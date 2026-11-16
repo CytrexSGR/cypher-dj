@@ -14,6 +14,7 @@ import { leseLoopQuelle, loopOrdnerVorgabe } from '../loops.ts';
 import { liesModul, modulBasis } from '../project/module_storage.ts';
 import { findeAnschlaege, type Anschlag } from '../project/transients.ts';
 import { geraetGraph, geraetName, geraetPanel } from './device.ts';
+import { ladeDatei } from './file.ts';
 import { leseWavF32 } from './wav.ts';
 
 export type Quelle = { art: 'loop' | 'modul' | 'datei'; ref: string; stem?: string };
@@ -22,7 +23,7 @@ export type Quelle = { art: 'loop' | 'modul' | 'datei'; ref: string; stem?: stri
 export type Guete = { staerke: number | null; raster_abstand_beats: number };
 export type Schnitt = {
   schema: 1; id: string; name: string; quelle: Quelle; bpm: number; beats: number; tonart?: string; frames: number;
-  methode: 'raster' | 'anschlag' | 'hand'; grenzen: number[]; guete: Guete[]; erstellt: string;
+  methode: 'raster' | 'anschlag' | 'hand' | 'ganz'; grenzen: number[]; guete: Guete[]; erstellt: string;
   /** The bounds as the method made them (written at every (re)cut, kept by marker edits), the hits used for `guete` and snapping (frames), the
    *  sensitivity of an `anschlag` cut, the time of the last change. All optional: cuts of plan A1 have none of them. */
   ursprung?: number[]; treffer?: number[]; empfindlichkeit?: number; geaendert?: string;
@@ -56,15 +57,17 @@ export class SchnittFehler extends Error {
 }
 const arg = (text: string): SchnittFehler => new SchnittFehler(400, 'argument_ungueltig', text);
 
-export type Ordner = { ordner?: string; bk?: string; loops?: string; module?: string };
+/** `tempo` (BPM of the open project) and `dateiMaxFrames` (a lower limit than 60 s, for tests) only matter for a source of the art `datei`. `packMaxBytes`
+ *  (a lower limit than 2 GiB, for tests) only matters for the pack of an instrument. */
+export type Ordner = { ordner?: string; bk?: string; loops?: string; module?: string; tempo?: number; dateiMaxFrames?: number; packMaxBytes?: number; zonenMax?: number };
 
 export type QuellAudio = { daten: Float32Array; frames: number; bpm: number; beats: number; tonart?: string; name: string };
 
 /** The audio of a source (D5), as the cut will hold it. A library loop is rotated so that frame 0 is its beat 1 (`versatz_frames`, "grid later by so many
  *  frames"); a module track is the WAV of its clip, its bpm follows from the frames and `herkunft.laenge_beats` (herkunft.bpm can differ from the audio). */
-export function ladeQuellAudio(q: Quelle, o: { loops?: string; module?: string } = {}): QuellAudio {
+export function ladeQuellAudio(q: Quelle, o: Ordner = {}): QuellAudio {
   if (typeof q !== 'object' || q === null || typeof q.ref !== 'string') throw arg('quelle: {art, ref} expected');
-  if (q.art === 'datei') throw new SchnittFehler(404, 'quelle_unbekannt', 'a file as source is not available yet');
+  if (q.art === 'datei') return ladeDatei(q.ref, o);   // sample player: ref is `<root name>/<path>`
   if (q.art === 'loop') {
     const l = leseLoopQuelle(o.loops ?? loopOrdnerVorgabe(''), q.ref);
     if (!l) throw new SchnittFehler(404, 'quelle_unbekannt', `library loop ${q.ref} does not exist or cannot be loaded`);
@@ -178,6 +181,10 @@ export const SCHNITT_METHODEN: Record<string, Methode> = {
     if (g.some((x, i) => i > 0 && x - g[i - 1] < MIN_SCHEIBE)) throw arg(`grenzen: must rise, every slice at least ${MIN_SCHEIBE} frames`);
     const t = trefferVon(a, EMPFINDLICHKEIT_VORGABE);
     return { grenzen: [...g], guete: guete(a, g, t), treffer: framesVon(t) };
+  },
+  /** The whole audio as one slice (sample player: a file as a source). */
+  ganz(a) {
+    return { grenzen: [0, a.frames], guete: [{ staerke: 0, raster_abstand_beats: 0 }], treffer: [] };
   },
 };
 

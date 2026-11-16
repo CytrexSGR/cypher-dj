@@ -6,6 +6,7 @@
  },
  "title": "Band Drive Bass",
  "akzent": "violett",
+ "front": ["k10", "k11", "k16", "k24", "k12", "k17"],
  "layout": {
   "rows": [
    [

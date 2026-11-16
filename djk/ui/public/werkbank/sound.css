@@ -1,34 +1,9 @@
-/* Workbench SOUND region (task 4): the tile row and the large device area. */
+/* Workbench SOUND host: the cut strip of a sampler track and the kit dialog. The host sits hidden in the root and moves into the big view of a track (window.js). */
 #werkbank .w-klang { display: flex; flex-direction: column; gap: 8px; }
-#werkbank .w-kacheln { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; }
-#werkbank .w-kachel {
-  display: flex; flex-direction: column; align-items: flex-start; text-align: left; gap: 1px; padding: 6px 9px;
-  border: 1px solid var(--line); border-radius: 6px; background: var(--panel2); color: var(--text); cursor: pointer;
-}
-#werkbank .w-kachel.aktiv { border-color: var(--d3); background: color-mix(in srgb, var(--d3) 14%, var(--panel2)); }
-#werkbank .w-kachel-t { font-size: 9px; letter-spacing: .14em; color: var(--dim); font-weight: 700; }
-#werkbank .w-kachel-v { font-weight: 700; font-size: 12px; white-space: nowrap; }
-#werkbank .w-geraet { flex: 1 1 auto; min-height: 0; overflow: auto; }
-#werkbank .w-geraet [hidden] { display: none; }
-#werkbank .w-geraet p { color: var(--dim); }
-
-/* task 8: the effect tiles, their controls and the "+" menu */
-#werkbank .w-kachel.gewaehlt { border-color: var(--d3); }
-#werkbank .w-kachel.aus .w-kachel-v { opacity: .5; text-decoration: line-through; }
-#werkbank .w-effekt-leiste { display: flex; gap: 6px; align-items: center; }
-#werkbank .w-effekt-leiste[hidden] { display: none; }
-#werkbank .w-effekt-knopf, #werkbank .w-plus-eintrag {
-  padding: 3px 9px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel2); color: var(--text); cursor: pointer; font-weight: 700; font-size: 11px;
-}
-#werkbank .w-effekt-knopf:disabled, #werkbank .w-plus-eintrag:disabled { opacity: .4; cursor: default; }
+#werkbank .w-klang[hidden] { display: none; }
+#werkbank .w-effekt-knopf { padding: 3px 9px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel2); color: var(--text); cursor: pointer; font-weight: 700; font-size: 11px; }
+#werkbank .w-effekt-knopf:disabled { opacity: .4; cursor: default; }
 #werkbank .w-effekt-knopf[aria-pressed="false"] { color: var(--dim); }
-#werkbank .w-plus-wrap { position: relative; display: flex; align-items: stretch; }
-#werkbank .w-plus { align-items: center; justify-content: center; min-width: 34px; font-size: 16px; font-weight: 700; }
-#werkbank .w-plus-menue {
-  position: absolute; top: 100%; left: 0; z-index: 5; margin-top: 4px; padding: 4px; display: flex; flex-direction: column; gap: 3px; min-width: 150px;
-  border: 1px solid var(--line); border-radius: 6px; background: var(--panel);
-}
-#werkbank .w-plus-eintrag { text-align: left; }
 
 /* sampler A1 task 8: the cut strip (waveform, numbered slices, selection) */
 #werkbank .w-schnitt { display: flex; flex-direction: column; gap: 5px; }

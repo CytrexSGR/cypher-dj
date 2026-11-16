@@ -43,6 +43,8 @@ const schreibt = () => attrappe.anrufe.filter((a) => a.methode === 'POST' && a.u
 const zelle = (ton, schritt) => alle('zelle').find((z) => Number(z.dataset.ton) === ton && Number(z.dataset.schritt) === schritt);
 const wertZelle = (schritt) => alle('wert').find((z) => Number(z.dataset.schritt) === schritt);
 const knopf = (a, n) => alle(`r-${a}`).find((b) => n === undefined || Number(b.dataset.n) === n);
+const seite = (r) => alle('seq-seite').find((b) => Number(b.dataset.richtung) === r);
+const schr = (n) => alle('seq-schritte').find((b) => Number(b.dataset.n) === n);
 const zeigen = async () => { w.zeige(); await ruhe(); };
 
 test('drum grid of the 909: rows from the info, a click toggles through the writer', async () => {
@@ -50,7 +52,7 @@ test('drum grid of the 909: rows from the info, a click toggles through the writ
   await zeigen();
   assert.ok($w('r-art').textContent.includes('DRUM GRID · one row per sound'));
   assert.deepEqual(alle('zeilenname').map((z) => z.textContent), ['Kick', 'Snare', 'Clap', 'Closed Hat']);
-  assert.equal(alle('zelle').filter((z) => Number(z.dataset.ton) === 36).length, 64, 'VIEW 4 with LENGTH 4: 64 cells per row');
+  assert.equal(alle('zelle').filter((z) => Number(z.dataset.ton) === 36).length, 32, 'the default page shows 32 steps');
   assert.ok(zelle(36, 0).classList.contains('an'));
   assert.ok(!zelle(36, 1).classList.contains('an'));
   zelle(36, 1).dispatch('click'); await ruhe();
@@ -63,29 +65,33 @@ test('drum grid of the 909: rows from the info, a click toggles through the writ
   assert.equal(schreibt().at(-1).koerper.befehle[0].befehl, 'noten_loeschen');
 });
 
-test('a shorter pattern repeats pale; a click on a repeat edits the cell it repeats', async () => {
+test('a pattern shorter than the module (older projects): the grid is the module, the repeats are pale, a click on one edits the step it repeats', async () => {
   aufbau(projektMit([spuren(4).drums]), { klaenge: KLAENGE });
   await zeigen();
+  assert.equal(alle('r-takt').length, 4, 'the bar strip lists every bar of the module');
+  const kick = alle('zelle').filter((z) => Number(z.dataset.ton) === 36);
+  assert.equal(kick.length, 32, 'the page shows 2 bars of 16 cells');
   assert.ok(!zelle(36, 15).classList.contains('wiederholung'));
-  assert.ok(zelle(36, 16).classList.contains('wiederholung'));
-  assert.ok(zelle(36, 16).classList.contains('an'), 'the repeat of the kick on step 1');
-  zelle(36, 17).dispatch('click'); await ruhe();   // repeats pattern step 1
+  assert.ok(zelle(36, 16).classList.contains('wiederholung'), 'cell 16 repeats the pattern');
+  assert.ok(zelle(36, 16).classList.contains('an'), 'the repeat shows the note of step 0');
+  assert.equal(zelle(36, 17).dataset.quelle, '1');
+  zelle(36, 17).dispatch('click'); await ruhe();
   const b = schreibt().at(-1).koerper.befehle[0];
   assert.equal(b.befehl, 'noten_neu');
-  assert.equal(b.noten[0].beat, 0.25);
+  assert.equal(b.noten[0].beat, 0.25, 'the click lands on the source step');
 });
 
 test('counting rows: BAR and STEP rows, steps 1 5 9 13 emphasised in every row, the bar strip', async () => {
-  aufbau(projektMit([spuren().drums], { takte: 16 }), { klaenge: KLAENGE });
+  aufbau(projektMit([spuren(64).drums], { takte: 16 }), { klaenge: KLAENGE });   // a pattern of 64 beats: the grid spans all 16 bars
   await zeigen();
-  assert.deepEqual(alle('r-bar').map((b) => b.textContent), ['BAR 1', 'BAR 2', 'BAR 3', 'BAR 4']);
+  assert.deepEqual(alle('r-bar').map((b) => b.textContent), ['BAR 1', 'BAR 2']);
   assert.deepEqual(alle('r-schritt').slice(0, 16).filter((s) => s.classList.contains('betont')).map((s) => s.textContent), ['1', '5', '9', '13']);
   assert.deepEqual(alle('zelle').filter((z) => Number(z.dataset.ton) === 38 && z.classList.contains('betont')).map((z) => Number(z.dataset.schritt) % 16 + 1).slice(0, 4), [1, 5, 9, 13]);
   assert.equal(alle('r-takt').length, 16, 'the strip holds every bar of the module');
   assert.deepEqual(alle('r-takt').filter((t) => t.classList.contains('betont')).map((t) => t.textContent), ['1', '5', '9', '13']);
-  assert.deepEqual(alle('r-takt').filter((t) => t.classList.contains('sichtbar')).map((t) => t.textContent), ['1', '2', '3', '4']);
+  assert.deepEqual(alle('r-takt').filter((t) => t.classList.contains('sichtbar')).map((t) => t.textContent), ['1', '2']);
   alle('r-takt')[9].dispatch('click');
-  assert.deepEqual(alle('r-takt').filter((t) => t.classList.contains('sichtbar')).map((t) => t.textContent), ['9', '10', '11', '12']);
+  assert.deepEqual(alle('r-takt').filter((t) => t.classList.contains('sichtbar')).map((t) => t.textContent), ['9', '10']);
 });
 
 test('note grid of the bass: wheel moves the window, octave click jumps, FOLD shows three rows', async () => {
@@ -121,17 +127,17 @@ test('the wheel does nothing over the drum grid', async () => {
 test('VIEW 1 pages with the arrows and the bar strip (review focus 3)', async () => {
   aufbau(projektMit([spuren().bass], { takte: 4 }), { klaenge: [] });
   await zeigen();
-  assert.equal($w('r-fenster').textContent, 'BAR 1 – 4');
+  assert.equal($w('r-fenster').textContent, 'BAR 1 – 2');
   knopf('sicht', 1).dispatch('click');
   assert.equal($w('r-fenster').textContent, 'BAR 1');
   assert.equal(alle('zelle').filter((z) => Number(z.dataset.ton) === 40).length, 16);
-  knopf('vor').dispatch('click');
+  seite(1).dispatch('click');
   assert.equal($w('r-fenster').textContent, 'BAR 2');
   alle('r-takt')[3].dispatch('click');
   assert.equal($w('r-fenster').textContent, 'BAR 4');
-  knopf('vor').dispatch('click');
+  seite(1).dispatch('click');
   assert.equal($w('r-fenster').textContent, 'BAR 4', 'the arrow does not page past the last bar');
-  knopf('zurueck').dispatch('click');
+  seite(-1).dispatch('click');
   assert.equal($w('r-fenster').textContent, 'BAR 3');
   assert.equal(globalThis.localStorage.getItem('djk-wb-sicht'), '1', 'VIEW is remembered per browser');
 });
@@ -142,9 +148,9 @@ test('a module of one bar with VIEW 4 shows one bar and the arrows never page (r
   assert.equal($w('r-fenster').textContent, 'BAR 1');
   assert.equal(alle('zelle').filter((z) => Number(z.dataset.ton) === 40).length, 16, 'no cell beyond the module');
   assert.equal(alle('r-takt').length, 1);
-  knopf('vor').dispatch('click');
+  seite(1).dispatch('click');
   assert.equal($w('r-fenster').textContent, 'BAR 1');
-  assert.ok(knopf('muster', 4).classList.contains('zulang'), 'the pattern of 4 bars is longer than the module: amber');
+  assert.ok(schr(16).classList.contains('an'), 'STEPS 16 per bar is the default');
 });
 
 test('velocity lane: press at mid height writes about 64 for that step only; a drag sets each cell it enters', async () => {
@@ -175,14 +181,14 @@ test('LENGTH lane (note grid): tabs, writes whole steps; the drum grid has no LE
   aufbau(projektMit([sp.bass]), { klaenge: [] });
   await zeigen();
   assert.ok($w('r-hinweis').textContent.includes('of the notes'));
-  alle('r-feld').find((b) => b.dataset.feld === 'laenge').dispatch('click');
+  alle('seq-wert-tab').find((b) => b.dataset.feld === 'laenge').dispatch('click');
   wertZelle(1).dispatch('pointerdown', { clientY: 10 }); await ruhe();
   const s = schreibt().at(-1).koerper;
   assert.equal(s.label, 'Bass: length');
   assert.deepEqual(s.befehle[0].noten.map((n) => n.laenge), [2], 'mid height = 8 steps = 2 beats');
   aufbau(projektMit([spuren().drums]), { klaenge: KLAENGE });
   await zeigen();
-  assert.deepEqual(alle('r-feld').map((b) => b.dataset.feld), ['vel']);
+  assert.deepEqual(alle('seq-wert-tab').map((b) => b.dataset.feld), ['vel', 'chance', 'versatz', 'wdh']);
 });
 
 test('velocity lane of the drum grid follows the selected row', async () => {
@@ -194,39 +200,61 @@ test('velocity lane of the drum grid follows the selected row', async () => {
   wertZelle(0).dispatch('pointerdown', { clientY: 10 }); await ruhe();
   assert.deepEqual(schreibt().at(-1).koerper.befehle[0].noten, [{ id: id(36, 0), vel: 64 }], 'the first row with notes: Kick');
   alle('zeilenname').find((z) => z.textContent === 'Closed Hat').dispatch('click');
-  assert.ok(alle('zeilenname').find((z) => z.textContent === 'Closed Hat').classList.contains('gewaehlt'));
+  assert.ok(alle('zeilenname').find((z) => z.textContent === 'Closed Hat').parent.classList.contains('gewaehlt'));
   wertZelle(2).dispatch('pointerdown', { clientY: 10 }); await ruhe();
   assert.deepEqual(schreibt().at(-1).koerper.befehle[0].noten, [{ id: id(42, 0.5), vel: 64 }]);
 });
 
-test('shortening the pattern asks with the number of notes; "no" sends nothing (review focus 4)', async () => {
-  const fragen = [];
-  let antwort = false;
-  aufbau(projektMit([spuren().bass]), { klaenge: [], frage: (t) => { fragen.push(t); return antwort; } });
+const laengeKnopf = (n) => $w(`laenge-${n}`);
+test('LENGTH n lengthens module and pattern: loop, clip length and pattern, and the old pattern written into the new bars (one history step)', async () => {
+  const sp = spuren(16);
+  aufbau(projektMit([sp.bass]), { klaenge: [] });
   await zeigen();
-  assert.ok(knopf('muster', 4).classList.contains('an'), 'the pattern of 16 beats is 4 bars');
-  knopf('muster', 2).dispatch('click'); await ruhe();
-  assert.equal(fragen.length, 1);
-  assert.ok(fragen[0].includes('24 notes'), fragen[0]);
-  assert.ok(fragen[0].includes('behind bar 2'), fragen[0]);
-  assert.equal(schreibt().length, 0, '"no" sends nothing');
-  antwort = true;
-  knopf('muster', 2).dispatch('click'); await ruhe();
-  assert.equal(fragen.length, 2);
-  assert.equal(schreibt().length, 1);
-  const befehle = schreibt()[0].koerper.befehle;
-  assert.equal(befehle[0].befehl, 'noten_loeschen');
-  assert.equal(befehle[0].ids.length, 24);
-  assert.deepEqual(befehle.at(-1), { befehl: 'clip_aendern', clip_id: 'c_Bass', loop_beats: 8 });
+  laengeKnopf(8).dispatch('click'); await ruhe();
+  assert.equal(schreibt().length, 1, 'one history step');
+  const k = schreibt()[0].koerper;
+  assert.equal(k.label, 'Length 8 bars');
+  assert.deepEqual(k.befehle.slice(0, 2), [{ befehl: 'loop_setzen', an: true, von_beat: 0, bis_beat: 32 }, { befehl: 'clip_aendern', clip_id: 'c_Bass', loop_beats: 32 }]);
+  assert.equal(k.befehle.length, 3);
+  const neu = k.befehle[2];
+  assert.equal(neu.befehl, 'noten_neu');
+  assert.equal(neu.noten.length, 48);
+  const alt = sp.bass.clips[0].noten[0];
+  assert.deepEqual(neu.noten[0], { beat: alt.beat + 16, laenge: alt.laenge, ton: alt.ton, vel: alt.vel });
+  assert.ok(neu.noten.every((n) => !('id' in n) && n.beat >= 16 && n.beat < 32));
 });
-
-test('lengthening the pattern asks nothing', async () => {
-  const fragen = [];
-  aufbau(projektMit([spuren(8).bass]), { klaenge: [], frage: (t) => { fragen.push(t); return true; } });
+test('LENGTH n shortens: only loop_beats and the loop, the notes behind stay', async () => {
+  aufbau(projektMit([spuren(16).bass]), { klaenge: [] });
   await zeigen();
-  knopf('muster', 4).dispatch('click'); await ruhe();
-  assert.equal(fragen.length, 0);
-  assert.deepEqual(schreibt().at(-1).koerper.befehle, [{ befehl: 'clip_aendern', clip_id: 'c_Bass', loop_beats: 16 }]);
+  laengeKnopf(2).dispatch('click'); await ruhe();
+  assert.deepEqual(schreibt()[0].koerper.befehle, [{ befehl: 'loop_setzen', an: true, von_beat: 0, bis_beat: 8 }, { befehl: 'clip_aendern', clip_id: 'c_Bass', loop_beats: 8 }]);
+});
+test('LENGTH 128 grows the clip past 64 beats, copies the pattern into every bar, and the track stays a pattern', async () => {
+  const sp = spuren(4);
+  aufbau(projektMit([sp.bass]), { klaenge: [] });
+  await zeigen();
+  assert.ok(laengeKnopf(128), 'LENGTH offers 128');
+  laengeKnopf(128).dispatch('click'); await ruhe();
+  const b = schreibt()[0].koerper.befehle;
+  assert.deepEqual(b[0], { befehl: 'loop_setzen', an: true, von_beat: 0, bis_beat: 512 });
+  assert.deepEqual(b[1], { befehl: 'clip_aendern', clip_id: 'c_Bass', laenge_beats: 512, loop_beats: 512 });
+  assert.equal(b[2].noten.length, 12 * 127);
+  assert.equal(Math.max(...b[2].noten.map((n) => n.beat)) < 512, true);
+});
+test('LENGTH growing copies nothing into a clip that already holds notes in the new bars, and never the notes of rows with their own length', async () => {
+  const sp = spuren(8), sp2 = spuren(8);
+  sp.bass.clips[0].noten.push({ id: 'alt', beat: 20, laenge: 0.25, ton: 40, vel: 100 });
+  sp2.drums.clips[0].zeilen = { 36: { schritte: 8 } };
+  aufbau(projektMit([sp.bass, sp2.drums]), { klaenge: KLAENGE });
+  await zeigen();
+  laengeKnopf(8).dispatch('click'); await ruhe();
+  const b = schreibt()[0].koerper.befehle;
+  const neu = b.filter((x) => x.befehl === 'noten_neu');
+  assert.equal(neu.length, 1, 'the bass clip is not copied');
+  assert.equal(neu[0].clip_id, 'c_Drums');
+  assert.ok(neu[0].noten.every((n) => n.ton !== 36), 'the kick row has its own length');
+  assert.ok(neu[0].noten.length > 0);
+  assert.deepEqual(b.filter((x) => x.befehl === 'clip_aendern').map((x) => x.clip_id).sort(), ['c_Bass', 'c_Drums']);
 });
 
 test('a locked track draws its notes but a click sends nothing (review focus 5)', async () => {
@@ -238,7 +266,7 @@ test('a locked track draws its notes but a click sends nothing (review focus 5)'
   assert.ok(zelle(36, 0).classList.contains('an'), 'the notes are drawn');
   zelle(36, 1).dispatch('click');
   wertZelle(0).dispatch('pointerdown', { clientY: 10 });
-  knopf('muster', 2).dispatch('click');
+  schr(8).dispatch('click');
   await ruhe();
   assert.equal(schreibt().length, 0);
 });
@@ -294,7 +322,7 @@ test('the view offers VELOCITY, LENGTH, REVERSE, PITCH for a slice track and mar
   await zeigen();
   assert.ok($w('r-art').textContent.includes('SLICE GRID · one row per slice'));
   assert.deepEqual(alle('zeilenname').map((z) => z.textContent), ['1', '2', '3', '4']);
-  assert.deepEqual(alle('r-feld').map((b) => b.textContent), ['VELOCITY', 'LENGTH', 'REVERSE', 'PITCH']);
+  assert.deepEqual(alle('seq-wert-tab').map((b) => b.textContent), ['VELOCITY', 'CHANCE', 'OFFSET', 'ROLL', 'LENGTH', 'REVERSE', 'PITCH']);
   assert.ok(zelle(0, 0).classList.contains('an') && !zelle(0, 0).classList.contains('w-rueck'));
   assert.ok(zelle(1, 2).classList.contains('an') && zelle(1, 2).classList.contains('w-rueck'), 'the reversed hit is on row 2 with its mark');
   assert.ok(!zelle(1, 0).classList.contains('an'));
@@ -318,7 +346,7 @@ test('slice grid: a click on an empty cell adds the slice length, on a hit remov
 test('slice grid: a REVERSE click on a hit sends noten_aendern, on a step without a hit nothing and says why', async () => {
   sliceAufbau([{ id: 'n1', beat: 0, laenge: 0.5, ton: 0, vel: 100 }, { id: 'n2', beat: 0.5, laenge: 0.5, ton: 64 + 1, vel: 100 }]);
   await zeigen();
-  alle('r-feld').find((b) => b.dataset.feld === 'rueck').dispatch('click');
+  alle('seq-wert-tab').find((b) => b.dataset.feld === 'rueck').dispatch('click');
   assert.ok($w('r-hinweis').textContent.includes('on all rows'));
   assert.equal(alle('wert').length, 16, 'one value cell per step of the bar');
   wertZelle(0).dispatch('pointerdown', { clientY: 10 }); await ruhe();   // slice 1 starts in step 1
@@ -342,7 +370,7 @@ test('slice grid: the value lanes VELOCITY and LENGTH act on all rows and see re
   await zeigen();
   wertZelle(2).dispatch('pointerdown', { clientY: 10 }); await ruhe();
   assert.deepEqual(schreibt().at(-1).koerper.befehle, [{ befehl: 'noten_aendern', clip_id: 'c_s', noten: [{ id: 'n2', vel: 64 }] }]);
-  alle('r-feld').find((b) => b.dataset.feld === 'laenge').dispatch('click');
+  alle('seq-wert-tab').find((b) => b.dataset.feld === 'laenge').dispatch('click');
   wertZelle(2).dispatch('pointerdown', { clientY: 10 }); await ruhe();
   assert.equal(schreibt().at(-1).koerper.label, 'Slices: length');
   assert.deepEqual(schreibt().at(-1).koerper.befehle[0].noten, [{ id: 'n2', laenge: 2 }], 'mid height = 8 steps = 2 beats');
@@ -352,18 +380,18 @@ test('the other grids keep their tabs next to the slice grid', async () => {
   const sp = spuren();
   aufbau(projektMit([sp.drums]), { klaenge: KLAENGE });
   await zeigen();
-  assert.deepEqual(alle('r-feld').map((b) => b.dataset.feld), ['vel']);
+  assert.deepEqual(alle('seq-wert-tab').map((b) => b.dataset.feld), ['vel', 'chance', 'versatz', 'wdh']);
   aufbau(projektMit([spuren().bass]), { klaenge: [] });
   await zeigen();
-  assert.deepEqual(alle('r-feld').map((b) => b.dataset.feld), ['vel', 'laenge']);
+  assert.deepEqual(alle('seq-wert-tab').map((b) => b.dataset.feld), ['vel', 'chance', 'versatz', 'wdh', 'laenge']);
 });
 
 // ---- PITCH lane of the slice grid (sampler A2 task 7) ----
-const pitchTab = () => alle('r-feld').find((b) => b.dataset.feld === 'pitch');
+const pitchTab = () => alle('seq-wert-tab').find((b) => b.dataset.feld === 'pitch');
 test('the slice view offers PITCH and a click on a value posts the envelope', async () => {
   sliceAufbau([{ id: 'n1', beat: 0, laenge: 0.5, ton: 0, vel: 100 }]);
   await zeigen();
-  assert.deepEqual(alle('r-feld').map((b) => b.textContent), ['VELOCITY', 'LENGTH', 'REVERSE', 'PITCH']);
+  assert.deepEqual(alle('seq-wert-tab').map((b) => b.textContent), ['VELOCITY', 'CHANCE', 'OFFSET', 'ROLL', 'LENGTH', 'REVERSE', 'PITCH']);
   pitchTab().dispatch('click');
   assert.ok(pitchTab().classList.contains('an'));
   assert.equal(alle('wert').length, 16, 'one value cell per step of the bar, over all rows');
@@ -398,10 +426,10 @@ test('PITCH: the lane shows what the project holds, marks a step with its own po
 test('the PITCH tab exists in the slice grid only', async () => {
   aufbau(projektMit([spuren().drums]), { klaenge: KLAENGE });
   await zeigen();
-  assert.ok(!alle('r-feld').some((b) => b.dataset.feld === 'pitch'));
+  assert.ok(!alle('seq-wert-tab').some((b) => b.dataset.feld === 'pitch'));
   aufbau(projektMit([spuren().bass]), { klaenge: [] });
   await zeigen();
-  assert.ok(!alle('r-feld').some((b) => b.dataset.feld === 'pitch'));
+  assert.ok(!alle('seq-wert-tab').some((b) => b.dataset.feld === 'pitch'));
 });
 
 test('the slice view puts a hit just before its step into that step and the bar strip marks the bar of the step', async () => {
@@ -431,7 +459,7 @@ test('a click on a drum row or a piano key sends the note to hear; a refusal is 
   await zeigen();
   alle('zeilenname').find((z) => z.textContent === 'Snare').dispatch('click'); await ruhe();
   assert.deepEqual(hoert().at(-1).koerper, { spur_id: 's1', ton: 38 });
-  assert.ok(alle('zeilenname').find((z) => z.textContent === 'Snare').classList.contains('gewaehlt'), 'the row is selected as before');
+  assert.ok(alle('zeilenname').find((z) => z.textContent === 'Snare').parent.classList.contains('gewaehlt'), 'the row is selected as before');
   assert.equal(schreibt().length, 0, 'hearing writes nothing');
   // the piano of a note track
   aufbau(projektMit([sp.bass]), { klaenge: [] });
@@ -453,8 +481,8 @@ test('+ lane adds a knob lane; a press writes the step value, shift removes it, 
   const wahl = $w('r-lane-neu');
   assert.deepEqual(wahl.querySelectorAll('option').map((o) => o.textContent), ['+ lane ▾', 'Cutoff', 'Reso']);
   wahl.value = '2'; wahl.dispatch('change'); await ruhe();
-  assert.deepEqual(alle('r-feld').map((b) => b.textContent), ['VELOCITY', 'LENGTH', 'RESO']);
-  assert.ok(alle('r-feld').find((b) => b.textContent === 'RESO').classList.contains('an'));
+  assert.deepEqual(alle('seq-wert-tab').map((b) => b.textContent), ['VELOCITY', 'CHANCE', 'OFFSET', 'ROLL', 'LENGTH', 'RESO']);
+  assert.ok(alle('seq-wert-tab').find((b) => b.textContent === 'RESO').classList.contains('an'));
   assert.deepEqual($w('r-lane-neu').querySelectorAll('option').map((o) => o.textContent), ['+ lane ▾', 'Cutoff']);
   assert.equal(schreibt().length, 0, 'adding a lane writes nothing');
   assert.equal(wertZelle(0).dataset.wert, '0.25', 'every step shows the knob');
@@ -467,7 +495,7 @@ test('+ lane adds a knob lane; a press writes the step value, shift removes it, 
   mitHk.clips[0].huellkurven = [{ ziel: 'geraet.k2', punkte: [{ beat: 0, wert: 0 }, { beat: 1, wert: 0.25, form: 'sprung' }, { beat: 1.25, wert: 0, form: 'sprung' }] }];
   mit(projektMit([mitHk]));
   await zeigen();
-  alle('r-feld').find((b) => b.textContent === 'RESO').dispatch('click'); await ruhe();
+  alle('seq-wert-tab').find((b) => b.textContent === 'RESO').dispatch('click'); await ruhe();
   assert.deepEqual([wertZelle(3).dataset.wert, wertZelle(4).dataset.wert, wertZelle(5).dataset.wert], ['0.25', '0.5', '0.25']);
   assert.ok(wertZelle(4).classList.contains('eigen') && !wertZelle(3).classList.contains('eigen'));
   wertZelle(4).dispatch('pointerdown', { shiftKey: true }); await ruhe();
@@ -475,8 +503,8 @@ test('+ lane adds a knob lane; a press writes the step value, shift removes it, 
   // × deletes the lane's envelope and goes back to VELOCITY
   mit(projektMit([mitHk]));
   await zeigen();
-  alle('r-feld').find((b) => b.textContent === 'RESO').dispatch('click'); await ruhe();
+  alle('seq-wert-tab').find((b) => b.textContent === 'RESO').dispatch('click'); await ruhe();
   $w('r-lane-weg').dispatch('click'); await ruhe();
   assert.deepEqual(schreibt().at(-1).koerper.befehle, [{ befehl: 'huellkurve_loeschen', clip_id: 'c_Bass', ziel: 'geraet.k2' }]);
-  assert.ok(alle('r-feld').find((b) => b.textContent === 'VELOCITY').classList.contains('an'));
+  assert.ok(alle('seq-wert-tab').find((b) => b.textContent === 'VELOCITY').classList.contains('an'));
 });

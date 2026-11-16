@@ -247,3 +247,52 @@ export function leseSmf(roh: Uint8Array): SmfDatei {
   return { format: formatRoh as 0 | 1, ticksProViertel: tpq, spurenImKopf, spurenGelesen: spurIndex, spurNamen, teile, tempi, taktarten, endeTick, notenZahl,
     ignoriert, hinweise };
 }
+
+// --- Writer (the file export of the workbench) ----------------------------------------------------------------------------
+// Format 1, 480 ticks per quarter note: a conductor track (name, tempo, time signature) and one track per part (name, notes on channel 1).
+// At the same tick a note-off comes before a note-on, so a note that ends where the next one of the same pitch starts stays two notes.
+export const SMF_TICKS = 480;
+export interface SmfSchreibNote { beat: number; laenge: number; ton: number; vel: number }
+export interface SmfSchreibTeil { name: string; noten: SmfSchreibNote[] }
+export interface SmfSchreibOpt { titel: string; tempo_bpm: number; taktart: [number, number]; teile: SmfSchreibTeil[] }
+
+const vlq = (n: number): number[] => {
+  const aus = [n & 0x7f];
+  for (let r = Math.floor(n / 128); r > 0; r = Math.floor(r / 128)) aus.unshift((r & 0x7f) | 0x80);
+  return aus;
+};
+const u32b = (n: number): number[] => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+const nameBytes = (s: string): number[] => {
+  const b = [...new TextEncoder().encode(s)].slice(0, 127);   // a name longer than 127 bytes is cut (a cut inside a UTF-8 character is rare enough here)
+  return [0, 0xff, 0x03, ...vlq(b.length), ...b];
+};
+const chunk = (ev: number[]): number[] => [0x4d, 0x54, 0x72, 0x6b, ...u32b(ev.length), ...ev];
+
+export function schreibeSmf(o: SmfSchreibOpt): Uint8Array {
+  const us = Math.round(60_000_000 / o.tempo_bpm);
+  const nenner = Math.max(0, Math.round(Math.log2(o.taktart[1])));
+  const kopf = [...nameBytes(o.titel),
+    0, 0xff, 0x51, 0x03, (us >>> 16) & 255, (us >>> 8) & 255, us & 255,
+    0, 0xff, 0x58, 0x04, o.taktart[0] & 255, nenner, 24, 8,
+    0, 0xff, 0x2f, 0x00];
+  const spuren: number[][] = [chunk(kopf)];
+  for (const t of o.teile) {
+    const e: { tick: number; an: boolean; ton: number; vel: number }[] = [];
+    for (const n of t.noten) {
+      const a = Math.round(n.beat * SMF_TICKS), z = Math.max(a + 1, Math.round((n.beat + n.laenge) * SMF_TICKS));
+      e.push({ tick: a, an: true, ton: n.ton, vel: n.vel }, { tick: z, an: false, ton: n.ton, vel: 0 });
+    }
+    e.sort((x, y) => x.tick - y.tick || Number(x.an) - Number(y.an) || x.ton - y.ton);
+    const b = [...nameBytes(t.name)];
+    let letzt = 0;
+    for (const x of e) {
+      b.push(...vlq(x.tick - letzt), x.an ? 0x90 : 0x80, x.ton & 127, x.vel & 127);
+      letzt = x.tick;
+    }
+    b.push(0, 0xff, 0x2f, 0x00);
+    spuren.push(chunk(b));
+  }
+  const roh = [0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 1, (spuren.length >> 8) & 255, spuren.length & 255, SMF_TICKS >> 8, SMF_TICKS & 255,
+    ...spuren.flat()];
+  return Uint8Array.from(roh);
+}

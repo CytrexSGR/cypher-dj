@@ -1,13 +1,15 @@
 // Workbench: the pure grid model (stage 1, task 6). Browser and node, no DOM, no fetch.
-// The grid shows one track's pattern as 16 steps per bar (step = 1/16 note = 0.25 beat). This module holds the window over the module's bars, the counting
+// The grid shows one track's pattern over the module's bars at 4, 8 or 16 cells per bar (16 = one sixteenth = 0.25 beat; the model stays in sixteenths). This module holds the window over the module's bars, the counting
 // rows, the row sets of a drum grid and a pitch grid, the cells and value lanes, and the project commands of a click, a value and a pattern length.
 // Commands come from seq_logic.js; a gesture that cannot be written throws a SeqFehler. Nothing here talks to the server.
-import { musterLaenge, zelleBefehle, laengeBefehle, folgeEditierbar, reglerBasis, SeqFehler } from '../seq_logic.js';
+import { musterLaenge, reglerBasis, SeqFehler } from '../seq_logic.js';
 import { tonName } from '../production/pianoroll.js';
-import { LAENGEN_TAKTE } from '../seq_field.js';
 
 export const SCHRITT = 0.25;                 // beats per step
-export const SCHRITTE_TAKT = 16;             // steps per bar
+export const SCHRITTE_TAKT = 16;             // steps per bar (the default resolution; the model stays in sixteenths)
+export const AUFLOESUNGEN = [4, 8, 16];      // STEPS: cells per bar of the view
+export const MAX_TAKTE = 128;                // the longest module
+export const weite = (aufl = SCHRITTE_TAKT) => 4 / aufl;   // beats per cell
 export const SICHTEN = [1, 2, 4];            // VIEW: bars shown at once
 export const TON_MIN = 24;                   // C0
 export const TON_MAX = 119;                  // B7
@@ -27,24 +29,30 @@ const betontNr = (nr) => nr % 4 === 1;       // bars and steps 1, 5, 9, 13
 
 // ---------- window (D9) ----------
 // The window over the module's bars: never wider than the module, its start a multiple of its width, clamped to the module. Bars are 0-based.
-export function fenster({ sicht, start } = {}, modulTakte) {
+export function fenster({ sicht, start, aufl } = {}, modulTakte) {
   const s = SICHTEN.includes(sicht) ? sicht : 4;
   const module = Math.max(1, Math.floor(modulTakte) || 1);
   const breite = Math.min(s, module);
   const a = klemme(Math.floor((Number.isFinite(start) ? start : 0) / breite) * breite, 0, module - breite);
-  return { sicht: s, breite, start: a, takte: Array.from({ length: breite }, (_, i) => a + i) };
+  return { sicht: s, breite, start: a, aufl: AUFLOESUNGEN.includes(aufl) ? aufl : SCHRITTE_TAKT, takte: Array.from({ length: breite }, (_, i) => a + i) };
 }
-export const blaettere = (f, richtung, modulTakte) => fenster({ sicht: f.sicht, start: f.start + Math.sign(richtung) * f.breite }, modulTakte);
-export const taktWahl = (f, takt, modulTakte) => fenster({ sicht: f.sicht, start: Math.floor(takt / f.breite) * f.breite }, modulTakte);
+export const blaettere = (f, richtung, modulTakte) => fenster({ sicht: f.sicht, aufl: f.aufl, start: f.start + Math.sign(richtung) * f.breite }, modulTakte);
+export const taktWahl = (f, takt, modulTakte) => fenster({ sicht: f.sicht, aufl: f.aufl, start: Math.floor(takt / f.breite) * f.breite }, modulTakte);
 // The bar strip: one entry per module bar.
 export const leiste = (modulTakte, f) => Array.from({ length: Math.max(1, Math.floor(modulTakte) || 1) }, (_, takt) => (
   { takt, nr: takt + 1, betont: betontNr(takt + 1), sichtbar: f.takte.includes(takt) }));
-// The BAR row (`schritt` = the absolute first step of the bar) and the STEP row of the window.
+// The BAR row (`schritt` = the absolute first cell of the bar) and the STEP row of the window; a bar has `f.aufl` cells (default 16).
 export function zaehlung(f) {
+  const A = f.aufl ?? SCHRITTE_TAKT, [von, bis] = fensterSpanne(f);
   return {
-    takte: f.takte.map((t) => ({ nr: t + 1, schritt: t * SCHRITTE_TAKT })),
-    schritte: f.takte.flatMap(() => Array.from({ length: SCHRITTE_TAKT }, (_, i) => ({ nr: i + 1, betont: betontNr(i + 1) }))),
+    takte: f.takte.map((t) => ({ nr: t + 1, schritt: t * A, spanne: A })),
+    schritte: Array.from({ length: bis - von }, (_, i) => ({ nr: (i % A) + 1, betont: betontNr((i % A) + 1) })),
   };
+}
+// The cells a window shows, [von, bis): its bars at the resolution of the view (cells per bar `f.aufl`, default 16).
+export function fensterSpanne(f) {
+  const A = f.aufl ?? SCHRITTE_TAKT;
+  return [f.takte[0] * A, (f.takte[f.takte.length - 1] + 1) * A];
 }
 
 // ---------- rows (D8) ----------
@@ -91,6 +99,16 @@ export function oktavLeiste(oben, clip) {
 
 // ---------- cells ----------
 // 'muster': editable with a clip; 'kein_clip': editable, the first edit creates the clip; 'gesperrt': not a pattern (read-only, never sends a command).
+// A pattern track is an instrument track with no clip or exactly one MIDI clip from beat 0 that is at least 64 beats long (a module of more than 16 bars
+// grows its clip past the 64 beats of the SEQ deck).
+const KLIPP_MIN = 64;
+export function folgeEditierbar(spur) {
+  const clips = spur?.clips ?? [];
+  if (spur?.art !== 'instrument') return false;
+  if (clips.length === 0) return true;
+  const c = clips[0];
+  return clips.length === 1 && c.art === 'midi' && Math.abs(c.start_beat) < EPS && c.laenge_beats >= KLIPP_MIN - EPS;
+}
 export function zustand(spur) {
   if (!folgeEditierbar(spur)) return 'gesperrt';
   return (spur.clips ?? []).length === 0 ? 'kein_clip' : 'muster';
@@ -98,26 +116,41 @@ export function zustand(spur) {
 export const musterTakte = (clip) => musterLaenge(clip) / 4;
 export const zuLang = (clip, modulTakte) => musterLaenge(clip) > modulTakte * 4 + EPS;
 
-const musterSchritte = (clip) => Math.max(1, Math.round(musterLaenge(clip) / SCHRITT));
-// the notes that start in pattern step `quelle` (pitch `ton`, null = any), lowest first; in a slice grid a row holds `ton` and `ton + 64`.
-// DRUM and NOTE grids take the notes that start in [step, step + 1). A slice grid takes a hit to its NEAREST step, [step - 1/2, step + 1/2): hits sit a few
+export const musterSchritte = (clip) => Math.max(1, Math.round(musterLaenge(clip) / SCHRITT));
+// The cells of a period of `beats` at the resolution `aufl` (cells per bar), and the source cell of an absolute cell: the cell the same beat has inside the period.
+export const periodeZellen = (beats, aufl = SCHRITTE_TAKT) => Math.max(1, Math.ceil(beats / weite(aufl) - EPS));
+export const musterZellen = (clip, aufl = SCHRITTE_TAKT) => periodeZellen(musterSchritte(clip) * SCHRITT, aufl);
+export const quelleZelle = (beats, schritt, aufl = SCHRITTE_TAKT) => {
+  const w = weite(aufl), b = runde(schritt * w);
+  return Math.floor(runde(b - Math.floor(b / beats + EPS) * beats) / w + EPS);
+};
+// the notes that start in cell `quelle` of the resolution `aufl` (pitch `ton`, null = any), lowest first; in a slice grid a row holds `ton` and `ton + 64`.
+// DRUM and NOTE grids take the notes that start in [cell, cell + 1). A slice grid takes a hit to its NEAREST cell, [cell - 1/2, cell + 1/2): hits sit a few
 // milliseconds in front of their step (a cut at the hits, a rounded slice bound) and still belong to it. A hit in the last half cell of the pattern is the
-// upbeat of the next pass and belongs to step 0.
-const imSchritt = (clip, ton, quelle, art = null) => {
-  const slice = art === 'slice';
-  const von = quelle * SCHRITT - (slice ? SCHRITT / 2 : 0), bis = von + SCHRITT, ende = musterSchritte(clip) * SCHRITT;
+// upbeat of the next pass and belongs to cell 0.
+export const imSchritt = (clip, ton, quelle, art = null, aufl = SCHRITTE_TAKT) => {
+  const slice = art === 'slice', w = weite(aufl);
+  const von = quelle * w - (slice ? w / 2 : 0), bis = von + w, ende = musterSchritte(clip) * SCHRITT;
   const zeile = (n) => ton === null || ton === undefined || n.ton === ton || (slice && n.ton === ton + RUECK);
-  const drin = (n) => (n.beat >= von - EPS && n.beat < bis - EPS) || (slice && quelle === 0 && n.beat >= ende - SCHRITT / 2 - EPS && n.beat < ende - EPS);
+  const drin = (n) => (n.beat >= von - EPS && n.beat < bis - EPS) || (slice && quelle === 0 && n.beat >= ende - w / 2 - EPS && n.beat < ende - EPS);
   return noten(clip).filter((n) => zeile(n) && drin(n)).sort((a, b) => a.ton - b.ton);
 };
-const schrittLaenge = (n) => Math.max(1, Math.round(n.laenge / SCHRITT));
-// every visible step of the window: `schritt` absolute in the module, `quelle` the pattern step it repeats. With `art` 'slice' a cell also says whether its
-// hit is reversed (`rueck`); the other kinds have no such key.
+const schrittLaenge = (n, w) => Math.max(1, Math.round(n.laenge / w));
+// every visible cell of the window: `schritt` absolute in the module, `quelle` the pattern cell it repeats (the pattern repeats inside a longer module as pale
+// cells). With `art` 'slice' a cell also says whether its hit is reversed (`rueck`); the other kinds have no such key. `laenge` is in cells.
 export function zellen(clip, ton, f, art = null) {
-  const P = musterSchritte(clip), aus = [], slice = art === 'slice';
-  for (let schritt = f.takte[0] * SCHRITTE_TAKT; schritt < (f.takte[f.takte.length - 1] + 1) * SCHRITTE_TAKT; schritt++) {
-    const quelle = schritt % P, n = imSchritt(clip, ton, quelle, art)[0];
-    aus.push({ schritt, quelle, an: !!n, vel: n ? n.vel : null, laenge: n ? schrittLaenge(n) : null, wiederholung: schritt >= P, ...(slice ? { rueck: !!n && n.ton >= RUECK } : {}) });
+  // a row with its own length (clip.zeilen[ton].schritte, in sixteenths) repeats after that long instead of the pattern length; its last cell carries `ende`
+  const aufl = f.aufl ?? SCHRITTE_TAKT, w = weite(aufl);
+  const eigeneL = ton === null || ton === undefined ? null : clip?.zeilen?.[ton]?.schritte ?? null;
+  const Pb = eigeneL !== null ? eigeneL * SCHRITT : musterSchritte(clip) * SCHRITT, Z = periodeZellen(Pb, aufl), aus = [], slice = art === 'slice';
+  for (let [schritt, bis] = fensterSpanne(f); schritt < bis; schritt++) {
+    const quelle = quelleZelle(Pb, schritt, aufl), n = imSchritt(clip, ton, quelle, art, aufl)[0];
+    const extra = {};
+    if (n?.chance != null) extra.chance = n.chance;
+    if (n?.wdh != null) extra.wdh = n.wdh;
+    if (n?.versatz != null) extra.versatz = n.versatz;
+    if (eigeneL !== null && quelle === Z - 1) extra.ende = true;
+    aus.push({ schritt, quelle, an: !!n, vel: n ? n.vel : null, laenge: n ? schrittLaenge(n, w) : null, wiederholung: runde(schritt * w) >= Pb - EPS, ...(slice ? { rueck: !!n && n.ton >= RUECK } : {}), ...extra });
   }
   return aus;
 }
@@ -141,60 +174,56 @@ export function wertZellen(clip, ton, f, feld, art = null) {
 // A click on a step. The step is read as a trigger lane of the row's pitch (synthetic, so no stored lane is needed). drum: toggles; note: an empty step
 // writes a one-step note, a full one is deleted.
 // slice: an empty step writes a hit of the slice's length (whole steps, 1..16, D11), a step with hits deletes every hit of the row that starts in it, forward or reversed.
-export function klickBefehle(spur, clip, ton, quelle, art, info = null) {
+export function klickBefehle(spur, clip, ton, quelle, art, info = null, aufl = SCHRITTE_TAKT) {
   if (zustand(spur) === 'gesperrt') fehler('this track is not a pattern, it can only be edited in PRODUCTION', 'nicht_editierbar');
   if (!clip) fehler('the pattern has no clip yet');
   if (!Number.isInteger(ton)) fehler('a pitch row is expected');
   if (art === 'slice') {
-    if (!Number.isInteger(quelle) || quelle < 0 || quelle >= musterSchritte(clip)) fehler(`step ${quelle}: the pattern has ${musterSchritte(clip)} steps`);
-    const drin = imSchritt(clip, ton, quelle, 'slice');
+    if (!Number.isInteger(quelle) || quelle < 0 || quelle >= musterZellen(clip, aufl)) fehler(`step ${quelle}: the pattern has ${musterZellen(clip, aufl)} steps`);
+    const drin = imSchritt(clip, ton, quelle, 'slice', aufl);
     if (drin.length) return [{ befehl: 'noten_loeschen', clip_id: clip.id, ids: drin.map((n) => n.id) }];
     const beats = info?.schnitt?.laengen_beats?.[ton];
     const schritte = Number.isFinite(beats) ? klemme(Math.round(beats / SCHRITT), 1, 16) : 1;
-    return [{ befehl: 'noten_neu', clip_id: clip.id, noten: [{ beat: runde(quelle * SCHRITT), laenge: runde(schritte * SCHRITT), ton, vel: VEL_VORGABE }] }];
+    return [{ befehl: 'noten_neu', clip_id: clip.id, noten: [{ beat: runde(quelle * weite(aufl)), laenge: runde(schritte * SCHRITT), ton, vel: VEL_VORGABE }] }];
   }
-  const zeile = { id: `t${ton}`, art: 'noten', teiler: SCHRITT, ton };
-  const felder = art === 'drum' ? {} : imSchritt(clip, ton, quelle).length ? { an: false } : { an: true, laenge: 1 };
-  return zelleBefehle(spur, clip, zeile, quelle, felder);
+  // drum and note grids: a cell is on when a note of the row starts inside it; a click turns it off (every note that starts in it goes) or writes one note
+  // on the start of the cell (drum: an eighth of a beat as the 909 takes it, note grid: the length of one cell)
+  const n = musterZellen(clip, aufl);
+  if (!Number.isInteger(quelle) || quelle < 0 || quelle >= n) fehler(`lane t${ton}, cell ${quelle}: the lane has ${n} cells`);
+  const drin = imSchritt(clip, ton, quelle, null, aufl);
+  if (drin.length) return [{ befehl: 'noten_loeschen', clip_id: clip.id, ids: drin.map((x) => x.id) }];
+  return [{ befehl: 'noten_neu', clip_id: clip.id, noten: [{ beat: runde(quelle * weite(aufl)), laenge: art === 'drum' ? 0.125 : weite(aufl), ton, vel: VEL_VORGABE }] }];
 }
 // A value for the notes that start in pattern step `quelle` (pitch `ton`, null = every pitch): one noten_aendern. vel: whole 1..127; laenge: whole steps
 // 1..16, written as beats. A note that already has the value is left out (then the list is empty).
 // Slice grid (`art` 'slice'): a row is `ton` and `ton + 64`; feld 'rueck' takes 1 (reversed) or 0 (forward) and writes the pitch change of the hits that are not so yet.
-export function wertBefehle(clip, ton, quelle, feld, wert, art = null) {
+export function wertBefehle(clip, ton, quelle, feld, wert, art = null, aufl = SCHRITTE_TAKT) {
   pruefeFeld(feld, art);
   if (!clip) fehler('the pattern has no clip yet');
-  if (!Number.isInteger(quelle) || quelle < 0 || quelle >= musterSchritte(clip)) fehler(`step ${quelle}: the pattern has ${musterSchritte(clip)} steps`);
+  if (!Number.isInteger(quelle) || quelle < 0 || quelle >= musterZellen(clip, aufl)) fehler(`step ${quelle}: the pattern has ${musterZellen(clip, aufl)} steps`);
   if (feld === 'rueck') {
     if (wert !== 0 && wert !== 1) fehler('reverse takes 0 (forward) or 1 (reversed)');
-    const hits = imSchritt(clip, ton, quelle, art);
+    const hits = imSchritt(clip, ton, quelle, art, aufl);
     if (!hits.length) fehler(`step ${quelle + 1}: no note starts in this step`);
     const aend = hits.filter((n) => (n.ton >= RUECK) !== (wert === 1)).map((n) => ({ id: n.id, ton: wert === 1 ? n.ton + RUECK : n.ton - RUECK }));
     return aend.length ? [{ befehl: 'noten_aendern', clip_id: clip.id, noten: aend }] : [];
   }
   const [min, max, name] = feld === 'vel' ? [1, 127, 'velocity'] : [1, 16, 'length'];
   if (!Number.isInteger(wert) || wert < min || wert > max) fehler(`${name} takes whole numbers ${min}..${max}${feld === 'laenge' ? ' (steps)' : ''}`);
-  const drin = imSchritt(clip, ton, quelle, art);
+  const drin = imSchritt(clip, ton, quelle, art, aufl);
   if (!drin.length) fehler(`step ${quelle + 1}: no note starts in this step`);
-  const neu = feld === 'vel' ? wert : runde(wert * SCHRITT);
+  const neu = feld === 'vel' ? wert : runde(wert * weite(aufl));
   const aend = drin.filter((n) => n[feld] !== neu).map((n) => ({ id: n.id, [feld]: neu }));
   return aend.length ? [{ befehl: 'noten_aendern', clip_id: clip.id, noten: aend }] : [];
 }
 // REVERSE on a step of a slice grid: the hits of the row that start in it all become reversed, or all forward when they all are reversed already (one noten_aendern;
 // a step without a hit refuses).
-export function rueckBefehle(clip, ton, quelle) {
+export function rueckBefehle(clip, ton, quelle, aufl = SCHRITTE_TAKT) {
   if (!clip) fehler('the pattern has no clip yet');
-  const drin = imSchritt(clip, ton, quelle, 'slice');
+  const drin = imSchritt(clip, ton, quelle, 'slice', aufl);
   if (!drin.length) fehler(`step ${quelle + 1}: no note starts in this step`);
-  return wertBefehle(clip, ton, quelle, 'rueck', drin.every((n) => n.ton >= RUECK) ? 0 : 1, 'slice');
+  return wertBefehle(clip, ton, quelle, 'rueck', drin.every((n) => n.ton >= RUECK) ? 0 : 1, 'slice', aufl);
 }
-// The pattern length in bars (1, 2, 4, 8, 16) with the number of notes it deletes (shortening deletes what lies behind the new end).
-export function musterLaengeBefehle(spur, clip, takte) {
-  if (!LAENGEN_TAKTE.includes(takte)) fehler(`pattern length: ${LAENGEN_TAKTE.join(', ')} bars are possible`);
-  const befehle = laengeBefehle(spur, clip, takte * 4);
-  const geloescht = befehle.filter((b) => b.befehl === 'noten_loeschen').reduce((s, b) => s + b.ids.length, 0);
-  return { befehle, geloescht };
-}
-
 // ---------- PITCH lane of a slice grid (A2 E9, step lock) ----------
 // A step lane over all rows (not one row) on the envelope of the device knob k3 (Pitch), a STEP LOCK: a value on step s holds for the hits of step s only,
 // every other step plays the track knob (offset 0). The window of a step is the one of the slice grid, [s - 1/2, s + 1/2) steps (a hit sits a little in
@@ -253,7 +282,7 @@ export function pitchZellen(spur, clip, f, info) {
   const basis = klemme(reglerBasis(spur, 3, info), 0, 1);
   const { n, eigen, versatz } = pitchEigene(clip);
   const aus = [];
-  for (let schritt = f.takte[0] * SCHRITTE_TAKT; schritt < (f.takte[f.takte.length - 1] + 1) * SCHRITTE_TAKT; schritt++) {
+  for (let [schritt, bis] = fensterSpanne(f); schritt < bis; schritt++) {
     const quelle = schritt % P, s = quelle % n;
     aus.push({ schritt, quelle, halb: halbVon(klemme(runde(basis + versatz[s]), 0, 1)), eigen: eigen.has(s), wiederholung: schritt >= P });
   }
@@ -303,7 +332,7 @@ export function knopfZellen(spur, clip, f, info, nr) {
   const basis = klemme(reglerBasis(spur, nr, info), 0, 1);
   const { n, eigen, versatz } = eigeneVon(clip, knopfZiel(nr));
   const aus = [];
-  for (let schritt = f.takte[0] * SCHRITTE_TAKT; schritt < (f.takte[f.takte.length - 1] + 1) * SCHRITTE_TAKT; schritt++) {
+  for (let [schritt, bis] = fensterSpanne(f); schritt < bis; schritt++) {
     const quelle = schritt % P, s = quelle % n;
     aus.push({ schritt, quelle, wert: klemme(runde(basis + versatz[s]), 0, 1), eigen: eigen.has(s), wiederholung: schritt >= P });
   }

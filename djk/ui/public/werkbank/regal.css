@@ -45,3 +45,50 @@
 #werkbank .w-karte-knopf:hover { color: inherit; }
 #werkbank .w-karte.offen:disabled { opacity: 1; }
 #werkbank .w-karte:has(.w-karte-marke) b { padding-right: 44px; }
+
+/* Tab SAMPLES (sample player stage 1): a folder browser inside the shelf. Everything here is prefixed w-smp- (w-karte* is styled by regal.css AND dock.css). */
+#werkbank .w-regal.w-smp-an { display: flex; flex-direction: column; height: 45%; overflow: hidden; }
+#werkbank .w-regal.w-smp-an .w-regal-kopf { flex: none; }
+#werkbank .w-karten.w-smp-host { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; max-height: none; overflow: hidden; }
+#werkbank .w-smp { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; gap: 6px; }
+#werkbank .w-smp-kopf { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+#werkbank .w-smp-chips, #werkbank .w-smp-pfad { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+#werkbank .w-smp-chip { font-size: 11px; font-weight: 700; padding: 2px 8px; border: 1px solid var(--line); border-radius: 4px; background: none; color: var(--dim); cursor: pointer; }
+#werkbank .w-smp-chip.an { color: inherit; border-color: var(--accent, currentColor); }
+#werkbank .w-smp-chip:disabled { opacity: .5; cursor: not-allowed; border-style: dashed; }
+#werkbank .w-smp-krume { font-size: 11px; background: none; border: 0; padding: 0 2px; color: inherit; cursor: pointer; text-decoration: underline dotted; }
+#werkbank .w-smp-trenner { color: var(--dim); font-size: 11px; }
+/* the search field leads the header: a folder can hold thousands of files */
+#werkbank .w-smp-suche { order: -1; width: 340px; height: 26px; padding: 0 10px; font-size: 13px; box-sizing: border-box; color: inherit; background: var(--panel2); border: 1px solid var(--dim); border-radius: 4px; outline: none; }
+#werkbank .w-smp-suche::placeholder { color: var(--dim); opacity: 1; }
+#werkbank .w-smp-suche:focus { border-color: var(--accent, currentColor); }
+#werkbank .w-smp-liste { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-color: var(--line) transparent; scrollbar-width: thin; outline: none; border: 1px solid var(--line); border-radius: 4px; background: var(--panel2); }
+#werkbank .w-smp-liste:focus-visible { border-color: var(--accent, currentColor); }
+#werkbank .w-smp-zeile { display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 8px; box-sizing: border-box; font-size: 12px; cursor: pointer; border-bottom: 1px solid var(--line); }
+#werkbank .w-smp-zeile:hover, #werkbank .w-smp-zeile.cursor { background: rgba(255, 255, 255, .06); }
+#werkbank .w-smp-zeile.spielt { color: var(--accent, currentColor); font-weight: 700; }
+#werkbank .w-smp-marke { flex: none; width: 14px; text-align: center; color: var(--dim); font-size: 10px; }
+#werkbank .w-smp-zeile.spielt .w-smp-marke { color: inherit; }
+#werkbank .w-smp-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#werkbank .w-smp-ordner .w-smp-name { font-weight: 700; }
+#werkbank .w-smp-ort { flex: 0 1 30%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); font-size: 11px; }
+#werkbank .w-smp-groesse { flex: none; min-width: 56px; text-align: right; white-space: nowrap; color: var(--dim); font-size: 11px; }
+#werkbank .w-smp-knopf { flex: none; font-size: 10px; font-weight: 700; padding: 1px 8px; }
+#werkbank .w-smp-knopf:disabled { cursor: not-allowed; }
+#werkbank .w-smp-leer, #werkbank .w-smp-mehr { padding: 8px; color: var(--dim); font-size: 11px; }
+
+/* Instrument bar of the SAMPLES tab (stage 2) and the tab INSTRUMENTS. Prefixes w-smp-instrument and w-ins-. */
+#werkbank .w-smp-instrument { flex: none; display: flex; flex-direction: column; gap: 2px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel2); font-size: 12px; }
+#werkbank .w-smp-instrument[hidden] { display: none; }
+#werkbank .w-smp-instrument-kopf { display: flex; align-items: center; gap: 8px; }
+#werkbank .w-smp-instrument-text { flex: 1 1 auto; min-width: 0; font-weight: 700; }
+#werkbank .w-smp-instrument-varianten, #werkbank .w-smp-instrument-lauf { color: var(--dim); font-size: 11px; }
+#werkbank .w-ins { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+#werkbank .w-ins-liste { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-color: var(--line) transparent; scrollbar-width: thin; border: 1px solid var(--line); border-radius: 4px; background: var(--panel2); }
+#werkbank .w-ins-zeile { display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 8px; box-sizing: border-box; font-size: 12px; border-bottom: 1px solid var(--line); }
+#werkbank .w-ins-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+#werkbank .w-ins-info, #werkbank .w-ins-groesse { flex: none; color: var(--dim); font-size: 11px; white-space: nowrap; }
+#werkbank .w-ins-groesse { min-width: 56px; text-align: right; }
+#werkbank .w-ins-knopf { flex: none; font-size: 10px; font-weight: 700; padding: 1px 8px; }
+#werkbank .w-ins-knopf:disabled { cursor: not-allowed; }
+#werkbank .w-ins-leer { padding: 8px; color: var(--dim); font-size: 11px; }

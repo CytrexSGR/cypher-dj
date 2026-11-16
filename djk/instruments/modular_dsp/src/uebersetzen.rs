@@ -25,7 +25,7 @@ use crate::limiter::{vorlauf, Limiter};
 use crate::osz::{Osz, Rauschen, Sinus};
 use crate::phaser::Phaser;
 use crate::programm::{Programm, Quelle, Schritt, MAX_STIMMEN, REGLER};
-use crate::sampler::{lade_datei, Einstellung, Sampler};
+use crate::sampler::{karte_datei, lade_datei, Daten, Einstellung, Sampler, ZonenTabelle};
 use crate::roehre::{Roehre, RoehrenSatz, BIAS_MAX, BIAS_MIN};
 use crate::svf::Svf;
 use crate::allpass::Allpass;
@@ -74,6 +74,9 @@ pub enum Fehler {
     KeinAusgang,
     /// sample file of a `sampler` node unusable (S10): name rule, size, content, missing sample root
     Datei { knoten: String, grund: String },
+    /// zone table of a `sampler` node unusable (sample player stage 2a): `wert` names the zone (counted from 0) and the field,
+    /// e.g. `zonen[3].lo`, or just `zonen` for the table as a whole
+    Zonen { knoten: String, wert: String, grund: String },
     /// die Knoten-IDs, die im Kreis hängen oder hinter ihm liegen (sortiert)
     Schleife(Vec<String>),
 }
@@ -140,8 +143,12 @@ pub const ARTEN: [ArtDef; 56] = [
     // loop without a gate edge keeps looping (C10).
     // Sampler A1: `grenzen` (named field) is a slice table; `noten_wahl` 1 lets the played note choose the slice, `tempo`
     // and `halb` set the read speed, `ausklang` (ms) is the release when the gate falls. The new inputs sit at the end.
-    ArtDef { art: "sampler", ein: &["hz", "trig", "gate", "scheibe", "rueck", "tempo", "halb", "ausklang"], aus: &["l", "r"], werte: &[],
-             frei: &[("grund", 261.6256), ("scheiben", 1.0), ("schleife", 0.0), ("gate", 1.0), ("noten_wahl", 0.0), ("tempo", 1.0), ("halb", 0.0), ("ausklang", 5.0)] },
+    // Stage 2a: `zonen` (named field) is a zone table (multisample instrument, `datei` is then a mapped pack); `vel` (0..1, read
+    // at the trigger) chooses the velocity layer there.
+    // Stage 2b: `loop_blende` (ms at 48 kHz, 0..500, zone mode only) is the cross-fade of the sustain loops of the zones; the outputs
+    // `rl`, `rr` (appended after `l`, `r`) carry the release samples (zones of art 1) and are silent without zones.
+    ArtDef { art: "sampler", ein: &["hz", "trig", "gate", "scheibe", "rueck", "tempo", "halb", "ausklang", "vel"], aus: &["l", "r", "rl", "rr"], werte: &[],
+             frei: &[("grund", 261.6256), ("scheiben", 1.0), ("schleife", 0.0), ("gate", 1.0), ("noten_wahl", 0.0), ("tempo", 1.0), ("halb", 0.0), ("ausklang", 5.0), ("vel", 1.0), ("loop_blende", 20.0)] },
     // S21: convolution with an IR file (sum point, zero latency); type 31. `datei` is a named field like sampler's.
     ArtDef { art: "faltung", ein: &["x", "l", "r", "mix"], aus: &["l", "r"], werte: &[], frei: &[("mix", 1.0), ("pre", 0.0), ("laenge_max", 1000.0)] },
     // wavetable oscillator with unison inside the voice (wavetable.rs); type 32. `aus` is the sum without pan.
@@ -259,6 +266,14 @@ fn pruefe_grenzen(g: &[u64], frames: Option<u64>) -> Result<(), &'static str> {
     Ok(())
 }
 
+fn zonen_fehler(knoten: &str, e: crate::sampler::ZonenFehler) -> Fehler {
+    let wert = match e.zone {
+        Some(i) => format!("zonen[{i}].{}", e.feld),
+        None => e.feld.to_string(),
+    };
+    Fehler::Zonen { knoten: knoten.to_string(), wert, grund: e.grund }
+}
+
 fn teile(adr: &str) -> Result<(&str, &str), Fehler> { adr.split_once('.').ok_or_else(|| Fehler::Adresse(adr.to_string())) }
 
 pub fn uebersetze(json: &str, sr: f32) -> Result<Programm, Fehler> { uebersetze_mit_wurzel(json, sr, None) }
@@ -328,6 +343,31 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
             if let Err(grund) = pruefe_grenzen(g, None) {
                 return falsch("grenzen", grund);
             }
+        }
+        if let Some(z) = &k.zonen {
+            if def.art != "sampler" {
+                return falsch("zonen", "zonen is only allowed on sampler");
+            }
+            if k.grenzen.is_some() {
+                return falsch("grenzen", "zonen replaces grenzen: grenzen must be absent");
+            }
+            if k.werte.contains_key("scheiben") {
+                return falsch("scheiben", "zonen replaces scheiben: scheiben must be absent");
+            }
+            if w("noten_wahl") == 1.0 {
+                return falsch("noten_wahl", "zonen excludes noten_wahl 1");
+            }
+            if w("schleife") == 1.0 {
+                return falsch("schleife", "zonen excludes schleife 1");
+            }
+            if !(0.0..=500.0).contains(&w("loop_blende")) {
+                return falsch("loop_blende", "0..500 ms");
+            }
+            if let Err(e) = ZonenTabelle::neu_mit(z, None, w("loop_blende") as f64) {
+                return Err(zonen_fehler(&k.id, e));
+            }
+        } else if k.werte.contains_key("loop_blende") {
+            return falsch("loop_blende", "loop_blende is only allowed with zonen (zone mode)");
         }
         match def.art {
             "sampler" if !(20.0..=2000.0).contains(&w("grund")) => return falsch("grund", "20..2000 Hz"),
@@ -789,7 +829,15 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
             "sampler" => {
                 let name = knoten[k].datei.as_deref().unwrap_or_default();
                 let wz = wurzel.ok_or_else(|| Fehler::Datei { knoten: k.to_string(), grund: "no sample root".to_string() })?;
-                let d = lade_datei(wz, name, k, &mut geladen)?;
+                // a zone node reads a pack: mapped, not read, not counted into the graph's sample bytes
+                let (d, z) = match &knoten[k].zonen {
+                    Some(zt) => {
+                        let karte = karte_datei(wz, name, k)?;
+                        let t = ZonenTabelle::neu_mit(zt, Some(karte.frames()), w("loop_blende") as f64).map_err(|e| zonen_fehler(k, e))?;
+                        (Daten::Karte(karte), Some(t))
+                    }
+                    None => (Daten::Eigen(lade_datei(wz, name, k, &mut geladen)?), None),
+                };
                 let scheiben = w("scheiben") as usize;
                 let g: Option<Box<[usize]>> = match &knoten[k].grenzen {
                     Some(g) => {
@@ -798,7 +846,7 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
                         Some(g.iter().map(|v| *v as usize).collect())
                     }
                     None => {
-                        if d.len() / 2 / scheiben < 4 {
+                        if z.is_none() && d.len() / 2 / scheiben < 4 {
                             return Err(Fehler::Wert { knoten: k.to_string(), wert: "scheiben".to_string(), grund: "a slice must have at least 4 frames" });
                         }
                         None
@@ -808,7 +856,10 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
                     tempo: q("tempo"),
                     halb: q("halb"),
                     ausklang: q("ausklang"),
+                    vel: q("vel"),
                     g,
+                    z,
+                    rr: 0,
                     wahl: w("noten_wahl") == 1.0,
                     hz: q("hz"),
                     trig: q("trig"),
@@ -817,6 +868,9 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
                     rueck: q("rueck"),
                     wl: aus(k, "l"),
                     wr: aus(k, "r"),
+                    wrl: aus(k, "rl"),
+                    wrr: aus(k, "rr"),
+                    rr2: 0,
                     e: Einstellung { grund: w("grund"), scheiben, schleife: w("schleife") == 1.0 },
                     d,
                     s: [Sampler::default(); MAX_STIMMEN],

@@ -23,8 +23,58 @@ const nurSchluessel = (d: Record<string, unknown>, ...erlaubt: string[]): void =
 };
 const istTonSpur = (s: { geraet?: { art?: string; name?: string; graph?: string } }, graph: string): boolean => s.geraet?.art === 'intern' && s.geraet.name === 'bk' && s.geraet.graph === graph;
 
+type Offen = NonNullable<ReturnType<SamplerOptionen['zugang']['offen']>>;
+/** The checks of TO TONE that need no tone: a project is open, it is a workbench module and has a free instrument slot (the codes of SLICE TO TRACK). */
+export function offenFuerSpur(opt: SamplerOptionen): Offen {
+  const o = opt.zugang.offen();
+  if (!o) throw new ProjFehler(409, 'kein_projekt');
+  if (!o.projekt.werkbank) throw new ProjFehler(409, 'kein_werkbank', { text: 'the open project is not a workbench module' });
+  if (o.projekt.spuren.filter((s) => s.art === 'instrument').length >= MAX_WERKBANK_SPUREN) {
+    throw new ProjFehler(409, 'werkbank_voll', { text: `a module holds at most ${MAX_WERKBANK_SPUREN} instrument tracks` });
+  }
+  return o;
+}
+// " 2", " 3" ... until the name is free among the instrument tracks (ignoring case, as the command does); a copy of the rule of SLICE TO TRACK
+const freierName = (p: Projekt, name: string): string => {
+  const belegt = new Set(p.spuren.filter((s) => s.art === 'instrument').map((s) => s.name.toLowerCase()));
+  for (let n = 1; ; n++) {
+    const rest = n === 1 ? '' : ` ${n}`;
+    const z = `${name.slice(0, NAME_MAX - rest.length)}${rest}`;
+    if (!belegt.has(z.toLowerCase())) return z;
+  }
+};
+/** The answer part every tone route shares: the tone, its one-line text and (when the cut has one) the key the page names beside a root taken from it. */
+export function tonKern(t: Ton, o: Ordner): Record<string, unknown> {
+  const k = liesSchnitt(t.schnitt_id, o)?.tonart;
+  return { ton: t, text: tonText(t, k), ...(k !== undefined ? { tonart: k } : {}) };
+}
+/** Puts a tone on a new NOTE track of the open workbench module: one note at the root, one history step. A refusal or failure removes the tone again
+ *  (the refusal of the project is the error to report). The answer is the tone part plus `rev`, `projekt` and `spur_id`. */
+export async function tonAufSpur(opt: SamplerOptionen, ordner: Ordner, t: Ton, quelle: Quelle): Promise<Antwort> {
+  const weg = (): void => { try { loescheTon(t.graph, ordner); } catch { /* the refusal of the project is the error to report */ } };
+  try {
+    const a = await geraetAufSpur(opt, { graph: t.graph, name: t.name, ton: t.grund, label: `Tone ${t.name}`,
+      laengeBeats: (tempo) => Math.min(SPUR_BEATS.max, Math.max(SPUR_BEATS.min, Math.round((t.b - t.a) / 48000 * tempo / 60 * 4) / 4)) }, quelle);
+    if (a.code !== 200) { weg(); return a; }
+    return { code: 200, j: { ...tonKern(t, ordner), ...(a.j as Record<string, unknown>) } };
+  } catch (e) { weg(); throw e; }
+}
+
+/** Puts a device graph on a new NOTE track of the open workbench module: one note at `ton`, `laengeBeats(tempo)` beats long, one history step. Returns the
+ *  refusal of the project as it is, or `{rev, projekt, spur_id}`; removing what was made for the track is the caller's job. */
+export async function geraetAufSpur(opt: SamplerOptionen, g: { graph: string; name: string; ton: number; label: string; laengeBeats: (tempoBpm: number) => number }, quelle: Quelle): Promise<Antwort> {
+  const o = offenFuerSpur(opt);                                          // the project may have changed while the device was written
+  const befehl = { befehl: 'werkbank_spur_neu', name: freierName(o.projekt, g.name), loop_beats: 4,
+    noten: [{ beat: 0, laenge: g.laengeBeats(o.projekt.tempo_bpm), ton: g.ton, vel: 100 }], geraet: { art: 'intern', name: 'bk', graph: g.graph, parameter: {} } };
+  const a = await opt.sitzung.aendern({ rev: o.projekt.rev, label: g.label.slice(0, NAME_MAX), befehle: [befehl] }, quelle);
+  if (a.code !== 200) return a;
+  const j = a.j as { rev: number; projekt: Projekt };
+  const neueSpur = [...j.projekt.spuren].reverse().find((x) => istTonSpur(x, g.graph));
+  return { code: 200, j: { rev: j.rev, projekt: j.projekt, spur_id: neueSpur?.id ?? null } };
+}
+
 /** Where the graph is played: the open project (live state), every other stored project, the module store of the live set. Same search as A1's cut delete. */
-function fundstellen(opt: SamplerOptionen, graph: string): { imOffenen: Fund[]; stellen: string[] } {
+export function fundstellen(opt: SamplerOptionen, graph: string): { imOffenen: Fund[]; stellen: string[] } {
   const o = opt.zugang.offen();
   const imOffenen = o ? nutzer(o.projekt, graph) : [];
   const stellen = imOffenen.map((f) => `${f.wo} of the open project "${o!.projekt.name}"`);
@@ -38,9 +88,9 @@ function fundstellen(opt: SamplerOptionen, graph: string): { imOffenen: Fund[]; 
   }
   return { imOffenen, stellen };
 }
-const inGebrauch = (was: string, stellen: string[], imOffenen: Fund[]): ProjFehler => {
+export const inGebrauch = (was: string, stellen: string[], imOffenen: Fund[], code = 'ton_in_gebrauch'): ProjFehler => {
   const gezeigt = stellen.slice(0, FUNDSTELLEN_MAX).join(', '), rest = stellen.length - FUNDSTELLEN_MAX;
-  return new ProjFehler(409, 'ton_in_gebrauch', { text: `${was} in use by ${gezeigt}${rest > 0 ? ` and ${rest} more` : ''}; remove it there first`,
+  return new ProjFehler(409, code, { text: `${was} in use by ${gezeigt}${rest > 0 ? ` and ${rest} more` : ''}; remove it there first`,
     spuren: [...new Set(imOffenen.map((f) => f.strang))], fundstellen: stellen });
 };
 
@@ -67,51 +117,21 @@ export function tonRouten(ctx: BereichKontext, opt: SamplerOptionen): Route[] {
     if (!o) throw new ProjFehler(409, 'kein_projekt');
     return o;
   };
-  /** The checks of TO TONE that need no tone: a workbench module is open and has a free instrument slot (the codes of SLICE TO TRACK). */
-  const werkbank = (o: ReturnType<typeof offen>): void => {
-    if (!o.projekt.werkbank) throw new ProjFehler(409, 'kein_werkbank', { text: 'the open project is not a workbench module' });
-    if (o.projekt.spuren.filter((s) => s.art === 'instrument').length >= MAX_WERKBANK_SPUREN) {
-      throw new ProjFehler(409, 'werkbank_voll', { text: `a module holds at most ${MAX_WERKBANK_SPUREN} instrument tracks` });
-    }
-  };
   const graphArg = (g: unknown): string => {
     if (typeof g !== 'string' || g === '') throw arg('graph: the name of a tone graph expected');
     return g;
   };
-  const tonart = (t: Ton): string | undefined => liesSchnitt(t.schnitt_id, ordner())?.tonart;
-  /** The answer part every route shares: the tone, its one-line text and (when the cut has one) the key the page names beside a root taken from it. */
-  const kern = (t: Ton): Record<string, unknown> => { const k = tonart(t); return { ton: t, text: tonText(t, k), ...(k !== undefined ? { tonart: k } : {}) }; };
-  // " 2", " 3" ... until the name is free among the instrument tracks (ignoring case, as the command does); a copy of the rule of SLICE TO TRACK
-  const freierName = (p: Projekt, name: string): string => {
-    const belegt = new Set(p.spuren.filter((s) => s.art === 'instrument').map((s) => s.name.toLowerCase()));
-    for (let n = 1; ; n++) {
-      const rest = n === 1 ? '' : ` ${n}`;
-      const z = `${name.slice(0, NAME_MAX - rest.length)}${rest}`;
-      if (!belegt.has(z.toLowerCase())) return z;
-    }
-  };
+  const kern = (t: Ton): Record<string, unknown> => tonKern(t, ordner());
 
   const neu = async (d: Record<string, unknown>, quelle: Quelle): Promise<Antwort> => {
     nurSchluessel(d, 'id', 'von', 'bis', 'grund', 'name', 'spur');
     if (typeof d.id !== 'string' || d.id === '') throw arg('id: the id of a cut expected');
     if (d.spur !== undefined && typeof d.spur !== 'boolean') throw arg('spur: true or false expected');
     gesperrt(quelle);
-    if (d.spur === true) werkbank(offen());                              // before anything is made
+    if (d.spur === true) offenFuerSpur(opt);                             // before anything is made
     const t = legeTon({ schnitt_id: d.id, von: d.von as number, bis: d.bis as number | undefined, grund: d.grund as number | undefined, name: d.name as string | undefined }, ordner());
     if (d.spur !== true) return { code: 200, j: kern(t) };
-    const weg = (): void => { try { loescheTon(t.graph, ordner()); } catch { /* the refusal of the project is the error to report */ } };
-    try {
-      const o = offen();                                                 // the project may have changed while the tone was written
-      werkbank(o);
-      const sekunden = (t.b - t.a) / 48000, laenge = Math.min(SPUR_BEATS.max, Math.max(SPUR_BEATS.min, Math.round(sekunden * o.projekt.tempo_bpm / 60 * 4) / 4));
-      const befehl = { befehl: 'werkbank_spur_neu', name: freierName(o.projekt, t.name), loop_beats: 4,
-        noten: [{ beat: 0, laenge, ton: t.grund, vel: 100 }], geraet: { art: 'intern', name: 'bk', graph: t.graph, parameter: {} } };
-      const a = await opt.sitzung.aendern({ rev: o.projekt.rev, label: `Tone ${t.name}`.slice(0, NAME_MAX), befehle: [befehl] }, quelle);
-      if (a.code !== 200) { weg(); return a; }
-      const j = a.j as { rev: number; projekt: Projekt };
-      const neueSpur = [...j.projekt.spuren].reverse().find((x) => istTonSpur(x, t.graph));
-      return { code: 200, j: { ...kern(t), rev: j.rev, projekt: j.projekt, spur_id: neueSpur?.id ?? null } };
-    } catch (e) { weg(); throw e; }
+    return tonAufSpur(opt, ordner(), t, quelle);
   };
 
   const lies = (url: URL): Antwort => {

@@ -26,6 +26,8 @@ export const AUSGABE_FEHLER = {
   wirt_spiegel_fehler: 'The Surge host did not take the track\'s parameter map, so a freeze would sound different from the project: check the Surge host and try again',
   render_fehler: 'The export render failed',
   export_bereich: 'The export range must be 1 to 1024 beats long',
+  export_leer: 'No unmuted instrument track has a note in this range',
+  keine_arbeitsflaeche: 'The server has no desktop session to open a folder in',
 };
 export const MEHRDEUTIG = new Set(['beschaeftigt', 'zu_gross']);
 const satz = (s) => s.charAt(0).toUpperCase() + s.slice(1);

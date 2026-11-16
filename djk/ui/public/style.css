@@ -1133,3 +1133,8 @@ body.lib-zu #bestand .register { display: none; }
 .register .reg-ziel { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; min-width: 24ch; }
 .register .reg-gelernt { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .register .reg-gelernt-zeile { display: flex; gap: 6px; align-items: center; }
+
+/* Studio (workbench) view: the DJ effect strip of the page head (ROUTING, FX1, FX2, COLOR, FX3) is folded away behind the DJ FX toggle; the status items stay. */
+#djfx-auf { display: none; order: 10; }
+body.werkbank #djfx-auf { display: inline-block; }
+body.werkbank:not(.djfx-auf) #kopf > #fx { display: none; }

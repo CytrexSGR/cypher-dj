@@ -2,6 +2,8 @@
 // template, "+ empty module" (a name field, Enter creates) and "Open module…" (a select of the modules). Opening or creating is the person's click and
 // goes through ctx.oeffneModul / ctx.neuesModul (live-container confirmation, nothing else). Lists are fetched on show and after a module change.
 import { WERKBANK_TEXT } from './werkbank.js';
+import { bindeSamples, SAMPLES_TEXT } from './regal_samples.js';
+import { bindeInstrumente, INSTRUMENTE_TEXT } from './regal_instruments.js';
 
 // liste: GET /proj/liste (an array); vorlagen: GET /proj/werkbank/vorlagen ({vorlagen: [...]}) or the array; slug: the open module.
 export function regalEintraege(liste, vorlagen, slug) {
@@ -30,7 +32,8 @@ const KEIN_MODUL = 'Open a module first.';
 const STUMM = 'This loop is silent: there is nothing to cut';
 const FIT_AUS = "Tempo is out of FIT's range: SPEED stays at 1.";
 const grossAnfang = (t) => `${t.charAt(0).toUpperCase()}${t.slice(1)}`;
-const datum = (iso) => (typeof iso === 'string' ? iso.slice(0, 10) : '');
+// date and time of day: two modules of one name (a template opened twice) differ by it
+const datum = (iso) => { const d = typeof iso === 'string' ? new Date(iso) : null; return d && !Number.isNaN(d.getTime()) ? `${iso.slice(0, 10)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : ''; };
 const el = (tag, klasse, text) => { const e = document.createElement(tag); if (klasse) e.className = klasse; if (text !== undefined) e.textContent = text; return e; };
 const karteBau = (klasse, name, zeile, marke) => {
   const k = el('button', `w-karte ${klasse}`);
@@ -61,7 +64,7 @@ export function bindeRegal(ctx) {
   const regal = $('regal');
   regal.replaceChildren(el('div', 'w-regal-kopf'), el('div', 'w-karten'));
   const tabKnopf = (name) => { const b = el('button', 'w-tab', name); b.type = 'button'; return b; };
-  const tabModule = tabKnopf('MODULES'), tabLoops = tabKnopf('LOOPS'), tabCuts = tabKnopf('CUTS');
+  const tabModule = tabKnopf('MODULES'), tabLoops = tabKnopf('LOOPS'), tabCuts = tabKnopf('CUTS'), tabSamples = tabKnopf('SAMPLES'), tabInstrumente = tabKnopf('INSTRUMENTS');
   const hinweis = el('span', 'w-hinweis', REGAL_HINT);
   const scheibenLbl = el('span', 'w-lbl-klein', 'SLICES');
   const scheibenWahl = el('select', 'w-scheiben');
@@ -71,13 +74,16 @@ export function bindeRegal(ctx) {
   const gemerkt = ctx.lies('djk-wb-scheiben', 'auto');
   scheibenWahl.value = SCHEIBEN_WAHL.includes(gemerkt) ? gemerkt : 'auto';
   scheibenWahl.addEventListener('change', () => ctx.merke('djk-wb-scheiben', scheibenWahl.value));
-  regal.firstChild.append(el('span', 'w-lbl', 'SHELF'), tabModule, tabLoops, tabCuts, hinweis, scheibenLbl, scheibenWahl);
+  regal.firstChild.append(el('span', 'w-lbl', 'SHELF'), tabModule, tabLoops, tabCuts, tabSamples, tabInstrumente, hinweis, scheibenLbl, scheibenWahl);
   const kartenHost = regal.children[1];
   let stand = { liste: null, vorlagen: null };
-  let tab = ['loops', 'cuts'].includes(ctx.lies('djk-wb-regal-tab', 'module')) ? ctx.lies('djk-wb-regal-tab', 'module') : 'module';
+  let tab = ['loops', 'cuts', 'samples', 'instrumente'].includes(ctx.lies('djk-wb-regal-tab', 'module')) ? ctx.lies('djk-wb-regal-tab', 'module') : 'module';
   const zeigeTab = () => {
     tabModule.classList.toggle('on', tab === 'module'); tabLoops.classList.toggle('on', tab === 'loops'); tabCuts.classList.toggle('on', tab === 'cuts');
-    hinweis.textContent = tab === 'loops' ? LOOPS_HINT : tab === 'cuts' ? CUTS_HINT : REGAL_HINT;
+    tabSamples.classList.toggle('on', tab === 'samples'); tabInstrumente.classList.toggle('on', tab === 'instrumente');
+    const innen = tab === 'samples' || tab === 'instrumente';   // both tabs scroll their own list inside the shelf
+    regal.classList.toggle('w-smp-an', innen); kartenHost.classList.toggle('w-smp-host', innen);
+    hinweis.textContent = tab === 'loops' ? LOOPS_HINT : tab === 'cuts' ? CUTS_HINT : tab === 'samples' ? SAMPLES_TEXT.hint : tab === 'instrumente' ? INSTRUMENTE_TEXT.hint : REGAL_HINT;
     scheibenLbl.hidden = scheibenWahl.hidden = tab !== 'loops';
   };
   zeigeTab();
@@ -107,8 +113,11 @@ export function bindeRegal(ctx) {
       return huelle;
     });
     const vorlagen = e.vorlagen.map((v) => {
-      const k = karteBau('vorlage', v.name, v.text ?? '', 'template');
-      k.addEventListener('click', () => aktion(() => ctx.neuesModul({ name: v.name, vorlage: v.id })));
+      const k = karteBau('vorlage', v.name, v.text ?? '', 'new from template');
+      k.setAttribute('title', 'Makes a new module from this template');
+      // a second module from one template gets " 2", " 3" ...: two cards of one name cannot be told apart
+      const frei = () => { const da = new Set(e.module.map((m) => String(m.name).toLowerCase())); for (let n = 1; ; n++) { const z = n === 1 ? v.name : `${v.name} ${n}`; if (!da.has(z.toLowerCase())) return z; } };
+      k.addEventListener('click', () => aktion(() => ctx.neuesModul({ name: frei(), vorlage: v.id })));
       return k;
     });
     // a div, not a button: an input inside a button is invalid and does not take clicks in every browser
@@ -323,17 +332,28 @@ export function bindeRegal(ctx) {
       if (tab === 'cuts') ladeSchnitte();
     }
   }
+  // tab SAMPLES lives in regal_samples.js; it draws into the card host while its tab is shown
+  const samples = bindeSamples(ctx, { host: kartenHost, setzeHinweis: (t) => { hinweis.textContent = t ?? SAMPLES_TEXT.hint; }, refusalText });
+  const instrumente = bindeInstrumente(ctx, { host: kartenHost, setzeHinweis: (t) => { hinweis.textContent = t ?? INSTRUMENTE_TEXT.hint; }, refusalText });
+  if (tab === 'samples') samples.zeige();
+  if (tab === 'instrumente') instrumente.zeige();
   function setzeTab(neu) {
     if (neu === tab) return;
+    if (tab === 'samples') samples.verberge();
+    if (tab === 'instrumente') instrumente.verberge();
     tab = neu; ctx.merke('djk-wb-regal-tab', tab); zeigeTab();
     if (tab === 'loops') { zeichneLoops(); ladeQuellen(); }
     else if (tab === 'cuts') { zeichneSchnitte(); ladeSchnitte(); }
+    else if (tab === 'samples') samples.zeige();
+    else if (tab === 'instrumente') instrumente.zeige();
     else if (stand.liste || stand.vorlagen) zeichneKarten(regalEintraege(stand.liste, stand.vorlagen, st.slug));
     else kartenHost.replaceChildren();
   }
   tabModule.addEventListener('click', () => setzeTab('module'));
   tabLoops.addEventListener('click', () => setzeTab('loops'));
   tabCuts.addEventListener('click', () => setzeTab('cuts'));
+  tabSamples.addEventListener('click', () => setzeTab('samples'));
+  tabInstrumente.addEventListener('click', () => setzeTab('instrumente'));
 
   ctx.beimSichtwechsel.push((sichtbar) => { if (sichtbar) { lade(); if (tab === 'loops') ladeQuellen(); if (tab === 'cuts') ladeSchnitte(); } });
   ctx.beimProjekt.push((p, wechsel) => {
@@ -343,4 +363,24 @@ export function bindeRegal(ctx) {
     if (tab !== 'module') zeigeKnoepfe();
     else if (!wechsel && (stand.liste || stand.vorlagen)) zeichneKarten(regalEintraege(stand.liste, stand.vorlagen, st.slug));
   });
+}
+
+// The shelf is a drawer over the dock: the SHELF button of the top bar opens and closes it. Closed by default once a module is open (the choice is
+// remembered); open while no module is open, because the empty state needs it. Appended to the top bar after the export buttons.
+export function bindeRegalSchublade(ctx) {
+  const { st, $ } = ctx;
+  const regal = $('regal');
+  const knopf = el('button', 'w-regal-auf', 'SHELF ▾');
+  knopf.type = 'button'; knopf.setAttribute('data-w', 'regal-auf'); knopf.title = 'Open or close the shelf of modules, loops and cuts';
+  $('kopf').append(knopf);
+  const gemerkt = () => ctx.lies('djk-wb-regal-auf', '0') === '1';
+  const zeige = () => {
+    const auf = !st.projekt || gemerkt();
+    regal.hidden = !auf;
+    knopf.setAttribute('aria-pressed', String(auf)); knopf.classList.toggle('an', auf);
+    knopf.textContent = auf ? 'SHELF ▴' : 'SHELF ▾';
+  };
+  knopf.addEventListener('click', () => { ctx.merke('djk-wb-regal-auf', st.projekt && gemerkt() ? '0' : '1'); zeige(); });
+  ctx.beimProjekt.push(() => zeige());
+  zeige();
 }

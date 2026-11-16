@@ -3,6 +3,7 @@
   "geraet": {"art": "bk", "graph": "drums-909"},
   "title": "Drums 909",
   "akzent": "rot",
+ "front": ["k7", "k8", "k27", "k31", "k1", "k2"],
   "layout": {"rows": [
     ["kick", "snare", "extras", "toms", "hats", "cym", "master"],
     ["levels"]

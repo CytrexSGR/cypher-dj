@@ -8,6 +8,8 @@
 //     span[data-w="spur-name"]       name
 //     span[data-w="spur-art"]        chip DRUM / NOTE (empty while the info loads)
 //     span[data-w="spur-geraet"]     instrument text
+//     span[data-w="spur-sends"]      one mini knob per return of the project: div[data-w="spur-send"][data-return-id] in the colour of the return, with the
+//                                    number of the return inside; it writes send_setzen (the taper of the fader, the lowest twentieth is off). No returns: empty.
 //     span[data-w="spur-rechts"]     controls (task 9): input[range] spur-fader + span spur-faderwert, button spur-mute (M), spur-solo (S),
 //                                    spur-loeschen (x), and the meter div.meter.waagrecht[data-kanal="spur/<nr>"] (filled by the page's /pegel path:
 //                                    stream event /pegel {kanal, spitze_db} -> zeigePegel in deck_view.js)
@@ -21,6 +23,8 @@ import { geraetWahl, freierName } from '../seq_field.js';
 import { REGLER_MAX, REGLER_SCHRITT, reglerVonDb, dbVonRegler, tasteMerke, tasteWert } from '../production/fader_curve.js';
 import { oeffneMenue } from '../production/context_menu.js';
 import { modulTakte } from './kopf.js';
+import { returnListe, sendWert, sendBefehl, sendLabel } from '../production/routing.js';
+import { neuerDrehknopf, sendPos, sendDb, sendText } from './mix.js';
 
 export const SPUREN_TEXT = { titel: 'TRACKS', andere: (n) => `${n} other track${n === 1 ? '' : 's'}: open PRODUCTION` };
 const BUCHSTABEN = 'ABCDEFGH';
@@ -28,7 +32,7 @@ const BUCHSTABEN = 'ABCDEFGH';
 export const MAX_SPUREN_MODUL = 8;
 export const NEU_TEXT = { knopf: '+ INSTRUMENT TRACK', voll: 'A module holds 8 instrument tracks' };
 const FADER_MIN = -60, FADER_AUS = -200, FADER_MAX = 6;   // the same thresholds as the PRODUCTION track head
-const faderWert = (db) => (db <= FADER_MIN ? FADER_AUS : Math.min(FADER_MAX, db));
+export const faderWert = (db) => (db <= FADER_MIN ? FADER_AUS : Math.min(FADER_MAX, db));
 const anzahlInstrument = (p) => (p?.spuren ?? []).filter((s) => s.art === 'instrument').length;
 
 export const faderText = (db) => (db <= FADER_MIN ? '-inf' : `${db > 0 ? '+' : ''}${db.toFixed(1)} dB`);
@@ -96,7 +100,7 @@ export function bindeSpuren(ctx) {
   function baueReihe(id) {
     const r = document.createElement('div');
     r.className = 'w-spur'; r.setAttribute('data-w', 'spur'); r.setAttribute('data-spur-id', id);
-    r.append(teil('spur-buchstabe', 'w-buchstabe'), teil('spur-name', 'w-spurname'), teil('spur-art', 'w-chip'), teil('spur-geraet', 'w-spurgeraet'), teil('spur-rechts', 'w-spurrechts'));
+    r.append(teil('spur-buchstabe', 'w-buchstabe'), teil('spur-name', 'w-spurname'), teil('spur-art', 'w-chip'), teil('spur-geraet', 'w-spurgeraet'), teil('spur-rechts', 'w-spurrechts'), teil('spur-sends', 'w-spursends'));
     r.addEventListener('click', () => ctx.waehle(id));
     return r;
   }
@@ -145,6 +149,33 @@ export function bindeSpuren(ctx) {
     });
     rechts.append(f, wert, m, so, weg, pegel);
   }
+  // The send knobs of a row: rebuilt when the set of returns changes, their values pulled on every redraw.
+  let gezeigt = [];   // the rows as they stand in the list
+  function zeigeSends(r, spur, returns) {
+    const host = feld(r, 'spur-sends');
+    const schluessel = JSON.stringify(returns.map((x) => [x.id, x.nr, x.name, x.farbe]));
+    if (r.sendSchluessel !== schluessel) {
+      r.sendSchluessel = schluessel;
+      r.sendFrisch = [];
+      const knoepfe = returns.map((x) => {
+        const k = neuerDrehknopf({
+          w: 'spur-send', name: x.name, titel: sendLabel(spur.name, x.name), farbe: x.farbe, klein: true, nummer: x.nr,
+          lies: () => { const s = aktuell(spur.id); return s ? sendPos(sendWert(s, x.id)) : null; },
+          setze: (pos) => { const s = aktuell(spur.id); if (s) ctx.aendere(sendLabel(s.name, x.name), [sendBefehl(spur.id, x.id, sendDb(pos))], `${spur.id}:send:${x.id}`, { wiederhole: true }); },
+          text: (pos) => sendText(sendDb(pos)), vorgabe: 0,
+        });
+        k.setAttribute('data-return-id', x.id);
+        r.sendFrisch.push(k.frisch);
+        // the name of the effect under its knob, in its colour: which knob feeds which effect
+        const paar = document.createElement('span'); paar.className = 'w-sendpaar';
+        const nm = document.createElement('span'); nm.className = 'w-sendname'; nm.textContent = `${x.nr} ${x.name}`; nm.style.color = x.farbe ?? '';
+        paar.append(k, nm);
+        return paar;
+      });
+      host.replaceChildren(...knoepfe);
+    }
+    for (const f of r.sendFrisch) f();
+  }
   function zeigeSteuerung(r, spur) {
     const f = feld(r, 'spur-fader'), db = typeof spur.fader_db === 'number' ? spur.fader_db : 0;
     if (!f.zieht && Date.now() - f.zuletzt > 400) { f.value = String(reglerVonDb(db)); feld(r, 'spur-faderwert').textContent = faderText(db); }
@@ -158,6 +189,7 @@ export function bindeSpuren(ctx) {
     const ids = new Set(z.zeilen.map((x) => x.id));
     for (const [id, r] of reihen) if (!ids.has(id)) { r.remove(); reihen.delete(id); }
     const folge = [];
+    const returns = returnListe(p);
     for (const x of z.zeilen) {
       let r = reihen.get(x.id);
       const neu = !r;
@@ -169,23 +201,27 @@ export function bindeSpuren(ctx) {
       feld(r, 'spur-art').textContent = x.art === 'drum' ? 'DRUM' : x.art === 'note' ? 'NOTE' : x.art === 'slice' ? 'SLICE' : '';
       feld(r, 'spur-geraet').textContent = x.geraet;
       r.classList.toggle('aktiv', x.id === st.wahl);
-      baueSteuerung(r, x.id); zeigeSteuerung(r, spur);
+      baueSteuerung(r, x.id); zeigeSteuerung(r, spur); zeigeSends(r, spur, returns);
       for (const h of ctx.spurZeile) h(r, spur);
       folge.push(r);
     }
-    liste.replaceChildren(...folge);
+    // re-inserting a row releases the pointer capture of a knob that is being turned: only touch the list when its rows or their order changed
+    if (folge.length !== gezeigt.length || folge.some((r, i) => r !== gezeigt[i])) { liste.replaceChildren(...folge); gezeigt = folge; }
     const voll = anzahlInstrument(p) >= MAX_SPUREN_MODUL;
     neuKnopf.disabled = voll; if (voll) neuKnopf.setAttribute('title', NEU_TEXT.voll); else neuKnopf.removeAttribute('title');
     andere.textContent = z.andere > 0 ? SPUREN_TEXT.andere(z.andere) : '';
   }
 
-  neuKnopf.addEventListener('click', async () => {
-    if (!st.projekt || neuKnopf.disabled) return;
-    const r = neuKnopf.getBoundingClientRect();
+  // the menu of "+ INSTRUMENT TRACK": the button under the list and the card of the dock open the same one
+  async function neuMenue(anker) {
+    if (!st.projekt || anzahlInstrument(st.projekt) >= MAX_SPUREN_MODUL) return;
+    const r = anker.getBoundingClientRect();
     const [g, kits] = await Promise.all([ctx.holeGet('/graphen'), ctx.holeGet('/proj/kits')]);
     const punkte = instrumentMenue(g?.j?.graphen, kits?.j?.kits, undefined, legeAn);
     (ctx.oeffneMenue ?? oeffneMenue)(punkte, r.left, r.bottom);
-  });
+  }
+  ctx.spurNeuMenue = neuMenue;
+  neuKnopf.addEventListener('click', () => { if (!neuKnopf.disabled) neuMenue(neuKnopf); });
   async function legeAn(eintrag) {
     const b = neueSpurBefehl(st.projekt, eintrag);
     if (!b) return;   // the module filled up while the menu was open
@@ -195,6 +231,6 @@ export function bindeSpuren(ctx) {
     }
   }
 
-  ctx.beimProjekt.push((p, wechsel) => { if (wechsel) speicher.vergiss(); if (p) zeichne(); else { liste.replaceChildren(); reihen.clear(); andere.textContent = ''; } });
+  ctx.beimProjekt.push((p, wechsel) => { if (wechsel) speicher.vergiss(); if (p) zeichne(); else { liste.replaceChildren(); gezeigt = []; reihen.clear(); andere.textContent = ''; } });
   ctx.beiWahl.push(() => { if (st.projekt) zeichne(); });
 }

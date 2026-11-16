@@ -200,6 +200,7 @@ export function audioKopien(c: AudioClip): AudioKopie[] {
 // Ruft f für jede klingende Note des Clips (absolute Beats, an Clip-Ende und Loop-Ende geschnitten). Mit Loop: nur Noten mit beat < loop,
 // je Kopie um k·loop verschoben, ID <clip>~<k>/<note>; Noten ab loop_beats bleiben im Projekt, klingen aber nicht.
 export function fuerAusgerollteNoten(c: MidiClip, f: (id: string, beat: number, laenge: number, n: Note) => void): void {
+  if (c.zeilen !== undefined || c.noten.some((n) => n.chance !== undefined || n.wdh !== undefined || n.versatz !== undefined)) { fuerAusgerollteNotenZeilen(c, f); return; }
   const ende = c.start_beat + c.laenge_beats;
   const loop = c.loop_beats ?? null;
   if (loop === null) {
@@ -214,6 +215,52 @@ export function fuerAusgerollteNoten(c: MidiClip, f: (id: string, beat: number, 
     for (const n of c.noten) {
       const beat = basis + n.beat;                           // eine Note ab loop_beats liegt hinter kopieEnde: still
       if (beat < kopieEnde) f(`${c.id}~${k}/${n.id}`, beat, Math.min(n.laenge, kopieEnde - beat), n);
+    }
+  }
+}
+// Workbench rows and note fields (chance, wdh, versatz, MidiClip.zeilen). Only clips that carry one of them come here; every other clip takes the loop above, unchanged.
+// Per note the pass period P is: the row length schritte / 4 (independent of loop_beats), else loop_beats, else none (one pass, the clip). The passes restart with the
+// clip. In a pass: a note with beat >= P is silent; "pendel" mirrors every odd pass (step i sounds at step schritte - 1 - i, the part inside the step stays); the odd
+// steps of the pass sounding position are delayed by swing / 100 * 0.125; versatz moves by versatz / 100 * 0.25 (copy 0 never before the clip start); wdh splits the note into
+// hits over max(0.25, laenge). A copy is cut at its pass end (hits behind it are silent). ids: <clip>~<pass>/<note>, or <clip>/<note> without passes, hits 2.. get ".<h-1>".
+const hash32 = (t: string): number => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16;
+  return h >>> 0;
+};
+// one draw in [0, 1) of a copy: seeded from clip id, note id and copy index only (same in playback, render and export, stable under unrelated edits)
+const zug = (clip: string, note: string, k: number): number => {
+  let t = (hash32(`${clip}|${note}|${k}`) + 0x6d2b79f5) >>> 0;
+  t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+function fuerAusgerollteNotenZeilen(c: MidiClip, f: (id: string, beat: number, laenge: number, n: Note) => void): void {
+  const ende = c.start_beat + c.laenge_beats, loop = c.loop_beats ?? null;
+  for (const n of c.noten) {
+    const z = c.zeilen?.[String(n.ton)];
+    const periode = z?.schritte !== undefined ? z.schritte / 4 : loop;
+    const pendel = z?.richtung === 'pendel' && periode !== null;
+    const stufe = (beat: number): number => Math.floor(beat * 4 + 1e-9);
+    for (let k = 0; periode === null ? k === 0 : k * periode < c.laenge_beats - 1e-9; k++) {
+      const basis = periode === null ? c.start_beat : c.start_beat + k * periode;
+      const kopieEnde = periode === null ? ende : Math.min(basis + periode, ende);
+      let pos = n.beat;
+      if (periode !== null) {
+        if (!(n.beat < periode)) continue;                                  // a note from the pass length on stays in the project but never sounds
+        if (pendel && k % 2 === 1) { const i = stufe(n.beat); pos = (periode * 4 - 1 - i) / 4 + (n.beat - i / 4); }
+      }
+      if (z?.swing !== undefined && stufe(pos) % 2 === 1) pos += z.swing / 100 * 0.125;
+      let beat = basis + pos + (n.versatz !== undefined ? n.versatz / 100 * 0.25 : 0);
+      if (k === 0 && beat < c.start_beat) beat = c.start_beat;
+      if (n.chance !== undefined && !(zug(c.id, n.id, k) * 100 < n.chance)) continue;
+      const id = periode === null ? `${c.id}/${n.id}` : `${c.id}~${k}/${n.id}`;
+      const treffer = n.wdh ?? 1, teil = Math.max(0.25, n.laenge) / treffer;
+      for (let h = 0; h < treffer; h++) {
+        const b = beat + (treffer === 1 ? 0 : h * teil);
+        if (!(b < kopieEnde)) break;
+        f(h === 0 ? id : `${id}.${h}`, b, treffer === 1 ? Math.min(n.laenge, kopieEnde - b) : Math.min(teil, kopieEnde - b), n);
+      }
     }
   }
 }

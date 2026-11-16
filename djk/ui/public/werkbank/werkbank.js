@@ -12,11 +12,14 @@ import { kopfStand } from '../production/transport.js';
 import { istTextFeld } from '../production/history_display.js';
 import { Kopf } from '../wave.js';
 import { bindeKopf } from './kopf.js';
-import { bindeRegal } from './regal.js';
+import { bindeRegal, bindeRegalSchublade } from './regal.js';
 import { bindeSpuren } from './tracks.js';
 import { bindeRaster } from './grid_view.js';
 import { bindeKlang } from './sound.js';
 import { bindeSchnittKit } from './schnitt_kit.js';
+import { bindeFenster } from './window.js';
+import { bindeDock } from './dock.js';
+import { bindeExport } from './export.js';
 
 export const WERKBANK_TEXT = {
   keinModul: 'No module is open.',
@@ -29,14 +32,17 @@ export const WERKBANK_TEXT = {
 
 export const istModul = (p) => p?.werkbank?.schema === 1;
 
-// The order is the contract (D15): top bar, shelf, tracks, notes, sound.
-const BINDER = [bindeKopf, bindeRegal, bindeSpuren, bindeRaster, bindeKlang, bindeSchnittKit];
+// The order is the contract (D15): top bar, shelf, tracks, notes, sound plumbing (panel source, faces, cut strip), the cut/kit dialog, the windows, the dock.
+// EXPORT and then the SHELF button append their controls to the top bar in this order (the dock and the windows use what sound.js puts on ctx).
+const BINDER = [bindeKopf, bindeRegal, bindeSpuren, bindeRaster, bindeKlang, bindeSchnittKit, bindeFenster, bindeDock, bindeExport, bindeRegalSchublade];
 
 const GERUEST = `
 <div class="w-kopf" data-w="kopf" role="toolbar" aria-label="Workbench"></div>
 <div class="w-pan w-spuren" data-w="spuren" aria-label="Tracks"></div>
 <div class="w-pan w-noten" data-w="noten" aria-label="Notes"></div>
-<div class="w-pan w-klang" data-w="klang" aria-label="Sound"></div>
+<div class="w-pan w-dock" data-w="dock" aria-label="Device dock"></div>
+<div class="w-klang" data-w="klang" aria-label="Sound" hidden></div>
+<div class="w-fenster-flaeche" data-w="fenster-flaeche"></div>
 <div class="w-pan w-leer" data-w="leer" aria-label="No module"></div>
 <div class="w-pan w-regal" data-w="regal" aria-label="Shelf"></div>
 <div class="w-meldung" data-w="meldung" role="status"></div>
@@ -95,7 +101,7 @@ export function bindeWerkbank({ post, wurzel = document.querySelector('#werkbank
     const wechsel = neuerSlug !== st.slug;
     st.slug = neuerSlug; st.projekt = modul ? p : null; st.fremd = !!p && !modul;
     if (modul) ctx.schreiber.setze(slug, p.rev);
-    for (const n of ['spuren', 'noten', 'klang']) $(n).hidden = !modul;
+    for (const n of ['spuren', 'noten', 'dock']) $(n).hidden = !modul;
     $('leer').hidden = modul;
     const wahlNeu = pruefeWahl(wechsel);
     for (const h of ctx.beimProjekt) h(st.projekt, wechsel);

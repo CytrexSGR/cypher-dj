@@ -1,5 +1,5 @@
 /* Workbench view (STUDIO, plan task 3). Applies only under body.werkbank; the other views stay untouched. Frame like the mockup: top bar over the width,
-   tracks (340 px), notes (1.25 fr), sound (1 fr), shelf strip below. Without a module the empty state replaces the three columns (D5).
+   tracks (300 px), notes (the rest), the device dock over the full width; the shelf is a drawer over the dock (2026-11-16 dock layout). Without a module the empty state replaces the three columns (D5).
    The region files are pulled in below in the order of the binders (D15). */
 @import url('kopf.css');
 @import url('regal.css');
@@ -7,6 +7,9 @@
 @import url('grid.css');
 @import url('sound.css');
 @import url('schnitt_kit.css');
+@import url('mix.css');
+@import url('dock.css');
+@import url('export.css');
 
 #werkbank { display: none; }
 body.werkbank, body.werkbank.lib-zu, body.werkbank.lib-gross {
@@ -18,16 +21,16 @@ body.werkbank #kopf { grid-area: kopf; }
 body.werkbank #pult, body.werkbank #bestand { display: none; }
 body.werkbank #werkbank {
   grid-area: wb; display: grid; position: relative; min-width: 0; min-height: 0; gap: 8px;
-  grid-template-columns: 340px minmax(0, 1.25fr) minmax(0, 1fr);
+  grid-template-columns: 300px minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
-  grid-template-areas: "top top top" "sp no kl" "rg rg rg";
+  grid-template-areas: "top top" "sp no" "dk dk";
 }
 #werkbank .w-kopf { grid-area: top; }
 #werkbank .w-spuren { grid-area: sp; }
 #werkbank .w-noten { grid-area: no; }
-#werkbank .w-klang { grid-area: kl; }
-#werkbank .w-leer { grid-column: 1 / 4; grid-row: 2; }
-#werkbank .w-regal { grid-area: rg; min-height: 0; }
+#werkbank .w-dock { grid-area: dk; }
+#werkbank .w-leer { grid-column: 1 / 3; grid-row: 2 / 4; }
+#werkbank .w-regal { position: absolute; left: 0; right: 0; bottom: 0; z-index: 8; max-height: 45%; box-shadow: 0 -8px 24px rgba(0, 0, 0, .45); }
 #werkbank .w-regal:empty { display: none; }
 #werkbank .w-pan { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px; min-width: 0; min-height: 0; overflow: auto; }
 #werkbank .w-pan[hidden] { display: none; }

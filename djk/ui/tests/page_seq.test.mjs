@@ -815,7 +815,7 @@ test('the object bindeProduktion returns carries waehleClip; the page jumps thro
   assert.match(quelle, /import \{ neuerClipWaehler \} from '\.\/clip_waehlen\.js'/);
   assert.match(quelle, /geladen: \(\) => nachlader\.fertig\(\)/); assert.match(quelle, /setzeAuswahl: \(ids\) => ctx\.setzeAuswahl\(ids\)/);
   assert.match(quelle, /return \{ zeige, verberge, ereignis, waehleClip,/);
-  assert.match(lies('seitenrahmen.js'), /export function setzeAnsicht\(a\)/);
+  assert.match(lies('seitenrahmen.js'), /export function setzeAnsicht\(a, merken = true\)/);
   assert.match(knoten, /setzeAnsicht\('produktion'\);\s*await produktion\.waehleClip\(z\.clip_id\)/);
 });
 

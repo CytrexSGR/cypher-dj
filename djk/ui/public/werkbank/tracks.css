@@ -2,7 +2,7 @@
 #werkbank .w-titel { margin: 0 0 8px; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); font-weight: 700; }
 #werkbank .w-spurliste { display: flex; flex-direction: column; gap: 6px; }
 #werkbank .w-spur {
-  display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; grid-template-areas: "b n c" "b g g" "b r r"; column-gap: 8px; row-gap: 2px; align-items: center;
+  display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; grid-template-areas: "b n c" "b g g" "b r r" "b s s"; column-gap: 8px; row-gap: 2px; align-items: center;
   padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel2); cursor: pointer;
 }
 #werkbank .w-spur.aktiv { border-color: var(--d3); background: color-mix(in srgb, var(--d3) 12%, var(--panel2)); }
@@ -24,3 +24,11 @@
 #werkbank .w-spurrechts:empty { display: none; }
 #werkbank .w-andere { margin: 8px 0 0; font-size: 11px; color: var(--dim); }
 #werkbank .w-andere:empty { display: none; }
+#werkbank .w-spursends { grid-area: s; display: flex; gap: 6px; align-items: center; }
+#werkbank .w-spursends:empty { display: none; }
+/* sends: one knob per loaded effect with the effect's name under it */
+#werkbank .w-spursends { gap: 10px; align-items: flex-start; padding-top: 2px; }
+#werkbank .w-spursends::before { content: "SEND TO"; font-size: 8px; font-weight: 700; letter-spacing: .1em; color: var(--dim); align-self: center; }
+#werkbank .w-sendpaar { display: flex; flex-direction: column; align-items: center; gap: 1px; width: 44px; }
+#werkbank .w-sendname { font-size: 8px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; max-width: 44px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#werkbank .w-spursends .w-dreh.klein, #werkbank .w-spursends .w-dreh.klein .w-dreh-rad { width: 26px; height: 26px; }

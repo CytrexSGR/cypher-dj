@@ -124,12 +124,14 @@ test('the track list shows a row per instrument track with letter, name, chip an
 test('selecting a track shows its panel wide and remembers the choice per module', async () => {
   aufbau(projektMit([bk(1, 'drums-909'), bk(2, 'bass-banddrive')]));
   w.zeige(); await ruhe();
-  assert.equal(GETS('/geraete/panel').at(-1).url, '/geraete/panel?art=bk&graph=drums-909');
+  // the dock cards load the panel of every track once (their front knobs); selecting a track asks for nothing more
+  assert.deepEqual(GETS('/geraete/panel').map((a) => a.url).sort(), ['/geraete/panel?art=bk&graph=bass-banddrive', '/geraete/panel?art=bk&graph=drums-909']);
   zeilen()[1].dispatch('click'); await ruhe();
   assert.equal(w.ctx.st.wahl, 's2');
   assert.equal(localStorage.getItem('djk-wb-wahl-m1'), 's2');
-  assert.equal(GETS('/geraete/panel').at(-1).url, '/geraete/panel?art=bk&graph=bass-banddrive');
+  assert.equal(GETS('/geraete/panel').length, 2);
   assert.ok(zeilen()[1].classList.contains('aktiv'));
+  assert.ok(wurzel.querySelectorAll('[data-w="karte-spur"]')[1].classList.contains('aktiv'), 'the card of the track is highlighted too');
   // a reload (new view over the same storage) keeps B
   aufbau(projektMit([bk(1, 'drums-909'), bk(2, 'bass-banddrive')]), { 'djk-wb-wahl-m1': 's2' });
   w.zeige(); await ruhe();

@@ -2,7 +2,9 @@
 // `werkbank: {schema: 1}`; the marker is never set together with `live`.
 import type { Note, Projekt } from './model.ts';
 
-export type WerkbankMarke = { schema: 1 };
+// laenge_beats: the module length in whole beats, remembered by werkbank_bereich while a loop range is set; absent otherwise (never written when absent)
+export type WerkbankMarke = { schema: 1; laenge_beats?: number };
+export const MAX_MODUL_BEATS = 100_000;   // the model's MAX_BEAT (not imported: model.ts imports this file)
 
 // at most this many instrument tracks in a module
 export const MAX_WERKBANK_SPUREN = 8;
@@ -11,11 +13,17 @@ export const MAX_WERKBANK_SPUREN = 8;
 export function werkbankPruefung(x: unknown): { grund: string; text: string } | null {
   const o = typeof x === 'object' && x !== null && !Array.isArray(x) ? (x as Record<string, unknown>) : null;
   if (o === null) return { grund: 'werkbank', text: 'werkbank: an object {schema: 1} expected' };
-  const extra = Object.keys(o).filter((k) => k !== 'schema');
+  const extra = Object.keys(o).filter((k) => k !== 'schema' && k !== 'laenge_beats');
   if (extra.length > 0) return { grund: 'werkbank', text: `werkbank: unknown field ${extra[0]}` };
   if (o.schema !== 1) return { grund: 'werkbank', text: 'werkbank.schema: 1 expected' };
+  if ('laenge_beats' in o && !(Number.isInteger(o.laenge_beats) && (o.laenge_beats as number) >= 1 && (o.laenge_beats as number) <= MAX_MODUL_BEATS)) {
+    return { grund: 'werkbank', text: `werkbank.laenge_beats: whole number of beats 1..${MAX_MODUL_BEATS} expected (absent when no range is set)` };
+  }
   return null;
 }
+
+// The module length in beats: the remembered one, else the end of the project loop (a module's loop starts at beat 0)
+export const modulLaenge = (p: Projekt): number => p.werkbank?.laenge_beats ?? p.loop.bis_beat;
 
 export const istWerkbank = (p: Projekt): boolean => p.werkbank !== undefined;
 

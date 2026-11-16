@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { liesSchnitt } from './sampler/schnitt.ts';
+import { instrumentKategorieText } from './sampler/instrument.ts';
 import { tonKategorieText } from './sampler/tone.ts';
 
 export type GraphArt = 'instrument' | 'effekt';
@@ -140,6 +141,12 @@ export function listeGraphen(ordner: string = graphenOrdner()): GraphListe {
     if (g.art !== 'instrument' || !g.name.startsWith('ton-')) continue;
     g.kategorie = 'sampler';
     g.text = tonKategorieText(g.name);
+  }
+  // Sample player stage 2: the generated instruments (ins-<id>) are filed under `sampler` too
+  for (const g of graphen) {
+    if (g.art !== 'instrument' || !g.name.startsWith('ins-')) continue;
+    g.kategorie = 'sampler';
+    g.text = instrumentKategorieText(g.name);
   }
   return { graphen, uebersprungen };
 }

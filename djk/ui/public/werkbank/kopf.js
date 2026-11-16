@@ -6,17 +6,74 @@ import { nurJuengste } from '../production/load.js';
 import { fehlerText } from '../production/production.js';
 import { WERKBANK_TEXT } from './werkbank.js';
 
-export const LAENGEN = [1, 2, 4, 8, 16];
+export const LAENGEN = [1, 2, 4, 8, 16, 32, 64, 128];
+const MAX_NOTEN = 65536;   // MAX_NOTEN of project/model.ts, notes of the whole project
 const BEATS_PRO_TAKT = 4;
 
 // D6: the module length is the project loop 0..bars*4 beats with bars in LAENGEN; anything else is no module length (null).
+// While a loop range is set (werkbank.laenge_beats is present) the project loop is the range and the module length is the remembered one.
+export const bereichGesetzt = (p) => Number.isFinite(p?.werkbank?.laenge_beats);
 export function modulTakte(p) {
+  if (bereichGesetzt(p)) { const t = p.werkbank.laenge_beats / BEATS_PRO_TAKT; return LAENGEN.includes(t) ? t : null; }
   const l = p?.loop;
   if (!l || l.an !== true || l.von_beat !== 0) return null;
   const takte = l.bis_beat / BEATS_PRO_TAKT;
   return LAENGEN.includes(takte) ? takte : null;
 }
 export const laengeBefehl = (takte) => ({ befehl: 'loop_setzen', an: true, von_beat: 0, bis_beat: takte * BEATS_PRO_TAKT });
+// A module always loops. When the project loop is off (switched in PRODUCTION), PLAY would run straight past the end of the
+// patterns into silence (found 2026-11-16: "no sound on the bass any more", loop switched off in PRODUCTION). The length PLAY restores: the shortest
+// module length that holds the longest pattern (4 bars without a pattern).
+export function laengeOhneSchleife(p) {
+  let beats = 0;
+  for (const s of p?.spuren ?? []) for (const c of s.clips ?? []) if (c.art === 'midi') beats = Math.max(beats, c.loop_beats ?? c.laenge_beats ?? 0);
+  if (!(beats > 0)) return 4;
+  return LAENGEN.find((n) => n * BEATS_PRO_TAKT >= beats) ?? LAENGEN[LAENGEN.length - 1];
+}
+// LENGTH n: the module AND the pattern of every track are n bars long. ONE history step: the loop range cleared (when set), the project loop 0..n*4 beats and
+// for every MIDI clip of every instrument track `laenge_beats` at least n*4 (never shortened) and `loop_beats` n*4. A pattern that grows keeps sounding as it did:
+// its notes before the old end are written as real notes into the copies behind it, so every bar can be edited on its own. Not copied: a clip that already holds
+// notes in the new part (an earlier longer state) and the notes of rows with a length of their own (they repeat by their own rule). Shortening only sets
+// loop_beats; notes behind it stay in the project and are silent. Copies that would break the note limit of the project are left out (`zuViele`).
+// -> { befehle, zuViele }
+const NOTEN_FELDER = ['beat', 'laenge', 'ton', 'vel', 'chance', 'wdh', 'versatz'];
+export function laengeKlickBefehle(p, takte) {
+  const B = takte * BEATS_PRO_TAKT, EPS = 1e-9;
+  const befehle = [];
+  if (bereichGesetzt(p)) befehle.push({ befehl: 'werkbank_bereich', aus: true });
+  if (modulTakte(p) !== takte) befehle.push(laengeBefehl(takte));
+  const clips = [];
+  for (const s of p?.spuren ?? []) if (s.art === 'instrument') for (const c of s.clips ?? []) if (c.art === 'midi') clips.push(c);
+  const vorhanden = clips.reduce((n, c) => n + (c.noten?.length ?? 0), 0);
+  const kopien = new Map();
+  let neuZahl = 0;
+  for (const c of clips) {
+    const P = c.loop_beats ?? c.laenge_beats, liste = [];
+    if (P < B - EPS && !(c.noten ?? []).some((n) => n.beat >= P - EPS && n.beat < B - EPS)) {
+      const quelle = (c.noten ?? []).filter((n) => n.beat < P - EPS && c.zeilen?.[n.ton]?.schritte == null);
+      for (let k = 1; k * P < B - EPS; k++) {
+        for (const n of quelle) {
+          const beat = Math.round((n.beat + k * P) * 1e9) / 1e9;
+          if (beat >= B - EPS) continue;
+          const neu = {};
+          for (const f of NOTEN_FELDER) if (n[f] !== undefined) neu[f] = f === 'beat' ? beat : n[f];
+          liste.push(neu);
+        }
+      }
+    }
+    if (liste.length) { kopien.set(c, liste); neuZahl += liste.length; }
+  }
+  const zuViele = vorhanden + neuZahl > MAX_NOTEN;
+  for (const c of clips) {
+    const aend = {};
+    if (c.laenge_beats < B - EPS) aend.laenge_beats = B;
+    if (c.loop_beats == null || Math.abs(c.loop_beats - B) > EPS) aend.loop_beats = B;
+    if (Object.keys(aend).length) befehle.push({ befehl: 'clip_aendern', clip_id: c.id, ...aend });
+    if (!zuViele && kopien.has(c)) befehle.push({ befehl: 'noten_neu', clip_id: c.id, noten: kopien.get(c) });
+  }
+  return { befehle, zuViele };
+}
+export const schleifeText = (n) => `The loop was off: the module loops over ${n} bar${n === 1 ? '' : 's'} again`;
 // A number 60..200 with up to two decimals (comma or point), else null.
 export function tempoBefehl(text) {
   const t = String(text ?? '').trim();
@@ -32,7 +89,7 @@ const KOPF = `
 <button data-w="undo" title="Undo (Ctrl+Z)" disabled>UNDO</button>
 <button data-w="redo" title="Redo (Ctrl+Shift+Z)" disabled>REDO</button>
 <span class="w-etikett">BPM</span><input data-w="bpm" class="w-bpm" inputmode="decimal" autocomplete="off" spellcheck="false" title="Tempo: type a value, Enter sets it" aria-label="Tempo in BPM" disabled>
-<span class="w-etikett">Length</span>${LAENGEN.map((n) => `<button data-w="laenge-${n}" class="w-laenge" aria-pressed="false" title="Module length: ${n} bar${n === 1 ? '' : 's'}" disabled>${n}</button>`).join('')}<span class="w-etikett">bars</span>
+<span class="w-etikett">Length</span>${LAENGEN.map((n) => `<button data-w="laenge-${n}" class="w-laenge" aria-pressed="false" title="Length of the module and of every pattern: ${n} bar${n === 1 ? '' : 's'}" disabled>${n}</button>`).join('')}<span class="w-etikett">bars</span>
 `;
 
 export function bindeKopf(ctx) {
@@ -54,6 +111,11 @@ export function bindeKopf(ctx) {
   async function start() {
     if (!st.projekt || wartet || springtImLauf(st.arr, st.arrUnbekannt)) return;
     setzeWartet(true);
+    if (st.projekt.loop?.an !== true) {
+      const n = laengeOhneSchleife(st.projekt);
+      if (!(await ctx.aendere(`Length ${n} bar${n === 1 ? '' : 's'}`, [laengeBefehl(n)]))) { setzeWartet(false); return; }
+      ctx.melde(schleifeText(n));
+    }
     const r = await ctx.holeJson('/proj/transport', { aktion: 'start', beat: 0 });
     const q = r.j?.quittung;
     if (r.status !== 200) scheitert(ctx.antwortText(r));
@@ -81,7 +143,13 @@ export function bindeKopf(ctx) {
     try { await ctx.aendere(`Tempo ${b.bpm}`, [b]); } finally { zeigeTempo(); }
   });
   for (const n of LAENGEN) {
-    $(`laenge-${n}`).addEventListener('click', () => { if (st.projekt && modulTakte(st.projekt) !== n) ctx.aendere(`Length ${n} bar${n === 1 ? '' : 's'}`, [laengeBefehl(n)]); });
+    $(`laenge-${n}`).addEventListener('click', () => {
+      if (!st.projekt) return;
+      // one history step: range off, loop, and the pattern of every track (laengeKlickBefehle)
+      const { befehle, zuViele } = laengeKlickBefehle(st.projekt, n);
+      if (zuViele) ctx.melde(`The notes would pass the limit of ${MAX_NOTEN} notes: the pattern was not copied into the new bars`, true);
+      if (befehle.length) ctx.aendere(`Length ${n} bar${n === 1 ? '' : 's'}`, befehle);
+    });
   }
 
   // UNDO and REDO follow the history of the project; unknown history leaves both usable (the server refuses an empty one with its text).

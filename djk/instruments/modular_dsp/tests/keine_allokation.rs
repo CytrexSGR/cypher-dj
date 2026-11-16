@@ -47,6 +47,12 @@ const ROEHRE_FX: &str = r#"{"format":"baukasten/2","name":"roehre-fx","stimmen":
 /// S10: four voices of the generated probe, slice and direction from knobs, loop mode; the sample root is a temp dir
 const SAMPLER_1: &str = r#"{"format":"baukasten/2","name":"sampler-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"sampler","datei":"probe.f32","scheiben":4,"schleife":1},{"id":"ks","art":"regler","nr":1,"min":0,"max":3},{"id":"kr","art":"regler","nr":2,"min":0,"max":1},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.trig","nach":"s.trig"},{"von":"n.gate","nach":"s.gate"},{"von":"ks.aus","nach":"s.scheibe"},{"von":"kr.aus","nach":"s.rueck"},{"von":"s.l","nach":"o.l"},{"von":"s.r","nach":"o.r"}]}"#;
 
+/// Sample player stage 2a: four voices on a zone table (two key ranges, two velocity layers, a round-robin pair, pan and gain), the
+/// pack `zonen.f32` is mapped; `vel` comes from the note
+/// Stage 2b: a looped zone (cross-fade 20 ms, loop_blende 30) and two release zones on `rl`/`rr`, added to the main output.
+const ZONEN_2: &str = r#"{"format":"baukasten/2","name":"zonen-2","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"sampler","datei":"zonen.f32","loop_blende":30,"zonen":[0,6000,60,0,127,1,127,1,0,1000,5000,0, 6000,12000,60,0,127,1,127,0.5,-0.5,0,0,1, 12000,18000,60,0,127,1,127,0.5,0.5,0,0,1]},{"id":"al","art":"add"},{"id":"ar","art":"add"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.trig","nach":"s.trig"},{"von":"n.gate","nach":"s.gate"},{"von":"n.vel","nach":"s.vel"},{"von":"s.l","nach":"al.a"},{"von":"s.rl","nach":"al.b"},{"von":"s.r","nach":"ar.a"},{"von":"s.rr","nach":"ar.b"},{"von":"al.aus","nach":"o.l"},{"von":"ar.aus","nach":"o.r"}]}"#;
+const ZONEN_1: &str = r#"{"format":"baukasten/2","name":"zonen-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"sampler","datei":"zonen.f32","zonen":[0,6000,48,0,59,1,80,1,0,0,0,0, 6000,12000,48,0,59,81,127,0.8,-0.5,0,0,0, 12000,18000,72,60,127,1,127,1.2,0.4,0,0,0, 18000,24000,72,60,127,1,127,1,0.4,0,0,0]},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.trig","nach":"s.trig"},{"von":"n.gate","nach":"s.gate"},{"von":"n.vel","nach":"s.vel"},{"von":"s.l","nach":"o.l"},{"von":"s.r","nach":"o.r"}]}"#;
+
 /// S21: four voices of saw through a faltung (4097 frame IR: head, 15 tail partitions), mix on a knob, predelay 7 ms
 const FALTUNG_1: &str = r#"{"format":"baukasten/2","name":"faltung-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"e","art":"adsr","a":0.01,"d":0.1,"s":1,"r":0.2},{"id":"vca","art":"mul"},{"id":"f","art":"faltung","datei":"ir.f32","pre":7},{"id":"k","art":"regler","nr":1,"min":0,"max":1},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.gate","nach":"e.gate"},{"von":"n.trig","nach":"e.trig"},{"von":"s.aus","nach":"vca.a"},{"von":"e.aus","nach":"vca.b"},{"von":"vca.aus","nach":"f.x"},{"von":"k.aus","nach":"f.mix"},{"von":"f.l","nach":"o.l"},{"von":"f.r","nach":"o.r"}]}"#;
 
@@ -147,6 +153,8 @@ const GRAPHEN: &[&str] = &[
     include_str!("../demos/fx-takt-pump.json"),
     include_str!("../demos/fx-vocoder-robot.json"),
     SAMPLER_1,
+    ZONEN_1,
+    ZONEN_2,
     FALTUNG_1,
     include_str!("../demos/fx-federhall.json"),
     include_str!("../demos/fx-filter-fahrt.json"),
@@ -242,6 +250,9 @@ fn echtzeitpfad_allokiert_nicht() {
         z ^= z << 5;
         0.4 * ((z as f64 / u32::MAX as f64) * 2.0 - 1.0) as f32 * (-((i / 2) as f32) / 1000.0).exp()
     }).collect();
+    // a pack of four zones, 6000 frames each (sines, one per zone), mapped by ZONEN_1
+    let pack: Vec<f32> = (0..24_000).flat_map(|i| { let v = (0.4 * (2.0 * std::f32::consts::PI * (100.0 + 50.0 * (i / 6000) as f32) * i as f32 / 48_000.0).sin()) as f32; [v, v] }).collect();
+    std::fs::write(wurzel.join("zonen.f32"), baukasten_dsp::proben::bytes(&pack)).unwrap();
     std::fs::write(wurzel.join("ir.f32"), baukasten_dsp::proben::bytes(&ir)).unwrap();
     std::fs::write(wurzel.join("feder-ir.f32"), baukasten_dsp::proben::bytes(&baukasten_dsp::proben::feder_ir(48_000.0))).unwrap();
     for g in GRAPHEN {

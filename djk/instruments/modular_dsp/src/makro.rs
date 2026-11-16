@@ -22,6 +22,9 @@ pub fn aufloesen(g: Graph) -> Result<Graph, Fehler> {
         if k.art.starts_with(PRAEFIX) && k.grenzen.is_some() {
             return Err(Fehler::Wert { knoten: k.id.clone(), wert: "grenzen".to_string(), grund: "grenzen not supported in makros" });
         }
+        if k.art.starts_with(PRAEFIX) && k.zonen.is_some() {
+            return Err(Fehler::Wert { knoten: k.id.clone(), wert: "zonen".to_string(), grund: "zonen not supported in makros" });
+        }
     }
     for (name, m) in &g.makros {
         for k in &m.knoten {
@@ -36,6 +39,9 @@ pub fn aufloesen(g: Graph) -> Result<Graph, Fehler> {
             }
             if k.grenzen.is_some() {
                 return Err(Fehler::Wert { knoten: format!("{name}/{}", k.id), wert: "grenzen".to_string(), grund: "grenzen not supported in makros" });
+            }
+            if k.zonen.is_some() {
+                return Err(Fehler::Wert { knoten: format!("{name}/{}", k.id), wert: "zonen".to_string(), grund: "zonen not supported in makros" });
             }
             if k.art.starts_with(PRAEFIX) || k.art == "note" || k.art == "ausgang" || k.art == "eingang" {
                 return Err(Fehler::MakroInhalt { makro: name.clone(), knoten: k.id.clone(), art: k.art.clone() });

@@ -54,7 +54,7 @@ test('the shelf strip shows the label, the tabs, the hint, module cards with a d
   assert.ok(t.includes('SHELF'));
   assert.ok(t.includes('MODULES'));
   assert.ok(t.includes('click = open the module · every change is saved at once · SAVE AS keeps a copy under a new name'));
-  assert.deepEqual(regal().querySelectorAll('.w-tab').map((x) => x.textContent), ['MODULES', 'LOOPS', 'CUTS']);
+  assert.deepEqual(regal().querySelectorAll('.w-tab').map((x) => x.textContent), ['MODULES', 'LOOPS', 'CUTS', 'SAMPLES', 'INSTRUMENTS']);
   assert.deepEqual(karten().map((k) => k.querySelector('b').textContent), ['Alpha', 'Beta', 'Techno 130 · Start', '+ empty module']);
   assert.ok(karte('Alpha').textContent.includes('2026-11-15'));
   assert.ok(karte('Techno 130 · Start').textContent.includes('template'));
@@ -285,7 +285,7 @@ const cutsOffen = async (opt = {}) => {
 
 test('CUTS lists the cuts; TO TRACK sends the id and selects the track', async () => {
   await cutsOffen({ antworten: { 'POST /sampler/spur': { j: { rev: 4, projekt: mitSpur('s9'), spur_id: 's9', schnitt_id: 'brk-00ff', fit: 0.5 } } } });
-  assert.deepEqual(regal().querySelectorAll('.w-tab').map((x) => x.textContent), ['MODULES', 'LOOPS', 'CUTS']);
+  assert.deepEqual(regal().querySelectorAll('.w-tab').map((x) => x.textContent), ['MODULES', 'LOOPS', 'CUTS', 'SAMPLES', 'INSTRUMENTS']);
   assert.deepEqual(karten().map((k) => k.querySelector('b').textContent), ['l4', 'Break']);
   assert.ok(karte('Break').textContent.includes('33 slices · 8 beats'));
   assert.equal(scheibenWahl().hidden, true);

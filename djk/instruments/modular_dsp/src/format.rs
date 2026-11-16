@@ -50,6 +50,11 @@ pub struct Knoten {
     /// (sampler A1). Not a scalar, so it is a named field like `datei`; checked in `uebersetzen`.
     #[serde(default)]
     pub grenzen: Option<Vec<u64>>,
+    /// Zone table of a `sampler` node (sample player stage 2a): a flat number array, 12 numbers per zone (`a, b, grund, lo,
+    /// hi, vlo, vhi, gain, pan, loop_a, loop_b, art`). `f64` because frame numbers of a pack exceed what `f32` holds exactly.
+    /// Named field like `grenzen`; checked in `uebersetzen`.
+    #[serde(default)]
+    pub zonen: Option<Vec<f64>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

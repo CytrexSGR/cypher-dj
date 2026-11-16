@@ -231,7 +231,11 @@ export const DEKODIERT: readonly DekodiertZustand[] = ['nein', 'laeuft', 'fertig
 // server knew them), the Strudel code and the project tempo. art leaves room for other origins (a native bk device on a track).
 export interface Entstehung { art: 'strom'; strom: 2 | 3; graph: string; regler: number[]; code: string; bpm: number }
 
-export interface Note { id: string; beat: number; laenge: number; ton: number; vel: number }
+// chance (1..99 percent), wdh (2..8 hits in the step), versatz (-95..95 without 0, percent of one sixteenth): optional, never written with their default
+export interface Note { id: string; beat: number; laenge: number; ton: number; vel: number; chance?: number; wdh?: number; versatz?: number }
+// Row settings of a MIDI clip, per pitch (key = the pitch as a decimal string); an entry without any field does not exist
+export interface Zeile { schritte?: number; swing?: number; richtung?: 'pendel' }
+export const MAX_ZEILEN = 128;
 // loop_beats (Spec 6.17): null oder fehlend = kein Loop; sonst wiederholt sich [0, loop_beats) bis laenge_beats (1/16 ≤ loop_beats ≤ laenge_beats)
 export interface AudioClip {
   id: string; art: 'audio'; name: string; start_beat: number; laenge_beats: number; loop_beats?: number | null;
@@ -247,6 +251,7 @@ export interface MidiClip {
   id: string; art: 'midi'; name: string; start_beat: number; laenge_beats: number; loop_beats?: number | null; naechste_noten_id?: number; noten: Note[];
   huellkurven?: Huellkurve[];                                  // 1.12 slice 5 (/2 only, D7): clip envelopes, absent when none
   muster?: MusterHerkunft;                                     // strudel-clip (/2 only): the Strudel pattern the notes were generated from; absent when none
+  zeilen?: Record<string, Zeile>;                              // workbench row settings per pitch; absent when none
   seq?: SeqSicht;                                              // SEQ deck v2 (/2 only): view of the lanes in the SEQ place, no music, absent when none
 }
 // strudel-clip: where the notes of a generated clip came from. code is the pattern text; ohne_ziel the Strudel fields that
@@ -921,8 +926,26 @@ export function punktePruefung(pk: unknown, ziel: string, bereich: ZielBereich =
   return null;
 }
 
+// MidiClip.zeilen: {"<pitch>": {schritte?: 1..128, swing?: 1..100, richtung?: "pendel"}}, at most MAX_ZEILEN entries, no entry without a field, never an empty object
+function pruefeZeilen(x: unknown, wo: string): void {
+  if (!istObjekt(x) || Array.isArray(x)) werfe(wo, 'object expected');
+  const ks = Object.keys(x as object);
+  if (ks.length < 1 || ks.length > MAX_ZEILEN) werfe(wo, `1..${MAX_ZEILEN} entries expected (absent when there are none)`);
+  for (const k of ks) {
+    if (!/^(0|[1-9][0-9]{0,2})$/.test(k) || Number(k) > 127) werfe(`${wo}.${k}`, 'pitch 0..127 as the key expected');
+    const o = felder((x as Record<string, unknown>)[k], `${wo}.${k}`, [], ['schritte', 'swing', 'richtung']);
+    if (Object.keys(o).length === 0) werfe(`${wo}.${k}`, 'an entry without a field does not exist');
+    if ('schritte' in o) zahlIn(o.schritte, `${wo}.${k}.schritte`, 1, 128, true);
+    if ('swing' in o) zahlIn(o.swing, `${wo}.${k}.swing`, 1, 100, true);
+    if ('richtung' in o && o.richtung !== 'pendel') werfe(`${wo}.${k}.richtung`, '"pendel" expected');
+  }
+}
+
 function pruefeNote(n: unknown, wo: string): Note {
-  const o = felder(n, wo, ['id', 'beat', 'laenge', 'ton', 'vel']);
+  const o = felder(n, wo, ['id', 'beat', 'laenge', 'ton', 'vel'], ['chance', 'wdh', 'versatz']);
+  if ('chance' in o) zahlIn(o.chance, `${wo}.chance`, 1, 99, true);
+  if ('wdh' in o) zahlIn(o.wdh, `${wo}.wdh`, 2, 8, true);
+  if ('versatz' in o) { zahlIn(o.versatz, `${wo}.versatz`, -95, 95, true); if (o.versatz === 0) werfe(`${wo}.versatz`, 'whole number -95..95 without 0 expected'); }
   if (typeof o.id !== 'string' || !ID.test(o.id)) werfe(`${wo}.id`, 'ID erwartet');
   zahlIn(o.beat, `${wo}.beat`, 0, MAX_BEAT);
   if (!zahl(o.laenge) || o.laenge <= 0 || o.laenge > MAX_BEAT) werfe(`${wo}.laenge`, 'Zahl > 0 erwartet');
@@ -1089,7 +1112,8 @@ function pruefeClip(c: unknown, wo: string, spurArt: string, warpErlaubt: boolea
     pruefeHuellkurven(o, wo, warpErlaubt, spur);
     return o as unknown as Clip;
   }
-  const o = felder(c, wo, [...basis, 'noten'], ['loop_beats', 'naechste_noten_id', 'huellkurven', 'muster', 'seq']);
+  const o = felder(c, wo, [...basis, 'noten'], ['loop_beats', 'naechste_noten_id', 'huellkurven', 'muster', 'seq', 'zeilen']);
+  if ('zeilen' in o) pruefeZeilen(o.zeilen, `${wo}.zeilen`);
   if ('seq' in o) {                                             // SEQ view descriptor: like muster, /2 only
     if (!warpErlaubt) werfe(`${wo}.seq`, `unknown field (seq exists only from ${FORMAT} on)`);
     const f = seqSichtPruefung(o.seq);
@@ -1725,6 +1749,7 @@ export function spurSicht(s: Spur, mitFreeze = true): unknown {
         loop_beats: c.loop_beats ?? null, offset_s: c.offset_s, gain_db: c.gain_db, fade_ein_beats: c.fade_ein_beats, fade_aus_beats: c.fade_aus_beats,
         warp: c.warp?.an ? c.warp : null, ...(c.stumm ? { stumm: true } : {}) }   // Paket 1.13: ein Warp an ändert den Klang, ein Warp aus nicht
       : { id: c.id, art: c.art, start_beat: c.start_beat, laenge_beats: c.laenge_beats, loop_beats: c.loop_beats ?? null, noten: c.noten,
+        ...(c.zeilen ? { zeilen: c.zeilen } : {}),   // row settings change the unrolling; absent: the view stays byte for byte the same
         ...(c.huellkurven?.some((h) => h.ziel === 'transpose') ? { transpose: c.huellkurven.find((h) => h.ziel === 'transpose') } : {}) })),
   };
 }

@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   fenster, blaettere, taktWahl, leiste, zaehlung, drumZeilen, tonZeilen, startOben, radOben, oktavLeiste, zustand, zellen, musterTakte, zuLang,
-  klickBefehle, wertZellen, wertBefehle, musterLaengeBefehle, sliceZeilen, rueckBefehle, pitchZellen, pitchBefehle, SCHRITT, SCHRITTE_TAKT, SICHTEN, TON_MIN, TON_MAX, FENSTER, RAD, VEL_VORGABE, LAENGE_VORGABE,
+  klickBefehle, wertZellen, wertBefehle, sliceZeilen, rueckBefehle, pitchZellen, pitchBefehle, SCHRITT, SCHRITTE_TAKT, SICHTEN, fensterSpanne, TON_MIN, TON_MAX, FENSTER, RAD, VEL_VORGABE, LAENGE_VORGABE,
 } from '../public/werkbank/grid.js';
 import { SeqFehler } from '../public/seq_logic.js';
 
@@ -34,7 +34,7 @@ test('constants', () => {
   assert.equal(vorlage().bass.clips[0].noten.length, 48);
 });
 test('window: never wider than the module, start on its grid (review focus 3)', () => {
-  assert.deepEqual(fenster({ sicht: 4, start: 0 }, 2), { sicht: 4, breite: 2, start: 0, takte: [0, 1] });
+  assert.deepEqual(fenster({ sicht: 4, start: 0 }, 2), { sicht: 4, breite: 2, start: 0, aufl: 16, takte: [0, 1] });
   assert.deepEqual(fenster({ sicht: 2, start: 3 }, 16).takte, [2, 3]);
   assert.deepEqual(blaettere(fenster({ sicht: 4, start: 12 }, 16), 1, 16).start, 12);
   assert.deepEqual(blaettere(fenster({ sicht: 1, start: 0 }, 1), -1, 1).start, 0);
@@ -116,14 +116,62 @@ test('state: a clip arranged in PRODUCTION is locked, no clip is kein_clip (revi
   const g = { id: 's1', art: 'instrument', clips: [{ id: 'c', art: 'midi', start_beat: 8, laenge_beats: 16, noten: [] }] };
   assert.throws(() => klickBefehle(g, g.clips[0], 36, 0, 'drum'), SeqFehler);
 });
-test('pattern length: shortening reports what it deletes; longer than the module is flagged', () => {
+test('a clip longer than 64 beats stays a pattern; a pattern clip shorter than 64 beats is locked', () => {
   const s = vorlage().bass;
-  assert.equal(musterLaengeBefehle(s, s.clips[0], 2).geloescht, 24);
-  assert.equal(musterLaengeBefehle(s, s.clips[0], 8).geloescht, 0);
-  assert.equal(musterLaengeBefehle(s, s.clips[0], 2).befehle.at(-1).loop_beats, 8);
-  assert.throws(() => musterLaengeBefehle(s, s.clips[0], 3), SeqFehler);
+  assert.equal(zustand({ ...s, clips: [{ ...s.clips[0], laenge_beats: 512 }] }), 'muster');
+  assert.equal(zustand({ ...s, clips: [{ ...s.clips[0], laenge_beats: 32 }] }), 'gesperrt');
   assert.equal(zuLang({ ...s.clips[0], loop_beats: 32 }, 4), true);
   assert.equal(zuLang(s.clips[0], 4), false);
+});
+test('resolution: a window has 4, 8 or 16 cells per bar; the counting row follows', () => {
+  for (const aufl of [4, 8, 16]) {
+    const f = fenster({ sicht: 2, start: 0, aufl }, 8);
+    assert.deepEqual(fensterSpanne(f), [0, 2 * aufl]);
+    const z = zaehlung(f);
+    assert.equal(z.schritte.length, 2 * aufl);
+    assert.deepEqual(z.takte.map((t) => [t.nr, t.schritt, t.spanne]), [[1, 0, aufl], [2, aufl, aufl]]);
+    assert.equal(blaettere(f, 1, 8).aufl, aufl);
+    assert.equal(taktWahl(f, 5, 8).aufl, aufl);
+  }
+  assert.equal(fenster({ sicht: 1 }, 4).aufl, 16, 'the default is 16');
+});
+test('windows page over 128 bars', () => {
+  let f = fenster({ sicht: 4, start: 0 }, 128);
+  assert.equal(leiste(128, f).length, 128);
+  f = blaettere(f, 1, 128);
+  assert.deepEqual(f.takte, [4, 5, 6, 7]);
+  assert.deepEqual(taktWahl(f, 127, 128).takte, [124, 125, 126, 127]);
+  assert.equal(blaettere(taktWahl(f, 127, 128), 1, 128).start, 124, 'the last page stays');
+  assert.equal(fenster({ sicht: 2, start: 40 }, 32).start, 30);
+});
+test('cells at 4, 8 and 32... resolutions: cell count, cell on when a note starts in its span, click writes at the cell start', () => {
+  const clip = { id: 'c', art: 'midi', start_beat: 0, laenge_beats: 64, loop_beats: 4, noten: [{ id: 'a', beat: 0.75, laenge: 0.25, ton: 36, vel: 90 }, { id: 'b', beat: 2, laenge: 0.25, ton: 36, vel: 100 }] };
+  const spur = { id: 's1', art: 'instrument', clips: [clip] };
+  const z4 = zellen(clip, 36, fenster({ sicht: 1, start: 0, aufl: 4 }, 1), 'drum');
+  assert.equal(z4.length, 4);
+  assert.deepEqual(z4.map((z) => z.an), [true, false, true, false], 'a note on the 4th sixteenth belongs to cell 0 of 4');
+  assert.equal(z4[0].vel, 90);
+  const z8 = zellen(clip, 36, fenster({ sicht: 1, start: 0, aufl: 8 }, 1), 'drum');
+  assert.deepEqual(z8.map((z) => z.an), [false, true, false, false, true, false, false, false]);
+  const k4 = klickBefehle(spur, clip, 38, 3, 'drum', null, 4);
+  assert.deepEqual(k4, [{ befehl: 'noten_neu', clip_id: 'c', noten: [{ beat: 3, laenge: 0.125, ton: 38, vel: 100 }] }]);
+  assert.deepEqual(klickBefehle(spur, clip, 40, 5, 'note', null, 8)[0].noten[0], { beat: 2.5, laenge: 0.5, ton: 40, vel: 100 });
+  assert.deepEqual(klickBefehle(spur, clip, 36, 0, 'drum', null, 4), [{ befehl: 'noten_loeschen', clip_id: 'c', ids: ['a'] }], 'a click on a cell with a note inside it turns it off');
+  assert.throws(() => klickBefehle(spur, clip, 36, 4, 'drum', null, 4), SeqFehler, 'cell 4 of 4 does not exist');
+});
+test('a pattern shorter than the module shows its repeats pale, a repeat names its source cell', () => {
+  const clip = { id: 'c', art: 'midi', start_beat: 0, laenge_beats: 64, loop_beats: 2, noten: [{ id: 'a', beat: 0.5, laenge: 0.25, ton: 36, vel: 90 }] };
+  const z = zellen(clip, 36, fenster({ sicht: 1, start: 0, aufl: 8 }, 1), 'drum');
+  assert.equal(z.length, 8);
+  assert.deepEqual(z.map((z) => z.wiederholung), [false, false, false, false, true, true, true, true]);
+  assert.deepEqual(z.map((z) => z.quelle), [0, 1, 2, 3, 0, 1, 2, 3]);
+  assert.deepEqual(z.map((z) => z.an), [false, true, false, false, false, true, false, false]);
+});
+test('a note value LENGTH counts cells of the resolution and is written as beats', () => {
+  const clip = { id: 'c', art: 'midi', start_beat: 0, laenge_beats: 64, loop_beats: 4, noten: [{ id: 'a', beat: 1, laenge: 0.5, ton: 36, vel: 90 }] };
+  assert.equal(zellen(clip, 36, fenster({ sicht: 1, aufl: 8 }, 1), 'note')[2].laenge, 1);
+  assert.equal(zellen(clip, 36, fenster({ sicht: 1, aufl: 16 }, 1), 'note')[4].laenge, 2);
+  assert.deepEqual(wertBefehle(clip, 36, 2, 'laenge', 3, 'note', 8), [{ befehl: 'noten_aendern', clip_id: 'c', noten: [{ id: 'a', laenge: 1.5 }] }]);
 });
 
 // ---- SLICE grid (sampler A1 task 6) ----

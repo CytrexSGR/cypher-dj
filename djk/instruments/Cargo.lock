@@ -99,6 +99,7 @@ dependencies = [
  "hall_dsp",
  "komp_dsp",
  "labor_dsp",
+ "libc",
  "rb_dsp",
  "realfft",
  "remix_dsp",

@@ -114,4 +114,58 @@ fn bk_block_allokiert_nicht() {
         assert!(klang, "Positivkontrolle: der Sampler klingt");
         assert!(abgewiesen > 0 && verloren > 0 && verloren_vorher > 0, "Positivkontrolle: die volle Warteschlange wurde erreicht");
     }
+    // sample player stage 2a: a zone node (mapped pack, vel input, round robin) plays through the FFI block without allocating
+    {
+        let w = std::env::temp_dir().join(format!("bk-zonen-alloc-{}", std::process::id()));
+        std::fs::create_dir_all(&w).unwrap();
+        let d: Vec<f32> = (0..24_000).flat_map(|i| { let v = (0.5 * (2.0 * std::f32::consts::PI * 300.0 * i as f32 / 48_000.0).sin()) as f32; [v, v] }).collect();
+        std::fs::write(w.join("zonen.f32"), d.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>()).unwrap();
+        let g = r#"{"format":"baukasten/2","name":"z","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"sampler","datei":"zonen.f32","zonen":[0,8000,60,0,63,1,127,1,0,0,0,0, 8000,16000,60,0,63,1,127,1,0.3,0,0,0, 16000,24000,72,64,127,1,127,1,-0.3,0,0,0]},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.trig","nach":"s.trig"},{"von":"n.gate","nach":"s.gate"},{"von":"n.vel","nach":"s.vel"},{"von":"s.l","nach":"o.l"},{"von":"s.r","nach":"o.r"}]}"#;
+        let json = CString::new(g).unwrap();
+        let wc = CString::new(w.to_str().unwrap()).unwrap();
+        let mut fehler = [0 as std::ffi::c_char; 256];
+        let h = cypher_bk_neu_wurzel(json.as_ptr(), 48_000.0, wc.as_ptr(), fehler.as_mut_ptr(), fehler.len());
+        assert!(!h.is_null());
+        let (mut l, mut r) = (vec![0f32; 256], vec![0f32; 256]);
+        let mut klang = false;
+        let start = ANFORDERUNGEN.load(Ordering::SeqCst);
+        for b in 0..1000u32 {
+            cypher_bk_note_an(h, (b * 11) % 256, 40 + (b % 40) as u8, 0.2 + (b % 5) as f32 * 0.2);
+            if b % 3 == 0 { cypher_bk_note_aus(h, (b * 29) % 256, 40 + (b % 40) as u8); }
+            if b % 400 == 399 { cypher_bk_zuruecksetzen(h); }
+            assert!(cypher_bk_block(h, l.as_mut_ptr(), r.as_mut_ptr(), 256) == 0);
+            klang |= l.iter().any(|v| *v != 0.0);
+        }
+        let danach = ANFORDERUNGEN.load(Ordering::SeqCst);
+        cypher_bk_frei(h);
+        assert_eq!(danach - start, 0, "Allokationen im Echtzeitpfad mit Zonen: {}", danach - start);
+        assert!(klang, "Positivkontrolle: der Zonen-Sampler klingt");
+    }
+    // sample player stage 2b: a looped zone and release zones on rl/rr (add nodes sum them into the output) plays through the FFI block without allocating
+    {
+        let w = std::env::temp_dir().join(format!("bk-zonen2-alloc-{}", std::process::id()));
+        std::fs::create_dir_all(&w).unwrap();
+        let d: Vec<f32> = (0..24_000).flat_map(|i| { let v = (0.5 * (2.0 * std::f32::consts::PI * 300.0 * i as f32 / 48_000.0).sin()) as f32; [v, v] }).collect();
+        std::fs::write(w.join("zonen.f32"), d.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>()).unwrap();
+        let g = r#"{"format":"baukasten/2","name":"z2","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"sampler","datei":"zonen.f32","zonen":[0,8000,60,0,127,1,127,1,0,1000,7000,0, 8000,16000,60,0,127,1,127,1,0.3,0,0,1, 16000,24000,60,0,127,1,127,1,-0.3,0,0,1]},{"id":"al","art":"add"},{"id":"ar","art":"add"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.trig","nach":"s.trig"},{"von":"n.gate","nach":"s.gate"},{"von":"n.vel","nach":"s.vel"},{"von":"s.l","nach":"al.a"},{"von":"s.rl","nach":"al.b"},{"von":"s.r","nach":"ar.a"},{"von":"s.rr","nach":"ar.b"},{"von":"al.aus","nach":"o.l"},{"von":"ar.aus","nach":"o.r"}]}"#;
+        let json = CString::new(g).unwrap();
+        let wc = CString::new(w.to_str().unwrap()).unwrap();
+        let mut fehler = [0 as std::ffi::c_char; 256];
+        let h = cypher_bk_neu_wurzel(json.as_ptr(), 48_000.0, wc.as_ptr(), fehler.as_mut_ptr(), fehler.len());
+        assert!(!h.is_null());
+        let (mut l, mut r) = (vec![0f32; 256], vec![0f32; 256]);
+        let mut klang = false;
+        let start = ANFORDERUNGEN.load(Ordering::SeqCst);
+        for b in 0..1000u32 {
+            cypher_bk_note_an(h, (b * 11) % 256, 40 + (b % 40) as u8, 0.2 + (b % 5) as f32 * 0.2);
+            if b % 3 == 0 { cypher_bk_note_aus(h, (b * 29) % 256, 40 + (b % 40) as u8); }
+            if b % 400 == 399 { cypher_bk_zuruecksetzen(h); }
+            assert!(cypher_bk_block(h, l.as_mut_ptr(), r.as_mut_ptr(), 256) == 0);
+            klang |= l.iter().any(|v| *v != 0.0);
+        }
+        let danach = ANFORDERUNGEN.load(Ordering::SeqCst);
+        cypher_bk_frei(h);
+        assert_eq!(danach - start, 0, "Allokationen im Echtzeitpfad mit Schleife und Release: {}", danach - start);
+        assert!(klang, "Positivkontrolle: der Zonen-Sampler klingt");
+    }
 }

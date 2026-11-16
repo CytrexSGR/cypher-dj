@@ -3,6 +3,34 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-16, fifth update
+
+**Studio**
+- New layout: the tracks on the left, the sequencer takes the rest, and a dock below with one card per instrument track
+  and one per effect. A card shows a few knobs of its device; OPEN shows the whole device in a floating window. The
+  separate mix view and the sound column are gone.
+- Effects are loaded into the dock (up to four) and each track has a small send knob per effect, labelled with the
+  effect it feeds. The shelf is a drawer behind SHELF.
+- Step sequencer for drum tracks: every row has its own length (LEN), so rows of different length drift against each
+  other, its own SWING, a direction (forward, or forward and back) and SHIFT buttons that move its hits by a step.
+  Step values per step: VELOCITY, CHANCE, OFFSET and ROLL (several hits inside one step). Tools DRAW, ERASE and FILL;
+  Shift draws a line, Ctrl selects a range, the arrow keys move a cursor.
+- LENGTH sets the module length from 1 to 128 bars, STEPS the resolution (4, 8 or 16 per bar), VIEW how many bars a page
+  shows. A loop range can be dragged above the steps.
+- EXPORT WAV and EXPORT MIDI write the module as a sum and per track.
+- Sample player: a SAMPLES tab on the shelf browses your own sample folders (listed in
+  `~/.config/cypherdj/sampler/wurzeln.json`), with a search over folder and file names and a preview by click. TO TRACK
+  puts one file on a new instrument track that plays it across the keys; the root note comes from pitch detection and
+  the file name. Samples in a protected vendor format are not listed.
+- Multisample instruments: a folder of note samples (note, velocity layer and take in the file names) becomes one
+  instrument with INSTRUMENT TO TRACK: the right sample for the key and the velocity, round robin between takes. Loop
+  points stored in WAV or AIFF files become sustain loops with a cross-fade, and a sibling folder of release samples
+  plays when a key is let go, with its own level knob. Built instruments are kept on a new INSTRUMENTS tab.
+
+**Cypher Modular**
+- The `sampler` block has a zone mode: a table of zones (key range, velocity range, root, gain, pan, sustain loop,
+  release sample) over one memory-mapped sample pack of up to 2 GiB, a `vel` input and two outputs for release samples.
+
 ## 2026-11-16, fourth update
 
 **Studio**

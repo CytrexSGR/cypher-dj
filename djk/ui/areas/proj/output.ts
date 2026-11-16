@@ -51,6 +51,9 @@ import {
   baueResampleProjekt, pruefeResampleNochGleich, ResampleFehler, resamplePlan, wirtSpurenImStrang, type ResamplePlan,
 } from '../../project/resample.ts';
 import { schreibeWavAusF32Stueckweise } from '../../project/recording.ts';
+import { schreibeSmf } from '../../project/smf.ts';
+import { midiTeile, sicherName, zweistellig as zwei2 } from '../../project/export_midi.ts';
+import { spawn } from 'node:child_process';
 import { baueBounceProjekt, bouncePlan, bounceRegler, bounceWiedergabe, pruefeBounceNochGleich, type BounceArt } from '../../project/bounce.ts';
 import type { AusgabeLauf, ProjZugang } from './area.ts';
 import { grundCode } from './mapping.ts';
@@ -82,6 +85,7 @@ const STATUS: Record<string, number> = {
   merge_keine_spur_frei: 409,
   resample_leer: 409, resample_fehler: 502,                                  // 1.10 slice 7 (T6)
   freeze_fehler: 502, render_fehler: 502, export_host_ausfall: 502, export_luecke: 502,   // plan 1.11 T13
+  export_leer: 409, keine_arbeitsflaeche: 409,                                // file export (MIDI / per track), show folder
   bounce_nur_audio: 409, bounce_ziel_art: 409, takes_voll: 409, ersetzen_loop: 409, gruppe_unbekannt: 400,   // 1.14 slice 4 (spec D12)
 };
 
@@ -237,11 +241,23 @@ export function fehlendesAudio(p: Projekt, von: number, bis: number): string[] {
 
 const zwei = (n: number): string => String(n).padStart(2, '0');
 // <projektordner>/export/<slug>-<JJJJMMTT-hhmmss>.wav (Ortszeit), bei Gleichstand -2, -3 …
+const exportStempel = (d: Date): string =>
+  `${d.getFullYear()}${zwei(d.getMonth() + 1)}${zwei(d.getDate())}-${zwei(d.getHours())}${zwei(d.getMinutes())}${zwei(d.getSeconds())}`;
 export function exportZiel(ordner: string, slug: string, d: Date): string {
-  const stempel = `${d.getFullYear()}${zwei(d.getMonth() + 1)}${zwei(d.getDate())}-${zwei(d.getHours())}${zwei(d.getMinutes())}${zwei(d.getSeconds())}`;
+  const stempel = exportStempel(d);
   let ziel = path.join(ordner, `${slug}-${stempel}.wav`);
   for (let n = 2; fs.existsSync(ziel); n++) ziel = path.join(ordner, `${slug}-${stempel}-${n}.wav`);
   return ziel;
+}
+// File export of the workbench: a NEW folder <projektordner>/export/<slug>-<JJJJMMTT-hhmmss>/ (-2, -3 ... on a tie). mkdir without `recursive` on the
+// last level fails when the folder exists, so an existing folder is never reused (the loop only picks a free name, the mkdir is the claim).
+export function exportOrdnerZiel(ordner: string, slug: string, d: Date): string {
+  const stempel = exportStempel(d);
+  fs.mkdirSync(ordner, { recursive: true });
+  for (let n = 1; ; n++) {
+    const ziel = path.join(ordner, n === 1 ? `${slug}-${stempel}` : `${slug}-${stempel}-${n}`);
+    try { fs.mkdirSync(ziel); return ziel; } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
+  }
 }
 
 // Spec 6.31: schmale Antwort für das Werkzeug proj_freeze (Abfrage ?antwort=kurz): rev, die Spur und ihr Freeze-Feld (null nach dem Verwerfen),
@@ -255,6 +271,15 @@ export function kurzeFreezeAntwort(r: { rev: number; projekt: Projekt }, spurId:
 // (positive dB, 0 = griff nie ein).
 export type ExportAntwort = Pick<RenderAntwort, 'frames' | 'spitze_db' | 'regler_quelle'>
   & { datei: string; abgriff: Abgriff; ueber_decke: boolean; limiter_db_max: number; dj_schluessel?: true; echtzeit?: true; dauer_s?: number } & Lautheit;
+// File export of the workbench (POST /proj/export_midi, /proj/export_spuren): `datei` is the file name inside `ordner`
+export interface ExportMidiAntwort {
+  ordner: string; von_beat: number; bis_beat: number;
+  dateien: { art: 'alle' | 'spur'; spur_id?: string; name: string; datei: string; noten: number }[];
+}
+export interface ExportSpurenAntwort {
+  ordner: string; von_beat: number; bis_beat: number;
+  dateien: { art: 'mix' | 'spur' | 'return'; spur_id?: string; return_id?: string; nr?: number; name: string; datei: string | null; spitze_db: number; stumm: boolean }[];
+}
 // 1.10 slice 5 (plan E7): a stage keyed by a DJ input (deck/1..4, erz/1) hears nothing in an export (no deck plays in the render): the answer says so,
 // only when it is true
 export const hatDjSchluessel = (p: Projekt): boolean => alleInserts(p).some((x) => x.insert.key?.quelle === 'deck' || x.insert.key?.quelle === 'erz');
@@ -694,8 +719,10 @@ export class Ausgabe {
 
   // Default range of export and loudness without von_beat/bis_beat: the loop bracket when it is on, otherwise the whole song from beat 0 to the end
   // of the last clip on any track (2026-11-06; before, the bracket was used even when off, so a fresh project always exported beats 0..32).
-  songBereich(): { von: number; bis: number } {
+  // A workbench module with a remembered length (a loop range is set) exports the module length 0..laenge_beats instead: the range is for listening, not for the file.
+  songBereich(modul = false): { von: number; bis: number } {
     const p = this.offen().projekt;
+    if (modul && p.werkbank?.laenge_beats !== undefined) return { von: 0, bis: p.werkbank.laenge_beats };
     if (p.loop.an) return { von: p.loop.von_beat, bis: p.loop.bis_beat };
     let bis = 0;
     for (const s of p.spuren) for (const c of s.clips) bis = Math.max(bis, c.start_beat + c.laenge_beats);
@@ -705,7 +732,7 @@ export class Ausgabe {
   // Prüfungen von Export und Lautheit: nur von_beat und bis_beat, Bereich 1 bis EXPORT_MAX_BEATS Beats ab Beat 0 (default: songBereich), kein anderer
   // Lauf, kein Transport, kein Audio in Vorbereitung.
   // nurSpuren (Merge, P6): audio_fehlt zählt nur diese Spuren (Standard: alle)
-  private pruefeBereich(d: Record<string, unknown>, erlaubt: readonly string[] = ['von_beat', 'bis_beat'], nurSpuren?: string[]):
+  private pruefeBereich(d: Record<string, unknown>, erlaubt: readonly string[] = ['von_beat', 'bis_beat'], nurSpuren?: string[], modul = false):
     { von: number; bis: number } {
     for (const k of Object.keys(d)) if (!erlaubt.includes(k)) fehl('argument_ungueltig', `unknown field ${k}`);
     for (const k of ['von_beat', 'bis_beat']) {
@@ -713,7 +740,7 @@ export class Ausgabe {
     }
     this.pruefeSchreiben();
     const o = this.offen();
-    const vorgabe = this.songBereich();
+    const vorgabe = this.songBereich(modul);
     const von = (d.von_beat as number | undefined) ?? vorgabe.von, bis = (d.bis_beat as number | undefined) ?? vorgabe.bis;
     if (!(von >= 0) || !(bis - von >= 1) || bis - von > EXPORT_MAX_BEATS) {
       fehl('export_bereich', `beat ${von} to ${bis}: the export starts at beat 0 or later and is 1 to ${EXPORT_MAX_BEATS} beats long`);
@@ -925,6 +952,133 @@ export class Ausgabe {
     return q ? this.zugang.schreibeWiedergabe(q) : null;
   }
 
+  // One offline render of the loaded export playback `nr` into `aus` with a controls file: the part that lautheit() and the per-track export share.
+  // The caller owns this.renderAbbruch (set before, cleared after) and removes the files.
+  private rendereTeil(o: { p: Projekt; nr: number; von: number; bis: number; aus: string; reglerDatei: string; regler: Record<string, number>;
+    nurSchluessel: string[]; trockenAus: boolean }): Promise<RenderAntwort> {
+    fs.writeFileSync(o.reglerDatei, JSON.stringify(o.regler));
+    const dauerMs = (o.bis - o.von) * 60_000 / o.p.tempo_bpm;
+    return rendere({ programm: (this.opt.render ?? (() => [renderProgramm()]))(), nr: o.nr, von_beat: o.von, bis_beat: o.bis, bpm: o.p.tempo_bpm,
+      aus: o.aus, arbeitsordner: this.zugang.arbeitsordner(), spurRegler: o.reglerDatei, ohneZustand: true, instanz: (this.opt.instanz ?? instanz)(),
+      // 1.10: alle am PM, damit die Summe dem Standard-Export gleicht (AK24)
+      zeitlimitMs: Math.ceil(4 * dauerMs) + 60_000, abbruch: this.renderAbbruch!.signal, abgriff: 'produktion', nurSchluessel: o.nurSchluessel,
+      trockenAus: o.trockenAus });
+  }
+
+  // File export of the workbench, MIDI (POST /proj/export_midi): nothing is rendered, so no transport check and no lock. The range follows the same rules
+  // as the other exports (the project loop or the whole song by default). One folder, `<slug>.mid` with all parts and one file per part.
+  async exportiereMidi(d: Record<string, unknown>): Promise<ExportMidiAntwort> {
+    for (const k of Object.keys(d)) if (k !== 'von_beat' && k !== 'bis_beat') fehl('argument_ungueltig', `unknown field ${k}`);
+    for (const k of ['von_beat', 'bis_beat']) {
+      if (d[k] !== undefined && (typeof d[k] !== 'number' || !Number.isFinite(d[k]))) fehl('argument_ungueltig', `${k}: a number is required`);
+    }
+    this.pruefeSchreiben();
+    const o = this.offen(), p = o.projekt;
+    const vorgabe = this.songBereich(true);
+    const von = (d.von_beat as number | undefined) ?? vorgabe.von, bis = (d.bis_beat as number | undefined) ?? vorgabe.bis;
+    if (!(von >= 0) || !(bis - von >= 1) || bis - von > EXPORT_MAX_BEATS) {
+      fehl('export_bereich', `beat ${von} to ${bis}: the export starts at beat 0 or later and is 1 to ${EXPORT_MAX_BEATS} beats long`);
+    }
+    const teile = midiTeile(p, von, bis);
+    if (!teile.length) fehl('export_leer', 'no unmuted instrument track has a note in this range');
+    const ziel = exportOrdnerZiel(path.join(o.ordner, 'export'), o.slug, (this.opt.jetzt ?? (() => new Date()))());
+    try {
+      const opt = { titel: p.name, tempo_bpm: p.tempo_bpm, taktart: p.taktart };
+      const dateien: ExportMidiAntwort['dateien'] = [];
+      const alle = `${o.slug}.mid`;
+      fs.writeFileSync(path.join(ziel, alle), schreibeSmf({ ...opt, teile: teile.map((t) => ({ name: t.name, noten: t.noten })) }));
+      dateien.push({ art: 'alle', name: p.name, datei: alle, noten: teile.reduce((n, t) => n + t.noten.length, 0) });
+      for (const t of teile) {
+        const datei = `${zwei2(t.nr)}-${sicherName(t.name)}.mid`;
+        fs.writeFileSync(path.join(ziel, datei), schreibeSmf({ ...opt, titel: t.name, teile: [{ name: t.name, noten: t.noten }] }));
+        dateien.push({ art: 'spur', spur_id: t.spur_id, name: t.name, datei, noten: t.noten.length });
+      }
+      this.ctx.log({ typ: 'proj_export_midi', slug: o.slug, von_beat: von, bis_beat: bis, ordner: ziel, dateien: dateien.length });
+      return { ordner: ziel, von_beat: von, bis_beat: bis, dateien };
+    } catch (e) { fs.rmSync(ziel, { recursive: true, force: true }); throw e; }
+  }
+
+  // File export of the workbench, WAV (POST /proj/export_spuren): the mix and every track alone (as lautheit() renders it, solo ignored), every fed
+  // return wet only, into a new folder. Offline only. Files that render to silence are still written (stumm: true). The render files are written as
+  // `.teil` inside the new folder and renamed; on any failure the whole new folder goes, so no half export stays.
+  async exportiereSpuren(d: Record<string, unknown>): Promise<ExportSpurenAntwort> {
+    await this.warteNachEigenemFreeze();
+    const { von, bis } = this.pruefeBereich(d, ['von_beat', 'bis_beat'], undefined, true);
+    if (brauchtEchtzeit(this.offen().projekt)) {
+      fehl('host_insert_echtzeit', 'a plugin stage is active; the per-track export renders offline and cannot capture it (export the mix instead, it is captured in real time)');
+    }
+    this.belege({ art: 'export' });
+    let tmp: string | null = null, ziel: string | null = null, fertig = false;
+    try {
+      const { jetzt, p, w } = await this.friereEinUndSchreibe('export');
+      try {
+        tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-export-'));
+        ziel = exportOrdnerZiel(path.join(jetzt.ordner, 'export'), jetzt.slug, (this.opt.jetzt ?? (() => new Date()))());
+        const aus = ziel, dir = tmp;
+        this.renderAbbruch = new AbortController();
+        if (this.geschlossen) this.renderAbbruch.abort();
+        const render = async (datei: string, regler: Record<string, number>, nrW = w.nr, nurSchluessel: string[] = [], trockenAus = false): Promise<RenderAntwort> => {
+          const teil = path.join(aus, `${datei}.teil`);
+          const r = await this.rendereTeil({ p, nr: nrW, von, bis, aus: teil, reglerDatei: path.join(dir, `${datei}.json`), regler, nurSchluessel, trockenAus });
+          fs.renameSync(teil, path.join(aus, datei));
+          this.datei = path.join(aus, datei);
+          return r;
+        };
+        const dateien: ExportSpurenAntwort['dateien'] = [];
+        const mix = await render('mix.wav', reglerAusProjekt(p));
+        dateien.push({ art: 'mix', name: p.name, datei: 'mix.wav', spitze_db: mix.spitze_db, stumm: mix.spitze_db <= STILLE_DB });
+        for (const s of belegteSpuren(p, von, bis)) {
+          const kopf = { art: 'spur' as const, spur_id: s.id, nr: s.nr, name: s.name };
+          if (s.mute && !hatLane(s)) { dateien.push({ ...kopf, datei: null, spitze_db: -200, stumm: true }); continue; }   // a mute lane could un-mute it
+          const einzel = this.schreibeOhneFremdeLanes(p, s);
+          let r: RenderAntwort;
+          const datei = `${zwei2(s.nr)}-${sicherName(s.name)}.wav`;
+          try { r = await render(datei, reglerEinzeln(s, p), einzel?.nr, schluesselPlan(p, s).ids); } finally { if (einzel) fs.rmSync(einzel.datei, { force: true }); }
+          dateien.push({ ...kopf, datei, spitze_db: r.spitze_db, stumm: r.spitze_db <= STILLE_DB });
+        }
+        const speist = (x: Return): boolean =>
+          [...p.spuren, ...(p.gruppen ?? [])].some((t) => (t.sends ?? []).some((sd) => sd.id === x.id && sd.db > STUMM_GRENZE));
+        for (const x of p.returns ?? []) {
+          if (!speist(x)) continue;
+          const kopf = { art: 'return' as const, return_id: x.id, nr: x.nr, name: x.name };
+          if (x.mute) { dateien.push({ ...kopf, datei: null, spitze_db: -200, stumm: true }); continue; }
+          const datei = `fx${x.nr}-${sicherName(x.name)}.wav`;
+          // the single files ignore solo (a track file is its track alone): the return file does too, so the parts add up to the mix without any solo
+          const regler = reglerReturn(x, p);
+          for (const k of Object.keys(regler)) if (k.endsWith('/solo')) regler[k] = 0;
+          const r = await render(datei, regler, w.nr, schluesselReturns(p, x).map((y) => `ret/${y.nr}`), true);
+          dateien.push({ ...kopf, datei, spitze_db: r.spitze_db, stumm: r.spitze_db <= STILLE_DB });
+        }
+        this.ctx.log({ typ: 'proj_export_spuren', slug: jetzt.slug, nr: w.nr, von_beat: von, bis_beat: bis, ordner: ziel, dateien: dateien.length });
+        fertig = true;
+        return { ordner: ziel, von_beat: von, bis_beat: bis, dateien };
+      } finally {
+        this.renderAbbruch = null;
+        fs.rmSync(w.datei, { force: true });                             // die Export-Wiedergabe verdrängt sonst die geladene (BEHALTE 5)
+        if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
+        if (ziel && !fertig) fs.rmSync(ziel, { recursive: true, force: true });
+      }
+    } catch (e) { throw this.nachFehler(e); } finally { this.gib(); }
+  }
+
+  // POST /proj/export_zeige {ordner}: opens one export folder of the open project in the desktop file manager. Detached, never waited for.
+  zeigeExport(d: Record<string, unknown>): { ordner: string } {
+    for (const k of Object.keys(d)) if (k !== 'ordner') fehl('argument_ungueltig', `unknown field ${k}`);
+    if (typeof d.ordner !== 'string' || d.ordner === '') return fehl('argument_ungueltig', 'ordner: a folder path is required');
+    const o = this.offen();
+    const wurzel = path.join(o.ordner, 'export');
+    let echt: string, echtWurzel: string;
+    try { echt = fs.realpathSync(path.resolve(d.ordner)); echtWurzel = fs.realpathSync(wurzel); } catch { return fehl('argument_ungueltig', 'ordner: no such folder'); }
+    if (path.dirname(echt) !== echtWurzel || !fs.statSync(echt).isDirectory()) {
+      return fehl('argument_ungueltig', 'ordner: only a folder inside the export folder of the open project can be shown');
+    }
+    if (!process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) fehl('keine_arbeitsflaeche', 'the server has no desktop session to open a folder in');
+    const k = spawn('xdg-open', [echt], { detached: true, stdio: 'ignore' });
+    k.on('error', () => {});                                             // no xdg-open: nothing to do, the page shows the path anyway
+    k.unref();
+    return { ordner: echt };
+  }
+
   // Paket 1.18, E-b (POST /proj/lautheit): Lautheit je belegter Spur und als Summe, offline, auf Anfrage. Gleicher Anfang wie der Export (Bereich, Wirt-
   // Spuren einfrieren, Export-Wiedergabe). Ein Render je Spur mit --ohne-zustand und einer Regler-Datei, in der alle anderen Spuren stumm stehen
   // (Fader und Pan der Spur aus dem Projekt, Master wie ein frisch gestarteter Kern, der Limiter bleibt), dazu ein Render aller Spuren für die Summe
@@ -939,17 +1093,12 @@ export class Ausgabe {
       const { jetzt, p, w } = await this.friereEinUndSchreibe('loudness measurement');
       try {
         const dir = tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-lautheit-'));
-        const dauerMs = (bis - von) * 60_000 / p.tempo_bpm;
         this.renderAbbruch = new AbortController();
         if (this.geschlossen) this.renderAbbruch.abort();
         const render = async (name: string, regler: Record<string, number>, nrW = w.nr, nurSchluessel: string[] = [], trockenAus = false):
           Promise<{ r: RenderAntwort; l: Lautheit; unter: boolean }> => {
-          const datei = path.join(dir, `${name}.json`), aus = path.join(dir, `${name}.wav`);
-          fs.writeFileSync(datei, JSON.stringify(regler));
-          const r = await rendere({ programm: (this.opt.render ?? (() => [renderProgramm()]))(), nr: nrW, von_beat: von, bis_beat: bis, bpm: p.tempo_bpm,
-            aus, arbeitsordner: this.zugang.arbeitsordner(), spurRegler: datei, ohneZustand: true, instanz: (this.opt.instanz ?? instanz)(),
-            // 1.10: alle am PM, damit die Summe dem Standard-Export gleicht (AK24)
-            zeitlimitMs: Math.ceil(4 * dauerMs) + 60_000, abbruch: this.renderAbbruch!.signal, abgriff: 'produktion', nurSchluessel, trockenAus });
+          const aus = path.join(dir, `${name}.wav`);
+          const r = await this.rendereTeil({ p, nr: nrW, von, bis, aus, reglerDatei: path.join(dir, `${name}.json`), regler, nurSchluessel, trockenAus });
           return { r, ...(r.spitze_db <= STILLE_DB ? { l: OHNE_LAUTHEIT, unter: false } : untermessgrenze(await messeLautheit(aus, this.opt.ffmpeg))) };
         };
         const spuren: SpurLautheit[] = [];
@@ -1299,6 +1448,9 @@ export function ausgabeBereich(ctx: BereichKontext, zugang: ProjZugang, opt: Aus
       }) },
       { methode: 'POST', pfad: '/proj/export', schutz: 'fremdePost', handler: antworte((d) => a.exportiere(d)) },
       { methode: 'POST', pfad: '/proj/lautheit', schutz: 'fremdePost', handler: antworte((d) => a.lautheit(d)) },
+      { methode: 'POST', pfad: '/proj/export_midi', schutz: 'fremdePost', handler: antworte(async (d) => a.exportiereMidi(d)) },
+      { methode: 'POST', pfad: '/proj/export_spuren', schutz: 'fremdePost', handler: antworte((d) => a.exportiereSpuren(d)) },
+      { methode: 'POST', pfad: '/proj/export_zeige', schutz: 'fremdePost', handler: antworte(async (d) => a.zeigeExport(d)) },
       { methode: 'POST', pfad: '/proj/zusammenfuehren', schutz: 'fremdePost', handler: antworte(async (d, kurz) => {
         const x = await a.zusammenfuehre(d);
         if (!kurz) return x;

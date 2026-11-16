@@ -1,0 +1,18 @@
+/* Workbench file export: the two top bar buttons and the result panel under the top bar. */
+#werkbank .w-kopf { position: relative; }
+#werkbank .w-export.laeuft { border-color: var(--warn); color: var(--warn); }
+#werkbank .w-export-ergebnis { position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; width: min(640px, 100%); max-height: 60vh; overflow: auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, .45); }
+#werkbank .w-export-ergebnis[hidden] { display: none; }
+#werkbank .w-export-titel { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); font-weight: 700; padding-right: 28px; }
+#werkbank .w-export-zu { position: absolute; top: 6px; right: 8px; }
+#werkbank .w-export-pfadzeile { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+#werkbank .w-export-pfad { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; user-select: all; font-size: 12px; background: rgba(255, 255, 255, .05); padding: 3px 6px; border-radius: 4px; }
+#werkbank .w-export-liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 12px; }
+#werkbank .w-export-liste li { display: grid; grid-template-columns: 5.5em minmax(0, 1fr) minmax(0, 1.2fr) auto auto; gap: 8px; align-items: baseline; }
+#werkbank .w-export-art { color: var(--dim); }
+#werkbank .w-export-name, #werkbank .w-export-datei { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#werkbank .w-export-datei { color: var(--dim); }
+#werkbank .w-export-detail { text-align: right; font-variant-numeric: tabular-nums; }
+#werkbank .w-export-stumm .w-export-detail { color: var(--warn); }
+#werkbank .w-export-marke { color: var(--warn); font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: .1em; }

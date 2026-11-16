@@ -16,7 +16,7 @@ use crate::limiter::Limiter;
 use crate::osz::{Osz, Rauschen, Sinus};
 use crate::phaser::Phaser;
 use crate::vocoder::Vocoder;
-use crate::sampler::{Eingabe, Einstellung, NotenWahl, Sampler};
+use crate::sampler::{Daten, Eingabe, Einstellung, NotenWahl, Sampler, ZonenTabelle};
 use crate::roehre::{Roehre, RoehrenSatz};
 use crate::svf::Svf;
 use crate::allpass::Allpass;
@@ -121,7 +121,7 @@ pub enum Schritt {
     /// C7), result in voice 0 on both sides. `zisch` and `mix` are read from voice 0; a non-finite value reads the node's own
     /// value (`voreinstellung`, same order).
     /// per voice; `d` is the node's sample data, shared read-only by all voices (S10, D5)
-    Sampler { hz: Quelle, trig: Quelle, gate: Quelle, scheibe: Quelle, rueck: Quelle, tempo: Quelle, halb: Quelle, ausklang: Quelle, wl: usize, wr: usize, e: Einstellung, g: Option<Box<[usize]>>, wahl: bool, d: Box<[f32]>, s: [Sampler; MAX_STIMMEN] },
+    Sampler { hz: Quelle, trig: Quelle, gate: Quelle, scheibe: Quelle, rueck: Quelle, tempo: Quelle, halb: Quelle, ausklang: Quelle, vel: Quelle, wl: usize, wr: usize, wrl: usize, wrr: usize, e: Einstellung, g: Option<Box<[usize]>>, z: Option<ZonenTabelle>, rr: u64, rr2: u64, wahl: bool, d: Daten, s: [Sampler; MAX_STIMMEN] },
     Vocoder { x: Quelle, l: Quelle, r: Quelle, zisch: Quelle, mix: Quelle, wl: usize, wr: usize, voreinstellung: [f32; 2], v: Vocoder },
     /// Sum point (S21): convolution on Σ(x + l) left and Σ(x + r) right, result in voice 0; mix from voice 0
     Faltung { x: Quelle, l: Quelle, r: Quelle, mix: Quelle, wl: usize, wr: usize, f: Box<Faltung> },
@@ -273,7 +273,11 @@ impl Schritt {
             Schritt::Phaser { p, .. } => p.zuruecksetzen(),
             Schritt::Vocoder { v, .. } => v.zuruecksetzen(),
             Schritt::Faltung { f, .. } => f.zuruecksetzen(),
-            Schritt::Sampler { s, .. } => *s = [Sampler::default(); MAX_STIMMEN],
+            Schritt::Sampler { s, rr, rr2, .. } => {
+                *s = [Sampler::default(); MAX_STIMMEN];
+                *rr = 0;
+                *rr2 = 0;
+            }
             Schritt::Wavetable { w, e, .. } => **w = std::array::from_fn(|i| WtStimme::neu(i, e)),
             Schritt::Resonator { v, e, .. } => **v = std::array::from_fn(|i| RsStimme::neu(i, e)),
             Schritt::Metall { m, e, .. } => **m = std::array::from_fn(|i| MtStimme::neu(i, e)),
@@ -1059,18 +1063,30 @@ impl Programm {
                     let (ra, ti, f, mi) = (m(rate, 0), m(tiefe, 1), m(fb, 2), m(mix, 3));
                     in_stimme0(slots, *wl, *wr, p.prozess(s.0, s.1, ra, ti, f, mi));
                 }
-                Schritt::Sampler { hz, trig, gate, scheibe, rueck, tempo, halb, ausklang, wl, wr, e, g: tabelle, wahl, d, s } => {
+                Schritt::Sampler { hz, trig, gate, scheibe, rueck, tempo, halb, ausklang, vel, wl, wr, wrl, wrr, e, g: tabelle, z: zonen, rr, rr2, wahl, d, s } => {
+                    let d: &[f32] = d;
                     let (h, t, g) = (spur(*hz, slots, vorher), spur(*trig, slots, vorher), spur(*gate, slots, vorher));
                     let (sc, ru) = (spur(*scheibe, slots, vorher), spur(*rueck, slots, vorher));
                     let (te, ha, au) = (spur(*tempo, slots, vorher), spur(*halb, slots, vorher), spur(*ausklang, slots, vorher));
                     let (mut ol, mut or) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
-                    for i in 0..n {
-                        let x = Eingabe { hz: h[i], trig: t[i], gate: g[i], scheibe: sc[i], rueck: ru[i] };
-                        let w = if *wahl { Some(NotenWahl { tempo: te[i], halb: ha[i], ausklang_ms: au[i] }) } else { None };
-                        (ol[i], or[i]) = s[i].prozess_mit(d, e, tabelle.as_deref(), w, sr, x);
+                    let (mut fl, mut fr) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
+                    if let Some(zt) = zonen.as_ref() {
+                        let ve = spur(*vel, slots, vorher);
+                        for i in 0..n {
+                            let x = Eingabe { hz: h[i], trig: t[i], gate: g[i], scheibe: sc[i], rueck: ru[i] };
+                            (ol[i], or[i], fl[i], fr[i]) = s[i].prozess_zonen_frei(d, zt, rr, rr2, sr, x, ve[i]);
+                        }
+                    } else {
+                        for i in 0..n {
+                            let x = Eingabe { hz: h[i], trig: t[i], gate: g[i], scheibe: sc[i], rueck: ru[i] };
+                            let w = if *wahl { Some(NotenWahl { tempo: te[i], halb: ha[i], ausklang_ms: au[i] }) } else { None };
+                            (ol[i], or[i]) = s[i].prozess_mit(d, e, tabelle.as_deref(), w, sr, x);
+                        }
                     }
                     slots[*wl] = ol;
                     slots[*wr] = or;
+                    slots[*wrl] = fl;
+                    slots[*wrr] = fr;
                 }
                 Schritt::Vocoder { x, l, r, zisch, mix, wl, wr, voreinstellung, v } => {
                     let (xs, ls, rs) = (spur(*x, slots, vorher), spur(*l, slots, vorher), spur(*r, slots, vorher));

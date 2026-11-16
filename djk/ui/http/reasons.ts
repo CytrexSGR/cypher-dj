@@ -195,6 +195,7 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   beat_ausserhalb: 'that position is outside the clip',
   tempo_bereich: 'tempo must be 60 to 200 BPM',
   loop_bereich: 'the loop needs at least 1 beat',
+  modul_bereich: 'the range must lie inside the module length',
   projekt_ungueltig: 'the change would make the project invalid; nothing was saved',
   zu_gross: 'the project would exceed the clip or note limit (at most 4096 clips, 65536 notes, counted after unrolling loops)',
   warp_maschine_fehlt: 'this core was built without the stretch engine (Bungee); COMPLEX and TONES warp need it. Use RE-PITCH',
@@ -269,6 +270,9 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   freeze_fehler: 'freezing failed in the core; nothing was saved',
   render_fehler: 'the export render failed',
   export_bereich: 'the export range must be 1 to 1024 beats long',
+  export_leer: 'no unmuted instrument track has a note in this range',
+  keine_arbeitsflaeche: 'the server has no desktop session to open a folder in',
+  projekt_offen: 'the open module cannot be deleted; open another one first',
   // MIDI import (project/smf.ts, project/midi_import.ts, areas/proj/midi_import.ts)
   smf_kein_smf: 'the file is not a Standard MIDI File',
   smf_format2: 'MIDI format 2 (independent sequences) is not supported; convert the file to format 0 or 1',

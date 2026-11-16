@@ -13,7 +13,7 @@ const lies = (n) => fs.readFileSync(path.join(PUBLIC, n), 'utf8');
 
 installiere();   // the globals the modules read at import time
 const { bindeWerkbank, istModul, WERKBANK_TEXT } = await import('../public/werkbank/werkbank.js');
-const { modulTakte, laengeBefehl, tempoBefehl, LAENGEN } = await import('../public/werkbank/kopf.js');
+const { modulTakte, laengeBefehl, laengeKlickBefehle: laengeKlick, tempoBefehl, laengeOhneSchleife, LAENGEN } = await import('../public/werkbank/kopf.js');
 const { regalEintraege } = await import('../public/werkbank/regal.js');
 const { antwortText } = await import('../public/production/production.js');
 
@@ -121,13 +121,14 @@ test('LENGTH and BPM write project commands with the rev; a bad tempo sends noth
   assert.equal($w('bpm').value, '132', 'the stored tempo is shown again');
 });
 
-test('a loop that is off, not from 0 or an odd length shows no LENGTH button active; PLAY still starts', async () => {
+test('a loop that is off, not from 0 or an odd length shows no LENGTH button active; PLAY still starts (a loop that is on is left as it is)', async () => {
   for (const loop of [{ an: false, von_beat: 0, bis_beat: 16 }, { an: true, von_beat: 4, bis_beat: 20 }, { an: true, von_beat: 0, bis_beat: 12 }]) {
-    aufbau({ antworten: MODUL_ANTWORTEN(modul({ loop })) });
+    aufbau({ antworten: { ...MODUL_ANTWORTEN(modul({ loop })), 'POST /proj/aendern': { j: { rev: 4, projekt: modul({ rev: 4 }) } } } });
     w.zeige(); await ruhe();
     assert.deepEqual(LAENGEN.filter((n) => $w(`laenge-${n}`).classList.contains('an')), []);
     klick($w('play')); await ruhe();
     assert.deepEqual(letzter('/proj/transport').koerper, { aktion: 'start', beat: 0 });
+    assert.equal(POSTS('/proj/aendern').length, loop.an ? 0 : 1);
   }
 });
 
@@ -266,12 +267,12 @@ test('verberge stops the frame loop: no hook runs once the view is hidden', asyn
 });
 
 test('every region of the contract exists as a host and as a binder file', () => {
-  for (const r of ['kopf', 'spuren', 'noten', 'klang', 'regal', 'leer', 'meldung']) assert.ok($w(r), `region ${r}`);
-  for (const f of ['werkbank.js', 'werkbank.css', 'kopf.js', 'kopf.css', 'regal.js', 'regal.css', 'tracks.js', 'tracks.css', 'sound.js', 'sound.css', 'grid_view.js', 'grid.css']) {
+  for (const r of ['kopf', 'spuren', 'noten', 'dock', 'klang', 'fenster-flaeche', 'regal', 'leer', 'meldung']) assert.ok($w(r), `region ${r}`);
+  for (const f of ['werkbank.js', 'werkbank.css', 'kopf.js', 'kopf.css', 'regal.js', 'regal.css', 'tracks.js', 'tracks.css', 'sound.js', 'sound.css', 'grid_view.js', 'grid.css', 'mix.js', 'mix.css', 'dock.js', 'dock.css', 'window.js', 'export.js', 'export.css']) {
     assert.ok(fs.existsSync(path.join(PUBLIC, 'werkbank', f)), f);
   }
   const css = lies('werkbank/werkbank.css');
-  const reihe = ['kopf', 'regal', 'spuren', 'raster', 'klang'].map((n) => css.indexOf(`@import url('${n}.css')`));
+  const reihe = ['kopf', 'regal', 'spuren', 'raster', 'klang', 'dock'].map((n) => css.indexOf(`@import url('${n}.css')`));
   assert.ok(reihe.every((i) => i >= 0), 'every region CSS is imported');
   assert.deepEqual([...reihe].sort((a, b) => a - b), reihe, 'in the order of the binders');
 });
@@ -295,10 +296,49 @@ test('modulTakte, laengeBefehl, tempoBefehl, istModul', () => {
   assert.deepEqual(laengeBefehl(8), { befehl: 'loop_setzen', an: true, von_beat: 0, bis_beat: 32 });
   assert.deepEqual([tempoBefehl('130'), tempoBefehl('59'), tempoBefehl('201'), tempoBefehl(''), tempoBefehl('130,25'), tempoBefehl('130.123')],
     [{ befehl: 'tempo_setzen', bpm: 130 }, null, null, null, { befehl: 'tempo_setzen', bpm: 130.25 }, null]);
-  assert.deepEqual(LAENGEN, [1, 2, 4, 8, 16]);
+  assert.deepEqual(LAENGEN, [1, 2, 4, 8, 16, 32, 64, 128]);
+  assert.equal(modulTakte({ loop: { an: true, von_beat: 0, bis_beat: 512 } }), 128);
+  assert.equal(modulTakte({ werkbank: { schema: 1, laenge_beats: 256 }, loop: { an: true, von_beat: 4, bis_beat: 8 } }), 64);
   assert.equal(istModul({ werkbank: { schema: 1 } }), true);
   assert.equal(istModul({ werkbank: { schema: 2 } }), false);
   assert.equal(istModul(null), false);
+});
+
+test('laengeKlickBefehle: note limit of the project leaves the copies out; a clip without loop_beats; the same length does nothing', () => {
+  const clip = (extra = {}) => ({ id: 'c', art: 'midi', start_beat: 0, laenge_beats: 64, loop_beats: 4, noten: [{ id: 'a', beat: 0, laenge: 0.25, ton: 36, vel: 100, chance: 50, wdh: 2, versatz: -10 }], ...extra });
+  const p = (c, voll = 0) => ({ werkbank: { schema: 1 }, loop: { an: true, von_beat: 0, bis_beat: 16 },
+    spuren: [{ id: 's', art: 'instrument', clips: [c] }, ...(voll ? [{ id: 'v', art: 'instrument', clips: [{ id: 'cv', art: 'midi', start_beat: 0, laenge_beats: 64, noten: Array.from({ length: voll }, (_, i) => ({ id: `x${i}`, beat: 0, laenge: 1, ton: 1, vel: 1 })) }] }] : []) ] });
+  const r = laengeKlick(p(clip()), 2);
+  assert.equal(r.zuViele, false);
+  assert.deepEqual(r.befehle[2].noten, [{ beat: 4, laenge: 0.25, ton: 36, vel: 100, chance: 50, wdh: 2, versatz: -10 }], 'all note fields are copied');
+  const voll = laengeKlick(p(clip(), 65536), 2);
+  assert.equal(voll.zuViele, true);
+  assert.ok(voll.befehle.every((b) => b.befehl !== 'noten_neu'), 'nothing is copied');
+  assert.ok(voll.befehle.some((b) => b.befehl === 'clip_aendern'), 'the lengths are still set');
+  assert.deepEqual(laengeKlick(p(clip({ loop_beats: 16 })), 4).befehle, [], 'the same length changes nothing');
+  assert.deepEqual(laengeKlick(p(clip({ loop_beats: undefined })), 4).befehle, [{ befehl: 'clip_aendern', clip_id: 'c', loop_beats: 16 }], 'a clip without a pattern length gets one');
+  const mitBereich = p(clip()); mitBereich.werkbank.laenge_beats = 16; mitBereich.loop = { an: true, von_beat: 4, bis_beat: 8 };
+  assert.deepEqual(laengeKlick(mitBereich, 4).befehle[0], { befehl: 'werkbank_bereich', aus: true });
+  assert.equal(laengeKlick(p(clip({ laenge_beats: 64, loop_beats: 64 })), 32).befehle[1].laenge_beats, 128, 'the clip grows, never shrinks');
+  assert.deepEqual(laengeKlick(p(clip({ loop_beats: 64 })), 1).befehle.at(-1), { befehl: 'clip_aendern', clip_id: 'c', loop_beats: 4 });
+});
+
+test('PLAY on a module whose loop was switched off restores the loop over the longest pattern before it starts', async () => {
+  const clips = (loop_beats) => [{ id: 'c1', art: 'midi', start_beat: 0, laenge_beats: 64, loop_beats, noten: [] }];
+  const aus = modul({ loop: { an: false, von_beat: 0, bis_beat: 4 }, spuren: [{ id: 's1', name: 'Drums', art: 'instrument', clips: clips(64) }, { id: 's2', name: 'Bass', art: 'instrument', clips: clips(16) }] });
+  assert.equal(laengeOhneSchleife(aus), 16);
+  assert.equal(laengeOhneSchleife(modul()), 4);
+  assert.equal(laengeOhneSchleife({ spuren: [{ clips: clips(20) }] }), 8);
+  aufbau({ antworten: MODUL_ANTWORTEN(aus) });
+  w.zeige(); await ruhe();
+  attrappe.antworten['POST /proj/aendern'] = { j: { rev: 4, projekt: { ...aus, rev: 4, loop: { an: true, von_beat: 0, bis_beat: 64 } } } };
+  klick($w('play')); await ruhe();
+  assert.deepEqual(letzter('/proj/aendern').koerper.befehle, [{ befehl: 'loop_setzen', an: true, von_beat: 0, bis_beat: 64 }]);
+  assert.deepEqual(letzter('/proj/transport').koerper, { aktion: 'start', beat: 0 });
+  const folge = attrappe.anrufe.filter((x) => x.methode === 'POST').map((x) => x.url);
+  assert.ok(folge.indexOf('/proj/aendern') < folge.indexOf('/proj/transport'));
+  assert.match($w('meldung').textContent, /loops over 16 bars again/);
+  assert.equal($w('laenge-16').classList.contains('an'), true);
 });
 
 test('regalEintraege: only modules, sorted by name, the open one marked', () => {

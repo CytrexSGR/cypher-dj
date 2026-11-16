@@ -6,6 +6,7 @@
  },
  "title": "Remix",
  "akzent": "tuerkis",
+ "front": ["k1", "k26", "k20", "k27"],
  "layout": {
   "rows": [
    [

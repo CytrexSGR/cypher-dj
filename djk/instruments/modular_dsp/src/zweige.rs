@@ -124,8 +124,8 @@ pub fn eingaenge(s: &Schritt) -> Vec<Quelle> {
         Schritt::Phaser { x, l, r, rate, tiefe, fb, mix, .. } => vec![*x, *l, *r, *rate, *tiefe, *fb, *mix],
         Schritt::Roehre { x, antrieb, bias, .. } => vec![*x, *antrieb, *bias],
         // every field is named: a new field of the step must be decided here (an input is listed, anything else is `_`)
-        Schritt::Sampler { hz, trig, gate, scheibe, rueck, tempo, halb, ausklang, wl: _, wr: _, e: _, g: _, wahl: _, d: _, s: _ } => {
-            vec![*hz, *trig, *gate, *scheibe, *rueck, *tempo, *halb, *ausklang]
+        Schritt::Sampler { hz, trig, gate, scheibe, rueck, tempo, halb, ausklang, vel, wl: _, wr: _, wrl: _, wrr: _, e: _, g: _, z: _, rr: _, rr2: _, wahl: _, d: _, s: _ } => {
+            vec![*hz, *trig, *gate, *scheibe, *rueck, *tempo, *halb, *ausklang, *vel]
         }
         Schritt::Vocoder { x, l, r, zisch, mix, .. } => vec![*x, *l, *r, *zisch, *mix],
         Schritt::Faltung { x, l, r, mix, .. } => vec![*x, *l, *r, *mix],
@@ -169,8 +169,9 @@ pub fn ausgaenge(s: &Schritt) -> Vec<usize> {
         Schritt::Sem { aus, bp, .. } => vec![*aus, *bp],
         Schritt::Chorus { l, r, .. } => vec![*l, *r],
         Schritt::Hall { wl, wr, .. } | Schritt::Delay { wl, wr, .. } | Schritt::Limiter { wl, wr, .. } | Schritt::Gate { wl, wr, .. }
-        | Schritt::Labor { wl, wr, .. } | Schritt::Remix { wl, wr, .. } | Schritt::Komp { wl, wr, .. } | Schritt::Phaser { wl, wr, .. } | Schritt::Sampler { wl, wr, .. } | Schritt::Vocoder { wl, wr, .. }
+        | Schritt::Labor { wl, wr, .. } | Schritt::Remix { wl, wr, .. } | Schritt::Komp { wl, wr, .. } | Schritt::Phaser { wl, wr, .. } | Schritt::Vocoder { wl, wr, .. }
         | Schritt::Faltung { wl, wr, .. } | Schritt::Granular { wl, wr, .. } | Schritt::Eingang { wl, wr } => vec![*wl, *wr],
+        Schritt::Sampler { wl, wr, wrl, wrr, .. } => vec![*wl, *wr, *wrl, *wrr],
         Schritt::Wavetable { wl, wr, aus, .. } => vec![*wl, *wr, *aus],
         Schritt::Metall { aus, huelle, .. } => vec![*aus, *huelle],
         Schritt::Ms20 { tp, hp, .. } => vec![*tp, *hp],

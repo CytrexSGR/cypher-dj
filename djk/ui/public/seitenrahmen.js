@@ -80,11 +80,11 @@ export function bindeSchublade() {
 const ANSICHTEN = ['dj', 'studio', 'produktion', 'werkbank'];
 export let produktion = null;
 export let werkbank = null;   // the workbench view (werkbank/werkbank.js), the fourth value: label STUDIO, value werkbank
-export function setzeAnsicht(a) {
+export function setzeAnsicht(a, merken = true) {
   setzeGeraeteseite(false);   // the layer sits on the page of one view; another view never keeps it
   for (const k of ['studio', 'produktion', 'werkbank']) document.body.classList.toggle(k, a === k);
   for (const b of $$('[data-ansicht]')) { const an = b.dataset.ansicht === a; b.classList.toggle('an', an); b.setAttribute('aria-pressed', String(an)); }
-  try { localStorage.setItem('djk-ansicht', a); } catch { /* ohne Speicher: DJ */ }
+  if (merken) try { localStorage.setItem('djk-ansicht', a); } catch { /* ohne Speicher: DJ */ }
   if (a === 'produktion') produktion?.zeige(); else produktion?.verberge();
   if (a === 'werkbank') werkbank?.zeige(); else werkbank?.verberge();
   ordneMitte(a);
@@ -100,8 +100,28 @@ export function bindeTablet() {
   window.addEventListener('hashchange', pruefe);
   pruefe();
 }
+// Studio view: the DJ effect strip of the head is folded away; this button (shown only in that view) brings it back. Remembered per browser.
+function bindeDjFx() {
+  const b = document.createElement('button');
+  b.setAttribute('id', 'djfx-auf'); b.setAttribute('type', 'button'); b.setAttribute('data-w', 'djfx-auf'); b.textContent = 'DJ FX';
+  b.title = 'Show or hide the DJ effects of the head (ROUTING, FX1, FX2, COLOR, FX3)';
+  const setze = (an, merken = true) => {
+    document.body.classList.toggle('djfx-auf', an); b.setAttribute('aria-pressed', String(an)); b.classList.toggle('an', an);
+    if (merken) try { localStorage.setItem('djk-wb-djfx', an ? '1' : '0'); } catch { /* without storage: only now */ }
+  };
+  let an = false;
+  try { an = localStorage.getItem('djk-wb-djfx') === '1'; } catch { /* default: folded */ }
+  b.addEventListener('click', () => setze(!document.body.classList.contains('djfx-auf')));
+  $('#kopf')?.append(b);
+  setze(an, false);
+}
 export function bindeAnsicht() {
+  bindeDjFx();
   for (const b of $$('[data-ansicht]')) b.addEventListener('click', () => setzeAnsicht(b.dataset.ansicht));
+  // The Remix window (#remix) is a page instance of its own that shows only the Remix plate of the DJ page. It shares localStorage with the main
+  // window: with STUDIO or PRODUCTION remembered there it showed that whole view instead of the plate (found 2026-11-16). It always takes the DJ view
+  // and never writes the remembered one.
+  if (location.hash === '#remix') { setzeAnsicht('dj', false); return; }
   let a = 'dj';
   try { const g = localStorage.getItem('djk-ansicht'); a = ANSICHTEN.includes(g) ? g : 'dj'; } catch { /* Vorgabe */ }
   setzeAnsicht(a);

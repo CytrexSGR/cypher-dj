@@ -14,8 +14,8 @@
 #werkbank .w-raster.gesperrt [data-a], #werkbank .w-raster.gesperrt .w-val { cursor: default; }
 
 /* bar strip over the grid: every bar of the module, the visible window framed */
-#werkbank .w-rleiste { display: flex; gap: 3px; margin: 0 0 8px var(--lnbreit); padding-left: 6px; }
-#werkbank .w-rtakt { flex: 1 1 0; min-width: 0; height: 26px; border-radius: 3px; background: var(--panel2); border: 1px solid var(--line); font-size: 10px; font-weight: 800; color: var(--dim); padding: 2px 4px; position: relative; cursor: pointer; }
+#werkbank .w-rleiste { display: flex; flex-wrap: wrap; gap: 3px; margin: 0 0 8px var(--lnbreit); padding-left: 6px; }
+#werkbank .w-rtakt { flex: 1 1 26px; min-width: 22px; height: 26px; border-radius: 3px; background: var(--panel2); border: 1px solid var(--line); font-size: 10px; font-weight: 800; color: var(--dim); padding: 2px 4px; position: relative; cursor: pointer; }
 #werkbank .w-rtakt.betont { color: var(--text); background: color-mix(in srgb, var(--d3) 10%, var(--panel2)); }
 #werkbank .w-rtakt.sichtbar { border-top-color: var(--d3); border-bottom-color: var(--d3); color: var(--text); }
 #werkbank .w-rtakt.sichtbar.von { border-left-color: var(--d3); }
@@ -87,3 +87,46 @@
 #werkbank .w-val.w-kn-lane i { opacity: .45; }
 #werkbank .w-val.w-kn-lane.eigen i { opacity: 1; background: var(--warn); }
 #werkbank select.w-lane-neu { max-width: 110px; background: none; color: var(--dim); border: 1px dashed var(--line); border-radius: 4px; font-family: inherit; cursor: pointer; }
+
+/* sequencer (strand C): row heads, values in the step, selection, loop brace */
+#werkbank .w-raster.reihen { --lnbreit: 262px; }
+#werkbank .w-raster.reihen .w-ln-drum { gap: 3px; overflow: visible; }
+#werkbank .w-ln-drum [data-w="zeilenname"] { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#werkbank .w-zin { width: 34px; padding: 1px 2px; font-size: 10px; text-align: center; background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 3px; font-family: inherit; }
+#werkbank .w-zin::placeholder { color: var(--dim); opacity: .7; }
+#werkbank .w-zin { box-sizing: border-box; width: 38px; flex: none; }
+#werkbank .w-zrichtung { padding: 1px 0; width: 24px; flex: none; }
+#werkbank .w-zschieb { padding: 1px 0; width: 18px; flex: none; font-size: 8px; }
+/* the captions above the row heads: the same widths and gap as the controls below them */
+#werkbank .w-ln-kap { gap: 3px; overflow: visible; }
+#werkbank .w-zkap-frei { flex: 1 1 auto; }
+#werkbank .w-zkap { flex: none; text-align: center; font-size: 8px; letter-spacing: .04em; }
+#werkbank .w-zkap.lang { width: 38px; }
+#werkbank .w-zkap.dir { width: 24px; }
+#werkbank .w-zkap.schieb { width: 39px; }
+#werkbank .w-raster[tabindex], #werkbank .w-noten { outline: none; }
+#werkbank .w-st { position: relative; touch-action: none; user-select: none; }
+/* a step has exactly one fill: the cell is dimmed and the inner bar carries the colour */
+#werkbank .w-st.an.mitfuell { background: color-mix(in srgb, var(--spurfarbe, var(--d3)) 28%, #10131b); }
+#werkbank .w-st.an.mitfuell.w-rueck { background: color-mix(in srgb, var(--spurfarbe, var(--d3)) 28%, #10131b); }
+#werkbank .w-zf { position: absolute; left: 0; right: 0; bottom: 0; background: var(--spurfarbe, var(--d3)); pointer-events: none; border-radius: 0 0 2px 2px; }
+#werkbank .w-zn { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; color: #fff; text-shadow: 0 0 2px #000, 0 0 2px #000; pointer-events: none; }
+/* the end of a row with its own length: a neutral light line in the gap right of the last step, never in the step and never in a fill colour */
+#werkbank .w-st.ende { margin-right: 4px; }
+#werkbank .w-st.ende::after { content: ""; position: absolute; top: -1px; bottom: -1px; right: -4px; width: 2px; background: #cfd5e3; pointer-events: none; }
+#werkbank .w-st.gewaehlt { outline: 2px solid #8fb4ff; outline-offset: -2px; }
+#werkbank .w-st.cursor { box-shadow: inset 0 0 0 2px #fff; }
+#werkbank .w-st.vorschau { filter: brightness(1.6); outline: 1px dashed var(--warn); outline-offset: -1px; }
+#werkbank .w-bereich .w-steps { height: 12px; }
+#werkbank .w-br { height: 12px; background: #10131b; border-radius: 2px; cursor: ew-resize; touch-action: none; }
+#werkbank .w-bereich:not(.gesetzt) .w-br.im { background: #1e2536; }
+#werkbank .w-bereich.gesetzt .w-br.im { background: color-mix(in srgb, var(--d3) 55%, #10131b); }
+#werkbank .w-br.links { box-shadow: inset 3px 0 0 #cfd5e3; }
+#werkbank .w-br.rechts { box-shadow: inset -3px 0 0 #cfd5e3; }
+#werkbank .w-br.vorschau { background: var(--warn); }
+/* with the dock the grid has the full width and height: larger cells, so that fills and values are readable inside a step */
+#werkbank .w-st, #werkbank .w-sicht-4 .w-st { height: 30px; }
+#werkbank .w-sicht-1 .w-st { height: 34px; }
+#werkbank .w-tonzeilen .w-st { height: 19px; }
+#werkbank .w-sicht-1 .w-tonzeilen .w-st { height: 21px; }
+#werkbank .w-bereich .w-steps, #werkbank .w-br { height: 16px; }

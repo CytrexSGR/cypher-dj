@@ -24,7 +24,7 @@ import {
   istObjekt, kanonisch, neueId, neueNotenId, notenNummer, notenZaehler,
   pruefeFehler, pruefeModulFehler, spurSicht, sucheClip, sucheSpur, wiedergabeSicht, warpPruefung, entstehungPruefung, type Entstehung,
   type AudioClip, type Clip, type Glied, type RackGeraet, MAX_GLIEDER, type Gruppe, type Herkunft, type Geraet,
-  type Insert, type InsertSchluessel, type InsertTraeger, type MidiClip, type Note, type Projekt, type Return, type Send, type Spur, type Warp,
+  type Insert, type InsertSchluessel, type InsertTraeger, type MidiClip, type Note, type Projekt, type Return, type Send, type Spur, type Warp, type Zeile,
   type DekodiertZustand, HOST_PFAD_ZEICHEN, HOST_UID_ZEICHEN, MAX_LATENZ_EXTRA,
   wirtSlots, AUFNAHME_VORGABE, EXTERN_MODI, VORZAEHLER_WERTE, type EingangExtern, type EingangIntern, type EingangMidi, type ProjektAufnahme, type SpurAufnahme,
 } from './model.ts';
@@ -610,8 +610,10 @@ function baueGeraet(p: Projekt, g: unknown, eigene?: string, ctx?: Kontext, bese
 }
 
 // --- Noten ------------------------------------------------------------------------------------------------------------
-function notenFelder(n: Args, wo: string, teil: boolean): Partial<Note> {
-  const ausgabe: Partial<Note> = {};
+// The note fields of a command. teil = a change (fields may be absent; the optional ones chance, wdh, versatz may be null = remove them: listed in `weg`)
+const NOTEN_OPTIONAL = { chance: [1, 99], wdh: [2, 8], versatz: [-95, 95] } as const;
+function notenFelder(n: Args, wo: string, teil: boolean): { f: Partial<Note>; weg: ('chance' | 'wdh' | 'versatz')[] } {
+  const ausgabe: Partial<Note> = {}, weg: ('chance' | 'wdh' | 'versatz')[] = [];
   const f = (k: 'beat' | 'laenge' | 'ton' | 'vel', min: number, max: number, o: { ganz?: boolean; offenUnten?: boolean }): void => {
     if (n[k] === undefined) { if (!teil) ab('argument_ungueltig', `${wo}.${k}: fehlt`); return; }
     if (!zahlOk(n[k]) || n[k] > max || (o.offenUnten ? n[k] <= min : n[k] < min) || (o.ganz && !Number.isInteger(n[k]))) {
@@ -620,7 +622,16 @@ function notenFelder(n: Args, wo: string, teil: boolean): Partial<Note> {
     ausgabe[k] = n[k];
   };
   f('beat', 0, MAX_BEAT, {}); f('laenge', 0, MAX_BEAT, { offenUnten: true }); f('ton', 0, 127, { ganz: true }); f('vel', 1, 127, { ganz: true });
-  return ausgabe;
+  for (const k of ['chance', 'wdh', 'versatz'] as const) {
+    if (n[k] === undefined) continue;
+    if (n[k] === null && teil) { weg.push(k); continue; }
+    const [min, max] = NOTEN_OPTIONAL[k];
+    if (!zahlOk(n[k]) || !Number.isInteger(n[k]) || n[k] < min || n[k] > max || (k === 'versatz' && n[k] === 0)) {
+      ab('argument_ungueltig', `${wo}.${k}: whole number ${min}..${max}${k === 'versatz' ? ' without 0' : ''} expected${teil ? ' (null removes it)' : ''}`);
+    }
+    ausgabe[k] = n[k];
+  }
+  return { f: ausgabe, weg };
 }
 function listeArg(a: Args, k: string): unknown[] {
   return Array.isArray(a[k]) && a[k].length >= 1 && a[k].length <= 65536 ? a[k] : ab('argument_ungueltig', `${k}: nicht leere Liste erwartet`);
@@ -636,8 +647,8 @@ function fuegeNotenEin(p: Projekt, clip: MidiClip, roh: unknown[]): void {
   let naechste = notenZaehler(p);
   roh.forEach((r, i) => {
     if (!istObjekt(r)) ab('argument_ungueltig', `noten[${i}]: Objekt erwartet`);
-    erlaube(r as Args, 'id', 'beat', 'laenge', 'ton', 'vel');
-    const f = notenFelder(r as Args, `noten[${i}]`, false) as Omit<Note, 'id'>;
+    erlaube(r as Args, 'id', 'beat', 'laenge', 'ton', 'vel', 'chance', 'wdh', 'versatz');
+    const f = notenFelder(r as Args, `noten[${i}]`, false).f as Omit<Note, 'id'>;
     let id = (r as Args).id as string | undefined;
     if (id !== undefined && (typeof id !== 'string' || !NOTEN_ID.test(id))) ab('argument_ungueltig', `noten[${i}].id: ungültig`);
     if (id !== undefined) {
@@ -649,7 +660,8 @@ function fuegeNotenEin(p: Projekt, clip: MidiClip, roh: unknown[]): void {
       do { id = `n${naechste}`; naechste += 1; } while (vorhanden.has(id));
     }
     vorhanden.add(id);
-    clip.noten.push({ id, beat: f.beat, laenge: f.laenge, ton: f.ton, vel: f.vel });
+    clip.noten.push({ id, beat: f.beat, laenge: f.laenge, ton: f.ton, vel: f.vel,
+      ...(f.chance !== undefined ? { chance: f.chance } : {}), ...(f.wdh !== undefined ? { wdh: f.wdh } : {}), ...(f.versatz !== undefined ? { versatz: f.versatz } : {}) });
   });
   p.naechste_noten_id = naechste;
 }
@@ -1342,15 +1354,19 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     const nachId = new Map(clip.noten.map((n, k) => [n.id, k] as const));  // linear statt find je Note (S2-Integration Slice 1)
     const aenderungen = roh.map((r, i) => {
       if (!istObjekt(r)) return ab('argument_ungueltig', `noten[${i}]: Objekt erwartet`);
-      erlaube(r as Args, 'id', 'beat', 'laenge', 'ton', 'vel');
+      erlaube(r as Args, 'id', 'beat', 'laenge', 'ton', 'vel', 'chance', 'wdh', 'versatz');
       if (typeof r.id !== 'string') ab('argument_ungueltig', `noten[${i}].id: ID erwartet`);
-      const f = notenFelder(r as Args, `noten[${i}]`, true);
-      if (Object.keys(f).length === 0) ab('argument_ungueltig', `noten[${i}]: keine Änderung angegeben`);
+      const { f, weg } = notenFelder(r as Args, `noten[${i}]`, true);
+      if (Object.keys(f).length === 0 && weg.length === 0) ab('argument_ungueltig', `noten[${i}]: keine Änderung angegeben`);
       const k = nachId.get(r.id as string) ?? ab('noten_unbekannt', String(r.id));
-      return { k, f };
+      return { k, f, weg };
     });
     // Spec 6.31 (Leistung): eine geänderte Note ist ein neues Objekt, die alte bleibt unberührt (der Notenweg teilt ungeänderte Noten mit dem Stand davor)
-    for (const { k, f } of aenderungen) clip.noten[k] = { ...clip.noten[k], ...f };
+    for (const { k, f, weg } of aenderungen) {
+      const neu: Note = { ...clip.noten[k], ...f };
+      for (const w of weg) delete neu[w];
+      clip.noten[k] = neu;
+    }
   },
 
   noten_loeschen(p, a) {
@@ -1361,6 +1377,29 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     const da = new Set(clip.noten.map((x) => x.id)), weg = new Set<string>();   // linear statt some/includes je Note (S2-Integration Slice 1)
     for (const n of ids) { if (typeof n !== 'string' || !da.has(n)) ab('noten_unbekannt', String(n)); weg.add(n as string); }
     clip.noten = clip.noten.filter((n) => !weg.has(n.id));
+  },
+
+  // Workbench row settings of one pitch in a MIDI clip: schritte (1..128), swing (1..100), richtung ("pendel"); null removes a field. A row without any
+  // field and an empty zeilen object are removed (never written when empty).
+  zeile_setzen(p, a) {
+    erlaube(a, 'clip_id', 'ton', 'schritte', 'swing', 'richtung');
+    const id = idArg(a, 'clip_id');
+    const clip = midiVon(clipVon(p, id).clip, id);
+    const ton = zahl(a, 'ton', 0, 127, { ganz: true })!;
+    if (['schritte', 'swing', 'richtung'].every((k) => a[k] === undefined)) ab('argument_ungueltig', 'zeile: no field given (schritte, swing, richtung)');
+    const zeile: Zeile = { ...(clip.zeilen?.[String(ton)] ?? {}) };
+    for (const [k, min, max] of [['schritte', 1, 128], ['swing', 1, 100]] as const) {
+      if (a[k] === undefined) continue;
+      if (a[k] === null) delete zeile[k]; else zeile[k] = zahl(a, k, min, max, { ganz: true })!;
+    }
+    if (a.richtung !== undefined) {
+      if (a.richtung === null) delete zeile.richtung;
+      else if (a.richtung === 'pendel') zeile.richtung = 'pendel';
+      else ab('argument_ungueltig', 'richtung: "pendel" or null expected');
+    }
+    const zeilen: Record<string, Zeile> = { ...(clip.zeilen ?? {}) };
+    if (Object.keys(zeile).length === 0) delete zeilen[String(ton)]; else zeilen[String(ton)] = zeile;
+    if (Object.keys(zeilen).length === 0) delete clip.zeilen; else clip.zeilen = zeilen;
   },
 
   // 1.10 Slice 1 (P4): Gruppen-Spuren. Die Namen vermeiden das Feld `gruppe` der Varianten (Paket 1.18, E-c).
@@ -1485,6 +1524,28 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
       ab('werkbank_voll', `a module holds at most ${MAX_WERKBANK_SPUREN} instrument tracks`);
     }
     musterSpurNeu(p, a, ctx, null);
+  },
+
+  // Loop range of a workbench module: {von_beat, bis_beat} (whole beats, at least 1, inside the module length) remembers the module length in
+  // werkbank.laenge_beats if it is not there yet and sets the project loop to the range; {aus: true} sets the loop back to 0..laenge_beats and removes the
+  // field (nothing to do while no length is remembered). A range outside the module is modul_bereich.
+  werkbank_bereich(p, a) {
+    erlaube(a, 'von_beat', 'bis_beat', 'aus');
+    if (!p.werkbank) ab('kein_werkbank', 'the open project is not a workbench module');
+    if (a.aus !== undefined) {
+      if (a.aus !== true || a.von_beat !== undefined || a.bis_beat !== undefined) ab('argument_ungueltig', 'aus: true alone expected (no von_beat, bis_beat)');
+      const laenge = p.werkbank.laenge_beats;
+      if (laenge === undefined) return;
+      p.loop = { an: true, von_beat: 0, bis_beat: laenge };
+      delete p.werkbank.laenge_beats;
+      return;
+    }
+    const von = zahl(a, 'von_beat', 0, MAX_BEAT, { ganz: true })!, bis = zahl(a, 'bis_beat', 0, MAX_BEAT, { ganz: true })!;
+    if (bis - von < 1) ab('loop_bereich', `bis_beat - von_beat must be at least 1 (${von}..${bis})`);
+    const laenge = p.werkbank.laenge_beats ?? p.loop.bis_beat;
+    if (bis > laenge) ab('modul_bereich', `${von}..${bis} lies outside the module length ${laenge}`);
+    p.werkbank.laenge_beats = laenge;
+    p.loop = { an: true, von_beat: von, bis_beat: bis };
   },
 
   // SEQ deck: removes the group and every track that plays into it, with their clips, in one step. A sub-group that plays into the group

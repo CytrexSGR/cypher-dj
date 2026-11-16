@@ -170,7 +170,7 @@ test('the grid method rounds the bounds k * frames / count and keeps them strict
   assert.equal(r.grenzen[16], 100001);
   assert.ok(r.grenzen.every((x, i) => i === 0 || x > r.grenzen[i - 1]));
   assert.equal(r.guete.length, 16);
-  assert.deepEqual(Object.keys(SCHNITT_METHODEN), ['raster', 'anschlag', 'hand']);
+  assert.deepEqual(Object.keys(SCHNITT_METHODEN), ['raster', 'anschlag', 'hand', 'ganz']);
 });
 
 test('spurBefehl: the original order, FIT on k2, out-of-range FIT is null', () => {
