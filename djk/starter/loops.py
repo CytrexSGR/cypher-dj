@@ -9,6 +9,8 @@ from pathlib import Path
 
 import numpy as np
 
+import storage as tabelle  # the storage table package djk/ablage (absolute import; not the sibling module starter/storage.py)
+
 from . import storage as ablage, graphs as graphen, tools as werkzeuge
 
 DJK = Path(__file__).resolve().parents[1]
@@ -23,11 +25,11 @@ def beschreibung() -> list[dict]:
 
 
 def loop_ordner(instanz: str = "") -> Path:
-    """The core's loop folder per instance (main.cpp, paths.ts loopOrdnerVorgabe): ~/.config/cypherdj/loops, or
+    """The core's loop folder per instance (main.cpp, paths.ts loopOrdnerVorgabe): the storage table's loops folder, or
     /dev/shm/cypherdj-<i>/loops for a test instance."""
     if instanz:
         return Path(f"/dev/shm/cypherdj-{instanz}/loops")
-    return Path.home() / ".config" / "cypherdj" / "loops"
+    return tabelle.ordner("loops")
 
 
 def _wav_ordner() -> Path:

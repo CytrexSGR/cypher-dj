@@ -23,6 +23,7 @@ import { geraetWahl, freierName } from '../seq_field.js';
 import { REGLER_MAX, REGLER_SCHRITT, reglerVonDb, dbVonRegler, tasteMerke, tasteWert } from '../production/fader_curve.js';
 import { oeffneMenue } from '../production/context_menu.js';
 import { modulTakte } from './kopf.js';
+import { spurAusSha, istRegalZug, regalNutzlast, markiereZiel } from './catalog_storage.js';
 import { returnListe, sendWert, sendBefehl, sendLabel } from '../production/routing.js';
 import { neuerDrehknopf, sendPos, sendDb, sendText } from './mix.js';
 
@@ -89,6 +90,21 @@ export function bindeSpuren(ctx) {
   host.innerHTML = `<h3 class="w-titel" data-w="spuren-titel">${SPUREN_TEXT.titel}</h3><div class="w-spurliste" data-w="spurliste"></div><button type="button" class="w-spurneu" data-w="spur-neu">${NEU_TEXT.knopf}</button><p class="w-andere" data-w="spuren-andere"></p>`;
   const liste = $('spurliste'), andere = $('spuren-andere');
   const neuKnopf = $('spur-neu');
+  // drop target: the whole TRACKS panel; a shelf sample dropped anywhere on it makes a new track (a STUDIO track has no clip lane).
+  // dragenter/dragleave are counted so the mark does not flicker while the pointer crosses child elements.
+  let ueber = 0;
+  const zurueck = () => { ueber = 0; markiereZiel(null, host, false); };
+  host.addEventListener('dragenter', (ev) => {
+    if (!host.classList.contains('w-drop')) ueber = 0;   // cleared from outside (dragend of the row)
+    if (istRegalZug(ev) && st.projekt) ueber++;
+  });
+  host.addEventListener('dragover', (ev) => { markiereZiel(ev, host, istRegalZug(ev) && !!st.projekt); });
+  host.addEventListener('dragleave', () => { ueber = Math.max(0, ueber - 1); if (ueber === 0) markiereZiel(null, host, false); });
+  host.addEventListener('drop', async (ev) => {
+    ev.preventDefault?.(); zurueck();
+    const n = regalNutzlast(ev);
+    if (n) await spurAusSha(ctx, n.sha);
+  });
   ctx.spurZeile = [];
   const speicher = neuerInfoSpeicher((weg) => ctx.holeGet(weg), () => zeichne());
   ctx.info = (spur) => speicher.info(spur);

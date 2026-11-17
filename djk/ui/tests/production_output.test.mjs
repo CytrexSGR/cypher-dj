@@ -20,6 +20,11 @@ test('V2 Ausgabe: Fortschritt aus /zustand/arr status 3, sonst Render mit Sekund
   assert.equal(laufText({ art: 'export', seit: t0 }, { status: 0, projekt_beat: 0 }, t0 + 4000), 'Exporting: rendering · 4 s', 'Negativ-Kontrolle: status 0 ist kein Freeze');
 });
 
+test('laufText names an analysis run', () => {
+  assert.equal(laufText({ art: 'analyse' }, null, 0), 'Analysing');
+  assert.equal(laufText({ art: 'analyse', seit: 1000 }, null, 4500), 'Analysing · 3 s');
+});
+
 test('V2 Ausgabe: Ergebnis mit Dauer, Spitze, Dateiname; über 0 dBFS warnt', () => {
   assert.equal(dauerText(768000), '16.0 s'); assert.equal(dbText(-3.21), '−3.2'); assert.equal(dbText(0.5), '+0.5');
   // Dateiname nach dem S3-Plan (Abweichung 2): <slug>-<JJJJMMTT-hhmmss>.wav im Ordner export/ des Projekts

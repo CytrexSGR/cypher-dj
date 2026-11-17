@@ -18,12 +18,12 @@ const GOLDEN = path.join(import.meta.dirname, 'support', 'routen_golden.json');
 export const GET = ['/strom?x=1', '/bestand', '/mediathek/anschluss', '/mediathek', '/mediathek/vorbereiten', '/stoebern', '/stoebern?typ=strudel', '/stoebern/detail',
   '/stoebern/baum', '/stoebern/baum?typ=strudel', '/vorhoeren', '/klaenge/karte', '/klaenge', '/mediathek/listen', '/sammlungen', '/sammlungen/x', '/sammlungen/x/posten',
   '/konfig', '/lage', '/ausgang', '/pegel', '/spur', '/loops', '/loop/automation', '/loop/raster', '/deck/hotcues', '/deck/loop', '/deck/raster', '/hoeren', '/fx',
-  '/fx/zuweisung', '/fx/routing', '/graphen', '/strudel', '/klang', '/welle', '/fassung', '/geraete', '/lernen', '/lernen/host', '/register', '/register/ziele?q=fader', '/', '/nicht-da', '/app.js'];
+  '/fx/zuweisung', '/fx/routing', '/graphen', '/strudel', '/klang', '/welle', '/fassung', '/geraete', '/lernen', '/lernen/host', '/register', '/register/ziele?q=fader', '/quellen', '/', '/nicht-da', '/app.js'];
 export const POST = ['/mediathek/vorbereiten', '/mediathek', '/muster', '/vorhoeren', '/sammlungen', '/sammlungen/import', '/sammlungen/x/posten',
   '/sammlungen/x/posten/entfernen', '/sammlungen/x/posten/verschieben', '/sammlungen/x/umbenennen', '/sammlungen/x/vorbereiten', '/sammlungen/x/loeschen',
   '/sammlungen/x/unsinn', '/griff', '/deck/start', '/deck/stopp', '/abbruch', '/spur', '/spur/stopp', '/regler', '/taste', '/laden', '/tempo',
   '/loops/aus-katalog', '/loop', '/loop/automation', '/fx/routing', '/graph', '/fx', '/fx/zuweisung', '/deck/sprung', '/deck/scrub', '/deck/hotcue', '/deck/loop',
-  '/deck/loop/sichern', '/deck/raster', '/deck/raster/fix', '/strudel', '/strudel/autonom', '/klang', '/geraete/eingang', '/geraete/midi', '/geraete/latenz', '/lernen', '/lernen/loeschen', '/lernen/host', '/lernen/host/loeschen', '/nicht-da', '/strom', '/lage'];
+  '/deck/loop/sichern', '/deck/raster', '/deck/raster/fix', '/strudel', '/strudel/autonom', '/klang', '/geraete/eingang', '/geraete/midi', '/geraete/latenz', '/lernen', '/lernen/loeschen', '/lernen/host', '/lernen/host/loeschen', '/quellen/dazu', '/quellen/weg', '/nicht-da', '/strom', '/lage'];
 export const ANDERE = [['PUT', '/lage'], ['PUT', '/mediathek/vorbereiten'], ['DELETE', '/sammlungen/x'], ['HEAD', '/lage'], ['HEAD', '/']];
 
 // Form einer JSON-Antwort: Schlüssel sortiert, Werte durch ihren Typ ersetzt, Arrays durch die Form ihres ersten Elements, Tiefe 3
@@ -38,7 +38,8 @@ export async function probe() {
   const tmp = (p) => fs.mkdtempSync(path.join(os.tmpdir(), p));
   const huellen = path.join(tmp('rg-huellen-'), 'huellen'); schreibeLeerenRing(huellen);
   const log = [];
-  const alt = process.env.CYPHERDJ_INSTANZ, altBk = process.env.CYPHERDJ_BK_ORDNER;
+  const alt = process.env.CYPHERDJ_INSTANZ, altBk = process.env.CYPHERDJ_BK_ORDNER, altHeim = process.env.CYPHERDJ_HEIM;
+  process.env.CYPHERDJ_HEIM = tmp('rg-heim-');   // A4: GET /quellen reads the source list of this empty home, never the real one
   process.env.CYPHERDJ_BK_ORDNER = tmp('rg-bk-');   // S12: /graphen lists this (empty) folder, never the real graph folder
   process.env.CYPHERDJ_INSTANZ = TEST_INSTANZ;   // nicht gelenkte Vorgaben (Vorhören, Klang) zeigen auf die Prüfinstanz, nie auf den Betrieb
   const o = new Oberflaeche({ port: 47300 + K, kernPort: 47100 + K, aboPort: 47150 + K, leitstandWs: 47200 + K, bestand: tmp('rg-bestand-'), arbeitsbestand: tmp('rg-ab-'),
@@ -80,6 +81,7 @@ export async function probe() {
     await o.stoppe();
     if (alt === undefined) delete process.env.CYPHERDJ_INSTANZ; else process.env.CYPHERDJ_INSTANZ = alt;
     if (altBk === undefined) delete process.env.CYPHERDJ_BK_ORDNER; else process.env.CYPHERDJ_BK_ORDNER = altBk;
+    if (altHeim === undefined) delete process.env.CYPHERDJ_HEIM; else process.env.CYPHERDJ_HEIM = altHeim;
   }
   const anKern = log.filter((z) => z.typ === 'an_kern').map((z) => z.adresse);
   return { text: JSON.stringify({ n: ergebnis.length, ergebnis }, null, 1) + '\n', anKern };

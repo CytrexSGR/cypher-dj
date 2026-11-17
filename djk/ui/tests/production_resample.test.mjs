@@ -68,7 +68,7 @@ test('the Resample entry calls ctx.resample with the strip', () => {
 function seite(t, holeJson) {
   const zurueck = installiereDom();
   t.after(zurueck);
-  const el = { export: element('button'), ausgabe: element('output'), koepfe: element('div'), meldung: element('div') };
+  const el = { export: element('button'), einsammeln: element('button'), ausgabe: element('output'), koepfe: element('div'), meldung: element('div') };
   const meldungen = [], nachfragen = [], posts = [];
   const ctx = {
     st: { projekt: PROJEKT, arr: null, slug: 'x' }, $: (n) => el[n], vorBild: [], beimProjekt: [], ladeAktuell: () => nachfragen.push(1),

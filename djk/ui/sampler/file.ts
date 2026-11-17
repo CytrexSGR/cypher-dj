@@ -293,8 +293,14 @@ const grenze = (o: Ordner): number => o.dateiMaxFrames ?? MAX_SCHNITT_FRAMES;
 export function ladeDatei(ref: string, o: Ordner = {}): QuellAudio {
   const i = ref.indexOf('/');
   const rel = i < 0 ? '' : ref.slice(i + 1);
-  const pfad = loeseAuf(i < 0 ? ref : ref.slice(0, i), rel, o);   // a ref without a known root name is `quelle_unbekannt`
-  if (!fs.statSync(pfad).isFile()) throw nicht(`${rel} is not a file`);
+  return ladeDateiPfad(loeseAuf(i < 0 ? ref : ref.slice(0, i), rel, o), o);   // a ref without a known root name is `quelle_unbekannt`
+}
+
+/** The same for a resolved file path (a root file after `loeseAuf`, a catalog file after the catalog lookup): not a file is 404 `quelle_unbekannt`. */
+export function ladeDateiPfad(pfad: string, o: Ordner = {}): QuellAudio {
+  let datei = false;
+  try { datei = fs.statSync(pfad).isFile(); } catch { /* gone between lookup and load */ }
+  if (!datei) throw nicht(`${path.basename(pfad)} is not a file`);
   if (!ENDUNG.test(pfad)) throw new SchnittFehler(422, 'format_falsch', `${path.basename(pfad)} is not one of the audio file types (wav, aif, aiff, flac, ogg)`);
   const max = grenze(o), deckel = max + 2 * SR;
   const roh = dekodiereDatei(pfad, deckel / SR);

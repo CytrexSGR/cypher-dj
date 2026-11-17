@@ -208,3 +208,36 @@ test('T8.3 negative controls: no context menu outside PRODUCTION, on a row that 
     assert.match(gemeldet.at(-1)[0], /^Not added: /);
   } finally { globalThis.document = alt; }
 });
+
+// ---- media browser slice 2: the two fixed collections ----
+test('fixed collections are listed first and have no RENAME or DELETE', async () => {
+  const { kollektionenHtml, festeZuerst } = await import(K);
+  const eigen = { slug: 'techno', name: 'Techno', anzahl: 3, geaendert: 'x' };
+  const l = festeZuerst([eigen, { slug: 'recently-used', name: 'Recently used', anzahl: 2, geaendert: 'y' }]);
+  assert.deepEqual(l.map((k) => k.slug), ['favourites', 'recently-used', 'techno'], 'Favourites then Recently used, a missing file listed as empty');
+  assert.equal(l[0].anzahl, 0);
+  const html = kollektionenHtml({ liste: [eigen, { slug: 'recently-used', name: 'Recently used', anzahl: 2 }], offen: null });
+  assert.ok(html.indexOf('data-koll-oeffnen="favourites"') < html.indexOf('data-koll-oeffnen="recently-used"') && html.indexOf('data-koll-oeffnen="recently-used"') < html.indexOf('data-koll-oeffnen="techno"'));
+  const offen = (slug) => kollektionenHtml({ liste: [], offen: { slug, name: slug, geaendert: 'g', zeilen: [] } });
+  for (const s of ['favourites', 'recently-used']) { const h = offen(s); assert.match(h, /data-koll-aktion="zurueck"/); assert.doesNotMatch(h, /umbenennen|loeschen/); }
+  assert.match(offen('techno'), /umbenennen/);
+});
+
+test('an unopened fixed collection (404) opens as empty; the page posts to its own slug', async (t) => {
+  const { bindeKollektionen } = await import(K);
+  const s = await server(t);
+  const w = wurzel();
+  const alt = globalThis.document;
+  globalThis.document = { getElementById: (id) => (id === 'kollektionen' ? w : null), querySelector: () => null };
+  try {
+    const ctx = { st: { sichtbar: true }, beimSichtwechsel: [], holeGet: s.holeGet, holeJson: s.holeJson, melde: () => {}, stoebern: () => null };
+    bindeKollektionen(ctx);
+    await ctx.kollektionenZeigen();
+    assert.ok(w.innerHTML.indexOf('data-koll-oeffnen="favourites"') >= 0, 'listed although no file exists');
+    w.feuer('click', { target: { closest: (sel) => (sel === '[data-koll-oeffnen]' ? { dataset: { kollOeffnen: 'favourites' } } : null) } });
+    await ruhe();
+    assert.match(w.innerHTML, /Favourites/);
+    assert.match(w.innerHTML, /Empty\./);
+    assert.doesNotMatch(w.innerHTML, /umbenennen|loeschen/);
+  } finally { globalThis.document = alt; }
+});

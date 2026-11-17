@@ -92,3 +92,68 @@
 #werkbank .w-ins-knopf { flex: none; font-size: 10px; font-weight: 700; padding: 1px 8px; }
 #werkbank .w-ins-knopf:disabled { cursor: not-allowed; }
 #werkbank .w-ins-leer { padding: 8px; color: var(--dim); font-size: 11px; }
+
+/* Tab SAMPLES, mode switch and LIBRARY mode (media browser B1). Prefix w-kat-. */
+#werkbank .w-kat-reiter { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; gap: 6px; }
+#werkbank .w-kat-modi { flex: none; display: flex; gap: 4px; }
+#werkbank .w-kat-modus-knopf { font-size: 11px; font-weight: 700; padding: 2px 10px; border: 1px solid var(--line); border-radius: 4px; background: none; color: var(--dim); cursor: pointer; }
+#werkbank .w-kat-modus-knopf.an { color: inherit; border-color: var(--accent, currentColor); }
+#werkbank .w-kat-modus { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+#werkbank .w-kat-modus[hidden] { display: none; }
+#werkbank .w-kat-modus > .w-smp { flex: 1 1 auto; }
+#werkbank .w-kat { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; gap: 6px; }
+#werkbank .w-kat-kopf { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+#werkbank .w-kat-suche { width: 340px; height: 26px; padding: 0 10px; font-size: 13px; box-sizing: border-box; color: inherit; background: var(--panel2); border: 1px solid var(--dim); border-radius: 4px; outline: none; }
+#werkbank .w-kat-suche::placeholder { color: var(--dim); opacity: 1; }
+#werkbank .w-kat-suche:focus { border-color: var(--accent, currentColor); }
+#werkbank .w-kat-knoepfe { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+#werkbank .w-kat-knopf { font-size: 11px; font-weight: 700; padding: 2px 8px; border: 1px solid var(--line); border-radius: 4px; background: none; color: var(--dim); cursor: pointer; }
+#werkbank .w-kat-knopf.an { color: inherit; border-color: var(--accent, currentColor); }
+#werkbank .w-kat-platten:empty { display: none; }
+#werkbank .w-kat-platte { padding: 2px 8px; font-size: 11px; color: var(--dim); border-left: 2px solid var(--accent, currentColor); }
+#werkbank .w-kat-liste { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-color: var(--line) transparent; scrollbar-width: thin; outline: none; border: 1px solid var(--line); border-radius: 4px; background: var(--panel2); }
+#werkbank .w-kat-liste:focus-visible { border-color: var(--accent, currentColor); }
+#werkbank .w-kat-zeile { display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 8px; box-sizing: border-box; font-size: 12px; cursor: pointer; border-bottom: 1px solid var(--line); }
+#werkbank .w-kat-zeile:hover, #werkbank .w-kat-zeile.cursor { background: rgba(255, 255, 255, .06); }
+#werkbank .w-kat-zeile.spielt { color: var(--accent, currentColor); font-weight: 700; }
+#werkbank .w-kat-zeile.fehlt { opacity: .5; cursor: default; }
+#werkbank .w-kat-marke { flex: none; width: 14px; text-align: center; color: var(--dim); font-size: 10px; }
+#werkbank .w-kat-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#werkbank .w-kat-instr, #werkbank .w-kat-pack, #werkbank .w-kat-dauer { flex: none; color: var(--dim); font-size: 11px; white-space: nowrap; }
+#werkbank .w-kat-pack { flex: 0 1 25%; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#werkbank .w-kat-ordner { flex: 0 1 30%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); font-size: 11px; }
+#werkbank .w-kat-stern { flex: none; width: 18px; padding: 0; border: 0; background: none; color: var(--dim); font-size: 13px; line-height: 1; cursor: pointer; }
+#werkbank .w-kat-stern.an { color: var(--accent, currentColor); }
+#werkbank .w-kat-dauer { min-width: 44px; text-align: right; }
+#werkbank .w-kat-spur, #werkbank .w-kat-mehr { flex: none; font-size: 10px; font-weight: 700; padding: 1px 8px; }
+#werkbank .w-kat-spur:disabled { cursor: not-allowed; }
+#werkbank .w-kat-mehr { display: block; margin: 6px auto; }
+#werkbank .w-kat-leer { padding: 8px; color: var(--dim); font-size: 11px; }
+
+/* SAMPLES tab, storage layout A4: the FOLDERS button and the source folder dialog (sources_dialog.js). The dialog is fixed over the page. */
+#werkbank .w-smp-ordner { margin-left: auto; }
+#werkbank .w-quellen {
+  position: fixed; top: 12vh; left: 50%; transform: translateX(-50%); z-index: 30; box-sizing: border-box; width: min(720px, calc(100vw - 32px)); max-height: 76vh; overflow: auto;
+  display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: 0 10px 34px rgba(0, 0, 0, .6);
+}
+#werkbank .w-quellen[hidden] { display: none; }
+#werkbank .w-quellen-kopf { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+#werkbank .w-quellen-titel { font-size: 10px; letter-spacing: .14em; font-weight: 700; color: var(--dim); }
+#werkbank .w-quellen-liste { display: flex; flex-direction: column; gap: 4px; }
+#werkbank .w-quellen-leer { color: var(--dim); font-size: 12px; padding: 4px 0; }
+#werkbank .w-quellen-zeile { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; }
+#werkbank .w-quellen-punkt { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--dim); opacity: .55; }
+#werkbank .w-quellen-punkt.an { background: #3fb950; opacity: 1; }
+#werkbank .w-quellen-name { flex: none; font-weight: 700; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#werkbank .w-quellen-pfad { flex: 1 1 auto; min-width: 0; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#werkbank .w-quellen-zustand { flex: none; font-size: 11px; color: var(--dim); }
+#werkbank .w-quellen-form { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+#werkbank .w-quellen-feld {
+  padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel2); color: var(--text); font: inherit; font-size: 12px; box-sizing: border-box;
+}
+#werkbank .w-quellen-feld:not(.kurz) { flex: 1 1 100%; min-width: 0; }
+#werkbank .w-quellen-feld.kurz { width: 150px; }
+#werkbank .w-quellen-etikett { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--dim); }
+#werkbank .w-quellen-text { margin: 0; min-height: 1.3em; font-size: 11px; color: var(--dim); }
+#werkbank .w-quellen-text.fehler { color: #e5484d; }
+@media (max-width: 520px) { #werkbank .w-quellen-zustand { display: none; } }

@@ -85,7 +85,7 @@ def test_an_existing_demo_folder_is_never_touched(tmp_path):
 
 
 def test_wurzel_follows_the_instance_rule(tmp_path):
-    assert demo.projekt_wurzel("") == Path.home() / "cypherdj-projekte"
+    assert demo.projekt_wurzel("") == Path.home() / "cypherdj" / "werke" / "projekte"
     assert demo.projekt_wurzel("f") == Path("/dev/shm/cypherdj-f/projekte")
     with pytest.raises(ValueError):
         demo.projekt_wurzel("ff")
@@ -93,8 +93,17 @@ def test_wurzel_follows_the_instance_rule(tmp_path):
 
 def test_step_demo_writes_into_the_throwaway_home_only(tmp_path, capsys):
     assert starter_main.main(["--nur", "demo"]) == 0
-    assert (Path.home() / "cypherdj-projekte" / "demo" / "project.json").is_file()
+    assert (Path.home() / "cypherdj" / "werke" / "projekte" / "demo" / "project.json").is_file()
+    assert not (Path.home() / "cypherdj-projekte").exists()
     assert "installed project demo" in capsys.readouterr().out
     assert str(Path.home()).startswith(str(tmp_path))
     assert starter_main.main(["--nur", "demo"]) == 0
     assert "kept project demo" in capsys.readouterr().out
+
+
+def test_demo_in_werke_auf_frischer_installation(tmp_path):
+    assert not (Path.home() / "cypherdj").exists() and not (Path.home() / "cypherdj-projekte").exists()
+    assert starter_main.main(["--nur", "demo"]) == 0
+    assert (Path.home() / "cypherdj" / "werke" / "projekte" / "demo" / "project.json").is_file()
+    assert json.loads((Path.home() / "cypherdj" / "werke" / "projekte" / "demo" / "project.json").read_text()) == _lies()
+    assert not (Path.home() / "cypherdj-projekte").exists()

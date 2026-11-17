@@ -1,6 +1,7 @@
 # Test files that must run one at a time (they start real servers on the shared test instance or bind fixed resources).
 # Found 2026-11-08 by running the whole suite with --test-concurrency=16. New files run in parallel unless listed here.
 connection_cache.test.mjs
+cache_deckel.test.mjs
 area_context.test.mjs
 deck_grid_get_s3.test.mjs
 e_auto_stream.test.mjs
@@ -59,6 +60,7 @@ proj_hand_free_switch.test.mjs
 proj_envelopes_ai.test.mjs
 proj_kits_route.test.mjs
 proj_loudness_route.test.mjs
+proj_analysis_route.test.mjs
 proj_s3_a17b_transport_window.test.mjs
 proj_interfaces.test.mjs
 proj_stems_route.test.mjs
@@ -84,6 +86,7 @@ stack_help.test.mjs
 stack_instance.test.mjs
 stack.test.mjs
 start.test.mjs
+browse_regal_route.test.mjs
 streams_server.test.mjs
 v2_fix_f16_stack_cleanup.test.mjs
 prepare_progress.test.mjs
@@ -112,7 +115,13 @@ graph_master.test.mjs
 graph_source_effect.test.mjs
 hand_channel_offen.test.mjs
 werkbank_route.test.mjs
+sampler_file_pad_route.test.mjs
 sampler_marken.test.mjs
 sampler_route.test.mjs
 sampler_kit_route.test.mjs
 sampler_tone_route.test.mjs
+sampler_file_catalog_route.test.mjs
+sampler_file_route.test.mjs
+sampler_instrument_release_route.test.mjs
+sampler_instrument_route.test.mjs
+proj_einsammeln_route.test.mjs

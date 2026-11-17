@@ -9,10 +9,10 @@
 // ihn ohne Neustart nach. Kein Kern-Verkehr.
 import dgram from 'node:dgram';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { kodiere, dekodiere } from '../contract/mock_core/osc.mjs';
+import { ablageOrdner, loopOrdnerVorgabe } from '../ui/paths.ts';
 import { loopZuKlang } from './kit_write.mjs';
 
 const AUFRUF = 'Aufruf: djk-loop [--instanz i] [--quelle cypher|andreas] liste | laden <box> <name> | start <box> | ' +
@@ -30,7 +30,7 @@ try {
     ordner: { type: 'string' },
     kit: { type: 'string', default: 'battery' },
     'kit-zusatz': { type: 'string' },
-    'kits-ordner': { type: 'string', default: path.join(os.homedir(), '.config/cypherdj/kits') },
+    'kits-ordner': { type: 'string', default: ablageOrdner('kits') },
   } }));
 } catch (e) { raus(`${e.message}\n${AUFRUF}`, 2); }
 const I = opt.instanz;
@@ -38,7 +38,7 @@ if (I && !/^[a-i]$/.test(I)) raus(`Instanz ${I}: erlaubt sind a bis i`, 2);
 if (opt.quelle !== 'cypher' && opt.quelle !== 'andreas') raus(`Quelle ${opt.quelle}: cypher oder andreas`, 2);
 const V = I ? 1000 * (I.charCodeAt(0) - 96) : 0;
 const KERN = Number(opt['kern-port'] ?? 47100 + V);
-const ORDNER = opt.ordner ?? (I ? `/dev/shm/cypherdj-${I}/loops` : path.join(os.homedir(), '.config/cypherdj/loops'));
+const ORDNER = opt.ordner ?? loopOrdnerVorgabe(I);
 const [befehl, ...rest] = pos;
 
 if (befehl === 'liste') {

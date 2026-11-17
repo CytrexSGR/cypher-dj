@@ -45,6 +45,8 @@ import { HostSpeicher } from './areas/hostlernen/store.ts';
 import { registerBereich, aktivesPult } from './areas/controller/register.ts';
 import { presetInhaltVon, presetsBereich, type PresetOptionen } from './presets/area.ts';
 import { kollektionenBereich, type KollektionBereichOptionen } from './collections/area.ts';
+import { KollektionSpeicher } from './collections/store.ts';
+import { rangVon } from './collections/feste.ts';
 import { ausgabeBereich } from './areas/proj/output.ts';   // Paket S3
 import { aufnahmeBereich } from './areas/proj/recording.ts';   // 1.8 Slice 1
 import { stemsBereich, type StemsOptionen } from './areas/proj/stems.ts';   // 1.13 Slice 6
@@ -81,6 +83,13 @@ import { Sammlungen, SammlungFehler, uebersicht } from './collection.ts';
 import { MusterBibliothek, MusterFehler, type MusterEintrag } from './pattern_library.ts';
 import { suchTerme } from './search_text.ts';
 import { Katalog, KatalogFehler, KATALOG_TYPEN, SORT_VORGABE, SEITE_VORGABE, SEITE_MAX, katalogVorgabe, type Typ, type Zeile, type Filter } from './catalog.ts';
+import { Erreichbarkeit, ERREICHBAR_TTL_MS, quellenLage } from './erreichbar.ts';   // media browser slice 1
+import { Quellen } from './sources.ts';   // storage layout A4
+import { quellenBereich } from './areas/quellen/area.ts';
+import { Einsammler } from './project/einsammeln.ts';   // storage layout A5
+import { baueNachExport } from './project/exporte.ts';
+import { einsammelnBereich } from './areas/proj/einsammeln.ts';
+import { leseWurzeln } from './sampler/file.ts';
 import { vorbereitQuelle } from './vorbereit_source.ts';
 import { Vorhoeren, VorhoerFehler, kernNurCueVorgabe, vorhoeerKlientVorgabe } from './prelisten.ts';
 import { Mediathek, Vorbereiter, MediathekFehler, KLANG_TYPEN, type KlangTreffer, MEDIATHEK_VORGABE, bestandIds, parseBpm, parseLimit } from './media_library.ts';
@@ -570,6 +579,9 @@ export class Oberflaeche {
 
   private readonly mediathek: Mediathek;
   private readonly katalog: Katalog;
+  private readonly erreichbar = new Erreichbarkeit();
+  private readonly quellenMerk = new Map<string, { b: object; t: number; j: unknown }>();
+  private readonly jetzt = (): number => Date.now();
   private readonly vorbereiter: Vorbereiter;
   private readonly vorhoeren: Vorhoeren;
   private readonly sammlungen: Sammlungen;
@@ -605,14 +617,24 @@ export class Oberflaeche {
     // weil stoppe() den Bereich braucht; S3 zieht seinen Anker auf diese zwei Zeilen nach.
     // Slice 3a: die Analyse-Ablage (Karten) und der Auftragsgeber der Analyse auf Abruf. Betrieb: Vorgabe $CYPHERDJ_ANALYSE bzw. ~/werkstatt/cypher-dj-analyse; eine
     // Prüfinstanz (a..i) hat keine Vorgabe und liest/schreibt die Ablage nur mit ausdrücklichem --analyse (sie berührt nie die echte).
+    // A5: removable sources are collected into the project in the background, never while the transport runs or a deck plays
+    this.quellen = new Quellen({ python, cwd: path.join(REPO, 'djk'), erreichbar: this.erreichbar, env: opt.samplerOrdner ? { CYPHERDJ_SAMPLER: opt.samplerOrdner } : undefined });
+    this.router.melde(quellenBereich(this.bereichKontext(), this.quellen));   // A4: /quellen
+    this.einsammler = new Einsammler({ wechselplatte: (p) => this.quellen.wechselplatte(p), frei: () => this.proj.sitzung.lage.arr !== null && this.proj.sitzung.lage.arr.status === 0 && !this.proj.sitzung.lage.djLaeuft(),   // the page's own question: deck, loop box, stream
+      log: (z) => opt.log?.(z) });
     const analyseOrdner = opt.analyse !== undefined ? opt.analyse : analyseVorgabe(inst);
     const analysierer = analyseOrdner ? new WerkstattAnalyse({ python, cwd: REPO_PFADE.werkstatt, ablage: analyseOrdner, modul: opt.einleserModul, log: opt.log }) : null;
     const presets = presetsBereich(this.bereichKontext(), { ...(opt.presets ?? {}), projekt: () => this.proj.zugang.offen()?.projekt ?? null, graphVon: (kanal) => this.stand.graphen_geladen[kanal] });   // 1.9 (O28): built first, the project command preset_anwenden reads its store
     const pluginIndex = new PluginIndex({ python, ...opt.plugins, log: opt.log, bei: (scan) => this.bereichKontext().verteile({ a: 'plugins', f: { scan } }) });
     this.proj = projBereich(this.bereichKontext(), { pluginIndex: (id) => pluginIndex.finde(id), presetLies: (id) => presetInhaltVon(presets.speicher, id), katalog: opt.katalog ?? katalogVorgabe(opt.mediathek ?? MEDIATHEK_VORGABE), mediathek: opt.mediathek ?? MEDIATHEK_VORGABE,
-      wirtOrdner: () => this.wirtBasis(), analyse: analyseOrdner, analysierer, bestand: opt.korrekturen !== undefined ? opt.korrekturen : (inst === '' ? opt.bestand : null), kanalOffen: (k) => this.kanalGeoeffnet(k), ...opt.proj });
+      wirtOrdner: () => this.wirtBasis(), analyse: analyseOrdner, analysierer, bestand: opt.korrekturen !== undefined ? opt.korrekturen : (inst === '' ? opt.bestand : null), kanalOffen: (k) => this.kanalGeoeffnet(k), einsammler: this.einsammler, ...opt.proj });
     this.router.melde(this.proj);
-    this.ausgabe = ausgabeBereich(this.bereichKontext(), this.proj.zugang, { wirtOrdner: () => this.wirtBasis() });   // Paket S3: /proj/freeze, /proj/export (Spec 3.4)
+    // A5: the route uses the collector of the session (a test may hand its own through opt.proj)
+    this.router.melde(einsammelnBereich(this.bereichKontext(), this.proj.zugang, { einsammler: opt.proj?.einsammler ?? this.einsammler,
+      quellPfad: (sha, hinweis) => this.proj.sitzung.quellePfadVon(sha, hinweis) }));
+    this.ausgabe = ausgabeBereich(this.bereichKontext(), this.proj.zugang, { wirtOrdner: () => this.wirtBasis(),
+      nachExport: baueNachExport({ einsammler: opt.proj?.einsammler ?? this.einsammler, offen: () => this.proj.zugang.offen(),
+        quellPfad: (sha, hinweis) => this.proj.sitzung.quellePfadVon(sha, hinweis), log: (z) => opt.log?.(z) }) });   // A5: keep three exports, collect   // Paket S3: /proj/freeze, /proj/export (Spec 3.4)
     this.router.melde(this.ausgabe);
     this.aufnahme = aufnahmeBereich(this.bereichKontext(), this.proj.zugang, { geraeteKonfig: opt.geraete?.konfigPfad });   // 1.8: /proj/aufnahme
     this.router.melde(this.aufnahme);
@@ -633,7 +655,7 @@ export class Oberflaeche {
     // plan live-module task 10: GET /module, POST /modul/einsetzen, POST /modul/speichern (the same store as above)
     this.router.melde(bibliothekBereich(this.bereichKontext(), this.proj.zugang, { basis: () => modulBasisVon(opt.modulOrdner, inst), kanalOffen: (k) => this.kanalGeoeffnet(k) }));
     // sampler A1 task 4: /sampler/*; loops and module folder of this instance, read at every request (the getters follow the options)
-    this.router.melde(samplerBereich(this.bereichKontext(), { sitzung: this.proj.sitzung, zugang: this.proj.zugang,
+    this.router.melde(samplerBereich(this.bereichKontext(), { sitzung: this.proj.sitzung, zugang: this.proj.zugang, katalog: this.katalog,
       get ordner() { return opt.samplerOrdner; }, get loops() { return opt.loops ?? loopOrdnerVorgabe(inst); }, get module() { return modulBasisVon(opt.modulOrdner, inst); } }));
     this.router.melde(samplerKitBereich(this.bereichKontext(), { get ordner() { return opt.samplerOrdner; } }));   // sampler B task 2: /sampler/kit/vorschlag, /sampler/kit
     this.router.melde(pluginsBereich(this.bereichKontext(), pluginIndex, { insertParameter: (id) => this.proj.sitzung.insertParameter(id),
@@ -728,6 +750,7 @@ export class Oberflaeche {
     this.gestoppt = true;
     this.aufnahme.aufnahme.schliesse();
     this.stems.stems.schliesse();
+    await this.einsammler.schliesse();   // kills a running copy, at most 2 s
     this.ausgabe.ausgabe.schliesse();   // Fix-Runde S3 R7: ein wartender Freeze endet jetzt mit freeze_fehler, nicht erst nach Stille oder Frist
     await this.proj.sitzung.beende();   // plan 1.11 D8: the plugin states first (at most 3 s)
     this.proj.sitzung.schliesse();   // D1 S2: ausstehenden Mixer-Eintrag schreiben, Projekt-Sperre frei
@@ -2278,6 +2301,8 @@ export class Oberflaeche {
   private readonly proj: ReturnType<typeof projBereich>;   // D1 S2: Bereich proj (Sitzung schliesst beim Stoppen)
   readonly stems: ReturnType<typeof stemsBereich>;   // 1.13 Slice 6: Bereich proj-stems
   private readonly aufnahme: ReturnType<typeof aufnahmeBereich>;   // 1.8: Bereich proj-aufnahme
+  private readonly einsammler: Einsammler;   // A5
+  private readonly quellen: Quellen;   // A4
   readonly ausgabe: ReturnType<typeof ausgabeBereich>;   // Paket S3: Bereich proj-ausgabe (schliesst beim Stoppen, Fix-Runde R7)
   private readonly router = new Router();   // Plan d1-s1 Task 9: Bereiche melden hier ihre Routen (oberflaeche zuerst, dann proj)
   meldeBereich(b: Bereich): void { this.router.melde(b); }
@@ -2343,6 +2368,7 @@ export class Oberflaeche {
       { methode: 'GET', pfad: '/mediathek/vorbereiten', schutz: O, handler: (_q, a, url) => this.vorbereitenStand(url, a) },
       { methode: 'POST', pfad: '/mediathek/vorbereiten', schutz: F, handler: async (q, a) => this.vorbereiten(await this.koerper(q), a) },
       { methode: 'GET', pfad: '/stoebern', schutz: O, handler: (_q, a, url) => (url.searchParams.get('typ') === 'strudel' ? this.stoebernMuster(url, a) : this.stoebern(url, a)) },
+      { methode: 'GET', pfad: '/stoebern/quellen', schutz: O, handler: (_q, a, url) => this.stoebernQuellen(url, a) },
       { methode: 'GET', pfad: '/stoebern/detail', schutz: O, handler: (_q, a, url) => this.stoebernDetail(url, a) },
       { methode: 'GET', pfad: '/stoebern/baum', schutz: O, handler: (_q, a, url) => (url.searchParams.get('typ') === 'strudel' ? this.stoebernMusterBaum(a) : this.stoebernBaum(url, a)) },
       { methode: 'POST', pfad: '/muster', schutz: F, handler: (q, a) => this.musterSpeichern(q, a) },
@@ -2671,11 +2697,21 @@ export class Oberflaeche {
       const sroh = Math.floor(Number(p.get('seite') ?? 0));
       const seite = Number.isFinite(sroh) && sroh > 0 ? sroh : 0;
       if (!Number.isSafeInteger(seite * limit)) throw new KatalogFehler(400, 'seite_ungueltig');   // 1e300 → sonst SQLite „datatype mismatch“ (Review MINOR 5)
-      const r = this.katalog.seite(t, this.stoebernFilter(p), sort, ab, seite, limit);
+      const filter = this.stoebernFilter(p);
+      if (Oberflaeche.schutzAus(p)) filter.ohneSchutz = true;
+      const vorrang = Oberflaeche.vorrangAn(p);
+      const rang = rangVon(this.kollektionSpeicher());   // read once per request: rank for the order, favorit for the rows
+      const r = this.katalog.seite(t, filter, sort, ab, seite, limit, vorrang
+        ? { fehlend: this.katalog.ordnerSummen(t).ordner.filter((o) => !this.erreichbar.ordnerDa(o.pfad)).map((o) => o.pfad), rang: rang.tabelle } : undefined);
       const bestand = t === 'track' ? bestandIds(this.opt.bestand) : new Set<string>();
-      this.json(a, 200, { typ: t, sort, richtung: ab ? 'ab' : 'auf', seite, limit, gesamt: r.gesamt, gebaut_am: r.gebaut_am,
-        treffer: r.zeilen.map((z) => this.stoebernTreffer(z, bestand)) });
+      this.json(a, 200, { typ: t, sort, richtung: ab ? 'ab' : 'auf', seite, limit, gesamt: r.gesamt, gebaut_am: r.gebaut_am, ...(vorrang ? { vorrang: true } : {}),
+        treffer: r.zeilen.map((z) => ({ ...this.stoebernTreffer(z, bestand), favorit: rang.favorit(z.sha) })) });
     } catch (e) { this.katalogFehler(e, a); }
+  }
+
+  private kollektionLeser?: KollektionSpeicher;
+  private kollektionSpeicher(): KollektionSpeicher {
+    return this.kollektionLeser ??= this.opt.kollektionen?.speicher ?? new KollektionSpeicher(this.opt.kollektionen ?? {});
   }
 
   // STRUDEL im Browser (S2b): ~250 Einträge, deshalb im Speicher filtern/sortieren statt FTS
@@ -2763,7 +2799,34 @@ export class Oberflaeche {
     try {
       const typ = url.searchParams.get('typ') ?? 'track';
       if (!(KATALOG_TYPEN as readonly string[]).includes(typ)) throw new KatalogFehler(400, 'typ_ungueltig');
-      this.json(a, 200, this.katalog.baum(typ as Typ));
+      this.json(a, 200, this.katalog.baum(typ as Typ, { ohneSchutz: Oberflaeche.schutzAus(url.searchParams) }));
+    } catch (e) { this.katalogFehler(e, a); }
+  }
+
+  // `schutz=aus` hides protected rows, `vorrang=1` switches on the priority order; an empty value counts as absent
+  private static schutzAus(p: URLSearchParams): boolean {
+    const v = p.get('schutz') ?? '';
+    if (v !== '' && v !== 'aus') throw new KatalogFehler(400, 'schutz_ungueltig');
+    return v === 'aus';
+  }
+  private static vorrangAn(p: URLSearchParams): boolean {
+    const v = p.get('vorrang') ?? '';
+    if (v !== '' && v !== '1') throw new KatalogFehler(400, 'vorrang_ungueltig');
+    return v === '1';
+  }
+
+  // The sources of one type (sampler roots or disks) with their file counts and whether they are mounted now
+  private stoebernQuellen(url: URL, a: http.ServerResponse): void {
+    try {
+      const typ = url.searchParams.get('typ') ?? 'track';
+      if (!(KATALOG_TYPEN as readonly string[]).includes(typ)) throw new KatalogFehler(400, 'typ_ungueltig');
+      const aus = Oberflaeche.schutzAus(url.searchParams);
+      const b = this.katalog.ordnerSummen(typ as Typ, { ohneSchutz: aus });   // one sum per folder, not the whole tree; kept until the catalog file changes
+      const schluessel = `${typ}|${aus}`, alt = this.quellenMerk.get(schluessel);
+      if (alt && alt.b === b && this.jetzt() - alt.t <= ERREICHBAR_TTL_MS) return this.json(a, 200, alt.j);
+      const j = { typ, quellen: quellenLage(b.ordner, leseWurzeln({ ordner: this.opt.samplerOrdner }), this.erreichbar), gebaut_am: b.gebaut_am };
+      this.quellenMerk.set(schluessel, { b, t: this.jetzt(), j });   // the same 10 s window as the reachability
+      this.json(a, 200, j);
     } catch (e) { this.katalogFehler(e, a); }
   }
 

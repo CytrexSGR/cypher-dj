@@ -112,11 +112,26 @@ test('normalisiere: Schlüssel tief sortiert, Zahlen wie JSON.stringify (-0 → 
   assert.notEqual(n, p);
 });
 
-test('Wurzeln je Instanz: Betrieb = ~/cypherdj-projekte und ~/.cache/cypherdj/arr; Prüfinstanz (Buchstabe) hat eigene; ungültiger Buchstabe → Fehler', () => {
-  assert.equal(projektWurzelVorgabe(''), path.join(os.homedir(), 'cypherdj-projekte'));
+test('Wurzeln je Instanz: Betrieb = ~/cypherdj/werke/projekte (frisches HOME) und ~/.cache/cypherdj/arr; Prüfinstanz (Buchstabe) hat eigene; ungültiger Buchstabe → Fehler', () => {
+  const h = fs.mkdtempSync(path.join(os.tmpdir(), 'wurzel-home-')), alt = { HOME: process.env.HOME, HEIM: process.env.CYPHERDJ_HEIM };
+  process.env.HOME = h; delete process.env.CYPHERDJ_HEIM;
+  try { assert.equal(projektWurzelVorgabe(''), path.join(h, 'cypherdj', 'werke', 'projekte')); }
+  finally { process.env.HOME = alt.HOME; if (alt.HEIM !== undefined) process.env.CYPHERDJ_HEIM = alt.HEIM; fs.rmSync(h, { recursive: true, force: true }); }
   assert.equal(arbeitsordnerVorgabe(''), path.join(os.homedir(), '.cache', 'cypherdj', 'arr'));
   assert.equal(projektWurzelVorgabe('t'), '/dev/shm/cypherdj-t/projekte');
   assert.equal(arbeitsordnerVorgabe('t'), path.join(os.homedir(), '.cache', 'cypherdj-t', 'arr'));
   assert.notEqual(projektWurzelVorgabe('t'), projektWurzelVorgabe('u')); assert.notEqual(projektWurzelVorgabe('t'), projektWurzelVorgabe(''));
   for (const x of ['ab', 'A', '1', '../x', '-']) { assert.throws(() => projektWurzelVorgabe(x), /Instanz/); assert.throws(() => arbeitsordnerVorgabe(x), /Instanz/); }
+});
+
+test('a symlinked project folder is not listed and opens by slug', (t) => {
+  const w = tmpOrdner(t); const wurzel = path.join(w, 'wurzel');
+  fs.mkdirSync(path.join(w, 'x', 'link-ziel'), { recursive: true });
+  const pr = new Projekte(wurzel);
+  pr.lege('echt');
+  const ziel = path.join(w, 'x', 'link-ziel');
+  fs.copyFileSync(path.join(wurzel, 'echt', 'project.json'), path.join(ziel, 'project.json'));
+  fs.symlinkSync('../x/link-ziel', path.join(wurzel, 'link'));
+  assert.deepEqual(pr.liste().map((e) => e.slug), ['echt']);
+  assert.equal(pr.lies('link').rev, 0);
 });

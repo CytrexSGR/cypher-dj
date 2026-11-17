@@ -2,7 +2,8 @@
 // template, "+ empty module" (a name field, Enter creates) and "Open module…" (a select of the modules). Opening or creating is the person's click and
 // goes through ctx.oeffneModul / ctx.neuesModul (live-container confirmation, nothing else). Lists are fetched on show and after a module change.
 import { WERKBANK_TEXT } from './werkbank.js';
-import { bindeSamples, SAMPLES_TEXT } from './regal_samples.js';
+import { SAMPLES_TEXT } from './regal_samples.js';
+import { bindeSamplesReiter } from './regal_samples_modus.js';
 import { bindeInstrumente, INSTRUMENTE_TEXT } from './regal_instruments.js';
 
 // liste: GET /proj/liste (an array); vorlagen: GET /proj/werkbank/vorlagen ({vorlagen: [...]}) or the array; slug: the open module.
@@ -333,7 +334,7 @@ export function bindeRegal(ctx) {
     }
   }
   // tab SAMPLES lives in regal_samples.js; it draws into the card host while its tab is shown
-  const samples = bindeSamples(ctx, { host: kartenHost, setzeHinweis: (t) => { hinweis.textContent = t ?? SAMPLES_TEXT.hint; }, refusalText });
+  const samples = bindeSamplesReiter(ctx, { host: kartenHost, setzeHinweis: (t) => { hinweis.textContent = t ?? SAMPLES_TEXT.hint; }, refusalText });
   const instrumente = bindeInstrumente(ctx, { host: kartenHost, setzeHinweis: (t) => { hinweis.textContent = t ?? INSTRUMENTE_TEXT.hint; }, refusalText });
   if (tab === 'samples') samples.zeige();
   if (tab === 'instrumente') instrumente.zeige();
@@ -379,7 +380,16 @@ export function bindeRegalSchublade(ctx) {
     regal.hidden = !auf;
     knopf.setAttribute('aria-pressed', String(auf)); knopf.classList.toggle('an', auf);
     knopf.textContent = auf ? 'SHELF ▴' : 'SHELF ▾';
+    messe();
   };
+  // The open shelf lies over the lower part of the track list and the grid. Both get that much room at their end, so their last rows scroll clear of it.
+  const wb = regal.parentElement, spuren = $('spuren');
+  const messe = () => {
+    if (!wb || !spuren || typeof spuren.getBoundingClientRect !== 'function') return;
+    const ueber = regal.hidden ? 0 : Math.max(0, Math.round(spuren.getBoundingClientRect().bottom - regal.getBoundingClientRect().top));
+    wb.style.setProperty('--regal-ueber', `${ueber}px`);
+  };
+  if (typeof ResizeObserver === 'function') { const ro = new ResizeObserver(messe); ro.observe(regal); if (spuren) ro.observe(spuren); }
   knopf.addEventListener('click', () => { ctx.merke('djk-wb-regal-auf', st.projekt && gemerkt() ? '0' : '1'); zeige(); });
   ctx.beimProjekt.push(() => zeige());
   zeige();

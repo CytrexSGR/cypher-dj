@@ -55,7 +55,7 @@ test('real render of the demo: the mix and each track alone are audible, the mix
     const r = spawnSync('bash', [path.join(DJK, 'start', 'djk-starter'), '--nur', stufe], { env: e, encoding: 'utf8' });
     assert.equal(r.status, 0, `starter ${stufe}: ${r.stdout}\n${r.stderr}`);
   }
-  const pj = path.join(env.HOME, 'cypherdj-projekte', 'demo', 'project.json');
+  const pj = path.join(env.HOME, 'cypherdj', 'werke', 'projekte', 'demo', 'project.json');
   assert.ok(fs.existsSync(pj), 'the demo project is in the throw-away HOME');
   const projekt = JSON.parse(fs.readFileSync(pj, 'utf8'));
   const render = (aus, nur) => {

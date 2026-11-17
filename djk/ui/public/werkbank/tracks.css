@@ -32,3 +32,4 @@
 #werkbank .w-sendpaar { display: flex; flex-direction: column; align-items: center; gap: 1px; width: 44px; }
 #werkbank .w-sendname { font-size: 8px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; max-width: 44px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #werkbank .w-spursends .w-dreh.klein, #werkbank .w-spursends .w-dreh.klein .w-dreh-rad { width: 26px; height: 26px; }
+#werkbank [data-w="spuren"].w-drop, #werkbank .w-spurneu.w-drop { outline: 2px dashed var(--d3); outline-offset: 2px; background: rgba(255, 255, 255, .05); color: var(--d3); border-color: var(--d3); }

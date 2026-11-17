@@ -1,0 +1,6 @@
+[
+  {"name": "Battery 4", "pfad": "/data/audio/Battery4-Samples"},
+  {"name": "VCSL", "pfad": "/data/audio/vcsl"},
+  {"name": "Live Core Library", "pfad": "/opt/daw/Core Library/Samples"},
+  {"name": "NI", "pfad": "/data/audio/ni"}
+]

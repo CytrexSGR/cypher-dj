@@ -3,6 +3,49 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-17, eighth update
+
+**Studio**
+- One visible folder for your work: a fresh install keeps projects, modules, kits, loops, presets and the rest under
+  `~/cypherdj/` (`CYPHERDJ_HEIM` moves it). An existing install keeps working where it is; the command `djk-umzug` shows
+  what a move would do and moves one kind at a time, leaves a link at the old place, can undo it and carries on by fixed
+  rules after an interrupted run. It also moves projects you choose out of the project list into `pruefen/`, and renames
+  module folders to `<title>-<slot>-<4 characters>`. INSTALL.md section 8 has the layout.
+- One list of source folders, `~/cypherdj/quellen.toml`. The SOURCES button in the shelf header opens the dialog SOURCE
+  FOLDERS: every folder with a dot for "reachable now", ADD and REMOVE. The shelf, the catalog and the kit sources read
+  the same list.
+- Projects collect their sources: opening a project copies the sources that lie on a removable disk into its `audio/`
+  folder in the background, so it plays with the disk unplugged. COLLECT in PRODUCTION copies every outside source, and
+  so does a finished export. It copies, never moves or deletes, checks every copy by its sha256, runs at the lowest
+  priority and waits while music plays.
+- A project keeps its three newest exports; older ones move to a bin folder inside the projects folder, nothing is deleted. The
+  decoded audio cache is capped at 5 GiB and the waveform cache at 1 GiB; a decode that any project names is never
+  removed.
+
+## 2026-11-17, seventh update
+
+**Studio**
+- Media browser in the shelf: the SAMPLES tab has a LIBRARY mode that searches the whole one-shot catalog by text and
+  by instrument class (FOLDERS keeps the folder browser). Protected samples are not shown, files you can reach come
+  first, and a disk that is not mounted is named with the number of samples it holds. Every row shows its folder;
+  a click previews it and TO TRACK puts it on a new track, also for catalog files outside your sample folders.
+- Favourites and recently used: a star in the row marks a sample, and a sample you put on a track, drop or load into a
+  deck counts as recently used. Both are fixed collections that sort the DJ library, the shelf and the PRODUCTION
+  library (reachable first, then favourites, then recent) until you choose a column to sort by.
+- Drag from the shelf: drop a sample on the track list for a new track, or on a row of a drum kit track to make it the
+  sound of that row. The kit is copied first, so other tracks and saved projects that play the old kit stay unchanged.
+
+## 2026-11-17, sixth update
+
+**Studio**
+- ANALYZE window: spectrum in semitone bands, time picture, stereo correlation per band, loudness with short-term and
+  momentary maxima, masking between two tracks, objective hints; measured from a render of the loop, also while the loop
+  plays.
+
+**The agent's side**
+- New tool `proj_analyse` (93 tools now): the same measurement for a track, group, return or the master, optionally
+  against a second strip, so the agent can judge a sound without hearing it.
+
 ## 2026-11-16, fifth update
 
 **Studio**

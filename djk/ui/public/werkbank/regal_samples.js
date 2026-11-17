@@ -2,10 +2,11 @@
 // TO TRACK puts it on a new instrument track. regal.js builds the tab button and calls bindeSamples; this file owns the body of the tab.
 // Routes (page server): GET /sampler/dateien, GET /sampler/datei/hoer, POST /sampler/datei/spur. All class names carry the prefix w-smp-
 // (regal.css and dock.css both style .w-karte*, a collision there caused a bug before).
+import { bindeQuellenDialog, QUELLEN_TEXT } from './sources_dialog.js';
 
 export const SAMPLES_TEXT = {
   hint: 'click plays a file · arrow keys move and play · Enter or TO TRACK puts it on a new track',
-  keineWurzeln: 'No sample folders yet. List them in ~/.config/cypherdj/sampler/wurzeln.json',
+  keineWurzeln: 'No sample folders yet. Add one with SOURCES.',
   fehlt: 'This folder is not on disk',
   liest: 'Reading…',
   mehr: 'More files than shown: narrow the search',
@@ -115,7 +116,9 @@ export function bindeSamples(ctx, { host, setzeHinweis = () => {}, refusalText =
   const pfad = el('div', 'w-smp-pfad');
   const feld = markiere(el('input', 'w-smp-suche'), 'samples-suche');
   feld.setAttribute('placeholder', '🔍 Search in this folder: kick 909, bass, …'); feld.setAttribute('aria-label', 'Search samples'); feld.setAttribute('maxlength', '80');
-  kopf.append(chips, pfad, feld);
+  const ordnerKnopf = markiere(el('button', 'w-smp-knopf w-smp-ordner', QUELLEN_TEXT.knopf), 'samples-quellen');   // A4: the source folder dialog
+  ordnerKnopf.type = 'button'; ordnerKnopf.setAttribute('title', QUELLEN_TEXT.knopfTitel);
+  kopf.append(chips, pfad, feld, ordnerKnopf);
   const liste = el('div', 'w-smp-liste');
   liste.setAttribute('tabindex', '0'); liste.setAttribute('role', 'listbox'); liste.setAttribute('aria-label', 'Sample files');
   const balken = markiere(el('div', 'w-smp-instrument'), 'samples-instrument');
@@ -127,6 +130,8 @@ export function bindeSamples(ctx, { host, setzeHinweis = () => {}, refusalText =
   balken.firstChild.append(balkenText, balkenKnopf);
   balken.hidden = true;
   wurzelEl.append(kopf, balken, liste);
+  const quellenDialog = bindeQuellenDialog(ctx, { mount: wurzelEl, beiAenderung: () => { if (aktiv) ladeAlles(); } });
+  ordnerKnopf.addEventListener('click', () => quellenDialog.oeffne());
 
   const speichere = () => ctx.merke(SPEICHER, JSON.stringify({ wurzel, ordner }));
   const nachricht = (text) => el('div', 'w-smp-leer', text);

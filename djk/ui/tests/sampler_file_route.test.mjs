@@ -43,8 +43,8 @@ async function aufbau(t) {
 
 test('the routes of the file part', () => {
   const r = dateiRouten({ log() {}, quelle: () => 'andreas', kiGestoppt: () => false }, { sitzung: {}, zugang: {}, loops: '', module: '' });
-  assert.deepEqual(r.map((x) => `${x.methode} ${x.pfad}`), ['GET /sampler/dateien', 'GET /sampler/datei/hoer', 'POST /sampler/datei/spur']);
-  assert.deepEqual(r.map((x) => x.schutz), ['offen', 'offen', 'fremdePost']);
+  assert.deepEqual(r.map((x) => `${x.methode} ${x.pfad}`), ['GET /sampler/dateien', 'GET /sampler/datei/hoer', 'POST /sampler/datei/spur', 'POST /sampler/datei/pad']);
+  assert.deepEqual(r.map((x) => x.schutz), ['offen', 'offen', 'fremdePost', 'fremdePost']);
 });
 
 test('GET /sampler/dateien: roots, folder, search, refusals', async (t) => {

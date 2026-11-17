@@ -15,6 +15,7 @@ import re
 import shutil
 from pathlib import Path
 
+from .table import ablage
 from .contract import pruefe, sauber
 
 AT_FDCWD = -100
@@ -25,12 +26,14 @@ FASSUNG_MUSTER = re.compile(r"^([1-9][0-9]*)_r([1-9][0-9]*)$")
 
 
 def standard_bestand():
-    return Path(os.environ.get("CYPHERDJ_BESTAND", Path.home() / "cypher-dj" / "bestand"))
+    """CYPHERDJ_BESTAND (empty counts as unset), else ~/cypher-dj/bestand (no entry in the storage table)."""
+    vorgabe = os.environ.get("CYPHERDJ_BESTAND", "")
+    return Path(vorgabe) if vorgabe != "" else Path.home() / "cypher-dj" / "bestand"
 
 
 def standard_ablage():
     """Analyse-Ablage des Nachtlaufs (einlesen nur_analyse); Daten gehoeren nach ~/werkstatt (Platte disk2)."""
-    return Path(os.environ.get("CYPHERDJ_ANALYSE", Path.home() / "werkstatt" / "cypher-dj-analyse"))
+    return ablage.fest("analyse")
 
 
 def sha256_datei(pfad):

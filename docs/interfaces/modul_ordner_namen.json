@@ -1,0 +1,12 @@
+{
+  "regel": "lesbarerName(titel) or 'modul' when empty; with a slot '-a' or '-b' is appended; then '-' plus the first 4 characters of the id. When that folder exists and its modul.json has another id, the first 8 characters of the id are used instead.",
+  "vektoren": [
+    { "titel": "Pure and Simple", "slot": "A", "id": "276617b78ebc7a9f", "erwartet": "pure-and-simple-a-2766" },
+    { "titel": "Pure and Simple", "slot": null, "id": "2766aaaaaaaaaaaa", "erwartet": "pure-and-simple-2766" },
+    { "titel": "Größe Äpfel Öl Übung", "slot": null, "id": "ab12cd34ef567890", "erwartet": "groesse-aepfel-oel-uebung-ab12" },
+    { "titel": "", "slot": null, "id": "0123456789abcdef", "erwartet": "modul-0123" },
+    { "titel": "!!! ???", "slot": "A", "id": "0123456789abcdee", "erwartet": "modul-a-0123" },
+    { "titel": "abcdefghij abcdefghij abcdefghij abcdefghij abcdefghij abcdefghij", "slot": "B", "id": "fedcba9876543210", "erwartet": "abcdefghij-abcdefghij-abcdefghij-abcdefg-b-fedc" },
+    { "titel": "Straße", "slot": "B", "id": "00ff00ff00ff00ff", "erwartet": "strasse-b-00ff" }
+  ]
+}

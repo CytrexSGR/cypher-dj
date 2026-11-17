@@ -9,14 +9,15 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { nimmSperre, SperreBelegt } from '../lock.ts';
-import { instanz } from '../paths.ts';
+import { ablageOrdner, instanz, type AblageOptionen } from '../paths.ts';
+import { FESTE, ZULETZT_MAX, ZULETZT_SLUG, istFest } from './feste.ts';
 import {
   DATEI_MAX, KollektionFehler, MAX_KOLLEKTIONEN, MAX_POSTEN, SCHEMA, postenListe, postenSchluessel, pruefeDatei, pruefeName, pruefeSlug, slugVon,
   type Kollektion, type Posten,
 } from './model.ts';
 
 export type Quelle = 'andreas' | 'cypher';
-export function kollektionenVorgabe(i: string = instanz()): string { return path.join(os.homedir(), '.config', i ? `cypherdj-${i}` : 'cypherdj', 'kollektionen'); }
+export function kollektionenVorgabe(i: string = instanz(), o: AblageOptionen = {}): string { return i ? path.join(os.homedir(), '.config', `cypherdj-${i}`, 'kollektionen') : ablageOrdner('kollektionen', o); }
 // nachTemp: test hook, runs after the temp file is complete and before it replaces the old file (a writer killed there leaves the old file)
 export interface KollektionOptionen { ordner?: string; jetzt?: () => Date; nachTemp?: (tmp: string) => void }
 export interface ListenEintrag { slug: string; name: string; anzahl: number; autor?: 'cypher'; geaendert: string | null; fehler?: string }
@@ -87,7 +88,14 @@ export class KollektionSpeicher {
     const p = this.pfad(slug);
     const hinzu = postenListe(o.hinzu), weg = postenListe(o.weg);
     return this.mitSperre(() => {
-      if (!fs.existsSync(p)) throw new KollektionFehler(404, 'unbekannt');
+      if (!fs.existsSync(p)) {
+        // a fixed collection is created on first use inside this lock; any other missing slug stays 404
+        const fest = FESTE.find((f) => f.slug === slug);
+        if (!fest) throw new KollektionFehler(404, 'unbekannt');
+        if (this.slugs().length >= MAX_KOLLEKTIONEN) throw new KollektionFehler(409, 'zu_viele');
+        const jetzt = this.zeit();
+        this.legeAn(p, { schema: SCHEMA, name: fest.name, angelegt: jetzt, geaendert: jetzt, posten: [] });
+      }
       if (weg.length && cypherDarfNicht(quelle, this.liesFuerRechte(slug as string))) throw new KollektionFehler(403, 'nur_andreas_kollektion');
       const k = this.lies(slug);
       if (o.erwartet !== undefined && o.erwartet !== k.geaendert) throw new KollektionFehler(409, 'veraltet');
@@ -96,6 +104,7 @@ export class KollektionSpeicher {
       const da = new Set(posten.map(postenSchluessel));
       for (const x of hinzu) { const s = postenSchluessel(x); if (!da.has(s)) { da.add(s); posten.push(x); } }
       if (posten.length > MAX_POSTEN) throw new KollektionFehler(409, 'zu_viele');
+      if (slug === ZULETZT_SLUG && posten.length > ZULETZT_MAX) posten.splice(0, posten.length - ZULETZT_MAX);   // oldest first out, the newest is last
       // nothing changed (every added item was already there, nothing to remove): no write, the stamp stays, so a no-op by Cypher never
       // touches Andreas' file and never makes his open page stale
       if (posten.length === k.posten.length && posten.every((x, i) => postenSchluessel(x) === postenSchluessel(k.posten[i]))) {
@@ -113,6 +122,7 @@ export class KollektionSpeicher {
     const neuSlug = slugVon(n);
     return this.mitSperre(() => {
       if (!fs.existsSync(alt)) throw new KollektionFehler(404, 'unbekannt');
+      if (istFest(slug as string) || istFest(neuSlug)) throw new KollektionFehler(409, 'feste_kollektion');
       if (cypherDarfNicht(quelle, this.liesFuerRechte(slug as string))) throw new KollektionFehler(403, 'nur_andreas_kollektion');
       const { autor: _a, ...rest } = this.lies(slug);
       // D27: the mark stays only when Cypher renames her own collection; a rename by Andreas makes it his (the mark goes)
@@ -128,6 +138,7 @@ export class KollektionSpeicher {
     const p = this.pfad(slug);
     this.mitSperre(() => {
       try { if (!fs.lstatSync(p).isFile()) throw new Error('kein file'); } catch { throw new KollektionFehler(404, 'unbekannt'); }
+      if (istFest(slug as string)) throw new KollektionFehler(409, 'feste_kollektion');
       if (cypherDarfNicht(quelle, this.liesFuerRechte(slug as string))) throw new KollektionFehler(403, 'nur_andreas_kollektion');
       const korb = path.join(this.ordner, '.papierkorb');
       fs.mkdirSync(korb, { recursive: true });

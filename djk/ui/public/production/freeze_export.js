@@ -5,13 +5,14 @@
 // Der Schalter wird in den vorhandenen Spurkopf (track_heads.js) eingesetzt, nicht in dessen Vorlage: V1 bleibt unverändert.
 import { resampleBefehl, strangName } from './resample.js';
 import { brauchtSlot } from './rack_device.js';
-import { freezeKnopf, laufText, ergebnisText, ausgabeFehler, echtzeitHinweis, echtzeitFortschritt } from './output.js';
+import { freezeKnopf, laufText, ergebnisText, einsammelText, ausgabeFehler, echtzeitHinweis, echtzeitFortschritt } from './output.js';
 
 export function bindeAusgabe(ctx) {
   const { st, $ } = ctx;
   const gruppe = document.createElement('div');
   gruppe.className = 'p-gruppe p-ausgabe';
   gruppe.innerHTML = '<button data-p="export" title="Export the loop bracket when it is on, otherwise the whole song, as a WAV file (48 kHz, 32 bit float); Surge tracks are frozen first" disabled>EXPORT</button>'
+    + '<button data-p="einsammeln" title="Copy every audio source that lies outside this project into its audio folder (the originals stay)" disabled>COLLECT</button>'
     + '<progress data-p="ausgabe-fortschritt" class="p-ausgabe-balken" max="1" value="0" hidden></progress>'
     + '<output data-p="ausgabe" class="p-ausgabe-text" aria-live="polite"></output>';
   $('meldung').before(gruppe);
@@ -26,7 +27,7 @@ export function bindeAusgabe(ctx) {
     clearTimeout(frage);
     // plan 1.11 T13: the real-time export (own or foreign) carries start_ms and dauer_s for the text and the bar
     if (st.lauf && x?.art === 'export' && x.echtzeit) { st.lauf.echtzeit = true; st.lauf.start_ms = x.start_ms; st.lauf.dauer_s = x.dauer_s; return; }
-    if (!x || (x.art !== 'freeze' && x.art !== 'export' && x.art !== 'lautheit' && x.art !== 'merge' && x.art !== 'bounce' && x.art !== 'resample') || st.lauf) { if (st.fremdLauf) { st.fremdLauf = null; knoepfe(); } return; }
+    if (!x || (x.art !== 'freeze' && x.art !== 'export' && x.art !== 'lautheit' && x.art !== 'analyse' && x.art !== 'merge' && x.art !== 'bounce' && x.art !== 'resample') || st.lauf) { if (st.fremdLauf) { st.fremdLauf = null; knoepfe(); } return; }
     const s = x.art === 'freeze' ? st.projekt?.spuren.find((y) => y.id === x.spur_id) : null;
     const gleich = st.fremdLauf && st.fremdLauf.art === x.art && st.fremdLauf.spur_id === x.spur_id && st.fremdLauf.strang_id === x.strang_id
       && st.fremdLauf.start_ms === x.start_ms;
@@ -37,10 +38,12 @@ export function bindeAusgabe(ctx) {
     frage = setTimeout(() => ctx.ladeAktuell(), 500);
   };
   st.exportErgebnis = null;  // letzte Antwort von /proj/export
+  st.einsammelErgebnis = null;  // last answer of /proj/einsammeln (shown in the same output; an export clears it and the other way round)
   ctx.laufJetzt = laufJetzt;
 
   function knoepfe() {
     $('export').disabled = !st.projekt || !!laufJetzt();
+    $('einsammeln').disabled = !st.projekt || !!laufJetzt() || st.einsammelt === true;
     for (const s of st.projekt?.spuren ?? []) {
       const kopf = $('koepfe').querySelector(`.p-kopf[data-spur="${CSS.escape(s.id)}"]`);
       if (!kopf) continue;
@@ -61,7 +64,7 @@ export function bindeAusgabe(ctx) {
   async function lauf(art, weg, koerper, extra) {
     const slug = st.slug;
     st.lauf = { art, seit: performance.now(), ...extra };
-    if (art === 'export') st.exportErgebnis = null;
+    if (art === 'export') { st.exportErgebnis = null; st.einsammelErgebnis = null; }
     knoepfe();
     // an export may run in real time: the server says so in ausgabe_lauf, so the page asks for it while the request is open
     const uhr = art === 'export' ? setInterval(() => ctx.ladeAktuell(), 1000) : null;
@@ -107,11 +110,25 @@ export function bindeAusgabe(ctx) {
     if (j && typeof j.datei === 'string') { st.exportErgebnis = j; ctx.melde('Export finished'); }
   });
 
+  // COLLECT: not a long run of the frame (no freeze or export is locked by it); the button only waits for its own answer
+  $('einsammeln').addEventListener('click', async () => {
+    if (!st.projekt || laufJetzt() || st.einsammelt) return;
+    const slug = st.slug;
+    st.einsammelt = true; knoepfe();
+    let r;
+    try { r = await ctx.holeJson('/proj/einsammeln', {}); } finally { st.einsammelt = false; knoepfe(); }
+    if (r.status === 409 && r.j?.fehler === 'transport_laeuft') { ctx.melde('Music is playing: collecting starts when it stops', true); return; }
+    if (r.status !== 200) { ctx.melde(ausgabeFehler(r, ctx.antwortText), true); return; }
+    if (st.slug !== slug) return;
+    st.exportErgebnis = null; st.einsammelErgebnis = r.j;
+    ctx.melde('Collect finished');
+  });
+
   let letzter = null;
   ctx.vorBild.push((t0) => {
     const l = laufJetzt();
     const e = l ? { text: laufText(l, st.arr, t0), titel: '', warnung: false } : st.exportErgebnis ? ergebnisText(st.exportErgebnis)
-      : { text: echtzeitHinweis(st.projekt), titel: '', warnung: false };
+      : st.einsammelErgebnis ? einsammelText(st.einsammelErgebnis) : { text: echtzeitHinweis(st.projekt), titel: '', warnung: false };
     const balken = $('ausgabe-fortschritt'), f = echtzeitFortschritt(l);
     if (balken) { balken.hidden = f === null; if (f !== null) balken.value = f; }
     const schluessel = `${e.text}|${e.titel}|${e.warnung}`;
@@ -120,5 +137,5 @@ export function bindeAusgabe(ctx) {
     const o = $('ausgabe');
     o.textContent = e.text; o.title = e.titel; o.classList.toggle('warnung', e.warnung);
   });
-  ctx.beimProjekt.push((p, wechsel) => { if (wechsel) st.exportErgebnis = null; knoepfe(); });
+  ctx.beimProjekt.push((p, wechsel) => { if (wechsel) { st.exportErgebnis = null; st.einsammelErgebnis = null; } knoepfe(); });
 }

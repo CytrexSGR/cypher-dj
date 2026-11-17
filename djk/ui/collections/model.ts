@@ -28,6 +28,7 @@ export const KOLLEKTION_TEXT: Readonly<Record<string, string>> = {
   zu_viele: `at most ${MAX_POSTEN} items per collection and ${MAX_KOLLEKTIONEN} collections`,
   unbekannt: 'no such collection',
   nur_andreas_kollektion: 'Cypher may remove items from, rename or delete only collections she created; this one is Andreas\'',
+  feste_kollektion: 'Favourites and Recently used are fixed collections; they cannot be renamed or deleted',
   veraltet: 'the collection was changed elsewhere in the meantime; reload and try again',
   kollektion_busy: 'another program is writing the collections right now; try again',
   json_kaputt: 'the collection file is not readable JSON; it was left untouched',

@@ -272,7 +272,7 @@ test('katalog hardening: camelotNachbarn rejects Unicode digits, signs and paddi
 // ---- mutation checks ----
 test('katalog hardening, mutation check: the checks above reject broken copies of catalog.ts', async (t) => {
   const stabil = stabilerKatalog(t);
-  const ohneId = await ladeMutante(t, 'catalog.ts', [["${ab ? 'DESC' : 'ASC'} NULLS LAST, k.id LIMIT", "${ab ? 'DESC' : 'ASC'} NULLS LAST, k.id DESC LIMIT"]]);
+  const ohneId = await ladeMutante(t, 'catalog.ts', [["${ab ? 'DESC' : 'ASC'} NULLS LAST, k.id`;", "${ab ? 'DESC' : 'ASC'} NULLS LAST, k.id DESC`;"]]);
   assert.throws(() => pruefeStabil(ohneId, stabil), assert.AssertionError, 'ties by descending id break the documented order');
   const proto = await ladeMutante(t, 'catalog.ts', [['Object.hasOwn(SORTIERUNG[typ], sort) ?', '(sort in SORTIERUNG[typ]) ?']]);
   assert.throws(() => pruefeSortPrototyp(proto, stabil), assert.AssertionError, '`in` sees constructor and lets SQL fail with a raw error');

@@ -77,6 +77,12 @@ if [ -f "$UMG" ]; then
   set -a; . "$UMG"; set +a
   [ -z "$_gesetzt" ] || eval "$_gesetzt"
 fi
+# The storage places come from the table djk/config/ablage.json (ABLAGE_<ART>=...). The umgebung.env line above stays literal: it is read
+# before the table can be asked, and CYPHERDJ_HEIM may be set inside it. PYTHONSAFEPATH keeps the working directory out of the module
+# path (djk/starter/storage.py must never answer for the package djk/ablage).
+ABLAGE_AUS=$(PYTHONPATH="$DJK${PYTHONPATH:+:$PYTHONPATH}" PYTHONSAFEPATH=1 python3 -m storage shell) \
+  || { echo "djk-start: the storage table could not be read (python3 -m storage shell). Nothing started." >&2; exit 2; }
+eval "$ABLAGE_AUS"
 
 I=${CYPHERDJ_INSTANZ:-}; MASTER=""; CUE=""; OHNE_CUE=0; TON_FREI=0; STRUDEL=0; INSTR=0; ARR1=0; ARR2=0; KIT=techno; KIT2=battery; KIT3=battery; KIT_G=0; KIT2_G=0; KIT3_G=0; MELODIE=surge; BASS=""; BK_STROEME=0; KERN_KONFIG=""; LS_KONFIG=""; KIT_ORDNER=""; PRUEF=1
 MODUS=start; VORLAGEN_NACH=""
@@ -106,9 +112,16 @@ done
 [ "$BK_STROEME" = 1 ] && [ "$STRUDEL" != 1 ] && { echo "djk-start: --bk-stroeme needs --strudel" >&2; exit 2; }
 [ "$MELODIE" != surge ] && [ "$INSTR" != 1 ] && { echo "djk-start: --melodie needs --instrumente" >&2; exit 2; }
 [ -n "$BASS" ] && [ "$INSTR" != 1 ] && { echo "djk-start: --bass needs --instrumente" >&2; exit 2; }
+# Storage layout (task 14): a real start of the production instance first lays out the new home folder (missing folders, the links
+# of the core kinds). A refusal (the home's disk is not mounted, exit 6) or any other failure is reported and the start goes on: the
+# core kinds stay at their old places, which the links keep valid. Test instances, --zustand and --vorlagen-nach never touch the home.
+if [ -z "$I" ] && [ "$MODUS" = start ]; then
+  PYTHONPATH="$DJK${PYTHONPATH:+:$PYTHONPATH}" PYTHONSAFEPATH=1 python3 "$HIER/umzug.py" einrichten --still \
+    || echo "djk-start: could not lay out the home folder (see above); starting with the old places" >&2
+fi
 # Starter kit (plan 2026-11-12): the Strudel kits are chosen here, before anything starts, in the kit folder of this start. A default kit that is
 # missing falls back to the starter kit (djk-starter); a kit named with --strudel-kit* that is missing, or no kit at all, is an error (2).
-KITS=${KIT_ORDNER:-$HOME/.config/cypherdj/kits}
+KITS=${KIT_ORDNER:-$ABLAGE_KITS}
 if [ "$STRUDEL" = 1 ] && [ "$MODUS" != zustand ]; then
   . "$HIER/kit_choice.sh"
   KIT=$(kit_wahl "$KITS" "$KIT_G" "$KIT") || exit 2
@@ -245,7 +258,7 @@ KERN_ARGS=""; [ -n "$KERN_KONFIG" ] && KERN_ARGS="--konfig $KERN_KONFIG"; [ "$PR
 LS_ARGS="--kern-port $P_KERN"; [ -n "$LS_KONFIG" ] && LS_ARGS="--konfig $LS_KONFIG $LS_ARGS"
 [ -n "$KERN_KONFIG" ] && LS_ARGS="$LS_ARGS --kern-konfig $KERN_KONFIG"
 # MVP 2 (ADR 025): Loop-Ordner je Instanz wie im Kern (main.cpp); die Seite liest ihn für /loops
-if [ -n "$I" ]; then LOOPS=/dev/shm/cypherdj-$I/loops; else LOOPS=$HOME/.config/cypherdj/loops; fi
+if [ -n "$I" ]; then LOOPS=/dev/shm/cypherdj-$I/loops; else LOOPS=$ABLAGE_LOOPS; fi
 mkdir -p "$LOOPS"
 OF_ARGS="--kern-port $P_KERN --leitstand-ws $P_WS --arbeitsbestand $ARBEITSBESTAND --loops $LOOPS --digitalout $RUN/digitalout.json"
 # Listen und eigene Strudel-Muster (Plan 2026-10-10, S2b): Prüfinstanzen schreiben in eine eigene Ablage, nie in die Bibliothek des
@@ -322,7 +335,7 @@ pw-link -o >/dev/null 2>&1 || { echo "djk-start: PipeWire not reachable (pw-link
 
 # 2b Shipped graphs the product relies on (arr-bk: the page button "+ Fx" and the Hand text name fx-delay-sync): copy them into the graph folder
 # of the kern when missing. Never overwrites a file, and only this list, so a graph deleted on purpose from the folder stays deleted.
-BK_ORDNER="$HOME/.config/cypherdj/baukasten"
+BK_ORDNER="$ABLAGE_GERAETE"
 for g in fx-delay-sync; do
   if [ ! -e "$BK_ORDNER/$g.json" ] && [ -f "$DJK/instruments/modular_dsp/demos/$g.json" ]; then
     mkdir -p "$BK_ORDNER" && cp -- "$DJK/instruments/modular_dsp/demos/$g.json" "$BK_ORDNER/$g.json" && echo "djk-start: installed the shipped graph $g into $BK_ORDNER"
@@ -550,10 +563,11 @@ if [ "$STRUDEL" = 1 ]; then  # Plan 2026-09-27 + Studio S1: drei Strudel-Erzeuge
     [ -f "$KITS/$K/kit.json" ] || abbruch "kit $K missing (djk/generator/kit_build.py)" ""
     ORD="/dev/shm/cypherdj$SFX/erzeuger$N"; U="cypherdj-erzeuger$N$SFX"; P=$(( P_ERZ + s - 1 ))
     mkdir -p "$ORD"
+    KR=(); KITS_ECHT=$(readlink -f -- "$KITS") && [ "$KITS_ECHT" != "$KITS" ] && KR=(--allow-fs-read="$KITS_ECHT")   # a linked kit folder: node 22.23 follows the link, a later node may not
     systemd-run --user --quiet --collect --unit="$U" ${I:+--setenv=CYPHERDJ_INSTANZ=$I} \
       -p Restart=always -p RestartSec=1 -p RestartPreventExitStatus=2 -p PartOf=cypherdj.target \
       /usr/bin/node --permission --allow-fs-read="$DJK" --allow-fs-read="$HOME/strudel" \
-      --allow-fs-read="$KITS" --allow-fs-read="$ORD" --allow-fs-write="$ORD" \
+      --allow-fs-read="$KITS" "${KR[@]}" --allow-fs-read="$ORD" --allow-fs-write="$ORD" \
       "$DJK/generator/generator.mjs" --kern-port "$P_KERN" --abo-port "$P" ${KIT_ORDNER:+--kit-ordner "$KIT_ORDNER"} --kit "$K" $ZUSATZ $ZIEL \
       --name "erzeuger$N" --strom "$s" --kanal "erz/$s" --muster "$ORD/strom1.js" 2>&1 | sed 's/^/    /' >&2
     UNITS+=("$U")

@@ -245,16 +245,34 @@ The lists above are the headline. Also in there:
   a drum kit (TO KIT, then KIT TO TRACK) or a tone that plays at the pitch of the keys, with a proposed root note (TO
   TONE). The shelf tab CUTS lists the cuts to reuse or delete. The agent does the same through its `sampler` tool. A kit
   made from hits plays on its own track at once but reaches the live drum stream only after a restart
-- **Sample player (STUDIO)**: the shelf tab SAMPLES browses your own sample folders (listed in
-  `~/.config/cypherdj/sampler/wurzeln.json`) with a search over folder and file names; a click plays a file, TO TRACK
+- **Sample player (STUDIO)**: the shelf tab SAMPLES browses your own sample folders (the roots marked for the shelf in
+  `~/cypherdj/quellen.toml`, edited in the SOURCES dialog) with a search over folder and file names; a click plays a file, TO TRACK
   puts it on a new instrument track that plays it across the keys, with the root note from pitch detection and the
   file name. Folders without samples are hidden and every folder shows how many it holds
+- **Media browser in the shelf (STUDIO)**: the SAMPLES tab has a LIBRARY mode next to FOLDERS. It searches the one-shot
+  catalog by text and by instrument class, hides protected samples, lists files you can reach first and names a disk
+  that is not mounted. A star marks a favourite, and a sample put on a track counts as recently used; both are fixed
+  collections that also sort the DJ library and the PRODUCTION library. A row can be dragged onto the track list (a
+  new instrument track) or onto a row of a drum kit track, which copies the kit with that sound replaced and leaves
+  the old kit untouched
+- **Storage layout and collecting (STUDIO)**: everything you make lives in one visible folder, `~/cypherdj/`, and
+  every source folder is named once in `~/cypherdj/quellen.toml`, which the SOURCES dialog of the shelf edits. A project
+  copies its sources from a removable disk into its own `audio/` folder when it opens, and COLLECT in PRODUCTION does it
+  for every outside source (copies only, each checked by sha256, never while music plays). Three exports per project
+  stay, older ones move to a bin; the decoded audio cache and the waveform cache have size caps. `djk-umzug` moves an
+  existing install over, one kind at a time and reversibly
 - **Multisample instruments (STUDIO)**: a folder of note samples becomes one instrument (INSTRUMENT TO TRACK): note,
   velocity layer and take are read from the file names, so every key gets the nearest sample, the velocity picks the
   layer and takes alternate (round robin). Loop points stored in WAV or AIFF files become sustain loops with a
   cross-fade, and a sibling folder of release samples plays when a key is let go, with its own level knob. Built
   instruments are kept on the shelf tab INSTRUMENTS. The sample data of an instrument is one memory-mapped pack of up
   to 2 GiB
+- **ANALYZE window (STUDIO)**: measures a track, a group, a return or the master, and optionally a second one, from a
+  render of the loop range (also while the loop plays): a spectrum in semitone bands with the column under the
+  playhead, a time picture, stereo correlation and width in four bands, loudness (LUFS-I, short-term and momentary
+  maxima, LRA, true peak, crest), the masking between the two strips and objective hints (a bass that is not mono, a
+  true peak over -1 dBTP, a narrow resonance, two strips fighting in the bass). The agent reads the same numbers with
+  the tool `proj_analyse`
 - **Step lanes for knobs (STUDIO)**: `+ lane` under the grid adds a step lane for any knob of a Cypher Modular
   instrument; clicking a key or a drum row plays it
 - **Live view (LIVE)**: the three Strudel channels side by side, each with an automation lane for fader,
@@ -273,7 +291,7 @@ The lists above are the headline. Also in there:
 - **Extra pattern streams**: five more channels (erz/5 to erz/7 and the two loop box pads) can each carry a Cypher
   Modular graph, started with `djk-start --strudel --bk-stroeme`; they can be recorded onto production tracks. The
   graph knobs can be learned onto a MIDI controller, and a project remembers which graph sits on which channel
-- **The agent's side**: 92 tools in the MCP server. Besides playing it can measure a deck behind its
+- **The agent's side**: 93 tools in the MCP server. Besides playing it can measure a deck behind its
   closed fader, read the levels of the last seconds, wait on the master clock for a number of bars, run
   automation tracks and ramps over bars, and cancel everything it started. When it has an idea while the
   human plays, it proposes; the human accepts or rejects with one key

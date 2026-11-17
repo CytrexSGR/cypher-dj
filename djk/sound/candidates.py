@@ -93,10 +93,35 @@ def _rundlauf(gruppen, maximum):
                 out.append(r.pop(0))
     return out
 
+def _klang_aus_quellen(var):
+    """CYPHERDJ_KLANG_<X> from [[klang]] name "<x>" of quellen.toml (root path of this machine + rel); None when absent."""
+    pre = "CYPHERDJ_KLANG_"
+    if not var.startswith(pre):
+        return None
+    import socket
+    import storage as ablage
+    from quellen import file as datei
+    p = ablage.fest("quellen")
+    if not p.is_file():
+        return None
+    try:
+        q = datei.lies(p)
+    except datei.QuellenFehler as e:
+        raise KandidatenFehler(f"{e}") from e
+    host = socket.gethostname()
+    wurzeln = {w.name: w for w in q.wurzeln}
+    for k in q.klang:
+        if k.name == var[len(pre):].lower():
+            basis = datei.pfad_fuer(wurzeln[k.wurzel], host)
+            if basis is None:
+                return None
+            return f"{basis.rstrip('/')}/{k.rel}" if k.rel else basis
+    return None
+
 def _loese(wert, rolle):
     """Platzhalter ${NAME} in einem Quellpfad aus der Umgebung ersetzen; ungesetzt: klarer Fehler statt Absturz."""
     def ersetze(m):
-        v = os.environ.get(m.group(1))
+        v = os.environ.get(m.group(1)) or _klang_aus_quellen(m.group(1))
         if not v:
             raise KandidatenFehler(f"Rolle {rolle}: Umgebungsvariable {m.group(1)} ist nicht gesetzt "
                                    f"(Sample-Quelle {wert}; Vorlage djk/config/umgebung.env.beispiel)")

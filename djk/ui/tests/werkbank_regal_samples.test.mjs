@@ -29,7 +29,7 @@ class FakeAudio {
 }
 function aufbau({ antworten = dateiAntworten(), aktuell = { slug: null }, mitAudio = true } = {}) {
   audios = [];
-  installiere({ speicher: { 'djk-wb-regal-tab': 'samples' }, antworten: {
+  installiere({ speicher: { 'djk-wb-regal-tab': 'samples', 'djk-wb-regal-katalog': '{"modus":"ordner"}' }, antworten: {
     'GET /proj/aktuell': { j: aktuell }, 'GET /proj/liste': { j: [] }, 'GET /proj/werkbank/vorlagen': { j: { vorlagen: [] } }, ...antworten } });
   delete globalThis.Audio;
   wurzel = document.createElement('section');
@@ -106,10 +106,10 @@ test('rows: folders then files with size, play mark and TO TRACK; chips; crumbs;
   assert.deepEqual(wd('samples-pfad').map((c) => c.textContent), ['Battery 4']);
 });
 
-test('no roots: the text names the file', async () => {
+test('no roots: the text points at SOURCES', async () => {
   aufbau({ antworten: { 'GET /sampler/dateien': () => ({ j: { wurzeln: [] } }) } });
   w.zeige(); await ruhe();
-  assert.ok(regal().textContent.includes('No sample folders yet. List them in ~/.config/cypherdj/sampler/wurzeln.json'));
+  assert.ok(regal().textContent.includes('No sample folders yet. Add one with SOURCES.'));
 });
 
 test('a folder click lists it, crumbs go back, the choice is remembered', async () => {

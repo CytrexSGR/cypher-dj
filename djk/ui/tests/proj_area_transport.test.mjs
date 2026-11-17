@@ -8,13 +8,13 @@ import { bis, sse, ruf } from './support/proj_stack.mjs';
 import { GRUND_TEXT } from '../http/reasons.ts';   // Spec 6.34: jede Antwort mit Grund trägt einen englischen text
 
   // 'POST (muster)' = POST /proj/insert/<insert_id>/param (plan 1.11 T7)
-const ROUTEN = ['GET /proj/liste', 'GET /proj/werkbank/vorlagen', 'GET /proj/aktuell', 'GET /proj/verlauf', 'GET /proj/kits', 'GET /proj/surge_patches', 'GET /proj/routing', 'GET /proj/warp', 'GET /proj/auto', 'POST /proj/neu', 'POST /proj/oeffnen', 'POST /live/oeffnen', 'POST (muster)', 'POST /proj/midi_import', 'POST /proj/aendern',
+const ROUTEN = ['GET /proj/liste', 'GET /proj/werkbank/vorlagen', 'GET /proj/aktuell', 'GET /proj/verlauf', 'GET /proj/kits', 'GET /proj/surge_patches', 'GET /proj/routing', 'GET /proj/warp', 'GET /proj/auto', 'POST /proj/neu', 'POST /proj/oeffnen', 'POST /proj/kopie', 'POST /proj/loeschen', 'POST /live/oeffnen', 'POST (muster)', 'POST /proj/midi_import', 'POST /proj/aendern',
   'POST /proj/undo', 'POST /proj/redo', 'POST /proj/transport',
   'GET /proj/take_vorhoeren', 'POST /proj/take_vorhoeren',   // 1.14 comping, audition
   'POST /proj/auto/uebersteuern', 'POST /proj/auto/re_enable', 'POST /proj/auto/arm', 'POST /proj/auto/geste',   // 1.12 slice 3
   'GET /proj/bk', 'POST /proj/bk/merken', 'POST /proj/bk/laden'];   // S17
 
-test('Routes: exactly the nine of spec 3.4 plus GET /proj/kits (1.9 T2.3), GET /proj/warp, GET /proj/auto and GET/POST /proj/take_vorhoeren (no freeze and export, S3 brings those), every POST with fremdePost', async (t) => {
+test('Routes: exactly the nine of spec 3.4 plus GET /proj/kits (1.9 T2.3), GET /proj/warp, GET /proj/auto and GET/POST /proj/take_vorhoeren, POST /proj/kopie and POST /proj/loeschen (workbench shelf: SAVE AS and DELETE) (no freeze and export, S3 brings those), every POST with fremdePost', async (t) => {
   const { o } = await stapel(t);
   const proj = o.routen().filter((e) => e.bereich === 'proj');
   assert.deepEqual(proj.map((e) => `${e.methode} ${e.pfad}`), ROUTEN);

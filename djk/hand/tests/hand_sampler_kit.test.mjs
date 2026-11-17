@@ -40,7 +40,7 @@ test('schema: aktion has kit, nummern is an integer array, namen a string array,
   assert.equal(p.kit.type, 'string');
   assert.deepEqual(x.inputSchema.required, ['aktion']);
   const tools = (await c.listTools()).tools;
-  assert.equal(tools.length, 92, 'the tool count stays 92');
+  assert.equal(tools.length, 93, 'the tool count stays 93');
 });
 
 test('description: proposed banks, per-bank numbers, 10 s, kit_vorhanden, the way to a track and to a Strudel text, the live stream', async (t) => {

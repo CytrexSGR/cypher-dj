@@ -2,10 +2,13 @@
 // <base>/<id>/modul.json (the subtree of the module group, its origin, relative audio paths) plus copies of its audio files in <id>/audio/<sha256>.<ext>.
 // The base is $CYPHERDJ_MODULE or ~/.config/cypherdj/module; tests pass their own. The id is given ONCE at export (neueModulId, stored as modul.id) and
 // stays with the module: saving it again overwrites its own modul.json and copies only missing audio, while exporting the same loop again (or the same
-// loop into A and B) is a new module with its own folder. A group without modul.id (no origin from the export) uses the content hash (modulId).
+// loop into A and B) is a new module with its own folder. The folder is named <name>-<4 hex of the id> (modulOrdnerName); the id inside modul.json
+// stays the reference everywhere, and a folder named by the bare id (the old form) or renamed by hand is found again by that id
+// (modulOrdner). A group without modul.id (no origin from the export) uses the content hash (modulId).
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import os from 'node:os';
+import { ablageOrdner } from '../paths.ts';
+import { lesbarerName } from '../names.ts';
 import path from 'node:path';
 import { MAX_BK_SPUREN, MAX_GRUPPEN, MAX_KIT_GERAETE, MAX_SPUREN, istBlendZiel, istKettenZiel, neueId } from './model.ts';
 import type { Gruppe, Herkunft, ModulHerkunft, Projekt, Spur } from './model.ts';
@@ -14,7 +17,57 @@ import { liveSlots } from './live.ts';
 export const MODUL_FORMAT = 1;
 
 export function modulBasis(): string {
-  return process.env.CYPHERDJ_MODULE || path.join(os.homedir(), '.config', 'cypherdj', 'module');
+  return ablageOrdner('module');
+}
+
+// Folder name of a module (vectors: docs/interfaces/modul_ordner_namen.json; djk-umzug modulnamen applies the same rule): the readable title,
+// '-a'/'-b' for a live slot, then the first 4 characters of the id (8 when the short name belongs to another module, see waehleOrdnerName)
+export function modulOrdnerName(titel: string, slot: 'A' | 'B' | undefined, id: string, lang = false): string {
+  return `${lesbarerName(titel) || 'modul'}${slot ? `-${slot.toLowerCase()}` : ''}-${id.slice(0, lang ? 8 : 4)}`;
+}
+
+const MODUL_ID_FORM = /^[0-9a-f]{16}$/;
+const idAus = (ordner: string): string | null => {
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(ordner, 'modul.json'), 'utf8')) as { id?: unknown };
+    return typeof j.id === 'string' && MODUL_ID_FORM.test(j.id) ? j.id : null;
+  } catch { return null; }
+};
+const istOrdner = (p: string): boolean => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
+
+// id -> folder name per base, rebuilt by reading every */modul.json when a lookup misses (a folder renamed by hand, or saved by another process)
+const ordnerKarte = new Map<string, Map<string, string>>();
+function baueKarte(basis: string): Map<string, string> {
+  const k = new Map<string, string>();
+  let namen: string[] = [];
+  try { namen = fs.readdirSync(basis); } catch { /* no base yet */ }
+  for (const n of namen.sort()) {
+    const id = idAus(path.join(basis, n));
+    if (id !== null && !k.has(id)) k.set(id, n);
+  }
+  ordnerKarte.set(basis, k);
+  return k;
+}
+
+// The absolute folder of a module, or null: <basis>/<id> when it exists (old form), else the folder whose modul.json holds the id
+export function modulOrdner(id: string, basis: string = modulBasis()): string | null {
+  if (!MODUL_ID_FORM.test(id)) return null;
+  const alt = path.join(basis, id);
+  if (istOrdner(alt)) return alt;
+  const bekannt = ordnerKarte.get(basis)?.get(id);
+  if (bekannt !== undefined && idAus(path.join(basis, bekannt)) === id) return path.join(basis, bekannt);
+  const n = baueKarte(basis).get(id);
+  return n === undefined ? null : path.join(basis, n);
+}
+
+// A new folder: the short name, or the 8-character one when a folder of that name holds another module
+function neuerOrdner(basis: string, titel: string, slot: 'A' | 'B' | undefined, id: string): string {
+  for (const lang of [false, true]) {
+    const ziel = path.join(basis, modulOrdnerName(titel, slot, id, lang));
+    const fremd = idAus(ziel);
+    if (!fs.existsSync(ziel) || fremd === null || fremd === id) return ziel;
+  }
+  return path.join(basis, id);                                               // both names taken: the old form cannot collide
 }
 
 // One id per export: the content hash mixed with the export time and a counter, so the same loop exported twice never shares a folder
@@ -52,7 +105,8 @@ export function speichereModul(projekt: Projekt, gruppeId: string, o: AblageOpti
   // task 10: any top group can be saved; without a module origin the origin is minimal (title = group name, date) and the id comes from the content
   const modul = top0.modul ?? minimaleHerkunft(top0.name, o.jetzt);
   const id = top0.modul ? (top0.modul.id ?? modulId(top0.modul)) : inhaltsId(baum);
-  const ordner = path.join(o.basis ?? modulBasis(), id);
+  const basis = o.basis ?? modulBasis();
+  const ordner = modulOrdner(id, basis) ?? neuerOrdner(basis, modul.titel, top0.modul?.slot, id);
   const audio = path.join(ordner, 'audio');
   fs.mkdirSync(audio, { recursive: true });
   const kopiert: { sha256: string; datei: string }[] = [], fehlt: string[] = [];
@@ -76,6 +130,7 @@ export function speichereModul(projekt: Projekt, gruppeId: string, o: AblageOpti
   const pfad = path.join(ordner, 'modul.json');
   fs.writeFileSync(`${pfad}.tmp-${process.pid}`, JSON.stringify(inhalt, null, 2));
   fs.renameSync(`${pfad}.tmp-${process.pid}`, pfad);
+  if (!ordnerKarte.has(basis)) baueKarte(basis); else ordnerKarte.get(basis)!.set(id, path.basename(ordner));
   return { id, pfad };
 }
 
@@ -88,14 +143,17 @@ export interface ModulDateiInhalt {
   format: number; id: string; gespeichert: string; slot?: 'A' | 'B'; herkunft: Partial<ModulHerkunft>; gruppen: Gruppe[]; spuren: Spur[];
   audio: { sha256: string; datei: string }[]; audio_fehlt?: string[];
 }
-const ID_FORM = /^[0-9a-f]{16}$/;
+const ID_FORM = MODUL_ID_FORM;
 
-export function liesModul(id: string, basis = modulBasis()): ModulDateiInhalt | null {
-  if (!ID_FORM.test(id)) return null;
+function leseModulDatei(ordner: string): ModulDateiInhalt | null {
   try {
-    const j = JSON.parse(fs.readFileSync(path.join(basis, id, 'modul.json'), 'utf8')) as ModulDateiInhalt;
+    const j = JSON.parse(fs.readFileSync(path.join(ordner, 'modul.json'), 'utf8')) as ModulDateiInhalt;
     return j.format === MODUL_FORMAT && Array.isArray(j.gruppen) && Array.isArray(j.spuren) && j.gruppen.length > 0 ? j : null;
   } catch { return null; }
+}
+export function liesModul(id: string, basis = modulBasis()): ModulDateiInhalt | null {
+  const ordner = modulOrdner(id, basis);
+  return ordner === null ? null : leseModulDatei(ordner);
 }
 const eintragVon = (j: ModulDateiInhalt): ModulEintrag => {
   const h = j.herkunft ?? {};
@@ -112,8 +170,8 @@ export function listeModule(o: { basis?: string; q?: string; sha?: string } = {}
   const woerter = (o.q ?? '').toLowerCase().split(/\s+/).filter(Boolean);
   const aus: ModulEintrag[] = [];
   for (const n of namen) {
-    const j = liesModul(n, basis);
-    if (!j) continue;
+    const j = leseModulDatei(path.join(basis, n));
+    if (!j || typeof j.id !== 'string' || !ID_FORM.test(j.id)) continue;
     const e = eintragVon(j);
     if (o.sha && e.quelle_sha256 !== o.sha) continue;
     const heu = [e.titel, e.kuenstler, e.set, e.datum, e.tonart].join('\n').toLowerCase();
@@ -127,7 +185,7 @@ export class EinsetzFehler extends Error {
   constructor(code: number, fehler: string, extra: Record<string, unknown> = {}) { super(fehler); this.code = code; this.fehler = fehler; this.extra = extra; }
 }
 export interface EinsetzOptionen {
-  modulOrdner: string;          // <base>/<id>
+  modulOrdner: string;          // the module's folder (modulOrdner(id, basis))
   audioZiel: string;            // folder in the target project the audio copies go to
   quelle: Herkunft;
   slot?: 'A' | 'B';             // live project only: wanted slot, else the first free one

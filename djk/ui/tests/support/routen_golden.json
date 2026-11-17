@@ -1,5 +1,5 @@
 {
- "n": 200,
+ "n": 207,
  "ergebnis": [
   {
    "m": "GET",
@@ -569,6 +569,16 @@
       "pfad": "string"
      }
     ]
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/quellen",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "datei": "string",
+    "wurzeln": "[]"
    }
   },
   {
@@ -2273,6 +2283,78 @@
   {
    "m": "POST",
    "p": "/lernen/host/loeschen",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/quellen/dazu",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "argument_ungueltig",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/quellen/dazu",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/quellen/dazu",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/quellen/weg",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "argument_ungueltig",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/quellen/weg",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/quellen/weg",
    "kopf": "fremd",
    "code": 403,
    "art": "application/json; charset=utf-8",

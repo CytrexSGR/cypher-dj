@@ -17,7 +17,7 @@ Built in Germany by Andreas, a DJ, and Cypher, an AI agent (Claude models), sinc
 
 One real-time core in C++ and Rust keeps a single sample clock for everything: the decks, the pattern channels and
 the arrangement. The browser page and the agent sit on the same functions. The agent reaches them through an MCP
-server with 92 tools, so nearly everything you can click, it can do too (a few controls such as the crossfader stay
+server with 93 tools, so nearly everything you can click, it can do too (a few controls such as the crossfader stay
 in your hand), and anything it does shows up on your page. When it
 cannot do something it answers with a reason (for example `sidechain_zyklus` for a sidechain that would depend on
 itself) instead of guessing. When you grab a fader, your
@@ -45,6 +45,8 @@ device cards with the effects you load and a send knob per track, and a step seq
 its own length, swing and direction, with velocity, chance, offset and roll per step. Loops are cut into slices that
 play as an instrument, and your own samples become instruments too: one file across the keys, or a folder of note
 samples as a multisample instrument with velocity layers, round robin, sustain loops and release samples.
+The shelf searches the whole sample catalog by text and instrument class, keeps favourites and recently used samples
+first, and a sample can be dragged onto the track list or onto a row of a drum kit.
 
 ![STUDIO: the step sequencer with rows of different length, the tracks with their sends and the dock of instruments and effects](docs/screens/studio-workbench.png)
 

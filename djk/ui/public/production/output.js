@@ -20,6 +20,7 @@ export const AUSGABE_FEHLER = {
   audio_fehlt: 'An audio clip is still being prepared: try again in a moment',
   kein_kernstand: 'The core has not reported its state yet: try again in a moment',
   deck_laeuft: 'A deck is playing: stop it first (freezing needs the project tempo on the master)',
+  freeze_noetig: 'A track with unfrozen notes has to be frozen first: freeze it or measure with the tool',
   freeze_fehler: 'Freezing failed in the core',
   wirt_fehlt: 'The Surge host for this track is not running: start it with djk-instrumente --arr1 or --arr2',
   wirt_fehler: 'The Surge host for this track stopped with an error: start it again with djk-instrumente --arr1 or --arr2',
@@ -77,6 +78,7 @@ export function laufText(lauf, arr, jetzt) {
   const wo = arr?.status === 3 && Number.isFinite(arr.projekt_beat) ? ` · bar ${positionText(arr.projekt_beat)}` : '';
   if (lauf.art === 'freeze') return lauf.an ? `Freezing ${lauf.name}${wo}${sek}` : `Unfreezing ${lauf.name}…`;
   if (lauf.art === 'lautheit') return `Measuring loudness${sek}`;   // Paket 1.18 E-b: ein Lauf von proj_lautheit (Cypher), ausgabe_lauf {art: 'lautheit'}
+  if (lauf.art === 'analyse') return `Analysing${sek}`;   // ANALYZE window / proj_analyse: ausgabe_lauf {art: 'analyse'}
   if (lauf.art === 'merge') return `Merging tracks${sek}`;   // Slice 7: a merge run (own page or Cypher), ausgabe_lauf {art: 'merge'}
   if (lauf.art === 'bounce') return `Bouncing${sek}`;        // 1.14 slice 4: a bounce run (own page or Cypher), ausgabe_lauf {art: 'bounce'}
   if (lauf.art === 'resample') return `Resampling ${lauf.name}${sek}`;   // 1.10 slice 7: a resample run (own page or Cypher), ausgabe_lauf {art: 'resample'}
@@ -92,6 +94,14 @@ export const dateiName = (p) => String(p).split('/').pop();
 const zahl = (x) => typeof x === 'number' && Number.isFinite(x);
 export function lautheitText(j) {
   return zahl(j.lufs_i) && zahl(j.true_peak_dbtp) ? ` · ${dbText(j.lufs_i)} LUFS, true peak ${dbText(j.true_peak_dbtp)} dBTP` : '';
+}
+// COLLECT (storage layout A5): the report of POST /proj/einsammeln as one line for the output next to the buttons
+export function einsammelText(j) {
+  const mb = Math.round((Number(j.bytes) || 0) / 1048576), n = (x) => (Array.isArray(x) ? x.length : 0);
+  const teile = [`Collected ${j.kopiert} file${j.kopiert === 1 ? '' : 's'}${j.kopiert ? ` (${mb} MB)` : ''}`, `${j.schon_da} already in the project`];
+  if (n(j.fehlt)) teile.push(`${n(j.fehlt)} missing (disk not mounted?)`);
+  if (n(j.abweichend)) teile.push(`${n(j.abweichend)} copied wrongly and removed`);
+  return { text: teile.join(' · '), titel: '', warnung: n(j.fehlt) + n(j.abweichend) > 0 };
 }
 export function ergebnisText(j) {
   const ueber = j.spitze_db > 0, decke = j.ueber_decke === true;   // 1.10 Slice 2: ueber_decke nur vom Produktions-Abgriff (Server, P10); ältere Antworten haben das Feld nicht

@@ -22,6 +22,7 @@ export interface DekodierOptionen {
   bei?: (e: DekodierEreignis) => void;       // SSE: jedes Mal, wenn sich der Zustand einer sha ändert (laeuft / fertig / fehler)
   dauerGrenzeS?: number;                     // Vorgabe 900
   groesseGrenze?: number;                    // Vorgabe 2 GiB
+  deckel?: (frisch: string | null) => void;  // size cap hook (storage layout A5): once after construction (null), after each finished decode (its sha)
   zeitlimitMs?: number;                      // Vorgabe 10 min (Dekodieren läuft mit nice 19 und braucht bei 15 min Quelle ~ Sekunden)
 }
 
@@ -41,6 +42,7 @@ export class DekodierCache {
   private readonly ffprobe: string[];
   private readonly vorsatz: string[];
   private readonly bei?: (e: DekodierEreignis) => void;
+  private readonly deckel?: (frisch: string | null) => void;
   private readonly zeitlimitMs: number;
   private readonly schlange: Auftrag[] = [];
   private readonly offen = new Map<string, Auftrag>();       // wartend oder laufend
@@ -52,7 +54,17 @@ export class DekodierCache {
     this.ffmpeg = o.ffmpeg ?? ['ffmpeg']; this.ffprobe = o.ffprobe ?? ['ffprobe']; this.vorsatz = o.vorsatz ?? ['nice', '-n', '19', 'ionice', '-c', '3'];
     this.bei = o.bei; this.dauerGrenzeS = o.dauerGrenzeS ?? 900; this.groesseGrenze = o.groesseGrenze ?? 2 * 1024 ** 3;
     this.zeitlimitMs = o.zeitlimitMs ?? 10 * 60_000;
+    this.deckel = o.deckel;
     this.raeumeAuf();
+    // after the caller has finished its own construction; a failing cap never breaks the cache
+    if (this.deckel) setImmediate(() => this.deckeln(null));
+  }
+
+  private deckeln(frisch: string | null): void { try { this.deckel?.(frisch); } catch { /* the cap is housekeeping */ } }
+
+  /** Marks a decode as just used (mtime now), so the size cap removes the oldest unused ones first. */
+  beruehre(sha: string): void {
+    try { const t = new Date(); fs.utimesSync(this.datei(sha), t, t); } catch { /* not there or no sha: nothing to touch */ }
   }
 
   // Reste eines beendeten Servers: <sha>.<pid>.teil toter PIDs. Lebende PIDs (andere Instanz, eigener Prozess) bleiben.
@@ -92,6 +104,7 @@ export class DekodierCache {
     pruefeSha(sha);
     if (typeof quelle !== 'string' || quelle === '') throw new DekodierFehler('quelle_ungueltig', 'Pfad der Quelle erwartet');
     const z = this.zustand(sha);
+    if (z === 'fertig') this.beruehre(sha);
     if (z === 'fertig' || z === 'laeuft') return z;
     this.fehler.delete(sha);
     if (!fs.existsSync(quelle)) { this.fehler.set(sha, 'quelle_fehlt'); this.melde(sha, 'fehler', 'quelle_fehlt'); return 'fehler'; }
@@ -159,6 +172,7 @@ export class DekodierCache {
       fs.renameSync(teil, ziel);
       this.fehler.delete(a.sha);
       this.melde(a.sha, 'fertig');
+      this.deckeln(a.sha);
       return 'fertig';
     } catch (e) {
       return scheitere(`intern: ${(e as Error).message}`.slice(0, 120));

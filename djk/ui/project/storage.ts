@@ -9,6 +9,7 @@
 //     ist dadurch nicht gegen einen zweiten Prozess geschützt; Lesen, Ändern, Schreiben als Ganzes sperrt sie nicht.
 import fs from 'node:fs';
 import os from 'node:os';
+import { ablageOrdner, type AblageOptionen } from '../paths.ts';
 import path from 'node:path';
 import { nimmSperre, SperreBelegt } from '../lock.ts';
 import { SLUG, slugVon } from '../collection.ts';
@@ -53,9 +54,9 @@ export const normalisiere = (p: Projekt): Projekt => {
 function instanzPruefen(instanz: string): void {
   if (instanz !== '' && !/^[a-z]$/.test(instanz)) throw new Error(`Instanz ${instanz}: erlaubt sind a bis z`);
 }
-export function projektWurzelVorgabe(instanz: string): string {
+export function projektWurzelVorgabe(instanz: string, o: AblageOptionen = {}): string {
   instanzPruefen(instanz);
-  return instanz === '' ? path.join(os.homedir(), 'cypherdj-projekte') : `/dev/shm/cypherdj-${instanz}/projekte`;
+  return instanz === '' ? ablageOrdner('projekte', o) : `/dev/shm/cypherdj-${instanz}/projekte`;
 }
 export function arbeitsordnerVorgabe(instanz: string): string {
   instanzPruefen(instanz);

@@ -1,0 +1,26 @@
+{
+  "vorgabe": "neu",
+  "arten": {
+    "projekte":     { "alt": "{HOME}/cypherdj-projekte", "neu": "{HEIM}/werke/projekte", "env": null, "kern": false },
+    "module":       { "alt": "{KONFIG}/module", "neu": "{HEIM}/werke/module", "env": "CYPHERDJ_MODULE", "kern": false },
+    "sampler":      { "alt": "{KONFIG}/sampler", "neu": "{HEIM}/werke/sampler", "env": "CYPHERDJ_SAMPLER", "kern": false },
+    "presets":      { "alt": "{KONFIG}/presets", "neu": "{HEIM}/werke/presets", "env": null, "kern": false },
+    "klaenge":      { "alt": "{KONFIG}/klaenge", "neu": "{HEIM}/werke/klaenge", "env": "CYPHERDJ_KLAENGE", "kern": false },
+    "kollektionen": { "alt": "{KONFIG}/kollektionen", "neu": "{HEIM}/werke/sammlungen/kollektionen", "env": null, "kern": false },
+    "raster":       { "alt": "{KONFIG}/raster", "neu": "{HEIM}/werke/korrekturen/raster", "env": null, "kern": false },
+    "hotcues":      { "alt": "{KONFIG}/hotcues", "neu": "{HEIM}/werke/korrekturen/hotcues", "env": null, "kern": false },
+    "kits":         { "alt": "{KONFIG}/kits", "neu": "{HEIM}/werke/kits", "env": "CYPHERDJ_KIT_ORDNER", "kern": true },
+    "loops":        { "alt": "{KONFIG}/loops", "neu": "{HEIM}/werke/loops", "env": null, "kern": true },
+    "geraete":      { "alt": "{KONFIG}/baukasten", "neu": "{HEIM}/werke/geraete", "env": "CYPHERDJ_BK_ORDNER", "kern": true }
+  },
+  "fest": {
+    "mediathek":         { "pfad": "{HOME}/.local/share/cypherdj/mediathek/mediathek.sqlite", "env": "CYPHERDJ_MEDIATHEK" },
+    "analyse":           { "pfad": "{HOME}/werkstatt/cypher-dj-analyse", "env": "CYPHERDJ_ANALYSE" },
+    "bibliothek_konfig": { "pfad": "{KONFIG}/bibliothek.json", "env": "CYPHERDJ_BIBLIOTHEK_KONFIG" },
+    "surge_werk":        { "pfad": "{HOME}/.local/share/cypherdj/surge-daten/usr/share/surge-xt/patches_factory", "env": "CYPHERDJ_SURGE_PATCHES" },
+    "plugin_index":      { "pfad": "{HOME}/.local/state/cypherdj/plugins/index.json", "env": "CYPHERDJ_PLUGIN_INDEX" },
+    "umgebung":          { "pfad": "{KONFIG}/umgebung.env", "env": "CYPHERDJ_UMGEBUNG" },
+    "pruefen":           { "pfad": "{HEIM}/pruefen", "env": null },
+    "quellen":           { "pfad": "{HEIM}/quellen.toml", "env": null }
+  }
+}

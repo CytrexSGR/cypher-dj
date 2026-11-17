@@ -926,7 +926,8 @@ export function punktePruefung(pk: unknown, ziel: string, bereich: ZielBereich =
   return null;
 }
 
-// MidiClip.zeilen: {"<pitch>": {schritte?: 1..128, swing?: 1..100, richtung?: "pendel"}}, at most MAX_ZEILEN entries, no entry without a field, never an empty object
+// MidiClip.zeilen: {"<pitch>": {schritte?: 1..128, swing?: 1..100, richtung?: "pendel"}}, at most MAX_ZEILEN entries, no entry without a field,
+// never an empty object
 function pruefeZeilen(x: unknown, wo: string): void {
   if (!istObjekt(x) || Array.isArray(x)) werfe(wo, 'object expected');
   const ks = Object.keys(x as object);
@@ -945,7 +946,8 @@ function pruefeNote(n: unknown, wo: string): Note {
   const o = felder(n, wo, ['id', 'beat', 'laenge', 'ton', 'vel'], ['chance', 'wdh', 'versatz']);
   if ('chance' in o) zahlIn(o.chance, `${wo}.chance`, 1, 99, true);
   if ('wdh' in o) zahlIn(o.wdh, `${wo}.wdh`, 2, 8, true);
-  if ('versatz' in o) { zahlIn(o.versatz, `${wo}.versatz`, -95, 95, true); if (o.versatz === 0) werfe(`${wo}.versatz`, 'whole number -95..95 without 0 expected'); }
+  if ('versatz' in o) { zahlIn(o.versatz, `${wo}.versatz`, -95, 95, true); if (o.versatz === 0) werfe(`${wo}.versatz`,
+    'whole number -95..95 without 0 expected'); }
   if (typeof o.id !== 'string' || !ID.test(o.id)) werfe(`${wo}.id`, 'ID erwartet');
   zahlIn(o.beat, `${wo}.beat`, 0, MAX_BEAT);
   if (!zahl(o.laenge) || o.laenge <= 0 || o.laenge > MAX_BEAT) werfe(`${wo}.laenge`, 'Zahl > 0 erwartet');

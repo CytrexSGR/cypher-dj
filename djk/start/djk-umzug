@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# djk-umzug: moves one storage kind of cypher-dj to the new home folder and leaves a link at the old place.
+# Without --ausfuehren nothing on disk changes. Full help: djk-umzug --help (the text of umzug.py).
+HIER=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+DJK=${DJK:-$(cd "$HIER/.." && pwd)}
+exec env PYTHONPATH="$DJK" python3 "$HIER/umzug.py" "$@"

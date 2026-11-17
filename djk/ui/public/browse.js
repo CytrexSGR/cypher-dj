@@ -94,6 +94,7 @@ export function stoebernUrl(z) {
   if (z.text && z.text.trim()) p.set('text', z.text.trim());
   if (z.sort) p.set('sort', z.sort);
   if (z.ab) p.set('richtung', 'ab');
+  if (z.vorrang) p.set('vorrang', '1');   // DJ library: reachable first, then favourites, then recently used, until a column is chosen
   if (z.seite) p.set('seite', String(z.seite));
   if (z.ordner) p.set('ordner', z.ordner);
   if (z.feld) { p.set('feld', z.feld); p.set('wert', z.wert ?? ''); }

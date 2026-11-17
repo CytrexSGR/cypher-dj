@@ -8,9 +8,11 @@
 # sandbox note "bit 0 = leftmost" showed every 8-pixel group mirrored on the device (photo 2026-11-14).
 import json
 import os
+import sys
 import threading
 import time
 import urllib.request
+from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -18,13 +20,16 @@ from PIL import Image, ImageDraw, ImageFont
 import nidrv as N
 import s8_usb
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # djk: the storage table package `ablage`
+import storage as ablage  # noqa: E402
+
 SEITE = "http://127.0.0.1:47300"
 PLAETZE = [  # group button -> (channel, short name, colour)
     ("erz/2", "BASS", (255, 60, 0)), ("erz/3", "MELODY", (255, 180, 0)), ("erz/5", "I5", (120, 255, 0)),
     ("erz/6", "I6", (0, 255, 120)), ("erz/7", "I7", (0, 180, 255)), ("pad/1", "L1", (60, 60, 255)),
     ("pad/2", "L2", (180, 0, 255)), ("fx/3", "REMIX", (0, 230, 200)),
 ]
-GRAPH_ORDNER = os.path.expanduser("~/.config/cypherdj/baukasten")
+GRAPH_ORDNER = str(ablage.ordner("geraete"))
 SCHRITT = 0.01      # value change per encoder step (knobs run 0..1)
 _F = "/usr/share/fonts/truetype/dejavu/"
 F_GROSS = ImageFont.truetype(_F + "DejaVuSansCondensed-Bold.ttf", 13)

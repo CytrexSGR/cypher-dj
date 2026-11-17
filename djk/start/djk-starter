@@ -25,4 +25,12 @@ if [ -z "$PY" ]; then
   done
 fi
 PY=${PY:-python3}
+# Storage layout (task 14): lay out the new home folder first (a fresh install starts there). A failure is reported, the steps go
+# on with the old places. A test instance (--instanz, CYPHERDJ_INSTANZ) never touches the home folder.
+_inst=${CYPHERDJ_INSTANZ:-}
+for _a in "$@"; do case "$_a" in --ins*) _inst=1;; esac; done
+if [ -z "$_inst" ]; then
+  PYTHONPATH="$DJK${PYTHONPATH:+:$PYTHONPATH}" PYTHONSAFEPATH=1 python3 "$HIER/umzug.py" einrichten --still \
+    || echo "djk-starter: could not lay out the home folder (see above); going on with the old places" >&2
+fi
 cd "$DJK" && exec "$PY" -m starter "$@"

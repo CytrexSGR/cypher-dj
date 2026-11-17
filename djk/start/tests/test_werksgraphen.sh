@@ -11,7 +11,9 @@ trap 'rm -rf "$H"' EXIT
 rc=0
 ok() { echo "OK   $1"; }
 fehl() { echo "FEHL $1"; rc=1; }
-run() { HOME="$H" DJK="$DJK" bash -c "$SCHRITT"; }
+# djk-start sets ABLAGE_GERAETE from the storage table before step 2b; the cut-out step gets it the same way
+ABLAGE_GERAETE=$(HOME="$H" PYTHONPATH="$DJK" PYTHONSAFEPATH=1 python3 -m storage pfad geraete)
+run() { HOME="$H" DJK="$DJK" ABLAGE_GERAETE="$ABLAGE_GERAETE" bash -c "$SCHRITT"; }
 ZIEL="$H/.config/cypherdj/baukasten/fx-delay-sync.json"
 run > "$H/aus1.txt"
 if [ -f "$ZIEL" ] && cmp -s "$ZIEL" "$DJK/instruments/modular_dsp/demos/fx-delay-sync.json" && grep -q installed "$H/aus1.txt"; then ok "a fresh folder gets fx-delay-sync, announced"; else fehl "fresh install"; fi

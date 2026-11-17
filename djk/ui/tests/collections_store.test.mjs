@@ -128,9 +128,14 @@ test('atomic write: a writer killed between temp file and rename leaves the old 
   assert.deepEqual(s.lies('whole').posten, [S1]);
 });
 
-test('default folder: ~/.config/cypherdj[-<i>]/kollektionen', () => {
-  assert.equal(kollektionenVorgabe(''), path.join(os.homedir(), '.config', 'cypherdj', 'kollektionen'));
-  assert.equal(kollektionenVorgabe('e'), path.join(os.homedir(), '.config', 'cypherdj-e', 'kollektionen'));
+test('default folder: ~/cypherdj/werke/sammlungen/kollektionen (fresh HOME), ~/.config/cypherdj-<i>/kollektionen for an instance', () => {
+  const alt = { HOME: process.env.HOME, HEIM: process.env.CYPHERDJ_HEIM };
+  const h = fs.mkdtempSync(path.join(os.tmpdir(), 'koll-home-'));
+  process.env.HOME = h; delete process.env.CYPHERDJ_HEIM;
+  try {
+    assert.equal(kollektionenVorgabe(''), path.join(h, 'cypherdj', 'werke', 'sammlungen', 'kollektionen'));
+    assert.equal(kollektionenVorgabe('e'), path.join(h, '.config', 'cypherdj-e', 'kollektionen'));
+  } finally { process.env.HOME = alt.HOME; if (alt.HEIM !== undefined) process.env.CYPHERDJ_HEIM = alt.HEIM; fs.rmSync(h, { recursive: true, force: true }); }
 });
 
 test('review: a change that changes nothing never rewrites the file (Cypher re-adding an item to Andreas\' collection, empty lists)', (t) => {

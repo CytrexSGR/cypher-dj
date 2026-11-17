@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { fuerHand, type AnalyseAntwort } from '../ui/project/sound_contract.ts';   // ANALYZE: the hand answer is the contract's reduction of the page answer
 import { ladeVokabular } from '../ui/presets/vocabulary.ts';   // 1.16 U5: the search tool's schema is the server's own definition
 import { frageSchema } from '../ui/presets/register.ts';
 import { PRESET_ID } from '../ui/presets/preset_id.ts';
@@ -61,14 +62,15 @@ async function http(methode: 'GET' | 'POST', pfad: string, daten?: Json): Promis
 //   Export: Freeze ≈ 291 s + Render-Zeitlimit 4 · 1024 s + 60 s + Lautheit (ffmpeg) 120 s ≈ 4567 s          → Vorgabe 80 min
 // (Grenzen aus ui/areas/proj/output.ts, session.ts rampeWarteMs, server.ts warteQuittung, project/loudness.ts, commands.ts TEMPO_MIN.)
 // Überschreibbar mit DJK_HAND_FRIST_PROJ_FREEZE_MS, DJK_HAND_FRIST_PROJ_EXPORT_MS und DJK_HAND_FRIST_PROJ_LAUTHEIT_MS (Tests: kurze Grenze).
-type Lang = 'proj_freeze' | 'proj_export' | 'proj_lautheit' | 'proj_stems' | 'proj_zusammenfuehren' | 'proj_bounce' | 'proj_resample';
+type Lang = 'proj_freeze' | 'proj_export' | 'proj_lautheit' | 'proj_stems' | 'proj_zusammenfuehren' | 'proj_bounce' | 'proj_resample' | 'proj_analyse';
 // proj_lautheit (Paket 1.18, S3-Fix G5): der Server rendert seriell, bis zu 33 Renders (32 Spuren und Summe) zu je 4 · 1024 s + 60 s (Zeitlimit des Renders)
 // plus ffmpeg 120 s je Messung plus ein Freeze ≈ 291 s: Grenzfall ≈ 2357 min (39,3 h). Die Vorgabe liegt NICHT darüber (80 min wie der Export): echte Renders
 // brauchen Sekunden, das Zeitlimit ist eine Kill-Schwelle; wer den Grenzfall erreicht, bekommt hand_frist und fragt später (beschaeftigt, solange es läuft).
 // Darum sagt fristText für proj_lautheit nicht „above the longest run“, sondern nennt Grenze, Grenzfall und Override.
 export const FRIST_VORGABE_MS: Readonly<Record<Lang, number>> = { proj_freeze: 6 * 60_000, proj_export: 80 * 60_000, proj_lautheit: 80 * 60_000, proj_stems: 20 * 60_000,
   proj_zusammenfuehren: 80 * 60_000, proj_bounce: 80 * 60_000,
-  proj_resample: 6 * 60_000 };   // 1.10 slice 7: the freeze's bound (a 256 beat tap at 60 BPM, ramp, receipt) plus the WAV conversion
+  proj_resample: 6 * 60_000,
+  proj_analyse: 30 * 60_000 };   // 1.10 slice 7: the freeze's bound (a 256 beat tap at 60 BPM, ramp, receipt) plus the WAV conversion
 const fristVon = (name: Lang): number => {
   const v = Number(process.env[`DJK_HAND_FRIST_${name.toUpperCase()}_MS`]);
   return Number.isFinite(v) && v > 0 ? v : FRIST_VORGABE_MS[name];
@@ -79,6 +81,7 @@ const FRIST_GRUND: Readonly<Record<Lang, string>> = {
   proj_zusammenfuehren: 'one render of the range (time limit 4 * 1024 s + 60 s) plus hashing the result, below 80 min; a normal merge takes seconds',
   proj_bounce: 'one render of the range (time limit 4 * 1024 s + 60 s) plus hashing the result, below 80 min; a normal bounce takes seconds',
   proj_lautheit: 'enough for normal ranges, but the server allows about 39.3 h in the extreme case: thirty-three renders of 1024 beats at 60 BPM, each at its time limit',
+  proj_analyse: 'one render of the strip and, with a comparison, of the second one, for at most 1024 beats each, plus the analysis in a worker thread; a normal range takes seconds, and a Surge track that must be frozen first adds its freeze',
 };
 const fristText = (name: Lang): string => `The call waits at most ${FRIST_VORGABE_MS[name] / 60_000} min (tool limit, DJK_HAND_FRIST_${name.toUpperCase()}_MS; `
   + `${FRIST_GRUND[name]}); after that it answers hand_frist, and the run may still finish on the server: a repeated call `
@@ -266,7 +269,7 @@ const W: Werkzeug[] = [
   { name: 'fx_zuweisung', description: 'Assign a channel to Beat FX 1 or 2 (kanal like deck/1, pad/1, erz/1, master), or to unit 3, the insert on fx/3 that carries the remix graph (any source channel such as deck/1..4, erz/1..8, pad/1..2, never master).',
     inputSchema: { type: 'object', required: ['einheit', 'kanal', 'an'], properties: { einheit: { type: 'integer', enum: [1, 2, 3] }, kanal: { type: 'string' }, an: { type: 'boolean' } } },
     lauf: (p) => http('POST', '/fx/zuweisung', p) },
-  { name: 'graphen', description: 'Baukasten graphs in the graph folder ($HOME/.config/cypherdj/baukasten): name, art (instrument = a synth/sampler that plays the notes of a Strudel stream; effekt = an insert with an input), regler_namen (the names of its knobs, numbered 1..64) and geladen (which graph sits on which channel, as the kern reports it; geladen_geprueft_vor_ms = age of the last kern report in ms, null = not known yet). uebersprungen lists files that were not usable (bad name or JSON). Free to read.',
+  { name: 'graphen', description: 'Baukasten graphs in the graph folder (CYPHERDJ_BK_ORDNER, else $HOME/.config/cypherdj/baukasten, which is a link to the devices folder of the home folder, by default ~/cypherdj/werke/geraete, once the layout of INSTALL.md section 8 is in use): name, art (instrument = a synth/sampler that plays the notes of a Strudel stream; effekt = an insert with an input), regler_namen (the names of its knobs, numbered 1..64) and geladen (which graph sits on which channel, as the kern reports it; geladen_geprueft_vor_ms = age of the last kern report in ms, null = not known yet). uebersprungen lists files that were not usable (bad name or JSON). Free to read.',
     inputSchema: { type: 'object', properties: {} }, lauf: () => http('GET', '/graphen') },
   { name: 'graph', description: 'Put a Baukasten graph on a channel or take it off again (name "" removes). Instruments (art instrument) go on erz/2 (bass stream) or erz/3 (melody stream) and REPLACE that stream\'s sound (Surge or the Cypher synth) until removed (after a restart of the kern alone the page server loads the graph again; a full studio stop and start begins without it); the stream keeps playing its pattern through the graph. Five more instrument slots: erz/5, erz/6, erz/7 (streams 5, 6, 7) and pad/1, pad/2 (streams 9, 10, the loop boxes L1, L2: a graph on pad/N is summed with the loop of box N, one fader). Streams 5..10 are played by one extra erzeuger process (djk/start/djk-stroeme, or djk-start --bk-stroeme); without it the call fails with kein_erzeuger. Write their patterns with strudel (strom 5, 6, 7, 9, 10); a stream parked without a graph is silent. erz/1 is a drum kit stream: no instrument there. Effects (art effekt) go on deck/1..4, the send returns fx/3, fx/4 or the DJ master sum (master: an insert that replaces the sum just before the master FX and the master fader; needs an eingang node, latency 0); their knobs are fx/3/bk/1..64, fx/4/bk/1..64, master/bk/1..64 (regler). Effects also go, as an insert on the channel before its fader, on erz/1..3 (Strudel drums, bass, melody) and pad/1, pad/2 (the loop slots L1, L2), knobs <kanal>/bk/1..64; a channel holds one graph: an effect on erz/2, erz/3, pad/1, pad/2 is refused with belegt while an instrument graph plays there, and the other way round. Sampler graphs read their files from <graph folder>/samples/ and may take a few seconds to load (the call waits up to 4 s; quittung null = no answer yet; graphen.geladen shows the kern state as soon as it has loaded). Refused while Stop Cypher is set (ki_gestoppt) and, for erz/N, while AUTO of that stream is off (auto_aus). A kern refusal comes back as a tool error with its reason (pruefung, kein_eingang, ...).',
     inputSchema: { type: 'object', required: ['kanal', 'name'], properties: { kanal: { type: 'string', enum: ['erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2', 'deck/1', 'deck/2', 'deck/3', 'deck/4', 'fx/3', 'fx/4', 'master', 'erz/1'] }, name: { type: 'string', description: 'graph name from graphen, or "" to remove' } } },
@@ -505,7 +508,7 @@ const W: Werkzeug[] = [
     inputSchema: { type: 'object', properties: { gruppe_id: { type: 'string', description: 'group id from proj_lage, e.g. g3' } }, required: ['gruppe_id'] },
     lauf: (p) => http('POST', '/modul/speichern', p) },
   // 1.9 (L25): the kits a kit track can play, read from the kit folder of the page server
-  { name: 'proj_kits', description: 'Kits for kit tracks: the kit folder of the page server (CYPHERDJ_KIT_ORDNER, else ~/.config/cypherdj/kits) lists every folder that holds a kit.json of the right shape: kits [{name, klaenge = number of sounds}], sorted by name. Use a name as geraet.kit in proj_aendern spur_neu / spur_aendern (geraet {art: intern, name: kit, kit}). The server checks only the shape; the core loads the sound files when the playback is loaded and refuses it with reason format when a kit does not load.',
+  { name: 'proj_kits', description: 'Kits for kit tracks: the kit folder of the page server (CYPHERDJ_KIT_ORDNER, else ~/.config/cypherdj/kits, which is a link to the kits folder of the home folder, by default ~/cypherdj/werke/kits, once that layout is in use) lists every folder that holds a kit.json of the right shape: kits [{name, klaenge = number of sounds}], sorted by name. Use a name as geraet.kit in proj_aendern spur_neu / spur_aendern (geraet {art: intern, name: kit, kit}). The server checks only the shape; the core loads the sound files when the playback is loaded and refuses it with reason format when a kit does not load.',
     inputSchema: { type: 'object', properties: {} }, lauf: () => http('GET', '/proj/kits') },
   // strudel-clip: the friendly way to the clip_aus_muster command of proj_aendern (same server command, same one undo step), with the report
   { name: 'proj_muster', description: 'A Strudel pattern becomes a MIDI clip in the arrangement, with its envelopes: one call instead of dozens of notes. Same as proj_aendern with the command clip_aus_muster (that text has the full rules); this tool sends exactly that one command. '
@@ -609,6 +612,49 @@ const W: Werkzeug[] = [
       von_beat: zahl('first beat (default: loop start)', { minimum: 0 }),
       bis_beat: zahl('end beat, exclusive (default: loop end)', { minimum: 1 }) } },
     lauf: (p) => httpLang('proj_lautheit', '/proj/lautheit', { ...(p.von_beat !== undefined ? { von_beat: p.von_beat } : {}), ...(p.bis_beat !== undefined ? { bis_beat: p.bis_beat } : {}) }) },
+  // ANALYZE window slice 1: the analysis of one strip (spectrum, stereo, loudness, masking against a second strip, hints), offline by a render of the range
+  { name: 'proj_analyse', description: 'Analyse one strip of the open project (a track, a group, a return or the master), optionally against a second strip, so that you can judge a sound without hearing it. '
+    + 'Offline and on request: the server renders the range exactly as proj_lautheit renders a strip (the strip alone with its own fader and pan from the project, then through its group and the production master; the other strips silent) and agrees with proj_lautheit on the loudness of the same strip and range. '
+    + 'Range: the loop range by default, or von_beat..bis_beat (1 to 1024 beats). Nothing is written into the project or the export folder. '
+    + 'It runs while the transport plays, unless an unfrozen Surge track with notes has to be frozen first (that freeze needs a stopped transport: 409 transport_laeuft). '
+    + 'quelle (required) and vergleich (optional) are {art: spur | gruppe | return | master, id} (id is the spur_id, gruppe_id or return_id as proj_lage and proj_lautheit give it; master takes none). '
+    + 'Answer: {rev, von_beat, bis_beat, dauer_s, tempo_bpm, quelle: M, vergleich?: M, ueberdeckung?, hinweise}. The time picture of the window is never part of the answer. '
+    + 'M = {quelle, name, stumm, lautheit, stereo, spektrum}. '
+    + 'lautheit: lufs_i integrated loudness in LUFS (null when silent or below -70 LUFS), lufs_s_max the highest short-term loudness (3 s) in LUFS, lufs_m_max the highest momentary loudness (400 ms) in LUFS, lra loudness range in LU, '
+    + 'true_peak_dbtp true peak in dBTP, spitze_db sample peak in dBFS, rms_db RMS of both channels together in dBFS, crest_db = spitze_db - rms_db (small = dense or squashed, large = peaky, a kick on its own is high). '
+    + 'stereo: korrelation over the whole range, 1 = mono, 0 = unrelated left and right, -1 = the channels cancel in mono; korrelation_min the lowest value over 400 ms windows (a short phase problem hides in the whole-range value); '
+    + 'breite_db = 10 log10 of side over mid energy (side = (L-R)/2, mid = (L+R)/2; -200 = pure mono, about 0 = wide, positive = more side than mid); '
+    + 'baender = the four bands below 120 Hz, 120-500 Hz, 500-4000 Hz and above 4000 Hz, each {hz_von, hz_bis, korrelation, breite_db} (the bass should stay near 1). '
+    + 'spektrum: {hz, mittel_db, max_db}: band centres in Hz, the mean level over the range and the highest level of any frame, in dB where a full-scale sine reads 0 dB (a sine of amplitude 0.5 reads -6 dB), -200 = nothing. '
+    + 'The bands are 1/3 octave (30 bands) unless fein is true, then 1/12 octave (120 semitone bands from 20.6 Hz to 19.9 kHz on the A440 grid, so a peak names a note); a 1/3 octave band is the power sum of four 1/12 bands, a sine keeps its level. '
+    + 'The 1/12 bands are band integrals, not line levels: below about 250 Hz a band is narrower than the window resolves, so a full-scale sine reads lower there (55 Hz about -5.5 dB in its 1/12 band, about -0.5 dB in its 1/3 octave band); for the level of low notes read the 1/3 octave spectrum (without fein). '
+    + 'A very long range (more than about 6 minutes) is sampled: the spectrum, the time picture and the band stereo values look at one window per column, not at every frame between the columns. '
+    + 'ueberdeckung (only with vergleich and when both sound): masking between the two, baender [{hz, quelle_db, vergleich_db, anteil}] in 1/3 octave, anteil 0 to 1 = the share of the time in which both are above -60 dB and differ by at most 9 dB (they fight there; 0 = never, 1 = always); '
+    + 'schwerpunkte [{hz_von, hz_bis, anteil}] = up to three runs of neighbouring bands with anteil of at least 0.5, the worst first. '
+    + 'A strip that sounds but lies below the measuring floor (about -70 LUFS) answers stumm false with the lautheit values lufs_i and lra null (true_peak_dbtp and the peaks are still measured). '
+    + 'vergleich equal to quelle is refused with argument_ungueltig. '
+    + 'stumm true = the strip is silent in the mix (muted, fader off, silent in the range, or silenced by a solo elsewhere): every lautheit value null, korrelation 0, breite_db -200, spectrum at -200, no hints for it and no masking; the other strip is still measured. '
+    + 'hinweise: objective hints, each {art, text, hz?}, in the order quelle, vergleich, masking; an empty list is a good result. The four kinds: '
+    + 'bass_nicht_mono = the band below 120 Hz has a korrelation under 0.5 while it carries level above -60 dB (a bass that collapses in mono); '
+    + 'true_peak = true_peak_dbtp above -1 dBTP; '
+    + 'resonanz = a band that stands 9 dB or more over the median of the octave around it (the six bands on each side), above -60 dB and not lower than its neighbours, at most three per strip, hz names the centre; '
+    + 'ueberdeckung_tief = a masking schwerpunkt that starts below 250 Hz (two strips fight in the bass). '
+    + 'fein (boolean, default false) only chooses the resolution of the spectrum in the answer; it is not sent to the server. '
+    + 'Refusals as a tool error {fehler, text}: kein_projekt, ki_gestoppt, beschaeftigt (another render, freeze, export or loudness run is on; the same request twice waits for the one running and gets the same answer), export_bereich (range empty or over 1024 beats), audio_fehlt, '
+    + 'wirt_fehlt, wirt_fehler, render_fehler, host_insert_echtzeit, transport_laeuft, spur_unbekannt, gruppe_unbekannt, return_unbekannt, argument_ungueltig. ' + fristText('proj_analyse'),
+    inputSchema: { type: 'object', properties: {
+      quelle: { type: 'object', description: 'the strip to analyse: {art: spur | gruppe | return | master, id} (id = spur_id, gruppe_id or return_id; none for master)',
+        properties: { art: { type: 'string', enum: ['spur', 'gruppe', 'return', 'master'] }, id: { type: 'string' } }, required: ['art'] },
+      vergleich: { type: 'object', description: 'optional second strip, same form as quelle; adds the masking between the two',
+        properties: { art: { type: 'string', enum: ['spur', 'gruppe', 'return', 'master'] }, id: { type: 'string' } }, required: ['art'] },
+      von_beat: zahl('first beat (default: loop start)', { minimum: 0 }),
+      bis_beat: zahl('end beat, exclusive (default: loop end)', { minimum: 1 }),
+      fein: { type: 'boolean', description: 'true = the spectrum in 1/12 octave (120 bands) instead of 1/3 octave (30 bands); not sent to the server' } }, required: ['quelle'] },
+    lauf: async (p) => {
+      const r = await httpLang('proj_analyse', '/proj/analyse', { quelle: p.quelle as Json, ...(p.vergleich !== undefined ? { vergleich: p.vergleich as Json } : {}),
+        ...(p.von_beat !== undefined ? { von_beat: p.von_beat } : {}), ...(p.bis_beat !== undefined ? { bis_beat: p.bis_beat } : {}) });
+      return r.code >= 400 || (r.j as Json).fehler !== undefined ? r : { code: r.code, j: fuerHand(r.j as unknown as AnalyseAntwort, p.fein === true) as unknown as Json };
+    } },
   // Paket 1.13 Slice 7: merge selected tracks into one new audio track by an isolated render (one undo step)
   { name: 'proj_zusammenfuehren', description: 'Merge selected tracks of the open project into ONE new audio track (merge, AK27): the server renders exactly '
     + 'these tracks '

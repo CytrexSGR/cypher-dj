@@ -118,7 +118,7 @@ test('3.2 run text Bouncing; ctx.bounce sends exactly one POST /proj/bounce with
   assert.equal(laufText({ art: 'bounce', seit: 1000 }, null, 4000), 'Bouncing · 3 s');
   const zurueck = installiereDom();
   t.after(zurueck);
-  const el = { export: element('button'), ausgabe: element('output'), koepfe: element('div'), meldung: element('div') };
+  const el = { export: element('button'), einsammeln: element('button'), ausgabe: element('output'), koepfe: element('div'), meldung: element('div') };
   const posts = [], uebernommen = [];
   const ctx = {
     st: { projekt: { spuren: [] }, arr: null, slug: 'x' }, $: (n) => el[n], vorBild: [], beimProjekt: [], ladeAktuell: () => {},

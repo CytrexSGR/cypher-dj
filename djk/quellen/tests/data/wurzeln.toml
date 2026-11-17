@@ -1,0 +1,49 @@
+# Roots of an invented media library, shaped like a real one.
+[[wurzel]]
+pfad = "/media/tester/Musik/01 MP3"
+laufwerk = "Musik"
+typ = "track"
+ohne = ["Audio Production", "Midi", "30 Radio Stream", "99 Mix"]
+
+[[wurzel]]
+pfad = "/media/tester/Musik/01 MP3/99 Mix"
+laufwerk = "Musik"
+typ = "mix"
+[[wurzel]]
+pfad = "/media/tester/Musik/01 MP3/30 Radio Stream"
+laufwerk = "Musik"
+typ = "mitschnitt"
+[[wurzel]]
+pfad = "/media/tester/Musik/01 MP3/Audio Production"
+laufwerk = "Musik"
+typ = "loop_oder_oneshot"
+[[wurzel]]
+pfad = "/data/audio"
+laufwerk = "data"
+typ = "loop_oder_oneshot"
+[[wurzel]]
+pfad = "/media/tester/Musik/01 MP3/Midi"
+laufwerk = "Musik"
+typ = "midi"
+[[wurzel]]
+pfad = "/home/tester/Musik"
+laufwerk = "system"
+typ = "erzeugt"
+[[wurzel]]
+pfad = "/home/tester/song"
+laufwerk = "system"
+typ = "track"
+ohne = ["stems"]
+
+[[fern]]
+host = "laptop-b"
+ssh = "tester@laptop-b"
+wurzeln = [{pfad = "~/musik", typ = "erzeugt"}, {pfad = "~/tts/out", typ = "stimme"}]
+
+[[wurzel]]
+pfad = "/opt/daw/Core Library/Samples"
+laufwerk = "system"
+typ = "loop_oder_oneshot"
+pack_ordner = true
+ohne_ordner = ["Folder Info", "Lessons"]
+ohne_endung = [".ogg"]

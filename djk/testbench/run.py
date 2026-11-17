@@ -12,6 +12,7 @@ import re
 import signal
 import socket
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -20,11 +21,13 @@ import osc
 
 PRUEF = Path(__file__).resolve().parent
 DJK = PRUEF.parent
+sys.path.insert(0, str(DJK))   # the storage table package `ablage`
+import storage as ablage  # noqa: E402
 def echtzeit_schloss():
     """Sperrdatei der Echtzeit-Läufe: CYPHERDJ_ECHTZEIT_SCHLOSS, sonst die Zeile in umgebung.env, sonst XDG_RUNTIME_DIR oder /tmp."""
     v = os.environ.get("CYPHERDJ_ECHTZEIT_SCHLOSS")
     if not v:
-        umg = Path(os.environ.get("CYPHERDJ_UMGEBUNG") or Path.home() / ".config/cypherdj/umgebung.env")
+        umg = ablage.fest("umgebung")
         try:
             for z in umg.read_text().splitlines():
                 if z.startswith("CYPHERDJ_ECHTZEIT_SCHLOSS="):

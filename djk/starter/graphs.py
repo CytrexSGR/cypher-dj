@@ -8,6 +8,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+import storage as tabelle  # the storage table package djk/ablage (absolute import; not the sibling module starter/storage.py)
+
 from . import storage as ablage, tools as werkzeuge
 from .tools import WerkzeugFehlt
 
@@ -16,9 +18,8 @@ PROBEN = ("orchester-schlag.f32", "orchester-schlag-schichten.f32", "feder-ir.f3
 
 
 def graphen_ordner() -> Path:
-    """The core's graph folder: CYPHERDJ_BK_ORDNER or $HOME/.config/cypherdj/baukasten (graphs.ts:21-24)."""
-    vorgabe = os.environ.get("CYPHERDJ_BK_ORDNER")
-    return Path(vorgabe) if vorgabe else Path.home() / ".config" / "cypherdj" / "baukasten"
+    """The core's graph folder from the storage table (CYPHERDJ_BK_ORDNER, empty counts as unset; graphs.ts)."""
+    return tabelle.ordner("geraete")
 
 
 def quellen_der_beispiele(djk: Path) -> list[Path]:

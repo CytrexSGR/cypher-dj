@@ -254,3 +254,72 @@ export function kitMuster(s: Schnitt, klaenge: { scheibe: number; note: number }
   const noten = klaenge.map((k) => ({ beat: start(k.scheibe), laenge: 0.25, ton: k.note, vel: 100 })).sort((a, b) => a.beat - b.beat || a.ton - b.ton);
   return { beats: s.beats, noten };
 }
+
+// --- one sound into a copy ----------------------------------------------------------------------------------------------------------------------------
+
+/** Kit limit: 92 sounds, notes 36 to 127 (the kit picker and the core ignore the rest). */
+const KIT_MAX_KLAENGE = 128 - ERSTE_NOTE;
+type KitKlang = { note: number; name: string; datei: string; frames: number; quelle?: string };
+
+/** The sounds of a kit's kit.json (schema 1), each with its file present; anything else is `kit_fremd`. */
+function liesKitKlaenge(kit: string, wurzel: string): KitKlang[] {
+  const fremd = (grund: string): SchnittFehler => new SchnittFehler(409, 'kit_fremd', `kit ${kit} cannot be copied: ${grund}`);
+  if (!KIT_NAME.test(kit)) throw fremd('not a kit name');
+  let j: { schema?: unknown; klaenge?: unknown };
+  try { j = JSON.parse(fs.readFileSync(path.join(wurzel, kit, 'kit.json'), 'utf8')); } catch { throw fremd('no readable kit.json'); }
+  if (j === null || typeof j !== 'object' || j.schema !== 1 || !Array.isArray(j.klaenge)) throw fremd('kit.json is not of schema 1');
+  const noten = new Set<number>();
+  for (const k of j.klaenge as KitKlang[]) {
+    if (k === null || typeof k !== 'object' || !Number.isInteger(k.note) || k.note < 0 || k.note > 127 || noten.has(k.note) || typeof k.name !== 'string'
+      || typeof k.datei !== 'string' || k.datei !== path.basename(k.datei) || k.datei === 'kit.json' || !Number.isInteger(k.frames)) throw fremd('a sound entry is not valid');
+    noten.add(k.note);
+    if (!fs.statSync(path.join(wurzel, kit, k.datei), { throwIfNoEntry: false })?.isFile()) throw fremd(`${k.datei} is missing`);
+  }
+  return j.klaenge as KitKlang[];
+}
+
+/** A copy of the kit `a.kit` with the sound at note `a.ton` replaced (same name, new file `<ton>.f32`) or added (name: its proposed bank and the smallest free
+ *  number of that bank). `a.daten` is stereo float32 48 kHz; it gets the 5 ms end fade and is at most 10 s (`klang_zu_lang`). The old kit is only read:
+ *  the copy is a new folder `freierKitName(<kit>)`, every sound file copied, kit.json written last, and a failure removes the folder again. A full kit
+ *  (92 sounds) takes no new note (`kit_voll`), a kit without a valid kit.json is `kit_fremd`. Every refusal comes before anything is written. */
+export function kitMitKlang(a: { kit: string; ton: number; daten: Float32Array; quelle: string }, o: KitOrdner = {}): { kit: string; name: string; neu: boolean } {
+  if (!Number.isInteger(a.ton) || a.ton < 0 || a.ton > 127) throw arg('ton: a MIDI note, a whole number from 0 to 127, expected');
+  const frames = Math.floor(a.daten.length / 2);
+  if (frames < 1) throw arg('daten: no audio');
+  if (frames > KLANG_MAX_FRAMES) throw new SchnittFehler(400, 'klang_zu_lang', `the sound is ${text(frames)} s long; a kit sound is at most ${text(KLANG_MAX_FRAMES)} s`);
+  const wurzel = kitsOrdner(o);
+  const alt = liesKitKlaenge(a.kit, wurzel);
+  const ersetzt = alt.find((k) => k.note === a.ton);
+  if (!ersetzt && alt.length >= KIT_MAX_KLAENGE) throw new SchnittFehler(409, 'kit_voll', `kit ${a.kit} holds ${alt.length} sounds, the most a kit takes; replace one instead`);
+  const datei = `${a.ton}.f32`;
+  if (alt.some((k) => k.note !== a.ton && k.datei === datei)) throw new SchnittFehler(409, 'kit_fremd', `kit ${a.kit}: the file ${datei} belongs to another note`);
+  let name = ersetzt?.name;
+  if (name === undefined) {
+    const bank = bankVorschlag(baender(a.daten, 0, frames));
+    const belegt = new Set(alt.map((k) => k.name));
+    let n = 0;
+    while (belegt.has(`${bank}:${n}`)) n++;
+    name = `${bank}:${n}`;
+  }
+  const bytes = alt.reduce((s, k) => s + (k.note === a.ton ? 0 : fs.statSync(path.join(wurzel, a.kit, k.datei)).size), 0) + frames * 8;
+  if (bytes > KIT_MAX_BYTES) throw arg(`the kit would hold ${Math.ceil(bytes / 1048576)} MiB, a kit holds at most 256 MiB`);
+  const neuName = freierKitName(a.kit, o);
+  const ordner = path.join(wurzel, neuName);
+  try { fs.mkdirSync(ordner); } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'EEXIST') throw new SchnittFehler(409, 'kit_vorhanden', `a kit named ${neuName} exists already; try again`);
+    throw e;
+  }
+  const klang: KitKlang = { note: a.ton, name, datei, frames, quelle: a.quelle };
+  const liste = (ersetzt ? alt.map((k) => (k.note === a.ton ? klang : k)) : [...alt, klang]).sort((x, y) => x.note - y.note);
+  try {
+    mitSperre(ordner, () => {
+      for (const k of alt) if (k.note !== a.ton) dateiSchreiben(path.join(ordner, k.datei), fs.readFileSync(path.join(wurzel, a.kit, k.datei)));
+      dateiSchreiben(path.join(ordner, datei), klangDaten(a.daten, 0, frames));
+      dateiSchreiben(path.join(ordner, 'kit.json'), JSON.stringify({ schema: 1, name: neuName, klaenge: liste }, null, 1));
+    });
+  } catch (e) {
+    try { fs.rmSync(ordner, { recursive: true, force: true }); } catch { /* the original error is the one to report */ }
+    throw e;
+  }
+  return { kit: neuName, name, neu: !ersetzt };
+}

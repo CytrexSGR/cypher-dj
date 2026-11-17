@@ -102,9 +102,9 @@ test('the routes of the Bereich', () => {
     ['GET /sampler/quellen', 'GET /sampler/liste', 'GET /sampler/schnitt', 'POST /sampler/schnitt', 'POST /sampler/spur', 'POST /sampler/fit', 'POST /sampler/loeschen', 'POST /sampler/hoeren',
       'POST /sampler/neu_schneiden', 'POST /sampler/marke', 'POST /sampler/ursprung',
       'POST /sampler/ton', 'GET /sampler/ton', 'POST /sampler/ton/grund', 'POST /sampler/ton/loeschen',
-      'GET /sampler/dateien', 'GET /sampler/datei/hoer', 'POST /sampler/datei/spur',
-      'POST /sampler/instrument', 'GET /sampler/instrument/lauf', 'GET /sampler/instrumente', 'POST /sampler/instrument/spur', 'POST /sampler/instrument/loeschen']);   // A2 (three), plan C (four), sample player (three), instruments (five)
-  assert.deepEqual(b.routen().filter((r) => r.methode === 'POST').map((r) => r.schutz), Array(15).fill('fremdePost'));
+      'GET /sampler/dateien', 'GET /sampler/datei/hoer', 'POST /sampler/datei/spur', 'POST /sampler/datei/pad',
+      'POST /sampler/instrument', 'GET /sampler/instrument/lauf', 'GET /sampler/instrumente', 'POST /sampler/instrument/spur', 'POST /sampler/instrument/loeschen']);   // A2 (three), plan C (four), sample player (three), instruments (five), media browser (datei/hoer, datei/spur, datei/pad)
+  assert.deepEqual(b.routen().filter((r) => r.methode === 'POST').map((r) => r.schutz), Array(16).fill('fremdePost'));
 });
 
 test('quellen lists loops and module audio; a cut from a module takes its tempo from the frames (review focus 2)', async (t) => {

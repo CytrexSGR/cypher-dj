@@ -28,10 +28,11 @@ from .inventory import fassung_name, fassungen_von, korrektur_anhaengen, lies_js
 from .one import eins_beat_this, entscheide_eins, erster_kick
 from .chain import karte_aus_liste, korrigieren
 from .grid_tools import SR_BEAT_THIS, SR_ESSENTIA, beat_this
+from .table import ablage
 
 BASIS = 128.0
 HAND_BEATS = 1.0     # Raster-Datei ab einem ganzen Beat gilt als Eins-Korrektur von Hand
-RASTER_ORDNER = Path.home() / ".config" / "cypherdj" / "raster"
+RASTER_ORDNER = ablage.ordner("raster")
 
 
 def fpb(basis_bpm):

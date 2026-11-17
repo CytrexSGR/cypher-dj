@@ -373,7 +373,7 @@ test('AK-B16-8: tools/list length = N + 6 (N = 66 on the base) = the count of to
   const laenge = (await c.listTools()).tools.length;
   const quelle = fs.readFileSync(HAND, 'utf8');
   const imCode = quelle.split('\n').filter((z) => z.startsWith("  { name: '")).length;
-  assert.equal(laenge, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import */ + 5 /* live-module task 4 */ + 1 /* live-module task 11: modul_tonart */ + 1 /* live-module task 8: modul_blend */ + 3 /* live-module task 10 */ + 1 /* oszilloskop */ + 1 /* SEQ deck slice 1 task 6: seq */ + 1 /* Sampler A1 task 9: sampler */);   // + plugins (1.11 T8) + ansage (demo overlay) + proj_kits (1.9 T2.5) + proj_routing (1.10 T1) + proj_resample (1.10 T6) + proj_muster (strudel-clip)
+  assert.equal(laenge, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import */ + 5 /* live-module task 4 */ + 1 /* live-module task 11: modul_tonart */ + 1 /* live-module task 8: modul_blend */ + 3 /* live-module task 10 */ + 1 /* oszilloskop */ + 1 /* SEQ deck slice 1 task 6: seq */ + 1 /* Sampler A1 task 9: sampler */ + 1 /* ANALYZE: proj_analyse */);   // + plugins (1.11 T8) + ansage (demo overlay) + proj_kits (1.9 T2.5) + proj_routing (1.10 T1) + proj_resample (1.10 T6) + proj_muster (strudel-clip)
   assert.equal(imCode, laenge, 'grep -c "^  { name: \'" djk/hand/hand.ts');
   const wurzel = path.resolve(path.dirname(HAND), '..', '..');
   // the English edition lives under docs/veroeffentlichung in the working repo; the public repo carries only djk/hand/AUFRUF.md

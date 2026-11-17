@@ -200,7 +200,8 @@ export function audioKopien(c: AudioClip): AudioKopie[] {
 // Ruft f für jede klingende Note des Clips (absolute Beats, an Clip-Ende und Loop-Ende geschnitten). Mit Loop: nur Noten mit beat < loop,
 // je Kopie um k·loop verschoben, ID <clip>~<k>/<note>; Noten ab loop_beats bleiben im Projekt, klingen aber nicht.
 export function fuerAusgerollteNoten(c: MidiClip, f: (id: string, beat: number, laenge: number, n: Note) => void): void {
-  if (c.zeilen !== undefined || c.noten.some((n) => n.chance !== undefined || n.wdh !== undefined || n.versatz !== undefined)) { fuerAusgerollteNotenZeilen(c, f); return; }
+  if (c.zeilen !== undefined || c.noten.some((n) => n.chance !== undefined || n.wdh !== undefined ||
+    n.versatz !== undefined)) { fuerAusgerollteNotenZeilen(c, f); return; }
   const ende = c.start_beat + c.laenge_beats;
   const loop = c.loop_beats ?? null;
   if (loop === null) {
@@ -218,11 +219,13 @@ export function fuerAusgerollteNoten(c: MidiClip, f: (id: string, beat: number, 
     }
   }
 }
-// Workbench rows and note fields (chance, wdh, versatz, MidiClip.zeilen). Only clips that carry one of them come here; every other clip takes the loop above, unchanged.
-// Per note the pass period P is: the row length schritte / 4 (independent of loop_beats), else loop_beats, else none (one pass, the clip). The passes restart with the
-// clip. In a pass: a note with beat >= P is silent; "pendel" mirrors every odd pass (step i sounds at step schritte - 1 - i, the part inside the step stays); the odd
-// steps of the pass sounding position are delayed by swing / 100 * 0.125; versatz moves by versatz / 100 * 0.25 (copy 0 never before the clip start); wdh splits the note into
-// hits over max(0.25, laenge). A copy is cut at its pass end (hits behind it are silent). ids: <clip>~<pass>/<note>, or <clip>/<note> without passes, hits 2.. get ".<h-1>".
+// Workbench rows and note fields (chance, wdh, versatz, MidiClip.zeilen). Only clips that carry one of them come here; every other clip takes the
+// loop above, unchanged.
+// Per note the pass period P is: the row length schritte / 4 (independent of loop_beats), else loop_beats, else none (one pass, the clip). The passes
+// restart with the clip. In a pass: a note with beat >= P is silent; "pendel" mirrors every odd pass (step i sounds at step schritte - 1 - i, the
+// part inside the step stays); the odd steps of the pass sounding position are delayed by swing / 100 * 0.125; versatz moves by versatz / 100 * 0.25
+// (copy 0 never before the clip start); wdh splits the note into hits over max(0.25, laenge). A copy is cut at its pass end (hits behind it are
+// silent). ids: <clip>~<pass>/<note>, or <clip>/<note> without passes, hits 2.. get ".<h-1>".
 const hash32 = (t: string): number => {
   let h = 0x811c9dc5;
   for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193); }

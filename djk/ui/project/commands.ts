@@ -661,7 +661,8 @@ function fuegeNotenEin(p: Projekt, clip: MidiClip, roh: unknown[]): void {
     }
     vorhanden.add(id);
     clip.noten.push({ id, beat: f.beat, laenge: f.laenge, ton: f.ton, vel: f.vel,
-      ...(f.chance !== undefined ? { chance: f.chance } : {}), ...(f.wdh !== undefined ? { wdh: f.wdh } : {}), ...(f.versatz !== undefined ? { versatz: f.versatz } : {}) });
+      ...(f.chance !== undefined ? { chance: f.chance } : {}), ...(f.wdh !== undefined ? { wdh: f.wdh } : {}),
+        ...(f.versatz !== undefined ? { versatz: f.versatz } : {}) });
   });
   p.naechste_noten_id = naechste;
 }

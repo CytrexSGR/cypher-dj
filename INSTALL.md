@@ -131,6 +131,74 @@ cp djk/config/umgebung.env.beispiel ~/.config/cypherdj/umgebung.env
 
 Edit it: where your music is, an optional Traktor `collection.nml`, sample folders for the kits.
 
+**Where your work lives.** A fresh install keeps everything you make in one visible folder, `~/cypherdj/`. The variable
+`CYPHERDJ_HEIM` moves it (an absolute path; a trailing `/` is ignored). `djk-start` creates the folders that are missing
+by running `djk/start/djk-umzug einrichten --still`; you can run that command yourself at any time. The layout:
+
+```
+~/cypherdj/
+  werke/                    what you make
+    projekte/               one folder per project (exports of a project are in its export/ folder)
+    module/                 live modules, one folder per module, named <title>-<a|b>-<4 hex characters>
+    sampler/                sample player data (cuts, instruments)
+    presets/  klaenge/      device presets, sounds
+    sammlungen/kollektionen/  your collections
+    korrekturen/raster/  korrekturen/hotcues/   corrected beat grids and hot cues
+    kits/  loops/  geraete/   drum kits, loops, Cypher Modular graphs
+  pruefen/                  projects you moved out of the project list, see below
+  quellen.toml              the list of your source folders, see section 10
+  .umzug/                   journal and report of djk-umzug
+```
+
+The audio core reads a few folders at fixed places. For `kits`, `loops` and `geraete` the old place stays and becomes a
+link: `~/.config/cypherdj/kits`, `~/.config/cypherdj/loops` and `~/.config/cypherdj/baukasten` lead to the folders
+above, so nothing you wrote against those paths breaks. The paths of the other kinds can also be set one by one:
+`CYPHERDJ_MODULE`, `CYPHERDJ_SAMPLER`, `CYPHERDJ_KLAENGE`, `CYPHERDJ_KIT_ORDNER` and `CYPHERDJ_BK_ORDNER` win over the
+layout (an empty value counts as unset).
+
+`CYPHERDJ_HEIM` can point to another disk. The commands never create that folder on a disk that is not there: when the
+parent folder is missing or empty (an unmounted disk often leaves its empty mount folder behind), they refuse with
+`the parent of CYPHERDJ_HEIM (...) is missing or empty: is the disk mounted?`.
+
+**An install that already has the old folders** (`~/cypherdj-projekte` and the folders under `~/.config/cypherdj`) keeps
+working as it is: a real old folder is used where it is. If you also copied a `werke/` folder from another machine, the
+old folder still wins and a line in the log says so. To move to the layout above, stop everything with `djk-stop`, then:
+
+```sh
+djk/start/djk-umzug                           # table: every kind, its state, what a move would do; changes nothing
+djk/start/djk-umzug presets --ausfuehren      # move one kind; the old place becomes a link
+djk/start/djk-umzug zurueck presets --ausfuehren   # undo it
+```
+
+Without `--ausfuehren` nothing changes. A move is a rename when both places are on one disk, otherwise a verified copy
+(every file compared by sha256) and the old folder is kept until you run `djk-umzug aufraeumen <kind> --ausfuehren`,
+which deletes it only when it is still what was copied. A move is refused while a cypherdj unit runs or a process has the
+folder open. It writes a journal under `.umzug/`: if a run is interrupted (power loss, kill), the next run finds the
+state from the files and the journal and continues by one fixed rule, or refuses and changes nothing. Running a command
+twice, or on an install that never had the old folders, does nothing. Return codes: 0 ok or nothing to do, 1 I/O error,
+2 usage, 3 in use, 4 conflict, 5 verification failed, 6 home folder not ready; `djk-umzug --help` has the rest.
+
+Two more tidying commands:
+
+- `djk-umzug pruefen` lists which projects look like test projects (a suggestion only, it moves nothing). You write
+  the names you want out of the project list into a file `{"slugs": ["name-1", "name-2"]}` and run
+  `djk-umzug pruefen --liste <file> --ausfuehren`: exactly those projects move to `~/cypherdj/pruefen/` and leave a
+  link, so they still open. `djk-umzug pruefen zurueck <name> --ausfuehren` (or `--alle`) brings them back.
+- `djk-umzug modulnamen --ausfuehren` renames module folders that still carry a bare 16 character id to
+  `<title>-<4 hex characters>`. The id inside `modul.json` stays the reference.
+
+**Exports.** After every export, a project keeps its three newest exports; older ones move to
+`<projects folder>/.papierkorb/exporte/<project>/`, nothing is deleted. The export you just wrote always stays, and
+MIDI export folders do not count. A name that you wrote down in a `.md` file (a listening sheet, say) stays where it is:
+`CYPHERDJ_EXPORT_GENANNT` takes the folders to search for such names, separated by `:`. If one of those folders does not
+exist, nothing is tidied. `djk/start/djk-exporte` does the same for all projects at once; without `--ausfuehren` nothing
+moves.
+
+**Caches.** Two folders hold files that can be computed again: the decoded audio (capped at 5 GiB) and the waveform
+cache (capped at 1 GiB). Over the cap the oldest files go first. A decoded file that any project or its history names is
+never deleted, so the decode cache can stay over its cap; the log then says so once. Nothing under a project and no
+source file is ever removed by a cap.
+
 ## 9. First sounds (optional)
 
 A fresh install has no music and no kits. One command generates something to play on your machine, from this
@@ -143,12 +211,13 @@ djk/start/djk-starter
 It needs `cargo` (section 1) and writes only files that are absent; a file you edited or deleted a sound from is kept
 and reported as `kept`. Steps:
 
-- `graphen`: the example graphs go into `~/.config/cypherdj/baukasten/` (the core's graph folder), with the three
+- `graphen`: the example graphs go into the core's graph folder (`~/.config/cypherdj/baukasten/`, a link to
+  `~/cypherdj/werke/geraete/` on a fresh install, section 8), with the three
   generated sample files that some of them need.
 - `kits`: the drum kits `starter` (909 style), `starter-808` and `gm` (a copy of `starter`, written only if you have
-  neither `gm` nor `techno`) go into `~/.config/cypherdj/kits/`.
-- `loops`: three loops go into `~/.config/cypherdj/loops/`.
-- `demo`: a small demo project, `demo`, goes into `~/cypherdj-projekte/`.
+  neither `gm` nor `techno`) go into the kit folder (`~/.config/cypherdj/kits/`, a link to `~/cypherdj/werke/kits/`).
+- `loops`: three loops go into `~/.config/cypherdj/loops/` (a link to `~/cypherdj/werke/loops/`).
+- `demo`: a small demo project, `demo`, goes into `~/cypherdj/werke/projekte/`.
 - `bibliothek`: the generated sounds become a library folder (section 10) and the catalog is built.
 
 `--nur <step>` runs one step (repeatable). Return codes: 0 all done, 2 usage, 4 done with skipped steps; the missing
@@ -170,7 +239,8 @@ djk/start/djk-bibliothek zeige                    # folders, target, state and c
 djk/start/djk-bibliothek weg ~/Music/tracks       # remove a folder again
 ```
 
-The folders are listed in `~/.config/cypherdj/bibliothek.json`. Every file with an audio extension becomes a track, a
+The folders are listed in `~/.config/cypherdj/bibliothek.json`, or in `~/cypherdj/quellen.toml` once that file exists
+(see below). Every file with an audio extension becomes a track, a
 loop or a one-shot, by three rules. A folder added with `--typ` gives all its files that type. With the default
 `auto`, a `loop` or `oneshot` word in the path decides first (for a loop under two minutes, for a one-shot under 30
 seconds). Otherwise length decides: a minute or more is a track, a file of at least four beats (one bar) at the BPM in its name
@@ -186,6 +256,51 @@ nothing but your catalog has rows (`--leer-erlaubt` empties it on purpose), 2 us
 
 `mutagen` (in `djk/requirements.txt`) is optional: it reads tags and durations. Without it the build says so, reads
 durations with soundfile or ffprobe, and stores no tags. A second `bauen` with nothing changed hashes no files.
+
+**One list for all your source folders.** `~/cypherdj/quellen.toml` is the list of the folders the studio reads
+sounds and tracks from. The sample shelf, the catalog and the kit sources all read it; the older lists
+(`bibliothek.json`, the shelf list `sampler/wurzeln.json`) are generated from it when you add or remove a folder in the
+studio. The format:
+
+```toml
+schema = 1
+
+[[wurzel]]
+name = "Samples"                   # 1 to 40 characters, no slash, unique
+art = "sample"                     # sample, oneshot, loop, track (also mix, mitschnitt, midi, spiegel, erzeugt, stimme)
+pfad = "/media/you/Music/Samples"  # absolute path
+wechselplatte = true               # optional: removable disk; unset means: decided by the path (/media, /run/media)
+regal = true                       # optional: also list it in the sample shelf
+katalog = true                     # optional, default true: build the catalog from it
+
+[wurzel.pfade]                     # optional: a different path per machine, by host name
+laptop = "/media/you/Samples"
+```
+
+A root without a path for the machine you are on (no `pfad`, and no entry for its host name under `pfade`) is listed as not
+reachable and ignored, never an error. In the studio, the button SOURCES in the shelf header opens the dialog SOURCE
+FOLDERS: it lists every folder with a dot for "reachable now", adds a folder (path, name, kind, removable drive) and
+removes one again (the files stay where they are). It is the same list as the file. Command line:
+
+```sh
+cd djk
+python3 -m quellen zeige --json                                  # the list as this machine sees it
+python3 -m quellen dazu --name Samples --pfad /media/you/Music/Samples --art sample --regal
+python3 -m quellen weg --name Samples
+```
+
+The tablet port of the web interface does not offer the source dialog.
+
+**Projects collect their sources.** A project refers to its audio by content (sha256), not only by path, so it finds a
+file again when it was copied. Opening a project, and adding or replacing an audio clip in it, starts a copy in the
+background of every source of that project that lies on a removable disk into `<project>/audio/` (named
+`<file name>-<8 characters of the sha>.<ext>`), so the project plays when the disk is unplugged. In PRODUCTION the button
+COLLECT does it for every source that lies outside the project folder, and a finished export does it too. Collecting
+copies: it never moves or deletes a source. Each copy is checked against the sha of the clip and removed if it
+differs. It runs at the lowest priority (`nice -n 19`, `ionice -c 3`) and streams, so a large file is never held in
+memory. It waits while the transport runs, a deck plays or a loop box or studio stream is live (COLLECT answers that
+music is playing and does not start); a file gets 120 seconds plus one second per MB. A source on a disk that is
+not mounted is reported as missing and tried again at the next opening.
 
 ## 11. Start
 

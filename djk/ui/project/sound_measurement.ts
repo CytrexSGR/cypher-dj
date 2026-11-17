@@ -1,0 +1,303 @@
+// ANALYZE window, slice 1: the pure, streaming analysis of one rendered strip (no I/O).
+// FFT, spectrum, time picture, stereo and peaks; masking between two strips and objective hints.
+import { Buffer } from 'node:buffer';
+import {
+  RATE, FFT_N, HOP, MAX_SPALTEN, KORR_FENSTER, DB_BODEN, ZEITBILD_DB_MIN, ZEITBILD_DB_MAX, STILLE_DB, STEREO_BAENDER,
+  ZWOELFTEL_HZ, TERZ_HZ, SCHWELLEN, zwoelftelKanten, terzKanten, terzVon, hzText,
+} from './sound_contract.ts';
+import type { Stereo, Spektrum, Zeitbild, Messung, Ueberdeckung, UeberdeckungsBand, Schwerpunkt, Hinweis } from './sound_contract.ts';
+import { tonName } from '../public/production/pianoroll.js';
+
+const BAENDER = ZWOELFTEL_HZ.length;   // 120
+const TERZ = BAENDER / 4;              // 30
+const DF = RATE / FFT_N;
+
+// In-place radix-2 FFT; the length must be a power of two.
+export function fft(re: Float64Array, im: Float64Array): void {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { const a = re[i]; re[i] = re[j]; re[j] = a; const b = im[i]; im[i] = im[j]; im[j] = b; }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len, half = len >> 1;
+    const wr = Math.cos(ang), wi = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let cr = 1, ci = 0;
+      for (let k = 0; k < half; k++) {
+        const a = i + k, b = a + half;
+        const tr = re[b] * cr - im[b] * ci, ti = re[b] * ci + im[b] * cr;
+        re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+        const nr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = nr;
+      }
+    }
+  }
+}
+
+// Column raster of a range of `frames` sample frames: one frame per column, at most MAX_SPALTEN columns.
+// A range so long that the hop exceeds the FFT window (more than about 2048 * 8192 frames, 6 min at 48 kHz) is only sampled: every column looks at one window
+// of 8192 frames, the frames between the columns are not seen by the spectrum, the time picture and the band stereo values (peak, rms and the
+// broadband correlation still cover every frame).
+export function rasterVon(frames: number): { hop: number; spalten: number } {
+  if (frames < FFT_N) return { hop: HOP, spalten: 1 };
+  const f = Math.floor((frames - FFT_N) / HOP) + 1;
+  if (f <= MAX_SPALTEN) return { hop: HOP, spalten: f };
+  const hop = Math.ceil((frames - FFT_N) / (MAX_SPALTEN - 1));
+  return { hop, spalten: Math.floor((frames - FFT_N) / hop) + 1 };
+}
+
+export interface Teilmessung {
+  stumm: boolean; spitze_db: number; rms_db: number; crest_db: number;
+  stereo: Stereo; spektrum: Spektrum; zeitbild: Zeitbild;
+  spaltenTerz: Float32Array; spalten: number;   // spalten x 30 dB values, column after column
+}
+
+// The bands are band integrals, not line levels: every FFT bin splits its power over the 1/12 bands by overlap, so a full-scale sine reads 0 dB only when its
+// main lobe (Hann: about 4 bins, 23 Hz) fits into the band. Below about 250 Hz a band is narrower than that, so such a sine reads lower in its own band
+// (measured: 30 Hz -7.0 dB, 55 Hz -5.5 dB, 100 Hz -2.9 dB, 200 Hz -1.5 dB, 440 Hz and above 0.0 dB). The sum of the band powers stays exactly 0 dB;
+// the 1/3 octave
+// values (four bands summed) read 55 Hz at -0.5 dB. Judge levels of low notes in the 1/3 octave spectrum.
+// Lazily built tables: Hann window, share of every FFT bin in every 1/12 band, stereo band of every bin.
+interface Tabellen { w: Float64Array; sw2: number; start: Int32Array; band: Int32Array; anteil: Float64Array; stereoBand: Int8Array }
+let TAB: Tabellen | null = null;
+function tabellen(): Tabellen {
+  if (TAB) return TAB;
+  const w = new Float64Array(FFT_N);
+  let sw2 = 0;
+  for (let i = 0; i < FFT_N; i++) { w[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / FFT_N); sw2 += w[i] * w[i]; }
+  const kanten: number[] = [zwoelftelKanten(0)[0]];
+  for (let j = 0; j < BAENDER; j++) kanten.push(zwoelftelKanten(j)[1]);
+  const start = new Int32Array(FFT_N / 2 + 2), band: number[] = [], anteil: number[] = [];
+  const stereoBand = new Int8Array(FFT_N / 2 + 1).fill(-1);
+  for (let k = 0; k <= FFT_N / 2; k++) {
+    start[k] = band.length;
+    const lo = (k - 0.5) * DF, hi = (k + 0.5) * DF;
+    for (let j = 0; j < BAENDER; j++) {
+      const o = Math.min(hi, kanten[j + 1]) - Math.max(lo, kanten[j]);
+      if (o > 0) { band.push(j); anteil.push(o / DF); }
+    }
+    const f = k * DF;
+    // like the spectrum bands the stereo values start at the lowest band edge (20 Hz): the bins below it (DC, rumble) count in no band
+    STEREO_BAENDER.forEach(([a, b], i) => { if (f >= Math.max(a, kanten[0]) && f < b) stereoBand[k] = i; });
+  }
+  start[FFT_N / 2 + 1] = band.length;
+  TAB = { w, sw2, start, band: Int32Array.from(band), anteil: Float64Array.from(anteil), stereoBand };
+  return TAB;
+}
+
+const dbVon = (p: number): number => (p > 0 ? Math.max(DB_BODEN, 10 * Math.log10(p / 0.5)) : DB_BODEN);
+const klemmeK = (x: number): number => Math.max(-1, Math.min(1, x));
+const korr = (lr: number, ll: number, rr: number): number => (ll > 0 && rr > 0 ? klemmeK(lr / Math.sqrt(ll * rr)) : 0);
+function breite(side: number, mid: number): number {
+  if (!(side > 0)) return DB_BODEN;
+  if (!(mid > 0)) return -DB_BODEN;
+  return Math.max(DB_BODEN, Math.min(-DB_BODEN, 10 * Math.log10(side / mid)));
+}
+
+export class StreifenAnalysator {
+  private readonly frames: number;
+  private readonly hop: number;
+  private readonly spalten: number;
+  private readonly t = tabellen();
+  private readonly ringL = new Float64Array(FFT_N);
+  private readonly ringR = new Float64Array(FFT_N);
+  private readonly re = new Float64Array(FFT_N);
+  private readonly im = new Float64Array(FFT_N);
+  private readonly bandP = new Float64Array(BAENDER);
+  private readonly sumP = new Float64Array(BAENDER);
+  private readonly maxP = new Float64Array(BAENDER);
+  private readonly db12 = new Array<number>(BAENDER).fill(DB_BODEN);
+  private readonly bytes: Uint8Array;
+  private readonly terz: Float32Array;
+  private nichtStille = 0;
+  private spalte = 0;
+  private gesehen = 0;
+  private spitze = 0;
+  private sLL = 0; private sRR = 0; private sLR = 0; private sMM = 0; private sSS = 0;
+  private wLL = 0; private wRR = 0; private wLR = 0; private wN = 0;
+  private korrMin = Infinity;
+  // stereo bands from FFT frames: LR, LL, RR, MM, SS per band
+  private readonly bLR = new Float64Array(4); private readonly bLL = new Float64Array(4); private readonly bRR = new Float64Array(4);
+  private readonly bMM = new Float64Array(4); private readonly bSS = new Float64Array(4);
+  private readonly bPow = new Float64Array(4);   // power of mid plus side per stereo band, summed over the non-silent frames
+
+  constructor(frames: number) {
+    this.frames = frames;
+    const r = rasterVon(frames);
+    this.hop = r.hop; this.spalten = r.spalten;
+    this.bytes = new Uint8Array(this.spalten * BAENDER);
+    this.terz = new Float32Array(this.spalten * TERZ).fill(DB_BODEN);
+  }
+
+  // Interleaved stereo, any block length.
+  schiebe(block: Float32Array): void {
+    const n = block.length >> 1, { ringL, ringR } = this;
+    for (let i = 0; i < n; i++) {
+      const l = block[2 * i], r = block[2 * i + 1];
+      const al = Math.abs(l), ar = Math.abs(r);
+      if (al > this.spitze) this.spitze = al;
+      if (ar > this.spitze) this.spitze = ar;
+      const m = (l + r) / 2, s = (l - r) / 2;
+      this.sLL += l * l; this.sRR += r * r; this.sLR += l * r; this.sMM += m * m; this.sSS += s * s;
+      this.wLL += l * l; this.wRR += r * r; this.wLR += l * r;
+      if (++this.wN === KORR_FENSTER) this.schliesseFenster();
+      const pos = this.gesehen % FFT_N;
+      ringL[pos] = l; ringR[pos] = r;
+      this.gesehen++;
+      if (this.gesehen >= FFT_N && (this.gesehen - FFT_N) % this.hop === 0 && this.spalte < this.spalten) this.frame(FFT_N);
+    }
+  }
+
+  private schliesseFenster(): void {
+    if (dbVon((this.wLL + this.wRR) / (2 * this.wN)) >= STILLE_DB)   // silent = both channels, so L = -R still counts
+      this.korrMin = Math.min(this.korrMin, korr(this.wLR, this.wLL, this.wRR));
+    this.wLL = this.wRR = this.wLR = 0; this.wN = 0;
+  }
+
+  // One FFT frame of the last `echt` frames (a short range is zero padded at the end of the window).
+  private frame(echt: number): void {
+    const { t, re, im, ringL, ringR, bandP } = this;
+    const col = this.spalte++;
+    const first = this.gesehen >= FFT_N ? this.gesehen % FFT_N : 0;   // ring index of the oldest frame
+    let e = 0;
+    for (let i = 0; i < FFT_N; i++) {
+      if (i < echt) {
+        const p = (first + i) % FFT_N;
+        re[i] = ringL[p] * t.w[i]; im[i] = ringR[p] * t.w[i];
+        e += (ringL[p] * ringL[p] + ringR[p] * ringR[p]) / 2;
+      } else { re[i] = 0; im[i] = 0; }
+    }
+    if (dbVon(e / Math.max(1, echt)) < STILLE_DB) return;   // silent frame: zero column, floor in the third-octave values
+    fft(re, im);
+    this.nichtStille++;
+    bandP.fill(0);
+    const sk = 2 / (FFT_N * t.sw2);
+    for (let k = 0; k <= FFT_N / 2; k++) {
+      const nk = (FFT_N - k) % FFT_N;
+      const lr = (re[k] + re[nk]) / 2, li = (im[k] - im[nk]) / 2;
+      const rr = (im[k] + im[nk]) / 2, ri = -(re[k] - re[nk]) / 2;
+      const mr = (lr + rr) / 2, mi = (li + ri) / 2, sr = (lr - rr) / 2, si = (li - ri) / 2;
+      const mm = mr * mr + mi * mi;
+      const pk = mm * sk * (k === 0 || k === FFT_N / 2 ? 0.5 : 1);
+      for (let q = t.start[k]; q < t.start[k + 1]; q++) bandP[t.band[q]] += pk * t.anteil[q];
+      const sb = t.stereoBand[k];
+      if (sb >= 0 && k > 0) {
+        this.bLR[sb] += lr * rr + li * ri; this.bLL[sb] += lr * lr + li * li; this.bRR[sb] += rr * rr + ri * ri;
+        const ss = sr * sr + si * si;
+        this.bMM[sb] += mm; this.bSS[sb] += ss;
+        this.bPow[sb] += (mm + ss) * sk;
+      }
+    }
+    for (let j = 0; j < BAENDER; j++) {
+      this.sumP[j] += bandP[j];
+      if (bandP[j] > this.maxP[j]) this.maxP[j] = bandP[j];
+      const d = dbVon(bandP[j]);
+      this.db12[j] = d;
+      this.bytes[col * BAENDER + j] = Math.max(0, Math.min(255, Math.round((d - ZEITBILD_DB_MIN) / (ZEITBILD_DB_MAX - ZEITBILD_DB_MIN) * 255)));
+    }
+    this.terz.set(terzVon(this.db12), col * TERZ);
+  }
+
+  ende(): Teilmessung {
+    if (this.frames < FFT_N && this.spalte === 0) this.frame(this.gesehen);
+    const spitze_db = this.spitze > 0 ? Math.max(DB_BODEN, 20 * Math.log10(this.spitze)) : DB_BODEN;
+    const rms_db = this.gesehen > 0 ? 10 * Math.log10(Math.max((this.sLL + this.sRR) / (2 * this.gesehen), 1e-20)) : DB_BODEN;
+    const stumm = spitze_db <= STILLE_DB;
+    const nf = this.nichtStille;
+    const spektrum: Spektrum = { hz: [...ZWOELFTEL_HZ], mittel_db: [], max_db: [] };
+    for (let j = 0; j < BAENDER; j++) {
+      spektrum.mittel_db.push(stumm || nf === 0 ? DB_BODEN : dbVon(this.sumP[j] / nf));
+      spektrum.max_db.push(stumm ? DB_BODEN : dbVon(this.maxP[j]));
+    }
+    const ganz = korr(this.sLR, this.sLL, this.sRR);
+    const stereo: Stereo = stumm
+      ? { korrelation: 0, korrelation_min: 0, breite_db: DB_BODEN,
+          baender: STEREO_BAENDER.map(([a, b]) => ({ hz_von: a, hz_bis: b, korrelation: 0, breite_db: DB_BODEN, pegel_db: DB_BODEN })) }
+      : { korrelation: ganz, korrelation_min: Number.isFinite(this.korrMin) ? this.korrMin : ganz, breite_db: breite(this.sSS, this.sMM),
+          baender: STEREO_BAENDER.map(([a, b], i) => ({ hz_von: a, hz_bis: b, korrelation: korr(this.bLR[i], this.bLL[i], this.bRR[i]),
+            breite_db: breite(this.bSS[i], this.bMM[i]),
+            pegel_db: nf > 0 ? dbVon(this.bPow[i] / nf) : DB_BODEN })) };
+    if (stumm) { this.bytes.fill(0); this.terz.fill(DB_BODEN); }
+    const zeitbild: Zeitbild = { spalten: this.spalten, zeilen: BAENDER, sek_je_spalte: this.hop / RATE,
+      db_min: ZEITBILD_DB_MIN, db_max: ZEITBILD_DB_MAX, daten: Buffer.from(this.bytes).toString('base64') };
+    return { stumm, spitze_db, rms_db, crest_db: spitze_db - rms_db, stereo, spektrum, zeitbild, spaltenTerz: this.terz, spalten: this.spalten };
+  }
+}
+
+// ---- masking and hints ----
+
+// Share of the time columns in which both strips are above -60 dB and within 9 dB of each other, per 1/3 octave band.
+// Both come from the same raster; the shorter one decides if they differ.
+export function ueberdeckung(q: Teilmessung, v: Teilmessung): Ueberdeckung {
+  const spalten = Math.min(q.spalten, v.spalten);
+  const mq = terzVon(q.spektrum.mittel_db), mv = terzVon(v.spektrum.mittel_db);
+  const baender: UeberdeckungsBand[] = [];
+  for (let m = 0; m < TERZ; m++) {
+    let n = 0;
+    for (let c = 0; c < spalten; c++) {
+      const a = q.spaltenTerz[c * TERZ + m], b = v.spaltenTerz[c * TERZ + m];
+      if (a > SCHWELLEN.pegelMinDb && b > SCHWELLEN.pegelMinDb && Math.abs(a - b) <= SCHWELLEN.naeheDb) n++;
+    }
+    baender.push({ hz: TERZ_HZ[m], quelle_db: mq[m], vergleich_db: mv[m], anteil: spalten > 0 ? n / spalten : 0 });
+  }
+  const laeufe: Schwerpunkt[] = [];
+  for (let m = 0; m < TERZ;) {
+    if (baender[m].anteil < SCHWELLEN.schwerpunkt) { m++; continue; }
+    let e = m, summe = 0;
+    while (e < TERZ && baender[e].anteil >= SCHWELLEN.schwerpunkt) summe += baender[e++].anteil;
+    laeufe.push({ hz_von: terzKanten(m)[0], hz_bis: terzKanten(e - 1)[1], anteil: summe / (e - m) });
+    m = e;
+  }
+  // stable sort: runs are in ascending frequency, so ties keep the lower one first
+  laeufe.sort((a, b) => b.anteil - a.anteil);
+  return { baender, schwerpunkte: laeufe.slice(0, 3) };
+}
+
+// Nearest semitone name, house convention (60 = C3).
+export function notenName(hz: number): string {
+  return tonName(Math.round(69 + 12 * Math.log2(hz / 440)));
+}
+
+// Objective findings about one source: bass_nicht_mono, true_peak, resonanz. A silent source has none.
+export function hinweiseQuelle(m: Messung): Hinweis[] {
+  if (m.stumm) return [];
+  const aus: Hinweis[] = [];
+  const bass = m.stereo.baender[0];
+  // The band carries energy when the power of L plus R below 120 Hz is above -60 dB (a bass in full antiphase has no mid left).
+  if (bass && bass.korrelation < SCHWELLEN.bassMono && bass.pegel_db > SCHWELLEN.pegelMinDb) {
+    aus.push({ art: 'bass_nicht_mono', text: `${m.name}: the bass below ${SCHWELLEN.bassHz} Hz is not mono (correlation ${bass.korrelation.toFixed(2)})` });
+  }
+  const tp = m.lautheit.true_peak_dbtp;
+  if (tp !== null && tp > SCHWELLEN.truePeak) aus.push({ art: 'true_peak',
+    text: `${m.name}: true peak ${tp.toFixed(1)} dBTP is above ${SCHWELLEN.truePeak} dBTP` });
+  const db = m.spektrum.mittel_db, res: { n: number; d: number }[] = [];
+  for (let n = 0; n < db.length; n++) {
+    if (!(db[n] > SCHWELLEN.pegelMinDb)) continue;
+    const nachbarn: number[] = [];
+    for (let j = Math.max(0, n - 6); j <= Math.min(db.length - 1, n + 6); j++) if (j !== n) nachbarn.push(db[j]);
+    nachbarn.sort((a, b) => a - b);
+    const h = nachbarn.length >> 1;
+    const median = nachbarn.length % 2 ? nachbarn[h] : (nachbarn[h - 1] + nachbarn[h]) / 2;
+    const d = db[n] - median;
+    if (d < SCHWELLEN.resonanzDb) continue;
+    if ((n > 0 && db[n - 1] > db[n]) || (n < db.length - 1 && db[n + 1] >= db[n])) continue;   // a local peak (plateaus count once)
+    res.push({ n, d });
+  }
+  res.sort((a, b) => b.d - a.d);
+  for (const { n, d } of res.slice(0, 3)) {
+    const hz = ZWOELFTEL_HZ[n];
+    aus.push({ art: 'resonanz', hz, text: `${m.name}: narrow peak at ${hzText(hz)} (${notenName(hz)}), ${d.toFixed(1)} dB above its octave` });
+  }
+  return aus;
+}
+
+// ueberdeckung_tief for every Schwerpunkt that starts below 250 Hz.
+export function hinweiseUeberdeckung(q: Messung, v: Messung, u: Ueberdeckung): Hinweis[] {
+  return u.schwerpunkte.filter((s) => s.hz_von < SCHWELLEN.tiefHz).map((s) => ({
+    art: 'ueberdeckung_tief' as const,
+    hz: Math.sqrt(s.hz_von * s.hz_bis),
+    text: `${q.name} and ${v.name} mask each other from ${hzText(s.hz_von)} to ${hzText(s.hz_bis)} (${Math.round(s.anteil * 100)} % of the time)`,
+  }));
+}

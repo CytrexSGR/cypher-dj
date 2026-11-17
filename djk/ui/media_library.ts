@@ -8,6 +8,7 @@
 //   darum verliert die Vorauswahl kein Werk, das den Filter erfüllt.
 import fs from 'node:fs';
 import os from 'node:os';
+import { festerPfad } from './paths.ts';
 import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
@@ -18,7 +19,7 @@ import { bewerte, type EnergieWunsch, type Merkmale } from './connection.ts';
 // Tonart-Quellen, deren Key einen Kandidaten ausschließen darf (Anschluss). Gemessen 2026-10-15 gegen eindeutige MIK-Keys:
 // analyse 88 % exakt (n=5.390), traktor 42 % (n=1.660); tag, beatport und der Rest ungemessen und damit unsicher.
 const KEY_SICHER = new Set(['andreas', 'werkstatt', 'mik_bestaetigt', 'tag_mik', 'analyse']);
-export const MEDIATHEK_VORGABE = process.env.CYPHERDJ_MEDIATHEK || path.join(os.homedir(), '.local', 'share', 'cypherdj', 'mediathek', 'mediathek.sqlite');
+export const MEDIATHEK_VORGABE = festerPfad('mediathek');
 export const LIMIT_VORGABE = 50, LIMIT_MAX = 200;
 const FELDER = ['titel', 'kuenstler', 'mix', 'bpm', 'camelot', 'energie', 'genre', 'typ'];
 const ALLE_MAX = 1500;       // bis hierhin werden alle Kandidaten-Werke zusammengeführt (gesamt exakt, nach Titel sortiert)

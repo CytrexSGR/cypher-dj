@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -89,3 +90,37 @@ def test_kit_ordner_follows_environment(tmp_path, monkeypatch):
     assert ablage.kit_ordner() == tmp_path / "home" / ".config" / "cypherdj" / "kits"
     monkeypatch.setenv("CYPHERDJ_KIT_ORDNER", str(tmp_path / "x"))
     assert ablage.kit_ordner() == tmp_path / "x"
+
+
+def test_vorgaben_aus_tabelle(tmp_path, monkeypatch):
+    """Kit, graph, loop and demo-project defaults equal the storage table; core kinds stay at the old place (a link after the setup), the demo project follows CYPHERDJ_HEIM (vorgabe neu)."""
+    import storage as tabelle  # the package djk/ablage, not starter/storage.py
+    from starter import demo, graphs as graphen, loops
+
+    assert Path(tabelle.__file__).resolve() == Path(__file__).resolve().parents[2] / "ablage" / "__init__.py"
+    home = tmp_path / "home"
+    monkeypatch.setenv("CYPHERDJ_HEIM", str(tmp_path / "heim"))
+    assert ablage.kit_ordner() == tabelle.ordner("kits") == home / ".config" / "cypherdj" / "kits"
+    assert graphen.graphen_ordner() == tabelle.ordner("geraete") == home / ".config" / "cypherdj" / "baukasten"
+    assert loops.loop_ordner("") == tabelle.ordner("loops") == home / ".config" / "cypherdj" / "loops"
+    assert demo.projekt_wurzel("") == tabelle.ordner("projekte") == tmp_path / "heim" / "werke" / "projekte"
+    # an empty value counts as unset
+    monkeypatch.setenv("CYPHERDJ_KIT_ORDNER", "")
+    monkeypatch.setenv("CYPHERDJ_BK_ORDNER", "")
+    assert ablage.kit_ordner() == home / ".config" / "cypherdj" / "kits"
+    assert graphen.graphen_ordner() == home / ".config" / "cypherdj" / "baukasten"
+    # the defaults really come from the table: another table, other places
+    import copy
+    geaendert = copy.deepcopy(tabelle._lade())
+    for art in ("kits", "geraete", "loops", "projekte"):
+        geaendert["arten"][art]["alt"] = geaendert["arten"][art]["neu"] = "{HOME}/anders/" + art
+    monkeypatch.setattr(tabelle, "_tabelle", geaendert)
+    monkeypatch.delenv("CYPHERDJ_KIT_ORDNER")
+    monkeypatch.delenv("CYPHERDJ_BK_ORDNER")
+    assert ablage.kit_ordner() == home / "anders" / "kits"
+    assert graphen.graphen_ordner() == home / "anders" / "geraete"
+    assert loops.loop_ordner("") == home / "anders" / "loops"
+    assert demo.projekt_wurzel("") == home / "anders" / "projekte"
+    # a test instance keeps its own places
+    assert loops.loop_ordner("f") == Path("/dev/shm/cypherdj-f/loops")
+    assert demo.projekt_wurzel("f") == Path("/dev/shm/cypherdj-f/projekte")

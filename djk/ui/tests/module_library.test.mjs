@@ -12,7 +12,7 @@ import os from 'node:os';
 import { baueModul, baueNeuePfade, liveSlots } from '../project/live.ts';
 import { fuehreListeAus } from '../project/commands.ts';
 import { neuesProjekt } from '../project/model.ts';
-import { liesModul, setzeModulEin } from '../project/module_storage.ts';
+import { liesModul, modulOrdner, setzeModulEin } from '../project/module_storage.ts';
 import { uebersetze } from '../project/playback.ts';
 import { modulZeilen, bindeModule } from '../public/module_library.js';
 
@@ -243,7 +243,7 @@ test('a module with instrument paths, blend 0.5 and a blend lane is saved and pl
   const id = speichereModul(live, top, { basis }).id;
   const prod = neuesProjekt('prod');
   prod.naechste_id = { spur: 7, clip: 40, gruppe: 5, lane: 3 };                   // counters that differ from the live container: nothing may collide
-  const r = setzeModulEin(prod, liesModul(id, basis), { modulOrdner: path.join(basis, id), audioZiel: path.join(basis, 'target'), quelle: 'andreas' });
+  const r = setzeModulEin(prod, liesModul(id, basis), { modulOrdner: modulOrdner(id, basis), audioZiel: path.join(basis, 'target'), quelle: 'andreas' });
   const p = r.projekt;
   assert.deepEqual(baum(p, r.gruppeId), baum(live, top), 'same tree: bk devices and knobs, MIDI clips, faders, blend, lanes');
   const drums = p.gruppen.find((g) => g.name === 'Drums'), bass = p.gruppen.find((g) => g.name === 'Bass');
@@ -266,7 +266,7 @@ test('instrument paths count against MAX_BK_SPUREN: 7 bk tracks in the project a
   const live = mitPfaden();
   const id = speichereModul(live, liveSlots(live).A, { basis }).id;
   const mod = () => liesModul(id, basis);
-  const opt = { modulOrdner: path.join(basis, id), audioZiel: path.join(basis, 'target'), quelle: 'andreas' };
+  const opt = { modulOrdner: modulOrdner(id, basis), audioZiel: path.join(basis, 'target'), quelle: 'andreas' };
   const voll = fuehreListeAus(neuesProjekt('p'), Array.from({ length: 7 }, () => ({ befehl: 'spur_neu', art: 'instrument', geraet: { art: 'intern', name: 'bk', graph: 'synth-neuro' } }))).projekt;
   const grenze = (f) => { try { f(); } catch (e) { return [e.code, e.fehler]; } return null; };
   assert.deepEqual(grenze(() => setzeModulEin(voll, mod(), opt)), [409, 'routing_grenze']);

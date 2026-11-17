@@ -1,0 +1,23 @@
+/* Workbench ANALYZE window (analysis.js): selectors, spectrum and time picture canvases, stereo meters, loudness table, hints. */
+#werkbank .w-fenster[data-fenster-id="analyse"] .w-fenster-koerper { width: 720px; max-width: 100%; display: grid; gap: 10px; }
+#werkbank .w-analyse-kopf { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+#werkbank .w-analyse-etikett { display: grid; gap: 2px; font-size: 10px; letter-spacing: .12em; color: var(--dim); text-transform: uppercase; }
+#werkbank .w-analyse-wahl { font: inherit; font-size: 12px; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; padding: 4px 8px; min-height: 32px; }
+#werkbank .w-analyse-stand { margin-left: auto; font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
+#werkbank .w-analyse-abschnitt h4 { margin: 0 0 4px; font-size: 10px; letter-spacing: .14em; color: var(--dim); font-weight: 700; }
+#werkbank .w-analyse-spektrum { display: block; width: 680px; max-width: 100%; height: 220px; background: #0b0d11; border: 1px solid var(--line); border-radius: 4px; }
+#werkbank .w-analyse-zeitbild { display: block; width: 680px; max-width: 100%; height: 140px; background: #0b0d11; border: 1px solid var(--line); border-radius: 4px; }
+#werkbank .w-analyse-lesung { min-height: 1.4em; margin-top: 3px; font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
+#werkbank .w-analyse-stereo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; font-size: 12px; font-variant-numeric: tabular-nums; }
+#werkbank .w-analyse-balken { position: relative; grid-column: 1 / -1; height: 22px; background: linear-gradient(90deg, #a33 0, #333 50%, #3a6 100%); border: 1px solid var(--line); border-radius: 4px; }
+#werkbank .w-analyse-marke { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -1px; background: #fff; }
+#werkbank .w-analyse-marke-min { background: var(--warn); width: 2px; opacity: .85; }
+#werkbank .w-analyse-balkentext { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; text-shadow: 0 0 3px #000; pointer-events: none; }
+#werkbank .w-analyse-breite { grid-column: 1 / -1; color: var(--dim); }
+#werkbank .w-analyse-zahlen { border-collapse: collapse; width: 100%; font-size: 12px; font-variant-numeric: tabular-nums; }
+#werkbank .w-analyse-zahlen th { text-align: left; font-weight: 400; color: var(--dim); padding: 2px 8px 2px 0; }
+#werkbank .w-analyse-zahlen tr:first-child th { color: var(--text); font-weight: 700; }
+#werkbank .w-analyse-zahl { text-align: right; padding: 2px 8px; }
+#werkbank .w-analyse-hinweise { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 12px; }
+#werkbank .w-analyse-hinweis { padding-left: 10px; border-left: 2px solid var(--warn); }
+#werkbank .w-analyse-leer { color: var(--dim); }

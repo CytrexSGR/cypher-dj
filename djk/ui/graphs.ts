@@ -4,7 +4,7 @@
 import crypto from 'node:crypto';
 import { INSTRUMENT_STROEME, kanalVonStrom } from '../contract/streams.ts';
 import fs from 'node:fs';
-import os from 'node:os';
+import { ablageOrdner } from './paths.ts';
 import path from 'node:path';
 import { liesSchnitt } from './sampler/schnitt.ts';
 import { instrumentKategorieText } from './sampler/instrument.ts';
@@ -24,7 +24,7 @@ export const GRAPH_NAME = /^[a-z0-9_-]{1,32}$/;
 
 // The kern always reads $HOME/.config/cypherdj/baukasten, whatever the instance. CYPHERDJ_BK_ORDNER is for tests.
 export function graphenOrdner(): string {
-  return process.env.CYPHERDJ_BK_ORDNER || path.join(os.homedir(), '.config', 'cypherdj', 'baukasten');
+  return ablageOrdner('geraete');
 }
 
 // Effect graphs have a node with art "eingang" (they sit as an insert on a channel), instruments do not.

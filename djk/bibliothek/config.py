@@ -3,10 +3,15 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
+
+import storage as ablage  # the storage table package djk/ablage (PYTHONPATH or pytest pythonpath puts djk first)
+from quellen import alt as _quellen_alt
+from quellen import file as _quellen
 
 TYPEN = ("auto", "track", "loop", "oneshot")
 
@@ -28,13 +33,65 @@ class Konfig:
 
 
 def konfig_pfad() -> Path:
-    vorgabe = os.environ.get("CYPHERDJ_BIBLIOTHEK_KONFIG")
-    if vorgabe:
-        return Path(vorgabe)
-    return Path(os.path.expanduser("~")) / ".config" / "cypherdj" / "bibliothek.json"
+    return ablage.fest("bibliothek_konfig")
+
+
+_ART_AUS_TYP = {"auto": "sample", "track": "track", "loop": "loop", "oneshot": "oneshot"}
+_KATALOG_ARTEN = ("track", "loop", "oneshot", "sample")
+
+
+def _quellen_pfad() -> Path:
+    return ablage.fest("quellen")
+
+
+def _quellen_lesen() -> tuple[_quellen.Quellen | None, str]:
+    """The source list when quellen.toml exists (else None) and this machine's name."""
+    p = _quellen_pfad()
+    if not p.is_file():
+        return None, ""
+    try:
+        return _quellen.lies(p), socket.gethostname()
+    except _quellen.QuellenFehler as e:
+        raise KonfigFehler(str(e)) from e
+
+
+def _aus_quellen(q: _quellen.Quellen, host: str) -> Konfig:
+    """The catalog roots of this machine, mapped as the generated bibliothek.json would have them."""
+    return Konfig(1, [Wurzel(Path(e["pfad"]), e["typ"]) for e in _quellen_alt._bibliothek(q, host)["wurzeln"]])
+
+
+def _in_quellen(k: Konfig, q: _quellen.Quellen, host: str) -> None:
+    """Brings the catalog roots of this machine in quellen.toml to the roots of k; every other entry stays as it is."""
+    soll = {os.path.realpath(w.pfad): w for w in k.wurzeln}
+    gesehen: set[str] = set()
+    benutzt = {kl.wurzel for kl in q.klang}
+    namen = {w.name for w in q.wurzeln}
+    for w in list(q.wurzeln):
+        p = _quellen.pfad_fuer(w, host)
+        if not (w.katalog and w.art in _KATALOG_ARTEN and p):
+            continue
+        echt = os.path.realpath(p)
+        if echt in soll and echt not in gesehen:
+            gesehen.add(echt)
+            if _ART_AUS_TYP[soll[echt].typ] != w.art and not (w.art == "sample" and soll[echt].typ == "auto"):
+                w.art = _ART_AUS_TYP[soll[echt].typ]
+        elif w.name in benutzt:
+            w.katalog = False                      # a kit source still names this root: keep it, hide it from the catalog
+        else:
+            q.wurzeln.remove(w)
+            namen.discard(w.name)
+    for echt, w in soll.items():
+        if echt in gesehen:
+            continue
+        name = _quellen_alt._frei(os.path.basename(str(w.pfad).rstrip("/")), namen)
+        namen.add(name)
+        q.wurzeln.append(_quellen.Wurzel(name=name, art=_ART_AUS_TYP[w.typ], pfad=str(w.pfad)))
 
 
 def lies_konfig() -> Konfig:
+    q, host = _quellen_lesen()
+    if q is not None:
+        return _aus_quellen(q, host)
     p = konfig_pfad()
     try:
         text = p.read_text(encoding="utf-8")
@@ -63,6 +120,14 @@ def lies_konfig() -> Konfig:
 
 
 def schreibe_konfig(k: Konfig) -> None:
+    q, host = _quellen_lesen()
+    if q is not None:                              # quellen.toml owns the list; bibliothek.json is left alone
+        _in_quellen(k, q, host)
+        try:
+            _quellen.schreibe(_quellen_pfad(), q)
+        except _quellen.QuellenFehler as e:
+            raise KonfigFehler(str(e)) from e
+        return
     p = konfig_pfad()
     p.parent.mkdir(parents=True, exist_ok=True)
     inhalt = json.dumps(
@@ -86,7 +151,4 @@ def katalog_ziel(env: Mapping[str, str]) -> Path:
     """Where the page reads the catalog (catalog.ts:55-57, media_library.ts:21)."""
     if env.get("CYPHERDJ_KATALOG"):
         return Path(env["CYPHERDJ_KATALOG"])
-    med = env.get("CYPHERDJ_MEDIATHEK")
-    if med:
-        return Path(med).parent / "katalog.sqlite"
-    return Path(os.path.expanduser("~")) / ".local" / "share" / "cypherdj" / "mediathek" / "katalog.sqlite"
+    return ablage.fest("mediathek", env).parent / "katalog.sqlite"

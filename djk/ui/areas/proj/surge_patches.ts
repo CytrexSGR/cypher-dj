@@ -3,14 +3,12 @@
 // (CYPHERDJ_SURGE_PATCHES, else ~/.local/share/cypherdj/surge-daten/usr/share/surge-xt/patches_factory) with the path below it as the name ("Pads/Warm Pad").
 // The own folder wins. Both are read at every call (a test instance points them elsewhere). geraet.patch of a Surge track holds such a name.
 import fs from 'node:fs';
-import os from 'node:os';
+import { ablageOrdner, festerPfad } from '../../paths.ts';
 import path from 'node:path';
 import { istPatchName } from '../../project/model.ts';
 
-export const eigeneOrdner = (): string => (process.env.CYPHERDJ_KLAENGE
-  ? process.env.CYPHERDJ_KLAENGE : path.join(os.homedir(), '.config', 'cypherdj', 'klaenge'));
-export const werkOrdner = (): string => (process.env.CYPHERDJ_SURGE_PATCHES
-  ? process.env.CYPHERDJ_SURGE_PATCHES : path.join(os.homedir(), '.local', 'share', 'cypherdj', 'surge-daten', 'usr', 'share', 'surge-xt', 'patches_factory'));
+export const eigeneOrdner = (): string => ablageOrdner('klaenge');
+export const werkOrdner = (): string => festerPfad('surge_werk');
 
 // the file of a library name, null when the name breaks the rule or no such patch exists (the name rule first: no path leaves the folders)
 export function surgePatchDatei(name: string): string | null {

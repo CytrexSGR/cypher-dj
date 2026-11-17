@@ -6,7 +6,7 @@ import type http from 'node:http';
 import type { Bereich, BereichKontext, Route } from '../../http/router.ts';
 import { json } from '../../http/transport.ts';
 import { leseLoops } from '../../loops.ts';
-import { liesModul, listeModule } from '../../project/module_storage.ts';
+import { liesModul, listeModule, modulOrdner } from '../../project/module_storage.ts';
 import type { BkKanal } from '../../project/modular.ts';
 import type { Gruppe, Master, Projekt, Return, Spur } from '../../project/model.ts';
 import { MAX_WERKBANK_SPUREN } from '../../project/werkbank.ts';
@@ -14,6 +14,7 @@ import { fitWert, geraetName, speedVon, spurBefehl } from '../../sampler/device.
 import { setzeMarke, umnummerBefehle } from '../../sampler/marken.ts';
 import { anschlaegeVon, legeSchnitt, liesSchnitt, listeSchnitte, loescheSchnitt, schneideNeu, schreibeGeaendert, sichereSchnitt, SchnittFehler, type Ordner, type Schnitt } from '../../sampler/schnitt.ts';
 import { schnittText } from '../../sampler/text.ts';
+import type { Katalog } from '../../catalog.ts';
 import { alsAntwort, leseKoerper, type ProjZugang } from '../proj/area.ts';
 import { quittungAbgelehnt } from '../proj/core_path.ts';
 import { ProjFehler, type Antwort, type ProjSitzung } from '../proj/session.ts';
@@ -22,7 +23,7 @@ import { instrumentRouten } from './instrument_routes.ts';   // sample player st
 import { loescheToeneDesSchnitts, tonRouten } from './tone_routes.ts';   // plan C
 
 /** `ordner` (cut store, default `samplerOrdner()`), `loops` and `module` are read at every request, so a getter may follow the options of the server. */
-export interface SamplerOptionen { sitzung: ProjSitzung; zugang: ProjZugang; ordner?: string; loops: string; module: string }
+export interface SamplerOptionen { sitzung: ProjSitzung; zugang: ProjZugang; ordner?: string; loops: string; module: string; katalog?: Katalog }
 type Quelle = 'andreas' | 'cypher';
 
 const STEMS = ['drums', 'bass', 'other', 'vocals', 'guitar', 'piano'];
@@ -112,7 +113,7 @@ export function samplerBereich(ctx: BereichKontext, opt: SamplerOptionen): Berei
         const name = stem === null ? 'Loop' : `${stem[0].toUpperCase()}${stem.slice(1)} original`;
         const clip = m.spuren.find((s) => s.name === name)?.clips.find((c) => c.art === 'audio');
         if (!clip || clip.art !== 'audio') continue;
-        const hinweis = clip.quelle.pfad_hinweis, basis = path.resolve(opt.module, e.id), datei = path.resolve(basis, hinweis);
+        const hinweis = clip.quelle.pfad_hinweis, basis = path.resolve(modulOrdner(e.id, opt.module) ?? path.join(opt.module, e.id)), datei = path.resolve(basis, hinweis);
         if (path.isAbsolute(hinweis) || !datei.startsWith(`${basis}${path.sep}`) || !fs.existsSync(datei)) continue;   // the audio of a module may be missing
         audio.push({ stem, name });
       }

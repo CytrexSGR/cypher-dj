@@ -2,7 +2,7 @@
 // (cached by mtime and size) and starts the scan as a child process, one at a time. A blocked entry is unblocked by dropping it from the index: the next
 // scan then tries the bundle again. Nothing here blocks the event loop for longer than one JSON parse of the index.
 import fs from 'node:fs';
-import os from 'node:os';
+import { festerPfad } from '../paths.ts';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -17,7 +17,7 @@ export interface ScanStand { laeuft: boolean; seit: number | null; ende: number 
 export interface ScanBefehl { befehl: string; args: string[] }
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
-export const INDEX_VORGABE = (): string => process.env.CYPHERDJ_PLUGIN_INDEX ?? path.join(os.homedir(), '.local', 'state', 'cypherdj', 'plugins', 'index.json');
+export const INDEX_VORGABE = (): string => festerPfad('plugin_index');
 export const SCAN_SKRIPT = path.resolve(HIER, '..', '..', 'hosts', 'carla', 'plugin_scan.py');
 export const SCAN_FRIST_MS = 10 * 60_000;
 

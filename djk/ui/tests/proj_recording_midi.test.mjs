@@ -490,7 +490,8 @@ test('T8 server and stand-in: an instrument-only run (no audio track) gives a MI
   assert.equal(clip.noten.length, erwartet.length, 'every note of the file is a note of the clip');
   assert.equal(take.noten, erwartet.length);
   clip.noten.forEach((x, i) => {
-    assert.ok(Math.abs(x.beat - erwartet[i][0]) < 1e-9 && Math.abs(x.laenge - erwartet[i][1]) < 1e-9, `note ${i}: ${x.beat}/${x.laenge} against ${erwartet[i]}`);
+    // both sides are rounded to nine decimals: one unit in the last place is rounding, not a wrong note
+    assert.ok(Math.abs(x.beat - erwartet[i][0]) < 1.5e-9 && Math.abs(x.laenge - erwartet[i][1]) < 1.5e-9, `note ${i}: ${x.beat}/${x.laenge} against ${erwartet[i]}`);
     assert.deepEqual([x.ton, x.vel], [erwartet[i][2], erwartet[i][3]]);
   });
   assert.equal((await ruf(url, 'GET', '/proj/verlauf')).j.at(-1).label, 'Record Keys');

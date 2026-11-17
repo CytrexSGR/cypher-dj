@@ -13,7 +13,7 @@
 Gruppen: bass, melodie (DJ-Instrumente) sowie arr1 und arr2 (D1/1.9: Produktions-Slot 1 und 2, Surge aus djk-instrumente --arr1
 und djk-instrumente --arr2), alle mit denselben Befehlen; der Socket ist /dev/shm/cypherdj<-i>/wirt-<gruppe>.sock.
 Der Wirt schreibt jeden geladenen Klang nach ~/.config/cypherdj<-i>/klang-<gruppe>.fxp und startet damit wieder.
-Eigene Klänge: $CYPHERDJ_KLAENGE, sonst ~/.config/cypherdj/klaenge. Ausgaben englisch (Oberflächen-Regel)."""
+Eigene Klänge: $CYPHERDJ_KLAENGE, sonst der Klänge-Ordner der Ablage-Tabelle (djk/config/ablage.json). Ausgaben englisch (Oberflächen-Regel)."""
 import argparse
 import base64
 import json
@@ -24,11 +24,13 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))   # djk: the storage table package `ablage`
+import storage as ablage  # noqa: E402
 import sound as klang  # noqa: E402
 from host_control import sende  # noqa: E402
 
-EIGENE = Path(os.environ.get("CYPHERDJ_KLAENGE", Path.home() / ".config/cypherdj/klaenge"))
-WERK = Path.home() / ".local/share/cypherdj/surge-daten/usr/share/surge-xt/patches_factory"
+EIGENE = ablage.ordner("klaenge")
+WERK = ablage.fest("surge_werk")
 GRUPPEN = {"bass": 36, "melodie": 60, "arr1": 60, "arr2": 60}  # Gruppe → Vorgabe-Note für hoere (arr1, arr2: Produktions-Slots 1 und 2)
 BEREICHE = json.loads((Path(__file__).resolve().parent / "surge_bereiche.json").read_text())["parameter"]
 

@@ -47,7 +47,15 @@ export interface Zeile {
   katalognummer: string | null; isrc: string | null; remixer: string | null; dauer_s: number | null; pfad: string | null; ordner: string | null;
   name: string | null; alle: string | null;
 }
-export interface Filter { text?: string; ordner?: string; facette?: { feld: string; wert: string }; camelot?: string; nachbarn?: boolean; bpm?: [number, number]; energie?: 0 | 1 | 2 }
+export interface Filter { text?: string; ordner?: string; facette?: { feld: string; wert: string }; camelot?: string; nachbarn?: boolean; bpm?: [number, number]; energie?: 0 | 1 | 2; ohneSchutz?: boolean }
+/** Priority order of the shelf: reachable folders first, then the rank (favourites and recent, lower first), then the chosen column. */
+export interface Vorrang {
+  /** Folders (as the catalog names them) that are NOT reachable now; empty in the normal case, then the key drops out of the query. */
+  fehlend: readonly string[];
+  /** The ranked rows only (favourite 0, recent 1..): sha to rank; every other row ranks 1000. Empty: the key drops out. */
+  rang: ReadonlyMap<string, number>;
+}
+const RANG_SONST = 1000;
 
 export class KatalogFehler extends Error {
   readonly code: number; readonly fehler: string;
@@ -81,6 +89,33 @@ export class Katalog {
 
   vorhanden(): boolean { return fs.existsSync(this.pfad); }
 
+  // Answers that do not depend on a filter (folder sums, tree) are kept until the file changes (the hourly rebuild replaces it): a cache hit
+  // costs a stat, not a scan over the whole table. The signature is file identity, size and mtime; a missing or unstattable file is never cached.
+  private readonly gemerkt = new Map<string, unknown>();
+  private signatur = '';
+  private merke<T>(schluessel: string, f: () => T): T {
+    let sig = '';
+    try { const st = fs.statSync(this.pfad); sig = `${st.ino}:${st.size}:${st.mtimeMs}`; } catch { return f(); }
+    if (sig !== this.signatur) { this.gemerkt.clear(); this.signatur = sig; }
+    if (this.gemerkt.has(schluessel)) return this.gemerkt.get(schluessel) as T;
+    const r = f();
+    if (this.gemerkt.size >= 300) this.gemerkt.clear();   // counts of free-text filters come and go: bounded
+    this.gemerkt.set(schluessel, r);
+    return r;
+  }
+
+  /** The folders of one type with their file counts (also the base of the source list); kept until the catalog file changes. */
+  ordnerSummen(typ: Typ, f: { ohneSchutz?: boolean } = {}): { ordner: { pfad: string; n: number }[]; gebaut_am: string } {
+    return this.merke(`ordner|${typ}|${f.ohneSchutz ? 1 : 0}`, () => {
+      const { db, stand } = this.oeffne();
+      try {
+        const sch = f.ohneSchutz ? ' AND schutz IS NULL' : '';
+        const o = db.prepare(`SELECT ordner AS pfad, count(*) AS n FROM katalog WHERE typ = ? AND ordner IS NOT NULL${sch} GROUP BY ordner ORDER BY ordner`).all(typ) as { pfad: string; n: number }[];
+        return { ordner: o.map((x) => ({ pfad: x.pfad, n: x.n })), gebaut_am: stand.gebaut_am ?? '' };
+      } catch (e) { throw kaputt(e); } finally { db.close(); }
+    });
+  }
+
   private oeffne(): { db: DatabaseSync; stand: Record<string, string> } {
     if (!this.vorhanden()) throw new KatalogFehler(503, 'katalog_fehlt');
     // a path that exists but cannot be opened (a directory, no permission) is unavailable like a damaged file, not a 500
@@ -110,6 +145,7 @@ export class Katalog {
     if (f.camelot) { const c = camelotNachbarn(f.camelot); const l = f.nachbarn ? c : [c[0]]; w.push(`k.camelot IN (${l.map(() => '?').join(',')})`); par.push(...l); }
     if (f.bpm) { w.push('k.bpm BETWEEN ? AND ?'); par.push(f.bpm[0], f.bpm[1]); }
     if (f.energie !== undefined) w.push(ENERGIE_SQL[f.energie]);
+    if (f.ohneSchutz) w.push('k.schutz IS NULL');
     if (f.text) {
       const s = parseSuche(f.text);
       if (s.zuviele) throw new KatalogFehler(400, 'zu_viele_suchwoerter');
@@ -120,15 +156,64 @@ export class Katalog {
     return { mit, von: mit ? 'katalog k JOIN t ON t.id = k.id' : 'katalog k', sql: w.join(' AND '), par: [...mpar, ...par] };
   }
 
-  seite(typ: Typ, f: Filter, sort: string, ab: boolean, seite: number, limit: number): { zeilen: Zeile[]; gesamt: number; gebaut_am: string } {
+  seite(typ: Typ, f: Filter, sort: string, ab: boolean, seite: number, limit: number, vorrang?: Vorrang): { zeilen: Zeile[]; gesamt: number; gebaut_am: string } {
     const spalte = Object.hasOwn(SORTIERUNG[typ], sort) ? SORTIERUNG[typ][sort] : undefined;
     if (!spalte) throw new KatalogFehler(400, 'sort_ungueltig');
     const { db, stand } = this.oeffne();
     try {
       const { mit, von, sql, par } = this.wo(typ, f);
-      const gesamt = (db.prepare(`${mit}SELECT count(*) AS n FROM ${von} WHERE ${sql}`).get(...par) as { n: number }).n;
-      const zeilen = db.prepare(`${mit}SELECT k.* FROM ${von} WHERE ${sql} ORDER BY ${spalte.startsWith('CASE') ? spalte : `k.${spalte}`} ${ab ? 'DESC' : 'ASC'} NULLS LAST, k.id LIMIT ? OFFSET ?`)
-        .all(...par, limit, seite * limit) as unknown as Zeile[];
+      // The count depends only on the filter, not on page, sort or priority; with `schutz IS NULL` it reads every row of the type (45 ms on 75 000 one-shots),
+      // so it is kept per filter until the catalog file changes.
+      const gesamt = this.merke(`n|${typ}|${JSON.stringify(f)}`, () => (db.prepare(`${mit}SELECT count(*) AS n FROM ${von} WHERE ${sql}`).get(...par) as { n: number }).n);
+      const ordnung = `${spalte.startsWith('CASE') ? spalte : `k.${spalte}`} ${ab ? 'DESC' : 'ASC'} NULLS LAST, k.id`;
+      const mitFehlend = !!vorrang?.fehlend.length, mitRang = !!vorrang?.rang.size;
+      if (!vorrang || (!mitFehlend && !mitRang)) {   // normal case: the order is the column's and the indexes serve it
+        const zeilen = db.prepare(`${mit}SELECT k.* FROM ${von} WHERE ${sql} ORDER BY ${ordnung} LIMIT ? OFFSET ?`).all(...par, limit, seite * limit) as unknown as Zeile[];
+        return { zeilen, gesamt, gebaut_am: stand.gebaut_am ?? '' };
+      }
+      // Priority order = four groups in this sequence: reachable and ranked (by rank), reachable and unranked (by column), missing and ranked, missing
+      // and unranked. The two small bound sets live in temp tables, no function runs per row. The ranked rows are few and read whole; the two big
+      // groups are read by the column's index with LIMIT/OFFSET, so a page costs about the same as without priority.
+      if (mitFehlend) {
+        db.exec('CREATE TEMP TABLE vr_fehlend(pfad TEXT PRIMARY KEY) WITHOUT ROWID');
+        const ins = db.prepare('INSERT OR IGNORE INTO vr_fehlend VALUES (?)');
+        for (const o of vorrang.fehlend) ins.run(o);
+      }
+      if (mitRang) {
+        db.exec('CREATE TEMP TABLE vr_rang(sha TEXT PRIMARY KEY, r INTEGER NOT NULL) WITHOUT ROWID');
+        const ins = db.prepare('INSERT OR IGNORE INTO vr_rang VALUES (?, ?)');
+        for (const [sha, r] of vorrang.rang) ins.run(sha, r);
+      }
+      const weg = '(k.ordner IS NULL OR k.ordner IN (SELECT pfad FROM vr_fehlend))';   // a row without a folder counts as not reachable
+      const ohneRang = mitRang ? ' AND k.sha NOT IN (SELECT sha FROM vr_rang)' : '';
+      const da = mitFehlend ? ` AND NOT ${weg}` : '';
+      const mitRangZeilen: { z: Zeile; weg: boolean }[] = mitRang
+        ? (db.prepare(`${mit}SELECT k.*, ${mitFehlend ? weg : '0'} AS vr_weg, vr_rang.r AS vr_r FROM vr_rang CROSS JOIN ${von} WHERE k.sha = vr_rang.sha AND ${sql} ORDER BY vr_weg, vr_r, ${ordnung}`)
+          .all(...par) as unknown as (Zeile & { vr_weg: number; vr_r: number })[]).map(({ vr_weg, vr_r: _r, ...z }) => ({ z: z as Zeile, weg: vr_weg === 1 }))
+        : [];
+      const rr = mitRangZeilen.filter((x) => !x.weg).map((x) => x.z), mr = mitRangZeilen.filter((x) => x.weg).map((x) => x.z);
+      const frage = (bed: string, l: number, o: number): Zeile[] => db.prepare(`${mit}SELECT k.* FROM ${von} WHERE ${sql}${bed} ORDER BY ${ordnung} LIMIT ? OFFSET ?`).all(...par, l, o) as unknown as Zeile[];
+      const zeilen: Zeile[] = [];
+      let skip = seite * limit, noch = limit;
+      const aus = (arr: Zeile[]): void => {
+        if (skip >= arr.length) { skip -= arr.length; return; }
+        const t = arr.slice(skip, skip + noch); zeilen.push(...t); noch -= t.length; skip = 0;
+      };
+      aus(rr);
+      if (noch > 0) {   // reachable and unranked
+        const t = frage(`${da}${ohneRang}`, noch, skip);
+        zeilen.push(...t); noch -= t.length;
+        if (noch > 0) {   // this group ended inside the window (or before it): how far did the offset reach into it?
+          if (t.length === 0 && skip > 0) {
+            const n = (db.prepare(`${mit}SELECT count(*) AS n FROM ${von} WHERE ${sql}${da}${ohneRang}`).get(...par) as { n: number }).n;
+            skip = Math.max(0, skip - n);
+          } else skip = 0;
+        } else skip = 0;
+      }
+      if (noch > 0 && mitFehlend) {
+        aus(mr);
+        if (noch > 0) zeilen.push(...frage(` AND ${weg}${ohneRang}`, noch, skip));
+      }
       return { zeilen, gesamt, gebaut_am: stand.gebaut_am ?? '' };
     } catch (e) {
       if (kaputt(e) !== e) throw kaputt(e);
@@ -139,16 +224,20 @@ export class Katalog {
   }
 
   // Ordner (vollständige Pfade mit Zahl, der Baum entsteht in der Seite) und Facetten je Typ. Unabhängig vom Filter.
-  baum(typ: Typ): { ordner: { pfad: string; n: number }[]; facetten: Record<string, { wert: string; n: number }[]>; gebaut_am: string } {
+  baum(typ: Typ, f: { ohneSchutz?: boolean } = {}): { ordner: { pfad: string; n: number }[]; facetten: Record<string, { wert: string; n: number }[]>; gebaut_am: string } {
+    return this.merke(`baum|${typ}|${f.ohneSchutz ? 1 : 0}`, () => this.baumRechnen(typ, f));
+  }
+  private baumRechnen(typ: Typ, f: { ohneSchutz?: boolean }): { ordner: { pfad: string; n: number }[]; facetten: Record<string, { wert: string; n: number }[]>; gebaut_am: string } {
     const { db, stand } = this.oeffne();
     try {
-      const ordner = db.prepare('SELECT ordner AS pfad, count(*) AS n FROM katalog WHERE typ = ? AND ordner IS NOT NULL GROUP BY ordner ORDER BY ordner')
+      const sch = f.ohneSchutz ? ' AND schutz IS NULL' : '';
+      const ordner = db.prepare(`SELECT ordner AS pfad, count(*) AS n FROM katalog WHERE typ = ? AND ordner IS NOT NULL${sch} GROUP BY ordner ORDER BY ordner`)
         .all(typ) as { pfad: string; n: number }[];
       const facetten: Record<string, { wert: string; n: number }[]> = {};
       for (const feld of FACETTEN[typ]) {
         // Zeilen umkopieren: node:sqlite liefert Objekte mit Null-Prototyp, deepStrictEqual scheitert daran (Review M1).
         // Kein LIMIT: die Seite zeigt 40 und „+N more" (Tracks haben 66 Genres).
-        facetten[feld] = (db.prepare(`SELECT coalesce(${facetteWert(feld)}, '') AS wert, count(*) AS n FROM katalog WHERE typ = ? GROUP BY ${facetteWert(feld)} ORDER BY n DESC, wert`)
+        facetten[feld] = (db.prepare(`SELECT coalesce(${facetteWert(feld)}, '') AS wert, count(*) AS n FROM katalog WHERE typ = ?${sch} GROUP BY ${facetteWert(feld)} ORDER BY n DESC, wert`)
           .all(typ) as { wert: string; n: number }[]).map((r) => ({ wert: r.wert, n: r.n }));
       }
       return { ordner: ordner.map((o) => ({ pfad: o.pfad, n: o.n })), facetten, gebaut_am: stand.gebaut_am ?? '' };

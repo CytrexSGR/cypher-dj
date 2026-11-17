@@ -7,6 +7,7 @@
 // How the info arrives: ctx.info(spur) is null until the first answer, and every answer redraws the track list, which runs the ctx.spurZeile hooks
 // (tracks.js); the hook below redraws this region when the info of the selected track is a different object than the one drawn last.
 // A track whose state is not 'muster' is drawn without gestures: no handler ever sends a command for it (review focus 5).
+import { padAusSha, istRegalZug, regalNutzlast, markiereZiel } from './catalog_storage.js';
 import { SeqFehler, geraetArt } from '../seq_logic.js';
 import { rasterArt } from './tracks.js';
 import { modulTakte } from './kopf.js';
@@ -564,6 +565,27 @@ ${a.f ? `<span class="w-etikett">PAGE</span><button data-w="seq-seite" data-a="z
   document.addEventListener('pointerdown', (e) => {
     if (!akt || !akt.ts.auswahl.length || host.contains?.(e.target)) return;
     akt.ts.auswahl = []; akt.ts.anker = null; zeichne();
+  });
+  // a shelf sample dropped on the name of a drum row becomes that pad's sound, but only on a track that plays a sample kit. Delegated: the row heads
+  // are redrawn as HTML strings, so a listener on a name would not survive. A drum synth takes the drop only to say why it does not use it.
+  const drumName = (e) => { const n = e.target?.closest?.('[data-w="zeilenname"]'); return n && akt?.art === 'drum' && st.projekt ? n : null; };
+  const spielKit = () => akt?.spur?.geraet?.art === 'intern' && akt.spur.geraet.name === 'kit';
+  const klar = () => { for (const m of host.querySelectorAll('.w-drop')) m.classList.remove('w-drop'); };
+  host.addEventListener('dragover', (e) => {
+    const n = istRegalZug(e) ? drumName(e) : null;
+    for (const m of host.querySelectorAll('.w-drop')) if (m !== n || !spielKit()) m.classList.remove('w-drop');
+    if (!n) return;
+    if (spielKit()) markiereZiel(e, n, true); else e.preventDefault?.();
+  });
+  host.addEventListener('dragleave', (e) => { for (const m of host.querySelectorAll('.w-drop')) if (!m.contains?.(e.relatedTarget)) m.classList.remove('w-drop'); });
+  host.addEventListener('drop', async (e) => {
+    const n = drumName(e);
+    klar();
+    const nutz = n ? regalNutzlast(e) : null;
+    if (!nutz) return;
+    e.preventDefault?.();
+    if (!spielKit()) { ctx.melde(`${akt.spur.name} plays a drum synth, not a sample kit. Drop the sample on TRACKS for a new track.`); return; }
+    await padAusSha(ctx, akt.spur.id, Number(n.dataset.ton), nutz.sha);
   });
   host.addEventListener('dblclick', (e) => {   // a double click on the brace removes the loop range
     if (!e.target?.closest?.('[data-w="bereich"]') || !st.projekt || !bereichDaten(st.projekt).gesetzt) return;

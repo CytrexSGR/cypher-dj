@@ -10,6 +10,7 @@
 import { ZIEH_TYP, GERAET_TYP, nutzlast, clipName, geraetNutzlast } from './production/drag.js';
 import { PRESET_TYP, presetNutzlast } from './production/preset_target.js';
 import { oeffneMenue } from './production/context_menu.js';
+import { FAVORITEN_SLUG, ZULETZT_SLUG } from './usage.js';
 
 const html = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const SHA = /^[0-9a-f]{64}$/;
@@ -61,6 +62,12 @@ export async function loesePosten(p, q) {
   return fehlt(p);
 }
 
+// ---- the two fixed collections (media browser slice 2): listed first, never renamed or deleted ----
+const FESTE = [[FAVORITEN_SLUG, 'Favourites'], [ZULETZT_SLUG, 'Recently used']];
+const istFest = (slug) => FESTE.some(([s]) => s === slug);
+/** The list with Favourites and Recently used first; a fixed collection whose file does not exist yet is listed as empty. */
+export const festeZuerst = (liste) => [...FESTE.map(([slug, name]) => (liste ?? []).find((k) => k.slug === slug) ?? { slug, name, anzahl: 0 }), ...(liste ?? []).filter((k) => !istFest(k.slug))];
+
 // ---- T8.1/T8.4 panel HTML ----
 export function kollektionenHtml(z) {
   const o = z.offen;
@@ -69,15 +76,14 @@ export function kollektionenHtml(z) {
       + `<span class="koll-name">${html(k.name)}</span><span class="koll-anzahl">${k.fehler ? 'damaged file' : `${k.anzahl} item${k.anzahl === 1 ? '' : 's'}`}</span>`
       + `${k.autor === 'cypher' ? '<span class="koll-autor">by Cypher</span>' : ''}</li>`;
     return `<div class="koll-kopf"><span class="koll-titel">COLLECTIONS</span><button data-koll-aktion="neu" title="Create a new collection">NEW</button></div>`
-      + (z.liste.length ? `<ul class="koll-liste">${z.liste.map(zeile).join('')}</ul>`
-        : '<p class="koll-leer">No collections yet. Right click a row in LIBRARY, PRESETS or DEVICES to start one.</p>');
+      + `<ul class="koll-liste">${festeZuerst(z.liste).map(zeile).join('')}</ul>`;
   }
   const zeile = (x, i) => `<li class="koll-zeile${x.fehlt ? ' fehlt' : ''}" data-koll-i="${i}" draggable="${!!x.typ}"${x.typ ? '' : ' title="Not available: remove it or bring the source back"'}>`
     + `<span class="koll-art">${ART_TEXT[x.posten.art] ?? ''}</span><span class="koll-text">${html(x.text)}</span>`
     + `<button data-koll-aktion="weg" data-koll-i="${i}" title="Remove from the collection">x</button></li>`;
   return `<div class="koll-kopf"><button data-koll-aktion="zurueck" title="All collections">BACK</button><span class="koll-titel">${html(o.name)}</span>`
     + `${o.autor === 'cypher' ? '<span class="koll-autor">by Cypher</span>' : ''}`
-    + '<button data-koll-aktion="umbenennen">RENAME</button><button data-koll-aktion="loeschen">DELETE</button></div>'
+    + (istFest(o.slug) ? '' : '<button data-koll-aktion="umbenennen">RENAME</button><button data-koll-aktion="loeschen">DELETE</button>') + '</div>'
     + (o.zeilen.length ? `<ul class="koll-posten">${o.zeilen.map(zeile).join('')}</ul>`
       : '<p class="koll-leer">Empty. Right click a row in LIBRARY, PRESETS or DEVICES to add it here.</p>');
 }
@@ -107,7 +113,9 @@ export function bindeKollektionen(ctx, opt = {}) {
     return katalog;
   }
   async function oeffne(slug) {
-    const r = await ctx.holeGet(`/kollektionen/${encodeURIComponent(slug)}`);
+    let r = await ctx.holeGet(`/kollektionen/${encodeURIComponent(slug)}`);
+    // a fixed collection is created on first use: until then it reads as empty
+    if (r.status === 404 && istFest(slug)) r = { status: 200, j: { slug, name: FESTE.find(([s]) => s === slug)[1], posten: [] } };
     if (r.status !== 200) { z.offen = null; ctx.melde(`Collection not available: ${fehlerText(r)}`, true); zeige(); return; }
     await holeKatalog();
     const zeilen = await Promise.all((r.j.posten ?? []).map((p) => loesePosten(p, { holeGet: ctx.holeGet, katalog })));

@@ -18,6 +18,8 @@ import { liveSlots } from '../../project/live.ts';
 import { vorlageBefehle, vorlageVon, vorlagenListe } from '../../project/werkbank.ts';
 import { seqGruppe } from '../../project/seq.ts';
 import { teileReglerLive, teileStummStart } from '../../project/controls_order.ts';
+import { loeseQuelle } from '../../project/source_path.ts';
+import type { Einsammler } from '../../project/einsammeln.ts';
 import { alleAudioClips, fuehreListeAus, laneStart, setzeDekodiert, vergleiche, type PluginEintrag, type PresetInhalt } from '../../project/commands.ts';
 import { findeGraph, vorgabenVon } from '../../graphs.ts';
 import { kitDa, kitKlaenge } from './kits.ts';
@@ -29,6 +31,7 @@ const surgePatchDa = (name: string): boolean => surgePatchDatei(name) !== null;
 import { SURGE_RICHTUNGEN, nurFilter1, surgeParameterVon } from '../../project/direction.ts';
 import { TransientenLager } from '../../project/transients.ts';
 import { DekodierCache, type DekodierEreignis } from '../../project/decode.ts';
+import { deckleDekodiert } from '../../project/cache_deckel.ts';
 import {
   alleInserts, alleStraenge, HALL_FELDER, MAX_BEAT, TEMPO_MIN, TEMPO_MAX, kanonisch, sucheClip, sucheSpur, sucheStrang, wertImBereich,
   type AudioClip, type Clip, type DekodiertZustand, type Lane, type Projekt, type Spur, type Warp, type Ziel,
@@ -100,6 +103,7 @@ export interface ProjOptionen {
   pluginIndex?: (id: string) => PluginEintrag | null;   // plan 1.11 T10: the plugin index (insert_setzen with plugin_id)
   instrument?: { abhaengig?: Partial<InstrumentAbhaengig>; zeiten?: Partial<InstrumentZeiten> };   // plan 1.11 task 17: the plugin instrument hosts
   host?: { abhaengig?: Partial<HostAbhaengig>; zeiten?: Partial<HostZeiten>; befehl?: string };
+  einsammler?: Einsammler;     // storage layout A5: collects sources of a removable disk into the project in the background (server.ts)
   uhrStillMs?: number;         // Spec 6.30: läuft /uhr so lange nicht weiter, bricht das Warten auf die Rampe ab (503 kein_kern, Vorgabe 1 s)
 }
 // merk (Spec 6.30, 6.31): was die Freeze-Sperre aufgeschoben hat und nach der letzten Freigabe nachgeholt wird. Es gehört zum offenen Projekt und
@@ -107,10 +111,17 @@ export interface ProjOptionen {
 interface Merk { laden: boolean; loop: boolean; tempo: boolean; reglerNach: Soll[]; stummStart: number[] }   // reglerNach: live rows that wait for the load
 // Spec 6.34: was GET /proj/aktuell als ausgabe_lauf zeigt, solange S3 einen Freeze oder Export fährt (Spur nur beim Freeze)
 export type AusgabeLauf = { art: 'freeze'; spur_id: string }
-  | { art: 'export'; echtzeit?: true; start_ms?: number; dauer_s?: number } | { art: 'lautheit' } | { art: 'merge' }
+  | { art: 'export'; echtzeit?: true; start_ms?: number; dauer_s?: number } | { art: 'lautheit' } | { art: 'analyse' } | { art: 'merge' }
   | { art: 'bounce' }   // 1.14 slice 4 (spec R11)
   | { art: 'resample'; strang_id: string };   // 1.10 slice 7 (T6): the strip being tapped
 // vorhoeren (1.14 comping, spec R8): spur_id -> take_id of the audition. Session state: never saved, never undoable, gone with the open project.
+// a change added or replaced an audio clip: some sha of the new state is not in the old one
+function neueQuelle(alt: Projekt, neu: Projekt): boolean {
+  const vorher = new Set<string>();
+  for (const c of alleAudioClips(alt)) vorher.add(c.quelle.sha256);
+  for (const c of alleAudioClips(neu)) if (!vorher.has(c.quelle.sha256)) return true;
+  return false;
+}
 interface Offen { slug: string; projekt: Projekt; verlauf: Verlauf; merk: Merk; vorhoeren: Map<string, string> }
 type Koerper = Record<string, unknown>;
 interface Hinweis { index: number; hinweis: string; [feld: string]: unknown }                // Paket 1.13: z. B. kein_tempo (Auto-Warp fand kein Tempo)
@@ -237,6 +248,7 @@ export class ProjSitzung {
   private readonly cache: DekodierCache;
   private readonly zaehler: WiedergabeZaehler;
   private readonly katalog: Katalog | null;
+  private readonly einsammler: Einsammler | null;
   private readonly analyse: string | null;
   private readonly mediathekPfad: string | null;
   private readonly bestand: string | null;
@@ -329,9 +341,10 @@ export class ProjSitzung {
       ?? (opt.arbeitsordner ? `${path.resolve(opt.arbeitsordner)}.zaehler` : zaehlerDateiVorgabe(instanz));
     this.zaehler = new WiedergabeZaehler(this.arbeitsordner, zaehlerDatei);
     this.cache = new DekodierCache(this.arbeitsordner, { ffmpeg: opt.ffmpeg, ffprobe: opt.ffprobe, vorsatz: opt.vorsatz,
-      bei: (e) => this.dekodiertEreignis(e) });
+      bei: (e) => this.dekodiertEreignis(e), deckel: (frisch) => this.deckelDekodiert(frisch) });
     this.transientenLager = new TransientenLager(path.join(this.arbeitsordner, 'audio'));
     this.katalog = opt.katalog ? new Katalog(opt.katalog) : null;
+    this.einsammler = opt.einsammler ?? null;
     this.analyse = opt.analyse !== undefined ? opt.analyse : analyseVorgabe(instanz);
     this.mediathekPfad = opt.mediathek ?? null;
     this.bestand = opt.bestand ?? null;
@@ -897,12 +910,13 @@ export class ProjSitzung {
       throw e;
     }
     const projekt = structuredClone(o.projekt);
-    this.gleicheDekodiertAb(projekt, true);
+    this.gleicheDekodiertAb(projekt, true, slug);   // the slug: this.offen is still the project before
     this.offen = { slug, projekt, verlauf: o.verlauf, merk: { laden: false, loop: false, tempo: false, reglerNach: [], stummStart: [] }, vorhoeren: new Map() };
     this.liveFaderWartend.clear(); this.liveFaderGemeldet.clear();
     // every open of the live project (queued behind this job)
     this.liveFaderLauf = projekt.live ? Promise.resolve().then(() => this.liveModulFader('oeffnen')) : null;
     this.meldeStand(this.offen);               // 1.8 S3 (D13): the core follows the opened project (tracks of the one before are disarmed)
+    this.meldeEinsammeln(this.offen);
     this.hosts.abgleich(projekt);              // plan 1.11 task 7: the hosts start in the background; open never waits for one
     this.instrumente.abgleich(projekt);        // plan 1.11 task 17: the same for the plugin instrument hosts
     void this.surge.gleiche(projekt, true);                       // 1.9 U5: the Surge map of the opened project goes to the hosts (all entries)
@@ -1152,17 +1166,40 @@ export class ProjSitzung {
     return { kanaele: 'spur/0', quittung: q };
   }
 
+  /** The shas of the audio clips of the open project (the decode cap never removes them). */
+  offeneShas(): Set<string> {
+    const aus = new Set<string>();
+    if (this.offen) for (const c of alleAudioClips(this.offen.projekt)) aus.add(c.quelle.sha256);
+    return aus;
+  }
+  private readonly deckelGemeldet = new Set<string>();
+  private readonly deckelSperre = { bis: 0 };
+  private deckelDekodiert(frisch: string | null): void {
+    deckleDekodiert({ arbeitsordner: this.arbeitsordner, projekte: this.projekte, offeneShas: () => this.offeneShas(), frisch,
+      log: (z) => this.ctx.log(z), gemeldet: this.deckelGemeldet, sperre: this.deckelSperre });
+  }
+
   // --- Dekodier-Cache (Spec 2.8) ----------------------------------------------------------------------------------------
   private zustandVon(sha: string): DekodiertZustand { return this.cache.zustand(sha); }
   // Pfad einer Quelle: über den Katalog (Spec 2.9: sha ist die Identität, der Pfad nur Hinweis); ohne Katalog-Treffer der Hinweis, wenn da.
-  private quellPfad(sha: string, hinweis: string): string | null {
+  private quellPfad(sha: string, hinweis: string, slug: string | null = this.offen?.slug ?? null): string | null {
+    let katalogPfad: string | null = null;
     if (this.katalog) {
       try {
         const z = this.katalog.eintrag(sha);
-        if (z && z.schutz !== 'ableton' && z.pfad && fs.existsSync(z.pfad)) return z.pfad;
+        if (z && z.schutz !== 'ableton' && z.pfad) katalogPfad = z.pfad;
       } catch { /* Katalog fehlt oder ist kaputt: Hinweis versuchen */ }
     }
-    return hinweis && fs.existsSync(hinweis) ? hinweis : null;
+    return loeseQuelle({ sha256: sha, hinweis, projektOrdner: slug !== null ? path.resolve(this.projekte.wurzelPfad, slug) : null, katalogPfad });
+  }
+  /** The resolver for the collector and the collect route (the same as the session's own). */
+  quellePfadVon(sha: string, hinweis: string): string | null { return this.quellPfad(sha, hinweis); }
+  // storage layout A5: a removable source is copied into the project folder in the background; once after open, once after a change that
+  // adds or replaces an audio clip. The collector drops a second report for the same folder while one waits.
+  private meldeEinsammeln(o: Offen): void {
+    // fixed slug: a project switch while the job waits must not change the lookup
+    const projektOrdner = path.resolve(this.projekte.wurzelPfad, o.slug);
+    this.einsammler?.melde({ projekt: o.projekt, projektOrdner, quellPfad: (s, h) => this.quellPfad(s, h, o.slug) });
   }
   // Welle der Seite (S6 Task 14): Pfad einer sha, die ein Audio-Clip des offenen Projekts trägt (Stems, Takes). Der Pfad kommt aus dem
   // Projekt, nie aus der Anfrage; eine sha ohne Clip im offenen Projekt gibt null.
@@ -1174,14 +1211,15 @@ export class ProjSitzung {
   }
   // Setzt dekodiert aller Audio-Clips (ohne rev, Spec 6.6) und fordert fehlende Dekodierungen an. fehlerNeu: auch Fehlgeschlagene neu versuchen.
   // Rückgabe: die shas, deren Zustand sich geändert hat (Haupt- und Take-Clips); ob das die Wiedergabe betrifft, sagt betrifftWiedergabe.
-  private gleicheDekodiertAb(p: Projekt, fehlerNeu: boolean): Set<string> {
+  private gleicheDekodiertAb(p: Projekt, fehlerNeu: boolean, slug: string | null = this.offen?.slug ?? null): Set<string> {
     const geaendert = new Set<string>();
     for (const c of alleAudioClips(p)) {
       let z = this.zustandVon(c.quelle.sha256);
       if (z === 'nein' || (fehlerNeu && z === 'fehler')) {
-        const pfad = this.quellPfad(c.quelle.sha256, c.quelle.pfad_hinweis);
+        const pfad = this.quellPfad(c.quelle.sha256, c.quelle.pfad_hinweis, slug);
         z = pfad ? this.cache.fordereAn(c.quelle.sha256, pfad) : 'fehler';
       }
+      if (z === 'fertig') this.cache.beruehre(c.quelle.sha256);   // a project uses this decode: the size cap removes the unused ones first
       if (c.dekodiert !== z) { c.dekodiert = z; geaendert.add(c.quelle.sha256); }
     }
     return geaendert;
@@ -1640,6 +1678,7 @@ export class ProjSitzung {
     if (typeof wiedergabe?.nr !== 'number') neu.wiedergabe_rev = alt.wiedergabe_rev;   // ohne neue Wiedergabe gilt die alte Nummer
     o.projekt = neu;
     this.meldeStand(o);                        // 1.8 S3 (D13): also the way of undo and redo
+    if (neueQuelle(alt, neu)) this.meldeEinsammeln(o);
     if (vorab.vorhoeren) this.setzeVorhoeren(o, vorab.vorhoeren);
     this.instrumente.abgleich(neu);                                        // plan 1.11 task 17: before the Surge mirror (it waits for a swapped slot)
     void this.surge.gleiche(neu);                                          // 1.9 U5: command, undo and redo (no await: the hosts answer in their own time)

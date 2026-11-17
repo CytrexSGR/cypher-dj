@@ -4,8 +4,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { alsAntwort } from '../areas/proj/output.ts';
+import { Einsammler } from '../project/einsammeln.ts';
+import { baueNachExport } from '../project/exporte.ts';
 import { leseSmf } from '../project/smf.ts';
 import { aufbau } from './support/output_setup.mjs';
 
@@ -84,4 +88,56 @@ test('export_zeige: only a folder directly inside export/ of the open project; n
   delete process.env.DISPLAY; delete process.env.WAYLAND_DISPLAY;
   try { assert.equal(zeige({ ordner: m.body.ordner }).body.fehler, 'keine_arbeitsflaeche'); }
   finally { if (alt.d !== undefined) process.env.DISPLAY = alt.d; if (alt.w !== undefined) process.env.WAYLAND_DISPLAY = alt.w; }
+});
+
+test('after the fourth export the oldest is in the bin and the sources are collected', async (t) => {
+  const quelleOrdner = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-export-quelle-'));
+  t.after(() => fs.rmSync(quelleOrdner, { recursive: true, force: true }));
+  const quelle = path.join(quelleOrdner, 'Snare Hit.wav');
+  fs.writeFileSync(quelle, 'snare-bytes');
+  const sha = crypto.createHash('sha256').update('snare-bytes').digest('hex');
+  const clip = { id: 'c9', art: 'audio', name: 'c9', start_beat: 0, laenge_beats: 4, quelle: { sha256: sha, pfad_hinweis: quelle }, dekodiert: 'nein',
+    offset_s: 0, gain_db: 0, fade_ein_beats: 0, fade_aus_beats: 0 };
+  const protokoll = [];
+  let a;
+  const einsammler = new Einsammler({ wechselplatte: () => null, frei: () => true });
+  const haken = baueNachExport({ einsammler, offen: () => ({ projekt: { spuren: [{ id: 's1', clips: [clip], takes: [] }] }, ordner: a.offen().ordner }),
+    quellPfad: (s, h) => (s === sha ? h : null), log: (z) => protokoll.push(z) });
+  a = await aufbau(t, { opt: { nachExport: haken } });
+  const ordner = a.offen().ordner, slug = a.offen().slug;
+  const namen = [];
+  for (let i = 0; i < 4; i++) {
+    const r = await rufe(a, 'exportiere', { von_beat: 0, bis_beat: 4 });
+    assert.equal(r.code, 200, JSON.stringify(r.body));
+    namen.push(path.basename(r.body.datei));
+  }
+  await einsammler.leer();
+  assert.equal(new Set(namen).size, 4, 'four distinct exports (same second: -2, -3, -4)');
+  const bin = path.join(path.dirname(ordner), '.papierkorb', 'exporte', slug);
+  assert.deepEqual(dateien(bin), [namen[0]], 'the oldest is in the bin');
+  assert.deepEqual(dateien(path.join(ordner, 'export')), namen.slice(1).sort());
+  assert.equal(fs.readFileSync(path.join(ordner, 'audio', `snare-hit-${sha.slice(0, 8)}.wav`), 'utf8'), 'snare-bytes', 'the source is collected');
+  assert.ok(fs.existsSync(quelle), 'the source stays');
+  assert.deepEqual(protokoll, []);
+});
+
+test('a throwing nachExport hook is logged and never fails the export', async (t) => {
+  const a = await aufbau(t, { opt: { nachExport: () => { throw new Error('boom'); } } });
+  const r = await rufe(a, 'exportiere', { von_beat: 0, bis_beat: 4 });
+  assert.equal(r.code, 200, JSON.stringify(r.body));
+  assert.ok(a.protokoll.log.some((z) => z.typ === 'nach_export_fehler' && z.fehler === 'boom'));
+});
+
+test('the reported export path still exists after the hook, even with the clock set back', async (t) => {
+  let nun = new Date(2026, 9, 15, 18, 15, 0);
+  const a = await aufbau(t, { opt: { jetzt: () => nun } });
+  const haken = baueNachExport({ einsammler: new Einsammler({ wechselplatte: () => null, frei: () => true }), offen: () => null, quellPfad: () => null });
+  a.ausgabe.opt.nachExport = haken;
+  const dateiNamen = [];
+  for (const tag of [20, 21, 22]) { nun = new Date(2026, 9, tag, 10, 0, 0); const r = await rufe(a, 'exportiere', { von_beat: 0, bis_beat: 4 }); dateiNamen.push(r.body.datei); }
+  nun = new Date(2026, 9, 1, 10, 0, 0);                              // the clock was set back: the new export has the oldest stamp
+  const r = await rufe(a, 'exportiere', { von_beat: 0, bis_beat: 4 });
+  assert.equal(r.code, 200, JSON.stringify(r.body));
+  assert.ok(fs.existsSync(r.body.datei), 'the reported file exists');
+  assert.equal(dateien(path.join(a.offen().ordner, 'export')).length, 4);
 });

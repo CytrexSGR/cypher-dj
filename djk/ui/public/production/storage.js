@@ -8,6 +8,7 @@ import { xZuBeat, rasterBeats, beatsProTakt } from './timeline.js';
 import { spurIndexBeiTabelle } from './layout.js';
 import { PRESET_TYP, presetZiel } from './preset_target.js';
 import { wendePresetAn } from './preset_apply.js';   // 1.16 rest U7
+import { merkeBenutzt } from '../usage.js';
 
 export function bindeAblage(ctx) {
   const { st, $ } = ctx;
@@ -47,6 +48,7 @@ export function bindeAblage(ctx) {
     const i = spurIndexBeiTabelle(ctx.zeilen(), e.offsetY), beat = xZuBeat(st.ansicht, e.offsetX), raster = rasterBeats(st.raster, beatsProTakt(st.projekt?.taktart));
     const r = ablageBefehl(st.projekt, n, i, beat, raster);
     if (r.fehler) { ctx.melde(ABLAGE_TEXT[r.fehler], true); return; }
+    if (typeof n.sha === 'string' && ctx.holeJson) merkeBenutzt(ctx.holeJson, n.sha);   // recently used: the drop is the use (not the preview); never waited for
     // V2 Fix-Runde 2 H1 (Spec 6.34): die Spur, auf die die Person gezeigt hat, bleibt fest; die Länge in Beats folgt aus dem Tempo im Stand beim
     // Senden (ctx.aendereAus), nicht beim Ablegen: ein TEMPO davor, der noch unterwegs ist, zählt mit
     const spurId = r.befehl.spur_id;

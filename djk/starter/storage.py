@@ -11,15 +11,16 @@ from pathlib import Path
 
 import numpy as np
 
+import storage as tabelle  # the storage table package djk/ablage (absolute import; not the sibling module starter/storage.py)
+
 KIT_NOTEN = 128
 KIT_MAX_FRAMES = 480000  # kit.h:14
 KIT_MAX_BYTES = 256 << 20  # kit.h:15
 
 
 def kit_ordner() -> Path:
-    """CYPHERDJ_KIT_ORDNER or $HOME/.config/cypherdj/kits (paths.ts:51)."""
-    vorgabe = os.environ.get("CYPHERDJ_KIT_ORDNER")
-    return Path(vorgabe) if vorgabe else Path.home() / ".config" / "cypherdj" / "kits"
+    """The kit folder of the storage table (CYPHERDJ_KIT_ORDNER, empty counts as unset; paths.ts)."""
+    return tabelle.ordner("kits")
 
 
 def pruefe_kit(ordner: Path) -> str | None:

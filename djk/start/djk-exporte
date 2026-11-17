@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# djk-exporte: keeps the three newest exports of every project, older ones move to <projects root>/.papierkorb/exporte/<slug>/.
+# Without --ausfuehren nothing moves. Help: djk-exporte --help
+HIER=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+DJK=${DJK:-$(cd "$HIER/.." && pwd)}
+exec node "$DJK/ui/project/exporte_cli.ts" "$@"

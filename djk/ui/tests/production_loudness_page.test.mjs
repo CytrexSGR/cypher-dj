@@ -9,7 +9,7 @@ import { element, installiereDom } from './support/dom_mock.mjs';
 function seite(t) {
   const zurueck = installiereDom();
   t.after(zurueck);
-  const el = { export: element('button'), ausgabe: element('output'), koepfe: element('div'), meldung: element('div') };
+  const el = { export: element('button'), einsammeln: element('button'), ausgabe: element('output'), koepfe: element('div'), meldung: element('div') };
   const kopf = element('div'); kopf.className = 'p-kopf'; kopf.klassen.add('p-kopf'); kopf.dataset.spur = 's3';
   el.koepfe.append(kopf);
   const nachfragen = [];
@@ -48,4 +48,14 @@ test('W1 lautheit: Negativ-Kontrolle, ein fremder Export sperrt wie bisher, ein 
   s.ctx.ausgabeLauf(null);
   s.ctx.ausgabeLauf({ art: 'unbekannt' });
   assert.deepEqual([s.el.export.disabled, s.freeze().disabled], [false, false], 'eine unbekannte Art sperrt nichts');
+});
+
+test('analysis run (ANALYZE window or the hand): "Analysing" and EXPORT and FREEZE are locked; afterwards free', (t) => {
+  const s = seite(t);
+  s.ctx.ausgabeLauf({ art: 'analyse' });
+  assert.deepEqual([s.el.export.disabled, s.freeze().disabled], [true, true]);
+  assert.equal(s.bild(), 'Analysing');
+  s.ctx.ausgabeLauf(null);
+  assert.deepEqual([s.el.export.disabled, s.freeze().disabled], [false, false]);
+  assert.equal(s.bild(), '');
 });

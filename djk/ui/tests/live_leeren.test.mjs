@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { liveAufbau } from './support/live_module.mjs';
+import { modulOrdner } from '../project/module_storage.ts';
 import { fahreRampe, rampeWert } from '../areas/live/ramp.ts';
 
 const baum = (p, slot) => {
@@ -97,7 +98,7 @@ test('the module is saved when it is cleared, with its audio, before the tree go
   const a = await z.l.leere({ slot: 'B', takte: 0 }, 'andreas');
   assert.equal(a.code, 200, JSON.stringify(a.j));
   assert.equal(a.j.zustand, 'fertig');
-  const datei = path.join(z.modulOrdner, a.j.modul_id, 'modul.json');
+  const datei = path.join(modulOrdner(a.j.modul_id, z.modulOrdner), 'modul.json');
   const j = JSON.parse(fs.readFileSync(datei, 'utf8'));
   assert.equal(j.slot, 'B');
   assert.equal(j.herkunft.titel, 'Song');

@@ -3,6 +3,7 @@
 // (server.ts:64) und vorhoeerKlientVorgabe (prelisten.ts:51) liegen weiter in ihren Modulen.
 // Die Instanz kommt bei JEDEM Aufruf aus CYPHERDJ_INSTANZ (Tests setzen sie zur Laufzeit), nie beim Import. Ein explizit
 // übergebener Ordner (ServerOptionen) gewinnt immer; diese Funktionen liefern nur die Vorgaben.
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,7 +25,6 @@ export const REPO_PFADE = {
   welleSkript: path.join(HIER, 'waveform.py'),
 } as const;
 
-const konfig = (...teile: string[]): string => path.join(os.homedir(), '.config', 'cypherdj', ...teile);
 
 export function instanz(): string { return process.env.CYPHERDJ_INSTANZ ?? ''; }
 export function versatz(i: string = instanz()): number {
@@ -41,15 +41,15 @@ export function shmOrdner(i: string = instanz()): string { return `/dev/shm/cyph
 // Prüfinstanz (a..i) liest sie nur mit ausdrücklichem --analyse, damit sie nie die echte Ablage berührt (Fixture-Katalog, Aufträge).
 export function analyseVorgabe(i: string = instanz()): string | null {
   if (i !== '') return null;
-  return process.env.CYPHERDJ_ANALYSE || path.join(os.homedir(), 'werkstatt', 'cypher-dj-analyse');
+  return festerPfad('analyse');
 }
-export function rasterOrdnerVorgabe(i: string = instanz()): string { return i ? `/dev/shm/cypherdj-${i}/raster` : konfig('raster'); }
-export function hotcueOrdnerVorgabe(i: string = instanz()): string { return i ? `/dev/shm/cypherdj-${i}/hotcues` : konfig('hotcues'); }
+export function rasterOrdnerVorgabe(i: string = instanz()): string { return i ? `/dev/shm/cypherdj-${i}/raster` : ablageOrdner('raster'); }
+export function hotcueOrdnerVorgabe(i: string = instanz()): string { return i ? `/dev/shm/cypherdj-${i}/hotcues` : ablageOrdner('hotcues'); }
 export function huellenVorgabe(i: string = instanz()): string { return `${shmOrdner(i)}/huellen`; }
 export function musterOrdnerVorgabe(i: string = instanz()): string { return `${shmOrdner(i)}/erzeuger`; }
 export function wirtOrdnerVorgabe(i: string = instanz()): string { return shmOrdner(i); }
 // Kit folder: CYPHERDJ_KIT_ORDNER (test instances, djk-start --kit-ordner) wins over the configured folder; empty counts as unset.
-export function kitsOrdnerVorgabe(): string { const e = process.env.CYPHERDJ_KIT_ORDNER; return e !== undefined && e !== '' ? e : konfig('kits'); }
+export function kitsOrdnerVorgabe(o: AblageOptionen = {}): string { return ablageOrdner('kits', o); }
 export function zusatzKit(i: string = instanz()): string { return i ? `rec-${i}` : 'rec'; }
 // I08: Geräte-Konfiguration je Instanz (~/.config/cypherdj[-<i>]/geraete.json) und die Kanten-Datei, die der Kern aus dem Shm-Ordner liest.
 // Baukasten S2: Ordner der Baukasten-Graphen (baukasten-<gruppe>.json), wie djk-instrumente sie dem Wirt nennt
@@ -60,7 +60,7 @@ export function controllerOrdner(i: string = instanz()): string { return path.jo
 export function eingangsKantenDatei(i: string = instanz()): string { return path.join(shmOrdner(i), 'eingaenge-kanten'); }
 export function strudelPakete(): string { return process.env.STRUDEL_PAKETE ?? path.join(os.homedir(), 'strudel', 'packages'); }
 // Bisher in loops.ts, wave_cache.ts, working_inventory.ts; dort bleiben sie als Re-Export (gleiche Signatur, gleiche Tests).
-export function loopOrdnerVorgabe(i: string): string { return i ? `/dev/shm/cypherdj-${i}/loops` : konfig('loops'); }
+export function loopOrdnerVorgabe(i: string): string { return i ? `/dev/shm/cypherdj-${i}/loops` : ablageOrdner('loops'); }
 // Cache je Instanz (S5-Review B4): Prüfinstanzen nie im Cache des Betriebs.
 export function welleCacheVorgabe(i: string): string {
   if (i === '') return path.join(os.homedir(), '.cache', 'cypherdj', 'welle');
@@ -74,3 +74,56 @@ export function arbeitsbestandVorgabe(i: string): string {
 // D1 S3 (Spec 2.5): Programm cypherdj-render aus Paket K3, im Bau-Ordner des Kerns wie cypherdj-kern (djk-start). CYPHERDJ_RENDER biegt es um
 // (Tests: tests/support/render_mock.mjs). Bei jedem Aufruf gelesen, wie die Instanz.
 export function renderProgramm(): string { return process.env.CYPHERDJ_RENDER || path.join(REPO, 'djk', 'core', 'build', 'cypherdj-render'); }
+
+// ---- Storage table (djk/config/ablage.json), also read by the Python package djk/ablage; both must give the same paths. ----
+export type AblageArt = 'projekte' | 'module' | 'sampler' | 'presets' | 'klaenge' | 'kollektionen' | 'raster' | 'hotcues' | 'kits' | 'loops' | 'geraete';
+export type FestName = 'mediathek' | 'analyse' | 'bibliothek_konfig' | 'surge_werk' | 'plugin_index' | 'umgebung' | 'pruefen' | 'quellen';
+type AblageTabelle = { vorgabe: string; arten: Record<string, { alt: string; neu: string; env: string | null; kern: boolean }>; fest: Record<string, { pfad: string; env: string | null }> };
+export type AblageOptionen = { tabelle?: AblageTabelle; log?: (e: { typ: 'ablage_beide'; art: string; alt: string; neu: string }) => void; gewarnt?: Set<string> };
+let tabelleGelesen: AblageTabelle | null = null;
+const tabelle = (): AblageTabelle => (tabelleGelesen ??= JSON.parse(fs.readFileSync(path.join(REPO, 'djk', 'config', 'ablage.json'), 'utf8')) as AblageTabelle);
+const gewarntVorgabe = new Set<string>();
+const logVorgabe = (e: object): void => { console.error(JSON.stringify(e)); };
+const envWert = (name: string | null): string => (name ? (process.env[name] ?? '') : '');
+
+// CYPHERDJ_HEIM: absolute, trailing '/' stripped; unset or empty gives {HOME}/cypherdj.
+export function heimOrdner(): string {
+  const roh = process.env.CYPHERDJ_HEIM;
+  if (roh === undefined || roh === '') return path.join(os.homedir(), 'cypherdj');
+  const e = roh.trim().replace(/\/+$/, '');
+  if (e === '' || !e.startsWith('/')) throw new Error('CYPHERDJ_HEIM must be an absolute path');
+  return e;
+}
+const fuelle = (vorlage: string): string => {
+  const home = os.homedir();
+  return vorlage.replace(/\{HOME\}/g, home).replace(/\{KONFIG\}/g, `${home}/.config/cypherdj`).replace(/\{HEIM\}/g, () => heimOrdner());
+};
+export function ablageArten(): AblageArt[] { return Object.keys(tabelle().arten) as AblageArt[]; }
+export function ablageOrte(art: AblageArt, o: AblageOptionen = {}): { alt: string; neu: string; env: string | null; kern: boolean } {
+  const z = (o.tabelle ?? tabelle()).arten[art];
+  if (!z) throw new Error(`unknown storage kind: ${art}`);
+  return { alt: fuelle(z.alt), neu: fuelle(z.neu), env: z.env, kern: z.kern };
+}
+const echterOrdner = (p: string): boolean => { try { return fs.lstatSync(p).isDirectory(); } catch { return false; } };
+const nichtLeer = (p: string): boolean => { try { return fs.readdirSync(p).length > 0; } catch { return false; } };
+// Resolution: (1) env, non-empty; (2) kern kinds and vorgabe 'alt': alt; (3) vorgabe 'neu': a real alt, else neu. Real alt plus non-empty neu
+// ('beide') stays at alt and warns once per kind and process.
+export function ablageOrdner(art: AblageArt, o: AblageOptionen = {}): string {
+  const t = o.tabelle ?? tabelle();
+  const orte = ablageOrte(art, o);
+  const e = envWert(orte.env);
+  if (e !== '') return e;
+  if (orte.kern || t.vorgabe !== 'neu') return orte.alt;
+  if (!echterOrdner(orte.alt)) return orte.neu;
+  if (nichtLeer(orte.neu)) {
+    const gewarnt = o.gewarnt ?? gewarntVorgabe;
+    if (!gewarnt.has(art)) { gewarnt.add(art); (o.log ?? logVorgabe)({ typ: 'ablage_beide', art, alt: orte.alt, neu: orte.neu }); }
+  }
+  return orte.alt;
+}
+export function festerPfad(name: FestName): string {
+  const z = tabelle().fest[name];
+  if (!z) throw new Error(`unknown fixed name: ${name}`);
+  const e = envWert(z.env);
+  return e !== '' ? e : fuelle(z.pfad);
+}

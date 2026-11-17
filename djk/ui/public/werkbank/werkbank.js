@@ -20,6 +20,7 @@ import { bindeSchnittKit } from './schnitt_kit.js';
 import { bindeFenster } from './window.js';
 import { bindeDock } from './dock.js';
 import { bindeExport } from './export.js';
+import { bindeAnalyse } from './analysis.js';
 
 export const WERKBANK_TEXT = {
   keinModul: 'No module is open.',
@@ -33,8 +34,8 @@ export const WERKBANK_TEXT = {
 export const istModul = (p) => p?.werkbank?.schema === 1;
 
 // The order is the contract (D15): top bar, shelf, tracks, notes, sound plumbing (panel source, faces, cut strip), the cut/kit dialog, the windows, the dock.
-// EXPORT and then the SHELF button append their controls to the top bar in this order (the dock and the windows use what sound.js puts on ctx).
-const BINDER = [bindeKopf, bindeRegal, bindeSpuren, bindeRaster, bindeKlang, bindeSchnittKit, bindeFenster, bindeDock, bindeExport, bindeRegalSchublade];
+// EXPORT, then ANALYZE, then the SHELF button append their controls to the top bar in this order (the dock and the windows use what sound.js puts on ctx).
+const BINDER = [bindeKopf, bindeRegal, bindeSpuren, bindeRaster, bindeKlang, bindeSchnittKit, bindeFenster, bindeDock, bindeExport, bindeAnalyse, bindeRegalSchublade];
 
 const GERUEST = `
 <div class="w-kopf" data-w="kopf" role="toolbar" aria-label="Workbench"></div>

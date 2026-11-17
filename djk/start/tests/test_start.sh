@@ -205,7 +205,7 @@ pruef $? "P15 --strudel: Start $R, Erzeuger $E, Zeile 'strudel ready' $(grep -c 
 DJK=$(cd "$START/.." && pwd)
 P_OF16=$(( 47300 + 1000 * ($(printf '%d' "'$I") - 96) ))
 "$START/djk-start" "${ZIEL[@]}" > "$O/p16.txt" 2>&1; R=$?
-"$DJK/werkstatt/.venv/bin/python" "$DJK/loops/check_loop.py" "/dev/shm/cypherdj-$I/loops" p16-probe > /dev/null 2>&1
+"$DJK/workshop/.venv/bin/python" "$DJK/loops/check_loop.py" "/dev/shm/cypherdj-$I/loops" p16-probe > /dev/null 2>&1
 L=$(curl -s --max-time 3 "http://127.0.0.1:$P_OF16/loops")
 EXEC=$(systemctl --user show -p ExecStart --value "cypherdj-oberflaeche-$I")  # Review: CYPHERDJ_INSTANZ allein fände den Ordner auch
 "$START/djk-stop" --instanz "$I" > "$O/p16stop.txt" 2>&1

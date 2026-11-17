@@ -96,6 +96,7 @@ export async function laden(deck, e) {
   if (!r.ok) return melde(`Load rejected: “${e.titel}” ${KOPIE_TEXT[j.fehler] ?? j.fehler}`, true);
   zustand.eigeneLaden.set(j.felder.id, { deck, titel: e.titel });
   melde(`Loading “${e.titel}” to deck ${BUCHSTABE[deck]} …`);
+  return true;   // answered 200: the library marks the sample as recently used
 }
 
 // KOPIE_TEXT (Antwort des Seiten-Servers, wenn nichts an den Kern ging) steht in messages.js

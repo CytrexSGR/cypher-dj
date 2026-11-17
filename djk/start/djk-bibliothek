@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # djk-bibliothek: turns your own music folders into the browser catalog (katalog.sqlite). Folders are listed in
-# ~/.config/cypherdj/bibliothek.json. Never replaces a catalog it did not build.
+# ~/.config/cypherdj/bibliothek.json, or in the catalog roots of quellen.toml when that file exists (dazu/weg then edit
+# quellen.toml, the same file python3 -m quellen edits). Never replaces a catalog it did not build.
 #
 #   djk-bibliothek dazu DIR [--typ auto|track|loop|oneshot]   add a folder
 #   djk-bibliothek weg DIR                                    remove a folder

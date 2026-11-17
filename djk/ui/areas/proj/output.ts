@@ -13,8 +13,9 @@
 // einen Zähler (nie geladen, danach gelöscht), cypherdj-render mit nice 19 und den Spur-Reglern aus project.json als Datei, WAV unter
 // <projektordner>/export/ (nie ersetzt), Lautheit per ffmpeg. Die Antwort ist schmal (kein Projekt, Spec 6.31): datei, frames, spitze_db,
 // regler_quelle, lufs_i, lra, true_peak_dbtp, bei Fehlschlag der Messung loudness_fehler.
-// 1.10 Slice 2 (E2): POST /proj/export nimmt abgriff (produktion | set, Vorgabe produktion) und schickt immer ausdrücklich --abgriff an den Render; die Antwort
-// nennt abgriff, ueber_decke und limiter_db_max. Sagt der Render einen anderen Abgriff, ist es ein render_fehler (render.ts leseRenderAntwort, P11).
+// 1.10 Slice 2 (E2): POST /proj/export nimmt abgriff (produktion | set, Vorgabe produktion) und schickt immer ausdrücklich --abgriff an den Render;
+// die Antwort nennt abgriff, ueber_decke und limiter_db_max. Sagt der Render einen anderen Abgriff, ist es ein render_fehler
+// (render.ts leseRenderAntwort, P11).
 // Lautheit je Spur (Paket 1.18, E-b, POST /proj/lautheit): derselbe Anfang (Bereich, Wirt-Freeze, Export-Wiedergabe), dann ein Render je belegter Spur
 // ohne Neustart-Zustand des Kerns (--ohne-zustand): die Regler kommen allein aus einer Datei, in der alle anderen Spuren stumm stehen, dazu ein Render
 // aller Spuren für die Summe. Die WAVs liegen in einem temporären Ordner und gehen im finally weg.
@@ -44,6 +45,8 @@ import {
   type Abgriff, type Pfad, type RenderAntwort, type SchluesselPlan,
 } from '../../project/render.ts';
 import { messeLautheit, type Lautheit } from '../../project/loudness.ts';
+import { quellenSchluessel, type AnalyseQuelle } from '../../project/sound_contract.ts';
+import { KlangAnalyse } from './sound_analysis.ts';
 import {
   baueMergeProjekt, MergeFehler, mergePlan, mergeRegler, mergeWiedergabe, pruefeMergeNochGleich,
 } from '../../project/merge.ts';
@@ -74,6 +77,7 @@ export interface AusgabeOptionen {
   ffmpeg?: string[];              // ffmpeg für die Lautheit (Vorgabe ['ffmpeg'])
   wirtOrdner?: () => string;      // Ordner der Wirt-Status-Dateien (Vorgabe pfade.wirtOrdnerVorgabe(), der Server gibt seinen mit)
   zeitlimitMs?: number;           // Test-Haken: Zeitlimit des Merge-Renders (Vorgabe 4 · Dauer + 60 s)
+  nachExport?: (a: { slug: string; ordner: string; datei?: string }) => void;   // A5: after an export; a throwing hook is logged, never fails it
   gesundMs?: number;              // plan 1.11 T13: every host healthy this long before a real-time export starts (Vorgabe 1100: the core's 1 s hold-off)
 }
 
@@ -87,16 +91,46 @@ const STATUS: Record<string, number> = {
   freeze_fehler: 502, render_fehler: 502, export_host_ausfall: 502, export_luecke: 502,   // plan 1.11 T13
   export_leer: 409, keine_arbeitsflaeche: 409,                                // file export (MIDI / per track), show folder
   bounce_nur_audio: 409, bounce_ziel_art: 409, takes_voll: 409, ersetzen_loop: 409, gruppe_unbekannt: 400,   // 1.14 slice 4 (spec D12)
+  return_unbekannt: 400, freeze_noetig: 409,                                                      // ANALYZE slice 1
 };
 
 // text: englisch (Spec 6.34)
 export class AusgabeFehler extends Error {
   readonly grund: string;
   readonly text: string;
-  constructor(grund: string, text = '') { super(text ? `${grund}: ${text}` : grund); this.grund = grund; this.text = text; }
+  readonly detail: string;   // a foreign message (a thrown error): the answer carries it as detail, never inside the English text
+  constructor(grund: string, text = '', detail = '') { super(text ? `${grund}: ${text}` : grund); this.grund = grund; this.text = text; this.detail = detail; }
 }
 // Typangabe am Namen: nur so wertet TypeScript einen Aufruf als Ende des Pfads und verengt danach (this.arr, q, e ohne Non-Null-Assertion)
 const fehl: (grund: string, text?: string) => never = (grund, text = '') => { throw new AusgabeFehler(grund, text); };
+
+// ANALYZE: the tracks that sound in the render of these sources (the track and its key sources, the members of a group; a return or the master: every track)
+function analyseBeteiligte(p: Projekt, quellen: AnalyseQuelle[]): Spur[] {
+  const aus = new Set<Spur>();
+  for (const x of quellen) {
+    if (x.art === 'spur') { const s = sucheSpur(p, x.id ?? ''); if (s) { aus.add(s); for (const t of schluesselPlan(p, s).spuren) aus.add(t); } }
+    else if (x.art === 'gruppe') {
+      const g = (p.gruppen ?? []).find((y) => y.id === x.id);
+      if (g) { for (const t of mitgliederVon(p, g)) aus.add(t); for (const t of schluesselPlan(p, pfadVonGruppe(p, g)).spuren) aus.add(t); }
+    } else for (const t of p.spuren) aus.add(t);
+  }
+  return [...aus];
+}
+
+// ANALYZE: one source of the request body, {art: 'spur' | 'gruppe' | 'return', id} or {art: 'master'}
+function analyseQuelleLesen(v: unknown, feld: string): AnalyseQuelle {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return fehl('argument_ungueltig', `${feld}: an object {art, id} is required`);
+  const o = v as Record<string, unknown>;
+  for (const k of Object.keys(o)) if (k !== 'art' && k !== 'id') fehl('argument_ungueltig', `${feld}: unknown field ${k}`);
+  if (o.art === 'master') {
+    if (o.id !== undefined) fehl('argument_ungueltig', `${feld}.id: the master has no id`);
+    return { art: 'master' };
+  }
+  if (o.art !== 'spur' && o.art !== 'gruppe' && o.art !== 'return') return fehl('argument_ungueltig',
+    `${feld}.art: a track, a group, a return or the master expected`);
+  if (typeof o.id !== 'string' || o.id === '') return fehl('argument_ungueltig', `${feld}.id: an id is required`);
+  return { art: o.art, id: o.id };
+}
 
 // Ein Schritt, den dieser Lauf schon gespeichert hat (Freeze als eigener Undo-Schritt), und die WAV, wenn sie schon steht
 export interface Schritt { rev: number; label: string }
@@ -133,7 +167,8 @@ export function alsAntwort(e: unknown): { code: number; body: { fehler: string; 
     const text = x.body.fehler === 'intern' ? `internal server error; ${e.stand()}` : `${x.body.text}; ${e.stand()}`;
     return { code: x.code, body: { ...x.body, text, schritte: e.schritte } };
   }
-  if (e instanceof AusgabeFehler || e instanceof FreezeFehler || e instanceof MergeFehler || e instanceof ResampleFehler) {
+  if (e instanceof AusgabeFehler) return { code: STATUS[e.grund] ?? 409, body: mit(e.grund, e.text, e.detail) };
+  if (e instanceof FreezeFehler || e instanceof MergeFehler || e instanceof ResampleFehler) {
     return { code: STATUS[e.grund] ?? 409, body: mit(e.grund, e.text) };
   }
   if (e instanceof StandFehler) return { code: STATUS[e.grund] ?? 409, body: mit(e.grund, e.text, e.detail) };
@@ -278,7 +313,8 @@ export interface ExportMidiAntwort {
 }
 export interface ExportSpurenAntwort {
   ordner: string; von_beat: number; bis_beat: number;
-  dateien: { art: 'mix' | 'spur' | 'return'; spur_id?: string; return_id?: string; nr?: number; name: string; datei: string | null; spitze_db: number; stumm: boolean }[];
+  dateien: { art: 'mix' | 'spur' | 'return'; spur_id?: string; return_id?: string; nr?: number; name: string; datei: string | null; spitze_db: number;
+    stumm: boolean }[];
 }
 // 1.10 slice 5 (plan E7): a stage keyed by a DJ input (deck/1..4, erz/1) hears nothing in an export (no deck plays in the render): the answer says so,
 // only when it is true
@@ -385,6 +421,10 @@ export function gruppeStummImMix(p: Projekt, g: Gruppe): boolean {
 export function returnStummImMix(p: Projekt, x: Return): boolean {
   return x.mute || x.fader_db <= STUMM_GRENZE || ((p.returns ?? []).some((y) => y.solo) && !x.solo);
 }
+// Does any track or group send into this return above the mute threshold? A return nothing feeds renders silence (lautheit, per-track export, analysis).
+export function returnGespeist(p: Projekt, x: Return): boolean {
+  return [...p.spuren, ...(p.gruppen ?? [])].some((t) => (t.sends ?? []).some((sd) => sd.id === x.id && sd.db > STUMM_GRENZE));
+}
 // 1.10 T10: the members of a group, the strips of its entry. Nested: the tracks of the group and of every group below it.
 export const mitgliederVon = (p: Projekt, g: Gruppe): Spur[] => pfadVonGruppe(p, g).spuren;
 // 1.10 T10 (AK24): the controls for the render of ONE group: its members run as the mix has them (mute, fader, pan; the project's solo decides through
@@ -435,7 +475,7 @@ export function reglerEinzeln(s: Spur, p?: Projekt): Record<string, number> {
 }
 
 const LAUF_TEXT: Record<AusgabeLauf['art'], string> = { freeze: 'a freeze', export: 'an export', lautheit: 'a loudness measurement', merge: 'a merge',
-  bounce: 'a bounce', resample: 'a resample' };
+  bounce: 'a bounce', resample: 'a resample', analyse: 'an analysis' };
 
 // Ende eines Freeze aus Sicht des Wartenden: /e/freeze (status, frames), ein neuer Kern, Stille, Frist (1.10 slice 7: ebenso /e/abgriff)
 type FreezeEnde = { art: 'e_freeze'; status: number; frames: number } | { art: 'e_abgriff'; status: number; frames: number }
@@ -719,7 +759,8 @@ export class Ausgabe {
 
   // Default range of export and loudness without von_beat/bis_beat: the loop bracket when it is on, otherwise the whole song from beat 0 to the end
   // of the last clip on any track (2026-11-06; before, the bracket was used even when off, so a fresh project always exported beats 0..32).
-  // A workbench module with a remembered length (a loop range is set) exports the module length 0..laenge_beats instead: the range is for listening, not for the file.
+  // A workbench module with a remembered length (a loop range is set) exports the module length 0..laenge_beats instead: the range is for listening,
+  // not for the file.
   songBereich(modul = false): { von: number; bis: number } {
     const p = this.offen().projekt;
     if (modul && p.werkbank?.laenge_beats !== undefined) return { von: 0, bis: p.werkbank.laenge_beats };
@@ -732,8 +773,8 @@ export class Ausgabe {
   // Prüfungen von Export und Lautheit: nur von_beat und bis_beat, Bereich 1 bis EXPORT_MAX_BEATS Beats ab Beat 0 (default: songBereich), kein anderer
   // Lauf, kein Transport, kein Audio in Vorbereitung.
   // nurSpuren (Merge, P6): audio_fehlt zählt nur diese Spuren (Standard: alle)
-  private pruefeBereich(d: Record<string, unknown>, erlaubt: readonly string[] = ['von_beat', 'bis_beat'], nurSpuren?: string[], modul = false):
-    { von: number; bis: number } {
+  private pruefeBereich(d: Record<string, unknown>, erlaubt: readonly string[] = ['von_beat', 'bis_beat'], nurSpuren?: string[], modul = false,
+    mitTransport = true): { von: number; bis: number } {
     for (const k of Object.keys(d)) if (!erlaubt.includes(k)) fehl('argument_ungueltig', `unknown field ${k}`);
     for (const k of ['von_beat', 'bis_beat']) {
       if (d[k] !== undefined && (typeof d[k] !== 'number' || !Number.isFinite(d[k]))) fehl('argument_ungueltig', `${k}: a number is required`);
@@ -745,8 +786,11 @@ export class Ausgabe {
     if (!(von >= 0) || !(bis - von >= 1) || bis - von > EXPORT_MAX_BEATS) {
       fehl('export_bereich', `beat ${von} to ${bis}: the export starts at beat 0 or later and is 1 to ${EXPORT_MAX_BEATS} beats long`);
     }
-    this.pruefeFrei();                                                   // ein laufender Freeze meldet Status 3: beschaeftigt, nicht transport_laeuft
-    if (this.arr && this.arr.status !== 0) fehl('transport_laeuft', 'stop the transport first');
+    // ANALYZE: the analysis checks neither the lock nor the transport here (rendereStreifen does, later)
+    if (mitTransport) {
+      this.pruefeFrei();                                                 // ein laufender Freeze meldet Status 3: beschaeftigt, nicht transport_laeuft
+      if (this.arr && this.arr.status !== 0) fehl('transport_laeuft', 'stop the transport first');
+    }
     const fehlt = fehlendesAudio(nurSpuren ? { ...o.projekt, spuren: o.projekt.spuren.filter((s) => nurSpuren.includes(s.id)) } : o.projekt, von, bis);
     if (fehlt.length) fehl('audio_fehlt', `audio clip ${fehlt.join(', ')} is still being prepared; try again in a moment`);
     return { von, bis };
@@ -792,7 +836,9 @@ export class Ausgabe {
     try {
       if (brauchtEchtzeit(this.offen().projekt)) {
         if (d.abgriff === 'set') fehl('argument_ungueltig', 'abgriff: the real-time export captures the production master only');
-        return await this.exportiereEchtzeit(von, bis);
+        const echtzeit = await this.exportiereEchtzeit(von, bis);
+        this.nachExportLauf(echtzeit.datei);
+        return echtzeit;
       }
       const { jetzt, p, w } = await this.friereEinUndSchreibe('export');
       const ordner = path.join(jetzt.ordner, 'export');
@@ -824,8 +870,16 @@ export class Ausgabe {
         ueber_decke: r.ueber_decke ?? false, limiter_db_max: r.limiter_db_max ?? 0,
         ...(hatDjSchluessel(p) ? { dj_schluessel: true as const } : {}), ...lautheit };
       this.ctx.log({ typ: 'proj_export', slug: jetzt.slug, nr: w.nr, von_beat: von, bis_beat: bis, ...antwort });
+      this.nachExportLauf(ziel);
       return antwort;
     } catch (e) { throw this.nachFehler(e); } finally { this.gib(); }
+  }
+
+  // A5: the hook of the page (keep three exports, collect the sources) runs once per finished export; what it throws is logged and ignored
+  private nachExportLauf(datei?: string): void {
+    if (!this.opt.nachExport) return;
+    try { const o = this.offen(); this.opt.nachExport({ slug: o.slug, ordner: o.ordner, ...(datei ? { datei: path.basename(datei) } : {}) }); }
+    catch (e) { this.ctx.log({ typ: 'nach_export_fehler', fehler: (e as Error)?.message ?? String(e) }); }
   }
 
   // plan 1.11 task 13: the real-time path of the export. Host stages cannot be rendered offline, so the core plays the project once in real time and
@@ -1005,7 +1059,8 @@ export class Ausgabe {
     await this.warteNachEigenemFreeze();
     const { von, bis } = this.pruefeBereich(d, ['von_beat', 'bis_beat'], undefined, true);
     if (brauchtEchtzeit(this.offen().projekt)) {
-      fehl('host_insert_echtzeit', 'a plugin stage is active; the per-track export renders offline and cannot capture it (export the mix instead, it is captured in real time)');
+      fehl('host_insert_echtzeit',
+        'a plugin stage is active; the per-track export renders offline and cannot capture it (export the mix instead, it is captured in real time)');
     }
     this.belege({ art: 'export' });
     let tmp: string | null = null, ziel: string | null = null, fertig = false;
@@ -1017,9 +1072,11 @@ export class Ausgabe {
         const aus = ziel, dir = tmp;
         this.renderAbbruch = new AbortController();
         if (this.geschlossen) this.renderAbbruch.abort();
-        const render = async (datei: string, regler: Record<string, number>, nrW = w.nr, nurSchluessel: string[] = [], trockenAus = false): Promise<RenderAntwort> => {
+        const render = async (datei: string, regler: Record<string, number>, nrW = w.nr, nurSchluessel: string[] = [],
+          trockenAus = false): Promise<RenderAntwort> => {
           const teil = path.join(aus, `${datei}.teil`);
-          const r = await this.rendereTeil({ p, nr: nrW, von, bis, aus: teil, reglerDatei: path.join(dir, `${datei}.json`), regler, nurSchluessel, trockenAus });
+          const r = await this.rendereTeil({ p, nr: nrW, von, bis, aus: teil, reglerDatei: path.join(dir, `${datei}.json`), regler, nurSchluessel,
+            trockenAus });
           fs.renameSync(teil, path.join(aus, datei));
           this.datei = path.join(aus, datei);
           return r;
@@ -1033,13 +1090,12 @@ export class Ausgabe {
           const einzel = this.schreibeOhneFremdeLanes(p, s);
           let r: RenderAntwort;
           const datei = `${zwei2(s.nr)}-${sicherName(s.name)}.wav`;
-          try { r = await render(datei, reglerEinzeln(s, p), einzel?.nr, schluesselPlan(p, s).ids); } finally { if (einzel) fs.rmSync(einzel.datei, { force: true }); }
+          try { r = await render(datei, reglerEinzeln(s, p), einzel?.nr, schluesselPlan(p, s).ids); } finally { if (einzel) fs.rmSync(einzel.datei,
+            { force: true }); }
           dateien.push({ ...kopf, datei, spitze_db: r.spitze_db, stumm: r.spitze_db <= STILLE_DB });
         }
-        const speist = (x: Return): boolean =>
-          [...p.spuren, ...(p.gruppen ?? [])].some((t) => (t.sends ?? []).some((sd) => sd.id === x.id && sd.db > STUMM_GRENZE));
         for (const x of p.returns ?? []) {
-          if (!speist(x)) continue;
+          if (!returnGespeist(p, x)) continue;
           const kopf = { art: 'return' as const, return_id: x.id, nr: x.nr, name: x.name };
           if (x.mute) { dateien.push({ ...kopf, datei: null, spitze_db: -200, stumm: true }); continue; }
           const datei = `fx${x.nr}-${sicherName(x.name)}.wav`;
@@ -1051,6 +1107,7 @@ export class Ausgabe {
         }
         this.ctx.log({ typ: 'proj_export_spuren', slug: jetzt.slug, nr: w.nr, von_beat: von, bis_beat: bis, ordner: ziel, dateien: dateien.length });
         fertig = true;
+        this.nachExportLauf(ziel);
         return { ordner: ziel, von_beat: von, bis_beat: bis, dateien };
       } finally {
         this.renderAbbruch = null;
@@ -1068,7 +1125,8 @@ export class Ausgabe {
     const o = this.offen();
     const wurzel = path.join(o.ordner, 'export');
     let echt: string, echtWurzel: string;
-    try { echt = fs.realpathSync(path.resolve(d.ordner)); echtWurzel = fs.realpathSync(wurzel); } catch { return fehl('argument_ungueltig', 'ordner: no such folder'); }
+    try { echt = fs.realpathSync(path.resolve(d.ordner)); echtWurzel = fs.realpathSync(wurzel); } catch { return fehl('argument_ungueltig',
+      'ordner: no such folder'); }
     if (path.dirname(echt) !== echtWurzel || !fs.statSync(echt).isDirectory()) {
       return fehl('argument_ungueltig', 'ordner: only a folder inside the export folder of the open project can be shown');
     }
@@ -1143,11 +1201,9 @@ export class Ausgabe {
           } finally { if (einzel) fs.rmSync(einzel.datei, { force: true }); }
           gruppen.push({ ...kopf, ...res.l, spitze_db: res.r.spitze_db, stumm: res.r.spitze_db <= STILLE_DB, unter_messgrenze: res.unter });
         }
-        const speist = (x: Return): boolean =>
-          [...p.spuren, ...(p.gruppen ?? [])].some((t) => (t.sends ?? []).some((sd) => sd.id === x.id && sd.db > STUMM_GRENZE));
         for (const x of p.returns ?? []) {
           const kopf = { return_id: x.id, nr: x.nr, name: x.name };
-          if (returnStummImMix(p, x) || !speist(x)) {
+          if (returnStummImMix(p, x) || !returnGespeist(p, x)) {
             returns.push({ ...kopf, ...OHNE_LAUTHEIT, spitze_db: -200, stumm: true, unter_messgrenze: false });
             continue;
           }
@@ -1165,6 +1221,105 @@ export class Ausgabe {
       }
     } catch (e) { throw this.nachFehler(e); } finally { this.gib(); }
   }
+  // ANALYZE window, slice 1 (POST /proj/analyse): checks that need no lock. Argument fields, Stop Cypher, open project, range (as the export, with the
+  // default of songBereich), then the sources: a vanished track, group or return is refused here, before anything is rendered. The lock and the
+  // transport are not looked at: a cached answer or a join with the running analysis must work while another run holds the lock.
+  analyseVorpruefung(d: Record<string, unknown>): { slug: string; rev: number; von: number; bis: number; tempo_bpm: number } {
+    for (const k of Object.keys(d)) if (!['quelle', 'vergleich', 'von_beat', 'bis_beat', 'ohne_freeze'].includes(k)) fehl('argument_ungueltig',
+      `unknown field ${k}`);
+    if (d.ohne_freeze !== undefined && typeof d.ohne_freeze !== 'boolean') fehl('argument_ungueltig', 'ohne_freeze: true or false is required');
+    if (d.quelle === undefined) fehl('argument_ungueltig', 'quelle: a source {art, id} is required');
+    const q = analyseQuelleLesen(d.quelle, 'quelle');
+    const v = d.vergleich === undefined || d.vergleich === null ? undefined : analyseQuelleLesen(d.vergleich, 'vergleich');   // null = no comparison
+    if (v && quellenSchluessel(v) === quellenSchluessel(q)) fehl('argument_ungueltig',
+      'vergleich: the comparison must be another strip than quelle; a strip against itself has nothing to compare');
+    const { von, bis } = this.pruefeBereich({ von_beat: d.von_beat, bis_beat: d.bis_beat }, ['von_beat', 'bis_beat'], undefined, false, false);
+    const o = this.offen(), p = o.projekt;
+    for (const x of v ? [q, v] : [q]) {
+      if (x.art === 'spur' && !sucheSpur(p, x.id!)) fehl('spur_unbekannt', `there is no track ${x.id}`);
+      if (x.art === 'gruppe' && !(p.gruppen ?? []).some((g) => g.id === x.id)) fehl('gruppe_unbekannt', `there is no group ${x.id}`);
+      if (x.art === 'return' && !(p.returns ?? []).some((r) => r.id === x.id)) fehl('return_unbekannt', `there is no return ${x.id}`);
+    }
+    return { slug: o.slug, rev: p.rev, von, bis, tempo_bpm: p.tempo_bpm };
+  }
+
+  /** ANALYZE slice 1: renders the strips `quellen` (one render each, as lautheit() renders that kind) under the output lock `{art: 'analyse'}` and hands the
+   *  WAVs to `nimm` while they exist. A strip the mix silences is a part with `stumm: true` and no render. Everything temporary is gone when this returns,
+   *  whatever happens. Unlike lautheit() the transport may run when no track needs a freeze (the offline render does not touch the playing core). */
+  async rendereStreifen<T>(quellen: AnalyseQuelle[], von: number, bis: number, ohneFreeze: boolean,
+    nimm: (r: { rev: number; slug: string; tempo_bpm: number;
+      teile: ({ name: string; datei: string; spitze_db: number; frames: number } | { name: string; stumm: true })[] }) => Promise<T>): Promise<T> {
+    await this.warteNachEigenemFreeze();
+    this.belege({ art: 'analyse' });
+    let tmp: string | null = null;
+    try {
+      if (this.arr && this.arr.status === 3) fehl('beschaeftigt', 'a freeze is running; this waits until it is done');
+      const p0 = this.offen().projekt;
+      if (brauchtEchtzeit(p0)) {
+        fehl('host_insert_echtzeit', 'a plugin stage is active; the analysis renders offline and cannot capture it');
+      }
+      let jetzt: ProjOffen, p: Projekt, w: { nr: number; datei: string };
+      if (ohneFreeze) {
+        // the window measures after every edit: it never freezes. A track that takes part and has unfrozen notes is refused; one that does not take part
+        // stays out of the playback (an unfrozen Surge track does not play in the export view).
+        const beteiligt = analyseBeteiligte(p0, quellen);
+        const offen = beteiligt.find((s) => brauchtFreeze(s) && !(stummImMix(p0, s) && !hatLane(s)));
+        if (offen) fehl('freeze_noetig', `the track ${offen.name} has to be frozen first; freeze it or measure with the tool`);
+        jetzt = this.offen(); p = jetzt.projekt; w = this.zugang.schreibeWiedergabe(exportSicht(p));
+      } else {
+        if (p0.spuren.some(brauchtFreeze) && this.arr && this.arr.status !== 0) {
+          fehl('transport_laeuft', 'a Surge track has unfrozen notes; stop the transport so it can be frozen first');
+        }
+        ({ jetzt, p, w } = await this.friereEinUndSchreibe('analysis'));
+      }
+      try {
+        const dir = tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-analyse-'));
+        this.renderAbbruch = new AbortController();
+        if (this.geschlossen) this.renderAbbruch.abort();
+        let nr = 0;
+        const render = async (name: string, regler: Record<string, number>, nrW = w.nr, nurSchluessel: string[] = [], trockenAus = false):
+          Promise<{ datei: string; spitze_db: number; frames: number }> => {
+          const aus = path.join(dir, `${++nr}-${name}.wav`);
+          const r = await this.rendereTeil({ p, nr: nrW, von, bis, aus, reglerDatei: path.join(dir, `${nr}-${name}.json`), regler, nurSchluessel, trockenAus });
+          return { datei: aus, spitze_db: r.spitze_db, frames: r.frames };
+        };
+        const teile: ({ name: string; datei: string; spitze_db: number; frames: number } | { name: string; stumm: true })[] = [];
+        for (const x of quellen) {
+          if (x.art === 'spur') {
+            const s = sucheSpur(p, x.id ?? '') ?? fehl('spur_unbekannt', `there is no track ${x.id}`);
+            // as lautheit(): the base values decide only for a track without a fader/mute/solo lane; a track with nothing in the range is not rendered
+            if ((stummImMix(p, s) && !hatLane(s)) || !belegteSpuren(p, von, bis).includes(s)) { teile.push({ name: s.name, stumm: true }); continue; }
+            const einzel = this.schreibeOhneFremdeLanes(p, s);
+            try { teile.push({ name: s.name, ...await render(`spur-${s.nr}`, reglerEinzeln(s, p), einzel?.nr, schluesselPlan(p, s).ids) }); }
+            finally { if (einzel) fs.rmSync(einzel.datei, { force: true }); }
+          } else if (x.art === 'gruppe') {
+            const g = (p.gruppen ?? []).find((y) => y.id === x.id) ?? fehl('gruppe_unbekannt', `there is no group ${x.id}`);
+            const mit = mitgliederVon(p, g);
+            if (gruppeStummImMix(p, g) || mit.every((m) => stummImMix(p, m) && !hatLane(m))) { teile.push({ name: g.name, stumm: true }); continue; }
+            const sl = schluesselPlan(p, pfadVonGruppe(p, g));
+            const einzel = this.schreibeOhneFremdeLanes(p, mit[0], [...mit.slice(1), ...sl.spuren]);
+            try { teile.push({ name: g.name, ...await render(`gruppe-${g.nr}`, reglerGruppe(g, p), einzel?.nr, sl.ids) }); }
+            finally { if (einzel) fs.rmSync(einzel.datei, { force: true }); }
+          } else if (x.art === 'return') {
+            const r = (p.returns ?? []).find((y) => y.id === x.id) ?? fehl('return_unbekannt', `there is no return ${x.id}`);
+            if (returnStummImMix(p, r) || !returnGespeist(p, r)) { teile.push({ name: r.name, stumm: true }); continue; }
+            teile.push({ name: r.name, ...await render(`return-${r.nr}`, reglerReturn(r, p), w.nr, schluesselReturns(p, r).map((y) => `ret/${y.nr}`), true) });
+          } else {
+            teile.push({ name: 'Master', ...await render('master', reglerAusProjekt(p)) });
+          }
+        }
+        return await nimm({ rev: p.rev, slug: jetzt.slug, tempo_bpm: p.tempo_bpm, teile });
+      } finally {
+        this.renderAbbruch = null;
+        fs.rmSync(w.datei, { force: true });                             // die Export-Wiedergabe verdrängt sonst die geladene (BEHALTE 5)
+        if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
+      }
+    } catch (e) { throw this.nachFehler(e); } finally { this.gib(); }
+  }
+
+  /** Writes one line to the server log (the analysis route logs its runs through the output area). */
+  protokolliere(z: Record<string, unknown>): void { this.ctx.log(z); }
+
   // Paket 1.13 Slice 7 (POST /proj/zusammenfuehren, D1 bis D13): die gewählten Spuren in EINEM Render ohne Neustart-Zustand (Regler allein aus der Datei,
   // Gruppen und PM neutral), die WAV als Quelle ohne Katalog auf eine neue Spur direkt unter der tiefsten Quelle, die Quellen stumm: EIN aendereStand,
   // ein Undo. Keine Sperre über die Render-Dauer (wie Export und Lautheit), kein Einfrieren (D7), nach dem Render eine frische Prüfung (D12).
@@ -1433,6 +1588,7 @@ export function ausgabeBereich(ctx: BereichKontext, zugang: ProjZugang, opt: Aus
     }
   }
   const a = new Ausgabe(ctx, zugang, opt);
+  const k = new KlangAnalyse(a, { ffmpeg: opt.ffmpeg });
   type Handler = (q: http.IncomingMessage, r: http.ServerResponse) => Promise<void>;
   const antworte = (f: (d: Record<string, unknown>, kurz: boolean) => Promise<unknown>): Handler => async (q, r) => {
     const kurz = new URL(q.url ?? '/', 'http://seite').searchParams.get('antwort') === 'kurz';
@@ -1448,6 +1604,7 @@ export function ausgabeBereich(ctx: BereichKontext, zugang: ProjZugang, opt: Aus
       }) },
       { methode: 'POST', pfad: '/proj/export', schutz: 'fremdePost', handler: antworte((d) => a.exportiere(d)) },
       { methode: 'POST', pfad: '/proj/lautheit', schutz: 'fremdePost', handler: antworte((d) => a.lautheit(d)) },
+      { methode: 'POST', pfad: '/proj/analyse', schutz: 'fremdePost', handler: antworte((d) => k.analysiere(d)) },
       { methode: 'POST', pfad: '/proj/export_midi', schutz: 'fremdePost', handler: antworte(async (d) => a.exportiereMidi(d)) },
       { methode: 'POST', pfad: '/proj/export_spuren', schutz: 'fremdePost', handler: antworte((d) => a.exportiereSpuren(d)) },
       { methode: 'POST', pfad: '/proj/export_zeige', schutz: 'fremdePost', handler: antworte(async (d) => a.zeigeExport(d)) },

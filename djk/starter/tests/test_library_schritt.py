@@ -140,3 +140,19 @@ def test_unwritable_target_folder_is_reported(klaenge, ziel, capsys):
         assert "Traceback" not in capsys.readouterr().err
     finally:
         ziel.parent.chmod(0o700)
+
+
+def test_starter_traegt_in_quellen_ein(klaenge, ziel, capsys, monkeypatch):
+    """With a quellen.toml the starter folder lands there and not in bibliothek.json."""
+    import socket
+    from quellen import file as datei
+    monkeypatch.setattr(socket, "gethostname", lambda: "laptop-a")
+    heim = Path(os.environ["HOME"]) / "cypherdj"
+    heim.mkdir(parents=True)
+    datei.schreibe(heim / "quellen.toml", datei.Quellen())
+    assert starter_main.main(["--nur", "bibliothek"]) == 0
+    q = datei.lies(heim / "quellen.toml")
+    assert [(w.art, w.pfad, w.katalog) for w in q.wurzeln] == [("sample", str(klaenge), True)]
+    assert not konfig_pfad().exists()
+    assert [w.pfad for w in lies_konfig().wurzeln] == [klaenge]
+    assert zeilen(ziel, "select count(*) from katalog")[0][0] > 0

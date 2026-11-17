@@ -130,3 +130,4 @@
 #werkbank .w-tonzeilen .w-st { height: 19px; }
 #werkbank .w-sicht-1 .w-tonzeilen .w-st { height: 21px; }
 #werkbank .w-bereich .w-steps, #werkbank .w-br { height: 16px; }
+#werkbank .w-ln-drum [data-w="zeilenname"].w-drop { outline: 2px dashed var(--d3); outline-offset: 1px; background: rgba(255, 255, 255, .08); }

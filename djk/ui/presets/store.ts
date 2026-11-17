@@ -10,7 +10,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { nimmSperre, SperreBelegt } from '../lock.ts';
-import { instanz } from '../paths.ts';
+import { ablageOrdner, instanz, type AblageOptionen } from '../paths.ts';
 import { GERAET_IDS } from './devices.ts';
 import { ladeVokabular, kanonisch, sha256, type Vokabular } from './vocabulary.ts';
 import {
@@ -23,7 +23,7 @@ export const WERK_VORGABE = path.join(path.dirname(fileURLToPath(import.meta.url
 // device id as folder name. This mapping is the only place that joins a factory folder.
 export const WERK_ORDNER: Readonly<Record<string, string>> = { baukasten: 'modular', hall: 'reverb', komp: 'comp', saett: 'sat' };
 export function werkOrdner(geraet: string): string { return WERK_ORDNER[geraet] ?? geraet; }
-export function nutzerVorgabe(i: string = instanz()): string { return path.join(os.homedir(), '.config', i ? `cypherdj-${i}` : 'cypherdj', 'presets'); }
+export function nutzerVorgabe(i: string = instanz(), o: AblageOptionen = {}): string { return i ? path.join(os.homedir(), '.config', `cypherdj-${i}`, 'presets') : ablageOrdner('presets', o); }
 
 // vok: the vocabulary descriptions are checked against (default presets/vokabular.json, loaded once per store)
 export interface SpeicherOptionen { werk?: string; nutzer?: string; jetzt?: () => Date; vok?: Vokabular }

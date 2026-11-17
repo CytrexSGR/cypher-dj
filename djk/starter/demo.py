@@ -7,6 +7,8 @@ import re
 import shutil
 from pathlib import Path
 
+import storage as tabelle  # the storage table package djk/ablage (absolute import; not the sibling module starter/storage.py)
+
 from . import storage as ablage
 
 QUELLE = Path(__file__).resolve().parent / "demo" / "project.json"
@@ -16,7 +18,7 @@ def projekt_wurzel(instanz: str = "") -> Path:
     """Project root of an instance, the rule of projektWurzelVorgabe (storage.ts:54-56)."""
     if instanz != "" and not re.fullmatch(r"[a-z]", instanz):
         raise ValueError(f"instance {instanz!r}: a to z expected")
-    return Path.home() / "cypherdj-projekte" if instanz == "" else Path(f"/dev/shm/cypherdj-{instanz}/projekte")
+    return tabelle.ordner("projekte") if instanz == "" else Path(f"/dev/shm/cypherdj-{instanz}/projekte")
 
 
 def kopiere_demo(wurzel: Path) -> str:

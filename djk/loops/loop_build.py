@@ -2,7 +2,7 @@
 """Loop für die Loop-Boxen bauen (Plan MVP 2, ADR 025): aus einer eigenen Aufnahme, die schon bei 128 BPM genau N Takte
 lang ist (±10 ms), wird <ziel>/<name>/loop.json + loop.f32 (48 kHz, Stereo, float32 verschränkt, genau N · 90 000
 Frames). Kein Strecken: eine Aufnahme in einem anderen Tempo wird abgelehnt.
-Aufruf: loop_build.py <datei> --takte N --name NAME [--ziel ~/.config/cypherdj/loops]"""
+Aufruf: loop_build.py <datei> --takte N --name NAME [--ziel ORDNER]   (Vorgabe: der Loop-Ordner der Ablage-Tabelle)"""
 import argparse
 import json
 import re
@@ -13,6 +13,9 @@ import time
 from pathlib import Path
 
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # djk: the storage table package `ablage`
+import storage as ablage  # noqa: E402
 
 RATE = 48000
 SPB = 22500
@@ -62,10 +65,10 @@ def main(argv=None) -> int:
     ap.add_argument("datei")
     ap.add_argument("--takte", type=int, required=True)
     ap.add_argument("--name", required=True)
-    ap.add_argument("--ziel", default="~/.config/cypherdj/loops")
+    ap.add_argument("--ziel", default=None)
     a = ap.parse_args(argv)
     try:
-        d = baue(Path(a.datei), a.takte, a.name, Path(a.ziel))
+        d = baue(Path(a.datei), a.takte, a.name, Path(a.ziel) if a.ziel else ablage.ordner("loops"))
     except ValueError as e:
         print(f"loop_bauen: {e}", file=sys.stderr)
         return 2

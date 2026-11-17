@@ -6,11 +6,12 @@ import { zeigeReiterInfo } from './seitenrahmen.js';
 import { BOXEN, ladeLoopSlot, ladeLoops } from './loop_rec_view.js';
 import { HINWEIS_LOOPS, loopsPlatzDa, zeigePlaetzeSpaeter } from './slots_view.js';
 import { instanzen, waehleRolle } from './instanzen.js';
-import { aktivesSet, libKnoepfe, ladeKnopf } from './library_view.js';
+import { aktivesSet, libKnoepfe, ladeKnopf, merkeZeile, nutzungPost } from './library_view.js';
+import { sternKnopf } from './usage.js';
 import { laden } from './deck_view.js';
 
 // ---------- Library: Browser über die Mediathek (Plan 2026-10-10-mediathek-browser) ----------
-export const stz = { typ: 'track', sort: null, ab: false, seite: 0, treffer: [], gesamt: 0, limit: 100, wahl: -1, lauf: 0, seiteOk: 0, ordner: null, feld: null, wert: null, facetteOffen: {}, baumLauf: 0,
+export const stz = { typ: 'track', sort: null, ab: false, seite: 0, treffer: [], gesamt: 0, limit: 100, wahl: -1, lauf: 0, seiteOk: 0, ordner: null, feld: null, wert: null, facetteOffen: {}, baumLauf: 0, vorrang: true,
   liste: null, listeArt: null, listenOffen: {} };   // liste: Slug der in der Mitte gezeigten Liste (S2b), sonst null
 zustand.stoebern = stz;
 export async function stoebernLaden() {
@@ -64,6 +65,8 @@ export function stoebernZeile(t, i, spalten = SPALTEN[t.typ] ?? SPALTEN[stz.typ]
 // Aktionen einer Zeile UND des Details (S5): je Typ dieselben Knöpfe, damit die Spalte nichts anbietet, was die Zeile nicht kann.
 // Die Track-Knöpfe liegen in einem eigenen span: libKnoepfe leert seinen Behälter (PREPARING…), + SET und + LIST dürfen dabei nicht mitgehen.
 export function aktionsKnoepfe(td, t) {
+  // the star: only on rows of a /stoebern result (they carry `favorit`); list views and Strudel rows get none
+  if (!stz.liste && t.typ !== 'strudel' && typeof t.sha === 'string' && typeof t.favorit === 'boolean') td.append(sternKnopf(t, nutzungPost, melde));
   for (const a of aktionenFuer(t)) {
     if (a === 'track') { const sp = document.createElement('span'); sp.className = 'track-aktion'; trackKnoepfe(sp, t); td.append(sp); }
     else if (a === 'loopbox') loopBoxKnoepfe(td, t);
@@ -153,7 +156,7 @@ function trackKnoepfe(td, t) {
   td.textContent = '';
   const e = t.laden_mid ? zustand.bestand.find((x) => x.material_id === t.laden_mid) : null;
   if (e) {
-    for (const n of LADE_DECKS) td.append(ladeKnopf(n, e));
+    for (const n of LADE_DECKS) td.append(ladeKnopf(n, e, merkeZeile(t)));
     zeigePlaetzeSpaeter();
     return;
   }

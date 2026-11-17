@@ -27,7 +27,7 @@ test('P5 Fassade: projBereich liefert zugang mit allen dreiundzwanzig Funktionen
   const { b, z } = bereich(t);
   for (const f of ['offen', 'arbeitsordner', 'haken', 'uebernimm', 'schreibeWiedergabe', 'naechsteNummer', 'tempoAnMaster', 'sperreLaden', 'ausgabeLauf', 'transport', 'aufnahmeLauf', 'aufnahmeAktiv', 'stemsStand', 'beiSchliessen', 'beendeVorhoeren', 'beiStand', 'wirtSpiegel', 'hostZustandSichern', 'hostLage', 'hostGesundAlterMs', 'ladeEchtzeitSicht', 'ladeLiveNeu']) assert.equal(typeof z[f], 'function', f);
   assert.equal(Object.keys(z).length, 23);   // SEQ deck: plus aendern (the session's POST /proj/aendern); plan 1.11 T7: plus hostZustandSichern; later lanes: hostLage, hostGesundAlterMs, ladeEchtzeitSicht, ladeLiveNeu
-  assert.equal(b.routen().length, 27);   // workbench: plus GET werkbank/vorlagen; live-module task 1: plus POST /live/oeffnen; MIDI import: plus POST midi_import; 1.12 slice 3: plus uebersteuern, re_enable, arm and geste; 1.14: plus GET and POST take_vorhoeren; 1.9: plus GET kits; 1.11 T7: plus POST insert param; 1.10 T1: plus GET routing; plus GET surge_patches (the patch picker)
+  assert.equal(b.routen().length, 29);   // workbench: plus GET werkbank/vorlagen; live-module task 1: plus POST /live/oeffnen; MIDI import: plus POST midi_import; 1.12 slice 3: plus uebersteuern, re_enable, arm and geste; 1.14: plus GET and POST take_vorhoeren; 1.9: plus GET kits; 1.11 T7: plus POST insert param; 1.10 T1: plus GET routing; plus GET surge_patches (the patch picker); workbench shelf: plus POST kopie (SAVE AS) and POST loeschen (DELETE)
   assert.equal(b.name, 'proj');
   assert.equal(z.offen(), null);
   assert.equal(z.arbeitsordner(), b.sitzung.arbeitsordner);

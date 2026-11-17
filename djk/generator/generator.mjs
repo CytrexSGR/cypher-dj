@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { kodiere, dekodiere } from '../contract/mock_core/osc.mjs';
+import { ablageOrdner } from '../ui/paths.ts';
 import { kompiliere } from './src/compile.mjs';
 import { ladeKits } from './src/kit.mjs';
 import { Planer, WECHSEL_ABSTAND } from './src/planner.mjs';
@@ -19,7 +20,7 @@ const V = I ? 1000 * (I.charCodeAt(0) - 96) : 0;
 const { values: opt } = parseArgs({ options: {
   'kern-port': { type: 'string', default: String(47100 + V) },
   'abo-port': { type: 'string', default: String(47160 + V) },
-  'kit-ordner': { type: 'string', default: `${process.env.HOME}/.config/cypherdj/kits` },
+  'kit-ordner': { type: 'string', default: ablageOrdner('kits') },
   kit: { type: 'string', default: 'battery' },
   'kit-zusatz': { type: 'string', default: '' },  // MVP 2 Scheibe 3: Mitschnitte (rec), live nachgeladen
   muster: { type: 'string', default: `/dev/shm/cypherdj${I ? `-${I}` : ''}/erzeuger/strom1.js` },

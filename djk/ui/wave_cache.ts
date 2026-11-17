@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { LOOP_NAME } from './loops.ts';
 import { SCHNITT_ID } from './sampler/schnitt.ts';
+import { deckleWelle, WELLE_DECKEL } from './project/cache_deckel.ts';
 
 export interface WelleQuelle { datei: string; schluessel: string; dekodieren?: boolean; dauerS?: number }
 // Keine Parameter-Properties: Node 22.23 strippt nur Typen (ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX, Review 2026-09-27);
@@ -75,7 +76,7 @@ interface Auftrag {
   q: WelleQuelle; ziel: string; refs: number; laeuft: boolean; weg: boolean; prozesse: ChildProcess[];
   promise: Promise<string>; ok: (z: string) => void; fehler: (e: Error) => void;
 }
-export interface WelleOptionen { log?: (z: Record<string, unknown>) => void; ffmpeg?: string[]; zeitlimit?: (dauerS?: number) => number; negativMs?: number }
+export interface WelleOptionen { log?: (z: Record<string, unknown>) => void; ffmpeg?: string[]; zeitlimit?: (dauerS?: number) => number; negativMs?: number; deckel?: number }
 
 export class WelleCache {
   private readonly laufend = new Map<string, Promise<string>>();   // Fassungen/Loops: gleicher Schlüssel teilt sich einen Lauf
@@ -89,9 +90,11 @@ export class WelleCache {
   private readonly ffmpeg: string[];
   private readonly zeitlimit: (dauerS?: number) => number;
   private readonly negativMs: number;
+  private readonly deckel: number;
+  private readonly gemeldet = new Set<string>();
   constructor(ordner: string, python: string, skript: string, log?: (z: Record<string, unknown>) => void, o: WelleOptionen = {}) {
     this.ordner = ordner; this.python = python; this.skript = skript; this.log = log ?? o.log;
-    this.ffmpeg = o.ffmpeg ?? ['ffmpeg']; this.zeitlimit = o.zeitlimit ?? zeitlimitVorgabe; this.negativMs = o.negativMs ?? 10 * 60_000;
+    this.ffmpeg = o.ffmpeg ?? ['ffmpeg']; this.zeitlimit = o.zeitlimit ?? zeitlimitVorgabe; this.negativMs = o.negativMs ?? 10 * 60_000; this.deckel = o.deckel ?? WELLE_DECKEL;
     this.raeumeAuf();
   }
 
@@ -108,6 +111,9 @@ export class WelleCache {
       } catch { /* weg oder nicht lesbar: egal */ }
     }
   }
+
+  // storage layout A5: derived files only, finished .welle files, oldest first; a failing cap never fails a wave
+  private deckeln(): void { try { deckleWelle({ ordner: this.ordner, deckel: this.deckel, log: this.log, gemeldet: this.gemeldet }); } catch { /* housekeeping */ } }
 
   async hole(q: WelleQuelle, signal?: AbortSignal): Promise<string> {
     const ziel = path.join(this.ordner, `${q.schluessel}.welle`);
@@ -180,6 +186,7 @@ export class WelleCache {
       if (pc !== 0) throw new WelleFehler(500, `waveform.py rc ${pc}: ${pyErr}`);
       fs.renameSync(teil, a.ziel);
       this.log?.({ typ: 'welle_gerechnet', datei: a.q.datei, ms: Date.now() - t0 });
+      this.deckeln();
       return a.ziel;
     } finally {
       clearTimeout(limit);
@@ -197,7 +204,7 @@ export class WelleCache {
       p.stderr.on('data', (d) => { err += d; });
       p.once('error', fehler);
       p.once('exit', (c) => {
-        if (c === 0) { this.log?.({ typ: 'welle_gerechnet', datei, ms: Date.now() - t0 }); ok(ziel); }
+        if (c === 0) { this.log?.({ typ: 'welle_gerechnet', datei, ms: Date.now() - t0 }); this.deckeln(); ok(ziel); }
         else fehler(new WelleFehler(500, `waveform.py rc ${c}: ${err.slice(-300)}`));
       });
     });

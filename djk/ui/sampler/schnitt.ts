@@ -7,17 +7,18 @@
 // what was written. Every limit is refused with a reason (SchnittFehler) before anything is written.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import os from 'node:os';
+import { ablageOrdner } from '../paths.ts';
 import path from 'node:path';
 import { graphenOrdner } from '../graphs.ts';
 import { leseLoopQuelle, loopOrdnerVorgabe } from '../loops.ts';
-import { liesModul, modulBasis } from '../project/module_storage.ts';
+import { liesModul, modulBasis, modulOrdner } from '../project/module_storage.ts';
 import { findeAnschlaege, type Anschlag } from '../project/transients.ts';
 import { geraetGraph, geraetName, geraetPanel } from './device.ts';
-import { ladeDatei } from './file.ts';
+import { ladeDatei, ladeDateiPfad } from './file.ts';
 import { leseWavF32 } from './wav.ts';
 
-export type Quelle = { art: 'loop' | 'modul' | 'datei'; ref: string; stem?: string };
+/** `katalog`: `ref` is the 64 hex sha of a catalog row; made only by the routes `/sampler/datei/*`, which hand `Ordner.katalogPfad` in. */
+export type Quelle = { art: 'loop' | 'modul' | 'datei' | 'katalog'; ref: string; stem?: string };
 /** Quality of a marker (guete[i] belongs to grenzen[i]): `staerke` 0..1 is the strength of the hit near the marker (0: none), null on cuts of plan A1 that
  *  were never cut again; `raster_abstand_beats` is the signed distance to the nearest grid position, 0 when it is under RASTER_NAH_BEATS. */
 export type Guete = { staerke: number | null; raster_abstand_beats: number };
@@ -47,7 +48,7 @@ const ENDE_FRAMES = 4;               // a hit this close to 0 or to the end merg
 const STEMS = ['drums', 'bass', 'other', 'vocals', 'guitar', 'piano'];
 
 export function samplerOrdner(): string {
-  return process.env.CYPHERDJ_SAMPLER || path.join(os.homedir(), '.config', 'cypherdj', 'sampler');
+  return ablageOrdner('sampler');
 }
 
 /** Reason codes: quelle_unbekannt, zu_lang, kein_raster, format_falsch, argument_ungueltig, methode_unbekannt, schnitt_unbekannt, keine_anschlaege. `code` is the HTTP status. */
@@ -59,7 +60,8 @@ const arg = (text: string): SchnittFehler => new SchnittFehler(400, 'argument_un
 
 /** `tempo` (BPM of the open project) and `dateiMaxFrames` (a lower limit than 60 s, for tests) only matter for a source of the art `datei`. `packMaxBytes`
  *  (a lower limit than 2 GiB, for tests) only matters for the pack of an instrument. */
-export type Ordner = { ordner?: string; bk?: string; loops?: string; module?: string; tempo?: number; dateiMaxFrames?: number; packMaxBytes?: number; zonenMax?: number };
+export type Ordner = { ordner?: string; bk?: string; loops?: string; module?: string; tempo?: number; dateiMaxFrames?: number; packMaxBytes?: number; zonenMax?: number;
+  /** The file of a catalog sha (null: unknown); only the routes of the file part hand it in. */ katalogPfad?: (sha: string) => string | null };
 
 export type QuellAudio = { daten: Float32Array; frames: number; bpm: number; beats: number; tonart?: string; name: string };
 
@@ -68,6 +70,11 @@ export type QuellAudio = { daten: Float32Array; frames: number; bpm: number; bea
 export function ladeQuellAudio(q: Quelle, o: Ordner = {}): QuellAudio {
   if (typeof q !== 'object' || q === null || typeof q.ref !== 'string') throw arg('quelle: {art, ref} expected');
   if (q.art === 'datei') return ladeDatei(q.ref, o);   // sample player: ref is `<root name>/<path>`
+  if (q.art === 'katalog') {   // the catalog row was checked by the route; here only the file is loaded (the stored cut audio is the f32, ref is provenance)
+    const pfad = o.katalogPfad?.(q.ref) ?? null;
+    if (pfad === null) throw new SchnittFehler(404, 'quelle_unbekannt', `catalog file ${q.ref.slice(0, 16)} is unknown`);
+    return ladeDateiPfad(pfad, o);
+  }
   if (q.art === 'loop') {
     const l = leseLoopQuelle(o.loops ?? loopOrdnerVorgabe(''), q.ref);
     if (!l) throw new SchnittFehler(404, 'quelle_unbekannt', `library loop ${q.ref} does not exist or cannot be loaded`);
@@ -90,7 +97,7 @@ export function ladeQuellAudio(q: Quelle, o: Ordner = {}): QuellAudio {
   const spurName = q.stem === undefined ? 'Loop' : `${stemName} original`;
   const clip = m.spuren.find((s) => s.name === spurName)?.clips.find((c) => c.art === 'audio');
   if (!clip || clip.art !== 'audio') throw new SchnittFehler(404, 'quelle_unbekannt', `module ${q.ref} has no audio track ${spurName}`);
-  const ordner = path.resolve(basis, q.ref);
+  const ordner = path.resolve(modulOrdner(q.ref, basis) ?? path.join(basis, q.ref));
   const datei = path.resolve(ordner, clip.quelle.pfad_hinweis);
   if (path.isAbsolute(clip.quelle.pfad_hinweis) || !datei.startsWith(`${ordner}${path.sep}`)) {
     throw new SchnittFehler(404, 'quelle_unbekannt', `module ${q.ref}: the audio path of ${spurName} leaves the module folder`);
@@ -212,6 +219,7 @@ export function legeSchnitt(a: { quelle: Quelle; name?: string; methode?: string
   if (a.name !== undefined && (typeof a.name !== 'string' || a.name.trim() === '' || a.name.length > NAME_MAX)) throw arg(`name: a text of 1..${NAME_MAX} characters expected`);
   const optionen = a.optionen ?? {};
   if (typeof optionen !== 'object' || optionen === null || Array.isArray(optionen)) throw arg('optionen: object expected');
+  if (a.quelle?.art === 'katalog' && !o.katalogPfad) throw arg('quelle.art: loop, modul or datei expected');   // catalog sources come only from /sampler/datei/*
   const q = ladeQuellAudio(a.quelle, o);
   const m = SCHNITT_METHODEN[methode](q, optionen);
   const name = a.name?.trim() ?? q.name;

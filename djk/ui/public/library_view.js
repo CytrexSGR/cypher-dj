@@ -5,10 +5,11 @@ import { stoebernLaden, stz } from './browse_table.js';
 import { ladeBaum, markiereTyp, schliesseListenMenue, zeigeDetail } from './browse_detail.js';
 import { fmtZeit, ladeBestand, laden } from './deck_view.js';
 import { zeigePlaetzeSpaeter } from './slots_view.js';
+import { merkeBenutzt } from './usage.js';
 export function bindeLibrary() {
   for (const b of $$('[data-typ]')) b.addEventListener('click', () => {
     for (const x of $$('[data-typ]')) x.classList.toggle('an', x === b);
-    Object.assign(stz, { typ: b.dataset.typ, sort: null, ab: false, seite: 0, ordner: null, feld: null, wert: null, facetteOffen: {}, liste: null, listeArt: null });
+    Object.assign(stz, { typ: b.dataset.typ, sort: null, ab: false, vorrang: true, seite: 0, ordner: null, feld: null, wert: null, facetteOffen: {}, liste: null, listeArt: null });
     markiereTyp(); stoebernLaden(); ladeBaum();
   });
   // Filterleiste (S3): Enter im Textfeld, sofort bei Haken und Auswahl; Fehler (400) zeigt stoebernLaden als „Library: …"
@@ -34,6 +35,7 @@ export function bindeLibrary() {
     const th = e.target.closest('th[data-sort]');
     if (!th) return;
     if (stz.sort === th.dataset.sort) stz.ab = !stz.ab; else Object.assign(stz, { sort: th.dataset.sort, ab: false });
+    stz.vorrang = false;   // a chosen column is the order, no priority any more
     stz.seite = 0; stoebernLaden();
   });
   document.addEventListener('click', (e) => { if (!e.target.closest('#listen-menue, .in-liste')) schliesseListenMenue(); });
@@ -46,18 +48,22 @@ export function bindeLibrary() {
   });
 }
 // One LOAD button; data-deck lets zeigePlaetze grey it when its place is not a Track place
-export function ladeKnopf(n, e) {
+// nachLaden: optional, called once the server answered 200 (the library marks the sample as recently used)
+export function ladeKnopf(n, e, nachLaden) {
   const b = document.createElement('button');
   b.className = `laden ${klasseLaden(n)}`; b.textContent = `LOAD ${BUCHSTABE[n]}`;
   b.dataset.deck = String(n);
-  b.addEventListener('click', () => laden(n, e));
+  b.addEventListener('click', async () => { if (await laden(n, e) === true) nachLaden?.(); });
   return b;
 }
+// usage.js talks {status, j}; postJson answers {ok, code, j}
+export const nutzungPost = async (pfad, daten) => { const r = await postJson(pfad, daten); return { status: r.code, j: r.j }; };
+export const merkeZeile = (t) => (typeof t?.sha === 'string' ? () => merkeBenutzt(nutzungPost, t.sha) : undefined);
 export function libKnoepfe(td, t) {
   td.textContent = '';
   const e = zustand.bestand.find((x) => x.material_id === t.material_id);
   if (e) {
-    for (const n of LADE_DECKS) td.append(ladeKnopf(n, e));
+    for (const n of LADE_DECKS) td.append(ladeKnopf(n, e, merkeZeile(t)));
     zeigePlaetzeSpaeter();
     return;
   }

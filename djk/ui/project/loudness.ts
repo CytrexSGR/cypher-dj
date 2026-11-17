@@ -5,7 +5,8 @@
 // ffmpeg) und Peak -inf dBFS, das hier wie spitze_db als −200 erscheint (JSON kennt kein −∞).
 import { spawn } from 'node:child_process';
 
-export interface Lautheit { lufs_i: number | null; lra: number | null; true_peak_dbtp: number | null; loudness_fehler?: string }
+export interface Lautheit { lufs_i: number | null; lra: number | null; true_peak_dbtp: number | null; loudness_fehler?: string;
+  lufs_s_max?: number | null; lufs_m_max?: number | null }
 
 const zahl = (s: string): number => (/^-inf$/i.test(s) ? -200 : Number(s));
 
@@ -21,14 +22,37 @@ export function leseEbur128(text: string): { lufs_i: number; lra: number; true_p
   return { lufs_i: zahl(I[1]), lra: zahl(LRA[1]), true_peak_dbtp: zahl(TP[1]) };
 }
 
+// Analyze B1: one ebur128 frame line (`-loglevel verbose`, framelog=verbose) carries M (momentary, 400 ms) and S (short-term, 3 s); keeps the maxima.
+// Values that are -inf or <= -120 (the gate floor before the first full window) are ignored. A summary line has neither key and changes nothing.
+export function leseMaxima(zeile: string, stand: { s: number | null; m: number | null }): void {
+  const m = /\bM:\s*(-?\d+(?:\.\d+)?|-inf)\s/.exec(zeile), s = /\bS:\s*(-?\d+(?:\.\d+)?|-inf)\s/.exec(zeile);
+  const nimm = (t: string | undefined, alt: number | null): number | null => {
+    if (t === undefined || /^-inf$/i.test(t)) return alt;
+    const v = Number(t);
+    return v <= -120 || (alt !== null && v <= alt) ? alt : v;
+  };
+  stand.m = nimm(m?.[1], stand.m);
+  stand.s = nimm(s?.[1], stand.s);
+}
+
 const NULL = { lufs_i: null, lra: null, true_peak_dbtp: null };
 
-export function messeLautheit(datei: string, ffmpeg: string[] = ['ffmpeg'], zeitlimitMs = 120_000): Promise<Lautheit> {
+export function messeLautheit(datei: string, ffmpeg: string[] = ['ffmpeg'], zeitlimitMs = 120_000, o: { maxima?: boolean } = {}): Promise<Lautheit> {
   return new Promise((ok) => {
-    const k = spawn('nice', ['-n', '19', ...ffmpeg, '-nostdin', '-hide_banner', '-nostats', '-i', datei,
-      '-af', 'ebur128=peak=true:framelog=quiet', '-f', 'null', '-'], { stdio: ['ignore', 'ignore', 'pipe'] });
-    let err = '', abgelaufen = false;
-    k.stderr.on('data', (b: Buffer) => { err = (err + b.toString('utf8')).slice(-65536); });
+    const mx = !!o.maxima;
+    const k = spawn('nice', ['-n', '19', ...ffmpeg, '-nostdin', '-hide_banner', '-nostats', ...(mx ? ['-loglevel', 'verbose'] : []), '-i', datei,
+      '-af', `ebur128=peak=true:framelog=${mx ? 'verbose' : 'quiet'}`, '-f', 'null', '-'], { stdio: ['ignore', 'ignore', 'pipe'] });
+    let err = '', abgelaufen = false, rest = '';
+    const stand = { s: null as number | null, m: null as number | null };
+    k.stderr.on('data', (b: Buffer) => {
+      const t = b.toString('utf8');
+      if (mx) {   // frame lines arrive as they are written; the 64 KiB tail below would drop most of them
+        const z = (rest + t).split('\n');
+        rest = z.pop() ?? '';
+        for (const l of z) leseMaxima(l, stand);
+      }
+      err = (err + t).slice(-65536);
+    });
     const uhr = setTimeout(() => { abgelaufen = true; k.kill('SIGKILL'); }, zeitlimitMs);
     k.once('error', (e) => { clearTimeout(uhr); ok({ ...NULL, loudness_fehler: `ffmpeg_fehlt: ${e.message}` }); });
     k.once('close', (rc) => {
@@ -38,7 +62,9 @@ export function messeLautheit(datei: string, ffmpeg: string[] = ['ffmpeg'], zeit
       if (rc === 127 || rc === 126) return ok({ ...NULL, loudness_fehler: `ffmpeg_fehlt: ${ffmpeg[0]}` });
       const letzte = err.split('\n').map((z) => z.trim()).filter(Boolean).at(-1) ?? '';
       if (rc !== 0) return ok({ ...NULL, loudness_fehler: `ffmpeg_fehler: Rückgabe ${rc}: ${letzte.slice(0, 200)}` });
+      if (mx && rest) leseMaxima(rest, stand);
       const m = leseEbur128(err);
+      if (m && mx) return ok({ ...m, lufs_s_max: stand.s, lufs_m_max: stand.m });
       ok(m ?? { ...NULL, loudness_fehler: 'ffmpeg_ausgabe: keine ebur128-Zusammenfassung' });
     });
   });

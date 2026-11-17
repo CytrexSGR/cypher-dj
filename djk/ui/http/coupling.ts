@@ -71,6 +71,7 @@ export const TABLET_VERBOTEN: readonly { pfad: string; warum: string }[] = [
   { pfad: '/laden', warum: 'loads material into a deck' }, { pfad: '/tempo', warum: 'master tempo' },
   { pfad: '/fx', warum: 'beat FX of the DJ view' },
   { pfad: '/deck', warum: 'deck transport and grid' }, { pfad: '/ansage', warum: 'announcements' },
+  { pfad: '/quellen', warum: 'local folder paths' },
   { pfad: '/presets', warum: 'writes preset files' }, { pfad: '/kollektionen', warum: 'writes collections' },
 ];
 // The POSTs a tablet may send at all: the knobs of the device page. Everything else is refused as well, so a route added later is closed until it is named here.
@@ -80,9 +81,9 @@ export const TABLET_KLANG_AKTIONEN: readonly string[] = ['param', 'params', 'ist
 
 const unter = (pfad: string, wurzel: string): boolean => pfad === wurzel || pfad.startsWith(`${wurzel}/`);
 
-/** true: the tablet listener refuses this (method, pathname) with 403. Reads stay open except under /kopplung; a POST must be on the allowed list. */
+/** true: the tablet listener refuses this (method, pathname) with 403. Reads stay open except under /kopplung and /quellen; a POST must be on the allowed list. */
 export function tabletVerboten(methode: string, pfad: string): boolean {
-  if (unter(pfad, '/kopplung')) return true;
+  if (unter(pfad, '/kopplung') || unter(pfad, '/quellen')) return true;   // /quellen: even the read shows local folder paths
   if (methode === 'GET') return false;
   if (methode === 'POST' && TABLET_POST_ERLAUBT.includes(pfad)) return false;
   return true;   // POST elsewhere, PUT, DELETE, ...: closed (the deny list above names the known ones with a reason, this keeps unknown ones closed too)

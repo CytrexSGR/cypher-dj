@@ -7,7 +7,7 @@ import type { Bereich, BereichKontext, Route } from '../../http/router.ts';
 import { json } from '../../http/transport.ts';
 import { aendereStand, StandFehler } from '../../project/state.ts';
 import { liveSlots, normiereSlot } from '../../project/live.ts';
-import { EinsetzFehler, liesModul, listeModule, setzeModulEin, speichereModul } from '../../project/module_storage.ts';
+import { EinsetzFehler, liesModul, listeModule, modulOrdner, setzeModulEin, speichereModul } from '../../project/module_storage.ts';
 import { alsAntwort, leseKoerper, type ProjZugang } from '../proj/area.ts';
 import { ProjFehler, type Antwort } from '../proj/session.ts';
 
@@ -65,7 +65,7 @@ export function bibliothekBereich(ctx: BereichKontext, zugang: ProjZugang, o: Bi
       }
     }
     try {
-      const r = setzeModulEin(offen.projekt, j, { modulOrdner: path.join(basis, j.id), audioZiel: path.join(offen.ordner, 'loops'), quelle,
+      const r = setzeModulEin(offen.projekt, j, { modulOrdner: modulOrdner(j.id, basis) ?? path.join(basis, j.id), audioZiel: path.join(offen.ordner, 'loops'), quelle,
         slot, ...(o.jetzt ? { jetzt: o.jetzt } : {}) });
       const meta = { quelle, label: `Place module ${j.herkunft?.titel ?? j.gruppen[0].name}`.slice(0, 80) };
       const w = aendereStand(offen.verlauf, offen.projekt, r.projekt, meta, zugang.haken());

@@ -62,3 +62,38 @@ def test_ungueltige_korrektur_wird_nicht_angehaengt(tmp_path):
                                        "fassung": "128000_r0", "ab_quell_beat": 8.0, "bis_quell_beat": 16.0,
                                        "versatz_ms": 5.0, "nr": None, "text": ""})
     assert korrekturen_lesen(tmp_path) == [] and os.path.getsize(tmp_path / "korrekturen.jsonl") == 0
+
+
+def test_vorgaben_aus_tabelle(tmp_path, monkeypatch):
+    """The analysis store default comes from the storage table; an empty CYPHERDJ_* value counts as unset."""
+    from pathlib import Path
+    from werkstatt.inventory import standard_ablage, standard_bestand
+    monkeypatch.setenv("HOME", str(tmp_path))
+    for n in ("CYPHERDJ_BESTAND", "CYPHERDJ_ANALYSE", "CYPHERDJ_HEIM"):
+        monkeypatch.delenv(n, raising=False)
+    assert standard_bestand() == tmp_path / "cypher-dj" / "bestand"
+    assert standard_ablage() == tmp_path / "werkstatt" / "cypher-dj-analyse"
+    monkeypatch.setenv("CYPHERDJ_BESTAND", "")
+    monkeypatch.setenv("CYPHERDJ_ANALYSE", "")
+    assert standard_bestand() == tmp_path / "cypher-dj" / "bestand"
+    assert standard_ablage() == tmp_path / "werkstatt" / "cypher-dj-analyse"
+    monkeypatch.setenv("CYPHERDJ_BESTAND", str(tmp_path / "b"))
+    monkeypatch.setenv("CYPHERDJ_ANALYSE", str(tmp_path / "a"))
+    assert standard_bestand() == Path(tmp_path / "b") and standard_ablage() == Path(tmp_path / "a")
+
+
+def test_raster_ordner_aus_tabelle_ab_cwd_workshop(tmp_path):
+    """Start path of the page server: `python -m werkstatt.<modul>` with cwd = djk/workshop. `ablage` must be the package djk/ablage."""
+    import subprocess
+    import sys
+    from pathlib import Path
+    workshop = Path(__file__).resolve().parents[1]
+    import site
+    env = {"PATH": os.environ["PATH"], "HOME": str(tmp_path), "PYTHONUSERBASE": site.getuserbase()}   # user site stays visible with a foreign HOME
+    code = ("import sys, os, werkstatt.bestand as b; from werkstatt import lauf_eins as l; "
+            "print(os.path.realpath(sys.modules['ablage'].__file__)); print(l.RASTER_ORDNER); print(b.standard_ablage())")
+    r = subprocess.run([sys.executable, "-c", code], cwd=workshop, env=env, capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, r.stderr
+    pfad, raster, analyse = r.stdout.splitlines()[-3:]
+    assert pfad == str(workshop.parent / "ablage" / "__init__.py")
+    assert raster == f"{tmp_path}/.config/cypherdj/raster" and analyse == f"{tmp_path}/werkstatt/cypher-dj-analyse"

@@ -25,7 +25,7 @@ const KEIN_LAUF = { 'GET /sampler/instrument/lauf': { j: { laeuft: false } } };
 let wurzel, w, fragen;
 function aufbau({ tab = 'samples', aktuell = AKTUELL, antworten = {}, frage = () => true } = {}) {
   fragen = [];
-  installiere({ speicher: { 'djk-wb-regal-tab': tab }, antworten: { 'GET /proj/aktuell': { j: aktuell }, 'GET /proj/liste': { j: [] }, 'GET /proj/werkbank/vorlagen': { j: { vorlagen: [] } }, ...antworten } });
+  installiere({ speicher: { 'djk-wb-regal-tab': tab, 'djk-wb-regal-katalog': '{"modus":"ordner"}' }, antworten: { 'GET /proj/aktuell': { j: aktuell }, 'GET /proj/liste': { j: [] }, 'GET /proj/werkbank/vorlagen': { j: { vorlagen: [] } }, ...antworten } });
   wurzel = document.createElement('section');
   w = bindeWerkbank({ post, wurzel, frage: (t) => { fragen.push(t); return frage(t); } });
   w.ctx.laufMs = 5;

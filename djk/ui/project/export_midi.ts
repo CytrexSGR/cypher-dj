@@ -3,8 +3,10 @@
 // Playback rule (mirrored from project/playback.ts `noten()`, which is not exported): a MIDI clip is unrolled by `fuerAusgerollteNoten` (exported there and
 // used here directly): copies of [0, loop_beats) up to laenge_beats, a note at or after loop_beats is silent; a transpose envelope moves the pitch, read at the
 // note start in the clip, rounded and clamped to 0..127.
-// Rows and note fields (chance, wdh, versatz, MidiClip.zeilen) are applied by the same unrolling, so the file holds what plays (chance: the same deterministic draws).
-// Then the range: a note is kept when it sounds anywhere in [von, bis); it starts at its beat relative to `von` (never before 0) and ends at `bis` at the latest.
+// Rows and note fields (chance, wdh, versatz, MidiClip.zeilen) are applied by the same unrolling, so the file holds what plays (chance: the same
+// deterministic draws).
+// Then the range: a note is kept when it sounds anywhere in [von, bis); it starts at its beat relative to `von` (never before 0) and ends at `bis`
+// at the latest.
 import { fuerAusgerollteNoten } from './playback.ts';
 import { hkWert } from './envelope.ts';
 import type { Projekt } from './model.ts';

@@ -1,0 +1,16 @@
+{
+  "regel": "lower case; ae oe ue ss for umlauts and sharp s; other characters outside a-z0-9 become '-'; runs of '-' collapse; trim '-'; cut to max (default 40); trim again; empty stays empty",
+  "vektoren": [
+    { "text": "Pure and Simple", "erwartet": "pure-and-simple" },
+    { "text": "Größe Äpfel Öl Übung", "erwartet": "groesse-aepfel-oel-uebung" },
+    { "text": "Straße", "erwartet": "strasse" },
+    { "text": "", "erwartet": "" },
+    { "text": "   ", "erwartet": "" },
+    { "text": "!!! ??? ...", "erwartet": "" },
+    { "text": "--a--b--", "erwartet": "a-b" },
+    { "text": "abcdefghij abcdefghij abcdefghij abcdefghij abcdefghij abcdefghij", "erwartet": "abcdefghij-abcdefghij-abcdefghij-abcdefg" },
+    { "text": "abcdefghij abcdefghij abcdefghij abcdefghij-", "max": 22, "erwartet": "abcdefghij-abcdefghij" },
+    { "text": "abcd efgh", "max": 5, "erwartet": "abcd" },
+    { "text": "Café 808_Kick", "erwartet": "caf-808-kick" }
+  ]
+}
