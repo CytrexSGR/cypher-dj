@@ -62,6 +62,7 @@ export const TABLET_VERBOTEN: readonly { pfad: string; warum: string }[] = [
   { pfad: '/lernen', warum: 'controller profiles (MIDI learn), also the host learn table' },
   { pfad: '/plugins', warum: 'plug-in scan, unlock, rescan (spawns processes)' },
   { pfad: '/proj', warum: 'the project: freeze, bounce, export, stems, recording, edits' },
+  { pfad: '/analyse', warum: 'reference measurement decodes files; storing and deleting references writes files' },
   { pfad: '/sammlungen', warum: 'sets: import, rename, delete' },
   { pfad: '/mediathek', warum: 'library preparation (spawns decoders)' },
   { pfad: '/vorhoeren', warum: 'pre-listening player' },

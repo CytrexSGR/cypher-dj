@@ -21,3 +21,12 @@
 #werkbank .w-analyse-hinweise { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 12px; }
 #werkbank .w-analyse-hinweis { padding-left: 10px; border-left: 2px solid var(--warn); }
 #werkbank .w-analyse-leer { color: var(--dim); }
+/* slice 2: drop target, references, the inline save row, VS REFERENCE */
+#werkbank .w-fenster[data-fenster-id="analyse"] .w-fenster-koerper.w-analyse-ziel { outline: 2px dashed var(--accent, #5cd0ff); outline-offset: -4px; background: rgba(92,208,255,.06); }
+#werkbank .w-analyse-weg { font: inherit; font-size: 11px; min-height: 32px; padding: 0 8px; color: var(--dim); background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; cursor: pointer; }
+#werkbank .w-analyse-weg:hover { color: var(--text); }
+#werkbank .w-analyse-weg[hidden], #werkbank .w-analyse-match[hidden], #werkbank .w-analyse-speichern[hidden], #werkbank .w-analyse-abschnitt[hidden] { display: none; }
+#werkbank .w-analyse-match { display: flex; align-items: center; gap: 4px; min-height: 32px; font-size: 10px; letter-spacing: .12em; color: var(--dim); cursor: pointer; }
+#werkbank .w-analyse-speichern { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 8px; background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; }
+#werkbank .w-analyse-name { flex: 1 1 140px; min-width: 0; font: inherit; font-size: 12px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 5px; padding: 4px 8px; min-height: 32px; }
+#werkbank .w-analyse-ref-zeile { font-size: 12px; font-variant-numeric: tabular-nums; margin-bottom: 4px; }

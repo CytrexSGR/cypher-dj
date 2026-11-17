@@ -6,27 +6,32 @@ import { Worker } from 'node:worker_threads';
 import { AusgabeFehler, untermessgrenze, type Ausgabe } from './output.ts';
 import { messeLautheit, type Lautheit } from '../../project/loudness.ts';
 import {
-  STILLE_DB, pruefeAntwort, quellenSchluessel,
-  type AnalyseAntwort, type AnalyseQuelle, type Hinweis, type Lautheitswerte, type Messung, type Ueberdeckung,
+  STILLE_DB, istRefQuelle, pruefeAntwort, quellenSchluessel,
+  type Abgleich, type AnalyseAntwort, type AnalyseQuelle, type Hinweis, type Lautheitswerte, type Messung, type RefMessung, type RefQuelle, type Ueberdeckung,
 } from '../../project/sound_contract.ts';
 import type { Teilmessung } from '../../project/sound_measurement.ts';
+import { abgleich } from '../../public/sound_match.js';
 
+export interface WerkAuftrag { quelle: string | null; vergleich?: string | null; frames: number[]; versatz?: number[] }
 export interface WerkErgebnis { quelle: Teilmessung; vergleich?: Teilmessung; ueberdeckung?: Ueberdeckung }
 export interface KlangAnalyseOptionen {
   /** What measures the WAVs: `quelle` / `vergleich` is a file, or null for a strip that is silent (then it is analysed as silence); `vergleich` is absent
-   *  without a comparison. `frames` is the common frame count of the entries (quelle, vergleich). Default: the worker sound_factory.ts. */
-  analysiere?: (dateien: { quelle: string | null; vergleich?: string | null; frames: number[] }) => Promise<WerkErgebnis>;
+   *  without a comparison. `frames` is the common frame count of the entries (quelle, vergleich); `versatz` the frames to skip per entry (slice 2,
+   *  references only). Default: the worker sound_factory.ts. */
+  analysiere?: (dateien: WerkAuftrag) => Promise<WerkErgebnis>;
   /** The objective hints (hinweiseQuelle, hinweiseUeberdeckung). Default: loaded from project/sound_measurement.ts at the first run. */
   hinweise?: { quelle: (m: Messung) => Hinweis[]; ueberdeckung: (q: Messung, v: Messung, u: Ueberdeckung) => Hinweis[] };
   /** Module of the pure analysis , loaded lazily by the default hints and by the default worker. Default: '../../project/sound_measurement.ts'. */
   messungModul?: string;
   ffmpeg?: string[];
   lruGroesse?: number;
+  /** Slice 2: measures a reference given as `vergleich` (KlangReferenz.messe). `dauer_s` is the length of the analysed range. */
+  referenz?: { messe: (q: RefQuelle, dauer_s?: number) => Promise<RefMessung>; stempel?: (q: RefQuelle) => string };
 }
 
 /** The default measuring: one worker per run. A failing worker rejects with its message. */
 export const MESSUNG_MODUL = '../../project/sound_measurement.ts';
-export function analysiereImWerk(dateien: { quelle: string | null; vergleich?: string | null; frames: number[] },
+export function analysiereImWerk(dateien: WerkAuftrag,
   messungModul = MESSUNG_MODUL): Promise<WerkErgebnis> {
   return new Promise((ok, nein) => {
     let fertig = false;
@@ -41,7 +46,8 @@ export function analysiereImWerk(dateien: { quelle: string | null; vergleich?: s
 const NULLEN: Lautheitswerte = { lufs_i: null, lufs_s_max: null, lufs_m_max: null, lra: null, true_peak_dbtp: null, spitze_db: null, rms_db: null,
   crest_db: null };
 
-function messung(q: AnalyseQuelle, name: string, t: Teilmessung, l: Lautheit | null, uebersprungen: boolean): Messung {
+/** The loudness block of a measurement from the analysis `t` and the ffmpeg result `l` (also used for references, sound_reference.ts). */
+export function lautheitswerte(t: Teilmessung, l: Lautheit | null, uebersprungen = false): Lautheitswerte {
   const stumm = uebersprungen || t.stumm;
   const lautheit: Lautheitswerte = stumm || !l ? { ...NULLEN } : {
     lufs_i: l.lufs_i, lufs_s_max: l.lufs_s_max ?? null, lufs_m_max: l.lufs_m_max ?? null, lra: l.lra, true_peak_dbtp: l.true_peak_dbtp,
@@ -53,7 +59,12 @@ function messung(q: AnalyseQuelle, name: string, t: Teilmessung, l: Lautheit | n
     if (u.unter) { lautheit.lufs_i = null; lautheit.lra = null; lautheit.lufs_s_max = null; lautheit.lufs_m_max = null; }
   }
   if (!stumm && !l) { lautheit.spitze_db = t.spitze_db; lautheit.rms_db = t.rms_db; lautheit.crest_db = t.crest_db; }
-  return { quelle: q, name, stumm, lautheit, stereo: t.stereo, spektrum: t.spektrum, zeitbild: t.zeitbild };
+  return lautheit;
+}
+
+function messung(q: AnalyseQuelle, name: string, t: Teilmessung, l: Lautheit | null, uebersprungen: boolean): Messung {
+  const stumm = uebersprungen || t.stumm;
+  return { quelle: q, name, stumm, lautheit: lautheitswerte(t, l, uebersprungen), stereo: t.stereo, spektrum: t.spektrum, zeitbild: t.zeitbild };
 }
 
 export class KlangAnalyse {
@@ -65,33 +76,47 @@ export class KlangAnalyse {
   private readonly o: KlangAnalyseOptionen;
   constructor(a: Ausgabe, o: KlangAnalyseOptionen = {}) { this.a = a; this.o = o; this.hinweisFn = o.hinweise; }
 
-  private schluessel(slug: string, rev: number, q: AnalyseQuelle, v: AnalyseQuelle | undefined, von: number, bis: number): string {
-    return [slug, rev, quellenSchluessel(q), quellenSchluessel(v), von, bis].join('|');
+  // `stempel`: the state of a reference file (KlangReferenz.stempel), empty for a strip
+  private schluessel(slug: string, rev: number, q: AnalyseQuelle, v: AnalyseQuelle | RefQuelle | undefined, von: number, bis: number,
+    stempel = ''): string {
+    return [slug, rev, quellenSchluessel(q), quellenSchluessel(v), von, bis, stempel].join('|');
   }
 
   async analysiere(d: Record<string, unknown>): Promise<AnalyseAntwort> {
     const pre = this.a.analyseVorpruefung(d);
-    const q = d.quelle as AnalyseQuelle, v = (d.vergleich ?? undefined) as AnalyseQuelle | undefined;
-    const schl = this.schluessel(pre.slug, pre.rev, q, v, pre.von, pre.bis);
+    const q = d.quelle as AnalyseQuelle, v = (d.vergleich ?? undefined) as AnalyseQuelle | RefQuelle | undefined;
+    // a reference is part of the key as the file is now: a replaced file or a removed reference is never answered from the cache (it refuses here)
+    const stempel = istRefQuelle(v) ? this.o.referenz?.stempel?.(v) ?? '' : '';
+    const schl = this.schluessel(pre.slug, pre.rev, q, v, pre.von, pre.bis, stempel);
     const treffer = this.lru.get(schl);
     if (treffer) { this.lru.delete(schl); this.lru.set(schl, treffer); return treffer; }
     // An identical request that comes while the run is in flight waits for it, but only takes its answer when that answer is for the rev it saw itself:
     // the rev the run started with (nothing changed since), or the rev the answer carries (the run froze a Surge track and so raised it). A project that
     // changed meanwhile is measured again.
-    const flug = this.schluessel(pre.slug, 0, q, v, pre.von, pre.bis);
+    const flug = this.schluessel(pre.slug, 0, q, v, pre.von, pre.bis, stempel);
     const im = this.imFlug.get(flug);
     if (im) {
       const a = await im.lauf;
       if (pre.rev === im.rev || pre.rev === a.rev) return a;
       return this.analysiere(d);
     }
-    const lauf = this.messe(q, v, pre.von, pre.bis, d.ohne_freeze === true).finally(() => { this.imFlug.delete(flug); });
+    const lauf = this.messe(q, v, pre.von, pre.bis, d.ohne_freeze === true, pre.tempo_bpm, stempel).finally(() => { this.imFlug.delete(flug); });
     this.imFlug.set(flug, { rev: pre.rev, lauf });
     return lauf;
   }
 
-  private async messe(q: AnalyseQuelle, v: AnalyseQuelle | undefined, von: number, bis: number, ohneFreeze: boolean): Promise<AnalyseAntwort> {
+  private async messe(q: AnalyseQuelle, vAlle: AnalyseQuelle | RefQuelle | undefined, von: number, bis: number, ohneFreeze: boolean,
+    tempo: number, stempel = ''): Promise<AnalyseAntwort> {
     const t0 = Date.now();
+    // a reference as the comparison is measured first (an unknown file fails before anything is rendered); only the strip is rendered
+    const ref = vAlle && istRefQuelle(vAlle) ? vAlle : undefined;
+    const v = vAlle && !ref ? vAlle as AnalyseQuelle : undefined;
+    let refMessung: RefMessung | undefined;
+    if (ref) {
+      if (!this.o.referenz) throw new AusgabeFehler('argument_ungueltig', 'vergleich: references are not available here');
+      // the window of the reference is as long as the analysed range, but never under 8 s (a one-bar loop would compare against too short a piece)
+      refMessung = await this.o.referenz.messe(ref, Math.min(900, Math.max(8, (bis - von) * 60 / tempo)));
+    }
     let slug = '';   // the slug of the project that was rendered
     const antwort = await this.a.rendereStreifen(v ? [q, v] : [q], von, bis, ohneFreeze, async (r) => {
       slug = r.slug;
@@ -119,14 +144,18 @@ export class KlangAnalyse {
       const u = mv && !mq.stumm && !mv.stumm ? werk.ueberdeckung : undefined;
       const hf = this.hinweisFn ?? (this.hinweisFn = await this.ladeHinweise());
       const hinweise: Hinweis[] = [...hf.quelle(mq), ...(mv ? hf.quelle(mv) : []), ...(mv && u ? hf.ueberdeckung(mq, mv, u) : [])];
+      // a reference: the level-matched difference of the spectra, no masking and only the hints of the source
+      const ag: Abgleich | undefined = refMessung && !mq.stumm && !refMessung.stumm ?
+        abgleich(mq.spektrum.mittel_db, refMessung.spektrum.mittel_db) as Abgleich : undefined;
       const aus: AnalyseAntwort = { rev: r.rev, von_beat: von, bis_beat: bis, dauer_s: (bis - von) * 60 / r.tempo_bpm, tempo_bpm: r.tempo_bpm, quelle: mq,
-        ...(mv ? { vergleich: mv } : {}), ...(u ? { ueberdeckung: u } : {}), hinweise };
+        ...(mv ? { vergleich: mv } : {}), ...(refMessung ? { vergleich: refMessung } : {}), ...(u ? { ueberdeckung: u } : {}), ...(ag ? { abgleich: ag } : {}),
+        hinweise };
       const fehler = pruefeAntwort(aus);
       if (fehler.length) throw new AusgabeFehler('render_fehler', `the analysis answer is malformed: ${fehler.slice(0, 3).join('; ')}`);
       return aus;
     });
-    this.merke(this.schluessel(slug, antwort.rev, q, v, von, bis), antwort);
-    this.a.protokolliere({ typ: 'proj_analyse', slug, von_beat: von, bis_beat: bis, quelle: quellenSchluessel(q), vergleich: quellenSchluessel(v),
+    this.merke(this.schluessel(slug, antwort.rev, q, vAlle, von, bis, stempel), antwort);
+    this.a.protokolliere({ typ: 'proj_analyse', slug, von_beat: von, bis_beat: bis, quelle: quellenSchluessel(q), vergleich: quellenSchluessel(vAlle),
       ms: Date.now() - t0 });
     return antwort;
   }

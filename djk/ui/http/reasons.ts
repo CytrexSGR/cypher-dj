@@ -276,6 +276,12 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   audio_fehlt: 'an audio clip is still being prepared; try again in a moment',
   freeze_fehler: 'freezing failed in the core; nothing was saved',
   render_fehler: 'the export render failed',
+  // ANALYZE slice 2: references (areas/proj/sound_reference.ts)
+  messung_fehler: 'measuring the reference failed',
+  format_falsch: 'the file cannot be read as audio',
+  referenz_unbekannt: 'there is no such stored reference',
+  speichern_fehler: 'the reference could not be saved',
+  quelle_unbekannt: 'the audio file of the reference was not found',
   export_bereich: 'the export range must be 1 to 1024 beats long',
   export_leer: 'no unmuted instrument track has a note in this range',
   keine_arbeitsflaeche: 'the server has no desktop session to open a folder in',

@@ -19,12 +19,35 @@ export interface Schwerpunkt { hz_von: number; hz_bis: number; anteil: number }
 export interface Ueberdeckung { baender: UeberdeckungsBand[]; schwerpunkte: Schwerpunkt[] }
 export type HinweisArt = 'bass_nicht_mono' | 'true_peak' | 'resonanz' | 'ueberdeckung_tief';
 export interface Hinweis { art: HinweisArt; text: string; hz?: number }
+// ---- slice 2: a reference as the comparison (an audio file or a stored reference curve) and the live picture of the master output ----
+// A reference is measured without a project: no time picture, no masking. `sha` is a catalogue sha, `pfad` an absolute path (one of the two for
+// 'datei'); von_s/bis_s fix the range, otherwise the server takes the loudest window of the length asked for, or the whole file (RefBereich.wahl).
+export type RefArt = 'datei' | 'referenz';
+export interface RefQuelle { art: RefArt; sha?: string; pfad?: string; von_s?: number; bis_s?: number; id?: string }   // id: a stored reference
+export interface RefBereich { von_s: number; bis_s: number; datei_s: number; wahl: 'ganz' | 'laut' | 'fest' }
+export interface RefMessung { quelle: RefQuelle; name: string; stumm: boolean; lautheit: Lautheitswerte; stereo: Stereo; spektrum: Spektrum;
+  bereich?: RefBereich; rolle?: string }
+// Level-matched difference of the source against the reference in 1/3 octave (public/sound_match.js): versatz_db is what the reference curve is
+// shifted by, diff_db > 0 = the source has more there than the reference, null = one of the two carries no level in the band.
+export interface AbgleichBand { hz: number; diff_db: number | null }
+export interface Abweichung { hz_von: number; hz_bis: number; diff_db: number }
+export interface Abgleich { versatz_db: number; baender: AbgleichBand[]; abweichungen: Abweichung[] }   // 30 bands, at most 3 deviations
+export interface ReferenzZeile { id: string; name: string; rolle: string; erstellt: string; herkunft: string; lufs_i: number | null }
+export const ROLLEN = ['kick', 'bass', 'drums', 'perc', 'lead', 'pad', 'chord', 'vocal', 'fx', 'master', 'other'] as const;
+// GET /analyse/live: the last 0.34 s of the master output (bus ring, section 6.1). steht: the ring counter did not move since the previous call.
+export interface LiveMessung { leer: false; w: number; steht: boolean; stumm: boolean; spektrum: { hz: number[]; db: number[] }; stereo: Stereo;
+  spitze_db: number; rms_db: number; true_peak_dbtp: number; lufs_m: number | null }
+export const LIVE_FRAMES = 16384, LIVE_LAUTHEIT_FRAMES = 19200, LIVE_VORLAUF_FRAMES = 4800;
+
 export interface AnalyseAntwort { rev: number; von_beat: number; bis_beat: number; dauer_s: number; tempo_bpm: number;
-  quelle: Messung; vergleich?: Messung; ueberdeckung?: Ueberdeckung; hinweise: Hinweis[] }
-export type HandMessung = Omit<Messung, 'zeitbild'>;
+  quelle: Messung; vergleich?: Messung | RefMessung; ueberdeckung?: Ueberdeckung; abgleich?: Abgleich; hinweise: Hinweis[] }
+export type HandMessung = Omit<Messung, 'zeitbild'> | RefMessung;
 export type HandAntwort = Omit<AnalyseAntwort, 'quelle' | 'vergleich'> & { quelle: HandMessung; vergleich?: HandMessung };
 
 export const RATE = 48000, FFT_N = 8192, HOP = 2048, MAX_SPALTEN = 2048, KORR_FENSTER = 19200;
+// Slice 2: the mean and maximum spectrum of the bands below TIEF_HZ come from a long window (FFT_TIEF frames, 0.68 s, every fourth column), so a low
+// note reads close to its level in its own 1/12 band; the time picture and the masking keep the short window. Ranges shorter than FFT_TIEF keep the short one.
+export const FFT_TIEF = 32768, TIEF_HZ = 400;
 export const DB_BODEN = -200, ZEITBILD_DB_MIN = -90, ZEITBILD_DB_MAX = 0, STILLE_DB = -90;
 export const ANALYSE_MAX_BEATS = 1024;
 export const SCHWELLEN = { bassMono: 0.5, bassHz: 120, truePeak: -1, resonanzDb: 9, naeheDb: 9, pegelMinDb: -60, schwerpunkt: 0.5, tiefHz: 250 } as const;
@@ -33,6 +56,8 @@ export const STEREO_BAENDER: readonly [number, number][] = [[0, 120], [120, 500]
 const BAENDER = 120, TERZ_BAENDER = 30, K0 = -53;   // 1/12 bands k = -53..66 around A4 = 440 Hz
 const HINWEIS_ARTEN: readonly string[] = ['bass_nicht_mono', 'true_peak', 'resonanz', 'ueberdeckung_tief'];
 const QUELLEN_ARTEN: readonly string[] = ['spur', 'gruppe', 'return', 'master'];
+const REF_ARTEN: readonly string[] = ['datei', 'referenz'];
+export const istRefQuelle = (q: unknown): q is RefQuelle => typeof q === 'object' && q !== null && REF_ARTEN.includes((q as { art?: string }).art as string);
 
 // Edge j lies half a semitone below the centre of band j; the same expression serves both neighbours, so edges touch exactly.
 const kante = (j: number): number => 440 * 2 ** ((j + K0 - 0.5) / 12);
@@ -57,8 +82,9 @@ export function terzVon(db12: readonly number[]): number[] {
 }
 
 // 'spur:s1', 'master', '' for undefined (key of selectors and of the answer cache).
-export function quellenSchluessel(q: AnalyseQuelle | undefined): string {
+export function quellenSchluessel(q: AnalyseQuelle | RefQuelle | undefined): string {
   if (!q) return '';
+  if (q.art === 'datei') return `datei:${q.sha ?? q.pfad ?? ''}@${q.von_s ?? ''}-${q.bis_s ?? ''}`;
   return q.id === undefined ? q.art : `${q.art}:${q.id}`;
 }
 
@@ -73,10 +99,14 @@ const obj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' 
 // Decoded byte count of a base64 string (no Buffer, so the module also runs in a browser).
 const base64Bytes = (b: string): number => Math.floor((b.length * 3) / 4) - (b.endsWith('==') ? 2 : b.endsWith('=') ? 1 : 0);
 
-function pruefeMessung(m: unknown, p: string, fehler: string[]): void {
+function pruefeMessung(m: unknown, p: string, fehler: string[], refErlaubt = false): void {
   if (!obj(m)) { fehler.push(`${p}: not an object`); return; }
   const q = m.quelle;
-  if (!obj(q) || !QUELLEN_ARTEN.includes(q.art as string)) fehler.push(`${p}.quelle.art: unknown`);
+  const ref = refErlaubt && istRefQuelle(q);   // a reference: its own source form and no time picture
+  if (ref) {
+    const fehlt = q.art === 'referenz' ? typeof q.id !== 'string' : typeof q.sha !== 'string' && typeof q.pfad !== 'string';
+    if (fehlt) fehler.push(`${p}.quelle: id, sha or pfad is missing`);
+  } else if (!obj(q) || !QUELLEN_ARTEN.includes(q.art as string)) fehler.push(`${p}.quelle.art: unknown`);
   else if ((q.art !== 'master') !== (typeof q.id === 'string')) fehler.push(`${p}.quelle.id: required except for master`);
   if (typeof m.name !== 'string') fehler.push(`${p}.name: not a string`);
   if (typeof m.stumm !== 'boolean') fehler.push(`${p}.stumm: not a boolean`);
@@ -111,6 +141,7 @@ function pruefeMessung(m: unknown, p: string, fehler: string[]): void {
     if (Array.isArray(sp.hz)) zeilen = sp.hz.length;
   }
   const z = m.zeitbild;
+  if (ref) { if (z !== undefined) fehler.push(`${p}.zeitbild: a reference has none`); return; }
   if (!obj(z)) fehler.push(`${p}.zeitbild: not an object`);
   else {
     if (!Number.isInteger(z.spalten) || (z.spalten as number) < 1 ||
@@ -131,7 +162,17 @@ export function pruefeAntwort(j: unknown): string[] {
   if (!obj(j)) return ['answer: not an object'];
   for (const k of ['rev', 'von_beat', 'bis_beat', 'dauer_s', 'tempo_bpm']) if (!num(j[k])) fehler.push(`${k}: not a number`);
   pruefeMessung(j.quelle, 'quelle', fehler);
-  if (j.vergleich !== undefined) pruefeMessung(j.vergleich, 'vergleich', fehler);
+  if (j.vergleich !== undefined) pruefeMessung(j.vergleich, 'vergleich', fehler, true);
+  if (j.abgleich !== undefined) {
+    const g = j.abgleich;
+    if (!obj(g) || !num(g.versatz_db)) fehler.push('abgleich.versatz_db: not a number');
+    else {
+      if (!Array.isArray(g.baender) || g.baender.length !== TERZ_BAENDER || !g.baender.every((b: unknown) => obj(b) && num(b.hz) &&
+        (b.diff_db === null || num(b.diff_db)))) fehler.push(`abgleich.baender: need ${TERZ_BAENDER} bands {hz, diff_db}`);
+      if (!Array.isArray(g.abweichungen) || g.abweichungen.length > 3 || !g.abweichungen.every((x: unknown) => obj(x) && num(x.hz_von) &&
+        num(x.hz_bis) && num(x.diff_db))) fehler.push('abgleich.abweichungen: need an array of at most 3 ranges');
+    }
+  }
   if (j.ueberdeckung !== undefined) {
     const u = j.ueberdeckung;
     if (!obj(u)) fehler.push('ueberdeckung: not an object');
@@ -157,8 +198,8 @@ export function pruefeAntwort(j: unknown): string[] {
   return fehler;
 }
 
-function handMessung(m: Messung, fein: boolean): HandMessung {
-  const { zeitbild: _weg, ...rest } = structuredClone(m);
+function handMessung(m: Messung | RefMessung, fein: boolean): HandMessung {
+  const { zeitbild: _weg, ...rest } = structuredClone(m) as Messung;
   if (!fein) rest.spektrum = { hz: [...TERZ_HZ], mittel_db: terzVon(m.spektrum.mittel_db), max_db: terzVon(m.spektrum.max_db) };
   return rest;
 }

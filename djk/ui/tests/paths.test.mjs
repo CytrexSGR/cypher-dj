@@ -90,6 +90,9 @@ test('ablage: CYPHERDJ_HEIM moves neu, relative is refused', () => {
     assert.equal(P.ablageOrte('kits').neu, '/tmp/h/werke/kits');
     assert.equal(P.heimOrdner(), '/tmp/h');
     assert.equal(P.festerPfad('quellen'), '/tmp/h/quellen.toml');
+    assert.equal(P.festerPfad('referenzen'), '/tmp/h/werke/referenzen');
+    assert.equal(P.referenzOrdnerVorgabe(''), '/tmp/h/werke/referenzen');
+    assert.equal(P.referenzOrdnerVorgabe('c'), '/dev/shm/cypherdj-c/referenzen');
   });
   mitEnv({ ...ohneEnv, CYPHERDJ_HEIM: 'rel' }, () => assert.throws(() => P.ablageOrte('kits'), { message: 'CYPHERDJ_HEIM must be an absolute path' }));
   mitEnv({ ...ohneEnv, CYPHERDJ_HEIM: '  ' }, () => assert.throws(() => P.heimOrdner(), { message: 'CYPHERDJ_HEIM must be an absolute path' }));

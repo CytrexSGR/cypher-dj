@@ -21,6 +21,7 @@
     "plugin_index":      { "pfad": "{HOME}/.local/state/cypherdj/plugins/index.json", "env": "CYPHERDJ_PLUGIN_INDEX" },
     "umgebung":          { "pfad": "{KONFIG}/umgebung.env", "env": "CYPHERDJ_UMGEBUNG" },
     "pruefen":           { "pfad": "{HEIM}/pruefen", "env": null },
-    "quellen":           { "pfad": "{HEIM}/quellen.toml", "env": null }
+    "quellen":           { "pfad": "{HEIM}/quellen.toml", "env": null },
+    "referenzen":        { "pfad": "{HEIM}/werke/referenzen", "env": "CYPHERDJ_REFERENZEN" }
   }
 }

@@ -1192,6 +1192,16 @@ export class ProjSitzung {
     }
     return loeseQuelle({ sha256: sha, hinweis, projektOrdner: slug !== null ? path.resolve(this.projekte.wurzelPfad, slug) : null, katalogPfad });
   }
+  /** ANALYZE slice 2: the file and the title of a catalogue entry (null: no catalogue, unknown sha, protected entry). */
+  katalogQuelle(sha: string): { pfad: string; name?: string } | null {
+    if (!this.katalog) return null;
+    try {
+      const z = this.katalog.eintrag(sha);
+      if (!z || z.schutz === 'ableton' || !z.pfad) return null;
+      const name = z.titel ?? z.name;
+      return { pfad: z.pfad, ...(name ? { name } : {}) };
+    } catch { return null; }
+  }
   /** The resolver for the collector and the collect route (the same as the session's own). */
   quellePfadVon(sha: string, hinweis: string): string | null { return this.quellPfad(sha, hinweis); }
   // storage layout A5: a removable source is copied into the project folder in the background; once after open, once after a change that

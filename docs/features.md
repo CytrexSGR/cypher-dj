@@ -271,8 +271,11 @@ The lists above are the headline. Also in there:
   render of the loop range (also while the loop plays): a spectrum in semitone bands with the column under the
   playhead, a time picture, stereo correlation and width in four bands, loudness (LUFS-I, short-term and momentary
   maxima, LRA, true peak, crest), the masking between the two strips and objective hints (a bass that is not mono, a
-  true peak over -1 dBTP, a narrow resonance, two strips fighting in the bass). The agent reads the same numbers with
-  the tool `proj_analyse`
+  true peak over -1 dBTP, a narrow resonance, two strips fighting in the bass). A reference can take the place of the
+  second strip: a track or sample dragged from the shelf, or a reference curve stored by role (SAVE REF); the
+  reference is level-matched and the largest differences in tonal balance are named. The source LIVE OUTPUT shows the
+  master output as it plays (spectrum with held maximum, rolling picture, stereo, momentary loudness, true peak).
+  The agent reads the same numbers with the tools `proj_analyse`, `analyse_referenz` and `analyse_live`
 - **Step lanes for knobs (STUDIO)**: `+ lane` under the grid adds a step lane for any knob of a Cypher Modular
   instrument; clicking a key or a drum row plays it
 - **Live view (LIVE)**: the three Strudel channels side by side, each with an automation lane for fader,
@@ -291,7 +294,7 @@ The lists above are the headline. Also in there:
 - **Extra pattern streams**: five more channels (erz/5 to erz/7 and the two loop box pads) can each carry a Cypher
   Modular graph, started with `djk-start --strudel --bk-stroeme`; they can be recorded onto production tracks. The
   graph knobs can be learned onto a MIDI controller, and a project remembers which graph sits on which channel
-- **The agent's side**: 93 tools in the MCP server. Besides playing it can measure a deck behind its
+- **The agent's side**: 95 tools in the MCP server. Besides playing it can measure a deck behind its
   closed fader, read the levels of the last seconds, wait on the master clock for a number of bars, run
   automation tracks and ramps over bars, and cancel everything it started. When it has an idea while the
   human plays, it proposes; the human accepts or rejects with one key

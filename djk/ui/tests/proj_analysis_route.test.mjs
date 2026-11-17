@@ -34,3 +34,28 @@ test('proj/analyse: route in proj-ausgabe with fremdePost; unreadable body 400; 
   i.vomKern('/e/ki', { gestoppt: 0, grund: '', sample: 0 });
   assert.equal(i.gesendet, n0, 'nothing sent to the core');
 });
+
+test('analyse/referenz: the four routes are in proj-ausgabe with their guards; reads and refusals work in the real server; the tablet may not post', async (t) => {
+  const { o, url } = await stapel(t);
+  const paare = o.routen().filter((r) => r.pfad.startsWith('/analyse/referenz')).map((r) => [r.bereich, r.methode, r.pfad, r.schutz]);
+  assert.deepEqual(paare.sort(), [
+    ['proj-ausgabe', 'GET', '/analyse/referenzen', 'offen'],
+    ['proj-ausgabe', 'POST', '/analyse/referenz/loeschen', 'fremdePost'],
+    ['proj-ausgabe', 'POST', '/analyse/referenz/merken', 'fremdePost'],
+    ['proj-ausgabe', 'POST', '/analyse/referenz/messen', 'fremdePost'],
+  ]);
+  const fremd = await fetch(`${url}/analyse/referenz/messen`, { method: 'POST', headers: { ...kopfJson, origin: 'https://boese.example' }, body: '{}' });
+  assert.deepEqual([fremd.status, (await fremd.json()).fehler], [403, 'fremde_herkunft']);
+  const roh = await fetch(`${url}/analyse/referenz/loeschen`, { method: 'POST', body: '{}' });
+  assert.deepEqual([roh.status, (await roh.json()).fehler], [415, 'nur_json']);
+  const liste = await (await fetch(`${url}/analyse/referenzen`)).json();
+  assert.ok(Array.isArray(liste.referenzen) && liste.rollen.includes('master'));
+  const rel = await post(url, '/analyse/referenz/messen', { quelle: { art: 'datei', pfad: 'relativ.wav' } });
+  assert.deepEqual([rel.code, rel.j.fehler], [400, 'argument_ungueltig']);
+  const weg = await post(url, '/analyse/referenz/messen', { quelle: { art: 'datei', sha: 'c'.repeat(64) } });
+  assert.deepEqual([weg.code, weg.j.fehler], [404, 'quelle_unbekannt']);
+  const unbekannt = await post(url, '/analyse/referenz/loeschen', { id: 'nicht-da-123456' });
+  assert.deepEqual([unbekannt.code, unbekannt.j.fehler], [404, 'referenz_unbekannt']);
+  const ref = await post(url, '/proj/analyse', { quelle: { art: 'datei', pfad: '/x/a.wav' } });
+  assert.deepEqual([ref.code, ref.j.fehler], [400, 'argument_ungueltig'], 'a reference is never the source');
+});

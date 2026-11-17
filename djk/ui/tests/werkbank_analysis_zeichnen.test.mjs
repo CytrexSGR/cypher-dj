@@ -124,3 +124,79 @@ test('the picture covers its share of the range', () => {
   assert.equal(bildAnteil({ ...a, dauer_s: 1 }), 1);
   assert.equal(bildAnteil(null), 1);
 });
+
+// ---- slice 2 ----
+import { minSekText, ballistik, maxHalten, neuesRollbild, rollbildSchiebe, ROLL_SPALTEN, vergleichOptionen, liveHinweise, haltHinweise }
+  from '../public/werkbank/analysis_zeichnen.js';
+
+test('m:ss text', () => {
+  assert.equal(minSekText(0), '0:00');
+  assert.equal(minSekText(65.9), '1:05');
+  assert.equal(minSekText(600), '10:00');
+  assert.equal(minSekText(null), 'n/a');
+  assert.equal(minSekText(-1), 'n/a');
+});
+
+test('ballistics: rises at once, falls 20 dB per second', () => {
+  assert.deepEqual(ballistik(null, [-30, -50], 0.1), [-30, -50]);
+  assert.deepEqual(ballistik([-30, -50], [-10, -80], 0.5), [-10, -60]);
+  assert.deepEqual(ballistik([-30], [-90], 0), [-30], 'no time, no fall');
+  assert.deepEqual(ballistik([-30], [-90], 0.1), [-32]);
+  assert.deepEqual(ballistik([-30], [-90], 1, 10), [-40], 'the fall rate is a parameter');
+});
+
+test('held maxima per band', () => {
+  assert.deepEqual(maxHalten(null, [-30, -50]), [-30, -50]);
+  assert.deepEqual(maxHalten([-30, -50], [-40, -20]), [-30, -20]);
+});
+
+test('the rolling picture keeps 300 columns and the newest sits at the right edge', () => {
+  const b = neuesRollbild(4);
+  assert.equal(b.spalten, ROLL_SPALTEN); assert.equal(ROLL_SPALTEN, 300);
+  assert.equal(b.daten.length, 300 * 4);
+  rollbildSchiebe(b, [0, -90, -45, 10]);
+  assert.deepEqual([...b.daten.slice(299 * 4)], [255, 0, 128, 255]);
+  rollbildSchiebe(b, [-90, -90, -90, -90]);
+  assert.deepEqual([...b.daten.slice(298 * 4, 299 * 4)], [255, 0, 128, 255], 'the first column moved one to the left');
+  assert.deepEqual([...b.daten.slice(299 * 4)], [0, 0, 0, 0]);
+  for (let i = 0; i < 400; i++) rollbildSchiebe(b, [0, 0, 0, 0]);
+  assert.equal(b.daten.length, 1200);
+  assert.equal(b.daten[0], 255);
+  rollbildSchiebe(b, [NaN, 0, 0, 0]);
+  assert.equal(b.daten[299 * 4], 0, 'a value that is no number is the floor');
+});
+
+test('the comparison option list', () => {
+  const streifen = [{ wert: 'spur:s1', text: 'A Drums' }, { wert: 'spur:s2', text: 'B Bass' }, { wert: 'master', text: 'MASTER' }];
+  const refs = [{ id: 'r1', name: 'Club kick', rolle: 'kick' }];
+  assert.deepEqual(vergleichOptionen({ streifen, quelle: 'spur:s1' }), [{ wert: '', text: 'none' }, { wert: 'spur:s2', text: 'B Bass' }, { wert: 'master', text: 'MASTER' }]);
+  assert.deepEqual(vergleichOptionen({ streifen, quelle: 'live', referenzen: refs }), [{ wert: '', text: 'none' },
+    { gruppe: 'REFERENCES', optionen: [{ wert: 'ref:r1', text: 'KICK · Club kick' }] }], 'no strips for the live source');
+  const voll = vergleichOptionen({ streifen, quelle: 'master', referenzen: refs, datei: { sha: 'x', name: 'loop.wav' } });
+  assert.equal(voll.length, 5);
+  assert.deepEqual(voll.at(-2).optionen.map((o) => o.wert), ['ref:r1']);
+  assert.deepEqual(voll.at(-1), { wert: 'datei', text: 'FILE · loop.wav' });
+});
+
+test('live hints: bass not mono, true peak', () => {
+  const stereo = (korr, pegel) => ({ baender: [{ korrelation: korr, pegel_db: pegel }] });
+  assert.deepEqual(liveHinweise({ stereo: stereo(0.9, -20), true_peak_dbtp: -3 }), []);
+  assert.deepEqual(liveHinweise({ stereo: stereo(0.3, -20), true_peak_dbtp: -3 }).map((h) => h.art), ['bass_nicht_mono']);
+  assert.deepEqual(liveHinweise({ stereo: stereo(0.3, -70), true_peak_dbtp: -3 }), [], 'a band without level is no hint');
+  assert.deepEqual(liveHinweise({ stereo: stereo(0.9, -20), true_peak_dbtp: -0.5 }).map((h) => h.art), ['true_peak']);
+  assert.deepEqual(liveHinweise({ stereo: stereo(0.9, -20), true_peak_dbtp: -1 }), [], 'exactly -1 dBTP is not above');
+  assert.deepEqual(liveHinweise({ stumm: true, stereo: stereo(0.1, -20), true_peak_dbtp: 3 }), []);
+  assert.deepEqual(liveHinweise(null), []);
+});
+
+test('hints are held for 2 s', () => {
+  const h = [{ art: 'true_peak', text: 'tp' }];
+  let r = haltHinweise({}, h, 1000);
+  assert.deepEqual(r.liste, ['tp']);
+  r = haltHinweise(r.gehalten, [], 2900);
+  assert.deepEqual(r.liste, ['tp'], 'still held 1.9 s later');
+  r = haltHinweise(r.gehalten, [], 3000);
+  assert.deepEqual(r.liste, [], 'gone after 2 s');
+  r = haltHinweise(r.gehalten, h, 4000); r = haltHinweise(r.gehalten, h, 5500);
+  assert.deepEqual(r.liste, ['tp'], 'seen again: the hold starts anew');
+});

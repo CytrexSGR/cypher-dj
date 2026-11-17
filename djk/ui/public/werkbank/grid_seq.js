@@ -3,10 +3,12 @@
 // and calls these once at the end of the gesture, so one gesture is one history step.
 // A target is { ton, quelle }: the row and the step of the row's own period (a pale repeat names the step it repeats).
 import { SeqFehler } from '../seq_logic.js';
-import { SCHRITT, SCHRITTE_TAKT, AUFLOESUNGEN, VEL_VORGABE, imSchritt, musterSchritte, periodeZellen, quelleZelle, weite } from './grid.js';
+import { SCHRITT, SCHRITTE_TAKT, AUFLOESUNGEN, VEL_VORGABE, imSchritt, musterSchritte, periodeZellen, quelleZelle, weite, deckung } from './grid.js';
+import { akkord, arpeggio, inTonart, transponiere, transponiereStufen, umkehrung, passendeTonarten, tonartOk, tonartText, ARP_MODI } from '../harmonie.js';
 
 export const STEPS_WAHL = AUFLOESUNGEN;   // STEPS: cells per bar of the view (4, 8, 16); a view state, no command
 export const WERKZEUGE = ['draw', 'erase', 'fill'];
+export const WERKZEUGE_NOTE = ['draw', 'chord', 'erase', 'fill'];   // the note grid also stamps chords
 export const FUELL_SCHRITTE = [1, 2, 4];
 // The value tabs that write a note field. `spanne` = pixels of dragging for the whole range.
 export const WERT_FELDER = {
@@ -135,6 +137,142 @@ export function setzeBefehle(clip, art, info, ziele, an, aufl = SCHRITTE_TAKT) {
     ...(loeschen.length ? [{ befehl: 'noten_loeschen', clip_id: clip.id, ids: [...new Set(loeschen)] }] : []),
     ...(neu.length ? [{ befehl: 'noten_neu', clip_id: clip.id, noten: neu }] : []),
   ];
+}
+
+// ---------- long notes (note grid, 2026-11-17) ----------
+// The cell the note of a cell starts in: the cell itself when a note starts there, the head of the note that sounds through it (note grid), null when empty.
+export function kopfZelle(clip, ton, quelle, art = null, aufl = SCHRITTE_TAKT) {
+  if (notenAn(clip, { ton, quelle }, art, aufl).length) return quelle;
+  if (art !== 'note') return null;
+  return deckung(clip, ton, zeilenSchritte(clip, ton, art, aufl), aufl).get(quelle)?.kopf ?? null;
+}
+// What a note over the cells a..b of a row pushes aside: notes of the row that start in (a, b] go (`weg`), a note that starts before `a` and sounds into
+// it ends in front of it (`kuerzen`).
+function raeume(clip, ton, a, b, art, aufl) {
+  const w = weite(aufl), weg = [], kuerzen = [];
+  for (const n of clip.noten ?? []) {
+    if (n.ton !== ton) continue;
+    const kopf = Math.floor(n.beat / w + EPS);
+    if (kopf > a && kopf <= b) weg.push(n.id);
+    else if (kopf < a && kopf + Math.max(1, Math.round(n.laenge / w)) > a) kuerzen.push({ id: n.id, laenge: runde((a - kopf) * w) });
+  }
+  return { weg, kuerzen };
+}
+const alsBefehle = (clip, weg, aendern, neu) => [
+  ...(weg.length ? [{ befehl: 'noten_loeschen', clip_id: clip.id, ids: [...new Set(weg)] }] : []),
+  ...(aendern.length ? [{ befehl: 'noten_aendern', clip_id: clip.id, noten: aendern }] : []),
+  ...(neu.length ? [{ befehl: 'noten_neu', clip_id: clip.id, noten: neu }] : []),
+];
+// Dragging the end of a note: the notes that start in cell `kopf` of the row end with cell `ende` (inclusive): at least one cell, at most to the end of the
+// row. Notes the longer note runs over are deleted. No change: an empty list.
+export function laengeBefehle(clip, art, ton, kopf, ende, aufl = SCHRITTE_TAKT) {
+  if (!clip) fehler('the pattern has no clip yet');
+  const Z = zeilenSchritte(clip, ton, art, aufl), w = weite(aufl);
+  if (!Number.isInteger(kopf) || kopf < 0 || kopf >= Z) return [];
+  const zellen = klemme(ende - kopf + 1, 1, Z - kopf), laenge = runde(zellen * w);
+  const eigene = notenAn(clip, { ton, quelle: kopf }, art, aufl);
+  if (!eigene.length) return [];
+  const aend = eigene.filter((n) => Math.abs(n.laenge - laenge) > EPS).map((n) => ({ id: n.id, laenge }));
+  const { weg } = raeume(clip, ton, kopf, kopf + zellen - 1, art, aufl);
+  return alsBefehle(clip, weg, aend, []);
+}
+// One new note over the cells q0..q1 of a row (either order), from the start of the first cell to the end of the last.
+const langeNote = (clip, art, ton, q0, q1, aufl) => {
+  const Z = zeilenSchritte(clip, ton, art, aufl), w = weite(aufl);
+  const a = klemme(Math.min(q0, q1), 0, Z - 1), b = klemme(Math.max(q0, q1), 0, Z - 1);
+  const drin = notenAn(clip, { ton, quelle: a }, art, aufl).map((n) => n.id);
+  const { weg, kuerzen } = raeume(clip, ton, a, b, art, aufl);
+  return { weg: [...drin, ...weg], kuerzen, neu: { beat: runde(a * w), laenge: runde((b - a + 1) * w), ton, vel: VEL_VORGABE } };
+};
+export function langeNoteBefehle(clip, art, ton, q0, q1, aufl = SCHRITTE_TAKT) {
+  if (!clip) fehler('the pattern has no clip yet');
+  if (!Number.isInteger(ton)) fehler('a pitch row is expected');
+  const r = langeNote(clip, art, ton, q0, q1, aufl);
+  return alsBefehle(clip, r.weg, r.kuerzen, [r.neu]);
+}
+// CHORD: the chord on the pitch of the row (thirds of the key, a minor triad without a key) over the cells q0..q1, one history step.
+export function akkordBefehle(clip, art, ton, q0, q1, tonart = null, aufl = SCHRITTE_TAKT, anzahl = 3) {
+  if (!clip) fehler('the pattern has no clip yet');
+  if (!Number.isInteger(ton)) fehler('a pitch row is expected');
+  const weg = [], kuerzen = [], neu = [];
+  for (const t of akkord(ton, tonartOk(tonart) ? tonart : null, anzahl)) {
+    const r = langeNote(clip, art, t, q0, q1, aufl);
+    weg.push(...r.weg); kuerzen.push(...r.kuerzen); neu.push(r.neu);
+  }
+  return alsBefehle(clip, weg, kuerzen, neu);
+}
+
+// ---------- move (note grid, 2026-11-17) ----------
+// Dragging a note: the notes that start in the targets move by `dSchritt` cells of the view and `dTon` semitones, all by the same amount. The shift is
+// cut so that every note stays inside the pattern and inside 0..127. A note that does not move and starts where a moved one lands (same row, same cell) is
+// deleted. -> { befehle, auswahl: the targets after the move, zellen: [{ ton, quelle, laenge }] the cells the moved notes cover (for the preview) }
+export function schiebeNotenBefehle(clip, art, ziele, dSchritt, dTon, aufl = SCHRITTE_TAKT) {
+  if (!clip) fehler('the pattern has no clip yet');
+  const w = weite(aufl), Z = periodeZellen(musterSchritte(clip) * SCHRITT, aufl);
+  const noten = new Map();
+  for (const z of ziele) for (const n of notenAn(clip, z, art, aufl)) noten.set(n.id, n);
+  const liste = [...noten.values()];
+  if (!liste.length) return { befehle: [], auswahl: [], zellen: [] };
+  const kopf = (n) => Math.floor(n.beat / w + EPS);
+  const dS = klemme(dSchritt, -Math.min(...liste.map(kopf)), Z - 1 - Math.max(...liste.map(kopf)));
+  const dT = klemme(dTon, -Math.min(...liste.map((n) => n.ton)), 127 - Math.max(...liste.map((n) => n.ton)));
+  const zellen = liste.map((n) => ({ ton: n.ton + dT, quelle: kopf(n) + dS, laenge: Math.min(Math.max(1, Math.round(n.laenge / w)), Z - kopf(n) - dS) }));
+  const auswahl = einmalig(zellen.map((z) => ({ ton: z.ton, quelle: z.quelle })));
+  if (dS === 0 && dT === 0) return { befehle: [], auswahl, zellen };
+  const aend = liste.map((n) => ({ id: n.id, ...(dS ? { beat: runde(n.beat + dS * w) } : {}), ...(dT ? { ton: n.ton + dT } : {}) }));
+  const landet = new Set(auswahl.map(schluessel));
+  const weg = (clip.noten ?? []).filter((n) => !noten.has(n.id) && landet.has(`${n.ton}:${kopf(n)}`)).map((n) => n.id);
+  return { befehle: alsBefehle(clip, weg, aend, []), auswahl, zellen };
+}
+
+// ---------- transformations of the selection (note grid) ----------
+// The notes a transformation works on: the notes of the selected steps; without a selection every note of the pattern.
+export function wirkNoten(clip, art, auswahl, aufl = SCHRITTE_TAKT) {
+  if (!auswahl.length) { const ende = musterSchritte(clip) * SCHRITT; return (clip?.noten ?? []).filter((n) => n.beat < ende - EPS); }
+  const aus = new Map();
+  for (const z of auswahl) for (const n of notenAn(clip, z, art, aufl)) aus.set(n.id, n);
+  return [...aus.values()];
+}
+// A list of pitch changes [{ id, ton }] as one noten_aendern, and the selection after it: every selected step follows its note to the new row.
+function tonErgebnis(clip, art, auswahl, aend, aufl) {
+  const neuTon = new Map(aend.map((x) => [x.id, x.ton]));
+  const neueAuswahl = einmalig(auswahl.flatMap((z) => {
+    const ns = notenAn(clip, z, art, aufl);
+    return ns.length ? ns.map((n) => ({ ton: neuTon.get(n.id) ?? n.ton, quelle: z.quelle })) : [z];
+  }));
+  return { befehle: aend.length ? [{ befehl: 'noten_aendern', clip_id: clip.id, noten: aend }] : [], auswahl: neueAuswahl };
+}
+// `was`: 'halb' (semitones `n`), 'stufe' (steps of the key `n`), 'umkehr' (inversion, `n` > 0 up), 'tonart' (snap to the key). -> { befehle, auswahl }
+export function formeBefehle(clip, art, auswahl, was, n, tonart = null, aufl = SCHRITTE_TAKT) {
+  if (!clip) fehler('the pattern has no clip yet');
+  const noten = wirkNoten(clip, art, auswahl, aufl), key = tonartOk(tonart) ? tonart : null;
+  if ((was === 'stufe' || was === 'tonart') && !key) fehler('set a key first (KEY in the head of the grid)');
+  const aend = was === 'halb' ? transponiere(noten, n) : was === 'stufe' ? transponiereStufen(noten, key, n)
+    : was === 'umkehr' ? umkehrung(noten, n) : was === 'tonart' ? inTonart(noten, key) : fehler(`unknown transformation ${was}`, 'argument_unbekannt');
+  return tonErgebnis(clip, art, auswahl, aend, aufl);
+}
+// ARP: every chord of the working notes becomes single steps of the view, one after the other for the length of the chord. -> { befehle, auswahl }
+export function arpBefehle(clip, art, auswahl, modus = 'up', aufl = SCHRITTE_TAKT) {
+  if (!clip) fehler('the pattern has no clip yet');
+  if (!ARP_MODI.includes(modus)) fehler(`arpeggio takes ${ARP_MODI.join(', ')}`);
+  const w = weite(aufl), ende = musterSchritte(clip) * SCHRITT;
+  const r = arpeggio(wirkNoten(clip, art, auswahl, aufl), w, modus);
+  const neu = r.neu.filter((n) => n.beat < ende - EPS);
+  if (!r.loeschen.length) return { befehle: [], auswahl };
+  return { befehle: alsBefehle(clip, r.loeschen, [], neu), auswahl: einmalig(neu.map((n) => ({ ton: n.ton, quelle: Math.floor(n.beat / w + EPS) }))) };
+}
+// FIND: the key that fits the notes of the pattern best, as the command that sets it and a sentence for the message line. No notes: null.
+export function findeTonart(clip) {
+  const ende = musterSchritte(clip) * SCHRITT;
+  const erg = passendeTonarten((clip?.noten ?? []).filter((n) => n.beat < ende - EPS), 3);
+  if (!erg.length) return null;
+  const [beste, ...rest] = erg, name = (x) => tonartText({ grundton: x.grundton, skala: x.skala });
+  const auch = rest.filter((x) => x.anteil >= beste.anteil - 1e-9).map(name);
+  return {
+    tonart: { grundton: beste.grundton, skala: beste.skala },
+    befehl: { befehl: 'tonart_setzen', grundton: beste.grundton, skala: beste.skala },
+    text: `Key set to ${name(beste)}: ${Math.round(beste.anteil * 100)} % of the notes fit${auch.length ? ` (fits as well: ${auch.join(', ')})` : ''}`,
+  };
 }
 
 // ---------- duplicate ----------

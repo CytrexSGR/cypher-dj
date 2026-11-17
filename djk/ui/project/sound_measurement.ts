@@ -2,7 +2,7 @@
 // FFT, spectrum, time picture, stereo and peaks; masking between two strips and objective hints.
 import { Buffer } from 'node:buffer';
 import {
-  RATE, FFT_N, HOP, MAX_SPALTEN, KORR_FENSTER, DB_BODEN, ZEITBILD_DB_MIN, ZEITBILD_DB_MAX, STILLE_DB, STEREO_BAENDER,
+  RATE, FFT_N, HOP, MAX_SPALTEN, KORR_FENSTER, FFT_TIEF, TIEF_HZ, DB_BODEN, ZEITBILD_DB_MIN, ZEITBILD_DB_MAX, STILLE_DB, STEREO_BAENDER,
   ZWOELFTEL_HZ, TERZ_HZ, SCHWELLEN, zwoelftelKanten, terzKanten, terzVon, hzText,
 } from './sound_contract.ts';
 import type { Stereo, Spektrum, Zeitbild, Messung, Ueberdeckung, UeberdeckungsBand, Schwerpunkt, Hinweis } from './sound_contract.ts';
@@ -55,10 +55,10 @@ export interface Teilmessung {
 }
 
 // The bands are band integrals, not line levels: every FFT bin splits its power over the 1/12 bands by overlap, so a full-scale sine reads 0 dB only when its
-// main lobe (Hann: about 4 bins, 23 Hz) fits into the band. Below about 250 Hz a band is narrower than that, so such a sine reads lower in its own band
-// (measured: 30 Hz -7.0 dB, 55 Hz -5.5 dB, 100 Hz -2.9 dB, 200 Hz -1.5 dB, 440 Hz and above 0.0 dB). The sum of the band powers stays exactly 0 dB;
-// the 1/3 octave
-// values (four bands summed) read 55 Hz at -0.5 dB. Judge levels of low notes in the 1/3 octave spectrum.
+// main lobe fits into the band. The short window (Hann 8192: lobe about 23 Hz) is wider than a band below about 250 Hz (55 Hz: -5.5 dB in its own band),
+// so the mean and maximum spectrum below TIEF_HZ come from a long window (Hann 32768: lobe about 6 Hz) whenever the range is long enough; measured with
+// it: 27.5 Hz -2.3 dB, 41.2 Hz -1.1 dB, 55 Hz -0.2 dB, 82 Hz and above 0.0 dB for notes on the A440 grid (a tone between two bands splits over both).
+// The sum of the band powers stays exactly 0 dB. The time picture, the masking and a range shorter than the long window keep the short one.
 // Lazily built tables: Hann window, share of every FFT bin in every 1/12 band, stereo band of every bin.
 interface Tabellen { w: Float64Array; sw2: number; start: Int32Array; band: Int32Array; anteil: Float64Array; stereoBand: Int8Array }
 let TAB: Tabellen | null = null;
@@ -85,6 +85,30 @@ function tabellen(): Tabellen {
   start[FFT_N / 2 + 1] = band.length;
   TAB = { w, sw2, start, band: Int32Array.from(band), anteil: Float64Array.from(anteil), stereoBand };
   return TAB;
+}
+
+// The long window of the low bands: Hann over FFT_TIEF frames and the share of its bins in the 1/12 bands whose centre lies below TIEF_HZ.
+interface TiefTabellen { w: Float64Array; sw2: number; start: Int32Array; band: Int32Array; anteil: Float64Array; kMax: number; baender: number }
+let TABT: TiefTabellen | null = null;
+function tabellenTief(): TiefTabellen {
+  if (TABT) return TABT;
+  const df = RATE / FFT_TIEF, w = new Float64Array(FFT_TIEF);
+  let sw2 = 0;
+  for (let i = 0; i < FFT_TIEF; i++) { w[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / FFT_TIEF); sw2 += w[i] * w[i]; }
+  const baender = ZWOELFTEL_HZ.findIndex((hz) => hz >= TIEF_HZ);
+  const kMax = Math.ceil(zwoelftelKanten(baender - 1)[1] / df) + 1;
+  const start = new Int32Array(kMax + 2), band: number[] = [], anteil: number[] = [];
+  for (let k = 0; k <= kMax; k++) {
+    start[k] = band.length;
+    const lo = (k - 0.5) * df, hi = (k + 0.5) * df;
+    for (let j = 0; j < baender; j++) {
+      const [a, b] = zwoelftelKanten(j), o = Math.min(hi, b) - Math.max(lo, a);
+      if (o > 0) { band.push(j); anteil.push(o / df); }
+    }
+  }
+  start[kMax + 1] = band.length;
+  TABT = { w, sw2, start, band: Int32Array.from(band), anteil: Float64Array.from(anteil), kMax, baender };
+  return TABT;
 }
 
 const dbVon = (p: number): number => (p > 0 ? Math.max(DB_BODEN, 10 * Math.log10(p / 0.5)) : DB_BODEN);
@@ -122,6 +146,11 @@ export class StreifenAnalysator {
   private readonly bLR = new Float64Array(4); private readonly bLL = new Float64Array(4); private readonly bRR = new Float64Array(4);
   private readonly bMM = new Float64Array(4); private readonly bSS = new Float64Array(4);
   private readonly bPow = new Float64Array(4);   // power of mid plus side per stereo band, summed over the non-silent frames
+  // the long window for the low bands (only for ranges of at least FFT_TIEF frames): the mid signal and the frame energy in rings
+  private readonly tief: { t: TiefTabellen; hop: number; ringM: Float64Array; ringE: Float64Array; re: Float64Array; im: Float64Array;
+    sumP: Float64Array; maxP: Float64Array; bandP: Float64Array } | null = null;
+  private tiefFrames = 0;
+  private tiefEnergie = 0;
 
   constructor(frames: number) {
     this.frames = frames;
@@ -129,6 +158,11 @@ export class StreifenAnalysator {
     this.hop = r.hop; this.spalten = r.spalten;
     this.bytes = new Uint8Array(this.spalten * BAENDER);
     this.terz = new Float32Array(this.spalten * TERZ).fill(DB_BODEN);
+    if (frames >= FFT_TIEF) {
+      const t = tabellenTief();
+      this.tief = { t, hop: 4 * this.hop, ringM: new Float64Array(FFT_TIEF), ringE: new Float64Array(FFT_TIEF), re: new Float64Array(FFT_TIEF),
+        im: new Float64Array(FFT_TIEF), sumP: new Float64Array(t.baender), maxP: new Float64Array(t.baender), bandP: new Float64Array(t.baender) };
+    }
   }
 
   // Interleaved stereo, any block length.
@@ -145,7 +179,14 @@ export class StreifenAnalysator {
       if (++this.wN === KORR_FENSTER) this.schliesseFenster();
       const pos = this.gesehen % FFT_N;
       ringL[pos] = l; ringR[pos] = r;
+      const tf = this.tief;
+      if (tf) {
+        const pt = this.gesehen % FFT_TIEF, e = (l * l + r * r) / 2;
+        this.tiefEnergie += e - tf.ringE[pt];
+        tf.ringM[pt] = m; tf.ringE[pt] = e;
+      }
       this.gesehen++;
+      if (tf && this.gesehen >= FFT_TIEF && (this.gesehen - FFT_TIEF) % tf.hop === 0) this.frameTief();
       if (this.gesehen >= FFT_N && (this.gesehen - FFT_N) % this.hop === 0 && this.spalte < this.spalten) this.frame(FFT_N);
     }
   }
@@ -200,6 +241,23 @@ export class StreifenAnalysator {
     this.terz.set(terzVon(this.db12), col * TERZ);
   }
 
+  // One long frame of the mid signal: the power of the low 1/12 bands. A silent frame is skipped like a short one.
+  private frameTief(): void {
+    const tf = this.tief!, { t, re, im, ringM, bandP } = tf;
+    if (dbVon(Math.max(0, this.tiefEnergie) / FFT_TIEF) < STILLE_DB) return;
+    const first = this.gesehen % FFT_TIEF;
+    for (let i = 0; i < FFT_TIEF; i++) { re[i] = ringM[(first + i) % FFT_TIEF] * t.w[i]; im[i] = 0; }
+    fft(re, im);
+    this.tiefFrames++;
+    bandP.fill(0);
+    const sk = 2 / (FFT_TIEF * t.sw2);
+    for (let k = 0; k <= t.kMax; k++) {
+      const pk = (re[k] * re[k] + im[k] * im[k]) * sk * (k === 0 ? 0.5 : 1);
+      for (let q = t.start[k]; q < t.start[k + 1]; q++) bandP[t.band[q]] += pk * t.anteil[q];
+    }
+    for (let j = 0; j < t.baender; j++) { tf.sumP[j] += bandP[j]; if (bandP[j] > tf.maxP[j]) tf.maxP[j] = bandP[j]; }
+  }
+
   ende(): Teilmessung {
     if (this.frames < FFT_N && this.spalte === 0) this.frame(this.gesehen);
     const spitze_db = this.spitze > 0 ? Math.max(DB_BODEN, 20 * Math.log10(this.spitze)) : DB_BODEN;
@@ -210,6 +268,15 @@ export class StreifenAnalysator {
     for (let j = 0; j < BAENDER; j++) {
       spektrum.mittel_db.push(stumm || nf === 0 ? DB_BODEN : dbVon(this.sumP[j] / nf));
       spektrum.max_db.push(stumm ? DB_BODEN : dbVon(this.maxP[j]));
+    }
+    // the low bands from the long window: the mean replaces the short one, the maximum is the higher of the two (a short hit reads higher in the
+    // short window, a held note in the long one)
+    const tf = this.tief;
+    if (tf && !stumm && this.tiefFrames > 0) {
+      for (let j = 0; j < tf.t.baender; j++) {
+        spektrum.mittel_db[j] = dbVon(tf.sumP[j] / this.tiefFrames);
+        spektrum.max_db[j] = Math.max(spektrum.max_db[j], dbVon(tf.maxP[j]));
+      }
     }
     const ganz = korr(this.sLR, this.sLL, this.sRR);
     const stereo: Stereo = stumm

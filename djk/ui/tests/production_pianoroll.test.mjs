@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TASTEN_BREITE, TON_HOEHE, VEL_HOEHE, tonName, istSchwarz, neueRollAnsicht, beatZuRx, rxZuBeat, yZuTon, trefferNote, trefferVel, velZuY, yZuVel,
-  naechsteNotenIds, neueNote, verschiebeNoten, dehneNoten, velocityNoten, quantisiere, rechteckAuswahl, tastenSchritt, auswahlVel, zoomRoll, scrolleTon, notenLabel } from '../public/production/pianoroll.js';
+  naechsteNotenIds, neueNote, verschiebeNoten, dehneNoten, velocityNoten, quantisiere, rechteckAuswahl, bereichAuswahl, tastenSchritt, auswahlVel, zoomRoll, scrolleTon, notenLabel } from '../public/production/pianoroll.js';
 
 const A = { beat0: 0, pxProBeat: 20, tonOben: 60 };
 const clip = () => ({ id: 'c3', art: 'midi', start_beat: 4, laenge_beats: 4, noten: [
@@ -66,4 +66,13 @@ test('V2 Roll: Rechteck, Tasten, Werkzeugleiste, Labels', () => {
   assert.equal(tastenSchritt('a', false, 1), null);
   assert.equal(auswahlVel(c, ['n1']), '100'); assert.equal(auswahlVel(c, ['n1', 'n2']), '–'); assert.equal(auswahlVel(c, []), '');
   assert.equal(notenLabel('Move', 1), 'Move note'); assert.equal(notenLabel('Move', 3), 'Move 3 notes');
+});
+
+test('Shift+click: the range between two notes takes every note in their span of time and pitch', () => {
+  const clip = { noten: [{ id: 'a', beat: 0, laenge: 1, ton: 60, vel: 100 }, { id: 'b', beat: 1, laenge: 1, ton: 64, vel: 100 }, { id: 'c', beat: 2, laenge: 1, ton: 67, vel: 100 },
+    { id: 'tief', beat: 1, laenge: 1, ton: 48, vel: 100 }, { id: 'spaet', beat: 5, laenge: 1, ton: 62, vel: 100 }] };
+  assert.deepEqual(bereichAuswahl(clip, 'a', 'c'), ['a', 'b', 'c']);
+  assert.deepEqual(bereichAuswahl(clip, 'c', 'a'), ['a', 'b', 'c']);
+  assert.deepEqual(bereichAuswahl(clip, 'weg', 'b'), ['b']);
+  assert.deepEqual(bereichAuswahl(clip, 'a', 'weg'), []);
 });

@@ -6,7 +6,7 @@ import { mixZuege } from './mix.js';
 import { returnListe } from '../production/routing.js';
 
 export const ANALYSE_TEXT = { knopf: 'ANALYZE', knopfTitel: 'Measure the spectrum, stereo image and loudness of a track',
-  titel: 'ANALYZE', vergleich: 'COMPARE WITH', keiner: 'none', neu: 'REFRESH', misst: 'measuring…', master: 'MASTER', leer: 'n/a' };
+  titel: 'ANALYZE', vergleich: 'COMPARE WITH', keiner: 'none', neu: 'REFRESH', misst: 'measuring…', master: 'MASTER', leer: 'n/a', live: 'LIVE OUTPUT', referenzen: 'REFERENCES', datei: 'FILE' };
 
 export const HZ_MIN = 20, HZ_MAX = 20000;
 const LOG_SPANNE = Math.log(HZ_MAX / HZ_MIN);
@@ -115,3 +115,65 @@ export const bildAnteil = (antwort) => {
   const z = antwort?.quelle?.zeitbild;
   return z && antwort.dauer_s > 0 ? Math.min(1, (z.spalten * z.sek_je_spalte) / antwort.dauer_s) : 1;
 };
+
+// ---- slice 2: live output, references ---------------------------------------------------------------------------------------------------------------
+
+// m:ss of a second count ('1:05'); a value that is no number reads n/a.
+export function minSekText(s) {
+  if (!Number.isFinite(s) || s < 0) return ANALYSE_TEXT.leer;
+  const ganz = Math.floor(s);
+  return `${Math.floor(ganz / 60)}:${String(ganz % 60).padStart(2, '0')}`;
+}
+
+// Display ballistics of the live spectrum: per band it rises at once and falls by `fall` dB per second. `pegel` null = nothing shown yet.
+export function ballistik(pegel, neu, dt, fall = 20) {
+  const s = Number.isFinite(dt) && dt > 0 ? fall * dt : 0;
+  return neu.map((n, i) => (pegel && Number.isFinite(pegel[i]) ? Math.max(n, pegel[i] - s) : n));
+}
+// The maximum of each band since the start (max null = start).
+export const maxHalten = (max, neu) => (max ? neu.map((n, i) => Math.max(n, max[i])) : [...neu]);
+
+// The rolling picture of the live mode: spalten columns of zeilen bytes (same byte coding as the time picture: -90..0 dB -> 0..255, column after
+// column, lowest band first); a new column goes in at the right edge and the rest moves left.
+export const ROLL_SPALTEN = 300;
+export const neuesRollbild = (zeilen = 120, spalten = ROLL_SPALTEN) => ({ spalten, zeilen, daten: new Uint8Array(spalten * zeilen) });
+export function rollbildSchiebe(bild, db) {
+  const { spalten, zeilen, daten } = bild;
+  daten.copyWithin(0, zeilen);
+  const o = (spalten - 1) * zeilen;
+  for (let i = 0; i < zeilen; i++) {
+    const d = Number.isFinite(db[i]) ? Math.min(0, Math.max(-90, db[i])) : -90;
+    daten[o + i] = Math.round(((d + 90) / 90) * 255);
+  }
+  return bild;
+}
+
+// The entries of the COMPARE WITH selector: none; the strips (not for the live source, never the source itself); the REFERENCES group; the dropped file.
+// An entry is { wert, text } or { gruppe, optionen: [{ wert, text }] }.
+export function vergleichOptionen({ streifen, quelle, referenzen = [], datei = null }) {
+  const aus = [{ wert: '', text: ANALYSE_TEXT.keiner }];
+  if (quelle !== 'live') for (const x of streifen) if (x.wert !== quelle) aus.push({ wert: x.wert, text: x.text });
+  if (referenzen.length) aus.push({ gruppe: ANALYSE_TEXT.referenzen, optionen: referenzen.map((r) => ({ wert: `ref:${r.id}`, text: `${String(r.rolle ?? '').toUpperCase()} \u00b7 ${r.name}` })) });
+  if (datei) aus.push({ wert: 'datei', text: `${ANALYSE_TEXT.datei} \u00b7 ${datei.name}` });
+  return aus;
+}
+
+// The hints of the live mode, computed on the page: the bass below 120 Hz is not mono, the true peak is too high. [{ art, text }]
+export const LIVE_SCHWELLEN = { bassKorrelation: 0.5, pegelMinDb: -60, truePeakDb: -1, halteMs: 2000 };
+export function liveHinweise(live) {
+  const aus = [];
+  if (!live || live.stumm) return aus;
+  const b = live.stereo?.baender?.[0];
+  if (b && b.korrelation < LIVE_SCHWELLEN.bassKorrelation && b.pegel_db > LIVE_SCHWELLEN.pegelMinDb)
+    aus.push({ art: 'bass_nicht_mono', text: `Bass: the band below 120 Hz is not mono-safe (correlation ${b.korrelation.toFixed(2)}).` });
+  if (Number.isFinite(live.true_peak_dbtp) && live.true_peak_dbtp > LIVE_SCHWELLEN.truePeakDb)
+    aus.push({ art: 'true_peak', text: `True peak is ${live.true_peak_dbtp.toFixed(1)} dBTP, above ${LIVE_SCHWELLEN.truePeakDb} dBTP.` });
+  return aus;
+}
+// Holds each hint for halteMs after it was last seen so the list does not flicker. gehalten: { art: { text, bis } }; returns the new map and the texts.
+export function haltHinweise(gehalten, neu, jetzt, halteMs = LIVE_SCHWELLEN.halteMs) {
+  const g = {};
+  for (const [art, x] of Object.entries(gehalten ?? {})) if (x.bis > jetzt) g[art] = x;
+  for (const h of neu) g[h.art] = { text: h.text, bis: jetzt + halteMs };
+  return { gehalten: g, liste: Object.keys(g).sort().map((a) => g[a].text) };
+}

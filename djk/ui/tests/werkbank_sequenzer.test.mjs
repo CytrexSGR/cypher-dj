@@ -244,10 +244,10 @@ test('DRAW: a press on a set step without movement toggles it; a drag starting o
   assert.equal(schreibt().length, 1);
 });
 
-test('Shift and drag draws a straight line along the row', async () => {
+test('Alt and drag draws a straight line along the row', async () => {
   aufbau(projektMit(drums()));
   await zeigen();
-  await geste([zelle(39, 1), zelle(39, 5)], { press: { shiftKey: true } });
+  await geste([zelle(39, 1), zelle(39, 5)], { press: { altKey: true } });
   assert.equal(schreibt().length, 1);
   assert.deepEqual(schreibt()[0].koerper.befehle[0].noten.map((n) => n.beat), [0.25, 0.5, 0.75, 1, 1.25]);
 });
@@ -264,10 +264,10 @@ test('ERASE clears what the drag crosses; FILL sets every 4th step over the rang
   assert.deepEqual(schreibt().at(-1).koerper.befehle[0].noten.map((n) => [n.ton, n.beat]), [[42, 0], [42, 1], [42, 2], [42, 3]]);
 });
 
-test('Ctrl and drag selects a rectangle, Ctrl-click adds a step; the value drag then moves all selected steps', async () => {
+test('Shift and drag selects a range, Ctrl-click adds a step; the value drag then moves all selected steps', async () => {
   aufbau(projektMit(drums()));
   await zeigen();
-  await geste([zelle(36, 0), zelle(36, 8)], { press: { ctrlKey: true } });
+  await geste([zelle(36, 0), zelle(36, 8)], { press: { shiftKey: true } });
   assert.equal(schreibt().length, 0, 'selecting writes nothing');
   assert.equal(alle('zelle').filter((z) => z.classList.contains('gewaehlt') && Number(z.dataset.ton) === 36).length, 18, 'steps 0..8 and their pale repeats in the second bar');
   // drag the kick on step 4 up by 12 px: the kicks on steps 0, 4, 8 move together, the one on step 12 stays
@@ -279,7 +279,7 @@ test('Ctrl and drag selects a rectangle, Ctrl-click adds a step; the value drag 
   assert.equal(schreibt().length, 1);
 });
 
-test('value tabs: CHANCE shows the number in the step and dragging writes it; Shift-drag draws a ramp', async () => {
+test('value tabs: CHANCE shows the number in the step and dragging writes it; Alt-drag draws a ramp', async () => {
   const extra = [{ id: 'c1', beat: 0.25, laenge: 0.125, ton: 38, vel: 100, chance: 50 }, { id: 'o1', beat: 0.5, laenge: 0.125, ton: 38, vel: 100, versatz: -20 }, { id: 'r1', beat: 0.75, laenge: 0.125, ton: 38, vel: 100, wdh: 3 }];
   aufbau(projektMit(drums({ extra })));
   await zeigen();
@@ -294,7 +294,7 @@ test('value tabs: CHANCE shows the number in the step and dragging writes it; Sh
   tab('wdh').dispatch('click');
   assert.ok(zelle(38, 3).textContent.includes('3'));
   tab('vel').dispatch('click');
-  await geste([zelle(36, 0), zelle(36, 12)], { press: { shiftKey: true, clientY: 100 }, bewegung: [{ clientY: 76 }] });
+  await geste([zelle(36, 0), zelle(36, 12)], { press: { altKey: true, clientY: 100 }, bewegung: [{ clientY: 76 }] });
   assert.deepEqual(schreibt().at(-1).koerper.befehle[0].noten, [{ id: 'k1', vel: 108 }, { id: 'k2', vel: 117 }, { id: 'k3', vel: 125 }]);
   assert.equal(schreibt().length, 2, 'each gesture is one change');
 });
@@ -424,4 +424,22 @@ test('SHIFT of a row moves its hits by one step and wraps inside the row length'
   // a row without its own length wraps at the pattern; other rows are not touched
   assert.deepEqual(L.schiebeBefehle(clip, 36, 1), [{ befehl: 'noten_aendern', clip_id: 'c1', noten: [{ id: 'k', beat: 0 }] }]);
   assert.deepEqual(L.schiebeBefehle(clip, 40, 1), []);
+});
+
+test('Shift-click selects the range from the last step, Ctrl and drag adds a second range, Ctrl-click takes a step out', async () => {
+  aufbau(projektMit(drums()));
+  await zeigen();
+  const gewaehlt = (ton) => alle('zelle').filter((z) => z.classList.contains('gewaehlt') && !z.classList.contains('wiederholung') && Number(z.dataset.ton) === ton).map((z) => Number(z.dataset.schritt));
+  await geste([zelle(36, 2), zelle(36, 2)], { press: { shiftKey: true } });            // no anchor yet: the step alone
+  assert.deepEqual(gewaehlt(36), [2]);
+  await geste([zelle(36, 6), zelle(36, 6)], { press: { shiftKey: true } });            // the range from step 2 to step 6
+  assert.deepEqual(gewaehlt(36), [2, 3, 4, 5, 6]);
+  await geste([zelle(36, 4), zelle(36, 4)], { press: { shiftKey: true } });            // the anchor stays: 2 to 4
+  assert.deepEqual(gewaehlt(36), [2, 3, 4]);
+  await geste([zelle(38, 8), zelle(38, 10)], { press: { ctrlKey: true } });            // Ctrl and drag: a second range joins
+  assert.deepEqual(gewaehlt(36), [2, 3, 4]);
+  assert.deepEqual(gewaehlt(38), [8, 9, 10]);
+  await geste([zelle(36, 3), zelle(36, 3)], { press: { ctrlKey: true } });             // Ctrl-click: one step leaves
+  assert.deepEqual(gewaehlt(36), [2, 4]);
+  assert.equal(schreibt().length, 0, 'selecting writes nothing');
 });

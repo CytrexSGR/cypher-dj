@@ -134,7 +134,7 @@ test('deny list: every golden POST route is classified, every entry names someth
   }
   for (const v of TABLET_VERBOTEN) {
     if (v.pfad === '/kopplung') continue;   // not a golden route, tested below
-    assert.ok(pfade.some((p) => p === v.pfad || p.startsWith(`${v.pfad}/`)) || GOLDEN.some((e) => e.p.split('?')[0].startsWith(v.pfad)) || ['/proj', '/plugins', '/presets', '/kollektionen', '/ansage'].includes(v.pfad), `deny entry ${v.pfad} matches a known route`);
+    assert.ok(pfade.some((p) => p === v.pfad || p.startsWith(`${v.pfad}/`)) || GOLDEN.some((e) => e.p.split('?')[0].startsWith(v.pfad)) || ['/proj', '/analyse', '/plugins', '/presets', '/kollektionen', '/ansage'].includes(v.pfad), `deny entry ${v.pfad} matches a known route`);
   }
   for (const e of GOLDEN.filter((x) => x.m === 'GET' && !x.p.startsWith('/kopplung') && !x.p.startsWith('/quellen'))) assert.equal(tabletVerboten('GET', e.p.split('?')[0]), false, `GET ${e.p}`);
   for (const m of ['GET', 'POST']) for (const p of ['/kopplung', '/kopplung/loeschen']) assert.equal(tabletVerboten(m, p), true);

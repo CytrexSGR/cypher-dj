@@ -4,6 +4,7 @@
 // Commands come from seq_logic.js; a gesture that cannot be written throws a SeqFehler. Nothing here talks to the server.
 import { musterLaenge, reglerBasis, SeqFehler } from '../seq_logic.js';
 import { tonName } from '../production/pianoroll.js';
+import { inSkala, istGrundton, tonartOk } from '../harmonie.js';
 
 export const SCHRITT = 0.25;                 // beats per step
 export const SCHRITTE_TAKT = 16;             // steps per bar (the default resolution; the model stays in sixteenths)
@@ -71,12 +72,22 @@ export function sliceZeilen(clip, info) {
 }
 const schwarz = (t) => [1, 3, 6, 8, 10].includes(t % 12);
 // Pitch rows, top row first: the window of 24 rows below `oben`, or with `fold` only the pitches the pattern uses (no notes: fold changes nothing).
-export function tonZeilen(oben, fold, clip) {
+// With a key (`tonart`, public/harmonie.js) every row says whether its pitch lies in the key (`inskala`) and whether it is the root (`grundton`).
+// `nurSkala` (SCALE, needs a key): the window holds 24 pitches of the key below `oben`, plus every pitch between them that the pattern uses, so no note
+// is hidden.
+export function tonZeilen(oben, fold, clip, tonart = null, nurSkala = false) {
   const benutzt = [...new Set(noten(clip).map((n) => n.ton))];
-  const toene = fold && benutzt.length
-    ? benutzt.sort((a, b) => b - a)
-    : Array.from({ length: FENSTER }, (_, i) => oben - i).filter((t) => t >= 0 && t <= 127);
-  return toene.map((ton) => ({ ton, name: tonName(ton), schwarz: schwarz(ton), c: ton % 12 === 0 }));
+  const key = tonartOk(tonart) ? tonart : null;
+  let toene;
+  if (fold && benutzt.length) toene = benutzt.sort((a, b) => b - a);
+  else if (nurSkala && key) {
+    toene = [];
+    let zahl = 0;
+    for (let t = Math.min(oben, 127); t >= 0 && zahl < FENSTER; t--) {
+      if (inSkala(t, key)) { toene.push(t); zahl += 1; } else if (benutzt.includes(t)) toene.push(t);
+    }
+  } else toene = Array.from({ length: FENSTER }, (_, i) => oben - i).filter((t) => t >= 0 && t <= 127);
+  return toene.map((ton) => ({ ton, name: tonName(ton), schwarz: schwarz(ton), c: ton % 12 === 0, ...(key ? { inskala: inSkala(ton, key), grundton: istGrundton(ton, key) } : {}) }));
 }
 const klemmeOben = (oben) => klemme(oben, TON_MIN + FENSTER - 1, TON_MAX);
 // The first window of a pitch grid: the octave C of the lowest pitch plus 23 (no notes: 59).
@@ -143,14 +154,27 @@ export function zellen(clip, ton, f, art = null) {
   const aufl = f.aufl ?? SCHRITTE_TAKT, w = weite(aufl);
   const eigeneL = ton === null || ton === undefined ? null : clip?.zeilen?.[ton]?.schritte ?? null;
   const Pb = eigeneL !== null ? eigeneL * SCHRITT : musterSchritte(clip) * SCHRITT, Z = periodeZellen(Pb, aufl), aus = [], slice = art === 'slice';
+  const decke = art === 'note' ? deckung(clip, ton, Z, aufl) : null;
   for (let [schritt, bis] = fensterSpanne(f); schritt < bis; schritt++) {
     const quelle = quelleZelle(Pb, schritt, aufl), n = imSchritt(clip, ton, quelle, art, aufl)[0];
     const extra = {};
+    if (decke?.has(quelle)) { const d = decke.get(quelle); if (!n) { extra.fort = true; extra.kopf = d.kopf; } if (d.letzte) extra.griff = true; }
     if (n?.chance != null) extra.chance = n.chance;
     if (n?.wdh != null) extra.wdh = n.wdh;
     if (n?.versatz != null) extra.versatz = n.versatz;
     if (eigeneL !== null && quelle === Z - 1) extra.ende = true;
     aus.push({ schritt, quelle, an: !!n, vel: n ? n.vel : null, laenge: n ? schrittLaenge(n, w) : null, wiederholung: runde(schritt * w) >= Pb - EPS, ...(slice ? { rueck: !!n && n.ton >= RUECK } : {}), ...extra });
+  }
+  return aus;
+}
+// Note grid: which cells of a row a note sounds through. cell -> { kopf: the cell the note starts in, letzte: true on the last cell of the note }. A note
+// ends at the end of the row's period (`Z` cells) at the latest; where two notes overlap the later one owns the cell.
+export function deckung(clip, ton, Z, aufl = SCHRITTE_TAKT) {
+  const w = weite(aufl), aus = new Map();
+  const zeile = noten(clip).filter((n) => n.ton === ton && n.beat < Z * w - EPS).sort((a, b) => a.beat - b.beat);
+  for (const n of zeile) {
+    const kopf = Math.floor(n.beat / w + EPS), len = Math.min(schrittLaenge(n, w), Z - kopf);
+    for (let j = 0; j < len; j++) aus.set(kopf + j, { kopf, letzte: j === len - 1 });
   }
   return aus;
 }

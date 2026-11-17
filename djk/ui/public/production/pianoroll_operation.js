@@ -1,6 +1,7 @@
-// PRODUCTION (D1 V2): Piano-Roll im Detailbereich bedienen und zeichnen (Spec A3): Doppelklick setzt oder löscht eine Note,
-// Ziehen verschiebt (Beat und Ton), der rechte Rand zieht die Länge, Ziehen im Leeren wählt per Rechteck, Umschalt/Strg+Klick
-// wählt mehrere, unten die Velocity-Spur. Tasten bei Fokus auf der Roll: Pfeile (Raster bzw. Halbton, Umschalt: Oktave),
+// PRODUCTION (D1 V2): Piano-Roll im Detailbereich bedienen und zeichnen (Spec A3): Doppelklick setzt eine Note, the right mouse button deletes one,
+// Ziehen verschiebt (Beat und Ton), der rechte Rand zieht die Länge, Ziehen im Leeren wählt per Rechteck, unten die Velocity-Spur.
+// Shift+click selects the range from the note selected last, Ctrl+click adds a note to the selection or takes it out (2026-11-17).
+// Tasten bei Fokus auf der Roll: Pfeile (Raster bzw. Halbton, Umschalt: Oktave),
 // Entf, Strg+A, Q (auf 1/16 quantisieren), Esc. Ein Zug ist EINE Änderung (noten_aendern), Pfeiltasten fasst strip.js zusammen.
 // Die Roll zeigt den Clip aus st.projektEntwurf ?? st.projekt; ein Zug rechnet aus dem bestätigten Stand beim Zeigen bzw. Senden (Spec 6.34).
 // V2 Fix-Runde 2 H1: ebenso Tasten, Quantisieren, VEL, Löschen der Auswahl und neue Noten (ctx.aendereAus): gerechnet, wenn die Anfrage an der
@@ -12,15 +13,22 @@ import { neuerSammler } from './strip.js';
 import {
   TASTEN_BREITE, TON_HOEHE, VEL_HOEHE, LAENGEN, QUANT, tonName, istSchwarz, zeilen, beatZuRx, rxZuBeat, yZuTon, imRaster, inVelSpur,
   neueRollAnsicht, scrolleTon, scrolleBeat, zoomRoll, notenKasten, trefferNote, trefferVel, velZuY, yZuVel, neueNote, verschiebeNoten,
-  dehneNoten, velocityNoten, quantisiere, rechteckAuswahl, tastenSchritt, auswahlVel, notenLabel,
+  dehneNoten, velocityNoten, quantisiere, rechteckAuswahl, bereichAuswahl, tastenSchritt, auswahlVel, notenLabel,
 } from './pianoroll.js';
+import { TON_NAMEN, SKALEN, SKALA_TEXT, tonartOk, tonartText, inSkala, istGrundton, akkord, inTonart, umkehrung, arpeggio, passendeTonarten } from '../harmonie.js';
 
 const LEISTE = `<div class="p-roll-leiste">
   <label>SNAP <select data-r="raster" title="Snap grid of the piano roll"></select></label>
   <label>NOTE <select data-r="laenge" title="Length of new notes"></select></label>
   <label>VEL <input data-r="vel" inputmode="numeric" size="4" autocomplete="off" title="Velocity of the selected notes, 1 to 127: Enter sets it"></label>
   <button data-r="quant" title="Quantize the selected notes (or all) to 1/16 (Q)">QUANTIZE 1/16</button>
-  <span class="p-roll-hilfe">Double click: add or delete a note · drag: move · right edge: length · drag empty: select · arrows · Del · Ctrl+A · Q</span>
+  <label>KEY <select data-r="grundton" title="Root of the project key: its pitches are marked in the roll"></select><select data-r="skala" title="Scale of the project key"></select></label>
+  <button data-r="finde" title="Find the key that fits the notes of this clip and set it">FIND</button>
+  <button data-r="fit" title="Move the selected notes (or all) that lie outside the key to the nearest pitch of the key">FIT</button>
+  <button data-r="inv-ab" title="Inversion: the highest note of every chord an octave down (selection or all)">INV▼</button>
+  <button data-r="inv-auf" title="Inversion: the lowest note of every chord an octave up (selection or all)">INV▲</button>
+  <button data-r="arp" title="Arpeggio: every chord of the selection (or of the clip) becomes single notes on the snap grid">ARP</button>
+  <span class="p-roll-hilfe">Double click: add a note · right button: delete · Alt+double click: chord · drag: move · right edge: length · drag empty: select · Shift+click: range · Ctrl+click: add · arrows · Del · Ctrl+A · Q</span>
 </div>
 <canvas class="p-roll" data-r="roll" tabindex="0" aria-label="Piano roll"></canvas>`;
 
@@ -34,6 +42,27 @@ export function bindeRolle(ctx, behaelter) {
   for (const x of RASTER) r('raster').append(new Option(x.text, x.wert));
   for (const x of LAENGEN) r('laenge').append(new Option(x.text, String(x.wert)));
   r('raster').value = st.rolle.raster; r('laenge').value = String(st.rolle.laenge);
+  // the key of the project (public/harmonie.js): "–" as the root means no key
+  r('grundton').append(new Option('–', ''));
+  TON_NAMEN.forEach((x, i) => r('grundton').append(new Option(x, String(i))));
+  for (const k of Object.keys(SKALEN)) r('skala').append(new Option(SKALA_TEXT[k], k));
+  r('skala').value = 'minor';
+  const tonart = () => { const t = (st.projektEntwurf ?? st.projekt)?.tonart; return tonartOk(t) ? t : null; };
+  let gezeigteTonart = '';
+  function zeigeTonart() {
+    const t = tonart(), k = t ? `${t.grundton}:${t.skala}` : '';
+    if (k === gezeigteTonart) return;
+    gezeigteTonart = k;
+    r('grundton').value = t ? String(t.grundton) : '';
+    if (t) r('skala').value = t.skala;
+  }
+  const setzeTonart = () => {
+    const g = r('grundton').value;
+    if (g === '') { if (tonart()) ctx.aendere('Key off', [{ befehl: 'tonart_setzen', aus: true }]); return; }
+    ctx.aendere('Key', [{ befehl: 'tonart_setzen', grundton: Number(g), skala: r('skala').value }]);
+  };
+  r('grundton').addEventListener('change', setzeTonart);
+  r('skala').addEventListener('change', setzeTonart);
   r('raster').addEventListener('change', () => { st.rolle.raster = r('raster').value; ctx.merke('djk-prod-rollraster', st.rolle.raster); });
   r('laenge').addEventListener('change', () => { st.rolle.laenge = Number(r('laenge').value); ctx.merke('djk-prod-notenlaenge', r('laenge').value); });
 
@@ -63,7 +92,14 @@ export function bindeRolle(ctx, behaelter) {
     const t = trefferNote(f.clip, a, x, y), mehr = e.shiftKey || e.ctrlKey || e.metaKey;
     if (!t) { ctx.zug.beginne().verwirf(); if (!mehr) waehle([]); rechteckZug(e, f.clip, mehr); return; }   // Rechteck: kein Zug, der Entwurf geht (6.34)
     const id = t.note.id, gewaehlt = st.rolle.auswahl.includes(id);
-    if (mehr) {
+    if (e.shiftKey) {   // Shift: the range from the note selected last to this one (2026-11-17); the anchor stays first in the list
+      const anker = st.rolle.anker && f.clip.noten.some((n) => n.id === st.rolle.anker) ? st.rolle.anker : st.rolle.auswahl.at(-1) ?? id;
+      st.rolle.anker = anker;
+      waehle(bereichAuswahl(f.clip, anker, id));
+      return;
+    }
+    st.rolle.anker = id;
+    if (mehr) {   // Ctrl: this note joins the selection or leaves it
       if (gewaehlt) { waehle(st.rolle.auswahl.filter((z) => z !== id)); return; }
       waehle([...st.rolle.auswahl, id]);
     } else if (!gewaehlt) waehle([id]);
@@ -113,20 +149,35 @@ export function bindeRolle(ctx, behaelter) {
     setze(e);
     fange(e, setze, () => zug.lass(), () => zug.verwirf());
   }
+  // The right mouse button deletes: the note under it, or the whole selection when that note is part of it
+  cv.addEventListener('contextmenu', (e) => {
+    const f = bestaetigt();
+    if (!f || !imRaster(e.offsetX, e.offsetY, cv.height)) return;
+    e.preventDefault();
+    const t = trefferNote(f.clip, st.rolle.ansicht, e.offsetX, e.offsetY);
+    if (!t) return;
+    const ids = st.rolle.auswahl.includes(t.note.id) ? [...st.rolle.auswahl] : [t.note.id];
+    waehle([]);
+    ctx.aendere(notenLabel('Delete', ids.length), [{ befehl: 'noten_loeschen', clip_id: f.clip.id, ids }]);
+  });
   cv.addEventListener('dblclick', async (e) => {
     const f = bestaetigt();
     if (!f || !imRaster(e.offsetX, e.offsetY, cv.height)) return;
     const a = st.rolle.ansicht, t = trefferNote(f.clip, a, e.offsetX, e.offsetY);
-    if (t) { waehle([]); ctx.aendere(notenLabel('Delete', 1), [{ befehl: 'noten_loeschen', clip_id: f.clip.id, ids: [t.note.id] }]); return; }
+    if (t) return;   // a note stays on a double click (2026-11-17: the right mouse button deletes)
     const beat = rxZuBeat(a, e.offsetX), ton = yZuTon(a, e.offsetY), r = raster(), laenge = st.rolle.laenge, clipId = f.clip.id;
     let id = null;   // ID aus dem S2-Projekt-Zähler (6.28) des Stands beim Senden (H1): zwei schnelle Doppelklicks bekommen zwei IDs
+    let ids = [];
+    const toene = e.altKey ? akkord(ton, tonart()) : [ton];   // Alt: the chord of the key on this pitch (a minor triad without a key)
     const ok = await ctx.aendereAus((p) => {
       if (!findeClip(p, clipId)) return null;
       const n = neueNote(p, beat, ton, r, laenge);
-      id = n.id;
-      return { label: notenLabel('Add', 1), befehle: [{ befehl: 'noten_neu', clip_id: clipId, noten: [n] }] };
+      const nr = Number(n.id.slice(1));
+      const noten = toene.map((t, i) => ({ ...n, id: `n${nr + i}`, ton: t }));
+      id = n.id; ids = noten.map((x) => x.id);
+      return { label: e.altKey ? 'Add chord' : notenLabel('Add', 1), befehle: [{ befehl: 'noten_neu', clip_id: clipId, noten }] };
     });
-    if (ok) waehle([id]);
+    if (ok) waehle(ids);
   });
   cv.addEventListener('wheel', (e) => {
     e.preventDefault();
@@ -174,6 +225,37 @@ export function bindeRolle(ctx, behaelter) {
     e.preventDefault(); e.stopPropagation();
   });
   r('quant').addEventListener('click', () => { const f = bestaetigt(); if (f) quant(f.clip); });
+  // Harmony tools: on the selected notes, or on all notes of the clip when none is selected
+  const wirk = (c, ids) => (ids.length ? c.noten.filter((n) => ids.includes(n.id)) : c.noten);
+  r('finde').addEventListener('click', () => {
+    const f = bestaetigt(), e = f ? passendeTonarten(f.clip.noten, 3) : [];
+    if (!e.length) { ctx.melde('No notes to read a key from', true); return; }
+    const name = (x) => tonartText({ grundton: x.grundton, skala: x.skala }), auch = e.slice(1).filter((x) => x.anteil >= e[0].anteil - 1e-9).map(name);
+    ctx.aendere('Key', [{ befehl: 'tonart_setzen', grundton: e[0].grundton, skala: e[0].skala }]);
+    ctx.melde(`Key set to ${name(e[0])}: ${Math.round(e[0].anteil * 100)} % of the notes fit${auch.length ? ` (fits as well: ${auch.join(', ')})` : ''}`);
+  });
+  r('fit').addEventListener('click', () => {
+    const f = bestaetigt(), t = tonart(), ids = [...st.rolle.auswahl];
+    if (!f) return;
+    if (!t) { ctx.melde('Set a key first (KEY)', true); return; }
+    notenMit('Fit to key', f.clip.id, (c) => { const x = inTonart(wirk(c, ids), t); if (!x.length) ctx.melde('Every note lies in the key'); return x; });
+  });
+  const kehre = (richtung) => { const f = bestaetigt(), ids = [...st.rolle.auswahl]; if (f) notenMit('Invert', f.clip.id, (c) => umkehrung(wirk(c, ids), richtung)); };
+  r('inv-ab').addEventListener('click', () => kehre(-1));
+  r('inv-auf').addEventListener('click', () => kehre(1));
+  r('arp').addEventListener('click', () => {
+    const f = bestaetigt(), ids = [...st.rolle.auswahl], schritt = raster() > 0 ? raster() : QUANT;
+    if (!f) return;
+    const clipId = f.clip.id;
+    waehle([]);
+    ctx.aendereAus((p) => {
+      const g = findeClip(p, clipId);
+      if (g?.clip.art !== 'midi') return null;
+      const a = arpeggio(wirk(g.clip, ids), schritt, 'up');
+      if (!a.loeschen.length) { ctx.melde('Arpeggio needs notes that start together (a chord)', true); return null; }
+      return { label: 'Arpeggio', befehle: [{ befehl: 'noten_loeschen', clip_id: clipId, ids: a.loeschen }, { befehl: 'noten_neu', clip_id: clipId, noten: a.neu }] };
+    });
+  });
   r('vel').addEventListener('keydown', (e) => {
     e.stopPropagation();
     if (e.key !== 'Enter') return;
@@ -188,16 +270,20 @@ export function bindeRolle(ctx, behaelter) {
   // --- Zeichnen (jedes Bild, solange sichtbar). Gemessen (probe_clips 6.7, Instanz i, kopfloser Chrome, 16.10.): 5000 Noten, alle gewählt,
   // p50 13,7 ms mit auswahl.includes je Note (quadratisch), mit der Auswahl als Set je Bild p50 2,4 ms, p99 3,3 ms; 3 Noten p50 0,1 ms ---
   function zeichne() {
+    zeigeTonart();
     const f = gezeigt();
     if (!f || behaelter.hidden || !st.rolle.ansicht) return;
     passe();
-    const a = st.rolle.ansicht, w = cv.width, h = cv.height, c = f.clip, unten = h - VEL_HOEHE;
+    const a = st.rolle.ansicht, w = cv.width, h = cv.height, c = f.clip, unten = h - VEL_HOEHE, key = tonart();
     g.fillStyle = '#0b0d11'; g.fillRect(0, 0, w, h);
     for (let i = 0; i < zeilen(h) + 1; i++) {
       const t = a.tonOben - i, y = i * TON_HOEHE;
       if (t < 0 || y >= unten) break;
-      g.fillStyle = istSchwarz(t) ? '#101217' : '#161920'; g.fillRect(TASTEN_BREITE, y, w - TASTEN_BREITE, TON_HOEHE);
+      // with a key: its pitches are lit, the root carries the accent, the pitches outside step back; without a key the rows follow the keyboard
+      g.fillStyle = !key ? (istSchwarz(t) ? '#101217' : '#161920') : istGrundton(t, key) ? '#3a2f14' : inSkala(t, key) ? '#1b2231' : '#0b0c10';
+      g.fillRect(TASTEN_BREITE, y, w - TASTEN_BREITE, TON_HOEHE);
       g.fillStyle = istSchwarz(t) ? '#2a2d36' : '#c9c9cf'; g.fillRect(0, y, TASTEN_BREITE - 2, TON_HOEHE - 1);
+      if (key && inSkala(t, key)) { g.fillStyle = istGrundton(t, key) ? '#ffb020' : '#5b8cff'; g.fillRect(TASTEN_BREITE - 6, y + 1, 4, TON_HOEHE - 3); }
       if (t % 12 === 0) { g.fillStyle = '#0e0f12'; g.font = '8px system-ui, sans-serif'; g.fillText(tonName(t), 2, y + TON_HOEHE - 1); }
     }
     for (const l of linien({ beat0: a.beat0, pxProBeat: a.pxProBeat }, w - TASTEN_BREITE)) {
@@ -212,7 +298,7 @@ export function bindeRolle(ctx, behaelter) {
     for (const n of c.noten) {
       const k = notenKasten(a, n), gew = gewaehlt.has(n.id);
       g.fillStyle = gew ? '#ffffff' : f.spur.farbe; g.fillRect(k.x, k.y, k.w, k.h);
-      g.strokeStyle = gew ? '#ffb020' : '#0b0d11'; g.strokeRect(k.x + 0.5, k.y + 0.5, Math.max(0, k.w - 1), k.h - 1);
+      g.strokeStyle = gew ? '#ffb020' : key && !inSkala(n.ton, key) ? '#ff5a5a' : '#0b0d11'; g.strokeRect(k.x + 0.5, k.y + 0.5, Math.max(0, k.w - 1), k.h - 1);   // red edge: outside the key
       const vx = Math.round(k.x) + 0.5, vy = velZuY(n.vel, h);
       g.strokeStyle = gew ? '#ffffff' : f.spur.farbe; g.beginPath(); g.moveTo(vx, h - 2); g.lineTo(vx, vy); g.stroke();
       g.fillStyle = g.strokeStyle; g.fillRect(vx - 2.5, vy - 2, 5, 4);

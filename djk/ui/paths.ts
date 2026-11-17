@@ -77,7 +77,7 @@ export function renderProgramm(): string { return process.env.CYPHERDJ_RENDER ||
 
 // ---- Storage table (djk/config/ablage.json), also read by the Python package djk/ablage; both must give the same paths. ----
 export type AblageArt = 'projekte' | 'module' | 'sampler' | 'presets' | 'klaenge' | 'kollektionen' | 'raster' | 'hotcues' | 'kits' | 'loops' | 'geraete';
-export type FestName = 'mediathek' | 'analyse' | 'bibliothek_konfig' | 'surge_werk' | 'plugin_index' | 'umgebung' | 'pruefen' | 'quellen';
+export type FestName = 'mediathek' | 'analyse' | 'bibliothek_konfig' | 'surge_werk' | 'plugin_index' | 'umgebung' | 'pruefen' | 'quellen' | 'referenzen';
 type AblageTabelle = { vorgabe: string; arten: Record<string, { alt: string; neu: string; env: string | null; kern: boolean }>; fest: Record<string, { pfad: string; env: string | null }> };
 export type AblageOptionen = { tabelle?: AblageTabelle; log?: (e: { typ: 'ablage_beide'; art: string; alt: string; neu: string }) => void; gewarnt?: Set<string> };
 let tabelleGelesen: AblageTabelle | null = null;
@@ -121,6 +121,8 @@ export function ablageOrdner(art: AblageArt, o: AblageOptionen = {}): string {
   }
   return orte.alt;
 }
+// ANALYZE slice 2: the stored reference curves. A test instance (a..i) keeps them in its own shm folder, never in the real home.
+export function referenzOrdnerVorgabe(i: string = instanz()): string { return i ? `${shmOrdner(i)}/referenzen` : festerPfad('referenzen'); }
 export function festerPfad(name: FestName): string {
   const z = tabelle().fest[name];
   if (!z) throw new Error(`unknown fixed name: ${name}`);

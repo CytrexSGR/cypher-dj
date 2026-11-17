@@ -9,7 +9,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { aufbau } from './support/output_setup.mjs';
-import { alsAntwort } from '../areas/proj/output.ts';
+import { Readable } from 'node:stream';
+import { spawnSync } from 'node:child_process';
+import { alsAntwort, ausgabeBereich } from '../areas/proj/output.ts';
+import { KlangReferenz } from '../areas/proj/sound_reference.ts';
+import { wavKopf } from '../project/recording.ts';
 import { KlangAnalyse } from '../areas/proj/sound_analysis.ts';
 import { leseWavF32Bloecke } from '../sampler/wav.ts';
 import { pruefeAntwort } from '../project/sound_contract.ts';
@@ -350,4 +354,191 @@ test('"vergleich": null counts as no comparison', async (t) => {
   const r = await analyse(a, klang(a), { quelle: { art: 'spur', id: 's2' }, vergleich: null, von_beat: 0, bis_beat: 4 });
   assert.equal(r.code, 200, JSON.stringify(r.body));
   assert.equal(r.body.vergleich, undefined);
+});
+
+// ---- slice 2: a reference as the comparison, and the reference routes ----
+const teilStand = () => ({ ...structuredClone(FIXTURE.quelle), stumm: false, spitze_db: -6, rms_db: -9, crest_db: 3 });
+const refMess = (o = {}) => {
+  const m = structuredClone(FIXTURE.quelle);
+  delete m.zeitbild;
+  return { ...m, quelle: { art: 'datei', pfad: '/x/ref.wav' }, name: 'ref', bereich: { von_s: 0, bis_s: 8, datei_s: 30, wahl: 'laut' }, ...o };
+};
+const refAttrappe = (m = refMess()) => {
+  const aufrufe = [];
+  return { aufrufe, messe: async (q, dauer) => { aufrufe.push([q, dauer]); if (m instanceof Error) throw m; return structuredClone(m); } };
+};
+const hinweiseZaehler = () => { const z = { ueb: 0 }; return { z, h: { quelle: () => [], ueberdeckung: () => { z.ueb++; return []; } } }; };
+const REF_DATEI = { art: 'datei', pfad: '/x/ref.wav' };
+
+test('a reference as vergleich: only the strip is rendered, the answer is valid with an abgleich and without ueberdeckung', async (t) => {
+  const a = await aufbau(t, { tempo: 120 });
+  const ref = refAttrappe(), { z, h } = hinweiseZaehler();
+  const k = klang(a, { referenz: ref, hinweise: h });
+  const r = await analyse(a, k, { quelle: { art: 'spur', id: 's2' }, vergleich: REF_DATEI });
+  assert.equal(r.code, 200, JSON.stringify(r.body));
+  assert.deepEqual(pruefeAntwort(r.body), []);
+  assert.equal(renderAufrufe(a).length, 1, 'one render: the strip only');
+  assert.deepEqual(ref.aufrufe, [[REF_DATEI, 8]], 'the reference is asked for the length of the analysed range (16 beats at 120 bpm)');
+  assert.equal(r.body.vergleich.name, 'ref');
+  assert.equal(r.body.vergleich.bereich.wahl, 'laut');
+  assert.equal('zeitbild' in r.body.vergleich, false);
+  assert.equal(r.body.abgleich.baender.length, 30);
+  assert.equal(typeof r.body.abgleich.versatz_db, 'number');
+  assert.equal(r.body.ueberdeckung, undefined);
+  assert.equal(z.ueb, 0, 'no masking hints');
+  assert.equal(r.body.quelle.name, 'Bass');
+});
+
+test('a reference whose file changed is measured again instead of being answered from the cache', async (t) => {
+  const a = await aufbau(t, { tempo: 120 });
+  const ref = refAttrappe();
+  let stand = 'eins';
+  ref.stempel = () => stand;
+  const k = klang(a, { referenz: ref, hinweise: hinweiseZaehler().h });
+  const frage = { quelle: { art: 'spur', id: 's2' }, vergleich: REF_DATEI };
+  await analyse(a, k, frage); await analyse(a, k, frage);
+  assert.equal(ref.aufrufe.length, 1, 'the unchanged file comes from the cache');
+  stand = 'zwei';
+  assert.equal((await analyse(a, k, frage)).code, 200);
+  assert.equal(ref.aufrufe.length, 2, 'the changed file is measured again');
+});
+
+test('a reference against a short range: the reference window is at least 8 s long', async (t) => {
+  const a = await aufbau(t, { tempo: 120 });
+  const ref = refAttrappe();
+  const k = klang(a, { referenz: ref, hinweise: hinweiseZaehler().h });
+  const r = await analyse(a, k, { quelle: { art: 'spur', id: 's2' }, vergleich: REF_DATEI, von_beat: 0, bis_beat: 4 });
+  assert.equal(r.code, 200, JSON.stringify(r.body));
+  assert.deepEqual(ref.aufrufe, [[REF_DATEI, 8]], '4 beats at 120 bpm are 2 s; the reference is asked for 8 s');
+});
+
+test('a reference: the answer cache and the in-flight join keep working', async (t) => {
+  const a = await aufbau(t, { tempo: 120 });
+  const ref = refAttrappe();
+  const k = klang(a, { referenz: ref });
+  const d = { quelle: { art: 'spur', id: 's2' }, vergleich: REF_DATEI };
+  const [x, y] = await Promise.all([analyse(a, k, d), analyse(a, k, d)]);
+  assert.equal(x.code, 200); assert.deepEqual(x.body, y.body);
+  await analyse(a, k, d);
+  assert.equal(renderAufrufe(a).length, 1);
+  assert.equal(ref.aufrufe.length, 1);
+  await analyse(a, k, { ...d, vergleich: { art: 'referenz', id: 'ein-ref-123456' } });
+  assert.equal(ref.aufrufe.length, 2, 'another reference is another key');
+});
+
+test('a silent reference gives no abgleich; a silent strip gives none either', async (t) => {
+  const a = await aufbau(t, { tempo: 120 });
+  const stumm = refMess({ stumm: true });
+  for (const k of Object.keys(stumm.lautheit)) stumm.lautheit[k] = null;
+  const r = await analyse(a, klang(a, { referenz: refAttrappe(stumm) }), { quelle: { art: 'spur', id: 's2' }, vergleich: REF_DATEI });
+  assert.equal(r.code, 200, JSON.stringify(r.body));
+  assert.deepEqual(pruefeAntwort(r.body), []);
+  assert.equal(r.body.abgleich, undefined);
+  assert.equal(r.body.vergleich.stumm, true);
+});
+
+test('a reference is refused as quelle; an unknown reference or file fails before anything is rendered', async (t) => {
+  const a = await aufbau(t, { tempo: 120 });
+  const ref = new KlangReferenz({ ordner: path.join(a.tmp, 'refs'), katalogPfad: () => null });
+  const k = klang(a, { referenz: ref });
+  const e = async (d) => { const r = await analyse(a, k, d); return [r.code, r.body.fehler]; };
+  assert.deepEqual(await e({ quelle: REF_DATEI }), [400, 'argument_ungueltig']);
+  assert.deepEqual(await e({ quelle: { art: 'referenz', id: 'x-123456' } }), [400, 'argument_ungueltig']);
+  assert.deepEqual(await e({ quelle: { art: 'spur', id: 's2' }, vergleich: { art: 'referenz', id: 'gibt-es-nicht-123456' } }), [404, 'referenz_unbekannt']);
+  assert.deepEqual(await e({ quelle: { art: 'spur', id: 's2' }, vergleich: { art: 'datei', pfad: '/gibt/es/nicht.wav' } }), [404, 'quelle_unbekannt']);
+  assert.deepEqual(await e({ quelle: { art: 'spur', id: 's2' }, vergleich: { art: 'datei', pfad: 'relativ.wav' } }), [400, 'argument_ungueltig']);
+  assert.deepEqual(await e({ quelle: { art: 'spur', id: 's2' }, vergleich: { art: 'datei' } }), [400, 'argument_ungueltig']);
+  assert.deepEqual(await e({ quelle: { art: 'spur', id: 's2' }, vergleich: { art: 'datei', pfad: '/x/a.wav', zusatz: 1 } }), [400, 'argument_ungueltig']);
+  assert.equal(renderAufrufe(a).length, 0);
+});
+
+test('a reference file measured for real (decode, loudest window) as the comparison of a strip', { skip: spawnSync('ffmpeg', ['-version']).status !== 0 }, async (t) => {
+  const a = await aufbau(t, { tempo: 120 });
+  const wav = path.join(a.tmp, 'ref.wav');
+  const frames = 48000 * 20, d = Buffer.alloc(frames * 8);
+  for (let i = 0; i < frames; i++) { const v = (i / 48000 >= 8 && i / 48000 < 16 ? 0.5 : 0.02) * Math.sin(2 * Math.PI * 440 * i / 48000); d.writeFloatLE(v, i * 8); d.writeFloatLE(v, i * 8 + 4); }
+  fs.writeFileSync(wav, Buffer.concat([wavKopf(frames), d]));
+  const ref = new KlangReferenz({ ordner: path.join(a.tmp, 'refs'), katalogPfad: () => null, analysiere: async () => ({ quelle: teilStand() }) });
+  const r = await analyse(a, klang(a, { referenz: ref }), { quelle: { art: 'spur', id: 's2' }, vergleich: { art: 'datei', pfad: wav } });
+  assert.equal(r.code, 200, JSON.stringify(r.body));
+  assert.deepEqual(pruefeAntwort(r.body), []);
+  assert.equal(r.body.vergleich.bereich.wahl, 'laut');
+  assert.ok(Math.abs(r.body.vergleich.bereich.von_s - 8) <= 0.2, `${r.body.vergleich.bereich.von_s}`);
+  assert.equal(r.body.vergleich.bereich.bis_s - r.body.vergleich.bereich.von_s, 8);
+  assert.equal(typeof r.body.vergleich.lautheit.lufs_i, 'number');
+  assert.ok(r.body.abgleich);
+});
+
+// the routes of the area, called without a server: a request and a response as the handlers use them
+async function route(b, methode, pfad, koerper) {
+  const r = b.routen().find((x) => x.methode === methode && x.pfad === pfad);
+  assert.ok(r, `route ${methode} ${pfad}`);
+  const q = Readable.from([JSON.stringify(koerper ?? {})]);
+  q.url = pfad; q.headers = {};
+  const aus = {};
+  await r.handler(q, { writeHead: (c) => { aus.code = c; }, end: (s) => { aus.j = JSON.parse(s); } }, new URL(pfad, 'http://seite'));
+  return { ...aus, schutz: r.schutz };
+}
+
+test('routes: messen, merken from a file, list, delete, with the guards and the refusals of the neighbours', { skip: spawnSync('ffmpeg', ['-version']).status !== 0 }, async (t) => {
+  const a = await aufbau(t, { tempo: 120 });
+  const ordner = path.join(a.tmp, 'refs');
+  const wav = path.join(a.tmp, 'Mein Loop.wav');
+  const frames = 48000 * 12, d = Buffer.alloc(frames * 8);
+  for (let i = 0; i < frames; i++) { const v = 0.3 * Math.sin(2 * Math.PI * 220 * i / 48000); d.writeFloatLE(v, i * 8); d.writeFloatLE(v, i * 8 + 4); }
+  fs.writeFileSync(wav, Buffer.concat([wavKopf(frames), d]));
+  const b = ausgabeBereich(a.ctx, a.echt, { ...a.optionen, referenzOrdner: () => ordner,
+    referenz: { analysiere: async () => ({ quelle: teilStand() }) } });
+  const paare = b.routen().map((r) => `${r.methode} ${r.pfad} ${r.schutz}`);
+  for (const p of ['POST /analyse/referenz/messen fremdePost', 'GET /analyse/referenzen offen', 'POST /analyse/referenz/merken fremdePost',
+    'POST /analyse/referenz/loeschen fremdePost']) assert.ok(paare.includes(p), p);
+  const g0 = await route(b, 'GET', '/analyse/referenzen');
+  assert.deepEqual([g0.code, g0.j.referenzen, g0.j.rollen.includes('kick')], [200, [], true]);
+  const me = await route(b, 'POST', '/analyse/referenz/messen', { quelle: { art: 'datei', pfad: wav, von_s: 2, bis_s: 6 } });
+  assert.equal(me.code, 200, JSON.stringify(me.j));
+  assert.deepEqual(me.j.messung.bereich, { von_s: 2, bis_s: 6, datei_s: 12, wahl: 'fest' });
+  assert.equal(me.j.messung.name, 'Mein Loop');
+  assert.deepEqual(pruefeAntwort({ rev: 1, von_beat: 0, bis_beat: 1, dauer_s: 1, tempo_bpm: 120, quelle: FIXTURE.quelle, vergleich: me.j.messung, hinweise: [] }), []);
+  const fe = async (pfad, k) => { const r = await route(b, 'POST', pfad, k); return [r.code, r.j.fehler]; };
+  assert.deepEqual(await fe('/analyse/referenz/messen', { quelle: { art: 'datei', pfad: 'rel.wav' } }), [400, 'argument_ungueltig']);
+  assert.deepEqual(await fe('/analyse/referenz/messen', { quelle: { art: 'datei', sha: 'a'.repeat(64) } }), [404, 'quelle_unbekannt']);
+  assert.deepEqual(await fe('/analyse/referenz/messen', { quelle: REF_DATEI, extra: 1 }), [400, 'argument_ungueltig']);
+  assert.deepEqual(await fe('/analyse/referenz/merken', { name: '', rolle: 'kick', quelle: { art: 'datei', pfad: wav } }), [400, 'argument_ungueltig']);
+  assert.deepEqual(await fe('/analyse/referenz/merken', { name: 'x', rolle: 'tuba', quelle: { art: 'datei', pfad: wav } }), [400, 'argument_ungueltig']);
+  assert.deepEqual(await fe('/analyse/referenz/merken', { name: 'x', rolle: 'kick' }), [400, 'argument_ungueltig']);
+  assert.deepEqual(await fe('/analyse/referenz/merken', { name: 'x', rolle: 'kick', quelle: { art: 'referenz', id: 'a-123456' } }), [400, 'argument_ungueltig']);
+  assert.equal(fs.existsSync(ordner), false, 'nothing stored by the refusals');
+  const mk = await route(b, 'POST', '/analyse/referenz/merken', { name: 'Loop A', rolle: 'drums', quelle: { art: 'datei', pfad: wav, von_s: 2, bis_s: 66.5 - 60.5 + 62 } });
+  assert.equal(mk.code, 400, 'bis_s beyond the file');
+  const ok = await route(b, 'POST', '/analyse/referenz/merken', { name: 'Loop A', rolle: 'drums', quelle: { art: 'datei', pfad: wav, von_s: 2, bis_s: 6 } });
+  assert.equal(ok.code, 200, JSON.stringify(ok.j));
+  assert.equal(ok.j.referenz.herkunft, 'Mein Loop.wav 0:02-0:06');
+  assert.equal(ok.j.referenz.rolle, 'drums');
+  const g1 = await route(b, 'GET', '/analyse/referenzen');
+  assert.deepEqual(g1.j.referenzen.map((x) => x.id), [ok.j.referenz.id]);
+  const lo = await route(b, 'POST', '/analyse/referenz/loeschen', { id: ok.j.referenz.id });
+  assert.deepEqual([lo.code, lo.j], [200, { ok: true }]);
+  assert.deepEqual((await route(b, 'GET', '/analyse/referenzen')).j.referenzen, []);
+  assert.deepEqual(await fe('/analyse/referenz/loeschen', { id: ok.j.referenz.id }), [404, 'referenz_unbekannt']);
+  assert.deepEqual(await fe('/analyse/referenz/loeschen', {}), [400, 'argument_ungueltig']);
+  assert.equal(fs.readdirSync(path.join(ordner, '.papierkorb')).length, 1);
+});
+
+test('routes: merken from a strip of the project stores the measurement without its time picture; the project strip is not stored when silent', async (t) => {
+  const a = await aufbau(t, { tempo: 120 });
+  const ordner = path.join(a.tmp, 'refs');
+  const b = ausgabeBereich(a.ctx, a.echt, { ...a.optionen, referenzOrdner: () => ordner });   // the default worker measures the render double's sine
+  const slug = a.offen().slug;
+  const ok = await mitUmgebung(MISCHUNG(a), () => route(b, 'POST', '/analyse/referenz/merken',
+    { name: 'Bass 8 bars', rolle: 'bass', projekt: { quelle: { art: 'spur', id: 's2' }, von_beat: 0, bis_beat: 8 } }));
+  assert.equal(ok.code, 200, JSON.stringify(ok.j));
+  assert.equal(ok.j.referenz.herkunft, `${slug}: Bass, beats 0-8`);
+  const roh = JSON.parse(fs.readFileSync(path.join(ordner, `${ok.j.referenz.id}.json`), 'utf8'));
+  assert.equal('zeitbild' in roh.messung, false);
+  assert.equal(roh.messung.spektrum.hz.length, 120);
+  const fe = async (k) => { const r = await mitUmgebung(MISCHUNG(a), () => route(b, 'POST', '/analyse/referenz/merken', k)); return [r.code, r.j.fehler]; };
+  assert.deepEqual(await fe({ name: 'x', rolle: 'bass', projekt: { quelle: { art: 'spur', id: 's9' } } }), [400, 'spur_unbekannt']);
+  assert.deepEqual(await fe({ name: 'x', rolle: 'bass', projekt: { quelle: { art: 'spur', id: 's2' }, zusatz: 1 } }), [400, 'argument_ungueltig']);
+  assert.deepEqual(await fe({ name: 'x', rolle: 'bass', projekt: { quelle: { art: 'spur', id: 's2' } }, quelle: REF_DATEI }), [400, 'argument_ungueltig']);
+  assert.deepEqual(await fe({ name: 'x', rolle: 'bass', projekt: { quelle: REF_DATEI } }), [400, 'argument_ungueltig']);
 });

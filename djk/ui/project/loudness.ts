@@ -37,10 +37,12 @@ export function leseMaxima(zeile: string, stand: { s: number | null; m: number |
 
 const NULL = { lufs_i: null, lra: null, true_peak_dbtp: null };
 
-export function messeLautheit(datei: string, ffmpeg: string[] = ['ffmpeg'], zeitlimitMs = 120_000, o: { maxima?: boolean } = {}): Promise<Lautheit> {
+export function messeLautheit(datei: string, ffmpeg: string[] = ['ffmpeg'], zeitlimitMs = 120_000,
+  o: { maxima?: boolean; von_s?: number; dauer_s?: number } = {}): Promise<Lautheit> {
   return new Promise((ok) => {
     const mx = !!o.maxima;
-    const k = spawn('nice', ['-n', '19', ...ffmpeg, '-nostdin', '-hide_banner', '-nostats', ...(mx ? ['-loglevel', 'verbose'] : []), '-i', datei,
+    const k = spawn('nice', ['-n', '19', ...ffmpeg, '-nostdin', '-hide_banner', '-nostats', ...(mx ? ['-loglevel', 'verbose'] : []),
+      ...(o.von_s !== undefined ? ['-ss', String(o.von_s)] : []), ...(o.dauer_s !== undefined ? ['-t', String(o.dauer_s)] : []), '-i', datei,
       '-af', `ebur128=peak=true:framelog=${mx ? 'verbose' : 'quiet'}`, '-f', 'null', '-'], { stdio: ['ignore', 'ignore', 'pipe'] });
     let err = '', abgelaufen = false, rest = '';
     const stand = { s: null as number | null, m: null as number | null };

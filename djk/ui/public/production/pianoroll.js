@@ -128,6 +128,13 @@ export function rechteckAuswahl(clip, a, x0, y0, x1, y1) {
   const l = Math.min(x0, x1), r = Math.max(x0, x1), o = Math.min(y0, y1), u = Math.max(y0, y1);
   return clip.noten.filter((n) => { const k = notenKasten(a, n); return k.x <= r && k.x + k.w >= l && k.y <= u && k.y + k.h >= o; }).map((n) => n.id);
 }
+// Shift+click: the range between two notes, every note that starts in their span of time and lies in their span of pitch (both ends included)
+export function bereichAuswahl(clip, vonId, bisId) {
+  const a = clip.noten.find((n) => n.id === vonId), b = clip.noten.find((n) => n.id === bisId);
+  if (!a || !b) return b ? [b.id] : [];
+  const b0 = Math.min(a.beat, b.beat), b1 = Math.max(a.beat, b.beat), t0 = Math.min(a.ton, b.ton), t1 = Math.max(a.ton, b.ton);
+  return clip.noten.filter((n) => n.beat >= b0 - 1e-9 && n.beat <= b1 + 1e-9 && n.ton >= t0 && n.ton <= t1).map((n) => n.id);
+}
 // Pfeiltasten: ←/→ ein Rasterschritt (bei OFF 1/16), ↑/↓ ein Halbton, mit Umschalt eine Oktave
 export function tastenSchritt(key, shift, raster) {
   const g = raster > 0 ? raster : QUANT;

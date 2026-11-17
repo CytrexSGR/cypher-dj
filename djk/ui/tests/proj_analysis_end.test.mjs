@@ -1,6 +1,6 @@
 // ANALYZE slice 1, end to end without a server: the real worker (areas/proj/sound_factory.ts) with the real analysis module (project/sound_measurement.ts, default path),
 // the real hint functions and the real ffmpeg. Only the render is replaced: two small WAV files written here stand for the rendered strips. The test process
-// (a 55 Hz sine reads about 5.5 dB under its level in its 1/12 band, see sound_measurement.ts). The test process
+// (4 s are longer than the long window, so the 55 Hz sine reads its level in its 1/12 band, see sound_measurement.ts). The test process
 // must end by itself (no test-force-exit): a worker that stays alive would hang it.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -41,7 +41,7 @@ test('the real worker analyses a bass and a kick, the answer is valid and the tw
   const s = r.quelle.spektrum;
   const lauteste = s.mittel_db.indexOf(Math.max(...s.mittel_db));
   assert.ok(Math.abs(s.hz[lauteste] - 55) < 6, `loudest band ${s.hz[lauteste]} Hz`);
-  assert.ok(Math.max(...s.mittel_db) < -10 && Math.max(...s.mittel_db) > -13, `${Math.max(...s.mittel_db)} dB`);
+  assert.ok(Math.abs(Math.max(...s.mittel_db) - -6.02) < 0.5, `${Math.max(...s.mittel_db)} dB`);
   assert.ok(r.ueberdeckung.schwerpunkte.length >= 1 && r.ueberdeckung.schwerpunkte[0].hz_von < 250, JSON.stringify(r.ueberdeckung.schwerpunkte));
   assert.ok(r.hinweise.some((h) => h.art === 'ueberdeckung_tief' && /Bass and Kick mask each other/.test(h.text)), JSON.stringify(r.hinweise));
 });

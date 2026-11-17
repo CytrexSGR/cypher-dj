@@ -27,7 +27,7 @@ import type http from 'node:http';
 import type { Bereich, BereichKontext } from '../../http/router.ts';
 import { json, koerper } from '../../http/transport.ts';
 import { grundText } from '../../http/reasons.ts';
-import { instanz, renderProgramm, wirtOrdnerVorgabe } from '../../paths.ts';
+import { instanz, referenzOrdnerVorgabe, renderProgramm, wirtOrdnerVorgabe } from '../../paths.ts';
 import { wirtStand } from './instrument_host.ts';
 import {
   KENNUNG_MAX, alleInserts, MAX_SPUREN, SAMPLERATE, kanonisch, spurSicht, sucheSpur,
@@ -45,8 +45,9 @@ import {
   type Abgriff, type Pfad, type RenderAntwort, type SchluesselPlan,
 } from '../../project/render.ts';
 import { messeLautheit, type Lautheit } from '../../project/loudness.ts';
-import { quellenSchluessel, type AnalyseQuelle } from '../../project/sound_contract.ts';
+import { ROLLEN, istRefQuelle, quellenSchluessel, type AnalyseQuelle, type RefQuelle } from '../../project/sound_contract.ts';
 import { KlangAnalyse } from './sound_analysis.ts';
+import { KlangReferenz, dauerLesen, nameRolleLesen, refQuelleLesen } from './sound_reference.ts';
 import {
   baueMergeProjekt, MergeFehler, mergePlan, mergeRegler, mergeWiedergabe, pruefeMergeNochGleich,
 } from '../../project/merge.ts';
@@ -78,6 +79,9 @@ export interface AusgabeOptionen {
   wirtOrdner?: () => string;      // Ordner der Wirt-Status-Dateien (Vorgabe pfade.wirtOrdnerVorgabe(), der Server gibt seinen mit)
   zeitlimitMs?: number;           // Test-Haken: Zeitlimit des Merge-Renders (Vorgabe 4 · Dauer + 60 s)
   nachExport?: (a: { slug: string; ordner: string; datei?: string }) => void;   // A5: after an export; a throwing hook is logged, never fails it
+  referenzOrdner?: () => string;  // ANALYZE slice 2: the folder of the stored references (Vorgabe pfade.referenzOrdnerVorgabe())
+  katalogPfad?: (sha: string) => { pfad: string; name?: string } | null;   // ANALYZE slice 2: a catalogue sha to its file (the server hands the session's)
+  referenz?: Partial<import('./sound_reference.ts').KlangReferenzOptionen>;   // test hook: injected measuring, programs
   gesundMs?: number;              // plan 1.11 T13: every host healthy this long before a real-time export starts (Vorgabe 1100: the core's 1 s hold-off)
 }
 
@@ -92,6 +96,7 @@ const STATUS: Record<string, number> = {
   export_leer: 409, keine_arbeitsflaeche: 409,                                // file export (MIDI / per track), show folder
   bounce_nur_audio: 409, bounce_ziel_art: 409, takes_voll: 409, ersetzen_loop: 409, gruppe_unbekannt: 400,   // 1.14 slice 4 (spec D12)
   return_unbekannt: 400, freeze_noetig: 409,                                                      // ANALYZE slice 1
+  referenz_unbekannt: 404, quelle_unbekannt: 404, format_falsch: 422, messung_fehler: 502, speichern_fehler: 500,   // ANALYZE slice 2
 };
 
 // text: englisch (Spec 6.34)
@@ -1230,7 +1235,9 @@ export class Ausgabe {
     if (d.ohne_freeze !== undefined && typeof d.ohne_freeze !== 'boolean') fehl('argument_ungueltig', 'ohne_freeze: true or false is required');
     if (d.quelle === undefined) fehl('argument_ungueltig', 'quelle: a source {art, id} is required');
     const q = analyseQuelleLesen(d.quelle, 'quelle');
-    const v = d.vergleich === undefined || d.vergleich === null ? undefined : analyseQuelleLesen(d.vergleich, 'vergleich');   // null = no comparison
+    // null = no comparison; a reference (slice 2) is allowed here and never as `quelle`
+    const v: AnalyseQuelle | RefQuelle | undefined = d.vergleich === undefined || d.vergleich === null ? undefined
+      : istRefQuelle(d.vergleich) ? refQuelleLesen(d.vergleich, 'vergleich') : analyseQuelleLesen(d.vergleich, 'vergleich');
     if (v && quellenSchluessel(v) === quellenSchluessel(q)) fehl('argument_ungueltig',
       'vergleich: the comparison must be another strip than quelle; a strip against itself has nothing to compare');
     const { von, bis } = this.pruefeBereich({ von_beat: d.von_beat, bis_beat: d.bis_beat }, ['von_beat', 'bis_beat'], undefined, false, false);
@@ -1588,7 +1595,36 @@ export function ausgabeBereich(ctx: BereichKontext, zugang: ProjZugang, opt: Aus
     }
   }
   const a = new Ausgabe(ctx, zugang, opt);
-  const k = new KlangAnalyse(a, { ffmpeg: opt.ffmpeg });
+  const ref = new KlangReferenz({ ordner: opt.referenzOrdner ?? (() => referenzOrdnerVorgabe()), katalogPfad: opt.katalogPfad ?? (() => null),
+    ffmpeg: opt.ffmpeg, ...opt.referenz });
+  const k = new KlangAnalyse(a, { ffmpeg: opt.ffmpeg, referenz: ref });
+  const sek = (x: number): string => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
+  // POST /analyse/referenz/merken: the measurement of a file range, or of a strip of the open project, is stored under a name and a role
+  const merken = async (d: Record<string, unknown>): Promise<unknown> => {
+    const datei = d.quelle !== undefined, projekt = d.projekt !== undefined;
+    for (const x of Object.keys(d)) if (!['name', 'rolle', 'quelle', 'dauer_s', 'projekt'].includes(x)) fehl('argument_ungueltig', `unknown field ${x}`);
+    if (datei === projekt) return fehl('argument_ungueltig', 'exactly one of quelle (a file) and projekt (a strip) is required');
+    const { name, rolle } = nameRolleLesen(d.name, d.rolle);   // before the measuring: a bad name costs nothing
+    if (datei) {
+      const q = refQuelleLesen(d.quelle, 'quelle');
+      if (q.art !== 'datei') return fehl('argument_ungueltig', 'quelle: a file is required (a stored reference is already stored)');
+      const m = await ref.messe(q, dauerLesen(d.dauer_s));
+      const datei_ = q.pfad ?? '';
+      const b = m.bereich;
+      const herkunft = `${datei_ ? path.basename(datei_) : m.name} ${b ? `${sek(b.von_s)}-${sek(b.bis_s)}` : ''}`.trim();
+      return { referenz: ref.merke({ name, rolle, messung: m, herkunft }) };
+    }
+    if (d.dauer_s !== undefined) return fehl('argument_ungueltig', 'dauer_s: only for a file');
+    const p = d.projekt;
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return fehl('argument_ungueltig', 'projekt: an object {quelle, von_beat?, bis_beat?} is required');
+    const po = p as Record<string, unknown>;
+    for (const x of Object.keys(po)) if (!['quelle', 'von_beat', 'bis_beat'].includes(x)) fehl('argument_ungueltig', `projekt: unknown field ${x}`);
+    const aufruf = { quelle: po.quelle, von_beat: po.von_beat, bis_beat: po.bis_beat, ohne_freeze: true };
+    const slug = a.analyseVorpruefung(aufruf).slug;
+    const x = await k.analysiere(aufruf);
+    const { zeitbild: _weg, ...m } = x.quelle;
+    return { referenz: ref.merke({ name, rolle, messung: m, herkunft: `${slug}: ${x.quelle.name}, beats ${x.von_beat}-${x.bis_beat}` }) };
+  };
   type Handler = (q: http.IncomingMessage, r: http.ServerResponse) => Promise<void>;
   const antworte = (f: (d: Record<string, unknown>, kurz: boolean) => Promise<unknown>): Handler => async (q, r) => {
     const kurz = new URL(q.url ?? '/', 'http://seite').searchParams.get('antwort') === 'kurz';
@@ -1605,6 +1641,20 @@ export function ausgabeBereich(ctx: BereichKontext, zugang: ProjZugang, opt: Aus
       { methode: 'POST', pfad: '/proj/export', schutz: 'fremdePost', handler: antworte((d) => a.exportiere(d)) },
       { methode: 'POST', pfad: '/proj/lautheit', schutz: 'fremdePost', handler: antworte((d) => a.lautheit(d)) },
       { methode: 'POST', pfad: '/proj/analyse', schutz: 'fremdePost', handler: antworte((d) => k.analysiere(d)) },
+      { methode: 'POST', pfad: '/analyse/referenz/messen', schutz: 'fremdePost', handler: antworte(async (d) => {
+        for (const x of Object.keys(d)) if (x !== 'quelle' && x !== 'dauer_s') fehl('argument_ungueltig', `unknown field ${x}`);
+        return { messung: await ref.messe(refQuelleLesen(d.quelle, 'quelle'), dauerLesen(d.dauer_s)) };
+      }) },
+      { methode: 'GET', pfad: '/analyse/referenzen', schutz: 'offen', handler: async (_q, r) => {
+        try { json(r, 200, { referenzen: ref.liste(), rollen: [...ROLLEN] }); } catch (e) { const x = alsAntwort(e); json(r, x.code, x.body); }
+      } },
+      { methode: 'POST', pfad: '/analyse/referenz/merken', schutz: 'fremdePost', handler: antworte(merken) },
+      { methode: 'POST', pfad: '/analyse/referenz/loeschen', schutz: 'fremdePost', handler: antworte(async (d) => {
+        for (const x of Object.keys(d)) if (x !== 'id') fehl('argument_ungueltig', `unknown field ${x}`);
+        if (typeof d.id !== 'string' || d.id === '') return fehl('argument_ungueltig', 'id: the id of a stored reference is required');
+        ref.loesche(d.id);
+        return { ok: true };
+      }) },
       { methode: 'POST', pfad: '/proj/export_midi', schutz: 'fremdePost', handler: antworte(async (d) => a.exportiereMidi(d)) },
       { methode: 'POST', pfad: '/proj/export_spuren', schutz: 'fremdePost', handler: antworte((d) => a.exportiereSpuren(d)) },
       { methode: 'POST', pfad: '/proj/export_zeige', schutz: 'fremdePost', handler: antworte(async (d) => a.zeigeExport(d)) },

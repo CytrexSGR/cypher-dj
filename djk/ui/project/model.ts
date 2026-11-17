@@ -12,6 +12,7 @@ import { ersterUngueltigerSchluessel } from './routing_verdict.ts';
 import { huellkurvenPruefung, type Huellkurve } from './envelope.ts';
 import { seqPruefung, seqSichtPruefung, type SeqDeck, type SeqSicht } from './seq.ts';   // seq.ts imports only types from this file: no runtime cycle
 import { werkbankPruefung, type WerkbankMarke } from './werkbank.ts';   // werkbank.ts imports only a type from this file: no runtime cycle
+import { tonartFehler } from '../public/harmonie.js';
 import { PRESET_ID } from '../presets/preset_id.ts';   // 1.16 rest: zero-import file, keeps this module free of file access
 export type { Punkt, LaneForm } from './lane.ts';
 
@@ -452,6 +453,8 @@ export interface Spur {
 }
 // naechste_id (Spec 6.26): Zähler je Art (spur, clip, gruppe); naechste_noten_id (Spec 6.28 Nachsatz zu 6.26): EIN Noten-Zähler für alle Clips.
 // Alle steigen nur und stehen in keinem Patch, Undo und Redo setzen sie nicht zurück.
+// The key of a project: the root as a pitch class (C = 0) and a scale name of public/harmonie.js SKALEN. View and editing help only, playback never reads it.
+export interface Tonart { grundton: number; skala: string }
 export interface Projekt {
   format: typeof FORMAT; name: string; rev: number; wiedergabe_rev: number; tempo_bpm: number; taktart: [number, number];
   naechste_id?: { spur?: number; clip?: number; gruppe?: number; lane?: number; return?: number; insert?: number; take?: number }; naechste_noten_id?: number;
@@ -465,6 +468,7 @@ export interface Projekt {
   baukasten?: BkKanal[];   // S17: sound snapshot (project/modular.ts), only in /2, absent when empty
   live?: true;             // the live container (plan live-module): the one project that runs during a DJ set; never written when absent
   werkbank?: WerkbankMarke;   // loop workbench module (project/werkbank.ts): only in /2, never together with live; never written when absent
+  tonart?: Tonart;          // key of the project (public/harmonie.js): the note editors mark and fold by it; only in /2, absent without a key
 }
 
 export const aufnahmeVon = (p: Projekt): ProjektAufnahme => p.aufnahme ?? structuredClone(AUFNAHME_VORGABE);
@@ -1509,7 +1513,10 @@ function pruefeAlles(x: unknown): void {
   const neu2 = istObjekt(x) && x.format === FORMAT;   // /2 verlangt gruppen und master, /1 hat sie nicht
   const pflicht = ['format', 'name', 'rev', 'wiedergabe_rev', 'tempo_bpm', 'taktart', 'loop', 'metronom', 'spuren', ...(neu2 ? ['gruppen', 'master'] : [])];
   // returns, baukasten in /1: unknown field
-  const o = felder(x, 'projekt', pflicht, ['naechste_id', 'naechste_noten_id', ...(neu2 ? ['returns', 'baukasten', 'aufnahme', 'live', 'werkbank'] : [])]);
+  const nur2 = ['returns', 'baukasten', 'aufnahme', 'live', 'werkbank', 'tonart'];
+  const o = felder(x, 'projekt', pflicht, ['naechste_id', 'naechste_noten_id', ...(neu2 ? nur2 : [])]);
+  const tf = 'tonart' in o ? tonartFehler(o.tonart) : null;
+  if (tf) werfe('tonart', tf.replace(/^tonart[.:]?\s*/, ''));
   if ('live' in o && o.live !== true) werfe('live', 'true expected (absent when not a live container)');
   if ('werkbank' in o) {
     const w = werkbankPruefung(o.werkbank);

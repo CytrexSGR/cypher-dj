@@ -30,6 +30,7 @@ import {
 } from './model.ts';
 import { INSERT_ARTEN } from './insert_key.ts';
 import { MAX_WERKBANK_SPUREN } from './werkbank.ts';
+import { tonartFehler } from '../public/harmonie.js';
 import { SEQ_BEATS, seqGruppe, seqSichtPruefung, type SeqSicht } from './seq.ts';
 import { wendeMusterAn, musterAbdruck, type KitKlang, type MusterErgebnis, type MusterFehlschlag } from './pattern_clip.ts';
 import { nachkommen, pruefeAlleSchluessel, pruefeSchluessel, vorfahren, type SchluesselFrage } from './routing_rules.ts';
@@ -2013,6 +2014,20 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     const overdub = flagge(a, 'overdub', true);
     if (overdub !== undefined) neu.overdub = overdub;
     p.aufnahme = neu;
+  },
+
+  // Key of the project: {grundton: 0..11, skala: a scale name of public/harmonie.js} sets it, {aus: true} removes it. The note editors mark the pitches of
+  // the key, fold to them and snap to them; playback never reads the key, so no note moves by this command.
+  tonart_setzen(p, a) {
+    erlaube(a, 'grundton', 'skala', 'aus');
+    if (a.aus !== undefined) {
+      if (a.aus !== true || a.grundton !== undefined || a.skala !== undefined) ab('argument_ungueltig', 'aus: true alone expected (no grundton, skala)');
+      delete p.tonart;
+      return;
+    }
+    const f = tonartFehler({ grundton: a.grundton, skala: a.skala });
+    if (f) ab('argument_ungueltig', f);
+    p.tonart = { grundton: a.grundton as number, skala: a.skala as string };
   },
 
   metronom_setzen(p, a) {

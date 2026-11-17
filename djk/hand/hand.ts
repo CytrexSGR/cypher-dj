@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { fuerHand, type AnalyseAntwort } from '../ui/project/sound_contract.ts';   // ANALYZE: the hand answer is the contract's reduction of the page answer
+import { fuerHand, terzVon, TERZ_HZ, ROLLEN, type AnalyseAntwort } from '../ui/project/sound_contract.ts';   // ANALYZE: the hand answer is the contract's reduction of the page answer
 import { ladeVokabular } from '../ui/presets/vocabulary.ts';   // 1.16 U5: the search tool's schema is the server's own definition
 import { frageSchema } from '../ui/presets/register.ts';
 import { PRESET_ID } from '../ui/presets/preset_id.ts';
@@ -627,26 +627,35 @@ const W: Werkzeug[] = [
     + 'baender = the four bands below 120 Hz, 120-500 Hz, 500-4000 Hz and above 4000 Hz, each {hz_von, hz_bis, korrelation, breite_db} (the bass should stay near 1). '
     + 'spektrum: {hz, mittel_db, max_db}: band centres in Hz, the mean level over the range and the highest level of any frame, in dB where a full-scale sine reads 0 dB (a sine of amplitude 0.5 reads -6 dB), -200 = nothing. '
     + 'The bands are 1/3 octave (30 bands) unless fein is true, then 1/12 octave (120 semitone bands from 20.6 Hz to 19.9 kHz on the A440 grid, so a peak names a note); a 1/3 octave band is the power sum of four 1/12 bands, a sine keeps its level. '
-    + 'The 1/12 bands are band integrals, not line levels: below about 250 Hz a band is narrower than the window resolves, so a full-scale sine reads lower there (55 Hz about -5.5 dB in its 1/12 band, about -0.5 dB in its 1/3 octave band); for the level of low notes read the 1/3 octave spectrum (without fein). '
+    + 'The 1/12 bands are band integrals, not line levels. The mean and maximum spectrum below 400 Hz come from a long window (about 0.68 s) whenever the range is at least 0.68 s long, so a low note on the A440 grid reads close to its level in its own 1/12 band (55 Hz -0.2 dB, 41 Hz -1.1 dB, 27.5 Hz -2.3 dB); only a shorter range keeps the old short window, where a band is narrower than the window resolves and a full-scale sine reads lower (55 Hz -5.5 dB in its 1/12 band). '
     + 'A very long range (more than about 6 minutes) is sampled: the spectrum, the time picture and the band stereo values look at one window per column, not at every frame between the columns. '
     + 'ueberdeckung (only with vergleich and when both sound): masking between the two, baender [{hz, quelle_db, vergleich_db, anteil}] in 1/3 octave, anteil 0 to 1 = the share of the time in which both are above -60 dB and differ by at most 9 dB (they fight there; 0 = never, 1 = always); '
     + 'schwerpunkte [{hz_von, hz_bis, anteil}] = up to three runs of neighbouring bands with anteil of at least 0.5, the worst first. '
     + 'A strip that sounds but lies below the measuring floor (about -70 LUFS) answers stumm false with the lautheit values lufs_i and lra null (true_peak_dbtp and the peaks are still measured). '
     + 'vergleich equal to quelle is refused with argument_ungueltig. '
+    + 'vergleich may also be a REFERENCE instead of a second strip: {art: datei, pfad | sha, von_s?, bis_s?} (an audio file: pfad is an absolute path, sha a catalogue sha256; von_s/bis_s in seconds fix the range of the file, else the whole file, at most its first 900 s) '
+    + 'or {art: referenz, id} (a reference kept with analyse_referenz). Then the answer has vergleich = the measurement of the reference (the same fields as a strip, but no time picture, plus bereich {von_s, bis_s, datei_s, wahl: ganz | laut | fest} for a file and rolle for a kept reference), '
+    + 'abgleich and NO ueberdeckung (there is no masking against a reference: it was not rendered with the strip), and hinweise of the source only. '
+    + 'abgleich = {versatz_db, baender, abweichungen} compares the tonal balance, not the loudness: the reference curve is first shifted by versatz_db, the median band difference, so both curves have the same overall level; '
+    + 'baender = 30 bands in 1/3 octave, each {hz, diff_db} with diff_db = source minus shifted reference in dB (diff_db > 0 = the source has more there than the reference, < 0 = less; null = one of the two carries no level in that band); '
+    + 'abweichungen = the up to three strongest runs of neighbouring 1/3 octave bands that differ by 3 dB or more, each {hz_von, hz_bis, diff_db}, the strongest first (an empty list = the balance matches within 3 dB). To match loudness read lautheit of both. '
+    + 'Extra refusals for a reference: referenz_unbekannt (no kept reference with that id), quelle_unbekannt (404: the file or sha is not found), format_falsch (422: the file is not audio the server can read). '
     + 'stumm true = the strip is silent in the mix (muted, fader off, silent in the range, or silenced by a solo elsewhere): every lautheit value null, korrelation 0, breite_db -200, spectrum at -200, no hints for it and no masking; the other strip is still measured. '
     + 'hinweise: objective hints, each {art, text, hz?}, in the order quelle, vergleich, masking; an empty list is a good result. The four kinds: '
     + 'bass_nicht_mono = the band below 120 Hz has a korrelation under 0.5 while it carries level above -60 dB (a bass that collapses in mono); '
     + 'true_peak = true_peak_dbtp above -1 dBTP; '
     + 'resonanz = a band that stands 9 dB or more over the median of the octave around it (the six bands on each side), above -60 dB and not lower than its neighbours, at most three per strip, hz names the centre; '
     + 'ueberdeckung_tief = a masking schwerpunkt that starts below 250 Hz (two strips fight in the bass). '
-    + 'fein (boolean, default false) only chooses the resolution of the spectrum in the answer; it is not sent to the server. '
+    + 'fein (boolean, default false) only chooses the resolution of the spectrum in the answer, also that of a reference; it is not sent to the server. '
     + 'Refusals as a tool error {fehler, text}: kein_projekt, ki_gestoppt, beschaeftigt (another render, freeze, export or loudness run is on; the same request twice waits for the one running and gets the same answer), export_bereich (range empty or over 1024 beats), audio_fehlt, '
     + 'wirt_fehlt, wirt_fehler, render_fehler, host_insert_echtzeit, transport_laeuft, spur_unbekannt, gruppe_unbekannt, return_unbekannt, argument_ungueltig. ' + fristText('proj_analyse'),
     inputSchema: { type: 'object', properties: {
       quelle: { type: 'object', description: 'the strip to analyse: {art: spur | gruppe | return | master, id} (id = spur_id, gruppe_id or return_id; none for master)',
         properties: { art: { type: 'string', enum: ['spur', 'gruppe', 'return', 'master'] }, id: { type: 'string' } }, required: ['art'] },
-      vergleich: { type: 'object', description: 'optional second strip, same form as quelle; adds the masking between the two',
-        properties: { art: { type: 'string', enum: ['spur', 'gruppe', 'return', 'master'] }, id: { type: 'string' } }, required: ['art'] },
+      vergleich: { type: 'object', description: 'optional second strip, same form as quelle (adds the masking between the two), or a reference: {art: datei, pfad | sha, von_s?, bis_s?} or {art: referenz, id} (adds abgleich, no masking)',
+        properties: { art: { type: 'string', enum: ['spur', 'gruppe', 'return', 'master', 'datei', 'referenz'] }, id: { type: 'string', description: 'spur_id, gruppe_id or return_id; with art referenz the id of the kept reference' },
+          pfad: { type: 'string', description: 'art datei: absolute path of the audio file' }, sha: { type: 'string', description: 'art datei: catalogue sha256 of the file' },
+          von_s: { type: 'number', minimum: 0, description: 'art datei: start of the range in the file, seconds' }, bis_s: { type: 'number', minimum: 0, description: 'art datei: end of the range in the file, seconds' } }, required: ['art'] },
       von_beat: zahl('first beat (default: loop start)', { minimum: 0 }),
       bis_beat: zahl('end beat, exclusive (default: loop end)', { minimum: 1 }),
       fein: { type: 'boolean', description: 'true = the spectrum in 1/12 octave (120 bands) instead of 1/3 octave (30 bands); not sent to the server' } }, required: ['quelle'] },
@@ -654,6 +663,74 @@ const W: Werkzeug[] = [
       const r = await httpLang('proj_analyse', '/proj/analyse', { quelle: p.quelle as Json, ...(p.vergleich !== undefined ? { vergleich: p.vergleich as Json } : {}),
         ...(p.von_beat !== undefined ? { von_beat: p.von_beat } : {}), ...(p.bis_beat !== undefined ? { bis_beat: p.bis_beat } : {}) });
       return r.code >= 400 || (r.j as Json).fehler !== undefined ? r : { code: r.code, j: fuerHand(r.j as unknown as AnalyseAntwort, p.fein === true) as unknown as Json };
+    } },
+  // ANALYZE window slice 2: the live picture of the master output and the reference store
+  { name: 'analyse_live', description: 'The live analysis of the master output as it goes out: the last 0.34 s of the master (the DJ master sum after its fader; in the live container this is the whole set including the Studio, because the production master of the Studio reaches it through erz/4). '
+    + 'It is one moment: call it again for another moment. A strip that is soloed is seen alone, but soloing changes what the audience hears. '
+    + 'Answer {leer: true, grund} when the engine is not running (nothing to measure). Otherwise {leer: false, w, steht, stumm, spektrum, stereo, spitze_db, rms_db, true_peak_dbtp, lufs_m}: '
+    + 'w = the write counter of the audio ring, it grows while the engine writes; steht = true when the engine wrote nothing new since the previous call (stopped or hanging: the picture is old, do not read it as the current sound); '
+    + 'stumm = true when the window is digital silence; '
+    + 'spektrum {hz, db}: band centres in Hz and levels in dB where a full-scale sine reads 0 dB; 1/3 octave (30 bands, the power sum of four 1/12 bands) unless fein is true, then the 120 bands in 1/12 octave on the A440 grid; '
+    + 'stereo {korrelation (1 = mono, 0 = unrelated, -1 = the channels cancel in mono), korrelation_min (lowest over 400 ms windows), breite_db (side over mid, -200 = mono), baender: four bands below 120 Hz, 120-500 Hz, 500-4000 Hz and above 4000 Hz, each {hz_von, hz_bis, korrelation, breite_db, pegel_db}}; '
+    + 'spitze_db = sample peak in dBFS, rms_db = RMS of both channels in dBFS, true_peak_dbtp = true peak in dBTP (4x oversampling), lufs_m = momentary loudness in LUFS over 400 ms (null when silent or below the measuring floor). '
+    + 'This tool only reads and changes nothing. For a strip of the project use proj_analyse; for one deck or channel use pegel, spektrum or oszilloskop.',
+    inputSchema: { type: 'object', properties: { fein: { type: 'boolean', default: false, description: 'true = the spectrum in 1/12 octave (120 bands) instead of 1/3 octave (30 bands)' } } },
+    lauf: async (p) => {
+      const r = await http('GET', '/analyse/live');
+      if (r.code !== 200) return r;
+      const j = (r.j !== null && typeof r.j === 'object' ? r.j : {}) as { leer?: unknown; spektrum?: { hz?: unknown; db?: unknown } };
+      if (typeof j.leer !== 'boolean') return { code: 502, j: { fehler: 'antwort_ungueltig', text: 'GET /analyse/live answered without a boolean leer', antwort: r.j } };
+      if (j.leer || p.fein === true) return r;
+      const db = j.spektrum?.db;
+      if (!Array.isArray(db) || db.length !== 120) return { code: 502, j: { fehler: 'antwort_ungueltig', text: 'GET /analyse/live: the spectrum is not 120 bands' } };
+      return { code: 200, j: { ...(r.j as Record<string, Json>), spektrum: { hz: [...TERZ_HZ], db: terzVon(db as number[]) } } as unknown as Json };
+    } },
+  { name: 'analyse_referenz', description: 'Reference measurements: measure a finished track or a sample as a TARGET, keep it by role, and compare a strip of the open project against it with proj_analyse vergleich {art: referenz, id}. '
+    + 'aktion: liste (GET: the kept references {referenzen: [{id, name, rolle, erstellt, herkunft, lufs_i}], rollen}), '
+    + 'messen (measure without keeping: quelle {art: datei, pfad | sha, von_s?, bis_s?} (an absolute path or a catalogue sha256) or {art: referenz, id}, optional dauer_s 4..900; answers {messung} with loudness, stereo and spectrum like a strip of proj_analyse, no time picture, plus bereich {von_s, bis_s, datei_s, wahl}), '
+    + 'merken (keep a measurement: name 1..60 characters, rolle, and either quelle (a file, with optional dauer_s) or projekt {quelle: a strip {art, id}, von_beat?, bis_beat?} to keep a strip of the open project as the reference; answers {referenz}), '
+    + 'loeschen (id; answers {ok: true}; the file goes to a bin folder, nothing is destroyed). '
+    + 'Range of a file: von_s/bis_s fix it (wahl fest); else with dauer_s and a file longer than twice that, the loudest window of dauer_s seconds (wahl laut); else the whole file, at most its first 900 s (wahl ganz). '
+    + `Roles: ${ROLLEN.join(', ')}. `
+    + 'The spectrum of messen is reduced to 1/3 octave (30 bands) unless fein is true (1/12 octave, 120 bands; only a choice of the answer, not sent). '
+    + 'A reference carries tonal balance: proj_analyse compares it level-matched (abgleich), so the loudness of the reference does not matter, and there is no masking against a reference. '
+    + 'Only merken and loeschen change the reference store; liste and messen read. Refusals as a tool error {fehler, text}, among them referenz_unbekannt, quelle_unbekannt (404), format_falsch (422), argument_ungueltig.',
+    inputSchema: { type: 'object', required: ['aktion'], properties: {
+      aktion: { type: 'string', enum: ['liste', 'messen', 'merken', 'loeschen'] },
+      quelle: { type: 'object', description: 'messen, merken: {art: datei, pfad | sha, von_s?, bis_s?} (merken: files only) or, for messen, {art: referenz, id}',
+        properties: { art: { type: 'string', enum: ['datei', 'referenz'] }, pfad: { type: 'string' }, sha: { type: 'string' }, id: { type: 'string' },
+          von_s: { type: 'number', minimum: 0 }, bis_s: { type: 'number', minimum: 0 } }, required: ['art'] },
+      dauer_s: { type: 'number', minimum: 4, maximum: 900, description: 'messen, merken: length of the loudest window in seconds (4..900)' },
+      name: { type: 'string', minLength: 1, maxLength: 60, description: 'merken: name of the reference' },
+      rolle: { type: 'string', enum: [...ROLLEN], description: 'merken: role' },
+      projekt: { type: 'object', description: 'merken: keep a strip of the open project: {quelle: {art: spur | gruppe | return | master, id}, von_beat?, bis_beat?}',
+        properties: { quelle: { type: 'object', properties: { art: { type: 'string', enum: ['spur', 'gruppe', 'return', 'master'] }, id: { type: 'string' } }, required: ['art'] },
+          von_beat: { type: 'number', minimum: 0 }, bis_beat: { type: 'number', minimum: 1 } }, required: ['quelle'] },
+      id: { type: 'string', description: 'loeschen: id of the reference' },
+      fein: { type: 'boolean', description: 'messen: the spectrum in 1/12 octave instead of 1/3 octave; not sent' } } },
+    lauf: async (p) => {
+      const fehlt = (f: string): { code: number; j: Json } => ({ code: 400, j: { fehler: 'argument_ungueltig', text: `${String(p.aktion)} needs ${f}` } });
+      const nur = (...k: string[]): Json => Object.fromEntries(k.filter((x) => p[x] !== undefined).map((x) => [x, p[x] as Json]));
+      switch (p.aktion) {
+        case 'liste': return http('GET', '/analyse/referenzen');
+        case 'messen': {
+          if (p.quelle === undefined) return fehlt('quelle');
+          const r = await http('POST', '/analyse/referenz/messen', nur('quelle', 'dauer_s'));
+          const m = (r.j as { messung?: { spektrum?: { hz?: unknown; mittel_db?: unknown; max_db?: unknown } } }).messung;
+          if (r.code !== 200 || p.fein === true || !m?.spektrum) return r;
+          const sp = m.spektrum;
+          if (!Array.isArray(sp.mittel_db) || sp.mittel_db.length !== 120 || !Array.isArray(sp.max_db) || sp.max_db.length !== 120) return r;
+          return { code: 200, j: { ...(r.j as Record<string, Json>), messung: { ...m, spektrum: { hz: [...TERZ_HZ], mittel_db: terzVon(sp.mittel_db as number[]), max_db: terzVon(sp.max_db as number[]) } } } as unknown as Json };
+        }
+        case 'merken': {
+          if (p.name === undefined) return fehlt('name');
+          if (p.rolle === undefined) return fehlt('rolle');
+          if ((p.quelle === undefined) === (p.projekt === undefined)) return fehlt('either quelle (a file) or projekt, not both');
+          return http('POST', '/analyse/referenz/merken', nur('name', 'rolle', 'quelle', 'dauer_s', 'projekt'));
+        }
+        case 'loeschen': return p.id === undefined ? fehlt('id') : http('POST', '/analyse/referenz/loeschen', nur('id'));
+        default: return { code: 400, j: { fehler: 'argument_ungueltig', text: 'aktion must be liste, messen, merken or loeschen' } };
+      }
     } },
   // Paket 1.13 Slice 7: merge selected tracks into one new audio track by an isolated render (one undo step)
   { name: 'proj_zusammenfuehren', description: 'Merge selected tracks of the open project into ONE new audio track (merge, AK27): the server renders exactly '

@@ -476,3 +476,5 @@ body.produktion #produktion:has(> .p-detail.p-zu) { --detail: auto; }
 /* edit tools: the EDIT group in the head row, grey buttons stay readable */
 .p-edit { gap: 3px; }
 .p-edit button[aria-disabled="true"] { cursor: default; }
+.p-roll-leiste { flex-wrap: wrap; row-gap: 4px; }
+.p-roll-leiste label select + select { margin-left: 4px; }

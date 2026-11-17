@@ -131,3 +131,31 @@
 #werkbank .w-sicht-1 .w-tonzeilen .w-st { height: 21px; }
 #werkbank .w-bereich .w-steps, #werkbank .w-br { height: 16px; }
 #werkbank .w-ln-drum [data-w="zeilenname"].w-drop { outline: 2px dashed var(--d3); outline-offset: 1px; background: rgba(255, 255, 255, .08); }
+
+/* note grid 2026-11-17: the key of the project, long notes, the second head row */
+#werkbank .w-rkopf2 { margin-top: -2px; }
+#werkbank select.w-wahl { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 4px; font-family: inherit; cursor: pointer; max-width: 150px; }
+#werkbank .w-rtrenner { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
+#werkbank .w-rknopf:disabled { opacity: .35; cursor: default; }
+/* rows of the key are lit, the root carries the accent, rows outside the key step back */
+#werkbank .w-lane.inskala .w-st:not(.an):not(.fort) { background: color-mix(in srgb, var(--spurfarbe, var(--d3)) 13%, #10131b); }
+#werkbank .w-lane.inskala .w-st.betont:not(.an):not(.fort) { background: color-mix(in srgb, var(--spurfarbe, var(--d3)) 22%, #1a2030); }
+#werkbank .w-lane.grundton .w-st:not(.an):not(.fort) { background: color-mix(in srgb, var(--warn) 20%, #10131b); }
+#werkbank .w-lane.grundton .w-st.betont:not(.an):not(.fort) { background: color-mix(in srgb, var(--warn) 30%, #1a2030); }
+#werkbank .w-lane.ausskala .w-st:not(.an):not(.fort) { background: #0a0c11; border-color: #11141b; }
+#werkbank .w-lane.ausskala .w-ln-taste { opacity: .55; }
+/* with a key the amber key is the root, not every C */
+#werkbank .w-lane.inskala .w-ln-taste.c, #werkbank .w-lane.ausskala .w-ln-taste.c { background: #e9ecf3; color: #111; }
+#werkbank .w-lane .w-ln-taste.grundton { background: var(--warn); color: #111; font-weight: 800; }
+#werkbank .w-lane.ausskala .w-st.an, #werkbank .w-lane.ausskala .w-st.fort { outline: 1px solid #ff5a5a; outline-offset: -1px; }   /* a note outside the key */
+/* a long note is one bar: its body closes the gaps to the step before it, its last step carries the grip that is pulled */
+#werkbank .w-tonzeilen .w-st.fort { background: color-mix(in srgb, var(--spurfarbe, var(--d3)) 72%, #10131b); box-shadow: -1px 0 0 color-mix(in srgb, var(--spurfarbe, var(--d3)) 72%, #10131b); border-radius: 0; }
+#werkbank .w-tonzeilen .w-steps > .w-st.fort:nth-child(4n+1) { box-shadow: -3px 0 0 color-mix(in srgb, var(--spurfarbe, var(--d3)) 72%, #10131b); }
+#werkbank .w-tonzeilen .w-steps > .w-st.fort:nth-child(16n+1) { box-shadow: -9px 0 0 color-mix(in srgb, var(--spurfarbe, var(--d3)) 72%, #10131b); }
+#werkbank .w-tonzeilen .w-steps > .w-st.fort:first-child { box-shadow: none; }
+#werkbank .w-tonzeilen .w-st.griff { cursor: ew-resize; }
+#werkbank .w-tonzeilen .w-st.griff::after { content: ""; position: absolute; top: 1px; bottom: 1px; right: 0; width: 3px; border-radius: 1px; background: rgba(255, 255, 255, .7); pointer-events: none; }
+#werkbank .w-st.vorweg { opacity: .3; }
+/* a note is moved by dragging it; its right end keeps the length cursor */
+#werkbank .w-tonzeilen .w-st.an, #werkbank .w-tonzeilen .w-st.fort { cursor: grab; }
+#werkbank .w-tonzeilen .w-st.griff::after { cursor: ew-resize; pointer-events: auto; width: 30%; min-width: min(6px, 50%); background: linear-gradient(to right, transparent calc(100% - 3px), rgba(255, 255, 255, .7) calc(100% - 3px)); }

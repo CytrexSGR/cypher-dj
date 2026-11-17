@@ -88,3 +88,5 @@ def test_shell_ausgabe_quotiert(tmp_path):
     assert "ABLAGE_KITS=" in out and "ABLAGE_PLUGIN_INDEX=" in out
     p = subprocess.run(["python3", "-m", "ablage", "pfad", "quellen"], env=env, capture_output=True, text=True, timeout=60)
     assert p.stdout.strip() == f"{heim}/quellen.toml"
+    r2 = subprocess.run(["python3", "-m", "ablage", "pfad", "referenzen"], env=env, capture_output=True, text=True, timeout=60)
+    assert r2.stdout.strip() == f"{heim}/werke/referenzen"

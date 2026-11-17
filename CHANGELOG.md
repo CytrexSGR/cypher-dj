@@ -35,6 +35,20 @@ builds cypher-dj.
 - Drag from the shelf: drop a sample on the track list for a new track, or on a row of a drum kit track to make it the
   sound of that row. The kit is copied first, so other tracks and saved projects that play the old kit stay unchanged.
 
+## 2026-11-17, seventh update
+
+**Studio**
+- ANALYZE window, references: drag a track or a sample from the shelf onto the window and the selected track is compared
+  with it. The reference curve is level-matched, so you see where the tonal balance differs, and the three largest
+  differences are named ("+6.5 dB 64 Hz to 80 Hz"). SAVE REF keeps a measured range, or one of your own tracks, as a
+  reference curve by role (kick, bass, lead, master and so on) for later comparisons.
+- ANALYZE window, live: the source LIVE OUTPUT shows what goes out of the master right now: spectrum with a held
+  maximum, a rolling picture of the last 30 seconds, stereo correlation per band, momentary loudness and true peak.
+- The spectrum resolves low notes: below 400 Hz it uses a longer window, so a bass note or a kick fundamental reads its
+  real level in its own semitone band.
+- Note editors: a project key (KEY, SCALE, FIND, FIT), long notes by dragging, chords, inversion and arpeggio; drag a
+  note to move it, right click deletes, Shift selects a range, Ctrl single steps.
+
 ## 2026-11-17, sixth update
 
 **Studio**

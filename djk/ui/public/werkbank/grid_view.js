@@ -14,7 +14,9 @@ import { modulTakte } from './kopf.js';
 import {
   STEPS_WAHL, WERKZEUGE, FUELL_SCHRITTE, WERT_FELDER, zeileBefehle, schiebeBefehle, zeileDaten, zeilenSchritte, quelleVon, zeilenLaengeAusZellen, zeilenLaengeInZellen, linieZiele, fuellZiele, rechteckZiele, auswahlUmschalten,
   notenAn, setzeBefehle, dupliziereBefehle, ziehWerte, ziehBefehle, rampeWerte, rampeBefehle, cursorBewegung, bereichDaten, bereichBefehl, bereichAusBefehl,
+  WERKZEUGE_NOTE, kopfZelle, laengeBefehle, langeNoteBefehle, schiebeNotenBefehle, akkordBefehle, formeBefehle, arpBefehle, findeTonart,
 } from './grid_seq.js';
+import { TON_NAMEN, SKALEN, SKALA_TEXT, ARP_MODI, akkord, tonartOk, tonartText } from '../harmonie.js';
 import {
   fenster, blaettere, taktWahl, leiste, zaehlung, drumZeilen, tonZeilen, startOben, radOben, oktavLeiste, zustand, zellen, wertZellen, musterTakte, zuLang,
   sliceZeilen, klickBefehle, wertBefehle, rueckBefehle, pitchZellen, pitchBefehle, knopfSpuren, knopfZellen, knopfBefehle, knopfZiel,
@@ -39,7 +41,17 @@ export const RASTER_TEXT = {
   laneNeuTitel: 'Add a step lane for a knob of this instrument',
   laneWeg: 'Remove this lane with all its step values',
   hinweisLane: 'knob lanes are edited at 16 steps per bar',
-  hinweisZelle: 'shown in the step · drag up or down on a set step · shift-drag a ramp',
+  hinweisZelle: 'shown in the step · drag up or down on a set step · Alt-drag over steps: a ramp',
+  hinweisZelleNote: 'shown in the step · Alt-drag up or down on a note · Alt-drag over notes: a ramp',
+  keinTon: 'This pattern has no notes to read a key from.',
+  nichtsZuTun: 'Nothing to change.',
+};
+const SKALA_SCHLUESSEL = 'djk-wb-skala';   // SCALE: the note grid shows only the pitches of the key
+const ARP_TEXT = { up: 'UP', down: 'DOWN', updown: 'UP-DOWN' };
+const WERKZEUG_TITEL = {
+  draw: 'Click sets a step, dragging paints, the right mouse button deletes. Shift: select a range (drag, or click from the last step), Ctrl: add steps to the selection or take them out, Alt: a line of single steps. Note grid: dragging over empty steps draws one long note, dragging a note moves it, its right end pulls the length',
+  chord: 'Click sets the chord of the key on this pitch (a minor triad without a key), dragging sideways gives it a length',
+  erase: 'Dragging clears steps', fill: 'Dragging over a range sets every 1st, 2nd or 4th step',
 };
 const SICHTEN_SEITE = [1, 2, 4];   // VIEW: a page shows 1, 2 or 4 bars
 const AUFL_SCHLUESSEL = 'djk-wb-aufl-';   // + track id: STEPS (cells per bar) of a track, a view state
@@ -65,6 +77,9 @@ export function bindeRaster(ctx) {
   let sicht = Number(ctx.lies(SICHT_SCHLUESSEL, '2'));
   if (!SICHTEN_SEITE.includes(sicht)) sicht = 2;
   let werkzeug = 'draw', fuell = 2;   // the mouse tool and the step of FILL
+  let nurSkala = ctx.lies(SKALA_SCHLUESSEL, '0') === '1', arpModus = 'up';
+  const wz = (art) => (werkzeug === 'chord' && art !== 'note' ? 'draw' : werkzeug);   // CHORD exists in the note grid only
+  const projektTonart = () => (tonartOk(st.projekt?.tonart) ? st.projekt.tonart : null);
   host.setAttribute?.('tabindex', '0');   // the grid takes the keys while it has the focus
   let akt = null;                // what the last draw showed: { spur, clip, art, zust, f, takte, ts, ton } (gestures read it)
   let veraltet = true;           // a change came while the view was hidden: draw when it is shown
@@ -90,11 +105,31 @@ export function bindeRaster(ctx) {
 <span class="w-rspur" data-w="r-spur">${esc(a.spur.name)}</span>
 ${a.art ? `<span class="w-chip" data-w="r-art">${RASTER_TEXT[a.art]}</span>` : ''}
 <span class="w-etikett">STEPS</span>${STEPS_WAHL.map((n) => knopf('seq-schritte', 'aufl', n, n, klassen(a.ts.aufl === n && ' an'), `${n} steps per bar`, !a.f)).join('')}<span class="w-etikett">per bar</span>
-${a.f && frei ? `<span class="w-etikett">TOOL</span>${WERKZEUGE.map((k) => knopf('seq-werkzeug', 'werkzeug', k, k.toUpperCase(), klassen(werkzeug === k && ' an'), { draw: 'Click toggles a step, dragging paints (Shift: line, Ctrl: select)', erase: 'Dragging clears steps', fill: 'Dragging over a range sets every 1st, 2nd or 4th step' }[k])).join('')}${werkzeug === 'fill' ? FUELL_SCHRITTE.map((n) => knopf('seq-fuell', 'fuell', n, `1/${n}`, klassen(fuell === n && ' an'), `Fill every ${n === 1 ? '' : `${n === 2 ? '2nd' : '4th'} `}step`)).join('') : ''}` : ''}
+${a.f && frei ? `<span class="w-etikett">TOOL</span>${(note ? WERKZEUGE_NOTE : WERKZEUGE).map((k) => knopf('seq-werkzeug', 'werkzeug', k, k.toUpperCase(), klassen(wz(a.art) === k && ' an'), WERKZEUG_TITEL[k])).join('')}${werkzeug === 'fill' ? FUELL_SCHRITTE.map((n) => knopf('seq-fuell', 'fuell', n, `1/${n}`, klassen(fuell === n && ' an'), `Fill every ${n === 1 ? '' : `${n === 2 ? '2nd' : '4th'} `}step`)).join('') : ''}` : ''}
 ${note && a.zeilenDa ? `<button data-w="r-fold" data-a="fold" class="w-rknopf${a.ts.fold ? ' an' : ''}" aria-pressed="${a.ts.fold}" title="Show only the pitches the pattern uses">FOLD</button>` : ''}
 <span class="w-rabstand"></span>
 ${a.f ? `<span class="w-etikett">PAGE</span><button data-w="seq-seite" data-a="zurueck" data-richtung="-1" class="w-rknopf" title="Previous page">◀</button><b class="w-rfenster" data-w="r-fenster">${a.f.breite === 1 ? `BAR ${a.f.start + 1}` : `BAR ${a.f.start + 1} – ${a.f.start + a.f.breite}`}</b><button data-w="seq-seite" data-a="vor" data-richtung="1" class="w-rknopf" title="Next page">▶</button>
 <span class="w-etikett">VIEW</span>${SICHTEN_SEITE.map((n) => `<button data-w="r-sicht" data-a="sicht" data-n="${n}" class="w-rknopf${a.f.sicht === n ? ' an' : ''}" title="Show ${n} bar${n === 1 ? '' : 's'} at once">${n}</button>`).join('')}<span class="w-etikett">bars</span>` : ''}
+</div>${note && a.f ? tonartHtml(a) : ''}`;
+  }
+  // The second head row of a note grid: the key of the project (root, scale, SCALE fold, FIND) and what is done to the selected notes (or to all).
+  function tonartHtml(a) {
+    const t = a.tonart, frei = a.zust === 'muster', aus = frei ? '' : ' disabled', ohne = t ? '' : ' disabled';
+    const k = (was, n, text, titel, zu = aus) => `<button data-w="r-forme" data-a="forme" data-was="${was}" data-n="${n}" class="w-rknopf" title="${esc(titel)}"${zu}>${text}</button>`;
+    return `<div class="w-rkopf w-rkopf2" data-w="r-kopf2">
+<span class="w-etikett">KEY</span>
+<select data-w="r-grundton" class="w-rknopf w-wahl" title="Root of the key: its pitches are marked in the grid" aria-label="Root of the key"><option value="">–</option>${TON_NAMEN.map((x, i) => `<option value="${i}"${t?.grundton === i ? ' selected' : ''}>${x}</option>`).join('')}</select>
+<select data-w="r-skala" class="w-rknopf w-wahl" title="Scale of the key" aria-label="Scale of the key">${Object.keys(SKALEN).map((x) => `<option value="${x}"${(t?.skala ?? 'minor') === x ? ' selected' : ''}>${SKALA_TEXT[x]}</option>`).join('')}</select>
+<button data-w="r-nurskala" data-a="skala" class="w-rknopf${nurSkala && t ? ' an' : ''}" aria-pressed="${nurSkala && !!t}" title="Show only the pitches of the key"${ohne}>SCALE</button>
+<button data-w="r-finde" data-a="finde" class="w-rknopf" title="Find the key that fits the notes of this pattern and set it">FIND</button>
+<span class="w-rtrenner"></span>
+<span class="w-etikett" title="These act on the selected steps (Shift and drag for a range, Ctrl and click for single ones), or on every note of the pattern when nothing is selected">NOTES</span>
+${k('halb', -1, '−1', 'A semitone down (Alt+Down)')}${k('halb', 1, '+1', 'A semitone up (Alt+Up)')}${k('halb', -12, 'OCT−', 'An octave down (Alt+Shift+Down)')}${k('halb', 12, 'OCT+', 'An octave up (Alt+Shift+Up)')}
+${k('stufe', -1, 'STEP−', 'One step of the key down', t ? aus : ' disabled')}${k('stufe', 1, 'STEP+', 'One step of the key up', t ? aus : ' disabled')}
+${k('umkehr', -1, 'INV▼', 'Inversion: the highest note of every chord an octave down')}${k('umkehr', 1, 'INV▲', 'Inversion: the lowest note of every chord an octave up')}
+<button data-w="r-arp" data-a="arp" class="w-rknopf" title="Arpeggio: every chord becomes single steps, one note after the other"${aus}>ARP</button><select data-w="r-arpmodus" class="w-rknopf w-wahl" title="Order of the arpeggio" aria-label="Order of the arpeggio">${ARP_MODI.map((m) => `<option value="${m}"${arpModus === m ? ' selected' : ''}>${ARP_TEXT[m]}</option>`).join('')}</select>
+${k('tonart', 0, 'FIT', 'Move every note outside the key to the nearest pitch of the key', t ? aus : ' disabled')}
+${t ? `<span class="w-hinweis" data-w="r-tonart">${esc(tonartText(t))}</span>` : ''}
 </div>`;
   }
 
@@ -119,7 +154,7 @@ ${a.f ? `<span class="w-etikett">PAGE</span><button data-w="seq-seite" data-a="z
 
   const spaltenZahl = (a) => { const [von, bis] = fensterSpanne(a.f); return bis - von; };
   const spalten = (a) => `grid-template-columns:repeat(${spaltenZahl(a)},1fr)`;
-  const lane = (a, name, inhalt, extra = '') => `<div class="w-lane" data-w="lane"><div class="${klassen('w-ln', extra)}"${name.attrs ?? ''}>${name.html}</div><div class="w-steps" style="${spalten(a)}">${inhalt}</div></div>`;
+  const lane = (a, name, inhalt, extra = '', reihe = '') => `<div class="${klassen('w-lane', reihe)}" data-w="lane"><div class="${klassen('w-ln', extra)}"${name.attrs ?? ''}>${name.html}</div><div class="w-steps" style="${spalten(a)}">${inhalt}</div></div>`;
 
   function zaehlungHtml(a) {
     const z = zaehlung(a.f);
@@ -141,11 +176,9 @@ ${a.f ? `<span class="w-etikett">PAGE</span><button data-w="seq-seite" data-a="z
   }
   function zellenHtml(a, zs, art) {
     // a note of more than one step is tied into the next steps (note grid only: the 909 ignores note off)
-    const fort = new Set();
-    if (art === 'note') zs.forEach((z, i) => { if (z.an && z.laenge > 1) for (let j = 1; j < z.laenge && i + j < zs.length; j++) fort.add(i + j); });
     const ausw = new Set(a.ts.auswahl.map((k) => `${k.ton}:${k.quelle}`)), cur = a.ts.cursor;
     const fuellt = ZELLEN_FELDER.includes(a.feld) && ['vel', 'laenge', 'chance'].includes(a.feld);
-    return zs.map((z, i) => `<div data-w="zelle" data-a="zelle" data-ton="${z.ton}" data-schritt="${z.schritt}" data-quelle="${z.quelle}" class="${klassen('w-st', betontNr(z.schritt % a.aufl + 1) && 'betont', z.wiederholung && 'wiederholung', z.an && 'an', z.an && fuellt && 'mitfuell', z.rueck && 'w-rueck', !z.an && fort.has(i) && 'fort', z.ende && 'ende', ausw.has(`${z.ton}:${z.quelle}`) && 'gewaehlt', cur && cur.ton === z.ton && cur.schritt === z.schritt && 'cursor')}">${zellInhalt(z, a.feld)}</div>`).join('');
+    return zs.map((z, i) => `<div data-w="zelle" data-a="zelle" data-ton="${z.ton}" data-schritt="${z.schritt}" data-quelle="${z.quelle}" class="${klassen('w-st', betontNr(z.schritt % a.aufl + 1) && 'betont', z.wiederholung && 'wiederholung', z.an && 'an', z.an && fuellt && 'mitfuell', z.rueck && 'w-rueck', !z.an && z.fort && 'fort', z.griff && 'griff', z.ende && 'ende', (ausw.has(`${z.ton}:${z.quelle}`) || (z.fort && ausw.has(`${z.ton}:${z.kopf}`))) && 'gewaehlt', cur && cur.ton === z.ton && cur.schritt === z.schritt && 'cursor')}">${zellInhalt(z, a.feld)}</div>`).join('');
   }
 
   // The row head of a drum grid: the name (click plays it), LENGTH in steps (empty = pattern length), SWING in percent, direction (pendulum).
@@ -171,7 +204,7 @@ ${a.f ? `<span class="w-etikett">PAGE</span><button data-w="seq-seite" data-a="z
     if (REIHEN_ART(a.art)) {
       return a.zeilen.map((z) => lane(a, { html: zeilenKopf(a, z) }, zeile(z, z.ton), klassen('w-ln-drum', z.ton === a.ton && 'gewaehlt'))).join('');
     }
-    const tasten = a.zeilen.map((z) => lane(a, { html: esc(z.name), attrs: ` data-w="zeilenname" data-a="taste" data-ton="${z.ton}" title="Click to hear this note"` }, zeile(z, z.ton), klassen('w-ln-taste', z.schwarz ? 'schwarz' : 'weiss', z.c && 'c'))).join('');
+    const tasten = a.zeilen.map((z) => lane(a, { html: esc(z.name), attrs: ` data-w="zeilenname" data-a="taste" data-ton="${z.ton}" title="Click to hear this note"` }, zeile(z, z.ton), klassen('w-ln-taste', z.schwarz ? 'schwarz' : 'weiss', z.c && 'c', z.grundton && 'grundton'), klassen(z.inskala === true && 'inskala', z.inskala === false && 'ausskala', z.grundton && 'grundton'))).join('');
     let oktaven = '';
     if (!a.ts.fold) {
       const O = oktavLeiste(a.ts.oben, a.clip);
@@ -226,7 +259,7 @@ ${a.f ? `<span class="w-etikett">PAGE</span><button data-w="seq-seite" data-a="z
     if (knopfNr(feld) !== null) return knopfHtml(a, knopfNr(feld));
     const tabs = feldTabs(a);
     const kopf = `<div class="w-werte" data-w="r-werte"><span class="w-etikett">${RASTER_TEXT.werte}</span>${tabs}<span class="w-hinweis" data-w="r-hinweis">${LANE_REIHE(a.art) ? RASTER_TEXT.hinweisReihe : a.art === 'slice' ? RASTER_TEXT.hinweisSchritte : RASTER_TEXT.hinweisNoten}</span></div>`;
-    if (!['vel', 'laenge', 'rueck'].includes(feld)) return kopf.replace(/<span class="w-hinweis"[^>]*>.*?<\/span>/, `<span class="w-hinweis" data-w="r-hinweis">${RASTER_TEXT.hinweisZelle}</span>`);
+    if (!['vel', 'laenge', 'rueck'].includes(feld)) return kopf.replace(/<span class="w-hinweis"[^>]*>.*?<\/span>/, `<span class="w-hinweis" data-w="r-hinweis">${a.art === 'note' ? RASTER_TEXT.hinweisZelleNote : RASTER_TEXT.hinweisZelle}</span>`);
     if (a.ton === null && LANE_REIHE(a.art)) return kopf;
     const zs = wertZellen(a.clip, LANE_REIHE(a.art) ? a.ton : null, a.f, feld, a.art);
     const hoch = feld === 'vel' ? 127 : feld === 'laenge' ? 16 : 1;
@@ -265,9 +298,9 @@ ${a.f ? `<span class="w-etikett">PAGE</span><button data-w="seq-seite" data-a="z
       const belegt = (z) => (clip.noten ?? []).some((n) => n.ton === z.ton || (art === 'slice' && n.ton === z.ton + 64));
       ton = (zeilen.find((z) => z.ton === ts.reihe) ?? zeilen.find(belegt) ?? zeilen[0])?.ton ?? null;
     } else {
-      zeilen = tonZeilen(ts.oben, ts.fold, clip);
+      zeilen = tonZeilen(ts.oben, ts.fold, clip, projektTonart(), nurSkala);
     }
-    const a = { spur, clip, art, zust, ts, f, takte, aufl: f.aufl, zeilen, ton, feld: ts.feld, zeilenDa: zeilen.length > 0, info };
+    const a = { spur, clip, art, zust, ts, f, takte, aufl: f.aufl, zeilen, ton, feld: ts.feld, zeilenDa: zeilen.length > 0, info, tonart: projektTonart() };
     // LENGTH exists in the note and slice grids, REVERSE and PITCH in the slice grid only, a knob lane while its knob has one
     if (!TABS[art].includes(ts.feld) && !knopfLanes(a).includes(knopfNr(ts.feld))) a.feld = ts.feld = 'vel';
     akt = a;
@@ -365,6 +398,23 @@ ${a.f ? `<span class="w-etikett">PAGE</span><button data-w="seq-seite" data-a="z
       case 'vor': akt.ts.start = blaettere(akt.f, 1, akt.takte).start; zeichne(); break;
       case 'takt': akt.ts.start = taktWahl(akt.f, n, akt.takte).start; zeichne(); break;
       case 'fold': akt.ts.fold = !akt.ts.fold; zeichne(); break;
+      case 'skala': nurSkala = !nurSkala; ctx.merke(SKALA_SCHLUESSEL, nurSkala ? '1' : '0'); zeichne(); break;
+      case 'finde': {   // the key that fits the notes of this pattern becomes the key of the project
+        const r = findeTonart(akt.clip);
+        if (!r) { ctx.melde(RASTER_TEXT.keinTon, true); break; }
+        ctx.aendere('Key', [r.befehl]); ctx.melde(r.text);
+        break;
+      }
+      case 'forme': forme(a.dataset.was, n); break;
+      case 'arp': {
+        if (!frei()) return;
+        const { spur, clip, art, ts } = akt;
+        const r = mitFehler(() => arpBefehle(clip, art, ts.auswahl, arpModus, akt.aufl));
+        if (!r) break;
+        if (!r.befehle.length) { ctx.melde('Arpeggio needs notes that start together (a chord)', true); break; }
+        ts.auswahl = r.auswahl; sende(`${spur.name}: arpeggio`, r.befehle);
+        break;
+      }
       case 'oktave': akt.ts.oben = Number(a.dataset.oben); zeichne(); break;
       case 'reihe': hoere(akt, Number(a.dataset.ton)); akt.ts.reihe = Number(a.dataset.ton); zeichne(); break;
       case 'taste': hoere(akt, Number(a.dataset.ton)); break;
@@ -389,13 +439,46 @@ ${a.f ? `<span class="w-etikett">PAGE</span><button data-w="seq-seite" data-a="z
         if (skipKlick || !frei()) return;   // a gesture that ended on its pointerup has done its work already
         if (e.ctrlKey || e.metaKey) { gesetzteAuswahl(auswahlUmschalten(akt.ts.auswahl, { ton: Number(a.dataset.ton), quelle: Number(a.dataset.quelle) })); break; }
         const { spur, clip, art } = akt;
-        mitFehler(() => sende(`${spur.name}: notes`, klickBefehle(spur, clip, Number(a.dataset.ton), Number(a.dataset.quelle), art, ctx.info(spur), akt.aufl)));
+        mitFehler(() => sende(`${spur.name}: notes`, klickNote({ ton: Number(a.dataset.ton), quelle: Number(a.dataset.quelle) })));
         break;
       }
       default:
     }
   });
+  // The mouse on a step: it toggles, but in a note grid a note stays (it is moved by dragging and removed with the right mouse button).
+  const klickNote = (c) => (akt.art === 'note' && kopfZelle(akt.clip, c.ton, c.quelle, 'note', akt.aufl) !== null ? [] : umschaltBefehle(c));
+  // Enter on a step: it toggles. In a note grid the body of a long note counts as the note (the note is one thing, not its first step only).
+  function umschaltBefehle(c) {
+    const { spur, clip, art } = akt;
+    if (art === 'note') {
+      const k = kopfZelle(clip, c.ton, c.quelle, art, akt.aufl);
+      if (k !== null && k !== c.quelle) return setzeBefehle(clip, art, ctx.info(spur), [{ ton: c.ton, quelle: k }], false, akt.aufl);
+    }
+    return klickBefehle(spur, clip, c.ton, c.quelle, art, ctx.info(spur), akt.aufl);
+  }
+  // NOTES: transpose, step of the key, inversion, fit to the key; on the selection, or on every note of the pattern. The selection follows its notes.
+  const FORM_NAME = { halb: 'transpose', stufe: 'scale step', umkehr: 'inversion', tonart: 'fit to key' };
+  function forme(was, n) {
+    if (!frei() || akt.art !== 'note') return;
+    const { spur, clip, art, ts } = akt;
+    const r = mitFehler(() => formeBefehle(clip, art, ts.auswahl, was, n, akt.tonart, akt.aufl));
+    if (!r) return;
+    if (!r.befehle.length) { ctx.melde(RASTER_TEXT.nichtsZuTun); return; }
+    ts.auswahl = r.auswahl;
+    if (ts.cursor && was === 'halb') ts.cursor = { ...ts.cursor, ton: klemme(ts.cursor.ton + n, 0, 127) };
+    sende(`${spur.name}: ${FORM_NAME[was]}`, r.befehle);
+  }
   host.addEventListener('change', (e) => {
+    const wahlEl = e.target?.closest?.('[data-w="r-grundton"], [data-w="r-skala"], [data-w="r-arpmodus"]');
+    if (wahlEl) {
+      if (wahlEl.dataset.w === 'r-arpmodus') { if (ARP_MODI.includes(wahlEl.value)) arpModus = wahlEl.value; return; }
+      if (!st.projekt) return;
+      const kopf = wahlEl.closest('[data-w="r-kopf2"]'), g = kopf?.querySelector?.('[data-w="r-grundton"]')?.value ?? '', sk = kopf?.querySelector?.('[data-w="r-skala"]')?.value ?? 'minor';
+      // a scale chosen while no root is set waits for the root; the root "–" removes the key
+      if (g === '') { if (st.projekt.tonart) ctx.aendere('Key off', [{ befehl: 'tonart_setzen', aus: true }]); return; }
+      ctx.aendere('Key', [{ befehl: 'tonart_setzen', grundton: Number(g), skala: sk }]);
+      return;
+    }
     const feldEl = e.target?.closest?.('[data-w="zeile-laenge"], [data-w="zeile-swing"]');
     if (feldEl) {
       if (!akt || !frei()) return;
@@ -430,10 +513,18 @@ ${a.f ? `<span class="w-etikett">PAGE</span><button data-w="seq-seite" data-a="z
   function gestenZiele(gg) {
     const { clip, art, ts } = akt;
     switch (gg.modus) {
-      case 'malen': case 'loeschen': return gg.cells.map((c) => ({ ton: c.ton, quelle: c.quelle }));
+      case 'malen': return gg.cells.map((c) => ({ ton: c.ton, quelle: c.quelle }));
+      case 'loeschen': {   // a step of a long note names the note; the right button on a selected step, without a drag, takes the whole selection
+        const ziele = gg.cells.map((c) => ({ ton: c.ton, quelle: (art === 'note' ? kopfZelle(clip, c.ton, c.quelle, art, akt.aufl) : null) ?? c.quelle }));
+        return gg.rechts && !gg.bewegt && ts.auswahl.some((k) => k.ton === ziele[0].ton && k.quelle === ziele[0].quelle) ? ts.auswahl : ziele;
+      }
+      case 'schieben': return schiebe(gg).zellen.flatMap((z) => Array.from({ length: z.laenge }, (_, j) => ({ ton: z.ton, quelle: z.quelle + j })));
       case 'linie': case 'rampe': return linieZiele(clip, gg.start.ton, gg.start.schritt, gg.ende.schritt, art, akt.aufl);
       case 'fuellen': return fuellZiele(clip, gg.start.ton, gg.start.schritt, gg.ende.schritt, fuell, art, akt.aufl);
       case 'auswahl': return rechteckZiele(clip, zeilenToene(), gg.start.ton, gg.start.schritt, gg.ende.ton, gg.ende.schritt, art, akt.aufl);
+      case 'lang': return linieZiele(clip, gg.start.ton, gg.start.schritt, gg.ende.schritt, art, akt.aufl);
+      case 'laenge': { const k = gg.start.schritt - (gg.start.quelle - gg.kopf); return linieZiele(clip, gg.start.ton, k, Math.max(k, gg.ende.schritt), art, akt.aufl); }
+      case 'akkord': return akkord(gg.start.ton, akt.tonart).flatMap((t) => linieZiele(clip, t, gg.start.schritt, gg.ende.schritt, art, akt.aufl));
       case 'wert': {
         const q = { ton: gg.start.ton, quelle: gg.start.quelle };
         return ts.auswahl.some((k) => k.ton === q.ton && k.quelle === q.quelle) ? ts.auswahl : [q];
@@ -442,7 +533,7 @@ ${a.f ? `<span class="w-etikett">PAGE</span><button data-w="seq-seite" data-a="z
     }
   }
   function vorschau() {
-    for (const el of g.vor) el.classList.remove('vorschau');
+    for (const el of g.vor) el.classList.remove('vorschau', 'vorweg');
     g.vor = [];
     if (g.modus === 'bereich') {
       const [a, b] = [Math.min(g.s0, g.s1), Math.max(g.s0, g.s1)];
@@ -457,6 +548,11 @@ ${a.f ? `<span class="w-etikett">PAGE</span><button data-w="seq-seite" data-a="z
     const neu = werte ? new Map(werte.map((w) => [`${w.ton}:${w.quelle}`, w.wert])) : null;
     for (const el of host.querySelectorAll('[data-w="zelle"]')) {
       const k = `${el.dataset.ton}:${el.dataset.quelle}`;
+      // pulling a note shorter: the steps it gives up fade
+      if (g.modus === 'laenge' && !keys.has(k) && Number(el.dataset.ton) === g.start.ton && el.classList.contains('fort') && Number(el.dataset.schritt) > g.ende.schritt
+        && kopfZelle(akt.clip, g.start.ton, Number(el.dataset.quelle), 'note', akt.aufl) === g.kopf) { el.classList.add('vorweg'); g.vor.push(el); continue; }
+      if (g.modus === 'schieben' && g.bewegt && !keys.has(k) && (el.classList.contains('an') || el.classList.contains('fort'))
+        && g.koepfe.has(`${el.dataset.ton}:${kopfZelle(akt.clip, Number(el.dataset.ton), Number(el.dataset.quelle), 'note', akt.aufl)}`)) { el.classList.add('vorweg'); g.vor.push(el); continue; }
       if (!keys.has(k)) continue;
       el.classList.add('vorschau'); g.vor.push(el);
       if (neu?.has(k)) {
@@ -469,8 +565,14 @@ ${a.f ? `<span class="w-etikett">PAGE</span><button data-w="seq-seite" data-a="z
   const schreibe = (label, befehle) => { if (befehle.length) ctx.aendere(label, befehle); else zeichne(); };
   function einzeln(c) {   // a press without movement: the step toggles
     const { spur, clip, art } = akt;
-    mitFehler(() => schreibe(`${spur.name}: notes`, klickBefehle(spur, clip, c.ton, c.quelle, art, ctx.info(spur), akt.aufl)));
+    mitFehler(() => schreibe(`${spur.name}: notes`, klickNote(c)));
   }
+  // The notes a drag on a note moves: the whole selection when the pressed note is part of it, else that note alone. Targets name the heads.
+  function schiebeZiele(gg) {
+    const q = { ton: gg.start.ton, quelle: gg.kopf };
+    return akt.ts.auswahl.some((k) => k.ton === q.ton && k.quelle === q.quelle) ? akt.ts.auswahl : [q];
+  }
+  const schiebe = (gg) => schiebeNotenBefehle(akt.clip, akt.art, schiebeZiele(gg), gg.ende.schritt - gg.start.schritt, gg.ende.ton - gg.start.ton, akt.aufl);
   function fertig(gg) {
     const { spur, clip, art, ts } = akt, info = ctx.info(spur);
     if (gg.modus === 'bereich') {
@@ -482,13 +584,45 @@ ${a.f ? `<span class="w-etikett">PAGE</span><button data-w="seq-seite" data-a="z
     ts.cursor = { ton: gg.ende.ton, schritt: gg.ende.schritt };
     const ziele = gestenZiele(gg);
     switch (gg.modus) {
-      case 'auswahl':
-        if (gg.bewegt) gesetzteAuswahl(ziele); else gesetzteAuswahl(auswahlUmschalten(ts.auswahl, ziele[0]));
+      case 'auswahl': {
+        // the step under a press names its note: a step of a long note stands for the head of the note
+        const eins = { ton: gg.start.ton, quelle: (art === 'note' ? kopfZelle(clip, gg.start.ton, gg.start.quelle, art, akt.aufl) : null) ?? gg.start.quelle };
+        const dazu = (liste) => { const k = new Set(ts.auswahl.map((z) => `${z.ton}:${z.quelle}`)); return [...ts.auswahl, ...liste.filter((z) => !k.has(`${z.ton}:${z.quelle}`))]; };
+        if (gg.plus) {   // Ctrl: a click takes one step in or out, a drag adds its rectangle
+          ts.anker = { ton: gg.start.ton, schritt: gg.start.schritt };
+          gesetzteAuswahl(gg.bewegt ? dazu(ziele) : auswahlUmschalten(ts.auswahl, eins));
+          return;
+        }
+        // Shift: a drag selects its rectangle, a click the range from the last step (the anchor) to this one
+        if (gg.bewegt) { ts.anker = { ton: gg.start.ton, schritt: gg.start.schritt }; gesetzteAuswahl(ziele); return; }
+        if (gg.anker) { ts.anker = gg.anker; gesetzteAuswahl(rechteckZiele(clip, zeilenToene(), gg.anker.ton, gg.anker.schritt, gg.start.ton, gg.start.schritt, art, akt.aufl)); return; }
+        ts.anker = { ton: gg.start.ton, schritt: gg.start.schritt };
+        gesetzteAuswahl([eins]);
         return;
+      }
       case 'malen': case 'linie': case 'wert':
         if (!gg.bewegt && (gg.modus !== 'linie' || ziele.length <= 1)) { einzeln(gg.start); return; }
         if (gg.modus === 'wert') { schreibe(`${spur.name}: ${WERT_FELDER[ts.feld].name}`, ziehBefehle(clip, art, ts.feld, ziele, gg.dy, akt.aufl)); return; }
         schreibe(`${spur.name}: notes`, setzeBefehle(clip, art, info, ziele, gg.modus === 'linie' ? true : gg.an, akt.aufl));
+        return;
+      case 'schieben': {   // on a note: the drag moves it (and the selection it belongs to); a plain press leaves it where it is
+        if (!gg.bewegt) { zeichne(); return; }
+        const r = schiebe(gg), mit = ts.auswahl.length > 0 && schiebeZiele(gg) === ts.auswahl;
+        if (mit) ts.auswahl = r.auswahl;
+        ts.cursor = { ton: r.auswahl[0]?.ton ?? gg.ende.ton, schritt: gg.ende.schritt };
+        schreibe(`${spur.name}: move ${r.zellen.length === 1 ? 'note' : `${r.zellen.length} notes`}`, r.befehle);
+        return;
+      }
+      case 'lang':   // an empty step: a press sets one step, a drag sideways one note over the steps it passed
+        if (!gg.bewegt) { einzeln(gg.start); return; }
+        schreibe(`${spur.name}: note`, langeNoteBefehle(clip, art, gg.start.ton, gg.start.quelle, gg.start.quelle + (gg.ende.schritt - gg.start.schritt), akt.aufl));
+        return;
+      case 'laenge':   // on the right end of a note: the drag sideways puts its end under the pointer
+        if (!gg.bewegt) { zeichne(); return; }
+        schreibe(`${spur.name}: note length`, laengeBefehle(clip, art, gg.start.ton, gg.kopf, gg.start.quelle + (gg.ende.schritt - gg.start.schritt), akt.aufl));
+        return;
+      case 'akkord':
+        schreibe(`${spur.name}: chord`, akkordBefehle(clip, art, gg.start.ton, gg.start.quelle, gg.start.quelle + (gg.ende.schritt - gg.start.schritt), akt.tonart, akt.aufl));
         return;
       case 'loeschen': schreibe(`${spur.name}: notes`, setzeBefehle(clip, art, info, ziele, false, akt.aufl)); return;
       case 'fuellen': schreibe(`${spur.name}: notes`, setzeBefehle(clip, art, info, ziele, true, akt.aufl)); return;
@@ -501,7 +635,16 @@ ${a.f ? `<span class="w-etikett">PAGE</span><button data-w="seq-seite" data-a="z
     skipKlick = true; setTimeout(() => { skipKlick = false; }, 0);   // the click that follows this pointerup has been handled here
     if (akt) mitFehler(() => fertig(gg));
   }
+  host.addEventListener('contextmenu', (e) => { if (e.target?.closest?.('[data-w="zelle"]')) e.preventDefault?.(); });   // the right button deletes
   host.addEventListener('pointerdown', (e) => {
+    if (e.button === 2) {   // the right mouse button: the note or hit under it goes, a drag clears every step it passes
+      const ze = e.target?.closest?.('[data-w="zelle"]');
+      if (!ze || !akt || !frei()) return;
+      const c = zelleDaten(ze);
+      g = { modus: 'loeschen', rechts: true, start: c, ende: c, cells: [c], kopf: null, x0: 0, y0: 0, dy: 0, an: false, bewegt: false, vor: [] };
+      vorschau();
+      return;
+    }
     if (e.button) return;   // the primary button or a touch only
     skipKlick = false;
     const el = wertAus(e);
@@ -513,27 +656,51 @@ ${a.f ? `<span class="w-etikett">PAGE</span><button data-w="seq-seite" data-a="z
     if (!ze || !frei()) return;
     const c = zelleDaten(ze), hat = notenAn(akt.clip, c, akt.art, akt.aufl).length > 0;
     const strg = e.ctrlKey || e.metaKey, tab = ZELLEN_FELDER.includes(akt.ts.feld);
-    // a plain press beside a selection only clears it; on a selected step it starts the value drag for all of them
-    if (!strg && !e.shiftKey && akt.ts.auswahl.length && !akt.ts.auswahl.some((k) => k.ton === c.ton && k.quelle === c.quelle)) {
-      akt.ts.auswahl = []; akt.ts.anker = null; skipKlick = true; setTimeout(() => { skipKlick = false; }, 0); zeichne(); return;
+    const w = wz(akt.art), note = akt.art === 'note';
+    // note grid: the head of the note this step belongs to (the step itself, or the step a long note over it starts in)
+    const kopf = note ? kopfZelle(akt.clip, c.ton, c.quelle, 'note', akt.aufl) : null;
+    const r0 = ze.getBoundingClientRect?.(), griffEl = ze.classList.contains('griff');   // read before a redraw replaces the element
+    // a plain press beside a selection only clears it; on a selected step it starts the gesture for all of them. In the note grid a press on another
+    // note clears the selection and takes that note at once.
+    if (!strg && !e.shiftKey && akt.ts.auswahl.length && !akt.ts.auswahl.some((k) => k.ton === c.ton && (k.quelle === c.quelle || k.quelle === kopf))) {
+      akt.ts.auswahl = []; akt.ts.anker = null;
+      if (!(note && w === 'draw' && kopf !== null)) { skipKlick = true; setTimeout(() => { skipKlick = false; }, 0); zeichne(); return; }
+      zeichne();
     }
-    const modus = strg ? 'auswahl' : e.shiftKey ? (tab && hat ? 'rampe' : 'linie')
-      : tab && hat && werkzeug === 'draw' ? 'wert' : werkzeug === 'erase' ? 'loeschen' : werkzeug === 'fill' ? 'fuellen' : 'malen';
-    g = { modus, start: c, ende: c, cells: [c], y0: Number.isFinite(e.clientY) ? e.clientY : 0, dy: 0, an: !hat, bewegt: false, vor: [] };
+    // on a note of the note grid: its right end (the grip) pulls the length, the rest of it moves the note, Alt changes the value of the tab
+    const amGriff = !!r0 && griffEl && Number.isFinite(e.clientX) && e.clientX >= r0.right - Math.min(r0.width / 2, Math.max(6, r0.width * 0.3));   // never more than half a narrow step
+    const aufNote = note && w === 'draw' && kopf !== null;
+    // Shift selects a range, Ctrl adds single steps (or a second range) to the selection; Alt is the line of single steps on an empty step and the
+    // value of the tab on a set one (a ramp once the drag leaves the step sideways; the drum and slice grids start the ramp at once)
+    const alt = e.altKey && !strg && !e.shiftKey;
+    const modus = strg || e.shiftKey ? 'auswahl'
+      : alt && tab && hat && !note ? 'rampe' : alt && kopf === null && !hat ? 'linie'
+      : w === 'chord' ? 'akkord'
+      : aufNote ? (alt && tab ? 'wert' : amGriff ? 'laenge' : 'schieben')
+      : tab && hat && w === 'draw' ? 'wert' : w === 'erase' ? 'loeschen' : w === 'fill' ? 'fuellen'
+      : note && w === 'draw' ? 'lang' : 'malen';
+    if (modus === 'wert' && aufNote && !hat) { c.schritt -= c.quelle - kopf; c.quelle = kopf; }   // Alt on the body: the value of the note
+    g = { modus, plus: strg, anker: akt.ts.anker ?? akt.ts.cursor, start: c, ende: c, cells: [c], kopf, koepfe: null, x0: Number.isFinite(e.clientX) ? e.clientX : 0, y0: Number.isFinite(e.clientY) ? e.clientY : 0, dy: 0, an: !hat, bewegt: false, vor: [] };
     host.focus?.();
-    if (modus === 'loeschen' || modus === 'fuellen' || modus === 'malen') vorschau();
+    if (modus === 'schieben') g.koepfe = new Set(schiebeZiele(g).map((k) => `${k.ton}:${k.quelle}`));
+    if (['loeschen', 'fuellen', 'malen', 'lang', 'akkord'].includes(modus)) vorschau();
   });
   host.addEventListener('pointermove', (e) => {
     if (g) {
-      if (e.buttons === 0) { g.vor.forEach((x) => x.classList.remove('vorschau')); g = null; zeichne(); return; }
+      if (e.buttons === 0) { g.vor.forEach((x) => x.classList.remove('vorschau', 'vorweg')); g = null; zeichne(); return; }
       if (g.modus === 'bereich') {
         const b = unter(e)?.closest?.('[data-w="bereich-schritt"]');
         if (b) { g.s1 = Number(b.dataset.schritt); g.bewegt = g.s1 !== g.s0; vorschau(); }
         return;
       }
       const dy = Number.isFinite(e.clientY) ? e.clientY - g.y0 : 0, c = zelleDaten(unter(e)?.closest?.('[data-w="zelle"]'));
+      if (g.modus === 'wert' && akt.art === 'note' && c && c.schritt !== g.start.schritt) g.modus = 'rampe';
       if (g.modus === 'wert') { g.dy = dy; if (Math.abs(dy) >= 3) g.bewegt = true; } else if (g.modus === 'rampe') { g.dy = dy; if (Math.abs(dy) >= 3) g.bewegt = true; }
-      if (c) {
+      if (c && ['lang', 'laenge', 'akkord'].includes(g.modus)) {   // these stay on the row of the press: only the step under the pointer counts
+        if (c.schritt !== g.ende.schritt) { g.bewegt = true; g.ende = { ...g.ende, schritt: c.schritt }; }
+      } else if (c && g.modus === 'schieben') {   // the note follows the pointer over steps and rows
+        if (!gleichZelle(g.ende, c)) { g.bewegt = true; g.ende = c; }
+      } else if (c) {
         if (g.modus === 'malen' || g.modus === 'loeschen') {
           const vor = g.cells.at(-1);
           if (!gleichZelle(vor, c)) {
@@ -601,7 +768,10 @@ ${a.f ? `<span class="w-etikett">PAGE</span><button data-w="seq-seite" data-a="z
     const taste = String(e.key ?? ''), strg = e.ctrlKey || e.metaKey;
     const ziel = (c) => ({ ton: c.ton, quelle: quelleVonZeile(c.ton, c.schritt) });
     const behandelt = () => e.preventDefault?.();
-    if (taste.startsWith('Arrow')) {
+    if (e.altKey && (taste === 'ArrowUp' || taste === 'ArrowDown')) {   // Alt and an arrow: the selected notes (or all) a semitone, with Shift an octave
+      behandelt();
+      forme('halb', (taste === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 12 : 1));
+    } else if (taste.startsWith('Arrow')) {
       const neu = cursorBewegung(cur, taste, toene, akt.takte * akt.aufl);
       if (e.shiftKey) { ts.anker ??= cur; ts.auswahl = rechteckZiele(clip, toene, ts.anker.ton, ts.anker.schritt, neu.ton, neu.schritt, art, akt.aufl); } else ts.anker = null;
       ts.cursor = neu;
@@ -609,7 +779,7 @@ ${a.f ? `<span class="w-etikett">PAGE</span><button data-w="seq-seite" data-a="z
       behandelt(); zeichne();
     } else if (taste === 'Enter') {
       ts.cursor = cur; behandelt();
-      mitFehler(() => sende(`${spur.name}: notes`, klickBefehle(spur, clip, cur.ton, ziel(cur).quelle, art, ctx.info(spur), akt.aufl)));
+      mitFehler(() => sende(`${spur.name}: notes`, umschaltBefehle(ziel(cur))));
     } else if (taste === 'Backspace' || taste === 'Delete') {
       behandelt();
       mitFehler(() => sende(`${spur.name}: delete notes`, setzeBefehle(clip, art, ctx.info(spur), ts.auswahl.length ? ts.auswahl : [ziel(cur)], false, akt.aufl)));

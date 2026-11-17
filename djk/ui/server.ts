@@ -56,6 +56,8 @@ import { samplerBereich } from './areas/sampler/area.ts';   // sampler A1 task 4
 import { samplerKitBereich } from './areas/sampler/kit_routes.ts';   // sampler B task 2
 import { liveBereich, type DeckLoopAusschnitt } from './areas/live/export.ts';
 import { liveSlots } from './project/live.ts';
+import { leseBusRing, messeLive } from './project/sound_live.ts';
+import { LIVE_VORLAUF_FRAMES, LIVE_LAUTHEIT_FRAMES } from './project/sound_contract.ts';
 import { tonartQuelle } from './areas/live/key.ts';
 import { renderPegelMesser } from './areas/live/level.ts';   // plan live-module task 2
 import { pluginsBereich } from './areas/plugins/area.ts';   // 1.11 task 10
@@ -177,6 +179,7 @@ export interface ServerOptionen {
   hotcueOrdner?: string;  // Plan E9: Vorgabe ~/.config/cypherdj/hotcues
   rasterOrdner?: string;  // Plan Grid: Vorgabe ~/.config/cypherdj/raster
   huellen?: string;  // Ohr T5: Vorgabe /dev/shm/cypherdj[-i]/huellen
+  busRing?: string;  // GET /analyse/live: audio ring, default <shmOrdner>/bus
   wirtOrdner?: string;  // Studio S6: Ordner der Wirt-Sockets (Vorgabe /dev/shm/cypherdj[-i])
   baukastenOrdner?: string;  // Baukasten S2: Ordner der Graphen baukasten-<gruppe>.json (Vorgabe ~/.config/cypherdj[-i])
   sammlungen?: string;   // Sets: Ordner, Vorgabe <REPO>/bibliothek/sets
@@ -381,6 +384,7 @@ export class Oberflaeche {
   }
   private rasterOrdner(): string { return this.opt.rasterOrdner ?? rasterOrdnerVorgabe(); }
   private huellenPfad(): string { return this.opt.huellen ?? huellenVorgabe(); }
+  private liveLetzt: { w: number; t: number } | null = null;   // GET /analyse/live: ring counter and time of the previous call
   // Gespeicherter Versatz der Fassung; fehlt ihre Datei, gilt die der nächstälteren Fassung (rasterErbe, Bericht grid-phase M7).
   private readonly einsGelesen = new Map<string, { eins: number; esf: number }>();
   private einsDerFassung(mid: string, bpm: number, fassung: number): { eins: number; esf: number } | null {
@@ -500,6 +504,16 @@ export class Oberflaeche {
     if (leser.lies(sek * 1000) === 0) return this.json(a, 409, { fehler: 'kein_ring' });
     const bpm = this.kern.uhr && Number.isFinite(this.kern.uhr.bpm) && this.kern.uhr.bpm > 0 ? this.kern.uhr.bpm : null;
     this.json(a, 200, { kanal, bpm, ...oszi(leser.alle(ring), { sek, bpm }) });
+  }
+
+  // GET /analyse/live: live picture of the master output from the audio ring. Always 200; steht: the ring counter did not move for 150 ms or more.
+  private analyseLiveAus(a: http.ServerResponse): void {
+    const x = leseBusRing(this.opt.busRing ?? path.join(shmOrdner(), 'bus'), LIVE_VORLAUF_FRAMES + LIVE_LAUTHEIT_FRAMES);
+    if (x === null) return this.json(a, 200, { leer: true, grund: 'kein_ring' });
+    const jetzt = Date.now(), l = this.liveLetzt;
+    const steht = l !== null && l.w === x.w && jetzt - l.t >= 150;
+    if (!(l !== null && l.w === x.w)) this.liveLetzt = { w: x.w, t: jetzt };   // keep the time of the first sight of this w, so a long stall stays steht
+    this.json(a, 200, { leer: false, w: x.w, steht, ...messeLive(x.daten) });
   }
 
   // Ohr T10: je neuem Takt der Master-Uhr (Beat überschreitet ein Vielfaches von 4) Hörscheine ausstellen/zurückziehen.
@@ -633,6 +647,7 @@ export class Oberflaeche {
     this.router.melde(einsammelnBereich(this.bereichKontext(), this.proj.zugang, { einsammler: opt.proj?.einsammler ?? this.einsammler,
       quellPfad: (sha, hinweis) => this.proj.sitzung.quellePfadVon(sha, hinweis) }));
     this.ausgabe = ausgabeBereich(this.bereichKontext(), this.proj.zugang, { wirtOrdner: () => this.wirtBasis(),
+      katalogPfad: (sha) => this.proj.sitzung.katalogQuelle(sha),
       nachExport: baueNachExport({ einsammler: opt.proj?.einsammler ?? this.einsammler, offen: () => this.proj.zugang.offen(),
         quellPfad: (sha, hinweis) => this.proj.sitzung.quellePfadVon(sha, hinweis), log: (z) => opt.log?.(z) }) });   // A5: keep three exports, collect   // Paket S3: /proj/freeze, /proj/export (Spec 3.4)
     this.router.melde(this.ausgabe);
@@ -2446,6 +2461,7 @@ export class Oberflaeche {
         return f ? this.json(a, 200, this.rasterWert(deck, f)) : this.json(a, 409, { fehler: 'kein_kernstand' });   // Form wie bisher (Route-Golden)
       } },
       { methode: 'GET', pfad: '/hoeren', schutz: O, handler: (_q, a, url) => this.hoerenAus(url, a) },
+      { methode: 'GET', pfad: '/analyse/live', schutz: O, handler: (_q, a) => this.analyseLiveAus(a) },
       { methode: 'GET', pfad: '/oszi', schutz: O, handler: (_q, a, url) => this.osziAus(url, a) },
       { methode: 'GET', pfad: '/fx', schutz: O, handler: (_q, a) => this.json(a, 200, this.stand.fx) },   // [FX1, FX2] oder null je Einheit
       { methode: 'GET', pfad: '/fx/zuweisung', schutz: O, handler: (_q, a) => this.json(a, 200, this.stand.fxZuweisung) },

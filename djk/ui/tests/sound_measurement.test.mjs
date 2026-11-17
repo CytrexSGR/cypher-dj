@@ -128,18 +128,38 @@ test('pegel_db: power of L plus R per stereo band', () => {
   assert.ok(still.stereo.baender.every((b) => b.pegel_db === -200 && b.korrelation === 0));
 });
 
-// The 1/12 bands are band integrals, not line levels: below about 250 Hz the main lobe of the Hann window is wider than the band.
-test('a full-scale 55 Hz sine reads about -5.5 dB in its 1/12 band, -0.5 dB in its 1/3 octave band, and the band powers add up to 0 dB', async () => {
+// The 1/12 bands are band integrals, not line levels. Below 400 Hz the mean spectrum comes from the long window (32768 frames), so a low note on the
+// A440 grid reads close to its level in its own band; a range shorter than that window keeps the short one, whose main lobe is wider than a low band.
+test('a full-scale low sine reads its level in its 1/12 band with the long window, and the band powers add up to 0 dB', async () => {
   const { terzVon } = await import('../project/sound_contract.ts');
   const t = messen(stereo(RATE * 2, sine(55, 1), sine(55, 1)));
   const n = 17;   // k = round(12 log2(55 / 440)) = -36, band index k + 53
   assert.ok(Math.abs(t.spektrum.hz[n] - 55) < 1, `band ${n} is ${t.spektrum.hz[n]} Hz`);
-  assert.ok(Math.abs(t.spektrum.mittel_db[n] - -5.5) <= 0.3, `${t.spektrum.mittel_db[n]} dB`);
+  assert.ok(Math.abs(t.spektrum.mittel_db[n]) <= 0.4, `${t.spektrum.mittel_db[n]} dB`);
+  assert.ok(Math.abs(t.spektrum.max_db[n]) <= 0.4, `max ${t.spektrum.max_db[n]} dB`);
   const summe = 10 * Math.log10(t.spektrum.mittel_db.reduce((s, d) => s + 10 ** (d / 10), 0));
   assert.ok(Math.abs(summe) <= 0.1, `sum of the bands ${summe} dB`);
-  const terz = terzVon(t.spektrum.mittel_db);
-  assert.ok(Math.abs(Math.max(...terz) - -0.5) <= 0.3, `1/3 octave ${Math.max(...terz)} dB`);
+  assert.ok(Math.abs(Math.max(...terzVon(t.spektrum.mittel_db))) <= 0.3);
   assert.ok(Math.abs(t.spitze_db) < 0.01);
+  const e1 = messen(stereo(RATE * 2, sine(41.2, 1), sine(41.2, 1)));   // E1: the band is 2.4 Hz wide
+  assert.ok(e1.spektrum.mittel_db[12] > -1.5 && e1.spektrum.mittel_db[12] <= 0.1, `E1 ${e1.spektrum.mittel_db[12]} dB`);
+  const a4 = messen(stereo(RATE * 2, sine(440, 1), sine(440, 1)));     // above 400 Hz the short window decides, as before
+  assert.ok(Math.abs(a4.spektrum.mittel_db[53]) <= 0.1);
+});
+
+test('a range shorter than the long window keeps the short one: 55 Hz reads about -5.5 dB in its 1/12 band, -0.5 dB in its 1/3 octave band', async () => {
+  const { terzVon } = await import('../project/sound_contract.ts');
+  const t = messen(stereo(24000, sine(55, 1), sine(55, 1)));   // 0.5 s
+  assert.ok(Math.abs(t.spektrum.mittel_db[17] - -5.5) <= 0.4, `${t.spektrum.mittel_db[17]} dB`);
+  assert.ok(Math.abs(Math.max(...terzVon(t.spektrum.mittel_db)) - -0.5) <= 0.3);
+});
+
+test('the long window keeps the level of a mix: noise carries the same power below 400 Hz as with the short window, within 1 dB', () => {
+  const tief = (t) => 10 * Math.log10(t.spektrum.mittel_db.slice(0, 51).reduce((s, d) => s + 10 ** (d / 10), 0));
+  const lang = messen(stereo(RATE * 3, noise(5), noise(5)));
+  const kurz = messen(stereo(30000, noise(5), noise(5)));
+  assert.ok(Math.abs(tief(lang) - tief(kurz)) <= 1, `${tief(lang)} against ${tief(kurz)} dB`);
+  assert.equal(lang.zeitbild.zeilen, 120);
 });
 
 test('the lowest stereo band counts only bins from 20 Hz', () => {
