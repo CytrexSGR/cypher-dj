@@ -74,7 +74,8 @@ export function setzeMidi(alt: Konfig, quelle: Quelle, d: Record<string, unknown
     const gleich = k.midi.profil === p.id && k.midi.port === (eigene ?? q!.port);
     // release and offset belong to the device (spec 4.4): another profile or port takes both away
     k.midi = { profil: p.id, port: eigene ?? q!.port, frei_fuer_cypher: gleich ? k.midi.frei_fuer_cypher : false,
-      ...(gleich && k.midi.versatz_samples !== undefined ? { versatz_samples: k.midi.versatz_samples } : {}) };
+      ...(gleich && k.midi.versatz_samples !== undefined ? { versatz_samples: k.midi.versatz_samples } : {}),
+      ...(k.midi.folgen ? { folgen: true } : {}) };   // the follow flag belongs to the place, not to the device
   }
   if (d.versatz_samples !== undefined) {   // 1.8 T8: like a cable latency, a value without Andreas' own measurement would be invented
     nurAndreas(quelle, 'latenz_nur_andreas');
@@ -94,10 +95,21 @@ export function setzeMidi(alt: Konfig, quelle: Quelle, d: Record<string, unknown
 
 // A controller on one of the places 2..8 (place 1 is the MIDI input above). {port} without platz takes the lowest free place; {platz, port: null}
 // frees the place (its learn table stays in the controller folder and comes back with the next device on that place); {platz, name} renames.
+// Cypher may set a controller place and its follow flag too (Andreas, 2026-11-18: "was für ein quatsch das nur ich follow umstellen"): a MIDI controller
+// is no audio input, nothing is released by it. The audio inputs, their release and the cable latency above stay his.
 export function setzeController(alt: Konfig, quelle: Quelle, d: Record<string, unknown>): Konfig {
-  nurAndreas(quelle);
+  void quelle;
   const k = structuredClone(alt);
   const liste = k.controller ?? [];
+  if (d.folgen !== undefined) {   // controller follow: the flag alone, for place 1 (midi.folgen) or a place 2..8 (its entry)
+    if (typeof d.folgen !== 'boolean') ungueltig('folgen: true or false');
+    if (!Number.isInteger(d.platz) || (d.platz as number) < 1 || (d.platz as number) > CONTROLLER_PLAETZE) ungueltig(`platz: 1 to ${CONTROLLER_PLAETZE}, the place that follows`);
+    if (d.port !== undefined) ungueltig('folgen: not together with port; set the flag on its own');
+    const c = d.platz === 1 ? k.midi : liste.find((x) => x.platz === d.platz);
+    if (!c || (d.platz === 1 && !k.midi.port)) throw new GeraeteFehler('eingang_leer', 409, 'there is no device on this place');
+    if (d.folgen) c.folgen = true; else delete c.folgen;
+    return k;
+  }
   if (d.platz !== undefined && (!Number.isInteger(d.platz) || (d.platz as number) < 2 || (d.platz as number) > CONTROLLER_PLAETZE)) ungueltig(`platz: 2 to ${CONTROLLER_PLAETZE} (place 1 is the MIDI input)`);
   if (d.name !== undefined && (typeof d.name !== 'string' || d.name.length < 1 || d.name.length > 40)) ungueltig('name: 1 to 40 characters');
   if (d.port === null) {
@@ -119,8 +131,9 @@ export function setzeController(alt: Konfig, quelle: Quelle, d: Record<string, u
   if (k.midi.port === port || (dort && dort.platz !== (d.platz ?? dort.platz))) throw new GeraeteFehler('port_vergeben', 409, 'this device already sits on another place');
   const platz = (d.platz as number | undefined) ?? dort?.platz ?? [2, 3, 4, 5, 6, 7, 8].find((p) => !liste.some((c) => c.platz === p));
   if (platz === undefined) throw new GeraeteFehler('kein_platz_frei', 409, `all ${CONTROLLER_PLAETZE} controller places are taken`);
-  const name = (d.name as string | undefined) ?? liste.find((c) => c.platz === platz && c.port === port)?.name;
-  k.controller = [...liste.filter((c) => c.platz !== platz), { platz, port, ...(name !== undefined ? { name } : {}) }].sort((a, b) => a.platz - b.platz);
+  const selbe = liste.find((c) => c.platz === platz && c.port === port);   // the same device again keeps its name and its follow flag
+  const name = (d.name as string | undefined) ?? selbe?.name;
+  k.controller = [...liste.filter((c) => c.platz !== platz), { platz, port, ...(name !== undefined ? { name } : {}), ...(selbe?.folgen ? { folgen: true } : {}) }].sort((a, b) => a.platz - b.platz);
   return k;
 }
 

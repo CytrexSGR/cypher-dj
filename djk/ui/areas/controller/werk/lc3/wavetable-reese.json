@@ -1,0 +1,8 @@
+{"schema":1,"name":"wavetable-reese","modell":"lc3","art":"instrument","graph":"wavetable-reese",
+"eintraege":[{"regler":"Enc 1","knopf":3},{"regler":"Enc 2","knopf":4},{"regler":"Enc 3","knopf":1},{"regler":"Enc 4","knopf":2},{"regler":"Enc 5","knopf":7},{"regler":"Enc 6","knopf":8},{"regler":"Enc 7","knopf":9},{"regler":"Enc 9","knopf":6},{"regler":"Enc 10","knopf":5}],
+"seiten":{"main":[{"regler":"Enc 1","knopf":3},{"regler":"Enc 2","knopf":4},{"regler":"Enc 3","knopf":1},{"regler":"Enc 4","knopf":2},{"regler":"Enc 5","knopf":7},{"regler":"Enc 6","knopf":8},{"regler":"Enc 7","knopf":9},{"regler":"Enc 9","knopf":6},{"regler":"Enc 10","knopf":5}],"mod":[{"regler":"Enc 1","knopf":11},{"regler":"Enc 2","knopf":13},{"regler":"Enc 3","knopf":14},{"regler":"Enc 4","knopf":15},{"regler":"Enc 5","knopf":17},{"regler":"Enc 6","knopf":18},{"regler":"Btn 1","knopf":10,"stufen":4},{"regler":"Btn 2","knopf":12,"stufen":3},{"regler":"Btn 3","knopf":16,"stufen":2}]},
+"programme":[
+{"name":"UNISON \u00b7 FILTER \u00b7 WAVE ENV \u00b7 AMP","seite":"main",
+"eintraege":[{"regler":"Enc 1","knopf":3},{"regler":"Enc 2","knopf":4},{"regler":"Enc 3","knopf":1},{"regler":"Enc 4","knopf":2},{"regler":"Enc 5","knopf":7},{"regler":"Enc 6","knopf":8},{"regler":"Enc 7","knopf":9},{"regler":"Enc 9","knopf":6},{"regler":"Enc 10","knopf":5}]},
+{"name":"WARP / STACK \u00b7 CHAOS \u00b7 SUB \u00b7 PHASE MOD \u00b7 BAND DRIVE","seite":"mod",
+"eintraege":[{"regler":"Enc 1","knopf":11},{"regler":"Enc 2","knopf":13},{"regler":"Enc 3","knopf":14},{"regler":"Enc 4","knopf":15},{"regler":"Enc 5","knopf":17},{"regler":"Enc 6","knopf":18},{"regler":"Btn 1","knopf":10,"stufen":4},{"regler":"Btn 2","knopf":12,"stufen":3},{"regler":"Btn 3","knopf":16,"stufen":2}]}]}

@@ -126,6 +126,9 @@ static_assert(k_mapping.typen.size() - 1 == k_mapping.felder);
 // §4.7 /k/lernen ,hsi
 inline constexpr Adresse k_lernen{"/k/lernen", ",hsi", Richtung::an_kern, false, 3};
 static_assert(k_lernen.typen.size() - 1 == k_lernen.felder);
+// §4.7 /k/live/tasten ,hsi
+inline constexpr Adresse k_live_tasten{"/k/live/tasten", ",hsi", Richtung::an_kern, false, 3};
+static_assert(k_live_tasten.typen.size() - 1 == k_live_tasten.felder);
 // §4.7 /k/latenz ,hssi
 inline constexpr Adresse k_latenz{"/k/latenz", ",hssi", Richtung::an_kern, false, 4};
 static_assert(k_latenz.typen.size() - 1 == k_latenz.felder);
@@ -391,7 +394,7 @@ static_assert(test_hand.typen.size() - 1 == test_hand.felder);
 inline constexpr Adresse test_klick{"/test/klick", ",hssi", Richtung::an_kern, true, 4};
 static_assert(test_klick.typen.size() - 1 == test_klick.felder);
 
-inline constexpr std::array<Adresse, 123> alle{
+inline constexpr std::array<Adresse, 124> alle{
     k_hallo,
     k_tschuess,
     k_willkommen,
@@ -427,6 +430,7 @@ inline constexpr std::array<Adresse, 123> alle{
     k_kiste,
     k_mapping,
     k_lernen,
+    k_live_tasten,
     k_latenz,
     erz_strom,
     erz_fenster,
@@ -561,6 +565,7 @@ namespace k_led { enum : std::size_t { id = 0, quelle = 1, name = 2, zustand = 3
 namespace k_kiste { enum : std::size_t { id = 0, quelle = 1 }; }
 namespace k_mapping { enum : std::size_t { id = 0, quelle = 1, geraet = 2 }; }
 namespace k_lernen { enum : std::size_t { id = 0, quelle = 1, an = 2 }; }
+namespace k_live_tasten { enum : std::size_t { id = 0, quelle = 1, strom = 2 }; }
 namespace k_latenz { enum : std::size_t { id = 0, quelle = 1, ziel = 2, samples = 3 }; }
 namespace erz_strom { enum : std::size_t { id = 0, quelle = 1, strom = 2, ziel = 3, kanal = 4 }; }
 namespace erz_fenster { enum : std::size_t { strom = 0, sendung = 1, modus = 2, kappe = 3, ab_beat = 4, bis_beat = 5, t_send_us = 6 }; }
@@ -678,6 +683,7 @@ namespace k_deck_basis_tausch { inline constexpr double deck_min = 1; inline con
 namespace k_schuss { inline constexpr double fassung_min = 1; inline constexpr double pad_min = 1; inline constexpr double pad_max = 2; }
 namespace k_ki_stufe { inline constexpr double stufe_min = 0; inline constexpr double stufe_max = 3; }
 namespace k_lernen { inline constexpr double an_min = 0; inline constexpr double an_max = 1; }
+namespace k_live_tasten { inline constexpr double strom_min = 0; inline constexpr double strom_max = 10; }
 namespace erz_strom { inline constexpr double strom_min = 1; inline constexpr double strom_max = 16; }
 namespace erz_fenster { inline constexpr double strom_min = 1; inline constexpr double strom_max = 16; }
 namespace erz_ev { inline constexpr double strom_min = 1; inline constexpr double strom_max = 16; inline constexpr double note_min = 0; inline constexpr double note_max = 255; inline constexpr double velocity_min = 0; inline constexpr double velocity_max = 1; }

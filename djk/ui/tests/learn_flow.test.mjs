@@ -53,18 +53,18 @@ test('S19 ablauf: a stale id (an earlier arming) is ignored: nothing written, st
   assert.deepEqual(x.speicher.lies().zuordnungen, [{ pfad: 'deck/1/bk/2', kanal: 1, nr: 74, platz: 1 }]);
 });
 
-test('S19 ablauf: belegt writes nothing (stand belegt); a CC from hand_in gives the English hand_in text and writes nothing', async (t) => {
+test('S19 ablauf: a CC from hand_in gives the English hand_in text and writes nothing; a CC the console mapping also uses (belegt) is learned on its place all the same', async (t) => {
   const x = aufbau(t);
   x.a.scharf('erz/5/bk/3');
-  x.a.ereignis('/e/gelernt', gelernt(101, { belegt: 1 }));
-  await still();
-  assert.ok(!fs.existsSync(x.datei));
-  assert.equal(x.verteilt.at(-1).f.stand, 'belegt');
-  x.a.scharf('erz/5/bk/3');
-  x.a.ereignis('/e/gelernt', gelernt(102, { quelle: 0 }));
+  x.a.ereignis('/e/gelernt', gelernt(101, { quelle: 0 }));
   await still();
   assert.ok(!fs.existsSync(x.datei));
   assert.deepEqual([x.verteilt.at(-1).f.stand, x.verteilt.at(-1).f.text], ['hand_in', 'this controller is mapped on hand_in; choose it as MIDI input under Devices']);
+  x.a.scharf('erz/5/bk/4');
+  x.a.ereignis('/e/gelernt', gelernt(102, { belegt: 1, nr: 14 }));
+  await still();
+  assert.ok(fs.existsSync(x.datei), 'the place has its own port and table: learned');
+  assert.ok(!x.verteilt.some((e) => e.f?.stand === 'belegt'));
 });
 
 test('S19 ablauf: the kern refuses the file (quittung 6 pruefung): the previous .bak comes back, stand abgelehnt with the reason; no answer keeps the file (ohne_antwort)', async (t) => {

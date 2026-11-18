@@ -47,6 +47,26 @@ const anfrage = (g) => (istSurge(g) ? '/geraete/panel?art=surge' : g.name === 'b
  * A Baukasten knob k1..k64 is live: see the header; its sends are separate commands geraet_param_setzen, a refusal stops the live sends of the running gesture (the
  * writer reported it once) and the display goes back to the stored value.
  */
+/** The running number (1-based) of a bk track among the bk tracks by ascending nr (bkSlot in project/model.ts), null when the project does not list it. */
+export function bkSlotNr(spuren, spurId) {
+  const alle = (spuren ?? []).filter((s) => s.geraet?.art === 'intern' && s.geraet.name === 'bk').sort((a, b) => a.nr - b.nr);
+  const i = alle.findIndex((s) => s.id === spurId);
+  return i < 0 ? null : i + 1;
+}
+
+/** The core row of a bk knob of a track, spur/<slot>/bk/<k>; null when the knob has none (not k1..k64, track not listed, beyond the 8th bk track). */
+export function bkZeilenPfad(spuren, spurId, param) {
+  const m = /^k([1-9][0-9]?)$/.exec(param ?? '');
+  if (!m || Number(m[1]) > BK_LIVE_MAX) return null;
+  const slot = bkSlotNr(spuren, spurId);
+  return slot === null || slot > BK_LIVE_SLOTS ? null : `spur/${slot}/bk/${m[1]}`;
+}
+
+/** Echo of a core row spur/<slot>/bk/<k> (stream.js, /e/regler): zeilenEcho(pfad) tells the open device panels, zeilenAbo(h) subscribes (returns the remover). */
+const zeilenAbos = new Set();
+export const zeilenEcho = (pfad) => { for (const h of [...zeilenAbos]) { try { h(pfad); } catch { /* one view's error stops no other */ } } };
+export const zeilenAbo = (h) => { zeilenAbos.add(h); return () => zeilenAbos.delete(h); };
+
 export function spurAdapter(ctx, spur, parameter = [], opt = {}) {
   const schluessel = geraetSchluessel(spur.geraet);
   const vorgabe = Object.fromEntries(parameter.map((p) => [p.name, p.vorgabe]));
@@ -59,9 +79,30 @@ export function spurAdapter(ctx, spur, parameter = [], opt = {}) {
   // the slot is the running number among the bk tracks by ascending nr (bkSlot in project/model.ts), read from the project as it is NOW: the 9th to 16th
   // bk track has no core row, its knobs take the release path (one spur_aendern); a track the project does not list yet keeps the live path
   const slotLive = () => {
-    const alle = (ctx.st?.projekt?.spuren ?? [spur]).filter((s) => s.geraet?.art === 'intern' && s.geraet.name === 'bk').sort((a, b) => a.nr - b.nr);
-    const i = alle.findIndex((s) => s.id === spur.id);
-    return i < 0 || i < BK_LIVE_SLOTS;
+    const n = bkSlotNr(ctx.st?.projekt?.spuren ?? [spur], spur.id);
+    return n === null || n <= BK_LIVE_SLOTS;
+  };
+  // P2: the knob follows its core row spur/<slot>/bk/<k> (a controller moves the row, nothing is sent from here). Per param: the project value and the row value last seen
+  // and what was shown; whichever changed since wins, so a project value that arrives (the write-back, Cypher, undo) replaces the row value shown before it.
+  const zeile = opt.zeile ?? ((pfad) => globalThis.djk?.regler?.[pfad]);
+  const gesehen = new Map();
+  const zeilenWert = (param) => {
+    if (!bk) return undefined;
+    const pfad = bkZeilenPfad(ctx.st?.projekt?.spuren, spur.id, param);
+    const w = pfad ? zeile(pfad) : undefined;
+    return typeof w === 'number' && Number.isFinite(w) ? w : undefined;
+  };
+  const folge = (param, projekt) => {
+    const z = zeilenWert(param);
+    if (z === undefined) { gesehen.delete(param); return projekt; }
+    const g = gesehen.get(param);
+    let zeigt;
+    if (!g) zeigt = z;                          // first look: the row is what plays
+    else if (g.p !== projekt) zeigt = projekt;  // the project value came: it holds
+    else if (g.z !== z) zeigt = z;              // the row moved since: it holds
+    else zeigt = g.zeigt;
+    gesehen.set(param, { p: projekt, z, zeigt });
+    return zeigt;
   };
   const istLive = (p) => bk && /^k[1-9][0-9]?$/.test(p) && Number(p.slice(1)) <= BK_LIVE_MAX && slotLive();
   const zeitgeber = opt.zeitgeber ?? globalThis, entprellMs = opt.entprellMs ?? BK_LIVE_MS;
@@ -110,7 +151,8 @@ export function spurAdapter(ctx, spur, parameter = [], opt = {}) {
     get(param) {
       if (angezeigt.has(param)) return angezeigt.get(param);
       const w = live()?.geraet?.parameter?.[param];
-      return w === undefined ? vorgabe[param] : surge && tabelle[param] ? surgeNorm(tabelle[param], w) : w;
+      const p = w === undefined ? vorgabe[param] : surge && tabelle[param] ? surgeNorm(tabelle[param], w) : w;
+      return bk ? folge(param, p) : p;
     },
     set(param, v) {
       if (surge) {
@@ -186,7 +228,13 @@ export function bindeGeraetAnsicht(ctx, wurzel, opt = {}) {
   let register = null;         // GET /presets/register, fetched by the view itself and again after a save
   let jetzt = null;            // { spurId, schluessel, fp, adapter, nr }
   let zaehler = 0;
-  const weg = () => { zaehler++; jetzt?.fp?.zerstoere(); jetzt = null; wurzel.replaceChildren(); };
+  // P2: a core row of this panel's bk knobs moved (a controller): the knobs read again, nothing is sent. Subscribed while a panel is built, let go in weg().
+  let abmelden = null;
+  const zeileBewegt = (pfad) => {
+    if (!jetzt?.fp || !jetzt.adapter || !/^spur\/\d+\/bk\/\d+$/.test(pfad)) return;
+    if (/^spur\/(\d+)\//.exec(pfad)?.[1] === String(bkSlotNr(ctx.st?.projekt?.spuren, jetzt.spurId))) jetzt.fp.aktualisiere();
+  };
+  const weg = () => { zaehler++; abmelden?.(); abmelden = null; jetzt?.fp?.zerstoere(); jetzt = null; wurzel.replaceChildren(); };
   const holeRegister = async () => {
     try { const r = await ctx.holeGet('/presets/register'); if (r?.status === 200) register = r.j?.register ?? register; } catch { /* the header keeps the old list */ }
   };
@@ -195,6 +243,7 @@ export function bindeGeraetAnsicht(ctx, wurzel, opt = {}) {
   async function baue(spur) {
     const nr = ++zaehler, g = spur.geraet;
     jetzt = { spurId: spur.id, schluessel: geraetSchluessel(g), fp: null, adapter: null, nr };
+    abmelden?.(); abmelden = zeilenAbo(zeileBewegt);
     text(GERAET_TEXT.laedt);
     const r = await ctx.holeGet(anfrage(g));
     if (nr !== zaehler) return;   // another track or none was opened meanwhile
@@ -206,7 +255,10 @@ export function bindeGeraetAnsicht(ctx, wurzel, opt = {}) {
     let tabelle = j.parameter;
     if (istSurge(g)) tabelle = await surgeIstEinlesen(ctx, spur, j.parameter, Object.keys(namen));   // untouched parameters show what the host plays, not 0.5
     if (nr !== zaehler) return;
-    const adapter = spurAdapter(ctx, spur, tabelle, { label: (pn) => namen[pn] ?? pn, melde: (t, f) => { if (t) ctx.melde(t, f); }, beiFertig: (ok) => { if (!ok && jetzt?.nr === nr) jetzt.fp?.aktualisiere(true); } });   // no lernPfad: LEARN is not offered
+    const adapter = spurAdapter(ctx, spur, tabelle, { label: (pn) => namen[pn] ?? pn, melde: (t, f) => { if (t) ctx.melde(t, f); }, beiFertig: (ok) => { if (!ok && jetzt?.nr === nr) jetzt.fp?.aktualisiere(true); } });
+    // MIDI learn (opt.lernen, device_learn.js; the device window gives it): a Baukasten knob is learned on its core row spur/<slot>/bk/<k>, read from the project as it is now
+    const lernen = g.name === 'bk' && opt.lernen ? opt.lernen : null;
+    if (lernen) adapter.lernPfad = (pn) => bkZeilenPfad(ctx.st.projekt?.spuren ?? [], spur.id, pn);
     const geraet = istSurge(g) ? { art: 'surge' } : g.name === 'bk' ? { art: 'bk', graph: g.graph } : { art: 'rb338' };
     const melde = (t, f) => { if (t) ctx.melde(t, f); };
     const ziel = { art: 'spur', spur_id: spur.id };
@@ -240,14 +292,22 @@ export function bindeGeraetAnsicht(ctx, wurzel, opt = {}) {
           return { ok, text: ok ? `Preset "${e?.name ?? id}" applied` : '' };   // a refusal was shown by wendePresetAn
         },
         sichern,
+        ...(lernen && opt.lernKopf !== false ? { lernen: { an: () => lernen.an(), umschalten: () => lernen.umschalten() } } : {}),   // lernKopf false: the caller shows LEARN itself (device window: next to SAVE MAPPING)
       });
       if (!register) holeRegister().then(() => kopfHandle?.neu());
     };
     jetzt.adapter = adapter;
-    jetzt.fp = baueFrontplatte(wurzel, { panel: j.panel, regler: reglerBereiche(j.parameter), parameter: g.name === 'bk' ? undefined : parameterNachName(j.parameter), adapter, dokument: d, kopf: istSurge(g) ? undefined : kopf, breit: opt.breit === true });   // Surge has no preset header
+    jetzt.fp = baueFrontplatte(wurzel, { panel: j.panel, regler: reglerBereiche(j.parameter), parameter: g.name === 'bk' ? undefined : parameterNachName(j.parameter), adapter, dokument: d, kopf: istSurge(g) ? undefined : kopf, breit: opt.breit === true,
+      ...(lernen ? { lernen: lernen.stand(), beiLernen: (pfad) => lernen.lerne(pfad), beiVergessen: (pfad) => lernen.vergiss(pfad) } : {}),
+      ...(typeof opt.beiSeite === 'function' ? { beiSeite: (id) => opt.beiSeite(spur.id, id) } : {}) });
+    jetzt.kopfNeu = () => kopfHandle?.neu();   // Surge has no preset header
   }
 
   return {
+    /** The learn state changed (opt.lernen): the marks of the panel and the LEARN toggle of the header follow. */
+    /** Show a page (tab) of the panel that is built, by its id (a controller program moved to it). */
+    zeigeSeite(id) { jetzt?.fp?.zeigeSeite?.(id); },
+    lernenNeu() { if (opt.lernen && jetzt?.fp) { jetzt.fp.setzeLernen?.(opt.lernen.stand()); jetzt.kopfNeu?.(); } },
     zeige(spur) {
       if (!spur || !kannGeraetAnsicht(spur)) { if (jetzt) weg(); return false; }
       const schluessel = geraetSchluessel(spur.geraet);

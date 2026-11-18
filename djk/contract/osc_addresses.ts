@@ -43,6 +43,7 @@ export const ADRESSEN = {
   '/k/kiste': { typen: ',hs', abschnitt: '4.7', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle'], bereiche: {} },
   '/k/mapping': { typen: ',hss', abschnitt: '4.7', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'geraet'], bereiche: {} },
   '/k/lernen': { typen: ',hsi', abschnitt: '4.7', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'an'], bereiche: { an: [0, 1] } },
+  '/k/live/tasten': { typen: ',hsi', abschnitt: '4.7', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'strom'], bereiche: { strom: [0, 10] } },
   '/k/latenz': { typen: ',hssi', abschnitt: '4.7', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'ziel', 'samples'], bereiche: {} },
   '/erz/strom': { typen: ',hsiss', abschnitt: '4.8', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'strom', 'ziel', 'kanal'], bereiche: { strom: [1, 16] } },
   '/erz/fenster': { typen: ',iiiiddh', abschnitt: '4.8', richtung: 'an_kern', nurPruefmodus: false, felder: ['strom', 'sendung', 'modus', 'kappe', 'ab_beat', 'bis_beat', 't_send_us'], bereiche: { strom: [1, 16] } },
@@ -172,6 +173,7 @@ export interface Werte {
   '/k/kiste': [id: bigint, quelle: string];
   '/k/mapping': [id: bigint, quelle: string, geraet: string];
   '/k/lernen': [id: bigint, quelle: string, an: number];
+  '/k/live/tasten': [id: bigint, quelle: string, strom: number];
   '/k/latenz': [id: bigint, quelle: string, ziel: string, samples: number];
   '/erz/strom': [id: bigint, quelle: string, strom: number, ziel: string, kanal: string];
   '/erz/fenster': [strom: number, sendung: number, modus: number, kappe: number, ab_beat: number, bis_beat: number, t_send_us: bigint];

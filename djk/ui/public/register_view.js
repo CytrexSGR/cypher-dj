@@ -9,6 +9,12 @@
 // "Free only" hides what is assigned in the first two. Moving a control on a controller marks its tile or row (the kern reports the move), so a control
 // is found by touching it. Data: GET /register (assignment files, the device catalogue with layouts), GET /register/ziele (every learnable target),
 // GET /geraete (places, detected sources), GET /lernen (learned assignments).
+// Follow and presets (a device with a layout and a known model): a FOLLOW switch and a line "follows <graph> on <synth>" with the device in the list, a preset bar
+// (SAVE FOR <graph>, SAVE AS, LOAD chips, DELETE on yours) above its tiles. Data: GET /controller/fokus (the synth in front, what each place follows, the preset
+// applied), GET /controller/presets, POST /controller/presets/*, POST /geraete/controller {platz, folgen}; the stream event controller_fokus redraws (registerFokus).
+// KEYS line under the device list: "KEYS -> <track or channel>" with a switch (POST /controller/fokus/tasten {an}); the field `tasten` of GET /controller/fokus says where
+// the MIDI keys go. An older page server without the field shows no line.
+// A page server that does not know the routes (404) leaves the switch disabled with a short text and shows no preset buttons; the rest works as before.
 const FEHLER_TEXT = { json: 'does not parse', form: 'not a mapping file (version 1 with eintraege)' };
 const SOFTWARE = (q) => /^bluez_midi\./.test(q.port) || /Midi Through/i.test(`${q.port} ${q.alias ?? ''}`);
 const quelleName = (q) => String(q.alias || '').split(':')[0].trim() || q.port;
@@ -172,7 +178,7 @@ export function kacheln(regler, zuordnungen, opt = {}) {
   const aus = (regler ?? []).map((r) => {
     const kanal = bank ? bank.kanal : r.kanal;
     const nr = r.typ === 'note' && bank?.noten ? bank.noten[note++] ?? r.nr : r.nr;
-    const z = meine.find((x) => typVon(x) === r.typ && x.nr === nr && (x.kanal === kanal || (!bank && x.kanal === r.kanal_daw)));
+    const z = meine.find((x) => typVon(x) === r.typ && x.nr === nr && (x.kanal === kanal || x.kanal === 0 || (!bank && x.kanal === r.kanal_daw)));   // channel 0: an entry for any channel (a preset)
     if (z) benutzt.add(z);
     return mit(z, { schluessel: `${r.typ}:${r.nr}`, name: r.name, typ: r.typ, kanal: z ? z.kanal : opt.daw && r.kanal_daw && !bank ? r.kanal_daw : kanal, nr, art: r.art, zeile: r.zeile, spalte: r.spalte, zuweisbar: true, extra: false });
   });
@@ -246,7 +252,7 @@ export function geraeteZeilen(register, geraete, lern, tablets = null) {
     const z = !k?.regler ? null : (k.baenke ?? [null]).map((_, i) => kachelZaehler(kacheln(k.regler, lern?.zuordnungen, { platz: c.platz, daw, baenke: k.baenke, bank: i })))
       .reduce((s, x) => ({ frei: s.frei + x.frei, gesamt: s.gesamt + x.gesamt }), { frei: 0, gesamt: 0 });
     zeilen.push({ art: 'platz', schluessel: `platz:${c.platz}`, platz: c.platz, name: k?.name ?? c.name, da: !!c.da, zustand, weg: `learn input ${c.platz}`, anzahl: z ? `${z.frei} of ${z.gesamt} free` : `${gelernt(c.platz)} learned`,
-      rueckweg: k?.rueckweg ?? '', hinweis: c.port, entfernen: c.platz >= 2, wechsel, regler: k?.regler ?? null, baenke: k?.baenke ?? null, bedienung: k?.bedienung ?? '', daw });
+      rueckweg: k?.rueckweg ?? '', hinweis: c.port, entfernen: c.platz >= 2, wechsel, modell: k?.id ?? null, regler: k?.regler ?? null, baenke: k?.baenke ?? null, bedienung: k?.bedienung ?? '', daw });
   }
   for (const q of quellen) {
     if (SOFTWARE(q) || /\bDAW\b/.test(q.port) || plaetze.some((c) => c.port === q.port)) continue;   // a DAW port is the device's feedback side, not a second controller
@@ -263,6 +269,101 @@ export function geraeteZeilen(register, geraete, lern, tablets = null) {
   }
   if (tablets !== null) zeilen.push({ art: 'tablet', schluessel: null, platz: null, name: 'Tablet', da: tablets > 0, zustand: tablets > 0 ? `${tablets} paired` : 'none paired', weg: 'page on the home network', anzahl: '', rueckweg: 'the page itself', hinweis: 'instruments and effects as touch panels' });
   return zeilen;
+}
+
+// ---- follow and presets (the server side: docs/controller/README.md, routes /controller/fokus and /controller/presets*) ----
+const GRUND_FOLGEN = {
+  kein_graph: (ort) => `${ort} has no graph loaded`,
+  kein_bk: (ort) => `${ort} is not a Baukasten synth`,
+  slot_ohne_zeile: (ort) => `${ort} has no controller row (only the first 8 Baukasten tracks have one)`,
+};
+const presetName = (id, liste) => (liste ?? []).find((p) => p.id === id)?.name ?? String(id).split('/').pop();
+/**
+ * What the device row says about following. `stand` = GET /controller/fokus ({fokus, plaetze}) or null (a page server without the route), `platz` = the controller
+ * place, `opt` = { kanalName(kanal), spurName(spur_id), presets (the list, for the name of an applied preset) }.
+ * { verfuegbar (the switch works), folgt, text (the line under the device name), titel (what the switch says) }
+ */
+export function folgenAnsicht(stand, platz, opt = {}) {
+  if (!stand) return { verfuegbar: false, folgt: false, text: 'Follow is not available on this page server yet', titel: 'The page server does not know following yet: restart it with the newer version' };
+  const p = (stand.plaetze ?? []).find((x) => x.platz === platz);
+  if (!p || !p.modell) return { verfuegbar: false, folgt: false, text: 'Follow is not available for this device', titel: 'The studio does not know the layout of this device, so it cannot load assignments for it' };
+  const titel = 'The assignments of this device follow the synth in front: a preset of this device for that synth, else its knobs in order';
+  if (!p.folgen) return { verfuegbar: true, folgt: false, text: '', titel };
+  const f = stand.fokus;
+  if (!f) return { verfuegbar: true, folgt: true, text: 'follows: no synth in front', titel };
+  const ort = f.kanal ? (opt.kanalName?.(f.kanal) ?? f.kanal) : (opt.spurName?.(f.spur_id) ?? `track ${f.spur_id}`);
+  if (!f.basis) return { verfuegbar: true, folgt: true, text: `follows: ${(GRUND_FOLGEN[f.grund] ?? ((o) => `${o} cannot be followed`))(ort)}`, titel };
+  const dazu = p.preset ? ` · ${p.preset === 'bank' ? 'default bank' : `preset ${presetName(p.preset, opt.presets)}`}` : '';
+  return { verfuegbar: true, folgt: true, text: `follows ${f.graph} on ${ort}${dazu}`, titel };
+}
+const GRUND_TASTEN = {
+  kein_fokus: 'no synth in front',
+  kein_instrument: 'the track in front is not an instrument',
+  keine_senke: 'the instrument in front has no sound path for keys',
+  kein_ziel: 'this channel takes no keys',
+  kern_alt: 'the studio core cannot play keys on live channels yet',
+};
+/**
+ * The KEYS line: where the MIDI keys go (plan N1). `stand` = GET /controller/fokus; a page server without the `tasten` field (older) gives null: no line.
+ * `opt` = { kanalName(kanal), spurName(spur_id) }. { an (the switch), text, titel }
+ */
+export function tastenAnsicht(stand, opt = {}) {
+  const t = stand?.tasten;
+  if (!t || typeof t !== 'object' || typeof t.an !== 'boolean') return null;
+  const titel = 'The keys of your MIDI keyboard play the instrument in front (a project track or a live channel) as long as this is on';
+  if (!t.an) return { an: false, text: 'KEYS off', titel };
+  const z = t.ziel;
+  if (z?.spur_id) return { an: true, text: `KEYS \u2192 ${opt.spurName?.(z.spur_id) ?? `track ${z.spur_id}`}`, titel };
+  if (z?.kanal) return { an: true, text: `KEYS \u2192 ${opt.kanalName?.(z.kanal) ?? z.kanal}`, titel };
+  return { an: true, text: `KEYS \u2192 none: ${(GRUND_TASTEN[t.grund] ?? 'no target')}`, titel };
+}
+/** Fills `el` with the one KEYS line in the look of a device row with its FOLLOW switch; `opt.schalte(an)` is called with the opposite of the current switch. */
+export function baueTasten(el, ansicht, opt = {}) {
+  if (!ansicht) { el.replaceChildren(); return; }
+  const zeile = document.createElement('div');
+  zeile.classList.add('reg-geraet', 'reg-tasten');
+  zeile.setAttribute('title', ansicht.titel);
+  const text = document.createElement('div');
+  text.classList.add('reg-geraet-text');
+  text.append(zelle('div', ansicht.text, 'reg-geraet-info'));
+  const tat = document.createElement('div');
+  tat.classList.add('reg-geraet-tat');
+  const k = knopf('KEYS', ansicht.titel, () => opt.schalte?.(!ansicht.an));
+  k.classList.toggle('an', ansicht.an);
+  k.setAttribute('aria-pressed', String(ansicht.an));
+  tat.append(k);
+  zeile.append(text, tat);
+  el.replaceChildren(zeile);
+}
+/** The SAVE FOR button: only with a synth in front that has a base to save the assignments of. */
+export function speicherAngebot(stand) {
+  const f = stand?.fokus;
+  if (f?.basis && f.graph) return { an: true, graph: f.graph, text: `SAVE FOR ${f.graph}`, titel: `Save the assignments that point at ${f.graph} as its preset for this device` };
+  return { an: false, graph: null, text: 'SAVE FOR SYNTH', titel: 'Needs a synth in front that has Baukasten knobs: pick one in INSTRUMENTS, the workbench, PRODUCTION or a SEQ deck' };
+}
+/** The LOAD list of one device model: { id, name, text, art, herkunft, aktiv, aus, grund, loeschbar }. An instrument preset waits (aus) while no synth with
+ *  a base is in front or while that synth runs another graph; usable presets come first. */
+export function praesetAnsicht(liste, modell, stand, platz) {
+  if (!modell) return [];
+  const f = stand?.fokus, angewandt = (stand?.plaetze ?? []).find((x) => x.platz === platz)?.preset ?? null;
+  const zeilen = (liste ?? []).filter((p) => p.modell === modell).map((p) => {
+    let grund = '';
+    if (p.art === 'instrument') {
+      if (!f?.basis) grund = 'Needs a synth in front';
+      else if (f.graph !== p.graph) grund = `For ${p.graph}; the synth in front is ${f.graph}`;
+    }
+    return { id: p.id, name: p.name, text: `${p.name} · ${p.herkunft === 'werk' ? 'factory' : 'yours'}`, art: p.art, herkunft: p.herkunft, aktiv: p.id === angewandt, aus: grund !== '', grund, loeschbar: p.herkunft === 'nutzer' };
+  });
+  return zeilen.sort((a, b) => (a.aus - b.aus) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) || (a.herkunft < b.herkunft ? -1 : 1));
+}
+/** GET /controller/fokus through `hole(url)` (fetch): { stand, fehlt }. 404 = a page server without the route: stand null, fehlt true. Any other failure keeps `alt`. */
+export async function holeFolgenStand(hole, alt) {
+  try {
+    const r = await hole('/controller/fokus');
+    if (r.status === 404) return { stand: null, fehlt: true };
+    if (!r.ok) return { stand: alt, fehlt: false };
+    return { stand: await r.json(), fehlt: false };
+  } catch { return { stand: alt, fehlt: false }; }
 }
 
 /** Device names by `besitzer` key, from the rows of geraeteZeilen. */
@@ -316,8 +417,16 @@ export function baueGeraete(el, zeilen, opt) {
     const text = document.createElement('div');
     text.classList.add('reg-geraet-text');
     text.append(zelle('div', z.name, 'reg-geraet-name'), zelle('div', [z.zustand, z.weg, z.anzahl].filter(Boolean).join(' · '), 'reg-geraet-info'));
+    if (z.folgen?.text) text.append(zelle('div', z.folgen.text, 'reg-geraet-info'));   // what the device follows, or why it cannot
     const tat = document.createElement('div');
     tat.classList.add('reg-geraet-tat');
+    if (z.folgen) {
+      const f = knopf('FOLLOW', z.folgen.titel, () => { if (z.folgen.verfuegbar) opt?.folge?.(z.platz, !z.folgen.folgt); });
+      f.classList.toggle('an', z.folgen.folgt);
+      f.setAttribute('aria-pressed', String(z.folgen.folgt));
+      if (!z.folgen.verfuegbar) f.setAttribute('disabled', '');
+      tat.append(f);
+    }
     if (z.wechsel) tat.append(knopf(z.wechsel.text, z.wechsel.titel, () => opt?.schicken({ platz: z.platz, port: z.wechsel.port })));
     if (z.art === 'frei') tat.append(knopf('ADD', 'Give this controller a place: it can then be learned, and its CC numbers stay its own', () => opt?.schicken({ port: z.port })));
     if (z.entfernen) tat.append(knopf('REMOVE', 'Free this place (what it has learned is kept for the next device on it)', () => opt?.schicken({ platz: z.platz, port: null })));
@@ -350,6 +459,38 @@ function wahlReihe(titel, eintraege, gewaehlt, beiWahl) {
  */
 export function baueWahl(el, module, opt) {
   el.replaceChildren(wahlReihe('View', SICHTEN, opt?.sicht ?? null, (id) => opt?.waehle?.({ sicht: id })), wahlReihe('Module', module, opt?.modul ?? null, (id) => opt?.waehle?.({ modul: id })));
+}
+
+/**
+ * The preset bar of a device: SAVE FOR <graph> (instrument preset), SAVE AS (a snapshot of the whole device under a name), then one chip per preset of the
+ * device model (`ansicht.zeilen`, praesetAnsicht); a user preset has a DELETE. `ansicht.verfuegbar` false (a page server without the routes) is one line of text.
+ * `opt`: speichereFuer(), speichereAls(), lade(id), loesche(id).
+ */
+export function bauePresets(el, ansicht, opt = {}) {
+  const wurzel = document.createElement('div');
+  wurzel.classList.add('reg-presets');
+  if (!ansicht.verfuegbar) { wurzel.append(zelle('div', ansicht.text, 'reg-leer')); el.replaceChildren(wurzel); return; }
+  const reihe = (titel) => { const r = document.createElement('div'); r.classList.add('reg-wahl'); r.append(zelle('span', titel, 'reg-wahl-titel')); return r; };
+  const sp = ansicht.speichern, speichern = reihe('Presets');
+  const fuer = knopf(sp.text, sp.titel, () => { if (sp.an) opt.speichereFuer?.(); });
+  if (!sp.an) fuer.setAttribute('disabled', '');
+  speichern.append(fuer, knopf('SAVE AS', 'Save every assignment of this device under a name; LOAD brings them back as they are', () => opt.speichereAls?.()));
+  const laden = reihe('Load');
+  for (const z of ansicht.zeilen) {
+    const chip = knopf(z.text, z.aus ? z.grund : `Load ${z.name}: replaces the assignments of this device${z.art === 'instrument' ? ' that point at the synth in front' : ''}`, () => { if (!z.aus) opt.lade?.(z.id); });
+    chip.classList.toggle('an', z.aktiv);
+    if (z.aus) chip.setAttribute('disabled', '');
+    if (!z.loeschbar) { laden.append(chip); continue; }
+    const paar = document.createElement('span');
+    paar.classList.add('reg-preset');
+    const weg = knopf('DELETE', `Delete the preset ${z.name} (yours); the factory one stays`, () => opt.loesche?.(z.id));
+    weg.setAttribute('data-preset', z.id);
+    paar.append(chip, weg);
+    laden.append(paar);
+  }
+  if (!ansicht.zeilen.length) laden.append(zelle('span', 'No presets for this device yet', 'reg-leer'));
+  wurzel.append(speichern, laden);
+  el.replaceChildren(wurzel);
 }
 
 /**
@@ -402,7 +543,7 @@ export function baueKacheln(el, ks, opt = {}) {
   }
   if (opt.offen && (!opt.kompakt || !ks.some((k) => k.schluessel === opt.offen.schluessel))) raster.append(tafel());   // not flowed in above
   const oben = opt.baenke?.length ? [wahlReihe('Bank', opt.baenke, opt.bank ?? null, (id) => { if (id !== null) opt.waehleBank?.(id); })] : [];
-  el.replaceChildren(...oben, raster, ...(opt.bedienung ? [zelle('div', opt.bedienung, 'reg-bedienung')] : []));
+  el.replaceChildren(...(opt.praesets ? [opt.praesets] : []), ...oben, raster, ...(opt.bedienung ? [zelle('div', opt.bedienung, 'reg-bedienung')] : []));
 }
 
 /**
@@ -559,13 +700,41 @@ export function baueLernen(el, lern, opt) {
 }
 
 let stand = null, filter = '', auswahl = null, modul = null, sicht = null, nurFrei = false, wahlEl = null, wurzelEl = null, inhalt = null, lernEl = null, lernOpt = null, lernHolen = null, geraeteEl = null, geraeteStand = null, tablets = null, spurEl = null, frei = null;
+let tastenEl = null;   // the KEYS line under the device list
+let folgenStand = null, folgenFehlt = false, presetListe = null, presetFehlt = false, spurNamen = new Map(), extra = {};   // follow and presets: GET /controller/fokus, GET /controller/presets (null and the flags while the page server does not know the routes), track names for the follow line
 let version = 0, letzteSig = '';   // version: counts the rereads of the register and the targets; letzteSig: what was drawn last
 let zieleAlle = [], knopfNamen = new Map(), offen = null, waehlerModul = null, waehlerSuche = '', menue = null, knoepfe = false;
 const bankVon = new Map();   // device key -> the picked bank (index)
 const familien = new Set();   // the unfolded module families (falteModule); knoepfe: the unnamed graph knobs are shown   // targets, the open picker (tile key), its module and search, the open ASSIGN menu (path)
 const ziele = async (q) => { try { return ((await (await fetch(`/register/ziele?q=${encodeURIComponent(q)}&limit=50`)).json())?.ziele ?? []).map((z) => z.pfad); } catch { return []; } };
 const holeJson = async (pfad) => { try { const r = await fetch(pfad); return r.ok ? await r.json() : null; } catch { return null; } };
+/** The focus and the follow flags of the places (GET /controller/fokus), and the name of the track in front when it is a project track. */
+async function holeFolgen() {
+  const r = await holeFolgenStand((u) => fetch(u), folgenStand);
+  folgenStand = r.stand; folgenFehlt = r.fehlt;
+  const id = folgenStand?.fokus?.spur_id;
+  if (id && !spurNamen.has(id)) {
+    const p = await holeJson('/proj/aktuell');
+    for (const x of p?.projekt?.spuren ?? []) if (x?.id && x.name) spurNamen.set(x.id, x.name);
+  }
+}
+/** The presets of every device model (GET /controller/presets); a page server without the route: fehlt. */
+async function holePresets() {
+  try {
+    const r = await fetch('/controller/presets');
+    if (r.status === 404) { presetListe = null; presetFehlt = true; return; }
+    if (r.ok) { presetListe = (await r.json())?.presets ?? []; presetFehlt = false; }
+  } catch { /* the page server is gone: keep what is shown */ }
+}
+/** The focus changed (stream event controller_fokus, body of GET /controller/fokus): redraw the follow lines. */
+export function registerFokus(f) {
+  if (!f || typeof f !== 'object' || !('plaetze' in f)) return;
+  folgenStand = f; folgenFehlt = false;
+  const id = f.fokus?.spur_id;
+  if (id && !spurNamen.has(id)) holeFolgen().then(() => zeichne(true)); else zeichne(true);
+}
 async function holeGeraete() {
+  await holeFolgen();
   geraeteStand = (await holeJson('/geraete')) ?? geraeteStand;
   const k = await holeJson('/kopplung');   // loopback only: a tablet gets no answer and shows no tablet row
   tablets = Array.isArray(k?.geraete) ? k.geraete.length : null;
@@ -576,7 +745,8 @@ async function holeRegister() {
   const z = await holeJson('/register/ziele?prefix=');   // every learnable target, with the graph knob names
   if (Array.isArray(z?.ziele)) { zieleAlle = z.ziele; knopfNamen = new Map(z.ziele.filter((x) => x.name).map((x) => [x.pfad, x.name])); }
 }
-const geraeteListe = () => geraeteZeilen(stand, geraeteStand, lernHolen?.stand?.(), tablets);
+const folgenOpt = () => ({ kanalName: extra.kanalName, spurName: (id) => spurNamen.get(id) ?? null, presets: presetListe ?? [] });
+const geraeteListe = () => geraeteZeilen(stand, geraeteStand, lernHolen?.stand?.(), tablets).map((z) => (z.art === 'platz' && z.regler ? { ...z, folgen: folgenAnsicht(folgenStand, z.platz, folgenOpt()) } : z));
 /** The tiles of the picked device (null: it has no layout or no place). */
 const kachelnVon = (g, bank = bankVon.get(g?.schluessel) ?? 0) => (g?.regler && g.platz ? kacheln(g.regler, lernHolen?.stand?.()?.zuordnungen, { platz: g.platz, daw: g.daw, namen: knopfNamen, baenke: g.baenke, bank }) : null);
 const waehlerWaehle = () => document.activeElement?.classList?.contains?.('reg-waehler-suche');   // typing in the picker: a redraw would take the focus away
@@ -588,11 +758,14 @@ const waehlerWaehle = () => document.activeElement?.classList?.contains?.('reg-w
 function zeichne(erzwingen = false) {
   if (!stand || !geraeteEl || (!erzwingen && waehlerWaehle())) return;
   const zeilen = geraeteListe();
-  const sig = JSON.stringify([version, auswahl, modul, sicht, nurFrei, filter, offen, waehlerModul, menue, knoepfe, [...familien], [...bankVon], zeilen, lernHolen?.stand?.()]);
+  const sig = JSON.stringify([version, auswahl, modul, sicht, nurFrei, filter, offen, waehlerModul, menue, knoepfe, [...familien], [...bankVon], zeilen, lernHolen?.stand?.(), presetListe, presetFehlt, folgenStand?.fokus ?? null, folgenStand?.plaetze ?? null, folgenStand?.tasten ?? null]);
   if (!erzwingen && sig === letzteSig) return;
   letzteSig = sig;
   if (auswahl && !zeilen.some((z) => z.schluessel === auswahl)) auswahl = null;   // the picked device left its place
-  baueGeraete(geraeteEl, zeilen, { auswahl, waehle: (s) => { auswahl = s; offen = null; menue = null; zeichne(true); }, schicken: geraeteSchicken });
+  baueGeraete(geraeteEl, zeilen, { auswahl, waehle: (s) => { auswahl = s; offen = null; menue = null; zeichne(true); }, schicken: geraeteSchicken, folge: (platz, an) => geraeteSchicken({ platz, folgen: an }) });
+  if (tastenEl) { tastenEl.remove?.(); tastenEl = null; }
+  const tasten = tastenAnsicht(folgenStand, folgenOpt());   // the KEYS line sits under the device list; an older page server gives none
+  if (tasten) { tastenEl = document.createElement('div'); baueTasten(tastenEl, tasten, { schalte: tastenSchalte }); geraeteEl.append(tastenEl); }
   const gewaehlt = zeilen.find((z) => z.schluessel === auswahl);
   const namen = namenVon(zeilen);
   // the module chips: every module with a learnable or assigned target in the view, with how many of them are free; a picked module that is gone is released
@@ -616,7 +789,10 @@ function zeichne(erzwingen = false) {
     const offenK = offen ? ks.find((k) => k.schluessel === offen) ?? null : null;
     if (offen && !offenK) offen = null;
     const baenke = gewaehlt.baenke?.map((b, i) => { const z = kachelZaehler(kachelnVon(gewaehlt, i)); return { id: i, name: `${b.name} (ch ${b.kanal})`, frei: z.frei, gesamt: z.gesamt, anzahl: `${z.frei} of ${z.gesamt} free` }; });
-    baueKacheln(inhalt, kachelSicht(ks, { nurFrei, sicht, filter }), { geraet: gewaehlt.name, kompakt: nurFrei, offen: offenK,
+    const praesets = gewaehlt.modell ? document.createElement('div') : null;
+    if (praesets) bauePresets(praesets, presetFehlt ? { verfuegbar: false, text: 'Presets are not available on this page server yet' }
+      : { verfuegbar: true, speichern: speicherAngebot(folgenStand), zeilen: praesetAnsicht(presetListe, gewaehlt.modell, folgenStand, gewaehlt.platz) }, praesetAktionen(gewaehlt.platz));
+    baueKacheln(inhalt, kachelSicht(ks, { nurFrei, sicht, filter }), { geraet: gewaehlt.name, kompakt: nurFrei, offen: offenK, praesets,
       baenke, bank: bankVon.get(gewaehlt.schluessel) ?? 0, waehleBank: (i) => { bankVon.set(gewaehlt.schluessel, i); offen = null; zeichne(true); }, bedienung: gewaehlt.bedienung,
       oeffne: (k) => { offen = offen === k.schluessel ? null : k.schluessel; zeichne(true); },
       entferne: async (k) => { offen = null; await lernHolen?.schicken('/lernen/loeschen', { pfad: k.ziel }); await holeRegister(); zeichne(true); },
@@ -666,6 +842,24 @@ async function zuweisen(pfad, platz, k, ks = null) {
   await holeRegister();
   zeichne(true);
 }
+/** POST a preset route; a refusal shows the server's text in the line above the list. `fertig(answer)` words a success. Afterwards everything the call can have changed is read again. */
+async function praesetSchicken(pfad, daten, fertig) {
+  let r = null, j = null;
+  try { r = await fetch(pfad, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(daten) }); j = await r.json().catch(() => null); } catch { /* shown below */ }
+  if (spurEl) spurEl.textContent = !r ? 'The page server did not answer' : r.status === 404 && !j?.text ? 'This page server does not know presets yet' : r.ok ? (fertig?.(j) ?? '') : String(j?.text ?? j?.fehler ?? r.status);
+  await Promise.all([lernHolen?.hole?.(), holePresets(), holeFolgen(), holeRegister()]);
+  zeichne(true); zeichneLernen();
+}
+const uebersprungenText = (l) => (Array.isArray(l) && l.length ? `, ${l.length} skipped (${l.slice(0, 4).map((x) => (typeof x === 'string' ? x : x?.regler ?? x?.pfad ?? '?')).join(', ')}${l.length > 4 ? ', ...' : ''})` : '');
+const praesetAktionen = (platz) => ({
+  speichereFuer: () => praesetSchicken('/controller/presets/speichern', { platz, art: 'instrument' }, (j) => `Saved ${j?.preset?.name ?? 'the preset'} for ${folgenStand?.fokus?.graph ?? 'the synth in front'}`),
+  speichereAls: () => {
+    const name = (globalThis.prompt?.('Name for these assignments') ?? '').trim();
+    if (name) praesetSchicken('/controller/presets/speichern', { platz, art: 'fest', name }, (j) => `Saved ${j?.preset?.name ?? name}`);
+  },
+  lade: (id) => praesetSchicken('/controller/presets/laden', { platz, id }, (j) => `Loaded ${presetName(id, presetListe)}: ${j?.gesetzt ?? 0} assigned${uebersprungenText(j?.uebersprungen)}`),
+  loesche: (id) => praesetSchicken('/controller/presets/loeschen', { id }, () => `Deleted ${presetName(id, presetListe)}`),
+});
 const geraeteSchicken = async (daten) => {
   try {
     const r = await fetch('/geraete/controller', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(daten) });
@@ -673,8 +867,17 @@ const geraeteSchicken = async (daten) => {
     if (r.ok) geraeteStand = j;
     if (spurEl) spurEl.textContent = r.ok ? '' : String(j?.text ?? j?.fehler ?? r.status);
   } catch { /* the page server is gone: keep what is shown */ }
-  await lernHolen?.hole?.();
+  await Promise.all([lernHolen?.hole?.(), holeFolgen()]);
   zeichne(true); zeichneLernen();
+};
+const tastenSchalte = async (an) => {
+  try {
+    const r = await fetch('/controller/fokus/tasten', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ an }) });
+    const j = await r.json().catch(() => null);
+    if (spurEl) spurEl.textContent = r.ok ? '' : String(j?.text ?? j?.fehler ?? r.status);
+  } catch { /* the page server is gone: keep what is shown */ }
+  await holeFolgen();
+  zeichne(true);
 };
 const zeichneLernen = () => { if (lernEl && lernOpt && lernHolen) baueLernen(lernEl, lernHolen.stand(), lernOpt); };
 
@@ -714,7 +917,8 @@ export function registerHand(pfad) {
  * `lern` = { stand: () => learn table, schicken: (pfad, daten) => Promise, hole: () => Promise } from learn_view.js (injected, so this module
  * stays free of the page's other modules and runs in the page test).
  */
-export async function zeigeRegister(wurzel, lern) {
+export async function zeigeRegister(wurzel, lern, mehr = {}) {
+  extra = mehr ?? {};   // { kanalName(kanal): the short name of an instrument channel, for the follow line }
   if (!inhalt) {
     wurzelEl = wurzel;
     lernHolen = lern ?? null;
@@ -762,6 +966,6 @@ export async function zeigeRegister(wurzel, lern) {
   }
   await lern?.hole?.();
   zeichneLernen();
-  await Promise.all([holeRegister(), holeGeraete()]);
+  await Promise.all([holeRegister(), holeGeraete(), holePresets()]);
   zeichne(true);
 }

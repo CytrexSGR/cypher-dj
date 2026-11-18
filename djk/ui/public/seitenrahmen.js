@@ -43,11 +43,11 @@ function gross(an) {
   if (an) schublade(true);                                  // groß heißt offen
   $('#gross').setAttribute('aria-pressed', String(an));
 }
-function schublade(auf) {
+function schublade(auf, merken = location.hash !== '#controller') {
   if (!auf) { document.body.classList.remove('lib-gross'); $('#gross').setAttribute('aria-pressed', 'false'); }   // zu heißt nicht mehr groß
   document.body.classList.toggle('lib-zu', !auf);
   $('#schublade').textContent = auf ? '▾' : '▸';
-  try { localStorage.setItem('djk-lib', auf ? 'auf' : 'zu'); } catch { /* ohne Speicher: nur jetzt */ }
+  if (merken) try { localStorage.setItem('djk-lib', auf ? 'auf' : 'zu'); } catch { /* ohne Speicher: nur jetzt */ }
 }
 export function bindeSchublade() {
   $('#schublade').addEventListener('click', () => schublade(document.body.classList.contains('lib-zu')));
@@ -71,6 +71,9 @@ export function bindeSchublade() {
     if (e.key === 'Escape') { if (document.body.classList.contains('lib-gross')) gross(false); else schublade(false); }
   });
   $('#suche').addEventListener('input', filtere);
+  // The Controllers window (#controller) shows its register in the drawer: it always starts open and leaves the main window's remembered state alone (found
+  // 2026-11-18: a drawer folded in the main window folded the Controllers window to a 40 px strip, both share localStorage).
+  if (location.hash === '#controller') { schublade(true, false); return; }
   let gespeichert = 'auf';
   try { gespeichert = localStorage.getItem('djk-lib') ?? 'auf'; } catch { /* leer */ }
   schublade(gespeichert !== 'zu');
@@ -80,11 +83,22 @@ export function bindeSchublade() {
 const ANSICHTEN = ['dj', 'studio', 'produktion', 'werkbank'];
 export let produktion = null;
 export let werkbank = null;   // the workbench view (werkbank/werkbank.js), the fourth value: label STUDIO, value werkbank
+// The main window tells the page server which view it shows: the APC20 is the project mixer while it is PRODUCTION (areas/controller/pult_production.ts,
+// djk/hand_bruecke/apc_production.py). Only the main window (no address); the Remix, Controllers and device windows have one of their own.
+const istHauptfenster = () => (globalThis.location?.hash ?? '') === '';
+let gemeldeteAnsicht = null, gezeigteAnsicht = null;
+export function meldeAnsicht(a = gezeigteAnsicht, erneut = false) {
+  if (!a || !istHauptfenster() || (a === gemeldeteAnsicht && !erneut)) return;
+  gemeldeteAnsicht = a;
+  try { void fetch('/controller/ansicht', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ansicht: a }) }).catch(() => { gemeldeteAnsicht = null; }); } catch { gemeldeteAnsicht = null; }
+}
 export function setzeAnsicht(a, merken = true) {
   setzeGeraeteseite(false);   // the layer sits on the page of one view; another view never keeps it
   for (const k of ['studio', 'produktion', 'werkbank']) document.body.classList.toggle(k, a === k);
   for (const b of $$('[data-ansicht]')) { const an = b.dataset.ansicht === a; b.classList.toggle('an', an); b.setAttribute('aria-pressed', String(an)); }
   if (merken) try { localStorage.setItem('djk-ansicht', a); } catch { /* ohne Speicher: DJ */ }
+  gezeigteAnsicht = a;
+  meldeAnsicht(a);
   if (a === 'produktion') produktion?.zeige(); else produktion?.verberge();
   if (a === 'werkbank') werkbank?.zeige(); else werkbank?.verberge();
   ordneMitte(a);

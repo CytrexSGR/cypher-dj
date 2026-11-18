@@ -12,7 +12,13 @@ import { GRUND_TEXT, eintragVon, zeigeDeck, zeigePegel, zeigeSchlag } from './de
 import { fxRoutingVomKern, fxVomKern, fxZuweisungVomKern } from './beat_fx_view.js';
 import { bkMarkeSpaeter, holeBkSpaeter, setzeGraphenGeladen } from './graphs_view.js';
 import { lernEreignis, zeigeFxDetail, zeigeSendKnobs } from './learn_view.js';
-import { registerHand } from './register_view.js';
+import { registerHand, registerFokus } from './register_view.js';
+import { fokus } from './controller_fokus.js';
+import { geraetFensterEreignis } from './device_window.js';
+import { zeigeCtlMarke } from './ctl_track_marker.js';
+import { zeigeApcBank } from './apc_bank_marker.js';
+import { spurHandEcho } from './production/track_heads.js';
+import { zeilenEcho } from './production/device_view.js';
 import { ladeLoops, recAktiv, recEnde, setzeLetzterBeat, taktText, uhrKopf, zeigeRec } from './loop_rec_view.js';
 import { zeigeWert } from './controls_view.js';
 import { zeigeColor } from './color_view.js';
@@ -61,6 +67,7 @@ export function strom() {
     const { a, f } = JSON.parse(m.data);
     try { produktion?.ereignis(a, f); } catch (e) { console.error('Production view:', e); }   // D1 V1: proj, /zustand/arr; ein Fehler dort hält die DJ-Anzeige nicht an
     try { werkbank?.ereignis(a, f); } catch (e) { console.error('Workbench view:', e); }   // like the line above: an error there does not stop the DJ display
+    try { geraetFensterEreignis(a, f); } catch (e) { console.error('Device window:', e); }   // the #geraet window mode (no-op elsewhere)
     if (a === '/zustand/arr') { merkeArr(f); zeigeMasterLimiter(f); }   // the loop slots follow the transport of the live container; the MASTER tab's LIMITER meter reads limiter_db
     switch (a) {
       case 'stand':
@@ -85,6 +92,8 @@ export function strom() {
       case 'ansage': zeigeAnsage(f); break;   // demo overlay (POST /ansage)
       case 'graphen': setzeGraphenGeladen(f.geladen); break;   // S12
       case 'lernen': lernEreignis(f); break;   // S19
+      case 'controller_fokus': fokus.vomServer(f); registerFokus(f); zeigeCtlMarke(f); break;
+      case 'pult': zeigeApcBank(f); break;   // the APC20 bank in PRODUCTION (areas/controller/pult_production.ts)   // the synth in front or what a controller place applied changed (page server, body of GET /controller/fokus)
       case '/e/hand': registerHand(String(f.pfad ?? '')); break;   // a controller moved a control: the Controllers window marks its row
       case 'proj': holeBkSpaeter(); liveEreignis(a, f); break;   // S17: the project changed or was opened; live modules task 4: the panel follows
       case 'modul': liveEreignis(a, f); break;   // live modules task 4: slot state of the module export (separation)
@@ -116,6 +125,8 @@ export function strom() {
         if (/^master\/bk\//.test(f.pfad)) zeigeSendKnobs();   // the knobs of the master insert (MASTER tab, same row type) follow it too
         { const m = /^(.+)\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.exec(f.pfad); const fp = m && m[1] === fxGewaehlt ? $('#fxdetail .bkliste')?._fp : null; if (fp) fp.aktualisiere(); }   // a panel in the detail view follows the echo too
         { const m = /^(.+)\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.exec(f.pfad); if (m && instrumenteSichtbar() && m[1] === instrumenteAnsicht.gewaehlt()) instrumenteAnsicht.aktualisiere(); }   // ... and the panel in INSTRUMENTS
+        if (f.halter === 'mensch') spurHandEcho(f.pfad, f.wert);   // a hand moved a track fader or pan: the PRODUCTION heads show it at once
+        if (/^spur\/\d+\/bk\/\d+$/.test(f.pfad)) zeilenEcho(f.pfad);   // P2: the device panel of a track follows its row (a controller moved it)
         if (remixFp && /\/bk\/\d+$/.test(f.pfad)) remixFp.aktualisiere();   // the REMIX panel follows the knob echo of its target
         break;
       case '/zustand/spektrum':   // A7b: 25 Hz while a source is selected

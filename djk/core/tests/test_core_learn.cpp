@@ -503,6 +503,45 @@ static void fall_tausch_slot2() {
   delete b;
 }
 
+// 20) stufen: a CC button on a learn table steps erz/5/bk/3 (default 0.5) through 3 positions and wraps; a release changes nothing
+static void fall_stufen_taste() {
+  Arbeitsbestand ab("test_kern_lernen_20");
+  Lauf x(ab.pfad);
+  PRUEF(x.lern_laden("core/tests/hand/mappings/lernen_stufen.json"));
+  x.zyklen(2 * N);
+  // the knob starts at its default 0.5 (step 1 of 0..2), so the cycle shows 1, 0, 0.5, 1, 0, 0.5
+  const double soll[] = {1.0, 0.0, 0.5, 1.0, 0.0, 0.5};
+  int64_t t = 4 * N + 10;
+  for (int i = 0; i < 6; ++i) {
+    x.midi_ein_bei(t, 0xB0, 75, 127);
+    x.midi_ein_bei(t + N, 0xB0, 75, 0);   // release
+    x.zyklen(t + 4 * N);
+    t += 6 * N;
+  }
+  x.zyklen(t + 2 * N);
+  const auto r = x.alle(cdj::Ereignis::REGLER, "erz/5/bk/3");
+  PRUEF(r.size() == 6);
+  for (size_t i = 0; i < r.size() && i < 6; ++i) PRUEF_NAH(r[i].wert, soll[i], 1e-4);
+  std::printf("stufen_taste: 6 presses, %zu events, last %.3f\n", r.size(), r.empty() ? -1.0 : r.back().wert);
+}
+
+// 21) channel 0 in a learn table matches every channel: CC 74 on channel 4 moves erz/5/bk/3 (LPD8 program 4)
+static void fall_kanal_0() {
+  Arbeitsbestand ab("test_kern_lernen_21");
+  Lauf x(ab.pfad);
+  PRUEF(x.lern_laden("core/tests/hand/mappings/lernen_kanal0.json"));
+  x.zyklen(2 * N);
+  x.midi_ein_bei(4 * N + 10, 0xB3, 74, 64);   // channel 4: first value primes
+  x.zyklen(6 * N);
+  x.midi_ein_bei(8 * N + 20, 0xB3, 74, 100);
+  x.zyklen(10 * N);
+  const auto r = x.alle(cdj::Ereignis::REGLER, "erz/5/bk/3");
+  PRUEF(r.size() == 1);
+  PRUEF(x.kern->lern_ereignisse() == 2);
+  std::printf("kanal_0: CC 74 on channel 4 moved erz/5/bk/3 (%zu events, lern_ereignisse %llu)\n", r.size(),
+              (unsigned long long)x.kern->lern_ereignisse());
+}
+
 int main() {
   fall_bk_ziel_laedt();
   fall_lern_cc_bewegt_bk();
@@ -522,5 +561,7 @@ int main() {
   fall_port_ohne_tisch();
   fall_faengt_auf_port_2();
   fall_tausch_slot2();
+  fall_stufen_taste();
+  fall_kanal_0();
   PRUEF_ENDE();
 }

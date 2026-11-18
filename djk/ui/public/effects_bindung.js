@@ -6,7 +6,8 @@ import { leseAchse, merkeAchse } from './instrument_groups.js';
 import { GERAETEKNOPF } from './panel_kopf.js';
 import { $, $$, zustand } from './page_state.js';
 import { baueFxStreifen, bindeBus, bindeWerkzeug, fxGewaehlt, grJetzt, kompVerlauf, sendeWerkzeug, waehleFx, zeigeKomp, zeigeLimiter } from './effects_view.js';
-import { FX_KANAELE, istGeraeteseite, kompWert, setzeBereich, setzeGeraeteseite, spektrumLeihe } from './effects_gemeinsam.js';
+import { FX_KANAELE, istGeraeteseite, instrumenteSichtbar, kompWert, setzeBereich, setzeGeraeteseite, spektrumLeihe } from './effects_gemeinsam.js';
+import { fokus } from './controller_fokus.js';
 import { produktion } from './seitenrahmen.js';
 import { graphVon, graphenGeladen, holeBk, holeGraphen, holeHostNamen, hostNamen, instrDurchsucht, merkeInstrKat, speichereSound, waehleGraph, zeigeGraphWahl } from './graphs_view.js';
 import { bindeBkKnobs, holeLernen, lernAbbrechenFuer, lernSchicken, lernen } from './learn_view.js';
@@ -165,8 +166,10 @@ export function bindeEffekte() {
   for (const t of $$('[data-bereich]')) t.addEventListener('click', () => setzeBereich(t.dataset.bereich));
   $('#instrumente').addEventListener('click', (e) => { if (e.target.closest(GERAETEKNOPF)) setzeGeraeteseite(!istGeraeteseite()); });   // the button in a plate's title bar (panel_kopf.js)
   window.addEventListener('resize', () => { if (istGeraeteseite()) setzeGeraeteseite(true); });   // re-measure the header; no rebuild (an equals war)
-  instrumenteAnsicht = bindeInstrumente({ beiWechsel: (alt, neu) => { lernAbbrechenFuer(alt); if (istGeraeteseite()) spektrumLeihe.oeffnen(neu); }, kanaele: Object.keys(GRAPH_KANAL_ART).filter((k) => GRAPH_KANAL_ART[k] === 'instrument'), graphVon,
+  instrumenteAnsicht = bindeInstrumente({ beiWechsel: (alt, neu) => { lernAbbrechenFuer(alt); if (istGeraeteseite()) spektrumLeihe.oeffnen(neu); fokus.melde({ kanal: neu }, 'instrumente'); },   // the chosen channel tab is the synth in front (controller follow)
+    kanaele: Object.keys(GRAPH_KANAL_ART).filter((k) => GRAPH_KANAL_ART[k] === 'instrument'), graphVon,
     hostNameVon: (k) => (graphVon(k) ? null : hostNamen[k] ?? null), bindeKnobs: bindeBkKnobs, zeigeGraphWahl, geraeteseite: istGeraeteseite });
+  fokus.registriere('instrumente', () => (instrumenteSichtbar() ? { kanal: instrumenteAnsicht.gewaehlt() } : null));   // window focus: the INSTRUMENTS area or the device page, while it is visible
   baueFxStreifen();
   bindeWerkzeug($('#fxstreifen'));
   bindeBus($('#fxstreifen'));

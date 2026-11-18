@@ -106,6 +106,14 @@ for (const k of BK_SEND_KANAELE) {
 // §1.5: 64 graph knobs master/bk/<m> of the effect graph on the DJ master sum; global (no channel), linear 0..1, default 0.5, everybody may
 for (let m = 1; m <= BK_REGLER_N; m++) tabelle.set(`master/bk/${m}`, { pfad: `master/bk/${m}`, kanal: null, ...r('linear', 0, 1, 0.5) });
 
+// Controller targets: spur/<slot>/bk/<k>, slot 1..8 (the n-th Baukasten track of the open project, bkSlot in ui/project/model.ts), k 1..64. The core rows
+// (core/signalbox/src/controls.cpp, SPUR_BK_SLOTS x SPUR_BK_KNOEPFE, appended last) are global (no channel), linear 0..1, default 0.5, everybody may; a value on
+// them is a transient override that is not in the project and that every playback rebuild clears.
+export const SPUR_BK_SLOTS = 8;
+for (let n = 1; n <= SPUR_BK_SLOTS; n++) {
+  for (let m = 1; m <= BK_REGLER_N; m++) tabelle.set(`spur/${n}/bk/${m}`, { pfad: `spur/${n}/bk/${m}`, kanal: null, ...r('linear', 0, 1, 0.5) });
+}
+
 // 1.15 A2 (§1.5, the 345 mix-tool rows): gate on the 13 live source channels, utility on those plus bus/1..4, multiband and channel
 // limiter on bus/1..4, one global spectrum row. erz/8 has no tool rows (cue only). All rows: everybody may, no "leiser machen"
 // (default deny, machtLeiser). Ranges and defaults equal tool_controls.h; tests/controls_info.test.ts compares both.

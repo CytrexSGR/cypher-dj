@@ -224,3 +224,18 @@ test('POST /presets/anwenden: a latency graph on a SEQ pattern track is refused 
   assert.deepEqual([r.code, r.j.fehler, typeof r.j.text], [409, 'graph_latenz', 'string']);
   assert.match(r.j.text, /SEQ/);
 });
+
+// A hidden duplicate (kategorien.json `verborgen`) is only left out of the pickers: its sound is listed and loads the graph.
+test('hidden instrument: its sound is listed in the sound list and graph_laden loads the hidden graph on a track and on a channel', async (t) => {
+  const s = await stapel(t, { graphen: () => [{ name: 'neu-a', art: 'instrument', latenz: 0, verborgen: true }, { name: 'alt', art: 'instrument', latenz: 0 }] });
+  assert.equal((await speichere(s)).code, 201);
+  const liste = await ruf(s.url, 'GET', '/presets?geraet=baukasten');
+  assert.ok(liste.j.some((e) => e.slug === 'neu-sound'), 'the sound list does not depend on the picker list');
+  const id = 'nutzer:baukasten/neu-sound';
+  const spur = await ruf(s.url, 'POST', '/presets/anwenden', { id, ziel: { art: 'spur', spur_id: 's2' }, graph_laden: true });
+  assert.equal(spur.code, 200, JSON.stringify(spur.j));
+  assert.equal(spur.j.befehle[0].geraet.graph, 'neu-a');
+  const kanal = await ruf(s.url, 'POST', '/presets/anwenden', { id, ziel: { art: 'kanal', kanal: 'erz/5' }, graph_laden: true });
+  assert.equal(kanal.code, 200, JSON.stringify(kanal.j));
+  assert.equal(kanal.j.graph?.name, 'neu-a');
+});

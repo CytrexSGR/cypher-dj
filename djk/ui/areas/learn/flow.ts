@@ -5,7 +5,7 @@
 // goes into the table of that place.
 // Every outcome goes out as SSE {a:'lernen', f:{stand, pfad, ...}} so every open page follows.
 import type { BereichKontext } from '../../http/router.ts';
-import { LernFehler, lernName, type Art, type LernSpeicher, type Typ } from './store.ts';
+import { LernFehler, lernName, type Art, type LernSpeicher, type Neu, type Typ } from './store.ts';
 
 export interface Zeit { setzen(f: () => void, ms: number): unknown; loeschen(h: unknown): void }
 export interface AblaufOptionen { fristMs?: number; zeit?: Zeit }
@@ -90,7 +90,9 @@ export class LernAblauf {
     const pfad = w.pfad, kanal = num(f.kanal), nr = num(f.nr), platz = num(f.quelle);
     if (platz >= 2) this.mehrPlaetze = true;
     if (platz === 0) { this.ctx.verteile({ a: 'lernen', f: { stand: 'hand_in', pfad, kanal, nr, text: HAND_IN_TEXT } }); return; }
-    if (num(f.belegt) === 1) { this.ctx.verteile({ a: 'lernen', f: { stand: 'belegt', pfad, kanal, nr } }); return; }
+    // `belegt` (the base mapping of the console uses this CC and channel) is not a reason to refuse: a controller place has its own port and its own table,
+    // so the same numbers on the console's device do not meet it. (Until 2026-11-18 this was refused: CC 14 on channel 1 is the master fader of the
+    // APC20, and encoder 2 of a Launch Control could not be learned.)
     this.kette = this.kette.then(() => this.speichere(pfad, kanal, nr, platz)).catch((e) => this.ctx.log({ typ: 'lernen_fehler', fehler: (e as Error)?.message ?? String(e) }));
   }
 
@@ -126,8 +128,35 @@ export class LernAblauf {
     return this.lade(plaetze, pfad, 'fertig', kanal, nr, platz);
   }
 
+  // Controller follow and presets: replace the knob entries (modus 'bk') or all learned entries (modus 'alle') of one place in one write, then reload the kern
+  // once for each place whose file changed. An unchanged table writes and reloads nothing. Resolves with how it ended, rejects with a LernFehler for a damaged file.
+  ersetze(platz: number, neu: Neu[], modus: 'bk' | 'alle' = 'bk'): Promise<{ stand: 'fertig' | 'ohne_antwort' | 'abgelehnt'; grund?: string; plaetze: number[]; gesetzt: Neu[]; kollidiert: Neu[] }> {
+    const lauf = this.kette.then(async () => {
+      let r;
+      try { r = this.speicher.ersetzeKnoepfe(platz, neu, modus); } catch (e) {
+        if (e instanceof LernFehler) this.ctx.verteile({ a: 'lernen', f: { stand: 'abgelehnt', pfad: neu[0]?.pfad ?? '', grund: e.grund } });
+        throw e;
+      }
+      if (r.plaetze.length === 0) return { stand: 'fertig' as const, ...r };
+      const pfad = r.gesetzt[0]?.pfad ?? neu[0]?.pfad ?? '';
+      const a = await this.kernLaden(r.plaetze, pfad);
+      if (a.stand === 'fertig') this.ctx.verteile({ a: 'lernen', f: { stand: 'ersetzt', platz, plaetze: r.plaetze } });
+      return a.stand === 'abgelehnt' ? { ...r, stand: a.stand, grund: a.grund } : { ...r, stand: a.stand };
+    });
+    this.kette = lauf.catch(() => undefined);
+    return lauf;
+  }
+
   // Ask the kern to reload the tables of the changed places and tell the pages how it went.
   private async lade(plaetze: number[], pfad: string, erfolg: 'fertig' | 'geloescht', kanal?: number, nr?: number, platz?: number): Promise<Ausgang> {
+    const a = await this.kernLaden(plaetze, pfad);
+    if (a.stand !== 'fertig') return a;
+    this.ctx.verteile({ a: 'lernen', f: { stand: erfolg, pfad, kanal, nr, ...(platz !== undefined ? { platz } : {}) } });
+    return a;
+  }
+
+  // The reload itself: one /k/mapping per changed place; the failure events go out here, the success event is the caller's.
+  private async kernLaden(plaetze: number[], pfad: string): Promise<Ausgang> {
     for (const p of plaetze) {
       if (p >= 2 && !this.mehrPlaetze) continue;   // see mehrPlaetze: the file is kept, the kern loads it at its next start
       const id = this.ctx.sende('/k/mapping', { geraet: lernName(p) });
@@ -139,7 +168,6 @@ export class LernAblauf {
       this.ctx.verteile({ a: 'lernen', f: { stand: 'abgelehnt', pfad, grund: q.grund || 'abgelehnt' } });
       return { stand: 'abgelehnt', grund: q.grund || 'abgelehnt' };
     }
-    this.ctx.verteile({ a: 'lernen', f: { stand: erfolg, pfad, kanal, nr, ...(platz !== undefined ? { platz } : {}) } });
     return { stand: 'fertig' };
   }
 }

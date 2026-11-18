@@ -51,7 +51,7 @@ export function neueSpurBefehl(p, eintrag) {
 // instrument_groups.js; graphs without the field under "Other") instead of one alphabetical list of over a hundred names. The first entry switches the axis;
 // the kits and the RB-338 follow in their own groups. `aktion(eintrag)` runs on a click; `umschalten` (the switch) comes from oeffneAchsenMenue.
 export function instrumentMenue(graphen, kits, behalte, aktion, achse, umschalten) {
-  return menuePunkte(geraetWahl(graphen, kits, behalte), graphen, achse, aktion, umschalten);
+  return menuePunkte(geraetWahl(graphen, kits, behalte), graphen, achse, aktion, umschalten, behalte);
 }
 // Opens that menu where the button is; the switch reopens it there.
 export function oeffneInstrumentMenue(graphen, kits, behalte, aktion, oeffne) {

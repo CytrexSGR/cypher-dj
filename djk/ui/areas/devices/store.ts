@@ -9,23 +9,30 @@ export interface Latenz { samples: number; streuung: number; min: number; max: n
 export interface AudioZuordnung { knoten: string; ports: string[] }
 export interface Eingang { k: number; name: string; profil: string | null; audio: AudioZuordnung | null; frei_fuer_cypher: boolean; latenz: Latenz | null }
 // versatz_samples (1.8 T8): how late the player's notes arrive against the music he heard, 0..48000; absent means 0. Only Andreas sets it (the measurement is his).
-export interface MidiZuordnung { profil: string | null; port: string | null; frei_fuer_cypher: boolean; versatz_samples?: number }
+// folgen (controller follow): place 1 follows the focused synth (see ControllerPlatz.folgen); absent means false.
+export interface MidiZuordnung { profil: string | null; port: string | null; frei_fuer_cypher: boolean; versatz_samples?: number; folgen?: boolean }
 export const MIDI_VERSATZ_MAX = 48000;
 // Controller places: the kern has eight raw MIDI inputs midi_ein_1..8, each with its own learn table, so the same CC of two devices never collides.
 // Place 1 is `midi.port` (the playing input with its offset and release); `controller` holds the places 2..8. The key is optional: a file without
 // it is a file with one place.
 export const CONTROLLER_PLAETZE = 8;
-export interface ControllerPlatz { platz: number; port: string; name?: string }
+// folgen: the place takes the learn entries of the synth in front (areas/controller/sequences.ts); absent means false. Place 1 keeps the same flag as midi.folgen.
+export interface ControllerPlatz { platz: number; port: string; name?: string; folgen?: boolean }
 export interface Konfig { format: typeof FORMAT; eingaenge: Eingang[]; midi: MidiZuordnung; controller?: ControllerPlatz[] }
 /** The device part of a JACK port name as the kern sees it: "Midi-Bridge:LPD8: MIDI 1 (capture)" -> "LPD8". */
 export const portGeraeteName = (port: string): string => { const t = port.split(':'); return (t.length >= 3 ? t[1] : t[0]).trim() || port; };
 /** Every assigned place in order: place 1 from `midi.port`, the others from `controller`. */
-export function controllerPlaetze(k: Konfig): Required<ControllerPlatz>[] {
-  const aus: Required<ControllerPlatz>[] = [];
+/** A controller place as the lists show it: the follow flag is read with folgenVon, not carried here. */
+export type ControllerZeile = Required<Omit<ControllerPlatz, 'folgen'>>;
+export function controllerPlaetze(k: Konfig): ControllerZeile[] {
+  const aus: ControllerZeile[] = [];
   if (k.midi.port) aus.push({ platz: 1, port: k.midi.port, name: portGeraeteName(k.midi.port) });
   for (const c of k.controller ?? []) aus.push({ platz: c.platz, port: c.port, name: c.name ?? portGeraeteName(c.port) });
   return aus.sort((a, b) => a.platz - b.platz);
 }
+
+/** Does the controller place follow the focused synth? Place 1 by `midi.folgen`, the places 2..8 by their `controller` entry. */
+export const folgenVon = (k: Konfig, platz: number): boolean => (platz === 1 ? k.midi.folgen === true : (k.controller ?? []).find((c) => c.platz === platz)?.folgen === true);
 
 export class GeraeteFehler extends Error {
   readonly grund: string;
@@ -72,7 +79,8 @@ export function pruefeKonfig(j: unknown): Konfig {
     }
   });
   const m = objekt(o.midi, 'midi');
-  nurSchluessel(m, ['profil', 'port', 'frei_fuer_cypher', 'versatz_samples'], 'midi');
+  nurSchluessel(m, ['profil', 'port', 'frei_fuer_cypher', 'versatz_samples', 'folgen'], 'midi');
+  if ('folgen' in m && typeof m.folgen !== 'boolean') defekt('midi.folgen: true or false expected');
   if ((m.profil !== null && (typeof m.profil !== 'string' || !profil(m.profil))) || (m.port !== null && !portName(m.port)) || typeof m.frei_fuer_cypher !== 'boolean') defekt('midi');
   if (m.frei_fuer_cypher && (m.port === null || m.profil === null)) defekt('midi: a release needs a device');
   if ('versatz_samples' in m && (!Number.isInteger(m.versatz_samples) || (m.versatz_samples as number) < 0 || (m.versatz_samples as number) > MIDI_VERSATZ_MAX)) {
@@ -83,7 +91,8 @@ export function pruefeKonfig(j: unknown): Konfig {
     const plaetze = new Set<number>(), ports = new Set<string>(m.port === null ? [] : [m.port as string]);
     (o.controller as unknown[]).forEach((x, i) => {
       const c = objekt(x, `controller[${i}]`);
-      nurSchluessel(c, ['platz', 'port', 'name'], `controller[${i}]`);
+      nurSchluessel(c, ['platz', 'port', 'name', 'folgen'], `controller[${i}]`);
+      if ('folgen' in c && typeof c.folgen !== 'boolean') defekt(`controller[${i}].folgen: true or false expected`);
       if (!Number.isInteger(c.platz) || (c.platz as number) < 2 || (c.platz as number) > CONTROLLER_PLAETZE || plaetze.has(c.platz as number)) defekt(`controller[${i}].platz: a free place from 2 to ${CONTROLLER_PLAETZE} expected`);
       if (!portName(c.port) || ports.has(c.port)) defekt(`controller[${i}].port: a port name that no other place holds expected`);
       if ('name' in c && (typeof c.name !== 'string' || c.name.length < 1 || c.name.length > 40)) defekt(`controller[${i}].name`);

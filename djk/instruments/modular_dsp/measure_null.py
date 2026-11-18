@@ -59,6 +59,7 @@ PROBEN = {
     "kit808": ["--hits", "36@0:0.9,38@0.75:0.9,39@1.5:0.9,37@2.25:0.9,42@3:0.9,44@3.5:0.9,46@4:0.9,41@5:0.9,45@5.5:0.9,48@6:0.9,49@6.5:0.9,51@9:0.9,"
                "35@12:0.9,56@13:0.9,75@14:0.9", "--off", "0.2", "--dauer", "16"],
 }
+AUFW_POLY_BASIS = "3b54ff71f23372a012c2ba7abb72a0f2f38dc17d"   # main when the synth upgrade wave 1 plan was committed
 DRIFT_VOR = "62dac099^"      # the commit before the Drift knob: the old side of the harness proof
 
 
@@ -87,10 +88,23 @@ MONO = "djk/instruments/modular_dsp/demos/synth-mono.json"
 NEURO = "djk/instruments/modular_dsp/demos/synth-neuro.json"
 # the 8 factory presets of synth-mono that carry knobs 1..32 only (the two newer ones use knobs 33..60, so they are no null case)
 SYNTH_MONO_WERK = tuple(f"synth-mono-{n}" for n in ("acid-303", "dnb-sub", "goa-lead", "hoover-growl", "house-bass", "ms-20-screamer", "rolling-techno-bass", "sync-lead"))
+# every factory preset synth-mono has today (the two newer ones use knobs 33..60, which exist on both sides of the wave-1 null)
+SYNTH_MONO_ALLE = SYNTH_MONO_WERK + ("synth-mono-dub-bass", "synth-mono-evolving-lead")
 # the eight factory presets synth-poly had before the build-out: the null cases of the poly entries (the presets of the build-out use new knobs; the glob
 # `presets` of such an entry matches nothing on purpose, `presets_extra` names the files)
 POLY_ALTE = dict(presets="synth-poly-(nur-alte)", presets_extra=tuple(f"synth-poly-{n}" for n in (
     "brass", "detroit-strings", "dnb-atmosphere", "goa-lead-stack", "house-chord-stab", "juno-pad", "pluck", "trance-supersaw")))
+# the wavetable graphs of the synth upgrade (wave 1, task D): the commit the plan was cut from is the old side
+WT = "djk/instruments/modular_dsp/demos/"
+WT_BASIS = "3b54ff71f"
+WT_WARP = [("warp bend", {10: 1 / 3}), ("warp asym", {10: 2 / 3}), ("warp sync", {10: 1.0}),
+           ("warp bend -1", {10: 1 / 3, 11: 0.0}), ("warp bend +1", {10: 1 / 3, 11: 1.0}), ("warp asym -1", {10: 2 / 3, 11: 0.0}),
+           ("warp asym +1", {10: 2 / 3, 11: 1.0}), ("warp sync +1", {10: 1.0, 11: 1.0}), ("warp bend +1, chord", {10: 1 / 3, 11: 1.0}, "rampe")]
+WT_STAPEL = [("stack octave", {12: 0.5}), ("stack octave + fifth", {12: 1.0}), ("stack octave + fifth, chord", {12: 1.0}, "rampe")]
+WT_CHAOS = [("chaos to position +1", {14: 1.0}), ("chaos to position -1", {14: 0.0}), ("chaos fast", {13: 1.0, 14: 1.0}), ("chaos slow", {13: 0.0, 14: 1.0})]
+# F knobs behind an Off selector or a zero amount: byte equal to the null state at both stops, alone and together
+WT_GLEICH = [(f"{n} {v}", {k: v}, "linie") for n, k in (("warp depth", 11), ("chaos rate", 13)) for v in (0.0, 1.0)] + [
+    ("all F at 0", {11: 0.0, 13: 0.0}, "rampe"), ("all F at 1", {11: 1.0, 13: 1.0}, "rampe")]
 GRAPHEN = {
     # harness proof: the Drift work. Knob 28 at 0.0 must reproduce the result of measure_drift_hull.py ...
     "poly-drift-aus": Graph(neu=POLY, alt_ref=DRIFT_VOR, **POLY_ALTE, neue=(28,), null_zustand={28: 0.0},
@@ -107,6 +121,17 @@ GRAPHEN = {
                                   ("delay mix", {57: 1.0}), ("reverb mix", {59: 1.0}), ("chorus", {53: 1.0}), ("master tune", {50: 1.0}),
                                   ("osc1 octave", {51: 1.0}), ("osc1 fine", {52: 1.0}), ("filter attack", {33: 1.0}),
                                   ("filter release", {34: 0.0}), ("amp attack", {35: 1.0})]),
+    # synth-mono upgrade wave 1 (plan 2026-11-18, Task A): knobs 58 (chaos rate), 61 (chaos to cutoff), 62 (chaos to osc 2 pitch), 63 (clean sub).
+    # The old side is the graph before that wave (the commit the branch was cut from; `--alt` overrides). Null cases: the default, all ten factory
+    # presets synth-mono has today (they use knobs that exist on both sides) and the chord / velocity probe. Knob 58 is free and reaches the
+    # sound only through 61 and 62, so it must stay byte equal at both ends of its travel (`gleich_faelle`, both probes).
+    "synth-mono-neu": Graph(
+        neu=MONO, alt_ref="3b54ff71f", presets_extra=SYNTH_MONO_ALLE, neue=(58, 61, 62, 63),
+        merkmale=[("chaos cutoff +1", {61: 1.0}), ("chaos cutoff -1", {61: 0.0}), ("chaos osc2 pitch +1", {62: 1.0}),
+                  ("chaos osc2 pitch -1", {62: 0.0}), ("clean sub", {63: 1.0}), ("clean sub half", {63: 0.5}, "rampe"),
+                  ("chaos cutoff fast", {61: 1.0, 58: 1.0}), ("chaos cutoff slow", {61: 1.0, 58: 0.0}),
+                  ("chaos both and sub", {61: 0.75, 62: 0.75, 63: 0.5}, "rampe")],
+        gleich_faelle=[(f"chaos rate {w} alone ({p})", {58: w}, p) for w in (0.0, 1.0) for p in ("linie", "rampe")]),
     # synth-neuro (Task 13): knobs 25..45 (44 stays free). LFO 2 target knob = option / 4 (Cutoff Fold Pitch Drive Amp); the sync knob
     # position 3 / 6 = 1/4 note. Velocity depth is class G here (the old graph has no velocity path, see build_synth_neuro.py).
     "synth-neuro": Graph(neu=NEURO, presets_extra=tuple("synth-neuro-" + n for n in (
@@ -118,6 +143,30 @@ GRAPHEN = {
         ("key follow", {37: 1.0}), ("velocity depth", {38: 1.0}), ("velocity to cutoff +1", {39: 1.0}),
         ("master tune +1", {40: 1.0}), ("delay mix", {43: 0.5}), ("reverb mix", {45: 0.5}),
     ]),
+    # synth-neuro upgrade, wave 1: knobs 46..56 (warp, stack, phase mod, chaos, drift), old side = the commit the branch was cut from
+    # (`--alt $(git merge-base HEAD main)`). Null cases: default (linie and rampe), every factory preset of synth-neuro (`synth-neuro-*`).
+    # Warp mode / stack positions are knob positions: warp 1/3 bend, 2/3 asym, 1 sync; stack 0.5 octave, 1 octave + fifth.
+    # Class F knobs behind an "off" must leave the null state byte equal, at both ends (`gleich_faelle`).
+    "synth-neuro-aufwertung": Graph(
+        neu=NEURO, presets="synth-neuro", neue=tuple(range(46, 57)), null_proben=("rampe",),
+        gleich_faelle=[
+            *[(f"warp off, depth {w} {p}", {47: w}, p) for w in (0.0, 1.0) for p in ("linie", "rampe")],
+            ("warp off, lfo1 to depth +1", {48: 1.0}, "linie"), ("warp off, lfo1 to depth -1", {48: 0.0}, "linie"),
+            *[(f"phase mod 0, ratio {i}", {51: i / 4}, "linie") for i in range(5)],
+            *[(f"chaos amounts 0, rate {r}", {52: r}, "linie") for r in (0.0, 0.5, 1.0)],
+        ],
+        merkmale=[
+            *[(f"warp {m} depth {d}", {46: v, 47: dv}) for m, v in (("bend", 1 / 3), ("asym", 2 / 3), ("sync", 1.0)) for d, dv in (("-1", 0.0), ("+1", 1.0), ("default", 0.75))],
+            ("lfo1 to warp depth +1", {46: 1 / 3, 48: 1.0}), ("lfo1 to warp depth -1", {46: 1 / 3, 48: 0.0}),
+            ("stack octave", {49: 0.5}, "rampe"), ("stack octave + fifth", {49: 1.0}, "rampe"),
+            *[(f"phase mod ratio {r}", {50: 0.5, 51: i / 4}) for i, r in enumerate((0.5, 1, 2, 3, 4))],
+            ("phase mod max", {50: 1.0, 51: 1.0}),
+            ("chaos to wave +1", {53: 1.0}), ("chaos to wave -1", {53: 0.0}), ("chaos to wave, rate max", {53: 1.0, 52: 1.0}),
+            ("chaos to cutoff +1", {54: 1.0}), ("chaos to cutoff -1", {54: 0.0}),
+            ("chaos to fold +1", {55: 1.0}), ("chaos to fold -1", {55: 0.0}),
+            ("drift", {56: 1.0}),
+            ("all new on, extreme", {46: 1 / 3, 47: 0.0, 49: 1.0, 50: 1.0, 51: 1.0, 53: 1.0, 54: 1.0, 55: 1.0, 56: 1.0}, "rampe"),
+        ]),
     # drums (backlog sound, task 1): the seven per-group level knobs 33..39 (dB, vorgabe 0.5 = 0 dB). The factory presets carry knobs 1..32 only.
     # On the 909 knob 39 has no drum (note 56 is a crash there, note 75 silent): its case must be byte equal, on the probe that plays both.
     "drums-909": Graph(neu="djk/instruments/modular_dsp/demos/drums-909.json", alt_ref="b69e82be", presets="drums-909", neue=tuple(range(33, 40)),
@@ -141,11 +190,59 @@ GRAPHEN = {
             ("velocity to cutoff", {56: 1.0}), ("master tune", {57: 1.0}),
             ("filter attack", {29: 1.0}), ("filter release", {30: 0.0}), ("velocity depth", {55: 1.0}, "rampe"), ("lfo shape saw", {44: 0.0, 24: 1.0}),
         ]),
+    # synth-poly upgrade wave 1 (Task B of 2026-11-18-synth-upgrade-new-blocks.md): table position, warp, stack, phase mod and chaos on top of the
+    # build-out. Old side = the graph at the commit the branch was cut from (`git merge-base HEAD main`); null cases = default, EVERY factory preset
+    # synth-poly has (the glob matches all ten), the chord/velocity probe. Run: python3 measure_null.py run synth-poly-aufw --alt $(git merge-base HEAD main)
+    # knob positions: 45 position (centre = the saw), 52/64 bipolar (0.5 = off), 59 warp mode = mode / 3, 60 depth -1..1, 61 stack = option,
+    # 53 phase mod 0..0.5 cycles, 58 ratio option / 6 (0.5 1 2 3 4 5 7), 62 chaos rate, 63 chaos to cutoff bipolar
+    "synth-poly-aufw": Graph(
+        neu=POLY, alt_ref=AUFW_POLY_BASIS, presets="synth-poly",
+        merkmale=[
+            ("position 0", {45: 0.0}), ("position 1", {45: 1.0}), ("position 0.3", {45: 0.3}),
+            ("mod env to position +1", {52: 1.0, 45: 0.2}), ("mod env to position -1", {52: 0.0, 45: 0.8}),
+            ("chaos to position +1", {64: 1.0}), ("chaos to position -1", {64: 0.0}), ("chaos position fast", {64: 1.0, 62: 0.9}),
+            ("chaos to cutoff +1", {63: 1.0}), ("chaos to cutoff -1", {63: 0.0}),
+            *[(f"warp {m} depth {d:+d}", {59: i / 3, 60: 0.5 + 0.5 * d}) for i, m in ((1, "bend"), (2, "asym"), (3, "sync")) for d in (1, -1)],
+            ("warp sync depth 0.5", {59: 1.0, 60: 0.75}),
+            ("stack octave", {61: 1.0}, "rampe"),
+            ("phase mod 0.5 ratio 2", {53: 1.0}), ("phase mod 0.25 ratio 2", {53: 0.5}),
+            *[(f"phase mod ratio {r}", {53: 0.6, 58: i / 6}) for i, r in enumerate(("0.5", "1", "2", "3", "4", "5", "7"))],
+            ("phase mod max + warp bend +1, ratio 7", {53: 1.0, 58: 1.0, 59: 1 / 3, 60: 1.0}),
+            ("phase mod max + warp asym -1, ratio 7", {53: 1.0, 58: 1.0, 59: 2 / 3, 60: 0.0}),
+            ("phase mod max + warp sync +1, ratio 7", {53: 1.0, 58: 1.0, 59: 1.0, 60: 1.0}),
+            ("everything on", {45: 0.8, 52: 1.0, 64: 1.0, 63: 1.0, 59: 1 / 3, 60: 1.0, 61: 1.0, 53: 1.0, 58: 1.0}, "rampe"),
+        ],
+        # review focus: an N selector at its first position with the F knobs behind it at ANY value is still the old sound
+        gleich_faelle=[
+            *[(f"F knobs at {w} {pr}", {58: w, 60: w, 62: w}, pr) for w in (0.0, 1.0) for pr in ("linie", "rampe")],
+            *[(f"ratio {i}", {58: i / 6}, "linie") for i in range(7)],
+            ("warp depth only", {60: 0.0}, "rampe"), ("chaos rate only", {62: 1.0}, "rampe"),
+            ("ratio and rate together", {58: 1.0, 62: 0.0}, "rampe"),
+        ]),
     # recipe graph drums-kick (backlog sound, task 7): knob 7 Pitch decay is new, the Tune range grows downwards to 36 Hz and `mitte`
     # keeps knob position 0.5 at the old value; the base is the commit before the change
     "drums-kick-rezept": Graph(
         neu="djk/instruments/modular_dsp/demos/recipes/drums-kick.json", alt_ref="ae343277d", presets="drums-kick", neue=(7,),
         merkmale=[("pitch decay 0", {7: 0.0}), ("pitch decay 1", {7: 1.0})]),
+    # synth upgrade wave 1, task D: knobs 10.. of the three wavetable graphs (null state = every new knob at its vorgabe; the F knobs behind an
+    # Off selector or a zero amount must not change a bit, `gleich_faelle`). Warp mode knob position = option / 3, stack = option / 2.
+    "wavetable-reese": Graph(
+        neu=WT + "wavetable-reese.json", alt_ref=WT_BASIS, presets="wavetable-reese",
+        merkmale=[*WT_WARP, *WT_STAPEL, *WT_CHAOS, ("sub", {15: 1.0}), ("sub octave -2", {15: 1.0, 16: 1.0}), ("phase mod", {17: 1.0}),
+                  ("phase mod half", {17: 0.5}), ("phase mod max + bend 1", {17: 1.0, 10: 1 / 3, 11: 1.0}), ("band drive", {18: 1.0}),
+                  ("band drive half", {18: 0.5})],
+        gleich_faelle=[*WT_GLEICH, ("sub octave alone", {16: 1.0}, "linie")]),
+    "wavetable-supersaw": Graph(
+        neu=WT + "wavetable-supersaw.json", alt_ref=WT_BASIS, presets="wavetable-supersaw",
+        merkmale=[*WT_WARP, *WT_STAPEL, *WT_CHAOS, ("chorus I", {15: 1.0}), ("chorus II", {15: 1.0, 16: 0.5}), ("chorus I+II", {15: 1.0, 16: 1.0}),
+                  ("chorus I, chord", {15: 1.0}, "rampe")],
+        gleich_faelle=[*WT_GLEICH, ("chorus mode alone", {16: 1.0}, "linie")]),
+    "wavetable-chor": Graph(
+        neu=WT + "wavetable-chor.json", alt_ref=WT_BASIS, presets="wavetable-chor",
+        merkmale=[*WT_WARP, *WT_STAPEL, *WT_CHAOS, ("phase mod", {15: 1.0}), ("phase mod half", {15: 0.5}),
+                  ("phase mod max + bend 1", {15: 1.0, 10: 1 / 3, 11: 1.0}), ("chorus I", {16: 1.0}), ("chorus II", {16: 1.0, 17: 0.5}),
+                  ("chorus I+II", {16: 1.0, 17: 1.0}), ("chorus I, chord", {16: 1.0}, "rampe")],
+        gleich_faelle=[*WT_GLEICH, ("chorus mode alone", {17: 1.0}, "linie")]),
 }
 
 
@@ -264,7 +361,7 @@ def laufen(name, cfg, alt_ref=None, arbeit=None):
 
     ergebnis = {"graph": name, "alt_ref": ref, "neue_knoepfe": neue, "null": {}, "merkmale": {}, "gleich": {}, "extreme": {}}
     ok = True
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=int(os.environ.get("MESSE_NULL_ARBEITER", "4"))) as pool:
         # set 1: null
         nullfaelle = [("standard", "linie", {}), ("standard-rampe", "rampe", {})]
         nullfaelle += [(p.name.replace(".preset.json", ""), "linie", preset_knoepfe(p)) for p in preset_dateien(cfg)]

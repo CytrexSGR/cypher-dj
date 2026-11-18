@@ -15,11 +15,17 @@ scrolled away or collapsed.
 
 ![Cypher Modular: the eight instrument knobs of a patch in the expanded EFFECTS view](screens/instrument-knobs.png)
 
-![Device page of Mono Synth, MAIN tab: oscillators, mixer, filter with response curve, envelopes, LFO and voice](screens/device-page-mono-synth.png)
+![Device page of Mono Synth, MAIN tab: oscillators, mixer with sub and clean sub, filter with response curve, tuning, envelopes, LFO, voice and amp](screens/device-page-mono-synth.png)
 
-![Device page of Mono Synth, MOD tab: modulation envelope, second LFO with sync and target, velocity](screens/device-page-mono-synth-mod.png)
+![Device page of Mono Synth, MOD tab: modulation envelope, second LFO with sync and target, velocity and the chaos LFO](screens/device-page-mono-synth-mod.png)
 
 ![Device page of Poly Synth: oscillator, second oscillator, unison, filter, envelopes, LFO, chorus, voice and tuning](screens/device-page-poly-synth.png)
+
+![Device window of a synth track driven by a Launch Control 3: the controller strip names every knob and button of the page in its section colour, the knobs on the panel carry their number](screens/device-window.png)
+
+![PRODUCTION track heads: the track the controllers drive is framed and marked CTL](screens/production-controllers.png)
+
+![Controllers window: every device with its state and FOLLOW, the learn bar and the list of all mapped controls](screens/controllers-window.png)
 
 ![Media library: tracks filtered by a search word, with key, tempo, length, loudness and a load button per deck](screens/library-browser.png)
 

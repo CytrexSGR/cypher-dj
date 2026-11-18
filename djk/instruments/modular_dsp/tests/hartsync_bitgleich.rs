@@ -122,8 +122,14 @@ fn alle() -> Vec<(String, u64)> {
         }
         // the wave envelope (knob 7 of the wavetable graphs) is bipolar and +1 at "all knobs 1": keep it off (0.5), so the pin
         // still means "bit-identical to the graph from before the envelope existed"
+        // The same for every knob the synth upgrade added (10 and up: warp, stack, chaos, sub, phase mod, band drive, chorus):
+        // "all knobs 1" keeps them at their graph's start value, so the pin still means "bit-identical to the graph before the upgrade".
         if name.starts_with("wavetable-") {
             p.setze_regler(7, 0.5);
+            let vor = p.regler_vorgaben();
+            for k in 10..=REGLER {
+                p.setze_regler(k, vor[k - 1]);
+            }
         }
         v.push((format!("{name}@1"), fingerabdruck(&spiele(&mut p))));
     }

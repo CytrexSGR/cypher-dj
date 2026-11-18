@@ -101,13 +101,14 @@ body.produktion .preset-kopf select { max-width: 14ch; }
 .p-leer { position: absolute; inset: 28px 0 0 0; display: flex; align-items: center; justify-content: center; color: var(--dim); font-size: 14px; pointer-events: none; }
 .p-leer[hidden] { display: none; }
 
-/* Spurkopf: 64 px wie eine Spurzeile (layout.js SPUR_HOEHE). Neun Spalten: Farbe | Name | Gerät | ↑ | ↓ | M | S | (frei) | ✕; Zeile 2 endet mit AUTO ● in Spalte 9 (task 9) */
-.p-kopf { height: 64px; box-sizing: border-box; display: grid; grid-template-columns: 10px minmax(0, 1fr) auto 18px 18px 22px 22px 18px 36px;
+/* Track head: 64 px like a track row (layout.js SPUR_HOEHE). Nine columns: colour | name | device | ↑ | ↓ | M | S | (free) | ✕; row 2 ends with AUTO ● in column 9. Name and device share their width 1:1 whatever the texts are, so fader and pan have the same length in every head (Andreas 2026-11-18) */
+.p-kopf { height: 64px; box-sizing: border-box; display: grid; grid-template-columns: 10px minmax(0, 1fr) minmax(0, 1fr) 18px 18px 22px 22px 18px 36px;
   grid-template-rows: 20px 18px 14px; gap: 2px 4px; padding: 3px 6px 3px 0; border-bottom: 1px solid var(--line); font-size: 11px; }
 .p-farbe { grid-column: 1; grid-row: 1 / -1; width: 10px; padding: 0; border: 0; border-radius: 0; background: var(--farbe); }
 .p-spurname { grid-column: 2; grid-row: 1; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; align-self: center; }
 .p-namefeld { grid-column: 2 / 4; grid-row: 1; font: inherit; min-width: 0; }
-.p-geraet { grid-column: 3; grid-row: 1; color: var(--dim); font-size: 9px; letter-spacing: .08em; align-self: center; white-space: nowrap; }
+.p-geraet { grid-column: 3; grid-row: 1; color: var(--dim); font-size: 9px; letter-spacing: .08em; align-self: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }   /* a long device text is cut, it never widens the head: every fader has the same length (Andreas 2026-11-18) */
+.p-fenster-auf { grid-column: 8; grid-row: 1; font-size: 10px; font-weight: 800; padding: 0; border-radius: 4px; }   /* OPEN ↗: the device in its own window */
 .p-hoch, .p-runter, .p-mute, .p-solo, .p-loeschen { grid-row: 1; font-size: 10px; font-weight: 800; padding: 0; border-radius: 4px; }
 .p-hoch { grid-column: 4; } .p-runter { grid-column: 5; } .p-mute { grid-column: 6; } .p-solo { grid-column: 7; } .p-loeschen { grid-column: 9; }   /* ✕ at the right edge (column 9, task 9) */
 .p-kopf button:disabled { opacity: .3; cursor: default; }

@@ -1,5 +1,5 @@
 // Effekt-Sektion (Plan 2026-10-11-effekt-sektion.md): reine Rechenteile, ohne DOM (getestet in tests/effects.test.mjs).
-import { GRAPH_KATEGORIEN, gruppenVon, gruppeVon, mitNeben, sortiere } from './instrument_groups.js';
+import { GRAPH_KATEGORIEN, gruppenVon, gruppeVon, mitNeben, ohneVerborgene, sortiere } from './instrument_groups.js';
 
 // Startpunkte wie die Presets des VST3 (djk/instruments/comp/presets/presets.json). Der Sidechain heißt im Kern komp/sc
 // (Schlüssel = Quellkanal + 1); „Kick Sidechain“ hört auf DRUMS (erz/1 = 5), alle anderen setzen ihn ausdrücklich zurück.
@@ -152,8 +152,9 @@ export function graphWahlOptionen(kanal, graphen, geladenName, host) {
   const art = GRAPH_KANAL_ART[kanal];
   if (!art) return [];
   const gewaehlt = geladenName ?? '';
-  const eintraege = (graphen ?? []).filter((g) => g.art === art);
-  const namen = eintraege.map((g) => g.name);
+  const alle = (graphen ?? []).filter((g) => g.art === art);
+  const namen = alle.map((g) => g.name);
+  const eintraege = ohneVerborgene(alle, gewaehlt);   // a hidden duplicate is not offered, but stays as the selected one where it is loaded
   const inst = art === 'instrument';
   const leer = GRAPH_HOST_KANAELE.includes(kanal) ? { wert: '', text: host || 'Surge XT', gewaehlt: gewaehlt === '', host: true } : { wert: '', text: inst ? 'Off' : '—', gewaehlt: gewaehlt === '' };
   // kategorie and prinzip stay as the file gave them (possibly absent or unknown): gruppeVon decides the group, so no graph drops out of a picker

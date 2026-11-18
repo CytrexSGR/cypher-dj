@@ -9,8 +9,8 @@ plays the arrangement, on the same sample clock.
 ## Tracks, groups, returns, master
 
 Up to 32 tracks, 16 group tracks and 4 returns. Every track goes to the production master or into one group, and a group can go into another group: a DRUMS group can hold a KICK, a PERC and a HATS group, each with its own inserts, fader and sends. Audio tracks
-take samples and tracks dragged from the library; instrument tracks play the RB-338, a Cypher Modular graph (up to 8 such
-tracks) or one hosted Surge XT. Per track: volume, pan, mute, solo, a meter. Every change is one undo step, and the undo
+take samples and tracks dragged from the library; instrument tracks play the RB-338, a Cypher Modular graph (up to 16 such
+tracks) or a hosted instrument plugin (Surge XT or a third-party plugin, two such slots). Per track: volume, pan, mute, solo, a meter. Every change is one undo step, and the undo
 history survives a restart.
 
 A return takes sends from every track and group (four sends per strip, taken after the fader and pan) and can carry
@@ -64,13 +64,12 @@ Limits:
 
 ## Inserts, sidechain, macros
 
-Each track, group, return and the production master has an insert chain of up to four stages. A stage is one of our own
-devices from a pool that the whole project shares: 12 compressors, 2 EQs, 1 saturator and 1 limiter. The chain of a
+Each track, group, return and the production master has an insert chain of up to five stages. A stage is one of our own
+devices from a pool that the whole project shares: 12 compressors, 8 EQs, 4 saturators, 2 limiters and 8 utilities (stereo width and bass mono), plus a Cypher Modular effect graph as a stage. The chain of a
 return sits after its Hall, the chain of the master before the master fader (so the export carries it). A bypass is a
-10 ms blend; every stage shows its gain reduction. Stages that add latency (EQ and saturator 69 samples, limiter 74
+10 ms blend; every stage shows its gain reduction. Stages that add latency (EQ and saturator 69 samples, limiter 86
 samples at 48 kHz) are compensated across tracks and groups, up to 1024 samples per place. The limiter looks ahead 1.5 ms
-and works on sample peaks: a clip whose master sum peaks at +2.969 dBFS renders at -1.001 dBFS with a ceiling of
--1 dBFS. Because the master chain runs before the master fader, the ceiling holds with the fader at 0 dB or below.
+and detects true peaks between the samples (4x oversampled); a test tone at +6 dBFS stays under a ceiling of -1 dBFS. Because the master chain runs before the master fader, the ceiling holds with the fader at 0 dB or below.
 
 A compressor can be keyed by another track (the Key selector on the stage). Through the agent's tools and in the project
 file it can also be keyed by a group, a return, a DJ deck (1 to 4) or the drum channel; a key that would depend on the
@@ -96,7 +95,7 @@ Grabbing a track's fader, pan, mute or solo by hand overrides its lane; the page
 With a track armed for automation, the hand is recorded into its lanes in one of three modes: Touch (only the span of the
 gesture is written), Latch (after the release the last value holds until stop) or Write (everything from start to stop
 is overwritten). Clips carry envelopes of their own: gain on audio clips, transpose on MIDI clips, and relative track
-volume and pan on any clip. Lanes for insert, send and Cypher Modular parameters do not exist yet.
+volume and pan on any clip. Lanes for the parameters of insert stages, the rack macros and the knobs of a Cypher Modular track exist as well, drawn or recorded from the hand.
 
 ## Takes, comping, bounce, merge
 
@@ -111,7 +110,7 @@ track at a beat, overwriting that track's main lane there. All of them are an of
 
 ## Presets
 
-A browser for presets of our own devices (EQ, Hall, compressor, saturator, RB-338, Cypher Modular): 48 factory presets,
+A browser for presets of our own devices (EQ, Hall, compressor, saturator, RB-338, Cypher Modular): 191 factory presets,
 your own, and collections of samples, presets and devices. Presets are described with words from one closed vocabulary,
 and the agent can search them by those words. Drag a preset onto a track, a stage or a strip row, or save the current
 state of a target as a new preset.

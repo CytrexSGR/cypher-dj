@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """pult_bruecke: one MIDI source for the kern's hand_in, made from all hardware controllers of the DJ desk.
 
-- Akai APC20 (class-compliant MIDI, channels 1..8) is forwarded unchanged.
+- Akai APC20 (class-compliant MIDI, channels 1..8) is forwarded unchanged, except while the main window shows PRODUCTION: then
+  apc_production.py makes it the project mixer (channel 16 to the kern, bank and arm through the page server).
 - Traktor Kontrol S8 (HID, no MIDI of its own) is read over usbfs (interface 5) and turned into MIDI on channels 9..15
   (layout in s8_map.py).
 - Maschine MK2 (HID) is the Baukasten desk: group buttons pick a channel, encoders turn its graph knobs (mk2.py, via the
@@ -31,6 +32,7 @@ import s8_usb  # noqa: E402
 import assignment as belegung  # noqa: E402
 import deck_page as deck_seite  # noqa: E402
 import lc3  # noqa: E402
+import apc_production as apc_produktion  # noqa: E402
 
 try:
     import mk2  # noqa: E402  (needs numpy and Pillow)
@@ -69,6 +71,7 @@ class Bruecke:
         self.stop = threading.Event()
         self.s8_leds_verworfen = 0
         self.deck = deck_seite.DeckSeite(log)  # hot cues and loop through the page server (not in the kern hand path yet)
+        self.apc = apc_produktion.ApcProduktion(log, self.zum_apc, self.senden)  # the APC20 as the project mixer while the main window shows PRODUCTION
         self.strip_zeit = {}  # side -> time of the last needle-search jump
         self.strip_griff = {}  # side -> grip state while the strip holds the deck without SHIFT (bend or scratch)
         self.strip_sprung = {}  # side -> {"start", "gesendet"} while SHIFT + strip seeks
@@ -84,6 +87,10 @@ class Bruecke:
     def senden(self, data):
         with self.lock:
             self.seq.send(self.p_hand, data)
+
+    def zum_apc(self, data):
+        with self.lock:
+            self.seq.send(self.p_apc_aus, data)
 
     # -- S8 -------------------------------------------------------------------------------------------------------
     def s8_schleife(self):
@@ -371,6 +378,7 @@ class Bruecke:
         threading.Thread(target=self.anzeige_schleife, daemon=True).start()
         threading.Thread(target=self.mk2_schleife, daemon=True).start()
         threading.Thread(target=lc3.lauf, args=(self.stop, log), daemon=True).start()   # Launch Control 3: LEDs and display follow the learn table
+        self.apc.starte(self.stop)   # APC20: DJ console or, while the main window shows PRODUCTION, the project mixer (apc_production.py)
         naechste = 0.0
         while not self.stop.is_set():
             if time.monotonic() >= naechste:
@@ -383,6 +391,9 @@ class Bruecke:
                 continue
             for port, data in ein:
                 if port == self.p_apc_ein:
+                    if data and self.apc.an():
+                        self.apc.vom_apc(bytes(data))
+                        continue
                     if data and (data[0] & 0x0F) < 8:
                         if len(data) == 3 and data[0] & 0xF0 == 0x90 and data[2] and (data[0] & 0x0F) < 4 and data[1] in (55, 56, 57):
                             d = (data[0] & 0x0F) + 1  # APC20 deck columns: rows 3/4 = hot cue 1/2, row 5 = loop
@@ -393,8 +404,9 @@ class Bruecke:
                         self.senden(data)
                 elif port == self.p_led and data:
                     if (data[0] & 0x0F) < 8:
-                        with self.lock:
-                            self.seq.send(self.p_apc_aus, data)
+                        if self.apc.vom_kern(bytes(data)):
+                            with self.lock:
+                                self.seq.send(self.p_apc_aus, data)
                     else:
                         self.s8_leds_verworfen += 1
 

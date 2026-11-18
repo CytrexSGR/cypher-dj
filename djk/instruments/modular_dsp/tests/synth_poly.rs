@@ -1,6 +1,7 @@
 //! `synth-poly` (demos/synth-poly.json): the poly synthesizer with unison. Pins the device rules with numbers:
 //! the default sound (every knob at its `vorgabe`, and every knob at 0.5), the extreme settings, the build-out knobs 29..57 (second oscillator,
-//! MOD ENV, LFO 2, velocity depth, glide, tuning: each one audible, each one at both corners, the beat of oscillator 2, the LFO 2 sync), the three filter types against each other, the tuning
+//! MOD ENV, LFO 2, velocity depth, glide, tuning: each one audible, each one at both corners, the beat of oscillator 2, the LFO 2 sync), the upgrade knobs 45, 52, 53, 58..64
+//! (wave position, warp, stack, phase modulation, chaos: audible, corners, extremes on high notes, chaos repeats), the three filter types against each other, the tuning
 //! of the unison stack (A4 = 440 Hz, copy spacing, copy count), the note onset and the cost. Prints the table with `--nocapture`.
 //! The cost test is `#[ignore]`d (it needs a quiet machine): `cargo test --release -p baukasten_dsp --test synth_poly -- --ignored --nocapture`.
 use baukasten_dsp::{uebersetze, Programm};
@@ -30,8 +31,9 @@ static A: Zaehler = Zaehler;
 const SR: f32 = 48_000.0;
 const GRAPH: &str = include_str!("../demos/synth-poly.json");
 const AKKORD: [u8; 4] = [45, 49, 52, 57];
-/// The knobs of the build-out: 45, 52, 53 and 58..63 stay free (row 45 reserved, 52/53 dropped with the cost tier, 58..63 are the channel effects').
-const NEUE: [usize; 26] = [29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 46, 47, 48, 49, 50, 51, 54, 55, 56, 57];
+/// The knobs of the build-out (29..57) and of the upgrade (45, 52, 53, 58..64: table position, mod env and chaos to position, phase mod,
+/// phase mod ratio, warp mode, warp depth, stack, chaos rate, chaos to cutoff).
+const NEUE: [usize; 36] = [29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64];
 
 fn lade() -> Programm { uebersetze(GRAPH, SR).unwrap() }
 
@@ -71,7 +73,7 @@ fn akkord(p: &mut Programm) -> Vec<(f32, f32)> {
 #[test]
 fn grundklang_alle_regler_auf_halb() {
     let mut p = lade();
-    assert_eq!(p.regler_namen.len(), 54, "28 old knobs + 26 of the build-out (29..44, 46..51, 54..57)");
+    assert_eq!(p.regler_namen.len(), 64, "28 old knobs + 26 of the build-out (29..44, 46..51, 54..57) + 10 of the upgrade (45, 52, 53, 58..64)");
     // the default sound is the graph's own `vorgabe` start (knob 28 Drift 0.25, the build-out knobs at their off positions)
     let y = akkord(&mut p);
     let (r, s, d, m) = (db(rms(&y)), spitze(&y), dc(&y), mono_gegen_stereo(&y));
@@ -280,6 +282,8 @@ const NEUE_MIT_TOR: &[(usize, &[(usize, f32)])] = &[
     (44, &[(24, 1.0)]),
     (46, &[]), (47, &[(46, 1.0)]), (48, &[(46, 1.0)]), (49, &[(46, 1.0)]), (50, &[(46, 1.0)]), (51, &[(46, 1.0)]),
     (55, &[]), (56, &[]), (57, &[]),
+    // upgrade: position, mod env and chaos to position, phase mod (its ratio needs the amount), warp (depth needs a mode), stack, chaos (rate needs a destination)
+    (45, &[]), (52, &[]), (53, &[]), (58, &[(53, 1.0)]), (59, &[]), (60, &[(59, 1.0 / 3.0)]), (61, &[]), (62, &[(64, 1.0)]), (63, &[]), (64, &[]),
 ];
 
 #[test]
@@ -322,6 +326,60 @@ fn neue_funktionen_an_gegen_aus() {
     ein("velocity to cutoff", &[(56, 0.5)], &[(56, 1.0)]);
     ein("master tune", &[(57, 0.5)], &[(57, 1.0)]);
     ein("velocity depth (0 against 1x)", &[(55, 0.0)], &[(55, 0.5)]);
+    // upgrade: position away from the saw, mod env and chaos onto the position and the cutoff (both signs), warp modes, stack, phase mod
+    ein("wave position to the square", &[], &[(45, 1.0)]);
+    ein("wave position to the sine", &[], &[(45, 0.0)]);
+    for (nr, name) in [(52, "mod env to position"), (64, "chaos to position"), (63, "chaos to cutoff")] {
+        for (v, vz) in [(1.0, "+1"), (0.0, "-1")] {
+            ein(&format!("{name} {vz}"), &[(nr, 0.5)], &[(nr, v)]);
+        }
+    }
+    for (m, name) in [(1.0 / 3.0, "bend"), (2.0 / 3.0, "asym"), (1.0, "sync")] {
+        for (t, tz) in [(1.0, "+1"), (0.0, "-1")] {
+            ein(&format!("warp {name} depth {tz}"), &[], &[(59, m), (60, t)]);
+        }
+    }
+    ein("stack octave", &[], &[(61, 1.0)]);
+    ein("phase mod 0.5 cycles", &[], &[(53, 1.0)]);
+    ein("phase mod 0.25 cycles", &[], &[(53, 0.5)]);
+}
+
+/// The upgrade at its extremes on the highest notes: warp depth -1 and +1 in every mode with phase modulation at its maximum and the
+/// highest ratio: finite, no rescue, DC under -50 dBFS, and below the clip bound of this file (1.0). The probe notes are 45..59 (A2..B3);
+/// 96 and 108 (C7, C8) are the extreme of the keyboard.
+#[test]
+fn warp_und_phasenmodulation_am_anschlag_auf_hohen_noten() {
+    let mut schlimmster = 0.0f32;
+    for note in [59u8, 96, 108] {
+        for (modus, mname) in [(0.0f32, "off"), (1.0 / 3.0, "bend"), (2.0 / 3.0, "asym"), (1.0, "sync")] {
+            for tiefe in [0.0f32, 1.0] {
+                for (ratio, rname) in [(0.0f32, "0.5"), (1.0, "7")] {
+                    let mut p = lade();
+                    setze(&mut p, &[(59, modus), (60, tiefe), (53, 1.0), (58, ratio), (61, 1.0)]);
+                    let y = halte(&mut p, &[note], 0.9, 1.5);
+                    let (s, d) = (spitze(&y), dc(&y));
+                    println!("MESS extreme note {note:3} warp {mname:4} depth {tiefe} pm 0.5 ratio {rname:3}: peak {s:.3}, dc {:.1} dBFS", db(d));
+                    assert_eq!(p.rettungen, 0, "rescued");
+                    assert!(s < 1.0, "note {note} {mname} depth {tiefe} ratio {rname}: peak {s}");
+                    assert!(db(d) < -50.0, "note {note} {mname} depth {tiefe} ratio {rname}: dc {} dBFS", db(d));
+                    schlimmster = schlimmster.max(s);
+                }
+            }
+        }
+    }
+    println!("MESS warp/pm worst peak {schlimmster:.3}");
+}
+
+/// Chaos is per voice and seeded: the same graph with the chaos on renders the same audio twice, bit for bit, and a second chord shows it
+/// moves (the chaos wander changes the sound over the held chord).
+#[test]
+fn chaos_ist_pro_stimme_geseedet() {
+    let k = [(64, 1.0f32), (63, 1.0), (62, 0.7)];
+    let a = akkord_mit_ende(&k, 0.8);
+    let b = akkord_mit_ende(&k, 0.8);
+    assert!(a.iter().zip(&b).all(|(x, y)| x.0.to_bits() == y.0.to_bits() && x.1.to_bits() == y.1.to_bits()), "two renders of the same graph differ");
+    let aus = akkord_mit_ende(&[(64, 0.5), (63, 0.5), (62, 0.7)], 0.8);
+    assert!(diff_db(&a, &aus) > -60.0, "chaos on equals chaos off");
 }
 
 #[test]
@@ -389,10 +447,10 @@ fn neue_regler_an_den_anschlaegen() {
 
 #[test]
 fn alle_regler_auf_halb() {
-    // every knob 1..57 at 0.5 (the project default for a knob without a start position): finite, no DC, below 1.0 (the build-out knobs
+    // every knob 1..64 at 0.5 (the project default for a knob without a start position): finite, no DC, below 1.0 (the build-out knobs
     // that are bipolar or middle-pinned sit at their neutral points, the unipolar gates at half)
     let mut p = lade();
-    setze(&mut p, &(1..=63).map(|n| (n, 0.5)).collect::<Vec<_>>());
+    setze(&mut p, &(1..=64).map(|n| (n, 0.5)).collect::<Vec<_>>());
     let y = akkord(&mut p);
     let (r, s, d) = (db(rms(&y)), spitze(&y), dc(&y));
     println!("MESS all knobs 0.5: rms {r:.1} dB, peak {s:.3}, dc {:.1} dBFS", db(d));

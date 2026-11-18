@@ -23,6 +23,7 @@ import { bindeExport } from './export.js';
 import { bindeZuSeq } from './zu_seq.js';
 import { bindeAnalyse } from './analysis.js';
 import { bindeKlangRunde } from './sound_runde.js';
+import { fokus } from '../controller_fokus.js';
 
 export const WERKBANK_TEXT = {
   keinModul: 'No module is open.',
@@ -96,6 +97,11 @@ export function bindeWerkbank({ post, wurzel = document.querySelector('#werkbank
     if (st.slug) merke(`djk-wb-wahl-${st.slug}`, String(spurId));
     for (const h of ctx.beiWahl) h(spurId);
   };
+
+  // Controller follow: the selected instrument track is the synth in front while this view is shown (ctx.waehle and a track that fell back both end in beiWahl).
+  ctx.beiWahl.push((spurId) => { if (st.sichtbar && spurId) fokus.melde({ spur_id: spurId }, 'werkbank'); });
+  ctx.beimSichtwechsel.push((sichtbar) => { if (sichtbar && st.wahl) fokus.melde({ spur_id: st.wahl }, 'werkbank'); });
+  fokus.registriere('werkbank', () => (st.sichtbar && st.wahl ? { spur_id: st.wahl } : null));   // window focus
 
   function setzeProjekt(slug, p) {
     const modul = istModul(p);

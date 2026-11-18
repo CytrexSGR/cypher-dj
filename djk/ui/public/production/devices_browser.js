@@ -2,13 +2,13 @@
 // per instrument graph) and effects (Compressor active; EQ, Saett, Hall shown greyed with their reason). Every row is draggable with
 // the type application/x-djk-geraet (drag.js geraetNutzlast); storage.js turns a drop into spur_neu or insert_setzen.
 import { GERAET_TYP, geraetNutzlast } from './drag.js';
-import { gruppenVon, gruppeVon, nebenText, sortiere, leseAchse, beiAchse } from '../instrument_groups.js';
+import { gruppenVon, gruppeVon, nebenText, ohneVerborgene, sortiere, leseAchse, beiAchse } from '../instrument_groups.js';
 
 const html = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 /** The instruments in display order: RB-338 and Surge (the rows without a graph) first, then the graphs grouped by the axis (inside a group by the other axis, then by name). */
 export function instrumenteGeordnet(k, achse = 'prinzip') {
   const alle = k?.instrumente ?? [];
-  return [...alle.filter((e) => !e.graph), ...sortiere(alle.filter((e) => e.graph), achse)];
+  return [...alle.filter((e) => !e.graph), ...sortiere(ohneVerborgene(alle.filter((e) => e.graph)), achse)];   // hidden duplicates are not offered as a new track
 }
 /** The entries in the order the rows are shown: the index of a row (data-geraet-i) is the index here, so a drag and a click find their entry. */
 export const eintraege = (k, achse = 'prinzip') => [...instrumenteGeordnet(k, achse), ...(k?.effekte ?? [])];

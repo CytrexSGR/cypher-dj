@@ -1,6 +1,8 @@
 // Hand-Weg: Ausgabe -> stellwerk::Griff, /test/hand -> stellwerk::Griff. Echtzeitfest.
 #include "hand/seam_signalbox.h"
 
+#include <cmath>
+
 namespace hand {
 
 bool zu_griff(const Ausgabe& a, const Mapping& m, float wert_jetzt, stellwerk::Griff* g) {
@@ -28,6 +30,19 @@ bool zu_griff(const Ausgabe& a, const Mapping& m, float wert_jetzt, stellwerk::G
       g->x = wert_jetzt >= 0.5f ? -1.0f : 1.0f;
       g->kurve = nullptr;
       return true;
+    case AusgabeArt::regler_stufe: {
+      // stufen: position i = round(clamp01(value) * (N - 1)), next j = (i + 1) % N, new value j / (N - 1). The mapping
+      // check only admits controls whose value is the position (range 0..1, linear), so the step is a relative grip of
+      // (j - i') / (N - 1) from the current target; relative grips are clamped to 0..1 by the Stellwerk.
+      const int n = e.stufen < 2 ? 2 : e.stufen;
+      const float v = wert_jetzt < 0.0f ? 0.0f : (wert_jetzt > 1.0f ? 1.0f : wert_jetzt);
+      const int i = static_cast<int>(std::lround(v * (n - 1)));
+      const int j = (i + 1) % n;
+      g->art = stellwerk::GriffArt::relativ;
+      g->x = static_cast<float>(j) / static_cast<float>(n - 1) - v;
+      g->kurve = nullptr;
+      return true;
+    }
     default:
       return false;
   }

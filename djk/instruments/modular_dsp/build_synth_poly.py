@@ -158,11 +158,16 @@ edge("osc_hz.aus", "sub_hz.hz")
 # ---- oscillators -------------------------------------------------------------------------------------------------------------
 # Unison: centre saw + three pairs (kopien 2 = one copy at -x, one at +x). The outer pair gets the Detune value in cent, the middle
 # and inner pairs 0.5716 and 0.1774 of it: the JP-8000 spacing. All 7 copies cost the same as one `wavetable` with kopien 7.
-node("uc", "wavetable", tabelle=0, kopien=1, saat=11)
+# Table 4 ("analog": sine, triangle, saw, square) resting on the saw frame at pos 2/3 is the old saw table exactly (the null test proves it):
+# the same step patch_wavetable_hull.py made for wavetable-reese. The one position signal `pos` feeds all four nodes.
+POS_SAEGE = 0.6666667                             # frame 2 of 4 (the saw) = pos 2/3, the centre of knob 45
+node("uc", "wavetable", tabelle=4, kopien=1, saat=11)
 for nm, saat in (("u1", 14), ("u2", 12), ("u3", 13)):
-    node(nm, "wavetable", tabelle=0, kopien=2, saat=saat)
+    node(nm, "wavetable", tabelle=4, kopien=2, saat=saat)
+pos_sum = "wpos.aus"                              # the position sum is built with the wave knobs further down
 for nm in ("uc", "u1", "u2", "u3"):
     edge("osc_hz.aus", f"{nm}.hz")
+    edge(pos_sum, f"{nm}.pos")
     edge("note.trig", f"{nm}.trig")
 det = mul("det_ab", det_a, det_b)                 # squared: k^2 * 50 cent
 edge(det, "u1.verstimmung")
@@ -378,6 +383,62 @@ A.umhaengen(g, "amp.aus", amp_m, ausser=("amp_m.a",))
 pwm_ende = [e for e in E if e["nach"] == "puls.pwm"]
 assert len(pwm_ende) == 1
 [e for e in E if e["nach"] == "o2_puls.pwm"][0]["von"] = pwm_ende[0]["von"]
+
+
+# ---- upgrade wave 1: table position, warp, stack, phase modulation and chaos on the four unison nodes (knobs 45, 52, 53, 58..64) ------------
+# Every new term joins an old signal as `old + term` with the term exactly 0.0 at the default, or reaches a wavetable input that the engine
+# reads as "off" at 0.0 (pm 0, warp 0, stapel 0); measure_null.py run synth-poly-aufw proves the whole at byte level.
+OSZ = ("uc", "u1", "u2", "u3")
+
+# 45 position (N): mitte 2/3 = the saw frame of table 4; 52 mod env to position and 64 chaos to position (GB) join the same sum
+info = info_neu()
+pos_k = A._n_mitte(g, info, "k_wpos", 45, "Wave position", 0, 1, POS_SAEGE)
+pos_me_k = A._g_bi(g, info, "k_wpos_me", 52, "Mod env to position", 1.0)
+pos_ch_k = A._g_bi(g, info, "k_wpos_ch", 64, "Chaos to position", 1.0)
+A.mul(g, "wpos_me", me["env"], pos_me_k)
+# chaos: Lorenz per voice, seeded; `aus` moves the cutoff, `aus2` the position, so the two do not move in step
+rate_k = A._f(g, info, "k_ch_rate", 62, "Chaos rate", 0.05, 20, 0.3, log=True)
+A.knoten(g, "ch", "chaos", form=0, saat=5)
+A.kante(g, rate_k, "ch.rate")
+A.mul(g, "wpos_ch", "ch.aus2", pos_ch_k)
+A.add(g, "wpos", pos_k, "wpos_me.aus", "wpos_ch.aus")
+uebernimm(info.ergebnis())
+
+# 63 chaos to cutoff (GB, +-36 st): the last term of the cutoff semitone sum
+info = info_neu()
+cut_ch_k = A._g_bi(g, info, "k_ch_cut", 63, "Chaos to cutoff", 36)
+A.summe_erweitern(g, "ch_cut", "l2_z_zin0.aus", A.mul(g, "ch_cut_t", "ch.aus", cut_ch_k))
+uebernimm(info.ergebnis())
+
+# 59 warp mode (N, Off first: 0 off, 1 bend, 2 asym, 3 sync), 60 warp depth (F, -1..1), 61 stack (N, Off first: 0 off, 1 octave; a pair node has two
+# copies, and the fifth of 'octave + fifth' needs a third, so that option would sound like the octave and is left out).
+# Warp and stack read the raw values (the engine rounds the mode); off is exactly 0.0, the value the unwired input has. `stapel` is read at
+# the note start and needs kopien >= 2, so it acts on the pair nodes u1..u3 and a change is heard on the next note.
+info = info_neu()
+info.neu(59, "Warp mode", 0.0, "N", stufen=(4, 0))
+warp_k = A.regler(g, "k_warp", 59, 0, 3, vorgabe=0.0)
+tiefe_k = A._f(g, info, "k_tiefe", 60, "Warp depth", -1, 1, 0.5)
+info.neu(61, "Stack", 0.0, "N", stufen=(2, 0))
+stapel_k = A.regler(g, "k_stapel", 61, 0, 1, vorgabe=0.0)
+for nm in OSZ:
+    edge(warp_k, f"{nm}.warp")
+    edge(tiefe_k, f"{nm}.tiefe")
+    edge(stapel_k, f"{nm}.stapel")
+uebernimm(info.ergebnis())
+
+# 53 phase mod (G, 0..0.5 cycles) and 58 ratio (F, 0.5 1 2 3 4 5 7): one sine per voice at the note pitch times the ratio, restarted with the
+# note, into `pm` of the four nodes. At amount 0 the product is exactly 0.0 and the wavetable takes its plain read.
+info = info_neu()
+pm_k = A._g_uni(g, info, "k_pm", 53, "Phase mod", 0.5)
+ratio_k = A._wahl_knopf(g, info, "k_pm_ratio", 58, "Phase mod ratio", 7, 2)
+ratio = A._wahl(g, "pm_ratio", 7, [], ratio_k, **{f"e{i + 1}": r for i, r in enumerate((0.5, 1, 2, 3, 4, 5, 7))})
+A.knoten(g, "pm_sin", "sinus")
+edge(A.mul(g, "pm_hz", "osc_hz.aus", ratio), "pm_sin.hz")
+edge("note.trig", "pm_sin.sync")
+pm_sig = A.mul(g, "pm_sig", "pm_sin.aus", pm_k)
+for nm in OSZ:
+    edge(pm_sig, f"{nm}.pm")
+uebernimm(info.ergebnis())
 
 for nr, n in INFO["namen"].items():
     NAMEN[str(nr)] = n

@@ -7,6 +7,11 @@ import { MAX_SPUREN } from '../public/production/limits.js';
 
 export const GRUND_TEXT: Readonly<Record<string, string>> = {
   // Router und Transport (http/transport.ts)
+  // Controller presets and follow (areas/controller/sequences.ts)
+  kein_fokus: 'no synth with a controller base is in front; pick an instrument channel or a project track first',
+  graph_anders: 'the preset belongs to another graph than the synth in front',
+  preset_unbekannt: 'that controller preset does not exist',
+  werk_preset: 'a factory preset cannot be deleted',
   nur_json: 'this server only takes JSON requests (content-type application/json)',
   fremde_herkunft: 'request from another origin refused',
   // Körper und Bereich proj (areas/proj)

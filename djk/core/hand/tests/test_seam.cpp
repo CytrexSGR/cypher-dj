@@ -28,7 +28,10 @@ const char* const MAPPING = R"({"version":1,"geraet":"test","quelle_port":"q",
    "kurve":{"typ":"linear","min":-26.0,"max":6.0},"kill_unter_min":true},
   {"nachricht":{"typ":"note","kanal":1,"nr":36},"ziel":"deck/1/kill/tief","art":"taste"},
   {"nachricht":{"typ":"note","kanal":2,"nr":37},"ziel":"deck/2/fader","art":"beruehrung"},
-  {"nachricht":{"typ":"note","kanal":1,"nr":44},"ziel":"deck/1/play","art":"taste"}]})";
+  {"nachricht":{"typ":"note","kanal":1,"nr":44},"ziel":"deck/1/play","art":"taste"},
+  {"nachricht":{"typ":"cc","kanal":3,"nr":50},"ziel":"erz/5/bk/3","art":"taste","stufen":3},
+  {"nachricht":{"typ":"cc","kanal":0,"nr":9},"ziel":"deck/1/fader","art":"absolut"},
+  {"nachricht":{"typ":"note","kanal":3,"nr":51},"ziel":"erz/5/bk/4","art":"taste","stufen":16}]})";
 
 // Ein Stellwerk an einer simulierten Uhr (128 BPM), Zyklen zu 256 Samples; MIDI geht wie im Kern hinein
 struct Kern {
@@ -163,6 +166,46 @@ FALL(taste_schaltet_kill_um) {
   k.midi(3100, 0x80, 36, 0);
   k.bis(4000);
   PRUEFE_NAH(k.sw->wert(r), 0.0, 0);
+}
+
+FALL(stufen_taste_geht_reihum_und_springt_zurueck) {
+  // stufen 3: from 0 the presses give 0.5, 1, 0, 0.5; releases change nothing
+  Kern k;
+  const int r = k.r("erz/5/bk/3");
+  k.sw->setze_direkt(r, 0.0f);
+  const double soll[] = {0.5, 1.0, 0.0, 0.5};
+  int64_t t = 1000;
+  for (double s : soll) {
+    k.midi(t, 0xB2, 50, 127);
+    k.midi(t + 300, 0xB2, 50, 0);   // release
+    k.bis(t + 2000);
+    PRUEFE_NAH(k.sw->wert(r), s, 1e-5);
+    t += 3000;
+  }
+  // stufen 16 from a value between the steps: round(0.52 * 15) = 8 -> next step 9/15; the current target counts (F18)
+  const int r2 = k.r("erz/5/bk/4");
+  k.sw->setze_direkt(r2, 0.52f);
+  k.midi(t, 0x92, 51, 100);
+  k.bis(t + 2000);
+  PRUEFE_NAH(k.sw->wert(r2), 9.0 / 15.0, 1e-5);
+  // at the last step it wraps to 0
+  k.sw->setze_direkt(r2, 1.0f);
+  k.midi(t + 3000, 0x92, 51, 100);
+  k.bis(t + 5000);
+  PRUEFE_NAH(k.sw->wert(r2), 0.0, 1e-5);
+}
+
+FALL(kanal_0_eintrag_nimmt_den_ersten_wert_nur_als_stellung) {
+  // soft takeover is per control, not per channel: the first value (channel 4) only primes, the next scales
+  Kern k;
+  const int r = k.r("deck/1/fader");
+  k.sw->setze_direkt(r, -10.0f);
+  k.midi(10000, 0xB3, 9, 64);
+  k.bis(20000);
+  PRUEFE_NAH(k.sw->wert(r), -10.0, 0);
+  k.midi(20000, 0xB3, 9, 127);
+  k.bis(30000);
+  PRUEFE(k.sw->wert(r) > -10.0);
 }
 
 FALL(hand_bricht_plan_am_versatz_sample) {

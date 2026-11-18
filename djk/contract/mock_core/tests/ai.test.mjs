@@ -177,6 +177,24 @@ test('E-a KI-Stopp: kein Fader wird gesenkt, Cyphers laufende Rampe hält am Ist
   gruen(r);
 });
 
+test('N2 /k/live/tasten: the hand sets 0 and the instrument streams; cypher gets 6 nur_hand; streams 1, 4, 8 and 11 get 6 ausserhalb_bereich', () => {
+  const r = fahre([
+    sende(1000, ['/k/live/tasten', 'hsi', 1, 'andreas', 2]),
+    sende(1000, ['/k/live/tasten', 'hsi', 2, 'cypher', 2]),
+    sende(1000, ['/k/live/tasten', 'hsi', 3, 'andreas', 4]),
+    sende(1000, ['/k/live/tasten', 'hsi', 4, 'andreas', 8]),
+    sende(1000, ['/k/live/tasten', 'hsi', 5, 'andreas', 1]),
+    sende(1000, ['/k/live/tasten', 'hsi', 6, 'andreas', 0]),
+    erwarte(1600, q(1, 'andreas', 3)),
+    erwarte(1600, q(2, 'cypher', 6, null, 'nur_hand')),
+    erwarte(1600, q(3, 'andreas', 6, null, 'ausserhalb_bereich')),
+    erwarte(1600, q(4, 'andreas', 6, null, 'ausserhalb_bereich')),
+    erwarte(1600, q(5, 'andreas', 6, null, 'ausserhalb_bereich')),
+    erwarte(1600, q(6, 'andreas', 3)),
+  ], { cfg });
+  gruen(r);
+});
+
 test('S19 /k/lernen: arm and disarm from the hand are accepted; quelle cypher gets 6 nur_hand; an outside 0/1 gets 6 ausserhalb_bereich', () => {
   const r = fahre([
     sende(1000, ['/k/lernen', 'hsi', 1, 'andreas', 1]),

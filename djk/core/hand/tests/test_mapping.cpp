@@ -155,6 +155,72 @@ FALL(arr_ziel_nur_als_taste) {
                tab(), m.get(), &f) && f.art == FehlerArt::unbekanntes_ziel);
 }
 
+FALL(stufen_nur_taste_an_stetigem_regler_2_bis_16) {
+  // "stufen": a button cycles a continuous control (range 0..1) through N positions
+  auto m = std::make_unique<Mapping>();
+  Fehler f;
+  const std::string kopf = R"({"version":1,"geraet":"s","quelle_port":"q","ziel_port":"z","eintraege":[)";
+  auto e = [&](const char* ziel, const char* art, const char* stufen, const char* typ = "cc") {
+    return kopf + R"({"nachricht":{"typ":")" + typ + R"(","kanal":1,"nr":60},"ziel":")" + ziel + R"(","art":")" + art + "\"" +
+           stufen + "}]}";
+  };
+  PRUEFE(lade(e("erz/5/bk/3", "taste", ",\"stufen\":3").c_str(), tab(), m.get(), &f));
+  PRUEFE_GLEICH(m->eintrag[0].stufen, 3);
+  PRUEFE(lade(e("spur/1/bk/14", "taste", ",\"stufen\":16", "note").c_str(), tab(), m.get(), &f));
+  PRUEFE_GLEICH(m->eintrag[0].stufen, 16);
+  PRUEFE(lade(e("erz/5/bk/3", "taste", ",\"stufen\":2").c_str(), tab(), m.get(), &f));
+  // without stufen the old rule holds: taste at a continuous control is refused, the field defaults to 0
+  PRUEFE(!lade(e("erz/5/bk/3", "taste", "").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::falsche_art);
+  PRUEFE(lade(e("deck/1/kill/tief", "taste", "", "note").c_str(), tab(), m.get(), &f));
+  PRUEFE_GLEICH(m->eintrag[0].stufen, 0);
+  // refused: out of range, not an integer, wrong art, switch control, non-control target, range not 0..1
+  PRUEFE(!lade(e("erz/5/bk/3", "taste", ",\"stufen\":1").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::feld_typ);
+  PRUEFE(!lade(e("erz/5/bk/3", "taste", ",\"stufen\":17").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::feld_typ);
+  PRUEFE(!lade(e("erz/5/bk/3", "taste", ",\"stufen\":2.5").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::feld_typ);
+  PRUEFE(!lade(e("erz/5/bk/3", "taste", ",\"stufen\":\"3\"").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::feld_typ);
+  PRUEFE(!lade(e("erz/5/bk/3", "absolut", ",\"stufen\":3").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::falsche_art);
+  PRUEFE(!lade(e("deck/1/kill/tief", "taste", ",\"stufen\":3", "note").c_str(), tab(), m.get(), &f) &&
+         f.art == FehlerArt::falsche_art);
+  PRUEFE(!lade(e("taste/stopp", "taste", ",\"stufen\":3", "note").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::falsche_art);
+  PRUEFE(!lade(e("deck/1/play", "taste", ",\"stufen\":3", "note").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::falsche_art);
+  PRUEFE(!lade(e("deck/1/fader", "taste", ",\"stufen\":3").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::falsche_art);
+  PRUEFE(std::strstr(f.text, "0..1") != nullptr);
+}
+
+FALL(kanal_0_ist_jeder_kanal) {
+  // channel 0 = every channel; the exact channel wins; two wildcards with one typ/nr are a duplicate
+  auto m = std::make_unique<Mapping>();
+  Fehler f;
+  const std::string kopf = R"({"version":1,"geraet":"k","quelle_port":"q","ziel_port":"z","eintraege":[)";
+  auto e = [](int kanal, int nr, const char* ziel, const char* typ = "cc") {
+    return std::string(R"({"nachricht":{"typ":")") + typ + R"(","kanal":)" + std::to_string(kanal) + R"(,"nr":)" +
+           std::to_string(nr) + R"(},"ziel":")" + ziel + R"(","art":"absolut"})";
+  };
+  PRUEFE(lade((kopf + e(0, 7, "deck/1/fader") + "]}").c_str(), tab(), m.get(), &f));
+  PRUEFE_GLEICH(suche(*m, NachrichtTyp::cc, 4, 7), 0);
+  PRUEFE_GLEICH(suche(*m, NachrichtTyp::cc, 1, 7), 0);
+  PRUEFE_GLEICH(suche(*m, NachrichtTyp::cc, 16, 7), 0);
+  PRUEFE_GLEICH(suche(*m, NachrichtTyp::cc, 4, 8), -1);
+  PRUEFE_GLEICH(suche(*m, NachrichtTyp::note, 4, 7), -1);   // typ still counts
+  PRUEFE_GLEICH(suche(*m, NachrichtTyp::cc, 0, 7), -1);     // a message never has channel 0
+  PRUEFE_GLEICH(suche(*m, NachrichtTyp::cc, 17, 7), -1);
+  // exact beats wildcard, in either file order
+  PRUEFE(lade((kopf + e(0, 7, "deck/1/fader") + "," + e(4, 7, "deck/2/fader") + "]}").c_str(), tab(), m.get(), &f));
+  PRUEFE_GLEICH(suche(*m, NachrichtTyp::cc, 4, 7), 1);
+  PRUEFE_GLEICH(suche(*m, NachrichtTyp::cc, 5, 7), 0);
+  PRUEFE(lade((kopf + e(4, 7, "deck/2/fader") + "," + e(0, 7, "deck/1/fader") + "]}").c_str(), tab(), m.get(), &f));
+  PRUEFE_GLEICH(suche(*m, NachrichtTyp::cc, 4, 7), 0);
+  PRUEFE_GLEICH(suche(*m, NachrichtTyp::cc, 5, 7), 1);
+  // duplicate wildcard refused, bounds -1 and 17 refused, note works too
+  PRUEFE(!lade((kopf + e(0, 7, "deck/1/fader") + "," + e(0, 7, "deck/2/fader") + "]}").c_str(), tab(), m.get(), &f) &&
+         f.art == FehlerArt::doppelt);
+  PRUEFE(!lade((kopf + e(-1, 7, "deck/1/fader") + "]}").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::nachricht);
+  PRUEFE(!lade((kopf + e(17, 7, "deck/1/fader") + "]}").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::nachricht);
+  PRUEFE(lade((std::string(kopf) + R"({"nachricht":{"typ":"note","kanal":0,"nr":36},"ziel":"deck/1/kill/tief","art":"taste"}]})").c_str(),
+              tab(), m.get(), &f));
+  PRUEFE_GLEICH(suche(*m, NachrichtTyp::note, 9, 36), 0);
+}
+
 FALL(fehlertext_nennt_zeile_und_ziel) {
   int zeile = 0;
   const std::string t = ersetze(datei("beispiel_7_2.json"), "\"deck/1/fader\"", "\"deck/1/fadr\"", &zeile);

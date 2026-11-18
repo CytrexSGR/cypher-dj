@@ -17,6 +17,8 @@ import { neueTakeKoepfe, vorhoerenSenden } from './takes_operation.js';
 import { oeffneMenue, kopfMenueAuf } from './context_menu.js';
 import { neueGesten, bindeAutoAufnahme, istArmiert, GESTE_RUHE_MS } from './auto_recording.js';
 import { geraetSchluessel } from './device_view.js';
+import { fokus } from '../controller_fokus.js';
+import { kannGeraetFenster, oeffneGeraetFenster, GERAET_FENSTER_TEXT } from '../device_open.js';
 
 // S18: the inputs a track can record, a literal list on purpose (the page cannot import the .ts table); tests/proj_inputs_s18.test.mjs
 // binds it to INTERNE_EINGAENGE of vertrag/stroeme.ts. erz/4 and erz/8 are missing on purpose: the kern has no tap for them.
@@ -109,6 +111,16 @@ export const UEBER_ZIELE = {
   solo: { feld: 'solo', art: 'knopf', knopf: '.p-solo', basis: (s) => s.solo, daumen: (v) => v, an: 'Solo', aus: 'Unsolo' },
 };
 const ziele = (art) => Object.entries(UEBER_ZIELE).filter(([, d]) => d.art === art);
+// A hand moved a track's fader or pan on the kern row spur/<nr>/fader|pan (the APC20 in PRODUCTION, a learned controller): the heads show the value at once
+// (2026-11-18, Andreas: "die fader reagieren laggy"); the project follows a little later through the session's write-back (at most every 250 ms), and
+// its value then takes over again. stream.js calls spurHandEcho for every /e/regler event; a head the mouse holds is left alone.
+const handEchoHaken = new Set();
+const HAND_RUHE_MS = 800;   // after the last echo the project's value (written back by then) shows again
+const HAND_ZEILE = /^spur\/([1-9][0-9]?)\/(fader|pan)$/;
+export function spurHandEcho(pfad, wert) {
+  if (!HAND_ZEILE.test(String(pfad)) || !Number.isFinite(wert)) return;
+  for (const h of handEchoHaken) { try { h(pfad, wert); } catch { /* one view's error stops no other */ } }
+}
 // the regulators: [selector of the value text, text of a value, base value of the track]; the buttons: [selector, base value]
 export const KOPF_WERTE = Object.fromEntries(ziele('regler').map(([z, d]) => [z, [d.anzeige, d.text, d.basis]]));
 export const KNOPF_ZIELE = Object.fromEntries(ziele('knopf').map(([z, d]) => [z, [d.knopf, d.basis]]));
@@ -214,7 +226,7 @@ function zeigeArmKnopf(el, an) {
 }
 export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new Set(), umschalten = () => {}, takeOffen = () => new Set(), takeKoepfe = null, takesUmschalten = () => {}, wahl = () => undefined, waehle = () => {},
   spurWahl = () => new Set(), wahlUmschalten = () => {}, gruppeFalten = () => {},
-  ueber = () => [], uebersteuere = async () => true, kopfBeat = () => null, gesten = KEINE_GESTEN, armiere = async () => {}, armStandJetzt = () => null, marke = () => null, geraete = () => null, rackOeffnen = () => {}, geraetOeffnen = () => {}, instrumente = () => [], faceOeffnen = () => {}, faceVerfuegbar = () => false }) {
+  ueber = () => [], uebersteuere = async () => true, kopfBeat = () => null, gesten = KEINE_GESTEN, armiere = async () => {}, armStandJetzt = () => null, marke = () => null, geraete = () => null, rackOeffnen = () => {}, geraetOeffnen = () => {}, instrumente = () => [], faceOeffnen = () => {}, faceVerfuegbar = () => false, fensterOeffnen = null }) {
   const frost = neuerFrost();
   const jetzt = () => performance.now();
   const stand = new Map();     // spur_id → Spur laut letztem Projekt
@@ -448,6 +460,17 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
         ge.after(b);
       }
     } else fb?.remove();
+    // OPEN ↗: the device of this track in its own window (device_window.js); created on demand after the device label, only for a device the window can show
+    const fo = q('.p-fenster-auf');
+    if (fensterOeffnen && kannGeraetFenster(s)) {
+      if (!fo) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'p-fenster-auf'; b.textContent = '↗';   // the head has no room for the word: the title and the label say it
+        b.title = GERAET_FENSTER_TEXT.titel; b.setAttribute('aria-label', `${GERAET_FENSTER_TEXT.knopf}: ${GERAET_FENSTER_TEXT.titel}`);
+        b.addEventListener('click', (e) => { e.stopPropagation(); fensterOeffnen(s.id); });
+        ge.after(b);
+      }
+    } else fo?.remove();
     if (fehlt) ge.title = `The plugin cannot be used: ${ih.grund ?? 'not loadable'}`;
     else if (pm) ge.title = pm.titel; else if (ge.title) ge.removeAttribute('title');   // only touch the attribute when a mark put it there (golden: no title attribute appears)
     el.classList.toggle('auto', faderLane(s) !== null);          // AUTO in front of the fader value (CSS): a volume line controls this fader
@@ -467,6 +490,7 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
     tk.classList.toggle('an', tan); tk.setAttribute('aria-pressed', String(tan)); tk.setAttribute('aria-label', `Take lanes ${s.name}`);
     for (const [z, d] of ziele('knopf')) { const an = knopfZustand(s, z, eing(z)); q(d.knopf).classList.toggle('an', an); q(d.knopf).setAttribute('aria-pressed', String(an)); }
     for (const [z, d] of ziele('regler')) {   // thumb and text: the frozen grip value, else the base value; the hand's own thumb is left alone
+      if (jetzt() - (handZeit.get(`${s.id}:${d.feld}`) ?? -Infinity) < HAND_RUHE_MS) continue;   // a controller moves it: its echo is newer than the project
       const v = eing(z) ?? d.basis(s);
       if (!griff.haelt(`${s.id}:${d.feld}`, jetzt())) setzeRegler(q(d.regler), d.daumen(v));
       q(d.anzeige).textContent = d.text(v);
@@ -505,6 +529,18 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
     q('.p-hoch').disabled = zielIndex(reihenfolge.length, i, 'hoch') === null;
     q('.p-runter').disabled = zielIndex(reihenfolge.length, i, 'runter') === null;
   }
+
+  const handZeit = new Map();   // `${spur_id}:${feld}` -> time of the last controller echo
+  handEchoHaken.add((pfad, wert) => {
+    const [, nr, ziel] = HAND_ZEILE.exec(pfad), d = UEBER_ZIELE[ziel];
+    for (const [id, el] of els) {
+      if (el.querySelector('.p-pegel')?.dataset.kanal !== `spur/${nr}` || griff.haelt(`${id}:${d.feld}`, jetzt())) continue;
+      handZeit.set(`${id}:${d.feld}`, jetzt());
+      const r = el.querySelector(d.regler), a = el.querySelector(d.anzeige);
+      if (r) setzeRegler(r, d.daumen(wert));
+      if (a) a.textContent = d.text(wert);
+    }
+  });
 
   return {
     element: (id) => els.get(id),
@@ -626,7 +662,10 @@ export function bindeSpuren(ctx) {
   });
   // 1.10 T3 (plan D5): track selection for Ctrl+G, page state like laneOffen. Ctrl/Shift+click on a name toggles; a plain click elsewhere or Escape clears.
   st.spurWahl = new Set();
-  const wahlGeaendert = () => koepfeRef?.zeigeWahl();
+  // Controller follow: exactly one selected track (not a group, not several) is the synth in front; the server says when it has no graph.
+  const einzelSpur = () => { const w = [...st.spurWahl]; return w.length === 1 && st.projekt?.spuren?.some((x) => x.id === w[0]) ? w[0] : null; };
+  const wahlGeaendert = () => { koepfeRef?.zeigeWahl(); const e = einzelSpur(); if (e) fokus.melde({ spur_id: e }, 'production'); };
+  fokus.registriere('production', () => { const e = st.sichtbar ? einzelSpur() : null; return e ? { spur_id: e } : null; });   // window focus
   const wahlLeeren = () => { if (st.spurWahl.size) { st.spurWahl.clear(); wahlGeaendert(); } };
   // ersetzen: a plain click on a group head makes it the whole selection (a second plain click lets go of it); Ctrl/Shift+click toggles
   const wahlUmschalten = (ids, e, ersetzen = false) => {
@@ -651,8 +690,8 @@ export function bindeSpuren(ctx) {
     return true;
   };
   const koepfe = bindeKoepfe($('koepfe'), { instrumente: () => st?.instrumente ?? [], aendere: ctx.aendere, spurWahl: () => st.spurWahl, wahlUmschalten, gruppeFalten, aendereAus: ctx.aendereAus, offen: () => st?.laneOffen ?? new Set(),
-    takeOffen: () => st?.takeOffen ?? new Set(), takeKoepfe, rackOeffnen: (id) => ctx.rackOeffnen?.(id), geraetOeffnen: (id) => ctx.geraetOeffnen?.(id),
-    faceOeffnen: (id, x, y) => ctx.faceOeffnen?.(id, x, y), faceVerfuegbar: (s) => ctx.faceVerfuegbar?.(s) ?? false,
+    takeOffen: () => st?.takeOffen ?? new Set(), takeKoepfe, rackOeffnen: (id) => ctx.rackOeffnen?.(id), geraetOeffnen: (id) => { fokus.melde({ spur_id: id }, 'production'); ctx.geraetOeffnen?.(id); },   // the device panel of a track opened: that track is in front
+    faceOeffnen: (id, x, y) => ctx.faceOeffnen?.(id, x, y), fensterOeffnen: (id) => oeffneGeraetFenster(id, ctx.melde), faceVerfuegbar: (s) => ctx.faceVerfuegbar?.(s) ?? false,
     takesUmschalten: (id) => { if (st.takeOffen.has(id)) st.takeOffen.delete(id); else st.takeOffen.add(id); ctx.layoutNeu(); koepfe.zeige(st.projekt); },
     gesten, armiere: (id, an) => aufnahme.armiere(id, an), armStandJetzt: () => st?.autoArm,
     ueber: () => st?.autoUeber ?? [], kopfBeat: () => st?.kopfBeat, marke: (id) => ctx.presetMarke?.('spur', id) ?? null, geraete: () => st?.geraete ?? null,

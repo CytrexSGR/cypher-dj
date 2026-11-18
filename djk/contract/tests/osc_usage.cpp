@@ -4,7 +4,7 @@
 namespace o = cypherdj::osc;
 
 static_assert(o::vertrag == 1);
-static_assert(o::alle.size() == 123, "123 addresses of section 4, 5 and 19.0 (osc.json; check_osc.py checks the count against the contract text)");
+static_assert(o::alle.size() == 124, "124 addresses of section 4, 5 and 19.0 (osc.json; check_osc.py checks the count against the contract text)");
 static_assert(o::k_teil.pfad == "/k/teil" && o::k_teil.typen == ",hssisddfiiss" && o::k_teil.felder == 12);
 static_assert(o::feld::k_teil::hoerschein == 11 && o::feld::q::grund == 5);
 static_assert(o::finde("/k/tempo/rampe") != nullptr && o::finde("/k/tempo/rampe")->typen == ",hsddd");

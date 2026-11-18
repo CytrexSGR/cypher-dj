@@ -17,7 +17,7 @@ Built in Germany by Andreas, a DJ, and Cypher, an AI agent (Claude models), sinc
 
 One real-time core in C++ and Rust keeps a single sample clock for everything: the decks, the pattern channels and
 the arrangement. The browser page and the agent sit on the same functions. The agent reaches them through an MCP
-server with 95 tools, so nearly everything you can click, it can do too (a few controls such as the crossfader stay
+server with 96 tools, so nearly everything you can click, it can do too (a few controls such as the crossfader stay
 in your hand), and anything it does shows up on your page. When it
 cannot do something it answers with a reason (for example `sidechain_zyklus` for a sidechain that would depend on
 itself) instead of guessing. When you grab a fader, your
@@ -50,7 +50,7 @@ first, and a sample can be dragged onto the track list or onto a row of a drum k
 
 ![STUDIO: the step sequencer with rows of different length, the tracks with their sends and the dock of instruments and effects](docs/screens/studio-workbench.png)
 
-**Mix and route.** Inserts of our own (compressor, EQ, saturator, limiter), up to 8 group tracks and 4 returns with
+**Mix and route.** Inserts of our own (compressor, EQ, saturator, limiter), up to 16 group tracks and 4 returns with
 our own reverb, sends before or after the fader, sidechain from other tracks (and on group, return and master stages
 also from groups and returns), Duck by Kick in one step, a routing matrix, and resampling of any track, group,
 return or the master into a new audio track.
@@ -64,6 +64,13 @@ a pattern plays one instrument, you add lanes of notes, of values per step or of
 instrument, in 1/4 to 1/32 per lane. Cypher Remix, a beat-synchronous remix station (build-up and break-down effects,
 a three-band isolator, a pad with roll and drum voices, a release lever), is the third FX unit: every channel strip
 has a key 3 that sends it through the Remix.
+
+**Hardware controllers.** An Akai APC20 is the DJ console, and while the PRODUCTION view is shown it is the project mixer
+(faders, master, mute, solo, arm, transport, banks of eight tracks). A Traktor Kontrol S8 works the DJ view with its
+screens, touch strips and hot cue pads, a Maschine MK2 is a desk for Cypher Modular knobs, and any class-compliant MIDI
+controller can be learned, up to eight at once. A Novation Launch Control 3 or an Akai LPD8 follows the synth in front
+with factory presets for six synths, and the keys of a MIDI keyboard play the instrument in front. What is confirmed on
+the devices and what is not is listed in [docs/features.md](docs/features.md#hardware-controllers).
 
 **The agent's side.** Besides playing, the agent can measure: levels of the last seconds, a 29-band spectrum,
 loudness per track, group and return, and how a closed deck sits against the running master per frequency band. It can wait on the master clock,
@@ -82,9 +89,9 @@ In this order, without dates:
 1. **Listening over time.** A map of each track per bar and per stem: loudness, brightness, bass, density of hits,
    pumping. From it the agent reads where the breaks and phrases are and whether the beat grid sits on the first
    hit, the way a DJ reads the waveform of a whole track.
-2. **Hardware controllers.** First controllers work: an Akai APC20 as main console, a Traktor Kontrol S8 with its
-   screens, touch strips and hot cue pads, a Maschine MK2 as a desk for Cypher Modular knobs and an LPD8 for
-   the remix. Next: the S8 button lights and finer touch strip feel.
+2. **Hardware controllers, further.** More devices (a Maschine Jam and a Pioneer XDJ-XZ are known but not bound), the
+   S8 button lights beyond PLAY and LOOP, finer touch strip feel, and a check by hand of what so far was only tested
+   by injecting MIDI (see [Hardware controllers](docs/features.md#hardware-controllers)).
 3. **Live.** A session view with a clip launcher and scenes, follow actions, recording into slots,
    swapping motifs live, MIDI effects.
 

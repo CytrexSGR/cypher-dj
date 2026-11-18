@@ -1150,6 +1150,9 @@ body.lib-zu #bestand .register { display: none; }
 .register .reg-wahl .reg-learn.an { background: var(--text); color: var(--bg); border-color: var(--text); }
 .register .reg-wahl .reg-learn.reg-voll:not(.an) { opacity: 0.55; }
 .register .reg-learn.an { background: var(--text); color: var(--bg); border-color: var(--text); }
+.register .reg-presets { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+.register .reg-preset { display: inline-flex; gap: 2px; align-items: center; }
+.register .reg-preset .reg-learn + .reg-learn { font-size: 9px; padding: 1px 5px; border-radius: 6px; }
 .register .reg-fehler { color: #e74c3c; }
 .register .reg-inhalt { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; }
 .register .reg-tabelle { border-collapse: collapse; width: 100%; }
@@ -1202,9 +1205,10 @@ body.lib-zu #bestand .register { display: none; }
   .register .reg-geraet-tat:empty { display: none; }
 }
 /* the Controllers window (#controller): the register alone, as high as the window */
-body.controller-fenster { grid-template-rows: minmax(0, 1fr); }
+/* !important on the grid: the stored view may be PRODUCTION, whose grid (production/production.css) put the register into the 18vw library column, folded 34 px */
+body.controller-fenster { grid-template-rows: minmax(0, 1fr) !important; grid-template-columns: minmax(0, 1fr) !important; grid-template-areas: none !important; }
 body.controller-fenster > :not(#bestand) { display: none !important; }
-body.controller-fenster #bestand { display: flex !important; min-height: 0; }
+body.controller-fenster #bestand { display: flex !important; min-height: 0; grid-area: auto !important; }
 body.controller-fenster #bestand > :not(#register) { display: none !important; }
 body.controller-fenster #bestand .register { display: flex !important; font-size: 13px; }
 .register .reg-lernen { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -1259,3 +1263,53 @@ body.werkbank:not(.djfx-auf) #kopf > #seq-szenen { display: none; }
   border: 1px solid var(--line); background: var(--panel); color: var(--dim); cursor: pointer; }
 #seq-szenen .szene-x[hidden] { display: none; }
 @keyframes szene-blink { 50% { opacity: .35; } }
+
+/* The device window (#geraet=<track id>): only a slim title line and the front panel of that track's instrument, filling the window. */
+body.geraet-fenster { display: block; padding: 0; overflow: auto; }
+body.geraet-fenster > #kopf, body.geraet-fenster > #pult, body.geraet-fenster > #bestand, body.geraet-fenster > #produktion, body.geraet-fenster > #werkbank,
+body.geraet-fenster > #kopplung, body.geraet-fenster > #demo-ansage { display: none !important; }
+#geraet-fenster { display: none; }
+body.geraet-fenster #geraet-fenster { display: block; padding: 8px 12px 14px; }
+.gf-kopf { display: flex; align-items: baseline; gap: 12px; padding: 4px 2px 8px; font-size: 13px; }
+.gf-kopf .gf-name { font-size: 15px; }
+.gf-kopf .gf-geraet { color: var(--dim); }
+.gf-kopf .gf-sp { flex: 1; }
+.gf-kopf .gf-hinweis, .gf-kopf .gf-meldung { color: var(--dim); font-size: 12px; }
+.gf-kopf .gf-meldung.fehler { color: var(--warn, #e8b13a); }
+.gf-keins { color: var(--dim); }
+#geraet-fenster.gf-weg .gf-platte { display: none; }   /* track or project gone: the line above says so, nothing to click */
+/* the controller strip of the device window: the controls of a controller place in hardware layout, each with the knob it drives */
+.gf-ctl { display: flex; flex-wrap: wrap; gap: 14px; padding: 0 2px 10px; }
+.gf-ctl-geraet { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 520px; }
+.gf-ctl-name { color: var(--dim); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+.gf-ctl-kopf { display: flex; align-items: center; gap: 10px; }
+.gf-ctl-sichern { font-size: 10px; letter-spacing: .08em; padding: 2px 8px; }
+.gf-ctl-lernen { font-size: 10px; letter-spacing: .08em; padding: 2px 8px; }
+.gf-ctl-lernen.an { color: var(--bg); background: var(--warn); border-color: var(--warn); }
+.gf-ctl .gf-sp { flex: 1; }
+.gf-kopf .gf-folgen { font-size: 10px; letter-spacing: .08em; padding: 2px 8px; align-self: center; opacity: .55; }
+.gf-kopf .gf-folgen.an { opacity: 1; background: #ffd60a; color: #000; border-color: #ffd60a; }
+.gf-ctl-prog { font-size: 10px; padding: 1px 6px; }
+.gf-ctl-prog:disabled { opacity: .3; }
+.gf-ctl-prognr { font-size: 12px; }
+.gf-ctl-progname { font-size: 11px; letter-spacing: .06em; color: var(--dim); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gf-ctl-reihe { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; }
+.gf-ctl-z { display: flex; align-items: baseline; gap: 6px; min-width: 0; padding: 4px 6px; border: 1px solid var(--linie, #2c3140); border-bottom: 2px solid var(--ctl, var(--linie, #2c3140)); border-radius: 4px; background: var(--feld, #1b1f2a); font-size: 12px; }
+.gf-ctl-z b { flex: none; min-width: 16px; padding: 0 4px; border-radius: 8px; background: var(--ctl, #e8943a); color: var(--ctl-ledtext, #111); font-size: 11px; text-align: center; }
+.gf-ctl-z span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gf-ctl-z.frei { opacity: .4; }
+.gf-ctl-z.frei b { background: none; color: inherit; border: 1px solid currentColor; }
+#geraet-fenster.gf-weg .gf-ctl { display: none; }
+.gf-ctl-klappe { font-size: 10px; letter-spacing: .08em; padding: 2px 8px; }
+#geraet-fenster.gf-ctl-zu .gf-ctl { padding-bottom: 6px; }
+#geraet-fenster.gf-ctl-zu .gf-ctl-reihe { display: none; }   /* folded: the head line stays, the rows go */
+#geraet-fenster.gf-ctl-zu .fp-knopf[data-ctl]::after, #geraet-fenster.gf-ctl-zu .fp-zelle[data-ctl]::after { content: none; }   /* and the numbers on the knobs */
+/* the number of the controller control that drives a knob: inside the knob; on a control without a knob (selector, switch) at its corner */
+#geraet-fenster .fp-knopf[data-ctl] { position: relative; }
+#geraet-fenster .fp-knopf[data-ctl]::after { content: attr(data-ctl); position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-top: 14px; color: var(--ctl, #e8943a); font-size: 11px; font-weight: 700; line-height: 1; pointer-events: none; }
+#geraet-fenster .fp-zelle.fp-gelernt:has(.fp-knopf[data-ctl])::after { display: none; }   /* the number in the knob says it: no learn dot */
+/* a box with controls on it: its title bar filled with the colour its LEDs show on the device */
+#geraet-fenster .fp-sektion[data-ctl-box] > .fp-sektionstitel { background: var(--ctl-led, var(--ctl)); color: var(--ctl-ledtext, #000); border-top-color: var(--ctl-led, var(--ctl)); }
+#geraet-fenster .fp-zelle[data-ctl] { position: relative; }
+#geraet-fenster .fp-zelle[data-ctl]::after { content: attr(data-ctl); position: absolute; top: -2px; right: 2px; width: auto; height: 14px; box-shadow: none; min-width: 14px; padding: 0 4px; border-radius: 7px; border: 1px solid var(--ctl, #e8943a); background: none; color: var(--ctl, #e8943a); font-size: 10px; font-weight: 700; line-height: 14px; text-align: center; pointer-events: none; }
+#geraet-fenster [hidden] { display: none !important; }

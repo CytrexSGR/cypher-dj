@@ -136,11 +136,11 @@ test('normalisierePanel: v1 becomes v2 (geraet bk, binds by param), v2 and unkno
   assert.deepEqual(pruefePanel(n, 'g', BEREICHE), [], 'a normalised panel validates');
 });
 
-test('v2 panel on synth-mono: k58 (the free number) is refused with the exact text', () => {
+test('v2 panel on synth-mono: k64 (the free number) is refused with the exact text', () => {
   const wurzel = path.join(import.meta.dirname, '..', '..', 'instruments', 'modular_dsp');
   const graph = JSON.parse(fs.readFileSync(path.join(wurzel, 'demos', 'synth-mono.json'), 'utf8'));
-  const p = { format: 'cypherdj-panel/2', geraet: { art: 'bk', graph: 'synth-mono' }, sections: [{ id: 's', controls: [{ id: 'x', type: 'knob', bind: { param: 'k58' } }] }] };
-  assert.deepEqual(pruefePanel(p, 'synth-mono', reglerBereiche(graph)), ['control "x": parameter k58 is not defined by the device']);
+  const p = { format: 'cypherdj-panel/2', geraet: { art: 'bk', graph: 'synth-mono' }, sections: [{ id: 's', controls: [{ id: 'x', type: 'knob', bind: { param: 'k64' } }] }] };
+  assert.deepEqual(pruefePanel(p, 'synth-mono', reglerBereiche(graph)), ['control "x": parameter k64 is not defined by the device']);
 });
 
 test('v2 panel: unknown parameter is named exactly; geraet is checked', () => {

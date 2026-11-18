@@ -485,7 +485,7 @@ def spur_regler_listen(q: Quelle) -> tuple[int, dict[str, list[str]]]:
         "const v=await import('file://@@/djk/contract/mock_core/contract.mjs');"
         "const k=await import('file://@@/djk/ui/public/curves.js');"
         "const l=await import('file://@@/djk/conductor/src/controls_info.ts');"
-        "const s=(m)=>[...m].filter((p)=>p.startsWith('spur/')&&!p.includes('/send/'));"
+        "const s=(m)=>[...m].filter((p)=>p.startsWith('spur/')&&!p.includes('/send/')&&!p.includes('/bk/'));"
         "console.log(JSON.stringify({a:s(v.REGLER.keys()),z:s(k.ZIELE),l:s(l.REGLER.keys())}))")
     return n, {"R01 Kern controls.cpp": alle(felder), "R02 INTERFACES §1.5": alle(zeilen),
                "R03 Attrappe REGLER": sorted(aus["a"]), "R04 curves.js ZIELE": sorted(aus["z"]),
@@ -781,7 +781,7 @@ def bk_regler_listen(q: Quelle) -> dict[str, list[str]]:
         "const v=await import('file://@@/djk/contract/mock_core/contract.mjs');"
         "const k=await import('file://@@/djk/ui/public/curves.js');"
         "const l=await import('file://@@/djk/conductor/src/controls_info.ts');"
-        "const s=(m)=>[...m].filter((p)=>/\\/bk\\/[0-9]+$/.test(p));"
+        "const s=(m)=>[...m].filter((p)=>/\\/bk\\/[0-9]+$/.test(p)&&!p.startsWith('spur/'));"
         "console.log(JSON.stringify({a:s(v.REGLER.keys()),z:s(k.ZIELE),l:s(l.REGLER.keys())}))")
     # master insert graph: master/bk/1..64, the last loop of the table (global like the send returns); every location must carry it
     if 'std::snprintf(p, sizeof p, "master/bk/%d", nr)' not in cpp:
@@ -823,6 +823,43 @@ def _pruefe_bk_regler(q: Quelle, befunde: list[str]) -> None:
             befunde.append(f"bk-Regler: R06 hand_bedienung.PFAD nimmt {falsch} an")
         if re.fullmatch(schema, falsch):
             befunde.append(f"bk-Regler: R07 defs.schema.json regler_pfad nimmt {falsch} an")
+
+
+# ---------------------------------------------------------------- controller targets spur/<slot>/bk/<k> (production plan task 8)
+def spur_bk_listen(q: Quelle) -> dict[str, list[str]]:
+    """spur/<slot>/bk/<k> per location; slots and knobs from controls.h (SPUR_BK_SLOTS, SPUR_BK_KNOEPFE). Only the core, controls_info.ts and the
+    schema carry these rows (the mock core and curves.js do not); the Baukasten tracks of a project are not channels. Working tree only (node)."""
+    regler_h = q.lies("djk/core/signalbox/include/cypherdj/signalbox/controls.h")
+    slots = int(_such(r"constexpr int SPUR_BK_SLOTS = (\d+);", regler_h, "controls.h").group(1))
+    knoepfe = int(_such(r"constexpr int SPUR_BK_KNOEPFE = (\d+);", regler_h, "controls.h").group(1))
+    if 'std::snprintf(p, sizeof p, "spur/%d/bk/%d", slot, nr)' not in q.lies("djk/core/signalbox/src/controls.cpp"):
+        raise ParserFehler("controls.cpp: no spur/%d/bk/%d loop, parser blind or source rebuilt")
+    aus = q.node_json(
+        "const l=await import('file://@@/djk/conductor/src/controls_info.ts');"
+        "console.log(JSON.stringify({l:[...l.REGLER.keys()].filter((p)=>/^spur\\/[0-9]+\\/bk\\//.test(p))}))")
+    return {"R01 Kern controls.cpp": sorted(f"spur/{n}/bk/{k}" for n in range(1, slots + 1) for k in range(1, knoepfe + 1)),
+            "R05 controls_info.ts": sorted(aus["l"])}
+
+
+def _pruefe_spur_bk_regler(q: Quelle, befunde: list[str]) -> None:
+    listen = spur_bk_listen(q)
+    soll = listen["R01 Kern controls.cpp"]
+    _diff(befunde, "Spur-bk-Regler=Kern", soll, listen["R05 controls_info.ts"], "R05 controls_info.ts")
+    pfad = re.compile(_such(r"export const PFAD = /(.*)/;", q.lies("djk/ui/hand_operation.ts"), "hand_operation.ts").group(1).replace("\\/", "/"))
+    try:
+        schema = json.loads(q.lies("djk/contract/schemas/defs.schema.json"))["$defs"]["regler_pfad"]["pattern"]
+    except (ValueError, KeyError) as fehler:
+        raise ParserFehler(f"defs.schema.json: kein $defs.regler_pfad.pattern ({fehler})") from fehler
+    for name in soll:
+        if not pfad.search(name):
+            befunde.append(f"Spur-bk-Regler: R06 hand_bedienung.PFAD lehnt {name} ab")
+        if not re.fullmatch(schema, name):
+            befunde.append(f"Spur-bk-Regler: R07 defs.schema.json regler_pfad lehnt {name} ab")
+    for falsch in ("spur/0/bk/1", "spur/9/bk/1", "spur/1/bk/0", "spur/1/bk/65", "spur/1/bk/01", "spur/1/bk/1x", "spur/32/bk/1"):   # no pattern too wide
+        if pfad.search(falsch):
+            befunde.append(f"Spur-bk-Regler: R06 hand_bedienung.PFAD nimmt {falsch} an")
+        if re.fullmatch(schema, falsch):
+            befunde.append(f"Spur-bk-Regler: R07 defs.schema.json regler_pfad nimmt {falsch} an")
 
 
 # ---------------------------------------------------------------- 1.15 A2: mix-tool controls (345 rows, plan A v2 section 3)
@@ -1212,6 +1249,7 @@ def pruefe(q: Quelle) -> list[str]:
         _pruefe_spur_regler(q, befunde)   # D1 K1
         _pruefe_routing_regler(q, befunde)   # 1.10 Slice 1
         _pruefe_bk_regler(q, befunde)     # S5r
+        _pruefe_spur_bk_regler(q, befunde)   # controller targets spur/<slot>/bk/<k>
         _pruefe_werkzeug_regler(q, befunde)   # 1.15 A2
         _pruefe_return_regler(q, befunde)   # 1.10 Slice 3
         _pruefe_insert_regler(q, befunde)   # 1.10 Slice 4a

@@ -22,7 +22,7 @@ test('factory presets: all valid, all described, no duplicate sound', (t) => {
   assert.deepEqual(doppelt, []);
   const je = {};
   for (const e of register.eintraege) je[e.geraet] = (je[e.geraet] ?? 0) + 1;
-  assert.deepEqual(je, { komp: 6, eq: 11, hall: 11, saett: 10, rb338: 10, baukasten: 139 });
+  assert.deepEqual(je, { komp: 6, eq: 11, hall: 11, saett: 10, rb338: 10, baukasten: 143 });
 });
 
 test('factory register is up to date (after changing a factory preset: node presets/tool.ts bauen)', (t) => {
@@ -60,4 +60,27 @@ test('factory register ids stay werk:<device>/<slug> while the folders are Engli
   assert.ok(fs.existsSync(path.join(WERK_VORGABE, 'comp', 'drum-bus.preset.json')));
   assert.equal(fs.existsSync(path.join(WERK_VORGABE, 'komp')), false);
   assert.ok(fs.readdirSync(WERK_VORGABE).includes('modular'));
+});
+
+// The five duplicate instruments left the pickers (kategorien.json `verborgen`); their sounds keep them reachable.
+test('hidden duplicates stay reachable as sounds: Greif 2 sounds are named "... II", the four others have one default-position sound each', async (t) => {
+  const { vorgabenVon } = await import('../graphs.ts');
+  const s = werkSpeicher(t);
+  const bk = s.liste({ herkunft: 'werk', geraet: 'baukasten' });
+  const namen = bk.map((e) => e.name);
+  assert.equal(new Set(namen).size, namen.length, 'no display name appears twice in the sound list');
+  const g2 = bk.filter((e) => s.lies('werk', 'baukasten', e.slug).graph === 'synth-greif2');
+  assert.equal(g2.length, 12);
+  assert.ok(g2.every((e) => e.name.endsWith(' II') && e.slug.startsWith('synth-greif2-')), 'only the display name changed, the slug stays');
+  const BK = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..', 'instruments', 'modular_dsp', 'demos');
+  for (const [graph, name] of [['juno-pad-dyn', 'Juno Pad Dyn'], ['juno-pad-echo', 'Juno Pad Echo'], ['juno-pad-hall', 'Juno Pad Hall'], ['lead', 'Classic Sync Lead']]) {
+    const e = bk.filter((x) => s.lies('werk', 'baukasten', x.slug).graph === graph);
+    assert.equal(e.length, 1, graph);
+    assert.equal(e[0].name, name);
+    const p = s.lies('werk', 'baukasten', e[0].slug);
+    const soll = vorgabenVon(graph, BK);
+    const knoepfe = Object.keys(p.werte);
+    assert.ok(knoepfe.length > 0 && knoepfe.every((k) => /^knob\d+$/.test(k)));
+    for (const k of knoepfe) assert.equal(p.werte[k], soll[Number(k.slice(4)) - 1], `${graph} ${k} sits at the graph's own default`);
+  }
 });

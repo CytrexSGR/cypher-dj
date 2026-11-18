@@ -43,6 +43,8 @@ of the beta. The short version is the [README](../README.md).
   own grid (4, 8, 16 or 32 per bar) and may have a shorter length, so it shifts against the notes. Two quick presses
   remove a value or a point. A pattern is an ordinary MIDI clip with envelopes, so PRODUCTION opens the same data in
   its piano roll. The agent writes a whole pattern in one call as text with the `seq` tool and reads the same text back
+- SEQ scenes: the SCENES strip in the header stores up to eight pictures of which patterns play across all SEQ decks (SAVE, then a
+  number). A click on a number switches the whole picture on the next bar line; with the transport stopped it switches at once
 - A module from the workbench becomes a SEQ deck with one click (TO SEQ DECK in the workbench, or LOAD MODULE in the place): one
   pattern per instrument track with the same instrument, notes and knob values. Effects, sends and the key stay behind and the
   page says what was left out. It is one undo step.
@@ -54,7 +56,7 @@ of the beta. The short version is the [README](../README.md).
   channel strip whose input is silent and whose effects are idle skips its DSP, with bit-equal output. In an
   arrangement the return Halls 2 to 4 are computed on up to three worker threads, each pinned to its own physical core
   (`hall_faeden` and `hall_cpus` in `kern.toml`); a Hall that is not ready at its deadline is computed in the callback
-  instead, and after repeated late blocks the pool switches itself off with the same sound. `djk-start` gives the core
+  instead, and after repeated late blocks the pool switches itself off with the same sound and tries again after a back-off. `djk-start` gives the core
   four physical cores by default (`CYPHERDJ_KERN_KERNE`) and the remaining ones to stem separation
 - Live master tempo from 60 to 200 BPM, ramped over a bar: the decks and the loop boxes (key-locked,
   pitch kept), the pattern channels and recordings follow it
@@ -92,7 +94,7 @@ of the beta. The short version is the [README](../README.md).
   plus guitar and piano when they carry signal (an empty stem is folded into other). Four to six tracks appear under the
   clip in a group, beat-exact, and the original is muted; one undo step takes it all back. The run shows its progress
   and can be cancelled. It needs a CUDA GPU, there is no CPU path
-- Instrument tracks with the built-in RB-338, a Cypher Modular graph (up to 8 such tracks), a one-shot kit or Surge XT
+- Instrument tracks with the built-in RB-338, a Cypher Modular graph (up to 16 such tracks), a one-shot kit or Surge XT
   (two hosted slots; the patch is chosen from the Surge library and stored in the project); notes are drawn in a
   piano roll with velocity and 1/16 quantize
 - **Instrument racks**: several instruments on one track with key and velocity zones and a chain selector, four macro
@@ -109,8 +111,9 @@ of the beta. The short version is the [README](../README.md).
   of insert stages, on the four rack macros and on the knobs of a Cypher Modular track (up to 64), drawn with points or recorded
   from the hand (touch, latch or write). Grabbing a track's fader, pan, mute or solo by hand overrides its lane, which the
   page shows until the override is ended. Clips carry envelopes of their own (gain, transpose, relative track volume
-  and pan)
-- **Inserts**: up to four stages per strip on a track, a group, a return and the production master, taken from a pool
+  and pan). Groups, returns and the master have rows of their own for the parameters of their insert stages, and a
+  return also for its fader
+- **Inserts**: up to five stages per strip on a track, a group, a return and the production master, taken from a pool
   of our own devices: compressors, EQs, a saturator, a limiter, a utility (stereo width 0 to 4 and bass mono) and a
   Cypher Modular effect graph as a stage, with a tempo-synced delay return shipped as an example. Pre or post fader sends, a gain reduction readout
   per stage, delay compensation across tracks and groups, and a rack of four macro knobs per strip (up to 16 mappings
@@ -134,9 +137,9 @@ of the beta. The short version is the [README](../README.md).
   hand edits unless asked to
 - **Merge and bounce**: merge two or more tracks into one new audio track, or bounce a track in place, to a new track
   or as a copy to paste, by an offline render of the same core. Tracks with insert stages are refused
-- **Presets**: a browser for presets of our own devices (103 factory presets, your own, collections) with names from
+- **Presets**: a browser for presets of our own devices (191 factory presets, your own, collections) with names from
   a closed vocabulary; drag one onto a track, a stage or a strip
-- Tempo, loop range and metronome; per track volume, pan, mute, solo and a meter
+- Tempo, loop range and metronome; the time signature of the project (2/4 to 12/4: bar counter, beat dots, ramps over bars and pattern starts count in that meter); per track volume, pan, mute, solo and a meter
 - Projects are folders with a JSON file; every change is one undo step, and the undo history survives a restart
 - Variants: tracks can share a group (say bass A, B, C); one click in the transport bar makes one of them audible
   and mutes the others, as a single undo step
@@ -200,7 +203,10 @@ references before they went in:
   modulation and a wavefolder, seven switchable filters, a tempo-synced second LFO, sample and hold, a second
   oscillator, key follow, delay and reverb. Every knob added in the build-out of 12 November sits at "off" or at the
   old value when a project loads, so the factory presets made before it render byte for byte as before (a null test
-  against the old graphs)
+  against the old graphs). On 18 November Mono Synth got a chaos LFO (to cutoff, to oscillator 2 pitch) and a clean sub, Poly Synth
+  wave position, warp, stack, phase modulation and chaos, Neuro Bass warp, stack, phase modulation, chaos and drift, and the three
+  wavetable synths (`wavetable-reese`, `wavetable-supersaw`, `wavetable-chor`) warp, stack, chaos and, in part, phase modulation, a
+  clean sub, band drive and a chorus; at the start values every graph renders byte for byte as before
 - **Band Drive Bass** (`bass-banddrive`): a bass for electro, neuro and reese. A wavetable and a bite voice run into a
   band split; the mids are folded and driven into a moving vowel filter, the sub stays clean and mono. 24 knobs, six
   factory presets (electro growl, neuro stab, wide reese, acid squelch, overdriven rock, clean sub grit)
@@ -208,7 +214,8 @@ references before they went in:
   modulation between them, warp, an octave stack, a chaos modulator, a frequency shifter and a clean sub. 63 knobs,
   eight voices, twelve factory presets
 - **Greif 2** (`synth-greif2`): Greif with tables built for a strong Position (basic to buzz, formant growl, hard sync),
-  phase modulation off at the start, the same twelve presets for an A/B
+  phase modulation off at the start, the same twelve presets for an A/B. Since 18 November it is no longer offered in the
+  instrument pickers (it counts as a duplicate of Greif); its sounds stay in the sound list and apply it
 - **Drums 909 and Drums 808**: two complete drum machines in one graph each. One MIDI channel plays the whole kit, the
   note picks the drum, the knobs tune the kit, and one bus (drive and a DJ filter) closes it
 - **Filterbox**: an effect graph with six filter models (ladder, diode, comb, vowel and others), three modulation
@@ -288,7 +295,9 @@ The lists above are the headline. Also in there:
   knob, keeps three that are audibly different from it and from each other, and names each by what it does (brighter,
   more sub, more movement, shorter ...). The places A to D switch while the loop plays (click or keys 1 to 4) without
   changing the project; PICK writes the chosen one as one undo step and looks for its neighbours, NEW NEIGHBOURS
-  offers others, three step sizes. Every pick is kept as a path on the track: BACK returns one step, a click on any
+  offers others, three step sizes (subtle, clear and strong say how far a variant must differ from the current sound; a knob is turned
+  further until that is reached, and one that cannot get there is offered at its end stop and marked "max"). COMPARE alternates one bar of
+  the current sound and one bar of the variant at the same loudness. Every pick is kept as a path on the track: BACK returns one step, a click on any
   earlier step goes there and a new pick from it starts a branch. The agent drives the same round with the tool
   `klang_runde`
 - **Step lanes for knobs (STUDIO)**: `+ lane` under the grid adds a step lane for any knob of a Cypher Modular
@@ -296,7 +305,8 @@ The lists above are the headline. Also in there:
 - **Live view (LIVE)**: the three Strudel channels side by side, each with an automation lane for fader,
   filter and cutoff over 4 to 32 bars
 - **Effects section**: one strip per channel showing what plays and how much the compressor pulls, an
-  expanded view with every control, and automation per loop for compressor, filter, hall send and EQ
+  expanded view with every control, a MASTER tab in signal order (insert effect, glue compressor, limiter with a gain reduction
+  meter), and automation per loop for compressor, filter, hall send and EQ
 - **Resampling**: record the master into the loop library (1 to 32 beats, starting on the beat), cut a
   running deck loop sample-exact into a loop box, or turn a recorded loop into a Strudel sound
   (`s("rec0")`) that the drum channel can play right away
@@ -309,12 +319,63 @@ The lists above are the headline. Also in there:
 - **Extra pattern streams**: five more channels (erz/5 to erz/7 and the two loop box pads) can each carry a Cypher
   Modular graph, started with `djk-start --strudel --bk-stroeme`; they can be recorded onto production tracks. The
   graph knobs can be learned onto a MIDI controller, and a project remembers which graph sits on which channel
-- **The agent's side**: 95 tools in the MCP server. Besides playing it can measure a deck behind its
+- **The agent's side**: 96 tools in the MCP server. Besides playing it can measure a deck behind its
   closed fader, read the levels of the last seconds, wait on the master clock for a number of bars, run
   automation tracks and ramps over bars, and cancel everything it started. When it has an idea while the
   human plays, it proposes; the human accepts or rejects with one key
 - **Cue tool**: key and BPM filters with a harmonic-mix option (±1 on the Camelot wheel), named cues,
   4-, 8- and 16-bar loops, quantize, and taking over existing Traktor cues
+
+## Hardware controllers
+
+Three ways in. The first two need no configuration of the device itself beyond plugging it in.
+
+- **Fixed desks.** A small bridge program binds three devices to fixed layouts. The Akai APC20 is the console for the four DJ
+  channels and the master, and while the main window shows PRODUCTION it is the project mixer (below). The Traktor Kontrol S8
+  works the DJ view: two screens with a scrolling waveform, hot cue marks, a whole-track overview and the Strudel, loop and SEQ
+  views, hot cue pads, loop and browse encoders, touch strips (tempo bend while playing, scratch when stopped, SHIFT seeks in
+  whole beats), and PLAY and LOOP lights that follow the deck. The Maschine MK2 is a desk for Cypher Modular knobs: group
+  buttons choose a channel, the top buttons a page of eight knobs, the encoders turn them, and the displays show the knob names
+  and values.
+- **Controller places.** Any class-compliant MIDI controller can be learned. There are eight places, each with its own learn
+  table, so two devices that send the same control do not collide. The CONTROLLERS window lists every device and every
+  assignment, shows known devices as tiles in their own layout (Akai LPD8 with its four programs, Novation Launch Control 3),
+  and assigns a control to any continuous target, or a button or pad to a switch or a deck action. A Maschine Jam and a
+  Pioneer XDJ-XZ are known but not bound.
+- **Tablet.** The device page as a touch view (see above).
+
+**Following the synth in front.** With FOLLOW on for a place, the knobs of the selected instrument are put on the controls of
+that device and move with you when you select another one. A project track in PRODUCTION or in the workbench, a pattern of a
+SEQ deck or a live channel in INSTRUMENTS all count. Factory presets ship for the Launch Control 3 and the LPD8 for Mono Synth,
+Poly Synth, Neuro Bass and the three wavetable synths; SAVE MAPPING keeps your own layout for a synth and FOLLOW prefers it.
+An entry of such a preset can be valid on any MIDI channel. A knob of a project track turned on a controller is written into the
+project after a short rest, as one undo step labelled Controller, except where a lane or a clip envelope drives it.
+
+**Launch Control 3.** A preset can hold several programs, each an assignment of the 16 encoders and 8 buttons cut along the
+boxes of the front panel of one synth. Page up and Page down step through them, the display shows the program, the buttons step
+choice fields such as waveform or filter type, the LEDs carry the colour of the panel box a control belongs to, and the values
+go back to the endless encoders so that they carry on from the real value.
+
+**Keys.** The keys and pads of a MIDI keyboard play the instrument in front: the selected project track (armed for MIDI by the
+studio while it is in front, nothing written into the project) or a live channel. A note assigned to a button in the learn
+table is a button, not a key. One KEYS line in the CONTROLLERS window switches it.
+
+**Device window.** `#geraet=<track>` opens the front panel of one instrument track in a window of its own, for a second
+monitor. It follows the track in front (or stays on its track), shows the controls of every controller that drives the track in
+the layout of the device, and offers LEARN and SAVE MAPPING.
+
+**APC20 as project mixer.** While PRODUCTION is shown, faders 1 to 8 move the tracks of a bank of eight, the master fader the
+project master, and Activator, Solo/Cue and Record Arm are mute, solo and arm with their lights. Shift with Play or Stop
+starts or stops the arrangement, with Left or Right it steps the bank and with Up or Down the track in front. The bank is framed
+in orange, and the track the controllers drive carries a yellow frame with CTL. In every other view the APC20 is the DJ console.
+
+Not confirmed on the devices, only by tests that inject MIDI or by unit tests in the core: the Shift functions of the APC20 in
+PRODUCTION (taken from a description of the device), mute, solo, arm and the steps of bank and track, the value feedback to the
+endless encoders, the display text, the button lights and the step buttons of the Launch Control 3, and keys reaching a live
+channel. Faders of the APC20 and the Page buttons of the Launch Control 3 were tried on the units. Controllers reach the first
+eight Cypher Modular tracks of a project only. A Launch Control 3 in its fixed default mode sends on another channel and does not
+match the factory presets. The first press of a step button after a restart or a preset change starts from the value of the
+row, not from the project's value.
 
 ## Measured
 
@@ -362,14 +423,13 @@ mostly against a silent test sink. Not benchmarks.
   experimental cue-suggestion pipeline is included as a separate research tool.
 - Key detection is weak on major keys (the test library is almost all minor).
 - Learning from the human's judgement is planned, not built.
-- The build-out of the three synthesizers was measured on synthetic signals; its new controls have not been judged
+- The build-out of the synthesizers (12 and 18 November) was measured on synthetic signals; its new controls have not been judged
   by a listener yet. The Cypher Modular VST3 plug-in exposes all 64 knob parameters.
 - Production: two hosted instrument slots (Surge XT or a third-party plugin). The pools of our own insert devices are
-  small: 12 compressors, 8 EQs, 4 saturators, 2 limiters and 8 utilities per project, at most four stages per strip. Third-party
+  small: 12 compressors, 8 EQs, 4 saturators, 2 limiters and 8 utilities per project, at most five stages per strip. Third-party
   plugins: at most four effect hosts at a time, no sidechain into a plugin, no automation or controller mapping of
   plugin parameters, no CLAP, a multi-plugin VST3 bundle loads only its first plugin (use the LV2 version), and a
-  project with an active plugin stage takes as long to export as the song lasts. The limiter works
-  on sample peaks, not true peaks, and on the master chain it sits before the production master fader. Automation lanes cover fader, pan, mute,
+  project with an active plugin stage takes as long to export as the song lasts. The limiter stage detects true peaks (4x oversampled), and on the master chain it sits before the production master fader. Automation lanes cover fader, pan, mute,
   solo, four RB-338 parameters, insert stage parameters, the rack macros and Cypher Modular knobs. Takes and comping are for audio
   tracks; bounce and merge refuse a track that has insert stages. Export
   is refused while the transport is running. The live track meters show sample peaks; loudness is measured offline (per

@@ -87,7 +87,10 @@ void Kern::midi_ein_stempeln(int n) noexcept {
   {   // 1.8 T7b: a midi_ein went away (any of bits 8..15 of the connection mask fell): a key held on an armed track would never get its off
     const uint32_t vb = ein_verbunden_.load(std::memory_order_relaxed);
     constexpr uint32_t MIDI_BITS = ((1u << MIDI_EIN_PORTS) - 1u) << 8;
-    if ((ein_verb_gesehen_ & ~vb & MIDI_BITS) != 0) arr_->live_alle_aus(sample_);
+    if ((ein_verb_gesehen_ & ~vb & MIDI_BITS) != 0) {
+      arr_->live_alle_aus(sample_);
+      erz_->tasten_alle_aus();   // Task N2: the keys held on the stream of /k/live/tasten close as well
+    }
     ein_verb_gesehen_ = vb;
   }
   aufnahme_.midi_beginn();   // 1.8 T7a: the recorder keeps the events of ONE cycle; this stamping runs before arr_->block and before Aufnahme::block of the cycle
@@ -105,6 +108,10 @@ void Kern::midi_ein_stempeln(int n) noexcept {
         const int64_t z = Arrangement::live_ziel(sample_, m.versatz, n);
         const bool an = t == 0x90 && m.d[2] != 0;
         for (uint32_t bits = aufnahme_.midi_maske(); bits != 0; bits &= bits - 1) arr_->live_note(__builtin_ctz(bits), z, m.d[1], m.d[2], an);
+        // Task N2: the stream of /k/live/tasten (one test of the target when none is set). A note that the learn table of its place maps is a button, not a key: it only triggers its action.
+        // (The armed-track path above does not make this distinction and is left as it was.)
+        const hand::Mapping* lm = m.port < MIDI_EIN_PORTS ? lern_mapping_[m.port] : nullptr;
+        if (!(lm && hand::suche(*lm, hand::NachrichtTyp::note, (m.d[0] & 0x0F) + 1, m.d[1]) >= 0)) erz_->taste(m.d[1], m.d[2], an, z);
       }
     }
     // S19 capture: the first 3-byte CC after arming is reported and consumed (also without a learn table)

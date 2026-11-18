@@ -126,7 +126,8 @@ test('register: the learnable devices carry their control layout', async (t) => 
   const lc3 = kat.find((k) => k.id === 'lc3').regler, lpd8 = kat.find((k) => k.id === 'lpd8').regler;
   assert.deepEqual([lc3.filter((r) => r.art === 'knob').length, lc3.filter((r) => r.art === 'button').length], [16, 8]);
   assert.deepEqual(lc3.filter((r) => r.art === 'knob').map((r) => r.nr), Array.from({ length: 16 }, (_, i) => 13 + i));
-  assert.deepEqual(lc3.filter((r) => r.art === 'button').map((r) => [r.nr, r.kanal, r.kanal_daw]), Array.from({ length: 8 }, (_, i) => [37 + i, 16, 1]));
+  assert.deepEqual(lc3.filter((r) => r.art === 'button').map((r) => [r.nr, r.kanal, r.kanal_daw]), Array.from({ length: 8 }, (_, i) => [37 + i, 1, undefined]));
+  assert.deepEqual(lc3.filter((r) => r.art === 'knob').map((r) => [r.kanal, r.kanal_daw]), Array.from({ length: 16 }, () => [1, 16]), 'encoders: channel 1 on the plain port, 16 on the DAW port');
   assert.deepEqual(lpd8.filter((r) => r.art === 'knob').map((r) => [r.typ, r.kanal, r.nr]), Array.from({ length: 8 }, (_, i) => ['cc', 1, 1 + i]));
   assert.ok(lpd8.filter((r) => r.art === 'pad').every((r) => r.typ === 'note'));
   for (const g of [lc3, lpd8]) assert.equal(new Set(g.map((r) => `${r.zeile}/${r.spalte}`)).size, g.length, 'no two controls share a grid cell');

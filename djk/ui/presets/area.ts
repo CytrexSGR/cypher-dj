@@ -40,7 +40,7 @@ export interface PresetOptionen extends SpeicherOptionen {
 
 // What the catalogue needs of a graph: name and art, plus the role (`kategorie`) and the synthesis type (`prinzip`) when the graph has them. The type is
 // optional on read: an older install without it lists its instruments under "Other" in the page.
-export type KatalogGraph = Pick<GraphEintrag, 'name' | 'art' | 'kategorie'> & { prinzip?: string };
+export type KatalogGraph = Pick<GraphEintrag, 'name' | 'art' | 'kategorie'> & { prinzip?: string; verborgen?: boolean };
 
 // 1.16 rest (S3): the device catalogue of the PRODUCTION browser. Instruments always make a new track (spur_neu); effects become a
 // stage at the end of a chain (insert), `aktiv` from INSERT_ARTEN_AKTIV. No grand piano device exists in the code; none is listed.
@@ -52,7 +52,7 @@ export function katalog(graphen: readonly KatalogGraph[]): Record<string, unknow
   return {
     instrumente: [{ geraet: 'rb338', titel: 'RB-338', ziel: 'spur_neu' }, { geraet: 'surge', titel: 'Surge', ziel: 'spur_neu' },
       ...graphen.filter((g) => g.art === 'instrument').map((g) => ({ geraet: 'bk', titel: g.name, ziel: 'spur_neu', graph: g.name,
-        ...(g.kategorie ? { kategorie: g.kategorie } : {}), ...(g.prinzip ? { prinzip: g.prinzip } : {}) }))],
+        ...(g.kategorie ? { kategorie: g.kategorie } : {}), ...(g.prinzip ? { prinzip: g.prinzip } : {}), ...(g.verborgen === true ? { verborgen: true } : {}) }))],
     effekte: [effekt('komp', 'Compressor', 'not active yet'), effekt('eq', 'EQ', 'comes with slice 4b'), effekt('saett', 'Saett', 'comes with slice 4b'),
       { geraet: 'hall', titel: 'Hall', ziel: 'insert', aktiv: false, grund: 'the return hall lives on returns' },
       // an effect graph is a bk stage (art bk in INSERT_ARTEN_AKTIV); its presets apply to such a stage (apply.ts bkStufenPlan)

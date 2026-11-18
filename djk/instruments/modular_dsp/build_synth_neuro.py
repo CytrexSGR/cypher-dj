@@ -14,6 +14,7 @@ Signal flow (one voice, mono legato bass):
         the sine sub bypasses everything non-linear and stays mono
 """
 import json
+import math
 import os
 import sys
 
@@ -323,6 +324,59 @@ for k in kanten:
         k["von"] = fx["l"]
     elif k["nach"] == "aus.r":
         k["von"] = fx["r"]
+
+
+# ======================================================================================================================
+# Synth upgrade, wave 1 (knobs 46..56, appended). The newer Baukasten functions reach the oscillator `osc` and the modulation
+# sums as NEW knobs; with every new knob at its `vorgabe` the graph renders byte-equal to the graph before this step
+# (`python3 measure_null.py run synth-neuro-aufwertung --alt <base>`).
+# Wired one function at a time, in this order: warp/depth, stack, phase mod, chaos, drift. Knobs 44 and 57..64 stay free.
+# ======================================================================================================================
+# ---- WARP (46..48) and STACK (49): the wavetable inputs `warp` / `tiefe` / `stapel`, all 0 at the default -----------------------
+ui = ab._Info()
+ui.neu(46, "Warp mode", 0.0, "N", stufen=(4, 0))
+w_mode = ab.regler(G, "wp_k_mode", 46, 0, 3, vorgabe=0)               # 0 Off, 1 Bend, 2 Asym, 3 Sync (the input is rounded)
+w_depth = ab._f(G, ui, "wp_k_depth", 47, "Warp depth", -1, 1, 0.5)    # bend and asym -1..1; sync takes 0..1 (negative = 0)
+w_l1 = ab._g_bi(G, ui, "wp_k_l1", 48, "LFO 1 to warp depth", 1.0)     # the LFO 1 shape output before its cutoff amount
+ui.neu(49, "Stack", 0.0, "N", stufen=(3, 0))
+w_stack = ab.regler(G, "wp_k_stack", 49, 0, 2, vorgabe=0)             # 0 Off, 1 Octave, 2 Octave + fifth; read at the strike
+w_tiefe = ab.add(G, "wp_tiefe", w_depth, ab.mul(G, "wp_l1_t", "w_shape.aus", w_l1))
+ab.kante(G, w_mode, "osc.warp")
+ab.kante(G, w_tiefe, "osc.tiefe")
+ab.kante(G, w_stack, "osc.stapel")
+namen_von(ui.ergebnis())
+
+# ---- PHASE MOD (50, 51): a sine at note pitch x ratio into `osc.pm`, in cycles -------------------------------------------------
+ui = ab._Info()
+pm_k = ab._g_uni(G, ui, "pm_k", 50, "Phase mod", 0.5)
+pm_ratio = ab._wahl_knopf(G, ui, "pm_k_ratio", 51, "Phase mod ratio", 5, 1)
+pm_r = ab._wahl(G, "pm_ratio", 5, [], pm_ratio, **{f"e{i + 1}": v for i, v in enumerate((0.5, 1, 2, 3, 4))})
+ab.knoten(G, "pm_sin", "sinus")
+ab.kante(G, ab.mul(G, "pm_hz", HZT, pm_r), "pm_sin.hz"); ab.kante(G, FRESH, "pm_sin.sync")
+ab.kante(G, ab.mul(G, "pm_out", "pm_sin.aus", pm_k), "osc.pm")
+namen_von(ui.ergebnis())
+
+# ---- CHAOS (52..55): Lorenz, per voice and seeded. aus -> wave position and fold, aus2 -> cutoff -------------------------------
+ui = ab._Info()
+ch_rate = ab._f(G, ui, "ch_k_rate", 52, "Chaos rate", 0.05, 20, 0.5, log=True)
+ch_wave = ab._g_bi(G, ui, "ch_k_wave", 53, "Chaos to wave", 1.0)
+ch_cut = ab._g_bi(G, ui, "ch_k_cut", 54, "Chaos to cutoff", 36)
+ch_fold = ab._g_bi(G, ui, "ch_k_fold", 55, "Chaos to fold", 18)
+ab.knoten(G, "chaos", "chaos", form=0, saat=5)
+ab.kante(G, ch_rate, "chaos.rate")
+ab.einspeisen(G, "ch_pos", "osc.pos", ab.mul(G, "ch_wave_t", "chaos.aus", ch_wave))
+ab.summe_erweitern(G, "ch_cut_sum", vc["aus"], ab.mul(G, "ch_cut_t", "chaos.aus2", ch_cut))
+ab.einspeisen(G, "ch_fold_sum", "fold.antrieb", ab.mul(G, "ch_fold_t", "chaos.aus", ch_fold))
+namen_von(ui.ergebnis())
+
+# ---- DRIFT (56): per-voice analog wander as in synth-mono: pitch +-6 ct on the master-tune stage, cutoff +-8 % -----------------------
+ui = ab._Info()
+dr_k = ab._g_uni(G, ui, "dr_k", 56, "Drift", 1.0)
+ab.knoten(G, "d_pitch", "drift", rate=0.3, fest=0.4, saat=31)
+ab.knoten(G, "d_cut", "drift", rate=0.3, fest=0.4, saat=33)
+ab.einspeisen(G, "dr_pitch_sum", "tune_hz.cent", ab.mul(G, "dr_pitch_t", ab.mul(G, "dr_pitch_a", "d_pitch.aus", dr_k), 6.0))
+ab.summe_erweitern(G, "dr_cut_sum", "ch_cut_sum.aus", ab.mul(G, "dr_cut_t", ab.mul(G, "dr_cut_a", "d_cut.aus", dr_k), 12 * math.log2(1.08)))
+namen_von(ui.ergebnis())
 
 
 def graph():

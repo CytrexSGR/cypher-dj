@@ -3,6 +3,87 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-18, eleventh update
+
+**Controllers**
+- A controller place can follow the synth in front. With FOLLOW on for a place in the CONTROLLERS window, the knobs of the
+  instrument you select (a project track in PRODUCTION or in the workbench, a pattern of a SEQ deck, a channel in
+  INSTRUMENTS) are put on the controls of that device, and they move with you when you select another one. Factory
+  presets ship for the Novation Launch Control 3 and the Akai LPD8 for six synths: Mono Synth, Poly Synth, Neuro Bass and
+  the three wavetable synths (reese, supersaw, chor). SAVE MAPPING keeps your own layout of a synth, which FOLLOW then
+  prefers over the factory one. A knob of a project track that you turn on a controller is written into the project
+  after it has rested for a moment, as one undo step labelled Controller, except for a knob that a lane or a clip
+  envelope drives.
+- Programs on the Launch Control 3. A preset can hold several programs: whole assignments of the 16 encoders and 8
+  buttons for one synth, cut along the boxes of its front panel (Mono Synth has four: oscillators, mixer and filter;
+  envelopes, LFO and voice; modulation and chaos; effects). Page up and Page down step through them, and the device
+  window turns to the page that belongs to the program. The display shows the program number and the names of its boxes
+  for a moment.
+- The eight buttons of the Launch Control 3 step the choice fields of a synth, such as waveform, filter type and voice
+  mode: every press moves the field to its next position and wraps around.
+- The LEDs of the Launch Control 3 show the colour of the panel box the control belongs to, the same colour the device
+  window gives the box. Every program starts with the strongest colours.
+- The values of the knobs go back to the endless encoders, so after a sound preset, a program change or a move with the
+  mouse an encoder carries on from the real value instead of jumping.
+- A mapping entry can be valid on any MIDI channel, so a device set to another channel or program still drives its
+  preset. An entry on an exact channel wins.
+- The keys and pads of a MIDI keyboard play the instrument in front. That is the selected project track while it is in
+  front (the studio arms it for MIDI for as long as it is in front, without writing anything into the project, and a
+  recording takes that arm back), or a live channel: the bass, the melody, the extra pattern streams and the two loop box
+  pads. The CONTROLLERS window shows one line, KEYS to the target, with a switch. A note that is assigned to a button in
+  the learn table is a button, not a key.
+- Akai APC20 as the project mixer: while the main window shows PRODUCTION, faders 1 to 8 move the tracks of a bank of
+  eight and the master fader moves the project master (the fader travel follows the taper of the page's faders, so half
+  travel is half travel on the screen). Activator, Solo/Cue and Record Arm are mute, solo and arm of the track, with
+  their LEDs. Shift with Play or Stop starts and stops the arrangement, Shift with Left or Right steps the bank, Shift with
+  Up or Down moves the track in front, and the synth window and the Launch Control follow it. PRODUCTION frames the tracks
+  of the bank with an orange bar. In every other view the APC20 is the DJ console as before.
+
+**Studio**
+- A window of its own for the instrument of a project track, for a second monitor: OPEN in the PRODUCTION track head and
+  in the header of the device panel, WINDOW on the device card of the workbench dock, OPEN in a SEQ pattern head. The
+  address is `#geraet=<track>`. It shows the front panel of that track and follows the project: values changed in the
+  main page, by undo or by a controller show at once, and a knob dragged there makes the same undo step as in the main
+  page. The window follows the track in front (FOLLOW in its title line; off pins it to its track), and one window
+  serves every track.
+- The device window has a controller strip above the panel. It draws the controls of every controller that drives the
+  track in the layout of the device, buttons and pads included, with the number of the control inside the knob it drives.
+  HIDE and SHOW fold it (folded at first); the head line with the program, LEARN and SAVE MAPPING and the box titles
+  in the LED colours stay. LEARN arms a knob of the panel for MIDI learn.
+- PRODUCTION track heads: every track fader has the same length (a long device name is cut instead of widening the head),
+  a fader or pan that a controller moves shows in the head at once, and a yellow frame with CTL marks the track the
+  controllers drive.
+- Five duplicate instruments leave the instrument pickers: Greif 2, the three Juno Pad variants with echo, hall and
+  dynamics, and the sync lead example. A loaded one stays listed where it sits, the graphs still load by name, and their
+  sounds stay in the sound list (Greif 2 sounds carry the suffix II; each of the other four has one factory sound).
+
+**Instruments and effects**
+- Synth upgrades. Mono Synth gets a chaos LFO (rate, to cutoff, to oscillator 2 pitch) and a clean sub that skips filters
+  and effects. Poly Synth gets wave position, warp, stack, phase modulation and chaos. Neuro Bass gets warp, stack, phase
+  modulation, chaos and drift. The three wavetable synths get warp, stack and chaos, and in part phase modulation, a clean
+  sub, band drive and a chorus. Warp has three modes (bend, asym, sync); stack adds a copy an octave up, on some synths
+  also an octave and a fifth. With every new knob at its start value, the default sound and the factory presets of
+  before render byte for byte as before (a null test against the old graphs). Measured on synthetic signals, not yet
+  heard by a listener.
+- 191 factory presets of our own devices ship now, 143 of them for Cypher Modular graphs.
+
+**For the assistant**
+- Cypher can set a controller place and its FOLLOW flag. Learning, presets and mapping stay with you.
+
+**Limits to know**
+- Not confirmed on the device: that the encoders carry on from the value sent back (the bytes go out, the unit sends no
+  echo), the text on the Launch Control 3 display, the button LEDs, the step buttons, and the keys of a keyboard reaching
+  a live channel (tested in the core's tests only). The encoder LEDs were seen lit on the device; the first, pale palette
+  was replaced by saturated colours that have not been looked at since. The Page buttons were measured on the unit.
+- Akai APC20 in PRODUCTION: the Shift functions are taken from a description of the device and were not measured on it.
+  The rest was checked by injecting MIDI; hand tests so far were the faders (whose taper was corrected after one), not
+  mute, solo, arm or the steps of bank and track.
+- Controllers reach the knobs of the first eight Cypher Modular tracks of a project (the core has rows for eight). The
+  ninth to sixteenth track take a knob by hand but no controller.
+- The first press of a step button after a restart or a preset change starts from the value of the row, not from the
+  project's value.
+- A Launch Control 3 left in its fixed default mode sends on another channel and does not match the factory presets.
+
 ## 2026-11-18, tenth update
 
 **Studio**

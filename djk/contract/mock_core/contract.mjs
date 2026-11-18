@@ -48,6 +48,7 @@ export const BEFEHLE = {
   '/k/kiste': f('hs', 'id quelle'),
   '/k/mapping': f('hss', 'id quelle geraet'),
   '/k/lernen': f('hsi', 'id quelle an'),
+  '/k/live/tasten': f('hsi', 'id quelle strom'),
   '/k/latenz': f('hssi', 'id quelle ziel samples'),
   '/erz/strom': f('hsiss', 'id quelle strom ziel kanal'),
   '/erz/fenster': f('iiiiddh', 'strom sendung modus kappe ab_beat bis_beat t_send_us'),

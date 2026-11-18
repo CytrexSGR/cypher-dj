@@ -248,6 +248,9 @@ const REGLER_OHNE_WIRKUNG_AUF_DER_PROBE: &[(&str, usize, &str)] = &[
     ("wavetable-reese", 9, WAVE_HUELLE_AUS),
     ("wavetable-supersaw", 8, WAVE_HUELLE_AUS),
     ("wavetable-supersaw", 9, WAVE_HUELLE_AUS),
+    ("wavetable-reese", 11, WT_TIEFE_AUS), ("wavetable-reese", 13, WT_CHAOS_AUS), ("wavetable-reese", 16, WT_SUB_AUS),
+    ("wavetable-supersaw", 11, WT_TIEFE_AUS), ("wavetable-supersaw", 13, WT_CHAOS_AUS), ("wavetable-supersaw", 16, WT_CHORUS_AUS),
+    ("wavetable-chor", 11, WT_TIEFE_AUS), ("wavetable-chor", 13, WT_CHAOS_AUS), ("wavetable-chor", 17, WT_CHORUS_AUS),
     ("saege-ladder", 9, SAEGE_FILTER_HUELLE_AUS),
     ("saege-ladder", 10, SAEGE_FILTER_HUELLE_AUS),
     ("labor", 8, LABOR_DELAY_1_AUS),
@@ -278,6 +281,10 @@ const REGLER_OHNE_WIRKUNG_AUF_DER_PROBE: &[(&str, usize, &str)] = &[
     ("synth-neuro", 35, NEURO_LFO2_AUS),
     ("synth-neuro", 41, NEURO_DELAY_AUS),
     ("synth-neuro", 42, NEURO_DELAY_AUS),
+    ("synth-neuro", 47, NEURO_WARP_AUS),
+    ("synth-neuro", 48, NEURO_WARP_AUS),
+    ("synth-neuro", 51, NEURO_PM_AUS),
+    ("synth-neuro", 52, NEURO_CHAOS_AUS),
     ("synth-mono", 36, MONO_NUR_UEBER_G),
     ("synth-mono", 37, MONO_NUR_UEBER_G),
     ("synth-mono", 38, MONO_NUR_UEBER_G),
@@ -289,11 +296,13 @@ const REGLER_OHNE_WIRKUNG_AUF_DER_PROBE: &[(&str, usize, &str)] = &[
     ("synth-mono", 54, MONO_NUR_UEBER_G),
     ("synth-mono", 55, MONO_NUR_UEBER_G),
     ("synth-mono", 56, MONO_NUR_UEBER_G),
+    ("synth-mono", 58, MONO_NUR_UEBER_G),
     ("synth-mono", 60, MONO_NUR_UEBER_G),
     ("synth-poly", 31, POLY_MODENV_AUS), ("synth-poly", 32, POLY_MODENV_AUS), ("synth-poly", 33, POLY_MODENV_AUS), ("synth-poly", 34, POLY_MODENV_AUS),
     ("synth-poly", 38, POLY_OSC2_AUS),
     ("synth-poly", 39, POLY_LFO2_AUS), ("synth-poly", 40, POLY_LFO2_AUS), ("synth-poly", 41, POLY_LFO2_AUS), ("synth-poly", 42, POLY_LFO2_AUS),
     ("synth-poly", 47, POLY_OSC2_AUS), ("synth-poly", 48, POLY_OSC2_AUS), ("synth-poly", 49, POLY_OSC2_AUS), ("synth-poly", 50, POLY_OSC2_AUS), ("synth-poly", 51, POLY_OSC2_AUS),
+    ("synth-poly", 58, POLY_PM_AUS), ("synth-poly", 60, POLY_WARP_AUS), ("synth-poly", 62, POLY_CHAOS_AUS),
     ("synth-greif", 62, GREIF_GLIDE),
     ("synth-greif2", 62, GREIF_GLIDE),
     ("synth-poly", 54, "glide runs from the pitch a voice had last; the probe's notes all land on voices that have not played yet (the first note of a voice sets the glide to its pitch), so there is nothing to glide from. tests/synth_poly.rs `glide_auf_der_stimme` plays two chords on the same voices"),
@@ -312,14 +321,28 @@ const LABOR_DELAY_1_AUS: &str = "delay time and its modulation depth of channel 
 const NEURO_OSC2_AUS: &str = "wave, octave and detune of oscillator 2 only act through Osc2 level (knob 28); the probe leaves it at 0 (off by design, so old presets keep their sound). `neuro_freie_regler_wirken_ueber_ihr_tor` sweeps them with the level open";
 const NEURO_LFO2_AUS: &str = "rate, shape, sync and target of LFO 2 only act through LFO2 amount (knob 36); the probe leaves it at 0.5 = 0 (off by design). `neuro_freie_regler_wirken_ueber_ihr_tor` sweeps them with the amount open";
 const NEURO_DELAY_AUS: &str = "delay time and feedback only act through Delay mix (knob 43); the probe leaves it at 0 (off by design). `neuro_freie_regler_wirken_ueber_ihr_tor` sweeps them with the mix open";
-const MONO_NUR_UEBER_G: &str = "a free (class F) knob of a new module: it is heard only through that module's gate knob (MOD ENV amounts, LFO 2 amount, chorus amount, delay mix), which sits at 0 by design so the default is the old sound. `mono_freie_regler_wirken_ueber_ihr_tor` (synth_mono.rs) sweeps them with the gate open";
+const NEURO_WARP_AUS: &str = "warp depth and LFO 1 to warp depth only act while Warp mode (knob 46) is not Off; the probe leaves it at Off (off by design, so old presets keep their sound). `neue_freie_regler_hinter_aus_aendern_nichts` (synth_neuro.rs) pins that they change nothing then, and the feature cases of `measure_null.py` (synth-neuro-aufwertung) open the mode";
+const NEURO_PM_AUS: &str = "the phase mod ratio only acts through Phase mod (knob 50); the probe leaves it at 0 (off by design). `measure_null.py` (synth-neuro-aufwertung) renders all five ratios with the amount open";
+const NEURO_CHAOS_AUS: &str = "the chaos rate only acts through the three chaos amounts (knobs 53..55); the probe leaves them at 0.5 = 0 (off by design). `measure_null.py` (synth-neuro-aufwertung) renders it with an amount open";
+const MONO_NUR_UEBER_G: &str = "a free (class F) knob of a new module: it is heard only through that module's gate knob (MOD ENV amounts, LFO 2 amount, chorus amount, delay mix, chaos amounts), which sits at 0 by design so the default is the old sound. `mono_freie_regler_wirken_ueber_ihr_tor` (synth_mono.rs) sweeps them with the gate open";
 const POLY_MODENV_AUS: &str = "the MOD ENV shape (attack, decay, sustain, release) acts only while one of its amounts (knobs 35..38) is away from its centre; the probe leaves them at 0.5 = 0 (off by design). tests/synth_poly.rs `jeder_neue_regler_ist_hoerbar` opens the gate";
 
 const POLY_LFO2_AUS: &str = "LFO 2 (rate, shape, sync, target) acts only while its Amount (knob 43) is away from its centre; the probe leaves it at 0.5 = 0 (off by design). tests/synth_poly.rs `jeder_neue_regler_ist_hoerbar` opens the gate";
 
 const POLY_OSC2_AUS: &str = "oscillator 2 (wave, octave, semitone, detune, sync, and the MOD ENV amount onto its pitch) is heard only while Osc2 level (knob 46) is above 0; the probe leaves it at 0 (off by design). tests/synth_poly.rs `jeder_neue_regler_ist_hoerbar` opens the gate";
 
+const POLY_PM_AUS: &str = "the phase mod ratio (knob 58) acts only through Phase mod (knob 53), which sits at 0 by design so the default is the old sound. tests/synth_poly.rs `jeder_neue_regler_ist_hoerbar` opens the gate";
+
+const POLY_WARP_AUS: &str = "the warp depth (knob 60) acts only while Warp mode (knob 59) is not Off; the probe leaves it Off (the old sound). tests/synth_poly.rs `jeder_neue_regler_ist_hoerbar` picks a mode";
+
+const POLY_CHAOS_AUS: &str = "the chaos rate (knob 62) acts only through a chaos amount (knobs 63, 64), which sit at their centre = 0 by design. tests/synth_poly.rs `jeder_neue_regler_ist_hoerbar` opens one";
+
 const SAEGE_FILTER_HUELLE_AUS: &str = "the filter envelope shape (decay, sustain) only acts while Env amount (knob 3) is away from its centre; the probe leaves it at 0.5 = 0 st (off by design, so the default is the old static cutoff)";
+
+const WT_TIEFE_AUS: &str = "the warp depth acts only while Warp mode (knob 10) is not Off; the probe leaves it Off (off by design, so the default is the old sound). `wavetable_freie_regler_wirken_ueber_ihr_tor` sweeps it with a warp mode on";
+const WT_CHAOS_AUS: &str = "the chaos rate acts only through Chaos to position (knob 14); the probe leaves it at 0.5 = 0 (off by design). `wavetable_freie_regler_wirken_ueber_ihr_tor` sweeps it with the amount open";
+const WT_SUB_AUS: &str = "the sub octave acts only through Clean sub (knob 15); the probe leaves it at 0 (off by design). `wavetable_freie_regler_wirken_ueber_ihr_tor` sweeps it with the level open";
+const WT_CHORUS_AUS: &str = "the chorus mode acts only through the chorus amount; the probe leaves it at 0 (off by design). `wavetable_freie_regler_wirken_ueber_ihr_tor` sweeps it with the amount open";
 
 const WAVE_HUELLE_AUS: &str = "the wave envelope times only act while Wave env amount (knob 7) is away from its centre; the probe leaves it at 0.5 = amount 0 (off by design, so old presets keep their sound)";
 
@@ -361,10 +384,11 @@ fn jeder_regler_aendert_den_klang_auf_der_probe() {
 fn neuro_freie_regler_wirken_ueber_ihr_tor() {
     let (name, json) = alle_graphen().into_iter().find(|(n, _)| n == "synth-neuro").expect("synth-neuro");
     // (knob, gate knobs set open)
-    let faelle: [(usize, &[(usize, f32)]); 9] = [
+    let faelle: [(usize, &[(usize, f32)]); 13] = [
         (29, &[(28, 0.8)]), (30, &[(28, 0.8)]), (31, &[(28, 0.8)]),
         (32, &[(36, 1.0), (35, 0.25)]), (33, &[(36, 1.0), (35, 0.25)]), (34, &[(36, 1.0), (35, 0.25)]), (35, &[(36, 1.0)]),
         (41, &[(43, 0.5)]), (42, &[(43, 0.5)]),
+        (47, &[(46, 1.0 / 3.0)]), (48, &[(46, 1.0 / 3.0)]), (51, &[(50, 0.6)]), (52, &[(53, 1.0)]),
     ];
     let aus: Vec<String> = parallel(&faelle, |(nr, tor)| {
         let mit = |w: f32| {
@@ -377,6 +401,33 @@ fn neuro_freie_regler_wirken_ueber_ihr_tor() {
         let diff = a.iter().zip(&b).fold(0.0f32, |m, (x, y)| m.max((x.0 - y.0).abs()).max((x.1 - y.1).abs()));
         println!("MESS neuro free knob {nr} with its gate open: max |0 - 1| {diff:.5}");
         if diff == 0.0 { Some(format!("knob {nr} is dead even with its gate open")) } else { None }
+    }).into_iter().flatten().collect();
+    assert!(aus.is_empty(), "{aus:?}");
+}
+
+/// wavetable-reese, -supersaw, -chor (synth upgrade): the class F knobs are audible only through their gate. Each is swept 0 against 1 with
+/// its gate open and must change the sound.
+#[test]
+fn wavetable_freie_regler_wirken_ueber_ihr_tor() {
+    // (graph, knob, gate knobs set open); warp mode knob position 1/3 = Bend
+    let faelle: [(&str, usize, &[(usize, f32)]); 9] = [
+        ("wavetable-reese", 11, &[(10, 1.0 / 3.0)]), ("wavetable-reese", 13, &[(14, 1.0)]), ("wavetable-reese", 16, &[(15, 1.0)]),
+        ("wavetable-supersaw", 11, &[(10, 1.0 / 3.0)]), ("wavetable-supersaw", 13, &[(14, 1.0)]), ("wavetable-supersaw", 16, &[(15, 1.0)]),
+        ("wavetable-chor", 11, &[(10, 1.0 / 3.0)]), ("wavetable-chor", 13, &[(14, 1.0)]), ("wavetable-chor", 17, &[(16, 1.0)]),
+    ];
+    let alle = alle_graphen();
+    let aus: Vec<String> = parallel(&faelle, |(name, nr, tor)| {
+        let json = &alle.iter().find(|(n, _)| n == name).unwrap_or_else(|| panic!("{name}")).1;
+        let mit = |w: f32| {
+            let mut p = lade(name, json);
+            for &(n, v) in tor.iter() { p.setze_regler(n, v); }
+            p.setze_regler(*nr, w);
+            spiele_probe(&mut p, false)
+        };
+        let (a, b) = (mit(0.0), mit(1.0));
+        let diff = a.iter().zip(&b).fold(0.0f32, |m, (x, y)| m.max((x.0 - y.0).abs()).max((x.1 - y.1).abs()));
+        println!("MESS {name} free knob {nr} with its gate open: max |0 - 1| {diff:.5}");
+        if diff == 0.0 { Some(format!("{name}: knob {nr} is dead even with its gate open")) } else { None }
     }).into_iter().flatten().collect();
     assert!(aus.is_empty(), "{aus:?}");
 }

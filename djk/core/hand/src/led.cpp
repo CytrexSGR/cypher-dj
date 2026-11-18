@@ -11,7 +11,7 @@ int led_nachricht(const Mapping& m, const char* name, int zustand, uint8_t aus[3
     const Led& l = m.led[i];
     if (std::strcmp(l.name, name) != 0) continue;
     const uint8_t status = l.nachricht.typ == NachrichtTyp::note ? 0x90 : 0xB0;
-    aus[0] = static_cast<uint8_t>(status | (l.nachricht.kanal - 1));
+    aus[0] = static_cast<uint8_t>(status | ((l.nachricht.kanal > 0 ? l.nachricht.kanal : 1) - 1));
     aus[1] = l.nachricht.nr;
     aus[2] = zustand == 0 ? l.aus : zustand == 1 ? l.an : l.blinkt;
     return 3;

@@ -22,14 +22,20 @@ export const lernName = (platz: number): string => (platz === 1 ? 'lernen' : `le
 export type Typ = 'cc' | 'note';
 export type Art = 'absolut' | 'taste';
 // typ and art are left out while they are the default ('cc', 'absolut'): a knob assignment reads and prints as it always did; a button or pad carries both.
-export interface Zuordnung { pfad: string; kanal: number; nr: number; platz: number; typ?: Typ; art?: Art }
+// stufen: a button or pad that steps a continuous target through N equidistant positions and wraps (art taste + stufen N, core/hand mapping.cpp); a
+// selector of a synth panel with N options is driven this way. Absent on every other entry.
+export interface Zuordnung { pfad: string; kanal: number; nr: number; platz: number; typ?: Typ; art?: Art; stufen?: number }
 export type Eintrag = Record<string, unknown>;
+/** An assignment to write (the place is given apart): what zuordne takes, and what ersetzeKnoepfe replaces a table with. */
+export type Neu = Omit<Zuordnung, 'platz'>;
+const BK_ZIEL = /\/bk\/\d+$/;   // a graph knob row: <x>/bk/<k>, spur/<n>/bk/<k>
 // eintraege: the raw entries of all places one after the other (reading only); zuordnungen: the entries the learn flow writes (knob, button, pad) with their place
 export interface Stand { datei: 'fehlt' | 'ok' | 'kaputt'; eintraege: Eintrag[]; zuordnungen: Zuordnung[] }
 interface PlatzStand { datei: 'fehlt' | 'ok' | 'kaputt'; eintraege: Eintrag[] }
 
 const istObjekt = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
-const gleicheQuelle = (e: Eintrag, typ: Typ, kanal: number, nr: number): boolean => { const n = e.nachricht; return istObjekt(n) && n.typ === typ && n.kanal === kanal && n.nr === nr; };
+// channel 0 is "any channel" (an entry written by a preset): it is the same source as every channel of that number
+const gleicheQuelle = (e: Eintrag, typ: Typ, kanal: number, nr: number): boolean => { const n = e.nachricht; return istObjekt(n) && n.typ === typ && n.nr === nr && (n.kanal === kanal || n.kanal === 0 || kanal === 0); };
 
 // An entry as the learn flow writes it: a CC "absolut" on a continuous target, a CC or a note "taste" on a switch or deck action. Anything else
 // (relativ, beruehrung, a note "absolut") is not ours and stays out of the list.
@@ -38,7 +44,8 @@ function alsZuordnung(e: Eintrag, platz: number): Zuordnung | null {
   if (!istObjekt(n) || (n.typ !== 'cc' && n.typ !== 'note') || (e.art !== 'absolut' && e.art !== 'taste') || typeof e.ziel !== 'string') return null;
   if (n.typ === 'note' && e.art !== 'taste') return null;
   if (!Number.isInteger(n.kanal) || !Number.isInteger(n.nr)) return null;
-  return { pfad: e.ziel, kanal: n.kanal as number, nr: n.nr as number, platz, ...(n.typ === 'note' ? { typ: 'note' as const } : {}), ...(e.art === 'taste' ? { art: 'taste' as const } : {}) };
+  const stufen = e.art === 'taste' && Number.isInteger(e.stufen) && (e.stufen as number) >= 2 && (e.stufen as number) <= 16 ? { stufen: e.stufen as number } : {};
+  return { pfad: e.ziel, kanal: n.kanal as number, nr: n.nr as number, platz, ...(n.typ === 'note' ? { typ: 'note' as const } : {}), ...(e.art === 'taste' ? { art: 'taste' as const } : {}), ...stufen };
 }
 
 export class LernSpeicher {
@@ -97,12 +104,44 @@ export class LernSpeicher {
     alle.forEach((p, i) => {
       const platz = i + 1;
       const rest = p.eintraege.filter((e) => e.ziel !== z.pfad && !(platz === ziel && gleicheQuelle(e, typ, z.kanal, z.nr)));
-      if (platz === ziel) rest.push({ nachricht: { typ, kanal: z.kanal, nr: z.nr }, ziel: z.pfad, art });
+      if (platz === ziel) rest.push({ nachricht: { typ, kanal: z.kanal, nr: z.nr }, ziel: z.pfad, art, ...(art === 'taste' && z.stufen ? { stufen: z.stufen } : {}) });
       else if (rest.length === p.eintraege.length) return;
       this.schreibe(platz, rest);
       geaendert.push(platz);
     });
     return geaendert;
+  }
+
+  // Controller follow and presets: replace the learn entries of ONE place in a single write. modus 'bk' (default): the entries that point at a graph knob
+  // row (<x>/bk/<k>, spur/<n>/bk/<k>) go and `neu` comes; modus 'alle': every entry the learn flow writes goes (a fest preset). Entries the server did not
+  // write stay in both. The uniqueness rule holds as in zuordne: an entry of another place on a target of `neu` goes. A new entry whose source (typ, channel,
+  // number) already drives an entry that stays is not written and comes back in `kollidiert`; the first of two new entries on one target or on one source wins.
+  // A place whose entries do not change is not written (no .bak, no file created). Answers the places whose file changed (the kern reloads exactly those).
+  ersetzeKnoepfe(platz: number, neu: Neu[], modus: 'bk' | 'alle' = 'bk'): { plaetze: number[]; gesetzt: Neu[]; kollidiert: Neu[] } {
+    const alle = this.gesund();
+    const eigen = alle[platz - 1].eintraege;
+    const geht = (e: Eintrag): boolean => alsZuordnung(e, platz) !== null && (modus === 'alle' || (typeof e.ziel === 'string' && BK_ZIEL.test(e.ziel)));
+    const bleibt = eigen.filter((e) => !geht(e));
+    const gesetzt: Neu[] = [], kollidiert: Neu[] = [];
+    const ziele = new Set<string>();
+    for (const z of neu) {
+      const typ = z.typ ?? 'cc';
+      const quelleBelegt = bleibt.some((e) => gleicheQuelle(e, typ, z.kanal, z.nr)) || gesetzt.some((g) => (g.typ ?? 'cc') === typ && g.nr === z.nr && (g.kanal === z.kanal || g.kanal === 0 || z.kanal === 0));
+      if (quelleBelegt || ziele.has(z.pfad) || bleibt.some((e) => e.ziel === z.pfad)) { kollidiert.push(z); continue; }
+      ziele.add(z.pfad);
+      gesetzt.push(z);
+    }
+    const eintraegeNeu = [...bleibt, ...gesetzt.map((z) => ({ nachricht: { typ: z.typ ?? 'cc', kanal: z.kanal, nr: z.nr }, ziel: z.pfad, art: z.art ?? 'absolut', ...(z.art === 'taste' && z.stufen ? { stufen: z.stufen } : {}) }))];
+    const geaendert: number[] = [];
+    alle.forEach((p, i) => {
+      const nr = i + 1;
+      const rest = nr === platz ? eintraegeNeu : p.eintraege.filter((e) => typeof e.ziel !== 'string' || !ziele.has(e.ziel));
+      const gleich = rest.length === p.eintraege.length && rest.every((e, k) => JSON.stringify(e) === JSON.stringify(p.eintraege[k]));
+      if (gleich) return;
+      this.schreibe(nr, rest);
+      geaendert.push(nr);
+    });
+    return { plaetze: geaendert, gesetzt, kollidiert };
   }
 
   loesche(pfad: string): number[] {

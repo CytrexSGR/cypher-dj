@@ -97,6 +97,7 @@ struct Befehl {
     ARR_INS_MESS = 55, // plan 1.11 T5 (§4.11 /k/arr/ins_mess): nr = host h (1..4); starts the round-trip measurement, answered by event INS_MESS
     LED = 57,          // slice 35 B3 (§4.7 /k/led): pfad = led name, an = state 0 to 3; stored for hand_led (not derived by the kern)
     ARR_EXPORT_LAUF = 56,  // plan 1.11 T12 (§4.11 /k/arr/export_lauf): zeiger = ArrExportLauf* (job with its ring, owned by a writer thread of the net layer); von/bis in the job; no event comes back, the job reports through its own phase
+    TASTEN_ZIEL = 59,      // Task N2 (§4.7 /k/live/tasten): nr = the stream (0 none, 2, 3, 5, 6, 7, 9, 10) that plays the keys of all midi_ein places; plain integers, applied at once in the cycle (Erzeuger::tasten_ziel)
     ARR_NOTE = 58,         // sampler plan A1 task 7 (§4.11 /k/arr/note): nr = spur (1..32), politik = ton (0..127), fassung = vel (0..127, 0 = off); plays one note on a project track through Arrangement::live_note (callback thread, stamp = cycle start), no pointer, no allocation
   };
   int32_t art;

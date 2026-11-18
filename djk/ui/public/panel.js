@@ -126,7 +126,7 @@ const SPERRE_MS = 400;   // after the last own movement incoming values wait thi
 /** Build the panel into `host`. opt: { panel, regler, adapter, dokument?, umschalter?: {text, beiKlick}, kopf?: (element, {lernen}) => void,
  *  breit?: boolean: the device page. Modules sit side by side in their rows and every knob without `scale` gets 11 ticks; without it the
  *  modules of a layout stack in one column and a scale is drawn only where the file asks for one.
- *  lernen?: {an, wartet, gelernt: Set<path>}, beiLernen?(pfad), beiVergessen?(pfad) }.
+ *  lernen?: {an, wartet, gelernt: Set<path>}, beiLernen?(pfad), beiVergessen?(pfad), beiSeite?(id): the page (tab) that is shown, told at build and at every switch }.
  *  MIDI learn: with `lernen.an` (and an adapter that has lernPfad) a click on a control calls beiLernen(adapter.lernPfad(param)) instead of moving it,
  *  a right click calls beiVergessen(pfad). A control addresses ONE path: for xy that is the x parameter. Cells carry `fp-gelernt` (path assigned) and
  *  `fp-wartet` (path armed). `kopf` hears {lernen: bool}: whether the header should offer a LEARN toggle.
@@ -777,6 +777,7 @@ export function baueFrontplatte(host, opt) {
       const zelle = el('div', 'fp-zelle');
       zelle.dataset.typ = c.type;
       zelle.dataset.id = c.id;
+      if (parameterVon(c)[0] !== undefined) zelle.dataset.param = parameterVon(c)[0];   // the device window marks the cell of a knob a controller drives (device_window.js)
       if (c.span) zelle.style.gridColumn = `span ${c.span}`;
       bauer[c.type]?.(c, zelle);
       const lernNr = parameterVon(c)[0];
@@ -811,6 +812,7 @@ export function baueFrontplatte(host, opt) {
     for (const [sid, sek] of sektionen) sek.classList.toggle('fp-aus', seiteVon.get(sid) !== id);
     for (const r of reihen) r.el.classList.toggle('fp-aus', r.ids.every((sid) => seiteVon.get(sid) !== id));
     tabs.forEach((t, i) => { const an = seiten[i].id === id; t.setAttribute('aria-selected', String(an)); t.classList.toggle('an', an); });
+    try { opt.beiSeite?.(id); } catch { /* the listener's business */ }   // the page in front, also the first one (a controller that follows takes the mapping of the page)
   };
   if (seiten.length) {
     const leiste = el('div', 'fp-seiten');

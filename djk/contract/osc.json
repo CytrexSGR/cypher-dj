@@ -301,6 +301,10 @@
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
       {"name": "an", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "1 arm, 0 disarm"}]},
+    {"adresse": "/k/live/tasten", "typen": ",hsi", "abschnitt": "4.7", "richtung": "an_kern", "felder": [
+      {"name": "id", "typ": "h", "einheit": "kennung"},
+      {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
+      {"name": "strom", "typ": "i", "einheit": "nummer", "bereich": [0, 10], "notiz": "the instrument stream that plays the keys of all midi_ein places: 0 = none, 2, 3, 5, 6, 7, 9, 10 (contract/streams.ts); 1, 4 and 8 are refused with ausserhalb_bereich"}]},
     {"adresse": "/k/latenz", "typen": ",hssi", "abschnitt": "4.7", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},

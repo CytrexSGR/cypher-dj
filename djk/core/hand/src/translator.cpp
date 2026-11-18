@@ -96,7 +96,7 @@ int Uebersetzer::ereignis(const uint8_t* d, size_t groesse, int64_t zyklus_s0, u
           z_.ignoriert++;
           return 0;
         }
-        aus->art = AusgabeArt::regler_umschalten;
+        aus->art = e.stufen > 0 ? AusgabeArt::regler_stufe : AusgabeArt::regler_umschalten;
         aus->wert = 1;
       } else {
         aus->art = e.ziel_art == ZielArt::deck  ? AusgabeArt::deck
@@ -116,6 +116,7 @@ const char* name(AusgabeArt a) {
     case AusgabeArt::regler_relativ: return "regler_relativ";
     case AusgabeArt::regler_beruehrung: return "regler_beruehrung";
     case AusgabeArt::regler_umschalten: return "regler_umschalten";
+    case AusgabeArt::regler_stufe: return "regler_stufe";
     case AusgabeArt::deck: return "deck";
     case AusgabeArt::tempo: return "tempo";
     case AusgabeArt::taste: return "taste";

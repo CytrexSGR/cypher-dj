@@ -26,6 +26,8 @@ import { setzeAnsicht, produktion } from './seitenrahmen.js';
 import { zeigeSzenen } from './seq_szenen.js';
 import { menuePunkte, oeffneAchsenMenue } from './instrument_groups.js';
 import { proTaktJetzt } from './bar_live.js';
+import { fokus } from './controller_fokus.js';
+import { kannGeraetFenster, oeffneGeraetFenster, GERAET_FENSTER_TEXT } from './device_open.js';
 import {
   seqAnsicht, deckAnsicht, infosAusCache, fehlendeInfos, ladeInfos, geraetWahl, wechselBefehle, anlegenZustand, zellKlassen, zellText, zellTitel, zeileTitel, kopfZelle, kopfPos,
   griffArt, velNeu, laengeNeu, tonNeu, loslassFelder, imRechteck, radFelder, tonVonText, kurvePfad, laengeText, laengeAusSchritten, pxProBeat,
@@ -132,6 +134,10 @@ function bauePlatz(n) {
   return k;
 }
 
+// The pattern touched last (controller follow); the window focus sends it again while its lane field is still on the page.
+let seqZuletzt = null;
+fokus.registriere('seq', () => (seqZuletzt && document.querySelector(`.sq-feld [data-folge="${seqZuletzt}"]`) ? { spur_id: seqZuletzt } : null));
+
 // ---------- drawing ----------
 // The field is rebuilt when anything it shows changes (a signature of the view); the playhead and the pending wheel note only touch single cells.
 // Where the focus sits inside the field, by pattern, lane and button or cell (not by node: the nodes are replaced), and the way back to it after a rebuild.
@@ -179,7 +185,9 @@ function baueFolge(k, f, i, px, sichtbar) {
   const geraet = knopf('sq-chip sq-geraet', `${f.geraet_text} ▾`, 'sqGeraet'); geraet.title = 'Instrument of this pattern';
   const laenge = knopf('sq-chip', `${laengeText(sicht.laenge_beats, proTaktJetzt())} ▾`, 'sqLaenge'); laenge.title = 'Pattern length';
   const stumm = knopf(f.stumm ? 'sq-chip an' : 'sq-chip', 'M', 'sqStumm'); stumm.title = 'Mute this pattern'; stumm.setAttribute('aria-pressed', String(f.stumm));
-  kopf.append(name, geraet, laenge, stumm);
+  kopf.append(name, geraet);
+  if (kannGeraetFenster(f.spur)) { const fenster = knopf('sq-chip sq-fenster', GERAET_FENSTER_TEXT.knopf, 'sqFenster'); fenster.title = GERAET_FENSTER_TEXT.titel; kopf.append(fenster); }   // the instrument in its own browser window
+  kopf.append(laenge, stumm);
   if (sicht.hinter_loop > 0) kopf.append(el('span', 'sq-hinter', `${sicht.hinter_loop} note${sicht.hinter_loop === 1 ? '' : 's'} behind the loop`));
   const neueZeile = knopf('sq-chip sq-neuezeile', '+ lane ▾', 'sqNeueZeile');
   kopf.append(el('span', 'sq-grow'), neueZeile);
@@ -536,6 +544,10 @@ function bindePlatz(k, n, feld, anlegen, leeren, neu, breite, sprung, modul) {
     const felder = loslassFelder(g, imRechteck(e.clientX, e.clientY, g.c.getBoundingClientRect()));
     if (felder) zelleSenden(g.folge, g.zeile, g.i, felder);
   };
+  // Controller follow: touching a pattern (pointer or keyboard focus inside its lane field or header) puts its track in front; the track is the synth the pattern plays.
+  const folgeBeruehrt = (e) => { const id = e.target.closest?.('[data-folge]')?.dataset.folge; if (id) { seqZuletzt = id; fokus.melde({ spur_id: id }, 'seq'); } };
+  feld.addEventListener('pointerdown', folgeBeruehrt);
+  feld.addEventListener('focusin', folgeBeruehrt);
   feld.addEventListener('pointerup', loslassen);
   feld.addEventListener('pointercancel', loslassen);
   feld.addEventListener('click', (e) => {
@@ -583,7 +595,9 @@ const seqFolge = (n, p, folgeId) => ansicht(n, p).folgen.find((x) => x.spur_id =
 function knopfGedrueckt(n, b) {
   const r = b.getBoundingClientRect(), folgeId = b.closest('.sq-folge')?.dataset.folge, d = b.dataset;
   const schreibeFolge = (label, befehle) => schreibe((p) => { const f = seqFolge(n, p, folgeId); return sende(n, label, befehle(f, p), p, holeJsonFrist); });
-  if ('sqStumm' in d) {
+  if ('sqFenster' in d) {
+    oeffneGeraetFenster(folgeId, melde);
+  } else if ('sqStumm' in d) {
     schreibe((p) => sende(n, 'Mute', [{ befehl: 'spur_aendern', spur_id: folgeId, mute: !seqFolge(n, p, folgeId).spur.mute }], p, holeJsonFrist));
   } else if ('sqLaenge' in d) {
     const setze = (beats) => schreibeFolge('Pattern length', (f) => laengeBefehle(f.spur, f.clip, beats));
@@ -597,14 +611,15 @@ function knopfGedrueckt(n, b) {
     holeGet('/graphen').then(async (g) => {
       const kits = await holeGet('/proj/kits');
       const aktuell = ansicht(n, live.projekt).folgen.find((x) => x.spur_id === folgeId)?.spur?.geraet;
-      const wahl = geraetWahl(g.j?.graphen, kits.j?.kits, aktuell?.art === 'intern' && aktuell.name === 'bk' ? aktuell.graph : undefined);
+      const behalte = aktuell?.art === 'intern' && aktuell.name === 'bk' ? aktuell.graph : undefined;   // the graph this pattern plays: listed even when hidden
+      const wahl = geraetWahl(g.j?.graphen, kits.j?.kits, behalte);
       // the instrument menu: Baukasten entries under the groups of the page-wide axis (instrument_groups.js), the first entry switches the axis and reopens it here
       oeffneAchsenMenue((achse, umschalten) => menuePunkte(wahl, g.j?.graphen, achse, (e) => schreibe((p) => {
         const f = seqFolge(n, p, folgeId), w = wechselBefehle(f.spur, f.clip, e.geraet, infosAusCache(p, n)[folgeId]);
         if (w.meldung) { melde(w.meldung, true); return { ok: false, projekt: p, neuLesen: false, text: '' }; }
         if (w.frage && !window.confirm(w.frage)) return { ok: true, projekt: p, neuLesen: false, text: '' };
         return sende(n, 'Instrument', w.befehle, p, holeJsonFrist);
-      }), umschalten), (punkte) => oeffneMenue(punkte, r.left, r.bottom));
+      }), umschalten, behalte), (punkte) => oeffneMenue(punkte, r.left, r.bottom));
     });
   } else if ('sqNeueZeile' in d) {
     const f = ansicht(n, live.projekt).folgen.find((x) => x.spur_id === folgeId);

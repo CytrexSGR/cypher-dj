@@ -335,6 +335,15 @@ void Kern::einsortieren25(const Befehl& c) {
       quittung(c.id, c.quelle, 1, sample_, beat0);
       quittung(c.id, c.quelle, 3, sample_, beat0);
       break;
+    case Befehl::TASTEN_ZIEL:  // Task N2 (§4.7 /k/live/tasten): the net thread checked source and range; this is the backstop (the kern never leaves a wrong stream as target)
+      if (!(c.nr == 0 || (c.nr >= 2 && c.nr <= 10 && c.nr != 4 && c.nr != 8)) || !std::strcmp(c.quelle, "cypher")) {
+        quittung(c.id, c.quelle, 6, sample_, beat0, !std::strcmp(c.quelle, "cypher") ? "nur_hand" : "ausserhalb_bereich");
+        break;
+      }
+      erz_->tasten_ziel(c.nr);   // a changed target closes the keys held on the old stream
+      quittung(c.id, c.quelle, 1, sample_, beat0);
+      quittung(c.id, c.quelle, 3, sample_, beat0);
+      break;
     case Befehl::HOERSCHEIN: {  // Ohr T14 (§4.5 /k/hoerschein): registriert im Register, sofort fertig
       sw::Schein s{};
       kopiere(s.hs_id, c.hoerschein, sizeof s.hs_id);

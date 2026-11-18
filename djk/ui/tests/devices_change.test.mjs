@@ -283,7 +283,7 @@ test('MIDI controller profile skips software ports and takes the USB controller 
   assert.equal(quellen.find((q) => p.midi.passt(q)).port, 'Midi-Bridge:LPD8: MIDI 1 (capture)');
 });
 
-test('controller places: a port takes the lowest free place 2..8, a taken port is refused, null frees the place, only Andreas', async () => {
+test('controller places: a port takes the lowest free place 2..8, a taken port is refused, null frees the place; Cypher may set a place too', async () => {
   const { setzeController } = await import('../areas/devices/change.ts');
   const { standard, pruefeKonfig, controllerPlaetze } = await import('../areas/devices/store.ts');
   const grundVon = (f) => { try { f(); } catch (e) { return e.grund; } return null; };
@@ -295,7 +295,7 @@ test('controller places: a port takes the lowest free place 2..8, a taken port i
   assert.deepEqual(controllerPlaetze(k).map((c) => [c.platz, c.name]), [[1, 'LPD8'], [2, 'LC3 1']]);
   assert.equal(grundVon(() => setzeController(k, 'andreas', { port: 'Midi-Bridge:LPD8: MIDI 1 (capture)' })), 'port_vergeben');
   assert.equal(grundVon(() => setzeController(k, 'andreas', { platz: 3, port: 'Midi-Bridge:LC3 1: MIDI In (capture)' })), 'port_vergeben');
-  assert.equal(grundVon(() => setzeController(k, 'cypher', { port: 'x:y' })), 'nur_andreas');
+  assert.ok(setzeController(k, 'cypher', { port: 'x:y' }).controller.some((c) => c.port === 'x:y'), 'a MIDI controller place is not his alone');
   k = setzeController(k, 'andreas', { platz: 2, name: 'Launch Control' });
   assert.equal(controllerPlaetze(k)[1].name, 'Launch Control');
   k = setzeController(k, 'andreas', { platz: 2, port: null });

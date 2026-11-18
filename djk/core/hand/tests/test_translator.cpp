@@ -132,6 +132,59 @@ FALL(schalter_nur_beim_druck_beruehrung_nur_beim_beruehren) {
   PRUEFE_GLEICH(a.ein(0x90, 37, 0, &x), 0);
 }
 
+FALL(stufen_taste_nur_beim_druck_cc_und_note) {
+  const char* const M = R"({"version":1,"geraet":"s","quelle_port":"q","ziel_port":"z","eintraege":[
+    {"nachricht":{"typ":"cc","kanal":1,"nr":50},"ziel":"erz/5/bk/3","art":"taste","stufen":3},
+    {"nachricht":{"typ":"note","kanal":1,"nr":51},"ziel":"erz/5/bk/4","art":"taste","stufen":4}]})";
+  auto m = std::make_unique<Mapping>();
+  Fehler f;
+  PRUEFE(lade(M, stellwerk::ReglerTabelle(), m.get(), &f));
+  Uebersetzer u(m.get());
+  Ausgabe x{};
+  auto ein = [&](uint8_t s, uint8_t a, uint8_t b) {
+    const uint8_t d[3] = {s, a, b};
+    return u.ereignis(d, 3, 0, 0, 256, &x);
+  };
+  PRUEFE_GLEICH(ein(0xB0, 50, 127), 1);   // CC >= 64 is a press
+  PRUEFE(x.art == AusgabeArt::regler_stufe && x.eintrag == 0);
+  PRUEFE_GLEICH(ein(0xB0, 50, 64), 1);
+  PRUEFE_GLEICH(ein(0xB0, 50, 63), 0);    // release: no effect
+  PRUEFE_GLEICH(ein(0xB0, 50, 0), 0);
+  PRUEFE_GLEICH(ein(0x90, 51, 100), 1);   // note-on with velocity
+  PRUEFE(x.art == AusgabeArt::regler_stufe && x.eintrag == 1);
+  PRUEFE_GLEICH(ein(0x90, 51, 0), 0);     // note-on velocity 0 = release
+  PRUEFE_GLEICH(ein(0x80, 51, 64), 0);    // note-off
+}
+
+FALL(kanal_0_trifft_jeden_kanal_exakt_gewinnt) {
+  const char* const M = R"({"version":1,"geraet":"k","quelle_port":"q","ziel_port":"z","eintraege":[
+    {"nachricht":{"typ":"cc","kanal":0,"nr":1},"ziel":"deck/1/fader","art":"absolut"},
+    {"nachricht":{"typ":"cc","kanal":2,"nr":1},"ziel":"deck/2/fader","art":"absolut"},
+    {"nachricht":{"typ":"cc","kanal":0,"nr":2},"ziel":"deck/1/eq/tief","art":"relativ","kodierung":"zweierkomplement"},
+    {"nachricht":{"typ":"note","kanal":0,"nr":36},"ziel":"deck/1/kill/tief","art":"taste"},
+    {"nachricht":{"typ":"cc","kanal":0,"nr":3},"ziel":"erz/5/bk/3","art":"taste","stufen":3}]})";
+  auto m = std::make_unique<Mapping>();
+  Fehler f;
+  PRUEFE(lade(M, stellwerk::ReglerTabelle(), m.get(), &f));
+  Uebersetzer u(m.get());
+  Ausgabe x{};
+  auto ein = [&](uint8_t s, uint8_t a, uint8_t b) {
+    const uint8_t d[3] = {s, a, b};
+    return u.ereignis(d, 3, 0, 0, 256, &x);
+  };
+  PRUEFE_GLEICH(ein(0xB3, 1, 100), 1);   // channel 4: the wildcard entry
+  PRUEFE(x.art == AusgabeArt::regler_absolut && x.eintrag == 0);
+  PRUEFE_GLEICH(ein(0xB1, 1, 100), 1);   // channel 2: the exact entry wins
+  PRUEFE_GLEICH(x.eintrag, 1);
+  PRUEFE_GLEICH(ein(0xB7, 2, 1), 1);     // relative
+  PRUEFE(x.art == AusgabeArt::regler_relativ && x.eintrag == 2 && x.wert == 1);
+  PRUEFE_GLEICH(ein(0x95, 36, 100), 1);  // note on channel 6
+  PRUEFE(x.art == AusgabeArt::regler_umschalten && x.eintrag == 3);
+  PRUEFE_GLEICH(ein(0xBF, 3, 127), 1);   // stufen on channel 16
+  PRUEFE(x.art == AusgabeArt::regler_stufe && x.eintrag == 4);
+  PRUEFE_GLEICH(ein(0xB3, 9, 100), 0);   // no entry on any channel
+}
+
 FALL(deck_tempo_und_tasten_mit_werten) {
   Aufbau a;
   Ausgabe x{};

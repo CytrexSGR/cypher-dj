@@ -38,6 +38,9 @@ import { Router, type Route, type Bereich, type BereichKontext } from './http/ro
 import { projBereich, type ProjOptionen } from './areas/proj/area.ts';
 import { geraeteBereich, type GeraeteOptionen } from './areas/devices/area.ts';
 import { lernenBereich, type LernenOptionen } from './areas/learn/area.ts';
+import { controllerBereich } from './areas/controller/sequences.ts';
+import { pultBereich } from './areas/controller/pult_production.ts';
+import { neuerTastenArm } from './areas/controller/tasten.ts';
 import { hostlernenBereich } from './areas/hostlernen/area.ts';
 import { HostSpeicher } from './areas/hostlernen/store.ts';
 import { registerBereich, aktivesPult } from './areas/controller/register.ts';
@@ -444,7 +447,8 @@ export class Oberflaeche {
       nachExport: baueNachExport({ einsammler: opt.proj?.einsammler ?? this.einsammler, offen: () => this.proj.zugang.offen(),
         quellPfad: (sha, hinweis) => this.proj.sitzung.quellePfadVon(sha, hinweis), log: (z) => opt.log?.(z) }) });   // A5: keep three exports, collect   // Paket S3: /proj/freeze, /proj/export (Spec 3.4)
     this.router.melde(this.ausgabe);
-    this.aufnahme = aufnahmeBereich(this.bereichKontext(), this.proj.zugang, { geraeteKonfig: opt.geraete?.konfigPfad });   // 1.8: /proj/aufnahme
+    const tastenArm = neuerTastenArm();   // keys follow the focus (N1): session state shared by the controller area (decides) and the recording area (arms in the core)
+    this.aufnahme = aufnahmeBereich(this.bereichKontext(), this.proj.zugang, { geraeteKonfig: opt.geraete?.konfigPfad, tasten: tastenArm });   // 1.8: /proj/aufnahme
     this.router.melde(this.aufnahme);
     this.stems = stemsBereich(this.bereichKontext(), this.proj.zugang, { python, cwd: REPO_PFADE.werkstatt, ...opt.stems });   // 1.13 S6
     this.router.melde(this.stems);
@@ -475,9 +479,16 @@ export class Oberflaeche {
       insertFenster: (id, d, q) => this.proj.sitzung.insertFenster(id, d, q),
       geraetParameter: (id) => this.proj.sitzung.geraetParameter(id), geraetParam: (id, d, q) => this.proj.sitzung.geraetParam(id, d, q), geraetIst: (id, n) => this.proj.sitzung.geraetIst(id, n),
       geraetFenster: (id, d, q) => this.proj.sitzung.geraetFenster(id, d, q) }));   // 1.11 task 10: /plugins, the parameter list and the window
-    this.router.melde(geraeteBereich(this.bereichKontext(), opt.geraete ?? {}));   // I08: /geraete
+    let controllerAnstoss: () => void = () => {};   // set below: the devices file may change a place's follow flag or its device
+    this.router.melde(geraeteBereich(this.bereichKontext(), { ...(opt.geraete ?? {}), beiAenderung: () => controllerAnstoss() }));   // I08: /geraete
     const lernBereich = lernenBereich(this.bereichKontext(), opt.lernen ?? {});
     this.router.melde(lernBereich);   // S19: /lernen
+    // controller presets and follow: /controller/*; re-resolves on the kern event /e/graph, on every change of the open project and on a change of the devices file
+    const controller = controllerBereich(this.bereichKontext(), lernBereich, { geraeteKonfig: opt.lernen?.geraeteKonfig, werk: opt.lernen?.werkOrdner, nutzer: opt.lernen?.presetOrdner, zugang: this.proj.zugang, tasten: tastenArm });
+    this.router.melde(controller);
+    this.router.melde(pultBereich(this.bereichKontext(), { zugang: this.proj.zugang, pult: () => aktivesPult(inst) }));   // the APC20 in PRODUCTION: /controller/ansicht, /controller/pult (pult_production.ts)
+    controllerAnstoss = () => { void controller.anstoss(); };
+    this.proj.zugang.beiStand(() => controllerAnstoss());
     this.router.melde(hostlernenBereich(this.bereichKontext(), lernBereich, { ordner: lernBereich.speicher.ordner }));   // host learn: /lernen/host, host_ziele.json next to lernen.json
     this.router.melde(registerBereich(this.bereichKontext(), { ordner: lernBereich.speicher.ordner, aktiv: () => aktivesPult(inst), midiPort: () => lernBereich.midiPort(), host: () => new HostSpeicher(lernBereich.speicher.ordner).lies().ziele }));   // controller register: /register
     this.router.melde(presets);   // 1.16: /presets (presets/area.ts), built above so that the project command preset_anwenden reads its store
@@ -2413,6 +2424,7 @@ export class Oberflaeche {
           return code === 200;
         },
       },
+      projekt: () => this.proj.zugang.offen()?.projekt ?? null,
       baukasten: {   // S17: the proj Bereich restores and captures graphs through the same checks as POST /graph
         geladen: () => ({ ...this.stand.graphen_geladen }),
         setzeGraph: (kanal, name, quelle, opt) => this.graphSetzen({ kanal, name, ...(opt?.vorgaben === false ? { vorgaben: false } : {}) }, quelle),

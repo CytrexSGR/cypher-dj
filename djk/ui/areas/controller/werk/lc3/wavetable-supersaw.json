@@ -1,0 +1,8 @@
+{"schema":1,"name":"wavetable-supersaw","modell":"lc3","art":"instrument","graph":"wavetable-supersaw",
+"eintraege":[{"regler":"Enc 1","knopf":3},{"regler":"Enc 2","knopf":4},{"regler":"Enc 3","knopf":1},{"regler":"Enc 4","knopf":2},{"regler":"Enc 5","knopf":7},{"regler":"Enc 6","knopf":8},{"regler":"Enc 7","knopf":9},{"regler":"Enc 9","knopf":5},{"regler":"Enc 10","knopf":6}],
+"seiten":{"main":[{"regler":"Enc 1","knopf":3},{"regler":"Enc 2","knopf":4},{"regler":"Enc 3","knopf":1},{"regler":"Enc 4","knopf":2},{"regler":"Enc 5","knopf":7},{"regler":"Enc 6","knopf":8},{"regler":"Enc 7","knopf":9},{"regler":"Enc 9","knopf":5},{"regler":"Enc 10","knopf":6}],"mod":[{"regler":"Enc 1","knopf":11},{"regler":"Enc 2","knopf":13},{"regler":"Enc 3","knopf":14},{"regler":"Enc 4","knopf":15},{"regler":"Btn 1","knopf":10,"stufen":4},{"regler":"Btn 2","knopf":12,"stufen":3},{"regler":"Btn 3","knopf":16,"stufen":3}]},
+"programme":[
+{"name":"UNISON \u00b7 FILTER \u00b7 WAVE ENV \u00b7 AMP ENV","seite":"main",
+"eintraege":[{"regler":"Enc 1","knopf":3},{"regler":"Enc 2","knopf":4},{"regler":"Enc 3","knopf":1},{"regler":"Enc 4","knopf":2},{"regler":"Enc 5","knopf":7},{"regler":"Enc 6","knopf":8},{"regler":"Enc 7","knopf":9},{"regler":"Enc 9","knopf":5},{"regler":"Enc 10","knopf":6}]},
+{"name":"WARP / STACK \u00b7 CHAOS \u00b7 CHORUS","seite":"mod",
+"eintraege":[{"regler":"Enc 1","knopf":11},{"regler":"Enc 2","knopf":13},{"regler":"Enc 3","knopf":14},{"regler":"Enc 4","knopf":15},{"regler":"Btn 1","knopf":10,"stufen":4},{"regler":"Btn 2","knopf":12,"stufen":3},{"regler":"Btn 3","knopf":16,"stufen":3}]}]}

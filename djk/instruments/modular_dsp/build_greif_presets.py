@@ -134,7 +134,9 @@ for name, ue, (art, unter, char, genre, eins, en), text in P:
     assert set(ue) <= set(NAMEN), set(ue) - set(NAMEN)
     slug = f"{GRAPH}-" + name.lower().replace(" ", "-")
     werte = {f"knob{k[0]}": round(norm(k[2], ue[k[2]]) if k[2] in ue else vorgabe(k[2]), 5) for k in K}
-    doc = {"schema": 1, "name": name, "geraet_typ": "instrument", "geraet": "baukasten", "graph": GRAPH, "werte": werte,
+    # on Greif 2 the display name gets " II" so the sound list does not show every Greif sound twice; slug, id and values stay
+    anzeige = f"{name} II" if GRAPH == "synth-greif2" else name
+    doc = {"schema": 1, "name": anzeige, "geraet_typ": "instrument", "geraet": "baukasten", "graph": GRAPH, "werte": werte,
            "beschreibung": {"art": art, "unterart": unter, "charakter": char, "genre": genre, "einsatz": eins, "energie": en, "text": text},
            "tags": [GRAPH, "wavetable"], "notiz": NOTIZ,
            "angelegt": "2026-11-16T00:00:00.000Z", "geaendert": "2026-11-16T00:00:00.000Z"}

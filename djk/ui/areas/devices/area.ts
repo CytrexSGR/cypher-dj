@@ -14,7 +14,8 @@ import { PROFILE, profil } from './profile.ts';
 import { pwDumpErkenne, LEER, type Erkennung } from './pwdump.ts';
 import { GeraeteFehler, GeraeteSpeicher, controllerPlaetze, type Konfig } from './store.ts';
 
-export interface GeraeteOptionen { konfigPfad?: string; kantenPfad?: string; erkenne?: () => Promise<Erkennung>; cacheMs?: number; jetzt?: () => number; kernFristMs?: number }
+// beiAenderung: called after every written change of the devices file (the controller follow re-resolves when a place starts following or its device changes)
+export interface GeraeteOptionen { beiAenderung?: () => void; konfigPfad?: string; kantenPfad?: string; erkenne?: () => Promise<Erkennung>; cacheMs?: number; jetzt?: () => number; kernFristMs?: number }
 
 const num = (x: unknown): number => Number(x ?? 0);
 
@@ -79,6 +80,7 @@ export function geraeteBereich(ctx: BereichKontext, opt: GeraeteOptionen = {}): 
         const neu = f(speicher.lies(), d, quelle, erk);
         schreibeAlles(neu);
         cache = null;
+        try { opt.beiAenderung?.(); } catch (e) { ctx.log({ typ: 'geraete_haken_fehler', fehler: (e as Error).message }); }
         return lage();
       });
       kette = lauf.catch(() => undefined);

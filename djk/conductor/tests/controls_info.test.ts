@@ -24,6 +24,8 @@ function universum(): string[] {
   u.push('keylock', 'deck/1/keylock', 'pad/1/keylock');   // Keylock 3: nur der globale Knopf
   // S5r: Graph-Regler <kanal>/bk/<n> auf jedem Kanal, dazu die Ränder 0, 9, 32, 33, 64, 65 und Nicht-Kanäle (nur Kanäle mit Graph gelten)
   u.push(...kanaele.flatMap((k) => [0, 1, 8, 9, 10, 32, 33, 63, 64, 65, 100].map((n) => `${k}/bk/${n}`)), 'master/bk/1', 'cue/bk/1', 'pad/3/bk/1');
+  // controller targets: spur/<slot>/bk/<k>, slots 1..8 only, knobs 1..64 (the rows of core/signalbox/src/controls.cpp, SPUR_BK_SLOTS = 8)
+  u.push(...[0, 1, 8, 9, 10, 16, 32].flatMap((n) => [0, 1, 2, 9, 33, 64, 65, 100].map((k) => `spur/${n}/bk/${k}`)), 'spur/1/bk/010', 'spur/1/bk/1x', 'spur/bk/1', 'spur/1/bk');
   // S14: the same for the send returns fx/1..5 (only fx/3 and fx/4 have graph knobs)
   u.push(...[1, 2, 3, 4, 5].flatMap((n) => [0, 1, 8, 9, 10, 32, 33, 64, 65].map((m) => `fx/${n}/bk/${m}`)));
   // 1.15 A2: every mix-tool suffix on every channel kind (positives where the contract has a row, wrong-kind negatives everywhere
@@ -71,7 +73,7 @@ test('1.15 A2: the table holds exactly the 345 tool paths of section 3 and grows
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/utility/')).length, 8 * 5);   // arr-fx slice 1
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/bk/')).length, 8 * 65);   // arr-bk slice 3 + 64-knob widening: an and k1..k64 per instance
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('rack/')).length, 48);   // slice 4c: 12 racks x 4 macro rows
-  assert.equal(REGLER.size, 909 + 784 + 345 + 1178 + 48 + 80 + 64);   // 3408 = 3344 + 64 (master/bk/1..64, the graph place on the DJ master); 3344 = 3264 + 80: the mixer went from 8 groups x 8 rows to 16 groups x 9 rows (c3396e9a, 3db625e3); the sibling test below compares every row with the core table in both directions
+  assert.equal(REGLER.size, 909 + 784 + 345 + 1178 + 48 + 80 + 64 + 8 * 64);   // 3920 = 3408 + 512 (spur/1..8/bk/1..64, the controller targets of the Baukasten tracks, controls.cpp SPUR_BK_SLOTS x SPUR_BK_KNOEPFE); 3408 = 3344 + 64 (master/bk/1..64, the graph place on the DJ master); 3344 = 3264 + 80: the mixer went from 8 groups x 8 rows to 16 groups x 9 rows (c3396e9a, 3db625e3); the sibling test below compares every row with the core table in both directions
   for (const p of soll) assert.equal(muster.test(p), true, `schema takes ${p}`);
 });
 
@@ -139,7 +141,7 @@ test('1.15 A2: tool rows are never "leiser machen" for Cypher (D16, default deny
 test('S5r: <kanal>/bk/<1..64> nur auf Kanälen mit Graph, 0..1, Vorgabe 0,5, alle dürfen', () => {
   const mit = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
   const bk = [...REGLER.keys()].filter((p) => /\/bk\/\d+$/.test(p));
-  assert.equal(bk.length, (mit.length + 3) * 64);   // S14: + fx/3, fx/4; + master (graph place on the DJ master)
+  assert.equal(bk.length, (mit.length + 3) * 64 + 8 * 64);   // S14: + fx/3, fx/4; + master (graph place on the DJ master); + spur/1..8/bk/1..64 (test below)
   for (const k of ['erz/4', 'erz/8', 'bus/1']) assert.equal(REGLER.has(`${k}/bk/1`), false, k);
   assert.equal(kanalVon('master/bk/3'), null);   // the master sum is no channel
   for (const k of mit) assert.equal(kanalVon(`${k}/bk/3`), k);
@@ -159,6 +161,17 @@ test('S14: fx/3/bk/<1..64> and fx/4/bk/<1..64> are global graph knobs of the sen
   assert.equal(kanalVon('fx/3/bk/1'), kanalVon('fx/3/rueckweg'));   // both global
   for (const p of ['fx/1/bk/1', 'fx/2/bk/1', 'fx/5/bk/1', 'fx/3/bk/0', 'fx/3/bk/65', 'fx/4/bk/033', 'fx/4/bk/640', 'deck/1/bk/65']) assert.equal(REGLER.has(p), false, p);   // negative controls
   assert.equal(machtLeiser('fx/3/bk/1', 0.9, 0.1), false);
+});
+
+test('spur/<slot>/bk/<k>: slots 1..8 x knobs 1..64, linear 0..1, default 0.5, no channel, everybody may (as the core rows)', () => {
+  const spur = [...REGLER.keys()].filter((p) => p.startsWith('spur/') && p.includes('/bk/'));
+  assert.equal(spur.length, 8 * 64);
+  for (let n = 1; n <= 8; n++) for (let k = 1; k <= 64; k++) {
+    const i = reglerInfo(`spur/${n}/bk/${k}`)!;
+    assert.deepEqual([i.einheit, i.min, i.max, i.vorgabe, i.nurHand, i.kanal], ['linear', 0, 1, 0.5, false, null], `spur/${n}/bk/${k}`);
+  }
+  for (const p of ['spur/0/bk/1', 'spur/9/bk/1', 'spur/1/bk/0', 'spur/1/bk/65', 'spur/1/bk/01', 'spur/32/bk/1']) assert.equal(REGLER.has(p), false, p);   // negative controls
+  assert.equal(machtLeiser('spur/1/bk/1', 0.9, 0.1), false);
 });
 
 test('§1.5: Bereiche, Vorgaben, nur Hand', () => {

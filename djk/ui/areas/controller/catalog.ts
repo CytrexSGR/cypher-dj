@@ -9,7 +9,7 @@ import path from 'node:path';
 export type Weg = 'pult' | 'lernen' | 'offen';
 /**
  * One control of a device, for the layout the page draws (zeile/spalte count from 1). `kanal`/`nr` are what the device sends in its default
- * mode; `kanal_daw` is the channel it sends on when it is on its DAW port (Launch Control 3 buttons), absent when it is the same.
+ * mode; `kanal_daw` is the channel it sends on when it is on its DAW port (Launch Control 3 encoders), absent when it is the same.
  * A `note` control (a pad) is assigned to a switch or a deck action, never to a continuous target; a `cc` button likewise (learn/targets.ts).
  */
 export interface Regler { name: string; typ: 'cc' | 'note'; kanal: number; nr: number; kanal_daw?: number; art: 'knob' | 'button' | 'pad'; zeile: number; spalte: number }
@@ -34,10 +34,13 @@ const reihe = (n: number, f: (i: number) => Regler): Regler[] => Array.from({ le
 // move to channel 1 on the DAW port (docs/controller/launch-control-3.md).
 // The buttons left of the encoders (programmer's reference v1.1): in standalone mode Page, Track and the DAW-only buttons send nothing, Shift and Mode
 // open the device's own menus; on the DAW port they report to the host (only Shift is documented: CC 63 on channel 7).
-const LC3_BEDIENUNG = 'The buttons on the left are not tiles: Page ▲▼ and Track ◀▶ send nothing on the plain MIDI port and are not used by the studio on the DAW port yet. Mode picks the custom mode (the tiles show mode 8, the default; a control learned in another custom mode appears as an extra tile), Shift + Mode opens the device settings, Function/DAW belongs to the device.';
+const LC3_BEDIENUNG = 'The buttons on the left are not tiles: Page ▲▼ and Track ◀▶ send nothing on the plain MIDI port and are not used by the studio on the DAW port yet. Mode picks the custom mode (the tiles show the encoders on channel 1 as this unit sends them; a control learned on another channel or number appears as an extra tile), Shift + Mode opens the device settings, Function/DAW belongs to the device.';
 const LC3_REGLER: Regler[] = [
-  ...reihe(16, (i) => ({ name: `Enc ${i}`, typ: 'cc', kanal: 16, nr: 12 + i, art: 'knob', zeile: i <= 8 ? 1 : 2, spalte: ((i - 1) % 8) + 1 })),
-  ...reihe(8, (i) => ({ name: `Btn ${i}`, typ: 'cc', kanal: 16, nr: 36 + i, kanal_daw: 1, art: 'button', zeile: 3, spalte: i })),
+  // Channels on the plain MIDI port: his unit sends its encoders on channel 1 (seen with aseqdump on 2026-11-18: Enc 1 = CC 13, channel 1), not on
+  // channel 16 as the guide gives for custom mode 8. The buttons were not seen yet and are taken to be on channel 1 as well. On the DAW port the
+  // encoders are on channel 16 (`kanal_daw`) and the buttons on channel 1. A preset is resolved with the channel of the port the place reads.
+  ...reihe(16, (i) => ({ name: `Enc ${i}`, typ: 'cc', kanal: 1, nr: 12 + i, kanal_daw: 16, art: 'knob', zeile: i <= 8 ? 1 : 2, spalte: ((i - 1) % 8) + 1 })),
+  ...reihe(8, (i) => ({ name: `Btn ${i}`, typ: 'cc', kanal: 1, nr: 36 + i, art: 'button', zeile: 3, spalte: i })),
 ];
 // LPD8, read from his unit with its program dump (F0 47 7F 75 63 00 01 <program> F7) on 2026-11-18, all four programs as they are stored:
 // knobs K1..K8 send CC 1..8, the pads send the notes below (PAD), CC 1..6, 8, 9 (CC) or program changes 0..7 (PROG CHNG); program n sends on

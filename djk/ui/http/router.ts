@@ -4,6 +4,7 @@
 // Bereiche bekommen nur den BereichKontext, nie die Oberflaeche selbst (kein Zugriff auf stand, angefasst, vomKern); der Haken ereignis
 // bekommt eine tief eingefrorene Kopie der Felder, denn vomKern legt dieselben Felder in stand.* ab und verteilt sie an /strom.
 import type http from 'node:http';
+import type { Projekt } from '../project/model.ts';
 
 export type Methode = 'GET' | 'POST' | '*';
 export type Schutz = 'offen' | 'fremdePost';   // fremdePost: bei POST 415 nur_json / 403 fremde_herkunft vor dem Handler (http/transport.ts)
@@ -52,6 +53,7 @@ export interface BereichKontext {
   log(zeile: Record<string, unknown>): void;
   host?: HostBruecke;   // host learn: only the server provides it
   baukasten?: BkBruecke;   // S17: optional, only the server and test contexts that need graphs provide it
+  projekt?(): Projekt | null;   // the open project (read-only view of the live state), null without one; optional like baukasten
 }
 
 const trifft = (r: Route, pfad: string): boolean =>

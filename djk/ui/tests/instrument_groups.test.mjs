@@ -5,7 +5,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { ACHSEN, PRINZIPIEN, GRAPH_KATEGORIEN, gruppenVon, gruppeVon, nebenText, mitNeben, sortiere, leseAchse, merkeAchse, beiAchse, andereAchse,
-  katSpeicherLesen, katMerken, menuePunkte, oeffneAchsenMenue } from '../public/instrument_groups.js';
+  katSpeicherLesen, katMerken, menuePunkte, oeffneAchsenMenue, ohneVerborgene } from '../public/instrument_groups.js';
 import * as effekte from '../public/effects.js';
 import { graphWahlHtml, graphWahlOptionen, instrumentWahlHtml, instrumentKategorien } from '../public/effects.js';
 import { geraeteHtml, eintraege } from '../public/production/devices_browser.js';
@@ -392,4 +392,51 @@ test('page code: the pickers read the axis, the TYPE/ROLE click stores it and se
   assert.doesNotMatch(block, /postJson|waehleGraph|fetch/, 'switching the axis sends nothing');
   assert.match(lies('graphs_view.js'), /beiAchse\(/, 'the pickers redraw when the axis changes');
   assert.match(lies('collections.js'), /geraeteZeilen\(katalog, leseAchse\(\)\)\[Number\(e\.target\?\.closest\?\.\('\[data-geraet-i\]'\)/, 'the right click on a device row finds its entry in display order');
+});
+
+// ---- hidden instruments (duplicates leave the pickers, the graph files stay) ----
+const VG = [...G, { name: 'dup-a', art: 'instrument', regler_namen: {}, kategorie: 'bass', prinzip: 'analog', verborgen: true, latenz: 0 },
+  { name: 'dup-b', art: 'instrument', regler_namen: {}, kategorie: 'bass', prinzip: 'analog', verborgen: true, latenz: 0 }];
+
+test('ohneVerborgene: drops entries with verborgen === true except the kept name; pure; tolerant of nothing', () => {
+  const l = [{ name: 'a' }, { name: 'b', verborgen: true }, { name: 'c', verborgen: true }, { name: 'd', verborgen: false }];
+  assert.deepEqual(ohneVerborgene(l).map((e) => e.name), ['a', 'd']);
+  assert.deepEqual(ohneVerborgene(l, 'c').map((e) => e.name), ['a', 'c', 'd'], 'the loaded one stays');
+  assert.equal(l.length, 4, 'the argument is not changed');
+  assert.deepEqual(ohneVerborgene(undefined), []);
+  assert.deepEqual(ohneVerborgene([{ wert: 'x', verborgen: true }, { wert: 'y' }], 'x', (e) => e.wert).map((e) => e.wert), ['x', 'y'], 'name accessor');
+});
+
+test('single picker and INSTRUMENTS area: a hidden instrument is not offered, but stays as the selected one where it is loaded', () => {
+  const namen = (h) => [...h.matchAll(/<option value="([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(!namen(graphWahlHtml('erz/5', VG, '')).some((n) => n.startsWith('dup-')));
+  assert.ok(!graphWahlOptionen('erz/5', VG, '').some((o) => o.wert.startsWith('dup-')));
+  const h = graphWahlHtml('erz/5', VG, 'dup-a');
+  assert.ok(namen(h).includes('dup-a') && !namen(h).includes('dup-b'));
+  assert.match(h, /<option value="dup-a" selected>/);
+  const o = graphWahlOptionen('erz/5', VG, 'dup-a').find((x) => x.wert === 'dup-a');
+  assert.equal(o.gewaehlt, true);
+  assert.equal(o.kategorie, 'bass', 'it keeps its group, not "Other"');
+  const w = instrumentWahlHtml('erz/5', VG, 'dup-a', '', null, 'prinzip');
+  assert.ok(opts(w, 'graphwahl').some((x) => x.wert === 'dup-a'));
+  assert.ok(!opts(instrumentWahlHtml('erz/5', VG, 'ms20-bass', '', 'analog', 'prinzip'), 'graphwahl').some((x) => x.wert.startsWith('dup-')));
+});
+
+test('menus: menuePunkte drops hidden instruments except the one the pattern or track plays (behalte)', () => {
+  const wahl = [...WAHL, { gruppe: 'Baukasten', text: 'dup-a', name: 'dup-a', geraet: { art: 'intern', name: 'bk', graph: 'dup-a' } }];
+  const texte = (p) => p.filter((x) => !x.gruppe).map((x) => x.text);
+  assert.ok(!texte(menuePunkte(wahl, VG, 'prinzip', () => {}, () => {})).some((t) => t.startsWith('dup-a')));
+  assert.ok(texte(menuePunkte(wahl, VG, 'prinzip', () => {}, () => {}, 'dup-a')).some((t) => t.startsWith('dup-a')));
+  assert.deepEqual(texte(menuePunkte(WAHL, G, 'prinzip', () => {}, () => {})), texte(menuePunkte(WAHL, G, 'prinzip', () => {}, () => {}, undefined)));
+  assert.ok(!texte(instrumentMenue(VG, [], undefined, () => {}, 'prinzip', () => {})).some((t) => t.startsWith('dup-')));
+});
+
+test('device browser: the catalogue carries verborgen, the browser does not list those rows', () => {
+  const k = katalog(VG);
+  assert.equal(k.instrumente.find((r) => r.graph === 'dup-a').verborgen, true);
+  assert.ok(!('verborgen' in k.instrumente.find((r) => r.graph === 'ms20-bass')));
+  const titel = (a) => eintraege(k, a).map((e) => e.titel);
+  for (const a of ACHSEN) assert.ok(!titel(a).some((t) => t.startsWith('dup-')), a);
+  assert.ok(!geraeteHtml(k, 'prinzip').includes('dup-a'));
+  assert.ok(geraeteHtml(k, 'prinzip').includes('ms20-bass'));
 });

@@ -5,6 +5,7 @@
 // What "current values" and "apply" mean depends on where the panel sits; the page passes both in (host.aktuell, host.anwenden).
 // The page imports it (app.js, 1.16 preset browser).
 import { htmlText, werkzeugAnfrage } from './effects.js';
+import { ohneVerborgene } from './instrument_groups.js';   // the graph select of the save panel does not offer hidden duplicates
 import { planMitFrage } from './preset_graph_frage.js';   // D28: a sound of another instrument asks to load it
 import { PRESET_TYP, presetNutzlast } from './production/preset_target.js';   // 1.16 rest U7: the drag payload (pure, shared with the drop side)
 
@@ -345,7 +346,7 @@ export class PresetPanel {
       // 1.16 F2: a Baukasten preset names its graph; the instrument graphs the kern knows (a missing route only leaves the list empty)
       if (!this.z.graphen) {
         const gr = await this.host.holen('/graphen');
-        this.z.graphen = gr.code === 200 && Array.isArray(gr.j?.graphen) ? gr.j.graphen.filter((x) => x.art === 'instrument').map((x) => x.name).sort() : [];
+        this.z.graphen = gr.code === 200 && Array.isArray(gr.j?.graphen) ? ohneVerborgene(gr.j.graphen.filter((x) => x.art === 'instrument')).map((x) => x.name).sort() : [];
       }
       const r = await this.host.holen('/presets');
       if (r.code !== 200) return this.melde(`Presets: ${fehlerText(r)}`, true);

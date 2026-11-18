@@ -55,6 +55,7 @@ export const ueberProjektText = (pfad: string): string => (pfad.startsWith('rack
   ? 'insert stages are changed through the project (/proj/aendern: insert_setzen, insert_param_setzen, insert_an, insert_entfernen, insert_ordnung)'
   : pfad.startsWith('ret/') || pfad.includes('/send/')
   ? 'sends, return strips and Hall values are changed through the project (/proj/aendern: send_setzen, return_aendern)'
+  : /^spur\/\d+\/bk\//.test(pfad) ? 'the knobs of a Baukasten track are changed through the project (/proj/aendern: geraet_param_setzen); a controller reaches them as a learn target'
   : pfad.startsWith('spur/') ? 'track faders are changed through the project (/proj/aendern, spur_aendern)'
     : 'group and master faders are changed through the project (/proj/aendern: gruppenspur_aendern, master_aendern)');
 // Plan live-module task 3: the module store folder; a test instance (a..i) keeps it in /dev/shm, never in the real config folder

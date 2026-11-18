@@ -12,14 +12,15 @@ import { tonKategorieText } from './sampler/tone.ts';
 
 export type GraphArt = 'instrument' | 'effekt';
 /** `latenz`: samples the graph delays its signal at 48 kHz (0 = none), see graphLatenz. */
-export type GraphEintrag = { name: string; art: GraphArt; regler_namen: Record<string, string>; latenz: number; kategorie?: string; prinzip?: string; text?: string };
+export type GraphEintrag = { name: string; art: GraphArt; regler_namen: Record<string, string>; latenz: number; kategorie?: string; prinzip?: string; text?: string;
+  /** true: a duplicate the instrument pickers do not offer (kategorien.json `verborgen`); the graph stays loadable by name. Absent = not hidden. */ verborgen?: boolean };
 /** Instrument categories (ids of kategorien.json). `host` is the Surge/plugin entry the page adds itself, so no graph carries it by default, but it is valid. */
 export const KATEGORIE_IDS = ['drums', 'bass', 'lead', 'pad', 'keys', 'textur', 'host', 'sampler'];
 export const KATEGORIE_TEXT_MAX = 90;
 /** Synthesis types of the instruments (`prinzip` of kategorien.json): the picker's second grouping axis next to the role (`kategorie`). The page adds the
  *  groups `host` and `sonst` (Other) itself; no graph carries them. */
 export const PRINZIP_IDS = ['analog', 'wavetable', 'fm', 'physik', 'granular', 'sampler', 'drums', 'feedback'] as const;
-export type KategorieEintrag = { kategorie: string; prinzip?: string; text: string };
+export type KategorieEintrag = { kategorie: string; prinzip?: string; text: string; verborgen?: true };
 export type GraphListe = { graphen: GraphEintrag[]; uebersprungen: string[] };
 
 // Same rule as the kern (net_erz.cpp kit_name_ok): [a-z0-9_-], 1..32 characters. The graph name is the FILE name.
@@ -116,7 +117,10 @@ export function pruefeKategorien(roh: unknown): { gueltig: Record<string, Katego
     const p = (v as { prinzip?: unknown }).prinzip;
     const prinzipOk = typeof p === 'string' && (PRINZIP_IDS as readonly string[]).includes(p);
     if (p !== undefined && !prinzipOk) fehler.push(`${n}: prinzip must be one of ${PRINZIP_IDS.join(', ')}`);
-    gueltig[n] = { kategorie: e.kategorie, ...(prinzipOk ? { prinzip: p } : {}), text: e.text };
+    // verborgen is optional on read (an older install has none); only `true` hides, a non-boolean is reported and the entry stays without it
+    const vb = (v as { verborgen?: unknown }).verborgen;
+    if (vb !== undefined && typeof vb !== 'boolean') fehler.push(`${n}: verborgen must be true or false`);
+    gueltig[n] = { kategorie: e.kategorie, ...(prinzipOk ? { prinzip: p } : {}), text: e.text, ...(vb === true ? { verborgen: true as const } : {}) };
   }
   return { gueltig, fehler };
 }
@@ -136,7 +140,7 @@ export function listeGraphen(ordner: string = graphenOrdner(), o: Ordner = {}): 
   }
   graphen.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   const kat = ladeKategorien(ordner);   // instruments only; entries without one carry no fields (the page files them under "Other")
-  for (const g of graphen) if (g.art === 'instrument' && kat[g.name]) { g.kategorie = kat[g.name].kategorie; if (kat[g.name].prinzip) g.prinzip = kat[g.name].prinzip; g.text = kat[g.name].text; }
+  for (const g of graphen) if (g.art === 'instrument' && kat[g.name]) { g.kategorie = kat[g.name].kategorie; if (kat[g.name].prinzip) g.prinzip = kat[g.name].prinzip; g.text = kat[g.name].text; if (kat[g.name].verborgen) g.verborgen = true; }
   // Sampler A1 D10: the generated devices of the cut store (smp-<id>) belong to the category `sampler`, named after their cut; no entry of kategorien.json
   for (const g of graphen) {
     if (g.art !== 'instrument' || !g.name.startsWith('smp-')) continue;

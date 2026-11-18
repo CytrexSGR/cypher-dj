@@ -1,0 +1,42 @@
+{
+ "schema": 1,
+ "name": "Juno Pad Dyn",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "juno-pad-dyn",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5,
+  "knob6": 0.5,
+  "knob7": 0.5,
+  "knob8": 0.5
+ },
+ "beschreibung": {
+  "art": "pad",
+  "unterart": "analog",
+  "charakter": [
+   "warm",
+   "wide",
+   "soft"
+  ],
+  "genre": [
+   "deep_house",
+   "ambient"
+  ],
+  "einsatz": [
+   "breakdown",
+   "intro"
+  ],
+  "energie": 2,
+  "text": "Juno pad with chorus, echo, hall and a compressor built in: wide, ready-made chords at the graph's own knob positions."
+ },
+ "tags": [
+  "juno-pad-dyn"
+ ],
+ "notiz": "Reproduces the graph's default sound (every knob at its own default position, 0.5) so the instrument stays reachable as a sound after it left the pickers. Not heard separately (2026-11-18).",
+ "angelegt": "2026-11-18T00:00:00.000Z",
+ "geaendert": "2026-11-18T00:00:00.000Z"
+}

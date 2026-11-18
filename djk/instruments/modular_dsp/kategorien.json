@@ -107,17 +107,20 @@
  "juno-pad-dyn": {
   "kategorie": "pad",
   "prinzip": "analog",
-  "text": "Chorus pad with echo, hall and compressor built in; ready-made wide chords."
+  "text": "Chorus pad with echo, hall and compressor built in; ready-made wide chords.",
+  "verborgen": true
  },
  "juno-pad-echo": {
   "kategorie": "pad",
   "prinzip": "analog",
-  "text": "Chorus pad with a tempo-friendly echo and hall; spacious chords."
+  "text": "Chorus pad with a tempo-friendly echo and hall; spacious chords.",
+  "verborgen": true
  },
  "juno-pad-hall": {
   "kategorie": "pad",
   "prinzip": "analog",
-  "text": "Chorus pad with a big hall; long, airy chords."
+  "text": "Chorus pad with a big hall; long, airy chords.",
+  "verborgen": true
  },
  "kamm-goa-zupf": {
   "kategorie": "keys",
@@ -132,7 +135,8 @@
  "lead": {
   "kategorie": "lead",
   "prinzip": "analog",
-  "text": "Sync lead: two saws, hard sync, filter envelope and vibrato; cuts through a mix."
+  "text": "Sync lead: two saws, hard sync, filter envelope and vibrato; cuts through a mix.",
+  "verborgen": true
  },
  "metall-crash": {
   "kategorie": "drums",
@@ -247,7 +251,8 @@
  "synth-greif2": {
   "kategorie": "lead",
   "prinzip": "wavetable",
-  "text": "Greif with tables built for a strong Position: basic to buzz, formant growl, hard sync."
+  "text": "Greif with tables built for a strong Position: basic to buzz, formant growl, hard sync.",
+  "verborgen": true
  },
  "synth-mono": {
   "kategorie": "bass",

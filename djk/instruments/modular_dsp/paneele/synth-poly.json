@@ -8,7 +8,9 @@
     ["osc", "osc2", "unison"],
     ["filter", "fenv", "aenv"],
     ["lfo", "chorus", "voice"],
-    ["menv", "lfo2"]
+    ["menv", "lfo2"],
+    ["wave", "warp", "pm"],
+    ["chaos"]
   ]},
   "sections": [
     { "id": "osc", "title": "OSCILLATOR", "cols": 4, "controls": [
@@ -98,6 +100,28 @@
       {"id": "l2amt", "type": "knob", "label": "Amount", "bind": {"param": "k43"}, "format": "percent", "span": 2, "default": 0.5, "scale": {"labels": ["-100", "-50", "off", "50", "100"]}},
       {"id": "l2sync", "type": "selector", "label": "Sync", "span": 4, "bind": {"param": "k41"}, "options": ["Free", "1/16", "1/8", "1/4", "1/2", "1 bar", "2 bars"], "default": 0},
       {"id": "l2target", "type": "selector", "label": "Target", "span": 4, "bind": {"param": "k42"}, "options": ["Cutoff", "Pitch", "PWM", "Reso", "Amp"], "default": 0}
+    ]},
+    {"id": "wave", "title": "WAVE", "page": "mod", "cols": 3, "controls": [
+      {"id": "wpos", "type": "knob", "label": "Position", "bind": {"param": "k45"}, "format": "percent", "span": 3, "default": 0.5, "scale": {"labels": ["sine", "tri", "saw", "square"]}},
+      {"id": "wme", "type": "knob", "label": "Mod env", "bind": {"param": "k52"}, "format": "percent", "default": 0.5, "scale": {"labels": ["-100", "-50", "off", "50", "100"]}},
+      {"id": "wch", "type": "knob", "label": "Chaos", "bind": {"param": "k64"}, "format": "percent", "default": 0.5, "scale": {"labels": ["-100", "-50", "off", "50", "100"]}},
+      {"id": "wn", "type": "label", "span": 3, "text": "Centre = saw, left sine, right square"}
+    ]},
+    {"id": "warp", "title": "WARP / STACK", "page": "mod", "cols": 3, "controls": [
+      {"id": "wmode", "type": "selector", "label": "Warp", "span": 3, "bind": {"param": "k59"}, "options": ["Off", "Bend", "Asym", "Sync"], "default": 0},
+      {"id": "wdepth", "type": "knob", "label": "Depth", "bind": {"param": "k60"}, "format": "percent", "span": 3, "default": 0.75, "scale": {"labels": ["-100", "-50", "0", "50", "100"]}},
+      {"id": "wstack", "type": "selector", "label": "Stack", "span": 3, "bind": {"param": "k61"}, "options": ["Off", "Octave"], "default": 0},
+      {"id": "wsn", "type": "label", "span": 3, "text": "Sync depth 0..100. Stack: next note"}
+    ]},
+    {"id": "pm", "title": "PHASE MOD", "page": "mod", "cols": 3, "controls": [
+      {"id": "pmamt", "type": "knob", "label": "Amount", "bind": {"param": "k53"}, "format": "raw", "unit": "cyc", "span": 3, "default": 0, "scale": {"labels": ["off", "0.12", "0.25", "0.37", "0.5"]}},
+      {"id": "pmratio", "type": "selector", "label": "Ratio", "span": 3, "bind": {"param": "k58"}, "options": ["0.5", "1", "2", "3", "4", "5", "7"], "default": 2},
+      {"id": "pmn", "type": "label", "span": 3, "text": "A sine at the note pitch times the ratio"}
+    ]},
+    {"id": "chaos", "title": "CHAOS", "page": "mod", "cols": 3, "controls": [
+      {"id": "chrate", "type": "knob", "label": "Rate", "bind": {"param": "k62"}, "format": "hz", "span": 2, "default": 0.29905200225092193},
+      {"id": "chcut", "type": "knob", "label": "To cutoff", "bind": {"param": "k63"}, "format": "raw", "unit": "st", "default": 0.5, "scale": {"labels": ["-36", "-18", "off", "18", "36"]}},
+      {"id": "chn", "type": "label", "span": 3, "text": "Lorenz, one path per voice"}
     ]}
   ]
 }

@@ -53,7 +53,8 @@ int HandEin::wandle(hand::Ausgabe a, const hand::Mapping& m, const uint8_t* date
     case hand::AusgabeArt::regler_absolut:
     case hand::AusgabeArt::regler_relativ:
     case hand::AusgabeArt::regler_beruehrung:
-    case hand::AusgabeArt::regler_umschalten: {
+    case hand::AusgabeArt::regler_umschalten:
+    case hand::AusgabeArt::regler_stufe: {
       const float jetzt = e.regler >= 0 ? st.wert_fest(e.regler) : 0.0f;  // F18: Umschalten nach dem Ziel der Rampe
       if (!hand::zu_griff(a, m, jetzt, &aus->griff)) return 0;
       aus->art = HandArt::griff;

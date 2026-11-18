@@ -138,3 +138,27 @@ test('GET /graphen entries carry prinzip; a file without it gives entries withou
     assert.deepEqual(pruefeKategorien({ 'b-inst': { kategorie: 'lead', text: 'x.' } }).fehler, []);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('verborgen: optional flag; true is carried, false or absent is not hidden, a non-boolean keeps the entry without the flag and reports', () => {
+  const e = (extra) => ({ kategorie: 'lead', text: 'x.', ...extra });
+  const r = pruefeKategorien({ a: e({ verborgen: true }), b: e({ verborgen: false }), c: e({}), d: e({ verborgen: 'yes' }), f: e({ verborgen: 1 }) });
+  assert.equal(r.gueltig.a.verborgen, true);
+  for (const n of ['b', 'c', 'd', 'f']) assert.ok(!('verborgen' in r.gueltig[n]), n);
+  assert.deepEqual(r.fehler, ['d: verborgen must be true or false', 'f: verborgen must be true or false']);
+  assert.ok(r.gueltig.d && r.gueltig.f, 'the entries stay');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'verborgen-'));
+  try {
+    for (const n of ['h-inst', 'v-inst']) fs.writeFileSync(path.join(dir, `${n}.json`), JSON.stringify({ knoten: [{ id: 'a', art: 'note' }] }));
+    fs.mkdirSync(path.join(dir, 'panels'));
+    fs.writeFileSync(path.join(dir, 'panels', 'kategorien.json'), JSON.stringify({ 'h-inst': e({ verborgen: true }), 'v-inst': e({}) }));
+    const g = Object.fromEntries(listeGraphen(dir).graphen.map((x) => [x.name, x]));
+    assert.equal(g['h-inst'].verborgen, true);
+    assert.ok(!('verborgen' in g['v-inst']));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('kategorien.json hides exactly the five duplicates and nothing else', () => {
+  const versteckt = Object.entries(kat).filter(([, v]) => v.verborgen !== undefined).map(([n, v]) => [n, v.verborgen]);
+  assert.deepEqual(versteckt.sort(), ['juno-pad-dyn', 'juno-pad-echo', 'juno-pad-hall', 'lead', 'synth-greif2'].map((n) => [n, true]));
+  assert.deepEqual(pruefeKategorien(kat).fehler, []);
+});

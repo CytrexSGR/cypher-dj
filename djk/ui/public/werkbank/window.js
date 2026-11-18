@@ -23,6 +23,8 @@ import { baueFrontplatte } from '../panel.js';
 import { geraetText } from '../seq_field.js';
 import { effektKachel, neuePanelQuelle } from './sound.js';
 import { mixZuege } from './mix.js';
+import { fokus } from '../controller_fokus.js';
+import { kannGeraetFenster, oeffneGeraetFenster, GERAET_FENSTER_TEXT } from '../device_open.js';
 
 export const FENSTER_TEXT = {
   zu: 'Close this window',
@@ -63,7 +65,7 @@ export function bindeFenster(ctx) {
     f.y = Math.min(Math.max(0, y), Math.max(0, hoehe - 40));
     f.e.style.left = `${f.x}px`; f.e.style.top = `${f.y}px`;
   }
-  const nachVorn = (f) => { oben += 1; f.e.style.zIndex = String(oben); };
+  const nachVorn = (f) => { oben += 1; f.e.style.zIndex = String(oben); if (f.def?.spurId !== undefined) fokus.melde({ spur_id: f.def.spurId }, 'werkbank'); };   // the large view in front is the synth in front
 
   function oeffne(def) {
     const alt = offene.get(def.id);
@@ -159,12 +161,14 @@ export function bindeFenster(ctx) {
     const spur = (st.projekt?.spuren ?? []).find((s) => s.id === spurId && s.art === 'instrument');
     if (!spur) return null;
     if (st.wahl !== spurId) ctx.waehle(spurId);   // the cut strip works on the selected track
+    else fokus.melde({ spur_id: spurId }, 'werkbank');   // the large view of the track already selected: it is in front all the same (a change went through beiWahl)
     const buchstabe = mixZuege(st.projekt).find((z) => z.id === spurId)?.buchstabe ?? '';
     const jetztSpur = () => (st.projekt?.spuren ?? []).find((s) => s.id === spurId && s.art === 'instrument') ?? null;
     const f = oeffne({
       id: `spur:${spurId}`, spurId, titel: `${buchstabe} · ${spur.name}`.trim(), untertitel: geraetText(spur), art: geraetSchluessel(spur.geraet) ?? String(spur.geraet?.name ?? 'instrument'),
       pruefe: () => jetztSpur() !== null,
-      bauen: (koerper) => {
+      bauen: (koerper, leiste) => {
+        if (kannGeraetFenster(spur)) leiste.append(knopf('w-effekt-knopf', 'fenster-fenster', GERAET_FENSTER_TEXT.knopf, GERAET_FENSTER_TEXT.titel, () => oeffneGeraetFenster(spurId, ctx.melde)));   // OPEN ↗: its own browser window
         const panelHost = el('div', 'w-fenster-geraet', 'fenster-geraet');
         koerper.append(panelHost);
         if (ctx.klangHost) { ctx.klangHost.hidden = false; koerper.append(ctx.klangHost); }

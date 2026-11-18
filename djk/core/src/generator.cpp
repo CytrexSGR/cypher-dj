@@ -31,8 +31,12 @@ void Erzeuger::setze_midi(int strom, int port, int midi_kanal) {
   if (strom < 1 || strom > ERZ_STROEME) return;
   Strom& s = st_[strom - 1];
   for (int i = 0; i < s.n_offen; ++i) s.offen[i].aus = INT64_MIN;  // sofort aus, auf ihrem alten Port/Kanal
-  s.midi_port = (port >= 1 && port <= ERZ_MIDI_PORTS) ? port : 0;
-  s.midi_kanal = std::clamp(midi_kanal, 1, 16);
+  const int neu_port = (port >= 1 && port <= ERZ_MIDI_PORTS) ? port : 0;
+  const int neu_kanal = std::clamp(midi_kanal, 1, 16);
+  // Task N2: keys held on the old port/channel are closed there (taste_port/taste_kanal keep the old place until tasten_midi_zu sent the offs)
+  if (s.taste_port > 0 && (s.taste[0] | s.taste[1]) && (neu_port != s.midi_port || neu_kanal != s.midi_kanal)) s.taste_zu = true;
+  s.midi_port = neu_port;
+  s.midi_kanal = neu_kanal;
 }
 
 void Erzeuger::bk_zur_freigabe(CypherBk* bk) {
@@ -90,6 +94,7 @@ void Erzeuger::setze_bk(int strom, CypherBk* bk, int kanal) {
     int w = 0;  // offene Noten des alten Graphen verfallen (port 0 = Graph)
     for (int i = 0; i < s.n_offen; ++i) if (s.offen[i].port != 0) s.offen[w++] = s.offen[i];
     s.n_offen = w;
+    tasten_graph_weg(s);   // Task N2: the keys held on the old instance go with it (it rings out and is released)
   }
   s.bk = bk;
   if (bk) s.kanal = (kanal >= 0 && kanal < MIX_KANAELE) ? kanal : -1;
@@ -97,6 +102,7 @@ void Erzeuger::setze_bk(int strom, CypherBk* bk, int kanal) {
 
 // Baukasten S3b: der neue Graph übernimmt den Strom; der alte ist schon im Ausklang-Platz oder war keiner.
 void Erzeuger::bk_wechsel(Strom& s, CypherBk* bk, int kanal) {
+  if (s.bk != bk) tasten_graph_weg(s);   // Task N2: the keys held on the old instance go with it
   s.bk = bk;
   s.bk_kanal = bk ? kanal : -1;
   if (bk && kanal >= 0) s.kanal = kanal;  // wie S3a setze_bk
@@ -148,6 +154,7 @@ void Erzeuger::noten_aus(Strom& s, int64_t bis, MidiAus* midi, int64_t n0, int64
     // D8: nur die gewählte Art; MIDI-Offs gehen nur mit Puffer hinaus und bleiben sonst stehen (B1)
     const bool faellig = o.aus < bis && (o.port == 0 ? wahl != OffsWahl::OHNE_GRAPH : (wahl != OffsWahl::NUR_GRAPH && midi));
     if (faellig) {
+      if (taste_haelt(s, o)) continue;   // Task N2: a key holds this pitch on this sink: its release sends the off, this one is dropped
       if (o.port == 0) {
 #ifdef CYPHERDJ_MUTATION_BK_OFF_BLOCKANFANG
         if (cypher_bk_note_aus(s.bk, 0, o.note) != 0) ++bk_stand_.verloren;  // Fehlerfall Baukasten S3a: Off am Blockanfang
@@ -306,6 +313,7 @@ void Erzeuger::block(const Karte& k, int64_t n0, int n, float* const* ein_l, flo
   for (Stimme& v : sti_) spiele(v, 0, n, ein_l, ein_r);  // was schon klingt: der ganze Block
   for (int si = 0; si < ERZ_STROEME; ++si) {
     Strom& s = st_[si];
+    if (s.taste_zu) tasten_midi_zu(s, midi, n0, zyklus_n0);   // Task N2: keys held on a MIDI place the stream has left (also while it is a graph stream now)
     // Baukasten S3b: ein Strom ohne Graph übernimmt einen wartenden sofort, wenn seine Plätze frei sind (sonst nach dem Ausklang)
     if (werk_ && s.bk_neu_gesetzt && !s.bk && !bk_aus_[si].bk && werk_->frei(si) && werk_->frei(ERZ_STROEME + si))
       bk_wechsel(s, s.bk_neu, s.bk_neu_kanal);
@@ -319,6 +327,7 @@ void Erzeuger::block(const Karte& k, int64_t n0, int n, float* const* ein_l, flo
 #else
     const int64_t vor = s.midi_port > 0 ? midi_vorhalt_ : 0;  // Glanz 2.7 (F19): Wirt-Rundweg vorhalten
 #endif
+    tasten_spielen(s, n0, n0 + n, midi, zyklus_n0);   // Task N2: live keys of this block (graph without Werk and MIDI; with Werk bk_noten does it)
     int gespielt = 0;
     while (gespielt < s.n) {
       const ErzEv& e = s.ev[gespielt];
@@ -338,12 +347,16 @@ void Erzeuger::block(const Karte& k, int64_t n0, int n, float* const* ein_l, flo
         const int64_t on = std::max(smp, n0);
 #endif
         const uint8_t note = (uint8_t)e.note;
+        bool abgeloest = false;
         for (int i = 0; i < s.n_offen; ++i)  // dieselbe Note klingt noch: erst aus (am selben Sample vor dem An)
           if (s.offen[i].port == 0 && s.offen[i].note == note) {
             if (cypher_bk_note_aus(s.bk, (uint32_t)(on - n0), note) != 0) ++bk_stand_.verloren;
             s.offen[i] = s.offen[--s.n_offen];
+            abgeloest = true;
             break;
           }
+        if (!abgeloest && s.taste_port == 0 && taste_gehalten(s, note))   // Task N2: a key holds the pitch: end it first, as above
+          if (cypher_bk_note_aus(s.bk, (uint32_t)(on - n0), note) != 0) ++bk_stand_.verloren;
         if (cypher_bk_note_an(s.bk, (uint32_t)(on - n0), note, e.velocity) != 0) ++bk_stand_.verloren;
         const int64_t aus = std::max<int64_t>(std::llround(k.sample_at(e.beat + (e.dauer > 0.0 ? e.dauer : 0.25))), on + 1);
         if (s.n_offen < ERZ_OFFEN) s.offen[s.n_offen++] = Strom::Offen{aus, note, 0, 0, on};
@@ -356,12 +369,16 @@ void Erzeuger::block(const Karte& k, int64_t n0, int n, float* const* ein_l, flo
         const int64_t t = std::max(smp, n0) - zyklus_n0;
         const uint8_t note = (uint8_t)(e.note & 0x7f), ch = (uint8_t)(s.midi_kanal - 1);
         const uint8_t vel = (uint8_t)std::clamp((int)std::lround(e.velocity * 127.0f), 1, 127);
+        bool abgeloest = false;
         for (int i = 0; i < s.n_offen; ++i)  // dieselbe Note klingt noch: erst aus, sonst beendet ihr Off die neue
           if (s.offen[i].note == note && s.offen[i].port == s.midi_port && s.offen[i].kanal == ch) {
             m.schreibe(t, (uint8_t)(0x80 | ch), note, 0);
             s.offen[i] = s.offen[--s.n_offen];
+            abgeloest = true;
             break;
           }
+        if (!abgeloest && s.taste_port == s.midi_port && s.taste_kanal == ch && taste_gehalten(s, note))   // Task N2: a key holds the pitch: end it first
+          m.schreibe(t, (uint8_t)(0x80 | ch), note, 0);
         m.schreibe(t, (uint8_t)(0x90 | ch), note, vel);
         // Prüfung R3: Off mindestens ein Sample nach dem tatsächlichen On (max(smp, n0)). Wächst das Quantum, gehen Noten
         // zwischen alter und neuer Grenze am Blockanfang hinaus; ihr Off läge sonst auf demselben Sample (Länge 0 am Wirt).
@@ -453,6 +470,7 @@ void Erzeuger::block(const Karte& k, int64_t n0, int n, float* const* ein_l, flo
 // zu von; was vor von liegt (verspätet eingetroffen oder nach einem verspäteten Block liegen geblieben), am Fensteranfang.
 // Nur auf freiem Platz: der Callback ist dann der einzige, der das Handle anfasst.
 void Erzeuger::bk_noten(Strom& s, const Karte& k, int64_t von, int64_t bis) {
+  tasten_spielen(s, von, bis, nullptr, 0);   // Task N2: live keys, in the same window and with the same on = max(sample, von) as the events below
   int gespielt = 0;
   while (gespielt < s.n) {
     const ErzEv& e = s.ev[gespielt];
@@ -463,12 +481,16 @@ void Erzeuger::bk_noten(Strom& s, const Karte& k, int64_t von, int64_t bis) {
     if (s.bk_kanal < 0 || e.note < 0 || e.note > 127) continue;
     const int64_t on = std::max(smp, von);
     const uint8_t note = (uint8_t)e.note;
+    bool abgeloest = false;
     for (int i = 0; i < s.n_offen; ++i)  // dieselbe Note klingt noch: erst aus (am selben Sample vor dem An)
       if (s.offen[i].port == 0 && s.offen[i].note == note) {
         if (cypher_bk_note_aus(s.bk, (uint32_t)(on - von), note) != 0) ++bk_stand_.verloren;
         s.offen[i] = s.offen[--s.n_offen];
+        abgeloest = true;
         break;
       }
+    if (!abgeloest && s.taste_port == 0 && taste_gehalten(s, note))   // Task N2: a key holds the pitch: end it first, as above
+      if (cypher_bk_note_aus(s.bk, (uint32_t)(on - von), note) != 0) ++bk_stand_.verloren;
     if (cypher_bk_note_an(s.bk, (uint32_t)(on - von), note, e.velocity) != 0) ++bk_stand_.verloren;
     const int64_t aus = std::max<int64_t>(std::llround(k.sample_at(e.beat + (e.dauer > 0.0 ? e.dauer : 0.25))), on + 1);
     if (s.n_offen < ERZ_OFFEN) s.offen[s.n_offen++] = Strom::Offen{aus, note, 0, 0, on};
@@ -556,6 +578,132 @@ void Erzeuger::bk_vorlauf(Strom& s, int a, const Karte& k, int64_t n0, int n, fl
   werk_->auftrag(a, s.bk, n0 + n, n);
 }
 
+// Task N2: the keys held on the old graph instance of s go with it (the instance rings out and is released, as the pattern notes of it do).
+void Erzeuger::tasten_graph_weg(Strom& s) {
+  if (s.taste_port != 0) return;   // keys held on a MIDI place stay: tasten_midi_zu closes them there
+  s.taste[0] = s.taste[1] = 0;
+  s.taste_zu = false;
+}
+
+void Erzeuger::tasten_ziel(int strom) {
+  if (strom < 0 || strom > ERZ_STROEME) strom = 0;
+  if (strom == tz_) return;
+  tasten_alle_aus();
+  tz_ = strom;
+}
+
+void Erzeuger::taste(int note, int vel, bool an, int64_t sample) {
+  if (tz_ == 0) return;
+  const uint8_t n = static_cast<uint8_t>(note & 0x7f);
+  if (an) tz_aus_[n >> 6] &= ~(uint64_t{1} << (n & 63));   // an off waiting for room is older than this on: it must not close the new press (the on retriggers)
+  if (n_tev_ < ERZ_TASTEN_EV) {
+    tev_[n_tev_++] = TastenEv{sample, n, static_cast<uint8_t>(std::clamp(vel, 1, 127)), an};
+  } else if (!an) {
+    tz_aus_[n >> 6] |= uint64_t{1} << (n & 63);   // an off is never dropped: it is applied when the queue has run empty
+  } else {
+    ++tz_verloren_;
+  }
+}
+
+void Erzeuger::tasten_alle_aus() {
+  n_tev_ = 0;
+  tz_aus_[0] = tz_aus_[1] = 0;
+  for (Strom& s : st_)
+    if (s.taste[0] | s.taste[1]) s.taste_zu = true;
+}
+
+int Erzeuger::tasten_offen() const {
+  int n = 0;
+  for (const Strom& s : st_) n += __builtin_popcountll(s.taste[0]) + __builtin_popcountll(s.taste[1]);
+  return n;
+}
+
+// Task N2: close the keys held on a MIDI place (per-note offs on the port and channel they were played on, at the start of the block). Waits while there is no MIDI buffer.
+void Erzeuger::tasten_midi_zu(Strom& s, MidiAus* midi, int64_t n0, int64_t zyklus_n0) {
+  if (s.taste_port == 0 || !midi) return;   // graph keys are closed by tasten_spielen at the place of the graph
+  MidiAus& mp = midi[s.taste_port - 1];
+  for (int b = 0; b < 2; ++b)
+    for (uint64_t bits = s.taste[b]; bits != 0; bits &= bits - 1) {
+      if (mp.n >= ERZ_MIDI_EV) return;   // buffer full: the keys not yet written stay held and taste_zu stays set, the next cycle retries
+      mp.schreibe(n0 - zyklus_n0, static_cast<uint8_t>(0x80 | s.taste_kanal), static_cast<uint8_t>(b * 64 + __builtin_ctzll(bits)), 0);
+      s.taste[b] &= ~(uint64_t{1} << __builtin_ctzll(bits));
+    }
+  s.taste_zu = false;
+}
+
+void Erzeuger::tasten_spielen(Strom& s, int64_t von, int64_t bis, MidiAus* midi, int64_t zyklus_n0) {
+  if (s.taste_zu && s.taste_port == 0) {
+    if (s.bk)
+      for (int b = 0; b < 2; ++b)
+        for (uint64_t bits = s.taste[b]; bits != 0; bits &= bits - 1)
+          if (cypher_bk_note_aus(s.bk, 0, static_cast<uint8_t>(b * 64 + __builtin_ctzll(bits))) != 0) ++bk_stand_.verloren;
+    s.taste[0] = s.taste[1] = 0;
+    s.taste_zu = false;
+  }
+  if (tz_ == 0 || &s != &st_[tz_ - 1]) return;
+  const bool bk = s.bk != nullptr;
+  const uint8_t port = bk ? 0 : static_cast<uint8_t>(s.midi_port);
+  const uint8_t ch = bk ? 0 : static_cast<uint8_t>(s.midi_kanal - 1);
+  const bool senke = bk ? (werk_ ? s.bk_kanal : s.kanal) >= 0 : (port > 0 && s.kanal >= 0);
+  if (bk ? false : (port > 0 && !midi)) return;   // MIDI waits for its buffer, like the offs of a MIDI stream
+  if ((s.taste[0] | s.taste[1]) && (s.taste_port != port || s.taste_kanal != ch)) return;   // keys of another place are still being closed
+  // true when the off was handed over (the graph took it, or the MIDI buffer had room); false keeps the key held and the caller retries
+  auto aus = [&](uint8_t note, int64_t t) -> bool {
+    if (bk) return cypher_bk_note_aus(s.bk, static_cast<uint32_t>(t - von), note) == 0;
+    if (midi[port - 1].n >= ERZ_MIDI_EV) return false;
+    midi[port - 1].schreibe(t - zyklus_n0, static_cast<uint8_t>(0x80 | ch), note, 0);
+    return true;
+  };
+  auto muster_klingt = [&](uint8_t note) {   // a pattern note of this pitch on this sink is still scheduled
+    for (int i = 0; i < s.n_offen; ++i)
+      if (s.offen[i].note == note && s.offen[i].port == port && (port == 0 || s.offen[i].kanal == ch)) return true;
+    return false;
+  };
+  // Graph sink: the events of this call get non-decreasing offsets, and an off of a note this call started lands strictly after that on (the graph runs an off before an on of the
+  // same sample, so an off at the offset of its own on would end nothing and the voice would hang with the held bit already cleared). MIDI keeps the order of the buffer.
+  int64_t letzt = von;
+  int64_t an_t[128];
+  uint64_t an_hat[2] = {0, 0};
+  auto druecken = [&](const TastenEv& e, int64_t t) {
+    const uint64_t m = uint64_t{1} << (e.note & 63);
+    uint64_t& w = s.taste[e.note >> 6];
+    if (bk) {
+      t = std::max(t, letzt);
+      if (!e.an && (an_hat[e.note >> 6] & m)) t = std::max(t, an_t[e.note & 127] + 1);
+      letzt = t;
+    }
+    if (e.an) {
+      if (!senke) return;
+      if ((w & m) || muster_klingt(e.note)) aus(e.note, t);   // end the sounding voice at the new onset (retrigger), as the patterns do
+      an_hat[e.note >> 6] |= m;
+      an_t[e.note & 127] = t;
+      if (!(s.taste[0] | s.taste[1])) { s.taste_port = port; s.taste_kanal = ch; }
+      w |= m;
+      if (bk) { if (cypher_bk_note_an(s.bk, static_cast<uint32_t>(t - von), e.note, static_cast<float>(e.vel) / 127.0f) != 0) ++bk_stand_.verloren; }
+      else midi[port - 1].schreibe(t - zyklus_n0, static_cast<uint8_t>(0x90 | ch), e.note, e.vel);
+    } else if (w & m) {
+      if (!muster_klingt(e.note) && !aus(e.note, t)) {   // a pattern note still scheduled on the pitch ends it with its own off
+        tz_aus_[e.note >> 6] |= m;   // not handed over: the key stays held, the off is retried when the queue is empty
+        return;
+      }
+      w &= ~m;
+      an_hat[e.note >> 6] &= ~m;
+    }
+  };
+  int i = 0;
+  for (; i < n_tev_ && tev_[i].smp < bis; ++i) druecken(tev_[i], std::max(tev_[i].smp, von));
+  if (i > 0) {
+    std::memmove(tev_, tev_ + i, sizeof(TastenEv) * static_cast<size_t>(n_tev_ - i));
+    n_tev_ -= i;
+  }
+  if (n_tev_ == 0 && (tz_aus_[0] | tz_aus_[1])) {   // offs that did not fit the queue or could not be handed over
+    const uint64_t offen[2] = {tz_aus_[0], tz_aus_[1]};
+    tz_aus_[0] = tz_aus_[1] = 0;   // druecken sets a bit again when an off still cannot be handed over
+    for (int b = 0; b < 2; ++b)
+      for (uint64_t bits = offen[b]; bits != 0; bits &= bits - 1) druecken(TastenEv{von, static_cast<uint8_t>(b * 64 + __builtin_ctzll(bits)), 0, false}, von);
+  }
+}
+
 void Erzeuger::leeren() {
   for (Strom& s : st_) {
     s.n = 0;
@@ -564,6 +712,8 @@ void Erzeuger::leeren() {
 #endif
     for (int i = 0; i < s.n_offen; ++i) s.offen[i].aus = INT64_MIN;  // Offs gehen im nächsten block() hinaus
   }
+  // Task N2: the stamps of the keys waiting for their sample belong to the old axis: they play at the start of the next block. Held keys stay held (the hands did not move).
+  for (int i = 0; i < n_tev_; ++i) tev_[i].smp = INT64_MIN;
 }
 
 int Erzeuger::stimmen() const {

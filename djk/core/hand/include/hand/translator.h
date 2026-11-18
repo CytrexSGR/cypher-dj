@@ -19,6 +19,7 @@ enum class AusgabeArt : uint8_t {
   regler_relativ,     // x = Rasten · SCHRITT_RELATIV, wert = Rasten
   regler_beruehrung,  // Berührungssensor berührt (§7.2 beruehrung)
   regler_umschalten,  // Taste an einem Schalter-Regler gedrückt: der Schalter wechselt
+  regler_stufe,       // Taste mit stufen an einem stetigen Regler gedrückt: der Regler geht zur nächsten von N Stufen
   deck,               // Deck-Aktion: wert = 1 Druck / 0 Loslassen (taste) oder Rasten (loop_laenge, nudge)
   tempo,              // Hand-Segment: wert = Rasten (je TEMPO_SCHRITT_BPM)
   taste,              // taste/<name>: wert = 1 Druck / 0 Loslassen; autonomie 0..3; spielart, laenge, kiste_wahl Rasten

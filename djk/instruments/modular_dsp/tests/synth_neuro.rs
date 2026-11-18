@@ -2,9 +2,9 @@
 //! Rules 1 to 3 of the device rules with numbers: all knobs at 0.5 sound good and sit at the level of the recipes, the pitch
 //! is exact (A1 = 55 Hz), the sub stays clean and mono, every filter type at every extreme stays finite, bounded and free of
 //! DC, switching the filter type jumps at most 3 dB, legato and the note onset do not click, the new blocks and the motion
-//! really act. Knobs 25..45 (synth build-out): the amp envelope times, a second oscillator, LFO 2, key follow, velocity, master tune,
+//! really act. Knobs 46..56 (upgrade wave 1: warp, stack, phase mod, chaos, drift) and 25..45 (synth build-out): the amp envelope times, a second oscillator, LFO 2, key follow, velocity, master tune,
 //! delay and reverb. Every one of them is class G (zero effect at its default), N (the old value at its default) or F (free); the
-//! default-state null against the old graph is proved by `measure_null.py run synth-neuro`, this file checks that each one acts,
+//! default-state null against the old graph is proved by `measure_null.py run synth-neuro` and `measure_null.py run synth-neuro-aufwertung --alt <base>`, this file checks that each one acts,
 //! stays finite and bounded at its corners and that the real-time path does not allocate.
 //! Cost: `kosten_synth_neuro` (ignored, run under the real-time lock).
 use baukasten_dsp::{uebersetze, Programm, REGLER};
@@ -32,12 +32,12 @@ static A: Zaehler = Zaehler;
 
 const SR: f32 = 48_000.0;
 const GRAPH: &str = include_str!("../demos/synth-neuro.json");
-/// Knobs 1..45 are defined (44 is free: no reverb decay knob); 7 is the filter type: i / 6 for the seven types (comb, notch, band-pass,
+/// Knobs 1..56 are defined (44 is free: no reverb decay knob; 57..64 are free); 7 is the filter type: i / 6 for the seven types (comb, notch, band-pass,
 /// low-pass, vowel, MS-20, diode)
-const KNOEPFE: usize = 45;
+const KNOEPFE: usize = 56;
 const FREI: usize = 44;
 /// The new knobs and their `vorgabe`: class G at 0 (bipolar 0.5), N at 0.5, F at a musical value (graph and panel agree)
-const NEUE: [(usize, f32); 20] = [
+const NEUE: [(usize, f32); 31] = [
     (25, 0.5), (26, 0.5), (27, 0.5),                            // amp attack, decay, sustain (N, `mitte` = the old 2 ms, 300 ms, 85 %)
     (28, 0.0), (29, 2.0 / 3.0), (30, 0.5), (31, 0.5),           // osc 2 level (G), wave saw, octave 0, detune 0
     (32, 0.615_689), (33, 0.0), (34, 0.0), (35, 0.0), (36, 0.5), // LFO 2 rate 2 Hz, shape sine, sync free, target cutoff, amount 0 (G)
@@ -45,6 +45,10 @@ const NEUE: [(usize, f32); 20] = [
     (38, 0.0), (39, 0.5), (40, 0.5),                            // velocity depth (G), velocity to cutoff (G), master tune (G)
     (41, 0.794_603), (42, 0.388_889), (43, 0.0),                // delay time 375 ms, feedback 0.35, mix (G)
     (45, 0.0),                                                  // reverb mix (G)
+    (46, 0.0), (47, 0.75), (48, 0.5), (49, 0.0),                // warp mode off (N), depth 0.5 (F), LFO 1 to depth 0 (G), stack off (N)
+    (50, 0.0), (51, 0.25),                                      // phase mod 0 (G), ratio 1 (F)
+    (52, 0.384_310_9), (53, 0.5), (54, 0.5), (55, 0.5),            // chaos rate 0.5 Hz (F), to wave, cutoff, fold 0 (G)
+    (56, 0.0),                                                  // drift (G)
 ];
 const TYP: usize = 7;
 const TYPEN: [&str; 7] = ["comb", "notch", "bandpass", "lowpass", "vowel", "ms20", "diode"];
@@ -350,6 +354,15 @@ fn jedes_neue_merkmal_wirkt_gegen_aus_um_mehr_als_minus_60_db() {
         ("velocity to cutoff +1".into(), vec![(39, 1.0)]), ("velocity to cutoff -1".into(), vec![(39, 0.0)]),
         ("master tune +1".into(), vec![(40, 1.0)]), ("master tune -1".into(), vec![(40, 0.0)]),
         ("delay mix".into(), vec![(43, 0.5)]), ("reverb mix".into(), vec![(45, 0.5)]),
+        // upgrade wave 1: warp mode knob positions 1/3 bend, 2/3 asym, 1 sync; stack 0.5 octave, 1 octave + fifth
+        ("warp bend".into(), vec![(46, 1.0 / 3.0)]), ("warp asym".into(), vec![(46, 2.0 / 3.0)]), ("warp sync".into(), vec![(46, 1.0)]),
+        ("LFO 1 to warp depth +1".into(), vec![(46, 1.0 / 3.0), (48, 1.0)]), ("LFO 1 to warp depth -1".into(), vec![(46, 1.0 / 3.0), (48, 0.0)]),
+        ("stack octave".into(), vec![(49, 0.5)]), ("stack octave + fifth".into(), vec![(49, 1.0)]),
+        ("phase mod".into(), vec![(50, 0.6)]),
+        ("chaos to wave +1".into(), vec![(53, 1.0)]), ("chaos to wave -1".into(), vec![(53, 0.0)]),
+        ("chaos to cutoff +1".into(), vec![(54, 1.0)]), ("chaos to cutoff -1".into(), vec![(54, 0.0)]),
+        ("chaos to fold +1".into(), vec![(55, 1.0)]), ("chaos to fold -1".into(), vec![(55, 0.0)]),
+        ("drift".into(), vec![(56, 1.0)]),
     ];
     for (i, z) in ["cutoff", "fold", "pitch", "drive", "amp"].iter().enumerate() {
         for (w, tag) in [(1.0f32, "+1"), (0.0, "-1")] {
@@ -392,7 +405,7 @@ fn jeder_neue_knopf_bei_0_und_1_bleibt_endlich_ohne_gleichanteil_unter_der_decke
             }
         }
     }
-    println!("MESS 20 new knobs x (0, 1) x (clean, dirty): worst peak {:.3}, worst DC {:.1} dBFS", schlimm.0, schlimm.1);
+    println!("MESS 31 new knobs x (0, 1) x (clean, dirty): worst peak {:.3}, worst DC {:.1} dBFS", schlimm.0, schlimm.1);
 }
 
 #[test]
@@ -441,7 +454,7 @@ fn lfo_2_takt_1_4_bei_120_bpm_hat_die_periode_0_5_s_und_frei_ignoriert_das_tempo
 
 #[test]
 fn echtzeitpfad_allokiert_nicht() {
-    // notes, all 45 knobs moving (also the delay time and the target knob), all-off and reset while playing: no allocation request
+    // notes, all 56 knobs moving (also the delay time and the target knob), all-off and reset while playing: no allocation request
     // (the translation does allocate: positive control)
     let vor = anforderungen();
     let mut p = lade(&[]);
@@ -493,4 +506,50 @@ fn kosten_synth_neuro() {
         println!("KOSTEN {label} ({} voices): p50 {:.0} us ({:.1} % of {periode:.0} us), p99 {:.0} us, p99.9 {:.0} us, max {:.0} us",
                  p.stimmen, kosten.quantil_us(0.5), kosten.quantil_us(0.5) / periode * 100.0, kosten.quantil_us(0.99), kosten.quantil_us(0.999), kosten.max_us);
     }
+}
+
+/// The class N / F knobs behind their "off" never reach the sound (Review focus of the upgrade plan): warp depth, LFO 1 to depth, phase mod
+/// ratio and chaos rate swept 0 against 1 with warp mode, phase mod and the chaos amounts at their defaults give bit-identical output.
+#[test]
+fn neue_freie_regler_hinter_aus_aendern_nichts() {
+    let probe = |k: &[(usize, f32)]| feature_probe(k);
+    let aus = probe(&[]);
+    for (nr, tag) in [(47usize, "warp depth"), (48, "LFO 1 to warp depth"), (51, "phase mod ratio"), (52, "chaos rate")] {
+        for w in [0.0f32, 1.0] {
+            assert!(probe(&[(nr, w)]) == aus, "{tag} = {w} changes the sound although its gate is off");
+        }
+    }
+}
+
+/// Chaos is per voice and seeded: the same graph renders the same audio twice.
+#[test]
+fn chaos_ist_wiederholbar() {
+    let k = [(53usize, 1.0f32), (54, 1.0), (55, 1.0), (56, 1.0), (52, 0.8)];
+    assert!(feature_probe(&k) == feature_probe(&k), "two renders of the same graph differ");
+}
+
+/// Extremes of the new oscillator inputs: every warp mode at depth -1 and +1, phase mod at its maximum with every ratio, stack on, on the
+/// highest probe note (and a very high one), clean and dirty: finite, no guard rescue, below the clip bound of this file.
+#[test]
+fn warp_und_phasenmodulation_am_anschlag_bleiben_endlich_und_unter_der_decke() {
+    let schmutzig = [(4usize, 1.0f32), (5, 1.0), (9, 0.9), (15, 0.6)];
+    let mut schlimm = 0.0f32;
+    for modus in [1.0f32 / 3.0, 2.0 / 3.0, 1.0] {
+        for tiefe in [0.0f32, 1.0] {
+            for ratio in [0.0f32, 0.25, 0.5, 0.75, 1.0] {
+                for dreck in [false, true] {
+                    let mut k: Vec<(usize, f32)> = if dreck { schmutzig.to_vec() } else { vec![] };
+                    k.extend([(46, modus), (47, tiefe), (48, 1.0), (49, 1.0), (50, 1.0), (51, ratio), (53, 1.0)]);
+                    let mut p = lade(&k);
+                    let (y, _) = spiele(&mut p, &[(24, 0.8), (45, 0.8), (57, 1.0), (84, 1.0)], true, 0.0, 0.6);
+                    assert!(y.iter().all(|(l, r)| l.is_finite() && r.is_finite()), "mode {modus} depth {tiefe} ratio {ratio}: not finite");
+                    assert_eq!(p.rettungen, 0, "mode {modus} depth {tiefe} ratio {ratio}: the guard rescued");
+                    let sp = spitze(&y);
+                    schlimm = schlimm.max(sp);
+                    assert!(sp < 0.97, "mode {modus} depth {tiefe} ratio {ratio} dirt {dreck}: peak {sp}");
+                }
+            }
+        }
+    }
+    println!("MESS warp / phase mod extremes: worst peak {schlimm:.3}");
 }

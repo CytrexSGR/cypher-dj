@@ -53,6 +53,12 @@ export function sortiere(eintraege, achse) {
     .map((x) => x.e);
 }
 
+/** The entries without the hidden ones (`verborgen === true`: duplicates the pickers do not offer), except the one named `behalte` (the instrument loaded or
+ *  selected at that place: it must still show as the selected one). `name(e)` reads the instrument name of an entry. Pure; every picker uses this one. */
+export function ohneVerborgene(eintraege, behalte, name = (e) => e?.name) {
+  return (eintraege ?? []).filter((e) => e?.verborgen !== true || (behalte !== undefined && behalte !== null && behalte !== '' && name(e) === behalte));
+}
+
 // ---------- the axis: page-wide, kept in localStorage (key djk-instrument-achse), default 'prinzip' ----------
 const ACHSE_SCHLUESSEL = 'djk-instrument-achse';
 let gemerkt = null;   // without a usable storage the choice still holds until the page is reloaded
@@ -93,11 +99,13 @@ export const katMerken = (speicher, kanal, achse, id) => ({ ...speicher, [kanal]
 
 // ---------- menus (SEQ instrument menu, workbench instrument menu) ----------
 /** The entries of an instrument menu `wahl` (geraetWahl of seq_field.js: Baukasten, Kit, RB-338) as menu items: the Baukasten instruments under the group headers of the axis, then the kits and the RB-338 each in their own group, and as the last item the axis switch (`umschalten`).
- *  `graphen` = GET /graphen, for the group of each instrument. A click runs `aktion(entry)` with the entry of `wahl`. */
-export function menuePunkte(wahl, graphen, achse, aktion, umschalten) {
+ *  `graphen` = GET /graphen, for the group of each instrument. A click runs `aktion(entry)` with the entry of `wahl`.
+ *  `behalte` = the name of the graph loaded at this place: stays listed even when hidden. */
+export function menuePunkte(wahl, graphen, achse, aktion, umschalten, behalte) {
   const a = achseVon(achse);
   const info = new Map((graphen ?? []).filter((g) => g && typeof g.name === 'string').map((g) => [g.name, g]));
-  const baukasten = sortiere((wahl ?? []).filter((e) => e.gruppe === 'Baukasten').map((e) => ({ e, name: e.name, kategorie: info.get(e.name)?.kategorie, prinzip: info.get(e.name)?.prinzip })), a);
+  // hidden duplicates are not offered, except the graph the pattern or track plays now (`behalte`, its name)
+  const baukasten = sortiere(ohneVerborgene((wahl ?? []).filter((e) => e.gruppe === 'Baukasten').map((e) => ({ e, name: e.name, kategorie: info.get(e.name)?.kategorie, prinzip: info.get(e.name)?.prinzip, verborgen: info.get(e.name)?.verborgen })), behalte), a);
   const punkte = [];
   const eintrag = (x) => ({ text: mitNeben(x.e.text, x, a), aktion: () => aktion(x.e) });
   for (const g of gruppenVon(a)) {

@@ -1,7 +1,7 @@
 // EFFECTS area basics: channel lists, spectrum views, the device page switch, plate building.
 import { spektrumFlaeche, SpektrumLeihe, SpektrumAnsicht, SPEKTRUM_FRIST_MS } from './spectrum.js';   // 1.15 A7b: spectrum view
 import { GRAPH_KANAL_ART } from './effects.js';
-import { geraeteseiteKlasse } from './instruments_view.js';
+import { geraeteseiteKlasse, instrumentLabel } from './instruments_view.js';
 import { baueFrontplatte } from './panel.js';
 import { geraeteknopfHtml } from './panel_kopf.js';
 import { $, $$, melde, zustand } from './page_state.js';
@@ -10,6 +10,7 @@ import { sendeWerkzeug } from './effects_view.js';
 import { tabletModus } from './seitenrahmen.js';
 import { holeLernen, lernAbbrechenFuer, lernSchicken, lernen } from './learn_view.js';
 import { zeigeRegister } from './register_view.js';
+import { fokus } from './controller_fokus.js';
 
 // Effekt-Sektion (Plan 2026-10-11-effekt-sektion.md, Andreas: „tauschoberfläche gegen die libary unten“): unten LIBRARY |
 // EFFECTS; EFFECTS zeigt je Quellkanal einen Streifen mit dem Kompressor (<k>/komp/*), Bedienung über /regler (sofort),
@@ -94,7 +95,7 @@ export function setzeBereich(b) {
     document.body.classList.add('controller-fenster');
     document.title = 'djk Controllers';
     $('#register').hidden = false;
-    zeigeRegister($('#register'), { stand: () => lernen, schicken: lernSchicken, hole: holeLernen });
+    zeigeRegister($('#register'), { stand: () => lernen, schicken: lernSchicken, hole: holeLernen }, { kanalName: instrumentLabel });
     return;
   }
   if (b === 'controller') {   // the register lives in its own window; the panel shows it only when the browser blocks the window on a click
@@ -113,10 +114,10 @@ export function setzeBereich(b) {
   if (b === 'presets') zeigePresets();
   document.body.classList.toggle('bereich-instrumente', b === 'instrumente');   // INSTRUMENTS area
   $('#instrumente').hidden = b !== 'instrumente';
-  if (b === 'instrumente') instrumenteAnsicht?.baue();
+  if (b === 'instrumente') { instrumenteAnsicht?.baue(); if (instrumenteAnsicht) fokus.melde({ kanal: instrumenteAnsicht.gewaehlt() }, 'instrumente'); }   // entering the area (or the device page at load): its chosen channel is in front
   document.body.classList.toggle('bereich-controller', b === 'controller');   // CONTROLLERS area (read-only register)
   $('#register').hidden = b !== 'controller';
-  if (b === 'controller') zeigeRegister($('#register'), { stand: () => lernen, schicken: lernSchicken, hole: holeLernen });
+  if (b === 'controller') zeigeRegister($('#register'), { stand: () => lernen, schicken: lernSchicken, hole: holeLernen }, { kanalName: instrumentLabel });
   try { localStorage.setItem('djk-bereich', b); } catch { /* ohne Speicher: nur jetzt */ }
 }
 export async function setzeKomp(pfad, nach) {

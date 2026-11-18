@@ -28,13 +28,14 @@ import { steuerungen, parameterVon, wertText, vorgabeK } from '../panel.js';
 import { parameterNachName } from '../panel_display.js';
 import { geraetSchluessel, spurAdapter, reglerBereiche, surgeIstEinlesen } from '../production/device_view.js';
 import { geraetText } from '../seq_field.js';
+import { kannGeraetFenster, oeffneGeraetFenster, GERAET_FENSTER_TEXT } from '../device_open.js';
 import { faderText, MAX_SPUREN_MODUL } from './tracks.js';
 import { mixZuege, fxMenue, rackTeile, masterTeile, neuerDrehknopf, sendPos, sendDb, MIX_TEXT } from './mix.js';
 import { effektKachel, plusEintraege, neuePanelQuelle, ersatzPanel, KLANG_TEXT } from './sound.js';
 
 export const DOCK_TEXT = {
   synths: 'SYNTHS', fx: 'EFFECTS', neueSpur: '+ INSTRUMENT TRACK', neueSpurTitel: 'Add an instrument track to the module',
-  plus: '+ INSERT', plusTitel: 'Add an effect stage to this strip', auf: 'OPEN ↗', aufTitel: 'Open the full device in a window',
+  plus: '+ INSERT', plusTitel: 'Add an effect stage to this strip', auf: 'OPEN ↗', aufTitel: 'Open the full device in a window', fenster: 'WINDOW ↗',
   chipTitel: 'Click: open · right click: ON/OFF, move, remove', level: 'LEVEL', an: 'ON', anTitel: 'Effect on or off (off mutes the return)',
   weg: '✕', wegTitel: 'Remove this effect from the rack', keineSends: 'NO SENDS', von: (l) => `FROM ${l.join(' ')}`,
   vonTitel: 'The tracks that send into this effect (turn the small knobs of a track to change it)', master: 'MASTER',
@@ -212,8 +213,11 @@ export function bindeDock(ctx) {
     const b = mk('span', 'w-buchstabe', null, z.buchstabe); b.style.background = z.farbe;
     const wechsel = knopfEl('w-karte-knopf', 'karte-wechsel', KLANG_TEXT.wechsel, KLANG_TEXT.wechselTitel);
     wechsel.addEventListener('click', (ev) => { ev.stopPropagation?.(); ctx.instrumentWechsel?.(z.id, wechsel); });
+    // the other OPEN ↗ opens the big view inside the page; this one the device in its own browser window (device_window.js), so it reads WINDOW ↗ here
+    const fenster = kannGeraetFenster(spur) ? knopfEl('w-karte-auf', 'karte-fenster', DOCK_TEXT.fenster, GERAET_FENSTER_TEXT.titel) : null;
+    fenster?.addEventListener('click', () => oeffneGeraetFenster(z.id, ctx.melde));
     kopf.append(b, mk('b', 'w-karte-name', null, z.name), mk('span', 'w-karte-geraet', null, geraetText(spur)), mk('span', 'w-sp'),
-      ...(spur.inserts ?? []).map((i) => teilChip(z.id, { teil: i.id, ...effektKachel(i) })), plusKnopf(z.id), wechsel, aufKnopf(() => ctx.oeffneGeraet?.(z.id)));
+      ...(spur.inserts ?? []).map((i) => teilChip(z.id, { teil: i.id, ...effektKachel(i) })), plusKnopf(z.id), wechsel, aufKnopf(() => ctx.oeffneGeraet?.(z.id)), ...(fenster ? [fenster] : []));
     const knoepfe = mk('div', 'w-karte-knoepfe', 'karte-knoepfe');
     e.append(kopf, knoepfe);
     e.addEventListener('click', () => ctx.waehle(z.id));

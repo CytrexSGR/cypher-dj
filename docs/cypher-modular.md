@@ -91,7 +91,7 @@ Each patch can use up to 64 knobs (`Knob 1` to `Knob 64`, values 0 to 1) and nam
 to a range, linear or logarithmic. On the page they appear in the expanded EFFECTS view of the channel (screenshot
 above); the agent turns them through the same route (`/klang`). A `regler` node can carry a start value `vorgabe`
 (the knob position a graph starts at, 0 to 1, default 0.5) and a centre value `mitte` (the value at knob position 0.5),
-so a new knob can begin at "off" while older projects and presets keep their sound. The VST3 plug-in exposes 32 knob
+so a new knob can begin at "off" while older projects and presets keep their sound. The VST3 plug-in exposes 64 knob
 parameters.
 
 ## Front panels
@@ -107,16 +107,17 @@ and a save button sit in its header.
 
 - **Mono Synth** (`synth-mono`): two oscillators with hard sync, a sub, noise, five switchable filters, filter and
   amplifier envelopes, a modulation envelope, two LFOs (the second with tempo sync and a choice of target), glide,
-  velocity depth, tuning, drift, and chorus, delay and reverb.
+  velocity depth, tuning, drift, a Lorenz chaos LFO (rate, to cutoff, to oscillator 2 pitch), a clean sub that skips filters and
+  effects, and chorus, delay and reverb.
 - **Poly Synth** (`synth-poly`): eight voices, a unison stack of up to seven saws, a second oscillator, three filters,
-  a modulation envelope, two LFOs, glide, velocity depth, tuning, drift and a chorus.
+  a modulation envelope, two LFOs, glide, velocity depth, tuning, drift, a chorus, wave position, warp, stack, phase modulation and a chaos source.
 - **Greif** (`synth-greif`): a hybrid wavetable synth with eight voices. Three wavetable oscillators, each with a table of its
   own that travels through 20 to 24 timbres (analog to digital, vocal, bell and organ), bend each other's phase, can be warped
   (bend, asymmetric, sync) and unison-stacked; a clean sub that skips filters and effects, noise, two filters with a drive between
   them, an envelope, a triangle LFO and a Lorenz chaos source for slow movement, and chorus, frequency shifter and delay. Twelve
   factory presets.
 - **Neuro Bass** (`synth-neuro`): three detuned copies bent by FM, ring modulation and a wavefolder, seven switchable
-  filters, a tempo-synced second LFO, sample and hold, a second oscillator, key follow, delay and reverb.
+  filters, a tempo-synced second LFO, sample and hold, a second oscillator, key follow, warp, stack, phase modulation, chaos, drift, delay and reverb.
 - **Drums 909 and Drums 808** (`drums-909`, `drums-808`): two drum machines built on the `trommeln` block.
 - **Filterbox** (`fx-filterbox`): an effect with six filter models and three modulation sources.
 - **Cypher Labor** (`labor`, `fx-labor`): a two-channel feedback processor in one block: a model of a one-bit
@@ -137,7 +138,7 @@ and a save button sit in its header.
 
 The new controls of the three synthesizers were added without changing any old sound: with every new knob at its start
 value, the graphs render byte for byte as before. Their numbers were measured on synthetic signals; the new controls have not
-been judged by a listener yet.
+been judged by a listener yet. The three wavetable synths (`wavetable-reese`, `wavetable-supersaw`, `wavetable-chor`) were built out the same way: warp, stack and chaos, in part phase modulation, a clean sub, band drive and a chorus.
 
 ## Where a graph can sit
 
@@ -145,7 +146,7 @@ been judged by a listener yet.
   playing through it);
 - erz/5 to erz/7 and the two loop box pads, each as an instrument on its own pattern stream (start the studio with
   `djk/start/djk-start --strudel --bk-stroeme`); these streams can be recorded onto production tracks;
-- a production instrument track (the device is the graph and its eight knob values; up to 8 such tracks), played from the
+- a production instrument track (the device is the graph and its knob values; up to 16 such tracks), played from the
   project's notes live and in the offline render;
 - an effect graph as an insert on a deck channel, on the DJ master sum, on a loop slot channel or on one of the three
   Strudel channels, or on one of two send returns (the examples `fx-*`: echo, spring reverb, filter ride, phaser,
@@ -160,6 +161,6 @@ In `djk/instruments/modular_dsp/demos/`: `juno-pad` (eight voices, chorus; with 
 `-hall`, `-echo` and `-dyn` variants), `lead` (sync lead), `bassmusik` (wobble bass with growl), `saite` (a plucked
 string), `rueckkopplung` (a feedback patch), `saege-ladder`, and since then `fm-*` (bass, electric piano, bell, lead),
 `wavetable-*` (supersaw, reese, choir), `granular-*`, `resonator-*`, `metall-*` (hi-hat, ride, crash), `saite-*`
-(guitar, harp, piano, Karplus-Strong), `hartsync-*`, `sampler-fairlight`, `synth-mono`, `synth-poly`, `synth-neuro`, `drums-909`, `drums-808` and the `fx-*` effect graphs (among them `fx-filterbox`). 103 factory presets of our own devices ship with the preset browser, 55 of them for Cypher Modular graphs. The folder
+(guitar, harp, piano, Karplus-Strong), `hartsync-*`, `sampler-fairlight`, `synth-mono`, `synth-poly`, `synth-neuro`, `drums-909`, `drums-808` and the `fx-*` effect graphs (among them `fx-filterbox`). 191 factory presets of our own devices ship with the preset browser, 143 of them for Cypher Modular graphs. Greif 2, the three Juno Pad variants and the sync lead example are no longer offered in the instrument pickers because they duplicate other graphs; they still load by name, and their sounds stay in the sound list. The folder
 `rezepte/` holds 46 more, one per sub-type of the instrument vocabulary (bass 8, drums 5, fx 5, keys 6, lead 7, pad 6,
 percussion 5, pluck 4), each built from a written recipe card.

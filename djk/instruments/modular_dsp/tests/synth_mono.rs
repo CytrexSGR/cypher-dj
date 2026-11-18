@@ -278,16 +278,21 @@ fn ecken_der_knoepfe_bleiben_endlich_und_laut_genug_begrenzt() {
             hoechste_ohne_fx = hoechste_ohne_fx.max(spitze(&y));
         }
         if i < 2 {
-            assert!(spitze(&y) < 0.9 && dc_dbfs(&y) < -50.0, "case {i} (all {}): peak {} dc {} dBFS", i, spitze(&y), dc_dbfs(&y));
+            // all 1 opens the effect mixes and the clean sub (knob 63) together: the held sine of the clean sub rings up in the delay at
+            // feedback 0.9 (default settings with the three mixes open already peak at 1.31 without the sub), so the all-1 corner has the
+            // effect-open bound; all 0 and every knob alone (`jeder_neue_knopf_allein_an_den_ecken`) keep 0.9
+            let grenze = if i == 1 { 1.6 } else { 0.9 };
+            assert!(spitze(&y) < grenze && dc_dbfs(&y) < -50.0, "case {i} (all {}): peak {} dc {} dBFS", i, spitze(&y), dc_dbfs(&y));
         }
     }
     println!("MESS synth-mono corners: highest peak over 26 cases {hoechste:.3}, without effect mixes {hoechste_ohne_fx:.3}");
     assert!(hoechste_ohne_fx < 1.3, "peak without effects {hoechste_ohne_fx}");
-    assert!(hoechste < 2.0, "peak {hoechste}");
+    // with the effects open the bound was 2.0 (1.87 measured); the clean sub (knob 63) is a steady low sine that the feedback delay rings up, 2.41 measured
+    assert!(hoechste < 2.6, "peak {hoechste}");
 }
 
-/// The knob numbers of the graph: 1..=57 and 59, 60 (58 stays free: the reverb has one fixed decay and no decay knob)
-fn alle_nummern() -> Vec<usize> { (1..=57).chain([59, 60]).collect() }
+/// The knob numbers of the graph: 1..=63 (64 stays free; 58 was free until the chaos rate took it, the reverb still has one fixed decay)
+fn alle_nummern() -> Vec<usize> { (1..=63).collect() }
 
 #[test]
 fn jeder_knopf_ist_benannt_und_die_nummern_sind_angehaengt() {
@@ -302,7 +307,8 @@ fn jeder_knopf_ist_benannt_und_die_nummern_sind_angehaengt() {
     let neu = [(33, "Filter attack"), (34, "Filter release"), (35, "Amp attack"), (36, "ModEnv attack"), (39, "ModEnv release"), (40, "ModEnv to pitch"),
         (41, "ModEnv to pwm"), (42, "ModEnv to cutoff"), (43, "LFO2 rate"), (45, "LFO2 sync"), (46, "LFO2 target"), (47, "LFO2 amount"),
         (48, "Velocity depth"), (49, "Velocity to cutoff"), (50, "Master tune"), (51, "Osc1 octave"), (52, "Osc1 fine"), (53, "Chorus"),
-        (55, "Delay time"), (57, "Delay mix"), (59, "Reverb mix"), (60, "Ping-pong")];
+        (55, "Delay time"), (57, "Delay mix"), (58, "Chaos rate"), (59, "Reverb mix"), (60, "Ping-pong"), (61, "Chaos to cutoff"),
+        (62, "Chaos to osc2 pitch"), (63, "Clean sub")];
     for (n, soll) in neu {
         assert!(name(n).eq_ignore_ascii_case(soll), "knob {n}: {} vs {soll}", name(n));
     }
@@ -323,6 +329,9 @@ fn neue_funktionen_aendern_den_klang_gegenueber_aus() {
             ("modenv to cutoff".into(), vec![(42, 1.0)]), ("modenv to pitch".into(), vec![(40, 1.0)]), ("modenv to pwm".into(), vec![(41, 1.0)]),
             ("velocity to cutoff".into(), vec![(49, 1.0)]), ("delay mix".into(), vec![(57, 1.0)]), ("reverb mix".into(), vec![(59, 1.0)]),
             ("chorus".into(), vec![(53, 1.0)]), ("master tune".into(), vec![(50, 1.0)]),
+            ("chaos to cutoff +1".into(), vec![(61, 1.0)]), ("chaos to cutoff -1".into(), vec![(61, 0.0)]),
+            ("chaos to osc2 pitch +1".into(), vec![(62, 1.0)]), ("chaos to osc2 pitch -1".into(), vec![(62, 0.0)]),
+            ("clean sub".into(), vec![(63, 1.0)]),
         ];
         for (i, t) in ["cutoff", "pitch", "pwm", "resonance", "amp"].iter().enumerate() {
             for (sz, a) in [("+1", 1.0f32), ("-1", 0.0)] {
@@ -344,11 +353,12 @@ fn neue_funktionen_aendern_den_klang_gegenueber_aus() {
 fn mono_freie_regler_wirken_ueber_ihr_tor() {
     // the class F knobs that are dead at the default (their gate sits at 0) must change the sound once the gate is open: a miswired
     // free knob would pass every other test. Each knob 0 against 1 with its gate knob open, all others at their vorgabe.
-    let tore: [(usize, &[usize], &[(usize, f32)]); 12] = [
+    let tore: [(usize, &[usize], &[(usize, f32)]); 14] = [
         (36, &[], &[(42, 1.0)]), (37, &[], &[(42, 1.0)]), (38, &[], &[(42, 1.0)]), (39, &[], &[(42, 1.0)]),   // MOD ENV A D S R through To cutoff
         (43, &[], &[(47, 1.0)]), (44, &[], &[(47, 1.0)]), (45, &[], &[(47, 1.0)]), (46, &[], &[(47, 1.0)]),   // LFO 2 rate, shape, sync, target through Amount
         (54, &[], &[(53, 1.0)]),                                                                              // chorus mode through Chorus
         (55, &[], &[(57, 1.0)]), (56, &[], &[(57, 1.0)]), (60, &[], &[(57, 1.0)]),                           // delay time, feedback, ping-pong through Delay mix
+        (58, &[], &[(61, 1.0)]), (58, &[], &[(62, 1.0)]),                                                     // chaos rate through Chaos to cutoff and to osc 2 pitch
     ];
     for (nr, _, tor) in tore {
         let mit = |w: f32| { let mut kn = tor.to_vec(); kn.push((nr, w)); probe(&mut lade(&kn)) };
@@ -358,6 +368,39 @@ fn mono_freie_regler_wirken_ueber_ihr_tor() {
         assert!(a.iter().chain(&b).all(|v| v.is_finite()), "knob {nr}: not finite");
         assert!(d > -80.0, "knob {nr} does not change the sound with its gate open ({d} dB)");
     }
+}
+
+#[test]
+fn chaos_wiederholt_sich_pro_stimme_bitgenau_und_haelt_den_aus_zustand() {
+    // the chaos node is seeded per voice: the same graph renders the same audio twice, bit for bit, with the chaos routed hard
+    let kn = [(61, 1.0f32), (62, 1.0), (58, 0.7)];
+    let (a, b) = (probe(&mut lade(&kn)), probe(&mut lade(&kn)));
+    assert!(a.iter().zip(&b).all(|(x, y)| x.to_bits() == y.to_bits()), "two renders of the same graph differ");
+    // the rate alone (both amounts at 0) never reaches the sound: byte equal at both ends of its travel
+    let (r0, r1, aus) = (probe(&mut lade(&[(58, 0.0)])), probe(&mut lade(&[(58, 1.0)])), probe(&mut lade(&[])));
+    assert!(r0.iter().zip(&aus).chain(r1.iter().zip(&aus)).all(|(x, y)| x.to_bits() == y.to_bits()), "chaos rate leaks into the sound at amount 0");
+}
+
+#[test]
+fn der_saubere_sub_umgeht_filter_saettiger_und_haengt_an_der_huelle() {
+    // filter closed (cutoff 0, 40 Hz), osc mix to osc 1, oscillator sub off: what the filter lets through is far below the clean sub, which
+    // is one octave under A2 (55 Hz) and follows the amp envelope (silent after the release)
+    let basis = [(1, 0.0f32), (9, 0.0), (10, 0.0), (6, 1.0)];
+    let nimm = |sub: f32| {
+        let mut kn = basis.to_vec();
+        kn.push((63, sub));
+        let mut p = lade(&kn);
+        p.note_an(45, 0.8);
+        let y = lauf(&mut p, 0.6);
+        p.note_aus(45);
+        let nach = lauf(&mut p, 2.0);
+        (y, nach)
+    };
+    let ((aus, _), (an, nach)) = (nimm(0.0), nimm(1.0));
+    let (d_aus, d_an) = (dft_db(&aus[12_000..12_000 + 8192], 55.0), dft_db(&an[12_000..12_000 + 8192], 55.0));
+    println!("MESS synth-mono clean sub: 55 Hz {d_aus:.1} dB off, {d_an:.1} dB on");
+    assert!(d_an > d_aus + 12.0 && d_an > -18.0, "off {d_aus} dB, on {d_an} dB");
+    assert!(spitze(&nach[nach.len() - 4800..]) < 1e-3, "the clean sub does not follow the envelope release");
 }
 
 /// The graph with the output of LFO 2 (signal x amount) on the left channel instead of the sound, and a chosen host tempo

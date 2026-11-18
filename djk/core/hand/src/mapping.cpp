@@ -79,7 +79,7 @@ struct Pruefung {
     const Wert* nr = k ? pflicht(v, "nr", Wert::zahl) : nullptr;
     if (!k || !nr) return false;
     int kanal = 0, num = 0;
-    if (!ganzzahl(*k, "kanal", 1, 16, &kanal, FehlerArt::nachricht)) return false;
+    if (!ganzzahl(*k, "kanal", 0, 16, &kanal, FehlerArt::nachricht)) return false;
     if (!ganzzahl(*nr, "nr", 0, 127, &num, FehlerArt::nachricht)) return false;
     n->kanal = static_cast<uint8_t>(kanal);
     n->nr = static_cast<uint8_t>(num);
@@ -153,8 +153,26 @@ bool art_passt(const Eintrag& e, const stellwerk::ReglerTabelle& tab, std::strin
   switch (e.ziel_art) {
     case ZielArt::regler: {
       const stellwerk::KurvenTyp k = tab.def(e.regler).kurve.typ;
+      if (e.stufen > 0) {
+        // stufen: a button cycles a continuous control through N positions. The step arithmetic works on the position
+        // 0..1, so it needs a control whose value is that position: range 0..1, linear default curve (bk rows).
+        const stellwerk::ReglerDef& d = tab.def(e.regler);
+        if (e.art != Art::taste) {
+          *warum = "stufen nur mit art taste";
+          return false;
+        }
+        if (e.schalter) {
+          *warum = "stufen nicht an Schalter-Reglern (die Taste schaltet sie um)";
+          return false;
+        }
+        if (k != stellwerk::KurvenTyp::linear || d.min != 0.0f || d.max != 1.0f || d.db || d.ganzzahlig) {
+          *warum = "stufen nur an stetigen Reglern mit dem Bereich 0..1 (Baukasten-Regler)";
+          return false;
+        }
+        return true;
+      }
       if (e.art == Art::taste && !e.schalter) {
-        *warum = "taste nur an Schalter-Reglern (kill, pfl, split)";
+        *warum = "taste nur an Schalter-Reglern (kill, pfl, split); an stetigen Reglern nur mit \"stufen\"";
         return false;
       }
       if (e.art == Art::relativ && k == stellwerk::KurvenTyp::schalter) {
@@ -191,8 +209,8 @@ bool eintrag_lesen(Pruefung& p, const Wert& v, const stellwerk::ReglerTabelle& t
   e->regler = -1;
   e->zeile = v.zeile;
   if (v.art != Wert::objekt) return p.fehl(FehlerArt::feld_typ, v.zeile, "Eintrag muss ein Objekt sein");
-  static const char* const F[] = {"nachricht", "ziel", "art", "kodierung", "kurve", "kill_unter_min", "quant"};
-  if (!p.nur_felder(v, F, 7)) return false;
+  static const char* const F[] = {"nachricht", "ziel", "art", "kodierung", "kurve", "kill_unter_min", "quant", "stufen"};
+  if (!p.nur_felder(v, F, 8)) return false;
   const Wert* n = p.pflicht(v, "nachricht", Wert::objekt);
   if (!n || !p.nachricht(*n, &e->nachricht)) return false;
   const Wert* ziel = p.pflicht(v, "ziel", Wert::text);
@@ -223,6 +241,14 @@ bool eintrag_lesen(Pruefung& p, const Wert& v, const stellwerk::ReglerTabelle& t
 
   if ((e->art == Art::absolut || e->art == Art::relativ) && e->nachricht.typ != NachrichtTyp::cc)
     return p.fehl(FehlerArt::falsche_art, art->zeile, std::string(name(e->art)) + " braucht eine cc-Nachricht");
+  // stufen: 2..16 positions for a button at a continuous control; art_passt names the targets/arts that do not fit
+  if (const Wert::Feld* st = v.feld("stufen")) {
+    int n = 0;
+    if (!p.ganzzahl(st->wert, "stufen", 2, 16, &n, FehlerArt::feld_typ)) return false;
+    if (e->ziel_art != ZielArt::regler)
+      return p.fehl(FehlerArt::falsche_art, st->zeile, std::string("stufen nur an Reglern (Ziel ") + e->ziel + ")");
+    e->stufen = static_cast<uint8_t>(n);
+  }
   std::string warum;
   if (!art_passt(*e, tab, &warum)) return p.fehl(FehlerArt::falsche_art, art->zeile, warum + " (Ziel " + e->ziel + ")");
 
@@ -333,7 +359,7 @@ bool lade(const char* text, const stellwerk::ReglerTabelle& tab, Mapping* m, Feh
       return p.fehl(FehlerArt::zu_viele, v.zeile, "höchstens " + std::to_string(MAX_EINTRAEGE) + " Einträge");
     Eintrag& e = m->eintrag[m->n_eintraege];
     if (!eintrag_lesen(p, v, tab, &e)) return false;
-    int16_t& idx = m->index[static_cast<int>(e.nachricht.typ)][e.nachricht.kanal - 1][e.nachricht.nr];
+    int16_t& idx = m->index[static_cast<int>(e.nachricht.typ)][kanal_slot(e.nachricht.kanal)][e.nachricht.nr];
     if (idx >= 0)
       return p.fehl(FehlerArt::doppelt, v.zeile,
                     "Nachricht schon in Zeile " + std::to_string(m->eintrag[idx].zeile) + " belegt");

@@ -16,10 +16,11 @@ import { RACK_TEXT } from './rack_device.js';
 import { bindeMusterFeld } from './pattern_field.js';
 import { bindeGeraetAnsicht, kannGeraetAnsicht, GERAET_TEXT } from './device_view.js';
 import { geraetText } from './track_heads.js';
+import { oeffneGeraetFenster, GERAET_FENSTER_TEXT } from '../device_open.js';
 
 // Gain-Regler: Bereich aus FELDER.gain_db (Spec 6.27, −96..+24 dB), sonst schnitte er Werte ab (V2 Fix F8: vorher −36..+12, +20 dB zeigte 12)
 const GERUEST = `<div class="p-detail-kopf"><span data-d="titel">CLIP</span><span class="p-detail-info" data-d="info"></span>
-  <span class="p-detail-knoepfe"><button data-d="loop" aria-pressed="false" title="Loop the clip: repeat it up to its length, then drag the right edge (Ctrl+L)" disabled>LOOP</button><button data-d="teilen" title="Split the selected clips at the start marker (Ctrl+E)" disabled>SPLIT</button><button data-d="duplizieren" title="Duplicate the selected clips behind themselves (Ctrl+D)" disabled>DUPLICATE</button><button data-d="loeschen" title="Delete the selected clips (Del)" disabled>DELETE</button></span></div>
+  <span class="p-detail-knoepfe"><button data-d="fenster" title="${GERAET_FENSTER_TEXT.titel}" hidden>${GERAET_FENSTER_TEXT.knopf}</button><button data-d="loop" aria-pressed="false" title="Loop the clip: repeat it up to its length, then drag the right edge (Ctrl+L)" disabled>LOOP</button><button data-d="teilen" title="Split the selected clips at the start marker (Ctrl+E)" disabled>SPLIT</button><button data-d="duplizieren" title="Duplicate the selected clips behind themselves (Ctrl+D)" disabled>DUPLICATE</button><button data-d="loeschen" title="Delete the selected clips (Del)" disabled>DELETE</button></span></div>
 <div class="p-detail-reiter" role="tablist" data-d="reiter" hidden><button role="tab" data-d="reiterclip" aria-selected="true">${HK_TEXT.reiter_clip}</button><button role="tab" data-d="reiterhk" aria-selected="false">${HK_TEXT.reiter_hk}</button></div>
 <div class="p-detail-leer" data-d="leer">No clip selected. Click a clip; double click on an instrument track makes a MIDI clip.</div>
 <div class="p-clip-audio" data-d="audio" hidden>
@@ -72,6 +73,8 @@ export function bindeDetail(ctx) {
   // (device_view.js); selecting a clip goes back, and so does a device that no longer has a view (the track was switched to Surge)
   const geraetTeil = bindeGeraetAnsicht(ctx, d('geraet'));
   st.geraetSpur = null;
+  // OPEN ↗ in the header of the rack panel and of the device panel: the track in its own window (device_window.js)
+  d('fenster').addEventListener('click', () => { const id = st.rackSpur ?? st.geraetSpur; if (id) oeffneGeraetFenster(id, ctx.melde); });
   ctx.geraetOeffnen = (id) => { st.geraetSpur = id; st.rackSpur = null; geraetTeil.wiederhole(); zeige(); };
   const editor = bindeWarpEditor(ctx, d('editorcanvas'), d('segment'));
   // 1.12 slice 5 (U10): the tab row CLIP (NOTES on a MIDI clip) / ENVELOPES; the open tab and the target per clip are page state (HkWahl)
@@ -171,15 +174,17 @@ export function bindeDetail(ctx) {
     if (rs?.geraet?.art === 'rack') {   // rack mode
       for (const k of ['loop', 'teilen', 'duplizieren', 'loeschen']) d(k).disabled = true;
       for (const k of ['leer', 'audio', 'midi', 'reiter', 'hk', 'muster', 'geraet']) d(k).hidden = true;
+      d('fenster').hidden = false;
       geraetTeil.zeige(null); d('rack').hidden = false; d('titel').textContent = RACK_TEXT.titel; d('info').textContent = `${rs.name} · ${RACK_TEXT.info}`;
       rolle.zeige(null); editor.zeige(null); hkTeil.zeige(null); musterTeil.zeige(null); rackTeil.zeige(rs);
       return;
     }
-    st.rackSpur = null; d('rack').hidden = true; rackTeil.zeige(null);
+    st.rackSpur = null; d('rack').hidden = true; rackTeil.zeige(null); d('fenster').hidden = true;
     const gs = st.geraetSpur ? st.projekt?.spuren.find((x) => x.id === st.geraetSpur) : null;
     if (gs && kannGeraetAnsicht(gs)) {   // device mode
       for (const k of ['loop', 'teilen', 'duplizieren', 'loeschen']) d(k).disabled = true;
       for (const k of ['leer', 'audio', 'midi', 'reiter', 'hk', 'muster']) d(k).hidden = true;
+      d('fenster').hidden = false;
       d('geraet').hidden = false; d('titel').textContent = GERAET_TEXT.titel; d('info').textContent = `${gs.name} · ${geraetText(gs)}`;
       rolle.zeige(null); editor.zeige(null); hkTeil.zeige(null); musterTeil.zeige(null); geraetTeil.zeige(gs);
       return;

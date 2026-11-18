@@ -22,6 +22,7 @@ constexpr int ERZ_STIMMEN = 32;     // gleichzeitig klingende Einsätze aller St
 constexpr int ERZ_MIDI_PORTS = 4;   // Studio S5: §7.1 midi_aus_1 bis _4
 constexpr int ERZ_MIDI_EV = 256;    // MIDI-Ereignisse je Port und Zyklus
 constexpr int ERZ_OFFEN = 64;       // klingende MIDI-Noten je Strom (Note-Off ausstehend)
+constexpr int ERZ_TASTEN_EV = 256;  // Task N2: live key events waiting for their sample (all keys of one cycle fit; the sinks take 256 per block as well)
 // Glanz 2.5/2.4 (Erhebung Klickfrei 2026-10-01, Längen UNGEHÖRT, Ohr-Termin mit Andreas steht aus):
 constexpr int ERZ_EIN = 32;         // F46: Einblende bei begin > 0 (0,67 ms), höchstens 1/4 des Ausschnitts
 constexpr int ERZ_AUS = 96;         // F46/F50: Ausblende am Ende des gespielten Bereichs (2 ms), höchstens 1/4
@@ -135,6 +136,20 @@ class Erzeuger {
   void block(const Karte& k, int64_t n0, int n, float* const* ein_l, float* const* ein_r, MidiAus* midi = nullptr,
              int64_t zyklus_n0 = 0, ErzAusloeser* ausl = nullptr);
   void leeren();  // neue Zeitachse (§4.2): offene Ereignisse fallen weg, Kits und Stimmen bleiben
+  // Task N2 (live keys, /k/live/tasten): the stream that plays the keys of all midi_ein places, 0 = none (the state after start). Callback thread only,
+  // no allocation. A key is played through the SAME sink a pattern note of that stream uses: a `bk:` stream through its graph instance (cypher_bk_note_an/aus,
+  // velocity vel/127, at the key's sample, no lead, like the graph events of the stream), a `midi:<port>:<ch>` stream as note on/off on its port and channel
+  // (at the key's sample, no lead: a key cannot be played ahead). A kit stream (or a stream without a sink) takes no keys. Held keys are closed with a per-note off
+  // (never an all-off: the notes of the patterns keep sounding) when the target changes, when the stream changes graph or MIDI target, and on tasten_alle_aus().
+  // A key and a pattern note of the same pitch: the sink has one voice per pitch, so the key's On first ends a sounding one (the retrigger the patterns already use),
+  // the off of a pattern note is held back while a key holds the pitch, and the off of a key is held back while a pattern note of that pitch is still scheduled.
+  void tasten_ziel(int strom);
+  int tasten_ziel() const { return tz_; }
+  // One key event of this cycle. sample = its stamp (first sub-block of the cycle, Arrangement::live_ziel); an false = off. vel 1..127 for an On.
+  void taste(int note, int vel, bool an, int64_t sample);
+  void tasten_alle_aus();   // close what the keys hold (a midi_ein went away); the events not yet played are dropped
+  int tasten_offen() const;   // keys held on any stream (including those waiting to be closed)
+  uint32_t tasten_verloren() const { return tz_verloren_; }   // On events that did not fit the queue (the offs are never lost: see taste())
   int offen(int strom) const { return (strom >= 1 && strom <= ERZ_STROEME) ? st_[strom - 1].n : 0; }
   int stimmen() const;
   int ausklaenge() const;  // F16/F11: belegte Ausklang-Plätze
@@ -163,6 +178,11 @@ class Erzeuger {
     bool kappe = false;
     double kappe_beat = 0.0;
     ErzEv ev[ERZ_SCHLANGE];  // nach beat aufsteigend
+    // Task N2: keys held on this stream (bit = note), the sink they went to (taste_port 0 = graph, else the MIDI port and channel at the first key) and a
+    // request to close them at the next safe point of the sink (taste_zu). All zero while no key is held.
+    uint64_t taste[2] = {0, 0};
+    uint8_t taste_port = 0, taste_kanal = 0;
+    bool taste_zu = false;
   };
   struct Stimme {
     const KitKlang* klang = nullptr;
@@ -212,6 +232,21 @@ class Erzeuger {
   void bk_vorlauf(Strom& s, int a, const Karte& k, int64_t n0, int n, float* const* ein_l, float* const* ein_r);
   uint64_t gezaehlt_ = 0;
   int64_t midi_vorhalt_ = 0;  // Glanz 2.7 (F19), im Callback gesetzt
+  // Task N2: live keys
+  struct TastenEv { int64_t smp; uint8_t note, vel; bool an; };
+  TastenEv tev_[ERZ_TASTEN_EV];
+  int n_tev_ = 0;
+  int tz_ = 0;                    // target stream 1..16, 0 = none
+  uint64_t tz_aus_[2] = {0, 0};   // offs that did not fit tev_: applied once the queue is empty
+  uint32_t tz_verloren_ = 0;
+  static bool taste_gehalten(const Strom& s, uint8_t note) { return (s.taste[note >> 6] >> (note & 63)) & 1u; }
+  // true while a key holds `note` on the sink (port, kanal) of the pattern note o
+  static bool taste_haelt(const Strom& s, const Strom::Offen& o) {
+    return taste_gehalten(s, o.note) && o.port == s.taste_port && (o.port == 0 || o.kanal == s.taste_kanal);
+  }
+  void tasten_graph_weg(Strom& s);
+  void tasten_midi_zu(Strom& s, MidiAus* midi, int64_t n0, int64_t zyklus_n0);
+  void tasten_spielen(Strom& s, int64_t von, int64_t bis, MidiAus* midi, int64_t zyklus_n0);
 };
 
 }  // namespace cdj

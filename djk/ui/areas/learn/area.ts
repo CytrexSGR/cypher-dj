@@ -9,13 +9,16 @@ import { json } from '../../http/transport.ts';
 import { controllerOrdner, geraeteDatei } from '../../paths.ts';
 import { leseKoerper } from '../proj/area.ts';
 import { ProjFehler } from '../proj/session.ts';
-import { GeraeteFehler, GeraeteSpeicher, controllerPlaetze, type ControllerPlatz } from '../devices/store.ts';
+import { GeraeteFehler, GeraeteSpeicher, controllerPlaetze, type ControllerZeile } from '../devices/store.ts';
 import { beschriftung } from './beschriftung.ts';
+import { boxVon } from './box.ts';
+import { wertVon } from './value.ts';
 import { LernAblauf, type Zeit } from './flow.ts';
-import { LernFehler, LernSpeicher, PLAETZE } from './store.ts';
+import { LernFehler, LernSpeicher, PLAETZE, type Neu } from './store.ts';
 import { eintragsArt, zielArt } from './targets.ts';
 
-export interface LernenOptionen { ordner?: string; geraeteKonfig?: string; fristMs?: number; zeit?: Zeit }
+// werkOrdner / presetOrdner are read by the controller Bereich (areas/controller/sequences.ts), which rides on the same options: the factory folder and the user folder of the controller presets.
+export interface LernenOptionen { ordner?: string; geraeteKonfig?: string; fristMs?: number; zeit?: Zeit; werkOrdner?: string; presetOrdner?: string }
 
 // What the capture can arm: a continuous target (a graph knob bk/1..64 or any control of the table whose unit is not a switch). A switch needs a button.
 const erfassbar = (p: unknown): p is string => zielArt(p) === 'regler';
@@ -34,8 +37,10 @@ export interface LernenBereich extends Bereich {
   wartet(): string | null;                  // the armed path
   abbrechen(): void;
   midiPort(): string | null;                // the MIDI input on place 1 (null without one or with a damaged devices file)
-  controller(): Required<ControllerPlatz>[]; // every assigned controller place (1..8), empty with a damaged devices file
+  controller(): ControllerZeile[]; // every assigned controller place (1..8), empty with a damaged devices file
   loesche(pfad: string): Promise<void>;     // remove the learn assignment (keine_zuordnung 404 when there is none)
+  lage(): Record<string, unknown>;          // the state GET /lernen answers
+  ersetze: LernAblauf['ersetze'];           // controller follow and presets: replace the knob entries (or all learned entries) of a place, one write, one reload per changed place
 }
 
 export function lernenBereich(ctx: BereichKontext, opt: LernenOptionen = {}): LernenBereich {
@@ -43,11 +48,13 @@ export function lernenBereich(ctx: BereichKontext, opt: LernenOptionen = {}): Le
   const geraete = new GeraeteSpeicher(opt.geraeteKonfig ?? geraeteDatei());
   const ablauf = new LernAblauf(ctx, speicher, { fristMs: opt.fristMs, zeit: opt.zeit });
   const midiPort = (): string | null => { try { return geraete.lies().midi.port; } catch { return null; } };   // a damaged devices file means: no port known
-  const controller = (): Required<ControllerPlatz>[] => { try { return controllerPlaetze(geraete.lies()); } catch { return []; } };
+  const controller = (): ControllerZeile[] => { try { return controllerPlaetze(geraete.lies()); } catch { return []; } };
+
+  const gemeldet = new Map<string, number>();   // row -> the last value the kern reported (/e/regler), for `wert` of a live-channel knob (value.ts)
 
   const lage = (): Record<string, unknown> => {
     const s = speicher.lies();
-    return { zuordnungen: s.zuordnungen.map((z) => ({ ...z, name: beschriftung(ctx, z.pfad) })), wartet: ablauf.lage(), midi: { port: midiPort() }, controller: controller(), datei: s.datei };
+    return { zuordnungen: s.zuordnungen.map((z) => { const box = boxVon(ctx, z.pfad); const wert = wertVon(ctx, z.pfad, gemeldet); return { ...z, name: beschriftung(ctx, z.pfad), ...(box === undefined ? {} : { box }), ...(wert === undefined ? {} : { wert }) }; }), wartet: ablauf.lage(), midi: { port: midiPort() }, controller: controller(), datei: s.datei };
   };
   const antwort = (e: unknown): { code: number; j: Record<string, unknown> } => {
     if (e instanceof LernFehler) return { code: e.code, j: { fehler: e.grund, text: e.text || grundText(e.grund) } };
@@ -84,6 +91,8 @@ export function lernenBereich(ctx: BereichKontext, opt: LernenOptionen = {}): Le
     midiPort,
     controller,
     loesche: (pfad: string) => ablauf.loesche(pfad),
+    lage,
+    ersetze: (platz: number, neu: Neu[], modus?: 'bk' | 'alle') => ablauf.ersetze(platz, neu, modus),
     routen: () => [
       { methode: 'GET', pfad: '/lernen', schutz: 'offen', handler: (_q: http.IncomingMessage, a: http.ServerResponse) => {
         try { json(a, 200, lage()); } catch (e) { const r = antwort(e); json(a, r.code, r.j); }
@@ -115,6 +124,10 @@ export function lernenBereich(ctx: BereichKontext, opt: LernenOptionen = {}): Le
         await ablauf.loesche(d.pfad);
       }),
     ],
-    ereignis(adresse: string, f: Record<string, unknown>): void { ablauf.ereignis(adresse, f); },
+    ereignis(adresse: string, f: Record<string, unknown>): void {
+      if (adresse === '/k/willkommen' || adresse === '/e/neustart') gemeldet.clear();   // a new kern reports its own values
+      if (adresse === '/e/regler' && typeof f.pfad === 'string' && typeof f.wert === 'number' && Number.isFinite(f.wert) && /\/bk\/\d+$/.test(f.pfad)) gemeldet.set(f.pfad, f.wert);
+      ablauf.ereignis(adresse, f);
+    },
   };
 }

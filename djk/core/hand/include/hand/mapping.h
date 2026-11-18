@@ -25,7 +25,7 @@ constexpr int PORT_TEXT = 128;      // JACK-Portnamen der Midi-Bridge
 enum class NachrichtTyp : uint8_t { cc = 0, note = 1 };
 struct Nachricht {
   NachrichtTyp typ;
-  uint8_t kanal;   // 1 bis 16
+  uint8_t kanal;   // 1 bis 16; 0 = jeder Kanal (der Eintrag mit genauem Kanal gewinnt)
   uint8_t nr;      // 0 bis 127
 };
 
@@ -68,6 +68,7 @@ struct Eintrag {
   Quant quant;
   Taste taste;
   ArrAktion arr_aktion;      // ZielArt::arr (D1 K1)
+  uint8_t stufen;            // art taste at a continuous control (range 0..1): N equidistant positions, 2..16; 0 = off
 };
 
 struct Led {
@@ -86,7 +87,7 @@ struct Mapping {
   Eintrag eintrag[MAX_EINTRAEGE];
   int n_leds;
   Led led[MAX_LEDS];
-  int16_t index[2][16][128];   // [typ][kanal - 1][nr] -> Eintrag oder -1
+  int16_t index[2][17][128];   // [typ][kanal - 1, Platz 16 = kanal 0 (jeder Kanal)][nr] -> Eintrag oder -1
 };
 
 enum class FehlerArt : uint8_t {
@@ -103,10 +104,14 @@ struct Fehler {
 bool lade(const char* text, const stellwerk::ReglerTabelle& tabelle, Mapping* aus, Fehler* fehler);
 bool lade_datei(const char* pfad, const stellwerk::ReglerTabelle& tabelle, Mapping* aus, Fehler* fehler);
 
+// Platz einer Eintrags-Kanalnummer im Index: 1..16 -> 0..15, 0 (jeder Kanal) -> 16
+inline int kanal_slot(int kanal) { return kanal == 0 ? 16 : kanal - 1; }
+
 // Index des Eintrags für diese Nachricht oder -1. Echtzeitfest.
 inline int suche(const Mapping& m, NachrichtTyp typ, int kanal, int nr) {
   if (kanal < 1 || kanal > 16 || nr < 0 || nr > 127) return -1;
-  return m.index[static_cast<int>(typ)][kanal - 1][nr];
+  const int exakt = m.index[static_cast<int>(typ)][kanal - 1][nr];
+  return exakt >= 0 ? exakt : m.index[static_cast<int>(typ)][16][nr];   // sonst der Eintrag mit kanal 0
 }
 
 const char* name(FehlerArt a);

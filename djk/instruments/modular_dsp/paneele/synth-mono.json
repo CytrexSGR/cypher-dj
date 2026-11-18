@@ -7,7 +7,7 @@
   "layout": {"rows": [
     ["osc", "mix", "filter", "tune"],
     ["env1", "env2", "lfo", "voice", "amp"],
-    ["menv", "lfo2", "velocity"],
+    ["menv", "lfo2", "velocity", "chaos"],
     ["chorus", "delay", "reverb"]
   ]},
   "sections": [
@@ -24,7 +24,9 @@
       {"id": "mix", "type": "knob", "label": "Osc1 / Osc2", "bind": {"param": "k8"}, "format": "percent", "default": 0.5},
       {"id": "sub", "type": "knob", "label": "Sub", "bind": {"param": "k9"}, "format": "percent", "default": 0.5},
       {"id": "noise", "type": "knob", "label": "Noise", "bind": {"param": "k10"}, "format": "percent", "default": 0.5},
-      {"id": "subwave", "type": "selector", "label": "Sub wave", "span": 3, "bind": {"param": "k31"}, "options": ["Sine", "Sq -1 oct", "Sq -2 oct"], "glyphs": ["sine", "square", "square"], "default": 1}
+      {"id": "subwave", "type": "selector", "label": "Sub wave", "span": 3, "bind": {"param": "k31"}, "options": ["Sine", "Sq -1 oct", "Sq -2 oct"], "glyphs": ["sine", "square", "square"], "default": 1},
+      {"id": "csub", "type": "knob", "label": "Clean sub", "span": 3, "bind": {"param": "k63"}, "format": "percent", "default": 0, "scale": {"labels": ["off", "50", "100"]}},
+      {"id": "csnote", "type": "label", "span": 3, "text": "Sine 1 oct down, past filter and drive"}
     ]},
     { "id": "filter", "page": "main", "title": "FILTER", "cols": 5, "controls": [
       {"id": "type", "type": "selector", "label": "Type", "span": 5, "bind": {"param": "k5"}, "options": ["Diode", "SV 12", "Ladder", "Sallen-Key", "SV BP"], "default": 2},
@@ -98,6 +100,12 @@
       {"id": "vdepth", "type": "knob", "label": "Depth", "bind": {"param": "k48"}, "format": "raw", "unit": "x", "default": 0.5},
       {"id": "vcut", "type": "knob", "label": "To cutoff", "bind": {"param": "k49"}, "format": "raw", "unit": "st", "default": 0.5, "scale": {"labels": ["-48", "off", "+48"]}},
       {"id": "vnote", "type": "label", "span": 2, "text": "Depth 1x = the Accent knob as is"}
+    ]},
+    { "id": "chaos", "page": "mod", "title": "CHAOS", "cols": 2, "controls": [
+      {"id": "chrate", "type": "knob", "label": "Rate", "span": 2, "bind": {"param": "k58"}, "format": "hz", "default": 0.3843108934201205},
+      {"id": "chcut", "type": "knob", "label": "To cutoff", "bind": {"param": "k61"}, "format": "raw", "unit": "st", "default": 0.5, "scale": {"labels": ["-36", "off", "+36"]}},
+      {"id": "chpit", "type": "knob", "label": "To osc2 pitch", "bind": {"param": "k62"}, "format": "raw", "unit": "ct", "default": 0.5, "scale": {"labels": ["-50", "off", "+50"]}},
+      {"id": "chnote", "type": "label", "span": 2, "text": "Wanders, never repeats"}
     ]},
     { "id": "chorus", "page": "fx", "title": "CHORUS", "cols": 3, "controls": [
       {"id": "chmode", "type": "selector", "label": "Mode", "span": 3, "bind": {"param": "k54"}, "options": ["I", "II", "I+II"], "default": 0},

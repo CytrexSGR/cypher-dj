@@ -3,37 +3,45 @@
   "geraet": {"art": "bk", "graph": "wavetable-reese"},
   "title": "Wavetable Reese",
   "akzent": "violett",
+  "pages": [{"id": "main", "title": "Main"}, {"id": "mod", "title": "Mod"}],
   "layout": {"rows": [
-    ["table", "unison", "filter", "wenv", "amp"]
+    ["table", "unison", "filter", "wenv", "amp"],
+    ["warp", "chaos", "sub"],
+    ["pm", "band"]
   ]},
   "sections": [
-    { "id": "table", "title": "TABLE", "cols": 2, "controls": [
+    { "id": "table", "title": "TABLE", "page": "main", "cols": 2, "controls": [
       {"id": "t1", "type": "label", "span": 2, "text": "Table: analog"},
       {"id": "t2", "type": "label", "span": 2, "text": "Position 67 % + wave env"},
       {"id": "t3", "type": "label", "span": 2, "text": "2 copies, 2 voices"}
     ]},
-    { "id": "unison", "title": "UNISON", "cols": 2, "controls": [
+    { "id": "unison", "title": "UNISON", "page": "main", "cols": 2, "controls": [
       {"id": "detune", "type": "knob", "label": "Detune", "bind": {"param": "k3"}, "format": "raw", "unit": "ct", "default": 0.5},
       {"id": "width", "type": "knob", "label": "Width", "bind": {"param": "k4"}, "format": "percent", "default": 0.5}
     ]},
-    { "id": "filter", "title": "FILTER", "cols": 3, "controls": [
+    { "id": "filter", "title": "FILTER", "page": "main", "cols": 3, "controls": [
       {"id": "fk", "type": "filterkurve", "span": 3, "of": {"cutoff": "cutoff", "reso": "reso"}, "typen": [{"art": "lp", "pole": 4}]},
       {"id": "cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
       {"id": "reso", "type": "knob", "label": "Resonance", "bind": {"param": "k2"}, "format": "percent", "default": 0.5},
       {"id": "fn", "type": "label", "span": 3, "text": "Low-pass 24 dB, per side"}
     ]},
-    { "id": "wenv", "title": "WAVE ENV", "cols": 3, "controls": [
+    { "id": "wenv", "title": "WAVE ENV", "page": "main", "cols": 3, "controls": [
       {"id": "whue", "type": "huelle", "span": 3, "label": "Table position envelope", "of": {"a": "wattack", "d": "wdecay", "s": 0, "r": 0.3}},
       {"id": "wamt", "type": "knob", "label": "Amount", "bind": {"param": "k7"}, "format": "percent", "default": 0.5},
       {"id": "wattack", "type": "knob", "label": "Attack", "bind": {"param": "k8"}, "format": "raw", "unit": "s", "default": 0.5},
       {"id": "wdecay", "type": "knob", "label": "Decay", "bind": {"param": "k9"}, "format": "raw", "unit": "s", "default": 0.5},
       {"id": "wn", "type": "label", "span": 3, "text": "Sustain 0, release 300 ms fixed"}
     ]},
-    { "id": "amp", "title": "AMP", "cols": 3, "controls": [
+    { "id": "amp", "title": "AMP", "page": "main", "cols": 3, "controls": [
       {"id": "ahue", "type": "huelle", "span": 3, "label": "Amp envelope", "of": {"a": 0.004, "d": 0.2, "s": 0.9, "r": "release"}},
       {"id": "release", "type": "knob", "label": "Release", "bind": {"param": "k6"}, "format": "raw", "unit": "s", "default": 0.5},
       {"id": "drive", "type": "knob", "label": "Drive", "bind": {"param": "k5"}, "format": "db", "default": 0.5},
       {"id": "an", "type": "label", "span": 3, "text": "A 4 ms, D 200 ms, S 90 % fixed"}
-    ]}
+    ]},
+    {"id": "warp", "title": "WARP / STACK", "page": "mod", "cols": 3, "controls": [{"id": "warpmode", "type": "selector", "label": "Warp mode", "span": 3, "bind": {"param": "k10"}, "options": ["Off", "Bend", "Asym", "Sync"], "default": 0}, {"id": "warpdepth", "type": "knob", "label": "Warp depth", "bind": {"param": "k11"}, "format": "percent", "default": 0.75, "scale": {"labels": ["-100", "0", "+100"]}, "span": 3}, {"id": "stack", "type": "selector", "label": "Stack", "span": 3, "bind": {"param": "k12"}, "options": ["Off", "Oct", "Oct+5th"], "default": 0}, {"id": "wn1", "type": "label", "span": 3, "text": "Next note; 5th needs 3+ copies"}]},
+    {"id": "chaos", "title": "CHAOS", "page": "mod", "cols": 3, "controls": [{"id": "crate", "type": "knob", "label": "Rate", "bind": {"param": "k13"}, "format": "hz", "default": 0.299052, "span": 1}, {"id": "cpos", "type": "knob", "label": "To position", "bind": {"param": "k14"}, "format": "percent", "default": 0.5, "scale": {"labels": ["-100", "off", "+100"]}, "span": 2}, {"id": "cn", "type": "label", "span": 3, "text": "Lorenz: never repeats"}]},
+    {"id": "sub", "title": "SUB", "page": "mod", "cols": 3, "controls": [{"id": "sublv", "type": "knob", "label": "Level", "bind": {"param": "k15"}, "format": "percent", "default": 0, "scale": {"labels": ["off", "50", "100"]}, "span": 3}, {"id": "subokt", "type": "selector", "label": "Octave", "span": 3, "bind": {"param": "k16"}, "options": ["-1", "-2"], "default": 0}, {"id": "sn", "type": "label", "span": 3, "text": "Clean: no filter, no drive"}]},
+    {"id": "pm", "title": "PHASE MOD", "page": "mod", "cols": 3, "controls": [{"id": "pmamt", "type": "knob", "label": "Amount", "bind": {"param": "k17"}, "format": "raw", "unit": "cyc", "default": 0, "scale": {"labels": ["off", "0.25", "0.5"]}, "span": 3}, {"id": "pn", "type": "label", "span": 3, "text": "Sine at note pitch"}]},
+    {"id": "band", "title": "BAND DRIVE", "page": "mod", "cols": 3, "controls": [{"id": "bdamt", "type": "knob", "label": "Amount", "bind": {"param": "k18"}, "format": "percent", "default": 0, "scale": {"labels": ["off", "50", "100"]}, "span": 3}, {"id": "bn", "type": "label", "span": 3, "text": "Extra drive above 180 Hz"}]}
   ]
 }
