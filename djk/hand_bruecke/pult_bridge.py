@@ -30,6 +30,7 @@ import s8_map as K  # noqa: E402
 import s8_usb  # noqa: E402
 import assignment as belegung  # noqa: E402
 import deck_page as deck_seite  # noqa: E402
+import lc3  # noqa: E402
 
 try:
     import mk2  # noqa: E402  (needs numpy and Pillow)
@@ -369,6 +370,7 @@ class Bruecke:
         threading.Thread(target=self.s8_schleife, daemon=True).start()
         threading.Thread(target=self.anzeige_schleife, daemon=True).start()
         threading.Thread(target=self.mk2_schleife, daemon=True).start()
+        threading.Thread(target=lc3.lauf, args=(self.stop, log), daemon=True).start()   # Launch Control 3: LEDs and display follow the learn table
         naechste = 0.0
         while not self.stop.is_set():
             if time.monotonic() >= naechste:

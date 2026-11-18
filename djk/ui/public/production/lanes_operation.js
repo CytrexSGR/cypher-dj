@@ -2,7 +2,7 @@
 // (bindeLanen). One gesture is ONE command auto_punkte (D9): nothing is sent while the pointer moves (the page shows a draft), exactly one command goes
 // out on pointerup. A twitch below ZUG_SCHWELLE px changes nothing (lesson S7 R2).
 import { rasterBeats, beatsProTakt, xZuBeat, beatZuX } from './timeline.js';
-import { laneZeile, zeileBei } from './layout.js';
+import { zeileBei } from './layout.js';
 import { trefferPunkt, ziehePunkt, setzePunkt, ZUG_SCHWELLE, gezeigteLane, laneMitId, yZuWert, wertZuY, laneWert, bereich, laneSchutz, MAX_PUNKTE, laneStrang } from './lanes.js';
 import { bereichGriff, freihandPunkte, MAX_BEAT, NACHBAR_ABSTAND } from './lanes.js';
 import { oeffneMenue } from './context_menu.js';
@@ -16,6 +16,7 @@ export const LANEN_TEXT = {
   wahl_titel: 'Target of the shown lane',
   knopf_titel: 'Show automation lanes of this track',
   keine_ziele: 'This group has no insert yet: add an effect in INSERTS first',
+  keine_ziele_strang: 'This strip has no insert yet: add an effect in INSERTS first',
   auto: 'AUTO',
   auto_titel: 'A volume line controls this fader while the project plays',
   voll: 'The line is full: delete a point first',
@@ -253,8 +254,10 @@ export function bindeLanen(ctx) {
     bereich: wahl.fuer(t.lane.id), zeichnen: zeichenModus.an });
   flaeche.addEventListener('pointerdown', (e) => {
     const t = laneAn(e);
-    if (!t || e.button !== 0) return;
+    if (!t) { if (e.button === 0) auswahl = null; return; }   // a press outside the lane rows (a clip, a ruler) ends the point selection: Delete is then the clips'
+    if (e.button !== 0) return;
     e.stopImmediatePropagation();
+    auswahl = null;
     if (!t.lane) return;
     const schutz = laneSchutz(t.lane);
     if (schutz) { ctx.melde(LANEN_TEXT[schutz], true); return; }   // locked or unknown target: no gesture, nothing is sent
@@ -321,8 +324,8 @@ export function bindeLanen(ctx) {
     const lane = laneMitId(st.projekt, auswahl.laneId)?.lane;
     const i = lane && !laneSchutz(lane) ? lane.punkte.findIndex((q) => q.beat === auswahl.beat) : -1;
     const b = i >= 0 ? loeschBefehl(lane, i) : null;
-    if (!b) return;
-    e.preventDefault(); e.stopImmediatePropagation();
+    e.preventDefault(); e.stopImmediatePropagation();   // a selected point owns the key, also when it cannot go (last point, locked, gone): it must not reach the clip handling and delete the selected clips
+    if (!b) { if (lane && laneSchutz(lane) === 'gesperrt') ctx.melde(LANEN_TEXT.gesperrt, true); return; }
     auswahl = null;
     ctx.aendere(LANEN_TEXT.gesten, [b]);
   }, true);
@@ -333,8 +336,10 @@ export function bindeLanen(ctx) {
     const p = st.projektEntwurf ?? st.projekt;
     // 1.12 slice 4: the selected range with its handles (skew: the top corners, stretch: the right edge)
     const ort = p && wahl.laneId ? laneMitId(p, wahl.laneId) : null;
-    const si = ort ? p.spuren.indexOf(ort.spur) : -1, zw = si >= 0 ? laneZeile(tabelle(), si) : null;
-    if (zw && gezeigteLane(ort.spur, st.laneZiel?.get(ort.spur.id))?.id === wahl.laneId) {
+    const zeileVon = (id) => tabelle().find((z) => z.art === 'lane' && laneStrang(p, z)?.id === id) ?? null;   // the lane row of a strand
+    const gezeigt = (o) => gezeigteLane(o.strang, st.laneZiel?.get(o.id));
+    const zw = ort ? zeileVon(ort.id) : null;
+    if (zw && gezeigt(ort)?.id === wahl.laneId) {
       const xl = beatZuX(st.ansicht, wahl.bereich.von), xr = beatZuX(st.ansicht, wahl.bereich.bis);
       g2.fillStyle = 'rgba(224, 168, 59, 0.16)'; g2.fillRect(xl, zw.y, xr - xl, zw.h);
       g2.fillStyle = '#e0a83b';
@@ -342,10 +347,9 @@ export function bindeLanen(ctx) {
       g2.fillRect(xr - 2, zw.y + 10, 4, zw.h - 14);                                   // stretch handle
     } else if (wahl.laneId && !ort) wahl.leere();                                      // the lane is gone
     if (!p || !auswahl) return;
-    const spur = p.spuren.findIndex((s) => (s.automation ?? []).some((l) => l.id === auswahl.laneId));
-    const z = spur >= 0 ? laneZeile(tabelle(), spur) : null, lane = spur >= 0 ? laneMitId(p, auswahl.laneId)?.lane : null;
+    const o = laneMitId(p, auswahl.laneId), z = o ? zeileVon(o.id) : null, lane = o?.lane;
     const q = lane?.punkte.find((x) => x.beat === auswahl.beat);
-    if (!z || !q || gezeigteLane(p.spuren[spur], st.laneZiel?.get(p.spuren[spur].id))?.id !== lane.id) return;
+    if (!z || !q || gezeigt(o)?.id !== lane.id) return;
     g2.strokeStyle = '#ffffff'; g2.lineWidth = 2;
     g2.beginPath(); g2.arc(beatZuX(st.ansicht, q.beat), wertZuY(z, q.wert, lane.ziel), 6, 0, Math.PI * 2); g2.stroke(); g2.lineWidth = 1;
   });

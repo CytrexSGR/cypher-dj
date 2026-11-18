@@ -1,4 +1,4 @@
-// I08: Bereich geraete. GET /geraete (Lage: Eingänge, erkannte Quellen, Profile, Kern-Zustand), POST /geraete/eingang, /geraete/midi, /geraete/latenz.
+// I08: Bereich geraete. GET /geraete (Lage: Eingänge, erkannte Quellen, Profile, Kern-Zustand), POST /geraete/eingang, /geraete/midi, /geraete/controller, /geraete/latenz.
 // Schreiben nur mit fremdePost (Router); Quelle aus x-djk-quelle. Zuordnung und Freigabe nur andreas (F3). Kanten-Datei und Konfiguration werden atomar
 // geschrieben; Hotplug ändert sie nicht (der Verbinder des Kerns holt Kanten nach, sobald beide Ports da sind).
 import type http from 'node:http';
@@ -8,11 +8,11 @@ import { json } from '../../http/transport.ts';
 import { leseKoerper } from '../proj/area.ts';
 import { ProjFehler } from '../proj/session.ts';
 import { eingangsKantenDatei, geraeteDatei } from '../../paths.ts';
-import { setzeEingang, setzeLatenz, setzeMidi, type Quelle } from './change.ts';
+import { setzeController, setzeEingang, setzeLatenz, setzeMidi, type Quelle } from './change.ts';
 import { baueKantenText, schreibeAtomar } from './edges.ts';
 import { PROFILE, profil } from './profile.ts';
 import { pwDumpErkenne, LEER, type Erkennung } from './pwdump.ts';
-import { GeraeteFehler, GeraeteSpeicher, type Konfig } from './store.ts';
+import { GeraeteFehler, GeraeteSpeicher, controllerPlaetze, type Konfig } from './store.ts';
 
 export interface GeraeteOptionen { konfigPfad?: string; kantenPfad?: string; erkenne?: () => Promise<Erkennung>; cacheMs?: number; jetzt?: () => number; kernFristMs?: number }
 
@@ -53,6 +53,8 @@ export function geraeteBereich(ctx: BereichKontext, opt: GeraeteOptionen = {}): 
         audio_hinweis: e.profil ? (profil(e.profil)?.audio?.hinweis ?? '') : '',
       })),
       midi: { ...k.midi, da: !!k.midi.port && erk.midi.some((m) => m.port === k.midi.port), verbunden: vb(256) },
+      // every controller place (1 = the MIDI input above): bit 7 + platz of the kern's mask says whether its raw input midi_ein_<platz> is linked
+      controller: controllerPlaetze(k).map((c) => ({ ...c, da: erk.midi.some((m) => m.port === c.port), verbunden: vb(1 << (7 + c.platz)) })),
       quellen: erk,
       profile: PROFILE.map((p) => ({ id: p.id, name: p.name, audio: p.audio !== null, midi: p.midi !== null, audio_hinweis: p.audio?.hinweis ?? '' })),
       kern: { ein: lebt ? kern : null },
@@ -91,6 +93,7 @@ export function geraeteBereich(ctx: BereichKontext, opt: GeraeteOptionen = {}): 
       } },
       schreib('/geraete/eingang', (k, d, q, erk) => setzeEingang(k, q, d, erk)),
       schreib('/geraete/midi', (k, d, q, erk) => setzeMidi(k, q, d, erk)),
+      schreib('/geraete/controller', (k, d, q) => setzeController(k, q, d)),
       schreib('/geraete/latenz', (k, d, q) => setzeLatenz(k, q, d)),
     ],
     ereignis(adresse: string, f: Record<string, unknown>): void {

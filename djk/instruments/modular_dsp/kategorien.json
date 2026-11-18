@@ -1,414 +1,517 @@
 {
  "bass-banddrive": {
   "kategorie": "bass",
+  "prinzip": "wavetable",
   "text": "Band-split bass: wavetable stack, folded mids with a moving vowel, clean mono sub."
  },
  "bassmusik": {
   "kategorie": "bass",
+  "prinzip": "analog",
   "text": "Dubstep-style wobble bass: saw and pulse into a ladder filter with LFO and growl."
  },
  "diode-acid-bass": {
   "kategorie": "bass",
+  "prinzip": "analog",
   "text": "Acid bass with a diode ladder filter; squelchy and resonant."
  },
  "diode-goa-linie": {
   "kategorie": "bass",
+  "prinzip": "analog",
   "text": "Rolling goa bass line: diode ladder filter, saw plus pulse; works for fast 16th lines."
  },
  "drums-808": {
   "kategorie": "drums",
+  "prinzip": "drums",
   "text": "808-style drum kit: boomy kick, snappy snare, hats; MIDI notes pick the drums."
  },
  "drums-909": {
   "kategorie": "drums",
+  "prinzip": "drums",
   "text": "909-style drum kit: punchy kick, clap and snare, crisp hats; MIDI notes pick the drums."
  },
  "falter-demo": {
   "kategorie": "textur",
+  "prinzip": "analog",
   "text": "Wavefolder demo: saw folded into rich harmonics; fold and symmetry change the timbre."
  },
  "fm-bass": {
   "kategorie": "bass",
+  "prinzip": "fm",
   "text": "FM bass: tight, bright and punchy, with fast decay and feedback bite."
  },
  "fm-epiano": {
   "kategorie": "keys",
+  "prinzip": "fm",
   "text": "FM electric piano with tremolo and chorus; soft bell-like attack."
  },
  "fm-glocke": {
   "kategorie": "keys",
+  "prinzip": "fm",
   "text": "FM bell with hall; clear, ringing and metallic."
  },
  "fm-lead": {
   "kategorie": "lead",
+  "prinzip": "fm",
   "text": "FM lead with vibrato and echo; bright, glassy and cutting."
  },
  "formant-neuro-bass": {
   "kategorie": "bass",
+  "prinzip": "analog",
   "text": "Neuro bass with a moving vowel filter; talks and growls in drum and bass style."
  },
  "gated-hall-snare": {
   "kategorie": "drums",
+  "prinzip": "drums",
   "text": "Big gated-reverb snare in 80s style; one hit per key, tail length on a knob."
  },
  "goa-blubber-lead": {
   "kategorie": "lead",
+  "prinzip": "analog",
   "text": "Goa lead with sample-and-hold bubbling on a ladder filter; trippy and rubbery."
  },
  "granular-drone": {
   "kategorie": "textur",
+  "prinzip": "granular",
   "text": "Dark drone from grains of a saw wave; freeze it for endless texture."
  },
  "granular-pad": {
   "kategorie": "pad",
+  "prinzip": "granular",
   "text": "Soft evolving pad built from sound grains; slow, wide and shimmering."
  },
  "granular-textur": {
   "kategorie": "textur",
+  "prinzip": "granular",
   "text": "Grainy texture generator; density and grain size from clouds to crackle."
  },
  "hartsync-bass": {
   "kategorie": "bass",
+  "prinzip": "analog",
   "text": "Hard-sync bass with a pitch zap on every note; aggressive, screaming low end."
  },
  "hartsync-lead": {
   "kategorie": "lead",
+  "prinzip": "analog",
   "text": "Hard-sync lead with a pitch sweep; the classic screaming sync solo sound."
  },
  "hartsync-pad": {
   "kategorie": "pad",
+  "prinzip": "analog",
   "text": "Hard-sync pad with a slow sweep, PWM and chorus; moving, edgy texture."
  },
  "juno-pad": {
   "kategorie": "pad",
+  "prinzip": "analog",
   "text": "Chorus pad: PWM, sub and chorus; warm and lush for chords."
  },
  "juno-pad-dyn": {
   "kategorie": "pad",
+  "prinzip": "analog",
   "text": "Chorus pad with echo, hall and compressor built in; ready-made wide chords."
  },
  "juno-pad-echo": {
   "kategorie": "pad",
+  "prinzip": "analog",
   "text": "Chorus pad with a tempo-friendly echo and hall; spacious chords."
  },
  "juno-pad-hall": {
   "kategorie": "pad",
+  "prinzip": "analog",
   "text": "Chorus pad with a big hall; long, airy chords."
  },
  "kamm-goa-zupf": {
   "kategorie": "keys",
+  "prinzip": "physik",
   "text": "Plucked goa tone from a tuned comb filter; short, hollow and bubbly."
  },
  "kick-synth": {
   "kategorie": "drums",
+  "prinzip": "drums",
   "text": "Synthesized sine kick tuned in Hz: pitch envelope, click, drive and a polarity switch."
  },
  "lead": {
   "kategorie": "lead",
+  "prinzip": "analog",
   "text": "Sync lead: two saws, hard sync, filter envelope and vibrato; cuts through a mix."
  },
  "metall-crash": {
   "kategorie": "drums",
+  "prinzip": "drums",
   "text": "Metallic crash cymbal with choke on release; for accents and fills."
  },
  "metall-hihat": {
   "kategorie": "drums",
+  "prinzip": "drums",
   "text": "Closed and open hi-hat from metallic oscillators; for steady 8th and 16th patterns."
  },
  "metall-ride": {
   "kategorie": "drums",
+  "prinzip": "drums",
   "text": "Ringing ride cymbal from metallic oscillators; for steady ride patterns."
  },
  "ms20-bass": {
   "kategorie": "bass",
+  "prinzip": "analog",
   "text": "Twin-filter bass: raw, screaming filter with drive; gritty and edgy."
  },
  "ms20-goa-lead": {
   "kategorie": "lead",
+  "prinzip": "analog",
   "text": "Twin-filter goa lead: biting filter, LFO and detune; psychedelic and sharp."
  },
  "mseg-neuro-bass": {
   "kategorie": "bass",
+  "prinzip": "analog",
   "text": "Neuro bass whose cutoff follows a multi-segment envelope; deep, evolving movement."
  },
  "resonator-conga": {
   "kategorie": "drums",
+  "prinzip": "drums",
   "text": "Struck conga from a resonator model; damping and strike position shape the hit."
  },
  "resonator-glocke": {
   "kategorie": "keys",
+  "prinzip": "physik",
   "text": "Struck bell from a resonator model; material and size change the metal."
  },
  "resonator-marimba": {
   "kategorie": "keys",
+  "prinzip": "physik",
   "text": "Marimba from a resonator model; mallet hardness and strike position shape the wood."
  },
  "resonator-metall": {
   "kategorie": "keys",
+  "prinzip": "physik",
   "text": "Struck metal bar or plate from a resonator model; inharmonic and ringing."
  },
  "roehre-lead": {
   "kategorie": "lead",
+  "prinzip": "analog",
   "text": "Warm saw lead through a tube stage; drive and cutoff for a singing, fat tone."
  },
  "rueckkopplung": {
   "kategorie": "bass",
+  "prinzip": "feedback",
   "text": "Feedback-string bass tone that sings and bites; tune, colour and feedback on knobs."
  },
  "saege-ladder": {
   "kategorie": "lead",
+  "prinzip": "analog",
   "text": "Plain saw through a ladder filter; a bare starting point for leads and basses."
  },
  "saite": {
   "kategorie": "keys",
+  "prinzip": "physik",
   "text": "Simple plucked string: a short delay loop with noise burst; Karplus-Strong style."
  },
  "saite-gitarre": {
   "kategorie": "keys",
+  "prinzip": "physik",
   "text": "Plucked guitar string with body resonance; pick position and damping on knobs."
  },
  "saite-harfe": {
   "kategorie": "keys",
+  "prinzip": "physik",
   "text": "Plucked harp string; bright attack and long ring."
  },
  "saite-karplus": {
   "kategorie": "keys",
+  "prinzip": "physik",
   "text": "Bare Karplus-Strong pluck; plain string sound without body."
  },
  "saite-klavier": {
   "kategorie": "keys",
+  "prinzip": "physik",
   "text": "Piano string model with hammer and soundboard; damper control on a knob."
  },
  "sampler-fairlight": {
   "kategorie": "textur",
+  "prinzip": "sampler",
   "text": "Fairlight-style orchestra hit sampler with slices and reverse; crunchy and retro."
  },
  "sem-house-akkord": {
   "kategorie": "pad",
+  "prinzip": "analog",
   "text": "State-variable house chord stab: filter envelope with a morphing filter shape."
  },
  "sem-pad": {
   "kategorie": "pad",
+  "prinzip": "analog",
   "text": "State-variable pad with a morphing filter that sweeps slowly; smooth and analog."
  },
  "synth-greif": {
   "kategorie": "lead",
+  "prinzip": "wavetable",
   "text": "Hybrid wavetable synth: three tables, phase mod, warp, chaos, shifter, clean sub."
  },
-  "synth-greif2": {
-    "kategorie": "lead",
-    "text": "Greif with tables built for a strong Position: basic to buzz, formant growl, hard sync."
-  },
+ "synth-greif2": {
+  "kategorie": "lead",
+  "prinzip": "wavetable",
+  "text": "Greif with tables built for a strong Position: basic to buzz, formant growl, hard sync."
+ },
  "synth-mono": {
   "kategorie": "bass",
+  "prinzip": "analog",
   "text": "Full mono synth for bass and lead: two oscillators, sub, five switchable filters."
  },
  "synth-neuro": {
   "kategorie": "bass",
+  "prinzip": "analog",
   "text": "Complete neuro and reese bass machine: detuned saws, FM, fold, formant and filter moves."
  },
  "synth-poly": {
   "kategorie": "pad",
+  "prinzip": "analog",
   "text": "Polyphonic unison synth with ladder, SV and diode filters: stabs, supersaws, pads."
  },
  "wavetable-chor": {
   "kategorie": "pad",
+  "prinzip": "wavetable",
   "text": "Choir-like pad from a vowel wavetable; the vowel moves slowly."
  },
  "wavetable-reese": {
   "kategorie": "bass",
+  "prinzip": "wavetable",
   "text": "Reese bass from detuned wavetable oscillators; wide, dark and growling."
  },
  "wavetable-supersaw": {
   "kategorie": "pad",
+  "prinzip": "wavetable",
   "text": "Wide supersaw from detuned wavetable oscillators; trance chords and big leads."
  },
  "labor": {
   "kategorie": "textur",
+  "prinzip": "feedback",
   "text": "Feedback synth: a note pings two resonant filters, one echoes the other."
  },
  "bass-sub": {
   "kategorie": "bass",
+  "prinzip": "analog",
   "text": "Clean mono sub: sine plus a quiet triangle an octave up under a 12 dB low-pass."
  },
  "bass-reese": {
   "kategorie": "bass",
+  "prinzip": "wavetable",
   "text": "Dark DnB reese: two saws detuned +-38 cent, tube drive and a slowly moving notch, legato."
  },
  "bass-acid": {
   "kategorie": "bass",
+  "prinzip": "analog",
   "text": "Squelchy acid bass: square plus 25 % pulse into a 24 dB ladder at 450 Hz."
  },
  "bass-fm": {
   "kategorie": "bass",
+  "prinzip": "fm",
   "text": "Punchy FM bass: three sine operators sharing one 2 s exponential decay."
  },
  "bass-wobble": {
   "kategorie": "bass",
+  "prinzip": "wavetable",
   "text": "Dubstep wobble: detuned saws under a resonant ladder swept by a tempo-synced LFO."
  },
  "bass-analog": {
   "kategorie": "bass",
+  "prinzip": "analog",
   "text": "Warm analog bass: saw and square an octave apart, open ladder, AR envelope, drive."
  },
  "bass-rolling": {
   "kategorie": "bass",
+  "prinzip": "wavetable",
   "text": "Rolling 16th-note bass: detuned saws an octave over a sine sub, plucked."
  },
  "bass-pluck": {
   "kategorie": "bass",
+  "prinzip": "wavetable",
   "text": "Tight plucked bass: unison saws through a ladder opened by a short, deep filter envelope."
  },
  "lead-mono": {
   "kategorie": "lead",
+  "prinzip": "wavetable",
   "text": "Mellow 70s mono lead: two squares 10 cent apart, open filter, fast 20 ms glide, overdrive."
  },
  "lead-poly": {
   "kategorie": "lead",
+  "prinzip": "analog",
   "text": "Brassy poly lead: two pulse waves with 5.5 Hz PWM, a fast-opening ladder, chorus."
  },
  "lead-supersaw": {
   "kategorie": "lead",
+  "prinzip": "wavetable",
   "text": "Trance supersaw: seven detuned saws in one voice, spread wide, hall with pre-delay."
  },
  "lead-acid": {
   "kategorie": "lead",
+  "prinzip": "analog",
   "text": "Acid lead: the 303-style acid bass lifted an octave, 60 % resonance, tube drive."
  },
  "lead-sync": {
   "kategorie": "lead",
+  "prinzip": "analog",
   "text": "Screaming sync lead: a square hard-synced to a silent master, tuned up."
  },
  "lead-fm": {
   "kategorie": "lead",
+  "prinzip": "fm",
   "text": "Digital FM lead: sine carrier with a 1:2 modulator whose index jumps at the attack."
  },
  "lead-arp": {
   "kategorie": "lead",
+  "prinzip": "analog",
   "text": "Bright arp lead: saw and pulse with a short filter blip, high-passed off the bass."
  },
  "pad-strings": {
   "kategorie": "pad",
+  "prinzip": "wavetable",
   "text": "String section: triangle and detuned squares under a mid-resonance ladder."
  },
  "pad-choir": {
   "kategorie": "pad",
+  "prinzip": "wavetable",
   "text": "Synth choir: two scattered pulse layers with slow vibrato and swell."
  },
  "pad-atmosphere": {
   "kategorie": "pad",
+  "prinzip": "analog",
   "text": "Celestial wash: noise rings a self-oscillating, key-tracked ladder pulsed at 5.5 Hz."
  },
  "pad-analog": {
   "kategorie": "pad",
+  "prinzip": "analog",
   "text": "Analog pad: two squares two octaves apart under a resonant ladder that breathes at 0.3 Hz."
  },
  "pad-granular": {
   "kategorie": "pad",
+  "prinzip": "wavetable",
   "text": "Stand-in for a granular pad: a slowly scanned, randomly jittered wavetable cloud."
  },
  "pad-drone": {
   "kategorie": "pad",
+  "prinzip": "analog",
   "text": "Dark drone bed: two triangles an octave apart under a resonant ladder that opens."
  },
  "keys-piano": {
   "kategorie": "keys",
+  "prinzip": "analog",
   "text": "Synth piano: saw and synced pulse whose filter brightness decays with the note."
  },
  "keys-electric-piano": {
   "kategorie": "keys",
+  "prinzip": "analog",
   "text": "Electric piano: saw and synced thin pulse for the tine, velocity bark."
  },
  "keys-organ": {
   "kategorie": "keys",
+  "prinzip": "analog",
   "text": "Two-triangle organ: 8' and 16' with a slow click-free attack, rotary-style chorus."
  },
  "keys-mallet": {
   "kategorie": "keys",
+  "prinzip": "analog",
   "text": "Glockenspiel: two triangles at an inharmonic +2 oct +6 st, a bright filter tick."
  },
  "keys-chord": {
   "kategorie": "keys",
+  "prinzip": "wavetable",
   "text": "Stacked fifth chord: two PWM squares a fifth apart with unison, hard gate envelope."
  },
  "keys-bell": {
   "kategorie": "keys",
+  "prinzip": "analog",
   "text": "FM bell: four sine carriers, three rung by one 1:7 modulator that dies in a second."
  },
  "pluck-synth": {
   "kategorie": "keys",
+  "prinzip": "analog",
   "text": "Thin synth pluck: a combed pulse through a resonant 2 kHz band-pass with a fast envelope."
  },
  "pluck-mallet": {
   "kategorie": "keys",
+  "prinzip": "analog",
   "text": "Wooden xylophone: two triangles at +1 oct +10 st, a filter envelope for the strike."
  },
  "pluck-string": {
   "kategorie": "keys",
+  "prinzip": "analog",
   "text": "Plucked string: synced pulse pair with a noise pick and a falling filter, 1.7 s decay."
  },
  "pluck-stab": {
   "kategorie": "keys",
+  "prinzip": "analog",
   "text": "House stab: two detuned saws with a snappy filter, velocity brightness."
  },
  "drums-kick": {
   "kategorie": "drums",
+  "prinzip": "drums",
   "text": "Punchy kick: a sine with a fast exponential pitch drop, short body, noise click."
  },
  "drums-snare": {
   "kategorie": "drums",
+  "prinzip": "drums",
   "text": "Snare: noise-dominated rattle with a short triangle body and a small pitch drop."
  },
  "drums-clap": {
   "kategorie": "drums",
+  "prinzip": "drums",
   "text": "Analog clap: filtered noise chopped by a retriggered 32 Hz square, short decay."
  },
  "drums-hihat": {
   "kategorie": "drums",
+  "prinzip": "drums",
   "text": "Closed hi-hat: six inharmonic squares through three band-passes."
  },
  "drums-cymbal": {
   "kategorie": "drums",
+  "prinzip": "drums",
   "text": "Crash-like cymbal: noise and a six-square metal layer, resonant filter, high-pass."
  },
  "percussion-tom": {
   "kategorie": "drums",
+  "prinzip": "drums",
   "text": "Analog tom: two squares a minor seventh apart with a quick pitch drop."
  },
  "percussion-shaker": {
   "kategorie": "drums",
+  "prinzip": "drums",
   "text": "Shaker: a 40 ms grain of noise ringing a resonant 7.6 kHz filter, high-passed."
  },
  "percussion-conga": {
   "kategorie": "drums",
+  "prinzip": "drums",
   "text": "Conga: two squares a ninth apart with a quick filter slap and a 150 ms decay, short room."
  },
  "percussion-rim": {
   "kategorie": "drums",
+  "prinzip": "drums",
   "text": "Rim shot: a 90 ms click of noise ringing a self-oscillating 2.7 kHz filter."
  },
  "percussion-metallic": {
   "kategorie": "drums",
+  "prinzip": "drums",
   "text": "Analog cowbell: two narrow pulses at 587 and 845 Hz, a bright filter snap, 150 ms decay."
  },
  "fx-riser": {
   "kategorie": "textur",
+  "prinzip": "analog",
   "text": "Noise riser: white noise through a band-pass that sweeps up over four seconds."
  },
  "fx-downlifter": {
   "kategorie": "textur",
+  "prinzip": "analog",
   "text": "Noise downlifter: a band-passed noise wash that falls from bright to dark."
  },
  "fx-impact": {
   "kategorie": "textur",
+  "prinzip": "analog",
   "text": "Cinematic impact: a sine boom falling an octave and a half, noise debris."
  },
  "fx-noise": {
   "kategorie": "textur",
+  "prinzip": "analog",
   "text": "Ocean wind: filtered noise swelling slowly at 0.2 Hz, long hall, high- and low-passed."
  },
  "fx-texture": {
   "kategorie": "textur",
+  "prinzip": "wavetable",
   "text": "Machine texture bed: saw and square two octaves apart, a resonant filter wandering."
  }
 }

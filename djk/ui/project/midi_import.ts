@@ -8,6 +8,10 @@ import {
 } from './model.ts';
 import { rbNorm } from './rb_mapping.ts';
 
+// The poly profile never hands out more than 8 Baukasten tracks on its own: MAX_BK_SPUREN is 16 since 2026-11-18, the other 8 belong to the live
+// container and the SEQ decks. Existing Baukasten tracks count against the cap.
+const MIDI_BK_AUTO_MAX = 8;
+
 export class MidiImportFehler extends Error {
   grund: string; code: number; extra: Record<string, unknown>;
   constructor(code: number, grund: string, text: string, extra: Record<string, unknown> = {}) {
@@ -217,7 +221,7 @@ export function planeImport(d: SmfDatei, projekt: Projekt | null, eingabe: Impor
 
   // --- devices ---
   const bkVorhanden = projekt?.spuren.filter((s) => s.geraet?.art === 'intern' && s.geraet.name === 'bk').length ?? 0;
-  let bkFrei = MAX_BK_SPUREN - bkVorhanden;
+  let bkFrei = Math.max(0, Math.min(MIDI_BK_AUTO_MAX, MAX_BK_SPUREN) - bkVorhanden);
   const polyAuto = new Set<string>();
   if (eingabe.profil === 'poly') {
     const kandidaten = gewaehlt.filter((t) => t.kanal !== 9 && eingabe.zuordnung?.[teilSchluessel(t)] === undefined

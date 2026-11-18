@@ -28,6 +28,8 @@ export type Schnitt = {
   /** The bounds as the method made them (written at every (re)cut, kept by marker edits), the hits used for `guete` and snapping (frames), the
    *  sensitivity of an `anschlag` cut, the time of the last change. All optional: cuts of plan A1 have none of them. */
   ursprung?: number[]; treffer?: number[]; empfindlichkeit?: number; geaendert?: string;
+  /** The method that made `ursprung`, kept while marker edits make the cut `hand`; the bounds back on `ursprung` restore it. */
+  ursprung_methode?: 'raster' | 'anschlag' | 'ganz';
 };
 
 export const SCHNITT_ID = /^[a-z0-9][a-z0-9-]{0,27}$/;
@@ -43,6 +45,8 @@ export const MESS_FENSTER_S = 0.010;
 /** A marker this close to a grid position (in beats) counts as on it. */
 export const RASTER_NAH_BEATS = 0.01;
 const RASTER_EINHEIT_BEATS = 0.25;   // 1/16 note
+/** The grid unit a raster cut of `n` slices is measured against: 1/16, or its own slice length when that is finer (32 or 64 slices of a bar). */
+export const rasterEinheit = (beats: number, n: number): number => Math.min(RASTER_EINHEIT_BEATS, beats / n);
 const MIN_SCHEIBE = 4;               // frames
 const ENDE_FRAMES = 4;               // a hit this close to 0 or to the end merges into that end
 const STEMS = ['drums', 'bass', 'other', 'vocals', 'guitar', 'piano'];
@@ -165,7 +169,7 @@ export const SCHNITT_METHODEN: Record<string, Methode> = {
     if (grenzen.some((g, i) => i > 0 && g - grenzen[i - 1] < MIN_SCHEIBE)) throw arg(`scheiben: ${n} slices of ${a.frames} frames would be shorter than ${MIN_SCHEIBE} frames`);
     const t = trefferVon(a, EMPFINDLICHKEIT_VORGABE);
     // the markers are the grid: a grid finer than 1/16 (32 or 64 slices of a bar) is measured against itself, so a grid marker has 0
-    return { grenzen, guete: guete(a, grenzen, t, Math.min(RASTER_EINHEIT_BEATS, a.beats / n)), treffer: framesVon(t) };
+    return { grenzen, guete: guete(a, grenzen, t, rasterEinheit(a.beats, n)), treffer: framesVon(t) };
   },
   /** Bounds at the hits (E2): [0, hits..., frames]; a hit within 4 frames of an end merges into it; more than 63 interior hits keep the 63 strongest. */
   anschlag(a, opt) {
@@ -173,7 +177,7 @@ export const SCHNITT_METHODEN: Record<string, Methode> = {
     if (typeof e !== 'number' || !Number.isFinite(e) || e < 0 || e > 1) throw arg('empfindlichkeit: a number from 0 to 1 expected');
     const t = trefferVon(a, e);
     let innen = t.filter((x) => x.frame > ENDE_FRAMES && x.frame < a.frames - ENDE_FRAMES);
-    if (innen.length === 0) throw new SchnittFehler(422, 'keine_anschlaege', `no hits found at sensitivity ${e.toFixed(2)}; raise it or cut by grid`);
+    if (innen.length === 0) throw new SchnittFehler(422, 'keine_anschlaege', `no hits found at sensitivity ${e.toFixed(2)}; cut by grid instead, or raise the sensitivity (HITS in the strip of a cut track, empfindlichkeit in the hand tool)`);
     if (innen.length > MAX_SCHEIBEN - 1) innen = [...innen].sort((p, q) => q.staerke - p.staerke || p.frame - q.frame).slice(0, MAX_SCHEIBEN - 1);
     const grenzen = [0, ...framesVon(innen).sort((p, q) => p - q), a.frames];
     return { grenzen, guete: guete(a, grenzen, t), treffer: framesVon(t), empfindlichkeit: e };
@@ -300,7 +304,7 @@ export function schneideNeu(id: string, a: { methode: 'raster' | 'anschlag'; opt
   const optionen = a.optionen ?? {};
   if (typeof optionen !== 'object' || optionen === null || Array.isArray(optionen)) throw arg('optionen: object expected');
   const m = SCHNITT_METHODEN[a.methode]({ frames: alt.frames, beats: alt.beats, daten: ladeSchnittAudio(alt, o) }, optionen);
-  const { empfindlichkeit: _weg, ...rest } = alt;
+  const { empfindlichkeit: _weg, ursprung_methode: _um, ...rest } = alt;
   const s: Schnitt = { ...rest, methode: a.methode, grenzen: m.grenzen, guete: m.guete, ursprung: [...m.grenzen], treffer: m.treffer,
     ...(m.empfindlichkeit !== undefined ? { empfindlichkeit: m.empfindlichkeit } : {}) };
   schreibeGeaendert(s, o);

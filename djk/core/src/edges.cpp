@@ -1,4 +1,5 @@
 #include "cypherdj/edges.h"
+#include "cypherdj/input.h"
 
 #include "cypherdj/arr_playback.h"
 
@@ -97,7 +98,7 @@ std::vector<Kante> filtere_kanten(const std::vector<Kante>& kanten, const std::s
 }
 
 static bool ein_port_name(const std::string& n) {
-  if (n == "midi_ein_1") return true;
+  if (n.size() == 10 && n.compare(0, 9, "midi_ein_") == 0 && n[9] >= '1' && n[9] <= '0' + MIDI_EIN_PORTS) return true;   // midi_ein_1..MIDI_EIN_PORTS
   return n.size() == 7 && n.compare(0, 4, "ein_") == 0 && n[4] >= '1' && n[4] <= '4' && n[5] == '_' && (n[6] == 'L' || n[6] == 'R');
 }
 

@@ -59,7 +59,9 @@ constexpr int ARR_INS_BK = 8;
 constexpr int ARR_INS_ALLE = ARR_INS_KOMP + ARR_INS_EQ + ARR_INS_SAETT + ARR_INS_LIM + ARR_INS_UTIL + ARR_INS_BK + ARR_INS_HOST;
 constexpr int BK_KNOEPFE = cypherdj::stellwerk::BK_REGLER_N;   // knobs k1..k64 of a Baukasten graph (track device parameters, insert stages, channel rows)
 constexpr int ARR_PARAMETER = BK_KNOEPFE;   // device parameters per internal track: the four RB-338 ones and the Baukasten knobs k1..k64 (was 8 before the 32-knob widening, 32 before the 64-knob one)
-constexpr int ARR_BK_MAX = 8;           // S20: Baukasten tracks per playback; = MAX_BK_SPUREN in model.ts
+constexpr int ARR_BK_MAX = 16;          // S20: Baukasten tracks per playback (8 until 2026-11-18); = MAX_BK_SPUREN in model.ts (pinned by tests/project_bk_device.test.mjs)
+// The live override rows spur/<slot>/bk/<k> exist for the first SPUR_BK_SLOTS bk tracks only; the 9th to 16th bk track has no row (Arrangement::bk_slot_ stays -1).
+static_assert(cypherdj::stellwerk::SPUR_BK_SLOTS <= ARR_BK_MAX, "the live override rows address bk slots 1..SPUR_BK_SLOTS of at most ARR_BK_MAX tracks");
 constexpr int ARR_BK_INSERT_NR = 1000;  // arr-bk slice 3: the track number an insert stage uses in the key of the graph store (tracks and members are below 100)
 constexpr int ARR_KIT_MAX = 8;          // 1.9: kit tracks per playback (spec E15); counted over tracks AND rack members
 // 1.9 U6 (spec E10, E15): instrument racks. A rack track holds up to ARR_RACK_GLIEDER members; every member of every rack takes one member slot
@@ -403,6 +405,10 @@ struct ArrSnapshot {
   // The device of a sink slot: a track (0..31) or a rack member (32..63). One place, so the sinks stay unchanged apart from this lookup.
   const ArrSpur& platz(int p) const noexcept { return p < ARR_SPUREN ? spur[p] : glied_spur[p - ARR_SPUREN]; }
   bool ret_da[ARR_RETURNS] = {};     // 1.10 Slice 3: which returns the playback knows (index nr − 1); the sends themselves are controls, not data
+  // Return fader lane (cypherdj-arr/3, `returns[].auto`): the fader lane of return nr - 1, absolute, at most one per return. The master takes no volume curve, a group none here.
+  // The points live in auto_punkte; ret_fader[r] counts in n_auto_lanes. Played by Arrangement::auto_block in the slots ARR_SPUREN + r.
+  ArrAutoLane ret_fader[ARR_RETURNS] = {};
+  bool ret_fader_da[ARR_RETURNS] = {};
   // Besitz, nur Lade-Faden: Speicher hinter den Zeigern oben (eigene Seiten, gesperrt, K1-Fix 8)
   std::vector<ArrClip, ArrSeiten<ArrClip>> clips;
   std::vector<ArrNote, ArrSeiten<ArrNote>> noten;

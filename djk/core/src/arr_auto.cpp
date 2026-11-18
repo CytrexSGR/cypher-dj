@@ -56,6 +56,19 @@ const ArrAutoLane* geraet_rel(const ArrSpur& sp, int param) {
     if (sp.auto_lanes[k].ziel == ARR_AUTO_GERAET && sp.auto_lanes[k].param == param && sp.auto_lanes[k].relativ) return &sp.auto_lanes[k];
   return nullptr;
 }
+// The lane of an automation slot (0..ARR_AUTO_SLOTS - 1): a track slot is the track, slot ARR_SPUREN + r is return r with field 0 (fader) only, absolute, no relative lane.
+// ArrSnapshot::ret_fader is the one place of a return lane.
+const ArrAutoLane* slot_lane(const ArrSnapshot& sn, int slot, int feld) {
+  if (slot < ARR_SPUREN) return feld_lane(sn.spur[slot], feld);
+  if (feld != ARR_AUTO_FADER) return nullptr;
+#ifdef CYPHERDJ_MUTATION_ARR_RET_FADER_SLOT_VERSATZ   // error case: a return reads the fader lane of the next return
+  const int r = (slot - ARR_SPUREN + 1) % ARR_RETURNS;
+#else
+  const int r = slot - ARR_SPUREN;
+#endif
+  return sn.ret_fader_da[r] ? &sn.ret_fader[r] : nullptr;
+}
+const ArrAutoLane* slot_rel(const ArrSnapshot& sn, int slot, int feld) { return slot < ARR_SPUREN ? feld_rel(sn.spur[slot], feld) : nullptr; }
 // The end of the value stack: the sum is clamped to the range of the target (the ranges of the absolute lanes: fader -200..6 dB, pan -1..1, device 0..1).
 inline float stapel_klemme(int feld, float v) {
 #ifdef CYPHERDJ_MUTATION_ARR_AUTO_REL_OHNE_KLEMME   // error case: the stack is not clamped
@@ -119,13 +132,13 @@ void Arrangement::auto_segment(const Karte& k, int64_t a, int64_t b, int64_t s0)
 }
 
 void Arrangement::auto_tausch(const ArrSnapshot* neu, int64_t s) {
-  for (int i = 0; i < ARR_SPUREN; ++i)
+  for (int i = 0; i < ARR_AUTO_SLOTS; ++i)   // the tracks and the returns (slot ARR_SPUREN + r)
     for (int f = 0; f < AUTO_FELDER; ++f) {
-      const bool alt_lane = snap_ && feld_lane(snap_->spur[i], f);
-      const ArrAutoLane* nl = neu ? feld_lane(neu->spur[i], f) : nullptr;
+      const bool alt_lane = snap_ && slot_lane(*snap_, i, f);
+      const ArrAutoLane* nl = neu ? slot_lane(*neu, i, f) : nullptr;
       const bool neu_lane = nl != nullptr;
-      const bool alt_rel = snap_ && feld_rel(snap_->spur[i], f);   // 1.12 slice 5: the relative lane of the field (fader, pan), before and after
-      const ArrAutoLane* nr = neu ? feld_rel(neu->spur[i], f) : nullptr;
+      const bool alt_rel = snap_ && slot_rel(*snap_, i, f);   // 1.12 slice 5: the relative lane of the field (fader, pan), before and after
+      const ArrAutoLane* nr = neu ? slot_rel(*neu, i, f) : nullptr;
       const bool ue = auto_ueber_[i][f];
       // D6: deleting the lane clears the override, checked here at the swap (also while stopped); the state is reported. A swap that keeps the lane keeps it.
 #ifdef CYPHERDJ_MUTATION_ARR_AUTO_UEBER_TAUSCH_LOESCHT
@@ -364,13 +377,17 @@ void Arrangement::auto_ueber_abschluss(int64_t s_ende) {
 
 void Arrangement::auto_stopp(int64_t s) {
   if (!snap_) return;
+#ifdef CYPHERDJ_MUTATION_ARR_RET_STOPP_HART   // error case: a return takes the Stellwerk value back at once at the stop (no blend)
   for (int i = 0; i < ARR_SPUREN; ++i)
+#else
+  for (int i = 0; i < ARR_AUTO_SLOTS; ++i)
+#endif
     for (int f = 0; f < AUTO_BLENDE_FELDER; ++f)
-      if ((feld_lane(snap_->spur[i], f) || feld_rel(snap_->spur[i], f)) && !auto_ueber_[i][f]) blende_vormerken(i, f, s);   // an overridden field plays the hand on: no source change
+      if ((slot_lane(*snap_, i, f) || slot_rel(*snap_, i, f)) && !auto_ueber_[i][f]) blende_vormerken(i, f, s);   // an overridden field plays the hand on: no source change
 }
 
 void Arrangement::auto_beginn() {
-  for (int i = 0; i < ARR_SPUREN; ++i)   // a start takes the hard lane value (AK6), no blend from an earlier stop
+  for (int i = 0; i < ARR_AUTO_SLOTS; ++i)   // a start takes the hard lane value (AK6), no blend from an earlier stop
     for (int f = 0; f < AUTO_FELDER; ++f) {
       blende_n_[i][f] = 0;
       blende_s_[i][f] = KEIN;
@@ -382,7 +399,7 @@ void Arrangement::auto_beginn() {
 void Arrangement::auto_block(int64_t s0, int m) {
   const bool laeuft = auto_bis_ > auto_von_ && snap_ && snap_->n_auto_lanes > 0;
   bool irgendwo = laeuft;
-  for (int i = 0; i < ARR_SPUREN && !irgendwo; ++i)
+  for (int i = 0; i < ARR_AUTO_SLOTS && !irgendwo; ++i)
     for (int f = 0; f < AUTO_FELDER && !irgendwo; ++f) irgendwo = blende_n_[i][f] > 0 || blende_s_[i][f] != KEIN;
   if (!irgendwo) {
     for (auto& je_spur : auto_war_)
@@ -396,11 +413,11 @@ void Arrangement::auto_block(int64_t s0, int m) {
         abfall = k;
         break;
       }
-  for (int i = 0; i < ARR_SPUREN; ++i)
+  for (int i = 0; i < ARR_AUTO_SLOTS; ++i)
     for (int f = 0; f < AUTO_FELDER; ++f) {
-      Wert& w = w_[i][f];
-      const bool lane = laeuft && feld_lane(snap_->spur[i], f);
-      const bool rel = laeuft && feld_rel(snap_->spur[i], f) != nullptr;   // 1.12 slice 5: the summand lane of the field (fader, pan)
+      Wert& w = i < ARR_SPUREN ? w_[i][f] : w_[ARR_RET0 + i - ARR_SPUREN][f];   // the strip of the slot (a return: the same fields 0..3, only the fader has a lane)
+      const bool lane = laeuft && slot_lane(*snap_, i, f);
+      const bool rel = laeuft && slot_rel(*snap_, i, f) != nullptr;   // 1.12 slice 5: the summand lane of the field (fader, pan)
       // 1.12 S3 (D6): the lane override. alt = state at the block start, neu = state after the pending changes, at block samples t_ue and t_ue2 (n = 0, 1 or 2 changes)
       const bool ue_alt = auto_ueber_alt_[i][f], ue_neu = auto_ueber_[i][f];
       const int ue_n = auto_ueber_n_[i][f];

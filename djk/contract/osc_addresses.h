@@ -708,7 +708,7 @@ namespace erz_quittung { inline constexpr double strom_min = 1; inline constexpr
 namespace takt { inline constexpr double takt_min = 1; inline constexpr double phrase_min = 1; }
 namespace zustand_deck { inline constexpr double deck_min = 1; inline constexpr double deck_max = 4; inline constexpr double stretcher_fuell_min = -1; }
 namespace zustand_box { inline constexpr double box_min = 1; inline constexpr double box_max = 2; }
-namespace e_gelernt { inline constexpr double quelle_min = 0; inline constexpr double quelle_max = 1; inline constexpr double kanal_min = 1; inline constexpr double kanal_max = 16; inline constexpr double nr_min = 0; inline constexpr double nr_max = 127; inline constexpr double wert_min = 0; inline constexpr double wert_max = 127; inline constexpr double belegt_min = 0; inline constexpr double belegt_max = 1; }
+namespace e_gelernt { inline constexpr double quelle_min = 0; inline constexpr double quelle_max = 8; inline constexpr double kanal_min = 1; inline constexpr double kanal_max = 16; inline constexpr double nr_min = 0; inline constexpr double nr_max = 127; inline constexpr double wert_min = 0; inline constexpr double wert_max = 127; inline constexpr double belegt_min = 0; inline constexpr double belegt_max = 1; }
 namespace e_geladen { inline constexpr double deck_min = 1; inline constexpr double deck_max = 4; }
 namespace e_rueckfall { inline constexpr double deck_min = 1; inline constexpr double deck_max = 4; }
 namespace e_frist { inline constexpr double deck_min = 1; inline constexpr double deck_max = 4; }

@@ -1,4 +1,5 @@
 // Effekt-Sektion (Plan 2026-10-11-effekt-sektion.md): reine Rechenteile, ohne DOM (getestet in tests/effects.test.mjs).
+import { GRAPH_KATEGORIEN, gruppenVon, gruppeVon, mitNeben, sortiere } from './instrument_groups.js';
 
 // Startpunkte wie die Presets des VST3 (djk/instruments/comp/presets/presets.json). Der Sidechain heißt im Kern komp/sc
 // (Schlüssel = Quellkanal + 1); „Kick Sidechain“ hört auf DRUMS (erz/1 = 5), alle anderen setzen ihn ausdrücklich zurück.
@@ -136,12 +137,8 @@ export function sendRueckHtml(kanaele = ['fx/3', 'fx/4']) {
 /** S12/S18: graph picker. Instruments go on erz/2, erz/3, erz/5..7 and the pads (stream 1 is a drum kit, erz/4 the production, erz/8 unused),
  *  effects on decks and the send returns. The instrument keys are bound to contract/streams.ts by tests/effekte.test.mjs. */
 export const GRAPH_KANAL_ART = { 'erz/2': 'instrument', 'erz/3': 'instrument', 'erz/5': 'instrument', 'erz/6': 'instrument', 'erz/7': 'instrument', 'pad/1': 'instrument', 'pad/2': 'instrument', 'deck/1': 'effekt', 'deck/2': 'effekt', 'deck/3': 'effekt', 'deck/4': 'effekt', 'fx/3': 'effekt', 'fx/4': 'effekt', 'master': 'effekt' };
-/** Instrument categories of the picker (ids as in kategorien.json). `host` is the Surge/plugin entry of erz/2 and erz/3, `sonst` collects graphs without a category. */
-export const GRAPH_KATEGORIEN = [
-  { id: 'drums', name: 'Drums' }, { id: 'bass', name: 'Bass' }, { id: 'lead', name: 'Lead' }, { id: 'pad', name: 'Pad & Poly' },
-  { id: 'keys', name: 'Keys & Plucks' }, { id: 'textur', name: 'Texture & FX' }, { id: 'sampler', name: 'Sampler' }, { id: 'host', name: 'Host (Surge/plugins)' }, { id: 'sonst', name: 'Other' },
-];
-const kategorieName = (id) => GRAPH_KATEGORIEN.find((k) => k.id === id)?.name ?? 'Other';
+// The instrument roles of the picker now live in instrument_groups.js (with the synthesis types and the grouping rules); re-exported for the callers of this file.
+export { GRAPH_KATEGORIEN };
 /** Channels on which a host (Surge XT or a plugin) plays while no graph is loaded; the empty picker value means "the host plays" there. */
 export const GRAPH_HOST_KANAELE = ['erz/2', 'erz/3'];
 /** Display name of the host of a GET /klang group ({art, plugin?}): the plugin name, else the part after vst3:/sfz:, else Surge XT (art lv2 or unknown); the grand piano (sfz:grand) is 'Grand piano'. */
@@ -158,53 +155,64 @@ export function graphWahlOptionen(kanal, graphen, geladenName, host) {
   const eintraege = (graphen ?? []).filter((g) => g.art === art);
   const namen = eintraege.map((g) => g.name);
   const inst = art === 'instrument';
-  const leer = GRAPH_HOST_KANAELE.includes(kanal) ? { wert: '', text: host || 'Surge XT', gewaehlt: gewaehlt === '', kategorie: 'host' } : { wert: '', text: inst ? 'Off' : '—', gewaehlt: gewaehlt === '' };
-  const aus = [leer, ...eintraege.map((g) => ({ wert: g.name, text: g.name, gewaehlt: g.name === gewaehlt, ...(inst ? { kategorie: g.kategorie || 'sonst', ...(g.text ? { beschreibung: g.text } : {}) } : {}) }))];
+  const leer = GRAPH_HOST_KANAELE.includes(kanal) ? { wert: '', text: host || 'Surge XT', gewaehlt: gewaehlt === '', host: true } : { wert: '', text: inst ? 'Off' : '—', gewaehlt: gewaehlt === '' };
+  // kategorie and prinzip stay as the file gave them (possibly absent or unknown): gruppeVon decides the group, so no graph drops out of a picker
+  const aus = [leer, ...eintraege.map((g) => ({ wert: g.name, text: g.name, gewaehlt: g.name === gewaehlt, ...(inst ? { kategorie: g.kategorie || 'sonst', ...(g.prinzip ? { prinzip: g.prinzip } : {}), ...(g.text ? { beschreibung: g.text } : {}) } : {}) }))];
   if (gewaehlt !== '' && !namen.includes(gewaehlt)) aus.push({ wert: gewaehlt, text: gewaehlt, gewaehlt: true, ...(inst ? { kategorie: 'sonst' } : {}) });   // loaded but not in the list: do not lie
   return aus;
 }
 const optionHtml = (x) => `<option value="${htmlText(x.wert)}"${x.gewaehlt ? ' selected' : ''}>${htmlText(x.text)}</option>`;
-/** The single picker (effects, strips, send returns, detail): effects flat, instruments grouped by category with <optgroup>; the empty entry stays first and ungrouped. */
-export function graphWahlHtml(kanal, graphen, geladenName, host) {
+/** The group of an option on an axis; the empty entry belongs to no group but the host one (the host plays erz/2 and erz/3 while nothing is loaded). */
+const optionsGruppe = (x, achse) => (x.wert === '' ? (x.host ? 'host' : null) : gruppeVon(x, achse));
+/** The single picker (effects, strips, send returns, detail): effects flat, instruments grouped with <optgroup> by the page-wide axis (`achse`, 'prinzip' = synthesis type
+ *  by default, or 'rolle'); the empty entry stays first and ungrouped. The text of an instrument is its name plus the short name of the other axis. */
+export function graphWahlHtml(kanal, graphen, geladenName, host, achse = 'prinzip') {
   const o = graphWahlOptionen(kanal, graphen, geladenName, host);
   if (!o.length) return '';
   let inhalt;
   if (GRAPH_KANAL_ART[kanal] === 'instrument') {
     inhalt = optionHtml(o[0]);
-    for (const k of GRAPH_KATEGORIEN) {
-      const rest = o.slice(1).filter((x) => x.kategorie === k.id);
-      if (rest.length) inhalt += `<optgroup label="${htmlText(k.name)}">${rest.map(optionHtml).join('')}</optgroup>`;
+    const rest = sortiere(o.slice(1).map((x) => ({ ...x, name: x.wert })), achse);
+    for (const k of gruppenVon(achse)) {
+      const in_ = rest.filter((x) => gruppeVon(x, achse) === k.id);
+      if (in_.length) inhalt += `<optgroup label="${htmlText(k.name)}">${in_.map((x) => optionHtml({ ...x, text: mitNeben(x.text, x, achse) })).join('')}</optgroup>`;
     }
   } else inhalt = o.map(optionHtml).join('');
   return `<select class="graphwahl" data-graphwahl="${htmlText(kanal)}" aria-label="Graph on ${htmlText(kanal)}" title="Baukasten graph on this channel">${inhalt}</select>`;
 }
-/** The categories offered on a channel (those with a graph, plus host on erz/2 and erz/3) and the one shown: `kat` when valid, else the loaded graph's, else host
- *  (erz/2, erz/3 with the host playing), else the first. */
-export function instrumentKategorien(kanal, graphen, geladenName, kat) {
+/** The groups offered on a channel for the axis (those with a graph, plus host on erz/2 and erz/3) and the one shown: `kat` when valid, else the loaded graph's,
+ *  else host (erz/2, erz/3 with the host playing), else the first. */
+export function instrumentKategorien(kanal, graphen, geladenName, kat, achse = 'prinzip') {
   const o = graphWahlOptionen(kanal, graphen, geladenName);
-  const ids = GRAPH_KATEGORIEN.map((k) => k.id).filter((id) => o.some((x) => x.kategorie === id));
+  const ids = gruppenVon(achse).map((k) => k.id).filter((id) => o.some((x) => optionsGruppe(x, achse) === id));
   const geladen = o.find((x) => x.gewaehlt && x.wert !== '');
-  const gew = ids.includes(kat) ? kat : geladen ? geladen.kategorie : ids.includes('host') && (geladenName ?? '') === '' ? 'host' : ids[0];
+  const gew = ids.includes(kat) ? kat : geladen ? gruppeVon(geladen, achse) : ids.includes('host') && (geladenName ?? '') === '' ? 'host' : ids[0];
   return { ids, gewaehlt: gew };
 }
-/** INSTRUMENTS area picker: CATEGORY select, INSTRUMENT select (filtered to the category) and one description line. `kat` is the category the person browsed to
- *  (null = follow the loaded graph). A category that does not hold the loaded graph shows a disabled "Choose..." entry. */
-export function instrumentWahlHtml(kanal, graphen, geladenName, host, kat) {
+/** The TYPE / ROLE buttons in front of the group select of a channel: which grouping the pickers use (one page-wide choice). */
+export function achsenKnoepfeHtml(kanal, achse) {
+  const knopf = (a, text) => `<button type="button" class="graphachse" data-graphachse="${htmlText(kanal)}" data-achse="${a}" aria-pressed="${achse === a}">${text}</button>`;
+  return `<span class="graphachsen" role="group" aria-label="Group instruments by">${knopf('prinzip', 'TYPE')}${knopf('rolle', 'ROLE')}</span>`;
+}
+/** INSTRUMENTS area picker: TYPE / ROLE buttons, GROUP select, INSTRUMENT select (filtered to the group) and one description line. `kat` is the group the person browsed
+ *  to on this axis (null = follow the loaded graph). A group that does not hold the loaded graph shows a disabled "Choose..." entry. */
+export function instrumentWahlHtml(kanal, graphen, geladenName, host, kat, achse = 'prinzip') {
   const o = graphWahlOptionen(kanal, graphen, geladenName, host);
   if (!o.length) return '';
-  const { ids, gewaehlt: gk } = instrumentKategorien(kanal, graphen, geladenName, kat);
+  const { ids, gewaehlt: gk } = instrumentKategorien(kanal, graphen, geladenName, kat, achse);
   const hostKanal = GRAPH_HOST_KANAELE.includes(kanal);
-  const inKat = o.filter((x) => (x.wert === '' ? (hostKanal ? gk === 'host' : true) : x.kategorie === gk));
+  const inKat = [...o.filter((x) => x.wert === '' && (hostKanal ? gk === 'host' : true)),
+    ...sortiere(o.filter((x) => x.wert !== '' && gruppeVon(x, achse) === gk).map((x) => ({ ...x, name: x.wert })), achse).map((x) => ({ ...x, text: mitNeben(x.text, x, achse) }))];
   const aktiv = inKat.find((x) => x.gewaehlt);
-  const katSel = `<select class="graphkat" data-graphkat="${htmlText(kanal)}" aria-label="Instrument category on ${htmlText(kanal)}" title="Category">`
-    + ids.map((id) => `<option value="${htmlText(id)}"${id === gk ? ' selected' : ''}>${htmlText(kategorieName(id))}</option>`).join('') + '</select>';
+  const katSel = `<select class="graphkat" data-graphkat="${htmlText(kanal)}" aria-label="Instrument group on ${htmlText(kanal)}" title="Group">`
+    + ids.map((id) => `<option value="${htmlText(id)}"${id === gk ? ' selected' : ''}>${htmlText(gruppenVon(achse).find((k) => k.id === id)?.name ?? 'Other')}</option>`).join('') + '</select>';
   const instSel = `<select class="graphwahl" data-graphwahl="${htmlText(kanal)}" aria-label="Instrument on ${htmlText(kanal)}" title="Instrument">`
     + (aktiv ? '' : '<option value="" disabled selected hidden>Choose…</option>')
     + inKat.map(optionHtml).join('') + '</select>';
   let text = '';
   if (aktiv?.wert === '') text = hostKanal ? `${aktiv.text} plays this channel; no Baukasten graph is loaded.` : 'No instrument loaded on this channel.';
   else if (aktiv) text = aktiv.beschreibung ?? '';
-  return `${katSel}${instSel}<span class="graphtext" data-graphtext="${htmlText(kanal)}">${htmlText(text)}</span>`;
+  return `${achsenKnoepfeHtml(kanal, achse)}${katSel}${instSel}<span class="graphtext" data-graphtext="${htmlText(kanal)}">${htmlText(text)}</span>`;
 }
 
 /** S17: saved/differs marker of the sound snapshot for one channel. gespeichert = GET /proj/bk gespeichert ([{id, graph, regler}] or null without a
@@ -438,6 +446,27 @@ export function busStreifenHtml(k, name) {
     + busMesser(kk, 'lim_db', 'LIM', 'Gain reduction, limiter')
     + `<span class="lim-grund" data-lim-grund>${LIMITER_GRUND}</span></div>`
     + werkzeugStreifenHtml(k, name, ['util']) + '</div>';
+}
+/** The MASTER panel in signal order, as the core runs it (mixer.cpp: master insert graph on the sum, then the master FX, the sum compressor GLUE
+ *  `master/kleber`, `master/pegel`, the master limiter): INSERT (graph picker and the knobs master/bk/1..64, one `.sendzeile` row like the send returns),
+ *  GLUE (the same knob and path as the mixer MASTER strip; both are bound by bindeKnoepfe and follow the same state echo) and LIMITER (read-only meter of
+ *  the gain reduction of the master limiter, `limiter_db` of /zustand/arr, see masterLimiterLesung). */
+export function masterPanelHtml() {
+  const glied = (n, titel, inhalt) => `<div class="fx-glied fx-glied-${n}"><span class="fx-glied-titel">${titel}</span>${inhalt}</div>`;
+  return '<div class="fxkette">'
+    + glied('insert', 'INSERT', '<div class="sendzeile masterzeile" data-kanal="master"><div class="graphplatz" data-graphplatz="master"></div><div class="bkliste"></div></div>')
+    + '<i class="fx-pfeil" aria-hidden="true">›</i>'
+    + glied('glue', 'GLUE', '<div class="summe glue"><div class="knopf regler" data-griff="kleber" data-pfad="master/kleber" role="slider" tabindex="0" aria-label="Master glue compressor">'
+      + '<svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div>'
+      + '<div class="glutext"><span>GLUE</span><output data-wert="master/kleber">–</output></div></div>')
+    + '<i class="fx-pfeil" aria-hidden="true">›</i>'
+    + glied('limiter', 'LIMITER', busMesser('master', 'limiter_db', 'GR', 'Gain reduction of the master limiter (after master level)')) + '</div>';
+}
+/** The gain reduction of the master limiter in dB (>= 0) from a /zustand/arr event: its field `limiter_db` is <= 0 (the core holds it for 0.5 s after the last
+ *  intervention); null when the field is missing or not a number (an older core): never a reading from a value that does not exist. */
+export function masterLimiterLesung(arr) {
+  const w = arr?.limiter_db;
+  return typeof w === 'number' && Number.isFinite(w) ? Math.max(0, -w) : null;
 }
 /** The whole BUS panel: a header that folds it, and four strips. */
 export function busPanelHtml() {

@@ -434,6 +434,33 @@ int main() {
     PRUEF(abfang_aus() > 0);   // positive control: the counter sees allocations
   }
 
+  {  // 6 quant_stopp_hinter_dem_ende: a bar-quantized stop behind the end of the run does not push the stop past it; the export completes (status 0) and the transport
+     // ends with it, the user's start beat 64 stays (before the fix the run's restore left the transport playing with the clips of the wrong region)
+    auto au = Audio::impuls(400000);
+    TR(t)
+    Bau b;
+    b.spur(1, ArrArt::audio).clip(1, "k1", 0.0, 6.0, &au->a).clip(1, "k70", 70.5, 1.0, &au->a);   // the second clip is the user's region, run position 6.5
+    t.laden(b.fertig());
+    PRUEF(t.arr.start(64.0, 0, false, 0, 4096, t.n, t.k));
+    t.arr.stopp(0, 0, t.k);
+    auto sch = neu(datei("e6.f32"), 0.0, 6.0);
+    const char* grund = "";
+    PRUEF(t.arr.export_lauf(sch->job(), 0, false, t.s, 0, t.n, t.k, grund));
+    const int64_t ende = t.arr.stopp_sample();
+    PRUEF(ende > 0);
+    while (t.s < sch->job()->start_s + 5 * 22500) schritt(t);
+    PRUEF(t.arr.status() == cdj::ArrStatus::spielt);
+    t.arr.stopp(2, t.s, t.k);   // beat 5 of the run: the next bar line, beat 8, lies behind the end (beat 6)
+    PRUEF(t.arr.stopp_sample() == ende);
+    while (t.s < ende + 4 * 22500) schritt(t);
+    int32_t st = -1;
+    int64_t es = -1;
+    PRUEF(t.arr.hole_export_fertig(st, es) && st == 0 && es == ende);
+    PRUEF(t.arr.status() == cdj::ArrStatus::steht && t.arr.beendet_sample() == ende && t.arr.start_beat() == 64.0);
+    PRUEF(t.treffer(ende + t.n, t.s).empty());   // the clip of beat 70.5 never started
+    PRUEF(warte_fertig(*sch));
+  }
+
   std::filesystem::remove_all(dir);
   PRUEF_ENDE();
 }

@@ -603,7 +603,8 @@ export class Vorbereiter {
     if (this.laeufe.has(mid)) return 'laeuft';
     if (this.laeufe.size >= this.max) return 'ausgelastet';
     const args = ['-n', '19', ...(this.ionice ? ['ionice', '-c3'] : []), this.o.python, '-m', this.o.modul ?? 'werkstatt.single',
-      '--quelle', quelle, '--titel', titel, '--bestand', this.o.bestand, ...(this.o.zusatzArgs ?? [])];
+      // Ein Titel mit '-' vorn (ohne Leerzeichen) läse argparse als Option: dann Wert am Schalter, sonst bleibt die Form wie sie ist (Audit U02)
+      '--quelle', quelle, ...(titel.startsWith('-') ? ['--titel=' + titel] : ['--titel', titel]), '--bestand', this.o.bestand, ...(this.o.zusatzArgs ?? [])];
     const kind = spawn('nice', args, { cwd: this.o.cwd, stdio: ['ignore', 'pipe', 'pipe'] });   // keine Shell: Titel und Pfad bleiben Argumente
     this.laeufe.set(mid, kind);
     this.staende.set(mid, { status: 'laeuft' });

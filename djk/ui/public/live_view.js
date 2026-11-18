@@ -10,7 +10,8 @@ import { $, $$, melde, zustand } from './page_state.js';
 import { loopAktiv } from './deck_griffe.js';
 import { HINWEIS_LOOPS, loopsPlatzDa, zeigePlaetzeSpaeter } from './slots_view.js';
 import { uhrKopf } from './loop_rec_view.js';
-import { zeichneSeq } from './seq_view.js';   // SEQ places (seq-deck-s1 task 7)
+import { zeichneSeq } from './seq_view.js';
+import { szenenEreignis } from './seq_szenen.js';   // SEQ places (seq-deck-s1 task 7)
 
 // ---------- Live modules (plan live-module task 4): EXPORT at the deck loop, the live container panel, LIVE ----------
 // The panel shows the open live container (project flag live): two slots, per module the module fader and one original fader per stem, CLEAR, and the
@@ -103,6 +104,23 @@ export function zeichneLoopWellen(jetzt) {
     zeichneKopf(g, pos, f.loop.beats, b, h, dpr);
   }
 }
+// Where the keyboard focus sits inside the panel (a stem or blend fader), by track or slot and stem, and the way back to it after the markup was replaced:
+// the nodes are new, the focused fader is not the same node, and without the focus the next arrow key would scroll the page instead of moving the fader.
+// The focus is given back with preventScroll: a fader that keeps the focus after a mouse drag must not pull the page back to it on every redraw.
+function fokusMerken(p) {
+  const ak = document.activeElement;
+  if (!ak || !p.contains?.(ak) || !ak.matches?.('.live-regler, .live-blendregler')) return null;
+  const ds = ak.dataset ?? {};
+  if (ds.blend !== undefined) return { blend: true, slot: ak.closest?.('.live-slot')?.dataset?.slot, stem: ds.stem };
+  return { spur: ds.spurId, neu: ds.neuFader !== undefined };
+}
+function fokusZurueck(p, m) {
+  if (!m) return;
+  const alle = [...p.querySelectorAll(m.blend ? '.live-blendregler' : '.live-regler')];
+  const ziel = alle.find((r) => (m.blend ? r.dataset.stem === m.stem && r.closest('.live-slot')?.dataset.slot === m.slot
+    : r.dataset.spurId === m.spur && (r.dataset.neuFader !== undefined) === m.neu));
+  try { ziel?.focus({ preventScroll: true }); } catch { /* the node cannot take the focus: it stays on the page */ }
+}
 export function zeichneLive() {
   zeigePlaetzeSpaeter();
   zeichneSeq();   // the SEQ places read their deck from the live project
@@ -112,8 +130,10 @@ export function zeichneLive() {
   const a = modulAnsicht(live.projekt, live.stand, live.stems, zustand.regler);
   live.kanal = `${kanalAnsicht('A', zustand.regler).offen}${kanalAnsicht('B', zustand.regler).offen}`;
   p.hidden = !a.offen;
+  const fokus = fokusMerken(p);
   p.innerHTML = modulHtml(a);
   bindeLoopWellen(a);
+  fokusZurueck(p, fokus);
   for (const b of $$('[data-liveoeffnen]')) b.classList.toggle('an', a.offen);
   const leer = $('[data-loops-leer]'); if (leer) leer.hidden = a.offen;
   for (const n of DECKS) zeigeExport(n);
@@ -143,7 +163,7 @@ export function liveEreignis(a, f) {
     if (f.stand && live.projekt) fetch('/modul/stand').then((r) => r.json()).then((s) => { live.stand = s; zeichneLive(); }, () => undefined);
     return;
   }
-  if (a === 'seq') { if (f?.rev !== live.rev) pruefeLiveSpaeter(0); return; }   // a step write of Cypher or another page: read the project when its revision differs from ours
+  if (a === 'seq') { szenenEreignis(f); if (f?.rev !== live.rev) pruefeLiveSpaeter(0); return; }   // a step write of Cypher or another page: read the project when its revision differs from ours
   if (a !== 'proj') return;
   if (f?.stems) { live.stems = f.stems; if (liveOffen()) zeichneLive(); }
   if (!f?.stems || f.stems.zustand !== 'laeuft') pruefeLiveSpaeter();
@@ -159,9 +179,11 @@ async function liveSchreibe(schluessel, befehl, label) {
       live.schreiben.delete(k);
       let r = await holeJson('/proj/aendern', { rev: live.rev, label: a.label, befehle: [a.befehl] });
       if (r.status === 409 && r.j?.fehler === 'rev_veraltet') {   // changed elsewhere: read the new revision, write the value once more (it is absolute)
-        const j = await (await fetch('/proj/aktuell')).json();
-        if (j.projekt?.live) { live.projekt = j.projekt; live.rev = j.projekt.rev; }
-        r = await holeJson('/proj/aendern', { rev: live.rev, label: a.label, befehle: [a.befehl] });
+        try {   // a network error here must not end the pump: values queued meanwhile still go out, and the panel is redrawn
+          const j = await (await fetch('/proj/aktuell')).json();
+          if (j.projekt?.live) { live.projekt = j.projekt; live.rev = j.projekt.rev; }
+          r = await holeJson('/proj/aendern', { rev: live.rev, label: a.label, befehle: [a.befehl] });
+        } catch { /* r stays the 409: reported below */ }
       }
       if (r.status === 200 && r.j?.projekt) { live.projekt = r.j.projekt; live.rev = r.j.rev; } else melde(`Fader refused: ${r.j?.text ?? r.j?.fehler ?? r.status}`, true);
     }

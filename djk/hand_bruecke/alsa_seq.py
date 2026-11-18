@@ -108,5 +108,14 @@ class Client:
         r = _lib.snd_seq_connect_to(self.h, my_port, a[0], a[1])
         return r >= 0 or r == -errno.EBUSY
 
+    def connect_to_state(self, my_port, dest):
+        """Like connect_to, but tells a new subscription from an existing one: 'new', 'kept', or None when `dest` is absent.
+        A device that was unplugged and plugged in again is a new ALSA client, so its subscription is new."""
+        a = self._addr(dest)
+        if not a:
+            return None
+        r = _lib.snd_seq_connect_to(self.h, my_port, a[0], a[1])
+        return "new" if r >= 0 else "kept" if r == -errno.EBUSY else None
+
     def close(self):
         _lib.snd_seq_close(self.h)

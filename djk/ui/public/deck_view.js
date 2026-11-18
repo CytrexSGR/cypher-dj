@@ -7,6 +7,7 @@ import { bindeDeckBedienung, holeHotcues, holeLoop, holeRaster, loopAktiv } from
 import { filtere, zeigeReiterInfo } from './seitenrahmen.js';
 import { zeigePlaetzeSpaeter } from './slots_view.js';
 import { zeigeExport } from './live_view.js';
+import { proTaktJetzt, zeigeSchlagPunkte } from './bar_live.js';
 const STATUS_TEXT = ['LOADED', 'LOADED', 'PLAYING', 'LOOP', 'ROLL', 'FALLBACK'];
 
 // ---------- Aufbau ----------
@@ -192,6 +193,5 @@ export function zeigePegel(kanal, db) {
 
 // ---------- Uhr (Kopf) ----------
 export function zeigeSchlag(beat) {
-  const s = Math.floor(((beat % 4) + 4) % 4);
-  $$('#schlaege i').forEach((i, k) => i.classList.toggle('an', k === s));
+  zeigeSchlagPunkte($('#schlaege'), beat, proTaktJetzt());   // one dot per beat of the open project's bar (4 without a project)
 }

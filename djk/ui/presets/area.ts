@@ -14,7 +14,8 @@
 //   POST /presets/nutzer/<geraet>/<slug>/umbenennen {name}   → {slug}
 //   POST /presets/nutzer/<geraet>/<slug>/loeschen            → moved to the trash folder
 //   GET  /presets/katalog                  1.16 rest: device catalogue for the browser {instrumente, effekte}
-//   POST /presets/anwenden                 1.16 rest: {id, ziel} → the apply plan (presets/apply.ts); changes nothing itself
+//   POST /presets/anwenden                 1.16 rest: {id, ziel, graph_laden?} → the apply plan (presets/apply.ts); changes nothing itself.
+//                                          graph_laden: true lets a Baukasten instrument preset load its graph on a track or channel (D28)
 //   POST /presets/von_ziel                 1.16 rest: {ziel, name, beschreibung, tags?, notiz?, ueberschreiben?} → saved like POST /presets
 // Factory presets (herkunft werk) only read: any write on /presets/werk/... is 403 werk_schreibgeschuetzt.
 // A refusal is {fehler, text} plus, for beschreibung_ungueltig and anfrage_ungueltig, details [{feld, code, wert?, erlaubt?}].
@@ -34,18 +35,24 @@ import { listeGraphen, type GraphEintrag } from '../graphs.ts';
 // register: the committed factory register checked by /presets/register/pruefen (default presets/register.json)
 // projekt: the open project (1.16 rest, apply plan and von_ziel; absent = no project); graphen: the Baukasten graphs (default graphs.ts)
 export interface PresetOptionen extends SpeicherOptionen {
-  speicher?: PresetSpeicher; register?: string; projekt?: () => Projekt | null; graphVon?: (kanal: string) => string | undefined; graphen?: () => readonly Pick<GraphEintrag, 'name' | 'art'>[];
+  speicher?: PresetSpeicher; register?: string; projekt?: () => Projekt | null; graphVon?: (kanal: string) => string | undefined; graphen?: () => readonly (KatalogGraph & { latenz?: number })[];
 }
+
+// What the catalogue needs of a graph: name and art, plus the role (`kategorie`) and the synthesis type (`prinzip`) when the graph has them. The type is
+// optional on read: an older install without it lists its instruments under "Other" in the page.
+export type KatalogGraph = Pick<GraphEintrag, 'name' | 'art' | 'kategorie'> & { prinzip?: string };
 
 // 1.16 rest (S3): the device catalogue of the PRODUCTION browser. Instruments always make a new track (spur_neu); effects become a
 // stage at the end of a chain (insert), `aktiv` from INSERT_ARTEN_AKTIV. No grand piano device exists in the code; none is listed.
-export function katalog(graphen: readonly Pick<GraphEintrag, 'name' | 'art'>[]): Record<string, unknown> {
+// An instrument row carries `kategorie` and `prinzip` when the graph has them (the browser groups by them, like every picker).
+export function katalog(graphen: readonly KatalogGraph[]): Record<string, unknown> {
   const aktiv = (art: string): boolean => (INSERT_ARTEN_AKTIV as readonly string[]).includes(art);
   const effekt = (geraet: string, titel: string, grund: string): Record<string, unknown> =>
     ({ geraet, titel, ziel: 'insert', aktiv: aktiv(geraet), ...(aktiv(geraet) ? {} : { grund }) });
   return {
     instrumente: [{ geraet: 'rb338', titel: 'RB-338', ziel: 'spur_neu' }, { geraet: 'surge', titel: 'Surge', ziel: 'spur_neu' },
-      ...graphen.filter((g) => g.art === 'instrument').map((g) => ({ geraet: 'bk', titel: g.name, ziel: 'spur_neu', graph: g.name }))],
+      ...graphen.filter((g) => g.art === 'instrument').map((g) => ({ geraet: 'bk', titel: g.name, ziel: 'spur_neu', graph: g.name,
+        ...(g.kategorie ? { kategorie: g.kategorie } : {}), ...(g.prinzip ? { prinzip: g.prinzip } : {}) }))],
     effekte: [effekt('komp', 'Compressor', 'not active yet'), effekt('eq', 'EQ', 'comes with slice 4b'), effekt('saett', 'Saett', 'comes with slice 4b'),
       { geraet: 'hall', titel: 'Hall', ziel: 'insert', aktiv: false, grund: 'the return hall lives on returns' },
       // an effect graph is a bk stage (art bk in INSERT_ARTEN_AKTIV); its presets apply to such a stage (apply.ts bkStufenPlan)
@@ -96,7 +103,7 @@ export function presetsBereich(ctx: Ctx, opt: PresetOptionen = {}): Bereich & { 
   const speicher = opt.speicher ?? new PresetSpeicher(opt);
   const registerDatei = opt.register ?? WERK_REGISTER;
   const fehler = (a: http.ServerResponse, e: unknown): void => {
-    if (e instanceof PresetFehler) return json(a, e.code, { fehler: e.fehler, text: e.text, ...(e.details ? { details: e.details } : {}) });
+    if (e instanceof PresetFehler) return json(a, e.code, { fehler: e.fehler, text: e.text, ...(e.details ? { details: e.details } : {}), ...(e.zusatz ?? {}) });
     if (e instanceof FrageFehler) return json(a, 400, { fehler: 'anfrage_ungueltig', text: e.message, details: e.fehler });
     ctx.log({ typ: 'presets_fehler', fehler: (e as Error)?.message ?? String(e) });
     json(a, 500, { fehler: 'intern', text: 'internal error in the preset store' });
@@ -134,7 +141,10 @@ export function presetsBereich(ctx: Ctx, opt: PresetOptionen = {}): Bereich & { 
         if (typeof d.id !== 'string' || !PRESET_ID.test(d.id)) throw new PresetFehler(400, 'preset_id_ungueltig');
         const [, herkunft, geraet, slug] = /^(werk|nutzer):([^/]+)\/(.+)$/.exec(d.id)!;
         const preset = speicher.lies(pruefeHerkunft(herkunft), geraet, slug);
-        return json(a, 200, planeAnwendung({ ...preset, id: d.id }, d.ziel as Ziel, opt.projekt?.() ?? null, typeof (d.ziel as Ziel & { kanal?: string })?.kanal === 'string' ? opt.graphVon?.((d.ziel as { kanal: string }).kanal) : undefined));
+        // graph_laden: true is the caller's yes to load the preset's instrument (D28); anything else keeps the refusals graph_anders / kein_graph
+        const graphen = d.graph_laden === true ? (opt.graphen?.() ?? listeGraphen().graphen) : [];
+        const gegeben = { graphLaden: d.graph_laden === true, graphGibt: (n: string) => graphen.find((g) => g.name === n)?.art ?? null, graphLatenz: (n: string) => graphen.find((g) => g.name === n)?.latenz ?? 0 };
+        return json(a, 200, planeAnwendung({ ...preset, id: d.id }, d.ziel as Ziel, opt.projekt?.() ?? null, typeof (d.ziel as Ziel & { kanal?: string })?.kanal === 'string' ? opt.graphVon?.((d.ziel as { kanal: string }).kanal) : undefined, gegeben));
       }
       if (p === '/presets/von_ziel' && q.method === 'POST') {
         const d = await lesen(q);

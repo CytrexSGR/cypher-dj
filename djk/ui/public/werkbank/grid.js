@@ -67,8 +67,10 @@ export function drumZeilen(clip, info) {
 // reversed hit (note i + 64) lives on the row of its slice.
 export function sliceZeilen(clip, info) {
   const zeilen = (info?.klaenge ?? []).map((k) => ({ ton: k.ton, name: k.name }));
-  const fremd = [...new Set(noten(clip).map((n) => n.ton))].filter((t) => t < RUECK && !zeilen.some((z) => z.ton === t)).sort((a, b) => a - b);
-  return [...zeilen, ...fremd.map((ton) => ({ ton, name: tonName(ton) }))];
+  // a note that no slice names (CUT AGAIN to fewer slices keeps the notes) gets a row of its own, forward and reversed alike, marked `ohne`. The core plays nothing
+  // for such a note (sampler.rs, note mode: n mod 64 >= slice count is no hit), so the row says it is silent.
+  const fremd = [...new Set(noten(clip).map((n) => (n.ton >= RUECK ? n.ton - RUECK : n.ton)))].filter((t) => !zeilen.some((z) => z.ton === t)).sort((a, b) => a - b);
+  return [...zeilen, ...fremd.map((ton) => (zeilen.length > 0 ? { ton, name: `${ton + 1} · no slice (silent)`, ohne: true } : { ton, name: tonName(ton) }))];
 }
 const schwarz = (t) => [1, 3, 6, 8, 10].includes(t % 12);
 // Pitch rows, top row first: the window of 24 rows below `oben`, or with `fold` only the pitches the pattern uses (no notes: fold changes nothing).

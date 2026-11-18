@@ -69,14 +69,19 @@ test('T1 (c) limits count tracks plus members; the three constants equal the cor
   assert.match(pruefeFehler(viele([kitSpur(), kitSpur(), kitSpur(), kitSpur(), k4(), kitSpur()])) ?? '', /at most 8 kit devices/);
   const b4 = () => rackG(['g1', 'g2', 'g3', 'g4'].map((id) => ({ id, geraet: bk() })));
   assert.equal(pruefeFehler(viele([bk(), bk(), bk(), bk(), b4()])), null);
-  assert.match(pruefeFehler(viele([bk(), bk(), bk(), bk(), b4(), bk()])) ?? '', /at most 8 Baukasten/);
+  const bk15 = Array.from({ length: 15 }, () => bk());
+  const b1 = () => rackG([{ id: 'g1', geraet: bk() }]), b2 = () => rackG([{ id: 'g1', geraet: bk() }, { id: 'g2', geraet: bk() }]);
+  assert.equal(pruefeFehler(viele([...bk15, b1()])), null, '15 bk tracks plus a rack with 1 bk member are 16');
+  assert.match(pruefeFehler(viele([...bk15, b2()])) ?? '', /at most 16 Baukasten/);   // the 17th counts as a member
+  assert.match(pruefeFehler(viele([...bk15, bk(), b1()])) ?? '', /at most 16 Baukasten/);
   const einzel = () => rackG([{ id: 'g1', geraet: kit('kit_rack') }]);
   assert.equal(pruefeFehler(viele(Array.from({ length: MAX_RACK_GERAETE }, einzel))), null);
   assert.match(pruefeFehler(viele(Array.from({ length: MAX_RACK_GERAETE + 1 }, einzel))) ?? '', /at most 8 rack devices/);
-  assert.equal(MAX_KIT_GERAETE, 8); assert.equal(MAX_BK_SPUREN, 8);
+  assert.equal(MAX_KIT_GERAETE, 8); assert.equal(MAX_BK_SPUREN, 16);
   const h = fs.readFileSync(path.join(hier, '..', '..', 'core', 'include', 'cypherdj', 'arr_playback.h'), 'utf8');
   const konst = (n) => Number(new RegExp(`constexpr int ${n} = (\\d+);`).exec(h)?.[1]);
   assert.equal(MAX_RACK_GERAETE, konst('ARR_RACK_MAX'));
+  assert.equal(MAX_BK_SPUREN, konst('ARR_BK_MAX'));
   assert.equal(MAX_GLIEDER, konst('ARR_RACK_GLIEDER'));
   assert.equal(MAX_GLIED_PLAETZE, konst('ARR_GLIED_PLAETZE'));
 });

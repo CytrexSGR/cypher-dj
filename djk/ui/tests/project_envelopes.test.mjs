@@ -155,6 +155,21 @@ test('U6 T6.4 clip_teilen, unlinked: the right part is rotated by split mod L; a
   assert.deepEqual(teileHuellkurve(hk, 4).rechts.punkte, pk);
 });
 
+test('U6 T6.4 clip_teilen, unlinked: a jump pair at the cut phase keeps the ramp of the last segment (the closing point carries the value from the left)', () => {
+  const saege = [{ beat: 0, wert: -60 }, { beat: 2, wert: 0 }, { beat: 2, wert: -60, form: 'sprung' }, { beat: 4, wert: 0 }];
+  const faelle = [['sawtooth jump pair at 2', saege, [2, 6]], ['jump pair at 1 (a cut inside the period)', [{ beat: 0, wert: -60 }, { beat: 1, wert: -20 },
+    { beat: 1, wert: -60, form: 'sprung' }, { beat: 4, wert: 0 }], [1, 5]]];
+  for (const [name, punkte, schnitte] of faelle) {
+    const hk = { ziel: 'gain', verknuepft: false, loop_beats: 4, punkte };
+    for (const rel of schnitte) {
+      const { rechts } = teileHuellkurve(hk, rel);
+      for (let t = 0; t < 9; t += 0.25) {
+        assert.ok(Math.abs(hkWert(rechts, t) - hkWert(hk, t + rel)) < 1e-9, `${name}, cut ${rel}, t=${t}: ${hkWert(rechts, t)} vs ${hkWert(hk, t + rel)}`);
+      }
+    }
+  }
+});
+
 test('U6 T6.4 clip_aendern: a shorter clip clamps the envelope loop; a move to a track that cannot take the target is refused', () => {
   const p = ok(basis(), { befehl: 'huellkurve_setzen', clip_id: 'c1', ziel: 'gain', punkte: RAMPE, verknuepft: false, loop_beats: 4 }).projekt;
   const r = ok(p, { befehl: 'clip_aendern', clip_id: 'c1', laenge_beats: 3 });

@@ -114,12 +114,12 @@ test('the playback holds the notes of a pattern clip with loop_beats 4 rolled ou
   assert.deepEqual(w.gruppen.map((x) => x.ausgang), [{ art: 'dj', nr: 4 }]);
 });
 
-test('seq_folge_neu: the ninth Baukasten track is refused with the model text, nothing changes; a kit track still fits', () => {
+test('seq_folge_neu: the 17th Baukasten track is refused with the model text, nothing changes; a kit track still fits', () => {
   let p = mitSeq(1);
-  for (let i = 0; i < 8; i++) p = folge(p, { name: `B${i}` });
+  for (let i = 0; i < 16; i++) p = folge(p, { name: `B${i}` });
   valide(p);
   const vorher = kopie(p);
-  assert.match(fehler(p, { befehl: 'seq_folge_neu', gruppe_id: p.gruppen[0].id, name: 'B9', geraet: bk() }).message, /at most 8 Baukasten tracks/);
+  assert.match(fehler(p, { befehl: 'seq_folge_neu', gruppe_id: p.gruppen[0].id, name: 'B17', geraet: bk() }).message, /at most 16 Baukasten tracks/);
   assert.deepEqual(kopie(p), vorher);
   valide(folge(p, { name: 'Drums', geraet: KIT }));
 });

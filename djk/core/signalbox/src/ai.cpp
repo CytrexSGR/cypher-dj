@@ -23,6 +23,19 @@ void Stellwerk::ki_stopp(int64_t id, Quelle quelle) {
   quittung_befehl(id, quelle, Status::fertig, s, Grund::kein);
 }
 
+// 2026-11-18 (SEQ deck, plan seq-fader-frei): a deck channel with nothing loaded is free for I3a, so a RAMP of cypher on deck/N/fader can be
+// running when a track is loaded. The load sets the fader to -200 once; a running ramp would drive it up again and open the new track without a
+// hearing pass (measured, test_kern_i3 case g). The load therefore ends the RUNNING parts of cypher on that fader (the same end as /k/abbruch: status
+// 7, grund abbruch, with their group). Parts of andreas and parts that have not started yet are untouched (a queued one is checked at its start).
+void Stellwerk::cypher_fahrt_beenden(int regler) {
+  if (regler < 0 || regler >= MAX_REGLER) return;
+  for (int j = 0; j < MAX_TEILE; j++) {
+    const Teil& t = teil_[j];
+    if (t.belegt && !t.intern && t.regler == regler && t.quelle == Quelle::cypher && t.status == Status::gestartet)
+      beenden_mit_gruppe(j, Status::abgebrochen, Grund::abbruch, jetzt_, HalterArt::frei);
+  }
+}
+
 void Stellwerk::ki_frei(int64_t id, Quelle quelle) {
   if (quelle != Quelle::andreas) {   // §4.7: /k/ki/frei nur andreas
     quittung_befehl(id, quelle, Status::abgelehnt, jetzt_, Grund::nur_hand);

@@ -343,3 +343,8 @@ test('einsZeile: zeit ist naive Lokalzeit ohne Suffix (wie datetime.now().isofor
   assert.equal(z.zeit, '2026-01-02T03:04:05');
   assert.match(z.zeit, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d$/);
 });
+
+test('abBeat on raster 3 (3/4 bars): at 100.0 gives 102, at 102.01 gives 105', () => {
+  assert.equal(abBeat(100.0, 0.01, 3), 102);
+  assert.equal(abBeat(102.01, 0.01, 3), 105);
+});

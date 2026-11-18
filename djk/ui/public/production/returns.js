@@ -3,6 +3,7 @@
 // or a send carries a coalescing key (one history line per drag). The level of a strip comes without code of its own: app.js fills every
 // .meter[data-kanal="ret/<nr>"] from /pegel. The PRE/POST switch of a return (slice 4: its sends are taken before the track fader) sends return_aendern {pre}.
 import { faderWert, faderText, panText, FADER_MIN, FADER_MAX, naechsteFarbe, istUmbenennenTaste } from './track_heads.js';
+import { returnFaderZeigt } from './lanes.js';
 import { REGLER_MAX, REGLER_SCHRITT, reglerVonDb, dbVonRegler, tasteMerke, tasteWert } from './fader_curve.js';
 import { HALL_FELDER_ANZEIGE, hallText, neuerReturnBefehl, returnLabels, returnListe, sendBefehl, sendLabel, sendWert } from './routing.js';
 import { MAX_RETURNS } from './limits.js';
@@ -27,7 +28,7 @@ const KOPF = `<button class="p-farbe" title="Return colour: click for the next o
 export function bindeReturns(ctx) {
   const { $ } = ctx;
   const reihe = $('mixer-returns'), sendBlock = $('mixer-sends');
-  const stand = new Map(), els = new Map(), greift = new Set();
+  const stand = new Map(), els = new Map(), greift = new Set(), folgt = new Set();   // folgt: ids of the strips that show the lane value now
   bindeReturnFace(ctx);
   const returnAus = (id, rechne) => ctx.aendereAus((p) => {
     const r = p.returns?.find((x) => x.id === id), z = r ? rechne(r) : null;
@@ -51,7 +52,12 @@ export function bindeReturns(ctx) {
     q('.p-loeschen').addEventListener('click', () => ctx.aendere(`Delete return ${ret().name}`, [{ befehl: 'return_loeschen', return_id: id }]));
     const regler = (r, k, vorgabe, wert, sende) => {
       r.addEventListener('pointerdown', () => greift.add(k));
-      r.addEventListener('keydown', (e) => { if (r.classList?.contains('p-fader')) tasteMerke(r, e.key); });
+      r.addEventListener('keydown', (e) => {
+        if (!r.classList?.contains('p-fader')) return;
+        // a lane that plays keeps the thumb on the lane value: the key steps the stored (rest) value, so the browser must start from it
+        if (returnFaderZeigt(ret(), ctx.st.kopfBeat).treibt) r.value = String(reglerVonDb(ret().fader_db));
+        tasteMerke(r, e.key);
+      });
       r.addEventListener('input', sende);
       r.addEventListener('change', () => greift.delete(k));
       r.addEventListener('pointerup', () => greift.delete(k));
@@ -61,6 +67,7 @@ export function bindeReturns(ctx) {
       const r = q(klasse), k = `${id}:${feld}`;
       regler(r, k, feld === 'fader_db' ? reglerVonDb(vorgabe) : vorgabe, null, () => {
         const v = feld === 'fader_db' ? faderWert(tasteWert(r)) : Number(r.value);
+        // a fader lane that plays: the rest value is written, but zeigeWerte keeps showing the lane (and the frame hook pulls the thumb back)
         zeigeWerte(el, { ...ret(), [feld]: v });
         ctx.aendere(`${feld === 'fader_db' ? 'Volume' : 'Balance'} return ${ret().name}`, [{ befehl: 'return_aendern', return_id: id, [feld]: v }], k);
       });
@@ -77,11 +84,11 @@ export function bindeReturns(ctx) {
     const umbenennen = () => {
       const ein = document.createElement('input');
       ein.className = 'p-namefeld'; ein.value = ret().name; ein.maxLength = 40; ein.setAttribute('aria-label', 'Return name');
-      name.replaceWith(ein); ein.focus(); ein.select();
+      name.hidden = true; el.append(ein); ein.focus(); ein.select();   // the input sits beside the hidden name (CSS): no node swap, zeigeWerte keeps finding it
       let fertig = false;
       const ende = (uebernehmen, zurueckAnName) => {
         if (fertig) return; fertig = true;
-        ein.replaceWith(name);
+        ein.remove(); name.hidden = false;
         if (zurueckAnName) name.focus();
         const neu = ein.value.trim();
         if (uebernehmen && neu && neu !== ret().name) ctx.aendere('Rename return', [{ befehl: 'return_aendern', return_id: id, name: neu }]);
@@ -101,7 +108,11 @@ export function bindeReturns(ctx) {
     for (const [k, an] of [['.p-mute', r.mute], ['.p-solo', r.solo], ['.p-hallan', r.hall.an]]) { q(k).classList.toggle('an', an); q(k).setAttribute('aria-pressed', String(an)); }
     q('.p-hallan').textContent = r.hall.an ? 'ON' : 'OFF';
     q('.p-prepost').classList.toggle('an', !!r.pre); q('.p-prepost').setAttribute('aria-pressed', String(!!r.pre)); q('.p-prepost').textContent = r.pre ? 'PRE' : 'POST';
-    if (!greift.has(`${r.id}:fader_db`)) q('.p-fader').value = String(reglerVonDb(r.fader_db));
+    // return fader lane: the class auto puts AUTO in front of the value (CSS of the track head); while the lane plays the strip shows the lane at the playhead
+    const z = returnFaderZeigt(r, ctx.st.kopfBeat), warLane = folgt.has(r.id);
+    el.classList.toggle('auto', z.lane !== null);
+    if (z.treibt) folgt.add(r.id); else folgt.delete(r.id);
+    if (z.treibt || warLane || !greift.has(`${r.id}:fader_db`)) q('.p-fader').value = String(reglerVonDb(z.db));   // the lane (and its end) overrule the hand hold
     if (!greift.has(`${r.id}:pan`)) q('.p-pan').value = String(r.pan);
     for (const h of el.querySelectorAll('.p-hall')) {
       if (!greift.has(`${r.id}:hall:${h.dataset.feld}`)) h.value = String(r.hall[h.dataset.feld]);
@@ -112,7 +123,7 @@ export function bindeReturns(ctx) {
       q(k).setAttribute('aria-label', v);
     }
     q('.p-prepost').setAttribute('aria-label', `Sends into return ${r.name} taken ${r.pre ? 'before' : 'after'} the track fader: switch`);
-    q('.p-faderwert').textContent = faderText(r.fader_db);
+    q('.p-faderwert').textContent = faderText(z.db);
     q('.p-panwert').textContent = panText(r.pan);
     q('.p-pegel').dataset.kanal = `ret/${r.nr}`;
   }
@@ -168,6 +179,25 @@ export function bindeReturns(ctx) {
       reg.nextElementSibling.textContent = faderText(db);
     }
   }
+
+  // While the transport runs, a return with a fader lane shows the lane value at the playhead in thumb and value (the core ignores the return fader then, there
+  // is no hand override for returns); when the transport stops the rest value is written back. Entries are built once per project object, one per fader lane.
+  let projektStand = null, eintraege = [];
+  const baueEintraege = (p) => (p?.returns ?? []).filter((r) => returnFaderZeigt(r, 0).lane !== null).map((r) => ({ r, id: r.id }));
+  ctx.beimBild?.push(() => {
+    const p = ctx.st.projekt, beat = ctx.st.kopfBeat;
+    if (p !== projektStand) { projektStand = p; eintraege = baueEintraege(p); }   // another project object: the entries of the old one are void
+    for (const e of eintraege) {
+      const el = els.get(e.id), z = returnFaderZeigt(e.r, beat);
+      if (!el) continue;                                  // the strip is gone (return deleted)
+      if (!z.treibt && !folgt.has(e.id)) continue;       // nothing to write: not playing and the strip already shows the rest value
+      if (z.treibt) folgt.add(e.id); else folgt.delete(e.id);
+      const text = faderText(z.db), regler = el.querySelector('.p-fader'), roh = reglerVonDb(z.db);
+      if (el.querySelector('.p-faderwert').textContent !== text) el.querySelector('.p-faderwert').textContent = text;
+      // the input snaps its value to the step: compare with the snapped value, or an off-step lane value would be rewritten every frame (as setzeRegler does)
+      if (Number(regler.value) !== Math.min(REGLER_MAX, Math.round(roh / REGLER_SCHRITT) * REGLER_SCHRITT)) regler.value = String(roh);   // the hand does not hold the thumb of a lane that plays, and the stop writes the rest value back
+    }
+  });
 
   $('neu-return').addEventListener('click', () => { const b = neuerReturnBefehl(ctx.st.projekt); if (b) ctx.aendere('Add return: Hall', [b]); });
 

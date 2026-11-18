@@ -15,7 +15,7 @@
 #                   (until 2026-11-06 the stems were fixed at 2-7,10-15): the stems are now all OTHER online CPUs, a CPU that is not online is a start error (2), and the list
 #                   is written back normalised as ranges ("0 1 8 9" -> "0-1 8-9"). CYPHERDJ_STEMS_CPUS overlapping the kern CPUs gives a note, not an error.
 #   CYPHERDJ_PYTHON=<absoluter Pfad>   (Umgebung, keine Option) Python der Oberfläche (Werkstatt-Aufträge, waveform.py); ohne: die Vorgabe der Seite (pythonVorgabe).
-#                   [--kern-konfig DATEI] [--leitstand-konfig DATEI] [--kit-ordner DIR] [--ohne-pruefmodus]
+#                   [--kern-konfig DATEI] [--leitstand-konfig DATEI] [--kit-ordner DIR] [--ohne-pruefmodus] [--journal voll|schlank]
 #         djk-start --zustand [--instanz a..i]
 #         djk-start --vorlagen-nach DIR [--master ...]   (füllt die Betriebs-Drop-ins, installiert nichts)
 #   --master/--cue  Präfix "<Senke>:<Portbasis>" des Ziels, an das "L" und "R" gehängt werden (INTERFACES §8),
@@ -63,6 +63,12 @@
 #                   ein abweichender abo_port gibt beim Start eine Warnung.
 #   --instanz       Prüfinstanz (ROADMAP Z2): Units, JACK-Namen, Pfade mit -<i>, Ports +1000·k. Vorgabe
 #                   $CYPHERDJ_INSTANZ, sonst leer (Betrieb).
+#                   Graph folder (devices, recipes, panels, categories; steps 2b2 to 2d): a test instance installs only files that are absent and
+#                   never overwrites a differing one (note on stderr), because that folder is the production folder; the kern has no override.
+#   --journal       Journal mode of the leitstand (lean operating journal, INTERFACES §15): voll journals every message, schlank leaves out
+#                   what carries no news. Default: schlank for the production instance (no --instanz), voll for a test instance. The option
+#                   wins over the default AND over the key `journal` of leitstand.toml (it is passed as --journal to the leitstand). Another
+#                   value is a usage error (2). The evaluation tool djk/conductor/check/evaluation.ts needs a full journal.
 # Rückgabe: 0 läuft, 2 Aufruf oder Aufbau (Programm, Ziel, PipeWire fehlt), 3 Riegel, 4 belegt (Port, Unit,
 # Shared Memory), 5 Start gescheitert (alles wieder abgeräumt).
 set -uo pipefail
@@ -85,7 +91,7 @@ ABLAGE_AUS=$(PYTHONPATH="$DJK${PYTHONPATH:+:$PYTHONPATH}" PYTHONSAFEPATH=1 pytho
 eval "$ABLAGE_AUS"
 
 I=${CYPHERDJ_INSTANZ:-}; MASTER=""; CUE=""; OHNE_CUE=0; TON_FREI=0; STRUDEL=0; INSTR=0; ARR1=0; ARR2=0; KIT=techno; KIT2=battery; KIT3=battery; KIT_G=0; KIT2_G=0; KIT3_G=0; MELODIE=surge; BASS=""; BK_STROEME=0; KERN_KONFIG=""; LS_KONFIG=""; KIT_ORDNER=""; PRUEF=1
-MODUS=start; VORLAGEN_NACH=""
+MODUS=start; VORLAGEN_NACH=""; JOURNAL=""
 # Option mit Wert: fehlt er (letztes Argument) oder ist er selbst eine Option, Abbruch 2. Nur --instanz darf leer sein.
 wert() {
   if [ "$2" -lt 2 ] || { [ -z "$3" ] && [ "$1" != --instanz ]; } || [[ "$3" == -* ]]; then
@@ -94,16 +100,17 @@ wert() {
 }
 while [ $# -gt 0 ]; do
   case "$1" in
-    --master|--cue|--strudel-kit|--strudel-kit2|--strudel-kit3|--melodie|--bass|--instanz|--kern-konfig|--leitstand-konfig|--kit-ordner|--vorlagen-nach) wert "$1" $# "${2-}";;
+    --master|--cue|--strudel-kit|--strudel-kit2|--strudel-kit3|--melodie|--bass|--instanz|--kern-konfig|--leitstand-konfig|--kit-ordner|--vorlagen-nach|--journal) wert "$1" $# "${2-}";;
   esac
   case "$1" in
     --master) MASTER=$2; shift 2;; --cue) CUE=$2; shift 2;; --ohne-cue) OHNE_CUE=1; shift;; --strudel) STRUDEL=1; shift;; --instrumente) INSTR=1; shift;; --arr1) ARR1=1; shift;; --arr2) ARR2=1; shift;; --bk-stroeme) BK_STROEME=1; shift;; --melodie) MELODIE=$2; shift 2;; --bass) BASS=$2; shift 2;; --strudel-kit) KIT=$2; KIT_G=1; shift 2;; --strudel-kit2) KIT2=$2; KIT2_G=1; shift 2;; --strudel-kit3) KIT3=$2; KIT3_G=1; shift 2;;
     --ton-frei) TON_FREI=1; shift;; --instanz) I=$2; shift 2;;
-    --kern-konfig) KERN_KONFIG=$(readlink -f -- "$2"); shift 2;;
-    --leitstand-konfig) LS_KONFIG=$(readlink -f -- "$2"); shift 2;;
+    --kern-konfig) KERN_KONFIG=$(realpath -m -- "$2") || { echo "djk-start: --kern-konfig $2: file not found" >&2; exit 2; }; shift 2;;
+    --leitstand-konfig) LS_KONFIG=$(realpath -m -- "$2") || { echo "djk-start: --leitstand-konfig $2: file not found" >&2; exit 2; }; shift 2;;
     --kit-ordner) KIT_ORDNER=$(readlink -f -- "$2"); [ -d "$KIT_ORDNER" ] || { echo "djk-start: --kit-ordner $2 is not a directory" >&2; exit 2; }; shift 2;;
     --pruefmodus) PRUEF=1; shift;; --ohne-pruefmodus) PRUEF=0; shift;; --zustand) MODUS=zustand; shift;;
     --vorlagen-nach) MODUS=vorlagen; VORLAGEN_NACH=$2; shift 2;;
+    --journal) JOURNAL=$2; shift 2;;
     -h|--help) sed -n '2,/^set -uo/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0;;
     *) echo "djk-start: unknown option $1 (see --help)" >&2; exit 2;;
   esac
@@ -128,6 +135,7 @@ if [ "$STRUDEL" = 1 ] && [ "$MODUS" != zustand ]; then
   KIT2=$(kit_wahl "$KITS" "$KIT2_G" "$KIT2") || exit 2
   KIT3=$(kit_wahl "$KITS" "$KIT3_G" "$KIT3") || exit 2
 fi
+case "$JOURNAL" in ""|voll|schlank) ;; *) echo "djk-start: --journal '$JOURNAL' invalid, use voll or schlank" >&2; exit 2;; esac
 case "$BASS" in ""|surge|rb338) ;; *) echo "djk-start: --bass '$BASS' invalid, use surge or rb338" >&2; exit 2;; esac
 case "$MELODIE" in surge|fluegel|baukasten) ;; *) echo "djk-start: --melodie '$MELODIE' invalid, use surge, fluegel or baukasten" >&2; exit 2;; esac
 case "$I" in
@@ -257,6 +265,10 @@ TF_ARG=""; [ "$TON_FREI" = 1 ] && TF_ARG="--ton-frei"
 KERN_ARGS=""; [ -n "$KERN_KONFIG" ] && KERN_ARGS="--konfig $KERN_KONFIG"; [ "$PRUEF" = 1 ] && KERN_ARGS="$KERN_ARGS --pruefmodus"
 LS_ARGS="--kern-port $P_KERN"; [ -n "$LS_KONFIG" ] && LS_ARGS="--konfig $LS_KONFIG $LS_ARGS"
 [ -n "$KERN_KONFIG" ] && LS_ARGS="$LS_ARGS --kern-konfig $KERN_KONFIG"
+# Journal mode of the leitstand (lean operating journal): the production instance (no --instanz) journals lean, a test instance full; --journal wins.
+# The leitstand takes the option before the key `journal` of its config file.
+[ -z "$JOURNAL" ] && [ -z "$I" ] && JOURNAL=schlank
+[ -n "$JOURNAL" ] && LS_ARGS="$LS_ARGS --journal $JOURNAL"
 # MVP 2 (ADR 025): Loop-Ordner je Instanz wie im Kern (main.cpp); die Seite liest ihn für /loops
 if [ -n "$I" ]; then LOOPS=/dev/shm/cypherdj-$I/loops; else LOOPS=$ABLAGE_LOOPS; fi
 mkdir -p "$LOOPS"
@@ -341,21 +353,35 @@ for g in fx-delay-sync; do
     mkdir -p "$BK_ORDNER" && cp -- "$DJK/instruments/modular_dsp/demos/$g.json" "$BK_ORDNER/$g.json" && echo "djk-start: installed the shipped graph $g into $BK_ORDNER"
   fi
 done
-# 2b2 Every graph of the device register (geraete.json, entries of art bk; `device.ts neu` adds them): copied when absent or different (cmp -s), so a
-# new or changed device reaches the studio. Names that do not match the graph rule are skipped.
+# 2b2 to 2d install shipped files into the graph folder of the kern. That folder is the production folder whatever the instance (the kern has no
+# override, INTERFACES.md), and $DJK is the checkout this script runs from, possibly an older branch. So the production instance (I empty)
+# copies a file when it is absent or differs (cmp -s), and a test instance (I set) copies only when it is absent and leaves a differing file alone,
+# with one note on stderr. A test start therefore never replaces what the live studio has installed.
+# installiere SOURCE TARGET TEXT: TEXT names what is announced on a copy ("installed the <TEXT>").
+installiere() {
+  local quelle=$1 ziel=$2 text=$3
+  if [ -e "$ziel" ]; then
+    cmp -s -- "$quelle" "$ziel" && return 0
+    if [ -n "$I" ]; then
+      echo "djk-start: test instance leaves the installed $text untouched (differs from $quelle); the kern reads the installed version" >&2
+      return 0
+    fi
+  fi
+  mkdir -p "$(dirname "$ziel")" && cp -- "$quelle" "$ziel" && echo "djk-start: installed the $text"
+}
+# 2b2 Every graph of the device register (geraete.json, entries of art bk; `device.ts neu` adds them): a new or changed device reaches the studio
+# (production start; see above for a test instance). Names that do not match the graph rule are skipped.
 REGISTER="$DJK/instruments/modular_dsp/geraete.json"
 if [ -f "$REGISTER" ]; then
   while IFS= read -r g; do
     [[ "$g" =~ ^[a-z0-9_-]{1,32}$ ]] || continue
     quelle="$DJK/instruments/modular_dsp/demos/$g.json"
     [ -f "$quelle" ] || continue
-    if [ ! -e "$BK_ORDNER/$g.json" ] || ! cmp -s -- "$quelle" "$BK_ORDNER/$g.json"; then
-      mkdir -p "$BK_ORDNER" && cp -- "$quelle" "$BK_ORDNER/$g.json" && echo "djk-start: installed the device graph $g into $BK_ORDNER"
-    fi
+    installiere "$quelle" "$BK_ORDNER/$g.json" "device graph $g into $BK_ORDNER"
   done < <(python3 -c 'import json,sys; [print(e["name"]) for e in json.load(open(sys.argv[1])) if e.get("art")=="bk"]' "$REGISTER" 2>/dev/null)
 fi
 
-# 2b3 The recipe graphs (demos/recipes/, listed in its MANIFEST.json): installed under their own names, same cmp rule as 2b2. The files stay in
+# 2b3 The recipe graphs (demos/recipes/, listed in its MANIFEST.json): installed under their own names, same rule as 2b2. The files stay in
 # demos/recipes/ in the repo; the kern reads them as top-level graphs of the graph folder. They have no hand panel (the page shows the knob field).
 REZEPTE="$DJK/instruments/modular_dsp/demos/recipes"
 if [ -f "$REZEPTE/MANIFEST.json" ]; then
@@ -363,30 +389,22 @@ if [ -f "$REZEPTE/MANIFEST.json" ]; then
     [[ "$g" =~ ^[a-z0-9_-]{1,32}$ ]] || continue
     quelle="$REZEPTE/$g.json"
     [ -f "$quelle" ] || continue
-    if [ ! -e "$BK_ORDNER/$g.json" ] || ! cmp -s -- "$quelle" "$BK_ORDNER/$g.json"; then
-      mkdir -p "$BK_ORDNER" && cp -- "$quelle" "$BK_ORDNER/$g.json" && echo "djk-start: installed the recipe graph $g into $BK_ORDNER"
-    fi
+    installiere "$quelle" "$BK_ORDNER/$g.json" "recipe graph $g into $BK_ORDNER"
   done < <(python3 -c 'import json,sys; [print(p["datei"][:-5]) for p in json.load(open(sys.argv[1]))["patches"]]' "$REZEPTE/MANIFEST.json" 2>/dev/null)
 fi
 
-# 2c Shipped front panels (sidecar files of the graphs, format cypherdj-panel/2): copied into <graph folder>/panels when missing or when the shipped
-# content differs (cmp -s), so an updated panel reaches the studio. The kern reads only top-level *.json of the graph folder, the subfolder is inert for it.
+# 2c Shipped front panels (sidecar files of the graphs, format cypherdj-panel/2): copied into <graph folder>/panels, same rule as 2b2, so an updated
+# panel reaches the studio. The kern reads only top-level *.json of the graph folder, the subfolder is inert for it.
 for f in "$DJK"/instruments/modular_dsp/paneele/*.json; do
   [ -f "$f" ] || continue
-  ziel="$BK_ORDNER/panels/$(basename "$f")"
-  if [ ! -e "$ziel" ] || ! cmp -s -- "$f" "$ziel"; then
-    mkdir -p "$BK_ORDNER/panels" && cp -- "$f" "$ziel" && echo "djk-start: installed the shipped panel $(basename "$f") into $BK_ORDNER/panels"
-  fi
+  installiere "$f" "$BK_ORDNER/panels/$(basename "$f")" "shipped panel $(basename "$f") into $BK_ORDNER/panels"
 done
 
-# 2d Instrument categories and descriptions (kategorien.json, read by the page server for GET /graphen): copied next to the panels with the same cmp rule.
+# 2d Instrument categories and descriptions (kategorien.json, read by the page server for GET /graphen): copied next to the panels, same rule as 2b2.
 # The kern reads only top-level *.json of the graph folder, so it goes into panels/ like the panel files.
 kat="$DJK/instruments/modular_dsp/kategorien.json"
 if [ -f "$kat" ]; then
-  ziel="$BK_ORDNER/panels/kategorien.json"
-  if [ ! -e "$ziel" ] || ! cmp -s -- "$kat" "$ziel"; then
-    mkdir -p "$BK_ORDNER/panels" && cp -- "$kat" "$ziel" && echo "djk-start: installed the instrument categories into $BK_ORDNER/panels"
-  fi
+  installiere "$kat" "$BK_ORDNER/panels/kategorien.json" "instrument categories into $BK_ORDNER/panels"
 fi
 
 # 3 Belegt: Units, Ports, Shared Memory. Alle Funde auf einmal melden.
@@ -458,7 +476,7 @@ mkdir -p "/dev/shm/cypherdj$SFX" && : > "$KANTEN_DATEI" || { echo "djk-start: ca
 abbruch() {
   echo "djk-start: $1" >&2
   [ -n "${2:-}" ] && journalctl --user -u "$2.service" --since "${T0:-today}" -n 12 --no-pager -o cat 2>/dev/null | sed 's/^/    | /' >&2
-  "$HIER/djk-stop" ${I:+--instanz "$I"} --still >&2
+  "$HIER/djk-stop" --instanz "$I" --still >&2
   echo "djk-start: rolled back, nothing left running" >&2
   exit 5
 }
@@ -548,7 +566,8 @@ done
 aktiv "$U_KERN" || abbruch "kern died while notbahn started" "$U_KERN"
 echo "  notbahn    ready   (beside, edge vor -> $KERN_CLIENT:notbahn_vor)"
 starte "$U_LS" "$DJK/units/cypherdj-leitstand.service" "$VORL/cypherdj-leitstand.service.d/betrieb.conf"
-warte 10 "$U_LS" lauscht t "$P_WS" || abbruch "$(w "leitstand does not listen on tcp $P_WS")" "$U_LS"
+# 30 s, not 10: the leitstand replays its whole journal before it listens (measured 11 s for a 2 GB journal; a lean journal is much faster).
+warte 30 "$U_LS" lauscht t "$P_WS" || abbruch "$(w "leitstand does not listen on tcp $P_WS")" "$U_LS"
 echo "  leitstand  ready   (ws $P_WS)"
 starte "$U_OF" "$VORL/cypherdj-oberflaeche.service" ""
 warte 10 "$U_OF" lauscht t "$P_OF" || abbruch "$(w "page does not listen on tcp $P_OF")" "$U_OF"
@@ -576,12 +595,12 @@ if [ "$STRUDEL" = 1 ]; then  # Plan 2026-09-27 + Studio S1: drei Strudel-Erzeuge
   echo "  strudel    ready   (drums kit $KIT+rec$SFX, bass kit $KIT2, melody kit $KIT3; pattern: djk/generator/djk-muster${I:+ --instanz $I} [--strom 2|3] --text '<pattern>')"
 fi
 if [ "$BK_STROEME" = 1 ]; then  # S18: ONE erzeuger process for the Baukasten streams 5,6,7,9,10 (erz/5..7, pad/1..2), one kern subscriber slot
-  "$HIER/djk-stroeme" ${I:+--instanz "$I"} --kern-port "$P_KERN" | sed 's/^/  /' || abbruch "bk streams failed (djk-stroeme)" "cypherdj-erzeuger-bk$SFX"  # pipefail: exit status of djk-stroeme
+  "$HIER/djk-stroeme" --instanz "$I" --kern-port "$P_KERN" | sed 's/^/  /' || abbruch "bk streams failed (djk-stroeme)" "cypherdj-erzeuger-bk$SFX"  # pipefail: exit status of djk-stroeme
   UNITS+=("cypherdj-erzeuger-bk$SFX")
 fi
 if [ "$INSTR" = 1 ]; then  # Studio S5.1: Carla-Wirt je Instrument (ADR 009), node.async, Rückweg in erz/2 bzw. erz/3.
   # Derselbe Weg wie das Nachrüsten im laufenden Studio (djk-instrumente); hier nur die Wirte, die Erzeuger haben --ziel schon.
-  "$HIER/djk-instrumente" ${I:+--instanz "$I"} --nur-wirte --melodie "$MELODIE" ${BASS:+--bass "$BASS"} | sed 's/^/  /' || abbruch "instruments failed (djk-instrumente)" "cypherdj-wirt-bass$SFX"  # pipefail: Rückgabe von djk-instrumente
+  "$HIER/djk-instrumente" --instanz "$I" --nur-wirte --melodie "$MELODIE" ${BASS:+--bass "$BASS"} | sed 's/^/  /' || abbruch "instruments failed (djk-instrumente)" "cypherdj-wirt-bass$SFX"  # pipefail: Rückgabe von djk-instrumente
   UNITS+=("cypherdj-wirt-bass$SFX" "cypherdj-wirt-melodie$SFX")
   echo "  instruments ready (bass ${BASS:-as before, Surge XT without a status} midi_aus_1 -> erz/2, melody $MELODIE midi_aus_2 -> erz/3; the kern re-links a restarted wirt's links within about 1 s of its ports appearing, from $KANTEN_DATEI)"
   echo "  sounds: djk/hosts/carla/djk-klang${I:+ --instanz $I} bass|melodie zeige|setze|lade|speichere|hoere · djk-klang liste"
@@ -589,11 +608,11 @@ elif [ "$STRUDEL" = 1 ]; then
   echo "  instruments not loaded; add them live without stopping anything: $HIER/djk-instrumente${I:+ --instanz $I}"
 fi
 if [ "$ARR1" = 1 ]; then  # Paket 1.18: der Produktions-Wirt arr1 (Surge-Spuren des Arrangements, D1 Spec 2.4); ohne ihn lehnen /proj/freeze, /proj/export und /proj/lautheit mit wirt_fehlt ab
-  "$HIER/djk-instrumente" ${I:+--instanz "$I"} --arr1 | sed 's/^/  /' || abbruch "production host failed (djk-instrumente --arr1)" "cypherdj-wirt-arr1$SFX"  # pipefail: Rückgabe von djk-instrumente
+  "$HIER/djk-instrumente" --instanz "$I" --arr1 | sed 's/^/  /' || abbruch "production host failed (djk-instrumente --arr1)" "cypherdj-wirt-arr1$SFX"  # pipefail: Rückgabe von djk-instrumente
   echo "  production host arr1 ready (Surge track slot 1 of the arrangement; /proj/freeze, /proj/export and /proj/lautheit need it for Surge tracks)"
 fi
 if [ "$ARR2" = 1 ]; then  # 1.9 (L10): der zweite Produktions-Wirt, wie arr1
-  "$HIER/djk-instrumente" ${I:+--instanz "$I"} --arr2 | sed 's/^/  /' || abbruch "production host failed (djk-instrumente --arr2)" "cypherdj-wirt-arr2$SFX"
+  "$HIER/djk-instrumente" --instanz "$I" --arr2 | sed 's/^/  /' || abbruch "production host failed (djk-instrumente --arr2)" "cypherdj-wirt-arr2$SFX"
   echo "  production host arr2 ready (Surge track slot 2 of the arrangement; /proj/freeze, /proj/export and /proj/lautheit need it for Surge tracks on that slot)"
 fi
 for u in "${UNITS[@]}"; do aktiv "$u" || abbruch "$u died during start" "$u"; done

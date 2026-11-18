@@ -42,6 +42,9 @@ constexpr int ARR_ZIEL_BLENDE = 480;    // 1.10: Ziel-Wechsel einer Spur (master
 constexpr int ARR_PM = ARR_SPUREN + ARR_GRUPPEN;   // Streifen-Index des Produktions-Masters: 0..31 Spuren, 32..47 Gruppen, 48 PM
 constexpr int ARR_RET0 = ARR_PM + 1;              // 1.10 Slice 3 (P2): the return strips follow the PM, no existing index moves
 constexpr int ARR_STREIFEN = ARR_PM + 1 + ARR_RETURNS;
+// Automation slots: the lane machinery (auto_block and its state arrays) runs over the 32 tracks (slot = track) and the 4 returns (slot ARR_SPUREN + r, field 0 = fader only).
+// Groups and the PM have no slot: the master takes no volume curve.
+constexpr int ARR_AUTO_SLOTS = ARR_SPUREN + ARR_RETURNS;
 // Fields per strip: 0 fader (dB), 1 pan, 2 mute, 3 solo. Tracks and groups: 4..7 send to return 1..4 (dB). Returns: 4 hall on, 5..10 hall pre, decay, size, low, highcut, tail.
 constexpr int ARR_FELDER = 11;
 constexpr int ARR_F_SEND0 = 4;
@@ -64,6 +67,9 @@ class ArrSenke {
   virtual void note(int spur, int64_t ziel, uint8_t ton, uint8_t vel, bool an) noexcept = 0;
   virtual void alle_aus(int spur, int64_t ziel) noexcept = 0;            // Stopp: All-Notes-Off der Spur
   virtual void transport_start(int spur, int64_t ziel) noexcept = 0;     // K2: Zustand zurücksetzen (RB-FFI, Spec 2.4)
+  // audit U33: the start announced by transport_start() is cancelled before it took effect (stop while the start was waiting): forget the pending
+  // start and the fade prepared for it. Default: nothing to forget.
+  virtual void transport_abbruch(int spur) noexcept { (void)spur; }
   // Audio der Spur für [s0, s0 + m) in den Spur-Eingang addieren (RB rendert, Wirt-Rückweg kopiert)
   virtual void block(int spur, int64_t s0, int m, float* l, float* r) noexcept = 0;
   // Mehrkern slice 3.1: may block_bahn() of this track run on another lane at the same time as block_bahn() of another track? Only
@@ -378,7 +384,7 @@ class Arrangement {
     spur_plan_gueltig_ = false;
 #endif
   }
-  // mehrkern slice 3.2: phase Q on the pool. mode 0 = aus (serial), 1 = an, 2 = auto (an, and one retry after an automatic switch-off). Any thread (an atomic); the callback reads it once per block and a change drops the plan flag.
+  // mehrkern slice 3.2: phase Q on the pool. mode 0 = aus (serial), 1 = an, 2 = auto (a synonym of an: both retry after an automatic switch-off, with a doubling back-off). Any thread (an atomic); the callback reads it once per block and a change drops the plan flag.
   void setze_spur_pool(int mode) { spur_modus_.store(mode, std::memory_order_release); }
   int spur_pool_modus() const { return spur_modus_.load(std::memory_order_acquire); }
   void setze_spur_haken(SpurHaken* h) { spur_lauf_.setze_haken(h); }          // test seam, before the block
@@ -658,6 +664,8 @@ class Arrangement {
   void export_blockende(int m);
   void export_ende(int64_t s, int32_t status, const char* grund);
   bool sonderlauf() const { return freeze_ || abg_ || exp_; }   // a freeze, a tap or an export run suspends the loop bracket and the start beat of the user
+  // the sample where the active freeze, tap or export run ends (its window start plus its length; the tap and the export window are shifted by the path latency), -1 without a run
+  int64_t lauf_ende() const { return freeze_ ? freeze_->start_s + freeze_->frames : abg_ ? abg_->start_s + abg_->frames : exp_ ? exp_->start_s + exp_->frames : -1; }
 
   // Metronom (arr_metronom.cpp)
   void klick_form_bauen();
@@ -688,41 +696,41 @@ class Arrangement {
   double ap_[ARR_BLOCK] = {};                      // project beat per sample of the block (only filled while a lane plays)
   // Automation slice 2: the fields 0..3 of a track (fader dB, pan, mute 0/1, solo 0/1) can each play a lane. One buffer per track and field (E7, 512 KiB, members: no allocation).
   static constexpr int AUTO_BLENDE_FELDER = 2;   // the fields 0 (fader) and 1 (pan) have a source blend; mute and solo (2, 3) have none
-  float auto_buf_[ARR_SPUREN][AUTO_FELDER][ARR_BLOCK] = {};   // the lane value or the blend per sample; Wert::vl points here for a block
+  float auto_buf_[ARR_AUTO_SLOTS][AUTO_FELDER][ARR_BLOCK] = {};   // the lane value or the blend per sample; Wert::vl points here for a block
   int auto_von_ = 0, auto_bis_ = 0;                // block-relative range [von, bis) in which the lane plays (transport running)
-  AutoLane auto_l_[ARR_SPUREN][AUTO_FELDER];       // cursor per track and field on the lane of the current snapshot
+  AutoLane auto_l_[ARR_AUTO_SLOTS][AUTO_FELDER];       // cursor per track and field on the lane of the current snapshot
   AutoLane auto_g_[ARR_SPUREN][ARR_GERAET_LANE_PARAMS]; // cursor per track and device parameter on the `geraet` lane of the current snapshot
   // 1.12 slice 5 (D9): the cursors of the RELATIVE lanes (summands of the value stack), per track and fader/pan field and per device parameter. New names: kern_bitgleich_auto reads the ones above.
-  AutoLane auto_r_[ARR_SPUREN][AUTO_BLENDE_FELDER];
+  AutoLane auto_r_[ARR_AUTO_SLOTS][AUTO_BLENDE_FELDER];
   AutoLane auto_gr_[ARR_SPUREN][ARR_GERAET_LANE_PARAMS];
   AutoLane auto_k_[ARR_KLANES_MAX];                // 1.12 slice 6: cursor per insert / rack lane of the current snapshot (index = ArrSnapshot::klane)
-  float auto_zuletzt_[ARR_SPUREN][AUTO_FELDER] = {};   // last value written to auto_buf_ (dB for the fader, pan units for pan)
-  bool auto_war_[ARR_SPUREN][AUTO_FELDER] = {};        // the field wrote auto_buf_ in the last block
+  float auto_zuletzt_[ARR_AUTO_SLOTS][AUTO_FELDER] = {};   // last value written to auto_buf_ (dB for the fader, pan units for pan)
+  bool auto_war_[ARR_AUTO_SLOTS][AUTO_FELDER] = {};        // the field wrote auto_buf_ in the last block
   // Step hold (task 8 fallback): the lane value is taken over for up to auto_schritt_ samples, so the mixer computes the gain (std::pow, cos/sin) only when the
   // value changes. A step larger than AUTO_HALT_DB (fader) or AUTO_HALT_PAN (pan) is taken at once. Mute and solo are not held (0/1 jumps). Live and render run the same function.
   int auto_schritt_ = 16;                          // samples per hold (1: every sample); set_auto_schritt is a test seam
-  int auto_halt_n_[ARR_SPUREN][AUTO_FELDER] = {};      // samples the held value still stays
-  float auto_halt_v_[ARR_SPUREN][AUTO_FELDER] = {};    // the held value
+  int auto_halt_n_[ARR_AUTO_SLOTS][AUTO_FELDER] = {};      // samples the held value still stays
+  float auto_halt_v_[ARR_AUTO_SLOTS][AUTO_FELDER] = {};    // the held value
   // 1.12 slice 3 (D6): the lane override per track and field, core only. auto_ueber_ is the state after all changes. A change inside the running block is pending
   // until that block has run: auto_ueber_n_ (0..2) changes, at auto_ueber_s_ and auto_ueber_s2_, starting from auto_ueber_alt_ (the state at the block start). Two
   // changes flip the state twice, so auto_block plays alt before the first, !alt between them and alt after the second; each one starts its own source blend.
-  bool auto_ueber_[ARR_SPUREN][AUTO_FELDER] = {};
-  bool auto_ueber_alt_[ARR_SPUREN][AUTO_FELDER] = {};
-  int8_t auto_ueber_n_[ARR_SPUREN][AUTO_FELDER] = {};
-  int64_t auto_ueber_s_[ARR_SPUREN][AUTO_FELDER] = {};
-  int64_t auto_ueber_s2_[ARR_SPUREN][AUTO_FELDER] = {};
+  bool auto_ueber_[ARR_AUTO_SLOTS][AUTO_FELDER] = {};
+  bool auto_ueber_alt_[ARR_AUTO_SLOTS][AUTO_FELDER] = {};
+  int8_t auto_ueber_n_[ARR_AUTO_SLOTS][AUTO_FELDER] = {};
+  int64_t auto_ueber_s_[ARR_AUTO_SLOTS][AUTO_FELDER] = {};
+  int64_t auto_ueber_s2_[ARR_AUTO_SLOTS][AUTO_FELDER] = {};
   int auto_ueber_offen_ = 0;                            // fields with a pending change (auto_ueber_n_ > 0)
-  bool auto_pickup_[ARR_SPUREN][AUTO_FELDER] = {};      // the pickup was handed out for the override that starts in this cycle (lane_wert answers false until then)
-  float auto_lane_v_[ARR_SPUREN][AUTO_FELDER] = {};     // the last value the lane itself played (not a blend, not the hand)
+  bool auto_pickup_[ARR_AUTO_SLOTS][AUTO_FELDER] = {};      // the pickup was handed out for the override that starts in this cycle (lane_wert answers false until then)
+  float auto_lane_v_[ARR_AUTO_SLOTS][AUTO_FELDER] = {};     // the last value the lane itself played (not a blend, not the hand)
   SpscRing<ArrAutoEreignis, 1024> auto_ev_;             // state changes for the net thread (task 3)
   std::atomic<uint32_t> auto_ev_verloren_{0};
   bool auto_vorausschau_ = true;                       // look-ahead inside a hold (auto_block); false only in tests
-  bool auto_probe_aus_[ARR_SPUREN][AUTO_FELDER] = {};  // the look-ahead failed in the running hold window: no second try until the next latch
+  bool auto_probe_aus_[ARR_AUTO_SLOTS][AUTO_FELDER] = {};  // the look-ahead failed in the running hold window: no second try until the next latch
   // Source blend (D6, E8): field 0 (fader) blends in the gain, field 1 (pan) linearly in the pan value; mute and solo have none (the mixer fade applies).
-  int32_t blende_n_[ARR_SPUREN][AUTO_FELDER] = {};     // samples of the source blend still to run (480)
-  float blende_g0_[ARR_SPUREN][AUTO_FELDER] = {};      // start value of the running blend: the gain (fader) or the pan value (pan) played just before the source change
-  int64_t blende_s_[ARR_SPUREN][AUTO_FELDER];          // absolute sample at which a blend starts, INT64_MIN: none (constructor)
-  int64_t blende_s2_[ARR_SPUREN][AUTO_FELDER];         // a second blend start in the same block (re-enable and grip within one block), INT64_MIN: none (constructor)
+  int32_t blende_n_[ARR_AUTO_SLOTS][AUTO_FELDER] = {};     // samples of the source blend still to run (480)
+  float blende_g0_[ARR_AUTO_SLOTS][AUTO_FELDER] = {};      // start value of the running blend: the gain (fader) or the pan value (pan) played just before the source change
+  int64_t blende_s_[ARR_AUTO_SLOTS][AUTO_FELDER];          // absolute sample at which a blend starts, INT64_MIN: none (constructor)
+  int64_t blende_s2_[ARR_AUTO_SLOTS][AUTO_FELDER];         // a second blend start in the same block (re-enable and grip within one block), INT64_MIN: none (constructor)
   double wp_[ARR_BLOCK] = {};        // Paket 1.13: Projekt-Beat je Sample des Teilblocks, einmal je Teilblock für alle gewarpten Stimmen
   float wl_[ARR_BLOCK] = {}, wr_[ARR_BLOCK] = {};   // Slice 2: Lesepuffer für den Ring einer Werk-Stimme
   WarpWerk* werk_ = nullptr;
@@ -784,7 +792,7 @@ class Arrangement {
   bool gziel_ok_[ARR_GRUPPEN] = {};
   // Production plan task 8 (D10, D11): the rows spur/<slot>/bk/<k> as a transient override of the Baukasten knobs. regler_bkz_: row -> slot * 32 + (k - 1), -1: none (regler_binden).
   // bk_ueber_[slot][k]: the written value and flag; the flag is cleared by every tausche(). bk_slot_[i]: slot (0..7) of track index i in the CURRENT snapshot (the running number among
-  // the tracks with the device bk, ascending track number), -1: not a bk track. bk_ueber_melden() reports every written value to the bk sink in every block, before auto_geraet().
+  // the tracks with the device bk, ascending track number), -1: not a bk track, or a bk track beyond the 8th (ARR_BK_MAX is 16; those have no override row). bk_ueber_melden() reports every written value to the bk sink in every block, before auto_geraet().
   static constexpr int BK_UEBER_SLOTS = cypherdj::stellwerk::SPUR_BK_SLOTS, BK_UEBER_KNOEPFE = cypherdj::stellwerk::SPUR_BK_KNOEPFE;
   struct BkUeber {
     float wert = 0.0f;

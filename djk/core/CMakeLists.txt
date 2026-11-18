@@ -198,7 +198,7 @@ foreach(pfad ${KERN_TESTS})
   # 1.8 T3: the recording threads (callback, net thread swapping RecSpur, AufnahmeFaden) and the monitor of the external inputs run under TSan too; only names in this list
   # start through setarch -R and carry the failure pattern, any other test would run plain and could abort with "unexpected memory mapping" or hide TSan lines
   # mehrkern plan: the HallPool and its callers run under TSan too (test_reverb_pool, test_arr_returns, test_reverb_state)
-  if(CYPHERDJ_TSAN AND (t STREQUAL "test_freeze_tsan" OR t STREQUAL "test_arr_tap" OR t STREQUAL "test_arr_tap_pool" OR t STREQUAL "test_core_arr_tap" OR t STREQUAL "test_net_arr_tap" OR t STREQUAL "test_arr_auto_tsan" OR t STREQUAL "test_reverb_pool" OR t STREQUAL "test_arr_returns" OR t STREQUAL "test_reverb_state" OR t STREQUAL "test_arr_track_path" OR t STREQUAL "test_arr_inserts_path" OR t STREQUAL "test_arr_host_stufe" OR t STREQUAL "test_arr_host_ausfall" OR t STREQUAL "test_arr_host_measurement" OR t STREQUAL "test_arr_track_phase" OR t STREQUAL "test_arr_track_pool" OR t STREQUAL "test_arr_rack_path" OR t STREQUAL "test_arr_rack_macro" OR t STREQUAL "test_arr_auto_chain" OR t STREQUAL "test_arr_auto_bk_button" OR t STREQUAL "test_arr_bk_sink" OR t STREQUAL "test_core_track_time" OR t STREQUAL "test_track_state" OR t STREQUAL "test_recording_tsan" OR t STREQUAL "test_recording_thread" OR t STREQUAL "test_core_rec" OR t STREQUAL "test_arr_monitor" OR t STREQUAL "test_render_nur_key" OR t STREQUAL "test_arr_export_run" OR t STREQUAL "test_net_arr_export_run"))
+  if(CYPHERDJ_TSAN AND (t STREQUAL "test_freeze_tsan" OR t STREQUAL "test_arr_tap" OR t STREQUAL "test_arr_tap_pool" OR t STREQUAL "test_core_arr_tap" OR t STREQUAL "test_net_arr_tap" OR t STREQUAL "test_arr_auto_tsan" OR t STREQUAL "test_reverb_pool" OR t STREQUAL "test_arr_returns" OR t STREQUAL "test_reverb_state" OR t STREQUAL "test_arr_track_path" OR t STREQUAL "test_arr_inserts_path" OR t STREQUAL "test_arr_host_stufe" OR t STREQUAL "test_arr_host_ausfall" OR t STREQUAL "test_arr_host_measurement" OR t STREQUAL "test_arr_track_phase" OR t STREQUAL "test_arr_track_pool" OR t STREQUAL "test_arr_rack_path" OR t STREQUAL "test_arr_rack_macro" OR t STREQUAL "test_arr_auto_chain" OR t STREQUAL "test_arr_auto_return" OR t STREQUAL "test_arr_auto_bk_button" OR t STREQUAL "test_arr_bk_sink" OR t STREQUAL "test_core_track_time" OR t STREQUAL "test_track_state" OR t STREQUAL "test_recording_tsan" OR t STREQUAL "test_recording_thread" OR t STREQUAL "test_core_rec" OR t STREQUAL "test_arr_monitor" OR t STREQUAL "test_render_nur_key" OR t STREQUAL "test_arr_export_run" OR t STREQUAL "test_net_arr_export_run"))
     add_test(NAME ${t} COMMAND ${TSAN_START} $<TARGET_FILE:${t}>)
     set_tests_properties(${t} PROPERTIES FAIL_REGULAR_EXPRESSION "ThreadSanitizer")   # jede TSan-Zeile ist ein Befund
   else()
@@ -928,6 +928,7 @@ test_mutation(test_kern_lernen_belegt_mutation test_core_learn CYPHERDJ_MUTATION
 test_mutation(test_kern_lernen_weitergereicht_mutation test_core_learn CYPHERDJ_MUTATION_LERN_WEITERGEREICHT ${KERN_QUELLEN35})  # captured CC also moves the knob
 test_mutation(test_kern_lernen_frist_mutation test_core_learn CYPHERDJ_MUTATION_LERN_OHNE_FRIST ${KERN_QUELLEN35})          # no timeout
 test_mutation(test_kern_lernen_nie_scharf_mutation test_core_learn CYPHERDJ_MUTATION_LERN_NIE_SCHARF ${KERN_QUELLEN35})      # acknowledged, never armed
+test_mutation(test_kern_lernen_port_egal_mutation test_core_learn CYPHERDJ_MUTATION_LERN_PORT_EGAL ${KERN_QUELLEN35})      # every midi_ein port is translated with the table of port 1
 # the net thread swaps kanal and nr on the wire (test_net_learn case 16); own object as above
 add_executable(test_netz_lernen_gelernt_mutation tests/test_net_learn.cpp src/net.cpp)
 target_include_directories(test_netz_lernen_gelernt_mutation PRIVATE include tests ${DJK}/contract)
@@ -1301,6 +1302,10 @@ test_mutation(test_arr_rack_limit_17_mutation test_arr_rack CYPHERDJ_MUTATION_MA
 test_mutation(test_arr_rack_bleibt_mutation test_arr_rack CYPHERDJ_MUTATION_MAKRO_BLEIBT ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)                 # case 5: the override stays after the rack has gone
 # 1.12 slice 6: insert and rack lanes (test_arr_auto_chain). The mutation turns K1, K3 and K7 red.
 test_mutation(test_arr_auto_kette_bleibt_mutation test_arr_auto_chain CYPHERDJ_MUTATION_ARR_KETTE_LANE_BLEIBT ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)   # a lane that ends keeps driving
+# return fader lane (test_arr_auto_return): a return reads the lane of the next return, the envelope test must go red
+test_mutation(test_arr_auto_return_slot_versatz_mutation test_arr_auto_return CYPHERDJ_MUTATION_ARR_RET_FADER_SLOT_VERSATZ ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)
+# return fader lane: the stop gives a return back to the Stellwerk row at once, the stop case (pair stop_s - 1, stop_s) must go red
+test_mutation(test_arr_auto_return_stopp_hart_mutation test_arr_auto_return CYPHERDJ_MUTATION_ARR_RET_STOPP_HART ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)
 # 1.9 U8 T9: macros on rack members (test_arr_rack_macro). Each mutation turns its named cases red.
 test_mutation(test_arr_rack_makro_glied_row_gewinnt_mutation test_arr_rack_macro CYPHERDJ_MUTATION_MAKRO_GLIED_ROW_GEWINNT ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)       # M1 to M5: the member's snapshot value wins over the macro
 test_mutation(test_arr_rack_makro_glied_falsches_glied_mutation test_arr_rack_macro CYPHERDJ_MUTATION_MAKRO_GLIED_FALSCHES_GLIED ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)   # M1 to M7 (M6, M7 in part): the member index is off by one
@@ -2047,6 +2052,14 @@ target_compile_definitions(test_arr_auto_null_render_gegenprobe_auto_blind_mutat
 target_link_libraries(test_arr_auto_null_render_gegenprobe_auto_blind_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
 add_test(NAME test_arr_auto_null_render_gegenprobe_auto_blind_mutation COMMAND test_arr_auto_null_render_gegenprobe_auto_blind_mutation)
 set_tests_properties(test_arr_auto_null_render_gegenprobe_auto_blind_mutation PROPERTIES WILL_FAIL TRUE)
+# Return fader lane, task 3: the counter-check of the render null test does not touch a return lane: case 2 of test_render_ret_fader must go red
+add_executable(test_render_ret_fader_gegenprobe_blind_mutation tests/test_render_ret_fader.cpp src/render.cpp)
+target_include_directories(test_render_ret_fader_gegenprobe_blind_mutation PRIVATE include tests)
+target_compile_definitions(test_render_ret_fader_gegenprobe_blind_mutation PRIVATE CYPHERDJ_MUTATION_RENDER_GEGENPROBE_AUTO_BLIND=1
+                           CYPHERDJ_DJK="${DJK}")
+target_link_libraries(test_render_ret_fader_gegenprobe_blind_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+add_test(NAME test_render_ret_fader_gegenprobe_blind_mutation COMMAND test_render_ret_fader_gegenprobe_blind_mutation)
+set_tests_properties(test_render_ret_fader_gegenprobe_blind_mutation PROPERTIES WILL_FAIL TRUE)
 # Automation Slice 1 T8 fallback: the render without the 16-sample hold while the live run holds: the null test must go red
 add_executable(test_arr_auto_null_schritt_nur_live_mutation tests/test_arr_auto_null.cpp src/render.cpp)
 target_include_directories(test_arr_auto_null_schritt_nur_live_mutation PRIVATE include tests)
@@ -2338,9 +2351,13 @@ unset(TM_FALL)
 set(TM_FALL 11)  # detector case
 test_mutation(spur_ohne_join_mutation test_arr_track_pool CYPHERDJ_MUTATION_SPUR_OHNE_JOIN ${ARR_QUELLEN} src/clock.cpp)
 unset(TM_FALL)
-# mode auto retries after every switch-off (case 19)
-set(TM_FALL 19)  # detector case
-test_mutation(spur_auto_immer_neu_mutation test_arr_track_pool CYPHERDJ_MUTATION_SPUR_AUTO_IMMER_NEU ${ARR_QUELLEN} src/clock.cpp)
+# the track pool retries only in mode auto (cases 19 and 31: the studio's mode an stays off for good)
+set(TM_FALL 31)  # detector case
+test_mutation(spur_neu_nur_auto_mutation test_arr_track_pool CYPHERDJ_MUTATION_SPUR_NEU_NUR_AUTO ${ARR_QUELLEN} src/clock.cpp)
+unset(TM_FALL)
+# the retry wait never grows (case 31: the second wait must be 8192 blocks)
+set(TM_FALL 31)  # detector case
+test_mutation(spur_neu_ohne_staffel_mutation test_arr_track_pool CYPHERDJ_MUTATION_SPUR_NEU_OHNE_STAFFEL ${ARR_QUELLEN} src/clock.cpp)
 unset(TM_FALL)
 # mehrkern 3.2 review of task 5 (WILL_FAIL): the live-load criterion by mixer gain (case 20, muted tracks); the Hall call site hands no MXCSR to the workers (test_arr_returns returns_pool_mxcsr)
 set(TM_FALL 20)  # detector case
@@ -2353,6 +2370,14 @@ test_mutation(spur_grenze_ab_lauf_mutation test_arr_track_pool CYPHERDJ_MUTATION
 unset(TM_FALL)
 set(TM_FALL 22)  # detector case
 test_mutation(spur_warte_ab_lauf_mutation test_arr_track_pool CYPHERDJ_MUTATION_SPUR_WARTE_AB_LAUF ${ARR_QUELLEN} src/clock.cpp)
+unset(TM_FALL)
+set(TM_FALL 24)  # detector case
+# join wait relative to the cost estimate: the rule ignores the estimate (WILL_FAIL), must turn test_arr_track_pool case 24 red (900 us wait against a 1 ms unit counts late)
+test_mutation(spur_warte_ohne_kosten_mutation test_arr_track_pool CYPHERDJ_MUTATION_SPUR_WARTE_OHNE_KOSTEN ${ARR_QUELLEN} src/clock.cpp)
+unset(TM_FALL)
+set(TM_FALL 28)  # detector case
+# the unit is measured on the wall clock (WILL_FAIL), must turn test_arr_track_pool case 28 red (a stall inside the unit raises its own allowance: late=1)
+test_mutation(spur_kosten_wandzeit_mutation test_arr_track_pool CYPHERDJ_MUTATION_SPUR_KOSTEN_WANDZEIT ${ARR_QUELLEN} src/clock.cpp)
 unset(TM_FALL)
 test_mutation(test_kern_arr_bk_mutation test_core_arr_bk CYPHERDJ_MUTATION_ARR_OHNE_RB_SENKE ${KERN_QUELLEN35} src/arr_playback.cpp)
 

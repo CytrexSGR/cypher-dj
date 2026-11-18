@@ -17,6 +17,8 @@ import type { GliedGeraet, AudioClip, Clip, Insert, InsertTraeger, Lane, Ziel, M
 export const WIEDERGABE_FORMAT = 'cypherdj-arr/1';
 // /2, wenn das Projekt Gruppen hat oder eine Spur nicht auf master zeigt (1.10, P2) oder ein Audio-Clip Warp an trägt (1.13); sonst /1 byteweise wie bisher
 export const WIEDERGABE_FORMAT_2 = 'cypherdj-arr/2';
+// /3 = /2 plus returns[].auto (the fader lane of a return, return automation slice 2); the format is the version gate: an old core refuses /3 as a whole
+export const WIEDERGABE_FORMAT_3 = 'cypherdj-arr/3';
 export const MAX_WARP_PUNKTE = 262_144;                       // Marker aller Clips (und Loop-Kopien) einer Wiedergabe; gleich ARR_WARP_PUNKTE_MAX im Kern
 export const WARP_MODUS_NR: Readonly<Record<string, number>> = { repitch: 0, beats: 1, complex: 2, tones: 3 };
 // 1 spielt der Callback (Slice 4), 2 und 3 das Warp-Werk des Kerns
@@ -85,8 +87,10 @@ export interface WGruppe {
   chain?: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[]
 }
 // slice 4: the send taps before the fader (absent = post)
-export interface WReturn extends Omit<WGruppe, 'ausgang'> { ausgang: { art: 'master' }; pre?: true }
-export interface Wiedergabe { format: typeof WIEDERGABE_FORMAT | typeof WIEDERGABE_FORMAT_2; nr: number; spuren: WSpur[]; live?: true; gruppen?: WGruppe[];
+// auto (only /3): the fader lane of the return, points [beat, dB, formcode] as on a track
+export interface WReturn extends Omit<WGruppe, 'ausgang'> { ausgang: { art: 'master' }; pre?: true; auto?: WAuto[] }
+export interface Wiedergabe {
+  format: typeof WIEDERGABE_FORMAT | typeof WIEDERGABE_FORMAT_2 | typeof WIEDERGABE_FORMAT_3; nr: number; spuren: WSpur[]; live?: true; gruppen?: WGruppe[];
   // returns (slice 3) like the groups; pm = the production master's chain, the kern's key (slice 4)
   returns?: WReturn[]; pm?: { chain: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] } }
 // slice 4c: the rack of a strip: its pooled slot and the mapping table (`stufe` = position in the chain, `param` = parameter index of the kind, `makro` 0..3)
@@ -344,6 +348,7 @@ export function gainHkPunkte(c: Clip): number {
 // 1.12 slice 5 (D9): the modulation envelopes of a track's clips merged into one relative lane per target: 0 outside the clip spans, a jump pair at
 // every copy edge (two points at one beat at most: of a run at one beat the first and the last stay). Muted clips do not modulate.
 // Clips may overlap on a track: the copy that starts later takes the modulation over from its start (the earlier one is cut there), so the beats rise.
+// The copies of all clips of a target are ordered by their absolute start for this, a loop copy of an earlier clip included.
 export function relativeLanen(clips: readonly Clip[]): WAuto[] {
   type Kopie = { a: number; k0: number; laenge: number; hk: Huellkurve; loop: number | null | undefined };
   const kopienJeZiel = new Map<string, Kopie[]>();
@@ -359,6 +364,7 @@ export function relativeLanen(clips: readonly Clip[]): WAuto[] {
   }
   const proZiel = new Map<string, Punkt[]>();
   for (const [ziel, kopien] of kopienJeZiel) {
+    kopien.sort((x, y) => x.a - y.a);          // stable: copies that start together keep their clip order; every later start takes over
     const liste: Punkt[] = [];
     kopien.forEach(({ a, k0, laenge: voll, hk, loop }, i) => {
       const laenge = i + 1 < kopien.length ? Math.min(voll, kopien[i + 1].a - a) : voll;
@@ -508,8 +514,14 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
       : ziel === undefined ? { art: 'master' as const } : { art: 'gruppe' as const, nr: ziel };
     return { nr: g.nr, ausgang, ...kette(g.inserts, g) };
   });
-  const returnsW = [...(p.returns ?? [])].sort((a, b) => a.nr - b.nr)
-    .map((r) => ({ nr: r.nr, ausgang: { art: 'master' as const }, ...(r.pre ? { pre: true as const } : {}), ...kette(r.inserts, r) }));
+  // return automation slice 2: the fader lane of a return goes to the core as returns[].auto (the same conversion as on a track); only `fader` is legal there
+  const returnsW: WReturn[] = [...(p.returns ?? [])].sort((a, b) => a.nr - b.nr).map((r) => {
+    const rl = (r.automation ?? []).filter((l) => l.ziel === 'fader');
+    autoPunkte += rl.reduce((n, l) => n + l.punkte.length, 0);
+    const auto = rl.map((l): WAuto => ({ ziel: 'fader', punkte: l.punkte.map((q) => [q.beat, q.wert, FORM_NR[q.form ?? 'linear']]) }));
+    return { nr: r.nr, ausgang: { art: 'master' as const }, ...(r.pre ? { pre: true as const } : {}), ...(auto.length ? { auto } : {}),
+      ...kette(r.inserts, r) };
+  });
   const pmW = p.master?.inserts?.length ? kette(p.master.inserts, p.master) as { chain: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] } : undefined;
   const streifen: { chain_auto?: WKettenLane[] }[] = [...gruppenW, ...returnsW, ...(pmW ? [pmW] : [])];
   for (const k of streifen) autoPunkte += kettenPunkte(k);   // the tracks were counted above
@@ -533,7 +545,8 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
   if (!routing && !gewarpt && !automatisiert && !hatReturns && !eingefuegt && !huellen && !hatRack && !stummig) {
     return { format: WIEDERGABE_FORMAT, nr: opt.nr, spuren };
   }
-  return { format: WIEDERGABE_FORMAT_2, nr: opt.nr, spuren,
+  const retLane = returnsW.some((r) => r.auto !== undefined);              // return automation slice 2: a return lane needs /3 (the version gate)
+  return { format: retLane ? WIEDERGABE_FORMAT_3 : WIEDERGABE_FORMAT_2, nr: opt.nr, spuren,
     ...(p.live === true ? { live: true as const } : {}),   // the head flag of the live container (decision 5); absent otherwise
     gruppen: gruppenW,
     ...(hatReturns ? { returns: returnsW } : {}),

@@ -11,6 +11,8 @@ import { alsAntwort } from '../areas/proj/area.ts';
 import { SeqBereich, geraetInfo } from '../areas/live/seq.ts';
 import { seqGruppe } from '../project/seq.ts';
 import { legeSchnitt } from '../sampler/schnitt.ts';
+import { Projekte } from '../project/storage.ts';
+import { fuehreListeAus } from '../project/commands.ts';
 
 const INFO_BK = { art: 'bk', regler: [{ nr: 3, name: 'Cutoff', vorgabe: 0.5 }, { nr: 4, name: 'Resonance', vorgabe: 0.3 }], klaenge: [] };
 const INFO_KIT = { art: 'kit', regler: [], klaenge: [{ ton: 36, name: 'kick' }, { ton: 38, name: 'snare' }, { ton: 42, name: 'hat' }] };
@@ -34,7 +36,10 @@ async function aufbau(t) {
   ordner(t);
   const z = await liveAufbau(t);
   const spielt = new Set();
-  const seq = new SeqBereich(z.ctx, z.zugang, { deckLaeuft: (n) => spielt.has(n), geraetInfo: info });
+  const offene = new Set();
+  const aufgeraeumt = [];
+  const seq = new SeqBereich(z.ctx, z.zugang, { deckLaeuft: (n) => spielt.has(n), geraetInfo: info, kanalOffen: (k) => offene.has(k),
+    deckAufraeumen: (n, q) => { aufgeraeumt.push([n, q]); } });
   const fehl = async (f) => {
     try { await f(); } catch (e) { const a = alsAntwort(e, z.ctx); return { code: a.code, fehler: a.j.fehler, text: a.j.text, detail: a.j.detail }; }   // the answer the route sends
     assert.fail('no refusal'); };
@@ -42,7 +47,7 @@ async function aufbau(t) {
   const schritte = () => z.offen().verlauf.liste().length;
   const spur = (name) => z.projekt().spuren.find((s) => s.name === name);
   const gid = (platz = 2) => seqGruppe(z.projekt(), platz).id;
-  return { ...z, seq, spielt, fehl, ereignisse, schritte, spur, gid };
+  return { ...z, seq, spielt, offene, fehl, ereignisse, schritte, spur, gid, aufgeraeumt };
 }
 const bk = 'bk:bassmusik';
 
@@ -430,4 +435,119 @@ test('geraetInfo of a smp graph names the slices and carries the cut', (t) => {
   // an unknown cut and a plain graph carry no cut
   assert.equal(geraetInfo({ art: 'intern', name: 'bk', graph: 'smp-nope-0000' }).schnitt, undefined);
   assert.equal(geraetInfo({ art: 'intern', name: 'bk', graph: 'bass-banddrive' }).schnitt, undefined);
+});
+
+// ---- POST /seq/modul: a Workbench module becomes patterns of a deck -------------------------------------------------------------------------------------------
+function modulAblegen(z, name, bauen) {
+  const ablage = new Projekte(path.join(z.tmp, 'projekte'));
+  const { slug, projekt } = ablage.lege(name, { werkbank: true });
+  const bk = { art: 'intern', name: 'bk', graph: 'bassmusik', parameter: { k3: 0.7 } };
+  const p = fuehreListeAus(projekt, bauen(bk)).projekt;
+  ablage.speichere(slug, p);
+  return { slug, projekt: p };
+}
+const zweiSpuren = (bk) => [
+  { befehl: 'werkbank_spur_neu', name: 'Kick', geraet: { ...bk }, loop_beats: 8, noten: [{ beat: 0, laenge: 0.25, ton: 36, vel: 100, chance: 50 }] },
+  { befehl: 'werkbank_spur_neu', name: 'Bass', geraet: { ...bk } }];
+
+test('modul: a fresh deck, one undo step that takes the whole deck out again; the answer carries the report; the event is sent', async (t) => {
+  const z = await aufbau(t);
+  const m = modulAblegen(z, 'Mod A', zweiSpuren);
+  const n0 = z.schritte(), rev0 = z.projekt().rev;
+  const a = await z.seq.modul({ slug: m.slug, platz: 2 }, 'andreas');
+  assert.equal(a.code, 200, JSON.stringify(a.j));
+  assert.equal(a.j.ok, true);
+  assert.equal(a.j.bericht.deck_neu, true);
+  assert.deepEqual(a.j.bericht.patterns.map((x) => x.name), ['Kick', 'Bass']);
+  assert.equal(a.j.gruppe_id, z.gid());
+  assert.equal(z.schritte(), n0 + 1, 'one undo step');
+  assert.equal(z.ereignisse().at(-1).f.platz, 2);
+  assert.deepEqual(z.spur('Kick').clips[0].noten.map(({ id, ...r }) => r), [{ beat: 0, laenge: 0.25, ton: 36, vel: 100, chance: 50 }]);
+  assert.deepEqual(z.spur('Kick').geraet.parameter, { k3: 0.7 });
+  assert.equal(z.seq.stand().j['2'].folgen[0].editierbar, true);
+  await z.s.umkehr('undo', { rev: z.projekt().rev }, 'andreas');
+  assert.equal(seqGruppe(z.projekt(), 2), undefined, 'the whole deck is gone');
+  assert.equal(z.projekt().spuren.length, 0);
+  assert.ok(z.projekt().rev >= rev0);
+});
+
+test('modul: loaded into a deck that is there, the patterns are added muted and one undo removes exactly them; nothing existing changes', async (t) => {
+  const z = await aufbau(t);
+  const m = modulAblegen(z, 'Mod B', zweiSpuren);
+  assert.equal((await z.seq.modul({ slug: m.slug, platz: 1 }, 'andreas')).code, 200);
+  const vorher = JSON.stringify(seqFolgen2(z));
+  z.spielt.add(1); z.offene.add('deck/1');   // a running deck with an open channel does not refuse added patterns
+  const b = await z.seq.modul({ slug: m.slug, platz: 1 }, 'andreas');
+  assert.equal(b.code, 200, JSON.stringify(b.j));
+  assert.equal(b.j.bericht.deck_neu, false);
+  assert.deepEqual(b.j.bericht.patterns.map((x) => x.name), ['Kick 2', 'Bass 2']);
+  assert.deepEqual([z.spur('Kick 2').mute, z.spur('Bass 2').mute], [true, true]);
+  await z.s.umkehr('undo', { rev: z.projekt().rev }, 'andreas');
+  assert.equal(JSON.stringify(seqFolgen2(z)), vorher, 'exactly the added patterns are gone');
+  assert.equal(z.spur('Kick 2'), undefined);
+});
+const seqFolgen2 = (z) => z.projekt().spuren.map((s) => [s.id, s.name, s.mute, s.clips.map((c) => c.noten.length)]);
+
+test('modul: the rules of seq_anlegen hold for a fresh deck; refusals write nothing', async (t) => {
+  const z = await aufbau(t);
+  const m = modulAblegen(z, 'Mod C', zweiSpuren);
+  const nichtModul = new Projekte(path.join(z.tmp, 'projekte')).lege('Plain').slug;
+  const rev = z.projekt().rev;
+  z.offene.add('deck/3');
+  let e = await z.fehl(() => z.seq.modul({ slug: m.slug, platz: 3 }, 'andreas'));
+  assert.deepEqual([e.code, e.fehler], [409, 'kanal_offen']);
+  z.offene.clear(); z.spielt.add(3);
+  e = await z.fehl(() => z.seq.modul({ slug: m.slug, platz: 3 }, 'andreas'));
+  assert.deepEqual([e.code, e.fehler], [409, 'deck_laeuft']);
+  z.spielt.clear();
+  e = await z.fehl(() => z.seq.modul({ slug: 'gibt-es-nicht', platz: 3 }, 'andreas'));
+  assert.deepEqual([e.code, e.fehler], [404, 'unbekannt']);
+  e = await z.fehl(() => z.seq.modul({ slug: nichtModul, platz: 3 }, 'andreas'));
+  assert.deepEqual([e.code, e.fehler], [409, 'kein_werkbank']);
+  e = await z.fehl(() => z.seq.modul({ slug: m.slug, platz: 9 }, 'andreas'));
+  assert.deepEqual([e.code, e.fehler], [400, 'argument_ungueltig']);
+  e = await z.fehl(() => z.seq.modul({ slug: m.slug, platz: 3, x: 1 }, 'andreas'));
+  assert.deepEqual([e.code, e.fehler], [400, 'argument_unbekannt']);
+  assert.equal(z.projekt().rev, rev, 'nothing was written');
+  const k = await z.seq.modul({ slug: m.slug, platz: 3 }, 'cypher');
+  assert.equal(k.code, 200, 'closed and stopped: accepted');
+});
+
+test('deckAufraeumen: anlegen that creates the deck calls it once with the place and the source; not on a place that holds a deck, not when the write is refused', async (t) => {
+  const z = await aufbau(t);
+  assert.equal((await z.seq.anlege({ platz: 2 }, 'cypher')).code, 200);
+  assert.deepEqual(z.aufgeraeumt, [[2, 'cypher']]);
+  const e = await z.fehl(() => z.seq.anlege({ platz: 2 }, 'andreas'));
+  assert.equal(e.fehler, 'seq_belegt');
+  ist(z.s, 'deck/3/trim', 0); ist(z.s, 'deck/3/fader', -6);
+  assert.equal((await z.fehl(() => z.seq.anlege({ platz: 3 }, 'andreas'))).fehler, 'kanal_offen');
+  ist(z.s, 'deck/3/fader', -200); z.spielt.add(3);
+  assert.equal((await z.fehl(() => z.seq.anlege({ platz: 3 }, 'andreas'))).fehler, 'deck_laeuft');
+  z.spielt.clear();
+  assert.deepEqual(z.aufgeraeumt, [[2, 'cypher']], 'no call for the refused writes and the occupied place');
+  assert.equal((await z.seq.anlege({ platz: 3 }, 'andreas')).code, 200);
+  assert.deepEqual(z.aufgeraeumt, [[2, 'cypher'], [3, 'andreas']]);
+});
+
+test('deckAufraeumen: a module that creates the deck calls it, a module onto a place with a deck does not, a refused module does not', async (t) => {
+  const z = await aufbau(t);
+  const m = modulAblegen(z, 'Mod D', zweiSpuren);
+  assert.equal((await z.seq.modul({ slug: m.slug, platz: 1 }, 'andreas')).code, 200);
+  assert.deepEqual(z.aufgeraeumt, [[1, 'andreas']]);
+  assert.equal((await z.seq.modul({ slug: m.slug, platz: 1 }, 'andreas')).code, 200);
+  assert.deepEqual(z.aufgeraeumt, [[1, 'andreas']], 'the second module adds patterns to the deck that is there');
+  const e = await z.fehl(() => z.seq.modul({ slug: 'gibt-es-nicht', platz: 3 }, 'andreas'));
+  assert.equal(e.fehler, 'unbekannt');
+  z.offene.add('deck/4');
+  assert.equal((await z.fehl(() => z.seq.modul({ slug: m.slug, platz: 4 }, 'andreas'))).fehler, 'kanal_offen');
+  assert.deepEqual(z.aufgeraeumt, [[1, 'andreas']]);
+});
+
+test('deckAufraeumen: a failing callback is no error of the write (anlegen and modul stay 200)', async (t) => {
+  const z = await aufbau(t);
+  const seq = new SeqBereich(z.ctx, z.zugang, { geraetInfo: info, deckAufraeumen: () => { throw new Error('send failed'); } });
+  assert.equal((await seq.anlege({ platz: 2 }, 'cypher')).code, 200);
+  const m = modulAblegen(z, 'Mod E', zweiSpuren);
+  assert.equal((await seq.modul({ slug: m.slug, platz: 1 }, 'cypher')).code, 200);
+  assert.ok(seqGruppe(z.projekt(), 2) && seqGruppe(z.projekt(), 1));
 });

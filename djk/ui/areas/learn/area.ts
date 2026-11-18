@@ -1,5 +1,5 @@
-// S19 (MIDI learn): bereich lernen. GET /lernen (assignments, what is waiting, the assigned MIDI port, state of the file), POST /lernen (arm a graph
-// knob, pfad null cancels), POST /lernen/loeschen (remove an assignment). Learning needs a hand on the hardware: only Andreas arms or deletes
+// S19 (MIDI learn): bereich lernen. GET /lernen (assignments with their controller place, what is waiting, the controller places, state of the files), POST /lernen (arm a graph
+// knob, pfad null cancels), POST /lernen/setzen (assign a CC to a target directly), POST /lernen/loeschen (remove an assignment). Learning needs a hand on the hardware: only Andreas arms or deletes
 // (Cypher gets 403 nur_andreas). The target is a graph knob bk/1..64 or any continuous control of the table (controls_info.ts, unit not a switch).
 import type http from 'node:http';
 import type { Bereich, BereichKontext, Route } from '../../http/router.ts';
@@ -10,9 +10,10 @@ import { reglerInfo } from '../../../conductor/src/controls_info.ts';
 import { controllerOrdner, geraeteDatei } from '../../paths.ts';
 import { leseKoerper } from '../proj/area.ts';
 import { ProjFehler } from '../proj/session.ts';
-import { GeraeteFehler, GeraeteSpeicher } from '../devices/store.ts';
+import { GeraeteFehler, GeraeteSpeicher, controllerPlaetze, type ControllerPlatz } from '../devices/store.ts';
+import { beschriftung } from './beschriftung.ts';
 import { LernAblauf, type Zeit } from './flow.ts';
-import { LernFehler, LernSpeicher } from './store.ts';
+import { LernFehler, LernSpeicher, PLAETZE } from './store.ts';
 
 export interface LernenOptionen { ordner?: string; geraeteKonfig?: string; fristMs?: number; zeit?: Zeit }
 
@@ -29,7 +30,8 @@ export interface LernenBereich extends Bereich {
   arme(pfad: string): void;                 // pruefeBereit + arm the kern for this knob
   wartet(): string | null;                  // the armed path
   abbrechen(): void;
-  midiPort(): string | null;                // the MIDI input assigned to learning (null without one or with a damaged devices file)
+  midiPort(): string | null;                // the MIDI input on place 1 (null without one or with a damaged devices file)
+  controller(): Required<ControllerPlatz>[]; // every assigned controller place (1..8), empty with a damaged devices file
   loesche(pfad: string): Promise<void>;     // remove the learn assignment (keine_zuordnung 404 when there is none)
 }
 
@@ -38,10 +40,11 @@ export function lernenBereich(ctx: BereichKontext, opt: LernenOptionen = {}): Le
   const geraete = new GeraeteSpeicher(opt.geraeteKonfig ?? geraeteDatei());
   const ablauf = new LernAblauf(ctx, speicher, { fristMs: opt.fristMs, zeit: opt.zeit });
   const midiPort = (): string | null => { try { return geraete.lies().midi.port; } catch { return null; } };   // a damaged devices file means: no port known
+  const controller = (): Required<ControllerPlatz>[] => { try { return controllerPlaetze(geraete.lies()); } catch { return []; } };
 
   const lage = (): Record<string, unknown> => {
     const s = speicher.lies();
-    return { zuordnungen: s.zuordnungen, wartet: ablauf.lage(), midi: { port: midiPort() }, datei: s.datei };
+    return { zuordnungen: s.zuordnungen.map((z) => ({ ...z, name: beschriftung(ctx, z.pfad) })), wartet: ablauf.lage(), midi: { port: midiPort() }, controller: controller(), datei: s.datei };
   };
   const antwort = (e: unknown): { code: number; j: Record<string, unknown> } => {
     if (e instanceof LernFehler) return { code: e.code, j: { fehler: e.grund, text: e.text || grundText(e.grund) } };
@@ -64,7 +67,7 @@ export function lernenBereich(ctx: BereichKontext, opt: LernenOptionen = {}): Le
   });
 
   const pruefeBereit = (): void => {
-    if (!midiPort()) throw new LernFehler('kein_midi_eingang', 409);
+    if (controller().length === 0) throw new LernFehler('kein_midi_eingang', 409);
     if (speicher.lies().datei === 'kaputt') throw new LernFehler('lernen_datei_kaputt', 409);   // better refuse now than learn in vain
   };
 
@@ -76,6 +79,7 @@ export function lernenBereich(ctx: BereichKontext, opt: LernenOptionen = {}): Le
     wartet: () => ablauf.lage()?.pfad ?? null,
     abbrechen: () => ablauf.abbrechen(),
     midiPort,
+    controller,
     loesche: (pfad: string) => ablauf.loesche(pfad),
     routen: () => [
       { methode: 'GET', pfad: '/lernen', schutz: 'offen', handler: (_q: http.IncomingMessage, a: http.ServerResponse) => {
@@ -86,6 +90,17 @@ export function lernenBereich(ctx: BereichKontext, opt: LernenOptionen = {}): Le
         if (!gueltigesZiel(d.pfad)) throw zielFehler(d.pfad, true);
         pruefeBereit();
         ablauf.scharf(d.pfad);
+      }),
+      // Direct assignment from a controller layout: CC <nr> on channel <kanal> of controller place <platz> drives <pfad>, without moving a knob.
+      schreib('/lernen/setzen', async (d) => {
+        if (!gueltigesZiel(d.pfad)) throw zielFehler(d.pfad, false);
+        const ganz = (x: unknown, lo: number, hi: number): x is number => typeof x === 'number' && Number.isInteger(x) && x >= lo && x <= hi;
+        if (!ganz(d.kanal, 1, 16)) throw new LernFehler('argument_ungueltig', 400, 'kanal: a MIDI channel 1..16');
+        if (!ganz(d.nr, 0, 127)) throw new LernFehler('argument_ungueltig', 400, 'nr: a CC number 0..127');
+        if (!ganz(d.platz, 1, PLAETZE)) throw new LernFehler('argument_ungueltig', 400, `platz: a controller place 1..${PLAETZE}`);
+        pruefeBereit();
+        if (!controller().some((c) => c.platz === d.platz)) throw new LernFehler('argument_ungueltig', 400, `platz: no controller on place ${d.platz}`);
+        await ablauf.setze(d.pfad, d.kanal, d.nr, d.platz);
       }),
       schreib('/lernen/loeschen', async (d) => {
         if (!gueltigesZiel(d.pfad)) throw zielFehler(d.pfad, false);

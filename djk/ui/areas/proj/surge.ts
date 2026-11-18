@@ -29,6 +29,7 @@ export const surgeBereich = (name: string): [number, number] | null => lade().ge
 // Surge); a job waits for it in the background chain, so a patch or parameter never hits the plugin host or a vanishing socket
 export interface SpiegelOptionen {
   ordner: (() => string) | undefined; log: (e: Record<string, unknown>) => void; fristMs?: number; slotBereit?: (slot: number) => Promise<void>;
+  wirtPid?: (slot: number) => number | null;   // pid of the host of a slot: a changed pid is a new process (restart under the mirror), see gleiche
 }
 export interface SpiegelErgebnis { gesendet: number; zurueck: number; fehler: string[] }
 const SCHLUESSEL = (slot: number, name: string): string => `${slot}:${name}`;
@@ -38,6 +39,7 @@ export class SurgeSpiegel {
   private readonly zuletzt = new Map<string, number>();     // "slot:name" -> the value sent last (acknowledged by the host)
   private readonly original = new Map<string, number>();    // "slot:name" -> the host's value before the mirror first sent this entry
   private readonly geladen = new Map<number, string>();   // slot -> the library name of the patch the mirror loaded into the host last (acknowledged)
+  private readonly pids = new Map<number, number>();    // slot -> pid of the host the mirror last talked to
   private kette: Promise<unknown> = Promise.resolve();
 
   constructor(opt: SpiegelOptionen) { this.opt = opt; }
@@ -52,6 +54,26 @@ export class SurgeSpiegel {
   }
   // resolves when every job queued so far is done
   fertig(): Promise<void> { return this.kette.then(() => undefined); }
+
+  // The host of a slot is a new process (the slot went back from a plugin instrument host to Surge): what the mirror believes about it is void. The next
+  // sync sends the whole map of the slot again, and the patch of the slot is loaded again (audit U07). Synchronous on purpose: the swap calls it before
+  // slotBereit resolves, so the sync queued behind the swap already sees the empty memory.
+  vergiss(slot: number): void {
+    this.geladen.delete(slot);
+    for (const k of [...this.zuletzt.keys(), ...this.original.keys()]) if (k.startsWith(`${slot}:`)) { this.zuletzt.delete(k); this.original.delete(k); }
+  }
+
+  // A host process that restarted under the mirror (systemd) is new although the slot never changed hands: its pid differs from the one seen last. Only then
+  // is the memory of the slot void; a freeze run with the same pid sends nothing it does not have to (audit U07).
+  private neuerWirt(slots: number[]): void {
+    for (const slot of slots) {
+      const pid = this.opt.wirtPid?.(slot) ?? null;
+      if (pid === null) continue;
+      const alt = this.pids.get(slot);
+      this.pids.set(slot, pid);
+      if (alt !== undefined && alt !== pid) this.vergiss(slot);
+    }
+  }
 
   // the current display values of some parameters of a slot's host; null when the host does not answer. The values of entries the mirror has not
   // touched yet are remembered as the originals the mirror returns to.
@@ -115,11 +137,10 @@ export class SurgeSpiegel {
     const soll = this.soll(projekt);
     const patches = this.sollPatch(projekt);
     return this.reihe(async () => {
-      if (this.opt.slotBereit) {
-        const slots = new Set<number>([...patches.keys(), ...[...soll.values()].map((e) => e.slot)]);
-        for (const k of this.zuletzt.keys()) slots.add(Number(k.split(':')[0]));
-        await Promise.all([...slots].map((s) => this.opt.slotBereit!(s)));
-      }
+      const slots = new Set<number>([...patches.keys(), ...[...soll.values()].map((e) => e.slot)]);
+      for (const k of this.zuletzt.keys()) slots.add(Number(k.split(':')[0]));
+      if (this.opt.slotBereit) await Promise.all([...slots].map((s) => this.opt.slotBereit!(s)));
+      this.neuerWirt([...slots]);
       const aus: SpiegelErgebnis = { gesendet: 0, zurueck: 0, fehler: [] };
       const ohnePatch = new Set<number>();                                  // slots whose wanted patch did not load: their entries wait
       if (projekt === null) this.geladen.clear();

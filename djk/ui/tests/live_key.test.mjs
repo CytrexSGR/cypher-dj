@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { neuesProjekt, pruefeProjekt } from '../project/model.ts';
-import { baueModul, liveSlots, tonartAbstand, tonartWurzel, passeModulAn } from '../project/live.ts';
+import { baueModul, baueNeuePfade, liveSlots, tonartAbstand, tonartWurzel, passeModulAn } from '../project/live.ts';
 import { fuehreListeAus } from '../project/commands.ts';
 import { ModulTonart } from '../areas/live/key.ts';
 import { liveAufbau } from './support/live_module.mjs';
@@ -68,6 +68,28 @@ test('adapt: MIDI notes +3, transpose_st 3 on the stem clips (drums in repitch s
   assert.equal('transponiert' in p4.gruppen.find((g) => g.id === top).modul, false);
   assert.deepEqual(p4, passeModulAn(p4, top, 0));
   valide(p4);
+});
+
+// The drum instruments pick the drum by the note number (drums-909: 36 kick, 39 clap, 42 closed hat, 45 mid tom; a kit: the pad), so moving their
+// notes swaps the drums. They stay, like the drum audio in repitch; the melodic MIDI (Bass new, Keys) moves.
+test('adapt: drum MIDI (a drum-map graph or a kit track) is not transposed, melodic MIDI is', () => {
+  const KICK = [{ beat: 0, laenge: 0.25, ton: 36, vel: 100 }, { beat: 2, laenge: 0.25, ton: 39, vel: 90 }, { beat: 13, laenge: 0.25, ton: 42, vel: 80 }];
+  const BASS = [{ beat: 0, laenge: 1, ton: 36, vel: 100 }, { beat: 8, laenge: 2, ton: 41, vel: 90 }];
+  let p = baueNeuePfade(mitMidi(), 'A', { drums: KICK, bass: BASS });
+  p = fuehreListeAus(p, [{ befehl: 'spur_neu', art: 'instrument', name: 'Kit', geraet: { art: 'intern', name: 'kit', kit: 'k1' } }]).projekt;
+  const kit = p.spuren.at(-1);
+  p = fuehreListeAus(p, [{ befehl: 'clip_neu', spur_id: kit.id, art: 'midi', start_beat: 0, laenge_beats: 16, noten: [{ id: 'k1', beat: 0, laenge: 0.25, ton: 36, vel: 100 }] },
+    { befehl: 'ziel_setzen', strang_id: kit.id, ausgang: { art: 'gruppe', id: p.gruppen.find((g) => g.name === 'Drums').id } }]).projekt;
+  const tonVon = (q, name) => q.spuren.filter((x) => x.name === name).flatMap((x) => x.clips.flatMap((c) => (c.art === 'midi' ? c.noten.map((n) => n.ton) : []))).sort((a, b) => a - b);
+  const top = liveSlots(p).A;
+  for (const d of [3, -2, 0]) {
+    const q = passeModulAn(p, top, d);
+    assert.deepEqual(tonVon(q, 'Drums new'), tonVon(p, 'Drums new'), `${d}: kick, clap and hat stay kick, clap and hat`);
+    assert.deepEqual(tonVon(q, 'Kit'), [36], `${d}: a kit track stays`);
+    assert.deepEqual(tonVon(q, 'Bass new'), tonVon(p, 'Bass new').map((t) => t + d), `${d}: Bass new moves`);
+    assert.deepEqual(tonVon(q, 'Keys'), [57 + d, 60 + d], `${d}: Keys moves`);
+    valide(q);
+  }
 });
 
 test('validator: transponiert is optional, an integer -12..12, never 0', () => {

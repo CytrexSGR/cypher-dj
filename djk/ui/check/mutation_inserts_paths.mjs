@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const WURZEL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TEST = 'tests/project_inserts_paths.test.mjs';
-const S = 'server.ts', R = 'project/render.ts', A = 'areas/proj/mapping.ts';
+const S = 'server_kopf.ts', R = 'project/render.ts', A = 'areas/proj/mapping.ts';
 
 export const MUTANTEN = [
   { name: 'ohne_ins_409', erwartet: 'server.insert_409', datei: S, alt: "pfad.startsWith('ret/') || pfad.startsWith('ins/') ||", neu: "pfad.startsWith('ret/') ||",

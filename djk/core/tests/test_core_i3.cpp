@@ -86,10 +86,13 @@ struct Lauf {
     return sende(b);
   }
   // /k/teil deck/<deck>/fader -> db, mit oder ohne Hörschein-Feld, Politik 1 (zustand: sofort, kein zu_spaet).
-  int64_t fader(int deck, float db, double ab, const char* quelle, const char* hs = "") {
+  // dauer > 0: a ramp of that many beats (S curve), 0 = set
+  int64_t fader(int deck, float db, double ab, const char* quelle, const char* hs = "", double dauer = 0.0) {
     cdj::Befehl b = neu(cdj::Befehl::TEIL, quelle);
     std::snprintf(b.pfad, sizeof b.pfad, "deck/%d/fader", deck);
     b.ab_beat = ab;
+    b.dauer_beats = dauer;
+    b.form = dauer > 0.0 ? 1 : 0;
     b.wert = db;
     b.politik = 1;
     std::snprintf(b.hoerschein, sizeof b.hoerschein, "%s", hs);
@@ -184,6 +187,55 @@ int main() {
   PRUEF(!a.quittung(t4, 2));
 
   PRUEF(g_allokationen == 0);
+
+  // Andreas 2026-11-18 (SEQ deck): a deck channel with nothing loaded is free for I3a; a loaded track keeps the lock.
+  const auto wert = [&](const char* pfad) { return a.kern->stellwerk().wert(a.kern->stellwerk().tabelle().suche(pfad)); };
+  // e) deck 3 was never loaded (the real adapter Kern::DeckModellImpl::inhalt reports "empty"): cypher opens it without a pass
+  PRUEF(!a.kern->deck(3).geladen());
+  const int64_t t6 = a.fader(3, 0.0f, 110.0, "cypher");
+  a.zyklen(114 * SPB);
+  PRUEF(a.quittung(t6, 2));
+  PRUEF(!a.quittung(t6, 6));
+  PRUEF_NAH(wert("deck/3/fader"), 0.0, 1e-3);
+  PRUEF_NAH(wert("deck/2/fader"), -200.0, 1e-6);   // the loaded deck 2 stays closed
+
+  // f) a part queued on the EMPTY deck 4 for a later beat, the track arrives before that beat: I3a is evaluated at the part START, with deck 4 then
+  //    loaded and no pass -> Quittung 6 kein_hoerschein, the fader stays closed (the load itself sets -200)
+  const int64_t t7 = a.fader(4, 0.0f, 130.0, "cypher");
+  a.zyklen(116 * SPB);
+  PRUEF(a.quittung(t7, 1));
+  const int64_t l4 = a.laden(4, MID);
+  a.zyklen(122 * SPB);
+  PRUEF(a.quittung(l4, 3));
+  a.zyklen(134 * SPB);
+  const Q* q7 = a.quittung(t7, 6);
+  PRUEF(q7 && q7->grund == "kein_hoerschein");
+  PRUEF(!a.quittung(t7, 2));
+  PRUEF_NAH(wert("deck/4/fader"), -200.0, 1e-6);
+
+  // g) a RAMP of cypher on the empty deck 1 (-200 -> 0 over 16 beats, started under the exemption), the track arrives in the middle of the ramp.
+  //    The load writes -200 once and ends the running part of cypher on that fader (Stellwerk::cypher_fahrt_beenden): the ramp must not drive the
+  //    fader up again (before that change it rose back to 0 dB without a pass: -40.96 dB mid-ramp, 0.00 dB afterwards)
+  const int64_t t8 = a.fader(1, 0.0f, 140.0, "cypher", "", 16.0);
+  a.zyklen(146 * SPB);
+  PRUEF(a.quittung(t8, 2));
+  const double mitte = wert("deck/1/fader");
+  PRUEF(mitte > -200.0 && mitte < 0.0);   // the ramp is running and has moved
+  const int64_t l1 = a.laden(1, MID);
+  a.zyklen(a.kern->sample() + 64 * 256);
+  PRUEF(a.quittung(l1, 3));
+  const double nach_laden = wert("deck/1/fader");
+  double hoechster = nach_laden;
+  while (a.kern->sample() < 162 * SPB) {   // the ramp would end at beat 156
+    a.zyklen(a.kern->sample() + 256);
+    if (wert("deck/1/fader") > hoechster) hoechster = wert("deck/1/fader");
+  }
+  std::printf("kern case g: fader mid-ramp %.2f dB, after the load %.2f dB, highest afterwards %.2f dB, at beat 162 %.2f dB\n", mitte, nach_laden,
+              hoechster, wert("deck/1/fader"));
+  PRUEF_NAH(nach_laden, -200.0, 1e-6);
+  PRUEF_NAH(hoechster, -200.0, 1e-6);
+  PRUEF_NAH(wert("deck/1/fader"), -200.0, 1e-6);
+  PRUEF(a.quittung(t8, 7));   // the part, started before the load, ended by it (abbruch)
 
   // Negativ-Kontrolle: ohne hoerschein_pflicht(true) (Vorgabe der PrueferI3-Instanz: aus) -> Quittung 2 wie heute
   Lauf b;

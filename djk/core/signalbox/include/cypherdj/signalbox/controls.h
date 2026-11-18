@@ -66,7 +66,7 @@ enum class Rolle : uint8_t {
   // in that slot (slot = running number among the tracks with the device bk). Not saved in the state file and not restored (see Kern::abbild, regler_uebernehmen, wiederherstellen).
   spur_bk
 };
-constexpr int SPUR_BK_SLOTS = 8;      // production plan task 8: Baukasten slots of spur/<slot>/bk/<k>; = ARR_BK_MAX (static_assert in arr_playback.h's users)
+constexpr int SPUR_BK_SLOTS = 8;      // production plan task 8: Baukasten slots of spur/<slot>/bk/<k>: the first 8 bk tracks; the 9th to 16th (ARR_BK_MAX 16) have no row; <= ARR_BK_MAX (static_assert in arr_playback.h)
 constexpr int SPUR_BK_KNOEPFE = 64;   // knobs of a slot reachable as a live override: spur/<slot>/bk/1..64 (32 until 2026-11-16; production plan task 8)
 constexpr int BK_REGLER_N = 64;   // knobs of a Baukasten graph reachable through the table: <kanal>/bk/1..64, ins/bk/<n>/k1..k64 (engine: baukasten_dsp::REGLER)
 constexpr int SPUR_REGLER_SPUREN = 32;   // D1 K1 (Spec 2.3): spur/<n>/{fader,pan,mute,solo}, n = 1..32 (E3)

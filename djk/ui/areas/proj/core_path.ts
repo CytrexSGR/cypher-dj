@@ -44,9 +44,11 @@ export class KernWeg {
   private readonly lage: KernLage;
   private readonly paket: number;
   private readonly bisEnde: boolean;
+  private readonly proTakt: () => number;
   // paket / bisEnde: test seams for the negative controls (packet size unlimited, waiting only for the first status)
-  constructor(ctx: BereichKontext, lage: KernLage, o: { paket?: number; bisEnde?: boolean } = {}) {
+  constructor(ctx: BereichKontext, lage: KernLage, o: { paket?: number; bisEnde?: boolean; proTakt?: () => number } = {}) {
     this.ctx = ctx; this.lage = lage; this.paket = o.paket ?? REGLER_PAKET; this.bisEnde = o.bisEnde ?? true;
+    this.proTakt = o.proTakt ?? ((): number => 4);   // beats per bar of the open project (studio-taktart); the tempo ramp starts on its bar
   }
 
   private beat(): number { return this.lage.uhr?.beat ?? 0; }
@@ -78,6 +80,21 @@ export class KernWeg {
       const q = await this.ctx.warteQuittung(ids[i], ab, this.bisEnde);
       return { pfad: r.pfad, wert: r.wert, quittung: q, ok: quittungOk(q) };
     }));
+  }
+
+  // SEQ scenes (D5, D12, D13): one /k/teil per mute row, all at the same ab_beat, plan `plan` (not derived from the source), gruppe '', politik 1.
+  // Resolves with the final receipt per MESSAGE id (status 0 = no receipt); the part number nr is not used.
+  async szenenTeile(plan: string, quelle: Quelle, ab: number, zeilen: readonly { pfad: string; wert: number }[]): Promise<{ id: number; status: number }[]> {
+    const ids = zeilen.map((r) => this.ctx.sende('/k/teil', { quelle, plan, teil: 0,
+      pfad: r.pfad, ab_beat: ab, dauer_beats: 0, nach: r.wert, form: 0, politik: 1, gruppe: '', hoerschein: '' }));
+    // the default cap of the wait is 4 s; a bar can lie further ahead at a slow tempo, so the cap follows the distance to ab_beat
+    const maxMs = Math.max(0, (ab - this.beat()) * 60000 / this.bpm()) + 2000;
+    return Promise.all(ids.map(async (id) => ({ id, status: (await this.ctx.warteQuittung(id, ab, this.bisEnde, maxMs))?.status ?? 0 })));
+  }
+  // SEQ scenes (D9): end every open part of a plan; teile '*' = all of them
+  async abbruchPlan(plan: string, quelle: Quelle): Promise<Quittung> {
+    const id = this.ctx.sende('/k/abbruch', { quelle, plan, teile: '*' });
+    return this.ctx.warteQuittung(id);
   }
 
   async laden(nr: number, quelle: Quelle): Promise<Quittung> {
@@ -131,7 +148,7 @@ export class KernWeg {
   }
   // Spec 2.7: derselbe Weg wie POST /tempo (tempo_ramp.ts). null bei einem Tempo außerhalb 60..200.
   async tempo(zielBpm: number, quelle: Quelle): Promise<(Rampe & { quittung: Quittung }) | null> {
-    const r = tempoRampe(this.beat(), this.bpm(), zielBpm);
+    const r = tempoRampe(this.beat(), this.bpm(), zielBpm, this.proTakt());
     if (!r) return null;
     const id = this.ctx.sende('/k/tempo/rampe', { quelle, ...r });
     return { ...r, quittung: await this.ctx.warteQuittung(id, r.ab_beat) };

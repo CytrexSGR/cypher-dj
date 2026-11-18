@@ -96,6 +96,7 @@ class Stellwerk {
   void stellung_vergessen();                         // Controller neu verbunden (§7.3 Punkt 2)
   void stems_geladen(int deck, bool ja);             // §1.5: stem/* nur bei Deck mit Stems
   void setze_direkt(int regler, float wert);         // Laden, Anfangszustand: ohne Teil, ohne Quittung
+  void cypher_fahrt_beenden(int regler);             // Laden: a RUNNING part of cypher on this regler ends (abbruch, holds at its value), see ai.cpp
 
   // ---- ein Zyklus [s0, s0 + n), n <= BLOCK_MAX ----
   void prozess(int64_t s0, int n);

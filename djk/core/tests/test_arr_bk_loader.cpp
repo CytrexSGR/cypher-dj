@@ -78,6 +78,39 @@ int main() {
     }
     PRUEF(cache.bk_eintraege() == 0 && cache.bk_aufgeschoben() == 0);
   }
+  {  // 1c: ARR_BK_MAX is 16 (was 8): sixteen bk tracks load, hold sixteen instances and release them all
+    cdj::SpeicherKonto konto(100LL << 20);
+    cdj::ArrAudioCache cache(&konto, 50LL << 20, false);
+    cache.setze_bk_ordner(bk);
+    PRUEF(cdj::ARR_BK_MAX == 16);
+    std::string sechzehn;
+    for (int i = 1; i <= 16; ++i) sechzehn += (i > 1 ? "," : "") + bk_spur(i, "t");
+    o.wiedergabe(7, sechzehn);
+    cdj::ArrLadeErgebnis e = lade(cache, 7);
+    PRUEF(e.snap && e.grund.empty());
+    if (e.snap) {
+      PRUEF(cache.bk_eintraege() == 16);
+      for (int i = 0; i < 16; ++i) PRUEF(e.snap->spur[i].bk != nullptr && e.snap->spur[i].bk_gen > 0);
+      cdj::gib_wiedergabe(e.snap.release(), cache);
+    }
+    PRUEF(cache.bk_eintraege() == 0 && cache.bk_aufgeschoben() == 0);
+    // rack members count like tracks: 15 bk tracks plus a rack with ONE bk member are 16 and load
+    const std::string glied_a = "{\"id\":\"a\",\"art\":\"intern\",\"geraet\":\"bk\",\"graph\":\"t\"}";
+    const std::string glied_b = "{\"id\":\"b\",\"art\":\"intern\",\"geraet\":\"bk\",\"graph\":\"t\"}";
+    const auto rack = [&](int nr, const std::string& glieder) {
+      return "{\"nr\":" + std::to_string(nr) + ",\"art\":\"intern\",\"geraet\":\"rack\",\"kette\":0,\"glieder\":[" + glieder + "],\"noten\":[]}";
+    };
+    std::string fuenfzehn;
+    for (int i = 1; i <= 15; ++i) fuenfzehn += (i > 1 ? "," : "") + bk_spur(i, "t");
+    o.wiedergabe2_warp(8, fuenfzehn + "," + rack(16, glied_a));
+    e = lade(cache, 8);
+    PRUEF(e.snap && e.grund.empty());
+    if (e.snap) {
+      PRUEF(cache.bk_eintraege() == 16);
+      cdj::gib_wiedergabe(e.snap.release(), cache);
+    }
+    PRUEF(cache.bk_eintraege() == 0 && cache.bk_aufgeschoben() == 0);
+  }
   {  // 1b: 32-knob widening. A track of the old format names k1..k8 only and loads unchanged (the missing knobs read 0.5 in the sink,
      // see test_arr_bk_senke); a track names k9, k17 and k32 and keeps them with their values.
     cdj::SpeicherKonto konto(100LL << 20);
@@ -148,8 +181,8 @@ int main() {
       const char* grund;
       const char* im_text;
     };
-    std::string neun;
-    for (int i = 1; i <= 9; ++i) neun += (i > 1 ? "," : "") + bk_spur(i, "t");
+    std::string siebzehn;
+    for (int i = 1; i <= 17; ++i) siebzehn += (i > 1 ? "," : "") + bk_spur(i, "t");
     const Fall faelle[] = {
         {"file missing", bk_spur(1, "nix"), "format", "nix"},
         {"effect graph", bk_spur(1, "e"), "format", "effect"},
@@ -162,7 +195,7 @@ int main() {
         {"knob out of range", bk_spur(1, "t", "{\"k1\":1.5}"), "format", "k1"},
         {"capital letters", bk_spur(1, "T"), "format", "T"},
         {"path in the name", bk_spur(1, "../t"), "format", "../t"},
-        {"nine tracks", neun, "zu_gross", "8"},
+        {"seventeen tracks", siebzehn, "zu_gross", "16"},
         {"graph missing in the track", "{\"nr\":1,\"art\":\"intern\",\"geraet\":\"bk\",\"noten\":[]}", "format", "graph"},
     };
     int nr = 10;
@@ -177,6 +210,17 @@ int main() {
       PRUEF(e.meldung.find(f.im_text) != std::string::npos);
       PRUEF(e.meldung.find("spuren[") != std::string::npos);   // names the track
       PRUEF(cache.bk_eintraege() == 0 && cache.bk_aufgeschoben() == 0);   // the abort released what it had taken
+      ++nr;
+    }
+    {  // the 17th counts rack members too: 15 bk tracks plus a rack with TWO bk members are 17 (the same refusal, nothing leaked)
+      std::string fuenfzehn;
+      for (int i = 1; i <= 15; ++i) fuenfzehn += (i > 1 ? "," : "") + bk_spur(i, "t");
+      const std::string g = "{\"id\":\"a\",\"art\":\"intern\",\"geraet\":\"bk\",\"graph\":\"t\"},{\"id\":\"b\",\"art\":\"intern\",\"geraet\":\"bk\",\"graph\":\"t\"}";
+      o.wiedergabe2_warp(nr, fuenfzehn + ",{\"nr\":16,\"art\":\"intern\",\"geraet\":\"rack\",\"kette\":0,\"glieder\":[" + g + "],\"noten\":[]}");
+      cdj::ArrLadeErgebnis e = lade(cache, nr);
+      PRUEF(e.snap == nullptr && e.grund == "zu_gross" && e.meldung.find("more than 16 bk tracks") != std::string::npos);
+      if (e.snap) cdj::gib_wiedergabe(e.snap.release(), cache);
+      PRUEF(cache.bk_eintraege() == 0 && cache.bk_aufgeschoben() == 0);
       ++nr;
     }
     {  // no graph folder set

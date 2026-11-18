@@ -66,7 +66,7 @@ int main() {
     PRUEF(grund(false, mit(gut)) == "format");
     PRUEF(grund(false, spur(o.clip("c1", 0.0, 4.0, a, F))).empty());   // /1 ohne Warp lädt wie bisher
     ++nr;
-    o.roh(nr, "{\"format\":\"cypherdj-arr/3\",\"nr\":" + std::to_string(nr) + ",\"spuren\":[]}");
+    o.roh(nr, "{\"format\":\"cypherdj-arr/4\",\"nr\":" + std::to_string(nr) + ",\"spuren\":[]}");
     cdj::ArrLadeErgebnis e = cdj::lade_wiedergabe(o.pfad, nr, cache);
     PRUEF(!e.snap && e.grund == "format");
   }

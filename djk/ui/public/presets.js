@@ -5,6 +5,7 @@
 // What "current values" and "apply" mean depends on where the panel sits; the page passes both in (host.aktuell, host.anwenden).
 // The page imports it (app.js, 1.16 preset browser).
 import { htmlText, werkzeugAnfrage } from './effects.js';
+import { planMitFrage } from './preset_graph_frage.js';   // D28: a sound of another instrument asks to load it
 import { PRESET_TYP, presetNutzlast } from './production/preset_target.js';   // 1.16 rest U7: the drag payload (pure, shared with the drop side)
 
 export const HERKUNFT_TEXT = { nutzer: 'MINE', werk: 'FACTORY' };
@@ -174,11 +175,32 @@ export function kernKompAusPreset(werte) {
 // holds them equal to the server mapping. `senden(pfad, daten)` is the host's POST ({code, j}).
 // Returns {ok: true, anfragen, uebersprungen} or {ok: false, text}: a refusal carries the server's text and no requests.
 // `id` is the REGISTER id ("werk:komp/drum-bus") that the panel hands to host.anwenden (registerId() of the page id).
-export async function kanalPlanHolen(senden, id, kanal) {
+export async function kanalPlanHolen(senden, id, kanal, opt = {}) {
   if (!/^(werk|nutzer):[a-z0-9-]+\/[a-z0-9][a-z0-9-]{0,47}$/.test(String(id))) return { ok: false, text: 'not a preset id', anfragen: [] };
-  const r = await senden('/presets/anwenden', { id, ziel: { art: 'kanal', kanal } });
+  // D28: a sound of another instrument asks once whether to load it (opt: presetName, zielName, bestaetige); the answer then carries `graph` ({kanal, name}) to send first
+  const { r, graph, abgelehnt } = await planMitFrage((body) => senden('/presets/anwenden', body), { id, ziel: { art: 'kanal', kanal } }, { presetName: opt.presetName, zielName: opt.zielName, bestaetige: opt.bestaetige });
+  if (abgelehnt) return { ok: false, text: `${graph} was not loaded`, anfragen: [] };
   if (r?.code !== 200 || r.j?.weg !== 'regler' || !Array.isArray(r.j.anfragen)) return { ok: false, text: fehlerText(r), anfragen: [] };
-  return { ok: true, anfragen: r.j.anfragen, uebersprungen: r.j.uebersprungen ?? [] };
+  return { ok: true, anfragen: r.j.anfragen, uebersprungen: r.j.uebersprungen ?? [], ...(r.j.graph ? { graph: r.j.graph } : {}) };
+}
+// Applies a preset to a channel: the plan, then the graph (only when the plan carries one) and only after the core accepted it the knob requests, one by one,
+// stopping at the first refusal. senden(pfad, daten) is the host's POST ({code, j}); regler(pfad, nach) sets one knob ({ok, text}). Returns {ok, text}.
+// The core answers a graph load with a quittung: 2, 3 and 5 are accepted (page server graphSetzen), anything else (6 refused, no answer) sends no knob.
+export async function kanalAnwenden({ senden, regler, id, kanal, kanalName, presetName, bestaetige }) {
+  const plan = await kanalPlanHolen(senden, id, kanal, { presetName, zielName: kanalName ?? kanal, bestaetige });
+  if (!plan.ok) return { ok: false, text: plan.text };
+  if (plan.graph) {
+    let r;
+    try { r = await senden('/graph', plan.graph); } catch (e) { return { ok: false, text: `${plan.graph.name} was not loaded, no knob was set: ${e.message}` }; }
+    const status = r?.j?.quittung?.status;
+    if (r?.code !== 200 || ![2, 3, 5].includes(status)) {
+      const grund = r?.code !== 200 ? (r?.j?.text ?? r?.j?.fehler ?? `HTTP ${r?.code}`) : (r?.j?.quittung?.grund ?? (r?.j?.quittung ? `status ${status}` : 'the core did not answer'));
+      return { ok: false, text: `${plan.graph.name} was not loaded, no knob was set: ${grund}` };
+    }
+  }
+  for (const a of plan.anfragen) { const r = await regler(a.pfad, a.nach); if (!r.ok) return { ok: false, text: r.text }; }
+  const uebrig = plan.uebersprungen;
+  return { ok: true, text: `channel ${kanalName ?? kanal}${plan.graph ? `; loaded ${plan.graph.name}` : ''}${uebrig.length ? `; not in the table: ${uebrig.join(', ')}` : ''}` };
 }
 export function presetAusKernKomp(lies) {   // lies(feld) → number | undefined
   const werte = {};

@@ -170,8 +170,8 @@ float BeatFx::eins(int k, float x, double beat, double spb) noexcept {
       return nachhall(k, x, trans_g_[k] * ein_ * x);
     }
     case ROLL:
-    case SLIPROLL: {  // Aufnahme läuft immer mit; gelesen wird roll_start_ + (n mod L), an den Nähten 64 Samples Blende
-      echo_[k][echo_pos_] = x;
+    case SLIPROLL: {  // Aufnahme läuft, bis die Leitung einmal voll ist; gelesen wird roll_start_ + (n mod L), an den Nähten 64 Samples Blende
+      if (roll_n_ < ECHO_FRAMES) echo_[k][echo_pos_] = x;   // danach käme der Schreibkopf über die Scheibe zurück und überschriebe sie
       const int L = static_cast<int>(std::clamp<long long>(std::llround(beats_ * spb), 1, ECHO_FRAMES - 1));
       const int ph = static_cast<int>(roll_n_ % L);
       const float naht = std::min(1.0f, static_cast<float>(std::min(ph, L - ph)) / 64.0f);

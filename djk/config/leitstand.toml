@@ -13,3 +13,4 @@ zug_vorlauf_takte = 12
 antwort_frist_takte = 4
 nachrender_ruhe_takte = 16
 grenzen_tief_verriegeln = false
+journal = "voll"   # "voll" or "schlank" (lean operating journal, INTERFACES §15); the production start passes schlank

@@ -38,6 +38,8 @@ function i3a(K, t, s) {
   const beat = K.uhr.beat(s);
   const hs = K.hs.get(t.hoerschein);
   const deck = istDeck(k) ? K.decks[deckNr(k)] : null;
+  // 2026-11-18 (SEQ deck): a deck channel with nothing loaded is free, like Kern signalbox/src/i3.cpp; a loaded deck keeps the lock
+  if (deck && !deck.m) return null;
   const g = gueltig(K, hs, k, deck ? deck.m?.inhalt ?? '' : null, beat);
   if (g) return g;
   if (deck && !imAbschnitt(hs, pos(deck, beat))) return 'hoerschein_anderer_abschnitt';

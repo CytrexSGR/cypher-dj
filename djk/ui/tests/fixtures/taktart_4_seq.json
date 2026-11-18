@@ -1,0 +1,374 @@
+{
+ "rein": {
+  "befehle": [
+   {
+    "befehl": "seq_folge_neu",
+    "gruppe_id": "g1",
+    "name": "bass",
+    "geraet": {
+     "art": "intern",
+     "name": "bk",
+     "graph": "bassmusik",
+     "parameter": {}
+    },
+    "loop_beats": 8,
+    "noten": [
+     {
+      "beat": 0,
+      "laenge": 0.5,
+      "ton": 36,
+      "vel": 120
+     },
+     {
+      "beat": 0.75,
+      "laenge": 0.25,
+      "ton": 36,
+      "vel": 64
+     },
+     {
+      "beat": 1.5,
+      "laenge": 0.5,
+      "ton": 39,
+      "vel": 100
+     },
+     {
+      "beat": 2.5,
+      "laenge": 0.25,
+      "ton": 36,
+      "vel": 70
+     },
+     {
+      "beat": 3,
+      "laenge": 0.75,
+      "ton": 31,
+      "vel": 115
+     },
+     {
+      "beat": 4,
+      "laenge": 0.5,
+      "ton": 36,
+      "vel": 120
+     },
+     {
+      "beat": 4.75,
+      "laenge": 0.25,
+      "ton": 48,
+      "vel": 90
+     },
+     {
+      "beat": 5.5,
+      "laenge": 0.5,
+      "ton": 39,
+      "vel": 100
+     },
+     {
+      "beat": 6.5,
+      "laenge": 0.25,
+      "ton": 41,
+      "vel": 76
+     },
+     {
+      "beat": 7,
+      "laenge": 0.5,
+      "ton": 43,
+      "vel": 108
+     },
+     {
+      "beat": 7.75,
+      "laenge": 0.25,
+      "ton": 34,
+      "vel": 64
+     }
+    ],
+    "seq": {
+     "schema": 1,
+     "zeilen": [
+      {
+       "id": "bass",
+       "art": "noten",
+       "teiler": 0.25
+      },
+      {
+       "id": "vel",
+       "art": "werte",
+       "teiler": 0.25,
+       "ziel": "vel"
+      },
+      {
+       "id": "k4",
+       "art": "kurve",
+       "ziel": "geraet.k4",
+       "form": {
+        "art": "sinus",
+        "von": 0.08,
+        "bis": 0.92,
+        "abdruck": "ffdcab61"
+       }
+      }
+     ]
+    },
+    "huellkurven": [
+     {
+      "ziel": "geraet.k4",
+      "punkte": [
+       {
+        "beat": 0,
+        "wert": -0.22,
+        "form": "s"
+       },
+       {
+        "beat": 1.5,
+        "wert": 0.62,
+        "form": "s"
+       },
+       {
+        "beat": 3,
+        "wert": -0.22,
+        "form": "s"
+       }
+      ],
+      "verknuepft": false,
+      "loop_beats": 3
+     }
+    ]
+   },
+   {
+    "befehl": "seq_folge_neu",
+    "gruppe_id": "g1",
+    "name": "drums",
+    "geraet": {
+     "art": "intern",
+     "name": "kit",
+     "kit": "909"
+    },
+    "loop_beats": 4,
+    "noten": [
+     {
+      "beat": 0,
+      "laenge": 0.125,
+      "ton": 36,
+      "vel": 100
+     },
+     {
+      "beat": 1,
+      "laenge": 0.125,
+      "ton": 36,
+      "vel": 100
+     },
+     {
+      "beat": 2,
+      "laenge": 0.125,
+      "ton": 36,
+      "vel": 100
+     },
+     {
+      "beat": 2.5,
+      "laenge": 0.125,
+      "ton": 36,
+      "vel": 60
+     },
+     {
+      "beat": 3,
+      "laenge": 0.125,
+      "ton": 36,
+      "vel": 100
+     },
+     {
+      "beat": 0,
+      "laenge": 0.0625,
+      "ton": 42,
+      "vel": 100
+     },
+     {
+      "beat": 0.5,
+      "laenge": 0.0625,
+      "ton": 42,
+      "vel": 60
+     },
+     {
+      "beat": 1,
+      "laenge": 0.0625,
+      "ton": 42,
+      "vel": 100
+     },
+     {
+      "beat": 1.5,
+      "laenge": 0.0625,
+      "ton": 42,
+      "vel": 60
+     },
+     {
+      "beat": 2,
+      "laenge": 0.0625,
+      "ton": 42,
+      "vel": 100
+     },
+     {
+      "beat": 2.5,
+      "laenge": 0.0625,
+      "ton": 42,
+      "vel": 60
+     },
+     {
+      "beat": 3,
+      "laenge": 0.0625,
+      "ton": 42,
+      "vel": 100
+     },
+     {
+      "beat": 3.25,
+      "laenge": 0.0625,
+      "ton": 42,
+      "vel": 60
+     },
+     {
+      "beat": 3.5,
+      "laenge": 0.0625,
+      "ton": 42,
+      "vel": 60
+     },
+     {
+      "beat": 3.625,
+      "laenge": 0.0625,
+      "ton": 42,
+      "vel": 100
+     },
+     {
+      "beat": 3.75,
+      "laenge": 0.0625,
+      "ton": 42,
+      "vel": 100
+     },
+     {
+      "beat": 3.875,
+      "laenge": 0.0625,
+      "ton": 42,
+      "vel": 127
+     }
+    ],
+    "seq": {
+     "schema": 1,
+     "zeilen": [
+      {
+       "id": "kick",
+       "art": "noten",
+       "teiler": 0.25,
+       "ton": 36
+      },
+      {
+       "id": "hat",
+       "art": "noten",
+       "teiler": 0.125,
+       "ton": 42
+      }
+     ]
+    }
+   }
+  ],
+  "texte": [
+   "folge bass  bk:bassmusik  2bar\nnoten bass  1/16  c1 ~ . c1 . . d#1 ~ . . c1 . g0 ~ ~ . | c1 ~ . c2 . . d#1 ~ . . f1 . g1 ~ . a#0\nwerte vel  1/16  120 . . 64 . . 100 . . . 70 . 115 . . . | 120 . . 90 . . 100 . . . 76 . 108 . . 64\nkurve k4  sinus .08 .92  je 3/4bar   ; Resonance",
+   "folge drums  kit:909  1bar\nnoten kick 36  1/16  x... x... x.o. x...   ; kick\nnoten hat 42  1/32  x... o... x... o... x... o... x.o. oxxX   ; hat"
+  ],
+  "laenge_plain": 64,
+  "laengen": [
+   [
+    0.5,
+    "0.5b"
+   ],
+   [
+    1,
+    "1/4bar"
+   ],
+   [
+    2,
+    "1/2bar"
+   ],
+   [
+    3,
+    "3/4bar"
+   ],
+   [
+    4,
+    "1bar"
+   ],
+   [
+    6,
+    "6b"
+   ],
+   [
+    8,
+    "2bar"
+   ],
+   [
+    12,
+    "3bar"
+   ],
+   [
+    16,
+    "4bar"
+   ],
+   [
+    32,
+    "8bar"
+   ],
+   [
+    48,
+    "12bar"
+   ],
+   [
+    64,
+    "16bar"
+   ]
+  ],
+  "editierbar": {
+   "32": [
+    false
+   ],
+   "48": [
+    false
+   ],
+   "50": [
+    false
+   ],
+   "64": [
+    true
+   ]
+  },
+  "fehlerText": {
+   "grund": "argument_ungueltig",
+   "text": "line 1: pattern x: the length takes a multiple of 0.125 beat up to 64 beats"
+  },
+  "fehlerText2": {
+   "grund": "argument_ungueltig",
+   "text": "line 1: pattern x: the length takes a multiple of 0.125 beat up to 64 beats"
+  }
+ },
+ "wache": {
+  "neuerClip": 64,
+  "folge": 200,
+  "verdikte": {
+   "32": {
+    "code": 400,
+    "fehler": "argument_ungueltig",
+    "text": "befehle[0]: a pattern clip is a MIDI clip from beat 0 over 64 beats",
+    "revGeaendert": false
+   },
+   "48": {
+    "code": 400,
+    "fehler": "argument_ungueltig",
+    "text": "befehle[0]: a pattern clip is a MIDI clip from beat 0 over 64 beats",
+    "revGeaendert": false
+   },
+   "50": {
+    "code": 400,
+    "fehler": "argument_ungueltig",
+    "text": "befehle[0]: a pattern clip is a MIDI clip from beat 0 over 64 beats",
+    "revGeaendert": false
+   },
+   "64": {
+    "code": 200,
+    "revGeaendert": true
+   }
+  }
+ }
+}

@@ -1,0 +1,156 @@
+{
+ "runde": 3,
+ "spur_id": "s1",
+ "spur_name": "Bass",
+ "graph": "acid",
+ "rev": 12,
+ "zustand": "fertig",
+ "schritt": "normal",
+ "von_beat": 0,
+ "bis_beat": 16,
+ "fortschritt": {
+  "gemessen": 9,
+  "hoechstens": 16
+ },
+ "aktiv": "A",
+ "vergleich": { "an": false, "platz": null, "klingt": "A", "ab_beat": null },
+ "plaetze": [
+  {
+   "platz": "A",
+   "param": null,
+   "label": "",
+   "wert": null,
+   "von_text": "",
+   "nach_text": "",
+   "wort": "current",
+   "staerke": 0,
+   "pegel_db": 0,
+   "ausgleich_db": 0,
+   "merkmale": {
+    "hell": 0,
+    "sub": 0,
+    "hoehen": 0,
+    "bewegung": 0,
+    "fuelle": 0,
+    "breite": 0,
+    "punch": 0,
+    "pegel": 0
+   },
+   "text": "current"
+  },
+  {
+   "platz": "B",
+   "param": "k1",
+   "label": "Cutoff",
+   "wert": 0.61,
+   "von_text": "420",
+   "nach_text": "610",
+   "wort": "brighter",
+   "staerke": 2.1,
+   "pegel_db": 1.2,
+   "ausgleich_db": 0,
+   "merkmale": {
+    "hell": 0.3,
+    "sub": 0,
+    "hoehen": 0,
+    "bewegung": 0,
+    "fuelle": 0,
+    "breite": 0,
+    "punch": 0,
+    "pegel": 1.2
+   },
+   "text": "brighter · Cutoff 420 → 610"
+  },
+  {
+   "platz": "C",
+   "param": "k4",
+   "label": "Sub",
+   "wert": 0.5,
+   "von_text": "0.2",
+   "nach_text": "0.5",
+   "wort": "more sub",
+   "staerke": 1.6,
+   "pegel_db": 0.2,
+   "ausgleich_db": 0,
+   "merkmale": {
+    "hell": 0,
+    "sub": 0,
+    "hoehen": 0,
+    "bewegung": 0,
+    "fuelle": 0,
+    "breite": 0,
+    "punch": 0,
+    "pegel": 0.2
+   },
+   "text": "more sub · Sub 0.2 → 0.5"
+  },
+  {
+   "platz": "D",
+   "param": "k7",
+   "label": "Decay",
+   "wert": 0.3,
+   "von_text": "0.6",
+   "nach_text": "0.3",
+   "wort": "shorter",
+   "staerke": 1.3,
+   "pegel_db": -0.8,
+   "ausgleich_db": 0,
+   "merkmale": {
+    "hell": 0,
+    "sub": 0,
+    "hoehen": 0,
+    "bewegung": 0,
+    "fuelle": 0,
+    "breite": 0,
+    "punch": 0,
+    "pegel": -0.8
+   },
+   "text": "shorter · Decay 0.6 → 0.3"
+  }
+ ],
+ "stammbaum": {
+  "graph": "acid",
+  "aktiv": "n2",
+  "knoten": [
+   {
+    "id": "n1",
+    "eltern": null,
+    "werte": {
+     "k1": 0.43,
+     "k4": 0.2,
+     "k7": 0.6
+    },
+    "text": "start"
+   },
+   {
+    "id": "n2",
+    "eltern": "n1",
+    "werte": {
+     "k1": 0.43
+    },
+    "text": "brighter · Cutoff 420 → 610"
+   },
+   {
+    "id": "n3",
+    "eltern": "n1",
+    "werte": {
+     "k4": 0.5
+    },
+    "text": "more sub · Sub 0.2 → 0.5"
+   }
+  ]
+ },
+ "weg": [
+  {
+   "id": "n1",
+   "text": "start",
+   "zweige": 1
+  },
+  {
+   "id": "n2",
+   "text": "brighter · Cutoff 420 → 610",
+   "zweige": 0
+  }
+ ],
+ "zurueck_moeglich": true
+}

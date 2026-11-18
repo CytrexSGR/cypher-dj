@@ -274,6 +274,8 @@ pub struct Stimme {
     zufall: u32,
     pos_halt: f32,
     gefroren: bool,
+    /// `trig` was high on the previous sample (edge detection)
+    trig_vorher: bool,
     /// grains started and grains dropped for want of a free slot (diagnosis, tests)
     pub gestartet: u64,
     pub verworfen: u64,
@@ -290,6 +292,7 @@ impl Stimme {
             zufall: if s == 0 { 0x2545_F491 } else { s },
             pos_halt: 0.0,
             gefroren: false,
+            trig_vorher: false,
             gestartet: 0,
             verworfen: 0,
         }
@@ -370,9 +373,12 @@ impl Stimme {
         self.gefroren = frieren;
         // the wavetable source holds its position while frozen; the buffer sources freeze their content instead
         let pos = if frieren && m.quelle == 0 { self.pos_halt } else { pos_ein };
-        if x.trig > 0.5 {
+        // a rising edge starts a grain at once; a held level is one edge, not a start per sample
+        let hoch = x.trig > 0.5;
+        if hoch && !self.trig_vorher {
             self.takt = self.ziel;
         }
+        self.trig_vorher = hoch;
         let dichte = endlich(x.dichte, 0.0).clamp(0.0, MAX_DICHTE);
         if x.gate > 0.5 && x.hz > 0.0 && x.hz.is_finite() && dichte > 0.0 {
             if self.takt >= self.ziel {
@@ -445,6 +451,34 @@ mod tests {
             assert_eq!(weg, 0, "overlap {} below the pool, nothing may be dropped", dichte * groesse / 1000.0);
             assert!(spitze <= (dichte * groesse / 1000.0).ceil() as usize + 1);
         }
+    }
+
+    #[test]
+    fn gehaltener_trig_startet_nur_ein_korn_an_der_flanke() {
+        // a held trig is one rising edge, not a start per sample: over 4000 samples at 20/s the density clock starts 2 grains (samples 0 and 2400),
+        // the edge at sample 0 adds none (the clock starts one there anyway). Before the fix every high sample started a grain: 32 started, 3968 dropped.
+        let e = einstellung(0);
+        let mut m = Material::neu(&e, 3, 1.0, SR);
+        let mut v = Stimme::neu(0, &e);
+        let mut lauf = |v: &mut Stimme, trig: f32, n: usize| {
+            for _ in 0..n {
+                m.schreibe(0.0, false);
+                v.prozess(&m, &e, SR, Eingabe { trig, ..Eingabe::default() });
+            }
+        };
+        lauf(&mut v, 1.0, 4000);
+        println!("MESS held trig over 4000 samples: {} started, {} dropped, {} sounding", v.gestartet, v.verworfen, v.aktive());
+        assert_eq!((v.gestartet, v.verworfen), (2, 0));
+        // released, then a one-sample pulse: exactly one more grain at once (the trig restarts the clock, so the next clock start is at 4100 + 2400 = 6500)
+        lauf(&mut v, 0.0, 100);
+        assert_eq!(v.gestartet, 2);
+        lauf(&mut v, 1.0, 1);
+        assert_eq!((v.gestartet, v.verworfen), (3, 0));
+        lauf(&mut v, 0.0, 100);
+        assert_eq!(v.gestartet, 3);
+        // a second held phase is a second edge: one grain at its first sample, none after
+        lauf(&mut v, 1.0, 300);
+        assert_eq!((v.gestartet, v.verworfen), (4, 0));
     }
 
     #[test]

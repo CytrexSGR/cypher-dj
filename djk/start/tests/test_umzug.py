@@ -530,29 +530,29 @@ def test_vorschlag_fremde_slugs():
 
 
 def test_pruefen_ohne_liste_verschiebt_nichts(welt, capsys):
-    projekte(welt, "hoerprobe-w2", "demo")
+    projekte(welt, "hoerprobe-q9", "demo")
     vorher = baum(welt.tmp)
     assert umzug.main(["pruefen", "--ausfuehren"], belegt=frei) == 2
     assert "--ausfuehren needs --liste" in capsys.readouterr().err
     assert umzug.main(["pruefen"], belegt=frei) == 0
     aus = capsys.readouterr().out
-    assert "hoerprobe-w2" in aus and "1 of 2 projects suggested" in aus
+    assert "hoerprobe-q9" in aus and "1 of 2 projects suggested" in aus
     assert baum(welt.tmp) == vorher
 
 
 def test_pruefen_nur_aus_liste(welt):
-    vorher = projekte(welt, "hoerprobe-w2", "gruppen-probe", "sampler-probe", "1-9-kit", "stems-vergleich", "demo")
-    assert umzug.main(["pruefen", "--liste", liste(welt, "hoerprobe-w2", "1-9-kit"), "--ausfuehren"], belegt=frei) == 0
-    for s in ("hoerprobe-w2", "1-9-kit"):
+    vorher = projekte(welt, "hoerprobe-q9", "bus-probe", "slicer-probe", "2-3-kit", "klang-vergleich", "demo")
+    assert umzug.main(["pruefen", "--liste", liste(welt, "hoerprobe-q9", "2-3-kit"), "--ausfuehren"], belegt=frei) == 0
+    for s in ("hoerprobe-q9", "2-3-kit"):
         pruefe_im_pruefordner(welt, s, vorher[s])
-    for s in ("gruppen-probe", "sampler-probe", "stems-vergleich", "demo"):
+    for s in ("bus-probe", "slicer-probe", "klang-vergleich", "demo"):
         assert not (welt.alt("projekte") / s).is_symlink() and baum(welt.alt("projekte") / s) == vorher[s]
-    assert sorted(os.listdir(welt.heim / "pruefen")) == ["1-9-kit", "hoerprobe-w2"]
+    assert sorted(os.listdir(welt.heim / "pruefen")) == ["2-3-kit", "hoerprobe-q9"]
 
 
 def test_pruefen_zweiter_lauf_derselben_liste(welt, capsys):
-    projekte(welt, "hoerprobe-w2")
-    l = liste(welt, "hoerprobe-w2")
+    projekte(welt, "hoerprobe-q9")
+    l = liste(welt, "hoerprobe-q9")
     assert umzug.main(["pruefen", "--liste", l, "--ausfuehren"], belegt=frei) == 0
     capsys.readouterr()
     assert umzug.main(["pruefen", "--liste", l, "--ausfuehren"], belegt=frei) == 0
@@ -560,8 +560,8 @@ def test_pruefen_zweiter_lauf_derselben_liste(welt, capsys):
 
 
 def test_pruefen_trockenlauf_aendert_nichts(welt):
-    projekte(welt, "hoerprobe-w2", "demo")
-    l = liste(welt, "hoerprobe-w2")
+    projekte(welt, "hoerprobe-q9", "demo")
+    l = liste(welt, "hoerprobe-q9")
     vorher = baum(welt.tmp)
     assert umzug.main(["pruefen", "--liste", l], belegt=frei) == 0
     assert umzug.main(["pruefen", "zurueck", "--alle"], belegt=frei) == 0
@@ -569,35 +569,35 @@ def test_pruefen_trockenlauf_aendert_nichts(welt):
 
 
 def test_pruefen_ziel_belegt(welt):
-    vorher = projekte(welt, "hoerprobe-w2", "1-9-kit")
-    fuelle(welt.heim / "pruefen" / "hoerprobe-w2")
-    assert umzug.main(["pruefen", "--liste", liste(welt, "hoerprobe-w2", "1-9-kit"), "--ausfuehren"], belegt=frei) == 4
-    assert baum(welt.alt("projekte") / "hoerprobe-w2") == vorher["hoerprobe-w2"]
-    pruefe_im_pruefordner(welt, "1-9-kit", vorher["1-9-kit"])            # the others are done
+    vorher = projekte(welt, "hoerprobe-q9", "2-3-kit")
+    fuelle(welt.heim / "pruefen" / "hoerprobe-q9")
+    assert umzug.main(["pruefen", "--liste", liste(welt, "hoerprobe-q9", "2-3-kit"), "--ausfuehren"], belegt=frei) == 4
+    assert baum(welt.alt("projekte") / "hoerprobe-q9") == vorher["hoerprobe-q9"]
+    pruefe_im_pruefordner(welt, "2-3-kit", vorher["2-3-kit"])            # the others are done
 
 
 def test_pruefen_unbekannter_slug(welt, capsys):
-    vorher = projekte(welt, "1-9-kit")
+    vorher = projekte(welt, "2-3-kit")
     fremd = fuelle(welt.tmp / "woanders")
     os.symlink(fremd, welt.alt("projekte") / "verlinkt")
-    l = liste(welt, "gibt-es-nicht", "../raus", "verlinkt", "1-9-kit")
+    l = liste(welt, "gibt-es-nicht", "../raus", "verlinkt", "2-3-kit")
     assert umzug.main(["pruefen", "--liste", l, "--ausfuehren"], belegt=frei) == 4
     berichte = [json.loads(z) for z in capsys.readouterr().out.splitlines()]
     assert [b["ergebnis"] for b in berichte] == ["abgelehnt", "abgelehnt", "abgelehnt", "ok"]
     assert "unknown project" in berichte[0]["grund"] and "not a project name" in berichte[1]["grund"]
-    pruefe_im_pruefordner(welt, "1-9-kit", vorher["1-9-kit"])
-    assert sorted(os.listdir(welt.heim / "pruefen")) == ["1-9-kit"] and os.readlink(welt.alt("projekte") / "verlinkt") == str(fremd)
+    pruefe_im_pruefordner(welt, "2-3-kit", vorher["2-3-kit"])
+    assert sorted(os.listdir(welt.heim / "pruefen")) == ["2-3-kit"] and os.readlink(welt.alt("projekte") / "verlinkt") == str(fremd)
     assert umzug.main(["pruefen", "--liste", str(welt.tmp / "fehlt.json")]) == 2
 
 
 def test_pruefen_zurueck_einzeln_und_alle(welt):
-    vorher = projekte(welt, "hoerprobe-w2", "1-9-kit", "gruppen-probe", "demo")
-    l = liste(welt, "hoerprobe-w2", "1-9-kit", "gruppen-probe")
+    vorher = projekte(welt, "hoerprobe-q9", "2-3-kit", "bus-probe", "demo")
+    l = liste(welt, "hoerprobe-q9", "2-3-kit", "bus-probe")
     assert umzug.main(["pruefen", "--liste", l, "--ausfuehren"], belegt=frei) == 0
-    assert umzug.main(["pruefen", "zurueck", "1-9-kit", "--ausfuehren"], belegt=frei) == 0
-    p = welt.alt("projekte") / "1-9-kit"
-    assert p.is_dir() and not p.is_symlink() and baum(p) == vorher["1-9-kit"]
-    assert sorted(os.listdir(welt.heim / "pruefen")) == ["gruppen-probe", "hoerprobe-w2"]
+    assert umzug.main(["pruefen", "zurueck", "2-3-kit", "--ausfuehren"], belegt=frei) == 0
+    p = welt.alt("projekte") / "2-3-kit"
+    assert p.is_dir() and not p.is_symlink() and baum(p) == vorher["2-3-kit"]
+    assert sorted(os.listdir(welt.heim / "pruefen")) == ["bus-probe", "hoerprobe-q9"]
     assert umzug.main(["pruefen", "zurueck", "--alle", "--ausfuehren"], belegt=frei) == 0
     for s in vorher:
         p = welt.alt("projekte") / s
@@ -607,34 +607,34 @@ def test_pruefen_zurueck_einzeln_und_alle(welt):
 
 
 def test_pruefen_belegt_durch_einheit(welt):
-    vorher = projekte(welt, "hoerprobe-w2")
+    vorher = projekte(welt, "hoerprobe-q9")
     laeuft = lambda o: umzug.belegt(o, einheiten=lambda: ["cypherdj-kern.service"])  # noqa: E731
-    assert umzug.main(["pruefen", "--liste", liste(welt, "hoerprobe-w2"), "--ausfuehren"], belegt=laeuft) == 3
-    assert baum(welt.alt("projekte") / "hoerprobe-w2") == vorher["hoerprobe-w2"]
-    assert not (welt.heim / "pruefen" / "hoerprobe-w2").exists()
+    assert umzug.main(["pruefen", "--liste", liste(welt, "hoerprobe-q9"), "--ausfuehren"], belegt=laeuft) == 3
+    assert baum(welt.alt("projekte") / "hoerprobe-q9") == vorher["hoerprobe-q9"]
+    assert not (welt.heim / "pruefen" / "hoerprobe-q9").exists()
 
 
 def test_pruefen_abbruch_wird_fortgesetzt(welt, capsys):
-    vorher = projekte(welt, "hoerprobe-w2", "1-9-kit", "gruppen-probe")
-    l = liste(welt, "hoerprobe-w2", "1-9-kit", "gruppen-probe")
+    vorher = projekte(welt, "hoerprobe-q9", "2-3-kit", "bus-probe")
+    l = liste(welt, "hoerprobe-q9", "2-3-kit", "bus-probe")
     with pytest.raises(Abbruch):                                          # the crash comes after s3 of the second project
         umzug.main(["pruefen", "--liste", l, "--ausfuehren"], umbenennen=bricht(2, os.rename, danach=True), belegt=frei)
-    assert not os.path.lexists(welt.alt("projekte") / "1-9-kit") and not (welt.heim / "pruefen" / "gruppen-probe").exists()
+    assert not os.path.lexists(welt.alt("projekte") / "2-3-kit") and not (welt.heim / "pruefen" / "bus-probe").exists()
     capsys.readouterr()
     assert umzug.main(["pruefen", "--liste", l, "--ausfuehren"], belegt=frei) == 0
     berichte = {b["slug"]: b for b in map(json.loads, capsys.readouterr().out.splitlines())}
-    assert (berichte["hoerprobe-w2"]["ergebnis"], berichte["1-9-kit"]["regel"], berichte["gruppen-probe"]["ergebnis"]) == ("nichts", "U2", "ok")
+    assert (berichte["hoerprobe-q9"]["ergebnis"], berichte["2-3-kit"]["regel"], berichte["bus-probe"]["ergebnis"]) == ("nichts", "U2", "ok")
     for s in vorher:
         pruefe_im_pruefordner(welt, s, vorher[s])
 
 
 def test_pruefen_nach_umzug_der_projekte(welt):
-    vorher = projekte(welt, "hoerprobe-w2", "demo")
+    vorher = projekte(welt, "hoerprobe-q9", "demo")
     assert umzug.ziehe_um("projekte", True, belegt=frei)["ergebnis"] == "ok"      # the project folder itself is a link now
-    assert umzug.main(["pruefen", "--liste", liste(welt, "hoerprobe-w2"), "--ausfuehren"], belegt=frei) == 0
-    neu = welt.heim / "pruefen" / "hoerprobe-w2"
-    assert baum(neu) == vorher["hoerprobe-w2"]
-    assert (welt.neu("projekte") / "hoerprobe-w2").is_symlink() and os.path.realpath(welt.alt("projekte") / "hoerprobe-w2") == str(neu)
+    assert umzug.main(["pruefen", "--liste", liste(welt, "hoerprobe-q9"), "--ausfuehren"], belegt=frei) == 0
+    neu = welt.heim / "pruefen" / "hoerprobe-q9"
+    assert baum(neu) == vorher["hoerprobe-q9"]
+    assert (welt.neu("projekte") / "hoerprobe-q9").is_symlink() and os.path.realpath(welt.alt("projekte") / "hoerprobe-q9") == str(neu)
     assert not (welt.neu("projekte") / "demo").is_symlink()
 
 
@@ -794,7 +794,7 @@ def ueber_platten_umgezogen(welt):
     (lambda w, kopie: [p.unlink() for p in list(w.neu("presets").rglob("*")) if p.is_file() or p.is_symlink()], 5),
     (lambda w, kopie: (Path(kopie) / "spaeter.txt").write_text("written to the old copy after the move"), 5),
     (lambda w, kopie: (Path(kopie) / "a.txt").write_text("drei"), 5),                     # the old copy is not what was copied
-    (lambda w, kopie: (w.heim / ".umzug" / "presets.manifest.json").unlink(), 4),         # no record: never delete blind
+    (lambda w, kopie: [q.unlink() for q in (w.heim / ".umzug").glob("presets.manifest*.json")], 4),   # no record: never delete blind
 ])
 def test_aufraeumen_behaelt_die_alte_kopie(welt, schaden, code):
     kopie = ueber_platten_umgezogen(welt)
@@ -803,6 +803,38 @@ def test_aufraeumen_behaelt_die_alte_kopie(welt, schaden, code):
     b = umzug.aufraeumen("presets", True)
     assert (b["ergebnis"], b["code"]) == ("abgelehnt", code), b
     assert baum(kopie) == vorher
+
+
+def test_aufraeumen_zwei_alte_kopien_nach_hin_zurueck_hin(welt, monkeypatch):
+    stempel = iter(["20261101-100000", "20261101-100001", "20261101-100002", "20261101-100003"])
+    monkeypatch.setattr(umzug, "_stempel", lambda: next(stempel))
+    fuelle(welt.alt("presets"))
+    g = welt.platten()
+    assert umzug.ziehe_um("presets", True, geraet=g, belegt=frei)["ergebnis"] == "ok"
+    assert umzug.zurueck("presets", True, geraet=g, belegt=frei)["ergebnis"] == "ok"
+    (welt.alt("presets") / "zwischen.txt").write_text("written while it was back")
+    assert umzug.ziehe_um("presets", True, geraet=g, belegt=frei)["ergebnis"] == "ok"
+    kopien = sorted(glob.glob(str(welt.alt("presets")) + umzug.ALTKOPIE + "*"))
+    assert len(kopien) == 2, kopien
+    b = umzug.aufraeumen("presets", True)
+    assert (b["ergebnis"], b.get("grund")) == ("ok", None), b
+    assert glob.glob(str(welt.alt("presets")) + umzug.ALTKOPIE + "*") == []
+    assert (welt.neu("presets") / "zwischen.txt").exists()
+
+
+def test_aufraeumen_aeltere_kopie_veraendert_bleibt(welt, monkeypatch):
+    stempel = iter(["20261101-100000", "20261101-100001", "20261101-100002", "20261101-100003"])
+    monkeypatch.setattr(umzug, "_stempel", lambda: next(stempel))
+    fuelle(welt.alt("presets"))
+    g = welt.platten()
+    umzug.ziehe_um("presets", True, geraet=g, belegt=frei)
+    umzug.zurueck("presets", True, geraet=g, belegt=frei)
+    umzug.ziehe_um("presets", True, geraet=g, belegt=frei)
+    erste = str(welt.alt("presets")) + umzug.ALTKOPIE + "20261101-100000"
+    assert os.path.isdir(erste)
+    Path(erste, "a.txt").write_text("changed in the old copy")
+    b = umzug.aufraeumen("presets", True)
+    assert (b["ergebnis"], b["code"]) == ("abgelehnt", 5) and os.path.isdir(erste)
 
 
 def test_aufraeumen_nach_weiterarbeit_am_neuen_ort(welt):

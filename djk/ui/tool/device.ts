@@ -88,9 +88,9 @@ export function neu(name: string, von: string, familie: string | undefined, wurz
     const katAlt = fs.existsSync(P.kategorien) ? fs.readFileSync(P.kategorien, 'utf8') : null;   // category and description of the source: "Copy of ..."
     let kat: Record<string, unknown> = {};
     try { const k = JSON.parse(katAlt ?? '{}'); if (k && typeof k === 'object' && !Array.isArray(k)) kat = k; } catch { /* unreadable: start a new file */ }
-    const kq = kat[von] as { kategorie?: string; text?: string } | undefined;
+    const kq = kat[von] as { kategorie?: string; prinzip?: string; text?: string } | undefined;
     if (kq?.kategorie) {
-      kat[name] = { kategorie: kq.kategorie, text: `Copy of ${von}: ${kq.text ?? ''}`.slice(0, KATEGORIE_TEXT_MAX) };
+      kat[name] = { kategorie: kq.kategorie, ...(kq.prinzip ? { prinzip: kq.prinzip } : {}), text: `Copy of ${von}: ${kq.text ?? ''}`.slice(0, KATEGORIE_TEXT_MAX) };
       schreibe(P.kategorien, JSON.stringify(Object.fromEntries(Object.entries(kat).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))), null, 1) + '\n');
       geschrieben.push(P.kategorien);
       kategorieZurueck = () => { if (katAlt === null) fs.rmSync(P.kategorien, { force: true }); else fs.writeFileSync(P.kategorien, katAlt); };
@@ -132,6 +132,8 @@ export function pruefen(wurzel: string = REPO): string[] {
     const kp = pruefeKategorien(katRoh);
     for (const m of kp.fehler) f.push(`kategorien.json: ${m}`);
     for (const g of graphen) if (g.art === 'instrument' && !(g.name in kp.gueltig) && !kp.fehler.some((m) => m.startsWith(`${g.name}: `))) f.push(`${g.name}: instrument graph without a category in kategorien.json`);
+    // the synthesis type is part of the picker's grouping: a demo or recipe instrument needs one (an invalid value is already reported above)
+    for (const g of graphen) if (g.art === 'instrument' && g.name in kp.gueltig && !kp.gueltig[g.name].prinzip && !kp.fehler.some((m) => m.startsWith(`${g.name}: `))) f.push(`${g.name}: instrument graph without a prinzip in kategorien.json`);
   }
   // every graph with knobs: the automatic panel must be valid
   const knobs = new Map<string, Set<number>>();

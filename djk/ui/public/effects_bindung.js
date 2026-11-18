@@ -1,7 +1,8 @@
 // Loop automation view, preset panel glue and the EFFECTS binding (bindeEffekte).
 import { AUTO_VORLAGEN, AUTO_BEREICH, punktAusStelle, vorlagePunkte, limiterZustand, fxInhaltText, GRAPH_KANAL_ART } from './effects.js';
-import { kanalPlanHolen, bauePresetPanel, hostWechsel, istKernGeraet, kernGeraetWerte, presetAusKernKomp, kernGeraetAnfragen } from './presets.js';   // 1.16: preset browser
+import { kanalAnwenden, bauePresetPanel, hostWechsel, istKernGeraet, kernGeraetWerte, presetAusKernKomp, kernGeraetAnfragen } from './presets.js';   // 1.16: preset browser
 import { bindeInstrumente } from './instruments_view.js';
+import { leseAchse, merkeAchse } from './instrument_groups.js';
 import { GERAETEKNOPF } from './panel_kopf.js';
 import { $, $$, zustand } from './page_state.js';
 import { baueFxStreifen, bindeBus, bindeWerkzeug, fxGewaehlt, grJetzt, kompVerlauf, sendeWerkzeug, waehleFx, zeigeKomp, zeigeLimiter } from './effects_view.js';
@@ -122,14 +123,11 @@ function zeichneVerlauf() {
 export let presetPanel = null;
 export const presetSenden = async (pfad, daten) => { const r = await fetch(pfad, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(daten ?? {}) }); return { code: r.status, j: await r.json().catch(() => ({})) }; };
 // 1.16 U3b: apply a preset to a channel. The server computes the requests (POST /presets/anwenden, target kanal); the page sends them one by one and stops at the first refusal.
+// D28: a sound of another instrument asks once, then sends the graph first (the knobs follow only after the core accepted it): presets.js kanalAnwenden.
 // Used by the EFFECTS preset browser and by the preset header of an instrument panel. Returns {ok, text}.
-export async function wendeKanalPresetAn(id, kanal) {
+export async function wendeKanalPresetAn(id, kanal, opt = {}) {
   const name = FX_KANAELE.find(([p]) => p === kanal)?.[1] ?? kanal;
-  const plan = await kanalPlanHolen(presetSenden, id, kanal);
-  if (!plan.ok) return { ok: false, text: plan.text };
-  for (const a of plan.anfragen) { const r = await sendeWerkzeug(a.pfad, a.nach); if (!r.ok) return { ok: false, text: r.text }; }
-  const uebrig = plan.uebersprungen;
-  return { ok: true, text: `channel ${name}${uebrig.length ? `; not in the table: ${uebrig.join(', ')}` : ''}` };
+  return kanalAnwenden({ senden: presetSenden, regler: sendeWerkzeug, id, kanal, kanalName: name, presetName: opt.presetName, bestaetige: opt.bestaetige });
 }
 const presetGeraet = (id) => presetPanel?.z.geraete.find((x) => x.id === id);
 export function zeigePresets() {
@@ -142,8 +140,10 @@ export function zeigePresets() {
       if (istKernGeraet(d)) return kernGeraetWerte(d, fxGewaehlt, (pfad) => zustand.regler?.[pfad]);
       return g === 'komp' ? presetAusKernKomp((feld) => kompWert(fxGewaehlt, feld, undefined)) : null;
     },
-    kannAnwenden: (g) => g === 'komp' || kernGeraetAnfragen(presetGeraet(g), {}, fxGewaehlt).fehler === undefined,
-    anwenden: (preset, g, id) => wendeKanalPresetAn(id, fxGewaehlt),
+    // a Baukasten sound goes on the instrument channel chosen in INSTRUMENTS (not on the EFFECTS channel): it loads its instrument there when another one
+    // (or none) plays, after one question (D28)
+    kannAnwenden: (g) => g === 'komp' || (g === 'baukasten' ? !!instrumenteAnsicht : kernGeraetAnfragen(presetGeraet(g), {}, fxGewaehlt).fehler === undefined),
+    anwenden: (preset, g, id) => wendeKanalPresetAn(id, preset?.geraet === 'baukasten' ? instrumenteAnsicht.gewaehlt() : fxGewaehlt, { presetName: preset?.name }),   // g is the device object here, the preset names its device
   }, () => produktion?.presetHost, () => document.body.classList.contains('produktion')));
 }
 
@@ -176,16 +176,23 @@ export function bindeEffekte() {
   });
   document.addEventListener('change', (e) => {   // S12: graph pickers (strips, detail, send returns)
     const kat = e.target.closest?.('select.graphkat');
-    if (kat) {   // category browsed to: remember it, show its instruments (the channel keeps what is loaded)
-      const k = kat.dataset.graphkat;
-      instrDurchsucht[k] = { kat: kat.value, fuer: graphenGeladen[k] ?? '' };
-      merkeInstrKat(k, kat.value);
+    if (kat) {   // group browsed to: remember it for this axis, show its instruments (the channel keeps what is loaded)
+      const k = kat.dataset.graphkat, achse = leseAchse();
+      instrDurchsucht[k] = { kat: kat.value, fuer: graphenGeladen[k] ?? '', achse };
+      merkeInstrKat(k, kat.value, achse);
       kat.blur();
       zeigeGraphWahl();
       return;
     }
     const sel = e.target.closest?.('select.graphwahl');
     if (sel) waehleGraph(sel.dataset.graphwahl, sel.value);
+  });
+  document.addEventListener('click', (e) => {   // TYPE / ROLE: the page-wide grouping of the instrument pickers; it only redraws, nothing goes to the server
+    const b = e.target.closest?.('button.graphachse');
+    if (!b) return;
+    b.blur();   // the picker it sits in is skipped by the redraw while it holds the focus
+    merkeAchse(b.dataset.achse);
+    zeigeGraphWahl();
   });
   document.addEventListener('click', (e) => {   // S17: SAVE SOUND
     const b = e.target.closest?.('button[data-bkmerken]');

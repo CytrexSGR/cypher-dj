@@ -3,7 +3,7 @@
 import type { Projekt } from '../project/model.ts';
 import type { Anschlag } from '../project/transients.ts';
 import { geraetName } from './device.ts';
-import { guete, MAX_SCHEIBEN, SchnittFehler, type Schnitt } from './schnitt.ts';
+import { guete, rasterEinheit, MAX_SCHEIBEN, SchnittFehler, type Schnitt } from './schnitt.ts';
 
 /** Snap range in beats (E7). */
 export const EINRAST_BEATS = 0.0625;
@@ -75,8 +75,14 @@ export function setzeMarke(s: Schnitt, a: MarkenAktion, treffer: Anschlag[]): { 
       neu = [...g.slice(0, k), x, ...g.slice(k + 1)];
     }
   }
-  const schnitt: Schnitt = { ...s, methode: 'hand', grenzen: neu, guete: guete(s, neu, treffer), ursprung: s.ursprung ?? [...g],
-    treffer: s.treffer ?? treffer.map((t) => t.frame) };
+  const ursprung = s.ursprung ?? [...g];
+  // the method that made the bounds is remembered while the cut is a hand cut; the bounds back where it put them give that method again
+  const ursprungMethode = s.methode === 'hand' ? s.ursprung_methode : s.methode;
+  const zurueck = ursprungMethode !== undefined && neu.length === ursprung.length && neu.every((b, i) => b === ursprung[i]);
+  const schnitt: Schnitt = { ...s, methode: zurueck ? ursprungMethode : 'hand', grenzen: neu,
+    // a cut that came from the raster is measured against its own grid, as the raster method does (Audit U15)
+    guete: guete(s, neu, treffer, ursprungMethode === 'raster' ? rasterEinheit(s.beats, ursprung.length - 1) : undefined), ursprung,
+    ...(ursprungMethode !== undefined ? { ursprung_methode: ursprungMethode } : {}), treffer: s.treffer ?? treffer.map((t) => t.frame) };
   return { schnitt, art, k };
 }
 

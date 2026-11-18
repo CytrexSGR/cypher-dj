@@ -1,6 +1,7 @@
 // Device page (Task 3 of the surfaces plan): the INSTRUMENTS element enlarged as a fixed layer. Pure helpers plus source checks of app.js and the CSS
 // (app.js cannot be imported without a DOM; the same approach as the other page source tests).
 import { liesApp } from './helpers/app_source.mjs';
+import { serverQuelle } from './support/server_source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -323,6 +324,6 @@ test('web app manifest: linked with credentials (the tablet listener needs the c
   assert.ok(m.icons.length >= 2);
   for (const i of m.icons) assert.ok(fs.existsSync(new URL(`../public/${i.src}`, import.meta.url)), i.src);
   assert.ok(m.icons.some((i) => i.sizes === '512x512' && i.type === 'image/png') && m.icons.some((i) => i.sizes === '192x192'));
-  const server = fs.readFileSync(new URL('../server.ts', import.meta.url), 'utf8');
+  const server = serverQuelle();
   assert.match(server, /'\.webmanifest': 'application\/manifest\+json'/);
 });

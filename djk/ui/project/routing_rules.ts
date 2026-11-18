@@ -7,7 +7,7 @@
 // `pruefeSchluessel` refuses with the reason literal the reason scanner sees (tests/support/reasons.mjs); a test pins the three literals to
 // SCHLUESSEL_GRUND. `schluesselErlaubt` is the
 // same question without a throw, for the matrix and the page.
-import { BefehlFehler } from './commands.ts';
+import { BefehlFehler } from './commands_helpers.ts';
 import type { Insert, Projekt } from './model.ts';
 import { bewerte, ersterUngueltigerSchluessel, type Ablehnung, type SchluesselFrage } from './routing_verdict.ts';
 export { vorfahren, nachkommen, ersterUngueltigerSchluessel } from './routing_verdict.ts';

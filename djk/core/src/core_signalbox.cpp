@@ -303,11 +303,11 @@ void Kern::einsortieren25(const Befehl& c) {
       break;
     }
     case Befehl::MAPPING: {  // Scheibe 35, §4.7 /k/mapping: das Netz hat geladen und geprüft, der Tausch gilt ab diesem Zyklus
-      const bool lern = c.nr == 1;  // S19: slot 1 is the learn table on midi_ein_1, slot 0 the base mapping on hand_in
-      const hand::Mapping* alt = lern ? lern_mapping_ : mapping_;
+      const bool lern = c.nr >= 1 && c.nr <= MIDI_EIN_PORTS;  // S19: slots 1..8 are the learn tables of midi_ein_1..8, slot 0 the base mapping on hand_in
+      const hand::Mapping* alt = lern ? lern_mapping_[c.nr - 1] : mapping_;
       if (lern) {
 #ifndef CYPHERDJ_MUTATION_LERN_NICHT_TAUSCHEN  // failure case S19: acknowledged, but the learn table is not swapped
-        setze_lern_mapping(static_cast<const hand::Mapping*>(c.zeiger));
+        setze_lern_mapping(static_cast<const hand::Mapping*>(c.zeiger), c.nr - 1);
 #endif
       } else {
 #ifndef CYPHERDJ_MUTATION_MAPPING_NICHT_TAUSCHEN  // Fehlerfall Plan 35 Task 8: quittiert, tauscht aber nicht

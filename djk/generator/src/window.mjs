@@ -1,5 +1,5 @@
 // Ereignisse eines Muster-Plans im Beat-Fenster [a, b) und die Teilung auf Bundles (Plan 2026-09-27).
-// 1 Zyklus = 1 Takt = 4 Beats (wie proben/06-erzeuger-muster/uhr/sender.mjs).
+// 1 Zyklus = 1 Takt = proTakt Beats (4 ohne Angabe, wie proben/06-erzeuger-muster/uhr/sender.mjs; Plan studio-taktart: n/4 -> n).
 import { noteFuer } from './kit.mjs';
 import { SCOPE } from './strudel.mjs';
 import { ERZ_PARAMETER } from '../../contract/osc_addresses.ts';
@@ -28,7 +28,8 @@ export function midiNote(v) {
   return Number.isInteger(x) && x >= 0 && x <= 127 ? x : null;
 }
 
-export function ereignisse(plan, kit, a, b) {
+// proTakt: default for plan entries without their own `proTakt` (an entry keeps the cycle it was planned with).
+export function ereignisse(plan, kit, a, b, proTakt = 4) {
   const evs = [];
   const unbekannt = new Set();
   const felder = new Set();
@@ -36,9 +37,10 @@ export function ereignisse(plan, kit, a, b) {
     const sa = Math.max(a, plan[k].ab);
     const sb = Math.min(b, k + 1 < plan.length ? plan[k + 1].ab : Infinity);
     if (sa >= sb || !plan[k].muster) continue;
-    for (const h of plan[k].muster.queryArc(sa / 4, sb / 4)) {
+    const pt = plan[k].proTakt ?? proTakt;
+    for (const h of plan[k].muster.queryArc(sa / pt, sb / pt)) {
       if (!h.hasOnset()) continue;
-      const beat = Number(h.whole.begin) * 4;
+      const beat = Number(h.whole.begin) * pt;
       if (beat < sa - 1e-9 || beat >= sb - 1e-9) continue;
       const note = kit?.midi ? midiNote(h.value) : noteFuer(kit, h.value);
       if (note == null) {
@@ -54,7 +56,7 @@ export function ereignisse(plan, kit, a, b) {
         if (Number.isFinite(w) && w !== vorgabe) param.push([ERZ_PARAMETER[name], w]);
       }
       if (h.value && typeof h.value === 'object') for (const f of Object.keys(h.value)) if (!BEKANNT.has(f) && !f.startsWith('_')) felder.add(f);  // _slices u. a.: Strudel-intern
-      evs.push({ beat, note, dauer: Number(h.whole.end - h.whole.begin) * 4,
+      evs.push({ beat, note, dauer: Number(h.whole.end - h.whole.begin) * pt,
         velocity: Math.min(1, Math.max(0, Number.isFinite(g) ? g : 1)), muster: plan[k].nr, param });
     }
   }

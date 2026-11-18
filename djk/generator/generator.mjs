@@ -14,6 +14,7 @@ import { ladeKits } from './src/kit.mjs';
 import { Planer, WECHSEL_ABSTAND } from './src/planner.mjs';
 import { schreibeStatus } from './src/pattern_state.mjs';
 import { NeustartRegel } from './src/generation.mjs';
+import { leseTaktart, TAKTART_DATEI } from './src/taktart_file.mjs';
 
 const I = process.env.CYPHERDJ_INSTANZ ?? '';
 const V = I ? 1000 * (I.charCodeAt(0) - 96) : 0;
@@ -54,7 +55,10 @@ const sende = (buf) => sock.send(buf, KERN, '127.0.0.1');
 let uhr = null;  // letzte /uhr: {mono_ns: BigInt, beat, bpm}
 const beatJetzt = () => uhr.beat + (Number(process.hrtime.bigint() - uhr.mono_ns) / 1e9) * uhr.bpm / 60;
 const msBisBeat = (b) => ((b - beatJetzt()) * 60000) / uhr.bpm;
-const planer = new Planer({ strom: STROM, kit, sende, jetztUs: () => Number(process.hrtime.bigint() / 1000n) });
+// Plan studio-taktart: beats per bar from the file `taktart` beside the pattern (absent = 4; the page server writes it only while the meter is not 4)
+const TAKTART_PFAD = path.join(path.dirname(opt.muster), TAKTART_DATEI);
+const planer = new Planer({ strom: STROM, kit, sende, jetztUs: () => Number(process.hrtime.bigint() / 1000n),
+  taktart: leseTaktart(path.dirname(opt.muster), 4) });
 const neustartRegel = new NeustartRegel();   // S17: announce once per kern generation, not on the heartbeat repeat
 let id = BigInt(Date.now()) * 1000n;
 const stromMelden = () => sende(kodiere('/erz/strom', 'hsiss', [++id, 'erzeuger', STROM, KIT_ZIEL, opt.kanal]));
@@ -64,7 +68,7 @@ function wecke() {  // kurz vor dem Taktanfang: die nächsten zwei Takte ersetze
   if (!uhr) return;
   // WECHSEL_ABSTAND vor der Eins wecken: genau auf der Grenze käme das Ereignis auf der Eins beim Kern um den
   // Wecker-Jitter zu spät (gemessen 27.09.: 4 von ~5 Takten „1 Ereignisse zu spät“ bei bd*4).
-  const n = Math.floor((beatJetzt() + WECHSEL_ABSTAND) / 4 + 1e-6);
+  const n = Math.floor((beatJetzt() + WECHSEL_ABSTAND) / planer.proTakt + 1e-6);
   if (ZUSATZ && zusatzStand() !== zusatzGesehen) {  // neuer Mitschnitt-Klang: Namen neu lesen, Kern lädt beide Kits neu
     try {
       zusatzGesehen = zusatzStand();
@@ -82,7 +86,7 @@ function wecke() {  // kurz vor dem Taktanfang: die nächsten zwei Takte ersetze
   if (unbekannt.size) log(`im Kit ${opt.kit} unbekannt: ${[...unbekannt].join(', ')}`);
   felderMelden();
   clearTimeout(wecker);
-  wecker = setTimeout(wecke, Math.max(5, msBisBeat(4 * (n + 1) - WECHSEL_ABSTAND)));
+  wecker = setTimeout(wecke, Math.max(5, msBisBeat(planer.proTakt * (n + 1) - WECHSEL_ABSTAND)));
 }
 
 // Task 1.4: zuletzt geschriebener Stand; schreibeStatus ersetzt die ganze Datei, die Meldestelle ergänzt ihn nur
@@ -100,6 +104,15 @@ function felderMelden() {
   if (zuwachs) log(`Muster ${planer.nr}: Strudel-Felder ohne Weg in den Kern (klingen nicht): ${[...planer.felder].join(', ')}`);
   letzterStand = { ...letzterStand, taub: [...planer.felder], taub_muster: planer.nr };  // Task 1.4: Cypher sieht es über studio
   status(letzterStand);
+}
+
+// The meter file changed: the new bar length applies from the next bar of the NEW length (never refused); a broken file keeps the last value.
+function taktartLesen() {
+  const neu = leseTaktart(path.dirname(opt.muster), planer.proTakt);
+  if (neu === planer.proTakt) return;
+  log(`Meter ${planer.proTakt} -> ${neu} beats per bar`);
+  planer.setzeTaktart(neu, uhr ? beatJetzt() : -Infinity);
+  if (uhr) { clearTimeout(wecker); wecke(); }
 }
 
 function musterLesen() {
@@ -161,6 +174,7 @@ sock.bind(Number(opt['abo-port']), '127.0.0.1', () => {
   hallo();
   setInterval(hallo, 1000);
   fs.watchFile(opt.muster, { interval: 100 }, () => musterLesen());
+  fs.watchFile(TAKTART_PFAD, { interval: 100 }, () => taktartLesen());
   status(letzterStand);   // S15: report the note mode at once, a restarted process must not leave the previous process's file
   log(`bereit: Kern udp ${KERN}, Abo udp ${abo}, Kit ${opt.kit} (${kit.note?.size ?? 'midi'} Klänge), Muster ${opt.muster}`);
 });

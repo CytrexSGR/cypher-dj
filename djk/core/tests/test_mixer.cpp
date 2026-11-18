@@ -191,6 +191,33 @@ int main() {
     PRUEF(p.m->ziel_ist(0) == 1);
   }
 
+  // 4b. audit U35: a second retarget while the first blend is still open must not step. deck/1/ziel 0 -> 1 at sample 10, then 1 -> 2 at sample 250 of the
+  //     same block (the blend of the first runs until sample 490, in the next block). The master share fades out as one S-curve (no step bigger than its steepest
+  //     slope, 1.5 / 480 per sample), the second blend starts when the first has ended, and the channel ends on bus/2.
+  {
+    Pruefling p;
+    float eins[256];
+    for (float& v : eins) v = 1.0f;
+    p.setze("deck/1/fader", 0.0f);
+    for (int b = 0; b < 400; ++b) p.block(0, eins);
+    const float voll = p.ml[255];
+    PRUEF_NAH(voll, 1.0, 1e-3);
+    float zv[256];
+    for (int i = 0; i < 256; ++i) zv[i] = i < 10 ? 0.0f : (i < 250 ? 1.0f : 2.0f);
+    p.m->verlauf(p.r("deck/1/ziel"), zv);
+    std::vector<float> m;
+    for (int b = 0; b < 5; ++b) {
+      p.block(0, eins);
+      m.insert(m.end(), p.ml, p.ml + 256);
+    }
+    float schritt = 0.0f;
+    for (size_t i = 11; i < m.size(); ++i) schritt = std::fmax(schritt, std::fabs(m[i] - m[i - 1]));
+    std::printf("mixer 4b: second retarget inside an open blend: biggest master step %.6f (S-curve slope limit %.6f), ziel_ist %d\n", schritt, 1.5 / 480.0, p.m->ziel_ist(0));
+    PRUEF(schritt < 0.01f);
+    PRUEF(m[10 + 479] > 0.0f && m[10 + 480] == 0.0f);   // the master share ends with the first blend, as without a second retarget
+    PRUEF(p.m->ziel_ist(0) == 2);                       // and the second target is reached, not lost when the block ends
+  }
+
   // 5. master/pegel, PFL, cue/mix, cue/split, cue/pegel
   {
     Pruefling p;

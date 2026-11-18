@@ -30,7 +30,7 @@ import { grundText } from '../../http/reasons.ts';
 import { instanz, referenzOrdnerVorgabe, renderProgramm, wirtOrdnerVorgabe } from '../../paths.ts';
 import { wirtStand } from './instrument_host.ts';
 import {
-  KENNUNG_MAX, alleInserts, MAX_SPUREN, SAMPLERATE, kanonisch, spurSicht, sucheSpur,
+  BK_PARAMETER, KENNUNG_MAX, alleInserts, MAX_SPUREN, SAMPLERATE, kanonisch, spurSicht, sucheSpur,
   wirtSlots, type Clip, type Freeze, type Gruppe, type Projekt, type Return, type Spur } from '../../project/model.ts';
 import { istModulation } from '../../project/envelope.ts';
 import { nachkommen, vorfahren } from '../../project/routing_rules.ts';
@@ -47,6 +47,8 @@ import {
 import { messeLautheit, type Lautheit } from '../../project/loudness.ts';
 import { ROLLEN, istRefQuelle, quellenSchluessel, type AnalyseQuelle, type RefQuelle } from '../../project/sound_contract.ts';
 import { KlangAnalyse } from './sound_analysis.ts';
+import { KlangRunde } from './sound_runde.ts';
+import { TaktUhr, baueTaktZugang } from './sound_bar.ts';
 import { KlangReferenz, dauerLesen, nameRolleLesen, refQuelleLesen } from './sound_reference.ts';
 import {
   baueMergeProjekt, MergeFehler, mergePlan, mergeRegler, mergeWiedergabe, pruefeMergeNochGleich,
@@ -93,6 +95,7 @@ const STATUS: Record<string, number> = {
   merge_keine_spur_frei: 409,
   resample_leer: 409, resample_fehler: 502,                                  // 1.10 slice 7 (T6)
   freeze_fehler: 502, render_fehler: 502, export_host_ausfall: 502, export_luecke: 502,   // plan 1.11 T13
+  keine_runde: 404, platz_leer: 409, runde_veraltet: 409, vergleich_steht: 409, kein_stammbaum: 409, spur_still: 409,   // FIND SOUND
   export_leer: 409, keine_arbeitsflaeche: 409,                                // file export (MIDI / per track), show folder
   bounce_nur_audio: 409, bounce_ziel_art: 409, takes_voll: 409, ersetzen_loop: 409, gruppe_unbekannt: 400,   // 1.14 slice 4 (spec D12)
   return_unbekannt: 400, freeze_noetig: 409,                                                      // ANALYZE slice 1
@@ -108,6 +111,8 @@ export class AusgabeFehler extends Error {
 }
 // Typangabe am Namen: nur so wertet TypeScript einen Aufruf als Ende des Pfads und verengt danach (this.arr, q, e ohne Non-Null-Assertion)
 const fehl: (grund: string, text?: string) => never = (grund, text = '') => { throw new AusgabeFehler(grund, text); };
+
+const MAX_KLANG_VARIANTEN = 8;   // FIND SOUND: variants per rendereKlangVarianten call
 
 // ANALYZE: the tracks that sound in the render of these sources (the track and its key sources, the members of a group; a return or the master: every track)
 function analyseBeteiligte(p: Projekt, quellen: AnalyseQuelle[]): Spur[] {
@@ -152,9 +157,10 @@ export class LaufFehler extends Error {
   // englisch (Spec 6.34): was gespeichert ist, und beim Export, ob eine Datei steht
   stand(): string {
     const n = this.schritte.map((x) => `${x.label} (rev ${x.rev})`);
-    const was = this.schritte.length === 1
-      ? `${this.schritte[0].label} was saved as its own undo step (rev ${this.schritte[0].rev})`
-      : `${n.slice(0, -1).join(', ')} and ${n.at(-1)} were saved as their own undo steps`;
+    const was = this.schritte.length === 0 ? 'no undo step was saved'
+      : this.schritte.length === 1
+        ? `${this.schritte[0].label} was saved as its own undo step (rev ${this.schritte[0].rev})`
+        : `${n.slice(0, -1).join(', ')} and ${n.at(-1)} were saved as their own undo steps`;
     if (this.art !== 'export') return was;
     return `${was}; ${this.datei ? `the export file ${path.basename(this.datei)} was written` : 'no export file was written'}`;
   }
@@ -409,7 +415,7 @@ function schluesselRegler(p: Projekt, sl: SchluesselPlan, r: Record<string, numb
     r[`grp/${g.nr}/fader`] = g.fader_db; r[`grp/${g.nr}/pan`] = g.pan; r[`grp/${g.nr}/mute`] = g.mute || (solo && !gruppeSoloKlingt(p, g)) ? 1 : 0;
   }
 }
-const hatLane = (t: Spur): boolean => (t.automation ?? []).some((l) => l.ziel === 'fader' || l.ziel === 'mute' || l.ziel === 'solo');
+export const hatLane = (t: Spur): boolean => (t.automation ?? []).some((l) => l.ziel === 'fader' || l.ziel === 'mute' || l.ziel === 'solo');
 // a track that runs in an isolated render: the base value of its mute is the project's own state, except for a track with a fader/mute/solo lane (the lane can
 // un-mute it, E10: then the track's own mute only)
 function spurGrund(p: Projekt, t: Spur, r: Record<string, number>): void {
@@ -903,6 +909,8 @@ export class Ausgabe {
     const frei = z.sperreLaden();                                        // nothing else loads a playback while the core plays the export view
     let sicht: { nr: number; datei: string } | null = null, roh: string | null = null;
     try {
+      await z.beendeVorhoeren();                                         // the export needs the main playback loaded, as the freeze does
+      await z.tempoAnMaster();                                           // the core captures on the master clock: master = project tempo, or deck_laeuft
       const o = this.offen();
       const q = structuredClone(o.projekt);                              // exportSicht without its filter: unfrozen host tracks play live
       sicht = await (z.ladeEchtzeitSicht ?? (() => fehl('kein_kernstand', 'no real-time export without the session')))(q);
@@ -1118,7 +1126,7 @@ export class Ausgabe {
         this.renderAbbruch = null;
         fs.rmSync(w.datei, { force: true });                             // die Export-Wiedergabe verdrängt sonst die geladene (BEHALTE 5)
         if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
-        if (ziel && !fertig) fs.rmSync(ziel, { recursive: true, force: true });
+        if (ziel && !fertig) { fs.rmSync(ziel, { recursive: true, force: true }); this.datei = null; }   // the files are gone with the folder (Audit U05)
       }
     } catch (e) { throw this.nachFehler(e); } finally { this.gib(); }
   }
@@ -1150,6 +1158,9 @@ export class Ausgabe {
   async lautheit(d: Record<string, unknown>): Promise<LautheitAntwort> {
     await this.warteNachEigenemFreeze();                                 // 1.9 T12
     const { von, bis } = this.pruefeBereich(d);
+    if (brauchtEchtzeit(this.offen().projekt)) {
+      fehl('host_insert_echtzeit', 'a plugin stage is active; the loudness measurement renders offline and cannot capture it');
+    }
     this.belege({ art: 'lautheit' });
     let tmp: string | null = null;
     try {
@@ -1256,6 +1267,83 @@ export class Ausgabe {
   async rendereStreifen<T>(quellen: AnalyseQuelle[], von: number, bis: number, ohneFreeze: boolean,
     nimm: (r: { rev: number; slug: string; tempo_bpm: number;
       teile: ({ name: string; datei: string; spitze_db: number; frames: number } | { name: string; stumm: true })[] }) => Promise<T>): Promise<T> {
+    return this.analyseLauf(quellen, ohneFreeze, true, async ({ jetzt, p, w, render }) => {
+      const wnr = w!.nr;
+      const teile: ({ name: string; datei: string; spitze_db: number; frames: number } | { name: string; stumm: true })[] = [];
+      for (const x of quellen) {
+        if (x.art === 'spur') {
+          const s = sucheSpur(p, x.id ?? '') ?? fehl('spur_unbekannt', `there is no track ${x.id}`);
+          // as lautheit(): the base values decide only for a track without a fader/mute/solo lane; a track with nothing in the range is not rendered
+          if ((stummImMix(p, s) && !hatLane(s)) || !belegteSpuren(p, von, bis).includes(s)) { teile.push({ name: s.name, stumm: true }); continue; }
+          const einzel = this.schreibeOhneFremdeLanes(p, s);
+          try { teile.push({ name: s.name, ...await render(`spur-${s.nr}`, reglerEinzeln(s, p), einzel?.nr ?? wnr, schluesselPlan(p, s).ids) }); }
+          finally { if (einzel) fs.rmSync(einzel.datei, { force: true }); }
+        } else if (x.art === 'gruppe') {
+          const g = (p.gruppen ?? []).find((y) => y.id === x.id) ?? fehl('gruppe_unbekannt', `there is no group ${x.id}`);
+          const mit = mitgliederVon(p, g);
+          if (gruppeStummImMix(p, g) || mit.every((m) => stummImMix(p, m) && !hatLane(m))) { teile.push({ name: g.name, stumm: true }); continue; }
+          const sl = schluesselPlan(p, pfadVonGruppe(p, g));
+          const einzel = this.schreibeOhneFremdeLanes(p, mit[0], [...mit.slice(1), ...sl.spuren]);
+          try { teile.push({ name: g.name, ...await render(`gruppe-${g.nr}`, reglerGruppe(g, p), einzel?.nr ?? wnr, sl.ids) }); }
+          finally { if (einzel) fs.rmSync(einzel.datei, { force: true }); }
+        } else if (x.art === 'return') {
+          const r = (p.returns ?? []).find((y) => y.id === x.id) ?? fehl('return_unbekannt', `there is no return ${x.id}`);
+          if (returnStummImMix(p, r) || !returnGespeist(p, r)) { teile.push({ name: r.name, stumm: true }); continue; }
+          teile.push({ name: r.name, ...await render(`return-${r.nr}`, reglerReturn(r, p), wnr, schluesselReturns(p, r).map((y) => `ret/${y.nr}`), true) });
+        } else {
+          teile.push({ name: 'Master', ...await render('master', reglerAusProjekt(p), wnr) });
+        }
+      }
+      return nimm({ rev: p.rev, slug: jetzt.slug, tempo_bpm: p.tempo_bpm, teile });
+    }, von, bis);
+  }
+
+  /** FIND SOUND: renders the track `spurId` (a Baukasten instrument) once per entry of `varianten` under the output lock `{art: 'analyse'}` and hands the WAVs
+   *  to `nimm` while they exist. A variant is a set of knob overrides merged over the track's `geraet.parameter` (`{}` = the project's own sound);
+   *  it is rendered as rendereStreifen renders a track (no freeze, the transport may run) from a copy of the export
+   *  view in which only that track's knobs differ. Every playback file is deleted before the next is written (BEHALTE 5 would evict the
+   *  loaded one). A track the mix silences or with nothing in the range gives `{stumm: true}` for every variant without a render.
+   *  The open project is never changed. */
+  async rendereKlangVarianten<T>(spurId: string, varianten: readonly Record<string, number>[], von: number, bis: number,
+    nimm: (r: { rev: number; slug: string; tempo_bpm: number;
+      teile: ({ datei: string; spitze_db: number; frames: number } | { stumm: true })[] }) => Promise<T>): Promise<T> {
+    const s0 = sucheSpur(this.offen().projekt, spurId) ?? fehl('spur_unbekannt', `there is no track ${spurId}`);
+    if (!(s0.geraet?.art === 'intern' && s0.geraet.name === 'bk')) fehl('geraet_falsch', `${spurId} is not a Baukasten track`);
+    if (varianten.length < 1 || varianten.length > MAX_KLANG_VARIANTEN) {
+      fehl('argument_ungueltig', `varianten: 1 to ${MAX_KLANG_VARIANTEN} variants are required`);
+    }
+    for (const v of varianten) {
+      for (const [k, x] of Object.entries(v)) {
+        if (!BK_PARAMETER.includes(k)) fehl('argument_ungueltig', `knob ${k}: only k1..k64 exist`);
+        if (typeof x !== 'number' || !Number.isFinite(x) || x < 0 || x > 1) fehl('argument_ungueltig', `knob ${k}: a number from 0 to 1 is required`);
+      }
+    }
+    return this.analyseLauf([{ art: 'spur', id: spurId }], true, false, async ({ jetzt, p, render }) => {
+      const s = sucheSpur(p, spurId) ?? fehl('spur_unbekannt', `there is no track ${spurId}`);
+      const teile: ({ datei: string; spitze_db: number; frames: number } | { stumm: true })[] = [];
+      if ((stummImMix(p, s) && !hatLane(s)) || !belegteSpuren(p, von, bis).includes(s)) {
+        for (const _ of varianten) teile.push({ stumm: true });
+        return nimm({ rev: p.rev, slug: jetzt.slug, tempo_bpm: p.tempo_bpm, teile });
+      }
+      const regler = reglerEinzeln(s, p), plan = schluesselPlan(p, s);
+      for (const [i, v] of varianten.entries()) {
+        const q = exportSicht(p);
+        const qs = q.spuren.find((x) => x.id === spurId)!;
+        (qs.geraet as { parameter: Record<string, number> }).parameter = { ...(qs.geraet as { parameter: Record<string, number> }).parameter, ...v };
+        const w = this.zugang.schreibeWiedergabe(ohneFremdeLanen(q, qs, plan.spuren) ?? q);
+        try { teile.push(await render(`variante-${i + 1}`, regler, w.nr, plan.ids)); }
+        finally { fs.rmSync(w.datei, { force: true }); }
+      }
+      return nimm({ rev: p.rev, slug: jetzt.slug, tempo_bpm: p.tempo_bpm, teile });
+    }, von, bis);
+  }
+
+  // The run both analysis renders share: lock `{art: 'analyse'}`, checks, the project (with its export playback `w` when `mitWiedergabe`), a temporary
+  // folder and `render` (one offline render of a loaded playback). Everything temporary is gone when this returns, whatever happens.
+  private async analyseLauf<T>(quellen: AnalyseQuelle[], ohneFreeze: boolean, mitWiedergabe: boolean,
+    lauf: (k: { jetzt: ProjOffen; p: Projekt; w: { nr: number; datei: string } | null;
+      render: (name: string, regler: Record<string, number>, nrW: number, nurSchluessel?: string[], trockenAus?: boolean)
+        => Promise<{ datei: string; spitze_db: number; frames: number }> }) => Promise<T>, von: number, bis: number): Promise<T> {
     await this.warteNachEigenemFreeze();
     this.belege({ art: 'analyse' });
     let tmp: string | null = null;
@@ -1265,14 +1353,14 @@ export class Ausgabe {
       if (brauchtEchtzeit(p0)) {
         fehl('host_insert_echtzeit', 'a plugin stage is active; the analysis renders offline and cannot capture it');
       }
-      let jetzt: ProjOffen, p: Projekt, w: { nr: number; datei: string };
+      let jetzt: ProjOffen, p: Projekt, w: { nr: number; datei: string } | null;
       if (ohneFreeze) {
         // the window measures after every edit: it never freezes. A track that takes part and has unfrozen notes is refused; one that does not take part
         // stays out of the playback (an unfrozen Surge track does not play in the export view).
         const beteiligt = analyseBeteiligte(p0, quellen);
         const offen = beteiligt.find((s) => brauchtFreeze(s) && !(stummImMix(p0, s) && !hatLane(s)));
         if (offen) fehl('freeze_noetig', `the track ${offen.name} has to be frozen first; freeze it or measure with the tool`);
-        jetzt = this.offen(); p = jetzt.projekt; w = this.zugang.schreibeWiedergabe(exportSicht(p));
+        jetzt = this.offen(); p = jetzt.projekt; w = mitWiedergabe ? this.zugang.schreibeWiedergabe(exportSicht(p)) : null;
       } else {
         if (p0.spuren.some(brauchtFreeze) && this.arr && this.arr.status !== 0) {
           fehl('transport_laeuft', 'a Surge track has unfrozen notes; stop the transport so it can be frozen first');
@@ -1284,41 +1372,16 @@ export class Ausgabe {
         this.renderAbbruch = new AbortController();
         if (this.geschlossen) this.renderAbbruch.abort();
         let nr = 0;
-        const render = async (name: string, regler: Record<string, number>, nrW = w.nr, nurSchluessel: string[] = [], trockenAus = false):
+        const render = async (name: string, regler: Record<string, number>, nrW: number, nurSchluessel: string[] = [], trockenAus = false):
           Promise<{ datei: string; spitze_db: number; frames: number }> => {
           const aus = path.join(dir, `${++nr}-${name}.wav`);
           const r = await this.rendereTeil({ p, nr: nrW, von, bis, aus, reglerDatei: path.join(dir, `${nr}-${name}.json`), regler, nurSchluessel, trockenAus });
           return { datei: aus, spitze_db: r.spitze_db, frames: r.frames };
         };
-        const teile: ({ name: string; datei: string; spitze_db: number; frames: number } | { name: string; stumm: true })[] = [];
-        for (const x of quellen) {
-          if (x.art === 'spur') {
-            const s = sucheSpur(p, x.id ?? '') ?? fehl('spur_unbekannt', `there is no track ${x.id}`);
-            // as lautheit(): the base values decide only for a track without a fader/mute/solo lane; a track with nothing in the range is not rendered
-            if ((stummImMix(p, s) && !hatLane(s)) || !belegteSpuren(p, von, bis).includes(s)) { teile.push({ name: s.name, stumm: true }); continue; }
-            const einzel = this.schreibeOhneFremdeLanes(p, s);
-            try { teile.push({ name: s.name, ...await render(`spur-${s.nr}`, reglerEinzeln(s, p), einzel?.nr, schluesselPlan(p, s).ids) }); }
-            finally { if (einzel) fs.rmSync(einzel.datei, { force: true }); }
-          } else if (x.art === 'gruppe') {
-            const g = (p.gruppen ?? []).find((y) => y.id === x.id) ?? fehl('gruppe_unbekannt', `there is no group ${x.id}`);
-            const mit = mitgliederVon(p, g);
-            if (gruppeStummImMix(p, g) || mit.every((m) => stummImMix(p, m) && !hatLane(m))) { teile.push({ name: g.name, stumm: true }); continue; }
-            const sl = schluesselPlan(p, pfadVonGruppe(p, g));
-            const einzel = this.schreibeOhneFremdeLanes(p, mit[0], [...mit.slice(1), ...sl.spuren]);
-            try { teile.push({ name: g.name, ...await render(`gruppe-${g.nr}`, reglerGruppe(g, p), einzel?.nr, sl.ids) }); }
-            finally { if (einzel) fs.rmSync(einzel.datei, { force: true }); }
-          } else if (x.art === 'return') {
-            const r = (p.returns ?? []).find((y) => y.id === x.id) ?? fehl('return_unbekannt', `there is no return ${x.id}`);
-            if (returnStummImMix(p, r) || !returnGespeist(p, r)) { teile.push({ name: r.name, stumm: true }); continue; }
-            teile.push({ name: r.name, ...await render(`return-${r.nr}`, reglerReturn(r, p), w.nr, schluesselReturns(p, r).map((y) => `ret/${y.nr}`), true) });
-          } else {
-            teile.push({ name: 'Master', ...await render('master', reglerAusProjekt(p)) });
-          }
-        }
-        return await nimm({ rev: p.rev, slug: jetzt.slug, tempo_bpm: p.tempo_bpm, teile });
+        return await lauf({ jetzt, p, w, render });
       } finally {
         this.renderAbbruch = null;
-        fs.rmSync(w.datei, { force: true });                             // die Export-Wiedergabe verdrängt sonst die geladene (BEHALTE 5)
+        if (w) fs.rmSync(w.datei, { force: true });                      // die Export-Wiedergabe verdrängt sonst die geladene (BEHALTE 5)
         if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
       }
     } catch (e) { throw this.nachFehler(e); } finally { this.gib(); }
@@ -1474,6 +1537,7 @@ export class Ausgabe {
     const o0 = this.offen();
     this.pruefeFrei();
     const z = resamplePlan(o0.projekt, d, this.songBereich());                 // wirft ResampleFehler
+    await this.warteNachEigenemFreeze();                                       // 1.9 T12 as in the freeze, export and bounce (Audit U06)
     if (this.arr === null) fehl('kein_kernstand', 'the core has not reported its arrangement state yet');
     if (this.arr.status !== 0) fehl('transport_laeuft', 'stop the transport first');
     this.belege({ art: 'resample', strang_id: z.strangId });
@@ -1598,6 +1662,11 @@ export function ausgabeBereich(ctx: BereichKontext, zugang: ProjZugang, opt: Aus
   const ref = new KlangReferenz({ ordner: opt.referenzOrdner ?? (() => referenzOrdnerVorgabe()), katalogPfad: opt.katalogPfad ?? (() => null),
     ffmpeg: opt.ffmpeg, ...opt.referenz });
   const k = new KlangAnalyse(a, { ffmpeg: opt.ffmpeg, referenz: ref });
+  // FIND SOUND: the one round of the open project
+  const uhr = new TaktUhr();
+  const runde = new KlangRunde({ ausgabe: a, zugang, quelle: () => ctx.quelle(), log: (z) => ctx.log(z), takt: baueTaktZugang(ctx, uhr, () => zugang.offen()),
+    kiGestoppt: () => ctx.kiGestoppt(),
+    pruefeSchreiben: () => { if (ctx.quelle() === 'cypher' && ctx.kiGestoppt()) fehl('ki_gestoppt', 'Stop Cypher is set'); } });
   const sek = (x: number): string => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
   // POST /analyse/referenz/merken: the measurement of a file range, or of a strip of the open project, is stored under a name and a role
   const merken = async (d: Record<string, unknown>): Promise<unknown> => {
@@ -1641,6 +1710,14 @@ export function ausgabeBereich(ctx: BereichKontext, zugang: ProjZugang, opt: Aus
       { methode: 'POST', pfad: '/proj/export', schutz: 'fremdePost', handler: antworte((d) => a.exportiere(d)) },
       { methode: 'POST', pfad: '/proj/lautheit', schutz: 'fremdePost', handler: antworte((d) => a.lautheit(d)) },
       { methode: 'POST', pfad: '/proj/analyse', schutz: 'fremdePost', handler: antworte((d) => k.analysiere(d)) },
+      { methode: 'POST', pfad: '/proj/klang/runde', schutz: 'fremdePost', handler: antworte(async (d) => runde.starte(d)) },
+      { methode: 'GET', pfad: '/proj/klang/runde', schutz: 'offen', handler: async (_q, r) => {
+        try { json(r, 200, runde.lage()); } catch (e) { const x = alsAntwort(e); json(r, x.code, x.body); }
+      } },
+      { methode: 'POST', pfad: '/proj/klang/hoeren', schutz: 'fremdePost', handler: antworte((d) => runde.hoere(d)) },
+      { methode: 'POST', pfad: '/proj/klang/waehlen', schutz: 'fremdePost', handler: antworte(async (d) => runde.waehle(d)) },
+      { methode: 'POST', pfad: '/proj/klang/zurueck', schutz: 'fremdePost', handler: antworte(async (d) => runde.zurueck(d)) },
+      { methode: 'POST', pfad: '/proj/klang/ende', schutz: 'fremdePost', handler: antworte(() => runde.ende()) },
       { methode: 'POST', pfad: '/analyse/referenz/messen', schutz: 'fremdePost', handler: antworte(async (d) => {
         for (const x of Object.keys(d)) if (x !== 'quelle' && x !== 'dauer_s') fehl('argument_ungueltig', `unknown field ${x}`);
         return { messung: await ref.messe(refQuelleLesen(d.quelle, 'quelle'), dauerLesen(d.dauer_s)) };
@@ -1672,6 +1749,6 @@ export function ausgabeBereich(ctx: BereichKontext, zugang: ProjZugang, opt: Aus
         return schmal;
       }) },
     ],
-    ereignis: (adresse, felder) => a.ereignis(adresse, felder),
+    ereignis: (adresse, felder) => { a.ereignis(adresse, felder); uhr.nimm(adresse, felder); runde.ereignis(adresse, felder); },
   };
 }

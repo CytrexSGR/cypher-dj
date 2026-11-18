@@ -30,3 +30,12 @@ test('schreibeAtomar: Inhalt da, keine .teil-Reste, zweites Schreiben ersetzt', 
   assert.deepEqual(fs.readdirSync(path.dirname(p)), ['eingaenge-kanten']);
   fs.rmSync(d, { recursive: true, force: true });
 });
+
+test('controller places: every place gets its own raw input midi_ein_<platz>', async () => {
+  const { baueKantenText } = await import('../areas/devices/edges.ts');
+  const { standard } = await import('../areas/devices/store.ts');
+  const k = standard();
+  k.midi = { profil: 'midi-controller', port: 'Midi-Bridge:LPD8: MIDI 1 (capture)', frei_fuer_cypher: false };
+  k.controller = [{ platz: 2, port: 'Midi-Bridge:LC3 1: MIDI In (capture)' }, { platz: 5, port: 'a:b' }];
+  assert.equal(baueKantenText(k), 'Midi-Bridge:LPD8: MIDI 1 (capture)\tmidi_ein_1\nMidi-Bridge:LC3 1: MIDI In (capture)\tmidi_ein_2\na:b\tmidi_ein_5\n');
+});

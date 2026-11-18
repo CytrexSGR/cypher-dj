@@ -1,0 +1,2667 @@
+[
+ {
+  "text": "s(\"bd*4\")",
+  "fenster": [
+   {
+    "a": 0,
+    "b": 4,
+    "evs": [
+     {
+      "beat": 0,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 1,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 2,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 3,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 4,
+    "b": 12,
+    "evs": [
+     {
+      "beat": 4,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 5,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 6,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 7,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 8,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 9,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 10,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 11,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 10.5,
+    "b": 21,
+    "evs": [
+     {
+      "beat": 11,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 12,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 13,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 14,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 15,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 16,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 17,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 18,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 19,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 20,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   }
+  ]
+ },
+ {
+  "text": "s(\"bd hh\")",
+  "fenster": [
+   {
+    "a": 0,
+    "b": 4,
+    "evs": [
+     {
+      "beat": 0,
+      "note": 0,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 2,
+      "note": 1,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 4,
+    "b": 12,
+    "evs": [
+     {
+      "beat": 4,
+      "note": 0,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 6,
+      "note": 1,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 8,
+      "note": 0,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 10,
+      "note": 1,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 10.5,
+    "b": 21,
+    "evs": [
+     {
+      "beat": 12,
+      "note": 0,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 14,
+      "note": 1,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 16,
+      "note": 0,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 18,
+      "note": 1,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 20,
+      "note": 0,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   }
+  ]
+ },
+ {
+  "text": "note(\"c3 e3 g3 b3\")",
+  "fenster": [
+   {
+    "a": 0,
+    "b": 4,
+    "evs": [
+     {
+      "beat": 0,
+      "note": 48,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 1,
+      "note": 52,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 2,
+      "note": 55,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 3,
+      "note": 59,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 4,
+    "b": 12,
+    "evs": [
+     {
+      "beat": 4,
+      "note": 48,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 5,
+      "note": 52,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 6,
+      "note": 55,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 7,
+      "note": 59,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 8,
+      "note": 48,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 9,
+      "note": 52,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 10,
+      "note": 55,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 11,
+      "note": 59,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 10.5,
+    "b": 21,
+    "evs": [
+     {
+      "beat": 11,
+      "note": 59,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 12,
+      "note": 48,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 13,
+      "note": 52,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 14,
+      "note": 55,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 15,
+      "note": 59,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 16,
+      "note": 48,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 17,
+      "note": 52,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 18,
+      "note": 55,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 19,
+      "note": 59,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 20,
+      "note": 48,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   }
+  ]
+ },
+ {
+  "text": "s(\"bd*4\").slow(2)",
+  "fenster": [
+   {
+    "a": 0,
+    "b": 4,
+    "evs": [
+     {
+      "beat": 0,
+      "note": 0,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 2,
+      "note": 0,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 4,
+    "b": 12,
+    "evs": [
+     {
+      "beat": 4,
+      "note": 0,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 6,
+      "note": 0,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 8,
+      "note": 0,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 10,
+      "note": 0,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 10.5,
+    "b": 21,
+    "evs": [
+     {
+      "beat": 12,
+      "note": 0,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 14,
+      "note": 0,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 16,
+      "note": 0,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 18,
+      "note": 0,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 20,
+      "note": 0,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   }
+  ]
+ },
+ {
+  "text": "stack(s(\"bd*4\"), s(\"hh*8\"))",
+  "fenster": [
+   {
+    "a": 0,
+    "b": 4,
+    "evs": [
+     {
+      "beat": 0,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 0,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 0.5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 1,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 1,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 1.5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 2,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 2,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 2.5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 3,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 3,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 3.5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 4,
+    "b": 12,
+    "evs": [
+     {
+      "beat": 4,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 4,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 4.5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 5,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 5.5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 6,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 6,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 6.5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 7,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 7,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 7.5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 8,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 8,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 8.5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 9,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 9,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 9.5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 10,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 10,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 10.5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 11,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 11,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 11.5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 10.5,
+    "b": 21,
+    "evs": [
+     {
+      "beat": 10.5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 11,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 11,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 11.5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 12,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 12,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 12.5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 13,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 13,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 13.5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 14,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 14,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 14.5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 15,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 15,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 15.5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 16,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 16,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 16.5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 17,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 17,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 17.5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 18,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 18,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 18.5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 19,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 19,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 19.5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 20,
+      "note": 0,
+      "dauer": 1,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 20,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 20.5,
+      "note": 1,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   }
+  ]
+ },
+ {
+  "text": "silence",
+  "fenster": [
+   {
+    "a": 0,
+    "b": 4,
+    "evs": [],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 4,
+    "b": 12,
+    "evs": [],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 10.5,
+    "b": 21,
+    "evs": [],
+    "unbekannt": [],
+    "felder": []
+   }
+  ]
+ },
+ {
+  "text": "s(\"bd ~ ~ bd\").fast(2)",
+  "fenster": [
+   {
+    "a": 0,
+    "b": 4,
+    "evs": [
+     {
+      "beat": 0,
+      "note": 0,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 1.5,
+      "note": 0,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 2,
+      "note": 0,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 3.5,
+      "note": 0,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 4,
+    "b": 12,
+    "evs": [
+     {
+      "beat": 4,
+      "note": 0,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 5.5,
+      "note": 0,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 6,
+      "note": 0,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 7.5,
+      "note": 0,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 8,
+      "note": 0,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 9.5,
+      "note": 0,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 10,
+      "note": 0,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 11.5,
+      "note": 0,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 10.5,
+    "b": 21,
+    "evs": [
+     {
+      "beat": 11.5,
+      "note": 0,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 12,
+      "note": 0,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 13.5,
+      "note": 0,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 14,
+      "note": 0,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 15.5,
+      "note": 0,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 16,
+      "note": 0,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 17.5,
+      "note": 0,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 18,
+      "note": 0,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 19.5,
+      "note": 0,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 20,
+      "note": 0,
+      "dauer": 0.5,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   }
+  ]
+ },
+ {
+  "text": "note(\"[c3,e3,g3]\")",
+  "fenster": [
+   {
+    "a": 0,
+    "b": 4,
+    "evs": [
+     {
+      "beat": 0,
+      "note": 48,
+      "dauer": 4,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 0,
+      "note": 52,
+      "dauer": 4,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 0,
+      "note": 55,
+      "dauer": 4,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 4,
+    "b": 12,
+    "evs": [
+     {
+      "beat": 4,
+      "note": 48,
+      "dauer": 4,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 4,
+      "note": 52,
+      "dauer": 4,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 4,
+      "note": 55,
+      "dauer": 4,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 8,
+      "note": 48,
+      "dauer": 4,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 8,
+      "note": 52,
+      "dauer": 4,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 8,
+      "note": 55,
+      "dauer": 4,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 10.5,
+    "b": 21,
+    "evs": [
+     {
+      "beat": 12,
+      "note": 48,
+      "dauer": 4,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 12,
+      "note": 52,
+      "dauer": 4,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 12,
+      "note": 55,
+      "dauer": 4,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 16,
+      "note": 48,
+      "dauer": 4,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 16,
+      "note": 52,
+      "dauer": 4,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 16,
+      "note": 55,
+      "dauer": 4,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 20,
+      "note": 48,
+      "dauer": 4,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 20,
+      "note": 52,
+      "dauer": 4,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 20,
+      "note": 55,
+      "dauer": 4,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   }
+  ]
+ },
+ {
+  "text": "note(\"c3 e3\").slow(3)",
+  "fenster": [
+   {
+    "a": 0,
+    "b": 4,
+    "evs": [
+     {
+      "beat": 0,
+      "note": 48,
+      "dauer": 6,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 4,
+    "b": 12,
+    "evs": [
+     {
+      "beat": 6,
+      "note": 52,
+      "dauer": 6,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 10.5,
+    "b": 21,
+    "evs": [
+     {
+      "beat": 12,
+      "note": 48,
+      "dauer": 6,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 18,
+      "note": 52,
+      "dauer": 6,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   }
+  ]
+ },
+ {
+  "text": "note(\"c3@3 e3\")",
+  "fenster": [
+   {
+    "a": 0,
+    "b": 4,
+    "evs": [
+     {
+      "beat": 0,
+      "note": 48,
+      "dauer": 3,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 3,
+      "note": 52,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 4,
+    "b": 12,
+    "evs": [
+     {
+      "beat": 4,
+      "note": 48,
+      "dauer": 3,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 7,
+      "note": 52,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 8,
+      "note": 48,
+      "dauer": 3,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 11,
+      "note": 52,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 10.5,
+    "b": 21,
+    "evs": [
+     {
+      "beat": 11,
+      "note": 52,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 12,
+      "note": 48,
+      "dauer": 3,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 15,
+      "note": 52,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 16,
+      "note": 48,
+      "dauer": 3,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 19,
+      "note": 52,
+      "dauer": 1,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 20,
+      "note": 48,
+      "dauer": 3,
+      "velocity": 0.9,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   }
+  ]
+ },
+ {
+  "text": "s(\"hh*16\").gain(0.5)",
+  "fenster": [
+   {
+    "a": 0,
+    "b": 4,
+    "evs": [
+     {
+      "beat": 0,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 0.25,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 0.5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 0.75,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 1,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 1.25,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 1.5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 1.75,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 2,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 2.25,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 2.5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 2.75,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 3,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 3.25,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 3.5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 3.75,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 4,
+    "b": 12,
+    "evs": [
+     {
+      "beat": 4,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 4.25,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 4.5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 4.75,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 5.25,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 5.5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 5.75,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 6,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 6.25,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 6.5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 6.75,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 7,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 7.25,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 7.5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 7.75,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 8,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 8.25,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 8.5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 8.75,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 9,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 9.25,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 9.5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 9.75,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 10,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 10.25,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 10.5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 10.75,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 11,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 11.25,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 11.5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 11.75,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 10.5,
+    "b": 21,
+    "evs": [
+     {
+      "beat": 10.5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 10.75,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 11,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 11.25,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 11.5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 11.75,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 12,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 12.25,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 12.5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 12.75,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 13,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 13.25,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 13.5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 13.75,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 14,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 14.25,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 14.5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 14.75,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 15,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 15.25,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 15.5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 15.75,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 16,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 16.25,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 16.5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 16.75,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 17,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 17.25,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 17.5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 17.75,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 18,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 18.25,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 18.5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 18.75,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 19,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 19.25,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 19.5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 19.75,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 20,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 20.25,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 20.5,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 20.75,
+      "note": 1,
+      "dauer": 0.25,
+      "velocity": 0.5,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   }
+  ]
+ },
+ {
+  "text": "s(\"bd:0 hh:1\")",
+  "fenster": [
+   {
+    "a": 0,
+    "b": 4,
+    "evs": [
+     {
+      "beat": 0,
+      "note": 0,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 2,
+      "note": 2,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 4,
+    "b": 12,
+    "evs": [
+     {
+      "beat": 4,
+      "note": 0,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 6,
+      "note": 2,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 8,
+      "note": 0,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 10,
+      "note": 2,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   },
+   {
+    "a": 10.5,
+    "b": 21,
+    "evs": [
+     {
+      "beat": 12,
+      "note": 0,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 14,
+      "note": 2,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 16,
+      "note": 0,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 18,
+      "note": 2,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     },
+     {
+      "beat": 20,
+      "note": 0,
+      "dauer": 2,
+      "velocity": 1,
+      "muster": 1,
+      "param": []
+     }
+    ],
+    "unbekannt": [],
+    "felder": []
+   }
+  ]
+ }
+]

@@ -38,6 +38,7 @@ class ArrBkSenke final : public ArrSenke, public ArrBkLeser {
   void note(int spur, int64_t ziel, uint8_t ton, uint8_t vel, bool an) noexcept override;
   void alle_aus(int spur, int64_t ziel) noexcept override;
   void transport_start(int spur, int64_t ziel) noexcept override;
+  void transport_abbruch(int spur) noexcept override;   // audit U33: a stop while the start waits cancels it (start and fade state)
   void block(int spur, int64_t s0, int m, float* l, float* r) noexcept override;   // = block_bahn on the own lane-0 struct
   // Track phase on the pool lanes: touches only the track's own slot sp_[spur], the relaxed counter verloren_ and the scratch of `a`; another bk track may run on another lane meanwhile.
   void block_bahn(int spur, int64_t s0, int m, float* l, float* r, ArrArbeit& a) noexcept override;

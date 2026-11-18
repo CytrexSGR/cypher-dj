@@ -1,0 +1,615 @@
+{
+ "laengeText": [
+  "1 step",
+  "2 steps",
+  "4 steps",
+  "8 steps",
+  "12 steps",
+  "1 bar",
+  "24 steps",
+  "2 bars",
+  "3 bars",
+  "4 bars",
+  "8 bars",
+  "12 bars",
+  "16 bars"
+ ],
+ "laengeAusSchritten": [
+  0.25,
+  4,
+  64,
+  null,
+  null,
+  null,
+  null
+ ],
+ "laengeTakte": [
+  1,
+  2,
+  4,
+  8,
+  16
+ ],
+ "pxProBeat": [
+  50,
+  48,
+  200,
+  100,
+  50,
+  96
+ ],
+ "sichtbar": [
+  16,
+  3,
+  16,
+  8,
+  16
+ ],
+ "lineal": [
+  {
+   "beat": 0,
+   "breite": 1,
+   "takt": true,
+   "wiederholung": false
+  },
+  {
+   "beat": 1,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": false
+  },
+  {
+   "beat": 2,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": false
+  },
+  {
+   "beat": 3,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": false
+  },
+  {
+   "beat": 4,
+   "breite": 1,
+   "takt": true,
+   "wiederholung": false
+  },
+  {
+   "beat": 5,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": false
+  },
+  {
+   "beat": 6,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": false
+  },
+  {
+   "beat": 7,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": false
+  },
+  {
+   "beat": 8,
+   "breite": 1,
+   "takt": true,
+   "wiederholung": false
+  },
+  {
+   "beat": 9,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": false
+  },
+  {
+   "beat": 10,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": false
+  },
+  {
+   "beat": 11,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": false
+  },
+  {
+   "beat": 12,
+   "breite": 1,
+   "takt": true,
+   "wiederholung": false
+  },
+  {
+   "beat": 13,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": false
+  },
+  {
+   "beat": 14,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": false
+  },
+  {
+   "beat": 15,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": false
+  },
+  {
+   "beat": 16,
+   "breite": 1,
+   "takt": true,
+   "wiederholung": true
+  },
+  {
+   "beat": 17,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 18,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 19,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 20,
+   "breite": 1,
+   "takt": true,
+   "wiederholung": true
+  },
+  {
+   "beat": 21,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 22,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 23,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 24,
+   "breite": 1,
+   "takt": true,
+   "wiederholung": true
+  },
+  {
+   "beat": 25,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 26,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 27,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 28,
+   "breite": 1,
+   "takt": true,
+   "wiederholung": true
+  },
+  {
+   "beat": 29,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 30,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 31,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 32,
+   "breite": 1,
+   "takt": true,
+   "wiederholung": true
+  },
+  {
+   "beat": 33,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 34,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 35,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 36,
+   "breite": 1,
+   "takt": true,
+   "wiederholung": true
+  },
+  {
+   "beat": 37,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 38,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 39,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 40,
+   "breite": 1,
+   "takt": true,
+   "wiederholung": true
+  },
+  {
+   "beat": 41,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 42,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 43,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 44,
+   "breite": 1,
+   "takt": true,
+   "wiederholung": true
+  },
+  {
+   "beat": 45,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 46,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 47,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 48,
+   "breite": 1,
+   "takt": true,
+   "wiederholung": true
+  },
+  {
+   "beat": 49,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 50,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 51,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 52,
+   "breite": 1,
+   "takt": true,
+   "wiederholung": true
+  },
+  {
+   "beat": 53,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 54,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 55,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 56,
+   "breite": 1,
+   "takt": true,
+   "wiederholung": true
+  },
+  {
+   "beat": 57,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 58,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 59,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 60,
+   "breite": 1,
+   "takt": true,
+   "wiederholung": true
+  },
+  {
+   "beat": 61,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 62,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 63,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 64,
+   "breite": 1,
+   "takt": true,
+   "wiederholung": true
+  },
+  {
+   "beat": 65,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 66,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 67,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  },
+  {
+   "beat": 68,
+   "breite": 1,
+   "takt": true,
+   "wiederholung": true
+  },
+  {
+   "beat": 69,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": true
+  }
+ ],
+ "linealKurz": [
+  {
+   "beat": 0,
+   "breite": 1,
+   "takt": true,
+   "wiederholung": false
+  },
+  {
+   "beat": 1,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": false
+  },
+  {
+   "beat": 2,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": false
+  },
+  {
+   "beat": 3,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": false
+  },
+  {
+   "beat": 4,
+   "breite": 1,
+   "takt": true,
+   "wiederholung": false
+  },
+  {
+   "beat": 5,
+   "breite": 1,
+   "takt": false,
+   "wiederholung": false
+  }
+ ],
+ "eigen": [
+  "2 steps",
+  "1/4 bar",
+  "1/2 bar",
+  "3/4 bar",
+  "1 bar",
+  "2 bars"
+ ],
+ "eigenLaengen": [
+  {
+   "text": "with pattern",
+   "beats": null
+  },
+  {
+   "text": "1/4 bar",
+   "beats": 1
+  },
+  {
+   "text": "1/2 bar",
+   "beats": 2
+  },
+  {
+   "text": "3/4 bar",
+   "beats": 3
+  },
+  {
+   "text": "1 bar",
+   "beats": 4
+  },
+  {
+   "text": "2 bars",
+   "beats": 8
+  }
+ ],
+ "eigenSchritte": [
+  0.25,
+  16,
+  null,
+  null
+ ],
+ "editierbar": [
+  true,
+  false,
+  false,
+  true
+ ],
+ "zelle": [
+  {
+   "befehl": "clip_neu",
+   "spur_id": "s1",
+   "art": "midi",
+   "name": "Bass",
+   "start_beat": 0,
+   "laenge_beats": 64,
+   "loop_beats": 4,
+   "noten": [
+    {
+     "beat": 0,
+     "laenge": 0.25,
+     "ton": 48,
+     "vel": 100
+    }
+   ],
+   "seq": {
+    "schema": 1,
+    "zeilen": [
+     {
+      "id": "noten",
+      "art": "noten",
+      "teiler": 0.25
+     }
+    ]
+   }
+  }
+ ],
+ "laenge": [
+  {
+   "befehl": "clip_neu",
+   "spur_id": "s1",
+   "art": "midi",
+   "name": "Bass",
+   "start_beat": 0,
+   "laenge_beats": 64,
+   "loop_beats": 8
+  }
+ ],
+ "zeileNeu": [
+  {
+   "befehl": "clip_neu",
+   "spur_id": "s1",
+   "art": "midi",
+   "name": "Bass",
+   "start_beat": 0,
+   "laenge_beats": 64,
+   "loop_beats": 4,
+   "seq": {
+    "schema": 1,
+    "zeilen": [
+     {
+      "id": "noten",
+      "art": "noten",
+      "teiler": 0.25
+     }
+    ]
+   }
+  }
+ ]
+}

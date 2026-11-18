@@ -119,7 +119,8 @@ const mitForm = (q: Punkt, form: Punkt['form']): Punkt => (form === undefined ? 
 // clip_teilen (T6.4): the envelope of the left and the right part when a clip without clip loop is cut `rel` beats after its start.
 // Linked: the left part keeps the points below rel plus a boundary point at rel; the right part gets the points from rel on, shifted by -rel, with a
 // boundary point at 0 (exact for linear and sprung segments). Unlinked with loop L: the left part keeps everything; the right part is rotated by
-// r = rel mod L, so its phase stays the same in the song (points ((p - r) mod L), the seam of the period as a jump pair, boundary points at 0 and L).
+// r = rel mod L, so its phase stays the same in the song (points ((p - r) mod L), the seam of the period as a jump pair,
+// boundary points at 0 (the value after r) and L (the value approached from the left at r, which differs at a jump pair).
 export function teileHuellkurve(hk: Huellkurve, rel: number): { links: Huellkurve; rechts: Huellkurve } {
   const p = hk.punkte, z = laneZiel(hk.ziel);
   const kopf = { ziel: hk.ziel, ...(hk.verknuepft === false ? { verknuepft: false as const } : {}),
@@ -144,7 +145,7 @@ export function teileHuellkurve(hk: Huellkurve, rel: number): { links: Huellkurv
   aus.push(mitForm({ beat: runde9(L - r), wert: naht }, formIn(L)));
   if (f0 !== naht) aus.push({ beat: runde9(L - r), wert: f0, form: 'sprung' });
   aus.push(...p.filter((q) => q.beat > 0 && q.beat < r).map((q) => ({ ...q, beat: runde9(q.beat + L - r) })));
-  aus.push(mitForm({ beat: L, wert: fr }, formIn(r)));
+  aus.push(mitForm({ beat: L, wert: linksWert(p, r, z) }, formIn(r)));   // closes the segment that runs into phase r from the left
   return { links, rechts: { ...kopf, punkte: aus } };
 }
 

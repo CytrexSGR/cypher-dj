@@ -11,6 +11,7 @@ export const MAX_ZEILEN = 32;                        // spec 4: at most thirty-t
 const ID_MUSTER = /^[a-z][a-z0-9]{0,7}$/;
 const EPS = 1e-9;
 const LOOP_MIN = 1 / 16;                             // LOOP_MIN of project/model.ts
+import { proTaktJetzt } from './bar_live.js';
 const KLIPP_BEATS = 64;                              // spec 4: a pattern clip is 64 beats long (the live region)
 const VORGABE_LAENGE = 4;                            // spec 4: the first edit creates a clip with loop_beats 4
 const VORGABE_TON = 48;                              // a new note of a pitched lane that came without a pitch
@@ -108,6 +109,18 @@ const ausBruch = (ziel, f) => { const b = anzeigeBereich(ziel); return b.min + f
 export const musterLaenge = (clip) => (clip ? clip.loop_beats ?? clip.laenge_beats : VORGABE_LAENGE);
 const zellenAnzahl = (laenge, teiler) => Math.max(1, Math.ceil(laenge / teiler - EPS));
 const zelleVon = (beat, teiler) => Math.floor(beat / teiler + EPS);
+// A track that plays a cut (device graph smp-<id>) takes a hit to its NEAREST step, the rule of the SLICE grid (werkbank/grid.js imSchritt): hits sit a few
+// milliseconds in front of their step. The window of step c is [c - 1/2, c + 1/2) steps; a hit in the last half cell of the pattern is the upbeat of the next
+// pass and belongs to step 0. Every other track rounds down.
+const schnittSpur = (spur) => spur?.geraet?.art === 'intern' && spur.geraet.name === 'bk' && typeof spur.geraet.graph === 'string' && spur.geraet.graph.startsWith('smp-');
+// the cell of a note and how far its beat lies from the start of that cell (negative in front of it)
+function zelleDerNote(beat, teiler, n, laenge, nah) {
+  if (!nah) { const c = Math.min(n - 1, zelleVon(beat, teiler)); return { c, abstand: beat - c * teiler }; }
+  const c = Math.floor(beat / teiler + 0.5 + EPS);
+  return c >= n ? { c: 0, abstand: beat - laenge } : { c, abstand: beat - c * teiler };
+}
+// does a note belong to cell `zelle` of a lane with n cells (the rule of zelleDerNote)
+const inZelle = (note, zelle, teiler, n, laenge, nah) => zelleDerNote(note.beat, teiler, n, laenge, nah).c === zelle;
 const huellkurveVon = (clip, ziel) => (clip?.huellkurven ?? []).find((h) => h.ziel === ziel) ?? null;
 const huellkurveLaenge = (clip, hk) => (hk && hk.verknuepft === false ? hk.loop_beats : musterLaenge(clip));
 const kopiePunkte = (p) => p.map((q) => ({ ...q }));
@@ -206,19 +219,20 @@ function quellZeile(eff, z) {
 const nachBeat = (a, b) => a.beat - b.beat || a.ton - b.ton;
 
 // cells of a note lane: { an, noten, vel, ton, versatz, zahl, gebunden }
-function notenZellen(noten, teiler, laenge, gebundenZeigen) {
+function notenZellen(noten, teiler, laenge, gebundenZeigen, nah = false) {
   const n = zellenAnzahl(laenge, teiler);
   const zellen = Array.from({ length: n }, () => ({ an: false, noten: [], vel: null, ton: null, versatz: 0, zahl: 0, gebunden: false }));
-  for (const note of [...noten].sort(nachBeat)) zellen[Math.min(n - 1, zelleVon(note.beat, teiler))].noten.push(note);
+  for (const note of [...noten].sort(nachBeat)) zellen[zelleDerNote(note.beat, teiler, n, laenge, nah).c].noten.push(note);
   zellen.forEach((z, c) => {
     if (!z.noten.length) return;
     // a chord shows its lowest note (and a count); a trigger lane has one pitch, so this is its earliest hit
     const rep = z.noten.reduce((a, b) => (b.ton < a.ton ? b : a));
-    z.an = true; z.zahl = z.noten.length; z.vel = rep.vel; z.ton = rep.ton; z.versatz = runde(rep.beat - c * teiler);
+    z.an = true; z.zahl = z.noten.length; z.vel = rep.vel; z.ton = rep.ton; z.versatz = runde(zelleDerNote(rep.beat, teiler, n, laenge, nah).abstand);
   });
   if (gebundenZeigen) {
     for (const note of noten) {
-      const ende = note.beat + note.laenge, c0 = Math.min(n - 1, zelleVon(note.beat, teiler));
+      // the end counts from the cell the note is shown in: a hit wrapped to cell 0 (nearest-step rule) starts just in front of the next pass, so it ties only what it sounds into there
+      const z = zelleDerNote(note.beat, teiler, n, laenge, nah), c0 = z.c, ende = c0 * teiler + z.abstand + note.laenge;
       for (let c = c0 + 1; c < n && c * teiler < ende - EPS; c++) if (!zellen[c].an) zellen[c].gebunden = true;
     }
   }
@@ -233,12 +247,12 @@ export function folgeSicht(spur, clip, info) {
   const zeilen = herkunft.map(({ z, abgeleitet }) => {
     if (z.art === 'noten') {
       const name = z.name ?? (z.ton !== undefined ? ((info?.klaenge ?? []).find((k) => k.ton === z.ton)?.name ?? tonName(z.ton)) : 'notes');
-      return { ...z, abgeleitet, name, laenge_beats: P, eigen_laenge: false, zellen: notenZellen(laneNoten(clip, z, eff), z.teiler, P, z.ton === undefined) };
+      return { ...z, abgeleitet, name, laenge_beats: P, eigen_laenge: false, zellen: notenZellen(laneNoten(clip, z, eff), z.teiler, P, z.ton === undefined, schnittSpur(spur)) };
     }
     if (z.art === 'werte' && (z.ziel === 'vel' || z.ziel === 'laenge')) {
       const q = quellZeile(eff, z);
       const teiler = q ? q.teiler : z.teiler;            // spec 4: the lane uses the grid of its note lane
-      const zz = q ? notenZellen(laneNoten(clip, q, eff), q.teiler, P, false) : Array.from({ length: zellenAnzahl(P, teiler) }, () => ({ an: false, noten: [] }));
+      const zz = q ? notenZellen(laneNoten(clip, q, eff), q.teiler, P, false, schnittSpur(spur)) : Array.from({ length: zellenAnzahl(P, teiler) }, () => ({ an: false, noten: [] }));
       const zellen = zz.map((c) => {
         if (!c.an) return { da: false, wert: null, frei: false, geklemmt: false };
         return { da: true, wert: z.ziel === 'vel' ? c.vel : runde(c.noten.find((x) => x.ton === c.ton).laenge / teiler), frei: true, geklemmt: false };
@@ -272,7 +286,7 @@ export function folgeSicht(spur, clip, info) {
 }
 
 // ---------- commands ----------
-const klippNeu = (spur, extra) => ({ befehl: 'clip_neu', spur_id: spur.id, art: 'midi', name: spur.name ?? 'Pattern', start_beat: 0, laenge_beats: KLIPP_BEATS, loop_beats: VORGABE_LAENGE, ...extra });
+const klippNeu = (spur, extra) => ({ befehl: 'clip_neu', spur_id: spur.id, art: 'midi', name: spur.name ?? 'Pattern', start_beat: 0, laenge_beats: 16 * proTaktJetzt(), loop_beats: VORGABE_LAENGE, ...extra });
 const seqBefehl = (clip, zeilen) => ({ befehl: 'clip_aendern', clip_id: clip.id, seq: zeilen.length ? { schema: 1, zeilen: zeilen.map(reinZeile) } : null });
 const hkBefehl = (clip, hk, punkte) => ({ befehl: 'huellkurve_setzen', clip_id: clip.id, ziel: hk.ziel, punkte,
   ...(hk.verknuepft === false ? { verknuepft: false, loop_beats: hk.loop_beats } : {}) });
@@ -298,8 +312,9 @@ export function zelleBefehle(spur, clip, zeile, zelle, felder = {}) {
   const eff = alleZeilen(spur, clip, undefined);
   const fremd = eff.find((x) => x.art === 'noten' && x.ton !== undefined && x.ton === felder.ton && x.id !== zeile.id);
   if (!trigger && fremd) fehler(`${wo(zeile, zelle)}: note ${felder.ton} belongs to the trigger lane ${fremd.id}`);
-  const start = zelle * zeile.teiler, ende = start + zeile.teiler;
-  const drin = clip ? laneNoten(clip, zeile, eff).filter((x) => x.beat >= start - EPS && (zelle === n - 1 ? true : x.beat < ende - EPS)).sort(nachBeat) : [];
+  const start = zelle * zeile.teiler, ende = start + zeile.teiler, nah = schnittSpur(spur);
+  const drin = clip ? laneNoten(clip, zeile, eff).filter((x) => (nah ? inZelle(x, zelle, zeile.teiler, n, P, true)
+    : x.beat >= start - EPS && (zelle === n - 1 ? true : x.beat < ende - EPS))).sort(nachBeat) : [];
   const setzt = felder.vel !== undefined || felder.ton !== undefined || felder.laenge !== undefined;
   const an = felder.an ?? (setzt ? true : !drin.length);          // {} toggles
   if (!an) return drin.length ? [{ befehl: 'noten_loeschen', clip_id: clip.id, ids: drin.map((x) => x.id) }] : [];
@@ -338,7 +353,8 @@ export function wertBefehle(spur, clip, zeile, zelle, wert, info) {
     if (wert === null) fehler(`${ort}: a ${zielName(zeile.ziel)} cannot be removed, delete the note`);
     if (!zahlOk(wert)) fehler(`${ort}: a number is expected`);
     const von = zelle * q.teiler, bis = von + q.teiler, n = zellenAnzahl(P, q.teiler);
-    const drin = laneNoten(clip, q, eff).filter((x) => x.beat >= von - EPS && (zelle === n - 1 || x.beat < bis - EPS));
+    const nah = schnittSpur(spur);
+    const drin = laneNoten(clip, q, eff).filter((x) => (nah ? inZelle(x, zelle, q.teiler, n, P, true) : x.beat >= von - EPS && (zelle === n - 1 || x.beat < bis - EPS)));
     if (!drin.length) fehler(`${ort}: no note starts in this cell`);
     let feld, wertNeu;
     if (zeile.ziel === 'vel') {
@@ -513,7 +529,8 @@ export function zeileWegBefehle(spur, clip, zeileId) {
   if (expl.some((x) => weg.has(x.id))) befehle.push(seqBefehl(clip, expl.filter((x) => !weg.has(x.id))));
   return befehle;
 }
-// felder: { teiler }, { ziel } (an envelope moves to the new target with the same shown values; note fields vel <-> laenge), { eigen_laenge } (beats, or null
+// felder: { teiler }, { ziel } (an envelope moves to the new target with the same shown values, or the same fraction of the shown range when the ranges differ;
+// the shape of a curve lane moves along: its von and bis are mapped like the points; note fields vel <-> laenge), { eigen_laenge } (beats, or null
 // for linked to the clip loop; needs an envelope).
 export function zeileAendernBefehle(spur, clip, zeileId, felder, info) {
   if (!clip) fehler(`lane ${zeileId}: the pattern has no clip`);
@@ -561,7 +578,14 @@ export function zeileAendernBefehle(spur, clip, zeileId, felder, info) {
     befehle.push(hkBefehl(clip, h, h.punkte));
   }
   let formNeu = false;
-  if (neu.form && h && neu.form.abdruck !== abdruck(h.punkte)) { neu.form = { ...neu.form, abdruck: abdruck(h.punkte) }; formNeu = true; }   // the shape stays the shape on the new base
+  if (neu.form && h && neu.form.abdruck !== abdruck(h.punkte)) {
+    // the shape stays the shape on the new base: where the points were mapped by the fraction of the shown range (not from one device target to another, whose
+    // shown range is the same), its von and bis are mapped the same way, else a later rewrite of the shape (lane length, shape menu, `je`) would write the old range
+    const gemappt = felder.ziel !== undefined && felder.ziel !== alt.ziel && !(istGeraetZiel(alt.ziel) && istGeraetZiel(felder.ziel));
+    const mappe = (x) => runde(ausBruch(felder.ziel, klemme(bruch(alt.ziel, x), 0, 1)), 1e6);
+    neu.form = { ...neu.form, ...(gemappt ? { von: mappe(neu.form.von), bis: mappe(neu.form.bis) } : {}), abdruck: abdruck(h.punkte) };
+    formNeu = true;
+  }
   if (neu.teiler !== alt.teiler || neu.ziel !== alt.ziel || formNeu) {
     const zeilen = eff.map((x) => (x.id === zeileId ? neu : x));
     pruefeZeilen(zeilen);
@@ -594,12 +618,12 @@ export function laengeBefehle(spur, clip, beats) {
 
 // ---------- whole lanes (the pattern text writes a lane at a time) ----------
 // Rule D8 exactly (project/seq.ts seqFolgen `editierbar`): an instrument track with no clip or exactly one MIDI clip from beat 0 over the whole region.
-export function folgeEditierbar(spur) {
+export function folgeEditierbar(spur, proTakt = proTaktJetzt()) {
   const clips = spur?.clips ?? [];
   if (spur?.art !== 'instrument') return false;
   if (clips.length === 0) return true;
   const c = clips[0];
-  return clips.length === 1 && c.art === 'midi' && Math.abs(c.start_beat) < EPS && Math.abs(c.laenge_beats - KLIPP_BEATS) < EPS;
+  return clips.length === 1 && c.art === 'midi' && Math.abs(c.start_beat) < EPS && (Math.abs(c.laenge_beats - KLIPP_BEATS) < EPS || Math.abs(c.laenge_beats - 16 * proTakt) < EPS);
 }
 
 // A lane id that is free in `vorhandene` for a new lane (a trigger lane `t<note>`, the pitched lane `noten`, an envelope lane the short target name).
@@ -620,7 +644,8 @@ export function zeilenSetzenBefehle(spur, clip, zeilen, info) {
 //  note lane: zellen[c] is undefined/null (leave the cell), { an: false } (no note starts in the cell afterwards), or
 //    { an: true, toene?, vel?, laenge? }: the notes that start in the cell have exactly the pitches `toene` (a trigger lane: its own pitch; a pitched lane:
 //    a list, a chord has several); notes of those pitches that are there stay as they are (an off-grid start too), the others go, new ones start on the
-//    cell start. `vel` and `laenge` (in cells of the lane grid) are set on the notes of the cell when they differ; a new note gets velocity 100 and
+//    cell start. The notes of a cell are the notes the view shows in it: a cut track takes a hit to its nearest step (zelleDerNote), as zelleBefehle does.
+//    `vel` and `laenge` (in cells of the lane grid) are set on the notes of the cell when they differ; a new note gets velocity 100 and
 //    half a cell (trigger) or one cell (pitched) without them. { nurFelder: true, vel?, laenge? } sets those fields on the notes that are there and
 //    refuses an empty cell.
 //  werte lane on an envelope target: zellen[c] is a shown value or null (no point in the cell). A cell whose last point shows the same value to two
@@ -639,13 +664,13 @@ function notenZeileBefehle(spur, clip, zeile, zellen, info) {
   const P = musterLaenge(clip), n = zellenAnzahl(P, zeile.teiler);
   if (!Array.isArray(zellen) || zellen.length !== n) fehler(`${wo(zeile)}: ${Array.isArray(zellen) ? zellen.length : 'no'} cells found, ${n} expected`);
   const eff = alleZeilen(spur, clip, info), trigger = zeile.ton !== undefined;
-  const lane = laneNoten(clip, zeile, eff);
+  const lane = laneNoten(clip, zeile, eff), nah = schnittSpur(spur);
   const fremd = new Map(eff.filter((x) => x.art === 'noten' && x.ton !== undefined && x.id !== zeile.id).map((x) => [x.ton, x.id]));
   const weg = [], aend = [], neu = [];
   zellen.forEach((s, c) => {
     if (s === undefined || s === null) return;
     const start = c * zeile.teiler, ende = start + zeile.teiler;
-    const drin = lane.filter((x) => x.beat >= start - EPS && (c === n - 1 || x.beat < ende - EPS)).sort(nachBeat);
+    const drin = lane.filter((x) => (nah ? inZelle(x, c, zeile.teiler, n, P, true) : x.beat >= start - EPS && (c === n - 1 || x.beat < ende - EPS))).sort(nachBeat);
     const ort = wo(zeile, c);
     if (s.an === false) { for (const x of drin) weg.push(x.id); return; }
     if (s.vel !== undefined && (!Number.isInteger(s.vel) || s.vel < 1 || s.vel > 127)) fehler(`${ort}: velocity takes whole numbers 1..127`);

@@ -183,9 +183,12 @@ export function bindeDeckBedienung(n, d) {
       if (gelandet || jetzt - t0 > 800) { a.zieh = 0; a.ziehBasis = null; clearInterval(iv); }
     }, 20);
   };
+  // A track load during the drag (a.raster is set to null, then to the new wave) ends the drag: nothing may keep following the hand
+  let rasterAmGriff = null;
+  const ziehEnde = () => { x0 = null; rasterAmGriff = null; zieher.abbruch(); a.zieh = 0; a.ziehBasis = null; };
   lauf.addEventListener('pointerdown', (e) => {
     if (a.raster && a.lauf.w) {
-      x0 = e.clientX; lauf.setPointerCapture(e.pointerId);
+      x0 = e.clientX; rasterAmGriff = a.raster; lauf.setPointerCapture(e.pointerId);
       zieher.beginne(!loopAktiv(zustand.decks[n]));
       // stehendes Deck: die Meldungen des Kerns folgen der Hand, die Anzeige hält darum den Griffpunkt fest (laufend: Kopf + Strecke)
       a.ziehBasis = (zustand.decks[n]?.status ?? 0) < 2 ? a.raster.ersterSchlagFrame + a.kopf.beat(performance.now()) * a.raster.framesProBeat : null;
@@ -193,14 +196,16 @@ export function bindeDeckBedienung(n, d) {
   });
   lauf.addEventListener('pointermove', (e) => {
     if (x0 === null) return;
+    if (a.raster !== rasterAmGriff) { ziehEnde(); return; }
     const fpp = a.lauf.takte * 4 * a.raster.framesProBeat / lauf.getBoundingClientRect().width;
     a.zieh = -(e.clientX - x0) * fpp;
     zieher.bewege(e.clientX - x0, a.zieh / a.raster.framesProBeat);
   });
   const los = async (e) => {
     if (x0 === null) return;
+    if (a.raster !== rasterAmGriff) { ziehEnde(); return; }
     const dx = e.clientX - x0, delta = a.zieh / a.raster.framesProBeat;
-    x0 = null;
+    x0 = null; rasterAmGriff = null;
     const r = await zieher.ende(delta);
     if (Math.abs(dx) < 3) { a.zieh = 0; a.ziehBasis = null; return; }
     if (r.gescrubbt && r.griffOk) { ziehNull(delta); return; }
@@ -209,7 +214,11 @@ export function bindeDeckBedienung(n, d) {
     a.zieh = 0; a.ziehBasis = null;
   };
   lauf.addEventListener('pointerup', los);
-  lauf.addEventListener('pointercancel', () => { const delta = a.zieh / a.raster.framesProBeat; x0 = null; zieher.abbruch(); ziehNull(delta); });
+  lauf.addEventListener('pointercancel', () => {
+    if (x0 === null) return;
+    if (a.raster !== rasterAmGriff) { ziehEnde(); return; }
+    const delta = a.zieh / a.raster.framesProBeat; x0 = null; rasterAmGriff = null; zieher.abbruch(); ziehNull(delta);
+  });
   // Plan Grid (D4): ◀ ▶ 5 ms, Shift 1 ms; Rechtsklick auf den Wert: zurück auf die Analyse (0); FIX speichert
   for (const b of $$('[data-gridschritt]', d)) b.addEventListener('click', async (e) => {
     const j = await deckPost('/deck/raster', { deck: n, schritt_ms: Number(b.dataset.gridschritt) * (e.shiftKey ? 1 : 5) }, 'Grid');

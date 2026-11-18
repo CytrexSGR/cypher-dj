@@ -33,10 +33,21 @@ const MODUL_BEATS = [4, 8, 16, 32, 64];   // the module lengths of the workbench
 const HOEREN_MAX_MS = 10_000;   // a slice that is heard by a click never sounds longer than this
 const HOEREN_TON_MS = 400;      // a note heard by a click on a key or a drum row of the grid is held this long
 
+/** " 2", " 3" ... until the name is free among the instrument tracks (ignoring case, as the command does); shared by SLICE TO TRACK and TO TONE. */
+export const freierName = (p: Projekt, name: string): string => {
+  const belegt = new Set(p.spuren.filter((s) => s.art === 'instrument').map((s) => s.name.toLowerCase()));
+  for (let n = 1; ; n++) {
+    const rest = n === 1 ? '' : ` ${n}`;
+    const z = `${name.slice(0, NAME_MAX - rest.length)}${rest}`;
+    if (!belegt.has(z.toLowerCase())) return z;
+  }
+};
 const arg = (text: string): ProjFehler => new ProjFehler(400, 'argument_ungueltig', { text });
 const nurSchluessel = (d: Record<string, unknown>, ...erlaubt: string[]): void => {
   for (const k of Object.keys(d)) if (!erlaubt.includes(k)) throw new ProjFehler(400, 'argument_unbekannt', { text: `${k}: the request has no field of that name`, detail: k });
 };
+/** The row of a cut in GET /sampler/liste (the shelf's CUTS tab); GET /suche gives the same row. */
+export const schnittKurz = (s: Schnitt): Record<string, unknown> => ({ id: s.id, name: s.name, quelle: s.quelle, bpm: s.bpm, beats: s.beats, scheiben: s.grenzen.length - 1, geraet: geraetName(s.id) });
 const istSpur = (s: Spur, id: string): boolean => s.geraet?.art === 'intern' && s.geraet.name === 'bk' && s.geraet.graph === geraetName(id);
 // Every place of a project (or of a module) that names the graph `graph`: the Baukasten device of a track, a member of an instrument rack, an insert
 // stage `bk` of any strip (track, group, return, master) and a Baukasten stream channel of the sound snapshot. `strang` is the name of the strip.
@@ -85,7 +96,6 @@ export function samplerBereich(ctx: BereichKontext, opt: SamplerOptionen): Berei
     if (!s) throw new SchnittFehler(404, 'schnitt_unbekannt', `cut ${id} does not exist`);
     return s;
   };
-  const schnittKurz = (s: Schnitt): Record<string, unknown> => ({ id: s.id, name: s.name, quelle: s.quelle, bpm: s.bpm, beats: s.beats, scheiben: s.grenzen.length - 1, geraet: geraetName(s.id) });
 
   // A library loop whose audio never passes -60 dBFS (a recording of silence) is listed with `stumm: true`. The measurement is kept per file state.
   const stummMerker = new Map<string, { marke: string; stumm: boolean }>();
@@ -137,16 +147,6 @@ export function samplerBereich(ctx: BereichKontext, opt: SamplerOptionen): Berei
     const { quelle: q, name, methode, ...optionen } = d;
     const s = legeSchnitt({ quelle: q as never, name: name as string | undefined, methode: methode as string | undefined, optionen }, ordner());
     return { code: 200, j: { schnitt: s } };
-  };
-
-  // " 2", " 3" ... until the name is free among the instrument tracks (ignoring case, as the command does)
-  const freierName = (p: Projekt, name: string): string => {
-    const belegt = new Set(p.spuren.filter((s) => s.art === 'instrument').map((s) => s.name.toLowerCase()));
-    for (let n = 1; ; n++) {
-      const rest = n === 1 ? '' : ` ${n}`;
-      const z = `${name.slice(0, NAME_MAX - rest.length)}${rest}`;
-      if (!belegt.has(z.toLowerCase())) return z;
-    }
   };
 
   const spur = async (d: Record<string, unknown>, quelle: Quelle): Promise<Antwort> => {
@@ -234,9 +234,12 @@ export function samplerBereich(ctx: BereichKontext, opt: SamplerOptionen): Berei
     const n = s.grenzen.length - 1;
     if (d.scheibe < 0 || d.scheibe >= n) throw arg(`scheibe: ${d.scheibe} is outside the cut (0 to ${n - 1})`);
     const k2 = t.geraet?.art === 'intern' ? t.geraet.parameter?.k2 : undefined;
-    const speed = speedVon(typeof k2 === 'number' ? k2 : 0.5);                        // SPEED at its default (the middle) plays at 1
+    const k3 = t.geraet?.art === 'intern' ? t.geraet.parameter?.k3 : undefined;
+    // the read rate of a note: SPEED times 2^(PITCH / 12), PITCH being -12..12 st on the knob k3; the core clamps it to 1/16..8 (sampler.rs wahl_schritt)
+    const halb = -12 + 24 * (typeof k3 === 'number' ? k3 : 0.5);
+    const rate = Math.min(8, Math.max(1 / 16, speedVon(typeof k2 === 'number' ? k2 : 0.5) * 2 ** (halb / 12)));   // the defaults (the middle) play at 1
     const frames = s.grenzen[d.scheibe + 1] - s.grenzen[d.scheibe];
-    const dauer = Math.min(HOEREN_MAX_MS, Math.max(1, Math.round(frames / 48 / speed)));
+    const dauer = Math.min(HOEREN_MAX_MS, Math.max(1, Math.round(frames / 48 / rate)));
     return spiele(t, d.scheibe, dauer);
   };
   // A click on a key or a drum row of the grid: one note through the instrument of the track, whatever it is, held HOEREN_TON_MS.
@@ -251,13 +254,13 @@ export function samplerBereich(ctx: BereichKontext, opt: SamplerOptionen): Berei
   const spiele = async (t: Spur, ton: number, dauer: number): Promise<Antwort> => {
     aus(t.id, ton);                                                              // the previous note of this track ends first (not when it is the same one)
     const q = await ctx.warteQuittung(ctx.sende('/k/arr/note', { spur: t.nr, ton, vel: 100 }));
-    if (!q) throw new ProjFehler(409, 'kein_kern', { text: 'the core did not answer' });
-    if (quittungAbgelehnt(q)) throw new ProjFehler(409, q.grund === 'ki_gestoppt' ? 'ki_gestoppt' : 'hoeren_abgelehnt', { text: `the core refused the note: ${q.grund}`, kern: q.grund });
+    if (q && quittungAbgelehnt(q)) throw new ProjFehler(409, q.grund === 'ki_gestoppt' ? 'ki_gestoppt' : 'hoeren_abgelehnt', { text: `the core refused the note: ${q.grund}`, kern: q.grund });
     aus(t.id, ton);                                                              // a request that overtook this one during the wait: its note ends too
     // after the end of the server the socket is closed and sending throws: nothing to end then
     const timer = setTimeout(() => { try { aus(t.id); } catch { /* the server has stopped */ } }, dauer);
     timer.unref();
-    klingend.set(t.id, { timer, nr: t.nr, ton });
+    klingend.set(t.id, { timer, nr: t.nr, ton });   // also without an answer: the note went out and may sound, so its off is armed
+    if (!q) throw new ProjFehler(409, 'kein_kern', { text: 'the core did not answer' });
     return { code: 200, j: { ok: true, dauer_ms: dauer } };
   };
 
@@ -301,6 +304,8 @@ export function samplerBereich(ctx: BereichKontext, opt: SamplerOptionen): Berei
     // under the load lock of a freeze, export or recording this only remembers the wish; the release loads
     try { await opt.sitzung.ladeLiveNeuFrei(); } catch (e) { ctx.log({ typ: 'sampler_neu_laden_fehler', schnitt: id, fehler: (e as Error).message }); }
   };
+  // the page learns that a cut changed (a strip that shows it reads it again); a context without a stream (a test) tells nobody
+  const meldeSchnitt = (s: Schnitt): void => { try { ctx.verteile({ a: 'schnitt', f: { id: s.id, geaendert: s.geaendert ?? null } }); } catch { /* no stream */ } };
   const spurNamen = (id: string): string[] => { const o = opt.zugang.offen(); return o ? o.projekt.spuren.filter((x) => istSpur(x, id)).map((x) => x.name) : []; };
 
   const neuSchneiden = (d: Record<string, unknown>, quelle: Quelle): Promise<Antwort> => nacheinander(async () => {
@@ -312,6 +317,7 @@ export function samplerBereich(ctx: BereichKontext, opt: SamplerOptionen): Berei
     const alt = holeSchnitt(d.id);
     const s = schneideNeu(alt.id, { methode: d.methode, optionen: { ...(d.scheiben === undefined ? {} : { scheiben: d.scheiben }), ...(d.empfindlichkeit === undefined ? {} : { empfindlichkeit: d.empfindlichkeit }) } }, ordner());
     await ladeNeu(s.id);
+    meldeSchnitt(s);
     const n = s.grenzen.length - 1;
     return { code: 200, j: { schnitt: s, spuren: spurNamen(s.id),
       text: `Cut again: ${n} slices by ${d.methode === 'raster' ? 'grid' : 'hits'}. The patterns keep their slice numbers; WRITE ORIGINAL ORDER puts the new order on a track.` } };
@@ -335,6 +341,7 @@ export function samplerBereich(ctx: BereichKontext, opt: SamplerOptionen): Berei
         projektTeil = a.j as { rev: number; projekt: Projekt };
       } catch (e) { try { zurueck(); } catch { /* the refusal of the project is the error to report */ } throw e; }
     } else await ladeNeu(alt.id);                                                    // no notes changed: the project step that would load the playback did not happen
+    meldeSchnitt(r.schnitt);
     const k = r.k + 1;                                                              // shown numbers are 1-based
     const text = r.art === 'schieben' ? `Marker ${r.k} moved to frame ${r.schnitt.grenzen[r.k]}. The patterns are unchanged.`
       : r.art === 'neu' ? `Marker added. Slice ${r.k} is split: its hits play the first part; slice ${k} has no hits yet. Patterns of open tracks that play this cut are renumbered in one step; tracks in modules that are not open keep their old numbers. Undo in PRODUCTION reverts the renumbering only, not the marker.`

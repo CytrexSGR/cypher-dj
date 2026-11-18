@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <fstream>
+#include <initializer_list>
 #include <string>
 #include <utility>
 #include <vector>
@@ -89,7 +90,7 @@ int main() {
     };
     const std::string gut = "{\"nr\":1,\"art\":\"audio\",\"clips\":[" + o.clip("c1", 0.0, 1.0, a, F) + "]}";
     PRUEF(grund(99) == "datei_fehlt");
-    o.roh(20, "{\"format\":\"cypherdj-arr/3\",\"nr\":20,\"spuren\":[]}");   // 1.10: /2 ist seit Task 5 gültig, unbekannt ist jetzt /3
+    o.roh(20, "{\"format\":\"cypherdj-arr/4\",\"nr\":20,\"spuren\":[]}");   // 1.10: /2 ist seit Task 5 gültig, /3 seit der return fader lane (returns[].auto), unbekannt ist jetzt /4
     PRUEF(grund(20) == "format");
     o.roh(21, "{\"format\":\"cypherdj-arr/1\",\"nr\":7,\"spuren\":[]}");
     PRUEF(grund(21) == "format");   // nr der Datei weicht ab
@@ -524,6 +525,19 @@ int main() {
     cdj::ArrLadeErgebnis e = cdj::lade_wiedergabe(o.pfad, nr, cache);
     PRUEF(e.snap != nullptr && e.snap->spur[0].kit[0] == '\0' && e.snap->spur[0].kit_ptr == nullptr && e.snap->kit_refs.empty());
     if (e.snap) cdj::gib_wiedergabe(e.snap.release(), cache);
+  }
+  {  // audit U32: frames so large that frames * 8 wraps in size_t (2^61 + F -> F * 8 bytes) must not match a small file: refused as
+     // "format" before the loader maps and scans it (a wrapped size sent erstes_unendliches over 2^62 floats: SIGSEGV in the kern)
+    cdj::SpeicherKonto konto(100LL << 20);
+    cdj::ArrAudioCache cache(&konto, 50LL << 20, false);
+    for (const int64_t gross : std::initializer_list<int64_t>{(1LL << 61) + F, (1LL << 60) + F, INT64_MAX}) {
+      o.wiedergabe(90, "{\"nr\":1,\"art\":\"audio\",\"clips\":[" + o.clip("c1", 0.0, 1.0, a, gross) + "]}");
+      cdj::ArrLadeErgebnis e = cdj::lade_wiedergabe(o.pfad, 90, cache);
+      PRUEF(!e.snap && e.grund == "format");
+      PRUEF(e.meldung.find("frames out of range") != std::string::npos);   // refused before any read of the mapping (unfixed: read past it, NaN hit by chance)
+      if (e.snap) cdj::gib_wiedergabe(e.snap.release(), cache);
+      PRUEF(cache.eintraege() == 0 && konto.gesperrt() == 0);
+    }
   }
   PRUEF_ENDE();
 }

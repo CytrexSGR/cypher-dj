@@ -2,12 +2,14 @@
 // Model, commands, translation. Old projects stay byte-identical (golden literals taken on base aa95b5f9 before the change).
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
 import { fuehreListeAus, BefehlFehler } from '../project/commands.ts';
-import { pruefeProjekt, pruefeFehler, kanonisch, wiedergabeSicht, BK_GRAPH_NAME, BK_PARAMETER, MAX_BK_SPUREN } from '../project/model.ts';
+import { pruefeProjekt, pruefeFehler, kanonisch, wiedergabeSicht, BK_GRAPH_NAME, BK_PARAMETER, MAX_BK_SPUREN, BK_LIVE_SLOTS } from '../project/model.ts';
 import { uebersetze } from '../project/playback.ts';
 import { GRAPH_NAME } from '../graphs.ts';
 import { specProjekt, kopie, SHA_A, SHA_B } from './support/project.mjs';
 
+const hier = path.dirname(fileURLToPath(import.meta.url));
 const AUDIO = '/arbeit/arr/audio';
 const opt = (extra = {}) => ({ nr: 1, audioOrdner: AUDIO, frames: (sha) => (sha === SHA_A || sha === SHA_B ? 24000 : null), ...extra });
 const GOLD_WIEDERGABE = "{\"format\":\"cypherdj-arr/1\",\"nr\":1,\"spuren\":[{\"nr\":1,\"art\":\"audio\",\"clips\":[{\"id\":\"c1\",\"start_beat\":0,\"laenge_beats\":1,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"datei\":\"/arbeit/arr/audio/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.f32\",\"frames\":24000,\"offset_frames\":0,\"gain_db\":0,\"ein_beats\":0,\"aus_beats\":0}]},{\"nr\":2,\"art\":\"intern\",\"geraet\":\"rb338\",\"parameter\":{},\"noten\":[{\"id\":\"c2/n1\",\"beat\":0,\"laenge\":0.5,\"ton\":36,\"vel\":100}]},{\"nr\":3,\"art\":\"wirt\",\"slot\":1,\"noten\":[]}]}";
@@ -49,15 +51,24 @@ test('S20 model: refusals (graph missing or malformed, knobs, extra field, freez
   }
   const mitFreeze = mitBk(bk()); mitFreeze.spuren[1].freeze = null;
   assert.notEqual(pruefeFehler(mitFreeze), null, 'freeze on a bk track');
-  // nine bk tracks: the ninth is refused, eight pass
+  // seventeen bk tracks: the 17th is refused, sixteen pass (MAX_BK_SPUREN was 8 until 2026-11-18)
   const p = specProjekt(); p.spuren = [];
-  for (let i = 1; i <= 9; i += 1) {
+  for (let i = 1; i <= 17; i += 1) {
     p.spuren.push({ id: `b${i}`, nr: i, name: `b${i}`, farbe: '#3b8de0', art: 'instrument', geraet: bk(), fader_db: 0, pan: 0, mute: false, solo: false, clips: [] });
     const f = pruefeFehler(p);
     if (i <= MAX_BK_SPUREN) assert.equal(f, null, `track ${i}: ${f}`);
-    else assert.match(f ?? '', /at most 8/, `track ${i}: ${f}`);
+    else assert.match(f ?? '', /at most 16/, `track ${i}: ${f}`);
   }
-  assert.equal(MAX_BK_SPUREN, 8);
+  assert.equal(MAX_BK_SPUREN, 16);
+});
+
+test('MAX_BK_SPUREN equals ARR_BK_MAX and BK_LIVE_SLOTS equals SPUR_BK_SLOTS (regex on the core headers)', () => {
+  const lies = (...teile) => fs.readFileSync(path.join(hier, '..', '..', ...teile), 'utf8');
+  const konst = (h, n) => Number(new RegExp(`constexpr int ${n} = (\\d+);`).exec(h)?.[1]);
+  const arr = lies('core', 'include', 'cypherdj', 'arr_playback.h'), regler = lies('core', 'signalbox', 'include', 'cypherdj', 'signalbox', 'controls.h');
+  assert.equal(MAX_BK_SPUREN, konst(arr, 'ARR_BK_MAX'));
+  assert.equal(BK_LIVE_SLOTS, konst(regler, 'SPUR_BK_SLOTS'));
+  assert.ok(BK_LIVE_SLOTS <= MAX_BK_SPUREN, 'the live rows address slots of at most MAX_BK_SPUREN tracks');
 });
 
 test('S20 commands: spur_neu with a bk device stores it, the track is named after the graph, parameter defaults to {}', () => {

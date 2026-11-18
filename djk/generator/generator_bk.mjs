@@ -46,10 +46,17 @@ let wecker = null;
 function wecke() {   // shortly before the bar starts: replace the next two bars of every stream
   if (!uhr) return;
   // WECHSEL_ABSTAND before the one, see generator.mjs (an event on the one would reach the kern late by the alarm jitter)
-  const n = Math.floor((beatJetzt() + WECHSEL_ABSTAND) / 4 + 1e-6);
-  for (const l of laeufe.values()) l.takt(n);
+  // Each stream counts bars of ITS meter (plan studio-taktart: a `taktart` file per folder); the alarm goes to the earliest next bar line.
+  const jetzt = beatJetzt();
+  let naechste = Infinity;
+  for (const l of laeufe.values()) {
+    const pt = l.planer.proTakt;
+    const n = Math.floor((jetzt + WECHSEL_ABSTAND) / pt + 1e-6);
+    l.takt(n);
+    naechste = Math.min(naechste, pt * (n + 1));
+  }
   clearTimeout(wecker);
-  wecker = setTimeout(wecke, Math.max(5, msBisBeat(4 * (n + 1) - WECHSEL_ABSTAND)));
+  wecker = setTimeout(wecke, Math.max(5, msBisBeat(naechste - WECHSEL_ABSTAND)));
 }
 
 sock.on('message', (buf) => {
@@ -82,7 +89,10 @@ sock.bind(Number(opt['abo-port']), '127.0.0.1', () => {
   const hallo = () => sende(kodiere('/k/hallo', 'sii', [opt.name, abo, 1]));   // ONE hello for all streams: one subscriber slot
   hallo();
   setInterval(hallo, 1000);
-  for (const l of laeufe.values()) fs.watchFile(l.muster, { interval: 100 }, () => l.musterLesen());
+  for (const l of laeufe.values()) {
+    fs.watchFile(l.muster, { interval: 100 }, () => l.musterLesen());
+    fs.watchFile(l.taktartPfad, { interval: 100 }, () => { if (l.taktartLesen() && uhr) wecke(); });
+  }
   log(`ready: kern udp ${KERN}, subscription udp ${abo}, streams ${streams.join(',')}, pattern folders ${opt['muster-basis']}N`);
 });
 process.on('SIGTERM', () => process.exit(0));

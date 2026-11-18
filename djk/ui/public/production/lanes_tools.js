@@ -32,7 +32,7 @@ export function dehne(punkte, von, bis, neuBis, ziel) {
   const m = Math.max(bis, neuBis), k = (neuBis - von) / (bis - von);
   const wertM = laneWert(alt, m, ziel);
   const links = alt.filter((q) => q.beat <= von);
-  const bewegt = alt.filter((q) => q.beat > von && q.beat <= bis).map((q) => ({ ...q, beat: von + (q.beat - von) * k }));
+  const bewegt = alt.filter((q) => q.beat > von && q.beat <= bis).map((q) => ({ ...q, beat: q.beat === bis ? neuBis : Math.min(m, von + (q.beat - von) * k) }));
   const rechts = alt.filter((q) => q.beat > m);
   const neu = [...links, ...bewegt];
   const ende = laneWert(neu, m, ziel);

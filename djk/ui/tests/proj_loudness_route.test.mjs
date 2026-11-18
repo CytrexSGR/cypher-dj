@@ -23,11 +23,11 @@ test('proj/lautheit: Route im Bereich proj-ausgabe, Schutz fremdePost, Körper u
   assert.match(kj.text, /^unreadable request body/);
   const ohne = await post(url, '/proj/lautheit', {});
   assert.deepEqual([ohne.code, ohne.j.fehler, ohne.j.text], [409, 'kein_projekt', 'no project is open']);
-  i.vomKern('/e/ki', { gestoppt: 1, grund: 'hand', sample: 0 });
+  await i.kiStopp(true);
   const ki = await post(url, '/proj/lautheit', {}, { 'x-djk-quelle': 'cypher' });
   assert.deepEqual([ki.code, ki.j.fehler], [409, 'ki_gestoppt']);
   const hand = await post(url, '/proj/lautheit', {});
   assert.deepEqual([hand.code, hand.j.fehler], [409, 'kein_projekt'], 'Negativ-Kontrolle: Andreas sperrt der KI-Stopp nicht');
-  i.vomKern('/e/ki', { gestoppt: 0, grund: '', sample: 0 });
+  await i.kiStopp(false);
   assert.equal(i.gesendet, n0, 'nichts an den Kern');
 });

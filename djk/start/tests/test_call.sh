@@ -44,7 +44,11 @@ for opt in --master --cue --kern-konfig --leitstand-konfig --vorlagen-nach; do
 done
 lauf "$O/a1.txt" "$START/djk-stop" --instanz; R=$?
 [ "$R" = 2 ] && grep -q -- "--instanz" "$O/a1.txt"; pruef $? "A1 djk-stop --instanz (letztes): Rückgabe $R: $(head -1 "$O/a1.txt")"
-lauf "$O/a1.txt" "$START/djk-stop" --instanz i --still; R=$?
+# the negative control runs djk-stop for real: stub systemctl/pactl/fuser and temp shm/runtime dirs, so instance i's units and
+# core state on this machine are never touched (2026-11-18: djk-stop deletes /dev/shm/cypherdj-i/* and stops cypherdj-*-i units)
+mkdir -p "$O/stopbin" "$O/stopshm" "$O/stoprun"
+for s in systemctl pactl fuser; do printf '#!/usr/bin/env bash\nexit 1\n' > "$O/stopbin/$s"; chmod +x "$O/stopbin/$s"; done
+lauf "$O/a1.txt" env PATH="$O/stopbin:$PATH" DJK_SHM_BASIS="$O/stopshm" XDG_RUNTIME_DIR="$O/stoprun" "$START/djk-stop" --instanz i --still; R=$?
 pruef $([ "$R" = 0 ]; echo $?) "A1 Negativ-Kontrolle djk-stop --instanz i --still: Rückgabe $R"
 
 # A2 Konfiguration
@@ -139,14 +143,14 @@ rm -rf "$O/v"; lauf "$O/a6.txt" "$START/djk-start" "${VN[@]}" "$O/v" --arr1; R=$
 pruef $([ "$R" = 0 ]; echo $?) "A6 djk-start --arr1 (Vorlagen-Modus): Rückgabe $R"
 lauf "$O/a6.txt" "$START/djk-start" --help; R=$?
 [ "$R" = 0 ] && grep -q -- "^  --arr1 " "$O/a6.txt"; pruef $? "A6 --help beschreibt --arr1: Rückgabe $R"
-grep -q 'djk-instrumente" ${I:+--instanz "$I"} --arr1' "$START/djk-start"; pruef $? "A6 der Startweg ruft djk-instrumente --arr1"
+grep -q 'djk-instrumente" --instanz "$I" --arr1' "$START/djk-start"; pruef $? "A6 der Startweg ruft djk-instrumente --arr1"
 lauf "$O/a6.txt" "$START/djk-start" "${VN[@]}" "$O/v" --arr2; R=$?
 pruef $([ "$R" = 0 ]; echo $?) "A6 djk-start --arr2 (Vorlagen-Modus, 1.9): Rückgabe $R"
 rm -rf "$O/v"; lauf "$O/a6.txt" "$START/djk-start" "${VN[@]}" "$O/v" --arr1 --arr2; R=$?
 pruef $([ "$R" = 0 ]; echo $?) "A6 djk-start --arr1 --arr2 zusammen: Rückgabe $R"
 lauf "$O/a6.txt" "$START/djk-start" --help; R=$?
 [ "$R" = 0 ] && grep -q -- "^  --arr2 " "$O/a6.txt"; pruef $? "A6 --help beschreibt --arr2: Rückgabe $R"
-grep -q 'djk-instrumente" ${I:+--instanz "$I"} --arr2' "$START/djk-start"; pruef $? "A6 der Startweg ruft djk-instrumente --arr2"
+grep -q 'djk-instrumente" --instanz "$I" --arr2' "$START/djk-start"; pruef $? "A6 der Startweg ruft djk-instrumente --arr2"
 lauf "$O/a6.txt" "$START/djk-start" "${VN[@]}" "$O/v" --arr3; R=$?
 [ "$R" = 2 ]; pruef $? "A6 Negativ-Kontrolle --arr3: Rückgabe $R"
 
@@ -198,6 +202,25 @@ kerne_lauf env CYPHERDJ_KERN_KERNE=vier timeout 3 "$START/djk-start" "${VN[@]}" 
 pruef $? "A7 negative control core count 'vier': return $R, nothing filled"
 kerne_lauf env CYPHERDJ_KERN_CPUS="0 99" timeout 3 "$START/djk-start" "${VN[@]}" "$O/v"; R=$?
 [ "$R" = 2 ] && grep -q "not online" "$O/a7.txt"; pruef $? "A7 negative control CPU 99: return $R"
+
+# A8 --journal (lean operating journal): a test instance passes no --journal to the leitstand (mode voll), --journal voll|schlank is handed on, another
+#    value and a missing value are return 2 naming the option, --help lists it. The production default (no --instanz passes schlank) is pinned in the
+#    script text by djk/conductor/tests/journal_start.test.ts: a real production render is not run from here.
+rm -rf "$O/v"; lauf "$O/a8.txt" "$START/djk-start" "${VN[@]}" "$O/v"; R=$?
+LS=$(grep '^ExecStart=/' "$O/v/cypherdj-leitstand.service.d/betrieb.conf" 2>/dev/null)
+[ "$R" = 0 ] && [ -n "$LS" ] && [[ "$LS" != *"--journal"* ]]; pruef $? "A8 test instance without --journal: leitstand gets no --journal ($R): $LS"
+for m in schlank voll; do
+  rm -rf "$O/v"; lauf "$O/a8.txt" "$START/djk-start" "${VN[@]}" "$O/v" --journal "$m"; R=$?
+  LS=$(grep '^ExecStart=/' "$O/v/cypherdj-leitstand.service.d/betrieb.conf" 2>/dev/null)
+  [ "$R" = 0 ] && [[ "$LS" == *"--journal $m"* ]]; pruef $? "A8 --journal $m is handed to the leitstand ($R): $LS"
+done
+rm -rf "$O/v"; lauf "$O/a8.txt" "$START/djk-start" "${VN[@]}" "$O/v" --journal halb; R=$?
+[ "$R" = 2 ] && grep -q -- "--journal" "$O/a8.txt" && grep -q "voll or schlank" "$O/a8.txt" && [ ! -e "$O/v/cypherdj-leitstand.service.d/betrieb.conf" ]
+pruef $? "A8 --journal halb: return $R, message names the option and the values, nothing filled"
+rm -rf "$O/v"; lauf "$O/a8.txt" "$START/djk-start" "${VN[@]}" "$O/v" --journal; R=$?
+[ "$R" = 2 ] && grep -q -- "--journal" "$O/a8.txt"; pruef $? "A8 --journal without a value: return $R"
+lauf "$O/a8.txt" "$START/djk-start" --help; R=$?
+[ "$R" = 0 ] && grep -q -- "^  --journal " "$O/a8.txt"; pruef $? "A8 --help describes --journal: return $R"
 
 echo "ERGEBNIS $OK OK, $FEHL FEHL"
 [ "$FEHL" = 0 ]

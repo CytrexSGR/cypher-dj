@@ -6,17 +6,20 @@ import { INSTRUMENT_STROEME, kanalVonStrom } from '../contract/streams.ts';
 import fs from 'node:fs';
 import { ablageOrdner } from './paths.ts';
 import path from 'node:path';
-import { liesSchnitt } from './sampler/schnitt.ts';
+import { liesSchnitt, type Ordner } from './sampler/schnitt.ts';
 import { instrumentKategorieText } from './sampler/instrument.ts';
 import { tonKategorieText } from './sampler/tone.ts';
 
 export type GraphArt = 'instrument' | 'effekt';
 /** `latenz`: samples the graph delays its signal at 48 kHz (0 = none), see graphLatenz. */
-export type GraphEintrag = { name: string; art: GraphArt; regler_namen: Record<string, string>; latenz: number; kategorie?: string; text?: string };
+export type GraphEintrag = { name: string; art: GraphArt; regler_namen: Record<string, string>; latenz: number; kategorie?: string; prinzip?: string; text?: string };
 /** Instrument categories (ids of kategorien.json). `host` is the Surge/plugin entry the page adds itself, so no graph carries it by default, but it is valid. */
 export const KATEGORIE_IDS = ['drums', 'bass', 'lead', 'pad', 'keys', 'textur', 'host', 'sampler'];
 export const KATEGORIE_TEXT_MAX = 90;
-export type KategorieEintrag = { kategorie: string; text: string };
+/** Synthesis types of the instruments (`prinzip` of kategorien.json): the picker's second grouping axis next to the role (`kategorie`). The page adds the
+ *  groups `host` and `sonst` (Other) itself; no graph carries them. */
+export const PRINZIP_IDS = ['analog', 'wavetable', 'fm', 'physik', 'granular', 'sampler', 'drums', 'feedback'] as const;
+export type KategorieEintrag = { kategorie: string; prinzip?: string; text: string };
 export type GraphListe = { graphen: GraphEintrag[]; uebersprungen: string[] };
 
 // Same rule as the kern (net_erz.cpp kit_name_ok): [a-z0-9_-], 1..32 characters. The graph name is the FILE name.
@@ -95,7 +98,7 @@ export function graphLatenz(graph: unknown): number {
   return aus;
 }
 
-/** kategorien.json ({graph: {kategorie, text}}) as installed next to the panels (<graph folder>/panels/kategorien.json, copied by djk-start). Entries that are not
+/** kategorien.json ({graph: {kategorie, prinzip?, text}}) as installed next to the panels (<graph folder>/panels/kategorien.json, copied by djk-start). Entries that are not
  *  valid (unknown category, empty or over-long text) are left out; a missing or unreadable file gives {}. */
 export function ladeKategorien(ordner: string = graphenOrdner()): Record<string, KategorieEintrag> {
   let roh: unknown;
@@ -109,12 +112,17 @@ export function pruefeKategorien(roh: unknown): { gueltig: Record<string, Katego
     const e = v as { kategorie?: unknown; text?: unknown };
     if (typeof e?.kategorie !== 'string' || !KATEGORIE_IDS.includes(e.kategorie)) { fehler.push(`${n}: kategorie must be one of ${KATEGORIE_IDS.join(', ')}`); continue; }
     if (typeof e.text !== 'string' || !e.text.trim() || e.text.length > KATEGORIE_TEXT_MAX) { fehler.push(`${n}: text must be 1..${KATEGORIE_TEXT_MAX} characters`); continue; }
-    gueltig[n] = { kategorie: e.kategorie, text: e.text };
+    // prinzip is optional on read (an older install has none); a wrong one is reported but the entry stays, without it
+    const p = (v as { prinzip?: unknown }).prinzip;
+    const prinzipOk = typeof p === 'string' && (PRINZIP_IDS as readonly string[]).includes(p);
+    if (p !== undefined && !prinzipOk) fehler.push(`${n}: prinzip must be one of ${PRINZIP_IDS.join(', ')}`);
+    gueltig[n] = { kategorie: e.kategorie, ...(prinzipOk ? { prinzip: p } : {}), text: e.text };
   }
   return { gueltig, fehler };
 }
 
-export function listeGraphen(ordner: string = graphenOrdner()): GraphListe {
+/** `o` is the sampler store (cuts, tones, instruments) the generated devices are named from; absent = the default folders. */
+export function listeGraphen(ordner: string = graphenOrdner(), o: Ordner = {}): GraphListe {
   const graphen: GraphEintrag[] = [], uebersprungen: string[] = [];
   let dateien: string[] = [];
   try { dateien = fs.readdirSync(ordner).filter((d) => d.endsWith('.json')); } catch { /* no folder: empty list */ }
@@ -128,25 +136,28 @@ export function listeGraphen(ordner: string = graphenOrdner()): GraphListe {
   }
   graphen.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   const kat = ladeKategorien(ordner);   // instruments only; entries without one carry no fields (the page files them under "Other")
-  for (const g of graphen) if (g.art === 'instrument' && kat[g.name]) { g.kategorie = kat[g.name].kategorie; g.text = kat[g.name].text; }
+  for (const g of graphen) if (g.art === 'instrument' && kat[g.name]) { g.kategorie = kat[g.name].kategorie; if (kat[g.name].prinzip) g.prinzip = kat[g.name].prinzip; g.text = kat[g.name].text; }
   // Sampler A1 D10: the generated devices of the cut store (smp-<id>) belong to the category `sampler`, named after their cut; no entry of kategorien.json
   for (const g of graphen) {
     if (g.art !== 'instrument' || !g.name.startsWith('smp-')) continue;
     g.kategorie = 'sampler';
-    const schnitt = liesSchnitt(g.name.slice(4));
+    g.prinzip = 'sampler';
+    const schnitt = liesSchnitt(g.name.slice(4), o);
     g.text = schnitt ? `Slices of ${schnitt.name}`.slice(0, KATEGORIE_TEXT_MAX) : 'Sliced sample';
   }
   // Sampler C: the generated tones (ton-<cut>-<n>) are filed under `sampler` as well; the text names the tone and its root
   for (const g of graphen) {
     if (g.art !== 'instrument' || !g.name.startsWith('ton-')) continue;
     g.kategorie = 'sampler';
-    g.text = tonKategorieText(g.name);
+    g.prinzip = 'sampler';
+    g.text = tonKategorieText(g.name, o);
   }
   // Sample player stage 2: the generated instruments (ins-<id>) are filed under `sampler` too
   for (const g of graphen) {
     if (g.art !== 'instrument' || !g.name.startsWith('ins-')) continue;
     g.kategorie = 'sampler';
-    g.text = instrumentKategorieText(g.name);
+    g.prinzip = 'sampler';
+    g.text = instrumentKategorieText(g.name, o);
   }
   return { graphen, uebersprungen };
 }

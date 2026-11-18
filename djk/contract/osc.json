@@ -296,7 +296,7 @@
     {"adresse": "/k/mapping", "typen": ",hss", "abschnitt": "4.7", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
-      {"name": "geraet", "typ": "s", "einheit": "text"}]},
+      {"name": "geraet", "typ": "s", "einheit": "text", "notiz": "device file name in the controller folder; \"lernen\" is slot 1 (learn table of midi_ein_1), \"lernen-2\" .. \"lernen-8\" are slots 2..8 (midi_ein_2..8), every other name is slot 0"}]},
     {"adresse": "/k/lernen", "typen": ",hsi", "abschnitt": "4.7", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
@@ -595,7 +595,7 @@
       {"name": "beat", "typ": "d", "einheit": "beat"}]},
     {"adresse": "/e/gelernt", "typen": ",hiiiii", "abschnitt": "5.8", "richtung": "vom_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung", "notiz": "id of the /k/lernen that armed the capture"},
-      {"name": "quelle", "typ": "i", "einheit": "code", "bereich": [0, 1], "notiz": "0 hand_in, 1 midi_ein_1"},
+      {"name": "quelle", "typ": "i", "einheit": "code", "bereich": [0, 8], "notiz": "0 hand_in, 1..8 midi_ein_1..8"},
       {"name": "kanal", "typ": "i", "einheit": "nummer", "bereich": [1, 16]},
       {"name": "nr", "typ": "i", "einheit": "zahl", "bereich": [0, 127], "notiz": "controller number of the CC"},
       {"name": "wert", "typ": "i", "einheit": "zahl", "bereich": [0, 127]},
@@ -737,7 +737,7 @@
       {"name": "spaet", "typ": "i", "einheit": "anzahl", "notiz": "late events since kern start (a job taken back, or a join after the deadline)"},
       {"name": "zurueck", "typ": "i", "einheit": "anzahl", "notiz": "jobs taken back by the callback since kern start"}]},
     {"adresse": "/zustand/spur_pool", "typen": ",iiiiiiiii", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [
-      {"name": "an", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "1 the track phases can fork onto the Hall pool, 0 off (spur_pool aus, no pool, workers that do not run SCHED_FIFO because the process has no real-time rights, or the track account switched itself off for good after repeated late events or a stall)"},
+      {"name": "an", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "1 the track phases can fork onto the Hall pool, 0 off (spur_pool aus, no pool, workers that do not run SCHED_FIFO because the process has no real-time rights, or the track account switched itself off after repeated late events or a stall and waits for its retry after a back-off of 4096 blocks, doubling to 65536)"},
       {"name": "modus", "typ": "i", "einheit": "code", "bereich": [0, 2], "notiz": "the mode in force: 0 aus, 1 an, 2 auto; 0 without a pool whatever kern.toml says"},
       {"name": "blocks_parallel", "typ": "i", "einheit": "anzahl", "notiz": "phases in which at least one worker job was started (not taken back), since kern start (low 31 bits: the counter wraps to 0 after 2147483647, a consumer takes differences)"},
       {"name": "einheiten_worker", "typ": "i", "einheit": "anzahl", "notiz": "track units computed on pool workers, since kern start (low 31 bits, wraps)"},
@@ -747,7 +747,7 @@
       {"name": "spaet", "typ": "i", "einheit": "anzahl", "notiz": "late events of the track account, since kern start (a job taken back late, a join after the deadline; saturates at 2147483647)"},
       {"name": "zurueck", "typ": "i", "einheit": "anzahl", "notiz": "track jobs taken back by the callback because no worker had started them, since kern start (normal, not late; saturates at 2147483647; reported with the 2 Hz beat, a change alone sends nothing)"}]},
     {"adresse": "/zustand/ein", "typen": ",ihhhh", "abschnitt": "5.14", "richtung": "vom_kern", "felder": [
-      {"name": "verbunden", "typ": "i", "einheit": "code", "notiz": "Bitmaske: Bit k-1 = ein_k_L und ein_k_R verbunden (k 1..4), Bit 8 = midi_ein_1 (I08)"},
+      {"name": "verbunden", "typ": "i", "einheit": "code", "notiz": "Bitmaske: Bit k-1 = ein_k_L und ein_k_R verbunden (k 1..4), Bit 8 = midi_ein_1, Bit 9..15 = midi_ein_2..8 (I08)"},
       {"name": "midi_gesehen", "typ": "h", "einheit": "anzahl"},
       {"name": "midi_verloren", "typ": "h", "einheit": "anzahl"},
       {"name": "midi_sample", "typ": "h", "einheit": "sample", "notiz": "Kern-Sample des letzten MIDI-Ereignisses, −1 ohne"},

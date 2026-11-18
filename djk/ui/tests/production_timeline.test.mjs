@@ -119,10 +119,11 @@ test('Scrollleiste: Inhalt reicht über das Projektende hinaus, Lage folgt beat0
 
 test('S2 T6 fix 5: another project drops the chosen lane targets, the same project keeps them', async () => {
   const { laneZustandBeiProjekt } = await import('../public/production/timeline_operation.js');
-  const st = { laneZiel: new Map([['s1', 'pan'], ['s2', 'mute']]), laneOffen: new Set(['s1']) };
+  const st = { laneZiel: new Map([['s1', 'pan'], ['s2', 'mute']]), laneOffen: new Set(['s1', 'g1', 'r1', 'r12', 'master']) };
   laneZustandBeiProjekt(st, false);
   assert.equal(st.laneZiel.size, 2, 'same project (a new revision): kept');
+  assert.equal(st.laneOffen.size, 5, 'same project: every open row kept');
   laneZustandBeiProjekt(st, true);
   assert.equal(st.laneZiel.size, 0, 'another project: dropped');
-  assert.equal(st.laneOffen.size, 1, 'the open rows are a known leftover of slice 1 and stay');
+  assert.deepEqual([...st.laneOffen], ['s1', 'g1'], 'tracks and groups stay (slice 1 leftover); returns and master are collapsed by default');
 });

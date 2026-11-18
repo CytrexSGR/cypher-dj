@@ -29,12 +29,12 @@ test('proj/zusammenfuehren: Route im Bereich proj-ausgabe, Schutz fremdePost, KÃ
   const koerper = { spur_ids: ['s1', 's2'], von_beat: 0, bis_beat: 4 };
   const ohne = await post(url, URL_, koerper);
   assert.deepEqual([ohne.code, ohne.j.fehler, ohne.j.text], [409, 'kein_projekt', 'no project is open']);
-  i.vomKern('/e/ki', { gestoppt: 1, grund: 'hand', sample: 0 });   // set right before the request: the stack may reset it under load
+  await i.kiStopp(true);
   const ki = await post(url, URL_, koerper, { 'x-djk-quelle': 'cypher' });
   assert.deepEqual([ki.code, ki.j.fehler], [409, 'ki_gestoppt']);
   const hand = await post(url, URL_, koerper);
   assert.deepEqual([hand.code, hand.j.fehler], [409, 'kein_projekt'], 'Negativ-Kontrolle: Andreas sperrt der KI-Stopp nicht');
-  i.vomKern('/e/ki', { gestoppt: 0, grund: '', sample: 0 });
+  await i.kiStopp(false);
   assert.equal(i.gesendet, n0, 'nichts an den Kern');
 });
 

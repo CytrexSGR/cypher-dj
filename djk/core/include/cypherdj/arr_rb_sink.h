@@ -55,6 +55,7 @@ class ArrRbSenke final : public ArrSenke {
   void note(int spur, int64_t ziel, uint8_t ton, uint8_t vel, bool an) noexcept override;
   void alle_aus(int spur, int64_t ziel) noexcept override;
   void transport_start(int spur, int64_t ziel) noexcept override;
+  void transport_abbruch(int spur) noexcept override;   // audit U33: a stop while the start waits cancels it (start and fade state)
   void block(int spur, int64_t s0, int m, float* l, float* r) noexcept override;   // = block_bahn on the own lane-0 struct
   // Mehrkern slice 3.1: touches only the track's own slot, the atomic counters and the scratch of `a`; another track may run on another lane meanwhile
   void block_bahn(int spur, int64_t s0, int m, float* l, float* r, ArrArbeit& a) noexcept override;

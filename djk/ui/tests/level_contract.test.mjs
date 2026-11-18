@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { ADRESSEN } from '../../contract/osc_addresses.ts';
+import { serverQuelle } from './support/server_source.mjs';
 
 const FELDER = ADRESSEN['/pegel'].felder;
 const quelle = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8');
@@ -15,7 +16,7 @@ test('Vertrag /pegel: acht Felder, vom Kern; kanal und spitze_db sind darunter',
 });
 
 test('Server liest aus /pegel nur Vertragsfelder (der Pegelpuffer führt kanal und spitze_db, auch für spur/<n>)', () => {
-  const s = quelle('../server.ts');
+  const s = serverQuelle();
   const m = /this\.pegelPuffer\.nimm\(\{([^}]*)\}\)/.exec(s);
   assert.ok(m, 'die Stelle in server.ts ist da');
   const gelesen = [...m[1].matchAll(/f\.(\w+)/g)].map((x) => x[1]);

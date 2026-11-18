@@ -782,7 +782,9 @@ ${t ? `<span class="w-hinweis" data-w="r-tonart">${esc(tonartText(t))}</span>` :
       mitFehler(() => sende(`${spur.name}: notes`, umschaltBefehle(ziel(cur))));
     } else if (taste === 'Backspace' || taste === 'Delete') {
       behandelt();
-      mitFehler(() => sende(`${spur.name}: delete notes`, setzeBefehle(clip, art, ctx.info(spur), ts.auswahl.length ? ts.auswahl : [ziel(cur)], false, akt.aufl)));
+      // no selection: the note under the cursor; a body cell of a long note stands for its head (as Enter and the right button do)
+      const unterCursor = () => { const z = ziel(cur); return { ton: z.ton, quelle: (art === 'note' ? kopfZelle(clip, z.ton, z.quelle, art, akt.aufl) : null) ?? z.quelle }; };
+      mitFehler(() => sende(`${spur.name}: delete notes`, setzeBefehle(clip, art, ctx.info(spur), ts.auswahl.length ? ts.auswahl : [unterCursor()], false, akt.aufl)));
     } else if (strg && taste.toLowerCase() === 'd') {
       behandelt();
       const r = mitFehler(() => dupliziereBefehle(clip, art, ts.auswahl, akt.aufl));

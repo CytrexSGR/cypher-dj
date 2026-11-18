@@ -281,3 +281,21 @@ test('Schreiber task 9: bisHier wartet nur auf die bis jetzt eingereihten Anfrag
   assert.equal(srv.anfragen.length, 3, 'C is only now in flight or queued');
   srv.freigaben.shift()?.();
 });
+
+test('Schreiber: a view hook that throws in beiProjekt does not strand the queue (the request ends, later changes are still sent)', async () => {
+  const srv = server();
+  let wirf = true;
+  const fehler = console.error; const gemeldet = [];
+  console.error = (...a) => gemeldet.push(a);
+  try {
+    const s = neuerSchreiber({ holeJson: srv.holeJson, beiProjekt: () => { if (wirf) { wirf = false; throw new TypeError('view broke'); } }, beiFehler: () => {} });
+    s.setze('a', 5);
+    const erste = await s.aendere('Mute', [{ befehl: 'spur_aendern', spur_id: 's1', mute: true }]);
+    assert.equal(erste, true, 'the write itself was answered');
+    const zweite = await Promise.race([s.aendere('Solo', [{ befehl: 'spur_aendern', spur_id: 's1', solo: true }]), new Promise((ok) => setTimeout(() => ok('haengt'), 200))]);
+    assert.equal(zweite, true, 'the next change is sent and answered');
+    assert.equal(srv.anfragen.length, 2);
+    assert.ok(s.leer());
+    assert.equal(gemeldet.length, 1, 'the throw is reported once');
+  } finally { console.error = fehler; }
+});

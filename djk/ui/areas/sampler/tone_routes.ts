@@ -7,10 +7,10 @@ import { liesModul, listeModule } from '../../project/module_storage.ts';
 import type { Projekt } from '../../project/model.ts';
 import { MAX_WERKBANK_SPUREN } from '../../project/werkbank.ts';
 import { liesSchnitt, SchnittFehler, type Ordner } from '../../sampler/schnitt.ts';
-import { legeTon, listeToene, liesTonVonGraph, loescheTon, loescheToeneVon, setzeGrund, tonText, type Ton } from '../../sampler/tone.ts';
+import { legeTon, listeToene, liesTonVonGraph, loescheTon, loescheToeneVon, setzeGrund, tonNachSchnitt, tonText, type Ton } from '../../sampler/tone.ts';
 import { alsAntwort, leseKoerper } from '../proj/area.ts';
 import { ProjFehler, type Antwort } from '../proj/session.ts';
-import { nutzer, type Fund, type SamplerOptionen } from './area.ts';
+import { freierName, nutzer, type Fund, type SamplerOptionen } from './area.ts';
 
 type Quelle = 'andreas' | 'cypher';
 const NAME_MAX = 80;            // the longest track name and history label of the project
@@ -34,19 +34,10 @@ export function offenFuerSpur(opt: SamplerOptionen): Offen {
   }
   return o;
 }
-// " 2", " 3" ... until the name is free among the instrument tracks (ignoring case, as the command does); a copy of the rule of SLICE TO TRACK
-const freierName = (p: Projekt, name: string): string => {
-  const belegt = new Set(p.spuren.filter((s) => s.art === 'instrument').map((s) => s.name.toLowerCase()));
-  for (let n = 1; ; n++) {
-    const rest = n === 1 ? '' : ` ${n}`;
-    const z = `${name.slice(0, NAME_MAX - rest.length)}${rest}`;
-    if (!belegt.has(z.toLowerCase())) return z;
-  }
-};
 /** The answer part every tone route shares: the tone, its one-line text and (when the cut has one) the key the page names beside a root taken from it. */
 export function tonKern(t: Ton, o: Ordner): Record<string, unknown> {
-  const k = liesSchnitt(t.schnitt_id, o)?.tonart;
-  return { ton: t, text: tonText(t, k), ...(k !== undefined ? { tonart: k } : {}) };
+  const s = liesSchnitt(t.schnitt_id, o), k = s?.tonart;
+  return { ton: tonNachSchnitt(t, s), text: tonText(t, k, s), ...(k !== undefined ? { tonart: k } : {}) };
 }
 /** Puts a tone on a new NOTE track of the open workbench module: one note at the root, one history step. A refusal or failure removes the tone again
  *  (the refusal of the project is the error to report). The answer is the tone part plus `rev`, `projekt` and `spur_id`. */

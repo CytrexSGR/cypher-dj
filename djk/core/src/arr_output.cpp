@@ -1250,7 +1250,9 @@ void Arrangement::verlaeufe_nachfuehren(int m) {
         w.w = w.vl[m - 1];   // error case: the lane value becomes the base value of the fader
 #else
         // Automation Slice 1 (D5a point 4): w.w stays the stellwerk or base value, never a lane value; a stellwerk course that ran this block ends in w.w
-        if (s < ARR_SPUREN && f < AUTO_FELDER && w.vl == auto_buf_[s][f]) {
+        // the lane buffer of the strip: a track is its own slot, a return is slot ARR_SPUREN + r (field 0 only: the other fields of a return have no lane buffer); groups and PM none
+        const int slot = s < ARR_SPUREN ? s : (s >= ARR_RET0 ? s - ARR_RET0 + ARR_SPUREN : -1);
+        if (slot >= 0 && f < AUTO_FELDER && w.vl == auto_buf_[slot][f]) {
           if (w.sw_vl) w.w = w.sw_vl[m - 1];
         } else {
           w.w = w.vl[m - 1];

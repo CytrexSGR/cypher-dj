@@ -583,3 +583,100 @@ test('U7 save: when the list does not (yet) hold the saved preset the panel read
   assert.deepEqual(geholt.filter((x) => /null|undefined/.test(x)), [], 'no request for a missing id');
   assert.equal(p.z.gewaehlt, null);
 });
+
+// ---- D28: a sound of another instrument asks once, then sends the graph first ----
+// A fake host: the plan answers come from a script, every request is logged in order, the knobs and the graph load are separate stand-ins.
+function kanalHost({ plan, graphAntwort = { code: 200, j: { ok: true, quittung: { status: 3 } } }, reglerAntwort = { ok: true } }) {
+  const log = [];
+  const senden = async (pfad, daten) => {
+    log.push([pfad, daten]);
+    if (pfad === '/presets/anwenden') return daten.graph_laden === true ? plan.mit : plan.ohne;
+    if (pfad === '/graph') return graphAntwort;
+    throw new Error(`unexpected ${pfad}`);
+  };
+  const regler = async (pfad, nach) => { log.push(['regler', pfad, nach]); return reglerAntwort; };
+  return { log, senden, regler };
+}
+const KNOBS = Array.from({ length: 64 }, (_, i) => ({ pfad: `erz/6/bk/${i + 1}`, nach: i === 1 ? 0.25 : 0.5 }));
+const PLAN_GRAPH = { ohne: { code: 409, j: { fehler: 'graph_anders', text: 'another graph', graph: 'neu-a' } },
+  mit: { code: 200, j: { weg: 'regler', graph: { kanal: 'erz/6', name: 'neu-a' }, anfragen: KNOBS, uebersprungen: [] } } };
+const ID = 'nutzer:baukasten/neu-sound';
+
+test('D28 kanalPlanHolen: a graph refusal asks once with the preset, graph and channel name; yes repeats with graph_laden and carries the graph', async () => {
+  const fragen = [], h = kanalHost({ plan: PLAN_GRAPH });
+  const r = await SeiteAlle.kanalPlanHolen(h.senden, ID, 'erz/6', { presetName: 'Neu Sound', zielName: 'Synth 6', bestaetige: (t) => { fragen.push(t); return true; } });
+  assert.deepEqual(fragen, ['"Neu Sound" is a sound of neu-a. Load neu-a on Synth 6 and apply it?']);
+  assert.deepEqual(h.log.map((x) => x[1]), [{ id: ID, ziel: { art: 'kanal', kanal: 'erz/6' } }, { id: ID, ziel: { art: 'kanal', kanal: 'erz/6' }, graph_laden: true }]);
+  assert.deepEqual([r.ok, r.graph, r.anfragen.length], [true, { kanal: 'erz/6', name: 'neu-a' }, 64]);
+});
+
+test('D28 kanalPlanHolen: answering no sends nothing more; a refusal without a graph (stage, wrong device, unknown) never asks', async () => {
+  let h = kanalHost({ plan: PLAN_GRAPH });
+  const nein = await SeiteAlle.kanalPlanHolen(h.senden, ID, 'erz/6', { presetName: 'Neu Sound', bestaetige: () => false });
+  assert.deepEqual([nein.ok, nein.anfragen, /neu-a was not loaded/.test(nein.text)], [false, [], true]);
+  assert.equal(h.log.length, 1, 'only the first plan request went out');
+  let gefragt = 0;
+  for (const j of [{ fehler: 'graph_anders', text: 't' }, { fehler: 'geraet_passt_nicht', text: 't', graph: 'x' }, { fehler: 'graph_fehlt', text: 'not installed' }]) {
+    h = kanalHost({ plan: { ohne: { code: j.fehler === 'graph_fehlt' ? 404 : 409, j } } });
+    const r = await SeiteAlle.kanalPlanHolen(h.senden, ID, 'erz/6', { bestaetige: () => { gefragt++; return true; } });
+    assert.equal(r.ok, false); assert.equal(h.log.length, 1);
+  }
+  assert.equal(gefragt, 0);
+});
+
+test('D28 kanalAnwenden: question, plan again, THEN the graph, THEN the 64 knobs in order; the answer names the instrument', async () => {
+  const h = kanalHost({ plan: PLAN_GRAPH });
+  const r = await SeiteAlle.kanalAnwenden({ senden: h.senden, regler: h.regler, id: ID, kanal: 'erz/6', kanalName: 'Synth 6', presetName: 'Neu Sound', bestaetige: () => true });
+  assert.deepEqual(h.log.map((x) => x[0]), ['/presets/anwenden', '/presets/anwenden', '/graph', ...Array(64).fill('regler')]);
+  assert.deepEqual(h.log[2], ['/graph', { kanal: 'erz/6', name: 'neu-a' }]);
+  assert.deepEqual(h.log[4], ['regler', 'erz/6/bk/2', 0.25]);
+  assert.deepEqual(r, { ok: true, text: 'channel Synth 6; loaded neu-a' });
+});
+
+test('D28 kanalAnwenden: a graph the core did not accept sends NO knob (refused status 6, an HTTP refusal, no answer, a thrown request)', async () => {
+  const faelle = [
+    [{ code: 200, j: { ok: true, quittung: { status: 6, grund: 'graph does not compile' } } }, /graph does not compile/],
+    [{ code: 400, j: { fehler: 'falsche_art', art: 'effekt' } }, /falsche_art/],
+    [{ code: 200, j: { ok: true, quittung: null } }, /did not answer/],
+    [{ code: 409, j: { fehler: 'belegt', text: 'erz/6 carries the effect graph x: take it off first' } }, /take it off first/],
+  ];
+  for (const [graphAntwort, text] of faelle) {
+    const h = kanalHost({ plan: PLAN_GRAPH, graphAntwort });
+    const r = await SeiteAlle.kanalAnwenden({ senden: h.senden, regler: h.regler, id: ID, kanal: 'erz/6', bestaetige: () => true });
+    assert.equal(r.ok, false); assert.match(r.text, /^neu-a was not loaded, no knob was set: /); assert.match(r.text, text);
+    assert.deepEqual(h.log.filter((x) => x[0] === 'regler'), [], JSON.stringify(graphAntwort));
+  }
+  const h = kanalHost({ plan: PLAN_GRAPH }); const alt = h.senden;
+  h.senden = async (p, d) => { if (p === '/graph') throw new Error('network down'); return alt(p, d); };
+  const r = await SeiteAlle.kanalAnwenden({ senden: h.senden, regler: h.regler, id: ID, kanal: 'erz/6', bestaetige: () => true });
+  assert.match(r.text, /no knob was set: network down/); assert.deepEqual(h.log.filter((x) => x[0] === 'regler'), []);
+  // negative control: the accepted statuses 2 and 5 do send the knobs
+  for (const status of [2, 5]) {
+    const k = kanalHost({ plan: PLAN_GRAPH, graphAntwort: { code: 200, j: { ok: true, quittung: { status } } } });
+    assert.equal((await SeiteAlle.kanalAnwenden({ senden: k.senden, regler: k.regler, id: ID, kanal: 'erz/6', bestaetige: () => true })).ok, true);
+    assert.equal(k.log.filter((x) => x[0] === 'regler').length, 64);
+  }
+});
+
+test('D28 kanalAnwenden: the graph is already loaded (no graph in the plan): no question, no /graph, knobs as before; declined: nothing but the plan request', async () => {
+  const plain = { ohne: { code: 200, j: { weg: 'regler', anfragen: KNOBS.slice(0, 3), uebersprungen: ['lautstaerke'] } } };
+  const h = kanalHost({ plan: plain });
+  const r = await SeiteAlle.kanalAnwenden({ senden: h.senden, regler: h.regler, id: ID, kanal: 'erz/6', kanalName: 'Synth 6', bestaetige: () => assert.fail('no question') });
+  assert.deepEqual(h.log.map((x) => x[0]), ['/presets/anwenden', 'regler', 'regler', 'regler']);
+  assert.deepEqual(r, { ok: true, text: 'channel Synth 6; not in the table: lautstaerke' });
+  const n = kanalHost({ plan: PLAN_GRAPH });
+  const abgelehnt = await SeiteAlle.kanalAnwenden({ senden: n.senden, regler: n.regler, id: ID, kanal: 'erz/6', bestaetige: () => false });
+  assert.equal(abgelehnt.ok, false);
+  assert.deepEqual(n.log.map((x) => x[0]), ['/presets/anwenden']);
+});
+
+test('D28 panel: applying a sound of another instrument shows the instrument that was loaded in the success message', async () => {
+  const w = wurzel();
+  const p = new PresetPanel(w, {
+    holen: async (pf) => (pf === '/presets/nutzer/baukasten/neu-sound' ? { code: 200, j: { name: 'Neu Sound', geraet: 'baukasten', graph: 'neu-a', werte: { knob2: 0.25 } } } : { code: 404, j: {} }),
+    anwenden: async (preset, g, id) => SeiteAlle.kanalAnwenden({ ...kanalHost({ plan: PLAN_GRAPH }), id, kanal: 'erz/6', kanalName: 'Synth 6', presetName: preset.name, bestaetige: () => true }),
+  });
+  p.z.geraete = GERAETE;
+  await p.anwenden('nutzer/baukasten/neu-sound');
+  assert.deepEqual(p.z.meldung, { text: 'Applied Neu Sound (channel Synth 6; loaded neu-a)', fehler: false });
+});

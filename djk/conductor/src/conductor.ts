@@ -1,7 +1,7 @@
 // cypherdj-leitstand, Grundgerüst (Scheibe 12): Kern-Anbindung, WS-Hub, Takt-Strom, Journal.
 // Scheibe 21: Annahme (Verriegelung, Autonomie, Vorschläge, Kopplung), Hörschein-Register, Tasten, Abgleich nach Neustart.
 // Aufruf: node src/conductor.ts [--konfig <pfad>] [--kern-port <n>] [--set-id JJJJ-MM-TT_hhmm]
-//                               [--ki-spur deck/3,erz/1] [--kern-konfig <kern.toml>]
+//                               [--ki-spur deck/3,erz/1] [--kern-konfig <kern.toml>] [--journal voll|schlank]
 // Umgebung: CYPHERDJ_INSTANZ (ROADMAP Z2), LEITSTAND_MUTATION (nur Prüfung: autonomie_aus, kopplung_aus,
 // wiederaufnahme_aus). Ohne --set-id setzt der Leitstand ein laufendes Set fort (src/resume.ts).
 // Erste Zeile auf stdout beginnt mit "leitstand:" (bereit).
@@ -11,7 +11,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import type { Dekodiert, Felder } from './addresses.ts';
-import { ansageFuer, ART_JE_ADRESSE, NICHT_INS_JOURNAL } from './ereignisse.ts';
+import {
+  ansageFuer, ART_JE_ADRESSE, journalModus, journalWuerdig, NICHT_INS_JOURNAL, resumeLiestZeile, type JournalModus,
+} from './ereignisse.ts';
 import { Hub, RpcFehler, type Client, type Rolle } from './hub.ts';
 import { Journal, journalZeilen, setIdAus, type JournalZeile, type Von } from './journal.ts';
 import { KernAnbindung, type KernZustand } from './core.ts';
@@ -54,6 +56,7 @@ export interface LeitstandOptionen {
   env?: NodeJS.ProcessEnv;
   kiSpur?: string[];      // Scheibe 21: Kanäle der KI-Spur (§4.7 /k/ki/spur), Vorgabe keiner
   kernKonfig?: string;    // Scheibe 21: kern.toml für hoerbar_db, tief_offen_db, max_stretcher (§2.1)
+  journal?: JournalModus; // lean operating journal: wins over the config key journal; absent in both = voll (ereignisse.ts journalWuerdig)
 }
 
 // Nach /k/willkommen sammelt der Leitstand /q/stand so lange, bevor er abgleicht (§4.1: willkommen, neustart und
@@ -73,6 +76,13 @@ export class Leitstand {
   verspaetet = 0; // takt-Nachrichten mehr als 150 ms nach Taktanfang (eigene Sicht; gemessen wird am Ziel)
   readonly annahme: Annahme;
   private bekannteGeneration: number | null = null;
+  // Heartbeat cause (plan 2026-11-18): Annahme.verbunden() runs only when the connection was really (re)established, not on every
+  // heartbeat answer. neuVerbunden: the connection watcher went from suche to verbunden since the last verbunden() call;
+  // verbundenGeneration: the generation the last verbunden() call was made for.
+  private neuVerbunden = false;
+  private verbundenGeneration: number | null = null;
+  readonly journalModus: JournalModus;
+  private readonly journalMerker = new Map<string, string>(); // what journalWuerdig wrote last per type, empty with the process
   private idZaehler = jetztNs(); // §1.4: je Absender streng steigend, Start = mono_ns beim Prozessstart
   private arbeitsbestandPfad = ''; // §6.4, aus kern.toml (kw.arbeitsbestand_pfad), gesetzt im Konstruktor
   // Scheibe 31: wer auf eine Kern-Quittung wartet, die nicht über einen Plan der Annahme läuft (laden, §4.4).
@@ -81,6 +91,8 @@ export class Leitstand {
 
   constructor(opt: LeitstandOptionen) {
     this.lz = ladeKonfig({ pfad: opt.konfigPfad, kernPort: opt.kernPort, env: opt.env });
+    // the config key journal arrives with its own task; until then absent = voll
+    this.journalModus = journalModus(opt.journal, this.lz.konfig.journal);
     this.journal = new Journal(this.lz.sets_pfad, opt.setId ?? fortsetzbar(this.lz.sets_pfad) ?? setIdAus(new Date()));
     this.takt = new TaktStrom({
       berichtFristNs: BERICHT_FRIST_NS,
@@ -146,7 +158,8 @@ export class Leitstand {
     if (!fs.existsSync(this.journal.pfad)) return;
     const leitstand = this;
     const zeilen = (function* () {
-      for (const z of journalZeilen(leitstand.journal.pfad)) {
+      // skip the lines the resume never reads before they are parsed (ereignisse.ts RESUME_UEBERSPRINGT)
+      for (const z of journalZeilen(leitstand.journal.pfad, undefined, resumeLiestZeile)) {
         if (z.typ === '/k/willkommen' || z.typ === '/e/neustart') leitstand.bekannteGeneration = z.daten.generation as number;
         yield z;
       }
@@ -221,7 +234,15 @@ export class Leitstand {
     return this.blockanfang();
   }
 
+  // Receipt of a plan part (idIndex) or one that laden waits for: mode schlank journals its status 1 to 3 as well.
+  private kenntQuittung(d: Record<string, unknown>): boolean {
+    return this.annahme.kenntQuittung(d as Felder) || this.wartendeQuittungen.has(`${d.quelle}:${d.id}`);
+  }
+
   private zeile(von: Von, typ: string, daten: Record<string, unknown>, mono: number, z: Zeitpunkt | null): void {
+    // The only filter of the lean journal: annahme, spiegel, websocket clients and tick have seen the message already.
+    if (this.journalModus === 'schlank'
+      && !journalWuerdig(this.journalModus, von, typ, daten, this.journalMerker, (d) => this.kenntQuittung(d), mono)) return;
     const zeile: JournalZeile = {
       sample: z ? z.sample : null, beat: z ? z.beat : null, takt: z ? z.takt : null, mono_ns: mono, von, typ, daten,
     };
@@ -234,7 +255,7 @@ export class Leitstand {
       this.journal.oeffne({
         sample: z.sample, beat: z.beat, takt: z.takt, mono_ns: t, von: 'leitstand', typ: 'set_start',
         daten: {
-          set_id: this.journal.setId, generation: d.felder.generation, vertrag: 1,
+          set_id: this.journal.setId, generation: d.felder.generation, vertrag: 1, journal: this.journalModus,
           konfiguration: {
             datei: this.lz.quelle, instanz: this.lz.instanz, werte: this.lz.konfig,
             ports: { ws: this.lz.ws_port, abo: this.lz.abo_port, kern: this.lz.kern_port },
@@ -278,7 +299,7 @@ export class Leitstand {
         return false;
       case '/k/willkommen':
         this.bekannteGeneration ??= f.generation as number;
-        this.annahme.verbunden();
+        this.kernVerbunden(f.generation as number);
         if (this.annahme.abgleichOffen) setTimeout(() => this.annahme.abgleichSchliessen(), ABGLEICH_FENSTER_MS);
         return false;
       case '/e/neustart': {
@@ -286,12 +307,25 @@ export class Leitstand {
         const g = f.generation as number;
         const echt = this.bekannteGeneration !== null && g > this.bekannteGeneration;
         this.bekannteGeneration = Math.max(this.bekannteGeneration ?? g, g);
-        if (echt) this.annahme.kernNeu();
+        if (echt) { this.annahme.kernNeu(); this.kernVerbunden(g); }
         if (echt && !this.annahme.abgleichOffen) this.annahme.abgleichBeginnen('kern_neustart');
         return !echt;
       }
       default: return false;
     }
+  }
+
+  // Heartbeat cause: the core answers every /k/hallo (every 1.5 s) with /k/willkommen. LED state, KI track and level go to the core
+  // only when the connection was really (re)established: the first willkommen of this process or after the watcher left
+  // verbunden (neuVerbunden), or a new generation (a restarted core knows nothing of it). A heartbeat answer of the same
+  // generation while connected does nothing. Everything else that was repeated before stays correct without it: each LED,
+  // the proposal channel, the KI level and the plan LED are sent when they change (Annahme.setzeLed, vorschlagAnzeige,
+  // setzeStufe, planStatus) and the proposal and listening-ticket LEDs on every /uhr (Annahme.tick).
+  private kernVerbunden(generation: number): void {
+    const neu = this.neuVerbunden || this.verbundenGeneration !== generation;
+    this.neuVerbunden = false;
+    this.verbundenGeneration = generation;
+    if (neu) this.annahme.verbunden();
   }
 
   // Ereignis an alle und in den Takt-Zustand, Ansage an ansage und anzeige
@@ -312,6 +346,7 @@ export class Leitstand {
   }
 
   private kernZustand(neu: KernZustand, t: number): void {
+    if (neu === 'verbunden') this.neuVerbunden = true;   // the willkommen that caused it follows in vomKern
     const z = this.blockanfang();
     this.zeile('leitstand', neu === 'suche' ? 'kern_weg' : 'kern_da', { generation: this.kern.generation }, t, z);
     const takt = z ? z.takt : 1;
@@ -541,15 +576,17 @@ async function main(): Promise<void> {
   const { values } = parseArgs({
     options: {
       konfig: { type: 'string' }, 'kern-port': { type: 'string' }, 'set-id': { type: 'string' },
-      'ki-spur': { type: 'string' }, 'kern-konfig': { type: 'string' },
+      'ki-spur': { type: 'string' }, 'kern-konfig': { type: 'string' }, journal: { type: 'string' },
     },
   });
+  const modus = values.journal === undefined ? undefined : journalModus(values.journal, undefined);
   const l = new Leitstand({
     konfigPfad: values.konfig,
     kernPort: values['kern-port'] ? Number(values['kern-port']) : undefined,
     setId: values['set-id'],
     kiSpur: values['ki-spur'] ? values['ki-spur'].split(',').filter(Boolean) : [],
     kernKonfig: values['kern-konfig'],
+    journal: modus,
   });
   await l.starte();
   process.stdout.write(`leitstand: ws 127.0.0.1:${l.lz.ws_port} abo ${l.lz.abo_port} kern ${l.lz.kern_port} ` +

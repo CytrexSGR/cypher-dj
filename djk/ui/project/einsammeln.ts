@@ -33,13 +33,18 @@ export const zeitLimitMs = (bytes: number): number => Math.max(120_000, Math.cei
 // the temp files of running copies of this process, so a second run never removes them as leftovers
 const aktiv = new Set<string>();
 const TMP_MUSTER = /^\.q-.*\.tmp-[0-9a-f]+$/;
+// a leftover is only removed when it is this old: a fresh one may be the running copy of a second process on the same project
+export const RESTE_ALTER_MS = 3600_000;
 function raeumeReste(ordner: string): void {
   let namen: string[];
   try { namen = fs.readdirSync(ordner); } catch { return; }
   for (const n of namen) {
     const p = path.join(ordner, n);
     if (!TMP_MUSTER.test(n) || aktiv.has(p)) continue;
-    try { if (fs.lstatSync(p).isFile()) fs.rmSync(p, { force: true }); } catch { /* gone already */ }
+    try {
+      const st = fs.lstatSync(p);
+      if (st.isFile() && Date.now() - st.mtimeMs > RESTE_ALTER_MS) fs.rmSync(p, { force: true });
+    } catch { /* gone already */ }
   }
 }
 
@@ -75,9 +80,10 @@ export async function kopiereGeprueft(von: string, nach: string,
 
 const drin = (wurzel: string, p: string): boolean => p === wurzel || p.startsWith(wurzel.endsWith(path.sep) ? wurzel : wurzel + path.sep);
 const echt = (p: string): string => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
-const sichere = (p: string, verzeichnis: boolean): void => {
+// the sync runs in the thread pool: a GB takes tens of ms and must not stand still the event loop of the page
+const sichere = async (p: string, verzeichnis: boolean): Promise<void> => {
   const fd = fs.openSync(p, verzeichnis ? 'r' : 'r+');
-  try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  try { await new Promise<void>((ok, f) => { fs.fsync(fd, (e) => (e ? f(e) : ok())); }); } finally { fs.closeSync(fd); }
 };
 
 export async function sammleEin(a: { projekt: Projekt; projektOrdner: string; quellPfad: (sha: string, hinweis: string) => string | null;
@@ -110,9 +116,9 @@ export async function sammleEin(a: { projekt: Projekt; projektOrdner: string; qu
         const groesse = fs.statSync(pfad).size;
         const kopieSha = await kopiereGeprueft(pfad, tmp, { signal: a.signal, zeitMs: (a.zeit ?? zeitLimitMs)(groesse), lauf: a.lauf });
         if (kopieSha !== sha) { fs.rmSync(tmp, { force: true }); b.abweichend.push(sha); continue; }
-        sichere(tmp, false);                    // the copy is on the disk before it gets its name
+        await sichere(tmp, false);                 // the copy is on the disk before it gets its name
         fs.renameSync(tmp, ziel);               // replaces an empty leftover of the same name
-        try { sichere(ordner, true); } catch { /* a folder cannot be synced everywhere */ }
+        try { await sichere(ordner, true); } catch { /* a folder cannot be synced everywhere */ }
         b.kopiert += 1; b.bytes += fs.statSync(ziel).size;
       } catch (e) {
         try { fs.rmSync(tmp, { force: true }); } catch { /* nothing to remove */ }

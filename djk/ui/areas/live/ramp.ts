@@ -2,7 +2,8 @@
 // steps the row itself: about every 1/16 note (a quarter beat) it writes the interpolated value on the core clock, and the model gets only the end value
 // (the caller's one edit, one playback reload). The ramp is beat based, not wall-clock based: it ends when the core clock has advanced `beats`, whatever
 // the tempo does meanwhile. Without beat progress (no clock, transport stopped, clock stalled) it does not wait: nothing sounds or nothing moves,
-// so the end is taken at once.
+// so the end is taken at once. A poll that comes back later than the stall limit is not a stalled clock: the page server's event loop was blocked
+// (a long synchronous request) and the clock telemetry is only read after the timer, so the stall count starts again from that poll.
 export interface RampeKern {
   uhr(): { beat: number; bpm: number } | null;     // the master clock of the core (telemetry /uhr)
   laeuft(): boolean;                               // the transport plays (a module on a stopped transport is not audible, a fade would be pointless)
@@ -35,12 +36,14 @@ export async function fahreRampe(a: RampeAuftrag): Promise<RampeEnde> {
   const u0 = a.kern.uhr();
   if (a.beats <= 0 || a.von === a.nach || !u0 || !a.kern.laeuft()) { a.schreibe(a.nach); return 'sofort'; }
   const start = u0.beat;
-  let letzter = start, seit = jetzt(), naechster = 1;
+  let letzter = start, seit = jetzt(), vorher = seit, naechster = 1;
   for (;;) {
     await warte(poll);
     if (a.abbruch?.()) return 'abgebrochen';
     const u = a.kern.uhr(), t = jetzt();
     if (u && u.beat > letzter) { letzter = u.beat; seit = t; }
+    if (t - vorher > still) seit = t;                                  // this poll was late (blocked event loop): no evidence of a stalled clock
+    vorher = t;
     if (!a.kern.laeuft() || t - seit > still) { a.schreibe(a.nach); return 'still'; }
     const fertig = (letzter - start) / a.beats;
     if (fertig >= 1) { a.schreibe(a.nach); return 'erreicht'; }

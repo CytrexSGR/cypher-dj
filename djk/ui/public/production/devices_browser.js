@@ -2,20 +2,34 @@
 // per instrument graph) and effects (Compressor active; EQ, Saett, Hall shown greyed with their reason). Every row is draggable with
 // the type application/x-djk-geraet (drag.js geraetNutzlast); storage.js turns a drop into spur_neu or insert_setzen.
 import { GERAET_TYP, geraetNutzlast } from './drag.js';
+import { gruppenVon, gruppeVon, nebenText, sortiere, leseAchse, beiAchse } from '../instrument_groups.js';
 
 const html = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-export const eintraege = (k) => [...(k?.instrumente ?? []), ...(k?.effekte ?? [])];
+/** The instruments in display order: RB-338 and Surge (the rows without a graph) first, then the graphs grouped by the axis (inside a group by the other axis, then by name). */
+export function instrumenteGeordnet(k, achse = 'prinzip') {
+  const alle = k?.instrumente ?? [];
+  return [...alle.filter((e) => !e.graph), ...sortiere(alle.filter((e) => e.graph), achse)];
+}
+/** The entries in the order the rows are shown: the index of a row (data-geraet-i) is the index here, so a drag and a click find their entry. */
+export const eintraege = (k, achse = 'prinzip') => [...instrumenteGeordnet(k, achse), ...(k?.effekte ?? [])];
 
-export function geraeteHtml(k) {
+export function geraeteHtml(k, achse = 'prinzip') {
   if (!k) return '<p class="geraete-leer">Loading…</p>';
   let i = 0;
   const zeile = (e) => {
     // a disabled effect stays draggable: its drop gives no command, only its reason (T6.5 drags EQ for that)
     const n = i++, ziehbar = !!geraetNutzlast(e), aus = e.aktiv === false;
+    const neben = e.graph && e.ziel === 'spur_neu' ? nebenText(e, achse) : '';
     return `<li data-geraet-i="${n}" class="geraete-zeile${aus ? ' aus' : ''}"${e.grund ? ` title="${html(e.grund)}"` : ''} draggable="${ziehbar}">`
-      + `<span class="geraete-name">${html(e.titel)}</span>${e.graph ? '<span class="geraete-art">graph</span>' : ''}</li>`;
+      + `<span class="geraete-name">${html(e.titel)}</span>${neben ? `<span class="geraete-neben">\u00b7 ${html(neben)}</span>` : ''}${e.graph ? '<span class="geraete-art">graph</span>' : ''}</li>`;
   };
-  return `<h4>INSTRUMENTS</h4><ul class="geraete-liste">${(k.instrumente ?? []).map(zeile).join('')}</ul>`
+  const inst = instrumenteGeordnet(k, achse);
+  let reihen = inst.filter((e) => !e.graph).map(zeile).join('');
+  for (const g of gruppenVon(achse)) {
+    const in_ = inst.filter((e) => e.graph && gruppeVon(e, achse) === g.id);
+    if (in_.length) reihen += `<li class="geraete-gruppe"><h5>${html(g.name)}</h5></li>${in_.map(zeile).join('')}`;
+  }
+  return `<h4>INSTRUMENTS</h4><ul class="geraete-liste">${reihen}</ul>`
     + `<h4>EFFECTS</h4><ul class="geraete-liste">${(k.effekte ?? []).map(zeile).join('')}</ul>`;
 }
 
@@ -49,7 +63,7 @@ export function pluginZeilenHtml(liste) {
 export function bindeGeraeteBrowser(ctx) {
   const wurzel = document.getElementById('geraete-browser');
   if (!wurzel) return;
-  let katalog = null, geladen = false;
+  let katalog = null, geladen = false, achse = leseAchse();   // achse: the grouping the rows were drawn with (a drag looks its entry up in the same order)
   let plugins = [], pluginsGeladen = false, pluginTimer = null;
   wurzel.innerHTML = '<div data-teil="geraete">' + geraeteHtml(null) + '</div>'
     + '<div class="plugin-gruppe" data-teil="plugins"><h4>PLUGINS</h4><div class="plugin-kopf">'
@@ -61,7 +75,7 @@ export function bindeGeraeteBrowser(ctx) {
   const knopf = wurzel.querySelector('.plugin-rescan'), stand = wurzel.querySelector('.plugin-stand'), pl = wurzel.querySelector('.plugin-liste');
   async function lade() {
     const r = await ctx.holeGet('/presets/katalog');
-    if (r.status === 200) { katalog = r.j; geladen = true; teilG.innerHTML = geraeteHtml(katalog); }
+    if (r.status === 200) { katalog = r.j; geladen = true; achse = leseAchse(); teilG.innerHTML = geraeteHtml(katalog, achse); }
     else teilG.innerHTML = `<p class="geraete-leer">Devices: ${html(ctx.antwortText?.(r) ?? r.j?.text ?? 'not available')}</p>`;
   }
   async function ladePlugins() {
@@ -97,9 +111,10 @@ export function bindeGeraeteBrowser(ctx) {
   });
   teilG.addEventListener('dragstart', (e) => {
     const li = e.target.closest?.('[data-geraet-i]');
-    const n = geraetNutzlast(eintraege(katalog)[Number(li?.dataset.geraetI)]);
+    const n = geraetNutzlast(eintraege(katalog, achse)[Number(li?.dataset.geraetI)]);
     if (!n) { e.preventDefault(); return; }
     e.dataTransfer.setData(GERAET_TYP, JSON.stringify(n)); e.dataTransfer.effectAllowed = 'copy';
   });
+  beiAchse((neu) => { if (geladen) { achse = neu; teilG.innerHTML = geraeteHtml(katalog, achse); } });   // the page-wide grouping changed: redraw, send nothing
   ctx.beimSichtwechsel.push((an) => { if (an && !geladen) lade(); if (an && !pluginsGeladen) ladePlugins(); });
 }

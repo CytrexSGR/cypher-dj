@@ -227,10 +227,24 @@ test('page: a slow double click (400 ms between the clicks) sends no toggle and 
   await sicht(s, k); await warte(30);
   const m = await s.b.mitte(k), n = (await zeit(s)).length;
   await s.b.maus('mouseMoved', m.x, m.y, { buttons: 0 });
+  // fake clock for the page's timers: the 400 ms between the clicks are advanced by hand, so a loaded machine cannot stretch them past the 500 ms the
+  // page waits for a second click (the real 400 ms wait was red under load: the single-click timer fired first and sent a toggle)
+  await s.w(`(() => {
+    const echt = { st: window.setTimeout, ct: window.clearTimeout }, q = new Map(); let jetzt = 0, n = 1e9;
+    window.__echt = echt;
+    window.setTimeout = (f, ms = 0, ...a) => { const id = ++n; q.set(id, { t: jetzt + ms, f, a }); return id; };
+    window.clearTimeout = (id) => { if (q.has(id)) q.delete(id); else echt.ct.call(window, id); };
+    window.__tick = (ms) => { jetzt += ms; for (const [id, e] of [...q].sort((x, y) => x[1].t - y[1].t)) if (e.t <= jetzt) { q.delete(id); e.f(...e.a); } };
+    window.__offen = () => q.size;
+  })()`);
   await s.b.maus('mousePressed', m.x, m.y, { clickCount: 1 }); await s.b.maus('mouseReleased', m.x, m.y, { clickCount: 1 });
-  await warte(400);
+  assert.equal(await s.w('window.__offen()'), 1, 'the first click waits for a second one');
+  await s.w('window.__tick(400)');
+  assert.equal(await s.w('window.__offen()'), 1, 'after 400 ms the page is still waiting');
   await s.b.maus('mousePressed', m.x, m.y, { clickCount: 2 }); await s.b.maus('mouseReleased', m.x, m.y, { clickCount: 2 });
-  await warte(900);
+  assert.equal(await s.w('window.__offen()'), 0, 'the double click cancelled the pending toggle');
+  await s.w('window.setTimeout = window.__echt.st; window.clearTimeout = window.__echt.ct');
+  await warte(300);
   assert.equal((await anfragen(s, n)).length, 0, 'no toggle request');
   assert.equal(await s.w(`document.querySelectorAll('.p-mx-sendfeld').length`), 1, 'the field is open');
   await s.w(`document.querySelector('.p-mx-sendfeld').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);

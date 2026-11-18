@@ -13,6 +13,7 @@ import { huellkurvenPruefung, type Huellkurve } from './envelope.ts';
 import { seqPruefung, seqSichtPruefung, type SeqDeck, type SeqSicht } from './seq.ts';   // seq.ts imports only types from this file: no runtime cycle
 import { werkbankPruefung, type WerkbankMarke } from './werkbank.ts';   // werkbank.ts imports only a type from this file: no runtime cycle
 import { tonartFehler } from '../public/harmonie.js';
+import { pruefeStammbaum, type Stammbaum } from './sound_runde_contract.ts';   // find sound: contract file, no imports of its own
 import { PRESET_ID } from '../presets/preset_id.ts';   // 1.16 rest: zero-import file, keeps this module free of file access
 export type { Punkt, LaneForm } from './lane.ts';
 
@@ -449,6 +450,7 @@ export interface Master { fader_db: number; inserts?: Insert[]; rack?: Rack; aut
 export interface Spur {
   id: string; von?: Herkunft; gruppe?: string; nr: number; name: string; farbe: string; art: 'audio' | 'instrument';
   geraet?: Geraet; freeze?: Freeze | null; aufnahme?: SpurAufnahme; ausgang?: AusgangGruppe; automation?: Lane[]; takes?: Take[];
+  stammbaum?: Stammbaum;   // find sound: the family tree of a Baukasten track (instrument tracks only); project data, not playback (spurSicht omits it)
   fader_db: number; pan: number; mute: boolean; solo: boolean; clips: Clip[]; sends?: Send[]; inserts?: Insert[]; rack?: Rack;
 }
 // naechste_id (Spec 6.26): Zähler je Art (spur, clip, gruppe); naechste_noten_id (Spec 6.28 Nachsatz zu 6.26): EIN Noten-Zähler für alle Clips.
@@ -469,7 +471,12 @@ export interface Projekt {
   live?: true;             // the live container (plan live-module): the one project that runs during a DJ set; never written when absent
   werkbank?: WerkbankMarke;   // loop workbench module (project/werkbank.ts): only in /2, never together with live; never written when absent
   tonart?: Tonart;          // key of the project (public/harmonie.js): the note editors mark and fold by it; only in /2, absent without a key
+  szenen?: (Szene | null)[];   // SEQ scenes (project/commands_szenen.ts): exactly SZENEN_SLOTS entries when present, absent until the first save; only in /2
 }
+
+// A SEQ scene: the pattern tracks (ids) that are ON and those that are OFF at the moment of saving. A pattern in neither list is left alone by a launch.
+export type Szene = { an: string[]; aus: string[] };
+export const SZENEN_SLOTS = 8;
 
 export const aufnahmeVon = (p: Projekt): ProjektAufnahme => p.aufnahme ?? structuredClone(AUFNAHME_VORGABE);
 
@@ -481,20 +488,28 @@ const SHA = /^[0-9a-f]{64}$/;
 export const RB_PARAMETER: readonly string[] = ['lautstaerke', 'wellenform', 'cutoff', 'resonanz', 'env_mod', 'decay', 'accent'];
 // Baukasten S20: a graph as the device of an instrument track. Knobs k1..k64 (0..1; absent = the graph's `vorgabe`). The graph name rule equals
 // GRAPH_NAME in graphs.ts and kit_name_ok in the kern (pinned by tests/project_bk_device.test.mjs). MAX_BK_SPUREN equals ARR_BK_MAX in
-// kern/include/cypherdj/arr_wiedergabe.h.
+// core/include/cypherdj/arr_playback.h (pinned by tests/project_bk_device.test.mjs, regex on the header; 8 until 2026-11-18).
 export const BK_PARAMETER: readonly string[] = Array.from({ length: 64 }, (_, i) => `k${i + 1}`);
 export const BK_KNOPF_VORGABE = 0.5;   // an untouched knob (the core plays 0.5 for a knob the playback does not name)
 export const BK_GRAPH_NAME = /^[a-z0-9_-]{1,32}$/;
-export const MAX_BK_SPUREN = 8;
+export const MAX_BK_SPUREN = 16;
+// = SPUR_BK_SLOTS in core/signalbox/include/cypherdj/signalbox/controls.h (pinned by tests/project_bk_device.test.mjs): only the first 8 bk tracks
+// have the core rows spur/<slot>/bk/<k>, the 9th to 16th are changed through the general path (a playback rebuild), see bkLive.
+export const BK_LIVE_SLOTS = 8;
 // Production plan task 9 (D10): the slot of a Baukasten track in the core rows spur/<slot>/bk/<k> is its running number among the tracks with the device bk,
-// in ascending track
-// number (nr), counted from 1, tracks only (a rack member does not count), by device name. The core derives the same number from the playback snapshot
+// in ascending track number (nr), counted from 1, tracks only (a rack member does not count), by device name.
+// The core derives the same number from the playback snapshot
 // (Arrangement::tausche, bk_slot_; djk/core/tests/test_arr_bk_controls.cpp case 10 pins the same example). null: not a bk track or unknown id.
 export function bkSlot(projekt: Projekt, spurId: string): number | null {
   const bk = projekt.spuren.filter((s) => s.geraet?.art === 'intern' && s.geraet.name === 'bk').sort((a, b) => a.nr - b.nr);
   const i = bk.findIndex((s) => s.id === spurId);
   return i < 0 ? null : i + 1;
 }
+// true: the track is a bk track whose slot has core rows spur/<slot>/bk/<k> (the first BK_LIVE_SLOTS bk tracks), so a knob of it can move live.
+export const bkLive = (projekt: Projekt, spurId: string): boolean => {
+  const slot = bkSlot(projekt, spurId);
+  return slot !== null && slot <= BK_LIVE_SLOTS;
+};
 // 1.9 (L25): the kit folder name rule = BK_GRAPH_NAME = kit_name_ok in the kern; at most 8 kit devices (spec E15, the kern's ARR_KIT_MAX)
 export const KIT_NAME = /^[a-z0-9_-]{1,32}$/;
 export const MAX_KIT_GERAETE = 8;
@@ -1295,7 +1310,7 @@ function pruefeReturn(g: unknown, wo: string): Return {
   if ('inserts' in o) pruefeInserts(o.inserts, `${wo}.inserts`, true);   // returns exist only in /2
   if ('rack' in o) pruefeRack(o.rack, `${wo}.rack`);
   // after the chain and rack checks: it looks them up
-  if ('automation' in o) pruefeLanen(o.automation, wo, o as { inserts?: Insert[]; rack?: Rack }, undefined, false);
+  if ('automation' in o) pruefeLanen(o.automation, wo, o as { inserts?: Insert[]; rack?: Rack }, undefined, 'return');
   if (typeof o.id !== 'string' || !ID.test(o.id)) werfe(`${wo}.id`, 'ID erwartet');
   zahlIn(o.nr, `${wo}.nr`, 1, MAX_RETURNS, true);
   text(o.name, `${wo}.name`, 80);
@@ -1322,7 +1337,11 @@ function pruefeTake(t: unknown, wo: string, warpErlaubt: boolean): Take {
 // slice 2 (E3, 1.12): geraet.* only on tracks whose device owns the parameter (`geraet`; slice 7: RB-338 or bk);
 // 1.12 slice 6: a chain target needs its stage or rack on this strip, and the
 // parameter of a stage a macro drives has one writer (the macro), so it takes no lane (param_gemappt)
-function pruefeLanen(automation: unknown, wo: string, strang: { inserts?: Insert[]; rack?: Rack }, geraet: unknown, istSpur = true): void {
+// Return fader lane (return automation slice 2): a return also takes its own `fader` lane (the volume of the return strip); the master and a group take no
+// volume curve and no other device target, only chain lanes (and a stem group its blend lane)
+export type StrangArt = 'spur' | 'return' | 'gruppe' | 'master';
+function pruefeLanen(automation: unknown, wo: string, strang: { inserts?: Insert[]; rack?: Rack }, geraet: unknown, art: StrangArt = 'spur'): void {
+  const istSpur = art === 'spur';
   if (!Array.isArray(automation) || automation.length < 1) werfe(`${wo}.automation`, 'non-empty list expected (absent when there is no lane)');
   if ((automation as unknown[]).length > MAX_LANES_PRO_SPUR) werfe(`${wo}.automation`, `at most ${MAX_LANES_PRO_SPUR} lanes per track`);
   const ziele = new Set<unknown>();
@@ -1334,8 +1353,10 @@ function pruefeLanen(automation: unknown, wo: string, strang: { inserts?: Insert
       if (istSpur || ziel !== `blend:${(strang as { id?: string }).id}`) {
         werfe(`${wo}.automation[${i}].ziel`, `${ziel}: only on the stem group it names (ziel_unbekannt)`);
       }
-    } else if (!istSpur && !istKettenZiel(ziel)) {
-      werfe(`${wo}.automation[${i}].ziel`, `${ziel}: a group, return or master takes insert and rack lanes only (ziel_unbekannt)`);
+    } else if (!istSpur && !istKettenZiel(ziel) && !(art === 'return' && ziel === 'fader')) {
+      werfe(`${wo}.automation[${i}].ziel`, ziel === 'fader'
+        ? 'fader: the master and groups take no volume curve (ziel_unbekannt)'
+        : `${ziel}: a group or master takes insert and rack lanes only, a return insert, rack and fader lanes (ziel_unbekannt)`);
     }
     if (istGeraetZiel(ziel) && !passtGeraetZiel(ziel, geraet)) {
       werfe(`${wo}.automation[${i}].ziel`, `${ziel}: only on a track with the device it belongs to (RB-338 parameters, bk k1 to k64)`);
@@ -1354,7 +1375,8 @@ function pruefeSpur(s: unknown, wo: string, warpErlaubt: boolean): Spur {
   const basis = ['id', 'nr', 'name', 'farbe', 'art', 'fader_db', 'pan', 'mute', 'solo', 'clips'];
   if (s.art !== 'audio' && s.art !== 'instrument') werfe(`${wo}.art`, 'audio oder instrument erwartet');
   const o = s.art === 'audio' ? felder(s, wo, basis, ['von', 'gruppe', 'aufnahme', 'ausgang', 'automation', 'sends', 'inserts', 'rack', 'takes'])
-    : felder(s, wo, [...basis, 'geraet'], ['freeze', 'von', 'gruppe', 'ausgang', 'automation', 'sends', 'inserts', 'rack', 'aufnahme']);
+    : felder(s, wo, [...basis, 'geraet'], ['freeze', 'von', 'gruppe', 'ausgang', 'automation', 'sends', 'inserts', 'rack', 'aufnahme', 'stammbaum']);
+  if ('stammbaum' in o) { const f = pruefeStammbaum(o.stammbaum, `${wo}.stammbaum`); if (f.length) werfe(`${wo}.stammbaum`, f[0]); }
   if ('sends' in o) pruefeSends(o.sends, `${wo}.sends`, warpErlaubt);
   if ('inserts' in o) pruefeInserts(o.inserts, `${wo}.inserts`, warpErlaubt);
   if ('rack' in o) { if (!warpErlaubt) werfe(`${wo}.rack`, `unbekanntes Feld (Racks gibt es erst ab ${FORMAT})`); pruefeRack(o.rack, `${wo}.rack`); }
@@ -1465,7 +1487,7 @@ function pruefeGruppe(g: unknown, wo: string): Gruppe {
   if ('inserts' in o) pruefeInserts(o.inserts, `${wo}.inserts`, true);
   if ('rack' in o) pruefeRack(o.rack, `${wo}.rack`);
   // after the chain and rack checks: it looks them up
-  if ('automation' in o) pruefeLanen(o.automation, wo, o as { inserts?: Insert[]; rack?: Rack }, undefined, false);
+  if ('automation' in o) pruefeLanen(o.automation, wo, o as { inserts?: Insert[]; rack?: Rack }, undefined, 'gruppe');
   if (typeof o.id !== 'string' || !ID.test(o.id)) werfe(`${wo}.id`, 'ID erwartet');
   zahlIn(o.nr, `${wo}.nr`, 1, MAX_GRUPPEN, true);
   text(o.name, `${wo}.name`, 80);
@@ -1505,6 +1527,18 @@ export function pruefeProjekt(x: unknown): { projekt: Projekt } | { fehler: stri
   return { projekt: p };
 }
 
+function pruefeSzenen(x: unknown): void {
+  if (!Array.isArray(x) || x.length !== SZENEN_SLOTS) werfe('szenen', `array of ${SZENEN_SLOTS} entries expected`);
+  (x as unknown[]).forEach((e, i) => {
+    if (e === null) return;
+    const o = felder(e, `szenen[${i}]`, ['an', 'aus']);
+    for (const k of ['an', 'aus']) {
+      const l = o[k];
+      if (!Array.isArray(l) || l.some((id) => typeof id !== 'string' || id === '')) werfe(`szenen[${i}].${k}`, 'list of ids expected');
+    }
+  });
+}
+
 function pruefeAlles(x: unknown): void {
   // Format zuerst (Prüfung 2, C1): ein fremdes Format, auch eines mit gruppen und master, ist der Fehler „format“
   // und scheitert nicht an „unbekanntes Feld“.
@@ -1513,8 +1547,9 @@ function pruefeAlles(x: unknown): void {
   const neu2 = istObjekt(x) && x.format === FORMAT;   // /2 verlangt gruppen und master, /1 hat sie nicht
   const pflicht = ['format', 'name', 'rev', 'wiedergabe_rev', 'tempo_bpm', 'taktart', 'loop', 'metronom', 'spuren', ...(neu2 ? ['gruppen', 'master'] : [])];
   // returns, baukasten in /1: unknown field
-  const nur2 = ['returns', 'baukasten', 'aufnahme', 'live', 'werkbank', 'tonart'];
+  const nur2 = ['returns', 'baukasten', 'aufnahme', 'live', 'werkbank', 'tonart', 'szenen'];
   const o = felder(x, 'projekt', pflicht, ['naechste_id', 'naechste_noten_id', ...(neu2 ? nur2 : [])]);
+  if ('szenen' in o) pruefeSzenen(o.szenen);
   const tf = 'tonart' in o ? tonartFehler(o.tonart) : null;
   if (tf) werfe('tonart', tf.replace(/^tonart[.:]?\s*/, ''));
   if ('live' in o && o.live !== true) werfe('live', 'true expected (absent when not a live container)');
@@ -1627,7 +1662,7 @@ function pruefeAlles(x: unknown): void {
     zahlIn(ms.fader_db, 'master.fader_db', FADER_MIN, FADER_MAX);
     if ('inserts' in ms) pruefeInserts(ms.inserts, 'master.inserts', true);
     if ('rack' in ms) pruefeRack(ms.rack, 'master.rack');
-    if ('automation' in ms) pruefeLanen(ms.automation, 'master', ms as { inserts?: Insert[]; rack?: Rack }, undefined, false);
+    if ('automation' in ms) pruefeLanen(ms.automation, 'master', ms as { inserts?: Insert[]; rack?: Rack }, undefined, 'master');
     laneZaehle(ms as { automation?: Lane[] }, 'master');
   }
   for (const [i, id] of refs) if (!gruppenIds.has(id)) werfe(`spuren[${i}].ausgang.id`, `unbekannte Gruppe ${id}`);

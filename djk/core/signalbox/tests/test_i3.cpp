@@ -49,10 +49,13 @@ Inhalt inhalt_von(const char* material_id, double bpm, int fassung) {
 }
 
 // Der echte Kanal-Index von "deck/2" in der Regler-Tabelle (dieselbe Tabelle, die jeder Lauf baut, §1.5 fest verdrahtet).
-int deck2_kanal() {
+int deck_kanal(int n) {
   Lauf sonde;
-  return sonde.sw->tabelle().def(sonde.r("deck/2/fader")).kanal;
+  char pfad[32];
+  std::snprintf(pfad, sizeof pfad, "deck/%d/fader", n);
+  return sonde.sw->tabelle().def(sonde.r(pfad)).kanal;
 }
+int deck2_kanal() { return deck_kanal(2); }
 
 Schein schein_von(const char* hs_id, const char* kanal, const Inhalt& inhalt, double bpm, double gueltig_bis,
                    double quell_von = -1e9, double quell_bis = 1e9) {
@@ -71,12 +74,16 @@ Schein schein_von(const char* hs_id, const char* kanal, const Inhalt& inhalt, do
 // Wie test_checker.cpp: ein Teil, der deck/2/fader von −200 auf 0 dB öffnet, Start bei Beat 64 (Sample 1 440 000
 // bei 128 BPM). `hs` = Hörschein-Feld des Teils, `quelle` seine Quelle. Rückgabe: Grund::kein, wenn gestartet,
 // sonst der Ablehnungsgrund.
+// `vorab_pfad`/`vorab_wert`: a second control set before the part (a trim part only opens the channel when the fader is up: pass
+// "deck/2/fader" and -10 dB, the trim then goes from its closed value to 0 and trim + fader crosses -26 dB).
 Grund lauf(const HoerscheinRegister& reg, const DeckModell& deck, bool an, const char* hs = "",
-           Quelle quelle = Quelle::cypher, const char* fader = "deck/2/fader") {
+           Quelle quelle = Quelle::cypher, const char* fader = "deck/2/fader", const char* vorab_pfad = nullptr,
+           float vorab_wert = 0.0f) {
   PrueferI3 pr(reg, deck);
   pr.schalte(an);
   Lauf l(128.0, &pr);
   l.sw->setze_direkt(l.r(fader), -200.0f);
+  if (vorab_pfad) l.sw->setze_direkt(l.r(vorab_pfad), vorab_wert);
   TeilBefehl b{77, quelle, "pI3", 0, fader, 64, 32, 0, 0, 0, "", hs};
   l.sw->teil(b);
   l.nachlese_ereignisse();
@@ -96,6 +103,7 @@ FALL(ausgeschaltet_immer_kein) {
 FALL(eingeschaltet_kein_schein) {
   HoerscheinRegister reg;
   TestDeck deck;
+  deck.setze_inhalt(deck2_kanal(), inhalt_von("matA", 128.0, 1));   // a loaded track keeps the lock (an empty deck channel is free, see leeres_deck_*)
   PRUEFE(lauf(reg, deck, true, "") == Grund::kein_hoerschein);
   PRUEFE(lauf(reg, deck, true, "unbekannt") == Grund::kein_hoerschein);
 }
@@ -116,11 +124,14 @@ FALL(schein_anderes_material) {
   PRUEFE(lauf(reg, deck, true, "h1") == Grund::hoerschein_anderer_inhalt);
 }
 
-FALL(schein_kein_inhalt_geladen) {
+// Andreas 2026-11-18 (SEQ deck): an empty deck channel is free for I3a whatever the pass says; formerly "pass but nothing loaded" was anderer_inhalt.
+// Not repaired into anderer_inhalt with a loaded deck: schein_anderes_material pins that.
+FALL(leeres_deck_schein_egal) {
   HoerscheinRegister reg;
   TestDeck deck;   // kein setze_inhalt: nichts geladen
   reg.setze(schein_von("h1", "deck/2", inhalt_von("matA", 128.0, 1), 128.0, 200.0), 0.0);
-  PRUEFE(lauf(reg, deck, true, "h1") == Grund::hoerschein_anderer_inhalt);
+  PRUEFE(lauf(reg, deck, true, "h1") == Grund::kein);
+  PRUEFE(lauf(reg, deck, true, "unbekannt") == Grund::kein);
 }
 
 FALL(schein_anderes_tempo) {
@@ -169,6 +180,7 @@ FALL(spur_regler_ohne_schein) {
   // D1 K1 (Spec 2.3): spur/* sind kein Kanal-Fader; Cypher öffnet sie ohne Hörschein (A9), wie erz und pad
   HoerscheinRegister reg;   // leer
   TestDeck deck;
+  deck.setze_inhalt(deck2_kanal(), inhalt_von("matA", 128.0, 1));
   for (const char* f : {"spur/1/fader", "spur/8/fader", "spur/3/pan", "grp/1/fader", "grp/8/fader", "grp/3/pan", "pm/fader"})
     PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, f) == Grund::kein);
   PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "deck/2/fader") == Grund::kein_hoerschein);   // Gegenprobe
@@ -178,6 +190,7 @@ FALL(send_und_return_regler_ohne_schein) {
   // 1.10 Slice 3 (I7): sends, return faders and hall values are no channel faders; Cypher opens them without a Hoerschein
   HoerscheinRegister reg;   // leer
   TestDeck deck;
+  deck.setze_inhalt(deck2_kanal(), inhalt_von("matA", 128.0, 1));
   for (const char* f : {"spur/1/send/1", "spur/32/send/4", "grp/3/send/2", "ret/1/fader", "ret/4/pan", "ret/1/hall/decay", "ret/3/hall/fahne"})   // ramp controls only: switches take no ramp
     PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, f) == Grund::kein);
   PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "deck/2/fader") == Grund::kein_hoerschein);   // control: a channel fader still needs one
@@ -187,6 +200,7 @@ FALL(erzeuger_kanal_oeffnet_ohne_schein) {
   // Andreas 2026-09-29: erz/* öffnen ohne Hörschein; Deck-Kanäle bleiben gesperrt (pad/* seit 2026-10-05 offen).
   HoerscheinRegister reg;   // leer
   TestDeck deck;
+  deck.setze_inhalt(deck2_kanal(), inhalt_von("matA", 128.0, 1));   // a loaded track: the deck channel is locked
   for (int n = 1; n <= 8; n++) {
     char f[32];
     std::snprintf(f, sizeof f, "erz/%d/fader", n);
@@ -199,6 +213,50 @@ FALL(erzeuger_kanal_oeffnet_ohne_schein) {
   PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "pad/2/fader") == Grund::kein);
   // Der Kern öffnet auch den Trim (i3.cpp:82 nimmt fader und trim): dieselbe Ausnahme
   PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "pad/1/trim") == Grund::kein);
+}
+
+// Andreas 2026-11-18 (SEQ deck): a deck channel with NOTHING loaded carries no track, only what the SEQ deck of that place plays into the strip (ADR 038).
+// The core cannot tell SEQ from "empty"; the page narrows it to places with a SEQ deck (like pad/*: core free, page decides).
+FALL(leeres_deck_oeffnet_ohne_schein) {
+  HoerscheinRegister reg;   // leer: kein Schein
+  TestDeck deck;            // nothing loaded on any deck
+  for (int n = 1; n <= 4; n++) {
+    char f[32];
+    std::snprintf(f, sizeof f, "deck/%d/fader", n);
+    PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, f) == Grund::kein);
+  }
+  // trim opens through the same exemption: the fader is up (-10 dB), the trim moves from its closed value to 0 dB
+  PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "deck/2/trim", "deck/2/fader", -10.0f) == Grund::kein);
+}
+
+// Positive control of the previous case: the same calls on a LOADED deck are refused, fader AND trim (the trim line proves that lauf() really
+// opens through the trim; if it returned kein here, the empty-deck trim assertion above would be vacuous); with a matching pass they pass.
+FALL(geladenes_deck_bleibt_gesperrt) {
+  HoerscheinRegister reg;
+  TestDeck deck;
+  for (int n = 1; n <= 4; n++) deck.setze_inhalt(deck_kanal(n), inhalt_von("matA", 128.0, 1));
+  deck.setze_quell(deck_kanal(2), 4.0);   // inside the section of the pass
+  for (int n = 1; n <= 4; n++) {
+    char f[32];
+    std::snprintf(f, sizeof f, "deck/%d/fader", n);
+    PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, f) == Grund::kein_hoerschein);
+  }
+  PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "deck/2/trim", "deck/2/fader", -10.0f) == Grund::kein_hoerschein);
+  reg.setze(schein_von("h1", "deck/2", inhalt_von("matA", 128.0, 1), 128.0, 200.0), 0.0);
+  PRUEFE(lauf(reg, deck, true, "h1") == Grund::kein);
+  PRUEFE(lauf(reg, deck, true, "h1", Quelle::cypher, "deck/2/trim", "deck/2/fader", -10.0f) == Grund::kein);
+}
+
+// The exemption is for deck channels only. Confirmed on the first run: there is no other channel gated by I3a (erz/* and pad/* are exempt, bus/1..4
+// faders are hand-only: refused as nur_hand before I3a looks at them). So the empty deck table must not change that refusal for bus/1/fader.
+FALL(leeres_deck_nur_deck_kanaele) {
+  HoerscheinRegister reg;
+  TestDeck deck;   // empty
+  PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "bus/1/fader") == Grund::nur_hand);
+  // andreas stays free everywhere, an empty deck changes nothing for him
+  PRUEFE(lauf(reg, deck, true, "", Quelle::andreas, "deck/2/fader") == Grund::kein);
+  // a part that does not open stays free (not an assertion about the exemption)
+  PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "deck/2/eq/tief") == Grund::kein);
 }
 
 FALL(fader_oeffnet_nicht_ohne_schein_kein) {

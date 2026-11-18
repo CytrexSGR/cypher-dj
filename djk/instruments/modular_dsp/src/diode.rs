@@ -23,6 +23,8 @@
 pub const K_MAX: f64 = 17.6;
 /// Position of the resonance peak at k = `K_MAX` in units of the stage frequency (computed from the chain poles).
 const SPITZE: f64 = 1.1765;
+/// States below this magnitude are flushed to 0 (same floor as `allpass.rs`).
+const BODEN: f64 = 1e-20;
 
 #[derive(Default, Clone, Copy)]
 pub struct Diode {
@@ -72,7 +74,9 @@ impl Diode {
         let xs = u - k * y4_schaetz.tanh();
         let y = [pz0 + q0 * xs, pz1 + q1 * xs, pz2 + q2 * xs, pz3 + q3 * xs];
         for i in 0..4 {
-            self.s[i] = 2.0 * y[i] - self.s[i];
+            let v = 2.0 * y[i] - self.s[i];
+            // flush a decayed state (-400 dB) so that silence does not run through the subnormal range (audit U38)
+            self.s[i] = if v.abs() < BODEN { 0.0 } else { v };
         }
         let aus = y[3];
         if !(aus.is_finite() && self.s.iter().all(|v| v.is_finite())) {
@@ -80,5 +84,30 @@ impl Diode {
             return 0.0;
         }
         aus as f32
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// audit U38: after the input falls silent the states decay exponentially and used to run through the subnormal range
+    /// (a few hundred cycles per operation on x86) for tens of thousands of samples per stage. They must be flushed to 0.
+    #[test]
+    fn states_do_not_linger_in_the_subnormal_range() {
+        let mut d = Diode::default();
+        for i in 0..64 {
+            d.prozess(if i < 32 { 0.5 } else { -0.5 }, 2000.0, 0.3, 0.0, 0.0, 48_000.0);
+        }
+        let mut subnormal = 0usize;
+        for _ in 0..400_000 {
+            d.prozess(0.0, 2000.0, 0.3, 0.0, 0.0, 48_000.0);
+            if d.s.iter().any(|v| v.is_subnormal()) {
+                subnormal += 1;
+            }
+        }
+        println!("samples with a subnormal state: {subnormal}");
+        assert_eq!(subnormal, 0);
+        assert!(d.s.iter().all(|v| *v == 0.0), "states after 400000 silent samples: {:?}", d.s);
     }
 }

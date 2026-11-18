@@ -50,6 +50,12 @@ void ArrRbSenke::transport_start(int spur, int64_t ziel) noexcept {
   sp_[spur].start = ziel;   // wirkt im Block, der ziel enthält (die Stimme ruht danach bis zur ersten Note)
 }
 
+void ArrRbSenke::transport_abbruch(int spur) noexcept {
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE) return;
+  sp_[spur].start = -1;      // the abandoned entry never comes: no reset, no all-off, no fade before it
+  sp_[spur].stumm = false;   // a fade that already ran for it ends (the track sounds again from the next block)
+}
+
 bool ArrRbSenke::spur_weg(int spur, int64_t, bool) noexcept {
   if (spur < 0 || spur >= ARR_SENKEN_PLAETZE || !sp_[spur].h) return false;
   sp_[spur].weg = true;   // wirkt im nächsten block() dieser Spur (Ausblende, dann zurücksetzen)

@@ -1,5 +1,5 @@
 // Coverage of the project commands by the hand (routing 1.10, open flank, "every project command has a hand path with a description text").
-// Every command of the project API (ui/project/commands.ts, BEFEHL_NAMEN) reaches Cypher through the tool proj_aendern as a verb
+// Every command of the project API (ui/project/befehle_<familie>.ts, BEFEHL_NAMEN) reaches Cypher through the tool proj_aendern as a verb
 // `<befehl> {args}`. The test reads the description the MCP client really gets (listTools) and checks, per command:
 //   1. the verb is listed with an argument block `<befehl> {` and carries a description text (a parenthesis of at least 8 characters, not only the bare block),
 //   2. every argument the handler declares with erlaube(a, ...) appears in that verb's text (an accepted argument the hand does not name is a gap).
@@ -16,13 +16,15 @@ import { BEFEHL_NAMEN } from '../../ui/project/commands.ts';
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
 const HAND = path.resolve(HIER, '..', 'hand.ts');
-const QUELLE = fs.readFileSync(path.resolve(HIER, '..', '..', 'ui', 'project', 'commands.ts'), 'utf8');
+// The handler tables live in the six family files of ui/project (befehle_<familie>.ts); the source is their text one after the other
+const FAMILIEN = ['spur', 'clip', 'gruppe', 'insert', 'auto', 'transport', 'szenen'];
+const QUELLE = FAMILIEN.map((f) => fs.readFileSync(path.resolve(HIER, '..', '..', 'ui', 'project', `befehle_${f}.ts`), 'utf8')).join('\n');
 
 // Arguments a handler accepts, from its erlaube(a, 'x', 'y') calls (a call may span lines). Handlers without erlaube yield an empty list.
 export function deklarierteArgumente(quelle, befehl) {
-  const k = quelle.indexOf('const PRO_BEFEHL');
+  const k = quelle.indexOf('export const SPUR = {');
   const start = quelle.search(new RegExp(`^  ${befehl}\\(`, 'm'));
-  if (k < 0 || start < k) throw new Error(`handler ${befehl} not found in PRO_BEFEHL`);
+  if (k < 0 || start < k) throw new Error(`handler ${befehl} not found in the handler table`);
   const rest = quelle.slice(start + 1);
   const ende = rest.search(/^  [a-z_0-9]+\(/m);
   const body = ende < 0 ? rest : rest.slice(0, ende);

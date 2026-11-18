@@ -29,11 +29,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { DatabaseSync } from 'node:sqlite';
 import { KernAnbindung } from '../conductor/src/core.ts';
 import { KernWeg } from './areas/proj/core_path.ts';
 import type { KernLage } from './areas/proj/state.ts';
-import { reglerInfo } from '../conductor/src/controls_info.ts';
 import { json as sendeJson, koerper as leseKoerper, postAbgewiesen, quelleAusKopf } from './http/transport.ts';
 import { Kopplung, TABLET_PORT, baueTabletHandler, heimAdresse, type TabletHandler } from './http/coupling.ts';
 import { Router, type Route, type Bereich, type BereichKontext } from './http/router.ts';
@@ -47,12 +45,16 @@ import { presetInhaltVon, presetsBereich, type PresetOptionen } from './presets/
 import { kollektionenBereich, type KollektionBereichOptionen } from './collections/area.ts';
 import { KollektionSpeicher } from './collections/store.ts';
 import { rangVon } from './collections/feste.ts';
+import { sucheBereich } from './areas/suche/area.ts';   // media browser B4: GET /suche
+import { baueQuellen } from './suche.ts';
+import { listeInstrumente, zeileVon as instrumentZeile } from './sampler/instrument.ts';
+import { listeSchnitte } from './sampler/schnitt.ts';
 import { ausgabeBereich } from './areas/proj/output.ts';   // Paket S3
 import { aufnahmeBereich } from './areas/proj/recording.ts';   // 1.8 Slice 1
 import { stemsBereich, type StemsOptionen } from './areas/proj/stems.ts';   // 1.13 Slice 6
 import { speichereModul, modulBasis } from './project/module_storage.ts';   // plan live-module task 3
 import { bibliothekBereich } from './areas/live/library.ts';   // plan live-module task 10
-import { samplerBereich } from './areas/sampler/area.ts';   // sampler A1 task 4
+import { samplerBereich, schnittKurz } from './areas/sampler/area.ts';   // sampler A1 task 4
 import { samplerKitBereich } from './areas/sampler/kit_routes.ts';   // sampler B task 2
 import { liveBereich, type DeckLoopAusschnitt } from './areas/live/export.ts';
 import { liveSlots } from './project/live.ts';
@@ -77,10 +79,12 @@ import { OEFFENTLICH, REPO, REPO_PFADE, instanz, ports, shmOrdner, rasterOrdnerV
   analyseVorgabe } from './paths.ts';
 import { WerkstattAnalyse } from './areas/proj/analysis.ts';
 import { tempoRampe, vorlaufBeats } from './tempo_ramp.ts';
+import { takteProLive } from './project/taktart_live.ts';
+import { veroeffentlicheTaktart } from './areas/proj/taktart_output.ts';
 import { RASTER_WAHL, abBeat, sprungDelta, loopStart, rasterRunden, hotcueDatei, leseHotcues, schreibeHotcues, type Hotcue, type Fassung, rasterSchritt, RASTER_MAX, rasterDatei, leseRaster, schreibeRaster, einsSetzen, rasterErbe, einsNachFix, einsZeile, haengeKorrekturAn, letzteEinsZeile, hatHandEins, hotcuesErbe } from './deck_operation.ts';
 // @ts-expect-error reines .mjs ohne Typen (djk/loops)
 import { loopZuKlang } from '../loops/kit_write.mjs';
-import { AB, PFAD, oeffnet, kanalOffen, FEHL_STATUS, ersterFreierBeat } from './hand_operation.ts';
+import { AB, abRaster, PFAD, oeffnet, kanalOffen, seqDeckFrei, FEHL_STATUS, ersterFreierBeat } from './hand_operation.ts';
 import { Sammlungen, SammlungFehler, uebersicht } from './collection.ts';
 import { MusterBibliothek, MusterFehler, type MusterEintrag } from './pattern_library.ts';
 import { suchTerme } from './search_text.ts';
@@ -108,229 +112,16 @@ import { geraetePanel, RB338_PARAM_NAMEN } from './devices_parameter.ts';
 import { listeGraphen, graphenOrdner, findeGraph, graphHash, ladePanel, reglerVonGraph, vorgabenVon, graphenNachNeustart, GRAPH_NAME, GRAPH_KANAELE, INSTRUMENT_KANAELE, EFFEKT_KANAELE } from './graphs.ts';   // Baukasten S12
 import { bkDefVonId } from './project/modular.ts';   // t_e998388c: project channels are left to the project restore
 
-// The main checkout behind a git worktree (its `.git` is a file pointing at .git/worktrees/<n>, whose `commondir` leads
-// back to the shared .git). The main checkout itself resolves to itself; a folder without git to null.
-export function hauptCheckout(repo: string): string | null {
-  const g = path.join(repo, '.git');
-  try {
-    if (fs.statSync(g).isDirectory()) return repo;
-    const m = /^gitdir:\s*(.+)$/m.exec(fs.readFileSync(g, 'utf8'));
-    if (!m) return null;
-    const gitdir = path.resolve(repo, m[1].trim());
-    const common = path.resolve(gitdir, fs.readFileSync(path.join(gitdir, 'commondir'), 'utf8').trim());
-    return path.dirname(common);
-  } catch { return null; }
-}
-// Python for waveform.py and the werkstatt jobs (needs numpy, torchaudio for stems): CYPHERDJ_PYTHON, else the werkstatt venv,
-// else the venv in the repo root (INSTALL §3: `python3 -m venv .venv`), else the same two venvs of the main checkout (a git
-// worktree has no untracked venv; without this step every worktree ran the stems tests on the system python3, 2026-11-04),
-// else python3 from the PATH.
-export function pythonVorgabe(repo: string = REPO, env: NodeJS.ProcessEnv = process.env): string {
-  const venvs = (r: string) => [path.join(r, 'djk', 'workshop', '.venv', 'bin', 'python'), path.join(r, '.venv', 'bin', 'python')];
-  const haupt = hauptCheckout(repo);
-  const kandidaten = [env.CYPHERDJ_PYTHON, ...venvs(repo), ...(haupt !== null && haupt !== repo ? venvs(haupt) : [])];
-  return kandidaten.find((p) => p !== undefined && p !== '' && fs.existsSync(p)) ?? 'python3';
-}
-// Mixer-Regler des Projekts (spur/*, grp/*, pm/fader) ändern sich nur über das Projekt (Spec 6.22), auf keinem Weg am Projekt vorbei
-// 1.10 slice 3: also the sends (spur|grp/<n>/send/<r>) and the return strips (ret/*, Hall values included)
-// 1.10 slice 4a/4b/4c: also the insert stages (ins/komp|eq|saett|lim|utility|bk/<n>/*) and the rack macros (rack/<k>/m1..m4)
-// The headphone cue of a group (grp/<n>/cue, live modules task 6) is no project value: it is a hand-only row like PFL and goes to the core (Cypher gets its nur_hand refusal)
-const ueberProjekt = (pfad: string): boolean => !/^grp\/\d+\/cue$/.test(pfad) && (pfad.startsWith('spur/') || pfad.startsWith('grp/') || pfad.startsWith('ret/') || pfad.startsWith('ins/') || pfad.startsWith('rack/') || pfad === 'pm/fader');
-const ueberProjektText = (pfad: string): string => (pfad.startsWith('rack/')
-  ? 'rack macros are changed through the project (/proj/aendern: rack_makro for the value, rack_setzen for the mapping)'
-  : pfad.startsWith('ins/')
-  ? 'insert stages are changed through the project (/proj/aendern: insert_setzen, insert_param_setzen, insert_an, insert_entfernen, insert_ordnung)'
-  : pfad.startsWith('ret/') || pfad.includes('/send/')
-  ? 'sends, return strips and Hall values are changed through the project (/proj/aendern: send_setzen, return_aendern)'
-  : pfad.startsWith('spur/') ? 'track faders are changed through the project (/proj/aendern, spur_aendern)'
-    : 'group and master faders are changed through the project (/proj/aendern: gruppenspur_aendern, master_aendern)');
-// Plan live-module task 3: the module store folder; a test instance (a..i) keeps it in /dev/shm, never in the real config folder
-const modulBasisVon = (vorgabe: string | undefined, inst: string): string => vorgabe ?? (inst === '' ? modulBasis() : `/dev/shm/cypherdj-${inst}/module`);
-const STROM_MAX_BYTES = 4 * 1024 * 1024;   // unsent bytes per event stream before the stream is closed
-const STRUDEL_ZEITLIMIT_MS = 2000;   // Plan-Review M3
+import { NEUSTART_PLAN_VERSPAETUNG_MS, NEUSTART_FRISCH_FRAMES } from './server_kopf.ts';
+import { KLANG_ERR_MAX, pythonVorgabe, ueberProjekt, ueberProjektText, modulBasisVon, STROM_MAX_BYTES, STRUDEL_ZEITLIMIT_MS, SPEKTRUM_QUELLEN, KLANG_GRUPPEN, KLANG_AUS_MAX, GRAPH_ABGELEHNT, DROSSEL_MS, INS_GR_FRIST_MS, DURCHREICHEN, leseBestand, TYPEN, VORLAUF_SCHLEIFE_BEATS, schleifeAusDatei, kompAbweichend, OFFENE_DECKS, istOffenesDeck, WERKZEUG_PFAD, werkzeugAbweichend, bkAbweichend, LAGE_KANALZUG, LAGE_SEND, LAGE_ABWEICHEND, leseNeustartStand, leseOffenesProjekt, NEUSTART_STAND_ADRESSEN, NEUSTART_STAND_TOLERANZ_MS, systemstartMs, type NeustartStand, type NeustartPlan } from './server_kopf.ts';
+import type { ServerOptionen, Pruefmodus, Eintrag, SpurLauf, SchleifenStand } from './server_kopf.ts';
+export { hauptCheckout, pythonVorgabe, INS_GR_FRIST_MS, leseBestand, istOffenesDeck } from './server_kopf.ts';
+export type { TabletOptionen, ServerOptionen, Pruefmodus } from './server_kopf.ts';
 
-// Tablet access (task 10). Off unless ~/.config/cypherdj/tablet.json says {"an": true}; a test instance (a..i) never reads it. Tests give their own paths.
-export interface TabletOptionen {
-  konfigPfad?: string; kopplungPfad?: string; port?: number;
-  schnittstellen?: () => NodeJS.Dict<os.NetworkInterfaceInfo[]>;   // default os.networkInterfaces
-  logMs?: number;   // tests: the window of the wrong-pairing-try summary line (default 60 s)
-  bindeAn?: string;   // tests only: bind here (127.0.0.1) while the pairing link still names the found address
-}
-
-export interface ServerOptionen {
-  tablet?: TabletOptionen;
-  port: number; kernPort: number; aboPort: number; leitstandWs: number; bestand: string; arbeitsbestand: string;
-  mutationen?: string[]; log?: (zeile: Record<string, unknown>) => void;
-  // Läuft der Kern im Prüfmodus (§19.0)? true/false aus der Konfig (--kern-pruefmodus an|aus), sonst unbekannt:
-  // dann lernt der Server es aus der Antwort des Kerns auf /test/hand (Befund 5 der adversarialen Prüfung).
-  kernPruefmodus?: boolean | null;
-  // Kurve, nach der die Seite Griffe rechnet (public/curves.js): 'kern' (Vorgabe) oder 'attrappe_linear' (Attrappe 13)
-  zielKurve?: string;
-  loops?: string;  // MVP 2: Loop-Ordner (Vorgabe aus CYPHERDJ_INSTANZ)
-  digitalout?: string;  // Glanz 2.1: Standdatei der Digital-Out-Wache
-  kits?: string;   // MVP 2 Scheibe 3: Kit-Ordner (Vorgabe ~/.config/cypherdj/kits, wie der Kern)
-  kit?: string;    // Basis-Kit des Erzeugers (Vorgabe battery); Zusatz-Kit rec bzw. rec-<i>
-  welleCache?: string;  // Plan Oberfläche T2: Vorgabe je Instanz (S5-Review B4): Betrieb ~/.cache/cypherdj/welle, Prüfinstanz /dev/shm/cypherdj-<i>/welle
-  welleFfmpeg?: string[];  // Tests: anderer Aufruf statt ffmpeg (z. B. eine langsame Attrappe)
-  welleZeitlimit?: (dauerS?: number) => number;  // Tests: Zeitlimit der Dekodierung in ms
-  python?: string;      // Vorgabe: pythonVorgabe() (waveform.py braucht numpy)
-  plugins?: { datei?: string; scan?: ScanBefehl };   // 1.11 task 10: the plugin index file and the scan command (tests replace both)
-  musterOrdner?: string;  // Plan 2: Vorgabe /dev/shm/cypherdj[-i]/erzeuger
-  hotcueOrdner?: string;  // Plan E9: Vorgabe ~/.config/cypherdj/hotcues
-  rasterOrdner?: string;  // Plan Grid: Vorgabe ~/.config/cypherdj/raster
-  huellen?: string;  // Ohr T5: Vorgabe /dev/shm/cypherdj[-i]/huellen
-  busRing?: string;  // GET /analyse/live: audio ring, default <shmOrdner>/bus
-  wirtOrdner?: string;  // Studio S6: Ordner der Wirt-Sockets (Vorgabe /dev/shm/cypherdj[-i])
-  baukastenOrdner?: string;  // Baukasten S2: Ordner der Graphen baukasten-<gruppe>.json (Vorgabe ~/.config/cypherdj[-i])
-  sammlungen?: string;   // Sets: Ordner, Vorgabe <REPO>/bibliothek/sets
-  musterBibliothek?: string;   // S2b: eigene Strudel-Muster, Vorgabe <REPO>/bibliothek/muster
-  musterSets?: string;         // S2b: Muster-Quellen track.mjs und Dirigent-Blöcke, Vorgabe <REPO>/sets
-  musterStarter?: string;      // Starter patterns (read-only), default <REPO>/djk/starter/muster; '' = none (tests)
-  loopWerkzeug?: ImportOptionen['werkzeug'];   // Tests: Attrappen vor ffmpeg/rubberband des Loop-Imports (S6)
-  katalog?: string;      // Browser (Plan 2026-10-10): katalog.sqlite, Vorgabe $CYPHERDJ_KATALOG bzw. neben der Mediathek
-  stems?: Partial<StemsOptionen>;   // 1.13 Slice 6: Tests biegen zusatzArgs (Prüftrenner, P3) und killMs um
-  geraete?: GeraeteOptionen;   // I08: Pfade und Erkennung (Tests geben eigene)
-  lernen?: LernenOptionen;     // S19: controller folder (lernen.json) and the devices file (Tests give their own)
-  kollektionen?: KollektionBereichOptionen;   // 1.16 rest: collections folder (default ~/.config/cypherdj[-<i>]/kollektionen); tests give their own
-  presets?: PresetOptionen;    // 1.16: preset folders (werk = factory presets/factory, nutzer = user ~/.config/cypherdj[-<i>]/presets), vocabulary and factory register; tests give their own
-  proj?: ProjOptionen;   // D1 S2: Projektwurzel, Arbeitsordner (Vorgaben je Instanz, areas/proj/session.ts)
-  mediathek?: string;    // Mediathek T2: Vorgabe $CYPHERDJ_MEDIATHEK (nur lesen; fehlt sie: 503 mediathek_fehlt)
-  korrekturen?: string;  // Slice 3b: Bestand des Decks für die Eins-Korrekturen; Vorgabe nur im Betrieb: bestand; eine Prüfinstanz (a..i) schreibt nur ausdrücklich
-  // plan live-module task 3: the module store; Vorgabe $CYPHERDJ_MODULE / ~/.config/cypherdj/module, a test instance (a..i) uses /dev/shm/cypherdj-<i>/module
-  modulOrdner?: string;
-  samplerOrdner?: string;   // sampler A1: the cut store (Vorgabe $CYPHERDJ_SAMPLER / ~/.config/cypherdj/sampler); tests give their own
-  analyse?: string;      // Slice 3a: Analyse-Ablage (Karten), Vorgabe nur im Betrieb: $CYPHERDJ_ANALYSE, sonst ~/werkstatt/cypher-dj-analyse
-  einleserModul?: string;  // Mediathek T2: Python-Modul für POST /mediathek/vorbereiten (Vorgabe werkstatt.einzeln); Python selbst: `python`
-  vorhoeren?: Vorhoeren;   // S7: Vorhören als Kern-Eingang (Tests: Attrappe statt Vorhörer-Prozess)
-  klangBefehl?: string;  // Task 3: Programm für POST /klang (Vorgabe djk/hosts/carla/djk-klang); Tests biegen es auf ein Stub-Skript um
-}
-
-// 1.15 A7b: the names of the selector values of spektrum/kanal (index = value; the kern sends the same names as the kanal of /zustand/spektrum)
-const SPEKTRUM_QUELLEN: string[] = ['', 'deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/4', 'erz/5', 'erz/6', 'erz/7', 'erz/8',
-  'pad/1', 'pad/2', 'bus/1', 'bus/2', 'bus/3', 'bus/4', 'master'];
-const KLANG_GRUPPEN = ['bass', 'melodie'];
-const KLANG_AUS_MAX = 32768, KLANG_ERR_MAX = 8192;
-
-export type Pruefmodus = 'an' | 'aus' | 'unbekannt';
-
-// Drosselung je Schlüssel: höchstens eine Meldung je Intervall, die letzte gewinnt (nachgereicht)
-// D1 S2: /zustand/arr 50 Hz beim Spielen, Drossel 50 ms (Spec 3.1)
-const GRAPH_ABGELEHNT = [4, 6, 7, 8];   // quittung states of a refused command (INTERFACES 5.1; 5 = executed late, a positive answer)
-const DROSSEL_MS: Record<string, number> = { '/uhr': 50, '/zustand/deck': 100, '/pegel': 100, '/zustand/komp': 100, '/zustand/arr': 50, '/zustand/ein': 250, '/zustand/rec': 100, '/zustand/mix': 100, '/e/ins_gr': 100, '/e/stufe_pegel': 100,
-  '/zustand/spektrum': 40 };   // 1.15 A7b: 25 Hz, keyed per source (kanal)
-export const INS_GR_FRIST_MS = 500;   // 1.10 slice 4a: as the page's meters (MIX_FRIST_MS); the kern sends 20 Hz while a stage runs
-const DURCHREICHEN = new Set(['/uhr', '/zustand/deck', '/pegel', '/e/regler', '/e/hand', '/e/geladen', '/e/hotcue', '/e/fx',
-  '/e/fx/zuweisung', '/e/fx/routing', '/q', '/e/protokollfehler', '/e/halter', '/e/neustart', '/k/willkommen', '/e/ki', '/e/loop', '/e/mitschnitt', '/e/raster',
-  '/zustand/komp',   // Effekt-Sektion 2026-10-11: Absenkung je aktivem Kompressor (10 Hz)
-  '/zustand/arr', '/e/freeze', '/zustand/ein', '/zustand/rec', '/e/aufnahme',   // D1 S2 (Spec 3.4); I08 (§5.14)
-  '/e/ins_gr',   // 1.10 slice 4a (§5.5f): gain reduction per running insert stage, 20 Hz from the kern, throttled per kanal
-  '/e/stufe_pegel',   // device faces T9 (§5.5g): input and output peak per running compressor or limiter stage, 20 Hz from the kern, throttled per kanal
-  '/zustand/mix', '/zustand/spektrum',   // 1.15 A6: gain-reduction meters (10 Hz per channel, throttled per kanal); A7b: the spectrum (25 Hz, 40 ms throttle per kanal)
-  '/e/auto']);   // 1.12 S3 (D8, §5.13): the override state of a lane field, every change at once
-
-interface Eintrag {
-  material_id: string; titel: string; camelot: string | null; quelle_bpm: number; dauer_s: number; lufs: number;
-  tore_ok: boolean; basis_bpm: number; fassung: number; beats: number | null; erste_eins_quell_beat: number;
-  eins_unsicher: boolean;   // tore.eins.unsicher der Fassung (2026-10-11): die Seite zeigt „downbeat?“
-}
-
-export function leseBestand(dir: string): Eintrag[] {
-  const idx = path.join(dir, 'index.sqlite');
-  if (!fs.existsSync(idx)) return [];
-  const db = new DatabaseSync(idx, { readOnly: true });
-  try {
-    const zeilen = db.prepare(`SELECT m.material_id, m.titel, m.camelot, m.quelle_bpm, m.dauer_s, m.lufs AS m_lufs,
-        f.basis_bpm, f.fassung, f.lufs, f.tore_ok FROM fassung f JOIN material m USING (material_id)
-        ORDER BY m.titel, f.basis_bpm, f.fassung`).all() as Record<string, unknown>[];
-    return zeilen.map((z) => {
-      const mo = path.join(dir, String(z.material_id));
-      const fj = path.join(dir, String(z.material_id), 'fassungen', `${Math.round(Number(z.basis_bpm) * 1000)}_r${z.fassung}`, 'fassung.json');
-      let beats: number | null = null;
-      let eins = 0, unsicher = false, bewertet = false;
-      try {
-        const j = JSON.parse(fs.readFileSync(fj, 'utf8')) as { beats?: number; erste_eins_quell_beat?: number; tore?: { eins?: { unsicher?: unknown } } };
-        beats = j.beats ?? null;
-        eins = j.erste_eins_quell_beat ?? 0;
-        unsicher = j.tore?.eins?.unsicher === true;
-        bewertet = (j.tore?.eins as { bewertet?: unknown } | undefined)?.bewertet === true;
-      } catch { /* Fassung ohne json: Anzeige ohne Länge */ }
-      // Seitenwert von lauf_eins (eins_bewertung.json neben material.json), solange die Fassung selbst nicht bewertet ist
-      if (!bewertet) {
-        try {
-          const sw = JSON.parse(fs.readFileSync(path.join(mo, 'eins_bewertung.json'), 'utf8')) as { unsicher?: unknown };
-          unsicher = sw.unsicher === true && !hatHandEins(mo);
-        } catch { /* keine oder unlesbare Seitendatei: nichts zeigen */ }
-      }
-      return {
-        material_id: String(z.material_id), titel: String(z.titel), camelot: (z.camelot as string) ?? null,
-        quelle_bpm: Number(z.quelle_bpm), dauer_s: Number(z.dauer_s), lufs: Number(z.lufs), tore_ok: z.tore_ok === 1,
-        basis_bpm: Number(z.basis_bpm), fassung: Number(z.fassung), beats, erste_eins_quell_beat: eins,
-        eins_unsicher: unsicher,
-      };
-    });
-  } finally { db.close(); }
-}
-
-const TYPEN: Record<string, string> = {
-  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json',
-};
-
-interface SpurLauf { quelle: string; anker: number; ende: number; fahrten: Fahrt[]; timer: NodeJS.Timeout[]; offen: MusterPlan[]; gruppen: Set<string>; ids: number[]; teile: { id: number; teil: number; pfad: string }[];
-  schleife?: SchleifenStand; planend?: number }   // 1.12 S7: only for a loop track; planend = end beat of the pass the watcher is sending (MAJOR 1)
-// 1.12 S7 (M13): state of a loop track. anker_naechster = start beat of the next pass not yet sent (MINOR 5: the one name for it),
-// durchlauf = its number k, teilNr = its first part number, n = its length in bars; durchlaeufe = the last two sent passes (MINOR 6).
-interface SchleifenStand { n: number; anker_naechster: number; durchlauf: number; teilNr: number; naechste: Spur | null;
-  durchlaeufe: { k: number; anfang: number; ende: number; teile: number }[] }
-const VORLAUF_SCHLEIFE_BEATS = 2;   // a pass goes to core and wirt this many beats before its start (S8 plan: 0.94 s at 128 BPM, n = 1)
-// Loop state from spuren.json (a file can hold anything): null unless every field is sound
-function schleifeAusDatei(x: unknown): SchleifenStand | null {
-  const s = x as Record<string, unknown> | null;
-  if (!s || typeof s !== 'object') return null;
-  const ganz = (v: unknown, lo: number, hi = Number.MAX_SAFE_INTEGER) => Number.isInteger(v) && (v as number) >= lo && (v as number) <= hi;
-  if (!ganz(s.n, 1, MAX_SCHLEIFE_TAKTE) || !Number.isFinite(s.anker_naechster) || !ganz(s.durchlauf, 0) || !ganz(s.teilNr, 0)) return null;
-  const d = Array.isArray(s.durchlaeufe) ? s.durchlaeufe.filter((x: Record<string, unknown>) => ganz(x?.k, 0) && Number.isFinite(x?.anfang)
-    && Number.isFinite(x?.ende) && ganz(x?.teile, 0)) : [];
-  if (!d.length) return null;
-  const n = s.naechste as Spur | null;
-  const naechste = n && typeof n === 'object' && Array.isArray(n.fahrten) && ganz(n.schleife_takte, 1, MAX_SCHLEIFE_TAKTE) ? n : null;
-  return { n: s.n as number, anker_naechster: s.anker_naechster as number, durchlauf: s.durchlauf as number, teilNr: s.teilNr as number,
-    naechste, durchlaeufe: d.slice(-2) as SchleifenStand['durchlaeufe'] };
-}
-
-// K2: Regler, die /lage erst zeigt, wenn sie von der Vorgabe (INTERFACES §1.5) abweichen
-// Kompressor je Quellkanal (2026-10-11): in der Lage, sobald ein Feld von seiner Vorgabe abweicht
-const KOMP_VORGABE: Record<string, number> = { an: 0, schwelle: -18, ratio: 4, attack: 10, release: 120, makeup: 0, mix: 1, sc: 0 };
-const kompAbweichend = (p: string, w: number): boolean => { const m = /^(?:deck\/[1-4]|erz\/[1-8]|pad\/[12])\/komp\/(\w+)$/.exec(p); return !!m && m[1] in KOMP_VORGABE && w !== KOMP_VORGABE[m[1]]; };
-// 1.15 A2: the 345 mix-tool controls (gate, util, mb, lim, spektrum/kanal) show in lage only once they differ from their default, like komp.
-// The default comes from the contract table (controls_info.ts, compared with the C++ table by its test); the comparison runs in float32, because
-// the core reports floats and lim/decke -0.3 is not exact there. The path set itself is PFAD (hand_operation.ts), checked before the kern is called.
-// Decks the page server opens: all four of the core (places plan 2026-11-13, decision 1: deck 4 opens like deck 3). The Ohr (hearing check)
-// covers all four as well, see hoerenAus, hoerscheinTakt and the ear reader's channel list.
-const OFFENE_DECKS = [1, 2, 3, 4] as const;
-export function istOffenesDeck(d: unknown): d is 1 | 2 | 3 | 4 { return d === 1 || d === 2 || d === 3 || d === 4; }
-const WERKZEUG_PFAD = /^(?:(?:deck\/[1-4]|erz\/[1-7]|pad\/[12]|bus\/[1-4])\/(?:gate|util|mb|lim)\/|spektrum\/kanal$)/;
-const werkzeugAbweichend = (p: string, w: number): boolean => {
-  if (!WERKZEUG_PFAD.test(p)) return false;
-  const vorgabe = reglerInfo(p)?.vorgabe;
-  return vorgabe !== undefined && Math.fround(w) !== Math.fround(vorgabe);
-};
-// S5r: graph knobs <channel>/bk/1..64 (default 0.5) show in lage only once they differ, like komp; S14: fx/3, fx/4 /bk/1..64 too; master/bk/1..64 (master insert graph)
-const BK_ZEILE = /^((?:deck\/[1-4]|erz\/[1-35-7]|pad\/[12]|fx\/[34]|master))\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/;
-/** A graph knob row differs from where its graph starts it (the graph's `vorgabe`, 0.5 where it has none or no graph is known); `vorgabe` caches per graph name for one call. */
-const bkAbweichend = (p: string, w: number, geladen: Record<string, string> = {}, vorgabe: Map<string, number[] | null> = new Map()): boolean => {
-  const m = BK_ZEILE.exec(p);
-  if (!m) return false;
-  const name = geladen[m[1]];
-  if (name && !vorgabe.has(name)) vorgabe.set(name, vorgabenVon(name));
-  return w !== ((name ? vorgabe.get(name)?.[Number(m[2]) - 1] : undefined) ?? 0.5);
-};
-// Bug t_bffc3708: every channel whose mixer a player sets, not erz/1..3 only (a level helper took the missing erz/5..7 fader for 0 dB). erz/4 belongs to
-// the production, erz/8 is cue only: both stay out. Fader, trim, eq, kill and filter always show (a closed fader is a value); a send (1..4) only off its default.
-const LAGE_KANAL = '(?:deck\\/[1-4]|pad\\/[12]|erz\\/[1-35-7])';
-const LAGE_KANALZUG = new RegExp(`^${LAGE_KANAL}\\/(?:fader|trim|eq\\/|kill\\/|filter)`);
-const LAGE_SEND = new RegExp(`^${LAGE_KANAL}\\/send\\/[1-4]$`);
-const LAGE_ABWEICHEND: Record<string, number> = { 'master/kleber': 0, 'duck/tiefe': 0, 'duck/release': 200, 'fx/2/rueckweg': 0, 'color/art': 0, 'color/param': 0.5 };
+/** A restore plan: loop boxes, FX units 1/2, the FX 3 assignments and the graphs, each with the source of its last setting. */
+type Wiederplan = { boxen: { box: number; name: string; status: number; besitzer: string; versatz?: number }[];
+  fx: { einheit: 1 | 2; felder: Felder; zuweisung: string[]; besitzer: string }[]; fx3: { zuweisung: string[]; besitzer: string } | null;
+  graphen: ReturnType<typeof graphenNachNeustart> };
 
 export class Oberflaeche {
   readonly opt: ServerOptionen;
@@ -356,7 +147,9 @@ export class Oberflaeche {
   // Ohr T18: Andreas' letzte Wahl. Der Kern behält das Routing über einen Neustart nicht (Rev. 5); der Server sendet sie
   // nach /e/neustart erneut, wenn sie nicht die Vorgabe ist. Nur im Speicher: ein Server-Neustart kehrt zur Vorgabe zurück.
   private fxRoutingWunsch: 'post_fader' | 'insert' = 'post_fader';
-  private id = process.hrtime.bigint();
+  // Command ids: µs since the epoch (about 1.8e15), so they rise across page-server restarts and stay below 2^53 for good. The old start, the
+  // monotonic clock in ns, passed 2^53 after 104 days of uptime; Number(++id) then rounded neighbouring ids to one double (audit U00).
+  private id = BigInt(Date.now()) * 1000n;
   private generation: number | null = null;
   private readonly welle: WelleCache;
   private readonly ohr: OhrLeser;   // Ohr T5: Hüllkurven-Ring (§6.2), liest deck/1, deck/2, master
@@ -659,7 +452,12 @@ export class Oberflaeche {
       loopOrdner: () => this.loopOrdner(),   // task 10: POST /modul/loop reads the loop library
       kanalOffen: (k) => this.kanalGeoeffnet(k),   // DJ view places task 7: an open channel refuses the export (PFL is no reason; a planned or running ramp counts)
       deckLoop: (deck) => this.deckLoopAusschnitt(deck), herkunft: (mid) => this.moduleHerkunft(mid), masterTonart: () => this.masterTonart(),
+      samplerOrdner: () => opt.samplerOrdner,
       deckLaeuft: (n) => { const st = this.deckStand(n); return st !== null && Number(st.z.status) >= 2; },   // SEQ deck: POST /seq/anlegen refuses deck_laeuft
+      // SEQ scenes: the bar target comes from the same-block /uhr + /zustand/arr pair of the session's lage, the parts go through the shared KernWeg
+      szenen: { zielLage: (loop) => this.proj.sitzung.lage.zielLage(loop), szenenTeile: (plan, q, ab, zeilen) => this.kernWeg().szenenTeile(plan, q, ab, zeilen),
+        abbruchPlan: (plan, q) => this.kernWeg().abbruchPlan(plan, q) },
+      deckAufraeumen: (n, quelle) => { this.seqNachgeladen.delete(n); this.seqDeckAufraeumen(n, quelle, false); },   // SEQ deck: a new deck ejects a stopped, closed track of its place
       // task 3: every module is saved (at export, when the stems arrive, when the slot is cleared); the ramp of POST /modul/leeren reads the core clock
       nachExport: (e) => { speichereModul(e.projekt, e.gruppeId, { basis: modulBasisVon(opt.modulOrdner, inst) }); },
       nachStems: (e) => { speichereModul(e.projekt, e.gruppeId, { basis: modulBasisVon(opt.modulOrdner, inst) }); },
@@ -684,11 +482,34 @@ export class Oberflaeche {
     this.router.melde(registerBereich(this.bereichKontext(), { ordner: lernBereich.speicher.ordner, aktiv: () => aktivesPult(inst), midiPort: () => lernBereich.midiPort(), host: () => new HostSpeicher(lernBereich.speicher.ordner).lies().ziele }));   // controller register: /register
     this.router.melde(presets);   // 1.16: /presets (presets/area.ts), built above so that the project command preset_anwenden reads its store
     this.router.melde(kollektionenBereich(this.bereichKontext(), opt.kollektionen ?? {}));   // 1.16 rest: /kollektionen (collections/area.ts)
+    // media browser B4: GET /suche asks the sources the shelf already has (catalogue, graphs, sampler lists, presets, modules), each with its own search
+    this.router.melde(sucheBereich(this.bereichKontext(), {
+      projekt: () => this.proj.zugang.offen()?.projekt ?? null,
+      quellen: baueQuellen({
+        katalog: this.katalog,
+        fehlend: (typ) => this.katalog.ordnerSummen(typ).ordner.filter((o) => !this.erreichbar.ordnerDa(o.pfad)).map((o) => o.pfad),
+        rang: () => rangVon(this.kollektionSpeicher()),
+        zeile: (z, favorit) => ({ ...this.stoebernTreffer(z, new Set()), favorit }),
+        graphen: () => listeGraphen(undefined, { ordner: opt.samplerOrdner }).graphen,
+        instrumente: () => listeInstrumente({ ordner: opt.samplerOrdner }).map(instrumentZeile),
+        schnitte: () => listeSchnitte({ ordner: opt.samplerOrdner }).map(schnittKurz),
+        presets: (q) => presets.speicher.liste({ q }).map(({ notiz: _n, ...e }) => e),
+        module: () => this.proj.sitzung.liste().j as unknown as Record<string, unknown>[],
+      }),
+    }));
   }
 
   async starte(): Promise<void> {
+    const gemerkt = this.leseOffenesProjektDatei();   // read before anything can overwrite it
+    this.proj.sitzung.beiOffen((slug) => this.merkeOffenesProjekt(slug));
+    this.proj.zugang.beiStand(() => this.meldeTaktart());   // studio-taktart: also after undo; the meter follows the open project
+    this.proj.sitzung.beiOffen(() => this.meldeTaktart());   // and after a close on purpose (no project: 4)
+    // first call: removes a stale meter file left by a crash. With a remembered project it waits for the reopen (which publishes the meter itself),
+    // otherwise running n/4 generators would see "missing = 4" and flip to 4 in between; if the reopen fails, projektWiederOeffnen makes the call.
+    if (gemerkt === null) this.meldeTaktart();
     this.spurenLaden();   // Studio S6 F2
     this.ladeAktiveLoops();   // gemerkter Deck-Loop von vor dem Neustart
+    this.ladeNeustartStand();   // t_7f487235: FX, Boxen, Graphen und ihre Besitzer von vor dem Neustart
     const reste = raeumeAuf(this.opt.arbeitsbestand);
     if (reste > 0) this.opt.log?.({ typ: 'aufgeraeumt', anzahl: reste, arbeitsbestand: this.opt.arbeitsbestand });
     const importReste = raeumeImportReste(this.loopOrdner());   // S6: Arbeitsordner eines abgestürzten Loop-Imports
@@ -703,6 +524,48 @@ export class Oberflaeche {
       this.http!.listen(this.opt.port, '127.0.0.1', () => ok());
     });
     await this.starteTablet();
+    this.projektWieder = this.projektWiederOeffnen(gemerkt);
+  }
+
+  // The project that was open last comes back after a restart of the page server: its slug lives in offenes_projekt.json next to neustart_stand.json (same
+  // temp file and rename). It is written at every open and removed by a close on purpose (POST /proj/schliessen); djk-stop leaves it alone. The reopen goes
+  // through ProjSitzung.oeffnen, the code of POST /proj/oeffnen, once the kern is there. It never sends a transport start. Any failure: start empty, one log
+  // line, one notice on the demo overlay line (the SSE event `ansage`, also in /ansage).
+  projektWieder: Promise<void> = Promise.resolve();
+  private offenesProjektDatei(): string { return path.join(this.hotcueOrdner(), 'offenes_projekt.json'); }
+  private leseOffenesProjektDatei(): string | null {
+    let text: string | null = null;
+    try { text = fs.readFileSync(this.offenesProjektDatei(), 'utf8'); } catch { /* nothing remembered yet */ }
+    return leseOffenesProjekt(text);
+  }
+  private merkeOffenesProjekt(slug: string | null): void {
+    try {
+      if (slug === null) { fs.rmSync(this.offenesProjektDatei(), { force: true }); return; }
+      fs.mkdirSync(this.hotcueOrdner(), { recursive: true });
+      const tmp = `${this.offenesProjektDatei()}.${process.pid}.neu`;
+      fs.writeFileSync(tmp, JSON.stringify({ v: 1, slug }));
+      fs.renameSync(tmp, this.offenesProjektDatei());
+    } catch (err) { this.opt.log?.({ typ: 'offenes_projekt_nicht_gesichert', text: (err as Error).message }); }
+  }
+  private async projektWiederOeffnen(slug: string | null): Promise<void> {
+    if (slug === null) return;
+    const scheitert = (grund: string): void => {
+      this.opt.log?.({ typ: 'projekt_wieder_oeffnen_fehlgeschlagen', slug, grund });
+      this.meldeTaktart();   // nothing came back: no project, so a stale meter file of the crash goes now
+      this.ansageZeile = { text: `Could not reopen project ${slug}`, art: 'tat', von: 'cypher', zeit: Date.now() };
+      this.verteile({ a: 'ansage', f: this.ansageZeile });
+    };
+    const frist = this.opt.wiederOeffnenFristMs ?? 15000;
+    for (let t0 = Date.now(); this.kern.zustand !== 'verbunden'; await new Promise((r) => setTimeout(r, 50))) {
+      if (this.gestoppt) return;
+      if (Date.now() - t0 >= frist) return scheitert('kein_kern');
+    }
+    if (this.gestoppt || this.proj.sitzung.offen !== null) return;   // stopped meanwhile, or somebody opened a project first: theirs wins
+    try {
+      const r = await this.proj.sitzung.oeffnen(slug, 'andreas');
+      if (r.code === 200) this.opt.log?.({ typ: 'projekt_wieder_geoeffnet', slug });
+      else scheitert(String((r.j as { fehler?: unknown } | null)?.fehler ?? `code_${r.code}`));
+    } catch (e) { scheitert((e as Error).message); }
   }
 
   // The second listener (task 10): only when tablet.json says so, only on the home-network address found from the interfaces, only with a pairing cookie
@@ -763,6 +626,8 @@ export class Oberflaeche {
   async stoppe(): Promise<void> {
     if (this.gestoppt) return;   // zweimal (Test-Neustart und Aufräumen) darf nichts werfen
     this.gestoppt = true;
+    const planWartete = this.offenerPlanTimer !== null, wiederLief = this.wiederTimer !== null;   // what the last write below must still know
+    if (this.planTimer) { clearTimeout(this.planTimer); this.planTimer = null; this.sichereNeustartStand(); }   // what was changed in the last 300 ms
     this.aufnahme.aufnahme.schliesse();
     this.stems.stems.schliesse();
     await this.einsammler.schliesse();   // kills a running copy, at most 2 s
@@ -779,6 +644,9 @@ export class Oberflaeche {
     if (this.wiederTimer) { clearTimeout(this.wiederTimer); this.wiederTimer = null; }
     this.vorbereiter.stoppe();
     await this.vorhoeren.ende();
+    // The awaits above take seconds while HTTP and the kern client run on: write what changed meanwhile (merkeNeustartStand holds since gestoppt).
+    // Not while the restore of an accepted restart was pending: the file keeps the old kern's stand until that restore ran, and it never will
+    if (!wiederLief) this.sichereNeustartStand(planWartete);
     await this.kern.stoppe();
     if (this.tabletServer) { const t = this.tabletServer; t.closeAllConnections(); await new Promise<void>((ok) => t.close(() => ok())); }
     await new Promise<void>((ok) => (this.http ? this.http.close(() => ok()) : ok()));
@@ -805,6 +673,21 @@ export class Oberflaeche {
     }
     // Neue Generation (Kern neu gestartet, vielleicht mit anderem Schalter): wieder der Stand aus der Konfig
     const alteGeneration = this.generation;   // Slice 5 F4: nur eine NEUE Generation ist ein Kern-Neustart
+    // t_7f487235: the first word of a kern after THIS server started. The stand of the file is true for the generation it was written in: the same kern kept
+    // it (take it over, send nothing), a higher generation is a kern that restarted while this server was down (take it over as the snapshot of the plan below),
+    // a lower one is a brake start without continuation (drop it). Without a file the first word counts as before.
+    const erstkontakt = alteGeneration === null && (d.adresse === '/k/willkommen' || d.adresse === '/e/neustart');
+    let platte = erstkontakt ? this.vomPlatte : null;
+    if (erstkontakt) this.vomPlatte = null;
+    // The same generation number is not the same running kern (generation 0 again after a reboot or a brake start): its sample position tells. A smaller one
+    // than the file saw is another kern life, the file is of another day and dropped.
+    const gruss = Number(f.sample);
+    if (platte !== null && platte.sample !== undefined && Number.isFinite(gruss) && Number(f.generation) === platte.generation && gruss < platte.sample) {
+      this.opt.log?.({ typ: 'neustart_stand_verworfen', grund: 'anderes_kernleben', generation: platte.generation, sample: gruss, gespeichert: platte.sample });
+      platte = null;
+    }
+    if ((d.adresse === '/k/willkommen' || d.adresse === '/e/neustart') && Number.isFinite(gruss)) this.kernSample = gruss;
+    const bezug = alteGeneration ?? platte?.generation ?? null;
     if (d.adresse === '/k/willkommen' || d.adresse === '/e/neustart') {
       const g = f.generation as number;
       if (this.generation !== null && g !== this.generation) {
@@ -824,8 +707,9 @@ export class Oberflaeche {
     // Riegel 2026-09-30: /e/ki kommt nur beim Wechsel; ein neu gestarteter Server holt den Stand aus dem periodischen
     // /zustand/kern (ki_gestoppt, Scheibe 25), sonst vergäße er ein gedrücktes Stop Cypher
     if (d.adresse === '/zustand/kern' && f.ki_gestoppt !== undefined) this.setzeKiGestoppt(Number(f.ki_gestoppt) === 1);
-    if (d.adresse === '/zustand/deck') { this.stand.decks[String(f.deck)] = f; this.zieheGeladenNach(f); }   // Fix-Runde S3 R8
+    if (d.adresse === '/zustand/deck') { this.merkeNachgeladen(f); this.stand.decks[String(f.deck)] = f; this.zieheGeladenNach(f); }   // Fix-Runde S3 R8
     if (d.adresse === '/e/geladen') {
+      this.seqNachgeladen.add(Number(f.deck));
       const n = String(f.deck), z = this.stand.decks[n];
       this.geladenSeit[n] = { vorher: z ? Oberflaeche.deckSchluessel(z) : null, bestaetigt: false };
       this.stand.geladen[n] = f;
@@ -848,16 +732,23 @@ export class Oberflaeche {
     }
     // Gleiche Generation (ein Abonnent hat sich nur neu gemeldet, der Kern lief weiter): der Stand des Kerns ist unverändert,
     // der Server leert nichts und sendet nichts erneut. Nur ein neuer Kern (andere Generation) beginnt leer.
-    const neuerKern = d.adresse === '/e/neustart' && f.generation !== alteGeneration;
+    const neuerKern = (d.adresse === '/e/neustart' && f.generation !== bezug)
+      || (d.adresse === '/k/willkommen' && platte !== null && Number(f.generation) > platte.generation);   // t_7f487235: a kern that restarted while the page server was down
     // Final-Review MAJOR-1: ein gebremster Kern (Bremse F20) startet mit Generation 0 und sendet nur /k/willkommen, kein
     // /e/neustart. Eine KLEINERE Generation ist ein neuer Kern ohne Fortsetzung: Stand leeren, Routing-Wunsch erneut senden,
     // aber nichts wiederherstellen (die Bremse hat den Zustand absichtlich verworfen).
-    const gebremst = d.adresse === '/k/willkommen' && alteGeneration !== null && Number(f.generation) < alteGeneration;
+    const gebremst = d.adresse === '/k/willkommen' && bezug !== null && Number(f.generation) < bezug;
     if (gebremst) {
       this.opt.log?.({ typ: 'wiederherstellung_uebersprungen', grund: 'gebremster_start', generation: f.generation });
       this.verteile({ a: 'wiederherstellung', f: { uebersprungen: true, grund: 'gebremster_start' } });
     }
-    if (neuerKern) this.boxFxPlanen();   // Paket 2 Slice 5 (F07): Schnappschuss VOR dem Leeren (B15)
+    if (platte !== null && Number(f.generation) >= platte.generation) this.uebernehmeNeustartStand(platte, Number(f.generation) === platte.generation);
+    // t_7f487235, review 2: a higher generation than the file's says the kern restarted while this server was down, not when. The kern's two words tell:
+    // /e/neustart carries the first sample of the generation, /k/willkommen the present one. The snapshot waits for both (in either order) and is planned
+    // only if the kern restarted less than 30 s before (planEntscheiden); a kern that restarted an hour ago has had its own set since.
+    if (neuerKern && erstkontakt && platte !== null) this.planWartet = { generation: Number(f.generation), plan: this.boxFxSchnappschuss() };
+    else if (neuerKern) this.boxFxPlanen();   // Paket 2 Slice 5 (F07): Schnappschuss VOR dem Leeren (B15)
+    this.planWartetFuehren(d.adresse, Number(f.generation), gruss);
     if (neuerKern || gebremst) this.spektrumLetzt = null;   // 1.15 A7b: the new kern starts with the selector at 0
     if (neuerKern || gebremst) { this.stand.fx = [null, null]; this.stand.fxZuweisung = [{}, {}, {}]; }  // after a restart all units are off
     if (neuerKern || gebremst) this.stand.hallPool = null;   // mehrkern Task 5: a new kern says it again within 0.5 s, or has no pool
@@ -877,6 +768,7 @@ export class Oberflaeche {
     if (neuerKern || gebremst) { this.graphenVomKernMs = null; this.fragGraphen('neustart'); }   // Baukasten S16: ask the new kern
     if (neuerKern || gebremst) this.stand.loops = {};                  // Boxen liegen nicht im Neustart-Zustand
     if (neuerKern || gebremst) for (const k of Object.keys(this.loopLadung)) delete this.loopLadung[k];   // Ladung ohne Echo gilt für den neuen Kern nicht (boxInhaltName zöge sie vor)
+    if (neuerKern || gebremst || erstkontakt || NEUSTART_STAND_ADRESSEN.has(d.adresse)) this.merkeNeustartStand();   // t_7f487235
     if (neuerKern || gebremst) this.insGr = {};   // 1.10 slice 4a: a new kern starts without a stage running
     if (d.adresse === '/e/ins_gr' && typeof f.kanal === 'string' && Number.isFinite(Number(f.gr_db))) this.insGr[f.kanal] = { db: Math.max(0, Number(f.gr_db)), t: Date.now() };
     if (d.adresse === '/pegel') this.pegelPuffer.nimm({ kanal: String(f.kanal), spitze_db: Number(f.spitze_db) });   // vor der Drossel: Spitzen gehen nicht verloren
@@ -1036,6 +928,7 @@ export class Oberflaeche {
       if (name === '') delete neu[kanal]; else neu[kanal] = name;
       this.setzeGraphenGeladen(neu);
       if (name === '') delete this.graphBesitzer[kanal]; else this.graphBesitzer[kanal] = quelle;   // after the push: merkeGraph is not involved here
+      this.merkeNeustartStand();
     } else if (quittung && GRAPH_ABGELEHNT.includes(quittung.status) && vorher.length) {
       // an explicit refusal: the running graph keeps its own values, not the defaults of the graph that was refused (no answer at all keeps the pushed rows:
       // the load may still happen, the page's graph list shows the truth)
@@ -1223,9 +1116,9 @@ export class Oberflaeche {
     }
     const felder = this.deckTeil('/k/deck/sprung', st, ab, raster, { delta_beats: delta });
     if (l) {
-      void this.warteQuittung(Number(felder.id), ab).then((q) => {
+      void this.warteBisAb(Number(felder.id), ab).then((q) => {
         const jetzt = this.aktiverLoop[String(st.deck)];
-        if (q && q.status === 6 && jetzt) this.setzeAktivenLoop(st.deck, { ...jetzt, start: jetzt.start - schritt });
+        if (q && GRAPH_ABGELEHNT.includes(q.status) && jetzt) this.setzeAktivenLoop(st.deck, { ...jetzt, start: jetzt.start - schritt });
       });
     }
     this.json(a, 200, { ok: true, felder });
@@ -1277,6 +1170,79 @@ export class Oberflaeche {
   ladeAktiveLoops(): void {
     try { this.aktiverLoop = JSON.parse(fs.readFileSync(this.aktiveLoopsDatei(), 'utf8')); } catch { this.aktiverLoop = {}; }
   }
+  // t_7f487235: the memory of the restore plan (FX type of units 1/2, FX assignments 1-3, loop boxes with owner and live offset, graphs with owner) on disk
+  // next to aktive_loops.json, written the same way (temp file, rename), so a restart of the page server does not lose what the plan after a kern restart
+  // is made of. Read on start into vomPlatte; the first word of the kern decides what becomes of it (vomKern). A missing or corrupt file is no stand.
+  private neustartStandDatei(): string { return path.join(this.hotcueOrdner(), 'neustart_stand.json'); }
+  private vomPlatte: NeustartStand | null = null;
+  private kernSample: number | null = null;   // the sample position of the kern's last greeting: the file keeps it to tell another kern life
+  private planTimer: ReturnType<typeof setTimeout> | null = null;
+  ladeNeustartStand(): void {
+    let text: string | null = null;
+    try { text = fs.readFileSync(this.neustartStandDatei(), 'utf8'); } catch { /* noch keine Datei */ }
+    const p = leseNeustartStand(text);
+    // The kern's state lives in /dev/shm: after a reboot (or djk-stop, which removes the file with it) no kern life exists that a file of before could belong to
+    const start = this.opt.systemstartMs ?? systemstartMs();
+    const grund = p === null ? null : p.geschrieben === undefined ? 'ohne_zeit' : p.geschrieben < start - NEUSTART_STAND_TOLERANZ_MS ? 'vor_systemstart' : null;
+    if (p !== null && grund !== null) this.opt.log?.({ typ: 'neustart_stand_verworfen', grund, geschrieben: p.geschrieben ?? null, systemstart: start });
+    this.vomPlatte = grund === null ? p : null;
+  }
+  private uebernehmeNeustartStand(p: NeustartStand, gleicheGeneration: boolean): void {
+    this.stand.fx = p.fx as (Felder | null)[];
+    this.stand.fxZuweisung = p.fxZuweisung;
+    this.stand.loops = p.loops as Record<string, Felder>;
+    this.stand.graphen_geladen = { ...p.graphen_geladen };
+    this.loopRasterLive = { ...p.loopRasterLive };
+    for (const [o, q] of [[this.loopBesitzer, p.loopBesitzer], [this.graphBesitzer, p.graphBesitzer]] as const) { for (const k of Object.keys(o)) delete o[k]; Object.assign(o, q); }
+    if (p.plan) {
+      this.offenerPlan = { boxen: p.plan.boxen, fx: p.plan.fx.map((u) => ({ ...u, felder: u.felder as Felder })), fx3: p.plan.fx3, graphen: p.plan.graphen };
+      if (gleicheGeneration && p.plan.faellig < Date.now() - NEUSTART_PLAN_VERSPAETUNG_MS) {
+        // the page was away past the due time: the moment is gone, only the owners stay
+        this.offenerPlan = null;
+        this.opt.log?.({ typ: 'neustart_plan_verworfen', grund: 'ueberfaellig', faellig: p.plan.faellig });
+      } else if (gleicheGeneration) {   // the kern the plan waited for: the same delayed restore, filtered by what the file kept, no later than due
+        this.letzteBoxFxWieder = p.plan.faellig - Oberflaeche.BOX_FX_SPERRE_MS - 500;
+        this.planNachholen(Math.max(500, p.plan.faellig - Date.now()));
+      }
+    }
+    this.opt.log?.({ typ: 'neustart_stand_gelesen', generation: p.generation, plan: p.plan !== undefined });
+  }
+  // Called at every change of one of those memories; the write is coalesced (a knob turned on an FX unit echoes /e/fx many times a second)
+  merkeNeustartStand(): void {
+    if (this.planTimer || this.gestoppt) return;
+    this.planTimer = setTimeout(() => { this.planTimer = null; this.sichereNeustartStand(); }, 300);
+    this.planTimer.unref?.();
+  }
+  // The plan that waits for the guard time, as the file keeps it: without what was touched since (the marks do not survive a restart of this server)
+  private planFuerPlatte(wartet = this.offenerPlanTimer !== null): NeustartPlan | null {
+    const p = this.offenerPlan;
+    if (!p || !wartet) return null;
+    const an = (k: string) => this.angefasst.has(k);
+    return { faellig: this.offenerPlanFaellig,
+      boxen: p.boxen.filter((b) => !an(`box:${b.box}`)).map((b) => (an(`raster:${b.box}`) ? { ...b, versatz: undefined } : b)),
+      fx: p.fx.filter((u) => !an(`fx:${u.einheit}`)), fx3: an('fx:3') ? null : p.fx3, graphen: p.graphen.filter((g) => !an(`graph:${g.kanal}`)) };
+  }
+  // After a restore was sent: at once, not after the coalescing. Until then the file holds the old generation, and a crash of this server without a stop
+  // would read it as "kern restarted again" and send the same restore twice
+  private sichereNeustartStandSofort(): void {
+    if (this.planTimer) { clearTimeout(this.planTimer); this.planTimer = null; }
+    this.sichereNeustartStand();
+  }
+  private sichereNeustartStand(planWartete?: boolean): void {
+    // Not before a kern has spoken (the file of the last run must not be overwritten by an empty stand) and not in the 500 ms before an accepted restore ran:
+    // until then the file keeps the stand of the old kern, so a crash in between loses nothing. During the longer wait for the guard time it IS written, with
+    // the current generation and the part of the plan that is still due, so a page restart inside the wait arms the same delayed restore.
+    if (this.generation === null || this.vomPlatte !== null || this.wiederTimer) return;
+    try {
+      fs.mkdirSync(this.hotcueOrdner(), { recursive: true });
+      const tmp = `${this.neustartStandDatei()}.${process.pid}.neu`;
+      const roh = { v: 1, generation: this.generation, sample: this.kernSample, geschrieben: Date.now(), plan: this.planFuerPlatte(planWartete),
+        fx: this.stand.fx, fxZuweisung: this.stand.fxZuweisung, loops: this.stand.loops, loopBesitzer: this.loopBesitzer,
+        loopRasterLive: this.loopRasterLive, graphBesitzer: this.graphBesitzer, graphen_geladen: this.stand.graphen_geladen };
+      fs.writeFileSync(tmp, JSON.stringify(roh, (_k, v) => (typeof v === 'bigint' ? Number(v) : v)));
+      fs.renameSync(tmp, this.neustartStandDatei());
+    } catch (err) { this.opt.log?.({ typ: 'neustart_stand_nicht_gesichert', text: (err as Error).message }); }
+  }
   private deckLoop(d: Record<string, unknown>, a: http.ServerResponse): void {
     const raster = this.rasterAus(d);
     if (raster === null) return this.json(a, 400, { fehler: 'raster' });
@@ -1289,10 +1255,22 @@ export class Oberflaeche {
     // den Loop bei start_beat statt am Kopf). Ohne gemerkten scharfen Loop (oder Länge 0) der gewöhnliche Weg.
     const alt = d.behalte_start === true && d.laenge > 0 && this.loopVon(st) ? this.aktiverLoop[String(st.deck)] : undefined;
     if (alt) {
-      this.setzeAktivenLoop(st.deck, { ...alt, laenge: d.laenge });
-      const felder = this.deckTeil('/k/deck/loop_laenge', st, ab, raster, { start_beat: alt.start, laenge_beats: d.laenge });
-      void this.warteQuittung(Number(felder.id), ab).then((q) => {   // abgelehnt (Loop ginge aus dem Material): der alte Loop läuft weiter
-        if (q && q.status === 6) this.setzeAktivenLoop(st.deck, alt);
+      // Taps in a row (4 to 8 to 16) each move the memory before the core answers, so the length the memory held at a tap is not what the core plays:
+      // the rollback goes to the length the core last CONFIRMED (sicher), and only when no newer tap is waiting (it moved the memory since)
+      const taste = String(st.deck), laenge = d.laenge;
+      const z = ((this.loopLaengeTasten ??= {})[taste] ??= { sicher: alt.laenge, tippen: 0, offen: 0, kette: Promise.resolve() });
+      const nr = ++z.tippen;
+      z.offen++;
+      this.setzeAktivenLoop(st.deck, { ...alt, laenge });
+      const felder = this.deckTeil('/k/deck/loop_laenge', st, ab, raster, { start_beat: alt.start, laenge_beats: laenge });
+      // abgelehnt (Loop ginge aus dem Material): der alte Loop läuft weiter. The answers may arrive in any order (a refusal comes at ab_beat,
+      // an accepted tap is only known after its wait): each tap decides after the earlier ones did, so `sicher` is up to date when a refusal rolls back
+      z.kette = Promise.all([this.warteBisAb(Number(felder.id), ab), z.kette]).then(([q]) => {
+        const abgelehnt = !!q && GRAPH_ABGELEHNT.includes(q.status);
+        if (!abgelehnt) z.sicher = laenge;
+        const jetzt = this.aktiverLoop[taste];   // only the length goes back: a jump on the same grid beat may have moved the start meanwhile
+        if (abgelehnt && nr === z.tippen && jetzt) this.setzeAktivenLoop(st.deck, { ...jetzt, laenge: z.sicher });
+        if (--z.offen === 0 && this.loopLaengeTasten?.[taste] === z) delete this.loopLaengeTasten[taste];
       });
       return this.json(a, 200, { ok: true, felder });
     }
@@ -1309,7 +1287,7 @@ export class Oberflaeche {
       this.setzeAktivenLoop(st.deck, { schluessel: Oberflaeche.fassungSchluessel(st.f), start, laenge: d.laenge });
       const felder = this.deckTeil('/k/deck/loop_laenge', st, jetzt, 0, { start_beat: start, laenge_beats: d.laenge });
       void this.warteQuittung(Number(felder.id), jetzt).then((q) => {
-        if (!q || q.status !== 6) return;
+        if (!q || !GRAPH_ABGELEHNT.includes(q.status)) return;
         if (vorher) this.setzeAktivenLoop(st.deck, vorher);
         else { delete this.aktiverLoop[String(st.deck)]; this.sichereAktiveLoops(); }
       });
@@ -1388,6 +1366,7 @@ export class Oberflaeche {
     this.opt.log?.({ typ: 'deck_loop_gesichert', deck: st.deck, name, start_frame: start });
     if (d.box === 1 || d.box === 2) {
       delete this.loopRasterLive[String(d.box)];
+      this.merkeNeustartStand();
       this.loopLadung[String(d.box)] = { name, quelle: this.quelle() };
       this.angefasst.add(`box:${d.box}`);
       this.kern.sende('/k/loop/laden', { id: Number(++this.id), quelle: this.quelle(), box: d.box, name });
@@ -1608,11 +1587,33 @@ export class Oberflaeche {
       await new Promise((r) => setTimeout(r, 20));
     }
   }
+  // warteQuittung up to ab_beat and past it: the core checks "loop stays in the material" and the AUTO stop only when it executes at ab_beat,
+  // which can lie more than 4 s ahead on a coarse grid (16 beats = 7.5 s at 128 BPM); the plain 4 s cap would return the 'accepted' receipt
+  private warteBisAb(id: number, ab: number): Promise<{ status: number; grund: string } | null> {
+    const u = this.kern.uhr as unknown as { beat: number; bpm: number } | null;
+    // the cap is only the end of the wait for a core that never answers (the wait itself ends at ab_beat + 1/4 beat): computed at the slowest tempo a ramp can
+    // reach (60 BPM), so a tempo ramp downwards after the send cannot make the 'accepted' receipt come too early
+    const ms = u ? Math.max(0, (ab - u.beat) * 60000 / Math.min(u.bpm > 0 ? u.bpm : 60, 60)) : 0;
+    return this.warteQuittung(id, ab, false, ms + 1000);
+  }
+  // Beats per bar of the open project (studio-taktart): its meter n/4, 4 with no project open or an invalid meter
+  private proTakt(): number { return takteProLive(this.proj.zugang.offen()?.projekt?.taktart); }
+  private letzteTaktart = 4;
+  private taktartVeroeffentlicht = false;
+  // Publishes the meter: file `taktart` in every stream folder for the generator, SSE `taktart` for the page. The first call always runs (it
+  // removes a stale file of a crash); later calls only when the value changed, so a 4/4 session writes and emits nothing.
+  private meldeTaktart(): void {
+    const n = this.proTakt();
+    if (this.taktartVeroeffentlicht && n === this.letzteTaktart) return;
+    this.taktartVeroeffentlicht = true;
+    veroeffentlicheTaktart(ALLE_STROEME.map((st) => this.musterOrdner(st)), n, undefined, (ordner, e) => this.opt.log?.({ typ: 'taktart_datei_fehler', ordner, text: e.message }));
+    if (n !== this.letzteTaktart) { this.letzteTaktart = n; this.verteile({ a: 'taktart', f: { proTakt: n } }); }
+  }
   // Ziel-Beat der Master-Uhr zur Zeitangabe ab (D2): jetzt + Vorlauf, dann aufs Raster 1/4/16
   private abVon(ab: string): number {
     const u = this.kern.uhr as unknown as { beat: number; bpm: number } | null;
     const beat = u?.beat ?? 0, bpm = u?.bpm ?? 128;
-    return abBeat(beat, vorlaufBeats(bpm), AB[ab]);                  // ein Vorlauf (tempo_ramp.ts), derselbe wie im Bereich proj
+    return abBeat(beat, vorlaufBeats(bpm), abRaster(ab, this.proTakt()) as number);                  // ein Vorlauf (tempo_ramp.ts), derselbe wie im Bereich proj
   }
   // POST /regler {pfad, nach, takte?=0, ab?='takt', form?='s'} → /k/teil (D3); D8 Öffnen-Sperre für cypher
   private async regler(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
@@ -1634,7 +1635,10 @@ export class Oberflaeche {
     // S18: a Baukasten instrument graph on an otherwise EMPTY box is Cypher's own sound like erz/* (no loop, nothing waiting); a foreign loop keeps the check
     // DJ view places (decision 10, spec correction c): the exception ends while a module occupies the slot of the channel, else Cypher could open a channel that carries a module
     const eigenePad = padBox !== undefined && !this.slotBelegt(Number(padBox)) && (this.boxEigen(Number(padBox)) || this.boxNurGraph(Number(padBox)));   // wie /loop: eigener Mitschnitt (laufend UND wartend)
-    if (this.quelle() === 'cypher' && !eigenePad && oeffnet(this.stand.regler, pfad, nach)) {
+    // Plan seq-fader-frei: deck/N of a place with a SEQ deck and no loaded track carries only Cypher's own patterns; the core exempts the empty deck too (I3a)
+    const seqFrei = this.quelle() === 'cypher' && !eigenePad && (() => { const x = this.seqPlaetzeOffen(); return seqDeckFrei(pfad, x.seq, x.geladen); })();
+    if (seqFrei && oeffnet(this.stand.regler, pfad, nach)) this.opt.log?.({ typ: 'seq_frei', pfad });
+    if (this.quelle() === 'cypher' && !eigenePad && !seqFrei && oeffnet(this.stand.regler, pfad, nach)) {
       // Ohr T10: die Decks 1 bis 4 kennen Hörscheine (§4.5, seit Slice 1 auch 3 und 4); erz/* frei seit 2026-09-29, pad/* frei für Cyphers eigenen Mitschnitt
       // (eigenePad, Glanz 1.3), aber nicht, solange ein Modul den Slot belegt (DJ view places decision 10).
       const m = /^(deck\/[1-4])\//.exec(pfad);
@@ -1646,28 +1650,89 @@ export class Oberflaeche {
       const schein = kanal ? this.hoerscheinstelle.gueltig(kanal, inhalt, beat) : null;
       if (!schein) {
         const letzterSchein = deckNr ? this.hoerscheinstelle.letzter(deckNr) : null;
+        // Plan seq-fader-frei D6 (2): a SEQ deck place that still holds a stopped track: eject it, the next call then opens (the first one still fails)
+        const geleert = deckNr !== null && /\/(fader|trim)$/.test(pfad) && this.seqDeckAufraeumen(deckNr, this.quelle(), true);
         return this.json(a, 409, { fehler: 'kein_hoerschein', text: 'channel is closed; opening needs a valid hearing check (Ohr)',
-          urteil: letzterSchein?.urteil ?? null, gruende: letzterSchein?.gruende ?? [] });
+          urteil: letzterSchein?.urteil ?? null, gruende: letzterSchein?.gruende ?? [], ...(geleert ? { seq_geleert: true } : {}) });
       }
       hoerscheinId = schein.hs_id;
     }
+    const proTakt = this.proTakt();   // read once per request
     let abBeat = this.abVon(ab), verschobenAuf: number | undefined;
     const id = Number(++this.id);
     if (this.quelle() === 'cypher') {
       const beat = this.kern.uhr?.beat ?? 0;
       const offen = (this.fahrtEnde.get(pfad) ?? []).filter((e) => e.ab + e.dauer >= beat);   // Abgelaufenes räumt sich hier ab
-      const frei = ersterFreierBeat(offen, abBeat, takte * 4);
+      const frei = ersterFreierBeat(offen, abBeat, takte * proTakt);
       if (frei !== abBeat) { abBeat = frei; verschobenAuf = frei; }
-      offen.push({ id, ab: abBeat, dauer: takte * 4 });
+      offen.push({ id, ab: abBeat, dauer: takte * proTakt });
       this.fahrtEnde.set(pfad, offen);
     }
     // Keylock 3b (NITPICK): der Knopf mit Politik 1 (zu spät -> sofort ausgeführt, Quittung 5 statt 4 zu_spaet)
     const felder = { id, quelle: this.quelle(), plan: this.planVon(), teil: 0, pfad, ab_beat: abBeat,
-      dauer_beats: takte * 4, nach, form: form === 's' ? 1 : 0, politik: pfad === 'keylock' || pfad === 'color/art' ? 1 : 0, gruppe: '', hoerschein: hoerscheinId };
+      dauer_beats: takte * proTakt, nach, form: form === 's' ? 1 : 0, politik: pfad === 'keylock' || pfad === 'color/art' ? 1 : 0, gruppe: '', hoerschein: hoerscheinId };
     this.kern.sende('/k/teil', felder);
     this.gesendet++;
     this.json(a, 200, { ok: true, felder, ...(verschobenAuf !== undefined ? { verschoben_auf: verschobenAuf } : {}),
       quittung: await this.warteQuittung(felder.id, verschobenAuf !== undefined ? undefined : felder.ab_beat) });   // verschoben: nur das kurze Fenster (Sofort-Ablehnungen des Kerns), nicht bis zum Startbeat
+  }
+
+  // Plan seq-fader-frei: the places of the open LIVE project that carry a SEQ deck, and the places with a track on the deck player
+  // (same expressions as /hoeren)
+  private seqPlaetzeOffen(): { seq: Set<number>; geladen: Set<number> } {
+    const op = this.proj.zugang.offen();
+    const seq = new Set<number>(op?.projekt.live ? OFFENE_DECKS.filter((n) => seqGruppe(op.projekt, n) !== undefined) : []);
+    const geladen = new Set<number>(OFFENE_DECKS.filter((n) => this.deckStand(n) !== null));
+    return { seq, geladen };
+  }
+
+  // Plan seq-fader-frei D6/D9: a place that becomes a SEQ deck may still hold a STOPPED track with its channel closed; that track would keep the
+  // I3a lock on deck/N. Eject it from the deck player (/k/deck/entladen). Never a playing track, never with an open channel. True iff the unload was
+  // sent. One unload per state of the deck: the guard holds until /zustand/deck shows another state (or 5 s have passed, a lost datagram).
+  private readonly seqEntladen = new Map<number, { schluessel: string; t: number }>();
+  // Review: D9 covers a place that BECOMES a SEQ deck. The lazy path (spaet) repairs a state the page server did not see come about (a restart, the studio
+  // of 2026-11-18); it never ejects a track that arrived while the page server was watching (a load of Andreas after the SEQ deck), and no path ejects a
+  // track with a start planned by Andreas: /zustand/deck has no "start planned" status (it reads 1), the unload would cancel the start.
+  private readonly seqNachgeladen = new Set<number>();
+  private merkeNachgeladen(z: Record<string, unknown>): void {
+    const n = Number(z.deck), vor = this.stand.decks[String(n)] as Record<string, unknown> | undefined;
+    if (!(Number(z.status) >= 1)) this.seqNachgeladen.delete(n);
+    else if (vor !== undefined && (!(Number(vor.status) >= 1) || Oberflaeche.deckSchluessel(vor) !== Oberflaeche.deckSchluessel(z))) this.seqNachgeladen.add(n);
+  }
+  private readonly startGeplant = new Map<number, number>();   // deck -> ab_beat of the last start sent by the page (any source)
+  private startSteht(n: number): boolean {
+    const ab = this.startGeplant.get(n);
+    if (ab === undefined) return false;
+    if ((this.kern.uhr?.beat ?? 0) <= ab + 1) return true;
+    this.startGeplant.delete(n);
+    return false;
+  }
+  private seqDeckAufraeumen(n: number, quelle: string, spaet: boolean): boolean {
+    if (!this.seqPlaetzeOffen().seq.has(n)) return false;
+    if ((spaet && this.seqNachgeladen.has(n)) || this.startSteht(n)) return false;
+    const st = this.deckStand(n);
+    if (st === null || Number(st.z.status) >= 2 || kanalOffen(this.stand.regler, `deck/${n}`)) return false;
+    const schluessel = `${Oberflaeche.deckSchluessel(st.z)}|${Number(st.z.status)}`;
+    const vorher = this.seqEntladen.get(n);
+    if (vorher && vorher.schluessel === schluessel && Date.now() - vorher.t < 5000) return false;
+    try {
+      this.kern.sende('/k/deck/entladen', { id: Number(++this.id), quelle, deck: n });
+    } catch (e) {
+      this.opt.log?.({ typ: 'seq_aufraeumen_fehler', deck: n, text: (e as Error).message });
+      return false;   // a failed send is no error of the SEQ write or of the fader call
+    }
+    this.gesendet++;
+    this.seqEntladen.set(n, { schluessel, t: Date.now() });
+    this.opt.log?.({ typ: 'seq_aufgeraeumt', deck: n });
+    return true;
+  }
+
+  // Plan seq-fader-frei D4: a SEQ deck sits on place n and a part of Cypher on deck/n/fader or deck/n/trim is planned or running
+  // (fahrtEnde holds Cypher's parts only)
+  private seqRampeLaeuft(n: number): boolean {
+    if (!this.seqPlaetzeOffen().seq.has(n)) return false;
+    const beat = this.kern.uhr?.beat ?? 0;
+    return [`deck/${n}/fader`, `deck/${n}/trim`].some((pfad) => (this.fahrtEnde.get(pfad) ?? []).some((e) => e.ab + e.dauer >= beat));
   }
 
   // Studio S6: laufende Automationsspuren (Name → Lauf) und die fahrbaren Surge-Parameter (surge_bereiche.json)
@@ -1752,7 +1817,7 @@ export class Oberflaeche {
     if (!u) return this.json(a, 409, { fehler: 'keine_uhr' });
     const anker = this.abVon(ab);
     const schleife = r.spur.schleife_takte !== undefined;   // 1.12 S7: pass 0 of a loop; its end is the start of pass 1
-    const g = schleife ? planeDurchlauf(r.spur, anker, 0, 0) : plane(r.spur, anker);
+    const g = schleife ? planeDurchlauf(r.spur, anker, 0, 0, this.proTakt()) : plane(r.spur, anker, this.proTakt());
     if (quelle === 'cypher') {
       // F4: AUTO aus auf einem Strom heißt, Andreas hält ihn; Cyphers Spur darf ihn nicht berühren (Kern, Wirt, Muster)
       for (const f of r.spur.fahrten) {
@@ -1760,13 +1825,13 @@ export class Oberflaeche {
         if (st !== null && !leseMusterStand(this.musterOrdner(st)).autonom) return this.json(a, 409, { fehler: 'auto_aus', strom: st, ziel: f.ziel, text: 'AUTO is off: Andreas holds this stream' });
       }
       // 1.12 S7: for a loop over two passes, so that the seam (end of pass k → start of pass k+1) is checked from the start
-      const p = oeffnetKanal(this.stand.regler, schleife ? [...g.teile, ...planeDurchlauf(r.spur, g.ende_beat, 0, 0).teile] : g.teile);
+      const p = oeffnetKanal(this.stand.regler, schleife ? [...g.teile, ...planeDurchlauf(r.spur, g.ende_beat, 0, 0, this.proTakt()).teile] : g.teile);
       if (p) return this.json(a, 409, { fehler: 'kein_hoerschein', pfad: p, text: 'this track opens a closed channel; Cypher may not (Plan Hand D8)' });
     }
     const lauf: SpurLauf = { quelle, anker, ende: g.ende_beat, fahrten: r.spur.fahrten, timer: [], offen: [...g.muster], gruppen: new Set(), ids: [], teile: [] };
     if (schleife) {   // 1.12 S7: set before the track enters the table, so it never looks like a one-shot track (cleanup, GET /spur)
       lauf.schleife = { n: r.spur.schleife_takte as number, anker_naechster: g.ende_beat, durchlauf: 1, teilNr: g.teile.length, naechste: null,
-        durchlaeufe: [{ k: 0, anfang: anker, ende: g.ende_beat, teile: g.teile.length }] };
+        durchlaeufe: [{ k: 0, anfang: anker, ende: g.ende_beat, teile: g.teile.length, ...(this.proTakt() !== 4 ? { proTakt: this.proTakt() } : {}) }] };
     }
     this.spuren.set(name, lauf);
     this.spurenSichern();
@@ -1808,7 +1873,7 @@ export class Oberflaeche {
     this.spurenSichern();
     this.opt.log?.({ typ: 'spur', name, quelle, anker, teile: g.teile.length, wirt: g.wirt.length, muster: g.muster.length });
     const quittung = lauf.ids.length ? await this.warteQuittung(lauf.ids[0], g.teile[0].ab_beat) : null;
-    this.json(a, 200, { ok: true, name, anker_beat: anker, anker_takt: Math.floor(anker / 4) + 1, ende_beat: g.ende_beat,
+    this.json(a, 200, { ok: true, name, anker_beat: anker, anker_takt: Math.floor(anker / this.proTakt()) + 1, ende_beat: g.ende_beat,
       teile: g.teile.length, wirt: g.wirt.length, muster: g.muster.length, quittung, abgelehnt: this.spurAbgelehnt(lauf) });
   }
 
@@ -1857,14 +1922,14 @@ export class Oberflaeche {
         const st = stromVonZiel(f.ziel);
         if (st !== null && !leseMusterStand(this.musterOrdner(st)).autonom) return this.json(a, 409, { fehler: 'auto_aus', strom: st, ziel: f.ziel, text: 'AUTO is off: Andreas holds this stream' });
       }
-      const g = planeDurchlauf(r.spur, ab, 0, 0);
-      const p = oeffnetKanal(this.stand.regler, [...g.teile, ...planeDurchlauf(r.spur, g.ende_beat, 0, 0).teile]);
+      const g = planeDurchlauf(r.spur, ab, 0, 0, this.proTakt());
+      const p = oeffnetKanal(this.stand.regler, [...g.teile, ...planeDurchlauf(r.spur, g.ende_beat, 0, 0, this.proTakt()).teile]);
       if (p) return this.json(a, 409, { fehler: 'kein_hoerschein', pfad: p, text: 'this change opens a closed channel; Cypher may not (Plan Hand D8)' });
     }
     s.naechste = r.spur;
     this.spurenSichern();
     this.opt.log?.({ typ: 'spur_aendern', name, quelle, ab_beat: ab, uebernaechster });
-    this.json(a, 200, { ok: true, name, ab_beat: ab, ab_takt: Math.floor(ab / 4) + 1, uebernaechster });
+    this.json(a, 200, { ok: true, name, ab_beat: ab, ab_takt: Math.floor(ab / this.proTakt()) + 1, uebernaechster });
   }
 
   // F5: ein Timer je Spur mit Muster-Fahrten; er schreibt, sobald der Kern-Beat ab_beat − Vorlauf erreicht hat
@@ -2056,7 +2121,7 @@ export class Oberflaeche {
   private schleifenInfo(s: SchleifenStand): Record<string, unknown> {
     const beat = (this.kern.uhr as unknown as { beat: number } | null)?.beat ?? -Infinity;
     const d = s.durchlaeufe.filter((x) => x.anfang <= beat).at(-1) ?? s.durchlaeufe[0];
-    return { schleife_takte: (d.ende - d.anfang) / 4, durchlauf: d.k, anker_beat: d.anfang, ende_beat: d.ende, naechste: s.naechste !== null };
+    return { schleife_takte: (d.ende - d.anfang) / (d.proTakt ?? 4), durchlauf: d.k, anker_beat: d.anfang, ende_beat: d.ende, naechste: s.naechste !== null };
   }
 
   // 1.12 S7: one watcher per loop track (like musterTimer, 50 ms, core beat instead of wall clock). MAJOR 1: it is serial; while a pass is
@@ -2079,16 +2144,16 @@ export class Oberflaeche {
     const s = lauf.schleife as SchleifenStand, u = this.kern.uhr as unknown as { beat: number; bpm: number; mono_ns: number } | null;
     if (!u || u.beat < s.anker_naechster - VORLAUF_SCHLEIFE_BEATS) return;
     if (s.anker_naechster <= u.beat) {
-      this.schleifeUeberspringen(name, s, Math.floor((u.beat - s.anker_naechster) / (4 * s.n)) + 1, u.beat);
+      this.schleifeUeberspringen(name, s, Math.floor((u.beat - s.anker_naechster) / (this.proTakt() * s.n)) + 1, u.beat);
       if (u.beat < s.anker_naechster - VORLAUF_SCHLEIFE_BEATS) { this.spurenSichern(); return; }
     }
-    lauf.planend = s.anker_naechster + 4 * s.n;   // sendeDurchlauf sets the exact end before its first await
+    lauf.planend = s.anker_naechster + this.proTakt() * s.n;   // sendeDurchlauf sets the exact end before its first await
     try { await this.sendeDurchlauf(name, lauf, u); } finally { lauf.planend = undefined; }
   }
 
   private schleifeUeberspringen(name: string, s: SchleifenStand, weg: number, beat: number): void {
     this.opt.log?.({ typ: 'spur_schleife_uebersprungen', name, durchlauf: s.durchlauf, durchlaeufe: weg, ab_beat: s.anker_naechster, beat });
-    s.anker_naechster += weg * 4 * s.n;
+    s.anker_naechster += weg * this.proTakt() * s.n;
     s.durchlauf += weg;
   }
 
@@ -2098,7 +2163,7 @@ export class Oberflaeche {
   private async sendeDurchlauf(name: string, lauf: SpurLauf, u: { beat: number; bpm: number; mono_ns: number }): Promise<void> {
     const s = lauf.schleife as SchleifenStand;
     const spur: Spur = s.naechste ?? { name, fahrten: lauf.fahrten, schleife_takte: s.n };
-    const g = planeDurchlauf(spur, s.anker_naechster, 0, s.teilNr);
+    const g = planeDurchlauf(spur, s.anker_naechster, 0, s.teilNr, this.proTakt());
     lauf.planend = g.ende_beat;
     if (lauf.quelle === 'cypher') {   // MAJOR 3: Stop Cypher, AUTO and D8 hold for every pass of Cypher's loop, not only at the start
       const sperre = this.schleifenSperre(spur, g.teile);
@@ -2139,7 +2204,7 @@ export class Oberflaeche {
       lauf.teile.push({ id: felder.id, teil: t.nr, pfad: t.pfad });
     }
     this.schleifeUebernimm(lauf, spur);
-    s.durchlaeufe = [...s.durchlaeufe, { k: s.durchlauf, anfang: g.anfang_beat, ende: g.ende_beat, teile: g.teile.length }].slice(-2);
+    s.durchlaeufe = [...s.durchlaeufe, { k: s.durchlauf, anfang: g.anfang_beat, ende: g.ende_beat, teile: g.teile.length, ...(this.proTakt() !== 4 ? { proTakt: this.proTakt() } : {}) }].slice(-2);
     const behalten = s.durchlaeufe.reduce((n, d) => n + d.teile, 0);   // MINOR 6: ids and teile of the last two passes only
     lauf.ids = behalten ? lauf.ids.slice(-behalten) : [];
     lauf.teile = behalten ? lauf.teile.slice(-behalten) : [];
@@ -2245,6 +2310,7 @@ export class Oberflaeche {
     const felder = start ? { ...basis, quell_beat: q, politik: 0 } : { ...basis, politik: 1 };
     this.kern.sende(start ? '/k/deck/start' : '/k/deck/stopp', felder);
     this.gesendet++;
+    if (start) this.startGeplant.set(Number(d.deck), felder.ab_beat); else this.startGeplant.delete(Number(d.deck));
     this.json(a, 200, { ok: true, felder, quittung: await this.warteQuittung(felder.id, felder.ab_beat) });
   }
 
@@ -2305,8 +2371,9 @@ export class Oberflaeche {
     const jetztMs = Date.now();   // 1.10 slice 4a: the stages that sent in the last 500 ms; a stage that stops sending (bypass, removed) simply falls out
     const insGr = Object.fromEntries(Object.entries(this.insGr).filter(([, g]) => jetztMs - g.t < INS_GR_FRIST_MS).sort(([a], [b]) => a.localeCompare(b, 'en', { numeric: true }))
       .map(([k, g]) => [k, Math.round(g.db * 10) / 10]));
-    return { uhr: { beat: Math.round(beat * 100) / 100, takt: Math.floor(beat / 4) + 1, schlag: Math.floor(((beat % 4) + 4) % 4) + 1,
-      bpm: u?.bpm ?? null }, ki: { gestoppt: this.kiGestoppt }, decks, regler, boxen: this.stand.loops, fx: this.stand.fx,
+    const proTakt = this.proTakt();
+    return { uhr: { beat: Math.round(beat * 100) / 100, takt: Math.floor(beat / proTakt) + 1, schlag: Math.floor(((beat % proTakt) + proTakt) % proTakt) + 1,
+      bpm: u?.bpm ?? null }, ...(proTakt !== 4 ? { taktart: [proTakt, 4] } : {}), ki: { gestoppt: this.kiGestoppt }, decks, regler, boxen: this.stand.loops, fx: this.stand.fx,
       fx_routing: this.stand.fxRouting, ...(Object.keys(insGr).length ? { ins_gr: insGr } : {}), ...(this.stand.kanalLimiter ? { kanal_limiter: { ...this.stand.kanalLimiter } } : {}), ...(this.stand.hallPool ? { hall_pool: { ...this.stand.hallPool } } : {}), ...(this.stand.spurPool ? { spur_pool: { ...this.stand.spurPool } } : {}), quittungen: this.cypherQuittungen.slice(-10), studio: this.studioLage(), ausgang: leseAusgang(this.opt.digitalout) };
   }
 
@@ -2465,7 +2532,7 @@ export class Oberflaeche {
       { methode: 'GET', pfad: '/oszi', schutz: O, handler: (_q, a, url) => this.osziAus(url, a) },
       { methode: 'GET', pfad: '/fx', schutz: O, handler: (_q, a) => this.json(a, 200, this.stand.fx) },   // [FX1, FX2] oder null je Einheit
       { methode: 'GET', pfad: '/fx/zuweisung', schutz: O, handler: (_q, a) => this.json(a, 200, this.stand.fxZuweisung) },
-      { methode: 'GET', pfad: '/graphen', schutz: O, handler: (_q, a) => this.json(a, 200, { ...listeGraphen(), geladen: this.stand.graphen_geladen, geladen_geprueft_vor_ms: this.graphenVomKernMs === null ? null : Date.now() - this.graphenVomKernMs }) },   // Baukasten S12/S16
+      { methode: 'GET', pfad: '/graphen', schutz: O, handler: (_q, a) => this.json(a, 200, { ...listeGraphen(undefined, { ordner: this.opt.samplerOrdner }), geladen: this.stand.graphen_geladen, geladen_geprueft_vor_ms: this.graphenVomKernMs === null ? null : Date.now() - this.graphenVomKernMs }) },   // Baukasten S12/S16
       { methode: 'GET', pfad: '/graphen/panel', schutz: O, handler: (_q, a, url) => {   // front panel of one graph (sidecar panels/<name>.json) plus its knob ranges
         const r = ladePanel(url.searchParams.get('name') ?? '');
         if (!r) return this.json(a, 404, { fehler: 'unbekannt' });
@@ -3068,6 +3135,12 @@ export class Oberflaeche {
     const eintrag = passend.filter((e) => e.basis_bpm === passend[0].basis_bpm)
       .reduce<typeof passend[number] | undefined>((m, e) => (m === undefined || e.fassung > m.fassung ? e : m), undefined);
     if (!istOffenesDeck(deck)) return this.json(a, 400, { fehler: 'unbekanntes_deck', deck });
+    // Plan seq-fader-frei D4: a part of Cypher that still acts on deck/N/fader|trim (opened under the empty-deck exemption)
+    // must not meet a track Cypher loads now
+    if (this.quelle() === 'cypher' && this.seqRampeLaeuft(deck)) {
+      return this.json(a, 409, { fehler: 'kanal_offen', kanal: `deck/${deck}`,
+        text: `a ramp of Cypher is still acting on deck/${deck} of a SEQ deck place; wait until it has ended before a track is loaded there` });
+    }
     // Befund 4: nicht im Index ist ein anderer Fall als eine fehlende Datei der Fassung (material_fehlt aus der Kopie)
     if (!eintrag) return this.json(a, 400, { fehler: 'nicht_im_index', material_id: d.material_id });
     let kopie;
@@ -3102,7 +3175,7 @@ export class Oberflaeche {
   private readonly angefasst = new Set<string>();   // seit dem letzten Plan neu gesetzt: box:N, raster:N, fx:E (F3)
   private letzteBoxFxWieder = 0;
   private static readonly BOX_FX_SPERRE_MS = 30_000;
-  private boxFxPlanen(): void {
+  private boxFxSchnappschuss(): Wiederplan | null {
     const boxen: { box: number; name: string; status: number; besitzer: string; versatz?: number }[] = [];
     for (const [n, l] of Object.entries(this.stand.loops)) {
       const name = String(l.name ?? ''), status = Number(l.status);
@@ -3125,27 +3198,20 @@ export class Oberflaeche {
     const graphen = graphenNachNeustart(this.stand.graphen_geladen, this.graphBesitzer, projektKanaele);
     // t_7f487235: an empty snapshot (the stand was cleared by a restart that was too fast) falls back to the plan that is still waiting
     const leer = boxen.length === 0 && fx.length === 0 && fx3 === null && graphen.length === 0;
-    if (leer && !this.offenerPlan) return;
-    const plan = leer ? this.offenerPlan! : { boxen, fx, fx3, graphen };
+    if (leer && !this.offenerPlan) return null;
+    return leer ? this.offenerPlan! : { boxen, fx, fx3, graphen };
+  }
+  // Plan the restore of the snapshot (taken before the stand was cleared); without an argument the snapshot is taken now
+  private boxFxPlanen(vorab?: Wiederplan | null): void {
+    const plan = vorab === undefined ? this.boxFxSchnappschuss() : vorab;
+    if (!plan) return;
     const jetzt = Date.now();
     if (jetzt - this.letzteBoxFxWieder < Oberflaeche.BOX_FX_SPERRE_MS) {
       // Keep the plan and restore it once when the guard time is over (a later restart replaces the wait, so one accepted restart sends once)
       this.offenerPlan = plan;
-      const warteMs = Oberflaeche.BOX_FX_SPERRE_MS - (jetzt - this.letzteBoxFxWieder) + 500;
-      if (this.offenerPlanTimer) clearTimeout(this.offenerPlanTimer);
-      const gen = this.generation;
-      this.offenerPlanTimer = setTimeout(() => {
-        this.offenerPlanTimer = null;
-        if (this.generation !== gen || !this.offenerPlan) return;   // another restart took over: its own pass decides
-        const p = this.offenerPlan;
-        this.offenerPlan = null;
-        this.letzteBoxFxWieder = Date.now();
-        this.angefasst.clear();
-        this.opt.log?.({ typ: 'wiederherstellung_nachgeholt' });
-        this.boxFxWieder(p.boxen, p.fx, p.fx3);
-        this.graphWieder(p.graphen);
-      }, warteMs);
-      this.offenerPlanTimer.unref?.();
+      this.angefasst.clear();   // marks gathered from here on (box, FX, graph set during the wait) keep that part out of the delayed replay; the echoes of earlier restores drop out here (audit C01)
+      this.planNachholen(Oberflaeche.BOX_FX_SPERRE_MS - (jetzt - this.letzteBoxFxWieder) + 500);
+      this.merkeNeustartStand();   // the wait is on disk too
       this.opt.log?.({ typ: 'wiederherstellung_uebersprungen', grund: 'zu_schnell', seit_ms: jetzt - this.letzteBoxFxWieder });
       this.verteile({ a: 'wiederherstellung', f: { uebersprungen: true, grund: 'zu_schnell' } });
       return;
@@ -3161,12 +3227,48 @@ export class Oberflaeche {
       if (this.generation !== geplant) { this.offenerPlan = plan; this.opt.log?.({ typ: 'wiederherstellung_verworfen', geplant, jetzt: this.generation }); return; }   // kept for the next restart
       this.boxFxWieder(plan.boxen, plan.fx, plan.fx3);
       this.graphWieder(plan.graphen);
+      this.sichereNeustartStandSofort();   // the file was held back during the 500 ms, and still holds the old generation
     }, 500);
   }
+  // The delayed restore of offenerPlan once, warteMs from now (the guard time is over then); another restart takes it over
+  private planNachholen(warteMs: number): void {
+    const gen = this.generation;
+    this.offenerPlanFaellig = Date.now() + warteMs;
+    if (this.offenerPlanTimer) clearTimeout(this.offenerPlanTimer);
+    this.offenerPlanTimer = setTimeout(() => {
+      this.offenerPlanTimer = null;
+      if (this.generation !== gen || !this.offenerPlan) return;   // another restart took over: its own pass decides
+      const p = this.offenerPlan;
+      this.offenerPlan = null;
+      this.letzteBoxFxWieder = Date.now();
+      this.opt.log?.({ typ: 'wiederherstellung_nachgeholt' });
+      this.boxFxWieder(p.boxen, p.fx, p.fx3);
+      this.graphWieder(p.graphen);
+      this.sichereNeustartStandSofort();   // the plan is done
+    }, warteMs);
+    this.offenerPlanTimer.unref?.();
+  }
+  // per deck: length taps waiting for the core's answer
+  private loopLaengeTasten?: Record<string, { sicher: number; tippen: number; offen: number; kette: Promise<void> }>;
+  private offenerPlanFaellig = 0;   // epoch ms the waiting plan is due
+  // The snapshot of a first contact with a higher generation, until /k/willkommen AND /e/neustart of that generation said their samples
+  private planWartet: { generation: number; plan: Wiederplan | null; willkommen?: number; neustart?: number } | null = null;
+  private planWartetFuehren(adresse: string, generation: number, sample: number): void {
+    const w = this.planWartet;
+    if (!w || (adresse !== '/k/willkommen' && adresse !== '/e/neustart')) return;
+    if (generation !== w.generation) { this.planWartet = null; return; }   // another kern life took over: its own pass decides
+    if (!Number.isFinite(sample)) return;
+    if (adresse === '/k/willkommen') w.willkommen ??= sample;
+    else if (adresse === '/e/neustart') w.neustart ??= sample;
+    if (w.willkommen === undefined || w.neustart === undefined) return;
+    this.planWartet = null;
+    const dauer = w.willkommen - w.neustart;   // frames the kern has run since it restarted
+    if (dauer < NEUSTART_FRISCH_FRAMES) { this.boxFxPlanen(w.plan); return; }
+    this.offenerPlan = null;   // adopted from the file, but not the plan of this kern
+    this.opt.log?.({ typ: 'wiederherstellung_uebersprungen', grund: 'kern_laenger_neu', dauer_frames: dauer });
+  }
   private wiederTimer: ReturnType<typeof setTimeout> | null = null;   // the restore 500 ms after an accepted restart (cleared by stoppe)
-  private offenerPlan: { boxen: { box: number; name: string; status: number; besitzer: string; versatz?: number }[];
-    fx: { einheit: 1 | 2; felder: Felder; zuweisung: string[]; besitzer: string }[]; fx3: { zuweisung: string[]; besitzer: string } | null;
-    graphen: ReturnType<typeof graphenNachNeustart> } | null = null;   // t_7f487235: plan held back by the guard
+  private offenerPlan: Wiederplan | null = null;   // t_7f487235: plan held back by the guard
   private offenerPlanTimer: ReturnType<typeof setTimeout> | null = null;
   private boxFxWieder(boxen: { box: number; name: string; status: number; besitzer: string; versatz?: number }[],
     fx: { einheit: 1 | 2; felder: Felder; zuweisung: string[]; besitzer: string }[],
@@ -3263,6 +3365,7 @@ export class Oberflaeche {
     this.kern.sende('/k/loop/raster', { id: Number(++this.id), quelle: this.quelle(), box, versatz_frames: v });
     this.gesendet++;
     this.loopRasterLive[String(box)] = { name: w.name, v };
+    this.merkeNeustartStand();
     this.angefasst.add(`raster:${box}`);
     this.json(a, 200, { ok: true, versatz_frames: v, gespeichert_frames: w.gespeichert_frames });
   }
@@ -3291,7 +3394,7 @@ export class Oberflaeche {
         return this.json(a, 409, { fehler: 'box_offen_oder_faehrt', text: 'my pad ramp on this box is still running; foreign material would play unheard' });
       }
     }
-    if (aktion === 'laden') delete this.loopRasterLive[String(box)];   // Review F5
+    const rasterLive = this.loopRasterLive[String(box)];   // Review F5: a load drops it, but only once the kern has taken it (audit U01)
     this.angefasst.add(`box:${box}`);   // Slice 5 F3
     const felder: Felder = { id: Number(++this.id), quelle: this.quelle(), box };
     if (aktion === 'laden') {
@@ -3309,6 +3412,8 @@ export class Oberflaeche {
     // nicht_geladen) beim Aufrufer steht statt nur im Kern-Log (Anlass 2026-09-30: jam-boom lud viermal stumm nicht).
     return this.warteQuittung(Number(felder.id)).then((quittung) => {
       if (aktion === 'laden' && (quittung as Felder | null)?.status === 6 && this.loopLadung[String(box)]?.name === felder.name) delete this.loopLadung[String(box)];   // abgelehnt: kein Besitzerwechsel
+      // accepted: the kern takes the offset from loop.json; refused: the old loop plays on with Andreas' live offset. A nudge made meanwhile stays.
+      if (aktion === 'laden' && !(quittung && GRAPH_ABGELEHNT.includes(Number((quittung as Felder).status))) && this.loopRasterLive[String(box)] === rasterLive) { delete this.loopRasterLive[String(box)]; this.merkeNeustartStand(); }
       this.json(a, 200, { ok: true, gesendet: adresse, felder, quittung });
     });
   }
@@ -3322,7 +3427,7 @@ export class Oberflaeche {
     // D1 Spec 6.32: eine Tempo-Rampe verändert eine laufende Freeze-Datei; während der Sperre des Bereichs proj (S3) nimmt die Route nichts an
     if (this.proj.sitzung.ladenGesperrt()) return this.json(a, 409, { fehler: 'beschaeftigt', text: 'a freeze is running; tempo changes wait until it is done' });
     const u = this.kern.uhr as unknown as { beat: number; bpm: number } | null;
-    const rampe = tempoRampe(u?.beat ?? 0, u?.bpm ?? 128, d.bpm as number);   // D1 S2: derselbe Weg wie der Bereich proj (Spec 2.7)
+    const rampe = tempoRampe(u?.beat ?? 0, u?.bpm ?? 128, d.bpm as number, this.proTakt());   // D1 S2: derselbe Weg wie der Bereich proj (Spec 2.7)
     if (!rampe) return this.json(a, 400, { fehler: 'bereich', text: 'bpm must be a number from 60 to 200' });
     const felder = { id: Number(++this.id), quelle: this.quelle(), ...rampe };
     this.kern.sende('/k/tempo/rampe', felder);

@@ -47,7 +47,7 @@ export interface Zeile {
   katalognummer: string | null; isrc: string | null; remixer: string | null; dauer_s: number | null; pfad: string | null; ordner: string | null;
   name: string | null; alle: string | null;
 }
-export interface Filter { text?: string; ordner?: string; facette?: { feld: string; wert: string }; camelot?: string; nachbarn?: boolean; bpm?: [number, number]; energie?: 0 | 1 | 2; ohneSchutz?: boolean }
+export interface Filter { text?: string; ordner?: string; facette?: { feld: string; wert: string }; camelot?: string; nachbarn?: boolean; /** with `camelot`: a row without a key passes too */ keyOffen?: boolean; bpm?: [number, number]; energie?: 0 | 1 | 2; ohneSchutz?: boolean }
 /** Priority order of the shelf: reachable folders first, then the rank (favourites and recent, lower first), then the chosen column. */
 export interface Vorrang {
   /** Folders (as the catalog names them) that are NOT reachable now; empty in the normal case, then the key drops out of the query. */
@@ -142,7 +142,7 @@ export class Katalog {
       // NULL, '' und nur Leerraum sind ein Wert „leer“, im Baum (facetteWert) wie hier (Review B2)
       if (f.facette.wert === '') w.push(`${facetteWert(f.facette.feld, 'k.')} IS NULL`); else { w.push(`${facetteWert(f.facette.feld, 'k.')} = ?`); par.push(f.facette.wert); }
     }
-    if (f.camelot) { const c = camelotNachbarn(f.camelot); const l = f.nachbarn ? c : [c[0]]; w.push(`k.camelot IN (${l.map(() => '?').join(',')})`); par.push(...l); }
+    if (f.camelot) { const c = camelotNachbarn(f.camelot); const l = f.nachbarn ? c : [c[0]]; w.push(`(k.camelot IN (${l.map(() => '?').join(',')})${f.keyOffen ? " OR nullif(trim(k.camelot), '') IS NULL" : ''})`); par.push(...l); }
     if (f.bpm) { w.push('k.bpm BETWEEN ? AND ?'); par.push(f.bpm[0], f.bpm[1]); }
     if (f.energie !== undefined) w.push(ENERGIE_SQL[f.energie]);
     if (f.ohneSchutz) w.push('k.schutz IS NULL');
@@ -165,6 +165,7 @@ export class Katalog {
       // The count depends only on the filter, not on page, sort or priority; with `schutz IS NULL` it reads every row of the type (45 ms on 75 000 one-shots),
       // so it is kept per filter until the catalog file changes.
       const gesamt = this.merke(`n|${typ}|${JSON.stringify(f)}`, () => (db.prepare(`${mit}SELECT count(*) AS n FROM ${von} WHERE ${sql}`).get(...par) as { n: number }).n);
+      if (gesamt === 0) return { zeilen: [], gesamt, gebaut_am: stand.gebaut_am ?? '' };   // nothing matches: the page query would walk the sort index to its end
       const ordnung = `${spalte.startsWith('CASE') ? spalte : `k.${spalte}`} ${ab ? 'DESC' : 'ASC'} NULLS LAST, k.id`;
       const mitFehlend = !!vorrang?.fehlend.length, mitRang = !!vorrang?.rang.size;
       if (!vorrang || (!mitFehlend && !mitRang)) {   // normal case: the order is the column's and the indexes serve it

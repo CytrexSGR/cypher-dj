@@ -49,6 +49,7 @@ struct Midi {
   int64_t s0;
   uint8_t d[3];
   uint32_t versatz;
+  int port = 0;   // midi_ein only: 0-based raw input index
 };
 
 struct Lauf {
@@ -77,9 +78,9 @@ struct Lauf {
   std::function<float(int64_t)> erz_quelle[8];
   std::vector<float> erz_puf_l[8], erz_puf_r[8];
   std::vector<Midi> midi_ein;
-  void midi_ein_bei(int64_t s, uint8_t a, uint8_t b, uint8_t c) {
+  void midi_ein_bei(int64_t s, uint8_t a, uint8_t b, uint8_t c, int port = 0) {
     PRUEF(s / N * N >= kern->sample());
-    midi_ein.push_back({s / N * N, {a, b, c}, static_cast<uint32_t>(s % N)});
+    midi_ein.push_back({s / N * N, {a, b, c}, static_cast<uint32_t>(s % N), port});
   }
   int64_t id = 100;
   bool bewachen = false;
@@ -205,7 +206,7 @@ struct Lauf {
       }
       for (Midi& m : midi_ein)
         if (m.s0 == n0) {
-          kern->midi_ein(m.d, 3, m.versatz);
+          kern->midi_ein(m.d, 3, m.versatz, m.port);
           m.s0 = -1;
         }
       const uint64_t w0 = cdj_lade(&ring->w);

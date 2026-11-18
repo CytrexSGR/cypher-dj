@@ -325,6 +325,44 @@ test('T7.2 wendePresetAn: one plan request, then exactly one ctx.aendere; a hint
   assert.equal(await wendePresetAn(s.ctx, n, ziel), false);
 });
 
+// ---- D28: a sound of another instrument dropped on a track asks once, then the exchange is ONE write ----
+test('D28 wendePresetAn: a graph refusal asks with the track name, yes asks for the plan again with graph_laden and writes once, naming the loaded instrument', async () => {
+  const { wendePresetAn, planAktion, graphGewechseltText } = await import(PA);
+  const log = [];
+  const GRAPH_PLAN = { weg: 'proj', befehle: [{ befehl: 'spur_aendern', spur_id: 's2', geraet: { art: 'intern', name: 'bk', graph: 'neu-a', parameter: { k2: 0.25 }, preset: 'nutzer:baukasten/neu-sound' } }],
+    label: 'Preset Neu Sound', uebersprungen: [], hinweise: ['graph_gewechselt'] };
+  const ctx = { st: { projekt: { spuren: [{ id: 's2', name: 'Pad' }] } },
+    holeJson: async (weg, k) => { log.push(['post', weg, k]); return k.graph_laden === true ? { status: 200, j: GRAPH_PLAN } : { status: 409, j: { fehler: 'graph_anders', text: 'another graph', graph: 'neu-a' } }; },
+    melde: (t, f) => log.push(['melde', t, f]), aendere: async (l, b) => { log.push(['aendere', l, b]); return true; } };
+  const fragen = [];
+  const n = { id: 'nutzer:baukasten/neu-sound', geraet: 'baukasten', name: 'Neu Sound' }, ziel = { art: 'spur', spur_id: 's2' };
+  assert.equal(await wendePresetAn(ctx, n, ziel, { bestaetige: (t) => { fragen.push(t); return true; } }), true);
+  assert.deepEqual(fragen, ['"Neu Sound" is a sound of neu-a. Load neu-a on Pad and apply it?']);
+  assert.deepEqual(log.map((x) => x[0]), ['post', 'post', 'melde', 'aendere'], 'plan, plan with the yes, hint, ONE write');
+  assert.deepEqual(log[0][2], { id: n.id, ziel });
+  assert.deepEqual(log[1][2], { id: n.id, ziel, graph_laden: true });
+  assert.deepEqual(log[2], ['melde', `Neu Sound: ${graphGewechseltText('neu-a')}`, false]);
+  assert.match(log[2][1], /Loaded neu-a on this track; its old knob values were not carried over/);
+  assert.deepEqual(log[3], ['aendere', 'Preset Neu Sound', GRAPH_PLAN.befehle]);
+  assert.deepEqual(planAktion({ status: 200, j: GRAPH_PLAN }).hinweise, [graphGewechseltText('neu-a')]);
+  // no: nothing is written, the reason is shown as an error; the second request never goes out
+  log.length = 0;
+  assert.equal(await wendePresetAn(ctx, n, ziel, { bestaetige: () => false }), false);
+  assert.deepEqual(log.map((x) => x[0]), ['post', 'melde']);
+  assert.deepEqual(log[1], ['melde', 'Not applied: neu-a was not loaded', true]);
+});
+
+test('D28 wendePresetAn: refusals without an offer (latency on a pattern, instrument not installed, a stage with another graph) never ask and write nothing', async () => {
+  const { wendePresetAn } = await import(PA);
+  const faelle = [[409, { fehler: 'graph_latenz', text: 'delays its signal' }], [404, { fehler: 'graph_fehlt', text: 'the instrument of this preset is not installed' }], [409, { fehler: 'graph_anders', text: 'stage graph' }]];
+  for (const [status, j] of faelle) {
+    const log = [];
+    const ctx = { holeJson: async () => ({ status, j }), melde: (t, f) => log.push(['melde', t, f]), aendere: async () => { log.push(['aendere']); return true; } };
+    assert.equal(await wendePresetAn(ctx, { id: 'nutzer:baukasten/x', name: 'X' }, { art: 'spur', spur_id: 's1' }, { bestaetige: () => assert.fail('no question') }), false);
+    assert.deepEqual(log, [['melde', j.text, true]]);
+  }
+});
+
 // ---- T7.1/T7.2 drop wiring (storage.js) with stand-in elements ----
 test('T7.2 drop wiring: a preset on a track row, a stage or a strip row asks the server for the plan and writes once; refusals only show text', async () => {
   const { bindeAblage } = await import('../public/production/storage.js');

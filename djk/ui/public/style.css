@@ -614,6 +614,11 @@ button.laden.in-box:disabled { opacity: .4; }
 
 /* Baukasten S12: graph pickers on the strips, in the detail view and in the SEND RETURNS block */
 .graphplatz select.graphwahl { width: 100%; min-width: 0; font-size: 11px; }
+.graphplatz .graphachsen { display: flex; gap: 2px; margin-top: 2px; }   /* TYPE / ROLE: the page-wide grouping of the instrument pickers */
+.graphplatz button.graphachse { flex: 1; font-size: 9px; letter-spacing: .08em; padding: 1px 4px; background: var(--panel2); color: var(--dim); border: 1px solid var(--line); border-radius: 4px; cursor: pointer; }
+.graphplatz button.graphachse[aria-pressed="true"] { color: var(--text); border-color: var(--dim); font-weight: 700; }
+#instrumente .graphplatz .graphachsen { margin-top: 0; margin-left: 6px; display: inline-flex; }
+#instrumente .graphplatz button.graphachse { flex: none; font-size: 11px; padding: 3px 8px; }
 .graphplatz .bkmerken { font-size: 10px; padding: 1px 6px; margin-top: 2px; }   /* S17 */
 .graphplatz .bkmarke { font-size: 10px; margin-left: 6px; }
 .graphplatz .bkmarke.gespeichert { color: #6fbf73; }
@@ -1119,16 +1124,89 @@ body.bereich-controller #bestand .reiter, body.bereich-controller #bestand #such
 body.bereich-controller #bestand .tabelle { display: none !important; }
 body.lib-zu #bestand .register { display: none; }
 .register[hidden] { display: none; }
-.register { padding-top: 8px; display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: 1; font-size: 12px; overflow: hidden; }
-.register .reg-filter { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; min-width: 12ch; }
-.register .reg-inhalt { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow: auto; }
-.register .reg-chips { display: flex; gap: 6px; flex-wrap: wrap; }
-.register .reg-chip { border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; background: var(--panel2); }
-.register .reg-chip.reg-inaktiv, .register .reg-zeile.reg-inaktiv { opacity: 0.5; }
-.register .reg-chip.reg-fehler { border-color: #c0392b; color: #e74c3c; opacity: 1; }
+.register { padding-top: 8px; display: flex; flex-direction: row; gap: 16px; min-height: 0; flex: 1; font-size: 12px; overflow: hidden; }
+.register .reg-links { flex: 0 0 34%; min-width: 300px; max-width: 520px; overflow: auto; }
+.register .reg-rechts { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.register .reg-geraete { display: flex; flex-direction: column; gap: 4px; }
+.register .reg-geraet { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel2); cursor: pointer; }
+.register .reg-geraet.an { border-color: var(--text); background: var(--panel); }
+.register .reg-geraet.reg-inaktiv { opacity: 0.55; }
+.register .reg-geraet.reg-alle { font-weight: 600; }
+.register .reg-geraet-text { flex: 1; min-width: 0; }
+.register .reg-geraet-name { font-weight: 600; font-size: 13px; }
+.register .reg-geraet-info { color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.register .reg-geraet-tat { display: flex; gap: 4px; flex: none; }
+.register .reg-punkt { flex: none; width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--dim); }
+.register .reg-punkt.an { background: #2ecc71; border-color: #2ecc71; }
+.register .reg-leiste { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.register .reg-filter { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; min-width: 26ch; }
+.register .reg-lernen { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.register .reg-ziel { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; min-width: 30ch; }
+.register .reg-spur, .register .reg-status, .register .reg-leer { color: var(--dim); }
+.register, .register * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.register .reg-wahlen { display: flex; flex-direction: column; gap: 4px; max-height: 104px; overflow-y: auto; flex: none; }
+.register .reg-wahl { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.register .reg-wahl-titel { color: var(--dim); min-width: 7ch; text-transform: uppercase; letter-spacing: 0.08em; font-size: 10px; }
+.register .reg-wahl .reg-learn.an { background: var(--text); color: var(--bg); border-color: var(--text); }
+.register .reg-wahl .reg-learn.reg-voll:not(.an) { opacity: 0.55; }
+.register .reg-learn.an { background: var(--text); color: var(--bg); border-color: var(--text); }
+.register .reg-fehler { color: #e74c3c; }
+.register .reg-inhalt { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; }
 .register .reg-tabelle { border-collapse: collapse; width: 100%; }
-.register .reg-tabelle th, .register .reg-tabelle td { text-align: left; padding: 2px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-.register .reg-lernzeile { display: flex; flex-direction: column; gap: 6px; }
+.register .reg-tabelle th { position: sticky; top: 0; background: var(--panel); }
+.register .reg-tabelle th, .register .reg-tabelle td { text-align: left; padding: 3px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.register .reg-zielzelle { font-weight: 600; }
+.register .reg-zeile.reg-treffer, .register .reg-kachel.reg-treffer { background: #2ecc7133; }
+.register .reg-dim { color: var(--dim); }
+.register .reg-ziele-tabelle td { white-space: normal; vertical-align: middle; }
+.register .reg-ziele-tabelle td.reg-tat { white-space: nowrap; width: 1%; }
+.register .reg-ziele-tabelle .reg-zielzelle span { display: block; }
+.register .reg-ziele-tabelle .reg-pfad { color: var(--dim); font-weight: 400; font-size: 10px; }
+.register .reg-ziele-tabelle .reg-frei td { color: var(--dim); }
+.register .reg-ziele-tabelle .reg-frei .reg-zielzelle { color: var(--text); }
+.register .reg-tat { text-align: right; white-space: nowrap; }
+.register .reg-tat .reg-learn + .reg-learn { margin-left: 4px; }
+.register .reg-tat .reg-learn, .register .reg-geraet-tat .reg-learn { white-space: nowrap; }
+.register .reg-menue { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 4px 0 6px; }
+/* the device as tiles in hardware layout; the picker of the open tile takes the row between two tile rows */
+.register .reg-raster { display: grid; grid-template-columns: repeat(var(--spalten, 8), minmax(0, 1fr)); column-gap: 6px; row-gap: 0; align-content: start; }
+.register .reg-kachel { margin-bottom: 6px; padding: 5px 7px; min-height: 66px; min-width: 0; display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel2); cursor: pointer; }
+.register .reg-kachel.frei { border-style: dashed; background: transparent; }
+.register .reg-kachel.frei .reg-kachel-ziel { color: var(--dim); font-style: italic; }
+.register .reg-kachel.aus { opacity: 0.45; cursor: default; }
+.register .reg-kachel.offen { border-color: var(--text); background: var(--panel); }
+.register .reg-kachel:not(.aus):hover { border-color: #3c404c; }
+.register .reg-kachel-kopf { display: flex; justify-content: space-between; gap: 4px; align-items: baseline; }
+.register .reg-kachel-name { font-weight: 700; }
+.register .reg-bedienung { color: var(--dim); font-size: 11px; margin-top: 8px; max-width: 110ch; line-height: 1.4; }
+.register .reg-kachel-cc { color: var(--dim); font-size: 10px; white-space: nowrap; }
+.register .reg-kachel-ziel { font-size: 11px; overflow-wrap: anywhere; line-height: 1.25; }
+.register .reg-kachel-tat { display: flex; flex-wrap: wrap; gap: 3px; margin-top: auto; padding-top: 2px; }
+.register .reg-kachel-tat .reg-learn { font-size: 9px; padding: 1px 5px; border-radius: 6px; }
+.register .reg-waehler { grid-column: 1 / -1; margin: 0 0 8px; padding: 8px; display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--text); border-radius: 8px; background: var(--panel); min-width: 0; }
+.register .reg-waehler-kopf { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.register .reg-waehler-titel { font-weight: 700; }
+.register .reg-waehler-suche { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
+.register .reg-waehler .reg-wahl { max-height: 78px; overflow-y: auto; align-content: flex-start; }
+.register .reg-waehler-liste { display: flex; flex-wrap: wrap; gap: 4px; max-height: 190px; overflow-y: auto; align-content: flex-start; }
+.register .reg-wahlziel { display: flex; flex-direction: column; align-items: flex-start; padding: 3px 8px; border-radius: 8px; text-align: left; line-height: 1.2; }
+.register .reg-wahlziel.belegt { opacity: 0.6; border-style: dashed; }
+.register .reg-wahlziel-von { color: var(--dim); font-size: 10px; }
+@media (max-width: 1250px) {   /* a narrow window: the device list gives room to the tiles */
+  .register .reg-links { flex-basis: 250px; min-width: 230px; }
+  .register { gap: 10px; }
+  .register .reg-geraet { flex-wrap: wrap; }
+  .register .reg-geraet-text { flex: 1 1 140px; }
+  .register .reg-geraet-info { white-space: normal; }
+  .register .reg-geraet-tat { flex: 1 0 100%; justify-content: flex-end; }
+  .register .reg-geraet-tat:empty { display: none; }
+}
+/* the Controllers window (#controller): the register alone, as high as the window */
+body.controller-fenster { grid-template-rows: minmax(0, 1fr); }
+body.controller-fenster > :not(#bestand) { display: none !important; }
+body.controller-fenster #bestand { display: flex !important; min-height: 0; }
+body.controller-fenster #bestand > :not(#register) { display: none !important; }
+body.controller-fenster #bestand .register { display: flex !important; font-size: 13px; }
 .register .reg-lernen { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .register .reg-ziel { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; min-width: 24ch; }
 .register .reg-gelernt { display: flex; flex-wrap: wrap; gap: 4px 16px; }
@@ -1138,3 +1216,46 @@ body.lib-zu #bestand .register { display: none; }
 #djfx-auf { display: none; order: 10; }
 body.werkbank #djfx-auf { display: inline-block; }
 body.werkbank:not(.djfx-auf) #kopf > #fx { display: none; }
+/* MASTER tab: the master chain in signal order, INSERT then GLUE then LIMITER */
+.fxstreifen-reihe .masterpanel { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; --farbe: var(--text); }
+.masterpanel .fxkette { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
+.masterpanel .fx-glied { flex: 1 1 150px; min-width: 0; display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--line); padding-top: 4px; }
+.masterpanel .fx-glied-insert { flex-grow: 3; flex-basis: 260px; }
+.masterpanel .fx-glied-titel { font-weight: 800; letter-spacing: 0.08em; color: var(--dim); font-size: 10px; }
+.masterpanel .fx-pfeil { align-self: center; color: var(--dim); font-style: normal; font-size: 16px; }
+.masterpanel .masterzeile { display: grid; grid-template-columns: minmax(0, 220px); gap: 4px; font-size: 11px; color: var(--dim); }
+.masterpanel .masterzeile .bkliste { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 4px 12px; }
+.masterpanel .bkliste label { display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 2px 6px; align-items: center; text-transform: uppercase; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.masterpanel .bkliste input[type=range] { grid-column: 1 / -1; grid-row: 2; min-width: 0; width: 100%; }
+.masterpanel .bkliste output { grid-column: 2; grid-row: 1; text-align: right; font-variant-numeric: tabular-nums; color: var(--text, #e6e6e6); }
+.masterpanel .summe.glue { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+.masterpanel .summe.glue .knopf { width: 40px; height: 40px; }
+.masterpanel .busgr { display: grid; grid-template-columns: 24px 1fr 56px; align-items: center; gap: 4px; color: var(--dim); font-size: 11px; }
+.masterpanel .gr { position: relative; height: 8px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; }
+.masterpanel .gr i { position: absolute; right: 0; top: 0; bottom: 0; width: 0; background: var(--warn); transition: width 80ms linear; }
+.masterpanel .grzahl { text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; }
+
+/* SEQ scenes: a box of the page header (row 1, next to ROUTING, same frame as BAR/PHRASE/BPM and ROUTING). It wraps inside itself at a narrow window and is
+   hidden with the beat FX strip in the STUDIO workbench view (body.werkbank without the DJ FX toggle). */
+#kopf > #seq-szenen { order: 4; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; max-width: 100%; box-sizing: border-box;
+  padding: 3px 10px; min-height: 34px; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; }
+#kopf > #seq-szenen[hidden] { display: none; }
+/* Below about 2100 px the first header row has no room for the scene box: it takes a row of its own (order 8, behind the connection lights) instead of
+   pushing them into the second row. Measured in the browser at 1920 and 2540 px. */
+@media (max-width: 2100px) { #kopf > #seq-szenen { order: 8; } }
+body.werkbank:not(.djfx-auf) #kopf > #seq-szenen { display: none; }
+#seq-szenen .szenen-titel { font-size: 11px; letter-spacing: .1em; font-weight: 700; color: var(--dim); margin-right: 2px; }
+#seq-szenen .szeneplatz { position: relative; display: inline-flex; }
+#seq-szenen .szene, #seq-szenen .szene-sichern { min-width: 32px; height: 28px; font-size: 11px; font-weight: 700; border: 1px solid var(--line); border-radius: 5px;
+  background: transparent; color: var(--dim); cursor: pointer; }
+#seq-szenen .szene.voll { color: var(--text); border-color: var(--dim); }
+#seq-szenen .szene.aktiv { background: var(--gut); color: #000; border-color: var(--gut); }
+#seq-szenen .szene.wartet { animation: szene-blink .5s steps(2, jump-none) infinite; border-color: var(--warn); color: var(--warn); }
+#seq-szenen .szene-sichern { padding: 0 8px; letter-spacing: .1em; margin-left: 4px; }
+#seq-szenen .szene-sichern.an { background: var(--kill); color: #000; border-color: var(--kill); }
+#seq-szenen.sichern .szene { border-color: var(--kill); border-style: dashed; color: var(--text); }   /* SAVE is armed: every number is a save target */
+#seq-szenen .szenen-hinweis { font-size: 11px; color: var(--dim); margin-left: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+#seq-szenen .szene-x { position: absolute; top: -6px; right: -4px; width: 14px; height: 14px; padding: 0; font-size: 10px; line-height: 12px; border-radius: 7px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--dim); cursor: pointer; }
+#seq-szenen .szene-x[hidden] { display: none; }
+@keyframes szene-blink { 50% { opacity: .35; } }

@@ -14,6 +14,8 @@
 //   9 verlauf(): the pointer form reports the last sample of the block
 //  10 slot numbering pinned with the same example as the page (djk/ui/tests/project_commands_device_param.test.mjs): bk on the numbers 3, 7 and 9, an RB-338 on number 5: the slots are 1, 2, 3 in
 //     ascending track number, counted by device name (a bk track without an instance counts, too); nr 9 is slot 3
+//  11 ARR_BK_MAX is 16, the override rows stay at 8 slots: ten bk tracks on the numbers 1..10; the table has no row spur/9/bk/1; a row of slot 8 reaches the 8th bk track only
+//     and nothing reaches the 9th and 10th (bk_slot_ -1: they take the release path of the page)
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -285,6 +287,28 @@ int main() {
     g.t.arr.setze_sofort(g.zeile("spur/2/bk/5"), 0.5f);   // slot 2 is the track without an instance: nothing to override
     g.blocks(1);
     PRUEF(g.rec.calls.size() == 1 && g.rec.calls[0].spur == 8 && g.rec.calls[0].param == 4 && std::fabs(g.rec.calls[0].wert - 0.4f) < 1e-6f);
+  }
+  {  // 11: ten bk tracks, only eight slots
+    Rig g;
+    Bau b;
+    for (int nr = 1; nr <= 10; ++nr) b.spur(nr, ArrArt::intern);
+    cdj::ArrSnapshot* s = b.fertig();
+    for (int nr = 1; nr <= 10; ++nr) mache_bk(s, nr, 0.25f);
+    g.t.laden(s);
+    PRUEF(g.zeile("spur/9/bk/1") == -1);
+    PRUEF(g.zeile("spur/8/bk/64") >= 0 && g.zeile("spur/8/bk/1") >= 0);
+    g.t.arr.setze_sofort(g.zeile("spur/8/bk/5"), 0.9f);
+    const int b0 = g.rec.cur + 1;
+    g.blocks(3);
+    for (int b = b0; b < b0 + 3; ++b) {
+      PRUEF(std::fabs(g.rec.letzter(b, 7, 4) - 0.9f) < 1e-6f);   // the 8th bk track (index 7), every block
+      PRUEF(g.rec.n_in(b) == 1);                                  // and nothing else: not the 9th and 10th (indices 8, 9)
+    }
+    for (const auto& c : g.rec.calls) PRUEF(c.spur == 7);
+    g.t.arr.setze_sofort(g.zeile("spur/1/bk/5"), 0.6f);   // slot 1 reaches the first bk track only
+    g.blocks(1);
+    PRUEF(std::fabs(g.rec.letzter(g.rec.cur, 0, 4) - 0.6f) < 1e-6f);
+    for (const auto& c : g.rec.calls) PRUEF(c.spur != 8 && c.spur != 9);
   }
   PRUEF_ENDE();
 }

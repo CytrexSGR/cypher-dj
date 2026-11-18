@@ -11,9 +11,14 @@ import { Arrangement } from './arrangement.js';
 // Argumente für das Bild des Arrangements aus dem Seitenstand (rein, getestet: stems geht mit)
 export const arrBild = (st) => ({ takeZeilen: takeZeilenVon(st, st.projektEntwurf ?? st.projekt), lanen: offeneIndizes(st.projektEntwurf ?? st.projekt, st.laneOffen), ansicht: st.ansicht, laneZiel: st.laneZiel, projekt: st.projektEntwurf ?? st.projekt, loop: st.loopEntwurf ?? st.projekt?.loop ?? null, loopZug: (st.loopEntwurf ?? null) !== null, straenge: st.laneOffen,
   kopfBeat: st.kopfBeat, startBeat: st.start, geist: st.geist, stems: st.stems, ueber: st.autoUeber ?? [] });
-// Another project: the chosen lane targets belong to the old one (track ids can repeat), so they are dropped. The open rows (laneOffen) stay: a known
-// leftover of slice 1, not changed here.
-export function laneZustandBeiProjekt(st, wechsel) { if (wechsel) st.laneZiel.clear(); }
+// Another project: the chosen lane targets belong to the old one (track ids can repeat), so they are dropped. Returns and the master are collapsed by
+// default: their ids (r<n> repeat between projects, 'master' exists in all) leave the open rows on a switch. Tracks and groups keep their open rows
+// (a known leftover of slice 1, not changed here). The same project (edit, undo, redo, reload of the same slug) keeps everything.
+export function laneZustandBeiProjekt(st, wechsel) {
+  if (!wechsel) return;
+  st.laneZiel.clear();
+  for (const id of [...st.laneOffen]) if (id === 'master' || /^r\d+$/.test(id)) st.laneOffen.delete(id);
+}
 export function bindeZeitachse(ctx) {
   const { st, $ } = ctx;
   st.ansicht = { ...neueAnsicht(), pxProBeat: Number(ctx.lies('djk-prod-zoom', PX_PRO_BEAT_VORGABE)) || PX_PRO_BEAT_VORGABE };

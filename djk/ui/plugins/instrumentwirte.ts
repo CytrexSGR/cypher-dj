@@ -4,6 +4,7 @@
 // restores the plugin state before notes play, answers parameter and window calls, writes the state back (D8 triggers, plugins/state.ts) and
 // notices a host that systemd restarted (new pid): state again, then `panik`, so no note of the old run hangs.
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +22,8 @@ export interface InstrumentAbhaengig {
   stand(slot: number): WirtStand;
   sock(slot: number, befehl: Record<string, unknown>, timeoutMs: number): Promise<Record<string, unknown>>;
   ordner(): string | null;      // the folder of the open project
+  /** a new Surge host took the slot over from a plugin host: whoever mirrors state into the Surge host must forget what it knew (audit U07) */
+  surgeNeu?(slot: number): void;
   log(zeile: Record<string, unknown>): void;
 }
 export interface InstrumentZeiten { pollMs: number; zustandRuheMs: number; fensterMs: number; endeMs: number; sockMs: number; startMs: number }
@@ -54,7 +57,13 @@ export class InstrumentWirte {
     }
     for (const [slot, w] of [...this.wirte]) {
       const s = soll.get(slot);
-      if (!s || s.spurId !== w.spurId || hostSpec(s.plugin) !== hostSpec(w.plugin)) this.entferne(w, p !== null, s === undefined);
+      if (!s || s.spurId !== w.spurId || hostSpec(s.plugin) !== hostSpec(w.plugin)) {
+        // the track stays and hosts another plugin (or none): its state file is put aside. The same plugin on another slot keeps its file in place:
+        // the new slot's chain restores from that very file, and the two chains are not ordered
+        const neu = p?.spuren.find((x) => x.id === w.spurId)?.geraet;
+        const anderesPlugin = p !== null && p.spuren.some((x) => x.id === w.spurId) && !(neu?.art === 'wirt' && neu.name === 'plugin' && neu.plugin && hostSpec(neu.plugin) === hostSpec(w.plugin));
+        this.entferne(w, p !== null, s === undefined, anderesPlugin);
+      }
     }
     for (const [slot, s] of soll) if (!this.wirte.has(slot)) this.lege(slot, s);
     if (this.wirte.size > 0 && !this.timer) { this.timer = setInterval(() => void this.tick(), this.z.pollMs); this.timer.unref(); }
@@ -89,16 +98,48 @@ export class InstrumentWirte {
     this.ketten.set(slot, vor.then(f).catch((e) => this.dep.log({ typ: 'instrument_fehler', slot, fehler: (e as Error).message })));
   }
 
+  /** the pid of the host of a slot (null: none known); a changed pid means a new host process */
+  pid(slot: number): number | null { return this.dep.stand(slot).pid; }
+
   /** the track left the project (or the project closed): its state is written first (at most endeMs), then the slot goes back to Surge when no
-   *  other plugin track takes it over at once */
-  private entferne(w: Wirt, sichern: boolean, zuSurge: boolean): void {
+   *  other plugin track takes it over at once. `geraetWechsel`: the track stays in the project and its plugin changed (a move of the same plugin to another slot is none); the state file belongs
+   *  to the track, not to the plugin, so the old plugin's state is written and then put aside, for the next plugin never to be given it */
+  private entferne(w: Wirt, sichern: boolean, zuSurge: boolean, geraetWechsel = false): void {
     w.weg = true;
     this.fensterStopp(w);
     if (this.wirte.get(w.slot) === w) this.wirte.delete(w.slot);
     this.inKette(w.slot, async () => {
-      if (sichern && w.status === 'bereit' && !w.gesperrt) await Promise.race([this.sichereEins(w), pause(this.z.endeMs)]);
-      if (zuSurge && this.dep.stand(w.slot).art === 'plugin') await this.dep.start(w.slot, 'surge');
+      if (geraetWechsel && sichern) {
+        await this.sichereEins(w);   // bounded by the socket timeout; a late write must not land after the file was moved
+        this.legeBeiseite(w);
+      } else if (sichern && w.status === 'bereit' && !w.gesperrt) await Promise.race([this.sichereEins(w), pause(this.z.endeMs)]);
+      if (zuSurge && this.dep.stand(w.slot).art === 'plugin') {
+        try { await this.dep.start(w.slot, 'surge'); } finally { this.dep.surgeNeu?.(w.slot); }   // also after a failed start: not the host the mirror knew
+      }
     });
+  }
+
+  /** the state file of the track, written by the plugin `w` hosted, goes to `<track>.<hash of the plugin>.carxs.alt` (a name no state restore reads) */
+  private beiseitePfad(w: Wirt, plugin: HostPlugin): string | null {
+    const ordner = this.dep.ordner();
+    if (!ordner) return null;
+    const datei = zustandDatei(ordner, w.zustandRel);
+    return `${datei.replace(/\.carxs$/, '')}.${createHash('sha1').update(hostSpec(plugin)).digest('hex').slice(0, 12)}.carxs.alt`;
+  }
+  private legeBeiseite(w: Wirt): void {
+    try {
+      const ordner = this.dep.ordner(), ziel = this.beiseitePfad(w, w.plugin);
+      if (!ordner || !ziel) return;
+      const datei = zustandDatei(ordner, w.zustandRel);
+      if (zustandDa(datei)) fs.renameSync(datei, ziel);
+    } catch (e) { this.dep.log({ typ: 'instrument_zustand_beiseite_fehler', slot: w.slot, fehler: (e as Error).message }); }
+  }
+  /** no state file and one put aside for exactly this plugin (the device went back to it): the state comes back, so an undo keeps the sound */
+  private holeBeiseite(w: Wirt, datei: string): void {
+    try {
+      const alt = this.beiseitePfad(w, w.plugin);
+      if (!zustandDa(datei) && alt && zustandDa(alt)) fs.renameSync(alt, datei);
+    } catch (e) { this.dep.log({ typ: 'instrument_zustand_beiseite_fehler', slot: w.slot, fehler: (e as Error).message }); }
   }
 
   private async starte(w: Wirt): Promise<void> {
@@ -129,9 +170,10 @@ export class InstrumentWirte {
       const ordner = this.dep.ordner();
       if (ordner) {
         const datei = zustandDatei(ordner, w.zustandRel);
+        this.holeBeiseite(w, datei);
         if (zustandDa(datei)) {
           const r = await this.rufe(w, 'zustand_setzen', { pfad: datei });
-          if (!r.ok) {   // never play with defaults and then overwrite the user's file: locked until the user acts (a new plugin in the track)
+          if (!r.ok) {   // never play with defaults and then overwrite the user's file: locked until the user acts (a new plugin in the track starts clean: the old plugin's file is put aside by a device change)
             this.dep.log({ typ: 'instrument_zustand_fehler', slot: w.slot, fehler: r.fehler });
             w.gesperrt = true; w.status = 'ausfall'; w.grund = r.fehler === 'zustand_passt_nicht' ? 'zustand_passt_nicht' : 'zustand_fehler';
             return;

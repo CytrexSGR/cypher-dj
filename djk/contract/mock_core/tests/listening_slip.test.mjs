@@ -40,6 +40,19 @@ test('i3 pad/*: Cyphers pad/1/fader öffnet ohne Hörschein (Andreas 2026-10-05)
   gruen(r);
 });
 
+test('i3 empty deck: cypher opens deck/3/fader without a pass while nothing is loaded; the loaded deck/2 stays locked', () => {
+  const r = fahre([
+    ...basis,
+    sende(3000, teil(3, 'cypher', 'p1', 0, 'deck/3/fader', 32, 0, -15)),
+    erwarte(S(32), q(3, 'cypher', 3, S(32))),
+    wert(S(32), 'deck/3/fader', -15),
+    sende(3100, oeffne(4, '', 40)),
+    erwarte(S(40), q(4, 'cypher', 6, S(40), 'kein_hoerschein')),
+    wert(S(40), 'deck/2/fader', -200),
+  ], { cfg });
+  gruen(r);
+});
+
 test('Negativ-Kontrolle i3: gültiger Hörschein öffnet (fertig), nur leiser machen braucht keinen', () => {
   const r = fahre([
     ...basis,

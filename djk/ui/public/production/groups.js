@@ -61,11 +61,11 @@ export function bindeGruppen(ctx) {
     const umbenennen = () => {
       const ein = document.createElement('input');
       ein.className = 'p-namefeld'; ein.value = gruppe().name; ein.maxLength = 40; ein.setAttribute('aria-label', 'Group name');
-      name.replaceWith(ein); ein.focus(); ein.select();
+      name.hidden = true; el.append(ein); ein.focus(); ein.select();   // the input sits beside the hidden name (CSS): no node swap, zeigeWerte keeps finding it
       let fertig = false;
       const ende = (uebernehmen, zurueckAnName) => {
         if (fertig) return; fertig = true;
-        ein.replaceWith(name);
+        ein.remove(); name.hidden = false;
         if (zurueckAnName) name.focus();
         const neu = ein.value.trim();
         if (uebernehmen && neu && neu !== gruppe().name) aendernG(id, 'Rename group', { name: neu });

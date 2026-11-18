@@ -163,8 +163,9 @@ export class Projekte {
   }
 
   // A copy of a project under a new name (workbench shelf SAVE AS, A 2026-11-16: "speichern der module wäre auch sinnvoll"): the folder with its media
-  // (export, stems, resample, loops ...) and project.json with the new name; the history starts empty, so the copy is a version of its own. Locks and
-  // half-written files are not copied. The slug is made as in lege().
+  // (export, stems, resample, loops ...) and project.json with the new name; the history starts empty and so does the playback identity
+  // (wiedergabe_rev 0: the first open does a full load, it is never taken for a restart of the source's playback), so the copy is a
+  // version of its own. Locks and half-written files are not copied. The slug is made as in lege().
   kopiere(slug: string, name: string): { slug: string; projekt: Projekt } {
     const quelle = this.lies(slug);
     const n = typeof name === 'string' ? name.trim() : '';
@@ -183,7 +184,7 @@ export class Projekte {
         if (weg.has(e) || e.endsWith('.teil')) continue;
         fs.cpSync(path.join(von, e), path.join(nach, e), { recursive: true, filter: (q) => !q.endsWith('.teil') });
       }
-      const projekt: Projekt = { ...structuredClone(quelle), name: n };
+      const projekt: Projekt = { ...structuredClone(quelle), name: n, wiedergabe_rev: 0 };
       this.schreibe(ziel, projekt);
       fs.writeFileSync(path.join(nach, 'undo.jsonl'), '', { flag: 'wx' });
       fsyncVerzeichnis(nach); fsyncVerzeichnis(this.wurzel);

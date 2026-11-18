@@ -47,7 +47,7 @@ int32_t rasten(Kodierung k, uint8_t wert);
 
 class Uebersetzer {
  public:
-  explicit Uebersetzer(const Mapping* m) : m_(m) {}
+  explicit Uebersetzer(const Mapping* m = nullptr) : m_(m) {}   // default: no mapping (arrays of translators, S19 learn ports)
   // Der Kern tauscht das Mapping nach /k/mapping zwischen zwei Zyklen (Zeiger aus dem Nicht-Echtzeit-Faden).
   void mapping(const Mapping* m) { m_ = m; }
   const Mapping* mapping() const { return m_; }

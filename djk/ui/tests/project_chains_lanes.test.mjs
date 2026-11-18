@@ -225,3 +225,29 @@ test('H: the model is closed: a chain lane needs its stage or rack on the same s
   assert.equal(fehler((x) => { x.master.automation = [{ id: 'a50', ziel: 'insert.i4.ratio', punkte: [{ beat: 0, wert: 4 }] }]; }), undefined, 'control: the master carries i4');
   assert.match(fehler((x) => { x.master.automation = [{ id: 'a50', ziel: 'insert.i1.ratio', punkte: [{ beat: 0, wert: 4 }] }]; }), /no stage parameter/);
 });
+
+test('I: automation slice 1: a lane on a return and on the master goes with its stage or rack; auto_punkte on them round-trips (undo/redo)', () => {
+  let p = alle();
+  p = lane(p, 'r1', 'insert.i3.ratio').projekt;
+  p = lane(p, 'master', 'insert.i4.ratio').projekt;
+  p = ok(p, { befehl: 'rack_setzen', strang_id: 'master', makros: [{ ziel: [{ insert: 'i4', param: 'schwelle', von: -40, bis: -10 }] }] }).projekt;
+  p = lane(p, 'master', 'rack.m1').projekt;
+  assert.equal(p.master.automation.length, 2);
+  const rack = ok(p, { befehl: 'rack_setzen', strang_id: 'master', makros: [] }); pruefe(p, rack);
+  assert.deepEqual(rack.projekt.master.automation.map((l) => l.ziel), ['insert.i4.ratio'], 'the master macro lane goes with its rack');
+  const r = ok(p, { befehl: 'insert_entfernen', insert_id: 'i3' }); pruefe(p, r);
+  assert.equal(r.projekt.returns[0].automation, undefined, 'the return lane goes with its stage');
+  assert.equal(r.projekt.master.automation.length, 2, 'the master lanes stay');
+  const m = ok(p, { befehl: 'insert_entfernen', insert_id: 'i4' }); pruefe(p, m);
+  assert.equal(m.projekt.master.automation, undefined, 'the master stage takes both lanes');
+  // auto_punkte on a return lane and on a master lane: the project, the forward patch and the back patch agree (undo and redo restore the exact lane)
+  for (const [strang, art] of [['r1', 'returns'], ['master', 'master']]) {
+    const s = strang === 'master' ? p.master : p.returns[0], id = s.automation[0].id;
+    const e = ok(p, { befehl: 'auto_punkte', lane_id: id, setze: [{ beat: 2, wert: 5 }] }); pruefe(p, e);
+    const neu = strang === 'master' ? e.projekt.master : e.projekt.returns[0];
+    assert.ok(neu.automation[0].punkte.some((q) => q.beat === 2 && q.wert === 5), `${art}: the point is set`);
+    const zurueck = wende(e.projekt, e.zurueck), vor = wende(zurueck, e.vor);
+    assert.equal(ohneAbgeleitetes(zurueck), ohneAbgeleitetes(p), `${art}: undo restores the exact lane`);
+    assert.equal(ohneAbgeleitetes(vor), ohneAbgeleitetes(e.projekt), `${art}: redo restores the edit`);
+  }
+});

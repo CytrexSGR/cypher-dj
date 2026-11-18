@@ -107,6 +107,12 @@ const ArrSnapshot* Arrangement::tausche(const ArrSnapshot* neu, int64_t s, const
   if (!alt)   // first snapshot: the pre/post flag of the returns stands at once, a later flip blends (review echtzeit-1)
     for (int r = 0; r < ARR_RETURNS; ++r) ret_pre_w_[r] = (neu && neu->ret_pre[r]) ? 1.0f : 0.0f;
   ins_.tausche(neu ? neu->kette : nullptr);   // 1.10 slice 4a: the stages keep, enter or leave by slot identity
+  for (int i = 0; i < ARR_SPUREN; ++i) {   // the cost estimate of the track scheduler belongs to what the track computes: a track that gets another sink, device, instrument or kit starts afresh (base join-wait threshold)
+    const ArrSpur* o = alt ? &alt->spur[i] : nullptr;
+    const ArrSpur* n = neu ? &neu->spur[i] : nullptr;
+    const bool gleich = o && n && o->art == n->art && o->slot == n->slot && o->nr == n->nr && std::strcmp(o->geraet, n->geraet) == 0 && o->bk_gen == n->bk_gen && o->kit_gen == n->kit_gen;
+    if (!gleich) spur_lauf_.kosten_vergessen(i);
+  }
   spur_plan_bauen();   // mehrkern slice 3.1: after the swap the sinks see the new snapshot (innen) and the old zuletzt_: exactly what the transition predicate needs
   snap_werk_ = false;   // Slice 2: hat der neue Schnappschuss Clips des Warp-Werks (COMPLEX, TONES)?
   if (snap_)
@@ -227,6 +233,8 @@ void Arrangement::stopp(int quant, int64_t s, const Karte& k) {
     vorzaehl_n_ = 0;   // 1.8 S4a: a stopped wait has no count-in left
     stopp_s_ = -1;
     for (int i = 0; i < n_offen_; ++i) offen_[i].aus = offen_[i].an;   // vorab gesendete Noten: Off auf ihr On
+    for (int i = 0; i < ARR_SPUREN; ++i)   // audit U33: the entry announced by start() will not come: the sinks drop it
+      if (ArrSenke* se = senke_fuer(snap_, i)) se->transport_abbruch(i);
     alle_noten_aus(s);
     gestoppt_bei_ = s;
     beendet_s_ = s;   // 1.8
@@ -241,6 +249,7 @@ void Arrangement::stopp(int quant, int64_t s, const Karte& k) {
     const int64_t w = naht_sample(k);
     if (w >= s && pz >= bis_) ziel = w;   // die Naht kommt vorher: dort endet der Transport
     if (ziel < s) ziel = s;
+    if (sonderlauf() && lauf_ende() < ziel) ziel = lauf_ende();   // the run ends first: the transport ends there (a stop must not outlive the run's restore)
   }
   stopp_s_ = ziel;
   for (int i = 0; i < n_offen_; ++i) offen_[i].aus = std::max(offen_[i].an, std::min(offen_[i].aus, ziel));
@@ -358,7 +367,7 @@ void Arrangement::ruhe(int m) {
     ms_gain_[s] = (ende(s, 2) >= 0.5f || (solo && ende(s, 3) < 0.5f && !msolo[g] && !oben)) ? 0.0f : 1.0f;
   }
   for (int r = 0; r < ARR_RETURNS; ++r) ms_gain_[ARR_RET0 + r] = ende(ARR_RET0 + r, 2) >= 0.5f ? 0.0f : 1.0f;
-  for (int i = 0; i < ARR_SPUREN; ++i) {   // Automation Slice 1: nothing is loaded, no lane and no blend
+  for (int i = 0; i < ARR_AUTO_SLOTS; ++i) {   // Automation Slice 1: nothing is loaded, no lane and no blend
     for (int f = 0; f < AUTO_FELDER; ++f) {
       blende_n_[i][f] = 0;
       blende_s_[i][f] = INT64_MIN;

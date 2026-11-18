@@ -22,6 +22,7 @@ import { neuerInfoSpeicher } from './info.js';
 import { geraetWahl, freierName } from '../seq_field.js';
 import { REGLER_MAX, REGLER_SCHRITT, reglerVonDb, dbVonRegler, tasteMerke, tasteWert } from '../production/fader_curve.js';
 import { oeffneMenue } from '../production/context_menu.js';
+import { menuePunkte, oeffneAchsenMenue } from '../instrument_groups.js';
 import { modulTakte } from './kopf.js';
 import { spurAusSha, istRegalZug, regalNutzlast, markiereZiel } from './catalog_storage.js';
 import { returnListe, sendWert, sendBefehl, sendLabel } from '../production/routing.js';
@@ -46,22 +47,15 @@ export function neueSpurBefehl(p, eintrag) {
   return { befehl: 'werkbank_spur_neu', name: freierName(eintrag.name, (p?.spuren ?? []).map((s) => s.name)), geraet: eintrag.geraet, loop_beats: takte === null ? 16 : takte * 4 };
 }
 
-// The instrument menu of the workbench (new track and CHANGE): geraetWahl, with the Baukasten entries grouped by their category (bass, drums, keys,
-// lead, pad, textur; graphs without one under "other") instead of one alphabetical list of over a hundred names. `aktion(eintrag)` runs on a click.
-const KATEGORIEN = ['bass', 'drums', 'keys', 'lead', 'pad', 'textur', 'sampler'];
-export function instrumentMenue(graphen, kits, behalte, aktion) {
-  const kat = new Map((graphen ?? []).map((g) => [g?.name, KATEGORIEN.includes(g?.kategorie) ? g.kategorie : 'other']));
-  const rang = (e) => (e.gruppe === 'Baukasten' ? KATEGORIEN.indexOf(kat.get(e.name)) + 1 || KATEGORIEN.length + 1 : e.gruppe === 'Kit' ? 100 : 101);
-  const wahl = geraetWahl(graphen, kits, behalte)
-    .map((e) => (e.gruppe === 'Baukasten' ? { ...e, gruppe: `Baukasten \u00b7 ${kat.get(e.name) ?? 'other'}` } : e))
-    .map((e, i) => ({ e, i, r: rang({ ...e, gruppe: e.gruppe.startsWith('Baukasten') ? 'Baukasten' : e.gruppe }) }))
-    .sort((a, b) => a.r - b.r || a.i - b.i).map((x) => x.e);
-  const punkte = []; let gruppe = null;
-  for (const e of wahl) {
-    if (e.gruppe !== gruppe) { gruppe = e.gruppe; punkte.push({ gruppe: true, text: gruppe }); }
-    punkte.push({ text: e.text, aktion: () => aktion(e) });
-  }
-  return punkte;
+// The instrument menu of the workbench (new track and CHANGE): geraetWahl, with the Baukasten entries grouped by the page-wide axis (synthesis type or role,
+// instrument_groups.js; graphs without the field under "Other") instead of one alphabetical list of over a hundred names. The first entry switches the axis;
+// the kits and the RB-338 follow in their own groups. `aktion(eintrag)` runs on a click; `umschalten` (the switch) comes from oeffneAchsenMenue.
+export function instrumentMenue(graphen, kits, behalte, aktion, achse, umschalten) {
+  return menuePunkte(geraetWahl(graphen, kits, behalte), graphen, achse, aktion, umschalten);
+}
+// Opens that menu where the button is; the switch reopens it there.
+export function oeffneInstrumentMenue(graphen, kits, behalte, aktion, oeffne) {
+  oeffneAchsenMenue((achse, umschalten) => instrumentMenue(graphen, kits, behalte, aktion, achse, umschalten), oeffne);
 }
 
 // D8: a kit, or an instrument whose info lists sounds, is a drum grid; anything else a note grid. A sampler cut (info.schnitt, D11) is a slice grid,
@@ -233,8 +227,7 @@ export function bindeSpuren(ctx) {
     if (!st.projekt || anzahlInstrument(st.projekt) >= MAX_SPUREN_MODUL) return;
     const r = anker.getBoundingClientRect();
     const [g, kits] = await Promise.all([ctx.holeGet('/graphen'), ctx.holeGet('/proj/kits')]);
-    const punkte = instrumentMenue(g?.j?.graphen, kits?.j?.kits, undefined, legeAn);
-    (ctx.oeffneMenue ?? oeffneMenue)(punkte, r.left, r.bottom);
+    oeffneInstrumentMenue(g?.j?.graphen, kits?.j?.kits, undefined, legeAn, (punkte) => (ctx.oeffneMenue ?? oeffneMenue)(punkte, r.left, r.bottom));
   }
   ctx.spurNeuMenue = neuMenue;
   neuKnopf.addEventListener('click', () => { if (!neuKnopf.disabled) neuMenue(neuKnopf); });

@@ -5,7 +5,7 @@
 // DOM:
 //   section.seqplatz[data-seq=N]
 //   (section.seqplatz.gross = the large view: the place fixed under the page header to the bottom edge, one place at a time, style.css)
-//     .deckkopf: .sq-zahl .sq-baukasten .sq-stand | .sq-rechts: [data-sq-gross] · .sq-breite [data-sq-breite] · [data-sq-produktion] · [data-sq-neu] · [data-seq-leeren]
+//     .deckkopf: .sq-zahl .sq-baukasten .sq-stand | .sq-rechts: [data-sq-gross] · .sq-breite [data-sq-breite] · [data-sq-produktion] · [data-sq-neu] · [data-sq-modul] · [data-seq-leeren]
 //     .sq-leer (no deck: [data-seq-anlegen])
 //     .sq-feld (scrolls both ways; --sq-beat = pixels per beat)
 //       .sq-folge[data-folge=<spur_id>][data-clip=<clip_id>] (.stumm, .fremd = arranged in PRODUCTION)
@@ -20,13 +20,17 @@ import { $, $$, el, melde, BUCHSTABE } from './page_state.js';
 import { live, arrBeat, pruefeLiveSpaeter } from './live_view.js';
 import { zeigePlaetzeSpaeter } from './slots_view.js';
 import { oeffneMenue, menueOffen } from './production/context_menu.js';
+import { berichtText, modulListe } from './module_after_seq.js';
 import { SeqFehler, zelleBefehle, zeileNeuBefehle, zeileWegBefehle, zeileAendernBefehle, laengeBefehle, TEILER } from './seq_logic.js';
 import { setzeAnsicht, produktion } from './seitenrahmen.js';
+import { zeigeSzenen } from './seq_szenen.js';
+import { menuePunkte, oeffneAchsenMenue } from './instrument_groups.js';
+import { proTaktJetzt } from './bar_live.js';
 import {
   seqAnsicht, deckAnsicht, infosAusCache, fehlendeInfos, ladeInfos, geraetWahl, wechselBefehle, anlegenZustand, zellKlassen, zellText, zellTitel, zeileTitel, kopfZelle, kopfPos,
   griffArt, velNeu, laengeNeu, tonNeu, loslassFelder, imRechteck, radFelder, tonVonText, kurvePfad, laengeText, laengeAusSchritten, pxProBeat,
-  sende, legeAn, leereDeck, neueFolge, LAENGEN_TAKTE, SICHT_BREITEN, sichtbarBeats, linealZellen, freierName, holeMitFrist, pruefeReglerInfo, vergissLeereInfos, grossLesen, grossSchreiben, grossUmschalten, grossGilt, grossEscape,
-  ueberlagere, wertAusPos, wertBruch, wertText, wertSchreibe, wiederholZellen, kurveBeatAusX, kurveWertAusY, kurveY, kurvePunkte, kurveMarken, kurveNeu, kurveVerschiebe, kurveWeg,
+  sende, legeAn, leereDeck, ladeModul, neueFolge, laengenWahl, SICHT_BREITEN, sichtbarBeats, linealZellen, freierName, holeMitFrist, pruefeReglerInfo, vergissLeereInfos, grossLesen, grossSchreiben, grossUmschalten, grossGilt, grossEscape,
+  ueberlagere, wertAusPos, wertBruch, wertText, wertSchreibe, wiederholZellen, kurveBeatAusX, kurveWertAusY, kurveY, kurvePunkte, kurveMarken, kurveNeu, kurveVerschiebe, kurveWeg, kurvePunktBei,
   kurveSchreibe, FORM_ARTEN, formAus, formSchreibe, eigenLaengen, eigenLaengeText, eigenAusSchritten, laengeZeileBefehle, zielWahl, zielUmhaengen, sprungZiel,
 } from './seq_field.js';
 
@@ -105,11 +109,13 @@ function bauePlatz(n) {
   sprung.title = 'Open the clip of the pattern you touched last in PRODUCTION';
   const neu = knopf('sq-chip sq-neu', '+ pattern', 'sqNeu');
   neu.title = 'Add a pattern: it plays one instrument';
+  const modul = knopf('sq-chip sq-modul', 'LOAD MODULE', 'sqModul');
+  modul.title = 'Load a Workbench module into this place: one pattern per instrument track';
   const leeren = knopf('sq-chip sq-leeren', 'CLEAR', 'seqLeeren');
   leeren.title = 'Remove the sequencer of this place with its patterns';
   const gross = knopf('sq-chip sq-gross', '⤢', 'sqGross');
   gross.title = 'Large view'; gross.setAttribute('aria-pressed', 'false');
-  rechts.append(gross, breite, sprung, neu, leeren);
+  rechts.append(gross, breite, sprung, neu, modul, leeren);
   kopf.append(el('span', 'buchstabe', BUCHSTABE[n]), el('span', 'decktitel', `SEQ ${n}`), el('span', 'sq-zahl'), el('span', 'sq-baukasten'), el('span', 'sq-stand'), rechts);
   const leer = el('div', 'sq-leer');
   const anlegen = el('button', 'sq-anlegen', 'CREATE');
@@ -121,7 +127,7 @@ function bauePlatz(n) {
   k.append(kopf, leer, feld);
   $('#pult').append(k);
   knoten.set(n, k);
-  bindePlatz(k, n, feld, anlegen, leeren, neu, breite, sprung);
+  bindePlatz(k, n, feld, anlegen, leeren, neu, breite, sprung, modul);
   gross.addEventListener('click', () => { grossWahl = grossUmschalten(grossWahl, n); wendeGross(); });
   return k;
 }
@@ -142,7 +148,7 @@ function fokusZurueck(feld, m) {
   const zeile = m.zeile === undefined ? folge : [...(folge?.querySelectorAll('.sq-zeile') ?? [])].find((x) => x.dataset.zeile === m.zeile);
   const sel = m.z !== undefined ? '.sq-zelle' : `[data-${m.sq.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}]`;
   const ziel = [...(zeile?.querySelectorAll(sel) ?? [])].find((x) => m.z === undefined || (x.dataset.z === m.z && x.tagName === 'BUTTON'));
-  try { ziel?.focus(); } catch { /* the node cannot take the focus: it stays on the page */ }
+  try { ziel?.focus({ preventScroll: true }); } catch { /* the node cannot take the focus: it stays on the page */ }
 }
 function baueFeld(k, feld, a, px, sichtbar) {
   const fokus = fokusMerken(feld);
@@ -171,7 +177,7 @@ function baueFolge(k, f, i, px, sichtbar) {
   const name = el('input', 'sq-folgenname');
   name.type = 'text'; name.value = f.name; name.maxLength = 80; name.dataset.sqName = ''; name.setAttribute('aria-label', 'Pattern name');
   const geraet = knopf('sq-chip sq-geraet', `${f.geraet_text} ▾`, 'sqGeraet'); geraet.title = 'Instrument of this pattern';
-  const laenge = knopf('sq-chip', `${laengeText(sicht.laenge_beats)} ▾`, 'sqLaenge'); laenge.title = 'Pattern length';
+  const laenge = knopf('sq-chip', `${laengeText(sicht.laenge_beats, proTaktJetzt())} ▾`, 'sqLaenge'); laenge.title = 'Pattern length';
   const stumm = knopf(f.stumm ? 'sq-chip an' : 'sq-chip', 'M', 'sqStumm'); stumm.title = 'Mute this pattern'; stumm.setAttribute('aria-pressed', String(f.stumm));
   kopf.append(name, geraet, laenge, stumm);
   if (sicht.hinter_loop > 0) kopf.append(el('span', 'sq-hinter', `${sicht.hinter_loop} note${sicht.hinter_loop === 1 ? '' : 's'} behind the loop`));
@@ -181,8 +187,8 @@ function baueFolge(k, f, i, px, sichtbar) {
   const lineal = el('div', 'sq-lineal');
   lineal.append(el('div', 'sq-zeilenkopf'));
   const takte = el('div', 'sq-zellen');
-  for (const c of linealZellen(sicht.laenge_beats, sichtbar)) {   // the ruler runs on pale after the pattern end, up to the visible width
-    const s = el('span', `${c.takt ? 'sq-nr takt' : 'sq-nr'}${c.wiederholung ? ' wiederholung' : ''}`, c.takt ? String(c.beat / 4 + 1) : '');
+  for (const c of linealZellen(sicht.laenge_beats, sichtbar, proTaktJetzt())) {   // the ruler runs on pale after the pattern end, up to the visible width
+    const s = el('span', `${c.takt ? 'sq-nr takt' : 'sq-nr'}${c.wiederholung ? ' wiederholung' : ''}`, c.takt ? String(c.beat / proTaktJetzt() + 1) : '');
     s.style.setProperty('--w', String(c.breite));
     if (c.wiederholung) s.setAttribute('aria-hidden', 'true');
     takte.append(s);
@@ -207,7 +213,7 @@ function baueZeile(k, f, z, sicht, px, sichtbar) {
     else { const g = knopf('sq-chip', `${GITTER_TEXT[z.teiler] ?? z.teiler} ▾`, 'sqGitter'); g.title = 'Grid of this lane'; meta.append(g); }
   }
   if (z.art !== 'noten' && !feldZiel) {
-    const e = knopf(z.eigen_laenge ? 'sq-chip an' : 'sq-chip', `${z.eigen_laenge ? eigenLaengeText(z.laenge_beats) : 'with pattern'} ▾`, 'sqEigen');
+    const e = knopf(z.eigen_laenge ? 'sq-chip an' : 'sq-chip', `${z.eigen_laenge ? eigenLaengeText(z.laenge_beats, proTaktJetzt()) : 'with pattern'} ▾`, 'sqEigen');
     e.title = 'Length of this lane: it repeats inside the pattern'; meta.append(e);
   }
   if (z.art === 'kurve') { const fo = knopf(z.form ? 'sq-chip an' : 'sq-chip', 'shape ▾', 'sqForm'); fo.title = z.form ? `Shape: ${z.form.art}` : 'Write a shape (sine, ramp, …) into this curve'; meta.append(fo); }
@@ -255,7 +261,7 @@ function baueZeile(k, f, z, sicht, px, sichtbar) {
       c.dataset.z = String(i);
       c.style.setProperty('--w', String(breite));
       if (Math.floor(vonBeat + EPS) % 2 === 1) c.classList.add('q');
-      if (vonBeat > EPS && Math.abs(vonBeat / 4 - Math.round(vonBeat / 4)) < EPS) c.classList.add('takt');
+      if (vonBeat > EPS && Math.abs(vonBeat / proTaktJetzt() - Math.round(vonBeat / proTaktJetzt())) < EPS) c.classList.add('takt');
       if (wiederholt) c.setAttribute('aria-hidden', 'true');
       if (noten) {
         c.style.setProperty('--vel', String(zelle.vel ?? 100));
@@ -300,13 +306,13 @@ function zeichnePlatz(n) {
     return;
   }
   for (const b of $$('[data-sq-breite]', k)) b.classList.toggle('an', b.dataset.sqBreite === String(k._wahl));
-  const px = pxProBeat(k._wahl, a.laenge_beats, Number(feld.clientWidth) - KOPF_BREITE), sichtbar = sichtbarBeats(k._wahl, a.laenge_beats);
-  const sig = JSON.stringify([px, sichtbar, a.folgen.map((f) => [f.spur_id, f.clip_id, f.name, f.geraet_text, f.stumm, f.editierbar, f.sicht])]);
+  const px = pxProBeat(k._wahl, a.laenge_beats, Number(feld.clientWidth) - KOPF_BREITE, proTaktJetzt()), sichtbar = sichtbarBeats(k._wahl, a.laenge_beats, proTaktJetzt());
+  const sig = JSON.stringify([px, sichtbar, proTaktJetzt(), a.folgen.map((f) => [f.spur_id, f.clip_id, f.name, f.geraet_text, f.stumm, f.editierbar, f.sicht])]);
   if (feld._sig !== sig) { baueFeld(k, feld, a, px, sichtbar); feld._sig = sig; k._px = px; }
   if (fehlendeInfos(live.projekt, n).length) ladeInfos(live.projekt, n, holeGet).then(() => zeichnePlatz(n));   // knob names and kit sounds arrive later
   setzeKopf(k, k._beat ?? null);
 }
-export function zeichneSeq() { for (const n of PLAETZE) zeichnePlatz(n); }
+export function zeichneSeq() { for (const n of PLAETZE) zeichnePlatz(n); zeigeSzenen(live.projekt); }   // + the scene row (seq_szenen.js)
 
 // ---------- the playhead: one cell lit per lane (a line in a curve), from the arrangement beat, in an animation frame ----------
 function setzeKopf(k, beat) {
@@ -338,7 +344,7 @@ const muster = (n, p, folgeId, zeileId) => {
 };
 const verschwunden = (was) => { throw new SeqFehler('argument_ungueltig', `${was} is gone: the page shows the saved state`); };
 
-function bindePlatz(k, n, feld, anlegen, leeren, neu, breite, sprung) {
+function bindePlatz(k, n, feld, anlegen, leeren, neu, breite, sprung, modul) {
   const stand = $('.sq-stand', k);
   k._wartet = new Map();
   k._eigen = new Map();   // "spur_id/lane id" -> beats: the length of a lane that has no envelope yet (seq_field.js ueberlagere)
@@ -361,11 +367,24 @@ function bindePlatz(k, n, feld, anlegen, leeren, neu, breite, sprung) {
     k._wahl = b.dataset.sqBreite === 'all' ? 'all' : Number(b.dataset.sqBreite);
     zeichnePlatz(n);
   });
+  // LOAD MODULE: the Workbench modules (GET /proj/liste, entries with werkbank: true) in a menu; the pick loads it into this place (POST /seq/modul)
+  modul.addEventListener('click', async () => {
+    if (live.projekt?.live !== true) { melde('Open the live container first (LIVE)', true); return; }
+    const r = modul.getBoundingClientRect();
+    const liste = modulListe((await holeGet('/proj/liste')).j);
+    if (liste.length === 0) { melde('No Workbench module saved yet', true); return; }
+    oeffneMenue(liste.map((m) => ({ text: m.name, aktion: async () => {
+      let bericht = null;
+      await schreibe((p) => ladeModul(n, m.slug, p, holeJsonFrist).then((x) => { bericht = x.bericht ?? null; return x; }));
+      if (bericht) melde(berichtText(bericht));
+    } })), r.left, r.bottom);
+  });
   neu.addEventListener('click', async () => {
     const r = neu.getBoundingClientRect();
     const [g, kits] = await Promise.all([holeGet('/graphen'), holeGet('/proj/kits')]);
     const wahl = geraetWahl(g.j?.graphen, kits.j?.kits);
-    oeffneMenue(menuePunkte(wahl, (e) => schreibe((p) => neueFolge(n, freierName(e.name, seqAnsicht(p, n).folgen.map((f) => f.name)), e.geraet, undefined, p, holeJsonFrist))), r.left, r.bottom);
+    oeffneAchsenMenue((achse, umschalten) => menuePunkte(wahl, g.j?.graphen, achse, (e) => schreibe((p) => neueFolge(n, freierName(e.name, seqAnsicht(p, n).folgen.map((f) => f.name)), e.geraet, undefined, p, holeJsonFrist)), umschalten),
+      (punkte) => oeffneMenue(punkte, r.left, r.bottom));
   });
 
   // The jump: the clip of the pattern touched last, in PRODUCTION (the view switches, the group unfolds, the clip is selected once the project is loaded).
@@ -423,7 +442,7 @@ function bindePlatz(k, n, feld, anlegen, leeren, neu, breite, sprung) {
         letzterDruck = { schl, t: Date.now() };
       }
       griff = { typ: punkt ? 'punkt' : 'flaeche', folge: reihe.dataset.folge, zeile: reihe.dataset.zeile, svg: kurve, punkt, i, z, px: rec.px, x0: e.clientX, y0: e.clientY, bewegt: false, zweiter,
-        beat: punkt ? z.punkte[i]?.beat : 0, wert: punkt ? z.punkte[i]?.wert : 0 };
+        beat: punkt ? z.punkte[i]?.beat : 0, beat0: punkt ? z.punkte[i]?.beat : 0, wert: punkt ? z.punkte[i]?.wert : 0 };
       k._griff = griff;
       try { (punkt ?? kurve).setPointerCapture(e.pointerId); } catch { /* no capture: the move still arrives over the lane */ }
       return;
@@ -490,11 +509,19 @@ function bindePlatz(k, n, feld, anlegen, leeren, neu, breite, sprung) {
       if (!g.bewegt) {
         if (!g.zweiter) return;   // a first press that did not move changes nothing and does not draw the field again: the circle stays for the second press
         letzterDruck = { schl: '', t: 0 };
-        const i = g.i;
-        zeileSenden('Remove curve point', g.folge, g.zeile, (f, z, info) => kurveSchreibe(f.spur, f.clip, z, kurveWeg(z, i), info));
+        // the point is named by its beat when the write is its turn: a write that is still out may have re-sorted the list
+        zeileSenden('Remove curve point', g.folge, g.zeile, (f, z, info) => {
+          const i = kurvePunktBei(z, g.beat0, g.i);
+          if (i < 0) verschwunden('The curve point');
+          return kurveSchreibe(f.spur, f.clip, z, kurveWeg(z, i), info);
+        });
         return;
       }
-      zeileSenden('Curve point', g.folge, g.zeile, (f, z, info) => kurveSchreibe(f.spur, f.clip, z, kurveVerschiebe(z, g.i, g.beat, g.wert), info));
+      zeileSenden('Curve point', g.folge, g.zeile, (f, z, info) => {
+        const i = kurvePunktBei(z, g.beat0, g.i);
+        if (i < 0) verschwunden('The curve point');
+        return kurveSchreibe(f.spur, f.clip, z, kurveVerschiebe(z, i, g.beat, g.wert), info);
+      });
       return;
     }
     if (g.typ === 'flaeche') {
@@ -552,17 +579,6 @@ function bindePlatz(k, n, feld, anlegen, leeren, neu, breite, sprung) {
 }
 
 const seqFolge = (n, p, folgeId) => ansicht(n, p).folgen.find((x) => x.spur_id === folgeId) ?? verschwunden('The pattern');
-// menu entries of the instrument picker with a label per group
-function menuePunkte(wahl, aktion) {
-  const punkte = [];
-  let gruppe = null;
-  for (const e of wahl) {
-    if (e.gruppe !== gruppe) { gruppe = e.gruppe; punkte.push({ gruppe: true, text: gruppe }); }
-    punkte.push({ text: e.text, aktion: () => aktion(e) });
-  }
-  return punkte;
-}
-
 // the buttons of a pattern head and a lane head
 function knopfGedrueckt(n, b) {
   const r = b.getBoundingClientRect(), folgeId = b.closest('.sq-folge')?.dataset.folge, d = b.dataset;
@@ -571,22 +587,24 @@ function knopfGedrueckt(n, b) {
     schreibe((p) => sende(n, 'Mute', [{ befehl: 'spur_aendern', spur_id: folgeId, mute: !seqFolge(n, p, folgeId).spur.mute }], p, holeJsonFrist));
   } else if ('sqLaenge' in d) {
     const setze = (beats) => schreibeFolge('Pattern length', (f) => laengeBefehle(f.spur, f.clip, beats));
-    oeffneMenue([...LAENGEN_TAKTE.map((t) => ({ text: laengeText(t * 4), aktion: () => setze(t * 4) })),
+    const maxBeats = seqFolge(n, live.projekt, folgeId).clip?.laenge_beats ?? 16 * proTaktJetzt();   // the stored clip bounds the length
+    oeffneMenue([...laengenWahl(maxBeats, proTaktJetzt()).map((t) => ({ text: laengeText(t * proTaktJetzt(), proTaktJetzt()), aktion: () => setze(t * proTaktJetzt()) })),
       { text: 'Steps…', aktion: () => {
-        const beats = laengeAusSchritten(window.prompt('Pattern length in steps of 1/16 (1 to 256)', ''));
-        if (beats === null) melde('A step count is a whole number from 1 to 256', true); else setze(beats);
+        const beats = laengeAusSchritten(window.prompt(`Pattern length in steps of 1/16 (1 to ${maxBeats * 4})`, ''), proTaktJetzt(), maxBeats);
+        if (beats === null) melde(`A step count is a whole number from 1 to ${maxBeats * 4}`, true); else setze(beats);
       } }], r.left, r.bottom);
   } else if ('sqGeraet' in d) {
     holeGet('/graphen').then(async (g) => {
       const kits = await holeGet('/proj/kits');
       const aktuell = ansicht(n, live.projekt).folgen.find((x) => x.spur_id === folgeId)?.spur?.geraet;
       const wahl = geraetWahl(g.j?.graphen, kits.j?.kits, aktuell?.art === 'intern' && aktuell.name === 'bk' ? aktuell.graph : undefined);
-      oeffneMenue(menuePunkte(wahl, (e) => schreibe((p) => {
+      // the instrument menu: Baukasten entries under the groups of the page-wide axis (instrument_groups.js), the first entry switches the axis and reopens it here
+      oeffneAchsenMenue((achse, umschalten) => menuePunkte(wahl, g.j?.graphen, achse, (e) => schreibe((p) => {
         const f = seqFolge(n, p, folgeId), w = wechselBefehle(f.spur, f.clip, e.geraet, infosAusCache(p, n)[folgeId]);
         if (w.meldung) { melde(w.meldung, true); return { ok: false, projekt: p, neuLesen: false, text: '' }; }
         if (w.frage && !window.confirm(w.frage)) return { ok: true, projekt: p, neuLesen: false, text: '' };
         return sende(n, 'Instrument', w.befehle, p, holeJsonFrist);
-      })), r.left, r.bottom);
+      }), umschalten), (punkte) => oeffneMenue(punkte, r.left, r.bottom));
     });
   } else if ('sqNeueZeile' in d) {
     const f = ansicht(n, live.projekt).folgen.find((x) => x.spur_id === folgeId);
@@ -641,7 +659,7 @@ function knopfGedrueckt(n, b) {
       });
       else { if (beats === null) knoten.get(n)._eigen.delete(schl); else knoten.get(n)._eigen.set(schl, beats); neuZeichnen(n); }   // no envelope yet: the page keeps the length for the first point
     };
-    oeffneMenue([...eigenLaengen(f.sicht.laenge_beats).map((e) => ({ text: e.text, aktion: () => setze(e.beats) })),
+    oeffneMenue([...eigenLaengen(f.sicht.laenge_beats, proTaktJetzt()).map((e) => ({ text: e.text, aktion: () => setze(e.beats) })),
       { text: 'Steps…', aktion: () => {
         const beats = eigenAusSchritten(window.prompt(`Lane length in steps of 1/16 (1 to ${f.sicht.laenge_beats * 4})`, ''), f.sicht.laenge_beats);
         if (beats === null) melde(`A step count is a whole number from 1 to ${f.sicht.laenge_beats * 4}`, true); else setze(beats);

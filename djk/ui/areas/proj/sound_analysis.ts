@@ -93,7 +93,8 @@ export class KlangAnalyse {
     // An identical request that comes while the run is in flight waits for it, but only takes its answer when that answer is for the rev it saw itself:
     // the rev the run started with (nothing changed since), or the rev the answer carries (the run froze a Surge track and so raised it). A project that
     // changed meanwhile is measured again.
-    const flug = this.schluessel(pre.slug, 0, q, v, pre.von, pre.bis, stempel);
+    // the mode is part of the key: the window (ohne_freeze) refuses where the tool freezes, so one must not take over the other's refusal (Audit U08)
+    const flug = this.schluessel(pre.slug, 0, q, v, pre.von, pre.bis, stempel) + (d.ohne_freeze === true ? '|ohne_freeze' : '');
     const im = this.imFlug.get(flug);
     if (im) {
       const a = await im.lauf;

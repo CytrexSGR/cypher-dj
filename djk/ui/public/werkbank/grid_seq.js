@@ -289,9 +289,12 @@ export function dupliziereBefehle(clip, art, auswahl, aufl = SCHRITTE_TAKT) {
     belegt.add(schluessel({ ton: z.ton, quelle: q }));
     neueAuswahl.push({ ton: z.ton, quelle: q });
     if (notenAn(clip, { ton: z.ton, quelle: q }, art, aufl).length) continue;
+    const w = weite(aufl), ende = zeilenBeats(clip, z.ton, art);
     for (const n of notenAn(clip, z, art, aufl)) {
       const { id, beat, ...rest } = n;
-      neu.push({ ...rest, beat: runde(beat + breite * weite(aufl)) });
+      // a slice hit in the last half cell of the pattern is drawn on cell 0 (the upbeat of the next pass): it moves from in front of the pattern end to in front of the target cell
+      const vor = art === 'slice' && z.quelle === 0 && beat >= ende - w / 2 - EPS ? ende : 0;
+      neu.push({ ...rest, beat: runde(beat - vor + breite * w) });
     }
   }
   return { befehle: neu.length ? [{ befehl: 'noten_neu', clip_id: clip.id, noten: neu }] : [], auswahl: neueAuswahl };

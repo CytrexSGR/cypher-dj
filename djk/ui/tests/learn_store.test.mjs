@@ -21,7 +21,7 @@ test('S19 speicher: a missing file reads as empty; the first assignment writes a
   assert.deepEqual(j.eintraege, [{ nachricht: { typ: 'cc', kanal: 1, nr: 74 }, ziel: 'erz/5/bk/3', art: 'absolut' }]);
   assert.ok(!('kurve' in j.eintraege[0]));
   assert.equal(lies(d).split('\n').filter((z) => z.includes('"ziel"')).length, 1, 'one entry per line');
-  assert.deepEqual(s.lies().zuordnungen, [{ pfad: 'erz/5/bk/3', kanal: 1, nr: 74 }]);
+  assert.deepEqual(s.lies().zuordnungen, [{ pfad: 'erz/5/bk/3', kanal: 1, nr: 74, platz: 1 }]);
 });
 
 test('S19 speicher: one CC <-> one knob: assigning 75 to a knob that has 74 removes 74; assigning a CC that drives another knob moves it', (t) => {
@@ -30,7 +30,7 @@ test('S19 speicher: one CC <-> one knob: assigning 75 to a knob that has 74 remo
   s.zuordne({ pfad: 'erz/5/bk/3', kanal: 1, nr: 74 });
   s.zuordne({ pfad: 'deck/1/bk/1', kanal: 1, nr: 75 });
   s.zuordne({ pfad: 'erz/5/bk/3', kanal: 1, nr: 75 });   // 75 now drives erz/5/bk/3: deck/1/bk/1 loses its CC, and the old 74 entry of this knob goes
-  assert.deepEqual(s.lies().zuordnungen, [{ pfad: 'erz/5/bk/3', kanal: 1, nr: 75 }]);
+  assert.deepEqual(s.lies().zuordnungen, [{ pfad: 'erz/5/bk/3', kanal: 1, nr: 75, platz: 1 }]);
 });
 
 test('S19 speicher: the previous file is kept as .bak; stelleWiederHer puts it back; a first file that is refused is removed again', (t) => {
@@ -91,5 +91,39 @@ test('S19 speicher: lies() lists an absolute CC entry on any continuous target (
   const s = new LernSpeicher(d);
   s.zuordne({ pfad: 'deck/1/fader', kanal: 2, nr: 21 });
   s.zuordne({ pfad: 'erz/5/bk/3', kanal: 1, nr: 74 });
-  assert.deepEqual(s.lies().zuordnungen, [{ pfad: 'deck/1/fader', kanal: 2, nr: 21 }, { pfad: 'erz/5/bk/3', kanal: 1, nr: 74 }]);
+  assert.deepEqual(s.lies().zuordnungen, [{ pfad: 'deck/1/fader', kanal: 2, nr: 21, platz: 1 }, { pfad: 'erz/5/bk/3', kanal: 1, nr: 74, platz: 1 }]);
+});
+
+test('controller places: a CC learned on place 2 goes to lernen-2.json with device name lernen-2 and raw input midi_ein_2; the same CC on place 1 stays', (t) => {
+  const d = ordner(t);
+  const s = new LernSpeicher(d);
+  assert.deepEqual(s.zuordne({ pfad: 'deck/1/fader', kanal: 1, nr: 7 }), [1]);
+  assert.deepEqual(s.zuordne({ pfad: 'deck/2/fader', kanal: 1, nr: 7, platz: 2 }), [2], 'only the file of place 2 changed');
+  const j = JSON.parse(fs.readFileSync(path.join(d, 'lernen-2.json'), 'utf8'));
+  assert.deepEqual([j.version, j.geraet, j.quelle_port], [1, 'lernen-2', 'midi_ein_2']);
+  assert.deepEqual(s.lies().zuordnungen, [{ pfad: 'deck/1/fader', kanal: 1, nr: 7, platz: 1 }, { pfad: 'deck/2/fader', kanal: 1, nr: 7, platz: 2 }]);
+});
+
+test('controller places: one target has one source over all places; deleting names the changed places; a restore covers every changed place', (t) => {
+  const d = ordner(t);
+  const s = new LernSpeicher(d);
+  s.zuordne({ pfad: 'deck/1/fader', kanal: 1, nr: 7 });
+  const vorher = lies(d);
+  assert.deepEqual(s.zuordne({ pfad: 'deck/1/fader', kanal: 3, nr: 20, platz: 2 }), [1, 2], 'the knob moves from place 1 to place 2: both files change');
+  assert.deepEqual(s.lies().zuordnungen, [{ pfad: 'deck/1/fader', kanal: 3, nr: 20, platz: 2 }]);
+  s.stelleWiederHer([1, 2]);
+  assert.equal(lies(d), vorher, 'place 1 is back');
+  assert.ok(!fs.existsSync(path.join(d, 'lernen-2.json')), 'the first file of place 2 is removed again');
+  s.zuordne({ pfad: 'deck/1/fader', kanal: 3, nr: 20, platz: 2 });
+  assert.deepEqual(s.loesche('deck/1/fader'), [2]);
+  assert.equal(grund(() => s.loesche('deck/1/fader')), 'keine_zuordnung/404');
+});
+
+test('controller places: a damaged file of any place makes the state kaputt and refuses writes; no file is touched', (t) => {
+  const d = ordner(t);
+  const s = new LernSpeicher(d);
+  s.zuordne({ pfad: 'deck/1/fader', kanal: 1, nr: 7 });
+  fs.writeFileSync(path.join(d, 'lernen-3.json'), '{"version":1,"geraet":"lernen","quelle_port":"midi_ein_3","eintraege":[]}');   // wrong device name for place 3
+  assert.equal(s.lies().datei, 'kaputt');
+  assert.equal(grund(() => s.zuordne({ pfad: 'deck/2/fader', kanal: 1, nr: 8 })), 'lernen_datei_kaputt/409');
 });

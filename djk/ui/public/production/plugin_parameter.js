@@ -1,5 +1,5 @@
 // PRODUCTION (plan 1.11 task 11): the generic parameter list of a foreign plugin stage (host insert). A plugin may have several hundred parameters, so the
-// list is one string of rows (no per-row listeners: one delegated handler), a filter field narrows it, and slider moves are collected for 30 ms and sent as
+// list is one string of rows (no per-row listeners: one delegated handler), a filter field narrows it, and slider moves are collected and sent every 30 ms (throttle, not a pause wait) as
 // ONE POST /proj/insert/<id>/param {werte: {<index>: <0..1>}}. The server owns the values; the project never holds them (a host stage has `werte: {}`).
 export const PARAM_ENTPRELLEN_MS = 30;
 
@@ -51,7 +51,7 @@ export function baueParameterListe(el, { holeListe, sende, fehler }) {
     const idx = Number(r.dataset.index), v = Number(r.value), q = alle.find((x) => x.index === idx);
     r.closest('.p-hp-zeile').querySelector('.p-hp-wert').textContent = paramWertText(q, v);
     offen[idx] = v;
-    clearTimeout(timer); timer = setTimeout(schicke, PARAM_ENTPRELLEN_MS);
+    if (timer === null) timer = setTimeout(schicke, PARAM_ENTPRELLEN_MS);   // a fixed-interval throttle: a further move does not restart the timer, so a long drag sends while it goes on
   });
   feld.addEventListener('input', zeige);
   const neu = async () => {

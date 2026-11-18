@@ -11,6 +11,8 @@ import { ZIEH_TYP, GERAET_TYP, nutzlast, clipName, geraetNutzlast } from './prod
 import { PRESET_TYP, presetNutzlast } from './production/preset_target.js';
 import { oeffneMenue } from './production/context_menu.js';
 import { FAVORITEN_SLUG, ZULETZT_SLUG } from './usage.js';
+import { eintraege as geraeteZeilen } from './production/devices_browser.js';   // the device rows in the order the browser shows them
+import { leseAchse } from './instrument_groups.js';
 
 const html = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const SHA = /^[0-9a-f]{64}$/;
@@ -212,7 +214,7 @@ export function bindeKollektionen(ctx, opt = {}) {
     const id = e.target?.closest?.('[data-preset-id]')?.dataset.presetId;
     return postenVonPreset((ctx.presetListe?.() ?? []).find((x) => `${x.herkunft}/${x.geraet}/${x.slug}` === id));
   });
-  rechts(document.getElementById('geraete-browser'), (e) => postenVonGeraet(katalogEintraege(katalog)[Number(e.target?.closest?.('[data-geraet-i]')?.dataset.geraetI)]));
+  rechts(document.getElementById('geraete-browser'), (e) => postenVonGeraet(geraeteZeilen(katalog, leseAchse())[Number(e.target?.closest?.('[data-geraet-i]')?.dataset.geraetI)]));   // data-geraet-i counts in display order (grouped by the page-wide axis)
   ctx.kollektionenZeigen = async () => { await holeKatalog(); return lade(); };
   ctx.beimSichtwechsel.push((an) => { if (an) holeKatalog(); });
 }

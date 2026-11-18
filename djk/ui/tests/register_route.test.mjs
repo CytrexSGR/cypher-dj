@@ -18,7 +18,7 @@ async function stapel(t, opt = {}) {
   const ordner = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-register-'));
   t.after(() => fs.rmSync(ordner, { recursive: true, force: true }));
   const router = new Router();
-  router.melde(registerBereich({ log: () => {}, quelle: () => 'andreas' }, { ordner: opt.ordner ?? ordner, aktiv: () => 'pult', midiPort: () => 'X:Y', host: () => ({}) }));
+  router.melde(registerBereich({ log: () => {}, quelle: () => 'andreas', ...(opt.baukasten ? { baukasten: opt.baukasten } : {}) }, { ordner: opt.ordner ?? ordner, aktiv: () => 'pult', midiPort: () => 'X:Y', host: () => ({}) }));
   const server = http.createServer(async (q, a) => {
     const url = new URL(q.url ?? '/', 'http://127.0.0.1');
     const r = router.finde(q.method ?? '', url.pathname);
@@ -58,6 +58,7 @@ test('register: roles, order, edges, LEDs and the broken fixtures of the folder'
   const fader = j.kanten.find((k) => k.ziel === 'deck/1/fader');
   assert.deepEqual([fader.einheit, fader.kurve, fader.weg, fader.geraet, fader.art], ['db', 'fader_db', 'kern', 'pult', 'absolut']);
   assert.deepEqual(fader.quelle, { typ: 'cc', kanal: 1, nr: 7 });
+  assert.deepEqual([fader.besitzer, j.kanten.find((k) => k.geraet === 'lernen').besitzer, j.kanten.find((k) => k.geraet === 'apc20').besitzer], ['apc20', 'platz:1', null], 'desk file by channel, learn table by place, an unloaded file has no owner');
   assert.equal(j.kanten.find((k) => k.ziel === 'deck/1/pfl').einheit, 'schalter');
   const platz = j.kanten.find((k) => k.ziel === '<kanal>/bk/<seite*8+1>');
   assert.deepEqual([platz.einheit, platz.weg, platz.quelle, platz.kurve], [null, 'seite', { name: 'encoder_1' }, null]);
@@ -91,4 +92,39 @@ test('register/ziele: continuous knobs whose path contains q; switches never; li
   assert.equal((await hole(url, '/register/ziele?limit=100000')).j.ziele.length, 200);
   assert.equal((await hole(url, '/register/ziele')).j.ziele.length, 50);
   assert.ok(!(await hole(url, '/register/ziele?limit=500')).j.ziele.some((z) => z.einheit === 'schalter'));
+});
+
+test('register/ziele prefix: every continuous target of a module without a cap, graph knobs with the knob name of the loaded graph', async (t) => {
+  const bk = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-register-bk-'));
+  t.after(() => fs.rmSync(bk, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(bk, 'testfx.json'), JSON.stringify({ knoten: [{ art: 'eingang' }], regler_namen: { 4: 'Sub 1' } }));
+  const alt = process.env.CYPHERDJ_BK_ORDNER;
+  process.env.CYPHERDJ_BK_ORDNER = bk;
+  t.after(() => { if (alt === undefined) delete process.env.CYPHERDJ_BK_ORDNER; else process.env.CYPHERDJ_BK_ORDNER = alt; });
+  const { url } = await stapel(t, { baukasten: { geladen: () => ({ 'fx/3': 'testfx' }) } });
+  const d1 = (await hole(url, '/register/ziele?prefix=deck/1')).j;
+  assert.ok(d1.ziele.length > 50 && d1.ziele.some((z) => z.pfad === 'deck/1/bk/64'), 'more than the default limit of 50');
+  assert.ok(d1.ziele.every((z) => z.pfad.startsWith('deck/1/') && z.einheit !== 'schalter'));
+  assert.equal(d1.gesamt, d1.ziele.length);
+  assert.deepEqual((await hole(url, '/register/ziele?prefix=xfader')).j.ziele.map((z) => z.pfad), ['xfader'], 'a single control is its own prefix');
+  assert.ok(!(await hole(url, '/register/ziele?prefix=deck/1')).j.ziele.some((z) => z.pfad.startsWith('deck/10')), 'the prefix ends at a path segment');
+  const alle = (await hole(url, '/register/ziele?prefix=')).j;
+  assert.ok(alle.ziele.length > 200 && alle.ziele.length === alle.gesamt, 'an empty prefix is everything, no cap of 200');
+  const fx = (await hole(url, '/register/ziele?prefix=fx/3')).j.ziele;
+  assert.equal(fx.find((z) => z.pfad === 'fx/3/bk/4').name, 'Sub 1');
+  assert.equal(fx.find((z) => z.pfad === 'fx/3/bk/5').name, undefined, 'no name: no field');
+  assert.equal(d1.ziele.find((z) => z.pfad === 'deck/1/filter').name, undefined);
+});
+
+test('register: the learnable devices carry their control layout', async (t) => {
+  const { url } = await stapel(t);
+  const kat = (await hole(url, '/register')).j.katalog;
+  const lc3 = kat.find((k) => k.id === 'lc3').regler, lpd8 = kat.find((k) => k.id === 'lpd8').regler;
+  assert.deepEqual([lc3.filter((r) => r.art === 'knob').length, lc3.filter((r) => r.art === 'button').length], [16, 8]);
+  assert.deepEqual(lc3.filter((r) => r.art === 'knob').map((r) => r.nr), Array.from({ length: 16 }, (_, i) => 13 + i));
+  assert.deepEqual(lc3.filter((r) => r.art === 'button').map((r) => [r.nr, r.kanal, r.kanal_daw]), Array.from({ length: 8 }, (_, i) => [37 + i, 16, 1]));
+  assert.deepEqual(lpd8.filter((r) => r.art === 'knob').map((r) => [r.typ, r.kanal, r.nr]), Array.from({ length: 8 }, (_, i) => ['cc', 1, 1 + i]));
+  assert.ok(lpd8.filter((r) => r.art === 'pad').every((r) => r.typ === 'note'));
+  for (const g of [lc3, lpd8]) assert.equal(new Set(g.map((r) => `${r.zeile}/${r.spalte}`)).size, g.length, 'no two controls share a grid cell');
+  assert.equal(kat.find((k) => k.id === 's8').regler, undefined, 'a desk device has no layout');
 });

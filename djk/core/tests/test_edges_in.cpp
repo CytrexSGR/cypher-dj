@@ -1,4 +1,4 @@
-// I08 Task 3: Eingangs-Kanten-Datei. Nur ein_<k>_{L,R} (k 1..4) und midi_ein_1 sind Ziele; Kern-Quellen fallen weg (Riegel);
+// I08 Task 3: Eingangs-Kanten-Datei. Nur ein_<k>_{L,R} (k 1..4) und midi_ein_1 bis _8 sind Ziele; Kern-Quellen fallen weg (Riegel);
 // Hotplug: erst wenn die Gerätequelle existiert, fehlt eine Kante.
 #include <set>
 #include <string>
@@ -34,6 +34,15 @@ int main() {
   PRUEF(k.size() == 4 && k[1] == cdj::Kante({fr, pre + "ein_1_R"}));
   PRUEF(k.size() == 4 && k[2] == cdj::Kante({"Midi-Bridge:XDJ-XZ (1):capture", pre + "midi_ein_1"}));
   PRUEF(k.size() == 4 && k[3] == cdj::Kante({"cypherdj-latenz:out_L", pre + "ein_4_L"}));   // m6: der Kern einer anderen Instanz ist weg, der Messclient bleibt
+  {  // eight raw MIDI inputs: midi_ein_1 .. midi_ein_8 are targets, midi_ein_0, _9, _10 and a trailing letter are not
+    const std::string q = "Midi-Bridge:dev:capture";
+    std::string t;
+    for (const char* n : {"midi_ein_1", "midi_ein_2", "midi_ein_8", "midi_ein_0", "midi_ein_9", "midi_ein_10", "midi_ein_2x", "midi_ein_"})
+      t += q + "\t" + n + "\n";
+    const std::vector<cdj::Kante> m = cdj::lies_eingangs_kanten(t, pre);
+    PRUEF(m.size() == 3);
+    PRUEF(m.size() == 3 && m[0].ziel == pre + "midi_ein_1" && m[1].ziel == pre + "midi_ein_2" && m[2].ziel == pre + "midi_ein_8");
+  }
   {  // Hotplug: Gerät fehlt: nichts zu verbinden; Gerät erscheint: zwei Audio-Kanten fehlen; verbunden: nichts mehr
     Welt w{{pre + "ein_1_L", pre + "ein_1_R", pre + "midi_ein_1"}, {}};
     PRUEF(cdj::fehlende_kanten(k, {ex, vb, &w}).empty());

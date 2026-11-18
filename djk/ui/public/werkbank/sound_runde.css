@@ -1,0 +1,30 @@
+/* Workbench FIND SOUND window (sound_runde.js): head, four large place buttons side by side, status, PICK / NEW NEIGHBOURS / BACK, the path of the family tree. */
+#werkbank .w-fenster[data-fenster-id="runde"] .w-fenster-koerper { width: 720px; max-width: 100%; }
+#werkbank .w-runde { display: grid; gap: 10px; outline: none; }
+#werkbank .w-runde-inhalt { display: grid; gap: 10px; }
+#werkbank .w-runde-inhalt[hidden], #werkbank .w-runde-hinweis[hidden] { display: none; }
+#werkbank .w-runde-hinweis { font-size: 12px; color: var(--dim); }
+#werkbank .w-runde-name { font-size: 13px; }
+#werkbank .w-runde-stand.w-runde-fehler { color: var(--warn); }
+#werkbank .w-runde-plaetze { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+#werkbank .w-runde-platz { display: grid; grid-template-rows: auto 1fr auto; gap: 4px; justify-items: start; text-align: left; min-height: 96px; padding: 8px 10px; font: inherit;
+  font-size: 12px; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+#werkbank .w-runde-platz:hover:not(:disabled) { border-color: var(--d3); }
+#werkbank .w-runde-platz:disabled { opacity: .5; cursor: default; }
+#werkbank .w-runde-platz[aria-pressed="true"] { border-color: var(--a); background: rgba(47,214,195,.10); }
+#werkbank .w-runde-buchstabe { font-size: 20px; font-weight: 700; letter-spacing: .08em; }
+#werkbank .w-runde-platz[aria-pressed="true"] .w-runde-buchstabe { color: var(--a); }
+#werkbank .w-runde-text { color: var(--text); overflow-wrap: anywhere; }
+#werkbank .w-runde-pegel { color: var(--dim); font-variant-numeric: tabular-nums; min-height: 1.2em; }
+#werkbank .w-runde-knoepfe { display: flex; flex-wrap: wrap; gap: 8px; }
+#werkbank .w-runde-knoepfe .w-analyse-weg { font-size: 11px; letter-spacing: .12em; padding: 0 14px; }
+#werkbank .w-runde-knoepfe .w-analyse-weg:disabled { opacity: .4; cursor: default; }
+#werkbank .w-runde-waehlen:not(:disabled) { color: var(--text); border-color: var(--a); }
+#werkbank .w-runde-weg { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 11px; }
+#werkbank .w-runde-knoten { font: inherit; font-size: 11px; min-height: 28px; padding: 0 8px; color: var(--dim); background: var(--panel2); border: 1px solid var(--line); border-radius: 14px; cursor: pointer; }
+#werkbank .w-runde-knoten:hover { color: var(--text); }
+#werkbank .w-runde-knoten.w-runde-aktiv { color: var(--text); border-color: var(--a); cursor: default; }
+#werkbank .w-runde-knoten + .w-runde-knoten::before { content: "\203A"; margin-right: 4px; color: var(--dim); }
+#werkbank .w-runde-platz.w-runde-gewaehlt:not([aria-pressed="true"]) { border-style: dashed; border-color: var(--a); }
+#werkbank .w-runde-vergleich[aria-pressed="true"] { color: var(--text); border-color: var(--a); background: rgba(47,214,195,.10); }
+#werkbank .w-runde-klingt { align-self: center; min-width: 9ch; font-size: 12px; font-weight: 700; letter-spacing: .08em; color: var(--a); }

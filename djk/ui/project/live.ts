@@ -1,8 +1,10 @@
 // Live container (plan live-module): reading the two slots (task 1) and building a module tree (task 2). A slot is a top-level group with modul.slot
 // 'A' or 'B'; the group name does not count.
 import { fuehreListeAus } from './commands.ts';
-import { SAMPLERATE, blendPfad, type Herkunft, type Projekt, type Warp } from './model.ts';
+import { SAMPLERATE, blendPfad, type Herkunft, type Projekt, type Spur, type Warp } from './model.ts';
 import { STEMS, type Stem } from './stems.ts';
+import { liveBeats, takteProLive } from './taktart_live.ts';
+import { TROMMEL_KARTEN } from './trommel_map.ts';
 
 export function liveSlots(p: Projekt): { A?: string; B?: string } {
   const aus: { A?: string; B?: string } = {};
@@ -18,7 +20,9 @@ export function normiereSlot(v: unknown): 'A' | 'B' | undefined {
   return v === 'A' || v === 1 || v === '1' ? 'A' : v === 'B' || v === 2 || v === '2' ? 'B' : undefined;
 }
 
-export const LIVE_LOOP_BEATS = 64;                                   // the live loop region: 16 bars
+export const LIVE_LOOP_BEATS = 64;                                   // the live loop region in 4/4: 16 bars
+// The live loop region of a project: 16 bars of its meter (4/4 and no meter: LIVE_LOOP_BEATS).
+export const liveRegion = (p: Projekt): number => liveBeats(takteProLive(p.taktart));
 const STEM_NAME: Record<Stem, string> = { drums: 'Drums', bass: 'Bass', other: 'Other', vocals: 'Vocals', guitar: 'Guitar', piano: 'Piano' };
 export const LOOP_SPUR = 'Loop';
 const EPS = 1e-3;
@@ -37,11 +41,12 @@ export function modulPhase(vonBeat: number, beats: number, eins = 0): number {
   const p = (((vonBeat - eins) % 4) + 4) % 4;
   return p < EPS || p > 4 - EPS ? 0 : p;
 }
-function clipBefehle(spurId: string, d: ModulDatei, loop: ModulLoop, vonBeat: number, eins: number, name: string, modus: Warp['modus']): unknown[] {
+function clipBefehle(spurId: string, d: ModulDatei, loop: ModulLoop, vonBeat: number, eins: number, name: string, modus: Warp['modus'],
+  region = LIVE_LOOP_BEATS): unknown[] {
   const dauer = loop.frames / SAMPLERATE, L = loop.beats, p = modulPhase(vonBeat, L, eins);
   const warp = (versatz: number): Warp => ({ an: true, modus, marker: [[0, 0], [dauer, L]], versatz_beats: versatz, quelle: 'hand',
     transpose_st: 0, detune_ct: 0 });
-  const laenge = LIVE_LOOP_BEATS - p;
+  const laenge = region - p;
   const aus: unknown[] = [];
   if (p > 0) aus.push({ befehl: 'clip_neu', spur_id: spurId, art: 'audio', start_beat: 0, laenge_beats: p, sha256: d.sha256, pfad_hinweis: d.pfad,
     name: `${name} lead-in`.slice(0, 80), warp: warp(L - p) });
@@ -67,7 +72,7 @@ export function baueModul(p0: Projekt, slot: 'A' | 'B', loop: ModulLoop, stems: 
   if (vorhanden === undefined) {
     p = lauf(p, { befehl: 'spur_neu', art: 'audio', name: LOOP_SPUR });
     loopId = p.spuren[p.spuren.length - 1].id;
-    p = nimm(p, clipBefehle(loopId, loop, loop, von, eins, `${titel} loop`, 'complex'));
+    p = nimm(p, clipBefehle(loopId, loop, loop, von, eins, `${titel} loop`, 'complex', liveRegion(p0)));
   } else {
     const g = p.gruppen.find((x) => x.id === vorhanden)!;
     if (p.gruppen.some((x) => x.ausgang?.id === g.id)) throw new Error(`the module in slot ${slot} already has its stems`);
@@ -81,7 +86,7 @@ export function baueModul(p0: Projekt, slot: 'A' | 'B', loop: ModulLoop, stems: 
     const d = stems[stem]!;
     p = lauf(p, { befehl: 'spur_neu', art: 'audio', name: `${STEM_NAME[stem]} original` });
     const sid = p.spuren[p.spuren.length - 1].id;
-    p = nimm(p, clipBefehle(sid, d, loop, von, eins, `${titel} ${STEM_NAME[stem]}`, stem === 'drums' ? 'repitch' : 'complex'));
+    p = nimm(p, clipBefehle(sid, d, loop, von, eins, `${titel} ${STEM_NAME[stem]}`, stem === 'drums' ? 'repitch' : 'complex', liveRegion(p0)));
     p = lauf(p, { befehl: 'gruppenspur_neu', name: STEM_NAME[stem], mitglieder: [sid] });
     kinder.push(p.gruppen.at(-1)!.id);
   }
@@ -105,7 +110,8 @@ export interface NeueNote { beat: number; laenge: number; ton: number; vel: numb
 
 // The notes sit on the loop's beat axis (beat 0 = the loop start, `beats` long). Like the audio clips (clipBefehle): bar phase p, then the loop clip from
 // beat p to 64 repeating every L beats, and a lead-in of p beats that plays the tail of the loop (notes from L - p on, moved to the clip start).
-function midiClipBefehle(spurId: string, noten: NeueNote[], loopBeats: number, vonBeat: number, eins: number, name: string): unknown[] {
+function midiClipBefehle(spurId: string, noten: NeueNote[], loopBeats: number, vonBeat: number, eins: number, name: string,
+  region = LIVE_LOOP_BEATS): unknown[] {
   const L = loopBeats, p = modulPhase(vonBeat, L, eins);
   const klemme = (n: NeueNote, v: number, bis: number): NeueNote => ({ beat: n.beat - v, ton: n.ton, vel: n.vel,
     laenge: Math.max(0.0625, Math.min(n.laenge, bis - (n.beat - v))) });
@@ -114,7 +120,7 @@ function midiClipBefehle(spurId: string, noten: NeueNote[], loopBeats: number, v
     const kopf = noten.filter((n) => n.beat >= L - p - EPS).map((n) => klemme(n, L - p, p));
     aus.push({ befehl: 'clip_neu', spur_id: spurId, art: 'midi', start_beat: 0, laenge_beats: p, name: `${name} lead-in`.slice(0, 80), noten: kopf });
   }
-  const laenge = LIVE_LOOP_BEATS - p;
+  const laenge = region - p;
   aus.push({ befehl: 'clip_neu', spur_id: spurId, art: 'midi', start_beat: p, laenge_beats: laenge, name: name.slice(0, 80),
     noten: noten.filter((n) => n.beat < L).map((n) => klemme(n, 0, L)), ...(L < laenge - 1e-9 ? { loop_beats: L } : {}) });
   return aus;
@@ -138,7 +144,8 @@ export function baueNeuePfade(p0: Projekt, slot: 'A' | 'B', noten: Partial<Recor
     const geraet = { art: 'intern', name: 'bk', graph: NEU_INSTRUMENT[stem], parameter: {} };
     p = lauf(p, { befehl: 'spur_neu', art: 'instrument', name: `${STEM_NAME[stem]} new`, geraet });
     const sid = p.spuren[p.spuren.length - 1].id;
-    p = midiClipBefehle(sid, liste, herkunft.laenge_beats, herkunft.von_beat, herkunft.eins_beat ?? 0, `${herkunft.titel} ${STEM_NAME[stem]} new`)
+    const mname = `${herkunft.titel} ${STEM_NAME[stem]} new`;
+    p = midiClipBefehle(sid, liste, herkunft.laenge_beats, herkunft.von_beat, herkunft.eins_beat ?? 0, mname, liveRegion(p0))
       .reduce<Projekt>((q, b) => lauf(q, b), p);
     p = lauf(p, { befehl: 'ziel_setzen', strang_id: sid, ausgang: { art: 'gruppe', id: kind.id } });
     p = lauf(p, { befehl: 'spur_aendern', spur_id: sid, fader_db: -200 });
@@ -172,8 +179,13 @@ export function tonartRest(modul: { tonart?: string; transponiert?: number }, de
   return d === null ? null : d - (modul.transponiert ?? 0);
 }
 
+// A track whose note number picks the sound, not the pitch: a drum-map graph (drums-909, drums-808) or a kit. Moving its notes swaps the drums.
+const trommelSpur = (s: Spur): boolean => s.geraet?.art === 'intern'
+  && (s.geraet.name === 'kit' || (s.geraet.name === 'bk' && Object.hasOwn(TROMMEL_KARTEN, s.geraet.graph)));
+
 // Moves the whole module tree by the missing semitones: MIDI notes by `ton`, audio clips by warp.transpose_st (clips without a warp or in repitch/beats
-// mode cannot be pitch shifted, so the drums stay), and stores the total on the module (`transponiert`, absent at 0). One project value: one undo step.
+// mode cannot be pitch shifted, so the drums stay; the MIDI of a drum track, drum-map graph or kit, stays too: there the note picks the drum), and
+// stores the total on the module (`transponiert`, absent at 0). One project value: one undo step.
 export function passeModulAn(p: Projekt, gruppeId: string, abstand: number, quelle: Herkunft = 'andreas'): Projekt {
   const top = p.gruppen.find((g) => g.id === gruppeId);
   if (!top?.modul) throw new Error(`group ${gruppeId} is no module`);
@@ -184,9 +196,10 @@ export function passeModulAn(p: Projekt, gruppeId: string, abstand: number, quel
   if (delta !== 0) {
     for (const s of p.spuren) {
       if (!s.ausgang || !ids.has(s.ausgang.id)) continue;
+      const trommel = trommelSpur(s);
       for (const c of s.clips) {
         if (c.art === 'midi') {
-          if (c.noten.length > 0) befehle.push({ befehl: 'noten_aendern', clip_id: c.id,
+          if (c.noten.length > 0 && !trommel) befehle.push({ befehl: 'noten_aendern', clip_id: c.id,
             noten: c.noten.map((n) => ({ id: n.id, ton: Math.min(127, Math.max(0, n.ton + delta)) })) });
         } else if (c.warp && c.warp.modus !== 'repitch' && c.warp.modus !== 'beats') {
           befehle.push({ befehl: 'warp_setzen', clip_id: c.id, transpose_st: c.warp.transpose_st + delta });

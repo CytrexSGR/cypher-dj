@@ -10,13 +10,17 @@ import { werkzeugNach } from './lanes_tools.js';
 export function entwurf(projekt, befehle) {
   if (!projekt || !Array.isArray(befehle) || befehle.length === 0) return projekt;
   const p = { ...projekt, spuren: projekt.spuren.map((s) => ({ ...s, clips: [...s.clips] })) };
+  if (projekt.gruppen) p.gruppen = projekt.gruppen.map((g) => ({ ...g }));   // backlog production task 7: the lanes of a group are drafted like those of a track
+  if (projekt.returns) p.returns = projekt.returns.map((r) => ({ ...r }));   // automation slice 1: the lanes of a return and of the master are drafted too
+  if (projekt.master) p.master = { ...projekt.master };
+  const straenge = [...p.spuren, ...(p.gruppen ?? []), ...(p.returns ?? []), ...(p.master ? [p.master] : [])];
   const finde = (id) => {
     for (const s of p.spuren) { const i = s.clips.findIndex((c) => c.id === id); if (i >= 0) return { s, i }; }
     return null;
   };
   for (const b of befehle) {
     if (b?.befehl === 'auto_punkte') {   // Automation Slice 1: the lane while a point is dragged (the same rule as the server, lanes.js punkteNach)
-      for (const s of p.spuren) {
+      for (const s of straenge) {
         const i = (s.automation ?? []).findIndex((l) => l.id === b.lane_id);
         if (i < 0) continue;
         const lanen = [...s.automation];
@@ -26,7 +30,7 @@ export function entwurf(projekt, befehle) {
       continue;
     }
     if (b?.befehl === 'auto_dehnen' || b?.befehl === 'auto_neigen' || b?.befehl === 'auto_form') {   // 1.12 slice 4: stretch, skew, shape (the server rule)
-      for (const s of p.spuren) {
+      for (const s of straenge) {
         const i = (s.automation ?? []).findIndex((l) => l.id === b.lane_id);
         if (i < 0) continue;
         const lanen = [...s.automation];

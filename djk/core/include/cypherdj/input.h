@@ -9,6 +9,7 @@
 namespace cdj {
 
 constexpr int EIN_PAARE = 4;
+constexpr int MIDI_EIN_PORTS = 8;  // raw MIDI inputs midi_ein_1..8, each with its own learn table (mapping slot 1..8)
 constexpr float EIN_FLANKE_SCHWELLE = 0.1f;  // |linker Kanal| ab diesem Wert ist ein Ausschlag
 constexpr int EIN_FLANKE_RUHE = 64;          // so viele Samples darunter vorher: dann ist es eine Flanke
 

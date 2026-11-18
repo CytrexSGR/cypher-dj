@@ -43,3 +43,16 @@ test('entferne: the folder moves to the bin and leaves the list; a project held 
   assert.ok(fs.existsSync(path.join(w, 'beta', 'project.json')), 'a refused delete leaves the folder');
   assert.throws(() => pr.entferne('alpha'), (e) => e instanceof AblageFehler && e.fehler === 'unbekannt');
 });
+
+// SAVE AS must not hand the copy the source's playback identity: istWiederanlauf (areas/proj/session.ts) takes /zustand/arr.nr === wiedergabe_rev
+// for "the core already plays this project's last playback", and that number is unique per instance. A copy starts at 0 (a full load on open).
+test('kopiere: the copy does not keep the source wiedergabe_rev', () => {
+  const w = wurzel(), pr = new Projekte(w);
+  const { slug } = pr.lege('Alpha', { werkbank: true });
+  pr.speichere(slug, { ...pr.lies(slug), wiedergabe_rev: 10 });
+  assert.equal(pr.lies(slug).wiedergabe_rev, 10);
+  const r = pr.kopiere(slug, 'Alpha v2');
+  assert.equal(r.projekt.wiedergabe_rev, 0, 'the copy would be taken for a restart of the source playback');
+  assert.equal(pr.lies(r.slug).wiedergabe_rev, 0);
+  assert.equal(pr.lies(slug).wiedergabe_rev, 10, 'the source keeps its number');
+});

@@ -368,6 +368,10 @@ export class Annahme {
     this.planLed();
   }
 
+  // True when quelle:id of a receipt belongs to a part of a plan this Annahme sent (idIndex stays for the life of the process,
+  // and is rebuilt from teil_gesendet by the resume): the lean journal keeps every receipt of such a part.
+  kenntQuittung(felder: Felder): boolean { return this.idIndex.has(`${felder.quelle}:${felder.id}`); }
+
   abgleichBeginnen(grund: 'kern_neustart' | 'leitstand_neustart'): void {
     this.abgleich = { grund, bestaetigt: new Set(), q_stand: 0 };
     this.journal('abgleich_beginn', { grund });
@@ -390,6 +394,7 @@ export class Annahme {
           s.status = 'abgebrochen';
           s.grund = 'neustart';
           this.ereignis('teil_abgebrochen', { plan_id: ps.plan.id, teil: s.nr, status: 0, grund: 'neustart' });
+          this.kopplungFolgen(ps, s.nr, 'abgebrochen', 'neustart');   // a lost b_rein: a_raus must not wait for it forever (audit U29)
         }
         teile.push({ plan_id: ps.plan.id, teil: s.nr, id: s.id, status: s.status, bestaetigt });
       }

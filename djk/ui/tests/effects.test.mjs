@@ -603,7 +603,7 @@ test('A8b the built controls carry exactly the ranges of the header rows (no nar
   }
 });
 
-// ---- Instrument picker by category ------------------------------------------------------------------------------------------------
+// ---- Instrument picker by category (these pin the ROLE axis; the type axis, its default and the switch are in instrument_groups.test.mjs) ------------------------------------------------------------------------------------------------
 const INST = [
   { name: 'drums-909', art: 'instrument', regler_namen: {}, kategorie: 'drums', text: '909-style drum kit; MIDI notes pick the drums.' },
   { name: 'diode-acid-bass', art: 'instrument', regler_namen: {}, kategorie: 'bass', text: 'Acid bass.' },
@@ -614,7 +614,7 @@ const INST = [
 const opts = (html, sel) => [...new RegExp(`<select[^>]*class="${sel}"[^>]*>(.*?)</select>`, 's').exec(html)[1].matchAll(/<option value="([^"]*)"([^>]*)>([^<]*)</g)].map((m) => ({ wert: m[1], text: m[3], an: / selected/.test(m[2]) }));
 
 test('category picker: two selects, the instrument list is filtered by the category of the loaded graph', () => {
-  const h = instrumentWahlHtml('erz/5', INST, 'ms20-bass');
+  const h = instrumentWahlHtml('erz/5', INST, 'ms20-bass', undefined, null, 'rolle');
   assert.deepEqual(opts(h, 'graphkat').map((o) => o.text), ['Drums', 'Bass', 'Other'], 'only categories that hold a graph; no host on erz/5');
   assert.deepEqual(opts(h, 'graphkat').filter((o) => o.an).map((o) => o.wert), ['bass']);
   assert.deepEqual(opts(h, 'graphwahl'), [{ wert: '', text: 'Off', an: false }, { wert: 'diode-acid-bass', text: 'diode-acid-bass', an: false }, { wert: 'ms20-bass', text: 'ms20-bass', an: true }]);
@@ -624,26 +624,26 @@ test('category picker: two selects, the instrument list is filtered by the categ
 });
 
 test('category picker: one description line for the chosen instrument, escaped; Off and Choose have their own lines', () => {
-  assert.match(instrumentWahlHtml('erz/5', INST, 'ms20-bass'), /<span class="graphtext" data-graphtext="erz\/5">Gritty &quot;MS-20&quot; &lt;bass&gt;\.<\/span>/);
-  assert.match(instrumentWahlHtml('erz/5', INST, ''), /graphtext[^>]*>No instrument loaded on this channel\.</);
-  const gewaehlt = instrumentWahlHtml('erz/5', INST, 'ms20-bass', undefined, 'drums');   // browsed to another category: nothing of it is chosen yet
+  assert.match(instrumentWahlHtml('erz/5', INST, 'ms20-bass', undefined, null, 'rolle'), /<span class="graphtext" data-graphtext="erz\/5">Gritty &quot;MS-20&quot; &lt;bass&gt;\.<\/span>/);
+  assert.match(instrumentWahlHtml('erz/5', INST, '', undefined, null, 'rolle'), /graphtext[^>]*>No instrument loaded on this channel\.</);
+  const gewaehlt = instrumentWahlHtml('erz/5', INST, 'ms20-bass', undefined, 'drums', 'rolle');   // browsed to another category: nothing of it is chosen yet
   assert.match(gewaehlt, /<option value="" disabled selected hidden>Choose/);
   assert.deepEqual(opts(gewaehlt, 'graphwahl').map((o) => o.text), ['Choose…', 'Off', 'drums-909']);
   assert.match(gewaehlt, /graphtext[^>]*><\/span>/, 'no description for "Choose"');
 });
 
 test('category picker: erz/2 and erz/3 offer the host as an instrument (Surge XT, or the real host), Off elsewhere; the host line says who plays', () => {
-  const h = instrumentWahlHtml('erz/3', INST, '');
+  const h = instrumentWahlHtml('erz/3', INST, '', undefined, null, 'rolle');
   assert.deepEqual(opts(h, 'graphkat').filter((o) => o.an).map((o) => o.wert), ['host'], 'nothing loaded: the host category');
   assert.deepEqual(opts(h, 'graphkat').map((o) => o.text), ['Drums', 'Bass', 'Host (Surge/plugins)', 'Other']);
   assert.deepEqual(opts(h, 'graphwahl'), [{ wert: '', text: 'Surge XT', an: true }]);
   assert.match(h, /graphtext[^>]*>Surge XT plays this channel; no Baukasten graph is loaded\.</);
-  const m = instrumentWahlHtml('erz/2', INST, '', 'Cypher Modular');
+  const m = instrumentWahlHtml('erz/2', INST, '', 'Cypher Modular', null, 'rolle');
   assert.deepEqual(opts(m, 'graphwahl'), [{ wert: '', text: 'Cypher Modular', an: true }]);
-  const bass = instrumentWahlHtml('erz/2', INST, '', 'Surge XT', 'bass');   // in another category the host is not listed: no Off there
+  const bass = instrumentWahlHtml('erz/2', INST, '', 'Surge XT', 'bass', 'rolle');   // in another category the host is not listed: no Off there
   assert.deepEqual(opts(bass, 'graphwahl').map((o) => o.text), ['Choose…', 'diode-acid-bass', 'ms20-bass']);
-  assert.ok(!opts(instrumentWahlHtml('erz/5', INST, ''), 'graphwahl').some((o) => o.text === 'Surge XT'));
-  assert.deepEqual(opts(instrumentWahlHtml('erz/3', INST, 'ms20-bass'), 'graphkat').filter((o) => o.an).map((o) => o.wert), ['bass'], 'a loaded graph wins over host');
+  assert.ok(!opts(instrumentWahlHtml('erz/5', INST, '', undefined, null, 'rolle'), 'graphwahl').some((o) => o.text === 'Surge XT'));
+  assert.deepEqual(opts(instrumentWahlHtml('erz/3', INST, 'ms20-bass', undefined, null, 'rolle'), 'graphkat').filter((o) => o.an).map((o) => o.wert), ['bass'], 'a loaded graph wins over host');
 });
 
 test('hostName: plugin name, vst3:/sfz: suffix, else Surge XT', () => {
@@ -656,12 +656,12 @@ test('hostName: plugin name, vst3:/sfz: suffix, else Surge XT', () => {
 });
 
 test('single picker: instruments grouped by <optgroup> with the empty entry first, effects flat', () => {
-  const h = graphWahlHtml('erz/5', INST, 'ms20-bass');
+  const h = graphWahlHtml('erz/5', INST, 'ms20-bass', undefined, 'rolle');
   assert.match(h, /<select class="graphwahl"[^>]*><option value="">Off<\/option><optgroup label="Drums">/);
   assert.deepEqual([...h.matchAll(/<optgroup label="([^"]*)">/g)].map((m) => m[1]), ['Drums', 'Bass', 'Other']);
   assert.match(h, /<optgroup label="Bass"><option value="diode-acid-bass">diode-acid-bass<\/option><option value="ms20-bass" selected>/);
   assert.ok(!graphWahlHtml('deck/1', INST, '').includes('optgroup'));
-  assert.match(graphWahlHtml('erz/2', INST, '', 'Cypher Modular'), /<option value="" selected>Cypher Modular<\/option>/);
+  assert.match(graphWahlHtml('erz/2', INST, '', 'Cypher Modular', 'rolle'), /<option value="" selected>Cypher Modular<\/option>/);
   assert.deepEqual(GRAPH_KATEGORIEN.map((k) => k.id), ['drums', 'bass', 'lead', 'pad', 'keys', 'textur', 'sampler', 'host', 'sonst']);
-  assert.equal(instrumentKategorien('erz/5', INST, '').gewaehlt, 'drums');
+  assert.equal(instrumentKategorien('erz/5', INST, '', null, 'rolle').gewaehlt, 'drums');
 });

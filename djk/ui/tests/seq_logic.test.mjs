@@ -10,6 +10,7 @@ import {
   TEILER, SeqFehler, abgeleiteteZeilen, folgeSicht, zelleBefehle, wertBefehle, kurveBefehle, formPunkte, abdruck, zeileNeuBefehle,
   zeileWegBefehle, zeileAendernBefehle, laengeBefehle, reglerBasis, musterLaenge, zeileBefehle, zeilenSetzenBefehle, folgeEditierbar, neueZeilenId,
 } from '../public/seq_logic.js';
+import { laengeZeileBefehle } from '../public/seq_field.js';
 
 // ---------- fixtures ----------
 const BK = { art: 'intern', name: 'bk', graph: 'bass', parameter: { k3: 0.25 } };
@@ -718,4 +719,114 @@ test('review 5: a note of the pitched lane does not move onto the pitch of a tri
   assert.deepEqual(zelleBefehle(spur, clip, lead, 0, { ton: 40 }).map((b) => b.befehl), ['noten_aendern'], 'a free pitch still moves');
   assert.equal(zelleBefehle(spur, clip, lead, 2, { ton: 41 })[0].befehl, 'noten_neu');
   try { zelleBefehle(spur, clip, lead, 0, { ton: 36 }); } catch (e) { assert.match(e.message, /lead/); assert.match(e.message, /cell 0|0/); }
+});
+
+// ---------- a cut track takes a hit to its nearest step (as the SLICE grid does) ----------
+const SMP = { art: 'intern', name: 'bk', graph: 'smp-x', parameter: {} };
+test('a cut track shows a hit just in front of a step on that step; other tracks round down as before', () => {
+  const clip = clipMit({ noten: [note('n1', 0.24, 3), note('n2', 1.1, 5), note('n3', 3.9, 7)] });   // 0.24 is 1/100 beat before step 1; 3.9 is in the last half cell
+  const cells = (spur) => lane(spur, clip, 'noten').zellen;
+  const smp = cells(spurMit(SMP));
+  assert.deepEqual(smp.map((z, i) => (z.an ? i : null)).filter((i) => i !== null), [0, 1, 4], 'n3 wraps to step 0 (upbeat of the next pass); n1 is step 1; n2 step 4');
+  assert.deepEqual(smp[1].noten.map((n) => n.id), ['n1']);
+  assert.deepEqual(smp[0].noten.map((n) => n.id), ['n3']);
+  assert.equal(smp[1].versatz, -0.01);
+  assert.equal(smp[0].versatz, -0.1, 'the wrapped hit is 0.1 beat in front of the next pass');
+  const bk = cells(bkSpur());
+  assert.deepEqual(bk.map((z, i) => (z.an ? i : null)).filter((i) => i !== null), [0, 4, 15], 'a baukasten track keeps rounding down');
+  assert.deepEqual(bk[0].noten.map((n) => n.id), ['n1']);
+});
+
+test('editing a cell of a cut track acts on the notes that cell shows', () => {
+  const clip = clipMit({ noten: [note('n1', 0.24, 3), note('n3', 3.9, 7)] });
+  const spur = spurMit(SMP), zeile = lane(spur, clip, 'noten');
+  assert.deepEqual(zelleBefehle(spur, clip, zeile, 1), [{ befehl: 'noten_loeschen', clip_id: 'c1', ids: ['n1'] }], 'toggling step 1 removes the hit it shows');
+  assert.deepEqual(zelleBefehle(spur, clip, zeile, 0), [{ befehl: 'noten_loeschen', clip_id: 'c1', ids: ['n3'] }]);
+  assert.deepEqual(zelleBefehle(spur, clip, zeile, 2, { an: true }).map((b) => b.befehl), ['noten_neu'], 'an empty step writes a note on the step');
+  assert.deepEqual(zelleBefehle(spur, clip, zeile, 1, { vel: 50 })[0].noten, [{ id: 'n1', vel: 50 }]);
+  // the same clip on another track: step 1 is empty, step 0 holds n1
+  const bk = bkSpur(), z2 = lane(bk, clip, 'noten');
+  assert.deepEqual(zelleBefehle(bk, clip, z2, 0), [{ befehl: 'noten_loeschen', clip_id: 'c1', ids: ['n1'] }]);
+  assert.equal(zelleBefehle(bk, clip, z2, 1)[0].befehl, 'noten_neu');
+});
+
+test('the velocity lane of a cut track follows the nearest step as well', () => {
+  const clip = clipMit({ noten: [note('n1', 0.24, 3)] });
+  const spur = spurMit(SMP), eff = abgeleiteteZeilen(spur, clip, INFO_BK);
+  const vel = { id: 'vl', art: 'werte', teiler: 0.25, ziel: 'vel', von: 'noten' };
+  const sicht = folgeSicht(spur, { ...clip, seq: { schema: 1, zeilen: [...eff, vel] } }, INFO_BK).zeilen.find((z) => z.id === 'vl');
+  assert.equal(sicht.zellen[1].da, true);
+  assert.equal(sicht.zellen[0].da, false);
+});
+
+// the whole-lane writer (the pattern text) reads and writes the cells with the same rule as the view
+const zellenWieGezeigt = (z) => z.zellen.map((c) => (c.an ? { an: true, toene: [...new Set(c.noten.map((x) => x.ton))] } : { an: false }));
+test('writing back the cells a cut track shows, unchanged, writes nothing (early hits keep their timing, velocity and length)', () => {
+  const clip = clipMit({ noten: [note('n1', 0.24, 3, 77, 0.2), note('n3', 3.9, 7, 55)] });
+  const spur = spurMit(SMP), zeile = lane(spur, clip, 'noten');
+  assert.deepEqual(zeile.zellen.map((z, i) => (z.an ? i : null)).filter((i) => i !== null), [0, 1], 'view: n3 wraps to step 0, n1 is step 1');
+  assert.deepEqual(zeileBefehle(spur, clip, zeile, zellenWieGezeigt(zeile), INFO_BK), []);
+});
+test('the whole-lane writer on a cut track acts on the notes a cell shows: clearing, a new pitch and a new velocity', () => {
+  const clip = clipMit({ noten: [note('n1', 0.24, 3, 77, 0.2), note('n3', 3.9, 7, 55), note('n2', 1.1, 5)] });
+  const spur = spurMit(SMP), zeile = lane(spur, clip, 'noten');
+  const zellen = zellenWieGezeigt(zeile);
+  zellen[1] = { an: false };                                   // step 1 shows n1
+  assert.deepEqual(zeileBefehle(spur, clip, zeile, zellen, INFO_BK), [{ befehl: 'noten_loeschen', clip_id: 'c1', ids: ['n1'] }]);
+  const z2 = zellenWieGezeigt(zeile);
+  z2[0] = { an: true, toene: [7], vel: 90 };                   // step 0 shows the upbeat n3: only its velocity changes
+  assert.deepEqual(zeileBefehle(spur, clip, zeile, z2, INFO_BK), [{ befehl: 'noten_aendern', clip_id: 'c1', noten: [{ id: 'n3', vel: 90 }] }]);
+  const z3 = zellenWieGezeigt(zeile);
+  z3[1] = { an: true, toene: [9] };                            // another pitch on step 1: n1 goes, a new note starts on the step
+  const b = zeileBefehle(spur, clip, zeile, z3, INFO_BK);
+  assert.deepEqual(b.map((x) => x.befehl), ['noten_loeschen', 'noten_neu']);
+  assert.deepEqual(b[0].ids, ['n1']);
+  assert.equal(b[1].noten[0].beat, 0.25);
+});
+test('the whole-lane writer still rounds down on other tracks', () => {
+  const clip = clipMit({ noten: [note('n1', 0.24, 3, 77, 0.2)] });
+  const spur = bkSpur(), zeile = lane(spur, clip, 'noten');
+  assert.deepEqual(zeile.zellen.map((z, i) => (z.an ? i : null)).filter((i) => i !== null), [0]);
+  assert.deepEqual(zeileBefehle(spur, clip, zeile, zellenWieGezeigt(zeile), INFO_BK), []);
+});
+
+// ---------- a shaped curve lane moved to a target with another shown range ----------
+const formSpur = () => {
+  const form = { art: 'sinus', von: 0.1, bis: 0.9 };
+  const spur = bkSpur(), clip = clipMit({ huellkurven: [hkK3([{ beat: 0, wert: 0 }])] });
+  const p = modellProjekt(BK, clip);
+  const [hk, seq] = kurveBefehle(spur, clipVon(p), lane(spur, clipVon(p), 'k3'), formPunkte(form, 4), INFO_BK, form);
+  return { p: fuehreListeAus(p, [hk, seq]).projekt };
+};
+const gerundet = (punkte) => punkte.map((q) => Math.round(q.wert * 10) / 10);
+test('a shape moved from a knob to transpose takes its range along: the next length change keeps the sweep', () => {
+  let { p } = formSpur();
+  const spur = () => p.spuren[0], clip = () => clipVon(p);
+  p = fuehreListeAus(p, zeileAendernBefehle(spur(), clip(), 'k3', { ziel: 'transpose' }, INFO_BK)).projekt;
+  const z = lane(spur(), clip(), 'k3');
+  assert.deepEqual(gerundet(z.punkte), [-38.4, 38.4, -38.4], 'points mapped by fraction');
+  assert.deepEqual([z.form.art, z.form.von, z.form.bis], ['sinus', -38.4, 38.4], 'the shape names the mapped range');
+  const setzen = laengeZeileBefehle(spur(), clip(), z, 2, INFO_BK).find((x) => x.befehl === 'huellkurve_setzen' && x.ziel === 'transpose');
+  assert.deepEqual(gerundet(setzen.punkte), [-38.4, 38.4, -38.4], 'the sweep stays -38.4..38.4 semitones');
+  // the shape menu starts from the same range
+  assert.deepEqual(gerundet(formPunkte({ art: 'sinus', von: z.form.von, bis: z.form.bis }, 4)), [-38.4, 38.4, -38.4]);
+  // and back to a knob: the range returns to 0.1..0.9
+  p = fuehreListeAus(p, zeileAendernBefehle(spur(), clip(), 'k3', { ziel: 'geraet.k4' }, INFO_BK)).projekt;
+  assert.deepEqual(gerundet(lane(spur(), clip(), 'k3').punkte), [0.1, 0.9, 0.1]);
+});
+test('a shape moved from knob to knob keeps its range; a range outside the new target is held at its edge', () => {
+  const { p } = formSpur();
+  const spur = p.spuren[0], clip = clipVon(p);
+  const k = lane(spur, clip, 'k3');
+  const b = zeileAendernBefehle(spur, clip, 'k3', { ziel: 'geraet.k5' }, INFO_BK);
+  const seq = b.find((x) => x.befehl === 'clip_aendern').seq.zeilen.find((x) => x.id === 'k3');
+  assert.deepEqual([seq.form.von, seq.form.bis], [k.form.von, k.form.bis], 'both are device targets with the shown range 0..1');
+  // a shape that reaches outside the shown range of the old target: its fraction is held at 0..1 like the points that show it
+  const seq0 = { schema: 1, zeilen: [{ id: 'k3', art: 'kurve', ziel: 'geraet.k3', form: { art: 'sinus', von: -0.5, bis: 1.5, abdruck: abdruck([{ beat: 0, wert: -0.5, form: 's' }]) } }] };
+  const c2 = clipMit({ seq: seq0, huellkurven: [hkK3([{ beat: 0, wert: -0.5, form: 's' }])] });
+  const f = lane(bkSpur(), c2, 'k3').form;
+  assert.ok(f, 'the shape is kept');
+  const b2 = zeileAendernBefehle(bkSpur(), c2, 'k3', { ziel: 'transpose' }, INFO_BK);
+  const f2 = b2.find((x) => x.befehl === 'clip_aendern').seq.zeilen.find((x) => x.id === 'k3').form;
+  assert.deepEqual([f2.von, f2.bis], [-48, 48]);
 });

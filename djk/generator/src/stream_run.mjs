@@ -8,6 +8,7 @@ import { kodiere } from '../../contract/mock_core/osc.mjs';
 import { kompiliere } from './compile.mjs';
 import { Planer } from './planner.mjs';
 import { schreibeStatus, schreibeLebt } from './pattern_state.mjs';
+import { leseTaktart, TAKTART_DATEI } from './taktart_file.mjs';
 
 export class StromLauf {
   /**
@@ -24,7 +25,8 @@ export class StromLauf {
     this.sende = sende;
     this.beatJetzt = beatJetzt;
     this.logRoh = log;
-    this.planer = new Planer({ strom, kit: { midi: true }, sende, jetztUs });
+    this.taktartPfad = path.join(ordner, TAKTART_DATEI);
+    this.planer = new Planer({ strom, kit: { midi: true }, sende, jetztUs, taktart: leseTaktart(ordner, 4) });
     this.id = BigInt(Date.now()) * 1000n + BigInt(strom);   // per-stream ids stay distinct inside one process
     this.letzterStand = { taub: [], taub_muster: null };
     this.gemeldet = { nr: 0, n: 0 };
@@ -63,6 +65,16 @@ export class StromLauf {
     const ab = this.planer.setze(r.muster, jetzt === null ? -Infinity : jetzt);
     this.log(`pattern ${this.planer.nr} applies from beat ${ab}`);
     this.status(this.letzterStand = { nr: this.planer.nr, ab_beat: Number.isFinite(ab) ? ab : null, fehler: null, taub: [], taub_muster: null });
+  }
+
+  /** The meter file of this stream folder changed (plan studio-taktart). Returns true when the bar length changed; a broken file keeps the old one. */
+  taktartLesen() {
+    const neu = leseTaktart(this.ordner, this.planer.proTakt);
+    if (neu === this.planer.proTakt) return false;
+    this.log(`bar ${this.planer.proTakt} -> ${neu} beats`);
+    const jetzt = this.beatJetzt();
+    this.planer.setzeTaktart(neu, jetzt === null ? -Infinity : jetzt);
+    return true;
   }
 
   /** Bar n: send the next two bars (see Planer.takt), report deaf fields, write the heartbeat. */

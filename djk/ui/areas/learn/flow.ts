@@ -1,12 +1,15 @@
 // S19 (MIDI learn): the flow of one assignment. The page asks to learn a graph knob (scharf), the kern is armed (/k/lernen), the first CC
 // on midi_ein_1 comes back as /e/gelernt, the store writes lernen.json and the kern reloads it (/k/mapping geraet "lernen"). The state
 // "armed" lives here, not in the kern: the kern only knows the id. A capture whose id is not the current arming is stale and dropped.
+// The kern reports on which raw input the CC came (/e/gelernt quelle 1..8 = midi_ein_1..8): that is the controller place, and the assignment
+// goes into the table of that place.
 // Every outcome goes out as SSE {a:'lernen', f:{stand, pfad, ...}} so every open page follows.
 import type { BereichKontext } from '../../http/router.ts';
-import { LernFehler, type LernSpeicher } from './store.ts';
+import { LernFehler, lernName, type LernSpeicher } from './store.ts';
 
 export interface Zeit { setzen(f: () => void, ms: number): unknown; loeschen(h: unknown): void }
 export interface AblaufOptionen { fristMs?: number; zeit?: Zeit }
+type Ausgang = { stand: 'fertig' | 'ohne_antwort' } | { stand: 'abgelehnt'; grund: string };
 interface Wartet { pfad: string; id: number; gen: number | null; timer: unknown }
 
 const num = (x: unknown): number => Number(x ?? 0);
@@ -15,6 +18,10 @@ export const HAND_IN_TEXT = 'this controller is mapped on hand_in; choose it as 
 export class LernAblauf {
   private wartet: Wartet | null = null;
   private gen: number | null = null;                 // last /e/neustart generation seen
+  // Has this kern shown that it knows the places 2..8 (a capture from one of them, or one of their inputs linked)? A kern from before the
+  // eight inputs would take the name "lernen-2" for a base mapping and replace the desk with it: without the proof the file is written and
+  // left for the kern's next start.
+  private mehrPlaetze = false;
   private kette: Promise<unknown> = Promise.resolve();   // writes one after the other
   private readonly fristMs: number;
   private readonly zeit: Zeit;
@@ -62,8 +69,10 @@ export class LernAblauf {
 
   // Kern events: /e/gelernt finishes an arming, /e/neustart of a new generation ends it (the new kern is not armed).
   ereignis(adresse: string, f: Record<string, unknown>): void {
+    if (adresse === '/zustand/ein') { if ((num(f.verbunden) & 0xFE00) !== 0) this.mehrPlaetze = true; return; }
     if (adresse === '/e/neustart') {
       const g = num(f.generation);
+      if (this.gen !== null && this.gen !== g) this.mehrPlaetze = false;
       if (this.wartet && this.wartet.gen !== null && this.wartet.gen !== g) {
         const w = this.wartet;
         this.zeit.loeschen(w.timer);
@@ -78,38 +87,58 @@ export class LernAblauf {
     if (!w || num(f.id) !== w.id) return;   // stale: not the current arming
     this.zeit.loeschen(w.timer);
     this.wartet = null;
-    const pfad = w.pfad, kanal = num(f.kanal), nr = num(f.nr);
-    if (num(f.quelle) === 0) { this.ctx.verteile({ a: 'lernen', f: { stand: 'hand_in', pfad, kanal, nr, text: HAND_IN_TEXT } }); return; }
+    const pfad = w.pfad, kanal = num(f.kanal), nr = num(f.nr), platz = num(f.quelle);
+    if (platz >= 2) this.mehrPlaetze = true;
+    if (platz === 0) { this.ctx.verteile({ a: 'lernen', f: { stand: 'hand_in', pfad, kanal, nr, text: HAND_IN_TEXT } }); return; }
     if (num(f.belegt) === 1) { this.ctx.verteile({ a: 'lernen', f: { stand: 'belegt', pfad, kanal, nr } }); return; }
-    this.kette = this.kette.then(() => this.speichere(pfad, kanal, nr)).catch((e) => this.ctx.log({ typ: 'lernen_fehler', fehler: (e as Error)?.message ?? String(e) }));
+    this.kette = this.kette.then(() => this.speichere(pfad, kanal, nr, platz)).catch((e) => this.ctx.log({ typ: 'lernen_fehler', fehler: (e as Error)?.message ?? String(e) }));
   }
 
   // Delete one assignment and reload the table.
   loesche(pfad: string): Promise<void> {
     const lauf = this.kette.then(async () => {
-      this.speicher.loesche(pfad);
-      await this.lade(pfad, 'geloescht');
+      await this.lade(this.speicher.loesche(pfad), pfad, 'geloescht');
     });
     this.kette = lauf.catch(() => undefined);
     return lauf;
   }
 
-  private async speichere(pfad: string, kanal: number, nr: number): Promise<void> {
-    try { this.speicher.zuordne({ pfad, kanal, nr }); } catch (e) {
-      const grund = e instanceof LernFehler ? e.grund : 'intern';
-      this.ctx.verteile({ a: 'lernen', f: { stand: 'abgelehnt', pfad, grund } });
-      return;
-    }
-    await this.lade(pfad, 'fertig', kanal, nr);
+  // Assign a CC to a target without a capture (the page picked the control from a layout): the same write, kern reload and events as a capture.
+  // Resolves with how it ended ('fertig', 'ohne_antwort': files kept, the kern loads them at its next start) and rejects with a LernFehler when it was refused.
+  setze(pfad: string, kanal: number, nr: number, platz: number): Promise<'fertig' | 'ohne_antwort'> {
+    const lauf = this.kette.then(async () => {
+      const r = await this.speichere(pfad, kanal, nr, platz);
+      if (r.stand === 'abgelehnt') throw r.grund === 'lernen_datei_kaputt' ? new LernFehler(r.grund, 409) : new LernFehler('lernen_abgelehnt', 409, `the assignment was refused (${r.grund}); nothing was changed`);
+      return r.stand;
+    });
+    this.kette = lauf.catch(() => undefined);
+    return lauf;
   }
 
-  // Ask the kern to reload slot 1 from lernen.json and tell the pages how it went.
-  private async lade(pfad: string, erfolg: 'fertig' | 'geloescht', kanal?: number, nr?: number): Promise<void> {
-    const id = this.ctx.sende('/k/mapping', { geraet: 'lernen' });
-    const q = await this.ctx.warteQuittung(id, undefined, true);
-    if (q === null) { this.ctx.verteile({ a: 'lernen', f: { stand: 'ohne_antwort', pfad } }); return; }   // file kept: the kern loads it at its next start
-    if (q.status === 3 || q.status === 5) { this.ctx.verteile({ a: 'lernen', f: { stand: erfolg, pfad, kanal, nr } }); return; }
-    this.speicher.stelleWiederHer();   // the kern refused the new file: the table stays what it was, and so does the file
-    this.ctx.verteile({ a: 'lernen', f: { stand: 'abgelehnt', pfad, grund: q.grund || 'abgelehnt' } });
+  private async speichere(pfad: string, kanal: number, nr: number, platz: number): Promise<Ausgang> {
+    let plaetze: number[];
+    try { plaetze = this.speicher.zuordne({ pfad, kanal, nr, platz }); } catch (e) {
+      const grund = e instanceof LernFehler ? e.grund : 'intern';
+      this.ctx.verteile({ a: 'lernen', f: { stand: 'abgelehnt', pfad, grund } });
+      return { stand: 'abgelehnt', grund };
+    }
+    return this.lade(plaetze, pfad, 'fertig', kanal, nr, platz);
+  }
+
+  // Ask the kern to reload the tables of the changed places and tell the pages how it went.
+  private async lade(plaetze: number[], pfad: string, erfolg: 'fertig' | 'geloescht', kanal?: number, nr?: number, platz?: number): Promise<Ausgang> {
+    for (const p of plaetze) {
+      if (p >= 2 && !this.mehrPlaetze) continue;   // see mehrPlaetze: the file is kept, the kern loads it at its next start
+      const id = this.ctx.sende('/k/mapping', { geraet: lernName(p) });
+      const q = await this.ctx.warteQuittung(id, undefined, true);
+      if (q === null) { this.ctx.verteile({ a: 'lernen', f: { stand: 'ohne_antwort', pfad } }); return { stand: 'ohne_antwort' }; }   // files kept: the kern loads them at its next start
+      if (q.status === 3 || q.status === 5) continue;
+      this.speicher.stelleWiederHer(plaetze);   // the kern refused a new file: the tables stay what they were, and so do the files
+      for (const r of plaetze) if (r !== p && (r === 1 || this.mehrPlaetze)) this.ctx.sende('/k/mapping', { geraet: lernName(r) });   // and the kern takes the old ones back
+      this.ctx.verteile({ a: 'lernen', f: { stand: 'abgelehnt', pfad, grund: q.grund || 'abgelehnt' } });
+      return { stand: 'abgelehnt', grund: q.grund || 'abgelehnt' };
+    }
+    this.ctx.verteile({ a: 'lernen', f: { stand: erfolg, pfad, kanal, nr, ...(platz !== undefined ? { platz } : {}) } });
+    return { stand: 'fertig' };
   }
 }

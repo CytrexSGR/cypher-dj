@@ -20,6 +20,7 @@ export interface Konfig {
   antwort_frist_takte: number;
   nachrender_ruhe_takte: number;
   grenzen_tief_verriegeln: boolean;
+  journal: 'voll' | 'schlank';   // journal mode of the leitstand (INTERFACES §2.1, §15)
 }
 
 export interface Laufzeit {
@@ -30,7 +31,7 @@ export interface Laufzeit {
   ws_port: number;             // mit Versatz
   abo_port: number;            // mit Versatz
   kern_port: number;           // 47100 + Versatz (§2), oder --kern-port
-  sets_pfad: string;           // aufgelöst
+  sets_pfad: string;           // aufgelöst; Prüfinstanz mit Vorgabe-sets: /dev/shm/cypherdj-<i>/sets
   bestand_pfad: string;        // aufgelöst (§13, Scheibe 21+: Werkzeug bestand liest index.sqlite von dort)
   rechner_socket_pfad: string; // aufgelöst, mit Z2
 }
@@ -85,6 +86,8 @@ export function ladeKonfig(opt: { pfad?: string; kernPort?: number; env?: NodeJS
     konfig = { ...VORGABEN };
     quelle = 'vorgaben';
   }
+  // A test instance never journals into the production sets folder: with the default `sets` its sets live in the instance's shm folder.
+  const setsPfad = instanz !== '' && konfig.sets === VORGABEN.sets ? `/dev/shm/cypherdj-${instanz}/sets` : aufloesen(konfig.sets, env);
   return {
     konfig,
     quelle,
@@ -93,7 +96,7 @@ export function ladeKonfig(opt: { pfad?: string; kernPort?: number; env?: NodeJS
     ws_port: konfig.ws_port + versatz,
     abo_port: konfig.abo_port + versatz,
     kern_port: opt.kernPort ?? 47100 + versatz,
-    sets_pfad: aufloesen(konfig.sets, env),
+    sets_pfad: setsPfad,
     bestand_pfad: aufloesen(konfig.bestand, env),
     rechner_socket_pfad: mitInstanz(aufloesen(konfig.rechner_socket, env), instanz),
   };

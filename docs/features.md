@@ -43,6 +43,9 @@ of the beta. The short version is the [README](../README.md).
   own grid (4, 8, 16 or 32 per bar) and may have a shorter length, so it shifts against the notes. Two quick presses
   remove a value or a point. A pattern is an ordinary MIDI clip with envelopes, so PRODUCTION opens the same data in
   its piano roll. The agent writes a whole pattern in one call as text with the `seq` tool and reads the same text back
+- A module from the workbench becomes a SEQ deck with one click (TO SEQ DECK in the workbench, or LOAD MODULE in the place): one
+  pattern per instrument track with the same instrument, notes and knob values. Effects, sends and the key stay behind and the
+  page says what was left out. It is one undo step.
 - Three [Strudel](https://strudel.cc) pattern channels (drums, bass, melody). Strudel runs as its own
   process; the core plays the resulting events at the sample
 - Real instruments: Surge XT hosted in Carla, played by the patterns
@@ -255,6 +258,10 @@ The lists above are the headline. Also in there:
   collections that also sort the DJ library and the PRODUCTION library. A row can be dragged onto the track list (a
   new instrument track) or onto a row of a drum kit track, which copies the kit with that sound replaced and leaves
   the old kit untouched
+- **One search over the shelf (STUDIO)**: a field above the shelf tabs searches samples, loops, instruments, devices, presets,
+  modules and cuts at once and groups the hits by kind, five rows each with "show all". The rows are the ones of the
+  tabs, so preview, star, TO TRACK and the rest work from the hits. FITS keeps the catalog samples and loops that match
+  the tempo of the open module (also half or double) and a key next to its key. `/` jumps to the field, Escape clears it.
 - **Storage layout and collecting (STUDIO)**: everything you make lives in one visible folder, `~/cypherdj/`, and
   every source folder is named once in `~/cypherdj/quellen.toml`, which the SOURCES dialog of the shelf edits. A project
   copies its sources from a removable disk into its own `audio/` folder when it opens, and COLLECT in PRODUCTION does it
@@ -276,6 +283,14 @@ The lists above are the headline. Also in there:
   reference is level-matched and the largest differences in tonal balance are named. The source LIVE OUTPUT shows the
   master output as it plays (spectrum with held maximum, rolling picture, stereo, momentary loudness, true peak).
   The agent reads the same numbers with the tools `proj_analyse`, `analyse_referenz` and `analyse_live`
+- **FIND SOUND window (STUDIO)**: finds a sound together with you instead of handing you a preset. For the Cypher
+  Modular instrument of the selected track it measures neighbours of the current sound that differ in exactly one
+  knob, keeps three that are audibly different from it and from each other, and names each by what it does (brighter,
+  more sub, more movement, shorter ...). The places A to D switch while the loop plays (click or keys 1 to 4) without
+  changing the project; PICK writes the chosen one as one undo step and looks for its neighbours, NEW NEIGHBOURS
+  offers others, three step sizes. Every pick is kept as a path on the track: BACK returns one step, a click on any
+  earlier step goes there and a new pick from it starts a branch. The agent drives the same round with the tool
+  `klang_runde`
 - **Step lanes for knobs (STUDIO)**: `+ lane` under the grid adds a step lane for any knob of a Cypher Modular
   instrument; clicking a key or a drum row plays it
 - **Live view (LIVE)**: the three Strudel channels side by side, each with an automation lane for fader,

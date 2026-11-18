@@ -30,7 +30,7 @@ const isLink = (p: string): boolean => { try { fs.lstatSync(p); return true; } c
 function zaehltAlsExport(ordner: string, e: fs.Dirent): boolean {
   if (!EXPORT_NAME.test(e.name)) return false;
   if (e.isDirectory()) return fs.existsSync(path.join(ordner, e.name, 'mix.wav'));
-  return e.isFile();
+  return e.isFile() && e.name.endsWith('.wav');   // the folder form has no extension; a plain file without it is something else
 }
 
 /** Moves every export but the newest `behalte` (default 3) to `papierkorb`. A name in `genannt` stays and does not count; `neu` (the export just

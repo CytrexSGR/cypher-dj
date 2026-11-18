@@ -291,6 +291,26 @@ test('poly profile: monophonic orchestral parts take the free Baukasten slots (r
   assert.deepEqual(planeImport(klav, neuesProjekt('t'), { profil: 'poly' }, ctxOrch).bericht.spuren.map((s) => s.geraet_text), ['RB-338']);
 });
 
+// MAX_BK_SPUREN is 16 since 2026-11-18, but the import keeps its own cap of 8 AUTOMATIC Baukasten tracks (MIDI_BK_AUTO_MAX): the other 8 belong to the live container
+const polyTeile = () => [40, 48, 56, 65, 73, 40, 48, 56, 65, 73].map((pr, i) => {
+  const k = i % 8, n = i >= 8 ? 1 : 3;
+  return spur([programm(k, pr), ...Array.from({ length: n }, (_, j) => note(k, 60 + j, 80, 48, j === 0 ? 0 : 1)).flat()]);
+});
+const mitBk = (n) => n === 0 ? neuesProjekt('t') : fuehreListeAus(neuesProjekt('t'), Array.from({ length: n }, () => ({ befehl: 'spur_neu', art: 'instrument',
+  geraet: { art: 'intern', name: 'bk', graph: 'juno-pad-hall' } })), { graphArt: ctxOrch.graphArt }).projekt;
+const bkNeu = (p0, p1) => p1.spuren.filter((s) => s.geraet.name === 'bk').length - p0.spuren.filter((s) => s.geraet.name === 'bk').length;
+
+test('poly profile into a project that already holds 4 Baukasten tracks hands out 4 more, with 8 existing none, with 12 existing none (the cap is on the import)', () => {
+  const d = leseSmf(smf(polyTeile()));
+  for (const [vorhanden, soll] of [[0, 8], [4, 4], [8, 0], [12, 0]]) {
+    const p0 = mitBk(vorhanden);
+    const plan = planeImport(d, p0, { profil: 'poly' }, ctxOrch);
+    assert.equal(plan.bericht.anlegbar, true, `${vorhanden} existing`);
+    const p1 = fuehreListeAus(p0, plan.befehle, { kitDa: ctxOrch.kitDa, graphArt: ctxOrch.graphArt }).projekt;
+    assert.equal(bkNeu(p0, p1), soll, `${vorhanden} existing`);
+  }
+});
+
 test('poly profile: no graph on the instance means every part stays on the soft RB-338 and nothing is refused', () => {
   const d = leseSmf(smf([spur([programm(0, 48), ...note(0, 60, 80, 48)]), spur([programm(1, 56), ...note(1, 62, 80, 48)])]));
   const c = { ...ctx, graphArt: () => null };

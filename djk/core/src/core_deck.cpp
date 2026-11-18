@@ -1019,6 +1019,7 @@ void Kern::decks_uebernehmen() {
       if (r.stem[k] >= 0) sw_->setze_direkt(r.stem[k], 0.0f);
       dk.stem_db(k, 0.0f);
     }
+    if (r.fader >= 0) sw_->cypher_fahrt_beenden(r.fader);   // seq-fader-frei: a running ramp of cypher must not reopen the fader after the load
     if (r.fader >= 0) sw_->setze_direkt(r.fader, dsp::kStummDb);
     if (r.pfl >= 0) sw_->setze_direkt(r.pfl, 0.0f);
     if (r.trim >= 0)

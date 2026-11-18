@@ -31,7 +31,7 @@ test('schema: aktion has kit, nummern is an integer array, namen a string array,
   const { c } = await verbinde(t);
   const x = (await c.listTools()).tools.find((y) => y.name === 'sampler');
   const p = x.inputSchema.properties;
-  assert.deepEqual(p.aktion.enum, ['quellen', 'liste', 'neu', 'lies', 'spur', 'kit', 'ton', 'schneiden', 'marke', 'ursprung', 'loeschen']);
+  assert.deepEqual(p.aktion.enum, ['quellen', 'liste', 'neu', 'lies', 'spur', 'kit', 'ton', 'schneiden', 'marke', 'ursprung', 'loeschen', 'dateien', 'instrument']);
   assert.equal(p.nummern.type, 'array');
   assert.equal(p.nummern.items.type, 'integer');
   assert.equal(p.nummern.items.minimum, 1);
@@ -40,7 +40,7 @@ test('schema: aktion has kit, nummern is an integer array, namen a string array,
   assert.equal(p.kit.type, 'string');
   assert.deepEqual(x.inputSchema.required, ['aktion']);
   const tools = (await c.listTools()).tools;
-  assert.equal(tools.length, 95, 'the tool count stays 95');
+  assert.equal(tools.length, 96, 'the tool count stays 96');
 });
 
 test('description: proposed banks, per-bank numbers, 10 s, kit_vorhanden, the way to a track and to a Strudel text, the live stream', async (t) => {

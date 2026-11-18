@@ -139,10 +139,22 @@ export function werte(e: Ergebnis, journal: Record<string, unknown>[], schemaPru
   return punkte;
 }
 
+// The evaluation counts every receipt and every /takt of the journal, so it needs a full journal. A lean journal (mode schlank, field
+// `journal` of the set_start line; a continuation can switch the mode, so the fortsetzung lines count too; absent = full) is refused with
+// a message; null when the journal is fine. Mode schlank: INTERFACES §15.
+export function schlankGrund(journal: Record<string, unknown>[]): string | null {
+  const schlank = journal.find((z) => (z.typ === 'set_start' || z.typ === 'fortsetzung') && (z.daten as Record<string, unknown> | undefined)?.journal === 'schlank');
+  if (!schlank) return null;
+  return `the evaluation needs a full journal, but this one was written in mode schlank (${String(schlank.typ)} line, journal: "schlank"). ` +
+    'Run the leitstand with --journal voll (test instances do by default; djk-start --journal voll) and evaluate that journal.';
+}
+
 function main(): void {
   const { values } = parseArgs({ options: { ergebnis: { type: 'string' }, journal: { type: 'string' }, bericht: { type: 'string' } } });
-  const e = JSON.parse(fs.readFileSync(String(values.ergebnis), 'utf8')) as Ergebnis;
   const j = fs.readFileSync(String(values.journal), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  const grund = schlankGrund(j);
+  if (grund) { process.stderr.write(`auswertung: ${grund}\n`); process.exit(2); }
+  const e = JSON.parse(fs.readFileSync(String(values.ergebnis), 'utf8')) as Ergebnis;
   const p = werte(e, j);
   for (const x of p) process.stdout.write(`${x.ok ? 'OK  ' : 'FEHL'} ${x.name}: ${x.wert}\n`);
   if (values.bericht) fs.writeFileSync(values.bericht, JSON.stringify(p, null, 1));

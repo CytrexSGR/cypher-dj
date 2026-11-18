@@ -16,12 +16,14 @@ int HandEin::ereignis(const uint8_t* daten, size_t groesse, uint32_t versatz, in
   return wandle(a, *ueb_.mapping(), daten, groesse, s0, n, st, aus);
 }
 
-// S19: slot 1, the learn table for midi_ein_1: own translator, the same conversion into an action.
+// S19: slots 1..8, the learn table of one midi_ein port (0-based): own translator per port, the same conversion into an action.
 int HandEin::ereignis_ein(const uint8_t* daten, size_t groesse, uint32_t versatz, int64_t s0, uint32_t n,
-                          const sw::Stellwerk& st, HandAktion* aus) {
+                          const sw::Stellwerk& st, HandAktion* aus, int port) {
+  if (port < 0 || port >= MIDI_EIN_PORTS) return 0;
+  hand::Uebersetzer& u = ueb_ein_[port];
   hand::Ausgabe a;
-  if (!ueb_ein_.ereignis(daten, groesse, s0, versatz, n, &a)) return 0;
-  return wandle(a, *ueb_ein_.mapping(), daten, groesse, s0, n, st, aus);
+  if (!u.ereignis(daten, groesse, s0, versatz, n, &a)) return 0;
+  return wandle(a, *u.mapping(), daten, groesse, s0, n, st, aus);
 }
 
 int HandEin::wandle(hand::Ausgabe a, const hand::Mapping& m, const uint8_t* daten, size_t groesse, int64_t s0,

@@ -7,6 +7,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { Oberflaeche } from '../server.ts';
+import { serverQuelle } from './support/server_source.mjs';
 import { schreibeLeerenRing } from './support/ring.mjs';
 import { K, TEST_INSTANZ, belegeTestInstanz } from './support/instance.mjs';
 import { Kopplung, LINK_MS, COOKIE, GERAET_MAX_MS, heimAdresse, istPrivat, tabletVerboten, TABLET_VERBOTEN, TABLET_POST_ERLAUBT } from '../http/coupling.ts';
@@ -342,7 +343,8 @@ test('files: the second listener serves the page files only with the cookie; the
   const addr = o.tabletServer.address();
   assert.equal(addr.address, '127.0.0.1', 'bound where the test said (bindeAn), never 0.0.0.0');
   assert.notEqual(addr.address, '0.0.0.0');
-  const src = fs.readFileSync(path.join(import.meta.dirname, '..', 'server.ts'), 'utf8');
+  const src = serverQuelle();
+  assert.ok(/\.listen\(/.test(src), 'the scan sees the listen calls of the server source');
   assert.ok(!/listen\([^)]*'0\.0\.0\.0'/.test(src) && !/listen\([^)]*'::'/.test(src), 'no wildcard bind in server.ts');
   assert.equal((await tablet('GET', '/app.js')).code, 401);
   assert.equal((await tablet('GET', '/manifest.webmanifest')).code, 401);

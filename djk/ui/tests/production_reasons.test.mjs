@@ -21,7 +21,7 @@ export { gruendeAusDatei, gruendeAusDemCode };
 test('V2 Gründe: die Extraktion findet bekannte Gründe aus jeder Quelle (Positiv-Kontrolle)', () => {
   const g = gruendeAusDemCode();
   const wo = (x) => [...(g.get(x) ?? [])].join(' | ');
-  for (const [x, quelle] of [['clip_unbekannt', 'ab project/commands.ts'], ['slot_belegt', 'ab project/commands.ts'], ['projekt_busy', 'AblageFehler'],
+  for (const [x, quelle] of [['clip_unbekannt', 'ab project/commands_helpers.ts'], ['slot_belegt', 'ab project/commands_helpers.ts'], ['projekt_busy', 'AblageFehler'],
     ['nichts_zu_tun', 'VerlaufFehler'], ['quelle_ungueltig', 'DekodierFehler'], ['op_unbekannt', 'PatchFehler'], ['beschaeftigt', 'ProjFehler'],
     ['koerper_zu_gross', 'ProjFehler'], ['katalog_kaputt', 'KatalogFehler'], ['datei_fehlt', 'WiedergabeFehler'], ['tempo_abgelehnt', 'literal areas/proj/session.ts'],
     ['rampe_haengt', 'literal'], ['marker_unbekannt', 'WarpFehler'], ['intern', 'literal areas/proj/area.ts'], ['kein_kern', 'BEREICH_GRUENDE'], ['ueber_projekt', 'genannt server.ts'],

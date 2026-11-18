@@ -12,6 +12,8 @@
 //   8..15) capture: /k/lernen arms the kern, the first CC on midi_ein_1 is consumed and reported as GELERNT (id, quelle, kanal,
 //      nr, wert, belegt); notes do not capture, the 20 s countdown survives /k/set/neu, disarm, re-arm, hand_in is reported
 //      but not consumed, midi_ein_1 wins when both ports deliver in one cycle
+//   16..19) eight raw inputs, one learn table each (slots 1..8): the same CC on two ports moves two targets, a port without a
+//      table does nothing, capture on port 2 reports quelle 2, Befehl MAPPING nr 2 swaps slot 2 only
 // Failure case: the mutation tests (test_kern_lernen_*_mutation) must fail.
 #include <cmath>
 
@@ -382,6 +384,125 @@ static void fall_beide_ports_ein_zyklus() {
   PRUEF(g.size() == 1 && g[0].deck == 1 && g[0].teil == 74);
 }
 
+// ---- eight raw inputs: one learn table per port ----
+
+static const char* LERN_BK2 = "core/tests/hand/mappings/lernen_bk2.json";
+
+static void lade_tisch(Lauf& x, const char* datei, hand::Mapping* m) {
+  hand::Fehler f{};
+  PRUEF(hand::lade_datei((djk() + "/" + datei).c_str(), x.kern->stellwerk().tabelle(), m, &f));
+}
+
+// 16) (a) the same CC on port 1 and port 2 with two tables moves two different targets
+static void fall_zwei_ports_zwei_ziele() {
+  Arbeitsbestand ab("test_kern_lernen_16");
+  Lauf x(ab.pfad);
+  hand::Mapping t2{};
+  lade_tisch(x, LERN_BK2, &t2);
+  PRUEF(x.lern_laden(LERN_BK));   // port 1: CC 74 -> erz/5/bk/3
+  x.kern->setze_lern_mapping(&t2, 1);   // port 2: CC 74 -> erz/5/bk/4
+  PRUEF(x.kern->lern_mapping(0) == x.lern.get() && x.kern->lern_mapping(1) == &t2);
+  x.zyklen(2 * N);
+  x.midi_ein_bei(4 * N + 10, 0xB0, 74, 64, 0);   // both prime
+  x.midi_ein_bei(4 * N + 12, 0xB0, 74, 64, 1);
+  x.zyklen(6 * N);
+  x.midi_ein_bei(8 * N + 20, 0xB0, 74, 100, 0);   // port 1 moves its target only
+  x.zyklen(10 * N);
+  PRUEF(x.alle(cdj::Ereignis::REGLER, "erz/5/bk/3").size() == 1);
+  PRUEF(x.alle(cdj::Ereignis::REGLER, "erz/5/bk/4").empty());
+  x.midi_ein_bei(12 * N + 20, 0xB0, 74, 100, 1);  // port 2 moves its own
+  x.zyklen(14 * N);
+  PRUEF(x.alle(cdj::Ereignis::REGLER, "erz/5/bk/3").size() == 1);
+  const auto r4 = x.alle(cdj::Ereignis::REGLER, "erz/5/bk/4");
+  PRUEF(r4.size() == 1 && r4[0].sample == 12 * N + 20);
+  PRUEF(x.kern->lern_ereignisse() == 4);   // two primes and two moves, all translated with effect
+  std::printf("zwei_ports_zwei_ziele: port 1 -> bk/3 x%zu, port 2 -> bk/4 x%zu, lern_ereignisse %llu\n",
+              x.alle(cdj::Ereignis::REGLER, "erz/5/bk/3").size(), r4.size(), (unsigned long long)x.kern->lern_ereignisse());
+  x.kern->setze_lern_mapping(nullptr, 1);   // t2 lives on this stack frame
+}
+
+// 17) (b) a port without a table does nothing while port 1 has one; counters stay at zero for it
+static void fall_port_ohne_tisch() {
+  Arbeitsbestand ab("test_kern_lernen_17");
+  Lauf x(ab.pfad);
+  PRUEF(x.lern_laden(LERN_BK));
+  x.zyklen(2 * N);
+  x.midi_ein_bei(4 * N + 10, 0xB0, 74, 64, 1);
+  x.midi_ein_bei(6 * N + 10, 0xB0, 74, 100, 1);
+  x.midi_ein_bei(7 * N + 10, 0xB0, 74, 20, 4);
+  x.zyklen(10 * N);
+  PRUEF(x.alle(cdj::Ereignis::REGLER, "erz/5/bk/3").empty());
+  PRUEF(x.kern->lern_ereignisse() == 0 && x.kern->lern_ohne_wirkung() == 0);
+  PRUEF(x.kern->midi_ein_ring().gesehen() == 3);   // the raw stream still sees them
+  x.midi_ein_bei(12 * N + 10, 0xB0, 74, 64, 0);   // control: port 1 with its table works
+  x.midi_ein_bei(14 * N + 10, 0xB0, 74, 100, 0);
+  x.zyklen(16 * N);
+  PRUEF(x.alle(cdj::Ereignis::REGLER, "erz/5/bk/3").size() == 1);
+  PRUEF(x.kern->lern_ereignisse() == 2);
+  std::printf("port_ohne_tisch: ports 2 and 5 without a table changed nothing, port 1 moved bk/3\n");
+}
+
+// 18) (c) capture on port 2 reports quelle 2 and consumes the CC (also from a port with a table)
+static void fall_faengt_auf_port_2() {
+  Arbeitsbestand ab("test_kern_lernen_18");
+  Lauf x(ab.pfad);
+  hand::Mapping t2{};
+  lade_tisch(x, LERN_BK2, &t2);
+  x.kern->setze_lern_mapping(&t2, 1);
+  x.zyklen(2 * N);
+  scharf(x, 701);
+  x.midi_ein_bei(4 * N + 7, 0xB0, 74, 64, 1);
+  x.zyklen(6 * N);
+  const auto g = x.alle(cdj::Ereignis::GELERNT);
+  PRUEF(g.size() == 1);
+  if (g.size() == 1) PRUEF(g[0].id == 701 && g[0].deck == 2 && g[0].fassung == 1 && g[0].teil == 74 && g[0].neu == 64);
+  PRUEF(x.kern->lern_ereignisse() == 0 && x.kern->lern_ohne_wirkung() == 0);   // consumed, not translated
+  scharf(x, 702);   // port 8 is reported as quelle 8
+  x.midi_ein_bei(8 * N + 7, 0xB1, 10, 5, 7);
+  x.zyklen(10 * N);
+  const auto g2 = x.alle(cdj::Ereignis::GELERNT);
+  PRUEF(g2.size() == 2 && g2[1].deck == 8 && g2[1].fassung == 2 && g2[1].teil == 10);
+  std::printf("faengt_auf_port_2: GELERNT quelle %d (port 2) and %d (port 8), consumed\n", g.empty() ? -1 : g[0].deck,
+              g2.size() < 2 ? -1 : g2[1].deck);
+  x.kern->setze_lern_mapping(nullptr, 1);
+}
+
+// 19) (d) Befehl MAPPING nr 2 swaps slot 2 only; the old table of slot 2 comes back as MAPPING_ALT, slot 1 and 0 stay
+static void fall_tausch_slot2() {
+  Arbeitsbestand ab("test_kern_lernen_19");
+  Lauf x(ab.pfad);
+  PRUEF(x.lern_laden(LERN_BK));
+  const hand::Mapping* slot0 = x.kern->mapping();
+  x.zyklen(2 * N);
+  auto* a = new hand::Mapping();
+  auto* b = new hand::Mapping();
+  lade_tisch(x, LERN_BK2, a);
+  lade_tisch(x, LERN_BK2, b);
+  cdj::Befehl c1 = x.neu(cdj::Befehl::MAPPING);
+  c1.nr = 2;
+  c1.zeiger = a;
+  x.sende(c1);
+  x.zyklen(4 * N);
+  PRUEF(x.quittung(c1.id, 3) != nullptr);
+  PRUEF(x.kern->lern_mapping(1) == a);
+  PRUEF(x.kern->lern_mapping(0) == x.lern.get() && x.kern->mapping() == slot0);
+  PRUEF(x.alle(cdj::Ereignis::MAPPING_ALT).empty());   // slot 2 was empty: nothing comes back
+  cdj::Befehl c2 = x.neu(cdj::Befehl::MAPPING);
+  c2.nr = 2;
+  c2.zeiger = b;
+  x.sende(c2);
+  x.zyklen(6 * N);
+  PRUEF(x.quittung(c2.id, 3) != nullptr);
+  PRUEF(x.kern->lern_mapping(1) == b);
+  PRUEF(x.kern->lern_mapping(0) == x.lern.get() && x.kern->mapping() == slot0);
+  const auto alt = x.alle(cdj::Ereignis::MAPPING_ALT);
+  PRUEF(alt.size() == 1 && alt[0].zeiger == a);
+  std::printf("tausch_slot2: slot 2 swapped twice, slots 0 and 1 untouched, MAPPING_ALT returned the first table of slot 2\n");
+  x.kern->setze_lern_mapping(nullptr, 1);
+  delete a;
+  delete b;
+}
+
 int main() {
   fall_bk_ziel_laedt();
   fall_lern_cc_bewegt_bk();
@@ -397,5 +518,9 @@ int main() {
   fall_neu_scharf();
   fall_hand_in_gemeldet();
   fall_beide_ports_ein_zyklus();
+  fall_zwei_ports_zwei_ziele();
+  fall_port_ohne_tisch();
+  fall_faengt_auf_port_2();
+  fall_tausch_slot2();
   PRUEF_ENDE();
 }

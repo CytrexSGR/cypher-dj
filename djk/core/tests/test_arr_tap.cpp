@@ -390,6 +390,29 @@ int main() {
     PRUEF(t.arr.start_beat() == 6.0 && t.arr.zustand(t.k, t.s).loop_an);
   }
 
+  {  // 8b a bar-quantized stop behind the end of the run (beat 8, the tap ends at 6): the tap completes at its own end (status 0) and the transport ends with it; the user's start beat 64 stays
+    auto au = Audio::sinus(300000, 440.0, 0.4f);
+    TR(t)
+    Bau b;
+    b.spur(1, ArrArt::audio).clip(1, "c1", 0.0, 8.0, &au->a).clip(1, "c70", 70.5, 1.0, &au->a);   // the second clip is the user's region, run position 6.5
+    t.laden(b.fertig());
+    PRUEF(t.arr.start(64.0, 0, false, 0, 4096, t.n, t.k));
+    t.arr.stopp(0, 0, t.k);
+    cdj::ArrAbgriff a = auftrag(0, 1, 1, 0.0, 6.0);
+    const char* grund = "";
+    PRUEF(t.arr.abgriff(&a, 0, false, t.s, 0, t.n, t.k, grund));
+    const int64_t ende = t.arr.stopp_sample();   // the run's end: bis - von beats plus the path latency of the point
+    PRUEF(ende >= a.start_s + 6 * SPB && ende < a.start_s + 7 * SPB);
+    t.lauf(a.start_s + 5 * SPB);
+    PRUEF(t.arr.status() == cdj::ArrStatus::spielt);
+    t.arr.stopp(2, t.s, t.k);   // beat 5 of the run: the next bar line, beat 8, lies behind the run's end
+    PRUEF(t.arr.stopp_sample() == ende);
+    t.lauf(ende + 4 * SPB);
+    PRUEF(t.arr.hole_abgriff_fertig() == &a && a.status == 0 && a.ende_s == ende);
+    PRUEF(t.arr.status() == cdj::ArrStatus::steht && t.arr.beendet_sample() == ende && t.arr.start_beat() == 64.0);
+    PRUEF(t.treffer(ende + t.n, t.s).empty());   // the clip of beat 74.5 never started
+  }
+
   if (!ALLOC_ABFANG_VERFUEGBAR) {
     std::printf("9 skipped (sanitizer build): allocation watcher not available\n");
   } else {  // 9 keine_allokation: 2000 blocks with a running tap on every kind of strip (the run starts and ends inside the window)

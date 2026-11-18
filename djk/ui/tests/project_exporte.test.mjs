@@ -22,6 +22,15 @@ test('the name pattern', () => {
   for (const n of ['notes.txt', 'a-2026-181500.wav', '20261015-181500.wav', 'a-20261015-181500.mp3']) assert.doesNotMatch(n, EXPORT_NAME, n);
 });
 
+test('a file without the .wav extension does not count as an export, a folder with mix.wav does', (t) => {
+  const a = aufbau(t, ['p-20261001-100000', 'p-20261002-100000.wav', 'p-20261003-100000.wav', 'p-20261004-100000.wav', 'p-20261005-100000.wav']);
+  const r = raeumeExporteAuf({ exportOrdner: a.ex, papierkorb: a.bin });
+  assert.deepEqual(r.verschoben, ['p-20261002-100000.wav']);
+  assert.ok(ls(a.ex).includes('p-20261001-100000'), 'the file without extension stays untouched');
+  const b = aufbau(t, ['q-20261001-100000/', 'q-20261002-100000.wav', 'q-20261003-100000.wav', 'q-20261004-100000.wav']);
+  assert.deepEqual(raeumeExporteAuf({ exportOrdner: b.ex, papierkorb: b.bin }).verschoben, ['q-20261001-100000']);
+});
+
 test('keeps the three newest by stamp and moves the rest to the bin', (t) => {
   const a = aufbau(t, ['p-20261001-100000.wav', 'p-20261003-100000.wav', 'p-20261002-100000.wav', 'p-20261004-100000.wav', 'p-20261005-100000.wav']);
   const r = raeumeExporteAuf({ exportOrdner: a.ex, papierkorb: a.bin });
@@ -149,6 +158,22 @@ test('a failing move leaves the file, logs once and leaves no empty bin', (t) =>
   assert.equal(log.length, 1);
   assert.equal(log[0].typ, 'export_aufraeumen_fehler');
   assert.ok(!fs.existsSync(a.bin), 'no empty bin folder is left');
+});
+
+// a real second file system: /dev/shm is another device than the temp folder (a linked project on another disk has its bin elsewhere)
+const andereDisk = (() => { try { return fs.statSync('/dev/shm').dev !== fs.statSync(os.tmpdir()).dev; } catch { return false; } })();
+test('a real cross-device move fails with EXDEV: the file stays, one log line, no empty bin', { skip: !andereDisk && 'no second file system' }, (t) => {
+  const shm = fs.mkdtempSync('/dev/shm/djk-exporte-'); t.after(() => fs.rmSync(shm, { recursive: true, force: true }));
+  const bin = path.join(tmp(t), '.papierkorb', 'exporte', 'proj');
+  const ex = path.join(shm, 'export'); fs.mkdirSync(ex);
+  for (let n = 1; n <= 5; n++) fs.writeFileSync(path.join(ex, `p-2026100${n}-100000.wav`), 'x');
+  const log = [];
+  const r = raeumeExporteAuf({ exportOrdner: ex, papierkorb: bin, log: (z) => log.push(z) });
+  assert.deepEqual(r.verschoben, []);
+  assert.equal(fs.readdirSync(ex).length, 5);
+  assert.equal(log.length, 1);
+  assert.match(log[0].fehler, /EXDEV/);
+  assert.ok(!fs.existsSync(bin));
 });
 
 test('the hook tidies nothing and logs once when a genannt folder is missing', (t) => {

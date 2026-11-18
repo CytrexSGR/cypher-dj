@@ -55,6 +55,17 @@ test('review R2: modulation envelopes of overlapping clips give a relative lane 
   assert.ok(steigt(lane), JSON.stringify(lane.punkte));
   assert.deepEqual(lane.punkte, [[0, 0, 0], [0, -6, 2], [4, -6, 0], [4, -3, 2], [12, -3, 0], [12, 0, 2]]);
 });
+// A looped clip under a later-starting clip: its copies that start after that clip must take over in absolute order too (the copies of all clips
+// are ordered by their start, not clip by clip), otherwise the beats fall and the core refuses the whole playback.
+test('review R2: a looped clip overlapped by a later clip gives a relative lane with rising beats; every copy that starts later takes over', () => {
+  let p = mitClips(audio('c1', 0, 12, { loop_beats: 4 }), audio('c2', 6, 4));
+  p = ok(p, { befehl: 'huellkurve_setzen', clip_id: 'c1', ziel: 'spur_pan', punkte: [{ beat: 0, wert: 0.5 }] });
+  p = ok(p, { befehl: 'huellkurve_setzen', clip_id: 'c2', ziel: 'spur_pan', punkte: [{ beat: 0, wert: -0.5 }] });
+  const [lane] = uebersetze(p, opt).spuren[0].auto.filter((l) => l.relativ);
+  assert.ok(steigt(lane), JSON.stringify(lane.punkte));
+  // c1 copy 0..4, c1 copy 4..6 (cut where c2 starts; no seam at 4, the value is the same), c2 6..8 (cut where the third copy of c1 starts), c1 copy 8..12
+  assert.deepEqual(lane.punkte, [[0, 0, 0], [0, 0.5, 2], [4, 0.5, 0], [6, 0.5, 0], [6, -0.5, 2], [8, -0.5, 0], [8, 0.5, 2], [12, 0.5, 0], [12, 0, 2]]);
+});
 test('review R2 negative control: adjacent clips (no overlap) keep their lane as before', () => {
   let p = mitClips(audio('c1', 0, 4), audio('c2', 4, 4));
   p = ok(p, { befehl: 'huellkurve_setzen', clip_id: 'c1', ziel: 'spur_fader', punkte: [{ beat: 0, wert: -6 }] });

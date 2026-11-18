@@ -50,6 +50,8 @@ body.produktion.b-kollektionen #kollektionen { display: block !important; }
 .geraete-zeile { padding: 3px 6px; border-radius: 4px; cursor: grab; }
 .geraete-zeile.aus { opacity: .45; cursor: not-allowed; }
 .geraete-art { margin-left: 6px; font-size: 10px; color: var(--dim); }
+.geraete-gruppe h5 { margin: 6px 6px 2px; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
+.geraete-neben { margin-left: 6px; font-size: 10px; color: var(--dim); }
 /* 1.16 rest (U7): the PRESETS list in the narrow browser column. One row = name, device, origin (the rest is in the detail below); a row is dragged onto a track or a stage. */
 body.produktion #presets { overflow: auto; min-height: 0; }
 body.produktion .preset-rumpf { grid-template-columns: minmax(0, 1fr); }

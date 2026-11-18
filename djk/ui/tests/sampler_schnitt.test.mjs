@@ -10,11 +10,12 @@ import { findeAnschlaege, findeTransienten } from '../project/transients.ts';
 import { graphenOrdner, listeGraphen, normalisierePanel, pruefePanel, reglerBereiche } from '../graphs.ts';
 import {
   EMPFINDLICHKEIT_VORGABE, MAX_SCHEIBEN, MAX_SCHNITT_FRAMES, MESS_FENSTER_S, RASTER_NAH_BEATS, RASTER_ZAHLEN, SCHNITT_ID, SCHNITT_METHODEN, SchnittFehler, ladeQuellAudio, legeSchnitt, liesSchnitt, listeSchnitte, loescheSchnitt,
-  guete, samplerOrdner, sprungDbVon, standardZahl,
+  guete, samplerOrdner, schreibeGeaendert, sprungDbVon, standardZahl,
 } from '../sampler/schnitt.ts';
 import { fitWert, geraetGraph, geraetName, geraetPanel, speedVon, spurBefehl } from '../sampler/device.ts';
 import { schnittText } from '../sampler/text.ts';
 import { leseWavF32 } from '../sampler/wav.ts';
+import { geraetInfo } from '../areas/live/seq.ts';
 
 const wurzeln = [];
 function neueDirs() {
@@ -615,7 +616,7 @@ test('anschlag and hand refusals write nothing', () => {
   };
   const still = { art: 'loop', ref: 'still' }, b = { art: 'loop', ref: 'bruch' };
   assert.throws(() => legeSchnitt({ quelle: still, methode: 'anschlag' }, d), (e) => e instanceof SchnittFehler && e.grund === 'keine_anschlaege' && e.code === 422
-    && e.text === 'no hits found at sensitivity 0.50; raise it or cut by grid');
+    && e.text === 'no hits found at sensitivity 0.50; cut by grid instead, or raise the sensitivity (HITS in the strip of a cut track, empfindlichkeit in the hand tool)');
   fall(still, 'keine_anschlaege', { methode: 'anschlag' });
   fall(still, 'keine_anschlaege', { methode: 'anschlag', optionen: { empfindlichkeit: 1 } });
   for (const e of [1.5, -0.1, '0.5', Number.NaN, null]) fall(b, 'argument_ungueltig', { methode: 'anschlag', optionen: { empfindlichkeit: e } });
@@ -631,4 +632,37 @@ test('anschlag and hand refusals write nothing', () => {
 test('graphenOrdner is not touched by this suite (every write went into temp folders)', () => {
   assert.ok(!wurzeln.some((r) => r === graphenOrdner()));
   assert.ok(wurzeln.length > 0 && wurzeln.every((r) => r.startsWith(os.tmpdir())));
+});
+
+test('the graph list and the device info read the cut store they are given, not the default folder', () => {
+  const d = neueDirs();
+  schreibeLoop(d, 'l4', 4);
+  const s = legeSchnitt({ quelle: { art: 'loop', ref: 'l4' } }, d);
+  const saved = process.env.CYPHERDJ_SAMPLER;
+  process.env.CYPHERDJ_SAMPLER = path.join(d.root, 'anderswo');   // the default folder has no cut
+  try {
+    assert.equal(listeGraphen(d.bk, { ordner: d.ordner }).graphen.find((x) => x.name === `smp-${s.id}`).text, 'Slices of l4');
+    assert.equal(listeGraphen(d.bk).graphen.find((x) => x.name === `smp-${s.id}`).text, 'Sliced sample');
+    const i = geraetInfo({ art: 'intern', name: 'bk', graph: `smp-${s.id}`, parameter: {} }, { ordner: d.ordner });
+    assert.equal(i.schnitt.id, s.id);
+    assert.equal(geraetInfo({ art: 'intern', name: 'bk', graph: `smp-${s.id}`, parameter: {} }).schnitt, undefined);
+  } finally { if (saved === undefined) delete process.env.CYPHERDJ_SAMPLER; else process.env.CYPHERDJ_SAMPLER = saved; }
+});
+
+test('a write that fails after the graph was written leaves no orphan: not a new cut, and a changed cut is written back', (t) => {
+  const d = neueDirs();
+  schreibeLoop(d, 'l4', 4);
+  const re = fs.renameSync;
+  const bricht = (ende) => { fs.renameSync = (a, b) => { if (String(b).endsWith(ende)) throw new Error('disk full'); return re(a, b); }; };
+  t.after(() => { fs.renameSync = re; });
+  bricht('schnitt.json');
+  assert.throws(() => legeSchnitt({ quelle: { art: 'loop', ref: 'l4' } }, d), /disk full/);
+  fs.renameSync = re;
+  assert.deepEqual([fs.readdirSync(d.ordner), fs.readdirSync(path.join(d.bk, 'samples')), fs.readdirSync(path.join(d.bk, 'panels')), fs.readdirSync(d.bk).filter((n) => n.endsWith('.json'))], [[], [], [], []]);
+  const s = legeSchnitt({ quelle: { art: 'loop', ref: 'l4' } }, d);
+  const vorher = [`${d.ordner}/${s.id}/schnitt.json`, `${d.bk}/smp-${s.id}.json`, `${d.bk}/panels/smp-${s.id}.json`].map((p) => fs.readFileSync(p, 'utf8'));
+  bricht('schnitt.json');
+  assert.throws(() => schreibeGeaendert({ ...s, grenzen: [0, 45000, 90000], guete: s.guete.slice(0, 2) }, d), /disk full/);
+  fs.renameSync = re;
+  assert.deepEqual([`${d.ordner}/${s.id}/schnitt.json`, `${d.bk}/smp-${s.id}.json`, `${d.bk}/panels/smp-${s.id}.json`].map((p) => fs.readFileSync(p, 'utf8')), vorher);
 });

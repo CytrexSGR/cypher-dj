@@ -81,6 +81,31 @@ test('pruefen finds the recipe graphs of demos/recipes/: a preset of a removed o
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('pruefen reports a demo or recipe instrument without a prinzip, and an invalid prinzip; neu copies the prinzip', () => {
+  const { dir, P } = kopie();
+  try {
+    assert.equal(lauf('pruefen', '--wurzel', dir).status, 0, 'positive control');
+    const kat = JSON.parse(fs.readFileSync(P.kategorien, 'utf8'));
+    delete kat['synth-mono'].prinzip;
+    delete kat['bass-sub'].prinzip;
+    kat['drums-808'].prinzip = 'laser';
+    fs.writeFileSync(P.kategorien, JSON.stringify(kat));
+    const r = lauf('pruefen', '--wurzel', dir);
+    assert.equal(r.status, 1, r.stdout);
+    assert.match(r.stdout, /^synth-mono: instrument graph without a prinzip in kategorien\.json$/m);
+    assert.match(r.stdout, /^bass-sub: instrument graph without a prinzip in kategorien\.json$/m);
+    assert.match(r.stdout, /^kategorien\.json: drums-808: prinzip must be one of analog, wavetable, fm, physik, granular, sampler, drums, feedback$/m);
+    assert.doesNotMatch(r.stdout, /^drums-808: instrument graph without/m, 'the invalid value is reported once, as itself');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  const k = kopie();
+  try {
+    assert.equal(lauf('neu', 'test-geraet', '--von', 'synth-mono', '--wurzel', k.dir).status, 0);
+    const kat = JSON.parse(fs.readFileSync(k.P.kategorien, 'utf8'));
+    assert.equal(kat['test-geraet'].prinzip, kat['synth-mono'].prinzip);
+    assert.equal(lauf('pruefen', '--wurzel', k.dir).status, 0, 'the copy passes the check');
+  } finally { fs.rmSync(k.dir, { recursive: true, force: true }); }
+});
+
 test('pruefen reports an instrument graph without a category; neu copies the category with "Copy of" and fails clean', () => {
   const { dir, P } = kopie();
   try {

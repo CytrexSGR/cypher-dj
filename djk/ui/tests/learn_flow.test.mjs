@@ -33,9 +33,9 @@ test('S19 ablauf: arm, capture, write, reload, quittung 3: the file is written, 
   assert.equal(x.timer[0].ms, 20000);
   x.a.ereignis('/e/gelernt', gelernt(101));
   await still();
-  assert.deepEqual(x.speicher.lies().zuordnungen, [{ pfad: 'erz/5/bk/3', kanal: 1, nr: 74 }]);
+  assert.deepEqual(x.speicher.lies().zuordnungen, [{ pfad: 'erz/5/bk/3', kanal: 1, nr: 74, platz: 1 }]);
   assert.deepEqual(x.sendet[1], { a: '/k/mapping', f: { geraet: 'lernen' } });
-  assert.deepEqual(x.verteilt.at(-1), { a: 'lernen', f: { stand: 'fertig', pfad: 'erz/5/bk/3', kanal: 1, nr: 74 } });
+  assert.deepEqual(x.verteilt.at(-1), { a: 'lernen', f: { stand: 'fertig', pfad: 'erz/5/bk/3', kanal: 1, nr: 74, platz: 1 } });
   assert.equal(x.a.lage(), null);
   assert.ok(x.timer[0].weg, 'the timer is cleared');
 });
@@ -50,7 +50,7 @@ test('S19 ablauf: a stale id (an earlier arming) is ignored: nothing written, st
   assert.equal(x.a.lage().pfad, 'deck/1/bk/2');
   x.a.ereignis('/e/gelernt', gelernt(102));   // control: the current id is taken
   await still();
-  assert.deepEqual(x.speicher.lies().zuordnungen, [{ pfad: 'deck/1/bk/2', kanal: 1, nr: 74 }]);
+  assert.deepEqual(x.speicher.lies().zuordnungen, [{ pfad: 'deck/1/bk/2', kanal: 1, nr: 74, platz: 1 }]);
 });
 
 test('S19 ablauf: belegt writes nothing (stand belegt); a CC from hand_in gives the English hand_in text and writes nothing', async (t) => {
@@ -80,7 +80,7 @@ test('S19 ablauf: the kern refuses the file (quittung 6 pruefung): the previous 
   y.a.scharf('erz/5/bk/3');
   y.a.ereignis('/e/gelernt', gelernt(101));
   await still();
-  assert.deepEqual(y.speicher.lies().zuordnungen, [{ pfad: 'erz/5/bk/3', kanal: 1, nr: 74 }], 'kept: the kern loads it at its next start');
+  assert.deepEqual(y.speicher.lies().zuordnungen, [{ pfad: 'erz/5/bk/3', kanal: 1, nr: 74, platz: 1 }], 'kept: the kern loads it at its next start');
   assert.equal(y.verteilt.at(-1).f.stand, 'ohne_antwort');
 });
 
@@ -118,4 +118,26 @@ test('S19 ablauf: abbrechen disarms (an 0) and tells the pages; loesche removes 
   assert.deepEqual(x.speicher.lies().zuordnungen, []);
   assert.deepEqual(x.sendet.slice(n), [{ a: '/k/mapping', f: { geraet: 'lernen' } }]);
   assert.equal(x.verteilt.at(-1).f.stand, 'geloescht');
+});
+
+test('controller places: a capture from midi_ein_2 (quelle 2) writes lernen-2.json and reloads the device lernen-2; place 1 is not reloaded', async (t) => {
+  const x = aufbau(t);
+  x.a.scharf('deck/2/fader');
+  x.a.ereignis('/e/gelernt', gelernt(101, { quelle: 2 }));
+  await still();
+  assert.deepEqual(x.speicher.lies().zuordnungen, [{ pfad: 'deck/2/fader', kanal: 1, nr: 74, platz: 2 }]);
+  assert.deepEqual(x.sendet.filter((s) => s.a === '/k/mapping').map((s) => s.f.geraet), ['lernen-2']);
+  assert.deepEqual(x.verteilt.at(-1), { a: 'lernen', f: { stand: 'fertig', pfad: 'deck/2/fader', kanal: 1, nr: 74, platz: 2 } });
+});
+
+test('controller places: without proof that the kern knows the places 2..8 the name lernen-2 is never sent (an older kern would load it as base mapping)', async (t) => {
+  const x = aufbau(t);
+  x.speicher.zuordne({ pfad: 'deck/2/fader', kanal: 1, nr: 7, platz: 2 });   // a file from an earlier run
+  await x.a.loesche('deck/2/fader');
+  assert.deepEqual(x.sendet.filter((s) => s.a === '/k/mapping'), [], 'kept for the next kern start');
+  assert.equal(x.verteilt.at(-1).f.stand, 'geloescht');
+  x.speicher.zuordne({ pfad: 'deck/2/fader', kanal: 1, nr: 7, platz: 2 });
+  x.a.ereignis('/zustand/ein', { verbunden: 1 << 9 });   // midi_ein_2 is linked: this kern has the eight inputs
+  await x.a.loesche('deck/2/fader');
+  assert.deepEqual(x.sendet.filter((s) => s.a === '/k/mapping').map((s) => s.f.geraet), ['lernen-2']);
 });

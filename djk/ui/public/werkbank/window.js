@@ -2,7 +2,8 @@
 // touch too), a close button and a body; several can be open at once. Its position is remembered per kind of device (ctx.lies / ctx.merke).
 // What a window shows:
 //   - an instrument track: the full front panel (bindeGeraetAnsicht, breit: true); for the cut of a sampler track the cut strip and the kit dialog of the
-//     SOUND host (sound.js, schnitt_kit.js) sit below the panel (the host moves into the window and back);
+//     SOUND host (sound.js, schnitt_kit.js) sit below the panel. The strip works on the selected track, so the host follows the selection: it sits in the
+//     window of the selected track, and without such a window it is hidden in the workbench root (never under the title of another track);
 //   - the Hall of a return: the Hall face (baueHallFace) with its ON/OFF;
 //   - a Baukasten stage of a track, a return or the master: its panel (baueFrontplatte, breit: true) with ON/OFF, move earlier/later and remove;
 //   - any other stage: a short text. The native inserts (comp, saturation, limiter, EQ) keep their floating faces: ctx.oeffneStufe opens those instead.
@@ -160,8 +161,8 @@ export function bindeFenster(ctx) {
     if (st.wahl !== spurId) ctx.waehle(spurId);   // the cut strip works on the selected track
     const buchstabe = mixZuege(st.projekt).find((z) => z.id === spurId)?.buchstabe ?? '';
     const jetztSpur = () => (st.projekt?.spuren ?? []).find((s) => s.id === spurId && s.art === 'instrument') ?? null;
-    return oeffne({
-      id: `spur:${spurId}`, titel: `${buchstabe} · ${spur.name}`.trim(), untertitel: geraetText(spur), art: geraetSchluessel(spur.geraet) ?? String(spur.geraet?.name ?? 'instrument'),
+    const f = oeffne({
+      id: `spur:${spurId}`, spurId, titel: `${buchstabe} · ${spur.name}`.trim(), untertitel: geraetText(spur), art: geraetSchluessel(spur.geraet) ?? String(spur.geraet?.name ?? 'instrument'),
       pruefe: () => jetztSpur() !== null,
       bauen: (koerper) => {
         const panelHost = el('div', 'w-fenster-geraet', 'fenster-geraet');
@@ -176,14 +177,31 @@ export function bindeFenster(ctx) {
         zeige();
         return { aktualisiere: zeige, zerstoere: () => ansicht.zeige(null) };
       },
-      nachSchliessen: () => {
-        // the SOUND host goes back to the workbench root unless another window took it meanwhile
-        const h = ctx.klangHost;
-        if (h && !offeneMitKlang()) { h.hidden = true; $('fenster-flaeche').parent?.append(h); }
-      },
+      nachSchliessen: () => stelleKlangHost(),
     });
+    stelleKlangHost();   // an existing window is only brought to the front: the host still has to come to it
+    return f;
   };
-  const offeneMitKlang = () => !!ctx.klangHost && [...offene.values()].some((f) => f.koerper.contains(ctx.klangHost));
+  // The SOUND host (cut strip, kit dialog, ROOT box) works on the selected track (st.wahl). It sits in the window of that track when it is open; otherwise it is
+  // hidden in the workbench root. Runs at every selection, after a window opened or closed. The strip draws for the selected track in any case: it is redrawn
+  // when the host moved, because a hidden canvas has no size.
+  const wurzel = () => flaeche.parentNode ?? flaeche.parent;
+  function stelleKlangHost() {
+    const h = ctx.klangHost;
+    if (!h) return;
+    const f = [...offene.values()].find((x) => x.def.spurId !== undefined && x.def.spurId === st.wahl);
+    if (f) {
+      const bewegt = !f.koerper.contains(h) || h.hidden;
+      if (!f.koerper.contains(h)) f.koerper.append(h);
+      h.hidden = false;
+      if (bewegt) ctx.zeichneSchnitt?.();
+      return;
+    }
+    h.hidden = true;
+    const w = wurzel();
+    if (w && (h.parentNode ?? h.parent) !== w) w.append(h);
+  }
+  ctx.beiWahl.push(stelleKlangHost);
 
   function hallFenster(r) {
     const ret = () => returnListe(st.projekt).find((x) => x.id === r.id) ?? null;

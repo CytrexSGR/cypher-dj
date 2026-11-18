@@ -221,11 +221,11 @@ export function fremdPfad(band, fahrten, breite, hoehe, rand) {
 
 // 1.12 S7: head position (bar, 1 .. length+1) at core beat `beat` for the own running track `lauf` (from GET /spur: anker_beat, and for a
 // loop schleife_takte); null = no head. A loop runs modulo its pass, also between two polls; a one-shot track stands only inside its span.
-export function kopfTakt(beat, lauf, laenge) {
+export function kopfTakt(beat, lauf, laenge, proTakt = 4) {
   if (lauf == null || lauf.anker_beat == null || beat == null || beat < lauf.anker_beat) return null;
   const n = lauf.schleife_takte;
-  if (n) return ((beat - lauf.anker_beat) % (4 * n)) / 4 + 1;
-  const takt = (beat - lauf.anker_beat) / 4 + 1;
+  if (n) return ((beat - lauf.anker_beat) % (proTakt * n)) / proTakt + 1;
+  const takt = (beat - lauf.anker_beat) / proTakt + 1;
   return takt <= laenge + 1 ? takt : null;
 }
 

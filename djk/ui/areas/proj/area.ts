@@ -29,6 +29,7 @@ export type { AusgabeLauf, ProjOptionen };
 export interface ProjZugang {
   offen(): { slug: string; ordner: string; projekt: Projekt; verlauf: Verlauf } | null;   // der lebende Stand, bei jedem Aufruf
   arbeitsordner(): string;                                                               // <arr_ordner> der Instanz (Spec 2.9)
+  liesProjekt(slug: string): Projekt;                                                    // read-only: a stored project by slug; refuses unknown slugs
   haken(): Haken;                                                                        // speichere (project.json) und dekodiert wie /proj/aendern
   uebernimm(w: Wirkung, meta: Meta): Promise<void>;                                      // Stand synchron setzen, dann laden, Regler, SSE
   schreibeWiedergabe(p: Projekt): { nr: number; datei: string };                         // nächste Nummer des einen Zählers, ohne /k/arr/laden
@@ -55,6 +56,10 @@ export interface ProjZugang {
   hostGesundAlterMs?(nur?: ReadonlySet<string>): number;   // plan 1.11 T13: ms since the last health rise of those hosts (export waits for 1.1 s)
   ladeEchtzeitSicht?(p: Projekt): Promise<{ nr: number; datei: string }>;   // plan 1.11 T13: write and load the project as an export playback
   ladeLiveNeu?(): Promise<void>;                                            // plan 1.11 T13: load the live playback again
+  // FIND SOUND: sets the transient core rows of some knobs of a Baukasten track without changing the project (no rev, no undo); resolves without
+  // effect when there is no core connection
+  // faderDb (level match): the track fader row spur/<nr>/fader is written in the same batch; a refusal that touches only that row is ignored
+  hoereBk?(spurId: string, werte: Readonly<Record<string, number>>, quelle: 'andreas' | 'cypher', faderDb?: number): Promise<void>;
 }
 export const KOERPER_MAX = 1024 * 1024;   // Spec 3.4: 1 MiB
 
@@ -127,7 +132,8 @@ export function kurzeOeffnenAntwort(r: Antwort): Antwort {
 export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereich & { sitzung: ProjSitzung; zugang: ProjZugang } {
   const s = new ProjSitzung(ctx, opt);
   const zugang: ProjZugang = {
-    offen: () => s.zugangOffen(), arbeitsordner: () => s.arbeitsordner, haken: () => s.zugangHaken(), uebernimm: (w, meta) => s.uebernimm(w, meta),
+    offen: () => s.zugangOffen(), liesProjekt: (slug) => s.liesProjekt(slug),
+    arbeitsordner: () => s.arbeitsordner, haken: () => s.zugangHaken(), uebernimm: (w, meta) => s.uebernimm(w, meta),
     schreibeWiedergabe: (p) => s.schreibeWiedergabeFuer(p), naechsteNummer: () => s.naechsteNummer(), tempoAnMaster: () => s.tempoAnMaster(),
     sperreLaden: (fuer) => s.sperreLaden(fuer), ausgabeLauf: (l) => s.setzeAusgabeLauf(l),
     transport: (d, quelle) => s.transport(d, quelle),
@@ -138,6 +144,7 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
     hostZustandSichern: (grund) => s.hostZustandSichern(grund),
     hostLage: () => s.hostLage(), hostGesundAlterMs: (nur) => s.hostGesundAlterMs(nur),
     ladeEchtzeitSicht: (p) => s.ladeEchtzeitSicht(p), ladeLiveNeu: () => s.ladeLiveNeu(),
+    hoereBk: (spurId, werte, quelle, faderDb) => s.hoereBk(spurId, werte, quelle, faderDb),
   };
   const antworte = async (a: http.ServerResponse, f: () => Antwort | Promise<Antwort>): Promise<void> => {
     let r: Antwort;
@@ -234,6 +241,7 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
       schreib('/proj/neu', (d, quelle) => s.neu(d.name, quelle, d.bestaetigt === true, { werkbank: d.werkbank, vorlage: d.vorlage }), kurzeOeffnenAntwort),
       schreib('/proj/oeffnen', (d, quelle) => s.oeffnen(d.slug, quelle, d.bestaetigt === true), kurzeOeffnenAntwort),
       // workbench shelf: SAVE AS (a copy under a new name) and DELETE (to the bin, never the open module)
+      schreib('/proj/schliessen', (d, quelle) => s.schliessen(quelle, d.bestaetigt === true)),
       schreib('/proj/kopie', (d, quelle) => s.kopie(d.slug, d.name, quelle)),
       schreib('/proj/loeschen', (d, quelle) => s.loeschen(d.slug, quelle)),
       schreib('/live/oeffnen', (d, quelle) => s.liveOeffnen(quelle, d.bestaetigt === true)),

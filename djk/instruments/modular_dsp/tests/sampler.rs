@@ -1,7 +1,7 @@
 //! S10 task 1: the sampler DSP (D6-D10, C4, C5). API: `Sampler::prozess(daten, &Einstellung, sr, Eingabe)` per sample.
 #[path = "sampler_helpers/mod.rs"]
 mod sampler_hilfe;
-use baukasten_dsp::sampler::{Eingabe, Einstellung, Sampler, FADE};
+use baukasten_dsp::sampler::{Eingabe, Einstellung, NotenWahl, Sampler, FADE};
 use sampler_hilfe::*;
 
 const SR: f32 = 48_000.0;
@@ -302,4 +302,153 @@ fn reverse_threshold_is_one_half() {
     let erster = |r: f32| lauf(&d, &e(1, false), SR, 3, |i| Eingabe { rueck: r, ..ein(GRUND, i == 0) })[0].0;
     assert!(erster(0.4999) < 0.01);
     assert!(erster(0.5) > 0.99);
+}
+
+// ---- note mode: clamps of the broken inputs `tempo`, `halb`, `ausklang`, and the retrigger during a release ----
+
+fn note_hz(n: u8) -> f32 { (440.0 * 2f64.powf((n as f64 - 69.0) / 12.0)) as f32 }
+
+fn wahl(tempo: f32, halb: f32, ausklang_ms: f32) -> NotenWahl { NotenWahl { tempo, halb, ausklang_ms } }
+
+/// A ramp whose every frame differs, 200000 frames: the read rate shows in the output.
+fn rampe() -> Vec<f32> { stereo(200_000, |i| (i as f32 * 0.37).sin() * 0.5 + (i % 977) as f32 / 4000.0) }
+
+/// Note mode, one slice over the whole file. Trigger at sample 0 and at every sample of `neu`; the gate is high until sample `gate_aus`
+/// (and again from each retrigger on); `n` samples.
+fn note_lauf(d: &[f32], w: NotenWahl, note: u8, gate_aus: usize, neu: &[usize], n: usize) -> Vec<(f32, f32)> {
+    let e = e(1, false);
+    let grenzen = [0usize, d.len() / 2];
+    let mut s = Sampler::default();
+    (0..n)
+        .map(|i| {
+            let trig = i == 0 || neu.contains(&i);
+            let gate = if i < gate_aus || neu.iter().any(|&r| i >= r) { 1.0 } else { 0.0 };
+            s.prozess_mit(d, &e, Some(&grenzen), Some(w), SR, Eingabe { hz: note_hz(note), trig: if trig { 1.0 } else { 0.0 }, gate, scheibe: 0.0, rueck: 0.0 })
+        })
+        .collect()
+}
+
+fn gleich(a: &[(f32, f32)], b: &[(f32, f32)], was: &str) {
+    assert_eq!(a.len(), b.len());
+    for (i, (x, y)) in a.iter().zip(b).enumerate() {
+        assert_eq!((x.0.to_bits(), x.1.to_bits()), (y.0.to_bits(), y.1.to_bits()), "{was}: sample {i}");
+    }
+}
+
+#[test]
+fn tempo_clamps_like_any_other_value() {
+    let d = rampe();
+    let lauf = |t: f32| note_lauf(&d, wahl(t, 0.0, 5.0), 0, 100_000, &[], 3000);
+    let unten = lauf(1.0 / 16.0);
+    let oben = lauf(8.0);
+    let eins = lauf(1.0);
+    assert_ne!(unten[500], eins[500], "the rates differ, the test sees them");
+    for t in [0.0, -0.0, -1.0, -1e30, 1e-9, f32::NEG_INFINITY] {
+        gleich(&lauf(t), &unten, &format!("tempo {t} clamps to 1/16"));
+    }
+    for t in [1e30, f32::INFINITY] {
+        gleich(&lauf(t), &oben, &format!("tempo {t} clamps to 8"));
+    }
+    gleich(&lauf(f32::NAN), &eins, "tempo NaN stays the default 1");
+}
+
+#[test]
+fn ausklang_clamps_at_both_ends_and_nan_stays_5_ms() {
+    let d = rampe();
+    let lauf = |a: f32| note_lauf(&d, wahl(1.0, 0.0, a), 0, 1000, &[], 1000 + 100_000);
+    let lang = lauf(2000.0);
+    let kurz = lauf(1.0);
+    let fuenf = lauf(5.0);
+    assert_ne!(lang[1000 + 500], kurz[1000 + 500]);
+    gleich(&lauf(f32::INFINITY), &lang, "ausklang +inf clamps to 2000 ms");
+    gleich(&lauf(f32::NEG_INFINITY), &kurz, "ausklang -inf clamps to 1 ms");
+    gleich(&lauf(f32::NAN), &fuenf, "ausklang NaN stays 5 ms");
+}
+
+#[test]
+fn broken_inputs_never_give_non_finite_output() {
+    let d = rampe();
+    let schlecht = [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, -1.0, 0.0, -1e30, 1e30, f32::MIN_POSITIVE];
+    for &t in &schlecht {
+        for &h in &schlecht {
+            for &a in &schlecht {
+                let o = note_lauf(&d, wahl(t, h, a), 5, 700, &[], 1500);
+                assert!(o.iter().all(|v| v.0.is_finite() && v.1.is_finite()), "tempo {t} halb {h} ausklang {a}");
+                // the same with a retrigger inside the release
+                let o = note_lauf(&d, wahl(t, h, a), 5, 700, &[900], 1500);
+                assert!(o.iter().all(|v| v.0.is_finite() && v.1.is_finite()), "retrigger: tempo {t} halb {h} ausklang {a}");
+            }
+        }
+    }
+}
+
+#[test]
+fn retrigger_while_the_release_still_runs() {
+    let d = rampe();
+    // gate falls at 1000 (release 100 ms = 4800 samples), the same note hits again at 3000 with the old release at about -25 dB
+    let ein = note_lauf(&d, wahl(1.0, 0.0, 100.0), 0, 1000, &[3000], 8000);
+    assert!(ein.iter().all(|v| v.0.is_finite() && v.1.is_finite()));
+    // no jump: the old release is folded into the fade-out, the step at the retrigger stays far below a full-scale jump
+    for i in 2999..3000 + FADE + 2 {
+        let sprung = ((ein[i + 1].0 - ein[i].0) as f64).abs();
+        assert!(sprung < 0.2, "sample {i}: step {sprung}");
+    }
+    // the old pass fades out over FADE samples, then the new hit starts from the slice start with its own fade-in; after that it is
+    // the lone hit, sample for sample (the running release does not leak into it)
+    let allein = note_lauf(&d, wahl(1.0, 0.0, 100.0), 0, 100_000, &[], 8000);
+    let start = 3000 + FADE;
+    for k in FADE..FADE + 2000 {
+        assert_eq!(ein[start + k].0.to_bits(), allein[k].0.to_bits(), "offset {k}");
+    }
+    // and the second hit has its own release: it ends at its gate fall like a lone hit
+    let mut s = Sampler::default();
+    let e = e(1, false);
+    let grenzen = [0usize, d.len() / 2];
+    let mut ende = None;
+    for i in 0..30_000 {
+        let gate = if i < 1000 || (3000..4000).contains(&i) { 1.0 } else { 0.0 };
+        let trig = if i == 0 || i == 3000 { 1.0 } else { 0.0 };
+        s.prozess_mit(&d, &e, Some(&grenzen), Some(wahl(1.0, 0.0, 100.0)), SR, Eingabe { hz: note_hz(0), trig, gate, scheibe: 0.0, rueck: 0.0 });
+        if i > 4000 && !s.spielt() { ende = Some(i); break; }
+    }
+    let ende = ende.expect("the second hit ends");
+    // the release is a ramp over 100 ms to -60 dB: it ends 4800 samples after the gate fall at 4000, not after the first gate fall at 1000
+    assert!((4000 + 4800 - 5..4000 + 4800 + 5).contains(&ende), "ended at {ende}");
+}
+
+// ---- note mode: a note without a slice plays nothing ----
+
+/// Note mode over `anzahl` equal slices of 1000 frames (slice k is the constant (k+1)/10), `grenzen` given or the equal split of `e.scheiben`.
+fn note_scheibe(anzahl: usize, mit_grenzen: bool, note: u8) -> Vec<(f32, f32)> {
+    let d = segmente(anzahl, 1000);
+    let grenzen: Vec<usize> = (0..=anzahl).map(|k| k * 1000).collect();
+    let mut s = Sampler::default();
+    (0..600)
+        .map(|i| s.prozess_mit(&d, &e(anzahl, false), if mit_grenzen { Some(&grenzen) } else { None }, Some(wahl(1.0, 0.0, 5.0)), SR, Eingabe { hz: note_hz(note), trig: if i == 0 { 1.0 } else { 0.0 }, gate: 1.0, scheibe: 0.0, rueck: 0.0 }))
+        .collect()
+}
+
+#[test]
+fn a_note_beyond_the_slice_count_is_silent() {
+    for mit_grenzen in [true, false] {
+        for note in [4u8, 5, 9, 63, 64 + 4, 64 + 5, 64 + 9, 127] {
+            let o = note_scheibe(4, mit_grenzen, note);
+            assert!(o.iter().all(|v| v.0 == 0.0 && v.1 == 0.0), "note {note} (table {mit_grenzen}) plays nothing");
+        }
+    }
+}
+
+#[test]
+fn a_note_that_names_a_slice_still_plays_it_bit_identical() {
+    for mit_grenzen in [true, false] {
+        let d = segmente(4, 1000);
+        for k in 0..4usize {
+            let o = note_scheibe(4, mit_grenzen, k as u8);
+            assert_eq!(o[0].0.to_bits(), d[2 * k * 1000].to_bits(), "note {k} forward, first sample");
+            assert_eq!(o[300].0.to_bits(), d[2 * (k * 1000 + 300)].to_bits(), "note {k} forward");
+            // reversed: the head starts at the last frame of the slice
+            let r = note_scheibe(4, mit_grenzen, 64 + k as u8);
+            assert_eq!(r[0].0.to_bits(), d[2 * (k * 1000 + 999)].to_bits(), "note {} reversed", 64 + k);
+        }
+    }
 }

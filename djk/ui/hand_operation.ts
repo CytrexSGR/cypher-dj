@@ -3,6 +3,11 @@
 // Startraster der Zeitangabe `ab`: Beats der Master-Uhr (Takt = Vielfache von 4, Phrase = von 32; §10 ab_beat = (takt−1)·4)
 export const AB: Record<string, number> = { jetzt: 0, schlag: 1, takt: 4, phrase: 32 };   // Phrase 8 Takte (INTERFACES.md:30)
 
+// Start raster of `ab` in beats for a project meter of `proTakt` beats per bar (4: identical to AB; unknown key: undefined).
+export function abRaster(ab: string, proTakt: number): number | undefined {
+  return ab === 'takt' ? proTakt : ab === 'phrase' ? 8 * proTakt : AB[ab];
+}
+
 // Regler-Pfade nach INTERFACES §1.5. Die „nur Hand“-Pfade stehen mit drin: sie lehnt der Kern ab (nur_hand).
 // 1.15 A2: the five alternatives before the bk one are the 345 mix-tool paths (gate, util, mb, lim, spektrum/kanal), an exact set; erz/8 has none.
 export const PFAD = /^(deck\/[1-4]|erz\/[1-8]|pad\/[12]|bus\/[1-4])\/(fader|trim|eq\/(tief|mitte|hoch)|kill\/(tief|mitte|hoch)|filter|send\/[1-4]|stem\/(drums|bass|vocals|other)|xseite|pfl|ziel)$|^(deck\/[1-4]|erz\/[1-8]|pad\/[12])\/komp\/(an|schwelle|ratio|attack|release|makeup|mix|sc)$|^(xfader|master\/(pegel|kleber|pfl)|cue\/(mix|pegel|split)|fx\/[1-4]\/(notenwert|rueckkopplung|rueckweg)|duck\/(tiefe|release)|color\/(art|param)|keylock)$|^spur\/([1-9]|[12][0-9]|3[0-2])\/(fader|pan|mute|solo)$|^grp\/([1-9]|1[0-6])\/(fader|pan|mute|solo|cue)$|^pm\/fader$|^(spur\/([1-9]|[12][0-9]|3[0-2])|grp\/([1-9]|1[0-6]))\/send\/[1-4]$|^ret\/[1-4]\/(fader|pan|mute|solo|hall\/(an|pre|decay|groesse|tief|highcut|fahne))$|^(deck\/[1-4]|erz\/[1-7]|pad\/[12])\/gate\/(an|schwelle|hysterese|ratio|bereich|attack|hold|release|sc)$|^(deck\/[1-4]|erz\/[1-7]|pad\/[12]|bus\/[1-4])\/util\/(balance|breite|bassmono|phase_l|phase_r|tausch|dc)$|^bus\/[1-4]\/mb\/(an|grenze_tief|grenze_hoch|(tief|mitte|hoch)\/(schwelle|ratio|attack|release|knie|makeup|umgehen))$|^bus\/[1-4]\/lim\/(an|decke|abklingen)$|^spektrum\/kanal$|^ins\/komp\/([1-9]|1[0-2])\/(an|schwelle|ratio|knie|attack|release|makeup|mix|schp|sc)$|^ins\/eq\/[1-8]\/(an|out|propq|b[1-8]\/(an|typ|freq|gain|q|steil|platz))$|^ins\/saett\/[1-4]\/(an|drive|out|mix)$|^ins\/lim\/[12]\/(an|decke|abklingen)$|^ins\/utility\/[1-8]\/(an|breite|mono_unter|gain|balance)$|^ins\/bk\/[1-8]\/(an|k([1-9]|[1-5][0-9]|6[0-4]))$|^ins\/host\/[1-4]\/an$|^rack\/([1-9]|1[0-2])\/m[1-4]$|^(deck\/[1-4]|erz\/[1-35-7]|pad\/[12]|fx\/[34]|master)\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/;   // keylock: Keylock 3, EIN Knopf für alle Quellen
@@ -14,6 +19,16 @@ export const OFFEN_DB = -26;
 const KANAL = /^(deck\/[1-4]|erz\/[1-8]|pad\/[12])\/(fader|trim)$/;
 export function kanalOffen(regler: Record<string, number>, k: string): boolean {
   return (regler[`${k}/trim`] ?? 0) + (regler[`${k}/fader`] ?? -200) > OFFEN_DB;
+}
+// Plan seq-fader-frei (card t_150d0c09): a place that carries a SEQ deck and has NO track loaded on its deck player has a channel strip deck/N that only
+// Cypher's own patterns play into (ADR 038), so Cypher opens its fader and trim there without a hearing pass, like erz/*. A loaded track keeps the lock.
+// Pure: `seqPlaetze` are the places with a SEQ deck in the open live project, `geladen` the places with a track on the deck player.
+const DECK_OEFFNER = /^deck\/([1-4])\/(fader|trim)$/;
+export function seqDeckFrei(pfad: string, seqPlaetze: ReadonlySet<number>, geladen: ReadonlySet<number>): boolean {
+  const m = DECK_OEFFNER.exec(pfad);
+  if (!m) return false;
+  const platz = Number(m[1]);
+  return seqPlaetze.has(platz) && !geladen.has(platz);
 }
 // Öffnet der Befehl pfad → nach einen zuvor geschlossenen Kanal? Strudel-Kanäle (erz/*) nie: ihr Inhalt ist Cyphers
 // eigenes Muster. AUTO hält der Seiten-Server (409 auto_aus in /spur und /regler), Stop Cypher hält Kern und Seiten-Server

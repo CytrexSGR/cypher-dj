@@ -7,6 +7,7 @@ import { liveSlots, normiereSlot } from '../../project/live.ts';
 import { aendereStand } from '../../project/state.ts';
 import { fuehreListeAus } from '../../project/commands.ts';
 import { modulBaum } from '../../project/module_storage.ts';
+import { takteProLive } from '../../project/taktart_live.ts';
 import type { Projekt } from '../../project/model.ts';
 import type { BereichKontext } from '../../http/router.ts';
 import { quittungAbgelehnt } from '../proj/core_path.ts';
@@ -58,7 +59,7 @@ export class ModulLeeren {
     const gruppeId = liveSlots(o.projekt)[slot];
     if (gruppeId === undefined) throw new ProjFehler(409, 'slot_leer', { slot });
     const g = o.projekt.gruppen.find((x) => x.id === gruppeId)!;
-    const ende = takte > 0 && this.o.kern?.uhr() ? this.o.kern.uhr()!.beat + takte * 4 : undefined;
+    const ende = takte > 0 && this.o.kern?.uhr() ? this.o.kern.uhr()!.beat + takte * takteProLive(o.projekt.taktart) : undefined;
     this.setze(slot, { zustand: 'rampe', takte });
     const lauf = this.lauf(slot, gruppeId, o.slug, g.nr, g.fader_db, takte, quelle).finally(() => this.laufend.delete(slot));
     this.laufend.set(slot, lauf);
@@ -97,7 +98,8 @@ export class ModulLeeren {
     };
     try {
       const kern = this.o.kern;
-      const ende = kern ? await fahreRampe({ kern, von, nach: -200, beats: takte * 4, schreibe: (db) => this.schreibeZeile(nr, db),
+      const proTakt = takteProLive(gleich()?.taktart);                              // beats per bar of the project at the start of the ramp (4 in 4/4)
+      const ende = kern ? await fahreRampe({ kern, von, nach: -200, beats: takte * proTakt, schreibe: (db) => this.schreibeZeile(nr, db),
         abbruch: () => gleich() === null || (quelle === 'cypher' && this.ctx.kiGestoppt()), ...this.o.rampe })
         : (this.schreibeZeile(nr, -200), 'sofort' as const);
       if (ende === 'abgebrochen') {

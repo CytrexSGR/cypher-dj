@@ -73,6 +73,14 @@ static bool quelle_bekannt(const char* q) {
   return false;
 }
 
+// S19: mapping slot of a device name in /k/mapping. "lernen" = 1 (learn table of midi_ein_1), "lernen-2".."lernen-8" = 2..8
+// (midi_ein_2..8; the range is MIDI_EIN_PORTS), every other name (also lernen-1, lernen-9, lernen-02) = 0, the base mapping on hand_in.
+static int lern_slot(const char* g) {
+  if (std::strcmp(g, "lernen") == 0) return 1;
+  if (std::strncmp(g, "lernen-", 7) == 0 && g[7] >= '2' && g[7] <= '0' + MIDI_EIN_PORTS && g[8] == '\0') return g[7] - '0';
+  return 0;
+}
+
 static int64_t jetzt_mono_ns() {
   timespec ts;
   clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -146,6 +154,8 @@ void Netz::hallo(const osc::Nachricht& m, int64_t jetzt_ns) {
   const char* name = m.werte[0].s;
   const int port = m.werte[1].i, protokoll = m.werte[2].i;
   if (protokoll != v::vertrag) { protokollfehler(m.adresse, "protokoll", port); return; }
+  // audit U36: OSC strings are at most 47 bytes (§1.4); the stored name is cut to that, so a longer one would never match its own entry again (a new slot, a welcome and a state dump on every heartbeat)
+  if (std::strlen(name) >= sizeof(Abonnent::name)) { protokollfehler(m.adresse, "ausserhalb_bereich", 0); return; }
   // Audit F17: der eigene Port machte den Kern zu seinem Abonnenten (Selbst-Flut, Netz-Faden im Livelock); htons brach
   // Ports über 65535 still auf einen anderen um
   // gemeldet an alle: an den genannten Port ginge die Meldung an den Kern selbst oder an einen umgebrochenen Port
@@ -316,6 +326,7 @@ void Netz::paket(const char* p, size_t n, int64_t jetzt_ns) {
   if (a->pfad == v::k_hallo.pfad) {
     hallo(m, jetzt_ns);
   } else if (a->pfad == v::k_tschuess.pfad) {
+    if (std::strlen(m.werte[0].s) >= sizeof(Abonnent::name)) { protokollfehler(adr, "ausserhalb_bereich", 0); return; }   // audit U36: the same limit as /k/hallo
     for (auto& x : abo_) if (x.aktiv && !std::strcmp(x.name, m.werte[0].s)) x.aktiv = false;
     schreibe_abonnenten();  // Scheibe 18
   } else if (a->pfad == v::k_set_neu.pfad) {
@@ -509,7 +520,7 @@ void Netz::paket(const char* p, size_t n, int64_t jetzt_ns) {
       quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "pruefung");
       return;
     }
-    b.nr = std::strcmp(geraet, "lernen") == 0 ? 1 : 0;  // S19: the reserved name "lernen" is slot 1, the learn table on midi_ein_1
+    b.nr = lern_slot(geraet);  // S19: "lernen" is slot 1 (midi_ein_1), "lernen-2".."lernen-8" are slots 2..8, every other name slot 0
 #ifdef CYPHERDJ_MUTATION_LERN_FALSCHER_SLOT
     b.nr = 0;  // failure case S19: the learn table would replace the base mapping
 #endif

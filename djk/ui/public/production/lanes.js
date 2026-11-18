@@ -265,6 +265,12 @@ export const laneFuer = (spur, ziel) => (spur?.automation ?? []).find((l) => l.z
 export const faderLane = (spur) => laneFuer(spur, 'fader');
 // does a lane of this track play right now? (shows AUTO at the fader of the track head)
 export const hatLane = (spur) => faderLane(spur) !== null;
+// What the fader of a return shows (return fader lane): `treibt` while a fader lane with points exists and the transport runs (kopfBeat is a finite beat), then
+// `db` is the lane at the playhead (the core ignores the return fader meanwhile); else `db` is the rest value fader_db. `lane` is the fader lane or null.
+export function returnFaderZeigt(ret, kopfBeat) {
+  const lane = ret ? faderLane(ret) : null, treibt = lane !== null && (lane.punkte?.length ?? 0) > 0 && Number.isFinite(kopfBeat);
+  return { treibt, lane, db: treibt ? laneWert(lane.punkte, kopfBeat, 'fader') : ret?.fader_db };
+}
 // The lane the open row shows: the chosen target if the track has it, else the volume lane (as in slice 1), else the first lane, else null.
 // wahl: the target the user picked (page state, not in the project).
 export const gezeigteLane = (spur, wahl) => laneFuer(spur, wahl) ?? faderLane(spur) ?? (spur?.automation ?? [])[0] ?? null;
@@ -278,9 +284,16 @@ export const freieZiele = (spur) => [
 ];
 // Task 7 (D4): a group offers only the chain targets (the model refuses fader, pan, mute and solo lanes on a group)
 export const freieZieleGruppe = (gruppe) => (gruppe ? freieKettenZiele(gruppe) : []);
-// the lane with this id in the project, with its track, or null
+// Automation rows of returns and master (slice 1): the same rule, chain targets only (no fader lane on a return or the master in this wave)
+export const freieZieleStrang = freieZieleGruppe;
+// Return fader lane: a return also takes the fader (Volume) lane, listed first while it has none. The master shares freieZieleStrang and the model refuses a
+// fader lane there (and on a group), so this is its own rule and not an addition to the shared one.
+export const freieZieleReturn = (ret) => (ret ? [...(laneFuer(ret, 'fader') ? [] : ['fader']), ...freieKettenZiele(ret)] : []);
+// the lane with this id in the project, with its strand: {art: 'spur'|'gruppe'|'return'|'master', id (the strand id, 'master' for the master), strang, lane}, or null
 export function laneMitId(projekt, id) {
-  for (const spur of projekt?.spuren ?? []) { const lane = (spur.automation ?? []).find((l) => l.id === id); if (lane) return { spur, lane }; }
+  for (const [art, straenge] of [['spur', projekt?.spuren], ['gruppe', projekt?.gruppen], ['return', projekt?.returns], ['master', projekt?.master ? [projekt.master] : []]]) {
+    for (const strang of straenge ?? []) { const lane = (strang.automation ?? []).find((l) => l.id === id); if (lane) return { art, id: art === 'master' ? 'master' : strang.id, strang, lane }; }
+  }
   return null;
 }
 
@@ -300,9 +313,14 @@ export const offeneIndizes = (projekt, offen) => (projekt && offen && offen.size
 // Task 6 (backlog production): the open lane rows of GROUPS. The page state laneOffen holds strand ids (s<n> and g<n> never collide); this gives the groups
 // among them that still exist, in project order.
 export const offeneStraenge = (projekt, ids) => (projekt && ids && ids.size ? (projekt.gruppen ?? []).filter((g) => ids.has(g.id)).map((g) => ({ art: 'gruppe', id: g.id })) : []);
-// The strand a lane row belongs to: {art:'gruppe'|'spur', id, strang} or null when the row's strand no longer exists (a group deleted while its row was open)
+// The strand a lane row belongs to: {art:'gruppe'|'spur'|'return'|'master', id, strang} or null when the row's strand no longer exists (a group deleted while its row was open)
 export function laneStrang(projekt, zeile) {
   if (!projekt || !zeile) return null;
+  if (zeile.strang !== undefined) {
+    if (zeile.strang === 'master') return projekt.master ? { art: 'master', id: 'master', strang: projekt.master } : null;
+    const r = (projekt.returns ?? []).find((x) => x.id === zeile.strang);
+    return r ? { art: 'return', id: r.id, strang: r } : null;
+  }
   if (zeile.gruppe !== undefined) { const g = (projekt.gruppen ?? [])[zeile.gruppe]; return g ? { art: 'gruppe', id: g.id, strang: g } : null; }
   const s = (projekt.spuren ?? [])[zeile.spur];
   return s ? { art: 'spur', id: s.id, strang: s } : null;

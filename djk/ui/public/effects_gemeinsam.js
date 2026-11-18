@@ -28,6 +28,16 @@ export function instrumenteSichtbar() { return !!instrumenteAnsicht && !$('#inst
 // Device page: the INSTRUMENTS element itself, enlarged as a fixed layer (panel.css body.geraeteseite). One host, no second plate; this function is the only way in and out.
 let geraeteseiteAn = false;
 export const remixFenster = location.hash === '#remix';   // the Remix window (bindeRemixFenster)
+// The Controllers window (#controller): a page instance of its own that shows only the controller register, full height (Andreas 2026-11-18:
+// the bottom panel is too small to find a control in). The CONTROLLERS tab of the main page opens it.
+export const controllerFenster = location.hash === '#controller';
+function oeffneControllerFenster() {
+  const B = Math.min(1500, screen.availWidth), H = Math.min(1000, screen.availHeight), x = Math.max(0, (screen.availLeft ?? 0) + (screen.availWidth - B) / 2), y = Math.max(0, (screen.availTop ?? 0) + (screen.availHeight - H) / 2);
+  const w = window.open('/#controller', 'djk-controller', `popup,width=${B},height=${H},left=${Math.round(x)},top=${Math.round(y)}`);
+  if (!w) return false;
+  w.focus();
+  return true;
+}
 // The spectrum views on the page: the EFFECTS one and, on the device page, the plate cell or the strip. All are fed by the same frames (one global source).
 export const spektrumAnsichten = new Set();
 function spektrumAnmelden(a) {
@@ -80,6 +90,18 @@ export function platteBauen(liste, opt) {
   return fp;
 }
 export function setzeBereich(b) {
+  if (controllerFenster) {   // this page instance is the Controllers window: only the register, whatever area was stored
+    document.body.classList.add('controller-fenster');
+    document.title = 'djk Controllers';
+    $('#register').hidden = false;
+    zeigeRegister($('#register'), { stand: () => lernen, schicken: lernSchicken, hole: holeLernen });
+    return;
+  }
+  if (b === 'controller') {   // the register lives in its own window; the panel shows it only when the browser blocks the window on a click
+    const klick = navigator.userActivation?.isActive === true;
+    if (!klick) b = 'library';                 // a restored area never opens a window
+    else if (oeffneControllerFenster()) return;   // the panel stays on what it showed
+  }
   setzeGeraeteseite(false, false);   // another area (or a restore) never keeps the layer; the rebuild below (INSTRUMENTS) or later (reopen) builds narrow
   if (b !== 'instrumente' && instrumenteSichtbar()) lernAbbrechenFuer(instrumenteAnsicht.gewaehlt());
   document.body.classList.toggle('bereich-effekte', b === 'effekte');

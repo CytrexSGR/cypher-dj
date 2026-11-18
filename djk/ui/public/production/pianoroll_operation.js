@@ -6,7 +6,7 @@
 // Die Roll zeigt den Clip aus st.projektEntwurf ?? st.projekt; ein Zug rechnet aus dem bestätigten Stand beim Zeigen bzw. Senden (Spec 6.34).
 // V2 Fix-Runde 2 H1: ebenso Tasten, Quantisieren, VEL, Löschen der Auswahl und neue Noten (ctx.aendereAus): gerechnet, wenn die Anfrage an der
 // Reihe ist, aus genau dem Stand, dessen rev mitgeht; vorher rechneten sie beim Tastendruck, und ein Zug davor, der noch unterwegs war, ging verloren.
-import { rasterBeats, RASTER, linien } from './timeline.js';
+import { rasterBeats, beatsProTakt, RASTER, linien } from './timeline.js';
 import { findeClip } from './draft.js';
 import { istZug } from './clips.js';
 import { neuerSammler } from './strip.js';
@@ -68,7 +68,8 @@ export function bindeRolle(ctx, behaelter) {
 
   const gezeigt = () => { const f = findeClip(st.projektEntwurf ?? st.projekt, st.rolle.clipId); return f?.clip.art === 'midi' ? f : null; };
   const bestaetigt = () => { const f = findeClip(st.projekt, st.rolle.clipId); return f?.clip.art === 'midi' ? f : null; };
-  const raster = () => rasterBeats(st.rolle.raster);
+  const takt = () => beatsProTakt((st.projektEntwurf ?? st.projekt)?.taktart);   // the meter of the project: BAR snap and the bar lines follow it
+  const raster = () => rasterBeats(st.rolle.raster, takt());
   // noten_aendern am Clip clipId, rechne(clip) → Notenänderungen aus dem Stand beim Senden (H1); keine Änderung: nichts senden
   const notenMit = (was, clipId, rechne) => ctx.aendereAus((p) => {
     const f = findeClip(p, clipId), noten = f?.clip.art === 'midi' ? rechne(f.clip) : [];
@@ -286,7 +287,7 @@ export function bindeRolle(ctx, behaelter) {
       if (key && inSkala(t, key)) { g.fillStyle = istGrundton(t, key) ? '#ffb020' : '#5b8cff'; g.fillRect(TASTEN_BREITE - 6, y + 1, 4, TON_HOEHE - 3); }
       if (t % 12 === 0) { g.fillStyle = '#0e0f12'; g.font = '8px system-ui, sans-serif'; g.fillText(tonName(t), 2, y + TON_HOEHE - 1); }
     }
-    for (const l of linien({ beat0: a.beat0, pxProBeat: a.pxProBeat }, w - TASTEN_BREITE)) {
+    for (const l of linien({ beat0: a.beat0, pxProBeat: a.pxProBeat }, w - TASTEN_BREITE, takt())) {
       g.strokeStyle = l.takt ? 'rgba(255,255,255,0.18)' : l.haupt ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.04)';
       const x = Math.round(TASTEN_BREITE + l.x) + 0.5;
       g.beginPath(); g.moveTo(x, 0); g.lineTo(x, unten); g.stroke();

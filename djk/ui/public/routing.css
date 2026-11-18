@@ -3,6 +3,11 @@
 /* Header row of a group in the head column: 28 px = layout.js GRUPPEN_HOEHE. NOT .p-gruppenkopf (that is the mixer strip, counted by the probes). */
 .p-arr-gruppe { height: 28px; box-sizing: border-box; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 0; font-size: 11px;
   background: #171a21; border-bottom: 1px solid var(--line); overflow: hidden; }
+/* Head row of a return or the master (automation slice 1): 28 px = layout.js GRUPPEN_HOEHE, like the group head above. */
+.p-arr-strang { height: 28px; box-sizing: border-box; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 0; font-size: 11px;
+  background: #171a21; border-bottom: 1px solid var(--line); overflow: hidden; }
+.p-arr-strang .p-lane { position: static; flex: none; }
+.p-strangname { font-weight: 700; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .p-arr-farbe { align-self: stretch; width: 3px; background: var(--farbe, #8a8d98); flex: none; }
 .p-arr-falte { width: 20px; height: 20px; padding: 0; border-radius: 4px; flex: none; font-size: 11px; line-height: 1; }
 .p-arr-name { font-weight: 700; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }

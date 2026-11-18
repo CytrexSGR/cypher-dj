@@ -221,7 +221,7 @@ int main() {
     PRUEF(x.kern->arrangement().spur_lauf().einheiten_worker() == 0);
     x.kern->setze_hall_pool(nullptr);
   }
-  {  // 8: mode auto (Task 6): the report follows the pool's account through switch-off, the one retry, and the second switch-off for good
+  {  // 8: mode auto (Task 6): the report follows the pool's account through switch-off, the first retry, and the longer wait after the second switch-off
     arr35::Lauf x(ab.pfad, "test_spur_zustand_8");
     LeerSenke senke;
     cdj::SpurHaken hk;
@@ -256,12 +256,45 @@ int main() {
     std::printf("Case 8 (auto, after retry): an %d, modus %d, spaet %d, worker %d\n", l ? l->spur_an : -1, l ? l->spur_modus : -1, l ? l->spur_spaet : -1, l ? l->spur_einheiten_worker : -1);
     PRUEF(l && l->spur_an == 1 && l->spur_modus == 2 && l->spur_spaet == 5);   // the account is on again, the late count is kept
     x.lauf(x.kern->sample() + 20 * N);
-    aus_schalten();   // the second switch-off is for good
+    aus_schalten();   // the second switch-off: the wait is now 8192 blocks, so 4106 blocks later it is still off
     x.lauf(x.kern->sample() + (cdj::ArrSpurLauf::AUTO_WARTE_BLOECKE + 10) * N);
     l = letzter(x);
-    std::printf("Case 8 (auto, second switch-off): an %d, modus %d, spaet %d\n", l ? l->spur_an : -1, l ? l->spur_modus : -1, l ? l->spur_spaet : -1);
+    std::printf("Case 8 (auto, second switch-off, longer wait): an %d, modus %d, spaet %d\n", l ? l->spur_an : -1, l ? l->spur_modus : -1, l ? l->spur_spaet : -1);
     PRUEF(l && l->spur_an == 0 && l->spur_modus == 2 && l->spur_spaet == 10);
     PRUEF(pool.an(cdj::HallPool::HALL));
+    x.kern->setze_hall_pool(nullptr);
+  }
+  {  // 8b: mode an (the studio's mode) retries too: the report shows an 0 -> 1 with the late count kept and the mode unchanged
+    arr35::Lauf x(ab.pfad, "test_spur_zustand_8b");
+    LeerSenke senke;
+    cdj::SpurHaken hk;
+    hk.warte_worker = 3;
+    cdj::HallPool pool(einst(3));
+    pool.setze_fifo_test(true);
+    x.kern->setze_hall_pool(&pool);
+    x.kern->setze_spur_pool(1);
+    x.kern->setze_spur_test(kein_tor());
+    x.kern->setze_arr_senke_wirt(1, &senke);
+    x.kern->setze_spur_haken(&hk);
+    lade24(x);
+    x.lauf(x.kern->sample() + 20 * N);
+    const cdj::Ereignis* l = letzter(x);
+    PRUEF(l && l->spur_an == 1 && l->spur_modus == 1);
+    pool.anhalten(true);
+    for (int i = 0; i < 5; ++i) {
+      PRUEF(pool.schicke(0, nichts, nullptr, i, cdj::HallPool::SPUR));
+      PRUEF(pool.hole_zurueck(0));
+    }
+    pool.block_anfang();
+    pool.anhalten(false);
+    PRUEF(!pool.an(cdj::HallPool::SPUR));
+    x.lauf(x.kern->sample() + 2 * N);
+    l = letzter(x);
+    PRUEF(l && l->spur_an == 0 && l->spur_modus == 1 && l->spur_spaet == 5);
+    x.lauf(x.kern->sample() + (cdj::ArrSpurLauf::AUTO_WARTE_BLOECKE + 10) * N);
+    l = letzter(x);
+    std::printf("Case 8b (an, after retry): an %d, modus %d, spaet %d\n", l ? l->spur_an : -1, l ? l->spur_modus : -1, l ? l->spur_spaet : -1);
+    PRUEF(l && l->spur_an == 1 && l->spur_modus == 1 && l->spur_spaet == 5);
     x.kern->setze_hall_pool(nullptr);
   }
   {  // 6b: the message itself: an offset below 2^31 makes the real counters cross it; the event must carry the wrapped low 31 bits, never a negative number

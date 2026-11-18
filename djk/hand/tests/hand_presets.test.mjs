@@ -41,11 +41,11 @@ const text = (r) => r.content[0].text;
 const tool = async (c, name) => (await c.listTools()).tools.find((x) => x.name === name);
 
 // The real routes behind one server; anything else goes to `rest` (a stand-in for /proj, /regler)
-async function echterStapel(t, rest, { projekt = null, quelle = 'andreas' } = {}) {
+async function echterStapel(t, rest, { projekt = null, quelle = 'andreas', graphen = [] } = {}) {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'hand-presets-'));
   const router = new Router();
   const ctx = { log: () => {}, quelle: () => quelle };
-  router.melde(presetsBereich(ctx, { nutzer: path.join(d, 'nutzer'), projekt: () => projekt, graphen: () => [] }));
+  router.melde(presetsBereich(ctx, { nutzer: path.join(d, 'nutzer'), projekt: () => projekt, graphen: () => graphen }));
   router.melde(kollektionenBereich(ctx, { ordner: path.join(d, 'koll') }));
   const gesehen = [];
   let port = 0;
@@ -269,6 +269,86 @@ test('presets_anwenden weg regler: an HTTP refusal of /regler also stops; a bad 
   assert.equal(gesehen.length, vorher);
 });
 
+// ---- D28: graph_laden, a sound loads its instrument ----
+const PLAN_GRAPH = { weg: 'regler', graph: { kanal: 'erz/6', name: 'neu-a' }, uebersprungen: [],
+  anfragen: [{ pfad: 'erz/6/bk/1', nach: 0.2 }, { pfad: 'erz/6/bk/2', nach: 0.25 }, { pfad: 'erz/6/bk/3', nach: 0.5 }] };
+const BK_ID = 'nutzer:baukasten/neu-sound', KANAL = { art: 'kanal', kanal: 'erz/6' };
+
+test('presets_anwenden graph_laden: the flag reaches the route, the graph is sent BEFORE the knobs, then the knobs in order; the answer names the graph', async (t) => {
+  const { c, gesehen } = await aufbau(t, (m, u, k) => (u === '/presets/anwenden' ? (k.graph_laden === true ? [200, PLAN_GRAPH] : [409, { fehler: 'graph_anders', text: 'another graph', graph: 'neu-a' }])
+    : u === '/graph' ? [200, { ok: true, quittung: { status: 3, grund: '' } }] : u === '/regler' ? [200, { ok: true, quittung: { status: 2, grund: '' } }] : null));
+  const ohne = await c.callTool({ name: 'presets_anwenden', arguments: { id: BK_ID, ziel: KANAL } });
+  assert.equal(ohne.isError, true); assert.match(text(ohne), /graph_anders/);
+  assert.deepEqual(gesehen.map((x) => x.pfad), ['/presets/anwenden'], 'without the flag nothing but the plan request left');
+  assert.deepEqual(gesehen[0].koerper, { id: BK_ID, ziel: KANAL }, 'the body carries no graph_laden when the caller gave none');
+  gesehen.length = 0;
+  const mit = await c.callTool({ name: 'presets_anwenden', arguments: { id: BK_ID, ziel: KANAL, graph_laden: true } });
+  assert.ok(!mit.isError, text(mit));
+  assert.deepEqual(gesehen[0].koerper, { id: BK_ID, ziel: KANAL, graph_laden: true });
+  assert.deepEqual(gesehen.map((x) => x.pfad), ['/presets/anwenden', '/graph', '/regler', '/regler', '/regler']);
+  assert.deepEqual(gesehen[1].koerper, { kanal: 'erz/6', name: 'neu-a' });
+  assert.deepEqual(gesehen.slice(2).map((x) => x.koerper), PLAN_GRAPH.anfragen.map((a) => ({ pfad: a.pfad, nach: a.nach, ab: 'jetzt' })));
+  const j = JSON.parse(text(mit));
+  assert.deepEqual([j.weg, j.gesendet, j.graph], ['regler', 3, 'neu-a']);
+});
+
+test('presets_anwenden graph_laden: a graph the kern refuses (status 6, no answer, HTTP 409) sends NO knob and says what was sent before', async (t) => {
+  const antworten = [[200, { ok: true, quittung: { status: 6, grund: 'graph does not compile' } }], [200, { ok: true, quittung: null }], [409, { fehler: 'belegt', text: 'erz/6 carries the effect graph x' }]];
+  let i = 0;
+  const { c, gesehen } = await aufbau(t, (m, u) => (u === '/presets/anwenden' ? [200, PLAN_GRAPH] : u === '/graph' ? antworten[i] : u === '/regler' ? [200, { ok: true }] : null));
+  for (i = 0; i < antworten.length; i++) {
+    gesehen.length = 0;
+    const r = await c.callTool({ name: 'presets_anwenden', arguments: { id: BK_ID, ziel: KANAL, graph_laden: true } });
+    assert.equal(r.isError, true, String(i));
+    assert.equal(gesehen.filter((x) => x.pfad === '/regler').length, 0, `case ${i}: no knob left`);
+    const d = JSON.parse(text(r)).detail;
+    assert.deepEqual([d.angenommen, d.abgelehnt, d.offen.length], [[], 'graph', 3], `case ${i}`);
+  }
+  i = 2;   // the HTTP refusal: the server's text reaches the caller
+  assert.match(text(await c.callTool({ name: 'presets_anwenden', arguments: { id: BK_ID, ziel: KANAL, graph_laden: true } })), /erz\/6 carries the effect graph x/);
+});
+
+test('presets_anwenden graph_laden on a track: weg proj stays ONE /proj/aendern; the hint graph_gewechselt reaches the answer; a plan without a graph never sends /graph', async (t) => {
+  const plan = { weg: 'proj', label: 'Preset Neu Sound', uebersprungen: [], hinweise: ['graph_gewechselt'],
+    befehle: [{ befehl: 'spur_aendern', spur_id: 's2', geraet: { art: 'intern', name: 'bk', graph: 'neu-a', parameter: { k2: 0.25 }, preset: BK_ID } }] };
+  const { c, gesehen } = await aufbau(t, (m, u, k) => (u === '/presets/anwenden' ? (k.graph_laden === true ? [200, plan] : [409, { fehler: 'graph_anders', text: 'another graph', graph: 'neu-a' }]) : u === '/proj/aktuell?nur=rev' ? [200, { rev: 7 }] : u === '/proj/aendern?antwort=kurz' ? [200, { rev: 8, kern: { ok: true } }] : null));
+  const r = await c.callTool({ name: 'presets_anwenden', arguments: { id: BK_ID, ziel: { art: 'spur', spur_id: 's2' }, graph_laden: true } });
+  assert.ok(!r.isError, text(r));
+  assert.deepEqual(gesehen.map((x) => x.pfad), ['/presets/anwenden', '/proj/aktuell?nur=rev', '/proj/aendern?antwort=kurz']);
+  assert.deepEqual(JSON.parse(text(r)).hinweise, ['graph_gewechselt']);
+  assert.equal(gesehen[2].koerper.befehle[0].geraet.graph, 'neu-a');
+  // the regler plan of an already loaded graph carries no graph: no /graph request
+  const { c: c2, gesehen: g2 } = await aufbau(t, (m, u, k) => (u === '/presets/anwenden' ? (k.graph_laden === true ? [200, { ...PLAN_GRAPH, graph: undefined }] : [409, { fehler: 'graph_anders', text: 'x', graph: 'neu-a' }]) : u === '/regler' ? [200, { ok: true }] : null));
+  assert.ok(!(await c2.callTool({ name: 'presets_anwenden', arguments: { id: BK_ID, ziel: KANAL, graph_laden: true } })).isError);
+  assert.equal(g2.filter((x) => x.pfad === '/graph').length, 0);
+});
+
+test('presets_anwenden: graph_laden is an optional boolean; the description says what it does and that a channel gets the graph first', async (t) => {
+  const { c } = await aufbau(t, () => null);
+  const w = await tool(c, 'presets_anwenden');
+  assert.deepEqual(w.inputSchema.properties.graph_laden.type, 'boolean');
+  assert.deepEqual(w.inputSchema.required, ['id', 'ziel']);
+  assert.match(w.description, /graph_laden/);
+  assert.match(w.description, /send the graph \(POST \/graph\) FIRST and the knob requests only after the kern accepted it/);
+  assert.match(w.description, /graph_fehlt/);
+});
+
+// the real routes: the flag and the plan are the page server's (a stored instrument preset, a channel with another graph loaded)
+test('presets_anwenden graph_laden against the real routes: another graph on a channel loads it first, then 64 knobs; without the flag graph_anders', async (t) => {
+  const graphen = [{ name: 'neu-a', art: 'instrument', latenz: 0 }, { name: 'alt', art: 'instrument', latenz: 0 }];
+  const s = await echterStapel(t, (m, u) => (u === '/graph' ? [200, { ok: true, quittung: { status: 3, grund: '' } }] : u === '/regler' ? [200, { ok: true }] : null), { graphen });
+  const beschr = { art: 'pad', unterart: 'analog', charakter: ['warm'], genre: [], einsatz: ['intro'], energie: 1, text: 'A warm pad for the hand test.' };
+  const gespeichert = await s.c.callTool({ name: 'presets_speichern', arguments: { name: 'Neu Sound', geraet: 'baukasten', graph: 'neu-a', werte: { knob2: 0.25 }, beschreibung: beschr } });
+  assert.ok(!gespeichert.isError, text(gespeichert));
+  const ohne = await s.c.callTool({ name: 'presets_anwenden', arguments: { id: BK_ID, ziel: KANAL } });
+  assert.match(text(ohne), /graph_anders|kein_graph/);
+  const mit = await s.c.callTool({ name: 'presets_anwenden', arguments: { id: BK_ID, ziel: KANAL, graph_laden: true } });
+  assert.ok(!mit.isError, text(mit));
+  const pfade = s.gesehen.map((x) => x.pfad);
+  assert.equal(pfade.indexOf('/graph') >= 0 && pfade.indexOf('/graph') < pfade.indexOf('/regler'), true, 'graph before the first knob');
+  assert.equal(s.gesehen.filter((x) => x.pfad === '/regler').length, 64);
+});
+
 test('presets_anwenden: description names the freeze rule; the schema asks for id and ziel', async (t) => {
   const { c } = await aufbau(t, () => null);
   const w = await tool(c, 'presets_anwenden');
@@ -373,7 +453,7 @@ test('AK-B16-8: tools/list length = N + 6 (N = 66 on the base) = the count of to
   const laenge = (await c.listTools()).tools.length;
   const quelle = fs.readFileSync(HAND, 'utf8');
   const imCode = quelle.split('\n').filter((z) => z.startsWith("  { name: '")).length;
-  assert.equal(laenge, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import */ + 5 /* live-module task 4 */ + 1 /* live-module task 11: modul_tonart */ + 1 /* live-module task 8: modul_blend */ + 3 /* live-module task 10 */ + 1 /* oszilloskop */ + 1 /* SEQ deck slice 1 task 6: seq */ + 1 /* Sampler A1 task 9: sampler */ + 1 /* ANALYZE: proj_analyse */ + 2 /* ANALYZE slice 2: analyse_live, analyse_referenz */);   // + plugins (1.11 T8) + ansage (demo overlay) + proj_kits (1.9 T2.5) + proj_routing (1.10 T1) + proj_resample (1.10 T6) + proj_muster (strudel-clip)
+  assert.equal(laenge, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import */ + 5 /* live-module task 4 */ + 1 /* live-module task 11: modul_tonart */ + 1 /* live-module task 8: modul_blend */ + 3 /* live-module task 10 */ + 1 /* oszilloskop */ + 1 /* SEQ deck slice 1 task 6: seq */ + 1 /* Sampler A1 task 9: sampler */ + 1 /* ANALYZE: proj_analyse */ + 2 /* ANALYZE slice 2: analyse_live, analyse_referenz */ + 1 /* FIND SOUND: klang_runde */);   // + plugins (1.11 T8) + ansage (demo overlay) + proj_kits (1.9 T2.5) + proj_routing (1.10 T1) + proj_resample (1.10 T6) + proj_muster (strudel-clip)
   assert.equal(imCode, laenge, 'grep -c "^  { name: \'" djk/hand/hand.ts');
   const wurzel = path.resolve(path.dirname(HAND), '..', '..');
   // the English edition lives under docs/veroeffentlichung in the working repo; the public repo carries only djk/hand/AUFRUF.md

@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { listeGraphen, normalisierePanel, pruefePanel, reglerBereiche } from '../graphs.ts';
 import { SchnittFehler, legeSchnitt } from '../sampler/schnitt.ts';
-import { legeTon, liesTon, liesTonVonGraph, listeToene, loescheTon, loescheToeneVon, notenName, setzeGrund, tonGraph, tonKategorieText, tonText } from '../sampler/tone.ts';
+import { legeTon, liesTon, liesTonVonGraph, listeToene, loescheTon, loescheToeneVon, notenName, setzeGrund, tonGraph, tonKategorieText, tonNachSchnitt, tonText } from '../sampler/tone.ts';
 
 const wurzeln = [];
 function neueDirs() {
@@ -248,4 +248,25 @@ test('loescheTon removes graph, panel and tone file of one tone', () => {
   assert.throws(() => loescheTon(t.graph, dirs), fehler('ton_unbekannt', 404));
   // the freed number is taken again
   assert.equal(legeTon({ schnitt_id: s.id, von: 3 }, dirs).nr, 1);
+});
+
+test('after the cut changed the tone follows the new slice numbers; a region off the bounds says so', () => {
+  const d = neueDirs();
+  const s = handSchnitt(d, 'saege-0001', { ton: saege(220) });
+  const auto = legeTon({ schnitt_id: 'saege-0001', von: 4, bis: 5 }, d);      // the default name carries the slice numbers
+  const eigen = legeTon({ schnitt_id: 'saege-0001', von: 4, bis: 5, name: 'Mine' }, d);
+  assert.equal(auto.name, 'Cut saege-0001 · 5-6');
+  assert.deepEqual(tonNachSchnitt(auto, s), auto, 'an unchanged cut changes nothing');
+  // a marker before the region is removed: the same audio is slices 4-5 now
+  const weg = { ...s, grenzen: s.grenzen.filter((_, i) => i !== 2), guete: s.guete.slice(1) };
+  const jetzt = tonNachSchnitt(auto, weg);
+  assert.deepEqual([jetzt.scheiben, jetzt.name, jetzt.a, jetzt.b], [[3, 4], 'Cut saege-0001 · 4-5', auto.a, auto.b]);
+  assert.equal(tonNachSchnitt(eigen, weg).name, 'Mine', 'a name the owner gave is kept');
+  assert.deepEqual(tonNachSchnitt(eigen, weg).scheiben, [3, 4]);
+  assert.match(tonText(auto, undefined, weg), /slices 4-5 /);
+  // cut again to 4 equal slices: the region is no slice of the cut any more
+  const vier = { ...s, grenzen: [0, 22500, 45000, 67500, 90000], guete: s.guete.slice(0, 4) };
+  assert.equal(tonNachSchnitt(auto, vier).name, auto.name);
+  assert.match(tonText(auto, undefined, vier), new RegExp(`frames ${auto.a}-${auto.b} \\(no slice bounds of the cut any more\\)`));
+  assert.match(tonText(auto), /slices 5-6 /, 'without a cut the stored numbers');
 });

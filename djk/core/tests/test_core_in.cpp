@@ -40,6 +40,25 @@ int main() {
     PRUEF(z.back().status == 5 && z.back().ein_midi_sample == 5037 && z.back().ein_flanke == 7001 && z.back().ein_gesehen == 1);
     PRUEF(z.back().ein_verloren == 0);
   }
+  {  // eight raw inputs: events of two ports with interleaved offsets leave the ring ordered by offset (stable, one merged stream)
+    k35::Lauf y(ab.pfad);
+    y.kern->midi_ein_extern(true);
+    y.midi_ein_bei(30, 0x90, 1, 100, 0);   // port 1, offsets 30 and 90
+    y.midi_ein_bei(90, 0x90, 2, 100, 0);
+    y.midi_ein_bei(10, 0x90, 3, 100, 1);   // port 2, offsets 10 and 60
+    y.midi_ein_bei(60, 0x90, 4, 100, 1);
+    y.midi_ein_bei(60, 0x90, 5, 100, 0);   // equal offset 60: the port 2 event arrived first and stays first
+    y.zyklen(2 * k35::N);
+    const uint8_t soll_nr[5] = {3, 1, 4, 5, 2};
+    const int64_t soll_s[5] = {10, 30, 60, 60, 90};
+    cdj::MidiEinEreignis e{};
+    for (int i = 0; i < 5; ++i) {
+      PRUEF(y.kern->midi_ein_ring().hole(e));
+      PRUEF(e.b[1] == soll_nr[i] && e.sample == soll_s[i]);
+    }
+    PRUEF(!y.kern->midi_ein_ring().hole(e));
+    PRUEF(y.kern->midi_ein_ring().gesehen() == 5);
+  }
   {  // Review-Nachzug (MAJOR 1): ohne Leser darf der MIDI-Ring nie vollaufen. 5100 Ereignisse (3 je Zyklus) sind mehr als KAP = 4096.
     k35::Lauf y(ab.pfad);
     for (int i = 0; i < 1700; ++i)

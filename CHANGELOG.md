@@ -3,6 +3,60 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-18, ninth update
+
+**Studio**
+- Scenes for the sequencer decks: the SCENES strip in the header stores up to eight pictures of which patterns
+  play across all sequencer decks (SAVE, then a number). A click on a number switches the whole picture on the next
+  bar line, every pattern at the same sample; the last click before the bar wins, and with the transport stopped it
+  switches at once.
+- A project can hold up to 16 Cypher Modular instrument tracks (was 8), so a full module fits next to a full
+  sequencer deck. Dragging a knob moves the sound live on the first 8; on the others a knob change is applied when
+  you let go.
+- The studio follows the time signature of the open project (2/4 to 12/4): the bar counter, the beat dots, ramps
+  "over n bars", pattern starts and the length menu of the sequencer count in that meter. The metronome accent, the
+  count-in and the loop boxes still count in four.
+- The page opens the project you had open again after a restart.
+- EFFECTS has a MASTER tab in signal order: insert effect, glue compressor, limiter with a gain reduction meter.
+- Instrument pickers group the Cypher Modular instruments by synthesis type (Analog, Wavetable, FM, Strings & Bodies, Granular,
+  Sampler, Drum Synthesis, Feedback) or by role as before; TYPE and ROLE switch the grouping, and the instrument name shows the
+  other one behind it.
+- A sound loads its instrument: applying a preset to a channel or track that plays another instrument asks once and then loads
+  the instrument with the sound.
+- One search field above the shelf tabs (the / key focuses it): it searches every shelf source at once and shows the
+  hits grouped by kind; show all opens them in their tab, and FITS keeps only what matches the tempo and key of the
+  open module.
+- Several MIDI controllers at once, each on its own place (2 to 8) with its own learn table, so two devices that send
+  the same control no longer collide. CONTROLLERS opens a window of its own: the devices on the left, one table of
+  every assignment on the right with a text filter, and moving a control marks its row. Known devices are drawn in
+  their own layout as tiles (the LPD8 with its four programs as banks), a module view lists the free targets of a
+  module, and a target can be assigned directly. Feedback for the Novation Launch Control 3 (encoder lights and display
+  following what is learned) is implemented but not yet confirmed on the device.
+
+**Production**
+- Automation rows for return and master strips at the bottom of the arrangement: "+ Lane" offers the parameters of
+  the strip's insert effects, and on a return also Volume. The return fader in the mixer is marked AUTO and follows
+  the curve while it plays.
+- FIND SOUND makes steps you can hear: subtle, clear and strong say how far a variant must differ from the current
+  sound, and a knob is turned further until that is reached. A knob that cannot get there is offered at its end
+  stop and marked "max". No two variants of a round carry the same word. COMPARE alternates one bar of the current
+  sound and one bar of the variant, at the same loudness.
+
+**Engine**
+- The worker threads that compute tracks in parallel switch themselves back on after a late block instead of
+  staying off until the next start.
+- The operating journal of a set is lean: it keeps what a set needs to resume and to be read afterwards and no longer
+  repeats the controller lights and their receipts every 1.5 seconds. A day of studio time wrote about 2 GB before; the
+  full journal is still available as a setting for measurements.
+- A restart of the page server while the core restores its state after its own restart no longer loses the restore.
+- About sixty fixes from a code review of the whole studio. Three of them change the sound: no spike when the drum bus
+  drive leaves 0, LFO phases stay exact over long sets, and a mixer target that changes during an open blend waits for
+  the blend instead of stepping.
+
+**For the assistant**
+- Cypher can open the fader of a sequencer deck it plays itself, as with its Strudel channels. A deck with a
+  loaded track keeps the listening check.
+
 ## 2026-11-17, eighth update
 
 **Studio**

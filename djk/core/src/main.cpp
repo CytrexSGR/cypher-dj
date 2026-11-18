@@ -93,7 +93,7 @@ static cdj::WaechterSeite* g_ws = nullptr;  // Scheibe 18: Selbst-Wächter, null
 static jack_port_t* g_hand_led = nullptr;   // slice 35 B3: LED feedback to the controller (§7.1)
 static jack_port_t* g_hand_in = nullptr;    // Scheibe 35: JACK-MIDI vom Controller (§7.1)
 static jack_port_t* g_ein[cdj::EIN_PAARE][2] = {};  // I08: ein_<k>_L/R
-static jack_port_t* g_midi_ein = nullptr;           // I08: midi_ein_1
+static jack_port_t* g_midi_ein[cdj::MIDI_EIN_PORTS] = {};  // I08: midi_ein_1..8
 static jack_port_t* g_midi_aus[cdj::ERZ_MIDI_PORTS] = {};  // Studio S5: §7.1 midi_aus_1 bis _4
 // Slice 3 (F06/B10/B17): All-Off nach Neuverbindung eines MIDI-Ausgangs. Der Verbinder setzt je Port zwei Fälligkeiten
 // (mono_ns; 0 = keine), process() sendet und löscht sie. g_allaus_pos/_maske nur im Callback.
@@ -188,12 +188,13 @@ static int process(jack_nframes_t n, void*) {
       if (jack_midi_event_get(&ev, mb, i) == 0) g_kern->hand_midi(ev.buffer, ev.size, ev.time);
     }
   }
-  if (g_midi_ein) {  // I08: roher MIDI-Eingang, jedes Ereignis mit Versatz
-    void* mb = jack_port_get_buffer(g_midi_ein, n);
+  for (int p = 0; p < cdj::MIDI_EIN_PORTS; ++p) {  // I08: rohe MIDI-Eingänge midi_ein_1..8, jedes Ereignis mit Versatz und Port
+    if (!g_midi_ein[p]) continue;
+    void* mb = jack_port_get_buffer(g_midi_ein[p], n);
     const uint32_t ne = jack_midi_get_event_count(mb);
     for (uint32_t i = 0; i < ne; ++i) {
       jack_midi_event_t ev;
-      if (jack_midi_event_get(&ev, mb, i) == 0) g_kern->midi_ein(ev.buffer, ev.size, ev.time);
+      if (jack_midi_event_get(&ev, mb, i) == 0) g_kern->midi_ein(ev.buffer, ev.size, ev.time, p);
     }
   }
   for (int k = 0; k < cdj::EIN_PAARE; ++k)  // I08: Audio-Eingänge dieses Zyklus
@@ -544,10 +545,11 @@ int main(int argc, char** argv) {
       g_kern->setze_mapping(mapping.release());  // Besitz beim Kern: ein Tausch über /k/mapping gibt es dem Netz-Faden zurück
     }
   }
-  // S19 (MIDI learn): the learn table <controller folder>/lernen.json translates midi_ein_1 (slot 1). A missing file means no
-  // table, a broken one is logged with the loader's line text and the kern runs without table: music never depends on the hand.
-  {
-    const std::string lpfad = controller_ordner + "/lernen.json";
+  // S19 (MIDI learn): one learn table per raw input: <controller folder>/lernen.json translates midi_ein_1 (slot 1), lernen-<k>.json
+  // translates midi_ein_<k> (slot k, k 2..8). A missing file means no table, a broken one is logged with the loader's line text and the
+  // kern runs without that table: music never depends on the hand.
+  for (int k = 1; k <= cdj::MIDI_EIN_PORTS; ++k) {
+    const std::string lpfad = controller_ordner + (k == 1 ? std::string("/lernen.json") : "/lernen-" + std::to_string(k) + ".json");
     std::error_code lec;
     if (!std::filesystem::exists(lpfad, lec)) {
       std::fprintf(stderr, "learn mapping %s: no file, no learn table\n", lpfad.c_str());
@@ -558,7 +560,7 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "learn mapping %s: %s (kern without learn table)\n", lpfad.c_str(), lfe.text);
       } else {
         std::fprintf(stderr, "learn mapping %s: %d entries\n", lpfad.c_str(), lm->n_eintraege);
-        g_kern->setze_lern_mapping(lm.release());  // owned by the kern; a swap over /k/mapping hands it back to the net thread
+        g_kern->setze_lern_mapping(lm.release(), k - 1);  // owned by the kern; a swap over /k/mapping hands it back to the net thread
       }
     }
   }
@@ -693,8 +695,8 @@ int main(int argc, char** argv) {
       if (spur_modus == 0)
         std::fprintf(stderr, "Track phases off by config: spur_pool = aus (the callback computes every track itself)\n");
       else
-        std::fprintf(stderr, "Track phases: spur_pool = %s%s (the track sources compute on the Hall pool once every worker runs SCHED_FIFO)\n", konf.spur_pool.c_str(),
-                     spur_modus == 2 ? ", one automatic retry after a switch-off" : "");
+        std::fprintf(stderr, "Track phases: spur_pool = %s, retried after a switch-off with a doubling back-off (the track sources compute on the Hall pool once every worker runs SCHED_FIFO)\n",
+                     konf.spur_pool.c_str());
     } else {
       g_kern->setze_spur_pool(0);
       if (spur_modus == 0)
@@ -750,8 +752,12 @@ int main(int argc, char** argv) {
       std::snprintf(name, sizeof name, "ein_%d_%c", k + 1, s ? 'R' : 'L');
       g_ein[k][s] = jack_port_register(g_client, name, JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
     }
-  g_midi_ein = jack_port_register(g_client, "midi_ein_1", JACK_DEFAULT_MIDI_TYPE, JackPortIsInput, 0);
-  if (!g_midi_ein) std::fprintf(stderr, "Port midi_ein_1 nicht angelegt: Kern ohne rohen MIDI-Eingang\n");
+  for (int p = 0; p < cdj::MIDI_EIN_PORTS; ++p) {
+    char name[32];
+    std::snprintf(name, sizeof name, "midi_ein_%d", p + 1);
+    g_midi_ein[p] = jack_port_register(g_client, name, JACK_DEFAULT_MIDI_TYPE, JackPortIsInput, 0);
+    if (!g_midi_ein[p]) std::fprintf(stderr, "Port %s nicht angelegt: Kern ohne diesen rohen MIDI-Eingang\n", name);
+  }
   for (int p = 0; p < cdj::ERZ_MIDI_PORTS; ++p) {
     char name[32];
     std::snprintf(name, sizeof name, "midi_aus_%d", p + 1);
@@ -1109,10 +1115,11 @@ int main(int argc, char** argv) {
   };
   auto verbinde = [&]() {
     verbinde_ausgaenge();
-    uint32_t maske = 0;  // I08: was ist verbunden (Bit k-1: ein_k beide Kanäle, Bit 8: midi_ein_1)
+    uint32_t maske = 0;  // I08: was ist verbunden (Bit k-1: ein_k beide Kanäle, Bit 8..15: midi_ein_1..8)
     for (int k = 0; k < cdj::EIN_PAARE; ++k)
       if (g_ein[k][0] && g_ein[k][1] && jack_port_connected(g_ein[k][0]) > 0 && jack_port_connected(g_ein[k][1]) > 0) maske |= 1u << k;
-    if (g_midi_ein && jack_port_connected(g_midi_ein) > 0) maske |= 1u << 8;
+    for (int p = 0; p < cdj::MIDI_EIN_PORTS; ++p)
+      if (g_midi_ein[p] && jack_port_connected(g_midi_ein[p]) > 0) maske |= 1u << (8 + p);
     g_kern->ein_verbunden(maske);
     if (g_hand_led && hand_ziel[0] && jack_port_by_name(g_client, hand_ziel) &&
         !jack_port_connected_to(g_hand_led, hand_ziel)) {  // slice 35 B3: LEDs to the device; a new connection resends every LED

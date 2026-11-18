@@ -419,3 +419,12 @@ test('S7 loop T13.3: STOP cancels a waiting change and the follow-up of a runnin
   b.melde({ v: 'a' }); await u.vor(300); b.melde({ v: 'b' }); await u.vor(300);
   assert.deepEqual(anfragen, ['a', 'b']);
 });
+
+test('kopfTakt: the head counts bars of proTakt beats, the default 4 is unchanged', () => {
+  const lauf = { anker_beat: 99, schleife_takte: 2 };
+  for (const b of [99, 101.5, 104, 107.5, 110]) assert.equal(kopfTakt(b, lauf, 2, 4), kopfTakt(b, lauf, 2));
+  assert.equal(kopfTakt(102, lauf, 2, 3), 2);
+  assert.equal(kopfTakt(105, lauf, 2, 3), 1, 'a pass of 2 bars of 3 beats ends after 6 beats');
+  assert.equal(kopfTakt(103.5, { anker_beat: 99 }, 4, 3), 2.5);
+  assert.equal(kopfTakt(114, { anker_beat: 99 }, 4, 3), null, 'beyond laenge + 1 bars of 3');
+});

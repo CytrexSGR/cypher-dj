@@ -1,5 +1,5 @@
 """Fetch the BS-RoFormer-SW weights for werkstatt.stems ahead of time (plan 2026-11-06-stems-roformer-gpu, Task 1): from a local file
-(--von, e.g. ~/werkstatt/stems-vergleich/dl/BS-Rofo-SW-Fixed.ckpt) or from the network. sha256 and size pinned (measured 2026-11-06).
+(--von, e.g. ~/werkstatt/<project>/dl/BS-Rofo-SW-Fixed.ckpt) or from the network. sha256 and size pinned (measured 2026-11-06).
 Limit G3: nothing over 1 GB is downloaded (exit 3). Call: python -m werkstatt.weights_stems [--von PATH] [--ziel PATH] [--nur-pruefen]"""
 import argparse
 import shutil

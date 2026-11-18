@@ -17,7 +17,7 @@ export const S3_QUELLE = /^(AusgabeFehler|FreezeFehler|StandFehler|fehl|grund-Fe
 // Gründe einer Datei d mit Inhalt t (Muster je Ort); dazu(grund, fundstelle)
 export function gruendeAusDatei(d, t, dazu) {
   for (const m of t.matchAll(new RegExp(`new (${KLASSEN})\\(\\s*(?:\\d+\\s*,\\s*)?'([a-z_]+)'`, 'g'))) dazu(m[2], `${m[1]} ${d}`);
-  if (d === 'project/commands.ts' || d === 'project/stems.ts' || d === 'project/merge.ts'
+  if (/^project\/befehle(_[a-z]+)?\.ts$/.test(d) || d === 'project/stems.ts' || d === 'project/merge.ts'
     || d === 'project/bounce.ts' || d === 'project/resample.ts') for (const m of t.matchAll(/\bab\(\s*'([a-z_]+)'/g)) dazu(m[1], `ab ${d}`);
   // Gründe-Literale {fehler|grund: '…'} in bereiche/ und (V2 Fix F9) http/, auch als Zweige eines Ternärs (http/transport.ts:
   // { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' }); gezählt werden der ganze Wert und die Zweige nach ? und :
@@ -42,7 +42,7 @@ export function gruendeAusDemCode() {
   for (const d of [...ts(PROJEKT), ...ts('areas/proj'), ...ts('http'), 'catalog.ts']) gruendeAusDatei(d, lies(d), dazu);
   for (const x of BEREICH_GRUENDE) dazu(x, 'BEREICH_GRUENDE');
   // ausdrücklich genannt; jede nur, wenn sie im Code dieses Baums wirklich steht
-  for (const [x, d] of [['intern', 'areas/proj/area.ts'], ['slot_belegt', 'project/commands.ts'], ['ueber_projekt', 'server.ts']]) {
+  for (const [x, d] of [['intern', 'areas/proj/area.ts'], ['slot_belegt', 'project/commands_helpers.ts'], ['ueber_projekt', 'server.ts']]) {
     if (lies(d).includes(`'${x}'`)) dazu(x, `genannt ${d}`);
   }
   return g;

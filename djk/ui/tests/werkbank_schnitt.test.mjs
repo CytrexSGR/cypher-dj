@@ -309,7 +309,7 @@ test('CUT AGAIN sends the method and count, shows the text, offers the original 
   assert.equal(streifen().querySelectorAll('[data-w="schnitt-ursprung"]').length, 0, 'written: the offer is gone');
   // a refusal (no hit): the text, the cut as it was, nothing offered
   const n = scheiben().length;
-  attrappe.antworten['POST /sampler/neu_schneiden'] = { code: 422, j: { fehler: 'keine_anschlaege', text: 'no hits found at sensitivity 0.70; raise it or cut by grid' } };
+  attrappe.antworten['POST /sampler/neu_schneiden'] = { code: 422, j: { fehler: 'keine_anschlaege', text: 'no hits found at sensitivity 0.70; cut by grid instead, or raise the sensitivity (HITS in the strip of a cut track, empfindlichkeit in the hand tool)' } };
   neu().dispatch('click'); await ruhe();
   assert.ok($w('meldung').textContent.includes('No hits found at sensitivity 0.70'));
   assert.ok($w('meldung').classList.contains('fehler'));
@@ -421,10 +421,11 @@ test('a cut changed elsewhere is read again on selection (geaendert differs)', a
   w.zeige(); await ruhe();
   const b = beobachte();
   w.ctx.waehleScheiben([3]);
-  // the same stamp: a project event and a selection read the cut and leave everything as it is
+  // the same stamp: a project event reads nothing, an event of the cut with the same stamp neither
   w.ctx.uebernimm('m1', { ...zweiSpuren(), rev: 3 }); await ruhe();
+  w.ereignis('schnitt', { id: 'x', geaendert: '2026-11-16T10:00:00.000Z' }); await ruhe();
   b.vergiss = 0;
-  assert.equal(GETS('/sampler/schnitt').length, 2, 'the project event read the cut once more');
+  assert.equal(GETS('/sampler/schnitt').length, 1, 'neither a project event nor an event with the same stamp read the cut');
   assert.deepEqual(w.ctx.schnittWahl.scheiben, [3]);
   assert.equal(b.vergiss, 0);
   w.ctx.waehle('s3'); await ruhe(); w.ctx.waehle('s1'); await ruhe();
@@ -436,11 +437,17 @@ test('a cut changed elsewhere is read again on selection (geaendert differs)', a
   assert.equal(scheiben().length, 9, 'redrawn from the new cut');
   assert.equal(b.vergiss, 1);
   assert.deepEqual(w.ctx.schnittWahl, { spur_id: 's1', schnitt_id: 'x', scheiben: [] });
-  // a project event does the same
+  // a hand cut without a project step: the event of the server reaches the open strip, no selection and no project event needed
+  const n = GETS('/sampler/schnitt').length;
   setzeSchnitt('x', mit(12, { geaendert: '2026-11-16T10:09:00.000Z' }));
   w.ctx.uebernimm('m1', { ...zweiSpuren(), rev: 4 }); await ruhe();
+  assert.equal(scheiben().length, 9, 'a project event does not read the cut');
+  w.ereignis('schnitt', { id: 'x', geaendert: '2026-11-16T10:09:00.000Z' }); await ruhe();
   assert.equal(scheiben().length, 12);
+  assert.equal(GETS('/sampler/schnitt').length, n + 1);
   assert.equal(b.vergiss, 2);
+  w.ereignis('schnitt', { id: 'unbekannt', geaendert: 'x' }); await ruhe();   // a cut the strip never read: nothing to refresh
+  assert.equal(GETS('/sampler/schnitt').length, n + 1);
 });
 
 test('moved markers are amber; a refusal keeps the strip and shows the text', async () => {
@@ -487,4 +494,14 @@ test('hit ticks come from the cut; marker 0 is neutral, a marker without a hit i
   assert.ok(handle(8).getAttribute('title').includes('0.125 beat before the grid'));
   assert.ok(handle(5).getAttribute('title').includes('no hit'));
   assert.ok(handle(1).getAttribute('title').includes('on the grid'));
+});
+
+test('a double click on a slice hears it once: the second click of the pair does not start another listening', async () => {
+  aufbau(zweiSpuren(), { schnitte: { x: mit(16), y: schnittJson('y', 8) } }); antwortHoeren();
+  w.zeige(); await ruhe();
+  attrappe.antworten['POST /sampler/marke'] = { j: { schnitt: mit(17, { methode: 'hand' }), text: 'Marker added.' } };
+  const el = scheibeEl(4);
+  klick(el, { detail: 1 }); klick(el, { detail: 2 }); el.dispatch('dblclick', { clientX: 30 }); await ruhe();
+  assert.equal(POSTS('/sampler/hoeren').length, 1);
+  assert.equal(POSTS('/sampler/marke').length, 1);
 });

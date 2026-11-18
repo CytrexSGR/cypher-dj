@@ -35,26 +35,31 @@ export function bindeInstrumente(ctx, { host, setzeHinweis = () => {}, refusalTe
   const liste = el('div', 'w-ins-liste');
   wurzelEl.append(liste);
 
+  // the search view (regal_suche.js) draws rows of this binder into its own host: their buttons follow the same state
+  const fremde = new Set();
+  const alle = (sel) => [liste, ...fremde].flatMap((h) => [...h.querySelectorAll(sel)]);
   const zeigeKnoepfe = () => {
-    for (const b of liste.querySelectorAll('[data-w="instrument-spur"]')) {
+    for (const b of alle('[data-w="instrument-spur"]')) {
       b.disabled = !st.projekt || macht;
       b.setAttribute('title', st.projekt ? INSTRUMENTE_TEXT.spurTitel : INSTRUMENTE_TEXT.keinModul);
     }
-    for (const b of liste.querySelectorAll('[data-w="instrument-weg"]')) b.disabled = macht;
+    for (const b of alle('[data-w="instrument-weg"]')) b.disabled = macht;
   };
+  // one row of a stored instrument (`z` as instrumentZeilen gives it)
+  function baueZeile(z) {
+    const r = markiere(el('div', 'w-ins-zeile'), 'instrument-zeile'); r.setAttribute('data-id', z.id); r.setAttribute('title', z.id);
+    r.append(el('span', 'w-ins-name', z.name), el('span', 'w-ins-info', z.info), el('span', 'w-ins-groesse', z.groesse));
+    const spur = el('button', 'w-ins-knopf', 'TO TRACK'); spur.type = 'button'; markiere(spur, 'instrument-spur');
+    spur.addEventListener('click', () => zuSpur(z));
+    const weg = el('button', 'w-ins-knopf', 'DELETE'); weg.type = 'button'; markiere(weg, 'instrument-weg');
+    weg.setAttribute('title', INSTRUMENTE_TEXT.wegTitel);
+    weg.addEventListener('click', () => loesche(z));
+    r.append(spur, weg);
+    return r;
+  }
   function zeichne() {
     if (!daten) { liste.replaceChildren(el('div', 'w-ins-leer', fehler ?? INSTRUMENTE_TEXT.liest)); return; }
-    const zeilen = instrumentZeilen(daten).map((z) => {
-      const r = markiere(el('div', 'w-ins-zeile'), 'instrument-zeile'); r.setAttribute('data-id', z.id); r.setAttribute('title', z.id);
-      r.append(el('span', 'w-ins-name', z.name), el('span', 'w-ins-info', z.info), el('span', 'w-ins-groesse', z.groesse));
-      const spur = el('button', 'w-ins-knopf', 'TO TRACK'); spur.type = 'button'; markiere(spur, 'instrument-spur');
-      spur.addEventListener('click', () => zuSpur(z));
-      const weg = el('button', 'w-ins-knopf', 'DELETE'); weg.type = 'button'; markiere(weg, 'instrument-weg');
-      weg.setAttribute('title', INSTRUMENTE_TEXT.wegTitel);
-      weg.addEventListener('click', () => loesche(z));
-      r.append(spur, weg);
-      return r;
-    });
+    const zeilen = instrumentZeilen(daten).map(baueZeile);
     liste.replaceChildren(...(zeilen.length ? zeilen : [el('div', 'w-ins-leer', INSTRUMENTE_TEXT.leer)]));
     zeigeKnoepfe();
   }
@@ -87,7 +92,7 @@ export function bindeInstrumente(ctx, { host, setzeHinweis = () => {}, refusalTe
     try {
       const r = await ctx.holeJson('/sampler/instrument/loeschen', { id: z.id });
       if (r.status !== 200) ctx.melde(refusalText(r), true);
-    } finally { macht = false; zeigeKnoepfe(); lade(); }
+    } finally { macht = false; zeigeKnoepfe(); lade(); ctx.beiInstrumentGeaendert?.(); }
   }
 
   ctx.beimProjekt.push(() => { if (aktiv) zeigeKnoepfe(); });
@@ -98,6 +103,9 @@ export function bindeInstrumente(ctx, { host, setzeHinweis = () => {}, refusalTe
 
   return {
     lade,
+    // the search view: the row of the stored instrument `z` (a hit of GET /suche is the row of GET /sampler/instrumente) for `suchHost`
+    zeileFuer(z, suchHost) { fremde.add(suchHost); const [r] = instrumentZeilen({ instrumente: [z] }); return r ? baueZeile(r) : null; },
+    zeigeKnoepfe,
     zeige() { aktiv = true; setzeHinweis(null); host.replaceChildren(wurzelEl); zeichne(); if (st.sichtbar) lade(); },
     verberge() { aktiv = false; setzeHinweis(null); },
   };

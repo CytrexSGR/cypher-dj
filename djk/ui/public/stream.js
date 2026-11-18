@@ -6,12 +6,13 @@ import { cypherStand } from './messages.js';
 import { live, liveEreignis, liveOffen, merkeArr, pruefeLiveSpaeter, zeichneLive } from './live_view.js';
 import { produktion, werkbank } from './seitenrahmen.js';
 import { $, BUCHSTABE, deckAnsicht, melde, zeigePruefmodus, zustand } from './page_state.js';
-import { baueFxDetail, busMix, fxGewaehlt, gateMix, zeigeBusMesser, zeigeGateMesser, zeigeKomp, zeigeWerkzeug } from './effects_view.js';
+import { baueFxDetail, busMix, fxGewaehlt, gateMix, zeigeBusMesser, zeigeGateMesser, zeigeKomp, zeigeMasterLimiter, zeigeWerkzeug } from './effects_view.js';
 import { zeigeKeylock } from './tempo_view.js';
 import { GRUND_TEXT, eintragVon, zeigeDeck, zeigePegel, zeigeSchlag } from './deck_view.js';
 import { fxRoutingVomKern, fxVomKern, fxZuweisungVomKern } from './beat_fx_view.js';
 import { bkMarkeSpaeter, holeBkSpaeter, setzeGraphenGeladen } from './graphs_view.js';
 import { lernEreignis, zeigeFxDetail, zeigeSendKnobs } from './learn_view.js';
+import { registerHand } from './register_view.js';
 import { ladeLoops, recAktiv, recEnde, setzeLetzterBeat, taktText, uhrKopf, zeigeRec } from './loop_rec_view.js';
 import { zeigeWert } from './controls_view.js';
 import { zeigeColor } from './color_view.js';
@@ -20,6 +21,8 @@ import { kompPegelAufnehmen } from './face/comp.js';
 import { instrumenteSichtbar, kompGr, kompPegel, spektrumAnsichten, spektrumLeihe, spektrumNachsehen } from './effects_gemeinsam.js';
 import { holeHotcues, holeRaster } from './deck_griffe.js';
 import { instrumenteAnsicht } from './effects_bindung.js';
+import { leitstandZaehlt, proTaktJetzt, setzeProTakt, takteProLive, zaehlerVon } from './bar_live.js';
+import { zeichneSeq } from './seq_view.js';
 
 // Demo overlay: the line "what Cypher is doing now" (POST /ansage). It stays while the text is new and fades after a
 // reading time (4 s plus 60 ms per character); an empty line (f null) hides it at once.
@@ -43,13 +46,22 @@ function zeigeAnsage(f) {
   ansageFrist = setTimeout(() => el.classList.remove('an'), Math.max(0, 4000 + 60 * f.text.length - alter));
 }
 
+// studio-taktart: the page counts bars of the open project's meter n/4 (bar_live.js); it learns it from /lage and from the SSE event `taktart`.
+function uebernimmTaktart(n) {
+  const alt = proTaktJetzt();
+  if (setzeProTakt(n) !== alt) { zeichneSeq(); zeigeCypher(); }
+}
+async function holeTaktart() {
+  try { uebernimmTaktart(takteProLive((await (await fetch('/lage')).json()).taktart)); } catch { /* the counter stays as it was */ }
+}
+
 export function strom() {
   const q = new EventSource('/strom');
   q.onmessage = (m) => {
     const { a, f } = JSON.parse(m.data);
     try { produktion?.ereignis(a, f); } catch (e) { console.error('Production view:', e); }   // D1 V1: proj, /zustand/arr; ein Fehler dort hält die DJ-Anzeige nicht an
     try { werkbank?.ereignis(a, f); } catch (e) { console.error('Workbench view:', e); }   // like the line above: an error there does not stop the DJ display
-    if (a === '/zustand/arr') merkeArr(f);   // the loop slots follow the transport of the live container
+    if (a === '/zustand/arr') { merkeArr(f); zeigeMasterLimiter(f); }   // the loop slots follow the transport of the live container; the MASTER tab's LIMITER meter reads limiter_db
     switch (a) {
       case 'stand':
         Object.assign(zustand.regler, f.regler);
@@ -67,10 +79,13 @@ export function strom() {
         if (f.graphen_geladen) setzeGraphenGeladen(f.graphen_geladen);   // S12
         $('#v-kern').classList.toggle('an', f.kern === 'verbunden');
         zeigePruefmodus(f.pruefmodus);
+        holeTaktart();   // the page may load after a meter change: /lage carries `taktart` only when it is not 4/4
         break;
+      case 'taktart': uebernimmTaktart(f.proTakt); break;   // studio-taktart: the open project's meter changed (only sent when it is not 4/4 or leaves it)
       case 'ansage': zeigeAnsage(f); break;   // demo overlay (POST /ansage)
       case 'graphen': setzeGraphenGeladen(f.geladen); break;   // S12
       case 'lernen': lernEreignis(f); break;   // S19
+      case '/e/hand': registerHand(String(f.pfad ?? '')); break;   // a controller moved a control: the Controllers window marks its row
       case 'proj': holeBkSpaeter(); liveEreignis(a, f); break;   // S17: the project changed or was opened; live modules task 4: the panel follows
       case 'modul': liveEreignis(a, f); break;   // live modules task 4: slot state of the module export (separation)
       case 'seq': liveEreignis(a, f); break;   // SEQ deck: a step or the deck itself was written ({platz, rev})
@@ -81,7 +96,7 @@ export function strom() {
         zeigeSchlag(f.beat);
         uhrKopf.melde(f.beat, f.bpm, performance.now(), true);
         setzeLetzterBeat(f.beat); zeigeRec(f.beat);
-        if (!taktVomLeitstand) { $('#takt').textContent = Math.floor(f.beat / 4) + 1; $('#phrase').textContent = Math.floor(f.beat / 32) + 1; }
+        if (!taktVomLeitstand || !leitstandZaehlt(proTaktJetzt())) { const z = zaehlerVon(f.beat, proTaktJetzt()); $('#takt').textContent = z.takt; $('#phrase').textContent = z.phrase; }
         if (document.activeElement !== $('#bpm')) $('#bpm').value = f.bpm.toFixed(2);
         if (zustand.bpm !== f.bpm) { zustand.bpm = f.bpm; DECKS.forEach(zeigeDeck); }
         break;
@@ -98,6 +113,7 @@ export function strom() {
         if (f.pfad === 'spektrum/kanal') for (const a of spektrumAnsichten) a.setzeQuelle(f.wert);   // A7b
         { const m = /^(.+?\/\d)\/(?:gate|util|mb|lim)\/[\w/]+$/.exec(f.pfad); if (m) zeigeWerkzeug(m[1]); }   // A8, A8b (bus multiband and limiter)
         if (/^fx\/[34]\/bk\//.test(f.pfad)) zeigeSendKnobs();   // S14: the send-return knobs follow the echo (also a move by Cypher)
+        if (/^master\/bk\//.test(f.pfad)) zeigeSendKnobs();   // the knobs of the master insert (MASTER tab, same row type) follow it too
         { const m = /^(.+)\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.exec(f.pfad); const fp = m && m[1] === fxGewaehlt ? $('#fxdetail .bkliste')?._fp : null; if (fp) fp.aktualisiere(); }   // a panel in the detail view follows the echo too
         { const m = /^(.+)\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.exec(f.pfad); if (m && instrumenteSichtbar() && m[1] === instrumenteAnsicht.gewaehlt()) instrumenteAnsicht.aktualisiere(); }   // ... and the panel in INSTRUMENTS
         if (remixFp && /\/bk\/\d+$/.test(f.pfad)) remixFp.aktualisiere();   // the REMIX panel follows the knob echo of its target
@@ -187,7 +203,7 @@ let cypherLage = { vorschlag: null, gestoppt: false };
 export function zeigeCypher() {
   const v = cypherLage.vorschlag;
   $('#vorschlag').hidden = !v;
-  if (v) $('#vorschlag').textContent = `Cypher proposes (bar ${Math.floor(v.start_beat / 4) + 1}): ${v.text}`;
+  if (v) $('#vorschlag').textContent = `Cypher proposes (bar ${Math.floor(v.start_beat / proTaktJetzt()) + 1}): ${v.text}`;
   $('#t-annehmen').hidden = !v; $('#t-verwerfen').hidden = !v;
   $('#t-stopp').hidden = cypherLage.gestoppt; $('#t-freigabe').hidden = !cypherLage.gestoppt;
 }
@@ -212,7 +228,7 @@ export async function leitstand() {
     ws.onmessage = (m) => {
       const n = JSON.parse(m.data);
       if (n.typ === 'willkommen') { leitstandDa = true; $('#v-leitstand').classList.add('an'); }
-      if (n.typ === 'takt') { taktVomLeitstand = true; $('#takt').textContent = n.daten.takt; $('#phrase').textContent = n.daten.phrase; }
+      if (n.typ === 'takt') { taktVomLeitstand = true; if (leitstandZaehlt(proTaktJetzt())) { $('#takt').textContent = n.daten.takt; $('#phrase').textContent = n.daten.phrase; } }   // the conductor counts 4
       // Die Ansage-Sätze des Leitstands sind deutsch (ADR 019); die Seite ist englisch und sagt Ereignisse selbst an
       if (n.typ === 'ereignis') cypherEreignis(n.daten);
       if (n.typ === 'ereignis') { const t = englisch(n.daten); if (t) { const a = $('#ansage'); a.textContent = `Bar ${n.daten.takt}: ${t[0]}`; a.className = `ansage ${t[1]}`; } }

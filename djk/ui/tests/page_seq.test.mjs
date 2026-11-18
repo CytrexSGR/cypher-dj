@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { liesApp } from './helpers/app_source.mjs';
-import { installiere, attrappe } from './helpers/pages_mock.mjs';
+import { installiere, attrappe, sendeStrom } from './helpers/pages_mock.mjs';
 import {
   seqAnsicht, deckAnsicht, folgeEditierbar, geraetText, kopfZelle, kopfPos, ANLEGEN_HINWEIS, anlegenZustand, zellKlassen, zellText, zellTitel, velNeu, tonNeu,
   griffArt, laengeNeu, loslassFelder, imRechteck, radFelder, sende, legeAn, leereDeck, neueFolge, geraetWahl, ladeInfos, infosAusCache, fehlendeInfos,
@@ -321,7 +321,7 @@ test('ladeInfos asks GET /seq/geraet once per device, keeps the answer, and a fa
 
 test('the instrument picker offers the Baukasten instruments, the kits and the RB-338', () => {
   const w = geraetWahl([{ name: 'bassmusik', art: 'instrument' }, { name: 'hall', art: 'effect' }, { name: 'lead', art: 'instrument' }], [{ name: '909', klaenge: 12 }]);
-  assert.deepEqual(w.map((e) => [e.gruppe, e.text]), [['Baukasten', 'bassmusik'], ['Baukasten', 'lead'], ['Kit', '909 (12)'], ['Other', 'RB-338']]);
+  assert.deepEqual(w.map((e) => [e.gruppe, e.text]), [['Baukasten', 'bassmusik'], ['Baukasten', 'lead'], ['Kit', '909 (12)'], ['RB-338', 'RB-338']]);   // own group name: the menu's type group "Other" must not clash with it
   assert.deepEqual(w[0].geraet, { art: 'intern', name: 'bk', graph: 'bassmusik' });
   assert.deepEqual(w[2].geraet, { art: 'intern', name: 'kit', kit: '909' });
   assert.deepEqual(w[3].geraet, { art: 'intern', name: 'rb338', parameter: {} });
@@ -410,6 +410,8 @@ let live, seqAnsichtModul, setzeProduktion;
 const platz = (n = 2) => attrappe.body.querySelector(`section.seqplatz[data-seq="${n}"]`);
 const antwort = (p) => ({ code: 200, j: { rev: p.rev, projekt: p, kern: {}, gruppe_id: 'g_seq' } });
 let posts, naechste = null;
+const modulPosts = [];
+let modulAntwort = () => ({ code: 200, j: { ok: true, rev: 9, projekt: { ...projekt(), rev: 9 }, bericht: { platz: 2, deck_neu: false, patterns: [{ name: 'A' }, { name: 'B' }], weggelassen: { sends: 1, inserts: 0, master_inserts: 0, returns: 0, gruppen: 0, kettenautomation: 0, tonart: false, spuren_uebersprungen: [], gekuerzt: [] } } } });
 before(async () => {
   posts = [];
   installiere({
@@ -420,6 +422,8 @@ before(async () => {
       'GET /graphen': { j: { graphen: [{ name: 'bassmusik', art: 'instrument', regler_namen: {} }] } }, 'GET /proj/kits': { j: { kits: [{ name: '909', klaenge: 12 }] } },
       'POST /seq/befehle': (k) => { posts.push(k); return naechste ? naechste(k) : antwort({ ...projekt(), rev: 8 }); },
       'POST /seq/anlegen': () => antwort(projekt([])),
+      'GET /proj/liste': { j: [{ slug: 'mod-a', name: 'Mod A', werkbank: true }, { slug: 'plain', name: 'Plain' }, { slug: 'mod-b', name: 'Mod B', werkbank: true }] },
+      'POST /seq/modul': (k) => { modulPosts.push(k); return modulAntwort(k); },
     },
   });
   await import('../public/app.js');
@@ -1321,8 +1325,219 @@ test('the DOM: the focus stays on its button or cell when a write draws the fiel
   assert.equal(attrappe.aktiv, null, 'nothing had the focus: nothing takes it');
 });
 
+test('the DOM: giving the focus back after a redraw does not scroll the page', async () => {
+  await zeige(projekt());
+  const stumm = () => platz(2).querySelectorAll('.sq-folge')[1].querySelector('[data-sq-stumm]');
+  const alt = stumm(); alt.focus();
+  naechste = () => antwort(projekt([kitSpur(), bkSpur({ mute: true })]));
+  attrappe.fokusAufrufe = [];
+  alt.dispatch('click', {});
+  await warteAuf(() => posts.length > 0); await warte(50);
+  naechste = null;
+  assert.notEqual(stumm(), alt, 'the block was built again');
+  const aufrufe = attrappe.fokusAufrufe.filter((a) => a.ziel === attrappe.aktiv);
+  assert.equal(aufrufe.length, 1, 'the new button got the focus once');
+  assert.equal(aufrufe[0].opt?.preventScroll, true, 'focus({ preventScroll: true })');
+});
+
 test('the instrument picker names a new pattern after the instrument and numbers a second one with the same instrument', () => {
   const src = lies('seq_view.js');
   assert.match(src, /freierName\(/, 'the + pattern entry asks for a free name');
   assert.match(src, /neueFolge\(n, freierName\(e\.name, /);
+});
+
+test('LOAD MODULE lists the Workbench modules; the pick loads it into this place, the line says what came along and what was left out', async () => {
+  await zeige(projekt());
+  modulPosts.length = 0;
+  const knopf = platz(2).querySelector('[data-sq-modul]');
+  assert.ok(knopf && knopf.textContent === 'LOAD MODULE' && !knopf.hidden);
+  knopf.dispatch('click', {});
+  await warte();
+  const punkte = attrappe.body.querySelectorAll('.p-menue button');
+  assert.deepEqual(punkte.map((b) => b.textContent), ['Mod A', 'Mod B'], 'only the entries with werkbank: true');
+  punkte[1].click();
+  await warteAuf(() => modulPosts.length > 0); await warte(50);
+  assert.deepEqual(modulPosts, [{ platz: 2, slug: 'mod-b' }]);
+  assert.equal(live.rev, 9);
+  assert.equal(attrappe.body.querySelector('#meldung').textContent, 'loaded 2 patterns into SEQ 2 · left out: 1 send');
+  assert.equal(attrappe.body.querySelector('#meldung').className, 'ok');
+});
+
+test('LOAD MODULE: a refusal is a readable error line and the project stays; without the live container nothing is asked', async () => {
+  await zeige(projekt());
+  modulAntwort = () => ({ code: 409, j: { fehler: 'kanal_offen', text: 'the channel deck/2 of place 2 is open; close it before a SEQ deck is created there' } });
+  modulPosts.length = 0;
+  platz(2).querySelector('[data-sq-modul]').dispatch('click', {});
+  await warte();
+  attrappe.body.querySelectorAll('.p-menue button')[0].click();
+  await warteAuf(() => modulPosts.length > 0); await warte(50);
+  assert.match(attrappe.body.querySelector('#meldung').textContent, /Load module refused: the channel deck\/2/);
+  assert.equal(attrappe.body.querySelector('#meldung').className, 'fehler');
+  const vorher = attrappe.anrufe.length;
+  live.projekt = null;
+  platz(2).querySelector('[data-sq-modul]').dispatch('click', {});
+  await warte();
+  assert.equal(attrappe.anrufe.length, vorher, 'no request without the live container');
+  assert.match(attrappe.body.querySelector('#meldung').textContent, /Open the live container first/);
+});
+
+// ---------- SEQ scenes: the row #seq-szenen (public/seq_szenen.js) ----------
+const szenenKnoten = () => attrappe.body.querySelector('#seq-szenen');
+const szenenKnopf = (i) => szenenKnoten().querySelectorAll('button.szene')[i];
+const SZENEN_LEER = { szenen: [null, null, null, null, null, null, null, null], aktiv: null, wartet: null };
+const szenenStand = (extra = {}) => ({ ...SZENEN_LEER, szenen: [null, { an: 2, aus: 1 }, null, null, null, null, null, null], ...extra });
+let szenenPosts, szenenAntwort;
+const szenenSetup = () => {
+  live.projekt = null; seqAnsichtModul.zeichneSeq();   // the row starts hidden: showing it reads the state again
+  szenenPosts = []; szenenAntwort = szenenStand();
+  attrappe.antworten['GET /seq/szenen'] = () => ({ code: 200, j: szenenAntwort });
+  attrappe.antworten['POST /seq/szene'] = (k) => { szenenPosts.push(k); return { code: 200, j: { ok: true } }; };
+};
+
+test('szenenZeile: eight slots, empty or filled, the lit one and the one that waits for its bar', async () => {
+  const { szenenZeile } = await import('../public/seq_szenen.js');
+  const z = szenenZeile(szenenStand({ aktiv: 1, wartet: { slot: 3, ziel_beat: 8 } }));
+  assert.equal(z.length, 8);
+  assert.deepEqual(z[0], { slot: 0, klasse: 'szene leer' });
+  assert.deepEqual(z[1], { slot: 1, klasse: 'szene voll aktiv' });
+  assert.deepEqual(szenenZeile(szenenStand({ wartet: { slot: 1, ziel_beat: 8 } }))[1], { slot: 1, klasse: 'szene voll wartet' });
+  assert.equal(szenenZeile(null).length, 8, 'no answer yet: eight empty slots');
+  assert.ok(szenenZeile(null).every((s) => s.klasse === 'szene leer'));
+});
+
+test('scene row appears with the first deck and disappears with the last', async () => {
+  szenenSetup();
+  live.projekt = { ...projekt([]), gruppen: [] }; live.rev = 7; seqAnsichtModul.zeichneSeq();
+  assert.equal(szenenKnoten().hidden, true, 'no deck (no group with seq)');
+  await zeige(projekt()); await warte();
+  assert.equal(szenenKnoten().hidden, false, 'a SEQ deck exists');
+  assert.equal(szenenKnoten().querySelectorAll('button.szene').length, 8);
+  assert.equal(szenenKnoten().querySelector('#szene-sichern').textContent, 'SAVE');
+  live.projekt = { ...projekt(), gruppen: [] }; seqAnsichtModul.zeichneSeq();
+  assert.equal(szenenKnoten().hidden, true, 'the last deck is gone');
+  live.projekt = null; seqAnsichtModul.zeichneSeq();
+  assert.equal(szenenKnoten().hidden, true, 'no live project');
+});
+
+test('a number only launches: an empty slot click saves nothing and says how to save; filled posts starten, shift-click posts loeschen', async () => {
+  szenenSetup();
+  await zeige(projekt()); await warte();
+  assert.equal(szenenKnopf(0).classList.contains('leer'), true); assert.equal(szenenKnopf(1).classList.contains('voll'), true);
+  szenenKnopf(0).dispatch('click', {}); await warte();
+  assert.deepEqual(szenenPosts, [], 'an empty slot never saves by itself');
+  assert.match(attrappe.body.querySelector('#meldung').textContent, /Scene 1 is empty.*SAVE.*then 1/);
+  szenenKnopf(1).dispatch('click', {}); await warte();
+  szenenKnopf(1).dispatch('click', { shiftKey: true }); await warte();
+  assert.deepEqual(szenenPosts, [{ slot: 1, aktion: 'starten' }, { slot: 1, aktion: 'loeschen' }]);
+});
+
+test('SAVE then an empty slot saves there; while SAVE is armed the button and the hint say what the next click does', async () => {
+  szenenSetup();
+  await zeige(projekt()); await warte();
+  const s = szenenKnoten().querySelector('#szene-sichern'), h = szenenKnoten().querySelector('.szenen-hinweis');
+  assert.ok(h, 'the hint line exists');
+  s.dispatch('click', {});
+  assert.equal(s.textContent, 'SAVE TO…'); assert.match(h.textContent, /pick a number: it stores which patterns are on and which are muted/);
+  assert.equal(szenenKnoten().classList.contains('sichern'), true, 'the row marks the slots as save targets');
+  szenenKnopf(0).dispatch('click', {}); await warte();
+  assert.deepEqual(szenenPosts, [{ slot: 0, aktion: 'speichern' }]);
+  assert.equal(s.textContent, 'SAVE'); assert.equal(szenenKnoten().classList.contains('sichern'), false);
+  s.dispatch('click', {}); s.dispatch('click', {});
+  assert.equal(s.textContent, 'SAVE', 'a second click on SAVE disarms it'); assert.deepEqual(szenenPosts.length, 1);
+});
+
+test('szenenHinweis: one line that says what the row holds and what a click does', async () => {
+  const { szenenHinweis } = await import('../public/seq_szenen.js');
+  assert.equal(szenenHinweis(SZENEN_LEER, false), 'no scene yet: set the M buttons of the patterns, press SAVE, then a number');
+  assert.equal(szenenHinweis(szenenStand(), false), 'click a number to switch to that scene on the next bar');
+  assert.equal(szenenHinweis(szenenStand({ aktiv: 1 }), false), 'scene 2 is what plays now: 2 patterns on, 1 muted');
+  assert.equal(szenenHinweis(szenenStand({ wartet: { slot: 1, ziel_beat: 8 } }), false), 'scene 2 switches on the next bar');
+  assert.equal(szenenHinweis(szenenStand({ aktiv: 1 }), true), 'pick a number: it stores which patterns are on and which are muted right now');
+  assert.equal(szenenHinweis(null, false), '');
+});
+
+test('the small x on a filled slot clears it (aria-label clear scene)', async () => {
+  szenenSetup();
+  await zeige(projekt()); await warte();
+  const x = szenenKnoten().querySelectorAll('button.szene-x')[1];
+  assert.ok(x, 'one x per slot'); assert.equal(x.getAttribute('aria-label'), 'clear scene'); x.dispatch('click', {}); await warte();
+  assert.deepEqual(szenenPosts, [{ slot: 1, aktion: 'loeschen' }]);
+});
+
+test('SAVE then filled click overwrites and the toggle goes off again', async () => {
+  szenenSetup();
+  await zeige(projekt()); await warte();
+  const s = szenenKnoten().querySelector('#szene-sichern');
+  s.dispatch('click', {}); assert.equal(s.classList.contains('an'), true);
+  szenenKnopf(1).dispatch('click', {}); await warte();
+  assert.deepEqual(szenenPosts, [{ slot: 1, aktion: 'speichern' }]);
+  assert.equal(s.classList.contains('an'), false);
+  szenenKnopf(1).dispatch('click', {}); await warte();
+  assert.deepEqual(szenenPosts.at(-1), { slot: 1, aktion: 'starten' }, 'the next click launches again');
+});
+
+test('aktiv slot is lit; wartet slot blinks and clears on the event', async () => {
+  szenenSetup(); szenenAntwort = szenenStand({ aktiv: 1 });
+  await zeige(projekt()); await warte();
+  assert.equal(szenenKnopf(1).classList.contains('aktiv'), true);
+  szenenAntwort = szenenStand({ wartet: { slot: 1, ziel_beat: 8 } });
+  sendeStrom('seq', { szene: true, rev: 7 }); await warte();
+  assert.equal(szenenKnopf(1).classList.contains('wartet'), true); assert.equal(szenenKnopf(1).classList.contains('aktiv'), false);
+  szenenAntwort = szenenStand({ aktiv: 1 });
+  sendeStrom('seq', { szene: true, rev: 7 }); await warte();
+  assert.equal(szenenKnopf(1).classList.contains('wartet'), false); assert.equal(szenenKnopf(1).classList.contains('aktiv'), true);
+});
+
+test('redraw keeps focus on the clicked scene button (the nodes are updated, not replaced)', async () => {
+  szenenSetup();
+  await zeige(projekt()); await warte();
+  const b = szenenKnopf(1); attrappe.aktiv = b;
+  szenenAntwort = szenenStand({ aktiv: 1 });
+  sendeStrom('seq', { szene: true, rev: 7 }); await warte();
+  assert.equal(szenenKnopf(1), b, 'same node'); assert.equal(attrappe.aktiv, b);
+  assert.equal(b.classList.contains('aktiv'), true);
+  attrappe.aktiv = null;
+});
+
+test('an event during a running read triggers one more read afterwards: two events, slow first fetch, two fetches, final state shown', async () => {
+  szenenSetup();
+  await zeige(projekt()); await warte();
+  const echt = globalThis.fetch; let gesehen = 0, frei;
+  const antwortVon = (j) => ({ status: 200, ok: true, json: async () => j, text: async () => JSON.stringify(j), headers: { get: () => null } });
+  globalThis.fetch = (url, opt) => {
+    if (String(url).split('?')[0] !== '/seq/szenen') return echt(url, opt);
+    gesehen++;
+    const jetzt = szenenAntwort;                                  // the server answers with the state of the moment of the request
+    return gesehen === 1 ? new Promise((r) => { frei = () => r(antwortVon(jetzt)); }) : Promise.resolve(antwortVon(jetzt));
+  };
+  try {
+    szenenAntwort = szenenStand({ wartet: { slot: 1, ziel_beat: 8 } });
+    sendeStrom('seq', { szene: true, rev: 7 }); await warte();      // read 1 starts and hangs
+    assert.equal(gesehen, 1);
+    szenenAntwort = szenenStand({ aktiv: 1 });                      // the scene executed meanwhile
+    sendeStrom('seq', { szene: true, rev: 8 }); await warte();      // event during the running read
+    assert.equal(gesehen, 1, 'no parallel read');
+    frei(); await warte(); await warte();
+    assert.equal(gesehen, 2, 'one more read after the running one');
+    assert.equal(szenenKnopf(1).classList.contains('aktiv'), true, 'final state shown');
+    assert.equal(szenenKnopf(1).classList.contains('wartet'), false, 'no stuck blink');
+  } finally { globalThis.fetch = echt; }
+});
+
+test('the row is not a .seqplatz node and not moved by the place layout; it has its own place in the CSS', () => {
+  const k = szenenKnoten();
+  assert.ok(!k.classList.contains('seqplatz')); assert.equal(k.parent?.id, 'kopf', 'a box of the page header, not of #pult');
+  assert.doesNotMatch(lies('slots_view.js'), /seq-szenen|szenen/);
+  const css = lies('style.css');
+  assert.doesNotMatch(css, /\n#seq-szenen \{|#kopf > #seq-szenen \{[^}]*position: (fixed|absolute);/, 'no fixed row on top of the panels');
+  assert.match(css, /#kopf > #seq-szenen \{[^}]*flex-wrap: wrap;[^}]*max-width: 100%;/, 'header box, wraps inside itself, never wider than the window');
+  assert.match(css, /body\.werkbank:not\(\.djfx-auf\) #kopf > #seq-szenen \{ display: none; \}/, 'folded away with ROUTING in the STUDIO view');
+  assert.match(css, /#seq-szenen \.szene, #seq-szenen \.szene-sichern \{[^}]*height: 28px;/, 'buttons at least 28 px high');
+  assert.match(css, /#seq-szenen \.szene\.wartet \{[^}]*animation:/); assert.match(css, /#seq-szenen \.szene\.aktiv \{/);
+  assert.match(css, /@keyframes szene-blink/);
+  const h = lies('index.html');
+  assert.match(h, /<section id="seq-szenen"[^>]*hidden/);
+  const kopf = h.slice(h.indexOf('<header id="kopf">'), h.indexOf('</header>'));
+  assert.match(kopf, /<section id="seq-szenen"/, 'inside the header');
+  assert.ok(!h.slice(h.indexOf('<main id="pult">')).includes('id="seq-szenen"'), 'not in #pult any more');
 });

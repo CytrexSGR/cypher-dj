@@ -854,6 +854,9 @@ fn weich(y: f32) -> f32 {
 #[derive(Clone, Copy)]
 pub struct Bus {
     adaa: Adaa1,
+    /// the previous input sample, and whether `adaa` has seen it (it is not fed while the drive stage is bypassed)
+    x_vor: f64,
+    adaa_aktuell: bool,
     lp: Stufe,
     hp: Stufe,
     /// smoothed controls
@@ -875,7 +878,7 @@ const X0: f64 = 0.5;
 
 impl Bus {
     pub fn neu() -> Bus {
-        Bus { adaa: Adaa1::default(), lp: Stufe::default(), hp: Stufe::default(), drive: 0.5, filter: 0.5, reso: 0.3, pegel: 1.0, fertig: false, still_n: 0, dc_x: 0.0, dc_y: 0.0 }
+        Bus { adaa: Adaa1::default(), x_vor: 0.0, adaa_aktuell: true, lp: Stufe::default(), hp: Stufe::default(), drive: 0.5, filter: 0.5, reso: 0.3, pegel: 1.0, fertig: false, still_n: 0, dc_x: 0.0, dc_y: 0.0 }
     }
 
     /// Drive 0..1 to the pre-gain: 0..18 dB, quadratic (0.5 = 4.5 dB).
@@ -907,6 +910,7 @@ impl Bus {
             self.reso += (reso - self.reso) * k;
             self.pegel += (pegel - self.pegel) * k;
         }
+        let x_vor = std::mem::replace(&mut self.x_vor, x as f64);
         if x == 0.0 {
             self.still_n = self.still_n.saturating_add(1);
             if self.still_n == (sr * 0.5) as u32 {
@@ -924,8 +928,15 @@ impl Bus {
         }
         let a = Bus::vorverstaerkung(self.drive);
         let y = if a > 1.0001 || self.drive > 0.0 {
+            if !self.adaa_aktuell {
+                // The drive stage was bypassed: its ADAA state is stale and the first step would average the slope over
+                // [stale input, this input]. Feed it the previous input so that this sample is a real one-sample step (audit U39).
+                self.adaa.verarbeite(a * x_vor);
+                self.adaa_aktuell = true;
+            }
             self.adaa.verarbeite(a * x as f64) / (a * X0).tanh() * X0
         } else {
+            self.adaa_aktuell = false;
             x as f64
         };
         let r = self.reso.clamp(0.0, 1.0) as f64;

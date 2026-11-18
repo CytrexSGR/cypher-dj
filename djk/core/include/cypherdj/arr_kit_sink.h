@@ -40,6 +40,7 @@ class ArrKitSenke final : public ArrSenke, public ArrKitLeser {
   void note(int spur, int64_t ziel, uint8_t ton, uint8_t vel, bool an) noexcept override;
   void alle_aus(int spur, int64_t ziel) noexcept override;
   void transport_start(int spur, int64_t ziel) noexcept override;
+  void transport_abbruch(int spur) noexcept override;   // audit U33: a stop while the start waits cancels it (start and fade state)
   void block(int spur, int64_t s0, int m, float* l, float* r) noexcept override;
   // The same body with the mix buffers of the lane struct (a.kit_l / a.kit_r) instead of the sink's own. A Kit track is a lane unit, and so is every rack that holds
   // a Kit member: the Kit slots (tracks and member slots) are per slot, the buffers and the counters are the only things two units could share.

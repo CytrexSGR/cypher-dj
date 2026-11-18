@@ -584,5 +584,35 @@ int main() {
       for (const cdj::ArrSnapshot* q : alt) delete q;
     }
   }
+  {  // 11 bk_alt_bei_aus (audit U34): the instance of a stage that is fully off changes: the old one is let go at once (nothing to crossfade, the stage does
+     // not sound) and the first block after switching on plays the new graph only
+    Graph a(g_fest("t-a", 0.5), 1), b(g_fest("t-b", 0.25), 2), r(g_fest("t-r", 0.25), 3);
+    std::vector<float> st(8192, 0.4f);
+    Direkt d;
+    d.zeile(0, 1.0f);
+    d.kette(0, {a.stufe(0)});
+    d.tausche();
+    d.block(0, st, 0, 2048, false);
+    d.zeile(0, 0.0f);   // switched off: fades out, then fully off
+    d.block(0, st, 0, 2048, false);
+    d.kette(0, {b.stufe(0)});   // the same owner, another instance, while the stage is off
+    d.tausche();
+    d.block(0, st, 0, 512, false);   // still off
+    PRUEF(!d.ins.nutzt(a.h));        // the old instance is not held by a stage that does not sound (the loader may free it)
+    d.zeile(0, 1.0f);
+    d.block(0, st, 0, 2048);
+    Direkt ref;   // the same without the old instance: the new graph from the start, off, then on
+    ref.zeile(0, 0.0f);
+    ref.kette(0, {r.stufe(0)});
+    ref.tausche();
+    ref.block(0, st, 0, 4608, false);
+    ref.zeile(0, 1.0f);
+    ref.block(0, st, 0, 2048);
+    float dmax = 0.0f;
+    for (size_t i = 0; i < d.l.size() && i < ref.l.size(); ++i) dmax = std::max(dmax, std::fabs(d.l[i] - ref.l[i]));
+    std::printf("11: output after switching on, swapped-while-off against never-had-the-old-graph: max difference %.6f\n", dmax);
+    PRUEF(d.l.size() == 2048 && ref.l.size() == 2048);
+    PRUEF(dmax < 1e-6f);
+  }
   PRUEF_ENDE();
 }

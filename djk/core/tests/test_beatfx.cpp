@@ -390,6 +390,26 @@ int main() {
     for (int i = 2000; i < 20000; ++i) d = std::max(d, std::fabs(b[i] - l[20000 + i]));
     PRUEF(d < 1e-6f);
   }
+  // RO4) ROLL held longer than the echo line (ECHO_FRAMES = 360000, 7.5 s): the recording must not overwrite itself,
+  // the repeat stays the slice captured at ON
+  for (double beats : {4.0, 16.0}) {
+    cdj::BeatFx fx;
+    fx.setze(cdj::BeatFx::ROLL, beats, 1.0f, 0.5f, true);
+    const int L = static_cast<int>(std::min<long long>(std::llround(beats * SPB), cdj::BeatFx::ECHO_FRAMES - 1));
+    const int n = beats == 4.0 ? 360000 + 2 * L : 2 * L + 10000;
+    std::vector<float> l(n), r(n);
+    for (int i = 0; i < n; ++i) l[i] = r[i] = chirp(i);
+    lauf(fx, l, r, 0);
+    const int ab = beats == 4.0 ? 360000 : 2 * L;   // from here on the write head used to come back over the slice
+    float d = 0.0f;
+    for (int i = ab + 64; i < n; ++i) {
+      const int ph = i % L;
+      if (ph < 66 || ph > L - 64) continue;   // seams: 64 sample fade, shifted by one sample because sample 0 runs through dry
+      d = std::max(d, std::fabs(l[i] - chirp(ph)));
+    }
+    std::printf("RO4 ROLL %.0f beats: deviation from the captured slice after the line wrapped: %.2e\n", beats, d);
+    PRUEF(d < 1e-6f);
+  }
   // V1) VINYL BRAKE 4 Beats (T = 90 000): 1 kHz wird zur Mitte hin ~500 Hz (halbe Geschwindigkeit), nach T still
   {
     cdj::BeatFx fx;

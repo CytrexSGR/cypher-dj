@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstring>
 
+#include "cypherdj/input.h"
 #include "cypherdj/signalbox/signalbox.h"
 #include "hand/mapping.h"
 #include "hand/translator.h"
@@ -41,18 +42,23 @@ class HandEin {
                const cypherdj::stellwerk::Stellwerk& sw, HandAktion* aus);
   const hand::UebersetzerZaehler& zaehler() const { return ueb_.zaehler(); }
 
-  // S19: the learn table (slot 1) for the raw input midi_ein_1. Same translation as ereignis(), own translator and mapping.
-  void mapping_ein(const hand::Mapping* m) { ueb_ein_.mapping(m); }
-  const hand::Mapping* mapping_ein() const { return ueb_ein_.mapping(); }
+  // S19: the learn tables (slots 1..8) of the raw inputs midi_ein_1..8, port 0-based. Same translation as ereignis(), own translator and
+  // mapping per port: an event is translated only with the table of its port. An unknown port has no table.
+  void mapping_ein(const hand::Mapping* m, int port = 0) {
+    if (port >= 0 && port < MIDI_EIN_PORTS) ueb_ein_[port].mapping(m);
+  }
+  const hand::Mapping* mapping_ein(int port = 0) const {
+    return port >= 0 && port < MIDI_EIN_PORTS ? ueb_ein_[port].mapping() : nullptr;
+  }
   int ereignis_ein(const uint8_t* daten, size_t groesse, uint32_t versatz, int64_t s0, uint32_t n,
-                   const cypherdj::stellwerk::Stellwerk& sw, HandAktion* aus);
+                   const cypherdj::stellwerk::Stellwerk& sw, HandAktion* aus, int port = 0);
 
  private:
   // The part after the translator is mapping-generic: it reads entry e of mapping m (shared by both slots).
   int wandle(hand::Ausgabe a, const hand::Mapping& m, const uint8_t* daten, size_t groesse, int64_t s0, uint32_t n,
              const cypherdj::stellwerk::Stellwerk& st, HandAktion* aus);
   hand::Uebersetzer ueb_;
-  hand::Uebersetzer ueb_ein_{nullptr};
+  hand::Uebersetzer ueb_ein_[MIDI_EIN_PORTS];  // one per midi_ein port (default: no mapping)
 };
 
 // Slice 35 part B3: LED names the kern derives from its own state (INTERFACES 7.4: loop, KI stop). /k/led refuses them.

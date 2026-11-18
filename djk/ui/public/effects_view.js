@@ -1,5 +1,5 @@
 // EFFECTS area strips: tools, bus, gate, compressor, meters and the detail view.
-import { sendRueckHtml, busPanelHtml, GRAPH_KANAL_ART, werkzeugStreifenHtml, setzeWerkzeug, werkText, werkzeugKlickNach, limiterZustand, mixAblaufIn, BUS_KANAELE, MIX_FELDER, mixLesung, GATE_KANAELE, GATE_FELDER, GATE_SKALA_DB, werkFeld, KOMP_SCHLUESSEL, KOMP_PRESETS, KNOB_GRUPPE, bkKnobListe, htmlText, AUTO_BEREICH, DURCHGAENGE, knobListe } from './effects.js';
+import { sendRueckHtml, busPanelHtml, masterPanelHtml, masterLimiterLesung, GRAPH_KANAL_ART, werkzeugStreifenHtml, setzeWerkzeug, werkText, werkzeugKlickNach, limiterZustand, mixAblaufIn, BUS_KANAELE, MIX_FELDER, mixLesung, GATE_KANAELE, GATE_FELDER, GATE_SKALA_DB, werkFeld, KOMP_SCHLUESSEL, KOMP_PRESETS, KNOB_GRUPPE, bkKnobListe, htmlText, AUTO_BEREICH, DURCHGAENGE, knobListe } from './effects.js';
 import { $, $$, melde, postJson, zustand } from './page_state.js';
 import { graphMitBereich, graphVon, zeigeGraphWahl } from './graphs_view.js';
 import { baueSendKnobs, bindeBkKnobs, zeigeFxDetail } from './learn_view.js';
@@ -41,6 +41,10 @@ export function baueFxStreifen() {
     }
     reihe.append(s);
   }
+  const master = document.createElement('div');   // MASTER: insert, glue, limiter in signal order
+  master.className = 'masterpanel';
+  master.innerHTML = masterPanelHtml();
+  reihe.append(master);
   const send = document.createElement('div');   // SEND RETURNS: graph picker and the knobs fx/<n>/bk/1..64 (S14)
   send.className = 'sendrueck';
   send.innerHTML = sendRueckHtml();
@@ -129,6 +133,18 @@ export function zeigeBusMesser() {
   const warte = mixAblaufIn(busMix, jetzt);
   busMesserTimer = warte === null ? null : setTimeout(zeigeBusMesser, warte + 5);
 }
+// MASTER tab, LIMITER: gain reduction of the master limiter from the `limiter_db` of /zustand/arr (the only stream value there is for it; the core holds it
+// 0.5 s and sends at 2 Hz idle, up to 50 Hz while the transport waits or plays). No reading (field absent) or none for 3 s: "–".
+let masterLimiterTimer = null;
+export function zeigeMasterLimiter(arr) {
+  const i = $('[data-messer="master|limiter_db"]'), z = $('[data-messer-zahl="master|limiter_db"]');
+  const db = arr === null ? null : masterLimiterLesung(arr);
+  if (!i || !z) return;
+  i.style.width = `${Math.min(100, ((db ?? 0) / 24) * 100)}%`;
+  z.textContent = db === null ? '–' : `${db.toFixed(1)} dB`;
+  clearTimeout(masterLimiterTimer);
+  if (db !== null) masterLimiterTimer = setTimeout(() => zeigeMasterLimiter(null), 3000);   // armed by a reading only: the fall back to "–" does not re-arm itself
+}
 // A6: gate meters of the source channels from /zustand/mix (gate_db), same 500 ms rule and self-scheduled reset as the bus meters.
 export const gateMix = {};
 let gateMesserTimer = null;
@@ -196,7 +212,7 @@ export const KOMP_DETAIL = [
   { feld: 'mix', name: 'MIX', min: 0, max: 1, schritt: 0.01, vorgabe: 1, text: (w) => `${Math.round(w * 100)}%` },
 ];
 // the stored tab, when it is a channel. FX_REITER (same ids, pinned by a test), not FX_KANAELE: this module and effects_gemeinsam.js import each other, and FX_KANAELE is not initialised yet when this line runs
-export let fxGewaehlt = (() => { const a = fxReiterAktiv(); return FX_REITER.some((r) => r.id === a && a !== 'sends' && a !== 'bus') ? a : 'erz/1'; })();
+export let fxGewaehlt = (() => { const a = fxReiterAktiv(); return FX_REITER.some((r) => r.id === a && a !== 'sends' && a !== 'bus' && a !== 'master') ? a : 'erz/1'; })();
 export const kompVerlauf = {};   // kanal -> letzte 100 Absenkungen (10 Hz)
 export function grJetzt(k) { const g = kompGr[k]; return kompWert(k, 'an', 0) >= 0.5 && g && performance.now() - g.t < 400 ? g.db : 0; }
 export function waehleFx(k) {

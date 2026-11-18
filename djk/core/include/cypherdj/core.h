@@ -65,7 +65,7 @@ struct Befehl {
     SET_NEU = 1, KLICK = 2, TEMPO_RAMPE = 3, STORNO = 4,
     TEIL = 5, ABBRUCH = 6, KI_STOPP = 7, KI_FREI = 8, KI_SPUR = 9, KI_STUFE = 10, HAND = 11,  // Scheibe 25
     DECK_LADEN = 12, DECK_ENTLADEN = 13, DECK_START = 14, DECK_STOPP = 15,                   // Scheibe 31
-    MAPPING = 16,                                                                             // Scheibe 35: /k/mapping; S19: nr = slot (0 hand_in, 1 learn table on midi_ein_1)
+    MAPPING = 16,                                                                             // Scheibe 35: /k/mapping; S19: nr = slot (0 hand_in, 1..8 learn table of midi_ein_<nr>)
     ERZ_STROM = 17, ERZ_FENSTER = 18,  // Plan 2026-09-27 (§4.8, ADR 024): nr = strom, pfad = kanal, zeiger = Kit*/ErzFenster*; form = -1: Baukasten-Graph, zeiger = CypherBk*
     LOOP_LADEN = 19, LOOP_START = 20, LOOP_STOPP = 21,  // MVP 2 (§4.9, ADR 025): deck = box, pfad = name, zeiger = Loop*
     MITSCHNITT = 22,  // MVP 2 Scheibe 2 (§4.9 /k/loop/rec): nr = beats, pfad = name, zeiger = Mitschnitt*
@@ -173,11 +173,11 @@ struct Ereignis {
     ARR_FREEZE = 33,    // Paket K3: beendeter oder abgelehnter Freeze-Auftrag (zeiger = ArrFreeze*), status 0 fertig,
                         // 1 abgebrochen, ARR_FREEZE_ABGELEHNT nur freigeben; der Lade-Faden schreibt die Datei (6.29),
                         // das Netz meldet /e/freeze
-    EIN_ZUSTAND = 34,   // I08, §5.14 /zustand/ein: status = verbunden (Bit k-1: ein_k, Bit 8: midi_ein_1), ein_* (Zähler, Samples)
+    EIN_ZUSTAND = 34,   // I08, §5.14 /zustand/ein: status = verbunden (Bit k-1: ein_k, Bit 8: midi_ein_1, Bit 9..15: midi_ein_2..8), ein_* (Zähler, Samples)
     REC_ZUSTAND = 35, REC_ALT = 36,  // 1.8 §5.14 /zustand/rec: status, id = kennung, rec_scharf, rec_luecken, arr_beat, fassung = ausgang_vorhalt, nframes = quantum; REC_ALT: zeiger = abgelöster RecSpur* zur Freigabe im Netz-Faden (fassung = 1: ein RecMidi*, 1.8 T7a)
     WARP_ZUSTAND = 37,               // 1.13 Slice 2, §5.13b /zustand/warp: warp_stimmen, warp_unterlauf, warp_kein_platz, warp_spaet, warp_faeden
     ERZ_BK_ALT = 38,                 // Baukasten S3a: abgelöster Baukasten-Graph zur Freigabe im Netz-Faden (zeiger = CypherBk*)
-    GELERNT = 39,                    // S19 (§5.8 /e/gelernt): id, deck = quelle (0 hand_in, 1 midi_ein_1), fassung = kanal, teil = nr, neu = wert, status = belegt
+    GELERNT = 39,                    // S19 (§5.8 /e/gelernt): id, deck = quelle (0 hand_in, 1..8 midi_ein_1..8), fassung = kanal, teil = nr, neu = wert, status = belegt
     AUTO_ZUSTAND = 40,               // 1.12 S3 (§5.13 /e/auto): deck = spur (1..32), fassung = field (0 fader .. 3 solo), status = 1 overridden / 0 the lane plays
     AUTO_PUNKT = 41,                 // 1.12 S3 (§5.13 /e/auto_punkt): pfad = spur/<n>/<field>, beat = project beat at the grip sample, wert = hand value, sample = end of the block that sent it
     MIX_ZUSTAND = 42,                // 1.15 A6 (§5.5d /zustand/mix): pfad = channel, pegel[0..4] = gate, multiband low/mid/high, limiter reduction in dB (>= 0), 10 Hz, only where a tool runs
@@ -336,7 +336,7 @@ class Kern {
   // callback before it deletes the pool). nullptr: the Halls compute serially in the callback.
   void setze_hall_pool(HallPool* p) { hall_pool_ = p; arr_->setze_hall_pool(p); }   // task 5: the kern also reports the pool's state (HALL_ZUSTAND)
   // mehrkern slice 3.2 task 7 (kern.toml spur_pool): 0 aus, 1 an, 2 auto. Any thread (an atomic in the arrangement). "auto" (2) is the automatic mode of the scheduler (arr_track_phase.h): after a switch-off
-  // of the track account it retries once after a pause, the second switch-off is for good; the report follows the pool's account, so `an` goes 1, 0, 1, 0. Without a pool (setze_hall_pool(nullptr)) the kern reports modus 0 whatever is set.
+  // of the track account both modes an and auto (a synonym) retry after a doubling back-off, never for good; the report follows the pool's account, so `an` goes 1, 0, 1, 0, 1, ... Without a pool (setze_hall_pool(nullptr)) the kern reports modus 0 whatever is set.
   void setze_spur_pool(int modus) { arr_->setze_spur_pool(modus < 0 ? 0 : (modus > 2 ? 2 : modus)); }
   // TESTS ONLY: the scheduler seams of the arrangement (arr_track_phase.h SpurHaken): lets a ctest force every pool worker to compute a unit, so the fork is reached without a race.
   void setze_spur_haken(SpurHaken* h) { arr_->setze_spur_haken(h); }
@@ -502,10 +502,12 @@ class Kern {
   void ein(int paar, const float* l, const float* r) noexcept { ein_bank_.zeiger(paar, l, r); }
   // Voice channel (voice.h, kern.toml stimme_*): before the first cycle, not in the callback.
   void stimme_einstellen(const StimmEinstellung& e) { mixer_->stimme_einstellen(e); }
-  // I08: roher MIDI-Eingang midi_ein_1, je Ereignis mit JACK-Versatz; aufzurufen im Callback vor dem zyklus(). Das Ereignis wird erst in
+  // I08: roher MIDI-Eingang midi_ein_1..8 (port 0-based, 0..MIDI_EIN_PORTS-1), je Ereignis mit JACK-Versatz; aufzurufen im Callback vor dem zyklus(). Das Ereignis wird erst in
   // zyklus() gestempelt, NACH dem Einsortieren der Befehle: so trägt es die Zeitachse, auf der dieser Zyklus läuft (nach /k/set/neu die
   // neue), wie die Hand-MIDI (Review-Nachzug MINOR 4). Höchstens MAX_MIDI je Zyklus, mehr zählt midi_ein_ring().verloren().
-  void midi_ein(const uint8_t* daten, size_t groesse, uint32_t versatz) noexcept {
+  // Die Ereignisse aller Ports teilen sich die MAX_MIDI und werden stabil nach versatz einsortiert (ein Port liefert schon geordnet), so
+  // bleiben die Stempel in Ring und Aufnahme innerhalb eines Zyklus monoton. Echtzeit: einfaches Einfügen, keine Allokation, keine Sperre.
+  void midi_ein(const uint8_t* daten, size_t groesse, uint32_t versatz, int port = 0) noexcept {
 #ifdef CYPHERDJ_MUTATION_EIN_MIDI_BLOCKANFANG
     versatz = 0;  // Fehlerfall: Versatz im Zyklus fällt weg
 #endif
@@ -513,28 +515,36 @@ class Kern {
     midi_ein_.schiebe(sample_, versatz, daten, groesse);  // Fehlerfall: gestempelt vor dem Einsortieren, also mit der alten Achse
     return;
 #endif
-    if (groesse == 0) return;
+    if (groesse == 0 || port < 0 || port >= MIDI_EIN_PORTS) return;
     if (n_midi_ein_ >= MAX_MIDI) { midi_ein_.ueberlauf(); return; }
-    MidiRoh& m = midi_ein_roh_[n_midi_ein_++];
+    int i = n_midi_ein_++;
+    while (i > 0 && midi_ein_roh_[i - 1].versatz > versatz) {  // stable: equal offsets keep the arrival order
+      midi_ein_roh_[i] = midi_ein_roh_[i - 1];
+      --i;
+    }
+    MidiRoh& m = midi_ein_roh_[i];
     std::memcpy(m.d, daten, std::min<size_t>(groesse, 3));
     m.groesse = static_cast<uint8_t>(std::min<size_t>(groesse, 255));  // über 3 Byte zählt schiebe() als zu_lang, die Länge genügt
     m.versatz = versatz;
+    m.port = static_cast<uint8_t>(port);
   }
   // Der Ring hat einen einzigen Leser. Standard: der Kern räumt ihn in jedem Zyklus selbst (Zähler und letztes Sample bleiben, die Ereignisse
   // nicht), sonst füllte er sich im Betrieb nach 4096 Ereignissen und zählte jedes weitere als verloren (Review-Nachzug MAJOR 1). Wer ihn selbst
   // liest (Aufnahme, 1.8 Slice 5; Tests), setzt dies VOR dem ersten Zyklus auf true und ist dann der einzige Leser.
   void midi_ein_extern(bool leser) noexcept { midi_ein_extern_.store(leser, std::memory_order_relaxed); }
-  // I08: der Verbinder-Faden meldet, welche Eingänge verbunden sind (Bit k-1: ein_k, beide Kanäle; Bit 8: midi_ein_1)
+  // I08: der Verbinder-Faden meldet, welche Eingänge verbunden sind (Bit k-1: ein_k, beide Kanäle; Bit 8..15: midi_ein_1..8)
   void ein_verbunden(uint32_t maske) noexcept { ein_verbunden_.store(maske, std::memory_order_relaxed); }
   MidiEin& midi_ein_ring() noexcept { return midi_ein_; }
   void setze_mapping(const hand::Mapping* m) noexcept;
   const hand::Mapping* mapping() const noexcept { return mapping_; }
-  // S19 (MIDI learn): second mapping slot, the learn table. It translates only midi_ein_1 (hand_in keeps slot 0 alone).
-  // Set before jack_activate (start) or swapped by Befehl MAPPING with nr 1; nullptr = no table, midi_ein_1 stays raw.
-  void setze_lern_mapping(const hand::Mapping* m) noexcept;
-  const hand::Mapping* lern_mapping() const noexcept { return lern_mapping_; }
-  uint64_t lern_ereignisse() const noexcept { return lern_ereignisse_; }      // midi_ein_1 events translated with effect
-  uint64_t lern_ohne_wirkung() const noexcept { return lern_ohne_wirkung_; }  // midi_ein_1 events with a table but no effect
+  // S19 (MIDI learn): mapping slots 1..8, one learn table per raw input (slot k translates only midi_ein_k, port k-1 here; hand_in keeps
+  // slot 0 alone). Set before jack_activate (start) or swapped by Befehl MAPPING with nr 1..8; nullptr = no table, that input stays raw.
+  void setze_lern_mapping(const hand::Mapping* m, int port = 0) noexcept;
+  const hand::Mapping* lern_mapping(int port = 0) const noexcept {
+    return port >= 0 && port < MIDI_EIN_PORTS ? lern_mapping_[port] : nullptr;
+  }
+  uint64_t lern_ereignisse() const noexcept { return lern_ereignisse_; }      // midi_ein events translated with effect (all ports)
+  uint64_t lern_ohne_wirkung() const noexcept { return lern_ohne_wirkung_; }  // midi_ein events with a table but no effect (all ports)
   void hand_neu_verbunden() noexcept {
     neu_verbunden_.store(true, std::memory_order_release);
     led_neu_.store(true, std::memory_order_release);
@@ -810,7 +820,7 @@ class Kern {
   EingangsBank ein_bank_;
   MidiEin midi_ein_;
   std::atomic<uint32_t> ein_verbunden_{0};
-  uint32_t ein_verb_gesehen_ = 0;   // 1.8 T7b: the mask of the last cycle (callback only): a fall of bit 8 (midi_ein_1) closes the held live keys
+  uint32_t ein_verb_gesehen_ = 0;   // 1.8 T7b: the mask of the last cycle (callback only): a fall of any of bits 8..15 (midi_ein_1..8) closes the held live keys
   float* erz_r_[MIX_KANAELE] = {};
   // MVP 2 (ADR 025): Loop-Boxen in pad/1, pad/2; Eingänge wie erz_l_/erz_r_
   std::unique_ptr<LoopBoxen> loops_;
@@ -861,21 +871,22 @@ class Kern {
     uint8_t d[3];
     uint8_t groesse;
     uint32_t versatz;
+    uint8_t port;   // midi_ein_roh_ only: 0-based midi_ein index
   };
   MidiRoh midi_[MAX_MIDI];
   int n_midi_ = 0;
-  MidiRoh midi_ein_roh_[MAX_MIDI];  // I08: Ereignisse dieses Zyklus, gestempelt in midi_ein_stempeln()
+  MidiRoh midi_ein_roh_[MAX_MIDI];  // I08: Ereignisse dieses Zyklus aller Ports, nach versatz geordnet, gestempelt in midi_ein_stempeln()
   int n_midi_ein_ = 0;
   std::atomic<bool> midi_ein_extern_{false};
   void midi_ein_stempeln(int n) noexcept;
-  // S19: effect of one translated action, shared by hand_zyklus (slot 0) and midi_ein_stempeln (slot 1)
+  // S19: effect of one translated action, shared by hand_zyklus (slot 0) and midi_ein_stempeln (slots 1..8)
   void hand_aktion(const HandAktion& a, uint64_t* mit, uint64_t* ohne);
   HandEin hand_ein_;
   const hand::Mapping* mapping_ = nullptr;
-  const hand::Mapping* lern_mapping_ = nullptr;
+  const hand::Mapping* lern_mapping_[MIDI_EIN_PORTS] = {};
   uint64_t lern_ereignisse_ = 0;
   uint64_t lern_ohne_wirkung_ = 0;
-  // S19 capture: armed by Befehl LERNEN; the first CC on midi_ein_1 is consumed and reported as GELERNT. The deadline is a
+  // S19 capture: armed by Befehl LERNEN; the first CC on any midi_ein port is consumed and reported as GELERNT. The deadline is a
   // countdown in samples (not a sample stamp): /k/set/neu resets sample_ but must not restart or stop it.
   static constexpr int64_t LERN_FRIST = 20 * 48000;
   bool lern_an_ = false;

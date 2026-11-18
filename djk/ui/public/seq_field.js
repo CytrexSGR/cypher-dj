@@ -152,34 +152,39 @@ export function tonVonText(text) {
 
 // ---------- lengths, widths ----------
 // Text of a pattern length: whole bars, else steps of 1/16, else beats.
-export function laengeText(beats) {
-  if (beats % 4 === 0) return `${beats / 4} bar${beats === 4 ? '' : 's'}`;
+export function laengeText(beats, proTakt = 4) {
+  if (beats % proTakt === 0) return `${beats / proTakt} bar${beats === proTakt ? '' : 's'}`;
   const s = beats * 4;
   return Number.isInteger(s) ? `${s} step${s === 1 ? '' : 's'}` : `${beats} beats`;
 }
 // A free step count (steps of 1/16, 1..256) as beats; null when it is not a whole number in range.
-export function laengeAusSchritten(text) {
+// `maxBeats` is the length of the stored clip (a pattern is at most as long as its clip); by default the live region of the meter.
+export function laengeAusSchritten(text, proTakt = 4, maxBeats = Math.max(KLIPP_BEATS, 16 * proTakt)) {
   const t = String(text ?? '').trim();
   if (!/^\d+$/.test(t)) return null;
   const n = Number(t);
-  return n >= 1 && n <= KLIPP_BEATS * 4 ? n / 4 : null;
+  return n >= 1 && n <= maxBeats * 4 ? n / 4 : null;
+}
+// The bar counts of the length menu that fit into the stored clip: a clip of 64 beats refuses 16 bars of 12 (192 beats).
+export function laengenWahl(clipBeats, proTakt = 4) {
+  return LAENGEN_TAKTE.filter((t) => t * proTakt <= clipBeats + 1e-9);
 }
 // Pixels per beat of the shared time axis. `wahl` is the selector of the deck head: 'all' fits the longest pattern into the room (between 48 and 256 px per
 // beat, so that the longest bar run fills the width; wider patterns scroll), 1, 2 or 4 bars fill the room. `verfuegbar` is the width of the cell area in
 // pixels (not measured: the default).
-export function pxProBeat(wahl, laengster, verfuegbar) {
+export function pxProBeat(wahl, laengster, verfuegbar, proTakt = 4) {
   if (!(verfuegbar > 0)) return PX_STANDARD;
-  if (wahl === 'all') return Math.floor(klemme(verfuegbar / Math.max(4, laengster), PX_MIN_ALLE, PX_MAX));
-  return klemme(Math.floor(verfuegbar / (wahl * 4)), PX_MIN, PX_MAX);
+  if (wahl === 'all') return Math.floor(klemme(verfuegbar / Math.max(proTakt, laengster), PX_MIN_ALLE, PX_MAX));
+  return klemme(Math.floor(verfuegbar / (wahl * proTakt)), PX_MIN, PX_MAX);
 }
 // The width of the time axis in beats: the longest pattern of the deck, and with the choice of 1, 2 or 4 bars at least that many bars. Lanes that end before it
 // are drawn again pale (note lanes, value lanes, curve lanes, the ruler).
-export const sichtbarBeats = (wahl, laengster) => (wahl === 'all' ? laengster : Math.max(laengster, wahl * 4));
+export const sichtbarBeats = (wahl, laengster, proTakt = 4) => (wahl === 'all' ? laengster : Math.max(laengster, wahl * proTakt));
 // The beats of the ruler over `sichtbar` beats: { beat, breite (a beat is 1; the one the pattern end cuts is narrower), takt (a bar number), wiederholung (after the
 // pattern end `laenge`) }.
-export function linealZellen(laenge, sichtbar) {
+export function linealZellen(laenge, sichtbar, proTakt = 4) {
   const gesamt = Math.max(laenge, sichtbar), aus = [];
-  for (let beat = 0; beat < gesamt - EPS; beat++) aus.push({ beat, breite: Math.min(1, gesamt - beat), takt: beat % 4 === 0, wiederholung: beat >= laenge - EPS });
+  for (let beat = 0; beat < gesamt - EPS; beat++) aus.push({ beat, breite: Math.min(1, gesamt - beat), takt: beat % proTakt === 0, wiederholung: beat >= laenge - EPS });
   return aus;
 }
 
@@ -294,7 +299,7 @@ export function geraetWahl(graphen, kits, behalte) {
     .map((g) => ({ gruppe: 'Baukasten', text: g.name, name: g.name, geraet: { art: 'intern', name: 'bk', graph: g.name } })).sort(nach);
   const kit = (kits ?? []).filter((k) => k && typeof k.name === 'string')
     .map((k) => ({ gruppe: 'Kit', text: `${k.name} (${k.klaenge})`, name: k.name, geraet: { art: 'intern', name: 'kit', kit: k.name } })).sort(nach);
-  return [...bk, ...kit, { gruppe: 'Other', text: 'RB-338', name: 'RB-338', geraet: { art: 'intern', name: 'rb338', parameter: {} } }];
+  return [...bk, ...kit, { gruppe: 'RB-338', text: 'RB-338', name: 'RB-338', geraet: { art: 'intern', name: 'rb338', parameter: {} } }];
 }
 
 // A new pattern is named after its instrument; the deck refuses a name it holds already (ignoring case), so a second pattern of the same instrument is
@@ -337,7 +342,7 @@ export async function holeMitFrist(holen, weg, opt = {}, ms = FRIST_MS) {
     return { status: 0, j: { fehler: 'netz', text: ac.signal.aborted ? `page server did not answer in ${ms / 1000} s` : `page server unreachable: ${e.message}` } };
   } finally { clearTimeout(uhr); }
 }
-const grundVon = (j) => j?.text ?? j?.fehler ?? 'unknown';
+const grundVon = (j) => (j?.detail && j?.text && !String(j.text).includes(j.detail) ? `${j.text} (${j.detail})` : j?.text ?? j?.fehler ?? 'unknown');   // detail: the limit a refused command names
 // The server lost the deck or the container closed, or the revision moved on: the page must not trust its project any more.
 const NEU_LESEN = new Set(['seq_fehlt', 'kein_liveprojekt', 'rev_veraltet', 'netz']);   // `netz`: no answer, so the server may or may not have written
 // mirror of WIEDERGABE_TEXT of production/production.js (kernHinweis): a write the model accepted but the core did not load
@@ -357,7 +362,7 @@ async function schreibe(weg, daten, projekt, holeJson, text) {
   if (r.status !== 200) return { ok: false, projekt, neuLesen: NEU_LESEN.has(r.j?.fehler), text: `${text} refused: ${grundVon(r.j)}` };
   const neu = r.j?.projekt && typeof r.j.projekt === 'object' && r.j.projekt.live === true ? r.j.projekt : null;
   const warn = kernHinweis(r.j?.kern);
-  return { ok: true, projekt: neu ?? projekt, neuLesen: neu === null, text: warn ?? '', ...(warn ? { warnung: true } : {}) };
+  return { ok: true, projekt: neu ?? projekt, neuLesen: neu === null, text: warn ?? '', ...(warn ? { warnung: true } : {}), ...(r.j?.bericht ? { bericht: r.j.bericht } : {}) };
 }
 // A gesture: one command list, one undo step. An empty list (the cell already says that) sends nothing.
 export function sende(platz, label, befehle, projekt, holeJson) {
@@ -365,6 +370,8 @@ export function sende(platz, label, befehle, projekt, holeJson) {
   return schreibe('/seq/befehle', { platz, label, befehle }, projekt, holeJson, label);
 }
 export const legeAn = (platz, projekt, holeJson) => schreibe('/seq/anlegen', { platz }, projekt, holeJson, 'Create');
+// A Workbench module into the place: one undo step; `bericht` of the answer says what was loaded and left out (module_after_seq.js berichtText)
+export const ladeModul = (platz, slug, projekt, holeJson) => schreibe('/seq/modul', { platz, slug }, projekt, holeJson, 'Load module');
 export const leereDeck = (platz, projekt, holeJson) => schreibe('/seq/leeren', { platz }, projekt, holeJson, 'Clear');
 export const neueFolge = (platz, name, geraet, loopBeats, projekt, holeJson) =>
   schreibe('/seq/folge', { platz, name, geraet, ...(loopBeats !== undefined ? { loop_beats: loopBeats } : {}) }, projekt, holeJson, 'Pattern');
@@ -475,6 +482,13 @@ export function kurveNeu(z, beat, wert) {
   else l.push({ beat, wert, form: 'linear' });
   return l;
 }
+// The index of the point a hand grabbed: the pressed index `i` while the point of that beat is still there, else the point on `beat` (a write that was still out
+// re-sorted the list), else -1 (the point is gone)
+export function kurvePunktBei(z, beat, i) {
+  const l = z.punkte ?? [];
+  if (l[i] && Math.abs(l[i].beat - beat) < 1e-6) return i;
+  return l.findIndex((p) => Math.abs(p.beat - beat) < 1e-6);
+}
 export function kurveVerschiebe(z, i, beat, wert) {
   const l = kurveListe(z);
   if (!l[i]) throw new SeqFehler('argument_ungueltig', `lane ${z.id}, point ${i}: no such point`);
@@ -508,13 +522,13 @@ export function formSchreibe(spur, clip, z, info, form) {
 
 // ---------- the length of a lane ----------
 // The text of a lane length: quarter bars below a bar, whole bars, else steps.
-export function eigenLaengeText(beats) {
-  if (beats < 4 && Number.isInteger(beats)) return `${beats}/4 bar`.replace('2/4', '1/2');
-  return laengeText(beats);
+export function eigenLaengeText(beats, proTakt = 4) {
+  if (proTakt === 4 && beats < 4 && Number.isInteger(beats)) return `${beats}/4 bar`.replace('2/4', '1/2');
+  return laengeText(beats, proTakt);
 }
 // The entries of the length picker of an envelope lane in a pattern of `muster` beats: "with pattern" (null) and every shorter length from a quarter bar.
-export function eigenLaengen(muster) {
-  return [{ text: 'with pattern', beats: null }, ...[1, 2, 3, 4, 8, 16, 32].filter((b) => b < muster - EPS).map((b) => ({ text: eigenLaengeText(b), beats: b }))];
+export function eigenLaengen(muster, proTakt = 4) {
+  return [{ text: 'with pattern', beats: null }, ...[1, 2, 3, 4, 8, 16, 32].filter((b) => b < muster - EPS).map((b) => ({ text: eigenLaengeText(b, proTakt), beats: b }))];
 }
 // A free step count (steps of 1/16) for a lane in a pattern of `muster` beats: beats, or null when it is not a whole number up to the pattern length.
 export function eigenAusSchritten(text, muster) {

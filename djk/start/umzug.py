@@ -204,8 +204,9 @@ def _setze_journal(art: str, env, inhalt: dict | None) -> None:
         os.close(fd)
 
 
-def _manifest_pfad(art: str, env) -> Path:
-    return ablage.heim(env) / ".umzug" / f"{art}.manifest.json"
+def _manifest_pfad(art: str, env, stempel: str | None = None) -> Path:
+    """The manifest of the latest move, or (with a stamp) the one kept for the old copy `<alt>.umzug-alt-<stamp>`."""
+    return ablage.heim(env) / ".umzug" / (f"{art}.manifest.json" if stempel is None else f"{art}.manifest-{stempel}.json")
 
 
 def _schreibe_manifest(art: str, env, m: dict, quelle: str) -> None:
@@ -221,9 +222,18 @@ def _schreibe_manifest(art: str, env, m: dict, quelle: str) -> None:
     os.replace(tmp, p)
 
 
-def _lies_manifest(art: str, env) -> dict | None:
+def _manifest_zur_kopie(art: str, env, stempel: str) -> None:
+    """Keeps the manifest of the move that made the old copy `stempel`: a later move overwrites the plain manifest, and two old copies
+    (there, back, there across disks) must each be checked against what was copied into them."""
     try:
-        return json.loads(_manifest_pfad(art, env).read_text(encoding="utf-8"))
+        shutil.copyfile(_manifest_pfad(art, env), _manifest_pfad(art, env, stempel))
+    except OSError:
+        pass                                                             # cleanup then falls back to the plain manifest (newest copy only)
+
+
+def _lies_manifest(art: str, env, stempel: str | None = None) -> dict | None:
+    try:
+        return json.loads(_manifest_pfad(art, env, stempel).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
 
@@ -388,7 +398,9 @@ def _s4c(b: dict, o: dict, art: str, g, env) -> None:
     gruende = g.belegt(Path(o["alt"]))                                   # again: the copy and its check took time
     if gruende:                                                          # the journal stays at "kopiert": rule U5 verifies again
         return _ablehnen(b, "; ".join(gruende), 3)
-    g.umbenennen(o["alt"], o["alt"] + ALTKOPIE + _stempel())
+    st = _stempel()
+    g.umbenennen(o["alt"], o["alt"] + ALTKOPIE + st)
+    _manifest_zur_kopie(art, env, st)
     _journal(art, env, schritt="verschoben")
     _s5c(b, o, art, g, env)
 
@@ -754,13 +766,15 @@ def aufraeumen(art: str, ausfuehren: bool, env=None) -> dict:
         b["grund"] = "no old copy"
         return b
     j = _lies_journal(art, env)
-    m = _lies_manifest(art, env)
-    geaendert = [k for k in kopien if m is None or not os.path.isdir(k) or os.path.islink(k) or _unterschiede(m, manifest(k))]
-    fehlend = sorted(r for r, e in (m or {}).items() if e[0] == "datei" and not os.path.lexists(os.path.join(o["neu"], r)))
-    beschaedigt = [] if fehlend or geaendert else _unberuehrt_aber_anders(m or {}, o["neu"])
+    # every old copy is checked against the manifest of its own move; the plain manifest is the latest move's and fits the newest copy only
+    mk = {k: _lies_manifest(art, env, k.rsplit(ALTKOPIE, 1)[1]) or (_lies_manifest(art, env) if k == kopien[-1] else None) for k in kopien}
+    ohne = [k for k in kopien if mk[k] is None]
+    geaendert = [k for k in kopien if mk[k] is None or not os.path.isdir(k) or os.path.islink(k) or _unterschiede(mk[k], manifest(k))]
+    fehlend = sorted({r for k in kopien for r, e in (mk[k] or {}).items() if e[0] == "datei" and not os.path.lexists(os.path.join(o["neu"], r))})
+    beschaedigt = [] if fehlend or geaendert else sorted({r for k in kopien for r in _unberuehrt_aber_anders(mk[k] or {}, o["neu"])})
     if not (_link_auf(o["alt"], o["neu"]) and os.path.isdir(o["neu"]) and j and j.get("schritt") == "fertig"):
         _ablehnen(b, f"the old copy stays: {o['alt']} is not the finished link to {o['neu']}", 4)
-    elif m is None:
+    elif ohne:
         _ablehnen(b, "the old copy stays: there is no record of what was copied (check and delete it by hand)", 4)
     elif geaendert:
         _ablehnen(b, "the old copy stays: it is not what was copied and may hold newer data: " + ", ".join(geaendert[:3]), 5)

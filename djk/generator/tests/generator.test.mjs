@@ -342,3 +342,70 @@ test('after a kern restart the stream is announced once per generation', { timeo
   await warte(300);
   assert.equal(strom(), start + 3, 'after a /k/willkommen of another generation the same number announces again');
 });
+
+// ---- Plan studio-taktart T1: the bar length comes from the file `taktart` beside strom1.js (absent = 4) ----
+async function starteTaktart(t, taktart, muster = 's("bd*3")') {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'erz-takt-'));
+  fs.mkdirSync(path.join(tmp, 'kits/t'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'kits/t/kit.json'), JSON.stringify({ schema: 1, name: 't', klaenge: [
+    { note: 0, name: 'bd:0', datei: 'bd_0.f32', frames: 1 }, { note: 1, name: 'hh:0', datei: 'hh_0.f32', frames: 1 }] }));
+  const datei = path.join(tmp, 'strom1.js');
+  fs.writeFileSync(datei, muster);
+  if (taktart !== null) fs.writeFileSync(path.join(tmp, 'taktart'), taktart);
+  const kern = dgram.createSocket('udp4');
+  await new Promise((r) => kern.bind(0, '127.0.0.1', r));
+  const eingang = [];
+  let abo = null;
+  kern.on('message', (b) => { const m = dekodiere(b); eingang.push(m); if (m.adresse === '/k/hallo') abo = m.werte[1]; });
+  const p = spawn(process.execPath, ['--permission', `--allow-fs-read=${path.resolve(HIER, '../..')}`,
+    `--allow-fs-read=${process.env.HOME}/strudel`, `--allow-fs-read=${tmp}`, `--allow-fs-write=${tmp}`,
+    path.join(HIER, '../generator.mjs'), '--kern-port', String(kern.address().port), '--abo-port', '0',
+    '--kit-ordner', path.join(tmp, 'kits'), '--kit', 't', '--muster', datei], { stdio: ['ignore', 'ignore', 'pipe'] });
+  const x = { tmp, eingang, p, log: '' };
+  p.stderr.on('data', (d) => { x.log += d; });
+  t.after(() => { p.kill('SIGTERM'); kern.close(); fs.rmSync(tmp, { recursive: true, force: true }); });
+  for (let i = 0; i < 100 && !abo; i++) await warte(50);
+  assert.ok(abo, `kein /k/hallo: ${x.log}`);
+  x.uhr = (beat, bpm = 128) => kern.send(kodiere('/uhr', 'hhddd', [0n, process.hrtime.bigint(), beat, bpm, 0]), abo, '127.0.0.1');
+  x.fenster = () => eingang.filter((m) => m.bundle).map((b) => ({ ab: b.elemente[0].werte[4], bis: b.elemente[0].werte[5],
+    beats: b.elemente.slice(1).map((e) => e.werte[4]) }));
+  return x;
+}
+
+test('taktart file "3" beside strom1.js: the windows are 3 beats per bar', { timeout: 20000 }, async (t) => {
+  const x = await starteTaktart(t, '3');
+  x.uhr(6.0);
+  await warte(400);
+  const f = x.fenster();
+  assert.deepEqual([f[0].ab, f.at(-1).bis], [9, 15], JSON.stringify(f));           // bar 2 of 3 beats runs: bars 3 and 4
+  assert.deepEqual(f.flatMap((w) => w.beats), [9, 10, 11, 12, 13, 14]);
+});
+
+test('taktart file removed: back to 4; garbage keeps the last value and the process lives', { timeout: 20000 }, async (t) => {
+  const x = await starteTaktart(t, '3');
+  x.uhr(6.0);
+  await warte(400);
+  const nr = x.fenster().length;
+  fs.writeFileSync(path.join(x.tmp, 'taktart.neu'), 'x');
+  fs.renameSync(path.join(x.tmp, 'taktart.neu'), path.join(x.tmp, 'taktart'));
+  await warte(500);
+  assert.equal(x.fenster().length, nr, 'garbage changes nothing');
+  assert.equal(x.p.exitCode, null);
+  fs.unlinkSync(path.join(x.tmp, 'taktart'));
+  await warte(600);
+  const neu = x.fenster().slice(nr);
+  assert.ok(neu.length >= 1, `no window after the removal: ${x.log}`);
+  assert.equal(neu[0].ab % 4, 0, JSON.stringify(neu));                               // the next bar line of 4
+  assert.ok(neu.every((w) => w.ab % 4 === 0 && w.bis % 4 === 0), JSON.stringify(neu));
+  assert.match(x.log, /Meter 3 -> 4 beats per bar/);
+});
+
+test('no taktart file at start: the windows are those of 4/4 (bar 2 of 4 beats runs: bars 3 and 4)', { timeout: 20000 }, async (t) => {
+  const x = await starteTaktart(t, null, 's("bd*4")');
+  x.uhr(6.0);
+  await warte(400);
+  const f = x.fenster();
+  assert.deepEqual([f[0].ab, f.at(-1).bis], [8, 16]);
+  assert.deepEqual(f.flatMap((w) => w.beats), [8, 9, 10, 11, 12, 13, 14, 15]);
+  assert.equal(fs.existsSync(path.join(x.tmp, 'taktart')), false, 'the process never writes the meter file');
+});

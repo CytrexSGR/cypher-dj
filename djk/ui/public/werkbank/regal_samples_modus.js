@@ -41,6 +41,15 @@ export function bindeSamplesReiter(ctx, { host, setzeHinweis = () => {}, refusal
   }
   zeichne();
   return {
+    // "show all" of the search view: LIBRARY mode with `q` in its search field; call it before zeige()
+    sucheAlle(q) {
+      if (modus !== 'katalog') { if (aktiv) binder[modus].verberge(); modus = 'katalog'; schreibeKatalogStand(ctx, { modus }); zeichne(); }
+      katalog.setzeText(q);
+    },
+    // the search view's rows (catalogue samples and loops)
+    katalogZeile: (z, suchHost) => katalog.zeileFuer(z, suchHost),
+    katalogKnoepfe: () => katalog.zeigeKnoepfe(),
+    katalogStopp: () => katalog.stoppe(),
     zeige() { aktiv = true; host.replaceChildren(wurzelEl); zeichne(); binder[modus].zeige(); },
     verberge() { aktiv = false; binder[modus].verberge(); },
   };

@@ -81,3 +81,100 @@ export function ansageFuer(adresse: string, f: Felder, takt: number, nbVorher: n
       return null;
   }
 }
+
+// ---------- Lean operating journal (plan 2026-11-18-lean-operating-journal) ----------
+
+// "voll": every line as before. "schlank": the operating journal of a set keeps only lines that say something new
+// (journalWuerdig). The filter sits only in front of Journal.schreibe; the annahme, the spiegel, the websocket clients and the
+// tick see every message in both modes.
+export type JournalModus = 'voll' | 'schlank';
+export const JOURNAL_MODI: readonly JournalModus[] = ['voll', 'schlank'];
+
+// Option (--journal / LeitstandOptionen.journal) wins over the config key; both absent means voll.
+export function journalModus(option: string | undefined, konfig: string | undefined): JournalModus {
+  const [wert, woher] = option !== undefined ? [option, '--journal'] : [konfig, 'journal (leitstand.toml)'];
+  if (wert === undefined) return 'voll';
+  if (!(JOURNAL_MODI as readonly string[]).includes(wert)) {
+    throw new Error(`${woher}: "${wert}" is not a journal mode, allowed are ${JOURNAL_MODI.join(', ')}`);
+  }
+  return wert as JournalModus;
+}
+
+const HEARTBEAT_ALTER_NS = 60e9;   // a lean journal still gets a /k/hallo or /k/willkommen line every minute (keeps its mtime for fortsetzbar)
+
+// Status lines: what the core repeats unchanged. Value: the fields left out of the comparison (they move every time).
+const ZUSTAND_OHNE: Readonly<Record<string, readonly string[]>> = {
+  '/zustand/arr': ['projekt_beat'],
+  '/zustand/warp': [],
+  '/zustand/rec': ['projekt_beat'],
+  '/zustand/spur_pool': ['blocks_parallel', 'einheiten_worker', 'einheiten_caller', 'seriell_summe', 'zurueck'],
+  '/zustand/hall_pool': [],
+  '/zustand/ins_host': [],
+  '/nb': ['w'],
+};
+
+const VERLUST_FELDER = ['verworfen', 'verworfen_anderes_muster', 'zu_spaet', 'ungehoert'];
+
+// Does this line go into the journal? voll: always. schlank: see the plan, decision 2.
+// merker: what the process wrote last per type (starts empty with the process, so the first line of each type is always
+// written); it is updated here when a line is let through. kenntQuittung: the receipt belongs to a plan part or is waited for.
+// monoNs: the mono_ns of the line (time base of the 60 s rule).
+export function journalWuerdig(
+  modus: JournalModus, von: string, typ: string, daten: Record<string, unknown>, merker: Map<string, string>,
+  kenntQuittung: (daten: Record<string, unknown>) => boolean, monoNs = 0,
+): boolean {
+  if (modus !== 'schlank') return true;
+  switch (typ) {
+    case '/k/led':
+    case '/k/vorschlag_kanal':
+      return von !== 'leitstand';
+    case '/k/hallo':
+    case '/k/willkommen': {
+      const generation = String(daten.generation);
+      const zeitKey = `${typ}@mono`;
+      const letzteZeit = merker.get(zeitKey);
+      const neu = merker.get(typ) !== generation || letzteZeit === undefined || monoNs - Number(letzteZeit) > HEARTBEAT_ALTER_NS;
+      if (neu) { merker.set(typ, generation); merker.set(zeitKey, String(monoNs)); }
+      return neu;
+    }
+    case '/q': {
+      if (von !== 'kern') return true;
+      const status = daten.status as number;
+      return !(status === 1 || status === 2 || status === 3) || (daten.grund !== undefined && daten.grund !== '') || kenntQuittung(daten);
+    }
+    case '/erz/quittung':
+      return VERLUST_FELDER.some((f) => daten[f] !== 0 && daten[f] !== undefined);
+    default: {
+      if (!Object.hasOwn(ZUSTAND_OHNE, typ)) return true;
+      const ohne = ZUSTAND_OHNE[typ];
+      const stand = JSON.stringify(Object.entries(daten).filter(([k]) => !ohne.includes(k)));
+      if (merker.get(typ) === stand) return false;
+      merker.set(typ, stand);
+      return true;
+    }
+  }
+}
+
+// Resume (Leitstand.wiederaufnehmen): the types of lines Annahme.wiederaufnehmen and Spiegel never consume. It reads only
+// plan_eingereicht, vorschlag_ende, plan_status, teil_gesendet, kopplung, autonomie, hoerschein, /q (von kern) and /e/* (von
+// kern), and the leitstand itself reads /k/willkommen and /e/neustart for the generation. None of the types below is one of
+// them (a /zustand/* or /nb line is never fed to the spiegel on resume, /takt is not an /e/ address).
+export const RESUME_UEBERSPRINGT: ReadonlySet<string> = new Set([
+  '/k/led', '/k/hallo', '/erz/quittung', '/zustand/arr', '/zustand/warp', '/zustand/rec', '/zustand/spur_pool',
+  '/zustand/hall_pool', '/zustand/ins_host', '/nb', '/takt',
+]);
+
+// Predicate on the RAW journal line (journalZeilen, third argument): false = the resume does not need the line, skip it
+// before JSON.parse. Looks at the typ field only: it stands in the head of the line, before the daten object (Leitstand.zeile
+// and Journal.oeffne write sample, beat, takt, mono_ns, von, typ, daten in this order); a text inside daten cannot match.
+// A line whose typ is not found in the head is kept and parsed.
+export function resumeLiestZeile(zeile: string): boolean {
+  const ende = zeile.indexOf('"daten":');
+  const kopf = ende < 0 ? zeile : zeile.slice(0, ende);
+  const i = kopf.indexOf('"typ":"');
+  if (i < 0) return true;
+  const von = i + 7;
+  const bis = kopf.indexOf('"', von);
+  if (bis < 0) return true;
+  return !RESUME_UEBERSPRINGT.has(kopf.slice(von, bis));
+}

@@ -406,7 +406,7 @@ export class HostVerwaltung {
     this.transportStatus = status;
     if (status !== 0 || vor === null || vor === 0) return;
     for (const host of this.hosts.values()) {   // transport stopped: a host that started on an estimate gets its measurement through a clean restart (empty rack)
-      if (host.status === 'bereit' && !host.gemessen && host.recycle < MAX_RECYCLE && host.offen === 0) this.neuStart(host);
+      if (host.status === 'bereit' && !host.gemessen && host.recycle < MAX_RECYCLE && host.offen === 0 && !host.fenster) this.neuStart(host);   // an open plugin window would vanish: measure at the next stop edge
     }
   }
 

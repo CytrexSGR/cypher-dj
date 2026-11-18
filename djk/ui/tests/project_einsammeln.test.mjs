@@ -272,9 +272,43 @@ test('a run removes leftover .q-*.tmp-* files of the project audio folder and no
   const a = aufbau(t);
   const audio = path.join(a.proj, 'audio'); fs.mkdirSync(audio);
   for (const n of ['.q-alt-12345678.wav.tmp-ab12cd34', 'take-1.wav', '.q-fremd.wav', 'x.tmp-ab12', '.other.tmp-ab12']) fs.writeFileSync(path.join(audio, n), 'z');
+  const alt = new Date(Date.now() - 2 * 3600_000);
+  fs.utimesSync(path.join(audio, '.q-alt-12345678.wav.tmp-ab12cd34'), alt, alt);   // a leftover is old; a fresh one may belong to another process
   const b = await sammleEin({ projekt: projektMit(clip('c1', a.s, a.datei)), projektOrdner: a.proj, quellPfad: aufloeser({}) });
   assert.equal(b.kopiert, 1);
   assert.deepEqual(fs.readdirSync(audio).sort(), ['.other.tmp-ab12', '.q-fremd.wav', `kick-drum-${a.s.slice(0, 8)}.wav`, 'take-1.wav', 'x.tmp-ab12'].sort());
+});
+
+test('a fresh leftover (a second process on the same project) stays; an old one goes', async (t) => {
+  const a = aufbau(t);
+  const audio = path.join(a.proj, 'audio'); fs.mkdirSync(audio);
+  const frisch = '.q-x-12345678.wav.tmp-ab12cd34', alt = '.q-y-12345678.wav.tmp-ab12cd35';
+  fs.writeFileSync(path.join(audio, frisch), 'z'); fs.writeFileSync(path.join(audio, alt), 'z');
+  const vor = new Date(Date.now() - 3 * 3600_000);
+  fs.utimesSync(path.join(audio, alt), vor, vor);
+  await sammleEin({ projekt: projektMit(clip('c1', a.s, a.datei)), projektOrdner: a.proj, quellPfad: aufloeser({}) });
+  assert.ok(fs.existsSync(path.join(audio, frisch)), 'fresh stays');
+  assert.ok(!fs.existsSync(path.join(audio, alt)), 'old goes');
+});
+
+test('a source whose name ends in a dot is found again as a copy', async (t) => {
+  const a = aufbau(t, 'track.', 'dot-bytes');
+  const o = { projekt: projektMit(clip('c1', a.s, a.datei)), projektOrdner: a.proj, quellPfad: aufloeser({}) };
+  assert.equal(einsammelName(a.datei, a.s), `track-${a.s.slice(0, 8)}.wav`);
+  assert.equal((await sammleEin(o)).kopiert, 1);
+  assert.notEqual(loeseQuelle({ sha256: a.s, hinweis: '', projektOrdner: a.proj }), null, 'the copy is found');
+  const b = await sammleEin(o);
+  assert.deepEqual([b.kopiert, b.schon_da], [0, 1]);
+});
+
+test('the sync does not block the event loop (the async fsync is used)', async (t) => {
+  const a = aufbau(t);
+  const orig = fs.fsyncSync;
+  let blockierend = 0;
+  fs.fsyncSync = (fd) => { blockierend += 1; return orig(fd); };
+  t.after(() => { fs.fsyncSync = orig; });
+  await sammleEin({ projekt: projektMit(clip('c1', a.s, a.datei)), projektOrdner: a.proj, quellPfad: aufloeser({}) });
+  assert.equal(blockierend, 0);
 });
 
 test('a run does not remove the temp file of a copy that is running right now', async (t) => {
@@ -309,9 +343,9 @@ test('an empty file is no copy: it is replaced; a real copy is never overwritten
 test('the copy is synced before it gets its name (file, then folder)', async (t) => {
   const a = aufbau(t);
   const fsyncs = [];
-  const orig = fs.fsyncSync;
-  fs.fsyncSync = (fd) => { fsyncs.push(fs.fstatSync(fd).isDirectory() ? 'dir' : 'file'); return orig(fd); };
-  t.after(() => { fs.fsyncSync = orig; });
+  const orig = fs.fsync;
+  fs.fsync = (fd, cb) => { fsyncs.push(fs.fstatSync(fd).isDirectory() ? 'dir' : 'file'); return orig(fd, cb); };
+  t.after(() => { fs.fsync = orig; });
   await sammleEin({ projekt: projektMit(clip('c1', a.s, a.datei)), projektOrdner: a.proj, quellPfad: aufloeser({}) });
   assert.deepEqual(fsyncs, ['file', 'dir']);
 });

@@ -16,9 +16,10 @@ const PROZESS = path.join(HIER, '../generator_bk.mjs');
 const STROEME = [5, 6, 7, 9, 10];
 const warte = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function starte(t, { strom = STROEME.join(',') } = {}) {
+async function starte(t, { strom = STROEME.join(','), vorher = () => {} } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'erzbk-'));
   for (const s of STROEME) fs.mkdirSync(path.join(tmp, `erzeuger${s}`));
+  vorher(tmp);   // files that must exist when the process starts
   const kern = dgram.createSocket('udp4');
   await new Promise((r) => kern.bind(0, '127.0.0.1', r));
   const eingang = [];
@@ -162,4 +163,33 @@ test('a new pattern with notes after the held one sends no kappe (negative contr
   fs.writeFileSync(path.join(x.tmp, 'erzeuger6/strom1.js'), 'note("e3 g3")');
   await warte(1500);
   assert.ok(kappen(x.eingang).length > 0 && kappen(x.eingang).every((w) => w.kappe === 0), JSON.stringify(kappen(x.eingang).filter((w) => w.kappe)));
+});
+
+// Plan studio-taktart T1: every stream folder has its OWN meter file; a stream without one stays on 4.
+test('stream 6 follows ITS taktart file while stream 5 without a file stays on 4', { timeout: 20000 }, async (t) => {
+  const x = await starte(t, { vorher: (tmp) => {
+    fs.writeFileSync(path.join(tmp, 'erzeuger6/taktart'), '3');
+    fs.writeFileSync(path.join(tmp, 'erzeuger6/strom1.js'), 'note("c3")');
+    fs.writeFileSync(path.join(tmp, 'erzeuger5/strom1.js'), 'note("c3")');
+  } });
+  x.uhr(6.0);   // 240 BPM
+  await warte(600);
+  const w = x.eingang.filter((m) => m.bundle).map((b) => ({ strom: b.elemente[0].werte[0], ab: b.elemente[0].werte[4], bis: b.elemente[0].werte[5],
+    beats: b.elemente.slice(1).map((e) => e.werte[4]) }));
+  const von = (s) => w.filter((k) => k.strom === s);
+  assert.equal(von(6)[0].ab, 9, JSON.stringify(von(6)));            // 3/4: bar 2 runs, windows from beat 9 to 15
+  const erste = (s) => von(s).filter((k) => k.ab < 12);               // the windows of the first alarm (the next one starts at 12)
+  assert.equal(erste(6).at(-1).bis, 15);
+  const beats = (s) => [...new Set(von(s).flatMap((k) => k.beats))];
+  assert.ok(beats(6).includes(9) && beats(6).every((b) => b % 3 === 0), JSON.stringify(beats(6)));   // one note per 3-beat cycle
+  assert.equal(von(5)[0].ab, 8, JSON.stringify(von(5)));            // 4/4: windows 8 to 16
+  assert.equal(erste(5).at(-1).bis, 16);
+  assert.ok(beats(5).includes(8) && beats(5).every((b) => b % 4 === 0), JSON.stringify(beats(5)));   // one note per 4-beat cycle
+  // a change at run time reaches only that stream
+  const vorher = x.eingang.length;
+  fs.unlinkSync(path.join(x.tmp, 'erzeuger6/taktart'));
+  await warte(600);
+  assert.match(x.log, /stream 6: bar 3 -> 4 beats/);
+  assert.doesNotMatch(x.log, /stream 5: bar/);
+  assert.ok(x.eingang.length > vorher);
 });

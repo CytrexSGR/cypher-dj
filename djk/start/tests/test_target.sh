@@ -72,7 +72,7 @@ pruef $([ "$R" = 0 ]; echo $?) "Z1 Negativ-Kontrolle: mehrdeutige Beschreibung, 
 # Z2 unit.py
 UN="$START/../units/cypherdj-kern.service"; DI="$START/templates/cypherdj-kern.service.d/betrieb.conf"
 args() { python3 "$START/unit.py" --unit "$UN" --dropin "$DI" --var "MASTER=$1" --var "CUE_ARG=$2" --var TON_FREI=--ton-frei \
-  --var KERN_ARGS= --var KERN_CLIENT=x --var LEITSTAND_ARGS= --var OBERFLAECHE_ARGS= | sed -n '/^--$/,$p' | tail -n +2; }
+  --var KERN_ARGS= --var KERN_CPUS=0-3 --var KERN_CLIENT=x --var LEITSTAND_ARGS= --var OBERFLAECHE_ARGS= | sed -n '/^--$/,$p' | tail -n +2; }
 m=$(args "$D:playback_F" "" | grep -A1 -x -- '--master' | tail -1)
 [ "$m" = "$D:playback_F" ]; pruef $? "Z2 Name mit Leerzeichen bleibt ein Argument: '$m'"
 c=$(args "$D:playback_F" "--cue \"$D:playback_R\"" | grep -A1 -x -- '--cue' | tail -1)

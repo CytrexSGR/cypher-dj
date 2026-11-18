@@ -50,12 +50,16 @@ const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
 // details: for beschreibung_ungueltig and anfrage_ungueltig every single error with the admissible words (erlaubt), so the page
 // and an agent can show or correct them (DECISIONS.md P-V3)
 export class PresetFehler extends Error {
-  readonly code: number; readonly fehler: string; readonly text: string; readonly details?: BeschreibungsFehler[];
-  constructor(code: number, fehler: string, text?: string, details?: BeschreibungsFehler[]) {
+  readonly code: number; readonly fehler: string; readonly text: string; readonly details?: BeschreibungsFehler[]; readonly zusatz?: Record<string, unknown>;
+  // zusatz: extra fields of the refusal answer (graph_anders / kein_graph name the preset's graph, so the page can ask to load it)
+  constructor(code: number, fehler: string, text?: string, details?: BeschreibungsFehler[], zusatz?: Record<string, unknown>) {
     super(fehler); this.code = code; this.fehler = fehler; this.text = text ?? PRESET_TEXT[fehler] ?? `request refused (${fehler})`;
     if (details) this.details = details;
+    if (zusatz) this.zusatz = zusatz;
   }
 }
+// graph_fehlt on APPLY (the save path answers 400 with the PRESET_TEXT text: the preset names no graph; here the name is there but the folder lacks the instrument)
+export const GRAPH_FEHLT_ANWENDEN = 'the instrument of this preset is not installed';
 // English texts for the page (http/reasons.ts is not ours to extend; the reasons stay local to this module)
 export const PRESET_TEXT: Readonly<Record<string, string>> = {
   name_ungueltig: `the name needs 1 to ${NAME_MAX} characters with at least one letter or digit, no control characters`,
@@ -91,6 +95,7 @@ export const PRESET_TEXT: Readonly<Record<string, string>> = {
   geraet_passt_nicht: 'the preset belongs to another device than the target',
   graph_anders: 'the Baukasten preset belongs to another graph than the one loaded on the track or channel',
   kein_graph: 'no graph is loaded on this channel',
+  graph_latenz: 'the instrument of this preset delays its signal and cannot play a SEQ pattern; load it on a track outside the sequencer',
   kein_projekt: 'no project is open',
   ziel_unbekannt: 'no such target (track, insert stage, strip or channel)',
   kanal_art: 'this channel kind does not carry the device',

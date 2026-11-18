@@ -197,5 +197,50 @@ int main() {
     PRUEF(f.daten[2 * SPB - 2] == 0.0f && f.daten[2 * SPB + 2] == 0.0f);
     PRUEF(t.arr.hole_freeze_fertig() == &f && f.status == 0);
   }
+  // 8: a bar-quantized stop that lies behind the end of the run does not push the stop past it: the run ends where it ends (status 0), the transport with it.
+  // Before the fix the stop moved to the quant point, the run's end restored the user's start beat 64 and the transport played on with the clips of the wrong region.
+  {
+    arrtest::Treiber t;
+    arrtest::Bau b;
+    b.spur(1, cdj::ArrArt::audio).clip(1, "c74", 74.5, 1.0, &imp->a);   // the user's region: start beat 64 + run position 10.5
+    t.laden(b.fertig());
+    PRUEF(t.arr.start(64.0, 0, false, 0, 4096, t.n, t.k));
+    t.arr.stopp(0, 0, t.k);
+    t.arr.loop(true, 0.0, 8.0, t.s, t.k);
+    cdj::ArrFreeze f = auftrag(1, 0.0, 8.0);
+    const char* grund = "";
+    PRUEF(t.arr.freeze(&f, 0, false, t.s, 0, t.n, t.k, grund));
+    const int64_t ende = f.start_s + f.frames;   // bis + ARR_FREEZE_NACHLAUF = beat 10 of the run
+    t.lauf(f.start_s + 9 * SPB);
+    PRUEF(t.arr.status() == cdj::ArrStatus::spielt);
+    t.arr.stopp(2, t.s, t.k);   // beat 9 of the run: the next bar line is beat 12, behind the end
+    t.lauf(ende + 4 * SPB);
+    PRUEF(t.arr.hole_freeze_fertig() == &f && f.status == 0 && f.ende_s == ende);
+    PRUEF(t.arr.status() == cdj::ArrStatus::steht && t.arr.beendet_sample() == ende);
+    PRUEF(t.arr.start_beat() == 64.0);
+    PRUEF(t.treffer(ende + t.n, t.s).empty());   // the clip of beat 74.5 never started
+  }
+  // 9: a second bar-quantized stop replaces an earlier user stop inside the run: it is clamped to the run's own end, not to the stop that is already planned.
+  // Before the fix the second stop was pulled back to the first one (beat 3), so its quant (the next bar line, beat 4) was not honoured.
+  {
+    arrtest::Treiber t;
+    arrtest::Bau b;
+    b.spur(1, cdj::ArrArt::audio).clip(1, "c74", 74.5, 1.0, &imp->a);
+    t.laden(b.fertig());
+    PRUEF(t.arr.start(64.0, 0, false, 0, 4096, t.n, t.k));
+    t.arr.stopp(0, 0, t.k);
+    cdj::ArrFreeze f = auftrag(1, 0.0, 8.0);
+    const char* grund = "";
+    PRUEF(t.arr.freeze(&f, 0, false, t.s, 0, t.n, t.k, grund));
+    const int64_t ende = f.start_s + f.frames;   // beat 10 of the run
+    t.lauf(f.start_s + SPB * 5 / 2);
+    PRUEF(t.arr.status() == cdj::ArrStatus::spielt);
+    t.arr.stopp(1, t.s, t.k);   // run beat 2.5: the next beat is run beat 3
+    PRUEF(t.arr.stopp_sample() == f.start_s + 3 * SPB);
+    t.lauf(t.s + SPB / 5);
+    t.arr.stopp(2, t.s, t.k);   // run beat 2.7: the next bar line is run beat 4 (project beat 68), before the run's end
+    PRUEF(t.arr.stopp_sample() == f.start_s + 4 * SPB);
+    PRUEF(t.arr.stopp_sample() < ende);
+  }
   PRUEF_ENDE();
 }

@@ -1,6 +1,7 @@
 // Sampler A1 task 9 and Sampler A2 task 9: the hand tool `sampler` (sources, list, create, read, to track, cut again, markers, original order). A stub page records every request.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,12 +28,16 @@ async function verbinde(t, antwort = () => [200, { ok: true }]) {
 }
 const sampler = (c, args) => c.callTool({ name: 'sampler', arguments: args });
 
-test('sampler schema: aktion is an enum of eleven, scheiben an enum of the grid counts, quelle names art, ref and stem', async (t) => {
+test('sampler schema: aktion is an enum of thirteen, scheiben an enum of the grid counts, quelle names art, ref and stem', async (t) => {
   const { c } = await verbinde(t);
   const x = (await c.listTools()).tools.find((y) => y.name === 'sampler');
   assert.ok(x, 'tool sampler is listed');
   const p = x.inputSchema.properties;
-  assert.deepEqual(p.aktion.enum, ['quellen', 'liste', 'neu', 'lies', 'spur', 'kit', 'ton', 'schneiden', 'marke', 'ursprung', 'loeschen']);
+  assert.deepEqual(p.aktion.enum, ['quellen', 'liste', 'neu', 'lies', 'spur', 'kit', 'ton', 'schneiden', 'marke', 'ursprung', 'loeschen', 'dateien', 'instrument']);
+  assert.equal(p.wurzel.type, 'string');
+  assert.equal(p.ordner.type, 'string');
+  assert.equal(p.suche.type, 'string');
+  assert.equal(p.release.type, 'boolean');
   assert.equal(p.ton_graph.type, 'string');
   assert.deepEqual(p.methode.enum, ['raster', 'anschlag'], 'hand is never a way to cut: it comes from marker edits');
   assert.equal(p.empfindlichkeit.type, 'number');
@@ -233,6 +238,11 @@ test('sampler ton refuses a wrong shape locally without a request (von 0, bis be
     { aktion: 'ton', id: 'x', von: 2, name: 5 },
     { aktion: 'ton', id: 'x', von: 2, name: '' },
     { aktion: 'ton', id: 'x', von: 2, spur: 'yes' },
+    // fields that belong to no ton call are refused, not dropped silently (scheibe is the field of marke, nummern of kit, vel is no field at all)
+    { aktion: 'ton', id: 'x', von: 2, scheibe: 3 },
+    { aktion: 'ton', id: 'x', von: 2, nummern: [1, 2] },
+    { aktion: 'ton', id: 'x', von: 2, scheiben: 8 },
+    { aktion: 'ton', id: 'x', von: 2, vel: 90 },
   ];
   for (const args of faelle) {
     const r = await sampler(c, args);
@@ -393,7 +403,7 @@ test('sampler marke: a 409 becomes isError with the server\'s reason and text, a
 });
 
 test('sampler schneiden: a 422 keine_anschlaege is an error with the server\'s text', async (t) => {
-  const { c } = await verbinde(t, () => [422, { fehler: 'keine_anschlaege', text: 'no hits found at sensitivity 0.50; raise it or cut by grid' }]);
+  const { c } = await verbinde(t, () => [422, { fehler: 'keine_anschlaege', text: 'no hits found at sensitivity 0.50; cut by grid instead, or raise the sensitivity (HITS in the strip of a cut track, empfindlichkeit in the hand tool)' }]);
   const r = await sampler(c, { aktion: 'schneiden', id: 'amen-1a2b', methode: 'anschlag' });
   assert.equal(r.isError, true);
   assert.equal(JSON.parse(r.content[0].text).fehler, 'keine_anschlaege');
@@ -496,4 +506,88 @@ test('sampler description: loeschen, liste shows what exists, marke counting bri
   assert.match(d, /markers 1\.\.n - 1/);
   assert.match(d, /ascending slice order/);
   assert.ok(!/in the order of the numbers/.test(d), 'the old kit wording is gone');
+});
+
+// ---- sample player: the file list and the instrument of a folder (routes /sampler/dateien, /sampler/instrument) ----
+test('sampler dateien: GET with the root, the folder and the search, only what is given; without a root it lists the roots', async (t) => {
+  const { c, gesehen } = await verbinde(t, () => [200, { wurzeln: [{ name: 'drums' }] }]);
+  await sampler(c, { aktion: 'dateien' });
+  await sampler(c, { aktion: 'dateien', wurzel: 'drums' });
+  await sampler(c, { aktion: 'dateien', wurzel: 'drums', ordner: 'kicks/808 set' });
+  await sampler(c, { aktion: 'dateien', wurzel: 'drums', ordner: 'kicks', suche: 'sub bass' });
+  assert.deepEqual(gesehen.map((g) => [g.methode, g.pfad]), [
+    ['GET', '/sampler/dateien'],
+    ['GET', '/sampler/dateien?wurzel=drums'],
+    ['GET', '/sampler/dateien?wurzel=drums&ordner=kicks%2F808%20set'],
+    ['GET', '/sampler/dateien?wurzel=drums&ordner=kicks&suche=sub%20bass'],
+  ]);
+});
+
+test('sampler dateien refuses a wrong shape locally without a request', async (t) => {
+  const { c, gesehen } = await verbinde(t);
+  const faelle = [
+    { aktion: 'dateien', ordner: 'kicks' },                    // a folder needs its root
+    { aktion: 'dateien', suche: 'kick' },
+    { aktion: 'dateien', wurzel: '' },
+    { aktion: 'dateien', wurzel: 3 },
+    { aktion: 'dateien', wurzel: 'd', ordner: 4 },
+    { aktion: 'dateien', wurzel: 'd', suche: false },
+    { aktion: 'dateien', wurzel: 'd', id: 'x' },               // a field that belongs to no dateien call
+    { aktion: 'dateien', wurzel: 'd', spur: true },
+  ];
+  for (const args of faelle) {
+    const r = await sampler(c, args);
+    assert.equal(r.isError, true, JSON.stringify(args));
+    assert.equal(JSON.parse(r.content[0].text).fehler, 'argument_ungueltig', JSON.stringify(args));
+  }
+  assert.equal(gesehen.length, 0, 'no request was sent');
+});
+
+test('sampler instrument: POST with the folder, passes only what is given, answers the text of the route', async (t) => {
+  const text = 'instrument piano: 3 zones';
+  const { c, gesehen } = await verbinde(t, () => [200, { instrument: { id: 'piano-1' }, text }]);
+  const r = await sampler(c, { aktion: 'instrument', wurzel: 'keys', ordner: 'piano', name: 'Piano', release: true, spur: true });
+  assert.ok(!r.isError);
+  assert.equal(r.content[0].text, text);
+  await sampler(c, { aktion: 'instrument', wurzel: 'keys' });
+  assert.deepEqual(gesehen.map((g) => [g.methode, g.pfad, g.koerper]), [
+    ['POST', '/sampler/instrument', { wurzel: 'keys', ordner: 'piano', name: 'Piano', release: true, spur: true }],
+    ['POST', '/sampler/instrument', { wurzel: 'keys' }],
+  ]);
+});
+
+test('sampler instrument refuses a wrong shape locally without a request, and passes the refusals of the server on', async (t) => {
+  const { c, gesehen } = await verbinde(t, () => [409, { fehler: 'kein_werkbank', text: 'the open project is not a workbench module' }]);
+  const faelle = [
+    { aktion: 'instrument' },
+    { aktion: 'instrument', wurzel: '' },
+    { aktion: 'instrument', wurzel: 7 },
+    { aktion: 'instrument', wurzel: 'k', ordner: 1 },
+    { aktion: 'instrument', wurzel: 'k', name: '' },
+    { aktion: 'instrument', wurzel: 'k', spur: 'yes' },
+    { aktion: 'instrument', wurzel: 'k', release: 1 },
+    { aktion: 'instrument', wurzel: 'k', suche: 'x' },         // belongs to dateien
+    { aktion: 'instrument', wurzel: 'k', id: 'x' },
+  ];
+  for (const args of faelle) {
+    const r = await sampler(c, args);
+    assert.equal(r.isError, true, JSON.stringify(args));
+    assert.equal(JSON.parse(r.content[0].text).fehler, 'argument_ungueltig', JSON.stringify(args));
+  }
+  assert.equal(gesehen.length, 0, 'no request was sent');
+  const r = await sampler(c, { aktion: 'instrument', wurzel: 'k', spur: true });
+  assert.equal(r.isError, true);
+  assert.equal(JSON.parse(r.content[0].text).fehler, 'kein_werkbank');
+});
+
+test('sampler description and AUFRUF.md in both languages name dateien and instrument', async (t) => {
+  const { c } = await verbinde(t);
+  const d = (await c.listTools()).tools.find((y) => y.name === 'sampler').description;
+  assert.match(d, /dateien \{wurzel\?, ordner\?, suche\?\}/);
+  assert.match(d, /instrument \{wurzel, ordner\?, name\?, release\?, spur\?\}/);
+  const wurzel = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+  for (const datei of ['djk/hand/AUFRUF.md', 'docs/veroeffentlichung/englisch/djk/hand/AUFRUF.md']) {
+    const md = fs.readFileSync(path.join(wurzel, datei), 'utf8');
+    for (const b of ['GET /sampler/dateien', 'POST /sampler/instrument {wurzel', 'dateien {wurzel?, ordner?, suche?}', 'instrument {wurzel, ordner?, name?, release?, spur?}']) assert.ok(md.includes(b), `${datei}: ${b}`);
+  }
 });

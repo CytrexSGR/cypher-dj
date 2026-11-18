@@ -31,10 +31,13 @@ const el = (tag, klasse, w, text) => {
   return e;
 };
 const hzKurz = (hz) => (hz >= 1000 ? `${(hz / 1000).toFixed(hz >= 10000 ? 0 : 1)} kHz` : `${Math.round(hz)} Hz`);
+const DETAIL_MAX = 160;
+// the server's own text first (as FIND SOUND does), else the text of the reason; then the detail, shortened to one line
 const fehlerText = (antwortText, r) => {
+  const t = typeof r?.j?.text === 'string' && r.j.text ? r.j.text : antwortText(r);
   const d = r?.j?.detail;
-  const dt = typeof d === 'string' ? d : d ? JSON.stringify(d) : '';
-  return dt ? `${antwortText(r)} \u00b7 ${dt}` : antwortText(r);
+  const dt = (typeof d === 'string' ? d : d ? JSON.stringify(d) : '').replace(/\s+/g, ' ').trim();
+  return dt ? `${t} \u00b7 ${dt.length > DETAIL_MAX ? `${dt.slice(0, DETAIL_MAX - 1)}\u2026` : dt}` : t;
 };
 const gueltig = (j) => !!j && typeof j === 'object' && Array.isArray(j.quelle?.spektrum?.hz) && !!j.quelle.zeitbild && Number.isFinite(j.rev);
 

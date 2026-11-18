@@ -178,10 +178,12 @@ fn note_64_plus_i_plays_slice_i_backwards() {
         assert_eq!(bits(out[j]), (q[2 * i].to_bits(), q[2 * i + 1].to_bits()), "frame {j}");
     }
     assert!(out[SL..].iter().all(|v| *v == (0.0, 0.0)), "the reversed hit ends at the slice start");
-    // the slice index wraps: note 64 + 3 + 16 is slice (3 + 16) mod 64 mod 16 = 3 again, forward
-    let mut p = programm(&wahl_graph(&gleiche_grenzen(16, SL), "", 2), &q);
-    let out = spiele(&mut p, 100, &[(0, Ev::An(19))]);
-    assert_eq!(bits(out[0]), (q[2 * SL * 3].to_bits(), q[2 * SL * 3 + 1].to_bits()), "note 19: slice 3 forward");
+    // a note that names no slice is silent: note 19 (16 slices) used to wrap to slice 3, now it plays nothing, forward and reversed
+    for note in [19u8, 64 + 19] {
+        let mut p = programm(&wahl_graph(&gleiche_grenzen(16, SL), "", 2), &q);
+        let out = spiele(&mut p, 2 * SL, &[(0, Ev::An(note))]);
+        assert!(out.iter().all(|v| *v == (0.0, 0.0)), "note {note} has no slice: silent");
+    }
 }
 
 #[test]

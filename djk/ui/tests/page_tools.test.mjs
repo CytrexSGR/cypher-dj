@@ -16,6 +16,8 @@ const GATE_PRESET = { schema: 1, name: 'Tight Gate', geraet_typ: 'effekt', gerae
 const KOMP_PRESET = { ...GATE_PRESET, name: 'Plain Komp', geraet: 'komp', werte: { thresh: -20, ratio: 3 } };
 const eintrag = (p, slug) => ({ herkunft: 'nutzer', geraet: p.geraet, geraet_typ: 'effekt', slug, name: p.name, tags: [], geaendert: p.geaendert, beschreibung: p.beschreibung, familie: 'effekt' });
 let streifen;
+const dokHoerer = {};
+let holeGraphen, setzeGraphenGeladen;   // from the page module, loaded after the stand-in is installed
 
 before(async () => {
   installiere({
@@ -37,7 +39,9 @@ before(async () => {
     },
   });
   streifen = attrappe.anrufe;
+  document.addEventListener = (art, f) => { (dokHoerer[art] ??= []).push(f); };   // the stand-in's document drops listeners; the page-wide select handler (graph pickers) is driven by the MASTER tests
   await import('../public/app.js');
+  ({ holeGraphen, setzeGraphenGeladen } = await import('../public/graphs_view.js'));
   await new Promise((r) => setTimeout(r, 60));   // the preset panel loads its lists
 });
 
@@ -381,4 +385,72 @@ test('review: a refusal of the 2nd /regler request stops the apply: the 3rd is n
   await new Promise((r) => setTimeout(r, 60));
   assert.equal(reglerKoerper(von2).length, 3);
   assert.match(hauptfeld().querySelector('.preset-meldung').textContent, /^Applied Tight Gate/);
+});
+
+// ---- MASTER tab: the master chain, the picker on kanal "master" and the light -----------------------------------------------------------
+const masterReiter = () => attrappe.body.querySelector('.fxreiter-tab[data-reiter="master"]');
+const masterLicht = () => masterReiter().querySelector('.licht-insert').classList.contains('an');
+const waehle = (sel, wert) => { sel.value = wert; for (const f of dokHoerer.change ?? []) f({ target: sel }); };
+
+test('MASTER tab: leftmost, 13 tabs, the panel holds picker, glue and limiter meter in that order; the bus limiters stay in BUS', () => {
+  const reiter = [...attrappe.body.querySelectorAll('.fxreiter .fxreiter-tab')].map((b) => b.dataset.reiter);
+  assert.equal(reiter.length, 13);
+  assert.deepEqual(reiter, ['master', 'deck/1', 'deck/2', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2', 'sends', 'bus']);
+  const panel = attrappe.body.querySelector('.masterpanel');
+  assert.deepEqual([...panel.querySelectorAll('.fx-glied-titel')].map((e) => e.children.join('')), ['INSERT', 'GLUE', 'LIMITER']);
+  assert.ok(panel.querySelector('[data-graphplatz="master"]') && panel.querySelector('[data-pfad="master/kleber"]') && panel.querySelector('[data-messer="master|limiter_db"]'));
+  assert.equal(attrappe.body.querySelectorAll('.masterpanel .fxwerk-lim').length, 0, 'no bus limiter in MASTER');
+  assert.equal(attrappe.body.querySelectorAll('.buspanel .fxwerk-lim').length, 4, 'the four bus limiters are in BUS');
+  assert.equal(masterReiter().querySelectorAll('i').length, 1, 'one light on the MASTER tab');
+});
+
+test('MASTER glue: the same path as the mixer strip; one state value moves both knobs and both numbers, and the second knob is a real handle', async () => {
+  const knoepfe = attrappe.body.querySelectorAll('.knopf[data-pfad="master/kleber"]');
+  assert.equal(knoepfe.length, 2, 'mixer strip and MASTER tab');
+  assert.equal(attrappe.body.querySelectorAll('[data-wert="master/kleber"]').length, 2);
+  sendeStrom('stand', { regler: { 'master/kleber': 0.5 }, decks: {}, geladen: {}, loops: {}, fx: [null, null], fxZuweisung: [{}, {}] });
+  for (const o of attrappe.body.querySelectorAll('[data-wert="master/kleber"]')) assert.equal(o.textContent, '50%');
+  const zeiger = [...knoepfe].map((k) => k.querySelector('.zeiger').getAttribute('transform'));
+  assert.equal(zeiger[0], zeiger[1], 'both pointers at the same angle');
+  assert.notEqual(zeiger[0], undefined);
+  assert.equal(window.djkRegler.get('master/kleber').el, knoepfe[0], 'the first handle stays under the path');
+  assert.equal([...window.djkRegler.values()].filter((r) => r.pfad === 'master/kleber').length, 2, 'the MASTER knob is bound too');
+  const von = attrappe.anrufe.length;
+  knoepfe[1].setPointerCapture = () => {};
+  knoepfe[1].dispatch('pointerdown', { button: 0, pointerId: 1, clientX: 0, clientY: 0 });
+  await pause(30);
+  assert.deepEqual(attrappe.anrufe.slice(von).filter((a) => a.url === '/griff').map((a) => a.koerper.pfad), ['master/kleber'], 'grabbing the MASTER knob goes the hand route of the mixer strip');
+});
+
+test('MASTER LIMITER meter: limiter_db of /zustand/arr (<= 0) shown as reduction; a message without the field shows "–"', () => {
+  const m = () => [attrappe.body.querySelector('[data-messer="master|limiter_db"]').style.width, attrappe.body.querySelector('[data-messer-zahl="master|limiter_db"]').textContent];
+  sendeStrom('/zustand/arr', { nr: 1, status: 2, limiter_db: -6 });
+  assert.deepEqual(m(), ['25%', '6.0 dB']);
+  sendeStrom('/zustand/arr', { nr: 1, status: 2, limiter_db: 0 });
+  assert.deepEqual(m(), ['0%', '0.0 dB']);
+  sendeStrom('/zustand/arr', { nr: 1, status: 2 });
+  assert.deepEqual(m(), ['0%', '–'], 'older core: no value, no reading');
+});
+
+test('MASTER insert picker: choosing a graph sends POST /graph {kanal: "master", name} like the picker of another channel; a loaded graph shows in the picker and lights the tab', async () => {
+  attrappe.antworten['GET /graphen'] = { j: { graphen: [{ name: 'hall-a', art: 'effekt', regler_namen: {} }, { name: 'tape-b', art: 'effekt', regler_namen: {} }, { name: 'bass-x', art: 'instrument', regler_namen: {} }], geladen: {} } };
+  attrappe.antworten['POST /graph'] = { j: { quittung: { status: 3 } } };
+  await holeGraphen();
+  const sel = (k) => attrappe.body.querySelector(`select[data-graphwahl="${k}"]`);
+  assert.ok(attrappe.body.querySelector('.masterpanel').contains(sel('master')), 'the picker sits in the MASTER panel');
+  assert.deepEqual(sel('master').children.map((o) => o.attrs.value), ['', 'hall-a', 'tape-b'], 'effect graphs only, the empty entry first');
+  assert.equal(masterLicht(), false, 'no graph: light off');
+  const post = (von) => attrappe.anrufe.slice(von).filter((a) => a.url === '/graph' && a.methode === 'POST').map((a) => a.koerper);
+  const von = attrappe.anrufe.length;
+  waehle(sel('master'), 'hall-a');
+  await pause(30);
+  waehle(sel('deck/1'), 'tape-b');
+  await pause(30);
+  assert.deepEqual(post(von), [{ kanal: 'master', name: 'hall-a' }, { kanal: 'deck/1', name: 'tape-b' }], 'same request shape, kanal master');
+  // the server reports what is loaded (stream state): picker and light follow
+  setzeGraphenGeladen({ master: 'tape-b' });
+  assert.equal(sel('master').children.find((o) => 'selected' in o.attrs || o.attrs.selected !== undefined)?.attrs.value, 'tape-b', 'the loaded graph is selected in the MASTER picker');
+  assert.equal(masterLicht(), true, 'graph loaded on master: light on');
+  setzeGraphenGeladen({});
+  assert.equal(masterLicht(), false, 'graph removed: light off again');
 });

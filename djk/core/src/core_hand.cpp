@@ -71,21 +71,23 @@ int Kern::hand_led_hole(uint8_t (*aus)[3], int max) noexcept {
   return n;
 }
 
-void Kern::setze_lern_mapping(const hand::Mapping* m) noexcept {
-  lern_mapping_ = m;
-  hand_ein_.mapping_ein(m);
+void Kern::setze_lern_mapping(const hand::Mapping* m, int port) noexcept {
+  if (port < 0 || port >= MIDI_EIN_PORTS) return;
+  lern_mapping_[port] = m;
+  hand_ein_.mapping_ein(m, port);
 }
 
 // I08: die in midi_ein() gesammelten Ereignisse dieses Zyklus mit dem Kern-Sample der Achse stempeln (nach dem Einsortieren, also nach einem
 // /k/set/neu auf der neuen Achse) und, wenn kein anderer Leser eingetragen ist, den Ring räumen (nur der Kern ist dann Leser).
-// S19: with a learn table (slot 1) the same events are translated as well; the raw ring keeps receiving every event.
+// S19: with a learn table (slots 1..8, one per port) the events of that port are translated as well; the raw ring keeps receiving every event.
 void Kern::midi_ein_stempeln(int n) noexcept {
 #ifndef CYPHERDJ_MUTATION_LERN_OHNE_FRIST  // failure case S19: the capture never times out
   if (lern_an_ && (lern_rest_ -= n) <= 0) lern_an_ = false;
 #endif
-  {   // 1.8 T7b: midi_ein_1 went away (bit 8 of the connection mask fell): a key held on an armed track would never get its off
+  {   // 1.8 T7b: a midi_ein went away (any of bits 8..15 of the connection mask fell): a key held on an armed track would never get its off
     const uint32_t vb = ein_verbunden_.load(std::memory_order_relaxed);
-    if ((ein_verb_gesehen_ & (1u << 8)) && !(vb & (1u << 8))) arr_->live_alle_aus(sample_);
+    constexpr uint32_t MIDI_BITS = ((1u << MIDI_EIN_PORTS) - 1u) << 8;
+    if ((ein_verb_gesehen_ & ~vb & MIDI_BITS) != 0) arr_->live_alle_aus(sample_);
     ein_verb_gesehen_ = vb;
   }
   aufnahme_.midi_beginn();   // 1.8 T7a: the recorder keeps the events of ONE cycle; this stamping runs before arr_->block and before Aufnahme::block of the cycle
@@ -107,17 +109,22 @@ void Kern::midi_ein_stempeln(int n) noexcept {
     }
     // S19 capture: the first 3-byte CC after arming is reported and consumed (also without a learn table)
     if (lern_an_ && m.groesse == 3 && (m.d[0] & 0xF0) == 0xB0) {
-      lern_melden(1, m.d, m.versatz);
+      lern_melden(1 + m.port, m.d, m.versatz);
 #ifndef CYPHERDJ_MUTATION_LERN_WEITERGEREICHT  // failure case S19: reported but also translated
       continue;
 #endif
     }
-    if (!lern_mapping_) continue;
+#ifdef CYPHERDJ_MUTATION_LERN_PORT_EGAL  // failure case S19: every port is translated with the table of port 1
+    const int tp = 0;
+#else
+    const int tp = m.port;
+#endif
+    if (!lern_mapping_[tp]) continue;
 #ifdef CYPHERDJ_MUTATION_LERN_ALLOKIERT  // failure case S19: one allocation per translated event in the realtime path
     { int* p = new int(i); asm volatile("" : : "r"(p) : "memory"); delete p; }
 #endif
     HandAktion a;
-    if (!hand_ein_.ereignis_ein(m.d, m.groesse, m.versatz, sample_, static_cast<uint32_t>(n), *sw_, &a)) {
+    if (!hand_ein_.ereignis_ein(m.d, m.groesse, m.versatz, sample_, static_cast<uint32_t>(n), *sw_, &a, tp)) {
       ++lern_ohne_wirkung_;
       continue;
     }
@@ -141,7 +148,7 @@ void Kern::hand_zyklus(int64_t n0, int n) {
     if (lern_an_ && m.groesse == 3 && (m.d[0] & 0xF0) == 0xB0) lern_melden(0, m.d, m.versatz);
     if (!hand_ein_.ereignis(m.d, m.groesse, m.versatz, n0, static_cast<uint32_t>(n), *sw_, &a)) {
 #ifdef CYPHERDJ_MUTATION_LERN_AUCH_HAND_IN  // failure case S19: hand_in events without an entry in slot 0 reach the learn table
-      if (lern_mapping_ && hand_ein_.ereignis_ein(m.d, m.groesse, m.versatz, n0, static_cast<uint32_t>(n), *sw_, &a)) {
+      if (lern_mapping_[0] && hand_ein_.ereignis_ein(m.d, m.groesse, m.versatz, n0, static_cast<uint32_t>(n), *sw_, &a)) {
         hand_aktion(a, &lern_ereignisse_, &lern_ohne_wirkung_);
         continue;
       }

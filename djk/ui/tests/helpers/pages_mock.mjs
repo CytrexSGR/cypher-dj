@@ -1,6 +1,6 @@
 // A DOM stand-in that is just enough to execute the real public/app.js in node (no jsdom in the repo): elements with attributes,
 // classes, children, an innerHTML parser for the markup the page builds, a small selector engine (compound selectors with
-// tag, .class, #id, [attr], [attr="v"], descendant combinator), listeners, and recording stand-ins for fetch and EventSource.
+// tag, .class, #id, [attr], [attr="v"], descendant and child combinators), listeners, and recording stand-ins for fetch and EventSource.
 // Anything the page asks for that is not here fails loudly (TypeError) so the stand-in grows only where a test needs it.
 const VOID = new Set(['input', 'br', 'img', 'hr', 'line', 'path', 'rect', 'circle', 'meta', 'link']);
 const camel = (k) => k.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
@@ -42,6 +42,7 @@ export class El {
   cloneNode() { const n = new El(this.tagName.toLowerCase()); n.attrs = { ...this.attrs }; n.klassen = new Set(this.klassen); for (const k of this.children) { if (typeof k === 'string') n.children.push(k); else { const c = k.cloneNode(); c.parent = n; n.children.push(c); } } return n; }
   get isConnected() { let e = this; while (e.parent) e = e.parent; return e === wurzel; }
   get firstChild() { return this.children[0] ?? null; }
+  get parentElement() { return this.parent; }
   get elemente() { return this.children.filter((c) => typeof c !== 'string'); }
   get nextElementSibling() { const l = this.parent?.elemente ?? []; return l[l.indexOf(this) + 1] ?? null; }
   setAttribute(k, v) { this.attrs[k] = String(v); if (k === 'class') this.className = v; }
@@ -60,7 +61,7 @@ export class El {
   replaceChildren(...k) { this.children = []; this.append(...k); }
   entferne(c) { this.children = this.children.filter((x) => x !== c); }
   remove() { this.parent?.entferne(this); this.parent = null; }
-  focus() { attrappe.aktiv = this; }
+  focus(opt) { attrappe.aktiv = this; (attrappe.fokusAufrufe ??= []).push({ ziel: this, opt }); }   // the options are kept: a restore must not scroll (preventScroll)
   blur() { if (attrappe.aktiv === this) attrappe.aktiv = null; }
   contains(x) { for (let e = x; e; e = e.parent) if (e === this) return true; return false; }
   closest(sel) { for (let e = this; e && e !== wurzel; e = e.parent) if (passt(e, sel)) return e; return null; }
@@ -95,15 +96,18 @@ function einfach(e, s) {   // one compound selector: tag.class#id[attr][attr="v"
   const tag = /^[a-z][\w-]*/i.exec(rest)?.[0];
   return (!tag || e.tagName === tag.toUpperCase()) && [...rest.matchAll(/\.([\w-]+)/g)].every((c) => e.klassen.has(c[1])) && [...rest.matchAll(/#([\w-]+)/g)].every((c) => e.attrs.id === c[1]);
 }
-function passt(e, sel) {
+function passt(e, sel) {   // compound selectors joined by the descendant combinator (space) or the child combinator (>)
+  const eins = (x, s) => { x.__ok = true; const ok = einfach(x, s) && x.__ok; delete x.__ok; return ok; };
   return sel.split(',').some((teil) => {
-    const stufen = teil.trim().split(/\s+/);
-    const letzte = stufen.pop();
-    e.__ok = true; const ok = einfach(e, letzte) && e.__ok; delete e.__ok;
-    if (!ok) return false;
-    let p = e.parent;
-    for (let i = stufen.length - 1; i >= 0; i--) { while (p && !(p.__ok = true, einfach(p, stufen[i]) && p.__ok)) p = p.parent; delete p?.__ok; if (!p) return false; p = p.parent; }
-    return true;
+    const stufen = teil.trim().replace(/\s*>\s*/g, ' > ').split(/\s+/);   // ['a', '>', 'b', 'c'] = a > b c
+    const passtAb = (x, i) => {   // stufen[i] is the compound that x has to match
+      if (!eins(x, stufen[i])) return false;
+      if (i === 0) return true;
+      if (stufen[i - 1] === '>') return !!x.parent && passtAb(x.parent, i - 2);
+      for (let p = x.parent; p; p = p.parent) if (passtAb(p, i - 1)) return true;
+      return false;
+    };
+    return passtAb(e, stufen.length - 1);
   });
 }
 function finde(von, sel) {

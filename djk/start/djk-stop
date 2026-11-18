@@ -65,12 +65,32 @@ rm -f "$STATE" "$RUN/digitalout.json"
 # einem bewussten Stopp soll der nächste Start frisch sein: sonst stellt der Kern Reglerstände und Decks des vorigen
 # Laufs wieder her, die Seite zeigt aber die Vorgaben (Befund 2026-09-27: Seite −∞, Kern 0 dB). Nur löschen, was kein
 # Prozess mehr hält; der Arbeitsbestand (material/) bleibt.
-for f in "/dev/shm/cypherdj$SFX/zustand" "/dev/shm/cypherdj$SFX/bus" "/dev/shm/cypherdj$SFX/kanten" "/dev/shm/cypherdj$SFX/neustarts"; do
+SHM=${DJK_SHM_BASIS:-/dev/shm}   # tests point every /dev/shm path of this script at a temp folder (no literal /dev/shm path below this line)
+for f in "$SHM/cypherdj$SFX/zustand" "$SHM/cypherdj$SFX/bus" "$SHM/cypherdj$SFX/kanten" "$SHM/cypherdj$SFX/neustarts"; do
   if [ -e "$f" ]; then
     if fuser -s "$f" 2>/dev/null; then echo "djk-stop: $f is still held, left in place" >&2
     else rm -f "$f" && sag "  removed core state $f"; fi
   fi
 done
+# neustart_stand.json (the page server's restore plan, in the hotcue folder next to aktive_loops.json) belongs to ONE kern life. That life is
+# gone with the core state above (and with a PC reboot), so the file goes with it: otherwise a later kern life, greeting with a higher
+# generation, would be given the plan of this one. Production: the hotcue folder from the storage table (python3 -m storage shell, with the
+# umgebung.env as djk-start reads it); test instance: its own /dev/shm/cypherdj-<i>/hotcues. DJK_SHM_BASIS replaces /dev/shm (tests).
+neustart_stand_weg() {
+  local d="" f
+  if [ -n "$I" ]; then d=$SHM/cypherdj-$I/hotcues
+  else
+    d=$( UMG=${CYPHERDJ_UMGEBUNG:-$HOME/.config/cypherdj/umgebung.env}
+      if [ -f "$UMG" ]; then _g=$(export -p | grep '^declare -x CYPHERDJ_'); set -a; . "$UMG"; set +a; [ -z "$_g" ] || eval "$_g"; fi
+      eval "$(PYTHONPATH="$DJK${PYTHONPATH:+:$PYTHONPATH}" PYTHONSAFEPATH=1 python3 -m storage shell 2>/dev/null | grep '^ABLAGE_HOTCUES=')"
+      printf '%s' "${ABLAGE_HOTCUES:-}" ) 2>/dev/null
+  fi
+  [ -n "$d" ] || { echo "djk-stop: hotcue folder not found, neustart_stand.json left in place" >&2; return 0; }
+  f=$d/neustart_stand.json
+  [ -e "$f" ] && rm -f "$f" && sag "  removed $f"
+  return 0
+}
+neustart_stand_weg
 REST=$(systemctl --user list-units --all --no-legend --plain "cypherdj-kern$SFX.service" "cypherdj-notbahn$SFX.service" \
   "cypherdj-leitstand$SFX.service" "cypherdj-oberflaeche$SFX.service" "cypherdj-wirt-bass$SFX.service" "cypherdj-wirt-melodie$SFX.service" "cypherdj-wirt-arr1$SFX.service" "cypherdj-wirt-arr2$SFX.service" "cypherdj-ins1$SFX.service" "cypherdj-ins2$SFX.service" "cypherdj-ins3$SFX.service" "cypherdj-ins4$SFX.service" "cypherdj-erzeuger$SFX.service" "cypherdj-erzeuger2$SFX.service" "cypherdj-erzeuger3$SFX.service" "cypherdj-digitalwache$SFX.service" 2>/dev/null)
 if [ -n "$REST" ]; then echo "djk-stop: still loaded:" >&2; echo "$REST" >&2; exit 1; fi

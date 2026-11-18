@@ -74,6 +74,12 @@ void ArrBkSenke::transport_start(int spur, int64_t ziel) noexcept {
   sp_[spur].start = ziel;   // acts in the block that holds ziel
 }
 
+void ArrBkSenke::transport_abbruch(int spur) noexcept {
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE) return;
+  sp_[spur].start = -1;      // the abandoned entry never comes: no reset, no all-off, no fade before it
+  sp_[spur].stumm = false;   // a fade that already ran for it ends (the track sounds again from the next block)
+}
+
 bool ArrBkSenke::spur_weg(int spur, int64_t, bool) noexcept {
   if (spur < 0 || spur >= ARR_SENKEN_PLAETZE || !sp_[spur].h_last) return false;
   sp_[spur].weg = true;   // acts in the next block() of this track: fade out, reset, release

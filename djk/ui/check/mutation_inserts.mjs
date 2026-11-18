@@ -9,10 +9,10 @@ import { fileURLToPath } from 'node:url';
 
 const WURZEL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TEST = 'tests/project_inserts.test.mjs';
-const B = 'project/commands.ts', M = 'project/model.ts', W = 'project/playback.ts', Z = 'project/merge.ts';
+const B = 'project/commands.ts', H = 'project/commands_helpers.ts', I = 'project/commands_insert.ts', M = 'project/model.ts', W = 'project/playback.ts', Z = 'project/merge.ts';
 
 export const MUTANTEN = [
-  { name: 'slot_doppelt', erwartet: 'slot_eindeutig', datei: B, alt: '.filter((x) => x.insert.art === art &&', neu: '.filter((x) => false &&',
+  { name: 'slot_doppelt', erwartet: 'slot_eindeutig', datei: I, alt: '.filter((x) => x.insert.art === art &&', neu: '.filter((x) => false &&',
     was: 'two stages get the same slot (the pool is ignored)' },
   { name: 'undo_ohne_werte', erwartet: 'undo of insert_entfernen restores slot and values', datei: B,
     alt: "for (const k of geaendert) if (k !== 'an') aus.push(pfad(k));", neu: "for (const k of geaendert) if (k !== 'an' && a.has(slot)) aus.push(pfad(k));",
@@ -31,7 +31,7 @@ export const MUTANTEN = [
     was: 'insert_werte_setzen skips the range check' },
   { name: 'preset_in_sicht', erwartet: 'preset_nicht_in_sicht', datei: M, alt: 'geraet: ohnePreset(s.geraet) ?? null', neu: 'geraet: s.geraet ?? null',
     was: 'the device preset counts as playback (a new playback on every apply of equal values)' },
-  { name: 'befehl_ohne_preset', test: 'tests/project_preset_origin.test.mjs', erwartet: 'commands: spur_neu and spur_aendern carry geraet.preset', datei: B,
+  { name: 'befehl_ohne_preset', test: 'tests/project_preset_origin.test.mjs', erwartet: 'commands: spur_neu and spur_aendern carry geraet.preset', datei: H,
     alt: "erlaube(g, 'art', 'name', 'parameter', 'preset');", neu: "erlaube(g, 'art', 'name', 'parameter');",
     was: 'the intern rb338 branch of baueGeraet refuses geraet.preset' },
 ];

@@ -126,3 +126,11 @@ sampler_file_route.test.mjs
 sampler_instrument_release_route.test.mjs
 sampler_instrument_route.test.mjs
 proj_einsammeln_route.test.mjs
+project_wieder_open.test.mjs
+seq_deck_free.test.mjs
+seq_szenen_stack.test.mjs
+taktart_server.test.mjs
+proj_sound_runde_route.test.mjs
+server_zerlegt.test.mjs
+suche_route.test.mjs
+taktart_4_server.test.mjs

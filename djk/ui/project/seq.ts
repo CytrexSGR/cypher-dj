@@ -6,8 +6,9 @@
 // that need the project (live flag, places, nesting) are in model.ts.
 // No file access here. Types are imported from model.ts only as types, so model.ts can import this file without a runtime cycle.
 import type { Gruppe, MidiClip, Projekt, Spur } from './model.ts';
+import { liveBeats, takteProLive } from './taktart_live.ts';   // runtime cycle with model.ts is harmless: used only inside functions
 
-export const SEQ_BEATS = 64;          // the region a pattern clip covers (the live loop region)
+export const SEQ_BEATS = 64;          // the region a pattern clip covers in 4/4 (and the legacy length that stays valid in every meter)
 export const SEQ_ZEILEN_MAX = 32;     // lanes per pattern
 export const SEQ_TEILER = [1, 0.5, 0.25, 0.125] as const;   // beats per cell: 1/4, 1/8, 1/16, 1/32
 export const SEQ_FORMEN = ['sinus', 'dreieck', 'saege', 'saege_ab', 'rechteck', 'rampe', 'zufall'] as const;
@@ -158,6 +159,10 @@ export function seqSichtPruefung(x: unknown): Urteil | null {
   }
 }
 
+// The region a NEW pattern clip covers: 16 bars of the project meter (4/4: SEQ_BEATS). A stored clip of SEQ_BEATS stays valid in every meter (no migration).
+export const seqRegion = (p: Projekt): number => liveBeats(takteProLive(p.taktart));
+export const seqLaengeOk = (p: Projekt, laenge: number): boolean => Math.abs(laenge - seqRegion(p)) < 1e-9 || Math.abs(laenge - SEQ_BEATS) < 1e-9;
+
 // The group of place `platz` that holds a SEQ deck, if any.
 export const seqGruppe = (p: Projekt, platz: number): Gruppe | undefined => (p.gruppen ?? []).find((g) => g.seq?.platz === platz);
 
@@ -168,7 +173,7 @@ export function seqFolgen(p: Projekt, gruppe: Gruppe): { spur: Spur; clip: MidiC
   return p.spuren.filter((s) => s.ausgang?.id === gruppe.id).map((spur) => {
     const einziger = spur.clips.length === 1 ? spur.clips[0] : null;
     const clip = einziger !== null && einziger.art === 'midi' ? einziger : null;
-    const passt = clip !== null && Math.abs(clip.start_beat) < 1e-9 && Math.abs(clip.laenge_beats - SEQ_BEATS) < 1e-9;
+    const passt = clip !== null && Math.abs(clip.start_beat) < 1e-9 && seqLaengeOk(p, clip.laenge_beats);
     return { spur, clip, editierbar: spur.art === 'instrument' && (spur.clips.length === 0 || passt) };
   });
 }

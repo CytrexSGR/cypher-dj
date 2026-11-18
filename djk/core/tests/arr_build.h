@@ -81,6 +81,8 @@ struct Bau {
   std::vector<N> ns;
   struct L { int spur; std::vector<cdj::ArrAutoPunkt> p; uint8_t ziel = cdj::ARR_AUTO_FADER; uint8_t param = 0; bool relativ = false; };   // Automation: one lane of a track (default target fader)
   std::vector<L> ls;
+  struct RL { int ret; std::vector<cdj::ArrAutoPunkt> p; };   // return fader automation (cypherdj-arr/3): the fader lane of return `ret` (1..ARR_RETURNS); the return exists then (ret_da)
+  std::vector<RL> rls;
   struct KL { int strip; int stufe, param, makro; std::vector<cdj::ArrAutoPunkt> p; };   // 1.12 slice 6: an insert-parameter or rack-macro lane of the strip with this chain index
   std::vector<KL> kls;
   explicit Bau(int64_t nr = 1) { s->nr = nr; }
@@ -145,6 +147,12 @@ struct Bau {
     ls.push_back({nr, std::move(p), ziel, param, relativ});
     return *this;
   }
+  Bau& ret(int r) { s->ret_da[r - 1] = true; return *this; }   // return r exists (ret_da), without a lane
+  // Return fader automation: the fader lane of return r (1..4), points as lane(); sets ret_da of the return. At most one per return.
+  Bau& ret_lane(int r, std::vector<cdj::ArrAutoPunkt> p) {
+    rls.push_back({r, std::move(p)});
+    return *this;
+  }
   // 1.12 slice 6: a lane on stage `stufe` parameter `param` of the strip with chain index `strip` (track nr - 1, group ARR_SPUREN + g - 1, PM ARR_KETTE_PM, return ARR_KETTE_RET0 + r - 1)
   Bau& kette_lane(int strip, int stufe, int param, std::vector<cdj::ArrAutoPunkt> p) { kls.push_back({strip, stufe, param, -1, std::move(p)}); return *this; }
   // the same for macro `makro` (0..3) of the rack of that strip
@@ -167,6 +175,7 @@ struct Bau {
     size_t n_ap = 0;
     for (const L& l : ls) n_ap += l.p.size();
     for (const KL& l : kls) n_ap += l.p.size();
+    for (const RL& l : rls) n_ap += l.p.size();
     s->auto_lane_liste.reserve(ls.size());   // Automation Slice 1: pointers into these vectors, they never grow afterwards
     s->auto_punkte.reserve(n_ap);
     size_t n_hk = 0;
@@ -248,6 +257,18 @@ struct Bau {
           ++sp.n_auto;
           ++s->n_auto_lanes;
         }
+    }
+    for (const RL& l : rls) {   // return fader lanes: after the track lanes, like the loader (returns come last)
+      const size_t p0 = s->auto_punkte.size();
+      s->auto_punkte.insert(s->auto_punkte.end(), l.p.begin(), l.p.end());
+      cdj::ArrAutoLane al{};
+      al.ziel = cdj::ARR_AUTO_FADER;
+      al.n = static_cast<int>(l.p.size());
+      al.p = s->auto_punkte.data() + p0;
+      s->ret_fader[l.ret - 1] = al;
+      s->ret_fader_da[l.ret - 1] = true;
+      s->ret_da[l.ret - 1] = true;
+      ++s->n_auto_lanes;
     }
     for (const KL& l : kls) {   // 1.12 slice 6: the insert and rack lanes behind the track lanes
       const size_t p0 = s->auto_punkte.size();

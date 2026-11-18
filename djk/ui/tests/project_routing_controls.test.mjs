@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { alleRegler, alleSpurRegler, reglerZuBefehl, istMixerRegler, istSpurRegler } from '../areas/proj/mapping.ts';
 import { reglerAusProjekt } from '../project/render.ts';
 import { reglerEinzeln } from '../areas/proj/output.ts';
-import { fuehreAus } from '../project/commands.ts';
+import { fuehreAus, fuehreListeAus } from '../project/commands.ts';
 import { neuesProjekt, MAX_SPUREN, MAX_GRUPPEN } from '../project/model.ts';
 
 const aufbau = () => {
@@ -144,4 +144,32 @@ test('slice 3 single-track render: the track, its group, their sends and only th
   const soloRet = fuehreAus(p, { befehl: 'return_aendern', return_id: 'r1', solo: true }).projekt;
   assert.equal(reglerEinzeln(soloRet.spuren[0], soloRet)['ret/1/solo'], 0, 'a return solo of the project does not silence the isolated track');
   assert.equal(routingRegler(soloRet)['ret/1/solo'], 1, 'but the summary render keeps it');
+});
+
+// The core's send rows are keyed by number, not by id: a number deleted and taken again by a new strip in ONE step keeps the old strip's send level
+// in the core unless the step resets it (the new strip has no send, the project says -200).
+test('regler_aenderungen: a track or group number reused within one step resets the deleted strip\'s send row', () => {
+  let p = neuesProjekt('T');
+  for (let i = 0; i < 3; i++) p = fuehreAus(p, { befehl: 'spur_neu', art: 'audio', name: `T${i + 1}` }).projekt;
+  p = fuehreAus(p, { befehl: 'return_neu' }).projekt;
+  p = fuehreAus(p, { befehl: 'gruppenspur_neu', name: 'G1' }).projekt;
+  const ret = p.returns[0], t = p.spuren.find((x) => x.nr === 3), g = p.gruppen[0];
+  p = fuehreAus(p, { befehl: 'send_setzen', strang_id: t.id, return_id: ret.id, db: -6 }).projekt;
+  p = fuehreAus(p, { befehl: 'send_setzen', strang_id: g.id, return_id: ret.id, db: -9 }).projekt;
+  const rs = fuehreListeAus(p, [{ befehl: 'spur_loeschen', spur_id: t.id }, { befehl: 'spur_neu', art: 'audio' }]);
+  const u = rs.projekt.spuren.find((x) => x.nr === 3);
+  assert.ok(u && u.id !== t.id && !(u.sends ?? []).length, 'the new track takes nr 3 without sends');
+  const sp = `spur/3/send/${ret.nr}`;
+  assert.deepEqual(rs.regler_aenderungen.filter((x) => x.pfad === sp), [{ pfad: sp, wert: -200 }], JSON.stringify(rs.regler_aenderungen));
+  const rg = fuehreListeAus(p, [{ befehl: 'gruppenspur_loeschen', gruppe_id: g.id }, { befehl: 'gruppenspur_neu', name: 'G2' }]);
+  const h = rg.projekt.gruppen.find((x) => x.nr === g.nr);
+  assert.ok(h && h.id !== g.id, 'the new group takes the same nr');
+  const gp = `grp/${g.nr}/send/${ret.nr}`;
+  assert.deepEqual(rg.regler_aenderungen.filter((x) => x.pfad === gp), [{ pfad: gp, wert: -200 }], JSON.stringify(rg.regler_aenderungen));
+  // the new strip has its own send: the row carries the new value, once
+  const rn = fuehreListeAus(p, [{ befehl: 'spur_loeschen', spur_id: t.id }, { befehl: 'spur_neu', art: 'audio' },
+    { befehl: 'send_setzen', strang_id: 's4', return_id: ret.id, db: -3 }]);
+  assert.deepEqual(rn.regler_aenderungen.filter((x) => x.pfad === sp), [{ pfad: sp, wert: -3 }]);
+  // an unchanged strip makes no send row
+  assert.deepEqual(fuehreAus(p, { befehl: 'spur_aendern', spur_id: t.id, fader_db: -2 }).regler_aenderungen.filter((x) => x.pfad.includes('/send/')), []);
 });

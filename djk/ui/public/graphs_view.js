@@ -1,4 +1,5 @@
 // Effect graphs and device panels per channel (graph choice, host areas, panel header, sound save).
+import { zeigeFxReiter } from './effects_reiter.js';
 import { htmlText, hostName, instrumentWahlHtml, graphWahlHtml, bkSpeichernHtml, bkMarke, GRAPH_KANAL_ART } from './effects.js';
 import { steuerungen, parameterVon, vorgaben as panelVorgaben } from './panel.js';
 import { vergesseGesendet, surgeAdapter, surgeFensterKnopf, SURGE_FENSTER, surgeFensterSenden } from './surge_adapter.js';
@@ -11,6 +12,7 @@ import { baueSendKnobs, hostLernOpt, lernModus, lernModusUmschalten, lernSchicke
 import { baueFxDetail, bindeKnobs, fxGewaehlt } from './effects_view.js';
 import { instrumenteAnsicht, presetSenden, wendeKanalPresetAn } from './effects_bindung.js';
 import { zeigeRemix } from './remix_window.js';
+import { beiAchse, katMerken, katSpeicherLesen, leseAchse, ACHSEN, gruppeVon } from './instrument_groups.js';
 import { zeigePlaetze } from './slots_view.js';
 // Baukasten S12: graph picker. graphenInfo = GET /graphen (the folder), graphenGeladen = what the page server sent per channel
 // (SSE: stand.graphen_geladen, then a:'graphen'). Pickers sit on the strips of deck/1, deck/2, erz/2, erz/3, erz/5..7 (I5..I7), pad/1, pad/2, in the detail view
@@ -255,21 +257,22 @@ export async function schickeVorgaben(kanal, werte) {
     if (!a.ok) { melde(`Panel defaults refused: ${a.j?.text ?? a.j?.fehler ?? a.code}`, true); return; }
   }
 }
-// Instrument picker by category: the display name of the host of erz/2 (bass) and erz/3 (melodie), read from GET /klang; the category last chosen per channel
-// (localStorage, in try/catch) and the category browsed to for the graph that was loaded at that moment (it falls back to the loaded graph's own category).
+// Instrument picker by group: the display name of the host of erz/2 (bass) and erz/3 (melodie), read from GET /klang; the group last chosen per channel AND axis
+// (localStorage, in try/catch: { <kanal>: { prinzip?: id, rolle?: id } }, an old string value is the role) and the group browsed to for the graph that was loaded
+// at that moment on that axis (it falls back to the loaded graph's own group). The axis itself (type or role) is the page-wide choice of instrument_groups.js.
 export const hostNamen = {};
 export const instrDurchsucht = {};
 let instrKat = {};
-try { const r = JSON.parse(localStorage.getItem('djk-instrument-kat') ?? '{}'); if (r && typeof r === 'object' && !Array.isArray(r)) instrKat = r; } catch { /* without storage: no memory */ }
-export function merkeInstrKat(k, kat) {
-  instrKat[k] = kat;
+try { instrKat = katSpeicherLesen(localStorage.getItem('djk-instrument-kat')); } catch { /* without storage: no memory */ }
+export function merkeInstrKat(k, kat, achse = leseAchse()) {
+  instrKat = katMerken(instrKat, k, achse, kat);
   try { localStorage.setItem('djk-instrument-kat', JSON.stringify(instrKat)); } catch { /* without storage: only now */ }
 }
-function katFuer(k) {
+function katFuer(k, achse) {
   const geladen = graphenGeladen[k] ?? '';
   const d = instrDurchsucht[k];
-  if (d && d.fuer === geladen) return d.kat;
-  return geladen === '' ? (instrKat[k] ?? null) : null;
+  if (d && d.fuer === geladen && d.achse === achse) return d.kat;
+  return geladen === '' ? (instrKat[k]?.[achse] ?? null) : null;
 }
 export async function holeHostNamen() {
   try {
@@ -281,13 +284,16 @@ export async function holeHostNamen() {
     if (neu) { zeigeGraphWahl(); if (instrumenteSichtbar()) instrumenteAnsicht.neuBauen(); }
   } catch { /* the default name Surge XT stays */ }
 }
+beiAchse(() => zeigeGraphWahl());   // the page-wide grouping changed: the pickers that are not focused redraw; nothing is sent
 export function zeigeGraphWahl() {
   for (const platz of $$('[data-graphplatz]')) {
     const k = platz.dataset.graphplatz;
     if (platz.contains(document.activeElement)) continue;   // do not pull the list away while it is open
-    platz.innerHTML = (platz.closest('#instrumente') ? instrumentWahlHtml(k, graphenInfo.graphen, graphenGeladen[k] ?? '', hostNamen[k], katFuer(k)) : graphWahlHtml(k, graphenInfo.graphen, graphenGeladen[k] ?? '', hostNamen[k]))
+    const achse = leseAchse();
+    platz.innerHTML = (platz.closest('#instrumente') ? instrumentWahlHtml(k, graphenInfo.graphen, graphenGeladen[k] ?? '', hostNamen[k], katFuer(k, achse), achse) : graphWahlHtml(k, graphenInfo.graphen, graphenGeladen[k] ?? '', hostNamen[k], achse))
       + bkSpeichernHtml(k, bkMarke(k, bkGespeichert, graphenGeladen[k], zustand.regler, panelVon(graphenGeladen[k])?.regler), bkGespeichert !== null, graphenGeladen[k]);   // S17
   }
+  zeigeFxReiter();   // the insert lights of the EFFECTS tabs follow the loaded graphs (MASTER has no other trigger)
 }
 // S17: sound snapshot of the open project. bkGespeichert = GET /proj/bk gespeichert, null without a project. Fetched on start, on SSE 'proj'
 // (debounced) and after SAVE SOUND; the marker follows the live knob values without polling (a knob event refreshes it at most every 250 ms).
@@ -342,8 +348,8 @@ export function setzeGraphenGeladen(neu) {
 }
 export async function waehleGraph(kanal, name) {
   let r;
-  const gewaehltKat = graphenInfo.graphen.find((g) => g.name === name)?.kategorie;
-  if (gewaehltKat) merkeInstrKat(kanal, gewaehltKat);
+  const gewaehlt = graphenInfo.graphen.find((g) => g.name === name);
+  if (gewaehlt) for (const a of ACHSEN) merkeInstrKat(kanal, gruppeVon(gewaehlt, a), a);   // the group of the chosen instrument, on both axes: what shows after "Off"
   if (lernen.wartet?.pfad?.startsWith(`${kanal}/bk/`)) lernSchicken('/lernen', { pfad: null });   // the knob it waited for is about to change meaning
   if (name) { const info = await holePanel(name); if (info) await schickeVorgaben(kanal, panelVorgaben(info.panel)); }   // every graph with knobs has a panel (file or automatic)
   try { r = await postJson('/graph', { kanal, name }); } catch (e) { melde(`Page server unreachable: ${e.message}`, true); zeigeGraphWahl(); return; }

@@ -105,7 +105,15 @@ void ArrSpurLauf::einheit(int lane, int spur) {
       haken_warten([&] { return h->frei.load(); });
     }
   }
+  const int64_t t0 = einheit_zeit();
   f_(ctx_, spur, arbeit_[lane]);
+  {   // cost estimate of the track: peak hold with slow decay, in thread CPU time. One writer at a time (the CAS claim gives the unit to exactly one thread per block).
+    int64_t d = einheit_zeit() - t0;
+    if (d < 0) d = 0;
+    const int64_t alt = kosten_ns_[spur].load(std::memory_order_relaxed);
+    const int64_t abkling = alt - alt / KOSTEN_ABKLING;
+    kosten_ns_[spur].store(d > abkling ? d : abkling, std::memory_order_relaxed);
+  }
   zustand_[spur].store(2, std::memory_order_release);
   ++lane_n_[lane].n;
   if (h) {
@@ -126,6 +134,22 @@ constexpr int64_t START_PLAUSIBEL_NS = 1000000000LL;   // a cycle stamp more tha
 void ArrSpurLauf::setze_haken(SpurHaken* h) {
   haken_ = h;
   g_haken_aufgegeben.store(false, std::memory_order_relaxed);
+}
+
+int64_t ArrSpurLauf::einheit_zeit() const {
+#ifdef CYPHERDJ_MUTATION_SPUR_KOSTEN_WANDZEIT
+  return jetzt();   // error case: the unit is measured on the wall clock, a worker preempted inside it raises its own allowance
+#endif
+  if (SpurHaken* h = haken_) {
+    const int64_t v = h->einheit_uhr_ns.load(std::memory_order_relaxed);
+    if (v != 0) return v;
+    const int64_t w = h->uhr_ns.load(std::memory_order_relaxed);
+    if (w != 0) return w;
+  }
+  if (test_.jetzt_ns != 0) return test_.jetzt_ns;
+  timespec t;
+  clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t);
+  return static_cast<int64_t>(t.tv_sec) * 1000000000LL + t.tv_nsec;
 }
 
 int64_t ArrSpurLauf::jetzt() const {
@@ -163,18 +187,23 @@ bool ArrSpurLauf::konto_pruefen(HallPool& pool, int modus) {
     auto_aus_gesehen_ = false;
     return true;
   }
-  if (modus != 2) return false;
+  if (modus == 0) return false;   // mode aus never asks (the caller checks it first); it never retries
+#ifdef CYPHERDJ_MUTATION_SPUR_NEU_NUR_AUTO
+  if (modus != 2) return false;   // error case: only mode auto retries, the studio's mode an stays off for good
+#endif
   if (!auto_aus_gesehen_) {   // the first block that finds the account off: this is one switch-off
     auto_aus_gesehen_ = true;
-    ++auto_aus_n_;
+    if (auto_aus_n_ < 1000) ++auto_aus_n_;
     auto_blocks_ = 0;
   }
-  if (auto_blocks_ < AUTO_WARTE_BLOECKE) ++auto_blocks_;   // saturates: no overflow however long the account stays off
-#ifndef CYPHERDJ_MUTATION_SPUR_AUTO_IMMER_NEU   // error case: the retry happens after every switch-off, the second one is not for good
-  if (auto_aus_n_ >= 2) return false;
+#ifdef CYPHERDJ_MUTATION_SPUR_NEU_OHNE_STAFFEL
+  const int warte = AUTO_WARTE_BLOECKE;   // error case: the wait never grows
+#else
+  const int warte = neu_wartezeit(auto_aus_n_);
 #endif
-  if (auto_blocks_ < AUTO_WARTE_BLOECKE) return false;
-  if (!pool.wieder_an(HallPool::SPUR)) return false;
+  if (auto_blocks_ < warte) ++auto_blocks_;   // saturates: no overflow however long the account stays off
+  if (auto_blocks_ < warte) return false;
+  if (!pool.wieder_an(HallPool::SPUR)) return false;   // a worker still holds a job: try again with the next block
   auto_aus_gesehen_ = false;
   ++z.auto_neu;
   return true;
@@ -227,6 +256,7 @@ void ArrSpurLauf::laufen(const ArrSpurPlan& plan, HallPool& pool, ArrArbeit* arb
   // started is waited for, never abandoned: it holds a unit or is about to claim one. The wait after the caller ran dry is the stall signal below the hard limit.
   bool gestartet = false, gewartet = false;
   int64_t t_warte = 0;
+  int64_t erlaubt_ns = 0;   // snapshot at the start of the wait: the usual duration of the longest unit a worker still holds
   for (int w = 0; w < n_w; ++w) {
     if (!gesandt[w]) continue;
     const bool lief_noch = !pool.fertig(w);
@@ -238,6 +268,18 @@ void ArrSpurLauf::laufen(const ArrSpurPlan& plan, HallPool& pool, ArrArbeit* arb
 #ifdef CYPHERDJ_MUTATION_SPUR_WARTE_AB_LAUF
       t_warte = t_eintritt;
 #endif
+      // Every free unit is claimed by now and each worker holds at most one, so the longest usual duration among the claimed (not done) units is the expected
+      // upper bound of this wait: a worker that was in the middle of such a unit when the caller ran dry is work stealing at its normal pace, not a stall.
+      for (int b = 0; b < plan.bahnen(); ++b)
+        for (int k = 0; k < plan.n(b); ++k) {
+          const int sp = plan.spur(b, k);
+          if (zustand_[sp].load(std::memory_order_acquire) != 1) continue;
+          const int64_t c = kosten_ns_[sp].load(std::memory_order_relaxed);
+          if (c > erlaubt_ns) erlaubt_ns = c;
+        }
+#ifdef CYPHERDJ_MUTATION_SPUR_WARTE_OHNE_KOSTEN
+      erlaubt_ns = 0;   // error case: the rule ignores the estimate, a unit of 1 ms on a worker counts as a stall
+#endif
       if (haken_) haken_->am_join.fetch_add(1);
     }
 #ifndef CYPHERDJ_MUTATION_SPUR_OHNE_JOIN   // error case: the caller does not wait for a started job and returns while a worker still computes
@@ -248,7 +290,8 @@ void ArrSpurLauf::laufen(const ArrSpurPlan& plan, HallPool& pool, ArrArbeit* arb
   if (gewartet) {
     const int64_t wartezeit = jetzt() - t_warte;
     if (wartezeit > z.warte_max_ns) z.warte_max_ns = wartezeit;
-    if (wartezeit > (test_.warte_spaet_ns != 0 ? test_.warte_spaet_ns : WARTE_SPAET_NS)) {
+    // late = longer than the base threshold plus the allowance for the units the workers still held (estimate plus a quarter); no estimate: the base threshold alone
+    if (wartezeit > (test_.warte_spaet_ns != 0 ? test_.warte_spaet_ns : WARTE_SPAET_NS) + erlaubt_ns + erlaubt_ns / 4) {
       ++z.warte_spaet;
       pool.spaet_melden(HallPool::SPUR);   // one late event of the track account: five in 64 blocks switch the track phases off
     }

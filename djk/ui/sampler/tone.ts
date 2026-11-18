@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { GRAPH_NAME, graphenOrdner } from '../graphs.ts';
 import { geraetName } from './device.ts';
-import { SCHNITT_ID, SchnittFehler, liesSchnitt, samplerOrdner, type Ordner } from './schnitt.ts';
+import { SCHNITT_ID, SchnittFehler, liesSchnitt, samplerOrdner, type Ordner, type Schnitt } from './schnitt.ts';
 import { erkenneGrundton, grundVorschlag, type Erkannt } from './tone_hoehe.ts';
 
 /** A cut id of at most this many characters goes into the graph name as it is. */
@@ -151,6 +151,29 @@ function leseRegion(id: string, a: number, b: number, o: Ordner): Float32Array {
   } finally { fs.closeSync(fd); }
 }
 
+const scheibenNummer = ([von, bis]: [number, number]): string => (von === bis ? `${von + 1}` : `${von + 1}-${bis + 1}`);
+/** The name a tone gets when the caller gives none: the cut name and the slice numbers (people count from 1). */
+const standardName = (schnittName: string, scheiben: [number, number]): string => {
+  const nummer = scheibenNummer(scheiben);
+  return `${schnittName.slice(0, NAME_MAX - 3 - nummer.length).trimEnd()} · ${nummer}`;
+};
+
+/** The tone as the cut stands now. A tone keeps the frames `a`..`b` it was made from, so its sound never changes; the slice numbers of its text and of a default
+ *  name follow the bounds of the cut as it is now (marker edits and CUT AGAIN renumber the slices). When `a` and `b` are no bounds of the cut any more, the
+ *  numbers stay as they were stored and `tonText` says so. A name the caller gave is kept. */
+export function tonNachSchnitt(t: Ton, s: Schnitt | null | undefined): Ton {
+  const j = scheibenJetzt(t, s);
+  if (j === null || (j[0] === t.scheiben[0] && j[1] === t.scheiben[1])) return t;
+  const eigen = s !== null && s !== undefined && t.name !== standardName(s.name, t.scheiben);
+  return { ...t, scheiben: j, name: eigen || s === null || s === undefined ? t.name : standardName(s.name, j) };
+}
+/** The slices (0-based, first and last) whose bounds are exactly `a` and `b` in the cut; null when there is no such run (or no cut). */
+function scheibenJetzt(t: Ton, s: Schnitt | null | undefined): [number, number] | null {
+  if (!s) return null;
+  const von = s.grenzen.indexOf(t.a), ende = s.grenzen.indexOf(t.b);
+  return von >= 0 && ende > von ? [von, ende - 1] : null;
+}
+
 /** Makes a tone of the slices `von`..`bis` (0-based, neighbours, default `bis` = `von`) of a cut: reads the region, detects the pitch, writes graph, panel and tone
  *  file. The root `grund` (MIDI note 16..95) is taken as given (`grund_quelle` 'hand') or proposed from the detection, the key of the cut or the default C3.
  *  Reason codes: schnitt_unbekannt 404, argument_ungueltig 400, toene_voll 409. */
@@ -166,8 +189,7 @@ export function legeTon(a: { schnitt_id: string; von: number; bis?: number; grun
   const fa = s.grenzen[von], fb = s.grenzen[bis + 1];
   const erkannt = erkenneGrundton(leseRegion(s.id, fa, fb, o), 0, fb - fa);
   const vorschlag = a.grund !== undefined ? { note: a.grund, quelle: 'hand' as const } : grundVorschlag(erkannt, s.tonart);
-  const nummer = von === bis ? `${von + 1}` : `${von + 1}-${bis + 1}`;
-  const name = a.name?.trim() ?? `${s.name.slice(0, NAME_MAX - 3 - nummer.length).trimEnd()} · ${nummer}`;
+  const name = a.name?.trim() ?? standardName(s.name, [von, bis]);
   const store = speicher(o), bk = bkOrdner(o);
   let t: Ton | null = null;
   for (let nr = 1; nr <= NR_MAX && t === null; nr++) {
@@ -259,10 +281,11 @@ export function loescheToeneVon(schnittId: string, o: Ordner = {}): string[] {
 
 const QUELLE_TEXT = { erkannt: 'from detection', vorgabe: 'default', hand: 'set by hand' } as const;
 /** The tone as one line (C-D10). `tonart` is the key of the cut, shown when the root came from it. */
-export function tonText(t: Ton, tonart?: string): string {
-  const [von, bis] = t.scheiben;
+export function tonText(t: Ton, tonart?: string, schnitt?: Schnitt | null): string {
   const quelle = t.grund_quelle === 'tonart' ? `from the key${tonart ? ` ${tonart}` : ''}` : QUELLE_TEXT[t.grund_quelle];
-  return `tone ${t.graph} "${t.name}"  cut ${t.schnitt_id}  slices ${von === bis ? von + 1 : `${von + 1}-${bis + 1}`}  root ${notenName(t.grund)} (note ${t.grund}, ${quelle})`
+  const jetzt = tonNachSchnitt(t, schnitt);
+  const ort = schnitt && scheibenJetzt(t, schnitt) === null ? `frames ${t.a}-${t.b} (no slice bounds of the cut any more)` : `slices ${scheibenNummer(jetzt.scheiben)}`;
+  return `tone ${t.graph} "${jetzt.name}"  cut ${t.schnitt_id}  ${ort}  root ${notenName(t.grund)} (note ${t.grund}, ${quelle})`
     + `  detected ${t.erkannt.note === null ? 'none' : notenName(t.erkannt.note)}  confidence ${t.erkannt.konfidenz.toFixed(2)}`;
 }
 

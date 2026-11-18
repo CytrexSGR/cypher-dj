@@ -10,7 +10,8 @@ const istDatei = (p: string): boolean => { try { const x = fs.statSync(p); retur
 
 /** `<readable name of the last element without extension, or 'quelle'>-<sha8><extension lower case, '.wav' when none>`. */
 export function einsammelName(quelle: string, sha: string): string {
-  const basis = path.basename(quelle), ext = path.extname(basis);
+  // a name that ends in a dot has the extension "." which is none (the copy would never match the search)
+  const basis = path.basename(quelle), roh = path.extname(basis), ext = roh === '.' ? '' : roh;
   const name = lesbarerName(ext ? basis.slice(0, -ext.length) : basis) || 'quelle';
   return `${name}-${sha.slice(0, 8)}${ext ? ext.toLowerCase() : '.wav'}`;
 }

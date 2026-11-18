@@ -106,10 +106,11 @@ export function faelligeMuster(muster: MusterPlan[], beat: number): MusterPlan[]
   return muster.filter((m) => beat >= m.ab_beat - MUSTER_VORLAUF_BEATS);
 }
 
-export function plane(spur: Spur, ankerBeat: number): Geplant {
+// proTakt = beats per bar of the open project (studio-taktart); 4 = the old behaviour
+export function plane(spur: Spur, ankerBeat: number, proTakt = 4): Geplant {
   const g: Geplant = { teile: [], wirt: [], muster: [], ende_beat: ankerBeat };
   for (const f of spur.fahrten) {
-    const ab = ankerBeat + 4 * (f.ab_takt - 1), dauer = 4 * (f.takte ?? 0);
+    const ab = ankerBeat + proTakt * (f.ab_takt - 1), dauer = proTakt * (f.takte ?? 0);
     g.ende_beat = Math.max(g.ende_beat, ab + dauer);
     const strom = STROM_ZIEL.exec(f.ziel), wirt = WIRT_ZIEL.exec(f.ziel);
     if (strom) g.muster.push({ strom: Number(strom[1]), text: f.muster as string, ab_beat: ab });
@@ -124,11 +125,11 @@ export function plane(spur: Spur, ankerBeat: number): Geplant {
 // 1.12 S7 (M13): pass k of a loop track. Start = anker + k·4n; part numbers from teilNr (continuing over all passes, so that
 // no (plan, part) pair repeats in the core); end = start of the next pass. The server always calls it with k = 0 and the
 // start of the pass as anker, which also covers a change of n between passes.
-export function planeDurchlauf(spur: Spur, anker: number, k: number, teilNr: number):
+export function planeDurchlauf(spur: Spur, anker: number, k: number, teilNr: number, proTakt = 4):
   Geplant & { anfang_beat: number; teile: (TeilPlan & { nr: number })[] } {
-  const n = spur.schleife_takte as number, anfang = anker + k * 4 * n;
-  const g = plane(spur, anfang);
-  return { ...g, anfang_beat: anfang, ende_beat: anfang + 4 * n, teile: g.teile.map((t, i) => ({ ...t, nr: teilNr + i })) };
+  const n = spur.schleife_takte as number, anfang = anker + k * proTakt * n;
+  const g = plane(spur, anfang, proTakt);
+  return { ...g, anfang_beat: anfang, ende_beat: anfang + proTakt * n, teile: g.teile.map((t, i) => ({ ...t, nr: teilNr + i })) };
 }
 
 // Plan Hand D8 über die ganze Spur: Fader und Trim in Zeitfolge durchspielen; der erste Teil, der einen geschlossenen

@@ -179,9 +179,11 @@ test('a note value LENGTH counts cells of the resolution and is written as beats
 const SLICE_INFO = { art: 'bk', regler: [], klaenge: [0, 1, 2, 3].map((ton) => ({ ton, name: String(ton + 1) })), schnitt: { id: 'x', scheiben: 4, laengen_beats: [0.5, 0.5, 1, 2] } };
 const sliceSpur = (noten, loop = 4) => ({ id: 's_s', name: 'S', art: 'instrument', geraet: { art: 'intern', name: 'bk', graph: 'smp-x', parameter: {} },
   clips: [{ id: 'c_s', art: 'midi', name: 's', start_beat: 0, laenge_beats: 64, loop_beats: loop, noten }] });
-test('slice rows: the slices in order, then foreign pitches below 64 that no slice names', () => {
+test('slice rows: the slices in order, then the rows of notes that no slice names', () => {
   const clip = { loop_beats: 4, noten: [{ id: 'a', beat: 0, ton: 60 }, { id: 'b', beat: 1, ton: 3 + 64 }, { id: 'c', beat: 2, ton: 1 }, { id: 'd', beat: 3, ton: 90 }] };
-  assert.deepEqual(sliceZeilen(clip, SLICE_INFO).map((r) => [r.ton, r.name]), [[0, '1'], [1, '2'], [2, '3'], [3, '4'], [60, 'C3']]);
+  // a note no slice names (after CUT AGAIN to fewer slices) has a row that says so and names the slice the core wraps it to (60 mod 4 = 0, 26 mod 4 = 2)
+  assert.deepEqual(sliceZeilen(clip, SLICE_INFO).map((r) => [r.ton, r.name]), [[0, '1'], [1, '2'], [2, '3'], [3, '4'], [26, '27 · no slice (silent)'], [60, '61 · no slice (silent)']]);
+  assert.deepEqual(sliceZeilen(clip, SLICE_INFO).map((r) => !!r.ohne), [false, false, false, false, true, true]);
   assert.deepEqual(sliceZeilen(null, SLICE_INFO).map((r) => r.ton), [0, 1, 2, 3]);
 });
 test('a reversed hit lives on its row; a click removes it and adds nothing (review focus 4)', () => {

@@ -23,14 +23,26 @@
 //  16 q_zyklus_zeit:                in test_core_track_time.cpp (needs the Kern)
 //  17 q_grenze:                     the hard limit: counts with the override, switches SPUR off for the next block; the product limit counts nothing in the same run
 //  18 q_ausfall_schaltet_spur_nicht_halls_ab:  24 rb tracks, four Halls: SPUR switched off by five late events, the output equals the serial one, the Halls keep their workers
-//  19 q_auto:                       mode auto retries once after 4096 blocks, the second switch-off is for good; mode an never retries
+//  19 q_auto:                       mode auto behaves like mode an: the pool retries after 4096 blocks, after the second switch-off after 8192
 //  21 q_grenze_ab_zyklusstart:      the product hard limit counts from the cycle stamp (40 percent in), not from the entry into the phase: a job held past it is a hang
 //  22 q_warte_nach_eigener_arbeit:  the caller's own work (the lane-0 hook moves the clock 300 us per unit) is no join wait: no late event, the phase stays on
 //  23 q_zyklusteilung:              the limit and the gate for a sub-block that starts ahead of the cycle stamp (sub-block 1 of a split cycle): on time, the limit counts from its nominal start
+//  24 q_warte_relativ:             a worker holds a unit whose usual duration is 1 ms, the caller waits 900 us: no late event, the pool stays on over 100 such blocks
+//  25 q_warte_relativ_stall:        the same with a wait of 2 ms: a late event each, the fifth switches the track account off (stall detection still works)
+//  26 q_warte_ohne_schaetzung:      no estimate yet (first block of the tracks) and a wait of 150 us: late as before the change
+//  28 q_stall_in_der_einheit:      the estimate is thread CPU time: five stalls of 2 ms wall time inside the held unit (1 ms of unit time) are all late, the fifth switches the account off
+//  29 q_kosten_vergessen:           the estimate of a track is zeroed when its sink changes (the first wait is judged with the base threshold again), kept when the sinks stay
+//  27 q_kosten_klingt_ab:           a track unit that took 3 ms once: the estimate decays by 1/64 per block; after 60 blocks 900 us is still no stall, after 150 blocks it is again
+//  30 q_sechzehn_bk:                ARR_BK_MAX is 16: 16 bk tracks (no RB-338, no host), 3 workers, 600 blocks: every bus and the master equal the serial arrangement; all 16
+//                                   bk tracks are lane units, every bk bus has energy, every lane computed units, no lost event
+//  31 q_neu_staffel:                the retry back-off 4096, 8192, ... 65536 (capped) in both modes: the pool is never off for good; busy worker, mode aus, mode change, retry then failure
 //  20 q_live:                       the load threshold counts units the sink computes: muted tracks and solo of one track still count live and fork, an empty unit does not
 // Mutations: SPUR_GRENZE_AB_LAUF (limit from the entry) must turn case 21 red; SPUR_WARTE_AB_LAUF (join wait from the entry) must turn case 22 red.
+// Mutations: SPUR_WARTE_OHNE_KOSTEN (the join-wait rule ignores the cost estimate) must turn case 24 red.
+// Mutations: SPUR_KOSTEN_WANDZEIT (the unit is measured on the wall clock) must turn case 28 red.
 // Mutations: SPUR_LIVE_NACH_GAIN (the old mute criterion) must turn case 20 red.
-// Mutations: SPUR_OHNE_JOIN (the caller does not wait for started jobs) must turn case 11 red; SPUR_AUTO_IMMER_NEU (the retry after every switch-off) must turn case 19 red.
+// Mutations: SPUR_OHNE_JOIN (the caller does not wait for started jobs) must turn case 11 red.
+// Mutations: SPUR_NEU_NUR_AUTO (only mode auto retries) must turn cases 19 and 31 red; SPUR_NEU_OHNE_STAFFEL (the wait never grows) must turn case 31 red.
 // Mutations: SPUR_ALLE_BAHN_1 (every worker uses lane 1) must turn case 1 red; SPUR_OHNE_MXCSR (no MXCSR hand-over) must turn case 3 red;
 //            SPUR_PROTOKOLL_GEMEINSAM (every lane writes log ring 0) must turn case 1 red (the first block's 96 log entries do not fit one ring; under TSan the shared slot is a data race).
 #include <time.h>
@@ -38,6 +50,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <climits>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -140,7 +153,7 @@ cdj::ArrSnapshot* snap(int64_t nr, int n_rb, int n_bk, CypherBk* const* hs, int 
     p("resonanz", 0.2f + 0.05f * static_cast<float>(i % 4));
     p("decay", 0.3f + 0.02f * static_cast<float>(i % 20));
   }
-  for (int i = 0; i < n_bk; ++i) bkt::spur(s, n_rb + i + 1, hs[i], 1, {{"k1", 0.7f - 0.1f * static_cast<float>(i)}});
+  for (int i = 0; i < n_bk; ++i) bkt::spur(s, n_rb + i + 1, hs[i], 1, {{"k1", 0.7f - 0.1f * static_cast<float>(i % 6)}});   // i % 6: with 16 bk tracks the knob stays in 0..1 (identical for i < 6)
   return s;
 }
 
@@ -909,12 +922,17 @@ void fall11() {
 std::atomic<cdj::SpurHaken*> g_hk{nullptr};
 std::atomic<int> g_base{0};
 std::atomic<bool> g_getan{false};
+// The scheduler estimates the cost of a unit on the scheduler's clock. A test that moves that clock while another worker is still inside a unit would lend that unit
+// the jump as a duration, so the stall cases move it only after every other unit is done (the `nach` hook counts the finished units of the block).
+std::atomic<int> g_fertig{0};
+void nach_zaehlen(int) { g_fertig.fetch_add(1); }
 // a unit that really takes long on lane 2: it counts as held (drin), waits until the caller stands at the join, and then 200 us pass on the scheduler's clock
 void vor_langsam(int bahn) {
   if (bahn != 2 || g_getan.exchange(true)) return;
   cdj::SpurHaken* h = g_hk.load();
   h->drin.fetch_add(1);
   warte_auf([&] { return h->am_join.load() > g_base.load(); });
+  warte_auf([&] { return g_fertig.load() >= 11; });   // the other 11 units are done: no unit is in flight when the clock jumps
   h->uhr_ns.fetch_add(200000);
 }
 // the caller's own units take 300 us each on the scheduler's clock (the clock moves nowhere else in that test)
@@ -932,6 +950,7 @@ struct Stall {
   int ok = 0;
   void sauber() {   // a block without a hold
     hk.vor = nullptr;
+    hk.nach = nullptr;
     hk.halte_bahn = -1;
     hk.halte_vor_claim_bahn = -1;
     hk.warte_drin = 0;
@@ -948,6 +967,8 @@ struct Stall {
     hk.warte_worker = vor_claim ? 0 : 2;
     hk.frei = !vor_claim;   // case 13 holds nothing: the `vor` hook is the slow unit
     const int base = hk.am_join.load();
+    g_fertig.store(0);
+    hk.nach = &nach_zaehlen;
     if (!vor_claim) {
       hk.vor = &vor_langsam;
       g_hk.store(&hk);
@@ -962,11 +983,13 @@ struct Stall {
     const bool im_join = warte_auf([&] { return hk.am_join.load() > base; });
     ok += im_join && (!vor_claim || !fertig.load()) ? 1 : 0;
     if (vor_claim) {
+      warte_auf([&] { return g_fertig.load() >= 12; });   // every unit is done (the held worker holds none): no unit is in flight when the clock jumps
       hk.uhr_ns.fetch_add(200000);   // the join wait is 200 us on the scheduler's clock (case 13: the hook does it inside the unit)
       hk.frei.store(true);
     }
     blk.join();
     hk.vor = nullptr;
+    hk.nach = nullptr;
     ref.block(s0);
     ungleich += vergleiche(a, ref);
     s0 += M;
@@ -1427,17 +1450,16 @@ void fall19() {
     PRUEF(pool.p.an(K::SPUR) && sl.z.blocks_parallel == 11 && sl.z.auto_neu == 1);
     lauf(20);
     PRUEF(sl.z.blocks_parallel == 31);
-    fuenf(pool.p);   // the second switch-off is for good
-    lauf(20000);
-    if (pool.p.an(K::SPUR) || sl.z.blocks_parallel != 31 || sl.z.auto_neu != 1 || sl.z.seriell_aus != 4095 + 20000)
-      std::fprintf(stderr, "case 19 diagnostics: an=%d parallel=%llu auto_neu=%llu seriell_aus=%llu spaet=%llu haengt=%llu zurueck=%llu\n", (int)pool.p.an(K::SPUR), (unsigned long long)sl.z.blocks_parallel,
-                   (unsigned long long)sl.z.auto_neu, (unsigned long long)sl.z.seriell_aus, (unsigned long long)pool.p.spaet(K::SPUR), (unsigned long long)pool.p.haengt(K::SPUR), (unsigned long long)pool.p.zurueck(K::SPUR));
+    fuenf(pool.p);   // the second switch-off: the wait is now 8192 blocks
+    lauf(8191);
     PRUEF(!pool.p.an(K::SPUR));
-    PRUEF(sl.z.blocks_parallel == 31 && sl.z.auto_neu == 1 && sl.z.seriell_aus == 4095 + 20000);
+    PRUEF(sl.z.blocks_parallel == 31 && sl.z.auto_neu == 1 && sl.z.seriell_aus == 4095 + 8191);
+    lauf(1);
+    PRUEF(pool.p.an(K::SPUR) && sl.z.blocks_parallel == 32 && sl.z.auto_neu == 2);
     std::printf("case 19 q_auto: parallel=%llu seriell_aus=%llu auto_neu=%llu spur_an=%d\n", (unsigned long long)sl.z.blocks_parallel, (unsigned long long)sl.z.seriell_aus,
                 (unsigned long long)sl.z.auto_neu, (int)pool.p.an(K::SPUR));
   }
-  {   // mode an never retries
+  {   // mode an retries like auto (the studio's mode: the pool is never off for good)
     Pool pool(3);
     AtomSenke sa;
     Welt a(&sa);
@@ -1452,18 +1474,385 @@ void fall19() {
     int64_t s0 = 0;
     for (int i = 0; i < 10; ++i, s0 += M) a.block(s0);
     fuenf(pool.p);
-    for (int i = 0; i < 6000; ++i, s0 += M) a.block(s0);
-    PRUEF(!pool.p.an(K::SPUR) && sl.z.blocks_parallel == 10 && sl.z.auto_neu == 0 && sl.z.seriell_aus == 6000);
+    for (int i = 0; i < 4095; ++i, s0 += M) a.block(s0);
+    PRUEF(!pool.p.an(K::SPUR) && sl.z.blocks_parallel == 10 && sl.z.auto_neu == 0 && sl.z.seriell_aus == 4095);
+    a.block(s0);
+    PRUEF(pool.p.an(K::SPUR) && sl.z.blocks_parallel == 11 && sl.z.auto_neu == 1);
   }
 }
 
 }  // namespace
 
+// ---- 24..27: the join wait is relative to the usual duration of the units the workers still hold
+// A track unit that costs time on the scheduler's clock: the sink moves the fake clock by `kosten` ns inside the unit (0 = free). The estimate of the scheduler is
+// filled by a warm-up block in which every worker is held, so the caller takes every job back and computes every unit alone (the clock moves on one thread only:
+// every unit measures exactly `kosten`). The measured block holds a unit on lane 2 before it starts (the clock does not move inside it, so d = 0 there) and moves
+// the clock by the wait while the caller stands at the join.
+struct KostSenke : AtomSenke {
+  std::atomic<cdj::SpurHaken*> hk{nullptr};
+  std::atomic<int64_t> kosten{0};
+  std::atomic<int64_t> stall_wand{0};      // the next unit that starts on lane 2 takes this long on the wall clock ...
+  std::atomic<int64_t> stall_einheit{0};   // ... and this long on the unit clock (a worker preempted inside a unit: wall time without CPU time)
+  void block(int spur, int64_t s0, int m, float* l, float* r) noexcept override {
+    AtomSenke::block(spur, s0, m, l, r);
+    const int64_t k = kosten.load();
+    if (k != 0) {
+      hk.load()->uhr_ns.fetch_add(k);
+      if (hk.load()->einheit_uhr_ns.load() != 0) hk.load()->einheit_uhr_ns.fetch_add(k);   // a unit of k ns costs k ns of CPU time as well
+    }
+  }
+  void block_bahn(int spur, int64_t s0, int m, float* l, float* r, cdj::ArrArbeit& a) noexcept override {
+    block(spur, s0, m, l, r);
+    if (a.bahn == 2) {   // the held unit is the first one that runs on lane 2: it computes right after the release
+      const int64_t w = stall_wand.exchange(0);
+      if (w != 0) {
+        hk.load()->uhr_ns.fetch_add(w);
+        hk.load()->einheit_uhr_ns.fetch_add(stall_einheit.exchange(0));
+      }
+    }
+  }
+};
+
+struct KostLauf {
+  Pool pool{3};
+  KostSenke sa;
+  Welt a{&sa};
+  cdj::SpurHaken hk;
+  int64_t s0 = 0;
+  KostLauf() {
+    hk.uhr_ns = 1'000'000'000;
+    sa.hk.store(&hk);
+    a.t.arr.setze_hall_pool(&pool.p);
+    a.t.arr.setze_spur_pool(1);
+    cdj::SpurTest st;
+    st.min_last = 0;
+    st.grenze_ns = 10'000'000'000LL;   // the hard limit is not what these cases look at; the join-wait threshold stays the product's 100 us
+    a.t.arr.setze_spur_test(st);
+    a.t.arr.setze_spur_haken(&hk);
+    a.laden(snap(1, 0, 0, nullptr, 0, 12), 0);
+  }
+  void warm(int64_t kosten_ns) {   // every unit of the block takes kosten_ns on the clock, the caller computes all of them
+    sa.kosten.store(kosten_ns);
+    hk.halte_bahn = -1;
+    hk.halte_vor_claim_bahn = -1;
+    hk.warte_drin = 0;
+    hk.warte_worker = 0;
+    hk.frei = true;
+    pool.p.anhalten(true);
+    a.block(s0);
+    pool.p.anhalten(false);
+    s0 += M;
+  }
+  bool messen(int64_t warte_ns) {   // a unit held on lane 2, the caller waits warte_ns at the join
+    sa.kosten.store(0);
+    hk.halte_bahn = 2;
+    hk.warte_drin = 1;
+    hk.warte_worker = 2;
+    hk.frei = false;
+    const int base = hk.am_join.load();
+    g_fertig.store(0);
+    hk.nach = &nach_zaehlen;
+    std::thread blk([&] { a.block(s0); });
+    const bool im_join = warte_auf([&] { return hk.am_join.load() > base; });
+    warte_auf([&] { return g_fertig.load() >= 11; });   // the other 11 units are done: the jump of the clock is not lent to a unit in flight as its duration
+    hk.uhr_ns.fetch_add(warte_ns);
+    hk.frei.store(true);
+    blk.join();
+    hk.nach = nullptr;
+    s0 += M;
+    return im_join;
+  }
+  const cdj::ArrSpurLauf& sl() const { return a.t.arr.spur_lauf(); }
+};
+
+void fall24() {
+  KostLauf k;
+  bool im_join = true;
+  for (int b = 0; b < 100; ++b) {
+    k.warm(1'000'000);                  // the estimate of every track is 1 ms
+    im_join = k.messen(900'000) && im_join;   // 900 us at the join: below 100 us + 1 ms + a quarter
+    if (!k.pool.p.an(cdj::HallPool::SPUR)) break;   // switched off: the next block would not reach the join at all (the case is red, end it fast)
+  }
+  PRUEF(im_join);
+  PRUEF(k.sl().z.warte_spaet == 0 && k.pool.p.spaet(cdj::HallPool::SPUR) == 0);
+  PRUEF(k.sl().warte_max_us() >= 900);   // the wait really happened
+  PRUEF(k.pool.p.an(cdj::HallPool::SPUR) && k.sl().z.blocks_parallel == 100);
+  std::printf("case 24 q_warte_relativ: late=%llu warte_max_us=%lld parallel=%llu spur_an=%d\n", (unsigned long long)k.sl().z.warte_spaet, (long long)k.sl().warte_max_us(),
+              (unsigned long long)k.sl().z.blocks_parallel, (int)k.pool.p.an(cdj::HallPool::SPUR));
+}
+
+void fall25() {
+  KostLauf k;
+  using K = cdj::HallPool;
+  bool im_join = true;
+  for (int b = 0; b < 4; ++b) {
+    k.warm(1'000'000);
+    im_join = k.messen(2'000'000) && im_join;   // 2 ms: above 100 us + 1 ms + a quarter
+  }
+  PRUEF(im_join);
+  PRUEF(k.sl().z.warte_spaet == 4 && k.pool.p.spaet(K::SPUR) == 4);
+  k.warm(1'000'000);                        // the block start would take a switch-off: four events do not
+  PRUEF(k.pool.p.an(K::SPUR));
+  im_join = k.messen(2'000'000) && im_join;   // the fifth within 64 blocks
+  PRUEF(im_join);
+  PRUEF(k.pool.p.spaet(K::SPUR) == 5);
+  k.warm(1'000'000);
+  PRUEF(!k.pool.p.an(K::SPUR));
+  std::printf("case 25 q_warte_relativ_stall: late=%llu spur_an=%d\n", (unsigned long long)k.pool.p.spaet(K::SPUR), (int)k.pool.p.an(K::SPUR));
+}
+
+void fall26() {
+  KostLauf k;
+  const bool im_join = k.messen(150'000);   // the first block of these tracks: no estimate, the base threshold of 100 us alone
+  PRUEF(im_join);
+  PRUEF(k.sl().z.warte_spaet == 1 && k.pool.p.spaet(cdj::HallPool::SPUR) == 1);
+  std::printf("case 26 q_warte_ohne_schaetzung: late=%llu warte_max_us=%lld\n", (unsigned long long)k.sl().z.warte_spaet, (long long)k.sl().warte_max_us());
+}
+
+void fall27() {
+  KostLauf k;
+  k.warm(3'000'000);   // one block in which every unit took 3 ms
+  int blocks = 1;
+  for (; blocks < 60; ++blocks) k.warm(200'000);   // from then on 200 us: the estimate falls by 1/64 per block (3 ms * (63/64)^59 = 1.18 ms)
+  PRUEF(k.messen(900'000));                        // block 61: 100 us + 1.18 ms * 1.25 > 900 us: no stall
+  PRUEF(k.sl().z.warte_spaet == 0);
+  ++blocks;
+  for (; blocks < 150; ++blocks) k.warm(200'000);   // block 150: 3 ms * (63/64)^149 = 0.29 ms (never below the 200 us the unit costs now)
+  PRUEF(k.messen(900'000));                        // 100 us + 0.29 ms * 1.25 < 900 us: late again
+  PRUEF(k.sl().z.warte_spaet == 1);
+  std::printf("case 27 q_kosten_klingt_ab: blocks=%d late=%llu\n", blocks, (unsigned long long)k.sl().z.warte_spaet);
+}
+
+// 28: a stall INSIDE the unit. The estimate is warm at 1 ms of unit time; in five consecutive blocks the worker-held unit takes 2 ms on the wall clock while its unit
+// clock (thread CPU time in the product) advances 1 ms, no warm-up in between. The wait is late every time and the fifth switches the account off. Measured on the wall clock
+// (mutation SPUR_KOSTEN_WANDZEIT) the first stall would raise the estimate to 2 ms and every later one would be excused: late=1, the pool stays on.
+void fall28() {
+  KostLauf k;
+  k.hk.einheit_uhr_ns.store(1'000'000'000);   // a unit clock of its own
+  using K = cdj::HallPool;
+  k.warm(1'000'000);
+  bool im_join = true;
+  for (int b = 0; b < 5; ++b) {
+    k.sa.stall_wand.store(2'000'000);
+    k.sa.stall_einheit.store(1'000'000);
+    im_join = k.messen(0) && im_join;
+  }
+  PRUEF(im_join);
+  PRUEF(k.sl().z.warte_spaet == 5 && k.pool.p.spaet(K::SPUR) == 5);
+  k.warm(1'000'000);
+  PRUEF(!k.pool.p.an(K::SPUR));
+  std::printf("case 28 q_stall_in_der_einheit: late=%llu spur_an=%d\n", (unsigned long long)k.pool.p.spaet(K::SPUR), (int)k.pool.p.an(K::SPUR));
+}
+
+// 29: the estimate is forgotten when the sink of a track changes. A swap that keeps the sinks (same tracks, other number) keeps it: 900 us against a 1 ms estimate is no stall.
+// A swap that gives the tracks another sink (the 12 host tracks become RB tracks) zeroes it: the first wait is judged with the base threshold again, 900 us is late.
+void fall29() {
+  KostLauf k;
+  k.warm(1'000'000);
+  k.a.laden(snap(2, 0, 0, nullptr, 0, 12), k.s0);   // the same sinks
+  PRUEF(k.messen(900'000));
+  PRUEF(k.sl().z.warte_spaet == 0);
+  k.warm(1'000'000);
+  k.a.laden(snap(3, 12, 0, nullptr, 0, 0), k.s0);   // the tracks are RB tracks now
+  PRUEF(k.messen(900'000));
+  PRUEF(k.sl().z.warte_spaet == 1);
+  std::printf("case 29 q_kosten_vergessen: late=%llu\n", (unsigned long long)k.sl().z.warte_spaet);
+}
+
+// 30: sixteen Baukasten tracks (ARR_BK_MAX) on the pool: bit-equal with the serial arrangement, every track a lane unit
+void fall30() {
+  constexpr int N = 16;
+  CypherBk* h[N];
+  CypherBk* h2[N];
+  for (int i = 0; i < N; ++i) {
+    h[i] = bkt::neu(bkt::G_T);
+    h2[i] = bkt::neu(bkt::G_T);
+  }
+  {
+    Pool pool(3);
+    Welt a, ref;
+    a.t.arr.setze_hall_pool(&pool.p);
+    a.t.arr.setze_spur_pool(1);
+    a.t.arr.setze_spur_test(kein_tor());
+    cdj::SpurHaken hk;
+    // Block 0 has no lane unit (every bk instance is taken over in the serial remainder of its first block, the lists are built after it), so no worker
+    // can finish a unit of its own there: a seam that waits for three of them would spin until its 3 s wall-clock cap, and that cap switches every later
+    // seam wait of the process off (the test would then depend on how fast the workers wake). The seam is armed from block 1 on, where every lane holds
+    // four units.
+    hk.warte_worker = 0;
+    a.t.arr.setze_spur_haken(&hk);
+    a.laden(snap(1, 0, N, h, 0, 0), 0);
+    ref.laden(snap(1, 0, N, h2, 0, 0), 0);
+    int ungleich = 0;
+    double e_bk[N] = {};
+    uint64_t parallel0 = 0;   // 1 when the workers started their (empty) jobs in block 0 before the caller took them back; scheduler-dependent
+    for (int b = 0; b < 600; ++b) {
+      const int64_t s0 = static_cast<int64_t>(b) * M;
+      if (b == 1) {
+        parallel0 = a.t.arr.spur_lauf().z.blocks_parallel;
+        hk.warte_worker = 3;
+      }
+      for (int i = 0; i < N; ++i) {
+        speise(a.intern, i, b, s0);
+        speise(ref.intern, i, b, s0);
+      }
+      a.block(s0);
+      ref.block(s0);
+      ungleich += vergleiche(a, ref);
+      for (int i = 0; i < N; ++i) e_bk[i] += energie(a.t.arr.spur_bus_l(i), M);
+      if (b == 1) {   // every worker must have computed by now (the seam forces it); if not, stop at once
+        bool alle = true;
+        for (int l = 1; l < 4; ++l) alle = alle && a.t.arr.spur_lauf().einheiten_bahn(l) >= 1;
+        bool jede = true;   // the seam waits for a unit of the worker's OWN list, so each lane list must hold one
+        for (int l = 0; l < 4; ++l) jede = jede && a.t.arr.spur_plan().n(l) >= 1;
+        if (!alle || !jede) {
+          PRUEF(alle);
+          PRUEF(jede);
+          break;
+        }
+      }
+    }
+    const cdj::ArrSpurLauf& sl = a.t.arr.spur_lauf();
+    PRUEF(ungleich == 0);
+    for (int i = 0; i < N; ++i) PRUEF(e_bk[i] > 0.0);   // not silence on any of the 16 buses: equality means something
+    for (int i = 0; i < N; ++i) PRUEF(a.t.arr.spur_plan().in_liste(i));   // every bk track is a lane unit once its instance plays
+    PRUEF(a.t.arr.spur_plan().n_rest() == 0);
+    PRUEF(parallel0 <= 1);
+    PRUEF(sl.z.blocks_parallel == parallel0 + 599);   // blocks 1..599: the seam keeps the caller's first unit until all three workers computed, so each of them started in every block
+    PRUEF(sl.einheiten_worker() > 0);
+    for (int b = 1; b < 4; ++b) PRUEF(sl.einheiten_bahn(b) >= 1);
+    PRUEF(sl.z.unfertig == 0);
+    PRUEF(a.bk.verloren() == 0 && ref.bk.verloren() == 0);   // no event lost on any lane
+    PRUEF(pool.p.an(cdj::HallPool::SPUR));
+    std::printf("case 30 q_sechzehn_bk: ungleich=%d parallel=%llu worker=%llu caller=%llu\n", ungleich, (unsigned long long)sl.z.blocks_parallel,
+                (unsigned long long)sl.einheiten_worker(), (unsigned long long)sl.z.einheiten_caller);
+  }
+  for (CypherBk* x : h) cypher_bk_frei(x);
+  for (CypherBk* x : h2) cypher_bk_frei(x);
+}
+
+// 31: the track pool is never off for good: after a switch-off it retries after a back-off that doubles per failure (4096 .. 65536 blocks), in both modes
+void job_nichts(void*, int) {}
+
+void fall31() {
+  using K = cdj::HallPool;
+  using L = cdj::ArrSpurLauf;
+  // a. the series, pure
+  PRUEF(L::neu_wartezeit(0) == 4096 && L::neu_wartezeit(1) == 4096 && L::neu_wartezeit(2) == 8192 && L::neu_wartezeit(3) == 16384);
+  PRUEF(L::neu_wartezeit(4) == 32768 && L::neu_wartezeit(5) == 65536 && L::neu_wartezeit(6) == 65536 && L::neu_wartezeit(7) == 65536);
+  PRUEF(L::neu_wartezeit(100) == 65536 && L::neu_wartezeit(INT_MAX) == 65536 && L::neu_wartezeit(-5) == 4096 && L::neu_wartezeit(INT_MIN) == 4096);
+  auto fuenf = [](K& p) {
+    for (int i = 0; i < 5; ++i) p.spaet_melden(K::SPUR);
+  };
+  // the world of one scenario: a pool of three workers, 8 RB tracks, the given mode
+  struct Szene {
+    Pool pool{3};
+    AtomSenke sa;
+    Welt a{&sa};
+    cdj::SpurHaken hk;
+    int64_t s0 = 0;
+    explicit Szene(int modus) {
+      a.t.arr.setze_hall_pool(&pool.p);
+      a.t.arr.setze_spur_pool(modus);
+      a.t.arr.setze_spur_test(kein_tor());
+      hk.warte_worker = 3;
+      a.t.arr.setze_spur_haken(&hk);
+      a.laden(snap(1, 0, 0, nullptr, 0, 8), 0);
+    }
+    const cdj::ArrSpurLauf& sl() const { return a.t.arr.spur_lauf(); }
+    void lauf(int n) {
+      for (int i = 0; i < n; ++i, s0 += M) a.block(s0);
+    }
+  };
+  {   // b. mode an (the studio's mode): three switch-offs, the waits are 4096, 8192, 16384 blocks, and the pool really forks after each retry
+    Szene z(1);
+    z.lauf(10);
+    PRUEF(z.sl().z.blocks_parallel == 10 && z.pool.p.an(K::SPUR));
+    fuenf(z.pool.p);
+    z.lauf(4095);
+    PRUEF(!z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 0 && z.sl().z.blocks_parallel == 10);
+    z.lauf(1);
+    PRUEF(z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 1 && z.sl().z.blocks_parallel == 11);
+    const uint64_t worker1 = z.sl().einheiten_worker();
+    z.lauf(20);
+    PRUEF(z.sl().z.blocks_parallel == 31 && z.sl().einheiten_worker() > worker1);   // a retry that only flipped the flag would stay serial here
+    fuenf(z.pool.p);
+    z.lauf(8191);
+    PRUEF(!z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 1);
+    z.lauf(1);
+    PRUEF(z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 2 && z.sl().z.blocks_parallel == 32);
+    z.lauf(5);
+    fuenf(z.pool.p);
+    z.lauf(16383);
+    PRUEF(!z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 2);
+    z.lauf(1);
+    PRUEF(z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 3);
+    std::printf("case 31 b q_neu_staffel (mode an): auto_neu=%llu parallel=%llu seriell_aus=%llu\n", (unsigned long long)z.sl().z.auto_neu, (unsigned long long)z.sl().z.blocks_parallel,
+                (unsigned long long)z.sl().z.seriell_aus);
+  }
+  {   // c. a worker still holds a job: the retry refuses (no switch-on over a held job), the counter does not move; one block after the release the account is on
+    Szene z(1);
+    z.lauf(10);
+    fuenf(z.pool.p);
+    z.lauf(2);
+    PRUEF(!z.pool.p.an(K::SPUR));
+    z.pool.p.anhalten(true);
+    PRUEF(z.pool.p.schicke(0, job_nichts, nullptr, 0, K::HALL));   // a Hall job (the account is on) stays bereit: the worker does not start it
+    z.lauf(5000);
+    PRUEF(!z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 0 && z.sl().z.blocks_parallel == 10);
+    PRUEF(z.pool.p.hole_zurueck(0, false));   // taken back without a late event
+    z.pool.p.anhalten(false);
+    z.lauf(1);
+    PRUEF(z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 1 && z.sl().z.blocks_parallel == 11);
+  }
+  {   // d. mode aus never retries and never forks
+    Szene z(0);
+    z.lauf(10);
+    fuenf(z.pool.p);
+    z.pool.p.block_anfang();   // mode aus does not reach the pool: take the switch-off by hand
+    PRUEF(!z.pool.p.an(K::SPUR));
+    const uint64_t aus0 = z.sl().z.seriell_aus;
+    z.lauf(6000);
+    PRUEF(!z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 0 && z.sl().z.blocks_parallel == 0 && z.sl().z.seriell_aus == aus0 + 6000);
+  }
+  {   // e. a mode change starts the back-off at 4096 again (after two switch-offs the wait would be 8192)
+    Szene z(1);
+    z.lauf(10);
+    fuenf(z.pool.p);
+    z.lauf(4096);
+    PRUEF(z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 1);
+    z.lauf(5);
+    fuenf(z.pool.p);
+    z.lauf(100);
+    PRUEF(!z.pool.p.an(K::SPUR));
+    z.a.t.arr.setze_spur_pool(2);
+    z.lauf(4095);
+    PRUEF(!z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 1);
+    z.lauf(1);
+    PRUEF(z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 2);
+  }
+  {   // f. the retry is followed at once by five late events: the next wait is 8192, not 4096 again (a successful retry does not reset the count)
+    Szene z(2);
+    z.lauf(10);
+    fuenf(z.pool.p);
+    z.lauf(4096);
+    PRUEF(z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 1);
+    fuenf(z.pool.p);
+    z.lauf(4096 + 100);   // the first wait has passed since this switch-off ...
+    PRUEF(!z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 1);   // ... the pool is still off
+    z.lauf(8192 - 4096 - 100 - 1);
+    PRUEF(!z.pool.p.an(K::SPUR));
+    z.lauf(1);
+    PRUEF(z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 2);
+  }
+  std::printf("case 31 q_neu_staffel: ok\n");
+}
+
 int main(int argc, char** argv) {
-  void (*falle[])() = {fall1, fall2, fall3, fall4, fall5, fall6, fall7, fall8, fall9, fall10, fall11, fall12, fall13, fall14, fall15, fall16, fall17, fall18, fall19, fall20, fall21, fall22, fall23};
-  if (argc > 1) {   // a single case for debugging: test_arr_spur_pool <1..23>
+  void (*falle[])() = {fall1, fall2, fall3, fall4, fall5, fall6, fall7, fall8, fall9, fall10, fall11, fall12, fall13, fall14, fall15, fall16, fall17, fall18, fall19, fall20, fall21, fall22, fall23, fall24, fall25, fall26, fall27, fall28, fall29, fall30, fall31};
+  if (argc > 1) {   // a single case for debugging: test_arr_spur_pool <1..31>
     const int n = std::atoi(argv[1]);
-    if (n >= 1 && n <= 23) falle[n - 1]();
+    if (n >= 1 && n <= 31) falle[n - 1]();
   } else {
     for (auto f : falle) {
       f();

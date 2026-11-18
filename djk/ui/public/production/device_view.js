@@ -12,6 +12,7 @@ import { wendePresetAn } from './preset_apply.js';
 import { surgeAnzeige, surgeNorm } from '../surge_adapter.js';
 
 export const BK_LIVE_MAX = 64;   // knobs k1..k64 have a core row spur/<slot>/bk/<k> (SPUR_BK_KNOEPFE; 32 until 2026-11-16); a page file cannot import the .ts, tests/production_device_view.test.mjs pins it
+export const BK_LIVE_SLOTS = 8;  // only the first 8 bk tracks have those rows (SPUR_BK_SLOTS; ARR_BK_MAX is 16 since 2026-11-18); = BK_LIVE_SLOTS of project/model.ts, pinned by the same test
 export const BK_LIVE_MS = 30;    // the throttle of a live drag, like pluginAdapter (plugin_panel.js)
 export const SURGE_MAX = 32;   // = SURGE_PARAMETER_MAX of project/model.ts (a page file cannot import the .ts; tests/production_device_view.test.mjs pins them equal)
 
@@ -55,7 +56,14 @@ export function spurAdapter(ctx, spur, parameter = [], opt = {}) {
   const angezeigt = new Map();   // param -> value shown until the server answered
   const offen = new Set();       // params set by the running gesture, not sent yet (the release path)
   const bk = typeof schluessel === 'string' && schluessel.startsWith('bk:');
-  const istLive = (p) => bk && /^k[1-9][0-9]?$/.test(p) && Number(p.slice(1)) <= BK_LIVE_MAX;
+  // the slot is the running number among the bk tracks by ascending nr (bkSlot in project/model.ts), read from the project as it is NOW: the 9th to 16th
+  // bk track has no core row, its knobs take the release path (one spur_aendern); a track the project does not list yet keeps the live path
+  const slotLive = () => {
+    const alle = (ctx.st?.projekt?.spuren ?? [spur]).filter((s) => s.geraet?.art === 'intern' && s.geraet.name === 'bk').sort((a, b) => a.nr - b.nr);
+    const i = alle.findIndex((s) => s.id === spur.id);
+    return i < 0 || i < BK_LIVE_SLOTS;
+  };
+  const istLive = (p) => bk && /^k[1-9][0-9]?$/.test(p) && Number(p.slice(1)) <= BK_LIVE_MAX && slotLive();
   const zeitgeber = opt.zeitgeber ?? globalThis, entprellMs = opt.entprellMs ?? BK_LIVE_MS;
   const lebend = new Map();      // live param -> latest value, not sent yet
   let timer = null;

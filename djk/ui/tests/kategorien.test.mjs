@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { listeGraphen, ladeKategorien, pruefeKategorien, KATEGORIE_IDS } from '../graphs.ts';
+import { listeGraphen, ladeKategorien, pruefeKategorien, KATEGORIE_IDS, PRINZIP_IDS } from '../graphs.ts';
 import { pfadeVon } from '../devices_parameter.ts';
 import { REPO } from '../paths.ts';
 
@@ -48,7 +48,8 @@ test('GET /graphen entries carry kategorie and text for instruments from <graph 
 test('djk-start installs kategorien.json into the panels folder with the cmp rule', () => {
   const sh = fs.readFileSync(path.join(REPO, 'djk', 'start', 'djk-start'), 'utf8');
   assert.match(sh, /kategorien\.json/);
-  assert.match(sh, /cmp -s -- "\$kat" "\$ziel"/);
+  assert.match(sh, /installiere "\$kat" "\$BK_ORDNER\/panels\/kategorien\.json"/);
+  assert.match(sh, /cmp -s -- "\$quelle" "\$ziel" && return 0/);   // the cmp rule lives in installiere() (a test instance never overwrites: audit C23)
 });
 
 test('recipe graphs: the category follows the name prefix (bass, lead, pad, keys; pluck is keys; drums and percussion are drums; fx is textur)', () => {
@@ -62,5 +63,78 @@ test('djk-start installs the recipe graphs of demos/recipes/ (MANIFEST.json) und
   const sh = fs.readFileSync(path.join(REPO, 'djk', 'start', 'djk-start'), 'utf8');
   assert.match(sh, /demos\/recipes/);
   assert.match(sh, /MANIFEST\.json/);
-  assert.match(sh, /cmp -s -- "\$quelle" "\$BK_ORDNER\/\$g\.json"/);
+  assert.match(sh, /installiere "\$quelle" "\$BK_ORDNER\/\$g\.json"/);
+});
+
+// ---- prinzip: the synthesis type of an instrument (the picker groups by it as well as by role) ----
+
+// The decided values of the 57 instrument demos (plan 2026-11-18-instrument-picker-by-type, Task 1), written out so a change is a visible edit.
+const DEMO_PRINZIP = {
+  analog: ['bassmusik', 'diode-acid-bass', 'diode-goa-linie', 'ms20-bass', 'ms20-goa-lead', 'goa-blubber-lead', 'roehre-lead', 'saege-ladder', 'lead', 'hartsync-bass',
+    'hartsync-lead', 'hartsync-pad', 'juno-pad', 'juno-pad-dyn', 'juno-pad-echo', 'juno-pad-hall', 'sem-pad', 'sem-house-akkord', 'synth-mono', 'synth-poly', 'synth-neuro',
+    'formant-neuro-bass', 'mseg-neuro-bass', 'falter-demo'],
+  wavetable: ['wavetable-chor', 'wavetable-reese', 'wavetable-supersaw', 'synth-greif', 'synth-greif2', 'bass-banddrive'],
+  fm: ['fm-bass', 'fm-epiano', 'fm-glocke', 'fm-lead'],
+  physik: ['saite', 'saite-gitarre', 'saite-harfe', 'saite-klavier', 'saite-karplus', 'resonator-glocke', 'resonator-marimba', 'resonator-metall', 'kamm-goa-zupf'],
+  granular: ['granular-pad', 'granular-textur', 'granular-drone'],
+  sampler: ['sampler-fairlight'],
+  drums: ['drums-808', 'drums-909', 'kick-synth', 'gated-hall-snare', 'metall-hihat', 'metall-crash', 'metall-ride', 'resonator-conga'],
+  feedback: ['labor', 'rueckkopplung'],
+};
+
+test('PRINZIP_IDS lists the eight synthesis types', () => {
+  assert.deepEqual([...PRINZIP_IDS], ['analog', 'wavetable', 'fm', 'physik', 'granular', 'sampler', 'drums', 'feedback']);
+});
+
+test('every instrument graph of beispiele/ and beispiele/recipes/ has a prinzip from PRINZIP_IDS, and a clean kategorien.json reports no error', () => {
+  const inst = [...listeGraphen(P.beispiele).graphen, ...listeGraphen(P.rezepte).graphen].filter((g) => g.art === 'instrument').map((g) => g.name);
+  for (const n of inst) assert.ok(PRINZIP_IDS.includes(kat[n].prinzip), `${n}: prinzip ${kat[n].prinzip}`);
+  assert.deepEqual(pruefeKategorien(kat).fehler, []);
+});
+
+test('the 57 demo instruments carry the decided prinzip values', () => {
+  const soll = Object.fromEntries(Object.entries(DEMO_PRINZIP).flatMap(([p, namen]) => namen.map((n) => [n, p])));
+  assert.equal(Object.keys(soll).length, 57);
+  const demos = listeGraphen(P.beispiele).graphen.filter((g) => g.art === 'instrument').map((g) => g.name).sort();
+  assert.deepEqual(demos, Object.keys(soll).sort(), 'the table covers exactly the demo instruments');
+  for (const n of demos) assert.equal(kat[n].prinzip, soll[n], n);
+});
+
+test('recipe graphs: drums category is drums, a wavetable node is wavetable, the rest is analog; bass-fm and lead-fm (FM from sine operators) are decided fm by hand', () => {
+  const fest = { 'bass-fm': 'fm', 'lead-fm': 'fm' };
+  const quellen = new Set(['fm', 'granular', 'sampler', 'saite', 'resonator', 'kamm']);
+  for (const g of listeGraphen(P.rezepte).graphen) {
+    const arten = new Set(JSON.parse(fs.readFileSync(path.join(P.rezepte, `${g.name}.json`), 'utf8')).knoten.map((k) => k.art));
+    assert.ok(![...arten].some((a) => quellen.has(a)), `${g.name}: the rule of the plan has a node type this test does not cover`);
+    const soll = fest[g.name] ?? (kat[g.name].kategorie === 'drums' ? 'drums' : arten.has('wavetable') ? 'wavetable' : 'analog');
+    assert.equal(kat[g.name].prinzip, soll, g.name);
+  }
+});
+
+test('GET /graphen entries carry prinzip; a file without it gives entries without it; an invalid one keeps the entry and reports the error', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'prinzip-'));
+  try {
+    const inst = { knoten: [{ id: 'a', art: 'note' }] }, fx = { knoten: [{ id: 'e', art: 'eingang' }] };
+    for (const n of ['a-inst', 'b-inst', 'c-inst', 'smp-x', 'ton-x-1', 'ins-x', 'u-sonst']) fs.writeFileSync(path.join(dir, `${n}.json`), JSON.stringify(inst));
+    fs.writeFileSync(path.join(dir, 'fx-x.json'), JSON.stringify(fx));
+    fs.mkdirSync(path.join(dir, 'panels'));
+    const schreibe = (o) => fs.writeFileSync(path.join(dir, 'panels', 'kategorien.json'), JSON.stringify(o));
+    schreibe({ 'a-inst': { kategorie: 'bass', prinzip: 'fm', text: 'A.' }, 'b-inst': { kategorie: 'lead', text: 'Old install, no prinzip.' }, 'c-inst': { kategorie: 'pad', prinzip: 'laser', text: 'Bad prinzip.' }, 'fx-x': { kategorie: 'bass', prinzip: 'fm', text: 'ignored' } });
+    const g = Object.fromEntries(listeGraphen(dir).graphen.map((e) => [e.name, e]));
+    assert.equal(g['a-inst'].prinzip, 'fm');
+    assert.equal(g['b-inst'].prinzip, undefined);
+    assert.equal(g['b-inst'].kategorie, 'lead', 'the old entry still loads');
+    assert.ok(!('prinzip' in g['b-inst']), 'no key without a value');
+    assert.equal(g['c-inst'].prinzip, undefined, 'an invalid prinzip is dropped');
+    assert.equal(g['c-inst'].kategorie, 'pad', 'but the entry stays');
+    assert.equal(g['c-inst'].text, 'Bad prinzip.');
+    assert.equal(g['fx-x'].prinzip, undefined, 'effects have none');
+    assert.equal(g['u-sonst'].prinzip, undefined, 'a graph without any entry has none (the page files it under Other)');
+    for (const n of ['smp-x', 'ton-x-1', 'ins-x']) assert.equal(g[n].prinzip, 'sampler', n);
+    const k = ladeKategorien(dir);
+    assert.deepEqual(Object.keys(k).sort(), ['a-inst', 'b-inst', 'c-inst', 'fx-x']);
+    assert.equal(k['c-inst'].prinzip, undefined);
+    assert.deepEqual(pruefeKategorien({ 'c-inst': { kategorie: 'pad', prinzip: 'laser', text: 'x.' } }).fehler, [`c-inst: prinzip must be one of ${PRINZIP_IDS.join(', ')}`]);
+    assert.deepEqual(pruefeKategorien({ 'b-inst': { kategorie: 'lead', text: 'x.' } }).fehler, []);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

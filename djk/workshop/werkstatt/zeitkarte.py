@@ -2,8 +2,9 @@
 
 Pure functions, no I/O. Input is the decoded source audio (48 kHz, float, shape (n, 2); (n,) and (n, 1) are
 accepted and treated as dual mono) and the `material.json` of the track (tempo map `tempo_karte_quelle`,
-`raster.erste_eins_quell_beat`). Every quantity is a list with one entry per bar; `None` marks a bar where the
-quantity is undefined (silence), so the JSON never carries NaN.
+`raster.erste_eins_quell_beat`; the caller lays the Eins corrections of korrekturen.jsonl over it first, see
+lauf_zeitkarte). Every quantity is a list with one entry per bar; `None` marks a bar where the quantity is
+undefined (silence), so the JSON never carries NaN.
 
 Quantities per bar
   lufs          K-weighted, ungated loudness (fa.k_filter, same formula as lautheit.lufs_je_takt, but on the

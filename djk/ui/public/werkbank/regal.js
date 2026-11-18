@@ -5,6 +5,7 @@ import { WERKBANK_TEXT } from './werkbank.js';
 import { SAMPLES_TEXT } from './regal_samples.js';
 import { bindeSamplesReiter } from './regal_samples_modus.js';
 import { bindeInstrumente, INSTRUMENTE_TEXT } from './regal_instruments.js';
+import { bindeSuche } from './regal_suche.js';
 
 // liste: GET /proj/liste (an array); vorlagen: GET /proj/werkbank/vorlagen ({vorlagen: [...]}) or the array; slug: the open module.
 export function regalEintraege(liste, vorlagen, slug) {
@@ -63,7 +64,11 @@ export function bindeRegal(ctx) {
 
   // The shelf strip: header (label, the tabs MODULES and LOOPS, hint, the SLICES choice of LOOPS) and the cards. One fetch feeds the strip and the empty state (no second list code).
   const regal = $('regal');
-  regal.replaceChildren(el('div', 'w-regal-kopf'), el('div', 'w-karten'));
+  // the search field sits above the tabs; its hits replace the tab content (the card host) while it has text
+  const sucheKopf = el('div', 'w-such-kopf'), sucheHost = el('div', 'w-such-host');
+  sucheHost.hidden = true; sucheHost.setAttribute('data-w', 'suche-host');
+  regal.replaceChildren(sucheKopf, el('div', 'w-regal-kopf'), el('div', 'w-karten'), sucheHost);
+  const kopfZeile = regal.children[1];
   const tabKnopf = (name) => { const b = el('button', 'w-tab', name); b.type = 'button'; return b; };
   const tabModule = tabKnopf('MODULES'), tabLoops = tabKnopf('LOOPS'), tabCuts = tabKnopf('CUTS'), tabSamples = tabKnopf('SAMPLES'), tabInstrumente = tabKnopf('INSTRUMENTS');
   const hinweis = el('span', 'w-hinweis', REGAL_HINT);
@@ -75,44 +80,46 @@ export function bindeRegal(ctx) {
   const gemerkt = ctx.lies('djk-wb-scheiben', 'auto');
   scheibenWahl.value = SCHEIBEN_WAHL.includes(gemerkt) ? gemerkt : 'auto';
   scheibenWahl.addEventListener('change', () => ctx.merke('djk-wb-scheiben', scheibenWahl.value));
-  regal.firstChild.append(el('span', 'w-lbl', 'SHELF'), tabModule, tabLoops, tabCuts, tabSamples, tabInstrumente, hinweis, scheibenLbl, scheibenWahl);
-  const kartenHost = regal.children[1];
+  kopfZeile.append(el('span', 'w-lbl', 'SHELF'), tabModule, tabLoops, tabCuts, tabSamples, tabInstrumente, hinweis, scheibenLbl, scheibenWahl);
+  const kartenHost = regal.children[2];
   let stand = { liste: null, vorlagen: null };
   let tab = ['loops', 'cuts', 'samples', 'instrumente'].includes(ctx.lies('djk-wb-regal-tab', 'module')) ? ctx.lies('djk-wb-regal-tab', 'module') : 'module';
   const zeigeTab = () => {
     tabModule.classList.toggle('on', tab === 'module'); tabLoops.classList.toggle('on', tab === 'loops'); tabCuts.classList.toggle('on', tab === 'cuts');
     tabSamples.classList.toggle('on', tab === 'samples'); tabInstrumente.classList.toggle('on', tab === 'instrumente');
     const innen = tab === 'samples' || tab === 'instrumente';   // both tabs scroll their own list inside the shelf
-    regal.classList.toggle('w-smp-an', innen); kartenHost.classList.toggle('w-smp-host', innen);
+    regal.classList.toggle('w-smp-an', innen); kartenHost.classList.toggle('w-smp-host', innen); sucheHost.classList.toggle('w-such-innen', innen);
     hinweis.textContent = tab === 'loops' ? LOOPS_HINT : tab === 'cuts' ? CUTS_HINT : tab === 'samples' ? SAMPLES_TEXT.hint : tab === 'instrumente' ? INSTRUMENTE_TEXT.hint : REGAL_HINT;
     scheibenLbl.hidden = scheibenWahl.hidden = tab !== 'loops';
   };
   zeigeTab();
 
+  // one card of a module (`m` as regalEintraege gives it); the search view draws the same card
+  function karteModul(m) {
+    const k = karteBau(m.fehler ? 'kaputt' : m.offen ? 'offen' : 'modul', m.name, m.fehler ? 'unreadable' : datum(m.geaendert), m.offen ? 'open' : '');
+    if (m.offen || m.fehler) k.disabled = true;
+    if (m.fehler) k.setAttribute('title', m.text);
+    // the click re-checks the live state: a card drawn before a change must not reopen the open module
+    k.addEventListener('click', () => { if (!m.fehler && m.slug !== st.slug) aktion(() => ctx.oeffneModul(m.slug)); });
+    if (m.fehler) return k;
+    // SAVE AS and DELETE sit on the card (siblings of its button: a button inside a button is invalid); the open module has no DELETE
+    const huelle = el('div', 'w-karte-huelle');
+    const knoepfe = el('div', 'w-karte-knoepfe');
+    const kopie = el('button', 'w-karte-knopf', MODUL_TEXT.kopie); kopie.type = 'button'; kopie.setAttribute('data-w', 'modul-kopie');
+    kopie.setAttribute('title', MODUL_TEXT.kopieTitel);
+    kopie.addEventListener('click', () => frageKopie(m, knoepfe));
+    knoepfe.append(kopie);
+    if (!m.offen) {
+      const weg = el('button', 'w-karte-knopf', MODUL_TEXT.weg); weg.type = 'button'; weg.setAttribute('data-w', 'modul-weg');
+      weg.setAttribute('title', MODUL_TEXT.wegTitel);
+      weg.addEventListener('click', () => loescheModul(m));
+      knoepfe.append(weg);
+    }
+    huelle.append(k, knoepfe);
+    return huelle;
+  }
   function zeichneKarten(e) {
-    const karten = e.module.map((m) => {
-      const k = karteBau(m.fehler ? 'kaputt' : m.offen ? 'offen' : 'modul', m.name, m.fehler ? 'unreadable' : datum(m.geaendert), m.offen ? 'open' : '');
-      if (m.offen || m.fehler) k.disabled = true;
-      if (m.fehler) k.setAttribute('title', m.text);
-      // the click re-checks the live state: a card drawn before a change must not reopen the open module
-      k.addEventListener('click', () => { if (!m.fehler && m.slug !== st.slug) aktion(() => ctx.oeffneModul(m.slug)); });
-      if (m.fehler) return k;
-      // SAVE AS and DELETE sit on the card (siblings of its button: a button inside a button is invalid); the open module has no DELETE
-      const huelle = el('div', 'w-karte-huelle');
-      const knoepfe = el('div', 'w-karte-knoepfe');
-      const kopie = el('button', 'w-karte-knopf', MODUL_TEXT.kopie); kopie.type = 'button'; kopie.setAttribute('data-w', 'modul-kopie');
-      kopie.setAttribute('title', MODUL_TEXT.kopieTitel);
-      kopie.addEventListener('click', () => frageKopie(m, knoepfe));
-      knoepfe.append(kopie);
-      if (!m.offen) {
-        const weg = el('button', 'w-karte-knopf', MODUL_TEXT.weg); weg.type = 'button'; weg.setAttribute('data-w', 'modul-weg');
-        weg.setAttribute('title', MODUL_TEXT.wegTitel);
-        weg.addEventListener('click', () => loescheModul(m));
-        knoepfe.append(weg);
-      }
-      huelle.append(k, knoepfe);
-      return huelle;
-    });
+    const karten = e.module.map(karteModul);
     const vorlagen = e.vorlagen.map((v) => {
       const k = karteBau('vorlage', v.name, v.text ?? '', 'new from template');
       k.setAttribute('title', 'Makes a new module from this template');
@@ -198,6 +205,7 @@ export function bindeRegal(ctx) {
         nochmal = false;
         const [l, v] = await Promise.all([ctx.holeGet('/proj/liste'), ctx.holeGet('/proj/werkbank/vorlagen')]);
         zeichne(l.status === 200 ? l.j : null, v.status === 200 ? v.j : null);
+        ctx.suche?.neu();   // a card of the search view may show the open mark of a module
       } while (nochmal);
     })().finally(() => { unterwegs = null; });
     return unterwegs;
@@ -221,17 +229,19 @@ export function bindeRegal(ctx) {
 
   // --- tab LOOPS (sampler A1 task 5): library loops and the audio of modules, each with SLICE TO TRACK ---
   let quellen = null, quellenFehler = null, quellenNr = 0, schneidet = false;
+  const hosts = () => [kartenHost, sucheHost];   // the cards of the search view take the same state
+  const alle = (sel) => hosts().flatMap((h) => [...h.querySelectorAll(sel)]);
   const zeigeKnoepfe = () => {
-    for (const b of kartenHost.querySelectorAll('[data-w="slice-spur"]')) {
+    for (const b of alle('[data-w="slice-spur"]')) {
       const stumm = b.hasAttribute('data-stumm');
       b.disabled = !st.projekt || schneidet || stumm;
       b.setAttribute('title', stumm ? STUMM : st.projekt ? 'Cut this loop into slices and put it on a new track' : KEIN_MODUL);
     }
-    for (const b of kartenHost.querySelectorAll('[data-w="schnitt-spur"]')) {
+    for (const b of alle('[data-w="schnitt-spur"]')) {
       b.disabled = !st.projekt || schneidet;
       b.setAttribute('title', st.projekt ? 'Put this cut on a new track in its original order' : KEIN_MODUL);
     }
-    for (const b of kartenHost.querySelectorAll('[data-w="schnitt-weg"]')) b.disabled = schneidet;
+    for (const b of alle('[data-w="schnitt-weg"]')) b.disabled = schneidet;
   };
   function zeichneLoops() {
     if (!quellen) { kartenHost.replaceChildren(el('span', 'w-karten-leer', quellenFehler ?? 'Reading the loops…')); return; }
@@ -294,22 +304,24 @@ export function bindeRegal(ctx) {
 
   // --- tab CUTS: the stored cuts, each with TO TRACK and DELETE (a cut still played somewhere is refused by the server, with the places) ---
   let schnitte = null, schnitteFehler = null, schnitteNr = 0;
+  // one card of a stored cut (`s` as GET /sampler/liste gives it); the search view draws the same card
+  function karteSchnitt(s) {
+    const k = el('div', 'w-karte schnitt');
+    k.append(el('b', '', s.name), el('span', '', `${s.scheiben} slices · ${s.beats} beats`));
+    k.setAttribute('title', s.id);
+    const zeile = el('div', 'w-schnitt-zeile');
+    const spur = el('button', 'w-schnitt-knopf', 'TO TRACK'); spur.type = 'button'; spur.setAttribute('data-w', 'schnitt-spur');
+    spur.addEventListener('click', () => schneide(null, { id: s.id }));
+    const weg = el('button', 'w-schnitt-knopf', 'DELETE'); weg.type = 'button'; weg.setAttribute('data-w', 'schnitt-weg');
+    weg.setAttribute('title', 'Delete this cut with its audio and its tones');
+    weg.addEventListener('click', () => loesche(s));
+    zeile.append(spur, weg);
+    k.append(zeile);
+    return k;
+  }
   function zeichneSchnitte() {
     if (!schnitte) { kartenHost.replaceChildren(el('span', 'w-karten-leer', schnitteFehler ?? 'Reading the cuts…')); return; }
-    const karten = schnitte.map((s) => {
-      const k = el('div', 'w-karte schnitt');
-      k.append(el('b', '', s.name), el('span', '', `${s.scheiben} slices · ${s.beats} beats`));
-      k.setAttribute('title', s.id);
-      const zeile = el('div', 'w-schnitt-zeile');
-      const spur = el('button', 'w-schnitt-knopf', 'TO TRACK'); spur.type = 'button'; spur.setAttribute('data-w', 'schnitt-spur');
-      spur.addEventListener('click', () => schneide(null, { id: s.id }));
-      const weg = el('button', 'w-schnitt-knopf', 'DELETE'); weg.type = 'button'; weg.setAttribute('data-w', 'schnitt-weg');
-      weg.setAttribute('title', 'Delete this cut with its audio and its tones');
-      weg.addEventListener('click', () => loesche(s));
-      zeile.append(spur, weg);
-      k.append(zeile);
-      return k;
-    });
+    const karten = schnitte.map(karteSchnitt);
     kartenHost.replaceChildren(...(karten.length ? karten : [el('span', 'w-karten-leer', 'No cuts yet: SLICE TO TRACK in LOOPS makes one')]));
     zeigeKnoepfe();
   }
@@ -331,11 +343,33 @@ export function bindeRegal(ctx) {
     } finally {
       schneidet = false; zeigeKnoepfe();
       if (tab === 'cuts') ladeSchnitte();
+      ctx.suche?.neu();
     }
   }
   // tab SAMPLES lives in regal_samples.js; it draws into the card host while its tab is shown
   const samples = bindeSamplesReiter(ctx, { host: kartenHost, setzeHinweis: (t) => { hinweis.textContent = t ?? SAMPLES_TEXT.hint; }, refusalText });
   const instrumente = bindeInstrumente(ctx, { host: kartenHost, setzeHinweis: (t) => { hinweis.textContent = t ?? INSTRUMENTE_TEXT.hint; }, refusalText });
+  // the search over everything: the rows are the ones of the tabs, "show all" of SAMPLES moves into the tab's own search field
+  const sucheRow = (t) => samples.katalogZeile(t, sucheHost);
+  const suche = bindeSuche(ctx, {
+    kopf: sucheKopf, host: sucheHost, tabHost: kartenHost,
+    bauer: {
+      samples: sucheRow, loops: sucheRow, instrumente: (t) => instrumente.zeileFuer(t, sucheHost), schnitte: karteSchnitt,
+      module: (t) => { const m = regalEintraege([t], [], st.slug).module[0]; return m ? karteModul(m) : null; },
+    },
+    zeigeAlle: (art, q, passt) => {
+      if (art !== 'samples' || passt) return false;   // the other tabs have no search field of their own: the group opens in place (so does SAMPLES with FITS on: the tab search carries only text)
+      samples.sucheAlle(q);
+      if (tab === 'samples') samples.zeige(); else setzeTab('samples');
+      return true;
+    },
+    eingeblendet: () => !regal.hidden, imRegal: (z) => regal.contains(z),
+    knoepfe: () => { zeigeKnoepfe(); samples.katalogKnoepfe(); instrumente.zeigeKnoepfe(); },
+    stopp: () => samples.katalogStopp(),
+  });
+  ctx.beiInstrumentGeaendert = () => suche.neu();
+  ctx.suche = suche;
+  document.addEventListener('keydown', (e) => { suche.taste(e); });
   if (tab === 'samples') samples.zeige();
   if (tab === 'instrumente') instrumente.zeige();
   function setzeTab(neu) {

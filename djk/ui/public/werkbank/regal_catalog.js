@@ -94,6 +94,10 @@ export function bindeKatalog(ctx, { host, setzeHinweis = () => {}, refusalText =
   liste.setAttribute('tabindex', '0'); liste.setAttribute('role', 'listbox'); liste.setAttribute('aria-label', 'Catalog samples');
   wurzelEl.append(kopf, platten, liste);
 
+  // The search view (regal_suche.js) draws catalogue rows of this binder into its own host: preview marks and the TO TRACK state follow them too.
+  const fremde = new Set();
+  const alleZeilen = (sel) => [liste, ...fremde].flatMap((h) => [...h.querySelectorAll(sel)]);
+
   // ---- preview ----
   function stoppe() {
     const s = spielt; spielt = null;
@@ -101,7 +105,7 @@ export function bindeKatalog(ctx, { host, setzeHinweis = () => {}, refusalText =
     markiereSpielt();
   }
   function markiereSpielt() {
-    for (const z of liste.querySelectorAll('[data-w="katalog-datei"]')) {
+    for (const z of alleZeilen('[data-w="katalog-datei"]')) {
       const an = spielt !== null && z.getAttribute('data-sha') === spielt.sha;
       z.classList.toggle('spielt', an);
       const m = z.querySelector('.w-kat-marke');
@@ -128,7 +132,8 @@ export function bindeKatalog(ctx, { host, setzeHinweis = () => {}, refusalText =
 
   // ---- TO TRACK ----
   const zeigeKnoepfe = () => {
-    for (const b of liste.querySelectorAll('[data-w="katalog-spur"]')) {
+    markiereSpielt();   // rows drawn anew (the search view) take the mark of a running preview too
+    for (const b of alleZeilen('[data-w="katalog-spur"]')) {
       b.disabled = !st.projekt || macht;
       b.setAttribute('title', st.projekt ? KATALOG_TEXT.spurTitel : KATALOG_TEXT.keinModul);
     }
@@ -159,37 +164,40 @@ export function bindeKatalog(ctx, { host, setzeHinweis = () => {}, refusalText =
     rows[i]?.scrollIntoView?.({ block: 'nearest' });
     if (spiel && zeilen[i]) { if (zeilen[i].pfad_da === true && spielt?.sha !== zeilen[i].sha) spiele(zeilen[i]); else if (zeilen[i].pfad_da !== true) stoppe(); }
   }
+  // one row of a catalogue sample; `i` is its place in the list of the tab (the cursor), absent for a row of the search view
+  function baueZeile(z, i) {
+    const da = z.pfad_da === true;
+    const r = el('div', `w-kat-zeile${da ? '' : ' fehlt'}`);
+    r.setAttribute('role', 'option'); markiere(r, 'katalog-datei'); r.setAttribute('data-sha', z.sha); r.setAttribute('title', z.name);
+    r.treffer = z;   // the whole hit stays with the row
+    const nutz = nutzlast(z);
+    if (nutz) {   // only a reachable, unprotected sample with a length is dragged; its payload is the one PRODUCTION uses
+      r.setAttribute('draggable', 'true');
+      r.addEventListener('dragstart', (ev) => {
+        if (!ev.dataTransfer) return;
+        ev.dataTransfer.setData(ZIEH_TYP, JSON.stringify(nutz)); ev.dataTransfer.effectAllowed = 'copy';
+      });
+      r.addEventListener('dragend', () => { for (const m of document.querySelectorAll('.w-drop')) m.classList.remove('w-drop'); });
+    }
+    const ord = ordnerKurz(z.ordner, quellenListe);
+    const ordEl = el('span', 'w-kat-ordner', ord.text); if (ord.title) ordEl.setAttribute('title', ord.title);
+    r.append(el('span', 'w-kat-marke', '▶'), sternKnopf(z, ctx.holeJson, ctx.melde), el('span', 'w-kat-name', z.name), ordEl, el('span', 'w-kat-instr', z.instrument ?? ''),
+      el('span', 'w-kat-pack', z.pack ?? ''), el('span', 'w-kat-dauer', dauerText(z.dauer_s)));
+    if (da) {
+      const b = el('button', 'w-kat-spur', 'TO TRACK'); b.type = 'button'; markiere(b, 'katalog-spur');
+      b.addEventListener('click', (ev) => { ev.stopPropagation?.(); zuSpur(z); });
+      r.append(b);
+    }
+    r.addEventListener('click', (ev) => {
+      if (ev.target?.closest?.('button')) return;
+      if (i !== undefined) setzeCursor(i, false);
+      spiele(z);
+    });
+    return r;
+  }
   function zeichneListe(meldungText) {
     if (meldungText !== undefined) { liste.replaceChildren(el('div', 'w-kat-leer', meldungText)); return; }
-    const rows = zeilen.map((z, i) => {
-      const da = z.pfad_da === true;
-      const r = el('div', `w-kat-zeile${da ? '' : ' fehlt'}`);
-      r.setAttribute('role', 'option'); markiere(r, 'katalog-datei'); r.setAttribute('data-sha', z.sha); r.setAttribute('title', z.name);
-      r.treffer = z;   // the whole hit stays with the row
-      const nutz = nutzlast(z);
-      if (nutz) {   // only a reachable, unprotected sample with a length is dragged; its payload is the one PRODUCTION uses
-        r.setAttribute('draggable', 'true');
-        r.addEventListener('dragstart', (ev) => {
-          if (!ev.dataTransfer) return;
-          ev.dataTransfer.setData(ZIEH_TYP, JSON.stringify(nutz)); ev.dataTransfer.effectAllowed = 'copy';
-        });
-        r.addEventListener('dragend', () => { for (const m of document.querySelectorAll('.w-drop')) m.classList.remove('w-drop'); });
-      }
-      const ord = ordnerKurz(z.ordner, quellenListe);
-      const ordEl = el('span', 'w-kat-ordner', ord.text); if (ord.title) ordEl.setAttribute('title', ord.title);
-      r.append(el('span', 'w-kat-marke', '▶'), sternKnopf(z, ctx.holeJson, ctx.melde), el('span', 'w-kat-name', z.name), ordEl, el('span', 'w-kat-instr', z.instrument ?? ''),
-        el('span', 'w-kat-pack', z.pack ?? ''), el('span', 'w-kat-dauer', dauerText(z.dauer_s)));
-      if (da) {
-        const b = el('button', 'w-kat-spur', 'TO TRACK'); b.type = 'button'; markiere(b, 'katalog-spur');
-        b.addEventListener('click', (ev) => { ev.stopPropagation?.(); zuSpur(z); });
-        r.append(b);
-      }
-      r.addEventListener('click', (ev) => {
-        if (ev.target?.closest?.('button')) return;
-        setzeCursor(i, false); spiele(z);
-      });
-      return r;
-    });
+    const rows = zeilen.map((z, i) => baueZeile(z, i));
     if (zeilen.length < gesamt) {
       const m = el('button', 'w-kat-mehr', KATALOG_TEXT.mehr); m.type = 'button'; markiere(m, 'katalog-mehr');
       m.addEventListener('click', () => { ladeMehr(); });
@@ -265,6 +273,12 @@ export function bindeKatalog(ctx, { host, setzeHinweis = () => {}, refusalText =
 
   zeichneKnoepfe();
   return {
+    // the search view: a row of the catalogue sample `z` for `suchHost`, with the preview and TO TRACK of this binder; stoppe ends a running preview
+    zeileFuer(z, suchHost) { fremde.add(suchHost); return baueZeile(z); },
+    zeigeKnoepfe, stoppe,
+    // the query of the tab's own search field ("show all" of the search view); the tab loads it when it is shown
+    // (the instrument button goes back to ALL: the tab then shows the same hits as the search did)
+    setzeText(t) { feld.value = t; text = t; instrument = null; schreibeKatalogStand(ctx, { instrument }); zeichneKnoepfe(); },
     zeige() {
       aktiv = true; hinweisNormal(); host.replaceChildren(wurzelEl);
       if (st.sichtbar) starte(); else zeichneListe(KATALOG_TEXT.liest);

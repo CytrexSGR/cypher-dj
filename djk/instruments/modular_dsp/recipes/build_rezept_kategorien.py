@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Add the 46 recipe graphs to kategorien.json (category and a text of at most 90 characters per instrument graph).
+"""Add the 46 recipe graphs to kategorien.json (category, synthesis type `prinzip` and a text of at most 90 characters per instrument graph).
 Usage: build_rezept_kategorien.py [kategorien.json]
 
-The category comes from the name prefix of the graph file, the text from the manifest sentence (cut at a clause end when it is
+The category comes from the name prefix of the graph file, the prinzip from the node types of the graph (see prinzip()), the text from the manifest sentence (cut at a clause end when it is
 longer than 90 characters). Existing entries keep their place and content; the recipe entries are replaced in place or appended."""
 import json
 import os
@@ -19,6 +19,24 @@ KATEGORIE = {'bass': 'bass', 'lead': 'lead', 'pad': 'pad', 'keys': 'keys',
              'drums': 'drums',
              'percussion': 'drums',  # tom, conga, shaker, rim, metallic: resonator-conga and metall-hihat are drums
              'fx': 'textur'}         # riser, downlifter, impact, noise, texture: labor and granular-textur are textur
+
+
+# Synthesis type by the node types of the graph, first match wins (plan 2026-11-18-instrument-picker-by-type). A recipe has no fm, granular or
+# sampler node today, so in practice: drums category, wavetable node, else analog; the other rules keep the table total for a future recipe.
+QUELLEN_PHYSIK = ('saite', 'resonator', 'kamm')
+# Decided by hand where the node types miss the sound: these two build FM from sine operators (no fm node), and a person looks for them under FM.
+PRINZIP_FEST = {'bass-fm': 'fm', 'lead-fm': 'fm'}
+
+
+def prinzip(kategorie, arten):
+    if kategorie == 'drums':
+        return 'drums'
+    for art, p in (('fm', 'fm'), ('granular', 'granular'), ('sampler', 'sampler')):
+        if art in arten:
+            return p
+    if any(a in arten for a in QUELLEN_PHYSIK):
+        return 'physik'
+    return 'wavetable' if 'wavetable' in arten else 'analog'
 
 
 SCHNITT = re.compile(r"(?<!\d)[,;:](?!\d)| (?=(?:that|whose|which|with|into|under|through|over|and|at|by|for|then|plus) )")
@@ -38,7 +56,13 @@ def kurztext(text):
 
 def eintraege():
     manifest = json.load(open(os.path.join(MOD, 'demos', 'recipes', 'MANIFEST.json')))['patches']
-    return {p['datei'][:-5]: {'kategorie': KATEGORIE[p['datei'].split('-', 1)[0]], 'text': kurztext(p['beschreibung']['text'])} for p in manifest}
+    aus = {}
+    for p in manifest:
+        kategorie = KATEGORIE[p['datei'].split('-', 1)[0]]
+        arten = {k['art'] for k in json.load(open(os.path.join(MOD, 'demos', 'recipes', p['datei'])))['knoten']}
+        name = p['datei'][:-5]
+        aus[name] = {'kategorie': kategorie, 'prinzip': PRINZIP_FEST.get(name) or prinzip(kategorie, arten), 'text': kurztext(p['beschreibung']['text'])}
+    return aus
 
 
 if __name__ == '__main__':

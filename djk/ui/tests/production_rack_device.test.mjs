@@ -206,7 +206,13 @@ function knoten(tag) {
     removeEventListener(n, f) { k.ereignisse[n] = (k.ereignisse[n] ?? []).filter((x) => x !== f); },
     append(...c) { k.children.push(...c); }, replaceChildren(...c) { k.children = c; },
     feuer(n, e = {}) { for (const f of [...(k.ereignisse[n] ?? [])]) f({ preventDefault() {}, stopPropagation() {}, pointerId: 1, ...e }); },
-    focus() { globalThis.document.activeElement = k; k.feuer('focus'); }, blur() { if (globalThis.document.activeElement === k) globalThis.document.activeElement = null; k.feuer('blur'); },
+    focus() { globalThis.document.activeElement = k; k.beimFokus = k.value; k.feuer('focus'); },
+    blur() {   // like a browser: a text input whose value changed since focus commits it (change) when the focus leaves, also on a programmatic blur()
+      if (globalThis.document.activeElement !== k) return;
+      globalThis.document.activeElement = null;
+      if (k.tag === 'input' && k.value !== k.beimFokus) k.feuer('change');
+      k.feuer('blur');
+    },
     getBoundingClientRect: () => ({ left: 0, width: 127, x: 0, y: 0 }) };
   return k;
 }
@@ -228,11 +234,30 @@ const fertig = () => new Promise((r) => setTimeout(r, 5));
 
 test('panel: Esc in a number field shows the server value, not an empty field', async () => {
   try {
-    const { wurzel } = panel(rack(glied('g1')), () => Promise.resolve());
+    const { wurzel, gesendet } = panel(rack(glied('g1')), () => Promise.resolve());
     const f = finde(wurzel, 'p-irack-ketten-zahl');
     f.focus(); f.value = '55';
     f.feuer('keydown', { key: 'Escape' });
     assert.equal(finde(wurzel, 'p-irack-ketten-zahl').value, '0');
+    assert.deepEqual(gesendet, [], 'Esc discards the typed value: nothing is sent');
+  } finally { delete globalThis.document; }
+});
+
+test('panel: Esc in the chain zone and the member gain fields sends nothing either, Enter still sends', async () => {
+  try {
+    const { wurzel, gesendet } = panel(rack(glied('g1')), () => Promise.resolve());
+    for (const klasse of ['p-irack-kette-lo', 'p-irack-kette-hi', 'p-irack-gainzahl']) {
+      const f = finde(wurzel, klasse);
+      f.focus(); f.value = '12';
+      f.feuer('keydown', { key: 'Escape' });
+    }
+    await fertig();
+    assert.deepEqual(gesendet, [], 'no field sent anything on Esc');
+    const f = finde(wurzel, 'p-irack-ketten-zahl');   // negative control: Enter commits
+    f.focus(); f.value = '55';
+    f.feuer('keydown', { key: 'Enter' });
+    assert.deepEqual(gesendet.map((b) => b.kette), [55]);
+    await fertig();
   } finally { delete globalThis.document; }
 });
 

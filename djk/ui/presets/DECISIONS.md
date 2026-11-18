@@ -390,6 +390,21 @@ Each decision below is DECIDED (Cypher default, Andreas may override); source: `
   for a track with a freeze whose values change carries `hinweise: ['freeze_geht']` (only reachable on host tracks today,
   see D26). `POST /presets/von_ziel` saves the values of a track or stage through the same save path and source rule
   (D24); `GET /presets/katalog` lists the devices of the PRODUCTION browser.
+- **D28 A sound loads its instrument (plan 2026-11-18-instrument-picker-by-type, task 3; answers the gap left by D25: a Baukasten
+  preset of another graph was only refused).** `POST /presets/anwenden {id, ziel, graph_laden?}`: only the boolean `true` is a yes,
+  everything else keeps the D25 behaviour. The caller asks first (page: one `confirm`, "<preset> is a sound of <graph>. Load <graph> on
+  <target> and apply it?"; hand: the argument), so the refusals `graph_anders` and `kein_graph` stay the default and now name the preset's
+  `graph` in the answer. With the yes: a track with a `bk` device of another graph gets one `spur_aendern` with the preset's graph and only its
+  knobs (the old knob values mean other things in the other graph and are not carried over; hint `graph_gewechselt`; one undo step); a channel
+  gets `weg: 'regler'` plus `graph: {kanal, name}`, the caller sends `POST /graph` first and the knobs only after the core accepted it
+  (quittung 2, 3, 5), the 64 requests start from the defaults (`vorgabe`) of the PRESET's graph. A stage never swaps its graph. Kit and rb338
+  tracks stay `geraet_passt_nicht`. `graph_fehlt` (404, "the instrument of this preset is not installed") when the graph is unknown or an effect
+  graph; the code also exists on the save path (400, the preset names no graph), the texts differ and each answer carries its own.
+  The plan repeats ONE rule the model does not have: a graph with latency is refused `graph_latenz` (409) on a SEQ pattern track, as the SEQ
+  instrument picker (`geraetWahl`) leaves such graphs out; the route gives the plan `graphGibt` and `graphLatenz` from the graph list. Everything
+  else `spur_aendern` already refuses (automation lanes that do not fit a device, the frozen-track rules, a graph name the folder does not hold)
+  is left to the model. Tests: `tests/presets_apply_graph.test.mjs`, the D28 cases in `tests/presets_page.test.mjs`,
+  `tests/production_browser.test.mjs` and `djk/hand/tests/hand_presets.test.mjs`.
 - **D27 A rename by Andreas takes the Cypher mark (2026-11-05, review finding S1 of 1.16; Andreas 2026-11-05: ja so bauen).**
   When Andreas renames a preset or a collection that carries `autor: "cypher"`, the renamed item becomes his: the mark is
   removed, so Cypher can no longer overwrite, remove items from, rename or delete it (`nur_andreas_preset`,

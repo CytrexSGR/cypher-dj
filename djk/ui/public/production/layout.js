@@ -77,7 +77,20 @@ export function gruppenLayout(projekt) {
 export function zeilenFuer(projekt, offen = [], takeZeilen = new Map(), offeneStraenge = new Set()) {
   const n = projekt?.spuren?.length ?? 0, l = gruppenLayout(projekt);
   const gruppen = (projekt?.gruppen ?? []).flatMap((g, i) => (offeneStraenge.has(g.id) ? [i] : []));
-  return zeilenTabelle(n, offen, takeZeilen, l.folge.some((f) => f.art === 'gruppe') ? l : null, new Set(gruppen));
+  const z = zeilenTabelle(n, offen, takeZeilen, l.folge.some((f) => f.art === 'gruppe') ? l : null, new Set(gruppen));
+  return strangZeilen(z, projekt, offeneStraenge);
+}
+// Automation rows of returns and master (slice 1): after tracks and groups one head row per return ({art:'return', id}) and the master
+// ({art:'master', id:'master'}), each GRUPPEN_HOEHE; an open strip (its id in offeneStraenge) gets ONE lane row {art:'lane', strang, y, h} directly under
+// its head (like a group: the row shows one lane at a time). A project without returns and master gets the table unchanged.
+function strangZeilen(z, projekt, offeneStraenge) {
+  const ids = [...(projekt?.returns ?? []).map((r) => ['return', r.id]), ...(projekt?.master ? [['master', 'master']] : [])];
+  let y = zeilenHoehe(z);
+  for (const [art, id] of ids) {
+    z.push({ art, id, y, h: GRUPPEN_HOEHE }); y += GRUPPEN_HOEHE;
+    if (offeneStraenge.has(id)) { z.push({ art: 'lane', strang: id, y, h: LANE_HOEHE }); y += LANE_HOEHE; }
+  }
+  return z;
 }
 export const zeilenHoehe = (tabelle) => (tabelle.length ? tabelle[tabelle.length - 1].y + tabelle[tabelle.length - 1].h : 0);
 // The row at height y, or null (above the first row, below the last one, or y is not a number)

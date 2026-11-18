@@ -626,3 +626,24 @@ test('hoeren with ton plays one note on any instrument track for 400 ms; scheibe
   assert.equal((await ruf(z.url, 'POST', '/sampler/hoeren', { spur_id: 'x', ton: 38 })).code, 404);
   assert.equal(noten(z).length, n, 'a refusal sends nothing');
 });
+
+test('hoeren: the length follows the PITCH of the track as well; a core that does not answer still gets its off', async (t) => {
+  const z = await aufbau(t);
+  const spur = await anSpur(z, { art: 'loop', ref: 'l4' }, 128);        // SPEED 1, PITCH at the middle: 117 ms
+  // the kern stand-in does not know the knob k3: the open project holds the value (+12 st = twice as fast)
+  z.o.proj.zugang.offen().projekt.spuren.find((s) => s.id === spur.id).geraet.parameter.k3 = 1;
+  const h = await ruf(z.url, 'POST', '/sampler/hoeren', { spur_id: spur.id, scheibe: 2 });
+  assert.deepEqual([h.code, h.j.dauer_ms], [200, Math.round(5625 / 48 / 2)]);
+  assert.ok(await bis(() => noten(z).length === 2));
+  // no answer of the core: the note may sound, so its off is still armed, and the request says so
+  const n = noten(z).length;
+  const echt = z.o.warteQuittung;
+  z.o.warteQuittung = async () => null;
+  try {
+    const k = await ruf(z.url, 'POST', '/sampler/hoeren', { spur_id: spur.id, scheibe: 3 });
+    assert.deepEqual([k.code, k.j.fehler], [409, 'kein_kern']);
+  } finally { z.o.warteQuittung = echt; }
+  assert.deepEqual(noten(z).slice(n), [[spur.nr, 3, 100]]);
+  assert.ok(await bis(() => noten(z).length === n + 2), 'the off follows');
+  assert.deepEqual(noten(z)[n + 1], [spur.nr, 3, 0]);
+});

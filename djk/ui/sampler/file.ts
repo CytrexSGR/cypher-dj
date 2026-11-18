@@ -18,6 +18,9 @@ export const STILLE_SCHWELLE = 1e-4;
 const SR = 48000;
 const NAME_MAX = 60;
 const ENDUNG = /\.(wav|aif|aiff|flac|ogg)$/i;
+// compressed files: not listed in the sample roots, but a catalog row may name one and the preview already decodes it; ffmpeg decodes it for a cut too
+// (dekodiereDatei), and the cut keeps only the decoded float audio in the sampler folder, never a file next to the source
+const KOMPRIMIERT = /\.(mp3|m4a|aac|opus)$/i;
 const SORT = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
 const sortiere = <T>(l: T[], f: (x: T) => string): T[] => [...l].sort((a, b) => SORT.compare(f(a), f(b)) || (f(a) < f(b) ? -1 : f(a) > f(b) ? 1 : 0));
 
@@ -126,6 +129,9 @@ export function listeOrdner(wurzel: string, ordner: string, o: Ordner = {}): { o
   const ordnerZahl: Record<string, number> = {};
   const gezeigt: string[] = [];
   for (const name of sortiere(ordnerListe, (x) => x)) {
+    // the count is a walk of the whole root kept for ten minutes: a folder it does not know or knows as empty is counted again here, so a pack copied in
+    // meanwhile shows at once and a symlinked folder (which the walk does not enter) shows with its count (Audit U14)
+    if ((zahl.gesamt.get(relVon(rel, name)) ?? 0) === 0) zaehleFrisch(zahl, path.join(voll, name), rel, name);
     let kette = name, n = zahl.gesamt.get(relVon(rel, kette)) ?? 0;
     if (n === 0) continue;
     for (;;) {
@@ -149,23 +155,37 @@ export function zaehleOrdner(wurzel: string, o: Ordner = {}): Zaehlung {
   const alt = zaehlungen.get(wur);
   if (alt && Date.now() - alt.zeit < ZAEHL_MS) return alt;
   const z: Zaehlung = { zeit: Date.now(), gesamt: new Map(), direkt: new Map(), kinder: new Map() };
-  const geh = (voll: string, r: string): number => {
-    let eintraege: fs.Dirent[];
-    try { eintraege = fs.readdirSync(voll, { withFileTypes: true }); } catch { return 0; }
-    let direkt = 0, gesamt = 0;
-    const kinder: string[] = [];
-    for (const e of eintraege) {
-      if (versteckt(e.name)) continue;
-      if (e.isDirectory()) { const n = geh(path.join(voll, e.name), relVon(r, e.name)); if (n > 0) { kinder.push(e.name); gesamt += n; } }
-      else if ((e.isFile() || e.isSymbolicLink()) && ENDUNG.test(e.name) && !istGesperrt(path.join(voll, e.name))) direkt++;
-    }
-    gesamt += direkt;
-    z.gesamt.set(r, gesamt); z.direkt.set(r, direkt); z.kinder.set(r, kinder);
-    return gesamt;
-  };
-  geh(wur, '');
+  zaehleTeil(z, wur, '');
   zaehlungen.set(wur, z);
   return z;
+}
+// counts the audio files below `voll` (the folder `r` of the root) into `z`; a folder that holds none is entered with 0
+function zaehleTeil(z: Zaehlung, voll: string, r: string): number {
+  let eintraege: fs.Dirent[];
+  try { eintraege = fs.readdirSync(voll, { withFileTypes: true }); } catch { return 0; }
+  let direkt = 0, gesamt = 0;
+  const kinder: string[] = [];
+  for (const e of eintraege) {
+    if (versteckt(e.name)) continue;
+    if (e.isDirectory()) { const n = zaehleTeil(z, path.join(voll, e.name), relVon(r, e.name)); if (n > 0) { kinder.push(e.name); gesamt += n; } }
+    else if ((e.isFile() || e.isSymbolicLink()) && ENDUNG.test(e.name) && !istGesperrt(path.join(voll, e.name))) direkt++;
+  }
+  gesamt += direkt;
+  z.gesamt.set(r, gesamt); z.direkt.set(r, direkt); z.kinder.set(r, kinder);
+  return gesamt;
+}
+// Counts one sub folder `name` of the folder `rel` again (readdir follows a symlink) and carries the difference to the parent's child list and to the counts of
+// every folder above it.
+function zaehleFrisch(z: Zaehlung, voll: string, rel: string, name: string): void {
+  const k = relVon(rel, name), alt = z.gesamt.get(k) ?? 0;
+  const n = zaehleTeil(z, voll, k);
+  if (n === alt) return;
+  const kinder = z.kinder.get(rel) ?? [];
+  if (n > 0 && !kinder.includes(name)) z.kinder.set(rel, [...kinder, name]);
+  for (let r = rel; ; r = r.includes('/') ? r.slice(0, r.lastIndexOf('/')) : '') {
+    if (z.gesamt.has(r)) z.gesamt.set(r, (z.gesamt.get(r) ?? 0) + n - alt);
+    if (r === '') break;
+  }
 }
 
 /** Recursive search below `ordner`: every word of `suche` (case-insensitive) must occur in the path of a file from the root; at most 300 hits and `ms` milliseconds of walking
@@ -301,7 +321,9 @@ export function ladeDateiPfad(pfad: string, o: Ordner = {}): QuellAudio {
   let datei = false;
   try { datei = fs.statSync(pfad).isFile(); } catch { /* gone between lookup and load */ }
   if (!datei) throw nicht(`${path.basename(pfad)} is not a file`);
-  if (!ENDUNG.test(pfad)) throw new SchnittFehler(422, 'format_falsch', `${path.basename(pfad)} is not one of the audio file types (wav, aif, aiff, flac, ogg)`);
+  if (!ENDUNG.test(pfad) && !KOMPRIMIERT.test(pfad)) {
+    throw new SchnittFehler(422, 'format_falsch', `${path.basename(pfad)} is not one of the audio file types (wav, aif, aiff, flac, ogg, mp3, m4a, aac, opus)`);
+  }
   const max = grenze(o), deckel = max + 2 * SR;
   const roh = dekodiereDatei(pfad, deckel / SR);
   const start = ersterTon(roh);
@@ -317,7 +339,7 @@ export function ladeDateiPfad(pfad: string, o: Ordner = {}): QuellAudio {
 
 /** The file name without its extension, within the name limit of a cut. */
 export function dateiName(pfad: string): string {
-  const n = path.basename(pfad).replace(ENDUNG, '').trim();
+  const n = path.basename(pfad).replace(ENDUNG, '').replace(KOMPRIMIERT, '').trim();
   return (n === '' ? 'sample' : n).slice(0, NAME_MAX).trim();
 }
 

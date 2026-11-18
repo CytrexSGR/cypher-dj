@@ -577,7 +577,7 @@ test('SAVE REF is off without something to store and shows an error text', async
   } finally { g.ende(); }
   $w('analyse-ref-speichern').dispatch('click');
   $w('analyse-ref-ok').dispatch('click'); await ruhe();
-  assert.ok($w('analyse-stand').textContent.includes(antwortText({ status: 409, j: { fehler: 'name_belegt', text: 'Name taken' } })), $w('analyse-stand').textContent);
+  assert.ok($w('analyse-stand').textContent.includes('Name taken'), $w('analyse-stand').textContent);
   assert.equal($w('analyse-ref-reihe').hidden, false, 'the row stays after an error');
   $w('analyse-ref-abbruch').dispatch('click');
   assert.equal($w('analyse-ref-reihe').hidden, true);
@@ -621,7 +621,18 @@ test('a failed measurement shows the detail after the text', async () => {
   attrappe.antworten['POST /proj/analyse'] = { code: 422, j: r.j };
   $w('analyse-neu').dispatch('click'); await ruhe();
   const t = $w('analyse-stand').textContent;
-  assert.ok(t.includes(antwortText(r)) && t.includes('file is too short'), t);
-  assert.ok(t.indexOf('file is too short') > t.indexOf(antwortText(r)));
+  assert.ok(t.includes('Cannot measure') && t.includes('file is too short'), t);
+  assert.ok(t.indexOf('file is too short') > t.indexOf('Cannot measure'));
+  zu();
+});
+
+test('a failed measurement shows the server text and a shortened detail', async () => {
+  aufbau(); w.zeige(); await ruhe(); await oeffne();
+  const lang = `ffmpeg said ${'x'.repeat(400)}`;
+  attrappe.antworten['POST /proj/analyse'] = { code: 500, j: { fehler: 'render_fehler', text: 'the analysis failed', detail: lang } };
+  $w('analyse-neu').dispatch('click'); await ruhe();
+  const t = $w('analyse-stand').textContent;
+  assert.ok(t.startsWith('the analysis failed \u00b7 ffmpeg said'), t);
+  assert.ok(t.length < 200 && t.endsWith('\u2026'), String(t.length));
   zu();
 });

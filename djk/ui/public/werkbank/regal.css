@@ -157,3 +157,25 @@
 #werkbank .w-quellen-text { margin: 0; min-height: 1.3em; font-size: 11px; color: var(--dim); }
 #werkbank .w-quellen-text.fehler { color: #e5484d; }
 @media (max-width: 520px) { #werkbank .w-quellen-zustand { display: none; } }
+
+/* One search over everything (media browser B4): the field above the tabs, the grouped hits in place of the tab content. Prefix w-such-. */
+#werkbank .w-such-kopf { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex: none; }
+#werkbank .w-such-feld { width: 340px; max-width: 100%; height: 26px; padding: 0 10px; font-size: 13px; box-sizing: border-box; color: inherit; background: var(--panel2); border: 1px solid var(--line); border-radius: 4px; }
+#werkbank .w-such-feld::placeholder { color: var(--dim); opacity: 1; }
+#werkbank .w-such-feld:focus { border-color: var(--accent, currentColor); }
+#werkbank .w-such-passt { font-size: 11px; font-weight: 700; padding: 2px 8px; border: 1px solid var(--line); border-radius: 4px; background: none; color: var(--dim); cursor: pointer; }
+#werkbank .w-such-passt.an { color: inherit; border-color: var(--accent, currentColor); }
+#werkbank .w-such-passt:disabled { opacity: .5; cursor: not-allowed; border-style: dashed; }
+#werkbank .w-karten[hidden], #werkbank .w-such-host[hidden] { display: none; }
+#werkbank .w-such-host { max-height: 260px; overflow-y: auto; overflow-x: hidden; scrollbar-color: var(--line) transparent; scrollbar-width: thin; }
+#werkbank .w-such-host.w-such-innen { flex: 1 1 auto; min-height: 0; max-height: none; }
+#werkbank .w-regal.w-smp-an .w-such-kopf { flex: none; }
+#werkbank .w-such-gruppe { margin-bottom: 8px; }
+#werkbank .w-such-gruppenkopf { display: flex; align-items: center; gap: 10px; margin-bottom: 2px; }
+#werkbank .w-such-titel { font-size: 11px; font-weight: 700; letter-spacing: .06em; color: var(--dim); }
+#werkbank .w-such-alle { font-size: 10px; font-weight: 700; padding: 1px 8px; }
+#werkbank .w-such-leer { padding: 2px 8px; color: var(--dim); font-size: 11px; }
+#werkbank .w-such-karten { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+#werkbank .w-such-zeile { display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 8px; box-sizing: border-box; font-size: 12px; border-bottom: 1px solid var(--line); }
+#werkbank .w-such-name { flex: 0 1 40%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#werkbank .w-such-info { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); font-size: 11px; }

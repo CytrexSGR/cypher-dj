@@ -36,7 +36,7 @@
 // caller says so (hole_zurueck als_spaet: an unstarted track job is simply not needed any more once the caller drained the units, it is late only
 // when the worker missed frist_um), and never counts in warte: the scheduler reports the join wait itself with spaet_melden. More than 4 late
 // events of an account within the last 64 blocks switch THAT account off for good (an(k) false); the switch is taken at the next block_anfang()
-// where every worker is frei. An off account lets schicke return false: the caller computes everything itself. The pool never switches an account on by itself; the scheduler of the track phases may (wieder_an, mode auto, once after a long pause).
+// where every worker is frei. An off account lets schicke return false: the caller computes everything itself. The pool never switches an account on by itself; the scheduler of the track phases does (wieder_an, modes an and auto, after a back-off that doubles per switch-off: arr_track_phase.h).
 // Hard limit: warte(w, grenze_ns) reports a job that is still running when the absolute CLOCK_MONOTONIC time grenze_ns passes (false, haengt(k)
 // counts it once); the job is never abandoned, warte keeps waiting. A hang of the SPUR account switches it off at the next block start.
 // MXCSR: schicke can carry the caller's MXCSR; the worker runs that job under it and returns to its own (FTZ|DAZ) afterwards.

@@ -50,15 +50,18 @@ def neue_fassung(bestand, material_id, basis_bpm):
     karte = karte_aus_liste(material["tempo_karte_quelle"], material["raster"]["tempo_vielfaches"])
     karte = wende_raster_an(karte, zeilen, basis_bpm)
     eins, hotcues = eins_und_hotcues(material, zeilen)
+    # Andreas' hand-set Eins counts as sure, as in kette.korrigieren (audit U40)
+    eins_hand = any(z["art"] == "eins" and z["ab_quell_beat"] is not None and z["von"] == "andreas" for z in zeilen)
     t0 = time.perf_counter()
     arbeit = bestand / ".arbeit" / f"f-{material_id}-{name}"
     aufraeumen(arbeit)
     arbeit.mkdir(parents=True)
     try:
         x = lade_stereo48(mo / material["quelle"]["datei"])
-        warn = [w for w in alt["warnungen"] if w.startswith(("Stimmung", "Takt-Eins", "Erster Schlag"))]
+        warn = [w for w in alt["warnungen"] if w.startswith(("Stimmung", "Takt-Eins", "Erster Schlag"))
+                and not (eins_hand and w.startswith("Takt-Eins unsicher"))]
         f, mw = rendere(x, karte, material, basis_bpm, 1, arbeit / name, arbeit, len(zeilen), eins, hotcues,
-                        alt["stimmung_korrektur_cent"], warn, alt["tore"]["eins"]["beat_this"])
+                        alt["stimmung_korrektur_cent"], warn, alt["tore"]["eins"]["beat_this"], eins_hand)
         versiegeln(arbeit / name, ordner_selbst=False)
         fsync_baum(arbeit / name)
         rename_ohne_ueberschreiben(arbeit / name, mo / "fassungen" / name)

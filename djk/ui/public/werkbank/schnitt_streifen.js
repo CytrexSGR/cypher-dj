@@ -16,7 +16,8 @@
 //   Marker 0 is the start of the audio: the detector never finds a hit at frame 0, so its strength 0 is not drawn.
 //
 // A changed cut (E10): every answer that carries one replaces the cached cut, resets the selection to [], calls ctx.vergissInfo() and takes over `projekt`.
-// The strip also reads the cut again on a track selection and on a project event and treats a changed `geaendert` the same way (Cypher may have cut it).
+// The strip also reads the cut again on a track selection and when the server reports a change of it (event `schnitt` {id, geaendert}, also for a cut made by a hand
+// without a project step) and treats a changed `geaendert` the same way.
 //
 // The contract for the later plans (A2, B, C), all on ctx:
 //   schnittWahl: { spur_id, schnitt_id, scheiben: number[] } | null   0-based, ascending; reset to [] when the track or its cut changes; null without a cut
@@ -123,12 +124,14 @@ export function bindeSchnittStreifen(ctx, host) {
     const stand = e.stand;
     const r = await ctx.holeGet(`/sampler/schnitt?id=${encodeURIComponent(id)}`);
     e.ladeS = false;
+    const nochmal = e.nochmal; e.nochmal = false;
     const s = r.j?.schnitt;
     if (r.status === 200 && s && Array.isArray(s.grenzen) && s.grenzen.length >= 2) {
       if (!e.schnitt) { e.schnitt = s; e.fehler = null; }
       else if (stand === e.stand && (s.geaendert !== e.schnitt.geaendert || !gleicheGrenzen(s.grenzen, e.schnitt.grenzen))) uebernimmAenderung(s, { info: nachlesen });   // another hand changed it; a read that started before our own change is stale
     } else if (!e.schnitt) e.fehler = refusalText(ctx, r);
     zeichne();
+    if (nochmal) ladeSchnitt(id, e, null, true);   // the cut changed again while this read was on its way
   }
   async function ladeWelle(id, e) {
     e.ladeW = true;
@@ -195,6 +198,7 @@ export function bindeSchnittStreifen(ctx, host) {
       setzeWahl({ ...wahl, scheiben: s });
       return;
     }
+    if ((ev?.detail ?? 1) >= 2) return;   // the second click of a double click: the first one has heard the slice, the double click adds a marker
     const nr = ++hoerNr;
     const r = await ctx.holeJson('/sampler/hoeren', { spur_id: wahl.spur_id, scheibe: i });
     if (r.status !== 200) { ctx.melde(refusalText(ctx, r), true); return; }   // a refusal keeps the selection as it was
@@ -456,7 +460,15 @@ export function bindeSchnittStreifen(ctx, host) {
   ctx.beimProjekt.push((_p, wechsel) => {
     if (wechsel) zeigtSpur = null;   // another module: nothing of the old one is kept while the info is on its way
     zeichne();
-    nachlesen();
+  });
+  // the cut is read again when it changed, not at every project event: the server tells the page about every change of a cut ({id, geaendert}), also one made
+  // by a hand without a project step; the stamp of our own answers is the one cached already, so an own edit does not read twice
+  ctx.beimEreignis.push((a, f) => {
+    if (a !== 'schnitt' || typeof f?.id !== 'string') return;
+    const e = cache.get(f.id);
+    if (!e?.schnitt || f.geaendert === e.schnitt.geaendert) return;
+    if (e.ladeS) { e.nochmal = true; return; }
+    ladeSchnitt(f.id, e, null, true);
   });
   // every answer of the info cache redraws the track list and runs these hooks: the info of the selected track arrives that way
   (ctx.spurZeile ??= []).push((_zeile, spur) => { if (spur.id === st.wahl && ctx.info(spur) !== gezeigteInfo) zeichne(); });

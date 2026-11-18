@@ -88,7 +88,7 @@ MUTATIONEN = [
     (SERVER_TS, VIER_TASTEN, VIER_TASTEN.replace("]", ", 'bogus']"), "T09 server.ts TASTEN steht ohne Vertrag: bogus"),
     (SERVER_TS, VIER_TASTEN, VIER_TASTEN.replace("]", ", 'autonomie']"),
      "Annahme-Weg: server.ts lässt Encoder-Taste autonomie zu, der Kern lehnt sie ab (hand_in.h)"),
-    ("djk/ui/public/app.js", "'stopp', 'freigabe']) $(`#t-", "'stopp']) $(`#t-", "Annahme-Weg: server.ts ['annehmen', 'verwerfen', 'stopp', 'freigabe'] != app.js ['annehmen', 'verwerfen', 'stopp']"),
+    ("djk/ui/public/stream.js", "'stopp', 'freigabe']) $(`#t-", "'stopp']) $(`#t-", "Annahme-Weg: server.ts ['annehmen', 'verwerfen', 'stopp', 'freigabe'] != app.js ['annehmen', 'verwerfen', 'stopp']"),
     ("djk/tools/softcontroller/keyboard.h", "{'Z', \"taste/zuruf\", true, 16, 20, Wirkung::druecken, 0},", "",
      "Softcontroller-Tasten: T11 keyboard.h fehlt: zuruf"),
     # ---- Encoder und /test/hand-Tasten kommen aus hand_in.h, nicht aus einer Abschrift
@@ -224,26 +224,26 @@ MUTATIONEN += [
      "bk-Regler=Kern: R02 INTERFACES §1.5 steht ohne Vertrag: erz/4/bk/1"),
     ("djk/core/signalbox/src/controls.cpp", 'for (const char* kn_bk : {"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "erz/5"', 'for (const char* kn_bk : {"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "erz/4", "erz/5"',
      "bk-Regler=Kern: R03 Attrappe REGLER fehlt: erz/4/bk/1"),
-    ("djk/ui/hand_operation.ts", "|^(deck\\/[1-4]|erz\\/[1-35-7]|pad\\/[12]|fx\\/[34])\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;", "|^(deck\\/[1-4]|erz\\/[1-8]|pad\\/[12]|fx\\/[34])\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;",
+    ("djk/ui/hand_operation.ts", "|^(deck\\/[1-4]|erz\\/[1-35-7]|pad\\/[12]|fx\\/[34]|master)\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;", "|^(deck\\/[1-4]|erz\\/[1-8]|pad\\/[12]|fx\\/[34]|master)\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;",
      "bk-Regler: R06 hand_bedienung.PFAD nimmt erz/4/bk/1 an"),
-    ("djk/ui/hand_operation.ts", "|^(deck\\/[1-4]|erz\\/[1-35-7]|pad\\/[12]|fx\\/[34])\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;", "/;",
+    ("djk/ui/hand_operation.ts", "|^(deck\\/[1-4]|erz\\/[1-35-7]|pad\\/[12]|fx\\/[34]|master)\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;", "/;",
      "bk-Regler: R06 hand_bedienung.PFAD lehnt deck/1/bk/1 ab"),
-    ("djk/contract/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34])/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34])/bk/([1-9]|[1-5][0-9]|6[0-5]))$\"",
+    ("djk/contract/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34]|master)/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34]|master)/bk/([1-9]|[1-5][0-9]|6[0-5]))$\"",
      "bk-Regler: R07 defs.schema.json regler_pfad nimmt deck/1/bk/65 an"),
-    ("djk/contract/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34])/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"", "|(deck/[1-4]|erz/[1-8]|pad/[12]|fx/[34])/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"",
+    ("djk/contract/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34]|master)/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"", "|(deck/[1-4]|erz/[1-8]|pad/[12]|fx/[34]|master)/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"",
      "bk-Regler: R07 defs.schema.json regler_pfad nimmt erz/4/bk/1 an"),
 ]
 
 
 # ---- S14: graph knobs of the send returns fx/3/bk/1..64, fx/4/bk/1..64 (global controls) in all locations
 MUTATIONEN += [
-    ("djk/contract/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34])/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"", "|(deck/[1-4]|erz/[1-35-7]|pad/[12])/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"",
+    ("djk/contract/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34]|master)/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|master)/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"",
      "bk-Regler: R07 defs.schema.json regler_pfad lehnt fx/3/bk/1 ab"),
-    ("djk/contract/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34])/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[1-4])/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"",
+    ("djk/contract/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34]|master)/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[1-4]|master)/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"",
      "bk-Regler: R07 defs.schema.json regler_pfad nimmt fx/1/bk/1 an"),
-    ("djk/ui/hand_operation.ts", "|pad\\/[12]|fx\\/[34])\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;", "|pad\\/[12])\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;",
+    ("djk/ui/hand_operation.ts", "|pad\\/[12]|fx\\/[34]|master)\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;", "|pad\\/[12]|master)\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;",
      "bk-Regler: R06 hand_bedienung.PFAD lehnt fx/3/bk/1 ab"),
-    ("djk/ui/hand_operation.ts", "|pad\\/[12]|fx\\/[34])\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;", "|pad\\/[12]|fx\\/[1-4])\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;",
+    ("djk/ui/hand_operation.ts", "|pad\\/[12]|fx\\/[34]|master)\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;", "|pad\\/[12]|fx\\/[1-4]|master)\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;",
      "bk-Regler: R06 hand_bedienung.PFAD nimmt fx/1/bk/1 an"),
     (KURVEN_JS, "  ...BK_SEND_KANAELE.flatMap((k) => Array.from({ length: 64 }, (_, i) => `${k}/bk/${i + 1}`)),", "",
      "bk-Regler=Kern: R04 curves.js ZIELE fehlt: fx/3/bk/1"),
@@ -438,7 +438,7 @@ def test_parser_meldet_verworfenes_oder_fehlendes_als_parserfehler(kopie, datei,
 
 
 SERVER_TS_ALT = "const TASTEN = ['annehmen', 'verwerfen', 'stopp', 'freigabe'];"
-APP_JS = "djk/ui/public/app.js"
+APP_JS = "djk/ui/public/stream.js"   # the page keys moved from app.js to stream.js (1868940b); the checker list keeps the name T10 app.js Tasten
 APP_JS_ALT = "for (const n of ['annehmen', 'verwerfen', 'stopp', 'freigabe']) $(`#t-"
 DECK_PFAD = "inline bool deck_taste_pfad(const char* p, int* deck, bool* play) {"
 IST_CUE = "  const bool ist_cue = r[0] == 'c' && r[1] == 'u' && r[2] == 'e' && r[3] == '\\0';\n"
@@ -455,7 +455,7 @@ PARSERFEHLER = [
      "test_taste_pfad"),
     (HAND_EIN_H, "test_taste_pfad", "test_taste_pfadx", "test_taste_pfad"),
     (SERVER_TS, SERVER_TS_ALT, "const TASTEN = [];", "server.ts"),
-    (APP_JS, APP_JS_ALT, APP_JS_ALT.replace("['annehmen', 'verwerfen', 'stopp', 'freigabe']", "[]"), "app.js"),
+    (APP_JS, APP_JS_ALT, APP_JS_ALT.replace("['annehmen', 'verwerfen', 'stopp', 'freigabe']", "[]"), "app.js"),   # the empty-list finding names the list (T10 app.js Tasten), not the file
     (KURVEN_JS, "const DECK_TASTEN = ['play', 'cue'];", "const DECK_TASTEN = [];", "curves.js"),
     (SOFTCONTROLLER, '"ziel":"deck/1/play"', '"zielx":"deck/1/play"', "ziel"),
     ("djk/contract/osc.json", '"abschnitt": "5.8", "liste"', '"abschnitt": "5.8", "listex"', "osc.json"),

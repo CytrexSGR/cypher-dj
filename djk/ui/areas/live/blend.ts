@@ -8,6 +8,7 @@ import { aendereStand } from '../../project/state.ts';
 import { fuehreListeAus } from '../../project/commands.ts';
 import { blendFader, blendPfad, type Projekt } from '../../project/model.ts';
 import { STEMS, type Stem } from '../../project/stems.ts';
+import { takteProLive } from '../../project/taktart_live.ts';
 import type { BereichKontext } from '../../http/router.ts';
 import { quittungAbgelehnt } from '../proj/core_path.ts';
 import { ProjFehler, type Antwort } from '../proj/session.ts';
@@ -75,7 +76,7 @@ export class ModulBlend {
       if (s.zustand === 'fehler') throw new ProjFehler(500, s.grund ?? 'intern', { text: s.text });
       return { code: 200, j: { ...kopf, zustand: s.zustand, rev: s.rev, blend: wert, fader_db: blendFader(wert, kind.neu_trim_db ?? 0) } };
     }
-    return { code: 200, j: { ...kopf, zustand: 'rampe', ...(u ? { ende_beat: u.beat + takte * 4 } : {}) } };
+    return { code: 200, j: { ...kopf, zustand: 'rampe', ...(u ? { ende_beat: u.beat + takte * takteProLive(o.projekt.taktart) } : {}) } };
   }
 
   private schreibeZeile(nr: number, db: number): void {
@@ -107,10 +108,11 @@ export class ModulBlend {
       if (pf) { this.schreibeZeile(pf.original.nr, pf.original.fader_db); this.schreibeZeile(pf.neu.nr, pf.neu.fader_db); }
     };
     if (takte > 0) this.setze(slot, stem, { zustand: 'rampe', stem, wert: nach, takte });
+    const proTakt = takteProLive(gleich()?.taktart);                                // beats per bar of the project at the start of the ramp (4 in 4/4)
     try {
       let ende: RampeEnde | undefined;
       if (takte > 0 && this.o.kern) {
-        ende = await fahreRampe({ kern: this.o.kern, von, nach, beats: takte * 4, schreibe: zeilen,
+        ende = await fahreRampe({ kern: this.o.kern, von, nach, beats: takte * proTakt, schreibe: zeilen,
           abbruch: () => gleich() === null || (quelle === 'cypher' && this.ctx.kiGestoppt()), ...this.o.rampe });
         if (ende === 'abgebrochen') {
           zurueck();

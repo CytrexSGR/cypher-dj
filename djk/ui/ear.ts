@@ -62,6 +62,8 @@ function liesSatz(buf: Buffer, off: number): Satz {
 
 // Liest den Hüllkurven-Ring fortlaufend: je lies() nur die neuen Datensätze seit dem letzten Aufruf, hält die
 // letzten `halte` je Kanal im Speicher (älteste raus). §6.2: Verwerf-Abstand cap − 1024.
+// Records held per channel: 16 bars at 60 BPM at the 1 kHz ring rate (hoerAntwort wants 90 % of 4·takte·60/bpm·1000 of them; takte goes up to 16)
+export const OHR_HALTE = 64000;
 export class OhrLeser {
   private pfad: string;
   private kanaele: number[];
@@ -69,7 +71,7 @@ export class OhrLeser {
   private wAlt = 0n;
   private puffer = new Map<number, Satz[]>();
 
-  constructor(pfad: string, kanaele: number[], halte = 16384) {
+  constructor(pfad: string, kanaele: number[], halte = OHR_HALTE) {
     this.pfad = pfad;
     this.kanaele = kanaele;
     this.halte = halte;
@@ -115,9 +117,9 @@ export class OhrLeser {
           const off = i * zeilenBytes + kanal * SATZ_BYTES;
           const arr = this.puffer.get(kanal)!;
           arr.push(liesSatz(gesamt, off));
-          if (arr.length > this.halte) arr.splice(0, arr.length - this.halte);
         }
       }
+      for (const arr of this.puffer.values()) if (arr.length > this.halte) arr.splice(0, arr.length - this.halte);   // once per call, not per record
       this.wAlt = wNeu;
       return anzahl;
     } finally {

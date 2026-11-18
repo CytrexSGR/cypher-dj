@@ -26,8 +26,10 @@ const mit = async (t, opt, k) => { const x = bereich(t, opt, k); await x.s.neu('
 test('P5 Fassade: projBereich liefert zugang mit allen dreiundzwanzig Funktionen (B3: naechsteNummer; S3: ausgabeLauf, Spec 6.34; 1.8: transport, aufnahmeLauf, aufnahmeAktiv, beiStand; Slice 6: stemsStand, beiSchliessen; 1.9: wirtSpiegel; 1.11: hostZustandSichern, hostLage, hostGesundAlterMs, ladeEchtzeitSicht, ladeLiveNeu), the routes stay nine plus GET /proj/warp (Paket 1.13) and GET /proj/auto (Automation Slice 1); offen() ist null ohne Projekt', (t) => {
   const { b, z } = bereich(t);
   for (const f of ['offen', 'arbeitsordner', 'haken', 'uebernimm', 'schreibeWiedergabe', 'naechsteNummer', 'tempoAnMaster', 'sperreLaden', 'ausgabeLauf', 'transport', 'aufnahmeLauf', 'aufnahmeAktiv', 'stemsStand', 'beiSchliessen', 'beendeVorhoeren', 'beiStand', 'wirtSpiegel', 'hostZustandSichern', 'hostLage', 'hostGesundAlterMs', 'ladeEchtzeitSicht', 'ladeLiveNeu']) assert.equal(typeof z[f], 'function', f);
-  assert.equal(Object.keys(z).length, 23);   // SEQ deck: plus aendern (the session's POST /proj/aendern); plan 1.11 T7: plus hostZustandSichern; later lanes: hostLage, hostGesundAlterMs, ladeEchtzeitSicht, ladeLiveNeu
-  assert.equal(b.routen().length, 29);   // workbench: plus GET werkbank/vorlagen; live-module task 1: plus POST /live/oeffnen; MIDI import: plus POST midi_import; 1.12 slice 3: plus uebersteuern, re_enable, arm and geste; 1.14: plus GET and POST take_vorhoeren; 1.9: plus GET kits; 1.11 T7: plus POST insert param; 1.10 T1: plus GET routing; plus GET surge_patches (the patch picker); workbench shelf: plus POST kopie (SAVE AS) and POST loeschen (DELETE)
+  assert.equal(typeof z.hoereBk, 'function');
+  assert.equal(typeof z.liesProjekt, 'function');   // module to SEQ deck: the read-only read of a stored project
+  assert.equal(Object.keys(z).length, 25);   // find sound: plus hoereBk; SEQ deck: plus aendern (the session's POST /proj/aendern); plan 1.11 T7: plus hostZustandSichern; module to SEQ deck: plus liesProjekt; later lanes: hostLage, hostGesundAlterMs, ladeEchtzeitSicht, ladeLiveNeu
+  assert.equal(b.routen().length, 30);   // reopen after restart: plus POST /proj/schliessen; workbench: plus GET werkbank/vorlagen; live-module task 1: plus POST /live/oeffnen; MIDI import: plus POST midi_import; 1.12 slice 3: plus uebersteuern, re_enable, arm and geste; 1.14: plus GET and POST take_vorhoeren; 1.9: plus GET kits; 1.11 T7: plus POST insert param; 1.10 T1: plus GET routing; plus GET surge_patches (the patch picker); workbench shelf: plus POST kopie (SAVE AS) and POST loeschen (DELETE)
   assert.equal(b.name, 'proj');
   assert.equal(z.offen(), null);
   assert.equal(z.arbeitsordner(), b.sitzung.arbeitsordner);
@@ -190,4 +192,15 @@ test('P4 Dekodieren während der Sperre: das Ereignis geht an die Seite, die neu
   frei();
   assert.ok(await warteBis(() => k.an('/k/arr/laden').length === 1), 'nach der Freigabe wird nachgeladen');
   assert.equal(s.aktuell().j.projekt.wiedergabe_rev, k.an('/k/arr/laden')[0].felder.nr);
+});
+
+test('liesProjekt(slug): reads a stored project read-only, the open one as it is now; an unknown or malformed slug is refused', async (t) => {
+  const { s, z, wurzel } = await mit(t);
+  const o = z.offen();
+  assert.equal(z.liesProjekt('f'), o.projekt, 'the open project as it is now');
+  await s.aendern({ rev: 0, label: 'Spur', befehle: [{ befehl: 'spur_neu', art: 'audio' }] }, 'andreas');
+  assert.equal(z.liesProjekt('f').spuren.length, 1);
+  assert.equal(fs.existsSync(path.join(wurzel, 'f', 'project.json')), true);
+  assert.equal((await fehlerVon(Promise.resolve().then(() => z.liesProjekt('nope')))).fehler, 'unbekannt');
+  assert.equal((await fehlerVon(Promise.resolve().then(() => z.liesProjekt('../x')))).fehler, 'slug_ungueltig');
 });

@@ -101,8 +101,9 @@ export function bindeRackPanel(ctx, wurzel) {
 
   // a number field that sends on change/Enter; Esc, a bad entry and a refused value show the server state again
   function feld(f, aktion) {
-    f.addEventListener('focus', () => { haelt++; }); f.addEventListener('blur', () => { haelt--; });
-    f.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') f.blur(); if (e.key === 'Escape') { f.blur(); frisch(); } });
+    let vorher = '';   // the value at focus: Esc puts it back first, else the blur() below commits the typed value (change) and sends it
+    f.addEventListener('focus', () => { haelt++; vorher = f.value; }); f.addEventListener('blur', () => { haelt--; });
+    f.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') f.blur(); if (e.key === 'Escape') { f.value = vorher; f.blur(); frisch(); } });
     f.addEventListener('change', () => {
       const v = Number(String(f.value).replace(',', '.').trim());
       if (f.value.trim() === '' || !Number.isFinite(v)) { ctx.melde?.('Enter a number', true); frisch(); return; }

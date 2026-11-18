@@ -108,14 +108,19 @@ Grund PrueferI3::vor_teilstart(const Sicht& s, const TeilSicht& t) {
   // Andreas 2026-10-05: pad/* wie erz/*; die Herkunftsprüfung (eigener Mitschnitt) liegt in der Seite.
   if (ist_pad_kanal(kanal_name)) return Grund::kein;
 
+  // Andreas 2026-11-18 (SEQ deck): a deck channel with NOTHING loaded carries no track; the only thing that can sound there is what the SEQ deck of
+  // that place plays into the strip (ADR 038), Cyphers own patterns. The core cannot tell SEQ from "empty": the page decides, as for pad/*.
+  // Stateless on purpose (no flag that could go stale). A load closes the channel again (core_deck.cpp), so a track never meets an open fader here.
+  Inhalt akt{};
+  const bool hat_inhalt = deck_.inhalt(d.kanal, akt);
+  if (ist_deck_kanal(kanal_name) && !hat_inhalt) return Grund::kein;
+
   if (!t.hoerschein || !t.hoerschein[0]) return Grund::kein_hoerschein;
   const Schein* sch = reg_.finde(t.hoerschein);
   if (!sch) return Grund::kein_hoerschein;
 
   if (!text_gleich(sch->kanal, kanal_name, sizeof(sch->kanal))) return Grund::hoerschein_anderer_kanal;
 
-  Inhalt akt{};
-  const bool hat_inhalt = deck_.inhalt(d.kanal, akt);
   if (!hat_inhalt || !text_gleich(akt.material_id, sch->inhalt.material_id, sizeof(akt.material_id)) ||
       akt.bpm_milli != sch->inhalt.bpm_milli || akt.fassung != sch->inhalt.fassung) {
     return Grund::hoerschein_anderer_inhalt;

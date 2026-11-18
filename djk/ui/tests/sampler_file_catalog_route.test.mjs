@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { stapel } from './support/media_library.mjs';
 import { ruf } from './support/proj_stack.mjs';
 import { sinusWav } from './support/sinus_wav.mjs';
@@ -27,12 +28,18 @@ async function aufbau(t, { ohneKatalog = false } = {}) {
   sinusWav(weg, { hz: 110, sekunden: 0.5, rate: 44100, kanaele: 1 });
   sinusWav(prot, { hz: 110, sekunden: 0.5, rate: 44100, kanaele: 1 });
   sinusWav(trk, { hz: 110, sekunden: 0.5, rate: 44100, kanaele: 1 });
+  const mp3 = path.join(d.aussen, 'Click 02.mp3'), txt = path.join(d.aussen, 'notiz.txt');
+  const fx = spawnSync('ffmpeg', ['-v', 'error', '-y', '-i', kick, mp3]);
+  assert.equal(fx.status, 0, String(fx.stderr));
+  fs.writeFileSync(txt, 'not audio');
   const katalog = ohneKatalog ? '/nicht/da/katalog.sqlite' : baueKatalog(path.join(root, 'kat'), [
     { n: 1, typ: 'oneshot', name: 'Kick 01', instrument: 'kick', pfad: kick },
     { n: 2, typ: 'oneshot', name: 'Weg', pfad: weg },
     { n: 3, typ: 'oneshot', name: 'Prot', schutz: 'ableton', pfad: prot },
     { n: 4, typ: 'track', titel: 'Ein Track', pfad: trk },
     { n: 5, typ: 'oneshot', name: 'Ohne Pfad', pfad: null },
+    { n: 6, typ: 'oneshot', name: 'Click 02', pfad: mp3 },
+    { n: 7, typ: 'oneshot', name: 'Notiz', pfad: txt },
   ]);
   const s = await stapel(t, { loops: d.loops, katalog });
   s.optionen.modulOrdner = d.module;
@@ -89,6 +96,21 @@ test('spur by sha: one history step and a cut with quelle {art: katalog, ref: sh
   const n = await ruf(z.url, 'POST', '/sampler/datei/spur', { sha: z.sha(1), name: 'Mein Kick' });
   assert.equal(n.code, 200, JSON.stringify(n.j));
   assert.deepEqual(listeSchnitte({ ordner: z.d.sampler }).map((c) => c.name).sort(), ['Kick 01', 'Mein Kick']);
+});
+
+test('spur by sha: an mp3 row becomes a cut in the sampler folder; the source folder stays untouched; a non-audio file is 422', async (t) => {
+  const z = await aufbau(t);
+  await z.oeffne();
+  const vorher = fs.readdirSync(z.d.aussen).sort();
+  const r = await ruf(z.url, 'POST', '/sampler/datei/spur', { sha: z.sha(6) });
+  assert.equal(r.code, 200, JSON.stringify(r.j));
+  const cuts = listeSchnitte({ ordner: z.d.sampler });
+  assert.equal(cuts.length, 1);
+  assert.equal(cuts[0].name, 'Click 02');
+  assert.deepEqual(fs.readdirSync(z.d.aussen).sort(), vorher, 'nothing written next to the source file');
+  const n = await ruf(z.url, 'POST', '/sampler/datei/spur', { sha: z.sha(7) });
+  assert.deepEqual([n.code, n.j.fehler], [422, 'format_falsch']);
+  assert.equal(listeSchnitte({ ordner: z.d.sampler }).length, 1);
 });
 
 test('spur by sha: a file removed after listing is 404 quelle_unbekannt and leaves no cut', async (t) => {

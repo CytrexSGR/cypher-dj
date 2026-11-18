@@ -256,3 +256,88 @@ test('only the first window of a split replacing range carries kappe (schicke ca
   assert.ok(k.length >= 2, `needs a split: ${k.length} window(s)`);
   assert.deepEqual(k.map((x) => x.kappe), [1, ...k.slice(1).map(() => 0)]);
 });
+
+// ---- Plan studio-taktart T1: the bar is proTakt beats ----
+const evBeats = (f) => f.flatMap((x) => x.evs.map((e) => e.beat));
+
+test('proTakt 3: takt(0) sends beats 3 to 9 without a gap', () => {
+  const bundles = [];
+  const p = new Planer({ strom: 1, kit: KIT, sende: (b) => bundles.push(b), jetztUs: () => 0, taktart: 3 });
+  p.setze(m('s("bd*3")'), -Infinity);
+  p.takt(0);
+  const k = bundles.map((b) => dekodiere(b).elemente[0].werte);
+  assert.equal(k[0][4], 3);
+  assert.equal(k.at(-1)[5], 9);
+  for (let i = 1; i < k.length; i++) assert.equal(k[i][4], k[i - 1][5]);
+});
+
+test('proTakt 3: naechsterTakt(4.9) is 6 and naechsterTakt(5.8) is 9', () => {
+  const p = new Planer({ strom: 1, kit: KIT, sende: () => {}, taktart: 3 });
+  assert.equal(p.naechsterTakt(4.9), 6);
+  assert.equal(p.naechsterTakt(5.8), 9);
+});
+
+test('setzeTaktart(3, 12.3) after 4/4 takes effect at 15, not 16, and re-sends from 15', () => {
+  const w = welt();
+  w.p.setze(m('s("bd*4")'), -Infinity);
+  w.p.takt(2);                                   // [12, 20) in 4/4
+  w.bundles.length = 0;
+  w.p.setzeTaktart(3, 12.3);
+  const f = w.fenster();
+  assert.equal(f[0].ab, 15);
+  assert.equal(f.at(-1).bis, 21);
+  assert.deepEqual(evBeats(f).slice(0, 3), [15, 15.75, 16.5]);
+});
+
+test('setzeTaktart(3, ...) replaces the window already sent beyond 15: no doubled, no missing note at the seam', () => {
+  const w = welt();
+  w.p.setze(m('s("bd*4")'), -Infinity);
+  w.p.takt(2);
+  const alt = evBeats(w.fenster());              // 12..19 in 4/4
+  w.bundles.length = 0;
+  w.p.setzeTaktart(3, 12.3);
+  const neu = evBeats(w.fenster());
+  const wirksam = [...alt.filter((b) => b < 15), ...neu];   // what the kern holds after the replacement
+  const soll = [12, 13, 14];
+  for (let b = 15; b < 21; b += 0.75) soll.push(b);
+  assert.deepEqual(wirksam, soll);
+});
+
+test('setzeTaktart on the same value sends nothing, also on a 4/4 planer', () => {
+  const w = welt();
+  w.p.setze(m('s("bd*4")'), -Infinity);
+  w.p.takt(2);
+  w.bundles.length = 0;
+  w.p.setzeTaktart(4, 12.3);
+  assert.equal(w.bundles.length, 0);
+  assert.equal(w.p.proTakt, 4);
+});
+
+test('setzeTaktart(4, ...) back from 3 applies at the next multiple of 4', () => {
+  const bundles = [];
+  const p = new Planer({ strom: 1, kit: KIT, sende: (b) => bundles.push(b), taktart: 3 });
+  p.setze(m('s("bd*4")'), -Infinity);
+  p.takt(3);                                     // [12, 18)
+  bundles.length = 0;
+  p.setzeTaktart(4, 13.1);
+  assert.equal(dekodiere(bundles[0]).elemente[0].werte[4], 16);
+});
+
+test('setzeTaktart growing the bar: no silent gap when the new bar line lies beyond the window already sent', () => {
+  for (const [alt, neu, takt, jetzt] of [[3, 12, 4, 13], [2, 12, 2, 5.1], [4, 12, 4, 23.8]]) {
+    const bundles = [];
+    const p = new Planer({ strom: 1, kit: KIT, sende: (b) => bundles.push(b), taktart: alt });
+    p.setze(m('s("bd*4")'), -Infinity);
+    p.takt(takt);
+    const gesendet = p.horizont;
+    bundles.length = 0;
+    p.setzeTaktart(neu, jetzt);
+    const von = p.naechsterTakt(jetzt);
+    const k = bundles.map((b) => dekodiere(b).elemente[0].werte);
+    assert.ok(von > gesendet || alt === 4, `case ${alt}->${neu} must reach the gap`);
+    assert.ok(k.length > 0);
+    assert.ok(k[0][4] <= Math.min(von, gesendet), `${alt}->${neu}: new windows start at ${k[0][4]}, old horizon ${gesendet}`);
+    for (let i = 1; i < k.length; i++) assert.equal(k[i][4], k[i - 1][5]);
+    assert.ok(k.at(-1)[5] >= von + 2 * neu);
+  }
+});

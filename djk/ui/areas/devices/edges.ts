@@ -11,6 +11,7 @@ export function baueKantenText(k: Konfig): string {
     z.push(`${l}\tein_${e.k}_L`, `${r}\tein_${e.k}_R`);
   }
   if (k.midi.port) z.push(`${k.midi.port}\tmidi_ein_1`);
+  for (const c of k.controller ?? []) z.push(`${c.port}\tmidi_ein_${c.platz}`);   // one raw input per controller place
   return z.length ? `${z.join('\n')}\n` : '';
 }
 

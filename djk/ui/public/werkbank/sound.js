@@ -7,7 +7,7 @@
 //     The host is hidden and sits in the workbench root; the big view of an instrument track moves it into its window (window.js).
 // UI texts English.
 import { wechselBefehle } from '../seq_field.js';
-import { instrumentMenue } from './tracks.js';
+import { oeffneInstrumentMenue } from './tracks.js';
 import { oeffneMenue } from '../production/context_menu.js';
 import {
   ARTEN, MAX_PLAETZE, straenge, neuerInsertBefehl, bkZahl, insGrAufnehmen, insPegelAufnehmen,
@@ -39,8 +39,8 @@ export function bindeKlang(ctx) {
     const r = anker.getBoundingClientRect();
     const [g, kits] = await Promise.all([ctx.holeGet('/graphen'), ctx.holeGet('/proj/kits')]);
     const alt = spur.geraet;
-    const punkte = instrumentMenue(g?.j?.graphen, kits?.j?.kits, alt?.art === 'intern' && alt.name === 'bk' ? alt.graph : undefined, (e) => tausche(spur.id, e));
-    (ctx.oeffneMenue ?? oeffneMenue)(punkte, r.left, r.bottom);
+    oeffneInstrumentMenue(g?.j?.graphen, kits?.j?.kits, alt?.art === 'intern' && alt.name === 'bk' ? alt.graph : undefined, (e) => tausche(spur.id, e),
+      (punkte) => (ctx.oeffneMenue ?? oeffneMenue)(punkte, r.left, r.bottom));
   };
   async function tausche(id, eintrag) {
     const spur = spurVon(id); if (!spur) return;

@@ -293,8 +293,8 @@ impl Sampler {
     /// a shorter file plays nothing). Allocation free.
     ///
     /// `grenzen` is the slice table (frame bounds, `grenzen.len() - 1` slices) or `None` for `e.scheiben` equal slices.
-    /// `wahl` is `Some` in the note mode: the note (from `x.hz`) chooses the slice `(n mod 64) mod count`, reversed from
-    /// note 64 on; `x.scheibe` and `x.rueck` are ignored; the read rate comes from `tempo` and `halb` (latched at the
+    /// `wahl` is `Some` in the note mode: the note (from `x.hz`) chooses the slice `n mod 64`, reversed from
+    /// note 64 on (a note whose slice does not exist, `n mod 64 >= count`, plays nothing); `x.scheibe` and `x.rueck` are ignored; the read rate comes from `tempo` and `halb` (latched at the
     /// trigger); the gate ends the hit with an exponential release to -60 dB over `ausklang_ms` (latched at the fall).
     #[inline]
     pub fn prozess_mit(&mut self, daten: &[f32], e: &Einstellung, grenzen: Option<&[usize]>, wahl: Option<NotenWahl>, sr: f32, x: Eingabe) -> (f32, f32) {
@@ -380,7 +380,16 @@ impl Sampler {
                 None => Durchlauf::start(frames, e, grenzen, x.scheibe, x.rueck, gate_tief),
                 Some(w) => {
                     let n = note_von_hz(x.hz) as i64;
-                    Durchlauf::scheibe_nr(frames, e, grenzen, n % 64, n >= 64, gate_tief, wahl_schritt(&w, sr))
+                    // a note that names no slice (CUT AGAIN to fewer slices keeps the notes) is no hit: an inactive pass
+                    let anzahl = match grenzen {
+                        Some(g) if g.len() >= 2 => g.len() - 1,
+                        _ => e.scheiben.max(1),
+                    };
+                    if (n % 64) as usize >= anzahl {
+                        Durchlauf { halt: gate_tief, ..Durchlauf::default() }
+                    } else {
+                        Durchlauf::scheibe_nr(frames, e, grenzen, n % 64, n >= 64, gate_tief, wahl_schritt(&w, sr))
+                    }
                 }
                 }
             };
@@ -412,7 +421,7 @@ impl Sampler {
         }
         if let Some(w) = wahl {
             if gate_tief && !self.frei && self.phase != Phase::Still {
-                let ms = if w.ausklang_ms.is_finite() { w.ausklang_ms.clamp(AUSKLANG_MIN_MS, AUSKLANG_MAX_MS) } else { 5.0 };
+                let ms = if w.ausklang_ms.is_nan() { 5.0 } else { w.ausklang_ms.clamp(AUSKLANG_MIN_MS, AUSKLANG_MAX_MS) };
                 let n = ((ms as f64 * sr as f64 / 1000.0).round() as u32).max(1);
                 self.frei = true;
                 self.frei_g = 1.0;
@@ -482,11 +491,14 @@ impl Sampler {
 }
 
 /// Read rate of the note mode: `tempo * 2^(halb / 12)` corrected for the output rate, clamped to 1/16..8. A `tempo` that is
-/// not finite or not positive counts as 1, a `halb` that is not finite as 0.
+/// not positive (also -inf) is too small like any other and clamps to 1/16, +inf clamps to 8; only NaN counts as the default 1.
+/// A `halb` that is not finite counts as 0.
 fn wahl_schritt(w: &NotenWahl, sr: f32) -> f64 {
-    let tempo = if w.tempo.is_finite() && w.tempo > 0.0 { w.tempo as f64 } else { 1.0 };
+    let tempo = if w.tempo.is_nan() { 1.0 } else { (w.tempo as f64).max(0.0) };
     let halb = if w.halb.is_finite() { w.halb as f64 } else { 0.0 };
-    (tempo * 2f64.powf(halb / 12.0) * (48_000.0 / sr as f64)).clamp(MIN_SCHRITT, MAX_SCHRITT)
+    let r = tempo * 2f64.powf(halb / 12.0) * (48_000.0 / sr as f64);
+    // 0 * inf (tempo 0 with a huge `halb`, or tempo inf with a huge negative one) is NaN: too small, so the lower bound
+    if r.is_nan() { MIN_SCHRITT } else { r.clamp(MIN_SCHRITT, MAX_SCHRITT) }
 }
 
 /// One zone of the table, precomputed for the trigger.

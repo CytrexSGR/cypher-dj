@@ -1,5 +1,5 @@
 {
- "n": 207,
+ "n": 212,
  "ergebnis": [
   {
    "m": "GET",
@@ -474,6 +474,7 @@
    "code": 200,
    "art": "application/json; charset=utf-8",
    "form": {
+    "controller": "[]",
     "eingaenge": [
      {
       "audio": "null",
@@ -520,6 +521,7 @@
    "code": 200,
    "art": "application/json; charset=utf-8",
    "form": {
+    "controller": "[]",
     "datei": "string",
     "midi": {
      "port": "null"
@@ -549,6 +551,20 @@
     "geraete": "[]",
     "host": {},
     "kanten": "[]",
+    "katalog": [
+     {
+      "belegung": "string",
+      "da": "boolean",
+      "eintraege": "number",
+      "hinweis": "string",
+      "id": "string",
+      "midi": "string",
+      "name": "string",
+      "rueckweg": "string",
+      "rueckweg_port": "null",
+      "weg": "string"
+     }
+    ],
     "leds": "[]",
     "midi_port": "null",
     "ziele_gesamt": "number"
@@ -579,6 +595,36 @@
    "form": {
     "datei": "string",
     "wurzeln": "[]"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/suche",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "argument_ungueltig",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/suche?q=x",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "gruppen": [
+     {
+      "art": "string",
+      "fehler": "string",
+      "name": "string",
+      "treffer": "[]",
+      "zahl": "number"
+     }
+    ],
+    "passt": "null",
+    "q": "string"
    }
   },
   {
@@ -2047,6 +2093,7 @@
    "code": 200,
    "art": "application/json; charset=utf-8",
    "form": {
+    "controller": "[]",
     "eingaenge": [
      {
       "audio": "null",
@@ -2175,6 +2222,42 @@
   {
    "m": "POST",
    "p": "/lernen",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/lernen/setzen",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "argument_ungueltig",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/lernen/setzen",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/lernen/setzen",
    "kopf": "fremd",
    "code": 403,
    "art": "application/json; charset=utf-8",

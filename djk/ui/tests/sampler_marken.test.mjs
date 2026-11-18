@@ -413,3 +413,34 @@ test('Stop Cypher: the three routes refuse Cypher and change nothing', async (t)
   const ok = await ruf(z.url, 'POST', '/sampler/marke', { id, art: 'weg', marke: 2 });
   assert.equal(ok.code, 200, JSON.stringify(ok.j));
 });
+
+test('a marker moved back to the detected position gives the original method again', async (t) => {
+  const { z, id, s: vor } = await mitSpur(t);
+  assert.equal(vor.methode, 'anschlag');
+  const weg = await ruf(z.url, 'POST', '/sampler/marke', { id, art: 'schieben', marke: 3, frame: vor.grenzen[3] + 900, einrasten: false });
+  assert.equal(weg.j.schnitt.methode, 'hand');
+  assert.equal(weg.j.schnitt.ursprung_methode, 'anschlag');
+  const zweiter = await ruf(z.url, 'POST', '/sampler/marke', { id, art: 'schieben', marke: 2, frame: vor.grenzen[2] + 300, einrasten: false });
+  assert.equal(zweiter.j.schnitt.methode, 'hand');
+  const halb = await ruf(z.url, 'POST', '/sampler/marke', { id, art: 'schieben', marke: 3, frame: vor.grenzen[3], einrasten: false });
+  assert.equal(halb.j.schnitt.methode, 'hand', 'one marker is still off its detected position');
+  const zurueck = await ruf(z.url, 'POST', '/sampler/marke', { id, art: 'schieben', marke: 2, frame: vor.grenzen[2], einrasten: false });
+  assert.equal(zurueck.code, 200, JSON.stringify(zurueck.j));
+  assert.deepEqual(zurueck.j.schnitt.grenzen, vor.grenzen);
+  assert.equal(zurueck.j.schnitt.methode, 'anschlag');
+  assert.deepEqual((await holeSchnitt(z, id)).methode, 'anschlag', 'schnitt.json holds it');
+});
+
+test('every change of the cut tells the page by an event, so an open strip reads it', async (t) => {
+  const { z, id, s: vor } = await mitSpur(t);
+  const gesehen = [], echt = z.o.verteile.bind(z.o);
+  z.o.verteile = (e) => { if (e.a === 'schnitt') gesehen.push(e.f); return echt(e); };
+  const m = await ruf(z.url, 'POST', '/sampler/marke', { id, art: 'schieben', marke: 3, frame: vor.grenzen[3] + 900, einrasten: false });
+  assert.equal(m.code, 200, JSON.stringify(m.j));
+  const n = await ruf(z.url, 'POST', '/sampler/neu_schneiden', { id, methode: 'raster', scheiben: 8 });
+  assert.equal(n.code, 200, JSON.stringify(n.j));
+  assert.deepEqual(gesehen, [{ id, geaendert: m.j.schnitt.geaendert }, { id, geaendert: n.j.schnitt.geaendert }]);
+  const refused = await ruf(z.url, 'POST', '/sampler/marke', { id, art: 'weg', marke: 99 });
+  assert.equal(refused.code, 404);
+  assert.equal(gesehen.length, 2, 'a refusal changes nothing and tells nothing');
+});

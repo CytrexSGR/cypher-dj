@@ -54,7 +54,7 @@ struct KernKonfig {
   int hall_faeden = 3;
   std::string hall_cpus = "";
   // Multi-core work, slice 3.2: the track phases (phase Q) on the Hall pool: "aus" | "an" | "auto". Default "an", in live and production alike. Needs hall_faeden > 0 (main maps
-  // "no pool" to aus and says so at start). "auto" behaves as "an" and, after a stall switch-off, retries once after a pause (the second switch-off is for good).
+  // "no pool" to aus and says so at start). "auto" is a synonym of "an": after a stall switch-off both retry after a back-off (4096 blocks, doubling per switch-off up to 65536).
   std::string spur_pool = "an";
   // Voice channel (voice.h): input pair ein_<k> summed into the master in front of the limiter, music ducked while it
   // speaks. 0 (default) = off, the master is bit-identical to a kern without it.

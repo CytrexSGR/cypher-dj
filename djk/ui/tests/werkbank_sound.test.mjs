@@ -116,10 +116,11 @@ test('CHANGE swaps the instrument of the selected track in one command, the note
   w.zeige(); await ruhe();
   let punkte = null; w.ctx.oeffneMenue = (liste) => { punkte = liste; };
   $w('karte-wechsel').click(); await ruhe();
-  const greif = punkte.find((p) => p.text === 'synth-greif');
+  const greif = punkte.find((p) => p.text === 'synth-greif \u00b7 Lead');   // grouped by type (the default); the text carries the role
   assert.ok(greif, 'menu lists the Baukasten instruments');
   const kopf = punkte.filter((p) => p.gruppe).map((p) => p.text);
-  assert.deepEqual(kopf, ['Baukasten \u00b7 lead', 'Baukasten \u00b7 other', 'Other'], 'grouped by category, the uncategorised after');
+  assert.deepEqual(kopf, ['Other', 'RB-338', 'View'], 'no type in this data: both graphs under Other, then the RB-338, then the view switch');
+  assert.equal(punkte.at(-1).text, 'Group by role', 'the last item switches the axis');
   assert.ok(punkte.indexOf(greif) < punkte.findIndex((p) => p.text === 'bass-banddrive'));
   greif.aktion(); await ruhe();
   const a = attrappe.anrufe.filter((x) => x.url.startsWith('/proj/aendern')).at(-1);

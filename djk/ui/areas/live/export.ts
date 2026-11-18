@@ -15,7 +15,7 @@ import { schneideAusFassung, leseLoopQuelle, type LoopQuelle } from '../../loops
 import { schreibeWavAusF32Stueckweise } from '../../project/recording.ts';
 import { aendereStand } from '../../project/state.ts';
 import { neueModulId } from '../../project/module_storage.ts';
-import { baueModul, liveSlots, normiereSlot, LIVE_LOOP_BEATS, LOOP_SPUR, type ModulDatei, type ModulLoop, type ModulHerkunftSlot } from '../../project/live.ts';
+import { baueModul, liveSlots, normiereSlot, liveRegion, LOOP_SPUR, type ModulDatei, type ModulLoop, type ModulHerkunftSlot } from '../../project/live.ts';
 import { MAX_GRUPPEN, MAX_SPUREN, type Herkunft, type Projekt } from '../../project/model.ts';
 import type { StemsPlan, Stem } from '../../project/stems.ts';
 import { alsAntwort, leseKoerper, type ProjZugang } from '../proj/area.ts';
@@ -25,7 +25,7 @@ import { ModulLeeren, type LeerenOptionen } from './leeren.ts';
 import { ModulBlend } from './blend.ts';
 import { ModulMidi, type MidiOptionen } from './midi.ts';
 import { ModulTonart, type MasterTonartQuelle } from './key.ts';
-import { SeqBereich, seqRouten } from './seq.ts';
+import { SeqBereich, seqRouten, type SzenenWeg } from './seq.ts';
 
 // What the page server knows about a deck's active loop (server.ts deckLoopAusschnitt); startFrame and frames are the cut of the rendering file
 export interface DeckLoopAusschnitt {
@@ -44,7 +44,10 @@ export interface ExportOptionen {
   nachStems?(e: { slot: 'A' | 'B'; gruppeId: string; projekt: Projekt }): void | Promise<void>;
   leeren?: LeerenOptionen;   // POST /modul/leeren (task 3): clock source, store, test seam; POST /modul/blend (task 8) takes the same clock
   midi?: MidiOptionen;       // task 8: the MIDI extraction of Drums and Bass after the stems (absent: no new paths)
+  samplerOrdner?(): string | undefined;   // SEQ deck: the cut store of this instance (server.ts)
+  szenen?: SzenenWeg;                    // SEQ scenes: the core side of a scene launch (server.ts); absent = a launch applies at once
   deckLaeuft?(platz: number): boolean;   // SEQ deck: does deck N play (server.ts); POST /seq/anlegen is refused with deck_laeuft while it does
+  deckAufraeumen?(platz: number, quelle: 'andreas' | 'cypher'): void;   // SEQ deck: a write created the deck on `platz`; eject a stale stopped track (server.ts)
   masterTonart?: MasterTonartQuelle;   // task 11: key of the deck on the master (server.ts), for POST /modul/tonart and the distance in /modul/stand
   zeitlimitDekodierenMs?: number;
   // DJ view places task 7 (decision 10): is the channel of the slot (`pad/1`, `pad/2`) open? An open channel refuses the export (kanal_offen); PFL is no reason.
@@ -275,7 +278,7 @@ export class Modulexport {
       const modul = gleich()!.gruppen.find((g) => g.id === gruppeId)!.modul!;
       const loop = { sha256: l.sha256, pfad: l.pfad, beats: modul.laenge_beats, frames };
       const plan: StemsPlan = { spurId: l.spurId, clipId: l.clipId, clipName: LOOP_SPUR, sha256: l.sha256, von: 0, bis: modul.laenge_beats,
-        f0: 0, f1: frames, n: frames, bClip0: 0, start: 0, laenge: LIVE_LOOP_BEATS, offset: 0, tempo: 0, warpText: '' };
+        f0: 0, f1: frames, n: frames, bClip0: 0, start: 0, laenge: liveRegion(gleich()!), offset: 0, tempo: 0, warpText: '' };
       const uebernahme: Uebernahme = {
         dateiName: () => `modul-${slot}`,
         hinfaellig: (o, anzahl) => {
@@ -330,7 +333,11 @@ export function liveBereich(ctx: BereichKontext, zugang: ProjZugang, stems: Stem
   const l = new ModulLeeren(ctx, zugang, o.leeren ?? {});
   const bl = new ModulBlend(ctx, zugang, o.leeren ?? {});
   const tonart = new ModulTonart(ctx, zugang, o.masterTonart);
-  const seq = new SeqBereich(ctx, zugang, o.deckLaeuft ? { deckLaeuft: (n) => o.deckLaeuft!(n) } : {});
+  const seq = new SeqBereich(ctx, zugang, { ...(o.deckLaeuft ? { deckLaeuft: (n: number) => o.deckLaeuft!(n) } : {}),
+    ...(o.samplerOrdner ? { samplerOrdner: () => o.samplerOrdner!() } : {}),
+    ...(o.deckAufraeumen ? { deckAufraeumen: (n: number, q: 'andreas' | 'cypher') => o.deckAufraeumen!(n, q) } : {}),
+    ...(o.kanalOffen ? { kanalOffen: (k: string) => o.kanalOffen!(k) } : {}),
+    ...(o.szenen ? { szenen: o.szenen } : {}) });   // POST /seq/modul: a new deck on an open channel is refused
   const antworte = async (r: http.ServerResponse, f: () => Antwort | Promise<Antwort>): Promise<void> => {
     let x: Antwort;
     try { x = await f(); } catch (e) { x = alsAntwort(e, ctx); }
@@ -369,5 +376,5 @@ export function liveBereich(ctx: BereichKontext, zugang: ProjZugang, stems: Stem
       }) },
     ...seqRouten(ctx, seq),
   ];
-  return { name: 'live-modul', modul: m, leeren: l, blend: bl, tonart, seq, routen };
+  return { name: 'live-modul', modul: m, leeren: l, blend: bl, tonart, seq, routen, ereignis: (adresse, felder) => seq.ereignis(adresse, felder) };
 }

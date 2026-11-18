@@ -28,13 +28,16 @@ export function setIdAus(d: Date): string {
 
 // Liest ein Journal Zeile für Zeile in Blöcken, nie als eine Zeichenkette: readFileSync scheitert ab 512 MB an der
 // V8-Grenze (M, 2026-10-22: Betriebs-Journal 555 MB). Leere und kaputte Zeilen werden übersprungen; fehlt die Datei: nichts.
-export function* journalZeilen(pfad: string, block = 1 << 20): Generator<JournalZeile> {
+// roh (optional): predicate on the raw line text, true = parse and yield it, false = skip it BEFORE JSON.parse (the resume of a
+// 2 GB journal spent 70 % of its 11 s in JSON.parse of lines it never reads). A skipped line is never parsed, so a skipped line
+// that is not valid JSON costs nothing; empty lines do not reach the predicate.
+export function* journalZeilen(pfad: string, block = 1 << 20, roh?: (zeile: string) => boolean): Generator<JournalZeile> {
   let fd: number;
   try { fd = fs.openSync(pfad, 'r'); } catch { return; }
   const dec = new StringDecoder('utf8');
   const buf = Buffer.alloc(block);
   let rest = '';
-  const zeile = (z: string): JournalZeile[] => { if (!z.trim()) return []; try { return [JSON.parse(z) as JournalZeile]; } catch { return []; } };
+  const zeile = (z: string): JournalZeile[] => { if (!z.trim() || (roh && !roh(z))) return []; try { return [JSON.parse(z) as JournalZeile]; } catch { return []; } };
   try {
     for (let n = fs.readSync(fd, buf, 0, block, null); n > 0; n = fs.readSync(fd, buf, 0, block, null)) {
       const teile = (rest + dec.write(buf.subarray(0, n))).split('\n');

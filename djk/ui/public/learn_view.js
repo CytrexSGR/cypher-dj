@@ -7,7 +7,7 @@ import { $, $$, melde, postJson, zustand } from './page_state.js';
 import { kompWert, platteBauen } from './effects_gemeinsam.js';
 import { KOMP_DETAIL, fxGewaehlt } from './effects_view.js';
 // S19 (MIDI learn): the learn table as the page server reports it (GET /lernen); the buttons next to the graph knobs follow it
-export let lernen = { zuordnungen: [], wartet: null, midi: { port: null }, datei: 'fehlt' };
+export let lernen = { zuordnungen: [], wartet: null, midi: { port: null }, controller: [], datei: 'fehlt' };
 export const lernModus = new Set();   // channels whose panel has the LEARN toggle on
 // Host learn: the host parameters mapped onto slot rows (GET /lernen/host ziele: {pfad, kanal, name, gelernt}). A host panel control has the key `<kanal>/host/<name>`
 // (adapter.lernPfad); the slot row `<kanal>/bk/<n>` is what the controller is learned onto.
@@ -50,7 +50,7 @@ function setzeLernen(neu) {
 function zeigeLernen() {
   for (const platz of $$('[data-lern-platz]')) {
     const pfad = platz.dataset.lernPlatz;
-    platz.innerHTML = lernKnopfHtml(pfad, lernStand(lernen.zuordnungen, pfad), { midi: !!lernen.midi?.port, wartet: lernen.wartet?.pfad ?? null });
+    platz.innerHTML = lernKnopfHtml(pfad, lernStand(lernen.zuordnungen, pfad), { midi: !!lernen.midi?.port || (lernen.controller?.length ?? 0) > 0, wartet: lernen.wartet?.pfad ?? null });
   }
   for (const liste of $$('.bkliste')) {   // front panels follow too
     if (liste._fp && liste._fpHostKanal) liste._fp.setzeLernen(hostLernStandVon(liste._fpHostKanal));
@@ -73,8 +73,10 @@ export async function lernSchicken(pfad, daten) {
   setzeLernen(r.j);
   if (pfad.startsWith('/lernen/host')) holeLernen();   // the host mappings changed (the answer is {pfad}, not the learn table)
 }
+/** Name of the controller on a place, as GET /lernen lists it ('' when unknown). */
+export const controllerName = (platz) => lernen.controller?.find((c) => c.platz === platz)?.name ?? '';
 const LERN_MELDUNG = {
-  fertig: (f) => [`Learned: ${f.pfad} follows CC${f.nr} ch${f.kanal}`, false],
+  fertig: (f) => [`Learned: ${f.pfad} follows CC${f.nr} ch${f.kanal}${controllerName(f.platz) ? ` of ${controllerName(f.platz)}` : ''}`, false],
   geloescht: (f) => [`MIDI assignment of ${f.pfad} removed`, false],
   belegt: (f) => [`CC${f.nr} ch${f.kanal} already drives a knob of the base mapping; nothing changed`, true],
   hand_in: (f) => [f.text, true],

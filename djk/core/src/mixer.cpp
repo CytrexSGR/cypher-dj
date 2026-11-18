@@ -449,7 +449,11 @@ void Mixer::route(int k, int n, const float* l, const float* r) {
   // FX3 (see mixer.h): a source channel that is assigned, blending or still carrying a weight splits its master share between the master
   // sum and the fx/3 bus input. Every other channel takes the code below bit for bit as before.
   const bool fx3 = !bus && (fx3_zuw_[k] || fx3_gew_[k] > 0.0f || fx3_rest_[k] > 0);
-  if (!zvl && !xsvl && !xfvl && blende_rest_[k] == 0 && !fx3) {   // ruhig: ein Ziel, ein Gewicht für den ganzen Block
+  // audit U35: the wanted target. A retarget while a blend is open waits until that blend has ended (restarting it from a full swap stepped the weights);
+  // the last value set (ziel_[k].w, carried on at the end of every block) is what the channel then moves to, also when the block that set it is over.
+  const int ziel_wunsch = bus ? 0 : std::clamp(ganz(ziel_[k].w), 0, static_cast<int>(MIX_BUSSE));
+  const bool ziel_offen = !bus && ziel_wunsch != ziel_ist_[k];
+  if (!zvl && !xsvl && !xfvl && blende_rest_[k] == 0 && !fx3 && !ziel_offen) {   // ruhig: ein Ziel, ein Gewicht für den ganzen Block
     const int z = bus ? 0 : ziel_ist_[k];
     const float g = z == 0 ? seitengewicht(ganz(xseite_[k].w), xfader_.w) : 1.0f;
     addiere(ziel_l(z), l, n, g);
@@ -457,8 +461,8 @@ void Mixer::route(int k, int n, const float* l, const float* r) {
     return;
   }
   for (int i = 0; i < n; ++i) {
-    if (zvl) {
-      int zi = ganz(zvl[i]);
+    if (!bus && blende_rest_[k] == 0) {
+      int zi = zvl ? ganz(zvl[i]) : ziel_wunsch;
       zi = zi < 0 ? 0 : (zi > MIX_BUSSE ? MIX_BUSSE : zi);
       if (zi != ziel_ist_[k]) {
         blende_von_[k] = ziel_ist_[k];

@@ -260,18 +260,18 @@ test('a module with instrument paths, blend 0.5 and a blend lane is saved and pl
   assert.equal(kopf(p).live, undefined);
 });
 
-test('instrument paths count against MAX_BK_SPUREN: 7 bk tracks in the project and a module with 2 is routing_grenze; host instruments and chain automation stay refused', async (t) => {
+test('instrument paths count against MAX_BK_SPUREN: 15 bk tracks in the project and a module with 2 is routing_grenze; host instruments and chain automation stay refused', async (t) => {
   const basis = fs.mkdtempSync(path.join(os.tmpdir(), 'modul-grenze-'));
   t.after(() => fs.rmSync(basis, { recursive: true, force: true }));
   const live = mitPfaden();
   const id = speichereModul(live, liveSlots(live).A, { basis }).id;
   const mod = () => liesModul(id, basis);
   const opt = { modulOrdner: modulOrdner(id, basis), audioZiel: path.join(basis, 'target'), quelle: 'andreas' };
-  const voll = fuehreListeAus(neuesProjekt('p'), Array.from({ length: 7 }, () => ({ befehl: 'spur_neu', art: 'instrument', geraet: { art: 'intern', name: 'bk', graph: 'synth-neuro' } }))).projekt;
+  const voll = fuehreListeAus(neuesProjekt('p'), Array.from({ length: 15 }, () => ({ befehl: 'spur_neu', art: 'instrument', geraet: { art: 'intern', name: 'bk', graph: 'synth-neuro' } }))).projekt;
   const grenze = (f) => { try { f(); } catch (e) { return [e.code, e.fehler]; } return null; };
   assert.deepEqual(grenze(() => setzeModulEin(voll, mod(), opt)), [409, 'routing_grenze']);
-  const sechs = fuehreListeAus(neuesProjekt('p'), Array.from({ length: 6 }, () => ({ befehl: 'spur_neu', art: 'instrument', geraet: { art: 'intern', name: 'bk', graph: 'synth-neuro' } }))).projekt;
-  assert.equal(grenze(() => setzeModulEin(sechs, mod(), opt)), null, '6 + 2 = 8 fit');
+  const sechs = fuehreListeAus(neuesProjekt('p'), Array.from({ length: 14 }, () => ({ befehl: 'spur_neu', art: 'instrument', geraet: { art: 'intern', name: 'bk', graph: 'synth-neuro' } }))).projekt;
+  assert.equal(grenze(() => setzeModulEin(sechs, mod(), opt)), null, '14 + 2 = 16 fit');
   const wirt = mod(); wirt.spuren[0].art = 'instrument'; wirt.spuren[0].geraet = { art: 'wirt', name: 'surge', slot: 1 };
   assert.deepEqual(grenze(() => setzeModulEin(neuesProjekt('p'), wirt, opt)), [409, 'modul_nicht_einsetzbar']);
   const kette = mod(); kette.gruppen[0].automation = [{ id: 'a1', ziel: 'insert.i1.cutoff', punkte: [{ beat: 0, wert: 0 }] }];

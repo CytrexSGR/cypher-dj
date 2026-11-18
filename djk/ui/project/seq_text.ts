@@ -20,7 +20,8 @@
 //  - `kurve <target> <shape> <from> <to> [stufen N] [saat N] [je <length>]` or `kurve <target> punkte <beat>:<value>[@s|@sprung] ... [je <length>]`.
 //  - a velocity lane wins over `x X o`; a length lane wins over `~`.
 import { fuehreListeAus, BefehlFehler } from './commands.ts';
-import { seqFolgen } from './seq.ts';
+import { seqFolgen, seqRegion } from './seq.ts';
+import { liveBeats, takteProLive } from './taktart_live.ts';
 import type { Geraet, MidiClip, Projekt, Spur } from './model.ts';
 import {
   SeqFehler, abgeleiteteZeilen, folgeSicht, kurveBefehle, formPunkte, laengeBefehle, musterLaenge, neueZeilenId, zeileBefehle, zeilenSetzenBefehle,
@@ -73,14 +74,16 @@ function zahlText(x: number, stellen: number): string {
   if (s === '-0') s = '0';
   return s.replace(/^(-?)0\./, '$1.');
 }
-export function laengeText(beats: number): string {
-  if (Math.abs(beats / 4 - Math.round(beats / 4)) < EPS) return `${Math.round(beats / 4)}bar`;
-  if (beats < 4) {                                              // a part of a bar: 1/4bar, 1/2bar, 3/4bar, else beats
-    const m = [2, 4].find((d) => Math.abs(beats * d / 4 - Math.round(beats * d / 4)) < EPS);
-    if (m) return `${Math.round(beats * m / 4)}/${m}bar`;
+// Own function for the meter (not a second parameter of laengeText: `.map(laengeText)` would pass the index as the meter).
+export function laengeTextTakt(beats: number, proTakt: number): string {
+  if (Math.abs(beats / proTakt - Math.round(beats / proTakt)) < EPS) return `${Math.round(beats / proTakt)}bar`;
+  if (beats < proTakt) {                                        // a part of a bar: 1/4bar, 1/2bar, 3/4bar, else beats
+    const m = [2, 4].find((d) => Math.abs(beats * d / proTakt - Math.round(beats * d / proTakt)) < EPS);
+    if (m) return `${Math.round(beats * m / proTakt)}/${m}bar`;
   }
   return `${zahlText(beats, 4).replace(/^(-?)\./, '$10.')}b`;
 }
+export const laengeText = (beats: number): string => laengeTextTakt(beats, 4);
 export const bandVon = (vel: number): 'o' | 'x' | 'X' => (vel <= 79 ? 'o' : vel <= 110 ? 'x' : 'X');
 const notenName = (ton: number): string => String(tonName(ton)).toLowerCase();
 const namenText = (n: string): string => (/[\s";]/.test(n) ? `"${n.replace(/"/g, "'")}"` : n);
@@ -115,18 +118,18 @@ function zielText(ziel: string): string {
 }
 
 // The pattern as text: head and every lane of the clip (explicit and derived, ids as the page shows them). A pattern without a clip is its head.
-export function schreibeFolgeText(spur: Spur, clip: MidiClip | null, info: FolgeInfo): string {
-  const kopf = `folge ${namenText(spur.name)}  ${geraetText(spur.geraet)}  ${laengeText(musterLaenge(clip))}`;
+export function schreibeFolgeText(spur: Spur, clip: MidiClip | null, info: FolgeInfo, proTakt = 4): string {
+  const kopf = `folge ${namenText(spur.name)}  ${geraetText(spur.geraet)}  ${laengeTextTakt(musterLaenge(clip), proTakt)}`;
   if (!clip) return kopf;
   const sicht = folgeSicht(spur, clip, info);
   const zeilen = sicht.zeilen.map((z: any) => {
-    const proTakt = Math.max(1, Math.round(4 / (z.teiler ?? 0.25)));
+    const zellenProTakt = Math.max(1, Math.round(proTakt / (z.teiler ?? 0.25)));
     if (z.art === 'noten') {
       const kopfZ = `noten ${z.id}${z.ton !== undefined ? ` ${z.ton}` : ''}  ${gitterText(z.teiler)}  `;
       if (z.ton !== undefined) {
         const zeichen = z.zellen.map((c: any) => (c.an ? bandVon(c.vel) : '.'));
         const name = (info.klaenge ?? []).find((k) => k.ton === z.ton)?.name;
-        return kopfZ + mitTakten(zeichen, proTakt, 4, ' ') + (name ? `   ; ${name}` : '');
+        return kopfZ + mitTakten(zeichen, zellenProTakt, 4, ' ') + (name ? `   ; ${name}` : '');
       }
       const tokens: string[] = z.zellen.map(() => '.');
       z.zellen.forEach((c: any, i: number) => {
@@ -135,19 +138,19 @@ export function schreibeFolgeText(spur: Spur, clip: MidiClip | null, info: Folge
         const b = bindungen(z.zellen, i, z.teiler);
         for (let k = 1; k <= b; k++) tokens[i + k] = '~';
       });
-      return kopfZ + mitTakten(tokens, proTakt, 1, ' ');
+      return kopfZ + mitTakten(tokens, zellenProTakt, 1, ' ');
     }
-    const je = z.eigen_laenge ? `  je ${laengeText(z.laenge_beats)}` : '';
+    const je = z.eigen_laenge ? `  je ${laengeTextTakt(z.laenge_beats, proTakt)}` : '';
     if (z.art === 'werte' && (z.ziel === 'vel' || z.ziel === 'laenge')) {
       const t = z.ziel === 'vel' ? 'vel' : 'len';
       const zellen = z.zellen.map((c: any) => (c.da ? (z.ziel === 'vel' ? String(Math.round(c.wert)) : zahlText(c.wert, 2)) : '.'));
-      return `werte ${t}${z.von !== undefined ? `@${z.von}` : ''}  ${gitterText(z.teiler)}  ${mitTakten(zellen, proTakt, 1, ' ')}`;
+      return `werte ${t}${z.von !== undefined ? `@${z.von}` : ''}  ${gitterText(z.teiler)}  ${mitTakten(zellen, zellenProTakt, 1, ' ')}`;
     }
     const name = zielName(z.ziel, info);
     const komm = reglerSchluessel(z.ziel) !== null ? `   ; ${z.kein_regler ? 'no such knob' : name}` : '';
     if (z.art === 'werte') {
       const zellen = z.zellen.map((c: any) => (c.da || c.naht ? zahlText(c.wert, 2) : '.'));
-      return `werte ${zielText(z.ziel)}  ${gitterText(z.teiler)}  ${mitTakten(zellen, proTakt, 1, ' ')}${je}${komm}`;
+      return `werte ${zielText(z.ziel)}  ${gitterText(z.teiler)}  ${mitTakten(zellen, zellenProTakt, 1, ' ')}${je}${komm}`;
     }
     if (z.form) {
       const f = z.form;
@@ -197,12 +200,12 @@ function worte(zeile: string): Token[] {
   }
   return aus;
 }
-function laengeVon(t: string): number | null {
+function laengeVon(t: string, proTakt = 4): number | null {
   const m = LAENGE.exec(t);
   if (!m) return null;
-  if (m[1] !== undefined) return Number(m[1]) * (m[2] === 'bar' ? 4 : 1);
+  if (m[1] !== undefined) return Number(m[1]) * (m[2] === 'bar' ? proTakt : 1);
   const d = Number(m[4]);
-  return d > 0 ? (Number(m[3]) / d) * 4 : null;
+  return d > 0 ? (Number(m[3]) / d) * proTakt : null;
 }
 function tonVonName(t: string): number | null {
   const m = NOTEN_NAME.exec(t);
@@ -212,7 +215,7 @@ function tonVonName(t: string): number | null {
 }
 
 // text -> the patterns it names, or a refusal that names the line (and lane and cell). Cell counts and targets are checked against the data by folgeBefehle.
-export function leseFolgeText(text: string): GeparsteFolge[] | Urteil {
+export function leseFolgeText(text: string, proTakt = 4): GeparsteFolge[] | Urteil {
   if (typeof text !== 'string') return urteil('text: the pattern text expected');
   const folgen: GeparsteFolge[] = [];
   const namen = new Set<string>();
@@ -233,11 +236,12 @@ export function leseFolgeText(text: string): GeparsteFolge[] | Urteil {
       const kopf: GeparstKopf = { name, instrument: null, beats: null, nr };
       for (const x of w.slice(2)) {
         if (INSTRUMENT.test(x.t) && kopf.instrument === null) kopf.instrument = x.t;
-        else if (laengeVon(x.t) !== null && kopf.beats === null) kopf.beats = laengeVon(x.t) as number;
+        else if (laengeVon(x.t, proTakt) !== null && kopf.beats === null) kopf.beats = laengeVon(x.t, proTakt) as number;
         else return vorLane(`pattern ${name}: ${x.t} is neither an instrument (bk:<graph>, kit:<kit>, rb338) nor a length (2bar, 3/4bar, 6b)`);
       }
-      if (kopf.beats !== null && (!(kopf.beats >= 0.125) || kopf.beats > 64 || Math.abs(kopf.beats * 8 - Math.round(kopf.beats * 8)) > EPS)) {
-        return vorLane(`pattern ${name}: the length takes a multiple of 0.125 beat up to 64 beats`);
+      const maxBeats = Math.max(64, liveBeats(proTakt));
+      if (kopf.beats !== null && (!(kopf.beats >= 0.125) || kopf.beats > maxBeats || Math.abs(kopf.beats * 8 - Math.round(kopf.beats * 8)) > EPS)) {
+        return vorLane(`pattern ${name}: the length takes a multiple of 0.125 beat up to ${maxBeats} beats`);
       }
       folgen.push({ kopf, zeilen: [] });
       continue;
@@ -249,11 +253,11 @@ export function leseFolgeText(text: string): GeparsteFolge[] | Urteil {
       if ('grund' in r) return r;
       f.zeilen.push(r);
     } else if (wort === 'werte') {
-      const r = leseWerte(w, nr);
+      const r = leseWerte(w, nr, proTakt);
       if ('grund' in r) return r;
       f.zeilen.push(r);
     } else if (wort === 'kurve') {
-      const r = leseKurve(w, nr);
+      const r = leseKurve(w, nr, proTakt);
       if ('grund' in r) return r;
       f.zeilen.push(r);
     } else return vorLane(`${w[0].t}: a line starts with folge, noten, werte or kurve`);
@@ -314,16 +318,16 @@ function zielWort(w: Token): GeparstZiel {
   }
   return { text: w.t, quoted: w.quoted, von: null };
 }
-function leseJe(w: Token[], ab: number, nr: number, wo: string): { je: number | null; bis: number } | Urteil {
+function leseJe(w: Token[], ab: number, nr: number, wo: string, proTakt: number): { je: number | null; bis: number } | Urteil {
   const i = w.findIndex((x, k) => k >= ab && !x.quoted && x.t.toLowerCase() === 'je');
   if (i < 0) return { je: null, bis: w.length };
-  const l = w[i + 1] ? laengeVon(w[i + 1].t) : null;
+  const l = w[i + 1] ? laengeVon(w[i + 1].t, proTakt) : null;
   if (l === null || w.length > i + 2) return urteil(`line ${nr} (${wo}): je takes one length (2bar, 3/4bar, 6b) at the end of the line`);
   if (!(l >= 0.0625) || l > 64) return urteil(`line ${nr} (${wo}): the length of an envelope takes 0.0625 to 64 beats`);
   return { je: l, bis: i };
 }
 
-function leseWerte(w: Token[], nr: number): Extract<GeparstZeile, { art: 'werte' }> | Urteil {
+function leseWerte(w: Token[], nr: number, proTakt: number): Extract<GeparstZeile, { art: 'werte' }> | Urteil {
   if (w.length < 3) return urteil(`line ${nr}: werte <target> <grid> <cells> expected`);
   const ziel = zielWort(w[1]);
   let i = 2;
@@ -332,7 +336,7 @@ function leseWerte(w: Token[], nr: number): Extract<GeparstZeile, { art: 'werte'
   if (g === undefined || w[i].quoted || !(g in GITTER)) {
     return urteil(`line ${nr} (lane ${ziel.text}): the grid 1/4, 1/8, 1/16 or 1/32 expected after the target (a knob name with spaces needs double quotes)`);
   }
-  const je = leseJe(w, i + 1, nr, `lane ${ziel.text}`);
+  const je = leseJe(w, i + 1, nr, `lane ${ziel.text}`, proTakt);
   if ('grund' in je) return je;
   const tokens = w.slice(i + 1, je.bis).map((x) => x.t).join(' ').replace(/\|/g, ' ').split(/\s+/).filter(Boolean);
   const zellen: (number | null)[] = [];
@@ -345,12 +349,12 @@ function leseWerte(w: Token[], nr: number): Extract<GeparstZeile, { art: 'werte'
   return { art: 'werte', nr, ziel, teiler: GITTER[g] as number, zellen, je: je.je };
 }
 
-function leseKurve(w: Token[], nr: number): Extract<GeparstZeile, { art: 'kurve' }> | Urteil {
+function leseKurve(w: Token[], nr: number, proTakt: number): Extract<GeparstZeile, { art: 'kurve' }> | Urteil {
   if (w.length < 3) return urteil(`line ${nr}: kurve <target> <shape> <from> <to> | punkte <beat>:<value> ... expected`);
   const ziel = zielWort(w[1]);
   const wo = `lane ${ziel.text}`;
   const art = w[2].t.toLowerCase();
-  const je = leseJe(w, 3, nr, wo);
+  const je = leseJe(w, 3, nr, wo, proTakt);
   if ('grund' in je) return je;
   const rest = w.slice(3, je.bis);
   if (art === 'punkte') {
@@ -638,7 +642,8 @@ function planeFolge(st: { w: Projekt }, spurId: string, f: GeparsteFolge, info: 
       const zellen = a.tl.zellen;
       const erwartet = Math.max(1, Math.ceil(L / zl.teiler - EPS));
       if (zellen.length !== erwartet) {
-        fehl(`${ort}: ${zellen.length} cells found, ${erwartet} expected for ${laengeText(L)} on ${gitterText(zl.teiler)} (line ${a.tl.nr})`);
+        const lt = laengeTextTakt(L, takteProLive(st.w.taktart));
+        fehl(`${ort}: ${zellen.length} cells found, ${erwartet} expected for ${lt} on ${gitterText(zl.teiler)} (line ${a.tl.nr})`);
       }
       kontext(() => lauf(zeileBefehle(spurW(), clipW(), zl, zellen, info, { eigen_laenge: eigen })), a.zl.id);
       continue;
@@ -688,12 +693,12 @@ export function folgeBefehle(p: Projekt, gruppeId: string, folgen: GeparsteFolge
       const clip = bestehend.clip;
       if (!clip) {
         // no clip yet: the clip comes with the first write, so it is one clip_neu with the notes and the descriptor (no envelopes)
-        fuehre(st, [{ befehl: 'clip_neu', spur_id: spur.id, art: 'midi', name: spur.name, start_beat: 0, laenge_beats: 64,
+        fuehre(st, [{ befehl: 'clip_neu', spur_id: spur.id, art: 'midi', name: spur.name, start_beat: 0, laenge_beats: seqRegion(st.w),
           loop_beats: f.kopf.beats ?? 4 }], name);
         planeFolge(st, spur.id, f, info, null);
         const c = (st.w.spuren.find((s) => s.id === spur.id) as Spur).clips[0] as MidiClip;
         if (c.huellkurven?.length) fehl(`pattern ${spur.name}: it has no clip yet; write the notes first, envelopes need the clip`);
-        out.push({ befehl: 'clip_neu', spur_id: spur.id, art: 'midi', name: spur.name, start_beat: 0, laenge_beats: 64, loop_beats: c.loop_beats,
+        out.push({ befehl: 'clip_neu', spur_id: spur.id, art: 'midi', name: spur.name, start_beat: 0, laenge_beats: seqRegion(st.w), loop_beats: c.loop_beats,
           ...(c.noten.length ? { noten: c.noten.map(({ beat, laenge, ton, vel }) => ({ beat, laenge, ton, vel })) } : {}), ...(c.seq ? { seq: c.seq } : {}) });
         continue;
       }

@@ -1,7 +1,7 @@
 // I08: Zuordnung, Freigabe und Latenz als reine Übergänge Konfig -> Konfig. F3 (Andreas 2026-10-22): externe Eingänge nur nach Einzelfreigabe durch Andreas.
 import { profil } from './profile.ts';
 import type { Erkennung } from './pwdump.ts';
-import { GeraeteFehler, MIDI_VERSATZ_MAX, portName, type Konfig, type Latenz } from './store.ts';
+import { CONTROLLER_PLAETZE, GeraeteFehler, MIDI_VERSATZ_MAX, portName, type Konfig, type Latenz } from './store.ts';
 
 export type Quelle = 'andreas' | 'cypher';
 const ungueltig = (t: string): never => { throw new GeraeteFehler('argument_ungueltig', 400, t); };
@@ -70,6 +70,7 @@ export function setzeMidi(alt: Konfig, quelle: Quelle, d: Record<string, unknown
     const q = erk.midi.find((x) => p.midi!.passt(x));
     const eigene = d.port === undefined ? null : d.port as string;
     if (!q && !eigene) throw new GeraeteFehler('geraet_nicht_da', 409, `${p.name} is not connected (or give port explicitly)`);
+    if ((k.controller ?? []).some((c) => c.port === (eigene ?? q!.port))) throw new GeraeteFehler('port_vergeben', 409, 'this device already sits on a controller place');
     const gleich = k.midi.profil === p.id && k.midi.port === (eigene ?? q!.port);
     // release and offset belong to the device (spec 4.4): another profile or port takes both away
     k.midi = { profil: p.id, port: eigene ?? q!.port, frei_fuer_cypher: gleich ? k.midi.frei_fuer_cypher : false,
@@ -88,6 +89,38 @@ export function setzeMidi(alt: Konfig, quelle: Quelle, d: Record<string, unknown
     if (d.frei_fuer_cypher && !k.midi.port) throw new GeraeteFehler('eingang_leer', 409, 'there is no device on this input to release');
     k.midi.frei_fuer_cypher = d.frei_fuer_cypher;
   }
+  return k;
+}
+
+// A controller on one of the places 2..8 (place 1 is the MIDI input above). {port} without platz takes the lowest free place; {platz, port: null}
+// frees the place (its learn table stays in the controller folder and comes back with the next device on that place); {platz, name} renames.
+export function setzeController(alt: Konfig, quelle: Quelle, d: Record<string, unknown>): Konfig {
+  nurAndreas(quelle);
+  const k = structuredClone(alt);
+  const liste = k.controller ?? [];
+  if (d.platz !== undefined && (!Number.isInteger(d.platz) || (d.platz as number) < 2 || (d.platz as number) > CONTROLLER_PLAETZE)) ungueltig(`platz: 2 to ${CONTROLLER_PLAETZE} (place 1 is the MIDI input)`);
+  if (d.name !== undefined && (typeof d.name !== 'string' || d.name.length < 1 || d.name.length > 40)) ungueltig('name: 1 to 40 characters');
+  if (d.port === null) {
+    if (d.platz === undefined) ungueltig('platz: which place to free');
+    const rest = liste.filter((c) => c.platz !== d.platz);
+    if (rest.length === liste.length) throw new GeraeteFehler('eingang_leer', 409, 'there is no device on this place');
+    if (rest.length) k.controller = rest; else delete k.controller;
+    return k;
+  }
+  if (d.port === undefined) {   // rename only
+    const c = liste.find((x) => x.platz === d.platz);
+    if (!c || d.name === undefined) return ungueltig('port: a port name, or null to free the place');
+    c.name = d.name as string;
+    return k;
+  }
+  if (!portName(d.port)) ungueltig('port: a port name (no tab, no line break)');
+  const port = d.port as string;
+  const dort = liste.find((c) => c.port === port);
+  if (k.midi.port === port || (dort && dort.platz !== (d.platz ?? dort.platz))) throw new GeraeteFehler('port_vergeben', 409, 'this device already sits on another place');
+  const platz = (d.platz as number | undefined) ?? dort?.platz ?? [2, 3, 4, 5, 6, 7, 8].find((p) => !liste.some((c) => c.platz === p));
+  if (platz === undefined) throw new GeraeteFehler('kein_platz_frei', 409, `all ${CONTROLLER_PLAETZE} controller places are taken`);
+  const name = (d.name as string | undefined) ?? liste.find((c) => c.platz === platz && c.port === port)?.name;
+  k.controller = [...liste.filter((c) => c.platz !== platz), { platz, port, ...(name !== undefined ? { name } : {}) }].sort((a, b) => a.platz - b.platz);
   return k;
 }
 

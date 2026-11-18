@@ -19,7 +19,7 @@ import { specProjekt } from './support/project.mjs';
 
 // Englisch heißt hier: druckbares ASCII (dazu × und –), keine Umlaute, keines der häufigen deutschen Wörter der Server-Meldungen
 const DEUTSCH = /\b(der|die|das|den|dem|und|nicht|kein|keine|keinen|ist|sind|erwartet|fehlt|mit|ohne|oder|noch|nur|wird|bitte|spur|datei|zahl|zeichen|höchstens|hoechstens|ausgerollt|läuft|laeuft|gibt|schon|unbekannt|ungültig|ungueltig)\b/i;
-export const englisch = (t) => typeof t === 'string' && t.trim().length > 3 && /^[\x20-\x7e×–−]+$/.test(t) && !DEUTSCH.test(t);
+export const englisch = (t) => typeof t === 'string' && t.trim().length > 3 && /^[\x20-\x7e×–−·→]+$/.test(t) && !DEUTSCH.test(t);
 const ctx = { log: () => {} };
 
 test('Positiv- und Negativ-Kontrolle des Englisch-Prüfers', () => {

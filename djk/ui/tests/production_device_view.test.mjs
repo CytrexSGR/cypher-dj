@@ -3,13 +3,17 @@
 // Production plan task 10: knobs k1..k32 of a Baukasten track send geraet_param_setzen while they are dragged (the last block of this file).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spurAdapter, bindeGeraetAnsicht, geraetSchluessel, kannGeraetAnsicht, reglerBereiche, surgeIstEinlesen } from '../public/production/device_view.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { BK_LIVE_SLOTS, spurAdapter, bindeGeraetAnsicht, geraetSchluessel, kannGeraetAnsicht, reglerBereiche, surgeIstEinlesen } from '../public/production/device_view.js';
 import { baueFrontplatte } from '../public/panel.js';
 import { presetsFuer, spurBeschreibung } from '../public/panel_kopf.js';
 import { anzeigeWert, anzeigeText, parameterNachName } from '../public/panel_display.js';
 import { wertText } from '../public/panel.js';
 import { baueInsertAdapter } from '../public/production/inserts.js';
 import { parameterTabelle, anzeigeWert as serverAnzeige } from '../devices_parameter.ts';
+import { BK_LIVE_SLOTS as MODELL_SLOTS } from '../project/model.ts';
 
 class K {
   constructor(tag) {
@@ -573,10 +577,10 @@ function uhr() {
   };
 }
 // a context that answers at once: the project takes a live knob value like the server does
-function liveKontext(sp, { ablehnen = false } = {}) {
+function liveKontext(sp, { ablehnen = false, davor = [] } = {}) {
   const gesendet = [], gemeldet = [];
   const ctx = {
-    st: { projekt: { spuren: [sp] } },
+    st: { projekt: { spuren: [...davor, sp] } },
     aendereAus: (rechne) => {
       const x = rechne(ctx.st.projekt);
       if (!x) return Promise.resolve(false);
@@ -695,5 +699,34 @@ test('bindeGeraetAnsicht with breit builds the wide plate; without it the small 
     const platten = wurzel.alles().filter((e) => e.klassen.has('frontplatte'));
     assert.ok(platten.length > 0, 'a plate was built');
     assert.ok(platten[0].classList.contains('fp-breit') === breit, `breit=${breit}`);
+  }
+});
+
+// ARR_BK_MAX is 16, but the core has the override rows spur/<slot>/bk/<k> for the first 8 bk tracks only (BK_LIVE_SLOTS): the 9th takes the release path
+const bkSpur = (i) => ({ id: `t${i}`, nr: i, name: `T${i}`, art: 'instrument', geraet: BK({ k1: 0.25 }), clips: [] });
+
+test('BK_LIVE_SLOTS of the page equals the model constant and SPUR_BK_SLOTS of the core header', () => {
+  const h = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'core', 'signalbox', 'include', 'cypherdj', 'signalbox', 'controls.h'), 'utf8');
+  assert.equal(BK_LIVE_SLOTS, MODELL_SLOTS);
+  assert.equal(BK_LIVE_SLOTS, Number(/constexpr int SPUR_BK_SLOTS = (\d+);/.exec(h)?.[1]));
+});
+
+test('slot 8 drags live; the 9th bk track sends nothing during a drag and ONE spur_aendern with every value at the end', async () => {
+  for (const [nr, live] of [[8, true], [9, false], [16, false]]) {
+    const sp = bkSpur(nr), u = uhr();
+    const k = liveKontext(sp, { davor: Array.from({ length: nr - 1 }, (_, i) => bkSpur(i + 1)) });
+    const ad = spurAdapter(k.ctx, sp, BK_TABELLE, { zeitgeber: u });
+    ad.set('k5', 0.2); ad.set('k5', 0.4);
+    u.vor(500);
+    await warte();
+    if (live) assert.equal(k.gesendet.at(-1)?.befehle[0].befehl, 'geraet_param_setzen', `nr ${nr}: live`);
+    else assert.equal(k.gesendet.length, 0, `nr ${nr}: nothing during the drag`);
+    assert.equal(ad.get('k5'), 0.4, 'the display follows at once either way');
+    await ad.ende();
+    if (!live) {
+      assert.equal(k.gesendet.length, 1);
+      const b = k.gesendet[0].befehle[0];
+      assert.deepEqual([b.befehl, b.spur_id, b.geraet.parameter], ['spur_aendern', `t${nr}`, { k1: 0.25, k5: 0.4 }]);
+    }
   }
 });

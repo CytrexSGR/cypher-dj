@@ -21,7 +21,7 @@ from . import contract as vertrag
 from .contract import sauber
 from .audio import lade_mono
 from .parallel import Kind, gleichzeitig
-from .inventory import (aufraeumen, fassung_name, fassungen_von, fsync_baum, korrekturen_lesen, lies_json,
+from .inventory import (aufraeumen, fassung_name, fassung_teile, fassungen_von, fsync_baum, korrekturen_lesen, lies_json,
                       rename_ohne_ueberschreiben, schreibe_json, sha256_datei, versiegeln)
 from .input import LUFT_DB, geklemmt, lade_stereo48, luft, quelle_info, schreibe_float_wav, spitze_dbfs
 from .foreign_tags import lese_tags
@@ -368,16 +368,21 @@ def wende_raster_an(karte, zeilen, basis_bpm):
     """Raster-Korrekturen (§13.3, Art `raster`) in Quell-Zeit. Festlegung F2 dieser Scheibe: `versatz_ms` ist die
     Lage der Anschlaege gegen das Raster der genannten Fassung (positiv = zu spaet); verschoben wird die
     Quell-Sekunde jedes Eintrags im Abschnitt [ab_quell_beat, bis_quell_beat) um
-    versatz * (lokale Quell-Periode / Periode der Basis), damit die Anschlaege dort aufs Raster fallen."""
+    versatz * (lokale Quell-Periode / Periode der Basis der genannten Fassung), damit die Anschlaege dort aufs Raster fallen.
+    Die Basis kommt aus dem Namen der Zeile, nicht aus der Fassung, die gerade gerechnet wird (Audit U41: eine Tempo-Fassung
+    auf 150 verschob sonst um den Faktor 150/128 zu viel); ohne lesbaren Namen gilt `basis_bpm`."""
     s = np.array(karte.sekunden, dtype=float)
     q = np.asarray(karte.beats, dtype=float)
-    per_basis = 60.0 / basis_bpm
     per_quelle = np.gradient(s, q)
     for z in zeilen:
         if z["art"] != "raster" or z["versatz_ms"] is None:
             continue
+        try:
+            basis_zeile = fassung_teile(z["fassung"])[0]
+        except (ValueError, KeyError, TypeError):
+            basis_zeile = basis_bpm
         drin = (q >= z["ab_quell_beat"]) & (q < z["bis_quell_beat"])
-        s[drin] += z["versatz_ms"] / 1000.0 * per_quelle[drin] / per_basis
+        s[drin] += z["versatz_ms"] / 1000.0 * per_quelle[drin] / (60.0 / basis_zeile)
     if np.any(np.diff(s) <= 0):
         raise ValueError("Raster-Korrektur macht die Karte nicht mehr steigend")
     return Karte(sekunden=s, beats=q, vielfaches=karte.vielfaches)

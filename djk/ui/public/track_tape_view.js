@@ -1,6 +1,7 @@
 // Studio S7: Spurbänder in der STUDIO-Ansicht zeichnen und bedienen. Rechnen: track_tape.js. Senden: POST /spur, /spur/stopp
 // (Seiten-Server, Studio S6). Entwurf je Band im localStorage (nur Bequemlichkeit: ohne Speicher gilt die Vorgabe-Linie).
 import { baender, spurName, vorgabePunkte, setzePunkt, verschiebePunkt, loeschePunkt, kuerze, entwurfGueltig, griffBei, zugStart, zugBewegung, segmentFuerKlick, naechsteForm, setzeForm, pfad, fremdPfad, raster, LAENGEN, kopfTakt, schleifenSpur, schleifenAenderer } from './track_tape.js';
+import { proTaktJetzt } from './bar_live.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 // viewBox = echte Pixelgröße des SVG (ResizeObserver), nichts wird gestreckt; Maße in Pixeln (Slice-1-Review F2)
@@ -61,7 +62,7 @@ function neuesBand(wurzel, strom, band, post, geaendert = () => {}) {
   // Abspielkopf aus dem Kern-Beat: nur die eigene Spur hat einen Kopf; vor dem Anker und hinter dem Ende steht er bei −10.
   // 1.12 S7: a loop runs modulo its pass (kopfTakt in track_tape.js)
   const kopfNachBeat = (beat) => {
-    const neu = kopfTakt(beat, eigenLauf, z.laenge);
+    const neu = kopfTakt(beat, eigenLauf, z.laenge, proTaktJetzt());
     if (neu !== kopfBei) { kopfBei = neu; stelleLaufEin(); } else if (neu != null) stelleLaufEin();
   };
   // liste = GET /spur; beat = Kern-Beat (oder null). Antwort: läuft auf diesem Ziel eine Spur (eigene oder fremde)?
@@ -185,7 +186,7 @@ function neuesBand(wurzel, strom, band, post, geaendert = () => {}) {
       }
       if (!r2.ok) return meldung(`${vor}new lane not started (${fehlerText(j, r2.status)})`, 'fehler');
       if (j?.abgelehnt?.length) return meldung(`${vor}kernel rejected ${j.abgelehnt.length} part(s)`, 'fehler');
-      const takt = j?.anker_takt ?? (Number.isFinite(j?.anker_beat) ? Math.floor(j.anker_beat / 4) + 1 : null);
+      const takt = j?.anker_takt ?? (Number.isFinite(j?.anker_beat) ? Math.floor(j.anker_beat / proTaktJetzt()) + 1 : null);
       meldung(takt === null ? 'looping' : `looping from bar ${takt}`, 'ok');
       const jetzt = schleifenSpur(name, band, z);   // an edit made while PLAY was on its way goes to the new loop as a change
       if (JSON.stringify(jetzt) !== JSON.stringify(gesendet)) aenderer.melde(jetzt);

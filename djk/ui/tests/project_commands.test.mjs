@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { fuehreAus, fuehreListeAus, BefehlFehler, vergleiche, gleicheDekodiertAb } from '../project/commands.ts';
 import { neuesProjekt, pruefeProjekt, kanonisch, MAX_SPUREN } from '../project/model.ts';
 import { wende } from '../project/patch.ts';
+import { fuerAusgerollteNoten } from '../project/playback.ts';
 import { specProjekt, kopie, ohneAbgeleitetes, SHA_A, SHA_B } from './support/project.mjs';
 
 const ok = (p, b) => fuehreAus(p, b);
@@ -324,6 +325,24 @@ test('clips_verbinden MIDI: the first clip wins for loop-less fields (seq, envel
   assert.deepEqual([ende.beat, ende.laenge], [11.5, 0.5], 'cut to the new clip end (12)');
 });
 
+// What a clip's notes sound like, as playback reads them: (beat, length, pitch) of the sounding notes, cut at the clip end.
+const klingend = (c) => { const aus = []; fuerAusgerollteNoten(c, (_id, beat, laenge, n) => aus.push([beat, laenge, n.ton])); return aus.sort((x, y) => x[0] - y[0]); };
+
+test('clips_verbinden MIDI: notes silent or cut behind the end of a shortened clip stay silent or cut after gluing (gaps stay silent)', () => {
+  const p = fuehreListeAus(neuesProjekt('T'), [
+    { befehl: 'spur_neu', art: 'instrument' },
+    { befehl: 'clip_neu', spur_id: 's1', art: 'midi', start_beat: 0, laenge_beats: 8,
+      noten: [{ beat: 0, laenge: 1, ton: 36, vel: 100 }, { beat: 3, laenge: 4, ton: 38, vel: 100 }, { beat: 6, laenge: 1, ton: 40, vel: 100 }] },
+    { befehl: 'clip_aendern', clip_id: 'c1', laenge_beats: 4 },
+    { befehl: 'clip_neu', spur_id: 's1', art: 'midi', start_beat: 8, laenge_beats: 4, noten: [{ beat: 1, laenge: 1, ton: 42, vel: 100 }] },
+  ]).projekt;
+  const vorher = [...klingend(p.spuren[0].clips[0]), ...klingend(p.spuren[0].clips[1])].sort((x, y) => x[0] - y[0]);
+  assert.deepEqual(vorher, [[0, 1, 36], [3, 1, 38], [9, 1, 42]], 'before: the note at 6 is silent, the note at 3 is cut at 4');
+  const r = ok(p, { befehl: 'clips_verbinden', clip_ids: ['c1', 'c2'] });
+  pruefeErgebnis(p, r);
+  assert.deepEqual(klingend(r.projekt.spuren[0].clips[0]), vorher, 'gluing must not change what sounds');
+});
+
 test('clips_verbinden: refusals, one failing case each', () => {
   const p = midiAufbau();
   lehntAb(p, { befehl: 'clips_verbinden', clip_ids: ['c1'] }, 'argument_ungueltig');
@@ -393,6 +412,20 @@ test('clips_verbinden audio: consecutive pieces of one source only; anything els
   verbieten(anders);
   const einsGewarpt = structuredClone(gt); delete nur(einsGewarpt, 'c2').warp;
   verbieten(einsGewarpt);
+});
+
+test('clips_verbinden audio: warped pieces split at one tempo glue after tempo_setzen (warped playback reads versatz_beats, not offset_s); unwarped ones do not', () => {
+  const geteilt = (warp) => ok(ok(aufbauAudio({}, warp), { befehl: 'clip_teilen', clip_id: 'c1', beat: 12 }).projekt, { befehl: 'tempo_setzen', bpm: 128 }).projekt;
+  const gew = geteilt(wp);
+  const r = ok(gew, { befehl: 'clips_verbinden', clip_ids: ['c1', 'c2'] });
+  pruefeErgebnis(gew, r);
+  assert.equal(r.projekt.spuren[0].clips.length, 1);
+  assert.deepEqual([nur(r.projekt, 'c1').laenge_beats, nur(r.projekt, 'c1').warp.versatz_beats], [16, wp.versatz_beats], 'the first piece wins');
+  const falsch = structuredClone(gew); nur(falsch, 'c2').warp.versatz_beats += 1;
+  lehntAb(falsch, { befehl: 'clips_verbinden', clip_ids: ['c1', 'c2'] }, 'verbinden_audio');   // versatz_beats stays the continuity test of warped pieces
+  const aus = geteilt({ ...wp, an: false });                                                   // warp off: offset_s is read, the tempo change breaks the continuity
+  lehntAb(aus, { befehl: 'clips_verbinden', clip_ids: ['c1', 'c2'] }, 'verbinden_audio');
+  lehntAb(geteilt(undefined), { befehl: 'clips_verbinden', clip_ids: ['c1', 'c2'] }, 'verbinden_audio');
 });
 
 test('clip_loeschen: Clip weg, Rückweg bringt ihn samt Noten an die alte Stelle', () => {

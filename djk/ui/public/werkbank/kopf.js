@@ -35,8 +35,40 @@ export function laengeOhneSchleife(p) {
 // its notes before the old end are written as real notes into the copies behind it, so every bar can be edited on its own. Not copied: a clip that already holds
 // notes in the new part (an earlier longer state) and the notes of rows with a length of their own (they repeat by their own rule). Shortening only sets
 // loop_beats; notes behind it stay in the project and are silent. Copies that would break the note limit of the project are left out (`zuViele`).
-// -> { befehle, zuViele }
+// The linked envelopes of a growing clip (PITCH and knob step locks, drawn envelopes) are copied too: a linked envelope repeats with the clip loop and holds its
+// last value behind its last point, so without the copies the new bars would play the value of the last point. They go in one `huellkurve_setzen` per envelope
+// after the clip_aendern, only when the envelope has no point behind its closing point at the old loop end yet and the copy fits the point limit of an envelope. Unlinked ones repeat by
+// their own length and stay. -> { befehle, zuViele }
 const NOTEN_FELDER = ['beat', 'laenge', 'ton', 'vel', 'chance', 'wdh', 'versatz'];
+const MAX_HK_PUNKTE = 8192;   // MAX_LANE_PUNKTE of project/model.ts, points of one envelope
+// The points of a linked envelope over [0, B) when its clip loop grows from P to B: the points before P repeated at every k * P. Each copy starts with a
+// `sprung` point (the value that holds before the first point of the original is set explicitly when the first point sits behind beat 0), so a linear segment
+// never runs from the end of one copy into the next. A closing point at the old loop end P (SEQ shapes, drawn envelopes) is part of the source: every copy ends with its own, so
+// the original closing point and the sprung start of the next copy share the beat k * P (two points). null when the envelope has points in the new part already or the copy
+// would not fit (also when the closing point and the start of a copy would be three points on one beat).
+function huellkurveKopie(hk, P, B, EPS) {
+  const punkte = hk.punkte ?? [];
+  if (hk.verknuepft === false || !punkte.length || punkte.some((q) => q.beat > P + EPS && q.beat < B - EPS)) return null;
+  const quelle = punkte.filter((q) => q.beat < P - EPS);
+  const schluss = punkte.filter((q) => Math.abs(q.beat - P) <= EPS);   // the closing point(s) at the old loop end (SEQ shapes, drawn envelopes)
+  if (!quelle.length) return null;
+  const aus = [...quelle, ...schluss].map((q) => ({ ...q }));
+  const vorn0 = quelle[0].beat > EPS ? 1 : quelle.filter((q) => q.beat <= EPS).length;
+  if (schluss.length && vorn0 + schluss.length > 2) return null;   // closing point(s) and the start of the next copy would be three points on one beat
+  for (let k = 1; k * P < B - EPS; k++) {
+    const vorn = quelle[0].beat > EPS ? [{ beat: 0, wert: quelle[0].wert, form: 'sprung' }] : [];
+    const kopie = [...vorn, ...quelle.map((q, i) => (i === 0 && vorn.length === 0 ? { ...q, form: 'sprung' } : { ...q }))];
+    for (const q of kopie) {
+      const beat = Math.round((q.beat + k * P) * 1e9) / 1e9;
+      if (beat < B - EPS) aus.push({ ...q, beat });
+    }
+    for (const q of schluss) {
+      const beat = Math.round((q.beat + k * P) * 1e9) / 1e9;
+      if (beat <= B + EPS) aus.push({ ...q, beat: Math.min(beat, B) });
+    }
+  }
+  return aus.length <= MAX_HK_PUNKTE ? aus : null;
+}
 export function laengeKlickBefehle(p, takte) {
   const B = takte * BEATS_PRO_TAKT, EPS = 1e-9;
   const befehle = [];
@@ -45,7 +77,7 @@ export function laengeKlickBefehle(p, takte) {
   const clips = [];
   for (const s of p?.spuren ?? []) if (s.art === 'instrument') for (const c of s.clips ?? []) if (c.art === 'midi') clips.push(c);
   const vorhanden = clips.reduce((n, c) => n + (c.noten?.length ?? 0), 0);
-  const kopien = new Map();
+  const kopien = new Map(), huellkopien = new Map();
   let neuZahl = 0;
   for (const c of clips) {
     const P = c.loop_beats ?? c.laenge_beats, liste = [];
@@ -65,11 +97,19 @@ export function laengeKlickBefehle(p, takte) {
   }
   const zuViele = vorhanden + neuZahl > MAX_NOTEN;
   for (const c of clips) {
+    const P = c.loop_beats ?? c.laenge_beats;
+    if (!(P < B - EPS)) continue;
+    const hks = [];
+    for (const h of c.huellkurven ?? []) { const punkte = huellkurveKopie(h, P, B, EPS); if (punkte) hks.push({ ziel: h.ziel, punkte }); }
+    if (hks.length) huellkopien.set(c, hks);
+  }
+  for (const c of clips) {
     const aend = {};
     if (c.laenge_beats < B - EPS) aend.laenge_beats = B;
     if (c.loop_beats == null || Math.abs(c.loop_beats - B) > EPS) aend.loop_beats = B;
     if (Object.keys(aend).length) befehle.push({ befehl: 'clip_aendern', clip_id: c.id, ...aend });
     if (!zuViele && kopien.has(c)) befehle.push({ befehl: 'noten_neu', clip_id: c.id, noten: kopien.get(c) });
+    for (const h of huellkopien.get(c) ?? []) befehle.push({ befehl: 'huellkurve_setzen', clip_id: c.id, ziel: h.ziel, punkte: h.punkte });
   }
   return { befehle, zuViele };
 }

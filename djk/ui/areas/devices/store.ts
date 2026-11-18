@@ -11,7 +11,21 @@ export interface Eingang { k: number; name: string; profil: string | null; audio
 // versatz_samples (1.8 T8): how late the player's notes arrive against the music he heard, 0..48000; absent means 0. Only Andreas sets it (the measurement is his).
 export interface MidiZuordnung { profil: string | null; port: string | null; frei_fuer_cypher: boolean; versatz_samples?: number }
 export const MIDI_VERSATZ_MAX = 48000;
-export interface Konfig { format: typeof FORMAT; eingaenge: Eingang[]; midi: MidiZuordnung }
+// Controller places: the kern has eight raw MIDI inputs midi_ein_1..8, each with its own learn table, so the same CC of two devices never collides.
+// Place 1 is `midi.port` (the playing input with its offset and release); `controller` holds the places 2..8. The key is optional: a file without
+// it is a file with one place.
+export const CONTROLLER_PLAETZE = 8;
+export interface ControllerPlatz { platz: number; port: string; name?: string }
+export interface Konfig { format: typeof FORMAT; eingaenge: Eingang[]; midi: MidiZuordnung; controller?: ControllerPlatz[] }
+/** The device part of a JACK port name as the kern sees it: "Midi-Bridge:LPD8: MIDI 1 (capture)" -> "LPD8". */
+export const portGeraeteName = (port: string): string => { const t = port.split(':'); return (t.length >= 3 ? t[1] : t[0]).trim() || port; };
+/** Every assigned place in order: place 1 from `midi.port`, the others from `controller`. */
+export function controllerPlaetze(k: Konfig): Required<ControllerPlatz>[] {
+  const aus: Required<ControllerPlatz>[] = [];
+  if (k.midi.port) aus.push({ platz: 1, port: k.midi.port, name: portGeraeteName(k.midi.port) });
+  for (const c of k.controller ?? []) aus.push({ platz: c.platz, port: c.port, name: c.name ?? portGeraeteName(c.port) });
+  return aus.sort((a, b) => a.platz - b.platz);
+}
 
 export class GeraeteFehler extends Error {
   readonly grund: string;
@@ -32,7 +46,7 @@ export const portName = (x: unknown): x is string => typeof x === 'string' && x.
 
 export function pruefeKonfig(j: unknown): Konfig {
   const o = objekt(j, 'file');
-  nurSchluessel(o, ['format', 'eingaenge', 'midi'], 'file');
+  nurSchluessel(o, ['format', 'eingaenge', 'midi', 'controller'], 'file');
   if (o.format !== FORMAT) defekt(`format: ${FORMAT} expected`);
   if (!Array.isArray(o.eingaenge) || o.eingaenge.length !== 4) defekt('eingaenge: exactly 4 expected');
   o.eingaenge.forEach((x, i) => {
@@ -63,6 +77,18 @@ export function pruefeKonfig(j: unknown): Konfig {
   if (m.frei_fuer_cypher && (m.port === null || m.profil === null)) defekt('midi: a release needs a device');
   if ('versatz_samples' in m && (!Number.isInteger(m.versatz_samples) || (m.versatz_samples as number) < 0 || (m.versatz_samples as number) > MIDI_VERSATZ_MAX)) {
     defekt(`midi.versatz_samples: an integer from 0 to ${MIDI_VERSATZ_MAX} expected`);
+  }
+  if ('controller' in o) {
+    if (!Array.isArray(o.controller) || o.controller.length > CONTROLLER_PLAETZE - 1) defekt(`controller: a list of at most ${CONTROLLER_PLAETZE - 1} places expected`);
+    const plaetze = new Set<number>(), ports = new Set<string>(m.port === null ? [] : [m.port as string]);
+    (o.controller as unknown[]).forEach((x, i) => {
+      const c = objekt(x, `controller[${i}]`);
+      nurSchluessel(c, ['platz', 'port', 'name'], `controller[${i}]`);
+      if (!Number.isInteger(c.platz) || (c.platz as number) < 2 || (c.platz as number) > CONTROLLER_PLAETZE || plaetze.has(c.platz as number)) defekt(`controller[${i}].platz: a free place from 2 to ${CONTROLLER_PLAETZE} expected`);
+      if (!portName(c.port) || ports.has(c.port)) defekt(`controller[${i}].port: a port name that no other place holds expected`);
+      if ('name' in c && (typeof c.name !== 'string' || c.name.length < 1 || c.name.length > 40)) defekt(`controller[${i}].name`);
+      plaetze.add(c.platz as number); ports.add(c.port as string);
+    });
   }
   return o as unknown as Konfig;
 }

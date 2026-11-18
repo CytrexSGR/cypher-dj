@@ -15,7 +15,8 @@ const HEX = /^#[0-9a-f]{6}$/i;
 const alpha = (f, a) => (HEX.test(f) ? f + a : `rgba(140,140,150,0.25)`);
 
 // Part of the redraw key: the groups whose lane row is open and the target each one shows (a group row has no index in `lanen`)
-const laneGruppenKey = (p, straenge, laneZiel) => (p?.gruppen ?? []).filter((g) => straenge.has(g.id)).map((g) => `${g.id}=${laneZiel?.get(g.id) ?? ''}`).join(',');
+const laneGruppenKey = (p, straenge, laneZiel) => [...(p?.gruppen ?? []), ...(p?.returns ?? []), ...(p?.master ? [{ id: 'master' }] : [])]
+  .filter((g) => straenge.has(g.id)).map((g) => `${g.id}=${laneZiel?.get(g.id) ?? ''}`).join(',');
 export class Arrangement {
   constructor({ lineal, spuren, ueber, wellen }) {
     this.l = lineal; this.s = spuren; this.u = ueber; this.wellen = wellen;
@@ -64,6 +65,10 @@ export class Arrangement {
         if (z.h === 0) continue;   // a child group of a folded group
         g.fillStyle = '#171a21'; g.fillRect(0, z.y, w, z.h);
         balken(gruppenKette(p, p.gruppen[z.gruppe].id, eltern), z.y, z.h);
+        continue;
+      }
+      if (z.art === 'return' || z.art === 'master') {   // automation slice 1: head row of a return or of the master: the group band, no bar, no track stripe
+        g.fillStyle = '#171a21'; g.fillRect(0, z.y, w, z.h);
         continue;
       }
       g.fillStyle = z.art === 'lane' ? '#0d1014' : z.art === 'take' ? '#0c0e12' : z.spur % 2 ? '#12141a' : '#0f1116'; g.fillRect(0, z.y, w, z.h);

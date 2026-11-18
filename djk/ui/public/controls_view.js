@@ -39,7 +39,7 @@ function neuerRegler(el) {
   const a = art(pfad);
   const r = { el, pfad, a, x: GRIFF[a].stellung(vorgabe(pfad)), gegriffen: false };
   r.zeige = () => zeichne(r);
-  regler.set(pfad, r);
+  regler.set(regler.has(pfad) ? `${pfad}#${regler.size}` : pfad, r);   // a second handle on one path (the glue knob of the MASTER tab): both follow the one state, the first stays under the path
   const weg = () => (el.classList.contains('knopf') ? 220 : el.classList.contains('waagrecht') ? $('.bahn', el).clientWidth : $('.bahn', el).clientHeight);
   let start = null;
   const setze = (x) => {
@@ -112,8 +112,7 @@ export function zeigeWert(pfad) {
     o.classList.toggle('vorgabe', !bestaetigt);
     o.title = bestaetigt ? 'value reported by the core' : 'default, not yet reported by the core';
   }
-  const r = regler.get(pfad);
-  if (r && !r.gegriffen && bestaetigt) { r.x = GRIFF[r.a].stellung(w); r.zeige(); }
+  if (bestaetigt) for (const r of regler.values()) if (r.pfad === pfad && !r.gegriffen) { r.x = GRIFF[r.a].stellung(w); r.zeige(); }
   for (const b of $$(`.xzuweisung[data-pfad="${CSS.escape(pfad)}"] button`)) {
     b.classList.toggle('an', Number(b.dataset.stufe) === Math.round(w));
     b.classList.toggle('vorgabe', !bestaetigt);

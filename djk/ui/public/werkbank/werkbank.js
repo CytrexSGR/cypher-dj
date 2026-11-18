@@ -20,7 +20,9 @@ import { bindeSchnittKit } from './schnitt_kit.js';
 import { bindeFenster } from './window.js';
 import { bindeDock } from './dock.js';
 import { bindeExport } from './export.js';
+import { bindeZuSeq } from './zu_seq.js';
 import { bindeAnalyse } from './analysis.js';
+import { bindeKlangRunde } from './sound_runde.js';
 
 export const WERKBANK_TEXT = {
   keinModul: 'No module is open.',
@@ -34,8 +36,8 @@ export const WERKBANK_TEXT = {
 export const istModul = (p) => p?.werkbank?.schema === 1;
 
 // The order is the contract (D15): top bar, shelf, tracks, notes, sound plumbing (panel source, faces, cut strip), the cut/kit dialog, the windows, the dock.
-// EXPORT, then ANALYZE, then the SHELF button append their controls to the top bar in this order (the dock and the windows use what sound.js puts on ctx).
-const BINDER = [bindeKopf, bindeRegal, bindeSpuren, bindeRaster, bindeKlang, bindeSchnittKit, bindeFenster, bindeDock, bindeExport, bindeAnalyse, bindeRegalSchublade];
+// EXPORT, then TO SEQ DECK, then ANALYZE, then FIND SOUND, then the SHELF button append their controls to the top bar in this order (the dock and the windows use what sound.js puts on ctx).
+const BINDER = [bindeKopf, bindeRegal, bindeSpuren, bindeRaster, bindeKlang, bindeSchnittKit, bindeFenster, bindeDock, bindeExport, bindeZuSeq, bindeAnalyse, bindeKlangRunde, bindeRegalSchublade];
 
 const GERUEST = `
 <div class="w-kopf" data-w="kopf" role="toolbar" aria-label="Workbench"></div>
@@ -52,7 +54,7 @@ const GERUEST = `
 const lies = (k, v) => { try { return localStorage.getItem(k) ?? v; } catch { return v; } };
 const merke = (k, v) => { try { localStorage.setItem(k, v); } catch { /* without storage: only now */ } };
 
-export function bindeWerkbank({ post, wurzel = document.querySelector('#werkbank'), frage = (t) => globalThis.confirm?.(t) ?? false }) {
+export function bindeWerkbank({ post, wurzel = document.querySelector('#werkbank'), frage = (t) => globalThis.confirm?.(t) ?? false, zeigeDj = () => {} }) {
   wurzel.innerHTML = GERUEST;
   const $ = (n) => wurzel.querySelector(`[data-w="${n}"]`);
   // projekt: the open module or null; fremd: a project that is no module is open (the empty state says so, nothing is written to it)
@@ -73,7 +75,7 @@ export function bindeWerkbank({ post, wurzel = document.querySelector('#werkbank
   const kopf = new Kopf();
   let arrZeit = null;
   const ctx = {
-    st, $, holeJson, holeGet, melde, lies, merke, antwortText, frage: (t) => frage(t),
+    st, $, holeJson, holeGet, melde, lies, merke, antwortText, frage: (t) => frage(t), zeigeDj: () => zeigeDj(),
     beimProjekt: [], beimEreignis: [], vorBild: [], beiWahl: [], beimSichtwechsel: [],
     info: () => null,   // task 4 (bindeSpuren) replaces it with the instrument info cache
   };

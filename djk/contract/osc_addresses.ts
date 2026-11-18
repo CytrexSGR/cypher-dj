@@ -91,7 +91,7 @@ export const ADRESSEN = {
   '/e/regler': { typen: ',sfshd', abschnitt: '5.7', richtung: 'vom_kern', nurPruefmodus: false, felder: ['pfad', 'wert', 'halter', 'sample', 'beat'], bereiche: {} },
   '/e/hand': { typen: ',sfhd', abschnitt: '5.8', richtung: 'vom_kern', nurPruefmodus: false, felder: ['pfad', 'wert', 'sample', 'beat'], bereiche: {} },
   '/e/taste': { typen: ',sihd', abschnitt: '5.8', richtung: 'vom_kern', nurPruefmodus: false, felder: ['name', 'wert', 'sample', 'beat'], bereiche: {} },
-  '/e/gelernt': { typen: ',hiiiii', abschnitt: '5.8', richtung: 'vom_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'kanal', 'nr', 'wert', 'belegt'], bereiche: { quelle: [0, 1], kanal: [1, 16], nr: [0, 127], wert: [0, 127], belegt: [0, 1] } },
+  '/e/gelernt': { typen: ',hiiiii', abschnitt: '5.8', richtung: 'vom_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'kanal', 'nr', 'wert', 'belegt'], bereiche: { quelle: [0, 8], kanal: [1, 16], nr: [0, 127], wert: [0, 127], belegt: [0, 1] } },
   '/e/geladen': { typen: ',isdiih', abschnitt: '5.9', richtung: 'vom_kern', nurPruefmodus: false, felder: ['deck', 'material_id', 'basis_bpm', 'fassung', 'mit_stems', 'sample'], bereiche: { deck: [1, 4] } },
   '/e/halter': { typen: ',sshd', abschnitt: '5.9', richtung: 'vom_kern', nurPruefmodus: false, felder: ['pfad', 'halter', 'sample', 'beat'], bereiche: {} },
   '/e/invariante': { typen: ',ssihd', abschnitt: '5.9', richtung: 'vom_kern', nurPruefmodus: false, felder: ['art', 'plan', 'teil', 'sample', 'beat'], bereiche: {} },

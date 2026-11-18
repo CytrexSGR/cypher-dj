@@ -634,6 +634,14 @@ void ArrInserts::stufe(int s, bool ziel_an, float* l, float* r, int m, ArrArbeit
   }
   if (pos_[s] == 0 && ziel == 0) {   // fully off: not computed, state cleared; the signal still passes the latency of the stage
     if (lief_[s]) leere(s);
+    if (s >= INS_G_BK0 && s < INS_G_HOST0) {   // audit U34: an instance swap while the stage is off has nothing to crossfade (rechne_bk, which clears `alt`, does not run): let the old one go now
+      BkSlot& b = bk_[s - INS_G_BK0];
+      if (b.alt) {
+        cypher_bk_zuruecksetzen(b.alt);   // a later take-over of the same instance starts clean
+        b.alt = nullptr;
+        b.blende.store(nullptr, std::memory_order_release);
+      }
+    }
 #ifndef CYPHERDJ_MUTATION_INS_BYPASS_OHNE_LATENZ
     if (lat) trocken_speise(s, l, r, m, l, r);
 #endif

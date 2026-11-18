@@ -1,0 +1,718 @@
+{
+ "ohne_projekt": {
+  "regler_takt": {
+   "code": 200,
+   "j": {
+    "ok": true,
+    "felder": {
+     "quelle": "andreas",
+     "plan": "",
+     "teil": 0,
+     "pfad": "master/pegel",
+     "ab_beat": 12,
+     "dauer_beats": 0,
+     "nach": -3,
+     "form": 1,
+     "politik": 0,
+     "gruppe": "",
+     "hoerschein": ""
+    }
+   }
+  },
+  "regler_phrase": {
+   "code": 200,
+   "j": {
+    "ok": true,
+    "felder": {
+     "quelle": "andreas",
+     "plan": "",
+     "teil": 0,
+     "pfad": "master/pegel",
+     "ab_beat": 32,
+     "dauer_beats": 0,
+     "nach": -4,
+     "form": 1,
+     "politik": 0,
+     "gruppe": "",
+     "hoerschein": ""
+    }
+   }
+  },
+  "regler_schlag_takte2": {
+   "code": 200,
+   "j": {
+    "ok": true,
+    "felder": {
+     "quelle": "andreas",
+     "plan": "",
+     "teil": 0,
+     "pfad": "master/pegel",
+     "ab_beat": 11,
+     "dauer_beats": 8,
+     "nach": -5,
+     "form": 1,
+     "politik": 0,
+     "gruppe": "",
+     "hoerschein": ""
+    }
+   }
+  },
+  "regler_cypher_takte2": {
+   "code": 200,
+   "j": {
+    "ok": true,
+    "felder": {
+     "quelle": "cypher",
+     "plan": "cypher",
+     "teil": 0,
+     "pfad": "master/pegel",
+     "ab_beat": 12,
+     "dauer_beats": 8,
+     "nach": -6,
+     "form": 1,
+     "politik": 0,
+     "gruppe": "",
+     "hoerschein": ""
+    }
+   }
+  },
+  "regler_cypher_nochmal": {
+   "code": 200,
+   "j": {
+    "ok": true,
+    "felder": {
+     "quelle": "cypher",
+     "plan": "cypher",
+     "teil": 0,
+     "pfad": "master/pegel",
+     "ab_beat": 12,
+     "dauer_beats": 8,
+     "nach": -7,
+     "form": 1,
+     "politik": 0,
+     "gruppe": "",
+     "hoerschein": ""
+    }
+   }
+  },
+  "spur": {
+   "code": 200,
+   "j": {
+    "ok": true,
+    "name": "gold",
+    "anker_beat": 12,
+    "anker_takt": 4,
+    "ende_beat": 20,
+    "teile": 1,
+    "wirt": 0,
+    "muster": 0,
+    "abgelehnt": [
+     {
+      "teil": 0,
+      "pfad": "master/pegel",
+      "status": 4,
+      "grund": "zu_spaet"
+     }
+    ]
+   }
+  },
+  "spur_stopp": {
+   "code": 200,
+   "j": {
+    "ok": true,
+    "name": "gold",
+    "felder": {
+     "quelle": "andreas",
+     "plan": "spur:gold",
+     "teile": "*"
+    },
+    "wirt": {}
+   }
+  },
+  "tempo": {
+   "code": 200,
+   "j": {
+    "ok": true,
+    "gesendet": "/k/tempo/rampe",
+    "felder": {
+     "quelle": "andreas",
+     "ab_beat": 12,
+     "ziel_bpm": 130,
+     "dauer_beats": 4
+    }
+   }
+  },
+  "lage_uhr": {
+   "beat": 10.3,
+   "takt": 3,
+   "schlag": 3,
+   "bpm": 120
+  },
+  "lage_schluessel": [
+   "ausgang",
+   "boxen",
+   "decks",
+   "fx",
+   "fx_routing",
+   "kanal_limiter",
+   "ki",
+   "quittungen",
+   "regler",
+   "spur_pool",
+   "studio",
+   "uhr"
+  ],
+  "lage": {
+   "uhr": {
+    "beat": 10.3,
+    "takt": 3,
+    "schlag": 3,
+    "bpm": 120
+   },
+   "ki": {
+    "gestoppt": false
+   },
+   "decks": [
+    {
+     "deck": 1,
+     "status": 0
+    },
+    {
+     "deck": 2,
+     "status": 0
+    },
+    {
+     "deck": 3,
+     "status": 0
+    },
+    {
+     "deck": 4,
+     "status": 0
+    }
+   ],
+   "regler": {
+    "master/pegel": -3,
+    "keylock": 1
+   },
+   "boxen": {},
+   "fx": [
+    null,
+    null
+   ],
+   "fx_routing": "post_fader",
+   "kanal_limiter": {
+    "gebaut": false,
+    "latenz_samples": 0
+   },
+   "spur_pool": {
+    "an": false,
+    "modus": "aus",
+    "blocks_parallel": 0,
+    "einheiten_worker": 0,
+    "einheiten_caller": 0,
+    "seriell": 0,
+    "haengt": 0,
+    "spaet": 0,
+    "zurueck": 0
+   },
+   "studio": {
+    "stroeme": [
+     {
+      "strom": 1,
+      "autonom": true,
+      "von": null,
+      "text_kurz": ""
+     },
+     {
+      "strom": 2,
+      "autonom": true,
+      "von": null,
+      "text_kurz": ""
+     },
+     {
+      "strom": 3,
+      "autonom": true,
+      "von": null,
+      "text_kurz": ""
+     }
+    ],
+    "klang": {
+     "bass": null,
+     "melodie": null
+    }
+   },
+   "ausgang": {
+    "zustand": "unbewacht",
+    "karte": null,
+    "faelle": 0,
+    "letzter": null,
+    "alter_s": null
+   }
+  },
+  "an_kern": [
+   {
+    "adresse": "/k/teil",
+    "felder": {
+     "quelle": "andreas",
+     "plan": "",
+     "teil": 0,
+     "pfad": "master/pegel",
+     "ab_beat": 12,
+     "dauer_beats": 0,
+     "nach": -3,
+     "form": 1,
+     "politik": 0,
+     "gruppe": "",
+     "hoerschein": ""
+    }
+   },
+   {
+    "adresse": "/k/teil",
+    "felder": {
+     "quelle": "andreas",
+     "plan": "",
+     "teil": 0,
+     "pfad": "master/pegel",
+     "ab_beat": 32,
+     "dauer_beats": 0,
+     "nach": -4,
+     "form": 1,
+     "politik": 0,
+     "gruppe": "",
+     "hoerschein": ""
+    }
+   },
+   {
+    "adresse": "/k/teil",
+    "felder": {
+     "quelle": "andreas",
+     "plan": "",
+     "teil": 0,
+     "pfad": "master/pegel",
+     "ab_beat": 11,
+     "dauer_beats": 8,
+     "nach": -5,
+     "form": 1,
+     "politik": 0,
+     "gruppe": "",
+     "hoerschein": ""
+    }
+   },
+   {
+    "adresse": "/k/teil",
+    "felder": {
+     "quelle": "cypher",
+     "plan": "cypher",
+     "teil": 0,
+     "pfad": "master/pegel",
+     "ab_beat": 12,
+     "dauer_beats": 8,
+     "nach": -6,
+     "form": 1,
+     "politik": 0,
+     "gruppe": "",
+     "hoerschein": ""
+    }
+   },
+   {
+    "adresse": "/k/teil",
+    "felder": {
+     "quelle": "cypher",
+     "plan": "cypher",
+     "teil": 0,
+     "pfad": "master/pegel",
+     "ab_beat": 12,
+     "dauer_beats": 8,
+     "nach": -7,
+     "form": 1,
+     "politik": 0,
+     "gruppe": "",
+     "hoerschein": ""
+    }
+   },
+   {
+    "adresse": "/k/teil",
+    "felder": {
+     "quelle": "andreas",
+     "plan": "spur:gold",
+     "teil": 0,
+     "pfad": "master/pegel",
+     "ab_beat": 16,
+     "dauer_beats": 4,
+     "nach": -2,
+     "form": 1,
+     "politik": 0,
+     "gruppe": "",
+     "hoerschein": ""
+    }
+   },
+   {
+    "adresse": "/k/tempo/rampe",
+    "felder": {
+     "quelle": "andreas",
+     "ab_beat": 12,
+     "ziel_bpm": 130,
+     "dauer_beats": 4
+    }
+   }
+  ]
+ },
+ "projekt_4_4": {
+  "regler_takt": {
+   "code": 200,
+   "j": {
+    "ok": true,
+    "felder": {
+     "quelle": "andreas",
+     "plan": "",
+     "teil": 0,
+     "pfad": "master/pegel",
+     "ab_beat": 12,
+     "dauer_beats": 0,
+     "nach": -3,
+     "form": 1,
+     "politik": 0,
+     "gruppe": "",
+     "hoerschein": ""
+    }
+   }
+  },
+  "regler_phrase": {
+   "code": 200,
+   "j": {
+    "ok": true,
+    "felder": {
+     "quelle": "andreas",
+     "plan": "",
+     "teil": 0,
+     "pfad": "master/pegel",
+     "ab_beat": 32,
+     "dauer_beats": 0,
+     "nach": -4,
+     "form": 1,
+     "politik": 0,
+     "gruppe": "",
+     "hoerschein": ""
+    }
+   }
+  },
+  "regler_schlag_takte2": {
+   "code": 200,
+   "j": {
+    "ok": true,
+    "felder": {
+     "quelle": "andreas",
+     "plan": "",
+     "teil": 0,
+     "pfad": "master/pegel",
+     "ab_beat": 11,
+     "dauer_beats": 8,
+     "nach": -5,
+     "form": 1,
+     "politik": 0,
+     "gruppe": "",
+     "hoerschein": ""
+    }
+   }
+  },
+  "regler_cypher_takte2": {
+   "code": 200,
+   "j": {
+    "ok": true,
+    "felder": {
+     "quelle": "cypher",
+     "plan": "cypher",
+     "teil": 0,
+     "pfad": "master/pegel",
+     "ab_beat": 12,
+     "dauer_beats": 8,
+     "nach": -6,
+     "form": 1,
+     "politik": 0,
+     "gruppe": "",
+     "hoerschein": ""
+    }
+   }
+  },
+  "regler_cypher_nochmal": {
+   "code": 200,
+   "j": {
+    "ok": true,
+    "felder": {
+     "quelle": "cypher",
+     "plan": "cypher",
+     "teil": 0,
+     "pfad": "master/pegel",
+     "ab_beat": 12,
+     "dauer_beats": 8,
+     "nach": -7,
+     "form": 1,
+     "politik": 0,
+     "gruppe": "",
+     "hoerschein": ""
+    }
+   }
+  },
+  "spur": {
+   "code": 200,
+   "j": {
+    "ok": true,
+    "name": "gold",
+    "anker_beat": 12,
+    "anker_takt": 4,
+    "ende_beat": 20,
+    "teile": 1,
+    "wirt": 0,
+    "muster": 0,
+    "abgelehnt": [
+     {
+      "teil": 0,
+      "pfad": "master/pegel",
+      "status": 4,
+      "grund": "zu_spaet"
+     }
+    ]
+   }
+  },
+  "spur_stopp": {
+   "code": 200,
+   "j": {
+    "ok": true,
+    "name": "gold",
+    "felder": {
+     "quelle": "andreas",
+     "plan": "spur:gold",
+     "teile": "*"
+    },
+    "wirt": {}
+   }
+  },
+  "tempo": {
+   "code": 200,
+   "j": {
+    "ok": true,
+    "gesendet": "/k/tempo/rampe",
+    "felder": {
+     "quelle": "andreas",
+     "ab_beat": 12,
+     "ziel_bpm": 130,
+     "dauer_beats": 4
+    }
+   }
+  },
+  "lage_uhr": {
+   "beat": 10.3,
+   "takt": 3,
+   "schlag": 3,
+   "bpm": 120
+  },
+  "lage_schluessel": [
+   "ausgang",
+   "boxen",
+   "decks",
+   "fx",
+   "fx_routing",
+   "kanal_limiter",
+   "ki",
+   "quittungen",
+   "regler",
+   "spur_pool",
+   "studio",
+   "uhr"
+  ],
+  "lage": {
+   "uhr": {
+    "beat": 10.3,
+    "takt": 3,
+    "schlag": 3,
+    "bpm": 120
+   },
+   "ki": {
+    "gestoppt": false
+   },
+   "decks": [
+    {
+     "deck": 1,
+     "status": 0
+    },
+    {
+     "deck": 2,
+     "status": 0
+    },
+    {
+     "deck": 3,
+     "status": 0
+    },
+    {
+     "deck": 4,
+     "status": 0
+    }
+   ],
+   "regler": {
+    "master/pegel": -3,
+    "keylock": 1
+   },
+   "boxen": {},
+   "fx": [
+    null,
+    null
+   ],
+   "fx_routing": "post_fader",
+   "kanal_limiter": {
+    "gebaut": false,
+    "latenz_samples": 0
+   },
+   "spur_pool": {
+    "an": false,
+    "modus": "aus",
+    "blocks_parallel": 0,
+    "einheiten_worker": 0,
+    "einheiten_caller": 0,
+    "seriell": 0,
+    "haengt": 0,
+    "spaet": 0,
+    "zurueck": 0
+   },
+   "studio": {
+    "stroeme": [
+     {
+      "strom": 1,
+      "autonom": true,
+      "von": null,
+      "text_kurz": ""
+     },
+     {
+      "strom": 2,
+      "autonom": true,
+      "von": null,
+      "text_kurz": ""
+     },
+     {
+      "strom": 3,
+      "autonom": true,
+      "von": null,
+      "text_kurz": ""
+     }
+    ],
+    "klang": {
+     "bass": null,
+     "melodie": null
+    }
+   },
+   "ausgang": {
+    "zustand": "unbewacht",
+    "karte": null,
+    "faelle": 0,
+    "letzter": null,
+    "alter_s": null
+   }
+  },
+  "an_kern": [
+   {
+    "adresse": "/k/teil",
+    "felder": {
+     "quelle": "andreas",
+     "plan": "",
+     "teil": 0,
+     "pfad": "master/pegel",
+     "ab_beat": 12,
+     "dauer_beats": 0,
+     "nach": -3,
+     "form": 1,
+     "politik": 0,
+     "gruppe": "",
+     "hoerschein": ""
+    }
+   },
+   {
+    "adresse": "/k/teil",
+    "felder": {
+     "quelle": "andreas",
+     "plan": "",
+     "teil": 0,
+     "pfad": "master/pegel",
+     "ab_beat": 32,
+     "dauer_beats": 0,
+     "nach": -4,
+     "form": 1,
+     "politik": 0,
+     "gruppe": "",
+     "hoerschein": ""
+    }
+   },
+   {
+    "adresse": "/k/teil",
+    "felder": {
+     "quelle": "andreas",
+     "plan": "",
+     "teil": 0,
+     "pfad": "master/pegel",
+     "ab_beat": 11,
+     "dauer_beats": 8,
+     "nach": -5,
+     "form": 1,
+     "politik": 0,
+     "gruppe": "",
+     "hoerschein": ""
+    }
+   },
+   {
+    "adresse": "/k/teil",
+    "felder": {
+     "quelle": "cypher",
+     "plan": "cypher",
+     "teil": 0,
+     "pfad": "master/pegel",
+     "ab_beat": 12,
+     "dauer_beats": 8,
+     "nach": -6,
+     "form": 1,
+     "politik": 0,
+     "gruppe": "",
+     "hoerschein": ""
+    }
+   },
+   {
+    "adresse": "/k/teil",
+    "felder": {
+     "quelle": "cypher",
+     "plan": "cypher",
+     "teil": 0,
+     "pfad": "master/pegel",
+     "ab_beat": 12,
+     "dauer_beats": 8,
+     "nach": -7,
+     "form": 1,
+     "politik": 0,
+     "gruppe": "",
+     "hoerschein": ""
+    }
+   },
+   {
+    "adresse": "/k/teil",
+    "felder": {
+     "quelle": "andreas",
+     "plan": "spur:gold",
+     "teil": 0,
+     "pfad": "master/pegel",
+     "ab_beat": 16,
+     "dauer_beats": 4,
+     "nach": -2,
+     "form": 1,
+     "politik": 0,
+     "gruppe": "",
+     "hoerschein": ""
+    }
+   },
+   {
+    "adresse": "/k/tempo/rampe",
+    "felder": {
+     "quelle": "andreas",
+     "ab_beat": 12,
+     "ziel_bpm": 130,
+     "dauer_beats": 4
+    }
+   }
+  ]
+ }
+}

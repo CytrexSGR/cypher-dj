@@ -2,6 +2,7 @@
 import { $, $$, jsonPost } from './page_state.js';
 import { stoebernLaden, stz } from './browse_table.js';
 import { ladeBaum } from './browse_detail.js';
+import { proTaktJetzt } from './bar_live.js';
 
 // ---------- Strudel-Instanzen (Plan 2 Spec E5/E6; Studio S1: drei Instanzen, je Strom ein Zustand) ----------
 // AUTO-Schalter je Instanz (Andreas 2026-09-28): an = Cypher spielt selbst, das Feld folgt. Aus = das laufende Muster
@@ -10,7 +11,7 @@ export const instanzen = new Map();   // strom → { strom, w (Wurzel), server, 
 function musterStandText(s) {
   if (!s.text) return 'no pattern yet';
   const wer = s.von === 'andreas' ? 'you' : (s.von ?? '?');
-  const ab = s.status?.ab_beat != null && Number.isFinite(s.status.ab_beat) ? ` · since bar ${Math.floor(s.status.ab_beat / 4) + 1}` : '';
+  const ab = s.status?.ab_beat != null && Number.isFinite(s.status.ab_beat) ? ` · since bar ${Math.floor(s.status.ab_beat / proTaktJetzt()) + 1}` : '';
   return `pattern ${s.status?.nr ?? '–'} by ${wer}${ab}`;
 }
 export function neueInstanz(w) {

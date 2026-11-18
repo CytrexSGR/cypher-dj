@@ -1,6 +1,6 @@
 // S19: /k/mapping with geraet "lernen" in the network thread. The device name "lernen" is the reserved name of the learn
 // table (slot 1): the net thread loads <controller folder>/lernen.json exactly like any other device file and hands it to
-// the kern as Befehl MAPPING with nr 1; every other device name keeps nr 0. A broken lernen.json is refused with quittung 6
+// the kern as Befehl MAPPING with nr 1; lernen-2 .. lernen-8 are slots 2 to 8 (one learn table per midi_ein port); every other device name keeps nr 0. A broken lernen.json is refused with quittung 6
 // pruefung and its line in the log, nothing reaches the ring.
 // /k/lernen ,hsi in the network thread (case 16): Befehl LERNEN for the hand, 6 nur_hand for cypher, 6 ausserhalb_bereich for
 // an outside 0/1; the kern event GELERNT leaves as /e/gelernt ,hiiiii.
@@ -57,6 +57,15 @@ int main() {
       const auto* m = static_cast<const hand::Mapping*>(b.zeiger);
       PRUEF(std::string(m->geraet) == "lernen" && m->n_eintraege == 1);
       delete m;
+    }
+    // 7a2) lernen-2 .. lernen-8 are slots 2..8 (midi_ein_2..8), lernen-9 is no slot (stays 0)
+    for (int k : {2, 8, 9}) {
+      const std::string name = "lernen-" + std::to_string(k);
+      fs::copy_file(djk + "/core/tests/hand/mappings/lernen_bk.json", dir / (name + ".json"), fs::copy_options::overwrite_existing);
+      mapping_senden(netz, 710 + k, "andreas", name.c_str());
+      PRUEF(bef->hole(b) && b.art == cdj::Befehl::MAPPING && b.id == 710 + k && b.zeiger != nullptr);
+      PRUEF(b.nr == (k == 9 ? 0 : k));
+      if (b.zeiger) delete static_cast<const hand::Mapping*>(b.zeiger);
     }
     // 7b) negative control: another device name stays on slot 0
     mapping_senden(netz, 72, "andreas", "softcontroller");

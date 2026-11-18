@@ -1,0 +1,482 @@
+[
+ {
+  "eingang": {
+   "kBeat": 0,
+   "offset": 0,
+   "bpm": 128,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": false,
+   "laeuft": true
+  },
+  "ziel": 4
+ },
+ {
+  "eingang": {
+   "kBeat": 0,
+   "offset": 0.37,
+   "bpm": 90,
+   "loopVon": 0,
+   "loopBis": 62,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 0.37
+ },
+ {
+  "eingang": {
+   "kBeat": 0,
+   "offset": 1.25,
+   "bpm": 140,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 1.25
+ },
+ {
+  "eingang": {
+   "kBeat": 0,
+   "offset": 0,
+   "bpm": 128,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": false,
+   "laeuft": false
+  },
+  "ziel": null
+ },
+ {
+  "eingang": {
+   "kBeat": 0,
+   "offset": 3.1,
+   "bpm": 174,
+   "loopVon": 0,
+   "loopBis": 30,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 3.1
+ },
+ {
+  "eingang": {
+   "kBeat": 5.57,
+   "offset": 0,
+   "bpm": 128,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": false,
+   "laeuft": true
+  },
+  "ziel": 8
+ },
+ {
+  "eingang": {
+   "kBeat": 5.57,
+   "offset": 0.37,
+   "bpm": 90,
+   "loopVon": 0,
+   "loopBis": 62,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 8.37
+ },
+ {
+  "eingang": {
+   "kBeat": 5.57,
+   "offset": 1.25,
+   "bpm": 140,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 9.25
+ },
+ {
+  "eingang": {
+   "kBeat": 5.57,
+   "offset": 0,
+   "bpm": 128,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": false,
+   "laeuft": false
+  },
+  "ziel": null
+ },
+ {
+  "eingang": {
+   "kBeat": 5.57,
+   "offset": 3.1,
+   "bpm": 174,
+   "loopVon": 0,
+   "loopBis": 30,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 7.1
+ },
+ {
+  "eingang": {
+   "kBeat": 7.99,
+   "offset": 0,
+   "bpm": 128,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": false,
+   "laeuft": true
+  },
+  "ziel": 12
+ },
+ {
+  "eingang": {
+   "kBeat": 7.99,
+   "offset": 0.37,
+   "bpm": 90,
+   "loopVon": 0,
+   "loopBis": 62,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 8.37
+ },
+ {
+  "eingang": {
+   "kBeat": 7.99,
+   "offset": 1.25,
+   "bpm": 140,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 9.25
+ },
+ {
+  "eingang": {
+   "kBeat": 7.99,
+   "offset": 0,
+   "bpm": 128,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": false,
+   "laeuft": false
+  },
+  "ziel": null
+ },
+ {
+  "eingang": {
+   "kBeat": 7.99,
+   "offset": 3.1,
+   "bpm": 174,
+   "loopVon": 0,
+   "loopBis": 30,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 11.1
+ },
+ {
+  "eingang": {
+   "kBeat": 8,
+   "offset": 0,
+   "bpm": 128,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": false,
+   "laeuft": true
+  },
+  "ziel": 12
+ },
+ {
+  "eingang": {
+   "kBeat": 8,
+   "offset": 0.37,
+   "bpm": 90,
+   "loopVon": 0,
+   "loopBis": 62,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 8.37
+ },
+ {
+  "eingang": {
+   "kBeat": 8,
+   "offset": 1.25,
+   "bpm": 140,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 9.25
+ },
+ {
+  "eingang": {
+   "kBeat": 8,
+   "offset": 0,
+   "bpm": 128,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": false,
+   "laeuft": false
+  },
+  "ziel": null
+ },
+ {
+  "eingang": {
+   "kBeat": 8,
+   "offset": 3.1,
+   "bpm": 174,
+   "loopVon": 0,
+   "loopBis": 30,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 11.1
+ },
+ {
+  "eingang": {
+   "kBeat": 61.5,
+   "offset": 0,
+   "bpm": 128,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": false,
+   "laeuft": true
+  },
+  "ziel": 64
+ },
+ {
+  "eingang": {
+   "kBeat": 61.5,
+   "offset": 0.37,
+   "bpm": 90,
+   "loopVon": 0,
+   "loopBis": 62,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 62.37
+ },
+ {
+  "eingang": {
+   "kBeat": 61.5,
+   "offset": 1.25,
+   "bpm": 140,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 65.25
+ },
+ {
+  "eingang": {
+   "kBeat": 61.5,
+   "offset": 0,
+   "bpm": 128,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": false,
+   "laeuft": false
+  },
+  "ziel": null
+ },
+ {
+  "eingang": {
+   "kBeat": 61.5,
+   "offset": 3.1,
+   "bpm": 174,
+   "loopVon": 0,
+   "loopBis": 30,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 63.1
+ },
+ {
+  "eingang": {
+   "kBeat": 100,
+   "offset": 0,
+   "bpm": 128,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": false,
+   "laeuft": true
+  },
+  "ziel": 104
+ },
+ {
+  "eingang": {
+   "kBeat": 100,
+   "offset": 0.37,
+   "bpm": 90,
+   "loopVon": 0,
+   "loopBis": 62,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 100.37
+ },
+ {
+  "eingang": {
+   "kBeat": 100,
+   "offset": 1.25,
+   "bpm": 140,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 101.25
+ },
+ {
+  "eingang": {
+   "kBeat": 100,
+   "offset": 0,
+   "bpm": 128,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": false,
+   "laeuft": false
+  },
+  "ziel": null
+ },
+ {
+  "eingang": {
+   "kBeat": 100,
+   "offset": 3.1,
+   "bpm": 174,
+   "loopVon": 0,
+   "loopBis": 30,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 103.1
+ },
+ {
+  "eingang": {
+   "kBeat": 108.35,
+   "offset": 0,
+   "bpm": 128,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": false,
+   "laeuft": true
+  },
+  "ziel": 112
+ },
+ {
+  "eingang": {
+   "kBeat": 108.35,
+   "offset": 0.37,
+   "bpm": 90,
+   "loopVon": 0,
+   "loopBis": 62,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 112.37
+ },
+ {
+  "eingang": {
+   "kBeat": 108.35,
+   "offset": 1.25,
+   "bpm": 140,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 109.25
+ },
+ {
+  "eingang": {
+   "kBeat": 108.35,
+   "offset": 0,
+   "bpm": 128,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": false,
+   "laeuft": false
+  },
+  "ziel": null
+ },
+ {
+  "eingang": {
+   "kBeat": 108.35,
+   "offset": 3.1,
+   "bpm": 174,
+   "loopVon": 0,
+   "loopBis": 30,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 111.1
+ },
+ {
+  "eingang": {
+   "kBeat": 127.3,
+   "offset": 0,
+   "bpm": 128,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": false,
+   "laeuft": true
+  },
+  "ziel": 128
+ },
+ {
+  "eingang": {
+   "kBeat": 127.3,
+   "offset": 0.37,
+   "bpm": 90,
+   "loopVon": 0,
+   "loopBis": 62,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 128.37
+ },
+ {
+  "eingang": {
+   "kBeat": 127.3,
+   "offset": 1.25,
+   "bpm": 140,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 129.25
+ },
+ {
+  "eingang": {
+   "kBeat": 127.3,
+   "offset": 0,
+   "bpm": 128,
+   "loopVon": 0,
+   "loopBis": 64,
+   "loopAn": false,
+   "laeuft": false
+  },
+  "ziel": null
+ },
+ {
+  "eingang": {
+   "kBeat": 127.3,
+   "offset": 3.1,
+   "bpm": 174,
+   "loopVon": 0,
+   "loopBis": 30,
+   "loopAn": true,
+   "laeuft": true
+  },
+  "ziel": 131.1
+ }
+]

@@ -21,7 +21,7 @@ test('S19 route: GET /lernen on a fresh setup: no assignments, nothing waiting, 
   const { url } = await aufbau(t);
   const g = await ruf(url, 'GET', '/lernen');
   assert.equal(g.code, 200);
-  assert.deepEqual(g.j, { zuordnungen: [], wartet: null, midi: { port: null }, datei: 'fehlt' });
+  assert.deepEqual(g.j, { zuordnungen: [], wartet: null, midi: { port: null }, controller: [], datei: 'fehlt' });
 });
 
 test('S19 route: POST /lernen needs a MIDI input (409 kein_midi_eingang), arms with the generic profile, Cypher is 403, bad targets are 400, null cancels', async (t) => {
@@ -77,7 +77,7 @@ test('S19 route: an existing file shows in GET; a broken file is reported (datei
   fs.mkdirSync(ordner, { recursive: true });
   fs.writeFileSync(path.join(ordner, 'lernen.json'), '{"version":1,"geraet":"lernen","quelle_port":"midi_ein_1","eintraege":[\n {"nachricht":{"typ":"cc","kanal":1,"nr":74},"ziel":"erz/5/bk/3","art":"absolut"}\n]}\n');
   const g = await ruf(url, 'GET', '/lernen');
-  assert.deepEqual([g.j.datei, g.j.zuordnungen, g.j.midi.port], ['ok', [{ pfad: 'erz/5/bk/3', kanal: 1, nr: 74 }], 'X:Y']);
+  assert.deepEqual([g.j.datei, g.j.zuordnungen, g.j.midi.port], ['ok', [{ pfad: 'erz/5/bk/3', kanal: 1, nr: 74, platz: 1, name: 'erz/5/bk/3' }], 'X:Y']);
   fs.writeFileSync(path.join(ordner, 'lernen.json'), '{"version":1,');
   const k = await ruf(url, 'GET', '/lernen');
   assert.equal(k.j.datei, 'kaputt');
@@ -94,7 +94,41 @@ test('learn any target: after the kern reports the captured CC the entry is stor
   innen(o).vomKern('/e/gelernt', { id: arm.felder.id, quelle: 1, kanal: 2, nr: 21, wert: 64, belegt: 0 });
   let g;
   for (let i = 0; i < 100; i++) { g = (await ruf(url, 'GET', '/lernen')).j; if (g.zuordnungen.length) break; await new Promise((r) => setTimeout(r, 20)); }
-  assert.deepEqual(g.zuordnungen, [{ pfad: 'deck/1/fader', kanal: 2, nr: 21 }]);
+  assert.deepEqual(g.zuordnungen, [{ pfad: 'deck/1/fader', kanal: 2, nr: 21, platz: 1, name: 'deck/1/fader' }]);
   const datei = JSON.parse(fs.readFileSync(path.join(ordner, 'lernen.json'), 'utf8'));
   assert.deepEqual(datei.eintraege, [{ nachricht: { typ: 'cc', kanal: 2, nr: 21 }, ziel: 'deck/1/fader', art: 'absolut' }]);
+});
+
+test('POST /lernen/setzen assigns a CC to a target without a capture: validated like POST /lernen, same file and kern reload, Cypher is 403', async (t) => {
+  const { url, log, ordner } = await aufbau(t);
+  const sende = (d, kopf) => ruf(url, 'POST', '/lernen/setzen', d, kopf);
+  const ohne = await sende({ pfad: 'deck/1/filter', platz: 1, kanal: 16, nr: 13 });
+  assert.deepEqual([ohne.code, ohne.j.fehler], [409, 'kein_midi_eingang']);
+  await ruf(url, 'POST', '/geraete/midi', { profil: 'midi-controller', port: 'X:Y' });
+  const cy = await sende({ pfad: 'deck/1/filter', platz: 1, kanal: 16, nr: 13 }, CYPHER);
+  assert.deepEqual([cy.code, cy.j.fehler], [403, 'nur_andreas']);
+  for (const d of [{ pfad: 'deck/1/kill/tief', platz: 1, kanal: 1, nr: 1 }, { pfad: 'erz/4/bk/1', platz: 1, kanal: 1, nr: 1 }, { pfad: 'deck/1/filter', platz: 1, kanal: 0, nr: 1 },
+    { pfad: 'deck/1/filter', platz: 1, kanal: 17, nr: 1 }, { pfad: 'deck/1/filter', platz: 1, kanal: 1, nr: 128 }, { pfad: 'deck/1/filter', platz: 1, kanal: 1.5, nr: 1 },
+    { pfad: 'deck/1/filter', platz: 1, kanal: '1', nr: 1 }, { pfad: 'deck/1/filter', platz: 0, kanal: 1, nr: 1 }, { pfad: 'deck/1/filter', platz: 9, kanal: 1, nr: 1 },
+    { pfad: 'deck/1/filter', platz: 3, kanal: 1, nr: 1 }, { pfad: 'deck/1/filter', kanal: 1, nr: 1 }]) {
+    const r = await sende(d);
+    assert.deepEqual([r.code, r.j.fehler], [400, 'argument_ungueltig'], JSON.stringify(d));
+  }
+  assert.equal(anKern(log, '/k/mapping').length, 0, 'nothing reached the kern');
+  assert.equal(fs.existsSync(path.join(ordner, 'lernen.json')), false, 'nothing was written');
+  const ja = await sende({ pfad: 'deck/1/filter', platz: 1, kanal: 16, nr: 13 });
+  assert.equal(ja.code, 200);
+  assert.deepEqual(ja.j.zuordnungen, [{ pfad: 'deck/1/filter', kanal: 16, nr: 13, platz: 1, name: 'deck/1/filter' }]);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(ordner, 'lernen.json'), 'utf8')).eintraege, [{ nachricht: { typ: 'cc', kanal: 16, nr: 13 }, ziel: 'deck/1/filter', art: 'absolut' }]);
+  assert.deepEqual(anKern(log, '/k/mapping').map((z) => z.felder.geraet), ['lernen'], 'the kern reloads the table of the place');
+  // the same target on another CC moves it; the same CC on another target replaces the first
+  const um = await sende({ pfad: 'deck/1/filter', platz: 1, kanal: 16, nr: 14 });
+  assert.deepEqual(um.j.zuordnungen.map((z) => [z.pfad, z.nr]), [['deck/1/filter', 14]]);
+  const ersatz = await sende({ pfad: 'deck/2/filter', platz: 1, kanal: 16, nr: 14 });
+  assert.deepEqual(ersatz.j.zuordnungen.map((z) => [z.pfad, z.nr]), [['deck/2/filter', 14]]);
+  // a broken file is refused and left alone
+  fs.writeFileSync(path.join(ordner, 'lernen.json'), '{"version":1,');
+  const kaputt = await sende({ pfad: 'deck/1/filter', platz: 1, kanal: 16, nr: 13 });
+  assert.deepEqual([kaputt.code, kaputt.j.fehler], [409, 'lernen_datei_kaputt']);
+  assert.equal(fs.readFileSync(path.join(ordner, 'lernen.json'), 'utf8'), '{"version":1,');
 });

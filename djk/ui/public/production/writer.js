@@ -51,7 +51,9 @@ export function neuerSchreiber({ holeJson, beiProjekt, beiFehler, beiVerworfen =
       for (const [vs, vr] of offen) if (vr !== bestaetigt) beiFremdeRev(vs, vr);
       if (r.status === 200 && r.j && typeof r.j.rev === 'number' && r.j.projekt) {
         rev = r.j.rev;
-        beiProjekt(slug, r.j.projekt, rev, r.j);   // D1 V2 Nachzug (7c): die ganze Antwort (kern) für den Hinweis
+        // D1 V2 Nachzug (7c): die ganze Antwort (kern) für den Hinweis. A view hook that throws must not strand the queue: the write is done,
+        // so the request ends and the loop goes on (else `unterwegs` stays true and no later change is ever sent).
+        try { beiProjekt(slug, r.j.projekt, rev, r.j); } catch (e) { console.error('schreiber: beiProjekt threw', e); }
         a.ende(true);
       } else {
         const veraltet = r.status === 409 && r.j?.fehler === 'rev_veraltet';

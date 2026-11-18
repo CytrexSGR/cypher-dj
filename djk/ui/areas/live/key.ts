@@ -1,6 +1,7 @@
 // Plan live-module task 11 (decision 19): POST /modul/tonart {slot} adapts the module of a slot to the key of the deck on the master. The distance
-// (project/live.ts tonartAbstand, Camelot, shortest way -6..+6) is applied to the whole module tree in ONE undo step: MIDI notes move, audio clips
-// get warp.transpose_st; the total is stored on the module (`transponiert`), so a second call changes nothing. GET /modul/stand shows the distance
+// (project/live.ts tonartAbstand, Camelot, shortest way -6..+6) is applied to the whole module tree in ONE undo step: MIDI notes move (not on drum
+// tracks: a drum-map graph or a kit picks the drum by the note), audio clips get warp.transpose_st; the total is stored on the module
+// (`transponiert`), so a second call changes nothing. GET /modul/stand shows the distance
 // per slot (`tonart_abstand` = what adapting would still move, `transponiert`, `deck_tonart`).
 // The master key: the playing deck (status 2+, channel open) whose channel is the loudest on the master (the page server's peak buffer); see server.ts.
 import { liveSlots, normiereSlot, passeModulAn, tonartAbstand, tonartRest } from '../../project/live.ts';

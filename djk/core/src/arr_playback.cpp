@@ -409,6 +409,62 @@ void lese_glied_ziele(const json& o, const std::string& wo, const ArrSnapshot& s
   }
 }
 
+// The `punkte` of an `auto` lane of a track or of a return fader lane: [[beat, wert, form], ...], the checks and the texts as they always were. The points go to the
+// end of snap.auto_punkte (reserved in the prescan), the lane gets its target fields, count and pointer. `wl` is the prefix of the lane's texts, `zname` the target name.
+void lese_auto_punkte(const json& l, const std::string& wl, const AutoZiel& az, const std::string& zname, bool relativ, ArrSnapshot& snap, ArrAutoLane& lane) {
+  const json& pl = feld(l, "punkte", wl);
+  if (!pl.is_array() || pl.empty()) format(wl + "punkte is not a non-empty list");
+  const size_t p0 = snap.auto_punkte.size();
+  for (size_t pi = 0; pi < pl.size(); ++pi) {
+    const json& q = pl[pi];
+    const std::string wq = wl + "punkte[" + std::to_string(pi) + "]";
+    if (!q.is_array() || q.size() != 3) format(wq + " is not [beat, wert, form]");
+    if (!q[0].is_number() || !q[1].is_number() || !q[2].is_number_integer()) format(wq + " has a non-number");
+    ArrAutoPunkt x{};
+    x.beat = q[0].get<double>();
+    const double w = q[1].get<double>();
+    const int64_t fm = q[2].get<int64_t>();
+    if (!std::isfinite(x.beat) || x.beat < 0.0) format(wq + " beat negative or not finite");
+    if (relativ ? !(w >= az.rel_min && w <= az.rel_max) : !(w >= az.min && w <= az.max))
+      format(wq + " wert outside the " + (relativ ? "relative " : "") + "range of " + zname);
+    if (fm < 0 || fm > 2) format(wq + " form outside 0 to 2");
+    if (az.nur_sprung && (fm != 2 || (w != 0.0 && w != 1.0))) format(wq + " " + zname + " takes only 0 or 1 with form 2 (jump)");
+    x.wert = static_cast<float>(w);
+    x.form = static_cast<uint8_t>(fm);
+    if (pi > 0 && x.beat < snap.auto_punkte.back().beat) format(wq + " beats fall");
+    if (pi > 1 && x.beat == snap.auto_punkte[snap.auto_punkte.size() - 1].beat && x.beat == snap.auto_punkte[snap.auto_punkte.size() - 2].beat)
+      format(wq + " three points at one beat");
+    snap.auto_punkte.push_back(x);
+  }
+  lane.ziel = az.ziel;
+  lane.param = az.param;
+  lane.n = static_cast<int>(pl.size());
+  lane.p = snap.auto_punkte.data() + p0;
+  lane.relativ = relativ;
+}
+
+// The fader lane of a return, `returns[].auto` (only /3): a list of at most one lane, target fader, absolute. Everything else on a return is refused, the master has no such list at all.
+void lese_ret_auto(const json& r, const std::string& wr, int ri, ArrSnapshot& snap) {
+  if (!r.contains("auto")) return;
+  const json& al = r.at("auto");
+  if (!al.is_array()) format(wr + "auto is not a list");
+  if (al.size() > 1) format(wr + "auto: one fader lane per return");
+  for (size_t li = 0; li < al.size(); ++li) {
+    const json& l = al[li];
+    const std::string wl = wr + "auto[" + std::to_string(li) + "].";
+    if (!l.is_object()) format(wl + "not an object");
+    const std::string zname = text(l, "ziel", wl);
+    if (zname != "fader") format(wl + "ziel " + zname + ": a return takes a fader lane only");
+    if (l.contains("relativ")) {
+      if (!l.at("relativ").is_boolean()) format(wl + "relativ is not a boolean");
+      if (l.at("relativ").get<bool>()) format(wl + "a return fader lane is absolute (no relative lane)");
+    }
+    lese_auto_punkte(l, wl, AUTO_ZIELE[0], zname, false, snap, snap.ret_fader[ri]);
+    snap.ret_fader_da[ri] = true;
+    ++snap.n_auto_lanes;
+  }
+}
+
 // 1.12 slice 6: the insert-parameter and rack-macro lanes of a strip, `chain_auto: [{stufe, param, punkte} | {makro, punkte}, ...]` (any strip with a chain, only /2). `stufe`/`param` as in a rack
 // target (the position in the chain of the strip, the parameter index of the stage kind: not the stage switch 0, not the compressor key 9, and not on a host stage: its plugin keeps its own
 // parameters); `makro` 0..3 drives a macro of the strip's rack (the strip must have one). `punkte` are [beat, wert, form] triples like an `auto` lane; a stage lane value is in the real unit of the
@@ -605,6 +661,13 @@ ArrAudio* ArrAudioCache::hole(const std::string& sha256, const std::string& date
     ++it->second->ref;   // Fehlerfall ohne: ein geteiltes Audio fiele mit dem ersten Schnappschuss
 #endif
     return it->second.get();
+  }
+  // audit U32: frames * 8 must not wrap size_t (frames = 2^61 + n would match a tiny file, and the finite scan and the callback
+  // would then run far past the mapping); INT64_MAX / 8 also keeps the bytes in int64_t for the budget below
+  if (frames < 1 || frames > INT64_MAX / (2 * static_cast<int64_t>(sizeof(float)))) {
+    grund = "format";
+    meldung = datei + ": frames out of range: " + std::to_string(frames);
+    return nullptr;
   }
   const int fd = open(datei.c_str(), O_RDONLY | O_CLOEXEC);
   if (fd < 0) {
@@ -1026,8 +1089,9 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
       format(std::string("kein JSON: ") + e.what());
     }
     const std::string fmt = text(j, "format", "");
-    const bool v2 = fmt == "cypherdj-arr/2";
-    if (fmt != "cypherdj-arr/1" && !v2) format("format ist weder cypherdj-arr/1 noch cypherdj-arr/2");
+    const bool v3 = fmt == "cypherdj-arr/3";   // /3 = /2 plus `returns[].auto` (the fader lane of a return); a core without it refuses the format
+    const bool v2 = fmt == "cypherdj-arr/2" || v3;
+    if (fmt != "cypherdj-arr/1" && !v2) format("format ist weder cypherdj-arr/1 noch cypherdj-arr/2 noch cypherdj-arr/3");
     // Spec 3.2, 6.1: Schlüssel "nr" (Wiedergabe-Nummer der Instanz, wie S2 sie schreibt), gleich der Nummer im Dateinamen
     if (ganz(j, "nr", "") != nummer) format("nr in der Datei weicht von " + std::to_string(nummer) + " ab");
     const json& spuren = feld(j, "spuren", "");
@@ -1108,12 +1172,19 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
           if (!r.at("pre").is_boolean()) format(wr + "pre ist kein Wahrheitswert");
           snap->ret_pre[rn - 1] = r.at("pre").get<bool>();
         }
+        if (r.contains("auto") && !v3) format(wr + "auto exists only in cypherdj-arr/3");   // an older loader would drop the lane silently: here it is refused
         const json& ar = feld(r, "ausgang", wr);
         if (text(ar, "art", wr + "ausgang.") != "master") format(wr + "ausgang: Returns senden nicht weiter (nur master)");
         lese_kette(r, wr, snap->kette[ARR_KETTE_RET0 + rn - 1], ins_belegt, cache, *snap);
         lese_rack(r, wr, snap->kette[ARR_KETTE_RET0 + rn - 1], snap->rack[ARR_KETTE_RET0 + rn - 1], rack_belegt);   // 1.10 slice 4c T15
       }
     }
+    // The master takes no volume curve (owner decision): no `auto` on the production master, on a group, or on a `master` object. Only a return carries a fader lane.
+    if (j.contains("pm") && j.at("pm").is_object() && j.at("pm").contains("auto")) format("pm.auto: the master takes no volume curve");
+    if (j.contains("master") && j.at("master").is_object() && j.at("master").contains("auto")) format("master.auto: the master takes no volume curve");
+    if (j.contains("gruppen") && j.at("gruppen").is_array())
+      for (const json& g : j.at("gruppen"))
+        if (g.is_object() && g.contains("auto")) format("gruppen[nr " + std::to_string(g.contains("nr") && g.at("nr").is_number_integer() ? g.at("nr").get<int64_t>() : 0) + "].auto: a group takes no fader lane");
     // Zählen, dann reservieren: die Zeiger in ArrSpur zeigen in die Vektoren, die danach nie wachsen
     size_t n_clips = 0, n_noten = 0, n_warps = 0, n_punkte = 0, n_lanes = 0, n_auto_p = 0, n_hk_p = 0;
     for (const json& s : spuren) {
@@ -1149,6 +1220,16 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
         n_auto_p += l.at("punkte").size();
       }
     };
+    if (j.contains("returns") && j.at("returns").is_array())   // the points of the return fader lanes (/3) share the vector and the budget
+      for (const json& r : j.at("returns")) {
+        if (!(r.is_object() && r.contains("auto") && r.at("auto").is_array())) continue;
+        for (const json& l : r.at("auto")) {
+          if (!(l.is_object() && l.contains("punkte") && l.at("punkte").is_array())) continue;
+          if (l.at("punkte").size() > static_cast<size_t>(ARR_AUTO_LANE_PUNKTE_MAX))
+            throw Abbruch("zu_gross", "more than " + std::to_string(ARR_AUTO_LANE_PUNKTE_MAX) + " points in one automation lane");
+          n_auto_p += l.at("punkte").size();
+        }
+      }
     for (const json& s : spuren) zaehle_kette_auto(s);
     if (j.contains("gruppen") && j.at("gruppen").is_array()) for (const json& g : j.at("gruppen")) zaehle_kette_auto(g);
     if (j.contains("returns") && j.at("returns").is_array()) for (const json& r : j.at("returns")) zaehle_kette_auto(r);
@@ -1616,37 +1697,8 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
             if (snap->auto_lane_liste[k].ziel == az->ziel && snap->auto_lane_liste[k].param == az->param && snap->auto_lane_liste[k].relativ == relativ)
 #endif
               format(wl + "ziel " + zname + (relativ ? " relative twice on one track" : " twice on one track"));
-          const json& pl = feld(l, "punkte", wl);
-          if (!pl.is_array() || pl.empty()) format(wl + "punkte is not a non-empty list");
-          const size_t p0 = snap->auto_punkte.size();
-          for (size_t pi = 0; pi < pl.size(); ++pi) {
-            const json& q = pl[pi];
-            const std::string wq = wl + "punkte[" + std::to_string(pi) + "]";
-            if (!q.is_array() || q.size() != 3) format(wq + " is not [beat, wert, form]");
-            if (!q[0].is_number() || !q[1].is_number() || !q[2].is_number_integer()) format(wq + " has a non-number");
-            ArrAutoPunkt x{};
-            x.beat = q[0].get<double>();
-            const double w = q[1].get<double>();
-            const int64_t fm = q[2].get<int64_t>();
-            if (!std::isfinite(x.beat) || x.beat < 0.0) format(wq + " beat negative or not finite");
-            if (relativ ? !(w >= az->rel_min && w <= az->rel_max) : !(w >= az->min && w <= az->max))
-              format(wq + " wert outside the " + (relativ ? "relative " : "") + "range of " + zname);
-            if (fm < 0 || fm > 2) format(wq + " form outside 0 to 2");
-            if (az->nur_sprung && (fm != 2 || (w != 0.0 && w != 1.0))) format(wq + " " + zname + " takes only 0 or 1 with form 2 (jump)");
-            x.wert = static_cast<float>(w);
-            x.form = static_cast<uint8_t>(fm);
-            if (pi > 0 && x.beat < snap->auto_punkte.back().beat) format(wq + " beats fall");
-            if (pi > 1 && x.beat == snap->auto_punkte[snap->auto_punkte.size() - 1].beat &&
-                x.beat == snap->auto_punkte[snap->auto_punkte.size() - 2].beat)
-              format(wq + " three points at one beat");
-            snap->auto_punkte.push_back(x);
-          }
           ArrAutoLane lane{};
-          lane.ziel = az->ziel;
-          lane.param = az->param;
-          lane.n = static_cast<int>(pl.size());
-          lane.p = snap->auto_punkte.data() + p0;
-          lane.relativ = relativ;
+          lese_auto_punkte(l, wl, *az, zname, relativ, *snap, lane);
           snap->auto_lane_liste.push_back(lane);
         }
         sp.n_auto = static_cast<int>(snap->auto_lane_liste.size() - l0);
@@ -1660,6 +1712,8 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
     if (j.contains("gruppen"))
       for (const json& g : j.at("gruppen")) lese_kette_auto(g, "gruppen[nr " + std::to_string(g.at("nr").get<int64_t>()) + "].", ARR_SPUREN + static_cast<int>(g.at("nr").get<int64_t>()) - 1, *snap);
     if (j.contains("pm")) lese_kette_auto(j.at("pm"), "pm.", ARR_KETTE_PM, *snap);
+    if (j.contains("returns"))
+      for (const json& r : j.at("returns")) lese_ret_auto(r, "returns[nr " + std::to_string(r.at("nr").get<int64_t>()) + "].", static_cast<int>(r.at("nr").get<int64_t>()) - 1, *snap);
     if (j.contains("returns"))
       for (const json& r : j.at("returns")) lese_kette_auto(r, "returns[nr " + std::to_string(r.at("nr").get<int64_t>()) + "].", ARR_KETTE_RET0 + static_cast<int>(r.at("nr").get<int64_t>()) - 1, *snap);
     // nested groups: the level and the order of every group, a cycle is refused (the server refuses it at the command too). Before the key check: the key rules read the levels.

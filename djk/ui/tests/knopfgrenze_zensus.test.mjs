@@ -23,7 +23,7 @@ const ERLAUBT = [
   { datei: 'ui/areas/proj/mapping.ts', fragment: '(spur)\\/([1-9]|[12][0-9]|3[0-2])', grund: 'SEND_PFAD counts tracks: 32 tracks' },
   { datei: 'ui/public/curves.js', fragment: 'spur\\/(?:[1-9]|[12][0-9]|3[0-2])', grund: 'track patterns spur/1..32 (curves.js:67, :72): 32 tracks' },
   { datei: 'ui/areas/proj/core_path.ts', fragment: 'track number 1..32', grund: 'comment: lane override per track' },
-  { datei: 'ui/areas/proj/session.ts', fragment: 'spur(1..32 = track number nr)', grund: 'comment: /e/auto per track' },
+  { datei: 'ui/areas/proj/session_auto.ts', fragment: 'spur(1..32 = track number nr)', grund: 'comment: /e/auto per track' },
   { datei: 'conductor/src/controls_info.ts', fragment: 'n <= 32', grund: 'one row per track slot (spur/1..32/*), not knobs' },
   { datei: 'hand/hand.ts', fragment: 'spur/1..32', grund: 'tool text: track paths' },
   { datei: 'ui/check/acceptance_r3.mjs', fragment: 'i <= 32', grund: 'probe: one command per track' },

@@ -1,10 +1,10 @@
-// EFFECTS channel tabs: one tab per channel (with lights for INSERT, COMP and GATE), plus SENDS and BUS. Only the chosen channel strip is shown;
+// EFFECTS channel tabs: MASTER (one light: INSERT), one tab per channel (lights for INSERT, COMP and GATE), plus SENDS and BUS. Only the chosen channel strip is shown;
 // the strips stay in the DOM with all their handlers, a class hides the rest. The chosen tab is per viewer (localStorage, try/catch).
 import { GRAPH_KANAL_ART } from './effects.js';
 // This module touches no page module (they need a browser to load): the page state arrives through bindeFxReiter, the channel list is the
 // one of FX_KANAELE (effects_gemeinsam.js:16; a test pins that the ids are equal).
-export const FX_REITER = [['deck/1', 'A'], ['deck/2', 'B'], ['erz/1', 'DRUMS'], ['erz/2', 'BASS'], ['erz/3', 'MELODY'], ['erz/5', 'I5'], ['erz/6', 'I6'], ['erz/7', 'I7'],
-  ['pad/1', 'L1'], ['pad/2', 'L2']].map(([id, text]) => ({ id, text })).concat([{ id: 'sends', text: 'SENDS' }, { id: 'bus', text: 'BUS' }]);
+export const FX_REITER = [{ id: 'master', text: 'MASTER' }].concat([['deck/1', 'A'], ['deck/2', 'B'], ['erz/1', 'DRUMS'], ['erz/2', 'BASS'], ['erz/3', 'MELODY'], ['erz/5', 'I5'], ['erz/6', 'I6'], ['erz/7', 'I7'],
+  ['pad/1', 'L1'], ['pad/2', 'L2']].map(([id, text]) => ({ id, text })), [{ id: 'sends', text: 'SENDS' }, { id: 'bus', text: 'BUS' }]);
 const $ = (q) => document.querySelector(q), $$ = (q) => [...document.querySelectorAll(q)];
 let quelle = { regler: () => undefined, graph: () => null };
 export function bindeFxReiter(q) { quelle = q; }
@@ -14,6 +14,7 @@ export function reiterWahl(gespeichert, vorgabe = 'erz/1') {
 }
 // the three lights of a channel from the live control values (`>= 0.5` is "on", as the strips treat it) and the graph picker
 export function fxLichter(regler, graphGewaehlt, k) {
+  if (k === 'master') return { insert: !!graphGewaehlt(k), comp: false, gate: false };   // the master has no COMP/GATE stage
   return { insert: !!graphGewaehlt(k), comp: (regler?.[`${k}/komp/an`] ?? 0) >= 0.5, gate: (regler?.[`${k}/gate/an`] ?? 0) >= 0.5 };
 }
 let aktiv = null;
@@ -29,8 +30,9 @@ export function baueFxReiterZeile(reihe, waehle) {
   for (const r of FX_REITER) {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'fxreiter-tab'; b.dataset.reiter = r.id; b.setAttribute('role', 'tab');
-    const kanal = r.id !== 'sends' && r.id !== 'bus';
-    b.innerHTML = `<span>${r.text}</span>${kanal ? '<i class="licht licht-insert" title="Graph on the insert"></i><i class="licht licht-comp" title="Compressor"></i><i class="licht licht-gate" title="Gate"></i>' : ''}`;
+    const kanal = r.id !== 'sends' && r.id !== 'bus' && r.id !== 'master';
+    const licht = (n, t) => `<i class="licht licht-${n}" title="${t}"></i>`;
+    b.innerHTML = `<span>${r.text}</span>${r.id === 'master' ? licht('insert', 'Graph on the master insert') : kanal ? licht('insert', 'Graph on the insert') + licht('comp', 'Compressor') + licht('gate', 'Gate') : ''}`;
     b.addEventListener('click', () => {
       aktiv = r.id;
       try { localStorage.setItem(FX_REITER_SCHLUESSEL, r.id); } catch { /* without storage the choice lives for this page load */ }
@@ -46,6 +48,7 @@ export function zeigeFxReiter() {
   for (const s of $$('#fxstreifen > .fxstreifen')) s.classList.toggle('fx-aus', s.dataset.kanal !== a);
   $('#fxstreifen > .sendrueck')?.classList.toggle('fx-aus', a !== 'sends');
   $('#fxstreifen > .buspanel')?.classList.toggle('fx-aus', a !== 'bus');
+  $('#fxstreifen > .masterpanel')?.classList.toggle('fx-aus', a !== 'master');
   for (const b of $$('#fxstreifen > .fxreiter .fxreiter-tab')) {
     const k = b.dataset.reiter, an = k === a;
     b.classList.toggle('an', an); b.setAttribute('aria-selected', String(an));
