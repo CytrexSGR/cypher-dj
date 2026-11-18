@@ -3,6 +3,19 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-18, tenth update
+
+**Studio**
+- Buttons and pads of a learned controller can be assigned to switches and deck actions with a click in the
+  CONTROLLERS window: PFL, the three kills, compressor and gate on, the utility switches, Play and Cue. The picker of
+  a button or pad offers only switches and actions, the picker of a knob only continuous targets, and after an
+  assignment it moves on to the next free control. Hot cues and loops from a learned button are not there yet.
+- The Akai LPD8 shows its pads as assignable tiles in each of its four programs (64 controls in all), in the layout
+  of the device. The Novation Launch Control 3 names its left-hand buttons under the tiles and says which of them
+  send nothing on the plain MIDI port.
+- The module row of the window folds tracks and groups into one chip each, and the free graph knobs that no loaded
+  graph names stay out of the lists until asked for.
+
 ## 2026-11-18, ninth update
 
 **Studio**

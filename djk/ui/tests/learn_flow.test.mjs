@@ -141,3 +141,17 @@ test('controller places: without proof that the kern knows the places 2..8 the n
   await x.a.loesche('deck/2/fader');
   assert.deepEqual(x.sendet.filter((s) => s.a === '/k/mapping').map((s) => s.f.geraet), ['lernen-2']);
 });
+
+test('direct assignment of a pad: setze writes a note "taste" entry, reloads the table of its place and tells the pages; a refused reload restores the file', async (t) => {
+  const x = aufbau(t);
+  await x.a.setze('deck/1/pfl', 1, 36, 1, { typ: 'note', art: 'taste' });
+  assert.deepEqual(JSON.parse(fs.readFileSync(x.datei, 'utf8')).eintraege, [{ nachricht: { typ: 'note', kanal: 1, nr: 36 }, ziel: 'deck/1/pfl', art: 'taste' }]);
+  assert.deepEqual(x.sendet.filter((s) => s.a === '/k/mapping').map((s) => s.f.geraet), ['lernen']);
+  assert.deepEqual(x.verteilt.at(-1), { a: 'lernen', f: { stand: 'fertig', pfad: 'deck/1/pfl', kanal: 1, nr: 36, platz: 1 } });
+  // the kern refuses the table (status 4): the previous file comes back and the caller hears why
+  const y = aufbau(t, { status: 4, grund: 'falsche_art' });
+  y.speicher.zuordne({ pfad: 'deck/1/filter', kanal: 16, nr: 13 });
+  const vorher = fs.readFileSync(y.datei, 'utf8');
+  await assert.rejects(y.a.setze('deck/1/cue', 1, 37, 1, { typ: 'note', art: 'taste' }), (e) => e.grund === 'lernen_abgelehnt' && e.code === 409);
+  assert.equal(fs.readFileSync(y.datei, 'utf8'), vorher, 'restored');
+});

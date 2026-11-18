@@ -5,7 +5,7 @@
 // goes into the table of that place.
 // Every outcome goes out as SSE {a:'lernen', f:{stand, pfad, ...}} so every open page follows.
 import type { BereichKontext } from '../../http/router.ts';
-import { LernFehler, lernName, type LernSpeicher } from './store.ts';
+import { LernFehler, lernName, type Art, type LernSpeicher, type Typ } from './store.ts';
 
 export interface Zeit { setzen(f: () => void, ms: number): unknown; loeschen(h: unknown): void }
 export interface AblaufOptionen { fristMs?: number; zeit?: Zeit }
@@ -103,11 +103,12 @@ export class LernAblauf {
     return lauf;
   }
 
-  // Assign a CC to a target without a capture (the page picked the control from a layout): the same write, kern reload and events as a capture.
+  // Assign a CC or a note to a target without a capture (the page picked the control from a layout): the same write, kern reload and events as a capture.
+  // `quelle` is what the control sends and how the kern reads it (typ and art default to a CC "absolut"; the route decides them from the target).
   // Resolves with how it ended ('fertig', 'ohne_antwort': files kept, the kern loads them at its next start) and rejects with a LernFehler when it was refused.
-  setze(pfad: string, kanal: number, nr: number, platz: number): Promise<'fertig' | 'ohne_antwort'> {
+  setze(pfad: string, kanal: number, nr: number, platz: number, quelle: { typ?: Typ; art?: Art } = {}): Promise<'fertig' | 'ohne_antwort'> {
     const lauf = this.kette.then(async () => {
-      const r = await this.speichere(pfad, kanal, nr, platz);
+      const r = await this.speichere(pfad, kanal, nr, platz, quelle);
       if (r.stand === 'abgelehnt') throw r.grund === 'lernen_datei_kaputt' ? new LernFehler(r.grund, 409) : new LernFehler('lernen_abgelehnt', 409, `the assignment was refused (${r.grund}); nothing was changed`);
       return r.stand;
     });
@@ -115,9 +116,9 @@ export class LernAblauf {
     return lauf;
   }
 
-  private async speichere(pfad: string, kanal: number, nr: number, platz: number): Promise<Ausgang> {
+  private async speichere(pfad: string, kanal: number, nr: number, platz: number, quelle: { typ?: Typ; art?: Art } = {}): Promise<Ausgang> {
     let plaetze: number[];
-    try { plaetze = this.speicher.zuordne({ pfad, kanal, nr, platz }); } catch (e) {
+    try { plaetze = this.speicher.zuordne({ pfad, kanal, nr, platz, ...quelle }); } catch (e) {
       const grund = e instanceof LernFehler ? e.grund : 'intern';
       this.ctx.verteile({ a: 'lernen', f: { stand: 'abgelehnt', pfad, grund } });
       return { stand: 'abgelehnt', grund };

@@ -67,11 +67,17 @@ test('S19 speicher: entries the server did not write (a hand-written note entry)
   const hand = { nachricht: { typ: 'note', kanal: 1, nr: 36 }, ziel: 'deck/1/play', art: 'taste' };
   fs.writeFileSync(path.join(d, 'lernen.json'), JSON.stringify({ version: 1, geraet: 'lernen', quelle_port: 'midi_ein_1', eintraege: [hand] }));
   const s = new LernSpeicher(d);
-  assert.deepEqual(s.lies().zuordnungen, [], 'a note entry is not a knob assignment');
+  assert.deepEqual(s.lies().zuordnungen, [{ pfad: 'deck/1/play', kanal: 1, nr: 36, platz: 1, typ: 'note', art: 'taste' }], 'a note "taste" entry reads as a pad assignment');
   s.zuordne({ pfad: 'erz/5/bk/3', kanal: 1, nr: 74 });
   assert.deepEqual(JSON.parse(lies(d)).eintraege[0], hand);
   s.loesche('erz/5/bk/3');
   assert.deepEqual(JSON.parse(lies(d)).eintraege, [hand]);
+  // entries that are none of ours (a relative encoder, a touch) stay out of the list and survive as well
+  const fremd = [{ nachricht: { typ: 'cc', kanal: 1, nr: 20 }, ziel: 'deck/1/filter', art: 'relativ', kodierung: 'versatz64' }, hand];
+  fs.writeFileSync(path.join(d, 'lernen.json'), JSON.stringify({ version: 1, geraet: 'lernen', quelle_port: 'midi_ein_1', eintraege: fremd }));
+  assert.deepEqual(s.lies().zuordnungen.map((z) => z.pfad), ['deck/1/play']);
+  s.zuordne({ pfad: 'erz/5/bk/3', kanal: 1, nr: 74 });
+  assert.deepEqual(JSON.parse(lies(d)).eintraege.slice(0, 2), fremd);
 });
 
 test('S19 speicher: loesche removes the entry of a knob; without an entry it is 404 keine_zuordnung and writes nothing', (t) => {
@@ -126,4 +132,39 @@ test('controller places: a damaged file of any place makes the state kaputt and 
   fs.writeFileSync(path.join(d, 'lernen-3.json'), '{"version":1,"geraet":"lernen","quelle_port":"midi_ein_3","eintraege":[]}');   // wrong device name for place 3
   assert.equal(s.lies().datei, 'kaputt');
   assert.equal(grund(() => s.zuordne({ pfad: 'deck/2/fader', kanal: 1, nr: 8 })), 'lernen_datei_kaputt/409');
+});
+
+test('S19 speicher: a button or pad is written with typ and art and read back; the default (a CC absolut) keeps the old shape without typ and art', (t) => {
+  const d = ordner(t);
+  const s = new LernSpeicher(d);
+  s.zuordne({ pfad: 'deck/1/pfl', kanal: 1, nr: 36, typ: 'note', art: 'taste' });
+  s.zuordne({ pfad: 'deck/1/kill/tief', kanal: 16, nr: 37, art: 'taste' });
+  s.zuordne({ pfad: 'deck/1/filter', kanal: 16, nr: 13 });
+  assert.deepEqual(JSON.parse(lies(d)).eintraege, [
+    { nachricht: { typ: 'note', kanal: 1, nr: 36 }, ziel: 'deck/1/pfl', art: 'taste' },
+    { nachricht: { typ: 'cc', kanal: 16, nr: 37 }, ziel: 'deck/1/kill/tief', art: 'taste' },
+    { nachricht: { typ: 'cc', kanal: 16, nr: 13 }, ziel: 'deck/1/filter', art: 'absolut' }]);
+  assert.deepEqual(s.lies().zuordnungen, [
+    { pfad: 'deck/1/pfl', kanal: 1, nr: 36, platz: 1, typ: 'note', art: 'taste' },
+    { pfad: 'deck/1/kill/tief', kanal: 16, nr: 37, platz: 1, art: 'taste' },
+    { pfad: 'deck/1/filter', kanal: 16, nr: 13, platz: 1 }]);
+  assert.equal(lies(d).split('\n').filter((z) => z.includes('"ziel"')).length, 3, 'one entry per line');
+});
+
+test('S19 speicher: one source drives one target: a note and a CC with the same number are two sources, the same note on a second target replaces the first', (t) => {
+  const d = ordner(t);
+  const s = new LernSpeicher(d);
+  s.zuordne({ pfad: 'deck/1/pfl', kanal: 1, nr: 36, typ: 'note', art: 'taste' });
+  s.zuordne({ pfad: 'deck/1/filter', kanal: 1, nr: 36 });
+  assert.deepEqual(s.lies().zuordnungen.map((z) => [z.pfad, z.typ ?? 'cc']), [['deck/1/pfl', 'note'], ['deck/1/filter', 'cc']]);
+  s.zuordne({ pfad: 'deck/2/pfl', kanal: 1, nr: 36, typ: 'note', art: 'taste' });
+  assert.deepEqual(s.lies().zuordnungen.map((z) => [z.pfad, z.typ ?? 'cc']), [['deck/1/filter', 'cc'], ['deck/2/pfl', 'note']], 'deck/1/pfl lost its pad');
+  s.zuordne({ pfad: 'deck/2/pfl', kanal: 1, nr: 37, typ: 'note', art: 'taste' });
+  assert.deepEqual(s.lies().zuordnungen.filter((z) => z.typ === 'note').map((z) => z.nr), [37], 'the target moved to the new pad');
+  s.zuordne({ pfad: 'deck/3/pfl', kanal: 1, nr: 37, typ: 'note', art: 'taste' });
+  assert.deepEqual(s.lies().zuordnungen.filter((z) => z.typ === 'note').map((z) => z.pfad), ['deck/3/pfl']);
+  // the same pad number on another place is another device's pad: not replaced
+  s.zuordne({ pfad: 'deck/4/pfl', kanal: 1, nr: 37, platz: 2, typ: 'note', art: 'taste' });
+  assert.deepEqual(s.lies().zuordnungen.filter((z) => z.typ === 'note').map((z) => [z.platz, z.pfad]), [[1, 'deck/3/pfl'], [2, 'deck/4/pfl']]);
+  assert.equal(grund(() => s.zuordne({ pfad: 'deck/1/fader', kanal: 1, nr: 40, typ: 'note' })), 'argument_ungueltig/400', 'a note cannot be absolut: the loader would refuse the file');
 });

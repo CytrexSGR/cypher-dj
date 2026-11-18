@@ -1,9 +1,10 @@
 // CONTROLLERS tab. Left: the devices (controller places, detected MIDI devices without a place, the known devices plugged in or not, tablets);
 // a click picks one. Right, three views of the same assignments:
 //  - a device with a control layout (Launch Control 3, LPD8): the device as a grid of tiles in hardware layout, each tile with its target or "free";
-//    a click opens a picker (module chips, then the targets of that module, searchable) that assigns with one click, without moving a knob;
-//  - a picked MODULE: every learnable target of the module, assigned ones with device and control, free ones with LEARN (and, with a device picked,
-//    a menu of that device's free controls);
+//    a click opens a picker (module chips, then the targets of that module, searchable) that assigns with one click, without moving a knob. A knob
+//    lists the continuous targets; a button or pad lists the switches and deck actions (Play, Cue, PFL, Kill ...);
+//  - a picked MODULE: every assignable target of the module, assigned ones with device and control, free continuous ones with LEARN, free switches and
+//    actions without it, and (with a device picked) an ASSIGN menu of the free knobs (continuous rows) or of the free buttons and pads (switches, actions);
 //  - otherwise the table of the assignments in effect (all devices, or a desk device without a layout).
 // "Free only" hides what is assigned in the first two. Moving a control on a controller marks its tile or row (the kern reports the move), so a control
 // is found by touching it. Data: GET /register (assignment files, the device catalogue with layouts), GET /register/ziele (every learnable target),
@@ -60,7 +61,11 @@ const TEIL = { fader: 'fader', trim: 'trim', eq: 'EQ', tief: 'low', mitte: 'mid'
   hysterese: 'hysteresis', bereich: 'range', hold: 'hold', util: 'utility', balance: 'balance', breite: 'width', bassmono: 'bass mono', mb: 'multiband',
   grenze_tief: 'split low', grenze_hoch: 'split high', knie: 'knee', lim: 'limiter', decke: 'ceiling', abklingen: 'decay', pan: 'pan', pegel: 'level', kleber: 'glue',
   notenwert: 'note length', rueckkopplung: 'feedback', rueckweg: 'return', tiefe: 'depth', art: 'type', param: 'parameter', pre: 'pre-delay', decay: 'decay',
-  groesse: 'size', highcut: 'high cut', fahne: 'tail', hall: 'reverb', drums: 'drums', bass: 'bass', vocals: 'vocals', other: 'other' };
+  groesse: 'size', highcut: 'high cut', fahne: 'tail', hall: 'reverb', drums: 'drums', bass: 'bass', vocals: 'vocals', other: 'other',
+  // switches and deck actions (a button or pad drives them)
+  kill: 'kill', pfl: 'PFL', split: 'split', mute: 'mute', solo: 'solo', an: 'on', umgehen: 'bypass', phase_l: 'phase L', phase_r: 'phase R', tausch: 'swap', dc: 'DC filter', propq: 'proportional Q',
+  play: 'play', cue: 'cue', hotcue: 'hotcue', hotcue_setzen: 'set hotcue', loop: 'loop', loop_laenge: 'loop length', sprung_plus: 'jump +', sprung_minus: 'jump -', nudge: 'nudge',
+  tap: 'tap', slip: 'slip', laden: 'load', roll: 'roll' };
 /** What a target is called inside its module: the knob name of a graph where one is known, "Knob n" for a graph knob without one, else the path parts in words. */
 export function zielLabel(pfad, knopfName) {
   if (knopfName) return knopfName;
@@ -78,19 +83,22 @@ export function zielLabel(pfad, knopfName) {
  * and, when it is not, who has it. `opt`: `modul`, `sicht` (ids), `nurFrei`, `filter` (text over label, path, module, device, control), `namen` (owner
  * key -> device name, namenVon), `zielNamen` (not used for labels: the graph knob names come with `ziele`). Order: the order of `ziele`, then the rest.
  * `namenlose: false` leaves out the free graph knobs without a knob name (64 per channel, they do nothing while no graph names them) unless a text is searched.
+ * `arten` (a list of 'regler' | 'schalter' | 'aktion') keeps only the targets of those kinds: the picker of a knob lists 'regler', the picker of a button or pad
+ * 'schalter' and 'aktion'. A row has `art`: the kind the server reports for it; a target outside `ziele` (an old server, a desk assignment the list does
+ * not know) is 'schalter' when a button drives it and 'regler' otherwise.
  */
 export function zielZeilen(ziele, daten, opt = {}) {
   const belegt = new Map();
   for (const z of registerZeilen(daten, '', { namen: opt.namen })) if (!belegt.has(z.ziel)) belegt.set(z.ziel, z);   // a learned assignment comes first
   const f = String(opt.filter ?? '').trim().toLowerCase();
-  const aus = [], gesehen = new Set(), lernbar = new Set((ziele ?? []).map((z) => z.pfad));
+  const aus = [], gesehen = new Set(), lernbar = new Set((ziele ?? []).map((z) => z.pfad)), artVon = new Map((ziele ?? []).map((z) => [z.pfad, z.art ?? 'regler']));
   const nimm = (pfad, name) => {
     gesehen.add(pfad);
-    const m = modulVon(pfad), b = belegt.get(pfad);
-    if ((opt.modul && m.id !== opt.modul) || (opt.sicht && !inSicht(m.id, opt.sicht)) || (opt.nurFrei && b)) return;
+    const m = modulVon(pfad), b = belegt.get(pfad), art = artVon.get(pfad) ?? (b?.art === ART_TEXT.taste ? 'schalter' : 'regler');
+    if ((opt.arten && !opt.arten.includes(art)) || (opt.modul && m.id !== opt.modul) || (opt.sicht && !inSicht(m.id, opt.sicht)) || (opt.nurFrei && b)) return;
     const namenlos = !name && /\/bk\/\d+$/.test(pfad);
     if (namenlos && !b && opt.namenlose === false && f === '') return;   // a free graph knob no loaded graph names: hidden until asked for or searched
-    const z = { pfad, name: name ?? null, namenlos, label: zielLabel(pfad, name), modulId: m.id, modul: m.name, lernbar: lernbar.has(pfad), frei: !b, besitzer: b?.besitzer ?? null, geraet: b?.geraet ?? '', quelle: b?.quelle ?? '', loeschbar: !!b?.loeschbar };
+    const z = { pfad, art, name: name ?? null, namenlos, label: zielLabel(pfad, name), modulId: m.id, modul: m.name, lernbar: lernbar.has(pfad), frei: !b, besitzer: b?.besitzer ?? null, geraet: b?.geraet ?? '', quelle: b?.quelle ?? '', loeschbar: !!b?.loeschbar };
     if (f === '' || [z.label, z.pfad, z.modul, z.geraet, z.quelle].some((x) => String(x).toLowerCase().includes(f))) aus.push(z);
   };
   for (const z of ziele ?? []) nimm(z.pfad, z.name);
@@ -98,10 +106,11 @@ export function zielZeilen(ziele, daten, opt = {}) {
   return aus;
 }
 
-/** The module chips: one per module with learnable or assigned targets, with "<free> of <learnable> free" (a module with only assigned switches: "<n> assigned"). `opt`: `sicht`, `nurFrei` (leaves out modules without a free target), `namen`. */
+/** The module chips: one per module with learnable or assigned targets, with "<free> of <learnable> free" (a module with only assigned switches: "<n> assigned"). `opt`: `sicht`, `nurFrei` (leaves out modules without a free target), `namen`, `arten` (see zielZeilen: the chip then counts only the targets of those kinds, so it
+ * says what the list below it shows). Without `arten` every kind counts: the module view lists knobs, switches and actions. */
 export function modulZaehler(ziele, daten, opt = {}) {
   const m = new Map();
-  for (const z of zielZeilen(ziele, daten, { namen: opt.namen, sicht: opt.sicht, namenlose: opt.namenlose })) {
+  for (const z of zielZeilen(ziele, daten, { namen: opt.namen, sicht: opt.sicht, namenlose: opt.namenlose, arten: opt.arten })) {
     const e = m.get(z.modulId) ?? { id: z.modulId, name: z.modul, gesamt: 0, frei: 0, belegt: 0 };
     if (z.lernbar) e.gesamt++; else e.belegt++;
     if (z.lernbar && z.frei) e.frei++;
@@ -142,13 +151,16 @@ const MODUL_REIHE = ['deck', 'pad', 'erz', 'fx', 'color', 'duck', 'xfader', 'mas
 /**
  * The tiles of a device from its control layout (`regler`, catalog.ts) and the learn table (`zuordnungen`: GET /lernen). `opt.platz` is the
  * controller place, `opt.daw` is true while the place sits on the device's DAW port (some controls then send on another channel), `opt.namen` maps a
- * target path to its graph knob name. A tile has `ziel` (null = free), `label`, `modul`, `zuweisbar` (only a CC can be assigned) and `kanal`: what
- * an assignment of this tile sends. A learned CC that is not in the layout becomes an extra tile "CC n · ch k" after the layout.
+ * target path to its graph knob name. A tile has `ziel` (null = free), `label`, `modul`, `zuweisbar` (every control of a layout: a CC and a note can
+ * both be assigned) and `kanal`: what an assignment of this tile sends. An entry of the learn table belongs to a tile by message type, channel and
+ * number (`typ` 'note' for a pad; an entry without `typ` is a CC). An entry that is not in the layout becomes an extra tile "CC n · ch k" or "Note n · ch k"
+ * after the layout.
  * A device with banks (`opt.baenke`, catalog.ts: the layout once per MIDI channel) shows one of them, `opt.bank` (an index, default 0): every
- * control sends on that bank's channel, a note control carries the bank's note, and a CC learned in another bank is not an extra tile here.
+ * control sends on that bank's channel, a note control carries the bank's note, and an entry learned in another bank is not an extra tile here.
  */
 export function kacheln(regler, zuordnungen, opt = {}) {
   const meine = (zuordnungen ?? []).filter((z) => (z.platz ?? 1) === (opt.platz ?? 1));
+  const typVon = (z) => z.typ ?? 'cc';
   const benutzt = new Set();
   const mit = (z, t) => {
     if (!z) return { ...t, ziel: null, label: '', modul: '', modulId: '' };
@@ -160,16 +172,35 @@ export function kacheln(regler, zuordnungen, opt = {}) {
   const aus = (regler ?? []).map((r) => {
     const kanal = bank ? bank.kanal : r.kanal;
     const nr = r.typ === 'note' && bank?.noten ? bank.noten[note++] ?? r.nr : r.nr;
-    const z = r.typ === 'cc' ? meine.find((x) => x.nr === r.nr && (x.kanal === kanal || (!bank && x.kanal === r.kanal_daw))) : undefined;
+    const z = meine.find((x) => typVon(x) === r.typ && x.nr === nr && (x.kanal === kanal || (!bank && x.kanal === r.kanal_daw)));
     if (z) benutzt.add(z);
-    return mit(z, { schluessel: `${r.typ}:${r.nr}`, name: r.name, typ: r.typ, kanal: z ? z.kanal : opt.daw && r.kanal_daw && !bank ? r.kanal_daw : kanal, nr, art: r.art, zeile: r.zeile, spalte: r.spalte, zuweisbar: r.typ === 'cc', extra: false });
+    return mit(z, { schluessel: `${r.typ}:${r.nr}`, name: r.name, typ: r.typ, kanal: z ? z.kanal : opt.daw && r.kanal_daw && !bank ? r.kanal_daw : kanal, nr, art: r.art, zeile: r.zeile, spalte: r.spalte, zuweisbar: true, extra: false });
   });
-  if (bank) for (const z of meine) if (opt.baenke.some((b) => b.kanal === z.kanal) && (regler ?? []).some((r) => r.typ === 'cc' && r.nr === z.nr)) benutzt.add(z);   // a control of another bank
+  if (bank) for (const z of meine) {   // a control of another bank
+    const b = opt.baenke.find((x) => x.kanal === z.kanal);
+    if (b && (typVon(z) === 'cc' ? (regler ?? []).some((r) => r.typ === 'cc' && r.nr === z.nr) : (b.noten ?? []).includes(z.nr))) benutzt.add(z);
+  }
   const unten = aus.reduce((m, k) => Math.max(m, k.zeile), 0);
   meine.filter((z) => !benutzt.has(z)).forEach((z, i) => {
-    aus.push(mit(z, { schluessel: `x:${z.kanal}:${z.nr}`, name: `CC ${z.nr} · ch ${z.kanal}`, typ: 'cc', kanal: z.kanal, nr: z.nr, art: 'knob', zeile: unten + 1 + Math.floor(i / 8), spalte: (i % 8) + 1, zuweisbar: true, extra: true }));
+    const pad = typVon(z) === 'note';
+    aus.push(mit(z, { schluessel: `${pad ? 'xn' : 'x'}:${z.kanal}:${z.nr}`, name: `${pad ? 'Note' : 'CC'} ${z.nr} · ch ${z.kanal}`, typ: typVon(z), kanal: z.kanal, nr: z.nr, art: pad ? 'pad' : z.art === 'taste' ? 'button' : 'knob', zeile: unten + 1 + Math.floor(i / 8), spalte: (i % 8) + 1, zuweisbar: true, extra: true }));
   });
   return aus;
+}
+/**
+ * The kinds of target a tile takes (zielZeilen `arten`): a knob the continuous targets, a button or pad the switches and deck actions. A button
+ * sends a CC, a pad a note: either one is a press.
+ */
+export const kachelArten = (k) => (k?.art === 'knob' ? ['regler'] : ['schalter', 'aktion']);
+/**
+ * The control the picker moves on to after `k` was assigned: the next free one after it in layout order (wrapping round) that is of the same
+ * class: a knob goes on to the next free knob, a button or pad to the next free button or pad. null when there is none, or `k` is not among `ks`.
+ */
+export function naechsteFreie(ks, k) {
+  const i = ks.findIndex((x) => x.schluessel === k.schluessel);
+  if (i < 0) return null;
+  const knopf = (x) => x.art === 'knob';
+  return [...ks.slice(i + 1), ...ks.slice(0, i)].find((x) => x.zuweisbar && !x.ziel && knopf(x) === knopf(k)) ?? null;
 }
 /** { frei, gesamt } of the assignable controls among the tiles. */
 export const kachelZaehler = (ks) => { const a = ks.filter((k) => k.zuweisbar); return { frei: a.filter((k) => !k.ziel).length, gesamt: a.length }; };
@@ -323,7 +354,7 @@ export function baueWahl(el, module, opt) {
 
 /**
  * Fills `el` with the tiles of a device (kacheln, kachelSicht) in hardware layout: a CSS grid, a tile at its zeile/spalte. A tile shows the control,
- * its target (module, readable name) or "free"; a click on an assignable tile calls `opt.oeffne(kachel)`; an assigned tile has CHANGE (the same) and
+ * its target (module, readable name) or "free"; a click on an assignable tile (a knob, a button or a pad) calls `opt.oeffne(kachel)`; an assigned tile has CHANGE (the same) and
  * REMOVE (`opt.entferne(kachel)`). The picker of the open tile (`opt.offen`, a tile) sits in a panel right under that tile's row: `opt.fuelle(panel,
  * kachel)` fills it. `opt.kompakt` lets the tiles flow without gaps (free only). `opt.geraet` is the device name (for the "moved" line).
  * A device with banks gets a row of bank chips above the tiles (`opt.baenke` = [{id, name, anzahl, frei}], `opt.bank` the picked id, `opt.waehleBank(id)`);
@@ -349,7 +380,7 @@ export function baueKacheln(el, ks, opt = {}) {
     if (opt.offen && opt.offen.schluessel === k.schluessel) t.classList.add('offen');
     platz(t, 2 * k.zeile - 1, k.spalte);
     t.setAttribute('data-kachel', k.schluessel);
-    t.setAttribute('title', k.ziel ? `${k.name}: ${k.ziel}` : k.zuweisbar ? `${k.name}: free, click to assign a target` : `${k.name}: pads send notes, which cannot be assigned yet`);
+    t.setAttribute('title', k.ziel ? `${k.name}: ${k.ziel}` : k.zuweisbar ? `${k.name}: free, click to assign ${kachelArten(k)[0] === 'regler' ? 'a target' : 'a switch or deck action'}` : `${k.name}: cannot be assigned`);
     if (k.ziel) {
       t.setAttribute('data-ziel', k.ziel);
       t.setAttribute('data-info', `${opt.geraet ?? ''} · ${k.name} → ${k.modul} · ${k.ziel}`);
@@ -358,7 +389,7 @@ export function baueKacheln(el, ks, opt = {}) {
     kopf.classList.add('reg-kachel-kopf');
     kopf.append(zelle('span', k.name, 'reg-kachel-name'));
     if (!k.extra) kopf.append(zelle('span', `${TYP_TEXT[k.typ] ?? k.typ} ${k.nr}`, 'reg-kachel-cc'));
-    t.append(kopf, zelle('div', k.ziel ? `${k.modul} · ${k.label}` : k.zuweisbar ? 'free' : 'not assignable yet', 'reg-kachel-ziel'));
+    t.append(kopf, zelle('div', k.ziel ? `${k.modul} · ${k.label}` : k.zuweisbar ? 'free' : 'not assignable', 'reg-kachel-ziel'));
     if (k.ziel) {
       const tat = document.createElement('div');
       tat.classList.add('reg-kachel-tat');
@@ -379,23 +410,25 @@ export function baueKacheln(el, ks, opt = {}) {
  * zielZeilen rows: of the picked module, or of all modules while none is picked and a text is typed); one click on a target calls `opt.setze(zeile)`. A target
  * that another control has is listed after the free ones and marked: picking it moves it. The search refills the list only, the field keeps its focus.
  * `opt.mehrKnoepfe` free unnamed graph knobs are left out: a chip "+ n unnamed knobs" calls `opt.zeigeKnoepfe()`.
+ * `opt.arten` (the kinds the tile takes, kachelArten) only words the header and the search field: a button or pad picks "switches and deck actions".
  */
 export function baueWaehler(el, kachel, opt) {
   const kopf = document.createElement('div');
   kopf.classList.add('reg-waehler-kopf');
-  kopf.append(zelle('span', `Assign ${kachel.name}${kachel.extra ? '' : ` (${TYP_TEXT[kachel.typ] ?? kachel.typ} ${kachel.nr} · ch ${kachel.kanal})`}`, 'reg-waehler-titel'), knopf('CLOSE', 'Close the picker', () => opt.schliesse?.()));
+  const tasten = !!opt.arten && !opt.arten.includes('regler');
+  kopf.append(zelle('span', `Assign ${kachel.name}${kachel.extra ? '' : ` (${TYP_TEXT[kachel.typ] ?? kachel.typ} ${kachel.nr} · ch ${kachel.kanal})`}${tasten ? ': switches and deck actions' : ''}`, 'reg-waehler-titel'), knopf('CLOSE', 'Close the picker', () => opt.schliesse?.()));
   const suche = document.createElement('input');
   suche.setAttribute('type', 'search');
-  suche.setAttribute('placeholder', 'Search the targets of the module, or of all modules');
+  suche.setAttribute('placeholder', tasten ? 'Search the switches and actions of the module, or of all modules' : 'Search the targets of the module, or of all modules');
   suche.classList.add('reg-waehler-suche');
   suche.value = opt.suche ?? '';
   const liste = document.createElement('div');
   liste.classList.add('reg-waehler-liste');
   const fuelle = () => {
     const text = suche.value.trim();
-    const zeilen = opt.ziele?.(text) ?? [];
+    const zeilen = (opt.ziele?.(text) ?? []).filter((z) => z.lernbar !== false);   // a target only the desk bridge can drive (hot cue, loop) cannot be assigned: not offered
     if (!opt.modul && text === '') { liste.replaceChildren(zelle('div', 'Pick a module above, or type to search every module', 'reg-leer')); return; }
-    if (zeilen.length === 0 && !(text === '' && opt.mehrKnoepfe)) { liste.replaceChildren(zelle('div', opt.nurFrei ? 'No free target matches' : 'No target matches', 'reg-leer')); return; }
+    if (zeilen.length === 0 && !(text === '' && opt.mehrKnoepfe)) { liste.replaceChildren(zelle('div', `No ${opt.nurFrei ? 'free ' : ''}${tasten ? 'switch or action' : 'target'} matches`, 'reg-leer')); return; }
     const sortiert = [...zeilen.filter((z) => z.frei), ...zeilen.filter((z) => !z.frei)];
     const zeige = sortiert.slice(0, 120);
     const knoepfe = zeige.map((z) => {
@@ -403,7 +436,7 @@ export function baueWaehler(el, kachel, opt) {
       b.setAttribute('type', 'button');
       b.classList.add('reg-wahlziel');
       if (!z.frei) b.classList.add('belegt');
-      b.setAttribute('title', z.frei ? `Assign ${z.pfad}` : `${z.pfad} is on ${z.geraet} · ${z.quelle}: picking it moves it here`);
+      b.setAttribute('title', z.frei ? `Assign ${z.pfad}` : z.loeschbar ? `${z.pfad} is on ${z.geraet} · ${z.quelle}: picking it moves it here` : `${z.pfad} is also on ${z.geraet} · ${z.quelle} (fixed): picking it adds this control, both work`);
       b.append(zelle('span', opt.modul ? z.label : `${z.modul} · ${z.label}`, 'reg-wahlziel-name'));
       if (!z.frei) b.append(zelle('span', `${z.geraet} · ${z.quelle}`, 'reg-wahlziel-von'));
       b.addEventListener('click', () => opt.setze?.(z));
@@ -418,9 +451,10 @@ export function baueWaehler(el, kachel, opt) {
 }
 
 /**
- * Fills `el` with the targets of ONE module (zielZeilen rows). An assigned row names device and control (DELETE when learned); a free row has LEARN
- * (`opt.lerne(pfad)`; while it is the armed one `opt.wartet` it reads "move a knob…" and a click cancels) and, when a device with free controls is picked,
- * ASSIGN: a menu of those controls (`opt.freie` = tiles, `opt.menue` = the path whose menu is open, `opt.oeffneMenue(pfad)`, `opt.zuweisen(pfad, kachel)`).
+ * Fills `el` with the targets of ONE module (zielZeilen rows). An assigned row names device and control (DELETE when learned); a free continuous row has
+ * LEARN (`opt.lerne(pfad)`; while it is the armed one `opt.wartet` it reads "move a knob…" and a click cancels) and, when a device with free knobs is picked,
+ * ASSIGN: a menu of those knobs (`opt.freie` = tiles, `opt.menue` = the path whose menu is open, `opt.oeffneMenue(pfad)`, `opt.zuweisen(pfad, kachel)`).
+ * A free switch or action row has no LEARN (the capture hears CCs only): its ASSIGN menu lists the free buttons and pads (`opt.freieTasten`, tiles).
  * `opt.mehr` = {text, titel, klick} adds one button under the table (the unnamed graph knobs).
  */
 export function baueZiele(el, zeilen, opt = {}) {
@@ -443,21 +477,26 @@ export function baueZiele(el, zeilen, opt = {}) {
     const tat = document.createElement('td');
     tat.classList.add('reg-tat');
     if (!z.frei && z.loeschbar) tat.append(knopf('DELETE', `Remove the assignment of ${z.pfad}`, () => opt.loesche?.(z.pfad)));
+    const taste = !!z.art && z.art !== 'regler';
+    const menueListe = taste ? opt.freieTasten : opt.freie;
     if (z.frei) {
-      const scharf = opt.wartet === z.pfad;
-      const b = knopf(scharf ? 'move a knob…' : 'LEARN', scharf ? 'Click to cancel' : `Arm ${z.pfad}, then move a knob on your controller`, () => opt.lerne?.(z.pfad));
-      if (scharf) b.classList.add('an');
-      tat.append(b);
-      if (opt.freie?.length) tat.append(knopf('ASSIGN', `Pick one of the free controls of ${opt.geraet ?? 'the device'}`, () => opt.oeffneMenue?.(z.pfad)));
+      if (!taste) {
+        const scharf = opt.wartet === z.pfad;
+        const b = knopf(scharf ? 'move a knob…' : 'LEARN', scharf ? 'Click to cancel' : `Arm ${z.pfad}, then move a knob on your controller`, () => opt.lerne?.(z.pfad));
+        if (scharf) b.classList.add('an');
+        tat.append(b);
+      }
+      if (menueListe?.length) tat.append(knopf('ASSIGN', `Pick one of the free ${taste ? 'buttons and pads' : 'knobs'} of ${opt.geraet ?? 'the device'}`, () => opt.oeffneMenue?.(z.pfad)));
+      else if (taste) tat.append(zelle('span', opt.geraet ? 'no free button or pad' : 'pick a device', 'reg-dim'));
     }
     tr.append(name, zelle('td', z.frei ? 'free' : `${z.geraet} · ${z.quelle}`, z.frei ? 'reg-dim' : undefined), tat);
     tabelle.append(tr);
-    if (z.frei && opt.menue === z.pfad && opt.freie?.length) {
+    if (z.frei && opt.menue === z.pfad && menueListe?.length) {
       const m = document.createElement('tr'), td = document.createElement('td'), box = document.createElement('div');
       td.setAttribute('colspan', '3');
       box.classList.add('reg-menue');
-      box.append(zelle('span', `Free controls of ${opt.geraet ?? 'the device'}:`, 'reg-dim'));
-      for (const k of opt.freie) box.append(knopf(k.name, `${TYP_TEXT[k.typ] ?? k.typ} ${k.nr} · ch ${k.kanal}`, () => opt.zuweisen?.(z.pfad, k)));
+      box.append(zelle('span', `Free ${taste ? 'buttons and pads' : 'knobs'} of ${opt.geraet ?? 'the device'}:`, 'reg-dim'));
+      for (const k of menueListe) box.append(knopf(k.name, `${TYP_TEXT[k.typ] ?? k.typ} ${k.nr} · ch ${k.kanal}`, () => opt.zuweisen?.(z.pfad, k)));
       td.append(box);
       m.append(td);
       tabelle.append(m);
@@ -561,7 +600,7 @@ function zeichne(erzwingen = false) {
   if (modul && !chips.some((c) => c.id === modul)) modul = null;
   const familie = (id) => { if (!String(id).startsWith('familie:')) return false; const a = id.slice(8); if (familien.has(a)) familien.delete(a); else familien.add(a); return true; };
   // how many free unnamed graph knobs a target list leaves out (0 while they are shown)
-  const versteckt = (m) => (knoepfe || !m ? 0 : zielZeilen(zieleAlle, stand, { modul: m, namen }).filter((z) => z.namenlos && z.frei).length);
+  const versteckt = (m, arten) => (knoepfe || !m ? 0 : zielZeilen(zieleAlle, stand, { modul: m, namen, arten }).filter((z) => z.namenlos && z.frei).length);
   if (wahlEl) baueWahl(wahlEl, falteModule(chips, familien, modul), { sicht, modul, waehle: (w) => {
     if ('sicht' in w) sicht = w.sicht;
     if ('modul' in w) { if (w.modul !== null && familie(w.modul)) { if (modul && modul.split('/')[0] === w.modul.slice(8)) modul = null; } else modul = w.modul; }
@@ -581,22 +620,29 @@ function zeichne(erzwingen = false) {
       baenke, bank: bankVon.get(gewaehlt.schluessel) ?? 0, waehleBank: (i) => { bankVon.set(gewaehlt.schluessel, i); offen = null; zeichne(true); }, bedienung: gewaehlt.bedienung,
       oeffne: (k) => { offen = offen === k.schluessel ? null : k.schluessel; zeichne(true); },
       entferne: async (k) => { offen = null; await lernHolen?.schicken('/lernen/loeschen', { pfad: k.ziel }); await holeRegister(); zeichne(true); },
-      fuelle: (panel, k) => baueWaehler(panel, k, {
-        module: falteModule(chips, familien, waehlerModul), modul: waehlerModul, suche: waehlerSuche, beiSuche: (t) => { waehlerSuche = t; }, nurFrei,
-        ziele: (text) => zielZeilen(zieleAlle, stand, { modul: waehlerModul, sicht: waehlerModul ? undefined : sicht, nurFrei, filter: text, namen, namenlose: knoepfe }),
-        mehrKnoepfe: versteckt(waehlerModul), zeigeKnoepfe: () => { knoepfe = true; zeichne(true); },
-        waehleModul: (id) => { if (id !== null && familie(id)) { if (waehlerModul && waehlerModul.split('/')[0] === id.slice(8)) waehlerModul = null; } else waehlerModul = id; zeichne(true); },
-        schliesse: () => { offen = null; zeichne(true); },
-        setze: (z) => zuweisen(z.pfad, gewaehlt.platz, k, ks),
-      }) });
+      fuelle: (panel, k) => {
+        // the picker lists what this tile takes (a knob the continuous targets, a button or pad the switches and actions), and its chips count exactly that
+        const arten = kachelArten(k);
+        const chipsP = modulZaehler(zieleAlle, stand, { sicht, nurFrei, namen, namenlose: knoepfe, arten });
+        if (waehlerModul && !chipsP.some((c) => c.id === waehlerModul)) waehlerModul = null;   // the module the last tile used has nothing of this kind
+        baueWaehler(panel, k, {
+          arten, module: falteModule(chipsP, familien, waehlerModul), modul: waehlerModul, suche: waehlerSuche, beiSuche: (t) => { waehlerSuche = t; }, nurFrei,
+          ziele: (text) => zielZeilen(zieleAlle, stand, { modul: waehlerModul, sicht: waehlerModul ? undefined : sicht, nurFrei, filter: text, namen, namenlose: knoepfe, arten }),
+          mehrKnoepfe: versteckt(waehlerModul, arten), zeigeKnoepfe: () => { knoepfe = true; zeichne(true); },
+          waehleModul: (id) => { if (id !== null && familie(id)) { if (waehlerModul && waehlerModul.split('/')[0] === id.slice(8)) waehlerModul = null; } else waehlerModul = id; zeichne(true); },
+          schliesse: () => { offen = null; zeichne(true); },
+          setze: (z) => zuweisen(z.pfad, gewaehlt.platz, k, ks),
+        });
+      } });
     return;
   }
   if (modus === 'modul') {
-    const freie = ks ? ks.filter((k) => k.zuweisbar && !k.ziel) : [];
+    const freie = ks ? ks.filter((k) => k.zuweisbar && !k.ziel && k.art === 'knob') : [];                // the menu of a continuous row
+    const freieTasten = ks ? ks.filter((k) => k.zuweisbar && !k.ziel && k.art !== 'knob') : [];         // the menu of a switch or action row
     const mehr = filter === '' ? versteckt(modul) : 0;
     baueZiele(inhalt, zielZeilen(zieleAlle, stand, { modul, sicht, nurFrei, filter, namen, namenlose: knoepfe }), { leer: leer(nurFrei ? 'Every target of this module is assigned' : 'No targets'),
       mehr: mehr ? { text: `+ ${mehr} unnamed knobs`, titel: 'Show the graph knobs no loaded graph names', klick: () => { knoepfe = true; zeichne(true); } } : null,
-      wartet: lernHolen?.stand?.()?.wartet?.pfad ?? null, freie, geraet: gewaehlt?.name, menue,
+      wartet: lernHolen?.stand?.()?.wartet?.pfad ?? null, freie, freieTasten, geraet: gewaehlt?.name, menue,
       lerne: async (pfad) => { menue = null; const w = lernHolen?.stand?.()?.wartet?.pfad; await lernHolen?.schicken('/lernen', { pfad: w === pfad ? null : pfad }); zeichneLernen(); zeichne(true); },
       oeffneMenue: (pfad) => { menue = menue === pfad ? null : pfad; zeichne(true); },
       zuweisen: (pfad, k) => zuweisen(pfad, gewaehlt.platz, k),
@@ -610,13 +656,13 @@ function zeichne(erzwingen = false) {
     loesche: async (pfad) => { await lernHolen?.schicken('/lernen/loeschen', { pfad }); await holeRegister(); zeichne(true); },
   });
 }
-/** Assign `pfad` to the control `k` (a tile) of controller place `platz` without a knob move: POST /lernen/setzen, then reread the register. */
+/** Assign `pfad` to the control `k` (a tile: a knob, button or pad) of controller place `platz` without a move: POST /lernen/setzen, then reread the register. */
 async function zuweisen(pfad, platz, k, ks = null) {
-  // from a tile's picker (`ks` = the tiles): the picker moves on to the next free control, so a whole row is assigned click by click (CLOSE ends it)
-  const i = ks ? ks.findIndex((x) => x.schluessel === k.schluessel) : -1;
-  const weiter = i < 0 ? null : [...ks.slice(i + 1), ...ks.slice(0, i)].find((x) => x.zuweisbar && !x.ziel);
+  // from a tile's picker (`ks` = the tiles): the picker moves on to the next free control of the same class (a knob to the next knob, a button or pad
+  // to the next button or pad), so a whole row is assigned click by click (CLOSE ends it)
+  const weiter = ks ? naechsteFreie(ks, k) : null;
   offen = weiter ? weiter.schluessel : null; menue = null;
-  await lernHolen?.schicken('/lernen/setzen', { pfad, platz, kanal: k.kanal, nr: k.nr });
+  await lernHolen?.schicken('/lernen/setzen', { pfad, platz, kanal: k.kanal, nr: k.nr, ...(k.typ === 'note' ? { typ: 'note' } : {}) });
   await holeRegister();
   zeichne(true);
 }
@@ -706,7 +752,7 @@ export async function zeigeRegister(wurzel, lern) {
       Promise.resolve(lern?.hole?.()).then(async () => {
         zeichneLernen();
         const l = lern?.stand?.();
-        const sig = JSON.stringify((l?.zuordnungen ?? []).map((z) => [z.pfad, z.platz, z.kanal, z.nr]));
+        const sig = JSON.stringify((l?.zuordnungen ?? []).map((z) => [z.pfad, z.platz, z.typ ?? 'cc', z.kanal, z.nr]));
         const w = l?.wartet?.pfad ?? null;
         if (sig !== gelernt) { gelernt = sig; wartet = w; await holeRegister(); zeichne(); }
         else if (w !== wartet) { wartet = w; zeichne(); }   // a LEARN button changes between "LEARN" and "move a knob…"

@@ -58,6 +58,8 @@ def soll(lernen, platz):
     for z in lernen.get("zuordnungen") or []:
         if z.get("platz", 1) != platz or z.get("kanal") != DAW_KANAL or z.get("nr") not in ENCODER:
             continue
+        if z.get("typ", "cc") != "cc" or z.get("art", "absolut") != "absolut":
+            continue   # a learned button or pad (note, or a switch/action "taste"): not an encoder
         pfad = str(z.get("pfad", ""))
         aus[z["nr"]] = (FARBEN.get(pfad.split("/")[0], FARBE_SONST), str(z.get("name") or pfad))
     return aus

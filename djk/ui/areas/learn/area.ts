@@ -1,12 +1,11 @@
 // S19 (MIDI learn): bereich lernen. GET /lernen (assignments with their controller place, what is waiting, the controller places, state of the files), POST /lernen (arm a graph
-// knob, pfad null cancels), POST /lernen/setzen (assign a CC to a target directly), POST /lernen/loeschen (remove an assignment). Learning needs a hand on the hardware: only Andreas arms or deletes
-// (Cypher gets 403 nur_andreas). The target is a graph knob bk/1..64 or any continuous control of the table (controls_info.ts, unit not a switch).
+// knob, pfad null cancels), POST /lernen/setzen (assign a CC or a note to a target directly), POST /lernen/loeschen (remove an assignment). Learning needs a hand on the hardware: only Andreas arms or deletes
+// (Cypher gets 403 nur_andreas). The capture takes a graph knob bk/1..64 or any continuous control of the table (controls_info.ts, unit not a switch), CC only.
+// The direct assignment also takes a switch or a deck action (targets.ts) from a button or pad; the server picks the art of the entry from the target.
 import type http from 'node:http';
 import type { Bereich, BereichKontext, Route } from '../../http/router.ts';
 import { grundText } from '../../http/reasons.ts';
 import { json } from '../../http/transport.ts';
-import { PFAD } from '../../hand_operation.ts';
-import { reglerInfo } from '../../../conductor/src/controls_info.ts';
 import { controllerOrdner, geraeteDatei } from '../../paths.ts';
 import { leseKoerper } from '../proj/area.ts';
 import { ProjFehler } from '../proj/session.ts';
@@ -14,14 +13,18 @@ import { GeraeteFehler, GeraeteSpeicher, controllerPlaetze, type ControllerPlatz
 import { beschriftung } from './beschriftung.ts';
 import { LernAblauf, type Zeit } from './flow.ts';
 import { LernFehler, LernSpeicher, PLAETZE } from './store.ts';
+import { eintragsArt, zielArt } from './targets.ts';
 
 export interface LernenOptionen { ordner?: string; geraeteKonfig?: string; fristMs?: number; zeit?: Zeit }
 
-// A learnable target: a graph knob bk/1..64 or any control of the table whose unit is not a switch (a switch needs a button; notes are not learnable yet).
-const gueltigesZiel = (p: unknown): p is string => typeof p === 'string' && ((PFAD.test(p) && /\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.test(p)) || (reglerInfo(p) !== null && reglerInfo(p)?.einheit !== 'schalter'));
-const zielFehler = (p: unknown, mitNull: boolean): LernFehler => typeof p === 'string' && reglerInfo(p)?.einheit === 'schalter'
+// What the capture can arm: a continuous target (a graph knob bk/1..64 or any control of the table whose unit is not a switch). A switch needs a button.
+const erfassbar = (p: unknown): p is string => zielArt(p) === 'regler';
+const zielFehler = (p: unknown, mitNull: boolean): LernFehler => zielArt(p) === 'schalter'
   ? new LernFehler('argument_ungueltig', 400, 'pfad: a switch needs a button; only knobs can be learned (notes are not learnable yet)')
   : new LernFehler('argument_ungueltig', 400, `pfad: a continuous target such as deck/1/fader or erz/5/bk/3${mitNull ? ', or null to cancel' : ''}`);
+// What a direct assignment or a delete takes: any of the three kinds of targets.ts.
+const setzbar = (p: unknown): p is string => zielArt(p) !== null;
+const setzFehler = (): LernFehler => new LernFehler('argument_ungueltig', 400, 'pfad: a continuous target such as deck/1/fader, a switch such as deck/1/pfl or deck/1/kill/tief, or the deck action deck/1/play or deck/1/cue');
 
 // What the host learn Bereich (areas/hostlernen) borrows: the same checks and the same arming as POST /lernen, without the HTTP layer.
 export interface LernenBereich extends Bereich {
@@ -87,23 +90,28 @@ export function lernenBereich(ctx: BereichKontext, opt: LernenOptionen = {}): Le
       } },
       schreib('/lernen', (d) => {
         if (d.pfad === null) { ablauf.abbrechen(); return; }
-        if (!gueltigesZiel(d.pfad)) throw zielFehler(d.pfad, true);
+        if (!erfassbar(d.pfad)) throw zielFehler(d.pfad, true);
         pruefeBereit();
         ablauf.scharf(d.pfad);
       }),
-      // Direct assignment from a controller layout: CC <nr> on channel <kanal> of controller place <platz> drives <pfad>, without moving a knob.
+      // Direct assignment from a controller layout: CC or note <nr> (typ, default cc) on channel <kanal> of controller place <platz> drives <pfad>,
+      // without moving a knob. The art follows from the target: a continuous target is a CC "absolut", a switch or deck action a press "taste".
       schreib('/lernen/setzen', async (d) => {
-        if (!gueltigesZiel(d.pfad)) throw zielFehler(d.pfad, false);
+        if (!setzbar(d.pfad)) throw setzFehler();
+        if (d.typ !== undefined && d.typ !== 'cc' && d.typ !== 'note') throw new LernFehler('argument_ungueltig', 400, "typ: 'cc' or 'note'");
+        const typ = d.typ === 'note' ? 'note' : 'cc';
+        const art = eintragsArt(zielArt(d.pfad)!, typ);
+        if (art === null) throw new LernFehler('argument_ungueltig', 400, 'typ: a note has no value for a continuous target; pick a switch or a deck action for a pad, or a CC for a knob');
         const ganz = (x: unknown, lo: number, hi: number): x is number => typeof x === 'number' && Number.isInteger(x) && x >= lo && x <= hi;
         if (!ganz(d.kanal, 1, 16)) throw new LernFehler('argument_ungueltig', 400, 'kanal: a MIDI channel 1..16');
-        if (!ganz(d.nr, 0, 127)) throw new LernFehler('argument_ungueltig', 400, 'nr: a CC number 0..127');
+        if (!ganz(d.nr, 0, 127)) throw new LernFehler('argument_ungueltig', 400, 'nr: a CC or note number 0..127');
         if (!ganz(d.platz, 1, PLAETZE)) throw new LernFehler('argument_ungueltig', 400, `platz: a controller place 1..${PLAETZE}`);
         pruefeBereit();
         if (!controller().some((c) => c.platz === d.platz)) throw new LernFehler('argument_ungueltig', 400, `platz: no controller on place ${d.platz}`);
-        await ablauf.setze(d.pfad, d.kanal, d.nr, d.platz);
+        await ablauf.setze(d.pfad, d.kanal, d.nr, d.platz, { typ, art });
       }),
       schreib('/lernen/loeschen', async (d) => {
-        if (!gueltigesZiel(d.pfad)) throw zielFehler(d.pfad, false);
+        if (!setzbar(d.pfad)) throw setzFehler();
         await ablauf.loesche(d.pfad);
       }),
     ],

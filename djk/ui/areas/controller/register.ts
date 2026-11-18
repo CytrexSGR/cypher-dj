@@ -12,6 +12,7 @@ import { REGLER, reglerInfo } from '../../../conductor/src/controls_info.ts';
 import type { HostZiel } from '../hostlernen/store.ts';
 import { KATALOG, usbGeraete, usbPasst } from './catalog.ts';
 import { knopfName } from '../learn/beschriftung.ts';
+import { AKTIONS_PFADE, zielArt } from '../learn/targets.ts';
 
 export interface RegisterOptionen {
   ordner: string;                              // the controller folder
@@ -91,18 +92,25 @@ export function registerBereich(ctx: BereichKontext, opt: RegisterOptionen): Ber
   return {
     name: 'register',
     routen: () => [
-      // The learnable (continuous) targets. `q` filters by a part of the path (capped by `limit`, default 50, at most 200). `prefix` answers EVERY target
-      // of a path prefix without a cap: a target is in when it equals the prefix or lies below it ("deck/1" gives deck/1/fader ...; empty = all).
-      // A graph knob carries `name`, the knob name of the graph loaded on its channel, where one is known.
+      // The assignable targets. Without `prefix`: the continuous ones whose path contains `q`, capped by `limit` (default 50, at most 200): what the
+      // capture can learn. With `prefix`: EVERY target of a path prefix without a cap, of all three kinds: a target is in when it equals the prefix or lies below it
+      // ("deck/1" gives deck/1/fader ... ; empty = all). `art` says what drives it: 'regler' (a knob, CC), 'schalter' (a switch: a button or pad) or
+      // 'aktion' (a deck action: a button or pad); the deck actions come first within the answer. A graph knob carries `name`, the knob name of the graph
+      // loaded on its channel, where one is known.
       { methode: 'GET', pfad: '/register/ziele', schutz: 'offen', handler: (_q: http.IncomingMessage, a: http.ServerResponse, url: URL) => {
         const q = (url.searchParams.get('q') ?? '').trim().toLowerCase();
         const vor = url.searchParams.get('prefix');
         const n = Number(url.searchParams.get('limit') ?? 50);
         const limit = Number.isFinite(n) ? Math.min(200, Math.max(1, Math.trunc(n))) : 50;
         const vorn = vor === null ? null : vor.trim().replace(/\/+$/, '');
-        const alle = [...REGLER.values()].filter((r) => r.einheit !== 'schalter' && r.pfad.toLowerCase().includes(q)
-          && (vorn === null || vorn === '' || r.pfad === vorn || r.pfad.startsWith(`${vorn}/`)));
-        json(a, 200, { ziele: (vorn === null ? alle.slice(0, limit) : alle).map((r) => { const name = knopfName(ctx, r.pfad); return { pfad: r.pfad, einheit: r.einheit, min: r.min, max: r.max, ...(name ? { name } : {}) }; }), gesamt: alle.length });
+        const passt = (pfad: string): boolean => pfad.toLowerCase().includes(q) && (vorn === null || vorn === '' || pfad === vorn || pfad.startsWith(`${vorn}/`));
+        const aktionen = vorn === null ? [] : AKTIONS_PFADE.filter(passt).map((pfad) => ({ pfad, einheit: 'aktion', art: 'aktion' as const }));
+        const regler = [...REGLER.values()].filter((r) => (vorn !== null || r.einheit !== 'schalter') && passt(r.pfad)).map((r) => {
+          const name = knopfName(ctx, r.pfad);
+          return { pfad: r.pfad, einheit: r.einheit, min: r.min, max: r.max, art: zielArt(r.pfad), ...(name ? { name } : {}) };
+        });
+        const alle = [...aktionen, ...regler];
+        json(a, 200, { ziele: vorn === null ? alle.slice(0, limit) : alle, gesamt: alle.length });
       } },
       { methode: 'GET', pfad: '/register', schutz: 'offen', handler: (_q: http.IncomingMessage, a: http.ServerResponse) => {
         try { json(a, 200, lies()); } catch (e) { ctx.log({ typ: 'register_fehler', fehler: (e as Error)?.message ?? String(e) }); json(a, 500, { fehler: 'intern' }); }

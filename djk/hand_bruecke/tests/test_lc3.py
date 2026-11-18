@@ -50,3 +50,13 @@ def test_text_is_ascii_and_cut():
     t = lc3.anzeige_text(13, 0, "Dämpfung sehr lang und noch länger")
     assert t[-1] == 0xF7 and len(t) == 9 + lc3.TEXT_MAX + 1
     assert all(0x20 <= b <= 0x7E for b in t[9:-1])
+
+
+def test_soll_skips_learned_buttons_and_pads():
+    lernen = {"zuordnungen": [{"pfad": "fx/3/bk/4", "kanal": 16, "nr": 13, "platz": 2, "name": "fx/3 Cutoff"},
+                              {"pfad": "deck/1/play", "kanal": 16, "nr": 14, "platz": 2, "typ": "note", "art": "taste", "name": "Deck 1 Play"},
+                              {"pfad": "deck/1/kill/lo", "kanal": 16, "nr": 15, "platz": 2, "art": "taste", "name": "Kill"}]}
+    s = lc3.soll(lernen, 2)
+    assert s[13] == (21, "fx/3 Cutoff")
+    assert s[14] == (lc3.FARBE_AUS, "free"), "a note entry does not light an encoder"
+    assert s[15] == (lc3.FARBE_AUS, "free"), "a switch entry on a CC does not either"

@@ -189,13 +189,13 @@ test('kacheln: a tile per control of the layout, its target from the learn table
   assert.equal(k.some((x) => x.ziel === 'fx/3/bk/4'), false, 'the learn table of place 1 is another device');
   assert.deepEqual(kachelZaehler(k), { frei: 21, gesamt: 25 }, '24 + 1 extra assignable, four assigned');
 });
-test('kacheln: the channel an assignment sends follows the port of the place; pads are shown but cannot be assigned', () => {
+test('kacheln: the channel an assignment sends follows the port of the place; a pad is a tile like a knob and counts', () => {
   const frei = (daw) => kacheln(LC3, [], { platz: 2, daw }).find((x) => x.name === 'Btn 1');
   assert.deepEqual([frei(false).kanal, frei(true).kanal], [16, 1]);
   assert.equal(kacheln(LC3, [], { platz: 2, daw: true }).find((x) => x.name === 'Enc 1').kanal, 16, 'encoders keep their channel');
   const l = kacheln(LPD8, [{ pfad: 'fx/3/bk/4', kanal: 1, nr: 2, platz: 1 }], { platz: 1 });
-  assert.deepEqual(l.map((x) => [x.name, x.ziel, x.zuweisbar]), [['K1', null, true], ['K2', 'fx/3/bk/4', true], ['Pad 1', null, false]]);
-  assert.deepEqual(kachelZaehler(l), { frei: 1, gesamt: 2 }, 'the pad is not counted');
+  assert.deepEqual(l.map((x) => [x.name, x.ziel, x.zuweisbar]), [['K1', null, true], ['K2', 'fx/3/bk/4', true], ['Pad 1', null, true]]);
+  assert.deepEqual(kachelZaehler(l), { frei: 2, gesamt: 3 }, 'the pad is counted');
 });
 test('kachelSicht: free only keeps the free assignable controls; a view hides the assigned tiles of other modules; the text finds control, module and target', () => {
   const k = kacheln(LC3, LERN, { platz: 2 });
@@ -224,7 +224,7 @@ test('zielZeilen: every learnable target of a module, free or with its owner; an
   const z = zielZeilen(ZIELE, DATEN, { modul: 'deck/1', namen: NA });
   assert.deepEqual(z.map((x) => [x.pfad, x.frei, x.geraet, x.quelle]), [
     ['deck/1/fader', false, 'Akai APC20', 'CC 7 · ch 1'], ['deck/1/filter', true, '', ''], ['deck/1/trim', true, '', ''], ['deck/1/pfl', false, 'Traktor Kontrol S8', 'Note 10 · ch 13']]);
-  assert.deepEqual(z.map((x) => x.label), ['Fader', 'Filter', 'Trim', 'Pfl']);
+  assert.deepEqual(z.map((x) => x.label), ['Fader', 'Filter', 'Trim', 'PFL']);
   assert.deepEqual(zielZeilen(ZIELE, DATEN, { modul: 'deck/1', nurFrei: true }).map((x) => x.pfad), ['deck/1/filter', 'deck/1/trim'], 'free only');
   assert.deepEqual(z.map((x) => x.lernbar), [true, true, true, false], 'the switch is listed but not learnable');
   assert.deepEqual(zielZeilen(ZIELE, DATEN, { modul: 'fx/3', namen: NA }).map((x) => [x.pfad, x.label, x.frei, x.geraet]), [['fx/3/bk/4', 'Sub 1', false, 'Akai LPD8'], ['fx/3/bk/5', 'Knob 5', true, '']]);
@@ -256,7 +256,7 @@ test('geraeteZeilen: a place with a layout shows how many of its controls are fr
   assert.deepEqual([z[1].anzahl, z[1].daw, z[1].regler.length], ['21 of 25 free', true, 24]);
 });
 
-test('baueKacheln: one tile per control at its place, free or with target; assigned tiles have CHANGE and REMOVE, a free tile opens the picker, pads do not', () => {
+test('baueKacheln: one tile per control at its place, free or with target; assigned tiles have CHANGE and REMOVE, a free tile (knob or pad) opens the picker', () => {
   const dok = globalThis.document; globalThis.document = { createElement: el };
   try {
     const wurzel = el('div'), ereignisse = [];
@@ -264,16 +264,15 @@ test('baueKacheln: one tile per control at its place, free or with target; assig
     baueKacheln(wurzel, ks, { geraet: 'Akai LPD8', oeffne: (k) => ereignisse.push(['oeffne', k.name]), entferne: (k) => ereignisse.push(['entferne', k.ziel]) });
     const t = wurzel.alle().filter((x) => x.klassen.has('reg-kachel'));
     assert.deepEqual(t.map((x) => x.attr['data-kachel']), ['cc:1', 'cc:2', 'note:36', 'cc:3']);
-    assert.deepEqual(t.map((x) => [x.klassen.has('frei'), x.klassen.has('belegt'), x.klassen.has('aus')]), [[true, false, false], [false, true, false], [true, false, true], [true, false, false]]);
+    assert.deepEqual(t.map((x) => [x.klassen.has('frei'), x.klassen.has('belegt'), x.klassen.has('aus')]), [[true, false, false], [false, true, false], [true, false, false], [true, false, false]]);
     assert.equal(t[1].attr['data-ziel'], 'fx/3/bk/4');
     assert.equal(t[1].attr['data-info'], 'Akai LPD8 · K2 → FX3 Remix · fx/3/bk/4');
     const texte = (x) => x.alle().filter((y) => y.klassen.has('reg-kachel-ziel')).map((y) => y.textContent);
-    assert.deepEqual(t.map(texte), [['free'], ['FX3 Remix · Sub 1'], ['not assignable yet'], ['free']]);
+    assert.deepEqual(t.map(texte), [['free'], ['FX3 Remix · Sub 1'], ['free'], ['free']]);
     assert.deepEqual(t[1].alle().filter((y) => y.tag === 'button').map((y) => y.textContent), ['CHANGE', 'REMOVE']);
-    t[0].ev.click[0](); t[2].ev.click?.[0]?.();
+    t[0].ev.click[0](); t[2].ev.click[0]();
     t[1].alle().filter((y) => y.textContent === 'REMOVE')[0].ev.click[0]({ stopPropagation() {} });
-    assert.deepEqual(ereignisse, [['oeffne', 'K1'], ['entferne', 'fx/3/bk/4']], 'the pad does nothing; REMOVE does not open the picker');
-    assert.equal(t[2].ev.click, undefined);
+    assert.deepEqual(ereignisse, [['oeffne', 'K1'], ['oeffne', 'Pad 1'], ['entferne', 'fx/3/bk/4']], 'a pad opens the picker like a knob; REMOVE does not open it');
   } finally { globalThis.document = dok; }
 });
 test('baueKacheln: the picker of the open tile sits in the grid; baueWaehler lists the targets, a click assigns, the search refills only the list', () => {
@@ -288,8 +287,8 @@ test('baueKacheln: the picker of the open tile sits in the grid; baueWaehler lis
       waehleModul: (id) => gewaehlt.push(['modul', id]), setze: (z) => gewaehlt.push(['setze', z.pfad]), schliesse: () => gewaehlt.push(['zu']) }); } });
     assert.ok(wurzel.alle().some((x) => x.klassen.has('reg-waehler')), 'the panel is a child of the grid');
     const knoepfe = () => panel.alle().filter((x) => x.klassen.has('reg-wahlziel'));
-    assert.deepEqual(knoepfe().map((x) => x.alle().filter((y) => y.klassen.has('reg-wahlziel-name'))[0].textContent), ['Filter', 'Trim', 'Fader', 'Pfl'], 'free targets first, then the assigned ones');
-    assert.deepEqual(knoepfe().map((x) => x.klassen.has('belegt')), [false, false, true, true]);
+    assert.deepEqual(knoepfe().map((x) => x.alle().filter((y) => y.klassen.has('reg-wahlziel-name'))[0].textContent), ['Filter', 'Trim', 'Fader'], 'free targets first, then the assigned ones; PFL is not among the assignable targets here and is not offered');
+    assert.deepEqual(knoepfe().map((x) => x.klassen.has('belegt')), [false, false, true]);
     knoepfe()[1].ev.click[0]();
     const chip = panel.alle().find((x) => x.tag === 'button' && x.textContent.startsWith('Deck B'));
     chip.ev.click[0]();
@@ -379,7 +378,7 @@ test('banks: a device with banks shows one bank on its channel, a CC learned in 
   assert.deepEqual(b2.map((k) => [k.name, k.kanal, k.nr, k.ziel]), [['Pad 1', 2, 35, null], ['K1', 2, 1, 'deck/1/filter'], ['K2', 2, 2, null], ['CC 50 · ch 9', 9, 50, 'deck/2/filter']]);
   const zeilen = geraeteZeilen({ katalog: [{ id: 'lpd8', name: 'Akai LPD8', weg: 'lernen', midi: 'LPD8', regler, baenke, bedienung: 'PROGRAM picks the bank' }], kanten: [] },
     { controller: [{ platz: 1, port: 'Midi-Bridge:LPD8: MIDI 1 (capture)', name: 'LPD8', da: true, verbunden: true }], quellen: { midi: [] } }, { zuordnungen: lern });
-  assert.deepEqual([zeilen[0].anzahl, zeilen[0].baenke.length, zeilen[0].bedienung], ['3 of 6 free', 2, 'PROGRAM picks the bank'], 'two banks of two knobs plus the extra CC, three of them free');
+  assert.deepEqual([zeilen[0].anzahl, zeilen[0].baenke.length, zeilen[0].bedienung], ['5 of 8 free', 2, 'PROGRAM picks the bank'], 'two banks of a pad and two knobs, each with the extra CC: five of them free');
 });
 
 test('baueKacheln: bank chips above the tiles pick a bank, the line about the other controls sits below', () => {

@@ -85,13 +85,16 @@ test('register/ziele: continuous knobs whose path contains q; switches never; li
   assert.equal(r.code, 200);
   assert.deepEqual(r.j.ziele.map((z) => z.pfad), ['deck/1/filter']);
   assert.equal(r.j.ziele[0].einheit, 'linear');
-  assert.deepEqual(Object.keys(r.j.ziele[0]).sort(), ['einheit', 'max', 'min', 'pfad']);
+  assert.deepEqual(Object.keys(r.j.ziele[0]).sort(), ['art', 'einheit', 'max', 'min', 'pfad']);
+  assert.equal(r.j.ziele[0].art, 'regler');
   assert.ok(r.j.gesamt >= 1);
   assert.deepEqual((await hole(url, '/register/ziele?q=kill')).j.ziele, []);
   assert.equal((await hole(url, '/register/ziele?q=deck&limit=3')).j.ziele.length, 3);
   assert.equal((await hole(url, '/register/ziele?limit=100000')).j.ziele.length, 200);
   assert.equal((await hole(url, '/register/ziele')).j.ziele.length, 50);
   assert.ok(!(await hole(url, '/register/ziele?limit=500')).j.ziele.some((z) => z.einheit === 'schalter'));
+  assert.ok((await hole(url, '/register/ziele?limit=200')).j.ziele.every((z) => z.art === 'regler'), 'without a prefix only continuous targets, as before');
+  assert.deepEqual((await hole(url, '/register/ziele?q=play')).j.ziele, [], 'the deck actions are not in the old answer');
 });
 
 test('register/ziele prefix: every continuous target of a module without a cap, graph knobs with the knob name of the loaded graph', async (t) => {
@@ -104,7 +107,8 @@ test('register/ziele prefix: every continuous target of a module without a cap, 
   const { url } = await stapel(t, { baukasten: { geladen: () => ({ 'fx/3': 'testfx' }) } });
   const d1 = (await hole(url, '/register/ziele?prefix=deck/1')).j;
   assert.ok(d1.ziele.length > 50 && d1.ziele.some((z) => z.pfad === 'deck/1/bk/64'), 'more than the default limit of 50');
-  assert.ok(d1.ziele.every((z) => z.pfad.startsWith('deck/1/') && z.einheit !== 'schalter'));
+  assert.ok(d1.ziele.every((z) => z.pfad.startsWith('deck/1/')));
+  assert.ok(d1.ziele.filter((z) => z.art === 'regler').every((z) => z.einheit !== 'schalter' && z.einheit !== 'aktion'));
   assert.equal(d1.gesamt, d1.ziele.length);
   assert.deepEqual((await hole(url, '/register/ziele?prefix=xfader')).j.ziele.map((z) => z.pfad), ['xfader'], 'a single control is its own prefix');
   assert.ok(!(await hole(url, '/register/ziele?prefix=deck/1')).j.ziele.some((z) => z.pfad.startsWith('deck/10')), 'the prefix ends at a path segment');
@@ -127,4 +131,22 @@ test('register: the learnable devices carry their control layout', async (t) => 
   assert.ok(lpd8.filter((r) => r.art === 'pad').every((r) => r.typ === 'note'));
   for (const g of [lc3, lpd8]) assert.equal(new Set(g.map((r) => `${r.zeile}/${r.spalte}`)).size, g.length, 'no two controls share a grid cell');
   assert.equal(kat.find((k) => k.id === 's8').regler, undefined, 'a desk device has no layout');
+});
+
+test('register/ziele prefix: switches and deck actions come with their art, the deck actions first; a switch is art schalter, play and cue art aktion', async (t) => {
+  const { url } = await stapel(t);
+  const d1 = (await hole(url, '/register/ziele?prefix=deck/1')).j.ziele;
+  const art = (pfad) => d1.find((z) => z.pfad === pfad)?.art;
+  assert.deepEqual(['deck/1/fader', 'deck/1/filter', 'deck/1/bk/3', 'deck/1/kill/tief', 'deck/1/pfl', 'deck/1/komp/an', 'deck/1/play', 'deck/1/cue'].map(art),
+    ['regler', 'regler', 'regler', 'schalter', 'schalter', 'schalter', 'aktion', 'aktion']);
+  assert.deepEqual(d1.slice(0, 2).map((z) => [z.pfad, z.art, z.einheit]), [['deck/1/play', 'aktion', 'aktion'], ['deck/1/cue', 'aktion', 'aktion']], 'actions first');
+  assert.ok(d1.every((z) => ['regler', 'schalter', 'aktion'].includes(z.art)));
+  assert.equal(art('deck/1/hotcue/1'), undefined, 'an action the kern does not run is not offered');
+  assert.equal(d1.filter((z) => z.art === 'aktion').length, 2);
+  const alle = (await hole(url, '/register/ziele?prefix=')).j;
+  assert.equal(alle.ziele.filter((z) => z.art === 'aktion').map((z) => z.pfad).join(), 'deck/1/play,deck/1/cue,deck/2/play,deck/2/cue,deck/3/play,deck/3/cue,deck/4/play,deck/4/cue');
+  assert.equal(alle.gesamt, REGLER.size + 8, 'every control of the table plus the eight deck actions');
+  assert.deepEqual((await hole(url, '/register/ziele?prefix=master')).j.ziele.filter((z) => z.art === 'schalter').map((z) => z.pfad), ['master/pfl']);
+  assert.deepEqual((await hole(url, '/register/ziele?prefix=deck/2/pfl')).j.ziele.map((z) => [z.pfad, z.art]), [['deck/2/pfl', 'schalter']], 'a single switch is its own prefix');
+  assert.deepEqual((await hole(url, '/register/ziele?prefix=deck/2&q=cue')).j.ziele.map((z) => z.pfad), ['deck/2/cue'], 'q still filters inside a prefix');
 });

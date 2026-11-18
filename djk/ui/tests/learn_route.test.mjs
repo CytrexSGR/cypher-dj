@@ -51,11 +51,18 @@ test('S19 route: POST /lernen needs a MIDI input (409 kein_midi_eingang), arms w
   for (const pfad of ['deck/1/fader', 'master/pegel', 'deck/1/eq/tief', 'xfader', 'erz/5/fader']) assert.equal((await ruf(url, 'POST', '/lernen', { pfad })).code, 200, pfad);
   // switches and paths that are no knob are refused with a reason, nothing is armed
   const vorher = anKern(log, '/k/lernen').filter((z) => z.felder.an === 1).length;
-  for (const pfad of ['deck/1/kill/tief', 'deck/1/pfl', 'deck/1/hotcue/1', 'deck/9/fader']) {
+  for (const pfad of ['deck/1/kill/tief', 'deck/1/pfl', 'deck/1/play', 'deck/1/hotcue/1', 'deck/9/fader']) {
     const r = await ruf(url, 'POST', '/lernen', { pfad });
     assert.deepEqual([r.code, r.j.fehler], [400, 'argument_ungueltig'], pfad);
+  }
+  // a delete knows the same targets as a direct assignment (a switch or a deck action can be learned from a tile), so only a non-target is a 400 there
+  for (const pfad of ['deck/1/hotcue/1', 'deck/9/fader']) {
     const l = await ruf(url, 'POST', '/lernen/loeschen', { pfad });
     assert.deepEqual([l.code, l.j.fehler], [400, 'argument_ungueltig'], `delete ${pfad}`);
+  }
+  for (const pfad of ['deck/1/kill/tief', 'deck/1/pfl', 'deck/1/play']) {
+    const l = await ruf(url, 'POST', '/lernen/loeschen', { pfad });
+    assert.deepEqual([l.code, l.j.fehler], [404, 'keine_zuordnung'], `delete ${pfad} without an entry`);
   }
   assert.equal((await ruf(url, 'POST', '/lernen', { pfad: 'deck/1/kill/tief' })).j.text, 'pfad: a switch needs a button; only knobs can be learned (notes are not learnable yet)');
   assert.equal(anKern(log, '/k/lernen').filter((z) => z.felder.an === 1).length, vorher, 'nothing was armed by the refused paths');
@@ -107,7 +114,8 @@ test('POST /lernen/setzen assigns a CC to a target without a capture: validated 
   await ruf(url, 'POST', '/geraete/midi', { profil: 'midi-controller', port: 'X:Y' });
   const cy = await sende({ pfad: 'deck/1/filter', platz: 1, kanal: 16, nr: 13 }, CYPHER);
   assert.deepEqual([cy.code, cy.j.fehler], [403, 'nur_andreas']);
-  for (const d of [{ pfad: 'deck/1/kill/tief', platz: 1, kanal: 1, nr: 1 }, { pfad: 'erz/4/bk/1', platz: 1, kanal: 1, nr: 1 }, { pfad: 'deck/1/filter', platz: 1, kanal: 0, nr: 1 },
+  for (const d of [{ pfad: 'deck/1/hotcue/1', platz: 1, kanal: 1, nr: 1 }, { pfad: 'erz/4/bk/1', platz: 1, kanal: 1, nr: 1 }, { pfad: 'deck/1/filter', platz: 1, kanal: 1, nr: 1, typ: 'note' },
+    { pfad: 'deck/1/pfl', platz: 1, kanal: 1, nr: 1, typ: 'sysex' }, { pfad: 'deck/1/pfl', platz: 1, kanal: 1, nr: 1, typ: null }, { pfad: 'deck/1/filter', platz: 1, kanal: 0, nr: 1 },
     { pfad: 'deck/1/filter', platz: 1, kanal: 17, nr: 1 }, { pfad: 'deck/1/filter', platz: 1, kanal: 1, nr: 128 }, { pfad: 'deck/1/filter', platz: 1, kanal: 1.5, nr: 1 },
     { pfad: 'deck/1/filter', platz: 1, kanal: '1', nr: 1 }, { pfad: 'deck/1/filter', platz: 0, kanal: 1, nr: 1 }, { pfad: 'deck/1/filter', platz: 9, kanal: 1, nr: 1 },
     { pfad: 'deck/1/filter', platz: 3, kanal: 1, nr: 1 }, { pfad: 'deck/1/filter', kanal: 1, nr: 1 }]) {
@@ -131,4 +139,54 @@ test('POST /lernen/setzen assigns a CC to a target without a capture: validated 
   const kaputt = await sende({ pfad: 'deck/1/filter', platz: 1, kanal: 16, nr: 13 });
   assert.deepEqual([kaputt.code, kaputt.j.fehler], [409, 'lernen_datei_kaputt']);
   assert.equal(fs.readFileSync(path.join(ordner, 'lernen.json'), 'utf8'), '{"version":1,');
+});
+
+test('POST /lernen/setzen: a switch or a deck action takes a button (CC) or a pad (note) with art taste, the server picks the art, a continuous target refuses a note', async (t) => {
+  const { url, log, ordner } = await aufbau(t);
+  const sende = (d) => ruf(url, 'POST', '/lernen/setzen', d);
+  await ruf(url, 'POST', '/geraete/midi', { profil: 'midi-controller', port: 'X:Y' });
+  const datei = () => JSON.parse(fs.readFileSync(path.join(ordner, 'lernen.json'), 'utf8')).eintraege;
+  // a pad (note) drives a switch and a deck action
+  const pfl = await sende({ pfad: 'deck/1/pfl', platz: 1, kanal: 1, nr: 36, typ: 'note' });
+  assert.equal(pfl.code, 200);
+  assert.deepEqual(datei(), [{ nachricht: { typ: 'note', kanal: 1, nr: 36 }, ziel: 'deck/1/pfl', art: 'taste' }]);
+  assert.deepEqual(pfl.j.zuordnungen, [{ pfad: 'deck/1/pfl', kanal: 1, nr: 36, platz: 1, typ: 'note', art: 'taste', name: 'deck/1/pfl' }], 'typ and art are listed for a pad');
+  assert.equal((await sende({ pfad: 'deck/2/play', platz: 1, kanal: 1, nr: 37, typ: 'note' })).code, 200);
+  // a button (CC) drives them too, also without a typ in the body; a CC knob keeps art absolut
+  const kill = await sende({ pfad: 'deck/1/kill/tief', platz: 1, kanal: 16, nr: 37 });
+  assert.equal(kill.code, 200);
+  assert.deepEqual(datei().find((e) => e.ziel === 'deck/1/kill/tief'), { nachricht: { typ: 'cc', kanal: 16, nr: 37 }, ziel: 'deck/1/kill/tief', art: 'taste' });
+  assert.deepEqual(kill.j.zuordnungen.find((z) => z.pfad === 'deck/1/kill/tief'), { pfad: 'deck/1/kill/tief', kanal: 16, nr: 37, platz: 1, art: 'taste', name: 'deck/1/kill/tief' });
+  await sende({ pfad: 'deck/1/cue', platz: 1, kanal: 16, nr: 38, typ: 'cc' });
+  await sende({ pfad: 'deck/1/filter', platz: 1, kanal: 16, nr: 13 });
+  assert.deepEqual(datei().filter((e) => e.nachricht.nr >= 13 && e.nachricht.kanal === 16).map((e) => [e.ziel, e.art]), [['deck/1/kill/tief', 'taste'], ['deck/1/cue', 'taste'], ['deck/1/filter', 'absolut']]);
+  // a note on a continuous target is refused with a readable text, nothing is written
+  const n = datei().length, mapping = anKern(log, '/k/mapping').length;
+  const nein = await sende({ pfad: 'deck/1/fader', platz: 1, kanal: 1, nr: 40, typ: 'note' });
+  assert.deepEqual([nein.code, nein.j.fehler], [400, 'argument_ungueltig']);
+  assert.match(nein.j.text, /a note has no value for a continuous target/);
+  assert.equal(datei().length, n);
+  assert.equal(anKern(log, '/k/mapping').length, mapping, 'nothing reached the kern');
+  // one source drives one target: the same pad on another target replaces the first; the same target on another pad moves it
+  await sende({ pfad: 'deck/3/pfl', platz: 1, kanal: 1, nr: 36, typ: 'note' });
+  assert.deepEqual(datei().filter((e) => e.nachricht.typ === 'note').map((e) => [e.nachricht.nr, e.ziel]), [[37, 'deck/2/play'], [36, 'deck/3/pfl']]);
+  await sende({ pfad: 'deck/3/pfl', platz: 1, kanal: 1, nr: 39, typ: 'note' });
+  assert.deepEqual(datei().filter((e) => e.nachricht.typ === 'note').map((e) => [e.nachricht.nr, e.ziel]), [[37, 'deck/2/play'], [39, 'deck/3/pfl']]);
+  // a note and a CC with the same number are two sources
+  await sende({ pfad: 'deck/4/play', platz: 1, kanal: 1, nr: 37 });
+  assert.equal(datei().filter((e) => e.nachricht.nr === 37 && e.nachricht.kanal === 1).length, 2);
+  // a learned switch is deleted like a learned knob
+  const weg = await ruf(url, 'POST', '/lernen/loeschen', { pfad: 'deck/3/pfl' });
+  assert.equal(weg.code, 200);
+  assert.ok(!datei().some((e) => e.ziel === 'deck/3/pfl'));
+});
+
+test('POST /lernen (the capture) stays continuous and CC only: a switch or a deck action is refused with the knob text', async (t) => {
+  const { url, log } = await aufbau(t);
+  await ruf(url, 'POST', '/geraete/midi', { profil: 'midi-controller', port: 'X:Y' });
+  for (const pfad of ['deck/1/pfl', 'deck/1/kill/tief', 'deck/1/play', 'deck/1/cue']) {
+    const r = await ruf(url, 'POST', '/lernen', { pfad });
+    assert.deepEqual([r.code, r.j.fehler], [400, 'argument_ungueltig'], pfad);
+  }
+  assert.equal(anKern(log, '/k/lernen').length, 0, 'nothing was armed');
 });

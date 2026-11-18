@@ -1,7 +1,9 @@
 // S19 (MIDI learn): the learn tables in the controller folder, normal Mapping-v1 files (INTERFACES 7.2). The kern has eight raw MIDI inputs
 // midi_ein_1..8 and one table per input (slot = place): place 1 is lernen.json with the reserved device name "lernen", the places 2..8 are
 // lernen-<k>.json with the name "lernen-<k>". A learned CC therefore belongs to the device on that place; two controllers that send the same CC
-// do not collide. This store reads and writes the files: entries the server writes carry no "kurve" (default curve of the control), one entry
+// do not collide. A source is a CC or a note of the device: a CC drives a continuous target (art "absolut") or, as a button, a switch or deck action
+// (art "taste"); a note (a pad) drives a switch or deck action. One source (place, typ, channel, number) drives one target, as the kern loader
+// demands (one entry per message). This store reads and writes the files: entries the server writes carry no "kurve" (default curve of the control), one entry
 // per line, atomically, with a .bak of the previous file. A file that does not parse or has the wrong shape is reported ("kaputt") and never
 // overwritten; entries the server did not write survive every change unchanged.
 import fs from 'node:fs';
@@ -17,21 +19,26 @@ export class LernFehler extends Error {
 export const PLAETZE = 8;
 /** Device name of a place for /k/mapping and the file name without .json: place 1 keeps the reserved name "lernen". */
 export const lernName = (platz: number): string => (platz === 1 ? 'lernen' : `lernen-${platz}`);
-export interface Zuordnung { pfad: string; kanal: number; nr: number; platz: number }
+export type Typ = 'cc' | 'note';
+export type Art = 'absolut' | 'taste';
+// typ and art are left out while they are the default ('cc', 'absolut'): a knob assignment reads and prints as it always did; a button or pad carries both.
+export interface Zuordnung { pfad: string; kanal: number; nr: number; platz: number; typ?: Typ; art?: Art }
 export type Eintrag = Record<string, unknown>;
-// eintraege: the raw entries of all places one after the other (reading only); zuordnungen: the CC entries with their place
+// eintraege: the raw entries of all places one after the other (reading only); zuordnungen: the entries the learn flow writes (knob, button, pad) with their place
 export interface Stand { datei: 'fehlt' | 'ok' | 'kaputt'; eintraege: Eintrag[]; zuordnungen: Zuordnung[] }
 interface PlatzStand { datei: 'fehlt' | 'ok' | 'kaputt'; eintraege: Eintrag[] }
 
 const istObjekt = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
-const gleicheCc = (e: Eintrag, kanal: number, nr: number): boolean => { const n = e.nachricht; return istObjekt(n) && n.typ === 'cc' && n.kanal === kanal && n.nr === nr; };
+const gleicheQuelle = (e: Eintrag, typ: Typ, kanal: number, nr: number): boolean => { const n = e.nachricht; return istObjekt(n) && n.typ === typ && n.kanal === kanal && n.nr === nr; };
 
-// a CC entry as the learn flow writes it: absolute, on any target (graph knob or continuous control)
+// An entry as the learn flow writes it: a CC "absolut" on a continuous target, a CC or a note "taste" on a switch or deck action. Anything else
+// (relativ, beruehrung, a note "absolut") is not ours and stays out of the list.
 function alsZuordnung(e: Eintrag, platz: number): Zuordnung | null {
   const n = e.nachricht;
-  if (!istObjekt(n) || n.typ !== 'cc' || e.art !== 'absolut' || typeof e.ziel !== 'string') return null;
+  if (!istObjekt(n) || (n.typ !== 'cc' && n.typ !== 'note') || (e.art !== 'absolut' && e.art !== 'taste') || typeof e.ziel !== 'string') return null;
+  if (n.typ === 'note' && e.art !== 'taste') return null;
   if (!Number.isInteger(n.kanal) || !Number.isInteger(n.nr)) return null;
-  return { pfad: e.ziel, kanal: n.kanal as number, nr: n.nr as number, platz };
+  return { pfad: e.ziel, kanal: n.kanal as number, nr: n.nr as number, platz, ...(n.typ === 'note' ? { typ: 'note' as const } : {}), ...(e.art === 'taste' ? { art: 'taste' as const } : {}) };
 }
 
 export class LernSpeicher {
@@ -81,14 +88,16 @@ export class LernSpeicher {
     return alle;
   }
 
-  // One CC of one device <-> one knob: a new assignment removes the entry with the same CC on its place and every entry with the same target on
-  // any place. Answers the places whose file changed (the kern reloads exactly those).
+  // One source of one device <-> one target: a new assignment removes the entry with the same message (typ, channel, number) on its place and every
+  // entry with the same target on any place. Answers the places whose file changed (the kern reloads exactly those).
   zuordne(z: Omit<Zuordnung, 'platz'> & { platz?: number }): number[] {
-    const ziel = z.platz ?? 1, alle = this.gesund(), geaendert: number[] = [];
+    const ziel = z.platz ?? 1, typ = z.typ ?? 'cc', art = z.art ?? 'absolut';
+    if (typ === 'note' && art !== 'taste') throw new LernFehler('argument_ungueltig', 400, 'a note can only drive a switch or a deck action (art taste)');
+    const alle = this.gesund(), geaendert: number[] = [];
     alle.forEach((p, i) => {
       const platz = i + 1;
-      const rest = p.eintraege.filter((e) => e.ziel !== z.pfad && !(platz === ziel && gleicheCc(e, z.kanal, z.nr)));
-      if (platz === ziel) rest.push({ nachricht: { typ: 'cc', kanal: z.kanal, nr: z.nr }, ziel: z.pfad, art: 'absolut' });
+      const rest = p.eintraege.filter((e) => e.ziel !== z.pfad && !(platz === ziel && gleicheQuelle(e, typ, z.kanal, z.nr)));
+      if (platz === ziel) rest.push({ nachricht: { typ, kanal: z.kanal, nr: z.nr }, ziel: z.pfad, art });
       else if (rest.length === p.eintraege.length) return;
       this.schreibe(platz, rest);
       geaendert.push(platz);

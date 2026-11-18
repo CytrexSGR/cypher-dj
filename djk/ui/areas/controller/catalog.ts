@@ -10,7 +10,7 @@ export type Weg = 'pult' | 'lernen' | 'offen';
 /**
  * One control of a device, for the layout the page draws (zeile/spalte count from 1). `kanal`/`nr` are what the device sends in its default
  * mode; `kanal_daw` is the channel it sends on when it is on its DAW port (Launch Control 3 buttons), absent when it is the same.
- * Only a CC can be learned and assigned today: a `note` control is shown but cannot be assigned.
+ * A `note` control (a pad) is assigned to a switch or a deck action, never to a continuous target; a `cc` button likewise (learn/targets.ts).
  */
 export interface Regler { name: string; typ: 'cc' | 'note'; kanal: number; nr: number; kanal_daw?: number; art: 'knob' | 'button' | 'pad'; zeile: number; spalte: number }
 /** A bank of a device: the same controls on another MIDI channel (LPD8: its four programs). `noten` are the notes of its note controls, in layout order. */
@@ -41,8 +41,8 @@ const LC3_REGLER: Regler[] = [
 ];
 // LPD8, read from his unit with its program dump (F0 47 7F 75 63 00 01 <program> F7) on 2026-11-18, all four programs as they are stored:
 // knobs K1..K8 send CC 1..8, the pads send the notes below (PAD), CC 1..6, 8, 9 (CC) or program changes 0..7 (PROG CHNG); program n sends on
-// MIDI channel n. The layout is the device's: pads on the left (5..8 above 1..4), knobs on the right (K1..K4 above K5..K8). The learn flow
-// takes no notes yet, so a pad is shown and cannot be assigned.
+// MIDI channel n. The layout is the device's: pads on the left (5..8 above 1..4), knobs on the right (K1..K4 above K5..K8). A pad is
+// assigned directly (POST /lernen/setzen with typ 'note') to a switch or a deck action; capture only reports CCs.
 const LPD8_REGLER: Regler[] = [
   ...reihe(8, (i) => ({ name: `Pad ${i}`, typ: 'note', kanal: 1, nr: 35 + i, art: 'pad', zeile: i <= 4 ? 2 : 1, spalte: ((i - 1) % 4) + 1 })),
   ...reihe(8, (i) => ({ name: `K${i}`, typ: 'cc', kanal: 1, nr: i, art: 'knob', zeile: i <= 4 ? 1 : 2, spalte: ((i - 1) % 4) + 5 })),
