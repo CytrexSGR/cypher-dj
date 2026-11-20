@@ -3,12 +3,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { steuerungen } from '../public/panel.js';
 import { pruefePanel, reglerBereiche } from '../graphs.ts';
+import { werksgraphPfad } from './werksgraph_path.mjs';
 
-const GERAETE = path.join(os.homedir(), 'cypherdj/werke/geraete');
 const PANEELE = new URL('../../instruments/modular_dsp/paneele/', import.meta.url);
 
 const NAMEN = ['fx-bandecho', 'fx-crunch', 'fx-delay-sync', 'fx-diode-acid', 'fx-echo-achtel', 'fx-federhall', 'fx-filter-fahrt', 'fx-filter-regler',
@@ -17,7 +16,7 @@ const NAMEN = ['fx-bandecho', 'fx-crunch', 'fx-delay-sync', 'fx-diode-acid', 'fx
   'fx-vocoder-robot', 'fx-wahl-filter'];
 
 const lies = (name) => JSON.parse(fs.readFileSync(new URL(`${name}.json`, PANEELE), 'utf8'));
-const graph = (name) => JSON.parse(fs.readFileSync(path.join(GERAETE, `${name}.json`), 'utf8'));
+const graph = (name) => JSON.parse(fs.readFileSync(werksgraphPfad(name), 'utf8'));
 
 const regelnPruefen = (name) => {
   const sts = steuerungen(lies(name));

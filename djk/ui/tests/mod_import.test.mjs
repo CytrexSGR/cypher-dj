@@ -210,16 +210,21 @@ test('a running sample: a note without a sample number plays the last one of its
 });
 
 test('Fxx on the first row: tempo (>= 32) sets the BPM, speed (< 32) sets the ticks; a later one is counted', () => {
-  const m = bauMod({ samples: [SMP(100)], muster: [{ 0: { 0: [P['C-2'], 1, 0xf, 0x7d], 1: [0, 0, 0xf, 0x06] }, 8: { 0: [0, 0, 0xf, 0x90] }, 9: { 0: [0, 0, 0xf, 0x03] } }] });
+  const m = bauMod({ samples: [SMP(100)], muster: [{ 0: { 0: [P['C-2'], 1, 0xf, 0x7d], 1: [0, 0, 0xf, 0x06] }, 8: { 0: [0, 0, 0xf, 0x90] }, 9: { 0: [0, 0, 0xf, 0x05] } }] });
   const r = leseMod(m);
-  assert.equal(r.projekt.tempo_bpm, 125);
-  assert.equal(r.projekt.tracker.ticks, undefined);                     // 6 is the default and is not written
+  // the project has one tempo: the BPM that keeps the length. Rows 0..7 at tempo 125 / speed 6, row 8 at 144 / 6, rows 9..63 at 144 / 5.
+  const sek = 8 * (6 * 2.5 / 125) + 6 * 2.5 / 144 + 55 * (5 * 2.5 / 144);
+  assert.equal(r.projekt.tempo_bpm, Math.round(64 * 15 / sek * 1000) / 1000);
+  assert.equal(r.bericht.tempo_gemittelt, true);
+  assert.equal(r.projekt.tracker.ticks, undefined);                     // the start speed 6 is the default and is not written
   assert.equal(r.bericht.weggelassen.tempo_wechsel, 2);
   const m2 = bauMod({ samples: [SMP(100)], muster: [{ 0: { 0: [P['C-2'], 1, 0xf, 0x88], 2: [0, 0, 0xf, 0x04] } }] });
   const r2 = leseMod(m2);
   assert.equal(r2.projekt.tracker.ticks, 4);
-  assert.equal(r2.projekt.tempo_bpm, 200);                             // 136 * 6 / 4 = 204, cut to the project limit 200 and counted
-  assert.equal(r2.bericht.weggelassen.unbekannt['tempo outside 60..200'], 1);
+  assert.equal(r2.projekt.tempo_bpm, 102);                             // 136 * 6 / 4 = 204 is over the project limit 200: 8 rows per beat, half the BPM
+  assert.equal(r2.projekt.tracker.lpb, 8);
+  assert.equal(r2.projekt.tracker.abschnitte[0].laenge_beats, 8);      // 64 rows of 1/8 beat
+  assert.deepEqual(r2.bericht.weggelassen.unbekannt, {});
   assert.equal(leseMod(bauMod({ muster: [{}] })).projekt.tempo_bpm, 125);   // none: the ProTracker default 125 and speed 6
 });
 
@@ -230,14 +235,13 @@ test('speed 6 with tempo 150: BPM 150; speed 3 with tempo 100: ticks 3 and BPM 2
   assert.equal(r.projekt.tempo_bpm, 200);
 });
 
-test('Dxx shortens the section and the next one starts at the row; Bxx counts, E6x counts, other Exy are counted by kind', () => {
+test('Dxx shortens the section and the next one starts at the row; a Bxx back to a played row ends the song (counted), other Exy are counted by kind', () => {
   const m = bauMod({
     ordnung: [0, 1, 2], samples: [SMP(500)],
     muster: [
       { 0: { 0: [P['C-2'], 1, 0, 0] }, 15: { 1: [0, 0, 0xd, 0x00] }, 20: { 0: [P['E-2'], 1, 0, 0] } },        // 16 rows, row 20 is never played
       { 0: { 0: [P['G-2'], 1, 0, 0] }, 3: { 0: [P['C-3'], 1, 0, 0] }, 10: { 2: [0, 0, 0xd, 0x31] } },        // starts at row 0, breaks after row 10 -> next row 31
-      { 30: { 0: [P['D-2'], 1, 0, 0] }, 33: { 0: [P['E-2'], 1, 0, 0] }, 40: { 0: [0, 0, 0xe, 0x60], 1: [0, 0, 0xe, 0x62] }, 50: { 3: [0, 0, 0xb, 0x00] },
-        51: { 0: [0, 0, 0xe, 0x60] } },
+      { 30: { 0: [P['D-2'], 1, 0, 0] }, 33: { 0: [P['E-2'], 1, 0, 0] }, 50: { 3: [0, 0, 0xb, 0x00] }, 51: { 0: [P['G-2'], 1, 0, 0] } },
     ],
   });
   const r = leseMod(m);
@@ -245,8 +249,8 @@ test('Dxx shortens the section and the next one starts at the row; Bxx counts, E
   const c = r.projekt.spuren[0].clips;
   assert.deepEqual(c.map((x) => [x.start_beat, x.laenge_beats, x.noten.length]), [[0, 4, 1], [4, 2.75, 2], [6.75, 5, 1]]);
   assert.deepEqual(c[2].noten.map((x) => [x.beat, x.ton]), [[0.5, ton('E-3')]]);   // row 33 is 2 rows after the start row 31; row 30 was never played
-  assert.equal(r.bericht.weggelassen.sprung, 1);
-  assert.equal(r.bericht.weggelassen.muster_schleife, 2);
+  assert.equal(r.bericht.weggelassen.sprung, 1);   // the Bxx back to the start is the loop point of the song
+  assert.equal(r.bericht.weggelassen.muster_schleife, 0);
   assert.deepEqual(r.bericht.weggelassen.unbekannt, {});
   assert.equal(pruefeFehler(r.projekt), null);
 });
@@ -354,4 +358,135 @@ test('a truncated last sample is accepted and padded with silence, and counted',
   assert.equal(r.samples[0].daten.length, 800);
   assert.equal(r.samples[0].daten[799], 0);
   assert.equal(r.bericht.weggelassen.unbekannt['sample data truncated'], 1);
+});
+
+// ---- found with real modules (2026-11-20): the course of the song, tempo, 15 samples, loudness ----------------------------------------
+test('E6x pattern loop: the rows of the loop are written out, once per pass (real module: the render was half as long)', () => {
+  const m = bauMod({ samples: [SMP(500)], muster: [{
+    2: { 0: [P['C-2'], 1, 0xe, 0x60] }, 3: { 0: [P['E-2'], 1, 0xe, 0x62] },   // E60 sets the start at row 2, E62 repeats rows 2..3 two more times
+  }] });
+  const r = leseMod(m);
+  assert.equal(r.projekt.tracker.abschnitte[0].laenge_beats, 17);   // 64 rows + 2 passes of 2 rows
+  const n = r.projekt.spuren[0].clips[0].noten;
+  assert.deepEqual(n.map((x) => [x.beat, x.ton]), [[0.5, ton('C-3')], [0.75, ton('E-3')], [1, ton('C-3')], [1.25, ton('E-3')], [1.5, ton('C-3')], [1.75, ton('E-3')]]);
+  assert.equal(r.bericht.weggelassen.muster_schleife, 0);
+  assert.deepEqual(r.bericht.weggelassen.unbekannt, {});
+  assert.equal(pruefeFehler(r.projekt), null);
+});
+
+test('E6x and Bxx on one row: the loop runs first, the jump counts on the last pass, and the loop count does not leak into the next pattern (real module: 6 s short)', () => {
+  const m = bauMod({ ordnung: [0, 1], samples: [SMP(100)], muster: [
+    { 0: { 0: [0, 0, 0xe, 0x60] }, 3: { 0: [0, 0, 0xe, 0x61], 1: [0, 0, 0xb, 0x01] } },
+    { 0: { 0: [0, 0, 0xe, 0x60] }, 1: { 0: [0, 0, 0xe, 0x61] } },
+  ] });
+  const r = leseMod(m);
+  assert.deepEqual(r.projekt.tracker.abschnitte.map((a) => a.laenge_beats), [2, 16.5]);   // rows 0..3 twice, then 64 rows + one repeat of rows 0..1
+  assert.equal(r.bericht.weggelassen.sprung, 0);
+});
+
+test('E6x without a start row loops from row 0; a loop that never ends is cut by the safety cap', () => {
+  const r = leseMod(bauMod({ samples: [SMP(100)], muster: [{ 3: { 0: [0, 0, 0xe, 0x61] } }] }));
+  assert.equal(r.projekt.tracker.abschnitte[0].laenge_beats, (64 + 4) / 4);
+  // E6F on two rows of one channel re-arms itself: ProTracker would loop for very long, the import stops at the cap and counts it
+  const e = leseMod(bauMod({ samples: [SMP(100)], muster: [{ 0: { 0: [0, 0, 0xe, 0x60] }, 1: { 0: [0, 0, 0xe, 0x6f] } }] }));
+  assert.ok(e.projekt.tracker.abschnitte.length > 0);
+  assert.equal(pruefeFehler(e.projekt), null);
+});
+
+test('Bxx forward: the positions it skips are not played and not imported (counted as never played)', () => {
+  const m = bauMod({ ordnung: [0, 1, 2], samples: [SMP(100)], muster: [
+    { 0: { 0: [P['C-2'], 1, 0, 0] }, 3: { 1: [0, 0, 0xb, 0x02] } },
+    { 0: { 0: [P['E-2'], 1, 0, 0] } },
+    { 0: { 0: [P['G-2'], 1, 0, 0] } },
+  ] });
+  const r = leseMod(m);
+  assert.deepEqual(r.projekt.tracker.abschnitte.map((a) => [a.name, a.laenge_beats]), [['P00', 1], ['P02', 16]]);
+  assert.equal(r.bericht.unerreicht, 1);
+  assert.equal(r.bericht.positionen, 3);
+  assert.equal(r.bericht.weggelassen.sprung, 0);   // the jump was followed
+  assert.equal(r.projekt.spuren[0].clips[1].noten[0].ton, ton('G-3'));
+});
+
+test('Bxx back to a played row is the loop point of the song: nothing behind it is played', () => {
+  const m = bauMod({ ordnung: [0, 1, 0], samples: [SMP(100)], muster: [{ 0: { 0: [P['C-2'], 1, 0, 0] } }, { 5: { 2: [0, 0, 0xb, 0x00] } }] });
+  const r = leseMod(m);
+  assert.equal(r.projekt.tracker.abschnitte.length, 2);
+  assert.equal(r.projekt.tracker.abschnitte[1].laenge_beats, 6 / 4);
+  assert.equal(r.bericht.weggelassen.sprung, 1);
+  assert.equal(r.bericht.unerreicht, 1);
+  // Bxx to a position past the list cannot be followed: counted, the song ends
+  const f = leseMod(bauMod({ ordnung: [0, 1], samples: [SMP(100)], muster: [{ 3: { 0: [0, 0, 0xb, 0x09] } }, {}] }));
+  assert.equal(f.bericht.weggelassen.sprung, 1);
+  assert.equal(f.projekt.tracker.abschnitte.length, 1);
+});
+
+test('Bxx and Dxx on one row: the song continues at the order position of Bxx and the row of Dxx', () => {
+  const m = bauMod({ ordnung: [0, 1, 2], samples: [SMP(100)], muster: [
+    { 1: { 0: [0, 0, 0xb, 0x02], 1: [0, 0, 0xd, 0x10] } }, {}, { 10: { 0: [P['C-2'], 1, 0, 0] }, 12: { 0: [P['E-2'], 1, 0, 0] } },
+  ] });
+  const r = leseMod(m);
+  assert.deepEqual(r.projekt.tracker.abschnitte.map((a) => [a.name, a.laenge_beats]), [['P00', 0.5], ['P02', 54 / 4]]);
+  assert.deepEqual(r.projekt.spuren[0].clips[0].noten.map((x) => x.beat), [0, 0.5]);
+});
+
+test('a tempo or speed change keeps the length of the song: the BPM is the average over the rows played; a Fxx to the value it already has is no change', () => {
+  const m = bauMod({ samples: [SMP(100)], muster: [{ 5: { 0: [0, 0, 0xf, 6], 1: [0, 0, 0xf, 125] }, 32: { 0: [0, 0, 0xf, 3] } }] });
+  const r = leseMod(m);
+  assert.equal(r.bericht.weggelassen.tempo_wechsel, 1);
+  assert.equal(r.bericht.tempo_gemittelt, true);
+  assert.equal(r.projekt.tempo_bpm, Math.round(64 * 15 / ((32 * 6 + 32 * 3) * 2.5 / 125) * 1000) / 1000);   // 166.667
+  assert.equal(r.projekt.tracker.ticks, undefined);
+  assert.equal(leseMod(bauMod({ muster: [{ 5: { 0: [0, 0, 0xf, 6] } }] })).bericht.tempo_gemittelt, undefined);
+});
+
+test('EEx pattern delay lengthens the rows in time: the BPM keeps the length', () => {
+  const r = leseMod(bauMod({ samples: [SMP(100)], muster: [{ 4: { 0: [0, 0, 0xe, 0xe3] } }] }));
+  assert.equal(r.projekt.tempo_bpm, Math.round(64 * 15 / ((64 + 3) * 6 * 2.5 / 125) * 1000) / 1000);
+  assert.equal(r.bericht.weggelassen.unbekannt.EE, 1);
+});
+
+test('a Soundtracker module with 15 samples and no signature is read (real module: it was refused)', () => {
+  const m = bauMod({ st15: true, ordnung: [0, 1], samples: [SMP(400, { name: 'bass' }), SMP(300, { name: 'lead', loopStart: 20, loopLen: 100 })],
+    muster: [{ 0: { 0: [P['C-2'], 1, 0, 0], 1: [P['E-2'], 2, 0, 0] } }, { 0: { 3: [P['G-2'], 2, 0, 0] } }] });
+  const r = leseMod(m);
+  assert.equal(r.bericht.kanaele, 4);
+  assert.equal(r.bericht.muster, 2);
+  assert.equal(r.bericht.positionen, 2);
+  assert.equal(r.bericht.samples, 2);
+  assert.deepEqual(r.samples.map((s) => [s.nr, s.name, s.schleife]), [[1, 'bass', 0], [2, 'lead', 1]]);
+  assert.equal(r.projekt.spuren[3].clips[0].noten[0].ton, ton('G-3'));
+  assert.equal(r.bericht.weggelassen.unbekannt['15 sample module, effects read as ProTracker'], 1);
+  assert.equal(pruefeFehler(r.projekt), null);
+});
+
+test('15 samples: noise and short files are still refused; a 31 sample file with a wrong signature too', () => {
+  assert.ok(abgelehnt(Uint8Array.from({ length: 3000 }, (_, i) => i % 7)) instanceof ModFehler);
+  assert.ok(abgelehnt(Uint8Array.from({ length: 700 }, () => 0)) instanceof ModFehler);
+  const sig = bauMod({ muster: [{}] }); sig.set([65, 66, 67, 68], 1080);
+  assert.equal(abgelehnt(sig).offset, 1080);
+  const st = bauMod({ st15: true, ordnung: [0, 5], muster: [{}] });   // pattern 5 is not in the file
+  assert.ok(abgelehnt(st) instanceof ModFehler);
+});
+
+test('the track faders follow the channel count: -6 dB at four channels, quieter at six and eight (6CHN of a real module clipped at +1.4 dB)', () => {
+  const fader = (sig, k) => leseMod(bauMod({ sig, kanaele: k, muster: [{ 0: { 0: [P['C-2'], 1, 0, 0] } }], samples: [SMP(100)] })).projekt.spuren.map((s) => s.fader_db);
+  assert.deepEqual(fader('M.K.', 4), [-6, -6, -6, -6]);
+  assert.ok(fader('6CHN', 6).every((x) => x === -9.5));
+  assert.ok(fader('8CHN', 8).every((x) => x === -12));
+});
+
+test('a song faster than 200 or slower than 60 BPM (at 4 rows per beat) keeps its length: 8 or 2 rows per beat, the BPM scaled (real modules: length 25 percent off)', () => {
+  const fast = leseMod(bauMod({ samples: [SMP(100)], muster: [{ 0: { 0: [P['C-2'], 1, 0xf, 0x7d], 1: [0, 0, 0xf, 0x03] }, 2: { 0: [P['E-2'], 1, 0, 0] } }] }));
+  assert.equal(fast.projekt.tracker.lpb, 8);
+  assert.equal(fast.projekt.tempo_bpm, 125);                           // 125 * 6 / 3 = 250 BPM at 4 rows per beat
+  const n = fast.projekt.spuren[0].clips[0].noten;
+  assert.deepEqual(n.map((x) => x.beat), [0, 0.25]);                   // rows 0 and 2 at 1/8 beat
+  assert.equal(fast.projekt.loop.bis_beat, 8);
+  const slow = leseMod(bauMod({ samples: [SMP(100)], muster: [{ 0: { 0: [0, 0, 0xf, 0x32] } }] }));   // tempo 50, speed 6: 50 BPM
+  assert.equal(slow.projekt.tracker.lpb, 2);
+  assert.equal(slow.projekt.tempo_bpm, 100);
+  assert.equal(slow.projekt.loop.bis_beat, 32);
+  assert.equal(pruefeFehler(fast.projekt), null);
+  assert.equal(pruefeFehler(slow.projekt), null);
+  assert.equal(leseMod(bauMod({ muster: [{}] })).projekt.tracker.lpb, undefined);   // the usual song stays at the default
 });

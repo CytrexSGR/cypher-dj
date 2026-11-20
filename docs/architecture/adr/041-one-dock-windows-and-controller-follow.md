@@ -1,6 +1,6 @@
 # ADR 041: one shared dock with a host object, one window opener, controller follow on existing rows
 
-Status: decision 1 is built by the plan `docs/superpowers/plans/2026-11-19-one-dock-stage-1.md` (stage 1). Decisions 2 and 3 are decided here and built in stages 2 and 3.
+Status: decision 1 is built by the plan `docs/superpowers/plans/2026-11-19-one-dock-stage-1.md` (stage 1). Decision 2 is built by the plan `docs/superpowers/plans/2026-11-20-one-dock-stage-2.md` (stage 2, PRODUCTION and STUDIO share the window layer; the WINDOW ↗ buttons are on in PRODUCTION; the window targets `fx:`, `kanal:` and `color` of live effects and channels move to stage 5b). Decision 3 is decided here and built in stage 3.
 Decided: in the spec `docs/superpowers/specs/2026-11-19-one-dock-design.md`, approved by the owner on 2026-11-19.
 Supersedes: nothing. Decision 2 keeps the FOLLOW rule of the instrument window of 2026-11-18.
 Spec: `docs/superpowers/specs/2026-11-19-one-dock-design.md`.

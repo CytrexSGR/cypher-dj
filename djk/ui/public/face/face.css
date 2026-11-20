@@ -6,6 +6,9 @@
   overflow: auto; box-sizing: border-box; color: var(--text); font-size: 12px; user-select: none;
   background: linear-gradient(180deg, #1f232c 0%, #181b22 100%); border: 1px solid var(--line); border-top: 3px solid var(--fa); border-radius: 10px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 14px 44px rgba(0, 0, 0, .6); }
+/* Embedded (stage window, target_window.js): the face is a block of the window page, not the floating overlay; the window is the frame. */
+.p-face.p-face-eingebettet { position: static; width: auto; max-width: 720px; max-height: none; margin: 0 auto; box-shadow: none; }
+.p-face-eingebettet .p-face-kopf { padding-right: 14px; }
 .p-face[data-akzent="rot"] { --fa: var(--ak-rot); }
 .p-face[data-akzent="orange"] { --fa: var(--ak-orange); }
 .p-face[data-akzent="gelb"] { --fa: var(--ak-gelb); }

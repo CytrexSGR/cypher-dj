@@ -4,7 +4,8 @@
 to four decks. The agent works the same controls you do: it builds tracks, routing and sounds, measures what it did, and
 every change it makes to a project is one undo step. You keep the last word.
 
-Built in Germany by Andreas, a DJ, and Cypher, an AI agent (Claude models), since 19 September 2026.
+Built in Germany by Andreas, a DJ, and Cypher, an AI agent (Claude models), since 19 September 2026. See
+[Who builds it](#who-builds-it).
 
 > **Status: public beta, looking for testers.** It runs on Linux and has been tested on one machine so far, see
 > [Try it](#try-it-we-are-looking-for-testers).
@@ -17,11 +18,38 @@ Built in Germany by Andreas, a DJ, and Cypher, an AI agent (Claude models), sinc
 
 One real-time core in C++ and Rust keeps a single sample clock for everything: the decks, the pattern channels and
 the arrangement. The browser page and the agent sit on the same functions. The agent reaches them through an MCP
-server with 96 tools, so nearly everything you can click, it can do too (a few controls such as the crossfader stay
+server with 98 tools, so nearly everything you can click, it can do too (a few controls such as the crossfader stay
 in your hand), and anything it does shows up on your page. When it
 cannot do something it answers with a reason (for example `sidechain_zyklus` for a sidechain that would depend on
 itself) instead of guessing. When you grab a fader, your
 hand wins over its automation.
+
+## At a glance
+
+**Five views on one clock**
+
+| View | What you do there |
+|---|---|
+| DJ | Four places, each a track deck, the Strudel pattern channels, a loop slot or a SEQ pattern deck; mixer, beat FX, color FX and the Cypher Remix station |
+| LIVE | The three live-coded pattern channels side by side, each with automation lanes for fader, filter and cutoff |
+| STUDIO | A loop workbench: up to eight instrument tracks, a step sequencer with a length, swing and direction per row, and a dock of device cards |
+| PRODUCTION | An arrangement with up to 32 tracks: audio and MIDI clips, piano roll, warp, automation, groups, returns, inserts, export and loudness per track |
+| TRACKER | The same production project as tracker rows: linked patterns, classic effect commands (arpeggio, slides, vibrato, retrigger and more), 8-bit devices, import of ProTracker modules |
+
+**Instruments, effects and hardware** (our own devices built as [Cypher Modular](docs/cypher-modular.md) graphs unless noted; 213
+factory presets)
+
+| Kind | Devices |
+|---|---|
+| Synthesizers | Mono Synth, Poly Synth, Neuro Bass, Kraken (semi-modular, with a 16 by 16 patch field), Greif (hybrid wavetable), Band Drive Bass, three wavetable synths (reese, supersaw, choir), Cypher Labor |
+| Drums | Drums 909, Drums 808, Drum Synth (eight synthesised pads), Kick Synth, one-shot drum kits |
+| 8-bit | an Amiga-style sample voice, chip pulse, triangle and noise |
+| More sources | RB-338 (a 303-style bass, its own engine), a sampler and multisample instrument, two slots of Surge XT, third-party VST3 and LV2 instruments |
+| Effects | Cypher EQ, Cypher Hall, Cypher Komp, Cypher Saett (Rust, also as VST3), a limiter and utility stage, Filterbox, a tempo-synced delay, Cypher Remix, and more effect graphs |
+| Hardware | Traktor Kontrol S8 (both screens drawn by cypher-dj), Maschine MK2 (displays show the knobs), Akai APC20, Novation Launch Control 3, Akai LPD8, any class-compliant MIDI controller |
+
+Every device has a front panel with real units and MIDI learn, a device window for a second monitor, and controls
+that are not heard with the current settings are greyed.
 
 ## What it can do
 
@@ -66,11 +94,15 @@ a three-band isolator, a pad with roll and drum voices, a release lever), is the
 has a key 3 that sends it through the Remix.
 
 **Hardware controllers.** An Akai APC20 is the DJ console, and while the PRODUCTION view is shown it is the project mixer
-(faders, master, mute, solo, arm, transport, banks of eight tracks). A Traktor Kontrol S8 works the DJ view with its
-screens, touch strips and hot cue pads, a Maschine MK2 is a desk for Cypher Modular knobs, and any class-compliant MIDI
-controller can be learned, up to eight at once. A Novation Launch Control 3 or an Akai LPD8 follows the synth in front
-with factory presets for six synths, and the keys of a MIDI keyboard play the instrument in front. What is confirmed on
+(faders, master, mute, solo, arm, transport, banks of eight tracks). The displays of two devices show cypher-dj
+itself: the two screens of a Traktor Kontrol S8 draw our own pages (a scrolling waveform with hot cue marks, a
+whole-track overview, and the Strudel, loop slot and SEQ deck views), and its touch strips and hot cue pads work the
+DJ view; on a Maschine MK2 the two displays show the names and values of the Cypher Modular knobs its encoders turn,
+page by page. Any class-compliant MIDI controller can be learned, up to eight at once. A Novation Launch Control 3 or an Akai LPD8 follows the synth in front
+(the Launch Control 3 with factory programs for every instrument panel), and the keys of a MIDI keyboard play the instrument in front. What is confirmed on
 the devices and what is not is listed in [docs/features.md](docs/features.md#hardware-controllers).
+
+<img src="docs/screens/s8-screen.png" alt="A Traktor Kontrol S8 screen as cypher-dj draws it: deck A with tempo, key, bar, loop size, a scrolling waveform, the whole-track overview, eight hot cue keys and the three Strudel channels" width="480"> <img src="docs/screens/maschine-mk2-displays.png" alt="The two Maschine MK2 displays as cypher-dj draws them: channel and instrument name, eight knob names with their values" width="520">
 
 **The agent's side.** Besides playing, the agent can measure: levels of the last seconds, a 29-band spectrum,
 loudness per track, group and return, and how a closed deck sits against the running master per frequency band. It can wait on the master clock,
@@ -131,6 +163,16 @@ It started on 19 September 2026 as a Strudel set in a browser, run by Cypher, pl
 he turned the plan around: "I want to play with you from the start, not alone." Since then features went
 through a written plan, one implementing agent per task and a reviewer, and counted as done only when its failure
 case had been shown before and after the fix. The longer story: [docs/how-it-was-built.md](docs/how-it-was-built.md).
+
+## Who builds it
+
+- **Andreas**, a DJ from Germany: the direction, the ear, and every decision about how it should sound and feel.
+- **Cypher**, an AI agent on Anthropic's Claude models: writes the code, the tests and this documentation, measures
+  sounds and mixes, and plays and produces in the studio through the same tools it built. In November 2026 it
+  produced a five-minute techno track entirely inside cypher-dj (tracker, Kraken, Drum Synth, a tuned kick), which
+  Andreas then judged by ear.
+
+From 20 November 2026 on, the public commits carry both names.
 
 ## Contributing
 

@@ -4,6 +4,7 @@ import { GERAET as REMIX_GERAET, PLATZ as FX3_PLATZ, geladen as fx3Geladen, frem
 import { ablehnung as remixAblehnung } from './remix_platz.js';
 import { baueFrontplatte, vorgaben as panelVorgaben } from './panel.js';
 import { remixFenster } from './effects_gemeinsam.js';
+import { oeffneFensterRoh } from './window_open.js';
 import { $, $$, melde, postJson } from './page_state.js';
 import { graphenGeladen, graphenInfo, holePanel, kanalAdapter, schickeVorgaben } from './graphs_view.js';
 import { zeigePlaetze, aktuellesLayout } from './slots_view.js';
@@ -16,11 +17,7 @@ export function bindeRemixFenster() {
   if (remixFenster) { document.title = 'djk Remix'; $('#platz-remix').hidden = false; zeigeRemix(); }
   for (const b of $$('[data-remix-oeffnen]')) b.addEventListener('click', () => {
     // a window just big enough for the whole plate at zoom 1 (plate 1060 x 686 plus head and browser bars), not a full screen (Andreas 2026-11-14): size it on open and again on reuse (a window of the same name keeps its old size)
-    const B = Math.min(1100, screen.availWidth), H = Math.min(880, screen.availHeight), x = Math.max(0, (screen.availLeft ?? 0) + (screen.availWidth - B) / 2), y = Math.max(0, (screen.availTop ?? 0) + (screen.availHeight - H) / 2);
-    const w = window.open('/#remix', 'djk-remix', `popup,width=${B},height=${H},left=${Math.round(x)},top=${Math.round(y)}`);
-    if (!w) { melde('The browser blocked the Remix window: allow pop-ups for this page', true); return; }
-    try { w.resizeTo(B, H); w.moveTo(Math.round(x), Math.round(y)); } catch { /* the window manager decides */ }
-    w.focus();
+    oeffneFensterRoh({ adresse: '/#remix', name: 'djk-remix', breite: 1100, hoehe: 880, melde, meldung: 'The browser blocked the Remix window: allow pop-ups for this page', anpassen: true, klemme0: true });
   });
   for (const b of $$('[data-fx3-alle]')) b.addEventListener('click', () => {   // master key 3: every channel on FX3, or all off when all are on
     const k = fx3Kanaele(aktuellesLayout()), z = fx3Zuweisung(), alle = k.length > 0 && k.every((x) => z[x]);

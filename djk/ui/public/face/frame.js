@@ -15,15 +15,17 @@ export function schliesseFace(wurzel = globalThis.document) { offene.get(wurzel)
 /** Opens the face `id` and returns {el, schliesse(), aktualisiere()}; null when the same id was open (it is closed now). Another face that is open closes first.
  *  bauen(inhalt, steuer) builds the face into `inhalt` and may put header controls into `steuer`; it returns {aktualisiere(), zerstoere?()}.
  *  live(jetzt) -> boolean runs once per frame while the face is open (only when given) and says whether something changed; the builder redraws inside it.
- *  an: {get(), set(b)} gives the header an ON/OFF button. untertitel (extra): a second line of the title bar, e.g. the strip. */
-export function oeffneFace({ id, titel, untertitel = '', akzent, an, bauen, live, wurzel = globalThis.document, takt = STANDARD_TAKT }) {
+ *  an: {get(), set(b)} gives the header an ON/OFF button. untertitel (extra): a second line of the title bar, e.g. the strip.
+ *  einbetten (an element): the face is drawn INTO that element as a plain block (class p-face-eingebettet), not as the floating overlay: no close button, no Esc
+ *  (the stage and strip windows, which are the face). The builder, the ON/OFF button and the frame loop are the same. */
+export function oeffneFace({ id, titel, untertitel = '', akzent, an, bauen, live, wurzel = globalThis.document, takt = STANDARD_TAKT, einbetten = null }) {
   const alt = offene.get(wurzel);
   if (alt) { const gleich = alt.id === id; alt.schliesse(); if (gleich) return null; }
   const d = wurzel;
   const mk = (tag, klasse, text) => { const e = d.createElement(tag); e.setAttribute('class', klasse); if (text !== undefined) e.textContent = text; return e; };
-  const el = mk('div', 'p-face');
+  const el = mk('div', einbetten ? 'p-face p-face-eingebettet' : 'p-face');
   el.dataset.face = id;
-  el.setAttribute('role', 'dialog');
+  el.setAttribute('role', einbetten ? 'group' : 'dialog');
   el.setAttribute('aria-label', `${titel}${untertitel ? ` ${untertitel}` : ''}`);
   if (akzent) el.dataset.akzent = akzent;
   const zu = mk('button', 'p-face-zu', '✕');
@@ -43,7 +45,7 @@ export function oeffneFace({ id, titel, untertitel = '', akzent, an, bauen, live
   }
   kopf.append(steuer);
   const inhalt = mk('div', 'p-face-inhalt');
-  el.append(zu, kopf, inhalt);
+  if (einbetten) el.append(kopf, inhalt); else el.append(zu, kopf, inhalt);
   const zeigeAn = () => {
     if (!anKnopf) return;
     const on = an.get() !== false;
@@ -71,10 +73,10 @@ export function oeffneFace({ id, titel, untertitel = '', akzent, an, bauen, live
   };
   const aktualisiere = () => { if (!offen) return; zeigeAn(); baustein?.aktualisiere?.(); };
   zu.addEventListener('click', schliesse);
-  wurzel.addEventListener('keydown', taste, true);
+  if (!einbetten) wurzel.addEventListener('keydown', taste, true);
   const o = { id, el, schliesse, aktualisiere };
   offene.set(wurzel, o);
-  (wurzel.body ?? globalThis.document.body).append(el);
+  (einbetten ?? wurzel.body ?? globalThis.document.body).append(el);
   try { baustein = bauen(inhalt, steuer); } catch (e) { schliesse(); throw e; }
   if (live) {
     const tick = (jetzt) => {

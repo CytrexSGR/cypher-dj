@@ -16,7 +16,7 @@ for (const titel of ['-ZIQ-', '-intro-', '--x', 'Gamma – y']) {
     const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-vt-')); t.after(() => fs.rmSync(d, { recursive: true, force: true }));
     fs.mkdirSync(path.join(d, 'attrappe'));
     fs.writeFileSync(path.join(d, 'attrappe', '__init__.py'), '');
-    fs.writeFileSync(path.join(d, 'attrappe', 'single.py'), [
+    fs.writeFileSync(path.join(d, 'attrappe', 'standin.py'), [
       'import argparse, json',
       'ap = argparse.ArgumentParser()',
       'ap.add_argument("--quelle", required=True)',
@@ -27,7 +27,7 @@ for (const titel of ['-ZIQ-', '-intro-', '--x', 'Gamma – y']) {
       'print(json.dumps({"status": "vorhanden" if a.titel is not None else "fehler", "material_id": "x", "titel": a.titel}))',
     ].join('\n'));
     const enden = [];
-    const v = new Vorbereiter({ python: 'python3', cwd: d, modul: 'attrappe.einzeln', bestand: d, bei: (mid, st) => enden.push(st) });
+    const v = new Vorbereiter({ python: 'python3', cwd: d, modul: 'attrappe.standin', bestand: d, bei: (mid, st) => enden.push(st) });
     t.after(() => v.stoppe());
     assert.equal(v.starte(MID, '/q.wav', titel), 'gestartet');
     await bis(() => enden.length === 1);

@@ -59,6 +59,7 @@ body.produktion.b-kollektionen #kollektionen { display: block !important; }
 .geraete-chip.an { background: var(--a, #35d0b5); color: #000; border-color: transparent; }
 .geraete-art { margin-left: 6px; font-size: 10px; color: var(--dim); }
 .geraete-gruppe h5 { margin: 6px 6px 2px; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
+.geraete-hinweis { margin: 0 0 4px; font-size: 10px; color: var(--dim); }
 .geraete-neben { margin-left: 6px; font-size: 10px; color: var(--dim); }
 /* 1.16 rest (U7): the PRESETS list in the narrow browser column. One row = name, device, origin (the rest is in the detail below); a row is dragged onto a track or a stage. */
 body.produktion #presets { overflow: auto; min-height: 0; }
@@ -181,7 +182,7 @@ body.produktion .preset-kopf select { max-width: 14ch; }
 .p-freeze.an { background: #8ad4ff; color: #0e0f12; border-color: #8ad4ff; }
 .p-freeze.laeuft { animation: p-puls .8s infinite alternate; }
 @keyframes p-puls { from { opacity: 1; } to { opacity: .35; } }
-.p-ausgabe-text { font-size: 11px; color: var(--dim); max-width: 44ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-ausgabe-text { font-size: 11px; color: var(--dim); max-width: min(76ch, 50vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .p-ausgabe-text.warnung { color: var(--kill); }
 /* 1.10 Slice 2: eine Warnung (CLIPPING, ABOVE SET LIMITER CEILING) wird nie mit Auslassung gekürzt; die Zeile bricht lieber in die nächste Reihe der Leiste um */
 .p-ausgabe-text.warnung { max-width: none; }

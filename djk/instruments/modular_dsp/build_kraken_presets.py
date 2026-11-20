@@ -95,7 +95,7 @@ P = [
      {"v1_wave": SAW, "v1_lv": 0.25, "v2_lv": 0, "ring_lv": 0, "noise_lv": 0.02, "v3_lv": 0, "w_lv": 0.8, "w_pitch": -12, "w_fold": 18, "w_sym": 0.25, "w_shape": 0.6,
       "g_mode": BOTH, "g_open": 0.85, "g_strike": 0.2, "g_decay": 1.5, "r_west": 0.35, "f_type": SEM, "f_cut": 1500, "f_reso": 0.3, "f_env": 6,
       "e2_a": 1.5, "e2_d": 2.0, "e2_s": 0.9, "e2_r": 2.5, "ch_rate": 0.25, "ch_fold": 14, "ch_cut": 8, "l2_rate": 0.5, "l2_fold": 6, "l1_pitch": 3, "fb_amt": 0.1, "drift": 0.5,
-      "fx_dtime": 620, "fx_dmix": 0.2, "fx_hmix": 0.45, "vol": -1},
+      "fx_dtime": 620, "fx_dmix": 0.2, "fx_hmix": 0.45, "vol": -3.5},
      ("pad", "drone", ["dark", "evolving", "thick"], ["ambient", "idm"], ["intro", "breakdown"], 2),
      "A dark drone from a sine folded over and over, the gate wide open; a chaos source keeps pushing the fold."),
     # ---- FM bell

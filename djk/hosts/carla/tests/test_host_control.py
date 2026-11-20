@@ -2,7 +2,7 @@ import pytest
 import base64
 from pathlib import Path
 
-import sound as klang
+import surge_sound as klang
 from host_control import Steuerung
 from carla_backend import PLUGIN_HAS_CUSTOM_UI
 

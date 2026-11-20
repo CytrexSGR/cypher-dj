@@ -1,4 +1,4 @@
-"""python3 -m storage pfad <kind|fixed-name> | shell"""
+"""python3 -m ablage pfad <kind|fixed-name> | shell"""
 from __future__ import annotations
 
 import shlex
@@ -22,7 +22,7 @@ def main(argv: list[str]) -> int:
     except (ValueError, KeyError) as e:
         print(f"ablage: {e}", file=sys.stderr)
         return 2
-    print("usage: python3 -m storage pfad <kind|fixed-name> | shell", file=sys.stderr)
+    print("usage: python3 -m ablage pfad <kind|fixed-name> | shell", file=sys.stderr)
     return 2
 
 

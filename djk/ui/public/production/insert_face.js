@@ -9,6 +9,7 @@ import { baueSaettFace, saettParameterTabelle } from '../face/sat.js';
 import { baueLimiterFace, limParameterTabelle } from '../face/limiter.js';
 import { baueEqFace } from '../face/eq.js';
 import { oeffneMenue } from './context_menu.js';
+import { oeffneGeraetFenster } from '../device_open.js';
 import { stufenBefehle, schluesselMenue } from '../dock/parts.js';
 
 /** The insert kinds that have a face; later faces add their kind name here. */
@@ -161,10 +162,11 @@ function kopfKnoepfe(ctx, steuer, strangId, insertId, schliesse) {
         oeffneMenue: (...a) => (ctx.oeffneMenue ?? oeffneMenue)(...a), projekt: () => ctx.st.projekt }, strang, i, q.left, q.bottom);
     }));
   }
+  if (ctx.dockHost?.schalter?.stufenFenster && !ctx.faceEinbettung) knoepfe.push(knopf('WINDOW ↗', 'Open this stage in its own window', () => oeffneGeraetFenster(`ins:${insertId}`, (...a) => ctx.melde(...a))));
   steuer.prepend(...knoepfe);
 }
 
-/** Registers the project listener and the two hooks of the track head. oeffne(strang, insert) opens (or closes) the face of a stage, verfuegbar(art) says whether
+/** Registers the project listener and the two hooks of the track head. ctx.faceEinbettung (an element, set by a stage window) draws the face into it instead of the floating overlay. oeffne(strang, insert) opens (or closes) the face of a stage, verfuegbar(art) says whether
  *  a kind has one. grStand() is the store of /e/ins_gr readings of the INSERTS panel. */
 export function bindeInsertFace(ctx, grStand, pegelStand = () => ({})) {
   let aktuell = null;   // {strangId, insertId} of the open face
@@ -176,7 +178,7 @@ export function bindeInsertFace(ctx, grStand, pegelStand = () => ({})) {
     const pos = strang.inserts.findIndex((i) => i.id === insert.id);
     let bau = null;
     const f = oeffneFace({
-      id: `face:${insert.id}`, titel: geraet?.titel ?? 'COMPRESSOR', untertitel: `${strang.name} · stage ${pos + 1}`, akzent: geraet?.akzent ?? 'orange', an: quelle.an,
+      id: `face:${insert.id}`, titel: geraet?.titel ?? 'COMPRESSOR', untertitel: `${strang.name} · stage ${pos + 1}`, akzent: geraet?.akzent ?? 'orange', an: quelle.an, einbetten: ctx.faceEinbettung ?? null,
       bauen: (inhalt, steuer) => { kopfKnoepfe(ctx, steuer, strang.id, insert.id, () => schliesseFace()); bau = geraet ? geraet.bauen(inhalt, quelle) : baueKompFace(inhalt, quelle); return bau; },
       live: geraet && insert.art !== 'lim' ? undefined : (zeit) => bau?.live(zeit) ?? false,   // the frame loop runs while this face is open and nowhere else; a face without a live value has none
     });
@@ -187,7 +189,7 @@ export function bindeInsertFace(ctx, grStand, pegelStand = () => ({})) {
     const quelle = insertQuelleEq(ctx, strang, insert);
     const pos = strang.inserts.findIndex((i) => i.id === insert.id);
     const f = oeffneFace({
-      id: `face:${insert.id}`, titel: 'EQ', untertitel: `${strang.name} · stage ${pos + 1}`, akzent: 'orange', an: quelle.an,
+      id: `face:${insert.id}`, titel: 'EQ', untertitel: `${strang.name} · stage ${pos + 1}`, akzent: 'orange', an: quelle.an, einbetten: ctx.faceEinbettung ?? null,
       bauen: (inhalt, steuer) => { kopfKnoepfe(ctx, steuer, strang.id, insert.id, () => schliesseFace()); return baueEqFace(inhalt, quelle); },   // no frame loop: the EQ has no live reading
     });
     aktuell = f ? { strangId: strang.id, insertId: insert.id, face: f } : null;

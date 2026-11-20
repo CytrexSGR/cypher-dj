@@ -90,7 +90,9 @@ def test_raster_ordner_aus_tabelle_ab_cwd_workshop(tmp_path):
     workshop = Path(__file__).resolve().parents[1]
     import site
     env = {"PATH": os.environ["PATH"], "HOME": str(tmp_path), "PYTHONUSERBASE": site.getuserbase()}   # user site stays visible with a foreign HOME
-    code = ("import sys, os, werkstatt.bestand as b; from werkstatt import lauf_eins as l; "
+    # importlib with the dotted names as plain literals: the public export renames module files and rewrites such literals
+    code = ("import sys, os, importlib; b = importlib.import_module('werkstatt.inventory'); "
+            "l = importlib.import_module('werkstatt.run_one'); "
             "print(os.path.realpath(sys.modules['ablage'].__file__)); print(l.RASTER_ORDNER); print(b.standard_ablage())")
     r = subprocess.run([sys.executable, "-c", code], cwd=workshop, env=env, capture_output=True, text=True, timeout=120)
     assert r.returncode == 0, r.stderr

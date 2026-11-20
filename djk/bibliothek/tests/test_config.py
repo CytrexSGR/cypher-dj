@@ -61,7 +61,7 @@ def test_bad_config_rejected(monkeypatch, tmp_path, text):
 
 
 def test_konfig_pfad_aus_tabelle(tmp_path, monkeypatch):
-    import storage as tabelle  # the package djk/ablage
+    import ablage as tabelle  # the package djk/ablage
 
     from bibliothek.config import konfig_pfad
 
@@ -81,7 +81,7 @@ def test_konfig_pfad_aus_tabelle(tmp_path, monkeypatch):
 
 import socket
 
-import storage as ablage
+import ablage
 from quellen import file as quellen_datei
 
 

@@ -12,6 +12,7 @@ import { holeLernen, lernAbbrechenFuer, lernSchicken, lernen } from './learn_vie
 import { zeigeRegister } from './register_view.js';
 import { fokus } from './controller_fokus.js';
 import { FX_KANAELE, FX_INDEX } from './live_kanaele.js';
+import { oeffneFensterRoh } from './window_open.js';
 export { FX_KANAELE, FX_INDEX };
 
 // Effekt-Sektion (Plan 2026-10-11-effekt-sektion.md, Andreas: „tauschoberfläche gegen die libary unten“): unten LIBRARY |
@@ -33,11 +34,7 @@ export const remixFenster = location.hash === '#remix';   // the Remix window (b
 // the bottom panel is too small to find a control in). The CONTROLLERS tab of the main page opens it.
 export const controllerFenster = location.hash === '#controller';
 function oeffneControllerFenster() {
-  const B = Math.min(1500, screen.availWidth), H = Math.min(1000, screen.availHeight), x = Math.max(0, (screen.availLeft ?? 0) + (screen.availWidth - B) / 2), y = Math.max(0, (screen.availTop ?? 0) + (screen.availHeight - H) / 2);
-  const w = window.open('/#controller', 'djk-controller', `popup,width=${B},height=${H},left=${Math.round(x)},top=${Math.round(y)}`);
-  if (!w) return false;
-  w.focus();
-  return true;
+  return oeffneFensterRoh({ adresse: '/#controller', name: 'djk-controller', breite: 1500, hoehe: 1000, klemme0: true }) !== null;   // blocked: the caller shows the panel in the page instead
 }
 // The spectrum views on the page: the EFFECTS one and, on the device page, the plate cell or the strip. All are fed by the same frames (one global source).
 export const spektrumAnsichten = new Set();

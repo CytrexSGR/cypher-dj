@@ -2,13 +2,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { steuerungen } from '../public/panel.js';
+import { werksgraphPfad } from './werksgraph_path.mjs';
 
 const GERAETE = ['keys-bell', 'keys-electric-piano', 'keys-mallet', 'keys-organ', 'keys-piano', 'pad-analog', 'pad-atmosphere', 'pad-drone', 'pluck-mallet', 'pluck-stab', 'pluck-string', 'pluck-synth'];
 const panel = (name) => steuerungen(JSON.parse(fs.readFileSync(new URL(`../../instruments/modular_dsp/paneele/${name}.json`, import.meta.url), 'utf8')));
-const graph = (name) => JSON.parse(fs.readFileSync(path.join(os.homedir(), 'cypherdj/werke/geraete', `${name}.json`), 'utf8'));
+const graph = (name) => JSON.parse(fs.readFileSync(werksgraphPfad(name), 'utf8'));
 
 const regelnPruefen = (titel, name, mindestens) => test(`${titel}: every rule names controls of the panel`, () => {
   const sts = panel(name);

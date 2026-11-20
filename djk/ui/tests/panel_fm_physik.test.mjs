@@ -3,11 +3,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { steuerungen } from '../public/panel.js';
+import { werksgraphPfad } from './werksgraph_path.mjs';
 
-const GRAPHEN = path.join(os.homedir(), 'cypherdj/werke/geraete');
 const panel = (name) => steuerungen(JSON.parse(fs.readFileSync(new URL(`../../instruments/modular_dsp/paneele/${name}.json`, import.meta.url), 'utf8')));
 const regelnPruefen = (name, mindestens) => test(`${name}: every rule names controls of the panel`, () => {
   const sts = panel(name);
@@ -22,7 +21,7 @@ const regelnPruefen = (name, mindestens) => test(`${name}: every rule names cont
   }
 });
 const reglerPruefen = (name) => test(`${name}: every knob of the graph is bound`, (t) => {
-  const datei = path.join(GRAPHEN, `${name}.json`);
+  const datei = werksgraphPfad(name);
   if (!fs.existsSync(datei)) return t.skip('graph not installed');
   const graph = JSON.parse(fs.readFileSync(datei, 'utf8'));
   const nrn = new Set(graph.knoten.filter((k) => k.art === 'regler').map((k) => k.nr));

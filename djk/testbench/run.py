@@ -22,7 +22,7 @@ import osc
 PRUEF = Path(__file__).resolve().parent
 DJK = PRUEF.parent
 sys.path.insert(0, str(DJK))   # the storage table package `ablage`
-import storage as ablage  # noqa: E402
+import ablage  # noqa: E402
 def echtzeit_schloss():
     """Sperrdatei der Echtzeit-Läufe: CYPHERDJ_ECHTZEIT_SCHLOSS, sonst die Zeile in umgebung.env, sonst XDG_RUNTIME_DIR oder /tmp."""
     v = os.environ.get("CYPHERDJ_ECHTZEIT_SCHLOSS")

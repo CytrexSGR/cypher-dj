@@ -39,10 +39,10 @@ from types import SimpleNamespace
 from typing import Callable
 
 try:
-    import storage as ablage
+    import ablage
 except ModuleNotFoundError:  # started without the launcher: the package sits one level up
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    import storage as ablage
+    import ablage
 
 LINK = ".umzug-link"                # temporary link next to the old place, renamed onto it in the last step
 TEIL = ".umzug-teil"                # part copy next to the new place (cross-device move)

@@ -33,3 +33,6 @@ joblib>=1.5
 #   essentia, beat_this (Werkstatt, tonart_energie): siehe djk/workshop/anforderungen.txt für die gepinnten Stände
 #   demucs 4.0.1 (nur testbench/load/demucs_load.py, Lastprofil p1)
 #   carla (carla_backend, kein PyPI-Paket, aus der Carla-Installation): djk/hosts/carla
+
+# screens of the Traktor S8 and the Maschine MK2 (djk/hand_bruecke: s8_display.py, mk2.py draw the displays)
+Pillow>=10.2

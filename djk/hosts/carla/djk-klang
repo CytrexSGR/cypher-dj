@@ -25,8 +25,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))   # djk: the storage table package `ablage`
-import storage as ablage  # noqa: E402
-import sound as klang  # noqa: E402
+import ablage  # noqa: E402
+import surge_sound as klang  # noqa: E402
 from host_control import sende  # noqa: E402
 
 EIGENE = ablage.ordner("klaenge")

@@ -12,7 +12,7 @@ rc=0
 ok() { echo "OK   $1"; }
 fehl() { echo "FEHL $1"; rc=1; }
 # djk-start sets ABLAGE_GERAETE from the storage table before step 2b; the cut-out step gets it the same way
-ABLAGE_GERAETE=$(HOME="$H" PYTHONPATH="$DJK" PYTHONSAFEPATH=1 python3 -m storage pfad geraete)
+ABLAGE_GERAETE=$(HOME="$H" PYTHONPATH="$DJK" PYTHONSAFEPATH=1 python3 -m ablage pfad geraete)
 run() { HOME="$H" DJK="$DJK" ABLAGE_GERAETE="$ABLAGE_GERAETE" bash -c "$SCHRITT"; }
 ZIEL="$H/.config/cypherdj/baukasten/fx-delay-sync.json"
 run > "$H/aus1.txt"

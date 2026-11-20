@@ -94,7 +94,7 @@ def test_kit_ordner_follows_environment(tmp_path, monkeypatch):
 
 def test_vorgaben_aus_tabelle(tmp_path, monkeypatch):
     """Kit, graph, loop and demo-project defaults equal the storage table; core kinds stay at the old place (a link after the setup), the demo project follows CYPHERDJ_HEIM (vorgabe neu)."""
-    import storage as tabelle  # the package djk/ablage, not starter/storage.py
+    import ablage as tabelle  # the package djk/ablage, not starter/storage.py
     from starter import demo, graphs as graphen, loops
 
     assert Path(tabelle.__file__).resolve() == Path(__file__).resolve().parents[2] / "ablage" / "__init__.py"

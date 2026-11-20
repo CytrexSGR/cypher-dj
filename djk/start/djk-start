@@ -86,8 +86,8 @@ fi
 # The storage places come from the table djk/config/ablage.json (ABLAGE_<ART>=...). The umgebung.env line above stays literal: it is read
 # before the table can be asked, and CYPHERDJ_HEIM may be set inside it. PYTHONSAFEPATH keeps the working directory out of the module
 # path (djk/starter/storage.py must never answer for the package djk/ablage).
-ABLAGE_AUS=$(PYTHONPATH="$DJK${PYTHONPATH:+:$PYTHONPATH}" PYTHONSAFEPATH=1 python3 -m storage shell) \
-  || { echo "djk-start: the storage table could not be read (python3 -m storage shell). Nothing started." >&2; exit 2; }
+ABLAGE_AUS=$(PYTHONPATH="$DJK${PYTHONPATH:+:$PYTHONPATH}" PYTHONSAFEPATH=1 python3 -m ablage shell) \
+  || { echo "djk-start: the storage table could not be read (python3 -m ablage shell). Nothing started." >&2; exit 2; }
 eval "$ABLAGE_AUS"
 
 I=${CYPHERDJ_INSTANZ:-}; MASTER=""; CUE=""; OHNE_CUE=0; TON_FREI=0; STRUDEL=0; INSTR=0; ARR1=0; ARR2=0; KIT=techno; KIT2=battery; KIT3=battery; KIT_G=0; KIT2_G=0; KIT3_G=0; MELODIE=surge; BASS=""; BK_STROEME=0; KERN_KONFIG=""; LS_KONFIG=""; KIT_ORDNER=""; PRUEF=1

@@ -330,7 +330,7 @@ test('workbench instrument menu: the same grouping, the latency rule of geraetWa
 test('SEQ and workbench code use the module: the menus carry the switch and read the axis when they open', () => {
   const lies = (n) => readFileSync(new URL(`../public/${n}`, import.meta.url), 'utf8');
   const seq = lies('seq_view.js');
-  assert.match(seq, /from '\.\/instrument_gruppen\.js'/);
+  assert.match(seq, /from '\.\/instrument_(gruppen|groups)\.js'/);   // groups: the file name in the public export
   assert.equal((seq.match(/oeffneAchsenMenue\(/g) ?? []).length, 2, 'the + pattern menu and the instrument exchange menu');
   assert.doesNotMatch(seq, /function menuePunkte/, 'no second grouping in the SEQ page');
   assert.match(lies('werkbank/tracks.js'), /oeffneAchsenMenue\(/);
@@ -356,7 +356,7 @@ test('device browser: RB-338 and Surge first, then h5 groups of the axis inside 
   const h = geraeteHtml(KAT, 'prinzip');
   assert.deepEqual(ueberschriften(h), ['Analog', 'FM', 'Strings & Bodies', 'Drum Synthesis', 'Other']);
   const inst = h.split('<h4>EFFECTS</h4>')[0];
-  assert.match(inst, /INSTRUMENTS<\/h4><ul class="geraete-liste"><li data-geraet-i="0"[^>]*>.*?RB-338.*?<li data-geraet-i="1"[^>]*>.*?Surge.*?<li class="geraete-gruppe"><h5>Analog<\/h5><\/li>/s);
+  assert.match(inst, /INSTRUMENTS<\/h4><p class="geraete-hinweis">[^<]*<\/p><ul class="geraete-liste"><li data-geraet-i="0"[^>]*>.*?RB-338.*?<li data-geraet-i="1"[^>]*>.*?Surge.*?<li class="geraete-gruppe"><h5>Analog<\/h5><\/li>/s);
   const ohne = inst.slice(inst.indexOf('<h5>Other</h5>'));
   assert.ok(['eigen', 'rolle-nur', 'unbekannt'].every((n) => ohne.includes(`>${n}<`)), 'nothing dropped');
   assert.equal(geraeteHtml(KAT), h, 'the default axis is the type');
@@ -364,6 +364,12 @@ test('device browser: RB-338 and Surge first, then h5 groups of the axis inside 
   assert.deepEqual(ueberschriften(r), ['Drums', 'Bass', 'Lead', 'Keys & Plucks', 'Other']);
   assert.match(r, /geraete-neben">· Analog</);
   assert.match(h, /geraete-neben">· Bass</);
+});
+
+test('device browser: a hint under INSTRUMENTS says that a double click or a drag adds the instrument as a track; instrument rows carry it as the tooltip', () => {
+  const h = geraeteHtml(KAT, 'prinzip');
+  assert.match(h, /<h4>INSTRUMENTS<\/h4><p class="geraete-hinweis">Double-click or drag an instrument to add it as a track<\/p>/);
+  assert.match(h, /<li data-geraet-i="0" class="geraete-zeile" title="Double-click or drag to add as a track"/);
 });
 
 test('device browser: data-geraet-i counts in display order and eintraege() lists the entries in that same order, so a drop finds its entry on both axes', () => {

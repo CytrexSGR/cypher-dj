@@ -36,6 +36,7 @@
 //   spurFensterHaken?: { offen(spurId, koerper), zu(spurId), wahl() }   the cut/kit host of STUDIO
 //   masterSpalte?           true: the MASTER card stands in a column of its own at the right edge of the dock, outside the rows (PRODUCTION); false (default):
 //                           it ends the EFFECTS row (STUDIO, unchanged markup). The column is div[data-w="dock-master"], the rows sit in div.w-dock-reihen.
+//   einzel?                 'ret:<id>' | 'grp:<id>' | 'master' (dock/target.js text): the dock draws exactly that one strip card, no rows, no + cards (the strip window, target_window.js)
 //   schalter: { gruppen, sends, mischer, stufenFenster }   switches of the later stages; all false by default
 //   hostLage(insertId) -> HostLage | null, grLesung(insert, jetzt), presetMarke(insertId), pluginFenster(insertId), stufenPopover(strang, insert, anker), kopfBeat() -> number | null
 //                           the state of the stages (read by the chips and the stage windows of the later tasks; kopfBeat defaults to null)
@@ -62,10 +63,11 @@ import { baueReihen } from './blocks.js';
 import { synthKarte, gruppenKarte, fxKarte, masterKarte, neuKarte, neueGruppeKarte } from './karten.js';
 import { dockModell, dockGestalt } from './model.js';
 import { montiereKarten } from './allgemein.js';
+import { parseZiel } from './target.js';
 
 export const DOCK_TEXT = {
   synths: 'SYNTHS', fx: 'EFFECTS', neueSpur: '+ INSTRUMENT TRACK', neueSpurTitel: 'Add an instrument track to the module',
-  plus: '+ INSERT', plusTitel: 'Add an effect stage to this strip', auf: 'OPEN ↗', aufTitel: 'Open the full device in a window', fenster: 'WINDOW ↗',
+  plus: '+ INSERT', plusTitel: 'Insert: add an effect stage on this track only (to share one effect between tracks use + LOAD EFFECT)', auf: 'OPEN ↗', aufTitel: 'Open the full device here in the page (WINDOW opens it as a separate browser window)', fenster: 'WINDOW ↗',
   chipTitel: 'Click: open · right click: ON/OFF, move, remove', level: 'LEVEL', an: 'ON', anTitel: 'Effect on or off (off mutes the return)',
   weg: '✕', wegTitel: 'Remove this effect from the rack', keineSends: 'NO SENDS', von: (l) => `FROM ${l.join(' ')}`,
   vonTitel: 'The tracks that send into this effect (turn the small knobs of a track to change it)', master: 'MASTER',
@@ -107,9 +109,10 @@ export function montiereDock(hostRoh) {
   const zeilen = [{ key: 'spuren', titel: host.zeilenTitel.spuren, w: 'dock-synths' }]
     .concat(host.schalter.gruppen ? [{ key: 'gruppen', titel: host.zeilenTitel.gruppen, w: 'dock-grp' }] : [])
     .concat([{ key: 'fx', titel: host.zeilenTitel.fx, w: 'dock-fx' }]);
-  const rahmen = baueReihen(dockEl, zeilen, !!host.masterSpalte);
-  const reiheMaster = rahmen.master;
-  const reiheSynth = rahmen.reihen.spuren, reiheGrp = rahmen.reihen.gruppen ?? null, reiheFx = rahmen.reihen.fx;
+  const einzel = host.einzel ? parseZiel(host.einzel) : null;   // one strip card instead of the rows
+  const rahmen = einzel ? null : baueReihen(dockEl, zeilen, !!host.masterSpalte);
+  const reiheMaster = rahmen?.master;
+  const reiheSynth = rahmen?.reihen.spuren, reiheGrp = rahmen?.reihen.gruppen ?? null, reiheFx = rahmen?.reihen.fx;
   const quelle = host.panelQuelle;
   let gebaut = null;
   const geraete = new Map();   // "<track id>|<device key>" -> Promise<{panel, regler, parameter, adapter} | null>
@@ -167,6 +170,18 @@ export function montiereDock(hostRoh) {
     const g = gestalt(m, p);
     // a card name is being typed (task 8): no rebuild under the input; the next project update after it closed builds again
     const tippt = !erzwingen && dockEl.querySelector('input.p-namefeld');
+    if (einzel) {   // the strip window: the card of that one strip, rebuilt when the model changes, gone when the strip is gone
+      if (!tippt && (erzwingen || g !== gebaut)) {
+        gebaut = g; werk.frisch = []; werk.gen += 1;
+        const meine = werk.gen;
+        const karte = einzel.art === 'grp' ? (m.gruppen.find((k) => k.id === einzel.id) ? gruppenKarte(werk, m.gruppen.find((k) => k.id === einzel.id), meine) : null)
+          : einzel.art === 'ret' ? (returnListe(p).find((r) => r.id === einzel.id) ? fxKarte(werk, returnListe(p).find((r) => r.id === einzel.id), meine) : null)
+          : einzel.art === 'master' ? masterKarte(werk, meine) : null;
+        dockEl.replaceChildren(...(karte ? [karte] : []));
+      }
+      frischAlle();
+      return;
+    }
     if (!tippt && (erzwingen || g !== gebaut)) {
       gebaut = g; werk.frisch = []; werk.gen += 1;
       const meine = werk.gen;
@@ -175,7 +190,7 @@ export function montiereDock(hostRoh) {
       if (neu) neu.disabled = host.spurNeuAus?.(p) ?? false;
       reiheSynth.replaceChildren(...spuren, ...(neu ? [neu] : []));
       reiheGrp?.replaceChildren(...m.gruppen.map((k) => gruppenKarte(werk, k, meine)), neueGruppeKarte(werk));
-      const laden = neuKarte('fx-laden', T.neuEffekt, 'Load an effect: every track can then send into it', async () => {
+      const laden = neuKarte('fx-laden', T.neuEffekt, 'Load a send effect: every track can then send into it with its small knobs (an insert sits on one track only)', async () => {
         const punkte = host.fxMenue(host.projekt(), await quelle.graphen(true)).map((x) => (x.gruppe ? x : { text: x.text, aus: x.befehl === null, titel: x.grund,
           aktion: () => host.aendere(`Add effect ${x.befehl.name}`, [x.befehl]) }));
         const q = laden.getBoundingClientRect();
@@ -198,7 +213,7 @@ export function montiereDock(hostRoh) {
 
   host.beimProjekt((p, wechsel) => {
     if (wechsel) { geraete.clear(); gebaut = null; }
-    if (p) zeichne(); else { reiheSynth.replaceChildren(); reiheGrp?.replaceChildren(); reiheFx.replaceChildren(); reiheMaster?.replaceChildren(); werk.modell = null; werk.frisch = []; gebaut = null; werk.gen += 1; }
+    if (p) zeichne(); else { reiheSynth?.replaceChildren(); reiheGrp?.replaceChildren(); reiheFx?.replaceChildren(); reiheMaster?.replaceChildren(); if (einzel) dockEl.replaceChildren(); werk.modell = null; werk.frisch = []; gebaut = null; werk.gen += 1; }
   });
   host.wahl.beiWechsel(() => zeichne());
   // the latency text follows the plugin state and the graph list, which arrive without a project update: refresh about once a second (no-op where the view has no frame hook)

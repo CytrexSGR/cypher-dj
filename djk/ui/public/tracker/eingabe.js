@@ -318,6 +318,15 @@ export function zelleLeeren(p, ort) {
     if (a) verlaengere(a);
   }
   const befehle = sam.befehle();
+  // R10: a clip whose last note goes and that holds nothing else (no effect commands, no clip envelopes) is removed, with its linked copies
+  // (they share the content and would be empty too), so that clearing a track in the tracker leaves no empty clip in every section
+  if (eigene) {
+    const clip = k.spur.clips.find((c) => c.id === eigene.clip_id);
+    if (clip && (clip.noten ?? []).length === 1 && !(clip.fx ?? []).length && !(clip.huellkurven ?? []).length) {
+      const weg = clip.verbund ? k.spur.clips.filter((c) => c.verbund === clip.verbund) : [clip];
+      for (const c of weg) befehle.push({ befehl: 'clip_loeschen', clip_id: c.id });
+    }
+  }
   return befehle.length === 0 ? null : { label: 'Clear cell', befehle };
 }
 

@@ -18,7 +18,7 @@ import socket
 import sys
 import time
 
-import sound as klang
+import surge_sound as klang
 
 sys.path.insert(0, "/usr/share/carla")
 from carla_backend import BINARY_NATIVE, PLUGIN_HAS_CUSTOM_UI, PLUGIN_LV2, PLUGIN_VST3  # noqa: E402

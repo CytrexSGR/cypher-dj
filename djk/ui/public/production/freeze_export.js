@@ -106,8 +106,9 @@ export function bindeAusgabe(ctx) {
   };
   $('export').addEventListener('click', async () => {
     if (!st.projekt || laufJetzt()) return;
+    const nurLoop = st.projekt.loop?.an === true;   // the loop bracket is what the export writes while it is on
     const j = await lauf('export', '/proj/export', {}, {});
-    if (j && typeof j.datei === 'string') { st.exportErgebnis = j; ctx.melde('Export finished'); }
+    if (j && typeof j.datei === 'string') { st.exportErgebnis = j; ctx.melde(nurLoop ? 'Export finished: only the loop bracket, because LOOP is on' : 'Export finished'); }
   });
 
   // COLLECT: not a long run of the frame (no freeze or export is locked by it); the button only waits for its own answer

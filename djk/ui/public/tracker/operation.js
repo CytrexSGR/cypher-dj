@@ -313,7 +313,7 @@ export function bindeBedienung(ctx) {
         const ton = 12 * (st.okt + 2) + a.halbton;
         const klingt = ton >= 24 && ton <= 127;
         if (klingt) hoere(s.spur_id, ton);
-        if (!st.edit) { if (!klingt) ctx.melde(BEDIENUNG_TEXT.keinKlang, true); return true; }
+        if (!st.edit) { if (!klingt) ctx.melde(BEDIENUNG_TEXT.keinKlang, true); else ctx.melde(BEDIENUNG_TEXT.editAus); return true; }   // sounds, writes nothing: say why
         const o = ortVon(r), vel = letzteVol.get(s.spur_id);
         const platz = ctx.platzVon?.(o.spur_id);   // the slot chosen in INSTRUMENTS, for tracks whose device has slots
         schreibe((p) => noteSchreiben(p, o, ton, { akkord: a.akkord, ...(platz ? { platz } : {}),

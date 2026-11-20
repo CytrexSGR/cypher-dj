@@ -3,11 +3,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { steuerungen, parameterVon } from '../public/panel.js';
+import { werksgraphPfad } from './werksgraph_path.mjs';
 
-const GRAPHEN = path.join(os.homedir(), 'cypherdj/werke/geraete');
 const NAMEN = [
   'ins-grand-piano-ab80', 'ins-limette-84c2', 'ins-trombone-394b', 'ins-upright-piano-knight-36df', 'ins-vibraphone-soft-mallet-ca84',
   'smp-acid-groove-1-da24', 'smp-hit-light1-6fb3', 'smp-komp-roh-drums-6916', 'smp-loop-122-bpm-eliot-9c5d', 'smp-sr-brk-c-3b2c', 'smp-vde3-125-bpm-wobble-kit-954c',
@@ -28,7 +27,7 @@ for (const name of NAMEN) {
     }
   });
   test(`${name}: every knob of the graph is bound by a control`, (t) => {
-    const f = path.join(GRAPHEN, `${name}.json`);
+    const f = werksgraphPfad(name);
     if (!fs.existsSync(f)) return t.skip('graph not installed');
     const nrn = lies(f).knoten.filter((n) => n.art === 'regler').map((n) => `k${n.nr}`);
     const gebunden = new Set(steuerungen(panel(name)).flatMap(parameterVon));

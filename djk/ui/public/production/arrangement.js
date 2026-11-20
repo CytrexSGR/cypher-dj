@@ -96,6 +96,11 @@ export class Arrangement {
       g.fillStyle = z.art === 'lane' ? '#0d1014' : z.art === 'take' ? '#0c0e12' : z.spur % 2 ? '#12141a' : '#0f1116'; g.fillRect(0, z.y, w, z.h);
       if (z.tiefe > 0 && z.h > 0) balken(gruppenKette(p, spurGruppe(p, p.spuren[z.spur]), eltern), z.y, z.h);
     }
+    if (!p.spuren?.length) {   // newcomer test 2026-11-20: nobody found how a first track is made
+      g.font = '12px ui-sans-serif, system-ui, sans-serif'; g.fillStyle = 'rgba(232,232,236,0.55)'; g.textAlign = 'center';
+      g.fillText('No tracks yet. Double-click an instrument in DEVICES (or drag it here), or use + AUDIO, + SURGE, + RB-338.', w / 2, Math.max(40, h / 2));
+      g.textAlign = 'start';
+    }
     if (p.loop) {
       const x0 = beatZuX(a, p.loop.von_beat), x1 = beatZuX(a, p.loop.bis_beat);
       g.fillStyle = p.loop.an ? 'rgba(47,214,195,0.07)' : 'rgba(255,255,255,0.025)'; g.fillRect(x0, 0, x1 - x0, h);

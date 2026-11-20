@@ -32,3 +32,7 @@ scrolled away or collapsed.
 ![Effects strip: a compressor and a gate on every source channel](screens/effects.png)
 
 ![Cue tool: whole-track overview, 3-band waveform and eight cue pads](screens/cue-tool.png)
+
+![A Traktor Kontrol S8 screen as cypher-dj draws it: deck A with tempo, key, bar and loop size, the scrolling waveform, the whole-track overview, eight hot cue keys and the three Strudel channels](screens/s8-screen.png)
+
+![The two Maschine MK2 displays as cypher-dj draws them: channel and instrument, eight knob names with their values](screens/maschine-mk2-displays.png)

@@ -43,9 +43,9 @@ echo 0-15 > "$SYS/online"
 H5="$O/h5"; ECHT="$O/echte kits"; mkdir -p "$H5/.config/cypherdj" "$ECHT/techno" "$ECHT/battery"
 echo '{}' > "$ECHT/techno/kit.json"; echo '{}' > "$ECHT/battery/kit.json"
 ln -s "$ECHT" "$H5/.config/cypherdj/kits"
-K5=$(env -i PATH="$PATH" HOME="$H5" PYTHONPATH="$START/.." PYTHONSAFEPATH=1 python3 -m storage pfad kits)
+K5=$(env -i PATH="$PATH" HOME="$H5" PYTHONPATH="$START/.." PYTHONSAFEPATH=1 python3 -m ablage pfad kits)
 [ "$K5" = "$H5/.config/cypherdj/kits" ]
-pruef $? "A5 python3 -m storage pfad kits names the (linked) kit folder of the tmp HOME: $K5"
+pruef $? "A5 python3 -m ablage pfad kits names the (linked) kit folder of the tmp HOME: $K5"
 rm -rf "$O/v5"
 env -i PATH="$PATH" HOME="$H5" CYPHERDJ_SYSFS_CPU="$SYS" CYPHERDJ_UMGEBUNG=/nicht/da DJK_PW_DUMP="$O/dump.json" \
   "$START/djk-start" --strudel --vorlagen-nach "$O/v5" >"$O/a5.txt" 2>&1; R=$?

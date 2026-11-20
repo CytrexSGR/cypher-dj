@@ -1182,6 +1182,8 @@ body.geraet-fenster #geraet-fenster { display: block; padding: 8px 12px 14px; }
 .gf-kopf .gf-meldung.fehler { color: var(--warn, #e8b13a); }
 .gf-keins { color: var(--dim); }
 #geraet-fenster.gf-weg .gf-platte { display: none; }   /* track or project gone: the line above says so, nothing to click */
+#geraet-fenster .zf-platte { position: relative; min-height: calc(100vh - 70px); }   /* the stage and strip windows: the face or the one strip card, the window layer on top */
+#geraet-fenster .w-dock.zf-dock { max-height: none; overflow: visible; }
 /* the controller strip of the device window: the controls of a controller place in hardware layout, each with the knob it drives */
 .gf-ctl { display: flex; flex-wrap: wrap; gap: 14px; padding: 0 2px 10px; }
 .gf-ctl-geraet { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 520px; }

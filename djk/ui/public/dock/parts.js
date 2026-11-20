@@ -3,6 +3,7 @@ import { anBefehl, entfernenBefehl, ordnungBefehl, verschoben, insertLabels, hos
 import { schluesselGruppen, schluesselWert, schluesselBefehl } from '../production/key_choice.js';
 import { msText } from '../production/pdc.js';
 import { mk, chipEl } from './blocks.js';
+import { oeffneGeraetFenster } from '../device_open.js';
 
 
 
@@ -10,7 +11,7 @@ import { mk, chipEl } from './blocks.js';
 /** The entries of a chip menu: [{text, aus?, titel?, aktion: name}]. The `aktion` is a name the DOM part maps to a function: an, links, rechts, schluessel,
  *  fenster, weg, hall. `lage` is the HostLage of a plugin stage (or null); `schluessel` says whether the view offers the key source menu (default true; STUDIO
  *  has none, its chip menu stays as it was). The Hall chip (insert `{art: 'hall', an}`) keeps only Bypass / Enable. */
-export function chipMenuePunkte(strang, insert, { lage = null, schluessel = true } = {}) {
+export function chipMenuePunkte(strang, insert, { lage = null, schluessel = true, fenster = false } = {}) {
   if (insert?.art === 'hall') return [{ text: insert.an === false ? 'Enable' : 'Bypass', aktion: 'hall' }];
   const ids = (strang?.inserts ?? []).map((x) => x.id), pos = ids.indexOf(insert.id);
   const punkte = [
@@ -20,6 +21,7 @@ export function chipMenuePunkte(strang, insert, { lage = null, schluessel = true
   ];
   if (insert.art === 'komp' && schluessel) punkte.push({ text: 'Key source…', aktion: 'schluessel' });
   if (insert.art === 'host') punkte.push({ text: lage?.fenster ? 'Close native window' : 'NATIVE WINDOW', aktion: 'fenster' });
+  if (fenster) punkte.push({ text: 'WINDOW ↗', titel: 'Open this stage in its own window', aktion: 'zielfenster' });
   punkte.push({ text: 'Remove', aktion: 'weg' });
   return punkte;
 }
@@ -79,6 +81,7 @@ const MENUE_AKTION = (werk, strangId, insert, s) => {
   return {
     an: (_ev) => tu(b.an(insert.an === false)), links: () => tu(b.links), rechts: () => tu(b.rechts), weg: () => tu(b.weg),
     fenster: () => host.pluginFenster?.(insert.id),
+    zielfenster: () => oeffneGeraetFenster(`ins:${insert.id}`, host.melde),
     schluessel: (ev) => schluesselMenue(host, s, insert, ev.clientX ?? 0, ev.clientY ?? 0),
   };
 };
@@ -97,7 +100,7 @@ export function teilMenue(werk, strangId, insertId, ev) {
   if (!s || !i) return;
   ev.preventDefault?.();
   const tabelle = MENUE_AKTION(werk, strangId, i, s);
-  host.oeffneMenue(chipMenuePunkte(s, i, { lage: host.hostLage?.(i.id) ?? null, schluessel: host.ansicht === 'production' }).map((p) => ({ text: p.text, aus: p.aus, titel: p.titel, aktion: () => tabelle[p.aktion](ev) })),
+  host.oeffneMenue(chipMenuePunkte(s, i, { lage: host.hostLage?.(i.id) ?? null, schluessel: host.ansicht === 'production', fenster: !!host.schalter?.stufenFenster && !host.einzel }).map((p) => ({ text: p.text, aus: p.aus, titel: p.titel, aktion: () => tabelle[p.aktion](ev) })),
     ev.clientX ?? 0, ev.clientY ?? 0);
 }
 

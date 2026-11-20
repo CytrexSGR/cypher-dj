@@ -70,6 +70,10 @@ test('berichtText: the counts in words; what was left out, only the non-zero par
   assert.equal(berichtText({ ...b, kanaele: 1, muster: 1, positionen: 1, samples: 1 }), 'Imported 1 channel, 1 pattern in 1 song position and 1 sample. Nothing was left out.');
   assert.equal(berichtText({ ...b, weggelassen: { tempo_wechsel: 2, sprung: 1, muster_schleife: 3, unbekannt: { E5x: 4, '9xx': 1 } } }),
     'Imported 4 channels, 2 patterns in 3 song positions and 2 samples. Left out: 2 tempo or speed changes, 1 position jump, 3 pattern loops, E5x (4x), 9xx (1x).');
+  assert.equal(berichtText({ ...b, unerreicht: 2, tempo_gemittelt: true }),
+    'Imported 4 channels, 2 patterns in 3 song positions and 2 samples. Nothing was left out. 2 song positions are never played because of a jump and not imported.'
+    + ' The song changes its tempo: the project plays it at the average tempo, so the length stays right.');
+  assert.match(berichtText({ ...b, unerreicht: 1 }), /1 song position is never played/);
 });
 
 test('importKoerper: name and base64 of the bytes (also past the chunk size); tooBig at 4 MiB', () => {

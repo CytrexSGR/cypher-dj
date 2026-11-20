@@ -3,6 +3,46 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-20, thirteenth update
+
+**First track made entirely inside cypher-dj**
+- Cypher produced a five-minute techno track in the application alone: the patterns written in TRACKER, Kraken as
+  bass, drone and acid line, the Drum Synth, a Kick Synth tuned to the key and resampled to audio, Duck by Kick,
+  returns and automation lanes, measured and exported in PRODUCTION. Andreas judged it by ear and liked it. Every
+  place where the work got stuck became a fix or a note below.
+
+**Studio**
+- Every insert stage, return, group and the master can open in a window of its own (WINDOW ↗ on the card or in the
+  chip menu), with the full surface of the stage; a knob turned there writes into the project and the window follows
+  the project. A window whose target was deleted says so, and undo brings it back.
+- Hints for newcomers, from a usability test with a reader who knew only these docs: the empty arrangement and the
+  DEVICES list say how to add an instrument track (double click or drag), the deck says how to open the library
+  (⤢ or G), TRACKER says when EDIT is off, the export line names a loop-only export, and the preset menu is labelled.
+
+**Tracker**
+- The ProTracker import was run against 25 real modules (public domain and Creative Commons) and now matches the
+  length libopenmpt plays for all of them. Fixed on the way: 15-sample Soundtracker modules, pattern loops (E6x),
+  pattern break and position jump (Bxx, Dxx), tempo and speed changes (the project tempo is the mean over the rows
+  played), songs faster or slower than 60 to 200 BPM, and the level of 6 and 8 channel modules. EC, ED, E1, E2, EA,
+  EB and 9xx without a note are reported and left out.
+- Clearing the last note of a pattern removes the emptied clip and its linked copies, so no empty clip stays behind
+  in every section.
+
+**Install**
+- A fresh install from this repository in an empty Ubuntu 24.04 container found three faults, all fixed: the start
+  script could not read the storage table, `djk/requirements.txt` lacked Pillow (the S8 and Maschine screens), and a
+  Python module of the Surge host was shadowed by a package of the same name.
+
+**Sounds**
+- An offline check of 78 sounds (Kraken, Drum Synth, the 8-bit devices and the presets of the six upgraded synths)
+  found no DSP defect and eight sounds that were too hot: Kraken Fold Drone, the Juno pad of Poly Synth, the choir
+  wavetable synth and two Amiga presets now peak below -1 dBFS.
+
+**Limits to know**
+- The window of a stage was checked against a stand-in page; size and place on a real second monitor and the native
+  plugin window were not.
+- Two Kraken presets (Gate Walker, Glass Rain) keep sounding after note off on purpose; in a set that can surprise.
+
 ## 2026-11-20, twelfth update
 
 **Tracker**

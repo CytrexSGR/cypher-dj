@@ -15,6 +15,9 @@ import {
   DUCK_DURCH_KICK_WERTE, schluesselArg, schluesselDef, FARBE_OK, presetArg, PRO_BEFEHL, type Args, type Kontext, type Handler,
 } from './commands_helpers.ts';
 
+// refusal detail of an unknown werte key; `an` is a parameter of the table but a new stage is on and switches with insert_an
+const werteName = (k: string): string => (k === 'an' ? 'werte.an (a new stage is on; switch it with insert_an)' : `werte.${k}`);
+
 // preset ids of the RB-338 as the register prints them: <herkunft>:rb338/<slug> (presets/model.ts SLUG)
 const RB_PRESET_ID = /^(?:werk|nutzer):rb338\/[a-z0-9][a-z0-9-]{0,47}$/;
 
@@ -135,7 +138,7 @@ export const INSERT = {
     const wp = insertWertParameter(pool);
     if (a.werte !== undefined) {
       if (!istObjekt(a.werte)) ab('argument_ungueltig', 'werte: Objekt erwartet');
-      for (const k of Object.keys(a.werte)) if (!wp.some((q) => q.name === k)) ab('argument_unbekannt', `werte.${k}`);
+      for (const k of Object.keys(a.werte)) if (!wp.some((q) => q.name === k)) ab('argument_unbekannt', werteName(k));
       for (const q of wp) {
         if (a.werte[q.name] !== undefined) werte[q.name] = insertZahl(pool, q, a.werte as Args, q.name);
       }
@@ -334,7 +337,7 @@ export const INSERT = {
     if (!istObjekt(a.werte)) ab('argument_ungueltig', 'werte: Objekt erwartet');
     const werte = a.werte as Args;
     const wp = insertWertParameter(insert.art as InsertPoolArt);
-    for (const k of Object.keys(werte)) if (!wp.some((q) => q.name === k)) ab('argument_unbekannt', `werte.${k}`);
+    for (const k of Object.keys(werte)) if (!wp.some((q) => q.name === k)) ab('argument_unbekannt', werteName(k));
     const preset = a.preset === null ? null : presetArg(a.preset, 'preset');
     if (Object.keys(werte).length === 0 && preset === undefined) ab('argument_ungueltig', 'werte: at least one value, or a preset');
     const neu: Record<string, number> = {};

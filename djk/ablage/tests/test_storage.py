@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import storage as ablage  # noqa: E402
+import ablage  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[3]
 NO_ENV = {"HOME": "/tmp/h0"}
@@ -90,7 +90,7 @@ def test_shell_ausgabe_quotiert(tmp_path):
     heim = tmp_path / "mein heim"
     env = {k: v for k, v in os.environ.items() if not k.startswith("CYPHERDJ_")}
     env.update(HOME=str(tmp_path), CYPHERDJ_HEIM=str(heim), PYTHONPATH=str(REPO / "djk"))
-    r = subprocess.run(["bash", "-c", 'eval "$(python3 -m storage shell)"; printf %s "$ABLAGE_PRUEFEN"'], env=env, capture_output=True, text=True, timeout=60)
+    r = subprocess.run(["bash", "-c", 'eval "$(python3 -m ablage shell)"; printf %s "$ABLAGE_PRUEFEN"'], env=env, capture_output=True, text=True, timeout=60)
     assert r.returncode == 0, r.stderr
     assert r.stdout == f"{heim}/pruefen"
     out = subprocess.run(["python3", "-m", "ablage", "shell"], env=env, capture_output=True, text=True, timeout=60).stdout

@@ -32,7 +32,7 @@ export function geraeteHtml(k, achse = 'prinzip', opt = {}) {
     const neben = e.graph && e.ziel === 'spur_neu' ? nebenText(e, achse) : '';
     const key = geraetKey(e), an = key !== null && fav.has(key);
     const stern = opt.stern && key !== null ? `<button type="button" class="geraete-stern${an ? ' an' : ''}" data-stern="${html(key)}" aria-pressed="${an}" title="${an ? 'Remove from favourites' : 'Mark as favourite'}">${an ? '★' : '☆'}</button>` : '';
-    return `<li data-geraet-i="${n}" class="geraete-zeile${aus ? ' aus' : ''}"${e.grund ? ` title="${html(e.grund)}"` : ''} draggable="${ziehbar}">`
+    return `<li data-geraet-i="${n}" class="geraete-zeile${aus ? ' aus' : ''}"${e.grund ? ` title="${html(e.grund)}"` : e.ziel === 'spur_neu' ? ' title="Double-click or drag to add as a track"' : ''} draggable="${ziehbar}">`
       + `${stern}<span class="geraete-name">${html(e.titel)}</span>${neben ? `<span class="geraete-neben">\u00b7 ${html(neben)}</span>` : ''}${e.graph ? '<span class="geraete-art">graph</span>' : ''}</li>`;
   };
   const inst = instrumenteGeordnet(k, achse);
@@ -44,7 +44,7 @@ export function geraeteHtml(k, achse = 'prinzip', opt = {}) {
   }
   const eff = (k.effekte ?? []).map(zeile).join('');
   const leer = '<li class="geraete-zeile geraete-leer">None in this filter</li>';
-  return `<h4>INSTRUMENTS</h4><ul class="geraete-liste">${reihen || leer}</ul>`
+  return `<h4>INSTRUMENTS</h4><p class="geraete-hinweis">Double-click or drag an instrument to add it as a track</p><ul class="geraete-liste">${reihen || leer}</ul>`
     + `<h4>EFFECTS</h4><ul class="geraete-liste">${eff || leer}</ul>`;
 }
 

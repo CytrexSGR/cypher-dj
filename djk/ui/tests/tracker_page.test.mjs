@@ -322,7 +322,7 @@ test('the wiring of the fifth view is pinned in the page files', () => {
   assert.ok(rahmen.includes("if (a === 'tracker') tracker?.zeige(); else tracker?.verberge();"));
   const app = lies('public/app.js');
   assert.ok(app.includes("import { bindeTracker } from './tracker/tracker.js';"));
-  assert.match(app, /if \(!geraetFensterSpurId\) try \{ setzeTracker\(bindeTracker\(\{ post: jsonPost[^\n]*\} catch \(e\) \{ console\.error\('Tracker view:', e\); \}/);
+  assert.match(app, /if \(!geraetFensterAn\) try \{ setzeTracker\(bindeTracker\(\{ post: jsonPost[^\n]*\} catch \(e\) \{ console\.error\('Tracker view:', e\); \}/);
   assert.ok(/setzeTracker/.test(app.split('\n').find((z) => z.startsWith('import { bindeAnsicht'))), 'setzeTracker is imported');
   const strom = lies('public/stream.js');
   assert.ok(strom.includes("import { produktion, werkbank, tracker } from './seitenrahmen.js';"));

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-import sound as klang
+import surge_sound as klang
 
 INIT = (Path(__file__).parent / "data" / "surge-init.carxs").read_text()
 

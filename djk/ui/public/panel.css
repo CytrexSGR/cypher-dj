@@ -125,6 +125,7 @@ body.bereich-instrumente #bestand .tabelle { display: none !important; }
 .instrument-koerper .bkliste.mit-platte > .frontplatte { width: fit-content; max-width: 100%; padding: 12px 18px 18px; }
 .instrument-koerper .fp-titel { font-size: 13px; }
 /* Preset header (panel_kopf.js): picker, step buttons, SAVE */
+.fp-etikett { font-size: 9px; letter-spacing: .08em; color: var(--dim); }
 .fp-presetzeile { display: flex; align-items: center; gap: 6px; margin: -2px 0 10px; }
 .fp-preset { flex: 1 1 auto; min-width: 0; max-width: 260px; font-size: 11px; padding: 3px 6px; }
 .fp-knopf-klein { font-size: 10px; letter-spacing: .12em; padding: 3px 8px; border-radius: 6px; color: var(--dim); }

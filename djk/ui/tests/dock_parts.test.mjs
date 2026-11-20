@@ -52,6 +52,15 @@ test('the Hall chip keeps only Bypass or Enable', () => {
   assert.deepEqual(texte(chipMenuePunkte(null, { art: 'hall', an: false }, {})), ['Enable']);
 });
 
+test('WINDOW ↗ in the chip menu only with the fenster switch, before Remove; the Hall chip never gets it', () => {
+  const s = strang([ins('k1', 'komp'), ins('e1', 'eq')]);
+  assert.ok(!texte(chipMenuePunkte(s, s.inserts[1], { lage: null })).includes('WINDOW ↗'), 'off by default (STUDIO)');
+  const p = chipMenuePunkte(s, s.inserts[1], { lage: null, fenster: true });
+  assert.deepEqual(texte(p), ['Bypass', 'Move earlier', 'Move later', 'WINDOW ↗', 'Remove']);
+  assert.equal(p.find((x) => x.text === 'WINDOW ↗').aktion, 'zielfenster');
+  assert.deepEqual(texte(chipMenuePunkte(null, { art: 'hall', an: true }, { fenster: true })), ['Bypass']);
+});
+
 test('schluesselPunkte: group headings, a locked option off with its reason, the current value marked', () => {
   const gruppen = schluesselGruppen([
     { quelle: 'spur', nr: 2, punkt: 'pre', erlaubt: true },

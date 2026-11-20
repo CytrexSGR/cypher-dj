@@ -70,6 +70,7 @@ of the beta. The short version is the [README](../README.md).
 - A cue tool: a 3-band waveform of the whole track, hot cues set from the keyboard
 - Import of grid and cues from a Traktor collection
 - A library with sets that can be prepared ahead of time
+- The library sits at the bottom of the DJ view. The arrow button or the key L folds it open or shut; the big browser (the expand button or the key G) shows the table with the LOAD A, B, 3 and 4 buttons that put a track on a deck
 - A media library browser for tracks, loops and one-shot samples: folder tree, full-text search, filters
   for key (with harmonic neighbours), BPM and energy, a waveform per item, headphone preview, and loops
   straight into a loop box

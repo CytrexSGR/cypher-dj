@@ -74,7 +74,7 @@ for f in "$SHM/cypherdj$SFX/zustand" "$SHM/cypherdj$SFX/bus" "$SHM/cypherdj$SFX/
 done
 # neustart_stand.json (the page server's restore plan, in the hotcue folder next to aktive_loops.json) belongs to ONE kern life. That life is
 # gone with the core state above (and with a PC reboot), so the file goes with it: otherwise a later kern life, greeting with a higher
-# generation, would be given the plan of this one. Production: the hotcue folder from the storage table (python3 -m storage shell, with the
+# generation, would be given the plan of this one. Production: the hotcue folder from the storage table (python3 -m ablage shell, with the
 # umgebung.env as djk-start reads it); test instance: its own /dev/shm/cypherdj-<i>/hotcues. DJK_SHM_BASIS replaces /dev/shm (tests).
 neustart_stand_weg() {
   local d="" f
@@ -82,7 +82,7 @@ neustart_stand_weg() {
   else
     d=$( UMG=${CYPHERDJ_UMGEBUNG:-$HOME/.config/cypherdj/umgebung.env}
       if [ -f "$UMG" ]; then _g=$(export -p | grep '^declare -x CYPHERDJ_'); set -a; . "$UMG"; set +a; [ -z "$_g" ] || eval "$_g"; fi
-      eval "$(PYTHONPATH="$DJK${PYTHONPATH:+:$PYTHONPATH}" PYTHONSAFEPATH=1 python3 -m storage shell 2>/dev/null | grep '^ABLAGE_HOTCUES=')"
+      eval "$(PYTHONPATH="$DJK${PYTHONPATH:+:$PYTHONPATH}" PYTHONSAFEPATH=1 python3 -m ablage shell 2>/dev/null | grep '^ABLAGE_HOTCUES=')"
       printf '%s' "${ABLAGE_HOTCUES:-}" ) 2>/dev/null
   fi
   [ -n "$d" ] || { echo "djk-stop: hotcue folder not found, neustart_stand.json left in place" >&2; return 0; }

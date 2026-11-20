@@ -10,7 +10,7 @@ plays the arrangement, on the same sample clock.
 
 Up to 32 tracks, 16 group tracks and 4 returns. Every track goes to the production master or into one group, and a group can go into another group: a DRUMS group can hold a KICK, a PERC and a HATS group, each with its own inserts, fader and sends. Audio tracks
 take samples and tracks dragged from the library; instrument tracks play the RB-338, a Cypher Modular graph (up to 16 such
-tracks) or a hosted instrument plugin (Surge XT or a third-party plugin, two such slots). Per track: volume, pan, mute, solo, a meter. Every change is one undo step, and the undo
+tracks) or a hosted instrument plugin (Surge XT or a third-party plugin, two such slots). To add an instrument track, double click an entry in the INSTRUMENTS list of the browser on the left (or drag it onto the arrangement): RB-338, Surge or a Cypher Modular graph. The graphs are listed under their file names, for example `synth-kraken` for Kraken and `synth-mono` for the Mono Synth. In a project without tracks the arrangement says so. Per track: volume, pan, mute, solo, a meter. Every change is one undo step, and the undo
 history survives a restart.
 
 A return takes sends from every track and group (four sends per strip, taken after the fader and pan) and can carry
@@ -138,3 +138,24 @@ and true peak per track as it sits in the mix.
 The agent has the same projects through its tools: create tracks, write clips and notes, warp, separate stems, automate,
 insert and key, comp, bounce, merge, apply presets, mix, start the transport, export. Without a loop bracket the export
 takes the whole song.
+
+## Tracker
+
+The TRACKER view, the fifth one in the header, shows the open production project as tracker rows: one column per
+instrument track, one cell per note, the song list as the arrangement. It is not a separate document. What you write
+there is in PRODUCTION at once, and the other way round.
+
+- **Keyboard entry.** Click the grid, switch EDIT on (click EDIT or press Escape) and type notes on the two key rows
+  (Z S X D C V G B H N J M and Q 2 W 3 E R 5 T 6 Y 7 U I 9 O 0 P). With EDIT off the keys only sound the instrument, and
+  the message line says that EDIT is off. Digits type values, Delete clears a cell, Space plays, Ctrl+Z undoes.
+- **Linked patterns.** A pattern that repeats in the song is a set of linked clips: an edit in one reaches all of them.
+  PRODUCTION marks them with a chain sign. Trimming a clip unlinks it.
+- **Effect commands.** Up to four effect columns take commands in the manner of the classic trackers, on a grid of
+  ticks per row (6 by default): ARP arpeggio, SLU and SLD slide up and down, GLD glide to note, VIB vibrato, TRM tremolo,
+  VSL volume slide, LVL set level, RTG retrigger, PAN pan, OFS sample offset and REV reverse. They are stored as
+  commands and unrolled for playback, offline render and MIDI export.
+- **Text form.** The agent can read and write a pattern as text through its tools.
+- **IMPORT MOD.** Reads a ProTracker module into a new tracker module, samples and patterns included, as one undo step.
+  What has no target (later tempo changes, position jumps, pattern loops) is counted in the report, not guessed.
+- **TO DJ.** Hands the current section (up to 64 beats) to a SEQ deck, one pattern per instrument track. From there it
+  is a SEQ deck like any other and runs in time with the master.

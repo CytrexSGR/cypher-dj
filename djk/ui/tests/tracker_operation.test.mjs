@@ -115,6 +115,13 @@ test('EDIT off: note keys only sound, nothing is written, the cursor stays; OCT 
   assert.equal(POSTS('/sampler/hoeren')[2].koerper.ton, 48);
 });
 
+test('a note key with EDIT off says why nothing was written (hint names Escape and the EDIT button)', async () => {
+  buchstabe('Z'); await ruhe();
+  assert.equal(AENDERN().length, 0);
+  assert.ok(meldung().textContent.includes('EDIT is off'), meldung().textContent);
+  assert.ok(meldung().textContent.includes('Escape') && meldung().textContent.includes('click EDIT'), meldung().textContent);
+});
+
 test('a refusal of the sampler is shown in the message line', async () => {
   server.antworten['POST /sampler/hoeren'] = () => ({ code: 409, j: { fehler: 'kein_klang', text: 'This track has no sound yet' } });
   buchstabe('Z'); await ruhe();

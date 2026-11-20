@@ -20,7 +20,7 @@
     ]},
     { "id": "out", "title": "OUT", "cols": 2, "controls": [
       {"id": "led", "type": "switch", "label": "LED filter", "bind": {"param": "k4"}, "default": 0},
-      {"id": "level", "type": "knob", "label": "Level", "bind": {"param": "k7"}, "format": "percent", "default": 0.8},
+      {"id": "level", "type": "knob", "label": "Level", "bind": {"param": "k7"}, "format": "percent", "default": 0.4},
       {"id": "out-n", "type": "label", "span": 2, "text": "Fixed 4.4 kHz low-pass; LED adds 3.3 kHz"}
     ]}
   ]

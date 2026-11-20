@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { neuesProjekt } from '../project/model.ts';
 import { fuehreListeAus } from '../project/commands.ts';
 import { kopie } from './support/project.mjs';
+import { FX_CODES } from '../public/tracker/grid_model.js';
 import { noteSchreiben, notenAus, wertSetzen, zelleLeeren, zeileEntfernen, zeileEinfuegen, knopfWert } from '../public/tracker/eingabe.js';
 
 const frieren = (x) => { if (x && typeof x === 'object' && !Object.isFrozen(x)) { Object.freeze(x); Object.values(x).forEach(frieren); } return x; };
@@ -14,6 +15,7 @@ function basis(clips = []) {
   for (const c of clips) p = lauf(p, [{ befehl: 'clip_neu', spur_id: p.spuren[0].id, art: 'midi', ...c, ...(c.noten?.length ? {} : { noten: undefined }) }]);
   return p;
 }
+const FX_CODE = FX_CODES[0];
 const N = (beat, laenge, ton = 60, extra = {}) => ({ beat, laenge, ton, vel: 100, ...extra });
 const ort = (p, zeile, o = {}) => ({ abschnitt_id: 'a1', spur_id: p.spuren[0].id, spalte: 0, zeile, unterspalte: 'note', ...o });
 // run a builder result: one undo step = one fuehreListeAus call
@@ -162,6 +164,17 @@ test('zelleLeeren: a note is deleted and the previous note lasts up to the next 
   const letzte = frieren(basis([{ start_beat: 0, laenge_beats: 16, noten: [N(0, 1, 60), N(1, 1, 62)] }]));
   assert.deepEqual(flach(wende(letzte, zelleLeeren(letzte, ort(letzte, 4)))), [[0, 16, 60]], 'up to the clip end');
   assert.equal(zelleLeeren(p, ort(p, 9)), null);
+});
+
+test('zelleLeeren: clearing the last note removes the emptied clip and its linked copies (reibung R10)', () => {
+  const p = frieren(basis([{ start_beat: 0, laenge_beats: 16, noten: [N(1, 1, 62)] }]));
+  const r = zelleLeeren(p, ort(p, 4));
+  assert.equal(wende(p, r).spuren[0].clips.length, 0, 'no empty clip is left behind');
+  const v = frieren(lauf(p, [{ befehl: 'abschnitt_duplizieren', id: 'a1', als: 'verknuepft' }]));
+  assert.equal(v.spuren[0].clips.length, 2);
+  assert.equal(wende(v, zelleLeeren(v, ort(v, 4))).spuren[0].clips.length, 0, 'the linked copy in the other section goes too');
+  const mitFx = frieren(lauf(p, [{ befehl: 'fx_setzen', clip_id: p.spuren[0].clips[0].id, eintraege: [{ beat: 2, spalte: 0, code: FX_CODE, wert: 16 }] }]));
+  assert.equal(wende(mitFx, zelleLeeren(mitFx, ort(mitFx, 4))).spuren[0].clips.length, 1, 'a clip with effect commands stays');
 });
 
 test('zelleLeeren on a note off lengthens the note; on a value cell it clears the field', () => {

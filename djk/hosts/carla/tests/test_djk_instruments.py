@@ -434,6 +434,11 @@ def _fake_djk(tmp_path):
         (djk / p).write_text("#!/bin/sh\nexit 0\n")
         (djk / p).chmod(0o755)
     (djk / "units").mkdir()
+    # djk-start reads the storage table first (python3 -m ablage shell): the package and its table come along as links
+    echt = Path(__file__).resolve().parents[3]
+    (djk / "ablage").symlink_to(echt / "ablage")
+    (djk / "config").mkdir()
+    (djk / "config" / "ablage.json").symlink_to(echt / "config" / "ablage.json")
     for u in ("kern", "notbahn", "leitstand"):
         (djk / f"units/cypherdj-{u}.service").write_text("")
     dump = tmp_path / "pw-dump.json"

@@ -51,3 +51,19 @@ test('V1 Arrangement: Spuren werden nur bei Änderung neu gezeichnet (Größe, A
   umg.melde(s, 900, 300); bild(); bild();
   assert.equal(gezeichnet, 2, 'neue Größe zeichnet einmal neu');
 });
+
+test('Arrangement: without a track the empty area says how to add one', async () => {
+  umgebung();
+  const { Arrangement } = await import('../public/production/arrangement.js');
+  const texte = [];
+  const ctx = new Proxy({}, { get: (z, k) => (k === 'fillText' ? (t) => texte.push(String(t)) : k in z ? z[k] : () => {}), set: (z, k, v) => { z[k] = v; return true; } });
+  const mk = (w, h) => ({ width: 0, height: 0, getContext: () => ctx, getBoundingClientRect: () => ({ width: w, height: h, left: 0, top: 0, right: w, bottom: h }) });
+  const arr = new Arrangement({ lineal: mk(800, 28), spuren: mk(800, 300), ueber: mk(800, 300), wellen: { hole: () => ({}) } });
+  const projekt = (spuren) => ({ tempo_bpm: 120, loop: { an: false, von_beat: 0, bis_beat: 8 }, spuren });
+  const bild = (p) => arr.bild({ ansicht: neueAnsicht(), projekt: p, loop: p.loop, kopfBeat: null, startBeat: 0, geist: null });
+  bild(projekt([]));
+  assert.ok(texte.some((t) => /double-click an instrument in DEVICES/i.test(t)), texte.join(' | '));
+  texte.length = 0;
+  bild(projekt([{ id: 's1', nr: 1, name: 'A', art: 'audio', clips: [] }]));
+  assert.ok(!texte.some((t) => /DEVICES/.test(t)), 'with a track the hint is gone');
+});

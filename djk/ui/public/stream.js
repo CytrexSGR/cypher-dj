@@ -15,6 +15,7 @@ import { lernEreignis, zeigeSendKnobs } from './learn_view.js';
 import { registerHand, registerFokus } from './register_view.js';
 import { fokus } from './controller_fokus.js';
 import { geraetFensterEreignis } from './device_window.js';
+import { zielFensterEreignis } from './target_window.js';
 import { zeigeCtlMarke } from './ctl_track_marker.js';
 import { zeigeApcBank } from './apc_bank_marker.js';
 import { spurHandEcho } from './production/track_heads.js';
@@ -69,6 +70,7 @@ export function strom() {
     try { werkbank?.ereignis(a, f); } catch (e) { console.error('Workbench view:', e); }   // like the line above: an error there does not stop the DJ display
     try { tracker?.ereignis(a, f); } catch (e) { console.error('Tracker view:', e); }   // like the lines above
     try { geraetFensterEreignis(a, f); } catch (e) { console.error('Device window:', e); }   // the #geraet window mode (no-op elsewhere)
+    try { zielFensterEreignis(a, f); } catch (e) { console.error('Stage window:', e); }   // the #geraet=ins:/ret:/grp:/master window mode (no-op elsewhere)
     if (a === '/zustand/arr') { merkeArr(f); zeigeMasterLimiter(f); }   // the loop slots follow the transport of the live container; the MASTER tab's LIMITER meter reads limiter_db
     switch (a) {
       case 'stand':

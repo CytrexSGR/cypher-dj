@@ -3,10 +3,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { ruhendeSteuerungen } from '../public/panel_wirkung.js';
 import { steuerungen } from '../public/panel.js';
+import { werksgraphPfad } from './werksgraph_path.mjs';
 
 const panel = (name) => steuerungen(JSON.parse(fs.readFileSync(new URL(`../../instruments/modular_dsp/paneele/${name}.json`, import.meta.url), 'utf8')));
 const regelnPruefen = (titel, name, mindestens) => test(`${titel}: every rule names controls of the panel`, () => {
@@ -23,7 +23,7 @@ const regelnPruefen = (titel, name, mindestens) => test(`${titel}: every rule na
 });
 
 const graphKnoepfe = (name) => {
-  const g = JSON.parse(fs.readFileSync(path.join(os.homedir(), 'cypherdj/werke/geraete', `${name}.json`), 'utf8'));
+  const g = JSON.parse(fs.readFileSync(werksgraphPfad(name), 'utf8'));
   return [...new Set(g.knoten.filter((k) => k.art === 'regler').map((k) => k.nr))];
 };
 const knoepfeGebunden = (name) => test(`${name}: every knob of the graph is bound by a control`, () => {

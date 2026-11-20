@@ -99,7 +99,7 @@ def _klang_aus_quellen(var):
     if not var.startswith(pre):
         return None
     import socket
-    import storage as ablage
+    import ablage
     from quellen import file as datei
     p = ablage.fest("quellen")
     if not p.is_file():

@@ -16,7 +16,7 @@ import pytest
 HIER = Path(__file__).resolve().parent
 sys.path.insert(0, str(HIER.parent))
 sys.path.insert(0, str(HIER.parent.parent))
-import storage as ablage  # noqa: E402
+import ablage  # noqa: E402
 import umzug  # noqa: E402
 
 

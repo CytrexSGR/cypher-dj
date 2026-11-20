@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
 
-import storage as ablage  # the storage table package djk/ablage (PYTHONPATH or pytest pythonpath puts djk first)
+import ablage  # the storage table package djk/ablage (PYTHONPATH or pytest pythonpath puts djk first)
 from quellen import alt as _quellen_alt
 from quellen import file as _quellen
 

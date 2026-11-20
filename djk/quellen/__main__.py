@@ -17,7 +17,7 @@ import socket
 import sys
 from pathlib import Path
 
-import storage as ablage
+import ablage
 
 from . import alt
 from .file import ARTEN, Quellen, QuellenFehler, Wurzel, als_toml, ist_wechselplatte, lies, pfad_fuer, schreibe

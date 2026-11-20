@@ -23,7 +23,10 @@ export function berichtText(b) {
   if (w.sprung > 0) weg.push(plural(w.sprung, 'position jump', 'position jumps'));
   if (w.muster_schleife > 0) weg.push(plural(w.muster_schleife, 'pattern loop', 'pattern loops'));
   for (const [k, n] of Object.entries(w.unbekannt ?? {})) if (n > 0) weg.push(`${k} (${n}x)`);
-  return weg.length === 0 ? `${da}. Nothing was left out.` : `${da}. Left out: ${weg.join(', ')}.`;
+  let text = weg.length === 0 ? `${da}. Nothing was left out.` : `${da}. Left out: ${weg.join(', ')}.`;
+  if (b.unerreicht > 0) text += ` ${plural(b.unerreicht, 'song position is', 'song positions are')} never played because of a jump and not imported.`;
+  if (b.tempo_gemittelt === true) text += ' The song changes its tempo: the project plays it at the average tempo, so the length stays right.';
+  return text;
 }
 
 // The request body for a module file: its name and the bytes as base64. Pure (a chunked btoa keeps the call stack small).

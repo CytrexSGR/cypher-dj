@@ -170,9 +170,9 @@ import fs from 'node:fs';
 const quelle = (d) => fs.readFileSync(new URL(`../public/${d}`, import.meta.url), 'utf8');
 test('app.js: the device window starts before the focus sender, and is one of the windows that send the focus', () => {
   const app = quelle('app.js');
-  assert.match(app, /if \(!controllerFenster && !remixFenster\) \{ fokus\.verbinde\(\(f\) => jsonPost\('\/controller\/fokus', f\)\); bindeFensterFokus\(\); \}/, 'the gate excludes only the Controllers and Remix windows');
+  assert.match(app, /if \(!controllerFenster && !remixFenster && !\(geraetFensterAn && !geraetFensterSpurId\)\) \{ fokus\.verbinde\(\(f\) => jsonPost\('\/controller\/fokus', f\)\); bindeFensterFokus\(\); \}/, 'the gate excludes the Controllers, Remix and stage or strip windows (only the instrument window sends the focus)');
   assert.ok(app.indexOf('starteGeraetFenster(jsonPost)') > 0 && app.indexOf('starteGeraetFenster(jsonPost)') < app.indexOf('fokus.verbinde'), 'its source is registered before the page asks its sources');
-  assert.match(app, /if \(!geraetFensterSpurId\) try \{ setzeProduktion/, 'no second project writer in the window');
+  assert.match(app, /if \(!geraetFensterAn\) try \{ setzeProduktion/, 'no second project writer in the window');
   assert.match(quelle('stream.js'), /geraetFensterEreignis\(a, f\)/, 'the stream reaches the window mode');
 });
 test('every OPEN ↗ control calls the one opener', () => {

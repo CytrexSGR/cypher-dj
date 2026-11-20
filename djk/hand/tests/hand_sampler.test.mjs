@@ -586,7 +586,8 @@ test('sampler description and AUFRUF.md in both languages name dateien and instr
   assert.match(d, /dateien \{wurzel\?, ordner\?, suche\?\}/);
   assert.match(d, /instrument \{wurzel, ordner\?, name\?, release\?, spur\?\}/);
   const wurzel = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-  for (const datei of ['djk/hand/AUFRUF.md', 'docs/veroeffentlichung/englisch/djk/hand/AUFRUF.md']) {
+  // The public export carries only the English text (as djk/hand/AUFRUF.md), not the folder of English copies.
+  for (const datei of ['djk/hand/AUFRUF.md', 'docs/veroeffentlichung/englisch/djk/hand/AUFRUF.md'].filter((d) => fs.existsSync(path.join(wurzel, d)))) {
     const md = fs.readFileSync(path.join(wurzel, datei), 'utf8');
     for (const b of ['GET /sampler/dateien', 'POST /sampler/instrument {wurzel', 'dateien {wurzel?, ordner?, suche?}', 'instrument {wurzel, ordner?, name?, release?, spur?}']) assert.ok(md.includes(b), `${datei}: ${b}`);
   }

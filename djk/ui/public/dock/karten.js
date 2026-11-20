@@ -118,6 +118,14 @@ export function synthKarte(werk, z, spur, meine) {
 }
 
 // the group card (PRODUCTION): colour field with G<nr>, name, the output, latency, stage chips, + INSERT, OPEN, LEVEL and the meter
+/** The WINDOW ↗ button of a return, group or master card (after OPEN): the strip in its own browser window. Only where the host has the switch, and not in a strip window itself. */
+const zielKnopf = (werk, ziel) => {
+  const { host, T } = werk;
+  if (!host.schalter?.stufenFenster || host.einzel) return [];
+  const b = knopfEl('w-karte-auf', 'karte-zielfenster', T.fenster, GERAET_FENSTER_TEXT.titelZiel);
+  b.addEventListener('click', (ev) => { ev.stopPropagation?.(); oeffneGeraetFenster(ziel, host.melde); });
+  return [b];
+};
 export function gruppenKarte(werk, g, meine) {
   const { host, T } = werk;
   const karte = () => karteVon(werk, 'gruppen', g.id);
@@ -131,7 +139,7 @@ export function gruppenKarte(werk, g, meine) {
   const untertitel = untertitelEl(host, g) ?? mk('span', 'w-karte-geraet', null, g.ausgangText);
   kopf.append(...balken, b, mk('b', 'w-karte-name', null, g.name), ...latenzSpan(werk, karte), untertitel, mk('span', 'w-sp'),
     ...teile.map((t) => teilChip(werk, g.id, t)), plusKnopf(werk, g.id), ...mischerKopf(host, g, werk.frisch),
-    aufKnopf(werk.T, (a) => { if (teile[0]) host.oeffneStufe?.(g.id, teile[0].teil, a); }, !teile.length));
+    aufKnopf(werk.T, (a) => { if (teile[0]) host.oeffneStufe?.(g.id, teile[0].teil, a); }, !teile.length), ...zielKnopf(werk, `grp:${g.id}`));
   const zeile = mk('div', 'w-karte-zeile');
   const knoepfe = mk('div', 'w-karte-knoepfe', 'karte-knoepfe');
   zeile.append(knoepfe, ...sendKnoepfe(host, g, werk.frisch), ...mischerZeile(host, g, werk.frisch), levelKnopf(werk, `Level of ${g.name}`, () => (gruppe() ? levelStand(host, karte() ?? g).db ?? 0 : null),
@@ -176,7 +184,7 @@ export function fxKarte(werk, r, meine) {
   const farbEl = mischer ? farbFeld(kurz, r.farbe) : null;
   kopf.append(...(farbEl ? [farbEl] : []), nameEl, ...latenzSpan(werk, karte), mk('span', 'w-karte-geraet', null, hauptInsert ? String(hauptInsert.graph ?? hauptInsert.art) : 'hall'), mk('span', 'w-sp'),
     von, ...teile.slice(1).map((t) => teilChip(werk, r.id, t)), plusKnopf(werk, r.id), ...(karte() ? mischerKopf(host, karte(), werk.frisch) : []), an,
-    aufKnopf(werk.T, (a) => { if (haupt) host.oeffneStufe?.(r.id, haupt.teil, a); }, !haupt), ...(weg ? [weg] : []));
+    aufKnopf(werk.T, (a) => { if (haupt) host.oeffneStufe?.(r.id, haupt.teil, a); }, !haupt), ...zielKnopf(werk, `ret:${r.id}`), ...(weg ? [weg] : []));
   const zeile = mk('div', 'w-karte-zeile');
   const knoepfe = mk('div', 'w-karte-knoepfe', 'karte-knoepfe');
   zeile.append(knoepfe, ...(karte() ? sendKnoepfe(host, karte(), werk.frisch) : []), ...(karte() ? mischerZeile(host, karte(), werk.frisch) : []), levelKnopf(werk, `Level of ${r.name}`, () => (ret() ? levelStand(host, karte() ?? r).db ?? null : null),
@@ -204,7 +212,7 @@ export function masterKarte(werk, meine) {
   const teile = masterTeile(p), erstes = (p?.master?.inserts ?? []).find((i) => i.art === 'bk');
   const kopf = mk('div', 'w-karte-kopf');
   kopf.append(mk('b', 'w-karte-name', null, T.master), ...latenzSpan(werk, karte), mk('span', 'w-sp'), ...teile.map((t) => teilChip(werk, 'master', t)), plusKnopf(werk, 'master'),
-    ...(karte() ? mischerKopf(host, karte(), werk.frisch) : []), aufKnopf(werk.T, (a) => { if (teile[0]) host.oeffneStufe?.('master', teile[0].teil, a); }, !teile.length));
+    ...(karte() ? mischerKopf(host, karte(), werk.frisch) : []), aufKnopf(werk.T, (a) => { if (teile[0]) host.oeffneStufe?.('master', teile[0].teil, a); }, !teile.length), ...zielKnopf(werk, 'master'));
   const zeile = mk('div', 'w-karte-zeile');
   const knoepfe = mk('div', 'w-karte-knoepfe', 'karte-knoepfe');
   zeile.append(knoepfe, ...(karte() ? mischerZeile(host, karte(), werk.frisch) : []), levelKnopf(werk, 'Master volume', () => (host.projekt() ? levelStand(host, karte() ?? { fader_db: 0 }).db ?? 0 : null),

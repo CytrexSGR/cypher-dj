@@ -45,6 +45,7 @@ export function kopfHtml({ titel, akzent, presets = [], aktiv = '', lernen = fal
   const opts = presets.map((p) => `<option value="${esc(p.id)}"${p.id === aktiv ? ' selected' : ''}>${esc(p.herkunft === 'nutzer' ? `${p.name} (mine)` : p.name)}</option>`).join('');
   return `<div class="fp-presetzeile"${farbe} aria-label="${esc(`Presets of ${titel ?? ''}`)}">`
     + '<button type="button" class="fp-knopf-klein" data-fp-zurueck aria-label="Previous preset" title="Previous preset">&lsaquo;</button>'
+    + '<span class="fp-etikett">PRESET</span>'
     + `<select class="fp-preset" aria-label="Preset"${presets.length ? '' : ' disabled'}>${opts}</select>`
     + '<button type="button" class="fp-knopf-klein" data-fp-vor aria-label="Next preset" title="Next preset">&rsaquo;</button>'
     + '<button type="button" class="fp-knopf-klein" data-fp-sichern title="Save the current knob values as a preset">SAVE</button>'

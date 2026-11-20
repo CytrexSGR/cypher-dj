@@ -21,7 +21,7 @@ import nidrv as N
 import s8_usb
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # djk: the storage table package `ablage`
-import storage as ablage  # noqa: E402
+import ablage  # noqa: E402
 
 SEITE = "http://127.0.0.1:47300"
 PLAETZE = [  # group button -> (channel, short name, colour)

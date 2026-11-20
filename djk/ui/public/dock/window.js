@@ -16,7 +16,7 @@
 //   fenster-rechts, fenster-weg), button fenster-zu) and div[data-w="fenster-koerper"].
 // UI texts English.
 import { bindeGeraetAnsicht, geraetSchluessel } from '../production/device_view.js';
-import { straenge, anBefehl, entfernenBefehl, ordnungBefehl, verschoben, baueInsertAdapter, insertLabels } from '../production/inserts.js';
+import { straenge, anBefehl, entfernenBefehl, ordnungBefehl, verschoben, baueInsertAdapter, insertLabels, HOST_STATUS_TEXT } from '../production/inserts.js';
 import { FACE_ARTEN } from '../production/insert_face.js';
 import { returnQuelleHall } from '../production/return_face.js';
 import { returnListe } from '../production/routing.js';
@@ -34,6 +34,7 @@ export const FENSTER_TEXT = {
   zu: 'Close this window',
   keinPanel: 'This instrument has no front panel in the workbench.',
   keinFenster: 'This stage has no panel here.',
+  nativ: 'NATIVE WINDOW', nativTitel: 'Open the plugin\'s own window on the studio machine',
   liste: 'Show the parameter list of this stage', panel: 'Show the front panel of this stage',
   an: 'Switch this stage on or off', links: 'Move earlier in the chain', rechts: 'Move later in the chain', weg: 'Remove this stage (Undo brings it back)',
 };
@@ -75,14 +76,15 @@ export function montiereFenster(hostRoh) {
   function oeffne(def) {
     const alt = offene.get(def.id);
     if (alt) { nachVorn(alt); return alt; }
-    const e = el('div', 'w-fenster', 'fenster');
+    const e = el('div', def.voll ? 'w-fenster w-fenster-voll' : 'w-fenster', 'fenster');   // voll: the window page of a stage (target_window.js): fills the page, no drag, no close
     e.setAttribute('data-fenster-id', def.id); e.setAttribute('role', 'dialog'); e.setAttribute('aria-label', def.titel);
     const kopf = el('div', 'w-fenster-kopf', 'fenster-kopf');
     const leiste = el('span', 'w-fenster-leiste', 'fenster-leiste');
     const f = { def, e, koerper: el('div', 'w-fenster-koerper', 'fenster-koerper'), leiste, handle: null, zu: false, x: 0, y: 0, frisch: [] };
     const zu = knopf('w-fenster-zu', 'fenster-zu', '✕', FENSTER_TEXT.zu, () => schliesse(def.id));
-    kopf.append(el('b', 'w-fenster-titel', 'fenster-titel', def.titel), el('span', 'w-fenster-unter', 'fenster-unter', def.untertitel ?? ''), leiste, zu);
+    kopf.append(el('b', 'w-fenster-titel', 'fenster-titel', def.titel), el('span', 'w-fenster-unter', 'fenster-unter', def.untertitel ?? ''), leiste, ...(def.voll ? [] : [zu]));
     e.append(kopf, f.koerper);
+    if (def.voll) { flaeche.append(e); offene.set(def.id, f); f.handle = def.bauen(f.koerper, leiste, f) ?? null; return f; }
     // drag by the title bar
     let griff = null;
     kopf.addEventListener('pointerdown', (ev) => {
@@ -125,7 +127,7 @@ export function montiereFenster(hostRoh) {
   // ---- the stage buttons in the title bar ---------------------------------------------------------------------------------------------------------
   const strangVon = (id) => straenge(host.projekt()).find((s) => s.id === id) ?? null;
   // ON/OFF, earlier, later and remove of an insert stage; the Hall of a return only has ON/OFF. Returns the refresh function.
-  function stufenLeiste(leiste, strangId, teil) {
+  function stufenLeiste(leiste, strangId, teil, voll = false) {
     const jetzt = () => {
       const s = strangVon(strangId);
       if (!s) return null;
@@ -153,6 +155,7 @@ export function montiereFenster(hostRoh) {
       const weg = knopf('w-effekt-knopf', 'fenster-weg', '✕', FENSTER_TEXT.weg, () => { const x = jetzt(); if (x) host.aendere(L().weg, [entfernenBefehl(x.insert.id)]); });
       leiste.append(links, rechts, weg);
     }
+    if (!voll && teil !== 'hall' && host.schalter?.stufenFenster && !host.einzel) leiste.append(knopf('w-effekt-knopf', 'fenster-zielfenster', 'WINDOW ↗', 'Open this stage in its own window', () => oeffneGeraetFenster(`ins:${teil}`, host.melde)));
     return () => {
       const x = jetzt(); if (!x) return;
       const ist = x.hall ? x.r.hall?.an !== false : x.insert.an !== false;
@@ -206,18 +209,41 @@ export function montiereFenster(hostRoh) {
       },
     });
   }
-  function stufenFenster(strang, insert) {
+  // The parameter panel of a utility or a plugin stage in a window page (the rows of the floating popover, embedded). A plugin stage also gets the status of its host
+  // and NATIVE WINDOW (the plugin's own window on the studio machine: the same call as the chip menu entry).
+  function parameterFenster(platz, leiste, strang, insert) {
+    const strangKopf = { id: strang.id, name: strang.name };
+    const ins = () => strangVon(strang.id)?.inserts.find((i) => i.id === insert.id) ?? null;
+    const liste = baueStufenPopover(host.adapterCtx, strangKopf, insert, { liste: false });
+    platz.append(liste.el); liste.aktualisiere(host.projekt());
+    let zeigeStatus = () => {};
+    if (insert.art === 'host' && typeof host.pluginFenster === 'function') {
+      const punkt = el('span', 'w-fenster-status', 'fenster-status', '');
+      const nativ = knopf('w-effekt-knopf', 'fenster-nativ', FENSTER_TEXT.nativ, FENSTER_TEXT.nativTitel, () => host.pluginFenster(insert.id));
+      leiste.prepend(punkt, nativ);
+      zeigeStatus = () => {
+        const l = host.hostLage?.(insert.id) ?? null;
+        punkt.textContent = l ? (HOST_STATUS_TEXT[l.status] ?? l.status) : '';
+        punkt.setAttribute('data-status', l?.status ?? '');
+        nativ.setAttribute('aria-pressed', String(!!l?.fenster));
+      };
+      zeigeStatus();
+    }
+    return { aktualisiere: () => { if (ins()) liste.aktualisiere(host.projekt()); zeigeStatus(); }, zerstoere: () => liste.zerstoere() };
+  }
+  function stufenFenster(strang, insert, voll = false) {
     const aktuell = () => { const s = strangVon(strang.id); return s?.inserts.find((i) => i.id === insert.id) ?? null; };
     const kopf = effektKachel(insert).text;
     return oeffne({
-      id: `stufe:${strang.id}:${insert.id}`, titel: `${strang.name} · ${kopf}`, untertitel: insert.art === 'bk' ? 'Baukasten' : String(insert.art).toUpperCase(),
+      id: `stufe:${strang.id}:${insert.id}`, titel: `${strang.name} · ${kopf}`, untertitel: insert.art === 'bk' ? 'Baukasten' : String(insert.art).toUpperCase(), voll,
       art: insert.art === 'bk' ? `bk:${insert.graph}` : String(insert.art),
       pruefe: () => aktuell() !== null,
       bauen: (koerper, leiste, f) => {
-        const frisch = stufenLeiste(leiste, strang.id, insert.id);
+        const frisch = stufenLeiste(leiste, strang.id, insert.id, voll);
         f.frisch.push(frisch); frisch();
         const platz = el('div', 'w-fenster-geraet', 'fenster-geraet');
         koerper.append(platz);
+        if (voll && (insert.art === 'utility' || insert.art === 'host')) return parameterFenster(platz, leiste, strang, insert);   // the window page of a util or plugin stage
         if (insert.art !== 'bk') { platz.append(el('p', '', null, FENSTER_TEXT.keinFenster)); return null; }
         // PRODUCTION (host.stufenPopover is its hook): a title-bar switch swaps the front panel for the K rows; a graph without a panel file shows the rows and no switch.
         // STUDIO has no such hook and keeps the plain panel window.
@@ -271,5 +297,11 @@ export function montiereFenster(hostRoh) {
     if ((insert.art === 'utility' || insert.art === 'host') && typeof host.stufenPopover === 'function') return host.stufenPopover(strang, insert, anker) ?? null;   // PRODUCTION: the parameter popover at the chip
     return stufenFenster(strang, insert);
   };
-  return { fenster, oeffneGeraet, oeffneStufe };
+  // The window page of a stage (target_window.js): the same content as the floating window or popover, filling the page. The native faces are drawn there by the face builder.
+  const oeffneStufeVoll = (strangId, teil) => {
+    const strang = strangVon(strangId);
+    const insert = strang?.inserts.find((i) => i.id === teil);
+    return insert ? stufenFenster(strang, insert, true) : null;
+  };
+  return { fenster, oeffneGeraet, oeffneStufe, oeffneStufeVoll };
 }

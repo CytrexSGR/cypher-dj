@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-import storage as tabelle  # the storage table package djk/ablage (absolute import; not the sibling module starter/storage.py)
+import ablage as tabelle  # the storage table package djk/ablage (absolute import; not the sibling module starter/storage.py)
 
 from . import storage as ablage, tools as werkzeuge
 from .tools import WerkzeugFehlt

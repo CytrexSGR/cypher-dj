@@ -46,7 +46,7 @@ export function produktionDockHost(ctx) {
     stufenPopover: (s, i, a) => ctx.oeffneStufenPopover?.(s, i, a) ?? null,
     kopfBeat: () => ctx.st.kopfBeat ?? null,
     adapterCtx: ctx,
-    schalter: { gruppen: true, sends: true, mischer: true, stufenFenster: false },
+    schalter: { gruppen: true, sends: true, mischer: true, stufenFenster: true },
   });
 }
 

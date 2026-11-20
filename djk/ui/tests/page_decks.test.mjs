@@ -88,3 +88,7 @@ test('the draw loop skips hidden deck sections; the library offers LOAD for all 
   assert.match(app, /sektion: d, lauf: new Laufansicht/);
   assert.match(app, /const LADE_DECKS = \[1, 2, 3, 4\];/);
 });
+
+test('an empty deck names how to open the library (newcomer test 2026-11-20: the hint led nowhere)', () => {
+  assert.match(html, /data-meta>Pick a track in the library \(⤢ or G opens it\) and press LOAD</);
+});

@@ -2,15 +2,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { steuerungen } from '../public/panel.js';
 import { ruhendeSteuerungen } from '../public/panel_wirkung.js';
+import { werksgraphPfad } from './werksgraph_path.mjs';
 
 const GERAETE = ['bass-acid', 'bass-analog', 'bass-sub', 'lead-acid', 'lead-arp', 'lead-poly', 'lead-sync', 'fx-downlifter', 'fx-impact', 'fx-noise', 'fx-riser'];
 const MIN_REGELN = { 'fx-noise': 1 };
 const panel = (name) => steuerungen(JSON.parse(fs.readFileSync(new URL(`../../instruments/modular_dsp/paneele/${name}.json`, import.meta.url), 'utf8')));
-const graph = (name) => JSON.parse(fs.readFileSync(path.join(os.homedir(), 'cypherdj/werke/geraete', `${name}.json`), 'utf8'));
+const graph = (name) => JSON.parse(fs.readFileSync(werksgraphPfad(name), 'utf8'));
 
 const regelnPruefen = (name, mindestens) => test(`${name}: every rule names controls of the panel`, () => {
   const sts = panel(name);

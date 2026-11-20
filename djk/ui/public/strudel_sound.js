@@ -3,6 +3,7 @@
 // (a [data-graphplatz] element, filled by zeigeGraphWahl, changed through the page-wide select.graphwahl handler); the knobs drive the
 // knob rows <channel>/bk/1..4 through the same adapter as the INSTRUMENTS area. DRUMS plays the sample kit, which has no instrument to pick.
 import { $, $$, melde } from './page_state.js';
+import { oeffneFensterRoh, FENSTER_GESPERRT } from './window_open.js';
 import { graphenGeladen, graphenInfo, kanalAdapter } from './graphs_view.js';
 import { zeichne } from './controls_view.js';
 import { knopfNamen } from './effects.js';
@@ -52,12 +53,7 @@ export function bindeStrudelSound() {
   for (const b of $$('[data-synth-oeffnen]', spalte)) b.addEventListener('click', () => {
     const k = b.dataset.synthOeffnen;
     try { localStorage.setItem('djk-instrument', k); } catch { /* the window opens on its first tab */ }
-    const B = Math.min(1100, screen.availWidth), H = Math.min(880, screen.availHeight);
-    const x = Math.round((screen.availLeft ?? 0) + (screen.availWidth - B) / 2), y = Math.round((screen.availTop ?? 0) + (screen.availHeight - H) / 2);
-    const w = window.open('/#tablet', `djk-synth-${k.replace('/', '-')}`, `popup,width=${B},height=${H},left=${x},top=${y}`);
-    if (!w) { melde('The browser blocked the window: allow pop-ups for this page', true); return; }
-    try { w.resizeTo(B, H); } catch { /* the window manager decides */ }
-    w.focus();
+    oeffneFensterRoh({ adresse: '/#tablet', name: `djk-synth-${k.replace('/', '-')}`, breite: 1100, hoehe: 880, melde, meldung: FENSTER_GESPERRT, anpassen: true });   // the one opener helper (window_open.js)
   });
   const auffrischen = () => {
     if (spalte.offsetParent === null) return;   // hidden (Studio view, or the place shows something else)

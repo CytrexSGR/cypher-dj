@@ -16,10 +16,8 @@
 // UI texts English.
 import { bindeGeraetAnsicht, bkZeilenPfad, GERAET_TEXT } from './production/device_view.js';
 import { bindeRackPanel } from './production/rack_device_operation.js';
-import { neuerLader, neuerNachlader, offlineNach } from './production/load.js';
-import { neuerSchreiber } from './production/writer.js';
+import { neuesFensterProjekt } from './window_project.js';
 import { nachladenNoetig } from './production/stems.js';
-import { antwortText, meldeNachSchreiben } from './production/production.js';
 import { geraetText } from './seq_field.js';
 import { fokus as geteilterFokus } from './controller_fokus.js';
 import { GERAET_FENSTER_TEXT, geraetFensterSpur, geraetFensterSpurId, kannGeraetFenster } from './device_open.js';
@@ -123,58 +121,11 @@ export function bindeGeraetFenster(opt) {
   kopf.append(name, geraet, folgeKnopf, el('span', 'gf-sp'), meldung, hinweis);
   wurzel.replaceChildren(kopf, streifen, platte);
 
-  const st = { slug: null, projekt: null, getrennt: false };
-  let slug0 = null, meldeUhr = null;
   const zeitgeber = opt.zeitgeber ?? globalThis;
-  const melde = (text, fehler = false) => {
-    meldung.textContent = text; meldung.classList.toggle('fehler', fehler);
-    zeitgeber.clearTimeout(meldeUhr); meldeUhr = zeitgeber.setTimeout(() => { meldung.textContent = ''; }, 6000);
-  };
-  const merkeAntwort = (r) => { const o = offlineNach(r); if (o !== null && o !== st.getrennt) { st.getrennt = o; zeige(); } return r; };
-  const holeJson = async (weg, koerper) => {
-    try { const r = await post(weg, koerper); let j = null; try { j = await r.json(); } catch { /* empty */ } return merkeAntwort({ status: r.status, j }); }
-    catch (e) { return merkeAntwort({ status: 0, j: { fehler: 'netz', text: e.message } }); }
-  };
-  const holeGet = opt.holeGet ?? (async (weg) => {
-    try { const r = await fetch(weg); let j = null; try { j = await r.json(); } catch { /* empty */ } return merkeAntwort({ status: r.status, j }); }
-    catch (e) { return merkeAntwort({ status: 0, j: { fehler: 'netz', text: e.message } }); }
-  });
-  const ctx = { st, melde, holeJson, holeGet };
-
-  // The project, loaded like PRODUCTION loads it (GET /proj/aktuell; an older state of the same project is dropped), written like PRODUCTION writes it.
-  const uebernimm = (slug, p) => {
-    if (slug !== null && slug === st.slug && st.projekt && p && p.rev < st.projekt.rev) return;
-    st.slug = slug; st.projekt = p;
-    if (slug !== null) ctx.schreiber.setze(slug, p.rev);
-    if (slug0 === null && slug !== null) slug0 = slug;   // the project this window was opened for
-    zeige();
-  };
-  const lade = neuerLader({
-    hole: () => holeGet('/proj/aktuell'),
-    uebernimm: (slug, p) => uebernimm(slug, p),
-    leere: () => uebernimm(null, null),
-    beiWeg: (r) => melde(antwortText(r), true),
-    beiDa: () => { if (st.getrennt) { st.getrennt = false; zeige(); } },
-  });
-  const nachlader = neuerNachlader(lade, 30);
-  ctx.schreiber = neuerSchreiber({
-    holeJson,
-    beiProjekt: (slug, p, rev, j) => { uebernimm(slug, p); meldeNachSchreiben(j, melde); },
-    beiFehler: (a, r) => { melde(antwortText(r), true); if (r.status === 409 && r.j?.fehler === 'rev_veraltet') return nachlader.starte(); },
-    beiWiederhole: async () => { nachlader.starte(); await nachlader.fertig(); },
-    beiFremdeRev: () => nachlader.plane(),
-    beiVerworfen: (n) => melde(`The project changed elsewhere: reloaded, ${n} waiting change${n === 1 ? '' : 's'} dropped, please repeat`, true),
-  });
-  ctx.aendere = (label, befehle, schluessel, optionen) => ctx.schreiber.aendere(label, befehle, schluessel, optionen);
-  ctx.aendereAus = (rechne) => {   // the command is computed when its turn comes, from the project as it is then (like PRODUCTION)
-    const slug = st.slug;
-    return ctx.schreiber.aendereMit(() => {
-      const p = st.projekt;
-      if (!p || st.slug !== slug) return null;
-      const x = rechne(p);
-      return x ? { ...x, rev: p.rev } : null;
-    });
-  };
+  // The project, loaded and written like PRODUCTION does it (window_project.js, shared with the stage and strip windows).
+  const fp = neuesFensterProjekt({ post, holeGet: opt.holeGet, zeitgeber, beiAenderung: () => zeige(),
+    zeigeMeldung: (text, fehler) => { meldung.textContent = text; meldung.classList.toggle('fehler', fehler); } });
+  const { st, ctx, melde, holeJson, holeGet, nachlader } = fp;
 
   // The panel code of PRODUCTION: one device view, one rack panel (a track shows one of them), both in the same place.
   const ansichtHost = el('div', 'gf-geraet'), rackHost = el('div', 'p-irack gf-rack');
@@ -203,7 +154,7 @@ export function bindeGeraetFenster(opt) {
   const ansicht = bindeGeraetAnsicht(ctx, ansichtHost, { breit: true, dokument: d, lernen, lernKopf: false, beiSeite, ...(opt.ansichtOpt ?? {}) });
   const rack = bindeRackPanel(ctx, rackHost);
   let gemeldet = false, zuletzt = null;
-  const lage = () => geraetFensterLage({ spurId, slug0, slug: st.slug, projekt: st.projekt });
+  const lage = () => geraetFensterLage({ spurId, slug0: fp.slug0(), slug: st.slug, projekt: st.projekt });
   function zeige() {
     const l = lage();
     zuletzt = l;
