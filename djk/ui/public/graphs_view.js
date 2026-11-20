@@ -1,6 +1,5 @@
 // Effect graphs and device panels per channel (graph choice, host areas, panel header, sound save).
-import { zeigeFxReiter } from './effects_reiter.js';
-import { htmlText, hostName, instrumentWahlHtml, graphWahlHtml, bkSpeichernHtml, bkMarke, GRAPH_KANAL_ART } from './effects.js';
+import { htmlText, hostName, instrumentWahlHtml, graphWahlHtml, bkSpeichernHtml, bkMarke } from './effects.js';
 import { steuerungen, parameterVon, vorgaben as panelVorgaben } from './panel.js';
 import { vergesseGesendet, surgeAdapter, surgeFensterKnopf, SURGE_FENSTER, surgeFensterSenden } from './surge_adapter.js';
 import { hostAdapter, istVonHost, rb338HostZuPanel, RB338_HOST_NAME, graphDesHosts, baukastenAutoPanel, knobHostName, hostKnobName } from './host_adapter.js';
@@ -9,7 +8,7 @@ import { fehlerText } from './presets.js';   // 1.16: preset browser
 import { $, $$, melde, postJson, zustand } from './page_state.js';
 import { instrumenteSichtbar, platteBauen } from './effects_gemeinsam.js';
 import { baueSendKnobs, hostLernOpt, lernModus, lernModusUmschalten, lernSchicken, lernen } from './learn_view.js';
-import { baueFxDetail, bindeKnobs, fxGewaehlt } from './effects_view.js';
+import { bindeKnobs } from './effects_view.js';
 import { instrumenteAnsicht, presetSenden, wendeKanalPresetAn } from './effects_bindung.js';
 import { zeigeRemix } from './remix_window.js';
 import { beiAchse, katMerken, katSpeicherLesen, leseAchse, ACHSEN, gruppeVon } from './instrument_groups.js';
@@ -183,7 +182,7 @@ function holeRb338() {
   })();
   return rb338Hol;
 }
-export function baueKnobsNeu() { baueSendKnobs(); if ($('#fxdetail')?.firstChild) baueFxDetail(); if (instrumenteSichtbar()) instrumenteAnsicht.neuBauen(); }
+export function baueKnobsNeu() { baueSendKnobs(); if (instrumenteSichtbar()) instrumenteAnsicht.neuBauen(); }
 /** Control path of a bk panel parameter k<n> on channel `k`: `<k>/bk/<n>`. */
 const bkPfad = (k, param) => `${k}/bk/${param.slice(1)}`;
 /** Adapter of the panel for a channel (contract: get(param), set(param, v), lernPfad(param)): bk parameter k<n> maps to `<kanal>/bk/<n>`;
@@ -293,7 +292,6 @@ export function zeigeGraphWahl() {
     platz.innerHTML = (platz.closest('#instrumente') ? instrumentWahlHtml(k, graphenInfo.graphen, graphenGeladen[k] ?? '', hostNamen[k], katFuer(k, achse), achse) : graphWahlHtml(k, graphenInfo.graphen, graphenGeladen[k] ?? '', hostNamen[k], achse))
       + bkSpeichernHtml(k, bkMarke(k, bkGespeichert, graphenGeladen[k], zustand.regler, panelVon(graphenGeladen[k])?.regler), bkGespeichert !== null, graphenGeladen[k]);   // S17
   }
-  zeigeFxReiter();   // the insert lights of the EFFECTS tabs follow the loaded graphs (MASTER has no other trigger)
 }
 // S17: sound snapshot of the open project. bkGespeichert = GET /proj/bk gespeichert, null without a project. Fetched on start, on SSE 'proj'
 // (debounced) and after SAVE SOUND; the marker follows the live knob values without polling (a knob event refreshes it at most every 250 ms).
@@ -327,13 +325,11 @@ export async function holeGraphen() {
     zeigeGraphWahl();
     zeigeRemix();
     baueSendKnobs();
-    if (GRAPH_KANAL_ART[fxGewaehlt] || $('#fxdetail')?.firstChild) baueFxDetail();
     if (instrumenteSichtbar()) instrumenteAnsicht.neuBauen();
     ladePaneele();
   } catch { /* the page server is gone: the picker keeps what it had */ }
 }
 export function setzeGraphenGeladen(neu) {
-  const vorher = graphenGeladen[fxGewaehlt];
   const alt = graphenGeladen;
   graphenGeladen = neu ?? {};
   graphenErhalten = true;
@@ -342,7 +338,6 @@ export function setzeGraphenGeladen(neu) {
   zeigeGraphWahl();
   baueSendKnobs();
   zeigeRemix(); zeigePlaetze();   // the REMIX place follows the core state (target, lock of the place switch)
-  if (graphenGeladen[fxGewaehlt] !== vorher) baueFxDetail();   // knob names (and the Surge knobs of erz/2, erz/3) follow the graph
   if (instrumenteSichtbar()) instrumenteAnsicht.neuBauen();   // deferred until pointerup while a panel control is held
   ladePaneele();
 }

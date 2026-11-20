@@ -18,7 +18,7 @@
       {"id": "hp", "type": "knob", "label": "Low cut", "bind": {"param": "k5"}, "format": "hz", "default": 0.5}
     ]},
     { "id": "grab", "title": "GRAB", "cols": 3, "controls": [
-      {"id": "grab", "type": "knob", "label": "Grab", "span": 3, "bind": {"param": "k6"}, "format": "percent", "default": 0.5},
+      {"id": "grab", "type": "knob", "label": "Choke on release", "span": 3, "bind": {"param": "k6"}, "format": "percent", "default": 0.5},
       {"id": "g1", "type": "label", "span": 3, "text": "Key release chokes the crash"}
     ]},
     { "id": "src", "title": "SOURCE", "cols": 3, "controls": [

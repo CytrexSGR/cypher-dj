@@ -89,7 +89,9 @@ export function kuerzeRechts(clip, dBeat, raster) {
   const laenge = runde(Math.max(minLaenge(clip, raster), ende - clip.start_beat));
   const loop = istLoop(clip) ? { loop_beats: Math.min(clip.loop_beats, laenge) } : {};
   const b = nurAnders(clip, { laenge_beats: laenge, ...loop, ...(clip.art === 'audio' ? fadesFuer(clip, laenge) : {}) });
-  return b ? [b] : [];
+  if (!b) return [];
+  // a linked clip is trimmed alone: unlink first, or the server fans the new length out to every member of the pattern
+  return clip.verbund ? [{ befehl: 'clip_entknuepfen', clip_id: clip.id }, b] : [b];
 }
 
 // Linken Rand ziehen: Anfang rastet, das Ende bleibt stehen. Audio: offset_s wandert mit (Sekunde im Clip = Beat · 60 / Tempo,

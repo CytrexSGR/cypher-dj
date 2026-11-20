@@ -77,15 +77,16 @@
 .fa-komp.fa-aus .fa-knick { fill: #6b6f7c; }
 
 /* ---- the openers */
-.p-ins-face { letter-spacing: .08em; }
 /* the free column 8 of the track head (18 px) is too narrow for the word: a head that carries the button gets 30 px there */
 .p-kopf:has(> .p-face-auf) { grid-template-columns: 10px minmax(0, 1fr) minmax(0, 1fr) 18px 18px 22px 22px 30px 36px; }
 .p-face-auf { grid-column: 8; grid-row: 1; font-size: 8px; font-weight: 800; letter-spacing: .04em; padding: 0; border-radius: 4px; color: var(--dim); }
 .p-face-auf:hover { color: var(--text); }
+/* FACE and the ↗ of the device window share column 8: side by side, the column grows by the arrow */
+.p-kopf:has(> .p-face-auf):has(> .p-fenster-auf) { grid-template-columns: 10px minmax(0, 1fr) minmax(0, 1fr) 18px 18px 22px 22px 50px 36px; }
+.p-kopf:has(> .p-fenster-auf) > .p-face-auf { justify-self: start; width: 30px; }
+.p-kopf:has(> .p-face-auf) > .p-fenster-auf { justify-self: end; width: 18px; }
 
 /* the channel compressor: the COMP and FACE buttons of the EFFECTS strip side by side, FACE in the look of COMP */
-.fxstreifen .komp-knoepfe { display: flex; gap: 6px; align-self: flex-start; }
-.fxstreifen button.komp-face, .fxkopf button.komp-face { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
 /* ---- the Hall face (face/reverb.js) */
 .p-face[data-face^="hall:"] { width: min(900px, calc(100vw - 32px)); }
 .p-hall-face { font-size: 9px; font-weight: 700; letter-spacing: .08em; padding: 1px 5px; border-radius: 4px; margin-left: 6px; }
@@ -183,3 +184,6 @@ circle.fa-hall-t0 { fill: var(--ak-blau); } circle.fa-hall-t1 { fill: var(--fa);
 .fa-komp.fa-aus .fa-pegel-spalte .fa-meter, .fa-lim.fa-aus .fa-pegel-spalte .fa-meter { opacity: .5; }
 /* with the peak bars the compressor and limiter faces are a little wider than the 520 px of the frame */
 .p-face:has(.fa-komp-pegel), .p-face:has(.fa-lim-pegel) { width: min(620px, calc(100vw - 32px)); }
+
+/* the title bar buttons of a device face (production/insert_face.js) */
+.p-face-knopf { font-size: 10px; font-weight: 700; letter-spacing: .08em; padding: 3px 8px; border-radius: 6px; cursor: pointer; }

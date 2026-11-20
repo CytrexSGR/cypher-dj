@@ -43,6 +43,9 @@ fn bk_block_allokiert_nicht() {
         if b == 100 { for i in 0..300 { cypher_bk_note_an(h, i, 50, 0.9); } } // über die Warteschlange hinaus
         if b % 60 == 59 { cypher_bk_zuruecksetzen(h); }   // S20: the reset allocates nothing either
         if b % 45 == 44 { cypher_bk_regler_sofort(h, 1 + b % 8, 0.3); }   // S20: neither does the immediate knob
+        // tracker effects: bend and level events (jumps and glides, also across blocks), neither allocates
+        if b % 3 == 1 { cypher_bk_bend_bei(h, (b * 11) % 256, ((b % 25) as f32) - 12.0, (b % 4) * 300); }
+        if b % 4 == 1 { cypher_bk_pegel_bei(h, (b * 5) % 256, ((b % 10) as f32) / 10.0, (b % 3) * 500); }
         assert!(cypher_bk_block(h, l.as_mut_ptr(), r.as_mut_ptr(), 256) == 0);
         klang |= l.iter().any(|v| *v != 0.0);
     }
@@ -52,6 +55,32 @@ fn bk_block_allokiert_nicht() {
     assert_eq!(danach - start, 0, "Allokationen im Echtzeitpfad: {}", danach - start);
     assert!(klang, "Positivkontrolle: der Graph klingt");
     assert!(verloren > 0, "Positivkontrolle: die volle Warteschlange wurde erreicht");
+
+    // Pin matrix: the setters allocate nothing, while the block runs and a note sounds
+    {
+        let json = CString::new(r#"{"format":"baukasten/2","name":"m","stimmen":2,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"m","art":"matrix","zeilen":["z0","z1","z2","z3","z4","z5","z6","z7","z8","z9","z10","z11","z12","z13","z14","z15"],"spalten":["s0","s1","s2","s3","s4","s5","s6","s7","s8","s9","s10","s11","s12","s13","s14","s15"],"stifte":[[0,0,0,0.5]]},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"s.aus","nach":"m.e1"},{"von":"m.a1","nach":"o.x"}]}"#).unwrap();
+        let mut fehler = [0 as std::ffi::c_char; 256];
+        let h = cypher_bk_neu(json.as_ptr(), 48_000.0, fehler.as_mut_ptr(), fehler.len());
+        assert!(!h.is_null());
+        assert_eq!(cypher_bk_hat_matrix(h), 1);
+        let (mut l, mut r) = (vec![0f32; 256], vec![0f32; 256]);
+        let mut klang = false;
+        cypher_bk_note_an(h, 0, 57, 0.9);
+        let start = ANFORDERUNGEN.load(Ordering::SeqCst);
+        for b in 0..200u32 {
+            assert_eq!(cypher_bk_stift(h, b % 2, (b / 2) % 16, (b / 3) % 16, ((b % 21) as f32 - 10.0) / 10.0), 0);
+            assert_eq!(cypher_bk_stift_sofort(h, (b + 1) % 2, (b / 5) % 16, b % 16, ((b % 7) as f32 - 3.0) / 3.0), 0);
+            assert_eq!(cypher_bk_stift(h, 5, 0, 0, 0.5), -1);
+            if b % 40 == 39 { assert_eq!(cypher_bk_stifte_grund(h, b % 80 / 40, b % 3), 0); }
+            if b % 60 == 59 { cypher_bk_zuruecksetzen(h); }
+            assert!(cypher_bk_block(h, l.as_mut_ptr(), r.as_mut_ptr(), 256) == 0);
+            klang |= l.iter().any(|v| *v != 0.0);
+        }
+        let danach = ANFORDERUNGEN.load(Ordering::SeqCst);
+        cypher_bk_frei(h);
+        assert_eq!(danach - start, 0, "Allokationen im Echtzeitpfad (Stifte): {}", danach - start);
+        assert!(klang, "Positivkontrolle: die Matrix klingt");
+    }
 
     // Effekt und Takt (S3c): zweite Schleife im selben Test, der Zähler ist prozessweit
     {

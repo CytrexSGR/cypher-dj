@@ -47,7 +47,15 @@ pub mod labor;
 pub mod remix;
 pub mod drift;
 pub mod chaos;
+pub mod nullen;
 pub mod schieber;
+pub mod paula;
+pub mod lfsr;
+pub mod funktion;
+pub mod lpg;
+pub mod matrix;
+pub mod regler_analyse;
+pub mod notenwahl;
 
 pub use format::{Graph, Kante, Knoten, FORMAT, FORMATE};
 pub use kosten::Kosten;

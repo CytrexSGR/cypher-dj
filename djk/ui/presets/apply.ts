@@ -11,6 +11,7 @@ import { rbNorm, rbPlain, RB_DEFS } from '../project/rb_mapping.ts';
 import { geraetVon, paramVon, type GeraetDef } from './devices.ts';
 import { PresetFehler, GRAPH_FEHLT_ANWENDEN, type Wert } from './model.ts';
 import { vorgabenVon } from '../graphs.ts';
+import { type Stift } from '../steckfeld.ts';
 import { BK_REGLER_ZAHL } from '../project/modular.ts';
 import { INSTRUMENT_STROEME, kanalVonStrom } from '../../contract/streams.ts';
 
@@ -18,7 +19,7 @@ import { INSTRUMENT_STROEME, kanalVonStrom } from '../../contract/streams.ts';
 const INSTRUMENT_KANAELE: readonly string[] = INSTRUMENT_STROEME.map((s) => kanalVonStrom(s));
 
 export type Ziel = { art: 'spur'; spur_id: string } | { art: 'insert'; insert_id: string } | { art: 'insert_neu'; strang_id: string } | { art: 'kanal'; kanal: string };
-export interface AnzuwendenPreset { id: string; name: string; geraet: string; graph?: string; werte: Record<string, Wert> }
+export interface AnzuwendenPreset { id: string; name: string; geraet: string; graph?: string; werte: Record<string, Wert>; stifte?: Stift[] }
 export type Plan =
   | { weg: 'proj'; befehle: Record<string, unknown>[]; label: string; uebersprungen: string[]; hinweise?: string[] }
   | { weg: 'regler'; graph?: { kanal: string; name: string }; anfragen: { pfad: string; nach: number }[]; uebersprungen: string[] };
@@ -96,8 +97,11 @@ export function planeAnwendung(preset: AnzuwendenPreset, ziel: Ziel, projekt: Pr
         const m = /^knob([1-9]|[1-5][0-9]|6[0-4])$/.exec(name);
         if (m && BK_PARAMETER.includes(`k${m[1]}`)) parameter[`k${m[1]}`] = w as number; else uebersprungen.push(name);   // lautstaerke: a bk track has none
       }
-      geraet = { art: 'intern', name: 'bk', graph: tausch ? preset.graph : alt.graph, parameter, preset: preset.id };
-      const hinweise = [...(tausch ? ['graph_gewechselt'] : []), ...(s.freeze && (tausch || !gleich(alt.parameter, parameter)) ? ['freeze_geht'] : [])];
+      // Kraken patch field: applying always REPLACES the track's pins. A preset with pins writes them; a preset without leaves the field out (= the graph's default pins).
+      const stifte = preset.stifte ? preset.stifte.map((e): Stift => [e[0], e[1], e[2], e[3]]) : undefined;
+      geraet = { art: 'intern', name: 'bk', graph: tausch ? preset.graph : alt.graph, parameter, preset: preset.id, ...(stifte ? { stifte } : {}) };
+      const stifteAnders = JSON.stringify(alt.stifte ?? null) !== JSON.stringify(stifte ?? null);
+      const hinweise = [...(tausch ? ['graph_gewechselt'] : []), ...(s.freeze && (tausch || stifteAnders || !gleich(alt.parameter, parameter)) ? ['freeze_geht'] : [])];
       return { weg: 'proj', befehle: [{ befehl: 'spur_aendern', spur_id: s.id, geraet }], label, uebersprungen, ...(hinweise.length ? { hinweise } : {}) };
     } else throw new PresetFehler(409, 'geraet_passt_nicht');
     // a freeze is dropped when the device's values change (spur_aendern); say so before the write
@@ -141,6 +145,7 @@ function bkStufenPlan(preset: AnzuwendenPreset, z: Record<string, unknown>, proj
     const m = /^knob([1-9]|[1-5][0-9]|6[0-4])$/.exec(name);
     if (m && BK_PARAMETER.includes(`k${m[1]}`) && typeof w === 'number') werte[`k${m[1]}`] = w; else uebersprungen.push(name);
   }
+  if (preset.stifte) uebersprungen.push('stifte');   // pins are only addressable on a track device (a stage plays the graph's default pins)
   if (z.art === 'insert') {
     const t = alleInserts(projekt).find((x) => x.insert.id === z.insert_id);
     if (!t) throw new PresetFehler(404, 'ziel_unbekannt');
@@ -172,6 +177,8 @@ function kanalPlan(preset: AnzuwendenPreset, g: GeraetDef, kanal: string, gelade
     // the start position for a knob the preset does not carry is the vorgabe of the graph the knobs will run on (0.5 where it defines none or the file is unknown)
     const vorgaben = vorgabenVon(String(preset.graph));
     for (let n = 1; n <= BK_REGLER_ZAHL; n++) { const w = preset.werte[`knob${n}`]; anfragen.push({ pfad: `${kanal}/bk/${n}`, nach: typeof w === 'number' ? w : (vorgaben?.[n - 1] ?? 0.5) }); }
+    // pins have no /regler path: only a track device carries them
+    if (preset.stifte) uebersprungen.push('stifte');
     // the caller sends the graph FIRST and the knob requests only after it was accepted
     return { weg: 'regler', ...(tausch ? { graph: { kanal, name: String(preset.graph) } } : {}), anfragen, uebersprungen };
   }
@@ -193,9 +200,9 @@ function kanalPlan(preset: AnzuwendenPreset, g: GeraetDef, kanal: string, gelade
 
 // POST /presets/von_ziel (T3a.4): the current values of a project target as a preset's `werte`, the inverse of the plan above.
 // rb338: plain values through rbPlain (a parameter the track does not set gets the plugin default, the switch becomes a boolean);
-// bk: knob1..knob64 from k1..k64 (absent = the graph's `vorgabe`, 0.5 where it has none) and the graph name; komp stage: the mapped rows back to plugin ids.
+// bk: knob1..knob64 from k1..k64 (absent = the graph's `vorgabe`, 0.5 where it has none), the graph name and the track's pins (`stifte`, when it has its own list); komp stage: the mapped rows back to plugin ids.
 // A kern channel is saved through POST /presets with werte, as the page does today (D9, D22).
-export function werteVonZiel(ziel: Ziel, projekt: Projekt | null): { geraet: string; graph?: string; werte: Record<string, Wert> } {
+export function werteVonZiel(ziel: Ziel, projekt: Projekt | null): { geraet: string; graph?: string; werte: Record<string, Wert>; stifte?: Stift[] } {
   const z = ziel as Record<string, unknown>;
   if (z?.art !== 'spur' && z?.art !== 'insert') throw new PresetFehler(404, 'ziel_unbekannt');
   if (!projekt) throw new PresetFehler(409, 'kein_projekt');
@@ -216,7 +223,9 @@ export function werteVonZiel(ziel: Ziel, projekt: Projekt | null): { geraet: str
     }
     if (g?.art === 'intern' && g.name === 'bk') {
       const vorgaben = vorgabenVon(g.graph);
-      return { geraet: 'baukasten', graph: g.graph, werte: Object.fromEntries(BK_PARAMETER.map((k, i) => [`knob${i + 1}`, g.parameter[k] ?? vorgaben?.[i] ?? 0.5])) };
+      // the track's own pin list rides along; a track on the graph's default pins (no `stifte`) saves none, which applies back as the defaults
+      return { geraet: 'baukasten', graph: g.graph, werte: Object.fromEntries(BK_PARAMETER.map((k, i) => [`knob${i + 1}`, g.parameter[k] ?? vorgaben?.[i] ?? 0.5])),
+        ...(g.stifte ? { stifte: g.stifte.map((e): Stift => [e[0], e[1], e[2], e[3]]) } : {}) };
     }
     throw new PresetFehler(409, 'geraet_passt_nicht');
   }

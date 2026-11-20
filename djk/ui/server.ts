@@ -57,6 +57,9 @@ import { aufnahmeBereich } from './areas/proj/recording.ts';   // 1.8 Slice 1
 import { stemsBereich, type StemsOptionen } from './areas/proj/stems.ts';   // 1.13 Slice 6
 import { speichereModul, modulBasis } from './project/module_storage.ts';   // plan live-module task 3
 import { bibliothekBereich } from './areas/live/library.ts';   // plan live-module task 10
+import { sichereWerksProbenImStandardOrdner } from './sampler/werksproben.ts';
+import { raeumeWaisenImStandardOrdner } from './sampler/waisen.ts';
+import { projektWurzelVorgabe } from './project/storage.ts';
 import { samplerBereich, schnittKurz } from './areas/sampler/area.ts';   // sampler A1 task 4
 import { samplerKitBereich } from './areas/sampler/kit_routes.ts';   // sampler B task 2
 import { liveBereich, type DeckLoopAusschnitt } from './areas/live/export.ts';
@@ -437,7 +440,7 @@ export class Oberflaeche {
     const presets = presetsBereich(this.bereichKontext(), { ...(opt.presets ?? {}), projekt: () => this.proj.zugang.offen()?.projekt ?? null, graphVon: (kanal) => this.stand.graphen_geladen[kanal] });   // 1.9 (O28): built first, the project command preset_anwenden reads its store
     const pluginIndex = new PluginIndex({ python, ...opt.plugins, log: opt.log, bei: (scan) => this.bereichKontext().verteile({ a: 'plugins', f: { scan } }) });
     this.proj = projBereich(this.bereichKontext(), { pluginIndex: (id) => pluginIndex.finde(id), presetLies: (id) => presetInhaltVon(presets.speicher, id), katalog: opt.katalog ?? katalogVorgabe(opt.mediathek ?? MEDIATHEK_VORGABE), mediathek: opt.mediathek ?? MEDIATHEK_VORGABE,
-      wirtOrdner: () => this.wirtBasis(), analyse: analyseOrdner, analysierer, bestand: opt.korrekturen !== undefined ? opt.korrekturen : (inst === '' ? opt.bestand : null), kanalOffen: (k) => this.kanalGeoeffnet(k), einsammler: this.einsammler, ...opt.proj });
+      wirtOrdner: () => this.wirtBasis(), analyse: analyseOrdner, analysierer, bestand: opt.korrekturen !== undefined ? opt.korrekturen : (inst === '' ? opt.bestand : null), kanalOffen: (k) => this.kanalGeoeffnet(k), einsammler: this.einsammler, samplerOrdner: () => opt.samplerOrdner, ...opt.proj });
     this.router.melde(this.proj);
     // A5: the route uses the collector of the session (a test may hand its own through opt.proj)
     this.router.melde(einsammelnBereich(this.bereichKontext(), this.proj.zugang, { einsammler: opt.proj?.einsammler ?? this.einsammler,
@@ -525,6 +528,11 @@ export class Oberflaeche {
     if (reste > 0) this.opt.log?.({ typ: 'aufgeraeumt', anzahl: reste, arbeitsbestand: this.opt.arbeitsbestand });
     const importReste = raeumeImportReste(this.loopOrdner());   // S6: Arbeitsordner eines abgestürzten Loop-Imports
     if (importReste > 0) this.opt.log?.({ typ: 'loop_import_aufgeraeumt', anzahl: importReste });
+    const werks = sichereWerksProbenImStandardOrdner();   // the factory samples of the amiga device: no amiga graph translates without them
+    if (werks.length > 0) this.opt.log?.({ typ: 'werksproben_angelegt', dateien: werks });
+    // slot banks (amiga-<hex>, smp-p*.f32) that no project or module names any more: old ones go, see sampler/waisen.ts
+    const waisen = raeumeWaisenImStandardOrdner([this.opt.proj?.wurzel ?? projektWurzelVorgabe(instanz()), modulBasisVon(this.opt.modulOrdner, instanz())]);
+    if (waisen.graphen.length + waisen.samples.length > 0 || waisen.uebersprungen !== null) this.opt.log?.({ typ: 'waisenbaenke_aufgeraeumt', ...waisen });
     await this.kern.starte();
     this.ohrTakt = setInterval(() => { this.ohr.lies(); this.hoerscheinTakt(); this.loopAutoTakt(); }, 100);  // Ohr T5/T10: Ring 100 ms nachlesen, je neuem Takt Hörscheine
     this.graphTakt = setInterval(() => { if (this.generation !== null) this.fragGraphen('takt'); }, Oberflaeche.GRAPH_FRAGE_MS);   // Baukasten S16
@@ -1662,7 +1670,13 @@ export class Oberflaeche {
       if (!schein) {
         const letzterSchein = deckNr ? this.hoerscheinstelle.letzter(deckNr) : null;
         // Plan seq-fader-frei D6 (2): a SEQ deck place that still holds a stopped track: eject it, the next call then opens (the first one still fails)
-        const geleert = deckNr !== null && /\/(fader|trim)$/.test(pfad) && this.seqDeckAufraeumen(deckNr, this.quelle(), true);
+        // seq_geleert only when the core ACCEPTED the unload (receipt 1..3); a refusal (deck_hoerbar, nicht_geladen) or no receipt reports nothing, and the guard is lifted so a retry sends again
+        let geleert = deckNr !== null && /\/(fader|trim)$/.test(pfad) && this.seqDeckAufraeumen(deckNr, this.quelle(), true);
+        if (geleert && deckNr !== null) {
+          const eintrag = this.seqEntladen.get(deckNr);
+          const q = eintrag ? await this.warteQuittung(eintrag.id) : null;
+          if (!q || ![1, 2, 3].includes(q.status)) { this.seqEntladen.delete(deckNr); geleert = false; }
+        }
         return this.json(a, 409, { fehler: 'kein_hoerschein', text: 'channel is closed; opening needs a valid hearing check (Ohr)',
           urteil: letzterSchein?.urteil ?? null, gruende: letzterSchein?.gruende ?? [], ...(geleert ? { seq_geleert: true } : {}) });
       }
@@ -1700,7 +1714,7 @@ export class Oberflaeche {
   // Plan seq-fader-frei D6/D9: a place that becomes a SEQ deck may still hold a STOPPED track with its channel closed; that track would keep the
   // I3a lock on deck/N. Eject it from the deck player (/k/deck/entladen). Never a playing track, never with an open channel. True iff the unload was
   // sent. One unload per state of the deck: the guard holds until /zustand/deck shows another state (or 5 s have passed, a lost datagram).
-  private readonly seqEntladen = new Map<number, { schluessel: string; t: number }>();
+  private readonly seqEntladen = new Map<number, { schluessel: string; t: number; id: number }>();
   // Review: D9 covers a place that BECOMES a SEQ deck. The lazy path (spaet) repairs a state the page server did not see come about (a restart, the studio
   // of 2026-11-18); it never ejects a track that arrived while the page server was watching (a load of Andreas after the SEQ deck), and no path ejects a
   // track with a start planned by Andreas: /zustand/deck has no "start planned" status (it reads 1), the unload would cancel the start.
@@ -1726,14 +1740,16 @@ export class Oberflaeche {
     const schluessel = `${Oberflaeche.deckSchluessel(st.z)}|${Number(st.z.status)}`;
     const vorher = this.seqEntladen.get(n);
     if (vorher && vorher.schluessel === schluessel && Date.now() - vorher.t < 5000) return false;
+    let id = 0;
     try {
-      this.kern.sende('/k/deck/entladen', { id: Number(++this.id), quelle, deck: n });
+      id = Number(++this.id);
+      this.kern.sende('/k/deck/entladen', { id, quelle, deck: n });
     } catch (e) {
       this.opt.log?.({ typ: 'seq_aufraeumen_fehler', deck: n, text: (e as Error).message });
       return false;   // a failed send is no error of the SEQ write or of the fader call
     }
     this.gesendet++;
-    this.seqEntladen.set(n, { schluessel, t: Date.now() });
+    this.seqEntladen.set(n, { schluessel, t: Date.now(), id });
     this.opt.log?.({ typ: 'seq_aufgeraeumt', deck: n });
     return true;
   }

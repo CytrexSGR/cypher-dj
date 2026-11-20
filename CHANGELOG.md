@@ -3,6 +3,64 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-20, twelfth update
+
+**Tracker**
+- A fifth view, TRACKER, shows the open production project as tracker rows: a column per instrument track, a cell per
+  note, the song list as the arrangement. There is no separate tracker document: what you write there opens in
+  PRODUCTION and the other way round. Keyboard entry, selection, clipboard, interpolation, transpose, undo and
+  transport; time insert and remove and section commands with ripple; a text form of the pattern.
+- Patterns that repeat in the song are linked clips: an edit in one reaches all of them, and trimming one unlinks it.
+  PRODUCTION shows the chain sign and the section borders on the ruler.
+- Effect commands in up to four effect columns, in the manner of the classic trackers: arpeggio, slide up and down,
+  glide to note, vibrato, tremolo, volume slide, set level, retrigger, pan, sample offset and reverse, on a grid of
+  ticks per row (6 by default, the 50 Hz of the old trackers at 125 BPM and 4 lines per beat). They are stored as
+  commands and unrolled for playback, offline render and MIDI export; on stepped 8-bit devices every tick is a jump,
+  on smooth devices the movement glides.
+- 8-bit devices for the Baukasten: amiga (a bank of up to 32 sample slots in the manner of an Amiga voice), chip-puls,
+  chip-dreieck and chip-rauschen, built on two new blocks, `paula` and `lfsr`. Templates 8-BIT 4 CHANNELS and CHIP,
+  SAVE MODULE and a tracker shelf.
+- IMPORT MOD reads a ProTracker module into a new tracker module, samples and patterns included, in one undo step.
+- TO DJ hands the current section (up to 64 beats) to a SEQ deck, one pattern per instrument track.
+
+**One dock**
+- PRODUCTION and the EFFECTS tab of DJ and LIVE use the same dock as STUDIO: one card per track, group, return, effect
+  unit and the master, the effects as chips on the card, the same menus and the same floating windows. In PRODUCTION
+  it replaces GROUPS, RETURNS and INSERTS; in the EFFECTS tab it replaces the channel strips, the detail view and the
+  MASTER, SENDS and BUS panels. Cards take plugin, effect and preset drops, + INSERT lists what can go there, and a
+  chip menu holds bypass, order, key source and the native window.
+
+**Instruments**
+- Kraken, a semi-modular synth with four voices and a 16 by 16 patch field, with a cabinet view that draws the jacks
+  and cables, and 14 factory presets (six of them use the patch field). New blocks `matrix`, `funktion` (a dual-slope
+  function generator) and `lpg` (a low-pass gate).
+- Drum Synth: a kit of eight pads (kick, rim, snare, clap, tom, closed hat, open hat, cymbal), each pad a drum recipe
+  with its own knobs, picked by the played note through the new block `notenwahl`.
+- Front panels for the rest of the instruments and effect graphs (analog role instruments, wavetable, FM, sampler,
+  drums), and factory programs of the Launch Control 3 for every instrument panel. A panel greys a control that is not
+  heard with the current settings and says in its tooltip what makes it heard.
+- The DEVICES list has a star per device, filter chips for favourites and your own collections, and a double click
+  adds the instrument as a new track or the effect to the selected strip.
+- Sampler: key and velocity cross-fades between zones and a release level that follows the hold time.
+- Wavetable tables are cached and shared between voices: a 256-frame table needs about half the memory and half the
+  build time, bit-identical to before. Tables can now hold up to 256 frames.
+- Fixes that change the sound: the Phase mod knob of Neuro Bass and the Clean sub knob of the Reese wavetable synth had
+  no audible effect and now do; the wavetable oscillator restarts only on a rising trigger.
+
+**Engine and studio**
+- MIDI export writes one channel per part (drums on channel 10) and widens the bend range to the largest bend.
+- A Surge host that systemd restarted gets its parameter map back without waiting for the next command; a deck load
+  ends running fader parts of the whole coupling group; a return fader lane can be taken over by hand while its
+  automation plays.
+- A number of smaller fixes in the tracker, the slot banks, the start scripts and the tests.
+
+**Limits to know**
+- The tracker, Kraken, the Drum Synth and the dock were checked in automated tests (the dock of the EFFECTS tab also in a
+  headless browser); they have not yet been heard in full by a listener. The MOD import reads four-channel ProTracker
+  modules and was tested with generated modules, not with a collection of real ones.
+- The dock is not yet in the FX1, FX2 and COLOR units of the DJ view; they keep their old surfaces.
+- SFZ import and export for the sampler are not built.
+
 ## 2026-11-18, eleventh update
 
 **Controllers**

@@ -75,6 +75,8 @@ fn probe_wurzel() -> PathBuf {
         std::fs::write(w.join("orchester-schlag.f32"), baukasten_dsp::proben::bytes(&baukasten_dsp::proben::orchester_schlag(48_000.0))).unwrap();
         // S22: sampler-fairlight reads the hit as three detune slices.
         std::fs::write(w.join("orchester-schlag-schichten.f32"), baukasten_dsp::proben::bytes(&baukasten_dsp::proben::orchester_schlag_schichten(48_000.0))).unwrap();
+        // the factory bank of the `amiga` device (tracker stage 4)
+        baukasten_dsp::proben::schreibe_amiga_werk(&w);
         // S21 fx-federhall reads its spring IR from the graph folder (merge S13 + S21).
         std::fs::write(w.join("feder-ir.f32"), baukasten_dsp::proben::bytes(&baukasten_dsp::proben::feder_ir(48_000.0))).unwrap();
         w
@@ -305,10 +307,46 @@ const REGLER_OHNE_WIRKUNG_AUF_DER_PROBE: &[(&str, usize, &str)] = &[
     ("synth-poly", 58, POLY_PM_AUS), ("synth-poly", 60, POLY_WARP_AUS), ("synth-poly", 62, POLY_CHAOS_AUS),
     ("synth-greif", 62, GREIF_GLIDE),
     ("synth-greif2", 62, GREIF_GLIDE),
+    ("synth-kraken", 58, KRAKEN_GLIDE),
+    ("drum-synth", 1, DRUMSYNTH_PAD),
+    ("drum-synth", 2, DRUMSYNTH_PAD),
+    ("drum-synth", 3, DRUMSYNTH_PAD),
+    ("drum-synth", 4, DRUMSYNTH_PAD),
+    ("drum-synth", 5, DRUMSYNTH_PAD),
+    ("drum-synth", 6, DRUMSYNTH_PAD),
+    ("drum-synth", 7, DRUMSYNTH_PAD),
+    ("drum-synth", 8, DRUMSYNTH_PAD),
+    ("drum-synth", 9, DRUMSYNTH_PAD),
+    ("drum-synth", 10, DRUMSYNTH_PAD),
+    ("drum-synth", 11, DRUMSYNTH_PAD),
+    ("drum-synth", 12, DRUMSYNTH_PAD),
+    ("drum-synth", 13, DRUMSYNTH_PAD),
+    ("drum-synth", 14, DRUMSYNTH_PAD),
+    ("drum-synth", 15, DRUMSYNTH_PAD),
+    ("drum-synth", 16, DRUMSYNTH_PAD),
+    ("drum-synth", 17, DRUMSYNTH_PAD),
+    ("drum-synth", 18, DRUMSYNTH_PAD),
+    ("drum-synth", 19, DRUMSYNTH_PAD),
+    ("drum-synth", 20, DRUMSYNTH_PAD),
+    ("drum-synth", 21, DRUMSYNTH_PAD),
+    ("drum-synth", 22, DRUMSYNTH_PAD),
+    ("drum-synth", 23, DRUMSYNTH_PAD),
+    ("drum-synth", 24, DRUMSYNTH_PAD),
+    ("drum-synth", 25, DRUMSYNTH_PAD),
+    ("drum-synth", 26, DRUMSYNTH_PAD),
+    ("drum-synth", 31, DRUMSYNTH_PAD),
+    ("drum-synth", 32, DRUMSYNTH_PAD),
+    ("drum-synth", 33, DRUMSYNTH_PAD),
+    ("drum-synth", 34, DRUMSYNTH_PAD),
+    ("synth-kraken", 52, KRAKEN_GREZO),
     ("synth-poly", 54, "glide runs from the pitch a voice had last; the probe's notes all land on voices that have not played yet (the first note of a voice sets the glide to its pitch), so there is nothing to glide from. tests/synth_poly.rs `glide_auf_der_stimme` plays two chords on the same voices"),
 ];
 
+const DRUMSYNTH_PAD: &str = "a pad knob: the probe plays A2 C#3 E3 A3, which the note map sends to the closed hat and the cymbal only, so the knobs of the other pads cannot be heard on it. tests/drum_synth.rs `jeder_knopf_aendert_seinen_platz` sweeps every knob on the note of its own pad";
 const GREIF_GLIDE: &str = "glide runs from the pitch a voice had last; the probe's four notes land on voices that have not played yet (the first note of a voice sets the glide to its pitch), and the chord that follows plays the same four notes on the same voices, so there is nothing to glide from. tests/greif.rs `glide_gleitet_auf_der_stimme` plays three chords with other pitches on the voices of the first";
+
+const KRAKEN_GREZO: &str = "Gate Reso acts on the low-pass gate only in mode LP; the default mode is Both, where the lpg ignores it. tests/kraken.rs `jeder_knopf_bewegt_den_klang` switches to LP and checks that knob 52 moves the sound";
+const KRAKEN_GLIDE: &str = "glide runs from the pitch a voice had last; the probe's four notes land on voices that have not played yet (the first note of a voice sets the glide to its pitch), so there is nothing to glide from. tests/kraken.rs `glide_gleitet_auf_der_stimme` plays three chords with other pitches on the voices of the first";
 
 const REMIX_SZENE_RUHT: &str = "the scene types, both sub parameters and the pump only act while Scene (knob 1) is away from its centre; the probe leaves it at 0.5 = original sound (the neutral start of the device). remix_dsp tests/verhalten.rs `every_scene_effect_changes_the_sound_and_stays_bounded` and `echo_repeats_at_the_selected_beat_fraction` drive them";
 const REMIX_ISO_RUHT: &str = "the isolate type only acts while Low, Mid or High (knobs 7 to 9) is away from its centre; the probe leaves them at 0.5 = neutral. remix_dsp `every_isolate_effect_stays_bounded_at_both_ends` and `isolator_kills_one_band_and_leaves_the_others` drive it";

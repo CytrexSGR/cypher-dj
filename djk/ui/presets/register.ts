@@ -74,7 +74,7 @@ function lese(speicher: PresetSpeicher, herkuenfte: readonly Herkunft[]): { eint
         id, herkunft: e.herkunft, geraet: p.geraet, slug: e.slug, name: p.name, pfad, tags: [...p.tags],
         familie: speicher.vok.familieVon.get(b.art) as Familie,
         art: b.art, unterart: b.unterart, charakter: [...b.charakter], genre: [...b.genre], einsatz: [...b.einsatz], energie: b.energie, text: b.text,
-        hash: p.hash, klang: sha256(kanonisch({ geraet: p.geraet, werte: p.werte, ...(p.graph ? { graph: p.graph } : {}) })),
+        hash: p.hash, klang: sha256(kanonisch({ geraet: p.geraet, werte: p.werte, ...(p.graph ? { graph: p.graph } : {}), ...(p.stifte ? { stifte: p.stifte } : {}) })),
         ...(p.autor ? { autor: p.autor } : {}),
       });
     } catch (x) {

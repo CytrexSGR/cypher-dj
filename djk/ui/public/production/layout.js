@@ -10,6 +10,8 @@ export const LINEAL_HOEHE = 28;
 export const LOOP_ZONE = 12;            // y < 12 im Lineal: Loop-Klammer; darunter: Startposition
 export const CLIP_KOPF = 14;            // Namenszeile eines Clips
 export const FARBEN = ['#e0563b', '#e0a33e', '#d6c94a', '#58d66b', '#2fd6c3', '#3b8de0', '#8c9bff', '#9b59d0', '#e08cff'];
+/** The colour after `f` in the track colour sequence (an unknown colour starts the sequence). */
+export const naechsteFarbe = (f) => FARBEN[(FARBEN.indexOf(f) + 1) % FARBEN.length];
 
 export const LANE_HOEHE = 48;           // Automation Slice 1: height of the lane row under a track (the row exists only while the lane is open)
 export const GRUPPEN_HOEHE = 28;        // 1.10 T3: height of a group header row in the arrangement

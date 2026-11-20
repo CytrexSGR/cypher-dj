@@ -33,6 +33,7 @@ fn wurzel() -> PathBuf {
         p("orchester-schlag.f32", baukasten_dsp::proben::orchester_schlag(SR));
         p("orchester-schlag-schichten.f32", baukasten_dsp::proben::orchester_schlag_schichten(SR));
         p("feder-ir.f32", baukasten_dsp::proben::feder_ir(SR));
+        baukasten_dsp::proben::schreibe_amiga_werk(&w);
         w
     }).clone()
 }

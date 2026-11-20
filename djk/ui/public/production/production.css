@@ -13,8 +13,11 @@ body.produktion #kopf { grid-area: kopf; }
 body.produktion #pult { display: none; }
 body.produktion #bestand { grid-area: bestand; min-width: 0; }
 body.produktion #produktion { grid-area: prod; display: grid; min-width: 0; min-height: 0; gap: 6px;
-  grid-template-rows: auto minmax(140px, 1fr) auto auto auto auto var(--detail, 26vh); position: relative; }   /* Zeilen in Flussreihenfolge: Transport, Arrangement, Mischer (Gruppen und Master; meist versteckt), INPUTS (zu: nur die Summary), Detail; jedes Kind hat unten eine feste grid-row (1.10 N4) */
-.p-transport { grid-row: 1; } .p-arr { grid-row: 2; } .p-mixer { grid-row: 3; } .p-returns { grid-row: 4; } .p-inserts { grid-row: 5; } .p-geraete { grid-row: 6; } .p-detail { grid-row: 7; }
+  grid-template-rows: auto minmax(140px, 1fr) auto auto auto var(--detail, 26vh); position: relative; }   /* rows in page order: transport, arrangement, dock, ROUTING MATRIX, INPUTS (closed: only the summary), CLIP; every child has a fixed grid-row below */
+.p-transport { grid-row: 1; } .p-arr { grid-row: 2; } .p-dock { grid-row: 3; } .p-matrix { grid-row: 4; } .p-geraete { grid-row: 5; } .p-detail { grid-row: 6; }
+/* the dock (dock/dock.css has the cards): the panel look #werkbank gives .w-pan; the window layer covers the page and lets clicks through */
+.p-dock { min-width: 0; }
+#produktion .p-dock .w-pan { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px; min-width: 0; min-height: 0; overflow: auto; }
 
 /* Browser links, schmal: nur LIBRARY, Baum über der Liste, Detail aus, nur die Namensspalte */
 /* Welche Tabelle des Browsers zeigt: in PRODUCTION immer LIBRARY, unabhängig vom DJ-Zustand (Reiter, BOTTOM-PANEL EFFECTS). Vorher
@@ -49,6 +52,11 @@ body.produktion.b-kollektionen #kollektionen { display: block !important; }
 .geraete-liste { list-style: none; margin: 0 0 8px; padding: 0; }
 .geraete-zeile { padding: 3px 6px; border-radius: 4px; cursor: grab; }
 .geraete-zeile.aus { opacity: .45; cursor: not-allowed; }
+.geraete-stern { border: 0; background: none; padding: 0 4px 0 0; color: var(--dim); font-size: 12px; cursor: pointer; }
+.geraete-stern.an { color: #f5c542; }
+.geraete-filter { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 6px; }
+.geraete-chip { font-size: 10px; padding: 1px 8px; border-radius: 10px; }
+.geraete-chip.an { background: var(--a, #35d0b5); color: #000; border-color: transparent; }
 .geraete-art { margin-left: 6px; font-size: 10px; color: var(--dim); }
 .geraete-gruppe h5 { margin: 6px 6px 2px; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
 .geraete-neben { margin-left: 6px; font-size: 10px; color: var(--dim); }
@@ -88,8 +96,8 @@ body.produktion .preset-kopf select { max-width: 14ch; }
 /* Arrangement: Ecke | Lineal, darunter Köpfe | Spurfläche in EINEM senkrecht scrollenden Körper */
 .p-arr { display: grid; grid-template-columns: 264px minmax(0, 1fr); grid-template-rows: 28px minmax(0, 1fr) 14px; min-height: 0;
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; position: relative; }
-.p-ecke { display: flex; gap: 2px; align-items: center; padding: 0 4px; border-right: 1px solid var(--line); }
-.p-ecke button { font-size: 9px; font-weight: 700; padding: 2px 4px; border-radius: 4px; white-space: nowrap; }
+.p-ecke { display: flex; gap: 2px; align-items: center; padding: 0 3px; border-right: 1px solid var(--line); }
+.p-ecke button { font-size: 9px; font-weight: 700; padding: 2px 2px; letter-spacing: 0; border-radius: 4px; white-space: nowrap; }
 .p-lineal { display: block; width: 100%; height: 28px; cursor: pointer; touch-action: none; }
 .p-koerper { grid-column: 1 / -1; display: grid; grid-template-columns: 264px minmax(0, 1fr); overflow-y: auto; overflow-x: hidden; min-height: 0; }
 .p-koepfe { border-right: 1px solid var(--line); }
@@ -124,7 +132,7 @@ body.produktion .preset-kopf select { max-width: 14ch; }
 
 /* Detailbereich: leerer Rahmen, gefüllt in V2 (Clip-Bearbeitung, Piano-Roll) */
 .p-detail { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; min-height: 0; overflow: hidden; }
-.p-detail-kopf { font-size: 11px; font-weight: 700; letter-spacing: .16em; color: var(--dim); }
+.p-detail-kopf { font-size: 10px; font-weight: 700; letter-spacing: .14em; color: var(--dim); }   /* the look of .w-dock-etikett */
 .p-detail-leer { color: var(--dim); font-size: 13px; padding-top: 8px; }
 
 /* D1 V2 Slice 1: Spurfläche mit Tastaturfokus (Entf, Strg+D, Strg+E, Strg+L wirken nur dort) */
@@ -188,7 +196,7 @@ body.produktion .preset-kopf select { max-width: 14ch; }
 
 /* I08: Geräte-Panel (Panel INPUTS) */
 .p-geraete { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; font-size: 12px; }
-.p-geraete summary { cursor: pointer; font-size: 11px; font-weight: 700; letter-spacing: .16em; color: var(--dim); }
+.p-geraete summary { cursor: pointer; font-size: 10px; font-weight: 700; letter-spacing: .14em; color: var(--dim); }   /* the look of .w-dock-etikett */
 .p-gzeile { display: grid; grid-template-columns: 9ch 22ch 24ch 160px auto minmax(0, 1fr); gap: 4px 10px; align-items: center; padding: 3px 0; border-top: 1px solid var(--line); }
 .p-gname { font-weight: 700; }
 .p-gstatus { color: var(--dim); }
@@ -221,33 +229,9 @@ body.produktion .preset-kopf select { max-width: 14ch; }
 .p-aufnahme button.an { background: #e5484d; color: #0e0f12; border-color: #e5484d; }
 
 /* 1.10 Slice 1: Gruppen und Master unter dem Arrangement (P1) */
-.p-mixer { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; min-width: 0; }
-.p-mixer[hidden] { display: none; }
-.p-mixer-kopf { display: flex; align-items: center; gap: 8px; }
-.p-mixer-titel { font-size: 10px; font-weight: 700; letter-spacing: .16em; color: var(--dim); }
-.p-mixer-kopf button { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
-.p-mixer-kopf button:disabled { opacity: .4; cursor: default; }
-.p-gruppenreihe { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
 .p-gruppenkopf { width: 264px; border: 1px solid var(--line); border-radius: 4px; }
 .p-gruppenkopf .p-fader { grid-column: 2 / 4; }   /* nested groups: the output selector (.p-ausgang, columns 4 and 5) sits next to the fader like on a track */
 /* 1.10 slice 3: returns (the head is the group head with Hall rows) and the send grid */
-.p-returnkopf { width: 300px; height: auto; grid-template-rows: 20px 18px 14px auto; max-height: 40vh; overflow-y: auto; }
-.p-hallblock { grid-column: 1 / -1; font-size: 10px; }
-.p-hallblock summary { cursor: pointer; letter-spacing: .12em; color: var(--dim); font-weight: 700; }
-.p-hallan { font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 4px; margin-left: 6px; }
-.p-hallzeile { display: grid; grid-template-columns: 76px 1fr 10ch; white-space: nowrap; gap: 6px; align-items: center; }
-.p-hall { min-width: 0; height: 12px; }
-.p-hallwert, .p-sendwert { text-align: right; font-variant-numeric: tabular-nums; }
-.p-sendblock { flex-basis: 100%; font-size: 10px; margin-top: 4px; }
-.p-sendraster { display: flex; flex-direction: column; gap: 2px; padding-top: 4px; max-height: 220px; overflow-y: auto; }
-.p-sendzeile { display: flex; align-items: center; gap: 10px; }
-.p-sendname { width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.p-send { display: grid; grid-template-columns: 56px 110px 6ch; gap: 4px; align-items: center; }
-.p-sendregler { min-width: 0; height: 12px; }
-.p-pm { display: grid; grid-template-columns: auto 160px 6ch; gap: 2px 8px; align-items: center; margin-left: auto; }
-.p-pm-fader { min-width: 0; height: 14px; }
-.p-pm-wert { font-size: 10px; text-align: right; }
-.p-pm-pegel { grid-column: 1 / -1; height: 6px; }
 
 /* Paket 1.13 Warp, Slice 3b: ×2, :2 (Task 4), SET PROJECT TEMPO (Task 10), Sample-Editor und Kontextmenü (Task 17) */
 .p-warp-tempo { display: inline-flex; gap: 4px; }
@@ -309,24 +293,11 @@ body.produktion .preset-kopf select { max-width: 14ch; }
 .p-autotitel { font-size: 10px; letter-spacing: .08em; color: var(--dim); }
 
 /* 1.10 slice 4a T7: PRE/POST switch of a return and the INSERTS block (one row per strip, four places) */
-.p-prepost { grid-column: 4 / 6; font-size: 9px; font-weight: 800; letter-spacing: .06em; padding: 0 4px; border-radius: 4px; }
-.p-prepost.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
-.p-inserts { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; min-width: 0; }
-.p-insertliste { display: flex; flex-direction: column; gap: 3px; padding-top: 4px; max-height: 170px; overflow-y: auto; overflow-x: hidden; }
-.p-kette { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 11px; min-width: 0; }
-.p-kette-name { flex: 0 0 120px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); }
-.p-kette-latenz { flex: 0 0 auto; font-size: 11px; color: var(--dim); }
-.p-platz { display: inline-flex; align-items: center; gap: 2px; min-width: 64px; min-height: 22px; border: 1px dashed var(--line); border-radius: 5px; padding: 0 2px; box-sizing: border-box; }
-.p-platz.leer { justify-content: center; opacity: .85; }
-.p-platz.p-stufe { border-style: solid; background: var(--panel2); }
-.p-platz.p-stufe.aus .p-ins-name { opacity: .5; text-decoration: line-through; }
-.p-platz button { font-size: 10px; padding: 1px 4px; border-radius: 4px; min-height: 18px; }
 .p-ins-gr { min-width: 5.5ch; text-align: right; font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
 .p-ins-gr.wirkt { color: var(--a); }
 .p-ins-preset { max-width: 20ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--dim); }   /* 1.16 rest U7: origin mark of a stage */
 .p-ins-preset.geaendert { color: var(--warn); }
 .p-ins-an.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
-.p-ins-neu:disabled { opacity: .45; }
 .p-ins-popover { flex: none; width: calc(100% - 126px); box-sizing: border-box; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 2px 14px; padding: 4px 8px; margin: 2px 0 4px 126px;
   background: #14171d; border: 1px solid var(--line); border-radius: 6px; }
 .p-ins-zeile { display: grid; grid-template-columns: 84px minmax(0, 1fr) 9ch; gap: 6px; align-items: center; color: var(--dim); white-space: nowrap; }
@@ -337,7 +308,6 @@ body.produktion .preset-kopf select { max-width: 14ch; }
 .p-ins-band { display: grid; gap: 2px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; min-width: 0; }
 .p-ins-band-kopf { font-size: 10px; letter-spacing: .08em; color: var(--dim); }
 .p-ins-zeile input[type="checkbox"] { width: auto; justify-self: start; }
-.p-ins-neu { margin-right: 2px; }
 /* 1.10 slice 4c: the rack of a strip. The panel reuses the popover grid; a macro block is one cell like an EQ band block. */
 .p-rack-knopf { font-size: 10px; padding: 1px 6px; border-radius: 4px; min-height: 18px; margin-left: auto; }
 .p-rack-knopf[aria-expanded="true"] { background: var(--a); color: #0e0f12; border-color: var(--a); }
@@ -362,7 +332,7 @@ body.produktion .preset-kopf select { max-width: 14ch; }
 .p-ins-zeile.gemappt { opacity: .55; }
 .p-ins-zeile.gemappt input { cursor: not-allowed; }
 .p-ins-zeile.gemappt .p-ins-wert { color: var(--a); }
-@media (max-width: 700px) { .p-kette-name { flex-basis: 100%; } .p-kette-latenz { flex-basis: 100%; } .p-ins-popover { margin-left: 0; width: 100%; } .p-platz { min-width: 0; } }
+@media (max-width: 700px) { .p-ins-popover { margin-left: 0; width: 100%; } }
 /* 1.14 Comping, task 7: the T button (left of A), the head of a take row (40 px like the row, layout.js TAKE_HOEHE) */
 .p-take { position: absolute; right: 28px; bottom: 3px; width: 18px; height: 14px; font-size: 9px; font-weight: 800; line-height: 1; padding: 0; border-radius: 4px; }
 .p-take[hidden] { display: none; }
@@ -436,7 +406,6 @@ body.produktion .preset-kopf select { max-width: 14ch; }
 .p-host-punkt.bereit { background: var(--gut); }
 .p-host-punkt.fehlt, .p-host-punkt.ausfall { background: var(--kill); }
 .p-host-latenz { font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.p-stufe[data-art="host"] .p-ins-name { max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .p-host-fenster.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
 .p-ins-popover.p-ins-host { display: block; }
 .p-hp-filter { width: 100%; max-width: 360px; font-size: 11px; }
@@ -466,12 +435,15 @@ body.produktion .preset-kopf select { max-width: 14ch; }
 body.produktion.bereich-instrumente #bestand .tabelle[data-tabelle], body.produktion.bereich-instrumente #geraete-browser, body.produktion.bereich-instrumente #presets,
 body.produktion.bereich-instrumente #kollektionen, body.produktion.bereich-instrumente #bestand .p-browserwahl { display: none !important; }
 
-/* Folding GROUPS, RETURNS and CLIP (einklappen.js): only the title row stays, the arrangement takes the height. */
+/* Folding the dock rows and CLIP (einklappen.js): only the title stays, the arrangement takes the height (the dock row is auto). */
 .p-klapptitel { cursor: pointer; user-select: none; }
 .p-klapptitel::before { content: '\25BE\00A0'; }
 .p-zu .p-klapptitel::before { content: '\25B8\00A0'; }
-.p-mixer.p-zu > :not(.p-mixer-kopf) { display: none; }
 .p-detail.p-zu > :not(.p-detail-kopf) { display: none; }
+#produktion .p-dock .w-dock-etikett.p-klapptitel { white-space: nowrap; }
+#produktion .p-dock .w-dock-zeile.p-zu { grid-template-columns: 1fr; }
+#produktion .p-dock .w-dock-zeile.p-zu > :not(.w-dock-etikett) { display: none; }
+#produktion .p-dock .w-dock-zeile.p-zu > .w-dock-etikett { border-right: 0; justify-content: flex-start; padding: 2px 6px; }
 body.produktion #produktion:has(> .p-detail.p-zu) { --detail: auto; }
 .p-ins-popover.p-geraet-plugin { position: fixed; z-index: 1000; right: 16px; bottom: 16px; left: auto; margin: 0; display: block; width: min(760px, calc(100vw - 32px)); max-height: 70vh; overflow: auto; }
 .p-geraet-zu { float: right; margin-left: 6px; }
@@ -481,3 +453,12 @@ body.produktion #produktion:has(> .p-detail.p-zu) { --detail: auto; }
 .p-edit button[aria-disabled="true"] { cursor: default; }
 .p-roll-leiste { flex-wrap: wrap; row-gap: 4px; }
 .p-roll-leiste label select + select { margin-left: 4px; }
+
+/* track heads: Shift/Ctrl selection and moving a whole track by dragging its head (2026-11-18) */
+.p-kopf.p-zieht { opacity: .55; cursor: grabbing; }
+.p-kopf.p-ziel-oben { box-shadow: inset 0 3px 0 var(--a, #35d0b5); }
+.p-kopf.p-ziel-unten { box-shadow: inset 0 -3px 0 var(--a, #35d0b5); }
+.p-gruppieren { margin-left: 8px; }
+.p-ins-popover.p-ins-schwebend { position: fixed; z-index: 30; width: min(640px, 90vw); max-height: 60vh; overflow: auto; margin: 0; }
+.p-ins-popover .p-ins-zu { grid-column: 1 / -1; justify-self: end; font: inherit; font-size: 11px; padding: 1px 8px; }
+.p-ins-popover.p-ins-host .p-ins-zu { float: right; }

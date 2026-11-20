@@ -11,7 +11,7 @@
       {"id": "hell", "type": "knob", "label": "Hardness", "span": 2, "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
       {"id": "lage", "type": "knob", "label": "Hammer position", "span": 2, "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
       {"id": "e1", "type": "label", "span": 4, "text": "Felt hammer, 4 to 0.5 ms contact"},
-      {"id": "e2", "type": "label", "span": 4, "text": "Pick position: share of string length"}
+      {"id": "e2", "type": "label", "span": 4, "text": "Hammer position: share of string length"}
     ]},
     { "id": "str", "title": "STRING", "cols": 4, "controls": [
       {"id": "decay", "type": "knob", "label": "Decay", "span": 2, "bind": {"param": "k1"}, "format": "raw", "unit": "s", "default": 0.5},

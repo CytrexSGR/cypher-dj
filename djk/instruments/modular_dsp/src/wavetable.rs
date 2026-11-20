@@ -3,7 +3,7 @@
 //! **Tables.** Every table is computed from its harmonic spectrum when a graph is translated (no files, no samples):
 //! `saege`, `rechteck` (pulse width morph), `dreieck`, `sinus`, `analog` (sine, triangle, saw, square), `vokale` (sung a e i o
 //! u, formant envelopes) and `orgel` (drawbars added one by one); a node may bring its own table as `spektren` instead. A
-//! table holds 1 to 32 frames (the built-in ones up to 8); `pos` morphs between
+//! table holds 1 to 256 frames (the built-in ones up to 8); `pos` morphs between
 //! neighbouring frames by linear interpolation of the two frames at the same phase.
 //!
 //! **Band limit.** Each frame is stored as a mip map with one level per third of an octave: level `k` keeps the harmonics
@@ -31,6 +31,8 @@
 //! that decays toward zero except the position smoother, which snaps to its target (no subnormals).
 use realfft::num_complex::Complex;
 use realfft::RealFftPlanner;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 /// Highest number of unison copies per voice.
 pub const MAX_KOPIEN: usize = 7;
@@ -45,7 +47,7 @@ pub const STUFEN: usize = 29;
 /// Highest frequency that must stay free of aliases.
 pub const ALIAS_FREI_HZ: f32 = 20_000.0;
 /// Most frames per table.
-pub const MAX_FRAMES: usize = 32;
+pub const MAX_FRAMES: usize = 256;
 /// Most harmonics of a custom spectrum frame (`spektren`).
 pub const MAX_SPEKTREN_HARMONISCHE: usize = 256;
 /// Largest absolute amplitude of one custom harmonic.
@@ -149,7 +151,7 @@ fn spektrum(nr: usize) -> (usize, bool, Box<dyn Fn(usize, usize) -> Teilton>) {
 /// finite with `|a| <= MAX_SPEKTREN_AMPLITUDE`. The error is the reason, ready for the refusal text.
 pub fn pruefe_spektren(spek: &[Vec<f32>]) -> Result<(), &'static str> {
     if spek.is_empty() || spek.len() > MAX_FRAMES {
-        return Err("1..32 frames");
+        return Err("1..256 frames");
     }
     for f in spek {
         if f.is_empty() || f.len() > MAX_SPEKTREN_HARMONISCHE {
@@ -170,7 +172,7 @@ impl Tabelle {
     pub fn neu(nr: usize) -> Tabelle {
         let nr = nr.min(TABELLEN.len() - 1);
         let (frames, additiv, sp) = spektrum(nr);
-        Self::bauen(TABELLEN[nr], frames, additiv, &*sp)
+        Self::bauen(TABELLEN[nr], frames, additiv, MAX_HARMONISCHE, &*sp)
     }
 
     /// Builds a table from custom harmonic spectra (node field `spektren`): frame `i` holds the amplitudes of harmonics
@@ -184,16 +186,51 @@ impl Tabelle {
             let a = spek.get(i).unwrap_or(&leer).get(h - 1).copied().filter(|a| a.is_finite() && h <= MAX_SPEKTREN_HARMONISCHE).unwrap_or(0.0);
             (a as f64, 0.0)
         };
-        Self::bauen("spektren", frames, true, &sp)
+        Self::bauen("spektren", frames, true, MAX_SPEKTREN_HARMONISCHE, &sp)
     }
 
-    fn bauen(name: &'static str, frames: usize, additiv: bool, sp: &dyn Fn(usize, usize) -> Teilton) -> Tabelle {
+    /// `inhalt`: no harmonic above this number is nonzero. Levels that keep all of them and have the same length hold the
+    /// same samples (same input, same inverse FFT, same droop correction), so such a level is stored once and the others
+    /// point at it: bit-identical to storing each, a custom table (256 harmonics) saves about half its memory.
+    /// Reference build without shared levels (every level stored): what `aus_spektren` gave before the cache. For the
+    /// bit-equality test and the measurement.
+    #[doc(hidden)]
+    pub fn aus_spektren_ohne_teilen(spek: &[Vec<f32>]) -> Tabelle {
+        let frames = spek.len().clamp(1, MAX_FRAMES);
+        let leer = Vec::new();
+        let sp = move |i: usize, h: usize| -> Teilton {
+            let a = spek.get(i).unwrap_or(&leer).get(h - 1).copied().filter(|a| a.is_finite() && h <= MAX_SPEKTREN_HARMONISCHE).unwrap_or(0.0);
+            (a as f64, 0.0)
+        };
+        Self::bauen("spektren", frames, true, MAX_HARMONISCHE + 1, &sp)
+    }
+
+    /// Samples of level `k`, frame `i`.
+    #[doc(hidden)]
+    pub fn stufe_daten(&self, k: usize, i: usize) -> &[f32] {
+        let s = self.stufen[k];
+        let l = 1usize << s.bits;
+        &self.daten[s.start + i * l..s.start + (i + 1) * l]
+    }
+
+    fn bauen(name: &'static str, frames: usize, additiv: bool, inhalt: usize, sp: &dyn Fn(usize, usize) -> Teilton) -> Tabelle {
         let mut stufen = [Stufe { start: 0, bits: 0 }; STUFEN];
+        // level that stores the data of level k (k itself unless it repeats an earlier one)
+        let mut quelle = [0usize; STUFEN];
         let mut summe = 0usize;
         for (k, s) in stufen.iter_mut().enumerate() {
             let l = laenge(harmonische(k));
-            *s = Stufe { start: summe, bits: l.trailing_zeros() };
-            summe += l * frames;
+            let voll = |k: usize| harmonische(k).min(laenge(harmonische(k)) / 2 - 1) >= inhalt;
+            quelle[k] = (0..k).find(|&j| laenge(harmonische(j)) == l && voll(j) && voll(k)).unwrap_or(k);
+            if quelle[k] == k {
+                *s = Stufe { start: summe, bits: l.trailing_zeros() };
+                summe += l * frames;
+            }
+        }
+        for k in 0..STUFEN {
+            if quelle[k] != k {
+                stufen[k] = stufen[quelle[k]];
+            }
         }
         // scale of each frame: 1, or RMS of the saw over RMS of the frame (sum of a^2 / 2 over the full spectrum)
         let saege_rms2: f64 = (1..=MAX_HARMONISCHE).map(|h| saege(h).0.powi(2) / 2.0).sum();
@@ -205,6 +242,9 @@ impl Tabelle {
         let mut daten = vec![0.0f32; summe].into_boxed_slice();
         let mut planer = RealFftPlanner::<f64>::new();
         for (k, s) in stufen.iter().enumerate() {
+            if quelle[k] != k {
+                continue;
+            }
             let l = 1usize << s.bits;
             let hmax = harmonische(k).min(l / 2 - 1);
             let inv = planer.plan_fft_inverse(l);
@@ -226,6 +266,7 @@ impl Tabelle {
                 }
             }
         }
+        TABELLEN_GEBAUT.fetch_add(1, Ordering::Relaxed);
         Tabelle { name, frames, stufen, harm: std::array::from_fn(|k| harmonische(k) as f32), daten }
     }
 
@@ -276,6 +317,56 @@ impl Tabelle {
 
     /// Bytes held by the table data.
     pub fn bytes(&self) -> usize { self.daten.len() * 4 }
+}
+
+/// How many tables were computed (not taken from the cache) since the process started. For the tests and `messe`.
+pub static TABELLEN_GEBAUT: AtomicUsize = AtomicUsize::new(0);
+
+/// Budget of the table cache in bytes: tables beyond it are dropped from the cache, oldest use first (a program that still
+/// holds one keeps it alive).
+const CACHE_BYTES: usize = 384 << 20;
+
+#[derive(PartialEq, Eq, Clone)]
+enum Schluessel {
+    Eingebaut(usize),
+    /// bit patterns of the custom spectra
+    Spektren(Vec<Vec<u32>>),
+}
+
+/// Cache of finished tables, most recently used last. A translation of a graph whose tables did not change takes them from
+/// here instead of computing them again (a 256 frame table costs about 0.5 s and 40 MB), and nodes with the same table
+/// share one copy.
+static CACHE: Mutex<Vec<(Schluessel, Arc<Tabelle>)>> = Mutex::new(Vec::new());
+
+fn aus_cache(key: Schluessel, bauen: impl FnOnce() -> Tabelle) -> Arc<Tabelle> {
+    let mut c = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(i) = c.iter().position(|(k, _)| *k == key) {
+        let e = c.remove(i);
+        let t = e.1.clone();
+        c.push(e);
+        return t;
+    }
+    // built under the lock: two translations asking for the same new table compute it once
+    let t = Arc::new(bauen());
+    c.push((key, t.clone()));
+    let mut summe: usize = c.iter().map(|(_, t)| t.bytes()).sum();
+    while summe > CACHE_BYTES && c.len() > 1 {
+        summe -= c[0].1.bytes();
+        c.remove(0);
+    }
+    t
+}
+
+/// Built-in table `nr` from the cache. Translation only.
+pub fn tabelle_eingebaut(nr: usize) -> Arc<Tabelle> {
+    let nr = nr.min(TABELLEN.len() - 1);
+    aus_cache(Schluessel::Eingebaut(nr), || Tabelle::neu(nr))
+}
+
+/// Custom table from the cache (same input bits, same table). Translation only.
+pub fn tabelle_aus_spektren(spek: &[Vec<f32>]) -> Arc<Tabelle> {
+    let key = Schluessel::Spektren(spek.iter().map(|f| f.iter().map(|a| a.to_bits()).collect()).collect());
+    aus_cache(key, || Tabelle::aus_spektren(spek))
 }
 
 /// Fixed values of a wavetable node.
@@ -416,6 +507,9 @@ pub struct Stimme {
     /// last phase offset from `pm`, and the largest recent step of it in cycles per sample (decays by `PM_ABKLING`)
     pm_alt: u32,
     pm_schritt: f32,
+    /// trig level of the last sample: only a rising edge restarts (audit 2026-11-18, found 2026-11-19: a held trig re-rolled every phase on every
+    /// sample, the tone turned into noise; the same fix as granular.rs ecd4c4630)
+    trig_vorher: bool,
 }
 
 /// Spread of copy `c` of `n` over -1..=1 (0 for a single copy).
@@ -448,6 +542,7 @@ impl Stimme {
             modus_halt: 0,
             pm_alt: 0,
             pm_schritt: 0.0,
+            trig_vorher: false,
         };
         v.neue_phasen(e);
         v
@@ -477,8 +572,12 @@ impl Stimme {
     pub fn prozess(&mut self, t: &Tabelle, e: &Einstellung, sr: f32, x: Eingabe) -> (f32, f32, f32) {
         let n = e.kopien.clamp(1, MAX_KOPIEN);
         let verst = endlich(x.verstimmung, 0.0).clamp(0.0, MAX_VERSTIMMUNG);
+        // a rising trig counts once, a held level is no new start
+        let hoch = x.trig > 0.5;
+        let flanke = hoch && !self.trig_vorher;
+        self.trig_vorher = hoch;
         // the stack is read at a trig (and once at the very start, so a node without a trig has it too)
-        let sofort = x.trig > 0.5 || self.frisch;
+        let sofort = flanke || self.frisch;
         let stapel = if sofort { endlich(x.stapel, 0.0).round().clamp(0.0, 2.0) as u8 } else { self.stapel };
         self.stapel = stapel;
         if verst != self.verst_alt || stapel != self.stapel_alt {
@@ -503,7 +602,7 @@ impl Stimme {
             }
         }
         let ziel = endlich(x.pos, 0.0).clamp(0.0, 1.0) * (t.frames - 1) as f32;
-        if x.trig > 0.5 {
+        if flanke {
             self.neue_phasen(e);
             self.frisch = true;
         }
@@ -597,6 +696,46 @@ impl Stimme {
 mod tests {
     use super::*;
 
+    fn probe_spektren(frames: usize, saat: f32) -> Vec<Vec<f32>> {
+        (0..frames).map(|i| (1..=256).map(|h| ((i as f32 + saat) * 0.37 * h as f32).sin() / h as f32).collect()).collect()
+    }
+
+    #[test]
+    fn geteilte_stufen_sind_bitgleich_und_sparen_speicher() {
+        let sp = probe_spektren(5, 0.0);
+        let (a, b) = (Tabelle::aus_spektren(&sp), Tabelle::aus_spektren_ohne_teilen(&sp));
+        for k in 0..STUFEN {
+            for i in 0..5 {
+                let (x, y) = (a.stufe_daten(k, i), b.stufe_daten(k, i));
+                assert_eq!(x.len(), y.len());
+                assert!(x.iter().zip(y).all(|(p, q)| p.to_bits() == q.to_bits()), "level {k} frame {i}");
+            }
+        }
+        assert!(a.bytes() * 10 < b.bytes() * 6, "{} vs {}", a.bytes(), b.bytes());
+        // built-in tables share nothing (their spectra reach 1024 harmonics)
+        assert_eq!(Tabelle::neu(0).bytes(), (0..STUFEN).map(|k| laenge(harmonische(k))).sum::<usize>() * 4);
+    }
+
+    #[test]
+    fn cache_gibt_dieselbe_tabelle_zurueck() {
+        let sp = probe_spektren(3, 7.0);
+        let (a, b) = (tabelle_aus_spektren(&sp), tabelle_aus_spektren(&sp));
+        assert!(Arc::ptr_eq(&a, &b));
+        let mut anders = sp.clone();
+        anders[1][3] += 0.25;
+        assert!(!Arc::ptr_eq(&a, &tabelle_aus_spektren(&anders)));
+        assert!(Arc::ptr_eq(&tabelle_eingebaut(4), &tabelle_eingebaut(4)));
+        assert!(Arc::ptr_eq(&tabelle_eingebaut(99), &tabelle_eingebaut(TABELLEN.len() - 1)));
+    }
+
+    #[test]
+    fn bis_256_frames() {
+        assert_eq!(MAX_FRAMES, 256);
+        assert!(pruefe_spektren(&probe_spektren(256, 0.0)).is_ok());
+        assert!(pruefe_spektren(&probe_spektren(257, 0.0)).is_err());
+        assert_eq!(Tabelle::aus_spektren(&probe_spektren(256, 1.0)).frames, 256);
+    }
+
     #[test]
     fn stufen_haben_die_versprochenen_harmonischen() {
         assert_eq!(harmonische(0), 1024);
@@ -639,6 +778,28 @@ mod tests {
             let ist = t.lese(k, (ph * 4_294_967_296.0) as u32, 0.0) as f64;
             assert!((ist - soll).abs() < 1e-4, "phase {ph}: {ist} vs {soll}");
         }
+    }
+
+    #[test]
+    fn gehaltener_trig_startet_nur_einmal() {
+        // audit 2026-11-18: a held trig (a gate) re-rolled the phases on every sample and the saw turned into noise. Only the rising edge restarts:
+        // a held trig must give the same periodic tone as a one-sample pulse (autocorrelation at one period of 100 Hz near 1).
+        let t = Tabelle::neu(0);
+        let e = Einstellung { kopien: 7, zufall: 1.0, glatt_ms: 0.0, saat: 3, reserve: 0 };
+        let lauf = |gehalten: bool| -> Vec<f32> {
+            let mut v = Stimme::neu(0, &e);
+            let mut x = Eingabe { hz: 100.0, trig: 1.0, pos: 0.0, verstimmung: 10.0, breite: 0.0, pm: 0.0, warp: 0.0, tiefe: 0.0, stapel: 0.0 };
+            (0..9600).map(|i| { if !gehalten && i > 0 { x.trig = 0.0; } v.prozess(&t, &e, 48_000.0, x).2 }).collect()
+        };
+        let ak = |s: &[f32]| -> f32 {
+            let (a, b) = (&s[4800..9120], &s[5280..9600]);
+            let z: f32 = a.iter().zip(b).map(|(p, q)| p * q).sum();
+            z / (a.iter().map(|p| p * p).sum::<f32>().sqrt() * b.iter().map(|q| q * q).sum::<f32>().sqrt())
+        };
+        let (puls, gehalten) = (lauf(false), lauf(true));
+        assert!(ak(&puls) > 0.9, "the pulse reference is periodic: {}", ak(&puls));
+        assert!(ak(&gehalten) > 0.9, "a held trig keeps the tone: autocorrelation {}", ak(&gehalten));
+        assert_eq!(puls, gehalten, "a held trig is the same as one rising edge");
     }
 
     #[test]

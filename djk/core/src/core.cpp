@@ -334,6 +334,7 @@ void Kern::einsortieren(const Befehl& c) {
     case Befehl::ARR_METRONOM:
     case Befehl::ARR_AUTO:   // 1.12 S3: needs the lanes of the playback, so it waits behind a pending load like the rest
     case Befehl::ARR_NOTE:   // sampler plan A1 task 7: needs the sink of the playback, so it waits behind a pending load too
+    case Befehl::ARR_STIFT:  // kraken patch field: the same wait as ARR_NOTE, behind queued arrangement commands or an open return only (a load still in the loader thread is not waited for; the generation stamp of the pin covers that, Arrangement::live_stift)
       if (!arr_befehl_wartet(c)) einsortieren_arr(c, beat0);  // D1 K1 (core_arr.cpp); wartet hinter einer Rückgabe
       break;
     case Befehl::ARR_ARM:   // 1.12 S3: touches no playback, so it does not wait behind a pending load

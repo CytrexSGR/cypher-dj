@@ -1,0 +1,6 @@
+{"schema":1,"name":"sampler-fairlight","modell":"lc3","art":"instrument","graph":"sampler-fairlight",
+"eintraege":[{"regler":"Enc 1","knopf":3},{"regler":"Enc 2","knopf":1},{"regler":"Enc 3","knopf":2}],
+"seiten":{"main":[{"regler":"Enc 1","knopf":3},{"regler":"Enc 2","knopf":1},{"regler":"Enc 3","knopf":2}]},
+"programme":[
+{"name":"SAMPLE \u00b7 CRUSH \u00b7 PLAY","seite":"main",
+"eintraege":[{"regler":"Enc 1","knopf":3},{"regler":"Enc 2","knopf":1},{"regler":"Enc 3","knopf":2}]}]}

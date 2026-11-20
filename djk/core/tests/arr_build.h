@@ -81,6 +81,8 @@ struct Bau {
   std::vector<N> ns;
   struct L { int spur; std::vector<cdj::ArrAutoPunkt> p; uint8_t ziel = cdj::ARR_AUTO_FADER; uint8_t param = 0; bool relativ = false; };   // Automation: one lane of a track (default target fader)
   std::vector<L> ls;
+  struct FXL { int spur; std::vector<cdj::ArrFxPunkt> bend, pegel; };   // tracker task 16: the bend and pegel events of a bk track
+  std::vector<FXL> fxl;
   struct RL { int ret; std::vector<cdj::ArrAutoPunkt> p; };   // return fader automation (cypherdj-arr/3): the fader lane of return `ret` (1..ARR_RETURNS); the return exists then (ret_da)
   std::vector<RL> rls;
   struct KL { int strip; int stufe, param, makro; std::vector<cdj::ArrAutoPunkt> p; };   // 1.12 slice 6: an insert-parameter or rack-macro lane of the strip with this chain index
@@ -147,6 +149,11 @@ struct Bau {
     ls.push_back({nr, std::move(p), ziel, param, relativ});
     return *this;
   }
+  // tracker task 16: bend and pegel events of track nr (beat, value, glide in beats), sorted by beat; the track needs the device bk (bkt::spur) to play them
+  Bau& fx(int nr, std::vector<cdj::ArrFxPunkt> bend, std::vector<cdj::ArrFxPunkt> pegel = {}) {
+    fxl.push_back({nr, std::move(bend), std::move(pegel)});
+    return *this;
+  }
   Bau& ret(int r) { s->ret_da[r - 1] = true; return *this; }   // return r exists (ret_da), without a lane
   // Return fader automation: the fader lane of return r (1..4), points as lane(); sets ret_da of the return. At most one per return.
   Bau& ret_lane(int r, std::vector<cdj::ArrAutoPunkt> p) {
@@ -166,6 +173,9 @@ struct Bau {
     s->noten.reserve(ns.size());
     s->noten_id.reserve(ns.size());
     s->noten_id_index.reserve(ns.size());
+    size_t n_fx = 0;
+    for (const FXL& f : fxl) n_fx += f.bend.size() + f.pegel.size();
+    s->fx_punkte.reserve(n_fx);   // ArrSpur::bend and ::pegel point into it
     size_t n_warps = 0, n_punkte = 0;
     for (const C& c : cs)
       if (!c.wb.empty()) {
@@ -242,6 +252,17 @@ struct Bau {
       }
       sp.noten_id = sp.n_noten ? s->noten_id.data() + i0 : nullptr;
       sp.noten_id_index = sp.n_noten ? s->noten_id_index.data() + i0 : nullptr;
+      for (const FXL& f : fxl)
+        if (f.spur == nr) {
+          const size_t b0 = s->fx_punkte.size();
+          s->fx_punkte.insert(s->fx_punkte.end(), f.bend.begin(), f.bend.end());
+          const size_t g0 = s->fx_punkte.size();
+          s->fx_punkte.insert(s->fx_punkte.end(), f.pegel.begin(), f.pegel.end());
+          sp.n_bend = static_cast<int>(f.bend.size());
+          sp.bend = sp.n_bend ? s->fx_punkte.data() + b0 : nullptr;
+          sp.n_pegel = static_cast<int>(f.pegel.size());
+          sp.pegel = sp.n_pegel ? s->fx_punkte.data() + g0 : nullptr;
+        }
       for (const L& l : ls)
         if (l.spur == nr) {
           const size_t p0 = s->auto_punkte.size();

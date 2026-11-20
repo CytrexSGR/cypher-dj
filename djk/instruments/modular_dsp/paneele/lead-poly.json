@@ -1,0 +1,21 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "lead-poly"},
+  "title": "Poly Lead",
+  "akzent": "blau",
+  "layout": {"rows": [
+    ["filter", "out"]
+  ]},
+  "sections": [
+    { "id": "filter", "title": "FILTER", "cols": 3, "controls": [
+      {"id": "cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "env", "type": "knob", "label": "Env amount", "bind": {"param": "k2"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "pwm", "type": "knob", "label": "PWM depth", "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
+      {"id": "fnote", "type": "label", "span": 3, "text": "Two pulse waves, chorus on the output"}
+    ]},
+    { "id": "out", "title": "FX", "cols": 2, "controls": [
+      {"id": "delay", "type": "knob", "label": "Delay mix", "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
+      {"id": "hall", "type": "knob", "label": "Hall mix", "bind": {"param": "k5"}, "format": "percent", "default": 0.5}
+    ]}
+  ]
+}

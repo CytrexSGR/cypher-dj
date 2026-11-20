@@ -1,15 +1,13 @@
-// 1.10 slice 6 T2: the key choice of the compressor popover and Duck by Kick. Pure parts (key_choice.js) run in node; the page parts drive the real
-// page against the project stub (which answers GET /proj/routing?optionen= with the real routingMatrix). Without google-chrome the page tests skip.
+// 1.10 slice 6 T2: the key choice of the compressor popover and Duck by Kick. Pure parts (key_choice.js) run in node. The page tests drove the popover of
+// the removed INSERTS rows and the Duck select (plan 1.11 task 14).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fuehreListeAus } from '../project/commands.ts';
 import { neuesProjekt } from '../project/model.ts';
 import { routingMatrix } from '../project/routing_matrix.ts';
-import { starteSeite, warte } from '../check/page_mock.mjs';
 import { schluesselGruppen, schluesselBefehl, schluesselWert, duckBefehl, duckKicks } from '../public/production/key_choice.js';
 
-const CHROME = fs.existsSync('/usr/bin/google-chrome');
 const lauf = (p, b) => fuehreListeAus(p, b, { quelle: 'andreas' }).projekt;
 
 // Kick, Bass, Lead, Pad; group Music (s2, s3); return Hall; a compressor on s2 (stage i1)
@@ -69,56 +67,4 @@ test('duck_menue_sendet_befehl: kick choice lists the other tracks, one duck_dur
 test('every visible string is English', () => {
   const t = fs.readFileSync(new URL('../public/production/key_choice.js', import.meta.url), 'utf8');
   assert.doesNotMatch(t, /\b(Eigen|Spur|Gruppe|Schl[uü]ssel|Wahl)\b/);
-});
-
-const wahl = (s, wert) => s.w(`(() => { const e = document.querySelector('.p-ins-popover[data-insert="i1"] .p-ins-sc'); e.value = ${JSON.stringify(wert)}; e.dispatchEvent(new Event('change', { bubbles: true })); })()`);
-async function seite(t, p) {
-  // 1080 high: since the two-row header (95799f2a) the INSERTS panel sits below the fold at 900 px, out of the test mouse's reach.
-  const s = await starteSeite({ hoehe: 1080 });
-  t.after(() => s.stoppe());
-  await s.oeffne(); await s.saat(p);
-  return s;
-}
-const optWerte = (s) => s.w(`[...document.querySelectorAll('.p-ins-popover[data-insert="i1"] .p-ins-sc option')].map((o) => o.value)`);
-
-test('page: the popover loads the options, a group key is stored, the select shows it', { skip: !CHROME && 'no google-chrome' }, async (t) => {
-  const s = await seite(t, projekt());
-  await s.b.klick('.p-stufe[data-insert="i1"] .p-ins-name');
-  assert.ok(await s.bis(async () => (await optWerte(s)).includes('spur:1:post')), 'options arrived');
-  assert.equal(await s.w(`document.querySelectorAll('.p-ins-popover[data-insert="i1"] .p-ins-sc optgroup').length`), 4);
-  assert.equal(await s.w(`document.querySelector('.p-ins-popover[data-insert="i1"] .p-ins-sc option[value="spur:2:pre"]').disabled`), true);
-  await wahl(s, 'spur:1:post');
-  assert.ok(await s.bis(async () => (await s.projekt()).spuren[1].inserts[0].key?.quelle === 'spur'), 'key written');
-  assert.ok(await s.bis(async () => (await s.w(`document.querySelector('.p-ins-popover[data-insert="i1"] .p-ins-sc').value`)) === 'spur:1:post'));
-  await wahl(s, 'own');
-  assert.ok(await s.bis(async () => { const i = (await s.projekt()).spuren[1].inserts[0]; return !i.key && !i.sc; }), 'own removes the key');
-});
-test('page: a stage with a structural key shows its source (not own signal)', { skip: !CHROME && 'no google-chrome' }, async (t) => {
-  const p = projekt([{ befehl: 'insert_param_setzen', insert_id: 'i1', param: 'key', wert: { quelle: 'spur', nr: 1, punkt: 'post' } }]);
-  assert.equal(p.spuren[1].inserts[0].key?.quelle, 'spur', 'precondition');
-  const s = await seite(t, p);
-  await s.b.klick('.p-stufe[data-insert="i1"] .p-ins-name');
-  assert.ok(await s.bis(async () => (await s.w(`document.querySelector('.p-ins-popover[data-insert="i1"] .p-ins-sc').value`)) === 'spur:1:post'));
-  assert.doesNotMatch(await s.w(`document.querySelector('.p-ins-popover[data-insert="i1"] .p-ins-sc').selectedOptions[0].textContent`), /own signal/i);
-});
-test('page: a failing options fetch disables the select with the reason, nothing is written', { skip: !CHROME && 'no google-chrome' }, async (t) => {
-  const s = await seite(t, projekt());
-  await s.post('/attrappe/rohantwort', { weg: '/proj/routing', code: 400, koerper: { fehler: 'argument_ungueltig' } });
-  const vorher = (await s.projekt()).rev;
-  await s.b.klick('.p-stufe[data-insert="i1"] .p-ins-name');
-  assert.ok(await s.bis(() => s.w(`document.querySelector('.p-ins-popover[data-insert="i1"] .p-ins-sc').disabled`)), 'select disabled');
-  assert.match(await s.w(`document.querySelector('.p-ins-popover[data-insert="i1"] .p-ins-sc').closest('label').querySelector('output').textContent`), /\S/);
-  await warte(200);
-  assert.equal((await s.projekt()).rev, vorher, 'no write');
-});
-test('page: Duck by Kick sends one duck_durch_kick and the stage appears', { skip: !CHROME && 'no google-chrome' }, async (t) => {
-  const s = await seite(t, projekt());
-  assert.equal(await s.w(`document.querySelector('.p-kette[data-strang="s3"] .p-duck') !== null`), true);
-  assert.equal(await s.w(`[...document.querySelectorAll('.p-kette[data-strang="s3"] .p-duck option')].map((o) => o.value).join()`), ',s1,s2,s4');
-  assert.equal(await s.w(`document.querySelector('.p-kette[data-strang="master"] .p-duck')`), null, 'only tracks can duck');
-  await s.w(`(() => { const e = document.querySelector('.p-kette[data-strang="s3"] .p-duck'); e.value = 's1'; e.dispatchEvent(new Event('change', { bubbles: true })); })()`);
-  assert.ok(await s.bis(async () => (await s.projekt()).spuren[2].inserts?.[0]?.sc === 1), 'compressor keyed by Kick');
-  const log = await (await fetch(s.url + 'attrappe/log')).json();
-  const aenderungen = log.filter((x) => x.weg === '/proj/aendern' && JSON.stringify(x.koerper).includes('duck_durch_kick'));
-  assert.equal(aenderungen.length, 1, 'one request');
 });

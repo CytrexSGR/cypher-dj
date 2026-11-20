@@ -205,7 +205,7 @@
     {"id": "wp_k_stack", "art": "regler", "nr": 49, "min": 0, "max": 2, "vorgabe": 0},
     {"id": "wp_l1_t", "art": "mul"},
     {"id": "wp_tiefe", "art": "add"},
-    {"id": "pm_k", "art": "regler", "nr": 50, "min": 0, "max": 0.5, "vorgabe": 0},
+    {"id": "pm_k", "art": "regler", "nr": 50, "min": 0, "max": 2, "vorgabe": 0},
     {"id": "pm_k_ratio", "art": "regler", "nr": 51, "min": 0, "max": 1, "vorgabe": 0.25},
     {"id": "pm_ratio", "art": "wahl", "n": 5, "blende": 10, "e1": 0.5, "e2": 1, "e3": 2, "e4": 3, "e5": 4},
     {"id": "pm_sin", "art": "sinus"},

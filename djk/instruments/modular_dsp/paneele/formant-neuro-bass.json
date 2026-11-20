@@ -17,7 +17,7 @@
       {"id": "ln", "type": "label", "span": 3, "text": "Sweeps the vowel 0 to 4"}
     ]},
     { "id": "formant", "title": "FORMANT FILTER", "cols": 3, "controls": [
-      {"id": "shift", "type": "knob", "label": "Shift", "bind": {"param": "k2"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "shift", "type": "knob", "label": "Shift", "bind": {"param": "k2"}, "format": "raw", "unit": "st", "default": 0.5, "scale": {"labels": ["-12", "-6", "off", "6", "12"]}},
       {"id": "sharp", "type": "knob", "label": "Sharpness", "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
       {"id": "fn", "type": "label", "span": 3, "text": "Vowel filter, five vowels"}
     ]},

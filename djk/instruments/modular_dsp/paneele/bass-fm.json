@@ -1,0 +1,34 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "bass-fm"},
+  "title": "FM Bass 3-Op",
+  "akzent": "orange",
+  "layout": {"rows": [
+    ["ops", "fm", "env", "out"]
+  ]},
+  "sections": [
+    { "id": "ops", "title": "OPERATORS", "cols": 4, "controls": [
+      {"id": "alg", "type": "label", "span": 4, "text": "3 operators: Op2 + Op3 modulate Op1"},
+      {"id": "op1", "type": "label", "span": 4, "text": "Op1 carrier x2  (one octave up)"},
+      {"id": "op2", "type": "label", "span": 4, "text": "Op2 modulator x0.67  (7 st below)"},
+      {"id": "op3", "type": "label", "span": 4, "text": "Op3 modulator x1  (also heard)"},
+      {"id": "opr", "type": "label", "span": 4, "text": "xN = frequency ratio to the note"},
+      {"id": "opn", "type": "label", "span": 4, "text": "One envelope sets index and level"}
+    ]},
+    { "id": "fm", "title": "FM", "cols": 2, "controls": [
+      {"id": "depth", "type": "knob", "label": "FM depth", "bind": {"param": "k1"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "op3lv", "type": "knob", "label": "Op3 level", "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
+      {"id": "fn1", "type": "label", "span": 2, "text": "FM depth scales Op2 and Op3 index"},
+      {"id": "fn2", "type": "label", "span": 2, "text": "Op3 level only mixes Op3 into the sound"}
+    ]},
+    { "id": "env", "title": "ENVELOPE", "cols": 2, "controls": [
+      {"id": "hue", "type": "huelle", "span": 2, "label": "Index and level", "of": {"a": 0.001, "d": "decay", "s": 0, "r": 0.3}},
+      {"id": "decay", "type": "knob", "label": "Decay", "span": 2, "bind": {"param": "k2"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "en", "type": "label", "span": 2, "text": "Sustain 0: every note decays, R 300 ms"}
+    ]},
+    { "id": "out", "title": "OUT", "cols": 2, "controls": [
+      {"id": "drive", "type": "knob", "label": "Drive", "span": 2, "bind": {"param": "k4"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "on", "type": "label", "span": 2, "text": "Saturation, then compressor 4:1, mono"}
+    ]}
+  ]
+}

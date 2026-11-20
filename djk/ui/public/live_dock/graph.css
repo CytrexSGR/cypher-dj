@@ -1,0 +1,8 @@
+/* Live dock: the window of a graph slot (graph.js): the picker of the channel on top, its knob area below. The tab's .sendzeile rules are scoped to the
+   SEND RETURNS block, so the window brings what it needs. */
+#live-fenster .live-graph { display: flex; flex-direction: column; gap: 8px; width: min(720px, 90vw); }
+#live-fenster .live-graph .graphplatz { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+#live-fenster .live-graph .graphplatz select { max-width: 260px; font-size: 11px; }
+#live-fenster .live-graph .bkliste { display: flex; flex-direction: column; gap: 3px; }
+#live-fenster .live-graph .bkzeile { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; }
+#live-fenster .live-graph .bkzeile label { display: grid; grid-template-columns: 90px 1fr 40px; gap: 4px; align-items: center; color: var(--dim); }

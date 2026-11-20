@@ -676,6 +676,7 @@ mod tests {
         std::fs::write(w.join("orchester-schlag.f32"), baukasten_dsp::proben::bytes(&baukasten_dsp::proben::orchester_schlag(sr))).unwrap();
         std::fs::write(w.join("orchester-schlag-schichten.f32"), baukasten_dsp::proben::bytes(&baukasten_dsp::proben::orchester_schlag_schichten(sr))).unwrap();
         std::fs::write(w.join("feder-ir.f32"), baukasten_dsp::proben::bytes(&baukasten_dsp::proben::feder_ir(sr))).unwrap();
+        baukasten_dsp::proben::schreibe_amiga_werk(&w);
         w
     }
 

@@ -75,6 +75,16 @@ export class SurgeSpiegel {
     }
   }
 
+  // True when the host of a slot the mirror talked to has another pid than at the last sync (systemd restarted it). Read-only: the next sync does the
+  // forgetting (neuerWirt), so the watch only has to ask for that sync (audit U07).
+  wirtGewechselt(): boolean {
+    for (const [slot, alt] of this.pids) {
+      const pid = this.opt.wirtPid?.(slot) ?? null;
+      if (pid !== null && pid !== alt) return true;
+    }
+    return false;
+  }
+
   // the current display values of some parameters of a slot's host; null when the host does not answer. The values of entries the mirror has not
   // touched yet are remembered as the originals the mirror returns to.
   ist(slot: number, namen: string[]): Promise<Record<string, number> | null> {

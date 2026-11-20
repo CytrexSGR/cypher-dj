@@ -1,0 +1,166 @@
+/* TRACKER view (plan 2026-11-18-tracker.md, task 2). Applies only under body.tracker; the other views stay untouched.
+   Frame like the spec's screen: the bar over the width, SONG column left, the grid in the middle, INSTRUMENTS right, the status line at the bottom. */
+#tracker { display: none; }
+body.tracker, body.tracker.lib-zu, body.tracker.lib-gross {
+  grid-template-rows: var(--kopf) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "kopf" "tr";
+}
+body.tracker #kopf { grid-area: kopf; }
+body.tracker #pult, body.tracker #bestand { display: none; }
+body.tracker #tracker {
+  grid-area: tr; display: grid; position: relative; min-width: 0; min-height: 0; gap: 8px;
+  grid-template-columns: 190px minmax(0, 1fr) 220px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas: "bar bar bar" "song grid ins" "stat stat stat";
+}
+#tracker .t-kopf { grid-area: bar; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; }
+#tracker .t-lied { grid-area: song; }
+#tracker .t-raster { grid-area: grid; }
+#tracker .t-instr { grid-area: ins; }
+#tracker .t-status { grid-area: stat; }
+#tracker .t-meldung { position: absolute; right: 12px; bottom: 36px; font-size: 12px; color: var(--dim); }
+#tracker .t-meldung.fehler { color: var(--kill); }
+#tracker .t-leer { grid-area: grid; padding: 24px; color: var(--dim); }
+#tracker [hidden] { display: none !important; }
+
+/* bar */
+#tracker .t-projektname { font-size: 17px; font-weight: 700; min-width: 8ch; }
+#tracker .t-gruppe { display: inline-flex; align-items: center; gap: 4px; }
+#tracker .t-rechts { margin-left: auto; }
+#tracker .t-knopf { white-space: nowrap; }
+#tracker .t-knopf.an { background: var(--d3); color: #0b0d12; border-color: var(--d3); }
+#tracker .t-knopf:disabled { opacity: .45; cursor: default; }
+#tracker .t-feld { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; letter-spacing: .14em; color: var(--dim); font-weight: 700; }
+#tracker .t-eingabe { width: 5ch; text-align: center; font-weight: 700; }
+/* a select needs its text: the SEQ place of TO DJ reads "SEQ 1", not "SE" */
+#tracker select.t-eingabe[data-t="zu-dj-platz"] { width: auto; min-width: 8ch; text-align: left; }
+#tracker select.t-eingabe[data-t="lpb"], #tracker select.t-eingabe[data-t="ticks"] { width: auto; min-width: 6ch; }
+
+/* side columns */
+#tracker .t-lied, #tracker .t-instr { overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: 12px; }
+#tracker .t-titel { font-size: 10px; letter-spacing: .14em; color: var(--dim); font-weight: 700; margin-bottom: 4px; }
+#tracker .t-lied-zeile { display: flex; gap: 8px; padding: 3px 4px; border-radius: 4px; cursor: pointer; font-family: ui-monospace, monospace; }
+#tracker .t-lied-zeile:hover { background: var(--panel2); }
+#tracker .t-lied-zeile.an { background: var(--d3); color: #0b0d12; }
+#tracker .t-lied-nr { color: inherit; opacity: .7; }
+#tracker .t-lied-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#tracker .t-instr-zeile { display: flex; gap: 6px; padding: 3px 4px; align-items: baseline; }
+#tracker .t-instr-zeile .t-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* slot editor in the 220 px INSTRUMENTS column: nothing wraps, long names are cut with an ellipsis, fields share the width */
+#tracker .t-slot { display: flex; flex-wrap: nowrap; gap: 6px; align-items: baseline; padding: 2px 4px; border-radius: 4px; cursor: pointer; font-family: ui-monospace, monospace; font-size: 11px; white-space: nowrap; }
+#tracker .t-slot:hover { background: var(--panel2); }
+#tracker .t-slot.an { background: var(--d3); color: #0b0d12; }
+#tracker .t-slot.leer { color: var(--dim); }
+#tracker .t-slot-nr { flex: none; opacity: .7; }
+#tracker .t-slot-name { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#tracker .t-slot-rate { flex: none; opacity: .7; font-size: 10px; }
+#tracker .t-slot-felder { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 6px; margin-top: 6px; align-items: center; white-space: nowrap; }
+#tracker .t-slot-felder > * { min-width: 0; }
+#tracker .t-slot-felder .t-feld { display: flex; gap: 4px; }
+#tracker .t-slot-felder .t-feld > input, #tracker .t-slot-felder .t-feld > select { flex: 1 1 0; width: 0; min-width: 0; box-sizing: border-box; }
+#tracker .t-slot-felder .t-name-feld, #tracker .t-slot-felder .t-feld:has(.t-name-feld) { grid-column: 1 / -1; }
+#tracker .t-slot-felder > input.t-name-feld { width: 100%; box-sizing: border-box; }
+#tracker .t-slot-felder > span { grid-column: 1 / -1; }
+#tracker .t-slot-felder .t-knopf { overflow: hidden; text-overflow: ellipsis; }
+
+/* status line */
+#tracker .t-status { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 12px; font-family: ui-monospace, monospace; font-size: 12px; min-height: 1.4em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* grid */
+#tracker .t-raster {
+  overflow: auto; position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; outline: none;
+  font-family: ui-monospace, "DejaVu Sans Mono", monospace; font-size: 13px; line-height: 18px;
+}
+#tracker .t-raster:focus-visible { border-color: var(--d3); }
+/* One width source: the head row and the rows both measure in `ch` of the grid font (monospace 13px), so every head stands exactly over its columns.
+   The text inside a head is set in the small UI font on the inner elements only (the box itself keeps the grid font). */
+#tracker .t-kopfzeile { position: sticky; top: 0; z-index: 2; display: flex; align-items: flex-start; gap: 0; width: max-content; background: var(--panel2); border-bottom: 1px solid var(--line); font: inherit; line-height: 14px; }
+#tracker .t-nr-kopf, #tracker .t-nr { flex: none; width: 4ch; padding: 0 1ch; text-align: right; color: var(--dim); box-sizing: content-box; }
+/* a fine vertical line and a gap between the tracks: head and rows take the same 1ch padding, 1ch margin and 1px line */
+#tracker .t-kopf-spur { flex: none; display: flex; flex-direction: column; gap: 2px; padding: 4px 1ch 4px 0; margin-right: 1ch; border-right: 1px solid var(--line); box-sizing: content-box; align-self: stretch; }
+#tracker .t-kopf-spur > * { font-family: system-ui, sans-serif; font-size: 11px; line-height: 14px; min-width: 0; }
+#tracker .t-kopf-zeile1 { display: flex; gap: 6px; align-items: baseline; }
+#tracker .t-buchstabe { font-weight: 700; color: var(--d3); }
+#tracker .t-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+#tracker .t-geraet { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+#tracker .t-knoepfe, #tracker .t-spaltenknoepfe { display: flex; gap: 4px; align-items: center; }
+#tracker .t-spaltenknoepfe { gap: 8px; font-size: 10px; color: var(--dim); justify-content: center; white-space: nowrap; }
+#tracker .t-spaltenknoepfe > span { display: inline-flex; gap: 3px; align-items: center; white-space: nowrap; }
+#tracker .t-kopf-spur button { padding: 0 5px; min-width: 18px; font-size: 10px; line-height: 14px; }
+#tracker .t-kopf-spur button[aria-pressed="true"][data-a="mute"] { background: var(--warn); color: #0b0d12; border-color: var(--warn); }
+#tracker .t-kopf-spur button[aria-pressed="true"][data-a="solo"] { background: var(--d3); color: #0b0d12; border-color: var(--d3); }
+#tracker .t-kopf-spur .meter.waagrecht { height: 6px; }
+#tracker .t-audio.t-kopf-spur { opacity: .8; }
+#tracker .t-verdeckt { color: var(--warn); font-size: 10px; cursor: help; }
+
+#tracker .t-zeile { display: flex; align-items: center; width: max-content; height: 18px; }
+#tracker .t-zeile.beat { background: rgba(255, 255, 255, .045); }
+#tracker .t-zeile.takt { background: rgba(255, 255, 255, .10); }
+#tracker .t-zeile.takt .t-nr, #tracker .t-zeile.beat .t-nr { color: var(--text); }
+#tracker .t-zeile.spielt { background: rgba(80, 220, 140, .22); box-shadow: inset 0 1px 0 var(--gut), inset 0 -1px 0 var(--gut); }
+#tracker .t-spur { flex: none; display: flex; align-items: center; padding-right: 1ch; margin-right: 1ch; border-right: 1px solid var(--line); box-sizing: content-box; align-self: stretch; white-space: pre; }
+#tracker .t-nsp { display: inline-flex; margin-right: 1ch; }
+#tracker .t-c { display: inline-block; margin-right: 1ch; box-sizing: content-box; text-align: left; cursor: default; overflow: hidden; }
+#tracker .t-c.leer { color: var(--dim); opacity: .55; }
+#tracker .t-c.ohne:not(.cursor) { opacity: .4; text-decoration: line-through; }
+#tracker .t-c.kurve { color: var(--d3); opacity: .75; }
+#tracker .t-c.schief { background: rgba(240, 160, 60, .28); border-radius: 2px; }
+#tracker .t-c.u-audio { width: 9ch; margin-right: 0; text-overflow: ellipsis; color: var(--d3); }
+#tracker .t-c.u-audio.leer { color: var(--dim); }
+#tracker .t-c.cursor { background: var(--d3); color: #0b0d12; opacity: 1; border-radius: 2px; }
+#tracker .t-c.cursor.leer { color: #0b0d12; }
+
+/* selection (task 6): the cells a selection covers; the cursor cell keeps its own colour */
+#tracker .t-c.gewaehlt { background: rgba(90, 160, 255, .28); border-radius: 2px; }
+#tracker .t-c.gewaehlt.cursor { background: var(--d3); }
+
+/* SONG column (task 10): section rows with pattern cells, buttons, pattern menu */
+#tracker .t-lied-zeile { flex-wrap: wrap; }
+#tracker .t-lied-zeilen { opacity: .7; }
+#tracker .t-lied-zellen { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 2px; }
+#tracker .t-lied-zelle { flex: 1 1 0; min-width: 2.4ch; max-width: 9ch; min-height: 1.3em; padding: 0 3px; border-radius: 3px; font-size: 10px; line-height: 1.3em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: rgba(255, 255, 255, .08); color: var(--text); }
+#tracker .t-lied-zelle[data-verbund] { color: #fff; }
+#tracker .t-lied-zelle[data-art="instrument"] { cursor: pointer; }
+#tracker .t-lied-knoepfe { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; align-items: center; }
+#tracker .t-lied-knoepfe .t-knopf { padding: 2px 6px; font-size: 10px; }
+#tracker .t-lied-feld { width: 100%; box-sizing: border-box; text-align: left; font-weight: 400; }
+#tracker .t-lied-knoepfe .t-feld { flex: 1 1 100%; display: flex; gap: 6px; }
+#tracker .t-lied-knoepfe .t-feld .t-lied-feld { flex: 1; width: auto; min-width: 0; }
+#tracker .t-lied-menue { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; padding: 6px; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; }
+#tracker .t-lied-muster { text-align: left; padding: 2px 6px; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* dark scrollbars that match the theme (grid, SONG and INSTRUMENTS columns) */
+#tracker .t-raster, #tracker .t-lied, #tracker .t-instr { scrollbar-color: #3a4152 var(--panel); scrollbar-width: thin; }
+#tracker .t-raster::-webkit-scrollbar, #tracker .t-lied::-webkit-scrollbar, #tracker .t-instr::-webkit-scrollbar { width: 10px; height: 10px; background: var(--panel); }
+#tracker .t-raster::-webkit-scrollbar-thumb, #tracker .t-lied::-webkit-scrollbar-thumb, #tracker .t-instr::-webkit-scrollbar-thumb { background: #3a4152; border-radius: 5px; border: 2px solid var(--panel); }
+#tracker .t-raster::-webkit-scrollbar-thumb:hover { background: #4a5368; }
+#tracker .t-raster::-webkit-scrollbar-corner { background: var(--panel); }
+
+/* like the workbench: the DJ head zone (ROUTING, FX1, FX2, COLOR, FX3, scenes, phones) is folded away behind the DJ FX toggle; view buttons, clock and BPM stay */
+body.tracker #djfx-auf { display: inline-block; }
+body.tracker:not(.djfx-auf) #kopf > #fx, body.tracker:not(.djfx-auf) #kopf > #seq-szenen { display: none; }
+
+/* overlays (F4): NEW MODULE menu, MODULES shelf and the file picker share one look: dark surface, border, padding, shadow, hover. They stand under the bar and
+   close on Escape and on a click beside them (neu.js, regal.js, instruments.js), so the column heads are covered only while one is open. */
+#tracker .t-neu { position: relative; }
+#tracker .t-neu-menue { position: absolute; top: calc(100% + 4px); left: 0; z-index: 20; display: flex; flex-direction: column; align-items: stretch; gap: 3px; min-width: 220px; padding: 8px;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 18px rgba(0, 0, 0, .45); }
+#tracker .t-neu-menue .t-knopf { text-align: left; padding: 4px 8px; }
+#tracker .t-neu-menue .t-knopf:hover { background: var(--panel); border-color: var(--d3); }
+#tracker .t-neu-menue .t-eingabe { width: auto; text-align: left; font-weight: 400; margin-top: 2px; }
+#tracker .t-leer .t-neu { display: inline-block; }
+
+/* tracker module shelf (task 23): opens over the grid area from the MODULES button */
+#tracker .t-regal { grid-area: grid; z-index: 5; align-self: start; max-height: 100%; overflow: auto; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .45); }
+#tracker .t-regal-kopf { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+#tracker .t-regal-lbl { font-size: 10px; letter-spacing: .14em; color: var(--dim); }
+#tracker .t-regal-hinweis, #tracker .t-regal-leer { font-size: 11px; color: var(--dim); }
+#tracker .t-regal-karten { display: flex; flex-wrap: wrap; gap: 8px; }
+#tracker .t-regal-karte { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 140px; padding: 6px 10px; text-align: left; }
+#tracker .t-regal-karte span { font-size: 10px; color: var(--dim); }
+#tracker .t-regal-karte.offen { border-color: var(--d3); }
+#tracker .t-regal-karte:hover:not(:disabled) { background: var(--panel); border-color: var(--d3); }
+#tracker .t-kopie-name { width: 18ch; text-align: left; }

@@ -99,6 +99,15 @@ test('ablage: CYPHERDJ_HEIM moves neu, relative is refused', () => {
   mitEnv({ ...ohneEnv, CYPHERDJ_HEIM: '' }, () => assert.equal(P.heimOrdner(), path.join(H, 'cypherdj')));
 });
 
+test('ablage: vorgabe neu aborts when alt is a link to a missing target (moved home, disk absent)', () => {
+  const t = neuTabelle();
+  mitEnv(ohneEnv, () => {
+    const h = tmpHome(); const alt = path.join(h, '.config', 'cypherdj', 'presets');
+    fs.mkdirSync(path.dirname(alt), { recursive: true }); fs.symlinkSync(path.join(h, 'platte', 'heim', 'werke', 'presets'), alt);
+    mitEnv({ HOME: h }, () => assert.throws(() => P.ablageOrdner('presets', { tabelle: t, log: () => {} }), /is the disk mounted/));
+  });
+});
+
 test('ablage: vorgabe neu picks a real alt, else neu', () => {
   const t = neuTabelle();
   mitEnv(ohneEnv, () => {

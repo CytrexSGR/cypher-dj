@@ -30,6 +30,10 @@ async function pumpe() {
   unterwegs = false;
 }
 
+// Senders for hosts outside the handles (the dock): x is the handle position 0..1 as in neuerRegler, converted by griffZuMidi like every mixer knob.
+export function sendeGriff(pfad, x, stellung = false) { sende(pfad, griffZuMidi(pfad, x), stellung); }
+export function griffStellung(pfad) { return GRIFF[art(pfad)].stellung(zustand.regler[pfad] ?? vorgabe(pfad)); }
+
 // ---------- Regler: Knopf (senkrecht ziehen), Fader (senkrecht), Crossfader (waagrecht) ----------
 const regler = new Map(); // pfad → { el, x, gegriffen, zeige() }
 window.djkRegler = regler; // für die Prüfung (lesen)

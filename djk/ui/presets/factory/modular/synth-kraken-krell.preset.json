@@ -1,0 +1,145 @@
+{
+ "schema": 1,
+ "name": "Krell",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "synth-kraken",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.725,
+  "knob5": 1.0,
+  "knob6": 0.0,
+  "knob7": 0.64583,
+  "knob8": 0.57,
+  "knob9": 0.75,
+  "knob10": 0.0,
+  "knob11": 0.0,
+  "knob12": 0.66667,
+  "knob13": 0.0,
+  "knob14": 0.05,
+  "knob15": 0.0,
+  "knob16": 0.81175,
+  "knob17": 0.85377,
+  "knob18": 0.5,
+  "knob19": 0.5,
+  "knob20": 0.27778,
+  "knob21": 0.5,
+  "knob22": 0.5,
+  "knob23": 0.0,
+  "knob24": 0.5,
+  "knob25": 0.2,
+  "knob26": 0.6,
+  "knob27": 0.54021,
+  "knob28": 0.0,
+  "knob29": 0.5934,
+  "knob30": 0.45,
+  "knob31": 0.4,
+  "knob32": 0.5,
+  "knob33": 0.16667,
+  "knob34": 0.15,
+  "knob35": 0.18896,
+  "knob36": 0.5,
+  "knob37": 0.3,
+  "knob38": 0.45198,
+  "knob39": 0.27035,
+  "knob40": 0.76862,
+  "knob41": 1.0,
+  "knob42": 0.56767,
+  "knob43": 0.5,
+  "knob44": 1.0,
+  "knob45": 0.56897,
+  "knob46": 0.34343,
+  "knob47": 0.5,
+  "knob48": 1.0,
+  "knob49": 0.05,
+  "knob50": 0.43311,
+  "knob51": 0.6,
+  "knob52": 0.0,
+  "knob53": 0.0,
+  "knob54": 0.77002,
+  "knob55": 0.55556,
+  "knob56": 0.35,
+  "knob57": 0.375,
+  "knob58": 0.0,
+  "knob59": 0.4,
+  "knob60": 1.0
+ },
+ "stifte": [
+  [
+   0,
+   10,
+   8,
+   0.35
+  ],
+  [
+   0,
+   10,
+   9,
+   0.2
+  ],
+  [
+   0,
+   10,
+   13,
+   0.2
+  ],
+  [
+   0,
+   11,
+   14,
+   -0.9
+  ],
+  [
+   0,
+   12,
+   0,
+   0.5
+  ],
+  [
+   0,
+   12,
+   1,
+   0.5
+  ],
+  [
+   0,
+   12,
+   8,
+   0.2
+  ],
+  [
+   0,
+   13,
+   4,
+   0.3
+  ]
+ ],
+ "beschreibung": {
+  "art": "lead",
+  "unterart": "arp",
+  "charakter": [
+   "evolving",
+   "metallic",
+   "smooth"
+  ],
+  "genre": [
+   "idm",
+   "ambient"
+  ],
+  "einsatz": [
+   "intro",
+   "transition"
+  ],
+  "energie": 3,
+  "text": "A self-playing machine melody: random steps of a sample and hold pluck out a tune while two function generators bend its tempo and filter."
+ },
+ "tags": [
+  "synth-kraken",
+  "semi-modular"
+ ],
+ "notiz": "Measured by render, not heard yet (2026-11-19).",
+ "angelegt": "2026-11-19T00:00:00.000Z",
+ "geaendert": "2026-11-19T00:00:00.000Z"
+}

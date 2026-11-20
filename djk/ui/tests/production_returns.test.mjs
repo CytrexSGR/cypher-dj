@@ -1,10 +1,9 @@
-// 1.10 slice 3: the page, pure parts of the returns, the sends and the Hall units (routing.js, returns.js). The DOM parts are checked by the browser probe.
+// 1.10 slice 3: the page, pure parts of the returns, the sends and the Hall units (routing.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { returnListe, sendWert, sendBefehl, neuerReturnBefehl, returnLabels, sendLabel, hallEinheit, hallText, HALL_TABELLE } from '../public/production/routing.js';
+import { returnListe, sendWert, sendBefehl, neuerReturnBefehl, returnLabels, sendLabel, hallEinheit, hallText, HALL_TABELLE, RETURN_VOLL_TEXT } from '../public/production/routing.js';
 import { MAX_RETURNS } from '../public/production/limits.js';
-import { RETURN_VOLL_TEXT } from '../public/production/returns.js';
 
 const r = (nr) => ({ id: `r${nr}`, nr, name: `Return ${nr}`, farbe: '#3b8de0', fader_db: 0, pan: 0, mute: false, solo: false });
 const REF = JSON.parse(fs.readFileSync(new URL('../../core/tests/data/hall_abbildung_ref.json', import.meta.url), 'utf8'));
@@ -57,12 +56,3 @@ test('slice 3 page: negative control for the guard: a changed curve is red (deca
   } finally { HALL_TABELLE.decay.kurve = echt; }
 });
 
-test('slice 3 page: every data-p id that returns.js asks for stands in the frame of production.js (negative control: an invented one does not)', () => {
-  const dom = fs.readFileSync(new URL('../public/production/returns.js', import.meta.url), 'utf8');
-  const geruest = fs.readFileSync(new URL('../public/production/production.js', import.meta.url), 'utf8');
-  const gefragt = [...dom.matchAll(/\$\('([a-z-]+)'\)/g)].map((m) => m[1]);
-  assert.ok(gefragt.length >= 4, `found: ${gefragt}`);
-  for (const k of gefragt) assert.ok(geruest.includes(`data-p="${k}"`), `data-p="${k}" is missing in the frame`);
-  assert.ok(!geruest.includes('data-p="gibt-es-nicht"'));
-  assert.match(geruest, /bindeReturns/);
-});

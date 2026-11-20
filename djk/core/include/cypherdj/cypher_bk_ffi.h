@@ -33,7 +33,16 @@ uint64_t cypher_bk_rastende(const CypherBk* h);   // sampler A2: latched knobs o
 // sampler A2: set the latched knob nr 1..64 to wert (0..1, clamped, NaN ignored) at sample `versatz` of the next block, no glide. Same queue and offset rule
 // as the notes (max 256 events together); at one sample after alle_aus and aus, before an. 0; -1 h null, nr outside, queue full (counted in verloren); -2 knob not latched. No allocation; not concurrent with block.
 int32_t cypher_bk_regler_bei(CypherBk* h, uint32_t versatz, uint32_t nr, float wert);
+// Pin matrix (`matrix` block): pin [satz 0|1][zeile 0..15][spalte 0..15] to wert (-1..1, clamped). stift: the program follows in about 5 ms; stift_sofort: the smoothed state jumps too.
+// Direct setters, not queue events: effective at the next block. 0; -1 h null, index out of range or NaN; -2 graph without a matrix. No allocation; not concurrent with block.
+int32_t cypher_bk_stift(CypherBk* h, uint32_t satz, uint32_t zeile, uint32_t spalte, float wert);
+int32_t cypher_bk_stift_sofort(CypherBk* h, uint32_t satz, uint32_t zeile, uint32_t spalte, float wert);
+int32_t cypher_bk_stifte_grund(CypherBk* h, uint32_t vorgabe, uint32_t sofort);   // all pins to the graph's own (vorgabe != 0) or to 0; sofort != 0 jumps the smoothed state; 0; -1 h null; -2 no matrix; no allocation; not concurrent with block
+uint32_t cypher_bk_hat_matrix(const CypherBk* h);   // 1 when the graph has a matrix block, 0 without and for h null; no allocation
 void cypher_bk_zuruecksetzen(CypherBk* h);   // S20: like after neu, knobs stay, queue emptied; h null: no effect; no allocation; not concurrent with block
+// Tracker effects. bend: pitch bend of the instance to st semitones (clamped -48..48, NaN ignored) from sample `versatz` of the next block; the factor 2^(st/12) multiplies the hz the graph's `note` block writes. pegel: output level factor 0..1 (clamped, NaN ignored) on both channels after the graph. gleit = glide length in samples: 0 jumps, otherwise a linear move (bend in semitones, pegel in the factor) from the value at that sample that ends exactly gleit samples later. Same queue and offset rule as the notes; at the same sample after alle_aus and aus, before an. No knob smoothing. alle_aus (at its sample) and cypher_bk_zuruecksetzen return bend to 0 and pegel to 1 and stop glides. Return 0; -1 h null or queue full (counted in verloren). No allocation; not concurrent with block.
+int32_t cypher_bk_bend_bei(CypherBk* h, uint32_t versatz, float st, uint32_t gleit);
+int32_t cypher_bk_pegel_bei(CypherBk* h, uint32_t versatz, float faktor, uint32_t gleit);
 uint32_t cypher_bk_hat_eingang(const CypherBk* h);            // 1 Effekt-Graph, 0 Instrument oder null
 uint32_t cypher_bk_latenz(const CypherBk* h);
 uint32_t cypher_bk_rettungen(const CypherBk* h);

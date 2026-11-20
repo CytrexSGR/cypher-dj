@@ -1,0 +1,27 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "amiga"},
+  "title": "Amiga",
+  "akzent": "blau",
+  "layout": {"rows": [
+    ["smp", "chip", "out"]
+  ]},
+  "sections": [
+    { "id": "smp", "title": "SAMPLE", "cols": 3, "controls": [
+      {"id": "slot", "type": "knob", "label": "Slot", "bind": {"param": "k1"}, "format": "raw", "unit": "slot", "default": 0},
+      {"id": "start", "type": "knob", "label": "Start", "bind": {"param": "k2"}, "format": "percent", "default": 0},
+      {"id": "rev", "type": "switch", "label": "Reverse", "bind": {"param": "k3"}, "default": 0},
+      {"id": "smp-n", "type": "label", "span": 3, "text": "Slots: edit them in TRACKER, INSTRUMENTS"}
+    ]},
+    { "id": "chip", "title": "CHIP", "cols": 2, "controls": [
+      {"id": "rate", "type": "knob", "label": "Rate", "bind": {"param": "k5"}, "format": "hz", "default": 0.5},
+      {"id": "bits", "type": "knob", "label": "Bits", "bind": {"param": "k6"}, "format": "raw", "unit": "bit", "default": 0.3333333},
+      {"id": "chip-n", "type": "label", "span": 2, "text": "Hold rate and bit depth of the output"}
+    ]},
+    { "id": "out", "title": "OUT", "cols": 2, "controls": [
+      {"id": "led", "type": "switch", "label": "LED filter", "bind": {"param": "k4"}, "default": 0},
+      {"id": "level", "type": "knob", "label": "Level", "bind": {"param": "k7"}, "format": "percent", "default": 0.8},
+      {"id": "out-n", "type": "label", "span": 2, "text": "Fixed 4.4 kHz low-pass; LED adds 3.3 kHz"}
+    ]}
+  ]
+}

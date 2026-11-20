@@ -1217,6 +1217,7 @@ test('the DOM: the button at the deck head makes the place large and small again
 
 test('the page source: the Escape key, the top edge from the page header, the CSS of the large place', () => {
   assert.match(knoten, /window\.addEventListener\('keydown', grossTaste, true\)/, 'the key is read on the window, capture phase, before a menu registers'); assert.match(knoten, /grossEscape\(\{ gross, menue, eingabe \}\)/);
+  assert.match(knoten, /!b\.contains\('tracker'\)/, 'in TRACKER the grid owns Escape: the large view never reacts there');
   assert.match(knoten, /menueOffen\(\)/, 'a menu that is open takes the key'); assert.match(knoten, /'#kopf'/, 'the top edge comes from the header element');
   assert.match(knoten, /--sq-oben/);
   assert.match(css, /\.seqplatz\.gross \{[^}]*position: fixed;/); assert.match(css, /\.seqplatz\.gross \{[^}]*top: var\(--sq-oben/); assert.match(css, /\.seqplatz\.gross \{[^}]*bottom: 0;/);

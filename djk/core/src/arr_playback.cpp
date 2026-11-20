@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cerrno>
 #include <cmath>
 #include <cstdint>
@@ -575,6 +576,8 @@ void je_bereich(ArrSnapshot& s, F f) {
     f(static_cast<void*>(s.noten_id.data()), arr_seiten(s.noten_id.capacity() * sizeof(uint64_t)));
   if (s.noten_id_index.capacity())
     f(static_cast<void*>(s.noten_id_index.data()), arr_seiten(s.noten_id_index.capacity() * sizeof(int32_t)));
+  if (s.stifte.capacity()) f(static_cast<void*>(s.stifte.data()), arr_seiten(s.stifte.capacity() * sizeof(ArrStift)));   // kraken patch field
+  if (s.fx_punkte.capacity()) f(static_cast<void*>(s.fx_punkte.data()), arr_seiten(s.fx_punkte.capacity() * sizeof(ArrFxPunkt)));   // tracker task 16
   if (s.warps.capacity()) f(static_cast<void*>(s.warps.data()), arr_seiten(s.warps.capacity() * sizeof(ArrWarp)));   // Paket 1.13
   if (s.warp_beat.capacity()) f(static_cast<void*>(s.warp_beat.data()), arr_seiten(s.warp_beat.capacity() * sizeof(double)));
   if (s.warp_frame.capacity()) f(static_cast<void*>(s.warp_frame.data()), arr_seiten(s.warp_frame.capacity() * sizeof(double)));
@@ -1080,6 +1083,10 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
     return erg;
   }
   auto snap = std::make_unique<ArrSnapshot>();
+  {   // kraken patch field: the serial of this snapshot, unique per snapshot the loader builds, never 0 (a snapshot of a test keeps 0)
+    static std::atomic<uint64_t> folge_zaehler{0};
+    snap->folge = folge_zaehler.fetch_add(1, std::memory_order_relaxed) + 1;
+  }
   std::vector<ArrAudio*> geholt;  // bei Abbruch zurückgeben
   try {
     json j;
@@ -1186,7 +1193,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
       for (const json& g : j.at("gruppen"))
         if (g.is_object() && g.contains("auto")) format("gruppen[nr " + std::to_string(g.contains("nr") && g.at("nr").is_number_integer() ? g.at("nr").get<int64_t>() : 0) + "].auto: a group takes no fader lane");
     // Zählen, dann reservieren: die Zeiger in ArrSpur zeigen in die Vektoren, die danach nie wachsen
-    size_t n_clips = 0, n_noten = 0, n_warps = 0, n_punkte = 0, n_lanes = 0, n_auto_p = 0, n_hk_p = 0;
+    size_t n_clips = 0, n_noten = 0, n_warps = 0, n_punkte = 0, n_lanes = 0, n_auto_p = 0, n_hk_p = 0, n_fx = 0;
     for (const json& s : spuren) {
       if (s.contains("clips") && s.at("clips").is_array()) {
         n_clips += s.at("clips").size();
@@ -1200,6 +1207,8 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
         }
       }
       if (s.contains("noten") && s.at("noten").is_array()) n_noten += s.at("noten").size();
+      for (const char* fx_name : {"bend", "pegel"})   // tracker task 16: the events of both lists share one budget (the checks follow in the track loop)
+        if (s.contains(fx_name) && s.at(fx_name).is_array()) n_fx += s.at(fx_name).size();
       if (s.contains("auto") && s.at("auto").is_array()) {   // Automation Slice 1: count lanes and points (the checks follow in the track loop)
         n_lanes += s.at("auto").size();
         for (const json& l : s.at("auto")) {
@@ -1241,6 +1250,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
       throw Abbruch("zu_gross", "more than " + std::to_string(ARR_AUTO_PUNKTE_MAX) + " automation and gain envelope points in all");
     if (n_clips > static_cast<size_t>(ARR_CLIPS_MAX)) throw Abbruch("zu_gross", "mehr als 4096 Clips");
     if (n_noten > static_cast<size_t>(ARR_NOTEN_MAX)) throw Abbruch("zu_gross", "mehr als 65536 Noten");
+    if (n_fx > static_cast<size_t>(ARR_FX_PUNKTE_MAX)) throw Abbruch("zu_gross", "mehr als " + std::to_string(ARR_FX_PUNKTE_MAX) + " bend/pegel");
 #ifndef CYPHERDJ_MUTATION_ARR_WARP_OHNE_GESAMT   // Fehlerfall: die Gesamtgrenze der Marker aller Clips fehlt (Slice 3a, Task 15)
     if (n_punkte > static_cast<size_t>(ARR_WARP_PUNKTE_MAX))
       throw Abbruch("zu_gross", "mehr als " + std::to_string(ARR_WARP_PUNKTE_MAX) + " Warp-Marker in allen Clips");
@@ -1249,6 +1259,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
     snap->noten.reserve(n_noten);
     snap->noten_id.reserve(n_noten);
     snap->noten_id_index.reserve(n_noten);
+    snap->fx_punkte.reserve(n_fx);   // before any push_back: ArrSpur::bend and ::pegel point into it
     snap->warps.reserve(n_warps);
     snap->warp_beat.reserve(n_punkte);
     snap->warp_frame.reserve(n_punkte);
@@ -1304,6 +1315,31 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
             std::snprintf(sp.param[sp.n_param].name, sizeof sp.param[0].name, "%s", it.key().c_str());
             sp.param[sp.n_param++].wert = static_cast<float>(w);
           }
+        }
+        if (s.contains("stifte")) {   // kraken patch field: the pins of the track, [satz, zeile, spalte, wert] sorted strictly ascending by position, at most 512, wert finite in -1..1 and not 0
+          if (!ist_bk || glied) format(wo + "stifte gibt es nur bei geraet bk auf einer Spur");
+          const json& l = s.at("stifte");
+          if (!l.is_array()) format(wo + "stifte ist keine Liste");
+          if (l.size() > 512) format(wo + "stifte: more than 512 pins");
+          sp.stift_von = static_cast<int32_t>(snap->stifte.size());
+          int32_t letzte = -1;
+          for (size_t i = 0; i < l.size(); ++i) {
+            const json& e = l[i];
+            const std::string w2 = wo + "stifte[" + std::to_string(i) + "]: ";
+            if (!e.is_array() || e.size() != 4) format(w2 + "expected [satz, zeile, spalte, wert]");
+            for (int c = 0; c < 4; ++c)
+              if (!e[c].is_number()) format(w2 + "not a number");
+            const double d0 = e[0].get<double>(), d1 = e[1].get<double>(), d2 = e[2].get<double>(), wv = e[3].get<double>();
+            if (d0 != std::floor(d0) || d1 != std::floor(d1) || d2 != std::floor(d2)) format(w2 + "satz, zeile and spalte must be integers");
+            if (!(d0 >= 0 && d0 <= 1 && d1 >= 0 && d1 <= 15 && d2 >= 0 && d2 <= 15)) format(w2 + "satz 0 to 1, zeile and spalte 0 to 15");
+            if (!(wv >= -1.0 && wv <= 1.0) || wv == 0.0) format(w2 + "wert must be in -1 to 1 and not 0");
+            const int32_t pos = static_cast<int32_t>(d0) * 256 + static_cast<int32_t>(d1) * 16 + static_cast<int32_t>(d2);
+            if (pos <= letzte) format(w2 + "pins must be sorted by (satz, zeile, spalte) without a repeated position");
+            letzte = pos;
+            snap->stifte.push_back(ArrStift{static_cast<uint8_t>(d0), static_cast<uint8_t>(d1), static_cast<uint8_t>(d2), static_cast<float>(wv)});
+          }
+          sp.stift_n = static_cast<int32_t>(l.size());
+          sp.stifte_da = true;
         }
         if (ist_bk) {   // all of the track's checks passed up to here: only now build or share the instance
           std::string grund, meldung;
@@ -1393,7 +1429,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
           const std::string wg = wo + "glieder[" + std::to_string(gi) + "].";
           if (!g.is_object()) format(wg + "kein Objekt");
           if (n_platz >= ARR_GLIED_PLAETZE) throw Abbruch("zu_gross", wg + "more than " + std::to_string(ARR_GLIED_PLAETZE) + " rack members");
-          for (const char* nein : {"noten", "clips", "auto"})
+          for (const char* nein : {"noten", "clips", "auto", "bend", "pegel"})
             if (g.contains(nein)) format(wg + nein + " gibt es nicht bei einem Glied (die Noten liegen auf der Rack-Spur)");
           ArrGlied& gd = sp.glied[gi];
           const std::string gid = text(g, "id", wg);
@@ -1666,6 +1702,42 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
         }
         sp.noten_id = sp.n_noten ? snap->noten_id.data() + i0 : nullptr;
         sp.noten_id_index = sp.n_noten ? snap->noten_id_index.data() + i0 : nullptr;
+      }
+      for (const char* fx_name : {"bend", "pegel"}) {   // tracker task 16: pitch and level events of a bk track, [[beat, value, glide in beats], ...] sorted by beat, only in /2 and /3
+        if (!s.contains(fx_name)) continue;
+        const std::string wf = wo + fx_name;
+        if (!v2) format(wf + " exists only in cypherdj-arr/2");
+        if (!(sp.art == ArrArt::intern && std::strcmp(sp.geraet, "bk") == 0)) format(wf + " exists only on a bk track");
+        const json& fl = s.at(fx_name);
+        if (!fl.is_array()) format(wf + " is not a list");
+        const bool ist_pegel = fx_name[0] == 'p';
+        const size_t f0 = snap->fx_punkte.size();
+        for (size_t fi = 0; fi < fl.size(); ++fi) {
+          const json& q = fl[fi];
+          const std::string wq = wf + "[" + std::to_string(fi) + "]";
+          if (!q.is_array() || q.size() != 3) format(wq + " is not [beat, value, glide]");
+          if (!q[0].is_number() || !q[1].is_number() || !q[2].is_number()) format(wq + " has a non-number");
+          ArrFxPunkt x{};
+          x.beat = q[0].get<double>();
+          const double w = q[1].get<double>(), g = q[2].get<double>();
+          if (!std::isfinite(x.beat) || x.beat < 0.0) format(wq + " beat negative or not finite");
+          if (!std::isfinite(w)) format(wq + " value not finite");
+          if (ist_pegel && w < 0.0) format(wq + " pegel below 0");
+          if (!std::isfinite(g) || g < 0.0) format(wq + " glide negative or not finite");
+          x.wert = static_cast<float>(w);
+          x.gleit = static_cast<float>(g);
+          if (fi > 0 && x.beat < snap->fx_punkte.back().beat) format(wq + " beats fall");
+          snap->fx_punkte.push_back(x);
+        }
+        const int fn = static_cast<int>(fl.size());
+        const ArrFxPunkt* fp = fn ? snap->fx_punkte.data() + f0 : nullptr;
+        if (ist_pegel) {
+          sp.n_pegel = fn;
+          sp.pegel = fp;
+        } else {
+          sp.n_bend = fn;
+          sp.bend = fp;
+        }
       }
       if (s.contains("auto")) {   // Automation Slice 1: lanes of this track, only in /2; one lane per (target, parameter), see AUTO_ZIELE
         if (!v2) format(wo + "auto exists only in cypherdj-arr/2");

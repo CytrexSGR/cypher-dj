@@ -16,7 +16,7 @@
     { "id": "sweep", "title": "SYNC SWEEP", "cols": 3, "controls": [
       {"id": "shue", "type": "huelle", "span": 3, "label": "Pitch sweep", "of": {"a": 0.001, "d": "sdecay", "s": 0.001, "r": 0.3}},
       {"id": "sweep", "type": "knob", "label": "Sweep", "bind": {"param": "k4"}, "format": "raw", "unit": "st", "default": 0.5},
-      {"id": "sdecay", "type": "knob", "label": "Decay", "bind": {"param": "k5"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "sdecay", "type": "knob", "label": "Decay", "bind": {"param": "k5"}, "format": "raw", "unit": "s", "default": 0.5, "wirkt": {"ueber": ["sweep", 0.01]}, "wirkt_text": "The sync sweep is off: turn up Sweep"},
       {"id": "sn", "type": "label", "span": 1, "text": "Attack 1 ms fixed"}
     ]},
     { "id": "filter", "title": "FILTER", "cols": 3, "controls": [

@@ -1,0 +1,22 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "percussion-metallic"},
+  "title": "Metallic Perc",
+  "akzent": "rot",
+  "layout": {"rows": [
+    ["tone", "amp", "fx"]
+  ]},
+  "sections": [
+    { "id": "tone", "title": "TONE", "cols": 2, "controls": [
+      {"id": "tune", "type": "knob", "label": "Tune", "span": 2, "bind": {"param": "k1"}, "format": "raw", "unit": "st", "default": 0.5, "scale": {"labels": ["-12", "0", "+12"]}}
+    ]},
+    { "id": "amp", "title": "AMP", "cols": 2, "controls": [
+      {"id": "hue", "type": "huelle", "span": 2, "label": "Envelope", "of": {"a": 0.0005, "d": "decay", "s": 0, "r": 0.04}},
+      {"id": "decay", "type": "knob", "label": "Decay", "span": 2, "bind": {"param": "k2"}, "format": "raw", "unit": "s", "default": 0.5}
+    ]},
+    { "id": "fx", "title": "DRIVE / ROOM", "cols": 2, "controls": [
+      {"id": "drive", "type": "knob", "label": "Drive", "bind": {"param": "k4"}, "format": "db", "default": 0.5},
+      {"id": "room", "type": "knob", "label": "Room mix", "bind": {"param": "k3"}, "format": "percent", "default": 0.5}
+    ]}
+  ]
+}

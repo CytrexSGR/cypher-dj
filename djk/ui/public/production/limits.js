@@ -4,3 +4,4 @@ export const MAX_GRUPPEN = 16;  // gleich project/model.ts MAX_GRUPPEN, geprüft
 export const MAX_RETURNS = 4;   // equal to project/model.ts MAX_RETURNS, checked by tests/limits.test.mjs
 export const WIRT_SLOTS = 2;   // equal to project/model.ts WIRT_SLOTS (1.9 U3), checked by tests/limits.test.mjs
 export const MAX_KIT_GERAETE = 8;   // equal to project/model.ts MAX_KIT_GERAETE (1.9), checked by tests/limits.test.mjs
+export const MAX_HOST = 4;   // equal to project/model.ts MAX_HOST (plugin host processes), checked by tests/limits.test.mjs

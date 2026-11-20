@@ -137,7 +137,7 @@ of the beta. The short version is the [README](../README.md).
   hand edits unless asked to
 - **Merge and bounce**: merge two or more tracks into one new audio track, or bounce a track in place, to a new track
   or as a copy to paste, by an offline render of the same core. Tracks with insert stages are refused
-- **Presets**: a browser for presets of our own devices (191 factory presets, your own, collections) with names from
+- **Presets**: a browser for presets of our own devices (213 factory presets, your own, collections) with names from
   a closed vocabulary; drag one onto a track, a stage or a strip
 - Tempo, loop range and metronome; the time signature of the project (2/4 to 12/4: bar counter, beat dots, ramps over bars and pattern starts count in that meter); per track volume, pan, mute, solo and a meter
 - Projects are folders with a JSON file; every change is one undo step, and the undo history survives a restart
@@ -190,7 +190,7 @@ references before they went in:
   oversampling. Available as a plugin and as an insert stage in the production core
 - **Cypher Modular**: a modular synthesizer. A patch is a JSON graph of building blocks (oscillators, filters,
   envelopes, LFOs, chorus, reverb, delay, dynamics, free feedback paths and, among others, wavetable, FM, granular,
-  modal resonator, string, sampler, filter, sample-and-hold, multi-stage envelope, wavefolder, drum kit and remix blocks; 56 block types in all) with up to 64 knobs that the human or the agent
+  modal resonator, string, sampler, filter, sample-and-hold, multi-stage envelope, wavefolder, drum kit and remix blocks; 61 block types in all) with up to 64 knobs that the human or the agent
   can turn; a knob can have a start value and a centre value of its own. It plays on the melody and bass channels, on extra pattern streams and on production instrument tracks, and it
   runs as an effect on DJ channels, the DJ master, the loop slots and send returns. Example patches: a Juno-style pad, a sync lead, a wobble bass, FM bells, a plucked string. See [docs/cypher-modular.md](cypher-modular.md)
 - **RB-338**: a 303-style bass voice with cutoff, resonance, envelope, decay, accent and slide, playable

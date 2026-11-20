@@ -21,6 +21,7 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   kein_projekt: 'no project is open',
   rev_veraltet: 'the project changed meanwhile; reload and repeat',
   regler_abgelehnt: 'the core refused a mixer change; nothing was changed',
+  stift_abgelehnt: 'the core refused a pin of the patch field; nothing was changed (pins that were already accepted were put back)',
   deck_laeuft: 'a deck is playing; the project tempo can only be set when no deck plays',
   ki_gestoppt: 'Stop Cypher is set',
   ki_stopp: 'Stop Cypher was pressed; the start was dropped and nothing was started',
@@ -77,6 +78,7 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   werkbank_voll: 'a module holds at most 8 instrument tracks',
   vorlage_unbekannt: 'that module template does not exist',
   geraet_falsch: 'the track does not carry the device this command needs (a Cypher Modular instrument)',
+  kein_steckfeld: 'the graph of this track has no matrix block, so it has no patch field (or no graph lookup was available for the first pin)',
   param_nicht_live: 'only the first 64 knobs of the first 8 Baukasten tracks change while dragged; set the others by changing the track',
   clip_unbekannt: 'that clip does not exist',
   take_unbekannt: 'that take lane does not exist',
@@ -312,6 +314,8 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   midi_zu_viele_spuren: 'the project has too few free tracks for the selected parts; select fewer parts or remove tracks',
   midi_zu_lang: 'the MIDI file is longer than the project allows',
   midi_datei_zu_gross: 'the MIDI file is larger than 8 MiB',
+  mod_ungueltig: 'the file is not a ProTracker module',
+  mod_zu_gross: 'the module file is larger than 4 MiB',
   midi_datei_fehlt: 'there is no MIDI file at that path',
   // S17: sound snapshot of the project (graph + knob values per channel)
   bk_nicht_geladen: 'no Baukasten graph is loaded on that channel; load one before saving the sound',
@@ -332,6 +336,13 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   slot_leer: 'that live slot holds no module',
   seq_fehlt: 'that group holds no SEQ deck',
   seq_belegt: 'that place already holds a SEQ deck; clear it first',
+  abschnitt_zu_lang: 'the section is longer than 64 beats, a SEQ deck takes at most 64',   // tracker TO DJ
+  keine_plaetze: 'the track plays no device with a slot bank (the amiga device)',   // tracker slot banks
+  bank_platz_leer: 'that slot holds no sample',
+  abschnitt_leer: 'the section holds no notes, envelope points or effects on an instrument track a SEQ deck can play',
+  zu_viele_bk: 'the live project and the section together would hold more Baukasten tracks than the limit of 16',
+  seq_raster_ungleich: 'a note of the section is not on the 1/8-beat grid of a SEQ deck (3, 6 or 12 rows per beat); change the rows per beat first',
+  seq_raster_belegt: 'a pattern of the deck already plays effects or slots at another rows-per-beat and ticks setting than the section',
   szene_leer_slot: 'that scene slot holds no scene; save one first',   // SEQ scenes
   szene_leer: 'there is no SEQ deck, so there is no picture of patterns to save',
   modul_ohne_instrument: 'the module has no instrument track that a SEQ deck can play (audio and host instruments do not come along)',
@@ -345,6 +356,20 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   slot_ungueltig: "slot is 1, 2, 'A' or 'B'",   // DJ view places task 10
   loop_unbekannt: 'there is no loadable loop of that name in the loop library',   // DJ view places task 10
   kanal_offen: 'the channel of that live slot is open (trim plus fader above -26 dB); close it first, a module is prepared on a closed channel (PFL does not matter)',   // DJ view places task 7
+  // tracker view (tracker tasks 1 to 9): marker, linked patterns, time and section commands
+  tracker_live: 'the live container has no tracker view',
+  tracker_werkbank: 'a workbench module has no tracker view',
+  verbund_spur: 'linked clips must lie on the same track',
+  verbund_ungleich: 'linked clips of one pattern must hold the same notes and envelopes',
+  zeit_schnitt: 'a clip crosses the border the time command would cut: move or shorten it first',
+  zeit_abschnitt: 'the range crosses a section border: use the section commands',
+  abschnitt_grenze: 'a clip crosses the border the section command would cut: move or shorten it first',
+  abschnitt_unbekannt: 'that section does not exist in this project',
+  abschnitt_letzter: 'the last section cannot be deleted',
+  abschnitt_rand: 'the section is already at the end of the list in that direction',
+  abschnitt_verknuepft: 'a clip that covers the section is linked to another section: make it UNIQUE first',
+  fx_lane_kollision: 'the effect commands of a track drive a device knob that the track also holds a lane for; the lane would be replaced silently',
+  fx_ungueltig: 'the effect commands of a clip must be entries {beat, spalte 0..3, code, wert 0..255} inside the clip, one per cell',   // tracker task 12
 };
 
 // Text zu einem Grund; ein Grund ohne Eintrag bekommt einen englischen Rückfall (der Test hält die Tabelle vollständig)

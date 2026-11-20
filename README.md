@@ -32,7 +32,7 @@ automation lanes, freeze, export and loudness per track. Stems of an audio clip 
 and out, overdub for MIDI, takes with comping for audio, latency compensated. Measured with a software loop and a
 test client, not yet with a real audio interface and keyboard.
 
-**Instruments.** A 303-style bass (RB-338), Cypher Modular (a modular synthesizer with 56 block types, with a mono
+**Instruments.** A 303-style bass (RB-338), Cypher Modular (a modular synthesizer with 61 block types, with a mono
 synth, a poly synth, a neuro bass, two drum machines and a filter effect built from it), one-shot drum
 kits and two slots of Surge XT whose patch choice is saved with the project. Every instrument has a front panel with
 real units and MIDI learn (Cypher Modular plates also pick and save presets), which opens enlarged on a device page; a tablet in your home network can show it as a

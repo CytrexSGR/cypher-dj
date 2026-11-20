@@ -1,0 +1,23 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "pad-choir"},
+  "title": "Choir Pad",
+  "akzent": "blau",
+  "layout": {"rows": [
+    ["voice", "amp", "fx"]
+  ]},
+  "sections": [
+    { "id": "voice", "title": "VOICE", "cols": 2, "controls": [
+      {"id": "cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k1"}, "format": "hz", "default": 0.5, "wirkt": {"unter": ["vowel", 0.98]}, "wirkt_text": "Cutoff is not heard at full Vowel mix: turn Vowel mix down"},
+      {"id": "vowel", "type": "knob", "label": "Vowel mix", "bind": {"param": "k2"}, "format": "percent", "default": 0.5, "scale": {"labels": ["LP", "50", "Choir"]}}
+    ]},
+    { "id": "amp", "title": "AMP", "cols": 3, "controls": [
+      {"id": "ahue", "type": "huelle", "span": 3, "label": "Amp envelope", "of": {"a": "attack", "d": 10, "s": 1, "r": "release"}},
+      {"id": "attack", "type": "knob", "label": "Attack", "span": 2, "bind": {"param": "k3"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "release", "type": "knob", "label": "Release", "span": 1, "bind": {"param": "k4"}, "format": "raw", "unit": "s", "default": 0.5}
+    ]},
+    { "id": "fx", "title": "SPACE", "cols": 1, "controls": [
+      {"id": "hall", "type": "knob", "label": "Hall mix", "bind": {"param": "k5"}, "format": "percent", "default": 0.5}
+    ]}
+  ]
+}

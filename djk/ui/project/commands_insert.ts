@@ -6,6 +6,7 @@ import {
   sucheSpur, type Gruppe, type Insert, type Return, type Send, type Spur, MAX_LATENZ_EXTRA,
 } from './model.ts';
 import { bkSetzen } from './modular.ts';
+import { normaleStifte, stiftFehler, stiftEinzelFehler, STIFT_SAETZE, type Stift } from '../steckfeld.ts';
 import { wendeAn as richtungAnwenden } from './direction.ts';
 import { pruefeStammbaum, type Stammbaum } from './sound_runde_contract.ts';   // find sound: the family tree of a track
 import { presetZuParameter } from './rb_mapping.ts';
@@ -210,6 +211,57 @@ export const INSERT = {
     }
     if (!zahlOk(a.wert) || a.wert < 0 || a.wert > 1) ab('argument_ungueltig', 'wert: Zahl 0..1 erwartet');
     (spur.geraet as { parameter: Record<string, number> }).parameter[param as string] = a.wert;
+  },
+
+  // Kraken patch field (task 4): one pin of the matrix block of a Baukasten track. [satz 0|1, zeile 0..15, spalte 0..15, wert -1..1], wert 0 removes the pin.
+  // A device without `stifte` first takes the graph's default pins from ctx.steckfeldVon (D5: a stored list replaces the defaults entirely, so the defaults
+  // must be written into it before the first pin); no lookup or no matrix node: kein_steckfeld. Light (live, no rebuild) only when the list is already there
+  // (istLeicht); the light path hands this handler a copy of the track, its device and its list, and the handler assigns a NEW array.
+  geraet_stift_setzen(p, a, ctx) {
+    erlaube(a, 'spur_id', 'satz', 'zeile', 'spalte', 'wert');
+    const spur = spurVon(p, idArg(a, 'spur_id'));
+    if (!(spur.geraet?.art === 'intern' && spur.geraet.name === 'bk')) ab('geraet_falsch', `${spur.id} is not a Baukasten track`);
+    const satz = zahl(a, 'satz', 0, STIFT_SAETZE - 1, { ganz: true })!, zeile = zahl(a, 'zeile', 0, 15, { ganz: true })!;
+      const spalte = zahl(a, 'spalte', 0, 15, { ganz: true })!;
+    if (!zahlOk(a.wert) || a.wert < -1 || a.wert > 1) ab('argument_ungueltig', 'wert: number -1..1 expected');
+    const g = spur.geraet;
+    let liste = g.stifte;
+    if (!liste) {
+      const sf = ctx?.steckfeldVon?.(g.graph);
+      if (!sf) ab('kein_steckfeld', `${g.graph}: no matrix node (or no graph lookup here)`);
+      liste = sf!.stifte;
+    }
+    g.stifte = normaleStifte([...liste, [satz, zeile, spalte, a.wert]]);
+  },
+  // Kraken patch field: a whole pin list. `stifte: null` = back to the graph defaults (the field is deleted; `satz` must then be absent). With
+  // `satz` only that set
+  // is replaced (every entry must carry that satz), the other set is kept; without `satz` the list replaces everything. Never light: up to 512 pins would
+  // overrun the core command ring, so it reaches the core as a playback.
+  geraet_stifte_setzen(p, a, ctx) {
+    erlaube(a, 'spur_id', 'satz', 'stifte');
+    const spur = spurVon(p, idArg(a, 'spur_id'));
+    if (!(spur.geraet?.art === 'intern' && spur.geraet.name === 'bk')) ab('geraet_falsch', `${spur.id} is not a Baukasten track`);
+    const g = spur.geraet;
+    if (!('stifte' in a)) ab('argument_ungueltig', 'stifte: list or null expected');
+    const satz = a.satz === undefined ? undefined : zahl(a, 'satz', 0, STIFT_SAETZE - 1, { ganz: true });
+    if (a.stifte === null) {
+      if (satz !== undefined) ab('argument_ungueltig', 'satz: must be absent when stifte is null');
+      delete g.stifte;
+      return;
+    }
+    if (!Array.isArray(a.stifte)) ab('argument_ungueltig', 'stifte: list or null expected');
+    if (a.stifte.length > 512) ab('argument_ungueltig', 'stifte: at most 512 entries');
+    (a.stifte as unknown[]).forEach((e, i) => {
+      const f = stiftEinzelFehler(e, `stifte[${i}]`);
+      if (f) ab('argument_ungueltig', f);
+      if (satz !== undefined && (e as Stift)[0] !== satz) ab('argument_ungueltig', `stifte[${i}]: satz ${(e as Stift)[0]} but the command sets satz ${satz}`);
+    });
+    const neu = normaleStifte(a.stifte as Stift[]);
+    if (stiftFehler(neu) !== null) ab('argument_ungueltig', stiftFehler(neu)!);
+    if (satz === undefined) { g.stifte = neu; return; }
+    const alt = g.stifte ?? ctx?.steckfeldVon?.(g.graph)?.stifte;
+    if (!alt) ab('kein_steckfeld', `${g.graph}: no matrix node (or no graph lookup here)`);
+    g.stifte = normaleStifte([...alt!.filter((e) => e[0] !== satz), ...neu]);
   },
 
   // find sound: the family tree of a Baukasten track (null removes it). Project data only: spurSicht omits it, so the playback is not rebuilt;

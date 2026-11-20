@@ -1,0 +1,40 @@
+{
+ "schema": 1,
+ "name": "Explosion",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "chip-rauschen",
+ "werte": {
+  "knob1": 0.3,
+  "knob2": 0.4,
+  "knob3": 0.7,
+  "knob4": 0.8,
+  "knob5": 0,
+  "knob6": 0.8
+ },
+ "beschreibung": {
+  "art": "fx",
+  "unterart": "impact",
+  "charakter": [
+   "dark",
+   "aggressive",
+   "dirty"
+  ],
+  "genre": [
+   "electro",
+   "idm"
+  ],
+  "einsatz": [
+   "transition",
+   "drop"
+  ],
+  "energie": 5,
+  "text": "Long-mode noise with a falling pitch sweep and a slow decay."
+ },
+ "tags": [
+  "chip-rauschen"
+ ],
+ "notiz": "Built from the device document, not yet heard.",
+ "angelegt": "2026-11-19T00:00:00.000Z",
+ "geaendert": "2026-11-19T00:00:00.000Z"
+}

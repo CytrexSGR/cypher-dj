@@ -9,7 +9,7 @@ import { KOMP_SCHLUESSEL } from './effects.js';
 import { KOMP_SECHS } from './comp_controls_table.js';
 import { FX_INDEX, kompGr, kompPegel, kompWert, setzeKomp } from './effects_gemeinsam.js';
 
-const GR_FRIST_MS = 400;   // the freshness rule of the strip (zeigeKomp)
+const GR_FRIST_MS = 400;   // the freshness rule of the compressor GR (grJetzt, effects_view.js)
 const PEGEL_FRIST_MS = 500;   // the freshness rule of the level reports, as insPegelLesung
 const GEBUENDELT_MS = 40;  // the coalescing of a knob move, as the strip's sliders
 const NACHZEICHNEN_MS = 850;   // a bit more than the face's own 800 ms of showing the hand's value: then the stored value is drawn again

@@ -1,0 +1,24 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "keys-chord"},
+  "title": "Chord Keys",
+  "akzent": "gruen",
+  "layout": {"rows": [
+    ["tone", "amp", "fx"]
+  ]},
+  "sections": [
+    { "id": "tone", "title": "TONE", "cols": 2, "controls": [
+      {"id": "pwm", "type": "knob", "label": "PWM depth", "bind": {"param": "k1"}, "format": "percent", "default": 0.5},
+      {"id": "detune", "type": "knob", "label": "Detune", "bind": {"param": "k2"}, "format": "raw", "unit": "ct", "default": 0.5},
+      {"id": "tn", "type": "label", "span": 2, "text": "Root and fifth sounded together"}
+    ]},
+    { "id": "amp", "title": "AMP", "cols": 3, "controls": [
+      {"id": "ahue", "type": "huelle", "span": 3, "label": "Amp envelope", "of": {"a": 0.001, "d": 10, "s": 1, "r": "release"}},
+      {"id": "release", "type": "knob", "label": "Release", "span": 3, "bind": {"param": "k3"}, "format": "raw", "unit": "s", "default": 0.5}
+    ]},
+    { "id": "fx", "title": "EFFECTS", "cols": 2, "controls": [
+      {"id": "dmix", "type": "knob", "label": "Delay mix", "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
+      {"id": "hall", "type": "knob", "label": "Hall mix", "bind": {"param": "k5"}, "format": "percent", "default": 0.5}
+    ]}
+  ]
+}

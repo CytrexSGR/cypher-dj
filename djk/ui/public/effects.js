@@ -23,6 +23,17 @@ export const AUTO_BEREICH = {
   'gate/hold': [0, 2000], 'gate/release': [1, 5000], 'util/balance': [-1, 1], 'util/breite': [0, 200], 'util/bassmono': [0, 500],
 };
 export const DURCHGAENGE = [1, 2, 4, 8, 16, 32];
+/** The loop automation editor of a pad box (L1, L2): name, control, LENGTH, template, SAVE, CLEAR LANE, status and the lane. Shown in the detail of the
+ *  EFFECTS tab and in the window of the live dock (live_dock/automation.js); bindeAutomation (effects_bindung.js) wires it. */
+export function autoBereichHtml() {
+  return `<div class="autobereich"><span class="bildtitel">AUTOMATION OF THE LOOP <b class="autoname">–</b> · saved with the loop, plays on every pass ·
+      click: add point · drag: move · double click: remove</span>
+      <div class="autokopf"><select class="autopfad" aria-label="Automated control">${Object.keys(AUTO_BEREICH).map((p) => `<option>${p}</option>`).join('')}</select>
+      <label class="klein">LENGTH <select class="autolaenge" title="Lane length in loop passes; long lanes start on a multiple of their length (phrase)">${DURCHGAENGE.map((d) => `<option value="${d}">${d}× loop</option>`).join('')}</select></label>
+      <select class="autovorlage" aria-label="Template for this lane"></select>
+      <button class="autospeichern">SAVE</button><button class="autoleeren">CLEAR LANE</button><span class="autostatus"></span></div>
+      <svg class="autospur" viewBox="0 0 480 120" aria-label="Automation lane"></svg></div>`;
+}
 // Punkt der Automationsspur aus einer Stelle im Feld (breite × hoehe): Beat auf 1/4 gerastet, Wert im Bereich
 export function punktAusStelle(x, y, breite, hoehe, beats, [lo, hi]) {
   const beat = Math.min(beats - 0.25, Math.max(0, Math.round((x / breite) * beats * 4) / 4));
@@ -343,7 +354,7 @@ export function werkText(feld, w) {
   if (f.einheit === 'dB') return `${w.toFixed(0)} dB`;
   return `${Math.round(w)}${f.einheit}`;
 }
-/** Markup of the Gate and the Utility strip of one channel (inside the channel's .fxstreifen). Nothing is sent while building;
+/** Markup of the Gate and the Utility strip of one channel (the GATE and UTIL popovers of the live dock, live_dock/tool.js). Nothing is sent while building;
  *  the values are filled from the live control state by app.js (zeigeWerkzeug). */
 export function werkzeugStreifenHtml(k, name, nur = null) {   // `nur`: the css keys to build (the bus panel builds only 'util': no gate on buses, D2)
   const kk = htmlText(k), nn = htmlText(name);

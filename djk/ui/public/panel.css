@@ -28,6 +28,9 @@
 .fp-sektionstitel::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 .fp-gitter { display: grid; grid-template-columns: repeat(var(--spalten, 4), minmax(64px, 88px)); gap: 10px 8px; align-items: start; justify-items: center; }
 .fp-zelle { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; min-width: 0; }
+/* a control that is not heard with the current settings (panel_wirkung.js): greyed, still movable; the tooltip says what makes it heard */
+.fp-zelle.fp-ruht { opacity: .3; transition: opacity .15s; }
+.fp-zelle.fp-ruht:hover { opacity: .6; }
 .fp-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9.5px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
 .fp-wert { min-width: 7ch; text-align: center; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); white-space: nowrap; }
 .fp-text { font-size: 11px; color: var(--dim); text-align: center; }
@@ -233,3 +236,64 @@ body.tablet .fp-xy { max-width: 260px; min-height: 160px; }
 .kopplung-geraete li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 4px 0; border-top: 1px solid var(--line); }
 .kopplung-geraete small { color: var(--dim); display: block; }
 .kopplung-leer { color: var(--dim); }
+
+/* Patch field (control `matrix`, panel.js .fp-m-*): 16 sources down, 16 destinations across, one pin where they cross. Pin = a dot: size is the amount, accent colour a plus,
+   warm colour with a bar a minus. The other set shows as a thin ring. The row and the column under the pointer light up. Scrolls sideways in a narrow host. */
+.frontplatte .fp-matrixsektion .fp-gitter { grid-template-columns: minmax(0, 1fr) !important; justify-items: stretch; }
+.fp-breit .fp-modul.fp-matrixsektion { flex: 8 1 520px; max-width: none; }
+.fp-zelle.fp-m { align-items: stretch; gap: 8px; --m: clamp(22px, calc((100cqw - 82px) / 16), 34px); }   /* the cells grow with the room the host gives, 22 px at least (then it scrolls) */
+.fp-m-leiste { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.fp-m-leiste .fp-option { position: relative; min-width: 34px; font-size: 12px; font-weight: 700; }
+.fp-m-leiste .fp-option::after { content: ""; position: absolute; left: 4px; right: 4px; bottom: 2px; height: 2px; border-radius: 1px; background: currentColor; opacity: .55;
+  transform-origin: left; transform: scaleX(var(--anteil, 0)); }
+.fp-m-leiste .fp-option.an::after { opacity: .8; }
+.fp-m-leiste .fp-knopf-klein:disabled { opacity: .35; cursor: default; }
+.fp-m-morph { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 10px; font-weight: 600; letter-spacing: .12em; color: var(--dim); }
+.fp-m-morphbahn { position: relative; width: 90px; height: 4px; border-radius: 2px; background: #0e0f12; box-shadow: inset 0 0 0 1px var(--line); }
+.fp-m-morphmarke { position: absolute; top: 50%; left: calc(var(--k, 0) * 100%); width: 10px; height: 10px; transform: translate(-50%, -50%); border-radius: 50%; background: var(--fp-akzent, var(--a)); box-shadow: 0 0 6px rgba(47, 214, 195, .5); }
+.fp-m-morphwert { min-width: 4ch; text-align: right; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); letter-spacing: 0; }
+.fp-m-rolle { container-type: inline-size; overflow-x: auto; overflow-y: hidden; max-width: 100%; padding-bottom: 4px; }
+.fp-m-gitter { display: grid; grid-template-columns: 82px repeat(16, var(--m)); grid-auto-rows: var(--m); width: max-content; outline: none; }
+.fp-m-gitter:focus-visible { outline: 2px solid var(--fp-akzent, var(--a)); outline-offset: 3px; border-radius: 4px; }
+.fp-m-gitter { grid-template-rows: 86px; }   /* the header row: the column labels stand upright in it */
+.fp-m-spalte { display: flex; align-items: flex-end; justify-content: center; padding-bottom: 4px; font-size: 9.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); white-space: nowrap; overflow: hidden; }
+.fp-m-spalte span { writing-mode: vertical-rl; transform: rotate(180deg); max-height: 100%; overflow: hidden; text-overflow: ellipsis; }
+.fp-m-zeile { display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; font-size: 9.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fp-m-spalte.fp-hell, .fp-m-zeile.fp-hell { color: var(--text); }
+.fp-m-z { position: relative; box-sizing: border-box; border-right: 1px solid rgba(255, 255, 255, .05); border-bottom: 1px solid rgba(255, 255, 255, .05); background: #0e0f12; cursor: pointer; touch-action: none; }
+.fp-m-z.fp-m-v { border-right-color: rgba(255, 255, 255, .16); }
+.fp-m-z.fp-m-h { border-bottom-color: rgba(255, 255, 255, .16); }
+.fp-m-z.fp-hell { background: #1a1e27; }
+.fp-m-z::before { content: ""; position: absolute; left: 50%; top: 50%; width: calc(var(--m) * var(--g, 0)); height: calc(var(--m) * var(--g, 0)); transform: translate(-50%, -50%); border-radius: 50%; background: transparent; pointer-events: none; }
+.fp-m-z.fp-plus::before { background: var(--fp-akzent, var(--a)); box-shadow: 0 0 5px rgba(47, 214, 195, .45); }
+.fp-m-z.fp-minus::before { background: var(--warn, #ff9a3c); box-shadow: 0 0 5px rgba(255, 154, 60, .45); }
+.fp-m-z.fp-minus::after { content: ""; position: absolute; left: 50%; top: 50%; width: calc(var(--m) * var(--g, 0) * .5); height: 2px; transform: translate(-50%, -50%); border-radius: 1px; background: #0e0f12; pointer-events: none; }
+.fp-m-z.fp-geist:not(.fp-plus):not(.fp-minus)::before { width: calc(var(--m) * var(--h, 0)); height: calc(var(--m) * var(--h, 0)); border: 1px solid var(--dim); box-sizing: border-box; opacity: .5; }
+.fp-m-z:hover:not(.fp-plus):not(.fp-minus)::before { background: rgba(255, 255, 255, .08); width: calc(var(--m) * .4); height: calc(var(--m) * .4); }
+.fp-m-info { min-height: 15px; font-size: 11px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fp-zelle.fp-m-ruht .fp-m-gitter { opacity: .4; }
+.fp-zelle.fp-m-ruht .fp-m-z { cursor: default; }
+.frontplatte.fp-lernmodus .fp-zelle.fp-m { outline: none; cursor: default; }
+body.tablet .fp-zelle.fp-m { --m: 28px; }
+body.tablet .fp-m-leiste .fp-option { min-height: 44px; min-width: 52px; }
+
+/* Cabinet view (page with `all`, panel.js matrixKabel): every module of the device at once, jacks on the module titles and on the destination labels, and a cable per pin.
+   The cable overlay is an SVG next to the plate inside the host (host-relative, so the zoom the device window puts on the plate does not scale the strokes). */
+.fp-schrank.fp-breit .fp-modul { max-width: none; }   /* the modules of a row fill the row like units in a rack */
+.fp-buchse { display: none; }
+.frontplatte.fp-kabelan .fp-buchse { display: inline-block; }
+.fp-buchse { flex: none; box-sizing: border-box; width: 12px; height: 12px; margin-left: 5px; border-radius: 50%; vertical-align: middle; cursor: pointer; pointer-events: auto; }
+.fp-buchse-aus { background: var(--bc, #ccc); border: 2px solid rgba(0, 0, 0, .55); box-shadow: 0 0 0 1px var(--bc, #ccc); }
+.fp-buchse-ein { background: #0e0f12; border: 2px solid #8a8d98; }
+.fp-buchse-ein.fp-benutzt { border-color: var(--text); background: #2a2f3a; }
+.fp-buchse-lose { position: absolute; top: 0; left: 2px; margin: 0; }
+.fp-buchse:hover { transform: scale(1.25); }
+.fp-buchse-aus.fp-an { box-shadow: 0 0 0 2px #fff, 0 0 12px var(--bc, #fff); transform: scale(1.25); }
+.fp-kabelsvg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 5; }
+.fp-kabelsvg.fp-kabel-aus { display: none; }
+.fp-kabel { opacity: .92; transition: opacity .12s; }
+.fp-kabel-geist { opacity: .3; }
+.fp-kabelsvg.fp-kabel-dimm .fp-kabel:not(.fp-kabel-hell) { opacity: .12; }
+.fp-kabel-hell { opacity: 1; stroke-width: 7; }
+.fp-kabel-griff { cursor: pointer; }
+.fp-m-leiste .fp-knopf-klein.an { color: var(--bg); background: var(--fp-akzent, var(--a)); border-color: var(--fp-akzent, var(--a)); }

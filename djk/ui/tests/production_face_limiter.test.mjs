@@ -29,12 +29,16 @@ const FACE = '.p-face';
 const zaehle = (s, sel) => s.w(`document.querySelectorAll(${JSON.stringify(sel)}).length`);
 const knopf = (param) => `${FACE} [data-id="c-r1-${param}"] .fp-knopf`;
 const aend = (s) => fetch(`${s.url}attrappe/aenderungen`).then((r) => r.json());
-const oeffneKlick = (s, id = 'i1') => s.w(`document.querySelector('.p-stufe[data-insert="${id}"] .p-ins-face').click()`);
+const oeffneKlick = (s, id = 'i1') => s.w(`document.querySelector('[data-w="karte-teil"][data-teil="${id}"]').click()`);
+const entferne = async (s, id = 'i1') => {   // the chip menu entry Remove (the event stops at the chip: the card's own menu handler would replace the chip menu, a dock quirk outside this test)
+  await s.w(`(() => { const c = document.querySelector('[data-w="karte-teil"][data-teil="${id}"]'); c.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 60, clientY: 60 })); })()`);
+  await s.w(`[...document.querySelectorAll('.p-menue button')].find((b) => b.textContent.trim() === 'Remove').click()`);
+};
 const lage = (s) => s.w(`(() => { const f = document.querySelector('.p-face'); if (!f) return null; const r = f.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, sh: f.scrollHeight, ch: f.clientHeight, iw: innerWidth, ih: innerHeight }; })()`);
 const taste = (s, param, key) => s.w(`(() => { const k = document.querySelector(${JSON.stringify(knopf(param))}); k.focus(); k.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(key)}, bubbles: true })); })()`);
 const WERTE = [['i1', 'decke', -9], ['i1', 'abklingen', 200]];
 
-test('limiter face opens from the stage row, lies inside the window (1280x900, 1920x1080), shows the ceiling and the fixed line, has two knobs and the meter', { skip: !CHROME && 'no google-chrome' }, async (t) => {
+test('limiter face opens from the stage chip, lies inside the window (1280x900, 1920x1080), shows the ceiling and the fixed line, has two knobs and the meter', { skip: !CHROME && 'no google-chrome' }, async (t) => {
   for (const [b, h] of [[1280, 900], [1920, 1080]]) {
     const s = await seite(t, projekt(WERTE), { breite: b, hoehe: h });
     assert.equal(await zaehle(s, FACE), 0, 'closed by default');
@@ -55,16 +59,14 @@ test('limiter face opens from the stage row, lies inside the window (1280x900, 1
   }
 });
 
-test('a Ceiling knob key sends insert_param_setzen decke with the label "Ceiling limiter on Kick"; the INSERTS row shows the same number; the ceiling line moves', { skip: !CHROME && 'no google-chrome' }, async (t) => {
+test('a Ceiling knob key sends insert_param_setzen decke with the label "Ceiling limiter on Kick"; the ceiling line moves', { skip: !CHROME && 'no google-chrome' }, async (t) => {
   const s = await seite(t, projekt());
-  await s.b.klick('.p-stufe[data-insert="i1"] .p-ins-name');
   await oeffneKlick(s);
   const linie0 = await s.w(`document.querySelector('.p-face .fa-decke').getAttribute('y1')`);
   await taste(s, 'decke', 'ArrowDown');
   assert.ok(await s.bis(async () => (await s.projekt()).spuren[0].inserts[0].werte.decke < -1), 'ceiling in the project');
   const v = (await s.projekt()).spuren[0].inserts[0].werte.decke;
   const text = `${v.toFixed(1)} dB`;
-  assert.ok(await s.bis(async () => (await s.w(`document.querySelector('.p-ins-popover[data-insert="i1"] .p-ins-wert[data-param="decke"]').textContent`)) === text), 'the row shows the same number');
   assert.equal(await s.w(`document.querySelector('.p-face [data-id="c-r1-decke"] .fp-wert').textContent`), text);
   assert.notEqual(await s.w(`document.querySelector('.p-face .fa-decke').getAttribute('y1')`), linie0, 'the ceiling line moved');
   assert.deepEqual((await aend(s)).at(-1).befehle, ['insert_param_setzen']);
@@ -75,7 +77,7 @@ test('failure case: the stage is removed under the open face: the face closes wi
   const s = await seite(t, projekt());
   await oeffneKlick(s);
   assert.equal(await zaehle(s, FACE), 1);
-  await s.w(`document.querySelector('.p-stufe[data-insert="i1"] .p-ins-weg').click()`);
+  await entferne(s);
   assert.ok(await s.bis(async () => (await zaehle(s, FACE)) === 0, 500), 'the face is gone');
   assert.deepEqual((await aend(s)).at(-1).befehle, ['insert_entfernen']);
   const n = (await aend(s)).length;

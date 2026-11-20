@@ -89,13 +89,13 @@ test('a LIBRARY drop in PRODUCTION records recently used', async () => {
   const { bindeAblage } = await import('../public/production/storage.js');
   const { ZIEH_TYP } = await import('../public/production/drag.js');
   const el = () => ({ h: {}, addEventListener(n, f) { this.h[n] = f; } });
-  const ueber = el(), liste = el();
+  const ueber = el();
   const alt = globalThis.document;
   globalThis.document = { querySelector: () => null };
   try {
     const p = fuehreListeAus(neuesProjekt('T'), [{ befehl: 'spur_neu', art: 'audio', name: 'Drums' }]).projekt;
     const posts = [];
-    const ctx = { st: { projekt: p, sichtbar: true, ansicht: { x0: 0, ppb: 10 }, raster: 1 }, $: (n) => ({ ueber, 'inserts-liste': liste })[n], stoebern: () => null, beimSichtwechsel: [],
+    const ctx = { st: { projekt: p, sichtbar: true, ansicht: { x0: 0, ppb: 10 }, raster: 1 }, $: (n) => ({ ueber })[n], stoebern: () => null, beimSichtwechsel: [],
       zeilen: () => [{ art: 'spur', spur: 0, y: 0, h: 40 }], aendere: () => {}, aendereAus: () => {}, melde: () => {},
       holeJson: async (u, k) => { posts.push([u, k]); return { status: 200, j: {} }; } };
     bindeAblage(ctx);

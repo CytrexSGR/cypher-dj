@@ -95,9 +95,9 @@ test("vorgabenVon('synth-poly') has BK_REGLER_ZAHL entries, all 0.5 except Drift
   const v = vorgabenVon('synth-poly', path.join(DSP, 'demos'));
   assert.equal(v.length, BK_REGLER_ZAHL);
   assert.equal(v[27], 0.25, 'Drift');
-  // Mod env A, D, R (31, 32, 34), LFO 2 rate, shape, sync, target (39..42), Osc 2 level, wave, sync (46, 47, 51), Glide (54): the values the graph's regler nodes carry
+  // Mod env A, D, R (31, 32, 34), LFO 2 rate, shape, sync, target (39..42), Osc 2 level, wave, sync (46, 47, 51), Glide (54), the wave-position build-out (53, 58..62): the values the graph's regler nodes carry
   const weg = v.map((x, i) => [i + 1, x]).filter(([, x]) => x !== 0.5).map(([nr]) => nr);
-  assert.deepEqual(weg, [28, 31, 32, 34, 39, 40, 41, 42, 46, 47, 51, 54]);
+  assert.deepEqual(weg, [28, 31, 32, 34, 39, 40, 41, 42, 46, 47, 51, 53, 54, 58, 59, 60, 61, 62]);
   for (const nr of [40, 41, 42, 46, 47, 51, 54]) assert.equal(v[nr - 1], 0, `knob ${nr} starts at its off position`);
 });
 

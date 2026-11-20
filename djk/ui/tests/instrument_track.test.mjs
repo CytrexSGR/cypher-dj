@@ -423,11 +423,11 @@ test('page: a plugin instrument dropped on the arrangement sends spur_neu once; 
   const { GERAET_TYP } = await import('../public/production/drag.js');
   const { geraetText } = await import('../public/production/track_heads.js');
   const el = () => ({ h: {}, addEventListener(n, f) { this.h[n] = f; } });
-  const ueber = el(), liste = el(), alt = globalThis.document;
+  const ueber = el(), alt = globalThis.document;
   globalThis.document = { querySelector: () => null };
   try {
     const gesendet = [];
-    bindeAblage({ st: { projekt: neuesProjekt('P'), sichtbar: true }, $: (n) => ({ ueber, 'inserts-liste': liste })[n], stoebern: () => null, beimSichtwechsel: [],
+    bindeAblage({ st: { projekt: neuesProjekt('P'), sichtbar: true }, $: (n) => ({ ueber })[n], stoebern: () => null, beimSichtwechsel: [],
       zeilen: () => [], aendere: (l, b) => gesendet.push([l, b]), aendereAus: () => {}, melde: () => {} });
     const n = { art: 'instrument', plugin_id: 'v1', titel: 'Vital' };
     ueber.h.drop({ dataTransfer: { types: [GERAET_TYP], getData: () => JSON.stringify(n) }, offsetX: 5, offsetY: 5, preventDefault() {} });

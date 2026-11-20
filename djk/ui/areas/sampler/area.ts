@@ -20,6 +20,7 @@ import { quittungAbgelehnt } from '../proj/core_path.ts';
 import { ProjFehler, type Antwort, type ProjSitzung } from '../proj/session.ts';
 import { dateiRouten } from './file_routes.ts';   // sample player stage 1
 import { instrumentRouten } from './instrument_routes.ts';   // sample player stage 2
+import { platzRouten } from './platz_routes.ts';   // tracker task 21: slot banks
 import { loescheToeneDesSchnitts, tonRouten } from './tone_routes.ts';   // plan C
 
 /** `ordner` (cut store, default `samplerOrdner()`), `loops` and `module` are read at every request, so a getter may follow the options of the server. */
@@ -397,6 +398,7 @@ export function samplerBereich(ctx: BereichKontext, opt: SamplerOptionen): Berei
     ...tonRouten(ctx, opt),   // plan C
     ...dateiRouten(ctx, opt),   // sample player stage 1
     ...instrumentRouten(ctx, opt),   // sample player stage 2
+    ...platzRouten(ctx, opt),   // tracker task 21
   ];
   return { name: 'sampler', routen };
 }

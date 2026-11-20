@@ -5,17 +5,19 @@ import { bindeInstrumente } from './instruments_view.js';
 import { leseAchse, merkeAchse } from './instrument_groups.js';
 import { GERAETEKNOPF } from './panel_kopf.js';
 import { $, $$, zustand } from './page_state.js';
-import { baueFxStreifen, bindeBus, bindeWerkzeug, fxGewaehlt, grJetzt, kompVerlauf, sendeWerkzeug, waehleFx, zeigeKomp, zeigeLimiter } from './effects_view.js';
+import { fxGewaehlt, grJetzt, kompVerlauf, sendeWerkzeug, zeigeLimiter } from './effects_view.js';
 import { FX_KANAELE, istGeraeteseite, instrumenteSichtbar, kompWert, setzeBereich, setzeGeraeteseite, spektrumLeihe } from './effects_gemeinsam.js';
 import { fokus } from './controller_fokus.js';
 import { produktion } from './seitenrahmen.js';
 import { graphVon, graphenGeladen, holeBk, holeGraphen, holeHostNamen, hostNamen, instrDurchsucht, merkeInstrKat, speichereSound, waehleGraph, zeigeGraphWahl } from './graphs_view.js';
 import { bindeBkKnobs, holeLernen, lernAbbrechenFuer, lernSchicken, lernen } from './learn_view.js';
 export let instrumenteAnsicht = null;   // INSTRUMENTS area (instruments_view.js), bound in bindeEffekte
-// Schritt 4: Automation je Loop. Daten aus GET /loop/automation, Bearbeiten im Feld, SAVE schreibt sie in loop.json
-let autoDaten = [];        // [{pfad, punkte}] des Loops in der gewählten Box
-let autoLoop = { name: '', beats: 0 };
+// Schritt 4: Automation je Loop. Daten aus GET /loop/automation, Bearbeiten im Feld, SAVE schreibt sie in loop.json.
+// The state lives per bound view (review 2026-11-19, MAJOR): with module-wide state two open windows (L1, L2) shared it, and SAVE in L1
+// wrote the curves and the name of the window opened last.
 export function bindeAutomation(d, box) {
+  let autoDaten = [];        // [{pfad, punkte}] of the loop in this box
+  let autoLoop = { name: '', beats: 0 };
   const svg = d.querySelector('.autospur');
   const sel = d.querySelector('.autopfad');
   const lsel = d.querySelector('.autolaenge');
@@ -105,10 +107,8 @@ export function bindeAutomation(d, box) {
   } else zeichne();
 }
 
-function zeichneVerlauf() {
-  const c = $('#fxdetail canvas');
-  if (!c) return;
-  const v = kompVerlauf[fxGewaehlt] ?? [];
+export function zeichneVerlaufIn(c, k) {
+  const v = kompVerlauf[k] ?? [];
   const g = c.getContext('2d');
   g.clearRect(0, 0, c.width, c.height);
   g.strokeStyle = getComputedStyle(document.body).getPropertyValue('--warn') || '#e8a33c';
@@ -150,6 +150,7 @@ export function zeigePresets() {
 
 // Was auf jedem Kanal läuft, aus /lage (dieselbe Quelle wie Cyphers Hand): Deck-Titel, Strudel-Muster und Klang, Loop der Box.
 // Nur abgefragt, solange die Effekt-Sektion offen ist (alle 2 s).
+export const fxInhalt = {};   // channel -> the text last shown on its strip
 export async function holeFxInhalt() {
   if ($('#effekte').hidden) return;
   try {
@@ -157,7 +158,9 @@ export async function holeFxInhalt() {
     zeigeLimiter(limiterZustand(lage));   // A8b, before the loop: a missing deck field there must not leave the limiter state stale
     for (const [k] of FX_KANAELE) {
       const el = $(`[data-fxinhalt="${CSS.escape(k)}"]`);
-      if (el) { const t = fxInhaltText(k, lage); el.textContent = t; el.title = t; el.classList.toggle('laeuft', t.startsWith('▶')); }
+      const t = fxInhaltText(k, lage);
+      fxInhalt[k] = t;
+      if (el) { el.textContent = t; el.title = t; el.classList.toggle('laeuft', t.startsWith('▶')); }
     }
   } catch { /* Seite gleich wieder */ }
 }
@@ -170,14 +173,7 @@ export function bindeEffekte() {
     kanaele: Object.keys(GRAPH_KANAL_ART).filter((k) => GRAPH_KANAL_ART[k] === 'instrument'), graphVon,
     hostNameVon: (k) => (graphVon(k) ? null : hostNamen[k] ?? null), bindeKnobs: bindeBkKnobs, zeigeGraphWahl, geraeteseite: istGeraeteseite });
   fokus.registriere('instrumente', () => (instrumenteSichtbar() ? { kanal: instrumenteAnsicht.gewaehlt() } : null));   // window focus: the INSTRUMENTS area or the device page, while it is visible
-  baueFxStreifen();
-  bindeWerkzeug($('#fxstreifen'));
-  bindeBus($('#fxstreifen'));
-  $('#fxstreifen').addEventListener('click', (e) => {
-    const s = e.target.closest('.fxstreifen');
-    if (s && !e.target.closest('button, input, select')) waehleFx(s.dataset.kanal);
-  });
-  document.addEventListener('change', (e) => {   // S12: graph pickers (strips, detail, send returns)
+  document.addEventListener('change', (e) => {   // S12: graph pickers (INSTRUMENTS, the windows of the live dock, the Strudel sound column)
     const kat = e.target.closest?.('select.graphkat');
     if (kat) {   // group browsed to: remember it for this axis, show its instruments (the channel keeps what is loaded)
       const k = kat.dataset.graphkat, achse = leseAchse();
@@ -211,14 +207,11 @@ export function bindeEffekte() {
     else if (wb) lernSchicken('/lernen/loeschen', { pfad: wb.dataset.lernWeg });
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && lernen.wartet) lernSchicken('/lernen', { pfad: null }); });
-  waehleFx(fxGewaehlt);
-  setInterval(() => {   // 10 Hz: Verlauf der Absenkung aller Kanäle mitschreiben, das Detail zeichnen
+  setInterval(() => {   // 10 Hz: the gain reduction history of every channel (drawn by the history window of the live dock, live_dock/comp.js)
     for (const [k] of FX_KANAELE) { const v = (kompVerlauf[k] ??= []); v.push(grJetzt(k)); if (v.length > 100) v.shift(); }
-    if (document.body.classList.contains('lib-gross') && !$('#effekte').hidden) zeichneVerlauf();
   }, 100);
   let b = 'library';
   try { b = localStorage.getItem('djk-bereich') || 'library'; } catch { /* ohne Speicher: Library */ }
   setzeBereich(b === 'effekte' || b === 'presets' || b === 'instrumente' || b === 'controller' ? b : 'library');
-  setInterval(() => { if (!$('#effekte').hidden) zeigeKomp(); }, 250);   // GR fällt ohne Meldung auf 0
   setInterval(holeFxInhalt, 2000);
 }

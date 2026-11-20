@@ -66,8 +66,8 @@ const NACHLAUF_MAX = 480000;                                                  //
 const MIDI_EINGANG = 30;                                                      // /k/rec/spur eingang of midi_ein_1 (an instrument track, T7a)
 const midiSchluessel = (kennung: number): string => `m:${kennung}`;           // key of the one MIDI report of a run in `gemeldet` / `wartend`
 const eingangVon = (s: { aufnahme?: { eingang: unknown } }): { art: string } => s.aufnahme!.eingang as { art: string };
-// Plan addendum N1: the keys follow the focus. The track in front (TastenArm, session state of the page server) counts as MIDI-armed for the core in addition to the
-// arms of the project; it is never written into the project and never part of a take (start sends the project's arms only).
+// Plan addendum N1: the keys follow the focus. The track in front (TastenArm, session state of the page server) counts as MIDI-armed for the core in
+// addition to the arms of the project; it is never written into the project and never part of a take (start sends the project's arms only).
 const TASTEN_SPUR: KernSpur = { eingang: MIDI_EINGANG, modus: 0, monitor: 1 };
 
 export class Aufnahme {
@@ -102,7 +102,10 @@ export class Aufnahme {
   private quantum = 0;                          // its quantum (0 before the first cycle)
   private arrNr: number | null = null;          // /zustand/arr.nr, the playback number the core plays (-1 none); null: not heard since the last hello
   private zustandWartend: (() => void)[] = [];
-  constructor(ctx: BereichKontext, zugang: ProjZugang, fristMs = 30000, geraeteKonfig?: string, zustandMs = 1500, ladeMs = 5000, platz: Platz = {}, tasten: TastenArm | null = null) {
+  constructor(
+    ctx: BereichKontext, zugang: ProjZugang, fristMs = 30000, geraeteKonfig?: string, zustandMs = 1500, ladeMs = 5000, platz: Platz = {},
+    tasten: TastenArm | null = null,
+  ) {
     this.tasten = tasten;
     this.ctx = ctx; this.zugang = zugang; this.fristMs = fristMs; this.zustandMs = zustandMs; this.ladeMs = ladeMs;
     this.minFreiBytes = platz.minFreiBytes ?? MIN_FREI_BYTES;
@@ -340,7 +343,8 @@ export class Aufnahme {
       // Scharf-Stand im Kern angleichen (D13): einmal je Kern-Generation alle Spuren (der Kern kann von früher armiert sein), danach nur die Unterschiede,
       // auch die Spuren, die ein Abgleich während eines früheren Laufs zurückgestellt hat. Ein Abgleich, der noch läuft, wird abgewartet.
       await this.kette;
-      const soll = this.soll(o.projekt, false);   // the same project state as `scharf` above; N1: without the focus arm, so it is taken back before the take and is never part of it
+      // the same project state as `scharf` above; N1: without the focus arm, so it is taken back before the take and is never part of it
+      const soll = this.soll(o.projekt, false);
       const alle = this.kernBereinigt ? this.unterschiede(soll) : Array.from({ length: 32 }, (_, i) => i + 1);
       // alle Nachrichten zugleich senden, dann alle Quittungen abwarten (32 mal einzeln wären rund eine Sekunde)
       for (const x of await this.sendeSpuren(alle, soll)) {
@@ -622,7 +626,8 @@ const eingangCode = (e: EingangIntern | EingangExtern): number => (e.art === 'ex
 
 export function aufnahmeBereich(ctx: BereichKontext, zugang: ProjZugang,
   opt: { fristMs?: number; geraeteKonfig?: string; zustandMs?: number; ladeMs?: number; tasten?: TastenArm } & Platz = {}): Bereich & { aufnahme: Aufnahme } {
-  const a = new Aufnahme(ctx, zugang, opt.fristMs, opt.geraeteKonfig, opt.zustandMs, opt.ladeMs, { minFreiBytes: opt.minFreiBytes, statfs: opt.statfs }, opt.tasten ?? null);
+  const a = new Aufnahme(ctx, zugang, opt.fristMs, opt.geraeteKonfig, opt.zustandMs, opt.ladeMs,
+    { minFreiBytes: opt.minFreiBytes, statfs: opt.statfs }, opt.tasten ?? null);
   const antworte = async (r: http.ServerResponse, f: () => Antwort | Promise<Antwort>): Promise<void> => {
     let x: Antwort;
     try { x = await f(); } catch (e) { x = alsAntwort(e, ctx); }

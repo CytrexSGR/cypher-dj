@@ -84,6 +84,9 @@ async function stapel(t, mutationen = [], { bestand = BESTAND, vorher, kernPruef
   // running), and since task 8 also /k/arr/arm spur 0 an 0 (plan automation-slice3 line 38: a core that kept running is disarmed). Wait for those
   // two commands and count from there, so that the tests' "0 commands" still mean: nothing happened because of the test.
   for (let i = 0; i < 100 && o.gesendet < 2; i++) await warte(20);
+  // The first /uhr tick of the stand-in may still be on its way when the connection is up (and under load it is: "keine_uhr" 409 from POST /spur in
+  // Studio S6 T2, 77 ms into the test, seen 2026-11-16). Every handler that anchors on the core beat answers keine_uhr without it, so wait for it here.
+  for (let i = 0; i < 150 && !o.kern.uhr; i++) await warte(20);
   const start = log.filter((z) => z.typ === 'an_kern' && z.adresse !== '/k/graph/frage').map((z) => z.adresse).sort();
   assert.deepEqual(start, ['/k/arr/arm', '/k/arr/auto'], 'the start sends exactly the release and the disarm command');
   assert.equal(o.gesendet, 2, 'the start sends exactly the release and the disarm command');

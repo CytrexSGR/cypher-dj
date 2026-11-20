@@ -6,7 +6,8 @@ import { installiere, attrappe } from './helpers/pages_mock.mjs';
 
 installiere();
 const { bindeWerkbank } = await import('../public/werkbank/werkbank.js');
-const { spurZeilen, rasterArt, faderText, neueSpurBefehl, MAX_SPUREN_MODUL } = await import('../public/werkbank/tracks.js');
+const { spurZeilen, rasterArt, neueSpurBefehl, MAX_SPUREN_MODUL } = await import('../public/werkbank/tracks.js');
+const { faderText } = await import('../public/dock/drehknopf.js');
 const { MAX_WERKBANK_SPUREN } = await import('../project/werkbank.ts');
 const { reglerVonDb, dbVonRegler } = await import('../public/production/fader_curve.js');
 const { neuerInfoSpeicher, INFO_WARTEN_MS, geraetSchluessel } = await import('../public/werkbank/info.js');

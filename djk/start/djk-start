@@ -120,11 +120,12 @@ done
 [ "$MELODIE" != surge ] && [ "$INSTR" != 1 ] && { echo "djk-start: --melodie needs --instrumente" >&2; exit 2; }
 [ -n "$BASS" ] && [ "$INSTR" != 1 ] && { echo "djk-start: --bass needs --instrumente" >&2; exit 2; }
 # Storage layout (task 14): a real start of the production instance first lays out the new home folder (missing folders, the links
-# of the core kinds). A refusal (the home's disk is not mounted, exit 6) or any other failure is reported and the start goes on: the
+# of the core kinds). A refusal (the home's disk is not mounted, exit 6) aborts the start; any other failure is reported and the start goes on: the
 # core kinds stay at their old places, which the links keep valid. Test instances, --zustand and --vorlagen-nach never touch the home.
 if [ -z "$I" ] && [ "$MODUS" = start ]; then
   PYTHONPATH="$DJK${PYTHONPATH:+:$PYTHONPATH}" PYTHONSAFEPATH=1 python3 "$HIER/umzug.py" einrichten --still \
-    || echo "djk-start: could not lay out the home folder (see above); starting with the old places" >&2
+    || { _rc=$?; [ "$_rc" = 6 ] && { echo "djk-start: the home is not ready (is the disk mounted?). Nothing started." >&2; exit 6; }
+         echo "djk-start: could not lay out the home folder (see above); starting with the old places" >&2; }
 fi
 # Starter kit (plan 2026-11-12): the Strudel kits are chosen here, before anything starts, in the kit folder of this start. A default kit that is
 # missing falls back to the starter kit (djk-starter); a kit named with --strudel-kit* that is missing, or no kit at all, is an error (2).
@@ -453,6 +454,13 @@ if ! ports_da "$MASTER" && [ "$MASTER" = "$STUMM:playback_F" ]; then
   for _ in $(seq 1 50); do ports_da "$CUE" && ports_da "$MASTER" && break; sleep 0.1; done
 fi
 for z in "$MASTER" ${CUE:+"$CUE"}; do
+  # A real ALSA output can lose its card profile (2026-11-19, after a reboot: iec958-stereo gone, card on AC3 5.1).
+  # profiles.py sets the profile back; it may restart the audio server only while no cypherdj kern is running.
+  if ! ports_da "$z" && [[ "${z%:*}" == alsa_output.* ]]; then
+    NEU=""; systemctl --user list-units --state=active --plain --no-legend 'cypherdj-kern*.service' 2>/dev/null | grep -q . || NEU=--neustart-erlaubt
+    python3 "$HIER/profiles.py" --senke "${z%:*}" $NEU >&2 || true
+    for _ in $(seq 1 30); do ports_da "$z" && break; sleep 0.1; done
+  fi
   if ! ports_da "$z"; then
     echo "djk-start: output ${z}L/R not found (pw-link -i). Nothing started." >&2
     # Gibt es das Gerät, aber mit anderen Portnamen (Pro Audio: playback_AUX0..), sagen, welche da sind: der Kern

@@ -10,6 +10,7 @@ import { INSERT } from '../project/commands_insert.ts';
 import { AUTO } from '../project/commands_auto.ts';
 import { TRANSPORT } from '../project/commands_transport.ts';
 import { SZENEN } from '../project/commands_szenen.ts';
+import { TRACKER } from '../project/commands_tracker.ts';
 import { neuesProjekt } from '../project/model.ts';
 import { mergeTabellen, PRO_BEFEHL as REGISTER } from '../project/commands_helpers.ts';
 
@@ -50,16 +51,26 @@ const NAMEN_MAIN = [
 ];
 // the SEQ scene commands (family SZENEN) came after the split
 const NAMEN_SZENEN = ['szene_anwenden', 'szene_loeschen', 'szene_speichern'];
-const NAMEN_ALLE = [...NAMEN_MAIN, ...NAMEN_SZENEN];
+// the tracker command (family TRACKER) came with the tracker view
+const NAMEN_TRACKER = ['tracker_setzen'];
+// the time and section commands (family TRACKER) came with the section list
+const NAMEN_ABSCHNITTE = ['abschnitt_duplizieren', 'abschnitt_laenge', 'abschnitt_loeschen', 'abschnitt_neu', 'abschnitt_umbenennen', 'abschnitt_verschieben',
+  'zeit_einfuegen', 'zeit_entfernen'];
+// the linked-clip commands (ADR 039, family CLIP) came with the tracker patterns
+const NAMEN_VERBUND = ['clip_entknuepfen', 'clip_verknuepfen'];
+// the effect command (family TRACKER, task 12)
+const NAMEN_FX = ['fx_setzen'];
+const NAMEN_STECKFELD = ['geraet_stift_setzen', 'geraet_stifte_setzen'];
+const NAMEN_ALLE = [...NAMEN_MAIN, ...NAMEN_SZENEN, ...NAMEN_TRACKER, ...NAMEN_ABSCHNITTE, ...NAMEN_VERBUND, ...NAMEN_FX, ...NAMEN_STECKFELD];
 
-test('PRO_BEFEHL holds the 82 commands of the table before the split plus the 3 scene commands', () => {
+test('PRO_BEFEHL holds the 82 commands of the table before the split plus the 3 scene commands, the tracker command, the 8 time and section commands the 2 linked-clip commands and the effect command', () => {
   assert.equal(NAMEN_MAIN.length, 82);
-  assert.equal(NAMEN_ALLE.length, 85);
+  assert.equal(NAMEN_ALLE.length, 99);
   assert.deepEqual(Object.keys(PRO_BEFEHL).sort(), [...NAMEN_ALLE].sort());
 });
 
 test('every command is defined in exactly one family table; BEFEHL_NAMEN is the key list of the registry', () => {
-  const familien = { SPUR, CLIP, GRUPPE, INSERT, AUTO, TRANSPORT, SZENEN };
+  const familien = { SPUR, CLIP, GRUPPE, INSERT, AUTO, TRANSPORT, SZENEN, TRACKER };
   for (const [name, t] of Object.entries(familien)) assert.ok(Object.keys(t).length > 0, `${name} is not empty`);
   const alle = Object.values(familien).flatMap((t) => Object.keys(t));
   assert.equal(new Set(alle).size, alle.length, 'no command twice');

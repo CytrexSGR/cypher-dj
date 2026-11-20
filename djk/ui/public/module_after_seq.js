@@ -24,27 +24,28 @@ export function weggelassenText(w) {
   if (punkte > 0) teile.push(`${mehrzahl(punkte, 'lane point')} after bar 16`);
   return teile.join(', ');
 }
-// "loaded 4 patterns into SEQ 2 · left out: 2 sends, 1 insert"
+// "loaded 4 patterns into SEQ 2 · left out: 2 sends, 1 insert"; a tracker section (TO DJ): "loaded 2 patterns of section 01 into SEQ 2"
 export function berichtText(b) {
   if (!b) return '';
   const aus = weggelassenText(b.weggelassen);
-  return `loaded ${mehrzahl(b.patterns?.length ?? 0, 'pattern')} into SEQ ${b.platz}${aus ? ` · left out: ${aus}` : ''}`;
+  const von = b.abschnitt ? ` of section ${String(b.abschnitt.nr).padStart(2, '0')}` : '';
+  return `loaded ${mehrzahl(b.patterns?.length ?? 0, 'pattern')}${von} into SEQ ${b.platz}${aus ? ` · left out: ${aus}` : ''}`;
 }
 
-// POST /seq/modul {slug, platz}. -> { ok, text, bericht?, projekt? }
-export async function ladeModulInSeq(slug, platz, holeJson) {
-  const r = await holeJson('/seq/modul', { slug, platz });
+// POST /seq/modul {slug, platz, abschnitt?}. -> { ok, text, bericht?, projekt? }. With a section id the slug is any project (TO DJ).
+export async function ladeModulInSeq(slug, platz, holeJson, abschnitt) {
+  const r = await holeJson('/seq/modul', { slug, platz, ...(abschnitt !== undefined ? { abschnitt } : {}) });
   if (r.status !== 200) return { ok: false, text: `Load refused: ${grundVon(r.j)}`, fehler: r.j?.fehler };
   return { ok: true, text: berichtText(r.j?.bericht), bericht: r.j?.bericht, ...(r.j?.projekt ? { projekt: r.j.projekt } : {}) };
 }
 
 // The Workbench entry: open the live container (the confirmation of a running one is the usual one), load the open module into the place. The caller
 // switches to the DJ view when `ok`. `abgelehnt`: Andreas said no to the confirmation, nothing to report.
-export async function modulZuSeq(slug, platz, holeJson, frage) {
+export async function modulZuSeq(slug, platz, holeJson, frage, abschnitt) {
   const l = await oeffneLive(holeJson, frage);
   if (l.abgelehnt) return { ok: false, abgelehnt: true, text: '' };
   if (!l.ok) return { ok: false, text: l.text };
-  return ladeModulInSeq(slug, platz, holeJson);
+  return ladeModulInSeq(slug, platz, holeJson, abschnitt);
 }
 
 // The Workbench modules of GET /proj/liste (entries with werkbank: true; an unreadable entry is left out): [{slug, name}]

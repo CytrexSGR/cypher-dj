@@ -53,6 +53,25 @@ test('i3 empty deck: cypher opens deck/3/fader without a pass while nothing is l
   gruen(r);
 });
 
+test('deck load ends the running ramp of a non-andreas part on that fader (same source or not), together with its group mate on another fader', () => {
+  const r = fahre([
+    ...basis,
+    // a ramp of cypher on the empty deck/3 fader, a ramp of leitstand on it too is refused by overlap, so the group mate sits on pad/1/fader
+    sende(3000, teil(3, 'cypher', 'p1', 0, 'deck/3/fader', 32, 32, 0, { gruppe: 'g' })),
+    sende(3100, teil(4, 'cypher', 'p1', 1, 'pad/1/fader', 32, 64, 0, { gruppe: 'g' })),
+    sende(S(48), laden(5, 3)),
+    erwarte(S(48) + 20000, q(3, 'cypher', 7, null, 'abbruch')),
+    wert(S(64), 'deck/3/fader', -200),
+    erwarte(S(48) + 20000, q(4, 'cypher', 7, null, 'abbruch')),
+    // leitstand is no exception: its running part on deck/4/fader ends too
+    sende(S(96) + 30000, teil(6, 'leitstand', 'p2', 0, 'deck/4/fader', 100, 32, 0)),
+    sende(S(116), laden(7, 4)),
+    erwarte(S(116) + 20000, q(6, 'leitstand', 7, null, 'abbruch')),
+    wert(S(140), 'deck/4/fader', -200),
+  ], { cfg });
+  gruen(r);
+});
+
 test('Negativ-Kontrolle i3: gültiger Hörschein öffnet (fertig), nur leiser machen braucht keinen', () => {
   const r = fahre([
     ...basis,

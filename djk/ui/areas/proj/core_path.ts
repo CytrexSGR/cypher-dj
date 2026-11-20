@@ -7,6 +7,7 @@ import type { KernLage } from './state.ts';
 import type { Soll } from './mapping.ts';
 import type { Quelle } from '../../project/history.ts';
 import { quittungsFristMs } from './recording_deadline.ts';
+import type { StiftAenderung } from '../../project/commands_helpers.ts';
 
 export type { Quelle } from '../../project/history.ts';             // eine Definition (history.ts), hier für die Aufrufer des Kern-Wegs
 export type Quittung = { status: number; grund: string } | null;
@@ -80,6 +81,24 @@ export class KernWeg {
       const q = await this.ctx.warteQuittung(ids[i], ab, this.bisEnde);
       return { pfad: r.pfad, wert: r.wert, quittung: q, ok: quittungOk(q) };
     }));
+  }
+
+  // Kraken patch field (task 4): one /k/arr/stift per pin, in packets of at most `paket` (REGLER_PAKET): each packet goes out in parallel and is
+  // awaited before the next
+  // (the kern command ring has 256 slots, core.h:257; an overrun is status 4 zu_spaet, which would count as a refusal). Like setzeReglerPakete a packet with a
+  // refusal, or in which no pin got a receipt (no core), ends the run: the later packets are not sent and their entries come back with a null receipt.
+  // One Quittung per entry, in the order of the list (the entries that were not sent are null).
+  async stifte(liste: readonly StiftAenderung[], quelle: Quelle): Promise<Quittung[]> {
+    const q: Quittung[] = [];
+    for (let von = 0; von < liste.length; von += this.paket) {
+      const teil = liste.slice(von, von + this.paket);
+      const ids = teil.map((e) => this.ctx.sende('/k/arr/stift', { quelle, spur: e.nr, satz: e.satz, zeile: e.zeile, spalte: e.spalte, wert: e.wert }));
+      const antworten = await Promise.all(ids.map((id) => this.ctx.warteQuittung(id, undefined, this.bisEnde)));
+      q.push(...antworten);
+      if (antworten.some((a) => quittungAbgelehnt(a)) || antworten.every((a) => a === null)) break;
+    }
+    while (q.length < liste.length) q.push(null);
+    return q;
   }
 
   // SEQ scenes (D5, D12, D13): one /k/teil per mute row, all at the same ab_beat, plan `plan` (not derived from the source), gruppe '', politik 1.

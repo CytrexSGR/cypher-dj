@@ -1,0 +1,6 @@
+{"schema":1,"name":"bass-fm","modell":"lc3","art":"instrument","graph":"bass-fm",
+"eintraege":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":3},{"regler":"Enc 3","knopf":2},{"regler":"Enc 4","knopf":4}],
+"seiten":{"main":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":3},{"regler":"Enc 3","knopf":2},{"regler":"Enc 4","knopf":4}]},
+"programme":[
+{"name":"FM \u00b7 ENVELOPE \u00b7 OUT","seite":"main",
+"eintraege":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":3},{"regler":"Enc 3","knopf":2},{"regler":"Enc 4","knopf":4}]}]}

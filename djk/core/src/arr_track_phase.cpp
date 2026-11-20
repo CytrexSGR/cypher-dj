@@ -182,12 +182,18 @@ int64_t ArrSpurLauf::grenze_echt(int64_t start_ns, int m, int64_t echt0) const {
   return start_echt + (test_.grenze_ns != 0 ? test_.grenze_ns : periode_ns(m) * GRENZE_PROZENT / 100);
 }
 
-bool ArrSpurLauf::konto_pruefen(HallPool& pool, int modus) {
+bool ArrSpurLauf::konto_pruefen(HallPool& pool, [[maybe_unused]] int modus) {
   if (pool.an(HallPool::SPUR)) {
     auto_aus_gesehen_ = false;
+#ifndef CYPHERDJ_MUTATION_SPUR_NEU_OHNE_GESUND
+    if (auto_aus_n_ > 0 && ++auto_gesund_ >= AUTO_GESUND_BLOECKE) {   // a long healthy run: the next stall starts the back-off at the first wait again
+      auto_aus_n_ = 0;
+      auto_gesund_ = 0;
+    }
+#endif
     return true;
   }
-  if (modus == 0) return false;   // mode aus never asks (the caller checks it first); it never retries
+  auto_gesund_ = 0;
 #ifdef CYPHERDJ_MUTATION_SPUR_NEU_NUR_AUTO
   if (modus != 2) return false;   // error case: only mode auto retries, the studio's mode an stays off for good
 #endif

@@ -121,6 +121,7 @@ export default {
       export: { ungesund: 0, luecken: 0 },   // plan 1.11 T12: the numbers the stand-in reports for /k/arr/export_lauf
       host: { gesund: [0, 0, 0, 0] },   // plan 1.11 T5: the server's health flag per effect host (the stand-in has no edge check: health = the flag)
       noten: [],           // sampler plan A1 task 7: the notes /k/arr/note was asked to play, [{ spur, ton, vel }] in order (the stand-in has no sink, nothing sounds)
+      stifte: [],          // Kraken patch field task 1: the pins /k/arr/stift was asked to set, [{ spur, satz, zeile, spalte, wert }] in order (the stand-in has no sink, nothing sounds)
       arm: new Map(),      // 1.12 Slice 3 (D11): armed tracks, spur 1..32 -> mode (0 touch, 1 latch, 2 write); a new core generation (a new stand-in) starts empty
       punkte: new Map(),   // 1.12 Slice 3 (D12): "spur/ziel" -> { gemeldet: sample of the block end that sent the last point, halt: the held point or null }
       lanen: new Set() };  // the fields that have a lane in the loaded playback, same keys
@@ -272,6 +273,14 @@ export default {
       if (!(a.ton >= 0 && a.ton <= 127) || !(a.vel >= 0 && a.vel <= 127)) return K.q(b, 6, 'ausserhalb_bereich');
       K.q(b, 1);
       K.sofortQ.push(() => { K.arr.noten.push({ spur: a.spur, ton: a.ton, vel: a.vel }); K.q(b, 3); });
+    },
+    // Kraken patch field task 1 (§4.11): one pin of the matrix block of a project track. Like the core: spur, then satz/zeile/spalte/wert (a NaN or inf wert is out of range); acknowledged 1 then 3.
+    // (cypher in the AI stop is refused by core.mjs before any handler.) The stand-in has no sink: it only records the pin in K.arr.stifte.
+    '/k/arr/stift': (K, a, b) => {
+      if (!(a.spur >= 1 && a.spur <= 32)) return K.q(b, 6, 'spur_bereich');
+      if (!(a.satz >= 0 && a.satz <= 1) || !(a.zeile >= 0 && a.zeile <= 15) || !(a.spalte >= 0 && a.spalte <= 15) || !(Number.isFinite(a.wert) && a.wert >= -1 && a.wert <= 1)) return K.q(b, 6, 'ausserhalb_bereich');
+      K.q(b, 1);
+      K.sofortQ.push(() => { K.arr.stifte.push({ spur: a.spur, satz: a.satz, zeile: a.zeile, spalte: a.spalte, wert: a.wert }); K.q(b, 3); });
     },
     // plan 1.11 T5 (§4.11): the server's health flag of an effect host. Answered by /e/ins_host (h, health). The stand-in has no JACK edges, so health is the flag alone.
     '/k/arr/ins_host': (K, a, b) => {

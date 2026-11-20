@@ -66,6 +66,10 @@ class ArrSenke {
   virtual int64_t vorhalt() const noexcept = 0;
   virtual void note(int spur, int64_t ziel, uint8_t ton, uint8_t vel, bool an) noexcept = 0;
   virtual void alle_aus(int spur, int64_t ziel) noexcept = 0;            // Stopp: All-Notes-Off der Spur
+  // kraken patch field: pin [satz][zeile][spalte] of the matrix of the track's graph to wert (-1..1), `gen` = Arrangement::snapshot_generation() when the pin was sent. Callback thread, before block(). Default: ignored.
+  virtual void stift(int spur, int satz, int zeile, int spalte, float wert, uint64_t gen) noexcept {
+    (void)spur; (void)satz; (void)zeile; (void)spalte; (void)wert; (void)gen;
+  }
   virtual void transport_start(int spur, int64_t ziel) noexcept = 0;     // K2: Zustand zurücksetzen (RB-FFI, Spec 2.4)
   // audit U33: the start announced by transport_start() is cancelled before it took effect (stop while the start was waiting): forget the pending
   // start and the fade prepared for it. Default: nothing to forget.
@@ -130,6 +134,16 @@ class ArrSenke {
     (void)param;
     (void)wert;
     (void)relativ;
+  }
+  // Tracker task 16: a pitch (pegel false: bend in semitones) or level (pegel true: factor) event of the track at sample `ziel`, handed by the Arrangement like note() (same sample rule, same
+  // lead). `gleit_samples` 0 jumps to `wert`, above 0 the value is reached linearly after that many samples from the value in force at `ziel`. Only for a bk track with events; never from a
+  // lane unit. Default: ignored (only the Baukasten sink has a pitch and a level).
+  virtual void fx(int spur, int64_t ziel, bool pegel, float wert, int64_t gleit_samples) noexcept {
+    (void)spur;
+    (void)ziel;
+    (void)pegel;
+    (void)wert;
+    (void)gleit_samples;
   }
   // 1.9 U8 T9 (E12): a rack macro drives a parameter of member `glied` (0-based index) of the rack track `spur`. `param` is the index space of ArrGliedZiel (0..3 RB-338, 8..15 knobs,
   // 16 gain in dB), `wert` the real value (0..1, or dB). Called by the Arrangement on the caller thread once per block and target, before phase Q and before any block() of the
@@ -272,7 +286,7 @@ class Arrangement {
   // (each starts its own blend from the value that is audible at its sample); a third in the same block takes the first two as already passed.
   bool auto_uebersteuern(int spur, int feld, bool an, int64_t sample);
   bool auto_lane_da(int spur, int feld) const;                // the playback has a lane for the field (the re-report of the core asks it)
-  bool auto_uebersteuert(int spur, int feld) const { return spur >= 0 && spur < ARR_SPUREN && feld >= 0 && feld < AUTO_FELDER && auto_ueber_[spur][feld]; }
+  bool auto_uebersteuert(int spur, int feld) const { return spur >= 0 && spur < ARR_AUTO_SLOTS && feld >= 0 && feld < AUTO_FELDER && auto_ueber_[spur][feld]; }
   // true if auto_uebersteuern(an = true) would take effect now (transport plays, lane present, not yet overridden)
   bool auto_kann_uebersteuern(int spur, int feld) const;
   void auto_alle_freigeben(int64_t sample);                 // re-enable every overridden field (blend while the transport plays)
@@ -292,10 +306,10 @@ class Arrangement {
   uint32_t auto_ereignis_verloren() const { return auto_ev_verloren_.load(std::memory_order_relaxed); }
   // Pickup source for the Stellwerk (D2, Task-1 condition 1): true once per override start, for the first applied hand step; false while overridden
   bool auto_lane_wert(int regler, float& wert);
-  int auto_regler(int spur, int feld) const { return spur >= 0 && spur < ARR_SPUREN && feld >= 0 && feld < AUTO_FELDER ? spur_regler_[spur][feld] : -1; }
+  int auto_regler(int spur, int feld) const { return spur >= 0 && spur < ARR_AUTO_SLOTS && feld >= 0 && feld < AUTO_FELDER ? spur_regler_[spur][feld] : -1; }
   bool auto_spielt() const { return status_ == ArrStatus::spielt; }
   // true if the lane of the field has played in the last block, i.e. auto_letzter_wert is a real lane value (same condition auto_lane_wert applies)
-  bool auto_gespielt(int spur, int feld) const { return spur >= 0 && spur < ARR_SPUREN && feld >= 0 && feld < AUTO_FELDER && auto_war_[spur][feld]; }
+  bool auto_gespielt(int spur, int feld) const { return spur >= 0 && spur < ARR_AUTO_SLOTS && feld >= 0 && feld < AUTO_FELDER && auto_war_[spur][feld]; }
 
   // ---- Spur-Regler spur/<n>/{fader,pan,mute,solo}, Werte je Sample aus dem Stellwerk
   void setze_sofort(int regler, float wert);                 // Start, Neustart-Zustand (nicht während eines Blocks)
@@ -430,6 +444,9 @@ class Arrangement {
   void live_note(int spur0, int64_t ziel, uint8_t ton, uint8_t vel, bool an) noexcept;
   void live_alle_aus(int64_t ziel) noexcept;
   void live_spur_aus(int spur0, int64_t ziel) noexcept;
+  // kraken patch field: one pin of the matrix of a bk track, callback thread before arr_->block like live_note. Goes to the sink of the track now (senke_fuer) stamped with snap_gen_; the sink
+  // drops a pending pin whose stamp is older than the generation of the snapshot it plays (a swap in between: the newer snapshot was built from a project that already held the pin or undid it). Nothing when there is no sink.
+  void live_stift(int spur0, int satz, int zeile, int spalte, float wert) noexcept;
   int live_offene_noten() const noexcept { return n_live_; }
   static int64_t live_ziel(int64_t zyklus_start, uint32_t versatz, int n) noexcept {
     const int64_t erster = std::min<int64_t>(n > 0 ? n : 1, ARR_BLOCK);   // length of the first sub-block of the cycle
@@ -644,6 +661,7 @@ class Arrangement {
   void senken_wechsel(const ArrSnapshot* neu, int64_t s);   // Fix F2: Spuren, die ihre Senke verlassen (arrangement.cpp)
   void noten_block(const Karte& k, int64_t s0, int m);
   void noten_fenster(const Karte& k, int spur, ArrSenke* se, int64_t von, int64_t bis);
+  void fx_fenster(const Karte& k, int spur, ArrSenke* se, int64_t von, int64_t bis);   // tracker task 16: bend and pegel events of the same window (arr_notes.cpp)
   void offen_aus_bis(int64_t ende);
   void alle_noten_aus(int64_t s);
   void noten_tauschen(const ArrSnapshot* neu, int64_t s);
@@ -741,7 +759,7 @@ class Arrangement {
   Wert w_[ARR_STREIFEN][ARR_FELDER];   // per strip (track, group, PM, return) see ARR_FELDER; the PM has field 0 only
   int16_t regler_spur_[cypherdj::stellwerk::MAX_REGLER];
   int8_t regler_feld_[cypherdj::stellwerk::MAX_REGLER];
-  int16_t spur_regler_[ARR_SPUREN][4];   // 1.12 S3: the regulator of spur/<n>/{fader,pan,mute,solo}, -1: none (regler_binden)
+  int16_t spur_regler_[ARR_AUTO_SLOTS][4];   // 1.12 S3: the regulator of spur/<n>/{fader,pan,mute,solo} and (slot ARR_SPUREN + r, field 0) of ret/<r+1>/fader, -1: none (regler_binden)
   bool trocken_aus_ = false;                       // 1.10 T10: render-only dry-out armed (setze_trocken_aus); implies nur_schl_, never true in the live kern
   bool nur_schl_ = false;                          // 1.10 T9: render-only key mask armed (setze_nur_schluessel); never true in the live kern
   bool nur_ziel_aus_[ARR_STREIFEN] = {};           // the strip adds nothing into its target

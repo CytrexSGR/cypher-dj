@@ -1,0 +1,6 @@
+{"schema":1,"name":"roehre-lead","modell":"lc3","art":"instrument","graph":"roehre-lead",
+"eintraege":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2}],
+"seiten":{"main":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2}]},
+"programme":[
+{"name":"TUBE \u00b7 FILTER","seite":"main",
+"eintraege":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2}]}]}

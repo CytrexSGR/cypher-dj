@@ -1,0 +1,30 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "smp-vde3-125-bpm-wobble-kit-954c"},
+  "title": "VDE3 Wobble Kit Slices",
+  "akzent": "tuerkis",
+  "layout": {"rows": [
+    ["play", "crush"],
+    ["filter", "out"]
+  ]},
+  "sections": [
+    { "id": "play", "title": "PLAYBACK", "cols": 4, "controls": [
+      {"id": "pitch", "type": "knob", "label": "Pitch", "bind": {"param": "k3"}, "format": "raw", "unit": "st", "default": 0.5, "scale": {"labels": ["-12", "off", "+12"]}},
+      {"id": "speed", "type": "knob", "label": "Speed", "bind": {"param": "k2"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "hold", "type": "knob", "label": "Hold", "bind": {"param": "k4"}, "format": "percent", "default": 0},
+      {"id": "release", "type": "knob", "label": "Slice release", "bind": {"param": "k5"}, "format": "ms", "default": 0.3},
+      {"id": "n1", "type": "label", "span": 4, "text": "Each key plays one slice of the sample"}
+    ]},
+    { "id": "crush", "title": "CRUSH", "cols": 1, "controls": [
+      {"id": "crush", "type": "knob", "label": "Bit depth", "bind": {"param": "k8"}, "format": "raw", "unit": "bit", "default": 0}
+    ]},
+    { "id": "filter", "title": "FILTER", "cols": 2, "controls": [
+      {"id": "cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k6"}, "format": "hz", "default": 1},
+      {"id": "reso", "type": "knob", "label": "Resonance", "bind": {"param": "k7"}, "format": "percent", "default": 0},
+      {"id": "fk", "type": "filterkurve", "span": 2, "of": {"cutoff": "cutoff", "reso": "reso"}, "typen": [{"art": "lp", "pole": 2}]}
+    ]},
+    { "id": "out", "title": "OUTPUT", "cols": 1, "controls": [
+      {"id": "level", "type": "knob", "label": "Level", "bind": {"param": "k1"}, "format": "percent", "default": 0.5}
+    ]}
+  ]
+}

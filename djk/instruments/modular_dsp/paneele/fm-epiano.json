@@ -9,10 +9,11 @@
   "sections": [
     { "id": "ops", "title": "OPERATORS", "cols": 4, "controls": [
       {"id": "alg", "type": "label", "span": 4, "text": "Algorithm 3: 2>1, 4>3, 4 operators"},
-      {"id": "op1", "type": "label", "span": 4, "text": "Op1 car x1  100%  D3.5s S0%"},
-      {"id": "op2", "type": "label", "span": 4, "text": "Op2 mod x1  11%  D2.5s S0%"},
-      {"id": "op3", "type": "label", "span": 4, "text": "Op3 car x1 +4ct  60%  D1.8s S0%"},
-      {"id": "op4", "type": "label", "span": 4, "text": "Op4 mod x14  3.5%  D0.25s S0%"},
+      {"id": "op1", "type": "label", "span": 4, "text": "Op1 carrier x1  100%  D3.5s S0%"},
+      {"id": "op2", "type": "label", "span": 4, "text": "Op2 modulator x1  11%  D2.5s S0%", "wirkt": {"ueber": ["hell", 0.02]}, "wirkt_text": "Modulation is off: turn up Brightness"},
+      {"id": "op3", "type": "label", "span": 4, "text": "Op3 carrier x1 +4ct  60%  D1.8s S0%"},
+      {"id": "op4", "type": "label", "span": 4, "text": "Op4 modulator x14  3.5%  D0.25s S0%", "wirkt": {"ueber": ["hell", 0.02]}, "wirkt_text": "Modulation is off: turn up Brightness"},
+      {"id": "opr", "type": "label", "span": 4, "text": "xN = frequency ratio to the note"},
       {"id": "opn", "type": "label", "span": 4, "text": "Level, decay D and sustain S at Decay x1"}
     ]},
     { "id": "sound", "title": "SOUND", "cols": 2, "controls": [
@@ -25,13 +26,13 @@
       {"id": "en", "type": "label", "span": 3, "text": "Decay scales D and R of every operator"}
     ]},
     { "id": "trem", "title": "TREMOLO", "cols": 2, "controls": [
-      {"id": "tf", "type": "lfoform", "span": 2, "label": "Tremolo shape", "formen": ["sine"]},
+      {"id": "tf", "type": "lfoform", "span": 2, "label": "Tremolo shape", "formen": ["sine"], "wirkt": {"ueber": ["trem", 0.02]}, "wirkt_text": "Tremolo is off: turn up Depth"},
       {"id": "trem", "type": "knob", "label": "Depth", "span": 2, "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
-      {"id": "tn", "type": "label", "span": 2, "text": "4.5 Hz sine fixed"}
+      {"id": "tn", "type": "label", "span": 2, "text": "4.5 Hz sine fixed", "wirkt": {"ueber": ["trem", 0.02]}, "wirkt_text": "Tremolo is off: turn up Depth"}
     ]},
     { "id": "chorus", "title": "CHORUS", "cols": 2, "controls": [
       {"id": "chorus", "type": "knob", "label": "Mix", "span": 2, "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
-      {"id": "cn", "type": "label", "span": 2, "text": "Chorus mode I fixed"}
+      {"id": "cn", "type": "label", "span": 2, "text": "Chorus mode I fixed", "wirkt": {"ueber": ["chorus", 0.02]}, "wirkt_text": "The chorus is off: turn up Mix"}
     ]}
   ]
 }

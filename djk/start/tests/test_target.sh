@@ -3,7 +3,7 @@
 # Kein Ton, kein Profilwechsel, kein echter Kern: Auflösung und Vorlagen laufen gegen ein aufgezeichnetes pw-dump
 # (DJK_PW_DUMP), die Inventur gegen aufgezeichnete Befehlsausgaben, der Sammelstopp gegen Wegwerf-Prozesse (sleep, node)
 # in einem Wegwerf-Baum (DJK=...) und eine Wegwerf-Unit der Instanz h. Nichts davon berührt Prozesse ausserhalb.
-# Aufruf: tests/test_target.sh
+# Aufruf: tests/test_target.sh   (Z5 is an integration section: it only runs with DJK_INTEGRATION_INSTANZ=h)
 # Prüfpunkte:
 #   Z1 target.py: Beschreibung und node.name -> dieselben zwei Formen; unbekannter Name (stumm, JACK-Client) unverändert;
 #      Fehlerfälle: kein Doppelpunkt, verbotenes Zeichen, mehrdeutige Beschreibung -> Rückgabe 2
@@ -151,7 +151,9 @@ FAKE="$O/baum"; mkdir -p "$FAKE/previewer/build" "$FAKE/cues" "$FAKE/units"
 cp /usr/bin/sleep "$FAKE/previewer/build/cypherdj-vorhoerer"
 echo 'setTimeout(() => {}, 300000);' > "$FAKE/cues/server.ts"
 echo 'setTimeout(() => {}, 300000);' > "$FAKE/cues/anderes.ts"
-if systemctl --user list-units --all --no-legend 'cypherdj-*-h.service' 2>/dev/null | grep -q .; then
+if [ "${DJK_INTEGRATION_INSTANZ:-}" != h ]; then
+  echo "SKIP Z5 integration section (starts a real unit of instance h and runs the real djk-stop): set DJK_INTEGRATION_INSTANZ=h to run it"
+elif systemctl --user list-units --all --no-legend 'cypherdj-*-h.service' 2>/dev/null | grep -q .; then
   echo "FEHL Z5 Instanz h ist belegt, Abschnitt übersprungen"; FEHL=$((FEHL + 1))
 else
   # je Prozess ein Unter-Shell mit exec: $! ist dann die PID des Prozesses selbst, nie eines Vermittlers

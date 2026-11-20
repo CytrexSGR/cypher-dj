@@ -107,3 +107,151 @@ test('refusals: not the live container, not a module, no instrument track that c
   assert.deepEqual([e.fehler, e.extra.spuren_uebersprungen], ['modul_ohne_instrument', [{ name: 'Aud', grund: 'audio track' }]]);
   assert.equal(fehler(() => setzeModulNachSeq(live(), m, 5)).fehler, 'argument_ungueltig');
 });
+
+// --- TO DJ: a section of a tracker project (task 24, D23) ---------------------------------------------------------------------
+import { uebersetze } from '../project/playback.ts';
+import { fxRahmen } from '../project/playback.ts';
+const ROLLEN = () => ({ stufig: false, rollen: { slot: 3, start: 5, rueckwaerts: 6 } });
+const spiel = (p) => uebersetze(p, { nr: 1, audioOrdner: '@A@', frames: () => 400000, geraetFx: ROLLEN });
+const wspur = (w, nr) => w.spuren.find((s) => s.nr === nr);
+const wlane = (s, ziel) => s.auto?.find((l) => l.ziel === ziel)?.punkte ?? [];
+const nt = (beat, ton, extra = {}) => ({ beat, laenge: 0.5, ton, vel: 100, ...extra });
+// two sections of 16 beats; the second one holds the content: track Lead (VIB, slots, a knob envelope), track Bass, track Empty
+function trackerProjekt(lpb = 8, ticks = 3) {
+  let p = lauf(neuesProjekt('trk'), { befehl: 'tracker_setzen', an: true, lpb, ticks });
+  for (const n of ['Lead', 'Bass', 'Empty']) p = lauf(p, { befehl: 'spur_neu', art: 'instrument', name: n, geraet: bk('synth-mono', { k3: 0.25 }) });
+  p = lauf(p, { befehl: 'clip_neu', spur_id: p.spuren[0].id, art: 'midi', start_beat: 0, laenge_beats: 16, noten: [nt(0, 60)] });
+  p = lauf(p, { befehl: 'clip_neu', spur_id: p.spuren[0].id, art: 'midi', start_beat: 16, laenge_beats: 16,
+    noten: [nt(0, 60, { platz: 5 }), nt(4, 62, { platz: 9, versatz: 10 }), nt(15.75, 64)] });
+  p = lauf(p, { befehl: 'huellkurve_setzen', clip_id: p.spuren[0].clips[1].id, ziel: 'geraet.k3',
+    punkte: [{ beat: 0, wert: 0.1, form: 'sprung' }, { beat: 8, wert: -0.1, form: 'sprung' }] });
+  p = lauf(p, { befehl: 'fx_setzen', clip_id: p.spuren[0].clips[1].id, eintraege: [{ beat: 0, spalte: 0, code: 'VIB', wert: 0x48 }, { beat: 2, spalte: 1, code: 'SLU', wert: 8 }] });
+  p = lauf(p, { befehl: 'clip_neu', spur_id: p.spuren[1].id, art: 'midi', start_beat: 16, laenge_beats: 16, noten: [nt(0, 36), nt(8, 36)] });
+  return p;
+}
+
+test('TO DJ: a 16 beat section becomes one pattern per track carrying notes, slots, VIB, envelopes; empty tracks stay out', () => {
+  const t = trackerProjekt();
+  const vorher = JSON.stringify(t);
+  const { projekt, bericht } = setzeModulNachSeq(live(), t, 2, { abschnitt_id: 'a2' });
+  valide(projekt);
+  assert.equal(JSON.stringify(t), vorher, 'the tracker project is not changed');
+  assert.deepEqual(bericht.patterns.map((x) => x.name), ['Lead', 'Bass']);
+  assert.deepEqual(bericht.weggelassen.spuren_uebersprungen, [{ name: 'Empty', grund: 'nothing in section 01' }]);
+  const [lead, bass] = seqFolgen(projekt, seqGruppe(projekt, 2));
+  assert.deepEqual(lead.clip.noten.map(({ id, ...r }) => r), [nt(0, 60, { platz: 5 }), nt(4, 62, { platz: 9, versatz: 10 }), nt(15.75, 64, { laenge: 0.25 })]);
+  assert.deepEqual(lead.clip.fx, t.spuren[0].clips[1].fx);
+  assert.deepEqual(lead.clip.huellkurven[0].punkte, t.spuren[0].clips[1].huellkurven[0].punkte);
+  assert.equal(lead.clip.loop_beats, 16);
+  assert.equal(bass.clip.noten.length, 2);
+  assert.equal(bass.clip.fx, undefined);
+  assert.deepEqual(projekt.gruppen[0].seq, { schema: 2, platz: 2, lpb: 8, ticks: 3 });
+  // the deck plays the section the way the tracker does: same frame, same slot lane, same pitch events inside the first copy
+  assert.deepEqual([fxRahmen(projekt, lead.spur).lpb, fxRahmen(projekt, lead.spur).ticks], [8, 3]);
+  const a = wlane(wspur(spiel(t), 1), 'geraet.k3'), b = wlane(wspur(spiel(projekt), 1), 'geraet.k3');
+  const imFenster = (l, von) => l.filter((q) => q[0] >= von && q[0] < von + 16).map((q) => [Math.round((q[0] - von) * 1e6) / 1e6, q[1], q[2]]);
+  assert.ok(imFenster(a, 16).length >= 3);
+  assert.deepEqual(imFenster(b, 0), imFenster(a, 16));
+});
+
+test('TO DJ: a section in the default frame writes no lpb or ticks; a project without fx and slots writes a plain deck', () => {
+  const t = lauf(lauf(neuesProjekt('x'), { befehl: 'spur_neu', art: 'instrument', name: 'K', geraet: bk() }),
+    { befehl: 'tracker_setzen', an: true, lpb: 8, ticks: 3 });
+  const t2 = lauf(t, { befehl: 'clip_neu', spur_id: t.spuren[0].id, art: 'midi', start_beat: 0, laenge_beats: 16, noten: [nt(0, 60)] });
+  const plain = setzeModulNachSeq(live(), t2, 1, { abschnitt_id: 'a1' }).projekt;
+  assert.deepEqual(plain.gruppen[0].seq, { schema: 2, platz: 1 }, 'no fx and no slot: the frame is irrelevant and stays unwritten');
+  const d = trackerProjekt(4, 6);
+  assert.deepEqual(setzeModulNachSeq(live(), d, 1, { abschnitt_id: 'a2' }).projekt.gruppen[0].seq, { schema: 2, platz: 1 }, 'defaults are never written');
+});
+
+test('TO DJ: a project without a tracker marker works, the section list is the default one; no section id loads nothing from a tracker project', () => {
+  let p = lauf(neuesProjekt('plain'), { befehl: 'spur_neu', art: 'instrument', name: 'K', geraet: bk() });
+  p = lauf(p, { befehl: 'clip_neu', spur_id: p.spuren[0].id, art: 'midi', start_beat: 16, laenge_beats: 16, noten: [nt(1, 60)] });
+  const { projekt } = setzeModulNachSeq(live(), p, 3, { abschnitt_id: 'a2' });
+  assert.deepEqual(seqFolgen(projekt, seqGruppe(projekt, 3))[0].clip.noten.map((n) => n.beat), [1]);
+  assert.equal(fehler(() => setzeModulNachSeq(live(), p, 3, { abschnitt_id: 'zz' })).fehler, 'abschnitt_unbekannt');
+  assert.equal(fehler(() => setzeModulNachSeq(live(), p, 3)).fehler, 'kein_werkbank', 'the workbench path still demands a module');
+});
+
+test('TO DJ: a section of 128 beats is refused with its length, exactly 64 beats is taken; nothing is written', () => {
+  const t = trackerProjekt();
+  t.tracker.abschnitte = [{ id: 'a1', laenge_beats: 16 }, { id: 'a2', laenge_beats: 16 }, { id: 'a3', laenge_beats: 16 }, { id: 'a4', laenge_beats: 128 }];
+  const l = live();
+  const vorher = JSON.stringify(l);
+  const e = fehler(() => setzeModulNachSeq(l, t, 1, { abschnitt_id: 'a4' }));
+  assert.deepEqual([e.code, e.fehler, e.extra.text], [409, 'abschnitt_zu_lang', 'section 03 is 128 beats long, a SEQ deck takes at most 64']);
+  assert.equal(JSON.stringify(l), vorher);
+  let g = lauf(neuesProjekt('g'), { befehl: 'spur_neu', art: 'instrument', name: 'K', geraet: bk() });
+  g = lauf(g, { befehl: 'clip_neu', spur_id: g.spuren[0].id, art: 'midi', start_beat: 0, laenge_beats: 64, noten: [nt(63, 60)] });
+  g.tracker = { schema: 1, abschnitte: [{ id: 'a1', laenge_beats: 64 }] };
+  const ok = setzeModulNachSeq(l, g, 1, { abschnitt_id: 'a1' }).projekt;
+  assert.equal(seqFolgen(ok, seqGruppe(ok, 1))[0].clip.loop_beats, 64);
+});
+
+test('TO DJ: notes that miss the 1/8-beat grid of the SEQ deck (LPB 3, 6, 12) are refused with the reason, notes that sit on it are taken; nothing is written', () => {
+  for (const lpb of [3, 6, 12]) {
+    const t = trackerProjekt(lpb);
+    t.tracker.abschnitte = [{ id: 'a1', laenge_beats: 16 }, { id: 'a2', laenge_beats: 16 }];
+    Object.assign(t.spuren[0].clips[1], { noten: [nt(0, 60), nt(1 / lpb, 62)] });
+    const l = live(), vorher = JSON.stringify(l);
+    const e = fehler(() => setzeModulNachSeq(l, t, 1, { abschnitt_id: 'a2' }));
+    assert.deepEqual([e.code, e.fehler], [409, 'seq_raster_ungleich'], `LPB ${lpb}`);
+    assert.match(e.extra.text, new RegExp(`section 01 runs at ${lpb} rows per beat.*1/8`));
+    assert.equal(JSON.stringify(l), vorher);
+    Object.assign(t.spuren[0].clips[1], { noten: [nt(0, 60), nt(0.5, 62)] });   // rows that fall on the 1/8 grid come along
+    const ok = setzeModulNachSeq(l, t, 1, { abschnitt_id: 'a2' }).projekt;
+    assert.ok(seqFolgen(ok, seqGruppe(ok, 1)).some((f) => f.spur.name === 'Lead'));
+  }
+});
+
+test('TO DJ: an empty section is refused; notes are cut at the section end, notes of other sections stay out', () => {
+  const t = trackerProjekt();
+  t.tracker.abschnitte = [{ id: 'a1', laenge_beats: 16 }, { id: 'a2', laenge_beats: 16 }, { id: 'a3', laenge_beats: 16 }];
+  const e = fehler(() => setzeModulNachSeq(live(), t, 1, { abschnitt_id: 'a3' }));
+  assert.equal(e.fehler, 'abschnitt_leer');
+  assert.equal(e.extra.text, 'section 02 holds no notes, envelope points or effects on an instrument track a SEQ deck can play');
+  const u = trackerProjekt();
+  Object.assign(u.spuren[1].clips[0], { start_beat: 0, laenge_beats: 32 });   // a loose clip that crosses the section border
+  u.spuren[1].clips[0].noten = [nt(0, 36), nt(15.5, 38, { laenge: 2 }), nt(16, 40)];
+  const { projekt } = setzeModulNachSeq(live(), u, 1, { abschnitt_id: 'a1' });
+  const bass = seqFolgen(projekt, seqGruppe(projekt, 1)).find((f) => f.spur.name === 'Bass');
+  assert.deepEqual(bass.clip.noten.map((n) => [n.beat, n.ton, n.laenge]), [[0, 36, 0.5], [15.5, 38, 0.5]]);
+});
+
+test('TO DJ: too many Baukasten tracks: the refusal names both counts, nothing partial', () => {
+  let l = live();
+  l = lauf(l, { befehl: 'seq_anlegen', platz: 1 });
+  for (let i = 0; i < 15; i++) l = lauf(l, { befehl: 'seq_folge_neu', gruppe_id: l.gruppen[0].id, name: `P${i}`, geraet: bk() });
+  const t = trackerProjekt();
+  const vorher = JSON.stringify(l);
+  const e = fehler(() => setzeModulNachSeq(l, t, 2, { abschnitt_id: 'a2' }));
+  assert.deepEqual([e.code, e.fehler], [409, 'zu_viele_bk']);
+  assert.equal(e.extra.text, 'the live project holds 15 Baukasten tracks and the section brings 2, at most 16 are possible');
+  assert.deepEqual([e.extra.vorhanden, e.extra.neu], [15, 2]);
+  assert.equal(JSON.stringify(l), vorher);
+});
+
+test('TO DJ: a second section into a deck whose frame differs: refused when the deck holds fx or slots, otherwise the frame follows', () => {
+  const a = trackerProjekt(8, 3), b = trackerProjekt(12, 4);
+  const eins = setzeModulNachSeq(live(), a, 1, { abschnitt_id: 'a2' }).projekt;
+  const e = fehler(() => setzeModulNachSeq(eins, b, 1, { abschnitt_id: 'a2' }));
+  assert.equal(e.grund, 'seq_raster_belegt');
+  // a deck with plain patterns takes over the frame of the section that needs one
+  let plain = lauf(neuesProjekt('pl'), { befehl: 'spur_neu', art: 'instrument', name: 'K', geraet: bk() });
+  plain = lauf(plain, { befehl: 'clip_neu', spur_id: plain.spuren[0].id, art: 'midi', start_beat: 0, laenge_beats: 16, noten: [nt(0, 60)] });
+  const nur = setzeModulNachSeq(live(), plain, 1, { abschnitt_id: 'a1' }).projekt;
+  const danach = setzeModulNachSeq(nur, a, 1, { abschnitt_id: 'a2' }).projekt;
+  assert.deepEqual(danach.gruppen[0].seq, { schema: 2, platz: 1, lpb: 8, ticks: 3 });
+});
+
+test('seq_folge_neu takes fx; a project without the new fields stays byte for byte the same', () => {
+  let l = lauf(live(), { befehl: 'seq_anlegen', platz: 1 });
+  const fx = [{ beat: 1, spalte: 0, code: 'VIB', wert: 0x48 }];
+  const m = lauf(l, { befehl: 'seq_folge_neu', gruppe_id: l.gruppen[0].id, name: 'F', geraet: bk(), loop_beats: 8, noten: [nt(0, 60)], fx });
+  assert.deepEqual(m.spuren[0].clips[0].fx, fx);
+  const e = fehler(() => lauf(l, { befehl: 'seq_folge_neu', gruppe_id: l.gruppen[0].id, name: 'F', geraet: bk(), fx: [{ beat: 1, spalte: 7, code: 'VIB', wert: 1 }] }));
+  assert.equal(e.grund, 'fx_ungueltig');
+  const ohne = lauf(l, { befehl: 'seq_folge_neu', gruppe_id: l.gruppen[0].id, name: 'F', geraet: bk(), noten: [nt(0, 60)] });
+  assert.ok(!('fx' in ohne.spuren[0].clips[0]));
+  assert.deepEqual(ohne.gruppen[0].seq, { schema: 2, platz: 1 });
+});

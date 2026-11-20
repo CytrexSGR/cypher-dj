@@ -1,0 +1,24 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "pluck-mallet"},
+  "title": "Mallet Pluck",
+  "akzent": "gelb",
+  "layout": {"rows": [
+    ["tone", "env", "fx"]
+  ]},
+  "sections": [
+    { "id": "tone", "title": "TONE", "cols": 3, "controls": [
+      {"id": "cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "env", "type": "knob", "label": "Env amount", "bind": {"param": "k2"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "trem", "type": "knob", "label": "Tremolo", "bind": {"param": "k4"}, "format": "percent", "default": 0.5}
+    ]},
+    { "id": "env", "title": "AMP ENV", "cols": 2, "controls": [
+      {"id": "hue", "type": "huelle", "span": 2, "label": "Envelope", "of": {"a": 0.001, "d": "decay", "s": 0, "r": 1.78}},
+      {"id": "decay", "type": "knob", "label": "Decay", "span": 2, "bind": {"param": "k3"}, "format": "raw", "unit": "s", "default": 0.5}
+    ]},
+    { "id": "fx", "title": "REVERB + DELAY", "cols": 2, "controls": [
+      {"id": "rmix", "type": "knob", "label": "Room mix", "bind": {"param": "k5"}, "format": "percent", "default": 0.5},
+      {"id": "dmix", "type": "knob", "label": "Delay mix", "bind": {"param": "k6"}, "format": "percent", "default": 0.5}
+    ]}
+  ]
+}

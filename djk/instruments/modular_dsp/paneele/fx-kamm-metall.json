@@ -1,0 +1,15 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "fx-kamm-metall"},
+  "title": "Metal Comb",
+  "akzent": "tuerkis",
+  "sections": [
+    { "id": "comb", "title": "COMB", "cols": 4, "controls": [
+      {"id": "tune", "type": "knob", "label": "Tuning", "bind": {"param": "k1"}, "format": "hz", "default": 0.5, "wirkt": {"ueber": ["mix", 0.02]}, "wirkt_text": "Dry only: turn up Mix"},
+      {"id": "mix", "type": "knob", "label": "Mix", "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
+      {"id": "fb", "type": "knob", "label": "Feedback", "bind": {"param": "k2"}, "format": "percent", "default": 0.5, "wirkt": {"ueber": ["mix", 0.02]}, "wirkt_text": "Dry only: turn up Mix"},
+      {"id": "damp", "type": "knob", "label": "Damping", "bind": {"param": "k3"}, "format": "percent", "default": 0.5, "wirkt": {"ueber": ["mix", 0.02]}, "wirkt_text": "Dry only: turn up Mix"},
+      {"id": "l1", "type": "label", "span": 4, "text": "Right channel is tuned higher than left"}
+    ]}
+  ]
+}

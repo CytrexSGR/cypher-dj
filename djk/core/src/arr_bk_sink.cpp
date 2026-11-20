@@ -3,6 +3,7 @@
 // start, then the FFI block under the denormal guard, short fade, rest rule.
 #include "cypherdj/arr_bk_sink.h"
 
+#include <algorithm>
 #include <cstring>
 
 #include <cypherdj/dsp/denormal.h>
@@ -69,6 +70,15 @@ void ArrBkSenke::alle_aus(int spur, int64_t ziel) noexcept {
   schiebe(sp_[spur], Ev{ziel, 2, 0, 0});
 }
 
+void ArrBkSenke::stift(int spur, int satz, int zeile, int spalte, float wert, uint64_t gen) noexcept {
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE || satz < 0 || satz > 1 || zeile < 0 || zeile > 15 || spalte < 0 || spalte > 15 || !(wert == wert)) return;
+  Spur& p = sp_[spur];
+  const int i = satz * BK_STIFTE_SATZ + zeile * 16 + spalte;   // dense: the last write of a position wins, nothing can overflow
+  p.stift_wert[i] = wert;
+  p.stift_gen[i] = gen;
+  p.stift_offen[i >> 6] |= uint64_t{1} << (i & 63);
+}
+
 void ArrBkSenke::transport_start(int spur, int64_t ziel) noexcept {
   if (spur < 0 || spur >= ARR_SENKEN_PLAETZE) return;
   sp_[spur].start = ziel;   // acts in the block that holds ziel
@@ -112,6 +122,17 @@ void ArrBkSenke::note_regler(int spur, int64_t ziel, int param, float wert, bool
     return;
   }
   p.rev[p.n_rev++] = Rev{ziel, wert, static_cast<uint8_t>(param), relativ};
+}
+
+void ArrBkSenke::fx(int spur, int64_t ziel, bool pegel, float wert, int64_t gleit_samples) noexcept {
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE || !(wert == wert)) return;
+  Spur& p = sp_[spur];
+  if (p.n_fev >= ARR_BK_WARTE) {   // its own queue is full: this event is lost (counted), notes are not touched
+    verloren_.fetch_add(1, std::memory_order_relaxed);
+    return;
+  }
+  const int64_t g = gleit_samples < 0 ? 0 : (gleit_samples > 0xffffffffll ? 0xffffffffll : gleit_samples);
+  p.fev[p.n_fev++] = Fev{ziel, wert, static_cast<uint32_t>(g), pegel};
 }
 
 void ArrBkSenke::block(int spur, int64_t s0, int m, float* l, float* r) noexcept { block_bahn(spur, s0, m, l, r, arbeit0_); }
@@ -199,8 +220,10 @@ void ArrBkSenke::block_bahn(int spur, int64_t s0, int m, float* l, float* r, Arr
     p.still = 0;
     p.neu = h_neu != nullptr;
     if (!h_neu) {   // the track is gone: nothing pending applies any more
+      std::memset(p.stift_offen, 0, sizeof p.stift_offen);
       p.n = 0;
       p.n_rev = 0;
+      p.n_fev = 0;
       p.start = -1;
       return;
     }
@@ -218,8 +241,10 @@ void ArrBkSenke::block_bahn(int spur, int64_t s0, int m, float* l, float* r, Arr
   }
   p.weg = false;
   if (!p.h_last || !q) {   // not a bk track: notes for it (an old queue) are dropped
+    std::memset(p.stift_offen, 0, sizeof p.stift_offen);
     p.n = 0;
     p.n_rev = 0;
+    p.n_fev = 0;
     return;
   }
   CypherBk* h = p.h_last;
@@ -235,6 +260,44 @@ void ArrBkSenke::block_bahn(int spur, int64_t s0, int m, float* l, float* r, Arr
   // Knobs k1..k64 in every block (also while the transport stands). At a take-over and at a transport start they jump to their values,
   // otherwise the instance smooths over 20 ms.
   const bool sofort = p.neu || start_hier;
+  // Pin matrix (kraken patch field), before the knobs and so before cypher_bk_block: first the pins of the snapshot, then the live pins that are still pending. A graph without a matrix skips all of it.
+  {
+    const bool hat_matrix = cypher_bk_hat_matrix(h) != 0;
+    if (p.neu || snap->folge != p.stift_folge) {   // a take-over or another snapshot (its serial differs): the snapshot's pins replace what the slot holds, a live pin before it is gone
+      if (hat_matrix) {
+        const int32_t s_sofort = sofort ? 1 : 0;
+        cypher_bk_stifte_grund(h, q->stifte_da ? 0u : 1u, static_cast<uint32_t>(s_sofort));   // no pins of its own: the graph's own; else everything 0 and the listed pins
+        if (q->stifte_da) {
+          const int64_t von = q->stift_von < 0 ? 0 : q->stift_von;
+          const int64_t bis = std::min<int64_t>(von + (q->stift_n < 0 ? 0 : q->stift_n), static_cast<int64_t>(snap->stifte.size()));
+          for (int64_t i = von; i < bis; ++i) {
+            const ArrStift& e = snap->stifte[static_cast<size_t>(i)];
+            if (sofort)
+              cypher_bk_stift_sofort(h, e.satz, e.zeile, e.spalte, e.wert);
+            else
+              cypher_bk_stift(h, e.satz, e.zeile, e.spalte, e.wert);
+          }
+        }
+      }
+      p.stift_folge = snap->folge;
+    }
+    // Live pins: bounded (8 mask words, at most 512 pins). One stamped before the swap to the snapshot in force is dropped: that snapshot was built from a project that already held it or undid it.
+    const uint64_t gen_jetzt = arr_.snapshot_generation();
+    for (int w = 0; w < 2 * BK_STIFTE_SATZ / 64; ++w) {
+      uint64_t bits = p.stift_offen[w];
+      p.stift_offen[w] = 0;
+      while (hat_matrix && bits) {
+        const int i = w * 64 + __builtin_ctzll(bits);
+        bits &= bits - 1;
+        if (p.stift_gen[i] < gen_jetzt) continue;   // stamped before the swap to the snapshot in force: dropped
+        const uint32_t satz = static_cast<uint32_t>(i / BK_STIFTE_SATZ), zeile = static_cast<uint32_t>((i % BK_STIFTE_SATZ) / 16), spalte = static_cast<uint32_t>(i % 16);
+        if (sofort)
+          cypher_bk_stift_sofort(h, satz, zeile, spalte, p.stift_wert[i]);
+        else
+          cypher_bk_stift(h, satz, zeile, spalte, p.stift_wert[i]);
+      }
+    }
+  }
   for (int k = 1; k <= BK_KNOEPFE; ++k) {
 #ifdef CYPHERDJ_MUTATION_ARR_BK_REGLER_NUR_START
     if (!sofort) continue;   // error case: knobs only at the start, a knob edited during playback never arrives
@@ -261,7 +324,7 @@ void ArrBkSenke::block_bahn(int spur, int64_t s0, int m, float* l, float* r, Arr
     p.stumm = false;
     p.still = 0;
   }
-  bool ereignis = p.n > 0;
+  bool ereignis = p.n > 0 || p.n_fev > 0;
   for (int i = 0; i < p.n; ++i) {
     const Ev& e = p.ev[i];
     int32_t rc = 0;
@@ -274,6 +337,14 @@ void ArrBkSenke::block_bahn(int spur, int64_t s0, int m, float* l, float* r, Arr
     if (rc != 0) verloren_.fetch_add(1, std::memory_order_relaxed);
   }
   p.n = 0;
+  // tracker task 16: bend and pegel events after the notes (the FFI queue is shared: a surplus costs these, never notes), before the knob values. At one sample the instance orders them after
+  // all-off and note-off and before note-on whatever the order here.
+  for (int i = 0; i < p.n_fev; ++i) {
+    const Fev& e = p.fev[i];
+    const int32_t rc = e.pegel ? cypher_bk_pegel_bei(h, versatz(e.ziel), e.wert, e.gleit) : cypher_bk_bend_bei(h, versatz(e.ziel), e.wert, e.gleit);
+    if (rc != 0) verloren_.fetch_add(1, std::memory_order_relaxed);
+  }
+  p.n_fev = 0;
   // sampler A2: the per-note knob values go in AFTER every note of the block, so the FFI queue (256 events together) is full of notes first and a surplus costs knob values, never notes.
   // At one sample the instance puts the value before the note-on whatever the order of the reports. -2: the instance of the block has no latched knob there (a swap between the report and
   // this block): nothing to say. -1: queue full, counted.

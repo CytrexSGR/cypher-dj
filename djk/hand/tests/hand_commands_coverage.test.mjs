@@ -17,7 +17,7 @@ import { BEFEHL_NAMEN } from '../../ui/project/commands.ts';
 const HIER = path.dirname(fileURLToPath(import.meta.url));
 const HAND = path.resolve(HIER, '..', 'hand.ts');
 // The handler tables live in the six family files of ui/project (befehle_<familie>.ts); the source is their text one after the other
-const FAMILIEN = ['spur', 'clip', 'gruppe', 'insert', 'auto', 'transport', 'szenen'];
+const FAMILIEN = ['spur', 'clip', 'gruppe', 'insert', 'auto', 'transport', 'szenen', 'tracker'];
 const QUELLE = FAMILIEN.map((f) => fs.readFileSync(path.resolve(HIER, '..', '..', 'ui', 'project', `befehle_${f}.ts`), 'utf8')).join('\n');
 
 // Arguments a handler accepts, from its erlaube(a, 'x', 'y') calls (a call may span lines). Handlers without erlaube yield an empty list.

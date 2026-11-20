@@ -9,6 +9,7 @@ import { anzeigeText, anzeigeWert, zeitInSekunden } from './panel_display.js';
 import { huellPunkte, lfoPunkte, filterPunkte, cutoffX, nullDbY, wtRahmen, wtGewarpt, wtLage, wtLinie, wtNull, wtTiefe } from './panel_curves.js';
 import { GLYPHEN_PFAD } from './panel_glyphen.js';
 import { skaliere, diskretWert, diskretIndex, formatiereWert, klemme01 } from './panel_skala.js';
+import { ruhendeSteuerungen } from './panel_wirkung.js';
 
 const WIE_BEI_REGLERN = 0.5;   // the control table starts every knob at 0.5 (core/signalbox/src/controls.cpp)
 
@@ -17,7 +18,7 @@ export function steuerungen(panel) {
   return (panel?.sections ?? []).flatMap((s) => (s.controls ?? []).map((c) => ({ ...c, sektion: s.id })));
 }
 
-/** The parameter names a control writes: knob/fader/switch/selector one, xy two (x, y), the rest none. */
+/** The parameter names a control writes: knob/fader/switch/selector one, xy two (x, y), the rest none (a `matrix` writes pins through the adapter, no parameter). */
 export function parameterVon(c) {
   const ok = (p) => typeof p === 'string' && p !== '';
   if (c.type === 'xy') return [c.bind?.x?.param, c.bind?.y?.param].filter(ok);
@@ -58,6 +59,38 @@ export const hebelWeg = (k) => klemme01((k - WIE_BEI_REGLERN) / (1 - WIE_BEI_REG
 export function hebelBereich(w) { return w < HEBEL_GRENZEN[0] ? -1 : w < HEBEL_GRENZEN[1] ? 0 : w < HEBEL_GRENZEN[2] ? 1 : 2; }
 /** Zone index (0..n-1) of a touchpad position x; n zones of equal width. */
 export const feldZone = (x, n) => Math.min(n - 1, Math.max(0, Math.floor(klemme01(x) * n)));
+
+// Patch field (control `matrix`, Kraken): a pin is [satz, zeile, spalte, wert] (satz 0 = A, 1 = B, wert -1..1, 0 = no pin; steckfeld.ts holds the rules).
+export const STIFT_N = 16;
+export const STIFT_KLICK = 0.5;     // a click on an empty cell sets this amount
+export const STIFT_ZIEH_PX = 90;    // vertical drag: pixels for an amount of 1 (five times as many with shift or a resting finger)
+export const STIFT_RAD = 0.05;      // one wheel notch (0.01 with shift)
+/** Amount of the pin at (satz, zeile, spalte) in a list of pins; 0 when there is none. */
+export function stiftWert(liste, satz, zeile, spalte) {
+  for (const e of liste ?? []) if (e[0] === satz && e[1] === zeile && e[2] === spalte) return e[3];
+  return 0;
+}
+/** An amount as a pin takes it: clamped to -1..1 and rounded to 0.01 (so a drag back to the middle lands on exactly 0 = no pin). */
+export function stiftRunde(v) {
+  if (!Number.isFinite(v)) return 0;
+  const r = Math.round(Math.max(-1, Math.min(1, v)) * 100) / 100;
+  return r === 0 ? 0 : r;   // no -0
+}
+/** Size of a pin dot as a share of the cell: 0.3 for a hair of amount up to 1 at full amount. */
+export const stiftGroesse = (w) => (w === 0 ? 0 : 0.3 + 0.7 * Math.min(1, Math.abs(w)));
+/** The plain sentence of a pin: `Func 1 moves Cutoff: +0.50 (up to +20 st)`. `bereich` = {wert, einheit}: the value of the destination at pin amount 1 (of.bereiche).
+ *  The unit `gain` marks an audio destination (`feeds`), every other unit a control (`moves`). Without a range the short form of stiftText. */
+export function stiftSatz(quelle, ziel, w, bereich) {
+  if (!bereich || !Number.isFinite(bereich.wert)) return stiftText(quelle, ziel, w);
+  const audio = bereich.einheit === 'gain';
+  if (w === 0) return `${quelle} ${audio ? 'does not feed' : 'does not move'} ${ziel}`;
+  const grenze = w * bereich.wert;
+  return `${quelle} ${audio ? 'feeds' : 'moves'} ${ziel}: ${w > 0 ? '+' : '-'}${Math.abs(w).toFixed(2)} (${w > 0 ? 'up' : 'down'} to ${grenze < 0 ? '-' : '+'}${Math.abs(grenze).toFixed(1)} ${bereich.einheit})`;
+}
+/** One colour per source row of the patch field (16, distinguishable on the dark plate): jack and cable. */
+export const KABEL_FARBEN = ['#ff5d5d', '#ff8f3d', '#ffc933', '#d4e157', '#7ddc5a', '#3ddc97', '#2fd6c3', '#4fc3f7', '#5b9bff', '#8c7bff', '#b48cff', '#e08cff', '#ff6fb5', '#c9a27a', '#e8e8e8', '#9aa4b5'];
+/** Readout of one cell: "<row> > <column> <amount>", the amount signed with two decimals, "off" without a pin. */
+export function stiftText(zeile, spalte, w) { return `${zeile} > ${spalte} ${w === 0 ? 'off' : `${w > 0 ? '+' : '-'}${Math.abs(w).toFixed(2)}`}`; }
 
 /** {param: k} of the controls that state a default: what the page pushes after it loads the graph (knobs first, then the graph). */
 export function vorgaben(panel) {
@@ -132,6 +165,13 @@ const SPERRE_MS = 400;   // after the last own movement incoming values wait thi
  *  `fp-wartet` (path armed). `kopf` hears {lernen: bool}: whether the header should offer a LEARN toggle.
  *  adapter.gesperrt?.(param) === true greys the control (class fp-gesperrt, aria-disabled) and blocks input; the shown value is adapter.get(param), refreshed by aktualisiere().
  *  adapter.ende?.() is called at the end of a gesture (pointer up, key up, wheel idle after `radMs` = 300, click, double click): one place to send what the gesture set.
+ *  steckfeld?: {zeilen, spalten, stifte} (GET /geraete/panel): the labels and default pins for a `matrix` control. The pins themselves come from the adapter:
+ *  stifte() -> [[satz, zeile, spalte, wert]], stiftSetzen(satz, zeile, spalte, wert) (live, per move), stiftEnde() (end of the gesture), stifteSetzen(satz, liste) (a whole set).
+ *  An adapter without them shows the defaults greyed.
+ *  A page with `all: true` (pages of the panel file) shows every section at once, but only in a `breit` host (a narrow host keeps the other pages). With it the
+ *  `matrix` control (`of.quellen`: the section of each of the 16 rows, `of.ziele`: the control or section of each of the 16 columns, `of.bereiche`: {wert, einheit}
+ *  of each column at pin amount 1) gets jacks on the sections and an SVG overlay of cables next to the faceplate (class fp-kabelsvg, a sibling in `host`, host-relative
+ *  geometry); the CABLES button in the tool row hides it. The readout of the field is a sentence where `bereiche` knows the column (stiftSatz).
  *  Returns { aktualisiere(), werte(), setzeLernen(stand), zeigeSeite(id), zerstoere() }: aktualisiere() pulls the adapter's values (skipping controls that are dragged or were
  *  just moved); werte() returns {param: k} as shown. */
 export function baueFrontplatte(host, opt) {
@@ -156,8 +196,20 @@ export function baueFrontplatte(host, opt) {
   for (const c of alle) for (const n of parameterVon(c)) k[n] = adapter.get(n) ?? (c.type === 'xy' ? vorgabeXY(c)[n === c.bind.x.param ? 'x' : 'y'] : c.type === 'touchpad' ? (n === c.bind.x.param ? vorgabeX(c) : 0) : vorgabeK(c));
   for (const n of Object.keys(k)) k[n] = klemme01(k[n]);
 
+  const mitWirkung = alle.some((c) => c.wirkt);
+  const wirkZellen = new Map();   // control id -> cell, for the controls with `wirkt` (panel_wirkung.js)
+  const zeigeWirkung = () => {
+    if (!mitWirkung) return;
+    const ruht = ruhendeSteuerungen(alle, k);
+    for (const [id, zelle] of wirkZellen) {
+      const text = ruht[id] ?? null;
+      zelle.classList.toggle('fp-ruht', text !== null);
+      if (text !== null) zelle.setAttribute('title', text); else zelle.removeAttribute('title');
+    }
+  };
   const zeige = () => {
     for (const f of zeiger) f();
+    zeigeWirkung();
     for (const z of sperrZellen) { const an = z.nrs.some(gesperrtP); z.zelle.classList.toggle('fp-gesperrt', an); z.zelle.setAttribute('aria-disabled', String(an)); }
   };
   // a parameter the adapter blocks (a macro drives it): its control is greyed, shows adapter.get() (the macro value) and sends nothing
@@ -256,7 +308,7 @@ export function baueFrontplatte(host, opt) {
       setze(o.nr, t.auf ?? k[o.nr] + t.schritt);
     });
   }
-  const beschrifte = (zelle, c) => { if (c.label) zelle.append(el('span', 'fp-name', c.label)); };
+  const beschrifte = (zelle, c) => { if (c.label) { const n = el('span', 'fp-name', c.label); namenVon.set(zelle, n); zelle.append(n); } };
   const glyphe = (id, text) => {   // a waveform or filter glyph: stroke-only path in the 24 x 12 box of panel_glyphen.js
     const g = el('svg', 'fp-glyphe', undefined, true), p = el('path', null, undefined, true);
     g.setAttribute('viewBox', '0 0 24 12');
@@ -356,6 +408,12 @@ export function baueFrontplatte(host, opt) {
     zelle.append(svg);
     return { svg, linie, flaeche };
   };
+  const aufraeumen = [];       // what zerstoere() lets go of (a running wheel gesture of the patch field)
+  const alleSeiteId = (panel.pages ?? []).find((p) => p.all === true && opt.breit)?.id ?? null;   // the page that shows every section (only in a wide host)
+  let seite;                   // the page in front (id)
+  const zellenVonId = new Map(), titelVon = new Map(), namenVon = new Map();   // control id -> cell, section id -> title element, cell -> its label element (jacks go there)
+  let matrixKabel = null;      // set by the matrix control: (aufbau) => void, called once the plate stands; kabelSeite() follows the page
+  let kabelSeite = () => {};
   const bauer = {
     knob(c, zelle) {
       const nr = parameterVon(c)[0];
@@ -747,6 +805,384 @@ export function baueFrontplatte(host, opt) {
       else rahmen.append(el('span', 'fp-text', 'Spectrum: device page'));
       zelle.append(rahmen);
     },
+    matrix(c, zelle) {   // the patch field of a Kraken-like graph: 16 x 16 pins in two sets A/B (opt.steckfeld = labels and graph defaults; styles .fp-m-* in panel.css)
+      const sf = opt.steckfeld;
+      if (!(Array.isArray(sf?.zeilen) && sf.zeilen.length === STIFT_N && Array.isArray(sf?.spalten) && sf.spalten.length === STIFT_N)) { zelle.append(el('span', 'fp-text', 'This device has no patch field')); return; }
+      // the adapter of a track device holds the pins and sends them (stifte, stiftSetzen, stiftEnde, stifteSetzen); any other host shows the graph defaults, greyed
+      const kannSetzen = typeof adapter.stiftSetzen === 'function', kannSaetze = typeof adapter.stifteSetzen === 'function';
+      const morphZelle = alle.find((x) => x.id === c.of?.morph), morphNr = morphZelle ? parameterVon(morphZelle)[0] : undefined;
+      zelle.classList.add('fp-m');
+      if (!kannSetzen) { zelle.classList.add('fp-m-ruht'); zelle.setAttribute('title', 'The default pins of the graph. Pins are set on an instrument track.'); }
+      let kabelInfo = null, bewaffnet = null, kabelAn = true;   // kabelInfo: text of a hovered cable or jack; bewaffnet: the armed source row; kabelAn: the CABLES toggle
+      const bereichAn = (s) => c.of?.bereiche?.[s] ?? null;
+      let ansicht = 0, ueber = null, st = null, rad = null, radT = null;   // ansicht: the set shown and edited (0 = A); ueber: the cell {z, s} under the pointer or the key cursor; st: a press; rad: the cell of a running wheel gesture
+      const feldStifte = () => (typeof adapter.stifte === 'function' ? adapter.stifte() : sf.stifte) ?? [];
+      const wertAn = (z, s) => stiftWert(feldStifte(), ansicht, z, s);
+      const knopf = (text, titel, bei) => { const b = el('button', 'fp-knopf-klein', text); b.type = 'button'; b.setAttribute('title', titel); b.addEventListener('click', bei); return b; };
+      const leiste = el('div', 'fp-m-leiste'), wahl = el('div', 'fp-wahl');
+      const satzKnoepfe = ['A', 'B'].map((t, i) => {
+        const b = el('button', 'fp-option', t);
+        b.type = 'button';
+        b.setAttribute('title', `Show and edit set ${t}`);
+        b.addEventListener('click', () => { ansicht = i; zeige(); });
+        wahl.append(b);
+        return b;
+      });
+      const stiftFertig = () => { try { adapter.stiftEnde?.(); } catch (e) { globalThis.console?.error?.('panel adapter stiftEnde:', e); } };
+      const satzSchreiben = (satz, liste) => { try { Promise.resolve(adapter.stifteSetzen(satz, liste)).catch(() => {}); } catch (e) { globalThis.console?.error?.('panel adapter stifteSetzen:', e); } zeige(); };
+      const kopieren = knopf('', 'Copy this set over the other one', () => {
+        if (!kannSaetze || lernAn()) return;
+        const an = 1 - ansicht;
+        satzSchreiben(an, feldStifte().filter((e) => e[0] === ansicht).map((e) => [an, e[1], e[2], e[3]]));
+      });
+      const leeren = knopf('', 'Remove every pin of this set', () => { if (kannSaetze && !lernAn()) satzSchreiben(ansicht, []); });
+      leiste.append(wahl, kopieren, leeren);
+      const mitKabeln = alleSeiteId !== null && Array.isArray(c.of?.quellen) && Array.isArray(c.of?.ziele);   // the cabinet page exists and the field knows its jacks
+      let kabelKnopf = null;
+      if (mitKabeln) {
+        kabelKnopf = knopf('CABLES', 'Show or hide the cables of the Cabinet view', () => { kabelAn = !kabelAn; kabelSeite(); });
+        kabelKnopf.setAttribute('aria-pressed', 'true');
+        leiste.append(kabelKnopf);
+      }
+      let morphMarke = null, morphWert = null;
+      if (morphNr !== undefined) {   // where the sound sits between A and B: the Morph knob, shown here beside the sets
+        const m = el('div', 'fp-m-morph');
+        m.setAttribute('title', 'Morph: the blend between set A and set B (the Morph knob)');
+        const bahn = el('div', 'fp-m-morphbahn');
+        morphMarke = el('i', 'fp-m-morphmarke');
+        bahn.append(morphMarke);
+        morphWert = el('output', 'fp-m-morphwert');
+        m.append(el('span', 'fp-m-morphname', 'A'), bahn, el('span', 'fp-m-morphname', 'B'), morphWert);
+        leiste.append(m);
+      }
+      const info = el('output', 'fp-m-info');
+      const rolle = el('div', 'fp-m-rolle'), gitter = el('div', 'fp-m-gitter');   // rolle: scrolls sideways in a narrow host
+      gitter.tabIndex = 0;
+      gitter.setAttribute('role', 'grid');
+      gitter.append(el('div', 'fp-m-ecke'));
+      const spaltenL = sf.spalten.map((t) => { const l = el('div', 'fp-m-spalte'); l.append(el('span', null, t)); l.setAttribute('title', t); return l; });
+      gitter.append(...spaltenL);
+      const zeilenL = [], zellen = [];
+      for (let z = 0; z < STIFT_N; z++) {
+        const l = el('div', 'fp-m-zeile', sf.zeilen[z]);
+        l.setAttribute('title', sf.zeilen[z]);
+        zeilenL.push(l);
+        gitter.append(l);
+        for (let s = 0; s < STIFT_N; s++) {
+          const x = el('div', 'fp-m-z');
+          x.dataset.z = String(z); x.dataset.s = String(s);
+          zellen.push(x);
+          gitter.append(x);
+        }
+      }
+      rolle.append(gitter);
+      zelle.append(leiste, rolle, info);
+      let hell = [];
+      const zeigeInfo = (n) => {
+        info.textContent = kabelInfo ?? (ueber ? stiftSatz(sf.zeilen[ueber.z], sf.spalten[ueber.s], wertAn(ueber.z, ueber.s), bereichAn(ueber.s))
+          : bewaffnet !== null ? `${sf.zeilen[bewaffnet]}: now click a destination` : `Set ${ansicht ? 'B' : 'A'}: ${n ?? feldStifte().filter((e) => e[0] === ansicht).length} pins`);
+      };
+      const markiere = () => {   // the row and the column of the cell under the pointer light up, with their labels
+        for (const e of hell) e.classList.toggle('fp-hell', false);
+        hell = [];
+        if (ueber) {
+          hell = [zeilenL[ueber.z], spaltenL[ueber.s], ...zellen.slice(ueber.z * STIFT_N, (ueber.z + 1) * STIFT_N), ...zellen.filter((_, i) => i % STIFT_N === ueber.s)];
+          for (const e of hell) e.classList.toggle('fp-hell', true);
+        }
+        zeigeInfo();
+      };
+      const zeigt = new Array(STIFT_N * STIFT_N).fill(null);   // per cell what is drawn: only a changed cell is touched
+      zeiger.push(() => {
+        const hier = new Float64Array(256), dort = new Float64Array(256);
+        let n = 0;
+        for (const e of feldStifte()) { if (e[0] === ansicht) { hier[e[1] * STIFT_N + e[2]] = e[3]; n++; } else dort[e[1] * STIFT_N + e[2]] = e[3]; }
+        for (let i = 0; i < hier.length; i++) {
+          const w = hier[i], g = dort[i], key = `${w}|${g}`;
+          if (zeigt[i] === key) continue;
+          zeigt[i] = key;
+          const x = zellen[i];
+          x.classList.toggle('fp-plus', w > 0);
+          x.classList.toggle('fp-minus', w < 0);
+          x.classList.toggle('fp-geist', g !== 0);   // the pin of the other set at this place: a thin ring
+          x.style.setProperty('--g', stiftGroesse(w).toFixed(3));
+          x.style.setProperty('--h', stiftGroesse(g).toFixed(3));
+        }
+        const m = morphNr === undefined ? 0 : k[morphNr];
+        satzKnoepfe.forEach((b, i) => {
+          b.classList.toggle('an', ansicht === i);
+          b.setAttribute('aria-pressed', String(ansicht === i));
+          if (morphNr !== undefined) b.style.setProperty('--anteil', (i ? m : 1 - m).toFixed(3));   // the share of the set in the sound, a bar under the letter
+        });
+        if (morphMarke) { morphMarke.style.setProperty('--k', m.toFixed(3)); morphWert.textContent = `${Math.round(m * 100)}%`; }
+        kopieren.textContent = ansicht ? 'COPY B>A' : 'COPY A>B';
+        leeren.textContent = ansicht ? 'CLEAR B' : 'CLEAR A';
+        kopieren.disabled = !kannSaetze;
+        leeren.disabled = !kannSaetze || n === 0;
+        gitter.setAttribute('aria-label', `Patch field, set ${ansicht ? 'B' : 'A'}`);
+        zeigeInfo(n);
+      });
+      const zelleVon = (e) => {
+        for (let t = e.target; t; t = t.parentElement ?? t.eltern ?? null) if (t.dataset?.z !== undefined) return { z: Number(t.dataset.z), s: Number(t.dataset.s) };
+        return null;
+      };
+      const pin = (z, s, w) => { adapter.stiftSetzen(ansicht, z, s, w); zeige(); };
+      const bedienbar = () => kannSetzen && !lernAn();
+      gitter.addEventListener('pointerover', (e) => { const x = zelleVon(e); if (x && !st) { ueber = x; markiere(); } });
+      gitter.addEventListener('pointerleave', () => { if (!st) { ueber = null; markiere(); } });
+      // a press that hardly moves is a click (empty cell: +0.5, pin: removed), a vertical drag changes the amount (up = more, below the middle = negative)
+      gitter.addEventListener('pointerdown', (e) => {
+        if (!bedienbar()) return;
+        if (e.button !== undefined && e.button !== 0) return;
+        const x = zelleVon(e);
+        if (!x) return;
+        if (st && jetzt() - st.t < STEHEN_MS) { e.preventDefault(); return; }
+        e.preventDefault();
+        gitter.focus?.();
+        try { gitter.setPointerCapture(e.pointerId); } catch { /* synthetic or lost pointer: the drag still works inside the element */ }
+        besetzt.add(e.pointerId);
+        const w0 = wertAn(x.z, x.s);
+        st = { ...x, id: e.pointerId, y0: e.clientY, y: e.clientY, w0, roh: w0, zuletzt: w0, bewegt: false, t: jetzt() };
+        ueber = x;
+        markiere();
+      });
+      gitter.addEventListener('pointermove', (e) => {
+        if (!st || fremder(st, e)) return;
+        if (!st.bewegt) {
+          if (Math.abs(e.clientY - st.y0) < TIPP_PX / 2) return;
+          st.bewegt = true;
+        }
+        st.roh = Math.max(-1, Math.min(1, st.roh + (st.y - e.clientY) / (STIFT_ZIEH_PX * (e.shiftKey || fein() ? REGLER_FEIN : 1))));
+        st.y = e.clientY;
+        st.t = jetzt();
+        const w = stiftRunde(st.roh);
+        if (w !== st.zuletzt) { st.zuletzt = w; pin(st.z, st.s, w); }
+      });
+      const losgelassen = (e, hoch) => {
+        if (!st || fremder(st, e)) return;
+        const hin = st;
+        st = null; besetzt.delete(hin.id);
+        if (hoch && !hin.bewegt) pin(hin.z, hin.s, hin.w0 !== 0 ? 0 : e.shiftKey ? -STIFT_KLICK : STIFT_KLICK);
+        stiftFertig();
+      };
+      gitter.addEventListener('pointerup', (e) => losgelassen(e, true));
+      gitter.addEventListener('pointercancel', (e) => losgelassen(e, false));
+      gitter.addEventListener('lostpointercapture', (e) => losgelassen(e, false));
+      gitter.addEventListener('contextmenu', (e) => {   // right click: a negative pin (or removes the pin there)
+        if (!bedienbar()) return;
+        const x = zelleVon(e);
+        if (!x) return;
+        e.preventDefault();
+        pin(x.z, x.s, wertAn(x.z, x.s) !== 0 ? 0 : -STIFT_KLICK);
+        stiftFertig();
+      });
+      // the wheel changes a pin it is over (an empty cell lets the page scroll); it ends after the idle time like the knob wheel
+      gitter.addEventListener('wheel', (e) => {
+        if (!bedienbar()) return;
+        const x = zelleVon(e);
+        if (!x) return;
+        const w0 = wertAn(x.z, x.s);
+        if (w0 === 0 && !(rad && rad.z === x.z && rad.s === x.s)) return;
+        e.preventDefault();
+        const r = -Math.sign(e.deltaY || e.deltaX);
+        if (!r) return;
+        rad = x;
+        const w = stiftRunde(w0 + r * (e.shiftKey ? 0.01 : STIFT_RAD));
+        if (w !== w0) pin(x.z, x.s, w);
+        if (radT !== null) clearTimeout(radT);
+        radT = setTimeout(() => { radT = null; rad = null; stiftFertig(); }, opt.radMs ?? RAD_MS);
+      }, { passive: false });
+      // keyboard: arrows move the cursor, Enter or Space sets or removes, + and - change the amount, Delete removes
+      gitter.addEventListener('keydown', (e) => {
+        const dz = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0, ds = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+        if (dz || ds) {
+          e.preventDefault();
+          const a = ueber ?? { z: 0, s: 0 };
+          ueber = { z: Math.min(STIFT_N - 1, Math.max(0, a.z + dz)), s: Math.min(STIFT_N - 1, Math.max(0, a.s + ds)) };
+          markiere();
+          return;
+        }
+        if (!ueber || !bedienbar()) return;
+        const w0 = wertAn(ueber.z, ueber.s);
+        let w = null;
+        if (e.key === 'Enter' || e.key === ' ') w = w0 !== 0 ? 0 : STIFT_KLICK;
+        else if (e.key === 'Delete' || e.key === 'Backspace') w = 0;
+        else if (e.key === '+' || e.key === '=') w = stiftRunde(w0 + (e.shiftKey ? 0.01 : STIFT_RAD));
+        else if (e.key === '-') w = stiftRunde(w0 - (e.shiftKey ? 0.01 : STIFT_RAD));
+        if (w === null) return;
+        e.preventDefault();
+        if (w !== w0) pin(ueber.z, ueber.s, w);
+      });
+      gitter.addEventListener('keyup', (e) => { if (['Enter', ' ', 'Delete', 'Backspace', '+', '=', '-'].includes(e.key)) stiftFertig(); });
+      gitter.addEventListener('blur', () => { if (!st) { ueber = null; markiere(); } });
+      aufraeumen.push(() => { if (radT !== null) { clearTimeout(radT); radT = null; rad = null; stiftFertig(); } });
+      // ---- Cabinet view: jacks on the sections and a cable per pin (only with a page `all`, see the header comment) ----
+      if (mitKabeln) matrixKabel = ({ platte, sektionen }) => {
+        const fenster2 = d.defaultView ?? null;
+        const hostStil = host.style ? host.style.position : undefined;
+        if (host.style) host.style.position = 'relative';   // the overlay is positioned against the host; the plate (zoomed by the device window) stays untouched
+        const svg = el('svg', 'fp-kabelsvg', undefined, true);
+        svg.setAttribute('pointer-events', 'none');
+        host.append(svg);
+        const quelle = (z) => c.of.quellen[z] ?? null, ziel = (s) => c.of.ziele[s] ?? null;
+        const buchsen = { q: [], z: [] };   // per row / column: [{ el }] (one jack each)
+        const stelle = (art, nr, ort, titel, sektionId) => {
+          const b = el('span', art === 'q' ? 'fp-buchse fp-buchse-aus' : 'fp-buchse fp-buchse-ein');
+          b.dataset.buchse = `${art}${nr}`;
+          b.setAttribute('role', 'button');
+          b.setAttribute('title', titel);
+          if (art === 'q') b.style.setProperty('--bc', KABEL_FARBEN[nr % KABEL_FARBEN.length]);
+          const zielZelle = sektionId ? null : zellenVonId.get(ort);
+          const sek = sektionen.get(ort);
+          const platz = sek ? (titelVon.get(ort) ?? sek) : zielZelle ? (namenVon.get(zielZelle) ?? zielZelle) : null;
+          if (!platz) return null;
+          if (!sek && !namenVon.get(zielZelle)) b.classList.add('fp-buchse-lose');
+          platz.append(b);
+          return b;
+        };
+        for (let z = 0; z < STIFT_N; z++) if (typeof quelle(z) === 'string') { const b = stelle('q', z, quelle(z), `Source: ${sf.zeilen[z]}`, true); if (b) buchsen.q[z] = b; }
+        for (let sp = 0; sp < STIFT_N; sp++) if (typeof ziel(sp) === 'string') { const b = stelle('z', sp, ziel(sp), `Destination: ${sf.spalten[sp]}`, sektionen.has(ziel(sp))); if (b) buchsen.z[sp] = b; }
+        let kabel = [];   // [{ z, s, pfad, griff, w }]: what is drawn
+        let hoverArt = null;   // { art: 'q'|'z'|'k', z?, s? }: the cable or jack under the pointer
+        const sichtbar = () => alleSeiteId !== null && seite === alleSeiteId && kabelAn;
+        const mitte = (e, h0) => {
+          const r = e?.getBoundingClientRect?.();
+          if (!r || !(r.width > 0 || r.height > 0)) return null;
+          return { x: r.left + r.width / 2 - h0.left, y: r.top + r.height / 2 - h0.top };
+        };
+        const kabelBeteiligt = (k) => hoverArt && (hoverArt.art === 'k' ? hoverArt.z === k.z && hoverArt.s === k.s : hoverArt.art === 'q' ? hoverArt.z === k.z : hoverArt.s === k.s);
+        const faerbe = () => {   // the hovered cable (or every cable of the hovered jack) lights up, the others dim
+          svg.classList.toggle('fp-kabel-dimm', hoverArt !== null);
+          for (const k of kabel) { k.pfad.classList.toggle('fp-kabel-hell', !!kabelBeteiligt(k)); }
+        };
+        const aktive = () => feldStifte().filter((e) => e[0] === ansicht && e[3] !== 0 && buchsen.q[e[1]] && buchsen.z[e[2]]);
+        const satzVon = (z, sp) => stiftSatz(sf.zeilen[z], sf.spalten[sp], wertAn(z, sp), bereichAn(sp));
+        const hoverText = (h) => {
+          if (h.art === 'k') return satzVon(h.z, h.s);
+          const liste = aktive().filter((e) => (h.art === 'q' ? e[1] === h.z : e[2] === h.s));
+          const teil = (e) => `${h.art === 'q' ? sf.spalten[e[2]] : sf.zeilen[e[1]]} (${e[3] > 0 ? '+' : '-'}${Math.abs(e[3]).toFixed(2)})`;
+          if (h.art === 'q') return liste.length ? `${sf.zeilen[h.z]} is patched to ${liste.map(teil).join(', ')}` : `${sf.zeilen[h.z]}: no cable yet, click to patch it`;
+          return liste.length ? `${sf.spalten[h.s]} receives ${liste.map(teil).join(', ')}` : `${sf.spalten[h.s]}: nothing patched, click a source jack first`;
+        };
+        const weise = (h) => { hoverArt = h; kabelInfo = h ? hoverText(h) : null; faerbe(); zeigeInfo(); };
+        let zuletztKey = null;
+        const zeichne = (erzwingen = false) => {
+          const an = sichtbar();
+          svg.classList.toggle('fp-kabel-aus', !an);
+          platte.classList.toggle('fp-kabelan', an);
+          if (kabelKnopf) { kabelKnopf.classList.toggle('an', kabelAn); kabelKnopf.setAttribute('aria-pressed', String(kabelAn)); }
+          for (const art of ['q', 'z']) buchsen[art].forEach((b, i) => { if (b) b.classList.toggle('fp-an', art === 'q' && bewaffnet === i); });
+          if (!an) { zuletztKey = null; svg.replaceChildren(); kabel = []; return; }
+          const key = JSON.stringify([ansicht, feldStifte(), bewaffnet]);
+          if (!erzwingen && key === zuletztKey) return;
+          const h0 = host.getBoundingClientRect?.();
+          if (!h0 || !(h0.width > 0)) { svg.replaceChildren(); kabel = []; return; }   // no layout (a test DOM, a hidden host): nothing to draw
+          zuletztKey = key;
+          svg.replaceChildren();
+          kabel = [];
+          const benutzt = new Set();
+          const zeichneEins = (e, geist) => {
+            const a = mitte(buchsen.q[e[1]], h0), b = mitte(buchsen.z[e[2]], h0);
+            if (!a || !b) return;
+            const hang = Math.min(140, 30 + Math.hypot(b.x - a.x, b.y - a.y) * 0.25);
+            const dpfad = `M${a.x.toFixed(1)} ${a.y.toFixed(1)}C${a.x.toFixed(1)} ${(a.y + hang).toFixed(1)} ${b.x.toFixed(1)} ${(b.y + hang).toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}`;
+            const farbe = KABEL_FARBEN[e[1] % KABEL_FARBEN.length];
+            const pfad = el('path', geist ? 'fp-kabel fp-kabel-geist' : 'fp-kabel', undefined, true);
+            pfad.setAttribute('d', dpfad); pfad.setAttribute('stroke', farbe); pfad.setAttribute('fill', 'none'); pfad.setAttribute('stroke-linecap', 'round');
+            pfad.setAttribute('stroke-width', geist ? '1' : (2 + 4 * Math.min(1, Math.abs(e[3]))).toFixed(2));
+            if (geist) pfad.setAttribute('stroke-opacity', '0.3');
+            if (!geist && e[3] < 0) pfad.setAttribute('stroke-dasharray', '7 5');
+            pfad.setAttribute('pointer-events', 'none');
+            svg.append(pfad);
+            if (geist) return;
+            benutzt.add(`q${e[1]}`); benutzt.add(`z${e[2]}`);
+            const griff = el('path', 'fp-kabel-griff', undefined, true);   // a wide invisible stroke: the thin cable is hard to hit
+            griff.setAttribute('d', dpfad); griff.setAttribute('fill', 'none'); griff.setAttribute('stroke', 'transparent'); griff.setAttribute('stroke-width', '14');
+            griff.setAttribute('pointer-events', 'stroke');
+            griff.dataset.z = String(e[1]); griff.dataset.s = String(e[2]);
+            griff.addEventListener('pointerover', () => weise({ art: 'k', z: e[1], s: e[2] }));
+            griff.addEventListener('pointerleave', () => weise(null));
+            griff.addEventListener('click', (ev) => {   // a click on a cable pulls it out
+              ev.stopPropagation?.();
+              if (!bedienbar()) return;
+              pin(e[1], e[2], 0); stiftFertig();
+              weise(null);
+            });
+            griff.addEventListener('wheel', (ev) => {   // the wheel changes the amount, the gesture ends after the idle time of the grid
+              if (!bedienbar()) return;
+              const r = -Math.sign(ev.deltaY || ev.deltaX);
+              ev.preventDefault?.();
+              if (!r) return;
+              const w0 = wertAn(e[1], e[2]);
+              rad = { z: e[1], s: e[2] };
+              const w = stiftRunde(w0 + r * (ev.shiftKey ? 0.01 : STIFT_RAD));
+              if (w !== w0) pin(e[1], e[2], w);
+              if (radT !== null) clearTimeout(radT);
+              radT = setTimeout(() => { radT = null; rad = null; stiftFertig(); }, opt.radMs ?? RAD_MS);
+            }, { passive: false });
+            svg.append(griff);
+            kabel.push({ z: e[1], s: e[2], pfad, griff, w: e[3] });
+          };
+          for (const e of feldStifte()) if (e[0] !== ansicht && e[3] !== 0 && buchsen.q[e[1]] && buchsen.z[e[2]]) zeichneEins(e, true);   // the other set: thin ghosts at the back
+          for (const e of aktive()) zeichneEins(e, false);
+          for (const art of ['q', 'z']) buchsen[art].forEach((b, i) => { if (b) b.classList.toggle('fp-benutzt', benutzt.has(`${art}${i}`)); });
+          faerbe();
+        };
+        zeiger.push(() => zeichne(false));
+        const entwaffne = () => { if (bewaffnet === null) return; bewaffnet = null; kabelInfo = null; zeige(); };
+        buchsen.q.forEach((b, z) => {
+          if (!b) return;
+          b.addEventListener('click', (ev) => {
+            ev.stopPropagation?.();
+            if (!bedienbar()) return;
+            if (bewaffnet === z) { entwaffne(); return; }
+            bewaffnet = z; kabelInfo = null;
+            zeige();
+          });
+          b.addEventListener('pointerdown', (ev) => ev.stopPropagation?.());
+          b.addEventListener('pointerover', () => weise({ art: 'q', z }));
+          b.addEventListener('pointerleave', () => weise(null));
+        });
+        buchsen.z.forEach((b, sp) => {
+          if (!b) return;
+          b.addEventListener('click', (ev) => {
+            ev.stopPropagation?.();
+            if (!bedienbar() || bewaffnet === null) return;
+            const z = bewaffnet;
+            bewaffnet = null;
+            const w0 = wertAn(z, sp);
+            pin(z, sp, w0 !== 0 ? 0 : ev.shiftKey ? -STIFT_KLICK : STIFT_KLICK);   // like a click in the grid
+            stiftFertig();
+            kabelInfo = satzVon(z, sp);
+            zeige();
+          });
+          b.addEventListener('pointerdown', (ev) => ev.stopPropagation?.());
+          b.addEventListener('pointerover', () => weise({ art: 'z', s: sp }));
+          b.addEventListener('pointerleave', () => weise(null));
+        });
+        const taste = (ev) => { if (ev.key === 'Escape') entwaffne(); };
+        d.addEventListener?.('keydown', taste);
+        let geplant = false;
+        const plane = () => {
+          if (geplant) return;
+          if (typeof fenster2?.requestAnimationFrame !== 'function') { zeichne(true); return; }
+          geplant = true;
+          fenster2.requestAnimationFrame(() => { geplant = false; zeichne(true); });
+        };
+        fenster2?.addEventListener?.('resize', plane);
+        fenster2?.addEventListener?.('scroll', plane, { passive: true, capture: true });
+        let beobachter = null;
+        try { if (typeof fenster2?.ResizeObserver === 'function') { beobachter = new fenster2.ResizeObserver(plane); beobachter.observe(platte); } } catch { beobachter = null; }
+        kabelSeite = () => { zeichne(true); };
+        aufraeumen.push(() => {
+          d.removeEventListener?.('keydown', taste);
+          fenster2?.removeEventListener?.('resize', plane);
+          fenster2?.removeEventListener?.('scroll', plane, { capture: true });
+          beobachter?.disconnect?.();
+          if (host.style) host.style.position = hostStil ?? '';
+          kabelSeite = () => {};
+        });
+      };
+    },
     label(c, zelle) { zelle.append(el('span', 'fp-text', c.text)); },
     spacer() { /* an empty cell */ },
   };
@@ -769,7 +1205,7 @@ export function baueFrontplatte(host, opt) {
   const baueSektion = (s) => {
     const sek = el('section', modulMode ? 'fp-sektion fp-modul' : 'fp-sektion');
     sek.dataset.sektion = s.id;
-    if (s.title) sek.append(el('h4', modulMode ? 'fp-sektionstitel fp-modultitel' : 'fp-sektionstitel', s.title));
+    if (s.title) { const t = el('h4', modulMode ? 'fp-sektionstitel fp-modultitel' : 'fp-sektionstitel', s.title); titelVon.set(s.id, t); sek.append(t); }
     const gitter = el('div', 'fp-gitter');
     gitter.style.setProperty('--spalten', String(s.cols ?? Math.min(4, s.controls.length)));
     if (modulMode) sek.style.setProperty('--spalten', String(s.cols ?? Math.min(4, s.controls.length)));   // the row sizes its modules by this
@@ -777,19 +1213,22 @@ export function baueFrontplatte(host, opt) {
       const zelle = el('div', 'fp-zelle');
       zelle.dataset.typ = c.type;
       zelle.dataset.id = c.id;
+      zellenVonId.set(c.id, zelle);
       if (parameterVon(c)[0] !== undefined) zelle.dataset.param = parameterVon(c)[0];   // the device window marks the cell of a knob a controller drives (device_window.js)
       if (c.span) zelle.style.gridColumn = `span ${c.span}`;
+      if (c.type === 'matrix') sek.classList.add('fp-matrixsektion');   // the section takes the room of the field (panel.css)
       bauer[c.type]?.(c, zelle);
       const lernNr = parameterVon(c)[0];
       if (kannLernen && lernNr !== undefined) markiert.push({ zelle, nr: lernNr });
       if (parameterVon(c).length) sperrZellen.push({ zelle, nrs: parameterVon(c) });
+      if (c.wirkt) wirkZellen.set(c.id, zelle);
       gitter.append(zelle);
     }
     sek.append(gitter);
     return sek;
   };
   const sektionen = new Map(panel.sections.map((s) => [s.id, baueSektion(s)]));   // built once; rows only place them
-  const seiten = panel.pages ?? [];
+  const seiten = (panel.pages ?? []).filter((p) => !p.all || opt.breit);   // the page that shows everything only where there is room for it
   const seiteVon = new Map(panel.sections.map((s) => [s.id, s.page ?? seiten[0]?.id]));
   const reihen = [];   // [{ el, ids }]
   if (modulMode) {
@@ -804,14 +1243,17 @@ export function baueFrontplatte(host, opt) {
       koerper.append(r);
     }
   } else for (const sek of sektionen.values()) koerper.append(sek);
-  let seite = seiten[0]?.id;
+  seite = seiten[0]?.id;
   const tabs = [];
   const zeigeSeite = (id) => {
     if (!seiten.some((p) => p.id === id)) return;
     seite = id;
-    for (const [sid, sek] of sektionen) sek.classList.toggle('fp-aus', seiteVon.get(sid) !== id);
-    for (const r of reihen) r.el.classList.toggle('fp-aus', r.ids.every((sid) => seiteVon.get(sid) !== id));
+    const alle = id === alleSeiteId;   // the page with `all` shows every section and every row
+    for (const [sid, sek] of sektionen) sek.classList.toggle('fp-aus', !alle && seiteVon.get(sid) !== id);
+    for (const r of reihen) r.el.classList.toggle('fp-aus', !alle && r.ids.every((sid) => seiteVon.get(sid) !== id));
+    platte.classList.toggle('fp-schrank', alle);
     tabs.forEach((t, i) => { const an = seiten[i].id === id; t.setAttribute('aria-selected', String(an)); t.classList.toggle('an', an); });
+    kabelSeite();
     try { opt.beiSeite?.(id); } catch { /* the listener's business */ }   // the page in front, also the first one (a controller that follows takes the mapping of the page)
   };
   if (seiten.length) {
@@ -832,6 +1274,8 @@ export function baueFrontplatte(host, opt) {
   if (modulMode) platte.classList.add('fp-mit-reihen');
   platte.append(koerper);
   host.append(platte);
+  matrixKabel?.({ platte, sektionen });   // jacks and the cable overlay of the patch field, now that every section and control stands
+  kabelSeite();
   const markiere = () => {
     platte.classList.toggle('fp-lernmodus', lernAn());
     for (const m of markiert) {
@@ -858,12 +1302,15 @@ export function baueFrontplatte(host, opt) {
     werte() { return { ...k }; },
     /** Shows the modules of page `id` (pages of the panel file); an unknown id changes nothing. */
     zeigeSeite,
+    /** Whether the page in front is the one with `all` (the Cabinet): it shows every module, so a controller program of another page has nothing to turn to. */
+    zeigtAlles: () => alleSeiteId !== null && seite === alleSeiteId,
     /** stand = {an?, wartet, gelernt}: re-marks the controls without rebuilding; an absent `an` keeps the mode. */
     setzeLernen(stand) {
       lern = { an: stand?.an ?? lern.an, wartet: stand?.wartet ?? null, gelernt: stand?.gelernt ?? new Set() };
       markiere();
     },
     zerstoere() {
+      for (const f of aufraeumen.splice(0)) f();
       if (radTimer !== null) { clearTimeout(radTimer); radTimer = null; fertig(); }
       for (const [t, f] of [['pointerdown', hostRunter], ['pointermove', hostBewegt], ['pointerup', hostHoch], ['pointercancel', hostHoch], ['lostpointercapture', hostHoch]]) host.removeEventListener?.(t, f);
       d.removeEventListener?.('visibilitychange', fensterAus); fenster.removeEventListener?.('blur', alleVergessen); ruhend.clear();

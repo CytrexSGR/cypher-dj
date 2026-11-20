@@ -571,7 +571,7 @@ void Kern::pegel_melden(int64_t n0, int n) {
 
 // 1.12 slice 3, D1: a grip is every hand step the Stellwerk applied to a track regulator in the sub-block just processed (value or touch; the holder does not matter).
 // It overrides the lane of that track and field from the grip sample on. Order in audio(): hand, prozess, aenderungen, arr_->verlauf, HERE, arr_->block.
-// Only spur/1..32/{fader,pan,mute,solo} count; the reverse table of the Arrangement has exactly these 128 entries. Not a grip: the touches teile_nachreichen replays
+// Only spur/1..32/{fader,pan,mute,solo} and ret/1..4/fader count; the reverse table of the Arrangement has exactly these 132 entries. Not a grip: the touches teile_nachreichen replays
 // after a restart (nachreichen_sperre_, cleared after the first sub-block of that cycle). Allocation-free.
 void Kern::arr_griffe_pruefen(int64_t s0, int m) {
   if (nachreichen_sperre_) {
@@ -580,7 +580,7 @@ void Kern::arr_griffe_pruefen(int64_t s0, int m) {
   }
   auto_punkte_melden(s0, m);   // D12: before the override loop, which only reads the same grip signal
   if (!arr_->auto_spielt()) return;   // D5: a stopped transport takes no override
-  for (int i = 0; i < ARR_SPUREN; ++i)
+  for (int i = 0; i < ARR_AUTO_SLOTS; ++i)   // tracks, then the return fader lanes (slot ARR_SPUREN + r)
     for (int f = 0; f < 4; ++f) {
       const int r = arr_->auto_regler(i, f);
       int64_t sample;

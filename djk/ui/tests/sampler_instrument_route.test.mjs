@@ -10,6 +10,7 @@ import { ruf } from './support/proj_stack.mjs';
 import { sinusWav } from './support/sinus_wav.mjs';
 import { instrumentRouten } from '../areas/sampler/instrument_routes.ts';
 
+const WERKS_SAMPLES = ['amiga-dreieck', 'amiga-quadrat', 'amiga-rauschen', 'amiga-saege'].map((n) => `bk/samples/${n}.f32`);
 const HZ = { C: 261.6256, D: 293.6648, E: 329.6276, G: 391.9954 };
 
 async function aufbau(t) {
@@ -41,7 +42,7 @@ async function aufbau(t) {
   const projekt = async () => (await ruf(s.url, 'GET', '/proj/aktuell')).j.projekt;
   const verlauf = async () => (await ruf(s.url, 'GET', '/proj/verlauf')).j;
   const spuren = async () => (await projekt()).spuren;
-  const alleDateien = () => { const aus = []; const geh = (p) => { for (const e of fs.readdirSync(p, { withFileTypes: true })) e.isDirectory() ? geh(path.join(p, e.name)) : aus.push(path.relative(root, path.join(p, e.name))); }; geh(d.bk); geh(d.sampler); return aus.filter((x) => !x.endsWith('wurzeln.json')).sort(); };
+  const alleDateien = () => { const aus = []; const geh = (p) => { for (const e of fs.readdirSync(p, { withFileTypes: true })) e.isDirectory() ? geh(path.join(p, e.name)) : aus.push(path.relative(root, path.join(p, e.name))); }; geh(d.bk); geh(d.sampler); return aus.filter((x) => !x.endsWith('wurzeln.json') && !WERKS_SAMPLES.includes(x)).sort(); };   // the server installs the four factory samples at start (sichereWerksProben); they are not part of what a route leaves behind
   return { ...s, d, oeffne, projekt, verlauf, spuren, alleDateien };
 }
 

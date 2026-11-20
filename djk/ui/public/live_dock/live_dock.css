@@ -1,0 +1,29 @@
+/* Live dock: the dock in the EFFECTS tab of DJ and LIVE (live_dock/host.js, dock/allgemein.js). The cards themselves use dock/dock.css. */
+@import url('tool.css');
+@import url('comp.css');
+@import url('graph.css');
+@import url('master.css');
+@import url('automation.css');
+
+#effekte { flex-wrap: wrap; }
+#effekte > #live-dock { flex: 1 0 100%; max-height: none; }
+#live-fenster { position: fixed; inset: 0; z-index: 12; pointer-events: none; }
+
+/* subtitle kinds: the instrument reads strong, what plays reads dim and italic, the effect of a return like an instrument but in the effect colour */
+#effekte .w-karte-geraet.w-karte-instrument { color: var(--text); font-weight: 600; font-size: 11px; }
+#effekte .w-karte-geraet.w-karte-inhalt { font-style: italic; max-width: 22ch; overflow: hidden; text-overflow: ellipsis; }
+#effekte .w-karte-geraet.w-karte-effekt { color: var(--text); font-weight: 600; font-size: 11px; }
+#effekte .w-karte-was { color: var(--dim); font-size: 10px; max-width: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#effekte .w-karte-was.laeuft { color: var(--gut); }
+#effekte .w-karte-gruppe { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+#effekte .w-karte-gruppe-name, #effekte .w-karte-abschnitt { font-size: 10px; letter-spacing: .14em; color: var(--dim); font-weight: 700; }
+#effekte .w-karte-abschnitt { margin-left: 4px; }
+#effekte .w-karte-pegel { font-size: 10px; font-variant-numeric: tabular-nums; color: var(--dim); align-self: flex-end; min-width: 4ch; text-align: right; }
+#effekte .w-karte-zeile .meter.senkrecht { min-height: 40px; }
+
+/* the popover at a chip (popover.js) */
+.w-live-popover { position: fixed; z-index: 30; pointer-events: auto; max-width: min(420px, 90vw); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .45); }
+.w-live-popover-kopf { display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .08em; margin-bottom: 6px; }
+.w-live-popover-kopf b { flex: 1; }
+.w-live-popover-zu { border: 1px solid var(--line); border-radius: 3px; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; padding: 0 5px; }
+.w-live-popover-zu:hover { color: var(--text); }

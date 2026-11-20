@@ -8,11 +8,11 @@
   ]},
   "sections": [
     { "id": "closed", "title": "CLOSED", "cols": 3, "controls": [
-      {"id": "cd", "type": "knob", "label": "Decay", "span": 3, "bind": {"param": "k1"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "cd", "type": "knob", "label": "Closed decay", "span": 3, "bind": {"param": "k1"}, "format": "raw", "unit": "s", "default": 0.5},
       {"id": "c1", "type": "label", "span": 3, "text": "Choked in 8 ms by the next hit"}
     ]},
     { "id": "open", "title": "OPEN", "cols": 3, "controls": [
-      {"id": "od", "type": "knob", "label": "Decay", "span": 3, "bind": {"param": "k2"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "od", "type": "knob", "label": "Open decay", "span": 3, "bind": {"param": "k2"}, "format": "raw", "unit": "s", "default": 0.5},
       {"id": "o1", "type": "label", "span": 3, "text": "Open hat is darker"}
     ]},
     { "id": "tone", "title": "TONE", "cols": 4, "controls": [

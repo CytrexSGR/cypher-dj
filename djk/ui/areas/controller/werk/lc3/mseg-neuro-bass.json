@@ -1,0 +1,6 @@
+{"schema":1,"name":"mseg-neuro-bass","modell":"lc3","art":"instrument","graph":"mseg-neuro-bass",
+"eintraege":[{"regler":"Enc 1","knopf":2},{"regler":"Enc 2","knopf":1},{"regler":"Enc 3","knopf":3}],
+"seiten":{"main":[{"regler":"Enc 1","knopf":2},{"regler":"Enc 2","knopf":1},{"regler":"Enc 3","knopf":3}]},
+"programme":[
+{"name":"MSEG \u00b7 FILTER","seite":"main",
+"eintraege":[{"regler":"Enc 1","knopf":2},{"regler":"Enc 2","knopf":1},{"regler":"Enc 3","knopf":3}]}]}

@@ -11,10 +11,13 @@ import { SCHLUESSEL_DJ, SCHLUESSEL_NUR_ZEILE } from './key_table.ts';
 import { ersterUngueltigerSchluessel } from './routing_verdict.ts';
 import { huellkurvenPruefung, type Huellkurve } from './envelope.ts';
 import { seqPruefung, seqSichtPruefung, type SeqDeck, type SeqSicht } from './seq.ts';   // seq.ts imports only types from this file: no runtime cycle
+import { verbundPruefungSpur } from './verbund.ts';   // verbund.ts uses model.ts values only inside functions: the cycle is harmless at load
+import { trackerPruefung, type TrackerMarke } from './tracker.ts';   // tracker.ts imports only a type from this file: no runtime cycle
 import { werkbankPruefung, type WerkbankMarke } from './werkbank.ts';   // werkbank.ts imports only a type from this file: no runtime cycle
 import { tonartFehler } from '../public/harmonie.js';
 import { pruefeStammbaum, type Stammbaum } from './sound_runde_contract.ts';   // find sound: contract file, no imports of its own
 import { PRESET_ID } from '../presets/preset_id.ts';   // 1.16 rest: zero-import file, keeps this module free of file access
+import { stiftFehler, type Stift } from '../steckfeld.ts';   // Kraken patch field: zero-import file too
 export type { Punkt, LaneForm } from './lane.ts';
 
 export const FORMAT = 'cypherdj-projekt/2';
@@ -167,6 +170,8 @@ export const MAX_TAKES_PRO_SPUR = 32;      // 1.14 comping: take lanes per audio
 export const TAKE_NAME_MAX = 64;
 export const MAX_LANE_PUNKTE = 8192;
 export const MAX_AUTO_PUNKTE = 65536;
+// tracker effect commands (task 14): pitch and level events of a playback after unrolling, all bk tracks together; equal ARR_FX_PUNKTE_MAX in the core
+export const MAX_FX_PUNKTE = 65536;
 // gesperrt (slice 2, E4): only `true` is ever written; an unlocked lane has no key, so slice 1 projects stay byte for byte the same
 // 1.12 slice 6: a lane may also drive a parameter of an insert stage (`insert.<stage id>.<param>`, the parameter name as in `Insert.werte`, a continuous one)
 // or a macro of the rack of the strip (`rack.m1` .. `rack.m4`). Such a lane is stored on the strip that carries the stage or rack (a track, group,
@@ -234,7 +239,11 @@ export const DEKODIERT: readonly DekodiertZustand[] = ['nein', 'laeuft', 'fertig
 export interface Entstehung { art: 'strom'; strom: 2 | 3; graph: string; regler: number[]; code: string; bpm: number }
 
 // chance (1..99 percent), wdh (2..8 hits in the step), versatz (-95..95 without 0, percent of one sixteenth): optional, never written with their default
-export interface Note { id: string; beat: number; laenge: number; ton: number; vel: number; chance?: number; wdh?: number; versatz?: number }
+// spalte (2..8): the tracker note column of the note; absent = column 1 (1 is never written). Playback never reads it.
+// platz (1..32, tracker task 19): the slot of a device with a slot role (spec 7); absent = the slot the knob stands on, never written with a default.
+export interface Note {
+  id: string; beat: number; laenge: number; ton: number; vel: number; chance?: number; wdh?: number; versatz?: number; spalte?: number; platz?: number;
+}
 // Row settings of a MIDI clip, per pitch (key = the pitch as a decimal string); an entry without any field does not exist
 export interface Zeile { schritte?: number; swing?: number; richtung?: 'pendel' }
 export const MAX_ZEILEN = 128;
@@ -255,7 +264,35 @@ export interface MidiClip {
   muster?: MusterHerkunft;                                     // strudel-clip (/2 only): the Strudel pattern the notes were generated from; absent when none
   zeilen?: Record<string, Zeile>;                              // workbench row settings per pitch; absent when none
   seq?: SeqSicht;                                              // SEQ deck v2 (/2 only): view of the lanes in the SEQ place, no music, absent when none
+  // tracker patterns (/2 only, ADR 039): clips of one track with the same value are linked copies; absent when unlinked
+  verbund?: string;
+  // tracker effect commands (/2 only, task 12): sorted by beat then column, one entry per (beat, column), never an empty list; absent when none
+  fx?: FxEintrag[];
 }
+// beat: start of the row in clip beats (0 <= beat < laenge_beats when written; an entry behind a shortened clip stays and is silent, as a note is)
+export const FX_CODES = ['ARP', 'SLU', 'SLD', 'GLD', 'VIB', 'TRM', 'VSL', 'LVL', 'RTG', 'PAN', 'OFS', 'REV'] as const;
+export type FxEintrag = { beat: number; spalte: 0 | 1 | 2 | 3; code: string; wert: number };
+export const FX_MAX_EINTRAEGE = 4096;
+const FX_FELDER = ['beat', 'spalte', 'code', 'wert'];
+/** The check of a stored `fx` list: non-empty, entries {beat, spalte, code, wert} sorted by beat then column, one per (beat, column). */
+export function fxPruefung(x: unknown): { grund: 'fx_ungueltig'; text: string } | null {
+  const ab = (text: string) => ({ grund: 'fx_ungueltig' as const, text });
+  if (!Array.isArray(x) || x.length < 1 || x.length > FX_MAX_EINTRAEGE) return ab(`fx: a list of 1..${FX_MAX_EINTRAEGE} entries expected (absent when none)`);
+  let vor: FxEintrag | null = null;
+  for (let i = 0; i < x.length; i++) {
+    const r = x[i];
+    if (!istObjekt(r) || Object.keys(r).some((k) => !FX_FELDER.includes(k))) return ab(`fx[${i}]: entry {beat, spalte, code, wert} expected`);
+    if (typeof r.beat !== 'number' || !Number.isFinite(r.beat) || r.beat < 0 || r.beat > MAX_BEAT) return ab(`fx[${i}].beat: number 0..${MAX_BEAT} expected`);
+    if (!Number.isInteger(r.spalte) || (r.spalte as number) < 0 || (r.spalte as number) > 3) return ab(`fx[${i}].spalte: 0..3 expected`);
+    if (typeof r.code !== 'string' || !(FX_CODES as readonly string[]).includes(r.code)) return ab(`fx[${i}].code: one of ${FX_CODES.join(' ')} expected`);
+    if (!Number.isInteger(r.wert) || (r.wert as number) < 0 || (r.wert as number) > 255) return ab(`fx[${i}].wert: whole number 0..255 expected`);
+    const e = r as unknown as FxEintrag;
+    if (vor && (e.beat < vor.beat || (e.beat === vor.beat && e.spalte <= vor.spalte))) return ab(`fx[${i}]: entries sorted by beat then column, one per cell`);
+    vor = e;
+  }
+  return null;
+}
+export const VERBUND_ID = /^v[0-9]{1,9}$/;
 // strudel-clip: where the notes of a generated clip came from. code is the pattern text; ohne_ziel the Strudel fields that
 // have no target here (reported, not applied).
 // Not playback (spurSicht lists only the fields it knows). clip_aus_muster with the clip_id alone generates the clip again from `code`.
@@ -285,7 +322,9 @@ export interface Take { id: string; name: string; art?: 'original'; clips: Audio
 // preset (1.16 rest, F8): the register id of the preset last applied (presets/preset_id.ts); not playback (spurSicht strips it), absent in older files
 export interface InternGeraet { art: 'intern'; name: 'rb338'; parameter: Record<string, number>; preset?: string }
 // Baukasten S20: an instrument graph of the kern's graph folder as the device; parameter holds the knobs k1..k64 that were set (absent = 0.5)
-export interface BkGeraet { art: 'intern'; name: 'bk'; graph: string; parameter: Record<string, number>; preset?: string }
+// Kraken patch field (task 4): `stifte` is the pin list of the graph's matrix block ([satz, zeile, spalte, wert], normal form of steckfeld.ts).
+// Absent = the graph's own default pins play; present (also empty) replaces them entirely. Format /2 only, never on a rack member.
+export interface BkGeraet { art: 'intern'; name: 'bk'; graph: string; parameter: Record<string, number>; preset?: string; stifte?: Stift[] }
 // 1.9 (L25): a core kit (ADR 024) as the device of an instrument track. One-shot, no device parameter: the kit is the whole device.
 export interface KitGeraet { art: 'intern'; name: 'kit'; kit: string }
 // 1.9 U5 (O28 on Surge, spec E7): `parameter` is a SPARSE map of Surge display values (names and ranges of hosts/carla/surge_bereiche.json); the server
@@ -459,7 +498,8 @@ export interface Spur {
 export interface Tonart { grundton: number; skala: string }
 export interface Projekt {
   format: typeof FORMAT; name: string; rev: number; wiedergabe_rev: number; tempo_bpm: number; taktart: [number, number];
-  naechste_id?: { spur?: number; clip?: number; gruppe?: number; lane?: number; return?: number; insert?: number; take?: number }; naechste_noten_id?: number;
+  naechste_id?: { spur?: number; clip?: number; gruppe?: number; lane?: number; return?: number; insert?: number; take?: number; verbund?: number };
+  naechste_noten_id?: number;
   loop: { an: boolean; von_beat: number; bis_beat: number };
   metronom: { an: boolean; pegel_db: number; ziel: 'master' | 'cue' };
   aufnahme?: ProjektAufnahme;   // 1.8 S0 (D17): only in /2, written after the first aufnahme_setzen
@@ -469,6 +509,7 @@ export interface Projekt {
   returns?: Return[];
   baukasten?: BkKanal[];   // S17: sound snapshot (project/modular.ts), only in /2, absent when empty
   live?: true;             // the live container (plan live-module): the one project that runs during a DJ set; never written when absent
+  tracker?: TrackerMarke;   // tracker view marker (project/tracker.ts): only in /2, never together with live or werkbank; never written when absent
   werkbank?: WerkbankMarke;   // loop workbench module (project/werkbank.ts): only in /2, never together with live; never written when absent
   tonart?: Tonart;          // key of the project (public/harmonie.js): the note editors mark and fold by it; only in /2, absent without a key
   szenen?: (Szene | null)[];   // SEQ scenes (project/commands_szenen.ts): exactly SZENEN_SLOTS entries when present, absent until the first save; only in /2
@@ -580,12 +621,13 @@ export function hoechste(ids: Iterable<string>, praefix: string): number {
 // Byte für Byte gleich bleiben und ein älterer Stand sie weiter liest; setzeFehlendeZaehler fasst ihn nicht an.
 // Return-IDs r<n> (slice 3): like the lane counter, naechste_id.return arises with the first return. Insert IDs i<n> (slice 4): the same, with the first stage.
 // Take ids t<n> (1.14): like the lane counter, naechste_id.take arises with the first use. Clip ids are project wide over main AND take clips.
-export function neueId(p: Projekt, art: 'spur' | 'clip' | 'gruppe' | 'lane' | 'return' | 'insert' | 'take'): string {
+export function neueId(p: Projekt, art: 'spur' | 'clip' | 'gruppe' | 'lane' | 'return' | 'insert' | 'take' | 'verbund'): string {
   const praefix = art === 'spur' ? 's' : art === 'clip' ? 'c' : art === 'lane' ? 'a' : art === 'return' ? 'r'
-    : art === 'insert' ? 'i' : art === 'take' ? 't' : 'g';
+    : art === 'insert' ? 'i' : art === 'take' ? 't' : art === 'verbund' ? 'v' : 'g';
   const ids = art === 'spur' ? p.spuren.map((s) => s.id)
     : art === 'clip' ? alleClipIds(p)
       : art === 'take' ? p.spuren.flatMap((s) => (s.takes ?? []).map((t) => t.id))
+        : art === 'verbund' ? p.spuren.flatMap((s) => s.clips.flatMap((c) => (c.art === 'midi' && c.verbund !== undefined ? [c.verbund] : [])))
         : art === 'lane' ? alleStraenge(p).flatMap((x) => (x.strang.automation ?? []).map((l) => l.id))
           : art === 'return' ? (p.returns ?? []).map((r) => r.id)
             : art === 'insert' ? alleInserts(p).map((x) => x.insert.id) : (p.gruppen ?? []).map((g) => g.id);
@@ -634,6 +676,7 @@ export function setzeFehlendeZaehler(p: Projekt): void {
     ...(z?.return !== undefined ? { return: z.return } : {}),   // slice 3: same for the return counter
     ...(z?.insert !== undefined ? { insert: z.insert } : {}),   // slice 4: and for the insert counter
     ...(z?.take !== undefined ? { take: z.take } : {}),         // 1.14: same for the take counter
+    ...(z?.verbund !== undefined ? { verbund: z.verbund } : {}),   // tracker patterns: same, it arises with the first link
   };
   if (p.naechste_noten_id === undefined) p.naechste_noten_id = notenZaehler(p);
 }
@@ -962,7 +1005,9 @@ function pruefeZeilen(x: unknown, wo: string): void {
 }
 
 function pruefeNote(n: unknown, wo: string): Note {
-  const o = felder(n, wo, ['id', 'beat', 'laenge', 'ton', 'vel'], ['chance', 'wdh', 'versatz']);
+  const o = felder(n, wo, ['id', 'beat', 'laenge', 'ton', 'vel'], ['chance', 'wdh', 'versatz', 'spalte', 'platz']);
+  if ('spalte' in o) zahlIn(o.spalte, `${wo}.spalte`, 2, 8, true);
+  if ('platz' in o) zahlIn(o.platz, `${wo}.platz`, 1, 32, true);
   if ('chance' in o) zahlIn(o.chance, `${wo}.chance`, 1, 99, true);
   if ('wdh' in o) zahlIn(o.wdh, `${wo}.wdh`, 2, 8, true);
   if ('versatz' in o) { zahlIn(o.versatz, `${wo}.versatz`, -95, 95, true); if (o.versatz === 0) werfe(`${wo}.versatz`,
@@ -1003,7 +1048,7 @@ function pruefeRackGeraet(g: unknown, wo: string, neu2: boolean): RackGeraet {
     }
     if (istObjekt(m.geraet) && m.geraet.art === 'wirt' && m.geraet.name === 'plugin') werfe(`${w}.geraet`, 'a plugin instrument is no rack member');
     if (istObjekt(m.geraet) && m.geraet.art === 'wirt' && 'patch' in m.geraet) werfe(`${w}.geraet.patch`, 'a surge member does not take a patch in 1.9');
-    pruefeGeraet(m.geraet, `${w}.geraet`, neu2);
+    pruefeGeraet(m.geraet, `${w}.geraet`, neu2, true);
     if ('ton' in m) pruefeZone(m.ton, `${w}.ton`, 0, 127);
     if ('vel' in m) pruefeZone(m.vel, `${w}.vel`, 1, 127);
     if ('kette' in m) pruefeZone(m.kette, `${w}.kette`, 0, 127);
@@ -1020,7 +1065,7 @@ function pruefePluginGeraet(g: Record<string, unknown>, wo: string, neu2: boolea
   if (typeof o.zustand !== 'string' || !/^plugins\/s[0-9]+\.carxs$/.test(o.zustand)) werfe(`${wo}.zustand`, 'plugins/<track id>.carxs expected');
   return o as unknown as Geraet;
 }
-function pruefeGeraet(g: unknown, wo: string, neu2: boolean): Geraet {
+function pruefeGeraet(g: unknown, wo: string, neu2: boolean, imGlied = false): Geraet {
   if (!istObjekt(g)) return werfe(wo, 'Objekt erwartet');
   if (g.art === 'rack') return pruefeRackGeraet(g, wo, neu2);
   if (g.art === 'intern') {
@@ -1031,8 +1076,14 @@ function pruefeGeraet(g: unknown, wo: string, neu2: boolean): Geraet {
       return k as unknown as Geraet;
     }
     if (g.name === 'bk') {                                                     // Baukasten S20
-      const b = felder(g, wo, ['art', 'name', 'graph', 'parameter'], ['preset']);
+      const b = felder(g, wo, ['art', 'name', 'graph', 'parameter'], ['preset', 'stifte']);
       if ('preset' in b) presetIdIn(b.preset, `${wo}.preset`);
+      if ('stifte' in b) {   // Kraken patch field: /2 only, a track device only (a rack member plays the graph defaults)
+        if (!neu2) werfe(`${wo}.stifte`, `unbekanntes Feld (Steckfeld-Stifte gibt es erst ab ${FORMAT})`);
+        if (imGlied) werfe(`${wo}.stifte`, 'pins are not stored on a rack member (it plays the graph default pins)');
+        const f = stiftFehler(b.stifte);
+        if (f !== null) werfe(`${wo}.stifte`, f);
+      }
       if (typeof b.graph !== 'string' || !BK_GRAPH_NAME.test(b.graph)) werfe(`${wo}.graph`, 'graph name expected ([a-z0-9_-], 1..32 characters)');
       if (!istObjekt(b.parameter)) werfe(`${wo}.parameter`, 'Objekt erwartet');
       for (const [k, v] of Object.entries(b.parameter as Record<string, unknown>)) {
@@ -1133,7 +1184,16 @@ function pruefeClip(c: unknown, wo: string, spurArt: string, warpErlaubt: boolea
     pruefeHuellkurven(o, wo, warpErlaubt, spur);
     return o as unknown as Clip;
   }
-  const o = felder(c, wo, [...basis, 'noten'], ['loop_beats', 'naechste_noten_id', 'huellkurven', 'muster', 'seq', 'zeilen']);
+  const o = felder(c, wo, [...basis, 'noten'], ['loop_beats', 'naechste_noten_id', 'huellkurven', 'muster', 'seq', 'zeilen', 'verbund', 'fx']);
+  if ('verbund' in o) {                                         // tracker patterns: /2 only, like seq
+    if (!warpErlaubt) werfe(`${wo}.verbund`, `unknown field (verbund exists only from ${FORMAT} on)`);
+    if (typeof o.verbund !== 'string' || !VERBUND_ID.test(o.verbund)) werfe(`${wo}.verbund`, 'v<1..9 digits> expected');
+  }
+  if ('fx' in o) {                                              // tracker effect commands: /2 only, like verbund
+    if (!warpErlaubt) werfe(`${wo}.fx`, `unknown field (fx exists only from ${FORMAT} on)`);
+    const f = fxPruefung(o.fx);
+    if (f) werfe(`${wo}.fx`, f.text);
+  }
   if ('zeilen' in o) pruefeZeilen(o.zeilen, `${wo}.zeilen`);
   if ('seq' in o) {                                             // SEQ view descriptor: like muster, /2 only
     if (!warpErlaubt) werfe(`${wo}.seq`, `unknown field (seq exists only from ${FORMAT} on)`);
@@ -1547,7 +1607,7 @@ function pruefeAlles(x: unknown): void {
   const neu2 = istObjekt(x) && x.format === FORMAT;   // /2 verlangt gruppen und master, /1 hat sie nicht
   const pflicht = ['format', 'name', 'rev', 'wiedergabe_rev', 'tempo_bpm', 'taktart', 'loop', 'metronom', 'spuren', ...(neu2 ? ['gruppen', 'master'] : [])];
   // returns, baukasten in /1: unknown field
-  const nur2 = ['returns', 'baukasten', 'aufnahme', 'live', 'werkbank', 'tonart', 'szenen'];
+  const nur2 = ['returns', 'baukasten', 'aufnahme', 'live', 'werkbank', 'tracker', 'tonart', 'szenen'];
   const o = felder(x, 'projekt', pflicht, ['naechste_id', 'naechste_noten_id', ...(neu2 ? nur2 : [])]);
   if ('szenen' in o) pruefeSzenen(o.szenen);
   const tf = 'tonart' in o ? tonartFehler(o.tonart) : null;
@@ -1558,10 +1618,16 @@ function pruefeAlles(x: unknown): void {
     if (w) werfe('werkbank', w.text);
     if ('live' in o) werfe('werkbank', 'a workbench module is never the live container');
   }
+  if ('tracker' in o) {
+    const t = trackerPruefung(o.tracker);
+    if (t) werfe('tracker', t.text);
+    if ('live' in o) werfe('tracker', 'the live container has no tracker view');
+    if ('werkbank' in o) werfe('tracker', 'a workbench module has no tracker view');
+  }
   if ('naechste_noten_id' in o) zahlIn(o.naechste_noten_id, 'naechste_noten_id', 1, Number.MAX_SAFE_INTEGER, true);
   if ('naechste_id' in o) {
-    const z = felder(o.naechste_id, 'naechste_id', [], ['spur', 'clip', 'gruppe', 'lane', 'return', 'insert', 'take']);
-    for (const k of ['spur', 'clip', 'gruppe', 'lane', 'return', 'insert', 'take']) {
+    const z = felder(o.naechste_id, 'naechste_id', [], ['spur', 'clip', 'gruppe', 'lane', 'return', 'insert', 'take', 'verbund']);
+    for (const k of ['spur', 'clip', 'gruppe', 'lane', 'return', 'insert', 'take', 'verbund']) {
       if (k in z) zahlIn(z[k], `naechste_id.${k}`, 1, Number.MAX_SAFE_INTEGER, true);
     }
   }
@@ -1620,6 +1686,8 @@ function pruefeAlles(x: unknown): void {
       if (clipIds.has(c.id)) werfe(`spuren[${i}].clips[${k}].id`, `doppelt (${c.id})`);
       clipIds.add(c.id); clips++; if (c.art === 'midi') noten += c.noten.length;
     });
+    const vf = verbundPruefungSpur(s);                       // tracker patterns: the members of one pattern on this track must be equal
+    if (vf) werfe(`spuren[${i}].clips`, vf.text);
     (s.takes ?? []).forEach((t, k) => {                      // 1.14: take ids and take clip ids are project wide, take clips count against MAX_CLIPS
       if (takeIds.has(t.id)) werfe(`spuren[${i}].takes[${k}].id`, `duplicate (${t.id})`);
       takeIds.add(t.id);

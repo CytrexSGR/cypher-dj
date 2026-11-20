@@ -30,7 +30,11 @@ async function seite(t, p, opt = { hoehe: 1080 }) {
 const FACE = '.p-face';
 const griff = (m) => `${FACE} .fa-griff[data-band="${m}"]`;
 const aend = (s) => fetch(`${s.url}attrappe/aenderungen`).then((r) => r.json());
-const oeffneKlick = (s) => s.w(`document.querySelector('.p-stufe[data-insert="i1"] .p-ins-face').click()`);
+const oeffneKlick = (s, id = 'i1') => s.w(`document.querySelector('[data-w="karte-teil"][data-teil="${id}"]').click()`);
+const entferne = async (s, id = 'i1') => {   // the chip menu entry Remove (the event stops at the chip: the card's own menu handler would replace the chip menu, a dock quirk outside this test)
+  await s.w(`(() => { const c = document.querySelector('[data-w="karte-teil"][data-teil="${id}"]'); c.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 60, clientY: 60 })); })()`);
+  await s.w(`[...document.querySelectorAll('.p-menue button')].find((b) => b.textContent.trim() === 'Remove').click()`);
+};
 const lage = (s) => s.w(`(() => { const f = document.querySelector('.p-face'); if (!f) return null; const r = f.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, sh: f.scrollHeight, ch: f.clientHeight, iw: innerWidth, ih: innerHeight }; })()`);
 const werteVon = async (s) => (await s.projekt()).spuren[0].inserts[0].werte;
 // the plot as the page draws it: user units per pixel and the axes of baueAnzeige(720 x 320, rand 30): 678 units for 10 Hz to 22 kHz, 280 units for +30 to -30 dB
@@ -38,10 +42,10 @@ const geometrie = (s) => s.w(`(() => { const r = document.querySelector('.p-face
 const freqNach = (f0, dx, skala) => f0 * 10 ** (((dx * skala) / 678) * Math.log10(22000 / 10));
 const gainNach = (g0, dy, skala) => g0 - ((dy * skala) / 280) * 60;
 
-test('face opens from the EQ row (a real click) and lies inside the window without inner scroll: 1280x1080, then 1280x900 and 1920x1080 by element.click()', { skip: !CHROME && 'no google-chrome' }, async (t) => {
+test('face opens from the EQ chip (a real click) and lies inside the window without inner scroll: 1280x1080, then 1280x900 and 1920x1080 by element.click()', { skip: !CHROME && 'no google-chrome' }, async (t) => {
   const s = await seite(t, projekt(BAENDER));
   assert.equal(await s.w(`document.querySelectorAll('${FACE}').length`), 0, 'closed by default');
-  await s.b.klick('.p-stufe[data-insert="i1"] .p-ins-face');
+  await s.b.klick('[data-w="karte-teil"][data-teil="i1"]');
   assert.equal(await s.w(`document.querySelectorAll('${FACE}').length`), 1);
   const m = await lage(s);
   assert.ok(m.l >= 0 && m.t >= 0 && m.r <= m.iw && m.b <= m.ih, JSON.stringify(m));
@@ -68,9 +72,8 @@ test('the second curve is drawn only when a band sits on Mid or Side', { skip: !
   assert.equal(await s.w(`document.querySelector('.p-face .fa-eq-seite').classList.contains('fa-eq-leer')`), true);
 });
 
-test('dragging handle 2 with real pointer events: frequency and gain follow the geometry, the INSERTS rows show the same numbers, one undo reverts both', { skip: !CHROME && 'no google-chrome' }, async (t) => {
+test('dragging handle 2 with real pointer events: frequency and gain follow the geometry, one undo reverts both', { skip: !CHROME && 'no google-chrome' }, async (t) => {
   const s = await seite(t, projekt(BAENDER));
-  await s.b.klick('.p-stufe[data-insert="i1"] .p-ins-name');   // the row's popover
   await oeffneKlick(s);
   const { skala } = await geometrie(s);
   const kurve0 = await s.w(`document.querySelector('.p-face .fa-eq-kurve').getAttribute('d')`);
@@ -81,7 +84,6 @@ test('dragging handle 2 with real pointer events: frequency and gain follow the 
   assert.notEqual(await s.w(`document.querySelector('.p-face .fa-eq-kurve').getAttribute('d')`), kurve0, 'the curve moved');
   const text = await s.w(`(async () => { const { wertText } = await import('/production/inserts.js'); return [wertText('eq', 'b2/freq', ${w['b2/freq']}), wertText('eq', 'b2/gain', ${w['b2/gain']})]; })()`);
   for (const [i, n] of ['b2/freq', 'b2/gain'].entries()) {
-    assert.ok(await s.bis(async () => (await s.w(`document.querySelector('.p-ins-popover[data-insert="i1"] .p-ins-wert[data-param="${n}"]').textContent`)) === text[i]), `the ${n} row shows ${text[i]}`);
   }
   const batch = (await aend(s)).at(-1);
   assert.deepEqual(batch.befehle, ['insert_param_setzen', 'insert_param_setzen'], 'one batch of the same commands as the rows');
@@ -136,7 +138,7 @@ test('failure case: the EQ stage is removed while a drag is running: the face cl
   await s.b.maus('mousePressed', m.x, m.y);
   await s.b.maus('mouseMoved', m.x + 20, m.y - 10);
   assert.ok(await s.bis(async () => (await aend(s)).length >= 1), 'the drag wrote');
-  await s.w(`document.querySelector('.p-stufe[data-insert="i1"] .p-ins-weg').click()`);
+  await entferne(s);
   assert.ok(await s.bis(async () => (await s.w(`document.querySelectorAll('${FACE}').length`)) === 0, 500), 'the face is gone');
   const n = (await aend(s)).length;
   await s.b.maus('mouseMoved', m.x + 60, m.y - 30);

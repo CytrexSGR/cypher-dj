@@ -6,10 +6,10 @@
 /** The CSS for the mark of track `spurId` (null: none). The id is checked: only plain track ids like s12 go into the selector. Pure. */
 export function ctlMarkeStil(spurId) {
   if (typeof spurId !== 'string' || !/^[A-Za-z0-9_-]{1,40}$/.test(spurId)) return '';
-  const k = `.p-kopf[data-spur="${spurId}"]`;
-  return `${k} { box-shadow: inset 0 0 0 2px #ffd60a; }\n`
+  // the track head in the arrangement and the card of the track in the dock (the card sits in a positioned box, dock.css)
+  return [`.p-kopf[data-spur="${spurId}"]`, `[data-w="karte-spur"][data-spur-id="${spurId}"]`].map((k) => `${k} { box-shadow: inset 0 0 0 2px #ffd60a; }\n`
     + `${k}::after { content: "CTL"; position: absolute; top: 2px; right: 3px; font-size: 9px; font-weight: 800; letter-spacing: .06em; line-height: 1;`
-    + ` padding: 1px 3px; border-radius: 2px; background: #ffd60a; color: #000; pointer-events: none; }\n`;
+    + ` padding: 1px 3px; border-radius: 2px; background: #ffd60a; color: #000; pointer-events: none; }\n`).join('');
 }
 
 /** The track the mark goes on from a controller focus state ({ fokus: { spur_id }, plaetze: [{ folgen }] }), or null. Pure. */

@@ -1,0 +1,40 @@
+{
+ "schema": 1,
+ "name": "Short Hat",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "chip-rauschen",
+ "werte": {
+  "knob1": 0.9,
+  "knob2": 0.0,
+  "knob3": 0.5,
+  "knob4": 0.15,
+  "knob5": 1,
+  "knob6": 0.8
+ },
+ "beschreibung": {
+  "art": "drums",
+  "unterart": "hihat",
+  "charakter": [
+   "thin",
+   "bright",
+   "tight"
+  ],
+  "genre": [
+   "electro",
+   "breaks"
+  ],
+  "einsatz": [
+   "build",
+   "drop"
+  ],
+  "energie": 5,
+  "text": "Short-mode noise at a high clock with a very short decay."
+ },
+ "tags": [
+  "chip-rauschen"
+ ],
+ "notiz": "Built from the device document, not yet heard.",
+ "angelegt": "2026-11-19T00:00:00.000Z",
+ "geaendert": "2026-11-19T00:00:00.000Z"
+}

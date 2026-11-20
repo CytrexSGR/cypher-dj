@@ -4,6 +4,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MAX_SPUREN as SEITE, MAX_GRUPPEN as SEITE_GRUPPEN } from '../public/production/limits.js';
 import { MAX_SPUREN as SERVER, MAX_GRUPPEN as SERVER_GRUPPEN } from '../project/model.ts';
+import { MAX_HOST as SEITE_HOST } from '../public/production/limits.js';
+import { MAX_HOST as SERVER_HOST } from '../project/model.ts';
 import { FEHLER_TEXT } from '../public/production/production.js';
 import { GRUND_TEXT } from '../http/reasons.ts';
 
@@ -15,6 +17,11 @@ test('Seite und Server haben dieselbe Spurgrenze', () => {
 test('1.10 Seite und Server haben dieselbe Gruppengrenze', () => {
   assert.equal(SEITE_GRUPPEN, SERVER_GRUPPEN);
   assert.equal(SERVER_GRUPPEN, 16, 'nested groups task 1: MAX_GRUPPEN = 16 (was 8 in 1.10, F1: eigene Plätze neben den 32 Spuren)');
+});
+
+test('plugin host limit: page and server agree', () => {
+  assert.equal(SEITE_HOST, SERVER_HOST);
+  assert.equal(SERVER_HOST, 4);
 });
 
 test('Fehlertexte nennen die Grenze aus der Konstanten, nicht eine feste Zahl', () => {

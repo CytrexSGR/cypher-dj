@@ -1,0 +1,127 @@
+{
+ "schema": 1,
+ "name": "Diode Acid",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "synth-kraken",
+ "werte": {
+  "knob1": 0.0,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.7,
+  "knob5": 1.0,
+  "knob6": 0.0,
+  "knob7": 0.5,
+  "knob8": 0.57,
+  "knob9": 0.0,
+  "knob10": 0.0,
+  "knob11": 0.0,
+  "knob12": 0.66667,
+  "knob13": 0.0,
+  "knob14": 0.0,
+  "knob15": 0.0,
+  "knob16": 0.5915,
+  "knob17": 0.5915,
+  "knob18": 0.5,
+  "knob19": 0.5,
+  "knob20": 0.27778,
+  "knob21": 0.5,
+  "knob22": 0.5,
+  "knob23": 0.0,
+  "knob24": 0.5,
+  "knob25": 0.2,
+  "knob26": 0.6,
+  "knob27": 0.54021,
+  "knob28": 1.0,
+  "knob29": 0.32478,
+  "knob30": 0.78,
+  "knob31": 0.45,
+  "knob32": 0.85,
+  "knob33": 0.1,
+  "knob34": 0.15,
+  "knob35": 0.18896,
+  "knob36": 0.38431,
+  "knob37": 0.0,
+  "knob38": 0.45198,
+  "knob39": 0.16276,
+  "knob40": 0.53724,
+  "knob41": 0.6,
+  "knob42": 0.26862,
+  "knob43": 0.5,
+  "knob44": 1.0,
+  "knob45": 0.51659,
+  "knob46": 0.51659,
+  "knob47": 0.5,
+  "knob48": 1.0,
+  "knob49": 0.0,
+  "knob50": 0.48072,
+  "knob51": 0.6,
+  "knob52": 0.0,
+  "knob53": 0.06,
+  "knob54": 0.7735,
+  "knob55": 0.38889,
+  "knob56": 0.1875,
+  "knob57": 0.0625,
+  "knob58": 0.35,
+  "knob59": 0.3,
+  "knob60": 1.0
+ },
+ "stifte": [
+  [
+   0,
+   2,
+   1,
+   0.0289
+  ],
+  [
+   0,
+   2,
+   3,
+   0.05
+  ],
+  [
+   0,
+   10,
+   4,
+   0.2
+  ],
+  [
+   0,
+   12,
+   5,
+   0.1
+  ],
+  [
+   0,
+   13,
+   5,
+   0.1
+  ]
+ ],
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "acid",
+  "charakter": [
+   "aggressive",
+   "dirty",
+   "tight"
+  ],
+  "genre": [
+   "acid",
+   "techno"
+  ],
+  "einsatz": [
+   "drop",
+   "build"
+  ],
+  "energie": 4,
+  "text": "Squelching diode-ladder acid bass: one saw, high resonance, a fast decaying filter sweep and a short glide between notes."
+ },
+ "tags": [
+  "synth-kraken",
+  "semi-modular"
+ ],
+ "notiz": "Measured by render, not heard yet (2026-11-19).",
+ "angelegt": "2026-11-19T00:00:00.000Z",
+ "geaendert": "2026-11-19T00:00:00.000Z"
+}

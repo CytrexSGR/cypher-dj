@@ -464,6 +464,14 @@
       {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 32], "notiz": "the project track (its nr) that plays the note"},
       {"name": "ton", "typ": "i", "einheit": "note", "bereich": [0, 127], "notiz": "MIDI note number; a sampler cut plays slice i on note i"},
       {"name": "vel", "typ": "i", "einheit": "code", "bereich": [0, 127], "notiz": "velocity; 0 is the off of that note"}]},
+    {"adresse": "/k/arr/stift", "typen": ",hsiiiif", "abschnitt": "4.11", "richtung": "an_kern", "felder": [
+      {"name": "id", "typ": "h", "einheit": "kennung"},
+      {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
+      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 32], "notiz": "the project track (its nr) whose matrix block gets the pin"},
+      {"name": "satz", "typ": "i", "einheit": "code", "bereich": [0, 1], "notiz": "pin set: 0 = A, 1 = B"},
+      {"name": "zeile", "typ": "i", "einheit": "nummer", "bereich": [0, 15], "notiz": "matrix row = source"},
+      {"name": "spalte", "typ": "i", "einheit": "nummer", "bereich": [0, 15], "notiz": "matrix column = destination"},
+      {"name": "wert", "typ": "f", "einheit": "faktor", "bereich": [-1, 1], "notiz": "pin weight; 0 removes the pin"}]},
     {"adresse": "/k/rec/spur", "typen": ",hsiiiii", "abschnitt": "4.12", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},

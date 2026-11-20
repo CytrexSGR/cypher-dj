@@ -306,23 +306,25 @@ void Arrangement::auto_ueber_setzen(int i, int f, bool an, int64_t sample) {
   auto_ereignis_melden(i, f, an, sample);
 }
 
+// From here on `spur` of the override calls is an automation SLOT (slot_lane): a track index, or ARR_SPUREN + r for the fader lane of return r (the hand overrides a
+// return fader lane like a track fader lane). The OSC side (/k/arr/auto, /e/auto) stays at tracks 1..32: it never names a slot above ARR_SPUREN - 1.
 bool Arrangement::auto_lane_da(int spur, int feld) const {
-  return spur >= 0 && spur < ARR_SPUREN && feld >= 0 && feld < AUTO_FELDER && snap_ && feld_lane(snap_->spur[spur], feld);
+  return spur >= 0 && spur < ARR_AUTO_SLOTS && feld >= 0 && feld < AUTO_FELDER && snap_ && slot_lane(*snap_, spur, feld);
 }
 
 bool Arrangement::auto_kann_uebersteuern(int spur, int feld) const {
-  return spur >= 0 && spur < ARR_SPUREN && feld >= 0 && feld < AUTO_FELDER && status_ == ArrStatus::spielt && snap_ && feld_lane(snap_->spur[spur], feld) &&
+  return spur >= 0 && spur < ARR_AUTO_SLOTS && feld >= 0 && feld < AUTO_FELDER && status_ == ArrStatus::spielt && snap_ && slot_lane(*snap_, spur, feld) &&
          !auto_ueber_[spur][feld];
 }
 
 bool Arrangement::auto_uebersteuern(int spur, int feld, bool an, int64_t sample) {
-  if (spur < 0 || spur >= ARR_SPUREN || feld < 0 || feld >= AUTO_FELDER) return false;
+  if (spur < 0 || spur >= ARR_AUTO_SLOTS || feld < 0 || feld >= AUTO_FELDER) return false;
 #ifdef CYPHERDJ_MUTATION_ARR_AUTO_FREIGABE_IM_STOPP
   if (status_ != ArrStatus::spielt) return false;   // error case: the re-enable is refused while stopped as well
 #elif !defined(CYPHERDJ_MUTATION_ARR_AUTO_UEBER_IM_STOPP)
   if (an && status_ != ArrStatus::spielt) return false;   // D5: while the transport does not play, no override starts
 #endif
-  if (!snap_ || !feld_lane(snap_->spur[spur], feld)) return false;   // nothing to override
+  if (!snap_ || !slot_lane(*snap_, spur, feld)) return false;   // nothing to override
   if (auto_ueber_[spur][feld] == an) return false;
   if (!an && status_ != ArrStatus::spielt) {   // D6: re-enable while stopped just clears the state (nothing plays, no blend), like auto_alle_freigeben
     auto_ueber_loeschen(spur, feld, sample);
@@ -333,7 +335,7 @@ bool Arrangement::auto_uebersteuern(int spur, int feld, bool an, int64_t sample)
 }
 
 void Arrangement::auto_alle_freigeben(int64_t sample) {
-  for (int i = 0; i < ARR_SPUREN; ++i)
+  for (int i = 0; i < ARR_AUTO_SLOTS; ++i)
     for (int f = 0; f < AUTO_FELDER; ++f) {
       if (!auto_ueber_[i][f]) continue;
       if (status_ == ArrStatus::spielt) {
@@ -345,16 +347,17 @@ void Arrangement::auto_alle_freigeben(int64_t sample) {
 }
 
 float Arrangement::auto_letzter_wert(int spur, int feld) const {
-  return spur >= 0 && spur < ARR_SPUREN && feld >= 0 && feld < AUTO_FELDER ? auto_lane_v_[spur][feld] : 0.0f;
+  return spur >= 0 && spur < ARR_AUTO_SLOTS && feld >= 0 && feld < AUTO_FELDER ? auto_lane_v_[spur][feld] : 0.0f;
 }
 
 // D2 and Task-1 condition 1: the Stellwerk asks this for every applied hand step. True only for the FIRST step of an override start (auto_pickup_), never while the field
 // is overridden, so a relative encoder or a moving fader accumulates from the lane value instead of falling back to it at every step.
 bool Arrangement::auto_lane_wert(int regler, float& wert) {
   if (status_ != ArrStatus::spielt || !snap_ || regler < 0 || regler >= cypherdj::stellwerk::MAX_REGLER) return false;
-  const int sp = regler_spur_[regler], fe = regler_feld_[regler];
-  if (sp < 0 || sp >= ARR_SPUREN || fe < 0 || fe >= AUTO_FELDER || spur_regler_[sp][fe] != regler) return false;   // only spur/1..32/{fader,pan,mute,solo}
-  if (!feld_lane(snap_->spur[sp], fe)) return false;
+  const int streifen = regler_spur_[regler], fe = regler_feld_[regler];
+  const int sp = streifen >= ARR_RET0 && streifen < ARR_RET0 + ARR_RETURNS ? ARR_SPUREN + (streifen - ARR_RET0) : streifen;   // strip index -> automation slot
+  if (sp < 0 || sp >= ARR_AUTO_SLOTS || (sp >= ARR_SPUREN && streifen < ARR_RET0) || fe < 0 || fe >= AUTO_FELDER || spur_regler_[sp][fe] != regler) return false;   // only spur/1..32/{fader,pan,mute,solo} and ret/<r>/fader
+  if (!slot_lane(*snap_, sp, fe)) return false;
 #ifndef CYPHERDJ_MUTATION_ARR_AUTO_UEBER_PICKUP_IMMER
   if (auto_ueber_[sp][fe] || auto_pickup_[sp][fe] || !auto_war_[sp][fe]) return false;   // overridden, already picked up, or the lane has not played yet
   auto_pickup_[sp][fe] = true;
@@ -366,7 +369,7 @@ bool Arrangement::auto_lane_wert(int regler, float& wert) {
 // After a block: an override change inside it has passed, the old state is no longer needed.
 void Arrangement::auto_ueber_abschluss(int64_t s_ende) {
   if (auto_ueber_offen_ == 0) return;
-  for (int i = 0; i < ARR_SPUREN; ++i)
+  for (int i = 0; i < ARR_AUTO_SLOTS; ++i)
     for (int f = 0; f < AUTO_FELDER; ++f)
       if (auto_ueber_n_[i][f] > 0 && std::max(auto_ueber_s_[i][f], auto_ueber_n_[i][f] == 2 ? auto_ueber_s2_[i][f] : auto_ueber_s_[i][f]) < s_ende) {
         auto_ueber_alt_[i][f] = auto_ueber_[i][f];

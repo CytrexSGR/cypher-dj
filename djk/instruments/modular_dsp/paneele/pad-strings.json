@@ -1,0 +1,24 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "pad-strings"},
+  "title": "String Pad",
+  "akzent": "blau",
+  "layout": {"rows": [
+    ["filter", "fenv", "fx"]
+  ]},
+  "sections": [
+    { "id": "filter", "title": "FILTER", "cols": 3, "controls": [
+      {"id": "fk", "type": "filterkurve", "span": 3, "of": {"cutoff": "cutoff", "reso": "reso"}, "typen": [{"art": "lp", "pole": 4}]},
+      {"id": "cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "reso", "type": "knob", "label": "Resonance", "bind": {"param": "k2"}, "format": "percent", "default": 0.5}
+    ]},
+    { "id": "fenv", "title": "FILTER ENV", "cols": 3, "controls": [
+      {"id": "fhue", "type": "huelle", "span": 3, "label": "Filter envelope", "of": {"a": "fattack", "d": 0.6, "s": 0.7, "r": 0.6}},
+      {"id": "env", "type": "knob", "label": "Amount", "bind": {"param": "k3"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "fattack", "type": "knob", "label": "Attack", "bind": {"param": "k4"}, "format": "raw", "unit": "s", "default": 0.5, "wirkt": {"ueber": ["env", 0.02]}, "wirkt_text": "The filter envelope does nothing: turn up Amount"}
+    ]},
+    { "id": "fx", "title": "SPACE", "cols": 1, "controls": [
+      {"id": "hall", "type": "knob", "label": "Hall mix", "bind": {"param": "k5"}, "format": "percent", "default": 0.5}
+    ]}
+  ]
+}

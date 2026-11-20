@@ -249,11 +249,25 @@ export function leseSmf(roh: Uint8Array): SmfDatei {
 }
 
 // --- Writer (the file export of the workbench) ----------------------------------------------------------------------------
-// Format 1, 480 ticks per quarter note: a conductor track (name, tempo, time signature) and one track per part (name, notes on channel 1).
-// At the same tick a note-off comes before a note-on, so a note that ends where the next one of the same pitch starts stays two notes.
+// Format 1, 480 ticks per quarter note: a conductor track (name, tempo, time signature) and one track per part (name, notes on the channel of the part,
+// default 1). At the same tick a note-off comes before a note-on, so a note that ends where the next one of the same pitch starts stays two notes.
 export const SMF_TICKS = 480;
 export interface SmfSchreibNote { beat: number; laenge: number; ton: number; vel: number }
-export interface SmfSchreibTeil { name: string; noten: SmfSchreibNote[] }
+// bend: pitch bend in semitones (D21: range 12, RPN 0 once at tick 0 of a part with bend); pegel: factor 0..1 as controller 11 = round(factor * 127).
+// Both are written at their beat as given (the caller expands glides); a value equal to the one before it is left out.
+// kanal: the MIDI channel 0..15 of the part (default 0; channel 10 of the standard = 9 is the drum channel). Bend and controller 11 act on the whole
+// channel, so parts that bend must not share one. The bend range is 12 semitones (D21) and grows to the part's largest bend, at most SMF_BEND_MAX;
+// beyond that a bend is cut at the limit (`bendGeklemmt` counts them, the export reports them).
+export interface SmfSchreibTeil {
+  name: string; noten: SmfSchreibNote[]; bend?: { beat: number; st: number }[]; pegel?: { beat: number; faktor: number }[]; kanal?: number
+}
+export const SMF_BEND_BEREICH = 12;
+export const SMF_BEND_MAX = 24;
+/** The RPN 0 range written for a part: 12 semitones, or the next whole semitone above its largest bend, at most SMF_BEND_MAX. */
+export const bendBereich = (bend: readonly { st: number }[] | undefined): number =>
+  Math.min(SMF_BEND_MAX, Math.max(SMF_BEND_BEREICH, Math.ceil(Math.max(0, ...(bend ?? []).map((x) => Math.abs(x.st))) - 1e-9)));
+/** How many bend points of a part lie beyond what a receiver can take (more than SMF_BEND_MAX semitones from the centre). */
+export const bendGeklemmt = (bend: readonly { st: number }[] | undefined): number => (bend ?? []).filter((x) => Math.abs(x.st) > SMF_BEND_MAX + 1e-9).length;
 export interface SmfSchreibOpt { titel: string; tempo_bpm: number; taktart: [number, number]; teile: SmfSchreibTeil[] }
 
 const vlq = (n: number): number[] => {
@@ -277,16 +291,38 @@ export function schreibeSmf(o: SmfSchreibOpt): Uint8Array {
     0, 0xff, 0x2f, 0x00];
   const spuren: number[][] = [chunk(kopf)];
   for (const t of o.teile) {
-    const e: { tick: number; an: boolean; ton: number; vel: number }[] = [];
+    const kn = Math.min(15, Math.max(0, Math.trunc(t.kanal ?? 0)));
+    // kl: 0 controller or pitch bend, 1 note-off, 2 note-on (at one tick a controller comes first, then a note-off before a note-on); the sort is stable
+    const e: { tick: number; kl: number; an: boolean; ton: number; vel: number; roh?: number[] }[] = [];
     for (const n of t.noten) {
       const a = Math.round(n.beat * SMF_TICKS), z = Math.max(a + 1, Math.round((n.beat + n.laenge) * SMF_TICKS));
-      e.push({ tick: a, an: true, ton: n.ton, vel: n.vel }, { tick: z, an: false, ton: n.ton, vel: 0 });
+      e.push({ tick: a, kl: 2, an: true, ton: n.ton, vel: n.vel }, { tick: z, kl: 1, an: false, ton: n.ton, vel: 0 });
     }
-    e.sort((x, y) => x.tick - y.tick || Number(x.an) - Number(y.an) || x.ton - y.ton);
+    if (t.bend?.length) {
+      const bereich = bendBereich(t.bend);
+      for (const r of [[101, 0], [100, 0], [6, bereich], [38, 0]]) e.push({ tick: 0, kl: 0, an: false, ton: 0, vel: 0, roh: [0xb0 | kn, r[0], r[1]] });
+      let vor = 8192;
+      for (const x of [...t.bend].sort((p, q) => p.beat - q.beat)) {
+        const w = Math.min(16383, Math.max(0, Math.round(8192 + x.st / bereich * 8192)));
+        if (w === vor) continue;
+        vor = w;
+        e.push({ tick: Math.round(x.beat * SMF_TICKS), kl: 0, an: false, ton: 0, vel: 0, roh: [0xe0 | kn, w & 127, w >> 7] });
+      }
+    }
+    if (t.pegel?.length) {
+      let vor = 127;
+      for (const x of [...t.pegel].sort((p, q) => p.beat - q.beat)) {
+        const w = Math.min(127, Math.max(0, Math.round(x.faktor * 127)));
+        if (w === vor) continue;
+        vor = w;
+        e.push({ tick: Math.round(x.beat * SMF_TICKS), kl: 0, an: false, ton: 0, vel: 0, roh: [0xb0 | kn, 11, w] });
+      }
+    }
+    e.sort((x, y) => x.tick - y.tick || x.kl - y.kl || (x.kl === 0 ? 0 : x.ton - y.ton));
     const b = [...nameBytes(t.name)];
     let letzt = 0;
     for (const x of e) {
-      b.push(...vlq(x.tick - letzt), x.an ? 0x90 : 0x80, x.ton & 127, x.vel & 127);
+      b.push(...vlq(x.tick - letzt), ...(x.roh ?? [(x.an ? 0x90 : 0x80) | kn, x.ton & 127, x.vel & 127]));
       letzt = x.tick;
     }
     b.push(0, 0xff, 0x2f, 0x00);

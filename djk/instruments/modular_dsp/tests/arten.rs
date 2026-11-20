@@ -158,6 +158,28 @@ fn minimalgraph(art: &str) -> Option<String> {
         // type 55: both shifted signals of the saw summed, the shift on a constant; a forgotten reset of the all-pass memory or the phase shows
         "schieber" => um(r#",{"id":"p","art":"schieber","hz":170},{"id":"a","art":"add"}"#,
                          r#",{"von":"s.aus","nach":"p.x"},{"von":"p.auf","nach":"a.a"},{"von":"p.ab","nach":"a.b"},{"von":"a.aus","nach":"o.x"}"#),
+        // type 56: two slots on the probe file (the second looped, a fine tune, a level), the note picks the pitch and the trigger the voice;
+        // a forgotten reset of the head, the slot, the direction or the trigger memory shows as a different second run
+        "paula" => um(r#",{"id":"p","art":"paula","platz":2,"quellrate":12000,"bits":6,"plaetze":[{"datei":"probe.f32","grund":110,"rate":48000},{"datei":"probe.f32","grund":200,"rate":22050,"schleife":1,"s_von":1000,"s_laenge":3000,"pegel":0.8,"fein":-3}]}"#,
+                      r#",{"von":"n.hz","nach":"p.hz"},{"von":"n.trig","nach":"p.trig"},{"von":"p.l","nach":"o.l"},{"von":"p.r","nach":"o.r"}"#),
+        // type 57: the register clocked by the note frequency, as an amplitude on the saw; a forgotten reset of the register or the clock phase shows
+        "lfsr" => um(r#",{"id":"p","art":"lfsr","kurz":1},{"id":"m","art":"mul"}"#,
+                     r#",{"von":"n.hz","nach":"p.hz"},{"von":"s.aus","nach":"m.a"},{"von":"p.aus","nach":"m.b"},{"von":"m.aus","nach":"o.x"}"#),
+        // type 61: the note picks the pad index, which scales the saw; a pad table with a gap, the played notes land on different pads
+        "notenwahl" => um(r#",{"id":"p","art":"notenwahl","n1":36,"n2":-1,"n3":45,"n4":57},{"id":"m","art":"mul"}"#,
+                          r#",{"von":"n.hz","nach":"p.hz"},{"von":"s.aus","nach":"m.a"},{"von":"p.aus","nach":"m.b"},{"von":"m.aus","nach":"o.x"}"#),
+        // type 58: a cycling function generator (rise 20 ms, fall 60 ms, shaped) re-triggered by the note, amplitude of the saw, the held top
+        // and the end pulse mixed in; a forgotten reset of the level, the phase, the trigger memory or the end counter shows
+        "funktion" => um(r#",{"id":"p","art":"funktion","steigen":0.02,"fallen":0.06,"form":0.3,"zyklus":1,"tempo":0.5},{"id":"m","art":"mul"},{"id":"a","art":"add"}"#,
+                         r#",{"von":"n.trig","nach":"p.trig"},{"von":"s.aus","nach":"m.a"},{"von":"p.aus","nach":"m.b"},{"von":"m.aus","nach":"a.a"},{"von":"p.ende","nach":"a.b"},{"von":"p.steigt","nach":"a.c"},{"von":"a.aus","nach":"o.x"}"#),
+        // type 59: the saw through the gate in the low-pass mode with resonance, opened by a note trigger through a funktion; a forgotten
+        // reset of the vactrol level or the filter states shows as a different second run
+        "lpg" => um(r#",{"id":"p","art":"lpg","modus":0,"reso":0.5,"abkling":2},{"id":"f","art":"funktion","steigen":0.002,"fallen":0.4}"#,
+                    r#",{"von":"n.trig","nach":"f.trig"},{"von":"f.aus","nach":"p.cv"},{"von":"s.aus","nach":"p.x"},{"von":"p.aus","nach":"o.x"}"#),
+        // type 60: the saw through two pins of set A and B (morph from the note velocity) and a self patch a2 -> e2; a forgotten reset of
+        // the weight state or the list shows when the targets are not restored. Pins stay across the reset, the defaults are the same
+        "matrix" => um(&format!(r#",{{"id":"p","art":"matrix","zeilen":["z0","z1","z2","z3","z4","z5","z6","z7","z8","z9","z10","z11","z12","z13","z14","z15"],"spalten":["s0","s1","s2","s3","s4","s5","s6","s7","s8","s9","s10","s11","s12","s13","s14","s15"],"stifte":[[0,0,0,0.5],[1,0,0,-0.25],[0,0,1,0.4],[0,1,1,0.3]]}}"#),
+                       r#",{"von":"s.aus","nach":"p.e1"},{"von":"p.a2","nach":"p.e2"},{"von":"n.vel","nach":"p.morph"},{"von":"p.a1","nach":"o.x"}"#),
         // drift: the saw through a multiplier driven by the drift block, so the wander state and the per-voice offset are audible in the output
         "drift" => um(r#",{"id":"p","art":"drift","rate":3,"fest":0.5,"saat":5},{"id":"m","art":"mul"},{"id":"k","art":"mul","b":0.5},{"id":"a","art":"add","b":1.0}"#,
                       r#",{"von":"p.aus","nach":"k.a"},{"von":"k.aus","nach":"a.a"},{"von":"s.aus","nach":"m.a"},{"von":"a.aus","nach":"m.b"},{"von":"m.aus","nach":"o.x"}"#),
@@ -295,6 +317,23 @@ fn arten_nur_angehaengt_falter() {
     let i = ARTEN.iter().position(|a| a.art == "falter").expect("falter in ARTEN");
     assert!(i >= 47, "the falter block must sit behind the 47 entries that existed before it, found at {i}");
 }
+/// The funktion block is type 58 and the lpg block type 59, appended after lfsr.
+#[test]
+fn arten_nur_angehaengt_funktion_lpg() {
+    assert_eq!(ARTEN.iter().position(|a| a.art == "funktion"), Some(58), "funktion is type 58 and must not move");
+    assert_eq!(ARTEN.iter().position(|a| a.art == "lpg"), Some(59), "lpg is type 59 and must not move");
+}
+/// The matrix block is type 60, appended after lpg.
+#[test]
+fn arten_nur_angehaengt_matrix() {
+    assert_eq!(ARTEN.iter().position(|a| a.art == "matrix"), Some(60), "matrix is type 60 and must not move");
+}
+/// The paula block is type 56 and the lfsr block type 57, appended after schieber.
+#[test]
+fn arten_nur_angehaengt_paula_lfsr() {
+    assert_eq!(ARTEN.iter().position(|a| a.art == "paula"), Some(56), "paula is type 56 and must not move");
+    assert_eq!(ARTEN.iter().position(|a| a.art == "lfsr"), Some(57), "lfsr is type 57 and must not move");
+}
 /// The chaos block is type 54 and the schieber block type 55, appended after kreuz.
 #[test]
 fn arten_nur_angehaengt_chaos_schieber() {
@@ -365,5 +404,5 @@ fn arten_nur_angehaengt_sem() {
 #[test]
 fn arten_nur_angehaengt_wahl() {
     let i = ARTEN.iter().position(|a| a.art == "wahl").expect("wahl is in ARTEN");
-    assert!(i >= 38 && i + 11 >= ARTEN.len(), "wahl is one of the last entries of ARTEN (index {i} of {})", ARTEN.len());
+    assert!(i >= 38 && i + 24 >= ARTEN.len(), "wahl is one of the last entries of ARTEN (index {i} of {})", ARTEN.len());
 }

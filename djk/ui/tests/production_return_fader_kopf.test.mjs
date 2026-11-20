@@ -75,23 +75,23 @@ test('gruppe_lane_kopf_ohne_volume: a group lane head never offers Volume', opt,
 });
 
 // ---- T3: the marking on the mixer strip (real CSS) ----
-const marke = (s, id) => s.w(`(() => { const k = document.querySelector('[data-ret="${id}"]'), w = k.querySelector('.p-faderwert');
-  return { cls: k.classList.contains('auto'), content: getComputedStyle(w, '::before').content, text: w.textContent, breite: k.getBoundingClientRect().width,
-    scroll: k.scrollWidth, client: k.clientWidth, wertRechts: w.getBoundingClientRect().right, kopfRechts: k.getBoundingClientRect().right }; })()`);
+// The AUTO mark lives on the LEVEL knob of the return's dock card (the RETURNS panel is gone): class `auto` on the knob, "AUTO" before its value text.
+const marke = (s, id) => s.w(`(() => { const karte = document.querySelector('.p-dock [data-strang="${id}"]'), k = karte.querySelector('[data-w="karte-level"]'), w = k.querySelector('.w-dreh-wert');
+  return { cls: k.classList.contains('auto'), content: getComputedStyle(w, '::before').content, text: w.textContent,
+    wertRechts: w.getBoundingClientRect().right, karteRechts: karte.getBoundingClientRect().right }; })()`);
 
-test('return_lane_marke_css: the strip of a return with a fader lane shows AUTO before the value, a strip without lane does not', opt, async (t) => {
+test('return_lane_marke_css: the LEVEL knob of a return card with a fader lane shows AUTO before the value, a card without lane does not', opt, async (t) => {
   const s = await seite(t, projekt([{ befehl: 'auto_neu', strang_id: 'r1', ziel: 'fader' }]));
   const mit = await marke(s, 'r1'), ohne = await marke(s, 'r2');
   assert.equal(mit.cls, true);
-  assert.equal(mit.content, '"AUTO "');
+  assert.equal(mit.content, '"AUTO"');
   assert.equal(ohne.cls, false);
-  assert.notEqual(ohne.content, '"AUTO "', `without a lane the browser says ${ohne.content}`);
-  assert.equal(mit.text, '0.0', 'the value text itself is unchanged, AUTO is only the CSS prefix');
-  assert.ok(mit.scroll <= mit.client, `the prefix does not push anything out of the strip (${mit.scroll} > ${mit.client}, width ${mit.breite})`);
-  assert.ok(mit.wertRechts <= mit.kopfRechts + 0.5, 'the value stays inside the strip');
+  assert.notEqual(ohne.content, '"AUTO"', `without a lane the browser says ${ohne.content}`);
+  assert.equal(mit.text, ohne.text, 'the value text itself is unchanged, AUTO is only the CSS prefix');
+  assert.ok(mit.wertRechts <= mit.karteRechts + 0.5, 'the value stays inside the card');
 });
 
-test('return_lane_marke_folgt_dem_projekt: a lane created from the menu marks the strip at once, deleting it takes the marking away', opt, async (t) => {
+test('return_lane_marke_folgt_dem_projekt: a lane created from the menu marks the LEVEL knob at once, deleting it takes the marking away', opt, async (t) => {
   const s = await seite(t, projekt());
   assert.equal((await marke(s, 'r1')).cls, false);
   await klick(s, kopf('r1') + ' .p-lane');

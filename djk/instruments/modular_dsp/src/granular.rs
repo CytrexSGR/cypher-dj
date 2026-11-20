@@ -104,7 +104,7 @@ impl Default for Eingabe {
 /// What the grains of a node read: the wavetable, or the ring buffer (recorded input or noise). Shared by all voices.
 pub struct Material {
     quelle: usize,
-    tabelle: Option<Box<Tabelle>>,
+    tabelle: Option<std::sync::Arc<Tabelle>>,
     puffer: Box<[f32]>,
     maske: usize,
     /// usable length in samples (the requested `puffer` seconds, at most the ring length)
@@ -140,7 +140,7 @@ impl Material {
     pub fn neu(e: &Einstellung, tabelle: usize, puffer_s: f32, sr: f32) -> Material {
         let quelle = e.quelle.min(QUELLEN.len() - 1);
         let (tabelle, puffer, nutzbar) = if quelle == 0 {
-            (Some(Box::new(Tabelle::neu(tabelle))), vec![0.0f32; 1].into_boxed_slice(), 1.0)
+            (Some(crate::wavetable::tabelle_eingebaut(tabelle)), vec![0.0f32; 1].into_boxed_slice(), 1.0)
         } else {
             let n = (puffer_s.clamp(PUFFER_MIN_S, PUFFER_MAX_S) * sr).ceil().max(16.0) as usize;
             (None, vec![0.0f32; (n + 8).next_power_of_two()].into_boxed_slice(), n as f64)

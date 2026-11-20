@@ -29,8 +29,8 @@ export class AblageFehler extends Error {
   constructor(code: number, fehler: string, detail = '') { super(detail ? `${fehler}: ${detail}` : fehler); this.code = code; this.fehler = fehler; }
 }
 
-// text: englisch (6.34); werkbank: the project is a workbench module
-export interface ProjektEintrag { slug: string; name: string; geaendert: string; fehler?: string; text?: string; werkbank?: true }
+// text: englisch (6.34); werkbank: the project is a workbench module; tracker: it is a tracker module (marker `tracker`, never together with werkbank)
+export interface ProjektEintrag { slug: string; name: string; geaendert: string; fehler?: string; text?: string; werkbank?: true; tracker?: true }
 
 // Slug wie bei den Sammlungen; ein Name ohne Buchstaben und Ziffern heißt „projekt" (nicht „set")
 export function projektSlug(name: string): string {
@@ -120,9 +120,10 @@ export class Projekte {
       try { st = fs.statSync(p); } catch { continue; }
       const geaendert = st.mtime.toISOString();
       try {
-        const j = JSON.parse(fs.readFileSync(p, 'utf8')) as { name?: unknown; werkbank?: unknown };
+        const j = JSON.parse(fs.readFileSync(p, 'utf8')) as { name?: unknown; werkbank?: unknown; tracker?: unknown };
         if (typeof j?.name !== 'string') throw new Error('name');
-        aus.push({ slug: d.name, name: j.name, geaendert, ...(j.werkbank !== undefined ? { werkbank: true as const } : {}) });
+        aus.push({ slug: d.name, name: j.name, geaendert, ...(j.werkbank !== undefined ? { werkbank: true as const } : {}),
+          ...(j.tracker !== undefined ? { tracker: true as const } : {}) });
       } catch { aus.push({ slug: d.name, name: d.name, geaendert, fehler: 'json_kaputt', text: grundText('json_kaputt') }); }
     }
     return aus;
@@ -139,9 +140,9 @@ export class Projekte {
     return g.projekt;
   }
 
-  // werkbank: a loop workbench module (stage 1), never together with live.
+  // werkbank: a loop workbench module (stage 1), never together with live. tracker: a tracker project, the marker {schema: 1} (never with live or werkbank).
   // live: the live container (plan live-module): flag set, loop region on over beats 0..64. Without it the project is exactly what it was before.
-  lege(name: string, opt: { live?: true; werkbank?: true } = {}): { slug: string; projekt: Projekt } {
+  lege(name: string, opt: { live?: true; werkbank?: true; tracker?: true } = {}): { slug: string; projekt: Projekt } {
     const n = typeof name === 'string' ? name.trim() : '';
     if (n.length < 1 || n.length > 80) throw new AblageFehler(400, 'name_ungueltig');
     const basis = projektSlug(n);
@@ -156,6 +157,7 @@ export class Projekte {
     if (opt.live) { projekt.live = true; projekt.loop = { an: true, von_beat: 0, bis_beat: 64 }; }
     // workbench module: marker, loop over 4 bars
     if (opt.werkbank) { projekt.werkbank = { schema: 1 }; projekt.loop = { an: true, von_beat: 0, bis_beat: 16 }; }
+    if (opt.tracker) projekt.tracker = { schema: 1 };
     this.schreibe(slug, projekt);
     fs.writeFileSync(path.join(this.ordner(slug), 'undo.jsonl'), '', { flag: 'wx' });
     fsyncVerzeichnis(this.ordner(slug)); fsyncVerzeichnis(this.wurzel);

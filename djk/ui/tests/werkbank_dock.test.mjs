@@ -9,7 +9,8 @@ import { installiere, attrappe } from './helpers/pages_mock.mjs';
 
 installiere();
 const { bindeWerkbank } = await import('../public/werkbank/werkbank.js');
-const { frontKnoepfe, sendeVon } = await import('../public/werkbank/dock.js');
+const { frontKnoepfe } = await import('../public/dock/blocks.js');
+const { sendeVon } = await import('../public/werkbank/dock.js');
 const { offenesFace, schliesseFace } = await import('../public/face/frame.js');
 
 const PANELE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'instruments', 'modular_dsp', 'paneele');

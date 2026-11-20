@@ -1,0 +1,6 @@
+{"schema":1,"name":"saite","modell":"lc3","art":"instrument","graph":"saite",
+"eintraege":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2}],
+"seiten":{"main":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2}]},
+"programme":[
+{"name":"STRING","seite":"main",
+"eintraege":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2}]}]}

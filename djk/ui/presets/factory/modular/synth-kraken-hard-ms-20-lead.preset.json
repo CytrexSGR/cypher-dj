@@ -1,0 +1,151 @@
+{
+ "schema": 1,
+ "name": "Hard MS-20 Lead",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "synth-kraken",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.775,
+  "knob5": 0.55,
+  "knob6": 0.0,
+  "knob7": 0.5,
+  "knob8": 0.62,
+  "knob9": 0.5,
+  "knob10": 0.05,
+  "knob11": 0.0,
+  "knob12": 0.59722,
+  "knob13": 0.0,
+  "knob14": 0.0,
+  "knob15": 0.0,
+  "knob16": 0.45537,
+  "knob17": 0.45537,
+  "knob18": 0.5,
+  "knob19": 0.5,
+  "knob20": 0.27778,
+  "knob21": 0.5,
+  "knob22": 0.5,
+  "knob23": 0.0,
+  "knob24": 0.5,
+  "knob25": 0.2,
+  "knob26": 0.6,
+  "knob27": 0.54021,
+  "knob28": 0.66667,
+  "knob29": 0.68336,
+  "knob30": 0.62,
+  "knob31": 0.5,
+  "knob32": 0.65,
+  "knob33": 0.4,
+  "knob34": 0.15,
+  "knob35": 0.18896,
+  "knob36": 0.53724,
+  "knob37": 0.3,
+  "knob38": 0.45198,
+  "knob39": 0.18896,
+  "knob40": 0.65293,
+  "knob41": 0.85,
+  "knob42": 0.42155,
+  "knob43": 0.5,
+  "knob44": 1.0,
+  "knob45": 0.51659,
+  "knob46": 0.51659,
+  "knob47": 0.5,
+  "knob48": 1.0,
+  "knob49": 0.0,
+  "knob50": 0.48072,
+  "knob51": 0.6,
+  "knob52": 0.0,
+  "knob53": 0.1,
+  "knob54": 0.73644,
+  "knob55": 0.38889,
+  "knob56": 0.225,
+  "knob57": 0.15,
+  "knob58": 0.0,
+  "knob59": 0.3,
+  "knob60": 0.69444
+ },
+ "stifte": [
+  [
+   0,
+   2,
+   0,
+   0.1443
+  ],
+  [
+   0,
+   2,
+   1,
+   0.0577
+  ],
+  [
+   0,
+   2,
+   3,
+   0.05
+  ],
+  [
+   0,
+   10,
+   0,
+   0.015
+  ],
+  [
+   0,
+   10,
+   1,
+   0.015
+  ],
+  [
+   0,
+   10,
+   2,
+   0.015
+  ],
+  [
+   0,
+   10,
+   4,
+   0.2
+  ],
+  [
+   0,
+   12,
+   5,
+   0.1
+  ],
+  [
+   0,
+   13,
+   5,
+   0.1
+  ]
+ ],
+ "beschreibung": {
+  "art": "lead",
+  "unterart": "mono",
+  "charakter": [
+   "bright",
+   "aggressive",
+   "thick"
+  ],
+  "genre": [
+   "techno",
+   "trance"
+  ],
+  "einsatz": [
+   "drop",
+   "build"
+  ],
+  "energie": 5,
+  "text": "A hard, biting lead: pulse and saw bent a little by the sine modulator, pushed into the MS-20 filter at high resonance."
+ },
+ "tags": [
+  "synth-kraken",
+  "semi-modular"
+ ],
+ "notiz": "Measured by render, not heard yet (2026-11-19).",
+ "angelegt": "2026-11-19T00:00:00.000Z",
+ "geaendert": "2026-11-19T00:00:00.000Z"
+}

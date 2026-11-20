@@ -2,6 +2,7 @@
 // verschiedene Buchstaben: CYPHERDJ_TEST_INSTANZ=g node --test … . i ist die Prüfinstanz der Browser-Proben, also meiden.
 import fs from 'node:fs';
 import { nimmSperre, SperreBelegt } from '../../lock.ts';
+import './no_keepalive.mjs';   // no pooled keep-alive socket may outlive a test server on the fixed port (ECONNRESET flake)
 const roh = process.env.CYPHERDJ_TEST_INSTANZ ?? 'h';
 if (!/^[a-i]$/.test(roh)) throw new Error(`CYPHERDJ_TEST_INSTANZ=${roh}: erlaubt sind a bis i`);
 export const TEST_INSTANZ = roh;

@@ -3,10 +3,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { posVonDb, dbVonPos, ANKER, reglerVonDb, dbVonRegler, REGLER_MAX, REGLER_SCHRITT, tasteMerke, tasteWert } from '../public/production/fader_curve.js';
 import { wertZuY, yZuWert } from '../public/production/lanes.js';
-import fs from 'node:fs';
 import { LaneGeste } from '../public/production/lanes_operation.js';
 import { faderWert } from '../public/production/track_heads.js';
-const importVon = (datei, vor = './') => new RegExp(`from '${(vor + datei).replace(/[.]/g, '\\.')}'`);   // the file name stays a plain literal so the export's file renaming rewrites it too (a regex literal escapes the dot and escapes the rewrite)
 
 test('anchors are exact in both directions', () => {
   const soll = [[1, 6], [0.85, 0], [0.72, -6], [0.6, -12], [0.4, -24], [0.2, -40], [0.05, -60], [0, -200]];
@@ -105,10 +103,4 @@ test('keyboard: one press moves the stored dB by at least one rounding step in i
   assert.ok(tot > 200);
   // negative control: no key press (a mouse move) is plain dbVonRegler
   const m = { value: '500' }; assert.equal(tasteWert(m), -18);
-});
-
-test('the production master template uses the slider constants of fader_curve.js (no hard-coded 0/1000/5)', () => {
-  const src = fs.readFileSync(new URL('../public/production/production.js', import.meta.url), 'utf8');
-  assert.match(src, /data-p="pm-fader" type="range" min="0" max="\$\{REGLER_MAX\}" step="\$\{REGLER_SCHRITT\}"/);
-  assert.match(src, /import \{ REGLER_MAX, REGLER_SCHRITT \} /); assert.match(src, importVon('fader_curve.js'));
 });

@@ -1,0 +1,4 @@
+/* Live dock: the loop automation window of L1 and L2 (automation.js); the editor rules are in style.css (.live-auto). */
+#live-fenster .live-auto { width: min(720px, 90vw); font-size: 11px; }
+#live-fenster .live-auto .bildtitel { color: var(--dim); font-size: 10px; letter-spacing: .08em; }
+#live-fenster .live-auto svg { width: 100%; background: rgba(255, 255, 255, .03); border: 1px solid var(--line); border-radius: 6px; }

@@ -143,17 +143,17 @@ test('drop builders: full chain and empty pool refuse with text; an instrument a
 });
 
 // ---- T6.4 drop wiring (storage.js) with stand-in elements: no browser, the handlers are called directly ----
-test('drop wiring: a device dropped on the arrangement sends one write; an effect on an INSERTS strip row too; refusals only show their text', async () => {
+test('drop wiring: a device dropped on the arrangement sends one write; refusals only show their text', async () => {
   const { bindeAblage } = await import('../public/production/storage.js');
   const { GERAET_TYP: TYP, ZIEH_TYP } = await import('../public/production/drag.js');
   const el = () => ({ h: {}, addEventListener(n, f) { this.h[n] = f; } });
-  const ueber = el(), liste = el();
+  const ueber = el();
   const alt = globalThis.document;
   globalThis.document = { querySelector: () => null };
   try {
     const gesendet = [], gemeldet = [];
     const p = projekt();
-    const ctx = { st: { projekt: p, sichtbar: true }, $: (n) => ({ ueber, 'inserts-liste': liste })[n], stoebern: () => null, beimSichtwechsel: [],
+    const ctx = { st: { projekt: p, sichtbar: true }, $: (n) => ({ ueber })[n], stoebern: () => null, beimSichtwechsel: [],
       zeilen: () => [{ art: 'spur', spur: 0, y: 0, h: 40 }, { art: 'spur', spur: 1, y: 40, h: 40 }],
       aendere: (label, befehle) => gesendet.push([label, befehle]), aendereAus: () => {}, melde: (t, f) => gemeldet.push([t, f]) };
     bindeAblage(ctx);
@@ -168,20 +168,6 @@ test('drop wiring: a device dropped on the arrangement sends one write; an effec
     ueber.h.drop(ev(TYP, geraetNutzlast(E('hall'))));
     assert.deepEqual(gesendet.map(([l, b]) => [l, b[0].befehl, b[0].strang_id ?? null]), [['Add RB-338 track', 'spur_neu', null], ['Add Compressor to Bass', 'insert_setzen', 's2'], ['Add EQ to Bass', 'insert_setzen', 's2']]);
     assert.deepEqual(gemeldet, [['the return hall lives on returns', true]], 'only the inactive kind (hall) is refused with its reason');
-    // a strip row of the INSERTS block (group, return, master rows too)
-    const zeile = { dataset: { strang: 'master' } };
-    const auf = ev(TYP, geraetNutzlast(E('komp')), { target: { closest: (s) => (s === '.p-kette[data-strang]' ? zeile : null) } });
-    liste.h.dragover(auf);
-    assert.equal(auf.verhindert, true);
-    liste.h.drop(auf);
-    assert.deepEqual(gesendet.at(-1)[1], [{ befehl: 'insert_setzen', strang_id: 'master', pos: 0, art: 'komp' }]);
-    liste.h.drop(ev(TYP, geraetNutzlast(E('rb338')), { target: { closest: () => zeile } }));
-    assert.equal(gesendet.length, 4, 'an instrument on a strip row sends nothing');
-    assert.equal(gemeldet.at(-1)[0], 'Drop instruments on the arrangement');
-    // negative control: a clip drag over a strip row is not taken
-    const clip = ev(ZIEH_TYP, { sha: 'a'.repeat(64), dauer_s: 1 }, { target: { closest: () => zeile } });
-    liste.h.dragover(clip);
-    assert.equal(clip.verhindert, undefined);
   } finally { globalThis.document = alt; }
 });
 
@@ -364,17 +350,17 @@ test('D28 wendePresetAn: refusals without an offer (latency on a pattern, instru
 });
 
 // ---- T7.1/T7.2 drop wiring (storage.js) with stand-in elements ----
-test('T7.2 drop wiring: a preset on a track row, a stage or a strip row asks the server for the plan and writes once; refusals only show text', async () => {
+test('T7.2 drop wiring: a preset on a track row asks the server for the plan and writes once; refusals only show text', async () => {
   const { bindeAblage } = await import('../public/production/storage.js');
   const { PRESET_TYP } = await import(PZ);
   const el = () => ({ h: {}, addEventListener(n, f) { this.h[n] = f; } });
-  const ueber = el(), liste = el();
+  const ueber = el();
   const alt = globalThis.document;
   globalThis.document = { querySelector: () => null };
   try {
     const log = [];
     const p = presetProjekt();
-    const ctx = { st: { projekt: p, sichtbar: true }, $: (n) => ({ ueber, 'inserts-liste': liste })[n], stoebern: () => null, beimSichtwechsel: [],
+    const ctx = { st: { projekt: p, sichtbar: true }, $: (n) => ({ ueber })[n], stoebern: () => null, beimSichtwechsel: [],
       zeilen: () => [0, 1, 2, 3].map((i) => ({ art: 'spur', spur: i, y: i * 40, h: 40 })),
       holeJson: async (weg, k) => { log.push(['post', weg, k]); return { status: 200, j: { weg: 'proj', befehle: [{ befehl: 'insert_werte_setzen', insert_id: 'i1', werte: {}, preset: k.id }], label: 'Preset X', uebersprungen: [] } }; },
       aendere: async (l, b) => { log.push(['aendere', l, b[0].befehl]); return true; }, aendereAus: () => {}, melde: (t, f) => log.push(['melde', t, f]) };
@@ -402,29 +388,69 @@ test('T7.2 drop wiring: a preset on a track row, a stage or a strip row asks the
     ueber.h.drop(ev(nutzlast('gate'), { offsetY: 45 }));
     await new Promise((r) => setImmediate(r));
     assert.deepEqual(log.splice(0).map((x) => x[0]), ['melde', 'melde'], 'no row and a DJ-channel device: reasons only');
-    // INSERTS block: a stage, a strip row
-    const stufe = { dataset: { insert: 'i2' } }, zeile = { dataset: { strang: 'master' } };
-    const auf = (n, stufeEl) => ev(n, { target: { closest: (s) => (s === '.p-stufe[data-insert]' ? stufeEl : s === '.p-kette[data-strang]' ? zeile : null) } });
-    const dstufe = auf(nutzlast('komp'), stufe);
-    liste.h.dragover(dstufe);
-    assert.equal(dstufe.verhindert, true);
-    liste.h.drop(dstufe);
+  } finally { globalThis.document = alt; }
+});
+
+// ---- task 13: the dock cards and chips take the same drops as the INSERTS strip rows ----
+test('task 13 drop wiring on the dock: a device, plugin or preset on a card or chip is taken like a drop on the arrangement; a Hall chip takes no preset', async () => {
+  const { bindeAblage } = await import('../public/production/storage.js');
+  const { GERAET_TYP: TYP, ZIEH_TYP } = await import('../public/production/drag.js');
+  const { PRESET_TYP } = await import(PZ);
+  const el = () => ({ h: {}, addEventListener(n, f) { this.h[n] = f; } });
+  const ueber = el(), dock = el();
+  const alt = globalThis.document;
+  globalThis.document = { querySelector: () => null };
+  try {
+    const log = [];
+    const p = presetProjekt();
+    const ctx = { st: { projekt: p, sichtbar: true }, $: (n) => ({ ueber, dock })[n], stoebern: () => null, beimSichtwechsel: [],
+      zeilen: () => [],
+      holeJson: async (weg, k) => { log.push(['post', weg, k]); return { status: 200, j: { weg: 'proj', befehle: [{ befehl: 'insert_werte_setzen', insert_id: 'i1', werte: {}, preset: k.id }], label: 'Preset X', uebersprungen: [] } }; },
+      aendere: async (l, b) => { log.push(['aendere', l, b[0].befehl, b[0].strang_id ?? null, b[0].pos ?? null]); return true; }, aendereAus: () => {}, melde: (t, f) => log.push(['melde', t, f]) };
+    bindeAblage(ctx);
+    const karte = { dataset: { strang: 'master' } };
+    const chip = { dataset: { teil: 'i2' } };
+    const hall = { dataset: { teil: 'hall' } };
+    const ziel = (chipEl) => ({ closest: (s) => (s === '[data-strang]' ? karte : s === '[data-w="karte-teil"]' ? chipEl : null) });
+    const dt = (typ, n) => ({ types: [typ], getData: (t) => (t === typ ? JSON.stringify(n) : ''), dropEffect: '' });
+    const ev = (typ, n, chipEl = null) => ({ dataTransfer: dt(typ, n), target: ziel(chipEl), preventDefault() { this.verhindert = true; } });
+    const nutzlast = (g, slug = 'x') => ({ id: `werk:${g}/${slug}`, geraet: g, name: slug });
+    // an effect device on a card
+    const auf = ev(TYP, geraetNutzlast(E('komp')));
+    dock.h.dragover(auf);
+    assert.equal(auf.verhindert, true);
+    dock.h.drop(auf);
+    assert.deepEqual(log.splice(0), [['aendere', 'Add Compressor to Master', 'insert_setzen', 'master', 1]]);
+    // an instrument on a card: only the reason
+    dock.h.drop(ev(TYP, geraetNutzlast(E('rb338'))));
+    assert.deepEqual(log.splice(0), [['melde', 'Drop instruments on the arrangement', true]]);
+    // a plugin on a card
+    dock.h.drop(ev(TYP, { art: 'host', plugin_id: 'pl1', titel: 'Plug' }));
+    assert.deepEqual(log.splice(0), [['aendere', 'Add Plug to Master', 'insert_setzen', 'master', 1]]);
+    // a preset on a chip targets that stage, on the card it targets a new stage
+    dock.h.drop(ev(PRESET_TYP, nutzlast('komp'), chip));
     await new Promise((r) => setImmediate(r));
     assert.deepEqual(log.splice(0)[0], ['post', '/presets/anwenden', { id: 'werk:komp/x', ziel: { art: 'insert', insert_id: 'i2' } }]);
-    liste.h.drop(auf(nutzlast('komp'), null));
+    dock.h.drop(ev(PRESET_TYP, nutzlast('komp')));
     await new Promise((r) => setImmediate(r));
     assert.deepEqual(log.splice(0)[0], ['post', '/presets/anwenden', { id: 'werk:komp/x', ziel: { art: 'insert_neu', strang_id: 'master' } }]);
-    liste.h.drop(auf(nutzlast('eq'), stufe));
+    // the Hall chip takes no preset
+    dock.h.drop(ev(PRESET_TYP, nutzlast('hall'), hall));
     await new Promise((r) => setImmediate(r));
-    assert.deepEqual(log.splice(0), [['melde', 'This preset belongs to another device than the target', true]], 'an eq preset on a compressor stage is refused before any request');
-    // negative control: a clip drag over the stage is not taken
-    const clip = ev({ sha: 'a'.repeat(64) }); clip.dataTransfer.types = ['application/x-djk-clip'];
-    const klar = { ...clip, target: { closest: () => zeile } };
-    liste.h.dragover(klar);
-    assert.equal(klar.verhindert, undefined, 'a clip over a strip row is not accepted');
-    const preset = auf(nutzlast('komp'), null);
-    liste.h.dragover(preset);
-    assert.equal(preset.verhindert, true, 'positive control: the same event shape with a preset is accepted');
+    assert.deepEqual(log.splice(0), [['melde', 'Drop the preset on an insert stage or on the card', true]]);
+    // an EQ preset on a compressor chip is refused before any request
+    dock.h.drop(ev(PRESET_TYP, nutzlast('eq'), chip));
+    await new Promise((r) => setImmediate(r));
+    assert.deepEqual(log.splice(0), [['melde', 'This preset belongs to another device than the target', true]]);
+    // negative controls: a clip drag is not taken; a target outside any card is not taken
+    const clip = ev(ZIEH_TYP, { sha: 'a'.repeat(64) });
+    dock.h.dragover(clip);
+    assert.equal(clip.verhindert, undefined);
+    const nirgends = { ...ev(TYP, geraetNutzlast(E('komp'))), target: { closest: () => null } };
+    dock.h.dragover(nirgends);
+    assert.equal(nirgends.verhindert, undefined);
+    dock.h.drop(nirgends);
+    assert.deepEqual(log, []);
   } finally { globalThis.document = alt; }
 });
 

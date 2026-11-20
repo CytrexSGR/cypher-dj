@@ -1,0 +1,6 @@
+{"schema":1,"name":"formant-neuro-bass","modell":"lc3","art":"instrument","graph":"formant-neuro-bass",
+"eintraege":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2},{"regler":"Enc 3","knopf":3}],
+"seiten":{"main":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2},{"regler":"Enc 3","knopf":3}]},
+"programme":[
+{"name":"VOWEL LFO \u00b7 FORMANT FILTER","seite":"main",
+"eintraege":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2},{"regler":"Enc 3","knopf":3}]}]}

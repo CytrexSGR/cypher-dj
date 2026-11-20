@@ -4,7 +4,7 @@
 // Shift + left / right = the bank (8 tracks), Shift + up / down = the track in front (the controller focus, the synths follow it).
 // Faders, mute and solo go through the kern (pult.json, channel 16, rows spur/<nr>/* and pm/fader; the hand's write-back stores them in the project like a
 // mouse move). This Bereich keeps what the bridge needs to know and cannot measure itself:
-//   POST /controller/ansicht {ansicht}  the main window tells the view it shows (dj, studio, produktion, werkbank)
+//   POST /controller/ansicht {ansicht}  the main window tells the view it shows (dj, studio, produktion, werkbank, tracker)
 //   GET  /controller/pult               { produktion, ansicht, bank, banken, laeuft, spalten: 8 x ({nr, id, name, mute, solo, arm} | null), spuren }
 //   POST /controller/pult/bank {schritt | bank}
 //   POST /controller/pult/arm {nr}      toggles the arm of track <nr> (project command, label "Arm <name>" like the track head)
@@ -20,7 +20,7 @@ import type { ZurueckZugang } from './zurueck.ts';
 
 export const BANK_BREITE = 8;
 export const SPUR_ZEILEN = 32;   // the kern has spur/<n>/* rows for n = 1..32 (SPUR_REGLER_SPUREN): tracks beyond have no APC column
-const ANSICHT = /^[a-z]{1,16}$/;
+const ANSICHT = /^(dj|studio|produktion|werkbank|tracker)$/;
 
 export interface PultSpalte { nr: number; id: string; name: string; mute: boolean; solo: boolean; arm: boolean }
 
@@ -66,7 +66,7 @@ export function pultBereich(ctx: BereichKontext, opt: { zugang?: ZurueckZugang; 
     routen: () => [
       { methode: 'GET', pfad: '/controller/pult', schutz: 'offen', handler: (_q: http.IncomingMessage, a: http.ServerResponse) => json(a, 200, lage()) },
       post('/controller/ansicht', (d, a) => {
-        if (typeof d.ansicht !== 'string' || !ANSICHT.test(d.ansicht)) { fehler(a, 400, 'argument_ungueltig', 'ansicht: dj, studio, produktion or werkbank'); return; }
+        if (typeof d.ansicht !== 'string' || !ANSICHT.test(d.ansicht)) { fehler(a, 400, 'argument_ungueltig', 'ansicht: dj, studio, produktion, werkbank or tracker'); return; }
         const neu = d.ansicht !== ansicht;
         ansicht = d.ansicht;
         if (neu) melde();

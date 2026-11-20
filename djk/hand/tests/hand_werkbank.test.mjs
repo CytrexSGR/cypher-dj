@@ -28,7 +28,7 @@ test('proj_neu schema: werkbank is a boolean, vorlage an enum; the description s
   const { c } = await verbinde(t);
   const x = (await c.listTools()).tools.find((y) => y.name === 'proj_neu');
   assert.equal(x.inputSchema.properties.werkbank.type, 'boolean');
-  assert.deepEqual(x.inputSchema.properties.vorlage.enum, ['techno-130-start']);
+  assert.deepEqual(x.inputSchema.properties.vorlage.enum, ['techno-130-start', '8bit-4kanal', 'chip']);
   assert.deepEqual(x.inputSchema.required, ['name']);
   assert.match(x.description, /workbench module/i);
   assert.match(x.description, /vorlage needs werkbank/i);

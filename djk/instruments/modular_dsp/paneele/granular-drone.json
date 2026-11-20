@@ -16,7 +16,7 @@
     { "id": "grain", "title": "GRAINS", "cols": 4, "controls": [
       {"id": "pos", "type": "knob", "label": "Position", "span": 2, "bind": {"param": "k1"}, "format": "percent", "default": 0.5},
       {"id": "dens", "type": "knob", "label": "Density", "span": 2, "bind": {"param": "k2"}, "format": "raw", "unit": "/s", "default": 0.5},
-      {"id": "pitch", "type": "knob", "label": "Pitch", "span": 2, "bind": {"param": "k3"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "pitch", "type": "knob", "label": "Pitch", "span": 2, "bind": {"param": "k3"}, "format": "raw", "unit": "st", "default": 0.5, "scale": {"labels": ["-12", "0", "+12"]}},
       {"id": "size", "type": "knob", "label": "Grain size", "span": 2, "bind": {"param": "k6"}, "format": "ms", "default": 0.5}
     ]},
     { "id": "tone", "title": "TONE", "cols": 2, "controls": [

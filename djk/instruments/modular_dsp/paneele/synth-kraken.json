@@ -1,0 +1,1087 @@
+{
+ "format": "cypherdj-panel/2",
+ "geraet": {
+  "art": "bk",
+  "graph": "synth-kraken"
+ },
+ "title": "Kraken",
+ "akzent": "tuerkis",
+ "pages": [
+  {
+   "id": "rack",
+   "title": "Cabinet",
+   "all": true
+  },
+  {
+   "id": "east",
+   "title": "East"
+  },
+  {
+   "id": "west",
+   "title": "West"
+  },
+  {
+   "id": "mod",
+   "title": "Mod"
+  },
+  {
+   "id": "patch",
+   "title": "Patch"
+  }
+ ],
+ "layout": {
+  "rows": [
+   [
+    "vco1",
+    "vco2",
+    "ringnoise",
+    "vco3"
+   ],
+   [
+    "west",
+    "gate",
+    "route",
+    "filter"
+   ],
+   [
+    "env1",
+    "env2",
+    "func1",
+    "func2",
+    "chaos"
+   ],
+   [
+    "feedback",
+    "fx"
+   ],
+   [
+    "feld",
+    "morph",
+    "master"
+   ]
+  ]
+ },
+ "sections": [
+  {
+   "id": "vco1",
+   "title": "VCO 1",
+   "cols": 4,
+   "page": "east",
+   "controls": [
+    {
+     "id": "c1",
+     "type": "selector",
+     "label": "VCO1 Wave",
+     "bind": {
+      "param": "k1"
+     },
+     "options": [
+      "Saw",
+      "Pulse",
+      "Tri"
+     ],
+     "default": 1,
+     "span": 4
+    },
+    {
+     "id": "c2",
+     "type": "knob",
+     "label": "VCO1 Pitch",
+     "bind": {
+      "param": "k2"
+     },
+     "format": "raw",
+     "default": 0.5,
+     "unit": "st"
+    },
+    {
+     "id": "c3",
+     "type": "knob",
+     "label": "VCO1 Fine",
+     "bind": {
+      "param": "k3"
+     },
+     "format": "raw",
+     "default": 0.5,
+     "unit": "ct"
+    },
+    {
+     "id": "c4",
+     "type": "knob",
+     "label": "VCO1 PW",
+     "bind": {
+      "param": "k4"
+     },
+     "format": "percent",
+     "default": 0.7
+    },
+    {
+     "id": "c5",
+     "type": "knob",
+     "label": "VCO1 Level",
+     "bind": {
+      "param": "k5"
+     },
+     "format": "percent",
+     "default": 0.6
+    }
+   ]
+  },
+  {
+   "id": "vco2",
+   "title": "VCO 2",
+   "cols": 3,
+   "page": "east",
+   "controls": [
+    {
+     "id": "c6",
+     "type": "selector",
+     "label": "VCO2 Wave",
+     "bind": {
+      "param": "k6"
+     },
+     "options": [
+      "Saw",
+      "Pulse",
+      "Tri"
+     ],
+     "default": 0,
+     "span": 3
+    },
+    {
+     "id": "c7",
+     "type": "knob",
+     "label": "VCO2 Pitch",
+     "bind": {
+      "param": "k7"
+     },
+     "format": "raw",
+     "default": 0.5,
+     "unit": "st"
+    },
+    {
+     "id": "c8",
+     "type": "knob",
+     "label": "VCO2 Fine",
+     "bind": {
+      "param": "k8"
+     },
+     "format": "raw",
+     "default": 0.57,
+     "unit": "ct"
+    },
+    {
+     "id": "c9",
+     "type": "knob",
+     "label": "VCO2 Level",
+     "bind": {
+      "param": "k9"
+     },
+     "format": "percent",
+     "default": 0.5
+    }
+   ]
+  },
+  {
+   "id": "ringnoise",
+   "title": "RING / NOISE",
+   "cols": 2,
+   "page": "east",
+   "controls": [
+    {
+     "id": "c10",
+     "type": "knob",
+     "label": "Ring Level",
+     "bind": {
+      "param": "k10"
+     },
+     "format": "percent",
+     "default": 0.1
+    },
+    {
+     "id": "c11",
+     "type": "knob",
+     "label": "Noise Level",
+     "bind": {
+      "param": "k11"
+     },
+     "format": "percent",
+     "default": 0.03
+    },
+    {
+     "id": "t_rn",
+     "type": "label",
+     "span": 2,
+     "text": "Ring is VCO 1 times VCO 2."
+    }
+   ]
+  },
+  {
+   "id": "vco3",
+   "title": "VCO 3",
+   "cols": 3,
+   "page": "east",
+   "controls": [
+    {
+     "id": "c13",
+     "type": "selector",
+     "label": "VCO3 Range",
+     "bind": {
+      "param": "k13"
+     },
+     "options": [
+      "Key",
+      "Low"
+     ],
+     "default": 0,
+     "span": 3
+    },
+    {
+     "id": "c12",
+     "type": "knob",
+     "label": "VCO3 Pitch",
+     "bind": {
+      "param": "k12"
+     },
+     "format": "raw",
+     "default": 0.666667,
+     "unit": "st"
+    },
+    {
+     "id": "c14",
+     "type": "knob",
+     "label": "VCO3 Level",
+     "bind": {
+      "param": "k14"
+     },
+     "format": "percent",
+     "default": 0.05
+    },
+    {
+     "id": "t_v3",
+     "type": "label",
+     "span": 3,
+     "text": "A sine. Low runs free. FM is patched."
+    }
+   ]
+  },
+  {
+   "id": "filter",
+   "title": "FILTER",
+   "cols": 5,
+   "page": "east",
+   "controls": [
+    {
+     "id": "fk",
+     "type": "filterkurve",
+     "span": 5,
+     "of": {
+      "cutoff": "c29",
+      "reso": "c30",
+      "typ": "c28"
+     },
+     "typen": [
+      {
+       "art": "lp",
+       "pole": 4
+      },
+      {
+       "art": "lp",
+       "pole": 2
+      },
+      {
+       "art": "lp",
+       "pole": 2
+      },
+      {
+       "art": "lp",
+       "pole": 4
+      }
+     ]
+    },
+    {
+     "id": "c28",
+     "type": "selector",
+     "label": "Filter Type",
+     "bind": {
+      "param": "k28"
+     },
+     "options": [
+      "Ladder",
+      "SEM",
+      "MS-20",
+      "Diode"
+     ],
+     "default": 0,
+     "span": 5
+    },
+    {
+     "id": "c29",
+     "type": "knob",
+     "label": "Cutoff",
+     "bind": {
+      "param": "k29"
+     },
+     "format": "hz",
+     "default": 0.635348
+    },
+    {
+     "id": "c30",
+     "type": "knob",
+     "label": "Resonance",
+     "bind": {
+      "param": "k30"
+     },
+     "format": "percent",
+     "default": 0.25
+    },
+    {
+     "id": "c31",
+     "type": "knob",
+     "label": "Drive",
+     "bind": {
+      "param": "k31"
+     },
+     "format": "percent",
+     "default": 0.2
+    },
+    {
+     "id": "c32",
+     "type": "knob",
+     "label": "Filter Env",
+     "bind": {
+      "param": "k32"
+     },
+     "format": "raw",
+     "default": 0.7,
+     "unit": "st"
+    },
+    {
+     "id": "c33",
+     "type": "knob",
+     "label": "Filter Key",
+     "bind": {
+      "param": "k33"
+     },
+     "format": "raw",
+     "default": 0.266667,
+     "unit": "x"
+    }
+   ]
+  },
+  {
+   "id": "env1",
+   "title": "ENV 1",
+   "cols": 4,
+   "page": "east",
+   "controls": [
+    {
+     "id": "e1hue",
+     "type": "huelle",
+     "span": 4,
+     "label": "Filter envelope",
+     "of": {
+      "a": "c35",
+      "d": "c36",
+      "s": "c37",
+      "r": "c38"
+     }
+    },
+    {
+     "id": "c35",
+     "type": "knob",
+     "label": "Env1 Attack",
+     "bind": {
+      "param": "k35"
+     },
+     "format": "raw",
+     "default": 0.188963,
+     "unit": "s"
+    },
+    {
+     "id": "c36",
+     "type": "knob",
+     "label": "Env1 Decay",
+     "bind": {
+      "param": "k36"
+     },
+     "format": "raw",
+     "default": 0.5,
+     "unit": "s"
+    },
+    {
+     "id": "c37",
+     "type": "knob",
+     "label": "Env1 Sustain",
+     "bind": {
+      "param": "k37"
+     },
+     "format": "percent",
+     "default": 0.3
+    },
+    {
+     "id": "c38",
+     "type": "knob",
+     "label": "Env1 Release",
+     "bind": {
+      "param": "k38"
+     },
+     "format": "raw",
+     "default": 0.451985,
+     "unit": "s"
+    }
+   ]
+  },
+  {
+   "id": "env2",
+   "title": "ENV 2",
+   "cols": 4,
+   "page": "east",
+   "controls": [
+    {
+     "id": "e2hue",
+     "type": "huelle",
+     "span": 4,
+     "label": "Amp envelope",
+     "of": {
+      "a": "c39",
+      "d": "c40",
+      "s": "c41",
+      "r": "c42"
+     }
+    },
+    {
+     "id": "c39",
+     "type": "knob",
+     "label": "Env2 Attack",
+     "bind": {
+      "param": "k39"
+     },
+     "format": "raw",
+     "default": 0.162764,
+     "unit": "s"
+    },
+    {
+     "id": "c40",
+     "type": "knob",
+     "label": "Env2 Decay",
+     "bind": {
+      "param": "k40"
+     },
+     "format": "raw",
+     "default": 0.652933,
+     "unit": "s"
+    },
+    {
+     "id": "c41",
+     "type": "knob",
+     "label": "Env2 Sustain",
+     "bind": {
+      "param": "k41"
+     },
+     "format": "percent",
+     "default": 0.8
+    },
+    {
+     "id": "c42",
+     "type": "knob",
+     "label": "Env2 Release",
+     "bind": {
+      "param": "k42"
+     },
+     "format": "raw",
+     "default": 0.451985,
+     "unit": "s"
+    }
+   ]
+  },
+  {
+   "id": "west",
+   "title": "WEST",
+   "cols": 3,
+   "page": "west",
+   "controls": [
+    {
+     "id": "c18",
+     "type": "knob",
+     "label": "West Pitch",
+     "bind": {
+      "param": "k18"
+     },
+     "format": "raw",
+     "default": 0.5,
+     "unit": "st"
+    },
+    {
+     "id": "c19",
+     "type": "knob",
+     "label": "West Fine",
+     "bind": {
+      "param": "k19"
+     },
+     "format": "raw",
+     "default": 0.5,
+     "unit": "ct"
+    },
+    {
+     "id": "c20",
+     "type": "knob",
+     "label": "West Fold",
+     "bind": {
+      "param": "k20"
+     },
+     "format": "raw",
+     "default": 0.277778,
+     "unit": "dB"
+    },
+    {
+     "id": "c21",
+     "type": "knob",
+     "label": "West Symmetry",
+     "bind": {
+      "param": "k21"
+     },
+     "format": "percent",
+     "default": 0.5
+    },
+    {
+     "id": "c22",
+     "type": "knob",
+     "label": "Fold Shape",
+     "bind": {
+      "param": "k22"
+     },
+     "format": "percent",
+     "default": 0.5
+    },
+    {
+     "id": "c23",
+     "type": "knob",
+     "label": "West Level",
+     "bind": {
+      "param": "k23"
+     },
+     "format": "percent",
+     "default": 0.35
+    },
+    {
+     "id": "t_w",
+     "type": "label",
+     "span": 3,
+     "text": "A sine into a wavefolder."
+    }
+   ]
+  },
+  {
+   "id": "gate",
+   "title": "GATE",
+   "cols": 4,
+   "page": "west",
+   "controls": [
+    {
+     "id": "c24",
+     "type": "selector",
+     "label": "Gate Mode",
+     "bind": {
+      "param": "k24"
+     },
+     "options": [
+      "LP",
+      "Both",
+      "VCA"
+     ],
+     "default": 1,
+     "span": 4
+    },
+    {
+     "id": "c25",
+     "type": "knob",
+     "label": "Gate Open",
+     "bind": {
+      "param": "k25"
+     },
+     "format": "percent",
+     "default": 0.2
+    },
+    {
+     "id": "c26",
+     "type": "knob",
+     "label": "Gate Strike",
+     "bind": {
+      "param": "k26"
+     },
+     "format": "percent",
+     "default": 0.6
+    },
+    {
+     "id": "c27",
+     "type": "knob",
+     "label": "Gate Decay",
+     "bind": {
+      "param": "k27"
+     },
+     "format": "raw",
+     "default": 0.540209,
+     "unit": "s"
+    },
+    {
+     "id": "c52",
+     "type": "knob",
+     "label": "Gate Reso",
+     "bind": {
+      "param": "k52"
+     },
+     "format": "percent",
+     "default": 0.0
+    },
+    {
+     "id": "t_g",
+     "type": "label",
+     "span": 4,
+     "text": "Vactrol low-pass gate on West."
+    }
+   ]
+  },
+  {
+   "id": "route",
+   "title": "ROUTE",
+   "cols": 1,
+   "page": "west",
+   "controls": [
+    {
+     "id": "c34",
+     "type": "knob",
+     "label": "West>Filter",
+     "bind": {
+      "param": "k34"
+     },
+     "format": "percent",
+     "default": 0.15
+    }
+   ]
+  },
+  {
+   "id": "func1",
+   "title": "FUNC 1",
+   "cols": 4,
+   "page": "mod",
+   "controls": [
+    {
+     "id": "c44",
+     "type": "selector",
+     "label": "Func1 Cycle",
+     "bind": {
+      "param": "k44"
+     },
+     "options": [
+      "Off",
+      "On"
+     ],
+     "default": 1,
+     "span": 4
+    },
+    {
+     "id": "c16",
+     "type": "knob",
+     "label": "Func1 Rise",
+     "bind": {
+      "param": "k16"
+     },
+     "format": "raw",
+     "default": 0.591502,
+     "unit": "s"
+    },
+    {
+     "id": "c17",
+     "type": "knob",
+     "label": "Func1 Fall",
+     "bind": {
+      "param": "k17"
+     },
+     "format": "raw",
+     "default": 0.591502,
+     "unit": "s"
+    },
+    {
+     "id": "c43",
+     "type": "knob",
+     "label": "Func1 Shape",
+     "bind": {
+      "param": "k43"
+     },
+     "format": "raw",
+     "einheitlos": true,
+     "default": 0.5
+    },
+    {
+     "id": "t_f1",
+     "type": "label",
+     "span": 4,
+     "text": "Envelope per note, or an LFO with Cycle."
+    }
+   ]
+  },
+  {
+   "id": "func2",
+   "title": "FUNC 2",
+   "cols": 4,
+   "page": "mod",
+   "controls": [
+    {
+     "id": "c48",
+     "type": "selector",
+     "label": "Func2 Cycle",
+     "bind": {
+      "param": "k48"
+     },
+     "options": [
+      "Off",
+      "On"
+     ],
+     "default": 1,
+     "span": 4
+    },
+    {
+     "id": "c45",
+     "type": "knob",
+     "label": "Func2 Rise",
+     "bind": {
+      "param": "k45"
+     },
+     "format": "raw",
+     "default": 0.516585,
+     "unit": "s"
+    },
+    {
+     "id": "c46",
+     "type": "knob",
+     "label": "Func2 Fall",
+     "bind": {
+      "param": "k46"
+     },
+     "format": "raw",
+     "default": 0.516585,
+     "unit": "s"
+    },
+    {
+     "id": "c47",
+     "type": "knob",
+     "label": "Func2 Shape",
+     "bind": {
+      "param": "k47"
+     },
+     "format": "raw",
+     "einheitlos": true,
+     "default": 0.5
+    },
+    {
+     "id": "c49",
+     "type": "knob",
+     "label": "S&H Slew",
+     "bind": {
+      "param": "k49"
+     },
+     "format": "raw",
+     "default": 0.0,
+     "unit": "ms"
+    },
+    {
+     "id": "t_f2",
+     "type": "label",
+     "span": 4,
+     "text": "Its end pulse clocks the S&H row."
+    }
+   ]
+  },
+  {
+   "id": "chaos",
+   "title": "CHAOS",
+   "cols": 1,
+   "page": "mod",
+   "controls": [
+    {
+     "id": "c50",
+     "type": "knob",
+     "label": "Chaos Rate",
+     "bind": {
+      "param": "k50"
+     },
+     "format": "hz",
+     "default": 0.480715
+    },
+    {
+     "id": "t_ch",
+     "type": "label",
+     "span": 1,
+     "text": "Lorenz: never repeats."
+    }
+   ]
+  },
+  {
+   "id": "feedback",
+   "title": "FEEDBACK",
+   "cols": 1,
+   "page": "mod",
+   "controls": [
+    {
+     "id": "c53",
+     "type": "knob",
+     "label": "Feedback",
+     "bind": {
+      "param": "k53"
+     },
+     "format": "percent",
+     "default": 0.05
+    }
+   ]
+  },
+  {
+   "id": "fx",
+   "title": "FX",
+   "cols": 4,
+   "page": "mod",
+   "controls": [
+    {
+     "id": "c54",
+     "type": "knob",
+     "label": "Echo Time",
+     "bind": {
+      "param": "k54"
+     },
+     "format": "ms",
+     "default": 0.744278
+    },
+    {
+     "id": "c55",
+     "type": "knob",
+     "label": "Echo Feedback",
+     "bind": {
+      "param": "k55"
+     },
+     "format": "percent",
+     "default": 0.388889
+    },
+    {
+     "id": "c56",
+     "type": "knob",
+     "label": "Echo Mix",
+     "bind": {
+      "param": "k56"
+     },
+     "format": "percent",
+     "default": 0.15
+    },
+    {
+     "id": "c57",
+     "type": "knob",
+     "label": "Reverb Mix",
+     "bind": {
+      "param": "k57"
+     },
+     "format": "percent",
+     "default": 0.15
+    },
+    {
+     "id": "t_fx",
+     "type": "label",
+     "span": 4,
+     "text": "Echo, then reverb."
+    }
+   ]
+  },
+  {
+   "id": "master",
+   "title": "MASTER",
+   "cols": 4,
+   "page": "patch",
+   "controls": [
+    {
+     "id": "c58",
+     "type": "knob",
+     "label": "Glide",
+     "bind": {
+      "param": "k58"
+     },
+     "format": "percent",
+     "default": 0.0
+    },
+    {
+     "id": "c59",
+     "type": "knob",
+     "label": "Drift",
+     "bind": {
+      "param": "k59"
+     },
+     "format": "percent",
+     "default": 0.3
+    },
+    {
+     "id": "c51",
+     "type": "knob",
+     "label": "Vel Sens",
+     "bind": {
+      "param": "k51"
+     },
+     "format": "percent",
+     "default": 0.6
+    },
+    {
+     "id": "c60",
+     "type": "knob",
+     "label": "Volume",
+     "bind": {
+      "param": "k60"
+     },
+     "format": "db",
+     "default": 0.833333
+    }
+   ]
+  },
+  {
+   "id": "feld",
+   "title": "PATCH FIELD",
+   "cols": 1,
+   "page": "patch",
+   "controls": [
+    {
+     "id": "t_feld",
+     "type": "label",
+     "text": "Sources are rows, destinations are columns. A pin (or a cable in the Cabinet view) sends a source to a destination."
+    },
+    {
+     "id": "matrix",
+     "type": "matrix",
+     "of": {
+      "morph": "c15",
+      "quellen": [
+       "vco1",
+       "vco2",
+       "vco3",
+       "ringnoise",
+       "ringnoise",
+       "west",
+       "filter",
+       "gate",
+       "env1",
+       "env2",
+       "func1",
+       "func2",
+       "func2",
+       "chaos",
+       "master",
+       "master"
+      ],
+      "ziele": [
+       "c2",
+       "c7",
+       "c12",
+       "c18",
+       "c4",
+       "c20",
+       "c21",
+       "filter",
+       "c29",
+       "c30",
+       "gate",
+       "gate",
+       "c16",
+       "c45",
+       "master",
+       "master"
+      ],
+      "bereiche": [
+       {
+        "wert": 12.0,
+        "einheit": "st"
+       },
+       {
+        "wert": 12.0,
+        "einheit": "st"
+       },
+       {
+        "wert": 12.0,
+        "einheit": "st"
+       },
+       {
+        "wert": 8.0,
+        "einheit": "idx"
+       },
+       {
+        "wert": 1.0,
+        "einheit": "unit"
+       },
+       {
+        "wert": 20.0,
+        "einheit": "dB"
+       },
+       {
+        "wert": 1.0,
+        "einheit": "unit"
+       },
+       {
+        "wert": 0.5,
+        "einheit": "gain"
+       },
+       {
+        "wert": 40.0,
+        "einheit": "st"
+       },
+       {
+        "wert": 1.0,
+        "einheit": "unit"
+       },
+       {
+        "wert": 0.5,
+        "einheit": "gain"
+       },
+       {
+        "wert": 1.0,
+        "einheit": "unit"
+       },
+       {
+        "wert": 4.0,
+        "einheit": "oct"
+       },
+       {
+        "wert": 4.0,
+        "einheit": "oct"
+       },
+       {
+        "wert": 1.0,
+        "einheit": "unit"
+       },
+       {
+        "wert": 0.5,
+        "einheit": "gain"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "morph",
+   "title": "MORPH",
+   "cols": 1,
+   "page": "patch",
+   "controls": [
+    {
+     "id": "c15",
+     "type": "knob",
+     "label": "Morph",
+     "bind": {
+      "param": "k15"
+     },
+     "format": "percent",
+     "default": 0.0
+    },
+    {
+     "id": "t_pa",
+     "type": "label",
+     "span": 1,
+     "text": "Blends set A into set B."
+    }
+   ]
+  }
+ ]
+}

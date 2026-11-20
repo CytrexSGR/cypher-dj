@@ -205,6 +205,14 @@ foreach(pfad ${KERN_TESTS})
     add_test(NAME ${t} COMMAND ${t})
   endif()
 endforeach()
+# 2026-11-19: the Stellwerk tests under signalbox/tests only build when signalbox is the top project (STELLWERK_TESTS), so test_i3 (I3a rules, hearing
+# pass register) was never a ctest target of the kernel build. It needs only the Stellwerk library and its simulated clock.
+if(TARGET cypherdj_stellwerk_sim AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/signalbox/tests/test_i3.cpp)
+  add_executable(stellwerk_test_i3 signalbox/tests/test_i3.cpp)
+  target_include_directories(stellwerk_test_i3 PRIVATE signalbox/tests)
+  target_link_libraries(stellwerk_test_i3 PRIVATE cypherdj::stellwerk cypherdj::stellwerk_sim)
+  add_test(NAME test_i3 COMMAND stellwerk_test_i3)
+endif()
 # Keylock Task 1b (Prüfung F3): test_stretcher misst die Lage gegen eine nackte Rubber-Band-Instanz (Referenz „rohes R3“).
 target_link_libraries(test_stretcher PRIVATE PkgConfig::RUBBERBAND)
 # Keylock Task 2: test_deck_keylock misst die Lage ebenso gegen rohes R3 (keylock_mess.h).
@@ -2358,6 +2366,7 @@ unset(TM_FALL)
 # the retry wait never grows (case 31: the second wait must be 8192 blocks)
 set(TM_FALL 31)  # detector case
 test_mutation(spur_neu_ohne_staffel_mutation test_arr_track_pool CYPHERDJ_MUTATION_SPUR_NEU_OHNE_STAFFEL ${ARR_QUELLEN} src/clock.cpp)
+test_mutation(spur_neu_ohne_gesund_mutation test_arr_track_pool CYPHERDJ_MUTATION_SPUR_NEU_OHNE_GESUND ${ARR_QUELLEN} src/clock.cpp)
 unset(TM_FALL)
 # mehrkern 3.2 review of task 5 (WILL_FAIL): the live-load criterion by mixer gain (case 20, muted tracks); the Hall call site hands no MXCSR to the workers (test_arr_returns returns_pool_mxcsr)
 set(TM_FALL 20)  # detector case

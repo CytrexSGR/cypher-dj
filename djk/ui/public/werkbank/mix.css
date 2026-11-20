@@ -1,22 +1,22 @@
 /* Workbench knobs (mix.js): the small rotary control of the dock cards and the send knobs of the track rows. */
-#werkbank .w-dreh { display: flex; flex-direction: column; align-items: center; gap: 1px; width: 40px; cursor: ns-resize; touch-action: none; user-select: none; --farbe: var(--d3); --k: 0; outline: none; }
-#werkbank .w-dreh:focus-visible .w-dreh-rad { box-shadow: 0 0 0 2px var(--d3); }
-#werkbank .w-dreh-rad {
+:is(#werkbank, #produktion, #effekte, #live-fenster) .w-dreh { display: flex; flex-direction: column; align-items: center; gap: 1px; width: 40px; cursor: ns-resize; touch-action: none; user-select: none; --farbe: var(--d3); --k: 0; outline: none; }
+:is(#werkbank, #produktion, #effekte, #live-fenster) .w-dreh:focus-visible .w-dreh-rad { box-shadow: 0 0 0 2px var(--d3); }
+:is(#werkbank, #produktion, #effekte, #live-fenster) .w-dreh-rad {
   position: relative; width: 30px; height: 30px; border-radius: 50%;
   background: conic-gradient(from 225deg, var(--farbe) calc(var(--k) * 270deg), var(--line) 0 270deg, transparent 0);
 }
-#werkbank .w-dreh-rad::before { content: ''; position: absolute; inset: 4px; border-radius: 50%; background: var(--panel); }
-#werkbank .w-dreh-rad::after {
+:is(#werkbank, #produktion, #effekte, #live-fenster) .w-dreh-rad::before { content: ''; position: absolute; inset: 4px; border-radius: 50%; background: var(--panel); }
+:is(#werkbank, #produktion, #effekte, #live-fenster) .w-dreh-rad::after {
   content: ''; position: absolute; left: calc(50% - 1px); top: 50%; width: 2px; height: 11px; border-radius: 1px; background: var(--text);
   transform-origin: 50% 0; transform: rotate(calc(45deg + var(--k) * 270deg));
 }
-#werkbank .w-dreh.aus .w-dreh-rad::after { background: var(--dim); }
-#werkbank .w-dreh-wert { font-size: 9px; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1.1; }
-#werkbank .w-dreh.aus .w-dreh-wert { color: var(--dim); }
-#werkbank .w-dreh-name { font-size: 8px; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); max-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.1; }
-#werkbank .w-dreh.klein { width: 22px; gap: 0; }
-#werkbank .w-dreh.klein .w-dreh-rad { width: 22px; height: 22px; }
-#werkbank .w-dreh.klein .w-dreh-rad::before { inset: 3px; }
-#werkbank .w-dreh.klein .w-dreh-rad::after { display: none; }
-#werkbank .w-dreh.klein .w-dreh-rad { display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; }
-#werkbank .w-dreh.klein .w-dreh-rad { color: var(--text); }
+:is(#werkbank, #produktion, #effekte, #live-fenster) .w-dreh.aus .w-dreh-rad::after { background: var(--dim); }
+:is(#werkbank, #produktion, #effekte, #live-fenster) .w-dreh-wert { font-size: 9px; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1.1; }
+:is(#werkbank, #produktion, #effekte, #live-fenster) .w-dreh.aus .w-dreh-wert { color: var(--dim); }
+:is(#werkbank, #produktion, #effekte, #live-fenster) .w-dreh-name { font-size: 8px; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); max-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.1; }
+:is(#werkbank, #produktion, #effekte, #live-fenster) .w-dreh.klein { width: 22px; gap: 0; }
+:is(#werkbank, #produktion, #effekte, #live-fenster) .w-dreh.klein .w-dreh-rad { width: 22px; height: 22px; }
+:is(#werkbank, #produktion, #effekte, #live-fenster) .w-dreh.klein .w-dreh-rad::before { inset: 3px; }
+:is(#werkbank, #produktion, #effekte, #live-fenster) .w-dreh.klein .w-dreh-rad::after { display: none; }
+:is(#werkbank, #produktion, #effekte, #live-fenster) .w-dreh.klein .w-dreh-rad { display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; }
+:is(#werkbank, #produktion, #effekte, #live-fenster) .w-dreh.klein .w-dreh-rad { color: var(--text); }

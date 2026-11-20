@@ -9,6 +9,7 @@ import { baueSaettFace, saettParameterTabelle } from '../face/sat.js';
 import { baueLimiterFace, limParameterTabelle } from '../face/limiter.js';
 import { baueEqFace } from '../face/eq.js';
 import { oeffneMenue } from './context_menu.js';
+import { stufenBefehle, schluesselMenue } from '../dock/parts.js';
 
 /** The insert kinds that have a face; later faces add their kind name here. */
 export const FACE_ARTEN = [
@@ -136,6 +137,33 @@ export function insertQuelleEq(ctx, strang, insert, stand = { band: 1 }) {
   };
 }
 
+/** The title bar buttons of a face (task 12): ◀ Move earlier, ▶ Move later, ✕ Remove (closes the face) and for a compressor KEY (the key source menu at the button).
+ *  The commands and labels are the chip menu's (stufenBefehle, schluesselMenue of dock/parts.js). */
+function kopfKnoepfe(ctx, steuer, strangId, insertId, schliesse) {
+  const d = steuer.ownerDocument ?? globalThis.document;
+  const knopf = (text, titel, fn) => {
+    const b = d.createElement('button'); b.type = 'button'; b.className = 'p-face-knopf'; b.textContent = text; b.title = titel; b.setAttribute('aria-label', titel);
+    b.addEventListener('click', fn); return b;
+  };
+  const jetzt = () => finde(ctx, strangId, insertId);
+  const tu = (wahl) => { const { strang, insert } = jetzt(); if (!strang || !insert) return null; const x = stufenBefehle(strang, insert)[wahl]; return x ? ctx.aendere(x.label, x.befehle) : null; };
+  const knoepfe = [
+    knopf('◀', 'Move earlier', () => tu('links')),
+    knopf('▶', 'Move later', () => tu('rechts')),
+    knopf('✕', 'Remove this stage', () => { Promise.resolve(tu('weg')).then((ok) => { if (ok !== false && ok !== null) schliesse(); }); }),
+  ];
+  const { insert } = jetzt();
+  if (insert?.art === 'komp') {
+    knoepfe.unshift(knopf('KEY', 'Key source of this compressor', (ev) => {
+      const { strang, insert: i } = jetzt(); if (!strang || !i) return;
+      const q = ev.currentTarget.getBoundingClientRect();
+      schluesselMenue({ holeGet: (w) => ctx.holeGet(w), aendere: (...a) => ctx.aendere(...a), melde: (...a) => ctx.melde(...a), fehlerText: ctx.fehlerText,
+        oeffneMenue: (...a) => (ctx.oeffneMenue ?? oeffneMenue)(...a), projekt: () => ctx.st.projekt }, strang, i, q.left, q.bottom);
+    }));
+  }
+  steuer.prepend(...knoepfe);
+}
+
 /** Registers the project listener and the two hooks of the track head. oeffne(strang, insert) opens (or closes) the face of a stage, verfuegbar(art) says whether
  *  a kind has one. grStand() is the store of /e/ins_gr readings of the INSERTS panel. */
 export function bindeInsertFace(ctx, grStand, pegelStand = () => ({})) {
@@ -149,7 +177,7 @@ export function bindeInsertFace(ctx, grStand, pegelStand = () => ({})) {
     let bau = null;
     const f = oeffneFace({
       id: `face:${insert.id}`, titel: geraet?.titel ?? 'COMPRESSOR', untertitel: `${strang.name} · stage ${pos + 1}`, akzent: geraet?.akzent ?? 'orange', an: quelle.an,
-      bauen: (inhalt) => { bau = geraet ? geraet.bauen(inhalt, quelle) : baueKompFace(inhalt, quelle); return bau; },
+      bauen: (inhalt, steuer) => { kopfKnoepfe(ctx, steuer, strang.id, insert.id, () => schliesseFace()); bau = geraet ? geraet.bauen(inhalt, quelle) : baueKompFace(inhalt, quelle); return bau; },
       live: geraet && insert.art !== 'lim' ? undefined : (zeit) => bau?.live(zeit) ?? false,   // the frame loop runs while this face is open and nowhere else; a face without a live value has none
     });
     aktuell = f ? { strangId: strang.id, insertId: insert.id, face: f } : null;
@@ -160,7 +188,7 @@ export function bindeInsertFace(ctx, grStand, pegelStand = () => ({})) {
     const pos = strang.inserts.findIndex((i) => i.id === insert.id);
     const f = oeffneFace({
       id: `face:${insert.id}`, titel: 'EQ', untertitel: `${strang.name} · stage ${pos + 1}`, akzent: 'orange', an: quelle.an,
-      bauen: (inhalt) => baueEqFace(inhalt, quelle),   // no frame loop: the EQ has no live reading
+      bauen: (inhalt, steuer) => { kopfKnoepfe(ctx, steuer, strang.id, insert.id, () => schliesseFace()); return baueEqFace(inhalt, quelle); },   // no frame loop: the EQ has no live reading
     });
     aktuell = f ? { strangId: strang.id, insertId: insert.id, face: f } : null;
     return f;

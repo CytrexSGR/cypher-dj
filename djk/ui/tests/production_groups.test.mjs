@@ -1,4 +1,4 @@
-// 1.10 Slice 1: Seite, reine Teile der Gruppen und der Ausgang-Wahl (routing.js, groups.js); die DOM-Teile prüft pruef/probe_routing.mjs.
+// 1.10 Slice 1: Seite, reine Teile der Gruppen und der Ausgang-Wahl (routing.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -33,11 +33,3 @@ test('1.10 Seite: jedes Bedienelement einer Gruppe trägt ihren Namen im zugäng
     loeschen: 'Delete group Music', umbenennen: 'Rename group Music' });
 });
 
-test('1.10 Seite: jede data-p-Kennung, die groups.js abfragt, steht im Gerüst von production.js (Negativ-Kontrolle: eine erfundene nicht)', () => {
-  const dom = fs.readFileSync(new URL('../public/production/groups.js', import.meta.url), 'utf8');
-  const geruest = fs.readFileSync(new URL('../public/production/production.js', import.meta.url), 'utf8');
-  const gefragt = [...dom.matchAll(/\$\('([a-z-]+)'\)/g)].map((m) => m[1]);
-  assert.ok(gefragt.length >= 5, `gefunden: ${gefragt}`);
-  for (const k of gefragt) assert.ok(geruest.includes(`data-p="${k}"`), `data-p="${k}" fehlt im Gerüst`);
-  assert.ok(!geruest.includes('data-p="gibt-es-nicht"'));
-});

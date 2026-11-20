@@ -4,19 +4,18 @@
 // nachLaden, vorBild, beimBild, beimEreignis, beimSichtwechsel. Spricht nur die Projekt-API (Spec 3.4); der Wechsel
 // der Ansicht schickt nichts an den Kern (A1). Oberfläche englisch. Gezeichnet wird nur, solange die Ansicht sichtbar
 // ist (eigener rAF-Takt, Ring window.djkProdBild wie window.djkBild).
-import { UEBER_FARBE, setzeKettenZiele } from './lanes.js';
+import { UEBER_FARBE, setzeKettenZiele, zielLabel } from './lanes.js';
 import { menueOffen } from './context_menu.js';
-import { REGLER_MAX, REGLER_SCHRITT } from './fader_curve.js';
+import { klickDaneben } from './choice_click.js';
 import { neuerSchreiber } from './writer.js';
 import { neuerLader, neuerNachlader, serverWeg, offlineNach } from './load.js';
 import { bindeZeitachse } from './timeline_operation.js';
 import { bindeProjektwahl } from './project_choice.js';
 import { bindeSpuren } from './track_heads.js';
 import { armStand } from './auto_recording.js';
-import { bindeGruppen } from './groups.js';
-import { bindeReturns } from './returns.js';
-import { bindeInserts } from './inserts.js';
-import { bindeEinklappen } from './einklappen.js';   // folding GROUPS, RETURNS and CLIP like the <details> panels
+import { bindeInsertDienste } from './inserts.js';
+import { bindeDockProduktion } from './dock_host.js';   // the shared dock below the arrangement (dock/)
+import { bindeEinklappen } from './einklappen.js';   // folding the dock rows and CLIP like the <details> panels
 import { bindeMatrix } from './matrix.js';   // 1.10 slice 6: routing matrix view
 import { MAX_SPUREN } from './limits.js';
 import { bindeAblage } from './storage.js';
@@ -41,7 +40,7 @@ import { AUSGABE_FEHLER, mehrdeutigText } from './output.js';
 import { nachladenNoetig, stemsEreignis, stemsFuerProjekt } from './stems.js';
 import { neuerClipWaehler } from './clip_waehlen.js';
 
-const BINDER = [bindeZeitachse, bindeProjektwahl, bindeSpuren, bindeGruppen, bindeReturns, bindeMatrix, bindeInserts, bindeAblage, bindeTransport, bindeVerlauf, bindeLanen, bindeComp, bindeClips, bindeEditWerkzeuge, bindeDetail, bindeAusgabe, bindeMidiImport, bindeVariantenReihen, bindeGeraete, bindeAufnahme,
+const BINDER = [bindeZeitachse, bindeProjektwahl, bindeSpuren, bindeMatrix, bindeInsertDienste, bindeDockProduktion, bindeAblage, bindeTransport, bindeVerlauf, bindeLanen, bindeComp, bindeClips, bindeEditWerkzeuge, bindeDetail, bindeAusgabe, bindeMidiImport, bindeVariantenReihen, bindeGeraete, bindeAufnahme,
   bindeBrowserwahl, bindeGeraeteBrowser, bindePresetHost, bindePresetMarken, bindeKollektionen, bindeEinklappen];
 
 const GERUEST = `
@@ -97,7 +96,7 @@ const GERUEST = `
 <ol class="p-verlauf" data-p="verlauf-liste" aria-label="History" hidden></ol>
 <div class="p-arr">
   <div class="p-ecke">
-    <button data-p="neu-audio" title="Add an audio track" disabled>+ AUDIO</button><button data-p="neu-rb" title="Add an instrument track with the RB-338" disabled>+ RB-338</button><button data-p="neu-surge" title="Add an instrument track with Surge (host slot 1 or 2)" disabled>+ SURGE</button><button data-p="neu-rack" title="Add an instrument track with a rack: up to 4 devices side by side, each with key, velocity and chain zones" disabled>+ RACK</button><button data-p="neu-kit" title="Add an instrument track that plays a kit from the kit folder (pick the kit)" disabled>+ KIT</button>
+    <button data-p="neu-audio" title="Add an audio track" disabled>+ AUDIO</button><button data-p="neu-rb" title="Add an instrument track with the RB-338" disabled>+ RB-338</button><button data-p="neu-surge" title="Add an instrument track with Surge (host slot 1 or 2)" disabled>+ SURGE</button><button data-p="neu-rack" title="Add an instrument track with a rack: up to 4 devices side by side, each with key, velocity and chain zones" disabled>+ RACK</button><button data-p="neu-kit" title="Add an instrument track that plays a kit from the kit folder (pick the kit)" disabled>+ KIT</button><button data-p="gruppieren" class="p-gruppieren" title="Group the selected tracks (Ctrl+G). Select tracks with Ctrl+click or Shift+click on their heads">GROUP</button>
   </div>
   <canvas class="p-lineal" data-p="lineal" title="Top strip: drag the loop bracket · bottom strip: click sets the start marker"></canvas>
   <div class="p-koerper" data-p="koerper">
@@ -107,32 +106,15 @@ const GERUEST = `
   <div class="p-hleiste" data-p="hleiste" title="Scroll the arrangement"><div data-p="hleiste-inhalt"></div></div>
   <div class="p-leer" data-p="leer">No project open. NEW starts one, OPEN loads one.</div>
 </div>
-<section class="p-mixer" data-p="mixer" aria-label="Groups and master" hidden>
-  <div class="p-mixer-kopf"><span class="p-mixer-titel">GROUPS</span><button data-p="neu-gruppe" title="Add a group track (up to 8); put tracks into it with the output menu of each track" disabled>+ GROUP</button></div>
-  <div class="p-gruppenreihe" data-p="mixer-gruppen"></div>
-  <div class="p-pm" aria-label="Production master">
-    <span class="p-mixer-titel">MASTER</span>
-    <input class="p-pm-fader" data-p="pm-fader" type="range" min="0" max="${REGLER_MAX}" step="${REGLER_SCHRITT}" title="Production master volume (double click: 0 dB). The export is taken here, before the set limiter." aria-label="Volume production master">
-    <output class="p-pm-wert" data-p="pm-wert"></output>
-    <div class="meter waagrecht p-pm-pegel" data-kanal="pm"><i></i></div>
-  </div>
-</section>
-<section class="p-returns p-mixer" data-p="returns" aria-label="Returns and sends" hidden>
-  <div class="p-mixer-kopf"><span class="p-mixer-titel">RETURNS</span><button data-p="neu-return" title="Add a return strip with Cypher Hall (up to 4)" disabled>+ Return: Hall</button></div>
-  <div class="p-gruppenreihe" data-p="mixer-returns"></div>
-  <details class="p-sendblock" data-p="sends" hidden><summary class="p-mixer-titel">SENDS</summary><div class="p-sendraster" data-p="mixer-sends"></div></details>
-</section>
-<details class="p-matrix p-mixer" data-p="matrix" aria-label="Routing matrix" hidden>
-  <summary class="p-mixer-titel">ROUTING MATRIX</summary>
+<section class="p-dock" data-p="dock" aria-label="Device dock"><div class="w-pan w-dock" data-p="dock-wurzel"></div></section>
+<details class="p-matrix" data-p="matrix" aria-label="Routing matrix" hidden>
+  <summary>ROUTING MATRIX</summary>
   <div class="p-mx-status" data-p="matrix-status" role="status"></div>
   <div class="p-mx-rolle" data-p="matrix-tabelle"></div>
 </details>
-<details class="p-inserts p-mixer" data-p="inserts" aria-label="Insert chains" hidden>
-  <summary class="p-mixer-titel" data-p="inserts-titel">INSERTS</summary>
-  <div class="p-insertliste" data-p="inserts-liste"></div>
-</details>
 <details class="p-geraete" data-p="geraete"><summary>INPUTS</summary><div data-p="geraete-liste" role="group" aria-label="Audio and MIDI inputs"></div></details>
-<section class="p-detail" data-p="detail" aria-label="Detail"><div class="p-detail-kopf">CLIP</div><div class="p-detail-leer">No clip selected.</div></section>`;
+<section class="p-detail" data-p="detail" aria-label="Detail"><div class="p-detail-kopf">CLIP</div><div class="p-detail-leer">No clip selected.</div></section>
+<div class="w-fenster-flaeche" data-p="fenster-flaeche"></div>`;
 
 // 1.12 S3: events after which the list of overridden lanes is fetched again. /e/neustart and /k/willkommen: a new core generation clears the server
 // mirror without any /e/auto, so the page would keep a stale orange. Only a visible page reloads (a hidden one loads in zeige()).
@@ -143,6 +125,8 @@ export const ladeNachEreignis = (a, sichtbar) => !!sichtbar && LADE_EREIGNISSE.h
 // zeigt die Seite „Rejected: <code>“ (tests/production_root.test.mjs hält die Liste beisammen).
 export const FEHLER_TEXT = {
   ...MIDI_FEHLER,   // MIDI import (midi_import.js)
+  stift_abgelehnt: 'The core refused a pin of the patch field: nothing was changed',
+  kein_steckfeld: 'This device has no patch field',
   veraltet: 'The clip changed while separating: nothing was placed',
   audio_fehlt: 'An audio clip is still being prepared: try again in a moment',
   stems_laeuft: 'A stem separation is already running',
@@ -188,6 +172,11 @@ export const FEHLER_TEXT = {
   kein_liveprojekt_flag: 'A project named live exists without the live flag: rename it',
   slot_leer: 'That live slot holds no module', modul_hat_stems: 'That module already has its stems',
   seq_fehlt: 'That group holds no SEQ deck', seq_belegt: 'That place already holds a SEQ deck',
+  abschnitt_zu_lang: 'That section is longer than 64 beats: a SEQ deck takes at most 64', abschnitt_leer: 'That section holds nothing a SEQ deck can play',   // TO DJ
+  keine_plaetze: 'This track plays no device with a slot bank (the Amiga device)', bank_platz_leer: 'That slot holds no sample',   // tracker slot banks
+  zu_viele_bk: 'The live project would hold too many Baukasten tracks (at most 16)',
+  seq_raster_ungleich: 'The notes do not fit the deck grid at 3, 6 or 12 rows per beat: set 2, 4, 8 or 16 first',
+  seq_raster_belegt: 'The deck plays effects at another LPB or TICKS setting: clear it first',
   szene_leer_slot: 'That scene slot holds no scene; save one first', szene_leer: 'There is no SEQ deck, so there is no picture of patterns to save',
   modul_ohne_instrument: 'The module has no instrument track a SEQ deck can play', modul_unbekannt: 'No module with that id is saved', modul_nicht_einsetzbar: 'This module holds something the project cannot take',   // task 10
   rampe_laeuft: 'That live slot is already being cleared or blended', kein_neuer_pfad: 'That stem has no new instrument path to blend to',
@@ -286,7 +275,20 @@ export const FEHLER_TEXT = {
   comp_leer: 'The range is empty or outside the take lane: drag over a part of the take lane',
   take_unbekannt: 'That take lane no longer exists', takes_voll: 'A track holds at most 32 take lanes', take_nur_audio: 'Only audio tracks have take lanes',
   take_name_ungueltig: 'A take lane name has 1 to 64 characters, not only spaces',
+  // tracker sections and linked clips (project/commands_tracker.ts, time.ts, verbund.ts, commands_clip.ts); the server detail with clip and track name follows
+  mod_ungueltig: 'That file is not a ProTracker module', mod_zu_gross: 'The module file is larger than 4 MiB',
+  quelle_unbekannt: 'That file was not found',
+  tracker_live: 'The live container has no tracker view', tracker_werkbank: 'A workbench module has no tracker view',
+  verbund_spur: 'Linked clips must lie on the same track', verbund_ungleich: 'Linked clips must have the same content',
+  zeit_schnitt: 'A clip crosses that point in time: nothing was changed', abschnitt_grenze: 'A clip crosses a section border: nothing was changed',
+  zeit_abschnitt: 'The time range does not fit one section: use the section commands',
+  abschnitt_unbekannt: 'That section does not exist', abschnitt_letzter: 'The last section cannot be deleted',
+  abschnitt_rand: 'The section is already at the end of the list', abschnitt_verknuepft: 'A linked clip belongs to another section: make it unique first',
+  fx_lane_kollision: 'The effect commands drive a knob that this track also has a lane for: delete one of them',
+  fx_ungueltig: 'That effect command is not valid: check the clip, the beat, the column (1 to 4), the command and the value',
 };
+export const TRACKER_GRUENDE = new Set(['tracker_live', 'tracker_werkbank', 'verbund_spur', 'verbund_ungleich', 'zeit_schnitt', 'zeit_abschnitt', 'abschnitt_grenze',
+  'abschnitt_unbekannt', 'abschnitt_letzter', 'abschnitt_rand', 'abschnitt_verknuepft', 'mod_ungueltig']);
 // V2 Fix-Runde 2 H7 (Spec 6.34): beschaeftigt und zu_gross sind mehrdeutig (ein Freeze, ein Öffnen, eine Tempo-Rampe; Grenzen des Kerns). Wie in
 // output.js (F12) zeigt die Seite dann den text der Antwort, wenn er da ist, sonst einen neutralen Text, der keine Ursache behauptet (vorher fest
 // „A freeze is running“ und „The change is too big“). Der S2-Text zu zu_gross ist heute deutsch (project/commands.ts); S3 stellt die Server-Texte um.
@@ -296,6 +298,8 @@ export function fehlerText(r) {
   const code = r?.j?.fehler ?? r?.j?.grund;
   // strudel-clip: the detail of a pattern refusal is the useful part (line and column, the sounds of the kit), so it is shown
   if (MUSTER_GRUENDE.has(code) && typeof r?.j?.detail === 'string') return `${FEHLER_TEXT[code]}: ${r.j.detail}`;
+  // tracker reasons: the detail of the server names the clip and the track, the table sentence says what the reason means
+  if (TRACKER_GRUENDE.has(code) && typeof r?.j?.detail === 'string' && r.j.detail !== '') return `${FEHLER_TEXT[code]}: ${r.j.detail}`;
   return mehrdeutigText(r) ?? FEHLER_TEXT[code] ?? `Rejected: ${code ?? `HTTP ${r?.status}`}`;
 }
 // D1 V2 Nachzug (7c, 7d): eine angenommene Änderung, die der Kern nicht nachvollzieht, ist kein stiller Erfolg. /proj/aendern (und
@@ -326,9 +330,14 @@ export const HINWEIS_TEXT = {
   // 1.12: a write to a parameter on which a lane lies (the server's text names the lane; this one is the fallback)
   lane_treibt: 'This parameter is driven by an automation lane while the arrangement plays: the value is saved as the rest value',
 };
+// the server text names the lane by id and target ("lane a1 (fader)"); the page names it by its readable label ("the Volume lane")
+function laneHinweisText(h) {
+  const t = h.ziel ? h.text.replace(/^parameter is driven by lane \S+ \([^)]*\)/, `parameter is driven by the ${zielLabel(h.ziel)} lane`) : h.text;
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
 export function hinweisMeldung(hinweise) {
   if (!Array.isArray(hinweise) || hinweise.length === 0) return null;
-  const texte = [...new Set(hinweise.map((h) => (h.hinweis === 'lane_treibt' && h.text ? h.text.charAt(0).toUpperCase() + h.text.slice(1) : HINWEIS_TEXT[h.hinweis] ?? `Note: ${h.hinweis}`)))];
+  const texte = [...new Set(hinweise.map((h) => (h.hinweis === 'lane_treibt' && h.text ? laneHinweisText(h) : HINWEIS_TEXT[h.hinweis] ?? `Note: ${h.hinweis}`)))];
   return { text: texte.join(' · '), fehler: hinweise.some((h) => h.hinweis === 'kein_tempo' || h.hinweis === 'eins_rueckweg_fehler') };
 }
 // Slice 3a: SSE {a: 'proj', f: {clip_id, analyse: 'wartet'|'laeuft'|'karte_bereit'|'fertig'|'fehler'|'verworfen', grund?}}. Die Seite lädt bei clip_id ohnehin nach
@@ -393,7 +402,7 @@ export function bindeProduktion({ post, bpm, stoebern, bibliothek = null, preset
     catch (e) { return merkeAntwort({ status: 0, j: { fehler: 'netz', text: e.message } }); }
   }
   const ctx = { st, $, bpm, stoebern, melde, holeJson, holeGet, lies, merke, fehlerText, antwortText,
-    beimProjekt: [], nachLaden: [], vorBild: [], beimBild: [], beimEreignis: [], beimSichtwechsel: [], beimMarken: [], beiGeraete: [],
+    beimProjekt: [], nachLaden: [], vorBild: [], beimBild: [], beimEreignis: [], beimSichtwechsel: [], beimMarken: [], beiGeraete: [], beiWahl: [],
     presetsZeigen, presetsNeu,   // 1.16 rest U7: app.js callbacks of the PRESETS panel (see preset_host.js)
     presetListe,                 // 1.16 rest U8: the rows of the PRESETS panel (right click "Add to collection", collections.js)
     ausgabeLauf: () => {} };   // V2 Fix F14: freeze_export.js setzt es (ausgabe_lauf aus GET /proj/aktuell)
@@ -465,7 +474,7 @@ export function bindeProduktion({ post, bpm, stoebern, bibliothek = null, preset
   // 1.10 T3 (D5): a plain click elsewhere or Escape clears the track selection (Ctrl/Shift+click on a name keeps it)
   document.addEventListener('click', (e) => {
     if (!st.spurWahl?.size) return;
-    if (e.target?.closest?.('.p-arr-name, .p-arr-gruppe .p-ausgang') || ((e.ctrlKey || e.shiftKey || e.metaKey) && e.target?.closest?.('.p-spurname'))) return;   // a click on a group head name selects the head itself; a click on the output select of a group head keeps the selection
+    if (!klickDaneben(e.target)) return;   // dock, window, face, menu, popover, a detached target or a track head keeps the selection
     ctx.wahlLeeren();
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && st.sichtbar && !menueOffen() && !e.defaultPrevented && !document.body.classList.contains('geraeteseite') && st.spurWahl?.size) ctx.wahlLeeren(); });

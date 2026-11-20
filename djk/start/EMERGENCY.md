@@ -36,6 +36,11 @@ no start limit, measured up to 1659 restarts in 5 s), and a loop does not stop b
    start error with return code 2 (configuration, `~/.config/cypherdj/kern.toml`), output gone (interface unplugged).
 3. Once the cause is fixed, run `djk-start` once. If it loops again: not a third time, **fallback to the XZ.**
 
+`djk-start: output ...L/R not found` for the digital output after a reboot: the card can come up on the wrong profile
+(2026-11-19: `output:iec958-ac3-surround-51`, stereo not offered). Since 2026-11-19 djk-start calls `profiles.py`, which
+sets `output:iec958-stereo` back and, when no kern is running, restarts WirePlumber (then PipeWire) so the card is probed
+again. By hand: `systemctl --user restart pipewire pipewire-pulse wireplumber`, then `djk-start` again.
+
 ## 3. Page hangs
 
 The sound keeps running, the page is only display and hand. Do not restart the core.

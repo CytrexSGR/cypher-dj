@@ -1,8 +1,5 @@
-// PRODUCTION: the Hall face of a return. The opener lives in the return header (returns.js); this file holds the source object the face reads and writes through
-// and the refresh when the project changes under an open face. A face reads the return from the project and writes through ctx.aendere with the same coalescing
-// key and undo label as the Hall sliders of the return strip: no second path to the project. The Hall has no live value, so the face has no frame function.
-import { oeffneFace, offenesFace, schliesseFace } from '../face/frame.js';
-import { baueHallFace } from '../face/reverb.js';
+// PRODUCTION: the source object of a Hall face. The dock (dock/karten.js, dock/window.js) opens the face in the window layer; the face reads the return
+// from the project and writes through ctx.aendere with the coalescing key and undo label of the Hall knobs: no second path to the project.
 import { returnListe } from './routing.js';
 
 const finde = (ctx, id) => returnListe(ctx.st.projekt).find((r) => r.id === id) ?? null;
@@ -22,26 +19,4 @@ export function returnQuelleHall(ctx, ret) {
       set: (b) => { const r = finde(ctx, id); if (r) ctx.aendere(`Hall ${b ? 'on' : 'off'} return ${r.name}`, [{ befehl: 'return_aendern', return_id: id, hall: { an: b } }]); },
     },
   };
-}
-
-/** Registers the opener hook and the project listener. ctx.returnFaceOeffnen(id) opens (or closes) the face of a return. */
-export function bindeReturnFace(ctx) {
-  let aktuell = null;   // {id, face} of the open Hall face
-  ctx.returnFaceOeffnen = (id) => {
-    const ret = finde(ctx, id);
-    if (!ret || ret.effekt !== undefined) return null;
-    const quelle = returnQuelleHall(ctx, ret);
-    const f = oeffneFace({
-      id: `hall:${id}`, titel: 'HALL', untertitel: `return ${ret.name}`, akzent: 'tuerkis', an: quelle.an,
-      bauen: (inhalt) => baueHallFace(inhalt, quelle),
-    });
-    aktuell = f ? { id, face: f } : null;
-    return f;
-  };
-  ctx.beimProjekt.push((p) => {
-    const o = offenesFace();
-    if (!o || !aktuell || o.id !== `hall:${aktuell.id}`) return;
-    if (!p || !finde(ctx, aktuell.id)) { schliesseFace(); aktuell = null; return; }
-    aktuell.face.aktualisiere();
-  });
 }

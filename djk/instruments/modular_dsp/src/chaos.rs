@@ -78,14 +78,22 @@ impl Chaos {
         Self { start, s: start, trig_vorher: false }
     }
 
-    /// One sample: (`aus`, `aus2`). `rate` in Hz-like units (clamped to 0.01..50, non-finite counts as the default).
+    /// The edge handling of `prozess` alone: a rising `trig` jumps back to the start state, the attractor does not advance.
+    /// Used while nobody listens to the output (`nullen.rs`): the state then stands still instead of running unheard, and a
+    /// note edge in that time still restarts it, as it would have.
     #[inline]
-    pub fn prozess(&mut self, rate: f32, trig: f32, form: u8, sr: f32) -> (f32, f32) {
+    pub fn nur_trigger(&mut self, trig: f32) {
         let hoch = trig > 0.5;
         if hoch && !self.trig_vorher {
             self.s = self.start;
         }
         self.trig_vorher = hoch;
+    }
+
+    /// One sample: (`aus`, `aus2`). `rate` in Hz-like units (clamped to 0.01..50, non-finite counts as the default).
+    #[inline]
+    pub fn prozess(&mut self, rate: f32, trig: f32, form: u8, sr: f32) -> (f32, f32) {
+        self.nur_trigger(trig);
         let rate = if rate.is_finite() { rate.clamp(MIN_RATE, MAX_RATE) } else { RATE } as f64;
         let form = form.min(1);
         let h = rate * TEMPO[form as usize] / sr as f64;

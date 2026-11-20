@@ -4,14 +4,14 @@ import { mixAufnehmen, gateAufnehmen } from './effects.js';
 import { kanalAnsicht } from './live_module.js';   // live modules task 4
 import { cypherStand } from './messages.js';
 import { live, liveEreignis, liveOffen, merkeArr, pruefeLiveSpaeter, zeichneLive } from './live_view.js';
-import { produktion, werkbank } from './seitenrahmen.js';
+import { produktion, werkbank, tracker } from './seitenrahmen.js';
 import { $, BUCHSTABE, deckAnsicht, melde, zeigePruefmodus, zustand } from './page_state.js';
-import { baueFxDetail, busMix, fxGewaehlt, gateMix, zeigeBusMesser, zeigeGateMesser, zeigeKomp, zeigeMasterLimiter, zeigeWerkzeug } from './effects_view.js';
+import { busMix, gateMix, zeigeBusMesser, zeigeGateMesser, zeigeMasterLimiter, zeigeWerkzeug } from './effects_view.js';
 import { zeigeKeylock } from './tempo_view.js';
 import { GRUND_TEXT, eintragVon, zeigeDeck, zeigePegel, zeigeSchlag } from './deck_view.js';
 import { fxRoutingVomKern, fxVomKern, fxZuweisungVomKern } from './beat_fx_view.js';
 import { bkMarkeSpaeter, holeBkSpaeter, setzeGraphenGeladen } from './graphs_view.js';
-import { lernEreignis, zeigeFxDetail, zeigeSendKnobs } from './learn_view.js';
+import { lernEreignis, zeigeSendKnobs } from './learn_view.js';
 import { registerHand, registerFokus } from './register_view.js';
 import { fokus } from './controller_fokus.js';
 import { geraetFensterEreignis } from './device_window.js';
@@ -67,6 +67,7 @@ export function strom() {
     const { a, f } = JSON.parse(m.data);
     try { produktion?.ereignis(a, f); } catch (e) { console.error('Production view:', e); }   // D1 V1: proj, /zustand/arr; ein Fehler dort hält die DJ-Anzeige nicht an
     try { werkbank?.ereignis(a, f); } catch (e) { console.error('Workbench view:', e); }   // like the line above: an error there does not stop the DJ display
+    try { tracker?.ereignis(a, f); } catch (e) { console.error('Tracker view:', e); }   // like the lines above
     try { geraetFensterEreignis(a, f); } catch (e) { console.error('Device window:', e); }   // the #geraet window mode (no-op elsewhere)
     if (a === '/zustand/arr') { merkeArr(f); zeigeMasterLimiter(f); }   // the loop slots follow the transport of the live container; the MASTER tab's LIMITER meter reads limiter_db
     switch (a) {
@@ -118,12 +119,10 @@ export function strom() {
         if (/\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.test(f.pfad)) bkMarkeSpaeter();   // S17: the saved/differs marker follows the graph knobs
         if (f.pfad === 'keylock') { zeigeKeylock(); DECKS.forEach(zeigeDeck); }   // Keylock 3: Taste und VARI
         if (f.pfad === 'color/art' || f.pfad === 'color/param') zeigeColor();
-        { const m = /^(.+)\/komp\/\w+$/.exec(f.pfad); if (m) { zeigeKomp(m[1]); if (m[1] === fxGewaehlt) zeigeFxDetail(); } }
         if (f.pfad === 'spektrum/kanal') for (const a of spektrumAnsichten) a.setzeQuelle(f.wert);   // A7b
         { const m = /^(.+?\/\d)\/(?:gate|util|mb|lim)\/[\w/]+$/.exec(f.pfad); if (m) zeigeWerkzeug(m[1]); }   // A8, A8b (bus multiband and limiter)
         if (/^fx\/[34]\/bk\//.test(f.pfad)) zeigeSendKnobs();   // S14: the send-return knobs follow the echo (also a move by Cypher)
         if (/^master\/bk\//.test(f.pfad)) zeigeSendKnobs();   // the knobs of the master insert (MASTER tab, same row type) follow it too
-        { const m = /^(.+)\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.exec(f.pfad); const fp = m && m[1] === fxGewaehlt ? $('#fxdetail .bkliste')?._fp : null; if (fp) fp.aktualisiere(); }   // a panel in the detail view follows the echo too
         { const m = /^(.+)\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.exec(f.pfad); if (m && instrumenteSichtbar() && m[1] === instrumenteAnsicht.gewaehlt()) instrumenteAnsicht.aktualisiere(); }   // ... and the panel in INSTRUMENTS
         if (f.halter === 'mensch') spurHandEcho(f.pfad, f.wert);   // a hand moved a track fader or pan: the PRODUCTION heads show it at once
         if (/^spur\/\d+\/bk\/\d+$/.test(f.pfad)) zeilenEcho(f.pfad);   // P2: the device panel of a track follows its row (a controller moved it)
@@ -134,7 +133,6 @@ export function strom() {
         break;
       case '/zustand/komp':
         kompGr[f.kanal] = { db: Number(f.gr_db), t: performance.now() };
-        zeigeKomp(f.kanal);
         break;
       case '/e/stufe_pegel':   // device faces T9: the channel compressor's input and output peak (the insert stages' reports are taken in production/inserts.js)
         kompPegelAufnehmen(kompPegel, f, performance.now());
@@ -171,9 +169,7 @@ export function strom() {
       }
       case '/pegel': zeigePegel(f.kanal, f.spitze_db); break;
       case '/e/loop': {
-        const alt = zustand.loops[f.box]?.name;
         zustand.loops[f.box] = f;
-        if (fxGewaehlt === `pad/${f.box}` && alt !== f.name) baueFxDetail();   // anderer Loop: andere Automation
         break;
       }
       case '/e/mitschnitt':

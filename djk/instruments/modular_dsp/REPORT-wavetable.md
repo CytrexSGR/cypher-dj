@@ -102,7 +102,7 @@ for being finite (NaN and inf read as 0) and clamped. The only state that decays
 | value | `saat` | integer 0..65535 | 0 | seed |
 | value | `glatt` | 0..1000 ms | 10 | smoothing of `pos` |
 | value | `reserve` | integer 0..3 | 0 | mip level chosen for the phase step times `2^reserve` |
-| field | `spektren` | 1..32 frames x 1..256 harmonics | absent | custom harmonic spectra instead of `tabelle` |
+| field | `spektren` | 1..256 frames x 1..256 harmonics | absent | custom harmonic spectra instead of `tabelle` |
 | out | `l`, `r` | | | stereo, panned copies |
 | out | `aus` | | | sum without pan (for one per-voice mono chain); equals `l` and `r` at width 0 |
 
@@ -299,3 +299,20 @@ Re-run on x86_64, release build, against main: aliasing of the saw sweep -108.2 
 mutations of `src/wavetable.rs` turned their checks red: reading mip level 0 always (both aliasing tests), unison gain 1
 instead of 1/sqrt(n) (`unison_lautheit_bleibt_gleich`), position without smoothing (`morph_ohne_sprung`). Open: the
 listening test of the three examples by the product owner.
+
+## Table cache and 256 frames (2026-11-19)
+
+Tables of up to 256 frames. Two changes, both bit-identical to the old tables (`wavetable::tests::geteilte_stufen_sind_bitgleich_und_sparen_speicher`
+compares every sample of every level and frame against the build without sharing):
+
+- **Cache.** `tabelle_eingebaut` / `tabelle_aus_spektren` return a shared `Arc<Tabelle>` keyed by the input bits (LRU, 384 MB
+  budget, programs keep what they hold). A playback build with unchanged tables computes nothing, nodes with the same table
+  share one copy (`tests/wavetable_cache.rs`).
+- **Shared levels.** A custom spectrum has at most 256 harmonics, so levels that keep all of them and have the same length
+  (`L = 8192`, levels 0..5) hold identical samples; they are stored once. Built-in tables (spectra up to 1024 harmonics)
+  share nothing. Fewer mip levels was rejected: dropping or thinning levels changes the sound.
+
+Measured (release, `cargo test --release --test wavetable_cache messe_tabellen -- --ignored --nocapture`):
+one table of 256 frames 75.8 MB before, 33.8 MB now (-55 %), build 66 ms before, 29 ms now. Playback build with 4 nodes x
+256 frames: first build 118 ms (+133 MB RSS), rebuild with unchanged tables 6 ms (+0.1 MB). Callback unchanged (the read path
+is the same code; 1611 ns per sample for 4 nodes x 3 copies x 4 voices).

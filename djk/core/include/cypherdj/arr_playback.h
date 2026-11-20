@@ -28,6 +28,7 @@ namespace cdj {
 constexpr int ARR_SPUREN = 32;           // Spur-Slots spur/1..32 (Spec 2.3, E3); = SPUR_REGLER_SPUREN (static_assert)
 constexpr int ARR_CLIPS_MAX = 4096;     // je Wiedergabe (Spec 3.2)
 constexpr int ARR_NOTEN_MAX = 65536;    // je Wiedergabe (Spec 3.2)
+constexpr int ARR_FX_PUNKTE_MAX = 65536;   // tracker task 16: bend and pegel events of all bk tracks together, per playback; = MAX_FX_PUNKTE in model.ts (pinned by tests/project_bk_device.test.mjs)
 constexpr int ARR_BK_INSTR_LAT_MAX = 4096;  // longest latency of an instrument graph on a project track in samples; more is refused by the loader (format)
 constexpr int ARR_HOST_LAT_MAX = 8192;  // plan 1.11 (D5): longest host-stage latency in samples (the dry ring of a host stage and, with the PDC ring, the bound of the loader): a latency of this value or more is refused (pdc_zu_lang)
 constexpr int ARR_INS_HOST = 4;         // plan 1.11 (D1): effect hosts, one Carla process per plugin; host h = pool instance ins/host/<h> = playback slot h - 1; ports arr_ins_<h>_L/R out, arr_insret_<h>_L/R in
@@ -162,6 +163,14 @@ struct ArrNote {
   uint8_t ton, vel;
 };
 
+// Tracker task 16: one pitch (bend, semitones) or level (pegel, factor) event of a bk track: the value in force from `beat` on (absolute project beat). gleit is a length in beats,
+// 0 jumps, above 0 reaches `wert` linearly over that many beats starting from the value in force at `beat`. Lists are sorted by beat; equal beats keep their order (the later wins).
+struct ArrFxPunkt {
+  double beat;
+  float wert;
+  float gleit;
+};
+
 enum class ArrArt : uint8_t { leer = 0, audio = 1, intern = 2, wirt = 3, rack = 4 };   // 1.9: rack = an instrument rack (ArrSpur::glied)
 
 struct ArrParameter {
@@ -184,6 +193,12 @@ struct ArrGlied {
   float gain = 1.0f;                 // linear, from gain_db -60..+12
 };
 
+// Kraken patch field: one pin of the matrix block of a bk track (satz 0 = A, 1 = B; zeile 0..15 source; spalte 0..15 destination; wert -1..1, never 0).
+struct ArrStift {
+  uint8_t satz, zeile, spalte;
+  float wert;
+};
+
 struct ArrSpur {
   int nr = 0;                        // 1..ARR_SPUREN (32); 0 = leer
   ArrArt art = ArrArt::leer;
@@ -204,6 +219,10 @@ struct ArrSpur {
   char kit[33] = {};
   const Kit* kit_ptr = nullptr;
   uint64_t kit_gen = 0;
+  // Kraken patch field (playback key `stifte` of a bk track): stifte_da = the track has its own pins (they replace the graph's pins entirely, an empty list means all pins 0); the pins
+  // are ArrSnapshot::stifte[stift_von .. stift_von + stift_n), sorted by (satz, zeile, spalte). Absent: the graph's own pins play.
+  bool stifte_da = false;
+  int32_t stift_von = 0, stift_n = 0;
   int n_param = 0;
   ArrParameter param[ARR_PARAMETER] = {};
   int n_clips = 0;
@@ -212,6 +231,11 @@ struct ArrSpur {
   const ArrNote* noten = nullptr;    // nach beat aufsteigend
   const uint64_t* noten_id = nullptr;    // IDs aufsteigend (Suche beim Tausch)
   const int32_t* noten_id_index = nullptr;
+  // Tracker task 16: bend and pegel events of a bk track (playback /2 and /3), into ArrSnapshot::fx_punkte; 0 / nullptr: the track has none and costs nothing
+  int n_bend = 0;
+  const ArrFxPunkt* bend = nullptr;
+  int n_pegel = 0;
+  const ArrFxPunkt* pegel = nullptr;
   int n_auto = 0;                    // Automation Slice 1: lanes of this track (none: 0)
   const ArrAutoLane* auto_lanes = nullptr;
   // 1.9 U6: art rack (geraet "rack"): the members and the chain value. A change of the chain value is a swap of the playback; notes that start
@@ -383,6 +407,9 @@ struct ArrSnapshot {
     }
   }
   int64_t nr = 0;
+  // Kraken patch field: serial of the snapshot, unique per snapshot built by the loader (lade_wiedergabe), never 0. A snapshot built anywhere else (tests, other builders) keeps 0. The bk sink applies the pins of
+  // the snapshot when this differs from the one it applied last (also when the pin lists are equal: an undo of a live pin is a new snapshot).
+  uint64_t folge = 0;
   uint8_t spur_ordnung[ARR_SPUREN];  // 1.10 slice 5 U1: the order the tracks run in (chain, then fader loop): a stable topological order over the track-post key edges, the identity without such edges (arr_key.h). A fixed array in the head, so inside the first locked region.
   // Nested groups (computed once by arr_gruppen_rechnen() below, in the loader and in the test builder; the callback only reads them). Fixed arrays in the head.
   int8_t gruppe_ausgang[ARR_GRUPPEN];   // output of group g+1: 0 = master, 1..ARR_GRUPPEN = the parent group
@@ -414,6 +441,8 @@ struct ArrSnapshot {
   std::vector<ArrNote, ArrSeiten<ArrNote>> noten;
   std::vector<uint64_t, ArrSeiten<uint64_t>> noten_id;
   std::vector<int32_t, ArrSeiten<int32_t>> noten_id_index;
+  std::vector<ArrStift, ArrSeiten<ArrStift>> stifte;          // kraken patch field: the pins of all bk tracks hintereinander (ArrSpur::stift_von / stift_n index into it; listed in je_bereich)
+  std::vector<ArrFxPunkt, ArrSeiten<ArrFxPunkt>> fx_punkte;   // tracker task 16: the bend and pegel events of all bk tracks, reserved in the prescan (ArrSpur::bend / pegel point into it)
   // Paket 1.13: Warp-Marker aller Clips, hintereinander (je Clip ein ArrWarp, dessen Zeiger in warp_beat und warp_frame zeigen)
   std::vector<ArrWarp, ArrSeiten<ArrWarp>> warps;
   std::vector<double, ArrSeiten<double>> warp_beat, warp_frame;

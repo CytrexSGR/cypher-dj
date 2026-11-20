@@ -14,7 +14,7 @@
     ]},
     { "id": "bub", "title": "BUBBLE", "cols": 3, "controls": [
       {"id": "bf", "type": "lfoform", "span": 3, "label": "Bubble shape", "formen": ["sh"]},
-      {"id": "rate", "type": "knob", "label": "Rate", "span": 1, "bind": {"param": "k4"}, "format": "hz", "default": 0.5},
+      {"id": "rate", "type": "knob", "label": "Rate", "span": 1, "bind": {"param": "k4"}, "format": "hz", "default": 0.5, "wirkt": {"ueber": ["tiefe", 0.01]}, "wirkt_text": "The bubble does nothing: turn up Depth in BUBBLE"},
       {"id": "tiefe", "type": "knob", "label": "Depth", "span": 1, "bind": {"param": "k2"}, "format": "raw", "unit": "st", "default": 0.5},
       {"id": "b1", "type": "label", "span": 3, "text": "Sample and hold moves the cutoff"}
     ]},

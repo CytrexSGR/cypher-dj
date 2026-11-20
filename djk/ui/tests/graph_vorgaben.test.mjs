@@ -55,10 +55,10 @@ function erwartet(name) {
 }
 const art = (name) => (JSON.parse(fs.readFileSync(path.join(ORDNER, `${name}.json`), 'utf8')).knoten.some((k) => k.art === 'eingang') ? 'effekt' : 'instrument');
 
-test('the walk covers 57 shipped graphs, the 46 recipe graphs and the four fixtures', () => {
-  assert.equal(NAMEN.length, 103);
+test('the walk covers 63 shipped graphs, the 46 recipe graphs and the four fixtures', () => {
+  assert.equal(NAMEN.length, 109);
   assert.equal(BK_REGLER_ZAHL, 64);
-  assert.equal(listeGraphen(ORDNER).graphen.length, 107);
+  assert.equal(listeGraphen(ORDNER).graphen.length, 113);
 });
 
 // ---- (h) Drift ----
@@ -68,9 +68,9 @@ test('Drift: vorgabenVon gives 0.25 for synth-poly knob 28 and synth-mono knob 3
   assert.equal(erwartet('synth-poly')[28], 0.25); assert.equal(erwartet('synth-mono')[32], 0.25);
   assert.ok(NAMEN.includes('synth-poly') && NAMEN.includes('synth-mono'));
   // the knobs that start away from 0.5: Drift, plus (synth-poly build-out) the free parameters and gates at their off positions: Mod env A, D, R (31, 32, 34),
-  // LFO 2 rate, shape, sync, target (39..42), Osc 2 level, wave, sync (46, 47, 51) and Glide (54);
-  // synth-mono build-out: Mod env A, D, R (36, 37, 39), LFO 2 (43..46), chorus, delay and reverb (53..57, 59) and ping-pong (60)
-  const abweichend = { 'synth-poly': [28, 31, 32, 34, 39, 40, 41, 42, 46, 47, 51, 54], 'synth-mono': [32, 36, 37, 39, 43, 44, 45, 46, 53, 54, 55, 56, 57, 59, 60] };
+  // LFO 2 rate, shape, sync, target (39..42), Osc 2 level, wave, sync (46, 47, 51) and Glide (54); the wave-position build-out adds 53 and 58..62 (phase mod, its ratio, warp, stack and chaos settings)
+  // synth-mono build-out: Mod env A, D, R (36, 37, 39), LFO 2 (43..46), chorus, delay and reverb (53..57, 59) and ping-pong (60), plus the chaos build-out: chaos rate (58) and the clean sub level (63)
+  const abweichend = { 'synth-poly': [28, 31, 32, 34, 39, 40, 41, 42, 46, 47, 51, 53, 54, 58, 59, 60, 61, 62], 'synth-mono': [32, 36, 37, 39, 43, 44, 45, 46, 53, 54, 55, 56, 57, 58, 59, 60, 63] };
   for (const n of ['synth-poly', 'synth-mono']) {
     const andere = Object.entries(erwartet(n)).filter(([nr, v]) => v !== 0.5).map(([nr]) => Number(nr));
     assert.deepEqual(andere, abweichend[n], `${n}: the knobs that start away from 0.5`);
@@ -162,11 +162,12 @@ test('no graph usable as an insert stage (every graph with an eingang node among
 
 // ---- panel defaults ----
 // Panels that push a default other than 0.5 on a knob whose graph keeps 0.5: the page pushes it on load; the graph keeps 0.5 so old projects and playbacks do not change.
-// Written once from the first run (9 pairs on 3 panels), plus fx-crunch and fx-polaritaet (2 pairs).
+// Written once from the first run (9 pairs on 3 panels), plus fx-crunch and fx-polaritaet (2 pairs), fx-wahl-filter (1 pair).
 const PANEL_ERLAUBT = [
   ['fx-filter-regler', 1], ['fx-filter-regler', 2],
   ['fx-filterbox', 1], ['fx-filterbox', 2], ['fx-filterbox', 3], ['fx-filterbox', 5], ['fx-filterbox', 7], ['fx-filterbox', 8],
   ['granular-drone', 4],
+  ['fx-wahl-filter', 1],   // the filter type selector starts on LP 12 (index 0 of 4); the graph keeps 0.5 so a project saved before the panel plays as it did
   ['fx-crunch', 8], ['fx-polaritaet', 1],   // Mix 100 % on load; the polarity selector's Off stop (index 2 of 4 = 2/3) while the 0.5 fill is Off too (zone 2)
   // fx-labor: the switches Delay 1, Delay 2 and Cycle start on and the filter selectors start on LP; the 0.5 fill reads the same (on, on, on, LP, LP)
   ['fx-labor', 3], ['fx-labor', 7], ['fx-labor', 15], ['fx-labor', 19], ['fx-labor', 25],
@@ -177,8 +178,8 @@ const PANEL_ERLAUBT = [
 // where the plan's own knobs start: from this number on (and the Drift knob) the panel default must EQUAL the graph's vorgabe
 const ERWEITERT = { 'synth-mono': { ab: 33, extra: [32] }, 'synth-poly': { ab: 29, extra: [28] }, 'synth-neuro': { ab: 25, extra: [] } };
 
-test('panel defaults: every shipped panel control bound to a knob equals the graph vorgabe, except the 28 listed pairs of knobs that keep 0.5', () => {
-  assert.equal(PANEL_ERLAUBT.length, 28);
+test('panel defaults: every shipped panel control bound to a knob equals the graph vorgabe, except the 29 listed pairs of knobs that keep 0.5', () => {
+  assert.equal(PANEL_ERLAUBT.length, 29);
   const benutzt = new Set();
   let geprueft = 0;
   for (const f of fs.readdirSync(path.join(BK, 'paneele')).filter((x) => x.endsWith('.json'))) {

@@ -16,7 +16,7 @@
     { "id": "zap", "title": "PITCH ZAP", "cols": 4, "controls": [
       {"id": "zhue", "type": "huelle", "span": 4, "label": "Pitch zap", "of": {"a": 0.001, "d": "zdecay", "s": 0.001, "r": 0.05}},
       {"id": "zap", "type": "knob", "label": "Zap", "bind": {"param": "k4"}, "format": "raw", "unit": "st", "default": 0.5},
-      {"id": "zdecay", "type": "knob", "label": "Decay", "bind": {"param": "k5"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "zdecay", "type": "knob", "label": "Decay", "bind": {"param": "k5"}, "format": "raw", "unit": "s", "default": 0.5, "wirkt": {"ueber": ["zap", 0.01]}, "wirkt_text": "The pitch zap is off: turn up Zap"},
       {"id": "zn", "type": "label", "span": 2, "text": "Attack 1 ms fixed"}
     ]},
     { "id": "filter", "title": "FILTER", "cols": 3, "controls": [

@@ -1,0 +1,38 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "lead-fm"},
+  "title": "FM Lead 2-Op",
+  "akzent": "orange",
+  "layout": {"rows": [
+    ["ops", "sound", "env", "delay", "hall"]
+  ]},
+  "sections": [
+    { "id": "ops", "title": "OPERATORS", "cols": 4, "controls": [
+      {"id": "alg", "type": "label", "span": 4, "text": "2 operators: Op2 modulates Op1"},
+      {"id": "op1", "type": "label", "span": 4, "text": "Op1 carrier x1"},
+      {"id": "op2", "type": "label", "span": 4, "text": "Op2 modulator x2"},
+      {"id": "opr", "type": "label", "span": 4, "text": "xN = frequency ratio to the note"},
+      {"id": "opn", "type": "label", "span": 4, "text": "Low-pass fixed at 9 kHz, 8 voices"}
+    ]},
+    { "id": "sound", "title": "SOUND", "cols": 2, "controls": [
+      {"id": "index", "type": "knob", "label": "Index", "bind": {"param": "k1"}, "format": "raw", "einheitlos": true,"default": 0.5},
+      {"id": "bite", "type": "knob", "label": "Bite", "bind": {"param": "k2"}, "format": "raw", "einheitlos": true,"default": 0.5},
+      {"id": "sn1", "type": "label", "span": 2, "text": "Index: steady modulation depth"},
+      {"id": "sn2", "type": "label", "span": 2, "text": "Bite: extra index on the attack"}
+    ]},
+    { "id": "env", "title": "AMP ENV", "cols": 2, "controls": [
+      {"id": "hue", "type": "huelle", "span": 2, "label": "Envelope", "of": {"a": 0.005, "d": "decay", "s": 0.45, "r": 0.3}},
+      {"id": "decay", "type": "knob", "label": "Decay", "span": 2, "bind": {"param": "k3"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "en", "type": "label", "span": 2, "text": "A 5 ms, S 45 %, R 300 ms fixed"}
+    ]},
+    { "id": "delay", "title": "ECHO", "cols": 2, "controls": [
+      {"id": "dmix", "type": "knob", "label": "Mix", "span": 2, "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
+      {"id": "dn", "type": "label", "span": 2, "text": "Feedback 30 %", "wirkt": {"ueber": ["dmix", 0.02]}, "wirkt_text": "The echo is off: turn up Mix"},
+      {"id": "cn", "type": "label", "span": 2, "text": "Chorus 50 % fixed, before the echo"}
+    ]},
+    { "id": "hall", "title": "HALL", "cols": 2, "controls": [
+      {"id": "hmix", "type": "knob", "label": "Mix", "span": 2, "bind": {"param": "k5"}, "format": "percent", "default": 0.5},
+      {"id": "hn", "type": "label", "span": 2, "text": "Decay 1.8 s", "wirkt": {"ueber": ["hmix", 0.02]}, "wirkt_text": "The hall is off: turn up Mix"}
+    ]}
+  ]
+}

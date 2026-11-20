@@ -1,0 +1,13 @@
+/* Live dock: the GATE and UTIL popover (tool.js); the strip markup of the tab (werkzeugStreifenHtml) in one column. */
+.live-werkzeug .live-werkzeug-koerper { min-width: 260px; font-size: 11px; }
+.live-werkzeug .fxwerk { display: flex; flex-direction: column; gap: 4px; }
+.live-werkzeug .fxwerk .werk-titel { display: none; }
+.live-werkzeug .fxwerk label { display: grid; grid-template-columns: 48px 1fr 56px; align-items: center; gap: 4px; color: var(--dim); }
+.live-werkzeug .fxwerk output { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.live-werkzeug .fxwerk button { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
+.live-werkzeug .fxwerk .werk-an { align-self: flex-start; }
+.live-werkzeug .fxwerk button.an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }
+.live-werkzeug .fxwerk .werk-schalter { display: flex; gap: 4px; flex-wrap: wrap; }
+.live-werkzeug .fxwerk .busgr { display: grid; grid-template-columns: 34px 1fr 56px; align-items: center; gap: 4px; color: var(--dim); }
+.live-werkzeug .gr { position: relative; height: 8px; background: rgba(255, 255, 255, .06); border-radius: 3px; overflow: hidden; }
+.live-werkzeug .gr i { position: absolute; right: 0; top: 0; bottom: 0; width: 0; background: var(--warn); transition: width 80ms linear; }

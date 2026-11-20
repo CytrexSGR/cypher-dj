@@ -377,56 +377,13 @@ body.lib-zu #bestand .effekte { display: none; }
 .bereich button.an { color: var(--text, #e6e6e6); border-color: var(--line); }
 body.bereich-effekte #bestand .reiter, body.bereich-effekte #bestand #suche, body.bereich-effekte #bestand #bestand-info, body.bereich-effekte #bestand .tabelle { display: none !important; }
 .effekte { flex: 1; min-height: 0; overflow: auto; padding-top: 8px; }
-.fxstreifen-reihe { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
-.fxstreifen { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; font-size: 11px; }
-.fxstreifen .fxname { font-weight: 800; letter-spacing: 0.08em; color: var(--dim); display: flex; justify-content: space-between; align-items: center; }
-.fxstreifen button.komp-an { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
-.fxstreifen button.komp-an.an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }
-.fxstreifen label { display: grid; grid-template-columns: 44px 1fr 46px; align-items: center; gap: 4px; color: var(--dim); }
-.fxstreifen input[type=range] { width: 100%; min-width: 0; }
-.fxstreifen output { text-align: right; font-variant-numeric: tabular-nums; }
-.fxstreifen .gr { position: relative; height: 8px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; }
-.fxstreifen .gr i { position: absolute; right: 0; top: 0; bottom: 0; width: 0; background: var(--warn); transition: width 80ms linear; }
-.effekte { display: flex; gap: 12px; }
+.effekte { display: block; }   /* the EFFECTS tab holds the live dock alone (live_dock/) */
 .effekte[hidden] { display: none; }   /* LIBRARY und EFFECTS schalten um: ohne die Zeile schlug display:flex das hidden (17.10., Andreas) */
-.effekte .fxstreifen-reihe { flex: 1; align-content: start; }
-.fxstreifen { cursor: pointer; }
-.fxstreifen.gewaehlt { border-color: var(--warn); }
-.fxdetail { display: none; }
-body.lib-gross .effekte .fxstreifen-reihe { flex: 0 0 340px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-body.lib-gross .fxdetail { display: grid; flex: 1; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); grid-template-rows: auto 1fr; gap: 10px 16px; align-content: start; font-size: 12px; }
-.fxdetail .fxkopf { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; }
-.fxdetail .fxkopf b { letter-spacing: 0.08em; }
-.fxdetail .fxkopf button.an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }
-.fxdetail .regler-liste { display: flex; flex-direction: column; gap: 6px; }
-.fxdetail .regler-liste label { display: grid; grid-template-columns: 84px 1fr 64px; gap: 6px; align-items: center; color: var(--dim); }
-.fxdetail .regler-liste output { text-align: right; font-variant-numeric: tabular-nums; color: var(--text, #e6e6e6); }
-.fxdetail .bilder { display: flex; flex-direction: column; gap: 8px; }
-.fxdetail .knobbereich { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
-.fxdetail .knobliste { display: flex; flex-direction: column; gap: 6px; }
-.fxdetail .knobliste label { text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fxdetail svg, .fxdetail canvas { width: 100%; max-width: 520px; background: rgba(255,255,255,0.03); border: 1px solid var(--line); border-radius: 6px; }
-.fxdetail .kurve { fill: none; stroke: var(--warn); stroke-width: 2; }
-.fxdetail .achse { stroke: var(--line); stroke-width: 1; }
-.fxdetail .schwelle { stroke: var(--dim); stroke-dasharray: 3 3; }
-.fxdetail .autobereich { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; }
-.fxdetail .autokopf { display: flex; gap: 8px; align-items: center; }
-.fxdetail .autostatus { color: var(--dim); }
-.fxdetail .autospur { max-width: none; height: 140px; touch-action: none; cursor: crosshair; }
-.fxdetail .autopunkt { fill: var(--warn); stroke: #0e0f12; stroke-width: 1.5; cursor: grab; }
-.fxdetail .bildtitel { color: var(--dim); font-size: 10px; letter-spacing: 0.08em; }
-.fxstreifen .fxinhalt { font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fxstreifen .fxinhalt.laeuft { color: var(--text, #e6e6e6); }
-.fxstreifen .fxpegel { display: grid; grid-template-columns: 1fr 40px; gap: 4px; align-items: center; }
-.fxstreifen .fxpegel span { text-align: right; font-variant-numeric: tabular-nums; color: var(--dim); }
-.fxstreifen .grzahl { text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; }
-.fxstreifen .fxwerk { display: flex; flex-direction: column; gap: 3px; border-top: 1px solid var(--line); padding-top: 4px; }
-.fxstreifen .fxwerk .werk-titel { font-weight: 800; letter-spacing: 0.08em; color: var(--dim); font-size: 10px; }
-.fxstreifen .fxwerk button { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
-.fxstreifen .fxwerk .werk-an { align-self: flex-start; }
-.fxstreifen .fxwerk button.an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }
-.fxstreifen .fxwerk .werk-schalter { display: flex; gap: 4px; flex-wrap: wrap; }
-.fxstreifen .fxwerk .busgr { display: grid; grid-template-columns: 34px 1fr 56px; align-items: center; gap: 4px; color: var(--dim); }   /* A6: gate meter */
+.live-auto .autobereich { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; }
+.live-auto .autokopf { display: flex; gap: 8px; align-items: center; }
+.live-auto .autostatus { color: var(--dim); }
+.live-auto .autospur { max-width: none; height: 140px; touch-action: none; cursor: crosshair; }
+.live-auto .autopunkt { fill: var(--warn); stroke: #0e0f12; stroke-width: 1.5; cursor: grab; }
 .colorfx [data-colorart].an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }   /* SOUND COLOR FX: die gewählte Art */
 .colorfx .colorparam { display: flex; align-items: center; gap: 4px; font-size: 9px; color: var(--dim); }
 .colorfx .colorparam input { width: 80px; }
@@ -623,14 +580,6 @@ button.laden.in-box:disabled { opacity: .4; }
 .graphplatz .bkmarke { font-size: 10px; margin-left: 6px; }
 .graphplatz .bkmarke.gespeichert { color: #6fbf73; }
 .graphplatz .bkmarke.abweichend { color: #e0a43b; }
-.fxdetail .graphdetail { grid-column: 1 / -1; max-width: 340px; }
-.fxstreifen-reihe .sendrueck { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 11px; }
-.sendrueck .sendzeile { display: grid; grid-template-columns: 80px minmax(0, 220px); gap: 8px; align-items: center; color: var(--dim); }
-/* S14: the eight graph knobs of a return span the row under the picker (same look as the detail view's knob list) */
-.sendrueck .sendzeile .bkliste { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 4px 12px; }
-.sendrueck .bkliste label { display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 2px 6px; align-items: center; text-transform: uppercase; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.sendrueck .bkliste input[type=range] { grid-column: 1 / -1; grid-row: 2; min-width: 0; width: 100%; }
-.sendrueck .bkliste output { grid-column: 2; grid-row: 1; text-align: right; font-variant-numeric: tabular-nums; color: var(--text, #e6e6e6); }
 
 /* S19 (MIDI learn): learn button, waiting state and badge next to a graph knob */
 .bkzeile { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
@@ -644,16 +593,7 @@ button.laden.in-box:disabled { opacity: .4; }
 .lern-badge { font-size: 10px; padding: 2px 6px; border: 1px solid var(--line); border-radius: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
 .lern-weg { font-size: 12px; line-height: 1; padding: 1px 6px; border-radius: 6px; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .lern.wartet { animation: none; } }
-.fxstreifen .fxwerk label { grid-template-columns: 48px 1fr 56px; }
-.fxstreifen .fxwerk output { white-space: nowrap; }
 
-/* A8b: BUS panel (multiband, limiter, utility per bus), a full row in the strip grid */
-.fxstreifen-reihe .buspanel { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; }
-.buspanel .buskopf { display: flex; align-items: center; gap: 10px; }
-.buspanel .buskopf .klein { color: var(--dim); font-size: 11px; }
-.buspanel button.bus-panel-knopf { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; padding: 2px 8px; border-radius: 4px; }
-.buspanel .busreihe { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
-.buspanel .busreihe[hidden] { display: none; }
 .busstreifen { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; font-size: 11px; }
 .busstreifen .fxname { font-weight: 800; letter-spacing: 0.08em; color: var(--dim); }
 .busstreifen .fxwerk { display: flex; flex-direction: column; gap: 3px; border-top: 1px solid var(--line); padding-top: 4px; }
@@ -677,8 +617,6 @@ button.laden.in-box:disabled { opacity: .4; }
 .busstreifen .lim-grund { color: var(--warn); font-size: 10px; }
 .busstreifen .lim-grund[hidden] { display: none; }
 /* A8b: the four Utility switches (Ø L, Ø R, SWAP, DC) stay in one row, also in the narrowest strip (150 px): no wrap, tighter padding and gap */
-.fxstreifen .fxwerk .werk-schalter, .busstreifen .fxwerk .werk-schalter { flex-wrap: nowrap; gap: 2px; }
-.fxstreifen .fxwerk .werk-schalter button, .busstreifen .fxwerk .werk-schalter button { padding: 1px 3px; min-width: 0; flex: 0 1 auto; white-space: nowrap; }
 
 /* 1.15 A7b: spectrum view in the EFFECTS panel */
 .spektrum { flex: 0 0 360px; display: flex; flex-direction: column; gap: 6px; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 8px; min-width: 0; align-self: flex-start; }
@@ -1102,22 +1040,6 @@ body.studio #pult[data-seq-n="1"] { grid-template-columns: var(--mu-breite) minm
 body.studio .zug[data-deck]:not([data-studio-zug]) { display: none !important; }
 body.studio .zug[data-studio-zug] { display: flex !important; }
 body.studio #pult:not([data-seq-n="0"]) #mischer-unten { grid-auto-flow: column; grid-template-columns: none; grid-auto-columns: var(--zug); overflow-x: auto; }
-/* EFFECTS channel tabs: one channel strip at a time */
-.fxstreifen-reihe > .fx-aus { display: none; }
-.fxreiter { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; }
-.fxreiter-tab { display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 6px; background: none; border: 1px solid var(--line); color: var(--dim); }
-.fxreiter-tab.an { color: var(--text, #e6e6e6); border-color: var(--warn); }
-.fxreiter-tab .licht { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.15); display: inline-block; }
-.fxreiter-tab .licht.an { background: var(--warn); }
-/* EFFECTS chain: INSERT, GATE, COMP, UTIL in signal order, one row (wraps when narrow) */
-.fxstreifen-reihe > .fxstreifen:not(.fx-aus) { grid-column: 1 / -1; }
-.fxstreifen .fxkette { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
-.fxstreifen .fx-glied { flex: 1 1 150px; min-width: 0; display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--line); padding-top: 4px; }
-.fxstreifen .fx-glied-titel { font-weight: 800; letter-spacing: 0.08em; color: var(--dim); font-size: 10px; }
-.fxstreifen .fx-glied .fxwerk { border-top: 0; padding-top: 0; }
-.fxstreifen .fx-glied .fxwerk .werk-titel { display: none; }
-.fxstreifen .fx-glied button.komp-an { align-self: flex-start; }
-.fxstreifen .fx-pfeil { align-self: center; color: var(--dim); font-style: normal; font-size: 16px; }
 
 /* CONTROLLERS tab: the read-only controller register (register_view.js) */
 body.bereich-controller #bestand .reiter, body.bereich-controller #bestand #suche, body.bereich-controller #bestand #bestand-info,
@@ -1220,24 +1142,6 @@ body.controller-fenster #bestand .register { display: flex !important; font-size
 #djfx-auf { display: none; order: 10; }
 body.werkbank #djfx-auf { display: inline-block; }
 body.werkbank:not(.djfx-auf) #kopf > #fx { display: none; }
-/* MASTER tab: the master chain in signal order, INSERT then GLUE then LIMITER */
-.fxstreifen-reihe .masterpanel { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; --farbe: var(--text); }
-.masterpanel .fxkette { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
-.masterpanel .fx-glied { flex: 1 1 150px; min-width: 0; display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--line); padding-top: 4px; }
-.masterpanel .fx-glied-insert { flex-grow: 3; flex-basis: 260px; }
-.masterpanel .fx-glied-titel { font-weight: 800; letter-spacing: 0.08em; color: var(--dim); font-size: 10px; }
-.masterpanel .fx-pfeil { align-self: center; color: var(--dim); font-style: normal; font-size: 16px; }
-.masterpanel .masterzeile { display: grid; grid-template-columns: minmax(0, 220px); gap: 4px; font-size: 11px; color: var(--dim); }
-.masterpanel .masterzeile .bkliste { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 4px 12px; }
-.masterpanel .bkliste label { display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 2px 6px; align-items: center; text-transform: uppercase; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.masterpanel .bkliste input[type=range] { grid-column: 1 / -1; grid-row: 2; min-width: 0; width: 100%; }
-.masterpanel .bkliste output { grid-column: 2; grid-row: 1; text-align: right; font-variant-numeric: tabular-nums; color: var(--text, #e6e6e6); }
-.masterpanel .summe.glue { display: flex; flex-direction: row; align-items: center; gap: 8px; }
-.masterpanel .summe.glue .knopf { width: 40px; height: 40px; }
-.masterpanel .busgr { display: grid; grid-template-columns: 24px 1fr 56px; align-items: center; gap: 4px; color: var(--dim); font-size: 11px; }
-.masterpanel .gr { position: relative; height: 8px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; }
-.masterpanel .gr i { position: absolute; right: 0; top: 0; bottom: 0; width: 0; background: var(--warn); transition: width 80ms linear; }
-.masterpanel .grzahl { text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; }
 
 /* SEQ scenes: a box of the page header (row 1, next to ROUTING, same frame as BAR/PHRASE/BPM and ROUTING). It wraps inside itself at a narrow window and is
    hidden with the beat FX strip in the STUDIO workbench view (body.werkbank without the DJ FX toggle). */
@@ -1313,3 +1217,11 @@ body.geraet-fenster #geraet-fenster { display: block; padding: 8px 12px 14px; }
 #geraet-fenster .fp-zelle[data-ctl] { position: relative; }
 #geraet-fenster .fp-zelle[data-ctl]::after { content: attr(data-ctl); position: absolute; top: -2px; right: 2px; width: auto; height: 14px; box-shadow: none; min-width: 14px; padding: 0 4px; border-radius: 7px; border: 1px solid var(--ctl, #e8943a); background: none; color: var(--ctl, #e8943a); font-size: 10px; font-weight: 700; line-height: 14px; text-align: center; pointer-events: none; }
 #geraet-fenster [hidden] { display: none !important; }
+
+/* Play and stop look the same everywhere (Andreas 2026-11-18: "die play und stop tasten könnte überall farbig gleich aussehen mit anderer farbe als jetzt"):
+   PLAY green, STOP red; a running play is filled. Transport of PRODUCTION and the workbench, deck PLAY, LIVE pattern PLAY/STOP, automation lanes. */
+:root { --play: #3ddc84; --stopp: #ff5f56; }
+body :is([data-p="play"], [data-w="play"], .taste.play, .muster-senden, #muster-senden, .spielen) { border-color: var(--play); color: var(--play); }
+body :is([data-p="stopp"], [data-w="stopp"], .taste-c.stopp, .muster-stopp, #muster-stopp, .halten) { border-color: var(--stopp); color: var(--stopp); }
+body :is([data-p="play"], [data-w="play"], .taste.play, .spielen):is(.an, [aria-pressed="true"]) { background: var(--play); border-color: var(--play); color: #04150b; }
+body :is([data-p="play"], [data-w="play"], [data-p="stopp"], [data-w="stopp"]):disabled { opacity: .45; }

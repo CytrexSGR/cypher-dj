@@ -7,14 +7,24 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 struct Zaehler;
 static ANFORDERUNGEN: AtomicUsize = AtomicUsize::new(0);
+thread_local! {
+    // const-initialised Cell<bool>: no lazy allocation and no destructor, so reading it inside the allocator is safe
+    static ZAEHLT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+/// Count only what the thread under test asks for. libtest's main thread allocates on its own (the "has been running for
+/// over 60 seconds" warning prints a formatted line), and a global count blamed that on whatever graph was playing at the
+/// time: the failure showed up in debug builds (run time over 60 s) and named a different graph every run.
+fn zaehle() {
+    if ZAEHLT.try_with(|z| z.get()).unwrap_or(false) { ANFORDERUNGEN.fetch_add(1, Ordering::SeqCst); }
+}
 unsafe impl GlobalAlloc for Zaehler {
     unsafe fn alloc(&self, l: Layout) -> *mut u8 {
-        ANFORDERUNGEN.fetch_add(1, Ordering::SeqCst);
+        zaehle();
         System.alloc(l)
     }
     unsafe fn dealloc(&self, p: *mut u8, l: Layout) { System.dealloc(p, l) }
     unsafe fn realloc(&self, p: *mut u8, l: Layout, n: usize) -> *mut u8 {
-        ANFORDERUNGEN.fetch_add(1, Ordering::SeqCst);
+        zaehle();
         System.realloc(p, l, n)
     }
 }
@@ -37,6 +47,20 @@ const GATE_1: &str = r#"{"format":"baukasten/2","name":"gate-1","stimmen":4,"kno
 const KOMP_1: &str = r#"{"format":"baukasten/2","name":"komp-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"e","art":"adsr","a":0.01,"d":0.1,"s":1,"r":0.2},{"id":"vca","art":"mul"},{"id":"k","art":"komp","schwelle":-30,"ratio":8,"attack":0.5,"release":20,"mix":0.5,"schp":150},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.gate","nach":"e.gate"},{"von":"n.trig","nach":"e.trig"},{"von":"s.aus","nach":"vca.a"},{"von":"e.aus","nach":"vca.b"},{"von":"vca.aus","nach":"k.x"},{"von":"k.l","nach":"o.l"},{"von":"k.r","nach":"o.r"}]}"#;
 /// Vier Stimmen Sägezahn in eine gestimmte Rückkopplungsschleife mit modulierter Zeit (Slice 4f)
 const LEITUNG_1: &str = r#"{"format":"baukasten/2","name":"leitung-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"e","art":"adsr","a":0.01,"d":0.1,"s":1,"r":0.2},{"id":"vca","art":"mul"},{"id":"a","art":"add"},{"id":"d","art":"leitung","max":50},{"id":"l","art":"lfo","rate":2},{"id":"t","art":"transponiere","cent":-30},{"id":"m","art":"mul","b":0.9},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.gate","nach":"e.gate"},{"von":"n.trig","nach":"e.trig"},{"von":"s.aus","nach":"vca.a"},{"von":"e.aus","nach":"vca.b"},{"von":"vca.aus","nach":"a.a"},{"von":"a.aus","nach":"d.x"},{"von":"n.hz","nach":"t.hz"},{"von":"l.aus","nach":"t.st"},{"von":"t.aus","nach":"d.hz"},{"von":"d.aus","nach":"m.a"},{"von":"m.aus","nach":"a.b"},{"von":"a.aus","nach":"o.x"}]}"#;
+/// Four voices of the paula bank: two slots on the generated probe (the second looped, fine tuned, leveled), slot, start and direction
+/// from knobs, so the pick, the read position, the grid and the quantiser change while playing
+const PAULA_1: &str = r#"{"format":"baukasten/2","name":"paula-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"p","art":"paula","quellrate":12000,"bits":6,"plaetze":[{"datei":"probe.f32","grund":110,"rate":48000},{"datei":"probe.f32","grund":200,"rate":22050,"schleife":1,"s_von":1000,"s_laenge":3000,"pegel":0.8,"fein":-3}]},{"id":"k1","art":"regler","nr":1,"min":1,"max":2},{"id":"k2","art":"regler","nr":2,"min":0,"max":1},{"id":"k3","art":"regler","nr":3,"min":0,"max":1},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"p.hz"},{"von":"n.trig","nach":"p.trig"},{"von":"n.gate","nach":"p.gate"},{"von":"k1.aus","nach":"p.platz"},{"von":"k2.aus","nach":"p.start"},{"von":"k3.aus","nach":"p.rueckwaerts"},{"von":"p.l","nach":"o.l"},{"von":"p.r","nach":"o.r"}]}"#;
+/// Four voices of chip noise clocked by the note, long and short mode on two nodes, mixed
+const LFSR_1: &str = r#"{"format":"baukasten/2","name":"lfsr-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"a","art":"lfsr"},{"id":"b","art":"lfsr","kurz":1},{"id":"m","art":"add"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"a.hz"},{"von":"n.hz","nach":"b.hz"},{"von":"a.aus","nach":"m.a"},{"von":"b.aus","nach":"m.b"},{"von":"m.aus","nach":"o.x"}]}"#;
+
+/// Four voices of a cycling function generator (shape, tempo and rise from knobs, trigger from the note) driving a low-pass gate in every
+/// mode on a saw, the gate's mode, reso and decay from knobs: the vactrol, the cycle and the mode switch run while playing
+const FUNKTION_LPG_1: &str = r#"{"format":"baukasten/2","name":"funktion-lpg-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"f","art":"funktion","zyklus":1,"fallen":0.1},{"id":"k1","art":"regler","nr":1,"min":-1,"max":1},{"id":"k2","art":"regler","nr":2,"min":-2,"max":2},{"id":"k3","art":"regler","nr":3,"min":0,"max":2},{"id":"k4","art":"regler","nr":4,"min":0,"max":1},{"id":"l","art":"lpg"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.trig","nach":"f.trig"},{"von":"n.gate","nach":"f.halt"},{"von":"k1.aus","nach":"f.form"},{"von":"k2.aus","nach":"f.tempo"},{"von":"s.aus","nach":"l.x"},{"von":"f.aus","nach":"l.cv"},{"von":"k3.aus","nach":"l.modus"},{"von":"k4.aus","nach":"l.reso"},{"von":"l.aus","nach":"o.x"}]}"#;
+
+/// Four voices of a saw through a pin matrix (type 60): a self patch, morph from a knob; the pins are set, jumped and reset by
+/// the test loop (`stift_setzen`, `stift_sofort`, `stifte_grund`) while the counter watches
+const MATRIX_1: &str = r#"{"format":"baukasten/2","name":"matrix-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"e","art":"adsr","a":0.01,"d":0.1,"s":1,"r":0.2},{"id":"vca","art":"mul"},{"id":"m","art":"matrix","zeilen":["z0","z1","z2","z3","z4","z5","z6","z7","z8","z9","z10","z11","z12","z13","z14","z15"],"spalten":["s0","s1","s2","s3","s4","s5","s6","s7","s8","s9","s10","s11","s12","s13","s14","s15"],"stifte":[[0,0,0,0.6],[1,0,0,-0.3],[0,0,1,0.5],[0,1,1,0.4]]},{"id":"k","art":"regler","nr":1,"min":0,"max":1},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.gate","nach":"e.gate"},{"von":"n.trig","nach":"e.trig"},{"von":"s.aus","nach":"vca.a"},{"von":"e.aus","nach":"vca.b"},{"von":"vca.aus","nach":"m.e1"},{"von":"m.a2","nach":"m.e2"},{"von":"k.aus","nach":"m.morph"},{"von":"m.a1","nach":"o.x"}]}"#;
+
 /// Four voices of saw through a krume with bits and rate on knobs (S7)
 const KRUME_1: &str = r#"{"format":"baukasten/2","name":"krume-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"e","art":"adsr","a":0.01,"d":0.1,"s":1,"r":0.2},{"id":"vca","art":"mul"},{"id":"k","art":"krume"},{"id":"kb","art":"regler","nr":1,"min":2,"max":16},{"id":"kr","art":"regler","nr":2,"min":2000,"max":48000,"log":1},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.gate","nach":"e.gate"},{"von":"n.trig","nach":"e.trig"},{"von":"s.aus","nach":"vca.a"},{"von":"e.aus","nach":"vca.b"},{"von":"vca.aus","nach":"k.x"},{"von":"kb.aus","nach":"k.bits"},{"von":"kr.aus","nach":"k.rate"},{"von":"k.aus","nach":"o.x"}]}"#;
 /// Four voices of saw through a phaser with rate, feedback and mix on knobs (S7)
@@ -50,7 +74,7 @@ const SAMPLER_1: &str = r#"{"format":"baukasten/2","name":"sampler-1","stimmen":
 /// Sample player stage 2a: four voices on a zone table (two key ranges, two velocity layers, a round-robin pair, pan and gain), the
 /// pack `zonen.f32` is mapped; `vel` comes from the note
 /// Stage 2b: a looped zone (cross-fade 20 ms, loop_blende 30) and two release zones on `rl`/`rr`, added to the main output.
-const ZONEN_2: &str = r#"{"format":"baukasten/2","name":"zonen-2","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"sampler","datei":"zonen.f32","loop_blende":30,"zonen":[0,6000,60,0,127,1,127,1,0,1000,5000,0, 6000,12000,60,0,127,1,127,0.5,-0.5,0,0,1, 12000,18000,60,0,127,1,127,0.5,0.5,0,0,1]},{"id":"al","art":"add"},{"id":"ar","art":"add"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.trig","nach":"s.trig"},{"von":"n.gate","nach":"s.gate"},{"von":"n.vel","nach":"s.vel"},{"von":"s.l","nach":"al.a"},{"von":"s.rl","nach":"al.b"},{"von":"s.r","nach":"ar.a"},{"von":"s.rr","nach":"ar.b"},{"von":"al.aus","nach":"o.l"},{"von":"ar.aus","nach":"o.r"}]}"#;
+const ZONEN_2: &str = r#"{"format":"baukasten/2","name":"zonen-2","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"sampler","datei":"zonen.f32","loop_blende":30,"taste_blende":3,"vel_blende":10,"frei_halte":2,"zonen":[0,6000,60,0,127,1,127,1,0,1000,5000,0, 6000,12000,60,0,127,1,127,0.5,-0.5,0,0,1, 12000,18000,60,0,127,1,127,0.5,0.5,0,0,1]},{"id":"al","art":"add"},{"id":"ar","art":"add"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.trig","nach":"s.trig"},{"von":"n.gate","nach":"s.gate"},{"von":"n.vel","nach":"s.vel"},{"von":"s.l","nach":"al.a"},{"von":"s.rl","nach":"al.b"},{"von":"s.r","nach":"ar.a"},{"von":"s.rr","nach":"ar.b"},{"von":"al.aus","nach":"o.l"},{"von":"ar.aus","nach":"o.r"}]}"#;
 const ZONEN_1: &str = r#"{"format":"baukasten/2","name":"zonen-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"sampler","datei":"zonen.f32","zonen":[0,6000,48,0,59,1,80,1,0,0,0,0, 6000,12000,48,0,59,81,127,0.8,-0.5,0,0,0, 12000,18000,72,60,127,1,127,1.2,0.4,0,0,0, 18000,24000,72,60,127,1,127,1,0.4,0,0,0]},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.trig","nach":"s.trig"},{"von":"n.gate","nach":"s.gate"},{"von":"n.vel","nach":"s.vel"},{"von":"s.l","nach":"o.l"},{"von":"s.r","nach":"o.r"}]}"#;
 
 /// S21: four voices of saw through a faltung (4097 frame IR: head, 15 tail partitions), mix on a knob, predelay 7 ms
@@ -230,15 +254,25 @@ const GRAPHEN: &[&str] = &[
     KREUZ_1,
     CHAOS_1,
     SCHIEBER_1,
+    PAULA_1,
+    LFSR_1,
+    FUNKTION_LPG_1,
+    MATRIX_1,
     // Band Drive Bass: wavetable stack, hard sync, kreuz bands, falter, formant, saett, wahl morph for the glide
     include_str!("../demos/bass-banddrive.json"),
     // Greif: three wavetables with custom spectra, phase modulation and warp, chaos, shift, chorus, delay
     include_str!("../demos/synth-greif.json"),
     include_str!("../demos/synth-greif2.json"),
+    // Kraken: East oscillators with a ring and FM, four filters behind a wahl, West sine into falter and a gate low-pass, drift, feedback over a delayed edge, delay, hall
+    include_str!("../demos/synth-kraken.json"),
+    // Drum Synth: eight recipe pads behind a notenwahl and a wahl, one voice per sounding pad
+    include_str!("../demos/drum-synth.json"),
 ];
 
 #[test]
 fn echtzeitpfad_allokiert_nicht() {
+    ZAEHLT.with(|z| z.set(true));
+    zaehler_prueft_nur_diesen_faden();
     let wurzel = std::env::temp_dir().join(format!("bk-s10-alloc-{}", std::process::id()));
     std::fs::create_dir_all(&wurzel).unwrap();
     std::fs::write(wurzel.join("probe.f32"), baukasten_dsp::proben::bytes(&baukasten_dsp::proben::orchester_schlag(48_000.0))).unwrap();
@@ -267,6 +301,16 @@ fn echtzeitpfad_allokiert_nicht() {
             if i % 256 == 0 { p.setze_regler(1 + (i / 256) as usize % 8, (i % 1000) as f32 / 1000.0); }
             if i % 50_000 == 0 { p.alle_aus(); }
             if i == 90_000 { p.zuruecksetzen(); }
+            if p.hat_matrix() {
+                // pins while playing: smoothed, jumping, the whole set to the defaults and to 0, an out-of-range index
+                let k = (i / 128) as usize;
+                if i % 128 == 0 {
+                    p.stift_setzen(k % 2, k % 16, (k / 3) % 16, ((k % 21) as f32 - 10.0) / 10.0);
+                    p.stift_sofort((k + 1) % 2, (k / 5) % 16, k % 16, ((k % 7) as f32 - 3.0) / 3.0);
+                    p.stift_setzen(5, 0, 0, 0.5);
+                }
+                if i % 8192 == 0 { p.stifte_grund(k % 2 == 0, k % 4 == 0); }
+            }
             let (l, r) = p.sample_stereo();
             summe += l + r;
         }
@@ -315,4 +359,17 @@ fn umschalten_der_zweige_allokiert_nicht() {
         assert!(p.uebersprungen() > 0, "{}: nothing skipped", p.name);
         assert_eq!(p.rettungen, 0, "{}: rescue ran", p.name);
     }
+}
+
+/// Controls for the counter itself: an allocation on this thread is seen, one on another thread is not.
+fn zaehler_prueft_nur_diesen_faden() {
+    // the child measures itself: spawning and joining allocate on this thread and would blur a count taken around them
+    std::thread::spawn(|| {
+        let v = ANFORDERUNGEN.load(Ordering::SeqCst);
+        std::hint::black_box(Vec::<u8>::with_capacity(64));
+        assert_eq!(ANFORDERUNGEN.load(Ordering::SeqCst), v, "an allocation on another thread must not count");
+    }).join().unwrap();
+    let v = ANFORDERUNGEN.load(Ordering::SeqCst);
+    std::hint::black_box(Vec::<u8>::with_capacity(64));
+    assert!(ANFORDERUNGEN.load(Ordering::SeqCst) > v, "an allocation on the test thread must count");
 }

@@ -1,0 +1,14 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "fx-formant-sprech"},
+  "title": "Formant Filter",
+  "akzent": "tuerkis",
+  "sections": [
+    { "id": "vowel", "title": "VOWEL", "cols": 3, "controls": [
+      {"id": "vowel", "type": "knob", "label": "Vowel", "span": 3, "bind": {"param": "k1"}, "format": "raw", "einheitlos": true,"default": 0.5, "scale": {"labels": ["A", "E", "I", "O", "U"]}},
+      {"id": "shift", "type": "knob", "label": "Shift", "bind": {"param": "k2"}, "format": "raw", "unit": "st", "default": 0.5, "scale": {"labels": ["-12", "off", "+12"]}},
+      {"id": "sharp", "type": "knob", "label": "Sharpness", "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
+      {"id": "l1", "type": "label", "span": 3, "text": "Vowel morphs smoothly between A and U"}
+    ]}
+  ]
+}

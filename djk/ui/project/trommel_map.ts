@@ -11,6 +11,11 @@ export const TROMMEL_KARTEN: Readonly<Record<string, readonly TrommelKlang[]>> =
     { ton: 41, name: 'Low Tom' }, { ton: 45, name: 'Mid Tom' }, { ton: 48, name: 'High Tom' },
     { ton: 49, name: 'Crash' }, { ton: 51, name: 'Ride' }, { ton: 53, name: 'Ride Bell' },
   ]),
+  // Drum Synth (djk/instruments/modular_dsp/build_drumsynth.py): eight recipe pads on the GM notes; any other note plays the pad below it
+  'drum-synth': Object.freeze([
+    { ton: 36, name: 'Kick' }, { ton: 37, name: 'Rim' }, { ton: 38, name: 'Snare' }, { ton: 39, name: 'Clap' },
+    { ton: 41, name: 'Low Tom' }, { ton: 42, name: 'Closed Hat' }, { ton: 46, name: 'Open Hat' }, { ton: 49, name: 'Cymbal' },
+  ]),
   'drums-808': Object.freeze([
     { ton: 35, name: 'Boom Kick' }, { ton: 36, name: 'Kick' }, { ton: 37, name: 'Rim' }, { ton: 38, name: 'Snare' }, { ton: 39, name: 'Clap' },
     { ton: 42, name: 'Closed Hat' }, { ton: 46, name: 'Open Hat' },

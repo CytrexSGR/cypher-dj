@@ -1,11 +1,10 @@
 // MIDI learn state and the knob bindings of the effect graphs.
 import { hostLernStand, hostLernAnfrage } from './host_adapter.js';
 import { lernPfadVon } from './instruments_view.js';
-import { lernKnopfHtml, lernStand, bkKnobListe, bkKnobHtml, htmlText, kennlinienPfad } from './effects.js';
+import { lernKnopfHtml, lernStand, bkKnobListe, bkKnobHtml, htmlText } from './effects.js';
 import { SURGE_GRUPPE, baueHostBereich, baueKnobsNeu, feldModus, graphMitBereich, graphVon, hostZeile, kanalAdapter, kopfHandles, panelKopf, panelVon } from './graphs_view.js';
 import { $, $$, melde, postJson, zustand } from './page_state.js';
-import { kompWert, platteBauen } from './effects_gemeinsam.js';
-import { KOMP_DETAIL, fxGewaehlt } from './effects_view.js';
+import { platteBauen } from './effects_gemeinsam.js';
 // S19 (MIDI learn): the learn table as the page server reports it (GET /lernen); the buttons next to the graph knobs follow it
 export let lernen = { zuordnungen: [], wartet: null, midi: { port: null }, controller: [], datei: 'fehlt' };
 export const lernModus = new Set();   // channels whose panel has the LEARN toggle on
@@ -145,27 +144,4 @@ function zeigeBkKnobs(d, k) {
     inp.value = String(x.wert);
     inp.nextElementSibling.textContent = x.wert.toFixed(2);
   }
-}
-export function zeigeFxDetail() {
-  const d = $('#fxdetail');
-  if (!d || !d.firstChild) return;
-  const k = fxGewaehlt;
-  const an = kompWert(k, 'an', 0) >= 0.5;
-  const b = d.querySelector('.komp-an');
-  b.classList.toggle('an', an);
-  b.setAttribute('aria-pressed', String(an));
-  for (const r of KOMP_DETAIL) {
-    const inp = d.querySelector(`input[data-komp-feld="${r.feld}"]`);
-    const w = kompWert(k, r.feld, r.vorgabe);
-    if (document.activeElement !== inp) inp.value = String(w);
-    inp.nextElementSibling.textContent = r.text(w);
-  }
-  const sl = d.querySelector('.schluessel');
-  if (sl && document.activeElement !== sl) sl.value = String(kompWert(k, 'sc', 0));
-  zeigeBkKnobs(d, k);
-  const t = kompWert(k, 'schwelle', -18), ra = kompWert(k, 'ratio', 4), mu = kompWert(k, 'makeup', 0);
-  d.querySelector('.kurve').setAttribute('d', kennlinienPfad(t, ra, mu, 240, 168));
-  const sx = ((t + 60) / 60) * 240;
-  const s = d.querySelector('.schwelle');
-  s.setAttribute('x1', sx); s.setAttribute('x2', sx); s.setAttribute('y1', 0); s.setAttribute('y2', 168);
 }

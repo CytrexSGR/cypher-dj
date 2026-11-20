@@ -366,8 +366,8 @@ fn neu_ist_fuer_alle_vorhandenen_beispiele_unveraendert() {
         if p.extension().map_or(true, |x| x != "json") { continue; }
         let text = std::fs::read_to_string(&p).unwrap();
         let h = neu(&text);
-        // sampler (S10) and faltung (S21) read files from the graph folder, so they need a root
-        let datei = ["sampler", "faltung"].iter().any(|a| text.contains(&format!(r#""art": "{a}""#)) || text.contains(&format!(r#""art":"{a}""#)));
+        // sampler (S10), faltung (S21) and paula (the amiga device) read files from the graph folder, so they need a root
+        let datei = ["sampler", "faltung", "paula"].iter().any(|a| text.contains(&format!(r#""art": "{a}""#)) || text.contains(&format!(r#""art":"{a}""#)));
         if datei {
             assert!(h.is_null(), "{p:?}: a graph with a file node needs a root");
             let w = wurzel_mit_probe("beispiel");
@@ -375,6 +375,7 @@ fn neu_ist_fuer_alle_vorhandenen_beispiele_unveraendert() {
             // S22: sampler-fairlight reads the hit as three detune slices
             std::fs::write(w.join("orchester-schlag-schichten.f32"), std::fs::read(w.join("d.f32")).unwrap()).unwrap();
             std::fs::write(w.join("feder-ir.f32"), baukasten_dsp::proben::bytes(&baukasten_dsp::proben::feder_ir(48_000.0))).unwrap();
+            baukasten_dsp::proben::schreibe_amiga_werk(&w);
             let (h2, f) = neu_wurzel(&text, Some(&w));
             assert!(!h2.is_null(), "{p:?}: {f}");
             cypher_bk_frei(h2);
@@ -738,4 +739,83 @@ fn rastende_reports_the_mask() {
     assert_eq!(cypher_bk_rastende(h), 0);
     cypher_bk_frei(h);
     assert_eq!(cypher_bk_rastende(std::ptr::null()), 0);
+}
+
+/// Graph with a pin matrix: a saw through one default pin (set A, row 0, column 0, 0.5)
+const G_MATRIX: &str = r#"{"format":"baukasten/2","name":"m","stimmen":2,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"m","art":"matrix","zeilen":["z0","z1","z2","z3","z4","z5","z6","z7","z8","z9","z10","z11","z12","z13","z14","z15"],"spalten":["s0","s1","s2","s3","s4","s5","s6","s7","s8","s9","s10","s11","s12","s13","s14","s15"],"stifte":[[0,0,0,0.5]]},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"s.aus","nach":"m.e1"},{"von":"m.a1","nach":"o.x"}]}"#;
+
+/// Pin matrix: return codes of the four functions, the pin reaches the sound through the block, the take-over equals the glide settled.
+#[test]
+fn stifte_codes_und_wirkung() {
+    let h = neu(G_MATRIX);
+    assert!(!h.is_null());
+    assert_eq!(cypher_bk_hat_matrix(h), 1);
+    // null handle
+    let null = std::ptr::null_mut();
+    assert_eq!(cypher_bk_stift(null, 0, 0, 0, 0.5), -1);
+    assert_eq!(cypher_bk_stift_sofort(null, 0, 0, 0, 0.5), -1);
+    assert_eq!(cypher_bk_stifte_grund(null, 1, 1), -1);
+    assert_eq!(cypher_bk_hat_matrix(std::ptr::null()), 0);
+    // out of range and NaN
+    for (s, z, c) in [(2u32, 0u32, 0u32), (0, 16, 0), (0, 0, 16), (u32::MAX, 0, 0)] {
+        assert_eq!(cypher_bk_stift(h, s, z, c, 0.5), -1, "{s} {z} {c}");
+        assert_eq!(cypher_bk_stift_sofort(h, s, z, c, 0.5), -1, "{s} {z} {c}");
+    }
+    assert_eq!(cypher_bk_stift(h, 0, 0, 0, f32::NAN), -1);
+    assert_eq!(cypher_bk_stift_sofort(h, 0, 0, 0, f32::NAN), -1);
+    // the corners are in range
+    assert_eq!(cypher_bk_stift(h, 1, 15, 15, -1.0), 0);
+    assert_eq!(cypher_bk_stift_sofort(h, 1, 15, 15, 7.0), 0);
+    assert_eq!(cypher_bk_stifte_grund(h, 1, 1), 0);
+    // a pin changes the output
+    let noten = |h: *mut CypherBk| {
+        assert_eq!(cypher_bk_note_an(h, 0, 57, 1.0), 0);
+        bloecke(h, 256, 8)
+    };
+    let spitze = |x: &[f32]| x.iter().fold(0.0f32, |m, v| m.max(v.abs()));
+    let halb = noten(h);
+    cypher_bk_frei(h);
+    assert!(spitze(&halb) > 0.01, "the default pin sounds");
+    let h = neu(G_MATRIX);
+    assert_eq!(cypher_bk_stift_sofort(h, 0, 0, 0, 1.0), 0);
+    let voll = noten(h);
+    cypher_bk_frei(h);
+    assert!(spitze(&voll) > 1.5 * spitze(&halb), "pin 1.0 is louder than the default 0.5: {} vs {}", spitze(&voll), spitze(&halb));
+    // the smoothed call settles on the same sound as the take-over
+    let h = neu(G_MATRIX);
+    assert_eq!(cypher_bk_stift(h, 0, 0, 0, 1.0), 0);
+    bloecke(h, 256, 40);
+    let gleit = noten(h);
+    cypher_bk_frei(h);
+    assert!((spitze(&gleit) - spitze(&voll)).abs() < 0.02 * spitze(&voll), "settled glide {} vs take-over {}", spitze(&gleit), spitze(&voll));
+    // all pins to 0: silence; back to the graph's pins: as at the start
+    let h = neu(G_MATRIX);
+    assert_eq!(cypher_bk_stifte_grund(h, 0, 1), 0);
+    let still = noten(h);
+    assert!(still.iter().all(|v| *v == 0.0), "no pins: silence");
+    cypher_bk_frei(h);
+    let h = neu(G_MATRIX);
+    assert_eq!(cypher_bk_stift_sofort(h, 0, 0, 0, 1.0), 0);
+    assert_eq!(cypher_bk_stifte_grund(h, 1, 1), 0);
+    assert_eq!(noten(h), halb, "stifte_grund(vorgabe) returns to the graph's pins");
+    cypher_bk_frei(h);
+    // pins survive a reset
+    let h = neu(G_MATRIX);
+    assert_eq!(cypher_bk_stift_sofort(h, 0, 0, 0, 1.0), 0);
+    cypher_bk_zuruecksetzen(h);
+    assert_eq!(noten(h), voll, "zuruecksetzen keeps the pins");
+    cypher_bk_frei(h);
+}
+
+/// A graph without a matrix: -2 for the setters and the reset, 0 for hat_matrix.
+#[test]
+fn stifte_ohne_matrix_geben_minus_zwei() {
+    let h = neu(G);
+    assert_eq!(cypher_bk_hat_matrix(h), 0);
+    assert_eq!(cypher_bk_stift(h, 0, 0, 0, 0.5), -2);
+    assert_eq!(cypher_bk_stift_sofort(h, 0, 0, 0, 0.5), -2);
+    assert_eq!(cypher_bk_stifte_grund(h, 1, 1), -2);
+    // an index out of range is -1 before the matrix question
+    assert_eq!(cypher_bk_stift(h, 2, 0, 0, 0.5), -1);
+    cypher_bk_frei(h);
 }

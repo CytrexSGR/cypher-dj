@@ -730,11 +730,11 @@ function wendeGross() {
     if (an) messeRahmen(k);
   }
 }
-// Escape closes the large view: not under a menu or the list menu, not in an input field, not over the device page or in PRODUCTION where the node is not shown.
+// Escape closes the large view: not under a menu or the list menu, not in an input field, not over the device page or in PRODUCTION where the node is not shown, and never in TRACKER (its grid owns Escape).
 function grossTaste(e) {
   if (e.key !== 'Escape' || e.ctrlKey || e.metaKey || e.altKey) return;
   const b = document.body.classList;
-  const gross = grossJetzt().platz !== null && !b.contains('produktion') && !b.contains('werkbank') && !b.contains('geraeteseite');
+  const gross = grossJetzt().platz !== null && !b.contains('produktion') && !b.contains('werkbank') && !b.contains('tracker') && !b.contains('geraeteseite');
   const eingabe = !!e.target?.closest?.('input, textarea, select, [contenteditable]'), menue = menueOffen() || $('#listen-menue')?.hidden === false;
   if (!grossEscape({ gross, menue, eingabe })) return;
   e.preventDefault(); e.stopPropagation();   // the Escape of the page (library drawer) does not also fire

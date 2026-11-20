@@ -9,7 +9,7 @@ const PUBLIC = new URL('../../public/', import.meta.url);
 export const APP_DATEIEN = [
   'app.js', 'page_state.js', 'controls_view.js', 'deck_view.js', 'deck_griffe.js', 'output_view.js', 'loop_rec_view.js',
   'tempo_view.js', 'color_view.js', 'beat_fx_view.js', 'live_view.js', 'slots_view.js', 'remix_window.js',
-  'effects_gemeinsam.js', 'effects_view.js', 'learn_view.js', 'graphs_view.js', 'effects_bindung.js', 'prelisten_view.js',
+  'live_kanaele.js', 'effects_gemeinsam.js', 'effects_view.js', 'learn_view.js', 'graphs_view.js', 'effects_bindung.js', 'prelisten_view.js',
   'browse_table.js', 'browse_detail.js', 'library_view.js', 'seitenrahmen.js', 'instanzen.js', 'stream.js',
 ];
 

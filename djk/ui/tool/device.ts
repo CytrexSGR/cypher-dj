@@ -118,9 +118,31 @@ export function pruefen(wurzel: string = REPO): string[] {
       const panel = normalisierePanel(JSON.parse(fs.readFileSync(path.join(P.paneele, d), 'utf8'))) as { geraet?: Geraet };
       const art = panel?.geraet?.art;
       const geraet: Geraet = art === 'rb338' || art === 'surge' ? { art } : { art: 'bk', graph: name };
-      const regler = geraet.art === 'bk' ? reglerBereiche(JSON.parse(fs.readFileSync(path.join(P.beispiele, `${name}.json`), 'utf8'))) : {};
-      for (const m of pruefePanel(panel, name, regler, parameterTabelle(geraet, P.beispiele, P.surge).map((p) => p.name))) f.push(`${name}: panel: ${m}`);
+      const ordner = !findeGraph(name, P.beispiele) && findeGraph(name, P.rezepte) ? P.rezepte : P.beispiele;   // a recipe graph lives in demos/recipes/
+      // Panels of user-made graphs (sampler instruments `ins-`, `smp-`, `ton-`, `fm-glocke-hoch`) ship in the repo, their graphs live in the user's graph
+      // folder only. Without a graph here there is nothing to check them against (tests/panel_sampler.test.mjs does that on the real folder).
+      if (geraet.art === 'bk' && !findeGraph(name, ordner)) continue;
+      const regler = geraet.art === 'bk' ? reglerBereiche(JSON.parse(fs.readFileSync(path.join(ordner, `${name}.json`), 'utf8'))) : {};
+      for (const m of pruefePanel(panel, name, regler, parameterTabelle(geraet, ordner, P.surge).map((p) => p.name))) f.push(`${name}: panel: ${m}`);
     } catch (e) { f.push(`${name}: panel unreadable (${(e as Error).message})`); }
+  }
+  // roles (tracker D16): the knob of a role must exist in the graph and be latched there (`rastet` 1 on every `regler` node of that number)
+  for (const e of ladeRegister(wurzel)) {
+    const rollen = e?.rollen as Record<string, unknown> | undefined;
+    if (e?.art !== 'bk' || typeof rollen !== 'object' || rollen === null || !GRAPH_NAME.test(String(e.name))) continue;
+    let graph: { knoten?: unknown } | null = null;
+    for (const ordner of [P.beispiele, P.rezepte]) {
+      try { graph = JSON.parse(fs.readFileSync(path.join(ordner, `${e.name}.json`), 'utf8')); break; } catch { /* next folder; pruefeGeraete reports a missing graph */ }
+    }
+    if (graph === null) continue;
+    const knoten = (Array.isArray(graph.knoten) ? graph.knoten : []).filter((k): k is { nr?: unknown; rastet?: unknown } =>
+      typeof k === 'object' && k !== null && (k as { art?: unknown }).art === 'regler');
+    for (const [rolle, nr] of Object.entries(rollen)) {
+      if (!Number.isInteger(nr)) continue;   // the shape is reported by pruefeGeraete
+      const da = knoten.filter((k) => k.nr === nr);
+      if (da.length === 0) f.push(`${e.name}: rollen.${rolle}: knob ${String(nr)} does not exist in the graph`);
+      else if (da.some((k) => k.rastet !== 1)) f.push(`${e.name}: rollen.${rolle}: knob ${String(nr)} is not latched (rastet 1) in the graph`);
+    }
   }
   // every instrument graph needs a valid category and description in kategorien.json
   // graphs live in demos/ and, as the recipe graphs, in demos/recipes/ (djk-start installs both under their own names); demos/ wins on a clash

@@ -11,12 +11,12 @@ import { tabletModus } from './seitenrahmen.js';
 import { holeLernen, lernAbbrechenFuer, lernSchicken, lernen } from './learn_view.js';
 import { zeigeRegister } from './register_view.js';
 import { fokus } from './controller_fokus.js';
+import { FX_KANAELE, FX_INDEX } from './live_kanaele.js';
+export { FX_KANAELE, FX_INDEX };
 
 // Effekt-Sektion (Plan 2026-10-11-effekt-sektion.md, Andreas: „tauschoberfläche gegen die libary unten“): unten LIBRARY |
 // EFFECTS; EFFECTS zeigt je Quellkanal einen Streifen mit dem Kompressor (<k>/komp/*), Bedienung über /regler (sofort),
 // Absenkung aus /zustand/komp (10 Hz je aktivem Kompressor). Der gewählte Bereich gilt je Betrachter (localStorage).
-export const FX_KANAELE = [['deck/1', 'A'], ['deck/2', 'B'], ['erz/1', 'DRUMS'], ['erz/2', 'BASS'], ['erz/3', 'MELODY'], ['erz/5', 'I5'], ['erz/6', 'I6'], ['erz/7', 'I7'], ['pad/1', 'L1'], ['pad/2', 'L2']];
-export const FX_INDEX = { 'deck/1': 0, 'deck/2': 1, 'erz/1': 4, 'erz/2': 5, 'erz/3': 6, 'erz/5': 8, 'erz/6': 9, 'erz/7': 10, 'pad/1': 12, 'pad/2': 13 };   // Mixer-Index (komp/sc = Index + 1)
 export const KOMP_REGLER = [
   { feld: 'schwelle', name: 'THR', min: -60, max: 0, schritt: 0.5, vorgabe: -18, text: (w) => `${w.toFixed(1)}` },
   { feld: 'ratio', name: 'RATIO', min: 1, max: 20, schritt: 0.1, vorgabe: 4, text: (w) => `${w.toFixed(1)}:1` },

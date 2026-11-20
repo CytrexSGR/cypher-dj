@@ -1,0 +1,6 @@
+{"schema":1,"name":"drums-hihat","modell":"lc3","art":"instrument","graph":"drums-hihat",
+"eintraege":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":3},{"regler":"Enc 3","knopf":2},{"regler":"Enc 4","knopf":4}],
+"seiten":{"main":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":3},{"regler":"Enc 3","knopf":2},{"regler":"Enc 4","knopf":4}]},
+"programme":[
+{"name":"TONE \u00b7 AMP \u00b7 ROOM","seite":"main",
+"eintraege":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":3},{"regler":"Enc 3","knopf":2},{"regler":"Enc 4","knopf":4}]}]}

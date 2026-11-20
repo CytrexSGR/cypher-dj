@@ -213,6 +213,9 @@ static_assert(k_arr_arm.typen.size() - 1 == k_arr_arm.felder);
 // §4.11 /k/arr/note ,hsiii
 inline constexpr Adresse k_arr_note{"/k/arr/note", ",hsiii", Richtung::an_kern, false, 5};
 static_assert(k_arr_note.typen.size() - 1 == k_arr_note.felder);
+// §4.11 /k/arr/stift ,hsiiiif
+inline constexpr Adresse k_arr_stift{"/k/arr/stift", ",hsiiiif", Richtung::an_kern, false, 7};
+static_assert(k_arr_stift.typen.size() - 1 == k_arr_stift.felder);
 // §4.12 /k/rec/spur ,hsiiiii
 inline constexpr Adresse k_rec_spur{"/k/rec/spur", ",hsiiiii", Richtung::an_kern, false, 7};
 static_assert(k_rec_spur.typen.size() - 1 == k_rec_spur.felder);
@@ -394,7 +397,7 @@ static_assert(test_hand.typen.size() - 1 == test_hand.felder);
 inline constexpr Adresse test_klick{"/test/klick", ",hssi", Richtung::an_kern, true, 4};
 static_assert(test_klick.typen.size() - 1 == test_klick.felder);
 
-inline constexpr std::array<Adresse, 124> alle{
+inline constexpr std::array<Adresse, 125> alle{
     k_hallo,
     k_tschuess,
     k_willkommen,
@@ -459,6 +462,7 @@ inline constexpr std::array<Adresse, 124> alle{
     k_arr_auto,
     k_arr_arm,
     k_arr_note,
+    k_arr_stift,
     k_rec_spur,
     k_rec_start,
     k_rec_stopp,
@@ -594,6 +598,7 @@ namespace k_arr_ins_mess { enum : std::size_t { id = 0, quelle = 1, h = 2 }; }
 namespace k_arr_auto { enum : std::size_t { id = 0, quelle = 1, spur = 2, ziel = 3, an = 4 }; }
 namespace k_arr_arm { enum : std::size_t { id = 0, quelle = 1, spur = 2, an = 3, modus = 4 }; }
 namespace k_arr_note { enum : std::size_t { id = 0, quelle = 1, spur = 2, ton = 3, vel = 4 }; }
+namespace k_arr_stift { enum : std::size_t { id = 0, quelle = 1, spur = 2, satz = 3, zeile = 4, spalte = 5, wert = 6 }; }
 namespace k_rec_spur { enum : std::size_t { id = 0, quelle = 1, spur = 2, scharf = 3, eingang = 4, modus = 5, monitor = 6 }; }
 namespace k_rec_start { enum : std::size_t { id = 0, quelle = 1, kennung = 2, nachlauf_samples = 3, frist_samples = 4, vorzaehler_takte = 5 }; }
 namespace k_rec_stopp { enum : std::size_t { id = 0, quelle = 1 }; }
@@ -708,6 +713,7 @@ namespace k_arr_ins_mess { inline constexpr double h_min = 1; inline constexpr d
 namespace k_arr_auto { inline constexpr double spur_min = 0; inline constexpr double spur_max = 32; inline constexpr double an_min = 0; inline constexpr double an_max = 1; }
 namespace k_arr_arm { inline constexpr double spur_min = 0; inline constexpr double spur_max = 32; inline constexpr double an_min = 0; inline constexpr double an_max = 1; inline constexpr double modus_min = 0; inline constexpr double modus_max = 2; }
 namespace k_arr_note { inline constexpr double spur_min = 1; inline constexpr double spur_max = 32; inline constexpr double ton_min = 0; inline constexpr double ton_max = 127; inline constexpr double vel_min = 0; inline constexpr double vel_max = 127; }
+namespace k_arr_stift { inline constexpr double spur_min = 1; inline constexpr double spur_max = 32; inline constexpr double satz_min = 0; inline constexpr double satz_max = 1; inline constexpr double zeile_min = 0; inline constexpr double zeile_max = 15; inline constexpr double spalte_min = 0; inline constexpr double spalte_max = 15; inline constexpr double wert_min = -1; inline constexpr double wert_max = 1; }
 namespace k_rec_spur { inline constexpr double spur_min = 1; inline constexpr double spur_max = 32; inline constexpr double scharf_min = 0; inline constexpr double scharf_max = 1; inline constexpr double eingang_min = 0; inline constexpr double eingang_max = 30; inline constexpr double modus_min = 0; inline constexpr double modus_max = 3; inline constexpr double monitor_min = 0; inline constexpr double monitor_max = 2; }
 namespace k_rec_start { inline constexpr double kennung_min = 0; inline constexpr double nachlauf_samples_min = 0; inline constexpr double nachlauf_samples_max = 480000; inline constexpr double frist_samples_min = 0; inline constexpr double frist_samples_max = 1440000; inline constexpr double vorzaehler_takte_min = 0; inline constexpr double vorzaehler_takte_max = 4; }
 namespace erz_quittung { inline constexpr double strom_min = 1; inline constexpr double strom_max = 16; }

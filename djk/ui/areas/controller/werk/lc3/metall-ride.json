@@ -1,0 +1,6 @@
+{"schema":1,"name":"metall-ride","modell":"lc3","art":"instrument","graph":"metall-ride",
+"eintraege":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2},{"regler":"Enc 3","knopf":3},{"regler":"Enc 4","knopf":4},{"regler":"Enc 5","knopf":5}],
+"seiten":{"main":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2},{"regler":"Enc 3","knopf":3},{"regler":"Enc 4","knopf":4},{"regler":"Enc 5","knopf":5}]},
+"programme":[
+{"name":"DECAY \u00b7 TONE","seite":"main",
+"eintraege":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2},{"regler":"Enc 3","knopf":3},{"regler":"Enc 4","knopf":4},{"regler":"Enc 5","knopf":5}]}]}

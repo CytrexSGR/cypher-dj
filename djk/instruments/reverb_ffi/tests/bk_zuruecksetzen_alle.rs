@@ -48,6 +48,8 @@ fn wurzel() -> std::path::PathBuf {
     std::fs::write(w.join("orchester-schlag-schichten.f32"), baukasten_dsp::proben::bytes(&baukasten_dsp::proben::orchester_schlag_schichten(48_000.0))).unwrap();
     // and the S21 spring example reads its IR (merge S20 + S21)
     std::fs::write(w.join("feder-ir.f32"), baukasten_dsp::proben::bytes(&baukasten_dsp::proben::feder_ir(48_000.0))).unwrap();
+    // the amiga device (paula) reads its four 8-bit slot files
+    baukasten_dsp::proben::schreibe_amiga_werk(&w);
     w
 }
 

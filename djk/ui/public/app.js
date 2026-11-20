@@ -4,6 +4,7 @@
 import { bindeSpurbaender } from './track_tape_view.js';
 import { bindeProduktion } from './production/production.js';
 import { bindeWerkbank } from './werkbank/werkbank.js';
+import { bindeTracker } from './tracker/tracker.js';
 import { bindeModule } from './module_library.js';   // plan live-module task 10: the MODULES tab
 import { bindeKopplung } from './coupling.js';   // task 10: pair a tablet (main page only)
 import { DECKS } from './curves.js';
@@ -14,7 +15,7 @@ import { bindePlaetze } from './slots_view.js';
 import { baueSeqPlaetze } from './seq_view.js';
 import { $, $$, jsonPost, melde, zustand } from './page_state.js';
 import { bindeLive, liveOeffnen, pruefeLive, pruefeLiveSpaeter } from './live_view.js';
-import { bindeAnsicht, bindeMusterFeld, bindeReiter, bindeSchublade, bindeTablet, setzeProduktion, setzeWerkbank, setzeAnsicht, meldeAnsicht } from './seitenrahmen.js';
+import { bindeAnsicht, bindeMusterFeld, bindeReiter, bindeSchublade, bindeTablet, setzeProduktion, setzeWerkbank, setzeTracker, setzeAnsicht, meldeAnsicht } from './seitenrahmen.js';
 import { bindeLibrary, bindeSets } from './library_view.js';
 import { ladeBaum, markiereTyp } from './browse_detail.js';
 import { bindeTempo } from './tempo_view.js';
@@ -32,6 +33,7 @@ import { bindeStrudelSound } from './strudel_sound.js';
 import { bindeFx, bindeFxZuweisung } from './beat_fx_view.js';
 import { bindeKnoepfe, zeigeWert } from './controls_view.js';
 import { ausgang, bild } from './output_view.js';
+import { bindeLiveDock } from './live_dock/host.js';
 
 // ---------- Aufbau: am Ende der Datei, nach allen Definitionen (dreimal am 2026-09-28 griff der Aufbau auf ein const,
 // das weiter unten stand: Temporal Dead Zone; hier unten gilt jedes const der Datei schon) ----------
@@ -51,10 +53,12 @@ bindeSchublade();
 bindeTempo();
 bindeColor();
 bindeEffekte();
+try { bindeLiveDock(); } catch (e) { console.error('Live dock:', e); }   // the EFFECTS tab of DJ and LIVE shows the dock (live_dock/host.js)
 bindeMusterFeld();
 try { bindeSpurbaender(jsonPost, () => letzterBeat); } catch (e) { console.error('Studio S7 lanes:', e); }   // Studio S7
 if (!geraetFensterSpurId) try { setzeProduktion(bindeProduktion({ presetsZeigen: () => zeigePresets(), presetsNeu: () => presetPanel?.aktualisiereZiele(), presetListe: () => presetPanel?.z.liste ?? [], post: jsonPost, bpm: () => zustand.bpm ?? 128, stoebern: () => zustand.stoebern, bibliothek: () => { if (!stz.treffer.length) { stoebernLaden(); ladeBaum(); } } })); } catch (e) { console.error('Production view:', e); }   // D1 V1
 if (!geraetFensterSpurId) try { setzeWerkbank(bindeWerkbank({ post: jsonPost, zeigeDj: () => { setzeAnsicht('dj'); pruefeLiveSpaeter(0); } })); } catch (e) { console.error('Workbench view:', e); }   // the fourth view, STUDIO; TO SEQ DECK: the DJ view then reads the changed live container
+if (!geraetFensterSpurId) try { setzeTracker(bindeTracker({ post: jsonPost, zeigeDj: () => { setzeAnsicht('dj'); pruefeLiveSpaeter(0); } })); } catch (e) { console.error('Tracker view:', e); }   // the fifth view, TRACKER: the open project as rows
 bindeAnsicht();
 bindeTablet();
 bindeRemixFenster();

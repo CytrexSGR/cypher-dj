@@ -104,7 +104,14 @@
       "param": "k8"
      },
      "format": "ms",
-     "default": 0.5
+     "default": 0.5,
+     "wirkt": {
+      "ueber": [
+       "dly1",
+       0.5
+      ]
+     },
+     "wirkt_text": "The delay is off: switch Delay on in this channel"
     },
     {
      "id": "fb1",
@@ -119,7 +126,7 @@
     {
      "id": "x1",
      "type": "knob",
-     "label": "Cross 2",
+     "label": "Cross to 2",
      "bind": {
       "param": "k6"
      },
@@ -144,7 +151,21 @@
       "param": "k10"
      },
      "format": "percent",
-     "default": 0.575
+     "default": 0.575,
+     "wirkt": {
+      "ueber": [
+       "amt",
+       0.02
+      ]
+     },
+     "wirkt_text": "The modulator is off: turn up Amount in MODULATOR",
+     "scale": {
+      "labels": [
+       "-100",
+       "off",
+       "+100"
+      ]
+     }
     },
     {
      "id": "mt1",
@@ -154,7 +175,31 @@
       "param": "k11"
      },
      "format": "percent",
-     "default": 0.5
+     "default": 0.5,
+     "wirkt": {
+      "alle": [
+       {
+        "ueber": [
+         "amt",
+         0.02
+        ]
+       },
+       {
+        "ueber": [
+         "dly1",
+         0.5
+        ]
+       }
+      ]
+     },
+     "wirkt_text": "Needs Delay on in this channel and Amount up in MODULATOR",
+     "scale": {
+      "labels": [
+       "-100",
+       "off",
+       "+100"
+      ]
+     }
     },
     {
      "id": "sp1",
@@ -346,7 +391,14 @@
       "param": "k19"
      },
      "format": "ms",
-     "default": 0.5
+     "default": 0.5,
+     "wirkt": {
+      "ueber": [
+       "dly2",
+       0.5
+      ]
+     },
+     "wirkt_text": "The delay is off: switch Delay on in this channel"
     },
     {
      "id": "fb2",
@@ -361,7 +413,7 @@
     {
      "id": "x2",
      "type": "knob",
-     "label": "Cross 1",
+     "label": "Cross to 1",
      "bind": {
       "param": "k17"
      },
@@ -386,7 +438,21 @@
       "param": "k21"
      },
      "format": "percent",
-     "default": 0.5
+     "default": 0.5,
+     "wirkt": {
+      "ueber": [
+       "amt",
+       0.02
+      ]
+     },
+     "wirkt_text": "The modulator is off: turn up Amount in MODULATOR",
+     "scale": {
+      "labels": [
+       "-100",
+       "off",
+       "+100"
+      ]
+     }
     },
     {
      "id": "mt2",
@@ -396,7 +462,31 @@
       "param": "k22"
      },
      "format": "percent",
-     "default": 0.5
+     "default": 0.5,
+     "wirkt": {
+      "alle": [
+       {
+        "ueber": [
+         "amt",
+         0.02
+        ]
+       },
+       {
+        "ueber": [
+         "dly2",
+         0.5
+        ]
+       }
+      ]
+     },
+     "wirkt_text": "Needs Delay on in this channel and Amount up in MODULATOR",
+     "scale": {
+      "labels": [
+       "-100",
+       "off",
+       "+100"
+      ]
+     }
     },
     {
      "id": "sp2",

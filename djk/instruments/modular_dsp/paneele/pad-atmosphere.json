@@ -1,0 +1,24 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "pad-atmosphere"},
+  "title": "Atmosphere Pad",
+  "akzent": "tuerkis",
+  "layout": {"rows": [
+    ["tone", "env", "fx"]
+  ]},
+  "sections": [
+    { "id": "tone", "title": "TONE", "cols": 2, "controls": [
+      {"id": "track", "type": "knob", "label": "Cutoff tracking", "bind": {"param": "k1"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "ring", "type": "knob", "label": "Ring depth", "bind": {"param": "k2"}, "format": "percent", "default": 0.5},
+      {"id": "rnote", "type": "label", "span": 2, "text": "Noise through a ringing filter"}
+    ]},
+    { "id": "env", "title": "AMP ENV", "cols": 2, "controls": [
+      {"id": "hue", "type": "huelle", "span": 2, "label": "Envelope", "of": {"a": "attack", "d": 5.85, "s": 0, "r": 4.4}},
+      {"id": "attack", "type": "knob", "label": "Attack", "span": 2, "bind": {"param": "k3"}, "format": "raw", "unit": "s", "default": 0.5}
+    ]},
+    { "id": "fx", "title": "REVERB + DELAY", "cols": 2, "controls": [
+      {"id": "rmix", "type": "knob", "label": "Hall mix", "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
+      {"id": "dmix", "type": "knob", "label": "Delay mix", "bind": {"param": "k5"}, "format": "percent", "default": 0.5}
+    ]}
+  ]
+}

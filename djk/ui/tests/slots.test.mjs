@@ -1,332 +1,341 @@
-// DJ view places, task 13: the pure places model (layout, storage, silence rule, header text, mixer plan).
+// Tracker task 21: slot banks of the amiga device. Pure bank graph and the conversion into the Amiga form, then the slot logic behind the routes against a
+// stand-in project session (the commands run through the real project engine). Every folder is a temp folder; no server, no core, no ~/.config.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LAYOUT_STANDARD, SCHLUESSEL, ladeLayout, speichereLayout, erlaubt, wechsel, still, wahl, kopf, mixerPlan, kanaele, folgeServer, ladeDeckDa } from '../public/slots.js';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { neuesProjekt } from '../project/model.ts';
+import { fuehreListeAus } from '../project/commands.ts';
+import { findeGraph } from '../graphs.ts';
+import { pfadeVon } from '../devices_parameter.ts';
+import { bankGraph, wandleAmiga, plaetzeVon, tiefpassUmrechnen, BANK_NAME, LEER_DATEI } from '../sampler/slots.ts';
+import { platzLogik, platzRouten } from '../areas/sampler/platz_routes.ts';
+import { sinusWav } from './support/sinus_wav.mjs';
 
-const speicher = (init) => { const m = new Map(init ? [[SCHLUESSEL, init]] : []); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, v), m }; };
-const wirft = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };
+const REPO_BK = pfadeVon();
+const AMIGA = JSON.parse(fs.readFileSync(path.join(REPO_BK.beispiele, 'amiga.json'), 'utf8'));
 
-test('the default layout is Track, Track, Strudel, Loops', () => {
-  assert.deepEqual([...LAYOUT_STANDARD], ['track', 'track', 'strudel', 'loops']);
-  assert.deepEqual(ladeLayout(speicher()), ['track', 'track', 'strudel', 'loops']);
+// ---- pure ----
+const sinus = (hz, sekunden, amp = 0.5, rate = 48000) => {
+  const n = Math.round(sekunden * rate), x = new Float32Array(n * 2);
+  for (let i = 0; i < n; i++) x[2 * i] = x[2 * i + 1] = amp * Math.sin(2 * Math.PI * hz * i / rate);
+  return x;
+};
+const rms = (x, von = 0, bis = x.length >> 1) => { let s = 0; for (let i = von; i < bis; i++) s += x[2 * i] ** 2; return Math.sqrt(s / (bis - von)); };
+const nulldurchgaenge = (x) => { let n = 0; for (let i = 1; i < x.length >> 1; i++) if (x[2 * (i - 1)] < 0 && x[2 * i] >= 0) n++; return n; };
+
+test('bankGraph: copies the base, fills the paula slots, leaves the base alone', () => {
+  const vorher = JSON.stringify(AMIGA);
+  const g = bankGraph(AMIGA, [{ datei: 'a.f32', name: 'A', grund: 261.6256, rate: 16574, schleife: 0, s_von: 0, s_laenge: 0, pegel: 1, fein: 0 },
+    { datei: 'b.f32', grund: 200, rate: 8363, schleife: 1, s_von: 4, s_laenge: 8, pegel: 0.5, fein: -2 }], 'amiga-0a1b2c');
+  assert.equal(JSON.stringify(AMIGA), vorher);
+  assert.equal(g.name, 'amiga-0a1b2c');
+  assert.deepEqual(plaetzeVon(g), [{ datei: 'a.f32', name: 'A', grund: 261.6256, rate: 16574 },
+    { datei: 'b.f32', grund: 200, rate: 8363, schleife: 1, s_von: 4, s_laenge: 8, pegel: 0.5, fein: -2 }]);
+  assert.equal(g.knoten.length, AMIGA.knoten.length);
+  assert.deepEqual(g.kanten, AMIGA.kanten);
+  assert.ok(BANK_NAME.test(g.name));
+  assert.throws(() => bankGraph(AMIGA, []), /1..32/);
+  assert.throws(() => bankGraph(AMIGA, Array.from({ length: 33 }, () => ({ datei: 'a.f32', grund: 261, rate: 8000 }))), /1..32/);
+  assert.throws(() => bankGraph({ knoten: [{ id: 'x', art: 'add' }] }, [{ datei: 'a.f32', grund: 261, rate: 8000 }]), /no paula/);
 });
 
-test('a missing, broken or throwing storage gives the default and never throws', () => {
-  for (const roh of ['not json', '{"a":1}', '["track"]', '["track","track","strudel","strudel"]', '["x","y","z","w"]', '[null,1,2,3]', '"track"', 'null']) {
-    assert.deepEqual(ladeLayout(speicher(roh)), [...LAYOUT_STANDARD], roh);
+test('wandleAmiga: 1 kHz at 48 kHz becomes 16574 Hz frames, every value a multiple of 1/128', () => {
+  const w = wandleAmiga(sinus(1000, 1), 16574);
+  assert.ok(Math.abs(w.frames - 16574) <= 1, `frames ${w.frames}`);
+  assert.equal(w.daten.length, w.frames * 2);
+  assert.ok(w.daten.every((v) => Number.isInteger(v * 128) && v >= -1 && v <= 127 / 128));
+  assert.ok(Math.abs(nulldurchgaenge(w.daten) - 1000) <= 3, `zero crossings ${nulldurchgaenge(w.daten)}`);
+  assert.ok(Math.abs(rms(w.daten) - 0.5 / Math.SQRT2) < 0.01, `rms ${rms(w.daten)}`);
+});
+
+test('wandleAmiga: the low-pass keeps a tone below the target Nyquist and removes one above it (no alias)', () => {
+  const unten = tiefpassUmrechnen(sinus(6000, 0.5), 16574);   // Nyquist 8287
+  assert.ok(Math.abs(rms(unten, 300, unten.length / 2 - 300) - 0.5 / Math.SQRT2) < 0.02, `6 kHz rms ${rms(unten, 300, unten.length / 2 - 300)}`);
+  for (const hz of [10000, 12000, 20000]) {
+    const t = tiefpassUmrechnen(sinus(hz, 0.5), 16574);
+    const r = rms(t, 300, t.length / 2 - 300);
+    assert.ok(r < 0.005, `${hz} Hz leaves rms ${r}`);   // 0.5 amplitude in: -40 dB is 0.0035 rms
   }
-  assert.deepEqual(ladeLayout(wirft), [...LAYOUT_STANDARD]);
-  assert.deepEqual(ladeLayout(undefined), [...LAYOUT_STANDARD]);
-  assert.equal(speichereLayout(wirft, [...LAYOUT_STANDARD]), false);
+  const klein = tiefpassUmrechnen(sinus(1000, 0.5), 4000);
+  assert.ok(Math.abs(klein.length / 2 - 2000) <= 1);
+  assert.deepEqual([...tiefpassUmrechnen(sinus(1000, 0.01), 48000)], [...sinus(1000, 0.01)]);
 });
 
-test('a saved layout is read back', () => {
-  const s = speicher();
-  assert.equal(speichereLayout(s, ['track', 'track', 'track', 'loops']), true);
-  assert.deepEqual(ladeLayout(s), ['track', 'track', 'track', 'loops']);
+// ---- the slot logic ----
+function aufbau(t) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'plaetze-'));
+  const d = { root, bk: path.join(root, 'bk'), sampler: path.join(root, 'sampler'), lib: path.join(root, 'lib') };
+  fs.mkdirSync(path.join(d.bk, 'panels'), { recursive: true });
+  fs.mkdirSync(d.sampler); fs.mkdirSync(d.lib);
+  fs.copyFileSync(path.join(REPO_BK.beispiele, 'amiga.json'), path.join(d.bk, 'amiga.json'));
+  fs.copyFileSync(path.join(REPO_BK.paneele, 'amiga.json'), path.join(d.bk, 'panels', 'amiga.json'));
+  fs.writeFileSync(path.join(d.bk, 'ohne-rolle.json'), JSON.stringify({ format: 'baukasten/2', name: 'ohne-rolle', stimmen: 1, knoten: [{ id: 'aus', art: 'ausgang' }], kanten: [] }));
+  fs.mkdirSync(path.join(d.bk, 'samples'));
+  for (const n of ['amiga-quadrat', 'amiga-dreieck', 'amiga-saege']) fs.writeFileSync(path.join(d.bk, 'samples', `${n}.f32`), Buffer.alloc(32 * 8));
+  fs.writeFileSync(path.join(d.bk, 'samples', 'amiga-rauschen.f32'), Buffer.alloc(4096 * 8));
+  fs.writeFileSync(path.join(d.sampler, 'wurzeln.json'), JSON.stringify([{ name: 'Lib', pfad: d.lib }]));
+  sinusWav(path.join(d.lib, 'Sinus.wav'), { hz: 1000, sekunden: 1, rate: 48000, kanaele: 1, pegel: 0.5 });
+  sinusWav(path.join(d.lib, 'lang.wav'), { hz: 100, sekunden: 61, rate: 8000, kanaele: 1 });
+  const alt = process.env.CYPHERDJ_BK_ORDNER;
+  process.env.CYPHERDJ_BK_ORDNER = d.bk;
+  t.after(() => { if (alt === undefined) delete process.env.CYPHERDJ_BK_ORDNER; else process.env.CYPHERDJ_BK_ORDNER = alt; fs.rmSync(root, { recursive: true, force: true }); });
+  const BK = { art: 'intern', name: 'bk', graph: 'amiga', parameter: {} };
+  const lauf = (p, b) => fuehreListeAus(structuredClone(p), b, { graphArt: (n) => findeGraph(n)?.art ?? null }).projekt;
+  let p = lauf(neuesProjekt('x'), [
+    { befehl: 'spur_neu', art: 'instrument', name: 'Amiga', geraet: BK },
+    { befehl: 'spur_neu', art: 'instrument', name: 'Plain', geraet: { art: 'intern', name: 'bk', graph: 'ohne-rolle', parameter: {} } },
+    { befehl: 'spur_neu', art: 'instrument', name: 'Second', geraet: BK },
+    { befehl: 'spur_neu', art: 'instrument', name: 'Host', geraet: { art: 'wirt', name: 'surge' } },
+  ]);
+  const z = { projekt: { ...p, rev: 5 }, verlauf: [], rueck: [], reloads: 0, offen: true, gestoppt: false };
+  const sitzung = {
+    async aendern({ rev, label, befehle }, quelle) {
+      assert.equal(rev, z.projekt.rev);
+      try {
+        const projekt = { ...lauf(z.projekt, befehle), rev: rev + 1 };
+        z.verlauf.push({ label, quelle, vorher: z.projekt }); z.rueck.length = 0;
+        z.projekt = projekt;
+        return { code: 200, j: { rev: rev + 1, projekt } };
+      } catch (e) { return { code: 409, j: { fehler: e.grund ?? e.message } }; }
+    },
+    async ladeLiveNeuFrei() { z.reloads++; return true; },
+  };
+  // undo and redo as the project history does them: the whole project state of before / after the step comes back
+  z.undo = () => { const e = z.verlauf.pop(); z.rueck.push({ ...e, nachher: z.projekt }); z.projekt = { ...e.vorher, rev: z.projekt.rev + 1 }; };
+  z.redo = () => { const e = z.rueck.pop(); z.verlauf.push(e); z.projekt = { ...e.nachher, rev: z.projekt.rev + 1 }; };
+  const zugang = { offen: () => (z.offen ? { projekt: z.projekt, slug: 'x' } : null) };
+  const ctx = { log() {}, quelle: () => 'andreas', kiGestoppt: () => z.gestoppt };
+  const opt = { sitzung, zugang, ordner: d.sampler, loops: '', module: '' };
+  const l = platzLogik(ctx, opt);
+  const spur = (n) => z.projekt.spuren.find((s) => s.name === n);
+  const lies = (id) => l.lies(new URL(`http://x/sampler/plaetze?spur_id=${id}`)).j;
+  const f32 = (datei) => { const b = fs.readFileSync(path.join(d.bk, 'samples', datei)); return new Float32Array(b.buffer, b.byteOffset, b.length / 4); };
+  return { d, z, l, spur, lies, f32, opt, ctx };
+}
+const refuse = async (f, code, grund) => {
+  await assert.rejects(Promise.resolve().then(f), (e) => (e.code === code || e.status === code) && (e.fehler ?? e.grund) === grund, `expected ${code} ${grund}`);
+};
+
+test('the routes are registered with their protection', () => {
+  const r = platzRouten({ log() {}, quelle: () => 'andreas', kiGestoppt: () => false }, { sitzung: {}, zugang: {}, loops: '', module: '' });
+  assert.deepEqual(r.map((x) => `${x.methode} ${x.pfad}`), ['GET /sampler/plaetze', 'POST /sampler/platz', 'POST /sampler/platz/aendern', 'POST /sampler/platz/leeren']);
+  assert.deepEqual(r.map((x) => x.schutz), ['offen', 'fremdePost', 'fremdePost', 'fremdePost']);
 });
 
-test('allowed types per place: any place shows Track, Strudel, Loops or SEQ, nothing else', () => {
-  for (const p of [1, 2, 3, 4]) for (const t of ['track', 'strudel', 'loops', 'seq']) assert.equal(erlaubt(p, t), true);
-  assert.equal(erlaubt(5, 'track'), false); assert.equal(erlaubt(1, 'deck'), false);
+test('GET plaetze of a track on the base graph lists the four factory slots', (t) => {
+  const s = aufbau(t);
+  const j = s.lies(s.spur('Amiga').id);
+  assert.equal(j.graph, 'amiga');
+  assert.deepEqual(j.plaetze.map((x) => [x.nr, x.name, x.frames, x.rate, x.schleife, x.s_laenge]),
+    [[1, 'Square', 32, 8372, 1, 32], [2, 'Triangle', 32, 8372, 1, 32], [3, 'Saw', 32, 8372, 1, 32], [4, 'Noise burst', 4096, 8372, 0, 0]]);
+  assert.deepEqual(Object.keys(j.plaetze[0]).sort(), ['fein', 'frames', 'grund', 'name', 'nr', 'pegel', 'rate', 's_laenge', 's_von', 'schleife']);
 });
 
-test('Strudel and Loops cannot appear twice (doppelt), the layout stays', () => {
-  const l = [...LAYOUT_STANDARD];
-  const a = wechsel(l, 1, 'strudel', true); assert.deepEqual(a, { ok: false, grund: 'doppelt' });
-  const b = wechsel(l, 2, 'loops', true); assert.equal(b.grund, 'doppelt');
-  assert.deepEqual(l, [...LAYOUT_STANDARD]);
-  assert.equal(wahl(l, 1).find((x) => x.typ === 'strudel').frei, false);
-  assert.equal(wahl(l, 3).find((x) => x.typ === 'strudel').frei, true);
-  assert.equal(wahl(l, 1).find((x) => x.typ === 'track').aktuell, true);
+test('POST platz: first use makes the bank and switches the track in ONE history step; the file is in the Amiga form', async (t) => {
+  const s = aufbau(t);
+  const id = s.spur('Amiga').id;
+  const a = await s.l.neu({ spur_id: id, platz: 5, wurzel: 'Lib', rel: 'Sinus.wav' }, 'andreas');
+  assert.equal(a.code, 200, JSON.stringify(a.j));
+  assert.equal(a.j.bank_neu, true);
+  assert.ok(BANK_NAME.test(a.j.graph), a.j.graph);
+  assert.equal(s.z.verlauf.length, 1);
+  assert.equal(s.spur('Amiga').geraet.graph, a.j.graph);
+  assert.equal(s.spur('Second').geraet.graph, 'amiga', 'another track keeps the base');
+  assert.ok(fs.existsSync(path.join(s.d.bk, 'panels', `${a.j.graph}.json`)));
+  assert.equal(JSON.parse(fs.readFileSync(path.join(s.d.bk, 'panels', `${a.j.graph}.json`), 'utf8')).geraet.graph, a.j.graph);
+  const g = JSON.parse(fs.readFileSync(path.join(s.d.bk, `${a.j.graph}.json`), 'utf8'));
+  assert.equal(g.name, a.j.graph);
+  const pl = plaetzeVon(g);
+  assert.equal(pl.length, 5);
+  assert.deepEqual(pl.slice(0, 4), plaetzeVon(AMIGA).map((x) => { const { s_von, ...r } = x; return r; }), 'the factory slots stay, defaults left out');
+  assert.deepEqual([pl[4].name, pl[4].grund, pl[4].rate], ['Sinus', 261.6256, 16574]);
+  // the answer and the file: frames ~ duration x 16574, every value a multiple of 1/128, stereo float32 at the slot rate
+  assert.ok(Math.abs(a.j.frames - 16574) <= 1, `frames ${a.j.frames}`);
+  const daten = s.f32(pl[4].datei);
+  assert.equal(daten.length, a.j.frames * 2);
+  assert.ok(daten.every((v) => Number.isInteger(v * 128)), 'values are k/128');
+  assert.ok(new Set(daten).size > 20, 'not silent');
+  const lies = s.lies(id).plaetze;
+  assert.deepEqual([lies.length, lies[4].frames, lies[4].rate, lies[4].name], [5, a.j.frames, 16574, 'Sinus']);
+  assert.equal(s.z.reloads, 0, 'the history step reloads the playback, no extra reload');
 });
 
-test('place 3 switches Strudel -> Track -> Strudel while it is silent', () => {
-  const l = [...LAYOUT_STANDARD];
-  const t = wechsel(l, 3, 'track', true);
-  assert.deepEqual(t, { ok: true, layout: ['track', 'track', 'track', 'loops'] });
-  assert.deepEqual(wechsel(t.layout, 3, 'strudel', true).layout, l);
+test('POST platz: the second write makes a NEW bank and a second history step (the first bank stays as it was); roh keeps 48 kHz', async (t) => {
+  const s = aufbau(t);
+  const id = s.spur('Amiga').id;
+  const a = await s.l.neu({ spur_id: id, platz: 2, wurzel: 'Lib', rel: 'Sinus.wav', rate: 8363, name: 'Hi' }, 'andreas');
+  const bank1 = a.j.graph;
+  const hash1 = fs.readFileSync(path.join(s.d.bk, `${bank1}.json`), 'utf8');
+  assert.ok(Math.abs(a.j.frames - 8363) <= 1);
+  const b = await s.l.neu({ spur_id: id, platz: 7, wurzel: 'Lib', rel: 'Sinus.wav', roh: true, grund: 440 }, 'cypher');
+  assert.equal(b.code, 200, JSON.stringify(b.j));
+  const bank = b.j.graph;
+  assert.deepEqual([b.j.bank_neu, b.j.rate, b.j.roh], [true, 48000, true]);
+  assert.ok(BANK_NAME.test(bank) && bank !== bank1);
+  assert.equal(fs.readFileSync(path.join(s.d.bk, `${bank1}.json`), 'utf8'), hash1, 'the first bank file is never changed');
+  assert.equal(b.j.rev, s.z.projekt.rev);
+  assert.equal(b.j.projekt.spuren.find((x) => x.name === 'Amiga').geraet.graph, bank);
+  assert.ok(Math.abs(b.j.frames - 48000) <= 2, `frames ${b.j.frames}`);   // the zero first sample of the sine is trimmed as leading silence
+  assert.deepEqual([s.z.verlauf.length, s.z.reloads], [2, 0]);
+  const pl = plaetzeVon(JSON.parse(fs.readFileSync(path.join(s.d.bk, `${bank}.json`), 'utf8')));
+  assert.equal(pl.length, 7);
+  assert.deepEqual([pl[1].name, pl[1].rate], ['Hi', 8363]);
+  assert.deepEqual([pl[4].datei, pl[5].datei], [LEER_DATEI, LEER_DATEI], 'a gap is filled with empty slots');
+  assert.equal(fs.statSync(path.join(s.d.bk, 'samples', LEER_DATEI)).size, 32 * 8);
+  assert.deepEqual([pl[6].rate, pl[6].grund], [48000, 440]);
+  assert.ok(s.f32(pl[6].datei).some((v) => !Number.isInteger(v * 128)), 'raw keeps the full resolution');
+  assert.equal(s.lies(id).plaetze[4].leer, true);
 });
 
-test('a place with an open channel or PFL on is refused (offen) and its layout unchanged', () => {
-  const l = [...LAYOUT_STANDARD];
-  const offen = still(l, 3, { 'erz/2/fader': 0, 'erz/2/trim': 0 });
-  assert.equal(offen.still, false); assert.deepEqual(offen.offen, [{ kanal: 'erz/2', grund: 'open' }]);
-  const r = wechsel(l, 3, 'track', offen);
-  assert.equal(r.ok, false); assert.equal(r.grund, 'offen'); assert.match(r.text, /erz\/2 is open/);
-  const pfl = still(l, 1, { 'deck/1/fader': -60, 'deck/1/pfl': 1 });
-  assert.equal(pfl.still, false); assert.match(pfl.text, /deck\/1 has PFL on/);
-  assert.equal(wechsel(['track', 'track', 'track', 'track'], 1, 'strudel', pfl).grund, 'offen');
-  assert.deepEqual(l, [...LAYOUT_STANDARD]);
-  assert.equal(still(l, 4, {}).still, true, 'nothing known: every channel closed, PFL off');
+test('POST platz/aendern and leeren: fields, loop checks, empty slot refused', async (t) => {
+  const s = aufbau(t);
+  const id = s.spur('Amiga').id;
+  // changing a factory slot of the base makes a bank as well (the base is never written)
+  const a = await s.l.aendern({ spur_id: id, platz: 1, name: 'Sq', pegel: 0.5, fein: -3 }, 'andreas');
+  assert.equal(a.code, 200, JSON.stringify(a.j));
+  assert.equal(a.j.bank_neu, true);
+  assert.equal(JSON.stringify(JSON.parse(fs.readFileSync(path.join(s.d.bk, 'amiga.json'), 'utf8'))), JSON.stringify(AMIGA));
+  const p1 = s.lies(id).plaetze[0];
+  assert.deepEqual([p1.name, p1.pegel, p1.fein, p1.schleife, p1.s_laenge], ['Sq', 0.5, -3, 1, 32]);
+  // the loop must lie inside the data (the block refuses it when it translates the graph)
+  const b = await s.l.aendern({ spur_id: id, platz: 1, s_von: 8, s_laenge: 16 }, 'andreas');
+  assert.deepEqual([b.code, b.j.bank_neu, s.z.verlauf.length], [200, true, 2]);
+  await refuse(() => s.l.aendern({ spur_id: id, platz: 1, s_von: 20, s_laenge: 16 }, 'andreas'), 400, 'argument_ungueltig');
+  await refuse(() => s.l.aendern({ spur_id: id, platz: 1, schleife: 1, s_laenge: 0 }, 'andreas'), 400, 'argument_ungueltig');
+  const c = await s.l.aendern({ spur_id: id, platz: 4, schleife: 0 }, 'andreas');
+  assert.equal(c.j.platz.schleife, 0);
+  // clear
+  const d = await s.l.leeren({ spur_id: id, platz: 2 }, 'andreas');
+  assert.equal(d.code, 200);
+  assert.deepEqual([s.lies(id).plaetze[1].leer, s.lies(id).plaetze[1].name], [true, '']);
+  await refuse(() => s.l.leeren({ spur_id: id, platz: 2 }, 'andreas'), 404, 'bank_platz_leer');
+  await refuse(() => s.l.aendern({ spur_id: id, platz: 2, name: 'x' }, 'andreas'), 404, 'bank_platz_leer');
+  await refuse(() => s.l.aendern({ spur_id: id, platz: 9, name: 'x' }, 'andreas'), 404, 'bank_platz_leer');
+  await refuse(() => s.l.aendern({ spur_id: id, platz: 1 }, 'andreas'), 400, 'argument_ungueltig');
+  for (const bad of [{ pegel: 2 }, { fein: 8 }, { fein: -9 }, { name: '' }, { name: 'x'.repeat(23) }, { grund: 10 }, { schleife: 2 }, { s_von: -1 }])
+    await refuse(() => s.l.aendern({ spur_id: id, platz: 1, ...bad }, 'andreas'), 400, 'argument_ungueltig');
 });
 
-test('unknown place or type is refused (unbekannt)', () => {
-  assert.equal(wechsel([...LAYOUT_STANDARD], 7, 'track', true).grund, 'unbekannt');
-  assert.equal(wechsel([...LAYOUT_STANDARD], 1, 'deck', true).grund, 'unbekannt');
-  assert.equal(wechsel(['x'], 1, 'track', true).grund, 'unbekannt');
+test('a bank shared by several tracks: one write switches all of them in one step', async (t) => {
+  const s = aufbau(t);
+  const a = await s.l.neu({ spur_id: s.spur('Amiga').id, platz: 5, wurzel: 'Lib', rel: 'Sinus.wav' }, 'andreas');
+  // the second track is switched to the same bank (what the MOD import does) by hand
+  const o = s.z.projekt;
+  s.z.projekt = { ...o, spuren: o.spuren.map((x) => (x.name === 'Second' ? { ...x, geraet: { ...x.geraet, graph: a.j.graph } } : x)) };
+  const n = s.z.verlauf.length;
+  const b = await s.l.aendern({ spur_id: s.spur('Amiga').id, platz: 5, name: 'Shared' }, 'andreas');
+  assert.equal(b.code, 200);
+  assert.equal(s.z.verlauf.length, n + 1, 'one history step');
+  assert.equal(s.spur('Amiga').geraet.graph, b.j.graph);
+  assert.equal(s.spur('Second').geraet.graph, b.j.graph, 'the second track follows');
+  assert.equal(s.spur('Plain').geraet.graph, 'ohne-rolle');
+  assert.equal(s.lies(s.spur('Second').id).plaetze[4].name, 'Shared');
+  s.z.undo();
+  assert.equal(s.spur('Amiga').geraet.graph, a.j.graph);
+  assert.equal(s.spur('Second').geraet.graph, a.j.graph, 'undo puts both back');
+  assert.equal(s.lies(s.spur('Second').id).plaetze[4].name, 'Sinus');
 });
 
-test('the channels of a place: deck N, the three generators, the two loop channels', () => {
-  assert.deepEqual(kanaele(LAYOUT_STANDARD, 2), ['deck/2']);
-  assert.deepEqual(kanaele(LAYOUT_STANDARD, 3), ['erz/1', 'erz/2', 'erz/3']);
-  assert.deepEqual(kanaele(LAYOUT_STANDARD, 4), ['pad/1', 'pad/2']);
+test('a project copy that loads a slot leaves the bank of the original byte for byte alone', async (t) => {
+  const s = aufbau(t);
+  const a = await s.l.neu({ spur_id: s.spur('Amiga').id, platz: 5, wurzel: 'Lib', rel: 'Sinus.wav' }, 'andreas');
+  const sha = (g) => crypto.createHash('sha256').update(fs.readFileSync(path.join(s.d.bk, `${g}.json`))).digest('hex');
+  const h0 = sha(a.j.graph);
+  const original = structuredClone(s.z.projekt);
+  s.z.projekt = structuredClone(original);                                // SAVE AS: a copy keeps the bank name
+  const c = await s.l.aendern({ spur_id: s.spur('Amiga').id, platz: 5, name: 'IN-COPY', pegel: 0.2 }, 'andreas');
+  assert.equal(c.code, 200);
+  assert.notEqual(c.j.graph, a.j.graph);
+  assert.equal(sha(a.j.graph), h0, 'the old bank file is unchanged');
+  const alt = original.spuren.find((x) => x.name === 'Amiga');
+  assert.equal(alt.geraet.graph, a.j.graph, 'the original still points at the old bank');
+  assert.equal(plaetzeVon(JSON.parse(fs.readFileSync(path.join(s.d.bk, `${alt.geraet.graph}.json`), 'utf8')))[4].name, 'Sinus', 'and still reads the old name');
 });
 
-test('the header names a loaded and an empty track in full', () => {
-  assert.equal(kopf(3, { typ: 'track', titel: 'Technasia – Bastille Days', tonart: '5A', bpm: 127.6 }), 'TRACK 3 · Technasia – Bastille Days · 5A · 128');
-  assert.equal(kopf(2, { typ: 'track' }), 'TRACK 2 · no track loaded');
-  assert.equal(kopf(3, { typ: 'strudel' }), 'STRUDEL');
-  assert.equal(kopf(4, { typ: 'loops', slots: [{ nr: 1, titel: 'from Bastille Days' }, { nr: 2 }] }), 'LOOPS · LOOP 1 · from Bastille Days');
-  assert.equal(kopf(4, { typ: 'loops', slots: [] }), 'LOOPS · both slots empty');
-  assert.equal(kopf(4, { typ: 'loops', slots: [{ nr: 2, titel: 'Bastille Days', tonart: '5A', takte: 4 }] }), 'LOOPS · LOOP 2 · Bastille Days · 5A · 4 bars');
-  assert.equal(kopf(4, { typ: 'loops', slots: [{ nr: 1, titel: 'A', tonart: '1A', takte: 1 }, { nr: 2, titel: 'B', takte: 8 }] }), 'LOOPS · LOOP 1 · A · 1A · 1 bar · LOOP 2 · B · 8 bars');
+test('undo and redo over three slot changes step through the banks', async (t) => {
+  const s = aufbau(t);
+  const id = s.spur('Amiga').id;
+  const g0 = s.spur('Amiga').geraet.graph;
+  const a = await s.l.neu({ spur_id: id, platz: 5, wurzel: 'Lib', rel: 'Sinus.wav', name: 'One' }, 'andreas');
+  const b = await s.l.aendern({ spur_id: id, platz: 5, name: 'Two', schleife: 0 }, 'andreas');
+  const c = await s.l.leeren({ spur_id: id, platz: 5 }, 'andreas');
+  assert.deepEqual(s.z.verlauf.map((x) => x.label), ['Slot 05: One', 'Slot 05: settings', 'Slot 05: cleared']);
+  const gs = [g0, a.j.graph, b.j.graph, c.j.graph];
+  assert.equal(new Set(gs).size, 4);
+  const name = () => s.lies(id).plaetze[4]?.name ?? null;
+  assert.deepEqual([s.spur('Amiga').geraet.graph, name()], [gs[3], '']);
+  s.z.undo(); assert.deepEqual([s.spur('Amiga').geraet.graph, name()], [gs[2], 'Two']);
+  s.z.undo(); assert.deepEqual([s.spur('Amiga').geraet.graph, name()], [gs[1], 'One']);
+  s.z.undo(); assert.deepEqual([s.spur('Amiga').geraet.graph, s.lies(id).plaetze.length], [g0, 4]);
+  s.z.redo(); s.z.redo(); s.z.redo();
+  assert.deepEqual([s.spur('Amiga').geraet.graph, name()], [gs[3], '']);
+  for (const g of gs.slice(1)) assert.ok(fs.existsSync(path.join(s.d.bk, `${g}.json`)), `bank ${g} stays on disk`);
+  assert.equal(JSON.stringify(JSON.parse(fs.readFileSync(path.join(s.d.bk, 'amiga.json'), 'utf8'))), JSON.stringify(AMIGA));
+  const d = await s.l.aendern({ spur_id: id, platz: 1, schleife: 0 }, 'andreas');
+  assert.equal(s.z.verlauf.at(-1).label, 'Slot 01: loop off');
+  assert.equal(d.code, 200);
 });
 
-test('the mixer plan of the default layout: two rows of four slots around the middle column, Loops as two strips', () => {
-  const p = mixerPlan([...LAYOUT_STANDARD]);
-  assert.equal(p.reihen.length, 2);
-  for (const r of p.reihen) assert.equal(r.length, 4);
-  assert.deepEqual(p.reihen[0].map((s) => s?.kanal ?? null), [null, 'deck/1', 'deck/2', null]);
-  // Strudel has no mixer strip (its faders sit in its place): the two loop strips sit around the middle, under the deck strips
-  assert.deepEqual(p.reihen[1].map((s) => s?.kanal ?? null), [null, 'pad/1', 'pad/2', null]);
-  assert.equal(p.master, 'mitte');
-  assert.deepEqual(p.spalten, { slots: [null, 2, 4, null], mitte: 3, aussen: '' });
+test('a failure in the middle of a write leaves no half bank and the project unchanged', async (t) => {
+  const s = aufbau(t);
+  const id = s.spur('Amiga').id;
+  const ls = () => [fs.readdirSync(s.d.bk).sort(), fs.readdirSync(path.join(s.d.bk, 'panels')).sort(), fs.readdirSync(path.join(s.d.bk, 'samples')).sort()];
+  const vorher = ls(), projekt = structuredClone(s.z.projekt);
+  // (a) the panel cannot be written: a FILE sits where the panel folder is
+  fs.rmSync(path.join(s.d.bk, 'panels'), { recursive: true });
+  fs.writeFileSync(path.join(s.d.bk, 'panels'), 'x');
+  await assert.rejects(s.l.neu({ spur_id: id, platz: 5, wurzel: 'Lib', rel: 'Sinus.wav' }, 'andreas'));
+  fs.rmSync(path.join(s.d.bk, 'panels')); fs.mkdirSync(path.join(s.d.bk, 'panels'));
+  fs.copyFileSync(path.join(REPO_BK.paneele, 'amiga.json'), path.join(s.d.bk, 'panels', 'amiga.json'));
+  assert.deepEqual(ls(), vorher, 'no bank graph, no slot file left');
+  // (b) the session throws
+  s.opt.sitzung.aendern = async () => { throw new Error('boom'); };
+  await assert.rejects(s.l.neu({ spur_id: id, platz: 5, wurzel: 'Lib', rel: 'Sinus.wav' }, 'andreas'), /boom/);
+  assert.deepEqual(ls(), vorher);
+  assert.deepEqual(s.z.projekt, projekt);
+  assert.equal(s.z.verlauf.length, 0);
 });
 
-test('the mixer plan follows a layout with Loops on place 1 and one with three tracks', () => {
-  const a = mixerPlan(['loops', 'track', 'strudel', 'track']);
-  assert.deepEqual(a.reihen[0].map((s) => s?.kanal ?? s?.art ?? null), ['pad/1', 'pad/2', 'deck/2', null]);
-  assert.deepEqual(a.reihen[1].map((s) => s?.kanal ?? null), [null, null, null, null], 'a deck in place 4 has no strip: the main mixer has four channels');
-  assert.deepEqual(a.spalten, { slots: [2, 3, 5, null], mitte: 4, aussen: 'l' });
-  const b = mixerPlan(['track', 'track', 'track', 'loops']);
-  assert.deepEqual(b.reihen[1].map((s) => s?.kanal ?? null), [null, 'pad/1', 'pad/2', null], 'no strip for deck 3: the two loop strips sit around the middle');
-  assert.deepEqual(mixerPlan(['track', 'track', 'track', 'strudel']).spalten, { slots: [null, 2, 4, null], mitte: 3, aussen: '' });
-});
-
-import { knotenPlan, wendeAn, KNOTEN } from '../public/slots.js';
-const knoten = () => Object.fromEntries(KNOTEN.map((k) => [k, { dataset: {}, hidden: false, classList: { s: new Set(), add(c) { this.s.add(c); }, remove(c) { this.s.delete(c); } } }]));
-
-test('the node plan of the default layout: decks 1 and 2, Strudel, Loops; decks 3 and 4 are out', () => {
-  const p = knotenPlan([...LAYOUT_STANDARD]);
-  assert.deepEqual(p.platz, { 'deck/1': 1, 'deck/2': 2, strudel: 3, loops: 4 });
-  assert.deepEqual(p.aus, ['deck/3', 'deck/4', 'remix', 'seq/1', 'seq/2', 'seq/3', 'seq/4']);
-});
-
-test('applying a layout only sets attributes: the same node objects both ways, place 3 Strudel -> deck 3 -> Strudel', () => {
-  const n = knoten(), vorher = { ...n };
-  wendeAn([...LAYOUT_STANDARD], (k) => n[k]);
-  assert.equal(n.strudel.dataset.platz, '3'); assert.equal(n['deck/3'].hidden, true); assert.ok(n['deck/3'].classList.s.has('platz-aus'));
-  assert.equal(n['deck/1'].dataset.platz, '1'); assert.equal(n.loops.dataset.platz, '4'); assert.equal(n['deck/1'].hidden, false);
-  wendeAn(['track', 'track', 'track', 'loops'], (k) => n[k]);
-  assert.equal(n['deck/3'].dataset.platz, '3'); assert.equal(n['deck/3'].hidden, false);
-  assert.equal(n.strudel.hidden, true); assert.equal(n.strudel.dataset.platz, undefined);
-  wendeAn([...LAYOUT_STANDARD], (k) => n[k]);
-  assert.equal(n.strudel.dataset.platz, '3'); assert.equal(n['deck/3'].hidden, true);
-  for (const k of KNOTEN) assert.equal(n[k], vorher[k], `${k} is the same object`);
-});
-
-test('a node the page does not have is skipped (finde returns null)', () => {
-  assert.doesNotThrow(() => wendeAn([...LAYOUT_STANDARD], () => null));
-});
-
-import { wendeMixerAn, ZUEGE } from '../public/slots.js';
-const zuege = () => Object.fromEntries(ZUEGE.map((k) => [k, { dataset: {}, hidden: false, classList: { s: new Set(), add(c) { this.s.add(c); }, remove(c) { this.s.delete(c); } } }]));
-const lage = (z) => Object.fromEntries(Object.entries(z).filter(([, e]) => e.dataset.mixZeile).map(([k, e]) => [k, `${e.dataset.mixZeile}/${e.dataset.mixSpalte}`]));
-
-test('the strips are placed by the mixer plan: default layout', () => {
-  const z = zuege();
-  wendeMixerAn([...LAYOUT_STANDARD], (k) => z[k]);
-  assert.deepEqual(lage(z), { 'zug/deck/1': '1/2', 'zug/deck/2': '1/4', 'zug/pad/1': '2/2', 'zug/pad/2': '2/4' });
-  assert.deepEqual(Object.keys(z), ['zug/deck/1', 'zug/deck/2', 'zug/pad/1', 'zug/pad/2'], 'four channels: decks 3 and 4 have no strip');
-});
-
-test('the strips follow Track, Track, Track, Loops and Loops, Track, Strudel, Track', () => {
-  const z = zuege();
-  wendeMixerAn(['track', 'track', 'track', 'loops'], (k) => z[k]);
-  assert.deepEqual(lage(z), { 'zug/deck/1': '1/2', 'zug/deck/2': '1/4', 'zug/pad/1': '2/2', 'zug/pad/2': '2/4' });
-  wendeMixerAn(['loops', 'track', 'strudel', 'track'], (k) => z[k]);
-  assert.deepEqual(lage(z), { 'zug/pad/1': '1/2', 'zug/pad/2': '1/3', 'zug/deck/2': '1/5' });
-  assert.ok(z['zug/deck/1'].classList.s.has('platz-aus')); assert.ok(!z['zug/deck/2'].classList.s.has('platz-aus'));
-});
-
-// ---------- REMIX place type ----------
-import { TYPEN, streifen } from '../public/slots.js';
-
-test('remix is no place type any more: it is an effect with its own window (#remix)', () => {
-  assert.deepEqual(TYPEN, ['track', 'strudel', 'loops', 'seq']);
-  assert.equal(erlaubt(2, 'remix'), false);
-  assert.equal(wechsel(['track', 'track', 'strudel', 'loops'], 2, 'remix', true).ok, false);
-  assert.equal(wahl(['track', 'track', 'strudel', 'loops'], 2).some((w) => w.typ === 'remix'), false);
-  assert.deepEqual(streifen(['track', 'remix', 'strudel', 'loops'], 2), [], 'an unknown type owns no strip');
-});
-
-test('the mixer plan with a remix place shows only the strips of the other place in that row', () => {
-  const plan = mixerPlan(['remix', 'track', 'strudel', 'loops']);
-  assert.deepEqual(plan.reihen[0].map((s) => s?.kanal ?? null), [null, null, 'deck/2', null]);
-  assert.equal(plan.reihen[1].filter(Boolean).length, 2);
-  assert.deepEqual(mixerPlan(['track', 'remix', 'strudel', 'loops']).reihen[0].map((s) => s?.kanal ?? null), [null, 'deck/1', null, null]);
-  // two strips next to a place without strips sit around the middle column, in line with a row of two decks; no outer column is needed
-  for (const l of [['track', 'track', 'remix', 'loops'], ['track', 'track', 'loops', 'remix']]) {
-    const p = mixerPlan(l);
-    assert.deepEqual(p.reihen[1].map((s) => s?.kanal ?? null), [null, 'pad/1', 'pad/2', null]);
-    assert.equal(p.spalten.aussen, '');
+test('refusals: no slot role, slot 0 and 33, file too long, unknown names, no project, Stop Cypher', async (t) => {
+  const s = aufbau(t);
+  const id = s.spur('Amiga').id, N = { spur_id: id, platz: 3, wurzel: 'Lib', rel: 'Sinus.wav' };
+  for (const n of ['Plain', 'Host']) {
+    await refuse(() => s.l.neu({ ...N, spur_id: s.spur(n).id }, 'andreas'), 409, 'keine_plaetze');
+    await refuse(() => s.l.leeren({ spur_id: s.spur(n).id, platz: 1 }, 'andreas'), 409, 'keine_plaetze');
+    await refuse(async () => s.l.lies(new URL(`http://x/sampler/plaetze?spur_id=${s.spur(n).id}`)), 409, 'keine_plaetze');
   }
+  for (const platz of [0, 33, 1.5, '3', undefined]) await refuse(() => s.l.neu({ ...N, platz }, 'andreas'), 400, 'argument_ungueltig');
+  await refuse(() => s.l.neu({ ...N, extra: 1 }, 'andreas'), 400, 'argument_unbekannt');
+  await refuse(() => s.l.neu({ ...N, rate: 3999 }, 'andreas'), 400, 'argument_ungueltig');
+  await refuse(() => s.l.neu({ ...N, rate: 48001 }, 'andreas'), 400, 'argument_ungueltig');
+  await refuse(() => s.l.neu({ ...N, rate: 16574, roh: true }, 'andreas'), 400, 'argument_ungueltig');
+  await refuse(() => s.l.neu({ ...N, name: 'x'.repeat(23) }, 'andreas'), 400, 'argument_ungueltig');
+  await refuse(() => s.l.neu({ ...N, grund: 5 }, 'andreas'), 400, 'argument_ungueltig');
+  await refuse(() => s.l.neu({ ...N, spur_id: 's99' }, 'andreas'), 404, 'spur_unbekannt');
+  await refuse(() => s.l.neu({ ...N, rel: 'lang.wav' }, 'andreas'), 422, 'zu_lang');
+  await refuse(() => s.l.neu({ ...N, rel: '../x.wav' }, 'andreas'), 404, 'quelle_unbekannt');
+  await refuse(() => s.l.neu({ ...N, wurzel: 'Nix' }, 'andreas'), 404, 'quelle_unbekannt');
+  s.z.gestoppt = true;
+  await refuse(() => s.l.neu(N, 'cypher'), 409, 'ki_gestoppt');
+  s.z.gestoppt = false;
+  s.z.offen = false;
+  await refuse(() => s.l.neu(N, 'andreas'), 409, 'kein_projekt');
+  // nothing was written by any refusal
+  assert.deepEqual(fs.readdirSync(s.d.bk).sort(), ['amiga.json', 'ohne-rolle.json', 'panels', 'samples']);
+  assert.ok(!fs.readdirSync(path.join(s.d.bk, 'samples')).some((n) => n.startsWith('smp-')));
+  assert.equal(s.z.verlauf.length, 0);
 });
 
-test('a saved layout with a REMIX place loads with Strudel there, or Track when Strudel is already on another place', () => {
-  assert.deepEqual(ladeLayout(speicher('["track","track","strudel","loops"]')), ['track', 'track', 'strudel', 'loops']);
-  assert.deepEqual(ladeLayout(speicher('["track","track","remix","loops"]')), ['track', 'track', 'strudel', 'loops']);
-  assert.deepEqual(ladeLayout(speicher('["remix","track","strudel","loops"]')), ['track', 'track', 'strudel', 'loops']);
-});
-
-test('the head of a remix place names the target', () => {
-  assert.equal(kopf(1, { typ: 'remix', ziel: 'master' }), 'REMIX · MASTER');
-  assert.equal(kopf(1, { typ: 'remix', ziel: 'deck/2' }), 'REMIX · DECK 2');
-  assert.equal(kopf(1, { typ: 'remix', ziel: null }), 'REMIX · no target');
-  assert.equal(kopf(1, { typ: 'remix' }), 'REMIX · no target');
-});
-
-// ---------- SEQ place type (plan 2026-11-14 seq-deck-s1, task 7) ----------
-import { gueltig } from '../public/slots.js';
-
-test('a layout with SEQ in two places is valid (SEQ may appear more than once)', () => {
-  assert.equal(gueltig(['seq', 'seq', 'strudel', 'loops']), true);
-  assert.equal(gueltig(['seq', 'seq', 'seq', 'seq']), true);
-  assert.deepEqual(ladeLayout(speicher('["seq","track","seq","loops"]')), ['seq', 'track', 'seq', 'loops']);
-  assert.equal(wahl(['seq', 'track', 'strudel', 'loops'], 2).find((w) => w.typ === 'seq').frei, true, 'a second SEQ place is allowed');
-});
-
-test('the channel and the mixer strip of a SEQ place N are the deck strip of N', () => {
-  const l = ['track', 'seq', 'strudel', 'loops'];
-  assert.deepEqual(kanaele(l, 2), ['deck/2']);
-  assert.deepEqual(streifen(l, 2), [{ art: 'deck', platz: 2, nr: 2, kanal: 'deck/2' }]);
-  assert.deepEqual(mixerPlan(l).reihen[0].map((s) => s?.kanal ?? null), [null, 'deck/1', 'deck/2', null], 'the strip sits where a Track place has it');
-  assert.equal(still(l, 2, { 'deck/2/fader': 0, 'deck/2/trim': 0 }).still, false, 'an open deck strip blocks the switch like a track');
-});
-
-test('the node plan places seq/N for a SEQ place N and keeps the others out', () => {
-  const p = knotenPlan(['track', 'seq', 'strudel', 'seq']);
-  assert.deepEqual(p.platz, { 'deck/1': 1, 'seq/2': 2, strudel: 3, 'seq/4': 4 });
-  assert.deepEqual(p.aus, ['deck/2', 'deck/3', 'deck/4', 'loops', 'remix', 'seq/1', 'seq/3']);
-});
-
-test('the header of a SEQ place says how many patterns it has, or that it is empty', () => {
-  assert.equal(kopf(2, { typ: 'seq', folgen: 3 }), 'SEQ 2 · 3 patterns');
-  assert.equal(kopf(2, { typ: 'seq', folgen: 1 }), 'SEQ 2 · 1 pattern');
-  assert.equal(kopf(2, { typ: 'seq', folgen: 0 }), 'SEQ 2 · 0 patterns', 'a deck without a pattern yet');
-  assert.equal(kopf(2, { typ: 'seq' }), 'SEQ 2 · empty');
-  assert.equal(kopf(2, { typ: 'seq', folgen: undefined }), 'SEQ 2 · empty');
-});
-
-test('a place leaves SEQ only while it holds no deck (belegt); an empty SEQ place switches like any other', () => {
-  const l = ['track', 'seq', 'strudel', 'loops'];
-  assert.deepEqual(wechsel(l, 2, 'track', true, true), { ok: false, grund: 'belegt' });
-  assert.deepEqual(wechsel(l, 2, 'track', true, false), { ok: true, layout: ['track', 'track', 'strudel', 'loops'] });
-  assert.deepEqual(wechsel(l, 2, 'track', true), { ok: true, layout: ['track', 'track', 'strudel', 'loops'] }, 'seqDa defaults to false');
-  assert.equal(wechsel(l, 2, 'track', true, true).grund, 'belegt', 'belegt wins over a silent place');
-  assert.equal(wechsel(l, 2, 'seq', true, true).ok, true, 'staying on SEQ is no switch away');
-  assert.deepEqual(l, ['track', 'seq', 'strudel', 'loops']);
-  // a switch TO seq asks the silence rule like any other
-  assert.equal(wechsel(['track', 'track', 'strudel', 'loops'], 2, 'seq', { still: false, text: 'deck/2 is open' }).grund, 'offen');
-  assert.deepEqual(wechsel(['track', 'track', 'strudel', 'loops'], 2, 'seq', true), { ok: true, layout: ['track', 'seq', 'strudel', 'loops'] });
-});
-
-test('a stored layout without seq loads unchanged', () => {
-  assert.deepEqual(ladeLayout(speicher('["track","track","strudel","loops"]')), ['track', 'track', 'strudel', 'loops']);
-  assert.deepEqual(ladeLayout(speicher('["loops","track","track","strudel"]')), ['loops', 'track', 'track', 'strudel']);
-});
-
-// ---------- the strip of a SEQ deck in the Studio view (follow-up of task 7) ----------
-import { studioZuege, wendeStudioZuegeAn, STUDIO_ZUEGE } from '../public/slots.js';
-const deckZuege = () => Object.fromEntries([1, 2].map((n) => [`zug/deck/${n}`, { dataset: {}, hidden: false }]));   // decks 3 and 4 have no strip
-
-test('the Studio strips: the five fixed ones, plus the deck strip of a SEQ place 1 or 2 after them', () => {
-  assert.deepEqual(STUDIO_ZUEGE, ['zug/erz/1', 'zug/erz/2', 'zug/erz/3', 'zug/pad/1', 'zug/pad/2']);
-  assert.deepEqual(studioZuege([...LAYOUT_STANDARD]), STUDIO_ZUEGE, 'without SEQ the five strips as before');
-  assert.deepEqual(studioZuege(['track', 'seq', 'strudel', 'loops']), [...STUDIO_ZUEGE, 'zug/deck/2']);
-  assert.deepEqual(studioZuege(['seq', 'track', 'seq', 'seq']), [...STUDIO_ZUEGE, 'zug/deck/1'], 'a SEQ deck in place 3 or 4 has no strip');
-  assert.deepEqual(studioZuege(['seq', 'seq', 'seq', 'seq']).slice(5), ['zug/deck/1', 'zug/deck/2'], 'in the order of the places');
-});
-
-test('applying the Studio strips marks only the deck strips of SEQ places 1 and 2', () => {
-  const z = deckZuege(), vorher = { ...z };
-  const reihe = wendeStudioZuegeAn(['track', 'seq', 'seq', 'loops'], (k) => z[k]);
-  assert.deepEqual(reihe, ['zug/deck/2'], 'the SEQ deck of place 3 has no strip');
-  assert.equal(z['zug/deck/2'].dataset.studioZug, '1'); assert.equal(z['zug/deck/1'].dataset.studioZug, undefined);
-  wendeStudioZuegeAn([...LAYOUT_STANDARD], (k) => z[k]);   // back to no SEQ
-  for (const n of [1, 2]) { assert.equal(z[`zug/deck/${n}`].dataset.studioZug, undefined, `deck ${n}`); assert.equal(z[`zug/deck/${n}`].hidden, false, 'the hidden flag is not touched'); }
-  for (const k of Object.keys(z)) assert.equal(z[k], vorher[k], `${k} is the same object`);
-  assert.doesNotThrow(() => wendeStudioZuegeAn(['seq', 'seq', 'seq', 'seq'], () => null));
-});
-
-// ---------- the page follows the server: a place that holds a SEQ deck turns SEQ ----------
-const stillAlle = () => true, offenAlle = () => false;
-
-test('folgeServer: a deck on a silent place that is not SEQ switches the place to SEQ (also Strudel and Loops: they stop showing)', () => {
-  const l = [...LAYOUT_STANDARD];
-  const r = folgeServer(l, [3], stillAlle);
-  assert.deepEqual(r, { layout: ['track', 'track', 'seq', 'loops'], gewechselt: [3], offen: [] });
-  assert.deepEqual(folgeServer(l, [4], stillAlle).layout, ['track', 'track', 'strudel', 'seq']);
-  assert.deepEqual(folgeServer(l, [1], stillAlle).layout, ['seq', 'track', 'strudel', 'loops']);
-  assert.deepEqual(l, [...LAYOUT_STANDARD], 'the old layout is never touched');
-  assert.equal(gueltig(r.layout), true);
-});
-
-test('folgeServer: a deck on a place that is not silent leaves the layout and names the place', () => {
-  const l = [...LAYOUT_STANDARD];
-  const r = folgeServer(l, [2], offenAlle);
-  assert.deepEqual(r, { layout: l, gewechselt: [], offen: [2] });
-  assert.notEqual(r.layout, l, 'a copy');
-  const verdikt = folgeServer(l, [2], () => ({ still: false, offen: [{ kanal: 'deck/2', grund: 'open' }] }));
-  assert.deepEqual(verdikt.offen, [2]);
-});
-
-test('folgeServer: the verdict is asked per place with the layout as it is; the real silence rule gives the verdict', () => {
-  const l = [...LAYOUT_STANDARD];
-  const regler = { 'erz/1/fader': -60, 'erz/2/fader': -60, 'erz/3/fader': -60, 'deck/2/fader': 0 };
-  const r = folgeServer(l, [2, 3], (p, lay) => still(lay, p, regler));
-  assert.deepEqual(r, { layout: ['track', 'track', 'seq', 'loops'], gewechselt: [3], offen: [2] });
-  const gefragt = [];
-  folgeServer(l, [3], (p, lay) => { gefragt.push([p, [...lay]]); return true; });
-  assert.deepEqual(gefragt, [[3, l]]);
-});
-
-test('folgeServer: a layout that already matches is returned unchanged, and nothing is asked for a SEQ place', () => {
-  const l = ['track', 'seq', 'strudel', 'loops'];
-  let fragen = 0;
-  const r = folgeServer(l, [2], () => { fragen += 1; return true; });
-  assert.deepEqual(r, { layout: l, gewechselt: [], offen: [] });
-  assert.equal(fragen, 0);
-  assert.deepEqual(folgeServer(l, [], stillAlle), { layout: l, gewechselt: [], offen: [] });
-});
-
-test('folgeServer: two decks at once, one silent and one open, or both silent', () => {
-  const l = [...LAYOUT_STANDARD];
-  assert.deepEqual(folgeServer(l, [3, 4], stillAlle), { layout: ['track', 'track', 'seq', 'seq'], gewechselt: [3, 4], offen: [] });
-  assert.deepEqual(folgeServer(l, [4, 1], (p) => p === 4), { layout: ['track', 'track', 'strudel', 'seq'], gewechselt: [4], offen: [1] });
-  assert.deepEqual(folgeServer(l, [3, 3], stillAlle).gewechselt, [3], 'a place listed twice counts once');
-});
-
-test('folgeServer: an unknown project (null or absent) changes nothing; an unknown verdict leaves the place alone and unreported', () => {
-  const l = [...LAYOUT_STANDARD];
-  for (const b of [null, undefined]) assert.deepEqual(folgeServer(l, b, stillAlle), { layout: l, gewechselt: [], offen: [] });
-  assert.deepEqual(folgeServer(l, [3], () => null), { layout: l, gewechselt: [], offen: [] });
-  assert.deepEqual(folgeServer(l, [3], () => undefined), { layout: l, gewechselt: [], offen: [] });
-  assert.deepEqual(folgeServer(l, [0, 5, 'x'], stillAlle), { layout: l, gewechselt: [], offen: [] }, 'places outside 1..4 are ignored');
-  assert.deepEqual(folgeServer(['x'], [1], stillAlle).gewechselt, [], 'an invalid layout is not touched');
-});
-
-test('wechsel stays: a SEQ place that holds a deck cannot switch away (belegt), also after folgeServer made it SEQ', () => {
-  const l = folgeServer([...LAYOUT_STANDARD], [3], stillAlle).layout;
-  assert.deepEqual(wechsel(l, 3, 'strudel', true, true), { ok: false, grund: 'belegt' });
-});
-
-test('LOAD is offered only for decks that sit on a Track place', () => {
-  assert.equal(ladeDeckDa(LAYOUT_STANDARD, 1), true);
-  assert.equal(ladeDeckDa(LAYOUT_STANDARD, 2), true);
-  assert.equal(ladeDeckDa(LAYOUT_STANDARD, 3), false);
-  assert.equal(ladeDeckDa(LAYOUT_STANDARD, 4), false);
-  assert.equal(ladeDeckDa(['seq', 'track', 'strudel', 'loops'], 1), false);
-  assert.equal(ladeDeckDa(['track', 'track', 'track', 'loops'], 3), true);
+test('a refusal of the project removes the bank files and the slot file again', async (t) => {
+  const s = aufbau(t);
+  const id = s.spur('Amiga').id;
+  s.opt.sitzung.aendern = async () => ({ code: 409, j: { fehler: 'rev_veraltet' } });
+  const a = await s.l.neu({ spur_id: id, platz: 3, wurzel: 'Lib', rel: 'Sinus.wav' }, 'andreas');
+  assert.deepEqual([a.code, a.j.fehler], [409, 'rev_veraltet']);
+  assert.deepEqual(fs.readdirSync(s.d.bk).sort(), ['amiga.json', 'ohne-rolle.json', 'panels', 'samples']);
+  assert.deepEqual(fs.readdirSync(path.join(s.d.bk, 'panels')), ['amiga.json']);
+  assert.ok(!fs.readdirSync(path.join(s.d.bk, 'samples')).some((n) => n.startsWith('smp-')));
 });

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import type { Katalog, Zeile } from '../../catalog.ts';
 import type { Hinweis, Koerper, ProjOptionen } from './session.ts';
-import { ProjFehler, graphArt } from './session.ts';
+import { ProjFehler, graphArt, steckfeldLookup } from './session.ts';
 import { fuehreListeAus } from '../../project/commands.ts';
 import { kitDa, kitKlaenge } from './kits.ts';
 import { uebersetzeAusCache } from './pattern_run.ts';
@@ -60,7 +60,8 @@ export class SitzungQuellen {
       const davor = bisher.filter((v) => v !== null);
       if (davor.length === 0) return projekt;
       try {
-        return fuehreListeAus(projekt, davor, { transienten: this.h.transienten, graphArt, kitDa, presetLies: this.h.presetLies, surgeBereich,
+        return fuehreListeAus(projekt, davor, { transienten: this.h.transienten, graphArt, steckfeldVon: steckfeldLookup, kitDa,
+          presetLies: this.h.presetLies, surgeBereich,
           musterUebersetze: uebersetzeAusCache, kitKlaenge }).projekt;
       } catch { return projekt; }
     };

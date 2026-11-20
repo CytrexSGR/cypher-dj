@@ -14,7 +14,7 @@
     ]},
     { "id": "fold", "title": "FOLD", "cols": 6, "controls": [
       {"id": "fold", "type": "knob", "label": "Fold", "span": 2, "bind": {"param": "k1"}, "format": "db", "default": 0.5},
-      {"id": "sym", "type": "knob", "label": "Symmetry", "span": 2, "bind": {"param": "k2"}, "format": "percent", "default": 0.5},
+      {"id": "sym", "type": "knob", "label": "Symmetry", "span": 2, "bind": {"param": "k2"}, "format": "percent", "default": 0.5, "scale": {"labels": ["-50", "-25", "off", "25", "50"]}},
       {"id": "form", "type": "knob", "label": "Shape", "span": 2, "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
       {"id": "f1", "type": "label", "span": 6, "text": "Shape: triangle fold (0) to sine fold"},
       {"id": "f2", "type": "label", "span": 6, "text": "Fold in dB; below 0 dB nothing folds"}

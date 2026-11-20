@@ -2,6 +2,7 @@
 // Oberflaeche and the route table (in order: the first match wins) are the ones of main 28e059c68, before any move.
 // The three arrays were taken from that main: exports with grep -oE on the file, methods with grep -oE on the class, routes from a test instance
 // (routen().map(r => r.methode + ' ' + r.pfad), also in ~/messungen/2026-11-17-zettel/schnitt/routen-vorher.json).
+// Routes added after the split (GET /proj/steckfeld, the /controller/ group) are inserted at the place where the table registers them; none was removed or moved.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -262,6 +263,7 @@ const ROUTEN = [
   'GET /proj/liste',
   'GET /proj/werkbank/vorlagen',
   'GET /proj/aktuell',
+  'GET /proj/steckfeld',
   'GET /proj/verlauf',
   'GET /proj/kits',
   'GET /proj/surge_patches',
@@ -277,6 +279,10 @@ const ROUTEN = [
   'POST (muster)',
   'POST /proj/midi_import',
   'POST /proj/aendern',
+  'GET /tracker/song',
+  'GET /tracker/text',
+  'POST /tracker/text',
+  'POST /tracker/import_mod',
   'POST /proj/undo',
   'POST /proj/redo',
   'POST /proj/transport',
@@ -358,6 +364,10 @@ const ROUTEN = [
   'GET /sampler/instrumente',
   'POST /sampler/instrument/spur',
   'POST /sampler/instrument/loeschen',
+  'GET /sampler/plaetze',
+  'POST /sampler/platz',
+  'POST /sampler/platz/aendern',
+  'POST /sampler/platz/leeren',
   'GET /sampler/kit/vorschlag',
   'POST /sampler/kit',
   'GET /plugins',
@@ -379,6 +389,19 @@ const ROUTEN = [
   'POST /lernen',
   'POST /lernen/setzen',
   'POST /lernen/loeschen',
+  'GET /controller/presets',
+  'POST /controller/presets/speichern',
+  'POST /controller/presets/laden',
+  'POST /controller/presets/loeschen',
+  'GET /controller/fokus',
+  'POST /controller/programm',
+  'POST /controller/fokus/tasten',
+  'POST /controller/fokus',
+  'GET /controller/pult',
+  'POST /controller/ansicht',
+  'POST /controller/pult/bank',
+  'POST /controller/pult/laden',
+  'POST /controller/pult/arm',
   'GET /lernen/host',
   'POST /lernen/host',
   'POST /lernen/host/loeschen',

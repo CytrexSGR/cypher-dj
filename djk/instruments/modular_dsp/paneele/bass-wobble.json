@@ -1,0 +1,26 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "bass-wobble"},
+  "title": "Wobble Bass",
+  "akzent": "orange",
+  "layout": {"rows": [
+    ["wobble", "osc", "crush", "room"]
+  ]},
+  "sections": [
+    { "id": "wobble", "title": "WOBBLE", "cols": 2, "controls": [
+      {"id": "wdepth", "type": "knob", "label": "Wobble depth", "bind": {"param": "k1"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "reso", "type": "knob", "label": "Resonance", "bind": {"param": "k2"}, "format": "percent", "default": 0.5},
+      {"id": "wn", "type": "label", "span": 2, "text": "Wobble rate is fixed"}
+    ]},
+    { "id": "osc", "title": "OSCILLATORS", "cols": 2, "controls": [
+      {"id": "detune", "type": "knob", "label": "Saw detune", "bind": {"param": "k3"}, "format": "raw", "unit": "ct", "default": 0.5},
+      {"id": "sub", "type": "knob", "label": "Sub level", "bind": {"param": "k4"}, "format": "percent", "default": 0.5}
+    ]},
+    { "id": "crush", "title": "CRUSH", "cols": 1, "controls": [
+      {"id": "bits", "type": "knob", "label": "Crush bits", "bind": {"param": "k5"}, "format": "raw", "unit": "bit", "default": 0.5}
+    ]},
+    { "id": "room", "title": "ROOM", "cols": 1, "controls": [
+      {"id": "rmix", "type": "knob", "label": "Room mix", "bind": {"param": "k6"}, "format": "percent", "default": 0.5}
+    ]}
+  ]
+}

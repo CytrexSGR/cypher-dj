@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { reglerBereiche, pruefePanel, normalisierePanel, ladePanel, panelOrdner, listeGraphen } from '../graphs.ts';
+import { reglerBereiche, pruefePanel, normalisierePanel, ladePanel, panelOrdner, listeGraphen, steckfeldAusGraph } from '../graphs.ts';
+import { stiftWert, stiftRunde, stiftGroesse, stiftText, stiftSatz, KABEL_FARBEN } from '../public/panel.js';
 import { hebelWeg, hebelBereich, feldZone, steuerungen, parameterVon, bereichVon, vorgaben, vorgabeK, wertText, tastenSchritt, bogenPfad, knobWinkel, baueFrontplatte } from '../public/panel.js';
 import { skaliere, formatiereWert } from '../public/panel_skala.js';
 import { parameterTabelle, pruefeGeraete, ladeRegister, pfadeVon } from '../devices_parameter.ts';
@@ -164,7 +165,9 @@ test('shipped panels: every file in modular_dsp/paneele binds only knobs its gra
     assert.equal(n.geraet.art, 'bk', d);
     assert.deepEqual(pruefePanel(n, name, reglerBereiche(graph)), [], `${d} normalised`);
     for (const c of steuerungen(n)) for (const pa of parameterVon(c)) assert.match(pa, /^k\d+$/, `${d}: ${c.id}`);
-    assert.ok(steuerungen(normalisierePanel(panel)).some((c) => parameterVon(c).length), `${d}: it binds something`);
+    // a fixed effect (fx-bandecho and its kind) has no knobs on purpose: its panel is labels only, anything else must bind something
+    const alle = (panel.sections ?? []).flatMap((sec) => sec.controls ?? []);
+    assert.ok(steuerungen(normalisierePanel(panel)).some((c) => parameterVon(c).length) || alle.every((c) => c.type === 'label'), `${d}: it binds something`);
   }
   // negative control: the check would catch a drifted panel
   const drift = JSON.parse(fs.readFileSync(path.join(wurzel, 'paneele', dateien[0]), 'utf8'));
@@ -620,8 +623,12 @@ test('device register: every shipped panel is v2, valid against the parameter ta
   for (const d of dateien) {
     const name = d.slice(0, -5);
     const e = reg.find((x) => x.name === name);
-    assert.ok(e, `${d} is listed in geraete.json`);
     const panel = JSON.parse(fs.readFileSync(path.join(P.paneele, d), 'utf8'));
+    if (!e) {   // a panel of a recipe graph (demos/recipes/) or of a user-made graph is not in the register; `device.ts pruefen` checks it on its own
+      assert.equal(panel.format, 'cypherdj-panel/2', d);
+      assert.deepEqual(panel.geraet, { art: 'bk', graph: name }, d);
+      continue;
+    }
     assert.equal(panel.format, 'cypherdj-panel/2', d);
     assert.equal(panel.akzent, e.akzent, `${d}: accent is the register's`);
     const geraet = e.art === 'bk' ? { art: 'bk', graph: name } : { art: e.art };
@@ -795,4 +802,537 @@ test('touch: a resting finger is forgotten on pointercancel, lostpointercapture,
     m = mitDok(); rest(m); t += 20_000; m.host.feuere('pointermove', touch(7, { target: m.host })); t += 20_000; nah(stufe(m), 0.05);   // a finger that still moves is alive
     m = mitDok(); rest(m); m.fp.zerstoere(); assert.equal((m.ev.visibilitychange ?? []).length, 0, 'zerstoere takes the document listeners off');
   } finally { Date.now = echte; }
+});
+
+// ---- patch field: the control `matrix` (Kraken) ----
+const ZEILEN16 = Array.from({ length: 16 }, (_, i) => `Src ${i + 1}`), SPALTEN16 = Array.from({ length: 16 }, (_, i) => `Dst ${i + 1}`);
+const SF = { zeilen: ZEILEN16, spalten: SPALTEN16, stifte: [[0, 2, 3, 0.25], [1, 4, 5, -0.5]] };
+const FELD_PANEL = (matrix = { id: 'matrix', type: 'matrix', of: { morph: 'mo' } }, extra = {}) => ({
+  format: 'cypherdj-panel/2', geraet: { art: 'bk', graph: 'g' }, title: 'G', akzent: 'tuerkis', pages: [{ id: 'east', title: 'East' }, { id: 'patch', title: 'Patch' }],
+  sections: [{ id: 'k', title: 'K', page: 'east', controls: [{ id: 'oben', type: 'knob', bind: { param: 'k2' } }] },
+    { id: 'feld', title: 'PATCH FIELD', page: 'patch', cols: 1, controls: [matrix] },
+    { id: 'morph', title: 'MORPH', page: 'patch', cols: 1, controls: [{ id: 'mo', type: 'knob', bind: { param: 'k1' } }] }], ...extra });
+const feldFehler = (p, sf = SF) => pruefePanel(p, 'g', BEREICHE, [], sf);
+
+test('matrix lint: the shipped Kraken panel is clean against its graph; a panel with the control is good', () => {
+  const wurzel = path.join(import.meta.dirname, '..', '..', 'instruments', 'modular_dsp');
+  const g = JSON.parse(fs.readFileSync(path.join(wurzel, 'demos', 'synth-kraken.json'), 'utf8'));
+  const panel = JSON.parse(fs.readFileSync(path.join(wurzel, 'paneele', 'synth-kraken.json'), 'utf8'));
+  const sf = steckfeldAusGraph(g);
+  assert.equal(sf?.zeilen.length, 16, 'positive control: the graph has a matrix node');
+  assert.deepEqual(pruefePanel(panel, 'synth-kraken', reglerBereiche(g), [], sf), []);
+  const m = steuerungen(panel).filter((c) => c.type === 'matrix');
+  assert.equal(m.length, 1);
+  assert.deepEqual(parameterVon(m[0]), [], 'the matrix binds no parameter');
+  assert.ok(steuerungen(panel).find((c) => c.id === m[0].of.morph && c.type === 'knob'), 'its morph names a knob');
+  assert.deepEqual(feldFehler(FELD_PANEL()), []);
+  assert.deepEqual(pruefePanel(FELD_PANEL(), 'g', BEREICHE), [], 'a caller that does not know the field does not check the graph for it');
+});
+
+test('matrix lint: two matrices, no matrix in the graph, a bind, a wrong page and a bad of.morph are each refused with their own text', () => {
+  const zwei = FELD_PANEL(); zwei.sections[1].controls.push({ id: 'matrix2', type: 'matrix' });
+  assert.match(feldFehler(zwei)[0], /at most one matrix control \(2 found\)/);
+  assert.match(feldFehler(FELD_PANEL(), null)[0], /control "matrix": the graph "g" has no matrix node/);
+  assert.match(feldFehler(FELD_PANEL({ id: 'matrix', type: 'matrix', bind: { param: 'k1' } }))[0], /takes no bind/);
+  const woanders = FELD_PANEL(); woanders.sections[1].page = 'east';
+  assert.match(feldFehler(woanders)[0], /its section must be on the page "patch"/);
+  assert.match(feldFehler(FELD_PANEL({ id: 'matrix', type: 'matrix', of: { morph: 'nix' } }))[0], /of\.morph "nix" does not name a knob or fader/);
+  assert.match(feldFehler(FELD_PANEL({ id: 'matrix', type: 'matrix', of: { morph: 'matrix' } }))[0], /does not name a knob or fader/, 'itself is no knob');
+  assert.match(feldFehler(FELD_PANEL({ id: 'matrix', type: 'matrix', of: { morph: 'oben' } }))[0], /of\.morph "oben" must sit in a section on the page "patch"/);
+  assert.match(feldFehler(FELD_PANEL({ id: 'matrix', type: 'matrix', of: { morph: 'mo', x: 1 } }))[0], /of\.x is unknown/);
+  assert.match(feldFehler(FELD_PANEL({ id: 'matrix', type: 'matrix', of: 'mo' }))[0], /of must be \{morph/);
+  assert.deepEqual(feldFehler(FELD_PANEL({ id: 'matrix', type: 'matrix' })), [], 'of is optional');
+});
+
+test('matrix helpers: amount of a pin, rounding, size, readout text', () => {
+  assert.equal(stiftWert([[0, 1, 2, 0.4], [1, 1, 2, -0.3]], 1, 1, 2), -0.3);
+  assert.equal(stiftWert([[0, 1, 2, 0.4]], 0, 2, 1), 0);
+  assert.equal(stiftRunde(0.456), 0.46);
+  assert.equal(stiftRunde(2), 1);
+  assert.equal(stiftRunde(-3), -1);
+  assert.equal(stiftRunde(0.004), 0);
+  assert.ok(Object.is(stiftRunde(-0.004), 0), 'no negative zero');
+  assert.equal(stiftRunde(NaN), 0);
+  assert.equal(stiftGroesse(0), 0);
+  assert.ok(stiftGroesse(0.01) >= 0.3 && stiftGroesse(1) === 1 && stiftGroesse(-1) === 1 && stiftGroesse(0.5) < stiftGroesse(0.9));
+  assert.equal(stiftText('VCO 3', 'Cutoff', 0.5), 'VCO 3 > Cutoff +0.50');
+  assert.equal(stiftText('VCO 3', 'Cutoff', -0.25), 'VCO 3 > Cutoff -0.25');
+  assert.equal(stiftText('VCO 3', 'Cutoff', 0), 'VCO 3 > Cutoff off');
+});
+
+// a fake adapter that holds the pins like the track adapter does and records every call
+function feldBau(opts = {}) {
+  const log = [], host = new K('div'), vorrat = { k1: 0.25 };
+  let stifte = (opts.start ?? SF.stifte).map((e) => [...e]);
+  const sortiert = () => stifte.sort((a, b) => a[0] * 256 + a[1] * 16 + a[2] - (b[0] * 256 + b[1] * 16 + b[2]));
+  const adapter = { get: (nr) => vorrat[nr], set: () => {} };
+  if (opts.lernPfad) adapter.lernPfad = () => null;
+  if (!opts.leseNur) Object.assign(adapter, {
+    stifte: () => stifte.map((e) => [...e]),
+    stiftSetzen(satz, zeile, spalte, wert) {
+      log.push(['set', satz, zeile, spalte, wert]);
+      stifte = stifte.filter((e) => !(e[0] === satz && e[1] === zeile && e[2] === spalte));
+      if (wert !== 0) stifte.push([satz, zeile, spalte, wert]);
+      sortiert();
+    },
+    stiftEnde() { log.push(['ende']); },
+    stifteSetzen(satz, liste) { log.push(['satz', satz, liste.map((e) => [...e])]); stifte = [...stifte.filter((e) => e[0] !== satz), ...liste]; sortiert(); return Promise.resolve(true); },
+  });
+  const fp = baueFrontplatte(host, { panel: FELD_PANEL(), regler: BEREICHE, adapter, dokument: DOK, steckfeld: SF, radMs: 300, ...(opts.opt ?? {}) });
+  const zellen = host.finde('fp-m-z');
+  const z = (zeile, spalte) => zellen[zeile * 16 + spalte];
+  return { fp, host, log, vorrat, z, adapter, stifte: () => stifte, gitter: host.finde('fp-m-gitter')[0], text: () => host.finde('fp-m-info')[0].textContent };
+}
+
+test('matrix DOM: 256 cells, 16 row and 16 column labels from the graph, pins drawn by sign and size, the field sits on its own page', () => {
+  const { host, z } = feldBau();
+  assert.equal(host.finde('fp-m-z').length, 256);
+  assert.deepEqual(host.finde('fp-m-zeile').map((e) => e.textContent), ZEILEN16);
+  assert.deepEqual(host.finde('fp-m-spalte').map((e) => e.kinder[0].textContent), SPALTEN16);
+  assert.deepEqual([z(2, 3).dataset.z, z(2, 3).dataset.s], ['2', '3']);
+  assert.ok(z(2, 3).klassen.has('fp-plus') && !z(2, 3).klassen.has('fp-minus'), 'set A pin +0.25');
+  assert.equal(z(2, 3).style.vars['--g'], stiftGroesse(0.25).toFixed(3));
+  assert.ok(!z(4, 5).klassen.has('fp-minus') && z(4, 5).klassen.has('fp-geist'), 'the pin of set B is a ghost in view A');
+  assert.equal(host.finde('fp-matrixsektion').length, 1);
+  assert.equal(host.finde('fp-zelle').find((e) => e.dataset.typ === 'matrix').dataset.id, 'matrix');
+});
+
+test('matrix DOM: a click sets +0.5 and sends one pin, a second click removes it; each ends the gesture once', () => {
+  const { z, log } = feldBau();
+  z(7, 7).feuere('pointerdown', { clientX: 5, clientY: 50 });
+  assert.deepEqual(log, [], 'nothing happens on the press');
+  z(7, 7).feuere('pointerup', { clientX: 5, clientY: 50 });
+  assert.deepEqual(log, [['set', 0, 7, 7, 0.5], ['ende']]);
+  assert.ok(z(7, 7).klassen.has('fp-plus'));
+  z(7, 7).feuere('pointerdown', { clientX: 5, clientY: 50 });
+  z(7, 7).feuere('pointerup', { clientX: 5, clientY: 50 });
+  assert.deepEqual(log.slice(2), [['set', 0, 7, 7, 0], ['ende']]);
+  assert.ok(!z(7, 7).klassen.has('fp-plus'), 'removed');
+  z(7, 7).feuere('pointerdown', { clientX: 5, clientY: 50, shiftKey: true });
+  z(7, 7).feuere('pointerup', { clientX: 5, clientY: 50, shiftKey: true });
+  assert.deepEqual(log.slice(4), [['set', 0, 7, 7, -0.5], ['ende']], 'shift click: a negative pin');
+  assert.ok(z(7, 7).klassen.has('fp-minus'));
+  z(1, 1).feuere('pointerdown', { button: 2, clientX: 5, clientY: 50 });
+  assert.equal(log.length, 6, 'a right button press starts nothing');
+  z(1, 1).feuere('contextmenu', {});
+  assert.deepEqual(log.slice(6), [['set', 0, 1, 1, -0.5], ['ende']], 'right click: a negative pin');
+  z(1, 1).feuere('contextmenu', {});
+  assert.deepEqual(log.slice(8), [['set', 0, 1, 1, 0], ['ende']], 'and again removes it');
+});
+
+test('matrix DOM: a vertical drag changes the amount live (90 px for 1), shift is finer, a drag back to the middle removes, the gesture ends once, no click follows', () => {
+  const { z, log, stifte } = feldBau();
+  z(2, 3).feuere('pointerdown', { clientX: 5, clientY: 100 });   // the default pin +0.25
+  z(2, 3).feuere('pointermove', { clientX: 5, clientY: 98 });
+  assert.deepEqual(log, [], 'two pixels are not a drag yet');
+  z(2, 3).feuere('pointermove', { clientX: 5, clientY: 91 });    // 9 px up from the press: +0.1
+  assert.deepEqual(log.at(-1), ['set', 0, 2, 3, 0.35]);
+  z(2, 3).feuere('pointermove', { clientX: 5, clientY: 46 });    // 45 px more: +0.5, to 0.85
+  assert.deepEqual(log.at(-1), ['set', 0, 2, 3, 0.85]);
+  z(2, 3).feuere('pointermove', { clientX: 5, clientY: -200 });  // far past the end
+  assert.deepEqual(log.at(-1), ['set', 0, 2, 3, 1]);
+  const n = log.length;
+  z(2, 3).feuere('pointermove', { clientX: 5, clientY: -200 });
+  assert.equal(log.length, n, 'an unchanged amount is not sent again');
+  z(2, 3).feuere('pointermove', { clientX: 5, clientY: -155 });  // 45 px back: the overshoot did not count as travel
+  assert.deepEqual(log.at(-1), ['set', 0, 2, 3, 0.5]);
+  z(2, 3).feuere('pointermove', { clientX: 5, clientY: -155 + 90 * 5, shiftKey: true });   // 450 px down with shift = 90 px of travel: -0.5 -> pin at... clamped path
+  assert.equal(stifte().find((e) => e[0] === 0 && e[1] === 2 && e[2] === 3)?.[3] ?? 0, stiftRunde(0.5 - 1));
+  z(2, 3).feuere('pointerup', { clientX: 5, clientY: 300 });
+  z(2, 3).feuere('lostpointercapture', {});
+  assert.equal(log.filter((e) => e[0] === 'ende').length, 1, 'ONE end for the whole drag');
+  assert.equal(log.at(-1)[0], 'ende');
+  assert.ok(log.filter((e) => e[0] === 'set').every((e) => e[1] === 0 && e[2] === 2 && e[3] === 3), 'only that place was written');
+  // an empty cell dragged up from nothing, then back down to zero: gone
+  const m = feldBau();
+  m.z(9, 9).feuere('pointerdown', { clientX: 5, clientY: 100 });
+  m.z(9, 9).feuere('pointermove', { clientX: 5, clientY: 55 });
+  assert.deepEqual(m.log.at(-1), ['set', 0, 9, 9, 0.5]);
+  m.z(9, 9).feuere('pointermove', { clientX: 5, clientY: 100 });
+  assert.deepEqual(m.log.at(-1), ['set', 0, 9, 9, 0], 'back to the middle: no pin');
+  m.z(9, 9).feuere('pointerup', {});
+  assert.deepEqual(m.stifte().filter((e) => e[1] === 9), []);
+});
+
+test('matrix DOM: the wheel changes a pin it is over and ends after 300 ms; over an empty cell it does nothing (the page scrolls)', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { z, log } = feldBau();
+  const leer = z(0, 0).feuere('wheel', { deltaY: -100 });
+  assert.deepEqual(log, [], 'an empty cell is not touched');
+  assert.equal(leer.defaultPrevented, undefined);
+  z(2, 3).feuere('wheel', { deltaY: -100 });   // 0.25 -> 0.30
+  t.mock.timers.tick(100);
+  z(2, 3).feuere('wheel', { deltaY: -100 });
+  assert.deepEqual(log, [['set', 0, 2, 3, 0.3], ['set', 0, 2, 3, 0.35]]);
+  t.mock.timers.tick(299);
+  assert.equal(log.filter((e) => e[0] === 'ende').length, 0);
+  t.mock.timers.tick(2);
+  assert.deepEqual(log.at(-1), ['ende']);
+  z(2, 3).feuere('wheel', { deltaY: 100, shiftKey: true });
+  assert.deepEqual(log.at(-1), ['set', 0, 2, 3, 0.34]);
+  t.mock.timers.tick(300);
+  assert.equal(log.filter((e) => e[0] === 'ende').length, 2);
+});
+
+test('matrix DOM: view A and B switch what is shown and written; copy and clear send ONE whole-set write each; the label of the buttons follows the view', () => {
+  const { host, z, log } = feldBau();
+  const knopf = (text) => host.finde('fp-knopf-klein').find((b) => b.textContent === text);
+  const optionen = host.finde('fp-option').filter((b) => ['A', 'B'].includes(b.textContent));
+  assert.ok(knopf('COPY A>B') && knopf('CLEAR A'));
+  knopf('COPY A>B').feuere('click');
+  assert.deepEqual(log, [['satz', 1, [[1, 2, 3, 0.25]]]], 'set A over set B: the pins carry the target set');
+  knopf('CLEAR A').feuere('click');
+  assert.deepEqual(log.at(-1), ['satz', 0, []]);
+  assert.ok(!z(2, 3).klassen.has('fp-plus'), 'cleared');
+  optionen[1].feuere('click');
+  assert.ok(z(2, 3).klassen.has('fp-plus'), 'view B shows the copied pin');
+  assert.ok(optionen[1].klassen.has('an') && !optionen[0].klassen.has('an'));
+  z(8, 8).feuere('pointerdown', { clientY: 10 }); z(8, 8).feuere('pointerup', { clientY: 10 });
+  assert.deepEqual(log.at(-2), ['set', 1, 8, 8, 0.5], 'a click in view B writes set B');
+  assert.ok(knopf('COPY B>A') && knopf('CLEAR B'));
+  knopf('COPY B>A').feuere('click');
+  assert.deepEqual(log.at(-1), ['satz', 0, [[0, 2, 3, 0.25], [0, 8, 8, 0.5]]], 'B over A');
+  assert.equal(log.filter((e) => e[0] === 'satz').length, 3);
+});
+
+test('matrix DOM: hover lights the row and the column and reads "<row> > <column> <value>"; leaving clears it', () => {
+  const { z, host, text } = feldBau();
+  assert.equal(text(), 'Set A: 1 pins');
+  z(2, 3).feuere('pointerover', {});
+  assert.equal(text(), 'Src 3 > Dst 4 +0.25');
+  assert.equal(host.finde('fp-hell').length, 2 + 16 + 15, 'two labels, the row and the column (the crossing counted once)');
+  z(5, 5).feuere('pointerover', {});
+  assert.equal(text(), 'Src 6 > Dst 6 off');
+  assert.ok(!z(2, 3).klassen.has('fp-hell') || z(2, 3).dataset.z === '5');
+  host.finde('fp-m-gitter')[0].feuere('pointerleave', {});
+  assert.equal(host.finde('fp-hell').length, 0);
+  assert.equal(text(), 'Set A: 1 pins');
+});
+
+test('matrix DOM: keyboard: arrows move the cursor, Enter sets, + changes, Delete removes; the end comes on key up', () => {
+  const { gitter, log, text } = feldBau();
+  gitter.feuere('keydown', { key: 'ArrowDown' }); gitter.feuere('keydown', { key: 'ArrowDown' }); gitter.feuere('keydown', { key: 'ArrowRight' });
+  gitter.feuere('keydown', { key: 'ArrowRight' }); gitter.feuere('keydown', { key: 'ArrowRight' });
+  assert.equal(text(), 'Src 3 > Dst 4 +0.25', 'the cursor stands on the default pin');
+  gitter.feuere('keydown', { key: '+' }); gitter.feuere('keyup', { key: '+' });
+  assert.deepEqual(log, [['set', 0, 2, 3, 0.3], ['ende']]);
+  gitter.feuere('keydown', { key: 'Delete' }); gitter.feuere('keyup', { key: 'Delete' });
+  assert.deepEqual(log.slice(2), [['set', 0, 2, 3, 0], ['ende']]);
+  gitter.feuere('keydown', { key: 'Enter' }); gitter.feuere('keyup', { key: 'Enter' });
+  assert.deepEqual(log.slice(4), [['set', 0, 2, 3, 0.5], ['ende']]);
+  gitter.feuere('keydown', { key: 'x' });
+  assert.equal(log.length, 6, 'other keys do nothing');
+});
+
+test('matrix DOM: the Morph knob is shown beside the sets (position, percent, share of each set); it follows the knob value', () => {
+  const { host, fp, vorrat } = feldBau();
+  const marke = host.finde('fp-m-morphmarke')[0], wert = host.finde('fp-m-morphwert')[0];
+  assert.equal(wert.textContent, '25%');
+  assert.equal(marke.style.vars['--k'], '0.250');
+  const [a, b] = host.finde('fp-option').filter((x) => ['A', 'B'].includes(x.textContent));
+  assert.equal(a.style.vars['--anteil'], '0.750');
+  assert.equal(b.style.vars['--anteil'], '0.250');
+  vorrat.k1 = 1;
+  fp.aktualisiere(true);
+  assert.equal(wert.textContent, '100%');
+  assert.equal(a.style.vars['--anteil'], '0.000');
+  // without of.morph: no bar
+  const ohne = new K('div');
+  baueFrontplatte(ohne, { panel: FELD_PANEL({ id: 'matrix', type: 'matrix' }), regler: BEREICHE, adapter: { get: () => 0.5, set() {}, stifte: () => [], stiftSetzen() {}, stifteSetzen() {} }, dokument: DOK, steckfeld: SF });
+  assert.equal(ohne.finde('fp-m-morph').length, 0);
+});
+
+test('matrix DOM: a host without pin methods shows the graph defaults greyed and sends nothing; no steckfeld: a note; learn mode blocks the pins', () => {
+  const { z, log, host, fp } = feldBau({ leseNur: true });
+  assert.ok(z(2, 3).klassen.has('fp-plus'), 'the default pin is shown');
+  assert.ok(host.finde('fp-m')[0].klassen.has('fp-m-ruht'));
+  z(7, 7).feuere('pointerdown', { clientY: 10 }); z(7, 7).feuere('pointerup', { clientY: 10 });
+  assert.ok(!z(7, 7).klassen.has('fp-plus'));
+  assert.deepEqual(log, []);
+  host.finde('fp-knopf-klein').find((b) => b.textContent === 'COPY A>B').feuere('click');
+  assert.deepEqual(log, [], 'copy needs the adapter too');
+  const kein = new K('div');
+  baueFrontplatte(kein, { panel: FELD_PANEL(), regler: BEREICHE, adapter: { get: () => 0.5, set() {} }, dokument: DOK });
+  assert.equal(kein.finde('fp-m-z').length, 0);
+  assert.equal(kein.finde('fp-text')[0].textContent, 'This device has no patch field');
+  // learn mode: a click does not set a pin
+  const l = feldBau({ lernPfad: true, opt: { lernen: { an: true, gelernt: new Set() }, beiLernen() {} } });
+  l.z(7, 7).feuere('pointerdown', { clientY: 10 }); l.z(7, 7).feuere('pointerup', { clientY: 10 });
+  assert.equal(l.log.length, 0, 'learn mode: the click sets no pin');
+});
+
+
+// ---- Cabinet view: the page with `all`, the jacks and the cables of the patch field ----
+const SCHRANK_PAGES = [{ id: 'rack', title: 'Cabinet', all: true }, { id: 'east', title: 'East' }, { id: 'patch', title: 'Patch' }];
+const SCHRANK_OF = (extra = {}) => ({
+  morph: 'mo', quellen: Array.from({ length: 16 }, (_, i) => (i === 3 ? 'ziel' : 'quelle')), ziele: Array.from({ length: 16 }, (_, i) => (i === 0 ? 'kn' : i === 1 ? 'ziel' : null)),
+  bereiche: Array.from({ length: 16 }, (_, i) => (i === 0 ? { wert: 40, einheit: 'st' } : i === 1 ? { wert: 1, einheit: 'gain' } : null)), ...extra });
+const SCHRANK_PANEL = (of = SCHRANK_OF(), pages = SCHRANK_PAGES) => ({
+  format: 'cypher-panel-x'.replace('cypher-panel-x', 'cypherdj-panel/2'), geraet: { art: 'bk', graph: 'g' }, title: 'G', pages,
+  sections: [{ id: 'quelle', title: 'SRC', page: 'east', controls: [{ id: 'oben', type: 'knob', label: 'Top', bind: { param: 'k2' } }] },
+    { id: 'ziel', title: 'DST', page: 'east', controls: [{ id: 'kn', type: 'knob', label: 'Cutoff', bind: { param: 'k3' } }] },
+    { id: 'feld', title: 'PATCH FIELD', page: 'patch', cols: 1, controls: [{ id: 'matrix', type: 'matrix', of }] },
+    { id: 'morph', title: 'MORPH', page: 'patch', cols: 1, controls: [{ id: 'mo', type: 'knob', bind: { param: 'k1' } }] }] });
+const SCHRANK_FEHLER = (of, pages) => pruefePanel(SCHRANK_PANEL(of, pages), 'g', { ...BEREICHE, 2: BEREICHE[1], 3: BEREICHE[1] }, [], SF);
+
+test('cabinet lint: all, quellen, ziele and bereiche are accepted when right and refused with their own text when not', () => {
+  assert.deepEqual(SCHRANK_FEHLER(SCHRANK_OF()), [], 'positive control: the cabinet panel is good');
+  assert.deepEqual(SCHRANK_FEHLER(undefined, [{ id: 'rack', title: 'Cabinet', all: false }, ...SCHRANK_PAGES.slice(1)]), [], 'all may be false');
+  assert.match(SCHRANK_FEHLER(SCHRANK_OF(), [{ ...SCHRANK_PAGES[0], all: 'yes' }, ...SCHRANK_PAGES.slice(1)])[0], /pages\[0\]: all must be true or false/);
+  assert.match(SCHRANK_FEHLER(SCHRANK_OF(), [...SCHRANK_PAGES.slice(0, 2), { id: 'patch', title: 'Patch', all: true }])[0], /at most one page may carry all \(2 found\)/);
+  assert.match(SCHRANK_FEHLER(SCHRANK_OF({ quellen: ['quelle'] }))[0], /of\.quellen must be a list of exactly 16 entries/);
+  assert.match(SCHRANK_FEHLER(SCHRANK_OF({ ziele: 'x' }))[0], /of\.ziele must be a list of exactly 16 entries/);
+  assert.match(SCHRANK_FEHLER(SCHRANK_OF({ bereiche: [] }))[0], /of\.bereiche must be a list of exactly 16 entries/);
+  const q = SCHRANK_OF().quellen; q[5] = 'kn';
+  assert.match(SCHRANK_FEHLER(SCHRANK_OF({ quellen: q }))[0], /of\.quellen\[5\] "kn" does not name a section/, 'a source is a section, not a control');
+  q[5] = 'nix';
+  assert.match(SCHRANK_FEHLER(SCHRANK_OF({ quellen: q }))[0], /of\.quellen\[5\] "nix" does not name a section/);
+  const z = SCHRANK_OF().ziele; z[7] = 'nix';
+  assert.match(SCHRANK_FEHLER(SCHRANK_OF({ ziele: z }))[0], /of\.ziele\[7\] "nix" does not name a control or a section/);
+  z[7] = 'feld';   // a section
+  assert.deepEqual(SCHRANK_FEHLER(SCHRANK_OF({ ziele: z })), []);
+  const b = SCHRANK_OF().bereiche;
+  for (const schlecht of [{ wert: 'a', einheit: 'st' }, { wert: 1, einheit: '' }, { wert: 1, einheit: 'toolongunit' }, { wert: Infinity, einheit: 'st' }, { einheit: 'st' }, 5]) {
+    b[4] = schlecht;
+    assert.match(SCHRANK_FEHLER(SCHRANK_OF({ bereiche: b }))[0], /of\.bereiche\[4\] must be null or \{wert: number, einheit: text of 1\.\.8 characters\}/, JSON.stringify(schlecht));
+  }
+  assert.ok(normalisierePanel(SCHRANK_PANEL()).pages[0].all === true, 'normalisierePanel keeps all');
+  const v1 = { format: 'cypherdj-panel/1', graph: 'g', pages: SCHRANK_PAGES, sections: [] };
+  assert.equal(normalisierePanel(v1).pages[0].all, true, 'also when a v1 panel is read as v2');
+});
+
+test('cabinet lint: the shipped Kraken panel has the Cabinet page first, the rows read like the signal flow, and 16 quellen, ziele and bereiche', () => {
+  const wurzel = path.join(import.meta.dirname, '..', '..', 'instruments', 'modular_dsp');
+  const panel = JSON.parse(fs.readFileSync(path.join(wurzel, 'paneele', 'synth-kraken.json'), 'utf8'));
+  assert.deepEqual(panel.pages[0], { id: 'rack', title: 'Cabinet', all: true });
+  assert.deepEqual(panel.pages.slice(1).map((p) => p.id), ['east', 'west', 'mod', 'patch']);
+  assert.deepEqual(panel.layout.rows, [['vco1', 'vco2', 'ringnoise', 'vco3'], ['west', 'gate', 'route', 'filter'], ['env1', 'env2', 'func1', 'func2', 'chaos'], ['feedback', 'fx'], ['feld', 'morph', 'master']]);
+  const m = steuerungen(panel).find((c) => c.type === 'matrix');
+  assert.equal(m.of.quellen.length, 16); assert.equal(m.of.ziele.length, 16); assert.equal(m.of.bereiche.length, 16);
+  assert.deepEqual(m.of.bereiche.map((x) => x.einheit), ['st', 'st', 'st', 'idx', 'unit', 'dB', 'unit', 'gain', 'st', 'unit', 'gain', 'unit', 'oct', 'oct', 'unit', 'gain']);
+  assert.ok(panel.sections.find((s) => s.id === 'feld').controls.some((c) => c.type === 'label' && /^Sources are rows/.test(c.text)), 'the help line under the patch field title');
+  assert.equal(KABEL_FARBEN.length, 16); assert.equal(new Set(KABEL_FARBEN).size, 16);
+});
+
+test('cabinet readout: a sentence with the range where the column has one (moves / feeds), the short form without', () => {
+  assert.equal(stiftSatz('Func 1', 'Cutoff', 0.5, { wert: 40, einheit: 'st' }), 'Func 1 moves Cutoff: +0.50 (up to +20.0 st)');
+  assert.equal(stiftSatz('Func 1', 'Cutoff', -0.25, { wert: 40, einheit: 'st' }), 'Func 1 moves Cutoff: -0.25 (down to -10.0 st)');
+  assert.equal(stiftSatz('Ring', 'Filter In', 0.5, { wert: 0.5, einheit: 'gain' }), 'Ring feeds Filter In: +0.50 (up to +0.3 gain)');
+  assert.equal(stiftSatz('Ring', 'Filter In', 0, { wert: 0.5, einheit: 'gain' }), 'Ring does not feed Filter In');
+  assert.equal(stiftSatz('Func 1', 'Cutoff', 0, { wert: 40, einheit: 'st' }), 'Func 1 does not move Cutoff');
+  assert.equal(stiftSatz('Func 1', 'Cutoff', 0.5, null), 'Func 1 > Cutoff +0.50', 'no range: the short form');
+});
+
+// a DOM with a made-up layout: the jack `q<n>` sits at x = 10 + 30 n, y = 10, the jack `z<n>` at x = 10 + 30 n, y = 210, the host is 1000 x 500, the rest has no size
+class KL extends K {
+  getBoundingClientRect() {
+    const b = this.dataset.buchse;
+    if (b) return { left: 10 + 30 * Number(b.slice(1)) - 5, top: (b[0] === 'q' ? 10 : 210) - 5, width: 10, height: 10 };
+    return this.tag === 'host' ? { left: 0, top: 0, width: 1000, height: 500 } : { left: 0, top: 0, width: 0, height: 0 };
+  }
+}
+const DOKL = { createElement: (t) => new KL(t), createElementNS: (_n, t) => new KL(t) };
+function schrankBau(opts = {}) {
+  const log = [], host = new KL('host'), vorrat = { k1: 0.25 };
+  let stifte = (opts.start ?? [[0, 0, 0, 0.25], [0, 3, 1, -0.5], [1, 5, 0, 0.75]]).map((e) => [...e]);
+  const adapter = { get: (nr) => vorrat[nr], set: () => {} };
+  if (opts.lernPfad) adapter.lernPfad = () => null;
+  if (!opts.leseNur) Object.assign(adapter, {
+    stifte: () => stifte.map((e) => [...e]),
+    stiftSetzen(satz, zeile, spalte, wert) {
+      log.push(['set', satz, zeile, spalte, wert]);
+      stifte = stifte.filter((e) => !(e[0] === satz && e[1] === zeile && e[2] === spalte));
+      if (wert !== 0) stifte.push([satz, zeile, spalte, wert]);
+    },
+    stiftEnde() { log.push(['ende']); },
+    stifteSetzen() { return Promise.resolve(true); },
+  });
+  const fp = baueFrontplatte(host, { panel: opts.panel ?? SCHRANK_PANEL(), regler: BEREICHE, adapter, dokument: opts.dok ?? DOKL, steckfeld: SF, radMs: 300, breit: true, ...(opts.opt ?? {}) });
+  const buchse = (n) => host.alles().find((e) => e.dataset?.buchse === n);
+  const pfade = () => host.finde('fp-kabelsvg')[0]?.kinder.filter((k) => k.klassen.has('fp-kabel')) ?? [];
+  const griffe = () => host.finde('fp-kabel-griff');
+  const griff = (z, sp) => griffe().find((g) => g.dataset.z === String(z) && g.dataset.s === String(sp));
+  return { fp, host, log, buchse, pfade, griffe, griff, stifte: () => stifte, text: () => host.finde('fp-m-info')[0].textContent, vorrat };
+}
+
+test('cabinet DOM: the page with all shows every section, the other pages only their own, a narrow host has no such page', () => {
+  const a = schrankBau();
+  const sek = (id) => a.host.alles().find((e) => e.dataset?.sektion === id);
+  assert.deepEqual(a.host.finde('fp-seite').map((t) => t.textContent), ['Cabinet', 'East', 'Patch']);
+  assert.ok(a.fp.zeigtAlles());
+  for (const id of ['quelle', 'ziel', 'feld', 'morph']) assert.ok(!sek(id).klassen.has('fp-aus'), `${id} is shown on the Cabinet page`);
+  assert.ok(a.host.finde('frontplatte')[0].klassen.has('fp-schrank'));
+  a.fp.zeigeSeite('east');
+  assert.ok(!a.fp.zeigtAlles());
+  assert.deepEqual(['quelle', 'ziel', 'feld', 'morph'].map((id) => sek(id).klassen.has('fp-aus')), [false, false, true, true]);
+  assert.ok(!a.host.finde('frontplatte')[0].klassen.has('fp-schrank'));
+  const schmal = schrankBau({ opt: { breit: false } });
+  assert.deepEqual(schmal.host.finde('fp-seite').map((t) => t.textContent), ['East', 'Patch'], 'narrow host: the Cabinet page is left out');
+  assert.equal(schmal.host.finde('fp-kabelsvg').length, 0);
+  assert.equal(schmal.host.finde('fp-buchse').length, 0);
+  schmal.fp.zeigeSeite('rack');
+  assert.ok(!schmal.fp.zeigtAlles(), 'zeigeSeite of a page that is not there changes nothing');
+});
+
+test('cabinet DOM: a jack per source and destination with a title, a colour per source; cables for the pins of the viewed set, ghosts for the other', () => {
+  const a = schrankBau();
+  assert.equal(a.host.finde('fp-buchse-aus').length, 16);
+  assert.equal(a.host.finde('fp-buchse-ein').length, 2, 'only the two destinations that are named');
+  assert.equal(a.buchse('q0').attr.title, 'Source: Src 1');
+  assert.equal(a.buchse('z0').attr.title, 'Destination: Dst 1');
+  assert.equal(a.buchse('q2').style.vars['--bc'], KABEL_FARBEN[2]);
+  assert.ok(a.buchse('q3').eltern.klassen.has('fp-modultitel') || a.buchse('q3').eltern.tag === 'h4', 'a source jack sits in the title bar of its section');
+  assert.ok(a.buchse('z0').eltern.klassen.has('fp-name'), 'a control destination sits next to the label of its knob');
+  assert.equal(a.buchse('z1').eltern.tag, 'h4', 'a section destination sits in the section title');
+  const svg = a.host.finde('fp-kabelsvg')[0];
+  assert.equal(svg.attr['pointer-events'], 'none', 'the overlay never blocks the knobs');
+  const p = a.pfade();
+  assert.equal(p.length, 3, 'set A: two cables (Src 1 > Dst 1, Src 4 > Dst 2), one ghost (set B: row 6 > column 1)');
+  const [geist, k1, k2] = p;
+  assert.ok(geist.klassen.has('fp-kabel-geist'));
+  assert.equal(geist.attr['stroke-opacity'], '0.3');
+  assert.equal(k1.attr.stroke, KABEL_FARBEN[0], 'the colour of the source row');
+  assert.match(k1.attr.d, /^M10\.0 10\.0C10\.0 [\d.]+ 10\.0 [\d.]+ 10\.0 210\.0$/, 'from the source jack to the destination jack, sagging below');
+  assert.equal(k1.attr['stroke-width'], '3.00', '2 + 4 * 0.25');
+  assert.equal(k1.attr['stroke-dasharray'], undefined);
+  assert.equal(k2.attr['stroke-dasharray'], '7 5', 'a negative amount is dashed');
+  assert.equal(k2.attr['stroke-width'], '4.00');
+  assert.equal(k2.attr.stroke, KABEL_FARBEN[3]);
+  assert.equal(a.griffe().length, 2);
+  assert.equal(a.griffe()[0].attr['pointer-events'], 'stroke');
+  assert.ok(a.buchse('q0').klassen.has('fp-benutzt') || a.buchse('z0').klassen.has('fp-benutzt'));
+  // set B: the other way round
+  a.host.finde('fp-option')[1].feuere('click');
+  const b = a.pfade();
+  assert.equal(b.length, 3);
+  assert.ok(b.filter((x) => x.klassen.has('fp-kabel-geist')).length === 2 && b.filter((x) => !x.klassen.has('fp-kabel-geist')).length === 1);
+  assert.equal(a.griffe().length, 1);
+  // the CABLES toggle hides and shows the overlay and the jacks
+  const knopf = a.host.finde('fp-knopf-klein').find((x) => x.textContent === 'CABLES');
+  assert.equal(knopf.attr['aria-pressed'], 'true');
+  knopf.feuere('click');
+  assert.equal(a.pfade().length, 0);
+  assert.ok(a.host.finde('fp-kabelsvg')[0].klassen.has('fp-kabel-aus'));
+  assert.ok(!a.host.finde('frontplatte')[0].klassen.has('fp-kabelan'), 'jacks are hidden by this class');
+  knopf.feuere('click');
+  assert.equal(a.pfade().length, 3);
+  assert.ok(a.host.finde('frontplatte')[0].klassen.has('fp-kabelan'));
+  // a page that is not the Cabinet: no cables
+  a.fp.zeigeSeite('east');
+  assert.equal(a.pfade().length, 0);
+  a.fp.zeigeSeite('rack');
+  assert.equal(a.pfade().length, 3);
+});
+
+test('cabinet DOM: arm a source jack, click a destination jack: one pin of the viewed set at +0.5 (shift -0.5), the gesture ends; Escape and a second click disarm', () => {
+  const a = schrankBau({ start: [] });
+  a.buchse('q2').feuere('click');
+  assert.ok(a.buchse('q2').klassen.has('fp-an'), 'the armed jack glows');
+  assert.equal(a.text(), 'Src 3: now click a destination');
+  a.buchse('z0').feuere('click');
+  assert.deepEqual(a.log, [['set', 0, 2, 0, 0.5], ['ende']]);
+  assert.ok(!a.buchse('q2').klassen.has('fp-an'), 'patched: disarmed');
+  assert.equal(a.text(), 'Src 3 moves Dst 1: +0.50 (up to +20.0 st)');
+  assert.equal(a.pfade().length, 1, 'the new cable is drawn');
+  a.log.length = 0;
+  a.buchse('z0').feuere('click');
+  assert.deepEqual(a.log, [], 'a destination jack without an armed source does nothing');
+  a.buchse('q5').feuere('click'); a.buchse('z1').feuere('click', { shiftKey: true });
+  assert.deepEqual(a.log, [['set', 0, 5, 1, -0.5], ['ende']]);
+  assert.equal(a.text(), 'Src 6 feeds Dst 2: -0.50 (down to -0.5 gain)');
+  a.log.length = 0;
+  a.buchse('q5').feuere('click'); a.buchse('q5').feuere('click');   // a second click on the armed jack
+  assert.ok(!a.buchse('q5').klassen.has('fp-an'));
+  a.buchse('z1').feuere('click');
+  assert.deepEqual(a.log, []);
+  const tasten = [];
+  const dok = { ...DOKL, addEventListener: (t, f) => tasten.push([t, f]), removeEventListener() {} };
+  const b = schrankBau({ start: [], dok });
+  b.buchse('q1').feuere('click');
+  assert.ok(b.buchse('q1').klassen.has('fp-an'));
+  for (const [t, f] of tasten) if (t === 'keydown') f({ key: 'Escape' });
+  assert.ok(!b.buchse('q1').klassen.has('fp-an'), 'Escape disarms');
+  b.fp.zerstoere();
+});
+
+test('cabinet DOM: a click on a cable pulls it out (amount 0); the wheel changes the amount by 0.05 (0.01 with shift) and ends after the idle time', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const a = schrankBau();
+  a.griff(0, 0).feuere('wheel', { deltaY: -100 });   // Src 1 > Dst 1: 0.25 -> 0.30
+  assert.deepEqual(a.log, [['set', 0, 0, 0, 0.3]]);
+  t.mock.timers.tick(299);
+  assert.equal(a.log.filter((e) => e[0] === 'ende').length, 0);
+  t.mock.timers.tick(2);
+  assert.deepEqual(a.log.at(-1), ['ende']);
+  a.griff(0, 0).feuere('wheel', { deltaY: 100, shiftKey: true });
+  assert.deepEqual(a.log.at(-1), ['set', 0, 0, 0, 0.29]);
+  t.mock.timers.tick(300);
+  a.log.length = 0;
+  a.griff(3, 1).feuere('click');   // Src 4 > Dst 2
+  assert.deepEqual(a.log, [['set', 0, 3, 1, 0], ['ende']]);
+  assert.equal(a.pfade().filter((x) => !x.klassen.has('fp-kabel-geist')).length, 1, 'the cable is gone');
+});
+
+test('cabinet DOM: hovering a cable or a jack lights it, dims the others and says a sentence', () => {
+  const a = schrankBau();
+  const svg = a.host.finde('fp-kabelsvg')[0];
+  a.griffe()[0].feuere('pointerover');
+  assert.equal(a.text(), 'Src 1 moves Dst 1: +0.25 (up to +10.0 st)');
+  assert.ok(svg.klassen.has('fp-kabel-dimm'));
+  const hell = a.pfade().filter((x) => x.klassen.has('fp-kabel-hell'));
+  assert.equal(hell.length, 1); assert.equal(hell[0].attr.stroke, KABEL_FARBEN[0]);
+  a.griffe()[0].feuere('pointerleave');
+  assert.ok(!svg.klassen.has('fp-kabel-dimm'));
+  assert.equal(a.text(), 'Set A: 2 pins');
+  a.buchse('q3').feuere('pointerover');
+  assert.equal(a.text(), 'Src 4 is patched to Dst 2 (-0.50)');
+  assert.equal(a.pfade().filter((x) => x.klassen.has('fp-kabel-hell')).length, 1);
+  a.buchse('q3').feuere('pointerleave');
+  a.buchse('q9').feuere('pointerover');
+  assert.equal(a.text(), 'Src 10: no cable yet, click to patch it');
+  a.buchse('z0').feuere('pointerover');
+  assert.equal(a.text(), 'Dst 1 receives Src 1 (+0.25)');
+  // the grid says the same sentences
+  a.buchse('z0').feuere('pointerleave');
+  a.host.finde('fp-m-z')[0 * 16 + 0].feuere('pointerover');
+  assert.equal(a.text(), 'Src 1 moves Dst 1: +0.25 (up to +10.0 st)');
+  a.host.finde('fp-m-z')[3 * 16 + 1].feuere('pointerover');
+  assert.equal(a.text(), 'Src 4 feeds Dst 2: -0.50 (down to -0.5 gain)', 'an audio destination feeds');
+  a.host.finde('fp-m-z')[3 * 16 + 5].feuere('pointerover');
+  assert.equal(a.text(), 'Src 4 > Dst 6 off', 'a column without a range keeps the short form');
+});
+
+test('cabinet DOM: learn mode and an adapter without pin methods block arming, patching and the cable gestures', () => {
+  const l = schrankBau({ lernPfad: true, opt: { lernen: { an: true, gelernt: new Set() }, beiLernen() {} } });
+  l.buchse('q2').feuere('click'); l.buchse('z0').feuere('click'); l.griffe()[0].feuere('click'); l.griffe()[0].feuere('wheel', { deltaY: -100 });
+  assert.deepEqual(l.log, [], 'learn mode: nothing is sent');
+  assert.ok(!l.buchse('q2').klassen.has('fp-an'));
+  const n = schrankBau({ leseNur: true });
+  n.buchse('q2').feuere('click'); n.buchse('z0').feuere('click');
+  assert.ok(!n.buchse('q2').klassen.has('fp-an'), 'no pin methods: not armed');
+  assert.deepEqual(n.log, []);
+});
+
+test('cabinet DOM: no overlay and no jacks without a page with all; no layout (no rect, zero size, no rect method) draws nothing and never throws', () => {
+  const ohne = schrankBau({ panel: SCHRANK_PANEL(SCHRANK_OF(), SCHRANK_PAGES.slice(1)) });
+  assert.equal(ohne.host.finde('fp-kabelsvg').length, 0);
+  assert.equal(ohne.host.finde('fp-buchse').length, 0);
+  assert.ok(!ohne.host.finde('fp-knopf-klein').some((x) => x.textContent === 'CABLES'), 'no toggle either');
+  assert.equal(ohne.host.finde('fp-m-z').length, 256, 'the grid is all there is');
+  const gewoehnlich = schrankBau({ panel: FELD_PANEL(), opt: {} });   // a plain field panel: no pages with all, no quellen
+  assert.equal(gewoehnlich.host.finde('fp-kabelsvg').length, 0);
+  class OhneRect extends K { getBoundingClientRect() { return undefined; } }
+  class Null extends K { getBoundingClientRect() { return { left: 0, top: 0, width: 0, height: 0 }; } }
+  class Fehlt extends K {}
+  Fehlt.prototype.getBoundingClientRect = undefined;
+  for (const Art of [OhneRect, Null, Fehlt]) {
+    const dok = { createElement: (t) => new Art(t), createElementNS: (_n, t) => new Art(t) };
+    const a = schrankBau({ dok });
+    assert.equal(a.pfade().length, 0, Art.name);
+    a.fp.zeigeSeite('east'); a.fp.zeigeSeite('rack'); a.fp.aktualisiere();
+    a.host.finde('fp-option')[1].feuere('click');
+    a.buchse('q2').feuere('click'); a.buchse('z0').feuere('click');
+    assert.equal(a.log[0][0], 'set', 'patching by jack still works without a layout');
+    a.fp.zerstoere();
+  }
 });

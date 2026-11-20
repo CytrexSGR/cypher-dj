@@ -36,6 +36,43 @@ int erste_note_ab(const ArrSpur& sp, double b) {   // erster Index mit beat >= b
   return lo;
 }
 
+// Tracker task 16: what a bend or pegel list says at project beat b: the value in force (a running glide interpolated), the value the glide is heading for and the beats it still needs
+// (0: none). Only events strictly before b count (an event at b itself is sent by the window at its own sample). A glide starts from the value in force at its own beat, which
+// is the target of the previous event unless that one is still gliding there: the walk back covers exactly such a chain of overlapping glides.
+struct FxStand {
+  float wert, ziel;
+  double rest;
+};
+
+FxStand fx_stand(const ArrFxPunkt* e, int n, double b, float neutral) {
+  int lo = 0, hi = n;
+  while (lo < hi) {   // first index with beat >= b - EPS
+    const int mi = (lo + hi) / 2;
+    if (e[mi].beat < b - EPS) lo = mi + 1;
+    else hi = mi;
+  }
+  const int k = lo - 1;
+  if (k < 0) return {neutral, neutral, 0.0};
+  int j0 = k;
+  while (j0 > 0 && e[j0 - 1].gleit > 0.0f && e[j0 - 1].beat + static_cast<double>(e[j0 - 1].gleit) > e[j0].beat) --j0;
+  float v = j0 == 0 ? neutral : e[j0 - 1].wert;
+  for (int j = j0; j < k; ++j) v += (e[j].wert - v) * static_cast<float>((e[j + 1].beat - e[j].beat) / static_cast<double>(e[j].gleit));
+  const ArrFxPunkt& l = e[k];
+  const double ende = l.beat + static_cast<double>(l.gleit);
+  if (l.gleit > 0.0f && ende > b + EPS) return {v + (l.wert - v) * static_cast<float>((b - l.beat) / static_cast<double>(l.gleit)), l.wert, ende - b};
+  return {l.wert, l.wert, 0.0};
+}
+
+int erster_fx_ab(const ArrFxPunkt* e, int n, double b) {   // first index with beat >= b
+  int lo = 0, hi = n;
+  while (lo < hi) {
+    const int mi = (lo + hi) / 2;
+    if (e[mi].beat < b) lo = mi + 1;
+    else hi = mi;
+  }
+  return lo;
+}
+
 }  // namespace
 
 ArrSenke* Arrangement::senke_fuer(const ArrSnapshot* s, int spur) const {
@@ -106,6 +143,60 @@ void Arrangement::noten_fenster(const Karte& k, int spur, ArrSenke* se, int64_t 
   }
 }
 
+// Tracker task 16: the bend and pegel events of a bk track in the window [von, bis), on the very structure of noten_fenster (the loop seam included), each at the sample of its beat with
+// its glide length in samples from the beat map. Besides the events of the list the window carries the STATE of the list at the two places where the play position jumps: the transport
+// entry (start_s_: the instance was just reset to neutral, the value in force at start_beat_ goes in, a running glide as a jump to its current value plus a glide to its target) and the
+// loop seam (the new pass begins at von_: the value in force there, the same way, always sent because the instance holds what the end of the old pass left). Neutral at the entry is
+// not sent (the reset did it). A track without events returns at once.
+void Arrangement::fx_fenster(const Karte& k, int spur, ArrSenke* se, int64_t von, int64_t bis) {
+  const ArrSpur& sp = snap_->spur[spur];
+  if (sp.n_bend == 0 && sp.n_pegel == 0) return;
+  const struct Liste {
+    const ArrFxPunkt* e;
+    int n;
+    bool pegel;
+    float neutral;
+  } listen[2] = {{sp.bend, sp.n_bend, false, 0.0f}, {sp.pegel, sp.n_pegel, true, 1.0f}};
+  auto frei = [&](int64_t an) { return an >= von && an < bis && an >= start_s_ && !(stopp_s_ >= 0 && an >= stopp_s_); };
+  // the state of both lists at project beat p, as events at sample `ziel` of the pass with origin `urs`; immer: also when the value is neutral and nothing glides
+  auto stand = [&](double p, int64_t ziel, double urs, bool immer) {
+    for (const Liste& li : listen) {
+      if (li.n == 0) continue;
+      const FxStand st = fx_stand(li.e, li.n, p, li.neutral);
+      int64_t gl = 0;
+      if (st.rest > 0.0) gl = std::llround(k.sample_at(p + st.rest + urs - start_beat_)) - ziel;
+      if (immer || st.wert != li.neutral || gl > 0) se->fx(spur, ziel, li.pegel, gl > 0 ? st.wert : st.ziel, 0);
+      if (gl > 0) se->fx(spur, ziel, li.pegel, st.ziel, gl);
+    }
+  };
+  if (start_s_ >= von && start_s_ < bis && frei(start_s_)) stand(start_beat_, start_s_, ursprung_, false);
+  double kb_lo = k.beat_at(static_cast<double>(von) - 0.5);
+  const double kb_hi = k.beat_at(static_cast<double>(bis) - 0.5);
+  double urs = ursprung_;
+  for (int n = 0; n < 4 && klammer() && kb_lo - urs + start_beat_ >= bis_ + EPS; ++n) urs += bis_ - von_;
+  for (int durchlauf = 0; durchlauf < 2; ++durchlauf) {
+    const double p_a = kb_lo - urs + start_beat_;
+    const double p_b = kb_hi - urs + start_beat_;
+    const bool klammer = this->klammer() && p_a < bis_ + EPS;
+    const double p_ende = klammer ? std::min(p_b + EPS, bis_) : p_b + EPS;
+    if (durchlauf == 1) {   // the seam: the new pass begins at von_ on the sample of the seam
+      const int64_t naht = std::llround(k.sample_at(kb_lo));
+      if (frei(naht)) stand(von_, naht, urs, true);
+    }
+    for (const Liste& li : listen)
+      for (int i = erster_fx_ab(li.e, li.n, p_a - EPS); i < li.n && li.e[i].beat < p_ende; ++i) {
+        const ArrFxPunkt& x = li.e[i];
+        const int64_t an = std::llround(k.sample_at(x.beat + urs - start_beat_));
+        if (!frei(an)) continue;
+        const int64_t gl = x.gleit > 0.0f ? std::llround(k.sample_at(x.beat + static_cast<double>(x.gleit) + urs - start_beat_)) - an : 0;
+        se->fx(spur, an, li.pegel, x.wert, gl > 0 ? gl : 0);
+      }
+    if (!klammer || p_b <= bis_) break;
+    kb_lo = bis_ + urs - start_beat_;
+    urs += bis_ - von_;
+  }
+}
+
 void Arrangement::noten_block(const Karte& k, int64_t s0, int m) {
   offen_aus_bis(s0 + m);   // fällige Offs zuerst, vor den Ons desselben Samples
   if (!snap_ || (status_ != ArrStatus::wartet && status_ != ArrStatus::spielt)) return;
@@ -122,7 +213,10 @@ void Arrangement::noten_block(const Karte& k, int64_t s0, int m) {
     // statt 600 gesendet); node.lock-quantum verhindert den Fall im Betrieb. Sinkt das Quantum, geht nichts verloren, die
     // schon gesendeten Noten kommen um die Differenz der Vorhalte zu früh (Probe 512 -> 256: höchstens 512 Samples).
     const int64_t von = std::max(s0 + v, gesendet_bis_[i]), bis = s0 + m + v;
-    if (bis > von) noten_fenster(k, i, se, von, bis);
+    if (bis > von) {
+      noten_fenster(k, i, se, von, bis);
+      fx_fenster(k, i, se, von, bis);   // tracker task 16: the bend and pegel events of the same window
+    }
     gesendet_bis_[i] = std::max(gesendet_bis_[i], bis);
   }
   offen_aus_bis(s0 + m);   // Offs kurzer Noten, die in diesem Block an- und ausgehen
@@ -161,6 +255,14 @@ void Arrangement::live_note(int spur0, int64_t ziel, uint8_t ton, uint8_t vel, b
 #endif
   h = nullptr;
   --n_live_;
+}
+
+// kraken patch field: the pin goes to the sink of the track now, stamped with the generation of the snapshot it was sent against (header).
+void Arrangement::live_stift(int spur0, int satz, int zeile, int spalte, float wert) noexcept {
+  if (spur0 < 0 || spur0 >= ARR_SPUREN) return;
+  ArrSenke* se = senke_fuer(snap_, spur0);
+  if (!se) return;
+  se->stift(spur0, satz, zeile, spalte, wert, snap_gen_);
 }
 
 void Arrangement::live_spur_aus(int spur0, int64_t ziel) noexcept {

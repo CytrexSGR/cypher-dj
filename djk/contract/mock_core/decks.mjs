@@ -242,6 +242,9 @@ export default {
         if (K.decks[a.deck]?.status >= 2 && offen(K, sicht(K, s), `deck/${a.deck}`)) return 'deck_hoerbar';  // §4.4: nur laufend und offen (2026-09-27)
         Object.assign(d, neuesDeck(a.deck), { m: r.info, status: 1, hotcues: { ...r.info.hotcues }, hotcuesHand: {}, anker: { b: K.uhr.beat(s), q: 0 }, halterBis: d.halterBis });
         const k = `deck/${a.deck}`;
+        // 2026-11-19 (Kern Stellwerk::cypher_fahrt_beenden): a load ends the RUNNING parts of every source but andreas on the deck fader (reason
+        // abbruch), each with its coupling group (a group falls together)
+        for (const t of [...K.teile]) if (t.art === 'regler' && t.pfad === `${k}/fader` && t.status === 'laeuft' && t.quelle !== 'andreas') K.gruppeAbbrechen(t, s, 'abbruch');
         for (const [p, w] of [[`${k}/fader`, -200], [`${k}/pfl`, 0], [`${k}/trim`, Math.max(-24, Math.min(24, K.cfg.ziel_lufs - r.info.lufs))]]) {
           const reg = K.r.get(p);
           reg.wert = w;

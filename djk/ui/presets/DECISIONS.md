@@ -415,3 +415,10 @@ Each decision below is DECIDED (Cypher default, Andreas may override); source: `
   Tests: `rename by Andreas takes the Cypher mark (D27)` in `tests/presets_store.test.mjs` and
   `tests/collections_store.test.mjs`; mutants `umbenennen_behaelt_marke` in `check/mutation_presets_rights.mjs` and
   `check/mutation_collections.mjs`.
+- **D29 Presets carry pins (plan 2026-11-19-kraken-patch-field, task 9).** `Preset.stifte?: Stift[]` (pin = `[satz, zeile, spalte, wert]`, the
+  shape of `steckfeld.ts`) exists only for the device `baukasten`; any other device is refused `stifte_verboten`, a malformed list `stifte_ungueltig`
+  (both 400, a damaged file is 409). Applying a preset to a track with a matrix always replaces the pins; a preset without `stifte` means the graph
+  defaults (the track device then carries no list). Channel and stage targets report `stifte` in `uebersprungen`; a rack or insert stage plays the graph
+  defaults. Saving from a track carries its pins; `presets_speichern` takes `stifte`. The register hash adds the sorted pins only when present, so
+  old hashes do not change. `baueBkGeraet` (project commands) accepts and validates `stifte` on a track device. The 8 v1 Kraken presets were repaired
+  with the pins that reproduce their v1 modulation and 6 factory presets were added (`build_kraken_presets.py`). Tests: `tests/presets_stifte.test.mjs`.

@@ -35,7 +35,7 @@
 // late, however long the caller worked before (late means a late worker, not a busy caller). The SPUR account counts a take-back late only when the
 // caller says so (hole_zurueck als_spaet: an unstarted track job is simply not needed any more once the caller drained the units, it is late only
 // when the worker missed frist_um), and never counts in warte: the scheduler reports the join wait itself with spaet_melden. More than 4 late
-// events of an account within the last 64 blocks switch THAT account off for good (an(k) false); the switch is taken at the next block_anfang()
+// events of an account within the last 64 blocks switch THAT account off (an(k) false; the HALL account stays off, the SPUR account is switched on again by its scheduler, see wieder_an); the switch is taken at the next block_anfang()
 // where every worker is frei. An off account lets schicke return false: the caller computes everything itself. The pool never switches an account on by itself; the scheduler of the track phases does (wieder_an, modes an and auto, after a back-off that doubles per switch-off: arr_track_phase.h).
 // Hard limit: warte(w, grenze_ns) reports a job that is still running when the absolute CLOCK_MONOTONIC time grenze_ns passes (false, haengt(k)
 // counts it once); the job is never abandoned, warte keeps waiting. A hang of the SPUR account switches it off at the next block start.
@@ -118,7 +118,7 @@ class HallPool {
   bool bereit(int w) const;
   // True when more than frist_us have passed since schicke(w) (the caller decides whether to take the job back).
   bool frist_um(int w) const;
-  // Switches an account that went off back on (mode auto of the track phases, callback thread, only when every worker is frei). Clears the window and the pending
+  // Switches an account that went off back on (the track phases in modes an and auto, after their back-off; callback thread, only when every worker is frei). Clears the window and the pending
   // switch-off of that account. False (and nothing done) when a worker still holds a job or there are no workers.
   bool wieder_an(Konto k);
   // Start of a block (callback thread): slides the lateness window and takes a due switch-off when every worker is frei.

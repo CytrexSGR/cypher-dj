@@ -22,7 +22,7 @@
     { "id": "sweep", "title": "FORM SWEEP", "cols": 3, "controls": [
       {"id": "lf", "type": "lfoform", "span": 3, "label": "Sweep LFO", "formen": ["sine"]},
       {"id": "depth", "type": "knob", "label": "Depth", "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
-      {"id": "rate", "type": "knob", "label": "Rate", "bind": {"param": "k5"}, "format": "hz", "default": 0.5},
+      {"id": "rate", "type": "knob", "label": "Rate", "bind": {"param": "k5"}, "format": "hz", "default": 0.5, "wirkt": {"ueber": ["depth", 0.01]}, "wirkt_text": "The form sweep does nothing: turn up Depth in FORM SWEEP"},
       {"id": "sn", "type": "label", "span": 1, "text": "Moves Form centre"}
     ]},
     { "id": "env", "title": "AMP ENV", "cols": 3, "controls": [

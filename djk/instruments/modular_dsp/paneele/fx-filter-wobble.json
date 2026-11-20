@@ -5,6 +5,7 @@
   "akzent": "tuerkis",
   "sections": [
     { "id": "filter", "title": "FILTER", "cols": 3, "controls": [
+      { "id": "fk", "type": "filterkurve", "span": 3, "of": { "cutoff": "centre", "reso": "reso" }, "typen": [{ "art": "lp", "pole": 4 }] },
       { "id": "centre", "type": "knob", "label": "Centre", "bind": { "param": "k1" }, "format": "hz", "default": 0.5 },
       { "id": "depth", "type": "knob", "label": "Depth", "bind": { "param": "k2" }, "format": "hz", "default": 0.5 },
       { "id": "reso", "type": "knob", "label": "Resonance", "bind": { "param": "k3" }, "format": "percent", "default": 0.5 }

@@ -5,6 +5,8 @@ import {
   alleInserts, sucheStrang, alleRacks, gliedMakroParam, makroFaehig, MAKRO_NAME_MAX, MAX_MAKROS, MAX_MAKRO_ZIELE, MAX_RACK, MAX_VARIATIONEN,
   type RackZiel, SPUR_FARBEN, istObjekt, neueId, pruefeModulFehler, sucheSpur, type RackGeraet, MAX_GLIEDER, type Gruppe, type Projekt, type Spur,
 } from './model.ts';
+import { LPB_VORGABE, TICKS_VORGABE } from '../public/tracker/grid_model.js';
+import { LPB_WERTE, TICKS_MAX, TICKS_MIN } from './tracker.ts';
 import { MAX_WERKBANK_SPUREN } from './werkbank.ts';
 import { SEQ_BEATS, seqGruppe, seqRegion } from './seq.ts';
 import { nachkommen, pruefeAlleSchluessel, vorfahren } from './routing_rules.ts';
@@ -45,6 +47,26 @@ function musterSpurNeu(p: Projekt, a: Args, ctx: Kontext, g: Gruppe | null): voi
     PRO_BEFEHL.huellkurve_setzen(p, { ...h, befehl: 'huellkurve_setzen', clip_id: clip.id }, ctx);
   }
   if (stumm) spur.mute = true;
+}
+
+// seq_folge_neu `raster` {lpb?, ticks?} (a pattern from a tracker section that carries effect commands or slots): the deck remembers the effect frame
+// of these patterns. A deck whose frame differs takes the new one only while none of its patterns plays effects or slots (their sound would change).
+function setzeDeckRaster(p: Projekt, g: Gruppe, x: unknown): void {
+  if (!istObjekt(x) || Object.keys(x).some((k) => k !== 'lpb' && k !== 'ticks')) ab('argument_ungueltig', 'raster: {lpb, ticks} expected');
+  const lpb = x.lpb === undefined ? LPB_VORGABE : x.lpb, ticks = x.ticks === undefined ? TICKS_VORGABE : x.ticks;
+  if (typeof lpb !== 'number' || !LPB_WERTE.includes(lpb)) ab('argument_ungueltig', `raster.lpb: one of ${LPB_WERTE.join(' ')} expected`);
+  if (!Number.isInteger(ticks) || (ticks as number) < TICKS_MIN || (ticks as number) > TICKS_MAX) {
+    ab('argument_ungueltig', `raster.ticks: integer ${TICKS_MIN}..${TICKS_MAX} expected`);
+  }
+  const jetzt = { lpb: g.seq!.lpb ?? LPB_VORGABE, ticks: g.seq!.ticks ?? TICKS_VORGABE };
+  if (jetzt.lpb === lpb && jetzt.ticks === ticks) return;
+  const spielt = p.spuren.some((s) => s.ausgang?.id === g.id
+    && s.clips.some((c) => c.art === 'midi' && (c.fx !== undefined || c.noten.some((n) => n.platz !== undefined))));
+  if (spielt) {
+    ab('seq_raster_belegt', `the deck runs effects at ${jetzt.lpb} rows per beat and ${jetzt.ticks} ticks, the section at ${lpb} and ${ticks}`);
+  }
+  if (lpb === LPB_VORGABE) delete g.seq!.lpb; else g.seq!.lpb = lpb;
+  if (ticks === TICKS_VORGABE) delete g.seq!.ticks; else g.seq!.ticks = ticks as number;
 }
 
 export const GRUPPE = {
@@ -207,10 +229,13 @@ export const GRUPPE = {
   // descriptor) and `huellkurven` (a list of {ziel, punkte, verknuepft?, loop_beats?} as huellkurve_setzen takes them); the command is refused as a
   // whole, so a text never leaves half a pattern.
   seq_folge_neu(p, a, ctx) {
-    erlaube(a, 'gruppe_id', 'name', 'geraet', 'loop_beats', 'stumm', 'noten', 'seq', 'huellkurven');
+    erlaube(a, 'gruppe_id', 'name', 'geraet', 'loop_beats', 'stumm', 'noten', 'seq', 'huellkurven', 'fx', 'raster');
     const g = gruppeVon(p, idArg(a, 'gruppe_id'));
     if (!g.seq) ab('seq_fehlt', `${g.id} holds no SEQ deck`);
+    if (a.raster !== undefined) setzeDeckRaster(p, g, a.raster);
     musterSpurNeu(p, a, ctx, g);
+    // `fx`: the effect commands of the pattern (as fx_setzen takes them, clip beats); refused as a whole like the rest of the command
+    if (a.fx !== undefined) PRO_BEFEHL.fx_setzen(p, { befehl: 'fx_setzen', clip_id: p.spuren[p.spuren.length - 1].clips[0].id, eintraege: a.fx }, ctx);
   },
 
   // Workbench module: one instrument track to the master with its pattern clip (same body as seq_folge_neu, no group). Refused outside a module

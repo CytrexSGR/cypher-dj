@@ -332,6 +332,8 @@ test('the gates: seq_fehlt without a deck, seq_belegt, kein_liveprojekt, ki_gest
 test('geraetInfo names the sounds of the drum graphs, a synth graph has none', () => {
   assert.deepEqual(geraetInfo({ art: 'intern', name: 'bk', graph: 'drums-909' }).klaenge.slice(0, 4).map((k) => [k.ton, k.name]), [[36, 'Kick'], [37, 'Rim'], [38, 'Snare'], [39, 'Clap']]);
   assert.deepEqual(geraetInfo({ art: 'intern', name: 'bk', graph: 'drums-808' }).klaenge.slice(0, 2).map((k) => [k.ton, k.name]), [[35, 'Boom Kick'], [36, 'Kick']]);
+  assert.deepEqual(geraetInfo({ art: 'intern', name: 'bk', graph: 'drum-synth' }).klaenge.map((k) => [k.ton, k.name]),
+    [[36, 'Kick'], [37, 'Rim'], [38, 'Snare'], [39, 'Clap'], [41, 'Low Tom'], [42, 'Closed Hat'], [46, 'Open Hat'], [49, 'Cymbal']]);
   assert.deepEqual(geraetInfo({ art: 'intern', name: 'bk', graph: 'bass-banddrive' }).klaenge, []);
   assert.equal(geraetInfo({ art: 'intern', name: 'bk', graph: 'drums-909' }).art, 'bk', 'the art stays bk, so SEQ v2 lanes do not change');
 });
@@ -511,6 +513,36 @@ test('modul: the rules of seq_anlegen hold for a fresh deck; refusals write noth
   assert.equal(z.projekt().rev, rev, 'nothing was written');
   const k = await z.seq.modul({ slug: m.slug, platz: 3 }, 'cypher');
   assert.equal(k.code, 200, 'closed and stopped: accepted');
+});
+
+test('modul with abschnitt (TO DJ): a section of any project becomes patterns with fx and the frame; refusals name the reason; the source stays as it is', async (t) => {
+  const z = await aufbau(t);
+  const ablage = new Projekte(path.join(z.tmp, 'projekte'));
+  const { slug, projekt } = ablage.lege('Song');
+  const bk = { art: 'intern', name: 'bk', graph: 'bassmusik', parameter: { k3: 0.7 } };
+  let p = fuehreListeAus(projekt, [{ befehl: 'tracker_setzen', an: true, lpb: 8 }, { befehl: 'spur_neu', art: 'instrument', name: 'Lead', geraet: bk }]).projekt;
+  p = fuehreListeAus(p, [{ befehl: 'clip_neu', spur_id: p.spuren[0].id, art: 'midi', start_beat: 0, laenge_beats: 16, noten: [{ beat: 0, laenge: 1, ton: 60, vel: 100, platz: 3 }] }]).projekt;
+  p = fuehreListeAus(p, [{ befehl: 'fx_setzen', clip_id: p.spuren[0].clips[0].id, eintraege: [{ beat: 1, spalte: 0, code: 'VIB', wert: 72 }] }]).projekt;
+  ablage.speichere(slug, p);
+  const gespeichert = JSON.stringify(ablage.lies(slug));
+  const a = await z.seq.modul({ slug, platz: 1, abschnitt: 'a1' }, 'andreas');
+  assert.equal(a.code, 200, JSON.stringify(a.j));
+  assert.equal(a.j.bericht.abschnitt.id, 'a1');
+  assert.deepEqual(z.spur('Lead').clips[0].fx, [{ beat: 1, spalte: 0, code: 'VIB', wert: 72 }]);
+  assert.equal(z.spur('Lead').clips[0].noten[0].platz, 3);
+  assert.deepEqual(seqGruppe(z.projekt(), 1).seq, { schema: 2, platz: 1, lpb: 8 });
+  assert.equal(JSON.stringify(ablage.lies(slug)), gespeichert, 'the tracker project is not changed');
+  const rev = z.projekt().rev;
+  let e = await z.fehl(() => z.seq.modul({ slug, platz: 2, abschnitt: 'a9' }, 'andreas'));
+  assert.deepEqual([e.code, e.fehler], [404, 'abschnitt_unbekannt']);
+  e = await z.fehl(() => z.seq.modul({ slug, platz: 2, abschnitt: '' }, 'andreas'));
+  assert.deepEqual([e.code, e.fehler], [400, 'argument_ungueltig']);
+  const lang = fuehreListeAus(p, [{ befehl: 'abschnitt_laenge', id: 'a1', zeilen: 1024 }]).projekt;
+  ablage.speichere(slug, lang);
+  e = await z.fehl(() => z.seq.modul({ slug, platz: 2, abschnitt: 'a1' }, 'andreas'));
+  assert.deepEqual([e.code, e.fehler], [409, 'abschnitt_zu_lang']);
+  assert.equal(e.text, 'section 00 is 128 beats long, a SEQ deck takes at most 64');
+  assert.equal(z.projekt().rev, rev, 'nothing was written');
 });
 
 test('deckAufraeumen: anlegen that creates the deck calls it once with the place and the source; not on a place that holds a deck, not when the write is refused', async (t) => {

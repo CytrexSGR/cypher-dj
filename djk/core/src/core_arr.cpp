@@ -224,6 +224,16 @@ void Kern::einsortieren_arr(const Befehl& c, double beat0) {
       quittung(c.id, c.quelle, 3, sample_, beat0);
       return;
     }
+    case Befehl::ARR_STIFT: {   // kraken patch field (§4.11 /k/arr/stift); the net thread checks the same, this is the backstop
+      if (ist_cypher(c.quelle) && sw_->ki_gestoppt()) return ab("ki_gestoppt");
+      if (c.nr < 1 || c.nr > ARR_SPUREN) return ab("spur_bereich");
+      if (c.form < 0 || c.form > 1 || c.politik < 0 || c.politik > 15 || c.fassung < 0 || c.fassung > 15 || !(c.wert >= -1.0f && c.wert <= 1.0f)) return ab("ausserhalb_bereich");
+      quittung(c.id, c.quelle, 1, sample_, beat0);
+      // The callback thread, before arr_->block of this cycle: the sink of the track now takes the pin with the snapshot generation of this moment. No arm and no transport needed.
+      arr_->live_stift(c.nr - 1, c.form, c.politik, c.fassung, c.wert);
+      quittung(c.id, c.quelle, 3, sample_, beat0);
+      return;
+    }
     default:
       return;
   }

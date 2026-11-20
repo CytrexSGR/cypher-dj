@@ -93,7 +93,7 @@ H7="$O/h7"; mkdir -p "$H7" "$O/stub"
 for t in systemd-run systemctl pactl pw-link pw-jack; do printf '#!/bin/sh\necho "$0 $*" >> "%s/aufrufe"\nexit 99\n' "$O" > "$O/stub/$t"; chmod +x "$O/stub/$t"; done
 env -i PATH="$O/stub:$PATH" HOME="$H7" CYPHERDJ_HEIM="$O/keine-platte/cypherdj" CYPHERDJ_SYSFS_CPU="$SYS" CYPHERDJ_UMGEBUNG=/nicht/da DJK_PW_DUMP="$O/dump.json" \
   "$START/djk-start" --strudel >"$O/a7.txt" 2>&1; R=$?
-[ "$R" = 2 ] && grep -q "the parent of CYPHERDJ_HEIM ($O/keine-platte) is missing or empty: is the disk mounted?" "$O/a7.txt" \
-  && grep -q "old places" "$O/a7.txt" && [ ! -e "$O/keine-platte" ] && [ ! -e "$H7/cypherdj" ] && [ ! -s "$O/aufrufe" ]
-pruef $? "A7 heim on a missing disk: refusal printed, nothing created there, start goes on with the old places, no unit started: rc $R: $(head -c 400 "$O/a7.txt")"
+[ "$R" = 6 ] && grep -q "CYPHERDJ_HEIM ($O/keine-platte/cypherdj) has no marker file .cypherdj-heim: is the disk mounted?" "$O/a7.txt" \
+  && grep -q "Nothing started" "$O/a7.txt" && [ ! -e "$O/keine-platte" ] && [ ! -e "$H7/cypherdj" ] && [ ! -s "$O/aufrufe" ]
+pruef $? "A7 heim on a missing disk: refusal printed, nothing created there, start aborts with exit 6, no unit started: rc $R: $(head -c 400 "$O/a7.txt")"
 echo "OK $OK FEHL $FEHL"; [ "$FEHL" = 0 ]

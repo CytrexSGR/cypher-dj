@@ -1,7 +1,7 @@
 """Storage places of cypher-dj: one table (djk/config/ablage.json), read here and by djk/ui/pfade.ts.
 
 Resolution (same as paths.ts): (1) the kind's env variable, non-empty; (2) core kinds and vorgabe "alt" give alt;
-(3) vorgabe "neu": alt when it is a real directory, else neu. A real alt next to a non-empty neu stays at alt
+(3) vorgabe "neu": alt when it is a real directory, else neu; alt a link to a missing target (moved, disk absent) raises ValueError. A real alt next to a non-empty neu stays at alt
 and prints one warning per kind and process.
 """
 from __future__ import annotations
@@ -81,6 +81,9 @@ def ordner(art: str, env=None, tabelle=None) -> Path:
         return Path(e)
     if o["kern"] or t.get("vorgabe") != "neu":
         return Path(o["alt"])
+    if os.path.islink(o["alt"]) and not os.path.exists(o["alt"]):
+        raise ValueError(f"{art}: {o['alt']} is a link to {os.readlink(o['alt'])}, which is missing: is the disk mounted? "
+                         "Aborting instead of choosing another place")
     if not _echter_ordner(o["alt"]):
         return Path(o["neu"])
     if _nicht_leer(o["neu"]) and art not in _gewarnt:

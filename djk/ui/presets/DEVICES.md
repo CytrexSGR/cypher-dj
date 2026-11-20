@@ -743,7 +743,7 @@ Inputs (`ein`): hz, trig, pos, verstimmung, breite, pm, warp, tiefe, stapel. Out
 | `tiefe` | warp depth | factor | bend and asym -1..1, sync 0..1 (clamped) | 0 | input port; 0 is neutral |
 | `stapel` | octave stack, rounded, read at trig | enum | 0 off, 1 copy c plays 12 (c mod 2) semitones up, 2 offsets 0, 12, 19 | 0 | input port |
 | `reserve` | mip level chosen for the phase step times 2^reserve | octaves | integer 0..3 (reject) | 0 | fixed value only |
-| `spektren` | custom harmonic spectra instead of `tabelle` | node field | 1..32 frames of 1..256 amplitudes, finite, magnitude at most 4 (reject); `tabelle` absent or 0; not in makros | absent | named field like `datei` |
+| `spektren` | custom harmonic spectra instead of `tabelle` | node field | 1..256 frames of 1..256 amplitudes, finite, magnitude at most 4 (reject); `tabelle` absent or 0; not in makros | absent | named field like `datei` |
 | `hz` | frequency | Hz | - | 0 (no default; unconnected input reads 0) | input port (edge or fixed value) |
 | `trig` | restarts copies at random phases | dimensionless | rising >0.5 | 0 (no default; unconnected input reads 0) | input port (edge or fixed value) |
 | `l (output)` | out left | - | - | - | output port |

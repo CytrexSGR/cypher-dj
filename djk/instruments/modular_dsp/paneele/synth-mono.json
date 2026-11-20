@@ -12,19 +12,19 @@
   ]},
   "sections": [
     { "id": "osc", "page": "main", "title": "OSCILLATORS", "cols": 6, "controls": [
-      {"id": "wave1", "type": "selector", "label": "Osc1 wave", "span": 3, "bind": {"param": "k14"}, "options": ["Tri", "Saw", "Pulse"], "glyphs": ["tri", "saw", "pulse"], "default": 1},
-      {"id": "wave2", "type": "selector", "label": "Osc2 wave", "span": 3, "bind": {"param": "k15"}, "options": ["Saw", "Pulse", "Tri"], "glyphs": ["saw", "pulse", "tri"], "default": 1},
-      {"id": "octave", "type": "selector", "label": "Osc2 octave", "span": 3, "bind": {"param": "k12"}, "options": ["-2", "-1", "0", "+1", "+2"], "default": 2},
-      {"id": "sync", "type": "selector", "label": "Sync", "span": 3, "bind": {"param": "k17"}, "options": ["Sync", "Off", "Sweep"], "default": 1},
-      {"id": "interval", "type": "knob", "label": "Interval", "span": 2, "bind": {"param": "k13"}, "format": "raw", "unit": "st", "default": 0.5},
-      {"id": "detune", "type": "knob", "label": "Detune", "span": 2, "bind": {"param": "k11"}, "format": "raw", "unit": "ct", "default": 0.5},
-      {"id": "pw", "type": "knob", "label": "Pulse width", "span": 2, "bind": {"param": "k16"}, "format": "percent", "default": 0.5}
+      {"id": "wave1", "type": "selector", "label": "Osc1 wave", "span": 3, "bind": {"param": "k14"}, "options": ["Tri", "Saw", "Pulse"], "glyphs": ["tri", "saw", "pulse"], "default": 1, "wirkt": {"unter": ["mix", 0.98]}, "wirkt_text": "Osc1 is silent: turn Osc1 / Osc2 down from Osc2"},
+      {"id": "wave2", "type": "selector", "label": "Osc2 wave", "span": 3, "bind": {"param": "k15"}, "options": ["Saw", "Pulse", "Tri"], "glyphs": ["saw", "pulse", "tri"], "default": 1, "wirkt": {"ueber": ["mix", 0.02]}, "wirkt_text": "Osc2 is silent: turn up Osc1 / Osc2 in MIXER"},
+      {"id": "octave", "type": "selector", "label": "Osc2 octave", "span": 3, "bind": {"param": "k12"}, "options": ["-2", "-1", "0", "+1", "+2"], "default": 2, "wirkt": {"ueber": ["mix", 0.02]}, "wirkt_text": "Osc2 is silent: turn up Osc1 / Osc2 in MIXER"},
+      {"id": "sync", "type": "selector", "label": "Sync", "span": 3, "bind": {"param": "k17"}, "options": ["Sync", "Off", "Sweep"], "default": 1, "wirkt": {"ueber": ["mix", 0.02]}, "wirkt_text": "Osc2 is silent: turn up Osc1 / Osc2 in MIXER"},
+      {"id": "interval", "type": "knob", "label": "Osc2 interval", "span": 2, "bind": {"param": "k13"}, "format": "raw", "unit": "st", "default": 0.5, "wirkt": {"ueber": ["mix", 0.02]}, "wirkt_text": "Osc2 is silent: turn up Osc1 / Osc2 in MIXER"},
+      {"id": "detune", "type": "knob", "label": "Osc2 detune", "span": 2, "bind": {"param": "k11"}, "format": "raw", "unit": "ct", "default": 0.5, "wirkt": {"ueber": ["mix", 0.02]}, "wirkt_text": "Osc2 is silent: turn up Osc1 / Osc2 in MIXER"},
+      {"id": "pw", "type": "knob", "label": "Pulse width", "span": 2, "bind": {"param": "k16"}, "format": "percent", "default": 0.5, "wirkt": {"eine": [{"alle": [{"ist": ["wave1", [2]]}, {"unter": ["mix", 0.98]}]}, {"alle": [{"ist": ["wave2", [1]]}, {"ueber": ["mix", 0.02]}]}]}, "wirkt_text": "Acts on a pulse wave only: set Osc1 or Osc2 wave to Pulse"}
     ]},
     { "id": "mix", "page": "main", "title": "MIXER", "cols": 3, "controls": [
       {"id": "mix", "type": "knob", "label": "Osc1 / Osc2", "bind": {"param": "k8"}, "format": "percent", "default": 0.5},
       {"id": "sub", "type": "knob", "label": "Sub", "bind": {"param": "k9"}, "format": "percent", "default": 0.5},
       {"id": "noise", "type": "knob", "label": "Noise", "bind": {"param": "k10"}, "format": "percent", "default": 0.5},
-      {"id": "subwave", "type": "selector", "label": "Sub wave", "span": 3, "bind": {"param": "k31"}, "options": ["Sine", "Sq -1 oct", "Sq -2 oct"], "glyphs": ["sine", "square", "square"], "default": 1},
+      {"id": "subwave", "type": "selector", "label": "Sub wave", "span": 3, "bind": {"param": "k31"}, "options": ["Sine", "Sq -1 oct", "Sq -2 oct"], "glyphs": ["sine", "square", "square"], "default": 1, "wirkt": {"ueber": ["sub", 0.02]}, "wirkt_text": "The sub is silent: turn up Sub in MIXER"},
       {"id": "csub", "type": "knob", "label": "Clean sub", "span": 3, "bind": {"param": "k63"}, "format": "percent", "default": 0, "scale": {"labels": ["off", "50", "100"]}},
       {"id": "csnote", "type": "label", "span": 3, "text": "Sine 1 oct down, past filter and drive"}
     ]},
@@ -40,10 +40,10 @@
     ]},
     { "id": "env1", "page": "main", "title": "FILTER ENV", "cols": 4, "controls": [
       {"id": "fhue", "type": "huelle", "span": 4, "label": "Envelope", "of": {"a": "fattack", "d": "decay", "s": "fsus", "r": "release"}},
-      {"id": "fattack", "type": "knob", "label": "Attack", "bind": {"param": "k33"}, "format": "ms", "default": 0.5},
-      {"id": "decay", "type": "knob", "label": "Decay", "bind": {"param": "k4"}, "format": "raw", "unit": "s", "default": 0.5},
-      {"id": "fsus", "type": "knob", "label": "Sustain", "bind": {"param": "k23"}, "format": "percent", "default": 0.5},
-      {"id": "frel", "type": "knob", "label": "Release x", "bind": {"param": "k34"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "fattack", "type": "knob", "label": "Attack", "bind": {"param": "k33"}, "format": "ms", "default": 0.5, "wirkt": {"ueber": ["env", 0.02]}, "wirkt_text": "The filter envelope does nothing: turn up Env amount in FILTER"},
+      {"id": "decay", "type": "knob", "label": "Decay", "bind": {"param": "k4"}, "format": "raw", "unit": "s", "default": 0.5, "wirkt": {"ueber": ["env", 0.02]}, "wirkt_text": "The filter envelope does nothing: turn up Env amount in FILTER"},
+      {"id": "fsus", "type": "knob", "label": "Sustain", "bind": {"param": "k23"}, "format": "percent", "default": 0.5, "wirkt": {"ueber": ["env", 0.02]}, "wirkt_text": "The filter envelope does nothing: turn up Env amount in FILTER"},
+      {"id": "frel", "type": "knob", "label": "Release x", "bind": {"param": "k34"}, "format": "raw", "unit": "x", "default": 0.5, "wirkt": {"ueber": ["env", 0.02]}, "wirkt_text": "The filter envelope does nothing: turn up Env amount in FILTER"},
       {"id": "fnote", "type": "label", "span": 4, "text": "Release = AMP ENV release x this"}
     ]},
     { "id": "env2", "page": "main", "title": "AMP ENV", "cols": 4, "controls": [
@@ -55,12 +55,12 @@
       {"id": "anote", "type": "label", "span": 4, "text": "Release feeds FILTER ENV too"}
     ]},
     { "id": "lfo", "page": "main", "title": "LFO", "cols": 4, "controls": [
-      {"id": "lfoshape", "type": "selector", "label": "Shape", "span": 4, "bind": {"param": "k25"}, "options": ["Saw", "Tri", "Sine", "Square", "S&H"], "glyphs": ["saw", "tri", "sine", "square", "sh"], "default": 2},
+      {"id": "lfoshape", "type": "selector", "label": "Shape", "span": 4, "bind": {"param": "k25"}, "options": ["Saw", "Tri", "Sine", "Square", "S&H"], "glyphs": ["saw", "tri", "sine", "square", "sh"], "default": 2, "wirkt": {"eine": [{"ueber": ["lfocut", 0.02]}, {"ueber": ["lfopitch", 0.02]}, {"alle": [{"ueber": ["lfopwm", 0.02]}, {"eine": [{"alle": [{"ist": ["wave1", [2]]}, {"unter": ["mix", 0.98]}]}, {"alle": [{"ist": ["wave2", [1]]}, {"ueber": ["mix", 0.02]}]}]}]}]}, "wirkt_text": "The LFO goes nowhere: turn up To cutoff, To pitch or To PWM"},
       {"id": "lfof", "type": "lfoform", "span": 4, "label": "LFO shape", "of": {"form": "lfoshape"}, "formen": ["saw", "tri", "sine", "square", "sh"]},
-      {"id": "lforate", "type": "knob", "label": "Rate", "bind": {"param": "k24"}, "format": "hz", "default": 0.5},
+      {"id": "lforate", "type": "knob", "label": "Rate", "bind": {"param": "k24"}, "format": "hz", "default": 0.5, "wirkt": {"eine": [{"ueber": ["lfocut", 0.02]}, {"ueber": ["lfopitch", 0.02]}, {"alle": [{"ueber": ["lfopwm", 0.02]}, {"eine": [{"alle": [{"ist": ["wave1", [2]]}, {"unter": ["mix", 0.98]}]}, {"alle": [{"ist": ["wave2", [1]]}, {"ueber": ["mix", 0.02]}]}]}]}]}, "wirkt_text": "The LFO goes nowhere: turn up To cutoff, To pitch or To PWM"},
       {"id": "lfocut", "type": "knob", "label": "To cutoff", "bind": {"param": "k26"}, "format": "raw", "unit": "st", "default": 0.5},
       {"id": "lfopitch", "type": "knob", "label": "To pitch", "bind": {"param": "k27"}, "format": "raw", "unit": "st", "default": 0.5},
-      {"id": "lfopwm", "type": "knob", "label": "To PWM", "bind": {"param": "k28"}, "format": "percent", "default": 0.5}
+      {"id": "lfopwm", "type": "knob", "label": "To PWM", "bind": {"param": "k28"}, "format": "percent", "default": 0.5, "wirkt": {"eine": [{"alle": [{"ist": ["wave1", [2]]}, {"unter": ["mix", 0.98]}]}, {"alle": [{"ist": ["wave2", [1]]}, {"ueber": ["mix", 0.02]}]}]}, "wirkt_text": "Acts on a pulse wave only: set Osc1 or Osc2 wave to Pulse"}
     ]},
     { "id": "voice", "page": "main", "title": "VOICE", "cols": 2, "controls": [
       {"id": "mode", "type": "selector", "label": "Mode", "span": 2, "bind": {"param": "k29"}, "options": ["Legato", "Retrig", "Glide all"], "default": 1},
@@ -79,20 +79,20 @@
     ]},
     { "id": "menv", "page": "mod", "title": "MOD ENV", "cols": 4, "controls": [
       {"id": "mhue", "type": "huelle", "span": 4, "label": "Envelope", "of": {"a": "mattack", "d": "mdecay", "s": "msustain", "r": "mrelease"}},
-      {"id": "mattack", "type": "knob", "label": "Attack", "bind": {"param": "k36"}, "format": "raw", "unit": "s", "default": 0.27034552830322406},
-      {"id": "mdecay", "type": "knob", "label": "Decay", "bind": {"param": "k37"}, "format": "raw", "unit": "s", "default": 0.5088100132404755},
-      {"id": "msustain", "type": "knob", "label": "Sustain", "bind": {"param": "k38"}, "format": "percent", "default": 0.5},
-      {"id": "mrelease", "type": "knob", "label": "Release", "bind": {"param": "k39"}, "format": "raw", "unit": "s", "default": 0.5088100132404755},
+      {"id": "mattack", "type": "knob", "label": "Attack", "bind": {"param": "k36"}, "format": "raw", "unit": "s", "default": 0.27034552830322406, "wirkt": {"eine": [{"weg": ["mpitch"]}, {"weg": ["mcut"]}, {"alle": [{"weg": ["mpwm"]}, {"eine": [{"alle": [{"ist": ["wave1", [2]]}, {"unter": ["mix", 0.98]}]}, {"alle": [{"ist": ["wave2", [1]]}, {"ueber": ["mix", 0.02]}]}]}]}]}, "wirkt_text": "The mod envelope goes nowhere: turn To pitch, To PWM or To cutoff away from off"},
+      {"id": "mdecay", "type": "knob", "label": "Decay", "bind": {"param": "k37"}, "format": "raw", "unit": "s", "default": 0.5088100132404755, "wirkt": {"eine": [{"weg": ["mpitch"]}, {"weg": ["mcut"]}, {"alle": [{"weg": ["mpwm"]}, {"eine": [{"alle": [{"ist": ["wave1", [2]]}, {"unter": ["mix", 0.98]}]}, {"alle": [{"ist": ["wave2", [1]]}, {"ueber": ["mix", 0.02]}]}]}]}]}, "wirkt_text": "The mod envelope goes nowhere: turn To pitch, To PWM or To cutoff away from off"},
+      {"id": "msustain", "type": "knob", "label": "Sustain", "bind": {"param": "k38"}, "format": "percent", "default": 0.5, "wirkt": {"eine": [{"weg": ["mpitch"]}, {"weg": ["mcut"]}, {"alle": [{"weg": ["mpwm"]}, {"eine": [{"alle": [{"ist": ["wave1", [2]]}, {"unter": ["mix", 0.98]}]}, {"alle": [{"ist": ["wave2", [1]]}, {"ueber": ["mix", 0.02]}]}]}]}]}, "wirkt_text": "The mod envelope goes nowhere: turn To pitch, To PWM or To cutoff away from off"},
+      {"id": "mrelease", "type": "knob", "label": "Release", "bind": {"param": "k39"}, "format": "raw", "unit": "s", "default": 0.5088100132404755, "wirkt": {"eine": [{"weg": ["mpitch"]}, {"weg": ["mcut"]}, {"alle": [{"weg": ["mpwm"]}, {"eine": [{"alle": [{"ist": ["wave1", [2]]}, {"unter": ["mix", 0.98]}]}, {"alle": [{"ist": ["wave2", [1]]}, {"ueber": ["mix", 0.02]}]}]}]}]}, "wirkt_text": "The mod envelope goes nowhere: turn To pitch, To PWM or To cutoff away from off"},
       {"id": "mpitch", "type": "knob", "label": "To pitch", "bind": {"param": "k40"}, "format": "raw", "unit": "st", "default": 0.5, "scale": {"labels": ["-24", "off", "+24"]}},
-      {"id": "mpwm", "type": "knob", "label": "To PWM", "bind": {"param": "k41"}, "format": "percent", "default": 0.5, "scale": {"labels": ["-60", "off", "+60"]}},
+      {"id": "mpwm", "type": "knob", "label": "To PWM", "bind": {"param": "k41"}, "format": "percent", "default": 0.5, "scale": {"labels": ["-60", "off", "+60"]}, "wirkt": {"eine": [{"alle": [{"ist": ["wave1", [2]]}, {"unter": ["mix", 0.98]}]}, {"alle": [{"ist": ["wave2", [1]]}, {"ueber": ["mix", 0.02]}]}]}, "wirkt_text": "Acts on a pulse wave only: set Osc1 or Osc2 wave to Pulse"},
       {"id": "mcut", "type": "knob", "label": "To cutoff", "bind": {"param": "k42"}, "format": "raw", "unit": "st", "default": 0.5, "scale": {"labels": ["-60", "off", "+60"]}}
     ]},
     { "id": "lfo2", "page": "mod", "title": "LFO 2", "cols": 4, "controls": [
-      {"id": "l2shape", "type": "selector", "label": "Shape", "span": 4, "bind": {"param": "k44"}, "options": ["Sine", "Tri", "Saw", "Square"], "glyphs": ["sine", "tri", "saw", "square"], "default": 0},
+      {"id": "l2shape", "type": "selector", "label": "Shape", "span": 4, "bind": {"param": "k44"}, "options": ["Sine", "Tri", "Saw", "Square"], "glyphs": ["sine", "tri", "saw", "square"], "default": 0, "wirkt": {"alle": [{"weg": ["l2amt"]}, {"ist": ["l2sync", [0]]}]}, "wirkt_text": "Heard with Amount away from off and Sync on Free"},
       {"id": "l2f", "type": "lfoform", "span": 4, "label": "LFO 2 shape", "of": {"form": "l2shape"}, "formen": ["sine", "tri", "saw", "square"]},
-      {"id": "l2sync", "type": "selector", "label": "Sync", "span": 4, "bind": {"param": "k45"}, "options": ["Free", "1/16", "1/8", "1/4", "1/2", "1 bar", "2 bar"], "default": 0},
-      {"id": "l2target", "type": "selector", "label": "Target", "span": 4, "bind": {"param": "k46"}, "options": ["Cutoff", "Pitch", "PWM", "Reso", "Amp"], "default": 0},
-      {"id": "l2rate", "type": "knob", "label": "Rate", "span": 2, "bind": {"param": "k43"}, "format": "hz", "default": 0.5518464803042319},
+      {"id": "l2sync", "type": "selector", "label": "Sync", "span": 4, "bind": {"param": "k45"}, "options": ["Free", "1/16", "1/8", "1/4", "1/2", "1 bar", "2 bar"], "default": 0, "wirkt": {"weg": ["l2amt"]}, "wirkt_text": "LFO 2 does nothing: turn Amount away from off"},
+      {"id": "l2target", "type": "selector", "label": "Target", "span": 4, "bind": {"param": "k46"}, "options": ["Cutoff", "Pitch", "PWM", "Reso", "Amp"], "default": 0, "wirkt": {"weg": ["l2amt"]}, "wirkt_text": "LFO 2 does nothing: turn Amount away from off"},
+      {"id": "l2rate", "type": "knob", "label": "Rate", "span": 2, "bind": {"param": "k43"}, "format": "hz", "default": 0.5518464803042319, "wirkt": {"alle": [{"weg": ["l2amt"]}, {"ist": ["l2sync", [0]]}]}, "wirkt_text": "Heard with Amount away from off and Sync on Free (a synced LFO takes the note value)"},
       {"id": "l2amt", "type": "knob", "label": "Amount", "span": 2, "bind": {"param": "k47"}, "format": "percent", "default": 0.5, "scale": {"labels": ["-100", "off", "+100"]}},
       {"id": "l2note", "type": "label", "span": 4, "text": "Shape acts in Free mode only"}
     ]},
@@ -102,19 +102,19 @@
       {"id": "vnote", "type": "label", "span": 2, "text": "Depth 1x = the Accent knob as is"}
     ]},
     { "id": "chaos", "page": "mod", "title": "CHAOS", "cols": 2, "controls": [
-      {"id": "chrate", "type": "knob", "label": "Rate", "span": 2, "bind": {"param": "k58"}, "format": "hz", "default": 0.3843108934201205},
+      {"id": "chrate", "type": "knob", "label": "Rate", "span": 2, "bind": {"param": "k58"}, "format": "hz", "default": 0.3843108934201205, "wirkt": {"eine": [{"weg": ["chcut"]}, {"alle": [{"weg": ["chpit"]}, {"ueber": ["mix", 0.02]}]}]}, "wirkt_text": "Chaos goes nowhere: turn To cutoff or To osc2 pitch away from off"},
       {"id": "chcut", "type": "knob", "label": "To cutoff", "bind": {"param": "k61"}, "format": "raw", "unit": "st", "default": 0.5, "scale": {"labels": ["-36", "off", "+36"]}},
-      {"id": "chpit", "type": "knob", "label": "To osc2 pitch", "bind": {"param": "k62"}, "format": "raw", "unit": "ct", "default": 0.5, "scale": {"labels": ["-50", "off", "+50"]}},
+      {"id": "chpit", "type": "knob", "label": "To osc2 pitch", "bind": {"param": "k62"}, "format": "raw", "unit": "ct", "default": 0.5, "scale": {"labels": ["-50", "off", "+50"]}, "wirkt": {"ueber": ["mix", 0.02]}, "wirkt_text": "Osc2 is silent: turn up Osc1 / Osc2 in MIXER"},
       {"id": "chnote", "type": "label", "span": 2, "text": "Wanders, never repeats"}
     ]},
     { "id": "chorus", "page": "fx", "title": "CHORUS", "cols": 3, "controls": [
-      {"id": "chmode", "type": "selector", "label": "Mode", "span": 3, "bind": {"param": "k54"}, "options": ["I", "II", "I+II"], "default": 0},
+      {"id": "chmode", "type": "selector", "label": "Mode", "span": 3, "bind": {"param": "k54"}, "options": ["I", "II", "I+II"], "default": 0, "wirkt": {"ueber": ["chamt", 0.01]}, "wirkt_text": "The chorus is off: turn up Amount"},
       {"id": "chamt", "type": "knob", "label": "Amount", "span": 3, "bind": {"param": "k53"}, "format": "percent", "default": 0, "scale": {"labels": ["off", "50", "100"]}}
     ]},
     { "id": "delay", "page": "fx", "title": "DELAY", "cols": 4, "controls": [
-      {"id": "dpp", "type": "selector", "label": "Ping-pong", "span": 4, "bind": {"param": "k60"}, "options": ["Off", "On"], "default": 0},
-      {"id": "dtime", "type": "knob", "label": "Time", "bind": {"param": "k55"}, "format": "ms", "default": 0.7492782502427077},
-      {"id": "dfb", "type": "knob", "label": "Feedback", "bind": {"param": "k56"}, "format": "percent", "default": 0.38888888888888884},
+      {"id": "dpp", "type": "selector", "label": "Ping-pong", "span": 4, "bind": {"param": "k60"}, "options": ["Off", "On"], "default": 0, "wirkt": {"ueber": ["dmix", 0.01]}, "wirkt_text": "The delay is off: turn up Mix"},
+      {"id": "dtime", "type": "knob", "label": "Time", "bind": {"param": "k55"}, "format": "ms", "default": 0.7492782502427077, "wirkt": {"ueber": ["dmix", 0.01]}, "wirkt_text": "The delay is off: turn up Mix"},
+      {"id": "dfb", "type": "knob", "label": "Feedback", "bind": {"param": "k56"}, "format": "percent", "default": 0.38888888888888884, "wirkt": {"ueber": ["dmix", 0.01]}, "wirkt_text": "The delay is off: turn up Mix"},
       {"id": "dmix", "type": "knob", "label": "Mix", "bind": {"param": "k57"}, "format": "percent", "default": 0, "scale": {"labels": ["off", "50", "100"]}}
     ]},
     { "id": "reverb", "page": "fx", "title": "REVERB", "cols": 3, "controls": [

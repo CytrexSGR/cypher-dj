@@ -106,3 +106,76 @@ test('the workbench knows the binder and app.js hands over the DJ view switch', 
   assert.match(wb, /bindeExport, bindeZuSeq, bindeAnalyse/);
   assert.match(app, /zeigeDj: \(\) => \{ setzeAnsicht\('dj'\)/);
 });
+
+// --- TO DJ: the tracker bar (task 24) -------------------------------------------------------------------------------------------
+const { bindeZuDj, zuDjVorab } = await import('../public/tracker/zu_dj.js');
+const { bindeKopf } = await import('../public/tracker/kopf.js');
+
+test('berichtText names the section; ladeModulInSeq and modulZuSeq pass the section id on, and only then', async () => {
+  assert.equal(berichtText({ ...BERICHT(), abschnitt: { id: 'a2', nr: 1, von_beat: 16, laenge_beats: 16 } }), 'loaded 4 patterns of section 01 into SEQ 2');
+  const gesehen = [];
+  const h = async (w, k) => { gesehen.push([w, k]); return { status: 200, j: { bericht: BERICHT() } }; };
+  await ladeModulInSeq('song', 2, h, 'a2');
+  await ladeModulInSeq('mod-a', 2, h);
+  assert.deepEqual(gesehen, [['/seq/modul', { slug: 'song', platz: 2, abschnitt: 'a2' }], ['/seq/modul', { slug: 'mod-a', platz: 2 }]]);
+  gesehen.length = 0;
+  await modulZuSeq('song', 4, h, () => true, 'a3');
+  assert.deepEqual(gesehen.map((g) => g[0]), ['/live/oeffnen', '/seq/modul']);
+  assert.deepEqual(gesehen[1][1], { slug: 'song', platz: 4, abschnitt: 'a3' });
+});
+
+test('zuDjVorab: a section of more than 64 beats is refused before LIVE is opened, with the words of the server', () => {
+  const p = { tracker: { schema: 1, abschnitte: [{ id: 'a1', laenge_beats: 16 }, { id: 'a2', laenge_beats: 128 }] }, spuren: [] };
+  assert.equal(zuDjVorab(p, 'a1'), null);
+  assert.equal(zuDjVorab(p, 'a2'), 'section 01 is 128 beats long, a SEQ deck takes at most 64');
+  assert.equal(zuDjVorab(p, 'zz'), 'That section does not exist');
+  assert.equal(zuDjVorab(null, 'a1'), 'That section does not exist');
+});
+
+function djAufbau({ antworten = {} } = {}) {
+  installiere();
+  const wurzel = new El('div'), kopf = new El('div');
+  kopf.setAttribute('data-t', 'kopf'); wurzel.append(kopf);
+  const meldungen = [], aufrufe = [], dj = [];
+  const ctx = {
+    st: { projekt: null, slug: null, abschnitt_id: null, spaltenAn: {} }, $: (n) => wurzel.querySelector(`[data-t="${n}"]`), beimProjekt: [], beimZeichnen: [],
+    melde: (t, f = false) => meldungen.push({ t, f }), frage: () => true, zeigeDj: () => dj.push(1), zeichne() {}, merke() {},
+    holeJson: async (weg, k) => { aufrufe.push({ weg, k }); const a = antworten[weg]; return { status: a?.code ?? 200, j: a?.j ?? {} }; },
+  };
+  bindeKopf(ctx); bindeZuDj(ctx);
+  const offen = (p, abschnitt_id = 'a2') => { ctx.st.projekt = p; ctx.st.slug = 'song'; ctx.st.abschnitt_id = abschnitt_id; for (const h of ctx.beimProjekt) h(p, true); };
+  return { ctx, $: ctx.$, meldungen, aufrufe, dj, offen };
+}
+const SONG = { tracker: { schema: 1, abschnitte: [{ id: 'a1', laenge_beats: 16 }, { id: 'a2', laenge_beats: 16 }, { id: 'a3', laenge_beats: 100 }] }, spuren: [] };
+
+test('TO DJ in the tracker bar: place 1..4, off without a project; a click opens LIVE, sends the section, shows the line, switches to the DJ view', async () => {
+  const a = djAufbau({ antworten: { '/seq/modul': { j: { bericht: { ...BERICHT(), abschnitt: { id: 'a2', nr: 1, von_beat: 16, laenge_beats: 16 } } } } } });
+  assert.ok(a.$('zu-dj').disabled && a.$('zu-dj-platz').disabled);
+  assert.deepEqual(a.$('zu-dj-platz').querySelectorAll('option').map((o) => o.value), ['1', '2', '3', '4']);
+  a.offen(SONG);
+  assert.ok(!a.$('zu-dj').disabled && !a.$('zu-dj-platz').disabled);
+  a.$('zu-dj-platz').value = '3';
+  a.$('zu-dj').dispatch('click'); await ruhe();
+  assert.deepEqual(a.aufrufe, [{ weg: '/live/oeffnen', k: {} }, { weg: '/seq/modul', k: { slug: 'song', platz: 3, abschnitt: 'a2' } }]);
+  assert.deepEqual(a.meldungen, [{ t: 'loaded 4 patterns of section 01 into SEQ 2', f: false }]);
+  assert.equal(a.dj.length, 1);
+  assert.ok(a.$('zu-dj').textContent === 'TO DJ' && !a.$('zu-dj').disabled, 'the busy state is over');
+});
+
+test('TO DJ: a section over 64 beats and a server refusal are error lines, LIVE is not opened for the first, the view stays', async () => {
+  const a = djAufbau({ antworten: { '/seq/modul': { code: 409, j: { fehler: 'zu_viele_bk', text: 'the live project holds 15 Baukasten tracks and the section brings 2, at most 16 are possible' } } } });
+  a.offen(SONG, 'a3');
+  a.$('zu-dj').dispatch('click'); await ruhe();
+  assert.deepEqual(a.aufrufe, []);
+  assert.deepEqual(a.meldungen, [{ t: 'Send refused: section 02 is 100 beats long, a SEQ deck takes at most 64', f: true }]);
+  a.offen(SONG, 'a2');
+  a.$('zu-dj').dispatch('click'); await ruhe();
+  assert.equal(a.meldungen[1].f, true); assert.match(a.meldungen[1].t, /Load refused: .*15 Baukasten tracks and the section brings 2/);
+  assert.equal(a.dj.length, 0);
+});
+
+test('the tracker knows the TO DJ binder and app.js hands over the DJ view switch', () => {
+  const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
+  assert.match(fs.readFileSync(path.join(PUBLIC, 'tracker/tracker.js'), 'utf8'), /export const BINDER = \[[^\]]*\bbindeZuDj\b[^\]]*\]/);
+  assert.match(fs.readFileSync(path.join(PUBLIC, 'app.js'), 'utf8'), /bindeTracker\(\{ post: jsonPost, zeigeDj: \(\) => \{ setzeAnsicht\('dj'\)/);
+});

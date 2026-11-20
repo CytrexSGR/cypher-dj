@@ -1,0 +1,13 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "fx-sem-fahrt"},
+  "title": "SEM Filter",
+  "akzent": "tuerkis",
+  "sections": [
+    { "id": "filter", "title": "SEM FILTER", "cols": 3, "controls": [
+      {"id": "cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "reso", "type": "knob", "label": "Resonance", "bind": {"param": "k2"}, "format": "percent", "default": 0.5},
+      {"id": "form", "type": "knob", "label": "Mode", "bind": {"param": "k3"}, "format": "percent", "default": 0.5, "scale": {"labels": ["LP", "Notch", "HP"]}}
+    ]}
+  ]
+}

@@ -56,13 +56,13 @@ code: `knoten` are nodes, `kanten` are wires, `art` is the block type, `stimmen`
 |---|---|
 | Notes and control | `note` (hz, gate, velocity, trigger), `konst`, `regler` (one of the knobs, mapped to a range, with an optional start value `vorgabe` and centre value `mitte`), `transponiere`, `glatt` (smoothing) |
 | Oscillators and noise | `saege`, `puls`, `dreieck`, `sinus`, `rauschen`; the saw, pulse and triangle also take a band-limited hard sync input and output (`hart`) |
-| Sound sources | `trommeln` (a drum kit in one block: the note picks the drum), `wavetable` (band-limited tables with up to seven detuned copies in one voice), `fm` (six operators, sixteen algorithms), `granular` (grains of a generated source), `resonator` (a modal bank of up to 32 modes per voice), `saite` (a digital waveguide string), `metall` (metallic oscillator bank for hi-hats and cymbals), `sampler` (plays a sample file) |
-| Filters and shaping | `ladder`, `svf`, `allpass` (first or second order phase rotator), `schieber` (frequency shifter: every partial moves by the same number of Hz), `kreuz` (Linkwitz-Riley crossover with two or three bands), `saett` (saturation), `roehre` (one triode stage), `krume` (bit and sample rate reduction), `ms20` (low-pass and high-pass with saturating feedback), `sem` (12 dB state-variable filter that morphs from low-pass through notch to high-pass, plus a band-pass output), `diode` (diode-ladder low-pass), `kamm` (tuned feedback comb filter), `formant` (vowel filter of five parallel band-passes), `falter` (wavefolder with antialiasing and 2x oversampling), `labor` (Cypher Labor, see below) |
-| Modulation | `adsr`, `lfo`, `mseg` (multi-stage envelope, up to eight stages with curves, a sustain stage and a loop), `sh` (sample and hold, clocked by a trigger, in beats or in Hz), `folger` (envelope follower), `drift` (per-voice analog drift), `chaos` (a Lorenz or Roessler attractor as a never-repeating LFO with two outputs) |
+| Sound sources | `trommeln` (a drum kit in one block: the note picks the drum), `wavetable` (band-limited tables with up to seven detuned copies in one voice), `fm` (six operators, sixteen algorithms), `granular` (grains of a generated source), `resonator` (a modal bank of up to 32 modes per voice), `saite` (a digital waveguide string), `metall` (metallic oscillator bank for hi-hats and cymbals), `sampler` (plays a sample file), `paula` (a bank of up to 32 sample slots with latched slot, start and direction, in the manner of an Amiga voice), `lfsr` (console-style shift-register noise, long or short register), `notenwahl` (the note picks one of eight pads: the index for a selector, so a kit of Baukasten sounds is one graph) |
+| Filters and shaping | `ladder`, `svf`, `allpass` (first or second order phase rotator), `schieber` (frequency shifter: every partial moves by the same number of Hz), `kreuz` (Linkwitz-Riley crossover with two or three bands), `saett` (saturation), `roehre` (one triode stage), `krume` (bit and sample rate reduction), `ms20` (low-pass and high-pass with saturating feedback), `sem` (12 dB state-variable filter that morphs from low-pass through notch to high-pass, plus a band-pass output), `diode` (diode-ladder low-pass), `kamm` (tuned feedback comb filter), `formant` (vowel filter of five parallel band-passes), `falter` (wavefolder with antialiasing and 2x oversampling), `labor` (Cypher Labor, see below), `lpg` (low-pass gate: a filter and amplifier opened by a model of a vactrol, fast to open and slow to close) |
+| Modulation | `adsr`, `lfo`, `mseg` (multi-stage envelope, up to eight stages with curves, a sustain stage and a loop), `sh` (sample and hold, clocked by a trigger, in beats or in Hz), `folger` (envelope follower), `drift` (per-voice analog drift), `chaos` (a Lorenz or Roessler attractor as a never-repeating LFO with two outputs), `funktion` (a dual-slope function generator: envelope, slew limiter, LFO and audio oscillator in one block) |
 | Arithmetic | `mul`, `add` |
 | Effects | `chorus`, `phaser`, `hall` (reverb), `delay`, `faltung` (convolution with an impulse response file, no added latency), `vocoder` (11-band channel vocoder), `remix` (beat-synchronous remix station, see Cypher Remix below) |
 | Dynamics | `limiter`, `gate`, `komp` |
-| Wiring | `ausgang` (output), `eingang` (input, for effect graphs), `leitung` (a feedback path that can be wired freely), `wahl` (a selector over up to eight inputs, with a crossfade) |
+| Wiring | `ausgang` (output), `eingang` (input, for effect graphs), `leitung` (a feedback path that can be wired freely), `wahl` (a selector over up to eight inputs, with a crossfade), `matrix` (a 16 by 16 pin matrix that routes sixteen sources to sixteen destinations, with two weight sets and a morph between them) |
 
 The `sampler` block also has a zone mode, used by the multisample instruments of the STUDIO view: a table of up to 1024
 zones over one memory-mapped sample pack of up to 2 GiB. A zone has a key range, a velocity range, a root note, gain
@@ -80,7 +80,7 @@ A `regler` node can also carry `rastet` 1. That knob does not glide: it takes it
 track a lane or envelope on it is read at the beat of each note, so every hit gets the value of its own step. The slice
 device uses it for SPEED and PITCH.
 
-That makes 56 block types. The graph is checked when it loads and runs in a fixed order. Feedback is only allowed through
+That makes 61 block types. The graph is checked when it loads and runs in a fixed order. Feedback is only allowed through
 a wire marked `"verzoegerung": 1` or through `leitung`. Up to 16 voices run side by side; the audio callback does not
 allocate.
 
@@ -116,9 +116,16 @@ and a save button sit in its header.
   (bend, asymmetric, sync) and unison-stacked; a clean sub that skips filters and effects, noise, two filters with a drive between
   them, an envelope, a triangle LFO and a Lorenz chaos source for slow movement, and chorus, frequency shifter and delay. Twelve
   factory presets.
+- **Kraken** (`synth-kraken`): a semi-modular synth with four voices. An East half with two oscillators, ring modulation, noise,
+  a sine modulator and four switchable filters (ladder, SEM, MS-20, diode), a West half with a sine, a wavefolder and a low-pass
+  gate, two function generators, feedback from the output, two LFOs and a chaos source, delay and reverb. A 16 by 16 patch field
+  (`matrix`) routes the sources to the destinations, with default pins and a morph to a second pin set; the cabinet view draws
+  it as jacks and cables. Fourteen factory presets.
 - **Neuro Bass** (`synth-neuro`): three detuned copies bent by FM, ring modulation and a wavefolder, seven switchable
   filters, a tempo-synced second LFO, sample and hold, a second oscillator, key follow, warp, stack, phase modulation, chaos, drift, delay and reverb.
 - **Drums 909 and Drums 808** (`drums-909`, `drums-808`): two drum machines built on the `trommeln` block.
+- **Drum Synth** (`drum-synth`): a kit of eight pads (kick, rim, snare, clap, low tom, closed hat, open hat, cymbal); every pad is a
+  drum recipe of the Baukasten with its own knobs, selected by the played note (`notenwahl` into a selector).
 - **Filterbox** (`fx-filterbox`): an effect with six filter models and three modulation sources.
 - **Cypher Labor** (`labor`, `fx-labor`): a two-channel feedback processor in one block: a model of a one-bit
   delay chip, a resonant filter whose resonance depends on the level, clipping, channel and cross feedback and one
@@ -161,6 +168,6 @@ In `djk/instruments/modular_dsp/demos/`: `juno-pad` (eight voices, chorus; with 
 `-hall`, `-echo` and `-dyn` variants), `lead` (sync lead), `bassmusik` (wobble bass with growl), `saite` (a plucked
 string), `rueckkopplung` (a feedback patch), `saege-ladder`, and since then `fm-*` (bass, electric piano, bell, lead),
 `wavetable-*` (supersaw, reese, choir), `granular-*`, `resonator-*`, `metall-*` (hi-hat, ride, crash), `saite-*`
-(guitar, harp, piano, Karplus-Strong), `hartsync-*`, `sampler-fairlight`, `synth-mono`, `synth-poly`, `synth-neuro`, `drums-909`, `drums-808` and the `fx-*` effect graphs (among them `fx-filterbox`). 191 factory presets of our own devices ship with the preset browser, 143 of them for Cypher Modular graphs. Greif 2, the three Juno Pad variants and the sync lead example are no longer offered in the instrument pickers because they duplicate other graphs; they still load by name, and their sounds stay in the sound list. The folder
+(guitar, harp, piano, Karplus-Strong), `hartsync-*`, `sampler-fairlight`, `synth-mono`, `synth-poly`, `synth-neuro`, `drums-909`, `drums-808` and the `fx-*` effect graphs (among them `fx-filterbox`). 213 factory presets of our own devices ship with the preset browser, 165 of them for Cypher Modular graphs. Greif 2, the three Juno Pad variants and the sync lead example are no longer offered in the instrument pickers because they duplicate other graphs; they still load by name, and their sounds stay in the sound list. The folder
 `rezepte/` holds 46 more, one per sub-type of the instrument vocabulary (bass 8, drums 5, fx 5, keys 6, lead 7, pad 6,
 percussion 5, pluck 4), each built from a written recipe card.

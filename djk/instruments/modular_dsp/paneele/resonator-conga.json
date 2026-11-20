@@ -15,7 +15,7 @@
       {"id": "k2", "type": "label", "span": 6, "text": "Damping dial shows material 0.3 to 0.05"}
     ]},
     { "id": "strike", "title": "STRIKE", "cols": 4, "controls": [
-      {"id": "pos", "type": "knob", "label": "Position", "span": 4, "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
+      {"id": "pos", "type": "knob", "label": "Strike position", "span": 4, "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
       {"id": "s1", "type": "label", "span": 4, "text": "Noise burst 2 ms"},
       {"id": "s2", "type": "label", "span": 4, "text": "0 edge, 90 % near the centre"}
     ]},

@@ -2,15 +2,16 @@
 // The handlers reach each other through PRO_BEFEHL (commands_helpers.ts) at call time; commands.ts merges the tables.
 import {
   type Ziel, GAIN_MAX, GAIN_MIN, LOOP_MIN, MAX_BEAT, MUSTER_CODE_MAX, istObjekt, neueId, neueNotenId, warpPruefung, entstehungPruefung,
-  type Entstehung, type AudioClip, type Clip, type MidiClip, type Note, type Spur, type Warp, type Zeile,
+  type Entstehung, type AudioClip, type Clip, type FxEintrag, type MidiClip, type Note, type Spur, type Warp, type Zeile,
 } from './model.ts';
 import { seqSichtPruefung, type SeqSicht } from './seq.ts';
 import { wendeMusterAn, musterAbdruck, type KitKlang } from './pattern_clip.ts';
+import { entknuepfe, kopiereInhalt } from './verbund.ts';
 import { huellkurvePruefung, teileHuellkurve } from './envelope.ts';
 import { abHierGerade, einsHier, handWarp, markerAendern, tempoSkalieren, type MarkerSetze, type MarkerVerschiebe } from './warp.ts';
 import {
   ab, erlaube, zahlOk, zahl, flagge, text, idArg, spurVon, laneStart, clipVon, midiVon, runde9, SHA, warpArg, WARP_FELDER, warpClip, mitWarp, gueltig,
-  objekte, notenFelder, listeArg, fuegeNotenEin, type Args, type Handler,
+  objekte, notenFelder, listeArg, fuegeNotenEin, fuegeNotenEinMitIds, type Args, type Handler,
 } from './commands_helpers.ts';
 
 // The view descriptor of a pattern clip (field `seq` of clip_neu and clip_aendern): checked, copied.
@@ -118,6 +119,9 @@ export const CLIP = {
     erlaube(a, 'clip_id', 'start_beat', 'laenge_beats', 'loop_beats', 'offset_s', 'gain_db', 'fade_ein_beats', 'fade_aus_beats', 'spur_id', 'name',
       'versatz_beats', 'stumm', 'entstehung', 'seq');
     const { spur, clip } = clipVon(p, idArg(a, 'clip_id'));
+    // ADR 039: a track change or a left trim (start_beat with another field) leaves the pattern; a pure move in time (start_beat alone) keeps it
+    const nurZeit = a.start_beat !== undefined && Object.keys(a).every((k) => k === 'befehl' || k === 'clip_id' || k === 'start_beat');
+    if (clip.art === 'midi' && (a.spur_id !== undefined || (a.start_beat !== undefined && !nurZeit))) entknuepfe(spur, clip);
     const felder = ['start_beat', 'laenge_beats', 'loop_beats', 'offset_s', 'gain_db', 'fade_ein_beats', 'fade_aus_beats', 'spur_id', 'name',
       'versatz_beats', 'stumm', 'entstehung', 'seq'];
     if (a.seq !== undefined && clip.art !== 'midi') ab('argument_ungueltig', 'seq: only for MIDI clips');
@@ -186,6 +190,7 @@ export const CLIP = {
     erlaube(a, 'clip_id', 'beat');
     const { spur, clip } = clipVon(p, idArg(a, 'clip_id'));
     if (clip.loop_beats != null) ab('argument_ungueltig', 'Loop-Clip: erst den Loop ausschalten (loop_beats null), dann teilen (Spec 6.17)');
+    if (clip.art === 'midi') entknuepfe(spur, clip);   // ADR 039: both parts are unlinked
     const beat = zahl(a, 'beat', -MAX_BEAT, MAX_BEAT)!;
     const rel = beat - clip.start_beat, rest = clip.start_beat + clip.laenge_beats - beat;
     if (!(rel > 0 && rest > 0)) ab('beat_ausserhalb', `${beat} liegt nicht im Inneren von ${clip.start_beat}..${clip.start_beat + clip.laenge_beats}`);
@@ -209,6 +214,11 @@ export const CLIP = {
       for (const q of quer) { q.id = neueNotenId(p); zweiter.noten.push(q); }
       clip.noten = erste;
       delete clip.muster; delete (zweiter as MidiClip).muster;   // strudel-clip: a cut clip is no longer what the pattern makes
+      if (clip.fx) {                               // tracker effects split like notes: the right part counts its beats from its own start
+        const links = clip.fx.filter((f) => f.beat < rel), rechts = clip.fx.filter((f) => f.beat >= rel).map((f) => ({ ...f, beat: runde9(f.beat - rel) }));
+        if (links.length) clip.fx = links; else delete clip.fx;
+        if (rechts.length) (zweiter as MidiClip).fx = rechts; else delete (zweiter as MidiClip).fx;
+      }
     }
     if (clip.huellkurven) {                        // 1.12 slice 5 (T6.4): linked envelopes are cut, unlinked ones rotate on the right part
       const teile = clip.huellkurven.map((h) => teileHuellkurve(h, rel));
@@ -369,6 +379,7 @@ export const CLIP = {
     const spur = gefunden[0].spur;
     if (gefunden.some((g) => g.spur !== spur)) ab('verbinden_spur', 'the clips lie on different tracks');
     const clips = gefunden.map((g) => g.clip).sort((x, y) => x.start_beat - y.start_beat);
+    for (const c of clips) if (c.art === 'midi') entknuepfe(spur, c);   // ADR 039: glued clips leave their pattern
     for (const c of clips) {
       if (c.loop_beats != null && c.loop_beats < c.laenge_beats - 1e-9) ab('verbinden_loop', `${c.id}: turn the loop off (unroll it) before gluing`);
     }
@@ -395,10 +406,14 @@ export const CLIP = {
       const letzte = clips[clips.length - 1] as AudioClip;
       (erste as AudioClip).fade_aus_beats = letzte.fade_aus_beats;
     } else {
-      const belegt = new Set<string>(), noten: Note[] = [];
+      const belegt = new Set<string>(), noten: Note[] = [], fxKarte = new Map<string, FxEintrag>();
       for (const c of clips) {
         if (c.art !== 'midi') ab('verbinden_audio', `${c.id}: not a MIDI clip`);
         const versatz = runde9(c.start_beat - erste.start_beat);
+        for (const f of (c as MidiClip).fx ?? []) {                   // tracker effects keep their absolute beat; the later clip wins on a clash
+          const beat = runde9(f.beat + versatz);
+          if (f.beat < c.laenge_beats - 1e-9 && beat < laenge - 1e-9) fxKarte.set(`${beat}/${f.spalte}`, { ...f, beat });
+        }
         for (const n of (c as MidiClip).noten) {
           if (n.beat >= c.laenge_beats - 1e-9) continue;               // silent behind its own clip's end: stays silent
           const beat = runde9(n.beat + versatz);
@@ -410,10 +425,38 @@ export const CLIP = {
       }
       (erste as MidiClip).noten = noten;
       delete (erste as MidiClip).muster;
+      const fxListe = [...fxKarte.values()].sort((x, y) => x.beat - y.beat || x.spalte - y.spalte);
+      if (fxListe.length) (erste as MidiClip).fx = fxListe; else delete (erste as MidiClip).fx;
     }
     delete erste.loop_beats;
     erste.laenge_beats = laenge;
     for (const c of clips.slice(1)) spur.clips.splice(spur.clips.indexOf(c), 1);
+  },
+
+  // ADR 039: `clip_id` becomes a copy of `mit` and joins its pattern (a new one when `mit` has none). Both MIDI clips of ONE track (verbund_spur).
+  clip_verknuepfen(p, a) {
+    erlaube(a, 'clip_id', 'mit');
+    const id = idArg(a, 'clip_id'), mitId = idArg(a, 'mit');
+    if (id === mitId) ab('argument_ungueltig', 'mit: another clip expected');
+    const g = clipVon(p, id), h = clipVon(p, mitId);
+    const clip = midiVon(g.clip, id), mit = midiVon(h.clip, mitId);
+    if (g.spur !== h.spur) ab('verbund_spur', `${id} (${g.spur.id}) and ${mitId} (${h.spur.id}) lie on different tracks`);
+    if (mit.verbund === undefined) mit.verbund = neueId(p, 'verbund');
+    kopiereInhalt(mit, clip);
+    const alt = clip.verbund;
+    clip.verbund = mit.verbund;
+    if (alt !== undefined && alt !== mit.verbund) {           // left its old pattern: one member left there loses it too
+      const rest = g.spur.clips.filter((x): x is MidiClip => x.art === 'midi' && x.verbund === alt);
+      if (rest.length === 1) delete rest[0].verbund;
+    }
+  },
+
+  // ADR 039: the clip leaves its pattern (nothing else changes); a pattern left with one member loses its verbund too. An unlinked clip: nothing happens.
+  clip_entknuepfen(p, a) {
+    erlaube(a, 'clip_id');
+    const id = idArg(a, 'clip_id');
+    const g = clipVon(p, id);
+    entknuepfe(g.spur, midiVon(g.clip, id));
   },
 
   clip_loeschen(p, a) {
@@ -422,14 +465,15 @@ export const CLIP = {
     spur.clips.splice(spur.clips.indexOf(clip), 1);
   },
 
-  noten_neu(p, a) {
+  noten_neu(p, a, ctx) {
     erlaube(a, 'clip_id', 'noten');
     const id = idArg(a, 'clip_id');
     const clip = midiVon(clipVon(p, id).clip, id);
     const roh = listeArg(a, 'noten');
     const neu = new Set<string>();
     for (const r of roh) if (istObjekt(r) && typeof r.id === 'string') { if (neu.has(r.id)) ab('id_belegt', r.id); neu.add(r.id); }
-    fuegeNotenEin(p, clip, roh);
+    // ctx.noteIdsAb: this clip is a member of a fan-out (ADR 039), the notes carry the ids drawn for all members
+    if (ctx.noteIdsAb !== undefined) fuegeNotenEinMitIds(p, clip, roh, ctx.noteIdsAb); else fuegeNotenEin(p, clip, roh);
   },
 
   noten_aendern(p, a) {
@@ -440,7 +484,7 @@ export const CLIP = {
     const nachId = new Map(clip.noten.map((n, k) => [n.id, k] as const));  // linear statt find je Note (S2-Integration Slice 1)
     const aenderungen = roh.map((r, i) => {
       if (!istObjekt(r)) return ab('argument_ungueltig', `noten[${i}]: Objekt erwartet`);
-      erlaube(r as Args, 'id', 'beat', 'laenge', 'ton', 'vel', 'chance', 'wdh', 'versatz');
+      erlaube(r as Args, 'id', 'beat', 'laenge', 'ton', 'vel', 'chance', 'wdh', 'versatz', 'spalte', 'platz');
       if (typeof r.id !== 'string') ab('argument_ungueltig', `noten[${i}].id: ID erwartet`);
       const { f, weg } = notenFelder(r as Args, `noten[${i}]`, true);
       if (Object.keys(f).length === 0 && weg.length === 0) ab('argument_ungueltig', `noten[${i}]: keine Änderung angegeben`);

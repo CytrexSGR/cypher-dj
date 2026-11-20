@@ -42,7 +42,7 @@ pub struct Knoten {
     /// `deny_unknown_fields` (serde does not combine it with `flatten`).
     #[serde(default)]
     pub datei: Option<String>,
-    /// Custom harmonic spectra of a `wavetable` node: frames of harmonic amplitudes (1..=32 frames, 1..=256 harmonics, sine
+    /// Custom harmonic spectra of a `wavetable` node: frames of harmonic amplitudes (1..=256 frames, 1..=256 harmonics, sine
     /// phase, sign = polarity). Not a scalar, so it is a named field like `datei`; checked in `uebersetzen`.
     #[serde(default)]
     pub spektren: Option<Vec<Vec<f32>>>,
@@ -55,7 +55,47 @@ pub struct Knoten {
     /// Named field like `grenzen`; checked in `uebersetzen`.
     #[serde(default)]
     pub zonen: Option<Vec<f64>>,
+    /// Slot bank of a `paula` node: 1..=32 slots, each with its own sample file and values. Not a scalar, so it is a named field
+    /// like `datei`; checked in `uebersetzen`.
+    #[serde(default)]
+    pub plaetze: Option<Vec<PaulaPlatz>>,
+    /// Row labels of a `matrix` node (exactly 16, 1..16 characters, unique). Not a scalar, so it is a named field like
+    /// `spektren`; checked in `uebersetzen`, refused in macros.
+    #[serde(default)]
+    pub zeilen: Option<Vec<String>>,
+    /// Column labels of a `matrix` node, like `zeilen`.
+    #[serde(default)]
+    pub spalten: Option<Vec<String>>,
+    /// Default pins of a `matrix` node: `[satz, zeile, spalte, wert]`, at most 512 (`matrix::pruefe_stifte`). Optional.
+    #[serde(default)]
+    pub stifte: Option<Vec<[f32; 4]>>,
 }
+
+/// One slot of a `paula` bank. `datei` is a raw stereo float32 file under the sample root (like the sampler's); `grund` is its
+/// root frequency in Hz, `rate` the rate of the stored frames in Hz, `s_von` and `s_laenge` the loop in frames (used with
+/// `schleife` 1), `pegel` the level 0..1, `fein` the fine tune in eighths of a semitone. A missing `schleife`, `s_von`, `s_laenge`,
+/// `pegel` or `fein` reads as 0, 0, 0, 1, 0.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PaulaPlatz {
+    pub datei: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    pub grund: f32,
+    pub rate: f32,
+    #[serde(default)]
+    pub schleife: u8,
+    #[serde(default)]
+    pub s_von: u32,
+    #[serde(default)]
+    pub s_laenge: u32,
+    #[serde(default = "eins")]
+    pub pegel: f32,
+    #[serde(default)]
+    pub fein: i8,
+}
+
+fn eins() -> f32 { 1.0 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]

@@ -1,0 +1,6 @@
+{"schema":1,"name":"lead-fm","modell":"lc3","art":"instrument","graph":"lead-fm",
+"eintraege":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2},{"regler":"Enc 3","knopf":3},{"regler":"Enc 4","knopf":4},{"regler":"Enc 5","knopf":5}],
+"seiten":{"main":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2},{"regler":"Enc 3","knopf":3},{"regler":"Enc 4","knopf":4},{"regler":"Enc 5","knopf":5}]},
+"programme":[
+{"name":"SOUND \u00b7 AMP ENV \u00b7 ECHO \u00b7 HALL","seite":"main",
+"eintraege":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2},{"regler":"Enc 3","knopf":3},{"regler":"Enc 4","knopf":4},{"regler":"Enc 5","knopf":5}]}]}

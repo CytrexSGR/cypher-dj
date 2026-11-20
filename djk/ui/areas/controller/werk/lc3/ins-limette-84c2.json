@@ -1,0 +1,6 @@
+{"schema":1,"name":"ins-limette-84c2","modell":"lc3","art":"instrument","graph":"ins-limette-84c2",
+"eintraege":[{"regler":"Enc 1","knopf":6},{"regler":"Enc 2","knopf":7},{"regler":"Enc 3","knopf":2},{"regler":"Enc 4","knopf":3},{"regler":"Enc 5","knopf":4},{"regler":"Enc 6","knopf":5},{"regler":"Enc 7","knopf":1},{"regler":"Enc 9","knopf":8},{"regler":"Enc 10","knopf":9}],
+"seiten":{"main":[{"regler":"Enc 1","knopf":6},{"regler":"Enc 2","knopf":7},{"regler":"Enc 3","knopf":2},{"regler":"Enc 4","knopf":3},{"regler":"Enc 5","knopf":4},{"regler":"Enc 6","knopf":5},{"regler":"Enc 7","knopf":1},{"regler":"Enc 9","knopf":8},{"regler":"Enc 10","knopf":9}]},
+"programme":[
+{"name":"FILTER \u00b7 AMP ENV \u00b7 TONE \u00b7 OUTPUT","seite":"main",
+"eintraege":[{"regler":"Enc 1","knopf":6},{"regler":"Enc 2","knopf":7},{"regler":"Enc 3","knopf":2},{"regler":"Enc 4","knopf":3},{"regler":"Enc 5","knopf":4},{"regler":"Enc 6","knopf":5},{"regler":"Enc 7","knopf":1},{"regler":"Enc 9","knopf":8},{"regler":"Enc 10","knopf":9}]}]}

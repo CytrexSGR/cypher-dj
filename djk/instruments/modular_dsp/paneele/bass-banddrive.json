@@ -22,110 +22,6 @@
  },
  "sections": [
   {
-   "id": "source",
-   "title": "SOURCE",
-   "cols": 3,
-   "controls": [
-    {
-     "id": "c1",
-     "type": "knob",
-     "label": "Wave position",
-     "bind": {
-      "param": "k1"
-     },
-     "format": "percent",
-     "default": 0.6
-    },
-    {
-     "id": "c2",
-     "type": "knob",
-     "label": "Wave env amount",
-     "bind": {
-      "param": "k2"
-     },
-     "format": "percent",
-     "default": 0.675
-    },
-    {
-     "id": "c3",
-     "type": "knob",
-     "label": "Wave LFO rate",
-     "bind": {
-      "param": "k3"
-     },
-     "format": "hz",
-     "default": 0.673075
-    },
-    {
-     "id": "c4",
-     "type": "knob",
-     "label": "Wave LFO depth",
-     "bind": {
-      "param": "k4"
-     },
-     "format": "percent",
-     "default": 0.85
-    },
-    {
-     "id": "c5",
-     "type": "knob",
-     "label": "Detune",
-     "bind": {
-      "param": "k5"
-     },
-     "format": "raw",
-     "default": 0.175,
-     "unit": "ct"
-    },
-    {
-     "id": "c6",
-     "type": "knob",
-     "label": "Width",
-     "bind": {
-      "param": "k6"
-     },
-     "format": "percent",
-     "default": 0.5
-    },
-    {
-     "id": "c7",
-     "type": "knob",
-     "label": "Bite",
-     "bind": {
-      "param": "k7"
-     },
-     "format": "percent",
-     "default": 0.35
-    },
-    {
-     "id": "c8",
-     "type": "knob",
-     "label": "Sub level",
-     "bind": {
-      "param": "k8"
-     },
-     "format": "percent",
-     "default": 0.7
-    },
-    {
-     "id": "c9",
-     "type": "knob",
-     "label": "Glide",
-     "bind": {
-      "param": "k9"
-     },
-     "format": "percent",
-     "default": 0.0
-    },
-    {
-     "id": "s1",
-     "type": "label",
-     "span": 3,
-     "text": "Wavetable stack, synced saw, clean sub."
-    }
-   ]
-  },
-  {
    "id": "filter",
    "title": "FILTER",
    "cols": 2,
@@ -185,7 +81,9 @@
      },
      "format": "raw",
      "default": 0.458014,
-     "unit": "s"
+     "unit": "s",
+     "wirkt": {"ueber": ["c12", 0.02]},
+     "wirkt_text": "The filter envelope does nothing: turn up Env amount"
     },
     {
      "id": "f1",
@@ -259,7 +157,9 @@
       "param": "k19"
      },
      "format": "percent",
-     "default": 0.55
+     "default": 0.55,
+     "wirkt": {"ueber": ["c20", 0.02]},
+     "wirkt_text": "The high band is silent: turn up Air"
     },
     {
      "id": "c20",
@@ -344,6 +244,113 @@
      },
      "format": "db",
      "default": 0.75
+    }
+   ]
+  },
+  {
+   "id": "source",
+   "title": "SOURCE",
+   "cols": 3,
+   "controls": [
+    {
+     "id": "c1",
+     "type": "knob",
+     "label": "Wave position",
+     "bind": {
+      "param": "k1"
+     },
+     "format": "percent",
+     "default": 0.6
+    },
+    {
+     "id": "c2",
+     "type": "knob",
+     "label": "Wave env amount",
+     "bind": {
+      "param": "k2"
+     },
+     "format": "percent",
+     "default": 0.675,
+     "scale": {
+      "labels": ["-100", "off", "+100"]
+     }
+    },
+    {
+     "id": "c3",
+     "type": "knob",
+     "label": "Wave LFO rate",
+     "bind": {
+      "param": "k3"
+     },
+     "format": "hz",
+     "default": 0.673075
+    },
+    {
+     "id": "c4",
+     "type": "knob",
+     "label": "Wave LFO depth",
+     "bind": {
+      "param": "k4"
+     },
+     "format": "percent",
+     "default": 0.85
+    },
+    {
+     "id": "c5",
+     "type": "knob",
+     "label": "Stack detune",
+     "bind": {
+      "param": "k5"
+     },
+     "format": "raw",
+     "default": 0.175,
+     "unit": "ct"
+    },
+    {
+     "id": "c6",
+     "type": "knob",
+     "label": "Stack width",
+     "bind": {
+      "param": "k6"
+     },
+     "format": "percent",
+     "default": 0.5
+    },
+    {
+     "id": "c7",
+     "type": "knob",
+     "label": "Bite",
+     "bind": {
+      "param": "k7"
+     },
+     "format": "percent",
+     "default": 0.35
+    },
+    {
+     "id": "c8",
+     "type": "knob",
+     "label": "Sub level",
+     "bind": {
+      "param": "k8"
+     },
+     "format": "percent",
+     "default": 0.7
+    },
+    {
+     "id": "c9",
+     "type": "knob",
+     "label": "Glide",
+     "bind": {
+      "param": "k9"
+     },
+     "format": "percent",
+     "default": 0.0
+    },
+    {
+     "id": "s1",
+     "type": "label",
+     "span": 3,
+     "text": "Wavetable stack, synced saw, clean sub."
     }
    ]
   }

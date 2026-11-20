@@ -11,6 +11,28 @@ import { stemsBalkenListe, stummDecke } from './stems.js';
 import { punchBand } from './recording.js';
 import { spalten, zeichneSpalte } from '../wave.js';
 
+// Linked clips (ADR 039): a clip with `verbund` is a member of a pattern shared with other clips of its track
+export const istVerknuepft = (c) => typeof c?.verbund === 'string';
+// Tracker effect commands (task 12): the x positions (pixels) of the rows of a MIDI clip that carry commands, one per beat, inside the clip box `k`
+export function fxMarken(c, k, pxProBeat) {
+  if (c?.art !== 'midi' || !Array.isArray(c.fx)) return [];
+  const xs = [];
+  for (const e of c.fx) {
+    if (!(e.beat < c.laenge_beats)) continue;
+    const x = k.x + e.beat * pxProBeat;
+    if (x < k.x || x > k.x + k.w) continue;
+    if (xs.length === 0 || Math.abs(xs[xs.length - 1] - x) > 0.5) xs.push(x);
+  }
+  return xs;
+}
+// Section borders for the ruler: only the stored list (`tracker.abschnitte`); a project without it has none, so it looks as before
+export function lineal_abschnitte(projekt) {
+  const liste = projekt?.tracker?.abschnitte;
+  if (!Array.isArray(liste) || liste.length === 0) return [];
+  let von = 0;
+  return liste.map((a, nr) => { const e = { id: a.id, nr, name: a.name ?? '', von_beat: von, bis_beat: von + a.laenge_beats }; von = e.bis_beat; return e; });
+}
+
 const HEX = /^#[0-9a-f]{6}$/i;
 const alpha = (f, a) => (HEX.test(f) ? f + a : `rgba(140,140,150,0.25)`);
 
@@ -147,7 +169,9 @@ export class Arrangement {
     g.fillStyle = f; g.fillRect(k.x, k.y, k.w, CLIP_KOPF);
     g.strokeStyle = c.dekodiert === 'fehler' ? '#ff5a1f' : f; g.lineWidth = 1; g.strokeRect(k.x + 0.5, k.y + 0.5, Math.max(0, k.w - 1), k.h - 1);
     g.save(); g.beginPath(); g.rect(k.x, k.y, k.w, k.h); g.clip();
-    g.font = '11px system-ui, sans-serif'; g.fillStyle = '#0e0f12'; g.fillText(c.stumm ? `${c.name ?? ''} (muted)` : (c.name ?? ''), k.x + 4, k.y + 11);
+    g.font = '11px system-ui, sans-serif'; g.fillStyle = '#0e0f12';
+    if (istVerknuepft(c) && k.w > 24) { g.textAlign = 'right'; g.fillText('\u26d3', k.x + k.w - 3, k.y + 11); g.textAlign = 'start'; }   // chain sign: this clip shares its content with others
+    g.fillText(c.stumm ? `${c.name ?? ''} (muted)` : (c.name ?? ''), k.x + 4, k.y + 11);
     const unten = (text) => { g.fillStyle = 'rgba(232,232,236,0.7)'; g.fillText(text, k.x + 4, k.y + CLIP_KOPF + 14); };
     if (spur.freeze) {
       g.strokeStyle = alpha(f, '60');
@@ -156,6 +180,9 @@ export class Arrangement {
     } else if (c.art === 'midi') {
       g.fillStyle = f;
       for (const n of notenKaesten(c, k, a.pxProBeat)) g.fillRect(n.x, n.y, n.w, n.h);
+      g.fillStyle = '#ffb454';   // a small mark at the foot of the clip for every row that carries effect commands
+      for (const x of fxMarken(c, k, a.pxProBeat)) { g.beginPath(); g.moveTo(x - 3, k.y + k.h); g.lineTo(x + 3, k.y + k.h); g.lineTo(x, k.y + k.h - 5); g.fill(); }
+      g.fillStyle = f;
     } else if (c.dekodiert !== 'fertig') {
       unten(c.dekodiert === 'fehler' ? 'decode failed' : 'decoding…');
     } else {
@@ -199,6 +226,14 @@ export class Arrangement {
       g.beginPath(); g.moveTo(x, l.haupt ? LOOP_ZONE : h - 5); g.lineTo(x, h); g.stroke();
       if (l.text) { g.fillStyle = 'rgba(232,232,236,0.8)'; g.fillText(l.text, x + 3, h - 4); }
     }
+    for (const ab of lineal_abschnitte(projekt)) {   // section borders and names (tracker marker with a stored list only)
+      const x = Math.round(beatZuX(a, ab.von_beat)) + 0.5;
+      if (x < -1 || x > w + 1) continue;
+      g.strokeStyle = '#b08cff'; g.beginPath(); g.moveTo(x, LOOP_ZONE); g.lineTo(x, h); g.stroke();
+      const x1 = beatZuX(a, ab.bis_beat);
+      if (x1 - x > 18) { g.font = '10px ui-monospace, monospace'; g.fillStyle = '#b08cff'; g.fillText(ab.name || String(ab.nr + 1).padStart(2, '0'), x + 3, LOOP_ZONE + 9); }
+    }
+    g.font = '11px ui-monospace, monospace';
     const xs = beatZuX(a, startBeat);
     g.fillStyle = '#ffb020'; g.beginPath(); g.moveTo(xs - 5, LOOP_ZONE); g.lineTo(xs + 5, LOOP_ZONE); g.lineTo(xs, LOOP_ZONE + 7); g.closePath(); g.fill();
     if (kopfBeat !== null) { g.fillStyle = '#fff'; g.fillRect(Math.round(beatZuX(a, kopfBeat)) - 1, 0, 2, h); }

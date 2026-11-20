@@ -51,7 +51,9 @@ fn harness_meldet_fehlenden_pfad() {
 fn kosten_graph() {
     let (json, _) = aus_umgebung();
     let block: usize = std::env::var("BK_KOSTEN_BLOCK").ok().map(|s| s.parse().expect("BK_KOSTEN_BLOCK")).unwrap_or(256);
-    let mut p = uebersetze_mit_wurzel(&json, 48_000.0, None).unwrap();
+    // BK_KOSTEN_WURZEL names the sample root for graphs that read files (`sampler`, `paula`)
+    let wurzel = std::env::var_os("BK_KOSTEN_WURZEL").map(std::path::PathBuf::from);
+    let mut p = uebersetze_mit_wurzel(&json, 48_000.0, wurzel.as_deref()).unwrap();
     // BK_KOSTEN_ZWEIGE=0 runs every unselected `wahl` branch, as the engine did before branches existed
     if std::env::var("BK_KOSTEN_ZWEIGE").as_deref() == Ok("0") { p.setze_zweige(false); }
     for n in 0..p.stimmen { p.note_an(40 + n as u8, 0.8); }

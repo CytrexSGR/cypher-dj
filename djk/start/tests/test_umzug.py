@@ -175,6 +175,7 @@ def test_fremder_link_abgelehnt(welt):
 
 def test_pfad_mit_leerzeichen(welt, monkeypatch):
     monkeypatch.setenv("CYPHERDJ_HEIM", str(welt.tmp / "mein heim"))
+    assert umzug.main(["heim-anlegen"]) == 0
     vorher = baum(fuelle(welt.alt("presets")))
     assert umzug.main(["presets", "--ausfuehren"], belegt=frei) == 0
     assert str(welt.neu("presets")).startswith(str(welt.tmp / "mein heim"))
@@ -331,6 +332,7 @@ def test_fortsetzung_u6(welt):
 
 def test_fortsetzung_u7(welt, capsys):
     welt.heim.mkdir()
+    (welt.heim / ".cypherdj-heim").write_text("")                         # a marked home: a refused run leaves it untouched
     setze_journal("presets", richtung="hin", schritt="begonnen")          # journal says "moving", but nothing is there
     fuelle(welt.tmp / "zeuge")
     vorher = baum(welt.tmp)
@@ -458,7 +460,7 @@ def test_einrichten_laesst_echten_alten_ordner(welt):
 def test_heim_ohne_elternordner_abgelehnt(welt, monkeypatch, capsys):
     monkeypatch.setenv("CYPHERDJ_HEIM", str(welt.tmp / "fehlt" / "heim"))
     assert umzug.main(["einrichten", "--still"]) == 6
-    assert "is missing or empty: is the disk mounted?" in capsys.readouterr().err
+    assert "has no marker file .cypherdj-heim: is the disk mounted?" in capsys.readouterr().err
     assert not (welt.tmp / "fehlt").exists()
 
 
@@ -468,6 +470,37 @@ def test_heim_auf_leerem_einhaengepunkt_abgelehnt(welt, monkeypatch):
     assert umzug.main(["einrichten"]) == 6
     assert os.listdir(welt.tmp / "platte") == []
     assert umzug.main([]) == 6
+
+
+def test_heim_ohne_marker_abgelehnt_nichts_geschrieben(welt, monkeypatch, capsys):
+    """Point (a): a folder that exists and even has content, but no marker, is not a home (unmounted disk, internal disk below)."""
+    platte = welt.tmp / "platte"
+    (platte / "heim").mkdir(parents=True)
+    (platte / "fremd.txt").write_text("x")
+    monkeypatch.setenv("CYPHERDJ_HEIM", str(platte / "heim"))
+    assert umzug.main(["einrichten", "--still"]) == 6
+    assert umzug.main(["presets", "--ausfuehren"], belegt=frei) == 6
+    assert "has no marker file .cypherdj-heim: is the disk mounted?" in capsys.readouterr().err
+    assert os.listdir(platte / "heim") == []
+
+
+def test_heim_anlegen_schreibt_marker_dann_bereit(welt, monkeypatch):
+    monkeypatch.setenv("CYPHERDJ_HEIM", str(welt.tmp / "platte" / "heim"))
+    assert umzug.heim_bereit() is not None
+    assert umzug.main(["heim-anlegen"]) == 0
+    assert (welt.tmp / "platte" / "heim" / ".cypherdj-heim").is_file()
+    assert umzug.heim_bereit() is None
+    assert umzug.main(["einrichten", "--still"]) == 0
+
+
+def test_standard_heim_wird_ohne_marker_angenommen_trockenlauf_liest_nur(welt):
+    """The existing real home ~/cypherdj (no marker yet) is not refused; a dry run writes nothing, an executed run adds the marker."""
+    fuelle(welt.heim / "werke")
+    vorher = baum(welt.heim)
+    assert umzug.heim_bereit() is None and umzug.main([]) == 0
+    assert baum(welt.heim) == vorher and not (welt.heim / ".cypherdj-heim").exists()
+    assert umzug.main(["einrichten", "--still"]) == 0
+    assert (welt.heim / ".cypherdj-heim").is_file()
 
 
 def test_umzug_heim_nicht_bereit(welt, monkeypatch):

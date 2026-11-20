@@ -21,7 +21,7 @@
     ]},
     { "id": "fenv", "title": "FILTER ENV", "cols": 3, "controls": [
       {"id": "fhue", "type": "huelle", "span": 3, "label": "Envelope", "of": {"a": 0.001, "d": "decay", "s": 0, "r": 0.05}},
-      {"id": "decay", "type": "knob", "label": "Decay", "span": 3, "bind": {"param": "k4"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "decay", "type": "knob", "label": "Decay", "span": 3, "bind": {"param": "k4"}, "format": "raw", "unit": "s", "default": 0.5, "wirkt": {"ueber": ["env", 0.01]}, "wirkt_text": "The filter envelope is off: turn up Env amount in FILTER"},
       {"id": "fn", "type": "label", "span": 3, "text": "A 1 ms, S 0, R 50 ms fixed"}
     ]},
     { "id": "aenv", "title": "AMP ENV", "cols": 3, "controls": [

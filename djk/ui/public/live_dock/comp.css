@@ -1,0 +1,2 @@
+/* Live dock: the gain reduction history window of a channel compressor (comp.js). */
+#live-fenster .live-verlauf { display: block; width: 100%; max-width: 520px; background: rgba(255, 255, 255, .03); border: 1px solid var(--line); border-radius: 6px; }

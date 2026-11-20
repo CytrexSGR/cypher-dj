@@ -11,6 +11,7 @@ import { renderProgramm } from '../ui/paths.ts';
 import { pruefeProjekt, sucheSpur } from '../ui/project/model.ts';
 import { reglerAusProjekt, rendere, RenderFehler, schluesselPlan } from '../ui/project/render.ts';
 import { schreibeWiedergabe, uebersetze, WiedergabeFehler } from '../ui/project/playback.ts';
+import { geraetFx } from '../ui/devices_parameter.ts';
 
 const ende = (rc: number, text: string): never => { process.stderr.write(`render_projekt: ${text}\n`); process.exit(rc); };
 
@@ -60,7 +61,7 @@ async function main(): Promise<void> {
   try {
     const reglerDatei = path.join(arbeit, 'regler.json');
     fs.writeFileSync(reglerDatei, JSON.stringify(regler));
-    schreibeWiedergabe(arbeit, uebersetze(sicht, { nr: 1, audioOrdner: path.join(arbeit, 'audio'), arbeitsordner: arbeit }));
+    schreibeWiedergabe(arbeit, uebersetze(sicht, { geraetFx, nr: 1, audioOrdner: path.join(arbeit, 'audio'), arbeitsordner: arbeit }));
     const dauerMs = (bis - von) * 60_000 / p.tempo_bpm;
     const r = await rendere({ programm: [programm], nr: 1, von_beat: von, bis_beat: bis, bpm: p.tempo_bpm, aus: a.aus, arbeitsordner: arbeit,
       spurRegler: reglerDatei, ohneZustand: true, instanz: '', zeitlimitMs: Math.ceil(4 * dauerMs) + 120_000, abgriff: 'produktion', nurSchluessel });

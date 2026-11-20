@@ -59,7 +59,7 @@ export async function starteBrowser({ breite = 1920, hoehe = 1080, sichtbar = nu
       await sende('Input.dispatchMouseEvent', { type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1, ...extra });
     },
     async mitte(selektor) {
-      return b.werte(`(() => { const r = document.querySelector(${JSON.stringify(selektor)}).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height }; })()`);
+      return b.werte(`(() => { const e = document.querySelector(${JSON.stringify(selektor)}); e.scrollIntoView({ block: 'nearest', inline: 'nearest' }); const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height }; })()`);
     },
     async klick(selektor) {
       const m = await b.mitte(selektor);

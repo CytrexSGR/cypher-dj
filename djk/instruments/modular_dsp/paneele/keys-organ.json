@@ -1,0 +1,24 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "keys-organ"},
+  "title": "Organ",
+  "akzent": "rot",
+  "layout": {"rows": [
+    ["tone", "env", "fx"]
+  ]},
+  "sections": [
+    { "id": "tone", "title": "TONE", "cols": 2, "controls": [
+      {"id": "rotary", "type": "knob", "label": "Rotary", "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
+      {"id": "drive", "type": "knob", "label": "Drive", "bind": {"param": "k4"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "onote", "type": "label", "span": 2, "text": "Rotary = speaker tremolo depth"}
+    ]},
+    { "id": "env", "title": "AMP ENV", "cols": 2, "controls": [
+      {"id": "hue", "type": "huelle", "span": 2, "label": "Envelope", "of": {"a": "attack", "d": 10, "s": 1, "r": "release"}},
+      {"id": "attack", "type": "knob", "label": "Attack", "bind": {"param": "k1"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "release", "type": "knob", "label": "Release", "bind": {"param": "k2"}, "format": "raw", "unit": "s", "default": 0.5}
+    ]},
+    { "id": "fx", "title": "REVERB", "cols": 1, "controls": [
+      {"id": "rmix", "type": "knob", "label": "Room mix", "bind": {"param": "k5"}, "format": "percent", "default": 0.5}
+    ]}
+  ]
+}

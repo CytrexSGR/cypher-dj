@@ -730,3 +730,130 @@ test('slot 8 drags live; the 9th bk track sends nothing during a drag and ONE sp
     }
   }
 });
+
+// ---- patch field (task 8): the pin methods of the track adapter --------------------------------------------------------------------------------------
+const FELD_NAMEN = { zeilen: Array.from({ length: 16 }, (_, i) => `R${i + 1}`), spalten: Array.from({ length: 16 }, (_, i) => `C${i + 1}`), stifte: [[0, 0, 0, 0.1], [1, 1, 1, 0.2]] };
+const nachOrt = (a, b) => a[0] * 256 + a[1] * 16 + a[2] - (b[0] * 256 + b[1] * 16 + b[2]);
+// answers like the project does: a pin command changes the track's own list
+function stiftKontext(sp, { ablehnen = false } = {}) {
+  const gesendet = [], gemeldet = [];
+  const ctx = {
+    st: { projekt: { spuren: [sp] } },
+    aendereAus: (rechne) => {
+      const x = rechne(ctx.st.projekt);
+      if (!x) return Promise.resolve(false);
+      if (ablehnen) { gemeldet.push('refused'); return Promise.resolve(false); }
+      gesendet.push(x);
+      const b = x.befehle[0], eigene = sp.geraet.stifte ?? FELD_NAMEN.stifte;
+      if (b.befehl === 'geraet_stift_setzen') {
+        const rest = eigene.filter((e) => !(e[0] === b.satz && e[1] === b.zeile && e[2] === b.spalte));
+        sp.geraet = { ...sp.geraet, stifte: [...rest, ...(b.wert === 0 ? [] : [[b.satz, b.zeile, b.spalte, b.wert]])].sort(nachOrt) };
+      } else if (b.befehl === 'geraet_stifte_setzen') {
+        sp.geraet = { ...sp.geraet, stifte: [...eigene.filter((e) => e[0] !== b.satz), ...b.stifte].sort(nachOrt) };
+      }
+      return Promise.resolve(true);
+    },
+  };
+  return { ctx, gesendet, gemeldet };
+}
+
+test('pins: stifte() shows the graph defaults first, then the track\'s own list; a pin moved shows at once and a drag sends at most one geraet_stift_setzen per 30 ms', async () => {
+  const sp = spurMit(BK({ k1: 0.25 })), u = uhr();
+  const { ctx, gesendet } = stiftKontext(sp);
+  const ad = spurAdapter(ctx, sp, BK_TABELLE, { zeitgeber: u, steckfeld: FELD_NAMEN });
+  assert.deepEqual(ad.stifte(), FELD_NAMEN.stifte, 'no own list: the defaults');
+  for (let i = 1; i <= 10; i++) { ad.stiftSetzen(0, 2, 3, i / 10); u.vor(10); }
+  assert.deepEqual(ad.stifte().find((e) => e[1] === 2), [0, 2, 3, 1], 'the display holds the latest value before any answer');
+  await warte();
+  assert.ok(gesendet.length >= 1 && gesendet.length <= 4, `${gesendet.length} commands`);
+  for (const x of gesendet) {
+    assert.deepEqual([x.befehle[0].befehl, x.befehle[0].spur_id, x.befehle[0].satz, x.befehle[0].zeile, x.befehle[0].spalte], ['geraet_stift_setzen', 's1', 0, 2, 3]);
+    assert.equal(x.label, 'Lead: Pin R3 > C4');
+  }
+  await ad.stiftEnde();
+  assert.equal(gesendet.at(-1).befehle[0].wert, 1, 'the last command carries the last value');
+  assert.deepEqual(sp.geraet.stifte.find((e) => e[1] === 2), [0, 2, 3, 1], 'the project holds it');
+  const n = gesendet.length;
+  assert.equal(ad.stiftEnde(), undefined, 'nothing pending');
+  u.vor(200);
+  assert.equal(gesendet.length, n);
+  assert.deepEqual(ad.stifte(), [...sp.geraet.stifte].sort(nachOrt), 'after the answer the project list is shown, nothing doubled');
+});
+
+test('pins: two places in one gesture each send their own latest value; a removal (0) is sent and shown as gone; set B carries satz 1 and a (B) label', async () => {
+  const sp = spurMit(BK({})), u = uhr();
+  const { ctx, gesendet } = stiftKontext(sp);
+  const ad = spurAdapter(ctx, sp, BK_TABELLE, { zeitgeber: u, steckfeld: FELD_NAMEN });
+  ad.stiftSetzen(0, 0, 0, 0);
+  assert.ok(!ad.stifte().some((e) => e[0] === 0 && e[1] === 0 && e[2] === 0), 'the default pin is shown removed at once');
+  ad.stiftSetzen(1, 5, 6, -0.4);
+  await ad.stiftEnde();
+  assert.equal(gesendet.length, 2);
+  assert.deepEqual(gesendet.map((x) => x.befehle[0].wert).sort(), [-0.4, 0]);
+  assert.ok(gesendet.some((x) => x.label === 'Lead: Pin R6 > C7 (B)'));
+  assert.deepEqual(sp.geraet.stifte, [[1, 1, 1, 0.2], [1, 5, 6, -0.4]], 'the removal left the project list');
+});
+
+test('pins: stifteSetzen sends ONE geraet_stifte_setzen with satz and only that set\'s entries; the set shows at once; [] clears it; the other set stays', async () => {
+  const sp = spurMit(BK({})), u = uhr();
+  const { ctx, gesendet } = stiftKontext(sp);
+  const ad = spurAdapter(ctx, sp, BK_TABELLE, { zeitgeber: u, steckfeld: FELD_NAMEN });
+  const antwort = ad.stifteSetzen(1, [[1, 3, 3, 0.5], [0, 9, 9, 0.9], [1, 4, 4, 0]]);   // a foreign satz and a zero entry are dropped
+  assert.deepEqual(ad.stifte(), [[0, 0, 0, 0.1], [1, 3, 3, 0.5]], 'shown at once: set B replaced, set A untouched');
+  assert.equal(await antwort, true);
+  assert.equal(gesendet.length, 1);
+  const b = gesendet[0].befehle[0];
+  assert.deepEqual([b.befehl, b.spur_id, b.satz, b.stifte], ['geraet_stifte_setzen', 's1', 1, [[1, 3, 3, 0.5]]]);
+  assert.equal(gesendet[0].label, 'Lead: Patch field set B');
+  assert.deepEqual(ad.stifte(), [[0, 0, 0, 0.1], [1, 3, 3, 0.5]], 'after the answer the project list shows the same');
+  await ad.stifteSetzen(0, []);
+  assert.deepEqual(gesendet.at(-1).befehle[0].stifte, []);
+  assert.deepEqual(ad.stifte(), [[1, 3, 3, 0.5]]);
+});
+
+test('pins: pins moved a moment ago go out BEFORE a whole-set write (order kept)', async () => {
+  const sp = spurMit(BK({})), u = uhr();
+  const { ctx, gesendet } = stiftKontext(sp);
+  const ad = spurAdapter(ctx, sp, BK_TABELLE, { zeitgeber: u, steckfeld: FELD_NAMEN });
+  ad.stiftSetzen(0, 2, 2, 0.7);
+  await ad.stifteSetzen(1, []);
+  assert.deepEqual(gesendet.map((x) => x.befehle[0].befehl), ['geraet_stift_setzen', 'geraet_stifte_setzen']);
+});
+
+test('pins (failure case): a refused pin is reported once, the display returns to the project, the rest of the gesture sends nothing; a refused set returns too', async () => {
+  const sp = spurMit(BK({})), u = uhr();
+  const k = stiftKontext(sp, { ablehnen: true });
+  const fertig = [];
+  const ad = spurAdapter(k.ctx, sp, BK_TABELLE, { zeitgeber: u, steckfeld: FELD_NAMEN, beiFertig: (ok) => fertig.push(ok) });
+  ad.stiftSetzen(0, 2, 3, 0.9);
+  assert.ok(ad.stifte().some((e) => e[1] === 2), 'shown at once');
+  u.vor(30);
+  await warte();
+  assert.equal(k.gemeldet.length, 1);
+  assert.ok(!ad.stifte().some((e) => e[1] === 2), 'back at the stored pins');
+  assert.deepEqual(fertig, [false]);
+  ad.stiftSetzen(0, 2, 3, 0.95); u.vor(300);
+  await warte();
+  assert.equal(k.gemeldet.length, 1, 'no second send, so no second report');
+  assert.ok(ad.stifte().some((e) => e[1] === 2), 'it still previews');
+  assert.equal(ad.stiftEnde(), undefined);
+  assert.ok(!ad.stifte().some((e) => e[1] === 2), 'gesture over: the stored pins show');
+  assert.equal(await ad.stifteSetzen(1, [[1, 3, 3, 0.5]]), false);
+  assert.deepEqual(ad.stifte(), FELD_NAMEN.stifte, 'a refused set shows the stored pins again');
+  assert.equal(k.gesendet.length, 0);
+});
+
+test('pins: only a bk track has the pin methods; the device changing under the adapter sends nothing', async () => {
+  const rb = spurMit(RB({}));
+  const adRb = spurAdapter(stiftKontext(rb).ctx, rb, RB_TABELLE, { zeitgeber: uhr() });
+  assert.equal(adRb.stiftSetzen, undefined);
+  assert.equal(adRb.stifte, undefined);
+  const sp = spurMit(BK({})), u = uhr();
+  const { ctx, gesendet } = stiftKontext(sp);
+  const ad = spurAdapter(ctx, sp, BK_TABELLE, { zeitgeber: u, steckfeld: FELD_NAMEN });
+  sp.geraet = RB({});
+  ad.stiftSetzen(0, 1, 1, 0.5);
+  u.vor(100);
+  await warte();
+  assert.equal(gesendet.length, 0);
+});

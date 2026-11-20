@@ -1,6 +1,7 @@
 // Presets (package 1.16 "Browser"): data model, names, validation. No file access here (store.ts), no HTTP (area.ts).
 // Every product decision behind these rules is written down in DECISIONS.md; change both together.
 import { GERAETE, geraetVon, paramVon, type GeraetDef, type GeraetTyp } from './devices.ts';
+import { stiftFehler, type Stift } from '../steckfeld.ts';
 import { FELDER, pruefeBeschreibung, fehlerText, type Beschreibung, type BeschreibungsFehler, type Familie, type Vokabular } from './vocabulary.ts';
 export { PRESET_ID } from './preset_id.ts';
 
@@ -20,6 +21,7 @@ export interface Preset {
   geraet: string;
   graph?: string;          // 1.16 F2: the Baukasten graph name; required for baukasten, forbidden otherwise
   werte: Record<string, Wert>;
+  stifte?: Stift[];        // Kraken patch field: the pins [satz, zeile, spalte, wert] (steckfeld.ts normal form); baukasten only; absent = the graph's default pins
   beschreibung: Beschreibung;
   tags: string[];
   notiz: string;
@@ -71,6 +73,8 @@ export const PRESET_TEXT: Readonly<Record<string, string>> = {
   werte_ungueltig: 'werte must be an object with at least one parameter',
   parameter_unbekannt: 'the device has no parameter of this name',
   wert_ungueltig: 'a parameter value has the wrong type or is out of range',
+  stifte_ungueltig: 'the pins must be a sorted list of [satz 0..1, zeile 0..15, spalte 0..15, wert -1..1 but not 0], at most 512, no position twice',
+  stifte_verboten: 'only a Baukasten preset carries pins',
   tags_ungueltig: `up to ${TAGS_MAX} tags, each 1 to 24 characters a-z, 0-9, space or dash`,
   notiz_ungueltig: `the note may have up to ${NOTIZ_MAX} characters`,
   beschreibung_ungueltig: 'the description is not valid: kind, sub-kind, character, genre, use, energy and one sentence, with words from the vocabulary',
@@ -203,12 +207,22 @@ export function pruefeGraph(g: GeraetDef, roh: unknown): { graph?: string } {
   return { graph: roh };
 }
 
-export interface NeuEingabe { name: unknown; geraet: unknown; geraet_typ?: unknown; graph?: unknown; werte: unknown; beschreibung: unknown; tags?: unknown; notiz?: unknown }
+// Patch field pins: absent is fine for every device, present only for baukasten and then a good stored list (steckfeld.ts stiftFehler).
+// Absent in the preset means "the graph's default pins" when it is applied; an empty list means "no pin at all".
+export function pruefeStifte(g: GeraetDef, roh: unknown): { stifte?: Stift[] } {
+  if (roh === undefined) return {};
+  if (g.id !== 'baukasten') throw new PresetFehler(400, 'stifte_verboten');
+  const f = stiftFehler(roh);
+  if (f !== null) throw new PresetFehler(400, 'stifte_ungueltig', `${PRESET_TEXT.stifte_ungueltig} (${f})`);
+  return { stifte: (roh as Stift[]).map((e) => [e[0], e[1], e[2], e[3]] as Stift) };
+}
+
+export interface NeuEingabe { name: unknown; geraet: unknown; geraet_typ?: unknown; graph?: unknown; werte: unknown; stifte?: unknown; beschreibung: unknown; tags?: unknown; notiz?: unknown }
 // A new or overwritten preset from user input (strict). The timestamps are set by the store.
 export function pruefeEingabe(e: NeuEingabe, vok: Vokabular): Omit<Preset, 'angelegt' | 'geaendert'> {
   const g = pruefeGeraet(e.geraet);
   if (e.geraet_typ !== undefined && e.geraet_typ !== g.typ) throw new PresetFehler(400, 'geraet_typ_falsch');
-  return { schema: SCHEMA, name: pruefeName(e.name), geraet_typ: g.typ, geraet: g.id, ...pruefeGraph(g, e.graph), werte: pruefeWerte(g, e.werte, true).werte,
+  return { schema: SCHEMA, name: pruefeName(e.name), geraet_typ: g.typ, geraet: g.id, ...pruefeGraph(g, e.graph), werte: pruefeWerte(g, e.werte, true).werte, ...pruefeStifte(g, e.stifte),
     beschreibung: pruefeBeschreibungFuer(g, e.beschreibung, vok, 400), tags: pruefeTags(e.tags), notiz: pruefeNotiz(e.notiz) };
 }
 
@@ -227,8 +241,9 @@ export function pruefeDatei(j: unknown, geraetOrdner: string, vok: Vokabular): P
     const name = pruefeName(o.name), tags = pruefeTags(o.tags), notiz = pruefeNotiz(o.notiz);
     const beschreibung = pruefeBeschreibungFuer(g, o.beschreibung, vok, 409);
     const graph = pruefeGraph(g, o.graph);
+    const stifte = pruefeStifte(g, o.stifte);
     if (o.autor !== undefined && o.autor !== 'cypher') throw new PresetFehler(409, 'preset_ungueltig');
-    return { schema: SCHEMA, name, geraet_typ: g.typ, geraet: g.id, ...graph, werte, beschreibung, tags, notiz, ...(o.autor === 'cypher' ? { autor: 'cypher' as const } : {}),
+    return { schema: SCHEMA, name, geraet_typ: g.typ, geraet: g.id, ...graph, werte, ...stifte, beschreibung, tags, notiz, ...(o.autor === 'cypher' ? { autor: 'cypher' as const } : {}),
       angelegt: o.angelegt, geaendert: o.geaendert, verworfen };
   } catch (e) {
     if (e instanceof PresetFehler && e.code === 400) throw new PresetFehler(409, 'preset_ungueltig', `${PRESET_TEXT.preset_ungueltig} (${e.fehler})`);

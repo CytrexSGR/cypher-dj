@@ -1,0 +1,14 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "fx-bandecho"},
+  "title": "Tape Echo",
+  "akzent": "tuerkis",
+  "sections": [
+    { "id": "echo", "title": "TAPE ECHO", "cols": 2, "controls": [
+      {"id": "l1", "type": "label", "span": 2, "text": "No controls: fixed tape echo"},
+      {"id": "l2", "type": "label", "span": 2, "text": "Time 350 ms, slow wow on the time"},
+      {"id": "l3", "type": "label", "span": 2, "text": "Dark repeats, 55 % feedback"},
+      {"id": "l4", "type": "label", "span": 2, "text": "Echoes only: use it on a send"}
+    ]}
+  ]
+}

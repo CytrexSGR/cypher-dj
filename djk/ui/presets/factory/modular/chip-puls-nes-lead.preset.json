@@ -1,0 +1,40 @@
+{
+ "schema": 1,
+ "name": "NES Lead",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "chip-puls",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.6,
+  "knob3": 0.75,
+  "knob4": 0.2,
+  "knob5": 0.3,
+  "knob6": 0.8
+ },
+ "beschreibung": {
+  "art": "lead",
+  "unterart": "mono",
+  "charakter": [
+   "bright",
+   "thin",
+   "tight"
+  ],
+  "genre": [
+   "electro",
+   "idm"
+  ],
+  "einsatz": [
+   "build",
+   "drop"
+  ],
+  "energie": 5,
+  "text": "25 % pulse lead with a sustained 16-step level and light vibrato."
+ },
+ "tags": [
+  "chip-puls"
+ ],
+ "notiz": "Built from the device document, not yet heard.",
+ "angelegt": "2026-11-19T00:00:00.000Z",
+ "geaendert": "2026-11-19T00:00:00.000Z"
+}

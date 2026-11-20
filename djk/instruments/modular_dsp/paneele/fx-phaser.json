@@ -1,0 +1,14 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "fx-phaser"},
+  "title": "Phaser",
+  "akzent": "tuerkis",
+  "sections": [
+    { "id": "phaser", "title": "PHASER", "cols": 3, "controls": [
+      {"id": "rate", "type": "knob", "label": "Rate", "bind": {"param": "k1"}, "format": "hz", "default": 0.5, "wirkt": {"ueber": ["mix", 0.02]}, "wirkt_text": "Dry only: turn up Mix"},
+      {"id": "mix", "type": "knob", "label": "Mix", "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
+      {"id": "fb", "type": "knob", "label": "Feedback", "bind": {"param": "k2"}, "format": "percent", "default": 0.5, "scale": {"labels": ["-60", "off", "+60"]}, "wirkt": {"ueber": ["mix", 0.02]}, "wirkt_text": "Dry only: turn up Mix"},
+      {"id": "l1", "type": "label", "span": 3, "text": "Six stages, left and right offset"}
+    ]}
+  ]
+}

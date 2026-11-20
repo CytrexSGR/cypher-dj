@@ -68,17 +68,17 @@ test('djk-start installs the recipe graphs of demos/recipes/ (MANIFEST.json) und
 
 // ---- prinzip: the synthesis type of an instrument (the picker groups by it as well as by role) ----
 
-// The decided values of the 57 instrument demos (plan 2026-11-18-instrument-picker-by-type, Task 1), written out so a change is a visible edit.
+// The decided values of the 63 instrument demos (57 of the picker plan plus amiga, the three chip voices of the tracker work, Kraken and the Drum Synth) (plan 2026-11-18-instrument-picker-by-type, Task 1), written out so a change is a visible edit.
 const DEMO_PRINZIP = {
   analog: ['bassmusik', 'diode-acid-bass', 'diode-goa-linie', 'ms20-bass', 'ms20-goa-lead', 'goa-blubber-lead', 'roehre-lead', 'saege-ladder', 'lead', 'hartsync-bass',
-    'hartsync-lead', 'hartsync-pad', 'juno-pad', 'juno-pad-dyn', 'juno-pad-echo', 'juno-pad-hall', 'sem-pad', 'sem-house-akkord', 'synth-mono', 'synth-poly', 'synth-neuro',
-    'formant-neuro-bass', 'mseg-neuro-bass', 'falter-demo'],
+    'hartsync-lead', 'hartsync-pad', 'juno-pad', 'juno-pad-dyn', 'juno-pad-echo', 'juno-pad-hall', 'sem-pad', 'sem-house-akkord', 'synth-mono', 'synth-poly', 'synth-neuro', 'synth-kraken',
+    'formant-neuro-bass', 'mseg-neuro-bass', 'falter-demo', 'chip-puls', 'chip-dreieck', 'chip-rauschen'],
   wavetable: ['wavetable-chor', 'wavetable-reese', 'wavetable-supersaw', 'synth-greif', 'synth-greif2', 'bass-banddrive'],
   fm: ['fm-bass', 'fm-epiano', 'fm-glocke', 'fm-lead'],
   physik: ['saite', 'saite-gitarre', 'saite-harfe', 'saite-klavier', 'saite-karplus', 'resonator-glocke', 'resonator-marimba', 'resonator-metall', 'kamm-goa-zupf'],
   granular: ['granular-pad', 'granular-textur', 'granular-drone'],
-  sampler: ['sampler-fairlight'],
-  drums: ['drums-808', 'drums-909', 'kick-synth', 'gated-hall-snare', 'metall-hihat', 'metall-crash', 'metall-ride', 'resonator-conga'],
+  sampler: ['sampler-fairlight', 'amiga'],
+  drums: ['drums-808', 'drums-909', 'drum-synth', 'kick-synth', 'gated-hall-snare', 'metall-hihat', 'metall-crash', 'metall-ride', 'resonator-conga'],
   feedback: ['labor', 'rueckkopplung'],
 };
 
@@ -92,9 +92,9 @@ test('every instrument graph of beispiele/ and beispiele/recipes/ has a prinzip 
   assert.deepEqual(pruefeKategorien(kat).fehler, []);
 });
 
-test('the 57 demo instruments carry the decided prinzip values', () => {
+test('the 63 demo instruments carry the decided prinzip values', () => {
   const soll = Object.fromEntries(Object.entries(DEMO_PRINZIP).flatMap(([p, namen]) => namen.map((n) => [n, p])));
-  assert.equal(Object.keys(soll).length, 57);
+  assert.equal(Object.keys(soll).length, 63);
   const demos = listeGraphen(P.beispiele).graphen.filter((g) => g.art === 'instrument').map((g) => g.name).sort();
   assert.deepEqual(demos, Object.keys(soll).sort(), 'the table covers exactly the demo instruments');
   for (const n of demos) assert.equal(kat[n].prinzip, soll[n], n);

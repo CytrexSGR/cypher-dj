@@ -13,10 +13,10 @@
       {"id": "s2", "type": "label", "span": 5, "text": "A 1 ms, D 250 ms, S 0, R 50 ms"}
     ]},
     { "id": "gate", "title": "GATE", "cols": 4, "controls": [
-      {"id": "key", "type": "knob", "label": "Key gain", "span": 4, "bind": {"param": "k1"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "key", "type": "knob", "label": "Tail length", "span": 4, "bind": {"param": "k1"}, "format": "raw", "unit": "x", "default": 0.5},
       {"id": "g1", "type": "label", "span": 4, "text": "Threshold -30 dB, depth 60 dB"},
       {"id": "g2", "type": "label", "span": 4, "text": "Release 30 ms, hysteresis 6 dB"},
-      {"id": "g3", "type": "label", "span": 4, "text": "More key gain holds it open"}
+      {"id": "g3", "type": "label", "span": 4, "text": "Key gain: more holds the gate open"}
     ]},
     { "id": "hall", "title": "HALL", "cols": 4, "controls": [
       {"id": "mix", "type": "knob", "label": "Mix", "span": 4, "bind": {"param": "k2"}, "format": "percent", "default": 0.5},

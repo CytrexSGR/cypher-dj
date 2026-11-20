@@ -5,6 +5,7 @@
   djk-umzug <art> [--ausfuehren]      move one kind (old place -> home), the old place becomes a link
   djk-umzug zurueck <art> [--ausfuehren]   undo a move
   djk-umzug einrichten [--still]      create missing folders and links (never touches a real old folder)
+  djk-umzug heim-anlegen              create the home folder and its marker file .cypherdj-heim (run with the removable disk mounted)
   djk-umzug aufraeumen <art> [--ausfuehren]  delete the kept old copy of a verified cross-device move
   djk-umzug pruefen                   dry run: which projects look like test projects (a suggestion, it decides nothing)
   djk-umzug pruefen --liste DATEI [--ausfuehren]   move exactly the projects of {"slugs": [...]} to {HEIM}/pruefen
@@ -14,6 +15,9 @@
 Without --ausfuehren nothing on disk changes. Every executed run appends its report to {HEIM}/.umzug/bericht.jsonl.
 A running move keeps a journal {HEIM}/.umzug/<art>.json; a journal that is not at "fertig" marks an interrupted move, and
 the next run applies exactly one continuation rule (U1..U7, Z1..Z5) or refuses and changes nothing (U7).
+
+A home counts as ready only when it carries the marker file .cypherdj-heim; without it every command refuses (exit 6, "is the disk
+mounted?") and writes nothing. The default home ~/cypherdj gets the marker automatically on the first executed run.
 
 Exit codes: 0 ok or nothing to do, 1 I/O error, 2 usage, 3 in use, 4 conflict, 5 verification failed, 6 home not ready.
 """
@@ -158,17 +162,51 @@ def _links_nach_aussen(wurzel: str) -> list[str]:
 
 # ---- home guard, journal, report -----------------------------------------------------------------------------------------
 
-def heim_bereit(env=None) -> str | None:
-    """None when the home may be created or used, else the refusal text. An empty mount folder counts as a missing disk."""
+MARKER = ".cypherdj-heim"           # a home counts as ready only when it carries this file (written by djk-umzug)
+
+
+def _standard_heim(env) -> bool:
+    return str(ablage.heim(env)) == os.path.join(_home(env).rstrip("/"), "cypherdj")
+
+
+def heim_bereit(env=None, schreiben: bool = False) -> str | None:
+    """None when the home may be used, else the refusal text. Only a home with the marker file counts as ready, so an
+    unmounted mount point (empty or not) is never mistaken for it. The default home {HOME}/cypherdj lives on the internal
+    disk and is adopted without the marker (one-time migration): with schreiben=True the marker is written then."""
     h = ablage.heim(env)
     if h.is_symlink() and not h.exists():
         return f"CYPHERDJ_HEIM ({h}) is a link that leads nowhere: is the disk mounted?"
-    if h.is_dir() and _nicht_leer(str(h)):
+    if (h / MARKER).is_file():
         return None
-    eltern = h.parent
-    if eltern.is_dir() and (str(eltern) == _home(env).rstrip("/") or _nicht_leer(str(eltern))):
+    if _standard_heim(env) and (h.is_dir() or not h.exists()):
+        if schreiben:
+            _schreibe_marker(h)
         return None
-    return f"the parent of CYPHERDJ_HEIM ({eltern}) is missing or empty: is the disk mounted?"
+    return (f"CYPHERDJ_HEIM ({h}) has no marker file {MARKER}: is the disk mounted? "
+            "With the disk mounted, `djk-umzug heim-anlegen` creates the home and the marker. Nothing was written.")
+
+
+def _schreibe_marker(h: Path) -> None:
+    h.mkdir(parents=True, exist_ok=True)
+    m = h / MARKER
+    if not m.exists():
+        m.write_text("cypherdj home, written by djk-umzug\n", encoding="utf-8")
+
+
+def heim_anlegen(env=None) -> dict:
+    """Creates the home folder and its marker. The one deliberate step for a home on a removable disk: run it with the disk mounted."""
+    b = _bericht(None, "heim-anlegen", None, ausgefuehrt=True)
+    h = ablage.heim(env)
+    if h.is_symlink() and not h.exists():
+        _ablehnen(b, f"CYPHERDJ_HEIM ({h}) is a link that leads nowhere: is the disk mounted?", 6)
+        return b
+    if h.exists() and not h.is_dir():
+        _ablehnen(b, f"CYPHERDJ_HEIM ({h}) exists and is not a folder", 4)
+        return b
+    _schreibe_marker(h)
+    b["ergebnis"] = "ok"
+    b["neu"] = str(h)
+    return b
 
 
 def _journal_pfad(art: str, env) -> Path:
@@ -590,7 +628,7 @@ def _lauf(art: str, richtung: str, ausfuehren: bool, g, env, o: dict | None = No
     t0 = time.monotonic()
     o = o or ablage.orte(art, env)
     b = _bericht(art, "umzug" if richtung == "hin" else "zurueck", o, ausgefuehrt=bool(ausfuehren))
-    grund = heim_bereit(env)
+    grund = heim_bereit(env, bool(ausfuehren))
     if grund:
         _ablehnen(b, grund, 6)
         return b
@@ -704,7 +742,7 @@ def _lege_link(alt: str, neu: str) -> None:
 
 def einrichten(env=None) -> list[dict]:
     """Creates missing folders and links. Allowed while units run; a real old folder is never touched."""
-    grund = heim_bereit(env)
+    grund = heim_bereit(env, True)
     if grund:
         return [_bericht(None, "einrichten", None, ergebnis="abgelehnt", grund=grund, code=6, ausgefuehrt=True)]
     out = []
@@ -757,7 +795,7 @@ def aufraeumen(art: str, ausfuehren: bool, env=None) -> dict:
     """Deletes the kept old copy of a cross-device move, only when the old place is the finished link to the new one."""
     o = ablage.orte(art, env)
     b = _bericht(art, "aufraeumen", o, ausgefuehrt=bool(ausfuehren))
-    grund = heim_bereit(env)
+    grund = heim_bereit(env, bool(ausfuehren))
     if grund:
         _ablehnen(b, grund, 6)
         return b
@@ -835,7 +873,7 @@ def modulnamen(ausfuehren: bool, belegt=belegt, env=None) -> dict:
     o = ablage.orte("module", env)
     b = _bericht("module", "modulnamen", o, ausgefuehrt=bool(ausfuehren), umbenennungen=[])
     b["modus"] = "rename"
-    grund = heim_bereit(env)
+    grund = heim_bereit(env, bool(ausfuehren))
     if grund:
         _ablehnen(b, grund, 6)
         return b
@@ -966,6 +1004,8 @@ def _hilfe(code: int) -> int:
 def _main(argv: list[str], inj: dict) -> int:
     if "-h" in argv or "--help" in argv:
         return _hilfe(0)
+    if argv == ["heim-anlegen"]:
+        return _zeige(heim_anlegen())
     if argv[:1] == ["pruefen"]:
         return _pruefen_cli(argv[1:], inj)
     if argv[:1] == ["modulnamen"]:

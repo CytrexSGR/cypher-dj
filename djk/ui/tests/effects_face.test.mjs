@@ -129,7 +129,7 @@ test('the face stays on its own channel when another tab is chosen', async () =>
   setzeWerte({ 'erz/1/komp/an': 1, 'erz/2/komp/an': 1 });
   const f = F.oeffneKanalFace('erz/1', 'DRUMS');
   const A = await import('../public/effects_view.js');
-  A.waehleFx('erz/2');
+  A.setzeFxGewaehlt('erz/2');
   assert.equal(f.el.querySelector('.p-face-ort').textContent, 'DRUMS');
   assert.equal(f.el.dataset.face, 'face:kanal:erz/1');
   assert.equal(F.oeffneKanalFace('erz/1', 'DRUMS'), null, 'the same channel again closes it');
@@ -141,10 +141,6 @@ test('a compressor that is off: the face is dimmed and the meter shows the dash'
   assert.ok(f.el.querySelector('.fa-komp').klassen.has('fa-aus'));
   assert.equal(f.el.querySelector('.p-face-an').textContent, 'OFF');
   f.schliesse();
-});
-
-test('the strip and the detail have the FACE button', () => {
-  assert.ok(attrappe.body.querySelectorAll('.komp-face').length >= 10, 'one per channel strip');
 });
 
 test('T9 the level reading of the channel: null while the compressor is off, the fresh report while on, null when stale (500 ms)', () => {

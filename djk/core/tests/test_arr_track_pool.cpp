@@ -36,13 +36,15 @@
 //  30 q_sechzehn_bk:                ARR_BK_MAX is 16: 16 bk tracks (no RB-338, no host), 3 workers, 600 blocks: every bus and the master equal the serial arrangement; all 16
 //                                   bk tracks are lane units, every bk bus has energy, every lane computed units, no lost event
 //  31 q_neu_staffel:                the retry back-off 4096, 8192, ... 65536 (capped) in both modes: the pool is never off for good; busy worker, mode aus, mode change, retry then failure
+//  32 q_bitgleich_ueber_neu:        switch-off, serial back-off and retry in one run with ten RB tracks: every bus and the master equal the serial arrangement in every block
+//  31 g/h: a healthy run of 65536 blocks forgets the switch-offs (the next wait is 4096 again); a shorter one does not
 //  20 q_live:                       the load threshold counts units the sink computes: muted tracks and solo of one track still count live and fork, an empty unit does not
 // Mutations: SPUR_GRENZE_AB_LAUF (limit from the entry) must turn case 21 red; SPUR_WARTE_AB_LAUF (join wait from the entry) must turn case 22 red.
 // Mutations: SPUR_WARTE_OHNE_KOSTEN (the join-wait rule ignores the cost estimate) must turn case 24 red.
 // Mutations: SPUR_KOSTEN_WANDZEIT (the unit is measured on the wall clock) must turn case 28 red.
 // Mutations: SPUR_LIVE_NACH_GAIN (the old mute criterion) must turn case 20 red.
 // Mutations: SPUR_OHNE_JOIN (the caller does not wait for started jobs) must turn case 11 red.
-// Mutations: SPUR_NEU_NUR_AUTO (only mode auto retries) must turn cases 19 and 31 red; SPUR_NEU_OHNE_STAFFEL (the wait never grows) must turn case 31 red.
+// Mutations: SPUR_NEU_NUR_AUTO (only mode auto retries) must turn cases 19 and 31 red; SPUR_NEU_OHNE_STAFFEL (the wait never grows) must turn case 31 red; SPUR_NEU_OHNE_GESUND (a healthy run never forgets) must turn case 31 g red. Case 32: bit-equal over a retry.
 // Mutations: SPUR_ALLE_BAHN_1 (every worker uses lane 1) must turn case 1 red; SPUR_OHNE_MXCSR (no MXCSR hand-over) must turn case 3 red;
 //            SPUR_PROTOKOLL_GEMEINSAM (every lane writes log ring 0) must turn case 1 red (the first block's 96 log entries do not fit one ring; under TSan the shared slot is a data race).
 #include <time.h>
@@ -1731,7 +1733,7 @@ void fall30() {
   for (CypherBk* x : h2) cypher_bk_frei(x);
 }
 
-// 31: the track pool is never off for good: after a switch-off it retries after a back-off that doubles per failure (4096 .. 65536 blocks), in both modes
+// 31: (a..h) the track pool is never off for good: after a switch-off it retries after a back-off that doubles per failure (4096 .. 65536 blocks), in both modes
 void job_nichts(void*, int) {}
 
 void fall31() {
@@ -1845,14 +1847,89 @@ void fall31() {
     z.lauf(1);
     PRUEF(z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 2);
   }
+  {   // g. a long healthy run forgets the switch-offs: after two of them (wait 8192) and 65536 healthy blocks the next stall waits 4096 blocks again, not 16384
+    Szene z(1);
+    z.lauf(10);
+    fuenf(z.pool.p);
+    z.lauf(4096);
+    PRUEF(z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 1);
+    z.lauf(5);
+    fuenf(z.pool.p);
+    z.lauf(8192);
+    PRUEF(z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 2);
+    z.lauf(L::AUTO_GESUND_BLOECKE);   // the long healthy run
+    PRUEF(z.pool.p.an(K::SPUR));
+    fuenf(z.pool.p);
+    z.lauf(4095);
+    PRUEF(!z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 2);
+    z.lauf(1);
+    PRUEF(z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 3);   // a count that was never forgotten would wait 16384 here
+  }
+  {   // h. the same run with a short healthy stretch in between does NOT forget (shorter than the long run)
+    Szene z(1);
+    z.lauf(10);
+    fuenf(z.pool.p);
+    z.lauf(4096);
+    PRUEF(z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 1);
+    z.lauf(L::AUTO_GESUND_BLOECKE - 2);
+    PRUEF(z.pool.p.an(K::SPUR));
+    fuenf(z.pool.p);
+    z.lauf(4096);
+    PRUEF(!z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 1);   // the second wait is 8192
+    z.lauf(4095);
+    PRUEF(!z.pool.p.an(K::SPUR));
+    z.lauf(1);
+    PRUEF(z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 2);
+  }
   std::printf("case 31 q_neu_staffel: ok\n");
 }
 
+// 32: bit-equal over a retry: a pool that switches itself off, runs serially for the back-off and forks again after the retry gives every bus and the master bit for bit
+// what the serial arrangement gives, in every block (the serial stretch, the switch-on and the parallel blocks after it)
+void fall32() {
+  using K = cdj::HallPool;
+  Pool pool(3);
+  Welt a, ref;
+  a.t.arr.setze_hall_pool(&pool.p);
+  a.t.arr.setze_spur_pool(1);
+  a.t.arr.setze_spur_test(kein_tor());
+  cdj::SpurHaken hk;
+  hk.warte_worker = 3;
+  a.t.arr.setze_spur_haken(&hk);
+  a.laden(snap(1, 10, 0, nullptr, 0, 0), 0);
+  ref.laden(snap(1, 10, 0, nullptr, 0, 0), 0);
+  int b = 0, ungleich = 0;
+  auto lauf = [&](int n) {
+    for (int k = 0; k < n; ++k, ++b) {
+      const int64_t s0 = static_cast<int64_t>(b) * M;
+      for (int i = 0; i < 10; ++i) {
+        speise(a.intern, i, b, s0);
+        speise(ref.intern, i, b, s0);
+      }
+      a.block(s0);
+      ref.block(s0);
+      ungleich += vergleiche(a, ref);
+    }
+  };
+  const cdj::ArrSpurLauf& sl = a.t.arr.spur_lauf();
+  lauf(10);
+  PRUEF(sl.z.blocks_parallel == 10);
+  for (int i = 0; i < 5; ++i) pool.p.spaet_melden(K::SPUR);   // five late events: the account goes off at the next block start
+  lauf(4095);
+  PRUEF(!pool.p.an(K::SPUR) && sl.z.auto_neu == 0 && sl.z.blocks_parallel == 10);   // the whole back-off ran serially
+  lauf(1);
+  PRUEF(pool.p.an(K::SPUR) && sl.z.auto_neu == 1 && sl.z.blocks_parallel == 11);   // the retry block itself forks
+  lauf(200);
+  PRUEF(sl.z.blocks_parallel == 211 && sl.einheiten_worker() > 0);
+  PRUEF(ungleich == 0);
+  std::printf("case 32 q_bitgleich_ueber_neu: ungleich=%d parallel=%llu auto_neu=%llu\n", ungleich, (unsigned long long)sl.z.blocks_parallel, (unsigned long long)sl.z.auto_neu);
+}
+
 int main(int argc, char** argv) {
-  void (*falle[])() = {fall1, fall2, fall3, fall4, fall5, fall6, fall7, fall8, fall9, fall10, fall11, fall12, fall13, fall14, fall15, fall16, fall17, fall18, fall19, fall20, fall21, fall22, fall23, fall24, fall25, fall26, fall27, fall28, fall29, fall30, fall31};
-  if (argc > 1) {   // a single case for debugging: test_arr_spur_pool <1..31>
+  void (*falle[])() = {fall1, fall2, fall3, fall4, fall5, fall6, fall7, fall8, fall9, fall10, fall11, fall12, fall13, fall14, fall15, fall16, fall17, fall18, fall19, fall20, fall21, fall22, fall23, fall24, fall25, fall26, fall27, fall28, fall29, fall30, fall31, fall32};
+  if (argc > 1) {   // a single case for debugging: test_arr_spur_pool <1..32>
     const int n = std::atoi(argv[1]);
-    if (n >= 1 && n <= 31) falle[n - 1]();
+    if (n >= 1 && n <= 32) falle[n - 1]();
   } else {
     for (auto f : falle) {
       f();

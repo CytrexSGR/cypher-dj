@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Prüflauf für djk-start und djk-stop an einer eigenen Null-Senke (ROADMAP §8.4) in einer Prüfinstanz (Z2).
 # Kein Ton: Senke cypherdj-pruef-<i>-start (vier Kanäle), Riegel-Ziele nur stumm/cypherdj-pruef-*.
-# Aufruf: tests/test_start.sh [instanz a..i, Vorgabe i]
+# Integration test (starts real units): Aufruf: tests/test_start.sh <instanz a..i>  (or DJK_INTEGRATION_INSTANZ=<i>); there is no default instance
 # Prüfpunkte:
 #   P1 Riegel: fremdes Ziel ohne --ton-frei -> Rückgabe 3, Meldung nennt --ton-frei, 0 Units
 #   P2 Fehlerfall: belegter Oberflächen-Port -> Rückgabe 4, Meldung nennt Port, 0 Units, Senke unberührt
@@ -26,7 +26,8 @@
 set -uo pipefail
 HIER=$(cd "$(dirname "$0")" && pwd)
 START=$(cd "$HIER/.." && pwd)
-I=${1:-i}
+. "$HIER/integration.sh"
+I=$(integration_instanz "${1:-}") || exit 2   # integration test: no default instance
 case "$I" in [a-i]) K=$(( $(printf '%d' "'$I") - 96 ));; *) echo "Instanz a bis i" >&2; exit 2;; esac
 LAST=$(cut -d' ' -f1 /proc/loadavg)
 python3 -c "import sys; sys.exit(0 if float('$LAST') <= 4 else 1)" || { echo "1-min-Last $LAST > 4, kein Start" >&2; exit 2; }

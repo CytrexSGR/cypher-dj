@@ -21,7 +21,7 @@
     ]},
     { "id": "wobble", "title": "WOBBLE", "cols": 3, "controls": [
       {"id": "lf", "type": "lfoform", "span": 3, "label": "Wobble shape", "formen": ["sine"]},
-      {"id": "rate", "type": "knob", "label": "Rate", "bind": {"param": "k3"}, "format": "hz", "default": 0.5},
+      {"id": "rate", "type": "knob", "label": "Rate", "bind": {"param": "k3"}, "format": "hz", "default": 0.5, "wirkt": {"ueber": ["depth", 0.01]}, "wirkt_text": "The wobble does nothing: turn up Depth in WOBBLE"},
       {"id": "depth", "type": "knob", "label": "Depth", "bind": {"param": "k2"}, "format": "hz", "default": 0.5},
       {"id": "wn", "type": "label", "span": 3, "text": "Restarts on every note"}
     ]},

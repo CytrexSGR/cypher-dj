@@ -55,6 +55,7 @@ export function bindeSchublade() {
   document.addEventListener('keydown', (e) => {
     if (e.target.closest('input, textarea, [contenteditable]')) { if (e.key === 'Escape') e.target.blur(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;          // Review: Strg+L u. a. bleiben beim Browser
+    if (document.body.classList.contains('tracker')) return;   // TRACKER has no library drawer; its grid owns L, G, S, Space, Escape and the arrows (tracker/grid_view.js)
     if (e.key === 'Escape' && istGeraeteseite()) { if (!lernen.wartet) { e.preventDefault(); setzeGeraeteseite(false); } return; }   // an armed learn: Escape only cancels that (listener in bindeEffekte); the production selection skips an Escape the page used   // the device page first, then the library branches below
     if (e.key === 'l' || e.key === 'L') schublade(document.body.classList.contains('lib-zu'));
     if (e.key === 'g' || e.key === 'G') gross(!document.body.classList.contains('lib-gross'));
@@ -80,8 +81,9 @@ export function bindeSchublade() {
 }
 // Studio S1: Ansicht DJ | STUDIO; wechselt nur die Sicht, nie den Klang. Gemerkt pro Browser (nur Bequemlichkeit).
 // D1 V1: dritter Wert PRODUCTION (Modul production/production.js, gekapselt wie die Spurbänder)
-const ANSICHTEN = ['dj', 'studio', 'produktion', 'werkbank'];
+const ANSICHTEN = ['dj', 'studio', 'produktion', 'werkbank', 'tracker'];
 export let produktion = null;
+export let tracker = null;    // the tracker view (tracker/tracker.js), the fifth value: label TRACKER
 export let werkbank = null;   // the workbench view (werkbank/werkbank.js), the fourth value: label STUDIO, value werkbank
 // The main window tells the page server which view it shows: the APC20 is the project mixer while it is PRODUCTION (areas/controller/pult_production.ts,
 // djk/hand_bruecke/apc_production.py). Only the main window (no address); the Remix, Controllers and device windows have one of their own.
@@ -94,13 +96,14 @@ export function meldeAnsicht(a = gezeigteAnsicht, erneut = false) {
 }
 export function setzeAnsicht(a, merken = true) {
   setzeGeraeteseite(false);   // the layer sits on the page of one view; another view never keeps it
-  for (const k of ['studio', 'produktion', 'werkbank']) document.body.classList.toggle(k, a === k);
+  for (const k of ['studio', 'produktion', 'werkbank', 'tracker']) document.body.classList.toggle(k, a === k);
   for (const b of $$('[data-ansicht]')) { const an = b.dataset.ansicht === a; b.classList.toggle('an', an); b.setAttribute('aria-pressed', String(an)); }
   if (merken) try { localStorage.setItem('djk-ansicht', a); } catch { /* ohne Speicher: DJ */ }
   gezeigteAnsicht = a;
   meldeAnsicht(a);
   if (a === 'produktion') produktion?.zeige(); else produktion?.verberge();
   if (a === 'werkbank') werkbank?.zeige(); else werkbank?.verberge();
+  if (a === 'tracker') tracker?.zeige(); else tracker?.verberge();
   ordneMitte(a);
 }
 export function bindeTablet() {
@@ -152,3 +155,4 @@ export function bindeMusterFeld() {
 }
 export function setzeProduktion(p) { produktion = p; }
 export function setzeWerkbank(w) { werkbank = w; }
+export function setzeTracker(t) { tracker = t; }

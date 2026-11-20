@@ -6,7 +6,9 @@ import { installiere, attrappe } from './helpers/pages_mock.mjs';
 
 installiere();
 const { bindeWerkbank } = await import('../public/werkbank/werkbank.js');
-const { ersatzPanel, effektKachel, plusEintraege } = await import('../public/werkbank/sound.js');
+const { ersatzPanel } = await import('../public/dock/panel_source.js');
+const { effektKachel } = await import('../public/dock/stages.js');
+const { plusEintraege } = await import('../public/dock/plus.js');
 const { MAX_PLAETZE, MAX_KOMP } = await import('../public/production/inserts.js');
 
 const bk = (nr, graph) => ({ id: `s${nr}`, nr, name: `T${nr}`, farbe: '#2fd6c3', art: 'instrument', geraet: { art: 'intern', name: 'bk', graph, parameter: {} }, clips: [] });

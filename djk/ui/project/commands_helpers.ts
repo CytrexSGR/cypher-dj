@@ -13,6 +13,7 @@ import {
 import { type KitKlang, type MusterErgebnis, type MusterFehlschlag } from './pattern_clip.ts';
 import { pruefeSchluessel, type SchluesselFrage } from './routing_rules.ts';
 import { PRESET_ID } from '../presets/preset_id.ts';
+import { stiftFehler, type Steckfeld, type Stift } from '../steckfeld.ts';
 import { type Patch } from './patch.ts';
 import { klingtGleich, TAKE_KOPIE_EPS } from './takes.ts';
 import { WarpFehler } from './warp.ts';
@@ -26,8 +27,11 @@ export class BefehlFehler extends Error {
 export const ab = (grund: string, detail?: string): never => { throw new BefehlFehler(grund, detail); };
 
 export interface ReglerAenderung { pfad: string; wert: number }
+/** Kraken patch field: one live pin of the matrix block of the project track `nr` (light path only; last write per position, value 0 = pin removed) */
+export interface StiftAenderung { nr: number; satz: number; zeile: number; spalte: number; wert: number }
 export interface BefehlErgebnis {
-  projekt: Projekt; vor: Patch; zurueck: Patch; betrifft_wiedergabe: boolean; regler_aenderungen: ReglerAenderung[]; hinweise?: LaneHinweis[]
+  projekt: Projekt; vor: Patch; zurueck: Patch; betrifft_wiedergabe: boolean; regler_aenderungen: ReglerAenderung[]; hinweise?: LaneHinweis[];
+  stift_aenderungen?: StiftAenderung[]
 }
 /** The answer of a command that wrote the value of a parameter on which a lane lies (an insert stage parameter, a rack macro, a Baukasten knob): the write is
  *  kept, but it is only the rest value of the parameter. While the arrangement plays, the lane drives the parameter in every block and holds its first and
@@ -449,8 +453,10 @@ export function presetArg(x: unknown, wo: string): string | undefined {
 // Baukasten S20: {art: intern, name: bk, graph, parameter?}. The name rule always applies; with ctx.graphArt (the server injects a lookup into the
 // graph folder) an unknown graph and an effect graph are refused here, so Cypher gets the refusal at the command and not at the next load.
 export function baueBkGeraet(g: Args, ctx?: Kontext): Geraet {
-  erlaube(g, 'art', 'name', 'graph', 'parameter', 'preset');
+  erlaube(g, 'art', 'name', 'graph', 'parameter', 'preset', 'stifte');
   const preset = presetArg(g.preset, 'geraet.preset');
+  // Kraken patch field (task 9): a whole pin list may ride in the device (a preset applies through spur_aendern); absent = the graph's default pins
+  if (g.stifte !== undefined) { const f = stiftFehler(g.stifte); if (f !== null) ab('argument_ungueltig', `geraet.${f}`); }
   if (typeof g.graph !== 'string' || !BK_GRAPH_NAME.test(g.graph)) ab('argument_ungueltig', 'geraet.graph: graph name expected ([a-z0-9_-], 1..32 characters)');
   const art = ctx?.graphArt?.(g.graph);
   if (ctx?.graphArt && art === null) ab('argument_ungueltig', `geraet.graph: unknown graph ${g.graph}`);
@@ -464,7 +470,8 @@ export function baueBkGeraet(g: Args, ctx?: Kontext): Geraet {
       parameter[k] = v as number;
     }
   }
-  return { art: 'intern', name: 'bk', graph: g.graph, parameter, ...(preset !== undefined ? { preset } : {}) };
+  return { art: 'intern', name: 'bk', graph: g.graph, parameter, ...(preset !== undefined ? { preset } : {}),
+    ...(g.stifte !== undefined ? { stifte: (g.stifte as Stift[]).map((e): Stift => [e[0], e[1], e[2], e[3]]) } : {}) };
 }
 
 // 1.9 (L25): {art: intern, name: kit, kit}. The name rule always applies; with ctx.kitDa (the server injects a lookup into the kit folder) an unknown
@@ -588,9 +595,10 @@ export function baueGeraet(p: Projekt, g: unknown, eigene?: string, ctx?: Kontex
 
 // --- Noten ------------------------------------------------------------------------------------------------------------
 // The note fields of a command. teil = a change (fields may be absent; the optional ones chance, wdh, versatz may be null = remove them: listed in `weg`)
-export const NOTEN_OPTIONAL = { chance: [1, 99], wdh: [2, 8], versatz: [-95, 95] } as const;
-export function notenFelder(n: Args, wo: string, teil: boolean): { f: Partial<Note>; weg: ('chance' | 'wdh' | 'versatz')[] } {
-  const ausgabe: Partial<Note> = {}, weg: ('chance' | 'wdh' | 'versatz')[] = [];
+export const NOTEN_OPTIONAL = { chance: [1, 99], wdh: [2, 8], versatz: [-95, 95], spalte: [1, 8], platz: [1, 32] } as const;
+// spalte 1 = absent: accepted, never stored; platz 1 is slot 1 and is stored
+export function notenFelder(n: Args, wo: string, teil: boolean): { f: Partial<Note>; weg: ('chance' | 'wdh' | 'versatz' | 'spalte' | 'platz')[] } {
+  const ausgabe: Partial<Note> = {}, weg: ('chance' | 'wdh' | 'versatz' | 'spalte' | 'platz')[] = [];
   const f = (k: 'beat' | 'laenge' | 'ton' | 'vel', min: number, max: number, o: { ganz?: boolean; offenUnten?: boolean }): void => {
     if (n[k] === undefined) { if (!teil) ab('argument_ungueltig', `${wo}.${k}: fehlt`); return; }
     if (!zahlOk(n[k]) || n[k] > max || (o.offenUnten ? n[k] <= min : n[k] < min) || (o.ganz && !Number.isInteger(n[k]))) {
@@ -599,13 +607,14 @@ export function notenFelder(n: Args, wo: string, teil: boolean): { f: Partial<No
     ausgabe[k] = n[k];
   };
   f('beat', 0, MAX_BEAT, {}); f('laenge', 0, MAX_BEAT, { offenUnten: true }); f('ton', 0, 127, { ganz: true }); f('vel', 1, 127, { ganz: true });
-  for (const k of ['chance', 'wdh', 'versatz'] as const) {
+  for (const k of ['chance', 'wdh', 'versatz', 'spalte', 'platz'] as const) {
     if (n[k] === undefined) continue;
     if (n[k] === null && teil) { weg.push(k); continue; }
     const [min, max] = NOTEN_OPTIONAL[k];
     if (!zahlOk(n[k]) || !Number.isInteger(n[k]) || n[k] < min || n[k] > max || (k === 'versatz' && n[k] === 0)) {
       ab('argument_ungueltig', `${wo}.${k}: whole number ${min}..${max}${k === 'versatz' ? ' without 0' : ''} expected${teil ? ' (null removes it)' : ''}`);
     }
+    if (k === 'spalte' && n[k] === 1) { if (teil) weg.push(k); continue; }   // column 1 is the same as absent
     ausgabe[k] = n[k];
   }
   return { f: ausgabe, weg };
@@ -624,7 +633,7 @@ export function fuegeNotenEin(p: Projekt, clip: MidiClip, roh: unknown[]): void 
   let naechste = notenZaehler(p);
   roh.forEach((r, i) => {
     if (!istObjekt(r)) ab('argument_ungueltig', `noten[${i}]: Objekt erwartet`);
-    erlaube(r as Args, 'id', 'beat', 'laenge', 'ton', 'vel', 'chance', 'wdh', 'versatz');
+    erlaube(r as Args, 'id', 'beat', 'laenge', 'ton', 'vel', 'chance', 'wdh', 'versatz', 'spalte', 'platz');
     const f = notenFelder(r as Args, `noten[${i}]`, false).f as Omit<Note, 'id'>;
     let id = (r as Args).id as string | undefined;
     if (id !== undefined && (typeof id !== 'string' || !NOTEN_ID.test(id))) ab('argument_ungueltig', `noten[${i}].id: ungültig`);
@@ -639,7 +648,37 @@ export function fuegeNotenEin(p: Projekt, clip: MidiClip, roh: unknown[]): void 
     vorhanden.add(id);
     clip.noten.push({ id, beat: f.beat, laenge: f.laenge, ton: f.ton, vel: f.vel,
       ...(f.chance !== undefined ? { chance: f.chance } : {}), ...(f.wdh !== undefined ? { wdh: f.wdh } : {}),
-        ...(f.versatz !== undefined ? { versatz: f.versatz } : {}) });
+        ...(f.versatz !== undefined ? { versatz: f.versatz } : {}), ...(f.spalte !== undefined ? { spalte: f.spalte } : {}),
+        ...(f.platz !== undefined ? { platz: f.platz } : {}) });
+  });
+  p.naechste_noten_id = naechste;
+}
+
+// Internal note insert of the fan-out (ADR 039): the notes carry their ids, drawn once for all members of a pattern, so each member takes exactly
+// these ids. Refuses only an id already in this clip, and (with `ab`, the project counter before the draw) an explicit id n<k> with k < ab, which was
+// given out before; the ids of the draw lie at or above it. Raises the counter to cover the ids taken. A note without id is numbered as fuegeNotenEin does.
+export function fuegeNotenEinMitIds(p: Projekt, clip: MidiClip, roh: unknown[], boden: number = 1): void {
+  const vorhanden = new Set(clip.noten.map((n) => n.id));
+  let naechste = notenZaehler(p);
+  roh.forEach((r, i) => {
+    if (!istObjekt(r)) ab('argument_ungueltig', `noten[${i}]: Objekt erwartet`);
+    erlaube(r as Args, 'id', 'beat', 'laenge', 'ton', 'vel', 'chance', 'wdh', 'versatz', 'spalte', 'platz');
+    const f = notenFelder(r as Args, `noten[${i}]`, false).f as Omit<Note, 'id'>;
+    let id = (r as Args).id as string | undefined;
+    if (id !== undefined && (typeof id !== 'string' || !NOTEN_ID.test(id))) ab('argument_ungueltig', `noten[${i}].id: ungültig`);
+    if (id !== undefined) {
+      const k = notenNummer(id);
+      if (k !== null && k >= NOTEN_NR_GRENZE) ab('argument_ungueltig', `noten[${i}].id: Nummer unter 2^31 erwartet`);
+      if (vorhanden.has(id) || (k !== null && k < boden)) ab('id_belegt', id);
+      if (k !== null && k >= naechste) naechste = k + 1;
+    } else {
+      do { id = `n${naechste}`; naechste += 1; } while (vorhanden.has(id));
+    }
+    vorhanden.add(id);
+    clip.noten.push({ id, beat: f.beat, laenge: f.laenge, ton: f.ton, vel: f.vel,
+      ...(f.chance !== undefined ? { chance: f.chance } : {}), ...(f.wdh !== undefined ? { wdh: f.wdh } : {}),
+        ...(f.versatz !== undefined ? { versatz: f.versatz } : {}), ...(f.spalte !== undefined ? { spalte: f.spalte } : {}),
+        ...(f.platz !== undefined ? { platz: f.platz } : {}) });
   });
   p.naechste_noten_id = naechste;
 }
@@ -654,6 +693,9 @@ export interface PresetInhalt { geraet: string; werte: Record<string, unknown> }
 export interface Kontext {
   quelle: Herkunft; graphArt?: (name: string) => 'instrument' | 'effekt' | null; kitDa?: (name: string) => boolean;
   presetLies?: (id: string) => PresetInhalt | null;
+  // Kraken patch field: the labels and default pins of the matrix node of a graph, null = no such graph or no matrix node; absent = no lookup (a
+  // first pin is refused kein_steckfeld)
+  steckfeldVon?: (graph: string) => Steckfeld | null;
   surgeBereich?: (name: string) => [number, number] | null;   // 1.9 U5: range of a Surge parameter (display units), null = unknown name
   surgeIst?: (slot: number, name: string) => number | null;   // 1.9 U5: the value the host of the slot plays now (display units), null = not known
   surgePatchDa?: (name: string) => boolean;                   // does the Surge patch library hold this name; absent = the name rule only
@@ -665,6 +707,7 @@ export interface Kontext {
   musterUebersetze?: (a: { code: string; takte: number | null }) => MusterErgebnis | MusterFehlschlag;
   kitKlaenge?: (name: string) => KitKlang[] | null;
   musterMeldung?: (m: MusterMeldung) => void;
+  noteIdsAb?: number;   // fan-out of noten_neu (ADR 039): the notes carry drawn ids; the project note counter before the draw (see fuegeNotenEinMitIds)
 }
 export interface MusterMeldung {
   clip_id: string; spur_id: string; noten_zahl: number; takte: number; loop_beats: number | null;

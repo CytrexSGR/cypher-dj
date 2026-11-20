@@ -1,0 +1,22 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "fx-impact"},
+  "title": "Impact",
+  "akzent": "tuerkis",
+  "layout": {"rows": [
+    ["body", "out"]
+  ]},
+  "sections": [
+    { "id": "body", "title": "BODY", "cols": 3, "controls": [
+      {"id": "ahue", "type": "huelle", "span": 3, "label": "Envelope", "of": {"a": 0.0005, "d": "decay", "s": 0, "r": 1.5}},
+      {"id": "tune", "type": "knob", "label": "Tune", "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "drop", "type": "knob", "label": "Pitch drop", "bind": {"param": "k2"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "decay", "type": "knob", "label": "Decay", "bind": {"param": "k3"}, "format": "raw", "unit": "s", "default": 0.5}
+    ]},
+    { "id": "out", "title": "DEBRIS & OUT", "cols": 3, "controls": [
+      {"id": "debris", "type": "knob", "label": "Debris", "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
+      {"id": "drive", "type": "knob", "label": "Drive", "bind": {"param": "k5"}, "format": "db", "default": 0.5},
+      {"id": "hall", "type": "knob", "label": "Hall mix", "bind": {"param": "k6"}, "format": "percent", "default": 0.5}
+    ]}
+  ]
+}

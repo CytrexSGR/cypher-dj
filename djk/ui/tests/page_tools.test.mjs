@@ -1,7 +1,8 @@
 // A8 fix round 1: the real public/app.js executed against the DOM stand-in (tests/helpers/pages_mock.mjs), fetch and EventSource
-// recorded. Pins what the source-text checks in effects.test.mjs cannot: the strips send nothing while the page builds, the state case of
-// the stream fills the Gate/Utility strips (a running gate must not read "off" after load or reconnect), and the preset glue of app.js
-// (SAVE CURRENT / APPLY of a kern device) talks to /regler and /presets with the right fields.
+// recorded. Pins what the source-text checks in effects.test.mjs cannot: nothing is sent while the page builds, the tool bodies the live dock
+// builds (werkzeugStreifenHtml / busStreifenHtml with bindeWerkzeug and bindeBus, as live_dock/tool.js and master.js do; built here in a rig,
+// the dock itself is tested in Chrome) send and show the right values, and the preset glue of app.js (SAVE CURRENT / APPLY of a kern device)
+// talks to /regler and /presets with the right fields.
 import { test, before, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -17,7 +18,7 @@ const KOMP_PRESET = { ...GATE_PRESET, name: 'Plain Komp', geraet: 'komp', werte:
 const eintrag = (p, slug) => ({ herkunft: 'nutzer', geraet: p.geraet, geraet_typ: 'effekt', slug, name: p.name, tags: [], geaendert: p.geaendert, beschreibung: p.beschreibung, familie: 'effekt' });
 let streifen;
 const dokHoerer = {};
-let holeGraphen, setzeGraphenGeladen;   // from the page module, loaded after the stand-in is installed
+let rig = null, zeigeWerkzeugIn = null;   // the tool bodies of the live dock, built after the page module is loaded
 
 before(async () => {
   installiere({
@@ -41,27 +42,37 @@ before(async () => {
   streifen = attrappe.anrufe;
   document.addEventListener = (art, f) => { (dokHoerer[art] ??= []).push(f); };   // the stand-in's document drops listeners; the page-wide select handler (graph pickers) is driven by the MASTER tests
   await import('../public/app.js');
-  ({ holeGraphen, setzeGraphenGeladen } = await import('../public/graphs_view.js'));
+  const E = await import('../public/effects.js'), A = await import('../public/effects_view.js');
+  ({ zeigeWerkzeugIn } = A);
+  rig = document.createElement('div');
+  rig.className = 'werkzeug-rig';
+  rig.innerHTML = [['deck/1', 'A'], ['deck/2', 'B'], ['erz/1', 'DRUMS'], ['erz/2', 'BASS'], ['erz/3', 'MELODY'], ['erz/5', 'I5'], ['erz/6', 'I6'], ['erz/7', 'I7'], ['pad/1', 'L1'], ['pad/2', 'L2']]
+    .map(([k, name]) => `<div class="werkzeug-test" data-kanal="${k}">${E.werkzeugStreifenHtml(k, name)}</div>`).join('') + `<div class="buspanel">${E.busPanelHtml()}</div>`;
+  attrappe.body.append(rig);
+  A.bindeWerkzeug(rig); A.bindeBus(rig); A.zeigeLimiter(A.limiterJetzt());
   await new Promise((r) => setTimeout(r, 60));   // the preset panel loads its lists
 });
 
-const strip = (k) => attrappe.body.querySelector(`.fxstreifen[data-kanal="${k}"]`);
+const strip = (k) => attrappe.body.querySelector(`.werkzeug-test[data-kanal="${k}"]`);
+const frisch = (...k) => { for (const x of k) zeigeWerkzeugIn(strip(x), x); };   // what the refresh of a GATE or UTIL popover does
+// The page tells the controller which view it shows (seitenrahmen.js, POST /controller/ansicht): a report of the view, it moves no control and sounds nothing.
 const regler = (k, feld) => strip(k).querySelector(`input[data-werk-pfad="${k}/${feld}"]`);
 const knopf = (k, feld) => strip(k).querySelector(`button[data-werk-pfad="${k}/${feld}"]`);
 
-test('A8 building the page (the real app.js) builds 10 strips with Gate and Utility and sends no /regler', () => {
-  assert.equal(attrappe.body.querySelectorAll('.fxstreifen').length, 10);
-  assert.equal(attrappe.body.querySelectorAll('.fxstreifen .fxwerk-gate').length, 10);
-  assert.equal(attrappe.body.querySelectorAll('.fxstreifen .fxwerk-util').length, 10);
-  assert.deepEqual(attrappe.anrufe.filter((a) => a.url === '/regler' || a.methode !== 'GET'), [], 'nothing but reads while building');
+test('A8 building the page (the real app.js) sends no /regler; the EFFECTS tab holds the live dock, no channel strips', () => {
+  assert.ok(attrappe.body.querySelector('#live-dock'), 'the dock root');
+  assert.equal(attrappe.body.querySelectorAll('.fxstreifen, #fxstreifen, #fxdetail').length, 0, 'the old strips and the detail are gone');
+  assert.deepEqual(attrappe.anrufe.filter((a) => a.url === '/regler' || (a.methode !== 'GET' && a.url !== '/controller/ansicht')), [], 'nothing but reads while building');
   assert.ok(attrappe.anrufe.some((a) => a.url === '/graphen'), 'positive control: the build did run and fetch');
 });
 
-test('A8 the state case of the stream fills the Gate and Utility strips (a running gate is not shown as off after load or reconnect)', () => {
+test('A8 the state case of the stream fills the Gate and Utility bodies (a running gate is not shown as off after load or reconnect)', () => {
+  frisch('erz/1', 'erz/2', 'deck/1');
   assert.equal(knopf('erz/1', 'gate/an').getAttribute('aria-pressed'), 'false', 'before the state: off (default)');
   assert.equal(regler('erz/1', 'gate/schwelle').value, '-40');
   sendeStrom('stand', { regler: { 'erz/1/gate/an': 1, 'erz/1/gate/schwelle': -28, 'erz/1/gate/release': 250, 'erz/1/util/dc': 1, 'erz/1/util/breite': 150,
     'erz/1/util/bassmono': 120, 'deck/1/util/tausch': 1 }, decks: {}, geladen: {}, loops: {}, fx: [null, null], fxZuweisung: [{}, {}] });
+  frisch('erz/1', 'erz/2', 'deck/1');
   assert.equal(knopf('erz/1', 'gate/an').getAttribute('aria-pressed'), 'true');
   assert.ok(knopf('erz/1', 'gate/an').classList.contains('an'));
   assert.equal(regler('erz/1', 'gate/schwelle').value, '-28');
@@ -89,12 +100,12 @@ const zahl = (k, feld) => attrappe.body.querySelector(`[data-messer-zahl="${k}|$
 const LIM = ['lim/an', 'lim/decke', 'lim/abklingen'];
 let jetztFalsch = 1000;
 
-test('A8b building the page builds the BUS panel with four strips and sends nothing; the limiter controls are disabled with the reason', () => {
+test('A8b the bus strips (the BUS windows of the live dock) send nothing while built; the limiter controls are disabled with the reason', () => {
   assert.equal(attrappe.body.querySelectorAll('.buspanel').length, 1);
   assert.equal(attrappe.body.querySelectorAll('.busstreifen').length, 4);
   assert.equal(attrappe.body.querySelectorAll('.busstreifen .fxwerk-util').length, 4, 'the Utility block of A8 on every bus');
   assert.equal(attrappe.body.querySelectorAll('.busstreifen .fxwerk-gate').length, 0, 'no gate on buses (D2)');
-  assert.deepEqual(attrappe.anrufe.filter((a) => a.url === '/regler' || a.methode !== 'GET'), [], 'nothing but reads while building');
+  assert.deepEqual(attrappe.anrufe.filter((a) => a.url === '/regler' || (a.methode !== 'GET' && a.url !== '/controller/ansicht')), [], 'nothing but reads while building');
   for (const k of ['bus/1', 'bus/4']) {
     for (const f of LIM) assert.ok(bus(k).querySelector(`[data-werk-pfad="${k}/${f}"]`).disabled, `${k} ${f} disabled while /lage has no kanal_limiter`);
     assert.ok(!bknopf(k, 'mb/an').disabled && !bregler(k, 'mb/grenze_tief').disabled && !bknopf(k, 'util/dc').disabled, 'negative control: multiband and utility are enabled');
@@ -263,7 +274,7 @@ test('A6 meters: gate_db of /zustand/mix drives the gate meter of a source chann
   } finally { mock.restoreAll(); }
 });
 
-test('A8 the existing Gate and Utility strips: switch click, slider input and the /e/regler echo reach the right paths without sending back', async () => {
+test('A8 the Gate and Utility bodies: switch click, slider input and the /e/regler echo reach the right paths without sending back', async () => {
   const von = attrappe.anrufe.length;
   knopf('erz/2', 'gate/an').click();
   knopf('pad/1', 'util/tausch').click();
@@ -275,6 +286,7 @@ test('A8 the existing Gate and Utility strips: switch click, slider input and th
   sendeStrom('/e/regler', { pfad: 'erz/2/gate/schwelle', wert: -55 });
   sendeStrom('/e/regler', { pfad: 'erz/2/gate/an', wert: 1 });
   sendeStrom('/e/regler', { pfad: 'pad/1/util/bassmono', wert: 90 });
+  frisch('erz/2', 'pad/1', 'erz/3');
   assert.equal(regler('erz/2', 'gate/schwelle').value, '-55');
   assert.equal(regler('erz/2', 'gate/schwelle').nextElementSibling.textContent, '-55 dB');
   assert.ok(knopf('erz/2', 'gate/an').classList.contains('an'));
@@ -387,70 +399,17 @@ test('review: a refusal of the 2nd /regler request stops the apply: the 3rd is n
   assert.match(hauptfeld().querySelector('.preset-meldung').textContent, /^Applied Tight Gate/);
 });
 
-// ---- MASTER tab: the master chain, the picker on kanal "master" and the light -----------------------------------------------------------
-const masterReiter = () => attrappe.body.querySelector('.fxreiter-tab[data-reiter="master"]');
-const masterLicht = () => masterReiter().querySelector('.licht-insert').classList.contains('an');
-const waehle = (sel, wert) => { sel.value = wert; for (const f of dokHoerer.change ?? []) f({ target: sel }); };
-
-test('MASTER tab: leftmost, 13 tabs, the panel holds picker, glue and limiter meter in that order; the bus limiters stay in BUS', () => {
-  const reiter = [...attrappe.body.querySelectorAll('.fxreiter .fxreiter-tab')].map((b) => b.dataset.reiter);
-  assert.equal(reiter.length, 13);
-  assert.deepEqual(reiter, ['master', 'deck/1', 'deck/2', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2', 'sends', 'bus']);
-  const panel = attrappe.body.querySelector('.masterpanel');
-  assert.deepEqual([...panel.querySelectorAll('.fx-glied-titel')].map((e) => e.children.join('')), ['INSERT', 'GLUE', 'LIMITER']);
-  assert.ok(panel.querySelector('[data-graphplatz="master"]') && panel.querySelector('[data-pfad="master/kleber"]') && panel.querySelector('[data-messer="master|limiter_db"]'));
-  assert.equal(attrappe.body.querySelectorAll('.masterpanel .fxwerk-lim').length, 0, 'no bus limiter in MASTER');
-  assert.equal(attrappe.body.querySelectorAll('.buspanel .fxwerk-lim').length, 4, 'the four bus limiters are in BUS');
-  assert.equal(masterReiter().querySelectorAll('i').length, 1, 'one light on the MASTER tab');
-});
-
-test('MASTER glue: the same path as the mixer strip; one state value moves both knobs and both numbers, and the second knob is a real handle', async () => {
-  const knoepfe = attrappe.body.querySelectorAll('.knopf[data-pfad="master/kleber"]');
-  assert.equal(knoepfe.length, 2, 'mixer strip and MASTER tab');
-  assert.equal(attrappe.body.querySelectorAll('[data-wert="master/kleber"]').length, 2);
-  sendeStrom('stand', { regler: { 'master/kleber': 0.5 }, decks: {}, geladen: {}, loops: {}, fx: [null, null], fxZuweisung: [{}, {}] });
-  for (const o of attrappe.body.querySelectorAll('[data-wert="master/kleber"]')) assert.equal(o.textContent, '50%');
-  const zeiger = [...knoepfe].map((k) => k.querySelector('.zeiger').getAttribute('transform'));
-  assert.equal(zeiger[0], zeiger[1], 'both pointers at the same angle');
-  assert.notEqual(zeiger[0], undefined);
-  assert.equal(window.djkRegler.get('master/kleber').el, knoepfe[0], 'the first handle stays under the path');
-  assert.equal([...window.djkRegler.values()].filter((r) => r.pfad === 'master/kleber').length, 2, 'the MASTER knob is bound too');
-  const von = attrappe.anrufe.length;
-  knoepfe[1].setPointerCapture = () => {};
-  knoepfe[1].dispatch('pointerdown', { button: 0, pointerId: 1, clientX: 0, clientY: 0 });
-  await pause(30);
-  assert.deepEqual(attrappe.anrufe.slice(von).filter((a) => a.url === '/griff').map((a) => a.koerper.pfad), ['master/kleber'], 'grabbing the MASTER knob goes the hand route of the mixer strip');
-});
-
-test('MASTER LIMITER meter: limiter_db of /zustand/arr (<= 0) shown as reduction; a message without the field shows "–"', () => {
-  const m = () => [attrappe.body.querySelector('[data-messer="master|limiter_db"]').style.width, attrappe.body.querySelector('[data-messer-zahl="master|limiter_db"]').textContent];
-  sendeStrom('/zustand/arr', { nr: 1, status: 2, limiter_db: -6 });
-  assert.deepEqual(m(), ['25%', '6.0 dB']);
-  sendeStrom('/zustand/arr', { nr: 1, status: 2, limiter_db: 0 });
-  assert.deepEqual(m(), ['0%', '0.0 dB']);
-  sendeStrom('/zustand/arr', { nr: 1, status: 2 });
-  assert.deepEqual(m(), ['0%', '–'], 'older core: no value, no reading');
-});
-
-test('MASTER insert picker: choosing a graph sends POST /graph {kanal: "master", name} like the picker of another channel; a loaded graph shows in the picker and lights the tab', async () => {
-  attrappe.antworten['GET /graphen'] = { j: { graphen: [{ name: 'hall-a', art: 'effekt', regler_namen: {} }, { name: 'tape-b', art: 'effekt', regler_namen: {} }, { name: 'bass-x', art: 'instrument', regler_namen: {} }], geladen: {} } };
-  attrappe.antworten['POST /graph'] = { j: { quittung: { status: 3 } } };
-  await holeGraphen();
-  const sel = (k) => attrappe.body.querySelector(`select[data-graphwahl="${k}"]`);
-  assert.ok(attrappe.body.querySelector('.masterpanel').contains(sel('master')), 'the picker sits in the MASTER panel');
-  assert.deepEqual(sel('master').children.map((o) => o.attrs.value), ['', 'hall-a', 'tape-b'], 'effect graphs only, the empty entry first');
-  assert.equal(masterLicht(), false, 'no graph: light off');
-  const post = (von) => attrappe.anrufe.slice(von).filter((a) => a.url === '/graph' && a.methode === 'POST').map((a) => a.koerper);
-  const von = attrappe.anrufe.length;
-  waehle(sel('master'), 'hall-a');
-  await pause(30);
-  waehle(sel('deck/1'), 'tape-b');
-  await pause(30);
-  assert.deepEqual(post(von), [{ kanal: 'master', name: 'hall-a' }, { kanal: 'deck/1', name: 'tape-b' }], 'same request shape, kanal master');
-  // the server reports what is loaded (stream state): picker and light follow
-  setzeGraphenGeladen({ master: 'tape-b' });
-  assert.equal(sel('master').children.find((o) => 'selected' in o.attrs || o.attrs.selected !== undefined)?.attrs.value, 'tape-b', 'the loaded graph is selected in the MASTER picker');
-  assert.equal(masterLicht(), true, 'graph loaded on master: light on');
-  setzeGraphenGeladen({});
-  assert.equal(masterLicht(), false, 'graph removed: light off again');
+test('dock helpers: gateGrJetzt and masterLimiterJetzt read the live values without the DOM', async () => {
+  const { gateGrJetzt, busGrJetzt, masterLimiterJetzt, zeigeMasterLimiter } = await import('../public/effects_view.js');
+  assert.equal(gateGrJetzt('erz/1'), gateGrJetzt('erz/1'), 'callable');
+  sendeStrom('/zustand/mix', { kanal: 'erz/1', gate_db: 12 });
+  assert.equal(gateGrJetzt('erz/1'), 12);
+  assert.equal(gateGrJetzt('erz/2'), null, 'negative control: a channel without a reading');
+  sendeStrom('/zustand/mix', { kanal: 'bus/1', lim_db: 5 });
+  assert.equal(busGrJetzt('bus/1', 'lim_db'), 5);
+  zeigeMasterLimiter({ limiter_db: -3 });
+  assert.equal(masterLimiterJetzt(), 3);
+  zeigeMasterLimiter({});
+  assert.equal(masterLimiterJetzt(), null, 'a reading without the field is no reading');
+  zeigeMasterLimiter(null);
 });

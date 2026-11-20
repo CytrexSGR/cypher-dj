@@ -7,7 +7,7 @@
 //   POST /seq/befehle {platz, label?, befehle}         a command list of the page, one gesture = one undo step; only the commands below, each on a track of the
 //                                                      deck or a clip of such a track, only the fields below
 //   POST /seq/text {platz, text}                       one or several patterns as text (seq_text.ts); one write, one undo step, all or nothing
-//   POST /seq/modul {slug, platz}                      a Workbench module (read from disk) becomes patterns of the deck (project/module_after_seq.ts); one undo step,
+//   POST /seq/modul {slug, platz, abschnitt?}          a Workbench module, or one section of any project (TO DJ) becomes patterns of the deck (project/module_after_seq.ts); one undo step,
 //                                                      all or nothing; answers {ok, bericht, rev, projekt, gruppe_id}; a new deck follows the rules of seq_anlegen
 //   GET  /seq/stand[?zellen=1]                         (`zellen=1` adds `zellen`, one char per cell, to the note rows) {"1": null | {gruppe_id, folgen: [{spur_id, clip_id, name, geraet, stumm, editierbar, laenge_beats, zeilen, text}]}, ...}
 //   POST /seq/szene {slot, aktion}                     SEQ scenes: aktion `speichern` stores the picture of the current M buttons in slot 0..7, `loeschen` empties it,
@@ -41,6 +41,7 @@ import { SZENEN_SLOTS, type Szene } from '../../project/model.ts';
 import { szenenZielBeat, type ZielEingang } from '../proj/szenen_bar.ts';
 import { ProjFehler, type Antwort } from '../proj/session.ts';
 import { aendereStand, StandFehler } from '../../project/state.ts';
+import { BefehlFehler } from '../../project/commands.ts';
 import { NachSeqFehler, setzeModulNachSeq, type BefehlsKontext } from '../../project/module_after_seq.ts';
 import { findeGraph } from '../../graphs.ts';
 import { kitDa } from '../proj/kits.ts';
@@ -195,10 +196,13 @@ export class SeqBereich {
   // A Workbench module becomes patterns of the deck of `platz`. The module is read from disk; the open project must be the live container. Everything is
   // computed first (setzeModulNachSeq), then stored as ONE undo step, so a refusal writes nothing. A new deck follows the rules of seq_anlegen (deck_laeuft,
   // kanal_offen); patterns added to an existing deck are not gated (they arrive muted).
+  // With `abschnitt` (a section id) the slug may be any project, e.g. a tracker project: TO DJ loads that one section (task 24, D23).
   async modul(d: Record<string, unknown>, quelle: Quelle): Promise<Antwort> {
-    nurFelder(d, ['slug', 'platz']);
+    nurFelder(d, ['slug', 'platz', 'abschnitt']);
     const platz = platzVon(d);
     if (typeof d.slug !== 'string' || d.slug === '') ungueltig('slug: the slug of a Workbench module expected');
+    if (d.abschnitt !== undefined && (typeof d.abschnitt !== 'string' || d.abschnitt === '')) ungueltig('abschnitt: a section id expected');
+    const abschnitt = d.abschnitt as string | undefined;
     const slug = d.slug as string;
     this.ki(quelle);
     this.brauchLive();
@@ -214,8 +218,8 @@ export class SeqBereich {
       }
       try {
         const kontext = this.o.befehlsKontext?.() ?? { graphArt: (n: string) => findeGraph(n)?.art ?? null, kitDa, kitKlaenge };
-        const r = setzeModulNachSeq(o.projekt, modul, platz, { kontext, quelle });
-        const meta = { quelle, label: `load module ${modul.name} into SEQ ${platz}`.slice(0, 80) };
+        const r = setzeModulNachSeq(o.projekt, modul, platz, { kontext, quelle, ...(abschnitt !== undefined ? { abschnitt_id: abschnitt } : {}) });
+        const meta = { quelle, label: `load ${abschnitt !== undefined ? 'section of' : 'module'} ${modul.name} into SEQ ${platz}`.slice(0, 80) };
         const w = aendereStand(o.verlauf, o.projekt, r.projekt, meta, this.zugang.haken());
         await this.zugang.uebernimm(w, meta);
         const jetzt = this.brauchLive().projekt;
@@ -224,6 +228,7 @@ export class SeqBereich {
         return { code: 200, j: { ok: true, bericht: r.bericht, rev: jetzt.rev, projekt: jetzt, gruppe_id: seqGruppe(jetzt, platz)?.id ?? '' } };
       } catch (e) {
         if (e instanceof NachSeqFehler) throw new ProjFehler(e.code, e.fehler, e.extra);
+        if (e instanceof BefehlFehler) throw new ProjFehler(409, e.grund, { detail: e.detail });
         if (e instanceof StandFehler) throw new ProjFehler(409, e.grund, { text: e.text, detail: e.detail });
         throw e;
       }

@@ -1,0 +1,13 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "fx-lofi-sp1200"},
+  "title": "Lo-Fi SP-1200",
+  "akzent": "tuerkis",
+  "sections": [
+    { "id": "lofi", "title": "LO-FI", "cols": 2, "controls": [
+      {"id": "bits", "type": "knob", "label": "Bit depth", "bind": {"param": "k1"}, "format": "raw", "unit": "bit", "default": 0.5},
+      {"id": "rate", "type": "knob", "label": "Sample rate", "bind": {"param": "k2"}, "format": "hz", "default": 0.5},
+      {"id": "l1", "type": "label", "span": 2, "text": "Low values crunch and alias on purpose"}
+    ]}
+  ]
+}

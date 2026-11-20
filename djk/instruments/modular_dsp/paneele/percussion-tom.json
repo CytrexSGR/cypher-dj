@@ -1,0 +1,23 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "percussion-tom"},
+  "title": "Tom",
+  "akzent": "rot",
+  "layout": {"rows": [
+    ["pitch", "amp", "tone"]
+  ]},
+  "sections": [
+    { "id": "pitch", "title": "PITCH", "cols": 2, "controls": [
+      {"id": "tune", "type": "knob", "label": "Tune", "span": 2, "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "pdrop", "type": "knob", "label": "Pitch drop", "span": 2, "bind": {"param": "k2"}, "format": "raw", "unit": "st", "default": 0.5}
+    ]},
+    { "id": "amp", "title": "AMP", "cols": 2, "controls": [
+      {"id": "hue", "type": "huelle", "span": 2, "label": "Envelope", "of": {"a": 0.0005, "d": "decay", "s": 0, "r": 0.4}},
+      {"id": "decay", "type": "knob", "label": "Decay", "span": 2, "bind": {"param": "k3"}, "format": "raw", "unit": "s", "default": 0.5}
+    ]},
+    { "id": "tone", "title": "TONE", "cols": 2, "controls": [
+      {"id": "env", "type": "knob", "label": "Filter env amount", "bind": {"param": "k4"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "room", "type": "knob", "label": "Room mix", "bind": {"param": "k5"}, "format": "percent", "default": 0.5}
+    ]}
+  ]
+}

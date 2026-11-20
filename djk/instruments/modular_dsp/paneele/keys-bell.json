@@ -1,0 +1,20 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "keys-bell"},
+  "title": "Bell Keys",
+  "akzent": "tuerkis",
+  "layout": {"rows": [
+    ["tone", "fx"]
+  ]},
+  "sections": [
+    { "id": "tone", "title": "BELL", "cols": 2, "controls": [
+      {"id": "index", "type": "knob", "label": "FM index", "bind": {"param": "k1"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "decay", "type": "knob", "label": "Decay", "bind": {"param": "k2"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "inote", "type": "label", "span": 2, "text": "Higher index = brighter, harsher"}
+    ]},
+    { "id": "fx", "title": "REVERB + DELAY", "cols": 2, "controls": [
+      {"id": "rmix", "type": "knob", "label": "Hall mix", "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
+      {"id": "dmix", "type": "knob", "label": "Delay mix", "bind": {"param": "k4"}, "format": "percent", "default": 0.5}
+    ]}
+  ]
+}

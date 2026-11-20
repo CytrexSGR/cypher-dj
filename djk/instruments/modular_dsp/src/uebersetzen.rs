@@ -13,7 +13,7 @@ use crate::adsr::Adsr;
 use crate::chorus::Chorus;
 use crate::echo::Echo;
 use crate::faltung::Faltung;
-use crate::format::{Graph, FORMATE};
+use crate::format::{Graph, PaulaPlatz, FORMATE};
 use crate::gate::Gate;
 use crate::krume::Krume;
 use crate::leitung::Leitung;
@@ -30,10 +30,12 @@ use crate::roehre::{Roehre, RoehrenSatz, BIAS_MAX, BIAS_MIN};
 use crate::svf::Svf;
 use crate::allpass::Allpass;
 use crate::kreuz::Kreuz;
+use crate::lfsr::Lfsr;
+use crate::paula::{Bank as PaulaBank, Platz as PaulaPlatz2, PlatzEinst, Stimme as PaulaStimme};
 use crate::sem::Sem;
 use crate::diode::Diode;
 use crate::vocoder::Vocoder;
-use crate::wavetable::{Stimme as WtStimme, Tabelle, TABELLEN};
+use crate::wavetable::{Stimme as WtStimme, TABELLEN};
 use crate::resonator::{Satz, Stimme as RsStimme, SAETZE};
 use crate::saite::{Stimme as SaStimme, ANREGER, KOERPER};
 use rb_dsp::Ladder;
@@ -95,7 +97,7 @@ pub struct ArtDef {
     pub frei: &'static [(&'static str, f32)],
 }
 
-pub const ARTEN: [ArtDef; 56] = [
+pub const ARTEN: [ArtDef; 62] = [
     ArtDef { art: "note", ein: &[], aus: &["hz", "gate", "vel", "trig", "erste"], werte: &[], frei: &[] },
     ArtDef { art: "konst", ein: &[], aus: &["aus"], werte: &["wert"], frei: &[] },
     // `vorgabe`: knob position the graph starts at (0..1). `mitte`: value at knob position 0.5; its default NaN is the "absent" marker
@@ -146,9 +148,11 @@ pub const ARTEN: [ArtDef; 56] = [
     // Stage 2a: `zonen` (named field) is a zone table (multisample instrument, `datei` is then a mapped pack); `vel` (0..1, read
     // at the trigger) chooses the velocity layer there.
     // Stage 2b: `loop_blende` (ms at 48 kHz, 0..500, zone mode only) is the cross-fade of the sustain loops of the zones; the outputs
+    // Stage 2c (zone mode only): `taste_blende` (0..24 keys) and `vel_blende` (0..127 steps) cross-fade the edges of key and velocity
+    // ranges, `frei_halte` (0..60 s) halves the level of a release sample per hold time; 0 is off.
     // `rl`, `rr` (appended after `l`, `r`) carry the release samples (zones of art 1) and are silent without zones.
     ArtDef { art: "sampler", ein: &["hz", "trig", "gate", "scheibe", "rueck", "tempo", "halb", "ausklang", "vel"], aus: &["l", "r", "rl", "rr"], werte: &[],
-             frei: &[("grund", 261.6256), ("scheiben", 1.0), ("schleife", 0.0), ("gate", 1.0), ("noten_wahl", 0.0), ("tempo", 1.0), ("halb", 0.0), ("ausklang", 5.0), ("vel", 1.0), ("loop_blende", 20.0)] },
+             frei: &[("grund", 261.6256), ("scheiben", 1.0), ("schleife", 0.0), ("gate", 1.0), ("noten_wahl", 0.0), ("tempo", 1.0), ("halb", 0.0), ("ausklang", 5.0), ("vel", 1.0), ("loop_blende", 20.0), ("taste_blende", 0.0), ("vel_blende", 0.0), ("frei_halte", 0.0)] },
     // S21: convolution with an IR file (sum point, zero latency); type 31. `datei` is a named field like sampler's.
     ArtDef { art: "faltung", ein: &["x", "l", "r", "mix"], aus: &["l", "r"], werte: &[], frei: &[("mix", 1.0), ("pre", 0.0), ("laenge_max", 1000.0)] },
     // wavetable oscillator with unison inside the voice (wavetable.rs); type 32. `aus` is the sum without pan.
@@ -232,6 +236,38 @@ pub const ARTEN: [ArtDef; 56] = [
     ArtDef { art: "chaos", ein: &["rate", "trig"], aus: &["aus", "aus2"], werte: &[], frei: &[("rate", 1.0), ("form", 0.0), ("saat", 0.0)] },
     // Frequency shifter (schieber.rs); type 55 (appended after chaos). Hilbert pair plus quadrature oscillator: `auf` up and `ab` down by `hz` (-2000..2000 Hz). No latency.
     ArtDef { art: "schieber", ein: &["x", "hz"], aus: &["auf", "ab"], werte: &[], frei: &[("hz", 0.0)] },
+    // Amiga sample voice (paula.rs); type 56 (appended after schieber). `plaetze` (named field, 1..32 slots with their own files) is the
+    // bank; `platz` picks the slot (1-based, rounded, clamped), `start` 0..1 and `rueckwaerts` are read at the trigger. `quellrate` (Hz) and
+    // `bits` are the chip's: the read index holds on the grid of min(quellrate, slot rate), the value is quantised to `bits`. No latency.
+    ArtDef { art: "paula", ein: &["hz", "trig", "gate", "platz", "start", "rueckwaerts"], aus: &["l", "r"], werte: &[], frei: &[("quellrate", 16574.0), ("bits", 8.0)] },
+    // Chip noise (lfsr.rs); type 57 (appended after paula). The 15-bit register of the NES (D19), clocked by `hz`; `kurz` 1 is the 93 step
+    // period, 0 the 32767 step one. Output `aus` is -1 or 1. No latency.
+    ArtDef { art: "lfsr", ein: &["hz"], aus: &["aus"], werte: &[], frei: &[("kurz", 0.0)] },
+    // Dual-slope function generator (funktion.rs); type 58 (appended after lfsr). Attack-decay envelope, slew limiter, LFO and audio
+    // oscillator in one: `x` is followed (up at `steigen`, down at `fallen`, seconds for a full 0..1 swing, 0.0001..60), a rising edge of
+    // `trig` rises to 1 first, `halt` above 0.5 holds the top, `zyklus` above 0.5 restarts at the end of the fall, `form` -1 logarithmic
+    // .. 0 linear .. +1 exponential, `tempo` (-8..8 octaves) multiplies both rates by 2^tempo per sample. `ende` is 1 for 1 ms when a
+    // triggered or cycling fall has arrived, `steigt` is 1 while rising after a trigger. No latency.
+    ArtDef { art: "funktion", ein: &["x", "trig", "halt", "steigen", "fallen", "form", "zyklus", "tempo"], aus: &["aus", "ende", "steigt"], werte: &[],
+             frei: &[("x", 0.0), ("trig", 0.0), ("halt", 0.0), ("steigen", 0.01), ("fallen", 0.3), ("form", 0.0), ("zyklus", 0.0), ("tempo", 0.0)] },
+    // Low-pass gate with a vactrol model (lpg.rs); type 59 (appended after funktion). The Buchla 292 of Parker and D'Angelo: `cv` (+ `versatz`,
+    // clamped 0..1.5) drives a vactrol with a fast attack and a level-dependent slow decay (`abkling` 0.1..10 scales it), the vactrol sets
+    // the resistance of the filter. `modus` 0 low-pass (with `reso` 0..1 feedback), 1 both, 2 VCA. A closed gate is exactly 0. No latency.
+    ArtDef { art: "lpg", ein: &["x", "cv", "modus", "abkling", "reso", "versatz"], aus: &["aus"], werte: &[],
+             frei: &[("x", 0.0), ("cv", 0.0), ("modus", 1.0), ("abkling", 1.0), ("reso", 0.0), ("versatz", 0.0)] },
+    // Pin matrix (matrix.rs); type 60 (appended after lpg). 16 sources `e1`..`e16` to 16 destinations `a1`..`a16`: `a_j = sum_i w[i][j] * e_i`
+    // per voice, `w = A + (B - A) * clamp(morph, 0, 1)` per sample, two weight sets A and B. The weights are not scalar values: the node
+    // carries `zeilen` and `spalten` (16 labels each, required) and optional default `stifte` (`[satz, zeile, spalte, wert]`), and the
+    // running program takes pin changes with `Programm::stift_setzen`. Edges into `e1`..`e16` always read the sample before (like
+    // `leitung.x`), so a patch through the matrix can never be a cycle error; `a1`..`a16` feed the same sample. At most one per graph.
+    // No latency.
+    ArtDef { art: "matrix", ein: &["e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9", "e10", "e11", "e12", "e13", "e14", "e15", "e16", "morph"],
+             aus: &["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9", "a10", "a11", "a12", "a13", "a14", "a15", "a16"], werte: &[],
+             frei: &[("morph", 0.0)] },
+    // Note select (notenwahl.rs); type 61 (appended after matrix). `hz` of a `note` node in, the index 0..7 of the pad the note belongs to out
+    // (for the `wahl` input of a selector). `n1`..`n8` are the pad notes (MIDI, -1 = not used); a note no pad owns plays the next pad below. No latency.
+    ArtDef { art: "notenwahl", ein: &["hz"], aus: &["aus"], werte: &[],
+             frei: &[("n1", -1.0), ("n2", -1.0), ("n3", -1.0), ("n4", -1.0), ("n5", -1.0), ("n6", -1.0), ("n7", -1.0), ("n8", -1.0)] },
 ];
 
 /// Arts whose node carries a `datei` (a file in the sample root, read at translation).
@@ -245,6 +281,41 @@ pub fn hall_vorgabe() -> hall_dsp::HallEinstellung {
 }
 
 fn ganz(w: f32, von: f32, bis: f32) -> bool { w.fract() == 0.0 && (von..=bis).contains(&w) }
+
+/// Slot bank of a `paula` node (stage 4): 1..=32 slots with plausible values. Everything that does not need the files; the loop is
+/// checked against the data length when the file is read. The error is the name of the field (`plaetze[3].grund`) and the reason.
+fn pruefe_plaetze(p: &[PaulaPlatz]) -> Result<(), (String, &'static str)> {
+    if !(1..=crate::paula::MAX_PLAETZE).contains(&p.len()) {
+        return Err(("plaetze".to_string(), "1..32 slots"));
+    }
+    for (i, s) in p.iter().enumerate() {
+        let f = |feld: &str, grund: &'static str| Err((format!("plaetze[{i}].{feld}"), grund));
+        if let Some(n) = &s.name {
+            if !(1..=22).contains(&n.chars().count()) {
+                return f("name", "1..22 characters");
+            }
+        }
+        if !(20.0..=2000.0).contains(&s.grund) {
+            return f("grund", "20..2000 Hz");
+        }
+        if !(4000.0..=48_000.0).contains(&s.rate) {
+            return f("rate", "4000..48000 Hz");
+        }
+        if s.schleife > 1 {
+            return f("schleife", "0 or 1");
+        }
+        if s.schleife == 1 && s.s_laenge == 0 {
+            return f("s_laenge", "a loop needs s_laenge of at least 1 frame");
+        }
+        if !(0.0..=1.0).contains(&s.pegel) {
+            return f("pegel", "0..1");
+        }
+        if !(-8..=7).contains(&s.fein) {
+            return f("fein", "-8..7 eighths of a semitone");
+        }
+    }
+    Ok(())
+}
 
 /// Slice table of a `sampler` node (sampler A1, D1): 2..=65 entries, strictly rising, every slice at least 4 frames (the
 /// Catmull-Rom read needs 4 points); with `frames` also the last entry at most `frames`.
@@ -333,6 +404,33 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
                 return falsch("spektren", "spektren replaces tabelle: tabelle must be absent or 0");
             }
         }
+        if k.zeilen.is_some() && def.art != "matrix" {
+            return falsch("zeilen", "zeilen is only allowed on matrix");
+        }
+        if k.spalten.is_some() && def.art != "matrix" {
+            return falsch("spalten", "spalten is only allowed on matrix");
+        }
+        if k.stifte.is_some() && def.art != "matrix" {
+            return falsch("stifte", "stifte is only allowed on matrix");
+        }
+        if def.art == "matrix" {
+            match &k.zeilen {
+                None => return Err(Fehler::FehlenderWert { knoten: k.id.clone(), wert: "zeilen".to_string() }),
+                Some(z) => if let Err(grund) = crate::matrix::pruefe_namen(z) { return falsch("zeilen", grund); },
+            }
+            match &k.spalten {
+                None => return Err(Fehler::FehlenderWert { knoten: k.id.clone(), wert: "spalten".to_string() }),
+                Some(s) => if let Err(grund) = crate::matrix::pruefe_namen(s) { return falsch("spalten", grund); },
+            }
+            if let Some(st) = &k.stifte {
+                if let Err(grund) = crate::matrix::pruefe_stifte(st) {
+                    return falsch("stifte", grund);
+                }
+            }
+            if g.knoten.iter().filter(|n| n.art == "matrix").count() > 1 {
+                return falsch("art", "at most one matrix per graph");
+            }
+        }
         if k.grenzen.is_some() && def.art != "sampler" {
             return falsch("grenzen", "grenzen is only allowed on sampler");
         }
@@ -363,11 +461,31 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
             if !(0.0..=500.0).contains(&w("loop_blende")) {
                 return falsch("loop_blende", "0..500 ms");
             }
+            for (feld, bis, einheit) in [("taste_blende", 24.0, "0..24 keys"), ("vel_blende", 127.0, "0..127 steps"), ("frei_halte", 60.0, "0..60 s")] {
+                if !(0.0..=bis).contains(&w(feld)) {
+                    return falsch(feld, einheit);
+                }
+            }
             if let Err(e) = ZonenTabelle::neu_mit(z, None, w("loop_blende") as f64) {
                 return Err(zonen_fehler(&k.id, e));
             }
-        } else if k.werte.contains_key("loop_blende") {
-            return falsch("loop_blende", "loop_blende is only allowed with zonen (zone mode)");
+        } else {
+            for feld in ["loop_blende", "taste_blende", "vel_blende", "frei_halte"] {
+                if k.werte.contains_key(feld) {
+                    return falsch(feld, "this value is only allowed with zonen (zone mode)");
+                }
+            }
+        }
+        if k.plaetze.is_some() && def.art != "paula" {
+            return falsch("plaetze", "plaetze is only allowed on paula");
+        }
+        if def.art == "paula" {
+            let Some(p) = &k.plaetze else {
+                return Err(Fehler::FehlenderWert { knoten: k.id.clone(), wert: "plaetze".to_string() });
+            };
+            if let Err((wert, grund)) = pruefe_plaetze(p) {
+                return Err(Fehler::Wert { knoten: k.id.clone(), wert, grund });
+            }
         }
         match def.art {
             "sampler" if !(20.0..=2000.0).contains(&w("grund")) => return falsch("grund", "20..2000 Hz"),
@@ -467,6 +585,19 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
             "chaos" if !ganz(w("saat"), 0.0, 65_535.0) => return falsch("saat", "integer 0..65535"),
             "schieber" if !(-crate::schieber::MAX_HZ..=crate::schieber::MAX_HZ).contains(&w("hz")) => return falsch("hz", "-2000..2000 Hz"),
             "allpass" if w("ordnung") != 1.0 && w("ordnung") != 2.0 => return falsch("ordnung", "1 or 2"),
+            "paula" if !(4000.0..=48_000.0).contains(&w("quellrate")) => return falsch("quellrate", "4000..48000 Hz"),
+            "paula" if !ganz(w("bits"), 4.0, 16.0) => return falsch("bits", "integer 4..16"),
+            "lfsr" if !ganz(w("kurz"), 0.0, 1.0) => return falsch("kurz", "0 or 1"),
+            "notenwahl" if !(1..=8).all(|i| ganz(w(&format!("n{i}")), -1.0, 127.0)) => return falsch("n1..n8", "integer -1..127"),
+            "funktion" if !(crate::funktion::ZEIT_MIN as f32..=crate::funktion::ZEIT_MAX as f32).contains(&w("steigen")) => return falsch("steigen", "0.0001..60 s"),
+            "funktion" if !(crate::funktion::ZEIT_MIN as f32..=crate::funktion::ZEIT_MAX as f32).contains(&w("fallen")) => return falsch("fallen", "0.0001..60 s"),
+            "funktion" if !(-1.0..=1.0).contains(&w("form")) => return falsch("form", "-1..1"),
+            "funktion" if !(-8.0..=8.0).contains(&w("tempo")) => return falsch("tempo", "-8..8 octaves"),
+            "lpg" if !(0.0..=1.5).contains(&w("cv")) => return falsch("cv", "0..1.5"),
+            "lpg" if !(-1.5..=1.5).contains(&w("versatz")) => return falsch("versatz", "-1.5..1.5"),
+            "lpg" if !(0.0..=2.0).contains(&w("modus")) => return falsch("modus", "0 low-pass, 1 both, 2 VCA"),
+            "lpg" if !(0.1..=10.0).contains(&w("abkling")) => return falsch("abkling", "0.1..10"),
+            "lpg" if !(0.0..=1.0).contains(&w("reso")) => return falsch("reso", "0..1"),
             "kreuz" if w("baender") != 2.0 && w("baender") != 3.0 => return falsch("baender", "2 or 3"),
             "sem" if !(0.0..=1.0).contains(&w("reso")) => return falsch("reso", "0..1"),
             "sem" if !(0.0..=1.0).contains(&w("form")) => return falsch("form", "0 low-pass, 0.5 notch, 1 high-pass"),
@@ -578,7 +709,8 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
             return Err(Fehler::MehrfachEingang(e.nach.clone()));
         }
         // die Kante in leitung.x liest immer das Sample davor (D3): ein Kreis durch eine Leitung ist kein Fehler
-        let verz = e.verzoegerung == 1 || (ndef.art == "leitung" && np == "x");
+        // the same holds for the inputs of a matrix (`e1`..`e16`): its outputs feed the same sample, the inputs read the sample before
+        let verz = e.verzoegerung == 1 || (ndef.art == "leitung" && np == "x") || (ndef.art == "matrix" && np.starts_with('e'));
         eingang.insert(schluessel, (vk.to_string(), vp.to_string(), verz));
     }
     // Reihenfolge (Kahn), nur über Kanten ohne Verzögerung; bereit = sortierte Menge der IDs
@@ -700,8 +832,52 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
             "svf" => Schritt::Svf { x: q("x"), cutoff: q("cutoff"), reso: q("reso"), tp: aus(k, "tp"), bp: aus(k, "bp"), hp: aus(k, "hp"), vier: w("pole") == 4.0, f: [Svf::default(); MAX_STIMMEN] },
             "allpass" => Schritt::Allpass { x: q("x"), fc: q("fc"), fc2: q("fc2"), aus: aus(k, "aus"), ordnung: w("ordnung") as u8, f: [Allpass::default(); MAX_STIMMEN] },
             "kreuz" => Schritt::Kreuz { x: q("x"), fc1: q("fc1"), fc2: q("fc2"), lo: aus(k, "lo"), mid: aus(k, "mid"), hi: aus(k, "hi"), baender: w("baender") as u8, f: [Kreuz::default(); MAX_STIMMEN] },
-            "chaos" => Schritt::Chaos { rate: q("rate"), trig: q("trig"), aus: aus(k, "aus"), aus2: aus(k, "aus2"), form: w("form") as u8, saat: w("saat") as u32, c: std::array::from_fn(|i| crate::chaos::Chaos::neu(i, w("saat") as u32, w("form") as u8)) },
+            "chaos" => Schritt::Chaos { rate: q("rate"), trig: q("trig"), aus: aus(k, "aus"), aus2: aus(k, "aus2"), form: w("form") as u8, saat: w("saat") as u32, betrag: Box::new([]), c: std::array::from_fn(|i| crate::chaos::Chaos::neu(i, w("saat") as u32, w("form") as u8)) },
             "schieber" => Schritt::Schieber { x: q("x"), hz: q("hz"), auf: aus(k, "auf"), ab: aus(k, "ab"), f: Box::new([crate::schieber::Schieber::default(); MAX_STIMMEN]) },
+            "paula" => {
+                let wz = wurzel.ok_or_else(|| Fehler::Datei { knoten: k.to_string(), grund: "no sample root".to_string() })?;
+                let mut plaetze = Vec::new();
+                for (i, s) in knoten[k].plaetze.as_deref().unwrap_or_default().iter().enumerate() {
+                    let daten = lade_datei(wz, &s.datei, k, &mut geladen)?;
+                    let frames = (daten.len() / 2) as u64;
+                    let schleife = s.schleife == 1;
+                    if schleife && s.s_von as u64 >= frames {
+                        return Err(Fehler::Wert { knoten: k.to_string(), wert: format!("plaetze[{i}].s_von"), grund: "the loop must start inside the data" });
+                    }
+                    if schleife && s.s_von as u64 + s.s_laenge as u64 > frames {
+                        return Err(Fehler::Wert { knoten: k.to_string(), wert: format!("plaetze[{i}].s_laenge"), grund: "the loop must end inside the data" });
+                    }
+                    let e = PlatzEinst { grund: s.grund, rate: s.rate, schleife, s_von: s.s_von, s_laenge: s.s_laenge, pegel: s.pegel, fein: s.fein };
+                    plaetze.push(PaulaPlatz2::neu(daten, &e));
+                }
+                Schritt::Paula {
+                    hz: q("hz"),
+                    trig: q("trig"),
+                    gate: q("gate"),
+                    platz: q("platz"),
+                    start: q("start"),
+                    rueckwaerts: q("rueckwaerts"),
+                    wl: aus(k, "l"),
+                    wr: aus(k, "r"),
+                    b: Box::new(PaulaBank::neu(plaetze, w("quellrate"), w("bits") as u8)),
+                    v: Box::new([PaulaStimme::default(); MAX_STIMMEN]),
+                }
+            }
+            "matrix" => {
+                let e: [Quelle; 16] = std::array::from_fn(|i| q(&format!("e{}", i + 1)));
+                let a: [usize; 16] = std::array::from_fn(|i| aus(k, &format!("a{}", i + 1)));
+                Schritt::Matrix { e, morph: q("morph"), a, m: Box::new(crate::matrix::Matrix::neu(knoten[k].stifte.as_deref().unwrap_or(&[]), sr)) }
+            }
+            "funktion" => Schritt::Funktion {
+                x: q("x"), trig: q("trig"), halt: q("halt"), steigen: q("steigen"), fallen: q("fallen"), form: q("form"), zyklus: q("zyklus"), tempo: q("tempo"),
+                aus: aus(k, "aus"), ende: aus(k, "ende"), steigt: aus(k, "steigt"), f: [crate::funktion::Funktion::default(); MAX_STIMMEN],
+            },
+            "lpg" => Schritt::Lpg {
+                x: q("x"), cv: q("cv"), modus: q("modus"), abkling: q("abkling"), reso: q("reso"), versatz: q("versatz"),
+                aus: aus(k, "aus"), l: [crate::lpg::Lpg::default(); MAX_STIMMEN],
+            },
+            "notenwahl" => Schritt::Notenwahl { hz: q("hz"), aus: aus(k, "aus"), noten: std::array::from_fn(|i| w(&format!("n{}", i + 1)) as i32) },
+            "lfsr" => Schritt::Lfsr { hz: q("hz"), aus: aus(k, "aus"), kurz: w("kurz") == 1.0, l: [Lfsr::default(); MAX_STIMMEN] },
             "sem" => Schritt::Sem { x: q("x"), cutoff: q("cutoff"), reso: q("reso"), form: q("form"), aus: aus(k, "aus"), bp: aus(k, "bp"), f: [Sem::default(); MAX_STIMMEN] },
             "saett" => Schritt::Saett { x: q("x"), antrieb: q("antrieb"), aus: aus(k, "aus"), a: [Adaa1::default(); MAX_STIMMEN] },
             "glatt" => Schritt::Glatt { x: q("x"), setzen: q("setzen"), aus: aus(k, "aus"), zeit: w("zeit"), z: [0.0; MAX_STIMMEN] },
@@ -833,7 +1009,9 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
                 let (d, z) = match &knoten[k].zonen {
                     Some(zt) => {
                         let karte = karte_datei(wz, name, k)?;
-                        let t = ZonenTabelle::neu_mit(zt, Some(karte.frames()), w("loop_blende") as f64).map_err(|e| zonen_fehler(k, e))?;
+                        let t = ZonenTabelle::neu_mit(zt, Some(karte.frames()), w("loop_blende") as f64)
+                            .map_err(|e| zonen_fehler(k, e))?
+                            .mit_blenden(w("taste_blende") as f64, w("vel_blende") as f64, w("frei_halte") as f64);
                         (Daten::Karte(karte), Some(t))
                     }
                     None => (Daten::Eigen(lade_datei(wz, name, k, &mut geladen)?), None),
@@ -852,6 +1030,7 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
                         None
                     }
                 };
+                let z_blendet = z.as_ref().is_some_and(|t| t.blendet());
                 Schritt::Sampler {
                     tempo: q("tempo"),
                     halb: q("halb"),
@@ -874,6 +1053,7 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
                     e: Einstellung { grund: w("grund"), scheiben, schleife: w("schleife") == 1.0 },
                     d,
                     s: [Sampler::default(); MAX_STIMMEN],
+                    s2: if z_blendet { Some(Box::new([Sampler::default(); MAX_STIMMEN])) } else { None },
                 }
             }
             "faltung" => {
@@ -908,10 +1088,10 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
                     wr: aus(k, "r"),
                     aus: aus(k, "aus"),
                     e,
-                    t: Box::new(match &knoten[k].spektren {
-                        Some(sp) => Tabelle::aus_spektren(sp),
-                        None => Tabelle::neu(w("tabelle") as usize),
-                    }),
+                    t: match &knoten[k].spektren {
+                        Some(sp) => crate::wavetable::tabelle_aus_spektren(sp),
+                        None => crate::wavetable::tabelle_eingebaut(w("tabelle") as usize),
+                    },
                     w: Box::new(std::array::from_fn(|i| WtStimme::neu(i, &e))),
                 }
             }

@@ -1,0 +1,41 @@
+{
+ "schema": 1,
+ "name": "Dusty Noise",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "amiga",
+ "werte": {
+  "knob1": 0.09677,
+  "knob2": 0,
+  "knob3": 0,
+  "knob4": 1,
+  "knob5": 0.25,
+  "knob6": 0.16667,
+  "knob7": 0.8
+ },
+ "beschreibung": {
+  "art": "fx",
+  "unterart": "noise",
+  "charakter": [
+   "dark",
+   "dirty",
+   "soft"
+  ],
+  "genre": [
+   "downtempo",
+   "idm"
+  ],
+  "einsatz": [
+   "transition",
+   "breakdown"
+  ],
+  "energie": 3,
+  "text": "Noise burst slot 4 at 6 bit and a low rate, LED filter on for a darker top."
+ },
+ "tags": [
+  "amiga"
+ ],
+ "notiz": "Built from the device document, not yet heard.",
+ "angelegt": "2026-11-19T00:00:00.000Z",
+ "geaendert": "2026-11-19T00:00:00.000Z"
+}

@@ -26,18 +26,16 @@ import { menuePunkte, oeffneAchsenMenue } from '../instrument_groups.js';
 import { modulTakte } from './kopf.js';
 import { spurAusSha, istRegalZug, regalNutzlast, markiereZiel } from './catalog_storage.js';
 import { returnListe, sendWert, sendBefehl, sendLabel } from '../production/routing.js';
-import { neuerDrehknopf, sendPos, sendDb, sendText } from './mix.js';
+import { neuerDrehknopf, sendPos, sendDb, sendText, faderText, FADER_MIN } from '../dock/drehknopf.js';
 
 export const SPUREN_TEXT = { titel: 'TRACKS', andere: (n) => `${n} other track${n === 1 ? '' : 's'}: open PRODUCTION` };
 const BUCHSTABEN = 'ABCDEFGH';
 // pinned equal to MAX_WERKBANK_SPUREN (project/werkbank.ts) by the test
 export const MAX_SPUREN_MODUL = 8;
 export const NEU_TEXT = { knopf: '+ INSTRUMENT TRACK', voll: 'A module holds 8 instrument tracks' };
-const FADER_MIN = -60, FADER_AUS = -200, FADER_MAX = 6;   // the same thresholds as the PRODUCTION track head
+const FADER_AUS = -200, FADER_MAX = 6;   // the same thresholds as the PRODUCTION track head
 export const faderWert = (db) => (db <= FADER_MIN ? FADER_AUS : Math.min(FADER_MAX, db));
 const anzahlInstrument = (p) => (p?.spuren ?? []).filter((s) => s.art === 'instrument').length;
-
-export const faderText = (db) => (db <= FADER_MIN ? '-inf' : `${db > 0 ? '+' : ''}${db.toFixed(1)} dB`);
 
 // The command that adds an instrument track for the picker entry `eintrag` ({name, geraet}), or null at MAX_SPUREN_MODUL instrument tracks.
 // The pattern is as long as the module (16 beats when the module has no length).

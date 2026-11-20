@@ -211,8 +211,8 @@ fn spektren_pruefung() {
         Err(e) => panic!("{e}"),
         Ok(_) => panic!("accepted: {g}"),
     };
-    let frames33: Vec<String> = (0..33).map(|_| "[1]".to_string()).collect();
-    assert_eq!(ref_(&spektren_graph(&format!("[{}]", frames33.join(",")), "")), "spektren");
+    let frames257: Vec<String> = (0..257).map(|_| "[1]".to_string()).collect();
+    assert_eq!(ref_(&spektren_graph(&format!("[{}]", frames257.join(",")), "")), "spektren");
     let h257: Vec<String> = (0..257).map(|_| "0.1".to_string()).collect();
     assert_eq!(ref_(&spektren_graph(&format!("[[{}]]", h257.join(",")), "")), "spektren");
     assert_eq!(ref_(&spektren_graph("[[5.0]]", "")), "spektren", "amplitude above 4");
@@ -221,10 +221,10 @@ fn spektren_pruefung() {
     assert_eq!(ref_(&spektren_graph("[]", "")), "spektren", "no frames");
     assert_eq!(ref_(&spektren_graph("[[]]", "")), "spektren", "empty frame");
     assert_eq!(ref_(&spektren_graph("[[1]]", r#","tabelle":2"#)), "spektren", "with tabelle 2");
-    // accepted: the limits themselves, tabelle 0 given, 32 frames
+    // accepted: the limits themselves, tabelle 0 given, 256 frames
     let h256: Vec<String> = (0..256).map(|_| "4".to_string()).collect();
-    let frames32: Vec<String> = (0..32).map(|_| "[1,-4]".to_string()).collect();
-    for g in [spektren_graph(&format!("[[{}]]", h256.join(",")), ""), spektren_graph(&format!("[{}]", frames32.join(",")), r#","tabelle":0"#)] {
+    let frames256: Vec<String> = (0..256).map(|_| "[1,-4]".to_string()).collect();
+    for g in [spektren_graph(&format!("[[{}]]", h256.join(",")), ""), spektren_graph(&format!("[{}]", frames256.join(",")), r#","tabelle":0"#)] {
         assert!(uebersetze(&g, SR).is_ok(), "{g}");
     }
     // `spektren` belongs to wavetable only

@@ -1,0 +1,14 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "fx-federhall"},
+  "title": "Spring Reverb",
+  "akzent": "tuerkis",
+  "sections": [
+    { "id": "spring", "title": "SPRING", "cols": 3, "controls": [
+      {"id": "spring", "type": "knob", "label": "Spring level", "bind": {"param": "k1"}, "format": "percent", "default": 0.5},
+      {"id": "tone", "type": "knob", "label": "Tone", "bind": {"param": "k3"}, "format": "hz", "default": 0.5, "wirkt": {"ueber": ["spring", 0.02]}, "wirkt_text": "No spring is heard: turn up Spring"},
+      {"id": "dwell", "type": "knob", "label": "Dwell drive", "bind": {"param": "k2"}, "format": "db", "default": 0.5, "wirkt": {"ueber": ["spring", 0.02]}, "wirkt_text": "No spring is heard: turn up Spring"},
+      {"id": "l1", "type": "label", "span": 3, "text": "Drive into the spring: more is splashier"}
+    ]}
+  ]
+}

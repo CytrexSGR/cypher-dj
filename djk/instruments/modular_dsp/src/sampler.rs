@@ -144,6 +144,8 @@ pub struct Sampler {
     rel_aus: bool,
     rel_i: usize,
     rel_g0: f32,
+    /// output samples the gate has been high since the last trigger (stage 2c: the hold time of the release level)
+    z_halte: u32,
 }
 
 /// The settings of a release pass: a one-shot.
@@ -306,7 +308,14 @@ impl Sampler {
     #[inline]
     pub fn prozess_zonen(&mut self, daten: &[f32], tab: &ZonenTabelle, rr: &mut u64, sr: f32, x: Eingabe, vel: f32) -> (f32, f32) {
         let e = Einstellung { grund: 261.6256, scheiben: 1, schleife: false };
-        self.kern(daten, &e, None, None, sr, x, Some((tab, rr, vel)))
+        self.kern(daten, &e, None, None, sr, x, Some((tab, rr, vel, 0)))
+    }
+
+    /// The second layer of a voice of a cross-fading zone node (stage 2c): plays the second strongest cell of the trigger, with
+    /// the counter value layer 0 had (`rr` is a copy, never advanced here). Silent when the table does not cross-fade.
+    #[inline]
+    pub fn prozess_zonen_zweite(&mut self, daten: &[f32], tab: &ZonenTabelle, rr: &mut u64, sr: f32, x: Eingabe, vel: f32) -> (f32, f32) {
+        self.kern(daten, &EINMAL, None, None, sr, x, Some((tab, rr, vel, 1)))
     }
 
     /// Like `prozess_zonen`, plus the release samples (stage 2b): returns `(l, r, rl, rr)`. `rr_frei` is the second round-robin
@@ -314,7 +323,7 @@ impl Sampler {
     /// zones (art 1) that hold the note and the velocity of that trigger.
     #[inline]
     pub fn prozess_zonen_frei(&mut self, daten: &[f32], tab: &ZonenTabelle, rr: &mut u64, rr_frei: &mut u64, sr: f32, x: Eingabe, vel: f32) -> (f32, f32, f32, f32) {
-        let (l, r) = self.kern(daten, &EINMAL, None, None, sr, x, Some((tab, rr, vel)));
+        let (l, r) = self.kern(daten, &EINMAL, None, None, sr, x, Some((tab, rr, vel, 0)));
         let (rl, rr2) = self.frei_zone(daten, tab, rr_frei, sr, x, vel);
         (l, r, rl, rr2)
     }
@@ -331,6 +340,7 @@ impl Sampler {
             self.z_note = n;
             self.z_vel = v;
             self.z_arm = true;
+            self.z_halte = 0;
             if self.rel.aktiv && !self.rel_aus {
                 self.rel_aus = true;
                 self.rel_i = 0;
@@ -338,11 +348,20 @@ impl Sampler {
             }
         } else if self.z_arm && self.g_hoch && !gate_hoch {
             self.z_arm = false;
-            let neu = tab.waehle_frei(self.z_note, self.z_vel, x.hz, rr, sr);
+            let mut neu = tab.waehle_frei(self.z_note, self.z_vel, x.hz, rr, sr);
             if neu.aktiv {
+                if tab.frei_halte_s > 0.0 {
+                    // the release level halves for every `frei_halte` seconds the key was held
+                    let f = (-(self.z_halte as f64) / (tab.frei_halte_s as f64 * sr as f64)).exp2() as f32;
+                    neu.zl *= f;
+                    neu.zr *= f;
+                }
                 self.rel = neu;
                 self.rel_aus = false;
             }
+        }
+        if self.z_arm && gate_hoch {
+            self.z_halte = self.z_halte.saturating_add(1);
         }
         self.g_hoch = gate_hoch;
         if !self.rel.aktiv {
@@ -366,15 +385,15 @@ impl Sampler {
     }
 
     #[inline]
-    fn kern(&mut self, daten: &[f32], e: &Einstellung, grenzen: Option<&[usize]>, wahl: Option<NotenWahl>, sr: f32, x: Eingabe, mut zonen: Option<(&ZonenTabelle, &mut u64, f32)>) -> (f32, f32) {
+    fn kern(&mut self, daten: &[f32], e: &Einstellung, grenzen: Option<&[usize]>, wahl: Option<NotenWahl>, sr: f32, x: Eingabe, mut zonen: Option<(&ZonenTabelle, &mut u64, f32, u8)>) -> (f32, f32) {
         let hoch = x.trig >= 0.5;
         let steigend = hoch && !self.trig_hoch;
         self.trig_hoch = hoch;
         let gate_tief = x.gate < 0.5;
         if steigend {
             let frames = daten.len() / 2;
-            let neu = if let Some((tab, rr, vel)) = zonen.as_mut() {
-                tab.waehle(x.hz, *vel, rr)
+            let neu = if let Some((tab, rr, vel, ebene)) = zonen.as_mut() {
+                tab.waehle(x.hz, *vel, rr, *ebene)
             } else {
                 match wahl {
                 None => Durchlauf::start(frames, e, grenzen, x.scheibe, x.rueck, gate_tief),
@@ -527,6 +546,11 @@ struct Zone {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ZonenTabelle {
     zonen: Box<[Zone]>,
+    /// stage 2c: width of the key cross-fade in keys, of the velocity cross-fade in steps (0 = hard edges), and the hold time in
+    /// seconds that halves the level of a release sample (0 = off)
+    taste_blende: f32,
+    vel_blende: f32,
+    frei_halte_s: f32,
 }
 
 /// A rule of the zone table that is violated: the zone (counted from 0; `None` for the table as a whole), the field name
@@ -638,8 +662,19 @@ impl ZonenTabelle {
                 art: z[11] as u8,
             });
         }
-        Ok(ZonenTabelle { zonen: zonen.into_boxed_slice() })
+        Ok(ZonenTabelle { zonen: zonen.into_boxed_slice(), taste_blende: 0.0, vel_blende: 0.0, frei_halte_s: 0.0 })
     }
+
+    /// Stage 2c settings: `taste` keys (0..=24) and `vel` steps (0..=127) of cross-fade at the edges of the key and velocity
+    /// ranges, `halte_s` seconds (0..=60) of hold time that halve the level of a release sample. 0 switches each off.
+    pub fn mit_blenden(mut self, taste: f64, vel: f64, halte_s: f64) -> ZonenTabelle {
+        self.taste_blende = taste.clamp(0.0, 24.0) as f32;
+        self.vel_blende = vel.clamp(0.0, 127.0) as f32;
+        self.frei_halte_s = halte_s.clamp(0.0, 60.0) as f32;
+        self
+    }
+
+    pub fn blendet(&self) -> bool { self.taste_blende > 0.0 || self.vel_blende > 0.0 }
 
     pub fn len(&self) -> usize { self.zonen.len() }
 
@@ -654,8 +689,18 @@ impl ZonenTabelle {
     /// The pass for a trigger: the candidates (art 0, key and velocity range contain the note and the velocity) in table
     /// order, one plays, with several `*rr % candidates`, and the counter advances. No candidate: an inactive pass, the counter
     /// stays. Does not allocate.
-    fn waehle(&self, hz: f32, vel: f32, rr: &mut u64) -> Durchlauf {
+    fn waehle(&self, hz: f32, vel: f32, rr: &mut u64, ebene: u8) -> Durchlauf {
         let (note, v) = self.note_vel(hz, vel);
+        if self.blendet() {
+            let d = self.waehle_blende(note, v, *rr, ebene).map(|x| x.0);
+            if ebene == 0 && d.is_some() {
+                *rr = rr.wrapping_add(1);
+            }
+            return d.unwrap_or_default();
+        }
+        if ebene > 0 {
+            return Durchlauf::default();
+        }
         let passt = |z: &&Zone| z.art == 0 && (z.lo..=z.hi).contains(&note) && (z.vlo..=z.vhi).contains(&v);
         let n = self.zonen.iter().filter(passt).count();
         if n == 0 {
@@ -664,6 +709,49 @@ impl ZonenTabelle {
         let z = self.zonen.iter().filter(passt).nth((*rr % n as u64) as usize).unwrap();
         *rr = rr.wrapping_add(1);
         Durchlauf { a: z.a, b: z.b, kopf: z.a as f64, aktiv: true, halt: true, zone: true, zgrund: z.grund_hz, zl: z.gl, zr: z.gr, la: z.la, lb: z.lb, xb: z.xb, ..Durchlauf::default() }
+    }
+
+    /// Weight 0..1 of a range edge pair at position `p`: 1 inside, a linear ramp over `breite` steps centred on each edge
+    /// (`lo_frei`/`hi_frei`: that edge is the end of the scale and does not fade). `breite` 0: 1 inside, 0 outside.
+    fn gewicht(p: f32, lo: u8, hi: u8, anfang: u8, ende: u8, breite: f32) -> f32 {
+        if breite <= 0.0 {
+            return if (lo..=hi).contains(&(p as u8)) { 1.0 } else { 0.0 };
+        }
+        let mut e = f32::INFINITY;
+        if lo > anfang { e = e.min(p - lo as f32 + 0.5); }
+        if hi < ende { e = e.min(hi as f32 + 0.5 - p); }
+        (0.5 + e / breite).clamp(0.0, 1.0)
+    }
+
+    /// Stage 2c pass of layer `ebene` (0 strongest, 1 second strongest). The candidates are the cells (same key and velocity
+    /// range) of the art-0 zones with a weight above 0 (the product of the key and velocity weights, edges fade equal power:
+    /// gain = sqrt(weight)); in a cell the take is `counter % takes`. The two strongest cells sound, ties go to the earlier
+    /// cell. The counter is only read here: layer 0 advances it. Does not allocate.
+    fn waehle_blende(&self, note: u8, v: u8, zaehler: u64, ebene: u8) -> Option<(Durchlauf, f32)> {
+        let gew = |z: &Zone| {
+            Self::gewicht(note as f32, z.lo, z.hi, 0, 127, self.taste_blende) * Self::gewicht(v as f32, z.vlo, z.vhi, 1, 127, self.vel_blende)
+        };
+        let gleich = |a: &Zone, b: &Zone| a.lo == b.lo && a.hi == b.hi && a.vlo == b.vlo && a.vhi == b.vhi;
+        // cells are told by their first zone: a zone starts a cell when no earlier art-0 zone has the same ranges
+        let erste = |i: usize| self.zonen[i].art == 0 && !self.zonen[..i].iter().any(|o| o.art == 0 && gleich(o, &self.zonen[i]));
+        let (mut best, mut zweit): (Option<(usize, f32)>, Option<(usize, f32)>) = (None, None);
+        for i in 0..self.zonen.len() {
+            if !erste(i) { continue; }
+            let w = gew(&self.zonen[i]);
+            if w <= 0.0 { continue; }
+            if best.map_or(true, |b| w > b.1) {
+                zweit = best;
+                best = Some((i, w));
+            } else if zweit.map_or(true, |b| w > b.1) {
+                zweit = Some((i, w));
+            }
+        }
+        let (i, w) = if ebene == 0 { best? } else { zweit? };
+        let k = &self.zonen[i];
+        let takes = self.zonen.iter().filter(|o| o.art == 0 && gleich(o, k)).count() as u64;
+        let z = self.zonen.iter().filter(|o| o.art == 0 && gleich(o, k)).nth((zaehler % takes) as usize)?;
+        let g = w.sqrt();
+        Some((Durchlauf { a: z.a, b: z.b, kopf: z.a as f64, aktiv: true, halt: true, zone: true, zgrund: z.grund_hz, zl: z.gl * g, zr: z.gr * g, la: z.la, lb: z.lb, xb: z.xb, ..Durchlauf::default() }, w))
     }
 
     /// The release pass for the gate fall of a voice triggered with `note` and `v`: the candidates are the zones of art 1 that

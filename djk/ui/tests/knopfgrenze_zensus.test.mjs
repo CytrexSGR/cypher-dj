@@ -30,6 +30,17 @@ const ERLAUBT = [
   { datei: 'ui/check/acceptance_r8.mjs', fragment: 'i <= 32', grund: 'probe: one command per track' },
   { datei: 'ui/check/acceptance_e3.mjs', fragment: '<1..32,', grund: 'probe usage text: number of tracks' },
   { datei: 'ui/public/effects_bindung.js', fragment: 'b > 32 ?', grund: 'bars of a long track: grid lines every 4 bars above 32' },
+  // 32 sampler slots (a bank holds 1..32 slots, INS / platz address one); the slot count is not the knob count
+  { datei: 'ui/areas/controller/pult_production.ts', fragment: 'for n = 1..32', grund: 'comment: the kern has spur/<n>/* rows per track' },
+  { datei: 'ui/project/model.ts', fragment: 'platz (1..32,', grund: 'comment: sampler slot number' },
+  { datei: 'ui/project/tracker_text.ts', fragment: '01..32', grund: 'sampler slot digits of the INS column' },
+  { datei: 'ui/project/tracker_text.ts', fragment: 'Number(i) <= 32', grund: 'INS column: slot number bound' },
+  { datei: 'ui/public/tracker/eingabe.js', fragment: 'platz <= 32', grund: 'slot number bound' },
+  { datei: 'ui/public/tracker/eingabe.js', fragment: 'Slot 1..32 expected', grund: 'slot number message' },
+  { datei: 'ui/sampler/slots.ts', fragment: '1..32 entries', grund: 'a bank holds 1..32 slots' },
+  { datei: 'hand/hand.ts', fragment: '01..32', grund: 'tool text: INS column slot digits' },
+  { datei: 'hand/hand.ts', fragment: 'platz? 1..32', grund: 'tool text: sampler slot number' },
+  { datei: 'hand/hand.ts', fragment: 'platz (1..32,', grund: 'tool text: sampler slot number' },
   // name lengths: graph, kit and group names are 1..32 characters
   { datei: '', fragment: '1..32 characters', grund: 'name length of a graph, kit or group' },
   { datei: '', fragment: '_ -, 1..32)', grund: 'graph name length' },

@@ -6,6 +6,7 @@
 // that need the project (live flag, places, nesting) are in model.ts.
 // No file access here. Types are imported from model.ts only as types, so model.ts can import this file without a runtime cycle.
 import type { Gruppe, MidiClip, Projekt, Spur } from './model.ts';
+import { LPB_WERTE, TICKS_MAX, TICKS_MIN } from './tracker.ts';   // the effect frame of a section that came from the tracker
 import { liveBeats, takteProLive } from './taktart_live.ts';   // runtime cycle with model.ts is harmless: used only inside functions
 
 export const SEQ_BEATS = 64;          // the region a pattern clip covers in 4/4 (and the legacy length that stays valid in every meter)
@@ -14,7 +15,9 @@ export const SEQ_TEILER = [1, 0.5, 0.25, 0.125] as const;   // beats per cell: 1
 export const SEQ_FORMEN = ['sinus', 'dreieck', 'saege', 'saege_ab', 'rechteck', 'rampe', 'zufall'] as const;
 export const SEQ_STUFEN_MAX = 64;     // steps of the `zufall` shape (the same limit as MAX_STUFEN of seq_logic.js)
 
-export interface SeqDeck { schema: 2; platz: 1 | 2 | 3 | 4 }   // later slices add `tonart` and nothing else
+// lpb, ticks (task 24): the effect frame (rows per beat, effect ticks per row) of the patterns that came from a tracker section with effect commands
+// or sample slots; absent = the project defaults (4 and 6), never written with a default. The live container has no tracker marker to carry them.
+export interface SeqDeck { schema: 2; platz: 1 | 2 | 3 | 4; lpb?: number; ticks?: number }   // later slices add `tonart` and nothing else
 
 export type SeqForm = {
   art: typeof SEQ_FORMEN[number]; von: number; bis: number; phase?: number; saat?: number; stufen?: number;
@@ -54,9 +57,11 @@ function schluessel(o: Record<string, unknown>, wo: string, pflicht: string[], o
 export function seqPruefung(x: unknown): Urteil | null {
   try {
     if (!istObjekt(x)) return ungueltig('seq: object expected');
-    schluessel(x, 'seq', ['schema', 'platz']);
+    schluessel(x, 'seq', ['schema', 'platz'], ['lpb', 'ticks']);
     if (x.schema !== 2) ungueltig('seq.schema: 2 expected');
     if (!ganzIn(x.platz, 1, 4)) ungueltig('seq.platz: integer 1..4 expected');
+    if ('lpb' in x && !LPB_WERTE.includes(x.lpb as number)) ungueltig(`seq.lpb: one of ${LPB_WERTE.join(' ')} expected`);
+    if ('ticks' in x && !ganzIn(x.ticks, TICKS_MIN, TICKS_MAX)) ungueltig(`seq.ticks: integer ${TICKS_MIN}..${TICKS_MAX} expected`);
     return null;
   } catch (e) {
     if (e instanceof Halt) return e.urteil;

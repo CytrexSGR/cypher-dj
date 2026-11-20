@@ -210,12 +210,11 @@ test('S12 graphWahlHtml: option texts and values are escaped', () => {
 
 // S14: the wiring in app.js is DOM code that no unit test runs; this pins by text that the pieces are connected (the live
 // behaviour was not measured in a browser in this slice, see docs/architecture/stand/baukasten-s14.md)
-test('S14 app.js wiring (text check): the block comes from sendRueckHtml, the knobs are bound after every graph refresh and follow /e/regler', () => {
+test('S14 app.js wiring (text check): the knobs of every .sendzeile row are bound after every graph refresh and follow /e/regler', () => {
   const app = liesApp();
-  assert.ok(/send\.innerHTML = sendRueckHtml\(\);/.test(app));
   assert.ok(!/fixed at 0\.5/.test(app));
   const rumpf = (name) => { const i = app.indexOf(`function ${name}(`); assert.ok(i >= 0, name); return app.slice(i, app.indexOf('\n}\n', i)); };
-  for (const f of ['baueFxStreifen', 'holeGraphen', 'setzeGraphenGeladen']) assert.ok(rumpf(f).includes('baueSendKnobs();'), `${f} binds the send knobs`);
+  for (const f of ['holeGraphen', 'setzeGraphenGeladen']) assert.ok(rumpf(f).includes('baueSendKnobs();'), `${f} binds the send knobs`);
   assert.ok(/if \(\/\^fx\\\/\[34\]\\\/bk\\\/\/\.test\(f\.pfad\)\) zeigeSendKnobs\(\);/.test(app), '/e/regler refreshes the send knobs');
 });
 
@@ -386,7 +385,7 @@ test('A8 the strip fields carry the ranges and defaults of the header, and every
   for (const s of WERK_STREIFEN) for (const suffix of [s.an, ...s.regler.map((r) => r.feld), ...s.schalter.map((x) => x.feld)].filter(Boolean)) assert.ok(suffix in WERK_FELDER, suffix);
 });
 
-test('A8 the page builds a Gate and a Utility strip for each of the FX_KANAELE channels and sends nothing while building', () => {
+test('A8 the Gate and Utility markup for each of the FX_KANAELE channels: controller rows only, nothing sent while building', () => {
   assert.equal(FX_KAN.length, 10);
   const gesendet = [];
   const echt = globalThis.fetch;
@@ -406,9 +405,8 @@ test('A8 the page builds a Gate and a Utility strip for each of the FX_KANAELE c
     }
   } finally { globalThis.fetch = echt; }
   assert.deepEqual(gesendet, [], 'building the strips sends nothing');
-  // the page wires the strips into the same loop that builds the compressor strips, and sends through the shared helper
-  assert.match(APP, /werkzeugStreifenHtml\(k, name, \['gate'\]\)/);   // Task 5: gate and util sit in their own sections of the chain
-  assert.match(APP, /werkzeugStreifenHtml\(k, name, \['util'\]\)/);
+  // the GATE and UTIL popovers of the live dock build one tool each from this markup, and the page sends through the shared helper
+  assert.match(readFileSync(new URL('../public/live_dock/tool.js', import.meta.url), 'utf8'), /werkzeugStreifenHtml\(kanal, name, \[teil\]\)/);
   assert.match(APP, /setzeWerkzeug\(fetch, /);
   assert.ok(!/gate\/an.*FX_KANAELE|FX_KANAELE.*deck\/3/.test(APP), 'no channel outside FX_KANAELE is added by hand');
   // negative control: a harmless name goes through, a hostile one is escaped

@@ -282,6 +282,11 @@ function mixerSchluessel(befehle: unknown[]): string | null {
   if (b.befehl === 'insert_param_setzen' && typeof b.insert_id === 'string' && typeof b.param === 'string') return `${b.insert_id}:insert:${b.param}`;
   // production plan task 9: a knob drag on a Baukasten track is one move per track and knob
   if (b.befehl === 'geraet_param_setzen' && typeof b.spur_id === 'string' && typeof b.param === 'string') return `${b.spur_id}:geraet:${b.param}`;
+  // Kraken patch field: dragging one pin is one move per track and position
+  if (b.befehl === 'geraet_stift_setzen' && typeof b.spur_id === 'string' && typeof b.satz === 'number'
+    && typeof b.zeile === 'number' && typeof b.spalte === 'number') {
+    return `${b.spur_id}:stift:${b.satz}:${b.zeile}:${b.spalte}`;
+  }
   // 1.10 slice 4c: a macro sweep is one move per strip and macro
   if (b.befehl === 'rack_makro' && typeof b.strang_id === 'string' && typeof b.nr === 'number') return `${b.strang_id}:rack:${b.nr}`;
   const idFeld = b.befehl === 'return_aendern' ? 'return_id' : b.befehl === 'spur_aendern' ? 'spur_id'

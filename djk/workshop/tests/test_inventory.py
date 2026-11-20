@@ -96,4 +96,4 @@ def test_raster_ordner_aus_tabelle_ab_cwd_workshop(tmp_path):
     assert r.returncode == 0, r.stderr
     pfad, raster, analyse = r.stdout.splitlines()[-3:]
     assert pfad == str(workshop.parent / "ablage" / "__init__.py")
-    assert raster == f"{tmp_path}/.config/cypherdj/raster" and analyse == f"{tmp_path}/werkstatt/cypher-dj-analyse"
+    assert raster == f"{tmp_path}/cypherdj/werke/korrekturen/raster" and analyse == f"{tmp_path}/werkstatt/cypher-dj-analyse"

@@ -21,6 +21,9 @@ NOTIZ = ("Greif's knob values on the tables of Greif 2, for an A/B with Greif; m
          if GRAPH == "synth-greif2" else "Measured by render, not heard yet (2026-11-16).")
 OFF, BEND, ASYM, SYNC = 0, 1, 2, 3
 
+# per-preset note that replaces NOTIZ on synth-greif (Pluck Stab: volume raised by hand on 2026-11-16, 70eb2b278; the script carries it since 2026-11-19)
+NOTIZ_JE = {"Pluck Stab": "Measured by render (2026-11-16). Volume raised to the top after Andreas heard it too quiet in a mix (2026-11-16)."}
+
 # table positions (see tabelle_a): sine 0, triangle 0.143, saw 0.286, square 0.429, pulse 0.571, hollow 0.857, digital 1
 # table B (vocal): u 0, o 0.25, a 0.5, e 0.75, i 1
 
@@ -116,7 +119,7 @@ P = [
      {"A Position": 0.43, "A Warp": BEND, "A Depth": 0.2, "A Level": 0.6, "B Position": 0.57, "B Warp": OFF, "B Level": 0.3, "B Pitch": 12, "B Fine": 0, "C Level": 0.0,
       "PM B>A": 0.1, "PM C>A": 0.0, "PM C>B": 0.0, "Detune": 12, "Width": 0.6, "Sub Level": 0.0, "Noise Level": 0.02, "F1 Cutoff": 1800, "F1 Resonance": 0.25, "F1 Env": 36, "F1 Key": 1.0,
       "Drive": 0.2, "Filter Attack": 0.001, "Filter Decay": 0.22, "Filter Sustain": 0.0, "Amp Attack": 0.002, "Amp Decay": 0.35, "Amp Sustain": 0.0, "Amp Release": 0.25,
-      "Env3 Decay": 0.2, "Env3 >Position": 0.3, "Chorus Mix": 0.3, "Shift Mix": 0.0, "Delay Time": 280, "Delay Mix": 0.2, "Volume": 3.5},
+      "Env3 Decay": 0.2, "Env3 >Position": 0.3, "Chorus Mix": 0.3, "Shift Mix": 0.0, "Delay Time": 280, "Delay Mix": 0.2, "Volume": 6},
      ("pluck", "stab", ["punchy", "tight", "bright"], ["house", "tech_house"], ["drop", "build"], 4),
      "Short chord stab: a square-ish table with a fast filter snap and a quick sweep of the position on each hit."),
     # ---- texture
@@ -138,7 +141,7 @@ for name, ue, (art, unter, char, genre, eins, en), text in P:
     anzeige = f"{name} II" if GRAPH == "synth-greif2" else name
     doc = {"schema": 1, "name": anzeige, "geraet_typ": "instrument", "geraet": "baukasten", "graph": GRAPH, "werte": werte,
            "beschreibung": {"art": art, "unterart": unter, "charakter": char, "genre": genre, "einsatz": eins, "energie": en, "text": text},
-           "tags": [GRAPH, "wavetable"], "notiz": NOTIZ,
+           "tags": [GRAPH, "wavetable"], "notiz": NOTIZ_JE.get(name, NOTIZ) if GRAPH == "synth-greif" else NOTIZ,
            "angelegt": "2026-11-16T00:00:00.000Z", "geaendert": "2026-11-16T00:00:00.000Z"}
     (ZIEL / f"{slug}.preset.json").write_text(json.dumps(doc, indent=1, ensure_ascii=False) + "\n")
 print(len(P), "presets in", ZIEL)

@@ -204,7 +204,7 @@ static Lauf6 kern_lauf6(const std::string& ab, const double (&fader)[KAN], const
   if (huellen) x.kern->verbinde_huellen(huellen);   // case 17: the envelope ring of the ear
   const int64_t FR = 400000;
   const std::string a = x.ordner.audio('a', FR, 0.25f);
-  for (int c = 0; c < KAN; ++c) x.teil((std::string(KANAL_PFAD[c]) + "/fader").c_str(), static_cast<float>(fader[c]), 0.0, 0.0);
+  for (int c = 0; c < KAN; ++c) x.teil((std::string(KANAL_PFAD[c]) + "/fader").c_str(), static_cast<float>(fader[c]), 0.0, 0.0, "andreas");   // a hand fader: the deck load ends running parts of every other source on deck/N/fader (Review 2026-11-19)
   if (deck) x.k35::Lauf::laden(1, "a2a0000000000e01");   // the deck is loaded first (the loader answers within a few cycles) and starts at kern beat 2 (sample 45000)
   x.lauf(4 * k35::N);   // in every run, so the group starts at the same sample with and without the deck
   if (!kan.empty()) {

@@ -67,9 +67,23 @@ pub enum Schritt {
     Transponiere { hz: Quelle, st: Quelle, cent: Quelle, aus: usize },
     Ladder { x: Quelle, cutoff: Quelle, reso: Quelle, aus: usize, f: [Ladder; MAX_STIMMEN], reso_glatt: Spur },
     Allpass { x: Quelle, fc: Quelle, fc2: Quelle, aus: usize, ordnung: u8, f: [Allpass; MAX_STIMMEN] },
+    /// Amiga sample voice (paula.rs): the bank is fixed after translation, only the voices hold state
+    Paula { hz: Quelle, trig: Quelle, gate: Quelle, platz: Quelle, start: Quelle, rueckwaerts: Quelle, wl: usize, wr: usize, b: Box<crate::paula::Bank>, v: Box<[crate::paula::Stimme; MAX_STIMMEN]> },
+    /// chip noise (lfsr.rs)
+    Lfsr { hz: Quelle, aus: usize, kurz: bool, l: [crate::lfsr::Lfsr; MAX_STIMMEN] },
+    /// dual-slope function generator (funktion.rs, type 58)
+    Funktion { x: Quelle, trig: Quelle, halt: Quelle, steigen: Quelle, fallen: Quelle, form: Quelle, zyklus: Quelle, tempo: Quelle, aus: usize, ende: usize, steigt: usize, f: [crate::funktion::Funktion; MAX_STIMMEN] },
+    /// low-pass gate with a vactrol model (lpg.rs, type 59)
+    Lpg { x: Quelle, cv: Quelle, modus: Quelle, abkling: Quelle, reso: Quelle, versatz: Quelle, aus: usize, l: [crate::lpg::Lpg; MAX_STIMMEN] },
+    /// 16 x 16 pin matrix with two sets and a morph (matrix.rs, type 60); `e` are the 16 sources, `a` the 16 outputs
+    /// note select (notenwahl.rs): the pad index of the played note
+    Notenwahl { hz: Quelle, aus: usize, noten: [i32; crate::notenwahl::NOTEN_MAX] },
+    Matrix { e: [Quelle; 16], morph: Quelle, a: [usize; 16], m: Box<crate::matrix::Matrix> },
     Kreuz { x: Quelle, fc1: Quelle, fc2: Quelle, lo: usize, mid: usize, hi: usize, baender: u8, f: [Kreuz; MAX_STIMMEN] },
     /// chaos LFO (chaos.rs, type 54): two coordinates of a Lorenz or Roessler attractor per voice, `saat`-seeded, reset by `trig`
-    Chaos { rate: Quelle, trig: Quelle, aus: usize, aus2: usize, form: u8, saat: u32, c: [crate::chaos::Chaos; MAX_STIMMEN] },
+    /// `betrag`: the other factor of every `mul` that reads the outputs and nothing else does (`nullen.rs`, empty = no guard). While all
+    /// of them are exactly 0 in every voice the output is multiplied by 0 and nobody hears it, so the attractor stands still.
+    Chaos { rate: Quelle, trig: Quelle, aus: usize, aus2: usize, form: u8, saat: u32, betrag: Box<[Quelle]>, c: [crate::chaos::Chaos; MAX_STIMMEN] },
     /// frequency shifter (schieber.rs, type 55): `auf` shifted up and `ab` down by `hz`
     Schieber { x: Quelle, hz: Quelle, auf: usize, ab: usize, f: Box<[crate::schieber::Schieber; MAX_STIMMEN]> },
     Svf { x: Quelle, cutoff: Quelle, reso: Quelle, tp: usize, bp: usize, hp: usize, vier: bool, f: [Svf; MAX_STIMMEN] },
@@ -121,13 +135,13 @@ pub enum Schritt {
     /// C7), result in voice 0 on both sides. `zisch` and `mix` are read from voice 0; a non-finite value reads the node's own
     /// value (`voreinstellung`, same order).
     /// per voice; `d` is the node's sample data, shared read-only by all voices (S10, D5)
-    Sampler { hz: Quelle, trig: Quelle, gate: Quelle, scheibe: Quelle, rueck: Quelle, tempo: Quelle, halb: Quelle, ausklang: Quelle, vel: Quelle, wl: usize, wr: usize, wrl: usize, wrr: usize, e: Einstellung, g: Option<Box<[usize]>>, z: Option<ZonenTabelle>, rr: u64, rr2: u64, wahl: bool, d: Daten, s: [Sampler; MAX_STIMMEN] },
+    Sampler { hz: Quelle, trig: Quelle, gate: Quelle, scheibe: Quelle, rueck: Quelle, tempo: Quelle, halb: Quelle, ausklang: Quelle, vel: Quelle, wl: usize, wr: usize, wrl: usize, wrr: usize, e: Einstellung, g: Option<Box<[usize]>>, z: Option<ZonenTabelle>, rr: u64, rr2: u64, wahl: bool, d: Daten, s: [Sampler; MAX_STIMMEN], s2: Option<Box<[Sampler; MAX_STIMMEN]>> },
     Vocoder { x: Quelle, l: Quelle, r: Quelle, zisch: Quelle, mix: Quelle, wl: usize, wr: usize, voreinstellung: [f32; 2], v: Vocoder },
     /// Sum point (S21): convolution on Σ(x + l) left and Σ(x + r) right, result in voice 0; mix from voice 0
     Faltung { x: Quelle, l: Quelle, r: Quelle, mix: Quelle, wl: usize, wr: usize, f: Box<Faltung> },
     /// Per voice: wavetable oscillator with up to 7 unison copies (wavetable.rs). `t` is the node's table, shared read-only by
     /// all voices; the voices are boxed so the step enum does not grow by their size. `aus` is the sum without pan.
-    Wavetable { hz: Quelle, trig: Quelle, pos: Quelle, verstimmung: Quelle, breite: Quelle, pm: Quelle, warp: Quelle, tiefe: Quelle, stapel: Quelle, wl: usize, wr: usize, aus: usize, e: WtEinstellung, t: Box<Tabelle>, w: Box<[WtStimme; MAX_STIMMEN]> },
+    Wavetable { hz: Quelle, trig: Quelle, pos: Quelle, verstimmung: Quelle, breite: Quelle, pm: Quelle, warp: Quelle, tiefe: Quelle, stapel: Quelle, wl: usize, wr: usize, aus: usize, e: WtEinstellung, t: std::sync::Arc<Tabelle>, w: Box<[WtStimme; MAX_STIMMEN]> },
     /// Per voice: modal resonator bank, up to 32 modes (resonator.rs). `satz` is the node's mode set, shared read-only by
     /// all voices; the voices are boxed so the step enum does not grow by their size. `ein` in the order of `RsEingabe`.
     Resonator { ein: [Quelle; 9], aus: usize, e: RsEinstellung, satz: Box<Satz>, v: Box<[RsStimme; MAX_STIMMEN]> },
@@ -181,6 +195,8 @@ pub struct Programm {
     verzoegert: Vec<usize>,
     note: [u8; MAX_STIMMEN],
     hz: Spur,
+    /// Frequency factor of the host's pitch bend (`setze_bend`), 1.0 = none. Multiplies the `note` block's hz output only.
+    bend: f32,
     gate: Spur,
     vel: Spur,
     trig: Spur,
@@ -213,6 +229,10 @@ pub struct Programm {
     pub regler_namen: Vec<(usize, String)>,
     /// false: every branch of a split `wahl` runs in every sample (the engine as it was before zweige.rs); reference for tests
     zweige: bool,
+    /// false: no step takes a zero-amount shortcut (nullen.rs); reference for tests
+    nullen: bool,
+    /// steps and chorus samples skipped for a zero amount so far
+    nullen_uebersprungen: u64,
     /// steps a `Zweig` has jumped over since loading (diagnostic: how much work the branches save)
     uebersprungen: u64,
     fehlerprobe: Fehlerprobe,
@@ -245,6 +265,11 @@ impl Schritt {
             Schritt::Svf { f, .. } => *f = [Svf::default(); MAX_STIMMEN],
             Schritt::Allpass { f, .. } => *f = [Allpass::default(); MAX_STIMMEN],
             Schritt::Kreuz { f, .. } => *f = [Kreuz::default(); MAX_STIMMEN],
+            Schritt::Paula { v, .. } => **v = [crate::paula::Stimme::default(); MAX_STIMMEN],
+            Schritt::Lfsr { l, .. } => *l = [crate::lfsr::Lfsr::default(); MAX_STIMMEN],
+            Schritt::Funktion { f, .. } => *f = [crate::funktion::Funktion::default(); MAX_STIMMEN],
+            Schritt::Lpg { l, .. } => *l = [crate::lpg::Lpg::default(); MAX_STIMMEN],
+            Schritt::Matrix { m, .. } => m.zuruecksetzen(),
             Schritt::Chaos { c, saat, form, .. } => *c = std::array::from_fn(|i| crate::chaos::Chaos::neu(i, *saat, *form)),
             Schritt::Schieber { f, .. } => **f = [crate::schieber::Schieber::default(); MAX_STIMMEN],
             Schritt::Sem { f, .. } => *f = [Sem::default(); MAX_STIMMEN],
@@ -273,8 +298,11 @@ impl Schritt {
             Schritt::Phaser { p, .. } => p.zuruecksetzen(),
             Schritt::Vocoder { v, .. } => v.zuruecksetzen(),
             Schritt::Faltung { f, .. } => f.zuruecksetzen(),
-            Schritt::Sampler { s, rr, rr2, .. } => {
+            Schritt::Sampler { s, s2, rr, rr2, .. } => {
                 *s = [Sampler::default(); MAX_STIMMEN];
+                if let Some(b) = s2 {
+                    **b = [Sampler::default(); MAX_STIMMEN];
+                }
                 *rr = 0;
                 *rr2 = 0;
             }
@@ -309,6 +337,7 @@ impl Schritt {
             Schritt::Note { .. }
             | Schritt::WahlMisch { .. }
             | Schritt::Konst { .. }
+            | Schritt::Notenwahl { .. }
             | Schritt::Regler { .. }
             | Schritt::Transponiere { .. }
             | Schritt::Mul { .. }
@@ -475,7 +504,7 @@ impl Programm {
     /// Nur für `uebersetzen`: Schritte und Slot-Zahl kommen fertig geprüft.
     pub(crate) fn neu(name: String, stimmen: usize, sr: f32, schritte: Vec<Schritt>, n_slots: usize, verzoegert: Vec<usize>,
                       regler_namen: Vec<(usize, String)>, latenz: usize, regler_vorgabe: [f32; REGLER], regler_rastet: u64) -> Self {
-        let schritte = crate::zweige::zerlege(schritte);
+        let schritte = crate::zweige::zerlege(crate::nullen::vorbereiten(schritte));
         let eingang = schritte.iter().any(|s| matches!(s, Schritt::Eingang { .. }));
         Self {
             name,
@@ -488,6 +517,7 @@ impl Programm {
             verzoegert,
             note: [0; MAX_STIMMEN],
             hz: [0.0; MAX_STIMMEN],
+            bend: 1.0,
             gate: [0.0; MAX_STIMMEN],
             vel: [0.0; MAX_STIMMEN],
             trig: [0.0; MAX_STIMMEN],
@@ -507,8 +537,18 @@ impl Programm {
             regler_rastet,
             regler_namen,
             zweige: true,
+            nullen: true,
+            nullen_uebersprungen: 0,
             uebersprungen: 0,
             fehlerprobe: Fehlerprobe::Keine,
+        }
+    }
+
+    /// Pitch bend of the host as a frequency factor (`2^(st/12)`), applied to the hz the `note` block writes. 1.0 = none (the
+    /// slot then gets the voice frequencies untouched, bit for bit as before). Not finite or not positive is ignored. Does not allocate.
+    pub fn setze_bend(&mut self, faktor: f32) {
+        if faktor.is_finite() && faktor > 0.0 {
+            self.bend = faktor;
         }
     }
 
@@ -526,6 +566,18 @@ impl Programm {
     /// Switch the skipping of unselected `wahl` branches on (default) or off. Off runs every step in every sample, as the
     /// engine did before branches existed; the output is the same wherever no `wahl` changes its position (zweige.rs).
     pub fn setze_zweige(&mut self, an: bool) { self.zweige = an; }
+
+    /// Switch the zero-amount shortcuts (nullen.rs: `chaos` behind a zero `mul`, `chorus` at mix 0) on (default) or off. Off runs
+    /// every step in full in every sample. Set it before the first sample: a step that stood still keeps its state.
+    pub fn setze_nullen(&mut self, an: bool) { self.nullen = an; }
+
+    /// Times a `chaos` step stood still for a zero amount plus the samples a `chorus` took its dry shortcut (diagnostic).
+    pub fn nullen_uebersprungen(&self) -> u64 {
+        self.nullen_uebersprungen + self.schritte.iter().map(|s| if let Schritt::Chorus { c, .. } = s { c.ausgelassen() } else { 0 }).sum::<u64>()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn schritte_fuer_test(&self) -> &[Schritt] { &self.schritte }
 
     /// (position, jump target) of every branch guard and the number of steps; for the translation tests
     #[cfg(test)]
@@ -635,6 +687,41 @@ impl Programm {
         }
     }
 
+    fn matrix_mut(&mut self) -> Option<&mut crate::matrix::Matrix> {
+        self.schritte.iter_mut().find_map(|s| if let Schritt::Matrix { m, .. } = s { Some(&mut **m) } else { None })
+    }
+
+    fn matrix_ref(&self) -> Option<&crate::matrix::Matrix> {
+        self.schritte.iter().find_map(|s| if let Schritt::Matrix { m, .. } = s { Some(&**m) } else { None })
+    }
+
+    /// The graph has a `matrix` node (type 60).
+    pub fn hat_matrix(&self) -> bool { self.matrix_ref().is_some() }
+
+    /// Target of the pin `[satz 0|1][zeile 0..15][spalte 0..15]` of the matrix, smoothed over about 5 ms. The value is clamped to -1..1.
+    /// False without a matrix, for an index out of range or NaN. Does not allocate; not concurrent with `sample_stereo`.
+    pub fn stift_setzen(&mut self, satz: usize, zeile: usize, spalte: usize, wert: f32) -> bool {
+        self.matrix_mut().map_or(false, |m| m.setzen(satz, zeile, spalte, wert, false))
+    }
+
+    /// Like `stift_setzen`, the smoothed state jumps to the value (a take-over: no glide into the sound).
+    pub fn stift_sofort(&mut self, satz: usize, zeile: usize, spalte: usize, wert: f32) -> bool {
+        self.matrix_mut().map_or(false, |m| m.setzen(satz, zeile, spalte, wert, true))
+    }
+
+    /// All weights to the graph's pins (`vorgabe` true) or to 0; `sofort` jumps the smoothed state too. False without a matrix.
+    pub fn stifte_grund(&mut self, vorgabe: bool, sofort: bool) -> bool {
+        self.matrix_mut().map_or(false, |m| { m.grund(vorgabe, sofort); true })
+    }
+
+    /// Target of a pin; `None` without a matrix or for an index out of range.
+    pub fn stift(&self, satz: usize, zeile: usize, spalte: usize) -> Option<f32> {
+        self.matrix_ref().and_then(|m| m.ziel(satz, zeile, spalte))
+    }
+
+    /// Positions the matrix computes in each sample (0 without a matrix).
+    pub fn aktive_stifte(&self) -> usize { self.matrix_ref().map_or(0, |m| m.aktive()) }
+
     /// Alle Zustände wie nach dem Laden (Plugin-reset, Wächter): Stimmen, Oszillatoren, Filter, Hüllkurven, Slots. Nur
     /// die Reglerwege bleiben, sie gehören dem Plugin.
     pub fn zuruecksetzen(&mut self) {
@@ -643,6 +730,7 @@ impl Programm {
         }
         self.note = [0; MAX_STIMMEN];
         self.hz = [0.0; MAX_STIMMEN];
+        self.bend = 1.0;
         self.gate = [0.0; MAX_STIMMEN];
         self.vel = [0.0; MAX_STIMMEN];
         self.trig = [0.0; MAX_STIMMEN];
@@ -676,7 +764,9 @@ impl Programm {
         let k_reso = self.k_reso;
         let (beat, bps) = (self.beat, self.bps);
         let (zweige_an, probe) = (self.zweige, self.fehlerprobe);
-        let Programm { schritte, slots, vorher, hz, gate, vel, trig, erste, regler, ein, uebersprungen, .. } = self;
+        let bend = self.bend;
+        let Programm { schritte, slots, vorher, hz, gate, vel, trig, erste, regler, ein, uebersprungen, nullen: nullen_an, nullen_uebersprungen: nullen_zaehler, .. } = self;
+        let nullen_an = *nullen_an;
         let (mut links, mut rechts) = (0.0f32, 0.0f32);
         let laenge = schritte.len();
         let mut pc = 0;
@@ -686,7 +776,13 @@ impl Programm {
             let (s, folge) = rest.split_first_mut().unwrap();
             match s {
                 Schritt::Note { hz: h, gate: g, vel: v, trig: t, erste: e } => {
-                    slots[*h] = *hz;
+                    if bend != 1.0 {
+                        for (a, b) in slots[*h].iter_mut().zip(hz.iter()) {
+                            *a = *b * bend;
+                        }
+                    } else {
+                        slots[*h] = *hz;
+                    }
                     slots[*g] = *gate;
                     slots[*v] = *vel;
                     slots[*t] = *trig;
@@ -863,8 +959,73 @@ impl Programm {
                     slots[*mid] = m;
                     slots[*hi] = h;
                 }
-                Schritt::Chaos { rate, trig: t, aus, aus2, form, c, .. } => {
+                Schritt::Paula { hz, trig, gate: _, platz, start, rueckwaerts, wl, wr, b, v } => {
+                    let (h, t, pl) = (spur(*hz, slots, vorher), spur(*trig, slots, vorher), spur(*platz, slots, vorher));
+                    let (st, ru) = (spur(*start, slots, vorher), spur(*rueckwaerts, slots, vorher));
+                    let (mut ol, mut or) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
+                    for i in 0..n {
+                        (ol[i], or[i]) = v[i].prozess(b, h[i], t[i], pl[i], st[i], ru[i], sr);
+                    }
+                    slots[*wl] = ol;
+                    slots[*wr] = or;
+                }
+                Schritt::Notenwahl { hz, aus, noten } => {
+                    let h = spur(*hz, slots, vorher);
+                    let mut o = [0.0; MAX_STIMMEN];
+                    for i in 0..n {
+                        o[i] = crate::notenwahl::index(h[i], noten);
+                    }
+                    slots[*aus] = o;
+                }
+                Schritt::Lfsr { hz, aus, kurz, l } => {
+                    let h = spur(*hz, slots, vorher);
+                    let mut o = [0.0; MAX_STIMMEN];
+                    for i in 0..n {
+                        o[i] = l[i].prozess(h[i], *kurz, sr);
+                    }
+                    slots[*aus] = o;
+                }
+                Schritt::Funktion { x, trig, halt, steigen, fallen, form, zyklus, tempo, aus, ende, steigt, f } => {
+                    let (x, t, h) = (spur(*x, slots, vorher), spur(*trig, slots, vorher), spur(*halt, slots, vorher));
+                    let (st, fa, fo) = (spur(*steigen, slots, vorher), spur(*fallen, slots, vorher), spur(*form, slots, vorher));
+                    let (z, te) = (spur(*zyklus, slots, vorher), spur(*tempo, slots, vorher));
+                    let (mut oa, mut oe, mut os) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
+                    for i in 0..n {
+                        (oa[i], oe[i], os[i]) = f[i].prozess(x[i], t[i], h[i], st[i], fa[i], fo[i], z[i], te[i], sr);
+                    }
+                    slots[*aus] = oa;
+                    slots[*ende] = oe;
+                    slots[*steigt] = os;
+                }
+                Schritt::Lpg { x, cv, modus, abkling, reso, versatz, aus, l } => {
+                    let (x, c, m) = (spur(*x, slots, vorher), spur(*cv, slots, vorher), spur(*modus, slots, vorher));
+                    let (ab, r, v) = (spur(*abkling, slots, vorher), spur(*reso, slots, vorher), spur(*versatz, slots, vorher));
+                    let mut o = [0.0; MAX_STIMMEN];
+                    for i in 0..n {
+                        o[i] = l[i].prozess(x[i], c[i], m[i], ab[i], r[i], v[i], sr);
+                    }
+                    slots[*aus] = o;
+                }
+                Schritt::Matrix { e, morph, a, m } => {
+                    let mo = lese_spur(*morph, slots, vorher);
+                    let mut o = [[0.0f32; MAX_STIMMEN]; 16];
+                    m.prozess(n, |i| spur(e[i], slots, vorher), |v| mo.bei(v), &mut o);
+                    for j in 0..16 {
+                        slots[a[j]] = o[j];
+                    }
+                }
+                Schritt::Chaos { rate, trig: t, aus, aus2, form, betrag, c, .. } => {
                     let (r, t) = (spur(*rate, slots, vorher), spur(*t, slots, vorher));
+                    // every `mul` that reads this step multiplies by exactly 0 in every voice (nullen.rs): its product is 0 whatever the
+                    // attractor does, so only the note edges are kept and the slots stay as they are (the product is +-0 either way)
+                    if nullen_an && !betrag.is_empty() && betrag.iter().all(|q| spur(*q, slots, vorher)[..n].iter().all(|&b| b == 0.0)) {
+                        for i in 0..n {
+                            c[i].nur_trigger(t[i]);
+                        }
+                        *nullen_zaehler += 1;
+                        pc += 1;
+                        continue;
+                    }
                     let (mut a, mut b) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
                     for i in 0..n {
                         (a[i], b[i]) = c[i].prozess(r[i], t[i], *form, sr);
@@ -974,7 +1135,7 @@ impl Programm {
                 Schritt::Chorus { x, mix, l, r, c } => {
                     let (x, m) = (spur(*x, slots, vorher), spur(*mix, slots, vorher));
                     let summe: f32 = x.iter().take(n).sum();
-                    let (a, b) = c.prozess(summe, m[0]);
+                    let (a, b) = if nullen_an { c.prozess(summe, m[0]) } else { c.prozess_voll(summe, m[0]) };
                     let (mut ol, mut or) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
                     ol[0] = a;
                     or[0] = b;
@@ -1063,7 +1224,7 @@ impl Programm {
                     let (ra, ti, f, mi) = (m(rate, 0), m(tiefe, 1), m(fb, 2), m(mix, 3));
                     in_stimme0(slots, *wl, *wr, p.prozess(s.0, s.1, ra, ti, f, mi));
                 }
-                Schritt::Sampler { hz, trig, gate, scheibe, rueck, tempo, halb, ausklang, vel, wl, wr, wrl, wrr, e, g: tabelle, z: zonen, rr, rr2, wahl, d, s } => {
+                Schritt::Sampler { hz, trig, gate, scheibe, rueck, tempo, halb, ausklang, vel, wl, wr, wrl, wrr, e, g: tabelle, z: zonen, rr, rr2, wahl, d, s, s2 } => {
                     let d: &[f32] = d;
                     let (h, t, g) = (spur(*hz, slots, vorher), spur(*trig, slots, vorher), spur(*gate, slots, vorher));
                     let (sc, ru) = (spur(*scheibe, slots, vorher), spur(*rueck, slots, vorher));
@@ -1074,7 +1235,15 @@ impl Programm {
                         let ve = spur(*vel, slots, vorher);
                         for i in 0..n {
                             let x = Eingabe { hz: h[i], trig: t[i], gate: g[i], scheibe: sc[i], rueck: ru[i] };
+                            let zaehler = *rr;
                             (ol[i], or[i], fl[i], fr[i]) = s[i].prozess_zonen_frei(d, zt, rr, rr2, sr, x, ve[i]);
+                            if let Some(zw) = s2.as_mut() {
+                                // stage 2c: the second layer plays the second cell with the counter value the first one had
+                                let mut z2 = zaehler;
+                                let (l2, r2) = zw[i].prozess_zonen_zweite(d, zt, &mut z2, sr, x, ve[i]);
+                                ol[i] += l2;
+                                or[i] += r2;
+                            }
                         }
                     } else {
                         for i in 0..n {

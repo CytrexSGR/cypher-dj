@@ -76,7 +76,7 @@ export function bindeAblage(ctx) {
     const s = strangId ? straenge(st.projekt).find((x) => x.id === strangId) : null;
     if (!s) { ctx.melde('Drop the plugin on a track row, or select a strip first', true); return; }
     if (s.inserts.length >= MAX_PLAETZE) { ctx.melde(`All ${MAX_PLAETZE} stages of this strip are used`, true); return; }
-    ctx.aendere(`Add ${n.titel ?? 'plugin'} to ${s.name}`, [{ befehl: 'insert_setzen', strang_id: strangId, art: 'host', plugin_id: n.plugin_id }]);
+    ctx.aendere(`Add ${n.titel ?? 'plugin'} to ${s.name}`, [{ befehl: 'insert_setzen', strang_id: strangId, pos: s.inserts.length, art: 'host', plugin_id: n.plugin_id }]);
   }
   ctx.fuegePluginEin = (n) => legePlugin([...(st.spurWahl ?? [])][0], n);
   // 1.16 rest (U7, S4): a preset from the PRESETS list. presetZiel() picks the target (or the reason), the server computes the plan, one write follows.
@@ -88,29 +88,33 @@ export function bindeAblage(ctx) {
     if (r.fehler) { ctx.melde(r.text, true); return; }
     wendePresetAn(ctx, n, r.ziel);
   }
-  // an effect dropped on a strip row of the INSERTS block (tracks, groups, returns, master)
-  const kette = $('inserts-liste');
-  const zeile = (e) => e.target?.closest?.('.p-kette[data-strang]') ?? null;
+  // an effect, plugin or preset dropped on a dock card or chip (plan 1.11 task 13)
   const istPreset = (e) => e.dataTransfer.types.includes(PRESET_TYP);
-  kette?.addEventListener('dragover', (e) => {
-    if (!st.projekt || !(e.dataTransfer.types.includes(GERAET_TYP) || istPreset(e)) || !zeile(e)) return;
-    e.preventDefault(); e.dataTransfer.dropEffect = 'copy';
-  });
-  kette?.addEventListener('drop', (e) => {
-    const z = zeile(e);
-    if (!st.projekt || !(e.dataTransfer.types.includes(GERAET_TYP) || istPreset(e)) || !z) return;
-    e.preventDefault();
-    if (istPreset(e)) {   // a stage takes the preset itself (kind must match); a strip row without a stage gets a new stage
-      const stufe = e.target?.closest?.('.p-stufe[data-insert]');
-      legePreset(e, stufe ? { stufe: stufe.dataset.insert } : { strang: z.dataset.strang });
-      return;
-    }
-    const n = lies(e);
-    if (!n) return;
-    if (n.art === 'host') { legePlugin(z.dataset.strang, n); return; }
-    if (n.ziel !== 'insert') { ctx.melde('Drop instruments on the arrangement', true); return; }
-    const r = effektBefehl(st.projekt, z.dataset.strang, n);
-    if (r.fehler) { ctx.melde(r.text, true); return; }
-    ctx.aendere(r.label, [r.befehl]);
-  });
+  function bindeZiel(wurzel, strangVon, stufeVon) {
+    wurzel?.addEventListener('dragover', (e) => {
+      if (!st.projekt || !(e.dataTransfer.types.includes(GERAET_TYP) || istPreset(e)) || !strangVon(e)) return;
+      e.preventDefault(); e.dataTransfer.dropEffect = 'copy';
+    });
+    wurzel?.addEventListener('drop', (e) => {
+      const strang = strangVon(e);
+      if (!st.projekt || !(e.dataTransfer.types.includes(GERAET_TYP) || istPreset(e)) || !strang) return;
+      e.preventDefault();
+      if (istPreset(e)) {   // a stage takes the preset itself (kind must match); a strip without a stage gets a new stage
+        const stufe = stufeVon(e);
+        if (stufe === 'hall') { ctx.melde('Drop the preset on an insert stage or on the card', true); return; }
+        legePreset(e, stufe ? { stufe } : { strang });
+        return;
+      }
+      const n = lies(e);
+      if (!n) return;
+      if (n.art === 'host') { legePlugin(strang, n); return; }
+      if (n.ziel !== 'insert') { ctx.melde('Drop instruments on the arrangement', true); return; }
+      const r = effektBefehl(st.projekt, strang, n);
+      if (r.fehler) { ctx.melde(r.text, true); return; }
+      ctx.aendere(r.label, [r.befehl]);
+    });
+  }
+  bindeZiel($('dock'),
+    (e) => e.target?.closest?.('[data-strang]')?.dataset.strang ?? null,
+    (e) => e.target?.closest?.('[data-w="karte-teil"]')?.dataset.teil ?? null);
 }

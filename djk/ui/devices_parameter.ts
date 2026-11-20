@@ -4,9 +4,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { skaliere } from './public/panel_skala.js';
-import { findeGraph, graphenOrdner, panelOrdner, ladePanel, reglerBereiche, type ReglerBereich, pruefePanel, normalisierePanel, GRAPH_NAME, AKZENTE, GERAET_ARTEN } from './graphs.ts';
+import { findeGraph, graphenOrdner, panelOrdner, ladePanel, reglerBereiche, type ReglerBereich, pruefePanel, normalisierePanel, GRAPH_NAME, AKZENTE, GERAET_ARTEN, steckfeldVon } from './graphs.ts';
 import { REPO, REPO_PFADE } from './paths.ts';
 import { RB_DEFS, RB_VORGABE_NORM7 } from './project/rb_mapping.ts';
+import type { Steckfeld } from './steckfeld.ts';
 
 /** min/max in display units; the panel and the device views work in normalised 0..1 travel, `vorgabe` is normalised 0..1. EXCEPTION Surge: the project
  *  (`geraet.parameter` of a Surge track) and POST /klang fahre hold DISPLAY values (ranges of surge_bereiche.json); the page maps the travel through `punkte`. `stufen`: the parameter is a discrete choice.
@@ -92,7 +93,10 @@ export function parameterTabelle(geraet: Geraet, ordner: string = graphenOrdner(
 export const FAMILIEN: Record<string, string> = { drums: 'rot', mono: 'orange', poly: 'blau', neuro: 'violett', fx: 'tuerkis' };
 
 // ---- device register: djk/instruments/modular_dsp/geraete.json (single source of family and accent) ----
-export type RegisterEintrag = { name: string; art: 'bk' | 'rb338' | 'surge'; familie: string; akzent: string; doku: string };
+// fx_stufig / rollen (tracker effect commands, plan D16): the device runs its effects as jumps per tick; knob numbers (1..64, latched in the graph) of the
+// slot, start and reverse roles. They live here, not in the graph (the graph format refuses unknown fields).
+export type FxRollen = { slot?: number; start?: number; rueckwaerts?: number };
+export type RegisterEintrag = { name: string; art: 'bk' | 'rb338' | 'surge'; familie: string; akzent: string; doku: string; fx_stufig?: true; rollen?: FxRollen };
 /** The directories of a repo copy (`wurzel`, default the repo this file lives in). Tests and `device.ts --wurzel` point it at a temp copy. */
 export function pfadeVon(wurzel: string = REPO) {
   const bk = path.join(wurzel, 'djk', 'instruments', 'modular_dsp');
@@ -109,6 +113,22 @@ export function ladeRegisterStreng(wurzel: string = REPO): RegisterEintrag[] {
   try { r = JSON.parse(fs.readFileSync(datei, 'utf8')); } catch (e) { throw new Error(`register ${datei} cannot be read (${(e as Error).message}); nothing written`); }
   if (!Array.isArray(r)) throw new Error(`register ${datei} is not a list; nothing written`);
   return r as RegisterEintrag[];
+}
+const ROLLEN = ['slot', 'start', 'rueckwaerts'] as const;
+const istKnopf = (x: unknown): x is number => Number.isInteger(x) && (x as number) >= 1 && (x as number) <= 64;
+let fxZwischen: { datei: string; mtime: number; liste: RegisterEintrag[] } | null = null;
+/** How the device of a Baukasten graph runs the tracker effect commands: `stufig` (jumps per tick, else smooth glides) and the knob numbers of its roles,
+ *  read from its register entry. A graph `amiga-<id>` takes the entry of `amiga`; an unknown graph, or an entry without the fields: smooth, no roles. */
+export function geraetFx(graph: string, wurzel: string = REPO): { stufig: boolean; rollen: FxRollen } {
+  const datei = pfadeVon(wurzel).register;
+  let mtime = 0;
+  try { mtime = fs.statSync(datei).mtimeMs; } catch { return { stufig: false, rollen: {} }; }
+  if (fxZwischen?.datei !== datei || fxZwischen.mtime !== mtime) fxZwischen = { datei, mtime, liste: ladeRegister(wurzel) };
+  const name = /^amiga-/.test(graph) ? 'amiga' : graph;
+  const e = fxZwischen.liste.find((x) => x?.art === 'bk' && x.name === name);
+  const rollen: FxRollen = {};
+  for (const r of ROLLEN) if (istKnopf(e?.rollen?.[r])) rollen[r] = e!.rollen![r];
+  return { stufig: e?.fx_stufig === true, rollen };
 }
 export const geraetName = (g: Geraet): string => (g.art === 'bk' ? g.graph : g.art);
 const eintragVon = (g: Geraet) => ladeRegister().find((e) => e.art === g.art && e.name === geraetName(g));
@@ -153,7 +173,8 @@ export function autoPanel(geraet: Geraet, parameter: Parameter[], titel: string)
   return { format: 'cypherdj-panel/2', geraet, title: kuerze(titel || 'Device', 40), akzent: akzentVon(geraet), sections };
 }
 
-export type GeraetePanel = { geraet: Geraet; parameter: Parameter[]; panel: Record<string, unknown> | null; quelle: 'datei' | 'auto'; fehler: string[] };
+export type GeraetePanel = { geraet: Geraet; parameter: Parameter[]; panel: Record<string, unknown> | null; quelle: 'datei' | 'auto'; fehler: string[];
+  /** Kraken patch field: labels and default pins of the graph's matrix node (bk only, absent when the graph has none) */ steckfeld?: Steckfeld };
 
 /** The hand panel of rb338 or surge: `<graph folder>/panels/<art>.json` (installed by djk-start from paneele/). {panel, fehler}: panel null when the file is
  *  missing (no fehler) or refused (fehler says why). */
@@ -176,8 +197,10 @@ export function geraetePanel(geraet: Geraet, titel?: string): GeraetePanel {
   const parameter = parameterTabelle(geraet);
   let fehler: string[] = [];
   if (geraet.art === 'bk') {
+    const sf = steckfeldVon(geraet.graph);
+    const mit = sf ? { steckfeld: sf } : {};
     const datei = ladePanel(geraet.graph);
-    if (datei?.panel) return { geraet, parameter, panel: datei.panel, quelle: 'datei', fehler: [] };
+    if (datei?.panel) return { geraet, parameter, panel: datei.panel, quelle: 'datei', fehler: [], ...mit };
     fehler = datei?.fehler ?? [];
   } else {
     const datei = ladeGeraetePanelDatei(geraet, parameter);
@@ -185,7 +208,8 @@ export function geraetePanel(geraet: Geraet, titel?: string): GeraetePanel {
     fehler = datei.fehler;
   }
   const t = titel ?? (geraet.art === 'bk' ? geraet.graph : geraet.art === 'rb338' ? 'RB-338' : 'Surge');
-  return { geraet, parameter, panel: parameter.length ? autoPanel(geraet, parameter, t) : null, quelle: 'auto', fehler };
+  const sf = geraet.art === 'bk' ? steckfeldVon(geraet.graph) : null;
+  return { geraet, parameter, panel: parameter.length ? autoPanel(geraet, parameter, t) : null, quelle: 'auto', fehler, ...(sf ? { steckfeld: sf } : {}) };
 }
 
 /** Completeness of the device register under `wurzel`: one line per problem, [] when everything is in order. Per entry: the register fields, the
@@ -205,6 +229,13 @@ export function pruefeGeraete(wurzel: string = REPO): string[] {
     if (!GERAET_ARTEN.includes(e.art as string)) { f.push(`${name}: art must be one of ${GERAET_ARTEN.join(', ')}`); continue; }
     if (!Object.keys(FAMILIEN).includes(String(e.familie))) f.push(`${name}: familie must be one of ${Object.keys(FAMILIEN).join(', ')}`);
     if (!AKZENTE.includes(String(e.akzent))) f.push(`${name}: akzent must be one of ${AKZENTE.join(', ')}`);
+    if (e.fx_stufig !== undefined && e.fx_stufig !== true) f.push(`${name}: fx_stufig must be true or absent`);
+    if (e.rollen !== undefined) {
+      const r = e.rollen as Record<string, unknown>;
+      if (typeof r !== 'object' || r === null || Array.isArray(r) || Object.keys(r).some((k) => !(ROLLEN as readonly string[]).includes(k) || !istKnopf(r[k]))) {
+        f.push(`${name}: rollen must be {slot?, start?, rueckwaerts?} with knob numbers 1..64`);
+      }
+    }
     if (typeof e.doku !== 'string' || !e.doku || !fs.existsSync(path.join(wurzel, e.doku))) f.push(`${name}: no doc file (${String(e.doku)})`);
     const datei = path.join(P.paneele, `${name}.json`);
     if (!fs.existsSync(datei)) { f.push(`${name}: no panel`); continue; }

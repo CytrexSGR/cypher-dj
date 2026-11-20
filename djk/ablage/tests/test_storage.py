@@ -69,6 +69,15 @@ def test_beide_bleibt_alt(tmp_path, capsys):
     assert ablage.ordner("kits", {"HOME": str(tmp_path / "h3")}, t) == tmp_path / "h3/.config/cypherdj/kits"
 
 
+def test_regel3_toter_link_bricht_ab(tmp_path):
+    """Point (b): moved home, disk missing: alt is a link to a missing target; no silent fallback to neu."""
+    h = tmp_path / "h"
+    (h / ".config/cypherdj").mkdir(parents=True)
+    (h / ".config/cypherdj/presets").symlink_to(tmp_path / "platte/heim/werke/presets")
+    with pytest.raises(ValueError, match="is the disk mounted"):
+        ablage.ordner("presets", {"HOME": str(h)}, neu_tabelle())
+
+
 def test_lesbarer_name_wie_vektoren():
     v = json.loads((REPO / "docs" / "interfaces" / "lesbare_namen.json").read_text(encoding="utf-8"))["vektoren"]
     assert len(v) >= 5

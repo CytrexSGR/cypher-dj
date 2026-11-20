@@ -8,11 +8,16 @@
 //   K8 quantum 2048: a note at offset 1500 (second sub-block) is not lost (the stamp is clamped into the first sub-block), and the sink counts nothing lost
 //   K10 /k/arr/note (sampler plan A1 task 7): one note on a project track with the transport standing and no arm: on, off (vel 0), spur 0 and 33 refused spur_bereich with
 //       nothing reaching the sink, cypher after the AI stop refused ki_gestoppt (andreas still plays)
+//   K11 /k/arr/stift (kraken patch field): a held note on a bk track whose graph has a matrix is silent until a pin arrives, with the transport standing; the pin sounds at once (receipts 1 and 3),
+//       a refused pin (spur 0) changes nothing; the pin waits behind a queued ARR_LADEN exactly as ARR_NOTE (full event ring: the load waits for the return, the pin and the note behind it)
+//       and sounds after the swap
 // Mutations built against this test: LIVE_AUS_BEI_DISARM_FEHLT (K3). LIVE_NOTE_VERWORFEN and LIVE_ALLE_AUS_LEER have targets only against test_arr_live; here K1 and K4, K5, K7
 // pin the same properties through the live table and the bus level, but no mutation binary of this test exists for them.
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <string>
 
 #include "arr_run.h"
@@ -313,6 +318,84 @@ int main() {
     note(1, 64, 0, "andreas");
     x.lauf(x.kern->sample() + 4 * N);
     PRUEF(live() == 0);
+  }
+  {  // K11: /k/arr/stift sets a pin of the matrix of a bk track (kraken patch field), with the transport standing
+    arr35::Lauf x(ab.pfad, "test_kern_live_k11");
+    const std::string bk = x.ordner.pfad + "/bk";
+    std::filesystem::create_directories(bk);
+    auto namen = [](const char* p) {
+      std::string s = "[";
+      for (int i = 0; i < 16; ++i) s += std::string(i ? "," : "") + "\"" + p + std::to_string(i) + "\"";
+      return s + "]";
+    };
+    std::ofstream(bk + "/m.json") << R"({"format":"baukasten/2","name":"m","stimmen":1,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"m","art":"matrix","zeilen":)" + namen("z") +
+                                         R"(,"spalten":)" + namen("s") + R"(},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"s.aus","nach":"m.e1"},{"von":"m.a1","nach":"o.x"}]})";
+    x.cache.setze_bk_ordner(bk);
+    x.cache.setze_bk_leser(x.kern->arr_bk_leser());
+    const char* BK1 = "{\"nr\":1,\"art\":\"intern\",\"geraet\":\"bk\",\"graph\":\"m\",\"noten\":[]}";
+    x.laden(5, BK1);
+    x.lauf(12 * N);
+    PRUEF(x.kern->arrangement().status() == cdj::ArrStatus::steht && x.kern->arrangement().snapshot() && x.kern->arrangement().snapshot()->nr == 5);
+    const auto note = [&](int spur, int ton, int vel) {
+      cdj::Befehl b = x.neu(cdj::Befehl::ARR_NOTE, "andreas");
+      b.nr = spur; b.politik = ton; b.fassung = vel;
+      return x.sende(b);
+    };
+    const auto stift = [&](int spur, int satz, int zeile, int spalte, float wert, const char* quelle = "andreas") {   // /k/arr/stift: nr = spur, form = satz, politik = zeile, fassung = spalte
+      cdj::Befehl b = x.neu(cdj::Befehl::ARR_STIFT, quelle);
+      b.nr = spur; b.form = satz; b.politik = zeile; b.fassung = spalte; b.wert = wert;
+      return x.sende(b);
+    };
+    // a held note with no pin: silent (the graph has no default pin)
+    const int64_t t0 = x.kern->sample();
+    note(1, 57, 100);
+    x.lauf(t0 + 8 * N);
+    const float still0 = spitze(x.pm_l, t0, t0 + 8 * N);
+    // a pin of a spur outside 1..32 is refused and changes nothing
+    const int64_t t1 = x.kern->sample();
+    const int64_t id0 = stift(0, 0, 0, 0, 1.0f);
+    x.lauf(t1 + 8 * N);
+    const float still1 = spitze(x.pm_l, t1, t1 + 8 * N);
+    PRUEF(x.quittung(id0, 6) && x.quittung(id0, 6)->grund == "spur_bereich" && !x.quittung(id0, 1));
+    // the pin of track 1: receipts 1 and 3, the held note sounds
+    const int64_t t2 = x.kern->sample();
+    const int64_t id1 = stift(1, 0, 0, 0, 1.0f);
+    x.lauf(t2 + 8 * N);
+    const float an = spitze(x.pm_l, t2 + N, t2 + 8 * N);
+    std::printf("K11 no pin: peak %.3g / refused pin: peak %.3g; pin: ack 1 %d ack 3 %d, peak %.4f\n", still0, still1, x.quittung(id1, 1) != nullptr, x.quittung(id1, 3) != nullptr, an);
+    PRUEF(still0 < 1e-4f && still1 < 1e-4f);
+    PRUEF(x.quittung(id1, 1) != nullptr && x.quittung(id1, 3) != nullptr && an > 0.001f);
+    PRUEF(x.kern->arrangement().status() == cdj::ArrStatus::steht);
+    // the pin off again (wert 0): silent
+    const int64_t t3 = x.kern->sample();
+    stift(1, 0, 0, 0, 0.0f);
+    x.lauf(t3 + 16 * N);
+    const float aus = spitze(x.pm_l, t3 + 12 * N, t3 + 16 * N);   // the pin glides out (about 5 ms)
+    PRUEF(aus < 1e-3f);
+    note(1, 57, 0);
+    x.lauf(x.kern->sample() + 4 * N);
+    // behind a queued ARR_LADEN: the event ring is full, the load of 6 swaps the playback and leaves the return of 5 open, the load of 7 waits for that place; pin and note queue behind it
+    x.abholen = false;
+    while (x.kern->ereignisse_verloren() == 0) x.zyklen(x.kern->sample() + N);
+    x.laden(6, BK1);
+    x.zyklen(x.kern->sample() + 2 * N);
+    const int64_t l7 = x.laden(7, BK1);
+    x.zyklen(x.kern->sample() + 2 * N);
+    const int64_t tw = x.kern->sample();
+    const int64_t idw = stift(1, 0, 0, 0, 1.0f);
+    const int64_t idn = note(1, 57, 100);
+    x.zyklen(tw + 6 * N);
+    PRUEF(x.kern->arrangement().snapshot() && x.kern->arrangement().snapshot()->nr == 6);
+    PRUEF(!x.quittung(idw, 1) && !x.quittung(idw, 3) && !x.quittung(l7, 3));   // still waiting behind the load
+    x.abholen = true;
+    const int64_t tr = x.kern->sample();
+    x.lauf(tr + 12 * N);
+    const float nach = spitze(x.pm_l, tr + 6 * N, tr + 12 * N);
+    std::printf("K11 behind a queued load: waiting ack %d, after the release snapshot %lld, ack 1 %d ack 3 %d, peak %.4f\n", x.quittung(idw, 3) != nullptr,
+                x.kern->arrangement().snapshot() ? static_cast<long long>(x.kern->arrangement().snapshot()->nr) : -1LL, x.quittung(idw, 1) != nullptr, x.quittung(idw, 3) != nullptr, nach);
+    (void)idn;
+    PRUEF(x.kern->arrangement().snapshot() && x.kern->arrangement().snapshot()->nr == 7);
+    PRUEF(x.quittung(l7, 3) && x.quittung(idw, 1) && x.quittung(idw, 3) && nach > 0.001f);
   }
   PRUEF_ENDE();
 }

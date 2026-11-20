@@ -1,0 +1,6 @@
+{"schema":1,"name":"gated-hall-snare","modell":"lc3","art":"instrument","graph":"gated-hall-snare",
+"eintraege":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2}],
+"seiten":{"main":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2}]},
+"programme":[
+{"name":"GATE \u00b7 HALL","seite":"main",
+"eintraege":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2}]}]}

@@ -1,4 +1,4 @@
-// Pin: a project WITHOUT a return fader lane renders the same mixer return strips, strip heads and "+ Lane" target lists as before the return fader
+// Pin: a project WITHOUT a return fader lane renders the same strip heads and "+ Lane" target lists as before the return fader
 // lane reached the page (golden captured on 11431bc8c, before any page change of this slice). Without google-chrome the test is skipped.
 // Set CYPHERDJ_GOLDEN_SCHREIBEN=1 to rewrite the golden (only ever on code that is known to be right).
 import test from 'node:test';
@@ -25,7 +25,7 @@ async function erfasse(t) {
   t.after(() => s.stoppe());
   await s.oeffne();
   await s.saat(p);
-  const out = { mixer_returns: await html(s, '[data-p="mixer-returns"]'), koepfe_zu: await html(s, '[data-p="koepfe"]') };
+  const out = { koepfe_zu: await html(s, '[data-p="koepfe"]') };
   await klick(s, '.p-arr-strang[data-strang="r1"] .p-lane');
   out.koepfe_r1_offen = await html(s, '[data-p="koepfe"]');
   await klick(s, '.p-arr-strang[data-strang="r1"] .p-lane');
@@ -37,7 +37,7 @@ async function erfasse(t) {
   return out;
 }
 
-test('ret_ohne_lane_seite_gleich_wie_vorher: mixer returns, strip heads and target lists equal the golden', { skip: !CHROME && 'no google-chrome' }, async (t) => {
+test('ret_ohne_lane_seite_gleich_wie_vorher: strip heads and target lists equal the golden', { skip: !CHROME && 'no google-chrome' }, async (t) => {
   const jetzt = await erfasse(t);
   if (process.env.CYPHERDJ_GOLDEN_SCHREIBEN === '1') { fs.writeFileSync(GOLDEN, JSON.stringify(jetzt, null, 1) + '\n'); return; }
   const golden = JSON.parse(fs.readFileSync(GOLDEN, 'utf8'));
@@ -49,8 +49,8 @@ test('ret_ohne_lane_seite_gleich_wie_vorher: mixer returns, strip heads and targ
   assert.ok(golden.koepfe_r1_offen.includes('value="fader">Volume</option>') && golden.koepfe_r1_offen.includes('[&quot;fader&quot;,&quot;Volume&quot;]'), 'the golden edit applied');
   for (const k of Object.keys(golden)) assert.deepEqual(jetzt[k], golden[k], `part ${k} differs from the golden`);
   assert.deepEqual(Object.keys(jetzt), Object.keys(golden));
-  // negative control: the comparison can fail (an `auto` class on the return strip would turn the golden red)
-  const falsch = golden.mixer_returns.replace('p-returnkopf"', 'p-returnkopf auto"');
-  assert.notEqual(falsch, golden.mixer_returns, 'the control string differs');
-  assert.notDeepEqual(falsch, jetzt.mixer_returns);
+  // negative control: the comparison can fail (a missing `auto` class on the track head would turn the golden red)
+  const falsch = golden.koepfe_zu.replace('class="p-kopf auto"', 'class="p-kopf"');
+  assert.notEqual(falsch, golden.koepfe_zu, 'the control string differs');
+  assert.notDeepEqual(falsch, jetzt.koepfe_zu);
 });

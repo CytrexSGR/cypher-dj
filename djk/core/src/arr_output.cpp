@@ -211,6 +211,8 @@ void Arrangement::regler_binden(const sw::ReglerTabelle& tab) {
     if (streifen < ARR_SPUREN && feld < 4 &&
         (d.rolle == sw::Rolle::spur_fader || d.rolle == sw::Rolle::spur_pan || d.rolle == sw::Rolle::spur_mute || d.rolle == sw::Rolle::spur_solo))
       spur_regler_[streifen][feld] = static_cast<int16_t>(r);   // 1.12 S3: only spur/1..32/{fader,pan,mute,solo} can be grabbed (D1)
+    if (d.rolle == sw::Rolle::ret_fader && streifen >= ARR_RET0 && streifen < ARR_RET0 + ARR_RETURNS && feld == ARR_AUTO_FADER)
+      spur_regler_[ARR_SPUREN + (streifen - ARR_RET0)][ARR_AUTO_FADER] = static_cast<int16_t>(r);   // the hand overrides a return fader lane like a track fader lane
     w_[streifen][feld].w = d.vorgabe;
   }
   for (float& g : ms_gain_) g = 1.0f;

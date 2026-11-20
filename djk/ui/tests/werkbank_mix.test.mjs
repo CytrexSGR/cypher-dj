@@ -5,7 +5,9 @@ import assert from 'node:assert/strict';
 import { installiere } from './helpers/pages_mock.mjs';
 
 installiere();
-const { mixZuege, sendPos, sendDb, sendText, fxMenue, rackTeile, masterTeile, neuerDrehknopf } = await import('../public/werkbank/mix.js');
+const { mixZuege, fxMenue } = await import('../public/werkbank/mix.js');
+const { sendPos, sendDb, sendText, neuerDrehknopf } = await import('../public/dock/drehknopf.js');
+const { rackTeile, masterTeile } = await import('../public/dock/stages.js');
 
 const HALL = { an: true, pre: 0.04, decay: 0.5, groesse: 0.3, tief: 0.5, highcut: 0.8, fahne: 0.6 };
 const GRAPHEN = [{ name: 'fx-delay-sync', art: 'effekt' }, { name: 'fx-remix', art: 'effekt' }, { name: 'bass-banddrive', art: 'instrument' }];

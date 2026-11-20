@@ -1,0 +1,21 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "pad-granular"},
+  "title": "Granular Pad",
+  "akzent": "blau",
+  "layout": {"rows": [
+    ["cloud", "filter", "fx"]
+  ]},
+  "sections": [
+    { "id": "cloud", "title": "CLOUD", "cols": 2, "controls": [
+      {"id": "pos", "type": "knob", "label": "Cloud position", "bind": {"param": "k1"}, "format": "percent", "default": 0.5},
+      {"id": "motion", "type": "knob", "label": "Position motion", "bind": {"param": "k2"}, "format": "percent", "default": 0.5}
+    ]},
+    { "id": "filter", "title": "FILTER", "cols": 1, "controls": [
+      {"id": "cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k3"}, "format": "hz", "default": 0.5}
+    ]},
+    { "id": "fx", "title": "SPACE", "cols": 1, "controls": [
+      {"id": "hall", "type": "knob", "label": "Hall mix", "bind": {"param": "k4"}, "format": "percent", "default": 0.5}
+    ]}
+  ]
+}

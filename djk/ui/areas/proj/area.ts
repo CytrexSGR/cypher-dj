@@ -21,7 +21,9 @@ import { routingMatrix } from '../../project/routing_matrix.ts';
 import { grundText } from '../../http/reasons.ts';
 import { wirtLage } from './instrument_host.ts';
 import { MIDI_KOERPER_MAX, midiImport } from './midi_import.ts';
-import { ProjFehler, ProjSitzung, TRANSIENTEN_MAX, hkKurz, type Antwort, type AusgabeLauf, type ProjOptionen } from './session.ts';
+import { steckfeldSicht } from './steckfeld.ts';
+import { trackerRouten } from './tracker_routes.ts';
+import { ProjFehler, ProjSitzung, steckfeldLookup, TRANSIENTEN_MAX, hkKurz, type Antwort, type AusgabeLauf, type ProjOptionen } from './session.ts';
 
 export type { AusgabeLauf, ProjOptionen };
 
@@ -180,6 +182,14 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
         }
         return r;
       }),
+      // patch field of one bk track: ?spur_id=<id>
+      lies('/proj/steckfeld', (url) => {
+        const o = s.zugangOffen();
+        if (!o) throw new ProjFehler(409, 'kein_projekt');
+        const id = url.searchParams.get('spur_id') ?? '';
+        if (id === '') throw new ProjFehler(400, 'argument_ungueltig', { text: 'spur_id: a track ID is required' });
+        return { code: 200, j: steckfeldSicht(o.projekt, id, steckfeldLookup) };
+      }),
       lies('/proj/verlauf', () => s.verlaufListe()),
       // 1.9 (L25): the kits the kit folder offers for a kit track (proj_kits and the picker of the page)
       lies('/proj/kits', () => ({ code: 200, j: { kits: listeKits() } })),
@@ -238,7 +248,8 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
       }),
       // Spec 6.32: ?antwort=kurz (Werkzeuge proj_neu, proj_oeffnen) liefert slug, rev, Spuren ohne Noten, noten_zahl und kern statt des Projekts
       // plan live-module task 1: bestaetigt = Andreas's confirm of a switch away from a running live container (the session ignores it for Cypher)
-      schreib('/proj/neu', (d, quelle) => s.neu(d.name, quelle, d.bestaetigt === true, { werkbank: d.werkbank, vorlage: d.vorlage }), kurzeOeffnenAntwort),
+      schreib('/proj/neu', (d, quelle) => s.neu(d.name, quelle, d.bestaetigt === true,
+        { werkbank: d.werkbank, vorlage: d.vorlage, tracker: d.tracker }), kurzeOeffnenAntwort),
       schreib('/proj/oeffnen', (d, quelle) => s.oeffnen(d.slug, quelle, d.bestaetigt === true), kurzeOeffnenAntwort),
       // workbench shelf: SAVE AS (a copy under a new name) and DELETE (to the bin, never the open module)
       schreib('/proj/schliessen', (d, quelle) => s.schliessen(quelle, d.bestaetigt === true)),
@@ -271,6 +282,9 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
         },
       },
       schreib('/proj/aendern', (d, quelle) => s.aendern(d, quelle), kurzeAntwort),
+      // tracker view (task 9): GET /tracker/song, GET and POST /tracker/text (areas/proj/tracker_routes.ts)
+      ...trackerRouten({ zugang, antworte, leseKoerper, quelle: () => ctx.quelle(), kurz: kurzeAntwort,
+        importMod: { sitzung: s, ordner: () => ({ ordner: opt.samplerOrdner?.() }), kiGestoppt: () => ctx.kiGestoppt() } }),
       schreib('/proj/undo', (d, quelle) => s.umkehr('undo', d, quelle), kurzeAntwort),
       schreib('/proj/redo', (d, quelle) => s.umkehr('redo', d, quelle), kurzeAntwort),
       // 1.8 S4b.1a: vorzaehl_beats is the internal key of the recording area; from outside it is refused, so a count-in cannot widen a plain transport call

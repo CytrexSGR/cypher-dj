@@ -29,6 +29,10 @@ before(async () => {
   document.addEventListener = (art, f) => { (dokHoerer[art] ??= []).push(f); };   // the stand-in's document drops listeners
   await import('../public/app.js');
   ({ holeGraphen, setzeGraphenGeladen } = await import('../public/graphs_view.js'));
+  // a picker as the instrument window of the live dock builds it (live_dock/graph.js); zeigeGraphWahl fills every [data-graphplatz]
+  const platz = document.createElement('div');
+  platz.className = 'graphplatz'; platz.setAttribute('data-graphplatz', 'erz/6');
+  attrappe.body.append(platz);
   ({ instrumenteAnsicht } = await import('../public/effects_bindung.js'));
   await holeGraphen();
   instrumenteAnsicht.baue();   // the INSTRUMENTS area builds when it opens; here it is built at once
@@ -46,7 +50,7 @@ const gewaehlt = (sel) => optionen(sel).filter((o) => 'selected' in o.attrs).map
 const nichtLesen = (von) => attrappe.anrufe.slice(von).filter((a) => a.methode !== 'GET');
 
 test('page: with nothing stored the pickers group by type; an instrument without prinzip sits under Other and is not dropped', () => {
-  assert.ok(wahl('erz/6'), 'a strip picker exists');
+  assert.ok(wahl('erz/6'), 'a channel picker exists');
   assert.deepEqual(gruppen(wahl('erz/6')), ['Analog', 'FM', 'Drum Synthesis', 'Other']);
   assert.ok(optionen(wahl('erz/6')).some((o) => o.attrs.value === 'eigen'), 'the entry without prinzip is in the list');
   assert.deepEqual(gewaehlt(wahl('erz/6')), ['drums-909']);
@@ -65,7 +69,7 @@ test('page: the INSTRUMENTS area opens on the group of the loaded instrument, on
   assert.deepEqual(gewaehlt(kat('erz/5')), ['fm']);
 });
 
-test('page: switching the axis stores it, redraws the strip pickers, keeps the loaded instrument selected and sends nothing', async () => {
+test('page: switching the axis stores it, redraws the channel pickers, keeps the loaded instrument selected and sends nothing', async () => {
   const von = attrappe.anrufe.length;
   klick(knopf('erz/5', 'rolle'));
   await new Promise((r) => setTimeout(r, 30));

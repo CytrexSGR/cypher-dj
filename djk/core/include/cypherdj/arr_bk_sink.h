@@ -13,6 +13,11 @@
 //   snapshot holds it and the sink does not use it. A tail inside the graph (delay, reverb) is cut by this fade.
 //   Rest: with the transport standing and 1 s of exact silence the instance is reset and not computed any more until a note or a start.
 //   The takt (beat at the block start, beats per sample) comes from the kern before the arrangement block.
+//   Pin matrix (graph with a `matrix` block, kraken patch field): the pins of the snapshot (ArrSpur::stifte_da, ArrSnapshot::stifte) are applied at a take-over and whenever the serial of the snapshot (ArrSnapshot::folge)
+//   differs from the one this slot applied last (the start value of stift_folge is UINT64_MAX, a sentinel that no snapshot has, so the first block always applies), before the knob loop and so before the FFI block; at once
+//   (sofort) where the knobs jump (take-over, transport start), else smoothed. A track without `stifte` plays the graph's own pins, a track with `stifte` only the listed ones. A live pin (stift(), from ARR_STIFT) waits
+//   in a dense array of the slot (512 values, a 512-bit mask, the last write of a position wins; no event queue, nothing can overflow) with the generation stamp it was sent under; the next block applies it after the pins
+//   of the snapshot, except a pin whose stamp is older than Arrangement::snapshot_generation() (a swap came between: the newer snapshot decides). A transport start keeps all pins.
 // Real-time: apart from the constructor and destructor no allocation, no lock, no I/O.
 #pragma once
 
@@ -26,6 +31,7 @@
 namespace cdj {
 
 constexpr int ARR_BK_WARTE = 256;          // events per track until the next block (= BK_MAX_EREIGNISSE of the FFI)
+constexpr int BK_STIFTE_SATZ = 256;           // pins per set of the matrix (16 x 16); the slot keeps 2 sets
 constexpr int64_t ARR_BK_RUHE = 48000;     // 1 s of exact silence with the transport standing, then the instance rests
 
 class ArrBkSenke final : public ArrSenke, public ArrBkLeser {
@@ -37,6 +43,8 @@ class ArrBkSenke final : public ArrSenke, public ArrBkLeser {
   int64_t vorhalt() const noexcept override { return 0; }
   void note(int spur, int64_t ziel, uint8_t ton, uint8_t vel, bool an) noexcept override;
   void alle_aus(int spur, int64_t ziel) noexcept override;
+  // Callback thread, before block() of the track (the same order as note()); the value waits in the slot and goes to the instance in the next block. Out of range or NaN: ignored.
+  void stift(int spur, int satz, int zeile, int spalte, float wert, uint64_t gen) noexcept override;
   void transport_start(int spur, int64_t ziel) noexcept override;
   void transport_abbruch(int spur) noexcept override;   // audit U33: a stop while the start waits cancels it (start and fade state)
   void block(int spur, int64_t s0, int m, float* l, float* r) noexcept override;   // = block_bahn on the own lane-0 struct
@@ -59,6 +67,10 @@ class ArrBkSenke final : public ArrSenke, public ArrBkLeser {
   // notes go to the instance first, the knob values after them, so a block with more events than the FFI takes loses knob values and never a note (a lost value counts in verloren()).
   // `relativ`: wert is a summand on the knob of the snapshot (clamped 0..1), as in the block loop; otherwise the final value. The instance sets it at the offset of the note, before the note.
   void note_regler(int spur, int64_t ziel, int param, float wert, bool relativ) noexcept override;
+  // Tracker task 16: a pitch (bend, semitones) or level (pegel, factor) event at sample `ziel`, `gleit_samples` 0 = jump, else linear to the value over that many samples. Own queue per track like
+  // the knob values: the instance gets it after all notes of the block (a surplus costs these events, never notes) and puts it, at one sample, after all-off and note-off and before note-on
+  // (cypher_bk_bend_bei / cypher_bk_pegel_bei). A transport start and all-off set the instance neutral (bend 0, pegel 1).
+  void fx(int spur, int64_t ziel, bool pegel, float wert, int64_t gleit_samples) noexcept override;
 
   // ArrBkLeser: does the callback still use this instance (play it or fade it)? Called from the loader thread.
   bool nutzt(const CypherBk* h) const noexcept override;   // true also when the second reader (the insert stages, arr-bk slice 3) uses it
@@ -85,9 +97,17 @@ class ArrBkSenke final : public ArrSenke, public ArrBkLeser {
     uint8_t param;   // 0..63
     bool relativ;
   };
+  struct Fev {   // a bend or pegel event (fx)
+    int64_t ziel;
+    float wert;
+    uint32_t gleit;   // samples
+    bool pegel;
+  };
   struct Spur {
     Ev ev[ARR_BK_WARTE];
     int n = 0;
+    Fev fev[ARR_BK_WARTE];   // bend and pegel events until the next block, applied after all notes of the block
+    int n_fev = 0;
     Rev rev[ARR_BK_WARTE];   // per-note knob values until the next block, applied after all notes of the block
     int n_rev = 0;
     int64_t start = -1;                 // start sample of a pending transport start, -1: none
@@ -98,6 +118,10 @@ class ArrBkSenke final : public ArrSenke, public ArrBkLeser {
     bool ruht = false;                  // reset after 1 s of silence, not computed until a note or a start
     int64_t still = 0;                  // samples of exact silence in a row
     bool neu = false;                   // an instance was just taken over: the knobs jump to their values
+    float stift_wert[2 * BK_STIFTE_SATZ];       // pending live pins by index satz * 256 + zeile * 16 + spalte (stift())
+    uint64_t stift_gen[2 * BK_STIFTE_SATZ];     // the generation each pending pin was sent under
+    uint64_t stift_offen[2 * BK_STIFTE_SATZ / 64] = {};   // bit i: stift_wert[i] is pending
+    uint64_t stift_folge = UINT64_MAX;  // folge of the snapshot whose pins this slot applied last; UINT64_MAX = none yet (a hand-built snapshot has folge 0)
     float knopf_wert[BK_KNOEPFE] = {};           // knobs reported for the next block (auto_parameter)
     bool knopf_da[BK_KNOEPFE] = {};
     float knopf_delta[BK_KNOEPFE] = {};          // summands reported for the next block (auto_parameter_summand)

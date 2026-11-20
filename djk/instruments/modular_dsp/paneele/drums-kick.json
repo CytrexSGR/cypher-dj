@@ -1,0 +1,25 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "drums-kick"},
+  "title": "Kick",
+  "akzent": "rot",
+  "layout": {"rows": [
+    ["pitch", "amp", "tone"]
+  ]},
+  "sections": [
+    { "id": "pitch", "title": "PITCH", "cols": 2, "controls": [
+      {"id": "tune", "type": "knob", "label": "Tune", "span": 2, "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "pdrop", "type": "knob", "label": "Pitch drop", "bind": {"param": "k2"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "pdec", "type": "knob", "label": "Pitch decay", "bind": {"param": "k7"}, "format": "raw", "unit": "s", "default": 0.5, "wirkt": {"ueber": ["pdrop", 0.01]}, "wirkt_text": "The pitch drop is off: turn up Pitch drop"}
+    ]},
+    { "id": "amp", "title": "AMP", "cols": 2, "controls": [
+      {"id": "hue", "type": "huelle", "span": 2, "label": "Envelope", "of": {"a": 0.0005, "d": "decay", "s": 0, "r": 0.12}},
+      {"id": "decay", "type": "knob", "label": "Decay", "span": 2, "bind": {"param": "k3"}, "format": "raw", "unit": "s", "default": 0.5}
+    ]},
+    { "id": "tone", "title": "TONE", "cols": 3, "controls": [
+      {"id": "click", "type": "knob", "label": "Click", "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
+      {"id": "drive", "type": "knob", "label": "Drive", "bind": {"param": "k5"}, "format": "db", "default": 0.5},
+      {"id": "room", "type": "knob", "label": "Room mix", "bind": {"param": "k6"}, "format": "percent", "default": 0.5}
+    ]}
+  ]
+}

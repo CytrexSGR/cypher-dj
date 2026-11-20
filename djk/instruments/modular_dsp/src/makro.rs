@@ -25,6 +25,15 @@ pub fn aufloesen(g: Graph) -> Result<Graph, Fehler> {
         if k.art.starts_with(PRAEFIX) && k.zonen.is_some() {
             return Err(Fehler::Wert { knoten: k.id.clone(), wert: "zonen".to_string(), grund: "zonen not supported in makros" });
         }
+        if k.art.starts_with(PRAEFIX) && k.zeilen.is_some() {
+            return Err(Fehler::Wert { knoten: k.id.clone(), wert: "zeilen".to_string(), grund: "zeilen not supported in makros" });
+        }
+        if k.art.starts_with(PRAEFIX) && k.spalten.is_some() {
+            return Err(Fehler::Wert { knoten: k.id.clone(), wert: "spalten".to_string(), grund: "spalten not supported in makros" });
+        }
+        if k.art.starts_with(PRAEFIX) && k.stifte.is_some() {
+            return Err(Fehler::Wert { knoten: k.id.clone(), wert: "stifte".to_string(), grund: "stifte not supported in makros" });
+        }
     }
     for (name, m) in &g.makros {
         for k in &m.knoten {
@@ -42,6 +51,15 @@ pub fn aufloesen(g: Graph) -> Result<Graph, Fehler> {
             }
             if k.zonen.is_some() {
                 return Err(Fehler::Wert { knoten: format!("{name}/{}", k.id), wert: "zonen".to_string(), grund: "zonen not supported in makros" });
+            }
+            if k.zeilen.is_some() {
+                return Err(Fehler::Wert { knoten: format!("{name}/{}", k.id), wert: "zeilen".to_string(), grund: "zeilen not supported in makros" });
+            }
+            if k.spalten.is_some() {
+                return Err(Fehler::Wert { knoten: format!("{name}/{}", k.id), wert: "spalten".to_string(), grund: "spalten not supported in makros" });
+            }
+            if k.stifte.is_some() {
+                return Err(Fehler::Wert { knoten: format!("{name}/{}", k.id), wert: "stifte".to_string(), grund: "stifte not supported in makros" });
             }
             if k.art.starts_with(PRAEFIX) || k.art == "note" || k.art == "ausgang" || k.art == "eingang" {
                 return Err(Fehler::MakroInhalt { makro: name.clone(), knoten: k.id.clone(), art: k.art.clone() });

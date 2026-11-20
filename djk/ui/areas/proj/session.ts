@@ -17,12 +17,16 @@ import { kanalOffen } from '../../hand_operation.ts';
 import { liveSlots } from '../../project/live.ts';
 import { takteProLive } from '../../project/taktart_live.ts';
 import { vorlageBefehle, vorlageVon, vorlagenListe } from '../../project/werkbank.ts';
+import { sichereWerksProbenImStandardOrdner } from '../../sampler/werksproben.ts';
+import { trackerVorlageBefehle, trackerVorlageVon, trackerVorlagenListe } from '../../project/tracker.ts';
 import { seqGruppe } from '../../project/seq.ts';
 import { teileReglerLive, teileStummStart } from '../../project/controls_order.ts';
 import { loeseQuelle } from '../../project/source_path.ts';
 import type { Einsammler } from '../../project/einsammeln.ts';
 import { alleAudioClips, fuehreListeAus, laneStart, setzeDekodiert, vergleiche, type PluginEintrag, type PresetInhalt } from '../../project/commands.ts';
-import { findeGraph, vorgabenVon } from '../../graphs.ts';
+import { findeGraph, vorgabenVon, steckfeldVon } from '../../graphs.ts';
+import type { StiftAenderung } from '../../project/commands_helpers.ts';
+import type { Stift } from '../../steckfeld.ts';
 import { kitDa, kitKlaenge } from './kits.ts';
 import { uebersetzeAusCache, ausCache, vorlauf, type Anfrage } from './pattern_run.ts';
 import type { MusterMeldung } from '../../project/commands.ts';
@@ -46,6 +50,7 @@ import {
 } from '../../project/warp.ts';
 import { aendere, rueckgaengig, wiederholen, type Haken, type Meta, type Verlauf, type Wirkung } from '../../project/history.ts';
 import { WiedergabeFehler, WiedergabeZaehler, schreibeWiedergabe, uebersetze, wiedergabeDatei, type Wiedergabe } from '../../project/playback.ts';
+import { geraetFx } from '../../devices_parameter.ts';
 import { ERZ4_NUR_HAND, alleRegler, erz4Soll, istMixerRegler, reglerZuBefehl, type Soll } from './mapping.ts';
 import { arrOrdner, zaehlerDateiVorgabe } from './config.ts';
 import { grundText } from '../../http/reasons.ts';
@@ -84,12 +89,14 @@ export interface Antwort { code: number; j: unknown }
 export interface ProjOptionen {
   kanalOffen?: (kanal: string) => boolean;   // DJ view places: the server's view of an open channel pad/N, a planned or running ramp counts (server.ts)
   instanz?: string;            // Vorgabe CYPHERDJ_INSTANZ
+  samplerOrdner?: () => string | undefined;   // sample folder (roots file), read at each call: IMPORT MOD reads a module given as <root>/<rel> from there
   wurzel?: string;             // Projektordner-Wurzel (Vorgabe projektWurzelVorgabe(instanz))
   arbeitsordner?: string;      // Arbeitsordner der Wiedergaben (Vorgabe: kern.toml arr_ordner, sonst ~/.cache/cypherdj[-<i>]/arr)
   zaehlerDatei?: string;       // Spec 6.30, 6.31: Zustandsdatei des Wiedergabe-Zählers ausserhalb des Arbeitsordners. Vorgabe: mit ausdrücklichem
                                // arbeitsordner `<arbeitsordner>.zaehler` (je Ordner eine, Test-Server teilen nie eine Datei), sonst
                                // ~/.local/state/cypherdj[-<i>]/wiedergabe-zaehler
   katalog?: string;            // katalog.sqlite (Audio-Quellen nur über den Katalog, Spec 2.11)
+  wirtWacheMs?: number;   // audit U07: how often the session looks at the pids of the Surge hosts (default 2000)
   wirtOrdner?: () => string;   // 1.9 (L10): folder of the host status files (wirt-arr<s>.json); proj_lage shows them as `wirte` (server.ts passes its own)
   analyse?: string | null;      // Slice 3a: Analyse-Ablage (Karten); null = aus; Vorgabe nur im Betrieb (paths.ts analyseVorgabe)
   mediathek?: string | null;    // Slice 3a: mediathek.sqlite, daraus die Traktor-Raster (Tabelle marke); null/fehlt = keine
@@ -114,7 +121,9 @@ export interface ProjOptionen {
 }
 // merk (Spec 6.30, 6.31): was die Freeze-Sperre aufgeschoben hat und nach der letzten Freigabe nachgeholt wird. Es gehört zum offenen Projekt und
 // verfällt mit ihm: ein anderes Projekt lädt beim Öffnen ohnehin seine eigene Wiedergabe.
-interface Merk { laden: boolean; loop: boolean; tempo: boolean; reglerNach: Soll[]; stummStart: number[] }   // reglerNach: live rows that wait for the load
+// stifte (Kraken patch field): a light pin was accepted since the stored playback file was written; the file does not hold it, so nachNeustart translates fresh
+// Merk: reglerNach = live rows that wait for the load; stifte = a light pin was accepted since the stored playback file was written
+interface Merk { laden: boolean; loop: boolean; tempo: boolean; reglerNach: Soll[]; stummStart: number[]; stifte: boolean }
 // Spec 6.34: was GET /proj/aktuell als ausgabe_lauf zeigt, solange S3 einen Freeze oder Export fährt (Spur nur beim Freeze)
 export type AusgabeLauf = { art: 'freeze'; spur_id: string }
   | { art: 'export'; echtzeit?: true; start_ms?: number; dauer_s?: number } | { art: 'lautheit' } | { art: 'analyse' } | { art: 'merge' }
@@ -137,6 +146,8 @@ const liveSlotsAntwort = (p: Projekt): { A: string | null; B: string | null } =>
 const schlaf = (ms: number): Promise<void> => new Promise((ok) => setTimeout(ok, ms));
 // Baukasten S20: lookup of a graph in the graph folder for the commands that set a bk device (null = no such graph)
 const graphArt = (name: string): 'instrument' | 'effekt' | null => findeGraph(name)?.art ?? null;
+// Kraken patch field: lookup of the matrix node (labels, default pins) of a graph for the pin commands (null = no such graph or no matrix node)
+const steckfeldLookup = (name: string): ReturnType<typeof steckfeldVon> => steckfeldVon(name);
 // arr-bk: the bk stages of the project whose graph file is not in the graph folder (the core plays such a stage dry and logs it): [{strang_id, stufe, graph}]
 type BkFehlt = { strang_id: string; stufe: string; graph: string };
 export function bkGraphenFehlen(p: Projekt, art: (name: string) => 'instrument' | 'effekt' | null = graphArt): BkFehlt[] {
@@ -283,6 +294,8 @@ export class ProjSitzung {
   readonly aufAuto: AutoAufnahme;   // 1.12 slice 3 (task 8): arm state and the take collector
   private readonly rueckwegWartend = new Map<string, number>();     // Rückweg: letzter Wert je Pfad, noch nicht gespeichert
   private rueckwegTimer: ReturnType<typeof setTimeout> | null = null;
+  private wirtWache: ReturnType<typeof setInterval> | null = null;   // audit U07: asks for a Surge sync when a host got a new pid
+  private readonly wirtWacheMs: number;
   private rueckwegGespeichertMs = -Infinity;                         // Zeit der letzten Speicherung des Rückwegs
   private geste: { nr: number; letzteMs: number; labels: string[]; offen: Offen | null } = { nr: 0, letzteMs: -Infinity, labels: [], offen: null };
   private sperren = 0;          // P4 (Spec 6.23): offene sperreLaden()-Freigaben
@@ -314,6 +327,7 @@ export class ProjSitzung {
     const instanz = opt.instanz ?? process.env.CYPHERDJ_INSTANZ ?? '';
     this.ctx = ctx;
     this.presetLies = opt.presetLies;
+    this.wirtWacheMs = opt.wirtWacheMs ?? 2000;
     this.pluginIndex = opt.pluginIndex;
     this.kanalHaken = opt.kanalOffen;
     this.surge = new SurgeSpiegel({ ordner: opt.wirtOrdner, log: (e) => ctx.log(e), slotBereit: (slot) => this.instrumente.slotFertig(slot),
@@ -625,30 +639,44 @@ export class ProjSitzung {
   // --- öffnen ---------------------------------------------------------------------------------------------------------
   // opt.werkbank / opt.vorlage (workbench stage 1): a module is a project with the marker; a template is applied after the open, as ONE history step
   // through aendern (not inside the serial open: it would wait on itself). Everything is checked before anything is created or opened.
-  async neu(name: unknown, quelle: Quelle, bestaetigt = false, opt: { werkbank?: unknown; vorlage?: unknown } = {}): Promise<Antwort> {
-    const vorlage = opt.vorlage === undefined ? null : vorlageVon(opt.vorlage);
+  // opt.tracker (tracker stage 4): the project gets the tracker marker; `vorlage` then names a tracker template (8bit-4kanal, chip); never with werkbank.
+  async neu(name: unknown, quelle: Quelle, bestaetigt = false,
+    opt: { werkbank?: unknown; vorlage?: unknown; tracker?: unknown } = {}): Promise<Antwort> {
+    const tracker = opt.tracker === true;
+    const vorlage = opt.vorlage === undefined || tracker ? null : vorlageVon(opt.vorlage);
+    const trackerVorlage = opt.vorlage === undefined || !tracker ? null : trackerVorlageVon(opt.vorlage);
     const r = await this.seriell(async () => {
       if (opt.werkbank !== undefined && opt.werkbank !== true) throw new ProjFehler(400, 'argument_ungueltig', { text: 'werkbank: true or absent expected' });
-      if (opt.vorlage !== undefined && opt.werkbank !== true) throw new ProjFehler(400, 'argument_ungueltig', { text: 'vorlage needs werkbank: true' });
-      if (opt.vorlage !== undefined && vorlage === null) {
+      if (opt.tracker !== undefined && opt.tracker !== true) throw new ProjFehler(400, 'argument_ungueltig', { text: 'tracker: true or absent expected' });
+      if (tracker && opt.werkbank !== undefined) throw new ProjFehler(400, 'argument_ungueltig', { text: 'tracker and werkbank exclude each other' });
+      if (opt.vorlage !== undefined && opt.werkbank !== true && !tracker) {
+        throw new ProjFehler(400, 'argument_ungueltig', { text: 'vorlage needs werkbank: true' });
+      }
+      if (opt.vorlage !== undefined && !tracker && vorlage === null) {
         throw new ProjFehler(400, 'vorlage_unbekannt', { text: `vorlage: one of ${vorlagenListe().map((v) => v.id).join(' | ')}` });
+      }
+      if (opt.vorlage !== undefined && tracker && trackerVorlage === null) {
+        throw new ProjFehler(400, 'vorlage_unbekannt', { text: `vorlage: one of ${trackerVorlagenListe().map((v) => v.id).join(' | ')}` });
       }
       this.riegel(quelle);
       this.sperreOeffnen();
       this.sperreLiveLaeuft(quelle, bestaetigt);
       this.sperreFremderTransport(quelle);
+      if (trackerVorlage !== null) sichereWerksProbenImStandardOrdner();   // the templates play the amiga device: its factory samples must exist
       // a template sets the tempo, which is refused while a deck plays; the open must not leave an empty module behind
-      if (vorlage !== null && this.lage.deckLaeuft()) {
+      if ((vorlage !== null || trackerVorlage !== null) && this.lage.deckLaeuft()) {
         throw new ProjFehler(409, 'deck_laeuft', { text: 'Stop the decks first: a module sets its own tempo.' });
       }
       return this.oeffnetGerade(() => {
-        const { slug } = this.projekte.lege(name as string, opt.werkbank === true ? { werkbank: true } : {});
+        const { slug } = this.projekte.lege(name as string, opt.werkbank === true ? { werkbank: true } : tracker ? { tracker: true } : {});
         return this.oeffneIntern(slug, quelle);
       });
     });
-    if (vorlage === null || r.code !== 200) return r;
+    const gewaehlt = vorlage !== null ? { name: vorlage.name, befehle: vorlageBefehle(vorlage) }
+      : trackerVorlage !== null ? { name: trackerVorlage.name, befehle: trackerVorlageBefehle(trackerVorlage) } : null;
+    if (gewaehlt === null || r.code !== 200) return r;
     const o = r.j as { projekt: Projekt };
-    const a = await this.aendern({ rev: o.projekt.rev, label: `Template ${vorlage.name}`, befehle: vorlageBefehle(vorlage) }, quelle);
+    const a = await this.aendern({ rev: o.projekt.rev, label: `Template ${gewaehlt.name}`, befehle: gewaehlt.befehle }, quelle);
     return a.code === 200 ? { code: 200, j: { ...(r.j as object), projekt: (a.j as { projekt: Projekt }).projekt } } : a;
   }
   // Workbench shelf (A 2026-11-16): SAVE AS copies a module under a new name (the open one too: its project.json holds every change already), DELETE
@@ -858,7 +886,8 @@ export class ProjSitzung {
     }
     const projekt = structuredClone(o.projekt);
     this.gleicheDekodiertAb(projekt, true, slug);   // the slug: this.offen is still the project before
-    this.offen = { slug, projekt, verlauf: o.verlauf, merk: { laden: false, loop: false, tempo: false, reglerNach: [], stummStart: [] }, vorhoeren: new Map() };
+    const merk = { laden: false, loop: false, tempo: false, reglerNach: [], stummStart: [], stifte: false };
+      this.offen = { slug, projekt, verlauf: o.verlauf, merk, vorhoeren: new Map() };
     this.liveFaderWartend.clear(); this.liveFaderGemeldet.clear();
     // every open of the live project (queued behind this job)
     this.liveFaderLauf = projekt.live ? Promise.resolve().then(() => this.liveModulFader('oeffnen')) : null;
@@ -866,6 +895,7 @@ export class ProjSitzung {
     this.meldeEinsammeln(this.offen);
     this.hosts.abgleich(projekt);              // plan 1.11 task 7: the hosts start in the background; open never waits for one
     this.instrumente.abgleich(projekt);        // plan 1.11 task 17: the same for the plugin instrument hosts
+    this.wacheStart();
     void this.surge.gleiche(projekt, true);                       // 1.9 U5: the Surge map of the opened project goes to the hosts (all entries)
     // AK34 / D6: a project open or new ends every override in the core (the override is never part of a project); the mirror starts empty
     this.uebersteuert.clear();
@@ -904,6 +934,7 @@ export class ProjSitzung {
     this.offen = null;
     this.hosts.abgleich(null);                                           // the hosts of the closed project stop in the background
     this.instrumente.abgleich(null);                                     // first: the swap back to Surge is queued before the mirror asks for the slot
+    this.wacheStopp();
     void this.surge.gleiche(null);                                       // 1.9 U5: the hosts go back to the values they had before this project's entries
     try { o.verlauf.schliesse(); } catch (e) { this.ctx.log({ typ: 'proj_verlauf_fehler', slug: o.slug, fehler: (e as Error).message }); }
   }
@@ -916,6 +947,7 @@ export class ProjSitzung {
     this.aufAuto.beende();
     this.analysen?.stoppe();
     if (this.rueckwegTimer) { clearTimeout(this.rueckwegTimer); this.rueckwegTimer = null; }
+    this.wacheStopp();
     this.rueckwegSpeichern();
     const o = this.offen;
     this.offen = null;
@@ -1030,7 +1062,9 @@ export class ProjSitzung {
   // `live`: the playback goes to the core (the host stages are written from the host manager); the export paths write no host stage as ready
   private uebersetzeFuer(p: Projekt, nr: number, vorhoeren?: ReadonlyMap<string, string>, live = true, ohneHost?: ReadonlySet<number>): Wiedergabe {
     const ohne = new Set([...(ohneHost ?? []), ...this.hosts.ausgelassen()]);   // plus the stages whose latency the core would refuse (latenz_zu_gross)
-    return uebersetze(p, { nr, audioOrdner: path.join(this.arbeitsordner, 'audio'), frames: (sha) => this.cache.frames(sha), transienten: this.transienten,
+    return uebersetze(p, {
+      geraetFx, nr, audioOrdner: path.join(this.arbeitsordner, 'audio'), frames: (sha) => this.cache.frames(sha),
+      transienten: this.transienten,
       arbeitsordner: this.arbeitsordner, ...(vorhoeren ? { vorhoeren } : {}),
       ...(live && this.offen?.merk.stummStart.length ? { stummStart: new Set(this.offen.merk.stummStart) } : {}),
       ...(live ? { host: (slot: number) => this.hosts.stufe(slot), ...(ohne.size ? { ohneHost: ohne } : {}) } : {}) });
@@ -1094,6 +1128,7 @@ export class ProjSitzung {
     }
     schreibeWiedergabe(this.arbeitsordner, w);
     p.wiedergabe_rev = nr;
+    if (this.offen) this.offen.merk.stifte = false;   // the new file holds every pin of `p` (Kraken patch field)
     this.hostBelegt = neuB;
     if (neuB.size || geraeumt.length || this.hostFreiMs.size) this.hostVorab.set(nr, { zwischen: zwischenNr, konflikt, eintritt, geraeumt, span });
     return nr;
@@ -1282,7 +1317,8 @@ export class ProjSitzung {
       if (this.offen !== o) throw new ProjFehler(409, 'projekt_gewechselt');
       this.pruefeRev(o, d.rev);
       // quelle: Herkunft für spur_neu (Spec 6.22)
-      const probe = fuehreListeAus(o.projekt, befehle, { quelle, transienten: this.transienten, graphArt, kitDa, presetLies: this.presetLies, surgeBereich,
+      const probe = fuehreListeAus(o.projekt, befehle, {
+        geraetFx, quelle, transienten: this.transienten, graphArt, steckfeldVon: steckfeldLookup, kitDa, presetLies: this.presetLies, surgeBereich,
         surgePatchDa, pluginDa: (pl) => pl.format !== 'vst3' || fs.existsSync(pl.pfad),
         musterUebersetze: uebersetzeAusCache, kitKlaenge, musterMeldung: (m) => musterBerichte.push(m),
         ...(this.pluginIndex ? { pluginIndex: this.pluginIndex } : {}),
@@ -1326,7 +1362,7 @@ export class ProjSitzung {
       // task 8: the value before a page write of a gesture (not for the take's own write)
       if (erwartet === undefined && quelle === 'andreas') this.aufAuto.merkeBasen(projekt, probe.projekt);
       const antwort = await this.vollziehe(o, quelle, probe.regler_aenderungen,
-        (h) => aendere(o.verlauf, projekt, befehle as never, meta, h, { ergebnis: probe }), quellen, probe.betrifft_wiedergabe);
+        (h) => aendere(o.verlauf, projekt, befehle as never, meta, h, { ergebnis: probe }), quellen, probe.betrifft_wiedergabe, probe.stift_aenderungen ?? []);
       if (antwort.code === 200) this.starteAnalysen(o, quelle, wuensche, alt);
       const alle = antwort.code === 200 ? [...hinweise, ...(probe.hinweise ?? []), ...this.einsRueckweg(o, d.befehle, quelle)] : hinweise;
       const mitMuster = (j: object): object => (musterBerichte.length ? { ...j, muster: musterBerichte } : j);   // strudel-clip: one report per generated clip
@@ -1358,7 +1394,8 @@ export class ProjSitzung {
     for (let runde = 0; runde <= MAX_MUSTER_JE_AUFRUF; runde++) {
       const fehlend: Anfrage[] = [];
       try {
-        fuehreListeAus(projekt, befehle, { transienten: this.transienten, graphArt, kitDa, presetLies: this.presetLies, surgeBereich, kitKlaenge,
+        fuehreListeAus(projekt, befehle, { transienten: this.transienten, graphArt, steckfeldVon: steckfeldLookup, kitDa, presetLies: this.presetLies,
+          surgeBereich, kitKlaenge,
           musterUebersetze: (a) => { const r = ausCache(a); if (!r) fehlend.push(a); return r ?? uebersetzeAusCache(a); } });
       } catch { /* the real run reports its own refusals; here only the missing patterns count */ }
       if (fehlend.length === 0) return;
@@ -1472,11 +1509,17 @@ export class ProjSitzung {
   // Regler zuerst (Quittungen abwarten), dann speichern. Spec 3.4: Ablehnung eines /k/teil setzt die Änderung zurück.
   // Spec 6.30 (Leistung): betrifft die Änderung die Wiedergabe, entsteht diese vor dem Speichern (im Haken speichere), und die EINE Speicherung
   // trägt ihre Nummer schon als wiedergabe_rev. Vorher speicherte ladeWiedergabe den Stand gleich danach ein zweites Mal.
+  // Kraken patch field: `stifte` are the live pins of a light pin command; they go out right after the knob rows (/k/arr/stift, packets of
+  // REGLER_PAKET) and are handled like
+  // them: a stale rev puts the pins back to the OPEN state, a refusal writes nothing and puts the accepted pins back to `alt`.
   private async vollziehe(o: Offen, quelle: Quelle, regler: Soll[], schreibe: (h: Haken) => Wirkung, quellen: Map<string, string>,
-    betrifftWiedergabe: boolean): Promise<Antwort> {
+    betrifftWiedergabe: boolean, stifte: StiftAenderung[] = []): Promise<Antwort> {
     const alt = o.projekt;
     const gesetzt = await this.kern.setzeRegler(regler, quelle);
-    const zurueck = (stand: Projekt): Promise<void> => this.reglerZurueck(stand, gesetzt, quelle);
+    const stiftQ = stifte.length ? await this.kern.stifte(stifte, quelle) : [];
+    const zurueck = async (stand: Projekt): Promise<void> => {
+      await this.reglerZurueck(stand, gesetzt, quelle); await this.stifteZurueck(stand, stifte, stiftQ, quelle);
+      };
     // Spec 6.30: nach dem await die rev noch einmal gegen den offenen Stand. S3 setzt ihn über uebernimm() synchron, auch während diese
     // Änderung auf ihre Quittungen wartet; geprüft wurde sie gegen alt. Ihre Regler gehen dann auf den offenen Stand zurück.
     if (this.offen !== o || o.projekt !== alt || o.projekt.rev !== alt.rev) {
@@ -1489,6 +1532,12 @@ export class ProjSitzung {
     if (abgelehnt.length) {
       await zurueck(alt);
       throw new ProjFehler(409, 'regler_abgelehnt', { regler: abgelehnt });
+    }
+    const stiftAbgelehnt = stifte.flatMap((e, i) => (quittungAbgelehnt(stiftQ[i])
+      ? [{ spur: e.nr, satz: e.satz, zeile: e.zeile, spalte: e.spalte, grund: stiftQ[i]!.grund, status: stiftQ[i]!.status }] : []));
+    if (stiftAbgelehnt.length) {
+      await zurueck(alt);
+      throw new ProjFehler(409, 'stift_abgelehnt', { stifte: stiftAbgelehnt, kern: stiftAbgelehnt[0].grund });
     }
     // Haken-Vertrag mit history.ts (speichereDannProtokolliere, Spec 6.31 festgehalten): speichere wird genau einmal mit dem NEUEN Stand gerufen, vor
     // dem Log-Eintrag; nur wenn das Log scheitert, folgt ein zweiter Aufruf mit dem alten Stand (zurückschreiben). vollziehe hängt an genau dieser
@@ -1526,6 +1575,10 @@ export class ProjSitzung {
     void this.surge.gleiche(neu);                                          // 1.9 U5: command, undo and redo (no await: the hosts answer in their own time)
     const kern: Record<string, unknown> = {};
     if (gesetzt.length) kern.regler = gesetzt.some((r) => r.quittung === null) ? 'kein_kern' : 'ok';
+    if (stifte.length) {
+      kern.stifte = stiftQ.some((q) => q === null) ? 'kein_kern' : 'ok';
+      if (stiftQ.some((q) => quittungOk(q))) o.merk.stifte = true;   // the stored playback file lacks these pins: a core restart translates fresh
+    }
     // Spec 6.30: die Freeze-Sperre gilt bis zum Laden. bereiteWiedergabe prüfte sie nach den Regler-Quittungen, zwischen dort und /k/arr/laden liegt
     // kein await. War sie gesetzt, bleibt die Änderung gespeichert und das Laden folgt nach der Freigabe.
     const nr = wiedergabe?.nr;
@@ -1543,6 +1596,19 @@ export class ProjSitzung {
     this.hosts.abgleich(neu);                  // plan 1.11 task 7: after the playback is loaded (a removed stage is gone from the core before its host stops)
     this.ctx.verteile({ a: 'proj', f: { slug: o.slug, rev: neu.rev, label: w.eintrag.label, quelle } });
     return { code: 200, j: { rev: neu.rev, projekt: neu, kern } };
+  }
+  // Kraken patch field: the accepted pins of a refused or stale change go back to the value `stand` holds (0 = no pin, also when the track or its
+  // list is gone).
+  // A track whose device has no `stifte` plays the graph defaults after a rebuild; the pin is then sent as 0, like the plan says (the project is the truth).
+  private async stifteZurueck(stand: Projekt, liste: readonly StiftAenderung[], quittungen: readonly Quittung[], quelle: Quelle): Promise<void> {
+    const zurueck = liste.flatMap((e, i) => {
+      if (!quittungOk(quittungen[i] ?? null)) return [];
+      const g = stand.spuren.find((x) => x.nr === e.nr)?.geraet;
+      const l: readonly Stift[] = g?.art === 'intern' && g.name === 'bk' ? g.stifte ?? [] : [];
+      const alt = l.find((x) => x[0] === e.satz && x[1] === e.zeile && x[2] === e.spalte);
+      return [{ ...e, wert: alt ? alt[3] : 0 }];
+    });
+    if (zurueck.length) await this.kern.stifte(zurueck, quelle);
   }
   // Angenommene Regler einer abgelehnten Änderung auf den alten Stand zurück.
   private async reglerZurueck(alt: Projekt, ergebnis: ReglerErgebnis[], quelle: Quelle): Promise<void> {
@@ -1881,6 +1947,16 @@ export class ProjSitzung {
       this.ctx.log({ typ: 'proj_uebernimm_regler', slug: o.slug, abgelehnt: abgelehnt.map((r) => r.pfad), kein_kern: keinKern.map((r) => r.pfad) });
     }
   }
+  // audit U07: a Surge host that systemd restarted plays at its init values; without this watch it would stay there until the next command or freeze
+  private wacheStart(): void {
+    if (this.wirtWache || !this.surge.an) return;
+    this.wirtWache = setInterval(() => {
+      const o = this.offen;
+      if (o && this.surge.wirtGewechselt()) void this.surge.gleiche(o.projekt);
+    }, this.wirtWacheMs);
+    this.wirtWache.unref();
+  }
+  private wacheStopp(): void { if (this.wirtWache) { clearInterval(this.wirtWache); this.wirtWache = null; } }
   // 1.9 U5: brings the hosts to the open project's Surge map and resolves when they answered (the freeze path waits for it). A missing host or an
   // error answer is logged, never thrown, and the entries stay pending; the errors come back as text so the freeze can refuse a sound that would not
   // match the map. Without an open project it only waits for the jobs already queued.
@@ -2053,7 +2129,7 @@ export class ProjSitzung {
       if (!o) return;
       this.leereVorhoeren(o);                      // 1.14: the new core plays the main lane; wiedergabe_rev already holds every comp made during an audition
       const nr = o.projekt.wiedergabe_rev;
-      const wiedergabe: Record<string, unknown> = !o.merk.laden && nr > 0 && fs.existsSync(wiedergabeDatei(this.arbeitsordner, nr))
+      const wiedergabe: Record<string, unknown> = !o.merk.laden && !o.merk.stifte && nr > 0 && fs.existsSync(wiedergabeDatei(this.arbeitsordner, nr))
         ? { nr, quittung: await this.kern.laden(nr, 'andreas') } : await this.ladeWiedergabe('andreas');
       if (typeof wiedergabe.nr === 'number' && quittungOk(wiedergabe.quittung as Quittung)) { o.merk.laden = false; o.merk.loop = false; }
       this.transportQuelle = null;
@@ -2072,4 +2148,4 @@ export class ProjSitzung {
 }
 // for the classes split out of ProjSitzung (session_device.ts, session_sources.ts)
 export type { Hinweis, Koerper, Offen };
-export { graphArt };
+export { graphArt, steckfeldLookup };

@@ -2,7 +2,7 @@
 // Lautstärke, Pan und Pegel (A6-Bedienung). Jede Bedienung geht über aendere() an POST /proj/aendern (Spec 3.4
 // spur_aendern), damit sie im Projekt und im Undo-Verlauf landet. Der Pegel kommt ohne eigenen Code: app.js zeigePegel
 // füllt jedes .meter[data-kanal="spur/<nr>"] aus /pegel (Spec 3.4: /pegel geht schon heute für jeden Kanal durch).
-import { FARBEN, zeilenFuer } from './layout.js';
+import { FARBEN, zeilenFuer, naechsteFarbe } from './layout.js';
 import { MAX_SPUREN, MAX_GRUPPEN, MAX_KIT_GERAETE, WIRT_SLOTS } from './limits.js';
 import { MAX_RACK_GERAETE, RB_GLIED_GERAET, wirtBelegt, kitBelegt, rackBelegt } from './rack_device.js';
 import { armZustand, eingangVonWert, eingangsOptionen, MODUS_OPTIONEN, MONITOR_OPTIONEN } from './recording.js';
@@ -43,7 +43,7 @@ export function geraetText(s) {
   if (s.geraet?.art === 'rack') return `RACK · ${s.geraet.glieder.length}`;   // 1.9 U7: the number of members
   return String(s.geraet?.name ?? '?').toUpperCase();
 }
-export const naechsteFarbe = (f) => FARBEN[(FARBEN.indexOf(f) + 1) % FARBEN.length];
+export { naechsteFarbe };   // lives in layout.js (a leaf): context_menu.js needs it too and must not import this module (import cycle through lanes_operation.js)
 // ↑/↓: Zielindex in der Spurliste für spur_verschieben {spur_id, index}; am Rand (oder unbekannte Spur/Richtung) null
 export function zielIndex(anzahl, index, richtung) {
   if (!(index >= 0 && index < anzahl)) return null;
@@ -248,6 +248,16 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
     for (const le of laneEls.values()) { const b = le.querySelector('.p-lane-zeichnen'); b.classList.toggle('an', an); b.setAttribute('aria-pressed', String(an)); }
   });
   let reihenfolge = [];        // spur_ids in Anzeigereihenfolge (Array-Reihenfolge des Projekts)
+  let anker = null;            // the track a plain or Ctrl click chose last: Shift+click selects from here
+  let zogGerade = false;       // a head drag just ended: the click that follows the pointer up is no selection
+  const NICHT_FREI = 'button, input, select, textarea, a, label, .p-geraet, .p-pegel, .p-namefeld';
+  // the track head under the y coordinate (client) and its index in the track order; below the last head: the last index
+  const zielBeiY = (y) => {
+    const koepfe = reihenfolge.map((sid) => behaelter.querySelector(`.p-kopf[data-spur="${sid}"]`)).filter((k) => k && k.offsetParent !== null);
+    for (const k of koepfe) { const r = k.getBoundingClientRect(); if (y < r.bottom) return { kopf: k, index: reihenfolge.indexOf(k.dataset.spur) }; }
+    const k = koepfe[koepfe.length - 1];
+    return k ? { kopf: k, index: reihenfolge.indexOf(k.dataset.spur) } : null;
+  };
   let gruppenStand = [];       // Gruppen laut letztem Projekt (Auswahl der Ausgang-Wahl)
   let strangStand = [];        // returns and master laut letztem Projekt (the master as {id: 'master', ...})
 
@@ -331,7 +341,7 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
     }
     // 1.9 U7: a click on the device label of a rack track opens the rack panel in the detail area (the right click menu is the shared KOPF_MENUE, bound once in production.js)
     // front panels task 8: the same click on a bk or RB-338 track opens its front panel (detail mode `geraet`)
-    q('.p-geraet').addEventListener('click', () => { const g = spur()?.geraet; if (g?.art === 'rack') rackOeffnen(id); else if (geraetSchluessel(g)) geraetOeffnen(id); });
+    q('.p-geraet').addEventListener('click', () => { const s = spur(), g = s?.geraet; if (g?.art === 'rack') rackOeffnen(id); else if (geraetSchluessel(g) || kannGeraetFenster(s)) geraetOeffnen(id); });
     q('.p-loeschen').addEventListener('click', () => aendere(`Delete track ${spur().name}`, [{ befehl: 'spur_loeschen', spur_id: id }]));
     q('.p-ausgang').addEventListener('change', (e) => aendere(`Output ${spur().name}`, [ausgangBefehl(id, e.target.value)]));
     for (const [ziel, d] of ziele('regler')) {
@@ -374,7 +384,55 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
       ein.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') ende(true, true); if (e.key === 'Escape') ende(false, true); });
       ein.addEventListener('blur', () => ende(false, false));
     };
-    name.addEventListener('click', (e) => { if (e.ctrlKey || e.shiftKey || e.metaKey) { e.preventDefault(); wahlUmschalten([id], e); } });   // D5: Ctrl/Shift+click selects the track
+    // a plain click on a free spot of the head (or on the name) makes this track the selection and so the synth in front: the device window and the
+    // controllers follow it (Andreas 2026-11-18: "wenn ich ... auf einen leeren bereich im mixer teil des track 1 clicke, switcht es nicht um"). Controls keep
+    // their own click; a click on the track already selected alone changes nothing.
+    // Ctrl+click adds or removes the track, Shift+click selects every track from the last one chosen to this one (Andreas 2026-11-18: "mehere spuren markieren
+    // können mit strg und shift"); GROUP or Ctrl+G then makes a group of them.
+    el.addEventListener('click', (e) => {
+      if (e.button !== 0) return;
+      if (zogGerade) { zogGerade = false; return; }
+      if (e.target?.closest?.(NICHT_FREI)) return;
+      const w = spurWahl();
+      if (e.ctrlKey || e.metaKey) { e.preventDefault(); wahlUmschalten([id], e); anker = id; return; }
+      if (e.shiftKey && anker && reihenfolge.includes(anker)) {
+        e.preventDefault();
+        const [a, b] = [reihenfolge.indexOf(anker), reihenfolge.indexOf(id)].sort((x, y) => x - y);
+        const neu = reihenfolge.slice(a, b + 1).filter((x) => !w.has(x));
+        if (neu.length) wahlUmschalten(neu, e);
+        return;
+      }
+      anker = id;
+      if (w.size === 1 && w.has(id)) return;
+      wahlUmschalten([id], e, true);
+    });
+    // a head grabbed on a free spot and pulled up or down moves the whole track there (Andreas 2026-11-18: "spuren kann ich nicht tauschen, hoch oder
+    // runterschieben als ganzes"); a line on the target head shows where it lands. One spur_verschieben, one undo step.
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || e.target?.closest?.(NICHT_FREI)) return;
+      const y0 = e.clientY;
+      let an = false, ziel = null;
+      const markiere = (z) => { for (const k of behaelter.querySelectorAll('.p-ziel-oben, .p-ziel-unten')) k.classList.remove('p-ziel-oben', 'p-ziel-unten'); if (z && z.kopf !== el) z.kopf.classList.add(z.index > reihenfolge.indexOf(id) ? 'p-ziel-unten' : 'p-ziel-oben'); };
+      const bewege = (m) => {
+        if (!an && Math.abs(m.clientY - y0) < 6) return;
+        if (!an) { an = true; el.classList.add('p-zieht'); }
+        ziel = zielBeiY(m.clientY);
+        markiere(ziel);
+      };
+      const los = () => {
+        globalThis.removeEventListener('pointermove', bewege);
+        globalThis.removeEventListener('pointerup', los);
+        globalThis.removeEventListener('pointercancel', los);
+        el.classList.remove('p-zieht'); markiere(null);
+        if (!an) return;
+        zogGerade = true; setTimeout(() => { zogGerade = false; }, 0);
+        const von = reihenfolge.indexOf(id);
+        if (ziel && ziel.index >= 0 && ziel.index !== von) aendere(`Move track ${spur()?.name ?? id}`, [{ befehl: 'spur_verschieben', spur_id: id, index: ziel.index }]);
+      };
+      globalThis.addEventListener('pointermove', bewege);
+      globalThis.addEventListener('pointerup', los);
+      globalThis.addEventListener('pointercancel', los);
+    });
     name.addEventListener('dblclick', umbenennen);
     name.addEventListener('keydown', (e) => { if (istUmbenennenTaste(e)) { e.preventDefault(); e.stopPropagation(); umbenennen(); } });
     return el;
@@ -664,7 +722,7 @@ export function bindeSpuren(ctx) {
   st.spurWahl = new Set();
   // Controller follow: exactly one selected track (not a group, not several) is the synth in front; the server says when it has no graph.
   const einzelSpur = () => { const w = [...st.spurWahl]; return w.length === 1 && st.projekt?.spuren?.some((x) => x.id === w[0]) ? w[0] : null; };
-  const wahlGeaendert = () => { koepfeRef?.zeigeWahl(); const e = einzelSpur(); if (e) fokus.melde({ spur_id: e }, 'production'); };
+  const wahlGeaendert = () => { koepfeRef?.zeigeWahl(); const e = einzelSpur(); if (e) fokus.melde({ spur_id: e }, 'production'); for (const h of ctx.beiWahl ?? []) h(einzelSpur()); };   // beiWahl: the dock follows the selection
   fokus.registriere('production', () => { const e = st.sichtbar ? einzelSpur() : null; return e ? { spur_id: e } : null; });   // window focus
   const wahlLeeren = () => { if (st.spurWahl.size) { st.spurWahl.clear(); wahlGeaendert(); } };
   // ersetzen: a plain click on a group head makes it the whole selection (a second plain click lets go of it); Ctrl/Shift+click toggles
@@ -674,6 +732,9 @@ export function bindeSpuren(ctx) {
     for (const i of ids) { if (ersetzen ? !nurDas : !st.spurWahl.has(i)) st.spurWahl.add(i); else st.spurWahl.delete(i); }
     wahlGeaendert();
   };
+  // the shared dock (dock_host.js): the selected track, and the plain-click rule of a head for a click on a track card
+  ctx.einzelSpur = einzelSpur;
+  ctx.waehleSpur = (id) => { if (st.spurWahl.size === 1 && st.spurWahl.has(id)) return; wahlUmschalten([id], null, true); };
   const gruppeFalten = (g) => ctx.aendere(foldLabel(g.name, g.gefaltet), [{ befehl: 'gruppenspur_aendern', gruppe_id: g.id, gefaltet: !g.gefaltet }]);
   // Ctrl+G: ONE gruppenspur_neu with the selection (one undo step). Nothing selected: the hint, no request. A ninth group: the server's reason text, no request.
   ctx.gruppiere = () => {
@@ -689,9 +750,23 @@ export function bindeSpuren(ctx) {
     ctx.aendere('Group tracks', [b]);
     return true;
   };
+  // the lane toggle of a strip (the A button of a head, the menu entry of a head or a dock card): the same page state
+  ctx.laneUmschalten = (id) => {
+    if (st.laneOffen.has(id)) st.laneOffen.delete(id); else st.laneOffen.add(id);
+    ctx.layoutNeu();
+    koepfe.zeige(st.projekt);
+  };
+  // the menu entry Rename: on a dock card the dock renames in place, else the inline rename of the head runs (the double click of its name)
+  ctx.umbenennen = (strang, ort) => {
+    if (ort?.closest?.('.w-karte-dock')) { ctx.dockUmbenennen?.(strang.id); return; }
+    const id = strang.id, d = globalThis.document;
+    const name = d?.querySelector(`.p-kopf[data-spur="${id}"] .p-spurname, [data-gruppe="${id}"] .p-spurname, [data-ret="${id}"] .p-spurname`);
+    name?.dispatchEvent(new globalThis.Event('dblclick', { bubbles: true }));
+  };
   const koepfe = bindeKoepfe($('koepfe'), { instrumente: () => st?.instrumente ?? [], aendere: ctx.aendere, spurWahl: () => st.spurWahl, wahlUmschalten, gruppeFalten, aendereAus: ctx.aendereAus, offen: () => st?.laneOffen ?? new Set(),
-    takeOffen: () => st?.takeOffen ?? new Set(), takeKoepfe, rackOeffnen: (id) => ctx.rackOeffnen?.(id), geraetOeffnen: (id) => { fokus.melde({ spur_id: id }, 'production'); ctx.geraetOeffnen?.(id); },   // the device panel of a track opened: that track is in front
-    faceOeffnen: (id, x, y) => ctx.faceOeffnen?.(id, x, y), fensterOeffnen: (id) => oeffneGeraetFenster(id, ctx.melde), faceVerfuegbar: (s) => ctx.faceVerfuegbar?.(s) ?? false,
+    takeOffen: () => st?.takeOffen ?? new Set(), takeKoepfe, // the device label opens the device window (no device area below the arrangement any more, Andreas 11-18); that track is in front
+    rackOeffnen: (id) => oeffneGeraetFenster(id, ctx.melde), geraetOeffnen: (id) => { fokus.melde({ spur_id: id }, 'production'); oeffneGeraetFenster(id, ctx.melde); },
+    faceOeffnen: (id, x, y) => ctx.faceOeffnen?.(id, x, y), fensterOeffnen: (id) => { fokus.melde({ spur_id: id }, 'production'); oeffneGeraetFenster(id, ctx.melde); }, faceVerfuegbar: (s) => ctx.faceVerfuegbar?.(s) ?? false,   // fensterOeffnen: the ↗ button next to the device label (the label alone was not visible as a control, Andreas 11-19)
     takesUmschalten: (id) => { if (st.takeOffen.has(id)) st.takeOffen.delete(id); else st.takeOffen.add(id); ctx.layoutNeu(); koepfe.zeige(st.projekt); },
     gesten, armiere: (id, an) => aufnahme.armiere(id, an), armStandJetzt: () => st?.autoArm,
     ueber: () => st?.autoUeber ?? [], kopfBeat: () => st?.kopfBeat, marke: (id) => ctx.presetMarke?.('spur', id) ?? null, geraete: () => st?.geraete ?? null,
@@ -702,11 +777,7 @@ export function bindeSpuren(ctx) {
       return r.status;
     },
     wahl: (id) => st?.laneZiel?.get(id), waehle: (id, ziel) => { st.laneZiel.set(id, ziel); ctx.layoutNeu(); koepfe.zeige(st.projekt); },
-    umschalten: (id) => {
-      if (st.laneOffen.has(id)) st.laneOffen.delete(id); else st.laneOffen.add(id);
-      ctx.layoutNeu();
-      koepfe.zeige(st.projekt);
-    } });
+    umschalten: (id) => ctx.laneUmschalten(id) });
   koepfeRef = koepfe;
   ctx.beiGeraete?.push(() => koepfe.zeige(st.projekt));   // 1.8 S2b: the device list changed (GET /geraete): the input selects follow
   ctx.beimMarken?.push(() => koepfe.zeige(st.projekt));   // 1.16 rest U7: a preset mark arrived or changed
@@ -765,6 +836,7 @@ export function bindeSpuren(ctx) {
     ring.push(performance.now() - t0); if (ring.length > 600) ring.shift();
   });
   for (const [knopf, [label, befehl]] of Object.entries(NEU)) $(knopf).addEventListener('click', () => ctx.aendere(label, [befehl]));
+  $('gruppieren').addEventListener('click', () => ctx.gruppiere?.());   // the same as Ctrl+G
   $('neu-kit').addEventListener('click', (e) => {
     const r = typeof e?.currentTarget?.getBoundingClientRect === 'function' ? e.currentTarget.getBoundingClientRect() : null;
     kitMenue(ctx, r ? r.left : (e?.clientX ?? 0), r ? r.bottom : (e?.clientY ?? 0));

@@ -98,6 +98,20 @@ struct Lauf {
     std::snprintf(b.hoerschein, sizeof b.hoerschein, "%s", hs);
     return sende(b);
   }
+  // /k/teil on any regler path with plan and coupling group (a ramp when dauer > 0)
+  int64_t teil(const char* pfad, float wert, double ab, const char* quelle, const char* plan, int nr, const char* gruppe, double dauer = 0.0) {
+    cdj::Befehl b = neu(cdj::Befehl::TEIL, quelle);
+    std::snprintf(b.pfad, sizeof b.pfad, "%s", pfad);
+    std::snprintf(b.plan, sizeof b.plan, "%s", plan);
+    std::snprintf(b.gruppe, sizeof b.gruppe, "%s", gruppe);
+    b.nr = nr;
+    b.ab_beat = ab;
+    b.dauer_beats = dauer;
+    b.form = dauer > 0.0 ? 1 : 0;
+    b.wert = wert;
+    b.politik = 1;
+    return sende(b);
+  }
   // /k/hoerschein: registriert hs_id für kanal, material_id/bpm/fassung passend zum geladenen Material.
   int64_t hoerschein(const char* hs, const char* kanal, const char* material_id, double bpm, int fassung,
                       double gueltig_bis_beat) {
@@ -236,6 +250,31 @@ int main() {
   PRUEF_NAH(hoechster, -200.0, 1e-6);
   PRUEF_NAH(wert("deck/1/fader"), -200.0, 1e-6);
   PRUEF(a.quittung(t8, 7));   // the part, started before the load, ended by it (abbruch)
+
+  // h) 2026-11-19 (review of seq-fader-frei): the load ends the RUNNING parts of EVERY source but andreas on that fader, and nothing else. Deck 3 is
+  //    still empty (open at 0 dB since case d). A ramp of leitstand (not cypher) on deck/3/fader, 0 -> -100 over 16 beats, is running when a track
+  //    arrives. Its coupling-group mate on pad/1/fader (same plan and group, a longer ramp) ends with it (a group falls together), and a
+  //    running part of andreas on another regler of the deck (deck/3/trim) is spared.
+  const int64_t h1 = a.teil("deck/3/fader", -100.0f, 170.0, "leitstand", "ph", 0, "gh", 16.0);
+  const int64_t h2 = a.teil("pad/1/fader", -100.0f, 170.0, "leitstand", "ph", 1, "gh", 64.0);
+  const int64_t h3 = a.teil("deck/3/trim", -10.0f, 170.0, "andreas", "pa", 0, "", 16.0);
+  a.zyklen(174 * SPB);
+  PRUEF(a.quittung(h1, 2) && a.quittung(h2, 2) && a.quittung(h3, 2));
+  const double h_mitte = wert("deck/3/fader");
+  PRUEF(h_mitte < 0.0 && h_mitte > -100.0);   // the ramp is running
+  const int64_t l3 = a.laden(3, MID);
+  a.zyklen(a.kern->sample() + 64 * 256);
+  PRUEF(a.quittung(l3, 3));
+  const Q* qh1 = a.quittung(h1, 7);
+  PRUEF(qh1 && qh1->grund == "abbruch");   // the leitstand part on that fader ended
+  PRUEF(a.quittung(h2, 7));                // the group mate on another fader ends with it
+  PRUEF(!a.quittung(h3, 7));               // andreas is spared
+  double h_hoechst = wert("deck/3/fader");
+  while (a.kern->sample() < 190 * SPB) {
+    a.zyklen(a.kern->sample() + 256);
+    if (wert("deck/3/fader") > h_hoechst) h_hoechst = wert("deck/3/fader");
+  }
+  PRUEF_NAH(h_hoechst, -200.0, 1e-6);   // the fader stayed closed
 
   // Negativ-Kontrolle: ohne hoerschein_pflicht(true) (Vorgabe der PrueferI3-Instanz: aus) -> Quittung 2 wie heute
   Lauf b;

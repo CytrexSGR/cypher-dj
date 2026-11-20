@@ -8,16 +8,18 @@
 // die Bewegung, die der Verlauf zusammenfasst (Spec 6.5); `{voll: true}` erzwingt den allgemeinen Weg (Test: beide ergeben dasselbe).
 // `rev` und `wiedergabe_rev` fasst kein Befehl an: sie zählt der Verlauf (history.ts).
 import {
-  MAX_AUTO_PUNKTE, MAX_LANE_PUNKTE, alleStraenge, FADER_MIN, MAX_CLIPS, MAX_NOTEN, MAX_RETURNS, HALL_FELDER, HALL_VORGABE, type InsertPoolArt,
-  alleInserts, sucheStrang, alleRacks, MAX_MAKROS, type Rack, bkSlot, bkLive, istObjekt, kanonisch, pruefeFehler, spurSicht, wiedergabeSicht, type AudioClip,
+  MAX_AUTO_PUNKTE, MAX_FX_PUNKTE, MAX_LANE_PUNKTE, alleStraenge, FADER_MIN, MAX_CLIPS, MAX_NOTEN, MAX_RETURNS, HALL_FELDER, HALL_VORGABE, type InsertPoolArt,
+  alleInserts, notenZaehler, sucheStrang, alleRacks, MAX_MAKROS, type Rack, bkSlot, bkLive, istObjekt, kanonisch, pruefeFehler, spurSicht, wiedergabeSicht,
+  type AudioClip,
   type Gruppe, type Herkunft, type Insert, type Projekt, type Return, type Spur, type DekodiertZustand,
 } from './model.ts';
 import { INSERT_ARTEN } from './insert_key.ts';
 import { unterschied, type Patch, pfadSegment } from './patch.ts';
 import { hkPunkteZahl } from './envelope.ts';
-import { MAX_WARP_PUNKTE, gainHkPunkte, relativeLanen, zaehleAusgerollt, zaehleWarpMarker } from './playback.ts';
+import { faechertAus, weite, kopiereInhalt, mitglieder, raeumeVerbuende } from './verbund.ts';
+import { MAX_WARP_PUNKTE, gainHkPunkte, relativeLanen, zaehleAusgerollt, zaehleFx, fxKollisionen, zaehleWarpMarker, type GeraetFxFn } from './playback.ts';
 import {
-  BefehlFehler, ab, laneRuhewerte, hatLaneRuhewerte, laneHinweise, GRUPPE_LEICHT, MIXER, PRO_BEFEHL, mergeTabellen, type ReglerAenderung,
+  BefehlFehler, ab, laneRuhewerte, hatLaneRuhewerte, laneHinweise, GRUPPE_LEICHT, MIXER, PRO_BEFEHL, mergeTabellen, type ReglerAenderung, type StiftAenderung,
   type BefehlErgebnis, type LaneHinweis, type Befehl, type Args, type Kontext,
 } from './commands_helpers.ts';
 import { SPUR } from './commands_track.ts';
@@ -27,11 +29,12 @@ import { INSERT } from './commands_insert.ts';
 import { AUTO } from './commands_auto.ts';
 import { TRANSPORT } from './commands_transport.ts';
 import { SZENEN } from './commands_szenen.ts';
+import { TRACKER } from './commands_tracker.ts';
 export { BefehlFehler, bereinigeGliedZiele, DUCK_DURCH_KICK_WERTE, laneStart, COMP_FADE_S, teileClipsAn, compFade } from './commands_helpers.ts';
-export type { ReglerAenderung, BefehlErgebnis, LaneHinweis, Befehl, PresetInhalt, MusterMeldung, PluginEintrag } from './commands_helpers.ts';
+export type { ReglerAenderung, StiftAenderung, BefehlErgebnis, LaneHinweis, Befehl, PresetInhalt, MusterMeldung, PluginEintrag } from './commands_helpers.ts';
 export { PRO_BEFEHL } from './commands_helpers.ts';
 
-mergeTabellen(PRO_BEFEHL, SPUR, CLIP, GRUPPE, INSERT, AUTO, TRANSPORT, SZENEN);
+mergeTabellen(PRO_BEFEHL, SPUR, CLIP, GRUPPE, INSERT, AUTO, TRANSPORT, SZENEN, TRACKER);
 export const BEFEHL_NAMEN: readonly string[] = Object.keys(PRO_BEFEHL);
 
 // Ein eingefrorener Wirt-Spur-Klang gilt nur zu genau den Noten, dem Gerät und dem Tempo, mit denen er entstanden ist
@@ -58,7 +61,20 @@ function pruefeBefehl(b: unknown): asserts b is Befehl {
 function wendeAn(entwurf: Projekt, b: unknown, ctx: Kontext): void {
   pruefeBefehl(b);
   const vorher = merkeFreezes(entwurf);
-  PRO_BEFEHL[b.befehl](entwurf, b as Args, ctx);
+  if (faechertAus(b)) {
+    // ADR 039: a content command on a member of a pattern runs on every member, at its turn inside the list (one undo step with the list)
+    const boden = notenZaehler(entwurf);
+    const cmds = weite(entwurf, b as Args);
+    if (cmds.length === 1) PRO_BEFEHL[b.befehl](entwurf, b as Args, ctx);
+    else if (b.befehl === 'clip_aus_muster') {          // generated once: the other members take the result (the same note ids)
+      PRO_BEFEHL[b.befehl](entwurf, cmds[0] as Args, ctx);
+      const ms = mitglieder(entwurf, (cmds[0] as Args).clip_id as string);
+      for (const m of ms.slice(1)) kopiereInhalt(ms[0], m);
+    } else for (const c of cmds) PRO_BEFEHL[b.befehl](entwurf, c as Args, { ...ctx, noteIdsAb: boden });
+  } else {
+    PRO_BEFEHL[b.befehl](entwurf, b as Args, ctx);
+    raeumeVerbuende(entwurf);                            // a pattern left with one member loses its verbund (not on the note fast path: it shares clips)
+  }
   if (vorher) verwerfeFreezes(vorher, entwurf);
 }
 
@@ -215,6 +231,15 @@ function istLeicht(projekt: Projekt, b: unknown): boolean {
     // production plan task 9: a knob of a Baukasten track, live. Only the first BK_LIVE_SLOTS bk tracks have a core row; the 9th to 16th take the general path
     // (playback rebuild, no spur/ row). An unknown or non-bk id keeps this route: the handler raises the same error as before.
     case 'geraet_param_setzen': return typeof b.spur_id !== 'string' || bkSlot(projekt, b.spur_id) === null || bkLive(projekt, b.spur_id);
+    // Kraken patch field: a pin is live only when the track is a bk track that already HAS a pin list and no freeze (the first pin takes the general
+    // path so the graph
+    // defaults are written into the list; a freeze would drop). An unknown or non-bk id keeps this route: the handler raises the same error as before.
+    case 'geraet_stift_setzen': {
+      if (typeof b.spur_id !== 'string') return true;
+      const sp = projekt.spuren.find((x) => x.id === b.spur_id);
+      if (!sp || !(sp.geraet?.art === 'intern' && sp.geraet.name === 'bk')) return true;
+      return sp.geraet.stifte !== undefined && !sp.freeze;
+    }
     case 'rack_makro': case 'makro_variation_laden': return true;   // slice 4c: the live macro value is a control change
     case 'tempo_setzen': return !projekt.spuren.some((s) => s.freeze);        // Tempo verwirft Freezes und ändert deren Länge in Beats
     default: return false;
@@ -255,6 +280,13 @@ function leichterUnterschied(von: Projekt, nach: Projekt): Patch {
       else if (x[k] !== y[k]) aus.push({ op: 'replace', pfad: `${pfad}/geraet/parameter/${pfadSegment(k)}`, wert: y[k] });
     }
     for (const k of Object.keys(x)) if (!(k in y)) aus.push({ op: 'remove', pfad: `${pfad}/geraet/parameter/${pfadSegment(k)}` });
+    // Kraken patch field: the pin list is replaced as a whole by ONE patch (geraet_stift_setzen on the light path always had a list before), so a
+    // drag of one pin stays
+    // one patch and the undo coalescing (r.vor.length === 1) holds
+    if (a.geraet.stifte !== b.geraet.stifte && a.geraet.stifte !== undefined && b.geraet.stifte !== undefined
+      && kanonisch(a.geraet.stifte) !== kanonisch(b.geraet.stifte)) {
+      aus.push({ op: 'replace', pfad: `${pfad}/geraet/stifte`, wert: b.geraet.stifte });
+    }
   };
   for (const k of Object.keys(von)) {
     if (k === 'tempo_bpm') flach({ tempo_bpm: von.tempo_bpm }, { tempo_bpm: nach.tempo_bpm }, '');
@@ -314,6 +346,8 @@ function fuehreLeichtAus(projekt: Projekt, befehle: unknown[]): BefehlErgebnis {
   const hinweise: LaneHinweis[] = [];
   // production plan task 9: spur/<slot>/bk/<k> -> value, the last write of a knob wins; this is the only producer of such a row
   const bkZeilen = new Map<string, number>();
+  // Kraken patch field: the pins to send, the last write of a position wins (a Map keeps the first insertion order, the value is overwritten)
+  const stifte = new Map<string, StiftAenderung>();
   befehle.forEach((b, i) => {
     const vorher = hatLaneRuhewerte(entwurf) ? laneRuhewerte(entwurf) : null;
     try {
@@ -333,11 +367,26 @@ function fuehreLeichtAus(projekt: Projekt, befehle: unknown[]): BefehlErgebnis {
           kopiert.add(`geraet:${a.spur_id}`);
         }
       }
+      // Kraken patch field: the track, its device AND its pin list are copied once per track before the handler runs, so the original project is never mutated
+      // (the handler assigns a new list, but a shared device object would still be written)
+      if (a.befehl === 'geraet_stift_setzen' && typeof a.spur_id === 'string' && !kopiert.has(`stifte:${a.spur_id}`)) {
+        const k = entwurf.spuren.findIndex((s) => s.id === a.spur_id);
+        const g = k >= 0 ? entwurf.spuren[k].geraet : undefined;
+        if (k >= 0) {
+          const kopieG = g?.art === 'intern' && g.name === 'bk' ? { geraet: { ...g, ...(g.stifte ? { stifte: [...g.stifte] } : {}) } } : {};
+            entwurf.spuren[k] = { ...entwurf.spuren[k], ...kopieG };
+          kopiert.add(`stifte:${a.spur_id}`);
+        }
+      }
       if (a.befehl === 'gruppenspur_aendern' && typeof a.gruppe_id === 'string' && !kopiert.has(a.gruppe_id)) {
         const k = (entwurf.gruppen ?? []).findIndex((g) => g.id === a.gruppe_id);
         if (k >= 0) { entwurf.gruppen[k] = { ...entwurf.gruppen[k] }; kopiert.add(a.gruppe_id); }
       }
       PRO_BEFEHL[a.befehl](entwurf, a, { quelle: 'andreas' });          // nur Befehle ohne Herkunft (istLeicht)
+      if (a.befehl === 'geraet_stift_setzen') {   // Kraken patch field: the handler accepted it, so the track is a bk track and the position is in range
+        const nr = entwurf.spuren.find((x) => x.id === a.spur_id)!.nr;
+        stifte.set(`${nr}:${a.satz}:${a.zeile}:${a.spalte}`, { nr, satz: a.satz, zeile: a.zeile, spalte: a.spalte, wert: a.wert });
+      }
       if (a.befehl === 'geraet_param_setzen') {   // task 9: the handler accepted it, so the track is a bk track and the knob is k1..k64
         bkZeilen.set(`spur/${bkSlot(entwurf, a.spur_id)}/bk/${Number(a.param.slice(1))}`, a.wert);
       }
@@ -346,7 +395,7 @@ function fuehreLeichtAus(projekt: Projekt, befehle: unknown[]): BefehlErgebnis {
   });
   return { projekt: entwurf, vor: leichterUnterschied(projekt, entwurf), zurueck: leichterUnterschied(entwurf, projekt),
     betrifft_wiedergabe: false, regler_aenderungen: [...reglerAenderungen(projekt, entwurf), ...[...bkZeilen].map(([pfad, wert]) => ({ pfad, wert }))],
-    ...(hinweise.length ? { hinweise } : {}) };
+    ...(hinweise.length ? { hinweise } : {}), ...(stifte.size ? { stift_aenderungen: [...stifte.values()] } : {}) };
 }
 
 // --- Notenweg (Spec 6.31, Leistung) ----------------------------------------------------------------------------------
@@ -361,6 +410,7 @@ function notenEntwurf(projekt: Projekt, befehle: unknown[]): Projekt | null {
     if (!istObjekt(b) || !NOTEN_BEFEHLE.has(b.befehl) || typeof b.clip_id !== 'string') return null;
     clips.add(b.clip_id);
   }
+  for (const id of [...clips]) for (const m of mitglieder(projekt, id)) clips.add(m.id);   // ADR 039: the members of a pattern are written too
   return { ...projekt, loop: { ...projekt.loop }, metronom: { ...projekt.metronom },
     spuren: projekt.spuren.map((s) => (s.clips.some((c) => clips.has(c.id))
       ? { ...s, clips: s.clips.map((c) => (clips.has(c.id) && c.art === 'midi' ? { ...c, noten: [...c.noten] } : c)) } : s)) };
@@ -368,7 +418,7 @@ function notenEntwurf(projekt: Projekt, befehle: unknown[]): Projekt | null {
 
 type TransientenQuelle = (sha256: string) => number[] | null;
 // The checks every command list ends with (model validity, the core's limits after unrolling loops, warp markers); also the end of a recording.
-export function pruefeGrenzen(entwurf: Projekt, o: { transienten?: TransientenQuelle } = {}): void {
+export function pruefeGrenzen(entwurf: Projekt, o: { transienten?: TransientenQuelle; geraetFx?: GeraetFxFn } = {}): void {
   const fehler = pruefeFehler(entwurf);
   if (fehler !== null) ab('projekt_ungueltig', fehler);
   const g = zaehleAusgerollt(entwurf);                                         // Spec 6.17: die Grenzen gelten nach dem Ausrollen
@@ -379,11 +429,20 @@ export function pruefeGrenzen(entwurf: Projekt, o: { transienten?: TransientenQu
   // Paket 1.13: Warp-Marker aller Kopien, Grenze wie im Kern (Slice 4: BEATS-Einheiten nach denselben Transienten wie uebersetze)
   const marker = zaehleWarpMarker(entwurf, o.transienten ? { transienten: o.transienten } : undefined);
   if (marker > MAX_WARP_PUNKTE) ab('zu_gross', `after unrolling loops ${marker} warp markers (at most ${MAX_WARP_PUNKTE})`);
+  // tracker effect commands (task 14): the pitch and level events and the lanes they roll out to, after unrolling the loops (a project without fx: no cost)
+  const fx = zaehleFx(entwurf, o.geraetFx);
+  if (fx.events > MAX_FX_PUNKTE) ab('zu_gross', `after unrolling ${fx.events} pitch and level events (at most ${MAX_FX_PUNKTE})`);
+  if (fx.breit && fx.breit.n > MAX_LANE_PUNKTE) {
+    ab('zu_gross', `${fx.breit.spur}: the ${fx.breit.ziel} effect lane rolls out to ${fx.breit.n} points (at most ${MAX_LANE_PUNKTE})`);
+  }
   // 1.12 slice 5 (D7): clip envelope points count with the lane points against MAX_AUTO_PUNKTE (once per repetition over the clip)
   let hk = 0, lanen = 0;
   // 1.12 slice 6: every strip carries lanes
   for (const { strang } of alleStraenge(entwurf)) for (const l of strang.automation ?? []) lanen += l.punkte.length;
   for (const s of entwurf.spuren) for (const c of s.clips) hk += hkPunkteZahl(c);
+  if (fx.lanePunkte > 0 && lanen + fx.lanePunkte > MAX_AUTO_PUNKTE) {
+    ab('zu_gross', `${lanen} lane points and ${fx.lanePunkte} effect lane points (at most ${MAX_AUTO_PUNKTE})`);
+  }
   if (hk > 0 && hk + lanen > MAX_AUTO_PUNKTE) ab('zu_gross', `${lanen} lane points and ${hk} envelope points (at most ${MAX_AUTO_PUNKTE})`);
   // the modulation envelopes of a track merge into one relative lane per target (D9); the core takes at most MAX_LANE_PUNKTE points per lane.
   // The total counts the points as the translator writes them (gain_hk per copy, relative lanes): the roll-out adds points at every period edge.
@@ -409,7 +468,7 @@ export function fuehreListeAus(projekt: Projekt, befehle: unknown[],
     presetLies?: Kontext['presetLies']; surgeBereich?: Kontext['surgeBereich']; surgeIst?: Kontext['surgeIst'];
     surgeFilter1An?: Kontext['surgeFilter1An']; surgePatchDa?: Kontext['surgePatchDa']; pluginDa?: Kontext['pluginDa'];
     pluginIndex?: Kontext['pluginIndex']; musterUebersetze?: Kontext['musterUebersetze']; kitKlaenge?: Kontext['kitKlaenge'];
-    musterMeldung?: Kontext['musterMeldung'] } = {}): BefehlErgebnis {
+    musterMeldung?: Kontext['musterMeldung']; geraetFx?: GeraetFxFn; steckfeldVon?: Kontext['steckfeldVon'] } = {}): BefehlErgebnis {
   if (!Array.isArray(befehle) || befehle.length === 0) ab('argument_ungueltig', 'befehle: nicht leere Liste erwartet');
   if (!o.voll && befehle.every((b) => istLeicht(projekt, b))) return fuehreLeichtAus(projekt, befehle);
   const entwurf = (o.voll ? null : notenEntwurf(projekt, befehle)) ?? structuredClone(projekt);
@@ -419,7 +478,7 @@ export function fuehreListeAus(projekt: Projekt, befehle: unknown[],
     ...(o.surgeFilter1An ? { surgeFilter1An: o.surgeFilter1An } : {}), ...(o.surgePatchDa ? { surgePatchDa: o.surgePatchDa } : {}),
     ...(o.pluginDa ? { pluginDa: o.pluginDa } : {}), ...(o.pluginIndex ? { pluginIndex: o.pluginIndex } : {}),
     ...(o.musterUebersetze ? { musterUebersetze: o.musterUebersetze } : {}), ...(o.kitKlaenge ? { kitKlaenge: o.kitKlaenge } : {}),
-    ...(o.musterMeldung ? { musterMeldung: o.musterMeldung } : {}) };
+    ...(o.musterMeldung ? { musterMeldung: o.musterMeldung } : {}), ...(o.steckfeldVon ? { steckfeldVon: o.steckfeldVon } : {}) };
   const hinweise: LaneHinweis[] = [];
   befehle.forEach((b, i) => {
     const vorher = hatLaneRuhewerte(entwurf) ? laneRuhewerte(entwurf) : null;
@@ -427,6 +486,17 @@ export function fuehreListeAus(projekt: Projekt, befehle: unknown[],
     hinweise.push(...laneHinweise(vorher, entwurf, i));
   });
   pruefeGrenzen(entwurf, o);
+  // a role lane of the effect commands would replace a lane the track holds (the playback lets the role lane win): refuse what the list newly creates
+  const kollision = fxKollisionen(entwurf, o.geraetFx);
+  if (kollision.size > 0) {
+    const alt = fxKollisionen(projekt, o.geraetFx);
+    const neu = [...kollision].find((k) => !alt.has(k));
+    if (neu !== undefined) {
+      const [spur, ziel] = neu.split('/');
+      ab('fx_lane_kollision',
+        `${spur}: the effect commands drive ${ziel} and would replace the lane the track holds for it; delete the lane or the commands first`);
+    }
+  }
   return { projekt: entwurf, vor: unterschied(projekt, entwurf), zurueck: unterschied(entwurf, projekt), ...vergleiche(projekt, entwurf),
     ...(hinweise.length ? { hinweise } : {}) };
 }

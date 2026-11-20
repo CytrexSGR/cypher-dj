@@ -23,7 +23,16 @@ pub struct Chorus {
     an: bool,
     g: f64,
     tp: [Stufe; 2],
+    /// samples in a row that `prozess` took the dry shortcut (mix exactly 0): the all-pass states `tp` lag behind by that many
+    trocken: u32,
+    /// samples taken by the dry shortcut so far (diagnostic for tests and cost reports)
+    ausgelassen: u64,
 }
+
+/// Samples the low-pass states are replayed over when the wet path starts again after a dry stretch. The 9 kHz low-pass has
+/// poles of radius about 0.46 at 48 kHz, so 64 samples forget a wrong start to 1e-21 and the replay reaches the state the
+/// always-running chorus has to within the rounding of the phase.
+const VORLAUF: usize = 64;
 
 /// Wert `verz` Samples vor `buf[pos]`, kubische Lagrange-Interpolation über vier Nachbarn (Spec E14). `verz` ≥ 1;
 /// genutzt von `Chorus` und `echo::Echo`.
@@ -59,6 +68,8 @@ impl Chorus {
             // Tiefpass liefe weg (gemessen im Review)
             g: (std::f64::consts::PI * BBD_HZ.min(0.45 * sr) / sr).tan(),
             tp: [Stufe::default(); 2],
+            trocken: 0,
+            ausgelassen: 0,
         }
     }
 
@@ -74,12 +85,62 @@ impl Chorus {
     }
 
     /// Ein Sample: (links, rechts) = x + mix·nass. `mix` 0 gibt beide Seiten trocken.
+    ///
+    /// Mix exactly 0 takes a shortcut (the wet path adds `0 * nass`, which is exactly `+0` for a finite `nass`): the sample is
+    /// written to the line and the triangle moves on, so the line and the phase stay where the full path has them, but the two
+    /// interpolated reads and the two low-passes are not computed. The low-pass states are the only thing that stands still; they
+    /// are brought up to date when mix leaves 0 (`vorwaermen`), before the first wet sample. The output is the same as
+    /// `prozess_voll` for every input, bit for bit (tests: `trockene_strecke_...` below and tests/nullen.rs), apart from the
+    /// rounding of the phase in the replay.
     #[inline]
     pub fn prozess(&mut self, x: f32, mix: f32) -> (f32, f32) {
+        if !self.an || mix != 0.0 {
+            return self.prozess_voll(x, mix);
+        }
+        self.pos = (self.pos + 1) & self.maske;
+        self.buf[self.pos] = x;
+        self.phase += self.rate;
+        if self.phase >= 1.0 {
+            self.phase -= 1.0;
+        }
+        self.trocken = self.trocken.saturating_add(1);
+        self.ausgelassen += 1;
+        // `x + 0.0` and not `x`: for x = -0.0 the full path gives +0.0
+        (x + 0.0, x + 0.0)
+    }
+
+    /// Samples taken by the dry shortcut so far
+    pub fn ausgelassen(&self) -> u64 { self.ausgelassen }
+
+    /// The low-pass states after a dry stretch: replays the last `VORLAUF` samples of it (at most the stretch itself, so a
+    /// short stretch continues exactly from the state it stopped at) with the delays the full path had at those times.
+    /// Called with the current sample already in the line and the phase not yet advanced.
+    fn vorwaermen(&mut self) {
+        let platz = self.buf.len().saturating_sub((self.min + self.tiefe).ceil() as usize + 8);
+        let k = (self.trocken as usize).min(VORLAUF).min(platz);
+        for j in (1..=k).rev() {
+            let phase = (self.phase - j as f64 * self.rate).rem_euclid(1.0);
+            let d = 1.0 - (2.0 * phase - 1.0).abs();
+            let (a, b) = (self.min + self.tiefe * d, self.min + self.tiefe * (1.0 - d));
+            let pos = self.pos.wrapping_sub(j) & self.maske;
+            let (na, nb) = (lagrange4(&self.buf, self.maske, pos, a) as f64, lagrange4(&self.buf, self.maske, pos, b) as f64);
+            self.tp[0].prozess(na, self.g, std::f64::consts::SQRT_2);
+            self.tp[1].prozess(nb, self.g, std::f64::consts::SQRT_2);
+        }
+        self.trocken = 0;
+    }
+
+    /// The chorus as it ran before the dry shortcut existed: every sample computes both reads and both low-passes. Reference of
+    /// the tests; `Programm::setze_nullen(false)` runs it.
+    #[inline]
+    pub fn prozess_voll(&mut self, x: f32, mix: f32) -> (f32, f32) {
         self.pos = (self.pos + 1) & self.maske;
         self.buf[self.pos] = x;
         if !self.an {
             return (x, x);
+        }
+        if self.trocken != 0 {
+            self.vorwaermen();
         }
         let (a, b) = self.verzoegerung();
         let (na, nb) = (self.lies(a) as f64, self.lies(b) as f64);
@@ -97,6 +158,7 @@ impl Chorus {
         self.pos = 0;
         self.phase = 0.0;
         self.tp = [Stufe::default(); 2];
+        self.trocken = 0;
     }
 }
 
@@ -200,6 +262,63 @@ mod tests {
             }
             assert!((c.lies(d as f64) - 1.0).abs() < 1e-6, "Modus {}: Impuls {d} Samples zurück: {}", modus + 1, c.lies(d as f64));
             assert!(c.lies(d as f64 - 1.0).abs() < 1e-6 && c.lies(d as f64 + 1.0).abs() < 1e-6, "Modus {}: Nachbarn leer", modus + 1);
+        }
+    }
+
+    /// A signal with content up to the 9 kHz low-pass, deterministic
+    fn signal(n: usize) -> f32 {
+        let t = n as f32;
+        0.5 * (t * 0.05).sin() + 0.3 * (t * 1.9).sin() + 0.2 * ((n * 7919 % 101) as f32 / 50.0 - 1.0)
+    }
+
+    #[test]
+    fn trockene_strecke_setzt_bitgleich_fort() {
+        // mix exactly 0 for `strecke` samples, then wet: every output equals the chorus that computed all samples. Lengths below,
+        // at and above the replay length, and one longer than the line.
+        for modus in 1..=3u8 {
+            for strecke in [1usize, 5, 63, 64, 65, 400, 5_000] {
+                let (mut kurz, mut voll) = (Chorus::neu(modus, 48_000.0), Chorus::neu(modus, 48_000.0));
+                let mut n = 0usize;
+                // wet first, so the states are not at rest when the dry stretch starts
+                for stufe in [(3_000usize, 0.6f32), (strecke, 0.0), (6_000, 0.35)] {
+                    for _ in 0..stufe.0 {
+                        let x = signal(n);
+                        let (a, b) = (kurz.prozess(x, stufe.1), voll.prozess_voll(x, stufe.1));
+                        assert_eq!((a.0.to_bits(), a.1.to_bits()), (b.0.to_bits(), b.1.to_bits()), "mode {modus}, stretch {strecke}, sample {n}");
+                        n += 1;
+                    }
+                }
+                assert!(kurz.ausgelassen() >= strecke as u64, "the shortcut must have been taken");
+            }
+        }
+    }
+
+    #[test]
+    fn mix_hochfahren_aus_null_bleibt_bitgleich_und_ohne_sprung() {
+        // mix ramps up from 0 sample by sample (the knob smoothing): the skipping chorus equals the full one throughout, and
+        // the first wet samples start at the dry value (no step)
+        let (mut kurz, mut voll) = (Chorus::neu(1, 48_000.0), Chorus::neu(1, 48_000.0));
+        let mut letzte = 0.0f32;
+        for n in 0..20_000usize {
+            let mix = if n < 8_000 { 0.0 } else { ((n - 8_000) as f32 * 1e-4).min(0.5) };
+            let x = signal(n);
+            let (a, b) = (kurz.prozess(x, mix), voll.prozess_voll(x, mix));
+            assert_eq!(a.0.to_bits(), b.0.to_bits(), "sample {n}");
+            assert_eq!(a.1.to_bits(), b.1.to_bits(), "sample {n}");
+            if n >= 8_000 {
+                assert!((a.0 - x).abs() <= mix * 1.5, "wet part at most mix times the signal level: sample {n}");
+            }
+            letzte = a.0;
+        }
+        assert!(letzte.is_finite());
+    }
+
+    #[test]
+    fn trockener_pfad_vergibt_negative_null_wie_der_volle() {
+        let (mut kurz, mut voll) = (Chorus::neu(2, 48_000.0), Chorus::neu(2, 48_000.0));
+        for x in [-0.0f32, 0.0, 1.0, -1.0, -0.0] {
+            let (a, b) = (kurz.prozess(x, 0.0), voll.prozess_voll(x, 0.0));
+            assert_eq!((a.0.to_bits(), a.1.to_bits()), (b.0.to_bits(), b.1.to_bits()), "x = {x:?}");
         }
     }
 

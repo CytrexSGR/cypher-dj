@@ -1,0 +1,25 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "chip-puls"},
+  "title": "Chip Pulse",
+  "akzent": "orange",
+  "layout": {"rows": [
+    ["wave", "amp", "out"]
+  ]},
+  "sections": [
+    { "id": "wave", "title": "WAVE", "cols": 2, "controls": [
+      {"id": "duty", "type": "selector", "label": "Duty", "bind": {"param": "k1"}, "options": ["12.5 %", "25 %", "50 %"], "default": 1, "span": 2},
+      {"id": "vib", "type": "knob", "label": "Vibrato", "bind": {"param": "k5"}, "format": "raw", "unit": "ct", "default": 0, "span": 2},
+      {"id": "wave-n", "type": "label", "span": 2, "text": "Fixed pulse widths, 6 Hz vibrato"}
+    ]},
+    { "id": "amp", "title": "ENVELOPE", "cols": 3, "controls": [
+      {"id": "decay", "type": "knob", "label": "Decay", "bind": {"param": "k2"}, "format": "ms", "default": 0.5},
+      {"id": "sus", "type": "knob", "label": "Sustain", "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
+      {"id": "rel", "type": "knob", "label": "Release", "bind": {"param": "k4"}, "format": "ms", "default": 0.3},
+      {"id": "amp-n", "type": "label", "span": 3, "text": "Level steps in 16 stages (4 bit)"}
+    ]},
+    { "id": "out", "title": "OUT", "cols": 1, "controls": [
+      {"id": "level", "type": "knob", "label": "Level", "bind": {"param": "k6"}, "format": "percent", "default": 0.8}
+    ]}
+  ]
+}

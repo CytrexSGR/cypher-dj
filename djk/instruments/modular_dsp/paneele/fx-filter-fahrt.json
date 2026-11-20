@@ -1,0 +1,15 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "fx-filter-fahrt"},
+  "title": "Filter Ride",
+  "akzent": "tuerkis",
+  "sections": [
+    { "id": "ride", "title": "RIDE", "cols": 4, "controls": [
+      {"id": "start", "type": "knob", "label": "Cutoff start", "bind": {"param": "k2"}, "format": "hz", "default": 0.5},
+      {"id": "depth", "type": "knob", "label": "Ride depth", "bind": {"param": "k3"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "reso", "type": "knob", "label": "Resonance", "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
+      {"id": "hp", "type": "knob", "label": "HP cut", "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "l1", "type": "label", "span": 4, "text": "Low-pass opens once over 128 beats"}
+    ]}
+  ]
+}

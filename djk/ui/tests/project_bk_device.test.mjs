@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { fuehreListeAus, BefehlFehler } from '../project/commands.ts';
-import { pruefeProjekt, pruefeFehler, kanonisch, wiedergabeSicht, BK_GRAPH_NAME, BK_PARAMETER, MAX_BK_SPUREN, BK_LIVE_SLOTS } from '../project/model.ts';
+import { pruefeProjekt, pruefeFehler, kanonisch, wiedergabeSicht, BK_GRAPH_NAME, BK_PARAMETER, MAX_BK_SPUREN, MAX_FX_PUNKTE, BK_LIVE_SLOTS } from '../project/model.ts';
 import { uebersetze } from '../project/playback.ts';
 import { GRAPH_NAME } from '../graphs.ts';
 import { specProjekt, kopie, SHA_A, SHA_B } from './support/project.mjs';
@@ -62,11 +62,12 @@ test('S20 model: refusals (graph missing or malformed, knobs, extra field, freez
   assert.equal(MAX_BK_SPUREN, 16);
 });
 
-test('MAX_BK_SPUREN equals ARR_BK_MAX and BK_LIVE_SLOTS equals SPUR_BK_SLOTS (regex on the core headers)', () => {
+test('MAX_BK_SPUREN equals ARR_BK_MAX, MAX_FX_PUNKTE equals ARR_FX_PUNKTE_MAX and BK_LIVE_SLOTS equals SPUR_BK_SLOTS (regex on the core headers)', () => {
   const lies = (...teile) => fs.readFileSync(path.join(hier, '..', '..', ...teile), 'utf8');
   const konst = (h, n) => Number(new RegExp(`constexpr int ${n} = (\\d+);`).exec(h)?.[1]);
   const arr = lies('core', 'include', 'cypherdj', 'arr_playback.h'), regler = lies('core', 'signalbox', 'include', 'cypherdj', 'signalbox', 'controls.h');
   assert.equal(MAX_BK_SPUREN, konst(arr, 'ARR_BK_MAX'));
+  assert.equal(MAX_FX_PUNKTE, konst(arr, 'ARR_FX_PUNKTE_MAX'));   // tracker task 16: bend and pegel events per project
   assert.equal(BK_LIVE_SLOTS, konst(regler, 'SPUR_BK_SLOTS'));
   assert.ok(BK_LIVE_SLOTS <= MAX_BK_SPUREN, 'the live rows address slots of at most MAX_BK_SPUREN tracks');
 });

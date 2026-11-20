@@ -31,6 +31,7 @@ _inst=${CYPHERDJ_INSTANZ:-}
 for _a in "$@"; do case "$_a" in --ins*) _inst=1;; esac; done
 if [ -z "$_inst" ]; then
   PYTHONPATH="$DJK${PYTHONPATH:+:$PYTHONPATH}" PYTHONSAFEPATH=1 python3 "$HIER/umzug.py" einrichten --still \
-    || echo "djk-starter: could not lay out the home folder (see above); going on with the old places" >&2
+    || { _rc=$?; [ "$_rc" = 6 ] && { echo "djk-starter: the home is not ready (is the disk mounted?). Nothing done." >&2; exit 6; }
+         echo "djk-starter: could not lay out the home folder (see above); going on with the old places" >&2; }
 fi
 cd "$DJK" && exec "$PY" -m starter "$@"

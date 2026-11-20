@@ -119,7 +119,7 @@ test('geraetText: a rack says RACK · <members>', () => {
 });
 
 test('every visible string of the rack panel is English (printable ASCII, no German umlauts)', () => {
-  const texte = [...Object.values(R.RACK_TEXT), ...KOPF_MENUE.map((e) => e.text)];
+  const texte = [...Object.values(R.RACK_TEXT), ...KOPF_MENUE.map((e) => (typeof e.text === 'function' ? e.text({ id: 'x' }, { st: {} }) : e.text))];
   assert.ok(texte.length > 8);
   for (const t of texte) assert.match(t, /^[ -~]+$/, t);
 });

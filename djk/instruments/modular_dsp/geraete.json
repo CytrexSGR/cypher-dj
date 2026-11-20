@@ -64,5 +64,11 @@
   {"name": "fx-remix", "art": "bk", "familie": "fx", "akzent": "tuerkis", "doku": "docs/presets/devices/GERAET-remix.md"},
   {"name": "bass-banddrive", "art": "bk", "familie": "neuro", "akzent": "violett", "doku": "docs/presets/devices/GERAET-bass-banddrive.md"},
   {"name": "synth-greif", "art": "bk", "familie": "neuro", "akzent": "violett", "doku": "docs/presets/devices/GERAET-synth-greif.md"},
-  {"name": "synth-greif2", "art": "bk", "familie": "neuro", "akzent": "violett", "doku": "docs/presets/devices/GERAET-synth-greif.md"}
+  {"name": "synth-greif2", "art": "bk", "familie": "neuro", "akzent": "violett", "doku": "docs/presets/devices/GERAET-synth-greif.md"},
+  {"name": "amiga", "art": "bk", "familie": "poly", "akzent": "blau", "doku": "docs/presets/devices/GERAET-amiga.md", "fx_stufig": true, "rollen": {"slot": 1, "start": 2, "rueckwaerts": 3}},
+  {"name": "chip-puls", "art": "bk", "familie": "mono", "akzent": "orange", "doku": "docs/presets/devices/GERAET-chip-puls.md", "fx_stufig": true},
+  {"name": "chip-dreieck", "art": "bk", "familie": "mono", "akzent": "orange", "doku": "docs/presets/devices/GERAET-chip-dreieck.md", "fx_stufig": true},
+  {"name": "chip-rauschen", "art": "bk", "familie": "drums", "akzent": "rot", "doku": "docs/presets/devices/GERAET-chip-rauschen.md", "fx_stufig": true},
+  {"name": "synth-kraken", "art": "bk", "familie": "poly", "akzent": "tuerkis", "doku": "docs/presets/devices/GERAET-synth-kraken.md"},
+  {"name": "drum-synth", "art": "bk", "familie": "drums", "akzent": "rot", "doku": "docs/presets/devices/GERAET-drum-synth.md"}
 ]

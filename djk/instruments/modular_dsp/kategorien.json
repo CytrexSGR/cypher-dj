@@ -254,6 +254,16 @@
   "text": "Greif with tables built for a strong Position: basic to buzz, formant growl, hard sync.",
   "verborgen": true
  },
+ "drum-synth": {
+  "kategorie": "drums",
+  "prinzip": "drums",
+  "text": "Eight drum recipes as pads (kick, snare, clap, hats, tom, rim, cymbal), knobs per pad."
+ },
+ "synth-kraken": {
+  "kategorie": "lead",
+  "prinzip": "analog",
+  "text": "Semi-modular synth: East oscillators and filters, West folder and gate, cross modulation."
+ },
  "synth-mono": {
   "kategorie": "bass",
   "prinzip": "analog",
@@ -518,5 +528,25 @@
   "kategorie": "textur",
   "prinzip": "wavetable",
   "text": "Machine texture bed: saw and square two octaves apart, a resonant filter wandering."
+ },
+ "amiga": {
+  "kategorie": "textur",
+  "prinzip": "sampler",
+  "text": "Amiga sample player: 8-bit slots, rate and bit depth, A500 low-pass with LED filter."
+ },
+ "chip-puls": {
+  "kategorie": "lead",
+  "prinzip": "analog",
+  "text": "NES-style pulse voice: 12.5, 25 and 50 % duty, 4-bit stepped level envelope."
+ },
+ "chip-dreieck": {
+  "kategorie": "bass",
+  "prinzip": "analog",
+  "text": "NES-style triangle voice: 4-bit stepped triangle with no volume envelope, made for bass."
+ },
+ "chip-rauschen": {
+  "kategorie": "drums",
+  "prinzip": "analog",
+  "text": "NES-style noise channel: long and short LFSR, pitch sweep and 4-bit level envelope."
  }
 }

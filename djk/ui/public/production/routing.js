@@ -67,6 +67,7 @@ export const returnListe = (projekt) => [...(projekt?.returns ?? [])].sort((a, b
 // the dB of the send of a strand (track or group) to a return; -200 = off (no entry)
 export const sendWert = (strang, returnId) => (strang?.sends ?? []).find((x) => x.id === returnId)?.db ?? -200;
 export const sendBefehl = (strangId, returnId, db) => ({ befehl: 'send_setzen', strang_id: strangId, return_id: returnId, db });
+export const RETURN_VOLL_TEXT = `All ${MAX_RETURNS} returns are used`;
 export const neuerReturnBefehl = (projekt) => (projekt && (projekt.returns?.length ?? 0) < MAX_RETURNS ? { befehl: 'return_neu' } : null);
 export const returnLabels = (name) => ({
   mute: `Mute return ${name}`, solo: `Solo return ${name}`, fader: `Volume return ${name}`, pan: `Balance return ${name}`,

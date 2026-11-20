@@ -1,0 +1,6 @@
+{"schema":1,"name":"bass-wobble","modell":"lc3","art":"instrument","graph":"bass-wobble",
+"eintraege":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2},{"regler":"Enc 3","knopf":3},{"regler":"Enc 4","knopf":4},{"regler":"Enc 5","knopf":5},{"regler":"Enc 6","knopf":6}],
+"seiten":{"main":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2},{"regler":"Enc 3","knopf":3},{"regler":"Enc 4","knopf":4},{"regler":"Enc 5","knopf":5},{"regler":"Enc 6","knopf":6}]},
+"programme":[
+{"name":"WOBBLE \u00b7 OSCILLATORS \u00b7 CRUSH \u00b7 ROOM","seite":"main",
+"eintraege":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2},{"regler":"Enc 3","knopf":3},{"regler":"Enc 4","knopf":4},{"regler":"Enc 5","knopf":5},{"regler":"Enc 6","knopf":6}]}]}

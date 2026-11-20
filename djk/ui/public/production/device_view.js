@@ -43,7 +43,7 @@ const anfrage = (g) => (istSurge(g) ? '/geraete/panel?art=surge' : g.name === 'b
  * is still on its way is already in it, so two quick gestures never roll each other back. A shown value stays until its own write was answered
  * (accepted: the project has it; refused: the display goes back to the project value, `beiFertig(ok)` lets the view redraw).
  * It sends only while the track still carries the device the view was built for: a track switched to Surge meanwhile gets nothing.
- * opt: { label(param) -> control label (undo step "<track>: <label>"), beiFertig(ok), melde, zeitgeber? ({setTimeout, clearTimeout}, default globalThis), entprellMs? (default 30) }.
+ * opt: { label(param) -> control label (undo step "<track>: <label>"), steckfeld? (GET /geraete/panel: labels and default pins of the patch field), beiFertig(ok), melde, zeitgeber? ({setTimeout, clearTimeout}, default globalThis), entprellMs? (default 30) }.
  * A Baukasten knob k1..k64 is live: see the header; its sends are separate commands geraet_param_setzen, a refusal stops the live sends of the running gesture (the
  * writer reported it once) and the display goes back to the stored value.
  */
@@ -147,7 +147,84 @@ export function spurAdapter(ctx, spur, parameter = [], opt = {}) {
     lebend.clear();
     return jobs.map(([param, wert]) => schickeLive(param, wert)).filter((x) => x !== undefined);
   };
+  // Patch field pins (control `matrix`, bk tracks only). A pin is [satz, zeile, spalte, wert]; its place is satz * 256 + zeile * 16 + spalte. stifte() = the pins as shown: the
+  // track's own list (else the graph defaults of opt.steckfeld), over it the sets written but not answered yet, over that the single pins moved but not answered yet.
+  // stiftSetzen() sends the light command geraet_stift_setzen at most once per 30 ms per place with the latest value, stiftEnde() the rest at once (a refusal stops the live
+  // sends of the gesture and the display goes back to the project); stifteSetzen() sends one geraet_stifte_setzen for a whole set (copy, clear).
+  const feldNamen = opt.steckfeld ?? null;
+  const stiftAngezeigt = new Map();   // place -> value shown until its own write was answered (0 = removed)
+  const stiftLebend = new Map();      // place -> latest value, not sent yet
+  const satzErsatz = new Map();       // satz -> the pins shown for the whole set until its write was answered
+  let stiftTimer = null, stiftGesperrt = false;
+  const ort = (e) => e[0] * 256 + e[1] * 16 + e[2];
+  const stiftLabel = (satz, zeile, spalte) => `Pin ${feldNamen?.zeilen?.[zeile] ?? zeile + 1} > ${feldNamen?.spalten?.[spalte] ?? spalte + 1}${satz ? ' (B)' : ''}`;
+  const stiftBefehl = (befehl, label) => {
+    const rechne = (p) => {
+      const sp = (p?.spuren ?? []).find((x) => x.id === spur.id);
+      if (!sp || geraetSchluessel(sp.geraet) !== schluessel) return null;   // the device changed or the track is gone: send nothing
+      return { label: `${spur.name}: ${label}`, befehle: [befehl] };
+    };
+    const antwort = typeof ctx.aendereAus === 'function'
+      ? ctx.aendereAus(rechne)
+      : Promise.resolve().then(() => { const x = rechne(ctx.st?.projekt); return x ? ctx.aendere(x.label, x.befehle) : false; });
+    return Promise.resolve(antwort);
+  };
+  const stiftFertig = (p, wert, ok) => {
+    if (ok === true) {
+      if (stiftAngezeigt.get(p) === wert && !stiftLebend.has(p)) { stiftAngezeigt.delete(p); opt.beiFertig?.(true); }   // no newer move of this place: the project has it now
+      return true;
+    }
+    stiftGesperrt = true;   // refused (the writer reported it): stop sending, show the stored pins again
+    if (stiftTimer !== null) { zeitgeber.clearTimeout(stiftTimer); stiftTimer = null; }
+    stiftLebend.clear();
+    stiftAngezeigt.clear();
+    opt.beiFertig?.(false);
+    return false;
+  };
+  const schickeStift = (e) => {
+    if (!live()) { stiftAngezeigt.delete(e.ort); return undefined; }
+    return stiftBefehl({ befehl: 'geraet_stift_setzen', spur_id: spur.id, satz: e.satz, zeile: e.zeile, spalte: e.spalte, wert: e.wert }, stiftLabel(e.satz, e.zeile, e.spalte))
+      .then((ok) => stiftFertig(e.ort, e.wert, ok), () => stiftFertig(e.ort, e.wert, false));
+  };
+  const leereStifte = () => {
+    if (stiftTimer !== null) { zeitgeber.clearTimeout(stiftTimer); stiftTimer = null; }
+    const jobs = [...stiftLebend.values()];
+    stiftLebend.clear();
+    return jobs.map(schickeStift).filter((x) => x !== undefined);
+  };
+  const stiftApi = {
+    stifte() {
+      const roh = live()?.geraet?.stifte ?? feldNamen?.stifte ?? [];
+      const je = new Map();
+      for (const e of roh) if (!satzErsatz.has(e[0])) je.set(ort(e), e);
+      for (const liste of satzErsatz.values()) for (const e of liste) je.set(ort(e), e);
+      for (const [o, w] of stiftAngezeigt) { if (w === 0) je.delete(o); else je.set(o, [o >> 8, (o >> 4) & 15, o & 15, w]); }
+      return [...je.values()].sort((a, b) => ort(a) - ort(b));
+    },
+    stiftSetzen(satz, zeile, spalte, wert) {
+      const o = satz * 256 + zeile * 16 + spalte;
+      stiftAngezeigt.set(o, wert);
+      if (stiftGesperrt) return;   // refused earlier in this gesture: the pin only previews
+      stiftLebend.set(o, { ort: o, satz, zeile, spalte, wert });
+      if (stiftTimer === null) stiftTimer = zeitgeber.setTimeout(() => { stiftTimer = null; leereStifte(); }, entprellMs);   // a fixed interval, like the knobs
+    },
+    stiftEnde() {
+      const antworten = leereStifte();   // the last value of every place goes out at once (nothing when it was sent already)
+      if (stiftGesperrt) { stiftGesperrt = false; stiftAngezeigt.clear(); }
+      return antworten.length ? Promise.all(antworten).then((r) => r.every((x) => x === true)) : undefined;
+    },
+    stifteSetzen(satz, liste) {
+      const gut = (liste ?? []).filter((e) => e[0] === satz && e[3] !== 0).map((e) => [e[0], e[1], e[2], e[3]]);
+      const davor = leereStifte();   // pins moved a moment ago go out first: the queue keeps the order
+      for (const o of [...stiftAngezeigt.keys()]) if (o >> 8 === satz) stiftAngezeigt.delete(o);
+      satzErsatz.set(satz, gut);
+      const fertig = (ok) => { if (satzErsatz.get(satz) === gut) satzErsatz.delete(satz); opt.beiFertig?.(ok === true); return ok === true; };
+      if (!live()) return fertig(false);
+      return Promise.all([...davor, stiftBefehl({ befehl: 'geraet_stifte_setzen', spur_id: spur.id, satz, stifte: gut }, `Patch field set ${satz ? 'B' : 'A'}`).then(fertig, () => fertig(false))]).then((r) => r.at(-1));
+    },
+  };
   return {
+    ...(bk ? stiftApi : {}),
     get(param) {
       if (angezeigt.has(param)) return angezeigt.get(param);
       const w = live()?.geraet?.parameter?.[param];
@@ -255,7 +332,7 @@ export function bindeGeraetAnsicht(ctx, wurzel, opt = {}) {
     let tabelle = j.parameter;
     if (istSurge(g)) tabelle = await surgeIstEinlesen(ctx, spur, j.parameter, Object.keys(namen));   // untouched parameters show what the host plays, not 0.5
     if (nr !== zaehler) return;
-    const adapter = spurAdapter(ctx, spur, tabelle, { label: (pn) => namen[pn] ?? pn, melde: (t, f) => { if (t) ctx.melde(t, f); }, beiFertig: (ok) => { if (!ok && jetzt?.nr === nr) jetzt.fp?.aktualisiere(true); } });
+    const adapter = spurAdapter(ctx, spur, tabelle, { label: (pn) => namen[pn] ?? pn, steckfeld: j.steckfeld, melde: (t, f) => { if (t) ctx.melde(t, f); }, beiFertig: (ok) => { if (!ok && jetzt?.nr === nr) jetzt.fp?.aktualisiere(true); } });
     // MIDI learn (opt.lernen, device_learn.js; the device window gives it): a Baukasten knob is learned on its core row spur/<slot>/bk/<k>, read from the project as it is now
     const lernen = g.name === 'bk' && opt.lernen ? opt.lernen : null;
     if (lernen) adapter.lernPfad = (pn) => bkZeilenPfad(ctx.st.projekt?.spuren ?? [], spur.id, pn);
@@ -297,7 +374,7 @@ export function bindeGeraetAnsicht(ctx, wurzel, opt = {}) {
       if (!register) holeRegister().then(() => kopfHandle?.neu());
     };
     jetzt.adapter = adapter;
-    jetzt.fp = baueFrontplatte(wurzel, { panel: j.panel, regler: reglerBereiche(j.parameter), parameter: g.name === 'bk' ? undefined : parameterNachName(j.parameter), adapter, dokument: d, kopf: istSurge(g) ? undefined : kopf, breit: opt.breit === true,
+    jetzt.fp = baueFrontplatte(wurzel, { panel: j.panel, steckfeld: j.steckfeld, regler: reglerBereiche(j.parameter), parameter: g.name === 'bk' ? undefined : parameterNachName(j.parameter), adapter, dokument: d, kopf: istSurge(g) ? undefined : kopf, breit: opt.breit === true,
       ...(lernen ? { lernen: lernen.stand(), beiLernen: (pfad) => lernen.lerne(pfad), beiVergessen: (pfad) => lernen.vergiss(pfad) } : {}),
       ...(typeof opt.beiSeite === 'function' ? { beiSeite: (id) => opt.beiSeite(spur.id, id) } : {}) });
     jetzt.kopfNeu = () => kopfHandle?.neu();   // Surge has no preset header

@@ -1,0 +1,31 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "ton-komp-roh-drums-6916-1"},
+  "title": "Komp Roh Drums Tone",
+  "akzent": "blau",
+  "layout": {"rows": [
+    ["filter", "env"],
+    ["tone", "out"]
+  ]},
+  "sections": [
+    { "id": "filter", "title": "FILTER", "cols": 2, "controls": [
+      {"id": "cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k6"}, "format": "hz", "default": 1},
+      {"id": "reso", "type": "knob", "label": "Resonance", "bind": {"param": "k7"}, "format": "percent", "default": 0},
+      {"id": "fk", "type": "filterkurve", "span": 2, "of": {"cutoff": "cutoff", "reso": "reso"}, "typen": [{"art": "lp", "pole": 2}]}
+    ]},
+    { "id": "env", "title": "AMP ENV", "cols": 4, "controls": [
+      {"id": "hue", "type": "huelle", "span": 4, "label": "Envelope", "of": {"a": "attack", "d": "decay", "s": "sustain", "r": "release"}},
+      {"id": "attack", "type": "knob", "label": "Attack", "bind": {"param": "k2"}, "format": "ms", "default": 0.0836},
+      {"id": "decay", "type": "knob", "label": "Decay", "bind": {"param": "k3"}, "format": "ms", "default": 0.5, "wirkt": {"unter": ["sustain", 0.98]}, "wirkt_text": "Decay does nothing at Sustain 100 %: turn Sustain down"},
+      {"id": "sustain", "type": "knob", "label": "Sustain", "bind": {"param": "k4"}, "format": "percent", "default": 1},
+      {"id": "release", "type": "knob", "label": "Release", "bind": {"param": "k5"}, "format": "ms", "default": 0.6347}
+    ]},
+    { "id": "tone", "title": "TONE", "cols": 2, "controls": [
+      {"id": "tune", "type": "knob", "label": "Fine tune", "bind": {"param": "k1"}, "format": "raw", "unit": "st", "default": 0.5, "scale": {"labels": ["-1", "off", "+1"]}},
+      {"id": "n1", "type": "label", "span": 2, "text": "One sample pitched over keys, root C4"}
+    ]},
+    { "id": "out", "title": "OUTPUT", "cols": 1, "controls": [
+      {"id": "level", "type": "knob", "label": "Level", "bind": {"param": "k8"}, "format": "percent", "default": 0.5}
+    ]}
+  ]
+}

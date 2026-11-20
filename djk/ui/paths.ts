@@ -105,8 +105,9 @@ export function ablageOrte(art: AblageArt, o: AblageOptionen = {}): { alt: strin
   return { alt: fuelle(z.alt), neu: fuelle(z.neu), env: z.env, kern: z.kern };
 }
 const echterOrdner = (p: string): boolean => { try { return fs.lstatSync(p).isDirectory(); } catch { return false; } };
+const linkOhneZiel = (p: string): boolean => { try { return fs.lstatSync(p).isSymbolicLink() && !fs.existsSync(p); } catch { return false; } };
 const nichtLeer = (p: string): boolean => { try { return fs.readdirSync(p).length > 0; } catch { return false; } };
-// Resolution: (1) env, non-empty; (2) kern kinds and vorgabe 'alt': alt; (3) vorgabe 'neu': a real alt, else neu. Real alt plus non-empty neu
+// Resolution: (1) env, non-empty; (2) kern kinds and vorgabe 'alt': alt; (3) vorgabe 'neu': a real alt, else neu; an alt link to a missing target throws (moved home, disk absent). Real alt plus non-empty neu
 // ('beide') stays at alt and warns once per kind and process.
 export function ablageOrdner(art: AblageArt, o: AblageOptionen = {}): string {
   const t = o.tabelle ?? tabelle();
@@ -114,6 +115,7 @@ export function ablageOrdner(art: AblageArt, o: AblageOptionen = {}): string {
   const e = envWert(orte.env);
   if (e !== '') return e;
   if (orte.kern || t.vorgabe !== 'neu') return orte.alt;
+  if (linkOhneZiel(orte.alt)) throw new Error(`${art}: ${orte.alt} is a link to a missing target: is the disk mounted? Aborting instead of choosing another place`);
   if (!echterOrdner(orte.alt)) return orte.neu;
   if (nichtLeer(orte.neu)) {
     const gewarnt = o.gewarnt ?? gewarntVorgabe;

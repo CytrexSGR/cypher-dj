@@ -76,11 +76,11 @@ const TABELLE = [{ name: 'k5', min: 20, max: 2000, log: true, vorgabe: 0.5 }];
 const BK = { art: 'intern', name: 'bk', graph: 'synth-mono', parameter: {} };
 const spurMit = (id, geraet) => ({ id, nr: 1, name: `T-${id}`, art: 'instrument', geraet, clips: [] });
 
-function aufbau(geraet = BK, weitere = []) {
+function aufbau(geraet = BK, weitere = [], panel = PANEL) {
   const z = { slug: 'a', rev: 1, name: 'A', spuren: [spurMit('s1', geraet), ...weitere] };
   const holeGet = async (weg) => {
     if (weg === '/proj/aktuell') return z.slug === null ? { status: 200, j: { projekt: null } } : { status: 200, j: { slug: z.slug, projekt: { rev: z.rev, name: z.name, spuren: z.spuren } } };
-    if (weg.startsWith('/geraete/panel')) return { status: 200, j: { panel: PANEL, parameter: TABELLE } };
+    if (weg.startsWith('/geraete/panel')) return { status: 200, j: { panel, parameter: TABELLE } };
     if (weg === '/presets/register') return { status: 200, j: { register: { eintraege: [] } } };
     return { status: 404, j: null };
   };
@@ -176,7 +176,7 @@ test('app.js: the device window starts before the focus sender, and is one of th
   assert.match(quelle('stream.js'), /geraetFensterEreignis\(a, f\)/, 'the stream reaches the window mode');
 });
 test('every OPEN ↗ control calls the one opener', () => {
-  for (const d of ['production/track_heads.js', 'production/detail.js', 'werkbank/dock.js', 'werkbank/window.js', 'seq_view.js']) assert.match(quelle(d), /oeffneGeraetFenster\(/, d);
+  for (const d of ['production/track_heads.js', 'production/detail.js', 'dock/karten.js', 'dock/window.js', 'seq_view.js']) assert.match(quelle(d), /oeffneGeraetFenster\(/, d);
 });
 
 test('controller strip: the knobs of the catalogue device in hardware layout with the knob each one drives; free controls stay, an unknown CC comes last', async () => {
@@ -253,4 +253,23 @@ test('the strip folds: the class on the root hides its rows and the knob numbers
   await warte(20);
   assert.equal(a.f.zu(), false);
   assert.equal(a.wurzel.classList.contains('gf-ctl-zu'), false);
+});
+
+
+test('controller state: a program of another page turns the panel there, but never away from the Cabinet page (all: true); stepping still works', async () => {
+  const panel = { format: 'cypherdj-panel/2', geraet: { art: 'bk', graph: 'synth-mono' }, title: 'T', pages: [{ id: 'rack', title: 'Cabinet', all: true }, { id: 'east', title: 'East' }, { id: 'mod', title: 'Mod' }],
+    sections: [{ id: 'a', title: 'A', page: 'east', controls: [{ id: 'c5', type: 'knob', label: 'c5', bind: { param: 'k5' } }] },
+      { id: 'b', title: 'B', page: 'mod', controls: [{ id: 'c6', type: 'knob', label: 'c6', bind: { param: 'k6' } }] }] };
+  const a = aufbau(BK, [], panel);
+  await warte(20);
+  const alle = (e, aus = []) => { aus.push(e); for (const k of e.kinder ?? []) alle(k, aus); return aus; };
+  const aus = (id) => alle(a.wurzel).find((e) => e.dataset?.sektion === id).klassen.has('fp-aus');
+  const reiter = (text) => alle(a.wurzel).find((e) => e.tag === 'button' && e.textContent === text);
+  assert.deepEqual([aus('a'), aus('b')], [false, false], 'the window opens on the Cabinet: every section shows');
+  a.f.ereignis('controller_fokus', { fokus: { spur_id: 's1', seite: 'mod' }, plaetze: [] });
+  assert.deepEqual([aus('a'), aus('b')], [false, false], 'a program of the page Mod does not turn the Cabinet away');
+  reiter('East').ev.click[0]();
+  assert.deepEqual([aus('a'), aus('b')], [false, true], 'positive control: on the page East the sections of other pages are off');
+  a.f.ereignis('controller_fokus', { fokus: { spur_id: 's1', seite: 'mod' }, plaetze: [] });
+  assert.deepEqual([aus('a'), aus('b')], [true, false], 'on any other page the program still turns the panel to its page');
 });

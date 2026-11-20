@@ -50,6 +50,249 @@
  },
  "sections": [
   {
+   "id": "f1",
+   "title": "FILTER 1",
+   "cols": 5,
+   "page": "main",
+   "controls": [
+    {
+     "id": "fk",
+     "type": "filterkurve",
+     "span": 5,
+     "of": {
+      "cutoff": "c29",
+      "reso": "c30"
+     },
+     "typen": [
+      {
+       "art": "lp",
+       "pole": 2
+      }
+     ]
+    },
+    {
+     "id": "c29",
+     "type": "knob",
+     "label": "F1 Cutoff",
+     "bind": {
+      "param": "k29"
+     },
+     "format": "hz",
+     "default": 0.798795
+    },
+    {
+     "id": "c30",
+     "type": "knob",
+     "label": "F1 Resonance",
+     "bind": {
+      "param": "k30"
+     },
+     "format": "percent",
+     "default": 0.222222
+    },
+    {
+     "id": "c31",
+     "type": "knob",
+     "label": "Env amount",
+     "bind": {
+      "param": "k31"
+     },
+     "format": "raw",
+     "default": 0.65,
+     "unit": "st",
+     "scale": {
+      "labels": [
+       "-60",
+       "off",
+       "+60"
+      ]
+     }
+    },
+    {
+     "id": "c32",
+     "type": "knob",
+     "label": "F1 Key track",
+     "bind": {
+      "param": "k32"
+     },
+     "format": "raw",
+     "default": 0.266667,
+     "unit": "x"
+    },
+    {
+     "id": "c28",
+     "type": "knob",
+     "label": "F1 Type",
+     "bind": {
+      "param": "k28"
+     },
+     "format": "percent",
+     "default": 0.0,
+     "scale": {
+      "labels": [
+       "LP",
+       "BP",
+       "HP"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "f2",
+   "title": "DRIVE / FILTER 2",
+   "cols": 4,
+   "page": "main",
+   "controls": [
+    {
+     "id": "fk2",
+     "type": "filterkurve",
+     "span": 4,
+     "of": {
+      "cutoff": "c34",
+      "reso": "c35"
+     },
+     "typen": [
+      {
+       "art": "lp",
+       "pole": 4
+      }
+     ]
+    },
+    {
+     "id": "c33",
+     "type": "knob",
+     "label": "Drive",
+     "bind": {
+      "param": "k33"
+     },
+     "format": "percent",
+     "default": 0.15
+    },
+    {
+     "id": "c34",
+     "type": "knob",
+     "label": "F2 Cutoff",
+     "bind": {
+      "param": "k34"
+     },
+     "format": "hz",
+     "default": 0.896999
+    },
+    {
+     "id": "c35",
+     "type": "knob",
+     "label": "F2 Resonance",
+     "bind": {
+      "param": "k35"
+     },
+     "format": "percent",
+     "default": 0.117647
+    },
+    {
+     "id": "c36",
+     "type": "knob",
+     "label": "F2 Routing",
+     "bind": {
+      "param": "k36"
+     },
+     "format": "percent",
+     "default": 0.2
+    }
+   ]
+  },
+  {
+   "id": "master",
+   "title": "MASTER",
+   "cols": 2,
+   "page": "main",
+   "controls": [
+    {
+     "id": "c62",
+     "type": "knob",
+     "label": "Glide",
+     "bind": {
+      "param": "k62"
+     },
+     "format": "percent",
+     "default": 0.0
+    },
+    {
+     "id": "c63",
+     "type": "knob",
+     "label": "Volume",
+     "bind": {
+      "param": "k63"
+     },
+     "format": "db",
+     "default": 0.666667
+    }
+   ]
+  },
+  {
+   "id": "aenv",
+   "title": "AMP ENV",
+   "cols": 4,
+   "page": "main",
+   "controls": [
+    {
+     "id": "ahue",
+     "type": "huelle",
+     "span": 4,
+     "label": "Amp envelope",
+     "of": {
+      "a": "c41",
+      "d": "c42",
+      "s": "c43",
+      "r": "c44"
+     }
+    },
+    {
+     "id": "c41",
+     "type": "knob",
+     "label": "Amp Attack",
+     "bind": {
+      "param": "k41"
+     },
+     "format": "raw",
+     "default": 0.162764,
+     "unit": "s"
+    },
+    {
+     "id": "c42",
+     "type": "knob",
+     "label": "Amp Decay",
+     "bind": {
+      "param": "k42"
+     },
+     "format": "raw",
+     "default": 0.652933,
+     "unit": "s"
+    },
+    {
+     "id": "c43",
+     "type": "knob",
+     "label": "Amp Sustain",
+     "bind": {
+      "param": "k43"
+     },
+     "format": "percent",
+     "default": 0.8
+    },
+    {
+     "id": "c44",
+     "type": "knob",
+     "label": "Amp Release",
+     "bind": {
+      "param": "k44"
+     },
+     "format": "raw",
+     "default": 0.451985,
+     "unit": "s"
+    }
+   ]
+  },
+  {
    "id": "osc_a",
    "title": "OSC A",
    "cols": 3,
@@ -1660,17 +1903,52 @@
       "param": "k1"
      },
      "format": "percent",
-     "default": 0.29
+     "default": 0.29,
+     "wirkt": {
+      "ueber": [
+       "c6",
+       0.02
+      ]
+     },
+     "wirkt_text": "Osc A is silent: turn up A Level"
     },
     {
      "id": "c3",
      "type": "knob",
-     "label": "A Depth",
+     "label": "A Warp depth",
      "bind": {
       "param": "k3"
      },
      "format": "percent",
-     "default": 0.575
+     "default": 0.575,
+     "scale": {
+      "labels": [
+       "-100",
+       "off",
+       "+100"
+      ]
+     },
+     "wirkt": {
+      "alle": [
+       {
+        "ueber": [
+         "c6",
+         0.02
+        ]
+       },
+       {
+        "ist": [
+         "c2",
+         [
+          1,
+          2,
+          3
+         ]
+        ]
+       }
+      ]
+     },
+     "wirkt_text": "Warp depth is not heard: turn up A Level and set A Warp to Bend, Asym or Sync"
     },
     {
      "id": "c4",
@@ -1681,7 +1959,21 @@
      },
      "format": "raw",
      "default": 0.5,
-     "unit": "st"
+     "unit": "st",
+     "scale": {
+      "labels": [
+       "-24",
+       "off",
+       "+24"
+      ]
+     },
+     "wirkt": {
+      "ueber": [
+       "c6",
+       0.02
+      ]
+     },
+     "wirkt_text": "Osc A is silent: turn up A Level"
     },
     {
      "id": "c5",
@@ -1692,7 +1984,21 @@
      },
      "format": "raw",
      "default": 0.5,
-     "unit": "ct"
+     "unit": "ct",
+     "scale": {
+      "labels": [
+       "-50",
+       "off",
+       "+50"
+      ]
+     },
+     "wirkt": {
+      "ueber": [
+       "c6",
+       0.02
+      ]
+     },
+     "wirkt_text": "Osc A is silent: turn up A Level"
     },
     {
      "id": "c6",
@@ -1718,7 +2024,14 @@
       "Sync"
      ],
      "default": 1,
-     "span": 3
+     "span": 3,
+     "wirkt": {
+      "ueber": [
+       "c6",
+       0.02
+      ]
+     },
+     "wirkt_text": "Osc A is silent: turn up A Level"
     },
     {
      "id": "t_osc_a",
@@ -3339,17 +3652,72 @@
       "param": "k7"
      },
      "format": "percent",
-     "default": 0.6
+     "default": 0.6,
+     "wirkt": {
+      "eine": [
+       {
+        "ueber": [
+         "c12",
+         0.02
+        ]
+       },
+       {
+        "ueber": [
+         "c18",
+         0.02
+        ]
+       }
+      ]
+     },
+     "wirkt_text": "Osc B is silent: turn up B Level or PM B>A"
     },
     {
      "id": "c9",
      "type": "knob",
-     "label": "B Depth",
+     "label": "B Warp depth",
      "bind": {
       "param": "k9"
      },
      "format": "percent",
-     "default": 0.56
+     "default": 0.56,
+     "scale": {
+      "labels": [
+       "-100",
+       "off",
+       "+100"
+      ]
+     },
+     "wirkt": {
+      "alle": [
+       {
+        "eine": [
+         {
+          "ueber": [
+           "c12",
+           0.02
+          ]
+         },
+         {
+          "ueber": [
+           "c18",
+           0.02
+          ]
+         }
+        ]
+       },
+       {
+        "ist": [
+         "c8",
+         [
+          1,
+          2,
+          3
+         ]
+        ]
+       }
+      ]
+     },
+     "wirkt_text": "Warp depth is not heard: turn up B Level (or PM B>A) and set B Warp to Bend, Asym or Sync"
     },
     {
      "id": "c10",
@@ -3360,7 +3728,31 @@
      },
      "format": "raw",
      "default": 0.5,
-     "unit": "st"
+     "unit": "st",
+     "scale": {
+      "labels": [
+       "-24",
+       "off",
+       "+24"
+      ]
+     },
+     "wirkt": {
+      "eine": [
+       {
+        "ueber": [
+         "c12",
+         0.02
+        ]
+       },
+       {
+        "ueber": [
+         "c18",
+         0.02
+        ]
+       }
+      ]
+     },
+     "wirkt_text": "Osc B is silent: turn up B Level or PM B>A"
     },
     {
      "id": "c11",
@@ -3371,7 +3763,31 @@
      },
      "format": "raw",
      "default": 0.56,
-     "unit": "ct"
+     "unit": "ct",
+     "scale": {
+      "labels": [
+       "-50",
+       "off",
+       "+50"
+      ]
+     },
+     "wirkt": {
+      "eine": [
+       {
+        "ueber": [
+         "c12",
+         0.02
+        ]
+       },
+       {
+        "ueber": [
+         "c18",
+         0.02
+        ]
+       }
+      ]
+     },
+     "wirkt_text": "Osc B is silent: turn up B Level or PM B>A"
     },
     {
      "id": "c12",
@@ -3397,7 +3813,24 @@
       "Sync"
      ],
      "default": 2,
-     "span": 3
+     "span": 3,
+     "wirkt": {
+      "eine": [
+       {
+        "ueber": [
+         "c12",
+         0.02
+        ]
+       },
+       {
+        "ueber": [
+         "c18",
+         0.02
+        ]
+       }
+      ]
+     },
+     "wirkt_text": "Osc B is silent: turn up B Level or PM B>A"
     },
     {
      "id": "t_osc_b",
@@ -4754,17 +5187,84 @@
       "param": "k13"
      },
      "format": "percent",
-     "default": 0.1
+     "default": 0.1,
+     "wirkt": {
+      "eine": [
+       {
+        "ueber": [
+         "c17",
+         0.02
+        ]
+       },
+       {
+        "ueber": [
+         "c19",
+         0.02
+        ]
+       },
+       {
+        "ueber": [
+         "c20",
+         0.02
+        ]
+       }
+      ]
+     },
+     "wirkt_text": "Osc C is silent: turn up C Level, PM C>B or PM C>A"
     },
     {
      "id": "c15",
      "type": "knob",
-     "label": "C Depth",
+     "label": "C Warp depth",
      "bind": {
       "param": "k15"
      },
      "format": "percent",
-     "default": 0.55
+     "default": 0.55,
+     "scale": {
+      "labels": [
+       "-100",
+       "off",
+       "+100"
+      ]
+     },
+     "wirkt": {
+      "alle": [
+       {
+        "eine": [
+         {
+          "ueber": [
+           "c17",
+           0.02
+          ]
+         },
+         {
+          "ueber": [
+           "c19",
+           0.02
+          ]
+         },
+         {
+          "ueber": [
+           "c20",
+           0.02
+          ]
+         }
+        ]
+       },
+       {
+        "ist": [
+         "c14",
+         [
+          1,
+          2,
+          3
+         ]
+        ]
+       }
+      ]
+     },
+     "wirkt_text": "Warp depth is not heard: turn up C Level (or a PM C amount) and set C Warp to Bend, Asym or Sync"
     },
     {
      "id": "c16",
@@ -4775,7 +5275,37 @@
      },
      "format": "raw",
      "default": 0.75,
-     "unit": "st"
+     "unit": "st",
+     "scale": {
+      "labels": [
+       "-24",
+       "off",
+       "+24"
+      ]
+     },
+     "wirkt": {
+      "eine": [
+       {
+        "ueber": [
+         "c17",
+         0.02
+        ]
+       },
+       {
+        "ueber": [
+         "c19",
+         0.02
+        ]
+       },
+       {
+        "ueber": [
+         "c20",
+         0.02
+        ]
+       }
+      ]
+     },
+     "wirkt_text": "Osc C is silent: turn up C Level, PM C>B or PM C>A"
     },
     {
      "id": "c17",
@@ -4801,7 +5331,30 @@
       "Sync"
      ],
      "default": 1,
-     "span": 3
+     "span": 3,
+     "wirkt": {
+      "eine": [
+       {
+        "ueber": [
+         "c17",
+         0.02
+        ]
+       },
+       {
+        "ueber": [
+         "c19",
+         0.02
+        ]
+       },
+       {
+        "ueber": [
+         "c20",
+         0.02
+        ]
+       }
+      ]
+     },
+     "wirkt_text": "Osc C is silent: turn up C Level, PM C>B or PM C>A"
     },
     {
      "id": "t_osc_c",
@@ -4825,7 +5378,14 @@
       "param": "k18"
      },
      "format": "percent",
-     "default": 0.05
+     "default": 0.05,
+     "wirkt": {
+      "ueber": [
+       "c6",
+       0.02
+      ]
+     },
+     "wirkt_text": "Osc A is silent: turn up A Level"
     },
     {
      "id": "c19",
@@ -4835,7 +5395,24 @@
       "param": "k19"
      },
      "format": "percent",
-     "default": 0.04
+     "default": 0.04,
+     "wirkt": {
+      "eine": [
+       {
+        "ueber": [
+         "c12",
+         0.02
+        ]
+       },
+       {
+        "ueber": [
+         "c18",
+         0.02
+        ]
+       }
+      ]
+     },
+     "wirkt_text": "Osc B is silent: turn up B Level or PM B>A"
     },
     {
      "id": "c20",
@@ -4845,7 +5422,14 @@
       "param": "k20"
      },
      "format": "percent",
-     "default": 0.04
+     "default": 0.04,
+     "wirkt": {
+      "ueber": [
+       "c6",
+       0.02
+      ]
+     },
+     "wirkt_text": "Osc A is silent: turn up A Level"
     },
     {
      "id": "t_pm",
@@ -4870,7 +5454,30 @@
      },
      "format": "raw",
      "default": 0.28,
-     "unit": "ct"
+     "unit": "ct",
+     "wirkt": {
+      "eine": [
+       {
+        "ueber": [
+         "c6",
+         0.02
+        ]
+       },
+       {
+        "ueber": [
+         "c12",
+         0.02
+        ]
+       },
+       {
+        "ueber": [
+         "c18",
+         0.02
+        ]
+       }
+      ]
+     },
+     "wirkt_text": "Unison acts on Osc A and B, both silent: turn up A Level or B Level"
     },
     {
      "id": "c22",
@@ -4880,7 +5487,30 @@
       "param": "k22"
      },
      "format": "percent",
-     "default": 0.6
+     "default": 0.6,
+     "wirkt": {
+      "eine": [
+       {
+        "ueber": [
+         "c6",
+         0.02
+        ]
+       },
+       {
+        "ueber": [
+         "c12",
+         0.02
+        ]
+       },
+       {
+        "ueber": [
+         "c18",
+         0.02
+        ]
+       }
+      ]
+     },
+     "wirkt_text": "Unison acts on Osc A and B, both silent: turn up A Level or B Level"
     },
     {
      "id": "c23",
@@ -4894,7 +5524,30 @@
       "Oct",
       "Cycle"
      ],
-     "default": 0
+     "default": 0,
+     "wirkt": {
+      "eine": [
+       {
+        "ueber": [
+         "c6",
+         0.02
+        ]
+       },
+       {
+        "ueber": [
+         "c12",
+         0.02
+        ]
+       },
+       {
+        "ueber": [
+         "c18",
+         0.02
+        ]
+       }
+      ]
+     },
+     "wirkt_text": "Unison acts on Osc A and B, both silent: turn up A Level or B Level"
     },
     {
      "id": "t_un",
@@ -4918,7 +5571,14 @@
       "param": "k24"
      },
      "format": "percent",
-     "default": 0.15
+     "default": 0.15,
+     "wirkt": {
+      "ueber": [
+       "c26",
+       0.02
+      ]
+     },
+     "wirkt_text": "The sub is silent: turn up Sub Level"
     },
     {
      "id": "c25",
@@ -4931,7 +5591,14 @@
       "-1",
       "-2"
      ],
-     "default": 0
+     "default": 0,
+     "wirkt": {
+      "ueber": [
+       "c26",
+       0.02
+      ]
+     },
+     "wirkt_text": "The sub is silent: turn up Sub Level"
     },
     {
      "id": "c26",
@@ -4962,235 +5629,6 @@
    ]
   },
   {
-   "id": "f1",
-   "title": "FILTER 1",
-   "cols": 5,
-   "page": "main",
-   "controls": [
-    {
-     "id": "fk",
-     "type": "filterkurve",
-     "span": 5,
-     "of": {
-      "cutoff": "c29",
-      "reso": "c30"
-     },
-     "typen": [
-      {
-       "art": "lp",
-       "pole": 2
-      }
-     ]
-    },
-    {
-     "id": "c28",
-     "type": "knob",
-     "label": "F1 Type",
-     "bind": {
-      "param": "k28"
-     },
-     "format": "percent",
-     "default": 0.0
-    },
-    {
-     "id": "c29",
-     "type": "knob",
-     "label": "F1 Cutoff",
-     "bind": {
-      "param": "k29"
-     },
-     "format": "hz",
-     "default": 0.798795
-    },
-    {
-     "id": "c30",
-     "type": "knob",
-     "label": "F1 Resonance",
-     "bind": {
-      "param": "k30"
-     },
-     "format": "percent",
-     "default": 0.222222
-    },
-    {
-     "id": "c31",
-     "type": "knob",
-     "label": "F1 Env",
-     "bind": {
-      "param": "k31"
-     },
-     "format": "raw",
-     "default": 0.65,
-     "unit": "st"
-    },
-    {
-     "id": "c32",
-     "type": "knob",
-     "label": "F1 Key",
-     "bind": {
-      "param": "k32"
-     },
-     "format": "raw",
-     "default": 0.266667,
-     "unit": "x"
-    }
-   ]
-  },
-  {
-   "id": "f2",
-   "title": "DRIVE / FILTER 2",
-   "cols": 4,
-   "page": "main",
-   "controls": [
-    {
-     "id": "fk2",
-     "type": "filterkurve",
-     "span": 4,
-     "of": {
-      "cutoff": "c34",
-      "reso": "c35"
-     },
-     "typen": [
-      {
-       "art": "lp",
-       "pole": 4
-      }
-     ]
-    },
-    {
-     "id": "c33",
-     "type": "knob",
-     "label": "Drive",
-     "bind": {
-      "param": "k33"
-     },
-     "format": "percent",
-     "default": 0.15
-    },
-    {
-     "id": "c34",
-     "type": "knob",
-     "label": "F2 Cutoff",
-     "bind": {
-      "param": "k34"
-     },
-     "format": "hz",
-     "default": 0.896999
-    },
-    {
-     "id": "c35",
-     "type": "knob",
-     "label": "F2 Resonance",
-     "bind": {
-      "param": "k35"
-     },
-     "format": "percent",
-     "default": 0.117647
-    },
-    {
-     "id": "c36",
-     "type": "knob",
-     "label": "F2 Routing",
-     "bind": {
-      "param": "k36"
-     },
-     "format": "percent",
-     "default": 0.2
-    }
-   ]
-  },
-  {
-   "id": "aenv",
-   "title": "AMP ENV",
-   "cols": 4,
-   "page": "main",
-   "controls": [
-    {
-     "id": "ahue",
-     "type": "huelle",
-     "span": 4,
-     "label": "Amp envelope",
-     "of": {
-      "a": "c41",
-      "d": "c42",
-      "s": "c43",
-      "r": "c44"
-     }
-    },
-    {
-     "id": "c41",
-     "type": "knob",
-     "label": "Amp Attack",
-     "bind": {
-      "param": "k41"
-     },
-     "format": "raw",
-     "default": 0.162764,
-     "unit": "s"
-    },
-    {
-     "id": "c42",
-     "type": "knob",
-     "label": "Amp Decay",
-     "bind": {
-      "param": "k42"
-     },
-     "format": "raw",
-     "default": 0.652933,
-     "unit": "s"
-    },
-    {
-     "id": "c43",
-     "type": "knob",
-     "label": "Amp Sustain",
-     "bind": {
-      "param": "k43"
-     },
-     "format": "percent",
-     "default": 0.8
-    },
-    {
-     "id": "c44",
-     "type": "knob",
-     "label": "Amp Release",
-     "bind": {
-      "param": "k44"
-     },
-     "format": "raw",
-     "default": 0.451985,
-     "unit": "s"
-    }
-   ]
-  },
-  {
-   "id": "master",
-   "title": "MASTER",
-   "cols": 2,
-   "page": "main",
-   "controls": [
-    {
-     "id": "c62",
-     "type": "knob",
-     "label": "Glide",
-     "bind": {
-      "param": "k62"
-     },
-     "format": "percent",
-     "default": 0.0
-    },
-    {
-     "id": "c63",
-     "type": "knob",
-     "label": "Volume",
-     "bind": {
-      "param": "k63"
-     },
-     "format": "db",
-     "default": 0.666667
-    }
-   ]
-  },
-  {
    "id": "fenv",
    "title": "FILTER ENV",
    "cols": 4,
@@ -5217,7 +5655,13 @@
      },
      "format": "raw",
      "default": 0.188963,
-     "unit": "s"
+     "unit": "s",
+     "wirkt": {
+      "weg": [
+       "c31"
+      ]
+     },
+     "wirkt_text": "The filter envelope does nothing: turn Filter env amount away from the middle"
     },
     {
      "id": "c38",
@@ -5228,7 +5672,13 @@
      },
      "format": "raw",
      "default": 0.519658,
-     "unit": "s"
+     "unit": "s",
+     "wirkt": {
+      "weg": [
+       "c31"
+      ]
+     },
+     "wirkt_text": "The filter envelope does nothing: turn Filter env amount away from the middle"
     },
     {
      "id": "c39",
@@ -5238,7 +5688,13 @@
       "param": "k39"
      },
      "format": "percent",
-     "default": 0.3
+     "default": 0.3,
+     "wirkt": {
+      "weg": [
+       "c31"
+      ]
+     },
+     "wirkt_text": "The filter envelope does nothing: turn Filter env amount away from the middle"
     },
     {
      "id": "c40",
@@ -5249,7 +5705,13 @@
      },
      "format": "raw",
      "default": 0.477713,
-     "unit": "s"
+     "unit": "s",
+     "wirkt": {
+      "weg": [
+       "c31"
+      ]
+     },
+     "wirkt_text": "The filter envelope does nothing: turn Filter env amount away from the middle"
     }
    ]
   },
@@ -5280,7 +5742,13 @@
      },
      "format": "raw",
      "default": 0.270346,
-     "unit": "s"
+     "unit": "s",
+     "wirkt": {
+      "weg": [
+       "c47"
+      ]
+     },
+     "wirkt_text": "Env 3 does nothing: turn Env3 >Position away from the middle"
     },
     {
      "id": "c46",
@@ -5291,7 +5759,13 @@
      },
      "format": "raw",
      "default": 0.567674,
-     "unit": "s"
+     "unit": "s",
+     "wirkt": {
+      "weg": [
+       "c47"
+      ]
+     },
+     "wirkt_text": "Env 3 does nothing: turn Env3 >Position away from the middle"
     },
     {
      "id": "c47",
@@ -5301,7 +5775,14 @@
       "param": "k47"
      },
      "format": "percent",
-     "default": 0.56
+     "default": 0.56,
+     "scale": {
+      "labels": [
+       "-100",
+       "off",
+       "+100"
+      ]
+     }
     }
    ]
   },
@@ -5328,7 +5809,24 @@
       "param": "k48"
      },
      "format": "hz",
-     "default": 0.412551
+     "default": 0.412551,
+     "wirkt": {
+      "eine": [
+       {
+        "ueber": [
+         "c49",
+         0.02
+        ]
+       },
+       {
+        "ueber": [
+         "c50",
+         0.02
+        ]
+       }
+      ]
+     },
+     "wirkt_text": "LFO 1 goes nowhere: turn up LFO1 >Position or LFO1 >Cutoff"
     },
     {
      "id": "c49",
@@ -5382,7 +5880,62 @@
       "param": "k51"
      },
      "format": "hz",
-     "default": 0.702575
+     "default": 0.702575,
+     "wirkt": {
+      "eine": [
+       {
+        "ueber": [
+         "c52",
+         0.02
+        ]
+       },
+       {
+        "alle": [
+         {
+          "ueber": [
+           "c53",
+           0.02
+          ]
+         },
+         {
+          "eine": [
+           {
+            "ist": [
+             "c2",
+             [
+              1,
+              2,
+              3
+             ]
+            ]
+           },
+           {
+            "ist": [
+             "c8",
+             [
+              1,
+              2,
+              3
+             ]
+            ]
+           },
+           {
+            "ist": [
+             "c14",
+             [
+              1,
+              2,
+              3
+             ]
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "wirkt_text": "LFO 2 goes nowhere: turn up LFO2 >Pitch, or LFO2 >Warp depth with a Warp mode on"
     },
     {
      "id": "c52",
@@ -5398,12 +5951,47 @@
     {
      "id": "c53",
      "type": "knob",
-     "label": "LFO2 >Depth",
+     "label": "LFO2 >Warp depth",
      "bind": {
       "param": "k53"
      },
      "format": "percent",
-     "default": 0.1
+     "default": 0.1,
+     "wirkt": {
+      "eine": [
+       {
+        "ist": [
+         "c2",
+         [
+          1,
+          2,
+          3
+         ]
+        ]
+       },
+       {
+        "ist": [
+         "c8",
+         [
+          1,
+          2,
+          3
+         ]
+        ]
+       },
+       {
+        "ist": [
+         "c14",
+         [
+          1,
+          2,
+          3
+         ]
+        ]
+       }
+      ]
+     },
+     "wirkt_text": "No oscillator has a Warp mode: set a Warp to Bend, Asym or Sync"
     },
     {
      "id": "t_l2",
@@ -5427,7 +6015,24 @@
       "param": "k54"
      },
      "format": "hz",
-     "default": 0.480715
+     "default": 0.480715,
+     "wirkt": {
+      "eine": [
+       {
+        "ueber": [
+         "c55",
+         0.02
+        ]
+       },
+       {
+        "ueber": [
+         "c56",
+         0.02
+        ]
+       }
+      ]
+     },
+     "wirkt_text": "Chaos goes nowhere: turn up Chaos >Cutoff or Chaos >Position"
     },
     {
      "id": "c55",
@@ -5472,7 +6077,21 @@
       "param": "k57"
      },
      "format": "hz",
-     "default": 0.503125
+     "default": 0.503125,
+     "scale": {
+      "labels": [
+       "-400",
+       "off",
+       "+400"
+      ]
+     },
+     "wirkt": {
+      "ueber": [
+       "c58",
+       0.02
+      ]
+     },
+     "wirkt_text": "The shifter is off: turn up Shift Mix"
     },
     {
      "id": "c58",
@@ -5502,7 +6121,14 @@
       "param": "k60"
      },
      "format": "ms",
-     "default": 0.744278
+     "default": 0.744278,
+     "wirkt": {
+      "ueber": [
+       "c61",
+       0.02
+      ]
+     },
+     "wirkt_text": "The delay is off: turn up Delay Mix"
     },
     {
      "id": "c61",

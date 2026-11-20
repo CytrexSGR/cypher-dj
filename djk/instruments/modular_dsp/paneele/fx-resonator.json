@@ -1,0 +1,16 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "fx-resonator"},
+  "title": "Resonator",
+  "akzent": "tuerkis",
+  "sections": [
+    { "id": "res", "title": "RESONATOR", "cols": 3, "controls": [
+      {"id": "tune", "type": "knob", "label": "Tune", "bind": {"param": "k1"}, "format": "hz", "default": 0.5, "wirkt": {"ueber": ["wet", 0.02]}, "wirkt_text": "Dry only: turn up Wet"},
+      {"id": "wet", "type": "knob", "label": "Wet", "bind": {"param": "k5"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "material", "type": "knob", "label": "Material", "bind": {"param": "k2"}, "format": "raw", "einheitlos": true,"default": 0.5, "scale": {"labels": ["felt", "bronze"]}, "wirkt": {"ueber": ["wet", 0.02]}, "wirkt_text": "Dry only: turn up Wet"},
+      {"id": "bright", "type": "knob", "label": "Brightness", "bind": {"param": "k3"}, "format": "percent", "default": 0.5, "wirkt": {"ueber": ["wet", 0.02]}, "wirkt_text": "Dry only: turn up Wet"},
+      {"id": "inh", "type": "knob", "label": "Inharmonic", "bind": {"param": "k4"}, "format": "raw", "einheitlos": true,"default": 0.5, "wirkt": {"ueber": ["wet", 0.02]}, "wirkt_text": "Dry only: turn up Wet"},
+      {"id": "l1", "type": "label", "span": 3, "text": "Glass resonances excited by the input"}
+    ]}
+  ]
+}

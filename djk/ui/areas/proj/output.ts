@@ -57,8 +57,9 @@ import {
   baueResampleProjekt, pruefeResampleNochGleich, ResampleFehler, resamplePlan, wirtSpurenImStrang, type ResamplePlan,
 } from '../../project/resample.ts';
 import { schreibeWavAusF32Stueckweise } from '../../project/recording.ts';
-import { schreibeSmf } from '../../project/smf.ts';
-import { midiTeile, sicherName, zweistellig as zwei2 } from '../../project/export_midi.ts';
+import { schreibeSmf, bendGeklemmt, SMF_BEND_MAX } from '../../project/smf.ts';
+import { geraetFx } from '../../devices_parameter.ts';
+import { midiTeile, kanalGeteilt, sicherName, zweistellig as zwei2 } from '../../project/export_midi.ts';
 import { spawn } from 'node:child_process';
 import { baueBounceProjekt, bouncePlan, bounceRegler, bounceWiedergabe, pruefeBounceNochGleich, type BounceArt } from '../../project/bounce.ts';
 import type { AusgabeLauf, ProjZugang } from './area.ts';
@@ -321,6 +322,7 @@ export type ExportAntwort = Pick<RenderAntwort, 'frames' | 'spitze_db' | 'regler
 export interface ExportMidiAntwort {
   ordner: string; von_beat: number; bis_beat: number;
   dateien: { art: 'alle' | 'spur'; spur_id?: string; name: string; datei: string; noten: number }[];
+  hinweise?: string[];   // what the file could not hold exactly: a bend cut at 24 semitones, parts that share a channel
 }
 export interface ExportSpurenAntwort {
   ordner: string; von_beat: number; bis_beat: number;
@@ -1046,22 +1048,32 @@ export class Ausgabe {
     if (!(von >= 0) || !(bis - von >= 1) || bis - von > EXPORT_MAX_BEATS) {
       fehl('export_bereich', `beat ${von} to ${bis}: the export starts at beat 0 or later and is 1 to ${EXPORT_MAX_BEATS} beats long`);
     }
-    const teile = midiTeile(p, von, bis);
+    const teile = midiTeile(p, von, bis, geraetFx);
     if (!teile.length) fehl('export_leer', 'no unmuted instrument track has a note in this range');
     const ziel = exportOrdnerZiel(path.join(o.ordner, 'export'), o.slug, (this.opt.jetzt ?? (() => new Date()))());
     try {
       const opt = { titel: p.name, tempo_bpm: p.tempo_bpm, taktart: p.taktart };
       const dateien: ExportMidiAntwort['dateien'] = [];
       const alle = `${o.slug}.mid`;
-      fs.writeFileSync(path.join(ziel, alle), schreibeSmf({ ...opt, teile: teile.map((t) => ({ name: t.name, noten: t.noten })) }));
+      const smfTeile = teile.map(({ name, noten, bend, pegel, kanal }) => ({ name, noten, bend, pegel, kanal }));
+      fs.writeFileSync(path.join(ziel, alle), schreibeSmf({ ...opt, teile: smfTeile }));
       dateien.push({ art: 'alle', name: p.name, datei: alle, noten: teile.reduce((n, t) => n + t.noten.length, 0) });
       for (const t of teile) {
         const datei = `${zwei2(t.nr)}-${sicherName(t.name)}.mid`;
-        fs.writeFileSync(path.join(ziel, datei), schreibeSmf({ ...opt, titel: t.name, teile: [{ name: t.name, noten: t.noten }] }));
+        const teil = { name: t.name, noten: t.noten, bend: t.bend, pegel: t.pegel, kanal: t.kanal };
+        fs.writeFileSync(path.join(ziel, datei), schreibeSmf({ ...opt, titel: t.name, teile: [teil] }));
         dateien.push({ art: 'spur', spur_id: t.spur_id, name: t.name, datei, noten: t.noten.length });
       }
       this.ctx.log({ typ: 'proj_export_midi', slug: o.slug, von_beat: von, bis_beat: bis, ordner: ziel, dateien: dateien.length });
-      return { ordner: ziel, von_beat: von, bis_beat: bis, dateien };
+      const hinweise: string[] = [];
+      for (const t of teile) {
+        const n = bendGeklemmt(t.bend);
+        if (n > 0) hinweise.push(`${t.name}: ${n} pitch bend points lie beyond ${SMF_BEND_MAX} semitones and are cut at that limit`);
+      }
+      if (kanalGeteilt(teile)) {
+        hinweise.push('more parts than MIDI channels: some parts with pitch bend or level events share a channel, so their bends act on each other');
+      }
+      return { ordner: ziel, von_beat: von, bis_beat: bis, dateien, ...(hinweise.length ? { hinweise } : {}) };
     } catch (e) { fs.rmSync(ziel, { recursive: true, force: true }); throw e; }
   }
 

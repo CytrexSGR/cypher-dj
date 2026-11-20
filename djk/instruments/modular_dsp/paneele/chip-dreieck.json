@@ -1,0 +1,24 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "chip-dreieck"},
+  "title": "Chip Triangle",
+  "akzent": "orange",
+  "layout": {"rows": [
+    ["wave", "amp", "out"]
+  ]},
+  "sections": [
+    { "id": "wave", "title": "WAVE", "cols": 2, "controls": [
+      {"id": "bits", "type": "knob", "label": "Bits", "bind": {"param": "k1"}, "format": "raw", "unit": "bit", "default": 0.3333333},
+      {"id": "vib", "type": "knob", "label": "Vibrato", "bind": {"param": "k3"}, "format": "raw", "unit": "ct", "default": 0},
+      {"id": "oct", "type": "selector", "label": "Octave", "bind": {"param": "k2"}, "options": ["-1", "0", "+1"], "default": 1, "span": 2},
+      {"id": "wave-n", "type": "label", "span": 2, "text": "Triangle in 4 bit steps, for bass"}
+    ]},
+    { "id": "amp", "title": "GATE", "cols": 1, "controls": [
+      {"id": "rel", "type": "knob", "label": "Release", "bind": {"param": "k4"}, "format": "ms", "default": 0.3},
+      {"id": "amp-n", "type": "label", "text": "No volume envelope, as on the NES"}
+    ]},
+    { "id": "out", "title": "OUT", "cols": 1, "controls": [
+      {"id": "level", "type": "knob", "label": "Level", "bind": {"param": "k5"}, "format": "percent", "default": 0.8}
+    ]}
+  ]
+}

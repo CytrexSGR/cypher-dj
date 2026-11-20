@@ -50,7 +50,8 @@ bool Netz::arr_paket(const v::Adresse* a, const osc::Nachricht& m) {
   if (a->pfad == v::k_arr_ins_host.pfad) return arr_host_paket(m, false);   // plan 1.11 T5
   if (a->pfad == v::k_arr_ins_mess.pfad) return arr_host_paket(m, true);
   const bool note = a->pfad == v::k_arr_note.pfad;   // sampler plan A1 task 7
-  if (!laden && !start && !stopp && !loop && !metronom && !auto_ && !arm && !note) return false;
+  const bool stift = a->pfad == v::k_arr_stift.pfad;   // kraken patch field
+  if (!laden && !start && !stopp && !loop && !metronom && !auto_ && !arm && !note && !stift) return false;
   Befehl b{};
   b.id = m.werte[0].h;
   kopiere(b.quelle, m.werte[1].s, sizeof b.quelle);
@@ -136,6 +137,17 @@ bool Netz::arr_paket(const v::Adresse* a, const osc::Nachricht& m) {
     b.fassung = m.werte[f::vel].i;
     if (b.nr < 1 || b.nr > ARR_SPUREN) return ab("spur_bereich");
     if (b.politik < 0 || b.politik > 127 || b.fassung < 0 || b.fassung > 127) return ab("ausserhalb_bereich");
+  } else if (stift) {   // kraken patch field (§4.11 /k/arr/stift). Order of the refusals: ki_gestoppt (above), spur_bereich, ausserhalb_bereich (also NaN and inf). Plain values in the command, no pointer, nothing allocated
+    namespace f = v::feld::k_arr_stift;
+    b.art = Befehl::ARR_STIFT;
+    b.nr = m.werte[f::spur].i;
+    b.form = m.werte[f::satz].i;
+    b.politik = m.werte[f::zeile].i;
+    b.fassung = m.werte[f::spalte].i;
+    b.wert = m.werte[f::wert].f;
+    if (b.nr < 1 || b.nr > ARR_SPUREN) return ab("spur_bereich");
+    if (b.form < 0 || b.form > 1 || b.politik < 0 || b.politik > 15 || b.fassung < 0 || b.fassung > 15 || !(b.wert >= -1.0f && b.wert <= 1.0f))
+      return ab("ausserhalb_bereich");   // the comparison is false for NaN; inf is outside
   } else {
     namespace f = v::feld::k_arr_metronom;
     b.art = Befehl::ARR_METRONOM;

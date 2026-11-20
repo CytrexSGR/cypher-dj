@@ -9,7 +9,7 @@
 //   GET  /presets/register                 the register built now from the store: {register, ungueltig, doppelt}
 //   GET  /presets/register/pruefen         drift of the committed register.json against the factory presets
 //   GET  /presets/<herkunft>/<geraet>/<slug>   one preset with its values
-//   POST /presets                          save {name, geraet, graph?, werte, beschreibung, tags?, notiz?, ueberschreiben?, erwartet?} → 201 new, 200 overwritten
+//   POST /presets                          save {name, geraet, graph?, werte, stifte? (baukasten only), beschreibung, tags?, notiz?, ueberschreiben?, erwartet?} → 201 new, 200 overwritten
 //                                          (1.16: a save by Cypher carries autor 'cypher'; she may overwrite, rename or delete only those, else 403)
 //   POST /presets/nutzer/<geraet>/<slug>/umbenennen {name}   → {slug}
 //   POST /presets/nutzer/<geraet>/<slug>/loeschen            → moved to the trash folder
@@ -90,7 +90,7 @@ async function wiederhole<T>(f: () => T): Promise<T> {
 
 // A preset by its register id "<herkunft>:<geraet>/<slug>" for the project command preset_anwenden (1.9, O28): its device and values, or null for
 // an id that is malformed, names no file or names a damaged one. Never throws.
-export function presetInhaltVon(speicher: PresetSpeicher, id: string): { geraet: string; werte: Record<string, unknown> } | null {
+export function presetInhaltVon(speicher: PresetSpeicher, id: string): { geraet: string; werte: Record<string, unknown> } | null {   // rb338 presets only (preset_anwenden); pins are applied by presets/apply.ts
   const m = /^(werk|nutzer):([a-z0-9]+)\/([a-z0-9-]+)$/.exec(id);
   if (!m) return null;
   try { const p = speicher.lies(m[1] as 'werk' | 'nutzer', m[2], m[3]); return { geraet: p.geraet, werte: p.werte }; } catch { return null; }
@@ -150,7 +150,7 @@ export function presetsBereich(ctx: Ctx, opt: PresetOptionen = {}): Bereich & { 
         const d = await lesen(q);
         const v = werteVonZiel(d.ziel as Ziel, opt.projekt?.() ?? null);
         const r = await wiederhole(() => speicher.speichere(
-          { name: d.name, geraet: v.geraet, graph: v.graph, werte: v.werte, beschreibung: d.beschreibung, tags: d.tags, notiz: d.notiz },
+          { name: d.name, geraet: v.geraet, graph: v.graph, werte: v.werte, stifte: v.stifte, beschreibung: d.beschreibung, tags: d.tags, notiz: d.notiz },
           { ueberschreiben: d.ueberschreiben === true, quelle: ctx.quelle() }));
         ctx.log({ typ: 'preset_gespeichert', geraet: r.preset.geraet, slug: r.slug, neu: r.neu, quelle: ctx.quelle(), von_ziel: true });
         return json(a, r.neu ? 201 : 200, { herkunft: 'nutzer', geraet: r.preset.geraet, slug: r.slug, geaendert: r.preset.geaendert });
@@ -158,7 +158,7 @@ export function presetsBereich(ctx: Ctx, opt: PresetOptionen = {}): Bereich & { 
       if (p === '/presets' && q.method === 'POST') {
         const d = await lesen(q);
         const r = await wiederhole(() => speicher.speichere(
-          { name: d.name, geraet: d.geraet, geraet_typ: d.geraet_typ, graph: d.graph, werte: d.werte, beschreibung: d.beschreibung, tags: d.tags, notiz: d.notiz },
+          { name: d.name, geraet: d.geraet, geraet_typ: d.geraet_typ, graph: d.graph, werte: d.werte, stifte: d.stifte, beschreibung: d.beschreibung, tags: d.tags, notiz: d.notiz },
           { ueberschreiben: d.ueberschreiben === true, erwartet: typeof d.erwartet === 'string' ? d.erwartet : undefined, quelle: ctx.quelle() }));
         ctx.log({ typ: 'preset_gespeichert', geraet: r.preset.geraet, slug: r.slug, neu: r.neu, quelle: ctx.quelle() });
         return json(a, r.neu ? 201 : 200, { herkunft: 'nutzer', geraet: r.preset.geraet, slug: r.slug, geaendert: r.preset.geaendert });

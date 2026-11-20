@@ -15,19 +15,19 @@
   "sections": [
     { "id": "osc", "title": "OSCILLATOR", "cols": 4, "controls": [
       {"id": "pulse", "type": "knob", "label": "Pulse", "bind": {"param": "k12"}, "format": "percent", "default": 0.5},
-      {"id": "pw", "type": "knob", "label": "Width", "bind": {"param": "k13"}, "format": "percent", "default": 0.5},
+      {"id": "pw", "type": "knob", "label": "Width", "bind": {"param": "k13"}, "format": "percent", "default": 0.5, "wirkt": {"eine": [{"ueber": ["pulse", 0.02]}, {"alle": [{"ist": ["o2wave", [1]]}, {"ueber": ["o2lv", 0.02]}]}]}, "wirkt_text": "Acts on a pulse wave only: turn up Pulse in OSCILLATOR, or set Osc 2 wave to Pulse with its Level up"},
       {"id": "sub", "type": "knob", "label": "Sub", "bind": {"param": "k14"}, "format": "percent", "default": 0.5},
       {"id": "noise", "type": "knob", "label": "Noise", "bind": {"param": "k15"}, "format": "percent", "default": 0.5},
       {"id": "o1", "type": "label", "span": 4, "text": "Centre saw + unison saws (right)"},
       {"id": "o2", "type": "label", "span": 4, "text": "Sub: square, one octave down"}
     ]},
     { "id": "osc2", "title": "OSC 2", "cols": 3, "controls": [
-      {"id": "o2wave", "type": "selector", "label": "Wave", "span": 3, "bind": {"param": "k47"}, "options": ["Saw", "Pulse"], "default": 0, "glyphs": ["saw", "pulse"]},
-      {"id": "o2oct", "type": "selector", "label": "Octave", "span": 3, "bind": {"param": "k48"}, "options": ["-2", "-1", "0", "+1", "+2"], "default": 2},
+      {"id": "o2wave", "type": "selector", "label": "Wave", "span": 3, "bind": {"param": "k47"}, "options": ["Saw", "Pulse"], "default": 0, "glyphs": ["saw", "pulse"], "wirkt": {"ueber": ["o2lv", 0.02]}, "wirkt_text": "Osc 2 is silent: turn up Level in OSC 2"},
+      {"id": "o2oct", "type": "selector", "label": "Octave", "span": 3, "bind": {"param": "k48"}, "options": ["-2", "-1", "0", "+1", "+2"], "default": 2, "wirkt": {"ueber": ["o2lv", 0.02]}, "wirkt_text": "Osc 2 is silent: turn up Level in OSC 2"},
       {"id": "o2lv", "type": "knob", "label": "Level", "bind": {"param": "k46"}, "format": "percent", "default": 0, "scale": {"labels": ["off", "25", "50", "75", "100"]}},
-      {"id": "o2semi", "type": "knob", "label": "Semitone", "bind": {"param": "k49"}, "format": "raw", "unit": "st", "default": 0.5},
-      {"id": "o2det", "type": "knob", "label": "Detune", "bind": {"param": "k50"}, "format": "raw", "unit": "ct", "default": 0.5},
-      {"id": "o2sync", "type": "selector", "label": "Sync", "span": 3, "bind": {"param": "k51"}, "options": ["Off", "Hard"], "default": 0},
+      {"id": "o2semi", "type": "knob", "label": "Semitone", "bind": {"param": "k49"}, "format": "raw", "unit": "st", "default": 0.5, "wirkt": {"ueber": ["o2lv", 0.02]}, "wirkt_text": "Osc 2 is silent: turn up Level in OSC 2"},
+      {"id": "o2det", "type": "knob", "label": "Detune", "bind": {"param": "k50"}, "format": "raw", "unit": "ct", "default": 0.5, "wirkt": {"ueber": ["o2lv", 0.02]}, "wirkt_text": "Osc 2 is silent: turn up Level in OSC 2"},
+      {"id": "o2sync", "type": "selector", "label": "Sync", "span": 3, "bind": {"param": "k51"}, "options": ["Off", "Hard"], "default": 0, "wirkt": {"ueber": ["o2lv", 0.02]}, "wirkt_text": "Osc 2 is silent: turn up Level in OSC 2"},
       {"id": "o2n", "type": "label", "span": 3, "text": "One copy; sync to osc 1"}
     ]},
     { "id": "unison", "title": "UNISON", "cols": 4, "controls": [
@@ -49,10 +49,10 @@
     ]},
     { "id": "fenv", "title": "FILTER ENV", "cols": 4, "controls": [
       {"id": "fhue", "type": "huelle", "span": 4, "label": "Envelope", "of": {"a": "attack", "d": "fdecay", "s": "fsustain", "r": "release"}},
-      {"id": "fattack", "type": "knob", "label": "Attack", "bind": {"param": "k29"}, "format": "raw", "unit": "x", "default": 0.5},
-      {"id": "fdecay", "type": "knob", "label": "Decay", "bind": {"param": "k21"}, "format": "raw", "unit": "s", "default": 0.5},
-      {"id": "fsustain", "type": "knob", "label": "Sustain", "bind": {"param": "k22"}, "format": "percent", "default": 0.5},
-      {"id": "frelease", "type": "knob", "label": "Release", "bind": {"param": "k30"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "fattack", "type": "knob", "label": "Attack", "bind": {"param": "k29"}, "format": "raw", "unit": "x", "default": 0.5, "wirkt": {"ueber": ["env", 0.02]}, "wirkt_text": "The filter envelope does nothing: turn up Env amount in FILTER"},
+      {"id": "fdecay", "type": "knob", "label": "Decay", "bind": {"param": "k21"}, "format": "raw", "unit": "s", "default": 0.5, "wirkt": {"ueber": ["env", 0.02]}, "wirkt_text": "The filter envelope does nothing: turn up Env amount in FILTER"},
+      {"id": "fsustain", "type": "knob", "label": "Sustain", "bind": {"param": "k22"}, "format": "percent", "default": 0.5, "wirkt": {"ueber": ["env", 0.02]}, "wirkt_text": "The filter envelope does nothing: turn up Env amount in FILTER"},
+      {"id": "frelease", "type": "knob", "label": "Release", "bind": {"param": "k30"}, "format": "raw", "unit": "x", "default": 0.5, "wirkt": {"ueber": ["env", 0.02]}, "wirkt_text": "The filter envelope does nothing: turn up Env amount in FILTER"},
       {"id": "fn", "type": "label", "span": 4, "text": "Attack, release: x the AMP ENV knobs"}
     ]},
     { "id": "aenv", "title": "AMP ENV", "cols": 4, "controls": [
@@ -64,14 +64,14 @@
     ]},
     { "id": "lfo", "title": "LFO", "cols": 4, "controls": [
       {"id": "lf", "type": "lfoform", "span": 4, "label": "LFO shape", "of": {"form": "lshape"}, "formen": ["saw", "tri", "sine", "square", "sh"]},
-      {"id": "lshape", "type": "selector", "label": "Shape", "span": 4, "bind": {"param": "k44"}, "options": ["Saw", "Tri", "Sine", "Square", "S&H"], "default": 2},
-      {"id": "lrate", "type": "knob", "label": "Rate", "bind": {"param": "k23"}, "format": "hz", "default": 0.5},
+      {"id": "lshape", "type": "selector", "label": "Shape", "span": 4, "bind": {"param": "k44"}, "options": ["Saw", "Tri", "Sine", "Square", "S&H"], "default": 2, "wirkt": {"eine": [{"ueber": ["lcut", 0.02]}, {"ueber": ["lpitch", 0.02]}, {"alle": [{"ueber": ["lpwm", 0.02]}, {"eine": [{"ueber": ["pulse", 0.02]}, {"alle": [{"ist": ["o2wave", [1]]}, {"ueber": ["o2lv", 0.02]}]}]}]}]}, "wirkt_text": "The LFO goes nowhere: turn up To cutoff, To pitch or To PWM"},
+      {"id": "lrate", "type": "knob", "label": "Rate", "bind": {"param": "k23"}, "format": "hz", "default": 0.5, "wirkt": {"eine": [{"ueber": ["lcut", 0.02]}, {"ueber": ["lpitch", 0.02]}, {"alle": [{"ueber": ["lpwm", 0.02]}, {"eine": [{"ueber": ["pulse", 0.02]}, {"alle": [{"ist": ["o2wave", [1]]}, {"ueber": ["o2lv", 0.02]}]}]}]}]}, "wirkt_text": "The LFO goes nowhere: turn up To cutoff, To pitch or To PWM"},
       {"id": "lcut", "type": "knob", "label": "To cutoff", "bind": {"param": "k24"}, "format": "percent", "default": 0.5},
-      {"id": "lpwm", "type": "knob", "label": "To PWM", "bind": {"param": "k25"}, "format": "percent", "default": 0.5},
+      {"id": "lpwm", "type": "knob", "label": "To PWM", "bind": {"param": "k25"}, "format": "percent", "default": 0.5, "wirkt": {"eine": [{"ueber": ["pulse", 0.02]}, {"alle": [{"ist": ["o2wave", [1]]}, {"ueber": ["o2lv", 0.02]}]}]}, "wirkt_text": "Acts on a pulse wave only: turn up Pulse in OSCILLATOR, or set Osc 2 wave to Pulse with its Level up"},
       {"id": "lpitch", "type": "knob", "label": "To pitch", "bind": {"param": "k26"}, "format": "percent", "default": 0.5}
     ]},
     { "id": "chorus", "title": "CHORUS", "cols": 2, "controls": [
-      {"id": "cmode", "type": "selector", "label": "Mode", "span": 2, "bind": {"param": "k27"}, "options": ["I", "II", "I+II"], "default": 1},
+      {"id": "cmode", "type": "selector", "label": "Mode", "span": 2, "bind": {"param": "k27"}, "options": ["I", "II", "I+II"], "default": 1, "wirkt": {"ueber": ["chorus", 0.01]}, "wirkt_text": "The chorus is off: turn up Amount"},
       {"id": "chorus", "type": "knob", "label": "Amount", "span": 2, "bind": {"param": "k7"}, "format": "percent", "default": 0.5}
     ]},
     { "id": "voice", "title": "VOICE / TUNE", "cols": 3, "controls": [
@@ -84,22 +84,22 @@
     ]},
     { "id": "menv", "title": "MOD ENV", "page": "mod", "cols": 4, "controls": [
       {"id": "mhue", "type": "huelle", "span": 4, "label": "Envelope", "of": {"a": "mattack", "d": "mdecay", "s": "msustain", "r": "mrelease"}},
-      {"id": "mattack", "type": "knob", "label": "Attack", "bind": {"param": "k31"}, "format": "raw", "unit": "s", "default": 0.27034552830322406},
-      {"id": "mdecay", "type": "knob", "label": "Decay", "bind": {"param": "k32"}, "format": "raw", "unit": "s", "default": 0.5088100132404755},
-      {"id": "msustain", "type": "knob", "label": "Sustain", "bind": {"param": "k33"}, "format": "percent", "default": 0.5},
-      {"id": "mrelease", "type": "knob", "label": "Release", "bind": {"param": "k34"}, "format": "raw", "unit": "s", "default": 0.5088100132404755},
+      {"id": "mattack", "type": "knob", "label": "Attack", "bind": {"param": "k31"}, "format": "raw", "unit": "s", "default": 0.27034552830322406, "wirkt": {"eine": [{"weg": ["mpitch"]}, {"weg": ["mcut"]}, {"alle": [{"weg": ["mpwm"]}, {"eine": [{"ueber": ["pulse", 0.02]}, {"alle": [{"ist": ["o2wave", [1]]}, {"ueber": ["o2lv", 0.02]}]}]}]}, {"alle": [{"weg": ["mosc2"]}, {"ueber": ["o2lv", 0.02]}]}, {"weg": ["wme"]}]}, "wirkt_text": "The mod envelope goes nowhere: turn To pitch, To PWM, To cutoff, To osc 2 or Mod env (WAVE) away from off"},
+      {"id": "mdecay", "type": "knob", "label": "Decay", "bind": {"param": "k32"}, "format": "raw", "unit": "s", "default": 0.5088100132404755, "wirkt": {"eine": [{"weg": ["mpitch"]}, {"weg": ["mcut"]}, {"alle": [{"weg": ["mpwm"]}, {"eine": [{"ueber": ["pulse", 0.02]}, {"alle": [{"ist": ["o2wave", [1]]}, {"ueber": ["o2lv", 0.02]}]}]}]}, {"alle": [{"weg": ["mosc2"]}, {"ueber": ["o2lv", 0.02]}]}, {"weg": ["wme"]}]}, "wirkt_text": "The mod envelope goes nowhere: turn To pitch, To PWM, To cutoff, To osc 2 or Mod env (WAVE) away from off"},
+      {"id": "msustain", "type": "knob", "label": "Sustain", "bind": {"param": "k33"}, "format": "percent", "default": 0.5, "wirkt": {"eine": [{"weg": ["mpitch"]}, {"weg": ["mcut"]}, {"alle": [{"weg": ["mpwm"]}, {"eine": [{"ueber": ["pulse", 0.02]}, {"alle": [{"ist": ["o2wave", [1]]}, {"ueber": ["o2lv", 0.02]}]}]}]}, {"alle": [{"weg": ["mosc2"]}, {"ueber": ["o2lv", 0.02]}]}, {"weg": ["wme"]}]}, "wirkt_text": "The mod envelope goes nowhere: turn To pitch, To PWM, To cutoff, To osc 2 or Mod env (WAVE) away from off"},
+      {"id": "mrelease", "type": "knob", "label": "Release", "bind": {"param": "k34"}, "format": "raw", "unit": "s", "default": 0.5088100132404755, "wirkt": {"eine": [{"weg": ["mpitch"]}, {"weg": ["mcut"]}, {"alle": [{"weg": ["mpwm"]}, {"eine": [{"ueber": ["pulse", 0.02]}, {"alle": [{"ist": ["o2wave", [1]]}, {"ueber": ["o2lv", 0.02]}]}]}]}, {"alle": [{"weg": ["mosc2"]}, {"ueber": ["o2lv", 0.02]}]}, {"weg": ["wme"]}]}, "wirkt_text": "The mod envelope goes nowhere: turn To pitch, To PWM, To cutoff, To osc 2 or Mod env (WAVE) away from off"},
       {"id": "mpitch", "type": "knob", "label": "To pitch", "bind": {"param": "k35"}, "format": "raw", "unit": "ct", "default": 0.5, "scale": {"labels": ["-1.2k", "off", "1.2k"]}},
-      {"id": "mpwm", "type": "knob", "label": "To PWM", "bind": {"param": "k36"}, "format": "percent", "default": 0.5, "scale": {"labels": ["-40", "-20", "off", "20", "40"]}},
+      {"id": "mpwm", "type": "knob", "label": "To PWM", "bind": {"param": "k36"}, "format": "percent", "default": 0.5, "scale": {"labels": ["-40", "-20", "off", "20", "40"]}, "wirkt": {"eine": [{"ueber": ["pulse", 0.02]}, {"alle": [{"ist": ["o2wave", [1]]}, {"ueber": ["o2lv", 0.02]}]}]}, "wirkt_text": "Acts on a pulse wave only: turn up Pulse in OSCILLATOR, or set Osc 2 wave to Pulse with its Level up"},
       {"id": "mcut", "type": "knob", "label": "To cutoff", "bind": {"param": "k37"}, "format": "raw", "unit": "st", "default": 0.5, "scale": {"labels": ["-48", "-24", "off", "24", "48"]}},
-      {"id": "mosc2", "type": "knob", "label": "To osc 2", "bind": {"param": "k38"}, "format": "raw", "unit": "ct", "default": 0.5, "scale": {"labels": ["-2.4k", "off", "2.4k"]}}
+      {"id": "mosc2", "type": "knob", "label": "To osc 2", "bind": {"param": "k38"}, "format": "raw", "unit": "ct", "default": 0.5, "scale": {"labels": ["-2.4k", "off", "2.4k"]}, "wirkt": {"ueber": ["o2lv", 0.02]}, "wirkt_text": "Osc 2 is silent: turn up Level in OSC 2"}
     ]},
     { "id": "lfo2", "title": "LFO 2", "page": "mod", "cols": 4, "controls": [
       {"id": "l2f", "type": "lfoform", "span": 4, "label": "LFO 2 shape", "of": {"form": "l2shape"}, "formen": ["sine", "tri", "saw", "square"]},
-      {"id": "l2shape", "type": "selector", "label": "Shape", "span": 4, "bind": {"param": "k40"}, "options": ["Sine", "Tri", "Saw", "Square"], "default": 0},
-      {"id": "l2rate", "type": "knob", "label": "Rate", "bind": {"param": "k39"}, "format": "hz", "span": 2, "default": 0.6156891065798796},
+      {"id": "l2shape", "type": "selector", "label": "Shape", "span": 4, "bind": {"param": "k40"}, "options": ["Sine", "Tri", "Saw", "Square"], "default": 0, "wirkt": {"alle": [{"weg": ["l2amt"]}, {"ist": ["l2sync", [0]]}]}, "wirkt_text": "Heard with Amount away from off and Sync on Free"},
+      {"id": "l2rate", "type": "knob", "label": "Rate", "bind": {"param": "k39"}, "format": "hz", "span": 2, "default": 0.6156891065798796, "wirkt": {"alle": [{"weg": ["l2amt"]}, {"ist": ["l2sync", [0]]}]}, "wirkt_text": "Heard with Amount away from off and Sync on Free (a synced LFO takes the note value)"},
       {"id": "l2amt", "type": "knob", "label": "Amount", "bind": {"param": "k43"}, "format": "percent", "span": 2, "default": 0.5, "scale": {"labels": ["-100", "-50", "off", "50", "100"]}},
-      {"id": "l2sync", "type": "selector", "label": "Sync", "span": 4, "bind": {"param": "k41"}, "options": ["Free", "1/16", "1/8", "1/4", "1/2", "1 bar", "2 bars"], "default": 0},
-      {"id": "l2target", "type": "selector", "label": "Target", "span": 4, "bind": {"param": "k42"}, "options": ["Cutoff", "Pitch", "PWM", "Reso", "Amp"], "default": 0}
+      {"id": "l2sync", "type": "selector", "label": "Sync", "span": 4, "bind": {"param": "k41"}, "options": ["Free", "1/16", "1/8", "1/4", "1/2", "1 bar", "2 bars"], "default": 0, "wirkt": {"weg": ["l2amt"]}, "wirkt_text": "LFO 2 does nothing: turn Amount away from off"},
+      {"id": "l2target", "type": "selector", "label": "Target", "span": 4, "bind": {"param": "k42"}, "options": ["Cutoff", "Pitch", "PWM", "Reso", "Amp"], "default": 0, "wirkt": {"weg": ["l2amt"]}, "wirkt_text": "LFO 2 does nothing: turn Amount away from off"}
     ]},
     {"id": "wave", "title": "WAVE", "page": "mod", "cols": 3, "controls": [
       {"id": "wpos", "type": "knob", "label": "Position", "bind": {"param": "k45"}, "format": "percent", "span": 3, "default": 0.5, "scale": {"labels": ["sine", "tri", "saw", "square"]}},
@@ -109,17 +109,17 @@
     ]},
     {"id": "warp", "title": "WARP / STACK", "page": "mod", "cols": 3, "controls": [
       {"id": "wmode", "type": "selector", "label": "Warp", "span": 3, "bind": {"param": "k59"}, "options": ["Off", "Bend", "Asym", "Sync"], "default": 0},
-      {"id": "wdepth", "type": "knob", "label": "Depth", "bind": {"param": "k60"}, "format": "percent", "span": 3, "default": 0.75, "scale": {"labels": ["-100", "-50", "0", "50", "100"]}},
+      {"id": "wdepth", "type": "knob", "label": "Depth", "bind": {"param": "k60"}, "format": "percent", "span": 3, "default": 0.75, "scale": {"labels": ["-100", "-50", "0", "50", "100"]}, "wirkt": {"ist": ["wmode", [1, 2, 3]]}, "wirkt_text": "Warp is off: set Warp to Bend, Asym or Sync"},
       {"id": "wstack", "type": "selector", "label": "Stack", "span": 3, "bind": {"param": "k61"}, "options": ["Off", "Octave"], "default": 0},
       {"id": "wsn", "type": "label", "span": 3, "text": "Sync depth 0..100. Stack: next note"}
     ]},
     {"id": "pm", "title": "PHASE MOD", "page": "mod", "cols": 3, "controls": [
       {"id": "pmamt", "type": "knob", "label": "Amount", "bind": {"param": "k53"}, "format": "raw", "unit": "cyc", "span": 3, "default": 0, "scale": {"labels": ["off", "0.12", "0.25", "0.37", "0.5"]}},
-      {"id": "pmratio", "type": "selector", "label": "Ratio", "span": 3, "bind": {"param": "k58"}, "options": ["0.5", "1", "2", "3", "4", "5", "7"], "default": 2},
+      {"id": "pmratio", "type": "selector", "label": "Ratio", "span": 3, "bind": {"param": "k58"}, "options": ["0.5", "1", "2", "3", "4", "5", "7"], "default": 2, "wirkt": {"ueber": ["pmamt", 0.01]}, "wirkt_text": "Phase mod is off: turn up Amount"},
       {"id": "pmn", "type": "label", "span": 3, "text": "A sine at the note pitch times the ratio"}
     ]},
     {"id": "chaos", "title": "CHAOS", "page": "mod", "cols": 3, "controls": [
-      {"id": "chrate", "type": "knob", "label": "Rate", "bind": {"param": "k62"}, "format": "hz", "span": 2, "default": 0.29905200225092193},
+      {"id": "chrate", "type": "knob", "label": "Rate", "bind": {"param": "k62"}, "format": "hz", "span": 2, "default": 0.29905200225092193, "wirkt": {"eine": [{"weg": ["chcut"]}, {"weg": ["wch"]}]}, "wirkt_text": "Chaos goes nowhere: turn To cutoff or Chaos in WAVE away from off"},
       {"id": "chcut", "type": "knob", "label": "To cutoff", "bind": {"param": "k63"}, "format": "raw", "unit": "st", "default": 0.5, "scale": {"labels": ["-36", "-18", "off", "18", "36"]}},
       {"id": "chn", "type": "label", "span": 3, "text": "Lorenz, one path per voice"}
     ]}

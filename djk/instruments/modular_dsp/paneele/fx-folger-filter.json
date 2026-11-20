@@ -1,0 +1,15 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "fx-folger-filter"},
+  "title": "Envelope Filter",
+  "akzent": "tuerkis",
+  "sections": [
+    { "id": "follow", "title": "ENVELOPE FILTER", "cols": 4, "controls": [
+      {"id": "sens", "type": "knob", "label": "Sensitivity", "bind": {"param": "k1"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "reso", "type": "knob", "label": "Resonance", "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
+      {"id": "attack", "type": "knob", "label": "Attack", "bind": {"param": "k2"}, "format": "ms", "default": 0.5, "wirkt": {"ueber": ["sens", 0.02]}, "wirkt_text": "The filter does not move: turn up Sensitivity"},
+      {"id": "release", "type": "knob", "label": "Release", "bind": {"param": "k3"}, "format": "ms", "default": 0.5, "wirkt": {"ueber": ["sens", 0.02]}, "wirkt_text": "The filter does not move: turn up Sensitivity"},
+      {"id": "l1", "type": "label", "span": 4, "text": "Louder input opens the low-pass"}
+    ]}
+  ]
+}

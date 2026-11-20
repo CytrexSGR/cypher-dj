@@ -1,0 +1,7 @@
+/* Live dock: the MASTER card surfaces (master.js): the GLUE and LIMITER popovers, the bus window, the spectrum inside a window. */
+.live-glue .w-live-popover-koerper { display: flex; justify-content: center; padding: 4px 12px; }
+.live-glue .w-dreh { width: 80px; }
+.live-limiter .live-limiter-text { margin: 0 0 4px; color: var(--dim); font-size: 11px; max-width: 220px; }
+.live-limiter .live-limiter-wert { font-size: 18px; font-variant-numeric: tabular-nums; }
+#live-fenster .live-bus { width: min(320px, 86vw); }
+#live-fenster .w-fenster #spektrum { flex: none; width: min(600px, 86vw); align-self: stretch; }

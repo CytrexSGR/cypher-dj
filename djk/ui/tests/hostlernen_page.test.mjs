@@ -103,7 +103,13 @@ test('app.js wiring: the three host panels get the channel and the host learn op
   assert.equal([...app.matchAll(/hostAdapter\(\{ gruppe, kanal: k,/g)].length, 2);
   assert.match(app, /\.\.\.hostLernOpt\(k\) \}\);/);
   assert.match(app, /lernSchicken\(a\.pfad, a\.daten\)/);
-  for (const f of ['plugin_panel.js', 'device_view.js', 'plugin_device.js', 'inserts.js']) {
-    assert.doesNotMatch(fs.readFileSync(path.join(import.meta.dirname, '..', 'public', 'production', f), 'utf8'), /beiLernen\s*[:(]|lernPfad\s*[:=]\s*\(/, f);
+  const lies = (f) => fs.readFileSync(path.join(import.meta.dirname, '..', 'public', 'production', f), 'utf8');
+  for (const f of ['plugin_panel.js', 'plugin_device.js', 'inserts.js']) {
+    assert.doesNotMatch(lies(f), /beiLernen\s*[:(]|lernPfad\s*[:=]\s*\(/, f);
   }
+  // The device view learns a Baukasten knob on its core row (device window, MIDI learn): only when the caller passes opt.lernen, and never by host name
+  const ansicht = lies('device_view.js');
+  assert.match(ansicht, /const lernen = g\.name === 'bk' && opt\.lernen \? opt\.lernen : null;/);
+  assert.match(ansicht, /if \(lernen\) adapter\.lernPfad = \(pn\) => bkZeilenPfad\(/);
+  assert.doesNotMatch(ansicht, /hostSchluessel|hostLernOpt|hostName/);
 });

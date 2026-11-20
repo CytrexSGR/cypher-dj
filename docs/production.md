@@ -110,7 +110,7 @@ track at a beat, overwriting that track's main lane there. All of them are an of
 
 ## Presets
 
-A browser for presets of our own devices (EQ, Hall, compressor, saturator, RB-338, Cypher Modular): 191 factory presets,
+A browser for presets of our own devices (EQ, Hall, compressor, saturator, RB-338, Cypher Modular): 213 factory presets,
 your own, and collections of samples, presets and devices. Presets are described with words from one closed vocabulary,
 and the agent can search them by those words. Drag a preset onto a track, a stage or a strip row, or save the current
 state of a target as a new preset.

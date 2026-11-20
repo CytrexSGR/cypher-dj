@@ -52,6 +52,7 @@ test('hinweis_im_toast: the page says it (meldeNachSchreiben) and it is no error
   const gemeldet = [];
   meldeNachSchreiben({ hinweise: r.hinweise }, (text, fehler) => gemeldet.push([text, fehler]));
   assert.equal(gemeldet.length, 1);
-  assert.ok(gemeldet[0][0].startsWith('Parameter is driven by lane a1 (fader)'), gemeldet[0][0]);
+  assert.ok(gemeldet[0][0].startsWith('Parameter is driven by the Volume lane:'), gemeldet[0][0]);
+  assert.doesNotMatch(gemeldet[0][0], /\ba1\b/, 'the toast names the lane by its readable name, not its id');
   assert.equal(gemeldet[0][1], false);
 });

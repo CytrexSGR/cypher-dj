@@ -1,0 +1,76 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "drum-synth"},
+  "title": "Drum Synth",
+  "akzent": "rot",
+  "front": ["k40"],
+  "layout": {"rows": [["kick", "rim", "snare", "clap"], ["tom", "chat", "ohat", "cym", "master"]]},
+  "sections": [
+    { "id": "kick", "title": "KICK", "cols": 2, "controls": [
+      {"id": "kick-tune", "type": "knob", "label": "Tune", "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "kick-pdrop", "type": "knob", "label": "Pitch drop", "bind": {"param": "k2"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "kick-decay", "type": "knob", "label": "Decay", "bind": {"param": "k3"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "kick-click", "type": "knob", "label": "Click", "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
+      {"id": "kick-drive", "type": "knob", "label": "Drive", "bind": {"param": "k5"}, "format": "db", "default": 0.5},
+      {"id": "kick-pdec", "type": "knob", "label": "Pitch decay", "bind": {"param": "k6"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "kick-level", "type": "knob", "label": "Level", "bind": {"param": "k7"}, "format": "percent", "default": 0.5},
+      {"id": "kick-n", "type": "label", "span": 2, "text": "MIDI 36"}
+    ]},
+    { "id": "rim", "title": "RIM", "cols": 2, "controls": [
+      {"id": "rim-cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k8"}, "format": "hz", "default": 0.5},
+      {"id": "rim-env", "type": "knob", "label": "Filter env amount", "bind": {"param": "k9"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "rim-decay", "type": "knob", "label": "Decay", "bind": {"param": "k10"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "rim-level", "type": "knob", "label": "Level", "bind": {"param": "k11"}, "format": "percent", "default": 0.5},
+      {"id": "rim-n", "type": "label", "span": 2, "text": "MIDI 37"}
+    ]},
+    { "id": "snare", "title": "SNARE", "cols": 2, "controls": [
+      {"id": "snare-tune", "type": "knob", "label": "Tune", "bind": {"param": "k12"}, "format": "hz", "default": 0.5},
+      {"id": "snare-snares", "type": "knob", "label": "Snares level", "bind": {"param": "k13"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "snare-decay", "type": "knob", "label": "Decay", "bind": {"param": "k14"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "snare-ndecay", "type": "knob", "label": "Noise decay", "bind": {"param": "k15"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "snare-level", "type": "knob", "label": "Level", "bind": {"param": "k16"}, "format": "percent", "default": 0.5},
+      {"id": "snare-n", "type": "label", "span": 2, "text": "MIDI 38"}
+    ]},
+    { "id": "clap", "title": "CLAP", "cols": 2, "controls": [
+      {"id": "clap-cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k17"}, "format": "hz", "default": 0.5},
+      {"id": "clap-env", "type": "knob", "label": "Filter env amount", "bind": {"param": "k18"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "clap-depth", "type": "knob", "label": "Clap depth", "bind": {"param": "k19"}, "format": "percent", "default": 0.5},
+      {"id": "clap-decay", "type": "knob", "label": "Decay", "bind": {"param": "k20"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "clap-level", "type": "knob", "label": "Level", "bind": {"param": "k21"}, "format": "percent", "default": 0.5},
+      {"id": "clap-n", "type": "label", "span": 2, "text": "MIDI 39"}
+    ]},
+    { "id": "tom", "title": "LOW TOM", "cols": 2, "controls": [
+      {"id": "tom-tune", "type": "knob", "label": "Tune", "bind": {"param": "k22"}, "format": "hz", "default": 0.15},
+      {"id": "tom-pdrop", "type": "knob", "label": "Pitch drop", "bind": {"param": "k23"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "tom-decay", "type": "knob", "label": "Decay", "bind": {"param": "k24"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "tom-env", "type": "knob", "label": "Filter env amount", "bind": {"param": "k25"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "tom-level", "type": "knob", "label": "Level", "bind": {"param": "k26"}, "format": "percent", "default": 0.5},
+      {"id": "tom-n", "type": "label", "span": 2, "text": "MIDI 41"}
+    ]},
+    { "id": "chat", "title": "CLOSED HAT", "cols": 2, "controls": [
+      {"id": "chat-tune", "type": "knob", "label": "Tune", "bind": {"param": "k27"}, "format": "raw", "unit": "st", "default": 0.5, "scale": {"labels": ["-12", "0", "+12"]}},
+      {"id": "chat-decay", "type": "knob", "label": "Decay", "bind": {"param": "k28"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "chat-hp", "type": "knob", "label": "High-pass", "bind": {"param": "k29"}, "format": "hz", "default": 0.5},
+      {"id": "chat-level", "type": "knob", "label": "Level", "bind": {"param": "k30"}, "format": "percent", "default": 0.5},
+      {"id": "chat-n", "type": "label", "span": 2, "text": "MIDI 42"}
+    ]},
+    { "id": "ohat", "title": "OPEN HAT", "cols": 2, "controls": [
+      {"id": "ohat-tune", "type": "knob", "label": "Tune", "bind": {"param": "k31"}, "format": "raw", "unit": "st", "default": 0.5, "scale": {"labels": ["-12", "0", "+12"]}},
+      {"id": "ohat-decay", "type": "knob", "label": "Decay", "bind": {"param": "k32"}, "format": "raw", "unit": "s", "default": 0.88},
+      {"id": "ohat-hp", "type": "knob", "label": "High-pass", "bind": {"param": "k33"}, "format": "hz", "default": 0.5},
+      {"id": "ohat-level", "type": "knob", "label": "Level", "bind": {"param": "k34"}, "format": "percent", "default": 0.5},
+      {"id": "ohat-n", "type": "label", "span": 2, "text": "MIDI 46"}
+    ]},
+    { "id": "cym", "title": "CYMBAL", "cols": 2, "controls": [
+      {"id": "cym-cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k35"}, "format": "hz", "default": 0.5},
+      {"id": "cym-decay", "type": "knob", "label": "Decay", "bind": {"param": "k36"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "cym-metal", "type": "knob", "label": "Metal", "bind": {"param": "k37"}, "format": "percent", "default": 0.5},
+      {"id": "cym-drive", "type": "knob", "label": "Drive", "bind": {"param": "k38"}, "format": "db", "default": 0.5},
+      {"id": "cym-level", "type": "knob", "label": "Level", "bind": {"param": "k39"}, "format": "percent", "default": 0.5},
+      {"id": "cym-n", "type": "label", "span": 2, "text": "MIDI 49"}
+    ]},
+    { "id": "master", "title": "MASTER", "cols": 1, "controls": [
+      {"id": "master", "type": "knob", "label": "Master", "bind": {"param": "k40"}, "format": "percent", "default": 0.5}
+    ]}
+  ]
+}

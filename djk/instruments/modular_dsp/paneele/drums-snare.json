@@ -1,0 +1,24 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "drums-snare"},
+  "title": "Snare",
+  "akzent": "rot",
+  "layout": {"rows": [
+    ["body", "noise", "room"]
+  ]},
+  "sections": [
+    { "id": "body", "title": "BODY", "cols": 2, "controls": [
+      {"id": "tune", "type": "knob", "label": "Tune", "span": 2, "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "decay", "type": "knob", "label": "Decay", "span": 2, "bind": {"param": "k3"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "hue", "type": "huelle", "span": 2, "label": "Body envelope", "of": {"a": 0.0005, "d": "decay", "s": 0, "r": 0.27}}
+    ]},
+    { "id": "noise", "title": "SNARES", "cols": 2, "controls": [
+      {"id": "snares", "type": "knob", "label": "Snares level", "bind": {"param": "k2"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "ndecay", "type": "knob", "label": "Noise decay", "bind": {"param": "k4"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "nhue", "type": "huelle", "span": 2, "label": "Noise envelope", "of": {"a": 0.0005, "d": "ndecay", "s": 0, "r": 0.1}}
+    ]},
+    { "id": "room", "title": "ROOM", "cols": 1, "controls": [
+      {"id": "room", "type": "knob", "label": "Room mix", "bind": {"param": "k5"}, "format": "percent", "default": 0.5}
+    ]}
+  ]
+}

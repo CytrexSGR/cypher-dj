@@ -69,11 +69,16 @@ export interface KernOptionen {
   waechter?: WaechterEinstellung;
 }
 
+export const EMPFANGSPUFFER_BYTES = 8 * 1024 * 1024;
+
 export class KernAnbindung {
   uhr: Uhrstand | null = null;
   generation: number | null = null;
   readonly waechter: HalloWaechter;
-  private readonly sock = dgram.createSocket('udp4');
+  // t_7f487235 (2026-11-19): a new subscriber gets the kern's whole controller stand at once (measured 1659 /e/regler datagrams in one burst).
+  // With the default buffer the page server dropped about 600 of them after its restart (RcvbufErrors), so /lage lacked spektrum/kanal and the
+  // pad faders. 8 MiB holds the burst; the kernel caps it at net.core.rmem_max.
+  private readonly sock = dgram.createSocket({ type: 'udp4', recvBufferSize: EMPFANGSPUFFER_BYTES });
   private tick: NodeJS.Timeout | null = null;
   private ersterHallo = true;
   private readonly opt: KernOptionen;
@@ -86,6 +91,9 @@ export class KernAnbindung {
   }
 
   get zustand(): KernZustand { return this.waechter.zustand; }
+
+  /** The receive buffer the kernel granted (Linux reports twice the requested size), only after starte(). */
+  empfangspuffer(): number { return this.sock.getRecvBufferSize(); }
 
   starte(): Promise<void> {
     this.sock.on('message', (buf) => this.empfange(buf));

@@ -216,6 +216,52 @@ int main() {
     PRUEF(!a.arr().auto_uebersteuert(0, 0));
     PRUEF_NAH(a.fader(1), 0.0, 1e-4);   // no pickup: the base value stands
   }
+  {  // (r) a hand step on ret/1/fader while its lane plays is a grip: the override starts (slot ARR_SPUREN + 0), the value moves ON from the pickup value (like a track)
+    const char* name = "test_arr_auto_eingriff_kern_r";
+    k35::Arbeitsbestand ab(name);
+    const std::string mapping = "/dev/shm/" + std::string(name) + "_" + std::to_string(getpid()) + ".json";
+    std::ofstream(mapping) << R"({"version":1,"geraet":"eingriff_ret","quelle_port":"q","ziel_port":"z","eintraege":[
+      {"nachricht":{"typ":"cc","kanal":1,"nr":9},"ziel":"ret/1/fader","art":"absolut","kurve":{"typ":"fader_db","min":-200.0,"max":0.0}}],"leds":[]})";
+    {
+      arr35::Lauf x(ab.pfad, name, mapping.c_str());
+      x.teil("ret/1/fader", 0.0f, 0.0, 0.0);   // base value 0 dB
+      const std::string au = x.ordner.audio('a', 800000, 0.1f);
+      const std::string spur = "{\"nr\":1,\"art\":\"audio\",\"clips\":[" + x.ordner.clip("c1", 0.0, 30.0, au, 800000) + "]}";
+      const std::string ret = "{\"nr\":1,\"ausgang\":{\"art\":\"master\"},\"auto\":[" + arrdatei::Ordner::auto_lane({{0.0, 0.0, 0}, {16.0, -30.0, 0}}) + "]}";
+      x.ordner.wiedergabe2_ret(1, spur, "", ret, "cypherdj-arr/3");
+      cdj::ArrLadeErgebnis e = cdj::lade_wiedergabe(x.ordner.pfad, 1, x.cache);
+      PRUEF(e.snap != nullptr);
+      if (e.snap) {
+        cdj::Befehl b = x.neu(cdj::Befehl::ARR_LADEN, "andreas");
+        b.zeiger = e.snap.release();
+        b.arr_nr = 1;
+        x.sende(b);
+        x.start(0.0, 0);
+        x.zyklen(560 * N);   // about beat 6
+        const cdj::Arrangement& arr = x.kern->arrangement();
+        const int SLOT = cdj::ARR_SPUREN;
+        PRUEF(arr.auto_gespielt(SLOT, 0));
+        const double lane0 = arr.auto_letzter_wert(SLOT, 0);
+        PRUEF(lane0 < -3.0 && lane0 > -25.0);
+        float roh = 0.5f;
+        double v[4] = {};
+        for (int k = 0; k < 4; ++k) {
+          const int64_t sm = (x.kern->sample() / N + 2) * N;
+          x.test_hand("ret/1/fader", roh, sm + 10);
+          x.zyklen(sm + 2 * N);
+          v[k] = x.wert("ret/1/fader");
+          std::printf("r: message %d raw %.2f -> %.3f dB, overridden %d, lane %.3f\n", k + 1, roh, v[k], arr.auto_uebersteuert(SLOT, 0) ? 1 : 0, arr.auto_letzter_wert(SLOT, 0));
+          roh += 0.02f;
+        }
+        PRUEF(arr.auto_uebersteuert(SLOT, 0));
+        PRUEF(v[1] > lane0 + 0.5 && v[1] < lane0 + 14.0);   // from the lane value (pickup), not from the base 0 dB
+        PRUEF(v[2] > v[1] + 0.5 && v[3] > v[2] + 0.5);       // every message moves ON
+        x.zyklen((x.kern->sample() / N + 2) * N + 40 * N);
+        PRUEF_NAH(x.wert("ret/1/fader"), v[3], 1e-4);        // the hand holds its value, the lane no longer pulls it
+      }
+    }
+    std::remove(mapping.c_str());
+  }
   {  // (h) allocation guard with overrides in play
     if (!ALLOC_ABFANG_VERFUEGBAR) {
       std::printf("skipped (sanitizer build): allocation watcher not available\n");

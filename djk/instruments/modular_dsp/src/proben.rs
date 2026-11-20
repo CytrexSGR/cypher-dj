@@ -241,3 +241,36 @@ pub fn feder_ir(sr: f32) -> Vec<f32> {
     let skala = 0.35 / norm(&l).max(norm(&r));
     (0..n).flat_map(|i| [(l[i] * skala) as f32, (r[i] * skala) as f32]).collect()
 }
+
+// ---- Factory bank of the `amiga` device (tracker stage 4) ----------------------------------------------------------------
+// Pure integer arithmetic divided by 128 (exact in f32), so `build_amiga_samples.py` writes the very same bytes. Mono data,
+// stored as stereo frames (l == r), 8-bit values.
+
+/// File names, in slot order, of the `amiga` factory bank.
+pub const AMIGA_DATEIEN: [&str; 4] = ["amiga-quadrat.f32", "amiga-dreieck.f32", "amiga-saege.f32", "amiga-rauschen.f32"];
+
+fn amiga_stereo(werte: &[i32]) -> Vec<f32> { werte.iter().flat_map(|&v| { let x = v as f32 / 128.0; [x, x] }).collect() }
+
+/// The factory bank: one 32-frame square cycle, triangle cycle and saw cycle (single-cycle waves for looping), and a 4096-frame noise
+/// burst (the NES shift register, amplitude falling quadratically to 0), each as stereo frames. In the order of [`AMIGA_DATEIEN`].
+pub fn amiga_werk() -> [Vec<f32>; 4] {
+    let quadrat: Vec<i32> = (0..32).map(|i| if i < 16 { 93 } else { -93 }).collect();
+    let dreieck: Vec<i32> = (0..32).map(|i: i32| { let t = if i < 16 { i } else { 31 - i }; -90 + 12 * t }).collect();
+    let saege: Vec<i32> = (0..32).map(|i: i32| -93 + 6 * i).collect();
+    const N: i64 = 4096;
+    let mut reg: u32 = 1;
+    let rauschen: Vec<i32> = (0..N).map(|i| {
+        let a = (110 * (N - i) * (N - i) / (N * N)) as i32;
+        let v = if reg & 1 == 1 { -a } else { a };
+        reg = (reg >> 1) | (((reg ^ (reg >> 1)) & 1) << 14);
+        v
+    }).collect();
+    [amiga_stereo(&quadrat), amiga_stereo(&dreieck), amiga_stereo(&saege), amiga_stereo(&rauschen)]
+}
+
+/// Writes the factory bank of `amiga` into `wurzel` (a sample root).
+pub fn schreibe_amiga_werk(wurzel: &std::path::Path) {
+    for (name, d) in AMIGA_DATEIEN.iter().zip(amiga_werk()) {
+        std::fs::write(wurzel.join(name), bytes(&d)).expect("amiga factory sample not writable");
+    }
+}

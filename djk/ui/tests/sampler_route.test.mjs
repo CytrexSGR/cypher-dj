@@ -12,6 +12,7 @@ import { bis, ruf, warte, anKern, CYPHER } from './support/proj_stack.mjs';
 import { samplerBereich } from '../areas/sampler/area.ts';
 import { fitWert, speedVon } from '../sampler/device.ts';
 
+const WERKS_SAMPLES = ['amiga-dreieck', 'amiga-quadrat', 'amiga-rauschen', 'amiga-saege'].map((n) => `${n}.f32`);
 const DEMOS = path.resolve(import.meta.dirname, '../../instruments/modular_dsp/demos');
 const MOD = '0123456789abcdef', MOD2 = 'fedcba9876543210';
 
@@ -103,8 +104,9 @@ test('the routes of the Bereich', () => {
       'POST /sampler/neu_schneiden', 'POST /sampler/marke', 'POST /sampler/ursprung',
       'POST /sampler/ton', 'GET /sampler/ton', 'POST /sampler/ton/grund', 'POST /sampler/ton/loeschen',
       'GET /sampler/dateien', 'GET /sampler/datei/hoer', 'POST /sampler/datei/spur', 'POST /sampler/datei/pad',
-      'POST /sampler/instrument', 'GET /sampler/instrument/lauf', 'GET /sampler/instrumente', 'POST /sampler/instrument/spur', 'POST /sampler/instrument/loeschen']);   // A2 (three), plan C (four), sample player (three), instruments (five), media browser (datei/hoer, datei/spur, datei/pad)
-  assert.deepEqual(b.routen().filter((r) => r.methode === 'POST').map((r) => r.schutz), Array(16).fill('fremdePost'));
+      'POST /sampler/instrument', 'GET /sampler/instrument/lauf', 'GET /sampler/instrumente', 'POST /sampler/instrument/spur', 'POST /sampler/instrument/loeschen',
+      'GET /sampler/plaetze', 'POST /sampler/platz', 'POST /sampler/platz/aendern', 'POST /sampler/platz/leeren']);   // tracker sample slots (four);   // A2 (three), plan C (four), sample player (three), instruments (five), media browser (datei/hoer, datei/spur, datei/pad)
+  assert.deepEqual(b.routen().filter((r) => r.methode === 'POST').map((r) => r.schutz), Array(19).fill('fremdePost'));
 });
 
 test('quellen lists loops and module audio; a cut from a module takes its tempo from the frames (review focus 2)', async (t) => {
@@ -229,7 +231,7 @@ test('a project write that is refused removes the cut this call created', async 
   assert.deepEqual([r.code, r.j.fehler], [409, 'rev_veraltet']);
   assert.deepEqual(z.bkDateien(), [], 'graph and panel are gone');
   assert.deepEqual(fs.readdirSync(z.d.sampler), [], 'the cut folder is gone');
-  assert.deepEqual(fs.readdirSync(path.join(z.d.bk, 'samples')), [], 'the audio is gone');
+  assert.deepEqual(fs.readdirSync(path.join(z.d.bk, 'samples')).filter((n) => !WERKS_SAMPLES.includes(n)), [], 'the audio is gone (the four factory samples the server installs at start stay)');
   assert.deepEqual(await liste(z), []);
   // and thrown refusals too
   sitz.aendern = async () => { sitz.aendern = echt; throw Object.assign(new Error('x'), { code: 409, fehler: 'verlauf_inkonsistent', extra: {} }); };

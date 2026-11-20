@@ -55,8 +55,7 @@
 .p-mx-gruppe th, .p-mx-pm th { color: var(--dim); }
 @media (max-width: 600px) { .p-mx { font-size: 10px; } .p-mx th, .p-mx td { padding: 2px 3px; } }
 
-/* The matrix is a section of its own, between the returns and the inserts: one more row in the page grid (production.css has seven, this file is linked after it). */
-body.produktion #produktion { grid-template-rows: auto minmax(140px, 1fr) auto auto auto auto auto var(--detail, 26vh); }
-.p-matrix { grid-row: 5; display: block; }
-.p-inserts { grid-row: 6; } .p-geraete { grid-row: 7; } .p-detail { grid-row: 8; }
-.p-matrix > summary { cursor: pointer; }
+/* The matrix is a section of its own below the dock (the page grid is in production.css: matrix row 4). Its title has the look of .w-dock-etikett. */
+.p-matrix { display: block; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; min-width: 0; }
+.p-matrix[hidden] { display: none; }
+.p-matrix > summary { cursor: pointer; font-size: 10px; font-weight: 700; letter-spacing: .14em; color: var(--dim); }

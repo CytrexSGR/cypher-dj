@@ -167,8 +167,8 @@ const rechtsklick = async (s, sel) => {
 const menue = (s) => s.w(`[...document.querySelectorAll('.p-menue button')].map((b) => b.textContent)`);
 const text = (s, sel) => s.w(`document.querySelector(${JSON.stringify(sel)})?.textContent ?? null`);
 
-const KOEPFE = [['track head', '.p-kopf[data-spur="s2"]', 's2'], ['group head', '.p-gruppenkopf[data-gruppe="g1"]', 'g1'],
-  ['return head', '.p-returnkopf[data-ret="r1"]', 'r1'], ['master block', '.p-pm', 'master']];
+const KOEPFE = [['track head', '.p-kopf[data-spur="s2"]', 's2'], ['group card', '[data-w="karte-grp"][data-strang="g1"]', 'g1'],
+  ['return card', '[data-w="karte-fx"][data-strang="r1"]', 'r1'], ['master card', '[data-w="karte-master"]', 'master']];
 for (const [wie, sel, id] of KOEPFE) {
   test(`page: right click on the ${wie} offers Resample, the click posts {strang_id: ${id}, punkt: post}, the new track appears`, KLEIN, async (t) => {
     const s = await seiteMit(t);

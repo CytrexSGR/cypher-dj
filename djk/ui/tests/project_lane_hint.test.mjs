@@ -78,7 +78,9 @@ test('D: no hint without a lane, for a mixer lane, or when the lane is created b
 test('E: the page turns the hint into a notice with the lane named; old hints are unchanged', () => {
   const h = { index: 0, hinweis: 'lane_treibt', lane_id: 'a3', ziel: 'insert.i1.schwelle', strang_id: 's1', text: 'parameter is driven by lane a3 (insert.i1.schwelle): saved as the rest value' };
   const m = hinweisMeldung([h]);
-  assert.match(m.text, /^Parameter is driven by lane a3/);
+  assert.match(m.text, /^Parameter is driven by the insert\.i1\.schwelle lane: saved as the rest value/);
+  const v = hinweisMeldung([{ ...h, lane_id: 'a1', ziel: 'fader', text: 'parameter is driven by lane a1 (fader): saved as the rest value' }]);
+  assert.match(v.text, /^Parameter is driven by the Volume lane: saved as the rest value/);
   assert.equal(m.fehler, false);
   assert.match(hinweisMeldung([{ index: 0, hinweis: 'lane_treibt' }]).text, /rest value/, 'fallback text without the server text');
   assert.match(hinweisMeldung([{ index: 0, hinweis: 'analyse_laeuft' }]).text, /already running/);

@@ -58,7 +58,7 @@ pub enum Wirkung {
 pub fn wirkung(s: &Schritt) -> Option<Wirkung> {
     use Wirkung::*;
     match s {
-        Schritt::Konst { .. } | Schritt::Regler { .. } | Schritt::Transponiere { .. } | Schritt::Mul { .. } | Schritt::Add { .. } => Some(Exakt),
+        Schritt::Konst { .. } | Schritt::Regler { .. } | Schritt::Notenwahl { .. } | Schritt::Transponiere { .. } | Schritt::Mul { .. } | Schritt::Add { .. } => Some(Exakt),
         Schritt::Ladder { .. } | Schritt::Svf { .. } | Schritt::Allpass { .. } | Schritt::Kreuz { .. } | Schritt::Sem { .. } | Schritt::Diode { .. } | Schritt::Ms20 { .. }
         | Schritt::Saett { .. } | Schritt::Krume { .. } | Schritt::Roehre { .. } | Schritt::Falter { .. } | Schritt::Formant { .. }
         | Schritt::Kamm { .. } | Schritt::Folger { .. } | Schritt::Leitung { .. } | Schritt::Wahl { .. } => Some(Vergessend),
@@ -70,6 +70,12 @@ pub fn wirkung(s: &Schritt) -> Option<Wirkung> {
         | Schritt::Sh { .. } | Schritt::Drift { .. } | Schritt::Glatt { .. }
         // own state that must keep running: the chaos path and the shifter's oscillator phase and all-pass memory
         | Schritt::Chaos { .. } | Schritt::Schieber { .. }
+        // the register keeps running, a voice has to keep playing across a skipped stretch
+        | Schritt::Lfsr { .. } | Schritt::Paula { .. }
+        // envelope level, cycle phase and the vactrol memory with the filter states: they keep running across a skipped stretch
+        | Schritt::Funktion { .. } | Schritt::Lpg { .. }
+        // the weights live in the program and the smoothed state keeps gliding: never inside a branch
+        | Schritt::Matrix { .. }
         // tails and recorded material
         | Schritt::Chorus { .. } | Schritt::Hall { .. } | Schritt::Delay { .. } | Schritt::Limiter { .. } | Schritt::Gate { .. }
         | Schritt::Labor { .. } | Schritt::Remix { .. } | Schritt::Komp { .. } | Schritt::Phaser { .. } | Schritt::Vocoder { .. } | Schritt::Faltung { .. } | Schritt::Granular { .. }
@@ -124,7 +130,7 @@ pub fn eingaenge(s: &Schritt) -> Vec<Quelle> {
         Schritt::Phaser { x, l, r, rate, tiefe, fb, mix, .. } => vec![*x, *l, *r, *rate, *tiefe, *fb, *mix],
         Schritt::Roehre { x, antrieb, bias, .. } => vec![*x, *antrieb, *bias],
         // every field is named: a new field of the step must be decided here (an input is listed, anything else is `_`)
-        Schritt::Sampler { hz, trig, gate, scheibe, rueck, tempo, halb, ausklang, vel, wl: _, wr: _, wrl: _, wrr: _, e: _, g: _, z: _, rr: _, rr2: _, wahl: _, d: _, s: _ } => {
+        Schritt::Sampler { hz, trig, gate, scheibe, rueck, tempo, halb, ausklang, vel, wl: _, wr: _, wrl: _, wrr: _, e: _, g: _, z: _, rr: _, rr2: _, wahl: _, d: _, s: _, s2: _ } => {
             vec![*hz, *trig, *gate, *scheibe, *rueck, *tempo, *halb, *ausklang, *vel]
         }
         Schritt::Vocoder { x, l, r, zisch, mix, .. } => vec![*x, *l, *r, *zisch, *mix],
@@ -146,6 +152,12 @@ pub fn eingaenge(s: &Schritt) -> Vec<Quelle> {
         Schritt::Drift { rate, fest, .. } => vec![*rate, *fest],
         Schritt::Chaos { rate, trig, .. } => vec![*rate, *trig],
         Schritt::Schieber { x, hz, .. } => vec![*x, *hz],
+        Schritt::Paula { hz, trig, gate, platz, start, rueckwaerts, .. } => vec![*hz, *trig, *gate, *platz, *start, *rueckwaerts],
+        Schritt::Lfsr { hz, .. } => vec![*hz],
+        Schritt::Notenwahl { hz, .. } => vec![*hz],
+        Schritt::Funktion { x, trig, halt, steigen, fallen, form, zyklus, tempo, .. } => vec![*x, *trig, *halt, *steigen, *fallen, *form, *zyklus, *tempo],
+        Schritt::Lpg { x, cv, modus, abkling, reso, versatz, .. } => vec![*x, *cv, *modus, *abkling, *reso, *versatz],
+        Schritt::Matrix { e, morph, .. } => { let mut v = e.to_vec(); v.push(*morph); v }
     }
 }
 
@@ -166,6 +178,12 @@ pub fn ausgaenge(s: &Schritt) -> Vec<usize> {
         Schritt::Kreuz { lo, mid, hi, .. } => vec![*lo, *mid, *hi],
         Schritt::Chaos { aus, aus2, .. } => vec![*aus, *aus2],
         Schritt::Schieber { auf, ab, .. } => vec![*auf, *ab],
+        Schritt::Paula { wl, wr, .. } => vec![*wl, *wr],
+        Schritt::Lfsr { aus, .. } => vec![*aus],
+        Schritt::Notenwahl { aus, .. } => vec![*aus],
+        Schritt::Funktion { aus, ende, steigt, .. } => vec![*aus, *ende, *steigt],
+        Schritt::Lpg { aus, .. } => vec![*aus],
+        Schritt::Matrix { a, .. } => a.to_vec(),
         Schritt::Sem { aus, bp, .. } => vec![*aus, *bp],
         Schritt::Chorus { l, r, .. } => vec![*l, *r],
         Schritt::Hall { wl, wr, .. } | Schritt::Delay { wl, wr, .. } | Schritt::Limiter { wl, wr, .. } | Schritt::Gate { wl, wr, .. }

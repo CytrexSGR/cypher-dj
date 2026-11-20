@@ -12,7 +12,9 @@ synth-mono comes out as Andreas asked on 2026-11-18: 1 = Oscillators 1..3, Mixer
 page; 4 = the FX page. The LPD8 gets no entries for these synths (a file without entries, so its place does not fall back to the default bank).
 `eintraege` is program 1; `seiten` holds the first program of every page for a place that knows a page but no program.
 
-Usage: build_pages.py [graph ...]   (default: every graph in GRAPHEN). Writes werk/lc3/<graph>.json and werk/lpd8/<graph>.json next to this file.
+Usage: build_pages.py [graph ...] | --alle   (default: every graph in GRAPHEN; --alle: every instrument panel in paneele/, 2026-11-18). Writes
+werk/lc3/<graph>.json next to this file, and werk/lpd8/<graph>.json (empty) for the graphs in GRAPHEN only: any other instrument keeps the LPD8's
+default bank (its first knobs on the eight knobs).
 """
 import json, os, sys
 
@@ -20,7 +22,8 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 PANEELE = os.path.join(HIER, '..', '..', '..', '..', 'instruments', 'modular_dsp', 'paneele')
 GRAPHEN = ['synth-mono', 'synth-poly', 'synth-neuro', 'wavetable-reese', 'wavetable-supersaw', 'wavetable-chor']
 DREH_MAX, TASTEN_MAX, REIHE = 16, 8, 8   # encoders, buttons, encoders per row
-LEER = ['lpd8']   # devices that get a file without entries
+LEER = ['lpd8']   # devices that get a file without entries (for the graphs in GRAPHEN)
+GRAPH_ORDNER = os.path.expanduser('~/cypherdj/werke/geraete')   # installed graphs: an effect graph has a node with art 'eingang'
 
 
 def nr(c):
@@ -100,7 +103,7 @@ def baue(graph):
         seiten.setdefault(p['seite'], p['eintraege'])
     kopf = lambda modell: {'schema': 1, 'name': graph, 'modell': modell, 'art': 'instrument', 'graph': graph}
     dateien = {'lc3': {**kopf('lc3'), 'eintraege': programme[0]['eintraege'] if programme else [], 'seiten': seiten, 'programme': programme}}
-    for modell in LEER:
+    for modell in (LEER if graph in GRAPHEN else []):
         dateien[modell] = {**kopf(modell), 'eintraege': []}
     for modell, preset in dateien.items():
         ziel = os.path.join(HIER, modell, f'{graph}.json')
@@ -113,6 +116,24 @@ def baue(graph):
     print(graph, [(p['name'], p['seite'], sum(1 for e in p['eintraege'] if e['regler'].startswith('Enc')), sum(1 for e in p['eintraege'] if e['regler'].startswith('Btn'))) for p in programme])
 
 
+def alle_instrumente():
+    """Every panel in paneele/ of a Baukasten instrument graph (not an effect: its installed graph has no 'eingang' node), sorted."""
+    aus = []
+    for f in sorted(os.listdir(PANEELE)):
+        if not f.endswith('.json'):
+            continue
+        g = f[:-5]
+        try:
+            panel = json.load(open(os.path.join(PANEELE, f)))
+            graph = json.load(open(os.path.join(GRAPH_ORDNER, f)))
+        except (OSError, ValueError):
+            continue
+        if (panel.get('geraet') or {}).get('art') != 'bk' or any(k.get('art') == 'eingang' for k in graph.get('knoten', [])):
+            continue
+        aus.append(g)
+    return aus
+
+
 if __name__ == '__main__':
-    for g in sys.argv[1:] or GRAPHEN:
+    for g in (alle_instrumente() if sys.argv[1:] == ['--alle'] else sys.argv[1:] or GRAPHEN):
         baue(g)

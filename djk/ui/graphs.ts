@@ -9,11 +9,15 @@ import path from 'node:path';
 import { liesSchnitt, type Ordner } from './sampler/schnitt.ts';
 import { instrumentKategorieText } from './sampler/instrument.ts';
 import { tonKategorieText } from './sampler/tone.ts';
+import { geraetFx, type FxRollen } from './devices_parameter.ts';
+import { normaleStifte, stiftEinzelFehler, STIFT_SPALTEN, STIFT_ZEILEN, type Steckfeld, type Stift } from './steckfeld.ts';
 
 export type GraphArt = 'instrument' | 'effekt';
 /** `latenz`: samples the graph delays its signal at 48 kHz (0 = none), see graphLatenz. */
 export type GraphEintrag = { name: string; art: GraphArt; regler_namen: Record<string, string>; latenz: number; kategorie?: string; prinzip?: string; text?: string;
-  /** true: a duplicate the instrument pickers do not offer (kategorien.json `verborgen`); the graph stays loadable by name. Absent = not hidden. */ verborgen?: boolean };
+  /** true: a duplicate the instrument pickers do not offer (kategorien.json `verborgen`); the graph stays loadable by name. Absent = not hidden. */ verborgen?: boolean;
+  /** Tracker (D16), from the device register: the device runs its effect commands as jumps per tick; absent = smooth. */ fx_stufig?: true;
+  /** Tracker (D16), from the device register: knob numbers of the roles slot, start and reverse (latched knobs); absent = no roles. */ rollen?: FxRollen };
 /** Instrument categories (ids of kategorien.json). `host` is the Surge/plugin entry the page adds itself, so no graph carries it by default, but it is valid. */
 export const KATEGORIE_IDS = ['drums', 'bass', 'lead', 'pad', 'keys', 'textur', 'host', 'sampler'];
 export const KATEGORIE_TEXT_MAX = 90;
@@ -126,7 +130,7 @@ export function pruefeKategorien(roh: unknown): { gueltig: Record<string, Katego
 }
 
 /** `o` is the sampler store (cuts, tones, instruments) the generated devices are named from; absent = the default folders. */
-export function listeGraphen(ordner: string = graphenOrdner(), o: Ordner = {}): GraphListe {
+export function listeGraphen(ordner: string = graphenOrdner(), o: Ordner = {}, fxVon: (graph: string) => { stufig: boolean; rollen: FxRollen } = geraetFx): GraphListe {
   const graphen: GraphEintrag[] = [], uebersprungen: string[] = [];
   let dateien: string[] = [];
   try { dateien = fs.readdirSync(ordner).filter((d) => d.endsWith('.json')); } catch { /* no folder: empty list */ }
@@ -162,6 +166,13 @@ export function listeGraphen(ordner: string = graphenOrdner(), o: Ordner = {}): 
     g.kategorie = 'sampler';
     g.prinzip = 'sampler';
     g.text = instrumentKategorieText(g.name, o);
+  }
+  // tracker D16: the register's description of a device (a graph `amiga-<id>` takes the entry of `amiga`); an entry without the fields stays as it was
+  for (const g of graphen) {
+    if (g.art !== 'instrument') continue;
+    const fx = fxVon(g.name);
+    if (fx.stufig) g.fx_stufig = true;
+    if (Object.keys(fx.rollen).length > 0) g.rollen = fx.rollen;
   }
   return { graphen, uebersprungen };
 }
@@ -214,7 +225,7 @@ export const GERAET_ARTEN = ['bk', 'rb338', 'surge', 'plugin'];
 export const PANEL_FORMATE = ['baukasten-panel/1', 'cypherdj-panel/2'];
 const PANEL_V1 = 'baukasten-panel/1', PANEL_V2 = 'cypherdj-panel/2';
 const PANEL_ID = /^[a-z0-9_-]{1,24}$/;
-const TYPEN = ['knob', 'fader', 'switch', 'selector', 'xy', 'value', 'label', 'spacer', 'huelle', 'lfoform', 'filterkurve', 'wavetable', 'spektrum', 'lever', 'touchpad'];
+const TYPEN = ['knob', 'fader', 'switch', 'selector', 'xy', 'value', 'label', 'spacer', 'huelle', 'lfoform', 'filterkurve', 'wavetable', 'spektrum', 'lever', 'touchpad', 'matrix'];
 const ANZEIGEN = ['huelle', 'lfoform', 'filterkurve', 'wavetable', 'spektrum'];   // displays: bind nothing, never sent to the engine
 const MIT_BIND = ['knob', 'fader', 'switch', 'selector', 'lever'];
 const MIT_ZONEN = ['lever', 'touchpad'];   // `zones`: 1..8 short texts beside the sections of the travel / the field
@@ -262,6 +273,30 @@ export function vorgabenVon(graphName: string, ordner: string = graphenOrdner())
   return Array.from({ length: BK_REGLER_ZAHL }, (_, i) => b[String(i + 1)]?.vorgabe ?? 0.5);
 }
 
+/** Kraken patch field: the labels and default pins of the graph's `matrix` node (the first one; a graph holds at most one). `zeilen` and `spalten` are the 16
+ *  labels each, `stifte` the default pins in normal form (entries the engine would refuse are left out, an absent list is empty). null when the graph has no
+ *  matrix node or its labels are not 16 texts (the engine refuses such a node). */
+export function steckfeldAusGraph(graph: unknown): Steckfeld | null {
+  const knoten = (graph as { knoten?: unknown } | null)?.knoten;
+  if (!Array.isArray(knoten)) return null;
+  const k = knoten.find((x) => typeof x === 'object' && x !== null && (x as { art?: unknown }).art === 'matrix') as Record<string, unknown> | undefined;
+  if (!k) return null;
+  const namen = (x: unknown, n: number): string[] | null => (Array.isArray(x) && x.length === n && x.every((e) => typeof e === 'string') ? [...x] as string[] : null);
+  const zeilen = namen(k.zeilen, STIFT_ZEILEN), spalten = namen(k.spalten, STIFT_SPALTEN);
+  if (!zeilen || !spalten) return null;
+  const roh = Array.isArray(k.stifte) ? k.stifte : [];
+  const stifte = normaleStifte(roh.filter((e) => stiftEinzelFehler(e) === null) as Stift[]);
+  return { zeilen, spalten, stifte };
+}
+
+/** The patch field of the graph file `<name>.json` in the graph folder; null when the file is unknown or unreadable or the graph has no matrix node. */
+export function steckfeldVon(graphName: string, ordner: string = graphenOrdner()): Steckfeld | null {
+  if (!GRAPH_NAME.test(graphName)) return null;
+  let g: unknown;
+  try { g = JSON.parse(fs.readFileSync(path.join(ordner, `${graphName}.json`), 'utf8')); } catch { return null; }
+  return steckfeldAusGraph(g);
+}
+
 const istObjekt = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
 const text = (x: unknown, max: number): x is string => typeof x === 'string' && x.length > 0 && x.length <= max;
 
@@ -285,8 +320,9 @@ export function normalisierePanel(p: unknown): Record<string, unknown> {
 }
 
 /** Check a parsed panel (v1 is read as v2 first) against the device it belongs to. bk: the graph `graphName` and its `regler` ranges (binds k<n>);
- *  rb338/surge: the binds must be names in `parameterNamen` (the device's parameterTabelle). Returns every problem found (empty list: the panel is good). */
-export function pruefePanel(roh: unknown, graphName: string, regler: ReglerBereiche, parameterNamen: readonly string[] = []): string[] {
+ *  rb338/surge: the binds must be names in `parameterNamen` (the device's parameterTabelle). `steckfeld` (bk): the graph's patch field as steckfeldAusGraph reads it,
+ *  null = the graph has none; a `matrix` control needs one (undefined = not known to the caller, not checked). Returns every problem found (empty list: the panel is good). */
+export function pruefePanel(roh: unknown, graphName: string, regler: ReglerBereiche, parameterNamen: readonly string[] = [], steckfeld: Steckfeld | null | undefined = undefined): string[] {
   const f: string[] = [];
   const panel = normalisierePanel(roh);
   if (!istObjekt(panel)) return ['the panel is not a JSON object'];
@@ -301,8 +337,10 @@ export function pruefePanel(roh: unknown, graphName: string, regler: ReglerBerei
   if (panel.title !== undefined && !text(panel.title, 40)) f.push('title must be a text of 1..40 characters');
   if (!Array.isArray(panel.sections) || panel.sections.length === 0) { f.push('sections must be a non-empty list'); return f; }
   const ids = new Set<string>(), gebunden = new Map<string, string>(), eigene = new Map<string, string>();   // eigene: control id -> type
+  const eigeneSeite = new Map<string, unknown>();   // control id -> page of its section
   const werte: { id: string; of: string }[] = [];
   const anzeigen: { wo: string; c: Record<string, unknown> }[] = [];
+  const matrizen: { wo: string; c: Record<string, unknown>; sektion: unknown }[] = [];
   const seiten = new Set<string>();
   const sektionIds = new Set<string>();
   const sektionSeiten: { sw: string; seite: unknown }[] = [];
@@ -325,7 +363,10 @@ export function pruefePanel(roh: unknown, graphName: string, regler: ReglerBerei
     else panel.pages.forEach((p, i) => {
       if (!istObjekt(p) || !(typeof p.id === 'string' && PANEL_ID.test(p.id)) || !text(p.title, 16)) f.push(`pages[${i}]: needs an id [a-z0-9_-]{1,24} and a title of 1..16 characters`);
       else if (seiten.has(p.id)) f.push(`pages: id "${p.id}" used twice`); else seiten.add(p.id);
+      if (istObjekt(p) && p.all !== undefined && typeof p.all !== 'boolean') f.push(`pages[${i}]: all must be true or false`);
     });
+    const alle = Array.isArray(panel.pages) ? panel.pages.filter((p) => istObjekt(p) && p.all === true).length : 0;
+    if (alle > 1) f.push(`pages: at most one page may carry all (${alle} found)`);
   }
   panel.sections.forEach((s, si) => {
     if (!istObjekt(s)) { f.push(`sections[${si}] is not an object`); return; }
@@ -345,6 +386,7 @@ export function pruefePanel(roh: unknown, graphName: string, regler: ReglerBerei
       const typ = c.type;
       if (typeof typ !== 'string' || !TYPEN.includes(typ)) { f.push(`${wo}: type must be one of ${TYPEN.join(', ')}`); return; }
       eigene.set(id, typ);
+      eigeneSeite.set(id, s.page);
       if (c.label !== undefined && !text(c.label, 24)) f.push(`${wo}: label must be a text of 1..24 characters`);
       if (c.unit !== undefined && !text(c.unit, 8)) f.push(`${wo}: unit must be a text of 1..8 characters`);
       if (c.format !== undefined && !FORMATE.includes(String(c.format))) f.push(`${wo}: format must be one of ${FORMATE.join(', ')}`);
@@ -403,7 +445,8 @@ export function pruefePanel(roh: unknown, graphName: string, regler: ReglerBerei
         if (typeof c.of !== 'string') f.push(`${wo}: of must name another control`); else werte.push({ id: wo, of: c.of });
       }
       if (ANZEIGEN.includes(typ)) anzeigen.push({ wo, c });
-      if (typ === 'label' && !text(c.text, 40)) f.push(`${wo}: text must be a text of 1..40 characters`);
+      if (typ === 'matrix') matrizen.push({ wo, c, sektion: s });
+      if (typ === 'label' && !text(c.text, 140)) f.push(`${wo}: text must be a text of 1..140 characters`);
     });
   });
   const reihen = istObjekt(panel.layout) ? panel.layout.rows : undefined;
@@ -419,6 +462,41 @@ export function pruefePanel(roh: unknown, graphName: string, regler: ReglerBerei
   }
   for (const { sw, seite } of sektionSeiten) if (!(typeof seite === 'string' && seiten.has(seite))) f.push(`${sw}: page "${String(seite)}" is not in pages`);
   const werkelt = (id: unknown): boolean => typeof id === 'string' && ['knob', 'fader'].includes(eigene.get(id) ?? '');
+  // patch field: one `matrix` control at most, no bind, a graph with a matrix node, `of.morph` names a knob or fader that sits on the page `patch` like the matrix
+  if (matrizen.length > 1) f.push(`control "matrix": a panel holds at most one matrix control (${matrizen.length} found)`);
+  for (const { wo, c, sektion } of matrizen) {
+    if (c.bind !== undefined) f.push(`${wo}: a matrix control takes no bind (the pins are not knobs)`);
+    if (geraet?.art !== undefined && geraet.art !== 'bk') f.push(`${wo}: a matrix control belongs on a Baukasten device`);
+    else if (steckfeld === null) f.push(`${wo}: the graph "${graphName}" has no matrix node`);
+    const seiteVon = (sek: unknown) => (istObjekt(sek) ? sek.page : undefined);
+    if (seiteVon(sektion) !== 'patch') f.push(`${wo}: its section must be on the page "patch"`);
+    const of = istObjekt(c.of) ? c.of : null;
+    if (c.of !== undefined && !of) f.push(`${wo}: of must be {morph?, quellen?, ziele?, bereiche?}`);
+    if (of) {
+      for (const k of Object.keys(of)) if (!['morph', 'quellen', 'ziele', 'bereiche'].includes(k)) f.push(`${wo}: of.${k} is unknown (only of.morph, quellen, ziele, bereiche)`);
+      // cabinet view (page with all): the section of each source row, the control or section of each destination column, the range of each column (at pin amount 1)
+      const sechzehn = (name: string): unknown[] | null => {
+        const l = of[name];
+        if (l === undefined) return null;
+        if (!Array.isArray(l) || l.length !== 16) { f.push(`${wo}: of.${name} must be a list of exactly 16 entries`); return null; }
+        return l;
+      };
+      const q = sechzehn('quellen');
+      if (q) q.forEach((x, i) => { if (x !== null && !(typeof x === 'string' && sektionIds.has(x))) f.push(`${wo}: of.quellen[${i}] ${JSON.stringify(x)} does not name a section`); });
+      const zl = sechzehn('ziele');
+      if (zl) zl.forEach((x, i) => { if (x !== null && !(typeof x === 'string' && (eigene.has(x) || sektionIds.has(x)))) f.push(`${wo}: of.ziele[${i}] ${JSON.stringify(x)} does not name a control or a section`); });
+      const br = sechzehn('bereiche');
+      if (br) br.forEach((x, i) => {
+        if (x === null) return;
+        if (!(istObjekt(x) && typeof x.wert === 'number' && Number.isFinite(x.wert) && text(x.einheit, 8))) f.push(`${wo}: of.bereiche[${i}] must be null or {wert: number, einheit: text of 1..8 characters}`);
+      });
+      const m = of.morph;
+      if (m !== undefined) {
+        if (typeof m !== 'string' || !werkelt(m)) f.push(`${wo}: of.morph ${JSON.stringify(m)} does not name a knob or fader`);
+        else if (eigeneSeite.get(m) !== 'patch') f.push(`${wo}: of.morph "${m}" must sit in a section on the page "patch"`);
+      }
+    }
+  }
   const glyphe = (g: unknown, wo: string) => { if (typeof g !== 'string' || !GLYPHEN.includes(g)) f.push(`${wo}: unknown glyph "${String(g)}"`); };
   for (const { wo, c } of anzeigen) {
     const of = istObjekt(c.of) ? c.of : {};
@@ -474,6 +552,6 @@ export function ladePanel(name: string, ordner: string = graphenOrdner()): Panel
   let panel: unknown;
   try { panel = JSON.parse(roh); } catch { return { name, art: e.art, regler, panel: null, fehler: ['the panel file is not valid JSON'] }; }
   const normal = normalisierePanel(panel);
-  const fehler = pruefePanel(normal, name, regler);
+  const fehler = pruefePanel(normal, name, regler, [], steckfeldAusGraph(graph));
   return { name, art: e.art, regler, panel: fehler.length ? null : normal, fehler };
 }

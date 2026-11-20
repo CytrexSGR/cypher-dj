@@ -119,7 +119,7 @@
     {
      "id": "x1",
      "type": "knob",
-     "label": "Cross 2",
+     "label": "Cross to ch2",
      "bind": {
       "param": "k9"
      },
@@ -129,32 +129,53 @@
     {
      "id": "mg1",
      "type": "knob",
-     "label": "Mod gain",
+     "label": "Mod to gain",
      "bind": {
       "param": "k10"
      },
      "format": "percent",
-     "default": 0.5
+     "default": 0.5,
+     "scale": {
+      "labels": [
+       "-100",
+       "off",
+       "+100"
+      ]
+     }
     },
     {
      "id": "mt1",
      "type": "knob",
-     "label": "Mod time",
+     "label": "Mod to time",
      "bind": {
       "param": "k11"
      },
      "format": "percent",
-     "default": 0.5
+     "default": 0.5,
+     "scale": {
+      "labels": [
+       "-100",
+       "off",
+       "+100"
+      ]
+     }
     },
     {
      "id": "mc1",
      "type": "knob",
-     "label": "Mod cut",
+     "label": "Mod to cutoff",
      "bind": {
       "param": "k12"
      },
      "format": "percent",
-     "default": 0.5
+     "default": 0.5,
+     "scale": {
+      "labels": [
+       "-100",
+       "off",
+       "+100"
+      ]
+     }
     },
     {
      "id": "mix1",
@@ -339,7 +360,7 @@
     {
      "id": "x2",
      "type": "knob",
-     "label": "Cross 1",
+     "label": "Cross to ch1",
      "bind": {
       "param": "k21"
      },
@@ -349,32 +370,53 @@
     {
      "id": "mg2",
      "type": "knob",
-     "label": "Mod gain",
+     "label": "Mod to gain",
      "bind": {
       "param": "k22"
      },
      "format": "percent",
-     "default": 0.5
+     "default": 0.5,
+     "scale": {
+      "labels": [
+       "-100",
+       "off",
+       "+100"
+      ]
+     }
     },
     {
      "id": "mt2",
      "type": "knob",
-     "label": "Mod time",
+     "label": "Mod to time",
      "bind": {
       "param": "k23"
      },
      "format": "percent",
-     "default": 0.5
+     "default": 0.5,
+     "scale": {
+      "labels": [
+       "-100",
+       "off",
+       "+100"
+      ]
+     }
     },
     {
      "id": "mc2",
      "type": "knob",
-     "label": "Mod cut",
+     "label": "Mod to cutoff",
      "bind": {
       "param": "k24"
      },
      "format": "percent",
-     "default": 0.5
+     "default": 0.5,
+     "scale": {
+      "labels": [
+       "-100",
+       "off",
+       "+100"
+      ]
+     }
     },
     {
      "id": "mix2",

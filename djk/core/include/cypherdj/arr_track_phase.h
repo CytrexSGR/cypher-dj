@@ -109,6 +109,9 @@ class ArrSpurLauf {
   // again. The wait doubles with every switch-off of this mode (4096, 8192, ... capped at 4096 << AUTO_WARTE_MAX_SHIFT = 65536 blocks, about 5.8 minutes at quantum 256).
   static constexpr int AUTO_WARTE_BLOECKE = 4096;        // the first wait, in blocks
   static constexpr int AUTO_WARTE_MAX_SHIFT = 4;
+  // A long healthy run forgets the switch-offs: after this many blocks with the account on (as many as the longest wait, 65536 blocks, about 5.8 minutes at quantum 256) the
+  // count starts at zero, so a stall hours later waits 4096 blocks again instead of the capped 65536. A retry that fails at once never gets this far (case f of test 31).
+  static constexpr int AUTO_GESUND_BLOECKE = AUTO_WARTE_BLOECKE << AUTO_WARTE_MAX_SHIFT;
   // The wait after the aus_n-th switch-off, in blocks. Any int is safe (the shift is clamped before it is used).
   static constexpr int neu_wartezeit(int aus_n) {
     return AUTO_WARTE_BLOECKE << (aus_n <= 1 ? 0 : (aus_n - 1 > AUTO_WARTE_MAX_SHIFT ? AUTO_WARTE_MAX_SHIFT : aus_n - 1));
@@ -126,7 +129,7 @@ class ArrSpurLauf {
   // The state of the track account at the start of a phase: true when it is on. Modes an and auto (a synonym): with the account off, counts blocks and switches it on again
   // after neu_wartezeit(switch-offs so far) (true in that call), however often it fails. Mode aus never asks. Callback thread, every worker frei.
   bool konto_pruefen(HallPool& pool, int modus);
-  void auto_neu_beginnen() { auto_aus_n_ = 0; auto_aus_gesehen_ = false; auto_blocks_ = 0; }   // a mode change starts the retry story afresh
+  void auto_neu_beginnen() { auto_aus_n_ = 0; auto_aus_gesehen_ = false; auto_blocks_ = 0; auto_gesund_ = 0; }   // a mode change starts the retry story afresh
   void setze_test(const SpurTest& t) { test_ = t; }
   int64_t warte_max_us() const { return z.warte_max_ns / 1000; }
   // The cost estimate of a track (or of every track) is forgotten: its sink or instrument changed. Callback thread, between phases (every worker idle).
@@ -167,6 +170,7 @@ class ArrSpurLauf {
   int auto_aus_n_ = 0;                     // switch-offs seen so far (callback thread only), counted up to 1000
   bool auto_aus_gesehen_ = false;
   int auto_blocks_ = 0;
+  int auto_gesund_ = 0;                    // blocks in a row with the account on since the last switch-off (callback thread only); AUTO_GESUND_BLOECKE forgets auto_aus_n_
   std::atomic<bool> erste_[BAHNEN] = {};   // seam: the lane has started a unit in this phase
   std::atomic<bool> gehalten_{false};      // seam: the hold of halte_bahn has been taken
   std::atomic<bool> fertig0_[BAHNEN] = {}; // seam: the worker has counted its first finished unit

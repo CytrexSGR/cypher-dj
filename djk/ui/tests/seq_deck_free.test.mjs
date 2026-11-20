@@ -58,12 +58,21 @@ async function stapel(t) {
     kern('/q', { id: s.felder.id, quelle: s.felder.quelle, status: 2, ist_sample: 0, ist_beat: 0, grund: '' });
     return p;
   }
+  // The core answers every unload with a receipt: status 1 accepted by default; a test sets antwort.status = 6 (+ grund) for a refusal, null for a silent core.
+  const antwort = { status: 1, grund: '', gesehen: 0 };
+  const antworter = setInterval(() => {
+    const l = entladen();
+    for (; antwort.gesehen < l.length; antwort.gesehen++) {
+      if (antwort.status !== null) kern('/q', { id: l[antwort.gesehen].felder.id, quelle: l[antwort.gesehen].felder.quelle, status: antwort.status, ist_sample: 0, ist_beat: 0, grund: antwort.grund });
+    }
+  }, 5);
+  t.after(() => clearInterval(antworter));
   const seqAn = async (platz = 2) => {
     assert.equal((await post('/live/oeffnen', {})).code, 200);
     const r = await post('/seq/anlegen', { platz }, ANDREAS);
     assert.equal(r.code, 200, JSON.stringify(r.j));
   };
-  return { o, url, log, post, hol, kern, uhr, deckZustand, regler, an, teile, entladen, setze, seqAn };
+  return { o, url, log, post, hol, kern, uhr, deckZustand, regler, an, teile, entladen, setze, seqAn, antwort };
 }
 
 test('pure rule: seqDeckFrei only for deck fader/trim of a SEQ place without a loaded track', () => {
@@ -239,6 +248,25 @@ test('eject: nothing is sent for a playing track (deck_laeuft), an open channel 
   const c = await post('/seq/anlegen', { platz: 4 }, ANDREAS);   // nothing loaded on place 4
   assert.equal(c.code, 200, JSON.stringify(c.j));
   assert.equal(entladen().length, 0, 'no unload for any of the three places');
+});
+
+test('eject reports seq_geleert only when the core accepted the unload: a refusal or a silent core reports nothing, the retry sends again', async (t) => {
+  const { post, uhr, deckZustand, entladen, seqAn, antwort } = await stapel(t);
+  uhr(16);
+  await seqAn();
+  deckZustand(2, 1);
+  antwort.status = 6; antwort.grund = 'nicht_geladen';
+  const r1 = await post('/regler', { pfad: 'deck/2/fader', nach: 0, takte: 0 }, CYPHER);
+  assert.deepEqual([r1.code, r1.j.fehler, r1.j.seq_geleert], [409, 'kein_hoerschein', undefined], JSON.stringify(r1.j));
+  assert.equal(entladen().length, 1, 'the unload was sent');
+  antwort.status = null;   // a silent core: no receipt, no claim
+  const r2 = await post('/regler', { pfad: 'deck/2/fader', nach: 0, takte: 0 }, CYPHER);
+  assert.deepEqual([r2.code, r2.j.seq_geleert], [409, undefined], JSON.stringify(r2.j));
+  assert.equal(entladen().length, 2, 'the refusal lifted the guard: the retry sent the unload again');
+  antwort.status = 1;
+  const r3 = await post('/regler', { pfad: 'deck/2/fader', nach: 0, takte: 0 }, CYPHER);
+  assert.deepEqual([r3.code, r3.j.seq_geleert], [409, true], JSON.stringify(r3.j));
+  assert.equal(entladen().length, 3);
 });
 
 test('eject, studio replay 2026-11-18: SEQ deck AND a stopped track on place 2: the first cypher open is 409 with seq_geleert and one unload, the next one (track gone) opens', async (t) => {

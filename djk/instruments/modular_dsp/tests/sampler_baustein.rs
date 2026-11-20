@@ -14,10 +14,10 @@ fn sampler_is_type_30_with_io() {
     assert_eq!(a.ein, &["hz", "trig", "gate", "scheibe", "rueck", "tempo", "halb", "ausklang", "vel"]);
     assert_eq!(a.aus, &["l", "r", "rl", "rr"]); // rl, rr: release samples (stage 2b), appended
     assert!(a.werte.is_empty(), "datei is a named field, not a pflichtwert");
-    for f in [("grund", 261.6256), ("scheiben", 1.0), ("schleife", 0.0), ("gate", 1.0), ("noten_wahl", 0.0), ("tempo", 1.0), ("halb", 0.0), ("ausklang", 5.0), ("vel", 1.0), ("loop_blende", 20.0)] {
+    for f in [("grund", 261.6256), ("scheiben", 1.0), ("schleife", 0.0), ("gate", 1.0), ("noten_wahl", 0.0), ("tempo", 1.0), ("halb", 0.0), ("ausklang", 5.0), ("vel", 1.0), ("loop_blende", 20.0), ("taste_blende", 0.0), ("vel_blende", 0.0), ("frei_halte", 0.0)] {
         assert!(a.frei.contains(&f), "{f:?}");
     }
-    assert_eq!(a.frei.len(), 10);
+    assert_eq!(a.frei.len(), 13);
     assert!(ARTEN.len() >= 31, "ARTEN only grows at the end");
     assert_eq!(ARTEN[29].art, "vocoder", "existing type numbers must not move");
 }

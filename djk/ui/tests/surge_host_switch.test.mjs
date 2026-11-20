@@ -69,3 +69,29 @@ test('a Surge host with a new pid gets the whole map again on the freeze path, t
   await s.wirtSpiegel();
   assert.equal(h.werte.a_filter1_cutoff, 20, `the new process got the map entry again, it holds ${h.werte.a_filter1_cutoff}`);
 });
+
+// Audit U07, trigger: only the next command or a freeze looked at the pid, so a Surge host that systemd restarted played at its init values until then.
+// The session watches the pid of the hosts of the open project and syncs the map by itself when it changed.
+test('a Surge host that systemd restarts gets the map without any command or freeze', async (t) => {
+  const d = tmpOrdner(t, 'djk-pidwache-');
+  const ordner = wirtOrdner(t);
+  const h = falscherWirt(t, ordner, 1, { a_filter1_cutoff: 3 });
+  const pid = { n: 100 };
+  const abhaengig = {
+    start: async () => ({ code: 0, fehler: '' }),
+    stand: () => ({ lebt: true, bereit: true, art: 'lv2', kennung: null, pid: pid.n }),
+    sock: async () => ({ ok: true }),
+    ordner: () => path.join(d, 'proj'),
+    log: () => {},
+  };
+  const { s } = sitzung(t, { wirtOrdner: () => ordner, wirtWacheMs: 30, instrument: { abhaengig } });
+  await s.neu('A', 'andreas');
+  await s.aendern({ rev: 0, label: 'surge', befehle: [{ befehl: 'spur_neu', art: 'instrument', geraet: { art: 'wirt', name: 'surge', parameter: { a_filter1_cutoff: 20 } } }] }, 'andreas');
+  assert.ok(await warteBis(() => h.werte.a_filter1_cutoff === 20), 'the mirror sent the entry');
+  h.befehle.length = 0;
+  await new Promise((r) => setTimeout(r, 150));
+  assert.deepEqual(h.befehle.filter((b) => b.befehl === 'fahre'), [], 'same pid: the watch sends nothing');
+  pid.n = 101; h.werte = { a_filter1_cutoff: 3 };   // systemd restarted the host: a new process at its init values
+  assert.ok(await warteBis(() => h.werte.a_filter1_cutoff === 20, 3000), `the new process got the map entry again by itself, it holds ${h.werte.a_filter1_cutoff}`);
+  s.schliesse();
+});

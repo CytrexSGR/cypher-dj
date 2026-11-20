@@ -1,0 +1,6 @@
+{"schema":1,"name":"saege-ladder","modell":"lc3","art":"instrument","graph":"saege-ladder",
+"eintraege":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2},{"regler":"Enc 3","knopf":3},{"regler":"Enc 4","knopf":9},{"regler":"Enc 5","knopf":10},{"regler":"Enc 9","knopf":4},{"regler":"Enc 10","knopf":5},{"regler":"Enc 11","knopf":6},{"regler":"Enc 12","knopf":7},{"regler":"Enc 13","knopf":8}],
+"seiten":{"main":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2},{"regler":"Enc 3","knopf":3},{"regler":"Enc 4","knopf":9},{"regler":"Enc 5","knopf":10},{"regler":"Enc 9","knopf":4},{"regler":"Enc 10","knopf":5},{"regler":"Enc 11","knopf":6},{"regler":"Enc 12","knopf":7},{"regler":"Enc 13","knopf":8}]},
+"programme":[
+{"name":"FILTER \u00b7 FILTER ENV \u00b7 AMP ENV \u00b7 OUT","seite":"main",
+"eintraege":[{"regler":"Enc 1","knopf":1},{"regler":"Enc 2","knopf":2},{"regler":"Enc 3","knopf":3},{"regler":"Enc 4","knopf":9},{"regler":"Enc 5","knopf":10},{"regler":"Enc 9","knopf":4},{"regler":"Enc 10","knopf":5},{"regler":"Enc 11","knopf":6},{"regler":"Enc 12","knopf":7},{"regler":"Enc 13","knopf":8}]}]}

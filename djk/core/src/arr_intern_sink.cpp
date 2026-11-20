@@ -53,8 +53,16 @@ void ArrInternSenke::auto_parameter_summand(int spur, int param, float delta) no
   if (ArrSenke* s = innen(spur)) s->auto_parameter_summand(spur, param, delta);
 }
 
+void ArrInternSenke::stift(int spur, int satz, int zeile, int spalte, float wert, uint64_t gen) noexcept {
+  if (ArrSenke* s = ziel(spur)) s->stift(spur, satz, zeile, spalte, wert, gen);
+}
+
 void ArrInternSenke::note_regler(int spur, int64_t z, int param, float wert, bool relativ) noexcept {
   if (ArrSenke* s = ziel(spur)) s->note_regler(spur, z, param, wert, relativ);   // the same sink as the note that follows
+}
+
+void ArrInternSenke::fx(int spur, int64_t z, bool pegel, float wert, int64_t gleit_samples) noexcept {
+  if (ArrSenke* s = ziel(spur)) s->fx(spur, z, pegel, wert, gleit_samples);
 }
 
 void ArrInternSenke::block(int spur, int64_t s0, int m, float* l, float* r) noexcept { block_(spur, s0, m, l, r, nullptr); }

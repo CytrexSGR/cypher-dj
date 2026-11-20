@@ -17,15 +17,15 @@ def quellen() -> list[Path]:
 
 def test_quellen_ohne_manifest():
     q = quellen()
-    assert len(q) == 130
+    assert len(q) == 136
     assert "MANIFEST.json" not in {p.name for p in q}
-    assert len({p.name for p in q}) == 130
+    assert len({p.name for p in q}) == 136
 
 
 def test_leerer_ordner_bekommt_alle_graphen(tmp_path):
     ziel = tmp_path / "bk"
     r = graphen.installiere_graphen(quellen(), ziel)
-    assert len(r["neu"]) == 130 and r["behalten"] == [] and r["uebersprungen"] == []
+    assert len(r["neu"]) == 136 and r["behalten"] == [] and r["uebersprungen"] == []
     for q in quellen():
         assert (ziel / q.name).read_bytes() == q.read_bytes()
     assert not [p for p in ziel.iterdir() if p.suffix != ".json"], "no temp leftovers"
@@ -37,7 +37,7 @@ def test_geaenderter_graph_bleibt_und_zweiter_lauf_ist_leer(tmp_path):
     (ziel / "drums-909.json").write_text('{"vom":"nutzer"}')
     r = graphen.installiere_graphen(quellen(), ziel)
     assert r["neu"] == []
-    assert len(r["behalten"]) == 130 and "drums-909" in r["behalten"]
+    assert len(r["behalten"]) == 136 and "drums-909" in r["behalten"]
     assert (ziel / "drums-909.json").read_text() == '{"vom":"nutzer"}'
 
 
@@ -102,7 +102,7 @@ def test_cli_ohne_cargo_gibt_4_und_graphen_stehen(tmp_path, isoliert):
     assert ("cargo not usable: kits, loops and graph samples need the Rust toolchain (INSTALL.md section 1)"
             in r.stderr)
     ordner = Path(env["HOME"]) / ".config" / "cypherdj" / "baukasten"
-    assert len(list(ordner.glob("*.json"))) == 130
+    assert len(list(ordner.glob("*.json"))) == 136
     assert "installed drums-909" in r.stdout
 
 

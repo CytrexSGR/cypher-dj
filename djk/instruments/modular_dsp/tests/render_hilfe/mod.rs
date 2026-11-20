@@ -30,6 +30,7 @@ pub fn wurzel() -> PathBuf {
         std::fs::create_dir_all(&w).unwrap();
         let bytes = |d: &[f32]| d.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>();
         std::fs::write(w.join("feder-ir.f32"), bytes(&baukasten_dsp::proben::feder_ir(48_000.0))).unwrap();
+        baukasten_dsp::proben::schreibe_amiga_werk(&w);
         let sch: Vec<f32> = (0..96_000usize).flat_map(|i| { let v = 0.3 * (i as f32 * 0.05).sin() * (-(i as f32) / 20_000.0).exp(); [v, v] }).collect();
         std::fs::write(w.join("orchester-schlag-schichten.f32"), bytes(&sch)).unwrap();
         w

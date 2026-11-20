@@ -1,0 +1,28 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "bass-reese"},
+  "title": "Reese Bass",
+  "akzent": "violett",
+  "layout": {"rows": [
+    ["filter", "osc", "drive"],
+    ["notch", "space"]
+  ]},
+  "sections": [
+    { "id": "filter", "title": "FILTER", "cols": 1, "controls": [
+      {"id": "cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k1"}, "format": "hz", "default": 0.5}
+    ]},
+    { "id": "osc", "title": "OSCILLATORS", "cols": 2, "controls": [
+      {"id": "detune", "type": "knob", "label": "Saw detune", "bind": {"param": "k2"}, "format": "raw", "unit": "ct", "default": 0.5},
+      {"id": "sub", "type": "knob", "label": "Sub level", "bind": {"param": "k5"}, "format": "percent", "default": 0.5}
+    ]},
+    { "id": "drive", "title": "DRIVE", "cols": 1, "controls": [
+      {"id": "drive", "type": "knob", "label": "Tube drive", "bind": {"param": "k4"}, "format": "db", "default": 0.5}
+    ]},
+    { "id": "notch", "title": "NOTCH SWEEP", "cols": 1, "controls": [
+      {"id": "nrate", "type": "knob", "label": "Notch rate", "bind": {"param": "k3"}, "format": "hz", "default": 0.5}
+    ]},
+    { "id": "space", "title": "SPACE", "cols": 1, "controls": [
+      {"id": "hall", "type": "knob", "label": "Hall mix", "bind": {"param": "k6"}, "format": "percent", "default": 0.5}
+    ]}
+  ]
+}

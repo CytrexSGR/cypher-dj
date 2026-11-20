@@ -9,12 +9,12 @@
   "sections": [
     { "id": "osc", "title": "PITCH", "cols": 2, "controls": [
       {"id": "tune", "type": "knob", "label": "Tune", "bind": {"param": "k1"}, "format": "hz", "default": 0.47873, "span": 2},
-      {"id": "pamt", "type": "knob", "label": "Amount", "bind": {"param": "k3"}, "format": "raw", "unit": "st", "default": 0.375},
-      {"id": "pdec", "type": "knob", "label": "Decay", "bind": {"param": "k4"}, "format": "ms", "default": 0.5},
+      {"id": "pamt", "type": "knob", "label": "Pitch amount", "bind": {"param": "k3"}, "format": "raw", "unit": "st", "default": 0.375},
+      {"id": "pdec", "type": "knob", "label": "Pitch decay", "bind": {"param": "k4"}, "format": "ms", "default": 0.5, "wirkt": {"ueber": ["pamt", 0.01]}, "wirkt_text": "The pitch drop is off: turn up Pitch amount"},
       {"id": "osc-n", "type": "label", "span": 2, "text": "Tune sets pitch, note only triggers"}
     ]},
     { "id": "amp", "title": "AMP", "cols": 2, "controls": [
-      {"id": "decay", "type": "knob", "label": "Decay", "bind": {"param": "k2"}, "format": "ms", "default": 0.536649, "span": 2},
+      {"id": "decay", "type": "knob", "label": "Amp decay", "bind": {"param": "k2"}, "format": "ms", "default": 0.536649, "span": 2},
       {"id": "hue", "type": "huelle", "span": 2, "label": "Envelope", "of": {"a": 0.0005, "d": "decay", "s": 0, "r": "decay"}}
     ]},
     { "id": "tone", "title": "TONE", "cols": 2, "controls": [

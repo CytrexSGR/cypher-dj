@@ -98,3 +98,19 @@ test('gegen den Taktgeber: willkommen, SIGSTOP → hallo nach 100 ms und alle 50
   assert.deepEqual(zustaende.map(([z]) => z), ['verbunden', 'suche', 'verbunden']);
   assert.ok((zustaende[2][1] - weiter) / 1e6 < 60, 'willkommen kam nach SIGCONT');
 });
+
+test('t_7f487235: the receive buffer holds the stand burst of a new subscriber (8 MiB requested, capped by rmem_max)', async () => {
+  const { EMPFANGSPUFFER_BYTES } = await import('../src/core.ts');
+  const fs = await import('node:fs');
+  const rmemMax = Number(fs.readFileSync('/proc/sys/net/core/rmem_max', 'utf8').trim());
+  const k = new KernAnbindung({ kernPort: await freierUdpPort(), aboPort: await freierUdpPort(), name: 'puffer-probe', tickMs: 1000 },
+    { nachricht: () => {}, gesendet: () => {}, zustand: () => {}, unlesbar: () => {} });
+  await k.starte();
+  try {
+    // Linux grants twice the requested size; below that the kernel capped it at rmem_max
+    assert.ok(k.empfangspuffer() >= Math.min(EMPFANGSPUFFER_BYTES, rmemMax), `granted ${k.empfangspuffer()} bytes, rmem_max ${rmemMax}`);
+    assert.ok(k.empfangspuffer() > 1_000_000 || rmemMax < 1_000_000, 'larger than the old default where rmem_max allows it');
+  } finally {
+    await k.stoppe();
+  }
+});

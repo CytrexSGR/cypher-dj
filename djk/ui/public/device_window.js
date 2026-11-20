@@ -25,6 +25,8 @@ import { fokus as geteilterFokus } from './controller_fokus.js';
 import { GERAET_FENSTER_TEXT, geraetFensterSpur, geraetFensterSpurId, kannGeraetFenster } from './device_open.js';
 import { neuesGeraetLernen } from './device_learn.js';
 
+export const GERAET_ZOOM_MAX = 1.8;   // the plate grows at most this much to use the window width
+
 // ---------- what the window shows ----------
 /** The state of the window from the project: { art: 'ok' | 'kein_projekt' | 'anderes_projekt' | 'spur_weg', spur, text }. `slug0` is the project the window
  *  was opened for (the first one it saw): another project with a track of the same id is not this window's track. */
@@ -179,7 +181,25 @@ export function bindeGeraetFenster(opt) {
   platte.append(ansichtHost, rackHost);
   const lernen = neuesGeraetLernen({ holeJson, holeGet, melde, beiStand: () => { ansicht?.lernenNeu(); zeigeBelegung(); } });   // MIDI learn on the knobs of this panel
   let seiteJetzt = null;   // the page (tab) of the panel that is shown: told with the focus, a following controller takes the mapping of that page
-  const beiSeite = (_spur, id) => { seiteJetzt = id; fokus.melde({ spur_id: spurId, seite: id }, 'geraet-fenster'); };
+  const beiSeite = (_spur, id) => { seiteJetzt = id; passeGroesse(); fokus.melde({ spur_id: spurId, seite: id }, 'geraet-fenster'); };
+  // Big: the plate is scaled up to use the window width (CSS zoom, 1 .. 1.8). Natural width = what the plate needs at max-content width; narrower than that it wraps as before.
+  // Applied after the plate is built, on a page switch and on a window resize; the page (body) scrolls when the scaled plate is taller than the window.
+  const fenster = d.defaultView ?? null;
+  function passeGroesse() {
+    const platteEl = typeof ansichtHost.querySelector === 'function' ? ansichtHost.querySelector('.frontplatte') : null;
+    if (!platteEl?.style) return;
+    const frei = ansichtHost.clientWidth;
+    if (!(frei > 0)) return;   // no layout (a test DOM, a hidden window)
+    platteEl.style.zoom = ''; platteEl.style.width = 'max-content';
+    const natuerlich = platteEl.offsetWidth;
+    platteEl.style.width = '';
+    if (!(natuerlich > 0) || frei <= natuerlich) return;
+    const faktor = Math.max(1, Math.min(GERAET_ZOOM_MAX, frei / natuerlich));
+    platteEl.style.zoom = String(Number(faktor.toFixed(3)));
+    platteEl.style.width = `${Math.floor(frei / faktor)}px`;   // the layout width inside the zoom: the plate fills the host exactly
+  }
+  fenster?.addEventListener?.('resize', () => passeGroesse());
+  try { if (typeof fenster?.MutationObserver === 'function') new fenster.MutationObserver(() => passeGroesse()).observe(ansichtHost, { childList: true }); } catch { /* no observer: page switch and resize still apply it */ }
   const ansicht = bindeGeraetAnsicht(ctx, ansichtHost, { breit: true, dokument: d, lernen, lernKopf: false, beiSeite, ...(opt.ansichtOpt ?? {}) });
   const rack = bindeRackPanel(ctx, rackHost);
   let gemeldet = false, zuletzt = null;
@@ -224,7 +244,8 @@ export function bindeGeraetFenster(opt) {
     programme.clear();
     for (const p of f?.plaetze ?? []) if (p?.programm && Number.isInteger(p.platz)) programme.set(p.platz, p.programm);
     const s = f?.fokus;
-    if (s && s.spur_id === spurId && typeof s.seite === 'string' && s.seite !== seiteJetzt) ansicht.zeigeSeite(s.seite);
+    // the Cabinet page (all: true) shows every module: the program's page changes nothing there (the coloured marks show what the controller holds); stepping programs still works
+    if (s && s.spur_id === spurId && typeof s.seite === 'string' && s.seite !== seiteJetzt && !ansicht.handle()?.zeigtAlles?.()) ansicht.zeigeSeite(s.seite);
   }
   const schalteProgramm = async (platz, schritt) => {
     const r = await holeJson('/controller/programm', { platz, schritt });
