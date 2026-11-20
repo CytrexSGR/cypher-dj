@@ -129,6 +129,11 @@ a note track. The generated track starts at 0 dB; its pan law leaves it about 3 
 
 ![PRODUCTION view: an arrangement with MIDI clips, a resampled audio track, DRUMS and MUSIC groups and a return; the bass clip open in the piano roll](screens/production-view.png)
 
+**First notes:** double click in the row of an instrument track to add a MIDI clip; the selected clip opens in the
+piano roll below, where a double click adds a note. PLAY starts at the start marker, and a click into the empty
+arrangement moves that marker, so after a stray click PLAY may start behind the clip. EXPORT writes the WAV into the
+`export` folder of the project (`~/cypherdj/werke/projekte/<project>/export/` on a fresh install).
+
 Notes are drawn in a piano roll with velocity and 1/16 quantize. Tracks can share a variant group (bass A, B, C) where
 one click makes one of them audible. Recording takes one of the studio's own channels, including the extra pattern
 streams, onto an armed audio track, bit-identical. The WAV export is an offline render by the same core; hosted instruments are frozen first, so the file is

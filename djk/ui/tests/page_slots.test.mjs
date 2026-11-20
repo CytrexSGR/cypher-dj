@@ -53,7 +53,7 @@ test('a switch asks the silence rule first and a refusal keeps the layout, says 
   assert.match(f, /if \(!r\.ok\) \{ melde\(.*zeigePlaetze\(\); return; \}/);
   assert.ok(f.indexOf('if (!r.ok)') < f.indexOf('speichereLayout('), 'saved only after the accepted switch');
   const z = funktion('zeigePlaetze');
-  assert.match(z, /b\.disabled = !w\.aktuell && \(!w\.frei \|\| !s\.still \|\| sp\.gesperrt\)/, 'the buttons are disabled while the place is not silent');
+  assert.match(z, /b\.disabled = !w\.aktuell && \(!w\.frei \|\| \(!s\.still && !belegt\) \|\| sp\.gesperrt\)/, 'the buttons are disabled while the place is not silent, unless it parks a SEQ deck');
   assert.match(z, /close it to switch/);
 });
 

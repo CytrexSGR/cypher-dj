@@ -114,6 +114,10 @@ export class Arrangement {
     p.spuren.forEach((spur, i) => {
       const zeile = spurZeile(tab, i);
       if (zeile.verborgen) return;   // a folded group member has no row: its clips are not drawn
+      if (spur.art === 'instrument' && !spur.clips.length && zeile.h >= 14) {   // newcomer probe 2026-11-20: only a tooltip told how a MIDI clip is made
+        g.font = '11px ui-sans-serif, system-ui, sans-serif'; g.fillStyle = 'rgba(232,232,236,0.4)'; g.textAlign = 'start';
+        g.fillText('double click: new MIDI clip', 12, zeile.y + zeile.h / 2 + 4);
+      }
       for (const c of spur.clips) {
         const k = clipKasten(a, i, c, zeile.y);
         if (sichtbar(k, w)) this.zeichneClip(g, k, spur, c, a, p, w);

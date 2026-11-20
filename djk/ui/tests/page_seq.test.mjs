@@ -13,6 +13,7 @@ import {
   griffArt, laengeNeu, loslassFelder, imRechteck, radFelder, sende, legeAn, leereDeck, neueFolge, geraetWahl, ladeInfos, infosAusCache, fehlendeInfos,
   leereInfoCache, wechselBefehle, tonVonText, kurvePfad, laengeText, laengeAusSchritten, pxProBeat, zeileTitel, LAENGEN_TAKTE, SICHT_BREITEN,
 } from '../public/seq_field.js';
+import { zeileBenutzt, leereZeilen, deckSpielSchritt, deckSpielt, msBisTakt } from '../public/seq_field.js';
 import { zelleBefehle, abgeleiteteZeilen, SeqFehler } from '../public/seq_logic.js';
 import {
   zeilenBereich, wertAusPos, wertBruch, wertText, ueberlagere, mitLaenge, wertSchreibe, wiederholZellen, kurveBeatAusX, kurveWertAusY, kurvePunkte, kurveMarken, kurveNeu,
@@ -411,6 +412,8 @@ const platz = (n = 2) => attrappe.body.querySelector(`section.seqplatz[data-seq=
 const antwort = (p) => ({ code: 200, j: { rev: p.rev, projekt: p, kern: {}, gruppe_id: 'g_seq' } });
 let posts, naechste = null;
 const modulPosts = [];
+const transportPosts = [];
+const aendernPosts = [];
 let modulAntwort = () => ({ code: 200, j: { ok: true, rev: 9, projekt: { ...projekt(), rev: 9 }, bericht: { platz: 2, deck_neu: false, patterns: [{ name: 'A' }, { name: 'B' }], weggelassen: { sends: 1, inserts: 0, master_inserts: 0, returns: 0, gruppen: 0, kettenautomation: 0, tonart: false, spuren_uebersprungen: [], gekuerzt: [] } } } });
 before(async () => {
   posts = [];
@@ -424,6 +427,8 @@ before(async () => {
       'POST /seq/anlegen': () => antwort(projekt([])),
       'GET /proj/liste': { j: [{ slug: 'mod-a', name: 'Mod A', werkbank: true }, { slug: 'plain', name: 'Plain' }, { slug: 'mod-b', name: 'Mod B', werkbank: true }] },
       'POST /seq/modul': (k) => { modulPosts.push(k); return modulAntwort(k); },
+      'POST /proj/aendern': (k) => { aendernPosts.push(k); return { code: 200, j: { rev: 8, projekt: { ...live.projekt, rev: 8 } } }; },
+      'POST /proj/transport': (k) => { transportPosts.push(k); return { code: 200, j: { quittung: { status: 2 } } }; },
     },
   });
   await import('../public/app.js');
@@ -548,7 +553,7 @@ test('the page draws the nodes from the live project on every live change, and r
 test('a place switch away from SEQ asks whether the place holds a deck; the place head counts the patterns', () => {
   const b = lies('slots_view.js');
   assert.match(b, /wechsel\(plaetzeLayout, platz, b\.dataset\.platzTyp, still\(plaetzeLayout, platz, zustand\.regler\), seqAnsicht\(live\.projekt, platz\)\.vorhanden\)/);
-  assert.match(b, /r\.grund === 'belegt' \? 'clear the SEQ deck first'/);
+  assert.match(b, /if \(r\.parken && !\(await parkeDeck\(platz\)\)\)/, 'a switch away from a SEQ deck parks it (mutes its group) first');
   assert.match(b, /if \(typ === 'seq'\) \{[^\n]*return \{ typ, folgen: a\.vorhanden \? a\.folgen\.length : undefined \}/, 'platzZustand gives the pattern count');
   assert.match(b, /ordneSeqStudio\(plaetzeLayout\);/);
   assert.match(b, /\$\(`section\.seqplatz\[data-seq="\$\{key\.slice\(4\)\}"\]`\)/);
@@ -579,7 +584,7 @@ test('the Studio view shows the deck strip of every SEQ place after L2: the exis
 test('an own SEQ write lets the places re-evaluate, and the page follows a deck the server holds on a place that is not typed SEQ', () => {
   assert.match(knoten, /zeigePlaetzeSpaeter\(\)/);
   const b = lies('slots_view.js');
-  assert.match(b, /folgeServer\(plaetzeLayout, PLAETZE\.filter\(hatDeck\)/);
+  assert.match(b, /folgeServer\(plaetzeLayout, PLAETZE\.filter\(deckAktiv\)/);
   assert.match(b, /function zeigePlaetze\(\) \{\s*if \(folgeDemServer\(\)\) return;/);
   assert.match(b, /melde\(`Place \$\{platz\} shows its SEQ deck`\)/);
   assert.match(lies('live_view.js'), /export function zeichneLive\(\) \{\s*zeigePlaetzeSpaeter\(\);/);
@@ -1541,4 +1546,86 @@ test('the row is not a .seqplatz node and not moved by the place layout; it has 
   const kopf = h.slice(h.indexOf('<header id="kopf">'), h.indexOf('</header>'));
   assert.match(kopf, /<section id="seq-szenen"/, 'inside the header');
   assert.ok(!h.slice(h.indexOf('<main id="pult">')).includes('id="seq-szenen"'), 'not in #pult any more');
+});
+
+// ---------- deck head: PLAY/STOP of the live container and "hide empty" (Andreas 2026-11-20) ----------
+const mitLeererZeile = () => { const b = bkSpur(); b.clips[0].seq.zeilen.push({ id: 'leer', art: 'werte', teiler: 0.25, ziel: 'geraet.k4' }); return projekt([kitSpur(), b]); };
+
+test('zeileBenutzt and leereZeilen: a lane without notes, values or curve points is empty', () => {
+  assert.equal(zeileBenutzt({ art: 'noten', zellen: [{ an: false }, { an: true }] }), true);
+  assert.equal(zeileBenutzt({ art: 'noten', zellen: [{ an: false }, { gebunden: true }] }), true);
+  assert.equal(zeileBenutzt({ art: 'noten', zellen: [{ an: false }] }), false);
+  assert.equal(zeileBenutzt({ art: 'werte', zellen: [{ da: false }, { da: true }] }), true);
+  assert.equal(zeileBenutzt({ art: 'werte', zellen: [{}] }), false);
+  assert.equal(zeileBenutzt({ art: 'kurve', punkte: [] }), false);
+  assert.equal(zeileBenutzt({ art: 'kurve', punkte: [{ beat: 0, wert: 0.2 }] }), true);
+  const a = { folgen: [{ spur_id: 's1', sicht: { zeilen: [{ id: 'k', art: 'noten', zellen: [{ an: true }] }, { id: 'h', art: 'noten', zellen: [{ an: false }] }] } }, { spur_id: 'sf', sicht: null }] };
+  assert.deepEqual([...leereZeilen(a)], ['s1/h'], 'a pattern arranged in PRODUCTION (no view) adds nothing');
+});
+
+test('the DOM: "hide empty" hides the lanes empty at the press, says how many, and shows them again on the next press', async () => {
+  await zeige(mitLeererZeile());
+  const k = platz(2), b = k.querySelector('[data-sq-leer-aus]');
+  assert.ok(b && !b.hidden); assert.equal(b.textContent, 'hide empty');
+  const vorher = k.querySelectorAll('.sq-zeile').length;
+  assert.ok(k.querySelector('.sq-zeile[data-zeile="leer"]'), 'the empty lane shows');
+  b.dispatch('click', {});
+  assert.equal(k.querySelector('.sq-zeile[data-zeile="leer"]'), null, 'hidden');
+  assert.ok(k.querySelectorAll('.sq-zeile').length < vorher);
+  assert.match(b.textContent, /^show empty \(\d+\)$/); assert.equal(b.getAttribute('aria-pressed'), 'true');
+  assert.ok(k.querySelectorAll('.sq-folgenkopf .sq-hinter').some((h) => /empty lanes? hidden/.test(h.textContent)), 'the pattern head counts them');
+  b.dispatch('click', {});
+  assert.equal(k.querySelectorAll('.sq-zeile').length, vorher); assert.equal(b.textContent, 'hide empty');
+});
+
+test('deckSpielSchritt: PLAY on a stopped container plays this deck alone, on a running one it joins; STOP mutes while another plays, else stops', () => {
+  const p = (m1, m2) => ({ gruppen: [{ id: 'ga', seq: { platz: 1 }, mute: m1 }, { id: 'gb', seq: { platz: 2 }, mute: m2 }, { id: 'gx', mute: false }] });
+  const stumm = (id, mute) => ({ befehl: 'gruppenspur_aendern', gruppe_id: id, mute });
+  assert.deepEqual(deckSpielSchritt(p(false, false), 1, true, false), { befehle: [stumm('gb', true)], transport: 'start' }, 'the other deck is muted, no other group');
+  assert.deepEqual(deckSpielSchritt(p(true, true), 1, true, false), { befehle: [stumm('ga', false)], transport: 'start' });
+  assert.deepEqual(deckSpielSchritt(p(false, true), 2, true, true), { befehle: [stumm('gb', false)], transport: null }, 'joins the running transport');
+  assert.deepEqual(deckSpielSchritt(p(false, false), 1, false, true), { befehle: [stumm('ga', true)], transport: null }, 'deck 2 still plays');
+  assert.deepEqual(deckSpielSchritt(p(false, true), 1, false, true), { befehle: [], transport: 'stopp' }, 'the last deck stops the transport');
+  assert.deepEqual(deckSpielSchritt(p(false, false), 3, true, false), { befehle: [], transport: null }, 'no deck on place 3');
+  assert.equal(deckSpielt(p(false, true), 1, true), true); assert.equal(deckSpielt(p(false, true), 2, true), false); assert.equal(deckSpielt(p(false, false), 1, false), false);
+  assert.equal(msBisTakt(0.5, 4, 120, 50), 1700); assert.equal(msBisTakt(3.99, 4, 120, 50), 1955, 'too close to the bar: the one after');
+  assert.equal(msBisTakt(null, 4, 120), null);
+});
+
+test('the DOM: PLAY on a stopped container mutes the other deck and starts the transport; STOP of the last playing deck stops it; without the live container nothing is sent', async () => {
+  const { merkeArr } = await import('../public/live_view.js');
+  const zwei = projekt(undefined, { gruppen: [...projekt().gruppen, { id: 'g_seq1', name: 'SEQ 1', seq: { schema: 2, platz: 1 }, mute: false }] });
+  await zeige(zwei);
+  const b = platz(2).querySelector('[data-sq-spiel]');
+  assert.ok(b && !b.hidden); assert.equal(b.textContent, '▶ PLAY');
+  transportPosts.length = 0; aendernPosts.length = 0;
+  merkeArr({ status: 0, projekt_beat: 0 });
+  b.dispatch('click', {});
+  await warteAuf(() => transportPosts.length > 0);
+  assert.deepEqual(aendernPosts.map((x) => x.befehle), [[{ befehl: 'gruppenspur_aendern', gruppe_id: 'g_seq1', mute: true }]], 'deck 1 is muted first');
+  assert.deepEqual(transportPosts, [{ aktion: 'start', beat: 0 }]);
+  await warte();
+  live.projekt = projekt(undefined, { gruppen: [...projekt().gruppen, { id: 'g_seq1', name: 'SEQ 1', seq: { schema: 2, platz: 1 }, mute: true }] });
+  merkeArr({ status: 2, projekt_beat: 3 });
+  b.dispatch('click', {});
+  await warteAuf(() => transportPosts.length > 1);
+  assert.deepEqual(transportPosts[1], { aktion: 'stopp' }, 'deck 2 was the only one playing');
+  await warte();
+  live.projekt = { ...projekt(), live: false };
+  b.dispatch('click', {});
+  await warte();
+  assert.equal(transportPosts.length, 2, 'no request without the live container');
+  assert.match(attrappe.body.querySelector('#meldung').textContent, /Open the live container first/);
+  merkeArr({ status: 0, projekt_beat: 0 });
+});
+
+test('wechsel: a SEQ place with a deck switches away, open or not, and says the deck is to be parked; without a deck nothing is parked', async () => {
+  const { wechsel } = await import('../public/slots.js');
+  const L = ['seq', 'seq', 'strudel', 'loops'];
+  assert.deepEqual(wechsel(L, 1, 'track', true, true), { ok: true, layout: ['track', 'seq', 'strudel', 'loops'], parken: true });
+  assert.deepEqual(wechsel(L, 1, 'track', true, false), { ok: true, layout: ['track', 'seq', 'strudel', 'loops'] });
+  assert.deepEqual(wechsel(L, 1, 'track', { still: false, text: 'deck/1 is open' }, true), { ok: true, layout: ['track', 'seq', 'strudel', 'loops'], parken: true }, 'an open channel does not hold a deck that is parked');
+  assert.equal(wechsel(L, 1, 'track', { still: false, text: 'deck/1 is open' }, false).grund, 'offen', 'a SEQ place without a deck still needs silence');
+  assert.equal(wechsel(L, 3, 'track', { still: false, text: 'erz/1 is open' }, false).grund, 'offen');
+  assert.equal(wechsel(L, 1, 'strudel', true, true).grund, 'doppelt', 'Strudel sits in place 3');
 });

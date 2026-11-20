@@ -59,6 +59,7 @@ export function bindeBedienung(ctx) {
   function zeigeKopf() {
     const setze = (t, an) => { const b = $(t); b.setAttribute('aria-pressed', String(an)); b.classList.toggle('an', an); };
     setze('edit', st.edit);
+    if (st.edit && st.editHinweis) { st.editHinweis = false; ctx.zeigeStatus?.(); }   // EDIT is on now: the status line drops the reminder
     setze('play', st.arr?.status === 2);
     $('modus').textContent = st.modus === 'song' ? 'SONG' : 'PATTERN';
     $('okt').value = String(st.okt); $('schritt').value = String(st.schritt);
@@ -115,9 +116,16 @@ export function bindeBedienung(ctx) {
   function zelleNote(p, o) {
     try { return projiziere(p, { abschnitt_id: o.abschnitt_id }).spuren.find((s) => s.spur_id === o.spur_id)?.notenspalten[o.spalte]?.[o.zeile]?.note ?? null; } catch { return null; }
   }
+  // a note key with EDIT off: the reminder stays in the status line until EDIT is on, and the EDIT button flashes once
+  let blitzUhr = null;
+  function editErinnere() {
+    st.editHinweis = true; ctx.zeigeStatus?.();
+    const b = $('edit'); b.classList.add('blitz');
+    clearTimeout(blitzUhr); blitzUhr = setTimeout(() => b.classList.remove('blitz'), 700); blitzUhr?.unref?.();
+  }
   function schreibbar() {
     if (st.edit) return true;
-    ctx.melde(BEDIENUNG_TEXT.editAus);
+    ctx.melde(BEDIENUNG_TEXT.editAus); editErinnere();
     return false;
   }
   const hoere = (spur_id, ton) => ctx.holeJson('/sampler/hoeren', { spur_id, ton }).then((r) => {
@@ -313,7 +321,7 @@ export function bindeBedienung(ctx) {
         const ton = 12 * (st.okt + 2) + a.halbton;
         const klingt = ton >= 24 && ton <= 127;
         if (klingt) hoere(s.spur_id, ton);
-        if (!st.edit) { if (!klingt) ctx.melde(BEDIENUNG_TEXT.keinKlang, true); else ctx.melde(BEDIENUNG_TEXT.editAus); return true; }   // sounds, writes nothing: say why
+        if (!st.edit) { if (!klingt) ctx.melde(BEDIENUNG_TEXT.keinKlang, true); else { ctx.melde(BEDIENUNG_TEXT.editAus); editErinnere(); } return true; }   // sounds, writes nothing: say why
         const o = ortVon(r), vel = letzteVol.get(s.spur_id);
         const platz = ctx.platzVon?.(o.spur_id);   // the slot chosen in INSTRUMENTS, for tracks whose device has slots
         schreibe((p) => noteSchreiben(p, o, ton, { akkord: a.akkord, ...(platz ? { platz } : {}),

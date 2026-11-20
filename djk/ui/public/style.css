@@ -227,7 +227,9 @@ tr.auf-1 td.titelzelle { color: var(--a); } tr.auf-2 td.titelzelle { color: var(
 /* Kopfleiste (2026-10-20, Andreas am rechten Monitor 2560 px, 100 %): mit FX1/FX2 samt P2/P3/ON/RESET, COLOR und
    PRODUCTION ist der Kopf 3306 px breit. Bei overflow: hidden fielen COLOR, Stop Cypher und CORE/CONTROL/OUT rechts
    aus dem Bild. Jetzt bricht der Kopf um, wenn er nicht passt: die Zeile wächst mit, nichts wird abgeschnitten. */
-:root { --kopf: minmax(52px, auto); --lib: 30vh; --lib-zu: 34px; --zug: 74px; }
+/* The library dock gives way on short screens (Andreas 2026-11-20: the faders of the lower strips vanished while it was open): the page keeps about 800 px for
+   the header and the two rows of places and strips, the dock takes what is left, between 140 px and 30 % of the height. */
+:root { --kopf: minmax(52px, auto); --lib: clamp(140px, calc(100vh - 800px), 30vh); --lib-zu: 34px; --zug: 74px; }
 body { grid-template-rows: var(--kopf) minmax(0, 1fr) var(--lib); gap: 8px; padding: 8px; }
 body.lib-zu { grid-template-rows: var(--kopf) minmax(0, 1fr) var(--lib-zu); }
 #kopf { gap: 20px; padding: 0 14px; border-radius: 8px; flex-wrap: wrap; row-gap: 4px; }
@@ -960,8 +962,10 @@ body:not(.studio) .seqplatz .sq-zahl { display: none; }   /* the DJ view has the
 .sq-chip { height: 22px; padding: 0 8px; border-radius: 5px; font-size: 11px; font-weight: 600; letter-spacing: .04em; white-space: nowrap; color: var(--text); }
 span.sq-chip { display: inline-flex; align-items: center; background: var(--panel2); border: 1px solid var(--line); color: var(--dim); }
 .sq-chip.an { border-color: var(--text); }
+.seqplatz .sq-spiel { font-weight: 700; color: var(--gut); border: 1px solid var(--gut); }
+.seqplatz .sq-spiel.an { color: var(--kill); border-color: var(--kill); }
 .seqplatz .sq-leeren { font-weight: 700; letter-spacing: .12em; color: var(--dim); }
-.seqplatz .sq-leeren[hidden], .seqplatz .sq-neu[hidden], .seqplatz .sq-produktion[hidden], .seqplatz .sq-breite[hidden], .seqplatz .sq-leer[hidden], .seqplatz .sq-feld[hidden] { display: none; }
+.seqplatz .sq-spiel[hidden], .seqplatz .sq-leer-aus[hidden], .seqplatz .sq-leeren[hidden], .seqplatz .sq-neu[hidden], .seqplatz .sq-produktion[hidden], .seqplatz .sq-breite[hidden], .seqplatz .sq-leer[hidden], .seqplatz .sq-feld[hidden] { display: none; }
 .sq-leer { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; color: var(--dim); padding: 0 24px; }
 .sq-leer b { color: var(--text); font-size: 15px; }
 .sq-leerhinweis { color: var(--warn); font-size: 13px; min-height: 1.3em; }

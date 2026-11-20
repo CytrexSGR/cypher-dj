@@ -67,3 +67,20 @@ test('Arrangement: without a track the empty area says how to add one', async ()
   bild(projekt([{ id: 's1', nr: 1, name: 'A', art: 'audio', clips: [] }]));
   assert.ok(!texte.some((t) => /DEVICES/.test(t)), 'with a track the hint is gone');
 });
+
+test('Arrangement: an instrument track without any clip says how to make one; not on audio tracks, not with a clip', async () => {
+  umgebung();
+  const { Arrangement } = await import('../public/production/arrangement.js');
+  const texte = [];
+  const ctx = new Proxy({}, { get: (z, k) => (k === 'fillText' ? (t) => texte.push(String(t)) : k in z ? z[k] : () => {}), set: (z, k, v) => { z[k] = v; return true; } });
+  const mk = (w, h) => ({ width: 0, height: 0, getContext: () => ctx, getBoundingClientRect: () => ({ width: w, height: h, left: 0, top: 0, right: w, bottom: h }) });
+  const arr = new Arrangement({ lineal: mk(800, 28), spuren: mk(800, 300), ueber: mk(800, 300), wellen: { hole: () => ({}) } });
+  const bild = (spuren) => { const p = { tempo_bpm: 120, loop: { an: false, von_beat: 0, bis_beat: 8 }, spuren }; arr.bild({ ansicht: neueAnsicht(), projekt: p, loop: p.loop, kopfBeat: null, startBeat: 0, geist: null }); };
+  const hinweise = () => texte.filter((t) => /double click: new MIDI clip/i.test(t)).length;
+  bild([{ id: 's1', nr: 1, name: 'A', art: 'instrument', clips: [] }]);
+  assert.equal(hinweise(), 1, texte.join(' | '));
+  texte.length = 0; bild([{ id: 's1', nr: 1, name: 'A', art: 'audio', clips: [] }]);
+  assert.equal(hinweise(), 0, 'audio track: no hint');
+  texte.length = 0; bild([{ id: 's1', nr: 1, name: 'A', art: 'instrument', clips: [{ id: 'c1', art: 'midi', start_beat: 0, laenge_beats: 4, noten: [] }] }]);
+  assert.equal(hinweise(), 0, 'with a clip: no hint');
+});

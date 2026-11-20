@@ -65,17 +65,19 @@ export function still(layout, platz, regler) {
 }
 
 // A switch of place `platz` to `typ`. `stumm` is the verdict of still() (or a plain boolean). Result: { ok: true, layout } or { ok: false, grund }
-// with grund 'unbekannt', 'doppelt' (Strudel or Loops already sits in another place), 'belegt' (the place holds a SEQ deck: clear it first) or 'offen'
-// (the place is not silent); the old layout is never touched. `seqDa` says whether the place holds a SEQ deck.
+// with grund 'unbekannt', 'doppelt' (Strudel or Loops already sits in another place) or 'offen' (the place is not silent); the old layout is never touched.
+// `seqDa` says whether the place holds a SEQ deck: a SEQ place with a deck may switch away (Andreas 2026-11-20), the answer then carries `parken: true` and the
+// page mutes the deck group first (on the next bar while the transport runs), so the parked deck stays in the live container, silent, and shows again when
+// the place turns SEQ. Such a switch needs no silence: the deck is what sounds on the channel, and parking silences it.
 export function wechsel(layout, platz, typ, stumm, seqDa = false) {
   if (!gueltig(layout) || !erlaubt(platz, typ)) return { ok: false, grund: 'unbekannt' };
   if (layout[platz - 1] === typ) return { ok: true, layout: [...layout] };
-  if (layout[platz - 1] === 'seq' && seqDa) return { ok: false, grund: 'belegt' };
   if (EINMALIG.includes(typ) && layout.some((t, i) => t === typ && i !== platz - 1)) return { ok: false, grund: 'doppelt' };
+  const parken = layout[platz - 1] === 'seq' && seqDa;   // the parked deck falls silent, so an open channel does not hold the place
   const leise = stumm === true || stumm?.still === true;
-  if (!leise) return { ok: false, grund: 'offen', text: stumm?.text ?? '' };
+  if (!leise && !parken) return { ok: false, grund: 'offen', text: stumm?.text ?? '' };
   const neu = [...layout]; neu[platz - 1] = typ;
-  return { ok: true, layout: neu };
+  return parken ? { ok: true, layout: neu, parken: true } : { ok: true, layout: neu };
 }
 
 // The page follows the server (2026-11-14): a SEQ deck sits on every place it was created for, whatever the browser's layout says (Cypher's hand tool picks the

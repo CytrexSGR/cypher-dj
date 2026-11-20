@@ -122,6 +122,18 @@ test('a note key with EDIT off says why nothing was written (hint names Escape a
   assert.ok(meldung().textContent.includes('Escape') && meldung().textContent.includes('click EDIT'), meldung().textContent);
 });
 
+test('a note key with EDIT off keeps the reminder in the status line until EDIT is on, and flashes the EDIT button', async () => {
+  assert.ok(!$t('status').textContent.includes('EDIT is off'));
+  buchstabe('Z'); await ruhe();
+  assert.ok($t('status').textContent.includes('EDIT is off'), $t('status').textContent);
+  assert.ok($t('status').textContent.includes('row 00'), 'the cursor text stays: ' + $t('status').textContent);
+  assert.ok($t('edit').classList.contains('blitz'), 'EDIT button flashes');
+  await ruhe();
+  assert.ok($t('status').textContent.includes('EDIT is off'), 'still there later');
+  await editAn();
+  assert.ok(!$t('status').textContent.includes('EDIT is off'), $t('status').textContent);
+});
+
 test('a refusal of the sampler is shown in the message line', async () => {
   server.antworten['POST /sampler/hoeren'] = () => ({ code: 409, j: { fehler: 'kein_klang', text: 'This track has no sound yet' } });
   buchstabe('Z'); await ruhe();

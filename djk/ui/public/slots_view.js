@@ -8,10 +8,11 @@ import { remixFenster } from './effects_gemeinsam.js';
 import { zeigeRemix } from './remix_window.js';
 import { graphenGeladen } from './graphs_view.js';
 import { eintragVon } from './deck_view.js';
-import { live, zeigeExport } from './live_view.js';
+import { live, zeigeExport, arrBeat } from './live_view.js';
 import { loopImportLaeuft } from './browse_table.js';
 import { ladeMini, speichereMini, ordneSpalten, wendeMiniAn, umschalten } from './platz_mini.js';
-import { seqAnsicht } from './seq_field.js';
+import { seqAnsicht, deckGruppe, msBisTakt } from './seq_field.js';
+import { proTaktJetzt } from './bar_live.js';
 import { zeichneSeq, ordneSeqStudio } from './seq_view.js';
 
 // ---------- DJ view places (plan 2026-11-13 tasks 13, 14): four cells, each shows Track (deck N), Strudel or Loops ----------
@@ -68,9 +69,11 @@ function platzZustand(platz) {
 // first state arrived (zustand.regler empty) no verdict is given: the silence rule would count every fader closed. Returns true when the layout changed.
 let plaetzeGebunden = false;
 const hatDeck = (platz) => seqAnsicht(live.projekt, platz).vorhanden;
+// A deck the page turns its place to SEQ for: one whose group is not muted. A muted (parked) deck stays where the place was switched away from it.
+const deckAktiv = (platz) => hatDeck(platz) && deckGruppe(live.projekt, platz)?.mute !== true;
 function folgeDemServer() {
   if (!plaetzeGebunden || !live.projekt) return false;
-  const r = folgeServer(plaetzeLayout, PLAETZE.filter(hatDeck), (platz, layout) => (Object.keys(zustand.regler).length === 0 ? null : still(layout, platz, zustand.regler)));
+  const r = folgeServer(plaetzeLayout, PLAETZE.filter(deckAktiv), (platz, layout) => (Object.keys(zustand.regler).length === 0 ? null : still(layout, platz, zustand.regler)));
   if (r.gewechselt.length === 0) return false;
   plaetzeLayout = r.layout;
   speichereLayout(speicherOderNull(), plaetzeLayout);
@@ -87,16 +90,16 @@ export function zeigePlaetze() {
     $('[data-platz-text]', k).textContent = platzKopf(platz, platzZustand(platz));
     const s = still(plaetzeLayout, platz, zustand.regler);
     const sp = plaetzeLayout[platz - 1] === 'remix' ? typSperre(graphenGeladen) : { gesperrt: false, text: '' };   // the device on a target pins the place to REMIX
-    const belegt = plaetzeLayout[platz - 1] === 'seq' && seqAnsicht(live.projekt, platz).vorhanden;   // a SEQ place holds its deck: clear it first
-    const deckDa = plaetzeLayout[platz - 1] !== 'seq' && !s.still && hatDeck(platz);   // the server holds a SEQ deck here that this place does not show yet
-    $('[data-platz-hinweis]', k).textContent = sp.gesperrt ? sp.text : belegt ? 'clear the SEQ deck to switch' : deckDa ? `SEQ deck on deck/${platz}: close this place to show it` : s.still ? '' : `${s.text}: close it to switch`;
+    const belegt = plaetzeLayout[platz - 1] === 'seq' && seqAnsicht(live.projekt, platz).vorhanden;   // a switch away parks the deck (mutes its group)
+    const deckDa = plaetzeLayout[platz - 1] !== 'seq' && !s.still && deckAktiv(platz);   // the server holds a playing SEQ deck here that this place does not show yet
+    $('[data-platz-hinweis]', k).textContent = sp.gesperrt ? sp.text : deckDa ? `SEQ deck on deck/${platz}: close this place to show it` : s.still || belegt ? '' : `${s.text}: close it to switch`;
     for (const w of wahl(plaetzeLayout, platz)) {
       const b = $(`[data-platz-typ="${w.typ}"]`, k);
       b.classList.toggle('an', w.aktuell);
       b.setAttribute('aria-pressed', String(w.aktuell));
-      b.disabled = !w.aktuell && (!w.frei || !s.still || sp.gesperrt);
-      if (belegt && !w.aktuell) b.disabled = true;
-      b.title = w.aktuell ? `Place ${platz} shows ${w.typ}` : belegt ? 'Clear the SEQ deck of this place first' : sp.gesperrt ? sp.text : !w.frei ? `${w.typ} is already shown in another place` : !s.still ? `Not silent: ${s.text}` : `Show ${w.typ} here`;
+      b.disabled = !w.aktuell && (!w.frei || (!s.still && !belegt) || sp.gesperrt);
+      b.title = w.aktuell ? `Place ${platz} shows ${w.typ}` : sp.gesperrt ? sp.text : !w.frei ? `${w.typ} is already shown in another place`
+        : belegt ? `Show ${w.typ} here: the SEQ deck is muted on the next bar and kept, SEQ shows it again` : !s.still ? `Not silent: ${s.text}` : `Show ${w.typ} here`;
     }
   }
 }
@@ -127,13 +130,29 @@ function zeigeLadeSperre() {
 export const zielNameVon = (k) => zielName(k);
 let plaetzeFrist = 0;
 export function zeigePlaetzeSpaeter() { if (!plaetzeFrist) plaetzeFrist = requestAnimationFrame(() => { plaetzeFrist = 0; zeigePlaetze(); }); }
+// Parks the SEQ deck of a place that switches away: its group is muted in the live container (one write, POST /proj/aendern). True when it is muted now.
+async function parkeDeck(platz) {
+  const g = deckGruppe(live.projekt, platz);
+  if (!g || g.mute) return true;
+  const ms = msBisTakt(arrBeat(performance.now()), proTaktJetzt(), live.projekt?.tempo_bpm);   // a playing deck leaves on the bar, not mid-phrase
+  if (ms !== null) await new Promise((r) => setTimeout(r, ms));
+  try {
+    const r = await fetch('/proj/aendern', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ rev: live.rev, label: `SEQ ${platz}: park`, befehle: [{ befehl: 'gruppenspur_aendern', gruppe_id: g.id, mute: true }] }) });
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 200 && j.projekt) { live.projekt = j.projekt; live.rev = j.rev ?? j.projekt.rev; melde(`SEQ ${platz} parked: muted and kept, SEQ shows it again`); return true; }
+    melde(`Place ${platz}: the SEQ deck could not be muted (${j.text ?? j.fehler ?? r.status})`, true);
+  } catch (e) { melde(`Place ${platz}: the SEQ deck could not be muted (${e.message})`, true); }
+  return false;
+}
 export function bindePlaetze() {
   for (const k of $$('.platzkopf')) {
     const platz = Number(k.dataset.platzKopf);
-    for (const b of $$('[data-platz-typ]', k)) b.addEventListener('click', () => {
+    for (const b of $$('[data-platz-typ]', k)) b.addEventListener('click', async () => {
       if (plaetzeLayout[platz - 1] === 'remix' && b.dataset.platzTyp !== 'remix' && typSperre(graphenGeladen).gesperrt) { melde(`Place ${platz}: ${typSperre(graphenGeladen).text}`, true); zeigePlaetze(); return; }
       const r = wechsel(plaetzeLayout, platz, b.dataset.platzTyp, still(plaetzeLayout, platz, zustand.regler), seqAnsicht(live.projekt, platz).vorhanden);
-      if (!r.ok) { melde(`Place ${platz}: ${r.grund === 'offen' ? `not silent, ${r.text}` : r.grund === 'doppelt' ? `${b.dataset.platzTyp} is already shown` : r.grund === 'belegt' ? 'clear the SEQ deck first' : r.grund}`, true); zeigePlaetze(); return; }
+      if (!r.ok) { melde(`Place ${platz}: ${r.grund === 'offen' ? `not silent, ${r.text}` : r.grund === 'doppelt' ? `${b.dataset.platzTyp} is already shown` : r.grund}`, true); zeigePlaetze(); return; }
+      if (r.parken && !(await parkeDeck(platz))) { zeigePlaetze(); return; }
       plaetzeLayout = r.layout;
       speichereLayout(speicherOderNull(), plaetzeLayout);
       wendePlaetzeAn();

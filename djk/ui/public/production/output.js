@@ -120,6 +120,7 @@ export function ergebnisText(j) {
   return {
     text: `Exported ${dateiName(j.datei)} · ${dauerText(j.frames)} · peak ${dbText(j.spitze_db)} dBFS${lautheitText(j)}${ueber ? ' · CLIPPING' : ''}${decke ? ` · ABOVE SET LIMITER CEILING${limiter}` : ''}`,
     titel: j.datei,
+    pfad: `Saved to ${j.datei}`,   // the full path in visible text (the server answers with the absolute file path)
     warnung: ueber || decke,
   };
 }

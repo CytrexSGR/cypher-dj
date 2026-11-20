@@ -5,7 +5,7 @@
 // DOM:
 //   section.seqplatz[data-seq=N]
 //   (section.seqplatz.gross = the large view: the place fixed under the page header to the bottom edge, one place at a time, style.css)
-//     .deckkopf: .sq-zahl .sq-baukasten .sq-stand | .sq-rechts: [data-sq-gross] · .sq-breite [data-sq-breite] · [data-sq-produktion] · [data-sq-neu] · [data-sq-modul] · [data-seq-leeren]
+//     .deckkopf: .sq-zahl .sq-baukasten .sq-stand | .sq-rechts: [data-sq-spiel] · [data-sq-gross] · .sq-breite [data-sq-breite] · [data-sq-leer-aus] · [data-sq-produktion] · [data-sq-neu] · [data-sq-modul] · [data-seq-leeren]
 //     .sq-leer (no deck: [data-seq-anlegen])
 //     .sq-feld (scrolls both ways; --sq-beat = pixels per beat)
 //       .sq-folge[data-folge=<spur_id>][data-clip=<clip_id>] (.stumm, .fremd = arranged in PRODUCTION)
@@ -17,7 +17,7 @@
 //                       .wiederholung = pale repeat of a note lane up to the visible width: a div, aria-hidden, no pointer)
 //                       | svg.sq-svg (.sq-pfad, .sq-pfad.spaeter, .sq-marke dashed mark at every repeat, .sq-punkt[data-i] circles, .sq-kopflinie)
 import { $, $$, el, melde, BUCHSTABE } from './page_state.js';
-import { live, arrBeat, pruefeLiveSpaeter } from './live_view.js';
+import { live, arrBeat, arrLaeuft, pruefeLiveSpaeter } from './live_view.js';
 import { zeigePlaetzeSpaeter } from './slots_view.js';
 import { oeffneMenue, menueOffen } from './production/context_menu.js';
 import { berichtText, modulListe } from './module_after_seq.js';
@@ -33,7 +33,8 @@ import {
   griffArt, velNeu, laengeNeu, tonNeu, loslassFelder, imRechteck, radFelder, tonVonText, kurvePfad, laengeText, laengeAusSchritten, pxProBeat,
   sende, legeAn, leereDeck, ladeModul, neueFolge, laengenWahl, SICHT_BREITEN, sichtbarBeats, linealZellen, freierName, holeMitFrist, pruefeReglerInfo, vergissLeereInfos, grossLesen, grossSchreiben, grossUmschalten, grossGilt, grossEscape,
   ueberlagere, wertAusPos, wertBruch, wertText, wertSchreibe, wiederholZellen, kurveBeatAusX, kurveWertAusY, kurveY, kurvePunkte, kurveMarken, kurveNeu, kurveVerschiebe, kurveWeg, kurvePunktBei,
-  kurveSchreibe, FORM_ARTEN, formAus, formSchreibe, eigenLaengen, eigenLaengeText, eigenAusSchritten, laengeZeileBefehle, zielWahl, zielUmhaengen, sprungZiel,
+  kurveSchreibe, FORM_ARTEN, formAus, formSchreibe, eigenLaengen, eigenLaengeText, eigenAusSchritten, laengeZeileBefehle, zielWahl, zielUmhaengen, sprungZiel, leereZeilen,
+  deckSpielt, deckSpielSchritt, msBisTakt,
 } from './seq_field.js';
 
 const PLAETZE = [1, 2, 3, 4];
@@ -94,6 +95,44 @@ const knopf = (klasse, text, attr) => {
   return b;
 };
 
+// PLAY/STOP of one deck (seq_field.js deckSpielSchritt): group mutes through POST /proj/aendern, then the transport when the step needs it. A deck that joins
+// or leaves a running transport switches just before the next bar, so it comes in on the one; the button says so while it waits.
+const gruppenSchreiben = (befehle, label) => async (p) => {
+  const r = await holeJsonFrist('/proj/aendern', { rev: p?.rev ?? live.rev, label, befehle });
+  if (r.status === 200 && r.j?.projekt) return { ok: true, projekt: r.j.projekt };
+  return { ok: false, neuLesen: true, text: `${label} refused: ${r.j?.text ?? r.j?.fehler ?? r.status}` };
+};
+async function deckSpiel(n, b) {
+  if (live.projekt?.live !== true) { melde('Open the live container first (LIVE)', true); return; }
+  if (b.dataset.wartet) return;
+  const laeuft = arrLaeuft(performance.now());
+  const an = !deckSpielt(live.projekt, n, laeuft);
+  const schritt = deckSpielSchritt(live.projekt, n, an, laeuft);
+  const label = `SEQ ${n}: ${an ? 'play' : 'stop'}`;
+  b.disabled = true;
+  try {
+    if (schritt.befehle.length && laeuft) {   // joins or leaves a running transport: on the next bar
+      const ms = msBisTakt(arrBeat(performance.now()), proTaktJetzt(), live.projekt?.tempo_bpm);
+      if (ms !== null) {
+        b.dataset.wartet = '1'; b.textContent = an ? '▶ next bar…' : '■ next bar…';
+        await new Promise((r) => setTimeout(r, ms));
+      }
+    }
+    if (schritt.befehle.length) {
+      let ok = false;
+      await schreibe(async (p) => { const x = await gruppenSchreiben(schritt.befehle, label)(p); ok = x.ok; return x; });   // schreibe answers nothing itself
+      if (!ok) return;
+    }
+    if (schritt.transport) {
+      const r = await holeJsonFrist('/proj/transport', schritt.transport === 'start' ? { aktion: 'start', beat: 0 } : { aktion: 'stopp' });
+      const q = r.j?.quittung;
+      if (r.status !== 200) melde(`${label} refused: ${r.j?.text ?? r.j?.fehler ?? r.status}`, true);
+      else if (q === null) melde(`${label}: the core did not answer`, true);
+      else if (q && [4, 6, 7, 8].includes(q.status)) melde(`${label} refused: ${q.grund}`, true);
+    }
+  } finally { delete b.dataset.wartet; b.disabled = false; const k = knoten.get(n); if (k) k._laeuft = undefined; }
+}
+
 function bauePlatz(n) {
   const k = document.createElement('section');
   k.className = 'seqplatz deckflaeche';
@@ -117,7 +156,12 @@ function bauePlatz(n) {
   leeren.title = 'Remove the sequencer of this place with its patterns';
   const gross = knopf('sq-chip sq-gross', '⤢', 'sqGross');
   gross.title = 'Large view'; gross.setAttribute('aria-pressed', 'false');
-  rechts.append(gross, breite, sprung, neu, modul, leeren);
+  // PLAY/STOP: the transport of the live container (POST /proj/transport); every SEQ deck and loop slot of the container starts and stops with it
+  const spiel = knopf('sq-chip sq-spiel', '▶ PLAY', 'sqSpiel');
+  spiel.title = 'Play or stop this deck: it joins a running transport on the next bar; on a stopped one it starts alone';
+  const leerAus = knopf('sq-chip sq-leer-aus', 'hide empty', 'sqLeerAus');
+  leerAus.title = 'Hide the lanes that are empty now; press again to show them'; leerAus.setAttribute('aria-pressed', 'false');
+  rechts.append(spiel, gross, breite, leerAus, sprung, neu, modul, leeren);
   kopf.append(el('span', 'buchstabe', BUCHSTABE[n]), el('span', 'decktitel', `SEQ ${n}`), el('span', 'sq-zahl'), el('span', 'sq-baukasten'), el('span', 'sq-stand'), rechts);
   const leer = el('div', 'sq-leer');
   const anlegen = el('button', 'sq-anlegen', 'CREATE');
@@ -131,6 +175,11 @@ function bauePlatz(n) {
   knoten.set(n, k);
   bindePlatz(k, n, feld, anlegen, leeren, neu, breite, sprung, modul);
   gross.addEventListener('click', () => { grossWahl = grossUmschalten(grossWahl, n); wendeGross(); });
+  spiel.addEventListener('click', () => deckSpiel(n, spiel));
+  leerAus.addEventListener('click', () => {
+    k._versteckt = k._versteckt ? null : leereZeilen(ansicht(n, live.projekt));
+    neuZeichnen(n);
+  });
   return k;
 }
 
@@ -189,6 +238,8 @@ function baueFolge(k, f, i, px, sichtbar) {
   if (kannGeraetFenster(f.spur)) { const fenster = knopf('sq-chip sq-fenster', GERAET_FENSTER_TEXT.knopf, 'sqFenster'); fenster.title = GERAET_FENSTER_TEXT.titel; kopf.append(fenster); }   // the instrument in its own browser window
   kopf.append(laenge, stumm);
   if (sicht.hinter_loop > 0) kopf.append(el('span', 'sq-hinter', `${sicht.hinter_loop} note${sicht.hinter_loop === 1 ? '' : 's'} behind the loop`));
+  const weg = sicht.zeilen.filter((z) => k._versteckt?.has(`${f.spur_id}/${z.id}`));   // hidden by "hide empty"
+  if (weg.length) kopf.append(el('span', 'sq-hinter', `${weg.length} empty lane${weg.length === 1 ? '' : 's'} hidden`));
   const neueZeile = knopf('sq-chip sq-neuezeile', '+ lane ▾', 'sqNeueZeile');
   kopf.append(el('span', 'sq-grow'), neueZeile);
   b.append(kopf);
@@ -203,7 +254,7 @@ function baueFolge(k, f, i, px, sichtbar) {
   }
   lineal.append(takte);
   b.append(lineal);
-  for (const z of sicht.zeilen) b.append(baueZeile(k, f, z, sicht, px, sichtbar));
+  for (const z of sicht.zeilen) if (!weg.includes(z)) b.append(baueZeile(k, f, z, sicht, px, sichtbar));
   return b;
 }
 
@@ -301,6 +352,9 @@ function zeichnePlatz(n) {
   const a = ansicht(n, live.projekt);
   const leer = $('.sq-leer', k), feld = $('.sq-feld', k), leeren = $('[data-seq-leeren]', k), neu = $('[data-sq-neu]', k), breite = $('.sq-breite', k);
   leer.hidden = a.vorhanden; feld.hidden = !a.vorhanden; leeren.hidden = !a.vorhanden; neu.hidden = !a.vorhanden; breite.hidden = !a.vorhanden; $('[data-sq-produktion]', k).hidden = !a.vorhanden;
+  $('[data-sq-spiel]', k).hidden = !a.vorhanden; $('[data-sq-leer-aus]', k).hidden = !a.vorhanden;
+  const la = $('[data-sq-leer-aus]', k);
+  la.classList.toggle('an', !!k._versteckt); la.setAttribute('aria-pressed', String(!!k._versteckt)); la.textContent = k._versteckt ? `show empty (${k._versteckt.size})` : 'hide empty';
   $('.sq-zahl', k).textContent = a.vorhanden ? `${a.folgen.length} pattern${a.folgen.length === 1 ? '' : 's'}` : '';   // the DJ view has it in the place head
   const bk = $('.sq-baukasten', k);
   bk.textContent = a.baukasten ? `${a.baukasten} Baukasten` : '';
@@ -315,7 +369,7 @@ function zeichnePlatz(n) {
   }
   for (const b of $$('[data-sq-breite]', k)) b.classList.toggle('an', b.dataset.sqBreite === String(k._wahl));
   const px = pxProBeat(k._wahl, a.laenge_beats, Number(feld.clientWidth) - KOPF_BREITE, proTaktJetzt()), sichtbar = sichtbarBeats(k._wahl, a.laenge_beats, proTaktJetzt());
-  const sig = JSON.stringify([px, sichtbar, proTaktJetzt(), a.folgen.map((f) => [f.spur_id, f.clip_id, f.name, f.geraet_text, f.stumm, f.editierbar, f.sicht])]);
+  const sig = JSON.stringify([px, sichtbar, proTaktJetzt(), [...(k._versteckt ?? [])], a.folgen.map((f) => [f.spur_id, f.clip_id, f.name, f.geraet_text, f.stumm, f.editierbar, f.sicht])]);
   if (feld._sig !== sig) { baueFeld(k, feld, a, px, sichtbar); feld._sig = sig; k._px = px; }
   if (fehlendeInfos(live.projekt, n).length) ladeInfos(live.projekt, n, holeGet).then(() => zeichnePlatz(n));   // knob names and kit sounds arrive later
   setzeKopf(k, k._beat ?? null);
@@ -341,7 +395,14 @@ function setzeKopf(k, beat) {
 }
 function bild() {
   const sichtbar = [...knoten.values()].filter((k) => !k.hidden);
-  if (sichtbar.length) { const beat = arrBeat(performance.now()); for (const k of sichtbar) setzeKopf(k, beat); }
+  if (sichtbar.length) {
+    const t = performance.now(), beat = arrBeat(t), laeuft = arrLaeuft(t);
+    for (const k of sichtbar) {
+      setzeKopf(k, beat);
+      const spielt = deckSpielt(live.projekt, Number(k.dataset.seq), laeuft), b = $('[data-sq-spiel]', k);
+      if (k._laeuft !== spielt && !b.dataset.wartet) { k._laeuft = spielt; b.textContent = spielt ? '■ STOP' : '▶ PLAY'; b.classList.toggle('an', spielt); b.setAttribute('aria-pressed', String(spielt)); }
+    }
+  }
   requestAnimationFrame(bild);
 }
 

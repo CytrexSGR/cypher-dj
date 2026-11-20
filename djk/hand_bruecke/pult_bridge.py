@@ -32,6 +32,7 @@ import s8_usb  # noqa: E402
 import assignment as belegung  # noqa: E402
 import deck_page as deck_seite  # noqa: E402
 import lc3  # noqa: E402
+import launchpad  # noqa: E402
 import apc_production as apc_produktion  # noqa: E402
 
 try:
@@ -378,6 +379,7 @@ class Bruecke:
         threading.Thread(target=self.anzeige_schleife, daemon=True).start()
         threading.Thread(target=self.mk2_schleife, daemon=True).start()
         threading.Thread(target=lc3.lauf, args=(self.stop, log), daemon=True).start()   # Launch Control 3: LEDs and display follow the learn table
+        threading.Thread(target=launchpad.lauf, args=(self.stop, log), daemon=True).start()   # Launchpad Mini MK3: SEQ step grid (launchpad.py)
         self.apc.starte(self.stop)   # APC20: DJ console or, while the main window shows PRODUCTION, the project mixer (apc_production.py)
         naechste = 0.0
         while not self.stop.is_set():

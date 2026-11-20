@@ -463,3 +463,6 @@ body.produktion #produktion:has(> .p-detail.p-zu) { --detail: auto; }
 .p-ins-popover.p-ins-schwebend { position: fixed; z-index: 30; width: min(640px, 90vw); max-height: 60vh; overflow: auto; margin: 0; }
 .p-ins-popover .p-ins-zu { grid-column: 1 / -1; justify-self: end; font: inherit; font-size: 11px; padding: 1px 8px; }
 .p-ins-popover.p-ins-host .p-ins-zu { float: right; }
+/* newcomer probe 2026-11-20: the export result names the folder; the path wraps instead of being cut off */
+.p-ausgabe-pfad { font-size: 11px; color: var(--dim); flex-basis: 100%; overflow-wrap: anywhere; user-select: all; }
+.p-ausgabe-pfad[hidden] { display: none; }

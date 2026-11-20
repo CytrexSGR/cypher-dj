@@ -14,7 +14,8 @@ export function bindeAusgabe(ctx) {
   gruppe.innerHTML = '<button data-p="export" title="Export the loop bracket when it is on, otherwise the whole song, as a WAV file (48 kHz, 32 bit float); Surge tracks are frozen first" disabled>EXPORT</button>'
     + '<button data-p="einsammeln" title="Copy every audio source that lies outside this project into its audio folder (the originals stay)" disabled>COLLECT</button>'
     + '<progress data-p="ausgabe-fortschritt" class="p-ausgabe-balken" max="1" value="0" hidden></progress>'
-    + '<output data-p="ausgabe" class="p-ausgabe-text" aria-live="polite"></output>';
+    + '<output data-p="ausgabe" class="p-ausgabe-text" aria-live="polite"></output>'
+    + '<output data-p="ausgabe-pfad" class="p-ausgabe-pfad" hidden></output>';
   $('meldung').before(gruppe);
   st.lauf = null;            // { art: 'freeze'|'export', spur_id?, name?, an?, seit } während einer Anfrage (seit: Start dieser Seite, performance.now())
   // V2 Fix F14 (Spec 6.34): ein Lauf, den diese Seite nicht selbst gestartet hat (Reload mitten im Lauf, eine zweite Seite, Cypher), aus
@@ -132,11 +133,13 @@ export function bindeAusgabe(ctx) {
       : st.einsammelErgebnis ? einsammelText(st.einsammelErgebnis) : { text: echtzeitHinweis(st.projekt), titel: '', warnung: false };
     const balken = $('ausgabe-fortschritt'), f = echtzeitFortschritt(l);
     if (balken) { balken.hidden = f === null; if (f !== null) balken.value = f; }
-    const schluessel = `${e.text}|${e.titel}|${e.warnung}`;
+    const schluessel = `${e.text}|${e.titel}|${e.warnung}|${e.pfad ?? ''}`;
     if (schluessel === letzter) return;
     letzter = schluessel;
     const o = $('ausgabe');
     o.textContent = e.text; o.title = e.titel; o.classList.toggle('warnung', e.warnung);
+    const pf = $('ausgabe-pfad');   // where the file is: visible, wraps, selectable
+    if (pf) { pf.textContent = e.pfad ?? ''; pf.hidden = !e.pfad; }
   });
   ctx.beimProjekt.push((p, wechsel) => { if (wechsel) { st.exportErgebnis = null; st.einsammelErgebnis = null; } knoepfe(); });
 }

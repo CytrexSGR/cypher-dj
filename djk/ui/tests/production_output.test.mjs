@@ -29,7 +29,7 @@ test('V2 Ausgabe: Ergebnis mit Dauer, Spitze, Dateiname; über 0 dBFS warnt', ()
   assert.equal(dauerText(768000), '16.0 s'); assert.equal(dbText(-3.21), '−3.2'); assert.equal(dbText(0.5), '+0.5');
   // Dateiname nach dem S3-Plan (Abweichung 2): <slug>-<JJJJMMTT-hhmmss>.wav im Ordner export/ des Projekts
   const e = ergebnisText({ datei: '/home/x/cypherdj-projekte/first-track/export/first-track-20261016-142233.wav', frames: 768000, spitze_db: -3.21, regler_quelle: 'kern', lufs_i: -14.2, lra: 5.1, true_peak_dbtp: -1.0 });
-  assert.deepEqual(e, { text: 'Exported first-track-20261016-142233.wav · 16.0 s · peak −3.2 dBFS · −14.2 LUFS, true peak −1.0 dBTP', titel: '/home/x/cypherdj-projekte/first-track/export/first-track-20261016-142233.wav', warnung: false });
+  assert.deepEqual(e, { text: 'Exported first-track-20261016-142233.wav · 16.0 s · peak −3.2 dBFS · −14.2 LUFS, true peak −1.0 dBTP', titel: '/home/x/cypherdj-projekte/first-track/export/first-track-20261016-142233.wav', pfad: 'Saved to /home/x/cypherdj-projekte/first-track/export/first-track-20261016-142233.wav', warnung: false });
   assert.equal(ergebnisText({ datei: 'a.wav', frames: 48000, spitze_db: 0.3 }).warnung, true);
 });
 

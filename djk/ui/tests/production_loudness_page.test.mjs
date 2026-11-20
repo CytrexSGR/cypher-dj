@@ -9,7 +9,7 @@ import { element, installiereDom } from './support/dom_mock.mjs';
 function seite(t) {
   const zurueck = installiereDom();
   t.after(zurueck);
-  const el = { export: element('button'), einsammeln: element('button'), ausgabe: element('output'), koepfe: element('div'), meldung: element('div') };
+  const el = { export: element('button'), einsammeln: element('button'), ausgabe: element('output'), 'ausgabe-pfad': element('output'), koepfe: element('div'), meldung: element('div') };
   const kopf = element('div'); kopf.className = 'p-kopf'; kopf.klassen.add('p-kopf'); kopf.dataset.spur = 's3';
   el.koepfe.append(kopf);
   const nachfragen = [];
@@ -58,4 +58,17 @@ test('analysis run (ANALYZE window or the hand): "Analysing" and EXPORT and FREE
   s.ctx.ausgabeLauf(null);
   assert.deepEqual([s.el.export.disabled, s.freeze().disabled], [false, false]);
   assert.equal(s.bild(), '');
+});
+
+test('export result: the full path is in visible text next to the status line, and gone again with the result', (t) => {
+  const s = seite(t);
+  s.bild();
+  assert.equal(s.el['ausgabe-pfad'].hidden, true, 'no result: no path line');
+  s.ctx.st.exportErgebnis = { datei: '/home/x/cypherdj-projekte/song/export/song-20261120-101500.wav', frames: 48000, spitze_db: -3 };
+  s.bild();
+  assert.equal(s.el['ausgabe-pfad'].textContent, 'Saved to /home/x/cypherdj-projekte/song/export/song-20261120-101500.wav');
+  assert.equal(s.el['ausgabe-pfad'].hidden, false);
+  s.ctx.st.exportErgebnis = null;
+  s.bild();
+  assert.equal(s.el['ausgabe-pfad'].hidden, true);
 });

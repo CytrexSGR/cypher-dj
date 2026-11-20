@@ -99,7 +99,7 @@ parameters.
 Each graph can ship a front panel (a plate) next to it: a JSON file that binds controls to knobs with real units,
 selectors with waveform symbols, and envelope, LFO shape and filter curve displays. A graph without one gets an
 automatic panel. The plate opens enlarged on a device page, with a live spectrum of the channel, and a preset picker
-and a save button sit in its header.
+(PRESET) and a save button sit in its header. Presets can also be dragged from the PRESETS tab of the browser onto a track.
 
 ![Device page of Mono Synth: oscillators, mixer, filter with its response curve, tuning, envelopes, LFO and voice](screens/device-page-mono-synth.png)
 

@@ -58,6 +58,8 @@ export function merkeArr(f) {
   arr = f; arrZeit = performance.now();
   arrKopf.melde(Number(f.projekt_beat), (uhrKopf.rate * 60000) || live.projekt?.tempo_bpm || 128, arrZeit, f.status === 2);
 }
+// The transport of the live container runs (status 1 waits for its start, 2 plays) by the last clock event; an event older than 1 s counts as stopped.
+export const arrLaeuft = (t) => !!arr && (arr.status === 1 || arr.status === 2) && t - arrZeit <= 1000;
 export function arrBeat(t) {
   if (!arr || arr.status !== 2 || t - arrZeit > 1000) return null;   // stale: no playhead rather than a guessed one
   return kopfImLoop(arrKopf.beat(t), live.projekt?.loop, Number(arr.projekt_beat));

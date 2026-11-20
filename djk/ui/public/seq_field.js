@@ -607,3 +607,45 @@ export function sprungZiel(a, spurId) {
   if (!clip) return { meldung: `The pattern ${f.name} has no clip yet: add a note first` };
   return { clip_id: clip.id, name: f.name };
 }
+
+// ---------- hide empty lanes: the lanes of the editable patterns that hold nothing (no note, no value, no curve point) ----------
+export function zeileBenutzt(z) {
+  if (z.art === 'kurve') return (z.punkte ?? []).length > 0;
+  if (z.art === 'noten') return (z.zellen ?? []).some((c) => c.an || c.gebunden);
+  return (z.zellen ?? []).some((c) => c.da);
+}
+// The keys "spur_id/lane id" of the empty lanes at this moment. The page hides exactly these until the button is pressed again, so a lane added later
+// or emptied under the hand stays in view.
+export function leereZeilen(a) {
+  const aus = new Set();
+  for (const f of a?.folgen ?? []) for (const z of f.sicht?.zeilen ?? []) if (!zeileBenutzt(z)) aus.add(`${f.spur_id}/${z.id}`);
+  return aus;
+}
+
+// ---------- PLAY/STOP per deck (Andreas 2026-11-20: "seq 1 und seq 2 starten beide egal welchen der beiden play knöpfe ich drücke") ----------
+// All decks are groups of the one live container and share its transport, so a deck plays when the transport runs AND its group is not muted. PLAY on a
+// stopped container unmutes this deck, mutes the other decks and starts the transport; PLAY on a running one unmutes this deck. STOP mutes this deck while
+// another deck still plays, else stops the transport. Answers {befehle, transport: 'start' | 'stopp' | null}; the group commands go to POST /proj/aendern.
+export const deckGruppe = (p, n) => (p?.gruppen ?? []).find((g) => g.seq?.platz === n) ?? null;
+export const deckSpielt = (p, n, laeuft) => { const g = deckGruppe(p, n); return !!laeuft && !!g && !g.mute; };
+export function deckSpielSchritt(p, n, an, laeuft) {
+  const g = deckGruppe(p, n);
+  if (!g) return { befehle: [], transport: null };
+  const stumm = (x, mute) => ({ befehl: 'gruppenspur_aendern', gruppe_id: x.id, mute });
+  const andere = (p.gruppen ?? []).filter((x) => x.seq && x.id !== g.id);
+  if (an) {
+    const befehle = g.mute ? [stumm(g, false)] : [];
+    if (laeuft) return { befehle, transport: null };
+    return { befehle: [...befehle, ...andere.filter((x) => !x.mute).map((x) => stumm(x, true))], transport: 'start' };
+  }
+  if (laeuft && andere.some((x) => !x.mute)) return { befehle: g.mute ? [] : [stumm(g, true)], transport: null };
+  return { befehle: [], transport: 'stopp' };
+}
+// Milliseconds until `vorlauf` ms before the next bar of the running transport (a change sent then lands on the one); null without a beat.
+export function msBisTakt(beat, proTakt, bpm, vorlauf = 50) {
+  if (beat === null || beat === undefined || !(bpm > 0) || !(proTakt > 0)) return null;
+  const msProBeat = 60000 / bpm;
+  let ms = (proTakt - (((beat % proTakt) + proTakt) % proTakt)) * msProBeat - vorlauf;
+  if (ms < 0) ms += proTakt * msProBeat;
+  return ms;
+}

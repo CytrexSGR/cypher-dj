@@ -152,7 +152,10 @@ export function bindeRaster(ctx) {
 
   function zeigeStatus() {
     const sp = raster?.spuren?.[st.cursor.spur];
-    status.textContent = raster ? statusText(raster, st.cursor, st.zahlen, { platzZahl: sp ? ctx.platzZahl?.(sp.spur_id) : undefined }) : '';
+    const text = raster ? statusText(raster, st.cursor, st.zahlen, { platzZahl: sp ? ctx.platzZahl?.(sp.spur_id) : undefined }) : '';
+    const hinweis = !!text && !!st.editHinweis && !st.edit;
+    status.textContent = hinweis ? `${text} | EDIT is off: press Escape or click EDIT to type into the grid` : text;
+    status.classList.toggle('mit-hinweis', hinweis);
   }
   ctx.zeigeStatus = zeigeStatus;
 

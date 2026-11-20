@@ -3,6 +3,27 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-20, fourteenth update
+
+**SEQ deck**
+- Every SEQ deck has its own PLAY/STOP in its head. On a stopped live container it starts this deck alone; a second
+  deck joins a running one just before the next bar and leaves on the bar, so decks come and go in time.
+- "hide empty" folds away the lanes that hold nothing at the press and counts them in the pattern head; a lane added
+  or emptied afterwards stays in view.
+- A place that holds a SEQ deck can switch to TRACK, LOOPS or Strudel at any time: the deck is muted on the next bar
+  and kept, and SEQ shows it again. Before, the deck had to be cleared first.
+- A Novation Launchpad Mini MK3 can be the step grid of the SEQ deck: four lanes of 16 steps in the colours of the
+  page, a white playhead, a pad press sets or clears a step. Built and tested against a simulated device; the look on
+  the real device is still to be checked.
+
+**DJ view**
+- On screens around 1080 px and lower the library dock now gives way, so the faders of the lower mixer strips stay
+  visible while it is open.
+
+**Docs**
+- The overview collage shows twelve current views, among them the SEQ deck, the LIVE view, the tracker and Cypher
+  Remix; the gallery has new screens of the DJ view, the SEQ deck, the tracker and the Remix window.
+
 ## 2026-11-20, thirteenth update
 
 **First track made entirely inside cypher-dj**

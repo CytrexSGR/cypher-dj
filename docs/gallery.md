@@ -1,13 +1,19 @@
 # Screenshots
 
-Taken on the development machine with our own songs and the factory sample packs; the folder tree of the library is
-scrolled away or collapsed.
+Taken on the development machine with our own songs, the factory sample packs and, in the DJ view, one track from the
+owner's library; the folder tree of the library is scrolled away or collapsed.
 
-![DJ view with four places: two track decks, a Strudel place and the Loops place with two live modules, around one mixer](screens/dj-view.png)
+![DJ view with four places around one mixer: a track deck, the SEQ deck SEQ 2, the Strudel place and the Loops place, with the scene row under the header](screens/dj-view.png)
+
+![SEQ deck in its large view: a kit pattern and three Baukasten patterns with pitch, velocity and curve lanes; empty lanes hidden, PLAY per deck](screens/seq-deck.png)
+
+![TRACKER view: the live container as tracker rows, with the song order, linked patterns and the instrument list](screens/tracker.png)
+
+![Cypher Remix, the beat-synchronous remix station on FX3: scene, isolate, release, the touch pad and the source switches](screens/remix.png)
 
 ![STUDIO, the loop workbench: a drum pattern whose rows have their own length, swing and direction, four tracks with send knobs, and the dock with one card per instrument and per effect](screens/studio-workbench.png)
 
-![LIVE view: three Strudel channels with multi-line patterns, the channel strips and the master meter](screens/studio-view.png)
+![LIVE view: three Strudel channels with multi-line patterns and their automation lanes, the channel strips, a SEQ deck and the master meter](screens/studio-view.png)
 
 ![PRODUCTION view: four stems under the muted original, the warp editor in COMPLEX mode](screens/production-warp-stems.png)
 

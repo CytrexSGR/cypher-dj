@@ -164,3 +164,7 @@ body.tracker:not(.djfx-auf) #kopf > #fx, body.tracker:not(.djfx-auf) #kopf > #se
 #tracker .t-regal-karte.offen { border-color: var(--d3); }
 #tracker .t-regal-karte:hover:not(:disabled) { background: var(--panel); border-color: var(--d3); }
 #tracker .t-kopie-name { width: 18ch; text-align: left; }
+/* a note key with EDIT off: the reminder stays in the status line (may wrap) and the EDIT button flashes once */
+#tracker .t-status.mit-hinweis { white-space: normal; color: var(--warn); }
+#tracker .t-knopf.blitz { animation: t-blitz .35s 2; }
+@keyframes t-blitz { 50% { background: var(--warn); color: #0b0d12; border-color: var(--warn); } }
