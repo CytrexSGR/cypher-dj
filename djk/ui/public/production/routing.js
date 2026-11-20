@@ -63,7 +63,9 @@ export const gruppenLabels = (name) => ({
   loeschen: `Delete group ${name}`, umbenennen: `Rename group ${name}` });
 
 // ---- Slice 3: returns, sends and the Hall values ----------------------------------------------------------------------------------------------
-export const returnListe = (projekt) => [...(projekt?.returns ?? [])].sort((a, b) => a.nr - b.nr);
+// The returns of a project in number order. The HALL and DELAY returns of a loop deck (`loopdeck` set) belong to the deck page and are left out
+// unless `mitLoopdeck`: lists and cards of PRODUCTION use the default, lookups by id (device windows) pass `{ mitLoopdeck: true }`.
+export const returnListe = (projekt, { mitLoopdeck = false } = {}) => [...(projekt?.returns ?? [])].filter((r) => mitLoopdeck || !r.loopdeck).sort((a, b) => a.nr - b.nr);
 // the dB of the send of a strand (track or group) to a return; -200 = off (no entry)
 export const sendWert = (strang, returnId) => (strang?.sends ?? []).find((x) => x.id === returnId)?.db ?? -200;
 export const sendBefehl = (strangId, returnId, db) => ({ befehl: 'send_setzen', strang_id: strangId, return_id: returnId, db });

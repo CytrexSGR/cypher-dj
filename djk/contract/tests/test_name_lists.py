@@ -117,7 +117,7 @@ MUTATIONEN = [
     (SOFTCONTROLLER, '"ziel":"deck/1/play"', '"ziel":"deck/1x/play"',
      "Mapping softcontroller.json: Ziel deck/1x/play: Deck-Nummer außerhalb 1 bis 4"),
     # ---- veraltete Ausnahmen: die pfl-Ausnahmen (A03, A05) dürfen nicht blind als genutzt gelten
-    ("docs/architecture/INTERFACES.md", "`pfl`, ", "",
+    ("docs/architecture/INTERFACES.md", "`slip`,\n  `pfl`, `laden`", "`slip`,\n  `laden`",
      "Ausnahme veraltet (tritt nicht mehr auf, streichen): ('A02 mapping.h enum', 'pfl')"),
     (HAND_MJS, "|slip|", "|slip|pfl|", "Ausnahme veraltet (tritt nicht mehr auf, streichen): "
      "('A05 hand.mjs DECK_AKTION', 'pfl')"),
@@ -139,8 +139,8 @@ MUTATIONEN = [
 
 # ---- D1 K1 (A11): Spur-Regler in allen Fundorten, Gründe
 MUTATIONEN += [
-    (KURVEN_JS, "...SPUREN.flatMap((n) => SPUR_REGLER.map((p) => `spur/${n}/${p}`)),",
-     "...SPUREN.flatMap((n) => SPUR_REGLER.filter((p) => n !== 1 || p !== 'pan').map((p) => `spur/${n}/${p}`)),",
+    (KURVEN_JS, "...SPUREN.flatMap((n) => SPUR_ZIELE.map((p) => `spur/${n}/${p}`)),",
+     "...SPUREN.flatMap((n) => SPUR_ZIELE.filter((p) => n !== 1 || p !== 'pan').map((p) => `spur/${n}/${p}`)),",
      "Spur-Regler=Kern: R04 curves.js ZIELE fehlt: spur/1/pan"),   # die Mutation aus Spec A11
     (VERTRAG_MJS, "REGLER.set(`spur/${n}/solo`", "REGLER.set(`spur/${n}/soli`",
      "Spur-Regler=Kern: R03 Attrappe REGLER fehlt: spur/1/solo"),
@@ -150,13 +150,13 @@ MUTATIONEN += [
      "Spur-Regler=Kern: R02 INTERFACES §1.5 fehlt: spur/1/solo"),
     ("djk/core/signalbox/src/controls.cpp", '"spur/%d/pan"', '"spur/%d/balance"',
      "Spur-Regler=Kern: R03 Attrappe REGLER steht ohne Vertrag: spur/1/pan"),
-    ("djk/ui/hand_operation.ts", "|^spur\\/([1-9]|[12][0-9]|3[0-2])\\/(fader|pan|mute|solo)$", "|^spur\\/([1-9]|[12][0-9]|3[0-2])\\/(fader|mute|solo)$",
+    ("djk/ui/hand_operation.ts", "|^spur\\/([1-9]|[12][0-9]|3[0-2])\\/(fader|pan|mute|solo|filter|", "|^spur\\/([1-9]|[12][0-9]|3[0-2])\\/(fader|mute|solo|filter|",
      "Spur-Regler: R06 hand_bedienung.PFAD lehnt spur/1/pan ab"),
-    ("djk/contract/schemas/defs.schema.json", "|spur/([1-9]|[12][0-9]|3[0-2])/(fader|pan|mute|solo)", "|spur/([1-9]|[12][0-9]|3[0-3])/(fader|pan|mute|solo)",
+    ("djk/contract/schemas/defs.schema.json", "|spur/([1-9]|[12][0-9]|3[0-2])/(fader|pan|mute|solo|filter|", "|spur/([1-9]|[12][0-9]|3[0-3])/(fader|pan|mute|solo|filter|",
      "Spur-Regler: R07 defs.schema.json regler_pfad nimmt spur/33/fader an"),
     (VERTRAG_MJS, "'spur_bereich', 'reserviert',", "'spur_bereich',",
      "Gründe: Attrappe GRUENDE fehlt: reserviert"),
-    ("djk/core/src/core_arr.cpp", 'return ab("nicht_geladen");', 'return ab("nicht_geladenx");',
+    ("djk/core/src/core_arr.cpp", 'case LaunchGrund::nicht_geladen: return ab("nicht_geladen");', 'case LaunchGrund::nicht_geladen: return ab("nicht_geladenx");',
      "Gründe: Kern-Quelltext vergibt nicht_geladenx, osc.json kennt es nicht"),
     ("djk/contract/osc.json", '"spur_bereich", "reserviert",', '"spur_bereich",',
      "Gründe: Attrappe GRUENDE kennt reserviert, osc.json nicht"),

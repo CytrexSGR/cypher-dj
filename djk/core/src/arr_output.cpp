@@ -170,6 +170,10 @@ void Arrangement::regler_binden(const sw::ReglerTabelle& tab) {
       case sw::Rolle::spur_mute: case sw::Rolle::grp_mute: feld = 2; break;
       case sw::Rolle::spur_solo: case sw::Rolle::grp_solo: feld = 3; break;
       case sw::Rolle::grp_cue: feld = ARR_F_CUE; break;   // live modules task 6
+      case sw::Rolle::spur_filter: feld = ARR_F_FILTER; break;   // loop deck K7a
+      case sw::Rolle::spur_eq_tief: feld = ARR_F_EQ0 + 0; break;   // loop deck channel strip KZ1
+      case sw::Rolle::spur_eq_mitte: feld = ARR_F_EQ0 + 1; break;
+      case sw::Rolle::spur_eq_hoch: feld = ARR_F_EQ0 + 2; break;
       case sw::Rolle::snd_spur: case sw::Rolle::snd_grp: {
         const int ri = sw::send_nr(d.pfad) - 1;   // "…/send/<r>"
         if (ri >= 0 && ri < ARR_RETURNS) feld = ARR_F_SEND0 + ri;
@@ -543,6 +547,92 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
     }
     // 1.10 slice 4b T13: the track is aligned with the track of the longest chain (arrival T_trk); its sends are taken from the aligned signal
     pdc_.verzoegere(PDC_SPUR0 + i, pd(PDC_SPUR0 + i), bus_l_[i], bus_r_[i], m);   // plan 1.11: also with d = 0, the ring is fed so that a later swap has the history
+    // Loop deck K7b: the DJ filter of the track (spur/<n>/filter, -1 low-pass .. +1 high-pass), behind the chain and the delay compensation, in front of the monitor join and the fader loop.
+    // The value is read per sample like the fader (a lane or a stellwerk course in vl, else the base value). Skipped while it is 0 over the whole block and the filter holds no state:
+    // that is bit-equal to running it (DjFilter is exactly dry at k = 0). Scratch is a member: no allocation, no lock.
+    {
+      const Wert& fi = w_[i][ARR_F_FILTER];
+      bool alle_null = !fi.vl && fi.w == 0.0f;
+      if (!alle_null || !filt_[i].leer()) {
+        if (fi.vl) {
+          alle_null = true;
+          for (int t = 0; t < m; ++t) {
+            const float v = fi.vl[t];
+            const double k = v != v ? 0.0 : std::min(1.0, std::max(-1.0, static_cast<double>(v)));   // NaN is centre, the range is -1..+1
+            filt_k_[t] = k;
+            if (k != 0.0) alle_null = false;
+          }
+        } else {
+          const double k = fi.w != fi.w ? 0.0 : std::min(1.0, std::max(-1.0, static_cast<double>(fi.w)));
+          std::fill(filt_k_, filt_k_ + m, k);
+          alle_null = k == 0.0;
+        }
+        if (!alle_null || !filt_[i].leer()) {
+          filt_[i].verarbeite(bus_l_[i], bus_r_[i], m, filt_k_);
+          filt_[i].abschneiden(1e-300);   // as Kanalzug does: a decayed state becomes exactly 0, so a silent track at k = 0 skips the filter again
+        }
+      }
+    }
+    // Loop deck channel strip KZ2: the 3-band isolator of the track (spur/<n>/eq/{tief,mitte,hoch}, dB per sample from ARR_F_EQ0 + 0..2), directly behind the DJ filter. While all three bands are
+    // 0 dB (no course, base 0) the track is in bypass and nothing runs: bit-equal. An LR8 split summed at unity is an allpass, not the identity, so entering and leaving the processed state
+    // crossfade dry <-> wet over ARR_NAHT samples; after leaving the isolator is cleared. No allocation, no lock: the isolators are heap objects of the constructor, the scratch is a member.
+    {
+      bool neutral = true;
+      for (int b = 0; b < 3; ++b) {
+        const Wert& fb = w_[i][ARR_F_EQ0 + b];
+        if (fb.vl) {
+          for (int t = 0; t < m; ++t) {
+            const float v = fb.vl[t];
+            if (v != v || v == 0.0f) continue;
+            neutral = false;
+            break;
+          }
+        } else if (fb.w == fb.w && fb.w != 0.0f) {
+          neutral = false;
+        }
+      }
+      uint8_t lage = iso_lage_[i];
+      if (lage == 0 && !neutral) { lage = 1; iso_blende_[i] = 0; }
+      else if (lage == 3 && !neutral) lage = 1;                         // back from the current share, no jump
+      else if ((lage == 1 || lage == 2) && neutral) lage = 3;           // a share of ARR_NAHT (running) or the current one (entering) falls to dry
+      if (lage != 0) {
+        for (int b = 0; b < 3; ++b) {   // gains per sample: NaN is 0 dB, the range is -200..+6; db_lin gives exactly 0 for a kill
+          const Wert& fb = w_[i][ARR_F_EQ0 + b];
+          if (fb.vl) {
+            for (int t = 0; t < m; ++t) {
+              const float v = fb.vl[t];
+              iso_g_[b][t] = db_lin(v != v ? 0.0f : std::min(6.0f, std::max(-200.0f, v)));
+            }
+          } else {
+            std::fill(iso_g_[b], iso_g_[b] + m, db_lin(fb.w != fb.w ? 0.0f : std::min(6.0f, std::max(-200.0f, fb.w))));
+          }
+        }
+        const bool blende = lage != 2 || iso_blende_[i] < ARR_NAHT;
+        if (blende) {
+          std::copy(bus_l_[i], bus_l_[i] + m, iso_trocken_l_);
+          std::copy(bus_r_[i], bus_r_[i] + m, iso_trocken_r_);
+        }
+        iso_[i].verarbeite(bus_l_[i], bus_r_[i], bus_l_[i], bus_r_[i], m, iso_g_[0], iso_g_[1], iso_g_[2]);
+        if (blende) {
+          int u = iso_blende_[i];
+          const int schritt = lage == 3 ? -1 : 1;
+          for (int t = 0; t < m; ++t) {
+            u = std::min(ARR_NAHT, std::max(0, u + schritt));
+            const float a = static_cast<float>(u) / static_cast<float>(ARR_NAHT);   // the wet share
+            bus_l_[i][t] = iso_trocken_l_[t] + (bus_l_[i][t] - iso_trocken_l_[t]) * a;
+            bus_r_[i][t] = iso_trocken_r_[t] + (bus_r_[i][t] - iso_trocken_r_[t]) * a;
+          }
+          iso_blende_[i] = static_cast<int16_t>(u);
+        }
+        iso_[i].abschneiden(1e-300);
+        if (lage == 1 && iso_blende_[i] >= ARR_NAHT) lage = 2;
+        else if (lage == 3 && iso_blende_[i] <= 0) {   // dry again: clear the state and fall back to bypass
+          iso_[i].leeren();
+          lage = 0;
+        }
+      }
+      iso_lage_[i] = lage;
+    }
 #ifndef CYPHERDJ_MUTATION_MONITOR_NACH_FADER
     // 1.8 T1 (slice 3b-lite): the dry monitor of an external input joins the track here, after the chain and the delay (no latency of the chains), before the fader loop below
     if (mon_[i].klingt) monitor_spur_addieren(i, m, bus_l_[i], bus_r_[i]);
@@ -1048,19 +1138,23 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
     }
 #endif
     // 1.10 slice 4b T13: the output of the return waits for the longest arrival at the PM sum; it adds into a sum of its own that is delayed and then joins the PM sum
-    int d_ret = pd(PDC_PM_RET0 + r);
+    // loop deck channel strip KZ3: a return of the live container can lead into a DJ pair (the group rule above: held tail after a swap, never in the offline switch, never without the pair). The post-fader
+    // sample then goes into the pair and into nothing of the PM (no PM sum, no PM-return delay place, no feed of it); the return's own taps and keys above stay.
+    const int dn = snap_ ? (snap_->ret_dj[r] ? snap_->ret_dj[r] : (dj_rest_gilt ? ret_dj_rest_[r] : 0)) : 0;
+    const bool dj_ziel = dn > 0 && !dj_master_ && dj_aus_l_[dn - 1] && dj_aus_r_[dn - 1];
+    int d_ret = dj_ziel ? 0 : pd(PDC_PM_RET0 + r);
 #ifdef CYPHERDJ_MUTATION_PDC_DOPPELT
     d_ret += pd(PDC_RETSPUR0 + r);   // error case: the send path is delayed once at the return input and once more at the return output
 #endif
-    float* rpm_l = pm_l_;
-    float* rpm_r = pm_r_;
-    const bool ret_sep = d_ret > 0 || pdc_.kreuzt(PDC_PM_RET0 + r, d_ret);   // plan 1.11 (fix round 2): as the groups above, a side sum feeds the ring when there is no delay
+    float* rpm_l = dj_ziel ? dj_aus_l_[dn - 1] : pm_l_;
+    float* rpm_r = dj_ziel ? dj_aus_r_[dn - 1] : pm_r_;
+    const bool ret_sep = !dj_ziel && (d_ret > 0 || pdc_.kreuzt(PDC_PM_RET0 + r, d_ret));   // plan 1.11 (fix round 2): as the groups above, a side sum feeds the ring when there is no delay
 #ifdef CYPHERDJ_MUTATION_HOST_PM_NICHT_GEFUETTERT
     float* rfl = nullptr;   // error case: PM_RET is fed only while delayed
     float* rfr = nullptr;
 #else
-    float* rfl = ret_sep ? nullptr : pdcs_l_;
-    float* rfr = ret_sep ? nullptr : pdcs_r_;
+    float* rfl = ret_sep || dj_ziel ? nullptr : pdcs_l_;
+    float* rfr = ret_sep || dj_ziel ? nullptr : pdcs_r_;
 #endif
     if (ret_sep) {
       rpm_l = pdcs_l_;

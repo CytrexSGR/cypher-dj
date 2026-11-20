@@ -64,8 +64,8 @@ const mitEnv = (kv, f) => { const alt = {}; for (const k of Object.keys(kv)) { a
   try { return f(); } finally { for (const k of Object.keys(alt)) { if (alt[k] === undefined) delete process.env[k]; else process.env[k] = alt[k]; } } };
 const ALT = (H) => ({ projekte: `${H}/cypherdj-projekte`, module: `${H}/.config/cypherdj/module`, sampler: `${H}/.config/cypherdj/sampler`, presets: `${H}/.config/cypherdj/presets`,
   klaenge: `${H}/.config/cypherdj/klaenge`, kollektionen: `${H}/.config/cypherdj/kollektionen`, raster: `${H}/.config/cypherdj/raster`, hotcues: `${H}/.config/cypherdj/hotcues`,
-  kits: `${H}/.config/cypherdj/kits`, loops: `${H}/.config/cypherdj/loops`, geraete: `${H}/.config/cypherdj/baukasten` });
-const ENVS = ['CYPHERDJ_HEIM', 'CYPHERDJ_MODULE', 'CYPHERDJ_SAMPLER', 'CYPHERDJ_KLAENGE', 'CYPHERDJ_KIT_ORDNER', 'CYPHERDJ_BK_ORDNER'];
+  kits: `${H}/.config/cypherdj/kits`, loops: `${H}/.config/cypherdj/loops`, geraete: `${H}/.config/cypherdj/baukasten`, loopsets: `${H}/.config/cypherdj/loopsets` });
+const ENVS = ['CYPHERDJ_HEIM', 'CYPHERDJ_MODULE', 'CYPHERDJ_SAMPLER', 'CYPHERDJ_KLAENGE', 'CYPHERDJ_KIT_ORDNER', 'CYPHERDJ_BK_ORDNER', 'CYPHERDJ_LOOPSETS'];
 const ohneEnv = Object.fromEntries(ENVS.map((k) => [k, undefined]));
 const tmpHome = () => fs.mkdtempSync(path.join(os.tmpdir(), 'ablage-home-'));
 const neuTabelle = () => ({ ...JSON.parse(fs.readFileSync(path.join(P.REPO, 'djk', 'config', 'ablage.json'), 'utf8')), vorgabe: 'neu' });
@@ -75,8 +75,19 @@ test('ablage: every kind resolves to its old place while vorgabe is alt', () => 
     const altTabelle = { ...neuTabelle(), vorgabe: 'alt' };
     const got = Object.fromEntries(P.ablageArten().map((a) => [a, P.ablageOrdner(a, { tabelle: altTabelle })]));
     assert.deepEqual(got, ALT(H));
-    assert.equal(P.ablageArten().length, 11);
+    assert.equal(P.ablageArten().length, 12);
   });
+});
+
+test('ablage: loopsets kind: neu place, alt place and env override', () => {
+  mitEnv(ohneEnv, () => {
+    assert.equal(P.ablageOrte('loopsets').neu, path.join(H, 'cypherdj/werke/loopsets'));
+    assert.equal(P.ablageOrte('loopsets').kern, false);
+    assert.equal(P.ablageOrdner('loopsets', { tabelle: { ...neuTabelle(), vorgabe: 'alt' } }), path.join(H, '.config/cypherdj/loopsets'));
+    assert.equal(P.ablageOrdner('loopsets', { tabelle: neuTabelle() }), path.join(H, 'cypherdj/werke/loopsets'));
+  });
+  mitEnv({ ...ohneEnv, CYPHERDJ_LOOPSETS: '/tmp/ls' }, () => assert.equal(P.ablageOrdner('loopsets'), '/tmp/ls'));
+  mitEnv({ ...ohneEnv, CYPHERDJ_LOOPSETS: '' }, () => assert.equal(P.ablageOrdner('loopsets', { tabelle: { ...neuTabelle(), vorgabe: 'alt' } }), path.join(H, '.config/cypherdj/loopsets')));
 });
 
 test('ablage: env override wins, empty counts as unset', () => {

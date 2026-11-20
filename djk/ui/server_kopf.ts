@@ -136,7 +136,7 @@ export const DROSSEL_MS: Record<string, number> = { '/uhr': 50, '/zustand/deck':
   '/zustand/spektrum': 40 };   // 1.15 A7b: 25 Hz, keyed per source (kanal)
 export const INS_GR_FRIST_MS = 500;   // 1.10 slice 4a: as the page's meters (MIX_FRIST_MS); the kern sends 20 Hz while a stage runs
 export const DURCHREICHEN = new Set(['/uhr', '/zustand/deck', '/pegel', '/e/regler', '/e/hand', '/e/geladen', '/e/hotcue', '/e/fx',
-  '/e/fx/zuweisung', '/e/fx/routing', '/q', '/e/protokollfehler', '/e/halter', '/e/neustart', '/k/willkommen', '/e/ki', '/e/loop', '/e/mitschnitt', '/e/raster',
+  '/e/fx/zuweisung', '/e/fx/routing', '/e/platz/kanal', '/q', '/e/protokollfehler', '/e/halter', '/e/neustart', '/k/willkommen', '/e/ki', '/e/loop', '/e/mitschnitt', '/e/raster',
   '/zustand/komp',   // Effekt-Sektion 2026-10-11: Absenkung je aktivem Kompressor (10 Hz)
   '/zustand/arr', '/e/freeze', '/zustand/ein', '/zustand/rec', '/e/aufnahme',   // D1 S2 (Spec 3.4); I08 (§5.14)
   '/e/ins_gr',   // 1.10 slice 4a (§5.5f): gain reduction per running insert stage, 20 Hz from the kern, throttled per kanal

@@ -230,6 +230,24 @@ void Kern::einsortieren25(const Befehl& c) {
       quittung(c.id, c.quelle, 3, sample_, beat0);
       break;
     }
+    case Befehl::PLATZ_KANAL: {  // DJ view places 3 and 4 (§4.10): at the block start; the net layer has checked, checked here as well
+      if (c.deck < 1 || c.deck > 2 || c.nr < 0 || c.nr >= Mixer::PLATZ_INHALTE) {
+        quittung(c.id, c.quelle, 6, sample_, beat0, "ausserhalb_bereich");
+        break;
+      }
+      mixer_->platz_kanal_setze(c.deck - 1, c.nr);
+      quittung(c.id, c.quelle, 1, sample_, beat0);
+      Ereignis x{};
+      x.art = Ereignis::PLATZ_KANAL;
+      x.sample = sample_;
+      x.beat = beat0;
+      x.deck = c.deck;
+      x.status = c.nr;
+      melde(x);
+      quittung(c.id, c.quelle, 2, sample_, beat0);
+      quittung(c.id, c.quelle, 3, sample_, beat0);
+      break;
+    }
     case Befehl::TEIL: {  // §4.3; Quittungen 1, 4, 6 kommen vom Stellwerk und räumen den Schatten mit auf
       SchattenTeil* t = schatten_.neu();
       if (!t) {
@@ -748,7 +766,10 @@ void Kern::audio(int64_t n0, int n) {
     }
     // D1 K1 (Spec 2.2): Arrangement nach dem Erzeuger, vor Rückwegen, Prüfklicks und Mixer. Summe in den Eingang von
     // erz/4, Metronom in die Master-Summe vor dem Limiter oder in die PFL-Summe. Ein KI-Stopp beendet Cyphers wartenden Start und ihren Freeze, einen laufenden Transport nicht (E-a).
-    if (sw_->ki_gestoppt()) arr_->ki_stopp(s0, karte);
+    if (sw_->ki_gestoppt()) {
+      arr_->ki_stopp(s0, karte);
+      arr_->launch_ki_stopp();   // loop deck K6: the pending launches of cypher go (7 abbruch); every way into the AI stop ends here, like the line above
+    }
     // 1.8 S3 (R10): the external input of every armed track goes to the arrangement for THIS block (the pointers of the JACK buffers of the cycle plus the sub-block offset;
     // the arrangement clears them after the block, so a track that is not fed here is not monitored). Internal sources sound on their own mixer channel (D11).
     // A take that is collecting its tail (status 4) still records, so auto keeps monitoring.

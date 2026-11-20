@@ -16,6 +16,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 import nidrv
+import s8_loopdeck
 from seq_view import seq_sicht
 
 W, H = 480, 272
@@ -37,6 +38,12 @@ UEBER_Y, UEBER_H = 146, 28         # whole-track overview (the touch strip maps 
 CUES_Y = 178                       # hot cue row
 UNTEN_Y = 210                      # streams row
 FENSTER_BEATS = 32                 # 8 bars across the screen
+
+
+def leer_bild():
+    img = np.zeros((H, W, 3), dtype=np.uint8)
+    img[:] = HG
+    return img
 
 
 def holen(pfad, timeout=0.5, roh=False):
@@ -415,6 +422,74 @@ def seq_bild(stand, nr, bpm):
     return np.asarray(img).copy()
 
 
+def loops_bild(stand, nr, jetzt_beat, paar=0, slice_fokus=None, offen=None, schicht="filter"):
+    """Fourth view: the loop deck of this side. `stand` is `decks[nr]` of GET /loopdeck/stand (None or empty: no loop deck),
+    `jetzt_beat` the core beat now (None: unknown, bars stand at 0), `paar` the visible row pair 0..3. Four columns: the
+    playing cell, a progress bar and the two visible rows as coloured boxes; footer with rows and grid. No waveform.
+    `slice_fokus` (1..4, slice mode): that column is outlined and its bar is split into the 8 slices, the one under the
+    play position filled. `offen` ({track: [field, ...]} from s8_loopdeck.nicht_abgeholt): a yellow marker `!V` (fader) and
+    `!F` (knob) in the track's header while that control has not picked up the model value (soft takeover). `schicht` is the
+    knob layer of the side (named in the footer); a killed band of a shown EQ layer puts a red `K` after the track number."""
+    img = Image.new("RGB", (W, H), HG)
+    d = ImageDraw.Draw(img)
+    ak = AKZENT.get(nr, AKZENT[1])
+    d.rectangle([0, 0, 34, 34], fill=ak)
+    d.text((17, 17), "AB"[(nr - 1) % 2], font=FONT["titel"], fill=HG, anchor="mm")
+    if not stand:
+        d.text((44, 6), f"LOOPS {nr}  (no loop deck)", font=FONT["titel"], fill=GRAU)
+        d.text((W // 2, H // 2), "-", font=FONT["gross"], fill=LINIE, anchor="mm")
+        return np.asarray(img).copy()
+    d.text((44, 6), f"LOOPS {nr}", font=FONT["titel"], fill=TEXT)
+    spalten = s8_loopdeck.spalten(stand, paar, jetzt_beat)
+    killed = s8_loopdeck.kill_spuren(stand, schicht)
+    br = W // 4
+    for i, c in enumerate(spalten):
+        x = i * br
+        if i:
+            d.line([x, 40, x, H - 28], fill=LINIE)
+        spur = (stand.get("spuren") or [{}] * 4)[i] if len(stand.get("spuren") or []) > i else {}
+        kopf = f"T{i + 1}"
+        if i + 1 in killed:
+            d.text((x + 6 + d.textlength(kopf, font=FONT["klein"]) + 4, 42), "K", font=FONT["klein"], fill=ROT)
+            kopf += "  "
+        d.text((x + 6, 42), kopf + ("  MUTE" if spur.get("mute") else ""), font=FONT["klein"],
+               fill=ROT if spur.get("mute") else GRAU)
+        fe = (offen or {}).get(i + 1, ())
+        marke = " ".join(m for m, hit in (("!V", "fader_db" in fe), ("!F", any(f != "fader_db" for f in fe))) if hit)
+        if marke:
+            d.text((x + br - 6, 44), marke, font=FONT["mono"], fill=GELB, anchor="ra")
+        spielt = c["name"] != "-"
+        farbe = s8_loopdeck.PALETTE[c["farbe"]] if spielt else GRAU
+        d.text((x + 6, 62), _kuerzen(d, c["name"], FONT["mittel"], br - 12), font=FONT["mittel"], fill=TEXT if spielt else GRAU)
+        if slice_fokus == i + 1:
+            d.rectangle([x + 1, 38, x + br - 2, H - 30], outline=AKZENT.get(nr, AKZENT[1]), width=2)
+            sb = (br - 12) / 8.0
+            hell = min(int(c["p"] * 8), 7) if c["name"] != "-" else None
+            for k in range(8):
+                sx = x + 6 + int(k * sb)
+                d.rectangle([sx, 88, sx + int(sb) - 2, 100], outline=LINIE, fill=farbe if k == hell else None)
+        else:
+            d.rectangle([x + 6, 90, x + br - 7, 98], outline=LINIE)
+            if c["p"] > 0:
+                d.rectangle([x + 7, 91, x + 7 + int((br - 15) * c["p"]), 97], fill=farbe)
+        for k, z in enumerate(c["zeilen"]):
+            y = 112 + k * 70
+            zf = s8_loopdeck.PALETTE[z["farbe"]]
+            box = [x + 6, y, x + br - 7, y + 62]
+            if z["zustand"] == "leer":
+                d.rectangle(box, outline=LINIE)
+                continue
+            fuell = {"gefuellt": s8_loopdeck.DIMM, "spielt": 1.0, "wartend": 0.6}[z["zustand"]]
+            d.rectangle(box, fill=tuple(int(v * fuell) for v in zf), outline=(255, 255, 255) if z["zustand"] == "wartend" else None)
+            hell = z["zustand"] != "gefuellt"
+            d.text((x + 10, y + 4), str(z["zelle"]), font=FONT["mono"], fill=HG if hell else GRAU)
+            d.text((x + 10, y + 24), _kuerzen(d, z["name"], FONT["klein"], br - 20), font=FONT["klein"], fill=HG if hell else TEXT)
+    d.text((W - 8, H - 4), s8_loopdeck.fuss_text(paar, stand.get("raster"), schicht), font=FONT["klein"], fill=GRAU, anchor="rb")
+    if slice_fokus:
+        d.text((8, H - 4), f"SLICE  T{slice_fokus}", font=FONT["klein"], fill=TEXT, anchor="lb")
+    return np.asarray(img).copy()
+
+
 class Anzeige:
     """Owns the vendor interface 6 of the S8 and refreshes both screens."""
 
@@ -453,7 +528,10 @@ class Anzeige:
                     ansicht = (stand or {}).get("ansicht") or {}
                     groesse = (stand or {}).get("loop_groesse") or {}
                     for i, nr, unten in ((0, 1, (1, 2, 3)), (1, 2, (9, 10, 5, 6, 7))):
-                        if ansicht.get(nr) == "seq":
+                        if ansicht.get(nr) == "loops":  # drawn every frame below (the progress bars move)
+                            kopf[i] = kopf[i] if kopf[i] is not None else leer_bild()
+                            cues[i] = {}
+                        elif ansicht.get(nr) == "seq":
                             kopf[i] = seq_bild(self.stand, nr, float(lage.get("uhr", {}).get("bpm") or 0))
                             cues[i] = self.stand.hotcues(nr)
                         elif ansicht.get(nr) == "studio":
@@ -475,6 +553,13 @@ class Anzeige:
                     bild[WELLE_Y:WELLE_Y + WELLE_H] = w.band(q, cues[disp], AKZENT[disp + 1])
                     bild[UEBER_Y:UEBER_Y + UEBER_H] = uebersicht(w, q, cues[disp], self.loop_von(stand, disp + 1),
                                                                      AKZENT[disp + 1])
+                if ((stand or {}).get("ansicht") or {}).get(disp + 1) == "loops":
+                    seite = (stand or {}).get("loopdeck")
+                    sicht = ((stand or {}).get("loops_sicht") or {}).get(disp + 1)
+                    bild = loops_bild(seite.deck(disp + 1) if seite else None, disp + 1, seite.beat_jetzt() if seite else None,
+                                      sicht.paar if sicht else 0, sicht.fokus if sicht and sicht.slice else None,
+                                      s8_loopdeck.nicht_abgeholt((stand or {}).get("abholung") or {}, disp + 1),
+                                      sicht.schicht if sicht else "filter")
                 h = hashlib.blake2b(bild.tobytes(), digest_size=8).digest()
                 if h == self.alt[disp]:
                     continue

@@ -280,7 +280,8 @@ set(ARR_QUELLEN src/arrangement.cpp src/arr_voices.cpp src/arr_output.cpp src/ar
     src/arr_host_measurement.cpp # plan 1.11 T5: the round-trip measurement of an effect host
     src/arr_track_phase.cpp # mehrkern slice 3.1: the sticky plan of the track phase
     src/arr_monitor.cpp # 1.8 Slice 3: monitor of the external inputs (R10)
-    src/arr_warp.cpp)   # Paket 1.13 Slice 2: Seite des Arrangements am Warp-Werk (nur die Schnittstelle warp_factory.h, kein Bungee)
+    src/arr_warp.cpp    # Paket 1.13 Slice 2: Seite des Arrangements am Warp-Werk (nur die Schnittstelle warp_factory.h, kein Bungee)
+    src/arr_launcher.cpp)   # loop deck K2: launcher voices
 list(APPEND ARR_QUELLEN src/arr_bk_sink.cpp src/arr_kit_sink.cpp src/arr_intern_sink.cpp src/arr_rb_sink.cpp src/arr_instrument_host_sink.cpp
      src/arr_rack_sink.cpp)   # 1.9 U6: instrument rack. D1 K2b: Senken (RB-338 über cypherdj::dsp -> libhall_ffi.a, Wirt-Slots)
 test_mutation(test_klick_mutation test_click CYPHERDJ_MUTATION_KLICK_BLOCKANFANG src/click.cpp src/clock.cpp)

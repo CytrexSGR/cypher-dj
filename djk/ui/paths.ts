@@ -76,7 +76,7 @@ export function arbeitsbestandVorgabe(i: string): string {
 export function renderProgramm(): string { return process.env.CYPHERDJ_RENDER || path.join(REPO, 'djk', 'core', 'build', 'cypherdj-render'); }
 
 // ---- Storage table (djk/config/ablage.json), also read by the Python package djk/ablage; both must give the same paths. ----
-export type AblageArt = 'projekte' | 'module' | 'sampler' | 'presets' | 'klaenge' | 'kollektionen' | 'raster' | 'hotcues' | 'kits' | 'loops' | 'geraete';
+export type AblageArt = 'projekte' | 'module' | 'sampler' | 'presets' | 'klaenge' | 'kollektionen' | 'raster' | 'hotcues' | 'kits' | 'loops' | 'geraete' | 'loopsets';
 export type FestName = 'mediathek' | 'analyse' | 'bibliothek_konfig' | 'surge_werk' | 'plugin_index' | 'umgebung' | 'pruefen' | 'quellen' | 'referenzen';
 type AblageTabelle = { vorgabe: string; arten: Record<string, { alt: string; neu: string; env: string | null; kern: boolean }>; fest: Record<string, { pfad: string; env: string | null }> };
 export type AblageOptionen = { tabelle?: AblageTabelle; log?: (e: { typ: 'ablage_beide'; art: string; alt: string; neu: string }) => void; gewarnt?: Set<string> };

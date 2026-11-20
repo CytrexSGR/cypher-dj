@@ -34,6 +34,7 @@ ECHTZEIT = [
     "src/core_arr.cpp",
     "src/arrangement.cpp",
     "src/arr_voices.cpp",
+    "src/arr_launcher.cpp",   # loop deck K2/K3: launcher voices run in the callback
     "src/arr_warp.cpp",   # 1.13 Slice 2: Seite des Arrangements am Warp-Werk (nicht warp_factory.cpp: das ist der Arbeitsfaden)
     "src/arr_output.cpp",
     "src/arr_monitor.cpp",   # 1.8 S3: the monitor of the external inputs runs in the callback

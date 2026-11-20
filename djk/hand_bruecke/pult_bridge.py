@@ -31,6 +31,8 @@ import s8_map as K  # noqa: E402
 import s8_usb  # noqa: E402
 import assignment as belegung  # noqa: E402
 import deck_page as deck_seite  # noqa: E402
+import loopdeck_page as loopdeck_seite  # noqa: E402
+import s8_loopdeck  # noqa: E402
 import lc3  # noqa: E402
 import launchpad  # noqa: E402
 import apc_production as apc_produktion  # noqa: E402
@@ -73,11 +75,20 @@ class Bruecke:
         self.s8_leds_verworfen = 0
         self.deck = deck_seite.DeckSeite(log)  # hot cues and loop through the page server (not in the kern hand path yet)
         self.apc = apc_produktion.ApcProduktion(log, self.zum_apc, self.senden)  # the APC20 as the project mixer while the main window shows PRODUCTION
+        self.loops = {1: s8_loopdeck.LoopSicht(), 2: s8_loopdeck.LoopSicht()}  # loops view state per side (s8_loopdeck.py)
         self.strip_zeit = {}  # side -> time of the last needle-search jump
         self.strip_griff = {}  # side -> grip state while the strip holds the deck without SHIFT (bend or scratch)
         self.strip_sprung = {}  # side -> {"start", "gesendet"} while SHIFT + strip seeks
         self.loop_groesse = {1: 4, 2: 4}  # beats per deck, set by the loop encoder (ladder 1..64)
         self.stand = {"ansicht": {1: "deck", 2: "deck"}, "loop_groesse": self.loop_groesse}  # shared with the screen loop
+        self.loopdeck = loopdeck_seite.LoopdeckSeite(log, self.stand["ansicht"])  # loop deck requests and stand (loops view)
+        self.stand["loopdeck"], self.stand["loops_sicht"] = self.loopdeck, self.loops  # the loops screen reads both
+        self.analog_loops = set()  # analog rows (names) that went to the loop deck instead of MIDI since their view began
+        self.analog_v7 = {}  # row name -> last 7-bit value (physical position of the control)
+        self.abholung = {}  # row name -> s8_loopdeck.Abholung: soft takeover of a control in the loops view
+        self.midi_zuletzt = {}  # row name -> last value forwarded as MIDI before its loops view began
+        self.rueck = {}  # row name -> (remembered MIDI value, side of the control): held back after the view until crossed
+        self.stand["abholung"] = self.abholung  # the loops screen marks controls that have not picked up
         # lage/pegel from the screen loop, read by the LED loop
         self.tasten = K.tasten()
         self.analog = K.analog()
@@ -139,7 +150,15 @@ class Bruecke:
             cues = self.stand.get("cues") or {}
             lage = self.stand.get("lage")
             for rid, deck in ((0x80, 1), (0x81, 2)):
-                frame = s8_led.rahmen_fuer_seite(rid, deck, set(cues.get(deck) or {}), lage, karte)
+                farben = None
+                if self.stand["ansicht"].get(deck) == "loops":  # loops view: pads show the cells of the visible row pair
+                    sicht = self.loops[deck]
+                    if sicht.slice:
+                        farben = s8_loopdeck.slice_led_farben(sicht, self.loopdeck.deck(deck), self.loopdeck.beat_jetzt())
+                    else:
+                        farben = s8_loopdeck.led_farben(sicht, self.loopdeck.deck(deck), time.time())
+                frame = s8_led.rahmen_fuer_seite(rid, deck, set(cues.get(deck) or {}), lage, karte, farben,
+                                                 freeze=self.loops[deck].slice and self.stand["ansicht"].get(deck) == "loops")
                 if alt.get(rid) != frame:
                     usb.senden(frame)
                     alt[rid] = frame
@@ -153,14 +172,18 @@ class Bruecke:
                 continue
             if alt is None and not jetzt:
                 continue  # first report: only report what is held
-            if belegung.faengt_ab(kanal, note):
-                d = kanal - 12  # deck A left, B right
+            d = kanal - 12  # deck A left, B right
+            if belegung.faengt_ab(kanal, note, self.stand["ansicht"].get(d)):
                 if jetzt:  # pads = hot cues 1..8 (SHIFT deletes; empty pad during a loop stores the loop), LOOP = loop on/off
+                    a = self.stand["ansicht"]
                     if note == 15:
                         self.deck.loop(d, self.loop_groesse[d])
-                    elif note == 40:  # top-left screen button: next screen view (deck -> studio -> seq -> deck)
-                        a = self.stand["ansicht"]
-                        a[d] = {"deck": "studio", "studio": "seq"}.get(a[d], "deck")
+                    elif note == 19:  # DECK: deck <-> loops view (from studio or seq it goes to loops)
+                        self.ansicht_setzen(d, "deck" if a[d] == "loops" else "loops")
+                    elif note == 40:  # top-left screen button: next screen view (deck -> studio -> seq -> loops -> deck)
+                        self.ansicht_setzen(d, {"deck": "studio", "studio": "seq", "seq": "loops"}.get(a[d], "deck"))
+                    elif a[d] == "loops":
+                        self.loops_taste(d, note, shift[kanal])
                     else:
                         self.deck.hotcue(d, note - 19, loeschen=shift[kanal], loop_laenge=self.loop_groesse[d])
                 if self.monitor:
@@ -177,7 +200,9 @@ class Bruecke:
         if alt is not None:
             for d, b, sh in ((1, 1, 4), (2, 2, 4)):  # browse encoders: left byte 1 high nibble (measured), right byte 2 high
                 schritt = ((r[b] >> sh & 15) - (alt[b] >> sh & 15) + 8) % 16 - 8   # (measured 2026-11-14); deck view: move the track
-                if schritt:  # one detent = 1 beat, with SHIFT 1 bar (Traktor's jog when stopped)
+                if schritt and self.stand["ansicht"].get(d) == "loops":  # loops view: the row pair
+                    s8_loopdeck.paar_drehen(self.loops[d], schritt)
+                elif schritt:  # one detent = 1 beat, with SHIFT 1 bar (Traktor's jog when stopped)
                     self.deck.spulen(d, schritt * (4 if r[9 if d == 1 else 17] & 0x80 else 1))
             for d, b, sh in ((1, 1, 0), (2, 2, 0)):  # loop encoders next to the small faders: left byte 1 low nibble
                 # (measured 2026-11-14), right byte 2 low nibble (measured the same evening); 4-bit absolute, wrapping
@@ -262,10 +287,113 @@ class Bruecke:
         g["t"], g["pos"] = jetzt, pos
         self.deck.scrub(d, 2, g["delta"])
 
+    def jetzt(self):
+        return time.monotonic()
+
+    def ansicht_setzen(self, d, neu):
+        """Change the view of side d. Leaving the loops view sends nothing: a control that moved in the loops view is held
+        back from MIDI until its value has reached or crossed the value last forwarded before the view (`rueck`), so the
+        deck's own track does not jump. Controls that did not move forward at once. Only the rows of side d are touched."""
+        a = self.stand["ansicht"]
+        alt, a[d] = a[d], neu
+        if neu != "loops":
+            self.loops[d].slice = False  # slice mode ends with the loops view
+        if alt == "loops" and neu != "loops":
+            for name, _, kanal, cc, _ in self.analog:
+                if kanal == 12 + d and 20 <= cc <= 27 and name in self.analog_loops:
+                    ziel, v = self.midi_zuletzt.pop(name, None), self.analog_v7.get(name)
+                    if ziel is not None and v is not None and v != ziel:
+                        self.rueck[name] = (ziel, (v > ziel) - (v < ziel))
+                    self.analog_loops.discard(name)
+                    self.abholung.pop(name, None)
+
+    def loops_regler(self, d, name, cc, v):
+        """Loops view: a fader (CC 24..27) is the volume of track 1..4; an fx dial (CC 20..23) is the value of the side's knob
+        layer (filter, EQ band or send) of track 1..4. Soft takeover: the control posts only once its value has reached or
+        crossed the model value of the stand (s8_loopdeck.Abholung), per layer. Without a loop deck nothing is posted."""
+        stand = self.loopdeck.deck(d)
+        if cc >= 24:
+            spur, feld = cc - 23, "fader_db"
+        else:
+            spur = cc - 19
+            gruppe, key = s8_loopdeck.schicht_feld(self.loops[d].schicht)
+            feld = gruppe if key is None else f"{gruppe}:{key}"
+        try:
+            sp = stand["spuren"][spur - 1]
+            modell = float(sp[feld]) if cc >= 24 else s8_loopdeck.modell_wert(sp, self.loops[d].schicht)
+            kennung = (stand.get("gruppe_id"), sp.get("spur_id"))
+            if modell is None:
+                raise ValueError(feld)
+        except (TypeError, KeyError, IndexError, ValueError):
+            self.abholung.pop(name, None)
+            return
+        ab = self.abholung.get(name)
+        if ab is not None and ab.feld != feld:  # the layer changed: the knob has to pick up again
+            self.loopdeck.vergessen(d, ab.spur, ab.feld)
+            ab = None
+        if ab is None:
+            ab = self.abholung[name] = s8_loopdeck.Abholung(d, spur, feld)
+        if ab.schritt(v, modell, kennung, self.jetzt()):
+            self.loopdeck.regeln(d, spur, feld, ab.wert(v))
+        else:
+            self.loopdeck.vergessen(d, spur, feld)
+
+    def loops_taste(self, d, note, shift):
+        """A bridge-owned press in the loops view of side d: pads 20..27, fx buttons 31..34 (knob layer), buttons under the knobs
+        35..38 (mutes; with SHIFT the layer's reset or kill), display buttons 44/45 (scene), CAPTURE 49, FREEZE 16 (slice mode:
+        pads jump to slices, on 1..4 pick the focus)."""
+        befehl = None
+        sicht = self.loops[d]
+        if note == 16:
+            s8_loopdeck.freeze_umschalten(sicht)
+        elif 31 <= note <= 34:
+            if s8_loopdeck.schicht_waehlen(sicht, note, shift):
+                self.schicht_gewechselt(d)
+        elif 35 <= note <= 38 and sicht.slice:  # slice mode: the buttons under the knobs pick the focus track
+            s8_loopdeck.fokus_waehlen(sicht, note - 34)
+        elif 35 <= note <= 38 and shift:  # SHIFT + on_n: the layer's kill (LO/MID/HI), filter reset or send off
+            try:
+                sp = self.loopdeck.deck(d)["spuren"][note - 35]
+            except (TypeError, KeyError, IndexError):
+                sp = None
+            befehl = s8_loopdeck.schicht_druck(d, note - 34, sicht.schicht, sp, self.loopdeck.streifen)
+        elif 35 <= note <= 38:
+            befehl = s8_loopdeck.mute_befehl(d, note - 34, self.loopdeck.deck(d), self.loopdeck.mute)
+        elif 20 <= note <= 27 and sicht.slice:
+            befehl = s8_loopdeck.slice_befehl(sicht, d, note - 19, self.loopdeck.deck(d))
+        elif 20 <= note <= 27:
+            befehl = s8_loopdeck.pad_befehl(self.loops[d], d, note - 19, shift, self.loopdeck.deck(d))
+        elif note in (44, 45):
+            befehl = s8_loopdeck.szene_befehl(self.loops[d], d, note == 45)
+        elif note == 49:
+            befehl = s8_loopdeck.capture_befehl(d)
+        if befehl:
+            self.loopdeck.senden(*befehl)
+
+    def schicht_gewechselt(self, d):
+        """The knob layer of side d changed: the dials (not the faders) lose their pickup and pick up again in the new layer."""
+        for name in [n for n, a in self.abholung.items() if a.deck == d and a.feld != "fader_db"]:
+            a = self.abholung.pop(name)
+            self.loopdeck.vergessen(d, a.spur, a.feld)
+
+    def raster_drehen(self, d, schritt):
+        """Loops view: the loop encoder steps the grid (1/4 .. 4 bars). No loop deck yet: nothing to change."""
+        stand = self.loopdeck.deck(d)
+        if not stand:
+            return
+        alt = self.loopdeck.raster.get(d) or stand.get("raster")
+        neu = s8_loopdeck.raster_drehen(alt, schritt)
+        if neu != alt:
+            self.loopdeck.raster[d] = neu  # builds further turns on the request until the next poll
+            self.loopdeck.senden("/loopdeck/raster", {"deck": d, "raster": neu})
+
     LOOP_LEITER = [1, 2, 4, 8, 16, 32, 64]  # beats the page server accepts for a deck loop
 
     def loop_drehen(self, d, schritt):
-        """Traktor's loop encoder: one detent halves/doubles the loop size; a running loop takes the new size."""
+        """Traktor's loop encoder: one detent halves/doubles the loop size; a running loop takes the new size.
+        In the loops view it steps the grid instead."""
+        if self.stand["ansicht"].get(d) == "loops":
+            return self.raster_drehen(d, schritt)
         i = self.LOOP_LEITER.index(self.loop_groesse[d]) if self.loop_groesse[d] in self.LOOP_LEITER else 2
         neu = self.LOOP_LEITER[max(0, min(len(self.LOOP_LEITER) - 1, i + (1 if schritt > 0 else -1)))]
         if neu != self.loop_groesse[d]:
@@ -276,6 +404,20 @@ class Bruecke:
         for name, b, kanal, cc, art in self.analog:
             roh = r[b] | (r[b + 1] << 8)
             v = K.zu_7bit(roh, art)
+            if kanal in (13, 14) and 20 <= cc <= 27:
+                self.analog_v7[name] = v
+                if self.stand["ansicht"].get(kanal - 12) == "loops":  # loops view: track volume and filter, not MIDI
+                    if name not in self.analog_loops:  # the view began: remember what the deck last got from this control
+                        self.analog_loops.add(name)
+                        self.midi_zuletzt[name] = gesendet.get(name)
+                        self.rueck.pop(name, None)
+                    self.loops_regler(kanal - 12, name, cc, v)
+                    continue
+                if name in self.rueck:  # after the loops view: forward again once the remembered value is reached or crossed
+                    ziel, vz = self.rueck[name]
+                    if (v > ziel) - (v < ziel) not in (0, -vz):
+                        continue
+                    del self.rueck[name]
             if gesendet.get(name) == v:
                 continue
             gesendet[name] = v

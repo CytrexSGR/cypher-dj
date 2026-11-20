@@ -7,7 +7,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DECKS } from '../public/curves.js';
-import { exportKnopf } from '../public/live_module.js';
 
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const lies = (n) => fs.readFileSync(path.join(PUBLIC, n), 'utf8');
@@ -74,13 +73,7 @@ test('the export button state is computed per deck, for every button of that dec
   const f = funktion('zeigeExport');
   assert.match(f, /\$\$\(`\[data-exportloop="\$\{n\}"\]`\)/);
   assert.match(app, /for \(const n of DECKS\) zeigeExport\(n\);/);
-  // the pure part: no loop, nothing loaded and a closed live container are three different reasons, per deck state
-  const ohneLoop = exportKnopf({ loop: false, geladen: true, live: true });
-  const mitLoop = exportKnopf({ loop: true, geladen: true, live: true });
-  const zu = exportKnopf({ loop: true, geladen: true, live: false });
-  assert.equal(mitLoop.aus, false);
-  assert.equal(ohneLoop.aus, true);
-  assert.notEqual(ohneLoop.titel, zu.titel);
+  assert.doesNotMatch(f, /loopsPlatzDa|liveOffen/, 'the export no longer depends on a Loops place or on an open live container (loop deck P5)');
 });
 
 test('the draw loop skips hidden deck sections; the library offers LOAD for all four decks', () => {

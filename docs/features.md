@@ -21,18 +21,27 @@ of the beta. The short version is the [README](../README.md).
   `kanal_limiter_vorhalt_ms` is set in `kern.toml`) and a spectrum analyser of 29 bands, three per octave, for one
   channel or the master
 - Two loop boxes that record, resample and play back in time
-- A DJ view with four places: each place shows a track deck, the Strudel channels, the loop slots or a SEQ deck,
+- A DJ view with four places: each place shows a track deck, the Strudel channels, a loop deck or a SEQ deck,
   switched only while that channel is silent (fader closed, no headphone cue); track place N is deck N. The layout is
   kept per browser. A track place folds to a mini view (position, overview, loop lengths, transport) and leaves its
   height to the other place of its column
+- The four faders belong to the four places, not to what a place shows: place 1 is strip A, place 2 is B, place 3 is L1,
+  place 4 is L2 (the S8 and the APC20 keep their fixed assignment). Whatever stands in a place, a track, a SEQ deck, the
+  Strudel sum or a loop deck, sounds through the fader of that place.
 - The main mixer has four channel strips, deck A, deck B, L1 and L2, around a middle column with the master, the
   headphones, beat FX 1 and 2 and COLOR. The Strudel channels have their strips inside the Strudel place, next to a
   SOUND column that picks the instrument of bass and melody (Surge XT or any Cypher Modular instrument) and shows its
   first four knobs; OPEN shows the full panel of that instrument in its own window
-- Loop slots L1 and L2: a loop cut from a deck (or loaded by the agent) becomes a live module with its stems and MIDI
-  and plays on its own DJ channel with EQ, filter, fader and crossfader side. Placing a module into a slot whose
-  channel is open is refused, also for the agent, so nothing new starts audibly under your hands. Each slot shows the
-  waveform of its loop with a beat grid, bar numbers and the playhead of the live transport
+- Two loop decks, LOOP 1 and LOOP 2, each with four tracks of eight cells. A cell holds an audio loop or a one-shot; a
+  click launches it on the next point of the launch grid (1/4 beat to four bars) and the cell that was playing on that
+  track ends on the same point. Scene buttons start a whole row, a running loop can be re-entered at one of eight slices,
+  and loop sets store a whole deck. Loops come from the library, from a module or stem, from the running loop of a track
+  deck (LOOP and 1 2 3 4) or from the Strudel sum: a row in the Strudel place records the sum of the three channels into a
+  loop deck track as a new cell. Each deck plays into the channel of the place that shows it and is refused where that
+  channel is open, also for the agent, so nothing new starts audibly under your hands
+- A channel strip per loop track, opened with STRIP: three-band EQ with kill, a HALL and a DELAY send that stay inside the
+  deck's channel, and one effect slot (for example Remix or Crunch); a Traktor Kontrol S8 side can run its loop deck with
+  pads, faders, dials and scene buttons
 - Cypher Remix as FX3: a beat-synchronous remix station (build-up and break-down effects, a three-band isolator, a
   pad with roll and drum voices, a release lever) in its own window. Key 3 on a channel strip sends that channel
   through it, key 3 on the master sends all of them; the agent drives the same knobs
@@ -58,7 +67,7 @@ of the beta. The short version is the [README](../README.md).
   (`hall_faeden` and `hall_cpus` in `kern.toml`); a Hall that is not ready at its deadline is computed in the callback
   instead, and after repeated late blocks the pool switches itself off with the same sound and tries again after a back-off. `djk-start` gives the core
   four physical cores by default (`CYPHERDJ_KERN_KERNE`) and the remaining ones to stem separation
-- Live master tempo from 60 to 200 BPM, ramped over a bar: the decks and the loop boxes (key-locked,
+- Live master tempo from 60 to 200 BPM, ramped over a bar: the decks, the loop boxes and the loop decks (key-locked,
   pitch kept), the pattern channels and recordings follow it
 
 **Prepare**
@@ -193,7 +202,7 @@ references before they went in:
   envelopes, LFOs, chorus, reverb, delay, dynamics, free feedback paths and, among others, wavetable, FM, granular,
   modal resonator, string, sampler, filter, sample-and-hold, multi-stage envelope, wavefolder, drum kit and remix blocks; 61 block types in all) with up to 64 knobs that the human or the agent
   can turn; a knob can have a start value and a centre value of its own. It plays on the melody and bass channels, on extra pattern streams and on production instrument tracks, and it
-  runs as an effect on DJ channels, the DJ master, the loop slots and send returns. Example patches: a Juno-style pad, a sync lead, a wobble bass, FM bells, a plucked string. See [docs/cypher-modular.md](cypher-modular.md)
+  runs as an effect on DJ channels, the DJ master, the loop deck channels and send returns. Example patches: a Juno-style pad, a sync lead, a wobble bass, FM bells, a plucked string. See [docs/cypher-modular.md](cypher-modular.md)
 - **RB-338**: a 303-style bass voice with cutoff, resonance, envelope, decay, accent and slide, playable
   from the bass pattern channel instead of Surge XT
 - **Mono Synth, Poly Synth, Neuro Bass**: three synthesizers built as Cypher Modular graphs. Mono Synth has two

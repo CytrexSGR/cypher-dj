@@ -859,8 +859,12 @@ int LoopBoxen::block(const Karte& k, int64_t n0, int n, float* const* ein_l, flo
         const float* er = ein_r[MITSCHNITT_KANAL];
         for (int64_t t = von; t < bis; ++t) {
           const int64_t p = mt.gefuellt + (t - von);
-          mt.daten[(size_t)(2 * p)] = el[t - n0];
-          mt.daten[(size_t)(2 * p + 1)] = er[t - n0];
+          float l = el[t - n0], r = er[t - n0];
+          if (mt.summe) {  // erz/1+2+3 (Kanäle MITSCHNITT_KANAL..+2), float: keine Klemme, die Datei ist f32
+            for (int c = 1; c < MITSCHNITT_SUMME_KANAELE; ++c) { l += ein_l[MITSCHNITT_KANAL + c][t - n0]; r += ein_r[MITSCHNITT_KANAL + c][t - n0]; }
+          }
+          mt.daten[(size_t)(2 * p)] = l;
+          mt.daten[(size_t)(2 * p + 1)] = r;
         }
         mt.gefuellt += bis - von;
       }

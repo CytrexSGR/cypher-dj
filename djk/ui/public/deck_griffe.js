@@ -1,9 +1,9 @@
 // Deck controls: raster, hotcues, loops, pads, handles.
 import { ScrubZieher } from './scrub.js';
-import { exportiereInSlot } from './live_module.js';   // live modules task 4
 import { laengeFrames } from './wave.js';
 import { $, $$, deckAnsicht, melde, zustand } from './page_state.js';
-import { exportTaste, holeJson, liveOffen, pruefeLiveSpaeter } from './live_view.js';
+import { exportTaste } from './live_view.js';
+import { exportiereVonDeck, wechsleExportDeck } from './loopdeck/view.js';   // loop deck P5
 import { uhrKopf } from './loop_rec_view.js';
 const LOOP_LAENGEN = [1, 2, 4, 8, 16, 32, 64];                      // Plan E9: Loop-Reihe (Beats)
 const FARBE_SHOT = '#58d66b', FARBE_LOOP = '#2fd6c3';       // Plan E9: Hotcue-Marken
@@ -95,14 +95,13 @@ export function bindeDeckBedienung(n, d) {
   });
   $('[data-muell]', d).addEventListener('click', () => setzeMuell(n, !a.muell));
   $('[data-sync]', d).addEventListener('click', () => deckPost('/deck/start', { deck: n, ab: 'takt' }, `Sync deck ${n}`));
-  // the running deck loop becomes a module of the loop slot L1 or L2 (POST /modul/export {deck, slot})
-  for (const b of $$('[data-nachbox]', d)) b.addEventListener('click', async () => {
+  // the running deck loop goes into track 1..4 of the target loop deck (POST /loopdeck/laden { deck, spur, quelle: { von_deck } })
+  for (const b of $$('[data-nachspur]', d)) b.addEventListener('click', async () => {
+    if (b.disabled) return;
     if (!loopAktiv(zustand.decks[n])) { melde('Loop → L: no loop running on this deck', true); return; }
-    if (!liveOffen()) { melde('Open the live container first (LIVE), then export', true); return; }
-    const r = await exportiereInSlot(n, Number(b.dataset.nachbox), holeJson);
-    melde(r.text, !r.ok);
-    pruefeLiveSpaeter(0);
+    await exportiereVonDeck(n, Number(b.dataset.nachspur));
   });
+  for (const b of $$('[data-nachdeck]', d)) b.addEventListener('click', wechsleExportDeck);
   for (const b of $$('[data-raster]', d)) b.addEventListener('click', () => {
     a.rasterWahl = Number(b.dataset.raster);
     for (const x of $$('[data-raster]', d)) x.classList.toggle('an', x === b);

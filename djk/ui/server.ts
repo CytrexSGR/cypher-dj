@@ -63,6 +63,8 @@ import { projektWurzelVorgabe } from './project/storage.ts';
 import { samplerBereich, schnittKurz } from './areas/sampler/area.ts';   // sampler A1 task 4
 import { samplerKitBereich } from './areas/sampler/kit_routes.ts';   // sampler B task 2
 import { liveBereich, type DeckLoopAusschnitt } from './areas/live/export.ts';
+import { loopdeckBereich } from './areas/live/loopdeck.ts';
+import { loopsetsBereich } from './areas/live/loopsets.ts';
 import { liveSlots } from './project/live.ts';
 import { leseBusRing, messeLive } from './project/sound_live.ts';
 import { LIVE_VORLAUF_FRAMES, LIVE_LAUTHEIT_FRAMES } from './project/sound_contract.ts';
@@ -148,11 +150,14 @@ export class Oberflaeche {
     hallPool: null as { an: boolean; faeden: number; spaet: number; zurueck: number } | null,   // mehrkern Task 5: the kern's /zustand/hall_pool (2 Hz and on change); null until it came, i.e. an old kern only: a kern without a pool sends nine zeros, which become {an: false, modus: 'aus', ...}
     spurPool: null as { an: boolean; modus: 'aus' | 'an' | 'auto'; blocks_parallel: number; einheiten_worker: number; einheiten_caller: number; seriell: number; haengt: number; spaet: number; zurueck: number } | null,   // mehrkern slice 3.2 Task 8: the kern's /zustand/spur_pool (2 Hz and on change); null until it came, i.e. no pool or an old kern
     kanalLimiter: null as { gebaut: boolean; latenz_samples: number } | null,   // 1.15 A5c: the kern's own word (/e/kanal_limiter); null until it came, a new kern says it again on its first hallo
+    platzKanal: [0, 0] as [number, number],   // Platz-Kanal: what the kern routes into pad/1, pad/2 (0 own, 1 Strudel, 2 deck/3, 3 deck/4)
     fxRouting: 'post_fader' as 'post_fader' | 'insert',   // Ohr T18: wo der Beat-FX in den Kanalzügen sitzt (Stand des Kerns)
     graphen_geladen: {} as Record<string, string> };   // Baukasten S12/S16: channel -> graph as the kern reports it (/e/graph); optimistic after a POST
   // Ohr T18: Andreas' letzte Wahl. Der Kern behält das Routing über einen Neustart nicht (Rev. 5); der Server sendet sie
   // nach /e/neustart erneut, wenn sie nicht die Vorgabe ist. Nur im Speicher: ein Server-Neustart kehrt zur Vorgabe zurück.
   private fxRoutingWunsch: 'post_fader' | 'insert' = 'post_fader';
+  // Platz-Kanal: what the page last reported for places 3/4 (pad/1, pad/2). The kern forgets it over a restart; resent after /e/neustart.
+  private platzKanalWunsch: [number, number] = [0, 0];
   // Command ids: µs since the epoch (about 1.8e15), so they rise across page-server restarts and stay below 2^53 for good. The old start, the
   // monotonic clock in ns, passed 2^53 after 104 days of uptime; Number(++id) then rounded neighbouring ids to one double (audit U00).
   private id = BigInt(Date.now()) * 1000n;
@@ -472,6 +477,15 @@ export class Oberflaeche {
       leeren: { speichere: (p, gid) => speichereModul(p, gid, { basis: modulBasisVon(opt.modulOrdner, inst) }),
         kern: { uhr: () => (this.kern.uhr as { beat: number; bpm: number } | null),
           laeuft: () => { const st = this.proj.sitzung.lage.arr?.status; return st === 1 || st === 2; } } } }));
+    // loop deck M4: /loopdeck/stand, /start, /stopp, /szene; the decoded length of a cell comes from the decode folder of the project
+    this.router.melde(loopdeckBereich(this.bereichKontext(), this.proj.zugang, {
+      frames: (sha) => {
+        try { const g = fs.statSync(path.join(this.proj.zugang.arbeitsordner(), 'audio', `${sha}.f32`)).size; return g >= 8 ? Math.floor(g / 8) : null; } catch { return null; }
+      },
+      liveOeffnen: (q) => this.proj.sitzung.liveOeffnen(q, false, true),   // M5 writes open or create the live container the way POST /live/oeffnen does
+      loopOrdner: () => this.loopOrdner(), modulBasis: () => modulBasisVon(opt.modulOrdner, inst),
+      katalogLoop: (sha) => this.katalogFuerDeck(sha), deckLoop: (deck) => this.deckLoopAusschnitt(deck) }));
+    this.router.melde(loopsetsBereich(this.bereichKontext(), this.proj.zugang));   // loop deck S1b: /loopsets, /loopset/speichern, /loopset/laden (store kind loopsets)
     // plan live-module task 10: GET /module, POST /modul/einsetzen, POST /modul/speichern (the same store as above)
     this.router.melde(bibliothekBereich(this.bereichKontext(), this.proj.zugang, { basis: () => modulBasisVon(opt.modulOrdner, inst), kanalOffen: (k) => this.kanalGeoeffnet(k) }));
     // sampler A1 task 4: /sampler/*; loops and module folder of this instance, read at every request (the getters follow the options)
@@ -781,6 +795,11 @@ export class Oberflaeche {
       this.stand.fxRouting = 'post_fader';
       if (this.fxRoutingWunsch !== 'post_fader') this.fxRoutingSenden(this.fxRoutingWunsch, 'andreas');
     }
+    if (d.adresse === '/e/platz/kanal' && (Number(f.pad) === 1 || Number(f.pad) === 2)) this.stand.platzKanal[Number(f.pad) - 1] = Number(f.inhalt);
+    if (neuerKern || gebremst) {   // Platz-Kanal: a new kern starts with every pad on its own signal; the page's wish goes again
+      this.stand.platzKanal = [0, 0];
+      for (const p of [1, 2]) if (this.platzKanalWunsch[p - 1] !== 0) this.platzKanalSenden(p, this.platzKanalWunsch[p - 1], 'andreas');
+    }
     if (neuerKern || gebremst) this.fahrtEnde.clear();                 // Plan Glanz 1.2: ob ein gebremster Start den Beat auf 0 setzt, ist ungeprüft
     if (neuerKern || gebremst) this.loopRasterLive = {};              // Plan Grid, Review F5
     if ((neuerKern || gebremst) && Object.keys(this.stand.graphen_geladen).length) this.setzeGraphenGeladen({});   // S12: the kern keeps no graph over a restart
@@ -984,6 +1003,13 @@ export class Oberflaeche {
   private fxRoutingSenden(routing: 'post_fader' | 'insert', quelle: string): { id: number; quelle: string; routing: number } {
     const felder = { id: Number(++this.id), quelle, routing: routing === 'insert' ? 1 : 0 };
     this.kern.sende('/k/fx/routing', felder);
+    this.gesendet++;
+    return felder;
+  }
+  // Platz-Kanal: /k/platz/kanal to the kern (thin pass-through); returns the fields
+  private platzKanalSenden(pad: number, inhalt: number, quelle: string): { id: number; quelle: string; pad: number; inhalt: number } {
+    const felder = { id: Number(++this.id), quelle, pad, inhalt };
+    this.kern.sende('/k/platz/kanal', felder);
     this.gesendet++;
     return felder;
   }
@@ -1530,23 +1556,38 @@ export class Oberflaeche {
 
   // Browser S6: Loop aus der Mediathek in die Loop-Bibliothek (danach lädt die Seite ihn wie jeden Loop per POST /loop).
   // Rechnen darf nur ein Import zur Zeit und nur mit nice 19 / ionice idle (loop_import.ts); dieselbe Quelle wird nicht doppelt angelegt.
+  // The import itself (also the catalogue source of a loop deck cell): the loop of a catalogue sound is in the library afterwards, an earlier import is reused.
+  private async loopAusKatalogName(sha: string): Promise<{ name: string; beats: number; schonDa: boolean }> {
+    const z = this.katalog.eintrag(sha);
+    if (!z) throw new KatalogFehler(404, 'unbekannt');
+    if (z.typ !== 'loop') throw new KatalogFehler(409, 'kein_loop');
+    if (z.schutz === 'ableton') throw new KatalogFehler(409, 'nur_live');
+    if (!z.pfad || !fs.existsSync(z.pfad)) throw new KatalogFehler(409, 'datei_fehlt');
+    const beats = beatsVon(z);
+    const dir = this.loopOrdner();
+    const da = findeImport(dir, z.sha);
+    if (da) return { ...da, schonDa: true };
+    const t0 = Date.now();
+    let naht: Record<string, unknown> = {};
+    const name = await importiereLoop({ bericht: (x) => { naht = x; }, pfad: z.pfad, beats, bpm: z.bpm, name: loopNameVon(z.name ?? z.titel ?? 'loop', dir), dir, werkzeug: this.opt.loopWerkzeug,
+      herkunft: { quelle: 'mediathek', sha: z.sha, pfad: z.pfad, bpm: z.bpm, takte: z.takte } });
+    this.opt.log?.({ typ: 'loop_importiert', name, beats, sha: z.sha, ms: Date.now() - t0, ...naht });
+    return { name, beats, schonDa: false };
+  }
+  // Loop deck {sha} source: a catalogue loop goes the way of POST /loops/aus-katalog, a one-shot is copied as it is (art 'einmal'); a track is kein_loop
+  private async katalogFuerDeck(sha: string): Promise<{ name: string; einmal?: { datei: string; sha: string; frames: number } }> {
+    const z = this.katalog.eintrag(sha);
+    if (z?.typ !== 'oneshot') return this.loopAusKatalogName(sha);
+    if (z.schutz === 'ableton') throw new KatalogFehler(409, 'nur_live');
+    if (!z.pfad || !fs.existsSync(z.pfad)) throw new KatalogFehler(409, 'datei_fehlt');
+    return { name: (z.name ?? z.titel ?? 'one-shot').toString().trim().slice(0, 64) || 'one-shot',
+      einmal: { datei: z.pfad, sha: z.sha, frames: z.dauer_s !== null && z.dauer_s > 0 ? Math.ceil(z.dauer_s * 48000) : 0 } };
+  }
   private async loopAusKatalog(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
     try {
-      const z = this.katalog.eintrag(String(d.sha ?? ''));
-      if (!z) throw new KatalogFehler(404, 'unbekannt');
-      if (z.typ !== 'loop') throw new KatalogFehler(409, 'kein_loop');
-      if (z.schutz === 'ableton') throw new KatalogFehler(409, 'nur_live');
-      if (!z.pfad || !fs.existsSync(z.pfad)) throw new KatalogFehler(409, 'datei_fehlt');
-      const beats = beatsVon(z);
-      const dir = this.loopOrdner();
-      const da = findeImport(dir, z.sha);
-      if (da) return this.json(a, 200, { ...da, schon_da: true });
-      const t0 = Date.now();
-      let naht: Record<string, unknown> = {};
-      const name = await importiereLoop({ bericht: (x) => { naht = x; }, pfad: z.pfad, beats, bpm: z.bpm, name: loopNameVon(z.name ?? z.titel ?? 'loop', dir), dir, werkzeug: this.opt.loopWerkzeug,
-        herkunft: { quelle: 'mediathek', sha: z.sha, pfad: z.pfad, bpm: z.bpm, takte: z.takte } });
-      this.opt.log?.({ typ: 'loop_importiert', name, beats, sha: z.sha, ms: Date.now() - t0, ...naht });
-      this.json(a, 201, { name, beats });
+      const r = await this.loopAusKatalogName(String(d.sha ?? ''));
+      if (r.schonDa) return this.json(a, 200, { name: r.name, beats: r.beats, schon_da: true });
+      this.json(a, 201, { name: r.name, beats: r.beats });
     } catch (e) {
       if (e instanceof LoopImportFehler) {
         if (e.code >= 500 || e.code === 422) this.opt.log?.({ typ: 'loop_import_fehler', fehler: e.fehler, text: e.text });
@@ -1591,11 +1632,13 @@ export class Oberflaeche {
   // kommen erst zum ab_beat; darum bis ab_beat + ¼ Beat warten (höchstens 4 s), dann die letzte; null, wenn keine kam.
   // bisEnde: nur der Endstatus zählt (nicht 1 angenommen, nicht 2 gestartet): ein Teil belegt seinen Stellwerk-Platz bis dahin (1.10 Slice 3, P11)
   // maxMs: longer wait without abBeat for slow loads (S12: sampler graphs)
-  private async warteQuittung(id: number, abBeat?: number, bisEnde = false, maxMs?: number): Promise<{ status: number; grund: string } | null> {
+  // ersteGenuegt (loop deck, M4 fix): the first receipt of any status ends the wait (status 1, accepted and pending, is an answer); maxMs is then only
+  // the upper bound for no receipt at all
+  private async warteQuittung(id: number, abBeat?: number, bisEnde = false, maxMs?: number, ersteGenuegt = false): Promise<{ status: number; grund: string } | null> {
     const t0 = Date.now();
     for (;;) {
       const l = this.quittungen.get(id);
-      const x = l?.find((q) => (bisEnde ? Number(q.status) > 2 : Number(q.status) !== 1));
+      const x = l?.find((q) => (ersteGenuegt ? true : bisEnde ? Number(q.status) > 2 : Number(q.status) !== 1));
       if (x) return { status: Number(x.status), grund: String(x.grund ?? '') };
       const beat = (this.kern.uhr as unknown as { beat: number } | null)?.beat ?? 0;
       const faellig = abBeat === undefined ? Date.now() - t0 >= (maxMs ?? 400) : beat >= abBeat + 0.25;   // S12: maxMs for slow loads (sampler graphs)
@@ -2401,7 +2444,7 @@ export class Oberflaeche {
     const proTakt = this.proTakt();
     return { uhr: { beat: Math.round(beat * 100) / 100, takt: Math.floor(beat / proTakt) + 1, schlag: Math.floor(((beat % proTakt) + proTakt) % proTakt) + 1,
       bpm: u?.bpm ?? null }, ...(proTakt !== 4 ? { taktart: [proTakt, 4] } : {}), ki: { gestoppt: this.kiGestoppt }, decks, regler, boxen: this.stand.loops, fx: this.stand.fx,
-      fx_routing: this.stand.fxRouting, ...(Object.keys(insGr).length ? { ins_gr: insGr } : {}), ...(this.stand.kanalLimiter ? { kanal_limiter: { ...this.stand.kanalLimiter } } : {}), ...(this.stand.hallPool ? { hall_pool: { ...this.stand.hallPool } } : {}), ...(this.stand.spurPool ? { spur_pool: { ...this.stand.spurPool } } : {}), quittungen: this.cypherQuittungen.slice(-10), studio: this.studioLage(), ausgang: leseAusgang(this.opt.digitalout) };
+      fx_routing: this.stand.fxRouting, platz_kanal: [...this.stand.platzKanal], ...(Object.keys(insGr).length ? { ins_gr: insGr } : {}), ...(this.stand.kanalLimiter ? { kanal_limiter: { ...this.stand.kanalLimiter } } : {}), ...(this.stand.hallPool ? { hall_pool: { ...this.stand.hallPool } } : {}), ...(this.stand.spurPool ? { spur_pool: { ...this.stand.spurPool } } : {}), quittungen: this.cypherQuittungen.slice(-10), studio: this.studioLage(), ausgang: leseAusgang(this.opt.digitalout) };
   }
 
   // Plan Hand D1: Quelle je Anfrage. Kopf x-djk-quelle: cypher → jeder Kern-Befehl dieser Anfrage (auch über await)
@@ -2425,7 +2468,7 @@ export class Oberflaeche {
         const id = Number(++this.id);
         this.kern.sende(adresse, { id, quelle: this.quelle(), ...felder } as Felder); this.gesendet++; return id;
       },
-      warteQuittung: (id, abBeat, bisEnde, maxMs) => this.warteQuittung(id, abBeat, bisEnde, maxMs),
+      warteQuittung: (id, abBeat, bisEnde, maxMs, ersteGenuegt) => this.warteQuittung(id, abBeat, bisEnde, maxMs, ersteGenuegt),
       quelle: () => (this.quelle() === 'cypher' ? 'cypher' : 'andreas'),
       kiGestoppt: () => this.kiGestoppt,
       verteile: (ereignis) => this.verteile(ereignis),
@@ -2577,6 +2620,14 @@ export class Oberflaeche {
       } },
       { methode: 'POST', pfad: '/graph', schutz: F, handler: async (q, a) => this.graphLaden(await this.koerper(q), a) },
       { methode: 'GET', pfad: '/fx/routing', schutz: O, handler: (_q, a) => this.json(a, 200, { routing: this.stand.fxRouting }) },
+      { methode: 'GET', pfad: '/platz/kanal', schutz: O, handler: (_q, a) => this.json(a, 200, { kanal: [...this.stand.platzKanal] }) },
+      { methode: 'POST', pfad: '/platz/kanal', schutz: F, handler: async (q, a) => {   // the page reports what sits in place 3/4: its fader follows the place, not the content
+        const d = await this.koerper(q);
+        if ((d.pad !== 1 && d.pad !== 2) || !Number.isInteger(d.inhalt) || (d.inhalt as number) < 0 || (d.inhalt as number) > 3) return this.json(a, 400, { fehler: 'platz_kanal' });
+        const felder = this.platzKanalSenden(d.pad as number, d.inhalt as number, this.quelle());
+        this.platzKanalWunsch[(d.pad as number) - 1] = d.inhalt as number;
+        return this.json(a, 200, { ok: true, felder, quittung: await this.warteQuittung(felder.id) });
+      } },
       { methode: 'POST', pfad: '/fx/routing', schutz: F, handler: async (q, a) => {   // Ohr T18: Andreas' Taste (Insert oder Post Fader), nie Cyphers
         if (this.quelle() === 'cypher') return this.json(a, 403, { fehler: 'nur_andreas' });   // wie /strudel/autonom (Review M5)
         const d = await this.koerper(q);
@@ -3473,7 +3524,9 @@ export class Oberflaeche {
     const name = d.name;
     if (![1, 2, 4, 8, 16, 32].includes(beats as number)) return this.json(a, 400, { fehler: 'unbekannte_beats', beats });
     if (typeof name !== 'string' || !LOOP_NAME.test(name)) return this.json(a, 400, { fehler: 'unbekannter_name', name });
-    const felder: Felder = { id: Number(++this.id), quelle: this.quelle(), beats: beats as number, name };
+    const summe = d.summe === undefined ? 0 : d.summe === true || d.summe === 1 ? 1 : d.summe === false || d.summe === 0 ? 0 : -1;
+    if (summe < 0) return this.json(a, 400, { fehler: 'unbekannte_summe', summe: d.summe });   // 1: Strudel sum erz/1+2+3 instead of erz/1
+    const felder: Felder = { id: Number(++this.id), quelle: this.quelle(), beats: beats as number, name, summe };
     this.kern.sende('/k/loop/rec', felder);
     this.gesendet++;
     this.json(a, 200, { ok: true, gesendet: '/k/loop/rec', felder, quittung: await this.warteQuittung(felder.id) });

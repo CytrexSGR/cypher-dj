@@ -131,7 +131,7 @@ export function montiereFenster(hostRoh) {
     const jetzt = () => {
       const s = strangVon(strangId);
       if (!s) return null;
-      if (teil === 'hall') { const r = returnListe(host.projekt()).find((x) => x.id === strangId); return r ? { s, r, hall: true } : null; }
+      if (teil === 'hall') { const r = returnListe(host.projekt(), { mitLoopdeck: true }).find((x) => x.id === strangId); return r ? { s, r, hall: true } : null; }
       const pos = s.inserts.findIndex((i) => i.id === teil);
       return pos < 0 ? null : { s, insert: s.inserts[pos], pos, ids: s.inserts.map((i) => i.id) };
     };
@@ -195,7 +195,7 @@ export function montiereFenster(hostRoh) {
     return f;
   };
   function hallFenster(r) {
-    const ret = () => returnListe(host.projekt()).find((x) => x.id === r.id) ?? null;
+    const ret = () => returnListe(host.projekt(), { mitLoopdeck: true }).find((x) => x.id === r.id) ?? null;
     return oeffne({
       id: `stufe:${r.id}:hall`, titel: `${host.kurz(host.projekt(), r.id)} · ${r.name}`, untertitel: 'HALL', art: 'hall',
       pruefe: () => ret() !== null,
@@ -288,7 +288,7 @@ export function montiereFenster(hostRoh) {
     const strang = strangVon(strangId);
     if (!strang) return null;
     if (teil === 'hall') {
-      const r = returnListe(host.projekt()).find((x) => x.id === strangId);
+      const r = returnListe(host.projekt(), { mitLoopdeck: true }).find((x) => x.id === strangId);
       return r ? hallFenster(r) : null;
     }
     const insert = strang.inserts.find((i) => i.id === teil);

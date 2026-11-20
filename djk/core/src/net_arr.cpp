@@ -51,7 +51,8 @@ bool Netz::arr_paket(const v::Adresse* a, const osc::Nachricht& m) {
   if (a->pfad == v::k_arr_ins_mess.pfad) return arr_host_paket(m, true);
   const bool note = a->pfad == v::k_arr_note.pfad;   // sampler plan A1 task 7
   const bool stift = a->pfad == v::k_arr_stift.pfad;   // kraken patch field
-  if (!laden && !start && !stopp && !loop && !metronom && !auto_ && !arm && !note && !stift) return false;
+  const bool zstart = a->pfad == v::k_arr_zelle_start.pfad, zstopp = a->pfad == v::k_arr_zelle_stopp.pfad;   // loop deck K6
+  if (!laden && !start && !stopp && !loop && !metronom && !auto_ && !arm && !note && !stift && !zstart && !zstopp) return false;
   Befehl b{};
   b.id = m.werte[0].h;
   kopiere(b.quelle, m.werte[1].s, sizeof b.quelle);
@@ -148,6 +149,20 @@ bool Netz::arr_paket(const v::Adresse* a, const osc::Nachricht& m) {
     if (b.nr < 1 || b.nr > ARR_SPUREN) return ab("spur_bereich");
     if (b.form < 0 || b.form > 1 || b.politik < 0 || b.politik > 15 || b.fassung < 0 || b.fassung > 15 || !(b.wert >= -1.0f && b.wert <= 1.0f))
       return ab("ausserhalb_bereich");   // the comparison is false for NaN; inf is outside
+  } else if (zstart || zstopp) {   // loop deck K6 (§4.11). Order of the refusals: ki_gestoppt (above, also for the stop), spur_bereich (track id over 32 chars). The kern checks cell, range and the track
+    const char* spur = m.werte[zstart ? static_cast<size_t>(v::feld::k_arr_zelle_start::spur) : static_cast<size_t>(v::feld::k_arr_zelle_stopp::spur)].s;
+    if (std::strlen(spur) > 32) return ab("spur_bereich");
+    kopiere(b.pfad, spur, sizeof b.pfad);
+    if (zstart) {
+      namespace f = v::feld::k_arr_zelle_start;
+      b.art = Befehl::ARR_ZELLE_START;
+      b.nr = m.werte[f::zelle].i;
+      b.ab_beat = m.werte[f::ab_beat].d;
+      b.wert_beats = m.werte[f::versatz_beats].d;
+    } else {
+      b.art = Befehl::ARR_ZELLE_STOPP;
+      b.ab_beat = m.werte[v::feld::k_arr_zelle_stopp::ab_beat].d;
+    }
   } else {
     namespace f = v::feld::k_arr_metronom;
     b.art = Befehl::ARR_METRONOM;
@@ -224,6 +239,16 @@ bool Netz::arr_ereignis(const Ereignis& e) {
   if (e.art == Ereignis::AUTO_PUNKT) {   // 1.12 S3, §5.13 /e/auto_punkt: pfad, projekt_beat, wert
     osc::Schreiber s(v::e_auto_punkt);
     s.s(e.pfad).d(e.beat).f(e.wert);
+    an_alle(s);
+    return true;
+  }
+  if (e.art == Ereignis::ZELLE_ZUSTAND) {   // loop deck K6, §5.13 /zustand/zelle
+    if (e.verloren > zelle_verloren_gesehen_) {   // one line per rise of the launcher's lost receipts (the event carries the running count; not the callback that logs)
+      std::fprintf(stderr, "launcher: %lld receipts dropped (buffer full), %lld before\n", static_cast<long long>(e.verloren), static_cast<long long>(zelle_verloren_gesehen_));
+      zelle_verloren_gesehen_ = e.verloren;
+    }
+    osc::Schreiber s(v::zustand_zelle);
+    s.s(e.pfad).i(e.zelle_zelle).i(e.zelle_verwaist).d(e.zelle_ab_beat).d(e.zelle_versatz).i(e.zelle_wartend).d(e.zelle_wartend_ab);
     an_alle(s);
     return true;
   }

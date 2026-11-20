@@ -560,6 +560,66 @@ void Mixer::fx3_zuweisung_setze(int kanal, bool an) noexcept {
   fx3_rest_[kanal] = MIX_ZIEL_BLENDE;
 }
 
+// Place channel: which source channels a content stands for (0 nothing, 1 Strudel sum, 2 deck/3, 3 deck/4)
+static bool platz_quelle(int inhalt, int k) noexcept {
+  switch (inhalt) {
+    case 1: return k >= 4 && k <= 6;   // erz/1..3
+    case 2: return k == 2;             // deck/3
+    case 3: return k == 3;             // deck/4
+    default: return false;
+  }
+}
+
+void Mixer::platz_kanal_setze(int pad, int inhalt) noexcept {
+  if (pad < 0 || pad > 1 || inhalt < 0 || inhalt >= PLATZ_INHALTE) return;
+  platz_inhalt_[pad] = inhalt;
+  for (int k = 0; k < PLATZ_QUELLEN; ++k)
+    for (int p = 0; p < 2; ++p) pz_ziel_[k][p] = platz_quelle(platz_inhalt_[p], k) && !(p == 0 && platz_quelle(platz_inhalt_[1], k)) ? 1.0f : 0.0f;
+}
+
+bool Mixer::platz_kanal_wechselt() const noexcept {
+  for (int k = 0; k < PLATZ_QUELLEN; ++k)
+    for (int p = 0; p < 2; ++p)
+      if (pz_w_[k][p] != pz_ziel_[k][p]) return true;
+  return false;
+}
+
+bool Mixer::pz_aktiv(int k) const noexcept {
+  return k < PLATZ_QUELLEN && (pz_w_[k][0] != 0.0f || pz_w_[k][1] != 0.0f || pz_ziel_[k][0] != 0.0f || pz_ziel_[k][1] != 0.0f);
+}
+
+static inline float pz_schritt(float w, float ziel, float st) noexcept {
+  return w < ziel ? std::fmin(ziel, w + st) : (w > ziel ? std::fmax(ziel, w - st) : w);
+}
+
+void Mixer::pz_vorruecken(int k, int n) noexcept {
+  if (k >= PLATZ_QUELLEN) return;
+  const float st = static_cast<float>(n) / MIX_ZIEL_BLENDE;
+  for (int p = 0; p < 2; ++p) pz_w_[k][p] = pz_schritt(pz_w_[k][p], pz_ziel_[k][p], st);
+}
+
+void Mixer::pz_umlenken(int k, int n) noexcept {
+  constexpr float ST = 1.0f / MIX_ZIEL_BLENDE;
+  float* const pl[2] = {ein_l_[MIX_QUELLEN - 2], ein_l_[MIX_QUELLEN - 1]};
+  float* const pr[2] = {ein_r_[MIX_QUELLEN - 2], ein_r_[MIX_QUELLEN - 1]};
+  float w0 = pz_w_[k][0], w1 = pz_w_[k][1];
+  const float z0 = pz_ziel_[k][0], z1 = pz_ziel_[k][1];
+  for (int i = 0; i < n; ++i) {
+    w0 = pz_schritt(w0, z0, ST);
+    w1 = pz_schritt(w1, z1, ST);
+    const float wm = std::fmax(0.0f, 1.0f - w0 - w1);
+    const float l = aus_l_[i], r = aus_r_[i];
+    pl[0][i] += l * w0;
+    pr[0][i] += r * w0;
+    pl[1][i] += l * w1;
+    pr[1][i] += r * w1;
+    rt_l_[i] = l * wm;
+    rt_r_[i] = r * wm;
+  }
+  pz_w_[k][0] = w0;
+  pz_w_[k][1] = w1;
+}
+
 // Kompressor des Quellkanals k auf dem Abgriff (nach EQ/Filter, vor dem Fader); Werte am Blockende wie duck/*, das Knie
 // fest 6 dB, kein Sidechain im Kern
 void Mixer::komp_block(int k, int n) {
@@ -1302,6 +1362,7 @@ void Mixer::kanal(int k, int n) {
   if (schlaf_schritt(k, n, komp_an, gate_an, util_an, mb_laeuft, bk_an, fzi)) {
     // Silent strip, every holder idle: tap, PFL, spectrum, sends, peak, route would all add exact zeros (schlaf_schritt).
     schlaf_bloecke_.store(schlaf_bloecke_.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);   // one writer
+    pz_vorruecken(k, n);   // a place-channel blend goes on while the strip sleeps (the share is zeros)
     return;
   }
   schlaeft_[k] = false;
@@ -1394,7 +1455,12 @@ void Mixer::kanal(int k, int n) {
       still = tl[i] == 0.0f && tr[i] == 0.0f && aus_l_[i] == 0.0f && aus_r_[i] == 0.0f;
     stumm_[k] = still;
   }
-  route(k, n, aus_l_, aus_r_);
+  if (pz_aktiv(k)) {   // place channel: the pad share goes into the input of pad/1 or pad/2 (they run after the sources), the master share on
+    pz_umlenken(k, n);
+    route(k, n, rt_l_, rt_r_);
+  } else {
+    route(k, n, aus_l_, aus_r_);
+  }
 }
 
 // FX1 (u = 0) vor FX2 (u = 1), seriell, auf dem Signal in place

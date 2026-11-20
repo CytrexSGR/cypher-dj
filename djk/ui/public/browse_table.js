@@ -1,10 +1,12 @@
 // Library table: loading, rows and the action buttons of a row.
-import { stoebernUrl, SPALTEN, zelle, aktionenFuer, loopBoxStatus, IMPORT_FEHLER_TEXT } from './browse.js';
+import { stoebernUrl, SPALTEN, zelle, aktionenFuer, loopBoxStatus } from './browse.js';
 import { $, $$, BUCHSTABE, LADE_DECKS, el, klasseLaden, melde, postJson, zustand } from './page_state.js';
 import { TYP_ART, behalteWahl, ladeListe, leereDetail, oeffneListenMenue, postenKoerper } from './browse_detail.js';
 import { zeigeReiterInfo } from './seitenrahmen.js';
-import { BOXEN, ladeLoopSlot, ladeLoops } from './loop_rec_view.js';
-import { HINWEIS_LOOPS, loopsPlatzDa, zeigePlaetzeSpaeter } from './slots_view.js';
+import { BOXEN } from './loop_rec_view.js';
+import { zeigePlaetzeSpaeter } from './slots_view.js';
+import { ladeInDeck } from './loopdeck/view.js';
+import { quelleZiehbar } from './loopdeck/drag.js';
 import { instanzen, waehleRolle } from './instanzen.js';
 import { aktivesSet, libKnoepfe, ladeKnopf, merkeZeile, nutzungPost } from './library_view.js';
 import { sternKnopf } from './usage.js';
@@ -57,6 +59,7 @@ export function stoebernZeile(t, i, spalten = SPALTEN[t.typ] ?? SPALTEN[stz.typ]
   if (t.typ === 'track') tr.dataset.material = t.material_id;
   if (t.typ === 'strudel' ? !t.ladbar : !t.pfad_da) tr.classList.add('fehlt');
   for (const s of spalten) { const td = document.createElement('td'); td.textContent = zelle(s, t); if (s.klasse) td.className = s.klasse; tr.append(td); }
+  if (t.typ === 'loop' && t.sha && loopBoxStatus(t).aktiv) quelleZiehbar(tr, { sha: t.sha });   // drop on a loop deck cell loads it there (loop deck P4)
   const td = document.createElement('td'); td.className = 'aktion';
   aktionsKnoepfe(td, t);
   tr.append(td);
@@ -84,21 +87,21 @@ export function aktionsKnoepfe(td, t) {
     }
   }
 }
-// Loop aus der Mediathek → L1/L2 (S6): der Server dekodiert, dehnt auf 128 BPM, schneidet auf die exakten Frames und legt den Loop in
-// die Loop-Bibliothek (POST /loops/aus-katalog), die Seite lädt ihn dann wie jeden Loop. Während ein Import läuft (der Server rechnet
-// höchstens einen) sind ALLE → L-Knöpfe aus, auch die der anderen Zeilen. nur_live: kein Knopf, der Grund steht da.
+// Loop or one-shot from the library -> L1/L2 (loop deck P3): POST /loopdeck/laden { deck, spur?, zelle?, quelle: { sha } } puts it into the selected
+// cell of that deck (the one chosen by a click on an empty cell), or into the first empty cell when none is selected. The server decodes and checks
+// it; a refusal shows its reason. While one load runs all → L buttons are off. nur_live: no button, the reason stands there.
 export let loopImportLaeuft = false;
 function loopBoxKnoepfe(td, t) {
   const s = loopBoxStatus(t);
   const sp = el('span', 'loopbox-aktion');
   if (t.nur_live) { sp.append(el('span', 'loopbox-grund', s.grund)); td.append(sp); return; }
   for (const n of BOXEN) {
-    const b = el('button', `laden in-box l${n}`, `→ L${n}`);
+    const b = el('button', `laden in-box l${n}`, `→ LOOP ${n}`);
     b.dataset.ok = s.aktiv ? '1' : '0';
-    b.disabled = !s.aktiv || loopImportLaeuft || !loopsPlatzDa();
-    b.dataset.titel0 = s.aktiv ? `${s.titel} L${n}` : s.titel;
-    b.title = loopsPlatzDa() ? b.dataset.titel0 : HINWEIS_LOOPS;
-    b.addEventListener('click', (e) => { e.stopPropagation(); loopAusKatalog(t, n); });
+    b.disabled = !s.aktiv || loopImportLaeuft;
+    b.dataset.titel0 = s.aktiv ? `Load into the selected cell of loop deck ${n} (first empty cell when none is selected)` : s.titel;
+    b.title = b.dataset.titel0;
+    b.addEventListener('click', (e) => { e.stopPropagation(); loopInDeck(t, n); });
     sp.append(b);
   }
   if (s.grund) sp.append(el('span', 'loopbox-grund', s.grund));
@@ -106,19 +109,13 @@ function loopBoxKnoepfe(td, t) {
 }
 function setzeImportSperre(an) {
   loopImportLaeuft = an;
-  for (const b of $$('button.in-box')) b.disabled = an || b.dataset.ok !== '1' || !loopsPlatzDa();
+  for (const b of $$('button.in-box')) b.disabled = an || b.dataset.ok !== '1';
 }
-async function loopAusKatalog(t, n) {
+async function loopInDeck(t, n) {
   if (loopImportLaeuft) return;
   setzeImportSperre(true);
-  melde(`Importing “${t.name}” — stretching to 128 BPM …`);
-  try {
-    const r = await postJson('/loops/aus-katalog', { sha: t.sha });
-    if (!r.ok) return melde(`Loop import: ${IMPORT_FEHLER_TEXT[r.j.fehler] ?? r.j.fehler}`, true);
-    const geladen = await ladeLoopSlot(r.j.name, n);
-    ladeLoops();                                              // der neue Loop steht auch im Reiter LOOPS
-    if (geladen) melde(r.j.schon_da ? `“${r.j.name}” was already imported — loaded into L${n}` : `“${r.j.name}” imported (${r.j.beats} beats at 128 BPM) and loaded into L${n}`);
-  } catch (e) { melde(`Loop import: ${e.message}`, true); }
+  try { await ladeInDeck(n, { sha: t.sha }); }
+  catch (e) { melde(`Loop deck: ${e.message}`, true); }
   finally { setzeImportSperre(false); }
 }
 // STRUDEL-Zeile: ladbare Muster gehen in den Editor einer Instanz, Archiv-Muster nur in die Zwischenablage

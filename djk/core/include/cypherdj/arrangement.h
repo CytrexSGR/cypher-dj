@@ -22,6 +22,8 @@
 #include "cypherdj/arr_returns.h"
 #include "cypherdj/arr_track_phase.h"
 #include "cypherdj/arr_playback.h"
+#include <cypherdj/dsp/djfilter.h>
+#include <cypherdj/dsp/isolator.h>
 #include "cypherdj/spsc_ring.h"
 #include "cypherdj/signalbox/controls.h"
 #include "cypherdj/clock.h"
@@ -46,11 +48,16 @@ constexpr int ARR_STREIFEN = ARR_PM + 1 + ARR_RETURNS;
 // Groups and the PM have no slot: the master takes no volume curve.
 constexpr int ARR_AUTO_SLOTS = ARR_SPUREN + ARR_RETURNS;
 // Fields per strip: 0 fader (dB), 1 pan, 2 mute, 3 solo. Tracks and groups: 4..7 send to return 1..4 (dB). Returns: 4 hall on, 5..10 hall pre, decay, size, low, highcut, tail.
-constexpr int ARR_FELDER = 11;
+constexpr int ARR_FELDER = 13;   // loop deck channel strip KZ1: 11 -> 13 (the track EQ fields 10..12)
 constexpr int ARR_F_SEND0 = 4;
 // Live modules task 6: field 8 of a GROUP strip is its headphone cue switch (grp/<n>/cue). Groups use 0..3 and the sends 4..7, so 8 is free there (the return fields 8..10 belong to the return strips).
 constexpr int ARR_F_CUE = 8;
 static_assert(ARR_F_CUE >= ARR_F_SEND0 + ARR_RETURNS && ARR_F_CUE < ARR_FELDER, "the group cue field must not collide with the sends");
+constexpr int ARR_F_FILTER = 9;   // loop deck K7a: spur/<n>/filter of a track (-1..+1); groups, returns and the PM never use it
+static_assert(ARR_F_FILTER > ARR_F_CUE && ARR_F_FILTER < ARR_FELDER, "the track filter field must not collide with the sends or the group cue field");
+// Loop deck channel strip KZ1: spur/<n>/eq/{tief,mitte,hoch} of a track (dB, -200 = kill), fields 10, 11, 12. Return strips use 8..10 for their hall values and tracks never read those, so the index 10 overlaps by design.
+constexpr int ARR_F_EQ0 = 10;
+static_assert(ARR_F_EQ0 > ARR_F_FILTER && ARR_F_EQ0 + 2 < ARR_FELDER, "the track EQ fields must follow the filter field and fit into the strip");
 static_assert(ARR_KETTE_PM == ARR_PM && ARR_KETTE_RET0 == ARR_RET0 && ARR_KETTEN == ARR_STREIFEN, "the chain index is the strip index");
 static_assert(ARR_BLOCK == INS_BLOCK, "the insert scratch buffers must match the block size");
 static_assert(ARR_BLOCK == ARR_RET_BLOCK, "the return buffers must match the block size");
@@ -226,6 +233,24 @@ struct ArrAutoEreignis {
 inline constexpr int auto_spur_index(int osc_spur) { return osc_spur - 1; }
 inline constexpr int auto_spur_osc(int index) { return index + 1; }
 
+// Loop deck K2: the launcher plays cells (loops, one-shots) on its own voices, independent of the transport and of the clip pool.
+constexpr int ARR_LAUNCH_SPUREN = 8;      // 2 decks x 4 tracks
+constexpr int ARR_LAUNCH_STIMMEN = 24;    // per track: playing + incoming + fading tails
+constexpr int ARR_LAUNCH_PAESSE = 48;     // K3: keylock passes (one werk voice each) shared by all launcher voices
+constexpr int ARR_LAUNCH_PAESSE_JE = 4;   // K3: passes one keylock voice holds at a time (playing, its successor after a tempo change, the next ones)
+enum class LaunchGrund : uint8_t { ok = 0, zelle_leer, spur_bereich, ausserhalb_bereich, nicht_geladen };
+struct LaunchMeldung { int64_t id; int status; int64_t sample; double beat; LaunchGrund grund; };   // status 3 (takes effect), 5 (late), 7 (replaced)
+struct LaunchStand {
+  uint64_t kennung;
+  char text[33];
+  int zelle;            // 0 silent
+  bool verwaist;        // K5
+  double ab_beat, versatz_beats;
+  int wartend;          // -1 none, 0 stop, 1..8 start
+  double wartend_ab;
+  uint64_t meldungen_verloren;   // K5: receipts dropped because the 128-entry buffer was full (same value in every entry; for K6 and diagnosis)
+};
+
 struct ArrPruefZugang;   // nur Tests (test_warp_werk_folgen): liest Spur-Busse und Stimmen, schreibt nichts
 
 class Arrangement {
@@ -259,6 +284,7 @@ class Arrangement {
     spur_plan_gueltig_ = false;
   }
   void setze_senke_rack(ArrSenke* s) { senke_rack_ = s; spur_plan_gueltig_ = false; }   // 1.9 U6: the sink of the instrument-rack tracks (ArrArt::rack)
+  void setze_filter_guete(double q) { for (cypherdj::dsp::DjFilter& f : filt_) f.setze_guete(q); }   // K7b: the Q of the track filters (kern.toml filter_guete, as the channel filters); not in the callback
   void sperre_metronom(bool ja) { metronom_gesperrt_ = ja; }   // Prüfmodus und Render: das Metronom klingt nie
 
   // ---- Befehle, im Callback am Blockanfang s
@@ -358,6 +384,8 @@ class Arrangement {
     if (!snap_ || dj_master_ || nr < 1 || nr > DJ_KANAELE) return false;
     for (int g = 0; g < ARR_GRUPPEN; ++g)
       if (snap_->gruppe_dj[g] == nr || (dj_rest_n_ > 0 && dj_rest_[g] == nr)) return true;
+    for (int r = 0; r < ARR_RETURNS; ++r)   // KZ3: a return on this channel (or its held tail) as well
+      if (snap_->ret_dj[r] == nr || (dj_rest_n_ > 0 && ret_dj_rest_[r] == nr)) return true;
     return false;
   }
 
@@ -418,8 +446,25 @@ class Arrangement {
   // Produktions-Master des zuletzt gerechneten Teilblocks (m Werte, nach dem PM-Fader, ohne Metronom): Summe in erz/4 und Export-Abgriff
   const float* pm_l() const { return pm_l_; }
   const float* pm_r() const { return pm_r_; }
+  bool eq_leer(int spur) const { return iso_lage_[spur] == 0 && iso_[spur].leer(); }   // loop deck channel strip KZ2 (tests): the isolator of the track is in bypass and holds no state
+  bool filter_leer(int spur) const { return filt_[spur].leer(); }   // loop deck K7b (tests): the DJ filter of the track holds no state
   float wert(int spur, int feld) const { return w_[spur][feld].w; }   // feld 0 fader (dB), 1 pan, 2 mute, 3 solo
   int stimmen() const;
+  // Loop deck K2 (arr_launcher.cpp). Callback thread, no allocation, no lock. See the plan lane K, task K2.
+  LaunchGrund launch_start(uint64_t kennung, int zelle, double ab_beat, double versatz_beats, int64_t id, bool von_cypher);
+  LaunchGrund launch_stopp(uint64_t kennung, double ab_beat, int64_t id, bool von_cypher);
+  void launch_block(const Karte& k, int64_t s0, int m);
+  int launch_stimmen() const;                          // sounding launcher voices
+  bool launch_ruhig() const;                           // no voice and nothing pending
+  void test_launch_paesse_sperren() noexcept;          // tests only: takes every keylock pass slot that is free now (a pool that is full); never given back
+  int launch_meldungen(LaunchMeldung* aus, int max);   // drains the receipts
+  int launch_stand(LaunchStand* aus, int max) const;   // one entry per deck track that has cells, a voice or a pending launch
+  // K5: snapshot swap (called by tausche before snap_ is replaced; neu == nullptr is an unload), /k/set/neu and unload, KI stop. Callback thread.
+  void launch_tauschen(const ArrSnapshot* neu, int64_t s);   // re-resolve every track state, pending launch and voice by kennung
+  void launch_alles_aus(int64_t s, bool sofort);             // every voice fades over ARR_NAHT from s (sofort: ends at s), pending launches dropped (receipt 7), holds released
+  void launch_ki_stopp();                                    // drops the pending launches that came from cypher (receipt 7)
+  uint64_t launch_meldungen_verloren() const { return lm_verloren_; }
+  uint32_t launch_aenderung() const { return launch_aend_; }   // increments on every state change
   int warp_stimmen() const;          // Paket 1.13: davon gewarpt (nur Prüfung und Kosten)
   int werk_stimmen() const;          // Paket 1.13 Slice 2: davon im Warp-Werk (COMPLEX, TONES), eine auslaufende mitgezählt
   // Paket 1.13 Slice 2: das Warp-Werk für COMPLEX und TONES. Nicht im Callback, vor dem ersten Block. Ohne Werk (nullptr) spielt ein COMPLEX- oder
@@ -709,6 +754,83 @@ class Arrangement {
 
   bool einstieg_ = false;            // am nächsten Teilblock Clips ansetzen, die am laufenden Ort schon klingen müssten
   Stimme st_[ARR_STIMMEN];
+  // Loop deck K2: the launcher pool, separate from st_ (E0: no clip-voice routine touches it). A voice owns copies of what it plays.
+  struct LStimme {
+    bool aktiv = false;
+    bool aktuell = false;     // the voice the track state refers to (not a fading tail)
+    int spur = 0;             // track index at launch time
+    ArrZelle z;
+    double anker = 0.0;       // core beat of sample t0 (phase origin)
+    double versatz = 0.0;     // position inside the cell at the anchor, beats
+    int64_t t0 = 0;           // un-clamped effect sample (one-shot frame 0)
+    int64_t start = 0;        // first sounding sample
+    int64_t ein_n = 0;        // 0: hard onset, else fade-in length from start
+    int64_t aus_ab = -1;      // fade-out start (ARR_NAHT long), -1: none
+    // K3 (keylock): a loop cell with the warp works plays one werk voice per pass (LPass). The pass numbers count from the first pass, which starts at
+    // q0 = core beat of the anchor - versatz; pass p starts at the core beat q0 + p * beats. ps indexes lp_ (-1: free).
+    bool kl = false;
+    bool vorab = false;       // prepared for a pending launch, not yet in effect (never played)
+    double q0 = 0.0;
+    int64_t nr_next = 0;      // the next pass number to set up
+    int ps[ARR_LAUNCH_PAESSE_JE] = {-1, -1, -1, -1};
+    // Passes without a pass slot or werk slot (pool full): they play as re-pitch from the cell, one range [fb_von, fb_ende) of consecutive passes. The joins
+    // with keylock passes cross-fade over ARR_NAHT: fb_ein_ab fades the range in, fb_aus_ab fades it out (the range then ends at fb_aus_ab + ARR_NAHT).
+    int64_t fb_von = -1, fb_ende = -1;          // first sounding sample, end of the last pass (exclusive); fb_ende <= fb_von: none
+    int64_t fb_ein_ab = -1, fb_aus_ab = -1;     // -1: none
+    int64_t fb_nr0 = 0, fb_nr1 = 0;             // first and last pass number of the range
+  };
+  struct LPass {
+    bool belegt = false;
+    int platz = -1;           // the werk slot of this pass (kept after the werk gave it back: werk_stimme_spielen sets Stimme::werk to -1)
+    bool warte = false;       // freed, but the werk thread may still read c and w (an order of that werk slot is open): the slot stays taken until launch_ernten sees it closed
+    int64_t nr = 0;
+    int64_t von = 0, ende = 0;   // first sounding sample and end sample (exclusive) of the pass on the core clock
+    Stimme s;                 // the werk voice; s.clip points at c
+    ArrClip c;                // the copy the werk reads (start_beat 0, laenge_beats = cell beats, 2-marker warp)
+    ArrWarp w;
+    double wb[2] = {0.0, 0.0}, wf[2] = {0.0, 0.0};
+  };
+  struct LSpur {
+    bool belegt = false;
+    uint64_t kennung = 0;
+    char text[33] = {};
+    int zelle = 0;
+    bool verwaist = false;
+    double ab_beat = 0.0, versatz = 0.0;
+    int wartend = -1;         // -1 none, 0 stop, 1..8 start
+    double wartend_ab = 0.0, wartend_versatz = 0.0;
+    int64_t wartend_id = 0;
+    bool wartend_cypher = false;
+    int wartend_spur = 0;
+    ArrZelle wartend_z;
+    int vorab = -1;           // K3: index in v of the voice prepared for the pending start, -1: none
+    LStimme v[ARR_LAUNCH_STIMMEN];
+  };
+  static constexpr int LAUNCH_MELDUNGEN = 128;
+  LSpur ls_[ARR_LAUNCH_SPUREN];
+  LPass lp_[ARR_LAUNCH_PAESSE];
+  uint32_t launch_gen_ = 0;   // K3: the tempo map generation the launcher has seen
+  LaunchMeldung lm_[LAUNCH_MELDUNGEN];
+  int lm_n_ = 0;
+  uint64_t lm_verloren_ = 0;   // K5: receipts lost to buffer overflow
+  uint32_t launch_aend_ = 0;
+  void launch_spur_beenden(LSpur& t, int64_t s, bool sofort);   // K5: drop the pending launch of t, fade or end its voices
+  void launch_melden(int64_t id, int status, int64_t sample, double beat);
+  void launch_anwenden(LSpur& t, const Karte& k, int64_t s0);
+  void launch_spielen(LStimme& v, const Karte& k, int64_t s0, int m, int64_t lo = INT64_MIN, int64_t hi = INT64_MAX);
+  // K3 keylock voices (arr_launcher.cpp)
+  bool launch_kl_zelle(const ArrZelle& z) const { return werk_ && z.art == ArrZellArt::loop && z.modus == 2 && z.audio && z.beats > 0.0; }
+  void launch_frei(LStimme& v);                                   // give back the werk slots and passes of v
+  void launch_pass_frei(LStimme& v, int j);
+  int64_t launch_pass_von(const LStimme& v, const Karte& k, int64_t nr) const;
+  bool launch_pass_vor(LStimme& v, const Karte& k, int64_t s0, int64_t nr, int64_t von, bool zwingend);
+  void launch_fb_pass(LStimme& v, int64_t s0, int64_t nr, int64_t von, int64_t ende);   // a pass as re-pitch (no slot)
+  void launch_fb_spielen(LStimme& v, const Karte& k, int64_t s0, int m);
+  void launch_ernten();                                           // pass slots whose werk thread is done with them become free again
+  void launch_kl_block(LStimme& v, const Karte& k, int64_t s0, int m, bool karte_neu);
+  void launch_vorab(LSpur& t, const Karte& k, int64_t s0, int m, bool karte_neu);
+  void launch_vorab_frei(LSpur& t);
+  void launch_kl_aus(LStimme& v, int64_t ab);
   uint64_t stimmen_verloren_ = 0;
   // Automation: 8 KiB of project beats per block (ap_); the lane buffers auto_buf_ below are 32 tracks * 4 fields * 1024 * 4 B = 512 KiB (slice 1 had one field: 128 KiB)
   double ap_[ARR_BLOCK] = {};                      // project beat per sample of the block (only filled while a lane plays)
@@ -756,6 +878,14 @@ class Arrangement {
   uint64_t warp_unterlauf_ = 0, warp_kein_platz_ = 0, warp_spaet_ = 0;
   const uint32_t* karte_gen_ = nullptr;
   uint32_t karte_gen_gesehen_ = 0;
+  cypherdj::dsp::DjFilter filt_[ARR_SPUREN];   // loop deck K7b: DJ filter of every track (field ARR_F_FILTER), run in mischen() behind the chain and the delay compensation
+  double filt_k_[ARR_BLOCK];               // the per-sample filter value of the track in work (scratch, mischen())
+  // Loop deck channel strip KZ2: one 3-band isolator per track (fields ARR_F_EQ0 + 0..2), run in mischen() right behind the DJ filter. Heap, allocated once in the constructor (about 24 KB each: not on the stack).
+  std::unique_ptr<cypherdj::dsp::Isolator[]> iso_;   // ARR_SPUREN isolators
+  float iso_g_[3][ARR_BLOCK];                        // per-sample linear gains of the track in work (scratch)
+  float iso_trocken_l_[ARR_BLOCK], iso_trocken_r_[ARR_BLOCK];   // dry copy for the bypass crossfade (scratch)
+  uint8_t iso_lage_[ARR_SPUREN] = {};                // 0 bypass, 1 entering (crossfade dry -> wet), 2 running, 3 leaving (wet -> dry)
+  int16_t iso_blende_[ARR_SPUREN] = {};              // wet share of the crossfade in samples (0..ARR_NAHT): 0 dry, ARR_NAHT wet
   Wert w_[ARR_STREIFEN][ARR_FELDER];   // per strip (track, group, PM, return) see ARR_FELDER; the PM has field 0 only
   int16_t regler_spur_[cypherdj::stellwerk::MAX_REGLER];
   int8_t regler_feld_[cypherdj::stellwerk::MAX_REGLER];
@@ -788,6 +918,7 @@ class Arrangement {
   // instead of the master: dj_rest_[g] is the channel the group had, dj_rest_n_ the samples left. Set in tausche(), counted down in mischen().
   static constexpr int DJ_REST = 960;
   uint8_t dj_rest_[ARR_GRUPPEN] = {};
+  uint8_t ret_dj_rest_[ARR_RETURNS] = {};   // KZ3: the DJ channel a return held before a swap removed or rerouted it, for its fade (counted by dj_rest_n_ as well)
   int dj_rest_n_ = 0;
   ArrPdc pdc_;                                   // 1.10 slice 4b T13: delay rings of the compensation (exist after the constructor)
   float gsd_l_[ARR_BLOCK] = {}, gsd_r_[ARR_BLOCK] = {};     // nested groups: the pre signal (group sum times its mute/solo fade) of the group in the pass, delayed at its send place (PDC_GRPSEND0 + g)

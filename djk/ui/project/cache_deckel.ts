@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { alleAudioClips } from './commands.ts';
-import type { Projekt } from './model.ts';
+import { alleZellen, type Projekt } from './model.ts';
 import type { Projekte } from './storage.ts';
 import { SLUG } from '../collection.ts';
 
@@ -155,7 +155,10 @@ export function deckleDekodiert(a: DekodiertDeckelOptionen): Deckelung | null {
     }
     for (const sha of wiedergabeShas(a.arbeitsordner)) genannt.add(sha);
     for (const sha of a.offeneShas()) genannt.add(sha);
-    for (const e of gelesen.eintraege) for (const c of alleAudioClips(e.projekt)) genannt.add(c.quelle.sha256);
+    for (const e of gelesen.eintraege) {
+      for (const c of alleAudioClips(e.projekt)) genannt.add(c.quelle.sha256);
+      for (const z of alleZellen(e.projekt)) genannt.add(z.sha256);   // loop deck cells of the stored projects too
+    }
     const geschuetzt = (name: string): boolean => {
       const sha = SHA_DATEI.exec(name)?.[1];
       return sha === undefined || sha === a.frisch || genannt.has(sha);

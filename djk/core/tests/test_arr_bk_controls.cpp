@@ -257,7 +257,7 @@ int main() {
       PRUEF(tab.suche(p) < 0);
     const int r = tab.suche("spur/2/bk/5");
     PRUEF(tab.def(r).rolle == cypherdj::stellwerk::Rolle::spur_bk && tab.def(r).min == 0.0f && tab.def(r).max == 1.0f && tab.def(r).vorgabe == 0.5f);
-    PRUEF(tab.anzahl() == 3412 + 512);   // 64 live knobs per slot: 3924 of 4096
+    PRUEF(tab.anzahl() == 3412 + 512 + 32 + 96);   // 64 live knobs per slot: 3924 of 4096; loop deck K7a: + 32 spur/<n>/filter rows, 3956; loop deck channel strip KZ1: + 96 spur/<n>/eq/<band> rows, 4052
     PRUEF(cypherdj::stellwerk::MAX_REGLER - tab.anzahl() >= 44);   // reserve 172
     PRUEF(tab.suche("spur/1/bk/1") == 3412);   // appended behind master/bk/64, slot-major
   }

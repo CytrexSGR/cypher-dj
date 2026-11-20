@@ -22,6 +22,7 @@ namespace cdj {
 
 constexpr int LOOP_BOXEN = 2;
 constexpr int LOOP_KANAL0 = 12;   // pad/1; Box b spielt in Mixer-Kanal LOOP_KANAL0 + b − 1
+constexpr int MITSCHNITT_SUMME_KANAELE = 3;  // summe=1: erz/1..3 (Kanäle 4..6) werden addiert
 constexpr int MITSCHNITT_KANAL = 4;  // erz/1 (Mixer-Layout: deck 0..3, erz 4..11); Mitschnitt liest hier vor Trim
 // Welle 2 (Audit 2026-10-01, Erhebung ~/messungen/2026-10-01-klickfrei): Hülle der Loop-Box. Vorgaben der Erhebung,
 // gehört 2026-10-06 (Plan Welle 2, Fragen O2, O3, O7), Andreas: „passt alles“ (~/messungen/2026-10-06-welle2-blende/ohr/antworten.md).

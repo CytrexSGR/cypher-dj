@@ -150,7 +150,7 @@ inline bool arr_pdc_rechnen(ArrSnapshot& s) {
   for (int r = 0; r < ARR_RETURNS; ++r) {
     if (!s.ret_da[r]) continue;
     a_ret[r] = in_r + arr_kette_latenz(s.kette[ARR_KETTE_RET0 + r]);
-    p_in = std::max(p_in, a_ret[r]);
+    if (s.ret_dj[r] == 0) p_in = std::max(p_in, a_ret[r]);   // KZ3: a return that leads into a DJ pair does not meet the PM sum, so it neither raises p_in nor is delayed
   }
   auto setze = [&](int key, int d) -> bool {
     if (d < 0 || d >= ARR_PDC_RING) return false;
@@ -171,7 +171,7 @@ inline bool arr_pdc_rechnen(ArrSnapshot& s) {
   for (int r = 0; r < ARR_RETURNS; ++r) {
     if (!s.ret_da[r]) continue;
     ok = setze(PDC_RETSPUR0 + r, in_r - t_trk) && ok;
-    ok = setze(PDC_PM_RET0 + r, p_in - a_ret[r]) && ok;
+    ok = setze(PDC_PM_RET0 + r, s.ret_dj[r] == 0 ? p_in - a_ret[r] : 0) && ok;
   }
   ok = setze(PDC_PM_SPUR, p_in - t_trk) && ok;
   if (gruppen) ok = setze(PDC_PM_GRP, p_in - t_g) && ok;

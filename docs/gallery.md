@@ -3,7 +3,9 @@
 Taken on the development machine with our own songs, the factory sample packs and, in the DJ view, one track from the
 owner's library; the folder tree of the library is scrolled away or collapsed.
 
-![DJ view with four places around one mixer: a track deck, the SEQ deck SEQ 2, the Strudel place and the Loops place, with the scene row under the header](screens/dj-view.png)
+![DJ view with four places around one mixer: a track deck, the SEQ deck SEQ 2, the Strudel place and the LOOP 1 deck, with the scene row under the header](screens/dj-view.png)
+
+![The LOOP 1 place: four tracks of eight cells, launch grid, STOP ALL, and the channel strip row opened with STRIP (EQ, HALL and DELAY sends, effect slot)](screens/loop-deck.png)
 
 ![SEQ deck in its large view: a kit pattern and three Baukasten patterns with pitch, velocity and curve lanes; empty lanes hidden, PLAY per deck](screens/seq-deck.png)
 
@@ -33,9 +35,9 @@ owner's library; the folder tree of the library is scrolled away or collapsed.
 
 ![Controllers window: every device with its state and FOLLOW, the learn bar and the list of all mapped controls](screens/controllers-window.png)
 
-![Media library: tracks filtered by a search word, with key, tempo, length, loudness and a load button per deck](screens/library-browser.png)
+![Media library, LOOPS tab: factory loops found by a search word, each with LOAD LOOP 1, LOAD LOOP 2 and a button into Strudel](screens/library-browser.png)
 
-![Effects strip: a compressor and a gate on every source channel](screens/effects.png)
+![Effects strip under the DJ view: a compressor and a gate on every source channel, the master bus](screens/effects.png)
 
 ![Cue tool: whole-track overview, 3-band waveform and eight cue pads](screens/cue-tool.png)
 

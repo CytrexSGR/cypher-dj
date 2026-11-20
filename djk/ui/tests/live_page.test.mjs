@@ -1,5 +1,5 @@
-// Plan live-module task 4: the page side of the live modules. Pure parts of public/live_module.js: the export button state, the model and markup of
-// the live container panel (two slots: empty, separating, ready, failed), the fader commands, the open-with-confirmation flow and the export calls.
+// Plan live-module task 4: the page side of the live modules. Pure parts of public/live_module.js: the model of the live container slots (empty,
+// separating, ready, failed), the key distance and the open-with-confirmation flow. (The panel markup and its calls left with the module panel.)
 // The wiring in app.js and index.html is checked by reading both files (the screenshots of the task cover the rest).
 import { liesApp, APP_DATEIEN } from './helpers/app_source.mjs';
 import test from 'node:test';
@@ -9,7 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { neuesProjekt } from '../project/model.ts';
 import { baueModul, baueNeuePfade, liveSlots } from '../project/live.ts';
-import { modulAnsicht, modulHtml, exportKnopf, faderBefehl, oeffneLive, exportiere, leere, trenneNeu, LEER_TAKTE, setzeBlend, passeTonartAn, tonartAnsicht, kanalAnsicht } from '../public/live_module.js';
+import { modulAnsicht, oeffneLive, tonartAnsicht, kanalAnsicht } from '../public/live_module.js';
 const importVon = (datei, vor = './') => new RegExp(`from '${(vor + datei).replace(/[.]/g, '\\.')}'`);   // the file name stays a plain literal so the export's file renaming rewrites it too (a regex literal escapes the dot and escapes the rewrite)
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
@@ -23,19 +23,12 @@ const vier = () => ({ drums: D('1'), bass: D('2'), other: D('3'), vocals: D('4')
 test('no open project, or a production project: the panel is closed (offen false), no slot cards', () => {
   assert.equal(modulAnsicht(null, {}, null).offen, false);
   assert.equal(modulAnsicht(neuesProjekt('prod'), {}, null).offen, false);
-  assert.equal(modulHtml(modulAnsicht(null, {}, null)), '');
 });
 
 test('the live container without modules renders two empty slots A and B', () => {
   const a = modulAnsicht(live(), { A: null, B: null }, null);
   assert.equal(a.offen, true);
   assert.deepEqual(a.slots.map((s) => [s.slot, s.zustand.art, s.leer]), [['A', 'leer', true], ['B', 'leer', true]]);
-  const h = modulHtml(a);
-  assert.equal((h.match(/data-slot="/g) ?? []).length, 2);
-  assert.match(h, /data-slot="A"[^>]*class="[^"]*\bleer\b/);
-  assert.match(h, /data-slot="B"[^>]*class="[^"]*\bleer\b/);
-  assert.match(h, /EMPTY/);
-  assert.doesNotMatch(h, /data-leeren|data-modul-fader/, 'an empty slot has nothing to clear or fade');
 });
 
 test('a module with four stems: title (escaped), origin, module fader, one original fader per stem, clear button, state ready', () => {
@@ -49,15 +42,6 @@ test('a module with four stems: title (escaped), origin, module fader, one origi
   assert.deepEqual(s.stems.map((x) => [x.name, x.faderDb]), [['Drums', 0], ['Bass', 0], ['Other', 0], ['Vocals', 0]]);
   assert.ok(s.stems.every((x) => /^s\d+$/.test(x.spurId)), 'the original track of each stem is the fader target');
   assert.equal(a.slots[1].leer, true);
-  const h = modulHtml(a);
-  assert.match(h, /Night &lt;Drive&gt;/);
-  assert.doesNotMatch(h, /Night <Drive>/);
-  assert.match(h, /126 BPM/); assert.match(h, /8A/); assert.match(h, /Art/);
-  assert.equal((h.match(/data-stem-fader/g) ?? []).length, 4);
-  assert.equal((h.match(/data-modul-fader/g) ?? []).length, 0, 'the module has no slider: the strip of its channel is the gain');
-  assert.equal((h.match(/ data-leeren /g) ?? []).length, 1);
-  assert.match(h, /READY/);
-  for (const n of ['Drums', 'Bass', 'Other', 'Vocals']) assert.match(h, new RegExp(n));
 });
 
 test('separation progress: waiting, running with percent from the proj_stems state of the same job, failed with its reason and a retry', () => {
@@ -71,49 +55,6 @@ test('separation progress: waiting, running with percent from the proj_stems sta
   assert.equal(f.zustand.art, 'fehler');
   assert.equal(f.zustand.text, 'not enough free memory on the GPU');
   assert.equal(f.stems.length, 0);
-  const h = modulHtml(modulAnsicht(p, { A: null, B: { gruppe_id: id, stems: { stems: 'fehler', grund: 'gpu_belegt', text: 'not enough free memory on the GPU' } } }, null));
-  assert.match(h, /LOOP ONLY/); assert.match(h, /not enough free memory on the GPU/); assert.match(h, /data-trennen/);
-  const h2 = modulHtml(modulAnsicht(p, { A: null, B: { gruppe_id: id, stems: { stems: 'laeuft', auftrag_id: 7 } } }, { auftrag_id: 7, zustand: 'laeuft', prozent: 42 }));
-  assert.match(h2, /SEPARATING 42 %/); assert.match(h2, /style="[^"]*--fortschritt:\s*42%/); assert.doesNotMatch(h2, /data-trennen/);
-});
-
-test('fader commands: the module fader is the fader of the top group, an original fader the fader of the original track', () => {
-  assert.deepEqual(faderBefehl('modul', 'g5', -12), { befehl: 'gruppenspur_aendern', gruppe_id: 'g5', fader_db: -12 });
-  assert.deepEqual(faderBefehl('stem', 's9', -200), { befehl: 'spur_aendern', spur_id: 's9', fader_db: -200 });
-});
-
-test('export button: off without a running loop or a loaded track, on with both; the title says why', () => {
-  assert.equal(exportKnopf({ loop: false, geladen: true, live: true }).aus, true);
-  assert.match(exportKnopf({ loop: false, geladen: true, live: true }).titel, /loop/i);
-  assert.equal(exportKnopf({ loop: true, geladen: false, live: true }).aus, true);
-  assert.deepEqual(exportKnopf({ loop: true, geladen: true, live: true }).aus, false);
-  assert.equal(exportKnopf({ loop: true, geladen: true, live: false }).aus, false, 'a closed container is told on the click, the button stays on');
-  assert.match(exportKnopf({ loop: true, geladen: true, live: false }).titel, /open the live container/i);
-});
-
-test('export posts deck only (the server picks the slot); the messages say Loop 1 / Loop 2, a refusal gives the text of the reason', async () => {
-  const ruf = [];
-  const ok = await exportiere(3, async (w, k) => { ruf.push([w, k]); return { status: 200, j: { slot: 'B' } }; });
-  assert.deepEqual(ruf, [['/modul/export', { deck: 3 }]]);
-  assert.deepEqual(ok, { ok: true, slot: 'B', text: 'Exported to Loop 2' });
-  const nein = await exportiere(1, async () => ({ status: 409, j: { fehler: 'slot_belegt', text: 'both live slots hold a module' } }));
-  assert.deepEqual(nein, { ok: false, text: 'Export refused: both live slots hold a module' });
-  const ohne = await exportiere(1, async () => ({ status: 409, j: { fehler: 'kein_loop' } }));
-  assert.equal(ohne.text, 'Export refused: kein_loop');
-});
-
-test('clear and separate post the slot (and the bars); LEER_TAKTE are the bars the server knows', async () => {
-  assert.deepEqual(LEER_TAKTE, [0, 1, 2, 4, 8, 16]);
-  const ruf = [];
-  const h = async (w, k) => { ruf.push([w, k]); return { status: 200, j: {} }; };
-  assert.equal((await leere('A', 4, h)).ok, true);
-  assert.equal((await trenneNeu('B', h)).ok, true);
-  assert.deepEqual(ruf, [['/modul/leeren', { slot: 'A', takte: 4 }], ['/modul/stems', { slot: 'B' }]]);
-  assert.equal((await leere('A', 4, async () => ({ status: 409, j: { fehler: 'slot_leer', text: 'that live slot holds no module' } }))).text, 'Clear refused: that live slot holds no module');
-  assert.equal((await leere('B', 0, async () => ({ status: 200, j: {} }))).text, 'Loop 2 is clearing');
-  assert.equal((await trenneNeu('A', async () => ({ status: 200, j: {} }))).text, 'Separating Loop 1');
-  assert.match(modulHtml(modulAnsicht(mitPfad(), standA(mitPfad()), null)), /empty Loop 1"/);
-  assert.doesNotMatch(exportKnopf({ loop: true, geladen: true, live: true }).titel, /slot A/);
 });
 
 test('open the live container: a plain open, or the confirmation when the server says live_laeuft, and no second post when declined', async () => {
@@ -132,16 +73,14 @@ test('open the live container: a plain open, or the confirmation when the server
   assert.deepEqual(nein, { ok: false, text: 'Live container not opened', abgelehnt: true });
 });
 
-test('wiring: EXPORT button on decks 1 to 3 in the loop row, LIVE button and the panel in the DJ view, SSE and styles', () => {
+test('wiring: EXPORT button on decks 1 to 3 in the loop row, the loop deck containers instead of the module panel, SSE', () => {
   const app = liesApp();
   const html = fs.readFileSync(path.join(HIER, '..', 'public', 'index.html'), 'utf8');
-  const css = fs.readFileSync(path.join(HIER, '..', 'public', 'style.css'), 'utf8');
   assert.match(app, importVon('live_module.js'));
   assert.match(app, /data-exportloop/);
-  assert.match(html, /data-liveoeffnen/);
-  assert.match(html, /id="live-panel"/);
+  assert.doesNotMatch(html, /id="live-panel"|class="live-slot"|data-slot=/, 'the module panel is gone from the page');
+  assert.deepEqual([...html.matchAll(/<div class="loopdeck" data-deck="(\d)"><\/div>/g)].map((m) => m[1]), ['1', '2'], 'two empty loop deck containers (the deck view fills them)');
   assert.match(app, /case 'modul'/);
-  assert.match(css, /#live-panel/);
 });
 
 test('review fix 7: the production project choice confirms on live_laeuft and repeats with bestaetigt, no second post when declined', async () => {
@@ -176,26 +115,6 @@ test('a stem with a new path gets the rows original fader, new fader and blend; 
   const [drums, bass] = a.slots[0].stems;
   assert.deepEqual([drums.stem, drums.neu.faderDb, drums.blend], ['drums', -200, 0]);
   assert.equal(bass.neu, undefined);
-  const h = modulHtml(a);
-  assert.equal((h.match(/data-stem-fader/g) ?? []).length, 4, 'the original fader of every stem');
-  assert.equal((h.match(/data-neu-fader/g) ?? []).length, 1, 'one new fader');
-  assert.equal((h.match(/data-blend /g) ?? []).length, 1, 'one blend slider');
-  assert.match(h, /data-blend data-stem="drums"/);
-  assert.match(h, /BLEND/); assert.match(h, /NEW/);
-  const mit = modulHtml(modulAnsicht({ ...p, gruppen: p.gruppen.map((g) => (g.name === 'Drums' ? { ...g, blend: 0.4 } : g)) }, standA(p), null));
-  assert.match(mit, /data-blend[^>]*>|value="0.4"/); assert.match(mit, /40 %/);
-  assert.doesNotMatch(modulHtml(modulAnsicht(baueModul(live(), 'A', LOOP, vier(), herkunft()), standA(p), null)), /data-blend|data-neu-fader/, 'no new path, no extra rows');
-});
-
-test('the new fader is a spur_aendern on the instrument track; blend posts /modul/blend without takte; a refusal gives its text', async () => {
-  const p = mitPfad();
-  const neu = modulAnsicht(p, standA(p), null).slots[0].stems[0].neu;
-  assert.deepEqual(faderBefehl('stem', neu.spurId, -6), { befehl: 'spur_aendern', spur_id: neu.spurId, fader_db: -6 });
-  assert.equal(p.spuren.find((x) => x.id === neu.spurId).art, 'instrument');
-  const ruf = [];
-  assert.deepEqual(await setzeBlend('A', 'drums', 0.5, async (w, k) => { ruf.push([w, k]); return { status: 200, j: {} }; }), { ok: true, text: 'Blend drums 50 %' });
-  assert.deepEqual(ruf, [['/modul/blend', { slot: 'A', stem: 'drums', wert: 0.5 }]]);
-  assert.equal((await setzeBlend('A', 'other', 1, async () => ({ status: 409, j: { fehler: 'kein_neuer_pfad', text: 'no new path' } }))).text, 'Blend refused: no new path');
 });
 
 test('DJ view places: the slot row has no MODULE slider and no CUE button, shows its channel (Loop 1 on pad/1, Loop 2 on pad/2) open or closed', () => {
@@ -209,10 +128,6 @@ test('DJ view places: the slot row has no MODULE slider and no CUE button, shows
   assert.equal(offen.slots[0].kanal.offen, true);
   assert.equal(offen.slots[1].kanal.pfad, 'pad/2', 'slot B is Loop 2 on pad/2');
   assert.equal(offen.slots[1].kanal.offen, false);
-  const h = modulHtml(offen);
-  assert.doesNotMatch(h, /data-cue|live-cue|data-modul-fader|data-modul-wert|live-modulfader|>MODULE</, 'neither the CUE button nor the MODULE slider');
-  assert.match(h, /data-kanal-zustand[^>]*>Loop 1 · open</);
-  assert.match(h, /data-kanal-zustand[^>]*>Loop 2 · closed</);
   assert.ok(g.nr > 0);
   // the rule is the one of kanalOffen (hand_operation.ts): -26 dB is still closed, an unknown fader is closed, an unknown trim is 0
   assert.equal(kanalAnsicht('A', { 'pad/1/fader': -26 }).offen, false);
@@ -234,22 +149,13 @@ test('KEY: shows the distance from /modul/stand, off when 0 or unknown, posts th
   assert.equal(tonartAnsicht({ tonart_abstand: 0 }).aus, true);
   assert.equal(tonartAnsicht({ tonart_abstand: null, tonart_grund: 'kein_deck' }).aus, true);
   assert.match(tonartAnsicht({ tonart_abstand: null, tonart_grund: 'kein_deck' }).titel, /kein_deck/);
-  const p = mitPfad();
-  const h = modulHtml(modulAnsicht(p, standA(p, { tonart_abstand: 2 }), null));
-  assert.match(h, /data-key title="[^"]*"[^>]*>KEY \+2</); assert.doesNotMatch(h, /data-key disabled/);
-  assert.match(modulHtml(modulAnsicht(p, standA(p, { tonart_abstand: 0 }), null)), /data-key disabled/);
-  const ruf = [];
-  assert.equal((await passeTonartAn('A', async (w, k) => { ruf.push([w, k]); return { status: 200, j: {} }; })).ok, true);
-  assert.deepEqual(ruf, [['/modul/tonart', { slot: 'A' }]]);
-  assert.equal((await passeTonartAn('A', async () => ({ status: 409, j: { fehler: 'kein_deck', text: 'no deck' } }))).text, 'Key refused: no deck');
 });
 
-test('wiring: blend and key handlers in app.js (blend double click = 0); the L1/L2 strips write pad/N/fader; the channel state redraws on pad/N rows', () => {
+test('wiring: the module panel handlers are gone; the L1/L2 strips write pad/N/fader; the channel state redraws on pad/N rows', () => {
   const app = liesApp();
   const kurven = fs.readFileSync(path.join(HIER, '..', 'public', 'curves.js'), 'utf8');
   assert.match(kurven, /LOOPBOXEN = \['pad\/1', 'pad\/2'\]/, 'the loop strips L1, L2 are the channels pad/1, pad/2');
   assert.match(app, /e\.dataset\.pfad = `\$\{k\}\/\$\{e\.dataset\.teil\}`/, 'every control of the L1/L2 strip (fader included) writes <channel>/<part>');
-  assert.match(app, /live-blendregler/); assert.match(app, /r\.value = '0';\s+sendeBlend/);
-  assert.match(app, /passeTonartAn\(slot, holeJson\)/);
+  assert.doesNotMatch(app, /live-blendregler|sendeBlend|passeTonartAn\(slot, holeJson\)|bindeLive\b|#live-panel/);
   assert.match(app, /pad\\\/\[12\]\\\/\(fader\|trim\)\$\/\.test\(f\.pfad\) && liveOffen\(\)/);
 });

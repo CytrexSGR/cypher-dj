@@ -78,13 +78,19 @@ def tasten_zustand(deck, karte):
     return {"play": hell if laeuft else gedimmt, "loop": hell if deck.get("loop") else gedimmt}
 
 
-def rahmen_fuer_seite(bericht, deck, gesetzt, lage, karte):
+def rahmen_fuer_seite(bericht, deck, gesetzt, lage, karte, pad_farben=None, freeze=False):
     """One full 119-byte LED report of a deck section: pads 1..8 (bytes 1..24) and, with a card, the button bytes.
+    `pad_farben` (8 RGB triples, from s8_loopdeck.led_farben in the loops view) replaces the hot cue pad colours.
+
+    `freeze` lights the FREEZE LED (slice mode) when the card names its offsets under "freeze"; without that key nothing is lit.
 
     A report carries every LED of the section, so pads and buttons always go out together."""
     frame = bytearray(LED_BERICHT_LAENGE[bericht])
     frame[0] = bericht
     for p in range(8):
+        if pad_farben is not None:
+            frame[1 + 3 * p:4 + 3 * p] = bytes(min(255, max(0, int(c))) for c in pad_farben[p])
+            continue
         hell = 1.0 if (p + 1) in gesetzt else 0.06
         frame[1 + 3 * p:4 + 3 * p] = bytes(int(c * hell) for c in FARBE[bericht])
     if karte is not None:
@@ -95,6 +101,8 @@ def rahmen_fuer_seite(bericht, deck, gesetzt, lage, karte):
         frame[seite["play"]] = z["play"]
         for o in seite["loop"]:
             frame[o] = z["loop"]
+        for o in seite.get("freeze", []):
+            frame[o] = karte["hell"] if freeze else karte["gedimmt"]
     return bytes(frame)
 
 

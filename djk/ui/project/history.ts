@@ -37,7 +37,7 @@ export class VerlaufFehler extends Error {
 
 const ARTEN: readonly string[] = ['aendern', 'undo', 'redo'];
 const QUELLEN: readonly string[] = ['andreas', 'cypher'];
-const MIXER_FELDER = ['fader_db', 'pan', 'mute', 'solo'];
+const MIXER_FELDER = ['fader_db', 'pan', 'mute', 'solo', 'filter'];
 
 function pruefeZeile(z: unknown, nr: number): Eintrag {
   const kaputt = (was: string): never => { throw new VerlaufFehler('verlauf_kaputt', `Zeile ${nr}: ${was}`); };
@@ -293,6 +293,11 @@ function mixerSchluessel(befehle: unknown[]): string | null {
     : b.befehl === 'gruppenspur_aendern' ? 'gruppe_id' : b.befehl === 'master_aendern' ? '' : null;
   if (idFeld === null || (idFeld !== '' && typeof b[idFeld] !== 'string')) return null;
   const rest = Object.keys(b).filter((k) => k !== 'befehl' && k !== idFeld);
+  // loop deck EQ: a knob drag on one band is one move per track and band; a kill toggle (kill) never coalesces
+  if (b.befehl === 'spur_aendern' && rest.length === 1 && rest[0] === 'eq' && b.eq !== null && typeof b.eq === 'object') {
+    const baender = Object.keys(b.eq as object);
+    return baender.length === 1 ? `${String(b.spur_id)}:eq:${baender[0]}` : null;
+  }
   return rest.length === 1 && MIXER_FELDER.includes(rest[0]) ? `${idFeld === '' ? 'master' : String(b[idFeld])}:${rest[0]}` : null;
 }
 

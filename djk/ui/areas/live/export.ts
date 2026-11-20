@@ -61,6 +61,35 @@ export interface ModulStand { stems: 'wartet' | 'laeuft' | 'fertig' | 'fehler'; 
 const text = (g: string): string => grundText(g);
 const warte = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+// The audio part of the deck export (shared by POST /modul/export and the loop deck source `von_deck`): the active loop of a deck is cut from its
+// rendering and written as a WAV `<project folder>/loops/<n>-<wavName>`. `ausschnitt` is the cut the caller already asked for (else it is asked here;
+// a refusal is a ProjFehler). The caller owns the WAV from the return on; a failure inside removes what was written.
+export async function exportiereDeckLoop(dep: { deckLoop: ExportOptionen['deckLoop']; zugang: ProjZugang; ordner: string }, deck: unknown,
+  o: { ausschnitt?: DeckLoopAusschnitt; wavName?: string } = {}): Promise<{ sha256: string; pfad: string; frames: number; beats: number; bpm: number }> {
+  let a = o.ausschnitt;
+  if (!a) {
+    const r = dep.deckLoop(deck);
+    if ('fehler' in r) throw new ProjFehler(r.code, r.fehler, { text: text(r.fehler) });
+    a = r;
+  }
+  const tmp = path.join(dep.zugang.arbeitsordner(), `live-export-${dep.zugang.naechsteNummer()}.f32`);
+  let wav: string | null = null;
+  try {
+    // the cut: the same code as deck/loop/sichern (loops.ts schneideAusFassung), then the WAV the way stems are written (decision 13)
+    fs.mkdirSync(path.dirname(tmp), { recursive: true });
+    fs.writeFileSync(tmp, schneideAusFassung(a.basisDatei, a.startFrame, a.frames));
+    wav = path.join(dep.ordner, 'loops', `${dep.zugang.naechsteNummer()}-${o.wavName ?? `${a.material_id}.wav`}`);
+    const w = await schreibeWavAusF32Stueckweise(tmp, wav);
+    if (w.frames !== a.frames) throw new Error(`${w.frames} frames written, ${a.frames} expected`);
+    return { sha256: w.sha256, pfad: wav, frames: a.frames, beats: a.laenge_beats, bpm: a.basis_bpm };
+  } catch (e) {
+    if (wav) fs.rmSync(wav, { force: true });
+    throw e;
+  } finally {
+    fs.rmSync(tmp, { force: true });
+  }
+}
+
 export class Modulexport {
   private readonly zustand: Partial<Record<Slot, ModulStand>> = {};
   private readonly imBau = new Set<Slot>();
@@ -110,26 +139,21 @@ export class Modulexport {
     const z = this.o.herkunft(a.material_id);
     if (!z || z.typ !== 'track') throw new ProjFehler(409, 'kein_bibliothekstrack');
     this.imBau.add(slot);
-    const tmp = path.join(this.zugang.arbeitsordner(), `live-export-${this.zugang.naechsteNummer()}.f32`);
     let wav: string | null = null, uebernommen = false;
     try {
-      // the cut: the same code as deck/loop/sichern (loops.ts schneideAusFassung), then the WAV the way stems are written (decision 13)
-      fs.mkdirSync(path.dirname(tmp), { recursive: true });
-      fs.writeFileSync(tmp, schneideAusFassung(a.basisDatei, a.startFrame, a.frames));
-      wav = path.join(o0.ordner, 'loops', `${this.zugang.naechsteNummer()}-${slot}-${a.material_id}.wav`);
-      const w = await schreibeWavAusF32Stueckweise(tmp, wav);
-      if (w.frames !== a.frames) throw new Error(`${w.frames} frames written, ${a.frames} expected`);
+      const x = await exportiereDeckLoop({ deckLoop: this.o.deckLoop, zugang: this.zugang, ordner: o0.ordner }, d.deck,
+        { ausschnitt: a, wavName: `${slot}-${a.material_id}.wav` });
+      wav = x.pfad;
       const exportZeit = this.o.jetzt?.() ?? new Date();
       const herkunft0 = { quelle_sha256: z.sha, titel: (z.titel || 'Untitled').slice(0, 200), ...(z.kuenstler ? { kuenstler: z.kuenstler.slice(0, 200) } : {}),
         fassung: String(a.fassung), basis_bpm: a.basis_bpm, von_beat: a.von_beat, ...(a.eins ? { eins_beat: a.eins } : {}), laenge_beats: a.laenge_beats,
         bpm: z.bpm ?? a.basis_bpm, ...(z.camelot ? { tonart: z.camelot } : {}), datum: exportZeit.toISOString().slice(0, 10) };
-      return await this.legeAb(slot, o0, { sha256: w.sha256, pfad: wav, beats: a.laenge_beats, frames: a.frames }, herkunft0, exportZeit, quelle, () => { uebernommen = true; });
+      return await this.legeAb(slot, o0, { sha256: x.sha256, pfad: wav, beats: a.laenge_beats, frames: a.frames }, herkunft0, exportZeit, quelle, () => { uebernommen = true; });
     } catch (e) {
       if (wav && !uebernommen) fs.rmSync(wav, { force: true });
       throw e;
     } finally {
       this.imBau.delete(slot);
-      fs.rmSync(tmp, { force: true });
     }
   }
 

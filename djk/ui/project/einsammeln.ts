@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { aufWechselplatte } from '../erreichbar.ts';
 import { alleAudioClips } from './commands.ts';
-import type { Projekt } from './model.ts';
+import { alleZellen, type Projekt } from './model.ts';
 import { einsammelName, findeKopie, loeseQuelle } from './source_path.ts';
 
 export { einsammelName, loeseQuelle };
@@ -95,15 +95,17 @@ export async function sammleEin(a: { projekt: Projekt; projektOrdner: string; qu
   const ordner = path.join(a.projektOrdner, 'audio');
   let angelegt = false, aufgeraeumt = false;
   try {
-    for (const c of alleAudioClips(a.projekt)) {
-      const sha = c.quelle.sha256;
+    // clip sources first, then the audio of loop deck cells (the same collecting, the same name rule)
+    const quellen = [...alleAudioClips(a.projekt)].map((c) => ({ sha: c.quelle.sha256, hinweis: c.quelle.pfad_hinweis }))
+      .concat([...alleZellen(a.projekt)].map((z) => ({ sha: z.sha256, hinweis: z.pfad_hinweis ?? '' })));
+    for (const { sha, hinweis } of quellen) {
       if (gesehen.has(sha)) continue;
       gesehen.add(sha);
       if (a.signal?.aborted) { b.aufgeschoben += 1; continue; }
       if (findeKopie(a.projektOrdner, sha) !== null) { b.schon_da += 1; continue; }
       // while music plays the disk of a source is not touched at all (a sleeping USB disk would block the event loop for its stat)
       if (a.frei && !a.frei()) { b.aufgeschoben += 1; continue; }
-      const pfad = a.quellPfad(sha, c.quelle.pfad_hinweis);
+      const pfad = a.quellPfad(sha, hinweis);
       if (pfad === null) { fehlt(sha, 'source_missing'); continue; }
       if (drin(wurzel, echt(pfad))) { b.schon_da += 1; continue; }
       if (a.nur && !a.nur(pfad)) continue;

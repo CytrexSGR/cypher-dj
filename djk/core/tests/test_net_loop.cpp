@@ -24,9 +24,9 @@ static void start_stopp(cdj::Netz& n, const cypherdj::osc::Adresse& a, int64_t i
   n.paket(s.daten(), s.groesse());
 }
 
-static void rec(cdj::Netz& n, int64_t id, const char* quelle, int beats, const char* name) {
+static void rec(cdj::Netz& n, int64_t id, const char* quelle, int beats, const char* name, int summe = 0) {
   cdj::osc::Schreiber s(v::k_loop_rec);
-  s.h(id).s(quelle).i(beats).s(name);
+  s.h(id).s(quelle).i(beats).s(name).i(summe);
   n.paket(s.daten(), s.groesse());
 }
 
@@ -100,13 +100,16 @@ int main() {
     PRUEF(g.warte("/e/loop", 200) && g.m.werte[0].i == 2 && g.m.werte[1].i == 3 && !std::strcmp(g.s(2), "gut") &&
           g.m.werte[3].i == 1 && g.m.werte[4].i == 0 && g.m.werte[5].d == 1.0 && g.m.werte[6].f == 0.0f);
     // 5. (Scheibe 2) /k/loop/rec: guter Aufruf reiht MITSCHNITT ein, der Puffer reicht bis 60 BPM (2 · mitschnitt_max_frames)
-    rec(netz, 69, "andreas", 4, "rec1");
+    rec(netz, 69, "andreas", 4, "rec1", 1);
     PRUEF(bef->hole(b) && b.art == cdj::Befehl::MITSCHNITT && b.id == 69 && b.nr == 4 && !std::strcmp(b.pfad, "rec1"));
     cdj::Mitschnitt* mt = nullptr;
     if (b.zeiger) {
       mt = static_cast<cdj::Mitschnitt*>(const_cast<void*>(b.zeiger));
-      PRUEF(mt->beats == 4 && mt->frames == 90000 && mt->daten.size() == (size_t)cdj::mitschnitt_max_frames(4) * 2 && !std::strcmp(mt->name, "rec1"));
+      PRUEF(mt->beats == 4 && mt->frames == 90000 && mt->daten.size() == (size_t)cdj::mitschnitt_max_frames(4) * 2 && !std::strcmp(mt->name, "rec1") && mt->summe);
     }
+    rec(netz, 72, "andreas", 4, "rec9", 2);  // summe 2 ist weder 0 noch 1: ausserhalb_bereich, nichts im Ring
+    PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 72 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
+    PRUEF(!bef->hole(b));
     rec(netz, 70, "andreas", 3, "rec2");  // Beats 3 ist nicht 1, 2, 4, 8, 16 oder 32: ausserhalb_bereich, nichts im Ring
     PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 70 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
     rec(netz, 71, "bogus", 4, "rec3");  // fremde Quelle

@@ -120,7 +120,7 @@ export function montiereDock(hostRoh) {
   const werk = {
     host, T, quelle, gen: 0, frisch: [], modell: null, vorn: null, setzeVorn: () => setzeVorn(),
     strangVon: (id) => straenge(host.projekt()).find((s) => s.id === id) ?? null,
-    returnVon: (id) => returnListe(host.projekt()).find((r) => r.id === id) ?? null,
+    returnVon: (id) => returnListe(host.projekt(), { mitLoopdeck: true }).find((r) => r.id === id) ?? null,
     // the labels of the tracks that send into the return (send above -60 dB)
     sendeVon: (p, returnId) => {
       const spuren = p?.spuren ?? [];
@@ -175,7 +175,7 @@ export function montiereDock(hostRoh) {
         gebaut = g; werk.frisch = []; werk.gen += 1;
         const meine = werk.gen;
         const karte = einzel.art === 'grp' ? (m.gruppen.find((k) => k.id === einzel.id) ? gruppenKarte(werk, m.gruppen.find((k) => k.id === einzel.id), meine) : null)
-          : einzel.art === 'ret' ? (returnListe(p).find((r) => r.id === einzel.id) ? fxKarte(werk, returnListe(p).find((r) => r.id === einzel.id), meine) : null)
+          : einzel.art === 'ret' ? (returnListe(p, { mitLoopdeck: true }).find((r) => r.id === einzel.id) ? fxKarte(werk, returnListe(p, { mitLoopdeck: true }).find((r) => r.id === einzel.id), meine) : null)
           : einzel.art === 'master' ? masterKarte(werk, meine) : null;
         dockEl.replaceChildren(...(karte ? [karte] : []));
       }

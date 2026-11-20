@@ -14,10 +14,10 @@ SCRUB_TAKT = 1 / 60  # s between two scrub targets (the kern's audible drag expe
 NUDGE_LOS = 0.15     # s without an encoder step: the nudge grip is released and the deck plays on from the new place
 
 
-def _anfrage(pfad, body=None):
+def _anfrage(pfad, body=None, timeout=1.0):
     req = urllib.request.Request(SEITE + pfad, data=None if body is None else json.dumps(body).encode(),
                                  method="GET" if body is None else "POST", headers={"content-type": "application/json"})
-    with urllib.request.urlopen(req, timeout=1.0) as r:
+    with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read() or b"{}")
 
 

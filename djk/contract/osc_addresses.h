@@ -156,8 +156,8 @@ static_assert(k_loop_stopp.typen.size() - 1 == k_loop_stopp.felder);
 // §4.9 /k/loop/raster ,hsii
 inline constexpr Adresse k_loop_raster{"/k/loop/raster", ",hsii", Richtung::an_kern, false, 4};
 static_assert(k_loop_raster.typen.size() - 1 == k_loop_raster.felder);
-// §4.9 /k/loop/rec ,hsis
-inline constexpr Adresse k_loop_rec{"/k/loop/rec", ",hsis", Richtung::an_kern, false, 4};
+// §4.9 /k/loop/rec ,hsisi
+inline constexpr Adresse k_loop_rec{"/k/loop/rec", ",hsisi", Richtung::an_kern, false, 5};
 static_assert(k_loop_rec.typen.size() - 1 == k_loop_rec.felder);
 // §4.10 /k/fx ,hsiidddddi
 inline constexpr Adresse k_fx{"/k/fx", ",hsiidddddi", Richtung::an_kern, false, 10};
@@ -168,6 +168,9 @@ static_assert(k_fx_zuweisung.typen.size() - 1 == k_fx_zuweisung.felder);
 // §4.10 /k/fx/routing ,hsi
 inline constexpr Adresse k_fx_routing{"/k/fx/routing", ",hsi", Richtung::an_kern, false, 3};
 static_assert(k_fx_routing.typen.size() - 1 == k_fx_routing.felder);
+// §4.10 /k/platz/kanal ,hsii
+inline constexpr Adresse k_platz_kanal{"/k/platz/kanal", ",hsii", Richtung::an_kern, false, 4};
+static_assert(k_platz_kanal.typen.size() - 1 == k_platz_kanal.felder);
 // §4.10 /k/kanal/graph ,hsss
 inline constexpr Adresse k_kanal_graph{"/k/kanal/graph", ",hsss", Richtung::an_kern, false, 4};
 static_assert(k_kanal_graph.typen.size() - 1 == k_kanal_graph.felder);
@@ -216,6 +219,12 @@ static_assert(k_arr_note.typen.size() - 1 == k_arr_note.felder);
 // §4.11 /k/arr/stift ,hsiiiif
 inline constexpr Adresse k_arr_stift{"/k/arr/stift", ",hsiiiif", Richtung::an_kern, false, 7};
 static_assert(k_arr_stift.typen.size() - 1 == k_arr_stift.felder);
+// §4.11 /k/arr/zelle_start ,hssidd
+inline constexpr Adresse k_arr_zelle_start{"/k/arr/zelle_start", ",hssidd", Richtung::an_kern, false, 6};
+static_assert(k_arr_zelle_start.typen.size() - 1 == k_arr_zelle_start.felder);
+// §4.11 /k/arr/zelle_stopp ,hssd
+inline constexpr Adresse k_arr_zelle_stopp{"/k/arr/zelle_stopp", ",hssd", Richtung::an_kern, false, 4};
+static_assert(k_arr_zelle_stopp.typen.size() - 1 == k_arr_zelle_stopp.felder);
 // §4.12 /k/rec/spur ,hsiiiii
 inline constexpr Adresse k_rec_spur{"/k/rec/spur", ",hsiiiii", Richtung::an_kern, false, 7};
 static_assert(k_rec_spur.typen.size() - 1 == k_rec_spur.felder);
@@ -339,6 +348,9 @@ static_assert(e_kanal_limiter.typen.size() - 1 == e_kanal_limiter.felder);
 // §5.12 /e/fx/routing ,i
 inline constexpr Adresse e_fx_routing{"/e/fx/routing", ",i", Richtung::vom_kern, false, 1};
 static_assert(e_fx_routing.typen.size() - 1 == e_fx_routing.felder);
+// §5.12 /e/platz/kanal ,ii
+inline constexpr Adresse e_platz_kanal{"/e/platz/kanal", ",ii", Richtung::vom_kern, false, 2};
+static_assert(e_platz_kanal.typen.size() - 1 == e_platz_kanal.felder);
 // §5.12 /e/graph ,ss
 inline constexpr Adresse e_graph{"/e/graph", ",ss", Richtung::vom_kern, false, 2};
 static_assert(e_graph.typen.size() - 1 == e_graph.felder);
@@ -348,6 +360,9 @@ static_assert(zustand_arr.typen.size() - 1 == zustand_arr.felder);
 // §5.13 /zustand/warp ,iiiii
 inline constexpr Adresse zustand_warp{"/zustand/warp", ",iiiii", Richtung::vom_kern, false, 5};
 static_assert(zustand_warp.typen.size() - 1 == zustand_warp.felder);
+// §5.13 /zustand/zelle ,siiddid
+inline constexpr Adresse zustand_zelle{"/zustand/zelle", ",siiddid", Richtung::vom_kern, false, 7};
+static_assert(zustand_zelle.typen.size() - 1 == zustand_zelle.felder);
 // §5.13 /zustand/ins_host ,iiiiiiiiiiii
 inline constexpr Adresse zustand_ins_host{"/zustand/ins_host", ",iiiiiiiiiiii", Richtung::vom_kern, false, 12};
 static_assert(zustand_ins_host.typen.size() - 1 == zustand_ins_host.felder);
@@ -397,7 +412,7 @@ static_assert(test_hand.typen.size() - 1 == test_hand.felder);
 inline constexpr Adresse test_klick{"/test/klick", ",hssi", Richtung::an_kern, true, 4};
 static_assert(test_klick.typen.size() - 1 == test_klick.felder);
 
-inline constexpr std::array<Adresse, 125> alle{
+inline constexpr std::array<Adresse, 130> alle{
     k_hallo,
     k_tschuess,
     k_willkommen,
@@ -447,6 +462,7 @@ inline constexpr std::array<Adresse, 125> alle{
     k_fx,
     k_fx_zuweisung,
     k_fx_routing,
+    k_platz_kanal,
     k_kanal_graph,
     k_graph_frage,
     k_arr_laden,
@@ -463,6 +479,8 @@ inline constexpr std::array<Adresse, 125> alle{
     k_arr_arm,
     k_arr_note,
     k_arr_stift,
+    k_arr_zelle_start,
+    k_arr_zelle_stopp,
     k_rec_spur,
     k_rec_start,
     k_rec_stopp,
@@ -504,9 +522,11 @@ inline constexpr std::array<Adresse, 125> alle{
     e_fx_zuweisung,
     e_kanal_limiter,
     e_fx_routing,
+    e_platz_kanal,
     e_graph,
     zustand_arr,
     zustand_warp,
+    zustand_zelle,
     zustand_ins_host,
     zustand_hall_pool,
     zustand_spur_pool,
@@ -579,10 +599,11 @@ namespace k_loop_laden { enum : std::size_t { id = 0, quelle = 1, box = 2, name 
 namespace k_loop_start { enum : std::size_t { id = 0, quelle = 1, box = 2 }; }
 namespace k_loop_stopp { enum : std::size_t { id = 0, quelle = 1, box = 2 }; }
 namespace k_loop_raster { enum : std::size_t { id = 0, quelle = 1, box = 2, versatz_frames = 3 }; }
-namespace k_loop_rec { enum : std::size_t { id = 0, quelle = 1, beats = 2, name = 3 }; }
+namespace k_loop_rec { enum : std::size_t { id = 0, quelle = 1, beats = 2, name = 3, summe = 4 }; }
 namespace k_fx { enum : std::size_t { id = 0, quelle = 1, einheit = 2, art = 3, beats = 4, wet = 5, param1 = 6, param2 = 7, param3 = 8, an = 9 }; }
 namespace k_fx_zuweisung { enum : std::size_t { id = 0, quelle = 1, einheit = 2, kanal = 3, an = 4 }; }
 namespace k_fx_routing { enum : std::size_t { id = 0, quelle = 1, routing = 2 }; }
+namespace k_platz_kanal { enum : std::size_t { id = 0, quelle = 1, pad = 2, inhalt = 3 }; }
 namespace k_kanal_graph { enum : std::size_t { id = 0, quelle = 1, kanal = 2, name = 3 }; }
 namespace k_graph_frage { enum : std::size_t { id = 0, quelle = 1 }; }
 namespace k_arr_laden { enum : std::size_t { id = 0, quelle = 1, nr = 2 }; }
@@ -599,6 +620,8 @@ namespace k_arr_auto { enum : std::size_t { id = 0, quelle = 1, spur = 2, ziel =
 namespace k_arr_arm { enum : std::size_t { id = 0, quelle = 1, spur = 2, an = 3, modus = 4 }; }
 namespace k_arr_note { enum : std::size_t { id = 0, quelle = 1, spur = 2, ton = 3, vel = 4 }; }
 namespace k_arr_stift { enum : std::size_t { id = 0, quelle = 1, spur = 2, satz = 3, zeile = 4, spalte = 5, wert = 6 }; }
+namespace k_arr_zelle_start { enum : std::size_t { id = 0, quelle = 1, spur = 2, zelle = 3, ab_beat = 4, versatz_beats = 5 }; }
+namespace k_arr_zelle_stopp { enum : std::size_t { id = 0, quelle = 1, spur = 2, ab_beat = 3 }; }
 namespace k_rec_spur { enum : std::size_t { id = 0, quelle = 1, spur = 2, scharf = 3, eingang = 4, modus = 5, monitor = 6 }; }
 namespace k_rec_start { enum : std::size_t { id = 0, quelle = 1, kennung = 2, nachlauf_samples = 3, frist_samples = 4, vorzaehler_takte = 5 }; }
 namespace k_rec_stopp { enum : std::size_t { id = 0, quelle = 1 }; }
@@ -640,9 +663,11 @@ namespace e_fx { enum : std::size_t { einheit = 0, art = 1, beats = 2, wet = 3, 
 namespace e_fx_zuweisung { enum : std::size_t { einheit = 0, kanal = 1, an = 2 }; }
 namespace e_kanal_limiter { enum : std::size_t { gebaut = 0, latenz_samples = 1 }; }
 namespace e_fx_routing { enum : std::size_t { routing = 0 }; }
+namespace e_platz_kanal { enum : std::size_t { pad = 0, inhalt = 1 }; }
 namespace e_graph { enum : std::size_t { kanal = 0, name = 1 }; }
 namespace zustand_arr { enum : std::size_t { nr = 0, status = 1, loop_an = 2, projekt_beat = 3, ursprung_sample = 4, start_beat = 5, metronom_an = 6, limiter_db = 7 }; }
 namespace zustand_warp { enum : std::size_t { stimmen = 0, unterlauf = 1, kein_platz = 2, spaet = 3, faeden = 4 }; }
+namespace zustand_zelle { enum : std::size_t { spur = 0, zelle = 1, verwaist = 2, ab_beat = 3, versatz_beats = 4, wartend = 5, wartend_ab = 6 }; }
 namespace zustand_ins_host { enum : std::size_t { h_1 = 0, gesund_1 = 1, rundweg_1 = 2, h_2 = 3, gesund_2 = 4, rundweg_2 = 5, h_3 = 6, gesund_3 = 7, rundweg_3 = 8, h_4 = 9, gesund_4 = 10, rundweg_4 = 11 }; }
 namespace zustand_hall_pool { enum : std::size_t { an = 0, faeden = 1, spaet = 2, zurueck = 3 }; }
 namespace zustand_spur_pool { enum : std::size_t { an = 0, modus = 1, blocks_parallel = 2, einheiten_worker = 3, einheiten_caller = 4, seriell_summe = 5, haengt = 6, spaet = 7, zurueck = 8 }; }
@@ -697,9 +722,11 @@ namespace k_loop_laden { inline constexpr double box_min = 1; inline constexpr d
 namespace k_loop_start { inline constexpr double box_min = 1; inline constexpr double box_max = 2; }
 namespace k_loop_stopp { inline constexpr double box_min = 1; inline constexpr double box_max = 2; }
 namespace k_loop_raster { inline constexpr double box_min = 1; inline constexpr double box_max = 2; }
+namespace k_loop_rec { inline constexpr double summe_min = 0; inline constexpr double summe_max = 1; }
 namespace k_fx { inline constexpr double einheit_min = 1; inline constexpr double einheit_max = 2; inline constexpr double art_min = 1; inline constexpr double art_max = 12; inline constexpr double wet_min = 0; inline constexpr double wet_max = 1; inline constexpr double param1_min = 0; inline constexpr double param1_max = 1; inline constexpr double param2_min = 0; inline constexpr double param2_max = 1; inline constexpr double param3_min = 0; inline constexpr double param3_max = 1; inline constexpr double an_min = 0; inline constexpr double an_max = 1; }
 namespace k_fx_zuweisung { inline constexpr double einheit_min = 1; inline constexpr double einheit_max = 3; inline constexpr double an_min = 0; inline constexpr double an_max = 1; }
 namespace k_fx_routing { inline constexpr double routing_min = 0; inline constexpr double routing_max = 1; }
+namespace k_platz_kanal { inline constexpr double pad_min = 1; inline constexpr double pad_max = 2; inline constexpr double inhalt_min = 0; inline constexpr double inhalt_max = 3; }
 namespace k_arr_laden { inline constexpr double nr_min = 0; }
 namespace k_arr_start { inline constexpr double start_beat_min = 0.0; inline constexpr double quant_min = 0; inline constexpr double quant_max = 2; }
 namespace k_arr_stopp { inline constexpr double quant_min = 0; inline constexpr double quant_max = 2; }
@@ -714,6 +741,7 @@ namespace k_arr_auto { inline constexpr double spur_min = 0; inline constexpr do
 namespace k_arr_arm { inline constexpr double spur_min = 0; inline constexpr double spur_max = 32; inline constexpr double an_min = 0; inline constexpr double an_max = 1; inline constexpr double modus_min = 0; inline constexpr double modus_max = 2; }
 namespace k_arr_note { inline constexpr double spur_min = 1; inline constexpr double spur_max = 32; inline constexpr double ton_min = 0; inline constexpr double ton_max = 127; inline constexpr double vel_min = 0; inline constexpr double vel_max = 127; }
 namespace k_arr_stift { inline constexpr double spur_min = 1; inline constexpr double spur_max = 32; inline constexpr double satz_min = 0; inline constexpr double satz_max = 1; inline constexpr double zeile_min = 0; inline constexpr double zeile_max = 15; inline constexpr double spalte_min = 0; inline constexpr double spalte_max = 15; inline constexpr double wert_min = -1; inline constexpr double wert_max = 1; }
+namespace k_arr_zelle_start { inline constexpr double zelle_min = 1; inline constexpr double zelle_max = 8; }
 namespace k_rec_spur { inline constexpr double spur_min = 1; inline constexpr double spur_max = 32; inline constexpr double scharf_min = 0; inline constexpr double scharf_max = 1; inline constexpr double eingang_min = 0; inline constexpr double eingang_max = 30; inline constexpr double modus_min = 0; inline constexpr double modus_max = 3; inline constexpr double monitor_min = 0; inline constexpr double monitor_max = 2; }
 namespace k_rec_start { inline constexpr double kennung_min = 0; inline constexpr double nachlauf_samples_min = 0; inline constexpr double nachlauf_samples_max = 480000; inline constexpr double frist_samples_min = 0; inline constexpr double frist_samples_max = 1440000; inline constexpr double vorzaehler_takte_min = 0; inline constexpr double vorzaehler_takte_max = 4; }
 namespace erz_quittung { inline constexpr double strom_min = 1; inline constexpr double strom_max = 16; }
@@ -730,7 +758,9 @@ namespace e_loop { inline constexpr double box_min = 1; inline constexpr double 
 namespace e_fx { inline constexpr double einheit_min = 1; inline constexpr double einheit_max = 2; inline constexpr double art_min = 0; inline constexpr double art_max = 12; inline constexpr double an_min = 0; inline constexpr double an_max = 1; }
 namespace e_fx_zuweisung { inline constexpr double einheit_min = 1; inline constexpr double einheit_max = 3; inline constexpr double an_min = 0; inline constexpr double an_max = 1; }
 namespace e_fx_routing { inline constexpr double routing_min = 0; inline constexpr double routing_max = 1; }
+namespace e_platz_kanal { inline constexpr double pad_min = 1; inline constexpr double pad_max = 2; inline constexpr double inhalt_min = 0; inline constexpr double inhalt_max = 3; }
 namespace zustand_arr { inline constexpr double status_min = 0; inline constexpr double status_max = 3; inline constexpr double loop_an_min = 0; inline constexpr double loop_an_max = 1; inline constexpr double metronom_an_min = 0; inline constexpr double metronom_an_max = 1; inline constexpr double limiter_db_min = -200; inline constexpr double limiter_db_max = 0; }
+namespace zustand_zelle { inline constexpr double zelle_min = 0; inline constexpr double zelle_max = 8; inline constexpr double verwaist_min = 0; inline constexpr double verwaist_max = 1; inline constexpr double wartend_min = -1; inline constexpr double wartend_max = 8; }
 namespace zustand_ins_host { inline constexpr double h_1_min = 1; inline constexpr double h_1_max = 1; inline constexpr double gesund_1_min = 0; inline constexpr double gesund_1_max = 1; inline constexpr double rundweg_1_min = -1; inline constexpr double rundweg_1_max = 16383; inline constexpr double h_2_min = 2; inline constexpr double h_2_max = 2; inline constexpr double gesund_2_min = 0; inline constexpr double gesund_2_max = 1; inline constexpr double rundweg_2_min = -1; inline constexpr double rundweg_2_max = 16383; inline constexpr double h_3_min = 3; inline constexpr double h_3_max = 3; inline constexpr double gesund_3_min = 0; inline constexpr double gesund_3_max = 1; inline constexpr double rundweg_3_min = -1; inline constexpr double rundweg_3_max = 16383; inline constexpr double h_4_min = 4; inline constexpr double h_4_max = 4; inline constexpr double gesund_4_min = 0; inline constexpr double gesund_4_max = 1; inline constexpr double rundweg_4_min = -1; inline constexpr double rundweg_4_max = 16383; }
 namespace zustand_hall_pool { inline constexpr double an_min = 0; inline constexpr double an_max = 1; }
 namespace zustand_spur_pool { inline constexpr double an_min = 0; inline constexpr double an_max = 1; inline constexpr double modus_min = 0; inline constexpr double modus_max = 2; }
@@ -771,7 +801,7 @@ inline constexpr std::array<std::string_view, 17> taste{"annehmen", "verwerfen",
 inline constexpr std::array<std::string_view, 3> invariante_art{"sub_doppelt", "master_leer", "hoerschein"};
 inline constexpr std::array<std::string_view, 3> protokollfehler_grund{"unbekannte_adresse", "falsche_typen", "protokoll"};
 enum class NbZustand : std::int32_t { durchreichen = 0, schleife = 1, ausgeblendet = 2, rueckgabe = 3 };
-inline constexpr std::array<std::string_view, 62> gruende{"zu_spaet", "regler_beim_menschen", "regler_verplant", "ueberlappung", "nur_hand", "unbekannter_regler", "unbekanntes_deck", "ausserhalb_bereich", "kein_hoerschein", "hoerschein_anderer_kanal", "hoerschein_anderer_inhalt", "hoerschein_anderes_tempo", "hoerschein_abgelaufen", "hoerschein_anderer_abschnitt", "ziel_ungehoert", "keine_stems", "hoerschein_nicht_sync", "hoerschein_pegel", "invariante_sub_doppelt", "invariante_master_leer", "deck_beruehrt", "deck_hoerbar", "deck_laeuft", "nicht_geladen", "material_fehlt", "pruefung", "budget_speicher", "budget_stretcher", "karte_voll", "tempo_rampe", "ki_gestoppt", "rechner_fehlt", "kein_stretcher", "autonomie", "form", "hand", "abbruch", "ki_stopp", "unbekannte_adresse", "falsche_typen", "protokoll", "grenze_sub", "neustart", "datei_fehlt", "format", "audio_fehlt", "zu_gross", "spur_bereich", "reserviert", "kein_eingang", "aufnahme_laeuft", "zu_viele_scharf", "eingang_fehlt", "kein_platz", "warp_maschine_fehlt", "nur_andreas", "auto_ziel_unbekannt", "laeuft", "host_fehlt", "kein_rueckweg", "belegt", "schreiber_ueberlauf"};
+inline constexpr std::array<std::string_view, 63> gruende{"zu_spaet", "regler_beim_menschen", "regler_verplant", "ueberlappung", "nur_hand", "unbekannter_regler", "unbekanntes_deck", "ausserhalb_bereich", "kein_hoerschein", "hoerschein_anderer_kanal", "hoerschein_anderer_inhalt", "hoerschein_anderes_tempo", "hoerschein_abgelaufen", "hoerschein_anderer_abschnitt", "ziel_ungehoert", "keine_stems", "hoerschein_nicht_sync", "hoerschein_pegel", "invariante_sub_doppelt", "invariante_master_leer", "deck_beruehrt", "deck_hoerbar", "deck_laeuft", "nicht_geladen", "material_fehlt", "pruefung", "budget_speicher", "budget_stretcher", "karte_voll", "tempo_rampe", "ki_gestoppt", "rechner_fehlt", "kein_stretcher", "autonomie", "form", "hand", "abbruch", "ki_stopp", "unbekannte_adresse", "falsche_typen", "protokoll", "grenze_sub", "neustart", "datei_fehlt", "format", "audio_fehlt", "zu_gross", "spur_bereich", "reserviert", "kein_eingang", "aufnahme_laeuft", "zu_viele_scharf", "eingang_fehlt", "kein_platz", "warp_maschine_fehlt", "nur_andreas", "auto_ziel_unbekannt", "laeuft", "host_fehlt", "kein_rueckweg", "belegt", "schreiber_ueberlauf", "zelle_leer"};
 }  // namespace werte
 
 }  // namespace cypherdj::osc

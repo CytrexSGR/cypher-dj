@@ -58,6 +58,7 @@ struct Mitschnitt {
   int64_t ab_sample = 0;      // llround(sample_at(ab_beat))
   int64_t gefuellt = 0;       // Frames schon kopiert (0 bis frames)
   bool abgebrochen = false;   // MVP 2 Scheibe 3 (E4): Tempo änderte sich vor dem Einsatz; /e/mitschnitt Status 1
+  bool summe = false;         // /k/loop/rec summe=1: erz/1+2+3 vor Trim summiert (float, ohne Klemme; Pegel regelt gain_db der Zelle)
   bool umgerechnet = false;   // Keylock Slice 4: daten sind schon auf frames Frames bei 128 BPM gebracht (R3, Tonhöhe erhalten)
   std::vector<float> daten;   // mindestens 2 · roh_frames Werte (das Netz legt 2 · mitschnitt_max_frames an), L R verschränkt
 };

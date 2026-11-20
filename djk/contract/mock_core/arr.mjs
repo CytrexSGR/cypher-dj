@@ -105,6 +105,60 @@ function beidesQ(K, b, tu) {   // Quittung 1 jetzt, 3 am nächsten Blockanfang (
   });
 }
 
+// Loop deck V0 (INTERFACES 4.11 /k/arr/zelle_start, /k/arr/zelle_stopp, 5.13 /zustand/zelle).
+// The stand-in does not know cells, tracks or their audio: it accepts every track id of 1 to 32 characters and a cell 1..8 and it NEVER answers
+// zelle_leer, spur_bereich for an unknown track or nicht_geladen (the core does, from the loaded snapshot). A launch is pending until the mock clock
+// passes ab_beat, then it takes effect (receipt 3, 5 first when ab_beat lay in the past); a newer command for the same track replaces a pending one
+// (the old id gets 7 abbruch); /k/set/neu and the KI stop (cypher's launches) drop pending launches the same way.
+const ZELLE_ABSTAND = 24000;   // 2 Hz of mock time
+function zelleMelde(K, spur) {
+  const e = K.arr.zellen.get(spur);
+  K.aus('/zustand/zelle', [spur, e.zelle, 0, e.ab_beat, e.versatz_beats, e.wartend, e.wartend_ab]);
+}
+function zelleStand(K, spur) {
+  if (!K.arr.zellen.has(spur)) K.arr.zellen.set(spur, { zelle: 0, ab_beat: 0, versatz_beats: 0, wartend: -1, wartend_ab: 0 });
+  return K.arr.zellen.get(spur);
+}
+function zelleAbbrechen(K, s, wahl = () => true) {   // pending launches that match: receipt 7 abbruch, the track reports nothing pending
+  for (const [spur, w] of [...K.arr.zellenWarten]) {
+    if (!wahl(w)) continue;
+    K.arr.zellenWarten.delete(spur);
+    K.q(w.b, 7, 'abbruch', s);
+    const e = zelleStand(K, spur);
+    Object.assign(e, { wartend: -1, wartend_ab: 0 });
+    zelleMelde(K, spur);
+  }
+}
+function zelleBefehl(K, b, spur, art, zelle, versatz_beats, ab_beat) {
+  const prev = K.arr.zellenWarten.get(spur);
+  if (prev) K.q(prev.b, 7, 'abbruch');   // E5: the newer command wins
+  K.q(b, 1);
+  const sample = llround(K.uhr.sample(ab_beat));
+  const spaet = sample < K.jetzt;   // ab_beat lay before this block: it takes effect at once (receipt 5, then 3)
+  K.arr.zellenWarten.set(spur, { art, zelle, versatz_beats, ab_beat, sample: Math.max(sample, K.jetzt), spaet, b });
+  Object.assign(zelleStand(K, spur), { wartend: art === 'start' ? zelle : 0, wartend_ab: ab_beat });
+  zelleMelde(K, spur);
+}
+function zellenPunkte(K, s0, s1) {
+  const aus = [];
+  for (const [spur, w] of K.arr.zellenWarten) {
+    if (w.sample >= s1) continue;
+    const s = Math.max(w.sample, s0);
+    aus.push({ s, prio: 2, seq: 0, tu: () => {
+      if (K.arr.zellenWarten.get(spur) !== w) return;   // replaced or dropped in the meantime
+      K.arr.zellenWarten.delete(spur);
+      Object.assign(zelleStand(K, spur), w.art === 'start'
+        ? { zelle: w.zelle, ab_beat: w.ab_beat, versatz_beats: w.versatz_beats, wartend: -1, wartend_ab: 0 }
+        : { zelle: 0, ab_beat: w.ab_beat, versatz_beats: 0, wartend: -1, wartend_ab: 0 });
+      if (w.spaet) K.q(w.b, 5, '', s);
+      K.q(w.b, 3, '', s);
+      zelleMelde(K, spur);
+    } });
+  }
+  return aus;
+}
+const zelleSpurOk = (spur) => typeof spur === 'string' && spur.length >= 1 && spur.length <= 32;
+
 const PUNKT_ABSTAND = 960;   // 50 Hz per regulator (REGLER_MELDUNG_ABSTAND)
 function punktStand(K, spur, ziel) {
   const key = `${spur}/${ziel}`;
@@ -112,7 +166,7 @@ function punktStand(K, spur, ziel) {
   return K.arr.punkte.get(key);
 }
 
-export default {
+const modul = {
   name: 'arr',
   init(K) {
     K.arr = { nr: -1, status: 0, start_beat: 0, ursprung: 0, start_s: -1, b_start: null, cypher: false,
@@ -122,6 +176,8 @@ export default {
       host: { gesund: [0, 0, 0, 0] },   // plan 1.11 T5: the server's health flag per effect host (the stand-in has no edge check: health = the flag)
       noten: [],           // sampler plan A1 task 7: the notes /k/arr/note was asked to play, [{ spur, ton, vel }] in order (the stand-in has no sink, nothing sounds)
       stifte: [],          // Kraken patch field task 1: the pins /k/arr/stift was asked to set, [{ spur, satz, zeile, spalte, wert }] in order (the stand-in has no sink, nothing sounds)
+      zellen: new Map(),   // loop deck V0: spur (project track id, string) -> { zelle, ab_beat, versatz_beats, wartend, wartend_ab }, the state /zustand/zelle reports; a track enters on its first launch or stop
+      zellenWarten: new Map(),   // loop deck V0: spur -> the one pending launch { art: 'start' | 'stopp', zelle, versatz_beats, ab_beat, sample, spaet, b } (a newer command for the same track replaces it)
       arm: new Map(),      // 1.12 Slice 3 (D11): armed tracks, spur 1..32 -> mode (0 touch, 1 latch, 2 write); a new core generation (a new stand-in) starts empty
       punkte: new Map(),   // 1.12 Slice 3 (D12): "spur/ziel" -> { gemeldet: sample of the block end that sent the last point, halt: the held point or null }
       lanen: new Set() };  // the fields that have a lane in the loaded playback, same keys
@@ -151,7 +207,8 @@ export default {
       }
       melde(K, s);
     };
-    K.arrKiStopp = (s) => {   // Entscheidung E-a (2026-10-20), wie Arrangement::ki_stopp: Cyphers wartender Start und ihr Freeze enden, ein laufender Transport nicht
+    K.arrKiStopp = (s) => {
+      zelleAbbrechen(K, s, (w) => w.b.quelle === 'cypher');   // loop deck V0: cypher's pending launches end with the KI stop (reason abbruch)   // Entscheidung E-a (2026-10-20), wie Arrangement::ki_stopp: Cyphers wartender Start und ihr Freeze enden, ein laufender Transport nicht
       const a = K.arr;
       if (a.status === 0 || !a.cypher || (a.status !== 1 && !a.freeze)) return;
       startAbbrechen(K, s, 'ki_stopp');
@@ -173,6 +230,7 @@ export default {
   setNeu(K) {
     const a = K.arr;
     a.punkte.clear();   // the rate windows count in samples of the old axis
+    zelleAbbrechen(K, 0);   // loop deck V0: pending launches count in samples of the old axis
     if (!a.freeze || K.mutation.has('arr_freeze_set_neu_bleibt')) return;
     a.status = 0;
     freezeEnde(K, 0, false);
@@ -282,6 +340,18 @@ export default {
       K.q(b, 1);
       K.sofortQ.push(() => { K.arr.stifte.push({ spur: a.spur, satz: a.satz, zeile: a.zeile, spalte: a.spalte, wert: a.wert }); K.q(b, 3); });
     },
+    // Loop deck V0 (§4.11): launch cell `zelle` of a loop deck track at ab_beat. Refusals as the core, in this order (cypher in the AI stop is refused by core.mjs before any handler):
+    // spur_bereich (empty id or over 32 characters), ausserhalb_bereich (zelle not 1..8, versatz_beats < 0 or not finite, ab_beat not finite). Never zelle_leer (see zelleBefehl).
+    '/k/arr/zelle_start': (K, a, b) => {
+      if (!zelleSpurOk(a.spur)) return K.q(b, 6, 'spur_bereich');
+      if (!(a.zelle >= 1 && a.zelle <= 8) || !Number.isFinite(a.ab_beat) || !(Number.isFinite(a.versatz_beats) && a.versatz_beats >= 0)) return K.q(b, 6, 'ausserhalb_bereich');
+      zelleBefehl(K, b, a.spur, 'start', a.zelle, a.versatz_beats, a.ab_beat);
+    },
+    '/k/arr/zelle_stopp': (K, a, b) => {
+      if (!zelleSpurOk(a.spur)) return K.q(b, 6, 'spur_bereich');
+      if (!Number.isFinite(a.ab_beat)) return K.q(b, 6, 'ausserhalb_bereich');
+      zelleBefehl(K, b, a.spur, 'stopp', 0, 0, a.ab_beat);
+    },
     // plan 1.11 T5 (§4.11): the server's health flag of an effect host. Answered by /e/ins_host (h, health). The stand-in has no JACK edges, so health is the flag alone.
     '/k/arr/ins_host': (K, a, b) => {
       if (!(a.h >= 1 && a.h <= 4) || (a.gesund !== 0 && a.gesund !== 1)) return K.q(b, 6, 'ausserhalb_bereich');
@@ -347,8 +417,13 @@ export default {
   ausgaben(K, s0, s1) {
     const abstand = K.arr.status === 1 || K.arr.status === 2 ? 960 : 24000;
     if (Math.ceil(s0 / abstand) * abstand < s1) melde(K, s0);
+    if (Math.ceil(s0 / ZELLE_ABSTAND) * ZELLE_ABSTAND < s1) for (const spur of K.arr.zellen.keys()) zelleMelde(K, spur);   // loop deck V0: 2 Hz per track in the map
   },
   punkte(K, s0, s1) {
+    return [...modul._transport(K, s0, s1), ...zellenPunkte(K, s0, s1)];
+  },
+  // the transport's own points (start onset, end of a freeze)
+  _transport(K, s0, s1) {
     const a = K.arr;
     if (a.freeze && a.status === 2 && a.freeze.ende < s1) {   // Paket K3: Ende des Nachlaufs
       const s = Math.max(a.freeze.ende, s0);
@@ -366,3 +441,4 @@ export default {
     } }];
   },
 };
+export default modul;

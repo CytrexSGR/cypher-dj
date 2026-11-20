@@ -46,7 +46,8 @@ export interface BereichKontext {
   // bisEnde (slice 3, P11): wait for the END status (3 fertig, 5 verspaetet ausgefuehrt, 4/6/7/8 refused or ended), not only for the first status other than 1;
   // a Teil occupies a stellwerk slot until then
   // maxMs (1.8 S4b.1a): a longer wait for the receipt of a count-in or running start (the receipt arrives at the entry); the cap is then max(4000, maxMs) ms
-  warteQuittung(id: number, abBeat?: number, bisEnde?: boolean, maxMs?: number): Promise<{ status: number; grund: string } | null>;
+  // ersteGenuegt: the first receipt of any status is the answer (a status 1 included); maxMs is then the bound for no receipt at all
+  warteQuittung(id: number, abBeat?: number, bisEnde?: boolean, maxMs?: number, ersteGenuegt?: boolean): Promise<{ status: number; grund: string } | null>;
   quelle(): 'andreas' | 'cypher';
   kiGestoppt(): boolean;
   verteile(ereignis: { a: string; f: unknown }): void;

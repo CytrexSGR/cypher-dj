@@ -154,6 +154,7 @@ struct Bau {
     fxl.push_back({nr, std::move(bend), std::move(pegel)});
     return *this;
   }
+  Bau& ret_dj(int r, int nr) { s->ret_da[r - 1] = true; s->ret_dj[r - 1] = static_cast<uint8_t>(nr); s->live = true; return *this; }   // loop deck channel strip KZ3: return r exists and leads into DJ channel nr (1..6); the head flag live is set (the loader requires it)
   Bau& ret(int r) { s->ret_da[r - 1] = true; return *this; }   // return r exists (ret_da), without a lane
   // Return fader automation: the fader lane of return r (1..4), points as lane(); sets ret_da of the return. At most one per return.
   Bau& ret_lane(int r, std::vector<cdj::ArrAutoPunkt> p) {

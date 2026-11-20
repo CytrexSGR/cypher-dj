@@ -2,7 +2,7 @@
 // from the project and writes through ctx.aendere with the coalescing key and undo label of the Hall knobs: no second path to the project.
 import { returnListe } from './routing.js';
 
-const finde = (ctx, id) => returnListe(ctx.st.projekt).find((r) => r.id === id) ?? null;
+const finde = (ctx, id) => returnListe(ctx.st.projekt, { mitLoopdeck: true }).find((r) => r.id === id) ?? null;
 
 /** The source of a Hall face: norms 0..1 from the return in the project, writes through return_aendern (a return that is gone gets no command). */
 export function returnQuelleHall(ctx, ret) {

@@ -95,3 +95,15 @@ def test_missing_lage_or_card_give_a_valid_frame(karte):
     assert len(s8_led.rahmen_fuer_seite(0x80, 1, set(), None, karte)) == 119
     assert len(s8_led.rahmen_fuer_seite(0x80, 1, set(), {"decks": None}, karte)) == 119
     assert len(s8_led.rahmen_fuer_seite(0x81, 2, set(), None, None)) == 119
+
+
+def test_pad_farben_replace_the_hot_cue_pads_and_keep_the_buttons(karte):
+    farben = [(i, 2 * i, 3 * i) for i in range(8)]
+    lage = {"decks": [{"deck": 1, "status": 2, "loop": None}]}
+    f = s8_led.rahmen_fuer_seite(0x80, 1, {1, 3}, lage, karte, farben)
+    assert len(f) == 119
+    assert f[1:4] == bytes((0, 0, 0)) and f[22:25] == bytes((7, 14, 21))
+    assert f[4:7] == bytes((1, 2, 3))
+    assert f[60] == 127  # PLAY LED still follows the deck
+    assert f[1:25] != s8_led.rahmen_fuer_seite(0x80, 1, {1, 3}, lage, karte)[1:25]
+    assert s8_led.rahmen_fuer_seite(0x80, 1, {1, 3}, lage, karte, None) == s8_led.rahmen_fuer_seite(0x80, 1, {1, 3}, lage, karte)

@@ -1,6 +1,7 @@
 // D1 K1: Wiedergabe lesen, prüfen, Audio laden (arr_playback.h). Muster: rendition.cpp (nlohmann, Feldprüfung mit
 // Namen), loader.cpp (mmap + MAP_POPULATE + mlock, Budget vor dem Einblenden).
 #include "cypherdj/arr_playback.h"
+#include "cypherdj/warp_factory.h"
 #include "cypherdj/arr_pdc.h"
 #include "cypherdj/arr_key.h"
 #include "cypherdj/arr_inserts.h"
@@ -651,6 +652,8 @@ ArrAudioCache::~ArrAudioCache() {
   }
 }
 
+constexpr int64_t ARR_ZELLE_FRAMES_MAX = 2880000;   // loop deck cell: 60 s at 48 kHz
+
 ArrAudio* ArrAudioCache::hole(const std::string& sha256, const std::string& datei, int64_t frames, std::string& grund,
                               std::string& meldung) {
   auto it = audio_.find(sha256);
@@ -770,8 +773,12 @@ ArrAudio* ArrAudioCache::hole(const std::string& sha256, const std::string& date
   return roh;
 }
 
-void ArrAudioCache::gib(ArrAudio* a) {
-  if (!a || --a->ref > 0) return;
+bool ArrAudioCache::audio_gehalten(const ArrAudio* a, const WarpWerk* w) const {
+  if (std::atomic_ref<int32_t>(const_cast<ArrAudio*>(a)->halter).load(std::memory_order_seq_cst) > 0) return true;
+  return w && w->haelt(a);
+}
+
+void ArrAudioCache::audio_freigeben(ArrAudio* a) {
   auto it = audio_.find(a->sha256);
   if (it == audio_.end()) return;
   if (a->gesperrt) munlock(a->abbild, a->bytes);
@@ -779,6 +786,38 @@ void ArrAudioCache::gib(ArrAudio* a) {
   if (konto_) konto_->entlaste(static_cast<int64_t>(a->bytes) + arr_audio_kopf());   // Daten und Kopf
   gesperrt_ -= static_cast<int64_t>(a->bytes);
   audio_.erase(it);   // gibt den Kopf frei (munmap seiner Seiten hebt die Sperre auf)
+}
+
+void ArrAudioCache::gib(ArrAudio* a) {
+  if (!a || --a->ref > 0) return;
+  if (audio_.find(a->sha256) == audio_.end()) return;
+#ifndef CYPHERDJ_MUTATION_ARR_AUDIO_OHNE_HALT
+  if (audio_gehalten(a, werk_)) {   // K4: a launcher voice plays it on: the entry outlives the snapshot
+    if (std::find(audio_aufgeschoben_.begin(), audio_aufgeschoben_.end(), a) == audio_aufgeschoben_.end()) audio_aufgeschoben_.push_back(a);
+    return;
+  }
+#endif
+  audio_freigeben(a);
+}
+
+int ArrAudioCache::audio_nachholen(const WarpWerk* w) {
+  if (!w) w = werk_;
+  int frei = 0;
+  for (size_t i = 0; i < audio_aufgeschoben_.size();) {
+    ArrAudio* a = audio_aufgeschoben_[i];
+    if (a->ref > 0) {   // a later snapshot named it again (hole): it is live
+      audio_aufgeschoben_.erase(audio_aufgeschoben_.begin() + static_cast<std::ptrdiff_t>(i));
+      continue;
+    }
+    if (audio_gehalten(a, w)) {
+      ++i;
+      continue;
+    }
+    audio_aufgeschoben_.erase(audio_aufgeschoben_.begin() + static_cast<std::ptrdiff_t>(i));
+    audio_freigeben(a);
+    ++frei;
+  }
+  return frei;
 }
 
 // ---- S20: graph store -------------------------------------------------------------------------------------------------
@@ -1163,7 +1202,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
       lese_rack(j.at("pm"), "pm.", snap->kette[ARR_KETTE_PM], snap->rack[ARR_KETTE_PM], rack_belegt);
     }
     // 1.10 Slice 3: returns (only /2). The core needs only WHICH returns exist; the sends are controls, not data (spec 5.1).
-    // nr 1..ARR_RETURNS at most once, the output is master (returns do not feed returns or groups).
+    // nr 1..ARR_RETURNS at most once, the output is master or (live container only) dj with nr 1..6 (returns do not feed returns or groups).
     if (j.contains("returns")) {
       if (!v2) format("returns gibt es erst in cypherdj-arr/2");
       const json& rl = j.at("returns");
@@ -1181,7 +1220,15 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
         }
         if (r.contains("auto") && !v3) format(wr + "auto exists only in cypherdj-arr/3");   // an older loader would drop the lane silently: here it is refused
         const json& ar = feld(r, "ausgang", wr);
-        if (text(ar, "art", wr + "ausgang.") != "master") format(wr + "ausgang: Returns senden nicht weiter (nur master)");
+        const std::string r_art = text(ar, "art", wr + "ausgang.");
+        if (r_art == "dj") {   // loop deck channel strip KZ3: a return of the live container can sound in a DJ channel pair; several returns may name the same channel (a deck's HALL and DELAY)
+          if (!live) format(wr + "ausgang.art dj only in a live project (head flag live missing)");
+          const int64_t dn = ganz(ar, "nr", wr + "ausgang.");
+          if (dn < 1 || dn > 6) format(wr + "ausgang.nr outside 1 to 6 (DJ channel)");
+          snap->ret_dj[rn - 1] = static_cast<uint8_t>(dn);
+        } else if (r_art != "master") {
+          format(wr + "ausgang: a return sends to master or dj only (not " + r_art + ")");
+        }
         lese_kette(r, wr, snap->kette[ARR_KETTE_RET0 + rn - 1], ins_belegt, cache, *snap);
         lese_rack(r, wr, snap->kette[ARR_KETTE_RET0 + rn - 1], snap->rack[ARR_KETTE_RET0 + rn - 1], rack_belegt);   // 1.10 slice 4c T15
       }
@@ -1270,6 +1317,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
     int n_bk = 0;                              // S20: bk tracks of this playback (at most ARR_BK_MAX)
     int n_kit = 0;                             // 1.9: kit tracks of this playback (at most ARR_KIT_MAX)
     std::set<int> nr_gesehen;
+    std::set<std::string> kennungen;   // loop deck: the track ids of this playback (unique)
     // 1.9 U6: the device of a track or of a rack member (the one code for both): art "intern" with geraet rb338, bk or kit, or art "wirt" with a
     // slot. glied: the object is a rack member (its device goes to snap->glied_spur, a graph instance is keyed by its member slot, a Surge slot
     // must not be used by another member or track, a rack does not nest). The checks and the texts are those of a track.
@@ -1471,6 +1519,69 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
         lese_glied_ziele(s, wo, *snap, sp, glied_roh, snap->rack[nr - 1]);   // 1.9 U8 T9: needs the members above
       } else {
         geraet_lesen(s, wo, sp, static_cast<int>(nr), false);   // intern or wirt, or the refusal of an unknown art
+      }
+      if ((s.contains("id") || s.contains("zellen")) && sp.art != ArrArt::audio) format(wo + "id and zellen exist only on an audio track");
+      if (s.contains("id") || s.contains("zellen")) {   // loop deck K1: the track id and the cells
+        if (!v2) format(wo + "id and zellen exist only in cypherdj-arr/2");
+        if (s.contains("id")) {
+          const std::string kid = text(s, "id", wo);
+          bool ok = !kid.empty() && kid.size() <= 32 && std::isalpha(static_cast<unsigned char>(kid[0]));
+          for (const char ch : kid) ok = ok && (std::isalnum(static_cast<unsigned char>(ch)) || ch == '_' || ch == '-');
+          if (!ok) format(wo + "id must match [A-Za-z][A-Za-z0-9_-]{0,31}");
+          if (!kennungen.insert(kid).second) format(wo + "id doppelt: " + kid);
+          sp.kennung = arr_id(kid);
+          std::snprintf(sp.kennung_text, sizeof sp.kennung_text, "%s", kid.c_str());
+        }
+        if (s.contains("zellen")) {
+          const json& zl = s.at("zellen");
+          if (!zl.is_array()) format(wo + "zellen is not a list");
+          if (zl.size() > static_cast<size_t>(ARR_ZELLEN)) format(wo + "zellen: more than " + std::to_string(ARR_ZELLEN) + " cells");
+          for (size_t zi = 0; zi < zl.size(); ++zi) {
+            const json& zj = zl[zi];
+            const std::string wz = wo + "zellen[" + std::to_string(zi) + "].";
+            if (!zj.is_object()) format(wz + "is not an object");
+            const int64_t index = ganz(zj, "index", wz);
+            if (index < 1 || index > ARR_ZELLEN) format(wz + "index outside 1 to " + std::to_string(ARR_ZELLEN));
+            ArrZelle& z = sp.zellen[index - 1];
+            if (z.art != ArrZellArt::leer) format(wz + "index twice: " + std::to_string(index));
+            const std::string zart = text(zj, "art", wz);
+            const double beats = zahl(zj, "beats", wz);
+            const int64_t modus = ganz(zj, "modus", wz);
+            if (zart == "loop") {
+              if (!(beats > 0.0)) format(wz + "a loop needs beats > 0");
+              if (modus != 2) format(wz + "a loop needs modus 2");
+            } else if (zart == "einmal") {
+              if (modus != 0) format(wz + "an einmal cell needs modus 0");
+            } else {
+              format(wz + "art " + zart + " unknown (loop or einmal)");
+            }
+            const std::string sha = text(zj, "sha256", wz);
+            if (!hex64(sha)) format(wz + "sha256 nicht 64 Hex-Zeichen");
+            const std::string datei = normal(text(zj, "datei", wz));
+            if (datei.size() <= erlaubt.size() || datei.compare(0, erlaubt.size(), erlaubt) != 0)
+              format(wz + "datei liegt nicht unterhalb des Arbeitsordners " + erlaubt + ": " + datei);
+            const int64_t frames = ganz(zj, "frames", wz);
+            if (frames < 1 || frames > ARR_ZELLE_FRAMES_MAX) format(wz + "frames outside 1 to " + std::to_string(ARR_ZELLE_FRAMES_MAX));
+            const double gain_db = zahl(zj, "gain_db", wz);
+            if (gain_db < -60.0 || gain_db > 12.0) format(wz + "gain_db outside -60 to +12");
+            ArrAudio*& a = je_sha[sha];
+            if (!a) {
+              std::string grund, meldung;
+              a = cache.hole(sha, datei, frames, grund, meldung);
+              if (!a) throw Abbruch(grund, wz + meldung);
+              geholt.push_back(a);
+            } else if (a->frames != frames) {
+              format(wz + "frames weicht für dasselbe sha256 ab");
+            }
+            z.art = zart == "loop" ? ArrZellArt::loop : ArrZellArt::einmal;
+            z.audio = a;
+            z.frames = frames;
+            z.beats = zart == "loop" ? beats : 0.0;
+            z.gain = static_cast<float>(std::pow(10.0, gain_db / 20.0));
+            z.modus = static_cast<int8_t>(modus);
+            ++sp.n_zellen;
+          }
+        }
       }
       if (sp.art == ArrArt::audio) {
         const json& clips = feld(s, "clips", wo);

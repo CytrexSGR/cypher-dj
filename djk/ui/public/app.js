@@ -6,6 +6,7 @@ import { bindeProduktion } from './production/production.js';
 import { bindeWerkbank } from './werkbank/werkbank.js';
 import { bindeTracker } from './tracker/tracker.js';
 import { bindeModule } from './module_library.js';   // plan live-module task 10: the MODULES tab
+import { ladeInDeck } from './loopdeck/view.js';   // the MODULES tab loads module sources into a loop deck cell
 import { bindeKopplung } from './coupling.js';   // task 10: pair a tablet (main page only)
 import { DECKS } from './curves.js';
 import { leitstand, strom, zeigeCypher } from './stream.js';
@@ -14,7 +15,7 @@ import { baueLoopZuege, baueRec, ladeLoops, letzterBeat } from './loop_rec_view.
 import { bindePlaetze } from './slots_view.js';
 import { baueSeqPlaetze } from './seq_view.js';
 import { $, $$, jsonPost, melde, zustand } from './page_state.js';
-import { bindeLive, liveOeffnen, pruefeLive, pruefeLiveSpaeter } from './live_view.js';
+import { pruefeLive, pruefeLiveSpaeter } from './live_view.js';
 import { bindeAnsicht, bindeMusterFeld, bindeReiter, bindeSchublade, bindeTablet, setzeProduktion, setzeWerkbank, setzeTracker, setzeAnsicht, meldeAnsicht } from './seitenrahmen.js';
 import { bindeLibrary, bindeSets } from './library_view.js';
 import { ladeBaum, markiereTyp } from './browse_detail.js';
@@ -44,7 +45,6 @@ baueLoopZuege();
 baueSeqPlaetze();   // the four SEQ nodes exist before the layout is applied
 bindePlaetze();
 bindeStrudelSound();   // SOUND column of the Strudel place, before the graph list arrives (zeigeGraphWahl fills its pickers)
-for (const b of $$('[data-liveoeffnen]')) b.addEventListener('click', liveOeffnen);   // the only way the page opens the live container: a click, with the confirmation
 baueRec();
 bindeReiter();
 bindeLibrary(); markiereTyp();
@@ -70,10 +70,11 @@ if (!controllerFenster && !remixFenster && !(geraetFensterAn && !geraetFensterSp
 if (!geraetFensterAn && !controllerFenster && !remixFenster) {   // the APC20 bank frame at load; the view again on focus and every 20 s (a restarted page server forgets it)
   fetch('/controller/pult').then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) zeigeApcBank(j); }, () => {});
   window.addEventListener('focus', () => meldeAnsicht(undefined, true));
-  setInterval(() => meldeAnsicht(undefined, true), 20000);
+  // only the window that has the focus repeats its view: two main windows on different views made the APC20 flip between DJ and PRODUCTION every few seconds
+  setInterval(() => { if (document.hasFocus()) meldeAnsicht(undefined, true); }, 20000);
 }
 if (!geraetFensterAn && !controllerFenster && !remixFenster) fetch('/controller/fokus').then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) zeigeCtlMarke(j); }, () => {});   // the CTL mark on the track the controllers drive, before the first event
-{ const reiter = $('[data-reiter="module"]'), tabelle = $('#module-tabelle'); if (reiter && tabelle) bindeModule({ reiter, tabelle, melde: (t) => melde(t) }); }   // task 10
+{ const reiter = $('[data-reiter="module"]'), tabelle = $('#module-tabelle'); if (reiter && tabelle) bindeModule({ reiter, tabelle, melde: (t) => melde(t), laden: (n, q) => { ladeInDeck(n, q); } }); }   // task 10
 { const knopf = $('#kopplung-knopf'), dialog = $('#kopplung'); if (knopf && dialog) bindeKopplung({ knopf, dialog }); }   // task 10: the QR code of a one-time pairing link
 bindeFx();
 bindeFxZuweisung();
@@ -82,7 +83,6 @@ for (const o of $$('[data-wert]')) zeigeWert(o.dataset.wert);
 for (const k of $$('.schalter[data-pfad]')) zeigeWert(k.dataset.pfad);
 for (const g of $$('.xzuweisung[data-pfad]')) zeigeWert(g.dataset.pfad);  // Vorgabe THRU blass, bis der Kern meldet
 DECKS.forEach(zeigeDeck);
-bindeLive();
 pruefeLive();
 ladeBestand().then(() => { DECKS.forEach(zeigeDeck); });
 ladeLoops();

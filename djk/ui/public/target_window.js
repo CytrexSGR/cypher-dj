@@ -43,7 +43,7 @@ export function zielFensterLage({ ziel, slug0, slug, projekt }) {
     return g ? { art: 'ok', text: '', name: `Group ${g.name}` } : { art: 'weg', text: GERAET_FENSTER_TEXT.gruppeWeg };
   }
   if (ziel.art === 'ret') {
-    const r = returnListe(projekt).find((x) => x.id === ziel.id);
+    const r = returnListe(projekt, { mitLoopdeck: true }).find((x) => x.id === ziel.id);
     return r ? { art: 'ok', text: '', name: r.name } : { art: 'weg', text: GERAET_FENSTER_TEXT.rueckWeg };
   }
   return { art: 'weg', text: '' };

@@ -153,6 +153,11 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   insert_unbekannt: 'that insert stage does not exist',
   art_unbekannt: 'that insert kind is not available (komp, eq, saett, lim, utility, bk and host exist in this version)',
   kette_voll: 'the insert chain of that strip is full (five stages at most)',
+  // Loop deck (project/commands_loopdeck.ts)
+  kein_loopdeck: 'that group or track does not belong to a loop deck',
+  platz_belegt: 'that place already holds a loop deck',
+  zelle_leer: 'that loop deck cell is empty',
+  modul_nicht_umwandelbar: 'that module cannot become a loop deck cell; it is left untouched',
   sidechain_spaet: 'that sidechain source is computed after the stage in the block order: a track stage can listen to tracks and DJ inputs only, a group stage to tracks, other groups (pre) and DJ inputs',
   sidechain_zyklus: 'that sidechain source depends on the stage itself (its own strip, a member keyed by its own group, tracks keying each other, the production master, or erz/4)',
   sidechain_quelle: 'that sidechain source is not available in the block of the arrangement (erz/2, erz/3, erz/5 to erz/8 and pad/1, pad/2 are computed after the production mixer)',

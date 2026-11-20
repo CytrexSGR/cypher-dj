@@ -137,7 +137,7 @@ export function speichereModul(projekt: Projekt, gruppeId: string, o: AblageOpti
 // --- Library (plan live-module task 10): list, search by origin, read, place -------------------------------------------------------------------
 export interface ModulEintrag {
   id: string; titel: string; kuenstler: string; tonart: string; datum: string; set: string; bpm: number | null; laenge_beats: number | null;
-  quelle_sha256: string | null; slot: 'A' | 'B' | null; gespeichert: string; stems: boolean; audio_fehlt: boolean; spuren: number;
+  quelle_sha256: string | null; slot: 'A' | 'B' | null; gespeichert: string; stems: boolean; stem_namen: string[]; audio_fehlt: boolean; spuren: number;
 }
 export interface ModulDateiInhalt {
   format: number; id: string; gespeichert: string; slot?: 'A' | 'B'; herkunft: Partial<ModulHerkunft>; gruppen: Gruppe[]; spuren: Spur[];
@@ -155,11 +155,16 @@ export function liesModul(id: string, basis = modulBasis()): ModulDateiInhalt | 
   const ordner = modulOrdner(id, basis);
   return ordner === null ? null : leseModulDatei(ordner);
 }
+// The stems a module really has: the groups directly under the top group that own a track (the way loopdeck_load.ts finds `{modul, stem}`)
+const stemNamen = (j: ModulDateiInhalt): string[] => {
+  const top = j.gruppen[0];
+  return j.gruppen.filter((g) => g.ausgang?.id === top.id && j.spuren.some((s) => s.ausgang?.id === g.id)).map((g) => g.name);
+};
 const eintragVon = (j: ModulDateiInhalt): ModulEintrag => {
   const h = j.herkunft ?? {};
   return { id: j.id, titel: h.titel ?? j.gruppen[0].name, kuenstler: h.kuenstler ?? '', tonart: h.tonart ?? '', datum: h.datum ?? '', set: h.set ?? '',
     bpm: h.bpm ?? null, laenge_beats: h.laenge_beats ?? null, quelle_sha256: h.quelle_sha256 ?? null, slot: j.slot ?? null, gespeichert: j.gespeichert,
-    stems: j.gruppen.length > 1, audio_fehlt: (j.audio_fehlt?.length ?? 0) > 0, spuren: j.spuren.length };
+    stems: j.gruppen.length > 1, stem_namen: stemNamen(j), audio_fehlt: (j.audio_fehlt?.length ?? 0) > 0, spuren: j.spuren.length };
 };
 // Newest first. `q`: every word must occur (case-insensitive) in the source title (a group saved without origin: its name), artist, set, date
 // or key; `sha`: the source track.

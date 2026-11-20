@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="production/production.css">
 <link rel="stylesheet" href="werkbank/werkbank.css">
 <link rel="stylesheet" href="tracker/tracker.css">
+<link rel="stylesheet" href="loopdeck/loopdeck.css">
 <link rel="stylesheet" href="routing.css">
 <link rel="stylesheet" href="presets.css">
 <link rel="stylesheet" href="collections.css">
@@ -121,6 +122,11 @@
         </div>
         <button id="rec-knopf" class="recknopf" title="Record DRUMS (erz/1, pre-fader) into a new loop">REC</button>
       </div>
+      <div class="recziel" aria-label="Record the Strudel sum into a loop deck">
+        <span class="reczieltext" title="Record the Strudel sum (DRUMS + BASS + MELODY, pre-fader) for the length chosen and load it into the first empty cell of the track">→</span>
+        <span class="recdeck">LOOP 1 <button data-recziel="1:1">1</button><button data-recziel="1:2">2</button><button data-recziel="1:3">3</button><button data-recziel="1:4">4</button></span>
+        <span class="recdeck">LOOP 2 <button data-recziel="2:1">1</button><button data-recziel="2:2">2</button><button data-recziel="2:3">3</button><button data-recziel="2:4">4</button></span>
+      </div>
     </div>
     <div class="instanzen">
       <div class="instanz an" data-strom="1" style="--farbe:var(--c)">
@@ -218,15 +224,10 @@
   <section class="deck" data-deck="3" style="--farbe:var(--d3)" hidden></section>
   <section class="deck" data-deck="4" style="--farbe:var(--d3)" hidden></section>
   <section id="platz-loops" class="deckflaeche" style="--farbe:var(--l1)" aria-label="Loops">
-    <div class="deckkopf"><span class="buchstabe">L</span><span class="decktitel">LOOPS</span>
-      <button class="livetaste" data-liveoeffnen title="Open the live container: the project that holds the live modules (EXPORT sends a deck loop there). A running production project is never replaced without asking.">LIVE</button>
-    </div>
-    <div class="loops-leer" data-loops-leer>
-      <b>The live container is not open</b>
-      <span>The loop slots L1 and L2 live in it. Opening it asks first when it would replace a project that is running.</span>
-      <button class="livetaste gross" data-liveoeffnen title="Open the live container (asks first when something is running)">LIVE</button>
-    </div>
-    <section id="live-panel" hidden aria-label="Live container: modules A and B"></section>
+    <div class="loopdeck" data-deck="1"></div>
+  </section>
+  <section id="platz-loops2" class="deckflaeche" style="--farbe:var(--l2)" aria-label="Loops 2">
+    <div class="loopdeck" data-deck="2"></div>
   </section>
   <section id="platz-remix" class="deckflaeche" style="--farbe:var(--l2)" aria-label="Remix" hidden>
     <div class="remix-kopf">
@@ -243,7 +244,7 @@
     <span class="platztext" data-platz-text></span>
     <span class="platzhinweis" data-platz-hinweis role="status"></span>
     <div class="platzwahl" role="group" aria-label="Type of place 1">
-      <button data-platz-typ="track" title="Track: deck 1">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: the live container with the loop slots L1 and L2">LOOPS</button><button data-platz-typ="seq" title="SEQ: patterns of notes, values and curves, plays on the strip of this place">SEQ</button>
+      <button data-platz-typ="track" title="Track: deck 1">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: loop deck 1 (strip L1)">LOOPS</button><button data-platz-typ="loops2" title="Loops 2: loop deck 2 (strip L2)">LOOPS 2</button><button data-platz-typ="seq" title="SEQ: patterns of notes, values and curves, plays on the strip of this place">SEQ</button>
     </div>
   </div>
   <div class="platzkopf" data-platz-kopf="2">
@@ -251,7 +252,7 @@
     <span class="platztext" data-platz-text></span>
     <span class="platzhinweis" data-platz-hinweis role="status"></span>
     <div class="platzwahl" role="group" aria-label="Type of place 2">
-      <button data-platz-typ="track" title="Track: deck 2">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: the live container with the loop slots L1 and L2">LOOPS</button><button data-platz-typ="seq" title="SEQ: patterns of notes, values and curves, plays on the strip of this place">SEQ</button>
+      <button data-platz-typ="track" title="Track: deck 2">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: loop deck 1 (strip L1)">LOOPS</button><button data-platz-typ="loops2" title="Loops 2: loop deck 2 (strip L2)">LOOPS 2</button><button data-platz-typ="seq" title="SEQ: patterns of notes, values and curves, plays on the strip of this place">SEQ</button>
     </div>
   </div>
   <div class="platzkopf" data-platz-kopf="3">
@@ -259,7 +260,7 @@
     <span class="platztext" data-platz-text></span>
     <span class="platzhinweis" data-platz-hinweis role="status"></span>
     <div class="platzwahl" role="group" aria-label="Type of place 3">
-      <button data-platz-typ="track" title="Track: deck 3">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: the live container with the loop slots L1 and L2">LOOPS</button><button data-platz-typ="seq" title="SEQ: patterns of notes, values and curves, plays on the strip of this place">SEQ</button>
+      <button data-platz-typ="track" title="Track: deck 3">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: loop deck 1 (strip L1)">LOOPS</button><button data-platz-typ="loops2" title="Loops 2: loop deck 2 (strip L2)">LOOPS 2</button><button data-platz-typ="seq" title="SEQ: patterns of notes, values and curves, plays on the strip of this place">SEQ</button>
     </div>
   </div>
   <div class="platzkopf" data-platz-kopf="4">
@@ -267,7 +268,7 @@
     <span class="platztext" data-platz-text></span>
     <span class="platzhinweis" data-platz-hinweis role="status"></span>
     <div class="platzwahl" role="group" aria-label="Type of place 4">
-      <button data-platz-typ="track" title="Track: deck 4">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: the live container with the loop slots L1 and L2">LOOPS</button><button data-platz-typ="seq" title="SEQ: patterns of notes, values and curves, plays on the strip of this place">SEQ</button>
+      <button data-platz-typ="track" title="Track: deck 4">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: loop deck 1 (strip L1)">LOOPS</button><button data-platz-typ="loops2" title="Loops 2: loop deck 2 (strip L2)">LOOPS 2</button><button data-platz-typ="seq" title="SEQ: patterns of notes, values and curves, plays on the strip of this place">SEQ</button>
     </div>
   </div>
 </main>
@@ -385,7 +386,7 @@
     <div class="cuewahl" role="radiogroup" aria-label="Type of the next cue">
       <label>CUE</label><button data-cueart="shot" class="an" title="Next empty pad sets a jump cue">SHOT</button><button data-cueart="loop" title="Next empty pad sets a loop cue (length from 1 2 4 8 16 32 64; in a running loop: that loop)">LOOP</button>
       <button data-muell title="Delete: press, then the pad to delete">🗑</button>
-      <label class="nachbox">LOOP →</label><button data-nachbox="1" title="Export the running loop into the loop slot L1 (live module, plays on the channel L1)">L1</button><button data-nachbox="2" title="Export the running loop into the loop slot L2 (live module, plays on the channel L2)">L2</button>
+      <label class="nachbox">LOOP →</label><button data-nachdeck hidden title="Target loop deck of the export (click to switch)">LOOP 1</button><button data-nachspur="1">1</button><button data-nachspur="2">2</button><button data-nachspur="3">3</button><button data-nachspur="4">4</button>
     </div>
   </div>
 </template>

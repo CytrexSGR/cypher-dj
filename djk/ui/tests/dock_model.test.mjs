@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { masterLevelSchreiben, produktionKurz, produktionZuege, sendKurz, latenzVon, masterLatenz, dockModell, dockGestalt } from '../public/dock/model.js';
+import { returnListe } from '../public/production/routing.js';
 import { pdcRechnen, msText, streifenText, latenzZeile } from '../public/production/pdc.js';
 
 const ins = (id, art, extra = {}) => ({ id, art, slot: 1, an: true, werte: {}, ...extra });
@@ -143,4 +144,14 @@ test('masterLevelSchreiben: PRODUCTION uses label and key of the old master pane
   assert.deepEqual(masterLevelSchreiben({ mischer: true }), { label: 'Master volume', schluessel: 'pm:fader' });
   assert.deepEqual(masterLevelSchreiben({ mischer: false }), { label: 'Volume master', schluessel: 'master:fader' });
   assert.deepEqual(masterLevelSchreiben(undefined), { label: 'Volume master', schluessel: 'master:fader' });
+});
+
+test('deck returns (loopdeck) stay out of the PRODUCTION cards and sends; returnListe can bring them back', () => {
+  const p = projekt();
+  p.returns.push({ id: 'r3', nr: 3, name: 'L1 HALL', farbe: '#00ffaa', fader_db: 0, pan: 0, mute: false, solo: false, hall: { an: true }, inserts: [], loopdeck: { platz: 1, art: 'hall' } });
+  const m = dockModell(p, prodHost(p));
+  assert.deepEqual(m.effekte.map((r) => r.id), ['r1', 'r2']);   // one FX card per plain return, none for the deck return
+  assert.deepEqual(m.spuren[0].sends.map((s) => s.return_id), ['r1', 'r2']);   // and no send target
+  assert.deepEqual(returnListe(p).map((r) => r.id), ['r1', 'r2']);
+  assert.deepEqual(returnListe(p, { mitLoopdeck: true }).map((r) => r.id), ['r1', 'r2', 'r3']);
 });

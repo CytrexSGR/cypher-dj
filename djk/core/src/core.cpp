@@ -135,6 +135,7 @@ void Kern::einsortieren(const Befehl& c) {
       plan_.neu(c.bpm);
       sample_ = 0;
       generation_ = 0;
+      arr_->launch_alles_aus(0, false);   // loop deck K6 (plan deviation 4): a jump to another set is a new arrangement; launcher voices fade over ARR_NAHT from the new axis, pending launches get 7 abbruch
       takt_letzt_ = takt_vorletzt_ = -1;  // Taktfelder der neuen Zeitachse beginnen bei Beat 0
       neue_zeitachse_ = true;
 #ifndef CYPHERDJ_MUTATION_EIN_ACHSE_OHNE_RESET  // I08 Review-Nachzug MINOR 4: Flanke und MIDI-Sample der alten Achse gelten nicht mehr
@@ -334,6 +335,8 @@ void Kern::einsortieren(const Befehl& c) {
     case Befehl::ARR_METRONOM:
     case Befehl::ARR_AUTO:   // 1.12 S3: needs the lanes of the playback, so it waits behind a pending load like the rest
     case Befehl::ARR_NOTE:   // sampler plan A1 task 7: needs the sink of the playback, so it waits behind a pending load too
+    case Befehl::ARR_ZELLE_START:   // loop deck K6: the launcher reads the snapshot, so it waits behind a pending load like the rest
+    case Befehl::ARR_ZELLE_STOPP:
     case Befehl::ARR_STIFT:  // kraken patch field: the same wait as ARR_NOTE, behind queued arrangement commands or an open return only (a load still in the loader thread is not waited for; the generation stamp of the pin covers that, Arrangement::live_stift)
       if (!arr_befehl_wartet(c)) einsortieren_arr(c, beat0);  // D1 K1 (core_arr.cpp); wartet hinter einer Rückgabe
       break;
@@ -431,6 +434,7 @@ void Kern::zyklus(int n, int64_t mono_ns) {
   mix_zustand(n0, n);    // 1.15 A6: Absenkung der Mix-Werkzeuge je Kanal (§5.5d)
   arr_zustand(n0, n);    // D1 K1: /zustand/arr (§5.13)
   warp_zustand(n0, n);   // 1.13 Slice 2: /zustand/warp (§5.13b)
+  zelle_zustand(n0, n);  // loop deck K6: /zustand/zelle (§5.13)
   ins_host_zustand(n0, n);   // plan 1.11 T5: /zustand/ins_host
   spur_zustand(n0, n);   // mehrkern slice 3.2 task 7: /zustand/spur_pool (§5.13)
   hall_zustand(n0, n);   // mehrkern Task 5: /zustand/hall_pool (§5.13)

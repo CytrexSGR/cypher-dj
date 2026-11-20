@@ -53,10 +53,11 @@ export const ADRESSEN = {
   '/k/loop/start': { typen: ',hsi', abschnitt: '4.9', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'box'], bereiche: { box: [1, 2] } },
   '/k/loop/stopp': { typen: ',hsi', abschnitt: '4.9', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'box'], bereiche: { box: [1, 2] } },
   '/k/loop/raster': { typen: ',hsii', abschnitt: '4.9', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'box', 'versatz_frames'], bereiche: { box: [1, 2] } },
-  '/k/loop/rec': { typen: ',hsis', abschnitt: '4.9', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'beats', 'name'], bereiche: {} },
+  '/k/loop/rec': { typen: ',hsisi', abschnitt: '4.9', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'beats', 'name', 'summe'], bereiche: { summe: [0, 1] } },
   '/k/fx': { typen: ',hsiidddddi', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'einheit', 'art', 'beats', 'wet', 'param1', 'param2', 'param3', 'an'], bereiche: { einheit: [1, 2], art: [1, 12], wet: [0, 1], param1: [0, 1], param2: [0, 1], param3: [0, 1], an: [0, 1] } },
   '/k/fx/zuweisung': { typen: ',hsisi', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'einheit', 'kanal', 'an'], bereiche: { einheit: [1, 3], an: [0, 1] } },
   '/k/fx/routing': { typen: ',hsi', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'routing'], bereiche: { routing: [0, 1] } },
+  '/k/platz/kanal': { typen: ',hsii', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'pad', 'inhalt'], bereiche: { pad: [1, 2], inhalt: [0, 3] } },
   '/k/kanal/graph': { typen: ',hsss', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'kanal', 'name'], bereiche: {} },
   '/k/graph/frage': { typen: ',hs', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle'], bereiche: {} },
   '/k/arr/laden': { typen: ',hsi', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'nr'], bereiche: { nr: [0, null] } },
@@ -73,6 +74,8 @@ export const ADRESSEN = {
   '/k/arr/arm': { typen: ',hsiii', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'spur', 'an', 'modus'], bereiche: { spur: [0, 32], an: [0, 1], modus: [0, 2] } },
   '/k/arr/note': { typen: ',hsiii', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'spur', 'ton', 'vel'], bereiche: { spur: [1, 32], ton: [0, 127], vel: [0, 127] } },
   '/k/arr/stift': { typen: ',hsiiiif', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'spur', 'satz', 'zeile', 'spalte', 'wert'], bereiche: { spur: [1, 32], satz: [0, 1], zeile: [0, 15], spalte: [0, 15], wert: [-1, 1] } },
+  '/k/arr/zelle_start': { typen: ',hssidd', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'spur', 'zelle', 'ab_beat', 'versatz_beats'], bereiche: { zelle: [1, 8] } },
+  '/k/arr/zelle_stopp': { typen: ',hssd', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'spur', 'ab_beat'], bereiche: {} },
   '/k/rec/spur': { typen: ',hsiiiii', abschnitt: '4.12', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'spur', 'scharf', 'eingang', 'modus', 'monitor'], bereiche: { spur: [1, 32], scharf: [0, 1], eingang: [0, 30], modus: [0, 3], monitor: [0, 2] } },
   '/k/rec/start': { typen: ',hsiiii', abschnitt: '4.12', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'kennung', 'nachlauf_samples', 'frist_samples', 'vorzaehler_takte'], bereiche: { kennung: [0, null], nachlauf_samples: [0, 480000], frist_samples: [0, 1440000], vorzaehler_takte: [0, 4] } },
   '/k/rec/stopp': { typen: ',hs', abschnitt: '4.12', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle'], bereiche: {} },
@@ -114,9 +117,11 @@ export const ADRESSEN = {
   '/e/fx/zuweisung': { typen: ',isi', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['einheit', 'kanal', 'an'], bereiche: { einheit: [1, 3], an: [0, 1] } },
   '/e/kanal_limiter': { typen: ',ii', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['gebaut', 'latenz_samples'], bereiche: {} },
   '/e/fx/routing': { typen: ',i', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['routing'], bereiche: { routing: [0, 1] } },
+  '/e/platz/kanal': { typen: ',ii', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['pad', 'inhalt'], bereiche: { pad: [1, 2], inhalt: [0, 3] } },
   '/e/graph': { typen: ',ss', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['kanal', 'name'], bereiche: {} },
   '/zustand/arr': { typen: ',iiidhdif', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['nr', 'status', 'loop_an', 'projekt_beat', 'ursprung_sample', 'start_beat', 'metronom_an', 'limiter_db'], bereiche: { status: [0, 3], loop_an: [0, 1], metronom_an: [0, 1], limiter_db: [-200, 0] } },
   '/zustand/warp': { typen: ',iiiii', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['stimmen', 'unterlauf', 'kein_platz', 'spaet', 'faeden'], bereiche: {} },
+  '/zustand/zelle': { typen: ',siiddid', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['spur', 'zelle', 'verwaist', 'ab_beat', 'versatz_beats', 'wartend', 'wartend_ab'], bereiche: { zelle: [0, 8], verwaist: [0, 1], wartend: [-1, 8] } },
   '/zustand/ins_host': { typen: ',iiiiiiiiiiii', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['h_1', 'gesund_1', 'rundweg_1', 'h_2', 'gesund_2', 'rundweg_2', 'h_3', 'gesund_3', 'rundweg_3', 'h_4', 'gesund_4', 'rundweg_4'], bereiche: { h_1: [1, 1], gesund_1: [0, 1], rundweg_1: [-1, 16383], h_2: [2, 2], gesund_2: [0, 1], rundweg_2: [-1, 16383], h_3: [3, 3], gesund_3: [0, 1], rundweg_3: [-1, 16383], h_4: [4, 4], gesund_4: [0, 1], rundweg_4: [-1, 16383] } },
   '/zustand/hall_pool': { typen: ',iiii', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['an', 'faeden', 'spaet', 'zurueck'], bereiche: { an: [0, 1] } },
   '/zustand/spur_pool': { typen: ',iiiiiiiii', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['an', 'modus', 'blocks_parallel', 'einheiten_worker', 'einheiten_caller', 'seriell_summe', 'haengt', 'spaet', 'zurueck'], bereiche: { an: [0, 1], modus: [0, 2] } },
@@ -184,10 +189,11 @@ export interface Werte {
   '/k/loop/start': [id: bigint, quelle: string, box: number];
   '/k/loop/stopp': [id: bigint, quelle: string, box: number];
   '/k/loop/raster': [id: bigint, quelle: string, box: number, versatz_frames: number];
-  '/k/loop/rec': [id: bigint, quelle: string, beats: number, name: string];
+  '/k/loop/rec': [id: bigint, quelle: string, beats: number, name: string, summe: number];
   '/k/fx': [id: bigint, quelle: string, einheit: number, art: number, beats: number, wet: number, param1: number, param2: number, param3: number, an: number];
   '/k/fx/zuweisung': [id: bigint, quelle: string, einheit: number, kanal: string, an: number];
   '/k/fx/routing': [id: bigint, quelle: string, routing: number];
+  '/k/platz/kanal': [id: bigint, quelle: string, pad: number, inhalt: number];
   '/k/kanal/graph': [id: bigint, quelle: string, kanal: string, name: string];
   '/k/graph/frage': [id: bigint, quelle: string];
   '/k/arr/laden': [id: bigint, quelle: string, nr: number];
@@ -204,6 +210,8 @@ export interface Werte {
   '/k/arr/arm': [id: bigint, quelle: string, spur: number, an: number, modus: number];
   '/k/arr/note': [id: bigint, quelle: string, spur: number, ton: number, vel: number];
   '/k/arr/stift': [id: bigint, quelle: string, spur: number, satz: number, zeile: number, spalte: number, wert: number];
+  '/k/arr/zelle_start': [id: bigint, quelle: string, spur: string, zelle: number, ab_beat: number, versatz_beats: number];
+  '/k/arr/zelle_stopp': [id: bigint, quelle: string, spur: string, ab_beat: number];
   '/k/rec/spur': [id: bigint, quelle: string, spur: number, scharf: number, eingang: number, modus: number, monitor: number];
   '/k/rec/start': [id: bigint, quelle: string, kennung: number, nachlauf_samples: number, frist_samples: number, vorzaehler_takte: number];
   '/k/rec/stopp': [id: bigint, quelle: string];
@@ -245,9 +253,11 @@ export interface Werte {
   '/e/fx/zuweisung': [einheit: number, kanal: string, an: number];
   '/e/kanal_limiter': [gebaut: number, latenz_samples: number];
   '/e/fx/routing': [routing: number];
+  '/e/platz/kanal': [pad: number, inhalt: number];
   '/e/graph': [kanal: string, name: string];
   '/zustand/arr': [nr: number, status: number, loop_an: number, projekt_beat: number, ursprung_sample: bigint, start_beat: number, metronom_an: number, limiter_db: number];
   '/zustand/warp': [stimmen: number, unterlauf: number, kein_platz: number, spaet: number, faeden: number];
+  '/zustand/zelle': [spur: string, zelle: number, verwaist: number, ab_beat: number, versatz_beats: number, wartend: number, wartend_ab: number];
   '/zustand/ins_host': [h_1: number, gesund_1: number, rundweg_1: number, h_2: number, gesund_2: number, rundweg_2: number, h_3: number, gesund_3: number, rundweg_3: number, h_4: number, gesund_4: number, rundweg_4: number];
   '/zustand/hall_pool': [an: number, faeden: number, spaet: number, zurueck: number];
   '/zustand/spur_pool': [an: number, modus: number, blocks_parallel: number, einheiten_worker: number, einheiten_caller: number, seriell_summe: number, haengt: number, spaet: number, zurueck: number];
@@ -291,4 +301,4 @@ export const TASTE = ['annehmen', 'verwerfen', 'cypher_vorschlag', 'cypher_hoere
 export const INVARIANTE_ART = ['sub_doppelt', 'master_leer', 'hoerschein'] as const;
 export const PROTOKOLLFEHLER_GRUND = ['unbekannte_adresse', 'falsche_typen', 'protokoll'] as const;
 export const NB_ZUSTAND = { durchreichen: 0, schleife: 1, ausgeblendet: 2, rueckgabe: 3 } as const;
-export const GRUENDE = ['zu_spaet', 'regler_beim_menschen', 'regler_verplant', 'ueberlappung', 'nur_hand', 'unbekannter_regler', 'unbekanntes_deck', 'ausserhalb_bereich', 'kein_hoerschein', 'hoerschein_anderer_kanal', 'hoerschein_anderer_inhalt', 'hoerschein_anderes_tempo', 'hoerschein_abgelaufen', 'hoerschein_anderer_abschnitt', 'ziel_ungehoert', 'keine_stems', 'hoerschein_nicht_sync', 'hoerschein_pegel', 'invariante_sub_doppelt', 'invariante_master_leer', 'deck_beruehrt', 'deck_hoerbar', 'deck_laeuft', 'nicht_geladen', 'material_fehlt', 'pruefung', 'budget_speicher', 'budget_stretcher', 'karte_voll', 'tempo_rampe', 'ki_gestoppt', 'rechner_fehlt', 'kein_stretcher', 'autonomie', 'form', 'hand', 'abbruch', 'ki_stopp', 'unbekannte_adresse', 'falsche_typen', 'protokoll', 'grenze_sub', 'neustart', 'datei_fehlt', 'format', 'audio_fehlt', 'zu_gross', 'spur_bereich', 'reserviert', 'kein_eingang', 'aufnahme_laeuft', 'zu_viele_scharf', 'eingang_fehlt', 'kein_platz', 'warp_maschine_fehlt', 'nur_andreas', 'auto_ziel_unbekannt', 'laeuft', 'host_fehlt', 'kein_rueckweg', 'belegt', 'schreiber_ueberlauf'] as const;
+export const GRUENDE = ['zu_spaet', 'regler_beim_menschen', 'regler_verplant', 'ueberlappung', 'nur_hand', 'unbekannter_regler', 'unbekanntes_deck', 'ausserhalb_bereich', 'kein_hoerschein', 'hoerschein_anderer_kanal', 'hoerschein_anderer_inhalt', 'hoerschein_anderes_tempo', 'hoerschein_abgelaufen', 'hoerschein_anderer_abschnitt', 'ziel_ungehoert', 'keine_stems', 'hoerschein_nicht_sync', 'hoerschein_pegel', 'invariante_sub_doppelt', 'invariante_master_leer', 'deck_beruehrt', 'deck_hoerbar', 'deck_laeuft', 'nicht_geladen', 'material_fehlt', 'pruefung', 'budget_speicher', 'budget_stretcher', 'karte_voll', 'tempo_rampe', 'ki_gestoppt', 'rechner_fehlt', 'kein_stretcher', 'autonomie', 'form', 'hand', 'abbruch', 'ki_stopp', 'unbekannte_adresse', 'falsche_typen', 'protokoll', 'grenze_sub', 'neustart', 'datei_fehlt', 'format', 'audio_fehlt', 'zu_gross', 'spur_bereich', 'reserviert', 'kein_eingang', 'aufnahme_laeuft', 'zu_viele_scharf', 'eingang_fehlt', 'kein_platz', 'warp_maschine_fehlt', 'nur_andreas', 'auto_ziel_unbekannt', 'laeuft', 'host_fehlt', 'kein_rueckweg', 'belegt', 'schreiber_ueberlauf', 'zelle_leer'] as const;

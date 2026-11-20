@@ -339,3 +339,33 @@ test('a refusal of the project removes the bank files and the slot file again', 
   assert.deepEqual(fs.readdirSync(path.join(s.d.bk, 'panels')), ['amiga.json']);
   assert.ok(!fs.readdirSync(path.join(s.d.bk, 'samples')).some((n) => n.startsWith('smp-')));
 });
+
+// ---- loopPlaetze: a loop deck sounds on the channel of the place that shows it ----
+import { loopPlaetze, loopPlatzAbweichung } from '../public/slots.js';
+test('loopPlaetze: the place (1..4) of each loop deck, null when no place shows it', () => {
+  assert.deepEqual(loopPlaetze(['loops', 'track', 'strudel', 'loops2']), { 1: 1, 2: 4 });
+  assert.deepEqual(loopPlaetze(['track', 'track', 'loops2', 'loops']), { 1: 4, 2: 3 });
+  assert.deepEqual(loopPlaetze(['track', 'loops', 'strudel', 'seq']), { 1: 2, 2: null });
+  assert.deepEqual(loopPlaetze(['track', 'track', 'strudel', 'seq']), { 1: null, 2: null });
+});
+test('loopPlatzAbweichung: a body only when a present deck sounds elsewhere than its place; absent decks and unshown decks are left alone', () => {
+  const projekt = (d1, d2) => ({ gruppen: [
+    ...(d1 === undefined ? [] : [{ loopdeck: { platz: 1, raster: 'takt', ...(d1 ? { ausgang_platz: d1 } : {}) } }]),
+    ...(d2 === undefined ? [] : [{ loopdeck: { platz: 2, raster: 'takt', ...(d2 ? { ausgang_platz: d2 } : {}) } }]) ] });
+  const L = ['track', 'track', 'loops', 'loops2'];
+  assert.equal(loopPlatzAbweichung(L, projekt(0, 0)), null, 'defaults 3 and 4: already there');
+  assert.deepEqual(loopPlatzAbweichung(['loops2', 'track', 'track', 'loops'], projekt(0, 0)), { 1: 4, 2: 1 }, 'both move: one request');
+  assert.deepEqual(loopPlatzAbweichung(['loops', 'track', 'track', 'seq'], projekt(0, 0)), { 1: 1, 2: null }, 'deck 2 is not shown: untouched');
+  assert.equal(loopPlatzAbweichung(['loops', 'track', 'track', 'seq'], projekt(1, 0)), null);
+  assert.equal(loopPlatzAbweichung(['track', 'track', 'track', 'seq'], projekt(0, 0)), null, 'none shown');
+  assert.equal(loopPlatzAbweichung(['loops', 'track', 'track', 'seq'], projekt(undefined, 0)), null);
+  assert.equal(loopPlatzAbweichung(L, null), null);
+});
+test('loopPlatzAbweichung: an unshown deck that holds the channel the shown deck needs moves to the other loop pad (studio 2026-11-20: LOOP 1 in place 4)', () => {
+  const projekt = (d1, d2) => ({ gruppen: [{ loopdeck: { platz: 1, raster: 'takt', ...(d1 ? { ausgang_platz: d1 } : {}) } },
+    { loopdeck: { platz: 2, raster: 'takt', ...(d2 ? { ausgang_platz: d2 } : {}) } }] });
+  assert.deepEqual(loopPlatzAbweichung(['track', 'seq', 'strudel', 'loops'], projekt(0, 0)), { 1: 4, 2: 3 }, 'deck 2 gives up L2');
+  assert.deepEqual(loopPlatzAbweichung(['track', 'seq', 'loops2', 'strudel'], projekt(0, 0)), { 1: 4, 2: 3 }, 'deck 1 gives up L1');
+  assert.deepEqual(loopPlatzAbweichung(['loops', 'seq', 'strudel', 'track'], projekt(0, 0)), { 1: 1, 2: null }, 'a deck channel takes nothing from deck 2');
+  assert.equal(loopPlatzAbweichung(['track', 'seq', 'strudel', 'loops'], projekt(4, 3)), null, 'already moved');
+});

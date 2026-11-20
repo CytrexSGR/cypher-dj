@@ -155,7 +155,7 @@ been judged by a listener yet. The three wavetable synths (`wavetable-reese`, `w
   `djk/start/djk-start --strudel --bk-stroeme`); these streams can be recorded onto production tracks;
 - a production instrument track (the device is the graph and its knob values; up to 16 such tracks), played from the
   project's notes live and in the offline render;
-- an effect graph as an insert on a deck channel, on the DJ master sum, on a loop slot channel or on one of the three
+- an effect graph as an insert on a deck channel, on the DJ master sum, on a loop deck channel or on one of the three
   Strudel channels, or on one of two send returns (the examples `fx-*`: echo, spring reverb, filter ride, phaser,
   flanger, tube, vocoder, remix and others). A pattern channel holds one graph: an instrument or an effect.
 

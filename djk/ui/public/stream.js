@@ -3,6 +3,7 @@ import { DECKS, setzeZielKurve } from './curves.js';
 import { mixAufnehmen, gateAufnehmen } from './effects.js';
 import { kanalAnsicht } from './live_module.js';   // live modules task 4
 import { cypherStand } from './messages.js';
+import { loopdeckEreignis } from './loopdeck/view.js';
 import { live, liveEreignis, liveOffen, merkeArr, pruefeLiveSpaeter, zeichneLive } from './live_view.js';
 import { produktion, werkbank, tracker } from './seitenrahmen.js';
 import { $, BUCHSTABE, deckAnsicht, melde, zeigePruefmodus, zustand } from './page_state.js';
@@ -71,7 +72,8 @@ export function strom() {
     try { tracker?.ereignis(a, f); } catch (e) { console.error('Tracker view:', e); }   // like the lines above
     try { geraetFensterEreignis(a, f); } catch (e) { console.error('Device window:', e); }   // the #geraet window mode (no-op elsewhere)
     try { zielFensterEreignis(a, f); } catch (e) { console.error('Stage window:', e); }   // the #geraet=ins:/ret:/grp:/master window mode (no-op elsewhere)
-    if (a === '/zustand/arr') { merkeArr(f); zeigeMasterLimiter(f); }   // the loop slots follow the transport of the live container; the MASTER tab's LIMITER meter reads limiter_db
+    try { loopdeckEreignis(a, f); } catch (e) { console.error('Loop deck view:', e); }   // loop deck P2: proj, loopdeck, /uhr
+    if (a === '/zustand/arr') { merkeArr(f); zeigeMasterLimiter(f); }   // the transport clock of the live container; the MASTER tab's LIMITER meter reads limiter_db
     switch (a) {
       case 'stand':
         Object.assign(zustand.regler, f.regler);

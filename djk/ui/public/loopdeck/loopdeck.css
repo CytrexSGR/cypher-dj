@@ -1,0 +1,116 @@
+/* Loop deck view (loop deck P2): the places `loops` (deck 1, --l1) and `loops2` (deck 2, --l2). Sized for about 765 x 320 px with the
+   library dock open; the track columns take the extra height when it is closed (the cell rows stretch, no cap).
+   The scene column and every track share one row template (title, wave, 8 cell rows, foot) and the same paddings, so a scene button
+   sits exactly beside its cell row at any height. The channel strip row (class `mit-strip` on `.loopdeck`, per deck, toggled by STRIP) is a fifth
+   row of 28 px between the cells and the foot; collapsed it is not in the grid. Default collapsed: at 1920 x 1080 with the dock open the place
+   is 765 x 302 px, a cell row is 17 px, and the strip would push the rows under their 14 px minimum. */
+#platz-loops, #platz-loops2 { display: flex; flex-direction: column; min-height: 0; }
+.loopdeck { position: relative; --farbe: var(--l1); display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; gap: 4px; padding: 4px 6px 6px; }
+#platz-loops2 .loopdeck { --farbe: var(--l2); }
+.ld-kopfzeile { display: flex; align-items: center; gap: 8px; min-height: 26px; flex: 0 0 auto; }
+.ld-deckname { font-size: 12px; font-weight: 800; letter-spacing: .12em; color: var(--farbe); }
+.ld-raster { display: flex; gap: 2px; margin-right: auto; }
+.ld-r, .ld-stopall, .ld-set, .ld-neu { font-size: 10px; font-weight: 800; letter-spacing: .08em; padding: 3px 9px; border-radius: 5px; color: var(--dim); border: 1px solid var(--line); }
+.ld-r.an, .ld-set.an { background: var(--farbe); border-color: var(--farbe); color: #0e0f12; }
+.ld-stopall { color: var(--text); }
+.ld-neu { color: var(--farbe); border-color: var(--farbe); }
+.ld-hinweis { font-size: 10px; color: var(--dim); }
+.ld-neu[hidden], .ld-setmenu[hidden], .ld-kopf[hidden], .ld-hinweis[hidden] { display: none; }
+.ld-setmenu { display: flex; gap: 6px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); font-size: 11px; color: var(--dim); }
+.ld-rumpf { display: flex; gap: 6px; flex: 1 1 0; min-height: 0; }
+.ld-spur, .ld-szenen { display: grid; grid-template-rows: 14px 36px minmax(0, 1fr) 26px; row-gap: 3px; min-width: 0; min-height: 0; padding: 4px; border: 1px solid transparent; border-top-width: 2px; }
+.ld-szenen { flex: 0 0 22px; padding-left: 0; padding-right: 0; }
+.ld-zellen, .ld-szenenzeilen { display: grid; grid-template-rows: repeat(8, minmax(14px, 1fr)); gap: 2px; min-height: 0; }
+.ld-szene { min-height: 0; padding: 0; font-size: 10px; font-weight: 700; color: var(--dim); border: 1px solid var(--line); border-radius: 4px; }
+.ld-szene:hover { color: var(--farbe); border-color: var(--farbe); }
+.ld-spuren { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; flex: 1 1 0; min-width: 0; min-height: 0; }
+.ld-spur { background: var(--panel); border-color: var(--line); border-radius: 6px; }
+.ld-spur.spielt { border-top-color: var(--farbe); }
+.ld-spur.verwaist { border-top-color: var(--warn, #e0a040); }
+.ld-spur.stumm { opacity: .6; }
+
+.ld-titel { font-size: 10px; line-height: 14px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ld-spur.verwaist .ld-titel { color: var(--warn, #e0a040); }
+.ld-welle { position: relative; background: #0c0d10; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.ld-welle canvas { display: block; width: 100%; height: 100%; }
+.ld-marke { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255, 255, 255, .16); pointer-events: none; }
+.ld-welle .ld-kopf { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--farbe); box-shadow: 0 0 4px var(--farbe); pointer-events: none; }
+.ld-zelle { position: relative; display: flex; align-items: center; gap: 5px; min-height: 0; padding: 0 5px; text-align: left; overflow: hidden;
+  font-size: 10px; color: var(--dim); background: var(--panel2); border: 1px solid var(--line); border-radius: 4px; }
+.ld-chip { flex: 0 0 8px; height: 8px; border-radius: 2px; background: transparent; }
+.ld-art { flex: 0 0 10px; font-size: 10px; text-align: center; }
+.ld-name { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ld-zelle.leer { border-style: dashed; opacity: .55; }
+.ld-zelle.voll { color: var(--text); }
+.ld-zelle.ziel { opacity: 1; border-color: var(--farbe); box-shadow: inset 0 0 0 1px var(--farbe); }
+.ld-zelle.wartend { color: var(--text); animation: ld-blink .5s steps(2, jump-none) infinite; border-color: var(--farbe); }
+.ld-zelle.spielt { color: #0e0f12; font-weight: 700; background: var(--farbe); border-color: var(--farbe);
+  background-image: linear-gradient(90deg, rgba(255, 255, 255, .45) calc(var(--pos, 0) * 100%), transparent calc(var(--pos, 0) * 100%)); }
+.ld-zelle.spielt::after { content: ""; position: absolute; top: 0; bottom: 0; left: calc(var(--pos, 0) * 100%); width: 2px; background: #fff; }
+@keyframes ld-blink { 50% { background: var(--farbe); color: #0e0f12; } }
+.ld-fuss { display: flex; align-items: center; gap: 4px; height: 26px; min-width: 0; }
+.ld-stopp, .ld-mute { font-size: 9px; font-weight: 800; letter-spacing: .06em; padding: 3px 5px; border-radius: 4px; border: 1px solid var(--line); color: var(--dim); }
+.ld-stopp.wartend { animation: ld-blink .5s steps(2, jump-none) infinite; }
+.ld-mute.an { background: var(--warn, #e0a040); border-color: var(--warn, #e0a040); color: #0e0f12; }
+.ld-fader { flex: 1 1 0; min-width: 0; height: 22px; }
+.ld-filter { flex: 0 0 26px; width: 26px; height: 26px; }
+@media (prefers-reduced-motion: reduce) { .ld-zelle.wartend, .ld-stopp.wartend { animation: none; background: var(--farbe); color: #0e0f12; } }
+/* Cell menu (loop deck P3) */
+.ld-griff { flex: 0 0 12px; text-align: center; font-weight: 800; color: var(--dim); cursor: pointer; }
+.ld-griff[hidden] { display: none; }
+.ld-zelle:hover .ld-griff, .ld-zelle.spielt .ld-griff { color: inherit; }
+.ld-zellmenue { position: absolute; z-index: 20; min-width: 190px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; font-size: 11px; color: var(--text);
+  background: var(--panel); border: 1px solid var(--farbe); border-radius: 6px; box-shadow: 0 4px 16px rgba(0, 0, 0, .5); }
+.ld-zellmenue[hidden], .ld-meintrag[hidden] { display: none; }
+.ld-mtitel { font-weight: 800; color: var(--farbe); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ld-meintrag { display: flex; align-items: center; gap: 6px; }
+.ld-mname { flex: 0 0 82px; color: var(--dim); }
+.ld-mfeld { flex: 1 1 0; min-width: 0; width: 0; font-size: 11px; padding: 2px 4px; }
+.ld-farben { display: grid; grid-template-columns: repeat(8, 14px); gap: 3px; }
+.ld-farbe { width: 14px; height: 14px; padding: 0; border-radius: 3px; border: 1px solid transparent; }
+.ld-farbe.an { border-color: #fff; }
+.ld-art-wahl { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; color: var(--dim); border: 1px solid var(--line); }
+.ld-art-wahl.an { background: var(--farbe); border-color: var(--farbe); color: #0e0f12; }
+.ld-leeren { justify-content: center; font-weight: 800; color: var(--warn, #e0a040); border: 1px solid var(--line); border-radius: 4px; padding: 3px; }
+.ld-setmenu { flex-direction: column; align-items: stretch; }
+.ld-setzeile { display: flex; align-items: center; gap: 6px; }
+.ld-seteintrag { font-size: 10px; font-weight: 800; letter-spacing: .08em; padding: 3px 9px; border-radius: 5px; color: var(--text); border: 1px solid var(--line); }
+.ld-seteintrag:hover { color: var(--farbe); border-color: var(--farbe); }
+.ld-setzeile[hidden], .ld-setliste[hidden] { display: none; }
+.ld-setname .ld-mfeld { flex: 1 1 auto; min-width: 0; }
+.ld-setliste { display: flex; flex-wrap: wrap; gap: 4px; max-height: 84px; overflow-y: auto; }
+.ld-setwahl { display: inline-flex; gap: 6px; padding: 2px 8px; font-size: 11px; border: 1px solid var(--line); border-radius: 5px; color: var(--text); }
+.ld-setwahl:hover { border-color: var(--farbe); }
+.ld-setinfo { color: var(--dim); }
+.ld-zelle.ablage { outline: 2px dashed var(--farbe); outline-offset: -2px; }
+.ld-zelle.laedt .ld-name { font-style: italic; opacity: .65; }
+/* Channel strip row (channel strip PZ1) */
+.loopdeck { --ld-kill: #7a1a1a; }
+.ld-strip, .ld-szenenstrip { display: none; }
+.mit-strip .ld-spur, .mit-strip .ld-szenen { grid-template-rows: 14px 36px minmax(0, 1fr) 28px 26px; }
+.mit-strip .ld-strip { display: flex; align-items: center; gap: 2px; height: 28px; min-width: 0; }
+.mit-strip .ld-szenenstrip { display: block; }
+.ld-strip-taste { font-size: 10px; font-weight: 800; letter-spacing: .08em; padding: 3px 9px; border-radius: 5px; color: var(--dim); border: 1px solid var(--line); }
+.ld-strip-taste.an { background: var(--farbe); border-color: var(--farbe); color: #0e0f12; }
+.ld-einheit { flex: 0 0 22px; display: flex; flex-direction: column; align-items: center; height: 28px; min-width: 0; }
+.ld-mini { flex: 0 0 20px; width: 20px; height: 20px; cursor: ns-resize; touch-action: none; }
+.ld-mini svg { width: 100%; height: 100%; display: block; }
+.ld-mini .ring { fill: var(--panel2); stroke: var(--line); stroke-width: 5; }
+.ld-mini .zeiger { stroke: var(--text); stroke-width: 5; stroke-linecap: round; }
+.ld-mini.gegriffen .ring { stroke: var(--farbe); }
+.ld-mini.kill .ring { fill: var(--ld-kill); stroke: var(--ld-kill); }
+.ld-band { flex: 0 0 8px; width: 100%; height: 8px; padding: 0; font-size: 7px; line-height: 8px; font-weight: 800; letter-spacing: .04em; color: var(--dim); }
+.ld-band.kill { color: #fff; background: var(--ld-kill); border-radius: 2px; }
+/* Sends and effect chip (channel strip PZ2) */
+.ld-sendname { flex: 0 0 8px; font-size: 7px; line-height: 8px; font-weight: 800; letter-spacing: .02em; color: var(--dim); white-space: nowrap; }
+.ld-send { flex-basis: 24px; }
+.ld-fx { flex: 1 1 0; min-width: 0; height: 18px; margin-left: 2px; padding: 0 2px; font-size: 8px; font-weight: 800; letter-spacing: .02em; color: var(--dim); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ld-fx.gesetzt { color: var(--farbe); border-color: var(--farbe); }
+.ld-fx.gesetzt.aus { color: var(--dim); border-color: var(--line); opacity: .5; }
+.ld-fxmenue { position: absolute; z-index: 20; min-width: 110px; display: flex; flex-wrap: wrap; gap: 4px; padding: 6px; font-size: 11px; color: var(--text);
+  background: var(--panel); border: 1px solid var(--farbe); border-radius: 6px; box-shadow: 0 4px 16px rgba(0, 0, 0, .5); }
+.ld-fxmenue[hidden] { display: none; }
+.ld-fxwahl, .ld-fxeintrag { font-size: 10px; font-weight: 800; letter-spacing: .06em; padding: 3px 8px; border-radius: 4px; color: var(--text); border: 1px solid var(--line); }
+.ld-fxwahl.an { background: var(--farbe); border-color: var(--farbe); color: #0e0f12; }
+.ld-fxeintrag { color: var(--dim); }
+.ld-fxleer { color: var(--dim); font-size: 10px; }

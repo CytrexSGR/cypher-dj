@@ -243,6 +243,17 @@ class Mixer {
   // assigned, within float rounding; no graph on fx/3 = the master path (never silent). Assigning or releasing a channel blends over
   // MIX_ZIEL_BLENDE samples (S-curve, like a <k>/ziel change), continuing from the weight reached when a blend is interrupted. A channel
   // that leaves FX3 stops feeding the bus; the graph keeps running on the bus, so its tail rings out.
+  // DJ view places 3 and 4 (the fader belongs to the place, not to the content): the content of place 3 / 4 sounds through pad/1 (L1) / pad/2 (L2).
+  // platz_kanal_setze(pad, inhalt), pad 0 = pad/1, 1 = pad/2; inhalt 0 nothing (the old paths, bit for bit), 1 the Strudel sum (erz/1..3, each after its
+  // own strip), 2 deck/3, 3 deck/4 (after its strip). What such a channel adds to the master sum goes into the INPUT of the pad strip instead (in front
+  // of trim, EQ, filter and fader), so the pad fader regulates all of it and the master hears it once. The source channels (0..11) run before
+  // pad/1, pad/2 (12, 13) in verarbeite(), so the redirect has no delay: same block, same sample. A change blends over MIX_ZIEL_BLENDE samples
+  // (linear weights that sum to 1, continuing from the weight reached), also while the source strip sleeps; no allocation. Out of range: ignored.
+  // Both pads on the same source: pad/2 wins. Callback thread only (the Stellwerk applies it at a block start).
+  static constexpr int PLATZ_INHALTE = 4, PLATZ_QUELLEN = MIX_QUELLEN - 2;
+  void platz_kanal_setze(int pad, int inhalt) noexcept;
+  int platz_kanal(int pad) const noexcept { return pad >= 0 && pad < 2 ? platz_inhalt_[pad] : 0; }
+  bool platz_kanal_wechselt() const noexcept;   // a redirect blend is still running
   static constexpr int FX3_EINHEIT = 2;
   void fx3_zuweisung_setze(int kanal, bool an) noexcept;
   bool fx3_zugewiesen(int kanal) const noexcept { return kanal >= 0 && kanal < MIX_QUELLEN && fx3_zuw_[kanal]; }
@@ -482,6 +493,14 @@ class Mixer {
   bool fx3_zuw_[MIX_QUELLEN] = {};
   float fx3_gew_[MIX_QUELLEN] = {}, fx3_von_[MIX_QUELLEN] = {};
   int fx3_rest_[MIX_QUELLEN] = {};
+  // Place channel (platz_kanal_setze): per source channel k < PLATZ_QUELLEN the weight pz_w_[k][p] of the share that goes into the input of pad p
+  // and its target pz_ziel_[k][p] (0 or 1); the master share is 1 - the sum of both. rt_l_/rt_r_: the master share, handed to route().
+  int platz_inhalt_[2] = {};
+  float pz_w_[PLATZ_QUELLEN][2] = {}, pz_ziel_[PLATZ_QUELLEN][2] = {};
+  float rt_l_[MIX_BLOCK] = {}, rt_r_[MIX_BLOCK] = {};
+  bool pz_aktiv(int k) const noexcept;
+  void pz_vorruecken(int k, int n) noexcept;   // the blend runs on while the strip sleeps
+  void pz_umlenken(int k, int n) noexcept;     // splits aus_l_/aus_r_: the pad share into ein_*_[12 + p], the rest into rt_l_/rt_r_
   BeatFx fx_master_[FX_EINHEITEN];                // die Summe vor master/pegel
   bool fx_zuw_[FX_EINHEITEN][FX_ZIELE] = {};
   bool fx_master_zuw_[FX_EINHEITEN] = {};

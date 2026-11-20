@@ -2,7 +2,6 @@
 import { DECKS } from './curves.js';
 import { ausgangAnzeige, HAND_PRUEFMODUS_TEXT } from './messages.js';
 import { uhrKopf } from './loop_rec_view.js';
-import { zeichneLoopWellen } from './live_view.js';
 import { $, deckAnsicht, melde, pruefmodusAus } from './page_state.js';
 import { hotcueMarken } from './deck_griffe.js';
 
@@ -18,7 +17,6 @@ export function bild() {
     const marken = hotcueMarken(a);
     a.lauf.zeichne(f, null, marken); a.ueber.zeichne(f, a.lauf.takte * 4 * a.raster.framesProBeat, marken);
   }
-  zeichneLoopWellen(jetzt);
   window.djkBild.push(performance.now() - jetzt); if (window.djkBild.length > 600) window.djkBild.shift();
   requestAnimationFrame(bild);
 }

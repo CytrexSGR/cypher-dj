@@ -211,6 +211,34 @@ int main() {
     PRUEF(ms.size() >= 3 && ms[1].adresse == "/e/neustart" && ms[2].adresse == "/e/fx/routing" && ms[2].i[0] == 1);
   }
 
+  // 7c) DJ view places 3 and 4: a changed place channel goes to everybody, a new subscriber gets the pads that are not 0 right after
+  // /e/fx/routing (nothing is sent while both are 0, so the sequences above stay as they were)
+  {
+    cdj::Ereignis p{};
+    p.art = cdj::Ereignis::PLATZ_KANAL;
+    p.deck = 2;
+    p.status = 3;
+    ere->schiebe(p);
+    b.ereignisse_senden();
+    mx = x.alle();
+    PRUEF(mx.size() == 1 && mx[0].adresse == "/e/platz/kanal" && mx[0].i[0] == 2 && mx[0].i[1] == 3);
+    Gegenstelle spaeter;
+    hallo(b, "spaeter", spaeter.port, t_neu + 5'300'000'000LL);
+    auto ms = spaeter.alle();
+    PRUEF(ms.size() >= 4 && ms[1].adresse == "/e/neustart" && ms[2].adresse == "/e/fx/routing" && ms[3].adresse == "/e/platz/kanal" && ms[3].i[0] == 2 &&
+          ms[3].i[1] == 3);
+    p.status = 0;   // back to nothing: the next subscriber hears no /e/platz/kanal
+    ere->schiebe(p);
+    b.ereignisse_senden();
+    x.alle();
+    Gegenstelle leer;
+    hallo(b, "leer", leer.port, t_neu + 5'400'000'000LL);
+    auto ml = leer.alle();
+    bool kein = true;
+    for (const auto& m : ml) kein = kein && m.adresse != "/e/platz/kanal";
+    PRUEF(kein && ml.size() >= 3);
+  }
+
   // 8) Fehlerfall: Netz ohne Zustand (wie Scheibe 08) nach demselben Neustart: niemand bekommt /e/neustart
   {
     auto bef2 = std::make_unique<cdj::Befehlsring>();

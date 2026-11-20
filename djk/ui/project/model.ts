@@ -401,6 +401,21 @@ export interface Gruppe {
   // SEQ deck (spec 2026-11-14-seq-deck-design, project/seq.ts): the step document of a top group of the live container; absent on every other group,
   // never written then. Not playback: playback.ts does not read it. A group has this or `modul`, never both.
   seq?: SeqDeck;
+  // loop deck (index 1.1, plan loop-deck M1): a top group of the live container that holds 4 audio tracks with 8 cells each; absent on every
+  // other group, never written then. A group has this, `modul` or `seq`, never two of them.
+  loopdeck?: LoopDeck;
+}
+// Loop deck (two decks, 4 tracks of 8 cells each). Grid = the quantum a cell start waits for, in beats (LOOP_RASTER_BEATS).
+export type LoopRaster = '1/4' | '1/2' | '1' | 'takt' | '4takte';
+export const LOOP_RASTER_BEATS: Readonly<Record<LoopRaster, number>> = { '1/4': 0.25, '1/2': 0.5, '1': 1, takt: 4, '4takte': 16 };
+export const LOOP_ZELLEN = 8, LOOP_SPUREN = 4, LOOP_FARBEN = 16, LOOP_MAX_FRAMES = 2_880_000;
+// platz = the deck number (LOOP 1, LOOP 2). ausgang_platz = the DJ view place (1..4) whose fixed channel the deck sounds on: the faders belong to the
+// places, not to the content (Andreas 2026-11-20). Place 3 = pad/1 (L1), 4 = pad/2 (L2), 1 = deck/1, 2 = deck/2. Absent = the deck number's pad
+// (deck 1 -> L1, deck 2 -> L2). A deck that no place shows keeps its last value. The page writes it (POST /loopdeck/plaetze).
+export interface LoopDeck { platz: 1 | 2; raster: LoopRaster; ausgang_platz?: 1 | 2 | 3 | 4 }
+export interface Zelle {
+  id: string; name: string; farbe: number; art: 'loop' | 'einmal'; sha256: string;
+  beats?: number; bpm?: number; gain_db: number; pfad_hinweis?: string;
 }
 // Where a live module comes from: one loop of a deck rendering, split into stems. von_beat is on the beat axis of the rendering.
 export interface ModulHerkunft {
@@ -484,21 +499,36 @@ export const insertParamIndex = (art: InsertPoolArt, name: string): number => IN
 export interface Return {
   id: string; nr: number; name: string; farbe: string; fader_db: number; pan: number; mute: boolean; solo: boolean; hall: ReturnHall;
   pre?: true; inserts?: Insert[]; rack?: Rack; automation?: Lane[];
+  loopdeck?: ReturnLoopdeck;   // the HALL or DELAY return of a loop deck; only in a project with live: true, unique per (platz, art)
 }
+// A return that belongs to a loop deck place and sounds inside that deck's DJ channel (the translator writes the DJ output for it)
+export interface ReturnLoopdeck { platz: 1 | 2; art: 'hall' | 'delay' }
+export const LOOP_SEND_MAX = 0;   // the send range of a loop deck track is -200..0 dB
 export interface Master { fader_db: number; inserts?: Insert[]; rack?: Rack; automation?: Lane[] }
 export interface Spur {
   id: string; von?: Herkunft; gruppe?: string; nr: number; name: string; farbe: string; art: 'audio' | 'instrument';
   geraet?: Geraet; freeze?: Freeze | null; aufnahme?: SpurAufnahme; ausgang?: AusgangGruppe; automation?: Lane[]; takes?: Take[];
   stammbaum?: Stammbaum;   // find sound: the family tree of a Baukasten track (instrument tracks only); project data, not playback (spurSicht omits it)
   fader_db: number; pan: number; mute: boolean; solo: boolean; clips: Clip[]; sends?: Send[]; inserts?: Insert[]; rack?: Rack;
+  zellen?: (Zelle | null)[];   // loop deck: exactly LOOP_ZELLEN entries; only on the audio tracks of a loopdeck group
+  filter?: number;             // loop deck: -1..+1, absent = 0; same tracks as `zellen`
+  eq?: Partial<Record<EqBand, number>>;     // loop deck: -200..+6 dB per band, absent band = 0; same tracks as `zellen`
+  kill?: Partial<Record<EqBand, true>>;     // loop deck: a band that is killed (absent = off, never stored as false); same tracks as `zellen`
 }
+// The 3-band isolator EQ of a loop deck track. A kill is model state; the one place it meets the core is the row value (the band's EQ row gets -200).
+export type EqBand = 'tief' | 'mitte' | 'hoch';
+export const EQ_BAENDER: readonly EqBand[] = ['tief', 'mitte', 'hoch'];
+export const EQ_MIN = -200, EQ_MAX = 6;
+export const eqZeilenWert = (s: { eq?: Partial<Record<EqBand, number>>; kill?: Partial<Record<EqBand, true>> } | undefined, b: EqBand): number =>
+  (s?.kill?.[b] ? -200 : (s?.eq?.[b] ?? 0));
 // naechste_id (Spec 6.26): Zähler je Art (spur, clip, gruppe); naechste_noten_id (Spec 6.28 Nachsatz zu 6.26): EIN Noten-Zähler für alle Clips.
 // Alle steigen nur und stehen in keinem Patch, Undo und Redo setzen sie nicht zurück.
 // The key of a project: the root as a pitch class (C = 0) and a scale name of public/harmonie.js SKALEN. View and editing help only, playback never reads it.
 export interface Tonart { grundton: number; skala: string }
 export interface Projekt {
   format: typeof FORMAT; name: string; rev: number; wiedergabe_rev: number; tempo_bpm: number; taktart: [number, number];
-  naechste_id?: { spur?: number; clip?: number; gruppe?: number; lane?: number; return?: number; insert?: number; take?: number; verbund?: number };
+  naechste_id?: { spur?: number; clip?: number; gruppe?: number; lane?: number; return?: number; insert?: number; take?: number; verbund?: number;
+    zelle?: number };
   naechste_noten_id?: number;
   loop: { an: boolean; von_beat: number; bis_beat: number };
   metronom: { an: boolean; pegel_db: number; ziel: 'master' | 'cue' };
@@ -621,12 +651,13 @@ export function hoechste(ids: Iterable<string>, praefix: string): number {
 // Byte für Byte gleich bleiben und ein älterer Stand sie weiter liest; setzeFehlendeZaehler fasst ihn nicht an.
 // Return-IDs r<n> (slice 3): like the lane counter, naechste_id.return arises with the first return. Insert IDs i<n> (slice 4): the same, with the first stage.
 // Take ids t<n> (1.14): like the lane counter, naechste_id.take arises with the first use. Clip ids are project wide over main AND take clips.
-export function neueId(p: Projekt, art: 'spur' | 'clip' | 'gruppe' | 'lane' | 'return' | 'insert' | 'take' | 'verbund'): string {
+export function neueId(p: Projekt, art: 'spur' | 'clip' | 'gruppe' | 'lane' | 'return' | 'insert' | 'take' | 'verbund' | 'zelle'): string {
   const praefix = art === 'spur' ? 's' : art === 'clip' ? 'c' : art === 'lane' ? 'a' : art === 'return' ? 'r'
-    : art === 'insert' ? 'i' : art === 'take' ? 't' : art === 'verbund' ? 'v' : 'g';
+    : art === 'insert' ? 'i' : art === 'take' ? 't' : art === 'verbund' ? 'v' : art === 'zelle' ? 'z' : 'g';
   const ids = art === 'spur' ? p.spuren.map((s) => s.id)
     : art === 'clip' ? alleClipIds(p)
       : art === 'take' ? p.spuren.flatMap((s) => (s.takes ?? []).map((t) => t.id))
+        : art === 'zelle' ? alleZellenIds(p)
         : art === 'verbund' ? p.spuren.flatMap((s) => s.clips.flatMap((c) => (c.art === 'midi' && c.verbund !== undefined ? [c.verbund] : [])))
         : art === 'lane' ? alleStraenge(p).flatMap((x) => (x.strang.automation ?? []).map((l) => l.id))
           : art === 'return' ? (p.returns ?? []).map((r) => r.id)
@@ -677,8 +708,36 @@ export function setzeFehlendeZaehler(p: Projekt): void {
     ...(z?.insert !== undefined ? { insert: z.insert } : {}),   // slice 4: and for the insert counter
     ...(z?.take !== undefined ? { take: z.take } : {}),         // 1.14: same for the take counter
     ...(z?.verbund !== undefined ? { verbund: z.verbund } : {}),   // tracker patterns: same, it arises with the first link
+    ...(z?.zelle !== undefined ? { zelle: z.zelle } : {}),         // loop deck: same, it arises with the first cell
   };
   if (p.naechste_noten_id === undefined) p.naechste_noten_id = notenZaehler(p);
+}
+
+// every filled cell of the project (all tracks)
+export function* alleZellen(p: Projekt): Generator<Zelle> {
+  for (const s of p.spuren) for (const z of s.zellen ?? []) if (z) yield z;
+}
+// every cell id of the project (all tracks)
+function alleZellenIds(p: Projekt): string[] {
+  return p.spuren.flatMap((s) => (s.zellen ?? []).flatMap((z) => (z ? [z.id] : [])));
+}
+// The loop deck group of a place (1 = deck A, 2 = deck B): the top group whose `loopdeck.platz` is `platz`
+export function loopDeckGruppe(p: Projekt, platz: 1 | 2): Gruppe | null {
+  return (p.gruppen ?? []).find((g) => g.loopdeck?.platz === platz && !g.ausgang) ?? null;
+}
+// The place a loop deck sounds on (ausgang_platz, else the place of its default pad: deck 1 -> 3, deck 2 -> 4)
+export const loopAusgangPlatz = (l: LoopDeck): 1 | 2 | 3 | 4 => l.ausgang_platz ?? (l.platz === 1 ? 3 : 4);
+// The DJ channel number of the translator for a place: places 3 and 4 are pad/1 and pad/2 (1, 2), places 1 and 2 are deck/1 and deck/2 (3, 4)
+export const LOOP_DJ_NR: Readonly<Record<1 | 2 | 3 | 4, 1 | 2 | 3 | 4>> = { 1: 3, 2: 4, 3: 1, 4: 2 };
+export const loopDjNr = (l: LoopDeck): 1 | 2 | 3 | 4 => LOOP_DJ_NR[loopAusgangPlatz(l)];
+// The DJ channel number of the loop deck `platz` of a project; a project without that deck: the default pad
+export function loopDjNrVon(p: Projekt, platz: 1 | 2): 1 | 2 | 3 | 4 {
+  const l = loopDeckGruppe(p, platz)?.loopdeck;
+  return l ? loopDjNr(l) : platz;
+}
+// The 4 tracks of a loop deck group in member order (the order of the track list)
+export function loopDeckSpuren(p: Projekt, g: Gruppe): Spur[] {
+  return p.spuren.filter((s) => s.ausgang?.id === g.id);
 }
 
 export function sucheSpur(p: Projekt, id: string): Spur | undefined { return p.spuren.find((s) => s.id === id); }
@@ -1365,7 +1424,12 @@ function pruefeRack(x: unknown, wo: string): Rack {
 }
 
 function pruefeReturn(g: unknown, wo: string): Return {
-  const o = felder(g, wo, ['id', 'nr', 'name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'hall'], ['pre', 'inserts', 'rack', 'automation']);
+  const o = felder(g, wo, ['id', 'nr', 'name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'hall'], ['pre', 'inserts', 'rack', 'automation', 'loopdeck']);
+  if ('loopdeck' in o) {
+    const l = felder(o.loopdeck, `${wo}.loopdeck`, ['platz', 'art']);
+    if (l.platz !== 1 && l.platz !== 2) werfe(`${wo}.loopdeck.platz`, '1 or 2 expected');
+    if (l.art !== 'hall' && l.art !== 'delay') werfe(`${wo}.loopdeck.art`, 'hall or delay expected');
+  }
   if ('pre' in o && o.pre !== true) werfe(`${wo}.pre`, 'true erwartet (fehlt bei post)');
   if ('inserts' in o) pruefeInserts(o.inserts, `${wo}.inserts`, true);   // returns exist only in /2
   if ('rack' in o) pruefeRack(o.rack, `${wo}.rack`);
@@ -1430,12 +1494,64 @@ function pruefeLanen(automation: unknown, wo: string, strang: { inserts?: Insert
   });
 }
 
+const SHA_HEX = /^[0-9a-f]{64}$/;
+// one cell of a loop deck track (the id is checked for uniqueness by pruefeAlles)
+function pruefeZelle(x: unknown, wo: string): void {
+  const o = felder(x, wo, ['id', 'name', 'farbe', 'art', 'sha256', 'gain_db'], ['beats', 'bpm', 'pfad_hinweis']);
+  if (typeof o.id !== 'string' || !ID.test(o.id)) werfe(`${wo}.id`, 'ID erwartet');
+  text(o.name, `${wo}.name`, 64);
+  if ((o.name as string).trim() === '') werfe(`${wo}.name`, 'a cell name of spaces only is not a name');
+  zahlIn(o.farbe, `${wo}.farbe`, 0, LOOP_FARBEN - 1, true);
+  if (o.art !== 'loop' && o.art !== 'einmal') werfe(`${wo}.art`, "'loop' or 'einmal' expected");
+  if (typeof o.sha256 !== 'string' || !SHA_HEX.test(o.sha256)) werfe(`${wo}.sha256`, '64 hex characters expected');
+  zahlIn(o.gain_db, `${wo}.gain_db`, -60, 12);
+  if (o.art === 'loop') {
+    if (!('beats' in o)) werfe(`${wo}.beats`, 'fehlt (a loop cell needs beats)');
+    if (!('bpm' in o)) werfe(`${wo}.bpm`, 'fehlt (a loop cell needs bpm)');
+  }
+  if ('beats' in o) {
+    const b = zahlIn(o.beats, `${wo}.beats`, 0.25, 64);
+    if (!ganz(b * 4)) werfe(`${wo}.beats`, 'a multiple of 0.25 expected');
+  }
+  if ('bpm' in o) zahlIn(o.bpm, `${wo}.bpm`, TEMPO_MIN, TEMPO_MAX);
+  if ('pfad_hinweis' in o) {
+    const h = text(o.pfad_hinweis, `${wo}.pfad_hinweis`, 1024);
+    if (h.startsWith('/') || h.includes('\\') || h.includes('\0') || h.split('/').some((t) => t === '..' || t === '')) {
+      werfe(`${wo}.pfad_hinweis`, 'a relative path without .. expected');
+    }
+  }
+}
+function pruefeZellen(x: unknown, wo: string): void {
+  if (!Array.isArray(x) || x.length !== LOOP_ZELLEN) werfe(wo, `array of ${LOOP_ZELLEN} entries expected`);
+  (x as unknown[]).forEach((z, i) => { if (z !== null) pruefeZelle(z, `${wo}[${i}]`); });
+}
+
+// the first field of a track that only a loop deck track may carry, or null
+const deckFeld = (s: Spur): string | null => (['zellen', 'filter', 'eq', 'kill'] as const).find((k) => s[k] !== undefined) ?? null;
+
 function pruefeSpur(s: unknown, wo: string, warpErlaubt: boolean): Spur {
   if (!istObjekt(s)) return werfe(wo, 'Objekt erwartet');
   const basis = ['id', 'nr', 'name', 'farbe', 'art', 'fader_db', 'pan', 'mute', 'solo', 'clips'];
   if (s.art !== 'audio' && s.art !== 'instrument') werfe(`${wo}.art`, 'audio oder instrument erwartet');
-  const o = s.art === 'audio' ? felder(s, wo, basis, ['von', 'gruppe', 'aufnahme', 'ausgang', 'automation', 'sends', 'inserts', 'rack', 'takes'])
+  const o = s.art === 'audio'
+    ? felder(s, wo, basis, ['von', 'gruppe', 'aufnahme', 'ausgang', 'automation', 'sends', 'inserts', 'rack', 'takes', 'zellen', 'filter', 'eq', 'kill'])
     : felder(s, wo, [...basis, 'geraet'], ['freeze', 'von', 'gruppe', 'ausgang', 'automation', 'sends', 'inserts', 'rack', 'aufnahme', 'stammbaum']);
+  if ('zellen' in o) pruefeZellen(o.zellen, `${wo}.zellen`);
+  if ('filter' in o) zahlIn(o.filter, `${wo}.filter`, -1, 1);
+  if ('eq' in o) {
+    const e = istObjekt(o.eq) ? o.eq : werfe(`${wo}.eq`, 'Objekt erwartet');
+    for (const k of Object.keys(e)) {
+      if (!EQ_BAENDER.includes(k as EqBand)) werfe(`${wo}.eq.${k}`, 'unknown band');
+      zahlIn(e[k], `${wo}.eq.${k}`, EQ_MIN, EQ_MAX);
+    }
+  }
+  if ('kill' in o) {
+    const e = istObjekt(o.kill) ? o.kill : werfe(`${wo}.kill`, 'Objekt erwartet');
+    for (const k of Object.keys(e)) {
+      if (!EQ_BAENDER.includes(k as EqBand)) werfe(`${wo}.kill.${k}`, 'unknown band');
+      if (e[k] !== true) werfe(`${wo}.kill.${k}`, 'true expected');
+    }
+  }
   if ('stammbaum' in o) { const f = pruefeStammbaum(o.stammbaum, `${wo}.stammbaum`); if (f.length) werfe(`${wo}.stammbaum`, f[0]); }
   if ('sends' in o) pruefeSends(o.sends, `${wo}.sends`, warpErlaubt);
   if ('inserts' in o) pruefeInserts(o.inserts, `${wo}.inserts`, warpErlaubt);
@@ -1528,8 +1644,19 @@ export function pruefeModulFehler(m: unknown): string | null {
 
 function pruefeGruppe(g: unknown, wo: string): Gruppe {
   const o = felder(g, wo, ['id', 'nr', 'name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'gefaltet'],
-    ['sends', 'inserts', 'rack', 'automation', 'ausgang', 'modul', 'blend', 'neu_trim_db', 'seq']);
+    ['sends', 'inserts', 'rack', 'automation', 'ausgang', 'modul', 'blend', 'neu_trim_db', 'seq', 'loopdeck']);
   if ('modul' in o) pruefeModul(o.modul, `${wo}.modul`);
+  if ('loopdeck' in o) {
+    const d = felder(o.loopdeck, `${wo}.loopdeck`, ['platz', 'raster'], ['ausgang_platz']);
+    if (d.platz !== 1 && d.platz !== 2) werfe(`${wo}.loopdeck.platz`, '1 or 2 expected');
+    if ('ausgang_platz' in d && ![1, 2, 3, 4].includes(d.ausgang_platz as number)) werfe(`${wo}.loopdeck.ausgang_platz`, '1..4 expected');
+    if (typeof d.raster !== 'string' || !Object.hasOwn(LOOP_RASTER_BEATS, d.raster)) {
+      werfe(`${wo}.loopdeck.raster`, "'1/4', '1/2', '1', 'takt' or '4takte' expected");
+    }
+    if ('modul' in o) werfe(`${wo}.loopdeck`, 'a group holds a loop deck, a module or a SEQ deck, not several');
+    if ('seq' in o) werfe(`${wo}.loopdeck`, 'a group holds a loop deck, a module or a SEQ deck, not several');
+    if ('ausgang' in o) werfe(`${wo}.loopdeck`, 'a loop deck sits on a top group, not on a nested one');
+  }
   if ('seq' in o) {
     const f = seqPruefung(o.seq);
     if (f) werfe(`${wo}.seq`, f.text);
@@ -1626,8 +1753,8 @@ function pruefeAlles(x: unknown): void {
   }
   if ('naechste_noten_id' in o) zahlIn(o.naechste_noten_id, 'naechste_noten_id', 1, Number.MAX_SAFE_INTEGER, true);
   if ('naechste_id' in o) {
-    const z = felder(o.naechste_id, 'naechste_id', [], ['spur', 'clip', 'gruppe', 'lane', 'return', 'insert', 'take', 'verbund']);
-    for (const k of ['spur', 'clip', 'gruppe', 'lane', 'return', 'insert', 'take', 'verbund']) {
+    const z = felder(o.naechste_id, 'naechste_id', [], ['spur', 'clip', 'gruppe', 'lane', 'return', 'insert', 'take', 'verbund', 'zelle']);
+    for (const k of ['spur', 'clip', 'gruppe', 'lane', 'return', 'insert', 'take', 'verbund', 'zelle']) {
       if (k in z) zahlIn(z[k], `naechste_id.${k}`, 1, Number.MAX_SAFE_INTEGER, true);
     }
   }
@@ -1697,7 +1824,8 @@ function pruefeAlles(x: unknown): void {
       });
     });
   });
-  const gruppenIds = new Set<string>(), gruppenNrs = new Set<number>(), seqPlaetze = new Set<number>();
+  const gruppenIds = new Set<string>(), gruppenNrs = new Set<number>(), seqPlaetze = new Set<number>(),
+    deckPlaetze = new Set<number>(), deckKanaele = new Set<number>();
   if (neu2) {
     if (!Array.isArray(o.gruppen)) werfe('gruppen', 'Liste erwartet');
     if ((o.gruppen as unknown[]).length > MAX_GRUPPEN) werfe('gruppen', `höchstens ${MAX_GRUPPEN}`);
@@ -1711,6 +1839,15 @@ function pruefeAlles(x: unknown): void {
         if (o.live !== true) werfe(`gruppen[${i}].seq`, 'a SEQ deck exists only in the live container');
         if (seqPlaetze.has(g.seq.platz)) werfe(`gruppen[${i}].seq.platz`, `duplicate (${g.seq.platz}): the place already holds a SEQ deck`);
         seqPlaetze.add(g.seq.platz);
+      }
+      if (g.loopdeck) {   // loop deck: live container only, one group per place, a place and a module slot of the same number exclude each other
+        if (o.live !== true) werfe(`gruppen[${i}].loopdeck`, 'a loop deck exists only in the live container');
+        if (deckPlaetze.has(g.loopdeck.platz)) werfe(`gruppen[${i}].loopdeck.platz`, `duplicate (${g.loopdeck.platz}): the place already holds a loop deck`);
+        deckPlaetze.add(g.loopdeck.platz);
+        const nr = loopDjNr(g.loopdeck);
+        const ort = loopAusgangPlatz(g.loopdeck);
+        if (deckKanaele.has(nr)) werfe(`gruppen[${i}].loopdeck.ausgang_platz`, `duplicate (place ${ort}): the channel already holds a loop deck`);
+        deckKanaele.add(nr);
       }
     });
     // group targets: a known group, not itself, and the tree has no cycle
@@ -1733,6 +1870,42 @@ function pruefeAlles(x: unknown): void {
     if ('automation' in ms) pruefeLanen(ms.automation, 'master', ms as { inserts?: Insert[]; rack?: Rack }, undefined, 'master');
     laneZaehle(ms as { automation?: Lane[] }, 'master');
   }
+  // loop deck: a place and a module slot (A = 1, B = 2) of the same number exclude each other; 4 audio member tracks without clips;
+  // cells and filter only on those tracks; cell ids unique over the project
+  if (neu2) {
+    (o.gruppen as Gruppe[]).forEach((g, i) => {
+      if (!g.loopdeck) return;
+      const slotNr = (o.gruppen as Gruppe[]).some((m) => m.modul?.slot === (g.loopdeck!.platz === 1 ? 'A' : 'B'));
+      if (slotNr) werfe(`gruppen[${i}].loopdeck.platz`, `place ${g.loopdeck.platz} is taken by a module slot`);
+      // the DJ channel of the deck: not a module slot's (A = pad/1, B = pad/2), not an unmuted SEQ deck's (deck/N = nr N + 2)
+      const nr = loopDjNr(g.loopdeck);
+      const alle = o.gruppen as Gruppe[], wo = `gruppen[${i}].loopdeck.ausgang_platz`;
+      if (alle.some((m) => m.modul?.slot === (nr === 1 ? 'A' : nr === 2 ? 'B' : '-'))) werfe(wo, `channel ${nr} is taken by a module slot`);
+      if (alle.some((m) => m.seq && !m.mute && m.seq.platz + 2 === nr)) werfe(wo, `channel ${nr} is taken by a SEQ deck`);
+      const mitglieder = (o.spuren as Spur[]).filter((s) => s.ausgang?.id === g.id);
+      if (mitglieder.length !== LOOP_SPUREN || (o.gruppen as Gruppe[]).some((m) => m.ausgang?.id === g.id)) {
+        werfe(`gruppen[${i}].loopdeck`, `a loop deck group has exactly ${LOOP_SPUREN} member tracks and no nested group`);
+      }
+      for (const s of mitglieder) {
+        if (s.art !== 'audio') werfe(`gruppen[${i}].loopdeck`, `track ${s.id} is not an audio track`);
+        if (s.clips.length > 0) werfe(`gruppen[${i}].loopdeck`, `track ${s.id} has clips: a loop deck track holds cells only`);
+      }
+    });
+    const deckGruppen = new Set((o.gruppen as Gruppe[]).filter((g) => g.loopdeck).map((g) => g.id));
+    (o.spuren as Spur[]).forEach((s, i) => {
+      if (deckFeld(s) !== null && !(s.ausgang && deckGruppen.has(s.ausgang.id))) {
+        werfe(`spuren[${i}].${deckFeld(s)}`, 'only on a track of a loop deck group');
+      }
+    });
+  } else {
+    (o.spuren as Spur[]).forEach((s, i) => { if (deckFeld(s) !== null) werfe(`spuren[${i}].zellen`, 'only on a track of a loop deck group'); });
+  }
+  const zellenIds = new Set<string>();
+  (o.spuren as Spur[]).forEach((s, i) => (s.zellen ?? []).forEach((z, k) => {
+    if (!z) return;
+    if (zellenIds.has(z.id)) werfe(`spuren[${i}].zellen[${k}].id`, `duplicate (${z.id})`);
+    zellenIds.add(z.id);
+  }));
   for (const [i, id] of refs) if (!gruppenIds.has(id)) werfe(`spuren[${i}].ausgang.id`, `unbekannte Gruppe ${id}`);
   // 1.10 slice 3: returns and the references of the sends
   const returnIds = new Set<string>(), returnNrs = new Set<number>();
@@ -1753,6 +1926,26 @@ function pruefeAlles(x: unknown): void {
   }));
   sendRefs(o.spuren as { sends?: Send[] }[], 'spuren');
   if (neu2) sendRefs(o.gruppen as { sends?: Send[] }[], 'gruppen');
+  // loop deck returns: only in the live container, one per (place, art), sends only from the track of the same deck
+  {
+    const loopRet = new Map<string, ReturnLoopdeck>();
+    const gruppen = (o.gruppen ?? []) as Gruppe[];
+    ((o.returns ?? []) as Return[]).forEach((r, i) => {
+      if (!r.loopdeck) return;
+      if (o.live !== true) werfe(`returns[${i}].loopdeck`, 'only in the live container');
+      const k = `${r.loopdeck.platz}/${r.loopdeck.art}`;
+      if (loopRet.has(k)) werfe(`returns[${i}].loopdeck`, `duplicate (place ${r.loopdeck.platz}, ${r.loopdeck.art})`);
+      loopRet.set(r.id, r.loopdeck); loopRet.set(k, r.loopdeck);
+    });
+    const platzVon = (s: Spur): number | null => gruppen.find((g) => g.id === s.ausgang?.id)?.loopdeck?.platz ?? null;
+    const pruefe = (liste: { sends?: Send[] }[], wo: string, platz: (e: never) => number | null): void => liste.forEach((e, i) =>
+      (e.sends ?? []).forEach((sd, k) => {
+        const l = loopRet.get(sd.id);
+        if (l && platz(e as never) !== l.platz) werfe(`${wo}[${i}].sends[${k}]`, 'a loop deck return takes sends only from its own deck');
+      }));
+    pruefe(o.spuren as Spur[], 'spuren', platzVon as (e: never) => number | null);
+    pruefe(gruppen, 'gruppen', () => null);
+  }
   // slice 4: stage IDs and pooled slots are unique over the whole project
   const insertIds = new Set<string>(), insertSlots = new Set<string>();
   for (const { strangId, insert } of alleInserts(o as unknown as Projekt)) {
@@ -1856,6 +2049,9 @@ export function spurSicht(s: Spur, mitFreeze = true): unknown {
     // change the host notes, so they also drop a freeze). Absent envelopes add no key: the view stays byte for byte the same
     ...(mitFreeze && s.clips.some((c) => (c.huellkurven ?? []).some((h) => h.ziel !== 'transpose'))
       ? { huellkurven: s.clips.flatMap((c) => (c.huellkurven ?? []).filter((h) => h.ziel !== 'transpose').map((h) => ({ clip: c.id, ...h }))) } : {}),
+    // loop deck cells: only what the snapshot is built from (sha, kind, beats, gain, the slot); a rename or a recolour is no new playback. Absent adds no key.
+    // `filter` is a control row (spur/<n>/filter), not playback
+    ...(s.zellen ? { zellen: s.zellen.map((z) => (z ? { sha256: z.sha256, art: z.art, beats: z.beats ?? null, gain_db: z.gain_db } : null)) } : {}),
     clips: s.clips.map((c) => (c.art === 'audio'
       ? { id: c.id, art: c.art, sha256: c.quelle.sha256, dekodiert: c.dekodiert, start_beat: c.start_beat, laenge_beats: c.laenge_beats,
         loop_beats: c.loop_beats ?? null, offset_s: c.offset_s, gain_db: c.gain_db, fade_ein_beats: c.fade_ein_beats, fade_aus_beats: c.fade_aus_beats,
@@ -1873,11 +2069,14 @@ export const wiedergabeSicht = (p: Projekt): unknown => ({
   // 1.10: die Topologie nur, wenn es welche gibt (neutral: wie vorher)
   ...((p.gruppen ?? []).length ? { gruppen: [...p.gruppen].sort((a, b) => a.nr - b.nr)
     .map((g) => ({ id: g.id, nr: g.nr, ...(g.ausgang ? { ausgang: g.ausgang.id } : {}),
+      // loop deck: the channel decides the DJ channel the deck plays into; the grid (`raster`) is server business and stays out
+      ...(g.loopdeck ? { loopdeck: loopDjNr(g.loopdeck) } : {}),
       ...(g.inserts?.length ? { inserts: kettenSicht(g.inserts) } : {}), ...(g.rack ? { rack: rackSicht(g) } : {}),
       ...laneSicht(g) })) } : {}),
   // 1.10 slice 3: the return topology (id, nr) only when there are returns; sends and hall values are controls, not part of the view
   ...((p.returns ?? []).length ? { returns: [...(p.returns ?? [])].sort((a, b) => a.nr - b.nr).map((r) => ({ id: r.id, nr: r.nr,
-    ...(r.pre ? { pre: true } : {}), ...(r.inserts?.length ? { inserts: kettenSicht(r.inserts) } : {}), ...(r.rack ? { rack: rackSicht(r) } : {}),
+    ...(r.pre ? { pre: true } : {}), ...(r.loopdeck ? { loopdeck: loopDjNrVon(p, r.loopdeck.platz) } : {}),   // the loop deck marker decides the DJ output
+    ...(r.inserts?.length ? { inserts: kettenSicht(r.inserts) } : {}), ...(r.rack ? { rack: rackSicht(r) } : {}),
     ...laneSicht(r) })) } : {}),
   // slice 4: only with a chain on the master
   ...(p.master?.inserts?.length

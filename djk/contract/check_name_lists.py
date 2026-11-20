@@ -458,11 +458,15 @@ def _pruefe_regler(q: Quelle, befunde: list[str]) -> None:
     for name in sorted(ziele - regler):
         if not re.fullmatch(r"deck/[1-4]/(play|cue)", name):   # deck keys of all four decks (80c70be7) are not controls
             befunde.append(f"Regler: curves.js ZIELE enthält {name}, attrappe REGLER nicht")
+    arr_ziele = set(re.findall(r"'([a-z_/]+)'", _such(r"const ARR_ZIELE = new Set\(\[(.*?)\]\)",
+                                                       q.lies("djk/contract/mock_core/hand.mjs"), "hand.mjs ARR_ZIELE").group(1)))
     for rel in q.mappings():
         for eintrag in _mapping_json(q, rel):
             ziel = eintrag["ziel"]
             if ziel.startswith(("taste/", "deck/")) and not re.match(_KANALZUG_ZIEL, ziel):
                 continue   # Tasten und Deck-Aktionen laufen über die Listen oben, nicht über REGLER
+            if ziel.startswith("arr/") and ziel in arr_ziele:
+                continue   # hand target kind of the arrangement (mock_core/hand.mjs ARR_ZIELE), not a control row
             if ziel != "tempo" and ziel not in regler:
                 befunde.append(f"Mapping {Path(rel).name}: Regler-Ziel {ziel} kennt die Attrappe nicht")
 
@@ -472,12 +476,18 @@ def spur_regler_listen(q: Quelle) -> tuple[int, dict[str, list[str]]]:
     """Spur-Regler je Fundort; n = SPUR_REGLER_SPUREN aus controls.h. Nur im Arbeitsbaum (node)."""
     regler_h = q.lies("djk/core/signalbox/include/cypherdj/signalbox/controls.h")
     n = int(_such(r"constexpr int SPUR_REGLER_SPUREN = (\d+);", regler_h, "controls.h").group(1))
-    felder = re.findall(r'"spur/%d/([a-z_]+)"', q.lies("djk/core/signalbox/src/controls.cpp"))
+    felder = re.findall(r'"spur/%d/([a-z_]+(?:/[a-z_]+)?)"', q.lies("djk/core/signalbox/src/controls.cpp"))   # KZ1: eq/<band> has one more segment
     if not felder:
         raise ParserFehler("controls.cpp: kein Pfad spur/%d/…, Parser blind oder Quelle umgebaut")
     spec = q.lies("docs/architecture/INTERFACES.md")
     teil = spec[_index(spec, "### 1.5 Kanäle und Regler-Pfade", "§1.5"):_index(spec, "### 1.6", "§1.5")]
-    zeilen = re.findall(r"^\| `spur/<n>/([a-z_]+)` \|", teil, re.M)
+    zeilen = []
+    for zelle in re.findall(r"^\| (`spur/<n>/[^|]*?`) \|", teil, re.M):   # KZ1: one row may name several paths: `spur/<n>/eq/tief`, `/eq/mitte`, `/eq/hoch`
+        roh = re.findall(r"`([^`]+)`", zelle)
+        for p in roh:
+            if p.startswith("/"):
+                p = "/".join(roh[0].split("/")[:-p.count("/")]) + p
+            zeilen.append(p[len("spur/<n>/"):])
     if not zeilen:
         raise ParserFehler("INTERFACES §1.5: keine Zeile spur/<n>/…, Parser blind oder Quelle umgebaut")
     alle = lambda fs: sorted(f"spur/{i}/{f}" for i in range(1, n + 1) for f in fs)   # noqa: E731
@@ -1151,6 +1161,9 @@ def _pruefe_insert_regler(q: Quelle, befunde: list[str]) -> None:
 
 
 # ---------------------------------------------------------------- D1 K1: Gründe (A11)
+# String literals the reason patterns catch that are not reasons: `cypher` is a command source compared inside a quittung call
+# (core_signalbox.cpp: `!std::strcmp(c.quelle, "cypher") ? "nur_hand" : ...`).
+_KEINE_GRUENDE = {"cypher"}
 _GRUND_LITERALE = [r'quittung\([^;]*?"([a-z_]+)"\s*\)', r'\bab\("([a-z_]+)"\)', r'Abbruch\("([a-z_]+)"',
                    r'\bgrund = "([a-z_]+)"']
 
@@ -1179,6 +1192,7 @@ def gruende_listen(q: Quelle) -> dict[str, list[str]]:
             literale |= set(re.findall(muster, text))
     if "ki_gestoppt" not in literale or len(literale) < 15:
         raise ParserFehler(f"djk/core/src: nur {len(literale)} Grund-Literale, Parser blind oder Quelle umgebaut")
+    literale -= _KEINE_GRUENDE
     listen["G03 Kern-Quelltext"] = sorted(literale)
     try:
         listen["G05 defs.schema.json grund"] = json.loads(q.lies("djk/contract/schemas/defs.schema.json"))["$defs"]["grund"]["enum"]

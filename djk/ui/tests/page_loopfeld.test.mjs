@@ -31,9 +31,3 @@ test('the L1 and L2 strips stay and are wired to pad/1 and pad/2', () => {
   assert.match(app, /^baueLoopZuege\(\);$/m);
   assert.doesNotMatch(app, /baueBoxen/);
 });
-
-test('the live panel has no row of its own any more (task 14 moves it into the Loops place)', () => {
-  assert.match(css, /#live-panel \{[^}]*display: grid/);
-  assert.doesNotMatch(css, /body\.live-offen #pult/);
-  assert.doesNotMatch(css, /"l l l"/);
-});

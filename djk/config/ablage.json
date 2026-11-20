@@ -11,7 +11,8 @@
     "hotcues":      { "alt": "{KONFIG}/hotcues", "neu": "{HEIM}/werke/korrekturen/hotcues", "env": null, "kern": false },
     "kits":         { "alt": "{KONFIG}/kits", "neu": "{HEIM}/werke/kits", "env": "CYPHERDJ_KIT_ORDNER", "kern": true },
     "loops":        { "alt": "{KONFIG}/loops", "neu": "{HEIM}/werke/loops", "env": null, "kern": true },
-    "geraete":      { "alt": "{KONFIG}/baukasten", "neu": "{HEIM}/werke/geraete", "env": "CYPHERDJ_BK_ORDNER", "kern": true }
+    "geraete":      { "alt": "{KONFIG}/baukasten", "neu": "{HEIM}/werke/geraete", "env": "CYPHERDJ_BK_ORDNER", "kern": true },
+    "loopsets":     { "alt": "{KONFIG}/loopsets", "neu": "{HEIM}/werke/loopsets", "env": "CYPHERDJ_LOOPSETS", "kern": false }
   },
   "fest": {
     "mediathek":         { "pfad": "{HOME}/.local/share/cypherdj/mediathek/mediathek.sqlite", "env": "CYPHERDJ_MEDIATHEK" },

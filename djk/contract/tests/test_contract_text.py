@@ -45,7 +45,7 @@ def test_text_ohne_z1_zaehlt_eine_weniger():
 def test_wertelisten():
     assert vertragstext.politik_codes(TEXT) == {"0": "musik", "1": "zustand", "2": "raster"}
     assert len(vertragstext.status_codes(TEXT)) == 8 and vertragstext.status_codes(TEXT)["8"] == "storniert"
-    assert len(vertragstext.gruende(TEXT)) == 62 and "falsche_typen" in vertragstext.gruende(TEXT)   # D1 K1: + 6; K3: tempo_rampe; 1.8: + 5; 1.13 Slice 2: + warp_maschine_fehlt; 1.12 Slice 3: + nur_andreas, auto_ziel_unbekannt
+    assert len(vertragstext.gruende(TEXT)) == 63 and "falsche_typen" in vertragstext.gruende(TEXT)   # D1 K1: + 6; K3: tempo_rampe; 1.8: + 5; 1.13 Slice 2: + warp_maschine_fehlt; 1.12 Slice 3: + nur_andreas, auto_ziel_unbekannt; loop deck V0: + zelle_leer
     assert vertragstext.quellen(TEXT)[-1] == "pruefstand"
     assert len(vertragstext.tasten(TEXT)) == 17 and vertragstext.tasten(TEXT)[-1] == "zuruf"
 

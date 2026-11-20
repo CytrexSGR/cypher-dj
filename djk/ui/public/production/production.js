@@ -191,6 +191,8 @@ export const FEHLER_TEXT = {
   sidechain_zyklus: 'That key would depend on the stage itself: its own strip, its own group, the master, or two tracks keying each other',
   sidechain_quelle: 'That key source is not available in the arrangement (erz/2, erz/3, erz/5 to erz/8 and pad/1, pad/2 come after the mixer)',
   kette_voll: 'The insert chain of that strip is full (five stages at most)', ins_voll: 'All stages of that kind are in use (twelve compressors, eight EQs, four saturators, two limiters, eight utilities and eight effect graphs at most)',
+  kein_loopdeck: 'That group or track does not belong to a loop deck', platz_belegt: 'That place already holds a loop deck',
+  zelle_leer: 'That loop deck cell is empty', modul_nicht_umwandelbar: 'That module cannot become a loop deck cell; it is left untouched',
   host_grenze: 'All four plugin hosts are in use: remove a plugin stage before adding another', host_fehlt: 'The plugin host is not running or not ready yet',
   plugin_nicht_ladbar: 'That plugin cannot be loaded', zustand_passt_nicht: 'The saved plugin state belongs to another plugin and was not applied',
   param_unbekannt: 'That plugin has no such parameter',

@@ -10,7 +10,7 @@ Built in Germany by Andreas, a DJ, and Cypher, an AI agent (Claude models), sinc
 > **Status: public beta, looking for testers.** It runs on Linux and has been tested on one machine so far, see
 > [Try it](#try-it-we-are-looking-for-testers).
 
-![Overview: DJ view with four places, the SEQ pattern deck, three Strudel channels, the tracker, arrangement with piano roll, warp and stems, the loop workbench, Cypher Remix, a Cypher Modular device page, media library, cue tool, loop slots with live modules](docs/screens/overview.png)
+![Overview: DJ view with four places, the SEQ pattern deck, three Strudel channels, the tracker, arrangement with piano roll, warp and stems, the loop workbench, Cypher Remix, a Cypher Modular device page, media library, cue tool, the loop deck with channel strips](docs/screens/overview.png)
 
 ![Instruments and plug-ins: Mono Synth, Poly Synth, Neuro Bass, Drums 909, Kick Synth, Cypher Labor, the plug-in browser with search and a third-party plug-in as an instrument track](docs/screens/instruments.png)
 
@@ -18,7 +18,7 @@ Built in Germany by Andreas, a DJ, and Cypher, an AI agent (Claude models), sinc
 
 One real-time core in C++ and Rust keeps a single sample clock for everything: the decks, the pattern channels and
 the arrangement. The browser page and the agent sit on the same functions. The agent reaches them through an MCP
-server with 98 tools, so nearly everything you can click, it can do too (a few controls such as the crossfader stay
+server with 99 tools, so nearly everything you can click, it can do too (a few controls such as the crossfader stay
 in your hand), and anything it does shows up on your page. When it
 cannot do something it answers with a reason (for example `sidechain_zyklus` for a sidechain that would depend on
 itself) instead of guessing. When you grab a fader, your
@@ -30,7 +30,7 @@ hand wins over its automation.
 
 | View | What you do there |
 |---|---|
-| DJ | Four places, each a track deck, the Strudel pattern channels, a loop slot or a SEQ pattern deck; mixer, beat FX, color FX and the Cypher Remix station |
+| DJ | Four places, each a track deck, the Strudel pattern channels, a loop deck or a SEQ pattern deck; mixer, beat FX, color FX and the Cypher Remix station |
 | LIVE | The three live-coded pattern channels side by side, each with automation lanes for fader, filter and cutoff |
 | STUDIO | A loop workbench: up to eight instrument tracks, a step sequencer with a length, swing and direction per row, and a dock of device cards |
 | PRODUCTION | An arrangement with up to 32 tracks: audio and MIDI clips, piano roll, warp, automation, groups, returns, inserts, export and loudness per track |
@@ -84,10 +84,11 @@ also from groups and returns), Duck by Kick in one step, a routing matrix, and r
 return or the master into a new audio track.
 
 **DJ.** Up to four decks with beat grid, hot cues, loops and key lock at any tempo, beat FX and color FX, three live-coded
-pattern channels ([Strudel](https://strudel.cc)) and two loop slots, all on the same clock. The DJ view has four
-places, each showing a track deck, the Strudel channels, the loop slots or a SEQ deck; the main mixer has four
-channels: deck A, deck B and the two loop slots. A loop cut from a deck becomes a live module with its stems and plays
-on its own mixer channel, with its waveform, beat grid and playhead in the slot. The SEQ deck is a pattern sequencer:
+pattern channels ([Strudel](https://strudel.cc)) and two loop decks, all on the same clock. The DJ view has four
+places, each showing a track deck, the Strudel channels, a loop deck or a SEQ deck; the main mixer has four
+channels and each fader belongs to its place (1 is A, 2 is B, 3 is L1, 4 is L2), whatever the place shows. A loop deck has
+four tracks of eight cells that launch on a grid, scenes, slices and a channel strip per track (EQ, HALL and DELAY sends, an
+effect); the Strudel sum can be recorded into a loop track as a cell. The SEQ deck is a pattern sequencer:
 a pattern plays one instrument, you add lanes of notes, of values per step or of drawn curves on any knob of that
 instrument, in 1/4 to 1/32 per lane. Cypher Remix, a beat-synchronous remix station (build-up and break-down effects,
 a three-band isolator, a pad with roll and drum voices, a release lever), is the third FX unit: every channel strip
@@ -96,7 +97,7 @@ has a key 3 that sends it through the Remix.
 **Hardware controllers.** An Akai APC20 is the DJ console, and while the PRODUCTION view is shown it is the project mixer
 (faders, master, mute, solo, arm, transport, banks of eight tracks). The displays of two devices show cypher-dj
 itself: the two screens of a Traktor Kontrol S8 draw our own pages (a scrolling waveform with hot cue marks, a
-whole-track overview, and the Strudel, loop slot and SEQ deck views), and its touch strips and hot cue pads work the
+whole-track overview, and the Strudel, loop deck and SEQ deck views), and its touch strips and hot cue pads work the
 DJ view; on a Maschine MK2 the two displays show the names and values of the Cypher Modular knobs its encoders turn,
 page by page. Any class-compliant MIDI controller can be learned, up to eight at once. A Novation Launch Control 3 or an Akai LPD8 follows the synth in front
 (the Launch Control 3 with factory programs for every instrument panel), and the keys of a MIDI keyboard play the instrument in front. What is confirmed on

@@ -590,6 +590,7 @@ void Arrangement::warp_vorausblick(const Karte& k, int64_t s0, int m) {
 // die Nachfolgerin schon in diesem Block ein, blendet ihre Brücke hier aus und endet vor dem nächsten werk_decken: dann bliebe ein Loch (Seed 294), darum nur Einsätze
 // hinter dem Block. nullptr: keine.
 Arrangement::Stimme* Arrangement::werk_verdraengen(int64_t grenze, int64_t dauer) {
+  // Loop deck K3: only clip voices of st_ are candidates; a slot held by a launcher voice (lp_, own pool) is never offered, so it is never evicted.
   Stimme* o = nullptr;
   int64_t rest = dauer;
   for (Stimme& v : st_) {

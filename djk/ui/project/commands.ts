@@ -10,7 +10,7 @@
 import {
   MAX_AUTO_PUNKTE, MAX_FX_PUNKTE, MAX_LANE_PUNKTE, alleStraenge, FADER_MIN, MAX_CLIPS, MAX_NOTEN, MAX_RETURNS, HALL_FELDER, HALL_VORGABE, type InsertPoolArt,
   alleInserts, notenZaehler, sucheStrang, alleRacks, MAX_MAKROS, type Rack, bkSlot, bkLive, istObjekt, kanonisch, pruefeFehler, spurSicht, wiedergabeSicht,
-  type AudioClip,
+  type AudioClip, EQ_BAENDER, eqZeilenWert,
   type Gruppe, type Herkunft, type Insert, type Projekt, type Return, type Spur, type DekodiertZustand,
 } from './model.ts';
 import { INSERT_ARTEN } from './insert_key.ts';
@@ -30,11 +30,12 @@ import { AUTO } from './commands_auto.ts';
 import { TRANSPORT } from './commands_transport.ts';
 import { SZENEN } from './commands_szenen.ts';
 import { TRACKER } from './commands_tracker.ts';
+import { LOOPDECK } from './commands_loopdeck.ts';
 export { BefehlFehler, bereinigeGliedZiele, DUCK_DURCH_KICK_WERTE, laneStart, COMP_FADE_S, teileClipsAn, compFade } from './commands_helpers.ts';
 export type { ReglerAenderung, StiftAenderung, BefehlErgebnis, LaneHinweis, Befehl, PresetInhalt, MusterMeldung, PluginEintrag } from './commands_helpers.ts';
 export { PRO_BEFEHL } from './commands_helpers.ts';
 
-mergeTabellen(PRO_BEFEHL, SPUR, CLIP, GRUPPE, INSERT, AUTO, TRANSPORT, SZENEN, TRACKER);
+mergeTabellen(PRO_BEFEHL, SPUR, CLIP, GRUPPE, INSERT, AUTO, TRANSPORT, SZENEN, TRACKER, LOOPDECK);
 export const BEFEHL_NAMEN: readonly string[] = Object.keys(PRO_BEFEHL);
 
 // Ein eingefrorener Wirt-Spur-Klang gilt nur zu genau den Noten, dem Gerät und dem Tempo, mit denen er entstanden ist
@@ -78,7 +79,7 @@ function wendeAn(entwurf: Projekt, b: unknown, ctx: Kontext): void {
   if (vorher) verwerfeFreezes(vorher, entwurf);
 }
 
-const KURZ = { fader_db: 'fader', pan: 'pan', mute: 'mute', solo: 'solo' } as const;
+const KURZ = { fader_db: 'fader', pan: 'pan', mute: 'mute', solo: 'solo', filter: 'filter' } as const;
 // 1.10 slice 3: send controls spur|grp/<nr>/send/<r> (dB, -200 = absent), ret/<r>/{fader,pan,mute,solo} and ret/<r>/hall/*.
 // A new or deleted return number sets the slot to the defaults; a deleted track or group sets its sends back to -200
 // (also when a new strip takes its number in the same step: the rows are compared by number, not by id).
@@ -169,10 +170,24 @@ function reglerAenderungen(alt: Projekt, neu: Projekt): ReglerAenderung[] {
     const a = alt.spuren.find((x) => x.id === s.id && x.nr === s.nr);
     const w = werte(s), v = a ? werte(a) : null;
     for (const k of MIXER) if (!v || v[k] !== w[k]) aus.push({ pfad: `spur/${s.nr}/${KURZ[k]}`, wert: w[k] });
+    // loop deck filter row: sent when it changed; a new track sends it only when it is not the default or a stale value of the number may be left
+    const f = s.filter ?? 0;
+    if (a ? (a.filter ?? 0) !== f : f !== 0 || alt.spuren.some((x) => x.nr === s.nr && (x.filter ?? 0) !== 0)) {
+      aus.push({ pfad: `spur/${s.nr}/filter`, wert: f });
+    }
+    // loop deck EQ rows: sent when the row value (kill applied) changed; a new track only when it is not 0 or a stale value of the number may be left
+    for (const b of EQ_BAENDER) {
+      const e = eqZeilenWert(s, b);
+      if (a ? eqZeilenWert(a, b) !== e : e !== 0 || alt.spuren.some((x) => x.nr === s.nr && eqZeilenWert(x, b) !== 0)) {
+        aus.push({ pfad: `spur/${s.nr}/eq/${b}`, wert: e });
+      }
+    }
   }
   for (const a of alt.spuren) {
     if (neu.spuren.some((s) => s.nr === a.nr)) continue;                      // die Nummer lebt weiter (ggf. mit neuer Spur): oben erledigt
     for (const k of MIXER) aus.push({ pfad: `spur/${a.nr}/${KURZ[k]}`, wert: 0 });
+    if ((a.filter ?? 0) !== 0) aus.push({ pfad: `spur/${a.nr}/filter`, wert: 0 });
+    for (const b of EQ_BAENDER) if (eqZeilenWert(a, b) !== 0) aus.push({ pfad: `spur/${a.nr}/eq/${b}`, wert: 0 });
   }
   // 1.10: Gruppen-Regler grp/<nr>/* und pm/fader; eine gelöschte oder neue Gruppe setzt den Slot auf die Vorgabe (alles 0) beziehungsweise auf ihre Werte
   const gw = (g: Gruppe): Record<(typeof MIXER)[number], number> => ({ fader_db: g.fader_db, pan: g.pan, mute: g.mute ? 1 : 0, solo: g.solo ? 1 : 0 });
@@ -222,7 +237,8 @@ function istLeicht(projekt: Projekt, b: unknown): boolean {
   if (!istObjekt(b) || typeof b.befehl !== 'string') return false;
   switch (b.befehl) {
     // ein Gerätewechsel berührt Freeze, Slots und Klang; gruppe kann neu entstehen, und leichterUnterschied sieht nur Schlüssel, die schon da sind
-    case 'spur_aendern': return b.geraet === undefined && b.gruppe === undefined && b.arm === undefined && b.eingang === undefined && b.monitor === undefined;
+    case 'spur_aendern': return b.geraet === undefined && b.gruppe === undefined && b.filter === undefined && b.eq === undefined && b.kill === undefined
+      && b.arm === undefined && b.eingang === undefined && b.monitor === undefined;
     case 'loop_setzen': case 'metronom_setzen': return true;
     case 'gruppenspur_aendern': case 'master_aendern': return true;
     // slice 4: knob and bypass of a stage are live only (the key `sc` may add or remove a field, and `key` is structure, so both take the general path)
@@ -468,7 +484,8 @@ export function fuehreListeAus(projekt: Projekt, befehle: unknown[],
     presetLies?: Kontext['presetLies']; surgeBereich?: Kontext['surgeBereich']; surgeIst?: Kontext['surgeIst'];
     surgeFilter1An?: Kontext['surgeFilter1An']; surgePatchDa?: Kontext['surgePatchDa']; pluginDa?: Kontext['pluginDa'];
     pluginIndex?: Kontext['pluginIndex']; musterUebersetze?: Kontext['musterUebersetze']; kitKlaenge?: Kontext['kitKlaenge'];
-    musterMeldung?: Kontext['musterMeldung']; geraetFx?: GeraetFxFn; steckfeldVon?: Kontext['steckfeldVon'] } = {}): BefehlErgebnis {
+    musterMeldung?: Kontext['musterMeldung']; geraetFx?: GeraetFxFn; steckfeldVon?: Kontext['steckfeldVon'];
+    ordner?: Kontext['ordner'] } = {}): BefehlErgebnis {
   if (!Array.isArray(befehle) || befehle.length === 0) ab('argument_ungueltig', 'befehle: nicht leere Liste erwartet');
   if (!o.voll && befehle.every((b) => istLeicht(projekt, b))) return fuehreLeichtAus(projekt, befehle);
   const entwurf = (o.voll ? null : notenEntwurf(projekt, befehle)) ?? structuredClone(projekt);
@@ -478,7 +495,8 @@ export function fuehreListeAus(projekt: Projekt, befehle: unknown[],
     ...(o.surgeFilter1An ? { surgeFilter1An: o.surgeFilter1An } : {}), ...(o.surgePatchDa ? { surgePatchDa: o.surgePatchDa } : {}),
     ...(o.pluginDa ? { pluginDa: o.pluginDa } : {}), ...(o.pluginIndex ? { pluginIndex: o.pluginIndex } : {}),
     ...(o.musterUebersetze ? { musterUebersetze: o.musterUebersetze } : {}), ...(o.kitKlaenge ? { kitKlaenge: o.kitKlaenge } : {}),
-    ...(o.musterMeldung ? { musterMeldung: o.musterMeldung } : {}), ...(o.steckfeldVon ? { steckfeldVon: o.steckfeldVon } : {}) };
+    ...(o.musterMeldung ? { musterMeldung: o.musterMeldung } : {}), ...(o.steckfeldVon ? { steckfeldVon: o.steckfeldVon } : {}),
+    ...(o.ordner ? { ordner: o.ordner } : {}) };
   const hinweise: LaneHinweis[] = [];
   befehle.forEach((b, i) => {
     const vorher = hatLaneRuhewerte(entwurf) ? laneRuhewerte(entwurf) : null;

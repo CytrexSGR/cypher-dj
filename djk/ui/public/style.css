@@ -197,6 +197,10 @@ tr.auf-1 td.titelzelle { color: var(--a); } tr.auf-2 td.titelzelle { color: var(
 .reclaenge button { font-family: inherit; font-weight: 600; font-size: 10px; line-height: 1; padding: 2px 6px; border: 1px solid var(--line); background: transparent;
   color: var(--dim); border-radius: 4px; cursor: pointer; }
 .reclaenge button.an { background: var(--farbe); color: #111; border-color: var(--farbe); }
+.recziel { display: flex; align-items: center; gap: 8px; font-size: 10px; font-weight: 600; color: var(--dim); }
+.recdeck { display: flex; align-items: center; gap: 2px; }
+.recdeck button { font-family: inherit; font-weight: 600; font-size: 10px; line-height: 1; padding: 2px 6px; border: 1px solid var(--line); background: transparent;
+  color: var(--dim); border-radius: 4px; cursor: pointer; }
 .recknopf { font-family: inherit; font-weight: 800; font-size: 10px; line-height: 1; letter-spacing: .1em; padding: 2px 10px; border: 1px solid var(--kill);
   background: transparent; color: var(--kill); border-radius: 4px; cursor: pointer; }
 .recknopf { min-width: 76px; }
@@ -406,8 +410,9 @@ body.bereich-effekte #bestand .reiter, body.bereich-effekte #bestand #suche, bod
 .cuewahl [data-muell] { margin-left: 8px; }
 .cuewahl [data-muell].an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }
 .cuewahl .nachbox { margin-left: 14px; }
-.cuewahl [data-nachbox] { color: var(--l1); }
-.cuewahl [data-nachbox="2"] { color: var(--l2); }
+.cuewahl [data-nachdeck] { padding: 0 6px; font-weight: 700; color: var(--l1); }
+.cuewahl [data-nachdeck="2"] { color: var(--l2); }
+.cuewahl [data-nachdeck][hidden] { display: none; }
 
 /* Crossfader in der Mitte: unter den Kanalzügen A | Master | B, über die volle Breite des oberen Mischers (Andreas 2026-09-29) */
 #mischer.mix-oben { grid-template-rows: minmax(0, 1fr) auto; }
@@ -642,43 +647,10 @@ button.laden.in-box:disabled { opacity: .4; }
 #pult { grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) auto; grid-template-areas: "a mo b" "c mu d" "s s s"; }
   border: 1px solid var(--line); border-top: 2px solid var(--farbe); border-radius: 8px; }
 body.studio 
-/* Live modules (plan live-module task 4): EXPORT in the deck loop rows, LIVE in the deck 3 strip, the live container panel under it. */
+/* Live modules (plan live-module task 4): EXPORT in the deck loop rows; .live-regler is also the class of the loop deck fader. */
 .exportknopf { margin-left: 6px; font-weight: 700; letter-spacing: .08em; border-color: var(--farbe); color: var(--farbe); }
 .exportknopf:disabled { opacity: .35; color: var(--dim); border-color: var(--line); }
-#live-panel { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; align-content: start; gap: 8px; min-height: 0; overflow: auto; }
-#live-panel[hidden] { display: none; }
-body.studio #live-panel { display: none; }
-.live-slot { --farbe: var(--d3); display: flex; flex-direction: column; gap: 6px; padding: 6px 10px 8px; min-width: 0; background: var(--panel);
-  border: 1px solid var(--line); border-top: 2px solid var(--farbe); border-radius: 8px; }
-.live-slot.leer { opacity: .7; border-top-color: var(--line); }
-.live-kopf { display: flex; align-items: center; gap: 10px; min-height: 40px; min-width: 0; }
-.live-buchstabe { font-size: 22px; color: var(--farbe); width: 1.1em; text-align: center; }
-.live-slot.leer .live-buchstabe { color: var(--dim); }
-.live-leer { font-size: 12px; letter-spacing: .16em; font-weight: 600; color: var(--dim); }
-.live-hinweis { color: var(--dim); font-size: 11px; }
-.live-titel { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; line-height: 1.2; }
-.live-titel b, .live-titel span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.live-titel span { color: var(--dim); font-size: 11px; }
-.live-zustand { position: relative; display: flex; flex-direction: column; justify-content: center; min-width: 118px; max-width: 220px; padding: 3px 10px; border-radius: 6px;
-  border: 1px solid var(--line); font-size: 11px; font-weight: 700; letter-spacing: .1em; overflow: hidden; line-height: 1.2; }
-.live-zustand.bereit { color: #7ddc9a; border-color: #2f6b45; }
-.live-zustand.trennt { color: var(--text); border-color: var(--farbe); background: linear-gradient(90deg, rgba(255, 255, 255, .14) var(--fortschritt, 8%), transparent var(--fortschritt, 8%)); }
-.live-zustand.fehler { color: #ffb86b; border-color: #8a5a22; }
-.live-grund { font-weight: 400; letter-spacing: 0; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.live-knopf { height: 38px; min-width: 64px; padding: 0 12px; font-size: 12px; font-weight: 700; letter-spacing: .08em; border-radius: 8px; }
-.live-loeschen { border-color: #8a3a3a; }
-.live-leeren { display: flex; gap: 4px; }
-.live-leeren select { height: 38px; font: inherit; font-size: 12px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
 .live-regler { height: 34px; margin: 0; accent-color: var(--farbe); cursor: pointer; touch-action: none; }
-.live-stem output { width: 3.6em; text-align: right; font-size: 11px; color: var(--text); font-variant-numeric: tabular-nums; }
-.live-welle { height: 46px; border-radius: 4px; overflow: hidden; background: #0c0d10; border: 1px solid var(--line); }
-.live-welle canvas { display: block; width: 100%; height: 100%; }
-.live-stems { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 4px 14px; }
-.live-stem { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.live-stemname { width: 4.2em; font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.live-blendregler { flex: 1 1 0; min-width: 0; height: 30px; }
-.live-key[disabled] { opacity: .5; }
-.live-stem .live-regler { flex: 1 1 0; min-width: 0; height: 30px; }
 
 /* DJ view places (plan 2026-11-13, task 14): four grid cells over the existing nodes. A place head sits over each cell; the nodes get their cell from
    data-platz (set by slots.js wendeAn), nodes that no place shows get .platz-aus. The Studio view keeps its own areas and ignores all of it. */
@@ -690,7 +662,7 @@ body:not(.studio) #pult > [data-platz="3"] { grid-area: p3; } body:not(.studio) 
 .platzkopf[data-platz-kopf="1"] { grid-area: h1; } .platzkopf[data-platz-kopf="2"] { grid-area: h2; }
 .platzkopf[data-platz-kopf="3"] { grid-area: h3; } .platzkopf[data-platz-kopf="4"] { grid-area: h4; }
 body:not(.studio) .platz-aus { display: none !important; }
-body.studio .platzkopf, body.studio #platz-loops { display: none; }
+body.studio .platzkopf, body.studio #platz-loops, body.studio #platz-loops2 { display: none; }
 .platzkopf { display: flex; align-items: center; gap: 10px; padding: 0 4px; min-height: 26px; min-width: 0; }
 .platztext { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 650; letter-spacing: .06em; color: var(--text); }
 .platzhinweis { color: var(--warn, #e0a040); font-size: 11px; white-space: nowrap; }
@@ -698,8 +670,7 @@ body.studio .platzkopf, body.studio #platz-loops { display: none; }
 .platzwahl button { font-size: 10px; font-weight: 800; letter-spacing: .08em; padding: 3px 9px; border-radius: 5px; color: var(--dim); border: 1px solid var(--line); }
 .platzwahl button.an { background: var(--text); border-color: var(--text); color: #0e0f12; }
 .platzwahl button:disabled:not(.an) { opacity: .3; cursor: not-allowed; }
-#platz-loops { overflow: hidden; }
-#platz-loops #live-panel { flex: 1; }
+#platz-loops, #platz-loops2 { overflow: hidden; }
 
 /* DJ view places, task 15: the mixer follows the places. In the DJ view the two mixer panels dissolve (display: contents) and their strips become
    cells of the page grid: two rows of three columns in the middle, slots.js (wendeMixerAn) sets data-mix-zeile and data-mix-spalte. The master
@@ -780,13 +751,6 @@ body:not(.studio) #pult .fxmitte .colorfx .colorparam > span { display: block; f
 .zug .beschrift label.color-an { color: var(--warn); }   /* the COLOR knob of a channel names the chosen COLOR type in its colour */
 body:not(.studio) #pult .xfader { grid-area: 5 / 2 / 6 / -2; padding: 4px 8px;   /* grid-column after grid-area reset the column and squeezed the crossfader into one strip column */ }
 
-/* DJ view places, task 16: the Loops place carries the live container (LIVE button in its head, a prominent one while the container is closed). */
-#platz-loops .livetaste { margin-left: auto; height: 26px; padding: 0 14px; font-weight: 700; letter-spacing: .12em; }
-#platz-loops .livetaste.an { background: var(--farbe); border-color: var(--farbe); color: #0e0f12; }
-#platz-loops .loops-leer { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; color: var(--dim); padding: 0 24px; }
-#platz-loops .loops-leer[hidden] { display: none; }
-#platz-loops .loops-leer b { color: var(--text); font-size: 15px; }
-#platz-loops .livetaste.gross { margin: 0; height: 56px; padding: 0 44px; font-size: 20px; background: var(--farbe); border-color: var(--farbe); color: #0e0f12; }
 body:not(.studio) .deck .lauf { min-height: 24px; }
 /* DJ view, short places (1920x1080: a top place is 219 px, the deck needs about 270): the rows of a deck never shrink below their text (they
    overlapped the BAR row and the next place head), only the waveform gives room. Below 290 px the deck drops its title and meta lines, which the

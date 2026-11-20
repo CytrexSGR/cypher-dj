@@ -20,6 +20,7 @@ const MUSTER = [/3\[0-2\]/, /nr > 32\b/, /<= 32\b/, /[^<>=-]> 32\b/, /< 33\b/, /
 const ERLAUBT = [
   // there are 32 tracks (the knob limit does not move them)
   { datei: 'ui/hand_operation.ts', fragment: 'spur\\/([1-9]|[12][0-9]|3[0-2])', grund: 'track mixer paths spur/1..32/*: 32 tracks' },
+  { datei: 'ui/areas/proj/mapping.ts', fragment: 'spur\\/([1-9]|[12][0-9]|3[0-2])\\/eq', grund: 'EQ_PFAD counts tracks: the EQ row of a loop deck track' },
   { datei: 'ui/areas/proj/mapping.ts', fragment: '(spur)\\/([1-9]|[12][0-9]|3[0-2])', grund: 'SEND_PFAD counts tracks: 32 tracks' },
   { datei: 'ui/public/curves.js', fragment: 'spur\\/(?:[1-9]|[12][0-9]|3[0-2])', grund: 'track patterns spur/1..32 (curves.js:67, :72): 32 tracks' },
   { datei: 'ui/areas/proj/core_path.ts', fragment: 'track number 1..32', grund: 'comment: lane override per track' },

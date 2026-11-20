@@ -294,8 +294,12 @@ test('Mitschnitt (MVP 2 Scheibe 2): /loop rec schickt an den Kern, /e/mitschnitt
   const s = sse(url);
   assert.equal((await postJson(url, '/loop', { aktion: 'rec', beats: 1, name: 'c-143012-1b' })).code, 200);
   const an = log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/loop/rec')
-    .map((z) => [z.adresse, z.felder.quelle, z.felder.beats, z.felder.name]);
-  assert.deepEqual(an, [['/k/loop/rec', 'andreas', 1, 'c-143012-1b']]);
+    .map((z) => [z.adresse, z.felder.quelle, z.felder.beats, z.felder.name, z.felder.summe]);
+  assert.deepEqual(an, [['/k/loop/rec', 'andreas', 1, 'c-143012-1b', 0]]);
+  // summe: the Strudel sum (erz/1+2+3) instead of erz/1; anything but 0/1/true/false is refused before the kern
+  assert.equal((await postJson(url, '/loop', { aktion: 'rec', beats: 1, name: 'c-143012-1s', summe: 1 })).code, 200);
+  assert.equal(log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/loop/rec').at(-1).felder.summe, 1);
+  assert.equal((await postJson(url, '/loop', { aktion: 'rec', beats: 1, name: 'x', summe: 2 })).code, 400);
   const vorher = o.gesendet;
   for (const body of [{ aktion: 'rec', beats: 3, name: 'x' }, { aktion: 'rec', beats: 1, name: 'Gross' },
     { aktion: 'rec', beats: 1 }, { aktion: 'rec', takte: 1, name: 'alt' }]) {
@@ -3591,4 +3595,29 @@ test('demo overlay: POST /ansage reaches the stream, a late page gets the curren
   assert.equal((await postJson(url, '/ansage', { text: 'x'.repeat(301) }, CYPHER)).j.fehler, 'text_zu_lang');
   s.zu();
   spaet.zu();
+});
+
+// ---------- Platz-Kanal: the page reports what sits in place 3/4, the kern routes it into pad/1, pad/2 ----------
+const platzSendungen = (log) => log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/platz/kanal');
+
+test('Platz-Kanal /platz/kanal: passes pad and inhalt to the kern, receipt, GET and /lage follow /e/platz/kanal', async (t) => {
+  const { url, log } = await stapel(t);
+  assert.deepEqual(await (await fetch(`${url}/platz/kanal`)).json(), { kanal: [0, 0] });
+  const r = await postJson(url, '/platz/kanal', { pad: 2, inhalt: 3 });
+  assert.equal(r.code, 200, JSON.stringify(r.j));
+  assert.equal(r.j.quittung.status, 2, JSON.stringify(r.j));
+  const f = platzSendungen(log);
+  assert.equal(f.length, 1);
+  assert.deepEqual({ ...f[0].felder, id: 0 }, { id: 0, quelle: 'andreas', pad: 2, inhalt: 3 });
+  await bis(async () => (await (await fetch(`${url}/platz/kanal`)).json()).kanal[1] === 3);
+  assert.deepEqual(await (await fetch(`${url}/platz/kanal`)).json(), { kanal: [0, 3] });
+  assert.deepEqual((await (await fetch(`${url}/lage`)).json()).platz_kanal, [0, 3]);
+});
+
+test('Platz-Kanal /platz/kanal: wrong values get 400 and the kern nothing', async (t) => {
+  const { url, log } = await stapel(t);
+  for (const falsch of [{ pad: 0, inhalt: 1 }, { pad: 3, inhalt: 1 }, { pad: 1, inhalt: 4 }, { pad: 1, inhalt: -1 }, { pad: 1, inhalt: 1.5 }, { pad: 1 }, { inhalt: 1 }, { pad: '1', inhalt: 1 }]) {
+    assert.equal((await postJson(url, '/platz/kanal', falsch)).code, 400, JSON.stringify(falsch));
+  }
+  assert.equal(platzSendungen(log).length, 0);
 });

@@ -66,6 +66,7 @@ struct Stimme final : WarpAbbild {
   double beat_versatz = 0.0;
   Karte karte;
   const ArrAudio* audio = nullptr;
+  bool kreis = false;                    // Schleife (WarpAnsatz::kreis): band() liest rund um die Quelle
   int64_t frames = 0;                    // Länge der Quelle, beim Übernehmen gelesen (das Audio selbst nur, solange haelt es hält)
   int modus = ARR_WARP_COMPLEX;
   std::vector<double> mb, mf;            // Marker (Kopie), je höchstens ARR_WARP_MARKER_MAX
@@ -83,6 +84,15 @@ struct Stimme final : WarpAbbild {
   void band(int64_t ab, int n, float* l, float* r) const noexcept override {
     const float* d = audio->daten;
     const int64_t fr = audio->frames;
+    if (kreis && fr > 0) {
+      for (int i = 0; i < n; ++i) {
+        int64_t f = (ab + i) % fr;
+        if (f < 0) f += fr;
+        l[i] = d[2 * f];
+        r[i] = d[2 * f + 1];
+      }
+      return;
+    }
     for (int i = 0; i < n; ++i) {
       const int64_t f = ab + i;
       const bool innen = f >= 0 && f < fr;
@@ -179,6 +189,10 @@ class WerkImpl final : public WarpWerk {
     st.posts.fetch_add(1, std::memory_order_seq_cst);
   }
 
+  bool offen(int p) const noexcept override {
+    return st_[p].posts.load(std::memory_order_seq_cst) != st_[p].gelesen.load(std::memory_order_seq_cst);
+  }
+
   StreckRing& ring(int p) noexcept override { return *st_[p].ring; }
 
   int64_t ende_s(int p) const noexcept override {
@@ -211,11 +225,20 @@ class WerkImpl final : public WarpWerk {
       if (st_[p].posts.load(std::memory_order_seq_cst) != st_[p].gelesen.load(std::memory_order_seq_cst)) return true;   // ein Auftrag trägt vielleicht Zeiger in s
 #ifndef CYPHERDJ_MUTATION_WARP_LIEST_OHNE_STIMME   // Fehlerfall: nur gefragt, ob gerade gelesen wird; eine Stimme, die ihr Audio später noch liest, zählt nicht
     for (const ArrAudio* x : s->audios) {
-      if (x->ref > 1) continue;   // ein anderer Schnappschuss nennt es noch (nur der Lade-Faden ändert ref, und nur er fragt): der Cache behält es, auch wenn s geht
+      if (x->ref > 1) continue;
+      if (std::atomic_ref<int32_t>(const_cast<ArrAudio*>(x)->halter).load(std::memory_order_seq_cst) > 0) continue;   // K4: a launcher voice holds it: the cache entry outlives s   // ein anderer Schnappschuss nennt es noch (nur der Lade-Faden ändert ref, und nur er fragt): der Cache behält es, auch wenn s geht
       for (int p = 0; p < ARR_WARP_PLAETZE; ++p)
         if (st_[p].haelt.load(std::memory_order_seq_cst) == x) return true;   // eine Stimme liest es noch oder wieder: s darf nicht der letzte sein, der es nennt
     }
 #endif
+    return false;
+  }
+
+  bool haelt(const ArrAudio* a) const noexcept override {
+    for (int p = 0; p < ARR_WARP_PLAETZE; ++p) {
+      if (st_[p].posts.load(std::memory_order_seq_cst) != st_[p].gelesen.load(std::memory_order_seq_cst)) return true;   // an open order may carry any audio
+      if (st_[p].haelt.load(std::memory_order_seq_cst) == a) return true;
+    }
     return false;
   }
 
@@ -315,7 +338,7 @@ class WerkImpl final : public WarpWerk {
     const int64_t s_jetzt = s_jetzt_.load(std::memory_order_acquire);
     for (int n = 0; n < max_bloecke; ++n) {
       if (!st.block_da) {
-        if (st.geschrieben_bis >= st.s_ende || st.position(static_cast<double>(st.geschrieben_bis)) >= static_cast<double>(st.frames) + QUELLE_NACHLAUF) {
+        if (st.geschrieben_bis >= st.s_ende || (!st.kreis && st.position(static_cast<double>(st.geschrieben_bis)) >= static_cast<double>(st.frames) + QUELLE_NACHLAUF)) {   // a loop has no end of the source
           st.ende.store(st.geschrieben_bis, std::memory_order_relaxed);
           st.ende_ep.store(st.epoche, std::memory_order_release);
           beende(st);   // Quelle oder Clip zu Ende: nichts mehr zu rechnen, das Audio ist frei
@@ -375,6 +398,7 @@ class WerkImpl final : public WarpWerk {
     st.karte = a.karte;
     st.audio = a.clip->audio;
     st.frames = a.clip->audio->frames;
+    st.kreis = a.kreis;
     st.modus = wq.modus;
     std::memcpy(st.mb.data(), wq.beat, static_cast<std::size_t>(wq.n) * sizeof(double));
     std::memcpy(st.mf.data(), wq.frame, static_cast<std::size_t>(wq.n) * sizeof(double));

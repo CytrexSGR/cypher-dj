@@ -1,12 +1,11 @@
-// Loop slots, the REC button and the loop list.
+// The loop channel strips L1 / L2, the REC button and the loop list of the LOOPS tab.
 import { LOOPBOXEN } from './curves.js';
 import { Kopf } from './wave.js';
-import { ladeLoopInSlot } from './live_module.js';   // live modules task 4
+import { ladeInDeck, ladeLoopInSpur } from './loopdeck/view.js';   // the LOOPS tab loads into a loop deck cell
+import { quelleZiehbar } from './loopdeck/drag.js';
 import { $, $$, melde, zustand } from './page_state.js';
-import { holeJson, pruefeLiveSpaeter } from './live_view.js';
 import { filtere, zeigeReiterInfo } from './seitenrahmen.js';
-import { HINWEIS_LOOPS, loopsPlatzDa } from './slots_view.js';
-export let recBeats = 4, recLaeuft = false, recAktiv = '';  // MVP 2 Scheibe 2: REC-Knopf im Kopf von C; recAktiv = Name des eigenen REC
+export let recBeats = 4, recLaeuft = false, recAktiv = '', recZiel = null;   // recZiel: { deck, spur } of a Strudel sum recording that goes into a loop deck  // MVP 2 Scheibe 2: REC-Knopf im Kopf von C; recAktiv = Name des eigenen REC
 
 // ---------- Strom vom Seiten-Server (Kern) ----------
 // ---------- Loop channel strips (MVP 2, ADR 025; places plan task 12: the loop fields are gone, the strips L1 and L2 stay) ----------
@@ -51,6 +50,8 @@ export function zeigeRec(beat) {
 
 export function recEnde(ok) {
   recLaeuft = false; recPlan = null;
+  const ziel = recZiel, name = recAktiv; recZiel = null;
+  if (ziel && ok === true) ladeLoopInSpur(ziel.deck, ziel.spur, name);   // the file is written before /e/mitschnitt: load the finished loop
   const k = $('#rec-knopf');
   k.classList.remove('an', 'wartet');
   clearTimeout(recFertigZeit);
@@ -68,36 +69,36 @@ export function baueRec() {
       for (const x of $$('[data-recbeats]', kopf)) x.classList.toggle('an', x === b);
     });
   }
-  $('#rec-knopf').addEventListener('click', async () => {
-    if (recLaeuft) return;
-    recLaeuft = true;
-    clearTimeout(recFertigZeit);
-    $('#rec-knopf').classList.remove('fertig');
-    if (letzterBeat != null) {
-      const raster = recBeats, start = Math.ceil(letzterBeat / raster) * raster;
-      recPlan = { start, ende: start + raster };
-      zeigeRec(letzterBeat);
-    } else $('#rec-knopf').classList.add('wartet');
-    const name = recName(recBeats);
-    recAktiv = name;
-    try {
-      const r = await fetch('/loop', { method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ aktion: 'rec', beats: recBeats, name }) });
-      const j = await r.json();
-      window.djkGesendet.push({ loop: { aktion: 'rec', beats: recBeats, name }, code: r.status, antwort: j });
-      if (!r.ok) { melde(`Recording refused: ${j.fehler}`, true); recEnde(false); }
-      else if (j.quittung?.status === 6) { melde(`Recording refused: ${j.quittung.grund === 'ausserhalb_bereich' ? 'the tempo is changing, wait for the ramp to finish' : (LOOP_GRUND[j.quittung.grund] ?? j.quittung.grund)}`, true); recEnde(false); }
-    } catch (e) { melde(`Page server unreachable: ${e.message}`, true); recEnde(false); }
+  $('#rec-knopf').addEventListener('click', () => starteRec(false, null));
+  // → L1 1..4 / L2 1..4: record the Strudel sum (erz/1+2+3, before trim) for the length chosen above, then load it into track n of that loop deck
+  for (const b of $$('[data-recziel]', kopf)) b.addEventListener('click', () => {
+    const [deck, spur] = b.dataset.recziel.split(':').map(Number);
+    starteRec(true, { deck, spur });
   });
 }
 
-// A library loop into the loop slot n (POST /modul/loop): the module is built from the loop, it plays on the channel pad/n
-export async function ladeLoopSlot(name, n) {
-  const r = await ladeLoopInSlot(name, n, holeJson);
-  melde(r.text, !r.ok);
-  pruefeLiveSpaeter(0);
-  return r.ok;
+async function starteRec(summe, ziel) {
+  if (recLaeuft) return;
+  recLaeuft = true;
+  clearTimeout(recFertigZeit);
+  $('#rec-knopf').classList.remove('fertig');
+  if (letzterBeat != null) {
+    const raster = recBeats, start = Math.ceil(letzterBeat / raster) * raster;
+    recPlan = { start, ende: start + raster };
+    zeigeRec(letzterBeat);
+  } else $('#rec-knopf').classList.add('wartet');
+  const name = recName(recBeats);
+  recAktiv = name; recZiel = ziel;
+  const koerper = summe ? { aktion: 'rec', beats: recBeats, name, summe: 1 } : { aktion: 'rec', beats: recBeats, name };
+  try {
+    const r = await fetch('/loop', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(koerper) });
+    const j = await r.json();
+    window.djkGesendet.push({ loop: koerper, code: r.status, antwort: j });
+    if (!r.ok) { melde(`Recording refused: ${j.fehler}`, true); recEnde(false); }
+    else if (j.quittung?.status === 6) { melde(`Recording refused: ${j.quittung.grund === 'ausserhalb_bereich' ? 'the tempo is changing, wait for the ramp to finish' : (LOOP_GRUND[j.quittung.grund] ?? j.quittung.grund)}`, true); recEnde(false); }
+  } catch (e) { melde(`Page server unreachable: ${e.message}`, true); recEnde(false); }
 }
+
 
 // MVP 2 Scheibe 3 (E2): → STRUDEL macht den Loop zum Klang im Zusatz-Kit. Die Antwort steht AM Knopf (Hörtest
 // e17c208: Meldungen fern vom Griff werden übersehen): s("rec0") zum Abtippen, oder der Grund der Ablehnung.
@@ -127,6 +128,7 @@ export async function ladeLoops() {
   for (const l of zustand.loopliste) {
     const tr = document.createElement('tr');
     if (l.ladbar === false) { tr.classList.add('defekt'); tr.title = `Cannot be loaded: ${l.grund}`; }
+    else quelleZiehbar(tr, { loop: l.name });   // drop on a loop deck cell loads it there (the source form of the loop library)
     for (const [t, k] of [[l.name, 'titelzelle'], [taktText(l.beats), 'zahl'], [l.quelle || '–', ''], [l.erstellt || '–', 'zahl']]) {
       const td = document.createElement('td'); td.textContent = t; td.className = k; tr.append(td);
     }
@@ -141,11 +143,10 @@ export async function ladeLoops() {
     for (const n of BOXEN) {
       const b = document.createElement('button');
       b.className = `laden l${n}`;
-      b.textContent = `LOAD L${n}`;
+      b.textContent = `LOAD LOOP ${n}`;
       if (l.ladbar === false) { b.disabled = true; b.title = `Cannot be loaded: ${l.grund}`; }
       b.dataset.titel0 = b.title;
-      if (!loopsPlatzDa()) { b.disabled = true; b.title = HINWEIS_LOOPS; }
-      b.addEventListener('click', () => ladeLoopSlot(l.name, n));
+      b.addEventListener('click', () => ladeInDeck(n, { loop: l.name }));   // the selected cell of loop deck n, else its first empty one
       td.append(b);
     }
     td.append(strudelKnopf(l.name));

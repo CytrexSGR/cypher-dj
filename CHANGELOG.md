@@ -3,6 +3,37 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-20, fifteenth update
+
+**Loop decks**
+- The LOOPS place now holds two loop decks (LOOP 1 and LOOP 2) of four tracks with eight cells each, in place of the two
+  module slots A and B. Each deck sums into one mixer channel, L1 and L2.
+- A click on a cell launches it on the next point of the launch grid (a quarter beat, half beat, beat, bar or four
+  bars); the cell that was playing on that track ends on the same point. A loop keeps the master tempo, a one-shot plays
+  as recorded. Launching works with the transport stopped or running, and the transport does not stop a playing loop.
+- Scene buttons start a whole row of cells at once; an empty cell in the row stops its track.
+- Every track has a volume, a mute and a filter (left low-pass, right high-pass, centre neutral).
+- Cells have a name, one of 16 colours, a kind (loop or one-shot), a gain and a length; they can be moved and swapped,
+  also between the two decks. Library loops and the loops and stems of a module can be loaded into a cell, and a track deck
+  can export its running loop into a loop deck track with LOOP and 1 2 3 4.
+- Loop sets store the content of a deck under a name; loading one replaces the deck in a single undo step.
+- A running loop can be re-entered at one of eight slices.
+- A Traktor Kontrol S8 side can show its loop deck: the pads launch cells in the cell colours, SHIFT and a pad stops a
+  track, the encoders move the row pair and the grid, the faders, dials and buttons set volume, filter and mute, the
+  display buttons launch scenes and CAPTURE takes the running loop of the track deck into the deck.
+- Every loop track has its own small channel strip inside the deck: a three-band EQ with kill, a HALL and a DELAY send whose
+  echo stays inside the deck's mixer channel, and one effect slot (for example Remix or Crunch). The strip row is folded away
+  by default and opens with STRIP; on the S8 the FX buttons switch the four dials between filter, the EQ bands and the sends.
+- The four faders now belong to the four places: place 1 is strip A, place 2 is B, place 3 is L1 and place 4 is L2 (the S8
+  and the APC20 stay fixed). What stands in a place, a track deck, a SEQ deck, the Strudel sum or a loop deck, sounds
+  through the fader of that place; a loop deck plays into the channel of the place that shows it.
+- The Strudel place can record the sum of its three channels into a loop deck track: a click on a track number in the row at the foot of the
+  place takes the running sum and writes it as a new cell.
+- Screenshots: a new LOOP 1 view with the channel strip row open, and new DJ view, media library, effects and overview
+  images that show the loop decks instead of the old slots.
+- Launching, switching, the filter and the slices were measured in the studio; the feel on the page and on the S8 is still to be
+  checked by hand.
+
 ## 2026-11-20, fourteenth update
 
 **SEQ deck**

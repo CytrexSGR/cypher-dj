@@ -2,7 +2,7 @@
 // Befehl (Rückweg). Kein Server, kein Kern, keine Datei.
 import {
   FADER_MAX, FADER_MIN, HALL_FELDER, HALL_VORGABE, alleInserts, alleRacks, insertVorgabe, insertZeilen, MAX_GRUPPEN, MAX_MAKROS, MAX_RACK, MAX_INS,
-  MAX_RETURNS, MAX_SPUREN,
+  MAX_RETURNS, MAX_SPUREN, EQ_BAENDER, EQ_MIN, EQ_MAX, eqZeilenWert, type EqBand,
   type Projekt, type Spur,
 } from '../../project/model.ts';
 import type { Quelle } from '../../project/history.ts';
@@ -63,6 +63,8 @@ export const ERZ4_NUR_HAND: readonly Soll[] = [{ pfad: 'erz/4/ziel', wert: 0 }, 
 export const erz4Soll = (quelle: Quelle): Soll[] => (quelle === 'andreas' ? [...ERZ4_NEUTRAL, ...ERZ4_NUR_HAND] : [...ERZ4_NEUTRAL]);
 
 const FELD = { fader: 'fader_db', pan: 'pan', mute: 'mute', solo: 'solo' } as const;
+// the filter row of a loop deck track (-1..+1, absent = 0): a track row only, groups and returns have none
+const SPUR_FILTER = 'filter';
 const werteVon = (s: Spur | undefined): Record<keyof typeof FELD, number> => ({
   fader: s ? s.fader_db : 0, pan: s ? s.pan : 0, mute: s?.mute ? 1 : 0, solo: s?.solo ? 1 : 0 });
 // Alle 4 · MAX_SPUREN Spur-Regler (Spec 3.4: „alle Spur-Regler“): belegte Slots mit den Werten der Spur, freie mit der Vorgabe (0 dB, Mitte, aus).
@@ -71,6 +73,8 @@ export function alleSpurRegler(p: Projekt): Soll[] {
   for (let n = 1; n <= MAX_SPUREN; n++) {
     const w = werteVon(p.spuren.find((s) => s.nr === n));
     for (const k of Object.keys(FELD) as (keyof typeof FELD)[]) aus.push({ pfad: `spur/${n}/${k}`, wert: w[k] });
+    aus.push({ pfad: `spur/${n}/${SPUR_FILTER}`, wert: p.spuren.find((s) => s.nr === n)?.filter ?? 0 });
+    for (const b of EQ_BAENDER) aus.push({ pfad: `spur/${n}/eq/${b}`, wert: eqZeilenWert(p.spuren.find((s) => s.nr === n), b) });   // kill applied
   }
   return aus;
 }
@@ -144,7 +148,8 @@ export const alleRegler = (p: Projekt): Soll[] => [...alleSpurRegler(p), ...alle
   ...alleSendRegler(p), ...alleRetRegler(p), ...alleInsertRegler(p), ...alleRackRegler(p)];
 
 // Rückweg (Spec 3.4): /e/regler spur/<n>/<feld> mit Halter mensch → Befehl spur_aendern, oder null (keine Spur auf n, Wert schon da)
-const REGLER_PFAD = /^spur\/([1-9][0-9]?)\/(fader|pan|mute|solo)$/;
+const REGLER_PFAD = /^spur\/([1-9][0-9]?)\/(fader|pan|mute|solo|filter)$/;
+const EQ_PFAD = /^spur\/([1-9]|[12][0-9]|3[0-2])\/eq\/(tief|mitte|hoch)$/;
 const GRUPPEN_PFAD = /^grp\/([1-9]|1[0-6])\/(fader|pan|mute|solo)$/;
 const SEND_PFAD = /^(?:(spur)\/([1-9]|[12][0-9]|3[0-2])|(grp)\/([1-9]|1[0-6]))\/send\/([1-4])$/;
 const RET_PFAD = /^ret\/([1-4])\/(fader|pan|mute|solo)$/;
@@ -187,10 +192,23 @@ export function reglerZuBefehl(p: Projekt, pfad: string, wert: number): { befehl
     const k = gm[2] as keyof typeof FELD, feld = FELD[k], w = klemme(k, wert);
     return g[feld] === w ? null : { befehl: { befehl: 'gruppenspur_aendern', gruppe_id: g.id, [feld]: w }, label: `Mixer: ${g.name} ${k}` };
   }
+  const em = EQ_PFAD.exec(pfad);
+  if (em) {                                                              // loop deck EQ row: the knob value, never the -200 of a kill
+    const s = p.spuren.find((x) => x.nr === Number(em[1]));
+    const b = em[2] as EqBand;
+    if (!s || s.zellen === undefined || s.kill?.[b] || !Number.isFinite(wert)) return null;
+    const w = Math.min(EQ_MAX, Math.max(EQ_MIN, wert));
+    return (s.eq?.[b] ?? 0) === w ? null : { befehl: { befehl: 'spur_aendern', spur_id: s.id, eq: { [b]: w } }, label: `Mixer: ${s.name} eq ${b}` };
+  }
   const m = REGLER_PFAD.exec(pfad);
   if (!m || Number(m[1]) > MAX_SPUREN || !Number.isFinite(wert)) return null;
   const s = p.spuren.find((x) => x.nr === Number(m[1]));
   if (!s) return null;
+  if (m[2] === SPUR_FILTER) {
+    if (s.zellen === undefined) return null;                             // only a loop deck track has a filter
+    const f = Math.min(1, Math.max(-1, wert));
+    return (s.filter ?? 0) === f ? null : { befehl: { befehl: 'spur_aendern', spur_id: s.id, filter: f }, label: `Mixer: ${s.name} ${SPUR_FILTER}` };
+  }
   const k = m[2] as keyof typeof FELD, feld = FELD[k];
   const w: number | boolean = k === 'mute' || k === 'solo' ? wert >= 0.5
     : k === 'fader' ? Math.min(FADER_MAX, Math.max(FADER_MIN, wert)) : Math.min(1, Math.max(-1, wert));
@@ -198,5 +216,5 @@ export function reglerZuBefehl(p: Projekt, pfad: string, wert: number): { befehl
   return { befehl: { befehl: 'spur_aendern', spur_id: s.id, [feld]: w }, label: `Mixer: ${s.name} ${k}` };
 }
 export const istSpurRegler = (pfad: string): boolean => REGLER_PFAD.test(pfad);
-export const istMixerRegler = (pfad: string): boolean => REGLER_PFAD.test(pfad) || GRUPPEN_PFAD.test(pfad) || pfad === 'pm/fader'
+export const istMixerRegler = (pfad: string): boolean => REGLER_PFAD.test(pfad) || EQ_PFAD.test(pfad) || GRUPPEN_PFAD.test(pfad) || pfad === 'pm/fader'
   || SEND_PFAD.test(pfad) || RET_PFAD.test(pfad) || HALL_PFAD.test(pfad);

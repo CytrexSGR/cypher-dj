@@ -88,6 +88,21 @@ bool Netz::loop_paket(const v::Adresse* a, const osc::Nachricht& m) {
     einreihen(b);
     return true;
   }
+  if (a->pfad == v::k_platz_kanal.pfad) {  // /k/platz/kanal ,hsii
+    namespace f = v::feld::k_platz_kanal;
+    Befehl b{};
+    b.art = Befehl::PLATZ_KANAL;
+    b.id = m.werte[f::id].h;
+    kopiere(b.quelle, m.werte[f::quelle].s, sizeof b.quelle);
+    b.deck = m.werte[f::pad].i;
+    b.nr = m.werte[f::inhalt].i;
+    if (!quelle_ok(b.quelle) || b.deck < 1 || b.deck > 2 || b.nr < 0 || b.nr > 3) {
+      quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "ausserhalb_bereich");
+      return true;
+    }
+    einreihen(b);
+    return true;
+  }
   if (a->pfad == v::k_fx_routing.pfad) {  // Ohr T17: /k/fx/routing ,hsi
     namespace f = v::feld::k_fx_routing;
     Befehl b{};
@@ -109,13 +124,15 @@ bool Netz::loop_paket(const v::Adresse* a, const osc::Nachricht& m) {
     kopiere(b.quelle, m.werte[v::feld::k_loop_rec::quelle].s, sizeof b.quelle);
     const int beats = m.werte[v::feld::k_loop_rec::beats].i;
     const char* name = m.werte[v::feld::k_loop_rec::name].s;
-    if (!quelle_ok(b.quelle) || !loop_beats_ok(beats) || !loop_name_ok(name)) {
+    const int summe = m.werte[v::feld::k_loop_rec::summe].i;
+    if (!quelle_ok(b.quelle) || !loop_beats_ok(beats) || !loop_name_ok(name) || (summe != 0 && summe != 1)) {
       quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "ausserhalb_bereich");
       return true;
     }
     auto mt = std::make_unique<Mitschnitt>();
     kopiere(mt->name, name, sizeof mt->name);
     mt->beats = beats;
+    mt->summe = summe == 1;
     mt->frames = (int64_t)beats * LOOP_SPB;
     mt->daten.resize((size_t)mitschnitt_max_frames(beats) * 2);  // Plan Tempo-Folge: reicht bis 60 BPM
     b.art = Befehl::MITSCHNITT;
@@ -297,6 +314,13 @@ bool Netz::loop_ereignis(const Ereignis& e) {
   if (e.art == Ereignis::FX_ZUWEISUNG) {  // §5.12 /e/fx/zuweisung ,isi
     osc::Schreiber s(v::e_fx_zuweisung);
     s.i(e.deck).s(e.pfad).i(e.status);
+    an_alle(s);
+    return true;
+  }
+  if (e.art == Ereignis::PLATZ_KANAL) {  // DJ view places 3 and 4, §5.12 /e/platz/kanal ,ii
+    if (e.deck >= 1 && e.deck <= 2) platz_kanal_stand_[e.deck - 1] = e.status;
+    osc::Schreiber s(v::e_platz_kanal);
+    s.i(e.deck).i(e.status);
     an_alle(s);
     return true;
   }

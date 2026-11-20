@@ -73,7 +73,7 @@ test('1.15 A2: the table holds exactly the 345 tool paths of section 3 and grows
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/utility/')).length, 8 * 5);   // arr-fx slice 1
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/bk/')).length, 8 * 65);   // arr-bk slice 3 + 64-knob widening: an and k1..k64 per instance
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('rack/')).length, 48);   // slice 4c: 12 racks x 4 macro rows
-  assert.equal(REGLER.size, 909 + 784 + 345 + 1178 + 48 + 80 + 64 + 8 * 64);   // 3920 = 3408 + 512 (spur/1..8/bk/1..64, the controller targets of the Baukasten tracks, controls.cpp SPUR_BK_SLOTS x SPUR_BK_KNOEPFE); 3408 = 3344 + 64 (master/bk/1..64, the graph place on the DJ master); 3344 = 3264 + 80: the mixer went from 8 groups x 8 rows to 16 groups x 9 rows (c3396e9a, 3db625e3); the sibling test below compares every row with the core table in both directions
+  assert.equal(REGLER.size, 909 + 784 + 345 + 1178 + 48 + 80 + 64 + 8 * 64 + 32 + 96);   // loop deck channel strip KZ1: + spur/1..32/eq/{tief,mitte,hoch} (4048); // loop deck K7a: + spur/1..32/filter (3952);   // 3920 = 3408 + 512 (spur/1..8/bk/1..64, the controller targets of the Baukasten tracks, controls.cpp SPUR_BK_SLOTS x SPUR_BK_KNOEPFE); 3408 = 3344 + 64 (master/bk/1..64, the graph place on the DJ master); 3344 = 3264 + 80: the mixer went from 8 groups x 8 rows to 16 groups x 9 rows (c3396e9a, 3db625e3); the sibling test below compares every row with the core table in both directions
   for (const p of soll) assert.equal(muster.test(p), true, `schema takes ${p}`);
 });
 

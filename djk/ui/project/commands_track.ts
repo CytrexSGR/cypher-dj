@@ -2,12 +2,34 @@
 // The handlers reach each other through PRO_BEFEHL (commands_helpers.ts) at call time; commands.ts merges the tables.
 import {
   istGeraetZiel, passtGeraetZiel, FADER_MAX, FADER_MIN, MAX_ARM_AUDIO, MAX_BEAT, MAX_SPUREN, alleInserts, SPUR_FARBEN, MAX_TAKES_PRO_SPUR,
-  entferneLeereTakes, type Take, kanonisch, neueId, type AudioClip, type Clip, type Spur, wirtSlots, type SpurAufnahme,
+  entferneLeereTakes, EQ_BAENDER, EQ_MIN, EQ_MAX, istObjekt, type EqBand, type Take, kanonisch, neueId, type AudioClip, type Clip, type Spur, wirtSlots,
+  type SpurAufnahme,
 } from './model.ts';
 import {
   ab, erlaube, zahlOk, zahl, flagge, eingangVon, text, gruppeArg, idArg, spurVon, freezeFeld, bereinigeGliedZiele, takeName, takeVon, COMP_FADE_S,
   COMP_EPS, teileClipsAn, compGleich, compFade, baueGeraet, type Handler,
 } from './commands_helpers.ts';
+
+// eq: {band: dB} and kill: {band: boolean}; only the three bands, at least one key, nothing else
+function baenderArg(x: unknown, k: string): Record<string, unknown> {
+  if (!istObjekt(x) || Object.keys(x).length === 0) return ab('argument_ungueltig', `${k}: {tief?, mitte?, hoch?} expected`);
+  for (const b of Object.keys(x)) if (!EQ_BAENDER.includes(b as EqBand)) ab('argument_ungueltig', `${k}.${b}: unknown band (tief, mitte, hoch)`);
+  return x;
+}
+function eqArg(x: unknown): Partial<Record<EqBand, number>> {
+  const o = baenderArg(x, 'eq');
+  for (const b of Object.keys(o)) {
+    if (typeof o[b] !== 'number' || !Number.isFinite(o[b]) || (o[b] as number) < EQ_MIN || (o[b] as number) > EQ_MAX) {
+      ab('argument_ungueltig', `eq.${b}: ${EQ_MIN}..${EQ_MAX} dB expected`);
+    }
+  }
+  return o as Partial<Record<EqBand, number>>;
+}
+function killArg(x: unknown): Partial<Record<EqBand, boolean>> {
+  const o = baenderArg(x, 'kill');
+  for (const b of Object.keys(o)) if (typeof o[b] !== 'boolean') ab('argument_ungueltig', `kill.${b}: true or false expected`);
+  return o as Partial<Record<EqBand, boolean>>;
+}
 
 export const SPUR = {
   spur_neu(p, a, ctx) {
@@ -33,15 +55,22 @@ export const SPUR = {
 
   spur_aendern(p, a, ctx) {
     if (a.von !== undefined) ab('argument_ungueltig', 'von: unveränderlich (Spec 6.22), die Herkunft einer Spur ändert kein Befehl');
-    erlaube(a, 'spur_id', 'name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'geraet', 'gruppe', 'arm', 'eingang', 'monitor');
+    erlaube(a, 'spur_id', 'name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'geraet', 'gruppe', 'arm', 'eingang', 'monitor', 'filter', 'eq', 'kill');
     const s = spurVon(p, idArg(a, 'spur_id'));
-    if (['name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'geraet', 'gruppe', 'arm', 'eingang', 'monitor'].every((k) => a[k] === undefined)) {
+    const FELDER = ['name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'geraet', 'gruppe', 'arm', 'eingang', 'monitor', 'filter', 'eq', 'kill'];
+    if (FELDER.every((k) => a[k] === undefined)) {
       ab('argument_ungueltig', 'keine Änderung angegeben');
     }
     const name = text(a, 'name', 80);
     const gruppe = a.gruppe === null ? null : gruppeArg(a);       // null nimmt die Spur aus ihrer Gruppe
     if (a.farbe !== undefined && (typeof a.farbe !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(a.farbe))) ab('argument_ungueltig', 'farbe: #rrggbb erwartet');
     const fader = zahl(a, 'fader_db', FADER_MIN, FADER_MAX, { opt: true }), pan = zahl(a, 'pan', -1, 1, { opt: true });
+    const filter = zahl(a, 'filter', -1, 1, { opt: true });
+    if (filter !== undefined && s.zellen === undefined) ab('argument_ungueltig', 'filter: only for a track of a loop deck');
+    // EQ and kill of a loop deck track: validated here, merged per band below (nothing is written when anything is refused)
+    const eq = a.eq === undefined ? undefined : eqArg(a.eq), kill = a.kill === undefined ? undefined : killArg(a.kill);
+    if (eq !== undefined && s.zellen === undefined) ab('argument_ungueltig', 'eq: only for a track of a loop deck');
+    if (kill !== undefined && s.zellen === undefined) ab('argument_ungueltig', 'kill: only for a track of a loop deck');
     const mute = flagge(a, 'mute', true), solo = flagge(a, 'solo', true);
     if (a.geraet !== undefined && s.art !== 'instrument') ab('argument_ungueltig', 'geraet: nur für Instrument-Spuren');
     const geraet = a.geraet !== undefined ? baueGeraet(p, a.geraet, s.id, ctx) : undefined;
@@ -68,6 +97,13 @@ export const SPUR = {
     if (a.farbe !== undefined) s.farbe = a.farbe;
     if (fader !== undefined) s.fader_db = fader;
     if (pan !== undefined) s.pan = pan;
+    if (filter !== undefined) s.filter = filter;
+    if (eq !== undefined) s.eq = { ...(s.eq ?? {}), ...eq };
+    if (kill !== undefined) {
+      const k: Partial<Record<EqBand, true>> = { ...(s.kill ?? {}) };
+      for (const b of EQ_BAENDER) { if (kill[b] === true) k[b] = true; else if (kill[b] === false) delete k[b]; }
+      if (Object.keys(k).length > 0) s.kill = k; else delete s.kill;
+    }
     if (mute !== undefined) s.mute = mute;
     if (solo !== undefined) s.solo = solo;
     if (geraet && (s.automation ?? []).some((l) => istGeraetZiel(l.ziel) && !passtGeraetZiel(l.ziel, geraet))) {
@@ -89,6 +125,7 @@ export const SPUR = {
     erlaube(a, 'spur_id', 'name');
     const s = spurVon(p, idArg(a, 'spur_id'));
     if (s.art !== 'audio') ab('take_nur_audio', s.id);
+    if (s.zellen !== undefined) ab('argument_ungueltig', `${s.id} is a loop deck track: it holds cells, not take lanes`);
     if ((s.takes ?? []).length >= MAX_TAKES_PRO_SPUR) ab('takes_voll', `at most ${MAX_TAKES_PRO_SPUR} take lanes per track`);
     const nummer = (s.takes ?? []).filter((t) => t.art === undefined).length + 1;   // the Original lane does not count
     const name = a.name === undefined ? `Take ${nummer}` : takeName(a.name);

@@ -182,7 +182,7 @@ static void test_k2() {
     // ein REC über 4 Beats bei 135 BPM erreicht ihn genau einmal.
     {
       cdj::osc::Schreiber r(v::k_loop_rec);
-      r.h(8).s("pruefstand").i(4).s("k2_rec");
+      r.h(8).s("pruefstand").i(4).s("k2_rec").i(0);
       n.netz->paket(r.daten(), r.groesse());
     }
     const int64_t s_rec = n.x->kern->sample();

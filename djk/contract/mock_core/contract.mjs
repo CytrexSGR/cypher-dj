@@ -59,11 +59,12 @@ export const BEFEHLE = {
   '/k/fx': f('hsiidddddi', 'id quelle einheit art beats wet param1 param2 param3 an'),   // AUFTRAG 2026-09-28 (§4.10)
   '/k/fx/zuweisung': f('hsisi', 'id quelle einheit kanal an'),                          // AUFTRAG 2026-09-28 (§4.10)
   '/k/fx/routing': f('hsi', 'id quelle routing'),                                        // Ohr Task 15 (§4.10)
+  '/k/platz/kanal': f('hsii', 'id quelle pad inhalt'),   // DJ view places 3 and 4 (§4.10)
   '/k/kanal/graph': f('hsss', 'id quelle kanal name'),   // Baukasten S3c (§4.10)
   '/k/graph/frage': f('hs', 'id quelle'),   // Baukasten S16 (§4.10)
   '/k/loop/stopp': f('hsi', 'id quelle box'),
   '/k/loop/raster': f('hsii', 'id quelle box versatz_frames'),
-  '/k/loop/rec': f('hsis', 'id quelle beats name'),
+  '/k/loop/rec': f('hsisi', 'id quelle beats name summe'),
   '/k/arr/laden': f('hsi', 'id quelle nr'),                                       // D1 K1 (§4.11)
   '/k/arr/start': f('hsdi', 'id quelle start_beat quant'),
   '/k/arr/stopp': f('hsi', 'id quelle quant'),
@@ -78,6 +79,8 @@ export const BEFEHLE = {
   '/k/arr/auto': f('hsisi', 'id quelle spur ziel an'),                              // 1.12 Slice 3 (§4.11)
   '/k/arr/arm': f('hsiii', 'id quelle spur an modus'),                              // 1.12 Slice 3 (§4.11)
   '/k/arr/stift': f('hsiiiif', 'id quelle spur satz zeile spalte wert'),                       // Kraken patch field task 1 (§4.11)
+  '/k/arr/zelle_start': f('hssidd', 'id quelle spur zelle ab_beat versatz_beats'),     // loop deck V0 (§4.11)
+  '/k/arr/zelle_stopp': f('hssd', 'id quelle spur ab_beat'),                          // loop deck V0 (§4.11)
   '/k/arr/note': f('hsiii', 'id quelle spur ton vel'),                              // sampler plan A1 task 7 (§4.11)
   '/test/hand': f('sfh', 'pfad midi_roh sample'),
   '/test/klick': f('hssi', 'id quelle kanal an'),
@@ -122,12 +125,14 @@ export const AUSGABEN = {
   '/e/fx': f('iidddddi', 'einheit art beats wet param1 param2 param3 an'),   // AUFTRAG 2026-09-28 (§5.12)
   '/e/fx/zuweisung': f('isi', 'einheit kanal an'),                          // AUFTRAG 2026-09-28 (§5.12)
   '/e/fx/routing': f('i', 'routing'),                                       // Ohr Task 15 (§5.12)
+  '/e/platz/kanal': f('ii', 'pad inhalt'),   // DJ view places 3 and 4 (§5.12)
   '/e/kanal_limiter': f('ii', 'gebaut latenz_samples'),                             // 1.15 A5c (§5.12)
   '/e/graph': f('ss', 'kanal name'),   // Baukasten S16 (§5.12)
   '/e/mitschnitt': f('siid', 'name beats status ab_beat'),
   '/zustand/arr': f('iiidhdif', 'nr status loop_an projekt_beat ursprung_sample start_beat metronom_an limiter_db'),   // D1 K1 (§5.13)
   '/zustand/ein': f('ihhhh', 'verbunden midi_gesehen midi_verloren midi_sample flanke_sample'),   // I08 (§5.14)
   '/zustand/rec': f('iiihdiii', 'status kennung scharf luecken projekt_beat ausgang_vorhalt quantum rec_midi_scharf'),   // 1.8 (§5.14)
+  '/zustand/zelle': f('siiddid', 'spur zelle verwaist ab_beat versatz_beats wartend wartend_ab'),   // loop deck V0 (§5.13): the cell state of one loop deck track
   '/zustand/warp': f('iiiii', 'stimmen unterlauf kein_platz spaet faeden'),   // 1.13 Slice 2 (§5.13): Zähler des Warp-Werks
   '/zustand/spur_pool': f('iiiiiiiii', 'an modus blocks_parallel einheiten_worker einheiten_caller seriell_summe haengt spaet zurueck'),   // mehrkern slice 3.2 (§5.13): track phases on the Hall pool
   '/zustand/hall_pool': f('iiii', 'an faeden spaet zurueck'),   // mehrkern Task 5 (§5.13): Zustand des Hall-Pools
@@ -159,7 +164,7 @@ export const GRUENDE = new Set(['zu_spaet', 'regler_beim_menschen', 'regler_verp
   'kein_eingang', 'aufnahme_laeuft', 'zu_viele_scharf', 'eingang_fehlt', 'kein_platz',   // 1.8 (§4.12)
   'warp_maschine_fehlt',                                                                    // 1.13 Slice 2 (§4.11, §16.2)
   'nur_andreas', 'auto_ziel_unbekannt',
-  'laeuft', 'host_fehlt', 'kein_rueckweg', 'belegt', 'schreiber_ueberlauf']);                                                 // 1.12 Slice 3 (§4.11, §16.2)
+  'laeuft', 'host_fehlt', 'kein_rueckweg', 'belegt', 'schreiber_ueberlauf', 'zelle_leer']);                                                 // 1.12 Slice 3 (§4.11, §16.2)
 
 // §1.5 Kanäle
 export const DECKS = [1, 2, 3, 4].map((n) => `deck/${n}`);
@@ -208,6 +213,8 @@ for (let n = 1; n <= 32; n++) {   // D1 K1 (§1.5), E3: 32 Slots: Spur-Regler de
   REGLER.set(`spur/${n}/pan`, { ...R(LIN, -1, 1, 0), kanal: null });
   REGLER.set(`spur/${n}/mute`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
   REGLER.set(`spur/${n}/solo`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
+  REGLER.set(`spur/${n}/filter`, { ...R(LIN, -1, 1, 0), kanal: null });   // loop deck K7a: DJ filter of a track, -1 low-pass .. +1 high-pass
+  for (const b of ['tief', 'mitte', 'hoch']) REGLER.set(`spur/${n}/eq/${b}`, { ...R(DB, -200, 6, 0), kanal: null });   // loop deck channel strip KZ1: isolator band of a track, -200 = kill
 }
 for (let n = 1; n <= 16; n++) {   // 1.10 Slice 1 (§1.5): Gruppen-Regler, global, alle dürfen
   REGLER.set(`grp/${n}/fader`, { ...R(DB, -200, 6, 0), kanal: null });

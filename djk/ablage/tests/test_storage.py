@@ -27,7 +27,7 @@ def test_gleiche_tabelle_wie_ts(tmp_path):
     r = subprocess.run(["node", "--input-type=module", "-e", js], cwd=REPO / "djk" / "ui", env=env, capture_output=True, text=True, timeout=60)
     assert r.returncode == 0, r.stderr
     assert json.loads(r.stdout) == {a: ablage.orte(a, env) for a in ablage.arten()}
-    assert len(ablage.arten()) == 11
+    assert len(ablage.arten()) == 12
 
 
 def test_env_leer_ist_ungesetzt():

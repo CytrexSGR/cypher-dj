@@ -38,7 +38,7 @@ import { TransientenLager } from '../../project/transients.ts';
 import { DekodierCache, type DekodierEreignis } from '../../project/decode.ts';
 import { deckleDekodiert } from '../../project/cache_deckel.ts';
 import {
-  alleInserts, alleStraenge, BK_LIVE_SLOTS, BK_PARAMETER, bkSlot, FADER_MAX, FADER_MIN,
+  alleInserts, alleStraenge, alleZellen, BK_LIVE_SLOTS, BK_PARAMETER, bkSlot, FADER_MAX, FADER_MIN,
   HALL_FELDER, MAX_BEAT, TEMPO_MIN, TEMPO_MAX, kanonisch, sucheClip, sucheSpur, sucheStrang, wertImBereich,
   type AudioClip, type Clip, type DekodiertZustand, type Lane, type Projekt, type Spur, type Warp, type Ziel,
 } from '../../project/model.ts';
@@ -129,6 +129,14 @@ export type AusgabeLauf = { art: 'freeze'; spur_id: string }
   | { art: 'export'; echtzeit?: true; start_ms?: number; dauer_s?: number } | { art: 'lautheit' } | { art: 'analyse' } | { art: 'merge' }
   | { art: 'bounce' }   // 1.14 slice 4 (spec R11)
   | { art: 'resample'; strang_id: string };   // 1.10 slice 7 (T6): the strip being tapped
+// Loop deck cell sources of a project: sha -> path hint (the first cell that names one wins). Decoded like clip sources.
+function alleZellQuellen(p: Projekt): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const z of alleZellen(p)) {
+    if ((!m.has(z.sha256) || (m.get(z.sha256) === '' && z.pfad_hinweis))) m.set(z.sha256, z.pfad_hinweis ?? '');
+  }
+  return m;
+}
 // vorhoeren (1.14 comping, spec R8): spur_id -> take_id of the audition. Session state: never saved, never undoable, gone with the open project.
 // a change added or replaced an audio clip: some sha of the new state is not in the old one
 function neueQuelle(alt: Projekt, neu: Projekt): boolean {
@@ -721,8 +729,10 @@ export class ProjSitzung {
   }
   // POST /live/oeffnen (plan live-module task 1): open the live container (slug `live`), creating it on the first call (flag live, loop region on, 0..64).
   // Already open: nothing is reopened (a reopen would stop the set); the answer is the same. Opening it from another project is guarded like any open.
-  async liveOeffnen(quelle: Quelle, bestaetigt = false): Promise<Antwort> {
-    const r = await this.liveOeffnenOhneTempo(quelle, bestaetigt);
+  // nurWennLeer (loop deck writes): the container is opened or created only if no project is open when this job's turn comes; any other open project
+  // (also one that was opened by a job queued before this one) is 409 projekt_offen and nothing changes
+  async liveOeffnen(quelle: Quelle, bestaetigt = false, nurWennLeer = false): Promise<Antwort> {
+    const r = await this.liveOeffnenOhneTempo(quelle, bestaetigt, nurWennLeer);
     if (r.code === 200) {
       await this.liveTempo(quelle);
       const fader = await this.liveFaderErgebnis();
@@ -816,10 +826,14 @@ export class ProjSitzung {
     const d = { rev: o.projekt.rev, label: 'Live tempo', befehle: [{ befehl: 'tempo_setzen', bpm }] };
     try { await this.aendern(d, quelle); } catch { /* shown tempo only */ }
   }
-  private liveOeffnenOhneTempo(quelle: Quelle, bestaetigt = false): Promise<Antwort> {
+  private liveOeffnenOhneTempo(quelle: Quelle, bestaetigt = false, nurWennLeer = false): Promise<Antwort> {
     return this.seriell(async () => {
       this.riegel(quelle);
       if (this.offen?.projekt.live) return { code: 200, j: { slug: this.offen.slug, slots: liveSlotsAntwort(this.offen.projekt) } };
+      if (nurWennLeer && this.offen) {
+        throw new ProjFehler(409, 'projekt_offen',
+          { text: 'A project is open. Open the live container first (LIVE); the loop deck never closes a project by itself.' });
+      }
       this.sperreOeffnen(); this.sperreLiveLaeuft(quelle, bestaetigt); this.sperreFremderTransport(quelle);
       return this.oeffnetGerade(async () => {
         try {
@@ -1150,10 +1164,13 @@ export class ProjSitzung {
     return { kanaele: 'spur/0', quittung: q };
   }
 
-  /** The shas of the audio clips of the open project (the decode cap never removes them). */
+  /** The shas of the audio clips and of the loop deck cells of the open project (the decode cap never removes them). */
   offeneShas(): Set<string> {
     const aus = new Set<string>();
-    if (this.offen) for (const c of alleAudioClips(this.offen.projekt)) aus.add(c.quelle.sha256);
+    if (this.offen) {
+      for (const c of alleAudioClips(this.offen.projekt)) aus.add(c.quelle.sha256);
+      for (const z of alleZellen(this.offen.projekt)) aus.add(z.sha256);
+    }
     return aus;
   }
   private readonly deckelGemeldet = new Set<string>();
@@ -1201,7 +1218,8 @@ export class ProjSitzung {
     const o = this.offen;
     if (!o) return null;
     for (const c of alleAudioClips(o.projekt)) if (c.quelle.sha256 === sha) return this.quellPfad(sha, c.quelle.pfad_hinweis);   // take clips too (R9)
-    return null;
+    const zellHinweis = alleZellQuellen(o.projekt).get(sha);   // a loop deck cell: its project-relative file
+    return zellHinweis === undefined ? null : this.quellPfad(sha, zellHinweis);
   }
   // Setzt dekodiert aller Audio-Clips (ohne rev, Spec 6.6) und fordert fehlende Dekodierungen an. fehlerNeu: auch Fehlgeschlagene neu versuchen.
   // Rückgabe: die shas, deren Zustand sich geändert hat (Haupt- und Take-Clips); ob das die Wiedergabe betrifft, sagt betrifftWiedergabe.
@@ -1216,6 +1234,18 @@ export class ProjSitzung {
       if (z === 'fertig') this.cache.beruehre(c.quelle.sha256);   // a project uses this decode: the size cap removes the unused ones first
       if (c.dekodiert !== z) { c.dekodiert = z; geaendert.add(c.quelle.sha256); }
     }
+    // loop deck cells: decoded like clip sources. A cell carries no state field, so the last seen state per sha is kept here
+    const zellShas = alleZellQuellen(p);
+    for (const sha of this.zellZustand.keys()) if (!zellShas.has(sha)) this.zellZustand.delete(sha);   // no cell carries it any more
+    for (const [sha, hinweis] of zellShas) {
+      let z = this.zustandVon(sha);
+      if (z === 'nein' || (fehlerNeu && z === 'fehler')) {
+        const pfad = this.quellPfad(sha, hinweis, slug);
+        z = pfad ? this.cache.fordereAn(sha, pfad) : 'fehler';
+      }
+      if (z === 'fertig') this.cache.beruehre(sha);
+      if (this.zellZustand.get(sha) !== z) { this.zellZustand.set(sha, z); geaendert.add(sha); }
+    }
     return geaendert;
   }
   // 1.14 comping: the one place that decides whether a changed decode state reaches the playback. Today only main clips are played, so a take-only
@@ -1223,6 +1253,7 @@ export class ProjSitzung {
   private betrifftWiedergabe(p: Projekt, geaenderteShas: Iterable<string>): boolean {
     const shas = new Set(geaenderteShas);
     if (shas.size === 0) return false;
+    for (const sha of alleZellQuellen(p).keys()) if (shas.has(sha)) return true;   // a loop deck cell is played from its decode
     for (const s of p.spuren) for (const c of s.clips) if (c.art === 'audio' && shas.has(c.quelle.sha256)) return true;
     // 1.14: a take clip counts when a track auditions that take
     for (const [spurId, takeId] of this.offen?.vorhoeren ?? []) {
@@ -1231,6 +1262,7 @@ export class ProjSitzung {
     }
     return false;
   }
+  private readonly zellZustand = new Map<string, DekodiertZustand>();
   private dekodiertEreignis(e: DekodierEreignis): void {
     void this.seriell(async () => {
       const o = this.offen;
@@ -1240,6 +1272,7 @@ export class ProjSitzung {
         c.dekodiert = e.zustand;
         this.ctx.verteile({ a: 'proj', f: { clip_id: c.id, dekodiert: e.zustand } });   // ohne neue rev (Festlegung V1)
       }
+      if (alleZellQuellen(o.projekt).has(e.sha)) this.zellZustand.set(e.sha, e.zustand);
       if (e.zustand === 'fertig' && this.betrifftWiedergabe(o.projekt, [e.sha])) await this.ladeOderMerke('andreas');
     }).catch((x) => this.ctx.log({ typ: 'proj_dekodier_fehler', sha: e.sha, fehler: (x as Error).message }));
   }
@@ -1318,7 +1351,8 @@ export class ProjSitzung {
       this.pruefeRev(o, d.rev);
       // quelle: Herkunft für spur_neu (Spec 6.22)
       const probe = fuehreListeAus(o.projekt, befehle, {
-        geraetFx, quelle, transienten: this.transienten, graphArt, steckfeldVon: steckfeldLookup, kitDa, presetLies: this.presetLies, surgeBereich,
+        geraetFx, quelle, ordner: path.resolve(this.projekte.wurzelPfad, o.slug), transienten: this.transienten, graphArt, steckfeldVon: steckfeldLookup, kitDa,
+        presetLies: this.presetLies, surgeBereich,
         surgePatchDa, pluginDa: (pl) => pl.format !== 'vst3' || fs.existsSync(pl.pfad),
         musterUebersetze: uebersetzeAusCache, kitKlaenge, musterMeldung: (m) => musterBerichte.push(m),
         ...(this.pluginIndex ? { pluginIndex: this.pluginIndex } : {}),

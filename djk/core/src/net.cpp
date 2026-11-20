@@ -257,6 +257,13 @@ void Netz::sende_neustart(int nur_port) {
   osc::Schreiber r(v::e_fx_routing);
   r.i(fx_routing_stand_);
   if (nur_port) an_port(nur_port, r); else an_alle(r);
+  // DJ view places 3 and 4: the place channel of each pad that is not 0 (the default; nothing is sent while both are 0)
+  for (int p = 0; p < 2; ++p) {
+    if (platz_kanal_stand_[p] == 0) continue;
+    osc::Schreiber pk(v::e_platz_kanal);
+    pk.i(p + 1).i(platz_kanal_stand_[p]);
+    if (nur_port) an_port(nur_port, pk); else an_alle(pk);
+  }
 }
 
 void Netz::sende_stand(int port) {

@@ -244,6 +244,7 @@ class Netz {
   double stand_bpm_ = 0.0;
   int32_t stand_generation_ = 0;
   int64_t neustart_sample_ = 0;                    // Scheibe 18: erstes Sample der laufenden Generation
+  int32_t platz_kanal_stand_[2] = {};              // DJ view places 3 and 4: last reported inhalt of pad/1, pad/2 (0 = nothing, the default of the kern)
   int32_t fx_routing_stand_ = 0;                   // Ohr T17: zuletzt gemeldetes FX-Routing (0 Post Fader = Vorgabe des Kerns)
   cdj_z_datei* zustand_ = nullptr;                 // Scheibe 18
   FachSchreiber<cdj_z_abos> abo_schreiber_;        // Scheibe 18
@@ -251,6 +252,7 @@ class Netz {
   // Scheibe 25
   std::unique_ptr<cypherdj::stellwerk::ReglerTabelle> tabelle_;  // Pfade für /test/hand (dieselbe wie im Stellwerk)
   Verteilung verteilung_;
+  int64_t zelle_verloren_gesehen_ = 0;             // loop deck K6: launcher receipts dropped, as last logged (from ZELLE_ZUSTAND)
   int32_t ki_gestoppt_ = 0;                        // aus /e/ki, für /zustand/kern
   int64_t ereignisse_verloren_ = 0;                // aus dem /uhr-Ereignis (Kern::verloren_), für /zustand/kern (D1 K1 Fix 10)
 };

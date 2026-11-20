@@ -156,7 +156,7 @@ function bauePlatz(n) {
   leeren.title = 'Remove the sequencer of this place with its patterns';
   const gross = knopf('sq-chip sq-gross', '⤢', 'sqGross');
   gross.title = 'Large view'; gross.setAttribute('aria-pressed', 'false');
-  // PLAY/STOP: the transport of the live container (POST /proj/transport); every SEQ deck and loop slot of the container starts and stops with it
+  // PLAY/STOP: the transport of the live container (POST /proj/transport); every SEQ deck and loop deck track of the container starts and stops with it
   const spiel = knopf('sq-chip sq-spiel', '▶ PLAY', 'sqSpiel');
   spiel.title = 'Play or stop this deck: it joins a running transport on the next bar; on a stopped one it starts alone';
   const leerAus = knopf('sq-chip sq-leer-aus', 'hide empty', 'sqLeerAus');

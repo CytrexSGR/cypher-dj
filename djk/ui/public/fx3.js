@@ -22,9 +22,11 @@ export function ladeSchritte(graphen) {
 }
 export const entladeSchritte = (graphen) => (geladen(graphen) ? [{ kanal: PLATZ, name: '' }] : []);
 
-// The channels the page offers for unit 3, in mixer order: the strips of the four places, then the Strudel streams when a place shows Strudel.
+// The channels the page offers for unit 3, in mixer order: the strips of the four places, the loop strips L1 and L2 (always in the mixer, whether a
+// Loops place shows the deck or not), then the Strudel streams when a place shows Strudel.
 export function kanaele(layout) {
   const k = [1, 2, 3, 4].flatMap((p) => streifen(layout, p).map((s) => s.kanal));
+  k.push('pad/1', 'pad/2');
   if (layout.includes('strudel')) k.push('erz/1', 'erz/2', 'erz/3');
   return k;
 }

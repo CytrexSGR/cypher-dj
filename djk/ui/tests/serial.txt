@@ -138,3 +138,4 @@ tracker_import_mod.test.mjs
 tracker_vorlagen.test.mjs
 proj_steckfeld_route.test.mjs
 controller_targets_track.test.mjs
+loopdeck_wave.test.mjs

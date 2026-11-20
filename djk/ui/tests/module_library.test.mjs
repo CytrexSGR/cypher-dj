@@ -91,6 +91,10 @@ test('placing twice gives new ids and numbers every time; the stems tree (nested
   assert.equal(new Set(p.spuren.map((s) => s.nr)).size, 4);
   assert.equal(new Set(p.spuren.flatMap((s) => s.clips.map((c) => c.id))).size, p.spuren.flatMap((s) => s.clips).length);
   assert.deepEqual(baum(p, e1.j.gruppe_id), baum(mitStems, gB), 'the nested tree is the one that was saved');
+  // the listing names the stems the module really has: the stem argument of the loop deck source {modul, stem}
+  const stemNamen = (id) => z.bib.liste(new URL('http://x/module')).j.module.find((m) => m.id === id).stem_namen;
+  assert.deepEqual(stemNamen(idB).map((n) => n.toLowerCase()).sort(), ['bass', 'drums']);
+  assert.deepEqual(stemNamen(z.id), [], 'a loop-only module has none');
   assert.equal(p.gruppen.filter((g) => g.ausgang === undefined).length, 2, 'two top groups');
 });
 
@@ -201,6 +205,10 @@ test('page: the MODULES list shows title, artist, key, date, set and a PLACE but
   const html = modulZeilen([{ id: 'abc', titel: 'Song <1>', kuenstler: 'Art', tonart: '8A', datum: '2026-11-12', set: 'Fri', stems: true }]);
   for (const x of ['Song &lt;1&gt;', 'Art', '8A', '2026-11-12', 'Fri', 'data-modul-setzen="abc"', 'PLACE']) assert.ok(html.includes(x), x);
   assert.ok(modulZeilen([]).includes('No modules saved yet'));
+  const nur = modulZeilen([{ id: 'x', titel: 'T', stems: true, stem_namen: ['Bass'] }]);
+  assert.ok(nur.includes('"stem":"Bass"') || nur.includes('&quot;stem&quot;:&quot;Bass&quot;'));
+  assert.ok(!nur.includes('Drums'), 'no fixed fallback list: only the real stems are offered');
+  assert.ok(!modulZeilen([{ id: 'x', titel: 'T', stems: true }]).includes('Drums'));
   const el = () => { const e = { innerHTML: '', value: '', ereignisse: {}, addEventListener: (n, f) => { e.ereignisse[n] = f; }, kinder: {}, querySelector: (s) => e.kinder[s] }; return e; };
   const reiter = el(), tabelle = el(), suche = el(), liste = el();
   tabelle.kinder['[data-modul-suche]'] = suche; tabelle.kinder['[data-modul-liste]'] = liste;

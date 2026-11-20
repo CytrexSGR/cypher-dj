@@ -16,6 +16,7 @@ const LAYOUTE = {
   standard: [...LAYOUT_STANDARD],
   'track track track loops': ['track', 'track', 'track', 'loops'],
   'loops track strudel track': ['loops', 'track', 'strudel', 'track'],
+  'loops2 seq loops track': ['loops2', 'seq', 'loops', 'track'],
 };
 const vorlage = html.slice(html.indexOf('<template id="zug-vorlage">'), html.indexOf('</template>', html.indexOf('<template id="zug-vorlage">')));
 const TEILE = [...vorlage.matchAll(/data-teil="([^"]+)"/g)].map((m) => m[1]);
@@ -30,11 +31,13 @@ for (const [name, layout] of Object.entries(LAYOUTE)) {
     const plan = mixerPlan(layout);
     const gesehen = plan.reihen.flat().filter(Boolean);
     // place order: row 1 holds the strips of places 1 and 2, row 2 of places 3 and 4, left place left
-    const plaetze_ = gesehen.map((s) => s.platz);
-    assert.deepEqual(plaetze_, [...plaetze_].sort((a, b) => a - b), 'strips in place order');
+    const decks = gesehen.filter((s) => s.art === 'deck').map((s) => s.platz);
+    assert.deepEqual(decks, [...decks].sort((a, b) => a - b), 'deck strips in place order');
+    assert.deepEqual(gesehen.filter((s) => s.art === 'pad').map((s) => s.kanal), ['pad/1', 'pad/2'], 'L1 and L2 are always in the plan');
     for (const s of gesehen) {
+      if (s.art === 'pad') { assert.equal(s.platz, s.nr + 2, 'pad/1 is the fader of place 3, pad/2 of place 4'); continue; }
       const erwartet = layout[s.platz - 1];
-      assert.equal(s.art === 'deck' ? 'track' : s.art === 'erz' ? 'strudel' : 'loops', erwartet);
+      assert.ok(s.art === 'deck' ? ['track', 'seq', 'loops', 'loops2'].includes(erwartet) : s.art === 'erz' ? erwartet === 'strudel' : false);
       if (s.art === 'deck') assert.equal(s.kanal, `deck/${s.platz}`, 'a Track place N shows the strip of deck N');
       for (const k of praefixe(s)) for (const t of TEILE) assert.ok(ZIELE.has(`${k}/${t}`), `${k}/${t} is a control target`);
     }
@@ -71,4 +74,17 @@ test('the DJ view lets the strips take cells of the page grid around a fixed mid
   assert.match(html, /<div class="fxmitte" id="fxmitte"/);
   assert.match(css, /body\.studio #pult \{[^}]*"c c mo" "mu d mo"/);
   assert.match(css, /body\.studio #mischer-unten \{ grid-template-columns: repeat\(5, var\(--zug\)\)/);
+});
+
+test('the page writes the loop deck outputs from the layout: after every place change and with the live project, one request, refusals not repeated; strip heads name the deck', () => {
+  const ansicht = lies('slots_view.js');
+  assert.match(ansicht, /holeJson\('\/loopdeck\/plaetze', \{ platz: body \}\)/);
+  const z = ansicht.slice(ansicht.indexOf('export function zeigePlaetze()'));
+  assert.match(z.slice(0, 300), /gleicheLoopPlaetzeAb\(\)/, 'the live project arriving draws the places, which compares once');
+  assert.match(ansicht, /loopPlatzAbweichung\(plaetzeLayout, live\.projekt\)/);
+  assert.match(ansicht, /schluessel === loopPlatzSchluessel\) return/, 'a refusal is not repeated until the revision moves');
+  const a = ansicht.slice(ansicht.indexOf('function wendePlaetzeAn()'), ansicht.indexOf('function platzZustand'));
+  assert.match(a, /zeigeZugKoepfe\(\)/);
+  assert.match(a, /zeigePlaetze\(\)/);
+  assert.match(ansicht, /textContent = zugKopf\(plaetzeLayout, art, nr\)/);
 });

@@ -69,6 +69,8 @@ for (let n = 1; n <= 32; n++) {   // D1 K1 (§1.5), E3: 32 Slots: Spur-Regler de
   tabelle.set(`spur/${n}/pan`, { pfad: `spur/${n}/pan`, kanal: null, ...r('linear', -1, 1, 0) });
   tabelle.set(`spur/${n}/mute`, { pfad: `spur/${n}/mute`, kanal: null, ...r('schalter', 0, 1, 0) });
   tabelle.set(`spur/${n}/solo`, { pfad: `spur/${n}/solo`, kanal: null, ...r('schalter', 0, 1, 0) });
+  tabelle.set(`spur/${n}/filter`, { pfad: `spur/${n}/filter`, kanal: null, ...r('linear', -1, 1, 0) });   // loop deck K7a: DJ filter of a track
+  for (const b of ['tief', 'mitte', 'hoch']) tabelle.set(`spur/${n}/eq/${b}`, { pfad: `spur/${n}/eq/${b}`, kanal: null, ...r('db', -200, 6, 0) });   // loop deck channel strip KZ1: isolator band of a track, -200 = kill
 }
 for (let n = 1; n <= 16; n++) {   // 1.10 Slice 1 (§1.5): Gruppen-Regler des Arrangements, global, alle dürfen; Fader bis +6 dB
   tabelle.set(`grp/${n}/fader`, { pfad: `grp/${n}/fader`, kanal: null, ...r('db', -200, 6, 0) });

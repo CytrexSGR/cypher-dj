@@ -15,6 +15,7 @@ import { hkStrecke, hkWert, istModulation, modulationsZiel, type Huellkurve } fr
 import { hatFxArbeit, rolleFxAus, type FxRahmen } from './fx_ausrollen.ts';
 import { geraetFx as geraetFxRegister } from '../devices_parameter.ts';   // default device mode of `uebersetze` (a caller cannot forget it)
 import { trackerEinstellung } from '../public/tracker/grid_model.js';   // LPB and TICKS of the project (task 1)
+import { LOOP_MAX_FRAMES, loopDjNr, loopDjNrVon } from './model.ts';
 import type { GliedGeraet, AudioClip, Clip, Insert, InsertTraeger, Lane, Ziel, MidiClip, Note, Projekt, Punkt, Spur, Warp } from './model.ts';
 import type { Stift } from '../steckfeld.ts';
 
@@ -41,6 +42,9 @@ export interface WAudioClip {
   warp?: { modus: number; w: [number, number][]; pitch?: number; e?: [number, number][]; loop?: number; huelle?: number };
   gain_hk?: [number, number, number][];   // 1.12 slice 5 (/2 only, D8): the gain envelope of this copy [copy beat, dB, formcode]
 }
+// loop deck cell in the playback (index 1.2): modus 2 (complex) for a loop, 0 (repitch, played unstretched) for einmal;
+// the core loader wants beats on every cell, 0 for einmal
+export interface WZelle { index: number; sha256: string; datei: string; frames: number; beats: number; art: 'loop' | 'einmal'; gain_db: number; modus: 0 | 2 }
 export interface WNote { id: string; beat: number; laenge: number; ton: number; vel: number }
 export type WZiel = { art: 'gruppe'; nr: number };   // fehlt `ausgang`, zeigt die Spur auf den Produktions-Master
 // Automation Slice 1 (nur /2): je Lane Ziel und Punkte [beat, wert dB, formcode], Formcode 0 linear, 1 s, 2 sprung; die Spur trägt `auto` nur mit Lane
@@ -67,7 +71,8 @@ export type HostStufe = { an: boolean; latenz: number };
 // the load that brings the stems of a module
 export type WSpur = WSpurKern & { stumm_start?: true };
 type WSpurKern =
-  | { nr: number; art: 'audio'; clips: WAudioClip[]; ausgang?: WZiel; auto?: WAuto[]; chain?: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] }
+  | { nr: number; art: 'audio'; clips: WAudioClip[]; ausgang?: WZiel; auto?: WAuto[]; chain?: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[];
+      id?: string; zellen?: WZelle[] }   // id and zellen: only the audio tracks of a loop deck group (index 1.2)
   | { nr: number; art: 'intern'; geraet: 'rb338' | 'bk'; graph?: string; parameter: Record<string, number>; noten: WNote[]; ausgang?: WZiel;
     // Kraken patch field: the pin list of a bk track's matrix block, written only when the device has one (an empty list = all pins zero)
     stifte?: [number, number, number, number][];
@@ -96,7 +101,7 @@ export interface WGruppe {
 }
 // slice 4: the send taps before the fader (absent = post)
 // auto (only /3): the fader lane of the return, points [beat, dB, formcode] as on a track
-export interface WReturn extends Omit<WGruppe, 'ausgang'> { ausgang: { art: 'master' }; pre?: true; auto?: WAuto[] }
+export interface WReturn extends Omit<WGruppe, 'ausgang'> { ausgang: { art: 'master' } | { art: 'dj'; nr: 1 | 2 }; pre?: true; auto?: WAuto[] }
 export interface Wiedergabe {
   format: typeof WIEDERGABE_FORMAT | typeof WIEDERGABE_FORMAT_2 | typeof WIEDERGABE_FORMAT_3; nr: number; spuren: WSpur[]; live?: true; gruppen?: WGruppe[];
   // returns (slice 3) like the groups; pm = the production master's chain, the kern's key (slice 4)
@@ -330,6 +335,20 @@ const spurClips = (s: Spur, vorhoeren?: ReadonlyMap<string, string>): readonly C
   return id === undefined ? s.clips : s.takes?.find((t) => t.id === id)?.clips ?? s.clips;
 };
 
+// The cells of a loop deck track for the snapshot (index 1.2): only filled cells whose decoded frames are known. Undefined for every other track
+// (they get neither `id` nor `zellen`). The filter is a control row and is not written here.
+function deckZellen(s: Spur, o: Required<Pick<UebersetzOptionen, 'frames'>> & UebersetzOptionen): WZelle[] | undefined {
+  if (s.zellen === undefined) return undefined;
+  const aus: WZelle[] = [];
+  s.zellen.forEach((z, i) => {
+    if (!z) return;
+    const frames = o.frames!(z.sha256);
+    if (frames === null || frames > LOOP_MAX_FRAMES) return;   // not decoded yet, or longer than the core takes (index 1.2)
+    aus.push({ index: i + 1, sha256: z.sha256, datei: path.join(o.audioOrdner, `${z.sha256}.f32`), frames,
+      beats: z.beats ?? 0, art: z.art, gain_db: z.gain_db, modus: z.art === 'loop' ? 2 : 0 });
+  });
+  return aus;
+}
 function audioClips(c: AudioClip, o: Required<Pick<UebersetzOptionen, 'frames'>> & UebersetzOptionen): WAudioClip[] {
   if (c.stumm) return [];   // Slice 6 (D12): stumm, Live und Export gleich
   if (c.dekodiert !== 'fertig') return [];                   // Spec 3.2: nur fertig dekodierte Clips
@@ -587,7 +606,8 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
       const cs = spurClips(s, o.vorhoeren).flatMap((c) => (c.art === 'audio' ? audioClips(c, o) : []))
         .sort((a, b) => a.start_beat - b.start_beat || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
       clips += cs.length;
-      return { nr: s.nr, art: 'audio', clips: cs };
+      const zellen = deckZellen(s, o);
+      return { nr: s.nr, art: 'audio', clips: cs, ...(zellen ? { id: s.id, zellen } : {}) };
     }
     const g = s.geraet!;
     if (wirtSlots(s).length > 0 && s.freeze) {            // 1.9 U7 T4: a frozen rack with a Surge member is its audio clip too
@@ -664,7 +684,7 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
     if (g.ausgang && ziel === undefined) throw new WiedergabeFehler('ziel_unbekannt', `Gruppe ${g.id} zeigt auf ${g.ausgang.id}`);
     // DJ view places (decision 6, ADR 038): derived, not stored. The top group of a live project that holds the module of slot A or B
     // plays into pad/1 or pad/2, and one that holds a SEQ document in place N (Gruppe.seq.platz) plays into deck/N, DJ channel N + 2
-    const slotNr = g.modul?.slot ? (g.modul.slot === 'A' ? 1 : 2) : g.seq ? g.seq.platz + 2 : 0;
+    const slotNr = g.modul?.slot ? (g.modul.slot === 'A' ? 1 : 2) : g.loopdeck ? loopDjNr(g.loopdeck) : g.seq ? g.seq.platz + 2 : 0;
     const dj = p.live === true && ziel === undefined ? slotNr : 0;
     const ausgang = dj ? { art: 'dj' as const, nr: dj as WDjNr }
       : ziel === undefined ? { art: 'master' as const } : { art: 'gruppe' as const, nr: ziel };
@@ -675,7 +695,9 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
     const rl = (r.automation ?? []).filter((l) => l.ziel === 'fader');
     autoPunkte += rl.reduce((n, l) => n + l.punkte.length, 0);
     const auto = rl.map((l): WAuto => ({ ziel: 'fader', punkte: l.punkte.map((q) => [q.beat, q.wert, FORM_NR[q.form ?? 'linear']]) }));
-    return { nr: r.nr, ausgang: { art: 'master' as const }, ...(r.pre ? { pre: true as const } : {}), ...(auto.length ? { auto } : {}),
+    // a loop deck return sounds in its deck's DJ channel (live container only); every other return goes to the master as before
+    return { nr: r.nr, ausgang: r.loopdeck && p.live === true ? { art: 'dj' as const, nr: loopDjNrVon(p, r.loopdeck.platz) } : { art: 'master' as const },
+      ...(r.pre ? { pre: true as const } : {}), ...(auto.length ? { auto } : {}),
       ...kette(r.inserts, r) };
   });
   const pmW = p.master?.inserts?.length ? kette(p.master.inserts, p.master) as { chain: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] } : undefined;

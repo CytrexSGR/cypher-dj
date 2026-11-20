@@ -86,7 +86,8 @@ void ArrLader::rueckgabe_frei(ArrSnapshot* s, bool& arbeit) {
 }
 
 bool ArrLader::einmal(ArrLaderRinge& r) {
-  bool arbeit = cache_.bk_nachholen();   // S20: graph instances whose free waited for the sink
+  bool arbeit = cache_.audio_nachholen(werk_) > 0;   // K4: audio that a launcher voice held past its snapshot
+  arbeit |= cache_.bk_nachholen();   // S20: graph instances whose free waited for the sink
 #ifndef CYPHERDJ_MUTATION_ARR_KIT_OHNE_NACHHOLEN
   arbeit |= cache_.kit_nachholen();      // 1.9: kits whose free waited for the sink
 #endif

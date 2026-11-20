@@ -99,6 +99,9 @@ struct Befehl {
     ARR_EXPORT_LAUF = 56,  // plan 1.11 T12 (§4.11 /k/arr/export_lauf): zeiger = ArrExportLauf* (job with its ring, owned by a writer thread of the net layer); von/bis in the job; no event comes back, the job reports through its own phase
     TASTEN_ZIEL = 59,      // Task N2 (§4.7 /k/live/tasten): nr = the stream (0 none, 2, 3, 5, 6, 7, 9, 10) that plays the keys of all midi_ein places; plain integers, applied at once in the cycle (Erzeuger::tasten_ziel)
     ARR_STIFT = 60,        // kraken patch field (§4.11 /k/arr/stift): nr = spur (1..32), form = satz (0 A, 1 B), politik = zeile (0..15), fassung = spalte (0..15), wert = pin value (-1..1); sets one pin of the matrix of a bk track through Arrangement::live_stift (callback thread, stamped with the snapshot generation), no pointer, no allocation
+    ARR_ZELLE_START = 61,  // loop deck K6 (§4.11 /k/arr/zelle_start): pfad = track id text (hashed with arr_id in the kern), nr = zelle (1..8), ab_beat = core beat of the effect, wert_beats = versatz_beats (position inside the cell at ab_beat), id, quelle; Arrangement::launch_start (callback thread), plain values, no pointer, no allocation
+    ARR_ZELLE_STOPP = 62,  // loop deck K6 (§4.11 /k/arr/zelle_stopp): pfad = track id text, ab_beat = core beat at which the track falls silent, id, quelle; Arrangement::launch_stopp
+    PLATZ_KANAL = 63,      // DJ view places 3 and 4 (§4.10 /k/platz/kanal): deck = pad (1, 2), nr = inhalt (0 nothing, 1 Strudel sum, 2 deck/3, 3 deck/4); Mixer::platz_kanal_setze at the block start, the event PLATZ_KANAL answers
     ARR_NOTE = 58,         // sampler plan A1 task 7 (§4.11 /k/arr/note): nr = spur (1..32), politik = ton (0..127), fassung = vel (0..127, 0 = off); plays one note on a project track through Arrangement::live_note (callback thread, stamp = cycle start), no pointer, no allocation
   };
   int32_t art;
@@ -190,6 +193,8 @@ struct Ereignis {
     INS_MESS = 48,                   // plan 1.11 T5 (/e/ins_mess): deck = h, status = round trip in samples or -1, grund = "" or laeuft, host_fehlt, kein_rueckweg
     INS_HOST_ZUSTAND = 49,           // plan 1.11 T5 (/zustand/ins_host): host_gesund[h-1], host_rundweg[h-1]; on change and at 2 Hz while the host ports exist
     STUFE_PEGEL = 50,                // device faces T9 (/e/stufe_pegel): pfad = ins/komp/<n>, ins/lim/<n> or komp/<channel>, pegel[0] = input peak, pegel[1] = output peak in dBFS since the last report (-200 for none), 20 Hz with the levels, only stages that ran in the last block; netz_loop sends it as /e/stufe_pegel ,sff (§5.5g)
+    ZELLE_ZUSTAND = 51,              // loop deck K6 (§5.13 /zustand/zelle): pfad = track id, zelle_*: one deck track, on change and at 2 Hz; verloren = launcher receipts dropped so far (the net thread logs a rise)
+    PLATZ_KANAL = 52,                // DJ view places 3 and 4 (§5.12 /e/platz/kanal ,ii): deck = pad (1, 2), status = inhalt (0 to 3)
     INS_GR = 43,                    // 1.10 S4a (/e/ins_gr): pfad = ins/komp/<n> or ins/lim/<n> (T8: the pooled limiter stages), wert = gain reduction of the pooled stage in dB (>= 0), 20 Hz with the levels, only stages that ran in the last block; netz_loop sends it as /e/ins_gr ,sf (§5.5f)
   };
   int32_t art;
@@ -242,6 +247,8 @@ struct Ereignis {
   float arr_limiter_db;   // ARR_ZUSTAND: Absenkung des Set-Limiters, <= 0 (1.10 Slice 2)
   // I08, EIN_ZUSTAND: MIDI-Zähler seit Kernstart, Kern-Sample des letzten MIDI-Ereignisses bzw. der letzten Flanke auf ein_1 (−1 ohne)
   int64_t ein_gesehen, ein_verloren, ein_midi_sample, ein_flanke;
+  int32_t zelle_zelle, zelle_verwaist, zelle_wartend;   // loop deck K6, ZELLE_ZUSTAND (§5.13): playing cell (0 silent), orphaned 0/1, pending (-1 none, 0 stop, 1..8 start)
+  double zelle_ab_beat, zelle_versatz, zelle_wartend_ab;   // ZELLE_ZUSTAND: beat and offset of the playing launch, beat of the pending one (0 when none)
   int32_t warp_stimmen, warp_unterlauf, warp_kein_platz, warp_spaet, warp_faeden;   // 1.13 Slice 2, WARP_ZUSTAND (§5.13b)
   int32_t hall_an, hall_faeden, hall_spaet, hall_zurueck;   // mehrkern Task 5, HALL_ZUSTAND (§5.13)
   // mehrkern slice 3.2 task 7, SPUR_ZUSTAND (§5.13): spur_blocks_parallel, spur_einheiten_*, spur_seriell are the low 31 bits of the kern's 64-bit counters (wrap, never negative);
@@ -294,7 +301,10 @@ class Kern {
     arr_->sperre_metronom(an);   // D1 K1 (Spec 2.6): im Prüfmodus klingt das Metronom nie (Prüfklick bleibt ungestört)
   }
   // Scheibe 25: Güte des DJ-Filters aller 18 Kanalzüge (kern.toml filter_guete, A27 Weg a). Nicht im Callback.
-  void setze_filter_guete(double q) { mixer_->setze_filter_guete(q); }
+  void setze_filter_guete(double q) {
+    mixer_->setze_filter_guete(q);
+    arr_->setze_filter_guete(q);   // K7b: the arrangement track filters take the same Q
+  }
   // Scheibe 25: Decke des Master-Limiters (kern.toml limiter_dbtp, §2.1). Nicht im Callback.
   void setze_limiter_dbtp(double decke) { mixer_->setze_limiter_dbtp(decke); }
   // 1.15 A5b: the channel limiters on bus/1..4 (kern.toml kanal_limiter_vorhalt_ms / kanal_limiter_echtspitze, D8). 0 builds nothing (L = 0). Not in the callback,
@@ -642,6 +652,19 @@ class Kern {
   void auto_punkte_melden(int64_t s0, int m);
   void warp_zustand(int64_t n0, int n);   // 1.13 Slice 2: /zustand/warp (§5.13b), bei Änderung und mit 2 Hz, solange ein Warp-Werk hängt
   int32_t warp_gemeldet_[4] = {-1, -1, -1, -1};
+  // loop deck K6: receipts of the launcher need the source of the command, which the launcher does not keep; a small table id -> quelle, filled at the acceptance, freed by the receipt 3, 5 or 7
+  struct ZelleQuelle { int64_t id = 0; char quelle[48] = {}; };
+  static constexpr int ZELLE_QUELLEN = 32;
+  ZelleQuelle zelle_quelle_[ZELLE_QUELLEN];
+  int zelle_quelle_n_ = 0;                  // next slot to overwrite when the table is full
+  void zelle_befehl(const Befehl& c, double beat0);   // ARR_ZELLE_START, ARR_ZELLE_STOPP (core_arr.cpp)
+  void zelle_quittungen(const Karte& k);    // after arr_->block(): the launcher's receipts 3, 5, 7 into /q
+  void zelle_zustand(int64_t n0, int n);    // /zustand/zelle per deck track, on change and at 2 Hz
+  struct ZelleGemeldet { uint64_t kennung = 0; char text[33] = {}; int zelle = 0, verwaist = 0, wartend = -1; double ab = 0.0, versatz = 0.0, wartend_ab = 0.0; };
+  ZelleGemeldet zelle_gemeldet_[ARR_SPUREN];
+  int zelle_gemeldet_n_ = 0;
+  LaunchStand zelle_stand_[ARR_SPUREN];     // scratch of zelle_zustand (no stack use in the callback)
+  uint64_t zelle_verloren_ = 0;             // launcher receipts dropped, as last read
   void hall_zustand(int64_t n0, int n);   // mehrkern Task 5: /zustand/hall_pool (§5.13), on change and at 2 Hz
   void spur_zustand(int64_t n0, int n);   // mehrkern slice 3.2 task 7: /zustand/spur_pool (§5.13), on change and at 2 Hz
   int32_t spur_gemeldet_[4] = {-1, -1, -1, -1};   // an, modus, haengt, spaet: the values whose change is sent at once (zurueck is normal traffic: beat only)

@@ -234,6 +234,10 @@ void Kern::einsortieren_arr(const Befehl& c, double beat0) {
       quittung(c.id, c.quelle, 3, sample_, beat0);
       return;
     }
+    case Befehl::ARR_ZELLE_START:   // loop deck K6 (§4.11 /k/arr/zelle_start)
+    case Befehl::ARR_ZELLE_STOPP:
+      zelle_befehl(c, beat0);
+      return;
     default:
       return;
   }
@@ -533,6 +537,7 @@ void Kern::abgriff_nachreichen() {
 // Nach arr_->block() eines Teilblocks: Quittung 2 am Einsatz-Sample, Quittung 3 am Stopp-Sample. Endete ein noch
 // wartender Start (KI-Stopp eines von Cypher gestarteten), bekommt er 7.
 void Kern::arr_quittungen(const Karte& k) {
+  zelle_quittungen(k);   // loop deck K6: the launcher's receipts 3, 5, 7
   if (const int64_t s = arr_->hole_gestartet(); s >= 0 && arr_start_id_) {
     quittung(arr_start_id_, arr_start_quelle_, 2, s, k.beat_at((double)s));
     arr_start_id_ = 0;
@@ -883,6 +888,110 @@ void Kern::ins_host_zustand(int64_t n0, int n) {
     e.host_rundweg[h] = v[4 + h];
   }
   melde(e);
+}
+
+}  // namespace cdj
+
+namespace cdj {
+
+// Loop deck K6 (§4.11 /k/arr/zelle_start, /k/arr/zelle_stopp). Callback thread, no allocation. The net thread checked the track id length and the source; here: ki_gestoppt first (as the other /k/arr/* cases),
+// then the launcher's own checks. The refusal reasons are the launcher's (spur_bereich, zelle_leer, ausserhalb_bereich, nicht_geladen). An accepted command is answered 1 now; the launcher answers 3, 5 or 7 later
+// (zelle_quittungen), and the table keeps the source of the id until then.
+void Kern::zelle_befehl(const Befehl& c, double beat0) {
+  auto ab = [&](const char* grund) { quittung(c.id, c.quelle, 6, sample_, beat0, grund); };
+  const bool cypher = ist_cypher(c.quelle);
+  if (cypher && sw_->ki_gestoppt()) return ab("ki_gestoppt");
+  const size_t n = strnlen(c.pfad, sizeof c.pfad);
+  const uint64_t kennung = arr_id(c.pfad, n);
+  const LaunchGrund g = c.art == Befehl::ARR_ZELLE_START ? arr_->launch_start(kennung, c.nr, c.ab_beat, c.wert_beats, c.id, cypher)
+                                                         : arr_->launch_stopp(kennung, c.ab_beat, c.id, cypher);
+  switch (g) {
+    case LaunchGrund::ok: break;
+    case LaunchGrund::zelle_leer: return ab("zelle_leer");
+    case LaunchGrund::spur_bereich: return ab("spur_bereich");
+    case LaunchGrund::ausserhalb_bereich: return ab("ausserhalb_bereich");
+    case LaunchGrund::nicht_geladen: return ab("nicht_geladen");
+  }
+  int frei = -1;   // a free slot, else the next in turn (more outstanding launches than slots cannot happen: the launcher keeps one per track)
+  for (int i = 0; i < ZELLE_QUELLEN && frei < 0; ++i)
+    if (zelle_quelle_[i].id == 0) frei = i;
+  if (frei < 0) {
+    frei = zelle_quelle_n_;
+    zelle_quelle_n_ = (zelle_quelle_n_ + 1) % ZELLE_QUELLEN;
+  }
+  ZelleQuelle& ziel = zelle_quelle_[frei];
+  ziel.id = c.id;
+  std::memcpy(ziel.quelle, c.quelle, sizeof ziel.quelle);
+  quittung(c.id, c.quelle, 1, sample_, beat0);
+}
+
+// After arr_->block() of a sub-block (and after the commands of the cycle): the launcher's receipts 3 (took effect), 5 (late) and 7 (dropped or replaced, reason abbruch) as /q. A receipt that carries no
+// sample (7) gets the start of the cycle. The id's source comes from the table; the entry is freed.
+void Kern::zelle_quittungen(const Karte& k) {
+  LaunchMeldung m[16];
+  for (int n; (n = arr_->launch_meldungen(m, 16)) > 0;)
+    for (int i = 0; i < n; ++i) {
+      const LaunchMeldung& x = m[i];
+      const char* quelle = "";
+      for (ZelleQuelle& z : zelle_quelle_)
+        if (z.id == x.id) {
+          quelle = z.quelle;
+          break;
+        }
+      const int64_t s = x.sample >= 0 ? x.sample : sample_;
+      const double b = x.sample >= 0 ? x.beat : k.beat_at(static_cast<double>(s));
+      quittung(x.id, quelle, x.status, s, b, x.status == 7 ? "abbruch" : "");
+      for (ZelleQuelle& z : zelle_quelle_)
+        if (z.id == x.id) z.id = 0;
+    }
+}
+
+// Loop deck K6 (§5.13 /zustand/zelle): one event per deck track whose state differs from the last one sent (a new track, a changed cell, pending launch or orphan flag), and every entry again at 2 Hz (the block
+// that holds a multiple of 24000 samples), like /zustand/warp. A track that left the list (snapshot swap) is sent once more as silent. The state is read after the cycle's commands, so a command shows in the same cycle.
+void Kern::zelle_zustand(int64_t n0, int n) {
+  const int anzahl = arr_->launch_stand(zelle_stand_, ARR_SPUREN);
+  const bool takt = (n0 + 24000 - 1) / 24000 * 24000 < n0 + n;
+  auto senden = [&](const char* text, int zelle, int verwaist, double ab, double versatz, int wartend, double wartend_ab) {
+    Ereignis e{};
+    e.art = Ereignis::ZELLE_ZUSTAND;
+    e.sample = n0;
+    std::strncpy(e.pfad, text, sizeof e.pfad - 1);
+    e.zelle_zelle = zelle;
+    e.zelle_verwaist = verwaist;
+    e.zelle_ab_beat = ab;
+    e.zelle_versatz = versatz;
+    e.zelle_wartend = wartend;
+    e.zelle_wartend_ab = wartend >= 0 ? wartend_ab : 0.0;
+    e.verloren = static_cast<int64_t>(arr_->launch_meldungen_verloren());
+    melde(e);
+  };
+  ZelleGemeldet neu[ARR_SPUREN];
+  for (int i = 0; i < anzahl; ++i) {
+    const LaunchStand& s = zelle_stand_[i];
+    ZelleGemeldet& g = neu[i];
+    g.kennung = s.kennung;
+    std::memcpy(g.text, s.text, sizeof g.text);
+    g.zelle = s.zelle;
+    g.verwaist = s.verwaist ? 1 : 0;
+    g.ab = s.ab_beat;
+    g.versatz = s.versatz_beats;
+    g.wartend = s.wartend;
+    g.wartend_ab = s.wartend >= 0 ? s.wartend_ab : 0.0;
+    bool gleich = false;
+    for (int j = 0; j < zelle_gemeldet_n_ && !gleich; ++j) {
+      const ZelleGemeldet& o = zelle_gemeldet_[j];
+      gleich = o.kennung == g.kennung && o.zelle == g.zelle && o.verwaist == g.verwaist && o.ab == g.ab && o.versatz == g.versatz && o.wartend == g.wartend && o.wartend_ab == g.wartend_ab;
+    }
+    if (!gleich || takt) senden(g.text, g.zelle, g.verwaist, g.ab, g.versatz, g.wartend, g.wartend_ab);
+  }
+  for (int j = 0; j < zelle_gemeldet_n_; ++j) {   // gone from the list: the last word is silent
+    const ZelleGemeldet& o = zelle_gemeldet_[j];
+    bool da = false;
+    for (int i = 0; i < anzahl && !da; ++i) da = neu[i].kennung == o.kennung;
+    if (!da && (o.zelle != 0 || o.wartend != -1 || o.verwaist != 0)) senden(o.text, 0, 0, 0.0, 0.0, -1, 0.0);
+  }
+  std::memcpy(zelle_gemeldet_, neu, sizeof(ZelleGemeldet) * static_cast<size_t>(anzahl));
+  zelle_gemeldet_n_ = anzahl;
 }
 
 }  // namespace cdj

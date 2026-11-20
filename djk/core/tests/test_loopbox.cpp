@@ -391,6 +391,39 @@ int main() {
     PRUEF(x.boxen.abholen() == &a);
   }
 
+  {  // 6b. Mitschnitt mit summe=1: erz/1+2+3 (Kanäle 4..6) vor Trim, float ohne Klemme; erz/4 (Kanal 7) zählt nicht
+    Welt w;
+    w.bis(3 * SPB);
+    cdj::Mitschnitt mt{};
+    mt.beats = 4;
+    mt.frames = 4 * SPB;
+    mt.summe = true;
+    mt.daten.assign((size_t)mt.frames * 2, -999.0f);
+    PRUEF(w.boxen.mitschnitt(&mt, w.jetzt(), w.karte));
+    cdj::Mitschnitt* fertig = nullptr;
+    int64_t s = w.s;
+    while (!fertig) {
+      std::fill(w.puffer_l.begin(), w.puffer_l.end(), 0.0f);
+      std::fill(w.puffer_r.begin(), w.puffer_r.end(), 0.0f);
+      for (int i = 0; i < N; ++i) {
+        w.l[4][i] = (float)(s + i);          w.r[4][i] = -(float)(s + i);
+        w.l[5][i] = 1000.0f;                 w.r[5][i] = 2000.0f;
+        w.l[6][i] = 0.25f;                   w.r[6][i] = 8.0f;   // Summe über 1.0: bleibt ungeklemmt
+        w.l[7][i] = 77.0f;                   w.r[7][i] = 77.0f;  // nicht Teil der Summe
+      }
+      cdj::BoxMeldung m[8];
+      w.boxen.block(w.karte, s, N, w.l, w.r, m, 8, &fertig);
+      s += N;
+    }
+    int falsch = 0;
+    for (int64_t i = 0; i < mt.frames; ++i) {
+      const float sl = (float)(mt.ab_sample + i) + 1000.25f, sr = -(float)(mt.ab_sample + i) + 2008.0f;
+      if (mt.daten[(size_t)(2 * i)] != sl || mt.daten[(size_t)(2 * i + 1)] != sr) ++falsch;
+    }
+    std::printf("mitschnitt summe: falsche Werte %d von %lld\n", falsch, (long long)mt.frames);
+    PRUEF(fertig == &mt && falsch == 0);
+  }
+
   {  // 6. (Plan MVP 2 Scheibe 2) Mitschnitt: erz/1 (Kanal 4) vor Trim wird ab dem nächsten Vielfachen von 4·takte
      // kopiert; Überlappung schlägt fehl; leeren() gibt einen laufenden Mitschnitt als abgebrochen zurück.
     Welt w;

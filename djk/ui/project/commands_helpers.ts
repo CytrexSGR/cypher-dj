@@ -707,6 +707,8 @@ export interface Kontext {
   musterUebersetze?: (a: { code: string; takte: number | null }) => MusterErgebnis | MusterFehlschlag;
   kitKlaenge?: (name: string) => KitKlang[] | null;
   musterMeldung?: (m: MusterMeldung) => void;
+  // absolute project folder of the open project (absent in pure tests): commands that turn an absolute file path into a project-relative one
+  ordner?: string;
   noteIdsAb?: number;   // fan-out of noten_neu (ADR 039): the notes carry drawn ids; the project note counter before the draw (see fuegeNotenEinMitIds)
 }
 export interface MusterMeldung {

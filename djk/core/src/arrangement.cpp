@@ -23,6 +23,7 @@ Arrangement::Arrangement(const sw::ReglerTabelle& tab, bool mit_hall) : ret_(mit
     for (int64_t& b : je_spur) b = INT64_MIN;
   for (auto& je_spur : blende_s2_)
     for (int64_t& b : je_spur) b = INT64_MIN;
+  iso_ = std::make_unique<cypherdj::dsp::Isolator[]>(ARR_SPUREN);   // loop deck channel strip KZ2: main thread, never in the callback
   spur_arbeit_ = std::make_unique<ArrArbeit[]>(ARR_ARBEIT_BAHNEN);
   for (int b = 0; b < ARR_ARBEIT_BAHNEN; ++b) spur_arbeit_[b].bahn = b;
 }
@@ -75,6 +76,7 @@ const ArrSnapshot* Arrangement::tausche(const ArrSnapshot* neu, int64_t s, const
   const ArrSnapshot* alt = snap_;
   auto_tausch(neu, s);   // Automation Slice 1: needs the old snapshot (snap_), so before it is replaced
   stimmen_tauschen(neu, s, k);   // unverändert: neu binden; geändert oder weg: Ausklang aus eigener Kopie
+  launch_tauschen(neu, s);       // loop deck K5: launcher state follows the track ids (neu == nullptr: unload, everything ends)
   noten_tauschen(neu, s);     // offene Noten ohne Gegenstück: Off sofort
   live_tauschen(neu, s);      // 1.8 T7b: held live keys of a track that changes its sink: Off to the sink that got the On
   senken_wechsel(neu, s);     // Spuren, die ihre Senke verlassen: Ausblende (RB), All Notes Off an den Slot (Wirt)
@@ -83,6 +85,14 @@ const ArrSnapshot* Arrangement::tausche(const ArrSnapshot* neu, int64_t s, const
     if (nachher) dj_rest_[g] = 0;
     else if (vorher) {
       dj_rest_[g] = vorher;
+      dj_rest_n_ = DJ_REST;
+    }
+  }
+  for (int r = 0; r < ARR_RETURNS; ++r) {   // loop deck channel strip KZ3: the same hold for a return that loses its DJ output (removed or rerouted): its fading tail stays in the pair
+    const uint8_t vorher = alt ? alt->ret_dj[r] : 0, nachher = neu ? neu->ret_dj[r] : 0;
+    if (nachher) ret_dj_rest_[r] = 0;
+    else if (vorher) {
+      ret_dj_rest_[r] = vorher;
       dj_rest_n_ = DJ_REST;
     }
   }
@@ -112,6 +122,13 @@ const ArrSnapshot* Arrangement::tausche(const ArrSnapshot* neu, int64_t s, const
     const ArrSpur* n = neu ? &neu->spur[i] : nullptr;
     const bool gleich = o && n && o->art == n->art && o->slot == n->slot && o->nr == n->nr && std::strcmp(o->geraet, n->geraet) == 0 && o->bk_gen == n->bk_gen && o->kit_gen == n->kit_gen;
     if (!gleich) spur_lauf_.kosten_vergessen(i);
+    if (!o || !n || o->kennung != n->kennung || o->art != n->art) {
+      // loop deck K7b: another track (identity) on this index starts with an empty DJ filter; the same id keeps its state. Loop deck channel strip KZ2: the same for the isolator, it restarts in bypass
+      iso_[i].leeren();
+      iso_lage_[i] = 0;
+      iso_blende_[i] = 0;
+      filt_[i].leeren();
+    }
   }
   spur_plan_bauen();   // mehrkern slice 3.1: after the swap the sinks see the new snapshot (innen) and the old zuletzt_: exactly what the transition predicate needs
   snap_werk_ = false;   // Slice 2: hat der neue Schnappschuss Clips des Warp-Werks (COMPLEX, TONES)?
@@ -568,7 +585,7 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
 #else
   const bool ret_blendet = ret_.blendet();   // 1.10 slice 3 (P15): a return strip still fades, no quiet path yet
 #endif
-  if (!snap_ && n_offen_ == 0 && klick_rest_ == 0 && stimmen() == 0 && !weg && !ret_blendet) {   // nichts geladen, nichts klingt:
+  if (!snap_ && n_offen_ == 0 && klick_rest_ == 0 && stimmen() == 0 && !weg && !ret_blendet && launch_ruhig()) {   // nichts geladen, nichts klingt:
     monitor_loeschen();   // 1.8 S3: the sources are valid for one block only
     ruhe(m);                                                                      // DJ-Betrieb ohne Kosten (Slice 11)
     for (int i = 0; i < DJ_EINGAENGE; ++i) dj_l_[i] = dj_r_[i] = nullptr;         // slice 5 U2b: the pointers of dj_schluessel() are good for one block
@@ -627,6 +644,7 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
     segment(k, a, b, s0);
     a = b;
   }
+  launch_block(k, s0, m);   // loop deck K2: the launcher voices add to the track buses, whether the transport plays or not
   bk_ueber_melden(m);   // production plan task 8: the written spur/<slot>/bk/<k> go to the bk sinks in every block, also with the transport stopped; a lane (auto_geraet, next) wins
   auto_geraet();   // Automation slice 2 (E9): the `geraet` lane values go to the sinks before their block()
   auto_kette();    // 1.12 slice 6: the insert-parameter and rack-macro lane values go to ArrInserts, read by makros_planen() and the chains in mischen()
@@ -650,6 +668,7 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
     if (dj_rest_n_ <= 0) {
       dj_rest_n_ = 0;
       for (uint8_t& r : dj_rest_) r = 0;
+      for (uint8_t& r : ret_dj_rest_) r = 0;
     }
   }
   monitor_loeschen();   // 1.8 S3: the sources are valid for one block only

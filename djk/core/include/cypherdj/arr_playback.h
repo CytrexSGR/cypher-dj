@@ -141,6 +141,7 @@ struct ArrKettenLane {
   const ArrAutoPunkt* p = nullptr;  // into ArrSnapshot::auto_punkte
 };
 
+class WarpWerk;
 struct ArrAudio;   // unten, nach den Seiten-Helfern (eigene Seiten)
 
 struct ArrClip {
@@ -199,11 +200,27 @@ struct ArrStift {
   float wert;
 };
 
+// Loop deck K1: one cell of a loop deck track (playback /2 and up, key `zellen`). Index i of ArrSpur::zellen is cell i+1.
+constexpr int ARR_ZELLEN = 8;
+enum class ArrZellArt : uint8_t { leer = 0, loop = 1, einmal = 2 };
+struct ArrZelle {
+  ArrZellArt art = ArrZellArt::leer;
+  const ArrAudio* audio = nullptr;   // from ArrAudioCache::hole, released with the snapshot like clip audio
+  int64_t frames = 0;
+  double beats = 0;                  // loop: > 0; einmal: 0
+  float gain = 1.0f;                 // linear, from gain_db
+  int8_t modus = 0;                  // 2 complex (loop), 0 repitch (einmal)
+};
+
 struct ArrSpur {
   int nr = 0;                        // 1..ARR_SPUREN (32); 0 = leer
   ArrArt art = ArrArt::leer;
   int8_t ausgang = 0;                // 1.10: 0 master, 1..ARR_GRUPPEN Gruppe (Wiedergabe /2)
   bool stumm_start = false;          // initial state: the track starts this playback muted (mute row 1, mute fade at 0 in the block of the swap; Wiedergabe /2 `stumm_start`)
+  uint64_t kennung = 0;              // loop deck: arr_id(id) of the project track id (playback key `id`); 0 = no id
+  char kennung_text[33] = {};
+  int n_zellen = 0;                  // filled cells
+  ArrZelle zellen[ARR_ZELLEN] = {};  // index i = cell i+1
   int slot = 0;                      // wirt: 1..2
   char geraet[16] = {};              // intern: "rb338" or "bk"
   // S20, device bk: graph name (the file stem in the graph folder) and the instance. The instance belongs to the graph store of the
@@ -274,6 +291,9 @@ struct ArrAudio {
   size_t bytes;
   int32_t ref;          // Zahl der Schnappschüsse, die es nutzen
   bool gesperrt;        // mlock gelungen
+  // K4: launcher voices (and pending launches) playing this audio. Plain field, accessed only through std::atomic_ref<int32_t> (keeps ArrAudio an aggregate):
+  // the callback increments when a launch is accepted or a voice is set up and decrements when it ends; the loader thread reads it in ArrAudioCache::gib.
+  int32_t halter = 0;
   static void* operator new(size_t n) { return arr_seiten_neu(n); }
   static void operator delete(void* p, size_t n) noexcept { arr_seiten_frei(p, n); }
 };
@@ -417,6 +437,7 @@ struct ArrSnapshot {
   // channel instead of the production master (ADR 037, ADR 038: 1 = pad/1, 2 = pad/2, 3..6 = deck/1..deck/4); 0 = no DJ output. Read by Arrangement::dj_nr(). A snapshot without DJ outputs has all zeros: the old behaviour bit for bit.
   bool live = false;
   uint8_t gruppe_dj[ARR_GRUPPEN] = {};
+  uint8_t ret_dj[ARR_RETURNS] = {};   // loop deck channel strip KZ3: the same for a return (returns[].ausgang {art: dj, nr}); 0 = the PM (as before), 1..6 = DJ channel (1 = pad/1, 2 = pad/2, 3..6 = deck/1..4); live containers only
   uint8_t gruppen_ebene[ARR_GRUPPEN];   // height: a group with no child group 0, a parent 1 + its highest child; the mixer runs the levels lowest first
   uint8_t gruppen_ordnung[ARR_GRUPPEN]; // the groups sorted by level, then index (the identity for a flat project)
   uint8_t ebenen = 1;                   // number of levels (highest level + 1)
@@ -549,7 +570,12 @@ class ArrAudioCache {
   // "zu_gross".
   ArrAudio* hole(const std::string& sha256, const std::string& datei, int64_t frames, std::string& grund,
                  std::string& meldung);
-  void gib(ArrAudio* a);          // ref − 1; bei 0 munlock, munmap, Konto zurück
+  // ref − 1; bei 0 munlock, munmap, Konto zurück. K4: not while a launcher voice holds the audio (halter > 0) or a werk slot reads it: then the entry
+  // stays (still booked in gesperrt_) on a deferred list until audio_nachholen frees it.
+  void gib(ArrAudio* a);
+  int audio_nachholen(const WarpWerk* w);   // K4: retries the deferred list (w: the werk to ask, nullptr: the one of setze_werk); returns how many were freed
+  void setze_werk(const WarpWerk* w) { werk_ = w; }   // K4: gib() asks it too (before the thread starts)
+  int audio_aufgeschoben() const { return static_cast<int>(audio_aufgeschoben_.size()); }
   // K1-Fix 8: Schnappschuss nach dem Bau buchen und (wenn der Cache sperrt) sperren; false mit grund "zu_gross"
   bool sperre(ArrSnapshot& s, std::string& grund, std::string& meldung);
   void entsperre(ArrSnapshot& s);   // vor dem Löschen: entsperren und zurückbuchen
@@ -622,6 +648,10 @@ class ArrAudioCache {
   bool sperren_;
   int64_t gesperrt_ = 0;
   std::map<std::string, std::unique_ptr<ArrAudio>> audio_;
+  std::vector<ArrAudio*> audio_aufgeschoben_;   // K4: reference count 0, but a launcher voice or a werk slot still reads it
+  const WarpWerk* werk_ = nullptr;
+  bool audio_gehalten(const ArrAudio* a, const WarpWerk* w) const;
+  void audio_freigeben(ArrAudio* a);
 };
 
 struct ArrLadeErgebnis {

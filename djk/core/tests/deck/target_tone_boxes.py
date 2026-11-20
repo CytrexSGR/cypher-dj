@@ -106,7 +106,7 @@ def rec_vorab(a: zl.Aufbau, bpm: float, aus: dict) -> float:
     i = a.merke(a.nid(), "/k/loop/rec 4 Beats")
     name = f"rec7b{int(time.time()) % 100000}"  # je Lauf neu: die Loop-Ablage der Prüfinstanz (tmpfs) überlebt den Lauf
     aus["rec_name"] = name
-    a.sende("/k/loop/rec", ",hsis", i, "pruefstand", 4, name)
+    a.sende("/k/loop/rec", ",hsisi", i, "pruefstand", 4, name, 0)
     warte_beat(a, bpm, 8.5)
     a.klick("erz/1", 0)
     ende = time.monotonic() + 20

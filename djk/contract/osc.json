@@ -67,7 +67,7 @@
     "invariante_art": {"abschnitt": "5.9", "liste": ["sub_doppelt", "master_leer", "hoerschein"]},
     "protokollfehler_grund": {"abschnitt": "16.2", "liste": ["unbekannte_adresse", "falsche_typen", "protokoll"]},
     "nb_zustand": {"abschnitt": "5.10", "codes": {"0": "durchreichen", "1": "schleife", "2": "ausgeblendet", "3": "rueckgabe"}},
-    "gruende": {"abschnitt": "16.2", "liste": ["zu_spaet", "regler_beim_menschen", "regler_verplant", "ueberlappung", "nur_hand", "unbekannter_regler", "unbekanntes_deck", "ausserhalb_bereich", "kein_hoerschein", "hoerschein_anderer_kanal", "hoerschein_anderer_inhalt", "hoerschein_anderes_tempo", "hoerschein_abgelaufen", "hoerschein_anderer_abschnitt", "ziel_ungehoert", "keine_stems", "hoerschein_nicht_sync", "hoerschein_pegel", "invariante_sub_doppelt", "invariante_master_leer", "deck_beruehrt", "deck_hoerbar", "deck_laeuft", "nicht_geladen", "material_fehlt", "pruefung", "budget_speicher", "budget_stretcher", "karte_voll", "tempo_rampe", "ki_gestoppt", "rechner_fehlt", "kein_stretcher", "autonomie", "form", "hand", "abbruch", "ki_stopp", "unbekannte_adresse", "falsche_typen", "protokoll", "grenze_sub", "neustart", "datei_fehlt", "format", "audio_fehlt", "zu_gross", "spur_bereich", "reserviert", "kein_eingang", "aufnahme_laeuft", "zu_viele_scharf", "eingang_fehlt", "kein_platz", "warp_maschine_fehlt", "nur_andreas", "auto_ziel_unbekannt", "laeuft", "host_fehlt", "kein_rueckweg", "belegt", "schreiber_ueberlauf"]}
+    "gruende": {"abschnitt": "16.2", "liste": ["zu_spaet", "regler_beim_menschen", "regler_verplant", "ueberlappung", "nur_hand", "unbekannter_regler", "unbekanntes_deck", "ausserhalb_bereich", "kein_hoerschein", "hoerschein_anderer_kanal", "hoerschein_anderer_inhalt", "hoerschein_anderes_tempo", "hoerschein_abgelaufen", "hoerschein_anderer_abschnitt", "ziel_ungehoert", "keine_stems", "hoerschein_nicht_sync", "hoerschein_pegel", "invariante_sub_doppelt", "invariante_master_leer", "deck_beruehrt", "deck_hoerbar", "deck_laeuft", "nicht_geladen", "material_fehlt", "pruefung", "budget_speicher", "budget_stretcher", "karte_voll", "tempo_rampe", "ki_gestoppt", "rechner_fehlt", "kein_stretcher", "autonomie", "form", "hand", "abbruch", "ki_stopp", "unbekannte_adresse", "falsche_typen", "protokoll", "grenze_sub", "neustart", "datei_fehlt", "format", "audio_fehlt", "zu_gross", "spur_bereich", "reserviert", "kein_eingang", "aufnahme_laeuft", "zu_viele_scharf", "eingang_fehlt", "kein_platz", "warp_maschine_fehlt", "nur_andreas", "auto_ziel_unbekannt", "laeuft", "host_fehlt", "kein_rueckweg", "belegt", "schreiber_ueberlauf", "zelle_leer"]}
   },
   "adressen": [
     {"adresse": "/k/hallo", "typen": ",sii", "abschnitt": "4.1", "richtung": "an_kern", "felder": [
@@ -356,11 +356,12 @@
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
       {"name": "box", "typ": "i", "einheit": "nummer", "bereich": [1, 2]},
       {"name": "versatz_frames", "typ": "i", "einheit": "frames", "notiz": "Betrag < frames des Loops; Plan Grid"}]},
-    {"adresse": "/k/loop/rec", "typen": ",hsis", "abschnitt": "4.9", "richtung": "an_kern", "felder": [
+    {"adresse": "/k/loop/rec", "typen": ",hsisi", "abschnitt": "4.9", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
       {"name": "beats", "typ": "i", "einheit": "beats", "notiz": "MVP 2 Scheibe 3: 1, 2, 4, 8, 16 oder 32 (vorher takte)"},
-      {"name": "name", "typ": "s", "einheit": "text"}]},
+      {"name": "name", "typ": "s", "einheit": "text"},
+      {"name": "summe", "typ": "i", "einheit": "code", "bereich": [0, 1], "notiz": "0: erz/1 vor Trim; 1: Summe erz/1+2+3 vor Trim"}]},
     {"adresse": "/k/fx", "typen": ",hsiidddddi", "abschnitt": "4.10", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
@@ -382,6 +383,11 @@
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
       {"name": "routing", "typ": "i", "einheit": "code", "bereich": [0, 1]}]},
+    {"adresse": "/k/platz/kanal", "typen": ",hsii", "abschnitt": "4.10", "richtung": "an_kern", "felder": [
+      {"name": "id", "typ": "h", "einheit": "kennung"},
+      {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
+      {"name": "pad", "typ": "i", "einheit": "nummer", "bereich": [1, 2]},
+      {"name": "inhalt", "typ": "i", "einheit": "code", "bereich": [0, 3]}]},
     {"adresse": "/k/kanal/graph", "typen": ",hsss", "abschnitt": "4.10", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
@@ -472,6 +478,18 @@
       {"name": "zeile", "typ": "i", "einheit": "nummer", "bereich": [0, 15], "notiz": "matrix row = source"},
       {"name": "spalte", "typ": "i", "einheit": "nummer", "bereich": [0, 15], "notiz": "matrix column = destination"},
       {"name": "wert", "typ": "f", "einheit": "faktor", "bereich": [-1, 1], "notiz": "pin weight; 0 removes the pin"}]},
+    {"adresse": "/k/arr/zelle_start", "typen": ",hssidd", "abschnitt": "4.11", "richtung": "an_kern", "felder": [
+      {"name": "id", "typ": "h", "einheit": "kennung"},
+      {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
+      {"name": "spur", "typ": "s", "einheit": "text", "notiz": "project track id of a loop deck track (playback key id), max 32 chars"},
+      {"name": "zelle", "typ": "i", "einheit": "nummer", "bereich": [1, 8], "notiz": "cell index on that track"},
+      {"name": "ab_beat", "typ": "d", "einheit": "beat", "notiz": "core beat at which the cell takes effect"},
+      {"name": "versatz_beats", "typ": "d", "einheit": "beat", "notiz": "position inside the cell at ab_beat, 0 <= v < beats"}]},
+    {"adresse": "/k/arr/zelle_stopp", "typen": ",hssd", "abschnitt": "4.11", "richtung": "an_kern", "felder": [
+      {"name": "id", "typ": "h", "einheit": "kennung"},
+      {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
+      {"name": "spur", "typ": "s", "einheit": "text", "notiz": "project track id of a loop deck track"},
+      {"name": "ab_beat", "typ": "d", "einheit": "beat", "notiz": "core beat at which the track falls silent (ARR_NAHT fade)"}]},
     {"adresse": "/k/rec/spur", "typen": ",hsiiiii", "abschnitt": "4.12", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
@@ -712,6 +730,9 @@
       {"name": "latenz_samples", "typ": "i", "einheit": "samples"}]},
     {"adresse": "/e/fx/routing", "typen": ",i", "abschnitt": "5.12", "richtung": "vom_kern", "felder": [
       {"name": "routing", "typ": "i", "einheit": "code", "bereich": [0, 1]}]},
+    {"adresse": "/e/platz/kanal", "typen": ",ii", "abschnitt": "5.12", "richtung": "vom_kern", "felder": [
+      {"name": "pad", "typ": "i", "einheit": "nummer", "bereich": [1, 2]},
+      {"name": "inhalt", "typ": "i", "einheit": "code", "bereich": [0, 3]}]},
     {"adresse": "/e/graph", "typen": ",ss", "abschnitt": "5.12", "richtung": "vom_kern", "felder": [
       {"name": "kanal", "typ": "s", "einheit": "pfad", "werte": "graph_platz"},
       {"name": "name", "typ": "s", "einheit": "text", "notiz": "graph file name without .json, empty = no graph on this slot"}]},
@@ -730,6 +751,14 @@
       {"name": "kein_platz", "typ": "i", "einheit": "anzahl", "notiz": "Stimmen ohne Platz im Werk (Pool voll oder Werk fehlt): der Clip spielt als RE-PITCH, seit Kern-Start"},
       {"name": "spaet", "typ": "i", "einheit": "anzahl", "notiz": "Stimmen, deren Ring zum Einsatz noch leer war (Ansatz nicht rechtzeitig fertig), seit Kern-Start"},
       {"name": "faeden", "typ": "i", "einheit": "anzahl", "notiz": "Arbeitsfäden des Werks (kern.toml warp_faeden), 0 synchron"}]},
+    {"adresse": "/zustand/zelle", "typen": ",siiddid", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [
+      {"name": "spur", "typ": "s", "einheit": "text", "notiz": "project track id"},
+      {"name": "zelle", "typ": "i", "einheit": "nummer", "bereich": [0, 8], "notiz": "playing cell, 0 = silent"},
+      {"name": "verwaist", "typ": "i", "einheit": "code", "bereich": [0, 1], "notiz": "1: the voice plays audio that is no longer the cell's audio in the loaded snapshot (E7)"},
+      {"name": "ab_beat", "typ": "d", "einheit": "beat", "notiz": "core beat of the playing launch"},
+      {"name": "versatz_beats", "typ": "d", "einheit": "beat"},
+      {"name": "wartend", "typ": "i", "einheit": "nummer", "bereich": [-1, 8], "notiz": "-1 nothing pending, 0 a pending stop, 1..8 a pending start"},
+      {"name": "wartend_ab", "typ": "d", "einheit": "beat", "notiz": "core beat of the pending launch, 0 when none"}]},
     {"adresse": "/zustand/ins_host", "typen": ",iiiiiiiiiiii", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [
       {"name": "h_1", "typ": "i", "einheit": "nummer", "bereich": [1, 1]},
       {"name": "gesund_1", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "host 1: edge check AND server flag"},

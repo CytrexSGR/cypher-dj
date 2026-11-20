@@ -98,11 +98,11 @@ test('the schema and the description', async (t) => {
   }
 });
 
-test('the tool count is 98', async (t) => {
+test('the tool count is 99', async (t) => {
   const { c } = await verbinde(t);
-  assert.equal((await c.listTools()).tools.length, 98);
+  assert.equal((await c.listTools()).tools.length, 99);
   const imCode = fs.readFileSync(HAND, 'utf8').split('\n').filter((z) => z.startsWith("  { name: '")).length;
-  assert.equal(imCode, 98);
+  assert.equal(imCode, 99);
 });
 
 // ---- slice 2 ----

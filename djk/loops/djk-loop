@@ -69,7 +69,7 @@ let sendung;
 if (rec && rest.length === 2) {
   beats = Number(rest[0]);
   if (![1, 2, 4, 8, 16, 32].includes(beats)) raus(`Beats ${rest[0]}: 1, 2, 4, 8, 16 oder 32 (4 Beats = 1 Takt)`, 2);
-  sendung = ['/k/loop/rec', 'hsis', [id, opt.quelle, beats, rest[1]]];
+  sendung = ['/k/loop/rec', 'hsisi', [id, opt.quelle, beats, rest[1], 0]];
   wartezeit_ms = 5000 + beats * 1000;  // Ausrichtung (bis zu beats Beats) plus Aufnahme (dieselbe Länge), ~0,47 s je Beat
 } else if (befehl === 'laden' && rest.length === 2) {
   box = Number(rest[0]);

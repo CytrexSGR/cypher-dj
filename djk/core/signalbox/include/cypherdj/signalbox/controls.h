@@ -64,10 +64,18 @@ enum class Rolle : uint8_t {
   grp_cue,
   // Production plan task 8 (appended after grp_cue, now the last role: the order stays). spur/<slot>/bk/<k>, slot 1..8, k 1..64 (32 until the 64-knob live override of 2026-11-16): a TRANSIENT override of knob k of the Baukasten instance
   // in that slot (slot = running number among the tracks with the device bk). Not saved in the state file and not restored (see Kern::abbild, regler_uebernehmen, wiederherstellen).
-  spur_bk
+  spur_bk,
+  // Loop deck K7a (appended after spur_bk, now the last role: the order stays). spur/<n>/filter, n = 1..32: DJ filter of an arrangement track, -1 (low-pass) .. +1 (high-pass), 0 is neutral and bit-neutral.
+  spur_filter,
+  // Loop deck channel strip KZ1 (appended after spur_filter, now the last role: the order stays). spur/<n>/eq/{tief,mitte,hoch}, n = 1..32: the 3-band isolator of an arrangement track, dB -200 (kill) .. +6, 0 is neutral.
+  spur_eq_tief,
+  spur_eq_mitte,
+  spur_eq_hoch
 };
 constexpr int SPUR_BK_SLOTS = 8;      // production plan task 8: Baukasten slots of spur/<slot>/bk/<k>: the first 8 bk tracks; the 9th to 16th (ARR_BK_MAX 16) have no row; <= ARR_BK_MAX (static_assert in arr_playback.h)
 constexpr int SPUR_BK_KNOEPFE = 64;   // knobs of a slot reachable as a live override: spur/<slot>/bk/1..64 (32 until 2026-11-16; production plan task 8)
+constexpr int SPUR_EQ_N = 32;        // loop deck channel strip KZ1: spur/1..32/eq/{tief,mitte,hoch} rows (96), appended behind spur/32/filter: the table holds 4052 of 4096
+constexpr int SPUR_FILTER_N = 32;     // loop deck K7a: spur/1..32/filter rows (one per track), appended behind the last spur/<slot>/bk/<k> row
 constexpr int BK_REGLER_N = 64;   // knobs of a Baukasten graph reachable through the table: <kanal>/bk/1..64, ins/bk/<n>/k1..k64 (engine: baukasten_dsp::REGLER)
 constexpr int SPUR_REGLER_SPUREN = 32;   // D1 K1 (Spec 2.3): spur/<n>/{fader,pan,mute,solo}, n = 1..32 (E3)
 constexpr int GRP_REGLER_GRUPPEN = 8;    // 1.10 (F1: eigene Plätze neben den 32 Spuren): grp/<n>/{fader,pan,mute,solo}, n = 1..8 (the rows inside the first 1258 hashed rows: this stays 8)

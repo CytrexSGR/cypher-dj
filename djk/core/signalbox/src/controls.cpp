@@ -343,6 +343,22 @@ ReglerTabelle::ReglerTabelle() {
       std::snprintf(p, sizeof p, "spur/%d/bk/%d", slot, nr);
       neu(p, -1, Rolle::spur_bk, 0, 1, 0.5f, 0, false, false, false, false, linear(0, 1));
     }
+  // Loop deck K7a: spur/1..32/filter, the DJ filter of an arrangement track (-1 low-pass .. +1 high-pass, 0 neutral). Appended at the very end, after spur/8/bk/64: no index moves.
+  // Everybody may write it; ramp 10 ms like the track pan (the Arrangement smooths the field per sample).
+  for (int n = 1; n <= SPUR_FILTER_N; n++) {
+    std::snprintf(p, sizeof p, "spur/%d/filter", n);
+    neu(p, -1, Rolle::spur_filter, -1, 1, 0, MS(10), false, false, false, false, linear(-1, 1));
+  }
+  // Loop deck channel strip KZ1: spur/1..32/eq/{tief,mitte,hoch}, the 3-band isolator of an arrangement track (-200 dB = kill .. +6 dB, 0 neutral). Appended at the very end, after spur/32/filter, n outer, band inner: no index moves.
+  // Everybody may write; flags and curve K_EQ of the mixer eq rows (db: the kill ramps through -60 dB), ramp 5 ms (one row carries knob and kill).
+  for (int n = 1; n <= SPUR_EQ_N; n++) {
+    std::snprintf(p, sizeof p, "spur/%d/eq/tief", n);
+    neu(p, -1, Rolle::spur_eq_tief, -200, 6, 0, MS(5), false, true, false, false, K_EQ);
+    std::snprintf(p, sizeof p, "spur/%d/eq/mitte", n);
+    neu(p, -1, Rolle::spur_eq_mitte, -200, 6, 0, MS(5), false, true, false, false, K_EQ);
+    std::snprintf(p, sizeof p, "spur/%d/eq/hoch", n);
+    neu(p, -1, Rolle::spur_eq_hoch, -200, 6, 0, MS(5), false, true, false, false, K_EQ);
+  }
   for (int i = 0; i < n_; i++) sortiert_[i] = static_cast<int16_t>(i);
   std::sort(sortiert_, sortiert_ + n_, [&](int16_t a, int16_t b) { return std::strcmp(def_[a].pfad, def_[b].pfad) < 0; });
 }

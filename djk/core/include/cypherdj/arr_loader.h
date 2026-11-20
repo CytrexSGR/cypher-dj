@@ -99,7 +99,7 @@ class ArrLader {
   const std::string& ordner() const { return ordner_; }
   // Paket 1.13 Slice 2 (Lebensdauer): ein abgelöster Schnappschuss wird erst freigegeben, wenn das Warp-Werk ihn nicht mehr liest (WarpWerk::liest);
   // bis dahin wartet er hier (höchstens WARTE_MAX, in jedem Durchgang erneut gefragt). Vor dem Start des Fadens setzen; nullptr: ohne Werk.
-  void setze_warp_werk(const WarpWerk* w) { werk_ = w; }
+  void setze_warp_werk(const WarpWerk* w) { werk_ = w; cache_.setze_werk(w); }
   // S20: the graph folder and the sink that tells whether a graph instance is still in use (see ArrBkLeser); before the thread starts
   void setze_bk_ordner(std::string o) { cache_.setze_bk_ordner(std::move(o)); }
   void setze_bk_leser(const ArrBkLeser* l) { cache_.setze_bk_leser(l); }

@@ -23,6 +23,7 @@ const DECK_TASTEN = ['play', 'cue'];
 const DECK_ZUWEISUNG = ['xseite'];  // Crossfader-Seite A/THRU/B, §1.5 „nur Hand“ (2026-09-27)
 export const SPUREN = Array.from({ length: 32 }, (_, i) => i + 1);   // D1 K1: Spur-Regler des Arrangements (§1.5 spur/<n>/*)
 const SPUR_REGLER = ['fader', 'pan', 'mute', 'solo'];
+const SPUR_ZIELE = [...SPUR_REGLER, 'filter', 'eq/tief', 'eq/mitte', 'eq/hoch'];   // loop deck K7a: spur/<n>/filter exists for tracks only, groups have no filter row
 // S5r (§1.5): graph knobs <kanal>/bk/<1..64> auf den Kanälen, die einen Baukasten-Graphen annehmen (nicht erz/4, erz/8)
 export const BK_KANAELE = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
 export const BK_SEND_KANAELE = ['fx/3', 'fx/4'];   // S14: graph knobs of the send returns (global controls fx/<n>/bk/1..64)
@@ -39,7 +40,7 @@ export const ZIELE = new Set([
   ...LOOPBOXEN.flatMap((k) => [...KANALZUG, ...DECK_ZUWEISUNG].map((p) => `${k}/${p}`)),  // ohne Tasten
   'xfader', 'master/pegel', 'master/kleber', 'cue/mix', 'cue/pegel',   // kleber (K2): Schwelle des Summen-Kompressors, nur Hand
   'master/pfl',   // MASTER CUE (2026-10-10): Master auf die PFL-Seite des Kopfhörers, nur Hand
-  ...SPUREN.flatMap((n) => SPUR_REGLER.map((p) => `spur/${n}/${p}`)),   // D1 K1: Spur-Mixer der Produktion
+  ...SPUREN.flatMap((n) => SPUR_ZIELE.map((p) => `spur/${n}/${p}`)),   // D1 K1: Spur-Mixer der Produktion
   ...GRUPPEN.flatMap((n) => SPUR_REGLER.map((p) => `grp/${n}/${p}`)),   // 1.10: Gruppen-Mixer der Produktion
   ...GRUPPEN.map((n) => `grp/${n}/cue`),                               // live modules task 6: headphone cue of a group, hand only
   'pm/fader',                                                          // 1.10: Fader des Produktions-Masters
@@ -66,6 +67,8 @@ export function art(pfad) {
   if (pfad === 'cue/mix') return 'mix';
   if (pfad === 'master/kleber') return 'kleber';
   if (pfad === 'master/pfl') return 'pfl';
+  if (/^spur\/(?:[1-9]|[12][0-9]|3[0-2])\/eq\/(?:tief|mitte|hoch)$/.test(pfad)) return 'eq';   // loop deck channel strip KZ1: isolator band of a track, KERN.eq applies
+  if (/^spur\/(?:[1-9]|[12][0-9]|3[0-2])\/filter$/.test(pfad)) return 'filter';   // loop deck K7a: DJ filter of a track, -1..+1, centre neutral
   const sp = /^spur\/(?:[1-9]|[12][0-9]|3[0-2])\/(fader|pan|mute|solo)$/.exec(pfad);   // D1 K1
   if (sp) return sp[1] === 'fader' ? 'spur_fader' : sp[1] === 'pan' ? 'pan' : 'schalter';
   const gp = /^grp\/([1-9]|1[0-6])\/(fader|pan|mute|solo|cue)$/.exec(pfad);   // 1.10: wie die Spur-Regler
@@ -84,7 +87,7 @@ export function art(pfad) {
 const f = Math.fround;
 const STUMM = -200;                        // §1.2
 const STUMM_GRENZE = -120;                 // §1.2: jeder Wert <= -120 gilt als stumm
-const KERN = {
+export const KERN = {
   fader: { typ: 'fader_db', min: -200, max: 0, kill: false },     // K_FADER (Fader, Master, Cue)
   eq: { typ: 'linear', min: -26, max: 6, kill: true },            // K_EQ: unter dem Minimum Kill
   trim: { typ: 'linear', min: -24, max: 24, kill: false },

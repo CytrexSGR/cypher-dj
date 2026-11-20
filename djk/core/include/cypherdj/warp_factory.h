@@ -48,6 +48,7 @@ struct WarpAnsatz {
   double beat_versatz = 0.0;
   Karte karte;
   uint32_t epoche = 0;        // vergibt ansetzen()
+  bool kreis = false;         // the source is a loop (launcher passes): the stretcher reads past either end around the loop, not zeros; the clip beat range is one turn
 };
 
 struct WarpZaehler {
@@ -77,6 +78,11 @@ class WarpWerk {
 
   // ---- Lade-Faden
   virtual bool liest(const ArrSnapshot* s) const noexcept = 0;
+  // K4: does a werk slot still read audio a (an open order or a voice that holds it)? ArrAudioCache::gib asks before it frees. Default false for fakes without slots.
+  // Callback only: an order of this werk slot is still open, i.e. the thread may read what its clip points to (markers, audio pointer) from the snapshot
+  // or from the launcher's copy. The owner of such memory keeps it untouched until this is false (posts == gelesen).
+  virtual bool offen(int /*platz*/) const noexcept { return false; }
+  virtual bool haelt(const ArrAudio*) const noexcept { return false; }
 
   // ---- Betrieb
   virtual int faeden() const noexcept = 0;
