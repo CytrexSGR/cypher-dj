@@ -1,7 +1,7 @@
 // Sleep state of silent channel strips (Mixer::setze_schlaf, schlaf_schritt in mixer.cpp). Every test runs two identical mixers in
 // lockstep, one with sleeping (default) and one with setze_schlaf(false), and compares the whole record with memcmp (no tolerance): master
 // sum, cue, send sums fx/1..4, the peak hold of the strips (/pegel) and the gain-reduction meters.
-//  (1) schlaf_bitgleich: 18 strips, 2 fed with a sine (one to the master, one to bus/1, which has a delay and a send into the hall), 16
+//  (1) schlaf_bitgleich: 8 strips, 2 fed with a sine (one to the master, one to bus/1, which has a delay and a send into the hall), 6
 //      silent, 3000 blocks: bit-equal, schlaf_bloecke() > 0, the reference never sleeps
 //  (2) schlaf_echo_impuls: colour echo, a 10 ms impulse, the knob back to the middle, 125 bpm: the strip does not sleep while the echo
 //      still sounds (the tail is longer than a block), bit-equal, sleeps eventually
@@ -82,7 +82,7 @@ struct Lauf {
     an(ml); an(mr); an(cl); an(cr);
     an(m->master_summe_l()); an(m->master_summe_r());
     for (int s = 0; s < 4; ++s) { an(m->fx_l(s)); an(m->fx_r(s)); }
-    for (int k = 0; k < 14; ++k) {
+    for (int k = 0; k < cdj::MIX_KANAELE; ++k) {
       ausgabe.push_back(m->spitze_lesen(k));
       ausgabe.push_back(m->komp_gr_db(k));
     }
@@ -114,15 +114,15 @@ int main() {
     Lauf a(true), b(false);
     for (Lauf* l : {&a, &b}) {
       l->m->setze_kanal_latenz(latenz);
-      l->setze("erz/1/fader", 0.0f);
-      l->setze("erz/2/fader", 0.0f);
-      l->setze("erz/1/send/2", -6.0f);   // into the hall
-      l->setze("erz/2/ziel", 1.0f);      // erz/2 goes to bus/1
+      l->setze("deck/2/fader", 0.0f);
+      l->setze("pad/1/fader", 0.0f);
+      l->setze("deck/2/send/2", -6.0f);   // into the hall
+      l->setze("pad/1/ziel", 1.0f);      // pad/1 goes to bus/1
       l->setze("bus/1/fader", 0.0f);
     }
     for (int k = 0; k < 3000; ++k) {
       for (Lauf* l : {&a, &b}) {
-        if (k < 400) { l->sinus(4); l->sinus(5, 0, 0.3f); }   // then silence: after ~2100 blocks (the 20 Hz high-pass of the DJ filter) the sources and the bus fall asleep
+        if (k < 400) { l->sinus(1); l->sinus(2, 0, 0.3f); }   // then silence: after ~2100 blocks (the 20 Hz high-pass of the DJ filter) the sources and the bus fall asleep
         l->lauf();
       }
     }
@@ -130,8 +130,8 @@ int main() {
     PRUEF(a.m->schlaf_bloecke() > 0);
     PRUEF(b.m->schlaf_bloecke() == 0);
     int schlaefer = 0;
-    for (int k = 0; k < 18; ++k) schlaefer += a.m->schlaeft(k);
-    PRUEF(schlaefer == 18);   // 16 silent from the start, the two fed ones and the bus once their filters have run out
+    for (int k = 0; k < cdj::MIX_KANAELE; ++k) schlaefer += a.m->schlaeft(k);
+    PRUEF(schlaefer == cdj::MIX_KANAELE);   // 6 silent from the start, the two fed ones and the bus once their filters have run out
     bool nicht_null = false;
     for (float v : a.ausgabe) nicht_null = nicht_null || v != 0.0f;
     PRUEF(nicht_null);   // positive control: there was sound
@@ -143,77 +143,77 @@ int main() {
     for (Lauf* l : {&a, &b}) {
       l->setze("color/art", 2.0f);     // DUB ECHO
       l->setze("color/param", 0.0f);   // feedback 0.35
-      l->setze("erz/3/fader", 0.0f);
-      l->setze("erz/3/filter", 0.6f);  // knob out of the dead zone: the echo takes the input
+      l->setze("pad/2/fader", 0.0f);
+      l->setze("pad/2/filter", 0.6f);  // knob out of the dead zone: the echo takes the input
     }
     int klingt = 0, geschlafen_bei_klang = 0;
     bool schlief_je = false;
     for (int k = 0; k < 2500; ++k) {
-      if (k == 4) beide(a, b, "erz/3/filter", 0.0f);   // the knob back to the middle: the tail runs out
+      if (k == 4) beide(a, b, "pad/2/filter", 0.0f);   // the knob back to the middle: the tail runs out
       for (Lauf* l : {&a, &b}) {
-        l->impuls(6, 480, 0);   // 10 ms
+        l->impuls(3, 480, 0);   // 10 ms
         l->lauf();
       }
       if (b.nicht_null_master()) {
         ++klingt;
-        if (a.m->schlaeft(6)) ++geschlafen_bei_klang;
+        if (a.m->schlaeft(3)) ++geschlafen_bei_klang;
       }
-      schlief_je = schlief_je || a.m->schlaeft(6);
+      schlief_je = schlief_je || a.m->schlaeft(3);
     }
     PRUEF(gleich(a, b));
     PRUEF(klingt > 50);   // positive control: the tail is much longer than one block
     PRUEF(geschlafen_bei_klang == 0);
     PRUEF(schlief_je);
-    PRUEF(a.m->schlaeft(6));
+    PRUEF(a.m->schlaeft(3));
     PRUEF(a.m->schlaf_bloecke() > 0);
   }
 
   // (3) schlaf_regler
   {
     Lauf a(true), b(false);
-    for (Lauf* l : {&a, &b}) l->setze("erz/3/fader", 0.0f);
+    for (Lauf* l : {&a, &b}) l->setze("pad/2/fader", 0.0f);
     auto bloecke = [&](int anzahl, bool sine) {
       for (int k = 0; k < anzahl; ++k) {
         for (Lauf* l : {&a, &b}) {
-          if (sine) l->sinus(6);
+          if (sine) l->sinus(3);
           l->lauf();
         }
       }
     };
     bloecke(300, false);
-    PRUEF(a.m->schlaeft(6));                         // asleep before the moves
+    PRUEF(a.m->schlaeft(3));                         // asleep before the moves
     // moves that leave nothing running on a silent strip: the strip may sleep on, and must sound right afterwards
-    beide(a, b, "erz/3/eq/tief", 6.0f);
+    beide(a, b, "pad/2/eq/tief", 6.0f);
     bloecke(20, false);
-    beide(a, b, "erz/3/fader", -6.0f);
+    beide(a, b, "pad/2/fader", -6.0f);
     bloecke(20, false);
-    beide(a, b, "erz/3/trim", 6.0f);
-    beide(a, b, "erz/3/send/2", 0.0f);
+    beide(a, b, "pad/2/trim", 6.0f);
+    beide(a, b, "pad/2/send/2", 0.0f);
     bloecke(20, false);
-    beide(a, b, "erz/3/kill/mitte", 1.0f);
+    beide(a, b, "pad/2/kill/mitte", 1.0f);
     bloecke(20, false);
-    beide(a, b, "erz/3/kill/mitte", 0.0f);
-    beide(a, b, "erz/3/filter", -0.5f);              // DJ filter (art FILTER) low-pass side
+    beide(a, b, "pad/2/kill/mitte", 0.0f);
+    beide(a, b, "pad/2/filter", -0.5f);              // DJ filter (art FILTER) low-pass side
     bloecke(20, false);
-    beide(a, b, "erz/3/filter", 0.0f);
+    beide(a, b, "pad/2/filter", 0.0f);
     bloecke(20, false);
     // colour move: NOISE out of its dead zone makes sound from zero input, the strip must be awake and sound like the reference
     beide(a, b, "color/art", 4.0f);
     beide(a, b, "color/param", 1.0f);
-    beide(a, b, "erz/3/filter", 0.8f);
+    beide(a, b, "pad/2/filter", 0.8f);
     bool laut = false;
     for (int k = 0; k < 60; ++k) {
       for (Lauf* l : {&a, &b}) l->lauf();
-      PRUEF(!a.m->schlaeft(6));
+      PRUEF(!a.m->schlaeft(3));
       laut = laut || b.nicht_null_master();
     }
     PRUEF(laut);   // positive control: noise came out
-    beide(a, b, "erz/3/filter", 0.0f);
+    beide(a, b, "pad/2/filter", 0.0f);
     bloecke(50, false);
-    PRUEF(a.m->schlaeft(6));                         // the noise stopped, the strip sleeps again
-    beide(a, b, "erz/3/komp/an", 1.0f);               // a compressor switch
+    PRUEF(a.m->schlaeft(3));                         // the noise stopped, the strip sleeps again
+    beide(a, b, "pad/2/komp/an", 1.0f);               // a compressor switch
     bloecke(10, false);
-    PRUEF(!a.m->schlaeft(6));
+    PRUEF(!a.m->schlaeft(3));
     bloecke(100, true);                               // then a sine
     PRUEF(gleich(a, b));
     PRUEF(a.m->schlaf_bloecke() > 0);
@@ -223,16 +223,16 @@ int main() {
   {
     Lauf a(true), b(false);
     for (Lauf* l : {&a, &b}) {
-      l->setze("erz/3/fader", 0.0f);
-      l->setze("erz/3/eq/hoch", -3.0f);
+      l->setze("pad/2/fader", 0.0f);
+      l->setze("pad/2/eq/hoch", -3.0f);
     }
     for (int k = 0; k < 300; ++k) {
       for (Lauf* l : {&a, &b}) {
-        if (k == 250) l->sinus(6, N / 3);   // the input starts in the middle of the block
+        if (k == 250) l->sinus(3, N / 3);   // the input starts in the middle of the block
         l->lauf();
       }
-      if (k == 249) PRUEF(a.m->schlaeft(6));
-      if (k == 250) PRUEF(!a.m->schlaeft(6));
+      if (k == 249) PRUEF(a.m->schlaeft(3));
+      if (k == 250) PRUEF(!a.m->schlaeft(3));
     }
     PRUEF(gleich(a, b));
     bool laut = false;
@@ -288,10 +288,10 @@ int main() {
   for (int routing : {0, 1}) {
     Lauf a(true), b(false);
     for (Lauf* l : {&a, &b}) {
-      l->setze("erz/3/fader", 0.0f);
+      l->setze("pad/2/fader", 0.0f);
       l->m->fx_routing_setze(routing);
       l->m->fx_einheit_setze(0, cdj::BeatFx::ECHO, 0.5, 0.5f, 0.5f, 0.5, 0.5, true);
-      l->m->fx_zuweisung_setze(0, 6, true);
+      l->m->fx_zuweisung_setze(0, 3, true);
     }
     int klingt_bloecke = 0, falsch = 0;
     bool schlief = false;
@@ -299,14 +299,14 @@ int main() {
       if (k == 4)
         for (Lauf* l : {&a, &b}) l->m->fx_einheit_setze(0, cdj::BeatFx::ECHO, 0.5, 0.5f, 0.5f, 0.5, 0.5, false);   // input closed, tail rings
       for (Lauf* l : {&a, &b}) {
-        l->impuls(6, 480, 0);
+        l->impuls(3, 480, 0);
         l->lauf();
       }
-      if (a.m->beatfx(0, 6).klingt()) {
+      if (a.m->beatfx(0, 3).klingt()) {
         ++klingt_bloecke;
-        falsch += a.m->schlaeft(6);
+        falsch += a.m->schlaeft(3);
       }
-      schlief = schlief || a.m->schlaeft(6);
+      schlief = schlief || a.m->schlaeft(3);
     }
     PRUEF(gleich(a, b));
     PRUEF(klingt_bloecke > 100);
@@ -317,25 +317,25 @@ int main() {
   {
     struct Knopf { const char* pfad; float von, bis; };
     const Knopf knoepfe[] = {
-        {"erz/3/trim", 0.0f, 6.0f},     {"erz/3/eq/tief", 0.0f, 6.0f},    {"erz/3/eq/mitte", 0.0f, -6.0f}, {"erz/3/eq/hoch", 0.0f, 6.0f},
-        {"erz/3/fader", -10.0f, -3.0f}, {"erz/3/send/1", -10.0f, -3.0f},  {"erz/3/send/2", -10.0f, -3.0f}, {"erz/3/send/3", -10.0f, -3.0f},
-        {"erz/3/send/4", -10.0f, -3.0f}, {"erz/3/kill/tief", 0.0f, 1.0f}, {"erz/3/kill/mitte", 0.0f, 1.0f}, {"erz/3/kill/hoch", 0.0f, 1.0f},
-        {"erz/3/filter", 0.0f, -0.7f},  {"erz/3/filter", 0.0f, 0.7f}};
+        {"pad/2/trim", 0.0f, 6.0f},     {"pad/2/eq/tief", 0.0f, 6.0f},    {"pad/2/eq/mitte", 0.0f, -6.0f}, {"pad/2/eq/hoch", 0.0f, 6.0f},
+        {"pad/2/fader", -10.0f, -3.0f}, {"pad/2/send/1", -10.0f, -3.0f},  {"pad/2/send/2", -10.0f, -3.0f}, {"pad/2/send/3", -10.0f, -3.0f},
+        {"pad/2/send/4", -10.0f, -3.0f}, {"pad/2/kill/tief", 0.0f, 1.0f}, {"pad/2/kill/mitte", 0.0f, 1.0f}, {"pad/2/kill/hoch", 0.0f, 1.0f},
+        {"pad/2/filter", 0.0f, -0.7f},  {"pad/2/filter", 0.0f, 0.7f}};
     for (const Knopf& kn : knoepfe) {
       Lauf a(true), b(false);
       for (Lauf* l : {&a, &b}) {
-        l->setze("erz/3/fader", 0.0f);
-        for (const char* sd : {"erz/3/send/1", "erz/3/send/2", "erz/3/send/3", "erz/3/send/4"}) l->setze(sd, -10.0f);
+        l->setze("pad/2/fader", 0.0f);
+        for (const char* sd : {"pad/2/send/1", "pad/2/send/2", "pad/2/send/3", "pad/2/send/4"}) l->setze(sd, -10.0f);
       }
       for (int k = 0; k < 20; ++k) { a.lauf(); b.lauf(); }
-      PRUEF(a.m->schlaeft(6));
+      PRUEF(a.m->schlaeft(3));
       beide_verl(a, b, kn.pfad, kn.von, kn.bis);
       a.lauf(); b.lauf();
-      if (a.m->schlaeft(6)) std::fprintf(stderr, "asleep in the block of the move: %s\n", kn.pfad);
-      PRUEF(!a.m->schlaeft(6));                      // awake in the block of the move
+      if (a.m->schlaeft(3)) std::fprintf(stderr, "asleep in the block of the move: %s\n", kn.pfad);
+      PRUEF(!a.m->schlaeft(3));                      // awake in the block of the move
       for (int k = 0; k < 5; ++k) { a.lauf(); b.lauf(); }
-      PRUEF(a.m->schlaeft(6));                       // and asleep again afterwards (the course ended, the parked value is idle)
-      for (int k = 0; k < 40; ++k) { a.sinus(6); b.sinus(6); a.lauf(); b.lauf(); }
+      PRUEF(a.m->schlaeft(3));                       // and asleep again afterwards (the course ended, the parked value is idle)
+      for (int k = 0; k < 40; ++k) { a.sinus(3); b.sinus(3); a.lauf(); b.lauf(); }
       PRUEF(gleich(a, b));
       bool laut = false;
       for (float v : b.ausgabe) laut = laut || v != 0.0f;
@@ -345,21 +345,21 @@ int main() {
     for (int art = 1; art <= 5; ++art) {
       Lauf a(true), b(false);
       for (Lauf* l : {&a, &b}) {
-        l->setze("erz/3/fader", 0.0f);
+        l->setze("pad/2/fader", 0.0f);
         l->setze("color/art", static_cast<float>(art));
         l->setze("color/param", art == 4 ? 1.0f : 0.0f);   // NOISE loud; the echo and hall tails short
       }
       for (int k = 0; k < 20; ++k) { a.lauf(); b.lauf(); }
-      PRUEF(a.m->schlaeft(6));
-      beide_verl(a, b, "erz/3/filter", 0.0f, 0.8f);
+      PRUEF(a.m->schlaeft(3));
+      beide_verl(a, b, "pad/2/filter", 0.0f, 0.8f);
       a.lauf(); b.lauf();
-      PRUEF(!a.m->schlaeft(6));
-      for (int k = 0; k < 30; ++k) { a.lauf(); b.lauf(); PRUEF(!a.m->schlaeft(6)); }   // the knob stays out: awake
-      beide_verl(a, b, "erz/3/filter", 0.8f, 0.0f);
+      PRUEF(!a.m->schlaeft(3));
+      for (int k = 0; k < 30; ++k) { a.lauf(); b.lauf(); PRUEF(!a.m->schlaeft(3)); }   // the knob stays out: awake
+      beide_verl(a, b, "pad/2/filter", 0.8f, 0.0f);
       for (int k = 0; k < 1500; ++k) { a.lauf(); b.lauf(); }
       PRUEF(gleich(a, b));
-      if (!a.m->schlaeft(6)) std::fprintf(stderr, "colour art %d not asleep again\n", art);
-      PRUEF(a.m->schlaeft(6));                       // tail out, knob in the dead zone: asleep again
+      if (!a.m->schlaeft(3)) std::fprintf(stderr, "colour art %d not asleep again\n", art);
+      PRUEF(a.m->schlaeft(3));                       // tail out, knob in the dead zone: asleep again
       if (art == 4) {
         bool laut = false;
         for (float v : b.ausgabe) laut = laut || v != 0.0f;
@@ -370,19 +370,19 @@ int main() {
     {
       Lauf a(true), b(false);
       for (Lauf* l : {&a, &b}) {
-        l->setze("erz/3/fader", 0.0f);
+        l->setze("pad/2/fader", 0.0f);
         l->setze("bus/1/fader", 0.0f);
-        l->setze("erz/3/send/2", -6.0f);
+        l->setze("pad/2/send/2", -6.0f);
       }
       for (int k = 0; k < 20; ++k) { a.lauf(); b.lauf(); }
-      PRUEF(a.m->schlaeft(6));
-      beide_verl(a, b, "erz/3/ziel", 0.0f, 1.0f);
-      beide_verl(a, b, "erz/3/pfl", 0.0f, 1.0f);
+      PRUEF(a.m->schlaeft(3));
+      beide_verl(a, b, "pad/2/ziel", 0.0f, 1.0f);
+      beide_verl(a, b, "pad/2/pfl", 0.0f, 1.0f);
       a.lauf(); b.lauf();
-      PRUEF(!a.m->schlaeft(6));
-      PRUEF(a.m->ziel_ist(6) == b.m->ziel_ist(6));
-      PRUEF(a.m->ziel_ist(6) == 1);
-      for (int k = 0; k < 40; ++k) { if (k >= 3) { a.sinus(6); b.sinus(6); } a.lauf(); b.lauf(); }
+      PRUEF(!a.m->schlaeft(3));
+      PRUEF(a.m->ziel_ist(3) == b.m->ziel_ist(3));
+      PRUEF(a.m->ziel_ist(3) == 1);
+      for (int k = 0; k < 40; ++k) { if (k >= 3) { a.sinus(3); b.sinus(3); } a.lauf(); b.lauf(); }
       PRUEF(gleich(a, b));
     }
   }
@@ -392,29 +392,29 @@ int main() {
   {
     Lauf a(true), b(false);
     for (Lauf* l : {&a, &b}) {
-      l->setze("erz/3/fader", 0.0f);
+      l->setze("pad/2/fader", 0.0f);
       l->setze("bus/1/fader", 0.0f);
     }
     for (int k = 0; k < 20; ++k) { a.lauf(); b.lauf(); }
-    PRUEF(a.m->schlaeft(6));
-    beide_verl(a, b, "erz/3/ziel", 0.0f, 1.0f);
+    PRUEF(a.m->schlaeft(3));
+    beide_verl(a, b, "pad/2/ziel", 0.0f, 1.0f);
     a.lauf(); b.lauf();
-    PRUEF(a.m->ziel_ist(6) == b.m->ziel_ist(6));     // the course is read in route(): a sleeping strip would not read it
-    PRUEF(a.m->ziel_ist(6) == 1);
+    PRUEF(a.m->ziel_ist(3) == b.m->ziel_ist(3));     // the course is read in route(): a sleeping strip would not read it
+    PRUEF(a.m->ziel_ist(3) == 1);
     a.lauf(); b.lauf();                              // crossfade still open (480 > 256), input silent
-    PRUEF(!a.m->schlaeft(6));
-    for (int k = 0; k < 40; ++k) { a.sinus(6); b.sinus(6); a.lauf(); b.lauf(); }
+    PRUEF(!a.m->schlaeft(3));
+    for (int k = 0; k < 40; ++k) { a.sinus(3); b.sinus(3); a.lauf(); b.lauf(); }
     PRUEF(gleich(a, b));
   }
 
-  // (9) schlaf_holder_limiter: bus/1 with a limiter and a bus delay, fed by erz/2; the limiter is switched on and off by course while the
+  // (9) schlaf_holder_limiter: bus/1 with a limiter and a bus delay, fed by pad/1; the limiter is switched on and off by course while the
   // input is silent, and a sine arrives later. The bus must stay awake while its limiter runs, crossfades or warms up.
   {
     Lauf a(true), b(false);
     for (Lauf* l : {&a, &b}) {
       l->m->setze_kanal_limiter(5.0, true);
-      l->setze("erz/2/fader", 0.0f);
-      l->setze("erz/2/ziel", 1.0f);
+      l->setze("pad/1/fader", 0.0f);
+      l->setze("pad/1/ziel", 1.0f);
       l->setze("bus/1/fader", 0.0f);
       l->setze("bus/1/lim/decke", -6.0f);
     }
@@ -424,9 +424,9 @@ int main() {
       if (k == 100) beide_verl(a, b, "bus/1/lim/an", 0.0f, 1.0f);
       if (k == 700) beide_verl(a, b, "bus/1/lim/an", 1.0f, 0.0f);
       if (k == 3000) beide_verl(a, b, "bus/1/lim/an", 0.0f, 1.0f);
-      if (k < 40 || (k >= 3500 && k < 3510)) { a.sinus(5, 0, 0.9f); b.sinus(5, 0, 0.9f); }
+      if (k < 40 || (k >= 3500 && k < 3510)) { a.sinus(2, 0, 0.9f); b.sinus(2, 0, 0.9f); }
       a.lauf(); b.lauf();
-      bus_schlief = bus_schlief || a.m->schlaeft(14);
+      bus_schlief = bus_schlief || a.m->schlaeft(4);
       if (!gleich(a, b)) diff_bei = k;
       a.ausgabe.clear();
       b.ausgabe.clear();
@@ -441,19 +441,19 @@ int main() {
   for (int routing : {0, 1}) {
     Lauf a(true), b(false);
     for (Lauf* l : {&a, &b}) {
-      l->setze("erz/3/fader", 0.0f);
+      l->setze("pad/2/fader", 0.0f);
       l->m->fx_routing_setze(routing);
       l->m->fx_einheit_setze(0, cdj::BeatFx::ECHO, 0.5, 0.5f, 0.5f, 0.5, 0.5, true);
-      l->m->fx_zuweisung_setze(0, 6, true);
+      l->m->fx_zuweisung_setze(0, 3, true);
     }
     int diff_bei = -1, schlief_bei_klang = 0;
     for (int k = 0; k < 4200 && diff_bei < 0; ++k) {
       for (Lauf* l : {&a, &b}) {
-        if (k < 2) l->impuls(6, 480, 0);
-        else if (k >= 4000 && k < 4040) l->sinus(6);
+        if (k < 2) l->impuls(3, 480, 0);
+        else if (k >= 4000 && k < 4040) l->sinus(3);
         l->lauf();
       }
-      if (a.m->beatfx(0, 6).klingt()) schlief_bei_klang += a.m->schlaeft(6);
+      if (a.m->beatfx(0, 3).klingt()) schlief_bei_klang += a.m->schlaeft(3);
       if (!gleich(a, b)) diff_bei = k;
       a.ausgabe.clear();
       b.ausgabe.clear();
@@ -471,16 +471,16 @@ int main() {
         R"({"format":"baukasten/2","name":"konst","stimmen":1,"knoten":[{"id":"c","art":"konst","wert":0.3},{"id":"o","art":"ausgang"}],"kanten":[{"von":"c.aus","nach":"o.x"}]})";
     struct Fall { const char* name; int k; int latenz; };
     const Fall faelle[] = {
-        {"gate", 6, 0}, {"util", 6, 0}, {"mb", 14, 0}, {"mb", 14, 480}, {"util", 14, 480}, {"bk", 0, 0},
+        {"gate", 3, 0}, {"util", 3, 0}, {"mb", 4, 0}, {"mb", 4, 480}, {"util", 4, 480}, {"bk", 0, 0},
     };
     for (const Fall& f : faelle) {
       Lauf a(true), b(false);
-      const std::string kn = f.k < 4 ? "deck/" + std::to_string(f.k + 1) : f.k < 14 ? "erz/" + std::to_string(f.k - 3) : "bus/" + std::to_string(f.k - 13);
+      const std::string kn = f.k < 2 ? "deck/" + std::to_string(f.k + 1) : f.k < 4 ? "pad/" + std::to_string(f.k - 1) : "bus/" + std::to_string(f.k - 3);
       for (Lauf* l : {&a, &b}) {
         l->m->setze_kanal_latenz(f.latenz);
         l->setze((kn + "/fader").c_str(), 0.0f);
       }
-      if (f.k >= 14) for (Lauf* l : {&a, &b}) l->setze("erz/2/ziel", 1.0f);   // a bus is silent anyway; the target just makes it a real bus
+      if (f.k >= 4) for (Lauf* l : {&a, &b}) l->setze("pad/1/ziel", 1.0f);   // a bus is silent anyway; the target just makes it a real bus
       auto ein = [&](bool an) {
         const std::string p = kn + "/";
         if (!std::strcmp(f.name, "gate")) beide(a, b, (p + "gate/an").c_str(), an ? 1.0f : 0.0f);
@@ -511,7 +511,7 @@ int main() {
       for (int k = 0; k < 30; ++k) { a.lauf(); b.lauf(); }
       if (!a.m->schlaeft(f.k)) std::fprintf(stderr, "holder %s (k=%d, latency %d): not asleep again\n", f.name, f.k, f.latenz);
       PRUEF(a.m->schlaeft(f.k));
-      for (int k = 0; k < 40; ++k) { a.sinus(f.k < 14 ? f.k : 5); b.sinus(f.k < 14 ? f.k : 5); a.lauf(); b.lauf(); }
+      for (int k = 0; k < 40; ++k) { a.sinus(f.k < 4 ? f.k : 2); b.sinus(f.k < 4 ? f.k : 2); a.lauf(); b.lauf(); }
       PRUEF(gleich(a, b));
     }
   }
@@ -527,7 +527,7 @@ int main() {
       l->setze("color/param", 1.0f);   // loud
     }
     for (int k = 0; k < 20; ++k) { a.lauf(); b.lauf(); }
-    PRUEF(a.m->schlaeft(14));
+    PRUEF(a.m->schlaeft(4));
     beide(a, b, "bus/1/filter", 0.8f);   // setze_sofort: this block already makes noise
     a.lauf(); b.lauf();
     beide(a, b, "bus/1/filter", 0.0f);   // back in the dead zone; the noise has not left the delay yet
@@ -536,13 +536,13 @@ int main() {
     bool laut = false;
     for (float v : b.ausgabe) laut = laut || v != 0.0f;
     PRUEF(laut);                         // positive control: the delayed noise did sound
-    PRUEF(a.m->schlaeft(14));            // and the bus sleeps again once the ring is empty
+    PRUEF(a.m->schlaeft(4));            // and the bus sleeps again once the ring is empty
   }
   // (11) schlaf_grenzfaelle
   {
     // varying block lengths: a sine burst, then silence until the strip sleeps, then a second burst
     Lauf a(true), b(false);
-    for (Lauf* l : {&a, &b}) l->setze("erz/3/fader", 0.0f);
+    for (Lauf* l : {&a, &b}) l->setze("pad/2/fader", 0.0f);
     const int ns[] = {256, 64, 1024, 100, 512, 33, 1, 977};
     for (int k = 0; k < 2200; ++k) {
       const int n = ns[k % 8];
@@ -550,12 +550,12 @@ int main() {
         if (k < 40 || (k >= 2100 && k < 2120))
           for (int i = 0; i < n; ++i) {
             const float v = 0.5f * std::sin(0.05f * static_cast<float>(k * 1024 + i));
-            l->m->eingang_l(6)[i] = v;
-            l->m->eingang_r(6)[i] = v;
+            l->m->eingang_l(3)[i] = v;
+            l->m->eingang_r(3)[i] = v;
           }
         l->lauf_n(n);
       }
-      if (k == 2099) PRUEF(a.m->schlaeft(6));
+      if (k == 2099) PRUEF(a.m->schlaeft(3));
     }
     PRUEF(gleich(a, b));
     PRUEF(a.m->schlaf_bloecke() > 0);
@@ -563,24 +563,24 @@ int main() {
   {
     // -0.0f is an exact zero: the strip may sleep through it, the record stays equal
     Lauf a(true), b(false);
-    for (Lauf* l : {&a, &b}) l->setze("erz/3/fader", 0.0f);
+    for (Lauf* l : {&a, &b}) l->setze("pad/2/fader", 0.0f);
     for (int k = 0; k < 400; ++k)
       for (Lauf* l : {&a, &b}) {
         if (k >= 300 && k < 310)
-          for (int i = 0; i < N; ++i) l->m->eingang_l(6)[i] = l->m->eingang_r(6)[i] = -0.0f;
+          for (int i = 0; i < N; ++i) l->m->eingang_l(3)[i] = l->m->eingang_r(3)[i] = -0.0f;
         l->lauf();
       }
     PRUEF(gleich(a, b));
-    PRUEF(a.m->schlaeft(6));
+    PRUEF(a.m->schlaeft(3));
   }
   for (float schlecht : {NAN, INFINITY}) {
     // NaN / Inf into a sleeping strip: it wakes, the NaN guard of verarbeite() reacts the same with sleeping on and off
     Lauf a(true), b(false);
-    for (Lauf* l : {&a, &b}) l->setze("erz/3/fader", 0.0f);
+    for (Lauf* l : {&a, &b}) l->setze("pad/2/fader", 0.0f);
     for (int k = 0; k < 400; ++k) {
-      if (k == 300) PRUEF(a.m->schlaeft(6));
+      if (k == 300) PRUEF(a.m->schlaeft(3));
       for (Lauf* l : {&a, &b}) {
-        if (k == 300) l->m->eingang_l(6)[10] = schlecht;
+        if (k == 300) l->m->eingang_l(3)[10] = schlecht;
         l->lauf();
       }
     }

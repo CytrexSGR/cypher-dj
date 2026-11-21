@@ -19,7 +19,7 @@ export const VORGABE_CFG = {
   hoerschein_pflicht: true, keylock: true, keylock_maschine: 'r3', arr_ordner: '', arr_budget_mib: 1024,
   // 1.15 mix tools (A1b, D8): 0 = the four channel limiters are not built; warp_faeden and graph_faeden were missing since 1.13 / Baukasten S3b
   kanal_limiter_vorhalt_ms: 0.0, kanal_limiter_echtspitze: false, warp_faeden: 4, graph_faeden: 2,
-  hall_faeden: 3, hall_cpus: '',   // mehrkern Task 5
+  hall_faeden: 7, hall_cpus: '',   // mehrkern Task 5
   spur_pool: 'an',   // mehrkern slice 3.2 (Task 7 key, in the dummy since Task 8)
   stimme_eingang: 0, stimme_duck_db: -12.0, stimme_pegel_db: 0.0,   // voice channel (demo)
 };
@@ -393,6 +393,8 @@ export const verbindung = {
         const gebaut = K.cfg.kanal_limiter_vorhalt_ms > 0;
         K.aus('/e/kanal_limiter', [gebaut ? 1 : 0, gebaut ? Math.round(K.cfg.kanal_limiter_vorhalt_ms * 48) + 2 + (K.cfg.kanal_limiter_echtspitze ? 12 : 0) : 0], a.port);
       }
+      // container core V5: a new subscriber gets the container input state of all four containers (/e/container/quelle), like the old place channel
+      if (neueGeneration) K.containerQuelleMelden?.(a.port);
       // wie der Kern (net.cpp hallo, Effekt-Sektion 2026-10-11): wer sich zum ersten Mal in dieser Generation meldet, bekommt den gemerkten
       // Stand aller schon gemeldeten Regler (Halter frei). Ein Seiten-Server nach dem Ende der Abonnenten-Frist kennt so die Spur-Regler
       // (D1 Spec 6.21, 6.35). keylock hat seine eigene Meldung oben; der Stand kommt zuletzt, nach /e/neustart und /q/stand, wie im Kern

@@ -124,7 +124,7 @@ void pruefe(const char* tag, int n, int K, const Erg& e, double grenze) {
 
 int main() {
   for (const int n : {256, 128, 64, 32}) {
-    for (const int K : {BUS1, 17}) {
+    for (const int K : {BUS1, BUS4}) {
       // (E1) classification looks at BOTH crossovers: hoch jumps with tief constant are big steps. A small step first (2000 -> 2100), then the jump.
       for (const double sh : {800.0, 1500.0}) {
         char t[100];

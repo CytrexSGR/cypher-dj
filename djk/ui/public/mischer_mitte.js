@@ -35,9 +35,6 @@ export function ordneMitte(ansicht, $ = (s) => document.querySelector(s)) {
   if (!fx || !mitte || !km || !master || !kopf) return;
   for (const id of ['#fx-1', '#fx-2', '#colorfx', '#remix-einheit']) { const e = $(id); if (e) (dj ? mitte : fx).append(e); }
   if (dj) master.append(km); else kopf.insertBefore(km, fx);
-  // the three Strudel channel strips: inside the Strudel place in the DJ view, in the bottom mixer row of the Studio view
-  const zp = $('.zugplatz'), strudel = $('#deck-c'), unten = $('#mischer-unten');
-  if (zp && strudel && unten) { if (dj) strudel.append(zp); else unten.prepend(zp); }
 }
 
 // COLOR PARAMETER as a knob (Andreas 2026-11-14: "sollte auch drehknopf sein"). The range input stays as the value carrier the page already reads

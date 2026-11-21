@@ -1,10 +1,10 @@
-// Insert graphs on every source channel (remix targets L1, L2, DRUMS, BASS, MELODY): Mixer::setze_kanal_graph takes erz/1..8 and pad/1..2 like the decks.
+// Insert graphs on every source channel (remix targets L1, L2, DRUMS, BASS, MELODY): Mixer::setze_kanal_graph takes the four containers.
 // Signal: 1 kHz sine 0.5 on the channel under test (fader 0 dB), master_summe_l()/r() is read.
 //  (a) a halving graph on pad/1 halves the sum after the blend (insert: the channel is replaced, not added to)
 //  (b) a graph on pad/1 does not touch deck/1: with only deck/1 playing the sum stays bit-identical
-//  (c) pad/1/bk/2 (knob row 12) steers a regler node of the pad/1 graph; deck/1/bk/2 (row 0) does not
-//  (d) erz/1 (the drum stream, row 4) takes a graph as well
-//  (e) a bus (bus/1, index 14) has no slot: the graph goes straight back through bk_frei
+//  (c) pad/1/bk/2 (knob row 2) steers a regler node of the pad/1 graph; deck/1/bk/2 (row 0) does not
+//  (d) deck/2 (row 1) takes a graph as well
+//  (e) a bus (bus/1, index 4) has no slot: the graph goes straight back through bk_frei
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -18,7 +18,7 @@ namespace sw = cypherdj::stellwerk;
 
 constexpr int N = 256;
 constexpr double PI = 3.14159265358979323846;
-constexpr int DECK1 = 0, ERZ1 = 4, PAD1 = 12, BUS1 = 14;
+constexpr int DECK1 = 0, DECK2 = 1, PAD1 = 2, BUS1 = 4;
 
 static CypherBk* graph(const char* json) {
   char f[256] = {};
@@ -41,7 +41,7 @@ struct Lauf {
   long t = 0;
   float bk[cdj::MIX_BK_ZEILEN][sw::BK_REGLER_N];
   explicit Lauf(int k) : m(std::make_unique<cdj::Mixer>(tab)), quelle(k) {
-    for (const char* f : {"deck/1/fader", "erz/1/fader", "pad/1/fader"}) {
+    for (const char* f : {"deck/1/fader", "deck/2/fader", "pad/1/fader"}) {
       const int r = tab.suche(f);
       PRUEF(r >= 0);
       m->setze_sofort(r, 0.0f);
@@ -116,8 +116,8 @@ int main() {
     PRUEF(std::fabs(gewinn(PAD1, 0.25f) - 0.25f) < 0.01f);
     PRUEF(std::fabs(gewinn(DECK1, 0.25f) - 0.5f) < 0.01f);
   }
-  // (d) erz/1 takes a graph
-  PRUEF(std::fabs(20.0 * std::log10(verhaeltnis(ERZ1, ERZ1, HALB)) + 6.0206) < 0.05);
+  // (d) deck/2 takes a graph
+  PRUEF(std::fabs(20.0 * std::log10(verhaeltnis(DECK2, DECK2, HALB)) + 6.0206) < 0.05);
   // (e) no slot on a bus: handed back at once
   {
     Lauf b(DECK1);

@@ -25,10 +25,25 @@ int main() {
   Arbeitsbestand ab("test_kern_mitschnitt");
   {  // 1. bitgleich gegen einen frischen Klick
     Lauf x(ab.pfad, nullptr);
-    auto k = x.neu(cdj::Befehl::KLICK, "pruefstand");
-    k.an = 1;
-    std::snprintf(k.pfad, sizeof k.pfad, "erz/1");
-    x.sende(k);
+    // Container core K3 (D-V4): the recorder reads the stream buffers of stage 1, not a mixer input, so the test click of erz/1 (Befehl::KLICK, a mixer input
+    // that no longer feeds the recorder) is replaced by the same click delivered as the host return of stream 1 (the harness's erz_quelle, the return adds bit-exactly).
+    // The right channel of that source is the negative of the left one.
+    cdj::Karte karte(128.0, 0);
+    cdj::Klick klick;
+    klick.an();
+    const int64_t QUELLE_N = 4 * 200000;
+    std::vector<float> klick_l((size_t)QUELLE_N, 0.0f), klick_r((size_t)QUELLE_N, 0.0f);
+    {
+      std::vector<float> rl(N), rr(N);
+      cdj::KlickEinsatz e[8];
+      for (int64_t s = 0; s < QUELLE_N; s += N) {
+        std::fill(rl.begin(), rl.end(), 0.0f);
+        std::fill(rr.begin(), rr.end(), 0.0f);
+        klick.block(karte, s, N, rl.data(), rr.data(), e, 8);
+        for (int i = 0; i < N; ++i) { klick_l[(size_t)(s + i)] = rl[(size_t)i]; klick_r[(size_t)(s + i)] = rr[(size_t)i]; }
+      }
+    }
+    x.erz_quelle[0] = [&](int64_t sm) { return sm < QUELLE_N ? klick_l[(size_t)sm] : 0.0f; };
     x.zyklen(2 * SPB);  // Beat ~2
     cdj::Mitschnitt* mt = neuer_mitschnitt(1);
     auto r = x.neu(cdj::Befehl::MITSCHNITT, "andreas");
@@ -43,25 +58,11 @@ int main() {
           mev[0].fassung == 4 && !std::strcmp(mev[0].pfad, "rec1") && mev[0].zeiger == mt);
     PRUEF(mt->gefuellt == mt->frames && mt->ab_sample == 90000 && mt->ab_beat == 4.0);
 
-    // Referenz: frischer Klick, [90000, 180000) in Blöcken zu 256
-    cdj::Karte karte(128.0, 0);
-    cdj::Klick klick;
-    klick.an();
+    // Reference: the click source itself over [90000, 180000), left as it is, right as the harness delivers it (the negative of the left one)
     std::vector<float> soll((size_t)mt->frames * 2, 0.0f);
-    std::vector<float> rl(N), rr(N);
-    cdj::KlickEinsatz e[8];
-    for (int64_t s = 0; s < 180000; s += N) {
-      std::fill(rl.begin(), rl.end(), 0.0f);
-      std::fill(rr.begin(), rr.end(), 0.0f);
-      klick.block(karte, s, N, rl.data(), rr.data(), e, 8);
-      if (s + N > 90000) {
-        const int64_t von = std::max(s, (int64_t)90000);
-        const int64_t bis = std::min(s + N, (int64_t)180000);
-        for (int64_t t = von; t < bis; ++t) {
-          soll[(size_t)(2 * (t - 90000))] = rl[(size_t)(t - s)];
-          soll[(size_t)(2 * (t - 90000) + 1)] = rr[(size_t)(t - s)];
-        }
-      }
+    for (int64_t t = 90000; t < 180000; ++t) {
+      soll[(size_t)(2 * (t - 90000))] = klick_l[(size_t)t];
+      soll[(size_t)(2 * (t - 90000) + 1)] = -klick_l[(size_t)t];
     }
     int falsch = 0;
     for (size_t i = 0; i < soll.size(); ++i)

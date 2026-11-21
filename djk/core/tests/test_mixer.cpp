@@ -1,8 +1,8 @@
 // Scheibe 25: der Mixer als Zuweisungstabelle (mixer.h). Offline, ohne Kern und ohne Stellwerk-Zyklus.
 //  1. Tabelle: jeder Regler des Stellwerks hat eine Zuweisung; die Vorgaben aus §1.5 stimmen zwischen Stellwerk
 //     (Scheibe 11) und Kanalzug-Bibliothek (Scheibe 04) überein.
-//  2. Negativ-Kontrolle: alle Regler auf Vorgabe, Rauschen in allen 18 Eingängen → Master und Cue exakt 0.
-//  3. Weg: deck/2 mit Fader 0 dB ist bitgleich zu einem allein gerechneten Kanalzug; deck/3 über bus/1 bitgleich zu
+//  2. Negativ-Kontrolle: alle Regler auf Vorgabe, Rauschen in allen 8 Eingängen → Master und Cue exakt 0.
+//  3. Weg: deck/2 mit Fader 0 dB ist bitgleich zu einem allein gerechneten Kanalzug; pad/1 über bus/1 bitgleich zu
 //     zwei Kanalzügen hintereinander; Crossfader Mixxx additiv (A bei +0,5 halb, bei +1 still; B bei +1 voll).
 //  4. Zielwechsel: 10-ms-Blende (480 Samples, S-Kurve) statt Sprung.
 //  5. master/pegel, PFL vor dem Fader (Vorhören hinter geschlossenem Fader), cue/mix, cue/split, cue/pegel.
@@ -46,9 +46,9 @@ int main() {
     for (int r = 0; r < p.tab.anzahl(); ++r) ++n[static_cast<int>(p.m->zuweisung(r).rolle)];
     std::printf("Regler %d: ohne %d, spaeter %d, kanalzug %d, ziel %d, xseite %d, pfl %d, global %d\n", p.tab.anzahl(),
                 n[0], n[1], n[2], n[3], n[4], n[5], n[6] + n[7] + n[8] + n[9] + n[10]);
-    PRUEF(n[static_cast<int>(cdj::MixRolle::kanalzug)] == 18 * dsp::kAnzahlRegler);  // 18 Kanäle · 13 Regler
-    PRUEF(n[static_cast<int>(cdj::MixRolle::ziel)] == 14);                           // Busse haben keinen
-    PRUEF(n[static_cast<int>(cdj::MixRolle::xseite)] == 18 && n[static_cast<int>(cdj::MixRolle::pfl)] == 18);
+    PRUEF(n[static_cast<int>(cdj::MixRolle::kanalzug)] == 8 * dsp::kAnzahlRegler);   // K9: 8 channels (4 containers, 4 buses) x 13 knobs
+    PRUEF(n[static_cast<int>(cdj::MixRolle::ziel)] == 4);                            // the containers have one, the buses do not
+    PRUEF(n[static_cast<int>(cdj::MixRolle::xseite)] == 8 && n[static_cast<int>(cdj::MixRolle::pfl)] == 8);
     PRUEF(n[static_cast<int>(cdj::MixRolle::ohne)] == 4);                            // deck/<n>/transport
     for (int g = static_cast<int>(cdj::MixRolle::xfader); g <= static_cast<int>(cdj::MixRolle::cue_split); ++g)
       PRUEF(n[g] == 1);
@@ -60,12 +60,13 @@ int main() {
     // 1.10 Slice 3: dazu 204 Send-, Return- und Hall-Regler (spur|grp/<n>/send/<r>, ret/<r>/*), ebenfalls Modul Arrangement
     // S14: fx/3, fx/4 x 8 bk/<n>, global, the Mixer ignores them (the kern ctor carries the values to the send graphs)
     // 1.10 slice 4a T1: plus the 120 ins/komp/<n>/* rows, global, owned by the Arrangement module (the Mixer ignores them)
-    PRUEF(n[static_cast<int>(cdj::MixRolle::spaeter)] == 16 + 4 + 1 + 4 * cdj::ARR_SPUREN + 4 * sw::GRP_REGLER_GRUPPEN_ALLE + 1 + 12 * 8 + 204 + 4 * sw::GRP_REGLER_GRUPPEN_NEU + 2 * 8 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 14 * 56 + sw::GRP_REGLER_GRUPPEN_ALLE + sw::BK_REGLER_N + sw::SPUR_BK_SLOTS * sw::SPUR_BK_KNOEPFE + sw::SPUR_FILTER_N + 3 * sw::SPUR_EQ_N);   // loop deck channel strip KZ1: + 96 spur/<n>/eq/<band> rows   // production plan task 8: + the 256 spur/<slot>/bk/<k> rows (role spur_bk, class spaeter); live modules task 6: + the 16 grp/<n>/cue rows (role class spaeter);   // arr-bk: + 8 bk instances x 9 rows; arr-fx: pools 8 eq, 4 saett, 2 lim and 8 utilities x 5 rows; master limiter: + 3 ins/lim rows (role class spaeter); 1.10 slice 4b: + 59 eq and 4 saett insert rows (eq pool 2 since 2026-11-06: 2 x 59); slice 4c T15: + 48 rack macro rows rack/<k>/m<n>
+    PRUEF(n[static_cast<int>(cdj::MixRolle::spaeter)] == 16 + 4 + 1 + 4 * cdj::ARR_SPUREN + 4 * sw::GRP_REGLER_GRUPPEN_ALLE + 1 + 4 * 8 + 204 + 4 * sw::GRP_REGLER_GRUPPEN_NEU + 2 * 8 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 6 * 56 + sw::GRP_REGLER_GRUPPEN_ALLE + sw::BK_REGLER_N + sw::SPUR_BK_SLOTS * sw::SPUR_BK_KNOEPFE + sw::SPUR_FILTER_N + 3 * sw::SPUR_EQ_N + sw::STROM_BK_STROEME * sw::BK_REGLER_N +
+                                                                       5 * cdj::ARR_SPUREN + (sw::RET_REGLER_RETURNS - sw::RET_REGLER_RETURNS_ALT) * (sw::SPUR_REGLER_SPUREN + sw::GRP_REGLER_GRUPPEN_ALLE + 11));   // + container core K6/K7 rows (ret/5..8, spur pfl/trim/kill);   // loop deck channel strip KZ1: + 96 spur/<n>/eq/<band> rows   // production plan task 8: + the 256 spur/<slot>/bk/<k> rows (role spur_bk, class spaeter); live modules task 6: + the 16 grp/<n>/cue rows (role class spaeter);   // arr-bk: + 8 bk instances x 9 rows; arr-fx: pools 8 eq, 4 saett, 2 lim and 8 utilities x 5 rows; master limiter: + 3 ins/lim rows (role class spaeter); 1.10 slice 4b: + 59 eq and 4 saett insert rows (eq pool 2 since 2026-11-06: 2 x 59); slice 4c T15: + 48 rack macro rows rack/<k>/m<n>
     PRUEF(n[static_cast<int>(cdj::MixRolle::fx_rueckweg)] == 4);                     // fx/1..4/rueckweg (K2 Slice 2)
     int abweichend = 0;
     for (int r = 0; r < p.tab.anzahl(); ++r) {
       const cdj::MixZuweisung& z = p.m->zuweisung(r);
-      if (z.rolle != cdj::MixRolle::kanalzug) continue;
+      if (z.rolle != cdj::MixRolle::kanalzug || z.kanal == cdj::Mixer::PRODUKTION_ZUG) continue;   // K3: the hidden production strip ignores the table
       const float w = p.m->kanalzug(z.kanal).wert(z.regler);
       if (w != p.tab.def(r).vorgabe || dsp::info(z.regler).vorgabe != p.tab.def(r).vorgabe) {
         std::printf("Vorgabe weicht ab: %s Stellwerk %g, dsp %g\n", p.tab.def(r).pfad, p.tab.def(r).vorgabe,
@@ -74,7 +75,7 @@ int main() {
       }
     }
     PRUEF(abweichend == 0);
-    PRUEF(cdj::Mixer::kanal_index("deck/2") == 1 && cdj::Mixer::kanal_index("bus/1") == 14);
+    PRUEF(cdj::Mixer::kanal_index("deck/2") == 1 && cdj::Mixer::kanal_index("bus/1") == 4);
     PRUEF(cdj::Mixer::kanal_index("master") == -1 && cdj::Mixer::kanal_index("deck/5") == -1);
     PRUEF(p.m->zuweisung(p.r("deck/2/eq/tief")).rolle == cdj::MixRolle::kanalzug &&
           p.m->zuweisung(p.r("deck/2/eq/tief")).kanal == 1 &&
@@ -88,7 +89,9 @@ int main() {
   {
     Pruefling p;
     for (int b = 0; b < 4; ++b) {
+      // Der Produktionszug (versteckt, fest neutral, 0 dB) ist keine Vorgabe-Stille: er bleibt unbeschickt.
       for (int k = 0; k < cdj::MIX_KANAELE; ++k) {
+        if (k == cdj::Mixer::PRODUKTION_ZUG) continue;
         std::memcpy(p.m->eingang_l(k), x, sizeof x);
         std::memcpy(p.m->eingang_r(k), x, sizeof x);
       }
@@ -97,7 +100,7 @@ int main() {
     }
   }
 
-  // 3. Weg: deck/2 direkt, deck/3 über bus/1, Crossfader
+  // 3. Weg: deck/2 direkt, pad/1 über bus/1, Crossfader
   {
     Pruefling p;
     auto ref = std::make_unique<dsp::Kanalzug>();
@@ -120,10 +123,10 @@ int main() {
       for (int i = 0; i < 256; ++i) gleich = gleich && p.ml[i] == rl[i] && p.mr[i] == rr[i];
     }
     PRUEF(gleich);
-    // deck/2 aus, deck/3 auf bus/1 (Fader 0), bus/1 Fader 0
+    // deck/2 aus, pad/1 auf bus/1 (Fader 0), bus/1 Fader 0
     p.setze("deck/2/fader", -200.0f);
-    p.setze("deck/3/fader", 0.0f);
-    p.setze("deck/3/ziel", 1.0f);
+    p.setze("pad/1/fader", 0.0f);
+    p.setze("pad/1/ziel", 1.0f);
     p.setze("bus/1/fader", 0.0f);
     PRUEF(p.m->ziel_ist(2) == 1);
     ref->zuruecksetzen();
@@ -137,7 +140,7 @@ int main() {
       for (int i = 0; i < 256; ++i) gleich = gleich && p.ml[i] == bl[i] && p.mr[i] == br[i];
     }
     PRUEF(gleich);
-    // Crossfader an deck/3 wirkt nicht (Ziel Bus), an bus/1 schon: Seite A, +0,5 → halb, +1 → still
+    // Crossfader an pad/1 wirkt nicht (Ziel Bus), an bus/1 schon: Seite A, +0,5 → halb, +1 → still
     p.setze("bus/1/xseite", 0.0f);
     p.setze("xfader", 0.5f);
     gleich = true;
@@ -277,118 +280,79 @@ int main() {
     PRUEF(summe);
   }
 
-  // 5c. Nur-Cue-Kanal (Plan Mediathek-Browser S7): erz/8 ist der Vorhör-Eingang. Er klingt NUR im Cue, nie im Master,
-  //     egal wie Fader, Ziel und Sends stehen; PFL ist fest an. Negativ-Kontrolle: derselbe Aufbau ohne nur_cue
-  //     klingt im Master (der Test kann also scheitern).
+  // 5c. Previewer service (plan Mediathek-Browser S7, container core K3 F3): vorhoer_eingang puts the preview pair into the PFL sum ONLY, raw (no strip), never into the master, a bus or a send,
+  //     whatever the rows of a strip say. Negative control: the same signal as the input of the strip pad/2 sounds in the master (so the test can fail).
   {
-    const int k8 = cdj::Mixer::kanal_index("erz/8");
-    PRUEF(k8 == 11);
-    PRUEF(std::strcmp(cdj::VORHOER_KANAL, "erz/8") == 0);
-    auto aufbau = [&](Pruefling& p) {   // alles, was den Kanal in den Master tragen könnte, weit auf
-      p.setze("erz/8/fader", 0.0f);
-      p.setze("erz/8/send/2", 0.0f);
+    const int k8 = cdj::Mixer::kanal_index("pad/2");   // K9: the former erz/8 strip is gone; pad/2 (container D) is the negative control
+    PRUEF(k8 == 3);
+    auto aufbau = [&](Pruefling& p) {   // everything that could carry a strip into the master, wide open
+      p.setze("pad/2/fader", 0.0f);
+      p.setze("pad/2/send/2", 0.0f);
       p.setze("fx/2/rueckweg", 0.0f);
-      p.setze("erz/8/pfl", 0.0f);       // PFL aus: nur_cue erzwingt es trotzdem
+      p.setze("pad/2/pfl", 0.0f);
     };
     Pruefling ohne;
     aufbau(ohne);
     ohne.block(k8, x);
     float m_ohne = 0.0f;
     for (int i = 0; i < 256; ++i) m_ohne = std::max(m_ohne, std::fabs(ohne.ml[i]));
-    PRUEF(m_ohne > 0.01f);               // Negativ-Kontrolle: ohne Schutz klingt erz/8 im Master
+    PRUEF(m_ohne > 0.01f);               // negative control: as a strip input pad/2 sounds in the master
 
     Pruefling p;
-    p.m->setze_nur_cue(k8);
-    PRUEF(p.m->nur_cue(k8) && !p.m->nur_cue(4));
     aufbau(p);
     const float g_cue = static_cast<float>(dsp::db_zu_linear(-12.0));
     bool master_still = true, cue_pfl = true;
-    for (int b = 0; b < 8; ++b) {        // mehrere Blöcke: auch der Hall-Nachlauf bleibt 0
-      p.block(k8, x);
-      const float* al = p.m->kanalzug(k8).abgriff(0);
+    for (int b = 0; b < 8; ++b) {        // several blocks: the hall tail stays 0 as well
+      p.m->vorhoer_eingang(x, x, 256);
+      p.m->verarbeite(256, p.ml, p.mr, p.cl, p.cr);
       for (int i = 0; i < 256; ++i) {
         master_still = master_still && p.ml[i] == 0.0f && p.mr[i] == 0.0f;
-        cue_pfl = cue_pfl && p.cl[i] == al[i] * g_cue;
+        cue_pfl = cue_pfl && std::fabs(p.cl[i] - x[i] * g_cue) < 1e-7f && std::fabs(p.cr[i] - x[i] * g_cue) < 1e-7f;
       }
     }
     PRUEF(master_still);
     PRUEF(cue_pfl);
-    for (int s = 0; s < 4; ++s) PRUEF(p.m->fx_l(s)[0] == 0.0f && p.m->fx_l(s)[255] == 0.0f);   // keine Send-Summe
-    p.setze("erz/8/ziel", 1.0f);         // auf bus/1 statt Master: bus/1 bleibt leer
+    for (int s = 0; s < 4; ++s) PRUEF(p.m->fx_l(s)[0] == 0.0f && p.m->fx_l(s)[255] == 0.0f);   // no send sum
+    p.setze("pad/2/ziel", 1.0f);         // bus/1 instead of the master: bus/1 stays empty
     p.setze("bus/1/fader", 0.0f);
-    p.block(k8, x);
+    p.m->vorhoer_eingang(x, x, 256);
+    p.m->verarbeite(256, p.ml, p.mr, p.cl, p.cr);
     bool bus_still = true;
     for (int i = 0; i < 256; ++i) bus_still = bus_still && p.ml[i] == 0.0f;
     PRUEF(bus_still);
   }
 
-  // 5d. Review-Kern m2 (Gehörschutz): Trim, EQ und Filter von erz/8 sind fest neutral. Der Mixer ignoriert Sets dafür;
-  //     Hand oder KI kann den Kopfhörer nicht über erz/8 hochdrehen (Cue hat keinen Limiter). Negativ-Kontrolle: derselbe
-  //     Satz Regler auf erz/7 (kein Nur-Cue) ändert den Pegel (der Test kann also scheitern).
+  // 5e. Review-Kern m4: a NaN of the preview leaves the master alone. vorhoer_eingang drops the non-finite sample pair itself, so the PFL guard of verarbeite does not empty hall, glue, beat FX
+  //     and all strips. Reference: the same run without the NaN, the master must be bit-identical.
   {
-    const int k8 = cdj::Mixer::kanal_index("erz/8");
-    auto lauf = [&](const char* kanal, int k, bool setzen, bool nur_cue) {
-      Pruefling p;
-      if (nur_cue) p.m->setze_nur_cue(k);
-      char pf[64];
-      if (setzen) {
-        std::snprintf(pf, sizeof pf, "%s/trim", kanal); p.setze(pf, 24.0f);
-        std::snprintf(pf, sizeof pf, "%s/eq/tief", kanal); p.setze(pf, 6.0f);
-        std::snprintf(pf, sizeof pf, "%s/eq/hoch", kanal); p.setze(pf, 6.0f);
-        std::snprintf(pf, sizeof pf, "%s/filter", kanal); p.setze(pf, 0.8f);
-      }
-      std::snprintf(pf, sizeof pf, "%s/pfl", kanal);
-      p.setze(pf, 1.0f);
-      float spitze = 0.0f;
-      std::vector<float> cl;
-      for (int b = 0; b < 4; ++b) {
-        p.block(k, x);
-        for (int i = 0; i < 256; ++i) { spitze = std::max(spitze, std::fabs(p.cl[i])); cl.push_back(p.cl[i]); }
-      }
-      return std::make_pair(spitze, cl);
-    };
-    const auto neutral = lauf("erz/8", k8, false, true);
-    const auto gesetzt = lauf("erz/8", k8, true, true);
-    PRUEF(neutral.first > 0.001f);
-    PRUEF(neutral.second == gesetzt.second);              // Trim +24, EQ +6, Filter: Cue unverändert (bitgleich)
-    const auto n7 = lauf("erz/7", 10, false, false);
-    const auto g7 = lauf("erz/7", 10, true, false);
-    PRUEF(g7.first > 2.0f * n7.first);                    // Negativ-Kontrolle: ohne Nur-Cue wirken dieselben Regler
-  }
-
-  // 5e. Review-Kern m4: ein NaN aus erz/8 (EQ, Filter, Eingang) legt den Master nicht still. Die F01-Wache prüft die
-  //     PFL-Summe getrennt: sie leert nur den Kanalzug des Verursachers, nicht Hall, Kleber, Beat-FX und die anderen
-  //     Kanalzüge. Referenz: derselbe Lauf ohne NaN, der Master muss bitgleich sein.
-  {
-    const int k8 = cdj::Mixer::kanal_index("erz/8");
     Pruefling mit, ohne;
-    for (Pruefling* p : {&mit, &ohne}) { p->m->setze_nur_cue(k8); p->setze("erz/1/fader", 0.0f); p->setze("erz/1/send/2", -6.0f); p->setze("fx/2/rueckweg", -6.0f); }
+    for (Pruefling* p : {&mit, &ohne}) { p->setze("pad/1/fader", 0.0f); p->setze("pad/1/send/2", -6.0f); p->setze("fx/2/rueckweg", -6.0f); }
     bool master_gleich = true, endlich = true, cue_zurueck = false;
+    float y[256];
     for (int blk = 0; blk < 30; ++blk) {
-      for (Pruefling* p : {&mit, &ohne}) {
-        std::memcpy(p->m->eingang_l(k8), x, sizeof(float) * 256);
-        std::memcpy(p->m->eingang_r(k8), x, sizeof(float) * 256);
-      }
-      if (blk == 10) mit.m->eingang_l(k8)[17] = std::nanf("");
-      mit.block(4, x);
-      ohne.block(4, x);
+      std::memcpy(y, x, sizeof y);
+      if (blk == 10) y[17] = std::nanf("");
+      mit.m->vorhoer_eingang(y, y, 256);
+      ohne.m->vorhoer_eingang(x, x, 256);
+      mit.block(2, x);
+      ohne.block(2, x);
       master_gleich = master_gleich && !std::memcmp(mit.ml, ohne.ml, sizeof mit.ml) && !std::memcmp(mit.mr, ohne.mr, sizeof mit.mr);
       for (int i = 0; i < 256; ++i) endlich = endlich && std::isfinite(mit.ml[i]) && std::isfinite(mit.cl[i]);
       if (blk >= 13) for (int i = 0; i < 256; ++i) cue_zurueck = cue_zurueck || std::fabs(mit.cl[i]) > 0.001f;
     }
-    PRUEF(master_gleich);                    // Master bitgleich, auch im Block mit dem NaN und danach (Hall-Nachlauf lebt)
+    PRUEF(master_gleich);                    // master bit-identical, also in the block with the NaN and after it (the hall tail lives)
     PRUEF(endlich);
-    PRUEF(cue_zurueck);                      // der Kopfhörer erholt sich
+    PRUEF(cue_zurueck);                      // the headphones recover
     PRUEF(mit.m->nan_treffer() >= 1 && ohne.m->nan_treffer() == 0);
   }
 
-  // Audit 2026-10-01 F01 (Paket „Nie still"): ein einziges NaN auf einem geschlossenen Kanal (erz/5, Fader −200)
+  // Audit 2026-10-01 F01 (Paket „Nie still"): ein einziges NaN auf einem geschlossenen Kanal (pad/2, Fader −200)
   // vergiftete die Filterzustände; NaN · 0 bleibt NaN, die Summe war ab da für immer NaN (am Ausgang still). Jetzt:
-  // der Block mit dem Treffer ist still, ab dem übernächsten klingt erz/1 wieder endlich. Negativ-Kontrolle: bis zum
+  // der Block mit dem Treffer ist still, ab dem übernächsten klingt pad/1 wieder endlich. Negativ-Kontrolle: bis zum
   // Treffer ist der Lauf bitgleich zu einem Lauf ohne NaN.
   {
     Pruefling mit, ohne;
-    for (Pruefling* p : {&mit, &ohne}) p->setze("erz/1/fader", 0.0f);
+    for (Pruefling* p : {&mit, &ohne}) p->setze("pad/1/fader", 0.0f);
     uint32_t z1 = 7, z2 = 7;
     float x[256], y[256];
     bool vorher_gleich = true, nachher_endlich = true;
@@ -396,12 +360,12 @@ int main() {
     for (int blk = 0; blk < 30; ++blk) {
       for (int i = 0; i < 256; ++i) { x[i] = 0.2f * rauschen(z1); y[i] = 0.2f * rauschen(z2); }
       for (Pruefling* p : {&mit, &ohne}) {
-        std::memset(p->m->eingang_l(8), 0, sizeof(float) * 256);
-        std::memset(p->m->eingang_r(8), 0, sizeof(float) * 256);
+        std::memset(p->m->eingang_l(3), 0, sizeof(float) * 256);
+        std::memset(p->m->eingang_r(3), 0, sizeof(float) * 256);
       }
-      if (blk == 10) mit.m->eingang_l(8)[17] = std::nanf("");
-      mit.block(4, x);
-      ohne.block(4, y);
+      if (blk == 10) mit.m->eingang_l(3)[17] = std::nanf("");
+      mit.block(2, x);
+      ohne.block(2, y);
       if (blk < 10) vorher_gleich = vorher_gleich && !std::memcmp(mit.ml, ohne.ml, sizeof mit.ml);
       if (blk >= 12)
         for (int i = 0; i < 256; ++i) {

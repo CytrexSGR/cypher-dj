@@ -15,7 +15,7 @@ using namespace arrtest;
 int main() {
   static_assert(cdj::ARR_F_EQ0 == 10, "the three EQ fields are 10, 11, 12");
   static_assert(cdj::ARR_F_EQ0 > cdj::ARR_F_FILTER && cdj::ARR_F_EQ0 + 2 < cdj::ARR_FELDER, "the EQ fields exist and do not collide with the filter");
-  static_assert(cdj::ARR_FELDER == 13, "ARR_FELDER grew from 11 to 13");
+  static_assert(cdj::ARR_FELDER == 21, "ARR_FELDER grew from 11 to 13 (KZ1), to 17 (K6, the sends to returns 5..8) and to 21 (K7, trim and kill)");
   const char* baender[3] = {"tief", "mitte", "hoch"};
   for (const int n : {1, 2, 17, 32}) {
     for (int b = 0; b < 3; ++b) {

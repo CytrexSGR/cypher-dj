@@ -5,6 +5,7 @@
 // `holeJson(weg, daten)` is the page's POST helper ({ status, j }), `holeGet(weg)` the same for GET.
 import { folgeEditierbar, folgeSicht, zielName, reglerSchluessel, reglerZiel, zielErlaubt, anzeigeBereich, SeqFehler, wertBefehle, kurveBefehle, formPunkte, zeileAendernBefehle } from './seq_logic.js';
 import { tonName } from './production/pianoroll.js';
+import { gruppeVon, typVon } from './slots.js';
 
 export const AKZENT_VEL = 110;    // a note above this velocity is drawn as an accent
 export const ANLEGEN_HINWEIS = 'open the live container';
@@ -33,10 +34,16 @@ export function geraetText(spur) {
 }
 const istBk = (spur) => spur?.geraet?.art === 'intern' && spur.geraet.name === 'bk';
 
+// The SEQ group of a place: the group the project's `plaetze[platz - 1]` names, when that place is typed seq (the place table is the only truth)
+const seqGruppeAm = (p, platz) => {
+  if (typVon(p?.plaetze, platz) !== 'seq') return null;
+  const id = gruppeVon(p.plaetze, platz);
+  return (p.gruppen ?? []).find((g) => g?.id === id && g.seq) ?? null;
+};
 // The deck of place `platz` without lanes (cheap: the place head and the place switch ask it): the patterns are the tracks of the group, in track order
 // (project/seq.ts seqGruppe and seqFolgen, rebuilt here from the live project).
 export function seqAnsicht(projekt, platz) {
-  const g = (projekt?.gruppen ?? []).find((x) => x?.seq?.platz === platz);
+  const g = seqGruppeAm(projekt, platz);
   if (!g) return { vorhanden: false, gruppe_id: null, folgen: [] };
   const folgen = (projekt.spuren ?? []).filter((s) => s?.ausgang?.id === g.id).map((spur) => {
     const clip = (spur.clips ?? []).length === 1 && spur.clips[0].art === 'midi' ? spur.clips[0] : null;
@@ -626,7 +633,7 @@ export function leereZeilen(a) {
 // All decks are groups of the one live container and share its transport, so a deck plays when the transport runs AND its group is not muted. PLAY on a
 // stopped container unmutes this deck, mutes the other decks and starts the transport; PLAY on a running one unmutes this deck. STOP mutes this deck while
 // another deck still plays, else stops the transport. Answers {befehle, transport: 'start' | 'stopp' | null}; the group commands go to POST /proj/aendern.
-export const deckGruppe = (p, n) => (p?.gruppen ?? []).find((g) => g.seq?.platz === n) ?? null;
+export const deckGruppe = (p, n) => seqGruppeAm(p, n);
 export const deckSpielt = (p, n, laeuft) => { const g = deckGruppe(p, n); return !!laeuft && !!g && !g.mute; };
 export function deckSpielSchritt(p, n, an, laeuft) {
   const g = deckGruppe(p, n);

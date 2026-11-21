@@ -165,7 +165,7 @@ function rundreiseAufbau(t) {
 }
 const VON_HAND = { an: true, modus: 'repitch', marker: [[0, 0], [1.2, 2], [3.84, 8]], versatz_beats: 0.5, quelle: 'hand', transpose_st: 0, detune_ct: 0 };
 
-test('Rundreise über die Platte: gespeichert, neu geöffnet in einer neuen Sitzung: derselbe Warp, dieselbe Wiedergabe /2', async (t) => {
+test('Rundreise über die Platte: gespeichert, neu geöffnet in einer neuen Sitzung: derselbe Warp, dieselbe Wiedergabe /3', async (t) => {
   const { a, katalog, wiedergabe, warpDerClips } = rundreiseAufbau(t);
   const s = a.s;
   await s.neu('Rundreise', 'andreas');
@@ -183,7 +183,7 @@ test('Rundreise über die Platte: gespeichert, neu geöffnet in einer neuen Sitz
   assert.equal(vorW.spuren[0].clips.filter((c) => c.warp).length, 3, 'drei Clips mit Warp in der Wiedergabe');
   // auf der Platte: project.json (Format /2) trägt den Warp in der Form des Speichers
   const platte = lies(path.join(a.wurzel, slug, 'project.json'));
-  assert.equal(platte.format, 'cypherdj-projekt/2');
+  assert.equal(platte.format, 'cypherdj-projekt/3');
   assert.deepEqual(platte.spuren[0].clips.map((c) => c.warp ?? null), vorher, 'der Warp auf der Platte gleicht dem im Speicher');
   assert.equal('warp' in platte.spuren[0].clips[2], false, 'der One-Shot trägt auf der Platte kein Warp-Feld');
   s.schliesse();

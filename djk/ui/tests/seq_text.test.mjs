@@ -13,7 +13,7 @@ const INFO_BK = { art: 'bk', regler: [{ nr: 1, name: 'Wave', vorgabe: 0.5 }, { n
 const INFO_KIT = { art: 'kit', regler: [], klaenge: [{ ton: 36, name: 'kick' }, { ton: 38, name: 'snare' }, { ton: 42, name: 'hat' }] };
 const INFO_RB = { art: 'rb338', regler: [{ nr: 'cutoff', name: 'Cutoff', vorgabe: 0.4 }, { nr: 'env_mod', name: 'Env Mod', vorgabe: 0.5 }], klaenge: [] };
 const geraetInfo = (g) => (g.name === 'bk' ? INFO_BK : g.name === 'kit' ? INFO_KIT : INFO_RB);
-const live = () => { const p = neuesProjekt('x'); p.live = true; return p; };
+const live = () => { const p = neuesProjekt('x'); p.live = true; p.plaetze = [{ typ: 'track' }, { typ: 'track' }, { typ: 'track' }, { typ: 'track' }]; return p; };
 const lauf = (p, ...b) => fuehreListeAus(p, b).projekt;
 const mitDeck = (platz = 2) => lauf(live(), { befehl: 'seq_anlegen', platz });
 const gid = (p) => seqGruppe(p, 2).id;

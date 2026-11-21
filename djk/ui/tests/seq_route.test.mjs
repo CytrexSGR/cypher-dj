@@ -530,7 +530,7 @@ test('modul with abschnitt (TO DJ): a section of any project becomes patterns wi
   assert.equal(a.j.bericht.abschnitt.id, 'a1');
   assert.deepEqual(z.spur('Lead').clips[0].fx, [{ beat: 1, spalte: 0, code: 'VIB', wert: 72 }]);
   assert.equal(z.spur('Lead').clips[0].noten[0].platz, 3);
-  assert.deepEqual(seqGruppe(z.projekt(), 1).seq, { schema: 2, platz: 1, lpb: 8 });
+  assert.deepEqual(seqGruppe(z.projekt(), 1).seq, { schema: 2, lpb: 8 });
   assert.equal(JSON.stringify(ablage.lies(slug)), gespeichert, 'the tracker project is not changed');
   const rev = z.projekt().rev;
   let e = await z.fehl(() => z.seq.modul({ slug, platz: 2, abschnitt: 'a9' }, 'andreas'));
@@ -551,9 +551,9 @@ test('deckAufraeumen: anlegen that creates the deck calls it once with the place
   assert.deepEqual(z.aufgeraeumt, [[2, 'cypher']]);
   const e = await z.fehl(() => z.seq.anlege({ platz: 2 }, 'andreas'));
   assert.equal(e.fehler, 'seq_belegt');
-  ist(z.s, 'deck/3/trim', 0); ist(z.s, 'deck/3/fader', -6);
+  ist(z.s, 'pad/1/trim', 0); ist(z.s, 'pad/1/fader', -6);
   assert.equal((await z.fehl(() => z.seq.anlege({ platz: 3 }, 'andreas'))).fehler, 'kanal_offen');
-  ist(z.s, 'deck/3/fader', -200); z.spielt.add(3);
+  ist(z.s, 'pad/1/fader', -200); z.spielt.add(3);
   assert.equal((await z.fehl(() => z.seq.anlege({ platz: 3 }, 'andreas'))).fehler, 'deck_laeuft');
   z.spielt.clear();
   assert.deepEqual(z.aufgeraeumt, [[2, 'cypher']], 'no call for the refused writes and the occupied place');

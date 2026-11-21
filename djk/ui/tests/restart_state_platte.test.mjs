@@ -1,5 +1,4 @@
-// Card t_7f487235: what the restore plan after a kern restart is made of (FX type of units 1/2, FX assignments 1-3, the loop boxes with their owners and live
-// grid offset, the graphs with their owners) lived only in memory. A restart of the page server dropped it. It now lives in neustart_stand.json next to
+// Card t_7f487235: what the restore plan after a kern restart is made of (FX type of units 1/2, FX assignments 1-3, the graphs with their owners) lived only in memory. A restart of the page server dropped it. It now lives in neustart_stand.json next to
 // aktive_loops.json (hotcue folder, atomic write) and is read again on start. Servers are built in-process, never started (no port bound); kern.sende is a
 // recorder, the kern's words come in through vomKern. The hotcue folder of every test is its own temp folder.
 import test from 'node:test';
@@ -50,7 +49,7 @@ const willkommen = (o, generation, sample = 1000) => o.vomKern({ adresse: '/k/wi
 const neustart = (o, generation, sample = 1000) => o.vomKern({ adresse: '/e/neustart', felder: { generation, sample } });
 const plan = (gesendet) => gesendet.filter((s) => /^\/(k\/(fx|loop|kanal\/graph)|erz\/strom)/.test(s.adresse));   // what a restore sends (the session sends its own words on first contact)
 const FX1 = { einheit: 1, art: 2, beats: 1, wet: 0.5, param1: 0.1, param2: 0.2, param3: 0.3, an: 1 };
-// the page server of the first run: one kern generation, FX 1 with two assignments, FX 3 with one, box 1 playing loop x (owner andreas, live offset), graph eff on master
+// the page server of the first run: one kern generation, FX 1 with two assignments, FX 3 with one, graph eff on master
 async function ersterLauf(u, generation = 3, sample = 1000) {
   const e = u.neu();
   willkommen(e.o, generation, sample);
@@ -58,9 +57,6 @@ async function ersterLauf(u, generation = 3, sample = 1000) {
   e.o.vomKern({ adresse: '/e/fx/zuweisung', felder: { einheit: 1, kanal: 'deck/1', an: 1 } });
   e.o.vomKern({ adresse: '/e/fx/zuweisung', felder: { einheit: 1, kanal: 'deck/2', an: 1 } });
   e.o.vomKern({ adresse: '/e/fx/zuweisung', felder: { einheit: 3, kanal: 'deck/3', an: 1 } });
-  e.o.loopLadung['1'] = { name: 'x', quelle: 'andreas' };
-  e.o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 3, name: 'x', beats: 4, fx_art: 0, fx_beats: 1, fx_wet: 0 } });
-  e.o.loopRasterLive['1'] = { name: 'x', v: 480 };
   e.o.vomKern({ adresse: '/e/graph', felder: { kanal: 'master', name: 'eff' } });
   e.o.graphBesitzer.master = 'andreas';
   e.o.merkeNeustartStand();
@@ -68,22 +64,19 @@ async function ersterLauf(u, generation = 3, sample = 1000) {
   return e;
 }
 
-test('the stand is written next to aktive_loops.json: FX units, assignments, loop boxes, owners, graphs, generation', async (t) => {
+test('the stand is written next to aktive_loops.json: FX units, assignments, owners, graphs, generation', async (t) => {
   const u = umgebung(t);
   await ersterLauf(u);
   const j = JSON.parse(fs.readFileSync(u.datei, 'utf8'));
   assert.equal(j.generation, 3);
   assert.equal(j.fx[0].art, 2);
   assert.deepEqual(j.fxZuweisung, [{ 'deck/1': true, 'deck/2': true }, {}, { 'deck/3': true }]);
-  assert.equal(j.loops['1'].name, 'x');
-  assert.deepEqual(j.loopBesitzer, { 1: 'andreas' });
-  assert.deepEqual(j.loopRasterLive, { 1: { name: 'x', v: 480 } });
   assert.deepEqual(j.graphBesitzer, { master: 'andreas' });
   assert.deepEqual(j.graphen_geladen, { master: 'eff' });
   assert.deepEqual(fs.readdirSync(u.hotcues).filter((n) => n.endsWith('.neu')), [], 'atomic: no temp file left');
 });
 
-test('page restart AND kern restart: the new page server restores FX, assignments, box and graph of the old kern into the new one', async (t) => {
+test('page restart AND kern restart: the new page server restores FX, assignments and graph of the old kern into the new one', async (t) => {
   const u = umgebung(t);
   await ersterLauf(u, 3);
   const { o, log, gesendet } = u.neu();   // the page server that comes up again; the kern came up as generation 4 meanwhile
@@ -94,9 +87,6 @@ test('page restart AND kern restart: the new page server restores FX, assignment
   const an = (a) => gesendet.filter((s) => s.adresse === a).map((s) => s.felder);
   assert.deepEqual(an('/k/fx').map((f) => [f.einheit, f.art, f.quelle]), [[1, 2, 'andreas']], 'FX 1 comes back with its type');
   assert.deepEqual(an('/k/fx/zuweisung').map((f) => [f.einheit, f.kanal]).sort(), [[1, 'deck/1'], [1, 'deck/2'], [3, 'deck/3']]);
-  assert.deepEqual(an('/k/loop/laden').map((f) => [f.box, f.name, f.quelle]), [[1, 'x', 'andreas']]);
-  assert.deepEqual(an('/k/loop/start').map((f) => f.box), [1]);
-  assert.deepEqual(an('/k/loop/raster').map((f) => [f.box, f.versatz_frames]), [[1, 480]]);
   assert.deepEqual(an('/k/kanal/graph').map((f) => [f.kanal, f.name, f.quelle]), [['master', 'eff', 'andreas']]);
   assert.ok(log.some((z) => z.typ === 'wiederherstellung'));
 });
@@ -112,11 +102,9 @@ test('page restart with the same kern: the stand comes back, nothing is sent to 
   assert.deepEqual(plan(gesendet), [], 'a kern that kept its state gets nothing again');
   assert.equal(o.stand.fx[0].art, 2);
   assert.deepEqual(o.stand.fxZuweisung[0], { 'deck/1': true, 'deck/2': true });
-  assert.equal(o.stand.loops['1'].name, 'x');
-  assert.equal(o.loopBesitzer['1'], 'andreas');
+  assert.equal(o.graphBesitzer.master, 'andreas');
   assert.equal(o.graphBesitzer.master, 'andreas');
   assert.equal(o.stand.graphen_geladen.master, 'eff');
-  assert.deepEqual(o.loopRasterLive['1'], { name: 'x', v: 480 });
 });
 
 test('page restart with the same kern, /e/neustart arrives before /k/willkommen: still nothing is sent', async (t) => {
@@ -140,15 +128,12 @@ test('a kern with a smaller generation (brake, no continuation): the old stand i
   await warte(800);
   assert.deepEqual(plan(gesendet), []);
   assert.equal(o.stand.fx[0], null);
-  assert.deepEqual(o.stand.loops, {});
 });
 
 test('Stop Cypher still holds Cypher\'s pieces back after a page restart (B12)', async (t) => {
   const u = umgebung(t);
   const e = u.neu();
   willkommen(e.o, 3);
-  e.o.loopLadung['1'] = { name: 'x', quelle: 'cypher' };
-  e.o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 3, name: 'x', beats: 4, fx_art: 0, fx_beats: 1, fx_wet: 0 } });
   e.o.vomKern({ adresse: '/e/graph', felder: { kanal: 'master', name: 'eff' } });
   e.o.graphBesitzer.master = 'cypher';
   e.o.merkeNeustartStand();
@@ -160,7 +145,6 @@ test('Stop Cypher still holds Cypher\'s pieces back after a page restart (B12)',
   neustart(o, 4);
   await warte(800);
   assert.deepEqual(plan(gesendet), []);
-  assert.ok(log.some((z) => z.typ === 'box_wieder_ausgelassen' && z.grund === 'ki_gestoppt'));
   assert.ok(log.some((z) => z.typ === 'graph_wieder_ausgelassen' && z.grund === 'ki_gestoppt'));
 });
 
@@ -196,15 +180,13 @@ test('the guard time keeps the old file until the restore ran, so a crash in bet
 // generation is another kern life: the file is yesterday's and must not be taken for the present.
 test('the same generation from another kern life (smaller greeting sample): the file is dropped, a later kern crash restores nothing of it', async (t) => {
   const u = umgebung(t);
-  await ersterLauf(u, 0, 5_000_000);   // yesterday evening: generation 0, box 1 plays loop x, FX 1, a graph; the kern had run for a long time
+  await ersterLauf(u, 0, 5_000_000);   // yesterday evening: generation 0, FX 1, a graph; the kern had run for a long time
   const { o, log, gesendet } = u.neu();   // today: PC rebooted, the kern greets with generation 0 and a small sample position
   o.ladeNeustartStand();
   willkommen(o, 0, 3000);
   neustart(o, 0, 3000);
   await warte(100);
   assert.equal(o.stand.fx[0], null, 'FX 1 of yesterday is not the present');
-  assert.deepEqual(o.stand.loops, {}, 'box 1 of yesterday is not the present');
-  assert.deepEqual(o.loopBesitzer, {});
   assert.deepEqual(o.graphBesitzer, {});
   assert.ok(log.some((z) => z.typ === 'neustart_stand_verworfen'), 'the drop is logged');
   neustart(o, 1, 4000); willkommen(o, 1, 4000);   // the first kern crash of the day (the kern says /e/neustart first)
@@ -219,7 +201,7 @@ test('the same life of the kern (equal or larger greeting sample) keeps the file
   o.ladeNeustartStand();
   willkommen(o, 0, 9_000_000); neustart(o, 0, 9_000_000);
   await warte(300);
-  assert.equal(o.stand.loops['1'].name, 'x');
+  assert.equal(o.stand.fx[0].art, 2);
   assert.deepEqual(plan(gesendet), []);
 });
 
@@ -237,9 +219,7 @@ test('page restart inside the guard time: the stand of the wait is adopted, the 
   willkommen(p2.o, 4, 2000); neustart(p2.o, 4, 2000);   // restart 1: restored 500 ms later
   await warte(700);
   assert.ok(p2.log.some((z) => z.typ === 'wiederherstellung'), 'restart 1 restored');
-  const echo = (o) => {   // the kern answers the restore: box, FX, assignments
-    o.loopLadung['1'] = { name: 'x', quelle: 'andreas' };
-    o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 3, name: 'x', beats: 4, fx_art: 0, fx_beats: 1, fx_wet: 0 } });
+  const echo = (o) => {   // the kern answers the restore: FX, assignments, graph
     o.vomKern({ adresse: '/e/fx', felder: FX1 });
     o.vomKern({ adresse: '/e/fx/zuweisung', felder: { einheit: 3, kanal: 'deck/3', an: 1 } });
     o.vomKern({ adresse: '/e/graph', felder: { kanal: 'master', name: 'eff' } });
@@ -248,14 +228,11 @@ test('page restart inside the guard time: the stand of the wait is adopted, the 
   echo(p2.o);
   neustart(p2.o, 5, 3000); willkommen(p2.o, 5, 3000);   // restart 2 inside the guard time: its restore waits
   assert.ok(p2.o.offenerPlanTimer, 'the restore waits for the guard time');
-  p2.o.loopLadung['1'] = { name: 'y', quelle: 'andreas' };   // Andreas loads loop y into box 1 and sets FX 1 meanwhile
-  p2.o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 3, name: 'y', beats: 4, fx_art: 0, fx_beats: 1, fx_wet: 0 } });
+  // Andreas sets FX 1 meanwhile
   p2.o.vomKern({ adresse: '/e/fx', felder: { ...FX1, art: 5 } });
   await warte(450);   // the write is coalesced
   const j = JSON.parse(fs.readFileSync(u.datei, 'utf8'));
   assert.equal(j.generation, 5, 'the file is written during the wait, with the current generation');
-  assert.equal(j.loops['1'].name, 'y');
-  assert.deepEqual(j.plan.boxen, [], 'the plan in the file lacks the box Andreas touched');
   assert.deepEqual(j.plan.fx, [], 'and the FX unit he touched');
   assert.deepEqual(j.plan.graphen.map((g) => g.kanal), ['master']);
   // the page server restarts inside the wait; the kern is still generation 5
@@ -263,13 +240,11 @@ test('page restart inside the guard time: the stand of the wait is adopted, the 
   const p3 = u.neu();
   p3.o.ladeNeustartStand();
   willkommen(p3.o, 5, 3500); neustart(p3.o, 5, 3500);
-  assert.equal(p3.o.stand.loops['1'].name, 'y', 'what Andreas set is the present');
   assert.equal(p3.o.stand.fx[0].art, 5);
   await warte(200);
   assert.deepEqual(plan(p3.gesendet), [], 'nothing is restored at once');
   await warte(2600);   // the delayed restore of the same plan, once
   const an = (a) => p3.gesendet.filter((s) => s.adresse === a).map((s) => s.felder);
-  assert.deepEqual(an('/k/loop/laden'), [], 'box 1 keeps loop y');
   assert.deepEqual(an('/k/fx').filter((f) => f.einheit === 1), [], 'FX 1 keeps its type');
   assert.deepEqual(an('/k/kanal/graph').map((f) => [f.kanal, f.name]), [['master', 'eff']], 'the untouched graph comes back once');
   assert.deepEqual(an('/k/fx/zuweisung').map((f) => [f.einheit, f.kanal]), [[3, 'deck/3']], 'the untouched FX 3 assignment too');
@@ -289,7 +264,6 @@ test('a higher generation, but the file is from before the system boot: nothing 
   neustart(o, 4); willkommen(o, 4);
   await warte(800);
   assert.deepEqual(plan(gesendet), [], 'nothing of the file is loaded or started');
-  assert.deepEqual(o.stand.loops, {});
   assert.deepEqual(log.filter((z) => z.typ === 'neustart_stand_verworfen').map((z) => z.grund), ['vor_systemstart']);
 });
 
@@ -299,13 +273,13 @@ test('a file from before the system boot is dropped on the same generation too, 
   const j = JSON.parse(fs.readFileSync(u.datei, 'utf8'));
   const alt = u.neu({ systemstartMs: j.geschrieben + 60_000 });
   alt.o.ladeNeustartStand(); willkommen(alt.o, 3); neustart(alt.o, 3);
-  assert.deepEqual(alt.o.stand.loops, {}, 'before the boot: dropped');
+  assert.equal(alt.o.stand.fx[0], null, 'before the boot: dropped');
   const neu = u.neu({ systemstartMs: j.geschrieben - 60_000 });
   neu.o.ladeNeustartStand(); willkommen(neu.o, 3); neustart(neu.o, 3);
-  assert.equal(neu.o.stand.loops['1'].name, 'x', 'after the boot: kept');
+  assert.equal(neu.o.stand.fx[0].art, 2, 'after the boot: kept');
   const knapp = u.neu({ systemstartMs: j.geschrieben + 3000 });   // the clock was stepped a few seconds: inside the tolerance
   knapp.o.ladeNeustartStand(); willkommen(knapp.o, 3); neustart(knapp.o, 3);
-  assert.equal(knapp.o.stand.loops['1'].name, 'x', 'a few seconds of clock difference are tolerated');
+  assert.equal(knapp.o.stand.fx[0].art, 2, 'a few seconds of clock difference are tolerated');
 });
 
 test('a file of the old format (no write time) is dropped, logged ohne_zeit', async (t) => {
@@ -327,8 +301,8 @@ async function wartenderPlan(u, faelligVor) {
   await ersterLauf(u, 5, 1000);
   const j = JSON.parse(fs.readFileSync(u.datei, 'utf8'));
   const vor = Date.now() - faelligVor - 20_000;   // written 20 s before the plan became due
-  j.geschrieben = vor; j.loops = {}; j.fx = [null, null]; j.fxZuweisung = [{}, {}, {}];   // the stand of the wait: cleared by the second restart
-  j.plan = { faellig: vor + 20_000, boxen: [{ box: 1, name: 'x', status: 3, besitzer: 'andreas' }],
+  j.geschrieben = vor; j.fx = [null, null]; j.fxZuweisung = [{}, {}, {}];   // the stand of the wait: cleared by the second restart
+  j.plan = { faellig: vor + 20_000,
     fx: [{ einheit: 1, felder: FX1, zuweisung: ['deck/1'], besitzer: 'andreas' }], fx3: null, graphen: [] };
   fs.writeFileSync(u.datei, JSON.stringify(j));
 }
@@ -340,8 +314,8 @@ test('a waiting plan whose due time is long past is not sent when the page comes
   o.ladeNeustartStand();
   willkommen(o, 5, 30_000_000); neustart(o, 5, 1000);   // the same kern life, ten minutes later
   await warte(900);
-  assert.deepEqual(plan(gesendet), [], 'no loop, no FX of ten minutes ago');
-  assert.equal(o.loopBesitzer['1'], 'andreas', 'the owners are adopted');
+  assert.deepEqual(plan(gesendet), [], 'no FX of ten minutes ago');
+  assert.equal(o.graphBesitzer.master, 'andreas', 'the owners are adopted');
   assert.ok(log.some((z) => z.typ === 'neustart_plan_verworfen' && z.grund === 'ueberfaellig'), JSON.stringify(log.map((z) => z.typ)));
   assert.equal(o.offenerPlan, null, 'and no plan is left to fire at a later kern restart');
 });
@@ -353,7 +327,7 @@ test('a waiting plan that is only a little late (the page was away a second or t
   o.ladeNeustartStand();
   willkommen(o, 5, 30_000_000); neustart(o, 5, 1000);
   await warte(900);
-  assert.deepEqual(plan(gesendet).filter((s) => s.adresse === '/k/loop/start').map((s) => s.felder.box), [1]);
+  assert.deepEqual(plan(gesendet).filter((s) => s.adresse === '/k/fx').map((s) => s.felder.einheit), [1]);
   assert.deepEqual(plan(gesendet).filter((s) => s.adresse === '/k/fx').map((s) => s.felder.einheit), [1]);
 });
 
@@ -372,8 +346,8 @@ test('a higher generation, but the kern restarted long before the page came back
   willkommen(o, 4, 200_000_000);   // an hour and more after the continuation
   neustart(o, 4, 1_000_000);
   await warte(900);
-  assert.deepEqual(plan(gesendet), [], 'no loop is started in box 1, no FX comes back');
-  assert.equal(o.loopBesitzer['1'], 'andreas');
+  assert.deepEqual(plan(gesendet), [], 'no FX comes back');
+  assert.equal(o.graphBesitzer.master, 'andreas');
   assert.ok(log.some((z) => z.typ === 'wiederherstellung_uebersprungen' && z.grund === 'kern_laenger_neu'), JSON.stringify(log.map((z) => z.typ)));
   assert.equal(o.offenerPlan, null);
 });
@@ -386,7 +360,7 @@ test('a higher generation, the kern restarted a few seconds ago (the real order:
   willkommen(o, 4, 5_000_000 + 10 * 48000);   // 10 s after the continuation
   neustart(o, 4, 5_000_000);
   await warte(900);
-  assert.deepEqual(plan(gesendet).filter((s) => s.adresse === '/k/loop/start').map((s) => s.felder.box), [1]);
+  assert.deepEqual(plan(gesendet).filter((s) => s.adresse === '/k/fx').map((s) => s.felder.einheit), [1]);
   assert.deepEqual(plan(gesendet).filter((s) => s.adresse === '/k/fx').map((s) => s.felder.einheit), [1]);
 });
 
@@ -398,7 +372,7 @@ test('the limit lies at 30 s between the two samples, in either order of the two
     o.ladeNeustartStand();
     if (neustartZuerst) { neustart(o, 4, 7_000_000); willkommen(o, 4, 7_000_000 + dauer); } else { willkommen(o, 4, 7_000_000 + dauer); neustart(o, 4, 7_000_000); }
     await warte(800);
-    assert.equal(plan(gesendet).filter((s) => s.adresse === '/k/loop/start').length, erwartet, `${dauer} frames, ${neustartZuerst ? 'neustart first' : 'willkommen first'}`);
+    assert.equal(plan(gesendet).filter((s) => s.adresse === '/k/fx').length, erwartet, `${dauer} frames, ${neustartZuerst ? 'neustart first' : 'willkommen first'}`);
   }
 });
 
@@ -428,7 +402,6 @@ test('stoppe() inside the 500 ms before an accepted restore leaves the old stand
   await o.stoppe();
   const j = JSON.parse(fs.readFileSync(u.datei, 'utf8'));
   assert.equal(j.generation, 3, 'still the stand of the old kern');
-  assert.equal(j.loops['1'].name, 'x');
 });
 
 test('stoppe() during the wait for the guard time keeps the waiting plan in the file', async (t) => {

@@ -44,7 +44,7 @@ def test_i3_gruende_17():
     assert h.hs_grund(hs, "deck/2", i, 60.0, 128.0, 124.5) == "hoerschein_anderer_abschnitt"
     assert h.hs_grund(dict(hs, bpm_messung=128.64), "deck/2", i, 60.0, 128.0, 50.0) is None
     assert h.hs_grund(dict(hs, bpm_messung=128.65), "deck/2", i, 60.0, 128.0, 50.0) == "hoerschein_anderes_tempo"
-    assert h.hs_grund(hs, "deck/3", i, 60.0, 128.0, 50.0) == "hoerschein_anderer_kanal"
+    assert h.hs_grund(hs, "pad/1", i, 60.0, 128.0, 50.0) == "hoerschein_anderer_kanal"
     assert h.hs_grund(None, "deck/2", i, 60.0, 128.0) == "kein_hoerschein"
 
 

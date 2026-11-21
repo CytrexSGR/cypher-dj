@@ -720,6 +720,39 @@ int main() {
       PRUEF(hash(ohne) == hash(aus) && pool->zurueck() == z0 && pool->an());
       for (int r = 0; r < 4; ++r) PRUEF(ohne.arr.returns().pool_berechnet(r) == 0 && ohne.arr.returns().hall_berechnet(r) == aus.arr.returns().hall_berechnet(r));
     }
+    {  // returns_pool_acht (container core review I4): all eight returns active, seven workers (MAX_W = ARR_RETURNS - 1): returns 2..8 run on workers, return 1 in the caller, output bit-equal to the serial path
+      static_assert(HallPool::MAX_W == cdj::ARR_RETURNS - 1, "one worker per return except return 0");
+      HallPoolEinstellung e8;
+      e8.faeden = HallPool::MAX_W;
+      e8.frist_us = 1000000;
+      HallPool pool8(e8);
+      PRUEF(pool8.faeden() == 7 && pool8.an());
+      auto projekt8 = [&](Treiber& t, HallPool* pl) {
+        t.arr.setze_hall_pool(pl);
+        for (int r = 1; r <= 8; ++r) setze(t, (std::string("spur/1/send/") + std::to_string(r)).c_str(), 0.0f);
+        spiele_hall(t, snap(&sin_audio->a, {0}, 255), 0);
+        for (int b = 0; b < 1500; ++b) {
+          if (b % 97 == 0)
+            for (int r = 1; r <= 8; ++r)
+              setze(t, (std::string("ret/") + std::to_string(r) + "/hall/decay").c_str(), 0.2f + 0.07f * static_cast<float>(r) + 0.003f * static_cast<float>((b / 97) % 40));
+          t.lauf(t.s + 256);
+        }
+      };
+      TR(aus) TR(an)
+      projekt8(aus, nullptr);
+      projekt8(an, &pool8);
+      bool alle = true, worker = an.arr.returns().pool_berechnet(0) == 0;
+      for (int r = 0; r < cdj::ARR_RETURNS; ++r) alle = alle && an.arr.returns().hall_berechnet(r) > 1000 && an.arr.returns().hall_berechnet(r) == aus.arr.returns().hall_berechnet(r);
+      for (int r = 1; r < cdj::ARR_RETURNS; ++r) worker = worker && an.arr.returns().pool_berechnet(r) > 0 && 2 * an.arr.returns().pool_berechnet(r) >= an.arr.returns().hall_berechnet(r);
+      PRUEF(alle);       // every one of the eight Halls ran, the same number of blocks as serially
+      PRUEF(worker);     // returns 2..8 on the workers, never return 1
+      PRUEF(hash(an) == hash(aus));
+      PRUEF(an.arr.returns().nan_treffer() == 0 && pool8.an() && pool8.zurueck() == 0 && pool8.spaet() == 0);
+      std::printf("returns_pool_acht: pool_berechnet %llu %llu %llu %llu %llu %llu %llu of hall_berechnet %llu\n", (unsigned long long)an.arr.returns().pool_berechnet(1),
+                  (unsigned long long)an.arr.returns().pool_berechnet(2), (unsigned long long)an.arr.returns().pool_berechnet(3), (unsigned long long)an.arr.returns().pool_berechnet(4),
+                  (unsigned long long)an.arr.returns().pool_berechnet(5), (unsigned long long)an.arr.returns().pool_berechnet(6), (unsigned long long)an.arr.returns().pool_berechnet(7),
+                  (unsigned long long)an.arr.returns().hall_berechnet(7));
+    }
   }
   PRUEF_ENDE();
 }

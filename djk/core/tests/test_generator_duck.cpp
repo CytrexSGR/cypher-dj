@@ -10,7 +10,7 @@ namespace {
 
 constexpr int N = 256;
 constexpr int64_t SPB = 22500;  // 128 BPM
-constexpr int ERZ1 = 4;
+constexpr int ERZ1 = 0;  // output index of stream 1
 
 struct Welt {
   cdj::Karte karte{128.0, 0};
@@ -56,7 +56,7 @@ int main() {
   const cdj::Kit kit = duck_kit();
   {  // 1. nur der duck-Klang meldet, am absoluten Sample; Block ohne Ereignis meldet nichts
     Welt w;
-    w.erz.setze_strom(1, &kit, ERZ1);
+    w.erz.setze_strom(1, &kit);
     const int64_t blk_a = 800 * N, blk_b = 1200 * N;  // Blöcke mit je einem Ereignis mitten im Block
     const double b0 = (double)(blk_a + 100) / SPB, b1 = (double)(blk_b + 37) / SPB;
     const auto z = w.erz.fenster(fenster(8.0, 12.0, {{b0, 0, 1, 1.0f}, {b1, 1, 1, 1.0f}}), 0.0);
@@ -75,7 +75,7 @@ int main() {
   }
   {  // 2. Deckel: 20 bd-Ereignisse im selben 256er-Block (~11 Samples Abstand) -> n == 16, der Rest verfällt still
     Welt w;
-    w.erz.setze_strom(1, &kit, ERZ1);
+    w.erz.setze_strom(1, &kit);
     const int64_t blk = 800 * N;
     const double b0 = (double)(blk + 10) / SPB;  // letztes bei ~ +224 < 256
     cdj::ErzFenster f = fenster(8.0, 12.0, {});

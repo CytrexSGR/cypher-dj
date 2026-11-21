@@ -115,7 +115,7 @@ export default {
     '/k/rec/spur': (K, a, b) => {
       const midi = a.eingang === 30;   // 1.8 T8 (midi_ein_1): a bit per instrument track, no tap and no channel mode
       const externEin = a.eingang >= 1 && a.eingang <= 4;   // Slice 2: ein_1..4 sind Abgriffe mit Kanalmodus
-      const erzOderPad = (a.eingang >= 11 && a.eingang <= 13) || (a.eingang >= 15 && a.eingang <= 17) || a.eingang === 21 || a.eingang === 22;   // wie rec_mixer_index
+      const erzOderPad = (a.eingang >= 11 && a.eingang <= 13) || (a.eingang >= 15 && a.eingang <= 17) || (a.eingang >= 21 && a.eingang <= 24);   // stream buffers 1..3, 5..7 and the container inputs C, D, A, B (container core)
       if (!(a.spur >= 1 && a.spur <= 32) || (a.scharf !== 0 && a.scharf !== 1) || !(a.eingang === 0 || erzOderPad || a.eingang === 20 || externEin || midi)
         || !(a.modus >= 0 && a.modus <= 3) || !(a.monitor >= 0 && a.monitor <= 2))
         return K.q(b, 6, 'ausserhalb_bereich');

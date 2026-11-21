@@ -24,7 +24,7 @@ const BESTAND = baueBestand(tmp('djk-s0-bestand-'), [{ material_id: '1ac28792d35
 process.on('exit', () => fs.rmSync(BESTAND, { recursive: true, force: true }));
 
 // Verkürzte Fassung des stapel() aus server.test.mjs (die Datei exportiert nichts): Attrappe + Oberflaeche, alle Ordner in tmp.
-async function stapel(t, { loops, musterOrdner, wirtOrdner, klangBefehl, hotcueOrdner } = {}) {
+async function stapel(t, { loops, musterOrdner, wirtOrdner, klangBefehl, hotcueOrdner, live } = {}) {
   const t1 = tmp('djk-s0-');
   const ab = path.join(fs.mkdtempSync('/dev/shm/djk60m-test-'), 'material');
   fs.mkdirSync(ab, { recursive: true });
@@ -46,7 +46,8 @@ async function stapel(t, { loops, musterOrdner, wirtOrdner, klangBefehl, hotcueO
   serverInstanzSetzen(t);   // I08 Nachzug R2 (m4)
   const o = new Oberflaeche({ port: 47300 + K, kernPort: 47100 + K, aboPort: 47150 + K, leitstandWs: 47200 + K, bestand: BESTAND, arbeitsbestand: ab,
     mutationen: [], loops: loops ?? tmp('djk-loops-'), kits: tmp('djk-kits-'), welleCache: tmp('djk-welle-'), musterOrdner: musterOrdner ?? tmp('djk-muster-'),
-    hotcueOrdner: hotcueOrdner ?? tmp('djk-hc-'), rasterOrdner: tmp('djk-raster-'), huellen, wirtOrdner: wirtOrdner ?? tmp('djk-wirt-'), klangBefehl, log: (z) => log.push(z) });
+    hotcueOrdner: hotcueOrdner ?? tmp('djk-hc-'), rasterOrdner: tmp('djk-raster-'), huellen, wirtOrdner: wirtOrdner ?? tmp('djk-wirt-'), klangBefehl, log: (z) => log.push(z),
+    ...(live ? { proj: { wurzel: path.join(tmp('djk-s0-proj-'), 'projekte'), arbeitsordner: path.join(t1, 'arr') } } : {}) });
   await o.starte();
   laufend = o;
   const i = innen(o);
@@ -54,6 +55,8 @@ async function stapel(t, { loops, musterOrdner, wirtOrdner, klangBefehl, hotcueO
   assert.equal(i.kern.zustand, 'verbunden');
   const empfange = i.kern.empfange.bind(i.kern);   // wie server.test.mjs: echte Begrüßungen nach dem Verbinden fallen weg
   i.kern.empfange = (buf) => { if (buf.includes('/k/willkommen')) return; return empfange(buf); };
+  // container core M6: POST /strudel needs the strudel module of an open live project
+  if (live) { const r = await o.proj.sitzung.liveOeffnen('andreas'); assert.equal(r.code, 200, JSON.stringify(r.j)); }
   return { o, i, log, url: `http://127.0.0.1:${47300 + K}` };
 }
 
@@ -112,7 +115,7 @@ const stoppCypher = async (i, an) => {
 
 test('S0 /strudel: Stop Cypher lehnt Cypher mit 409 ki_gestoppt ab und schreibt nichts; Andreas und der Normalfall gehen', async (t) => {
   const d = tmp('djk-muster-');
-  const { i, url } = await stapel(t, { musterOrdner: d });
+  const { i, url } = await stapel(t, { musterOrdner: d, live: true });
   const text = { text: 's("bd*4")' };
   assert.equal((await postJson(url, '/strudel', text, CYPHER)).code, 200, 'Kontrolle: ohne Stop darf Cypher');
   fs.rmSync(d, { recursive: true, force: true });
@@ -127,7 +130,7 @@ test('S0 /strudel: Stop Cypher lehnt Cypher mit 409 ki_gestoppt ab und schreibt 
 
 test('S0 /spur: Stop Cypher lehnt Cypher mit 409 ki_gestoppt ab, nichts an den Kern; Andreas und der Normalfall gehen', async (t) => {
   const { i, url, log } = await stapel(t);
-  const spur = (name) => ({ spur: { name, fahrten: [{ ziel: 'erz/2/filter', ab_takt: 1, takte: 2, nach: -0.6 }] } });
+  const spur = (name) => ({ spur: { name, fahrten: [{ ziel: 'deck/2/filter', ab_takt: 1, takte: 2, nach: -0.6 }] } });
   assert.equal((await postJson(url, '/spur', spur('s0-frei'), CYPHER)).code, 200, 'Kontrolle: ohne Stop darf Cypher');
   await stoppCypher(i, true);
   const n0 = log.filter((z) => z.typ === 'an_kern').length;
@@ -167,12 +170,6 @@ function schreibeLoop(dir, name, beats) {
   fs.writeFileSync(path.join(dir, name, 'loop.json'), JSON.stringify({ schema: 1, name, beats, bpm: 128, frames: beats * 22500, datei: 'loop.f32', quelle: 'test', erstellt: '2026-09-27 15:00' }));
   fs.writeFileSync(path.join(dir, name, 'loop.f32'), Buffer.alloc(beats * 22500 * 8));
 }
-async function boxAn(i, url, loops, box, name, { raster } = {}) {
-  schreibeLoop(loops, name, 4);
-  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box, name })).code, 200);
-  i.vomKern('/e/loop', { box, status: 3, name, beats: 4 });
-  if (raster !== undefined) assert.equal((await postJson(url, '/loop', { aktion: 'raster', box, versatz_frames: raster })).code, 200);
-}
 const fxFelder = (e) => ({ einheit: e, art: 2, beats: 1, wet: 0.6, param1: 0.4, param2: 0.5, param3: 0.5, an: 1 });
 const kernBefehle = (log, ab = 0) => log.filter((z) => z.typ === 'an_kern' && /^\/k\/(loop|fx)/.test(z.adresse)).slice(ab);
 const form = (z) => `${z.adresse}|${z.felder.box !== undefined ? 'b' + z.felder.box : 'e' + z.felder.einheit}|${z.felder.quelle}`;
@@ -186,13 +183,6 @@ async function neustartMitFenster(i, log, generation, imFenster) {
 }
 const ausgelassen = (log, typ, feld, wert) => log.filter((z) => z.typ === typ && z[feld] === wert).map((z) => z.grund);
 
-async function zweiBoxen(t, extra) {
-  const loops = tmp('djk-loops-');
-  const s = await stapel(t, { loops });
-  await boxAn(s.i, s.url, loops, 1, 'pruef-a', extra);
-  await boxAn(s.i, s.url, loops, 2, 'pruef-b', extra);
-  return { ...s, loops };
-}
 async function zweiFx(t) {
   const d = tmp('djk-muster-');
   const s = await stapel(t, { musterOrdner: d });
@@ -201,14 +191,6 @@ async function zweiFx(t) {
   s.i.vomKern('/e/fx', fxFelder(2));
   return s;
 }
-
-test('S0 angefasst (Echo /e/loop): ein Echo für Box 1 im Fenster hält die Wiederherstellung von Box 1 zurück, Box 2 kommt', async (t) => {
-  const { i, log } = await zweiBoxen(t);
-  const b = await neustartMitFenster(i, log, 201, async () => { i.vomKern('/e/loop', { box: 1, status: 3, name: 'pruef-a', beats: 4 }); });
-  assert.deepEqual(ausgelassen(log, 'box_wieder_ausgelassen', 'box', 1), ['neu_gesetzt'], JSON.stringify(log.filter((z) => /wieder/.test(z.typ))));
-  assert.deepEqual(b.filter((x) => x.includes('|b1|')), [], `Box 1: nichts erneut gesendet: ${b}`);
-  assert.deepEqual(b.filter((x) => x.includes('|b2|')).sort(), ['/k/loop/laden|b2|andreas', '/k/loop/start|b2|andreas'], `Kontrolle Box 2: ${b}`);
-});
 
 test('S0 angefasst (Echo /e/fx): ein Echo für FX 1 im Fenster hält die Wiederherstellung von FX 1 zurück, FX 2 kommt', async (t) => {
   const { i, log } = await zweiFx(t);
@@ -224,37 +206,4 @@ test('S0 angefasst (/fx/zuweisung): eine Zuweisung im Fenster hält die Wiederhe
   assert.equal(antwort.code, 200, JSON.stringify(antwort));
   assert.deepEqual(ausgelassen(log, 'fx_wieder_ausgelassen', 'einheit', 1), ['neu_gesetzt'], JSON.stringify(log.filter((z) => /wieder/.test(z.typ))));
   assert.deepEqual(b.sort(), ['/k/fx/zuweisung|e1|andreas', '/k/fx|e2|andreas'].sort(), 'von FX 1 nur die eigene Zuweisung, FX 2 (Kontrolle) kommt');
-});
-
-test('S0 angefasst (/deck/loop/sichern mit box): das Sichern in Box 1 im Fenster hält die Wiederherstellung von Box 1 zurück, Box 2 kommt', async (t) => {
-  const loops = tmp('djk-loops-');
-  const { i, log, url } = await stapel(t, { loops });
-  assert.equal((await postJson(url, '/laden', { deck: 1, material_id: '1ac28792d355a38b' })).code, 200);
-  for (let n = 0; n < 50 && !i.stand.decks['1']; n++) await warte(20);
-  await boxAn(i, url, loops, 1, 'pruef-a');
-  await boxAn(i, url, loops, 2, 'pruef-b');
-  assert.equal((await postJson(url, '/deck/loop', { deck: 1, laenge: 2, raster: 4 })).code, 200);
-  for (let n = 0; n < 100; n++) { const z = i.stand.decks['1']; if (z && (z.beats_bis_ende === null || z.beats_bis_ende === Infinity)) break; await warte(20); }
-  let antwort;
-  const b = await neustartMitFenster(i, log, 204, async () => { antwort = await postJson(url, '/deck/loop/sichern', { deck: 1, box: 1 }); });
-  assert.equal(antwort.code, 200, JSON.stringify(antwort));
-  assert.deepEqual(ausgelassen(log, 'box_wieder_ausgelassen', 'box', 1), ['neu_gesetzt'], JSON.stringify(log.filter((z) => /wieder/.test(z.typ))));
-  assert.deepEqual(b.filter((x) => x.includes('|b1|')), ['/k/loop/laden|b1|andreas'], `Box 1: nur das Laden des gesicherten Loops: ${b}`);
-  assert.ok(log.some((z) => z.typ === 'an_kern' && z.adresse === '/k/loop/laden' && z.felder.box === 1 && /^a-\d{6}-2b$/.test(z.felder.name)), 'das Laden trägt den gesicherten Namen, nicht pruef-a');
-  assert.ok(b.some((x) => x.startsWith('/k/loop/laden|b2|')), `Kontrolle Box 2 kommt: ${b}`);
-});
-
-test('S0 angefasst (/loop raster): ein Raster-Versatz im Fenster hält den alten Live-Versatz aus der Wiederherstellung zurück, Box 2 bekommt seinen', async (t) => {
-  const { i, log, url } = await zweiBoxen(t, { raster: 96 });
-  const rasterBefehle = () => log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/loop/raster').map((z) => [z.felder.box, z.felder.versatz_frames]);
-  const r0 = rasterBefehle().length;
-  let antwort;
-  await neustartMitFenster(i, log, 205, async () => {
-    // nach dem Neustart ist stand.loops leer; Andreas' Raster-Griff braucht die Box, also steht sie hier ein (wie ein früher Echo, ohne ihn: der setzte box:1)
-    i.stand.loops['1'] = { box: 1, status: 3, name: 'pruef-a', beats: 4 };
-    antwort = await postJson(url, '/loop', { aktion: 'raster', box: 1, versatz_frames: 200 });
-  });
-  assert.equal(antwort.code, 200, JSON.stringify(antwort));
-  assert.deepEqual(rasterBefehle().slice(r0), [[1, 200], [2, 96]], 'Box 1: nur Andreas\' neuer Versatz, nicht der alte 96; Box 2 (Kontrolle): der gemerkte 96');
-  assert.deepEqual(log.filter((z) => z.typ === 'box_wieder' && z.box === 1).map((z) => z.versatz_frames), [96], 'Box 1 kam zurück (nicht angefasst), nur ohne zweiten Raster-Befehl');
 });

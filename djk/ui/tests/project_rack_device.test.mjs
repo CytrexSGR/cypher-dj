@@ -54,7 +54,7 @@ test('T1 (b) refusals: nested rack, member count, ids, zones, gain, chain, surge
   assert.match(pruefeFehler(mitSpur(rackG([m({ geraet: { art: 'wirt', name: 'surge', slot: 1, parameter: { a: 1 } } })]))) ?? '', /surge member parameters are not mirrored/);
   // (d) a /1 file with a rack track
   const alt = specProjekt(); alt.spuren[1].geraet = zweiKit();
-  assert.match(pruefeFehler(alt) ?? '', /cypherdj-projekt\/2/);
+  assert.match(pruefeFehler(alt) ?? '', /cypherdj-projekt\/3/);
   // the valid edges pass
   assert.equal(pruefeFehler(mitSpur(rackG([m({ ton: [0, 127], vel: [1, 127], kette: [0, 127], gain_db: -60 }), m({ id: 'g4', gain_db: 12 })], 127))), null);
 });

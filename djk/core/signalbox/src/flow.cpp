@@ -133,11 +133,7 @@ void Stellwerk::prozess(int64_t s0, int n) {
   pruefe_je_zyklus();
 
   // 4. Rückgabe an frei nach 32 Beats ohne Hand (§7.3 Punkt 4): Samples in diesem Zyklus
-  struct Rueck {
-    int16_t r;
-    int64_t s;
-  };
-  Rueck rueck[MAX_REGLER];
+  Rueck* const rueck = rueck_;   // preallocated member (signalbox.h), nothing on the callback stack
   int n_rueck = 0;
   if (n_mensch_ > 0) {
     for (int r = 0; r < tab_.anzahl(); r++) {

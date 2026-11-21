@@ -4,7 +4,7 @@
 // takeover). Cases:
 //   1) bk_ziel_laedt: a Mapping-v1 file with a bk target loads (closes the "no test loads a bk target" gap); an unknown bk
 //      index fails with unbekanntes_ziel on line 2
-//   2) lern_cc_bewegt_bk: CC 74 on midi_ein_1 moves erz/5/bk/3 with the scaled takeover of the Hand
+//   2) lern_cc_bewegt_bk: CC 74 on midi_ein_1 moves pad/1/bk/3 with the scaled takeover of the Hand
 //   3) hand_in_nicht: the same CC on hand_in does not reach slot 1
 //   4) ohne_eintrag: negative control, a CC and a note without entry change no knob; without a table nothing is counted
 //   5) tausch_slot1: Befehl MAPPING nr 1 swaps slot 1 only, the old pointer comes back as MAPPING_ALT
@@ -36,7 +36,7 @@ static void fall_bk_ziel_laedt() {
   PRUEF(hand::lade_datei((djk() + "/" + LERN_BK).c_str(), t, &m, &f));
   PRUEF(m.n_eintraege == 1);
   if (m.n_eintraege == 1) {
-    PRUEF(m.eintrag[0].regler == t.suche("erz/5/bk/3"));
+    PRUEF(m.eintrag[0].regler == t.suche("pad/1/bk/3"));
     PRUEF(m.eintrag[0].regler >= 0);
     PRUEF(!m.eintrag[0].eigene_kurve);
   }
@@ -45,11 +45,11 @@ static void fall_bk_ziel_laedt() {
   PRUEF(!hand::lade_datei((djk() + "/" + LERN_KAPUTT).c_str(), t, &k, &f));
   PRUEF(f.art == hand::FehlerArt::unbekanntes_ziel);
   PRUEF(f.zeile == 2);
-  std::printf("bk_ziel_laedt: erz/5/bk/3 -> regler %d, without own curve; erz/5/bk/65 refused: %s\n",
+  std::printf("bk_ziel_laedt: pad/1/bk/3 -> regler %d, without own curve; pad/1/bk/65 refused: %s\n",
               m.n_eintraege == 1 ? m.eintrag[0].regler : -1, f.text);
 }
 
-// 2) CC 74 on midi_ein_1 moves erz/5/bk/3: the first value primes, the second takes over scaled (signalbox/src/hand.cpp)
+// 2) CC 74 on midi_ein_1 moves pad/1/bk/3: the first value primes, the second takes over scaled (signalbox/src/hand.cpp)
 static void fall_lern_cc_bewegt_bk() {
   Arbeitsbestand ab("test_kern_lernen_2");
   Lauf x(ab.pfad);
@@ -57,10 +57,10 @@ static void fall_lern_cc_bewegt_bk() {
   x.zyklen(2 * N);
   x.midi_ein_bei(4 * N + 10, 0xB0, 74, 64);
   x.zyklen(6 * N);
-  PRUEF(x.alle(cdj::Ereignis::REGLER, "erz/5/bk/3").empty());  // first value only primes
+  PRUEF(x.alle(cdj::Ereignis::REGLER, "pad/1/bk/3").empty());  // first value only primes
   x.midi_ein_bei(8 * N + 20, 0xB0, 74, 100);
   x.zyklen(10 * N);
-  const auto r = x.alle(cdj::Ereignis::REGLER, "erz/5/bk/3");
+  const auto r = x.alle(cdj::Ereignis::REGLER, "pad/1/bk/3");
   PRUEF(r.size() == 1);
   const double basis = 64.0 / 127.0, p = 100.0 / 127.0;
   const double soll = 0.5 + (p - basis) * (1.0 - 0.5) / (1.0 - basis);
@@ -69,7 +69,7 @@ static void fall_lern_cc_bewegt_bk() {
     PRUEF(r[0].sample == 8 * N + 20);
   }
   PRUEF(x.kern->lern_ereignisse() == 2);
-  std::printf("lern_cc_bewegt_bk: erz/5/bk/3 = %.6f at sample %lld (expected %.6f), lern_ereignisse %llu\n",
+  std::printf("lern_cc_bewegt_bk: pad/1/bk/3 = %.6f at sample %lld (expected %.6f), lern_ereignisse %llu\n",
               r.empty() ? -1.0 : r[0].wert, r.empty() ? -1LL : (long long)r[0].sample, soll,
               (unsigned long long)x.kern->lern_ereignisse());
 }
@@ -84,10 +84,10 @@ static void fall_hand_in_nicht() {
   x.midi_bei(4 * N + 10, 0xB0, 74, 64);
   x.midi_bei(6 * N + 20, 0xB0, 74, 100);
   x.zyklen(8 * N);
-  PRUEF(x.alle(cdj::Ereignis::REGLER, "erz/5/bk/3").empty());
+  PRUEF(x.alle(cdj::Ereignis::REGLER, "pad/1/bk/3").empty());
   PRUEF(x.kern->hand_ohne_wirkung() == ohne + 2);  // softcontroller.json has no CC 74
   PRUEF(x.kern->lern_ereignisse() == 0);
-  std::printf("hand_in_nicht: hand_ohne_wirkung +%llu, lern_ereignisse %llu, no REGLER on erz/5/bk/3\n",
+  std::printf("hand_in_nicht: hand_ohne_wirkung +%llu, lern_ereignisse %llu, no REGLER on pad/1/bk/3\n",
               (unsigned long long)(x.kern->hand_ohne_wirkung() - ohne), (unsigned long long)x.kern->lern_ereignisse());
 }
 
@@ -107,7 +107,7 @@ static void fall_ohne_eintrag() {
       std::snprintf(pfad, sizeof pfad, "deck/%d/bk/3", d);
       PRUEF(x.alle(cdj::Ereignis::REGLER, pfad).empty());
     }
-    PRUEF(x.alle(cdj::Ereignis::REGLER, "erz/5/bk/3").empty());
+    PRUEF(x.alle(cdj::Ereignis::REGLER, "pad/1/bk/3").empty());
     PRUEF(x.kern->lern_ohne_wirkung() == 2);
     PRUEF(x.kern->lern_ereignisse() == 0);
     std::printf("ohne_eintrag: lern_ohne_wirkung %llu (CC 75 and a note), no REGLER\n",
@@ -151,7 +151,7 @@ static void fall_tausch_slot1() {
   PRUEF(x.kern->lern_mapping() == a);
   PRUEF(x.kern->mapping() == slot0);
   PRUEF(x.alle(cdj::Ereignis::MAPPING_ALT).empty());
-  const auto r = x.alle(cdj::Ereignis::REGLER, "erz/5/bk/3");
+  const auto r = x.alle(cdj::Ereignis::REGLER, "pad/1/bk/3");
   PRUEF(r.size() == 1 && r[0].sample == 4 * N + 20);
   // second swap: the first table comes back
   cdj::Befehl c2 = x.neu(cdj::Befehl::MAPPING);
@@ -399,8 +399,8 @@ static void fall_zwei_ports_zwei_ziele() {
   Lauf x(ab.pfad);
   hand::Mapping t2{};
   lade_tisch(x, LERN_BK2, &t2);
-  PRUEF(x.lern_laden(LERN_BK));   // port 1: CC 74 -> erz/5/bk/3
-  x.kern->setze_lern_mapping(&t2, 1);   // port 2: CC 74 -> erz/5/bk/4
+  PRUEF(x.lern_laden(LERN_BK));   // port 1: CC 74 -> pad/1/bk/3
+  x.kern->setze_lern_mapping(&t2, 1);   // port 2: CC 74 -> pad/1/bk/4
   PRUEF(x.kern->lern_mapping(0) == x.lern.get() && x.kern->lern_mapping(1) == &t2);
   x.zyklen(2 * N);
   x.midi_ein_bei(4 * N + 10, 0xB0, 74, 64, 0);   // both prime
@@ -408,16 +408,16 @@ static void fall_zwei_ports_zwei_ziele() {
   x.zyklen(6 * N);
   x.midi_ein_bei(8 * N + 20, 0xB0, 74, 100, 0);   // port 1 moves its target only
   x.zyklen(10 * N);
-  PRUEF(x.alle(cdj::Ereignis::REGLER, "erz/5/bk/3").size() == 1);
-  PRUEF(x.alle(cdj::Ereignis::REGLER, "erz/5/bk/4").empty());
+  PRUEF(x.alle(cdj::Ereignis::REGLER, "pad/1/bk/3").size() == 1);
+  PRUEF(x.alle(cdj::Ereignis::REGLER, "pad/1/bk/4").empty());
   x.midi_ein_bei(12 * N + 20, 0xB0, 74, 100, 1);  // port 2 moves its own
   x.zyklen(14 * N);
-  PRUEF(x.alle(cdj::Ereignis::REGLER, "erz/5/bk/3").size() == 1);
-  const auto r4 = x.alle(cdj::Ereignis::REGLER, "erz/5/bk/4");
+  PRUEF(x.alle(cdj::Ereignis::REGLER, "pad/1/bk/3").size() == 1);
+  const auto r4 = x.alle(cdj::Ereignis::REGLER, "pad/1/bk/4");
   PRUEF(r4.size() == 1 && r4[0].sample == 12 * N + 20);
   PRUEF(x.kern->lern_ereignisse() == 4);   // two primes and two moves, all translated with effect
   std::printf("zwei_ports_zwei_ziele: port 1 -> bk/3 x%zu, port 2 -> bk/4 x%zu, lern_ereignisse %llu\n",
-              x.alle(cdj::Ereignis::REGLER, "erz/5/bk/3").size(), r4.size(), (unsigned long long)x.kern->lern_ereignisse());
+              x.alle(cdj::Ereignis::REGLER, "pad/1/bk/3").size(), r4.size(), (unsigned long long)x.kern->lern_ereignisse());
   x.kern->setze_lern_mapping(nullptr, 1);   // t2 lives on this stack frame
 }
 
@@ -431,13 +431,13 @@ static void fall_port_ohne_tisch() {
   x.midi_ein_bei(6 * N + 10, 0xB0, 74, 100, 1);
   x.midi_ein_bei(7 * N + 10, 0xB0, 74, 20, 4);
   x.zyklen(10 * N);
-  PRUEF(x.alle(cdj::Ereignis::REGLER, "erz/5/bk/3").empty());
+  PRUEF(x.alle(cdj::Ereignis::REGLER, "pad/1/bk/3").empty());
   PRUEF(x.kern->lern_ereignisse() == 0 && x.kern->lern_ohne_wirkung() == 0);
   PRUEF(x.kern->midi_ein_ring().gesehen() == 3);   // the raw stream still sees them
   x.midi_ein_bei(12 * N + 10, 0xB0, 74, 64, 0);   // control: port 1 with its table works
   x.midi_ein_bei(14 * N + 10, 0xB0, 74, 100, 0);
   x.zyklen(16 * N);
-  PRUEF(x.alle(cdj::Ereignis::REGLER, "erz/5/bk/3").size() == 1);
+  PRUEF(x.alle(cdj::Ereignis::REGLER, "pad/1/bk/3").size() == 1);
   PRUEF(x.kern->lern_ereignisse() == 2);
   std::printf("port_ohne_tisch: ports 2 and 5 without a table changed nothing, port 1 moved bk/3\n");
 }
@@ -503,7 +503,7 @@ static void fall_tausch_slot2() {
   delete b;
 }
 
-// 20) stufen: a CC button on a learn table steps erz/5/bk/3 (default 0.5) through 3 positions and wraps; a release changes nothing
+// 20) stufen: a CC button on a learn table steps pad/1/bk/3 (default 0.5) through 3 positions and wraps; a release changes nothing
 static void fall_stufen_taste() {
   Arbeitsbestand ab("test_kern_lernen_20");
   Lauf x(ab.pfad);
@@ -519,13 +519,13 @@ static void fall_stufen_taste() {
     t += 6 * N;
   }
   x.zyklen(t + 2 * N);
-  const auto r = x.alle(cdj::Ereignis::REGLER, "erz/5/bk/3");
+  const auto r = x.alle(cdj::Ereignis::REGLER, "pad/1/bk/3");
   PRUEF(r.size() == 6);
   for (size_t i = 0; i < r.size() && i < 6; ++i) PRUEF_NAH(r[i].wert, soll[i], 1e-4);
   std::printf("stufen_taste: 6 presses, %zu events, last %.3f\n", r.size(), r.empty() ? -1.0 : r.back().wert);
 }
 
-// 21) channel 0 in a learn table matches every channel: CC 74 on channel 4 moves erz/5/bk/3 (LPD8 program 4)
+// 21) channel 0 in a learn table matches every channel: CC 74 on channel 4 moves pad/1/bk/3 (LPD8 program 4)
 static void fall_kanal_0() {
   Arbeitsbestand ab("test_kern_lernen_21");
   Lauf x(ab.pfad);
@@ -535,10 +535,10 @@ static void fall_kanal_0() {
   x.zyklen(6 * N);
   x.midi_ein_bei(8 * N + 20, 0xB3, 74, 100);
   x.zyklen(10 * N);
-  const auto r = x.alle(cdj::Ereignis::REGLER, "erz/5/bk/3");
+  const auto r = x.alle(cdj::Ereignis::REGLER, "pad/1/bk/3");
   PRUEF(r.size() == 1);
   PRUEF(x.kern->lern_ereignisse() == 2);
-  std::printf("kanal_0: CC 74 on channel 4 moved erz/5/bk/3 (%zu events, lern_ereignisse %llu)\n", r.size(),
+  std::printf("kanal_0: CC 74 on channel 4 moved pad/1/bk/3 (%zu events, lern_ereignisse %llu)\n", r.size(),
               (unsigned long long)x.kern->lern_ereignisse());
 }
 

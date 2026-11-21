@@ -84,6 +84,7 @@ struct Mapping {
   char quelle_port[PORT_TEXT];
   char ziel_port[PORT_TEXT];
   int n_eintraege;
+  int n_alias;                 // ADR 043: entries on erz/<n>/<suffix> (an alias the page server resolves) that the kern skipped
   Eintrag eintrag[MAX_EINTRAEGE];
   int n_leds;
   Led led[MAX_LEDS];

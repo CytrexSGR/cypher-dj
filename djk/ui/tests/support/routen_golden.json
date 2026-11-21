@@ -22,7 +22,6 @@
      "hallPool": "null",
      "kanalLimiter": "null",
      "kern": "string",
-     "loops": {},
      "pruefmodus": "string",
      "regler": {},
      "spurPool": "null"
@@ -260,7 +259,11 @@
      "letzter": "null",
      "zustand": "string"
     },
-    "boxen": {},
+    "container": [
+     {
+      "art": "string"
+     }
+    ],
     "decks": [
      {
       "deck": "number",
@@ -274,6 +277,7 @@
     "ki": {
      "gestoppt": "boolean"
     },
+    "plaetze": "null",
     "quittungen": "[]",
     "regler": {
      "keylock": "null"
@@ -337,7 +341,7 @@
    "p": "/loop/automation",
    "code": 404,
    "art": "application/json; charset=utf-8",
-   "fehler": "kein_loop",
+   "fehler": "nicht_gefunden",
    "form": {
     "fehler": "string"
    }
@@ -345,9 +349,9 @@
   {
    "m": "GET",
    "p": "/loop/raster",
-   "code": 409,
+   "code": 404,
    "art": "application/json; charset=utf-8",
-   "fehler": "kein_loop",
+   "fehler": "nicht_gefunden",
    "form": {
     "fehler": "string"
    }
@@ -1530,9 +1534,9 @@
    "m": "POST",
    "p": "/loop/automation",
    "kopf": "json",
-   "code": 404,
+   "code": 405,
    "art": "application/json; charset=utf-8",
-   "fehler": "kein_loop",
+   "fehler": "methode",
    "form": {
     "fehler": "string"
    }
@@ -1541,24 +1545,22 @@
    "m": "POST",
    "p": "/loop/automation",
    "kopf": "text",
-   "code": 415,
+   "code": 405,
    "art": "application/json; charset=utf-8",
-   "fehler": "nur_json",
+   "fehler": "methode",
    "form": {
-    "fehler": "string",
-    "text": "string"
+    "fehler": "string"
    }
   },
   {
    "m": "POST",
    "p": "/loop/automation",
    "kopf": "fremd",
-   "code": 403,
+   "code": 405,
    "art": "application/json; charset=utf-8",
-   "fehler": "fremde_herkunft",
+   "fehler": "methode",
    "form": {
-    "fehler": "string",
-    "text": "string"
+    "fehler": "string"
    }
   },
   {

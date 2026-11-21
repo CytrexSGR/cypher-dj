@@ -6,7 +6,8 @@ import type http from 'node:http';
 import type { Bereich, BereichKontext, Route } from '../../http/router.ts';
 import { json } from '../../http/transport.ts';
 import { aendereStand, StandFehler } from '../../project/state.ts';
-import { liveSlots, normiereSlot } from '../../project/live.ts';
+import { normierePlatz, platzVonModul, type Slot } from '../../project/live.ts';
+import { waehleModulSlot } from './platzwahl.ts';
 import { EinsetzFehler, liesModul, listeModule, modulOrdner, setzeModulEin, speichereModul } from '../../project/module_storage.ts';
 import { alsAntwort, leseKoerper, type ProjZugang } from '../proj/area.ts';
 import { ProjFehler, type Antwort } from '../proj/session.ts';
@@ -34,10 +35,10 @@ export function bibliothekBereich(ctx: BereichKontext, zugang: ProjZugang, o: Bi
   const einsetzen = async (d: Record<string, unknown>, quelle: Quelle): Promise<Antwort> => {
     nurSchluessel(d, 'modul_id', 'slot');
     if (typeof d.modul_id !== 'string') throw new ProjFehler(400, 'argument_ungueltig', { detail: 'modul_id: the id of a saved module' });
-    if (d.slot !== undefined) {                                                // 1/2 and A/B (decision 13)
-      const s0 = normiereSlot(d.slot);
-      if (s0 === undefined) throw new ProjFehler(400, 'argument_ungueltig', { detail: "slot: 1, 2, 'A' or 'B'" });
-      d = { ...d, slot: s0 };
+    let wunsch: Slot | undefined;
+    if (d.slot !== undefined) {                                                // a place: 1..4 or the container letter A..D
+      wunsch = normierePlatz(d.slot);
+      if (wunsch === undefined) throw new ProjFehler(400, 'argument_ungueltig', { detail: "slot: a place 1..4 or 'A'..'D'" });
     }
     gesperrt(quelle);
     const basis = o.basis();
@@ -45,25 +46,8 @@ export function bibliothekBereich(ctx: BereichKontext, zugang: ProjZugang, o: Bi
     if (!j) throw new ProjFehler(404, 'modul_unbekannt');
     const offen = zugang.offen();
     if (!offen) throw new ProjFehler(409, 'kein_projekt');
-    let slot = d.slot as 'A' | 'B' | undefined;
-    if (offen.projekt.live && o.kanalOffen) {                                   // decision 10: a live slot is placed like an export, only into a closed channel
-      const belegt = liveSlots(offen.projekt);
-      const name = (x: 'A' | 'B'): string => `pad/${x === 'A' ? 1 : 2}`;
-      if (slot !== undefined) {                                                  // an explicit slot stays strict; an occupied one is slot_belegt below
-        if (belegt[slot] === undefined && o.kanalOffen(name(slot))) {
-          const text = `the channel ${name(slot)} of Loop ${slot === 'A' ? 1 : 2} is open; close it before a module is placed`;
-          throw new ProjFehler(409, 'kanal_offen', { slot, kanal: name(slot), text });
-        }
-      } else {                                                                   // first free slot with a closed channel; refused only when none fits
-        const freie = (['A', 'B'] as const).filter((x) => belegt[x] === undefined);
-        if (freie.length > 0) {
-          slot = freie.find((x) => !o.kanalOffen!(name(x)));
-          if (slot === undefined) {
-            throw new ProjFehler(409, 'kanal_offen', { text: `the channel of every free loop slot is open (${freie.map(name).join(' and ')}); close one before a module is placed` });
-          }
-        }
-      }
-    }
+    // decision 10: a live module is placed like an export, only into a free place with a closed channel
+    const slot = offen.projekt.live ? waehleModulSlot(offen.projekt, wunsch, o.kanalOffen) : undefined;
     try {
       const r = setzeModulEin(offen.projekt, j, { modulOrdner: modulOrdner(j.id, basis) ?? path.join(basis, j.id), audioZiel: path.join(offen.ordner, 'loops'), quelle,
         slot, ...(o.jetzt ? { jetzt: o.jetzt } : {}) });
@@ -72,7 +56,8 @@ export function bibliothekBereich(ctx: BereichKontext, zugang: ProjZugang, o: Bi
       await zugang.uebernimm(w, meta);
       const jetzt = zugang.offen()!.projekt;
       const g = jetzt.gruppen.find((x) => x.id === r.gruppeId)!;
-      return { code: 200, j: { gruppe_id: r.gruppeId, name: g.name, ...(g.modul?.slot ? { slot: g.modul.slot } : {}), rev: jetzt.rev,
+      const slotNeu = platzVonModul(jetzt, r.gruppeId);
+      return { code: 200, j: { gruppe_id: r.gruppeId, name: g.name, ...(slotNeu ? { slot: slotNeu } : {}), rev: jetzt.rev,
         spuren: j.spuren.length, gruppen: j.gruppen.length, ...(r.audio_fehlt.length ? { audio_fehlt: r.audio_fehlt } : {}) } };
     } catch (e) {
       if (e instanceof EinsetzFehler) throw new ProjFehler(e.code, e.fehler, e.extra);

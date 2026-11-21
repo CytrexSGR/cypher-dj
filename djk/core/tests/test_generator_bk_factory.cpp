@@ -26,7 +26,7 @@ namespace {
 
 constexpr int N = 256;
 constexpr int64_t SPB = 22500;  // 128 BPM bei 48 kHz
-constexpr int ERZ2 = 5, ERZ3 = 6;
+constexpr int ERZ2 = 1, ERZ3 = 2;   // output indices of streams 2 and 3 (stream - 1)
 const char* G = R"({"format":"baukasten/2","name":"t","stimmen":2,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"v","art":"mul"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"s.aus","nach":"v.a"},{"von":"n.gate","nach":"v.b"},{"von":"v.aus","nach":"o.x"}]})";
 const char* GA = R"({"format":"baukasten/2","name":"t","stimmen":2,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"e","art":"adsr","a":0.001,"d":0.1,"s":1,"r":1.0},{"id":"v","art":"mul"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.gate","nach":"e.gate"},{"von":"s.aus","nach":"v.a"},{"von":"e.aus","nach":"v.b"},{"von":"v.aus","nach":"o.x"}]})";
 
@@ -74,7 +74,7 @@ struct Welt {
     }
   }
   int raeumen() {  // Graph ab, ausklingen lassen, alles freigeben; Rückgabe: Anzahl freigegebener Graphen
-    for (int st = 1; st <= cdj::ERZ_STROEME; ++st) erz.setze_bk(st, nullptr, ERZ2);
+    for (int st = 1; st <= cdj::ERZ_STROEME; ++st) erz.setze_bk(st, nullptr);
     bis(s + 4 * N);   // bei bn = 128: 512 Samples, reicht für zwei Blöcke Ausklang
     CypherBk* f[8];
     int ges = 0;
@@ -105,8 +105,8 @@ cdj::ErzEv ev(double beat, int note, float vel, double dauer) {
 // erster Anschlag (Beat 0.37, dauer 0.5, Off bei 0.87) noch klingt: der Zweig "Note klingt noch" in bk_noten.
 std::vector<float> szenario(int faeden, const cdj::Kit& kit, std::vector<float>* rechts) {
   Welt w(faeden);
-  w.erz.setze_bk(2, neu(GA), ERZ2);
-  w.erz.setze_strom(3, &kit, ERZ2);
+  w.erz.setze_bk(2, neu(GA));
+  w.erz.setze_strom(3, &kit);
   w.erz.fenster(fenster(2, {ev(0.0, 45, 0.8f, 1.0), ev(0.37, 49, 0.6f, 0.5), ev(0.5, 49, 0.8f, 0.5), ev(1.0, 52, 0.9f, 0.25), ev(1.1, 45, 0.7f, 2.0),
                             ev(2.0, 57, 1.0f, 3.0), ev(2.0, 61, 1.0f, 3.0)}), 0.0);
   w.erz.fenster(fenster(3, {ev(0.5, 57, 1.0f, 0.0), ev(1.75, 57, 0.5f, 0.0)}), 0.0);
@@ -139,15 +139,15 @@ struct Wechsel128 {
 Wechsel128 wechsel128(int faeden, int bn, bool zweiter) {
   Welt w(faeden);
   w.bn = bn;
-  w.erz.setze_bk(2, neu(G), ERZ2);
+  w.erz.setze_bk(2, neu(G));
   w.erz.fenster(fenster(2, {ev(0.0, 57, 1.0f, 8.0), ev((double)(778) / (double)SPB, 64, 1.0f, 1.0),
                             ev((double)(1546) / (double)SPB, 60, 1.0f, 1.0)}), 0.0);
   w.bis(512);
-  w.erz.setze_bk(2, neu(G), ERZ2);
+  w.erz.setze_bk(2, neu(G));
   const size_t T = w.erz2.size();
   if (zweiter) {
     w.bis(w.s + 2 * bn);
-    w.erz.setze_bk(2, neu(G), ERZ2);
+    w.erz.setze_bk(2, neu(G));
   }
   w.bis(2816);
   Wechsel128 e;
@@ -185,12 +185,12 @@ int main() {
   }
   for (int faeden : {0, 2}) {  // 2) Wechsel G1 -> G2 im Block T = 2
     Welt w(faeden);
-    w.erz.setze_bk(2, neu(G), ERZ2);
+    w.erz.setze_bk(2, neu(G));
     // G1: Note ab Sample 0, gehalten; G2 bekommt die Note bei Sample 3N + 10 (liegt hinter dem Fenster, das G1 vorab bekam)
     const double beat_g2 = (double)(3 * N + 10) / (double)SPB;
     w.erz.fenster(fenster(2, {ev(0.0, 57, 1.0f, 8.0), ev(beat_g2, 64, 1.0f, 1.0)}), 0.0);
     w.bis(2 * N);
-    w.erz.setze_bk(2, neu(G), ERZ2);
+    w.erz.setze_bk(2, neu(G));
     const size_t T = w.erz2.size();
     w.bis(w.s + 3 * N);
     CypherBk* ref = neu(G);   // Referenz: G1 mit derselben Note, Block T mal Rampe ab 0
@@ -245,7 +245,7 @@ int main() {
     Welt w(2);
     CypherBk* a = neu(G);
     CypherBk* b = neu(G);
-    w.erz.setze_bk(2, a, ERZ2);
+    w.erz.setze_bk(2, a);
     w.erz.fenster(fenster(2, {ev(0.5, 57, 1.0f, 0.5), ev(1.0, 60, 1.0f, 0.5), ev(1.5, 64, 0.7f, 2.0)}), 0.0);
     w.bis(N);   // erster Block außerhalb der Zählung (Vectors der Welt wachsen)
     w.schlaf = false;   // Schlafen zählt der Wächter; Takt wie ein Callback (ohne ihn wäre fast jeder Block verspätet, gemessen 136-147
@@ -262,7 +262,7 @@ int main() {
     CypherBk* frei[4];
     abfang_an();
     w.bis(2 * SPB);
-    w.erz.setze_bk(2, b, ERZ2);
+    w.erz.setze_bk(2, b);
     w.bis(w.s + 4 * N);
     const int nf = w.erz.bk_frei(frei, 4);
     const AbfangZahlen az = abfang_zahlen();
@@ -281,7 +281,7 @@ int main() {
     text << f.rdbuf();
     PRUEF(f.good() || f.eof());
     Welt w(2);
-    w.erz.setze_bk(2, neu(text.str().c_str()), ERZ2);
+    w.erz.setze_bk(2, neu(text.str().c_str()));
     w.erz.fenster(fenster(2, {ev(0.0, 45, 0.8f, 1.0), ev(1.0, 49, 0.8f, 1.0), ev(2.0, 52, 0.8f, 1.0), ev(3.0, 57, 0.8f, 1.0),
                               ev(4.0, 45, 0.8f, 4.0), ev(4.0, 49, 0.8f, 4.0), ev(4.0, 52, 0.8f, 4.0), ev(4.0, 57, 0.8f, 4.0)}), 0.0);
     w.bis(10 * SPB);
@@ -306,7 +306,7 @@ int main() {
   for (int faeden : {0, 2}) {  // Bug t_bffc3708 (2): kappe = 1 ends the notes of a graph stream that still sound at ab_beat, also with the Werk (stille)
     const auto lauf = [&](int kappe) {
       Welt w(faeden);
-      w.erz.setze_bk(2, neu(G), ERZ2);
+      w.erz.setze_bk(2, neu(G));
       w.erz.fenster(fenster(2, {ev(1.0, 57, 1.0f, 6.0)}), 0.0);   // sounds from beat 1 to beat 7
       w.bis(2 * SPB);
       cdj::ErzFenster f = fenster(2, {});
@@ -336,7 +336,7 @@ int main() {
     };
     const auto abgebrochen = [&](bool zweites) {
       Welt w(faeden);
-      w.erz.setze_bk(2, neu(G), ERZ2);
+      w.erz.setze_bk(2, neu(G));
       w.erz.fenster(fenster(2, {ev(1.0, 57, 1.0f, 6.0)}), 0.0);
       w.bis(2 * SPB);
       cdj::ErzFenster stille = fenster(2, {});
@@ -351,7 +351,7 @@ int main() {
     PRUEF(spitze(abgebrochen(true), 3 * SPB + 512, 7 * SPB) > 0.1f);
     PRUEF(spitze(abgebrochen(false), 3 * SPB + 512, 7 * SPB) == 0.0f);
     Welt w(faeden);   // K5: bk_noten applies the cut before the first event at or after the cut beat
-    w.erz.setze_bk(2, neu(G), ERZ2);
+    w.erz.setze_bk(2, neu(G));
     w.erz.fenster(fenster(2, {ev(1.0, 57, 1.0f, 6.0)}), 0.0);
     w.bis(2 * SPB);
     cdj::ErzFenster f = fenster(2, {ev(3.0, 60, 1.0f, 1.0)});

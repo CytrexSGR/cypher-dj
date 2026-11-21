@@ -54,7 +54,6 @@ int main() {
   auto m = std::make_unique<cdj::Mixer>(st->tabelle());
   std::vector<int> zeilen;
   for (int k = 0; k < cdj::MIX_KANAELE; ++k) {
-    if (k == 11) continue;   // erz/8 has no tool rows
     const std::string kn = cdj::Mixer::kanal_name(k);
     if (k < cdj::MIX_QUELLEN)
       for (const char* s : {"gate/an", "gate/schwelle", "gate/hysterese", "gate/ratio", "gate/bereich", "gate/attack", "gate/hold", "gate/release", "gate/sc"})
@@ -70,7 +69,7 @@ int main() {
   }
   zeilen.push_back(st->tabelle().suche("spektrum/kanal"));
   for (int z : zeilen) PRUEF(z >= 0);
-  PRUEF(zeilen.size() == 13 * 9 + 17 * 7 + 4 * 24 + 1);   // 117 gate + 119 utility + 96 multiband + the spectrum source
+  PRUEF(zeilen.size() == 4 * 9 + 8 * 7 + 4 * 24 + 1);   // 36 gate + 56 utility + 96 multiband + the spectrum source
   for (int z : zeilen) {   // the stellwerk and the mixer start from the same values
     m->setze_sofort(z, st->wert(z));
   }
@@ -115,7 +114,7 @@ int main() {
       mk += m->mb_aktiv(k);
       mf += m->mb_aktiv(k) && m->mb_blende(k) > 0 && m->mb_blende(k) < 480;   // caught in the middle of a crossfade (it copies the dry signal)
     }
-    mb_gblenden += m->mb_grenzblende(14) + m->mb_grenzblende(15) + m->mb_grenzblende(16) + m->mb_grenzblende(17) > 0;   // crossover crossfade running
+    mb_gblenden += m->mb_grenzblende(4) + m->mb_grenzblende(5) + m->mb_grenzblende(6) + m->mb_grenzblende(7) > 0;   // crossover crossfade running
     mb_bloecke += mk > 0;
     mb_ausgeblendet += mf > 0;
     gate_bloecke += gk > 0;
@@ -125,14 +124,14 @@ int main() {
     nicht_endlich += !endlich;
   }
   std::printf("%ld blocks: %ld allocations, %ld frees, %ld locks, %ld sleeps; gate in use in %ld blocks, utility in %ld, multiband in %ld (of those mid-crossfade %ld, with a crossover crossfade running %ld, crossfades started %u); blocks with non-finite output %ld\n",
-              BLOECKE, summe.alloc, summe.frei, summe.sperren, summe.schlafen, gate_bloecke, util_bloecke, mb_bloecke, mb_ausgeblendet, mb_gblenden, m->mb_blenden(14) + m->mb_blenden(15) + m->mb_blenden(16) + m->mb_blenden(17), nicht_endlich);
+              BLOECKE, summe.alloc, summe.frei, summe.sperren, summe.schlafen, gate_bloecke, util_bloecke, mb_bloecke, mb_ausgeblendet, mb_gblenden, m->mb_blenden(4) + m->mb_blenden(5) + m->mb_blenden(6) + m->mb_blenden(7), nicht_endlich);
   // 1.15 A4 fix round (M7 with continuous turning): all eight crossover rows of the four buses are moved a little in EVERY block, as a
   // knob dragged by hand does (the warm-up of the second object gets a new target in place in nearly every block, the crossfades run one
   // after the other), the multiband on. Counted like the run above.
   {
     std::vector<int> an_zeilen, dreh_zeilen;
     for (int k = cdj::MIX_QUELLEN; k < cdj::MIX_KANAELE; ++k) {
-      const std::string kn = k == 14 ? "bus/1" : k == 15 ? "bus/2" : k == 16 ? "bus/3" : "bus/4";
+      const std::string kn = k == 4 ? "bus/1" : k == 5 ? "bus/2" : k == 6 ? "bus/3" : "bus/4";
       an_zeilen.push_back(st->tabelle().suche((kn + "/mb/an").c_str()));
       for (const char* f : {"mb/grenze_tief", "mb/grenze_hoch"}) dreh_zeilen.push_back(st->tabelle().suche((kn + "/" + f).c_str()));
     }
@@ -144,7 +143,7 @@ int main() {
     st->prozess(s0, 64);
     s0 += 64;
   for (const bool zufall_modus : {false, true}) {
-    const unsigned vorher = m->mb_blenden(14) + m->mb_blenden(15) + m->mb_blenden(16) + m->mb_blenden(17);
+    const unsigned vorher = m->mb_blenden(4) + m->mb_blenden(5) + m->mb_blenden(6) + m->mb_blenden(7);
     AbfangZahlen dreh;
     long dreh_gblenden = 0, dreh_nicht_endlich = 0;
     const long DREH_BLOECKE = 20000;
@@ -174,12 +173,12 @@ int main() {
       abfang_aus();
       dreh += abfang_zahlen();
       s0 += n;
-      dreh_gblenden += m->mb_grenzblende(14) + m->mb_grenzblende(15) + m->mb_grenzblende(16) + m->mb_grenzblende(17) > 0;
+      dreh_gblenden += m->mb_grenzblende(4) + m->mb_grenzblende(5) + m->mb_grenzblende(6) + m->mb_grenzblende(7) > 0;
       bool endlich = true;
       for (int i = 0; i < n; ++i) endlich = endlich && std::isfinite(ml[i]) && std::isfinite(mr[i]);
       dreh_nicht_endlich += !endlich;
     }
-    const unsigned danach = m->mb_blenden(14) + m->mb_blenden(15) + m->mb_blenden(16) + m->mb_blenden(17);
+    const unsigned danach = m->mb_blenden(4) + m->mb_blenden(5) + m->mb_blenden(6) + m->mb_blenden(7);
     std::printf("continuous turning (%s), %ld blocks: %ld allocations, %ld frees, %ld locks, %ld sleeps; %u crossfades started, running in %ld blocks; non-finite blocks %ld\n",
                 zufall_modus ? "random targets" : "triangle sweep", DREH_BLOECKE, dreh.alloc, dreh.frei, dreh.sperren, dreh.schlafen, danach - vorher, dreh_gblenden, dreh_nicht_endlich);
     PRUEF(dreh.alloc == 0);

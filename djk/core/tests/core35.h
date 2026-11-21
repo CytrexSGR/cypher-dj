@@ -73,8 +73,8 @@ struct Lauf {
   // A derived test Lauf (arr35::Lauf) must not declare members of these names: they would shadow these and never be fed.
   std::function<float(int64_t)> ein_quelle_r[cdj::EIN_PAARE + 1];
   std::vector<float> ein_puf_r[cdj::EIN_PAARE + 1];
-  // 1.8: Quellen für erz/1..3 über den vorhandenen Rückweg (Kern::rueck): Kern-Sample -> Wert links, rechts das Negative. Der Rückweg addiert bitgleich (|Wert| <= 8).
-  // S18: widened from 3 to 8 sources (index e feeds erz/<e+1> = mixer index 4 + e; index 3 = erz/4 belongs to the production and is skipped by the kern).
+  // 1.8: Quellen für Stream 1..3 über den vorhandenen Rückweg (Kern::rueck): Kern-Sample -> Wert links, rechts das Negative. Der Rückweg addiert bitgleich (|Wert| <= 8).
+  // S18: widened from 3 to 8 sources (index e feeds stream e+1 through Kern::rueck; index 3 belongs to the production service and is skipped by the kern).
   std::function<float(int64_t)> erz_quelle[8];
   std::vector<float> erz_puf_l[8], erz_puf_r[8];
   std::vector<Midi> midi_ein;

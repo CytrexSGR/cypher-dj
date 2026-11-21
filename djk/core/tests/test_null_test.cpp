@@ -7,9 +7,9 @@
 //      Samples je Beat) und bei 124 BPM nach 10^7 Samples Leerlauf (hohes Kern-Sample, Risiko 1);
 //   2. Gegenprobe (Spur 1 um 1 Sample verschoben) rot;
 //   3. Negativ-Kontrolle: Render ohne Regler-Stand rot; Stille in beiden Läufen ungültig. Dazu Spec 6.20: Regler-Quelle
-//      projekt mit denselben Spur-Reglern wie live bestanden (erz/4 neutral wie beim Live-Kern);
+//      projekt mit denselben Spur-Reglern wie live bestanden (the hidden production strip is neutral like in the live kernel);
 //   4. Start live mit Quant 1: Blockphase ≠ 25 (das Werkzeug erklärt den Test dann für ungültig);
-//   5. Vorbedingungen: erfüllt am Live-Fach; Verstöße für Tempo, Metronom, FX an master, erz/1-Fader, erz/4-EQ.
+//   5. Vorbedingungen: erfüllt am Live-Fach; Verstöße für Tempo, Metronom, FX an master, pad/1-Fader, pad/2-Fader.
 // Mutationen: RENDER_OHNE_VORHALT (Fall 1 rot), NULL_OHNE_NAHTRAND (Fall 1 rot: die Kurzblende der Naht im Fenster).
 #include <algorithm>
 #include <cmath>
@@ -185,7 +185,7 @@ int main() {
     ohne.gegenprobe_spur = 3;   // interne Spur: keine Audio-Clips
     PRUEF(cdj::rendere(ohne).fehler == "gegenprobe");
   }
-  // 3: Negativ-Kontrollen: ohne Regler-Stand (erz/4 auf der Vorgabe −200 dB, Spur 2 auf 0 dB) rot; Stille ungültig.
+  // 3: Negativ-Kontrollen: ohne Regler-Stand (Spur 2 auf 0 dB) rot; Stille ungültig.
   //    Spec 6.20: Regler-Quelle projekt mit den Spur-Reglern des Live-Laufs: bestanden
   {
     cdj::RenderAuftrag o = auf;
@@ -226,13 +226,13 @@ int main() {
     PRUEF(cdj::null_vorbedingungen(*v.fach, tab, 128.0, true, false).size() == 1);
     const std::vector<std::string> fx = cdj::null_vorbedingungen(*v.fach, tab, 128.0, false, true);
     PRUEF(fx.size() == 1 && fx[0].find("FX") == 0);
-    x.teil("erz/1/fader", -10.0f, 0.0, 0.0);
-    x.teil("erz/4/eq/tief", -3.0f, 0.0, 0.0);
+    x.teil("pad/1/fader", -10.0f, 0.0, 0.0);
+    x.teil("pad/2/fader", -3.0f, 0.0, 0.0);
     x.lauf(x.kern->sample() + 4 * N);
     auto f = std::make_unique<cdj_z_echtzeit>();
     x.kern->abbild(*f);
     const std::vector<std::string> zwei = cdj::null_vorbedingungen(*f, tab, 128.0, false, false);
-    PRUEF(zwei.size() == 2 && zwei[0].find("erz/1/fader") == 0 && zwei[1].find("erz/4/eq/tief") == 0);
+    PRUEF(zwei.size() == 2 && zwei[0].find("pad/1/fader") == 0 && zwei[1].find("pad/2/fader") == 0);
   }
   PRUEF_ENDE();
 }

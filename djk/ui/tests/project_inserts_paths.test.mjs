@@ -48,15 +48,15 @@ test('server.insert_409: POST /regler on ins/komp/<n>/* answers 409 ueber_projek
   assert.equal(anKern(log, '/k/teil').length, 0, 'nothing went to the core');
 });
 
-test('server.insert_409 negative control: outside the vocabulary stays 400 pfad, the old project families keep their own text, erz/* still passes', async (t) => {
+test('server.insert_409 negative control: outside the vocabulary stays 400 pfad, the old project families keep their own text, bus/* still passes', async (t) => {
   const { url, log } = await stapel(t);
   for (const pfad of ['ins/komp/0/an', 'ins/komp/13/an', 'ins/komp/1/zz', 'ins/eq/9/an', 'ins/eq/1/b9/an', 'ins/saett/5/an', 'ins/lim/3/an', 'ins/utility/9/an', 'ins/utility/1/zz', 'ins/eq/1', 'ins/komp/1']) {
     assert.equal((await ruf(url, 'POST', '/regler', { pfad, nach: 0 })).j.fehler, 'pfad', pfad);
   }
   assert.match((await ruf(url, 'POST', '/regler', { pfad: 'spur/1/fader', nach: 0 })).j.text, /track faders/);
   assert.match((await ruf(url, 'POST', '/regler', { pfad: 'ret/1/fader', nach: 0 })).j.text, /send_setzen, return_aendern/);
-  assert.equal((await ruf(url, 'POST', '/regler', { pfad: 'erz/2/fader', nach: -3 })).j.ok, true);
-  assert.deepEqual(anKern(log, '/k/teil').map((z) => z.felder.pfad), ['erz/2/fader']);
+  assert.equal((await ruf(url, 'POST', '/regler', { pfad: 'bus/1/fader', nach: -3 })).j.ok, true);
+  assert.deepEqual(anKern(log, '/k/teil').map((z) => z.felder.pfad), ['bus/1/fader']);
 });
 
 // ---- export render ---------------------------------------------------------------------------------------------------------------------------
@@ -133,7 +133,7 @@ test('abbildung.alle_insert: all slots of all kinds (12 x 10 komp, 8 x 59 eq, 4 
   assert.equal(r.findLastIndex((x) => x.pfad.startsWith('ins/komp/1/')), r.findIndex((x) => x.pfad === 'ins/komp/1/an'), 'the switch is the last row of its slot');
   assert.equal(alleRegler(p).length, alleRegler(neuesProjekt('N')).length, 'the number does not depend on the stages in use: all 12 slots are always set');
   assert.deepEqual(alleInsertRegler(neuesProjekt('N')).filter((x) => /\/an$/.test(x.pfad) && !/\/b\d\/an$/.test(x.pfad)).map((x) => x.wert), Array(46).fill(0), 'negative control: no stage, every stage switch off (12 komp, 8 eq, 4 saett, 2 lim, 4 host, 8 utility)');
-  assert.equal(alleRegler(neuesProjekt('N')).length, 365 + 64 + 1178 + 48 + 4 * 32, 'the old 365 plus the 64 rows of groups 9 to 16 plus the 1178 pooled insert rows plus the 48 rack macro rows (slice 4c) plus filter and 3 eq rows for each of the 32 tracks (loop deck channel strip)');
+  assert.equal(alleRegler(neuesProjekt('N')).length, 365 + 64 + 1178 + 48 + 4 * 32 + 236, 'the old 365 plus the 64 rows of groups 9 to 16 plus the 1178 pooled insert rows plus the 48 rack macro rows (slice 4c) plus filter and 3 eq rows for each of the 32 tracks (loop deck channel strip) plus 236 for eight returns instead of four (4 more send rows on each of the 32 tracks and 16 groups, 4 more returns of 11 rows)');
 });
 
 test('sitzung.setzt_alle_ins: opening a project with two inserts sets both (and the free slots at the defaults, 1178 rows) before the transport starts; the old controls are all there too', async (t) => {
@@ -152,7 +152,7 @@ test('sitzung.setzt_alle_ins: opening a project with two inserts sets both (and 
   assert.equal(insTeile.find((x) => x.felder.pfad === 'ins/komp/1/schwelle').felder.nach, -33);
   assert.equal(insTeile.find((x) => x.felder.pfad === 'ins/komp/2/ratio').felder.nach, 12);
   assert.equal(k.teile(/^rack\//).length, 48, 'all 12 racks x 4 macro rows (slice 4c)');
-  assert.equal(k.teile().length, soll + 24, 'all mixer controls plus the 24 erz/4 controls plus the inserts');
+  assert.equal(k.teile().length, soll, 'all mixer controls plus the inserts (the streams have no strip, so no erz/* rows go out)');
   assert.equal(r.j.kern.regler_fehler.length, 0);
   const frei = k.an('/k/hand/frei').at(-1).felder.pfade.split(',');
   assert.ok(frei.includes('spur/') && !frei.some((x) => x.startsWith('ins/') || x.startsWith('rack/')), `the hand release names regulator groups, no ins/* or rack/* path: ${frei.length} entries`);
@@ -172,7 +172,7 @@ test('sitzung.setzt_alle_ins negative control: opening a project without inserts
   assert.equal(k.teile(/^ins\//).length, 1178);
   assert.ok(k.teile(/^ins\/(komp|eq|saett|lim)\/\d+\/an$/).every((x) => x.felder.nach === 0), 'every switch off');
   assert.equal(k.teile(/^ins\/(komp|eq|saett|lim)\/\d+\/an$/).length, 26);
-  assert.equal(k.teile().length, 453 + 1178 + 48 + 4 * 32, 'the old 453 (389 plus the 64 rows of groups 9 to 16), the 1178 insert rows, the 48 rack macro rows and filter plus 3 eq rows for each of the 32 tracks (loop deck channel strip)');
+  assert.equal(k.teile().length, 665 + 1178 + 48 + 4 * 32, 'the old 453 (389 plus the 64 rows of groups 9 to 16) minus the 24 erz/4 rows plus 236 rows for eight returns = 665, the 1178 insert rows, the 48 rack macro rows and filter plus 3 eq rows for each of the 32 tracks (loop deck channel strip)');
 });
 
 test('sitzung.stale_slot: project A leaves ratio 12 / schwelle -40 on slot 1; opening B and adding a default stage there gives ratio 4 at the core (review IMPORTANT)', async (t) => {

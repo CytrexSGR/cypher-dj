@@ -27,7 +27,7 @@ int main() {
   auto st = std::make_unique<sw::Stellwerk>(uhr, nullptr);
   auto m = std::make_unique<cdj::Mixer>(st->tabelle());
   float ml[N], mr[N], cl[N], cr[N];
-  const char* const pfade[] = {"erz/1/gate/schwelle", "erz/1/util/breite", "erz/1/gate/an", "spektrum/kanal", "erz/1/komp/schwelle"};
+  const char* const pfade[] = {"deck/2/gate/schwelle", "deck/2/util/breite", "deck/2/gate/an", "spektrum/kanal", "deck/2/komp/schwelle"};
   int r[5];
   float vorher[5];
   for (int i = 0; i < 5; ++i) {

@@ -1,5 +1,5 @@
 // 1.15 A7b: the pure parts of public/spectrum.js, fed with frames the core produced (tests/fixtures/spektrum_rahmen.json: 1 kHz, 5 kHz and 100 Hz
-// full-scale sines through erz/1, the strings test_mixer_spektrum makes the SpektrumSender encode; regenerate with SPEKTRUM_FIXTURE=<file> test_mixer_spektrum).
+// full-scale sines through deck/1, the strings test_mixer_spektrum makes the SpektrumSender encode; regenerate with SPEKTRUM_FIXTURE=<file> test_mixer_spektrum).
 // The acceptance probe: the peak of the 100 Hz tone and of the 5 kHz tone sit at the right bands, and the bars of the drawing rise there.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -20,12 +20,11 @@ test('bands: 29 centres 1000 x 2^(i/3), 24.8 Hz .. 16 kHz, labels', () => {
   assert.equal(bandText(28), '16 kHz');
 });
 
-test('selector values: 20 entries, 1..18 the mixer channels, 19 master, names as the kern tags the frames', () => {
-  assert.equal(SPEKTRUM_QUELLEN.length, 20);
-  assert.deepEqual([SPEKTRUM_QUELLEN[0], SPEKTRUM_QUELLEN[1], SPEKTRUM_QUELLEN[5], SPEKTRUM_QUELLEN[12], SPEKTRUM_QUELLEN[18], SPEKTRUM_QUELLEN[19]],
-    ['off', 'deck/1', 'erz/1', 'erz/8', 'bus/4', 'master']);
-  assert.equal(quellenText(5), 'ERZ 1');
-  assert.equal(quellenText(19), 'MASTER');
+test('selector values: 10 entries, 1..4 the containers, 5..8 the buses, 9 the master (pult.json wire order)', () => {
+  assert.equal(SPEKTRUM_QUELLEN.length, 10);
+  assert.deepEqual(SPEKTRUM_QUELLEN, ['off', 'deck/1', 'deck/2', 'pad/1', 'pad/2', 'bus/1', 'bus/2', 'bus/3', 'bus/4', 'master']);
+  assert.equal(quellenText(3), 'CONTAINER C');
+  assert.equal(quellenText(9), 'MASTER');
   assert.equal(quellenText(99), '');
 });
 
@@ -65,10 +64,10 @@ test('bars: geometry inside the canvas, clamped, NaN is the floor', () => {
 });
 
 test('tag rule: a frame counts only for the selected source', () => {
-  assert.equal(rahmenGilt({ kanal: 'erz/2' }, 6), true);
-  assert.equal(rahmenGilt({ kanal: 'erz/1' }, 6), false, 'a late frame of the previous source');
-  assert.equal(rahmenGilt({ kanal: 'erz/1' }, 0), false, 'nothing selected');
-  assert.equal(rahmenGilt({ kanal: 'master' }, 19), true);
+  assert.equal(rahmenGilt({ kanal: 'deck/2' }, 2), true);
+  assert.equal(rahmenGilt({ kanal: 'deck/1' }, 2), false, 'a late frame of the previous source');
+  assert.equal(rahmenGilt({ kanal: 'deck/1' }, 0), false, 'nothing selected');
+  assert.equal(rahmenGilt({ kanal: 'master' }, 9), true);
   assert.equal(rahmenGilt(null, 5), false);
 });
 
@@ -103,9 +102,9 @@ function leinwand(B, H) {
 test('the labels are drawn after the bars and the bars stay above the label band', () => {
   const l = leinwand(600, 160);
   const a = new SpektrumAnsicht({ leinwand: l, info: { textContent: '' }, sende: null, jetzt: () => 1000 });
-  a.setzeQuelle(5);
+  a.setzeQuelle(1);
   l.rufe.length = 0;
-  assert.ok(a.aufnehmen({ kanal: 'erz/1', rahmen: 1, pegel: von(5000).pegel }));
+  assert.ok(a.aufnehmen({ kanal: 'deck/1', rahmen: 1, pegel: von(5000).pegel }));
   const bar = l.rufe.map((r, k) => [r, k]).filter(([r]) => r[0] === 'fillRect' && r[3] < 50);
   const text = l.rufe.map((r, k) => [r, k]).filter(([r]) => r[0] === 'fillText' && /Hz$/.test(r[1]));
   assert.ok(bar.length === 29 && text.length >= 8, `bars ${bar.length}, labels ${text.length}`);
@@ -118,12 +117,12 @@ test('silent source: "no signal" instead of a peak at -200 dB; the floor is the 
   const zeige = (db) => {
     const info = { textContent: '' };
     const a = new SpektrumAnsicht({ leinwand: null, info, sende: null, jetzt: () => 1000 });
-    a.setzeQuelle(5);
-    a.aufnehmen({ kanal: 'erz/1', rahmen: 3, pegel: Array(29).fill(Math.round(db * 10)).join(',') });
+    a.setzeQuelle(1);
+    a.aufnehmen({ kanal: 'deck/1', rahmen: 3, pegel: Array(29).fill(Math.round(db * 10)).join(',') });
     return info.textContent;
   };
-  assert.equal(zeige(-200), 'ERZ 1: no signal · frame 3');
-  assert.equal(zeige(-90), 'ERZ 1: no signal · frame 3', 'at the plot bottom nothing is visible');
-  assert.match(zeige(-89.9), /^ERZ 1: peak 25 Hz at -89\.9 dB/, 'just above the floor: still a peak (control)');
+  assert.equal(zeige(-200), 'CONTAINER A: no signal · frame 3');
+  assert.equal(zeige(-90), 'CONTAINER A: no signal · frame 3', 'at the plot bottom nothing is visible');
+  assert.match(zeige(-89.9), /^CONTAINER A: peak 25 Hz at -89\.9 dB/, 'just above the floor: still a peak (control)');
   assert.match(zeige(-6), /peak/, 'a real level: peak (control)');
 });

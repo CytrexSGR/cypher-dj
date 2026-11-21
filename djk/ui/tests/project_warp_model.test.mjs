@@ -15,13 +15,13 @@ const mitWarp = (w, format = FORMAT) => {
 };
 
 test('Format: neue Projekte sind /2, /1 bleibt lesbar und öffnet als /2 ohne ein Warp-Feld', () => {
-  assert.equal(FORMAT, 'cypherdj-projekt/2'); assert.equal(FORMAT_ALT, 'cypherdj-projekt/1');   // die Nummern von 1.10, Warp ändert sie nicht
+  assert.equal(FORMAT, 'cypherdj-projekt/3'); assert.equal(FORMAT_ALT, 'cypherdj-projekt/1');   // die Nummern von 1.10, Warp ändert sie nicht
   assert.equal(neuesProjekt('x').format, FORMAT);
   const alt = specProjekt();
   assert.equal(alt.format, FORMAT_ALT);
   assert.equal(pruefeFehler(alt), null, 'die /1-Datei ist gültig');
   const r = pruefeProjekt(alt);
-  assert.equal(r.projekt.format, FORMAT, 'geöffnet ist es /2');
+  assert.equal(r.projekt.format, FORMAT, 'geöffnet ist es /3');
   const audio = r.projekt.spuren.flatMap((s) => s.clips).filter((c) => c.art === 'audio');
   assert.ok(audio.length > 0, 'die Vorlage hat Audio-Clips (sonst prüfte die Schleife nichts)');
   for (const c of audio) assert.equal(c.warp, undefined, `Clip ${c.id}: kein Warp beim Öffnen`);

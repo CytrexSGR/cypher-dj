@@ -13,9 +13,10 @@ import { instrumenteAnsicht, presetSenden, wendeKanalPresetAn } from './effects_
 import { zeigeRemix } from './remix_window.js';
 import { beiAchse, katMerken, katSpeicherLesen, leseAchse, ACHSEN, gruppeVon } from './instrument_groups.js';
 import { zeigePlaetze } from './slots_view.js';
+import { stromKanal } from './kanaele.js';
 // Baukasten S12: graph picker. graphenInfo = GET /graphen (the folder), graphenGeladen = what the page server sent per channel
-// (SSE: stand.graphen_geladen, then a:'graphen'). Pickers sit on the strips of deck/1, deck/2, erz/2, erz/3, erz/5..7 (I5..I7), pad/1, pad/2, in the detail view
-// and in the SEND RETURNS block (fx/3, fx/4); deck/3, deck/4 have no strip.
+// (SSE: stand.graphen_geladen, then a:'graphen'). Pickers sit on the strips of the four containers and of the instrument streams of the Strudel module, in the detail view
+// and in the SEND RETURNS block (fx/3, fx/4).
 export let graphenInfo = { graphen: [], uebersprungen: [] };
 export let graphenGeladen = {};
 export function graphVon(k) {
@@ -65,7 +66,7 @@ function ladePaneele() {
 // Front panels task 11: erz/2 (bass) and erz/3 (melodie) play a host while no Baukasten graph is loaded there. GET /klang says which one (wirt-<gruppe>.json, `art`):
 // 'lv2' is Surge XT (the host started without --sfz/--vst3/--effekt/--instrument, instrument_host.py), 'vst3:*' is Cypher Modular (its own INSTRUMENT KNOBS), 'sfz:*' has
 // no controls. The Surge panel and its parameter table come from GET /geraete/panel?art=surge (once per page load); the actual values from POST /klang aktion 'ist'.
-export const SURGE_GRUPPE = { 'erz/2': 'bass', 'erz/3': 'melodie' };
+export const SURGE_GRUPPE = { [stromKanal(2)]: 'bass', [stromKanal(3)]: 'melodie' };
 let graphenErhalten = false;   // the first graphen_geladen state arrived (SSE stand or GET /graphen): before it a channel may look empty although it plays a graph
 let surgeInfo, surgeHol = null;   // undefined = loading or not asked yet; null = failed; else { panel, parameter }
 const surgeKlang = new Map();     // gruppe -> patch name of the host the last time the area was built

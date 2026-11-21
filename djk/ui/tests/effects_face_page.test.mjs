@@ -12,7 +12,7 @@ import { starteSeite, warte } from '../check/page_mock.mjs';
 const CHROME = fs.existsSync('/usr/bin/google-chrome');
 const AUS = path.join(os.homedir(), 'messungen/2026-11-15-backlog/device-faces');
 const sse = (s, a, f) => s.post('/attrappe/sse', { a, f });
-const WERTE = { 'erz/1/komp/an': 1, 'erz/1/komp/schwelle': -26, 'erz/1/komp/ratio': 6, 'erz/1/komp/attack': 4, 'erz/1/komp/release': 220, 'erz/1/komp/makeup': 4, 'erz/1/komp/mix': 0.8, 'erz/1/komp/sc': 6 };
+const WERTE = { 'erz/1/komp/an': 1, 'erz/1/komp/schwelle': -26, 'erz/1/komp/ratio': 6, 'erz/1/komp/attack': 4, 'erz/1/komp/release': 220, 'erz/1/komp/makeup': 4, 'erz/1/komp/mix': 0.8, 'erz/1/komp/sc': 3 };
 
 async function seite(t, opt, produktion = true) {
   const s = await starteSeite(opt);
@@ -48,7 +48,7 @@ for (const [breite, hoehe] of [[1280, 900], [1920, 1080]]) {
     assert.ok(m.sh <= m.ch + 1, `no inner scroll: ${m.sh} > ${m.ch}`);
     assert.deepEqual(await s.w(`[...document.querySelectorAll('.p-face .fp-name')].map((e) => e.textContent)`), ['Threshold', 'Ratio', 'Attack', 'Release', 'Makeup', 'Mix']);
     assert.equal(await s.w(`document.querySelector('.p-face [data-id="c-r1-schwelle"] .fp-wert').textContent`), '-26.0 dB', 'the knobs show the strip');
-    assert.equal(await s.w(`document.querySelector('.p-face .fa-komp-schluessel-wahl').value`), '6', 'the key select shows the strip');
+    assert.equal(await s.w(`document.querySelector('.p-face .fa-komp-schluessel-wahl').value`), '3', 'the key select shows the strip');
     const grChip = await s.w(`document.querySelector('#live-dock [data-strang="erz/1"] [data-teil="komp"]').title`);
     assert.match(grChip, /GR 9\.4 dB/, 'the chip title carries the GR');
     assert.match(await s.w(`document.querySelector('.p-face .fa-meter-wert, .p-face [class*="meter"] [class*="wert"]')?.textContent ?? document.querySelector('.p-face').textContent`), /9\.4/, 'the face shows the number of the strip');

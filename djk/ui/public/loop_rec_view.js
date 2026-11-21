@@ -1,5 +1,5 @@
-// The loop channel strips L1 / L2, the REC button and the loop list of the LOOPS tab.
-import { LOOPBOXEN } from './curves.js';
+// The REC button and the loop list of the LOOPS tab.
+import { LOOPDECKS } from './curves.js';
 import { Kopf } from './wave.js';
 import { ladeInDeck, ladeLoopInSpur } from './loopdeck/view.js';   // the LOOPS tab loads into a loop deck cell
 import { quelleZiehbar } from './loopdeck/drag.js';
@@ -8,22 +8,7 @@ import { filtere, zeigeReiterInfo } from './seitenrahmen.js';
 export let recBeats = 4, recLaeuft = false, recAktiv = '', recZiel = null;   // recZiel: { deck, spur } of a Strudel sum recording that goes into a loop deck  // MVP 2 Scheibe 2: REC-Knopf im Kopf von C; recAktiv = Name des eigenen REC
 
 // ---------- Strom vom Seiten-Server (Kern) ----------
-// ---------- Loop channel strips (MVP 2, ADR 025; places plan task 12: the loop fields are gone, the strips L1 and L2 stay) ----------
-// L1 and L2 are the channel strips of pad/1 and pad/2; the live modules play on them.
-export const BOXEN = LOOPBOXEN.map((_, i) => i + 1);
 export const uhrKopf = new Kopf();                               // Master-Beat, hochgerechnet (Spec E4)
-
-export function baueLoopZuege() {
-  for (const n of BOXEN) {
-    const k = LOOPBOXEN[n - 1];
-    const z = $(`.zug[data-boxzug="${n}"]`);
-    z.append($('#zug-vorlage').content.cloneNode(true));
-    for (const e of $$('[data-teil]', z)) e.dataset.pfad = `${k}/${e.dataset.teil}`;
-    for (const e of $$('[data-wert-teil]', z)) e.dataset.wert = `${k}/${e.dataset.wertTeil}`;
-    $('[data-kanal]', z).dataset.kanal = k;
-    for (const b of $$('[data-fxzuweisung]', z)) b.dataset.kanal = k;
-  }
-}
 
 // MVP 2 Scheibe 2 (§4.9 /k/loop/rec): REC-Knopf mit Längenwahl 1/2/4/8 im Kopf von C. Name c-<hhmmss>-<n>t.
 // MVP 2 Scheibe 3 (E3): Längen in Beats; Anzeige in Takten (¼ ½ 1 2 4 8)
@@ -140,7 +125,7 @@ export async function ladeLoops() {
     }
     const td = document.createElement('td');
     td.className = 'aktion';
-    for (const n of BOXEN) {
+    for (const n of LOOPDECKS) {
       const b = document.createElement('button');
       b.className = `laden l${n}`;
       b.textContent = `LOAD LOOP ${n}`;

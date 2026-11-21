@@ -168,17 +168,17 @@ test('POST /lernen/setzen: a switch or a deck action takes a button (CC) or a pa
   assert.equal(datei().length, n);
   assert.equal(anKern(log, '/k/mapping').length, mapping, 'nothing reached the kern');
   // one source drives one target: the same pad on another target replaces the first; the same target on another pad moves it
-  await sende({ pfad: 'deck/3/pfl', platz: 1, kanal: 1, nr: 36, typ: 'note' });
-  assert.deepEqual(datei().filter((e) => e.nachricht.typ === 'note').map((e) => [e.nachricht.nr, e.ziel]), [[37, 'deck/2/play'], [36, 'deck/3/pfl']]);
-  await sende({ pfad: 'deck/3/pfl', platz: 1, kanal: 1, nr: 39, typ: 'note' });
-  assert.deepEqual(datei().filter((e) => e.nachricht.typ === 'note').map((e) => [e.nachricht.nr, e.ziel]), [[37, 'deck/2/play'], [39, 'deck/3/pfl']]);
+  await sende({ pfad: 'pad/1/pfl', platz: 1, kanal: 1, nr: 36, typ: 'note' });
+  assert.deepEqual(datei().filter((e) => e.nachricht.typ === 'note').map((e) => [e.nachricht.nr, e.ziel]), [[37, 'deck/2/play'], [36, 'pad/1/pfl']]);
+  await sende({ pfad: 'pad/1/pfl', platz: 1, kanal: 1, nr: 39, typ: 'note' });
+  assert.deepEqual(datei().filter((e) => e.nachricht.typ === 'note').map((e) => [e.nachricht.nr, e.ziel]), [[37, 'deck/2/play'], [39, 'pad/1/pfl']]);
   // a note and a CC with the same number are two sources
   await sende({ pfad: 'deck/4/play', platz: 1, kanal: 1, nr: 37 });
   assert.equal(datei().filter((e) => e.nachricht.nr === 37 && e.nachricht.kanal === 1).length, 2);
   // a learned switch is deleted like a learned knob
-  const weg = await ruf(url, 'POST', '/lernen/loeschen', { pfad: 'deck/3/pfl' });
+  const weg = await ruf(url, 'POST', '/lernen/loeschen', { pfad: 'pad/1/pfl' });
   assert.equal(weg.code, 200);
-  assert.ok(!datei().some((e) => e.ziel === 'deck/3/pfl'));
+  assert.ok(!datei().some((e) => e.ziel === 'pad/1/pfl'));
 });
 
 test('POST /lernen (the capture) stays continuous and CC only: a switch or a deck action is refused with the knob text', async (t) => {

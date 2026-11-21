@@ -540,8 +540,8 @@ int main(int argc, char** argv) {
       if (m->ziel_port[0] && !cdj::hand_port_name(m->ziel_port, inst, hand_ziel, sizeof hand_ziel))
         std::fprintf(stderr, "Mapping %s: ziel_port too long (kern without LEDs)\n", mpfad.c_str());
       mapping = std::move(m);
-      std::fprintf(stderr, "Mapping %s: Gerät %s, %d Einträge, Quelle %s\n", mpfad.c_str(), mapping->geraet,
-                   mapping->n_eintraege, hand_quelle);
+      std::fprintf(stderr, "Mapping %s: Gerät %s, %d Einträge, %d Alias-Einträge erz/<n> übersprungen (ADR 043), Quelle %s\n", mpfad.c_str(),
+                   mapping->geraet, mapping->n_eintraege, mapping->n_alias, hand_quelle);
       g_kern->setze_mapping(mapping.release());  // Besitz beim Kern: ein Tausch über /k/mapping gibt es dem Netz-Faden zurück
     }
   }
@@ -658,7 +658,7 @@ int main(int argc, char** argv) {
       }
       if (!w.meldung.empty()) std::fprintf(stderr, "Hall pool: %s\n", w.meldung.c_str());
     }
-    for (size_t c = 0; c < cpus.size() && c < 3; ++c) hall_e.cpus[c] = cpus[c];
+    for (size_t c = 0; c < cpus.size() && c < static_cast<size_t>(cdj::HallPool::MAX_W); ++c) hall_e.cpus[c] = cpus[c];
   }
   std::unique_ptr<cdj::HallPool> hall_pool = std::make_unique<cdj::HallPool>(hall_e);
   g_kern->setze_hall_pool(hall_pool->faeden() > 0 ? hall_pool.get() : nullptr);
@@ -843,11 +843,7 @@ int main(int argc, char** argv) {
     std::snprintf(pfad, sizeof g_faehig_pfad, "%s/kern-faehigkeiten.json", ordner);
     std::snprintf(tmp, sizeof tmp, "%s.tmp", pfad);
     if (FILE* f = std::fopen(tmp, "w")) {
-      const int k = cdj::Mixer::kanal_index(cdj::VORHOER_KANAL);
-      if (g_kern->mixer().nur_cue(k))
-        std::fprintf(f, "{\"pid\": %d, \"nur_cue\": \"%s\"}\n", (int)getpid(), cdj::VORHOER_KANAL);
-      else
-        std::fprintf(f, "{\"pid\": %d}\n", (int)getpid());
+      std::fprintf(f, "{\"pid\": %d, \"nur_cue\": \"vorhoer\"}\n", (int)getpid());   // container core K3: the previewer is a service of the core (rueck_erz_8 into the PFL sum), not a strip
       const bool ok = std::fclose(f) == 0;
       if (!ok || std::rename(tmp, pfad) != 0) std::perror(pfad);
     } else {

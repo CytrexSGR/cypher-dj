@@ -46,7 +46,7 @@ int main() {
   PRUEF(k.warp_faeden == 4);                                 // 1.13 Slice 2: Vorgabe 4 Arbeitsfäden
   PRUEF(k.graph_faeden == 2);                                // Baukasten S3b: Vorgabe 2 Fäden des Graph-Werks
   PRUEF(k.spur_pool == "an");                                // mehrkern slice 3.2: the track phases are on by default, in the shipped file too
-  PRUEF(k.hall_faeden == 3 && k.hall_cpus.empty());          // multi-core work: default 3 Hall pool workers, CPUs automatic
+  PRUEF(k.hall_faeden == 7 && k.hall_cpus.empty());          // multi-core work: default 7 Hall pool workers (one per return except return 1), CPUs automatic
   PRUEF(k.kanal_limiter_vorhalt_ms == 0.0);                  // 1.15 A1b, D8: default 0 = the four channel limiters are not built
   PRUEF(k.kanal_limiter_echtspitze == false);                // 1.15 A1b: sample peaks unless true peak is asked for
 
@@ -134,13 +134,13 @@ int main() {
     PRUEF(f.find("spur_pool") != std::string::npos);
     if (schlecht[12] == '"') PRUEF(f.find("aus") != std::string::npos && f.find("an") != std::string::npos && f.find("auto") != std::string::npos);
   }
-  // mehrkern Task 5: hall_faeden 0..3 and hall_cpus (comma separated CPU ids, "" = automatic). A file without the keys loads with the defaults.
-  PRUEF(cdj::lies_kern_toml_text("version = 1\n", "t").hall_faeden == 3);
+  // mehrkern Task 5: hall_faeden 0..7 and hall_cpus (comma separated CPU ids, "" = automatic). A file without the keys loads with the defaults.
+  PRUEF(cdj::lies_kern_toml_text("version = 1\n", "t").hall_faeden == 7);
   PRUEF(cdj::lies_kern_toml_text("version = 1\n", "t").hall_cpus.empty());
-  for (int n = 0; n <= 3; ++n)
+  for (int n = 0; n <= 7; ++n)
     PRUEF(cdj::lies_kern_toml_text("version = 1\nhall_faeden = " + std::to_string(n) + "\n", "t").hall_faeden == n);
   PRUEF(fehlertext("version = 1\nhall_faeden = -1\n").find("hall_faeden") != std::string::npos);
-  PRUEF(fehlertext("version = 1\nhall_faeden = 4\n").find("hall_faeden") != std::string::npos);
+  PRUEF(fehlertext("version = 1\nhall_faeden = 8\n").find("hall_faeden") != std::string::npos);
   PRUEF(fehlertext("version = 1\nhall_faeden = \"drei\"\n").find("hall_faeden") != std::string::npos);
   {  // hall_cpus with 16 CPUs (the machine of the plan): valid lists, then every kind of invalid text (all name the key)
     const auto lies = [](const std::string& z) { return cdj::lies_kern_toml_text("version = 1\n" + z, "t", 16); };
@@ -174,7 +174,7 @@ int main() {
     PRUEF(fehlertext_cpus("hall_cpus = \"1-3\"\n").find("ranges") != std::string::npos);   // a range says so, it is not just "not a list"
     PRUEF(fehlertext_cpus("hall_cpus = \"1-3\"\n").find("not supported") != std::string::npos);
     // control: the same text with 16 CPUs is fine, with 12 CPUs the ids 12 and 13 do not exist
-    PRUEF(cdj::lies_kern_toml_text("version = 1\nhall_cpus = \"11,12,13\"\n", "t", 16).hall_faeden == 3);
+    PRUEF(cdj::lies_kern_toml_text("version = 1\nhall_cpus = \"11,12,13\"\n", "t", 16).hall_faeden == 7);
     bool abgelehnt = false;
     try { cdj::lies_kern_toml_text("version = 1\nhall_cpus = \"11,12,13\"\n", "t", 12); } catch (const cdj::KonfigFehler&) { abgelehnt = true; }
     PRUEF(abgelehnt);

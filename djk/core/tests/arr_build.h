@@ -154,7 +154,7 @@ struct Bau {
     fxl.push_back({nr, std::move(bend), std::move(pegel)});
     return *this;
   }
-  Bau& ret_dj(int r, int nr) { s->ret_da[r - 1] = true; s->ret_dj[r - 1] = static_cast<uint8_t>(nr); s->live = true; return *this; }   // loop deck channel strip KZ3: return r exists and leads into DJ channel nr (1..6); the head flag live is set (the loader requires it)
+  Bau& ret_dj(int r, int nr) { s->ret_da[r - 1] = true; s->ret_dj[r - 1] = static_cast<uint8_t>(nr); s->live = true; return *this; }   // loop deck channel strip KZ3: return r exists and leads into DJ channel nr (1..4); the head flag live is set (the loader requires it)
   Bau& ret(int r) { s->ret_da[r - 1] = true; return *this; }   // return r exists (ret_da), without a lane
   // Return fader automation: the fader lane of return r (1..4), points as lane(); sets ret_da of the return. At most one per return.
   Bau& ret_lane(int r, std::vector<cdj::ArrAutoPunkt> p) {
@@ -358,7 +358,9 @@ struct PruefSenke : cdj::ArrSenke {
 };
 
 struct Treiber {
-  cypherdj::stellwerk::ReglerTabelle tab;
+  // On the heap too: since container core K2 (MAX_REGLER 4096 to 8192) the control table alone is about 320 KB, and test_arr_bk_stift keeps four drivers in one frame (8 MB stack)
+  std::unique_ptr<cypherdj::stellwerk::ReglerTabelle> tab_heap{std::make_unique<cypherdj::stellwerk::ReglerTabelle>()};
+  cypherdj::stellwerk::ReglerTabelle& tab{*tab_heap};
   cdj::Karte k{128.0, 0};
   // On the heap: the Arrangement is about 2 MB since 16 groups (arr_ausgang per-group arrays), and tests keep several drivers in one frame (8 MB stack)
   std::unique_ptr<cdj::Arrangement> arr_heap{std::make_unique<cdj::Arrangement>(tab)};
@@ -373,7 +375,7 @@ struct Treiber {
   uint32_t gen = 1;                           // Slice 2: Karten-Generation (mit_werk hängt sie ans Arrangement); wer die Karte ändert, erhöht sie
   std::function<void(int64_t)> vor_block;     // slice 5 U2b: called with the first sample of every block just before arr.block() (a test hands the DJ inputs here, Arrangement::dj_schluessel)
   // slice 5 U2b: DJ inputs as signals indexed by kern sample (0..3 = deck/1..4, 4 = erz/1; both channels equal). An empty signal is a nullptr (silent input). dj_sig_an = false: no call at all.
-  std::vector<float> dj_sig[cdj::Arrangement::DJ_EINGAENGE];
+  std::vector<float> dj_sig[cdj::ARR_SCHLUESSEL];
   bool dj_sig_an = false;
   ~Treiber() {
     if (werk) werk->stoppe();
@@ -398,8 +400,8 @@ struct Treiber {
       for (PruefSenke* p : senken) p->block_s0 = s;
       if (vor_block) vor_block(s);
       if (dj_sig_an) {
-        const float* dl[cdj::Arrangement::DJ_EINGAENGE];
-        for (int i = 0; i < cdj::Arrangement::DJ_EINGAENGE; ++i)
+        const float* dl[cdj::ARR_SCHLUESSEL];
+        for (int i = 0; i < cdj::ARR_SCHLUESSEL; ++i)
           dl[i] = !dj_sig[i].empty() && s + n <= static_cast<int64_t>(dj_sig[i].size()) ? dj_sig[i].data() + s : nullptr;
         arr.dj_schluessel(dl, dl);
       }

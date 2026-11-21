@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { annahme, welt } from './support/world.ts';
 
-const KI_LEISER = { grund: 'leiser', teile: [{ regler: 'deck/3/fader', art: 'rampe' as const, ab_takt: 9, dauer_takte: 2, nach: -20 }] };
+const KI_LEISER = { grund: 'leiser', teile: [{ regler: 'pad/1/fader', art: 'rampe' as const, ab_takt: 9, dauer_takte: 2, nach: -20 }] };
 const q = (status: number, id: number) => ({ id, quelle: 'cypher', status, ist_sample: 0, ist_beat: 33, grund: '' });
 
 test('B03 doppeltes gestartet (auch als 5 verspaetet_ausgefuehrt) nach Kern-Neustart: ein teil_gestartet, Journal quittung_doppelt', () => {

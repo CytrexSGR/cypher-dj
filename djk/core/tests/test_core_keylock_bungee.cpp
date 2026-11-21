@@ -147,7 +147,9 @@ void test_deck() {
 
   Lauf k(cdj::DehnerMaschine::Bungee);
   PRUEF(!k.kern->keylock_faeden_laufen());  // Kern ohne Fäden
-  for (int d = 1; d <= 6; ++d) PRUEF(k.kern->keylock_dehner(d) != nullptr);
+  // container core K1 (F7): the loop boxes are gone, so KEYLOCK_QUELLEN is the four decks (it was six with the boxes): decks 1..4 have a stretcher, 5 and 6 are out of range
+  for (int d = 1; d <= cdj::KEYLOCK_QUELLEN; ++d) PRUEF(k.kern->keylock_dehner(d) != nullptr);
+  PRUEF(cdj::KEYLOCK_QUELLEN == 4 && k.kern->keylock_dehner(5) == nullptr && k.kern->keylock_dehner(6) == nullptr);
   k.laden(1, MAT);
   k.teil("deck/1/fader", 0.0f, 6.0);
   k.start(1, START, 0.0);
@@ -170,8 +172,8 @@ void test_deck() {
   PRUEF(hoer_soll > 200 && hoer == hoer_soll);  // ab dem Ring in jedem Zyklus der Ring
   PRUEF(dk.keylock_unterlauf() == 0);
   PRUEF(dk.keylock_aufgegeben() == 0);
-  // alle sechs Dehner haben ihre Leer-Epoche oder ihren Ansatz quittiert (kein Faden, der es sonst täte)
-  for (int d = 1; d <= 6; ++d) {
+  // alle Dehner (K1: vier, ohne Loopboxen) haben ihre Leer-Epoche oder ihren Ansatz quittiert (kein Faden, der es sonst täte)
+  for (int d = 1; d <= cdj::KEYLOCK_QUELLEN; ++d) {
     const cdj::DehnerBasis* dh = k.kern->keylock_dehner(d);
     PRUEF(dh->quittiert_e() == dh->epoche());
   }

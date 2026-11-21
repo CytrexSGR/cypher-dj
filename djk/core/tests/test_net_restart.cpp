@@ -109,8 +109,10 @@ int main() {
     hallo(a, "wirt", w.port, 1'200'000'000);
     auto mx = x.alle();
     // Negativ: Generation 0, kein neustart; Keylock 3b: dazu der Stand des Knopfs (/uhr gesehen); 1.15 A5c: zuletzt /e/kanal_limiter (nichts gebaut: 0, 0)
-    PRUEF(mx.size() == 3 && mx[0].adresse == "/k/willkommen" && mx[0].i[1] == 0 && mx[1].adresse == "/e/regler" &&
-          mx[2].adresse == "/e/kanal_limiter" && mx[2].i[0] == 0 && mx[2].i[1] == 0);
+    // container core K8: the first hallo of a subscriber (also in generation 0) brings the four /e/container/quelle (container c, art 1 = player) right after /k/willkommen
+    PRUEF(mx.size() == 7 && mx[0].adresse == "/k/willkommen" && mx[0].i[1] == 0 && mx[5].adresse == "/e/regler" &&
+          mx[6].adresse == "/e/kanal_limiter" && mx[6].i[0] == 0 && mx[6].i[1] == 0);
+    for (int c = 0; c < 4 && mx.size() == 7; ++c) PRUEF(mx[1 + c].adresse == "/e/container/quelle" && mx[1 + c].i[0] == c + 1 && mx[1 + c].i[1] == 1);
     tschuess(a, "pruefstand", 1'300'000'000);
     y.alle();
     w.alle();
@@ -154,26 +156,28 @@ int main() {
   ereignis(*ere, cdj::Ereignis::UHR, 1, 1'665'536);
   b.ereignisse_senden();
   auto mx = x.alle();
-  PRUEF(mx.size() == 3);
+  PRUEF(mx.size() == 7);   // container core K8: four /e/container/quelle after /e/fx/routing
   PRUEF(!mx.empty() && mx[0].adresse == "/e/neustart" && mx[0].i[0] == 1 && mx[0].h[0] == 1'665'536);
   PRUEF(mx.size() > 1 && mx[1].adresse == "/e/fx/routing" && mx[1].i[0] == 0);  // Ohr T17 (§5.12): gleich danach die Vorgabe 0
-  PRUEF(mx.size() > 2 && mx[2].adresse == "/uhr");
-  PRUEF(w.alle().size() == 3);
+  for (int c = 0; c < 4 && mx.size() == 7; ++c) PRUEF(mx[2 + c].adresse == "/e/container/quelle" && mx[2 + c].i[0] == c + 1 && mx[2 + c].i[1] == 1);
+  PRUEF(mx.size() > 6 && mx[6].adresse == "/uhr");
+  PRUEF(w.alle().size() == 7);
   PRUEF(b.generation() == 1);
 
   // 4) x meldet sich (sein Herzschlag): /k/willkommen, /e/neustart, /q/stand für 7 (läuft) und 8 (wartet), nicht 9
   hallo(b, "leitstand", x.port, t_neu + 800'000'000);
   mx = x.alle();
-  PRUEF(mx.size() == 7);  // Keylock 3b: /e/regler keylock (Stand nach dem Neustart des Kerns); 1.15 A5c: zuletzt /e/kanal_limiter
-  if (mx.size() == 7) {
+  PRUEF(mx.size() == 11);  // container core K8: four /e/container/quelle after /e/fx/routing; Keylock 3b: /e/regler keylock (Stand nach dem Neustart des Kerns); 1.15 A5c: zuletzt /e/kanal_limiter
+  if (mx.size() == 11) {
     PRUEF(mx[0].adresse == "/k/willkommen" && mx[0].i[1] == 1);
     PRUEF(mx[1].adresse == "/e/neustart" && mx[1].i[0] == 1 && mx[1].h[0] == 1'665'536);
     PRUEF(mx[2].adresse == "/e/fx/routing" && mx[2].i[0] == 0);  // Ohr T17
-    PRUEF(mx[3].adresse == "/q/stand" && mx[3].h[0] == 7 && mx[3].i[0] == 2 && mx[3].h[1] == 1'440'000);
-    PRUEF(mx[3].s[0] == "leitstand" && mx[3].s[1].empty());
-    PRUEF(mx[4].adresse == "/q/stand" && mx[4].h[0] == 8 && mx[4].i[0] == 1);
-    PRUEF(mx[5].adresse == "/e/regler");
-    PRUEF(mx[6].adresse == "/e/kanal_limiter" && mx[6].i[0] == 0 && mx[6].i[1] == 0);   // 1.15 A5c: again in the new generation
+    for (int c = 0; c < 4; ++c) PRUEF(mx[3 + c].adresse == "/e/container/quelle" && mx[3 + c].i[0] == c + 1 && mx[3 + c].i[1] == 1);
+    PRUEF(mx[7].adresse == "/q/stand" && mx[7].h[0] == 7 && mx[7].i[0] == 2 && mx[7].h[1] == 1'440'000);
+    PRUEF(mx[7].s[0] == "leitstand" && mx[7].s[1].empty());
+    PRUEF(mx[8].adresse == "/q/stand" && mx[8].h[0] == 8 && mx[8].i[0] == 1);
+    PRUEF(mx[9].adresse == "/e/regler");
+    PRUEF(mx[10].adresse == "/e/kanal_limiter" && mx[10].i[0] == 0 && mx[10].i[1] == 0);   // 1.15 A5c: again in the new generation
   }
 
   // 5) Negativ-Kontrolle: der nächste Herzschlag in derselben Generation bekommt nur /k/willkommen
@@ -184,8 +188,8 @@ int main() {
   // 6) Ein neuer Abonnent in Generation 1 bekommt dasselbe wie x beim ersten Mal
   hallo(b, "analyse", neu.port, t_neu + 900'000'000);
   auto mn = neu.alle();
-  PRUEF(mn.size() == 7 && mn[1].adresse == "/e/neustart" && mn[2].adresse == "/e/fx/routing" && mn[4].adresse == "/q/stand" &&
-        mn[5].adresse == "/e/regler" && mn[6].adresse == "/e/kanal_limiter");  // Keylock 3b: der Knopf; 1.15 A5c: zuletzt der Limiter-Stand
+  PRUEF(mn.size() == 11 && mn[1].adresse == "/e/neustart" && mn[2].adresse == "/e/fx/routing" && mn[3].adresse == "/e/container/quelle" && mn[7].adresse == "/q/stand" &&
+        mn[9].adresse == "/e/regler" && mn[10].adresse == "/e/kanal_limiter");  // Keylock 3b: der Knopf; 1.15 A5c: zuletzt der Limiter-Stand
 
   // 7) Die 5-s-Frist der übernommenen Abonnenten beginnt mit dem Neustart: "wirt" meldet sich nie
   b.abonnenten_pruefen(t_neu + 4'900'000'000LL);
@@ -209,34 +213,6 @@ int main() {
     hallo(b, "spaet", spaet.port, t_neu + 5'200'000'000LL);
     auto ms = spaet.alle();
     PRUEF(ms.size() >= 3 && ms[1].adresse == "/e/neustart" && ms[2].adresse == "/e/fx/routing" && ms[2].i[0] == 1);
-  }
-
-  // 7c) DJ view places 3 and 4: a changed place channel goes to everybody, a new subscriber gets the pads that are not 0 right after
-  // /e/fx/routing (nothing is sent while both are 0, so the sequences above stay as they were)
-  {
-    cdj::Ereignis p{};
-    p.art = cdj::Ereignis::PLATZ_KANAL;
-    p.deck = 2;
-    p.status = 3;
-    ere->schiebe(p);
-    b.ereignisse_senden();
-    mx = x.alle();
-    PRUEF(mx.size() == 1 && mx[0].adresse == "/e/platz/kanal" && mx[0].i[0] == 2 && mx[0].i[1] == 3);
-    Gegenstelle spaeter;
-    hallo(b, "spaeter", spaeter.port, t_neu + 5'300'000'000LL);
-    auto ms = spaeter.alle();
-    PRUEF(ms.size() >= 4 && ms[1].adresse == "/e/neustart" && ms[2].adresse == "/e/fx/routing" && ms[3].adresse == "/e/platz/kanal" && ms[3].i[0] == 2 &&
-          ms[3].i[1] == 3);
-    p.status = 0;   // back to nothing: the next subscriber hears no /e/platz/kanal
-    ere->schiebe(p);
-    b.ereignisse_senden();
-    x.alle();
-    Gegenstelle leer;
-    hallo(b, "leer", leer.port, t_neu + 5'400'000'000LL);
-    auto ml = leer.alle();
-    bool kein = true;
-    for (const auto& m : ml) kein = kein && m.adresse != "/e/platz/kanal";
-    PRUEF(kein && ml.size() >= 3);
   }
 
   // 8) Fehlerfall: Netz ohne Zustand (wie Scheibe 08) nach demselben Neustart: niemand bekommt /e/neustart

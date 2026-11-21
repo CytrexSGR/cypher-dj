@@ -55,7 +55,7 @@ test('marker: every invalid case names the reason tracker', () => {
 });
 
 test('marker with live or werkbank is refused; /1 refuses the field', () => {
-  const a = neuesProjekt('x'); a.tracker = { schema: 1 }; a.live = true;
+  const a = neuesProjekt('x'); a.tracker = { schema: 1 }; a.live = true; a.plaetze = [{ typ: 'track' }, { typ: 'track' }, { typ: 'track' }, { typ: 'track' }];
   assert.match(pruefeFehler(a), /tracker/);
   const b = neuesProjekt('x'); b.tracker = { schema: 1 }; b.werkbank = { schema: 1 };
   assert.match(pruefeFehler(b), /tracker/);
@@ -90,7 +90,7 @@ test('tracker_setzen: one undo step, no playback change', () => {
 
 test('tracker_setzen: refusals', () => {
   const p = neuesProjekt('x');
-  const live = neuesProjekt('x'); live.live = true;
+  const live = neuesProjekt('x'); live.live = true; live.plaetze = [{ typ: 'track' }, { typ: 'track' }, { typ: 'track' }, { typ: 'track' }];
   const wb = neuesProjekt('x'); wb.werkbank = { schema: 1 };
   assert.equal(grund(live, { befehl: 'tracker_setzen', lpb: 8 }), 'tracker_live');
   assert.equal(grund(live, { befehl: 'tracker_setzen', an: true }), 'tracker_live');

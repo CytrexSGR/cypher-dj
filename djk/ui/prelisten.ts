@@ -24,11 +24,11 @@ export function kopfhoererAus(pwLinkL: string, kern: string): boolean {
 }
 export const VORHOER_MAX_S = 1800;   // M1: der Vorhörer dekodiert höchstens die ersten 30 min (djk/previewer MAX_DEKODIER_S), sonst belegt ein 5-h-Track 7 GB
 export const VORHOERER_NAME = 'cypherdj-vorhoerer-mt';   // eigener JACK-Name neben dem Cue-Werkzeug (Review S7 m4)
-// kern-faehigkeiten.json (Task 7.1): der LAUFENDE Kern hat erz/8 als Nur-Cue. comm(pid) liest /proc/<pid>/comm (null = tot).
+// kern-faehigkeiten.json (Task 7.1): der LAUFENDE Kern hat den Dienst vorhoer als Nur-Cue. comm(pid) liest /proc/<pid>/comm (null = tot).
 export function nurCueAus(json: string | null, comm: (pid: number) => string | null): boolean {
   try {
     const j = JSON.parse(json ?? '') as { pid?: unknown; nur_cue?: unknown };
-    return typeof j.pid === 'number' && j.nur_cue === 'erz/8' && comm(j.pid) === 'cypherdj-kern';
+    return typeof j.pid === 'number' && j.nur_cue === 'vorhoer' && comm(j.pid) === 'cypherdj-kern';
   } catch { return false; }
 }
 export function kernNurCueVorgabe(shm: string): boolean {

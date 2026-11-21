@@ -5,7 +5,7 @@
 // djk-muster). `aus` liest den Stand der Einheit von der Seite (GET /fx) und schickt ihn mit an 0. Nach dem Übernehmen
 // schreibt es fx_von.json je Einheit (cypher): schaltet Andreas AUTO aus, lässt die Seite Cyphers Effekt auslaufen.
 // Aufruf: djk-fx [--instanz i] [--einheit 1|2] <art> <beats> <depth> <param1> [param2] [param3]
-//         djk-fx [--instanz i] [--einheit 1|2] zuweisen <A|B|C|C2|C3|L1|L2|M> <an|aus>
+//         djk-fx [--instanz i] [--einheit 1|2] zuweisen <A|B|L1|L2|M> <an|aus>
 //         djk-fx [--instanz i] [--einheit 1|2] aus
 //   art: echo flanger phaser filter reverb (beats = Ausklingzeit, param1 = SIZE) delay (param1 = TONE) pingpong
 //   (param1 = Rückkopplung) trans (param1 = DUTY) roll sliproll vinyl (beats = Bremsdauer) spiral (param1 = Rückkopplung) · beats: 0.25 0.5 1 2 4 8 16 · depth, param1..3: 0 bis 1 (param2/3 Vorgabe 0,5,
@@ -18,8 +18,8 @@ import { parseArgs } from 'node:util';
 import { kodiere, dekodiere } from '../contract/mock_core/osc.mjs';
 import { autonomAn } from './src/pattern_state.mjs';
 
-const AUFRUF = 'Aufruf: djk-fx [--instanz i] [--einheit 1|2] <echo|flanger|phaser|filter|reverb|delay|pingpong|trans|roll|sliproll|vinyl|spiral> <beats> <depth 0..1> <param1 0..1> [param2] [param3] | zuweisen <A|B|C|C2|C3|L1|L2|M> <an|aus> | aus';
-const KANAL = { A: 'deck/1', B: 'deck/2', C: 'erz/1', C2: 'erz/2', C3: 'erz/3', L1: 'pad/1', L2: 'pad/2', M: 'master' };
+const AUFRUF = 'Aufruf: djk-fx [--instanz i] [--einheit 1|2] <echo|flanger|phaser|filter|reverb|delay|pingpong|trans|roll|sliproll|vinyl|spiral> <beats> <depth 0..1> <param1 0..1> [param2] [param3] | zuweisen <A|B|L1|L2|M> <an|aus> | aus';
+const KANAL = { A: 'deck/1', B: 'deck/2', L1: 'pad/1', L2: 'pad/2', M: 'master' };   // the four containers and the master (the erz/1..3 channels are gone)
 const ARTEN = ['echo', 'flanger', 'phaser', 'filter', 'reverb', 'delay', 'pingpong', 'trans', 'roll', 'sliproll', 'vinyl', 'spiral'];
 const BEATS = [0.25, 0.5, 1, 2, 4, 8, 16];
 const raus = (text, rc) => { (rc ? process.stderr : process.stdout).write(`djk-fx: ${text}\n`); process.exit(rc); };
@@ -67,7 +67,7 @@ if (pos.length === 1 && pos[0] === 'aus') {
   antwort = '/e/fx';
 } else if (pos.length === 3 && pos[0] === 'zuweisen') {
   const kanal = KANAL[pos[1].toUpperCase()] ?? (Object.values(KANAL).includes(pos[1]) ? pos[1] : null);
-  if (!kanal) raus(`Kanal ${pos[1]}: A B C C2 C3 L1 L2 M`, 2);
+  if (!kanal) raus(`Kanal ${pos[1]}: A B L1 L2 M`, 2);
   if (pos[2] !== 'an' && pos[2] !== 'aus') raus(`${pos[2]}: an oder aus`, 2);
   sendung = ['/k/fx/zuweisung', 'hsisi', [id, 'cypher', EINHEIT, kanal, pos[2] === 'an' ? 1 : 0]];
   antwort = '/e/fx/zuweisung';

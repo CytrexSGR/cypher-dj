@@ -182,6 +182,18 @@ int64_t ArrSpurLauf::grenze_echt(int64_t start_ns, int m, int64_t echt0) const {
   return start_echt + (test_.grenze_ns != 0 ? test_.grenze_ns : periode_ns(m) * GRENZE_PROZENT / 100);
 }
 
+void ArrSpurLauf::seriell_gemessen(int64_t dauer_ns, int m) {
+  const int64_t d = test_.seriell_ns > 0 ? test_.seriell_ns : dauer_ns;
+#ifndef CYPHERDJ_MUTATION_SPUR_SERIELL_NIE_TEUER   // error case: the serial fallback is never measured as too slow (test_arr_spur_pool case 33 a must go red)
+  if (d > periode_ns(m) * GRENZE_PROZENT / 100) {
+    seriell_teuer_ = true;
+    ++z.seriell_teuer;
+  }
+#else
+  (void)d;
+#endif
+}
+
 bool ArrSpurLauf::konto_pruefen(HallPool& pool, [[maybe_unused]] int modus) {
   if (pool.an(HallPool::SPUR)) {
     auto_aus_gesehen_ = false;
@@ -201,6 +213,16 @@ bool ArrSpurLauf::konto_pruefen(HallPool& pool, [[maybe_unused]] int modus) {
     auto_aus_gesehen_ = true;
     if (auto_aus_n_ < 1000) ++auto_aus_n_;
     auto_blocks_ = 0;
+  }
+  // The serial phase since the switch-off was over the pool's own hard limit: serial is not the safer side, every block of the back-off would be late.
+  // Switch on again at once (the back-off count stays: a stall that is real and cheap to compute serially still waits as before).
+  if (seriell_teuer_) {
+    if (!pool.wieder_an(HallPool::SPUR)) return false;   // a worker still holds a job: the next block tries again, the flag stays
+    seriell_teuer_ = false;
+    auto_aus_gesehen_ = false;
+    ++z.auto_neu;
+    ++z.neu_teuer;
+    return true;
   }
 #ifdef CYPHERDJ_MUTATION_SPUR_NEU_OHNE_STAFFEL
   const int warte = AUTO_WARTE_BLOECKE;   // error case: the wait never grows

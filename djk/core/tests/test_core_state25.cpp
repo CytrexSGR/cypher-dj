@@ -43,7 +43,7 @@ int main() {
   a.teil(5, "cypher", "p1", 1, "deck/2/fader", 64.0, 0.0, -15.0f, 0, 0, "b_rein", "h2");
   a.teil(6, "cypher", "p1", 2, "deck/2/fader", 64.0, 32.0, 0.0f, 0, 0, "b_rein", "h2");
   a.teil(7, "leitstand", "l1", 0, "deck/1/eq/mitte", 88.0, 4.0, -6.0f, 0, 0, "", "");  // deck/1 klickt nicht
-  a.einfach(B::KI_SPUR, 8, "leitstand", "deck/3");
+  a.einfach(B::KI_SPUR, 8, "leitstand", "pad/1");
   a.bis(1'480'000);
   a.hand("deck/1/eq/hoch", 0.2f, 1'500'000);  // Stellung
   a.hand("deck/1/eq/hoch", 0.4f, 1'510'000);  // wirksam: Halter mensch für 32 Beats
@@ -71,7 +71,7 @@ int main() {
     if (!std::strcmp(f->regler[i].pfad, "deck/1/eq/hoch")) hoch = !std::strcmp(f->regler[i].halter, "mensch");
   }
   PRUEF(fader && hoch);
-  PRUEF(!std::strcmp(f->ki_spur, "deck/3") && f->ki_gestoppt == 0);
+  PRUEF(!std::strcmp(f->ki_spur, "pad/1") && f->ki_gestoppt == 0);
 
   // Übernahme in B, 4 096 Samples Ausfall
   Kern25 b;
@@ -108,7 +108,7 @@ int main() {
 
   // KI-Stopp über den Neustart
   Kern25 d;
-  d.einfach(B::KI_SPUR, 1, "leitstand", "deck/3");
+  d.einfach(B::KI_SPUR, 1, "leitstand", "pad/1");
   d.einfach(B::KI_STOPP, 2, "andreas");
   d.bis(100'000);
   auto g = fach_von(d);

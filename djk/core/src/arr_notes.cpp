@@ -80,6 +80,7 @@ ArrSenke* Arrangement::senke_fuer(const ArrSnapshot* s, int spur) const {
   const ArrSpur& sp = s->spur[spur];
   if (sp.art == ArrArt::intern) return senke_intern_;
   if (sp.art == ArrArt::rack) return senke_rack_;   // 1.9 U6
+  if (sp.art == ArrArt::strom) return senke_strom_;   // container core K7
   if (sp.art == ArrArt::wirt && sp.slot >= 1 && sp.slot <= ARR_WIRT_SLOTS) return senke_wirt_[sp.slot - 1];
   return nullptr;
 }
@@ -122,6 +123,10 @@ void Arrangement::noten_fenster(const Karte& k, int spur, ArrSenke* se, int64_t 
       if (klammer && n.beat + n.laenge > bis_) aus = std::llround(k.sample_at(bis_ + urs - start_beat_));   // Naht
       if (stopp_s_ >= 0) aus = std::min(aus, stopp_s_);
       aus = std::max(aus, an);
+      if (note_stumm(spur, se, an)) {   // the track is muted at this sample: no voice is started, the sink falls silent and rests (the off of an earlier note still comes)
+        ++noten_stumm_;
+        continue;
+      }
       if (n_offen_ >= ARR_OFFEN) {   // Liste voll: lieber keine Note als eine hängende
         ++noten_verloren_;
         continue;
@@ -197,7 +202,28 @@ void Arrangement::fx_fenster(const Karte& k, int spur, ArrSenke* se, int64_t von
   }
 }
 
+// Variant a of 2026-11-21: true = the note-on at sample `an` of track `spur` is not sent because the track's own mute is on at that very sample. The core hands the mute
+// course of this block to the Arrangement before block() (Kern audio(): verlauf, then block), so a scene that unmutes on the bar keeps the note on that bar. Only where
+// that course is the whole truth: an internal sink without look-ahead (vorhalt 0: the note lies in this block), no mute lane (auto_block replaces the course after
+// this point), no track PFL (the cue hears the track in front of the mute), no freeze, tap or export run (they render the track whatever the mixer says).
+bool Arrangement::note_stumm(int spur, const ArrSenke* se, int64_t an) const {
+#ifdef CYPHERDJ_MUTATION_ARR_STUMM_NOTEN_GEHEN
+  (void)spur; (void)se; (void)an;
+  return false;   // error case: a muted pattern gets every note and computes at full cost (test_arr_stumm_ruhe must go red)
+#endif
+  if (!stumm_ruhe_ || !snap_ || sonderlauf() || !se || se->vorhalt() != 0) return false;
+  if (spur < 0 || spur >= ARR_SPUREN || snap_->spur[spur].art != ArrArt::intern || auto_lane_da(spur, 2)) return false;
+  const Wert& cu = w_[spur][ARR_F_CUE];
+  if (cu.vl || cu.w >= 0.5f) return false;
+  const int64_t t = an - noten_s0_;
+  if (t < 0 || t >= noten_m_) return false;
+  const Wert& mu = w_[spur][2];
+  return (mu.vl ? mu.vl[t] : mu.w) >= 0.5f;
+}
+
 void Arrangement::noten_block(const Karte& k, int64_t s0, int m) {
+  noten_s0_ = s0;
+  noten_m_ = m;
   offen_aus_bis(s0 + m);   // fällige Offs zuerst, vor den Ons desselben Samples
   if (!snap_ || (status_ != ArrStatus::wartet && status_ != ArrStatus::spielt)) return;
   for (int i = 0; i < ARR_SPUREN; ++i) {

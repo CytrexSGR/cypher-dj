@@ -125,9 +125,12 @@ export function zeigeWert(pfad) {
   if (k) k.classList.toggle('an', w >= 0.5);
 }
 
-export function bindeKnoepfe() {
-  for (const el of $$('.regler[data-pfad]')) neuerRegler(el);
-  for (const k of $$('.schalter[data-pfad]')) {   // Kill und PFL: Umschalter
+// `wurzel`: only the handles below it (a Strudel row built later); a handle that is bound already is skipped, so the call can be repeated
+const neu = (e) => { if (e.dataset.gebunden) return false; e.dataset.gebunden = '1'; return true; };
+export function bindeKnoepfe(wurzel = document) {
+  for (const el of $$('.regler[data-pfad]', wurzel)) if (neu(el)) neuerRegler(el);
+  for (const k of $$('.schalter[data-pfad]', wurzel)) {   // Kill und PFL: Umschalter
+    if (!neu(k)) continue;
     k.addEventListener('click', () => {
       const pfad = k.dataset.pfad;
       const ist = (zustand.regler[pfad] ?? 0) >= 0.5 ? 1 : 0;
@@ -135,14 +138,16 @@ export function bindeKnoepfe() {
       sende(pfad, 1 - ist);
     });
   }
-  for (const g of $$('.xzuweisung[data-pfad]')) {   // Crossfader-Zuweisung A/THRU/B (2026-09-27): Stellung = jetzige Seite
+  for (const g of $$('.xzuweisung[data-pfad]', wurzel)) {   // Crossfader-Zuweisung A/THRU/B (2026-09-27): Stellung = jetzige Seite
+    if (!neu(g)) continue;
     for (const b of $$('button', g)) b.addEventListener('click', () => {
       const pfad = g.dataset.pfad;
       sende(pfad, GRIFF.xseite.stellung(zustand.regler[pfad] ?? vorgabe(pfad)), true);
       sende(pfad, GRIFF.xseite.stellung(Number(b.dataset.stufe)));
     });
   }
-  for (const t of $$('[data-taste]')) {
+  for (const t of $$('[data-taste]', wurzel)) {
+    if (!neu(t)) continue;
     const pfad = t.dataset.pfad;
     t.addEventListener('pointerdown', (e) => { if (e.button !== 0 || t.disabled) return; t.classList.add('gedrueckt'); sende(pfad, 1); });
     const los = () => { if (!t.classList.contains('gedrueckt')) return; t.classList.remove('gedrueckt'); sende(pfad, 0); };

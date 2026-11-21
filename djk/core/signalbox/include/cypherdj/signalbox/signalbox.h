@@ -242,6 +242,12 @@ class Stellwerk {
   Aenderung aend_[MAX_BEWEGT];
   int n_aend_ = 0;
   double beats_[BLOCK_MAX + 1];
+  // step 4 of the cycle (give back to free after 32 beats without a hand): the regulators whose return falls into this cycle. A member, not a local: 8192 rows would be about 128 KiB on the callback stack.
+  struct Rueck {
+    int16_t r;
+    int64_t s;
+  };
+  Rueck rueck_[MAX_REGLER];
   int16_t ausstehend_regler_[MAX_REGLER];
   int n_ausstehend_regler_ = 0;
   int16_t ausstehend_hand_[MAX_REGLER];

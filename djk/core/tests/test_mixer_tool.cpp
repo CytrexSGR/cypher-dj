@@ -1,4 +1,4 @@
-// 1.15 A1b: the Mixer maps every one of the 345 mix-tool rows of the controller table to (tool, field, channel) and gives
+// 1.15 A1b: the Mixer maps every one of the 201 mix-tool rows of the controller table to (tool, field, channel) and gives
 // each its own slot. The expectation (suffix -> tool and field inside the tool) is written out here, not read from
 // tool_controls.h: a swapped suffix in the table has to turn this test red.
 //   (f1) no new row maps to MixRolle::spaeter (nor to ohne, kanalzug, komp)
@@ -73,7 +73,7 @@ int main() {
     }
     PRUEF(d.kanal < 0 ? kanal == -1 : kanal >= 0);   // every channel name of the table is a mixer channel
   }
-  PRUEF(neu == 345);
+  PRUEF(neu == 201);
   PRUEF(spaeter == 0);   // (f1)
   PRUEF(falsch == 0);    // (f2)
 
@@ -86,17 +86,27 @@ int main() {
   }
   PRUEF(vorgabe_falsch == 0);
 
-  // (f3) a unique value per row reads back from that row only (two rows sharing a slot would overwrite each other)
+  // (f3) a unique value per row reads back from that row only (two rows sharing a slot would overwrite each other).
+  // Container core K9: the hidden production strip (PRODUKTION_ZUG) has no table rows (the erz/* rows are gone); the exemption below stays as the
+  // guard that no row ever maps to it again.
+  int alias = 0;
+  int produktion_zeilen = 0;
   for (int r = 0; r < tab.anzahl(); ++r) {
     const sw::ReglerDef& d = tab.def(r);
     if (d.rolle == sw::Rolle::werkzeug || d.rolle == sw::Rolle::spektrum_kanal) m->setze_sofort(r, 1000.0f + static_cast<float>(r));
   }
-  int alias = 0;
   for (int r = 0; r < tab.anzahl(); ++r) {
     const sw::ReglerDef& d = tab.def(r);
-    if (d.rolle == sw::Rolle::werkzeug || d.rolle == sw::Rolle::spektrum_kanal)
-      if (m->wert(r) != 1000.0f + static_cast<float>(r)) ++alias;
+    if (d.rolle != sw::Rolle::werkzeug && d.rolle != sw::Rolle::spektrum_kanal) continue;
+    const bool produktion = d.kanal >= 0 && cdj::Mixer::kanal_index(tab.kanal_name(d.kanal)) == cdj::Mixer::PRODUKTION_ZUG;
+    if (produktion) {
+      ++produktion_zeilen;
+      if (m->wert(r) != d.vorgabe) { ++alias; std::fprintf(stderr, "%s: production strip row moved off its default\n", d.pfad); }
+    } else if (m->wert(r) != 1000.0f + static_cast<float>(r)) {
+      ++alias;
+    }
   }
+  PRUEF(produktion_zeilen == 0);   // K9: the hidden production strip has no table rows any more
   PRUEF(alias == 0);
 
   // negative control: old rows keep their roles

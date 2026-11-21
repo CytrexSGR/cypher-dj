@@ -16,7 +16,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { alleRegler, erz4Soll } from '../areas/proj/mapping.ts';
+import { alleRegler } from '../areas/proj/mapping.ts';
 import { insertWertParameter } from '../project/model.ts';
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
@@ -182,9 +182,9 @@ async function lauf8() {
   info(`maximal project ${slugMax}: ${JSON.stringify(z)}`);
   notiere('maximal project built as specified', z.spuren === 32 && z.gruppen === 8 && z.returns === 4 && z.sends === 160 && z.komp === 12 && z.eq === 1 && z.saett === 1 && z.racks === 4 && z.mappings.every((n) => n === 16) && z.sc === 2 && z.keys === 10,
     `tracks ${z.spuren}, groups ${z.gruppen}, returns ${z.returns}, sends ${z.sends} (expected 160), stages komp ${z.komp} eq ${z.eq} saett ${z.saett} (12/1/1), racks ${z.racks} with mappings ${z.mappings.join(',')} (16 each), keys: ${z.sc} row keys + ${z.keys} structural (kinds ${z.keyArten.join(' ')}) (expected 2 + 10)`);
-  // the list the server sends on a switch by the hand of Andreas: erz/4 neutral first, then every mixer control (session.ts synchronisiere). It does NOT depend on the size of the
+  // the list the server sends on a switch by the hand of Andreas: every mixer control (session.ts synchronisiere). It does NOT depend on the size of the
   // project: every track, group, return, send, insert pool slot and rack slot is sent, used or not, so a small project sends the same number of controls.
-  const regler = [...erz4Soll('andreas'), ...alleRegler(pMax)];
+  const regler = alleRegler(pMax);
   fs.writeFileSync(path.join(ORDNER, 'regler-maximal.tsv'), regler.map((r) => `${r.pfad}\t${r.wert}`).join('\n') + '\n');
   const nIns = regler.filter((r) => r.pfad.startsWith('ins/')).length, nRack = regler.filter((r) => r.pfad.startsWith('rack/')).length;
   info(`control list of the project written (${regler.length} controls, of them ins/ ${nIns}, rack/ ${nRack}) → regler-maximal.tsv; packets of 100: ${Math.ceil(regler.length / 100)}`);

@@ -5,8 +5,8 @@
 // Das Netz läuft gegen einen echten Kern ohne JACK (wie test_netz_keylock_kern); der Mitschnitt kommt als Ereignis in den
 // Ring (was der Kern bei fertigem Mitschnitt täte, Beweis des Kerns: test_kern_mitschnitt), ein Ton 130,81 Hz wird
 // "aufgenommen".
-//  (a) 135 BPM, 4 Beats: Datei genau 90 000 Frames, Frequenz der Datei 130,81 Hz ± 3 ct. Vorher (umtasten): −92 ct. Die
-//      Wiedergabe bei 135 (bis Task 7 über die Keylock-Variante) prüft test_kern_box_keylock K3 mit dem Dehner.
+//  (a) 135 BPM, 4 Beats: Datei genau 90 000 Frames, Frequenz der Datei 130,81 Hz ± 3 ct. Vorher (umtasten): −92 ct. (The playback
+//      at 135 was checked by the loop box tests, which are gone with container core K1.)
 //  (b) 128 BPM: Datei bitgleich mit dem Puffer, kein R3-Aufruf (Haken zählt 0). Gegenprobe im selben Aufbau: 135 ruft ihn.
 //  (c) Länge exakt bei 130, 140, 100 BPM; außerhalb des Bereichs (rendere_rec direkt und im Netz) abgelehnt.
 //  (e) Fehler der Umrechnung (leer, Ausnahme, falsche Länge): keine Datei, keine .neu-Leiche, genau eine stderr-Zeile,
@@ -29,7 +29,6 @@
 #include <vector>
 
 #include "cypherdj/loop.h"
-#include "cypherdj/loopbox.h"
 #include "cypherdj/loop_stretch.h"
 #include "cypherdj/net.h"
 #include "cypherdj/clock.h"
@@ -64,7 +63,7 @@ static double frequenz(const float* l, int64_t schritt, int64_t a, int64_t b) {
   return zahl < 2 ? 0.0 : (zahl - 1) * 48000.0 / (letzte - erste);
 }
 
-// Wie der Kern: 4 Beats beim Tempo bpm kopieren (LoopBoxen::mitschnitt): Länge = llround(sample_at(ab + beats)) − ab_sample
+// Wie der Kern: 4 Beats beim Tempo bpm kopieren (MitschnittAufnahme): Länge = llround(sample_at(ab + beats)) − ab_sample
 static cdj::Mitschnitt* neuer_mitschnitt(const char* name, int beats, double bpm, double ton) {
   auto* mt = new cdj::Mitschnitt();
   std::snprintf(mt->name, sizeof mt->name, "%s", name);
@@ -239,8 +238,7 @@ int main() {
     const double ff = d.size() == 2 * 90000 ? frequenz(d.data(), 2, 10000, 80000) : 0.0;
     std::printf("(a) Frequenz der Datei %.3f Hz = %+.1f ct gegen %.2f Hz (Soll |ct| <= 3; mit umtasten: -92)\n", ff, cent(ff, F_TON), F_TON);
     PRUEF(ff > 0 && std::fabs(cent(ff, F_TON)) <= 3.0);
-    // Die Wiedergabe bei 135 (vorher über die Keylock-Variante des Render-Fadens) prüft seit Task 7 test_kern_box_keylock K3
-    // mit dem Dehner in der Box.
+    // The playback at 135 was checked by the loop box tests (gone with container core K1).
   }
   {  // (b) 128 BPM: bitgleich, kein R3; Gegenprobe 135 ruft ihn
     Haken h;

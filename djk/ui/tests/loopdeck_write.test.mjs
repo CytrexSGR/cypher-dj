@@ -40,14 +40,18 @@ test('neu creates the deck once and is idempotent; the container is opened when 
   assert.equal((await z.bereich.neu({ deck: 1, raster: 'x' }, 'andreas')).code, 400);
 });
 
-test('neu turns a module of the same place into cell 1 of track 1', async (t) => {
+test('neu leaves a module alone: the module keeps its place and the deck takes another one', async (t) => {
   const z = await ldAufbau(t);
   await z.exportiere('A');
-  assert.equal(z.projekt().gruppen.some((g) => g.modul?.slot === 'A'), true);
+  const modul = z.projekt().gruppen.find((g) => g.modul);
+  const ort = z.projekt().plaetze.findIndex((e) => e.typ === 'stems' && e.gruppe === modul.id);
+  assert.equal(ort, 0, 'the module sits in place A (slot A)');
   const a = await z.bereich.neu({ deck: 1 }, 'andreas');
   assert.equal(a.code, 200, JSON.stringify(a.j));
-  assert.equal(z.projekt().gruppen.some((g) => g.modul), false);
-  assert.equal(z.zelle(1, 1)?.art, 'loop');
+  assert.ok(z.projekt().gruppen.some((g) => g.modul), 'the module stays');
+  assert.equal(z.projekt().plaetze[ort].typ, 'stems');
+  assert.equal(z.projekt().plaetze.filter((e) => e.typ === 'loops').length, 1, 'the deck takes another place');
+  assert.equal(z.zelle(1, 1), null);
 });
 
 test('zelle renames and changes a cell, leeren clears it; one undo step each', async (t) => {
@@ -180,53 +184,25 @@ test('a project that is being opened (in flight) is not closed by a write: proje
   assert.equal(z.s.aktuell().j.projekt.name, 'Production');
 });
 
-test('plaetze sets the output place of both decks in one undo step; a changeless request writes nothing; the same place is refused', async (t) => {
+test('neu places each new deck at the first free place scanning C, D, A, B; platz_setzen moves a deck in one undo step', async (t) => {
   const z = await ldAufbau(t, { deck: true });
   assert.equal((await z.bereich.neu({ deck: 2 }, 'andreas')).code, 200);
-  const orte = () => z.projekt().gruppen.filter((g) => g.loopdeck).sort((a, b) => a.loopdeck.platz - b.loopdeck.platz).map((g) => g.loopdeck.ausgang_platz ?? (g.loopdeck.platz + 2));
-  assert.deepEqual(orte(), [3, 4]);
+  const orte = () => z.projekt().plaetze.map((e) => (e.typ === 'loops' ? e.typ[0] + z.projekt().gruppen.find((g) => g.id === e.gruppe).loopdeck.platz : e.typ[0]));
+  assert.deepEqual(orte(), ['t', 't', 'l1', 'l2']);
   const rev = z.projekt().rev;
-  const n = await z.bereich.plaetze({ platz: { 1: 3, 2: 4 } }, 'andreas');
-  assert.deepEqual([n.code, n.j.ok, z.projekt().rev], [200, true, rev], 'the defaults: nothing changes');
-  const n2 = await z.bereich.plaetze({ platz: { 1: null, 2: null } }, 'andreas');
-  assert.deepEqual([n2.code, z.projekt().rev], [200, rev], 'null leaves the deck as it is');
-  const a = await z.bereich.plaetze({ platz: { 1: 4, 2: 3 } }, 'andreas');
-  assert.deepEqual([a.code, a.j.ok, z.projekt().rev, orte()], [200, true, rev + 1, [4, 3]]);
-  assert.equal((await z.bereich.plaetze({ platz: { 1: 4, 2: 3 } }, 'andreas')).code, 200);
-  assert.equal(z.projekt().rev, rev + 1, 'repeating changes nothing');
+  await z.aendern([{ befehl: 'platz_setzen', platz: 4, typ: 'track' }, { befehl: 'platz_setzen', platz: 1, typ: 'loops', gruppe_id: z.projekt().plaetze[3].gruppe ?? z.projekt().gruppen.find((g) => g.loopdeck?.platz === 2).id }]);
+  assert.deepEqual(orte(), ['l2', 't', 'l1', 't']);
+  assert.equal(z.projekt().rev, rev + 1);
   assert.equal((await z.undo()).code, 200);
-  assert.deepEqual(orte(), [3, 4], 'one undo restores both decks');
-  const rev2 = z.projekt().rev;
-  const b = await z.bereich.plaetze({ platz: { 1: 1, 2: 2 } }, 'andreas');
-  assert.deepEqual([b.code, orte()], [200, [1, 2]], 'both in the top row');
-  assert.equal(z.projekt().rev, rev2 + 1);
-  assert.equal((await z.undo()).code, 200);
-  for (const platz of [{ 1: 2, 2: 2 }, { 1: 5, 2: 1 }, { 1: 0, 2: 1 }, 'x', null]) {
-    const r = await z.bereich.plaetze({ platz }, 'andreas');
-    assert.equal(r.code, 400, JSON.stringify(platz));
-    assert.equal(r.j.grund, 'argument_ungueltig');
-  }
-  assert.equal((await z.bereich.plaetze({}, 'andreas')).code, 400);
+  assert.deepEqual(orte(), ['t', 't', 'l1', 'l2'], 'one undo restores both places');
 });
 
-test('plaetze with one deck sets only that deck; a new deck avoids the pad the other deck sits on; a SEQ deck on the place refuses', async (t) => {
-  const z = await ldAufbau(t, { deck: true });   // deck 1 only
-  const g = (p) => z.projekt().gruppen.find((x) => x.loopdeck?.platz === p);
-  assert.equal((await z.bereich.plaetze({ platz: { 1: 4, 2: 3 } }, 'andreas')).code, 200);
-  assert.equal(g(1).loopdeck.ausgang_platz, 4);
-  assert.equal((await z.bereich.neu({ deck: 2 }, 'andreas')).code, 200);
-  assert.equal(g(2).loopdeck.ausgang_platz, 3, 'deck 2 does not take pad/2 (deck 1 holds it)');
-  // an unmuted SEQ deck in place 1 holds deck/1: deck 1 shown in place 1 is refused, nothing is written
-  await z.aendern([{ befehl: 'seq_anlegen', platz: 1 }]);
-  const rev = z.projekt().rev;
-  const r = await z.bereich.plaetze({ platz: { 1: 1, 2: null } }, 'andreas');
-  assert.ok(r.code >= 400, JSON.stringify(r));
-  assert.equal(z.projekt().rev, rev);
-});
-
-test('the stand carries ausgang_platz of each deck (the S8 shows the deck of its side)', async (t) => {
+test('the stand carries ausgang_platz of each deck, derived from the places; a parked deck shows null', async (t) => {
   const z = await ldAufbau(t, { deck: true });
-  assert.equal(z.bereich.stand().j.decks[1].ausgang_platz, 3, 'default: the pad of deck 1');
-  await z.bereich.plaetze({ platz: { 1: 2, 2: null } }, 'andreas');
+  assert.equal(z.bereich.stand().j.decks[1].ausgang_platz, 3, 'default: the first free place scanning C first');
+  await z.aendern([{ befehl: 'platz_setzen', platz: 3, typ: 'track' }]);
+  assert.equal(z.bereich.stand().j.decks[1].ausgang_platz, null, 'parked');
+  const g = z.projekt().gruppen.find((x) => x.loopdeck);
+  await z.aendern([{ befehl: 'platz_setzen', platz: 2, typ: 'loops', gruppe_id: g.id }]);
   assert.equal(z.bereich.stand().j.decks[1].ausgang_platz, 2);
 });

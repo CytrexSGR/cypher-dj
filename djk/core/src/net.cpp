@@ -183,6 +183,8 @@ void Netz::hallo(const osc::Nachricht& m, int64_t jetzt_ns) {
   if (stand_generation_ >= 1 && erstes_in_generation) {
     sende_neustart(port);
     sende_stand(port);
+  } else if (erstes_in_generation) {
+    sende_container_stand(port);   // container core K8: also in generation 0 the first hallo of a subscriber learns the container inputs
   }
   // Keylock 3b (Prüfung MINOR 4): der Kern meldet Regler nur bei Änderung (§5.7); ein neuer Abonnent (die Seite nach
   // ihrem Neustart) wüsste sonst nicht, ob der Knopf aus steht. Stand aus der letzten /uhr, Halter frei (nur Setzen);
@@ -210,13 +212,6 @@ void Netz::hallo(const osc::Nachricht& m, int64_t jetzt_ns) {
       osc::Schreiber r(v::e_regler);
       r.s(pfad.c_str()).f(w.first).s("frei").h(stand_sample_).d(stand_beat_);
       an_port(port, r);
-    }
-    for (int b = 1; b <= 2; ++b) {
-      const LoopStand& l = loop_stand_[b];
-      if (!l.da) continue;
-      osc::Schreiber s(v::e_loop);
-      s.i(b).i(l.status).s(l.name.c_str()).i(l.beats).i(l.fx_art).d(l.fx_beats).f(l.fx_wet);
-      an_port(port, s);
     }
   }
 #endif
@@ -257,12 +252,14 @@ void Netz::sende_neustart(int nur_port) {
   osc::Schreiber r(v::e_fx_routing);
   r.i(fx_routing_stand_);
   if (nur_port) an_port(nur_port, r); else an_alle(r);
-  // DJ view places 3 and 4: the place channel of each pad that is not 0 (the default; nothing is sent while both are 0)
-  for (int p = 0; p < 2; ++p) {
-    if (platz_kanal_stand_[p] == 0) continue;
-    osc::Schreiber pk(v::e_platz_kanal);
-    pk.i(p + 1).i(platz_kanal_stand_[p]);
-    if (nur_port) an_port(nur_port, pk); else an_alle(pk);
+  sende_container_stand(nur_port);   // container core K8: the input art of the four containers; the core keeps no state across a restart, the page server replays its choice
+}
+
+void Netz::sende_container_stand(int nur_port) {
+  for (int c = 0; c < 4; ++c) {
+    osc::Schreiber s(v::e_container_quelle);
+    s.i(c + 1).i(container_stand_[c]);
+    if (nur_port) an_port(nur_port, s); else an_alle(s);
   }
 }
 

@@ -1,5 +1,6 @@
 """Tests für check_osc.py (osc.json gegen den Vertragstext)."""
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -119,3 +120,89 @@ def test_text_ohne_anker_ist_ein_befund_kein_absturz(tmp_path):
     leer.write_text("## 4. x\n\n## 5. y\n\n## 19. z\n\nnothing here\n", encoding="utf-8")
     fehler = pruefe_osc.pruefe_sicher(leer, OSC, False)
     assert any("Anker" in f for f in fehler)
+
+
+# ---- container core V2: container source command and event, /erz/strom without kanal, loop box commands removed
+def _json():
+    return json.loads(OSC.read_text(encoding="utf-8"))
+
+
+def _adr(name):
+    return next((e for e in _json()["adressen"] if e["adresse"] == name), None)
+
+
+def test_container_quelle_ist_im_vertrag():
+    k = _adr("/k/container/quelle")
+    assert k["typen"] == ",hsii" and k["richtung"] == "an_kern" and k["abschnitt"] == "4.10"
+    assert [f["name"] for f in k["felder"]] == ["id", "quelle", "container", "art"]
+    assert k["felder"][2]["bereich"] == [1, 4] and k["felder"][3]["bereich"] == [0, 2]
+    e = _adr("/e/container/quelle")
+    assert e["typen"] == ",ii" and e["richtung"] == "vom_kern" and e["abschnitt"] == "5.12"
+    assert [f["name"] for f in e["felder"]] == ["container", "art"]
+    s = _adr("/erz/strom")
+    assert s["typen"] == ",hsis" and "kanal" not in [f["name"] for f in s["felder"]]
+    adressen = {x["adresse"] for x in _json()["adressen"]}
+    entfernt = {"/k/platz/kanal", "/e/platz/kanal", "/k/loop/laden", "/k/loop/start", "/k/loop/stopp", "/k/loop/raster",
+                "/zustand/box", "/e/loop"}
+    assert not (entfernt & adressen)
+    assert {"/k/loop/rec", "/e/mitschnitt"} <= adressen
+
+
+def test_werte_listen_der_container():
+    w = _json()["werte"]
+    c = ["deck/1", "deck/2", "pad/1", "pad/2"]
+    assert w["fx_kanal_12"]["liste"] == c + ["master"]
+    assert w["fx_kanal_3"]["liste"] == c
+    assert w["fx_kanal"]["liste"] == c + ["master"]
+    assert w["graph_kanal"]["liste"] == c + ["fx/3", "fx/4", "master"]
+    assert w["graph_platz"]["liste"] == c + ["fx/3", "fx/4", "master", "strom/2", "strom/3", "strom/5", "strom/6",
+                                              "strom/7", "strom/9", "strom/10"]
+
+
+def test_rec_codes_nennen_container_eingaenge():
+    f = next(x for x in _adr("/k/rec/spur")["felder"] if x["name"] == "eingang")
+    assert f["bereich"] == [0, 30] and "23" in f["notiz"] and "24" in f["notiz"]
+
+
+def test_text_und_json_sind_gleich():
+    assert pruefe_osc.pruefe(vertragstext.VERTRAG, OSC, True) == []
+    if ENGLISCH.exists():
+        assert pruefe_osc.pruefe(ENGLISCH, OSC, False) == []
+
+
+# ---- container core V3: cypherdj-arr/4 prose and the three loader reasons
+NEUE_GRUENDE = ["live_ohne_container", "dj_doppelt", "send_ausser_modul"]
+DEUTSCH = HIER.parents[1] / "docs" / "architecture" / "INTERFACES.md"
+
+
+def _texte():
+    return [DEUTSCH] + ([ENGLISCH] if ENGLISCH.exists() else [])
+
+
+def test_neue_gruende_stehen_im_vertrag():
+    liste = _json()["werte"]["gruende"]["liste"]
+    ts = (HIER / "osc_addresses.ts").read_text(encoding="utf-8")
+    grund_ts = ts[ts.index("export const GRUENDE"):].split("\n")[0]
+    for code in NEUE_GRUENDE:
+        assert code in liste and f"'{code}'" in grund_ts
+        for text in _texte():
+            assert f"| `{code}` |" in text.read_text(encoding="utf-8"), (code, text)
+
+
+def test_gruende_der_attrappe_sind_teilmenge():
+    mock = (HIER / "mock_core" / "contract.mjs").read_text(encoding="utf-8")
+    block = mock[mock.index("export const GRUENDE"):]
+    block = block[:block.index("]);")]
+    mock_codes = set(re.findall(r"'([a-z_]+)'", block))
+    assert set(NEUE_GRUENDE) <= mock_codes
+    assert mock_codes <= set(_json()["werte"]["gruende"]["liste"])
+
+
+def test_arr4_prosa_nennt_format_und_quelle_strom():
+    for text in _texte():
+        t = text.read_text(encoding="utf-8")
+        assert "cypherdj-arr/4" in t and '"art": "strom"' in t, text
+        absatz = next(a for a in t.split("\n") if a.startswith("**DJ-channel output of a group"))
+        assert "1 to 4" in absatz and "1 to 6" not in absatz and "`dj_doppelt`" in absatz, text
+        rets = next(a for a in t.split("\n") if a.startswith("**Returns in the playback"))
+        assert "1 to 8" in rets and "1 to 6" not in rets, text

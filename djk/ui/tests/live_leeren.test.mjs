@@ -6,10 +6,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { liveAufbau } from './support/live_module.mjs';
 import { modulOrdner } from '../project/module_storage.ts';
+import { modulAmPlatz } from '../project/live.ts';
 import { fahreRampe, rampeWert } from '../areas/live/ramp.ts';
 
 const baum = (p, slot) => {
-  const top = p.gruppen.find((g) => g.ausgang === undefined && g.modul?.slot === slot);
+  const top = p.gruppen.find((g) => g.id === modulAmPlatz(p, slot));
   if (!top) return { gruppen: [], spuren: [] };
   const gruppen = [top];
   for (let i = 0; i < gruppen.length; i++) for (const g of p.gruppen) if (g.ausgang?.id === gruppen[i].id) gruppen.push(g);
@@ -100,7 +101,7 @@ test('the module is saved when it is cleared, with its audio, before the tree go
   assert.equal(a.j.zustand, 'fertig');
   const datei = path.join(modulOrdner(a.j.modul_id, z.modulOrdner), 'modul.json');
   const j = JSON.parse(fs.readFileSync(datei, 'utf8'));
-  assert.equal(j.slot, 'B');
+  assert.equal(j.slot, undefined, 'a module file carries no place: the project places it');
   assert.equal(j.herkunft.titel, 'Song');
   assert.equal(j.spuren.length, 1);
   assert.ok(fs.existsSync(path.join(path.dirname(datei), j.audio[0].datei)));
@@ -120,7 +121,7 @@ test('takte 0: the row goes to -200 at once and the tree is gone when the answer
 
 test('refusals: takte not in 0,1,2,4,8,16, no slot, unknown field, empty slot, no live project, running ramp', async (t) => {
   const z = await zweiModule(t);
-  for (const d of [{ slot: 'A', takte: 3 }, { slot: 'A', takte: -1 }, { slot: 'A', takte: '4' }, { slot: 'A' }, { slot: 'C', takte: 1 }, { takte: 1 }]) {
+  for (const d of [{ slot: 'A', takte: 3 }, { slot: 'A', takte: -1 }, { slot: 'A', takte: '4' }, { slot: 'A' }, { slot: 'X', takte: 1 }, { takte: 1 }]) {
     assert.deepEqual(await z.fehl(() => z.l.leere(d, 'andreas')), { code: 400, fehler: 'argument_ungueltig' }, JSON.stringify(d));
   }
   assert.deepEqual(await z.fehl(() => z.l.leere({ slot: 'A', takte: 1, x: 1 }, 'andreas')), { code: 400, fehler: 'argument_unbekannt' });

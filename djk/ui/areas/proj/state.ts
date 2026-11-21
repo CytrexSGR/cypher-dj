@@ -11,19 +11,19 @@ export interface ArrZustand {
 
 export type ZielLage = ZielEingang;
 
-const BOX_LAEUFT = new Set([2, 3, 4]);          // /e/loop, /zustand/box: 2 wartet, 3 läuft, 4 endet (INTERFACES §5.11)
 const ERZ_STROEME = ['erz/1', 'erz/2', 'erz/3'];  // Studio-Ströme 1 bis 3 (Strudel), Spec 2.2 „Studio-Strom“
 
 export class KernLage {
   uhr: { beat: number; bpm: number } | null = null;
   arr: ArrZustand | null = null;
   generation: number | null = null;
+  // What feeds container A..D as the core reported it (/e/container/quelle: 0 empty, 1 player, 2 module). A new core starts with every container on its player.
+  container: (0 | 1 | 2)[] = [1, 1, 1, 1];
   // SEQ scenes: core beat minus project beat from one same-block pair. The core emits /uhr and then /zustand/arr in one cycle (core.cpp), so a
   // /zustand/arr pairs with the newest /uhr that arrived since the previous /zustand/arr; without a fresh /uhr it forms no pair.
   private paarBeat: number | null = null;
   private offset: number | null = null;
   private readonly decks = new Map<number, number>();
-  private readonly boxen = new Map<number, number>();
   private readonly regler = new Map<string, number>();
 
   // Liefert neustart: true bei /e/neustart mit neuer Generation (wie server.ts vomKern: „neuerKern“)
@@ -31,7 +31,6 @@ export class KernLage {
     switch (adresse) {
       case '/uhr': this.uhr = { beat: Number(f.beat), bpm: Number(f.bpm) }; this.paarBeat = this.uhr.beat; break;
       case '/zustand/deck': this.decks.set(Number(f.deck), Number(f.status)); break;
-      case '/e/loop': case '/zustand/box': this.boxen.set(Number(f.box), Number(f.status)); break;
       case '/e/regler': this.regler.set(String(f.pfad), Number(f.wert)); break;
       case '/zustand/arr': this.arr = {
         nr: Number(f.nr), status: Number(f.status), loop_an: Number(f.loop_an), projekt_beat: Number(f.projekt_beat),
@@ -42,6 +41,11 @@ export class KernLage {
         this.paarBeat = null;
         break;
       case '/zustand/ins_host': this.insHost = insHostListe(f); break;   // plan 1.11: per effect host the core's health and last round trip
+      case '/e/container/quelle': {
+        const c = Number(f.container), art = Number(f.art);
+        if (Number.isInteger(c) && c >= 1 && c <= 4 && (art === 0 || art === 1 || art === 2)) this.container[c - 1] = art;
+        break;
+      }
       case '/k/willkommen': this.generation = Number(f.generation); break;
       case '/e/neustart': {
         const alt = this.generation, g = Number(f.generation);
@@ -49,7 +53,8 @@ export class KernLage {
         // Spec 6.30: ein neuer Kern kennt nichts von dem, was der alte gemeldet hat (Decks, Boxen, Regler, Arrangement); bis er es
         // neu meldet, ist es unbekannt. Die Uhr bleibt (sie kommt ohnehin laufend nach).
         if (g !== alt) {
-          this.decks.clear(); this.boxen.clear(); this.regler.clear(); this.arr = null; this.insHost = null; this.offset = null; this.paarBeat = null;
+          this.decks.clear(); this.regler.clear(); this.arr = null; this.insHost = null; this.offset = null; this.paarBeat = null;
+          this.container = [1, 1, 1, 1];
         }
         return { neustart: g !== alt };
       }
@@ -68,11 +73,10 @@ export class KernLage {
   insHost: ReturnType<typeof insHostListe> | null = null;
   reglerWert(pfad: string): number | null { return this.regler.get(pfad) ?? null; }
   deckLaeuft(): boolean { for (const s of this.decks.values()) if (s >= 2) return true; return false; }
-  // Spec 2.2: quant 2, sobald ein Deck, eine Loop-Box oder ein Studio-Strom läuft. Den Strom sieht der Server nur am offenen Kanal
+  // Spec 2.2: quant 2, sobald ein Deck oder ein Studio-Strom läuft. Den Strom sieht der Server nur am offenen Kanal
   // (erz/1..3 Fader über −200 dB): ein Strom auf geschlossenem Kanal ist nicht zu hören, Takt-Treue zu ihm ist dann ohne Wirkung.
   djLaeuft(): boolean {
     if (this.deckLaeuft()) return true;
-    for (const s of this.boxen.values()) if (BOX_LAEUFT.has(s)) return true;
     return ERZ_STROEME.some((k) => (this.reglerWert(`${k}/fader`) ?? -200) > -200);
   }
 }

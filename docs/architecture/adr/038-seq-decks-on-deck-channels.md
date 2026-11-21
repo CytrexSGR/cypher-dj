@@ -1,5 +1,7 @@
 # ADR 038: SEQ decks on deck channels (the DJ output of the arrangement grows to six channels)
 
+Superseded by ADR 043 (containers as the console unit): the DJ-channel numbering, the place channel and the fixed module slots of this decision are replaced by the four containers and their one input each. The text below is kept as the record.
+
 Status: built on branch `seq-deck-kern` (plan 2026-11-14 `seq-deck-s1`, task 4). The page server derivation for a group with a `seq` document (`playback.ts`) is part of the same task; the SEQ document itself is task 1, the commands task 3, the place on the page task 7. Not yet merged into main, not yet heard on the studio instance; Andreas' listening acceptance is open.
 Decided: by Cypher as defaults in the spec `docs/superpowers/specs/2026-11-14-seq-deck-design.md` section 6 (decision D11) and the plan `docs/superpowers/plans/2026-11-14-seq-deck-s1.md`; Andreas may override. Origin: Andreas, 2026-11-14 (a step sequencer as a fourth place type next to deck, loop and Strudel).
 Supersedes: nothing. It widens the output kind `dj` of ADR 037 from two channels to six; the production master, nested groups (ADR 036) and the loop slots work as before.

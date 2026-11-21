@@ -3,7 +3,7 @@
 // undo step. The module is saved to the store first (spec: saved when it is cleared), so Clear is never the loss of a module.
 // takte 0 answers after the removal. takte > 0 answers at once with zustand 'rampe' (a 16 bar ramp outlasts any HTTP call); the end comes as the
 // event {a:'modul', f:{leeren}} and in GET /modul/stand under `leeren`. Editing the other slot goes on meanwhile (nothing here holds the project).
-import { liveSlots, normiereSlot } from '../../project/live.ts';
+import { modulAmPlatz, normierePlatz, type Slot } from '../../project/live.ts';
 import { aendereStand } from '../../project/state.ts';
 import { fuehreListeAus } from '../../project/commands.ts';
 import { modulBaum } from '../../project/module_storage.ts';
@@ -15,7 +15,6 @@ import { ProjFehler, type Antwort } from '../proj/session.ts';
 import type { ProjZugang } from '../proj/area.ts';
 import { fahreRampe, type RampeEnde, type RampeKern } from './ramp.ts';
 
-type Slot = 'A' | 'B';
 export const MUTE_WARTE_MS = 20;                                                   // the core's mute fade is 10 ms, plus a reserve
 export const LEEREN_TAKTE: readonly number[] = [0, 1, 2, 4, 8, 16];
 export interface LeerenOptionen {
@@ -45,8 +44,8 @@ export class ModulLeeren {
 
   async leere(d: Record<string, unknown>, quelle: 'andreas' | 'cypher'): Promise<Antwort> {
     for (const k of Object.keys(d)) if (k !== 'slot' && k !== 'takte') throw new ProjFehler(400, 'argument_unbekannt', { detail: k });
-    const s0 = normiereSlot(d.slot);                                           // 1/2 and A/B (decision 13)
-    if (s0 === undefined) throw new ProjFehler(400, 'argument_ungueltig', { detail: "slot: 1, 2, 'A' or 'B'" });
+    const s0 = normierePlatz(d.slot);                                          // a place: 1..4 or A..D
+    if (s0 === undefined) throw new ProjFehler(400, 'argument_ungueltig', { detail: "slot: a place 1..4 or 'A'..'D'" });
     d = { ...d, slot: s0 };
     if (typeof d.takte !== 'number' || !LEEREN_TAKTE.includes(d.takte)) {
       throw new ProjFehler(400, 'argument_ungueltig', { detail: `takte: one of ${LEEREN_TAKTE.join(', ')}` });
@@ -56,7 +55,7 @@ export class ModulLeeren {
     const o = this.zugang.offen();
     if (!o || !o.projekt.live) throw new ProjFehler(409, 'kein_liveprojekt');
     if (this.laufend.has(slot)) throw new ProjFehler(409, 'rampe_laeuft', { slot });
-    const gruppeId = liveSlots(o.projekt)[slot];
+    const gruppeId = modulAmPlatz(o.projekt, slot);
     if (gruppeId === undefined) throw new ProjFehler(409, 'slot_leer', { slot });
     const g = o.projekt.gruppen.find((x) => x.id === gruppeId)!;
     const ende = takte > 0 && this.o.kern?.uhr() ? this.o.kern.uhr()!.beat + takte * takteProLive(o.projekt.taktart) : undefined;
@@ -87,7 +86,7 @@ export class ModulLeeren {
   private async lauf(slot: Slot, gruppeId: string, slug: string, nr: number, von: number, takte: number, quelle: 'andreas' | 'cypher'): Promise<void> {
     const gleich = (): Projekt | null => {
       const o = this.zugang.offen();
-      return o && o.slug === slug && liveSlots(o.projekt)[slot] === gruppeId ? o.projekt : null;
+      return o && o.slug === slug && modulAmPlatz(o.projekt, slot) === gruppeId ? o.projekt : null;
     };
     let stumm: Projekt['spuren'] = [];                                              // tracks muted by this run (rows only, the model is unchanged)
     const zurueck = (): void => {                                                  // the rows go back to what the model says

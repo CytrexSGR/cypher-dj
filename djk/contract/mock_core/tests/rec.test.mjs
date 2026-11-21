@@ -486,3 +486,14 @@ test('rec T8: cfg.rec_midi replaces the pattern; an existing file is never repla
   assert.equal(lies(ordner, 'midi-9.bin').toString(), 'x', 'the old file is untouched');
   assert.equal(JSON.parse(lies(ordner, 'midi-9.json').toString()).status, 'kein_platz');
 });
+
+test('rec V5: container inputs 23 and 24 are accepted, 14 and 18 stay ausserhalb_bereich', () => {
+  const cfg = { arbeitsbestand: arbeitsbestand(), arr_ordner: fs.mkdtempSync(path.join(os.tmpdir(), 'attrappe-rec-')) };
+  gruen(fahre([
+    sende(0, laden(9, 1)),
+    sende(1000, spur(1, 3, 1, 23)), erwarte(2000, q(1, 'andreas', 3)),
+    sende(2100, spur(2, 4, 1, 24)), erwarte(3000, q(2, 'andreas', 3)),
+    sende(3100, spur(3, 5, 1, 14)), erwarte(4000, q(3, 'andreas', 6, null, 'ausserhalb_bereich')),
+    sende(4100, spur(4, 5, 1, 18)), erwarte(5000, q(4, 'andreas', 6, null, 'ausserhalb_bereich')),
+  ], { cfg }));
+});

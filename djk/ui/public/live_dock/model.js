@@ -3,27 +3,27 @@
 // The rule this model carries: an instrument is only the subtitle of a card (with CHANGE, the front knobs, OPEN), never a chip;
 // an effect is only a chip named like the effect; the word INSERT labels nothing.
 //
-// Snapshot: { regler: {path: value}, geladen: {channel: graphName}, graphen: [{name, art, kategorie?, prinzip?, regler_namen?}],
+// Snapshot: { strome: [stream numbers of the placed Strudel module], regler: {path: value}, geladen: {channel: graphName}, graphen: [{name, art, kategorie?, prinzip?, regler_namen?}],
 //   front: {graphName: [{param, name, vorgabe}]}, hostNamen: {channel: name}, inhalt: {channel: text}, gewaehlt: channel,
 //   limiter: {gebaut, grund} }.
 import { GRAPH_KANAL_ART, KOMP_SCHLUESSEL, KOMP_PRESETS, graphWahlOptionen } from '../effects.js';
 import { KOMP_SECHS } from '../comp_controls_table.js';
 import { SPEKTRUM_QUELLEN } from '../spectrum.js';
+import { CONTAINER, STROEME, fxIndex, stromKanal, stromName } from '../kanaele.js';
 
-/** [id, short label, name, colour] of the ten channel cards, in the order of the tabs. */
-export const LIVE_KANAELE = [
-  ['deck/1', 'A', 'A', 'var(--a)'], ['deck/2', 'B', 'B', 'var(--b)'],
-  ['erz/1', 'I1', 'DRUMS', 'var(--c)'], ['erz/2', 'I2', 'BASS', 'var(--c)'], ['erz/3', 'I3', 'MELODY', 'var(--c)'],
-  ['erz/5', 'I5', 'I5', 'var(--c)'], ['erz/6', 'I6', 'I6', 'var(--c)'], ['erz/7', 'I7', 'I7', 'var(--c)'],
-  ['pad/1', 'L1', 'L1', 'var(--c3)'], ['pad/2', 'L2', 'L2', 'var(--c3)'],
-];
+/** [id, short label, name, colour] of the four container cards, in the order of the tabs. */
+export const LIVE_KANAELE = CONTAINER.map((c, i) => [c.pfad, c.id, c.id, ['var(--a)', 'var(--b)', 'var(--c)', 'var(--c3)'][i]]);
+/** The channel cards of the dock: the four containers, then the aliases of the streams of the placed Strudel module (`strome`: the stream numbers of the
+ *  module rows; none when no module is placed). A stream without an alias strip has no card. Card = [id, short label, name, colour]. */
+export const liveKanaele = (strome = []) => [...LIVE_KANAELE,
+  ...[...new Set(strome)].filter((n) => STROEME.includes(n)).sort((a, b) => a - b).map((n) => [stromKanal(n), `S${n}`, stromName(n), 'var(--c)'])];
 /** The effect returns (cards of the EFFECTS row). */
 export const LIVE_RUECKGAENGE = [['fx/3', '3', 'FX3', 'var(--c2)'], ['fx/4', '4', 'FX4', 'var(--c2)']];
 /** Mixer index of a channel (komp/sc = index + 1); a copy of FX_INDEX of effects_gemeinsam.js (a page module); the test binds it to FX_REITER. */
-export const FX_INDEX = { 'deck/1': 0, 'deck/2': 1, 'erz/1': 4, 'erz/2': 5, 'erz/3': 6, 'erz/5': 8, 'erz/6': 9, 'erz/7': 10, 'pad/1': 12, 'pad/2': 13 };
+export const FX_INDEX = Object.fromEntries(CONTAINER.map((c) => [c.pfad, fxIndex(c.pfad)]));
 
 const BUS_KANAELE = ['bus/1', 'bus/2', 'bus/3', 'bus/4'];
-const PAD_AUTOMATION = { 'pad/1': 1, 'pad/2': 2 };
+const SURGE_HOST_KANAELE = [stromKanal(2), stromKanal(3)];   // streams 2 (bass) and 3 (melody) play a host instrument while no graph is loaded
 const CHIP_ZEICHEN = 10;
 
 const wert = (stand, pfad, vorgabe = 0) => stand?.regler?.[pfad] ?? vorgabe;
@@ -73,7 +73,7 @@ function kanalKarte(stand, [id, kurz, name, farbe]) {
     meter: id, pegelText: true, menue: true, aktiv: id === stand?.gewaehlt,
   };
   if (instrument) {
-    const hostArt = GRAPH_KANAL_ART[id] === 'instrument' && (id === 'erz/2' || id === 'erz/3');
+    const hostArt = GRAPH_KANAL_ART[id] === 'instrument' && SURGE_HOST_KANAELE.includes(id);
     const untertitel = art === 'instrument' ? graph : !graph && hostArt ? (stand?.hostNamen?.[id] ?? 'Surge XT') : 'No instrument';
     return {
       ...karte, untertitel, untertitelArt: 'instrument', untertitelTitel: `Instrument of ${name}`,
@@ -121,10 +121,10 @@ function masterKarte(stand) {
 }
 
 /** The cards of the dock for one snapshot. */
-export function liveModell(stand) {
+export function liveModell(stand, kanaele = liveKanaele(stand?.strome)) {
   return {
     zeilen: [
-      { key: 'kanaele', titel: 'CHANNELS', w: 'dock-kanaele', karten: LIVE_KANAELE.map((k) => kanalKarte(stand, k)) },
+      { key: 'kanaele', titel: 'CHANNELS', w: 'dock-kanaele', karten: kanaele.map((k) => kanalKarte(stand, k)) },
       { key: 'fx', titel: 'EFFECTS', w: 'dock-fx', karten: LIVE_RUECKGAENGE.map((k) => rueckKarte(stand, k)) },
     ],
     master: [masterKarte(stand)],
@@ -197,7 +197,6 @@ export function chipPunkte(karte, teil, stand) {
 export function kartenPunkte(karte) {
   if (karte.art !== 'kanal') return [];
   const punkte = [{ text: 'Spectrum', aktion: 'spektrum' }];
-  if (PAD_AUTOMATION[karte.id]) punkte.push({ text: 'Loop automation…', aktion: 'automation', wert: PAD_AUTOMATION[karte.id] });
   return punkte;
 }
 

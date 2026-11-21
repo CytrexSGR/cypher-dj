@@ -30,7 +30,7 @@ test('file check: geraet.preset on rb338 and bk devices loads; malformed id, a p
   assert.ok('fehler' in pruefeProjekt(w), 'a host device carries no preset');
   // negative control: a file of the current format (/2, no preset) loads and saves byte-identical
   const alt = pruefeProjekt(specProjekt()).projekt;
-  assert.equal(alt.format, 'cypherdj-projekt/2');
+  assert.equal(alt.format, 'cypherdj-projekt/3');
   assert.equal(kanonisch(pruefeProjekt(JSON.parse(kanonisch(alt))).projekt), kanonisch(alt));
   assert.ok(!kanonisch(alt).includes('preset'));
 });

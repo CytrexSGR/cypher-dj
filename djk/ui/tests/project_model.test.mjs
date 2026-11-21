@@ -6,7 +6,7 @@ import { specProjekt, kopie, SHA_A } from './support/project.mjs';
 
 test('neuesProjekt: gültig, leer, Vorgaben nach Spec (Tempo, 4/4, Loop, Metronom aus/master)', () => {
   const p = neuesProjekt('First Track');
-  assert.equal(p.format, FORMAT); assert.equal(p.format, 'cypherdj-projekt/2');   // 1.10 Task 9: /2 (gruppen, master); /1 wird beim Laden gehoben
+  assert.equal(p.format, FORMAT); assert.equal(p.format, 'cypherdj-projekt/3');   // container core M1: /3 (places, strudel); /1 and /2 are lifted on load
   assert.equal(p.name, 'First Track'); assert.equal(p.rev, 0); assert.equal(p.wiedergabe_rev, 0);
   assert.deepEqual(p.taktart, [4, 4]); assert.deepEqual(p.spuren, []);
   assert.equal(p.metronom.an, false); assert.equal(p.metronom.ziel, 'master');
@@ -22,7 +22,7 @@ test('das Beispiel aus Spec 3.3 ist ein gültiges Projekt (Negativ-Kontrolle: di
 });
 
 const ABLEHNUNGEN = [
-  ['format falsch', (p) => { p.format = 'cypherdj-projekt/3'; }, /format/],   // 1.10 Task 9: /2 ist jetzt gültig und scheiterte an „gruppen: fehlt“
+  ['format falsch', (p) => { p.format = 'cypherdj-projekt/4'; }, /format/],   // /3 is the current format, /4 does not exist
   ['name leer', (p) => { p.name = ''; }, /name/],
   ['name zu lang', (p) => { p.name = 'x'.repeat(81); }, /name/],
   ['rev negativ', (p) => { p.rev = -1; }, /rev/],

@@ -2,7 +2,7 @@
 //  (G1) gate/an 0: bit-identical to a mixer that never saw the tool; on then off: bit-identical again, the object not in use
 //  (G2) a -60 dBFS sine under threshold -40 goes to the floor within hold + release (measured at the master), a -20 dBFS sine
 //       passes within 0.01 dB
-//  (G3) gate/sc keys from the INPUT of another channel (as komp/sc): erz/2 follows erz/1; sc 0 and the own index key on itself
+//  (G3) gate/sc keys from the INPUT of another channel (as komp/sc): pad/1 follows deck/2; sc 0 and the own index key on itself
 //  (G4) PFL hears the gate (fader at -200)
 //  (G5) order: the gate acts before the compressor (compressor make-up +12 dB must not lift noise over the gate threshold)
 //  (G6) switching on while a signal runs: no step (starts open), and under the threshold it closes after hold + release
@@ -14,6 +14,8 @@
 //  (G10) D9: a per-sample course counts with its last sample
 //  (N2) the F01 guard resets the IIR states of the utility (bassmono, dc) after a NaN
 //  (N)  a NaN in a gated channel is caught by the F01 guard: the master is silent for one block only, the gate is reset
+#include <pthread.h>
+
 #include <cmath>
 
 #include "mixer_wz_run.h"
@@ -32,29 +34,31 @@ void gate_ein(Lauf& l, int k, float schwelle, float bereich, float release = 50.
 double db_zu_amp(double db) { return std::pow(10.0, db / 20.0); }
 }  // namespace
 
-int main() {
+// The Lauf objects of this test hold a whole controller table each; the frame of the body is above the 8 MB default stack,
+// so it runs on a thread with its own stack.
+static int haupt() {
   // (G1) off = never saw the tool; on then off = identical again
   {
     Lauf a, b, c;
     for (const char* s : {"gate/schwelle", "gate/hysterese", "gate/ratio", "gate/bereich", "gate/attack", "gate/hold", "gate/release"})
-      PRUEF(b.r((std::string(kname(ERZ1)) + "/" + s).c_str()) >= 0);
-    b.setze(ERZ1, "gate/schwelle", -10.0f);   // moved, but gate/an stays 0
-    b.setze(ERZ1, "gate/bereich", -100.0f);
+      PRUEF(b.r((std::string(kname(DECK2)) + "/" + s).c_str()) >= 0);
+    b.setze(DECK2, "gate/schwelle", -10.0f);   // moved, but gate/an stays 0
+    b.setze(DECK2, "gate/bereich", -100.0f);
     int aus_ungleich = 0, wieder_ungleich = 0, an_ungleich = 0;
     bool aktiv_an = false, aktiv_ende = true;
     for (int blk = 0; blk < 70; ++blk) {
-      if (blk == 20) gate_ein(c, ERZ1, -10.0f, -100.0f);
-      if (blk == 40) c.setze(ERZ1, "gate/an", 0.0f);
+      if (blk == 20) gate_ein(c, DECK2, -10.0f, -100.0f);
+      if (blk == 40) c.setze(DECK2, "gate/an", 0.0f);
       for (Lauf* l : {&a, &b, &c}) {
-        l->sinus(ERZ1, 1000.0, 0.1, 0.1);   // -20 dBFS: under threshold -10, the gate would close
-        l->sinus(ERZ2, 220.0, 0.2, 0.1);
+        l->sinus(DECK2, 1000.0, 0.1, 0.1);   // -20 dBFS: under threshold -10, the gate would close
+        l->sinus(PAD1, 220.0, 0.2, 0.1);
         l->verarbeite();
       }
       aus_ungleich += !gleich(a, b);
       if (blk >= 26 && blk < 40) an_ungleich += !gleich(a, c);   // switched on at 20: open for the hold time (3.75 blocks), then it closes
-      if (blk == 30) aktiv_an = c.m->gate_aktiv(ERZ1);
+      if (blk == 30) aktiv_an = c.m->gate_aktiv(DECK2);
       if (blk >= 41) wieder_ungleich += !gleich(a, c);
-      if (blk == 69) aktiv_ende = c.m->gate_aktiv(ERZ1);
+      if (blk == 69) aktiv_ende = c.m->gate_aktiv(DECK2);
     }
     std::printf("G1: off vs never: %d of 70 differ; on (blocks 26..39) differs in %d of 14 (positive control); on then off differs in %d of 29\n",
                 aus_ungleich, an_ungleich, wieder_ungleich);
@@ -64,8 +68,8 @@ int main() {
     PRUEF(wieder_ungleich == 0);
     PRUEF(!aktiv_ende);
   }
-  // (G2) floor and pass-through, measured at the master against an ungated twin; on erz/1, deck/1 and deck/4
-  for (const int K : {ERZ1, DECK1, 3}) {
+  // (G2) floor and pass-through, measured at the master against an ungated twin; on deck/2, deck/1 and deck/4
+  for (const int K : {DECK2, DECK1, 3}) {
     std::printf("-- G2 channel %s\n", kname(K));
     Lauf ref, g;
     gate_ein(g, K, -40.0f, -60.0f, 50.0f);
@@ -90,24 +94,24 @@ int main() {
     PRUEF_NAH(daempf_ende, 60.0, 0.1);
   }
   // (G3) sidechain from the input of another channel
-  for (int sc : {5, 0, 6}) {   // 5 = erz/1 (index 4 + 1); 0 = own signal; 6 = erz/2 itself (index 5 + 1) = own signal as well
+  for (int sc : {2, 0, 3}) {   // 2 = deck/2 (index 1 + 1); 0 = own signal; 3 = pad/1 itself (index 2 + 1) = own signal as well
     Lauf ref, g;
-    for (Lauf* l : {&ref, &g}) l->setze(ERZ1, "fader", -200.0f);
-    gate_ein(g, ERZ2, -40.0f, -60.0f, 20.0f);
-    g.setze(ERZ2, "gate/sc", static_cast<float>(sc));
+    for (Lauf* l : {&ref, &g}) l->setze(DECK2, "fader", -200.0f);
+    gate_ein(g, PAD1, -40.0f, -60.0f, 20.0f);
+    g.setze(PAD1, "gate/sc", static_cast<float>(sc));
     double still = 0.0, laut = 0.0;
     for (int blk = 0; blk < 120; ++blk) {
       for (Lauf* l : {&ref, &g}) {
-        l->sinus(ERZ2, 1000.0, 0.1, 0.1);                                    // erz/2: -20 dBFS all the time
-        l->sinus(ERZ1, 100.0, blk < 60 ? 0.0 : 0.1, blk < 60 ? 0.0 : 0.1);   // the key: silent, then -20 dBFS
+        l->sinus(PAD1, 1000.0, 0.1, 0.1);                                    // pad/1: -20 dBFS all the time
+        l->sinus(DECK2, 100.0, blk < 60 ? 0.0 : 0.1, blk < 60 ? 0.0 : 0.1);   // the key: silent, then -20 dBFS
         l->verarbeite();
       }
       if (blk == 59) still = rms_db(ref.m->master_summe_l(), N) - rms_db(g.m->master_summe_l(), N);
       if (blk == 119) laut = rms_db(ref.m->master_summe_l(), N) - rms_db(g.m->master_summe_l(), N);
     }
-    std::printf("G3 sc=%d: attenuation of erz/2 with the key silent %.2f dB, with the key loud %.3f dB\n", sc, still, laut);
-    if (sc == 5) {
-      PRUEF_NAH(still, 60.0, 0.1);   // erz/2 closed by a key that is silent
+    std::printf("G3 sc=%d: attenuation of pad/1 with the key silent %.2f dB, with the key loud %.3f dB\n", sc, still, laut);
+    if (sc == 2) {
+      PRUEF_NAH(still, 60.0, 0.1);   // pad/1 closed by a key that is silent
       PRUEF_NAH(laut, 0.0, 0.01);    // opened by the other channel
     } else {
       PRUEF_NAH(still, 0.0, 0.01);   // keyed on itself: -20 dBFS, open all the time
@@ -118,13 +122,13 @@ int main() {
   {
     Lauf aus, an;
     for (Lauf* l : {&aus, &an}) {
-      l->setze(ERZ1, "fader", -200.0f);
-      l->setze(ERZ1, "pfl", 1.0f);
+      l->setze(DECK2, "fader", -200.0f);
+      l->setze(DECK2, "pfl", 1.0f);
     }
-    gate_ein(an, ERZ1, 0.0f, -60.0f, 20.0f);   // threshold 0 dBFS: a -20 dBFS sine never opens it
+    gate_ein(an, DECK2, 0.0f, -60.0f, 20.0f);   // threshold 0 dBFS: a -20 dBFS sine never opens it
     for (int blk = 0; blk < 60; ++blk)
       for (Lauf* l : {&aus, &an}) {
-        l->sinus(ERZ1, 1000.0, 0.1, 0.1);
+        l->sinus(DECK2, 1000.0, 0.1, 0.1);
         l->verarbeite();
       }
     const double ca = rms_db(aus.cl, N), cb = rms_db(an.cl, N);
@@ -136,15 +140,15 @@ int main() {
   {
     Lauf ref, komp_nur, beide;
     for (Lauf* l : {&komp_nur, &beide}) {
-      l->setze(ERZ1, "komp/an", 1.0f);
-      l->setze(ERZ1, "komp/schwelle", 0.0f);
-      l->setze(ERZ1, "komp/ratio", 2.0f);
-      l->setze(ERZ1, "komp/makeup", 12.0f);
+      l->setze(DECK2, "komp/an", 1.0f);
+      l->setze(DECK2, "komp/schwelle", 0.0f);
+      l->setze(DECK2, "komp/ratio", 2.0f);
+      l->setze(DECK2, "komp/makeup", 12.0f);
     }
-    gate_ein(beide, ERZ1, -45.0f, -60.0f, 20.0f);   // -50 dBFS is under -45; the lifted -38 dBFS would be over it
+    gate_ein(beide, DECK2, -45.0f, -60.0f, 20.0f);   // -50 dBFS is under -45; the lifted -38 dBFS would be over it
     for (int blk = 0; blk < 120; ++blk)
       for (Lauf* l : {&ref, &komp_nur, &beide}) {
-        l->sinus(ERZ1, 1000.0, db_zu_amp(-50.0), db_zu_amp(-50.0));
+        l->sinus(DECK2, 1000.0, db_zu_amp(-50.0), db_zu_amp(-50.0));
         l->verarbeite();
       }
     const double r0 = rms_db(ref.m->master_summe_l(), N), kn = rms_db(komp_nur.m->master_summe_l(), N), bd = rms_db(beide.m->master_summe_l(), N);
@@ -153,7 +157,7 @@ int main() {
     PRUEF(bd < r0 - 40.0);           // the gate sees -50 dBFS, stays closed; make-up lifts only the floor
   }
   // (G6) switch on with a running signal: no step; under the threshold: closes the regular way
-  for (const int K : {ERZ1, DECK1}) {
+  for (const int K : {DECK2, DECK1}) {
     for (float att : {1.0f, 200.0f}) {
       Lauf ref, g;
       g.setze(K, "gate/attack", att);
@@ -198,15 +202,15 @@ int main() {
   // (G7) off and on again: the old state is gone
   {
     Lauf ref, g;
-    gate_ein(g, ERZ1, -40.0f, -60.0f, 50.0f);
-    g.setze(ERZ1, "gate/attack", 200.0f);
+    gate_ein(g, DECK2, -40.0f, -60.0f, 50.0f);
+    g.setze(DECK2, "gate/attack", 200.0f);
     double erste = 99.0, spaeter = 99.0;
     for (int blk = 0; blk < 70; ++blk) {
-      if (blk == 40) g.setze(ERZ1, "gate/an", 0.0f);
-      if (blk == 45) g.setze(ERZ1, "gate/an", 1.0f);
+      if (blk == 40) g.setze(DECK2, "gate/an", 0.0f);
+      if (blk == 45) g.setze(DECK2, "gate/an", 1.0f);
       const double amp = blk < 45 ? db_zu_amp(-60.0) : db_zu_amp(-20.0);   // closed gate before, then a loud signal appears with the switch
       for (Lauf* l : {&ref, &g}) {
-        l->sinus(ERZ1, 1000.0, amp, amp);
+        l->sinus(DECK2, 1000.0, amp, amp);
         l->verarbeite();
       }
       if (blk == 39) spaeter = rms_db(ref.m->master_summe_l(), N) - rms_db(g.m->master_summe_l(), N);
@@ -219,16 +223,16 @@ int main() {
   // (G11) hold set while the gate is OFF, then switched on under the threshold: the open phase follows that hold, not the previous one
   for (const float hold : {0.0f, 500.0f}) {
     Lauf ref, g;
-    g.setze(ERZ1, "gate/schwelle", -40.0f);
-    g.setze(ERZ1, "gate/bereich", -60.0f);
-    g.setze(ERZ1, "gate/release", 50.0f);
-    g.setze(ERZ1, "gate/attack", 1.0f);
-    g.setze(ERZ1, "gate/hold", hold);
+    g.setze(DECK2, "gate/schwelle", -40.0f);
+    g.setze(DECK2, "gate/bereich", -60.0f);
+    g.setze(DECK2, "gate/release", 50.0f);
+    g.setze(DECK2, "gate/attack", 1.0f);
+    g.setze(DECK2, "gate/hold", hold);
     double d[3] = {};
     for (int blk = 0; blk < 170; ++blk) {   // one block is 256 samples = 5.33 ms; switched on at block 20
-      if (blk == 20) g.setze(ERZ1, "gate/an", 1.0f);
+      if (blk == 20) g.setze(DECK2, "gate/an", 1.0f);
       for (Lauf* l : {&ref, &g}) {
-        l->sinus(ERZ1, 1000.0, db_zu_amp(-60.0), db_zu_amp(-60.0));
+        l->sinus(DECK2, 1000.0, db_zu_amp(-60.0), db_zu_amp(-60.0));
         l->verarbeite();
       }
       const double a = rms_db(ref.m->master_summe_l(), N) - rms_db(g.m->master_summe_l(), N);
@@ -244,12 +248,12 @@ int main() {
   // (G12) F01: after a NaN the gate starts OPEN. (i) loud sine, attack 200 ms: no fade-in after the NaN block. (ii) a closed gate: reopened, closes again.
   {
     Lauf ref, g;
-    gate_ein(g, ERZ1, -40.0f, -60.0f, 50.0f);
-    g.setze(ERZ1, "gate/attack", 200.0f);
+    gate_ein(g, DECK2, -40.0f, -60.0f, 50.0f);
+    g.setze(DECK2, "gate/attack", 200.0f);
     double a1 = 99.0, a2 = 99.0;
     for (int blk = 0; blk < 60; ++blk) {
-      for (Lauf* l : {&ref, &g}) l->sinus(ERZ1, 1000.0, 0.3, 0.3);
-      if (blk == 30) { ref.m->eingang_l(ERZ1)[7] = NAN; g.m->eingang_l(ERZ1)[7] = NAN; }
+      for (Lauf* l : {&ref, &g}) l->sinus(DECK2, 1000.0, 0.3, 0.3);
+      if (blk == 30) { ref.m->eingang_l(DECK2)[7] = NAN; g.m->eingang_l(DECK2)[7] = NAN; }
       ref.verarbeite();
       g.verarbeite();
       const double a = rms_db(ref.m->master_summe_l(), N) - rms_db(g.m->master_summe_l(), N);
@@ -262,11 +266,11 @@ int main() {
   }
   {
     Lauf ref, g;
-    gate_ein(g, ERZ1, -40.0f, -60.0f, 50.0f);
+    gate_ein(g, DECK2, -40.0f, -60.0f, 50.0f);
     double vorher = 0.0, danach = 99.0, spaet = 0.0;
     for (int blk = 0; blk < 80; ++blk) {
-      for (Lauf* l : {&ref, &g}) l->sinus(ERZ1, 1000.0, db_zu_amp(-60.0), db_zu_amp(-60.0));
-      if (blk == 40) { ref.m->eingang_l(ERZ1)[7] = NAN; g.m->eingang_l(ERZ1)[7] = NAN; }
+      for (Lauf* l : {&ref, &g}) l->sinus(DECK2, 1000.0, db_zu_amp(-60.0), db_zu_amp(-60.0));
+      if (blk == 40) { ref.m->eingang_l(DECK2)[7] = NAN; g.m->eingang_l(DECK2)[7] = NAN; }
       ref.verarbeite();
       g.verarbeite();
       const double a = rms_db(ref.m->master_summe_l(), N) - rms_db(g.m->master_summe_l(), N);
@@ -279,23 +283,22 @@ int main() {
     PRUEF(danach < 3.0);
     PRUEF_NAH(spaet, 60.0, 0.5);
   }
-  // (G8) +Inf (and NaN) on the key of a foreign gate: erz/2 keyed by the cue-only erz/8 (sc 12)
+  // (G8) +Inf (and NaN) on the key of a foreign gate: pad/1 keyed by pad/2 (sc 4), whose fader stays at its default (closed)
   for (const float boese : {INFINITY, NAN}) {
     Lauf g;
-    g.m->setze_nur_cue(ERZ8);
-    gate_ein(g, ERZ2, -40.0f, -60.0f, 20.0f);
-    g.setze(ERZ2, "gate/sc", 12.0f);
+    gate_ein(g, PAD1, -40.0f, -60.0f, 20.0f);
+    g.setze(PAD1, "gate/sc", 4.0f);
     double geschlossen = 0.0, nach = 0.0, offen = 0.0;
     for (int blk = 0; blk < 260; ++blk) {
-      g.sinus(ERZ2, 1000.0, 0.1, 0.1);
-      g.sinus(ERZ8, 100.0, blk < 200 ? 0.0 : 0.1, blk < 200 ? 0.0 : 0.1);
-      if (blk == 100) g.m->eingang_l(ERZ8)[7] = boese;
+      g.sinus(PAD1, 1000.0, 0.1, 0.1);
+      g.sinus(PAD2, 100.0, blk < 200 ? 0.0 : 0.1, blk < 200 ? 0.0 : 0.1);
+      if (blk == 100) g.m->eingang_l(PAD2)[7] = boese;
       g.verarbeite();
       if (blk == 99) geschlossen = rms_db(g.m->master_summe_l(), N);
       if (blk == 199) nach = rms_db(g.m->master_summe_l(), N);
       if (blk == 259) offen = rms_db(g.m->master_summe_l(), N);
     }
-    std::printf("G8 %s on the key: erz/2 level %.1f dB before, %.1f dB 100 blocks after, %.1f dB when the key is loud\n", std::isinf(boese) ? "+Inf" : "NaN",
+    std::printf("G8 %s on the key: pad/1 level %.1f dB before, %.1f dB 100 blocks after, %.1f dB when the key is loud\n", std::isinf(boese) ? "+Inf" : "NaN",
                 geschlossen, nach, offen);
     PRUEF(geschlossen < -80.0);
     PRUEF(nach < -80.0);       // still closed: the Inf did not stick the follower
@@ -304,12 +307,12 @@ int main() {
   // (G9) D1: utility before gate. L-only sine 0.2; breite 0 makes it 0.1 on both sides (-20 dBFS); the gate threshold sits at -17 dBFS
   {
     Lauf ref, g;
-    for (Lauf* l : {&ref, &g}) l->setze(ERZ1, "util/breite", 0.0f);
-    gate_ein(g, ERZ1, -17.0f, -60.0f, 20.0f);
-    g.setze(ERZ1, "gate/hysterese", 0.0f);
+    for (Lauf* l : {&ref, &g}) l->setze(DECK2, "util/breite", 0.0f);
+    gate_ein(g, DECK2, -17.0f, -60.0f, 20.0f);
+    g.setze(DECK2, "gate/hysterese", 0.0f);
     for (int blk = 0; blk < 100; ++blk)
       for (Lauf* l : {&ref, &g}) {
-        l->sinus(ERZ1, 1000.0, 0.2, 0.0);
+        l->sinus(DECK2, 1000.0, 0.2, 0.0);
         l->verarbeite();
       }
     const double d = rms_db(ref.m->master_summe_l(), N) - rms_db(g.m->master_summe_l(), N);
@@ -320,8 +323,8 @@ int main() {
   {
     Lauf ref, g, offen;
     for (Lauf* l : {&ref, &g, &offen}) {
-      gate_ein(*l, ERZ1, -90.0f, -60.0f, 1.0f);
-      l->setze(ERZ1, "gate/hold", 0.0f);
+      gate_ein(*l, DECK2, -90.0f, -60.0f, 1.0f);
+      l->setze(DECK2, "gate/hold", 0.0f);
     }
     float verlauf[N];
     for (int i = 0; i < N; ++i) verlauf[i] = -90.0f + 90.0f * static_cast<float>(i) / (N - 1);   // ends on exactly 0
@@ -329,11 +332,11 @@ int main() {
     double gated = 0.0;
     for (int blk = 0; blk < 8; ++blk) {
       if (blk == 5) {
-        ref.setze(ERZ1, "gate/schwelle", 0.0f);
-        g.m->verlauf(g.r((std::string(kname(ERZ1)) + "/gate/schwelle").c_str()), verlauf);
+        ref.setze(DECK2, "gate/schwelle", 0.0f);
+        g.m->verlauf(g.r((std::string(kname(DECK2)) + "/gate/schwelle").c_str()), verlauf);
       }
       for (Lauf* l : {&ref, &g, &offen}) {
-        l->sinus(ERZ1, 1000.0, 0.1, 0.1);
+        l->sinus(DECK2, 1000.0, 0.1, 0.1);
         l->verarbeite();
       }
       if (blk == 5) {
@@ -349,17 +352,17 @@ int main() {
   {
     Lauf ref, g;
     for (Lauf* l : {&ref, &g}) {
-      gate_ein(*l, ERZ1, -60.0f, -60.0f, 20.0f);
-      l->setze(ERZ1, "util/bassmono", 120.0f);
-      l->setze(ERZ1, "util/dc", 1.0f);
-      l->setze(ERZ1, "util/breite", 50.0f);
+      gate_ein(*l, DECK2, -60.0f, -60.0f, 20.0f);
+      l->setze(DECK2, "util/bassmono", 120.0f);
+      l->setze(DECK2, "util/dc", 1.0f);
+      l->setze(DECK2, "util/breite", 50.0f);
     }
     int still = 0;
     bool endlich_alle = true;
     double nach = 0.0;
     for (int blk = 0; blk < 120; ++blk) {
-      for (Lauf* l : {&ref, &g}) l->sinus(ERZ1, 300.0, 0.3, 0.3);
-      if (blk == 30) g.m->eingang_l(ERZ1)[7] = NAN;
+      for (Lauf* l : {&ref, &g}) l->sinus(DECK2, 300.0, 0.3, 0.3);
+      if (blk == 30) g.m->eingang_l(DECK2)[7] = NAN;
       ref.verarbeite();
       g.verarbeite();
       bool st = true;
@@ -380,20 +383,20 @@ int main() {
   // (N) a NaN in a gated, utility-processed channel
   {
     Lauf ref, g;
-    for (Lauf* l : {&ref, &g}) l->setze(ERZ2, "fader", 0.0f);
-    gate_ein(g, ERZ1, -40.0f, -60.0f, 20.0f);
-    g.setze(ERZ1, "util/tausch", 1.0f);
-    gate_ein(ref, ERZ1, -40.0f, -60.0f, 20.0f);
-    ref.setze(ERZ1, "util/tausch", 1.0f);
+    for (Lauf* l : {&ref, &g}) l->setze(PAD1, "fader", 0.0f);
+    gate_ein(g, DECK2, -40.0f, -60.0f, 20.0f);
+    g.setze(DECK2, "util/tausch", 1.0f);
+    gate_ein(ref, DECK2, -40.0f, -60.0f, 20.0f);
+    ref.setze(DECK2, "util/tausch", 1.0f);
     bool alle_endlich = true;
     int still_bloecke = 0;
     double nach = 0.0;
     for (int blk = 0; blk < 80; ++blk) {
       for (Lauf* l : {&ref, &g}) {
-        l->sinus(ERZ1, 1000.0, 0.1, 0.1);
-        l->sinus(ERZ2, 440.0, 0.2, 0.2);
+        l->sinus(DECK2, 1000.0, 0.1, 0.1);
+        l->sinus(PAD1, 440.0, 0.2, 0.2);
       }
-      if (blk == 20) g.m->eingang_l(ERZ1)[10] = NAN;
+      if (blk == 20) g.m->eingang_l(DECK2)[10] = NAN;
       ref.verarbeite();
       g.verarbeite();
       bool endlich = true;
@@ -408,8 +411,24 @@ int main() {
     PRUEF(alle_endlich);
     PRUEF(still_bloecke == 1);
     PRUEF(g.m->nan_treffer() == 1);
-    PRUEF(g.m->gate_aktiv(ERZ1));    // the gate is on again after the reset
+    PRUEF(g.m->gate_aktiv(DECK2));    // the gate is on again after the reset
     PRUEF(nach < 1e-3);              // the gate has recovered: the channel is back
   }
   PRUEF_ENDE();
 }
+static void* haupt_faden(void* r) {
+  *static_cast<int*>(r) = haupt();
+  return nullptr;
+}
+
+int main() {
+  int rc = 1;
+  pthread_attr_t a;
+  pthread_attr_init(&a);
+  pthread_attr_setstacksize(&a, size_t{256} << 20);
+  pthread_t t;
+  if (pthread_create(&t, &a, haupt_faden, &rc) != 0) return 2;
+  pthread_join(t, nullptr);
+  return rc;
+}
+

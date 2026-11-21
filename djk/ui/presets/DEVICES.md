@@ -995,11 +995,11 @@ Sends 1..4 collect into the sums fx/1..4. fx/2 is **Cypher Hall** (Rust `hall_ds
 
 ### 3A.8 Baukasten graph on a channel (`<ch>/bk/1..8`), instrument / effect host
 
-A Baukasten graph (section 2) can run as an insert on `deck/1..4` (effect, after the compressor, before the Beat-FX insert; `mixer.h:57-60`) or as an instrument on the channels a `/erz/strom` stream targets with `bk:<name>` (erz/1..3, erz/5..7, pad/1..2; erz/4 is reserved for production, erz/8 is the cue-only preview). The eight knobs feed the graph's `regler` nodes. Source: `controls.cpp:183-193`, `osc.json` (`/k/kanal/graph`, `/erz/strom`).
+A Baukasten graph (section 2) can run as an insert on `deck/1`, `deck/2`, `pad/1`, `pad/2` (effect, after the compressor, before the Beat-FX insert; `mixer.h:57-60`) or as an instrument on a stream: `/erz/strom` with `bk:<name>` and no channel (streams 2, 3, 5, 6, 7, 9, 10). An effect graph on `erz/<n>` is not a core insert but a bk insert on the strom track of the project (strudel module required). The eight knobs feed the graph's `regler` nodes. Source: `controls.cpp:183-193`, `osc.json` (`/k/kanal/graph`, `/erz/strom`).
 
 | parameter id | meaning | unit | range | default | notes |
 |---|---|---|---|---|---|
-| `<ch>/bk/1..8` for ch in deck/1..4, erz/1,2,3,5,6,7, pad/1,2 | graph knob n | normalised | 0 .. 1 | 0.5 | ramp 0 (FFI smooths 20 ms); 12 channels x 8 = 96 paths; `controls.cpp:187-192` |
+| `<ch>/bk/1..8` for ch in deck/1, deck/2, pad/1, pad/2 (effect inserts) | graph knob n | normalised | 0 .. 1 | 0.5 | ramp 0 (FFI smooths 20 ms); 4 channels x 8 = 32 paths; instrument graphs on a stream use `strom/<n>/bk/<k>`; `controls.cpp:187-192` |
 | `/k/kanal/graph` `kanal`, `name` | load graph `name` on channel (`deck/1..4`, `fx/3`, `fx/4`) | path, text | channel from `werte.graph_kanal` | - | `osc.json` section 4.10 |
 
 ### 3A.9 Master section, mix tool

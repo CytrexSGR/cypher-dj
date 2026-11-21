@@ -1,0 +1,191 @@
+{
+ "format": "cypherdj-projekt/2",
+ "gruppen": [
+  {
+   "fader_db": 0,
+   "farbe": "#3b8de0",
+   "gefaltet": false,
+   "id": "g1",
+   "mute": false,
+   "name": "SEQ 1",
+   "nr": 1,
+   "pan": 0,
+   "seq": {
+    "platz": 1,
+    "schema": 2
+   },
+   "solo": false
+  },
+  {
+   "fader_db": 0,
+   "farbe": "#3b8de0",
+   "gefaltet": false,
+   "id": "g2",
+   "loopdeck": {
+    "ausgang_platz": 4,
+    "platz": 1,
+    "raster": "takt"
+   },
+   "mute": false,
+   "name": "LOOP 1",
+   "nr": 2,
+   "pan": 0,
+   "solo": false
+  }
+ ],
+ "live": true,
+ "loop": {
+  "an": false,
+  "bis_beat": 32,
+  "von_beat": 0
+ },
+ "master": {
+  "fader_db": 0
+ },
+ "metronom": {
+  "an": false,
+  "pegel_db": -12,
+  "ziel": "master"
+ },
+ "naechste_id": {
+  "clip": 1,
+  "gruppe": 3,
+  "spur": 10
+ },
+ "naechste_noten_id": 1,
+ "name": "synthetic",
+ "rev": 0,
+ "spuren": [
+  {
+   "art": "instrument",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g1"
+   },
+   "clips": [],
+   "fader_db": 0,
+   "farbe": "#3bb07a",
+   "geraet": {
+    "art": "intern",
+    "name": "rb338",
+    "parameter": {}
+   },
+   "id": "s1",
+   "mute": false,
+   "name": "s1",
+   "nr": 1,
+   "pan": 0,
+   "solo": false
+  },
+  {
+   "art": "audio",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g2"
+   },
+   "clips": [],
+   "fader_db": 0,
+   "farbe": "#3bb07a",
+   "id": "s2",
+   "mute": false,
+   "name": "s2",
+   "nr": 2,
+   "pan": 0,
+   "solo": false,
+   "zellen": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "art": "audio",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g2"
+   },
+   "clips": [],
+   "fader_db": 0,
+   "farbe": "#3bb07a",
+   "id": "s3",
+   "mute": false,
+   "name": "s3",
+   "nr": 3,
+   "pan": 0,
+   "solo": false,
+   "zellen": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "art": "audio",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g2"
+   },
+   "clips": [],
+   "fader_db": 0,
+   "farbe": "#3bb07a",
+   "id": "s4",
+   "mute": false,
+   "name": "s4",
+   "nr": 4,
+   "pan": 0,
+   "solo": false,
+   "zellen": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "art": "audio",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g2"
+   },
+   "clips": [],
+   "fader_db": 0,
+   "farbe": "#3bb07a",
+   "id": "s5",
+   "mute": false,
+   "name": "s5",
+   "nr": 5,
+   "pan": 0,
+   "solo": false,
+   "zellen": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  }
+ ],
+ "taktart": [
+  4,
+  4
+ ],
+ "tempo_bpm": 120,
+ "wiedergabe_rev": 0
+}

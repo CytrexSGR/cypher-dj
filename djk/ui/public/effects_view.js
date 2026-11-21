@@ -4,6 +4,7 @@ import { masterLimiterLesung, setzeWerkzeug, werkText, werkzeugKlickNach, limite
 import { $, $$, melde, postJson, zustand } from './page_state.js';
 import { kompGr, kompWert } from './effects_gemeinsam.js';
 import { FX_KANAELE } from './live_kanaele.js';
+import { CONTAINER } from './kanaele.js';
 import { FX_REITER_SCHLUESSEL, fxReiterAktiv } from './effects_reiter.js';
 // A8: the Gate and Utility controls (the popovers and bus windows of the live dock). One handler on a body: sliders send after 40 ms, switches toggle from the live value.
 export async function sendeWerkzeug(pfad, nach) {
@@ -135,7 +136,7 @@ export function zeigeWerkzeug(nur) {
   }
 }
 // the channel in front (the PRESETS tab works on it): the stored tab, when it is a channel (the channel list comes from the leaf module live_kanaele.js, which is initialised at any import order)
-export let fxGewaehlt = (() => { const a = fxReiterAktiv(); return FX_KANAELE.some(([p]) => p === a) ? a : 'erz/1'; })();
+export let fxGewaehlt = (() => { const a = fxReiterAktiv(); return FX_KANAELE.some(([p]) => p === a) ? a : CONTAINER[0].pfad; })();
 export const kompVerlauf = {};   // kanal -> letzte 100 Absenkungen (10 Hz)
 export function grJetzt(k) { const g = kompGr[k]; return kompWert(k, 'an', 0) >= 0.5 && g && performance.now() - g.t < 400 ? g.db : 0; }
 export function setzeFxGewaehlt(k) {

@@ -24,9 +24,9 @@ export function welt(): Welt {
   return w;
 }
 
-// Deck 1 (A, Andreas' Deck) hörbar, Deck 2 (B) läuft hinter geschlossenem Fader mit Hörschein h2, Deck 3 ist KI-Spur
+// Deck 1 (A, Andreas' Deck) hörbar, Deck 2 (B) läuft hinter geschlossenem Fader mit Hörschein h2, the pad/1 container is the KI track
 // mit Fader −6 dB, erz/1 ist KI-Spur mit Send 1 auf −10 dB.
-export function annahme(w: Welt, stufe = 1, kiSpur = ['deck/3', 'erz/1'], mutationen: string[] = []): Annahme {
+export function annahme(w: Welt, stufe = 1, kiSpur = ['pad/1', 'erz/1'], mutationen: string[] = []): Annahme {
   const a = new Annahme(w.u, { stufe, kiSpur, schwellen: { hoerbarDb: -26, tiefOffenDb: -12 }, maxStretcher: 4, mutationen });
   for (const [adresse, felder] of [
     ['/e/geladen', { deck: 1, material_id: 'f0000000000000a1', basis_bpm: 128, fassung: 1, mit_stems: 1, sample: 0 }],
@@ -38,7 +38,7 @@ export function annahme(w: Welt, stufe = 1, kiSpur = ['deck/3', 'erz/1'], mutati
       beats_bis_ende: 200, faktor: 1, vorlauf_ms: 0, hoerweg: 0, stretcher_fuell: -1, versatz_intern_ms: 0,
       keylock_unterlauf: 0, keylock_aufgegeben: 0 }],
     ['/e/regler', { pfad: 'deck/1/fader', wert: 0, halter: 'frei', sample: 0, beat: 0 }],
-    ['/e/regler', { pfad: 'deck/3/fader', wert: -6, halter: 'frei', sample: 0, beat: 0 }],
+    ['/e/regler', { pfad: 'pad/1/fader', wert: -6, halter: 'frei', sample: 0, beat: 0 }],
     ['/e/regler', { pfad: 'erz/1/send/1', wert: -10, halter: 'frei', sample: 0, beat: 0 }],
   ] as Array<[string, Felder]>) a.spiegel.aufnehmen({ adresse, felder });
   a.hoerschein(H2);

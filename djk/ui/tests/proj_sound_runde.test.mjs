@@ -649,16 +649,16 @@ test('a sensitive knob gives three increasing places at fein, normal and grob (t
   assert.ok(f.staerke < n.staerke && n.staerke < g.staerke);
 });
 
-test('hoereBk refuses a bk track beyond the 8th (no core row spur/9/bk/<k>): param_nicht_live, nothing sent, the project untouched', async (t) => {
+test('hoereBk reaches every bk track up to BK_LIVE_SLOTS (spur/<slot>/bk/<k>): the 9th and the 16th are live, nothing is refused, the project untouched', async (t) => {
   const a = await aufbau(t, { mitKick: false, mitWirt: false });
-  await a.aendern(Array.from({ length: 9 }, (_, i) => ({ befehl: 'spur_neu', art: 'instrument', name: `P${i + 1}`,
+  await a.aendern(Array.from({ length: 16 }, (_, i) => ({ befehl: 'spur_neu', art: 'instrument', name: `P${i + 1}`,
     geraet: { art: 'intern', name: 'bk', graph: 'bassmusik' } })));
-  const neunte = a.projekt().spuren.find((s) => s.name === 'P9'), achte = a.projekt().spuren.find((s) => s.name === 'P8');
   const rev = a.projekt().rev, vor = JSON.stringify(a.projekt());
-  a.protokoll.gesendet.length = 0;
-  await assert.rejects(a.echt.hoereBk(neunte.id, { k3: 0.7 }, 'andreas'), (e) => e.grund === 'param_nicht_live' && e.code === 409);
-  assert.equal(a.protokoll.gesendet.some((g) => g.adresse === '/k/teil'), false, 'no row was sent');
-  await a.echt.hoereBk(achte.id, { k3: 0.7 }, 'andreas');
-  assert.deepEqual(a.protokoll.gesendet.filter((g) => g.adresse === '/k/teil').map((g) => g.felder.pfad), ['spur/8/bk/3'], 'the 8th is still live');
+  for (const [name, slot] of [['P8', 8], ['P9', 9], ['P16', 16]]) {
+    const sp = a.projekt().spuren.find((s) => s.name === name);
+    a.protokoll.gesendet.length = 0;
+    await a.echt.hoereBk(sp.id, { k3: 0.7 }, 'andreas');
+    assert.deepEqual(a.protokoll.gesendet.filter((g) => g.adresse === '/k/teil').map((g) => g.felder.pfad), [`spur/${slot}/bk/3`], `${name} is live`);
+  }
   assert.deepEqual([a.projekt().rev, JSON.stringify(a.projekt())], [rev, vor]);
 });

@@ -12,28 +12,37 @@ Kern::Kern(double start_bpm, cdj_ring_kopf* ring, Befehlsring* befehle, Ereignis
     : plan_(start_bpm), ring_(ring), befehle_(befehle), ereignisse_(ereignisse) {
   w_ = cdj_lade(&ring_->w);  // INTERFACES §6.1: beim Start liest der Kern w und setzt fort
   // Ohr T14 (§17 I3a): Deck-Modell und Prüfer vor dem Stellwerk, das ihn als Pointer bekommt (Vorgabe: aus).
-  deck_modell_ = std::make_unique<DeckModellImpl>(decks_);
+  deck_modell_ = std::make_unique<DeckModellImpl>(decks_, container_art_);
   pruefer_i3_ = std::make_unique<cypherdj::stellwerk::PrueferI3>(hoerschein_reg_, *deck_modell_);
   // Scheibe 25: Stellwerk und Mixer einmal hier (nicht im Callback), der Mixer mit der Regler-Tabelle des Stellwerks
   sw_ = std::make_unique<cypherdj::stellwerk::Stellwerk>(uhr_, pruefer_i3_.get());
   mixer_ = std::make_unique<Mixer>(sw_->tabelle());
-#ifndef CYPHERDJ_MUTATION_KERN_OHNE_NUR_CUE
-  mixer_->setze_nur_cue(Mixer::kanal_index(VORHOER_KANAL));   // S7: Vorhören nur im Kopfhörer, nie im Master
-#endif
   erz_ = std::make_unique<Erzeuger>();  // Plan 2026-09-27: 400 KB, darum hier und nicht im Callback
-  for (int k = 0; k < MIX_KANAELE; ++k) {
-    erz_l_[k] = mixer_->eingang_l(k);
-    erz_r_[k] = mixer_->eingang_r(k);
+  quell_mem_.reset(new float[static_cast<size_t>(QP_PUFFER) * MIX_BLOCK]());   // K3 (F2): the 48 source buffers, once, not in the callback
+  quell_.binde(quell_mem_.get());
+  static_assert(ARR_SCHLUESSEL == QP_PLAYER + QP_STROEME && QP_STROEME == ERZ_STROEME, "the key table is the four containers and the sixteen streams");
+  for (int i = 0; i < QP_PLAYER; ++i) {
+    schl_l_[i] = quell_.player_l[i];
+    schl_r_[i] = quell_.player_r[i];
   }
-  static_assert(MIX_BK_ZEILEN * cypherdj::stellwerk::BK_REGLER_N <= INT16_MAX, "bk_ort_ packs row * BK_REGLER_N + nr - 1 into an int16 (20 * 64 + 63 = 1343 at 64 knobs)");
+  for (int s = 0; s < QP_STROEME; ++s) {
+    schl_l_[QP_PLAYER + s] = quell_.strom_l[s];
+    schl_r_[QP_PLAYER + s] = quell_.strom_r[s];
+  }
+  static_assert(KERN_BK_ZEILEN * cypherdj::stellwerk::BK_REGLER_N <= INT16_MAX, "bk_ort_ packs row * BK_REGLER_N + nr - 1 into an int16 (37 * 64 + 63 = 2431 at 64 knobs)");
+  static_assert(ERZ_STROEME == cypherdj::stellwerk::STROM_BK_STROEME, "one knob row per stream");
   {  // Baukasten S5r + S14: Graph-Regler <kanal>/bk/<1..64> and fx/3|4/bk/<1..64> -> (row of bk_wert_, nr); start from the control values (default 0.5)
     const auto& tab = sw_->tabelle();
     for (int r = 0; r < cypherdj::stellwerk::MAX_REGLER; ++r) bk_ort_[r] = -1;
     for (int r = 0; r < tab.anzahl(); ++r) {
       const auto& d = tab.def(r);
-      if (d.rolle != cypherdj::stellwerk::Rolle::bk_regler) continue;
+      const bool strom_bk = d.rolle == cypherdj::stellwerk::Rolle::strom_bk;
+      if (d.rolle != cypherdj::stellwerk::Rolle::bk_regler && !strom_bk) continue;
       int k = -1;
-      if (d.kanal >= 0) {
+      if (strom_bk) {   // container core K2: strom/<n>/bk/<k> -> row KERN_BK_STROM0 + n - 1
+        const int n = std::atoi(d.pfad + 6);
+        if (n >= 1 && n <= ERZ_STROEME) k = KERN_BK_STROM0 + n - 1;
+      } else if (d.kanal >= 0) {
         k = Mixer::kanal_index(tab.kanal_name(d.kanal));
 #ifndef CYPHERDJ_MUTATION_BK_SEND_KERN_OHNE_ZEILE   // failure case S14: global knobs skipped as before
       } else if (!std::strncmp(d.pfad, "fx/", 3) && (d.pfad[3] == '3' || d.pfad[3] == '4') && d.pfad[4] == '/') {
@@ -54,18 +63,14 @@ Kern::Kern(double start_bpm, cdj_ring_kopf* ring, Befehlsring* befehle, Ereignis
       bk_wert_[k][nr - 1] = sw_->wert(r);
     }
     mixer_->setze_bk_wert(bk_wert_);
-    erz_->setze_bk_wert(bk_wert_);
+    erz_->setze_bk_wert(&bk_wert_[KERN_BK_STROM0]);
   }
-  loops_ = std::make_unique<LoopBoxen>();  // MVP 2: feste Puffer, darum hier und nicht im Callback
   arr_ = std::make_unique<Arrangement>(sw_->tabelle());  // D1 K1: fixed buffers (sizeof(Arrangement) is 1,925,440 bytes since the 64-knob widening (1,882,176 after the 32-knob one, ArrSnapshot 94,016 -> 134,976 bytes because ARR_PARAMETER went from 32 to 64), 1,882,176 bytes since the 32-knob widening (1,857,600 before it: the device-lane cursors auto_g_/auto_gr_ grew from 8 to 32 parameters; ArrSnapshot 63,296 -> 94,016 bytes because ARR_PARAMETER went from 8 to 32), 1,358,656 bytes with 32 tracks at the time of D1 K1 (1,327,296 before 1.10 slice 4a), of which 512 KiB lane buffers and 16 KiB event ring; measured 2026-11-04 with -O2 -std=gnu++20 -DCYPHERDJ_BUNGEE=1), not in the callback
   arr_pickup_.arr = arr_.get();   // 1.12 S3 (D2): the Stellwerk asks the Arrangement for the lane value at the first applied hand step
   arr_pickup_.sperre = &nachreichen_sperre_;
   sw_->setze_pickup(&arr_pickup_);
-  arr_kanal_ = Mixer::kanal_index(ARR_KANAL);
-  {   // DJ view places, ADR 038: the DJ channels a group of the live container plays into, indexed by the DJ nr - 1: the loop slots A and B on pad/1, pad/2, the SEQ decks on deck/1..deck/4
-    static const char* const dj_namen[] = {"pad/1", "pad/2", "deck/1", "deck/2", "deck/3", "deck/4"};
-    static_assert(sizeof dj_namen / sizeof dj_namen[0] == Arrangement::DJ_KANAELE, "one mixer channel name per DJ channel");
-    for (int c = 0; c < Arrangement::DJ_KANAELE; ++c) dj_kanal_[c] = Mixer::kanal_index(dj_namen[c]);
+  {   // DJ view places, ADR 038, K5: DJ output n is container n - 1, interim until K8 the old mixer input of PULT_CONTAINER_PFAD[n - 1] (deck/1, deck/2, pad/1, pad/2); K8 replaces it with the container input
+    for (int c = 0; c < Arrangement::DJ_KANAELE; ++c) dj_kanal_[c] = Mixer::kanal_index(PULT_CONTAINER_PFAD[c]);
   }
   // D1 K2b (Spec 2.4): die RB-338 spielt alle internen Spuren (je Spur-Slot eine Instanz)
   arr_rb_ = std::make_unique<ArrRbSenke>(*arr_);
@@ -83,6 +88,8 @@ Kern::Kern(double start_bpm, cdj_ring_kopf* ring, Befehlsring* befehle, Ereignis
   // 1.9 U6: the instrument rack routes its notes to the member slots of the dispatcher and to the Wirt sinks (made above)
   arr_rack_ = std::make_unique<ArrRackSenke>(*arr_, arr_intern_.get(), arr_wirt_[0].get(), arr_wirt_[1].get());
   arr_->setze_senke_rack(arr_rack_.get());
+  arr_strom_ = std::make_unique<ArrStromSenke>(*arr_, quell_);   // container core K7: the strom tracks read the stream buffers (quell_ is bound above)
+  arr_->setze_senke_strom(arr_strom_.get());
   decks_anlegen();  // Scheibe 31: Decks, Regler-Indizes für offen und hörbar (core_deck.cpp)
   std::memset(cue_l_, 0, sizeof cue_l_);
   std::memset(cue_r_, 0, sizeof cue_r_);
@@ -129,9 +136,7 @@ void Kern::einsortieren(const Befehl& c) {
       set_neu_teile_ab();  // Scheibe 25: Planteile der alten Zeitachse ebenso
       decks_set_neu();     // Scheibe 31: wartende Deck-Befehle ebenso; geladene Decks bleiben geladen
       erz_->leeren();      // Plan 2026-09-27: Erzeuger-Ereignisse der alten Zeitachse ebenso
-      loops_->ausklingen(plan_.karte(), sample_);  // F15 (Welle 2): klingende Boxen blenden auf der alten Karte aus
-      if (Mitschnitt* mt = loops_->leeren(sample_)) mitschnitt_melden(mt, 1);  // MVP 2 Scheibe 2: laufender Mitschnitt = abgebrochen
-      for (int b = 1; b <= LOOP_BOXEN; ++b) loop_melden(b, sample_, beat0);
+      if (Mitschnitt* mt = mitschnitt_aufnahme_.leeren()) mitschnitt_melden(mt, 1);  // MVP 2 Scheibe 2: laufender Mitschnitt = abgebrochen
       plan_.neu(c.bpm);
       sample_ = 0;
       generation_ = 0;
@@ -163,10 +168,8 @@ void Kern::einsortieren(const Befehl& c) {
       break;
     case Befehl::ERZ_STROM: {  // §4.8 /erz/strom mit kit:<name>, midi:<p>:<c> oder bk:<name> (Baukasten S3a, form = -1)
       const bool bk = c.form < 0;
-      const int kanal = Mixer::kanal_index(c.pfad);
-      // setze_bk zuerst: es hält den ALTEN Kanal des abgelösten Graphen fest, setze_strom überschreibt s.kanal
-      erz_->setze_bk(c.nr, bk ? static_cast<CypherBk*>(const_cast<void*>(c.zeiger)) : nullptr, kanal);  // Kit/MIDI: Graph ab
-      const Kit* alt = erz_->setze_strom(c.nr, bk ? nullptr : static_cast<const Kit*>(c.zeiger), kanal);
+      erz_->setze_bk(c.nr, bk ? static_cast<CypherBk*>(const_cast<void*>(c.zeiger)) : nullptr);  // Kit/MIDI: Graph ab
+      const Kit* alt = erz_->setze_strom(c.nr, bk ? nullptr : static_cast<const Kit*>(c.zeiger));
       erz_->setze_midi(c.nr, bk ? 0 : c.form, c.politik);  // Studio S5: midi:<p>:<c> (form = Port, politik = Kanal); Kit: form 0
       quittung(c.id, c.quelle, 1, sample_, beat0);
       quittung(c.id, c.quelle, 3, sample_, beat0);
@@ -196,63 +199,6 @@ void Kern::einsortieren(const Befehl& c) {
       melde(x);
       break;
     }
-    case Befehl::LOOP_LADEN:
-    case Befehl::LOOP_START:
-    case Befehl::LOOP_STOPP: {  // MVP 2 (§4.9, ADR 025)
-      if (!std::strcmp(c.quelle, "cypher") && sw_->ki_gestoppt()) {  // §4.7 Stopp-Taste
-        if (c.art == Befehl::LOOP_LADEN && c.zeiger) {  // der geladene Loop geht ungenutzt zur Freigabe zurück
-          Ereignis x{};
-          x.art = Ereignis::LOOP_ALT;
-          x.sample = sample_;
-          x.zeiger = c.zeiger;
-          melde(x);
-        }
-        quittung(c.id, c.quelle, 6, sample_, beat0, "ki_gestoppt");
-        break;
-      }
-      if (c.art == Befehl::LOOP_LADEN) {
-        const Loop* alt =
-            loops_->laden(c.deck, static_cast<const Loop*>(c.zeiger), !std::strcmp(c.quelle, "cypher"), sample_);
-        if (alt) {
-          Ereignis x{};
-          x.art = Ereignis::LOOP_ALT;
-          x.sample = sample_;
-          x.zeiger = alt;
-          melde(x);
-        }
-        loops_frei(sample_);  // was die Box selbst loswird (Task 7: auch verliehene Loops nach der Quittung)
-        if (alt && alt == c.zeiger) {  // ungültige Box: der Loop kam gleich zurück
-          quittung(c.id, c.quelle, 6, sample_, beat0, "ausserhalb_bereich");
-          break;
-        }
-        quittung(c.id, c.quelle, 1, sample_, beat0);
-        quittung(c.id, c.quelle, 3, sample_, beat0);
-      } else {
-        const bool ok = c.art == Befehl::LOOP_START ? loops_->start(c.deck, beat0, sample_)
-                                                    : loops_->stopp(c.deck, beat0, sample_);  // Task 7: Ereignis-Sample
-        if (!ok) {
-          quittung(c.id, c.quelle, 6, sample_, beat0, "nicht_geladen");
-          break;
-        }
-        quittung(c.id, c.quelle, 1, sample_, beat0);
-      }
-      loop_melden(c.deck, sample_, beat0);
-      break;
-    }
-    case Befehl::LOOP_RASTER: {  // Plan Grid (§4.9 /k/loop/raster): sofort, absolut
-      if (!std::strcmp(c.quelle, "cypher") && sw_->ki_gestoppt()) {
-        quittung(c.id, c.quelle, 6, sample_, beat0, "ki_gestoppt");
-        break;
-      }
-      const int r = loops_->raster(c.deck, c.versatz_f, sample_);
-      if (r != 0) {
-        quittung(c.id, c.quelle, 6, sample_, beat0, r == 1 ? "nicht_geladen" : "ausserhalb_bereich");
-        break;
-      }
-      quittung(c.id, c.quelle, 1, sample_, beat0);
-      quittung(c.id, c.quelle, 3, sample_, beat0);
-      break;
-    }
     case Befehl::MITSCHNITT: {  // MVP 2 Scheibe 2 (§4.9 /k/loop/rec, ADR 025 Folgeplan)
       Mitschnitt* mt = static_cast<Mitschnitt*>(const_cast<void*>(c.zeiger));
       if (!std::strcmp(c.quelle, "cypher") && sw_->ki_gestoppt()) {  // §4.7 Stopp-Taste
@@ -262,8 +208,8 @@ void Kern::einsortieren(const Befehl& c) {
       }
       // Plan Tempo-Folge: jedes feste Tempo. Keylock Slice 4 (F3): abgelehnt nur, wenn jetzt eine Rampe läuft oder eine
       // (wartende oder laufende) Rampe vor dem Ende des Mitschnitts beginnt. Eine Rampe, die erst danach startet (auch auf
-      // dem End-Beat), berührt die aufgenommenen Beats nicht; der Block in LoopBoxen::block bricht ab, falls sie doch hineinreicht.
-      const double ende_beat = LoopBoxen::mitschnitt_ab_beat(beat0, mt->beats) + (double)mt->beats;
+      // dem End-Beat), berührt die aufgenommenen Beats nicht; der Block in MitschnittAufnahme::block bricht ab, falls sie doch hineinreicht.
+      const double ende_beat = MitschnittAufnahme::ab_beat(beat0, mt->beats) + (double)mt->beats;
       bool tempo_fest = plan_.karte().k_at((double)sample_) == 0.0;
       for (int i = 0; i < plan_.eintraege(); ++i)
         if (plan_.eintrag(i).start_beat < ende_beat - 1e-9) tempo_fest = false;
@@ -272,7 +218,7 @@ void Kern::einsortieren(const Befehl& c) {
         quittung(c.id, c.quelle, 6, sample_, beat0, "ausserhalb_bereich");
         break;
       }
-      if (!loops_->mitschnitt(mt, beat0, plan_.karte())) {
+      if (!mitschnitt_aufnahme_.start(mt, beat0, plan_.karte())) {
         mitschnitt_melden(mt, 1);
         quittung(c.id, c.quelle, 6, sample_, beat0, "ueberlappung");
         break;
@@ -425,11 +371,10 @@ void Kern::zyklus(int n, int64_t mono_ns) {
   u.bpm = karte.bpm_at((double)n0);
   u.k = karte.k_at((double)n0);
   u.generation = generation_;
-  u.verloren = (int64_t)verloren_;  // Glanz 2.6: ein verlorenes LOOP_ALT wird so im Netz erkennbar
+  u.verloren = (int64_t)verloren_;  // Glanz 2.6: a lost event is visible in the net this way
   u.keylock_aus = keylock_knopf() ? 0 : 1;  // Keylock Task 3: Stand des Reglers (Diagnose)
   melde(u);
   decks_zustand(n0, n);  // Scheibe 31: /zustand/deck direkt nach /uhr desselben Zyklus (§5.5)
-  boxen_zustand(n0, n);  // Keylock 7b.3: /zustand/box im selben Zyklus (§5.5b)
   komp_zustand(n0, n);   // Effekt-Sektion: Absenkung je aktivem Kompressor (§5.5c)
   mix_zustand(n0, n);    // 1.15 A6: Absenkung der Mix-Werkzeuge je Kanal (§5.5d)
   arr_zustand(n0, n);    // D1 K1: /zustand/arr (§5.13)
@@ -504,31 +449,6 @@ void Kern::zyklus(int n, int64_t mono_ns) {
   sample_ = n0 + n;
   keylock_wecken();  // Keylock Task 2.5: Vorbereiter und Arbeits-Threads (Aufträge und Ring-Verbrauch dieses Zyklus)
   keylock_antrieb();  // Bungee S2: statt der Fäden, im Callback selbst (nur mit keylock_maschine = bungee)
-}
-
-void Kern::loops_frei(int64_t smp) {  // Keylock: Freigabe-Ring der Boxen leeren; jeder Zeiger geht einmal an den Netz-Faden
-  while (const Loop* q = loops_->abholen()) {
-    Ereignis x{};
-    x.art = Ereignis::LOOP_ALT;
-    x.sample = smp;
-    x.zeiger = q;
-    melde(x);
-  }
-}
-
-void Kern::loop_melden(int box, int64_t smp, double beat) {  // MVP 2, §5.11; im Callback: ohne snprintf
-  Ereignis x{};
-  x.art = Ereignis::LOOP;
-  x.sample = smp;
-  x.beat = beat;
-  x.deck = box;
-  x.status = static_cast<int32_t>(loops_->status(box));
-  x.fx_beats = 1.0;
-  if (const Loop* l = loops_->loop(box)) {
-    for (size_t i = 0; i + 1 < sizeof x.pfad && i < l->name.size(); ++i) x.pfad[i] = l->name[i];
-    x.fassung = l->beats;
-  }
-  melde(x);
 }
 
 void Kern::mitschnitt_melden(const Mitschnitt* mt, int32_t status) {  // MVP 2 Scheibe 2, §5.11 /e/mitschnitt

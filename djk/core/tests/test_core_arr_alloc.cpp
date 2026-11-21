@@ -5,11 +5,12 @@
 // Unter ASan/TSan fehlt der Abfang: dann „übersprungen“, nie „bestanden“.
 // 1.10 slice 5 U2b: a second phase counts the cycles of a project in which EVERY kind of sidechain key is active (row sc, track post, group pre and post, return pre and post, deck/1, erz/1) with latency stages in
 // front of the keyed stages, so that the key rings run: the cycles allocate nothing either (the rings are built in the constructor of ArrInserts).
+#include <cmath>
 #include <cstdlib>
 
 #include "arr_build.h"
 #include "arr_run.h"
-#include "alloc_intercept.h"   // zuletzt: ersetzt malloc und Verwandte (wie test_loopbox_keylock)
+#include "alloc_intercept.h"   // zuletzt: ersetzt malloc und Verwandte
 
 bool g_waechter = false;
 
@@ -85,7 +86,8 @@ int main() {
     const std::string spuren_j = spur(1, stufe("eq", 1) + "," + stufe("komp", 1, key("spur", 2))) + "," + spur(2, "") + "," + spur(3, stufe("komp", 2, key("deck", 1))) + "," +
                                  spur(4, stufe("komp", 3, key("erz", 1))) + "," + spur(5, stufe("komp", 4)) + "," + spur(6, "", 1);
     const std::string gruppen_j = "{\"nr\":1,\"ausgang\":{\"art\":\"master\"},\"chain\":[" + stufe("saett", 1) + "," + stufe("komp", 5, key("spur", 2)) + "]}";
-    const std::string returns_j = "{\"nr\":1,\"ausgang\":{\"art\":\"master\"},\"chain\":[" + stufe("komp", 6, key("grp", 1)) + "]}";
+    std::string returns_j = "{\"nr\":1,\"ausgang\":{\"art\":\"master\"},\"chain\":[" + stufe("komp", 6, key("grp", 1)) + "]}";
+    returns_j += ",{\"nr\":5,\"ausgang\":{\"art\":\"master\"}},{\"nr\":8,\"ausgang\":{\"art\":\"master\"}}";   // container core K6: the returns 5 and 8 compute too (sends below)
     const std::string pm_j = "{\"chain\":[" + stufe("komp", 7, key("ret", 1)) + "," + stufe("komp", 8, key("grp", 1, "pre")) + "]}";
     y.ordner.roh(7, "{\"format\":\"cypherdj-arr/2\",\"nr\":7,\"spuren\":[" + spuren_j + "],\"gruppen\":[" + gruppen_j + "],\"returns\":[" + returns_j + "],\"pm\":" + pm_j + "}");
     cdj::ArrLadeErgebnis e = cdj::lade_wiedergabe(y.ordner.pfad, 7, y.cache);
@@ -108,6 +110,8 @@ int main() {
     y.teil("ins/komp/4/sc", 2.0f, 0.0, 0.0);   // the row key of the fifth strip
     y.teil("spur/1/send/1", 0.0f, 0.0, 0.0);   // the return computes: a send into it
     y.teil("spur/2/send/1", 0.0f, 0.0, 0.0);
+    y.teil("spur/1/send/8", 0.0f, 0.0, 0.0);   // K6: the sends 5..8 live in their own fields
+    y.teil("spur/2/send/5", -6.0f, 0.0, 0.0);
     y.start(0.0, 0);
     y.lauf(4 * N);
     long j_zyklus = 0;
@@ -133,6 +137,45 @@ int main() {
     PRUEF(j_zyklus == 0);
     y.stopp(0);
     y.lauf(y.kern->sample() + 8 * N);
+  }
+
+  {  // K7: a stream track (reads the stream buffer, trim, kill, pfl) on the callback path allocates nothing
+    arr35::Lauf z(ab.pfad, "test_kern_arr_alloc_strom");
+    z.erz_quelle[4] = [](int64_t t) { return 0.25f * std::sin(0.05f * static_cast<float>(t)); };
+    z.teil("pad/1/fader", 0.0f, 0.0, 0.0);
+    const std::string file =
+        "{\"format\":\"cypherdj-arr/4\",\"nr\":1,\"spuren\":[{\"nr\":1,\"art\":\"intern\",\"quelle\":{\"art\":\"strom\",\"strom\":5},\"ausgang\":{\"art\":\"gruppe\",\"nr\":1}}],\"live\":true,"
+        "\"gruppen\":[{\"nr\":1,\"ausgang\":{\"art\":\"dj\",\"nr\":3}}]}";
+    z.ordner.roh(1, file);
+    cdj::ArrLadeErgebnis le = cdj::lade_wiedergabe(z.ordner.pfad, 1, z.cache);
+    PRUEF(le.snap != nullptr);
+    if (le.snap) {
+      cdj::Befehl b = z.neu(cdj::Befehl::ARR_LADEN, "andreas");
+      b.zeiger = le.snap.release();
+      b.arr_nr = 1;
+      z.sende(b);
+    }
+    z.teil("spur/1/trim", 6.0f, 0.0, 0.0);
+    z.teil("spur/1/pfl", 1.0f, 0.0, 0.0);
+    z.start(0.0, 0);
+    z.lauf(4 * N);
+    long s_zyklus = 0;
+    for (int i = 0; i < 1500; ++i) {
+      if (i == 300) z.teil("spur/1/kill/tief", 1.0f, 0.0, 0.0);
+      if (i == 600) z.teil("spur/1/kill/tief", 0.0f, 0.0, 0.0);
+      if (i == 900) z.teil("spur/1/trim", -6.0f, 4.0, 4.0);
+      const int64_t n0 = z.kern->sample();
+      abfang_an();
+      z.kern->zyklus(N, n0 * 20833);
+      s_zyklus += abfang_aus();
+      cdj::Ereignis ev;
+      while (z.ere->hole(ev))
+        if (ev.art == cdj::Ereignis::ARR_ALT) cdj::gib_wiedergabe(static_cast<cdj::ArrSnapshot*>(const_cast<void*>(ev.zeiger)), z.cache);
+    }
+    std::printf("arr_alloc: stream track: %ld allocations in 1500 cycles\n", s_zyklus);
+    PRUEF(s_zyklus == 0);
+    z.stopp(0);
+    z.lauf(z.kern->sample() + 8 * N);
   }
   PRUEF_ENDE();
 }

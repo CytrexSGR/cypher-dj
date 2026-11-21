@@ -105,7 +105,7 @@ test('the quellen flag wins over the path rule', async (t) => {
   assert.deepEqual(versuche, [datei]);
 });
 
-test('a loop box that plays holds back the button and the background job although the transport stands', async (t) => {
+test('a deck that plays holds back the button and the background job although the transport stands', async (t) => {
   const d = tmp(t);
   const datei = path.join(d, 'k.wav'); fs.writeFileSync(datei, 'kick-bytes');
   const s = sha('kick-bytes');
@@ -116,11 +116,11 @@ test('a loop box that plays holds back the button and the background job althoug
   await ruf(url, 'POST', '/proj/neu', { name: 'Box' });
   const a = await ruf(url, 'POST', '/proj/aendern', { rev: 0, label: 'Spur', befehle: [{ befehl: 'spur_neu', art: 'audio', name: 'Drums' }] });
   await ruf(url, 'POST', '/proj/aendern', { rev: a.j.rev, label: 'Clip', befehle: [{ befehl: 'clip_neu', spur_id: a.j.projekt.spuren[0].id, art: 'audio', start_beat: 0, laenge_beats: 1, sha256: s }] });
-  i.vomKern('/zustand/box', { box: 1, status: 3 });   // the box runs
+  i.vomKern('/zustand/deck', { deck: 1, status: 2, material_id: 'x', basis_bpm: 128, fassung: 1, quell_beat: 0, beats_bis_ende: 64, faktor: 1, vorlauf_ms: 0 });   // the deck runs (loop boxes are gone: container core M10)
   const r = await ruf(url, 'POST', '/proj/einsammeln', {});
   assert.deepEqual([r.code, r.j.fehler], [409, 'transport_laeuft']);
   assert.match(r.j.text, /^music is playing/);
-  i.vomKern('/zustand/box', { box: 1, status: 1 });   // the box stops
+  i.vomKern('/zustand/deck', { deck: 1, status: 0, material_id: 'x', basis_bpm: 128, fassung: 1, quell_beat: 0, beats_bis_ende: 0, faktor: 1, vorlauf_ms: 0 });   // the deck stops
   assert.equal((await ruf(url, 'POST', '/proj/einsammeln', {})).code, 200, 'positive control: idle again');
 });
 

@@ -199,13 +199,13 @@ test('return_neu: smallest free nr, id r1, defaults, Hall defaults; controls; af
   assert.deepEqual(zwei.projekt.returns.map((x) => [x.id, x.nr]), [['r1', 1], ['r2', 2]]);
 });
 
-test('return_neu: limit of four (routing_grenze), arguments, an id is never reused and the freed number is', () => {
+test('return_neu: limit of eight (routing_grenze), arguments, an id is never reused and the freed number is', () => {
   let p = mitRet();
-  for (let i = 0; i < 4; i++) p = ok(p, { befehl: 'return_neu' }).projekt;
-  lehntAb(p, { befehl: 'return_neu' }, 'routing_grenze');                                          // the fifth
+  for (let i = 0; i < 8; i++) p = ok(p, { befehl: 'return_neu' }).projekt;
+  lehntAb(p, { befehl: 'return_neu' }, 'routing_grenze');                                          // the ninth
   const q = ok(p, { befehl: 'return_loeschen', return_id: 'r2' }).projekt;
   const n = ok(q, { befehl: 'return_neu' }).projekt;
-  assert.equal(n.returns.find((x) => x.nr === 2).id, 'r5', 'id never reused, the freed number (slot) is reused'); assert.ok(!n.returns.some((x) => x.id === 'r2'));
+  assert.equal(n.returns.find((x) => x.nr === 2).id, 'r9', 'id never reused, the freed number (slot) is reused'); assert.ok(!n.returns.some((x) => x.id === 'r2'));
   const o = mitRet();
   lehntAb(o, { befehl: 'return_neu', farbe: 'red' }, 'argument_ungueltig');
   lehntAb(o, { befehl: 'return_neu', name: '' }, 'argument_ungueltig');

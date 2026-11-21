@@ -3,8 +3,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ZIELE, DECKS, art, GRIFF, griffZuMidi, midiRoh, wertAusMidi, formatiere, vorgabe } from '../public/curves.js';
 
-test('Ziel-Liste: 41 Pfade, je Deck 13 (mit PFL und Crossfader-Zuweisung), erz/1 11, pad/1 und pad/2 je 11 (ohne Tasten) plus xfader, master/pegel, cue/mix, cue/pegel', () => {
-  assert.equal(ZIELE.size, 87 + 128 + 33 + 12 * 64 + 204 + 2 * 64 + 64 + 16 + 2 * 13 + 64 + 32 + 96);   // loop deck channel strip KZ1: + spur/1..32/eq/{tief,mitte,hoch};   // loop deck K7a: + spur/1..32/filter;   // 1518 (+ master/bk/1..64, the graph place on the DJ master); 1454 (places slice 1 task 2: + deck/3 and deck/4, 2 x 13 = 26 (ten channel-strip rows, play, cue, crossfader side); 1428 (live modules task 6: + grp/1..16/cue, 16; 1412 (nested groups task 1: + groups 9..16, 64; before 1348; was 900 at 32 knobs); S14: + fx/3, fx/4 x 64 graph knobs; 1.10 Slice 3: + 128 + 32 sends, 16 return and 28 hall controls; S5r: + <kanal>/bk/1..64 on 12 channels; K2: plus master/kleber; D1 K1/E3: spur/1..32 je fader, pan, mute, solo; 1.10: grp/1..8 je 4 plus pm/fader
+test('Ziel-Liste: container strips A..D (11 rows each), player keys of decks 1..4, stream alias strips (10 rows each), plus xfader, master/pegel, cue/mix, cue/pegel', () => {
+  // 1646 before the container core; minus deck/3 and deck/4 strips and the erz/1..3 and pad strips of the old model, plus 4 x 11 containers, 4 x 2 keys, 8 streams x 10 alias rows (132 strip rows), 14 x 64 graph knobs (896)
+  // re-measured at the integration (X1), by prefix: deck 158 + pad 150 + erz 592 (8 streams x 74) + xfader 1 + master 67 + cue 2 + spur 672 (32 x (13 rows + 8 sends)) + grp 208 + pm 1 + ret 88 + fx 128 (graph knobs of fx/3 and fx/4), measured with the container-core ZIELE table
+  assert.equal(ZIELE.size, 2067);
   for (const p of ['deck/1/fader', 'deck/2/eq/tief', 'deck/1/kill/hoch', 'deck/2/play', 'deck/1/cue', 'xfader',
     'deck/1/pfl', 'deck/2/pfl', 'master/pegel', 'master/kleber', 'cue/mix', 'cue/pegel', 'erz/1/fader']) assert.ok(ZIELE.has(p), p);
 });
@@ -92,23 +94,23 @@ test('Nachtrag: cue/mix −1 (nur Cue) bis +1 (nur Master), Vorgabe −1; PFL al
 });
 
 test('Crossfader-Zuweisung deck/<n>/xseite (2026-09-27): A 0, THRU 1, B 2 als midi_roh 0, 0,5, 1 (FORMAT 22 g)', () => {
-  assert.ok(ZIELE.has('deck/1/xseite') && ZIELE.has('deck/2/xseite') && ZIELE.has('deck/3/xseite') && ZIELE.has('deck/4/xseite'));
-  assert.ok(!ZIELE.has('deck/5/xseite'));
+  assert.ok(ZIELE.has('deck/1/xseite') && ZIELE.has('deck/2/xseite') && ZIELE.has('pad/1/xseite') && ZIELE.has('pad/2/xseite'));
+  assert.ok(!ZIELE.has('deck/3/xseite') && !ZIELE.has('deck/4/xseite') && !ZIELE.has('deck/5/xseite'), 'decks 3 and 4 have no strip');
   assert.equal(art('deck/1/xseite'), 'xseite');
   assert.deepEqual([0, 1, 2].map((w) => midiRoh('deck/2/xseite', w)), [0, 0.5, 1]);
   assert.deepEqual([0, 0.5, 1].map((u) => GRIFF.xseite.wert(u)), [0, 1, 2]);
   assert.equal(vorgabe('deck/1/xseite'), 1);
 });
 
-test('Strudel-Kanal erz/1: Kanalzug greifbar, keine Tasten, andere Erzeuger nicht', () => {
-  for (const p of ['erz/1/fader', 'erz/1/eq/tief', 'erz/1/kill/hoch', 'erz/1/filter', 'erz/1/trim', 'erz/1/pfl', 'erz/1/xseite']) {
+test('Strudel stream aliases erz/<n>: strip rows reachable, no keys, no crossfader side, streams outside the list not', () => {
+  for (const p of ['erz/1/fader', 'erz/1/eq/tief', 'erz/1/kill/hoch', 'erz/1/filter', 'erz/1/trim', 'erz/1/pfl', 'erz/9/fader', 'erz/10/pfl']) {
     assert.ok(ZIELE.has(p), p);
   }
   assert.equal(art('erz/1/fader'), 'fader');
   assert.equal(art('erz/1/eq/mitte'), 'eq');
-  for (const p of ['erz/1/play', 'erz/4/fader']) assert.ok(!ZIELE.has(p), p);
+  for (const p of ['erz/1/play', 'erz/1/xseite', 'erz/4/fader', 'erz/8/fader', 'erz/11/fader']) assert.ok(!ZIELE.has(p), p);
 });
-test('Loop-Boxen pad/1, pad/2: Kanalzug und Crossfader-Seite greifbar, keine Tasten, andere Pads nicht', () => {
+test('Containers C and D (pad/1, pad/2): strip and crossfader side reachable, no keys, other pads not', () => {
   for (const k of ['pad/1', 'pad/2']) {
     for (const p of ['fader', 'eq/tief', 'kill/hoch', 'filter', 'trim', 'pfl', 'xseite']) assert.ok(ZIELE.has(`${k}/${p}`), `${k}/${p}`);
   }
@@ -132,8 +134,8 @@ test('K2 Kleber: linear 0..1 (u = Wert), Vorgabe 0 = aus, Anzeige OFF / Prozent'
 });
 
 test('D1 K1: Spur-Regler spur/1..32 in der Ziel-Liste, Kurven wie der Kern (fader K_FADER, pan linear −1..1, Schalter)', () => {
-  for (const n of [1, 8, 9, 20, 32]) for (const p of ['fader', 'pan', 'mute', 'solo']) assert.ok(ZIELE.has(`spur/${n}/${p}`), `spur/${n}/${p}`);
-  assert.ok(!ZIELE.has('spur/33/fader') && !ZIELE.has('spur/0/fader') && !ZIELE.has('spur/1/trim'));   // n+1 und 0 fehlen
+  for (const n of [1, 8, 9, 20, 32]) for (const p of ['fader', 'pan', 'mute', 'solo']) assert.ok(ZIELE.has(`spur/${n}/${p}`), `spur/${n}/${p}`);   // spur/1/trim is a row of the K7 track mixer now, so the negative control uses a name no row has
+  assert.ok(!ZIELE.has('spur/33/fader') && !ZIELE.has('spur/0/fader') && !ZIELE.has('spur/1/bogus'));   // n+1 und 0 fehlen
   assert.equal(art('spur/32/fader'), 'spur_fader');   // zweistellig: die Zahl ist keine Fangruppe, die Art liest das Feld
   assert.equal(art('spur/20/mute'), 'schalter');
   assert.equal(art('spur/33/fader'), null);
@@ -170,18 +172,18 @@ test('S14 ZIELE: fx/3/bk/1..64 and fx/4/bk/1..64 are targets, other fx numbers a
 
 // 64 knobs: two-digit knob numbers are anchored: bk/1 is not bk/10..19, bk/3 is not bk/33
 test('64 knobs ZIELE: <kanal>/bk/1..64 on every graph channel, nothing outside, bk/1 and bk/1x are separate paths', () => {
-  for (const k of ['deck/1', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/7', 'pad/2', 'fx/3', 'fx/4']) {
+  for (const k of ['deck/1', 'deck/2', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/7', 'erz/9', 'erz/10', 'pad/1', 'pad/2', 'fx/3', 'fx/4']) {
     for (const n of [1, 9, 10, 19, 20, 31, 32, 33, 48, 63, 64]) { assert.ok(ZIELE.has(`${k}/bk/${n}`), `${k}/bk/${n}`); assert.equal(art(`${k}/bk/${n}`), 'bk', `${k}/bk/${n}`); }
     for (const n of ['0', '65', '70', '100', '010', '1x', 'x1', '1.5', '-1', '']) { assert.ok(!ZIELE.has(`${k}/bk/${n}`), `${k}/bk/${n}`); assert.notEqual(art(`${k}/bk/${n}`), 'bk', `${k}/bk/${n}`); }
   }
-  for (const p of ['erz/4/bk/9', 'erz/8/bk/9', 'deck/5/bk/9', 'bus/1/bk/9', 'erz/4/bk/32', 'erz/4/bk/64']) assert.ok(!ZIELE.has(p), p);
+  for (const p of ['erz/1/bk/65', 'erz/4/bk/9', 'erz/8/bk/9', 'deck/3/bk/9', 'deck/4/bk/9', 'deck/5/bk/9', 'bus/1/bk/9', 'erz/4/bk/32', 'erz/4/bk/64']) assert.ok(!ZIELE.has(p), p);
 });
 
-test('Places slice 1: DECKS is 1..4; deck 3 and 4 targets are in the list and classify like deck 1; deck 5 is neither', () => {
+test('DECKS is 1..4 (players); deck 3 and 4 have keys but no strip; art classifies by pattern; deck 5 is nothing', () => {
   assert.deepEqual(DECKS, [1, 2, 3, 4]);
-  for (const n of [3, 4]) for (const p of ['fader', 'trim', 'eq/hoch', 'eq/mitte', 'eq/tief', 'kill/hoch', 'kill/mitte', 'kill/tief', 'filter', 'pfl', 'play', 'cue', 'xseite']) {
-    assert.ok(ZIELE.has(`deck/${n}/${p}`), `deck/${n}/${p}`);
-    assert.equal(art(`deck/${n}/${p}`), art(`deck/1/${p}`), `art deck/${n}/${p}`);
+  for (const n of [3, 4]) {
+    for (const p of ['play', 'cue']) assert.ok(ZIELE.has(`deck/${n}/${p}`), `deck/${n}/${p}`);
+    for (const p of ['fader', 'trim', 'eq/hoch', 'filter', 'pfl', 'xseite']) { assert.ok(!ZIELE.has(`deck/${n}/${p}`), `deck/${n}/${p}`); assert.equal(art(`deck/${n}/${p}`), art(`deck/1/${p}`), `art deck/${n}/${p}`); }
   }
   assert.equal(art('deck/4/fader'), 'fader');
   assert.equal(art('deck/4/play'), 'taste');

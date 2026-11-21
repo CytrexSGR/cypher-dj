@@ -6,7 +6,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { LOOPBOXEN } from '../public/curves.js';
 
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const lies = (n) => fs.readFileSync(path.join(PUBLIC, n), 'utf8');
@@ -22,12 +21,10 @@ test('the page has no loop field D and no loop boxes', () => {
     assert.ok(!app.includes(sym), `${sym} is gone from app.js`);
 });
 
-test('the L1 and L2 strips stay and are wired to pad/1 and pad/2', () => {
-  assert.deepEqual(LOOPBOXEN, ['pad/1', 'pad/2']);
-  assert.match(html, /data-boxzug="1"/); assert.match(html, /data-boxzug="2"/);
-  const f = app.slice(app.indexOf('function baueLoopZuege('));
-  assert.match(f.slice(0, 900), /\$\(`\.zug\[data-boxzug="\$\{n\}"\]`\)/);
-  assert.match(f.slice(0, 900), /dataset\.pfad = `\$\{k\}\/\$\{e\.dataset\.teil\}`/);
-  assert.match(app, /^baueLoopZuege\(\);$/m);
-  assert.doesNotMatch(app, /baueBoxen/);
+test('the strips of the pad containers C and D are the container strips, built with the others; there is no L1/L2 pair', () => {
+  assert.doesNotMatch(html, /data-boxzug/);
+  assert.match(html, /data-kanalzug="pad\/1"/); assert.match(html, /data-kanalzug="pad\/2"/);
+  assert.match(app, /for \(const c of CONTAINER\) baueZug\(\$\(`\.zug\[data-kanalzug="\$\{c\.pfad\}"\]`\), c\.pfad\);/);
+  assert.match(app, /e\.dataset\.pfad = `\$\{k\}\/\$\{e\.dataset\.teil\}`/);
+  assert.doesNotMatch(app, /baueLoopZuege|baueBoxen|LOOPBOXEN/);
 });

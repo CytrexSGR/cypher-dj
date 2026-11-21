@@ -2,13 +2,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { instrumentReiterHtml, instrumentLabel, bindeInstrumente, lernPfadVon } from '../public/instruments_view.js';
-import { GRAPH_KANAL_ART } from '../public/effects.js';
+import { bkKanaele } from '../public/kanaele.js';
 
 test('tabs: label and graph per channel, selected tab, picker and knob area in the body', () => {
   const h = instrumentReiterHtml(['erz/5', 'erz/6', 'pad/1'], 'erz/6', { 'erz/6': 'synth-mono' });
   assert.match(h, /<button[^>]*data-instrument="erz\/6"[^>]*aria-selected="true"[^>]*>I6 · synth-mono<\/button>/);
   assert.match(h, /<button[^>]*data-instrument="erz\/5"[^>]*aria-selected="false"[^>]*>I5 · empty<\/button>/);
-  assert.match(h, />P1 · empty<\/button>/);
+  assert.match(h, />C · empty<\/button>/);
   assert.match(h, /<div class="graphplatz" data-graphplatz="erz\/6">/);
   assert.match(h, /<div class="bkliste">/);
   assert.ok(!h.includes('—'));
@@ -21,7 +21,7 @@ test('graph names are escaped', () => {
 });
 
 test('labels cover every instrument channel of the picker', () => {
-  for (const [k, art] of Object.entries(GRAPH_KANAL_ART)) if (art === 'instrument') assert.match(instrumentLabel(k), /^[IP]\d$/, k);
+  for (const k of bkKanaele()) assert.match(instrumentLabel(k), /^([A-D]|I\d+)$/, k);
 });
 
 function fakeWurzel() {

@@ -16,7 +16,7 @@ import type { BereichKontext } from '../../http/router.ts';
 import { BK_KNOPF_VORGABE, bkSlot, BK_LIVE_SLOTS, type Projekt } from '../../project/model.ts';
 
 export const RUHE_MS = 400;
-const ZEILE = /^spur\/([1-9])\/bk\/([1-9][0-9]?)$/;
+const ZEILE = /^spur\/([1-9][0-9]?)\/bk\/([1-9][0-9]?)$/;   // the slot range itself is BK_LIVE_SLOTS (spurDerZeile)
 const EPS = 1e-6;
 
 export interface ZurueckZugang {

@@ -119,12 +119,16 @@ int main() {
       Lauf x(ab.pfad, nullptr);
       x.teil("erz/2/fader", 0.0f, 0.0, 0.0);
       if (lauf == 0) x.kern->rueck(2, wirt_l, wirt_r);
-      x.zyklen(4 * SPB);
-      float p = -999.0f;
-      for (const auto& ev : x.alle(cdj::Ereignis::PEGEL, "erz/2")) p = std::max(p, ev.pegel[0]);
+      float p = -999.0f;   // K4: the level is read off the stream buffer (the /pegel channel erz/2 is gone, strom/2 only exists for a set stream)
+      for (int64_t z = 0; z < 4 * SPB / N; ++z) {
+        x.zyklen(x.kern->sample() + N);
+        float sp = 0.0f;
+        for (int i = 0; i < N; ++i) sp = std::max(sp, std::fabs(x.kern->quellpuffer().strom_l[1][i]));
+        p = std::max(p, sp > 1e-10f ? 20.0f * std::log10(sp) : -200.0f);
+      }
       (lauf == 0 ? mit : ohne) = p;
     }
-    std::printf("instrument rueckweg: erz/2 mit %.1f dB, ohne %.1f dB\n", mit, ohne);
+    std::printf("instrument rueckweg: strom/2 mit %.1f dB, ohne %.1f dB\n", mit, ohne);
     PRUEF(mit > -20.0f && mit < 0.0f);
     PRUEF(ohne <= -100.0f);
   }

@@ -26,8 +26,8 @@ import ablage  # noqa: E402
 SEITE = "http://127.0.0.1:47300"
 PLAETZE = [  # group button -> (channel, short name, colour)
     ("erz/2", "BASS", (255, 60, 0)), ("erz/3", "MELODY", (255, 180, 0)), ("erz/5", "I5", (120, 255, 0)),
-    ("erz/6", "I6", (0, 255, 120)), ("erz/7", "I7", (0, 180, 255)), ("pad/1", "L1", (60, 60, 255)),
-    ("pad/2", "L2", (180, 0, 255)), ("fx/3", "REMIX", (0, 230, 200)),
+    ("erz/6", "I6", (0, 255, 120)), ("erz/7", "I7", (0, 180, 255)), ("pad/1", "C", (60, 60, 255)),
+    ("pad/2", "D", (180, 0, 255)), ("fx/3", "REMIX", (0, 230, 200)),
 ]
 GRAPH_ORDNER = str(ablage.ordner("geraete"))
 SCHRITT = 0.01      # value change per encoder step (knobs run 0..1)

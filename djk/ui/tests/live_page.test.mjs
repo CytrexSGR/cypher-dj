@@ -8,8 +8,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { neuesProjekt } from '../project/model.ts';
-import { baueModul, baueNeuePfade, liveSlots } from '../project/live.ts';
-import { modulAnsicht, oeffneLive, tonartAnsicht, kanalAnsicht } from '../public/live_module.js';
+import { baueModul, baueNeuePfade, modulAmPlatz } from '../project/live.ts';
+import { modulAnsicht, oeffneLive, tonartAnsicht, kanalAnsicht, kanalKennung, istKanalZustand, SLOTS } from '../public/live_module.js';
 const importVon = (datei, vor = './') => new RegExp(`from '${(vor + datei).replace(/[.]/g, '\\.')}'`);   // the file name stays a plain literal so the export's file renaming rewrites it too (a regex literal escapes the dot and escapes the rewrite)
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
@@ -17,7 +17,7 @@ const HASH = 'c'.repeat(64), D = (n) => ({ sha256: n.repeat(64), pfad: `/x/${n}.
 const herkunft = (extra = {}) => ({ quelle_sha256: HASH, titel: 'Night <Drive>', kuenstler: 'Art', fassung: '1', basis_bpm: 120, von_beat: 4, laenge_beats: 16, bpm: 126,
   tonart: '8A', datum: '2026-11-12', ...extra });
 const LOOP = { ...D('e'), beats: 16, frames: 16 * 24000 };
-const live = () => { const p = neuesProjekt('live'); p.live = true; return p; };
+const live = () => { const p = neuesProjekt('live'); p.live = true; p.plaetze = [{ typ: 'leer' }, { typ: 'leer' }, { typ: 'leer' }, { typ: 'leer' }]; return p; };
 const vier = () => ({ drums: D('1'), bass: D('2'), other: D('3'), vocals: D('4') });
 
 test('no open project, or a production project: the panel is closed (offen false), no slot cards', () => {
@@ -25,15 +25,18 @@ test('no open project, or a production project: the panel is closed (offen false
   assert.equal(modulAnsicht(neuesProjekt('prod'), {}, null).offen, false);
 });
 
-test('the live container without modules renders two empty slots A and B', () => {
+test('the live container without a stems place has no slot card; a module is addressed by its place letter A..D', () => {
   const a = modulAnsicht(live(), { A: null, B: null }, null);
   assert.equal(a.offen, true);
-  assert.deepEqual(a.slots.map((s) => [s.slot, s.zustand.art, s.leer]), [['A', 'leer', true], ['B', 'leer', true]]);
+  assert.deepEqual(a.slots, []);
+  const p = baueModul(baueModul(live(), 'D', LOOP, {}, herkunft()), 'B', LOOP, {}, herkunft());
+  assert.deepEqual(modulAnsicht(p, {}, null).slots.map((s) => [s.slot, s.kanal.pfad, s.leer]), [['B', 'deck/2', false], ['D', 'pad/2', false]], 'in place order, on the strip of the container');
+  assert.deepEqual(SLOTS, ['A', 'B', 'C', 'D']);
 });
 
 test('a module with four stems: title (escaped), origin, module fader, one original fader per stem, clear button, state ready', () => {
   const p = baueModul(live(), 'A', LOOP, vier(), herkunft());
-  const stand = { A: { gruppe_id: liveSlots(p).A, titel: 'Night <Drive>', stems: { stems: 'fertig' } }, B: null };
+  const stand = { A: { gruppe_id: modulAmPlatz(p, 'A'), titel: 'Night <Drive>', stems: { stems: 'fertig' } }, B: null };
   const a = modulAnsicht(p, stand, null);
   const s = a.slots[0];
   assert.equal(s.zustand.art, 'bereit');
@@ -41,13 +44,13 @@ test('a module with four stems: title (escaped), origin, module fader, one origi
   assert.equal(s.faderDb, 0);
   assert.deepEqual(s.stems.map((x) => [x.name, x.faderDb]), [['Drums', 0], ['Bass', 0], ['Other', 0], ['Vocals', 0]]);
   assert.ok(s.stems.every((x) => /^s\d+$/.test(x.spurId)), 'the original track of each stem is the fader target');
-  assert.equal(a.slots[1].leer, true);
+  assert.equal(a.slots.length, 1, 'places B..D hold no module: no card');
 });
 
 test('separation progress: waiting, running with percent from the proj_stems state of the same job, failed with its reason and a retry', () => {
   const p = baueModul(live(), 'B', LOOP, {}, herkunft());
-  const id = liveSlots(p).B;
-  const mit = (st, stems) => modulAnsicht(p, { A: null, B: { gruppe_id: id, stems: st } }, stems).slots[1];
+  const id = modulAmPlatz(p, 'B');
+  const mit = (st, stems) => modulAnsicht(p, { A: null, B: { gruppe_id: id, stems: st } }, stems).slots[0];
   assert.deepEqual(mit({ stems: 'wartet' }, null).zustand, { art: 'trennt', text: 'SEPARATING', prozent: null });
   assert.deepEqual(mit({ stems: 'laeuft', auftrag_id: 7 }, { auftrag_id: 7, zustand: 'laeuft', prozent: 41.6 }).zustand, { art: 'trennt', text: 'SEPARATING 42 %', prozent: 42 });
   assert.equal(mit({ stems: 'laeuft', auftrag_id: 7 }, { auftrag_id: 6, zustand: 'laeuft', prozent: 90 }).zustand.prozent, null, 'another job is not ours');
@@ -107,7 +110,7 @@ test('review fix 7: the production project choice confirms on live_laeuft and re
 
 const NOTEN = [{ beat: 0, laenge: 0.25, ton: 36, vel: 100 }];
 const mitPfad = () => baueNeuePfade(baueModul(live(), 'A', LOOP, vier(), herkunft()), 'A', { drums: NOTEN });
-const standA = (p, extra = {}) => ({ A: { gruppe_id: liveSlots(p).A, stems: { stems: 'fertig' }, ...extra }, B: null });
+const standA = (p, extra = {}) => ({ A: { gruppe_id: modulAmPlatz(p, 'A'), stems: { stems: 'fertig' }, ...extra }, B: null });
 
 test('a stem with a new path gets the rows original fader, new fader and blend; the others only the original fader', () => {
   const p = mitPfad();
@@ -117,23 +120,26 @@ test('a stem with a new path gets the rows original fader, new fader and blend; 
   assert.equal(bass.neu, undefined);
 });
 
-test('DJ view places: the slot row has no MODULE slider and no CUE button, shows its channel (Loop 1 on pad/1, Loop 2 on pad/2) open or closed', () => {
-  const p = mitPfad();
-  const g = p.gruppen.find((x) => x.id === liveSlots(p).A);
-  const zu = modulAnsicht(p, standA(p), null, { 'pad/1/trim': 0, 'pad/1/fader': -200 }).slots[0];
-  assert.deepEqual(zu.kanal, kanalAnsicht('A', { 'pad/1/trim': 0, 'pad/1/fader': -200 }));
-  assert.deepEqual([zu.kanal.pfad, zu.kanal.name, zu.kanal.offen], ['pad/1', 'Loop 1', false]);
+test('the module of place C plays on the channel of container C: open or closed by the rule of kanalOffen, no MODULE slider, no CUE button', () => {
+  const p = baueModul(live(), 'C', LOOP, vier(), herkunft());
+  const zu = modulAnsicht(p, { C: { gruppe_id: modulAmPlatz(p, 'C'), stems: { stems: 'fertig' } } }, null, { 'pad/1/trim': 0, 'pad/1/fader': -200 }).slots[0];
+  assert.deepEqual(zu.kanal, kanalAnsicht('C', { 'pad/1/trim': 0, 'pad/1/fader': -200 }));
+  assert.deepEqual([zu.slot, zu.kanal.pfad, zu.kanal.name, zu.kanal.offen], ['C', 'pad/1', 'Container C', false]);
   assert.equal('cue' in zu, false, 'no cue state in the slot model');
-  const offen = modulAnsicht(p, standA(p), null, { 'pad/1/trim': 0, 'pad/1/fader': -6 });
-  assert.equal(offen.slots[0].kanal.offen, true);
-  assert.equal(offen.slots[1].kanal.pfad, 'pad/2', 'slot B is Loop 2 on pad/2');
-  assert.equal(offen.slots[1].kanal.offen, false);
-  assert.ok(g.nr > 0);
+  assert.equal(modulAnsicht(p, {}, null, { 'pad/1/trim': 0, 'pad/1/fader': -6 }).slots[0].kanal.offen, true);
   // the rule is the one of kanalOffen (hand_operation.ts): -26 dB is still closed, an unknown fader is closed, an unknown trim is 0
-  assert.equal(kanalAnsicht('A', { 'pad/1/fader': -26 }).offen, false);
-  assert.equal(kanalAnsicht('A', { 'pad/1/fader': -25.5 }).offen, true);
+  assert.equal(kanalAnsicht('A', { 'deck/1/fader': -26 }).offen, false);
+  assert.equal(kanalAnsicht('A', { 'deck/1/fader': -25.5 }).offen, true);
   assert.equal(kanalAnsicht('B', {}).offen, false);
-  assert.equal(kanalAnsicht('B', { 'pad/2/trim': 12, 'pad/2/fader': -30 }).offen, true);
+  assert.equal(kanalAnsicht('D', { 'pad/2/trim': 12, 'pad/2/fader': -30 }).offen, true);
+  assert.deepEqual(['A', 'B', 'C', 'D'].map((x) => kanalAnsicht(x, {}).pfad), ['deck/1', 'deck/2', 'pad/1', 'pad/2']);
+});
+
+test('the channel key of the live view covers the four containers; only the fader and trim rows of a container strip count', () => {
+  assert.equal(kanalKennung({}), 'falsefalsefalsefalse');
+  assert.equal(kanalKennung({ 'deck/2/fader': -6, 'pad/2/trim': 0, 'pad/2/fader': -3 }), 'falsetruefalsetrue');
+  for (const pfad of ['deck/1/fader', 'deck/2/trim', 'pad/1/fader', 'pad/2/trim']) assert.equal(istKanalZustand(pfad), true, pfad);
+  for (const pfad of ['deck/3/fader', 'pad/3/trim', 'erz/1/fader', 'deck/1/pfl', 'pad/1/fader/x', 'master/fader', '', undefined]) assert.equal(istKanalZustand(pfad), false, String(pfad));
 });
 
 test('the live module helpers of the cue are gone from the page code', () => {
@@ -151,11 +157,10 @@ test('KEY: shows the distance from /modul/stand, off when 0 or unknown, posts th
   assert.match(tonartAnsicht({ tonart_abstand: null, tonart_grund: 'kein_deck' }).titel, /kein_deck/);
 });
 
-test('wiring: the module panel handlers are gone; the L1/L2 strips write pad/N/fader; the channel state redraws on pad/N rows', () => {
+test('wiring: the module panel handlers are gone; the container strips write <channel>/<part>; the channel state redraws on the fader and trim rows of a container', () => {
   const app = liesApp();
-  const kurven = fs.readFileSync(path.join(HIER, '..', 'public', 'curves.js'), 'utf8');
-  assert.match(kurven, /LOOPBOXEN = \['pad\/1', 'pad\/2'\]/, 'the loop strips L1, L2 are the channels pad/1, pad/2');
-  assert.match(app, /e\.dataset\.pfad = `\$\{k\}\/\$\{e\.dataset\.teil\}`/, 'every control of the L1/L2 strip (fader included) writes <channel>/<part>');
+  assert.match(app, /for \(const c of CONTAINER\) baueZug\(/, 'the strips of the pad containers C and D are built like the deck strips');
+  assert.match(app, /e\.dataset\.pfad = `\$\{k\}\/\$\{e\.dataset\.teil\}`/, 'every control of a container strip (fader included) writes <channel>/<part>');
   assert.doesNotMatch(app, /live-blendregler|sendeBlend|passeTonartAn\(slot, holeJson\)|bindeLive\b|#live-panel/);
-  assert.match(app, /pad\\\/\[12\]\\\/\(fader\|trim\)\$\/\.test\(f\.pfad\) && liveOffen\(\)/);
+  assert.match(app, /istKanalZustand\(f\.pfad\) && liveOffen\(\)/);
 });

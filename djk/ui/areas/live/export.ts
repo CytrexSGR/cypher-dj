@@ -15,8 +15,10 @@ import { schneideAusFassung, leseLoopQuelle, type LoopQuelle } from '../../loops
 import { schreibeWavAusF32Stueckweise } from '../../project/recording.ts';
 import { aendereStand } from '../../project/state.ts';
 import { neueModulId } from '../../project/module_storage.ts';
-import { baueModul, liveSlots, normiereSlot, liveRegion, LOOP_SPUR, type ModulDatei, type ModulLoop, type ModulHerkunftSlot } from '../../project/live.ts';
+import { pultContainerPfad } from '../../../contract/pult.ts';
+import { baueModul, modulAmPlatz, normierePlatz, slotPlatz, SLOTS, liveRegion, LOOP_SPUR, type Slot, type ModulDatei, type ModulLoop, type ModulHerkunftSlot } from '../../project/live.ts';
 import { MAX_GRUPPEN, MAX_SPUREN, type Herkunft, type Projekt } from '../../project/model.ts';
+import { platzFrei, slotBelegt, kanalOffenFehler, waehleModulSlot } from './platzwahl.ts';
 import type { StemsPlan, Stem } from '../../project/stems.ts';
 import { alsAntwort, leseKoerper, type ProjZugang } from '../proj/area.ts';
 import { ProjFehler, type Antwort } from '../proj/session.ts';
@@ -40,8 +42,8 @@ export interface ExportOptionen {
   jetzt?: () => Date;
   // Hooks of the module store (task 3): nachExport runs once after the loop-only module is in the project, never for a failed export; nachStems runs
   // when the stems have been placed (the saved module then holds them, same module id)
-  nachExport?(e: { slot: 'A' | 'B'; gruppeId: string; projekt: Projekt }): void | Promise<void>;
-  nachStems?(e: { slot: 'A' | 'B'; gruppeId: string; projekt: Projekt }): void | Promise<void>;
+  nachExport?(e: { slot: Slot; gruppeId: string; projekt: Projekt }): void | Promise<void>;
+  nachStems?(e: { slot: Slot; gruppeId: string; projekt: Projekt }): void | Promise<void>;
   leeren?: LeerenOptionen;   // POST /modul/leeren (task 3): clock source, store, test seam; POST /modul/blend (task 8) takes the same clock
   midi?: MidiOptionen;       // task 8: the MIDI extraction of Drums and Bass after the stems (absent: no new paths)
   samplerOrdner?(): string | undefined;   // SEQ deck: the cut store of this instance (server.ts)
@@ -55,7 +57,6 @@ export interface ExportOptionen {
   // DJ view places task 10: the loop library folder (POST /modul/loop); absent = the verb answers loop_unbekannt
   loopOrdner?(): string;
 }
-type Slot = 'A' | 'B';
 export interface ModulStand { stems: 'wartet' | 'laeuft' | 'fertig' | 'fehler'; grund?: string; text?: string; detail?: string; auftrag_id?: number }
 
 const text = (g: string): string => grundText(g);
@@ -105,8 +106,7 @@ export class Modulexport {
 
   stand(): Record<string, unknown> {
     const o = this.zugang.offen();
-    const slots = o?.projekt.live ? liveSlots(o.projekt) : {};
-    return { A: this.slotStand('A', slots.A), B: this.slotStand('B', slots.B) };
+    return Object.fromEntries(SLOTS.map((s) => [s, this.slotStand(s, o?.projekt.live ? modulAmPlatz(o.projekt, s) : undefined)]));
   }
   private slotStand(slot: Slot, gruppeId: string | undefined): Record<string, unknown> | null {
     if (gruppeId === undefined) return null;
@@ -125,15 +125,15 @@ export class Modulexport {
 
   async exportiere(d: Record<string, unknown>, quelle: 'andreas' | 'cypher'): Promise<Antwort> {
     for (const k of Object.keys(d)) if (k !== 'deck' && k !== 'slot') throw new ProjFehler(400, 'argument_unbekannt', { detail: k });
-    if (d.slot !== undefined) {                                                // 1/2 and A/B (decision 13)
-      const s0 = normiereSlot(d.slot);
-      if (s0 === undefined) throw new ProjFehler(400, 'argument_ungueltig', { detail: "slot: 1, 2, 'A' or 'B'" });
+    if (d.slot !== undefined) {                                                // a place: 1..4 or the container letter A..D
+      const s0 = normierePlatz(d.slot);
+      if (s0 === undefined) throw new ProjFehler(400, 'argument_ungueltig', { detail: "slot: a place 1..4 or 'A'..'D'" });
       d = { ...d, slot: s0 };
     }
     if (quelle === 'cypher' && this.ctx.kiGestoppt()) throw new ProjFehler(409, 'ki_gestoppt');
     const o0 = this.zugang.offen();
     if (!o0 || !o0.projekt.live) throw new ProjFehler(409, 'kein_liveprojekt');
-    const slot = this.waehleSlot(o0.projekt, d.slot as Slot | undefined);
+    const slot = waehleModulSlot(o0.projekt, d.slot as Slot | undefined, this.o.kanalOffen, this.imBau);
     const a = this.o.deckLoop(d.deck);
     if ('fehler' in a) throw new ProjFehler(a.code, a.fehler, { text: text(a.fehler) });
     const z = this.o.herkunft(a.material_id);
@@ -159,28 +159,29 @@ export class Modulexport {
 
   // The part both verbs share: with the WAV written, place the module (checks that may have changed while the file was written, one undo step, the
   // store hook, the separation in the background). `markiere` runs once the project owns the file, so the caller keeps the WAV from then on.
-  private async legeAb(slot: Slot, o0: NonNullable<ReturnType<ProjZugang['offen']>>, loop: ModulLoop, herkunft0: Omit<ModulHerkunftSlot, 'slot' | 'id'>,
+  private async legeAb(slot: Slot, o0: NonNullable<ReturnType<ProjZugang['offen']>>, loop: ModulLoop, herkunft0: Omit<ModulHerkunftSlot, 'id'>,
     exportZeit: Date, quelle: 'andreas' | 'cypher', markiere: () => void): Promise<Antwort> {
     const o = this.zugang.offen();                                          // fresh; no await up to aendereStand
     if (!o || o.slug !== o0.slug || !o.projekt.live) throw new ProjFehler(409, 'projekt_gewechselt');
-    if (liveSlots(o.projekt)[slot] !== undefined) throw this.belegt(slot);
-    this.pruefeKanal(slot);                                                 // the fader may have moved while the WAV was written
-    const herkunft = { ...herkunft0, id: neueModulId({ ...herkunft0, slot }, this.zugang.naechsteNummer(), exportZeit) };
+    if (!platzFrei(o.projekt, slot)) throw slotBelegt(slot);
+    if (this.o.kanalOffen?.(pultContainerPfad[slotPlatz(slot) - 1])) throw kanalOffenFehler(slot);   // the fader may have moved while the WAV was written
+    const herkunft = { ...herkunft0, id: neueModulId(herkunft0, this.zugang.naechsteNummer(), exportZeit) };
     const neu = baueModul(o.projekt, slot, loop, {}, herkunft, quelle);
     const meta = { quelle, label: `Module ${slot} ${herkunft.titel}`.slice(0, 80) };
     const wirkung = aendereStand(o.verlauf, o.projekt, neu, meta, this.zugang.haken());
     markiere();
     await this.zugang.uebernimm(wirkung, meta);
     const jetzt = this.zugang.offen()!;
-    const gruppeId = liveSlots(jetzt.projekt)[slot]!;
-    this.setze(slot, { stems: 'wartet' });
+    const gruppeId = modulAmPlatz(jetzt.projekt, slot)!;
+    const slotNeu = slot;
+    this.setze(slotNeu, { stems: 'wartet' });
     if (this.o.nachExport) {
-      try { await this.o.nachExport({ slot, gruppeId, projekt: jetzt.projekt }); } catch (e) {
+      try { await this.o.nachExport({ slot: slotNeu, gruppeId, projekt: jetzt.projekt }); } catch (e) {
         this.ctx.log({ typ: 'modul_nach_export_fehler', fehler: (e as Error).message });
       }
     }
-    void this.trenne(slot, gruppeId, quelle);                               // in the background: decoding, then the child process
-    return { code: 200, j: { slot, gruppe_id: gruppeId, laenge_beats: loop.beats, frames: loop.frames, rev: jetzt.projekt.rev, stand: this.stand()[slot] } };
+    void this.trenne(slotNeu, gruppeId, quelle);                               // in the background: decoding, then the child process
+    return { code: 200, j: { slot: slotNeu, gruppe_id: gruppeId, laenge_beats: loop.beats, frames: loop.frames, rev: jetzt.projekt.rev, stand: this.stand()[slotNeu] } };
   }
 
   // POST /modul/loop {name, slot?}: a loop of the loop library becomes a module (DJ view places task 10, spec 7). Same rules as the deck export: the
@@ -191,7 +192,7 @@ export class Modulexport {
     if (typeof d.name !== 'string') throw new ProjFehler(400, 'argument_ungueltig', { detail: 'name: a loop of the loop library' });
     let wunsch: Slot | undefined;
     if (d.slot !== undefined) {
-      wunsch = normiereSlot(d.slot);
+      wunsch = normierePlatz(d.slot);
       if (wunsch === undefined) throw new ProjFehler(400, 'slot_ungueltig', { text: text('slot_ungueltig') });
     }
     if (quelle === 'cypher' && this.ctx.kiGestoppt()) throw new ProjFehler(409, 'ki_gestoppt');
@@ -200,7 +201,7 @@ export class Modulexport {
     const dir = this.o.loopOrdner?.();
     const l = dir === undefined ? null : leseLoopQuelle(dir, d.name);
     if (!l) throw new ProjFehler(404, 'loop_unbekannt', { text: text('loop_unbekannt') });
-    const slot = this.waehleSlot(o0.projekt, wunsch);
+    const slot = waehleModulSlot(o0.projekt, wunsch, this.o.kanalOffen, this.imBau);
     this.imBau.add(slot);
     let wav: string | null = null, uebernommen = false;
     try {
@@ -219,7 +220,7 @@ export class Modulexport {
   }
   // The module origin of a library loop (decision 12): 128 bpm, from beat 0; the bar phase comes from the loop's grid offset. A deck loop or an import
   // keeps its origin (catalogue track or source sha); a recorded loop has none and gets the placeholder sha plus quelle 'mitschnitt'.
-  private loopHerkunft(l: LoopQuelle, zeit: Date): Omit<ModulHerkunftSlot, 'slot' | 'id'> {
+  private loopHerkunft(l: LoopQuelle, zeit: Date): Omit<ModulHerkunftSlot, 'id'> {
     const PLATZHALTER = '0'.repeat(64), h = l.herkunft;
     const z = h && typeof h.material_id === 'string' ? this.o.herkunft(h.material_id) : null;
     const sha = z?.sha ?? (h && typeof h.sha === 'string' && /^[0-9a-f]{64}$/.test(h.sha) ? h.sha : PLATZHALTER);
@@ -229,32 +230,16 @@ export class Modulexport {
       ...(z?.camelot ? { tonart: z.camelot } : {}), datum: zeit.toISOString().slice(0, 10), ...(h === null ? { quelle: 'mitschnitt' as const } : {}) };
   }
 
-  private pruefeKanal(slot: Slot): void {
-    const kanal = `pad/${slot === 'A' ? 1 : 2}`;
-    if (this.o.kanalOffen?.(kanal)) throw new ProjFehler(409, 'kanal_offen', { slot, kanal, text: `the channel ${kanal} of Loop ${slot === 'A' ? 1 : 2} is open; close it before a module is placed` });
-  }
-  private belegt(slot: Slot): ProjFehler { return new ProjFehler(409, 'slot_belegt', { slot, text: `Loop ${slot === 'A' ? 1 : 2} already holds a module` }); }
-  private waehleSlot(p: Projekt, wunsch: Slot | undefined): Slot {
-    const frei = (s: Slot): boolean => liveSlots(p)[s] === undefined && !this.imBau.has(s);
-    if (wunsch !== undefined) { if (!frei(wunsch)) throw this.belegt(wunsch); this.pruefeKanal(wunsch); return wunsch; }
-    // without a slot: the first free slot whose channel is closed (an open channel is skipped); refused only when none fits
-    const freie = (['A', 'B'] as const).filter(frei);
-    if (freie.length === 0) throw new ProjFehler(409, 'slot_belegt', { text: 'both live slots hold a module' });
-    const s = freie.find((x) => !this.o.kanalOffen?.(`pad/${x === 'A' ? 1 : 2}`));
-    if (!s) throw new ProjFehler(409, 'kanal_offen', { text: `the channel of every free loop slot is open (${freie.map((x) => `pad/${x === 'A' ? 1 : 2}`).join(' and ')}); close one before a module is placed` });
-    return s;
-  }
-
   // POST /modul/stems {slot}: separation again for a module without stems (after a failure, a busy GPU or a restart)
   async stemsNeu(d: Record<string, unknown>, quelle: 'andreas' | 'cypher'): Promise<Antwort> {
     for (const k of Object.keys(d)) if (k !== 'slot') throw new ProjFehler(400, 'argument_unbekannt', { detail: k });
-    const s0 = normiereSlot(d.slot);                                           // 1/2 and A/B (decision 13)
-    if (s0 === undefined) throw new ProjFehler(400, 'argument_ungueltig', { detail: "slot: 1, 2, 'A' or 'B'" });
+    const s0 = normierePlatz(d.slot);                                          // a place: 1..4 or A..D
+    if (s0 === undefined) throw new ProjFehler(400, 'argument_ungueltig', { detail: "slot: a place 1..4 or 'A'..'D'" });
     d = { ...d, slot: s0 };
     if (quelle === 'cypher' && this.ctx.kiGestoppt()) throw new ProjFehler(409, 'ki_gestoppt');
     const o = this.zugang.offen();
     if (!o || !o.projekt.live) throw new ProjFehler(409, 'kein_liveprojekt');
-    const gruppeId = liveSlots(o.projekt)[s0];
+    const gruppeId = modulAmPlatz(o.projekt, s0);
     if (gruppeId === undefined) throw new ProjFehler(409, 'slot_leer');
     if (o.projekt.gruppen.some((x) => x.ausgang?.id === gruppeId)) throw new ProjFehler(409, 'modul_hat_stems');
     const s = this.zustand[s0]?.stems;
@@ -280,7 +265,7 @@ export class Modulexport {
       const slug = this.zugang.offen()!.slug;
       const gleich = (): Projekt | null => {
         const o = this.zugang.offen();
-        return o && o.slug === slug && liveSlots(o.projekt)[slot] === gruppeId ? o.projekt : null;
+        return o && o.slug === slug && modulAmPlatz(o.projekt, slot) === gruppeId ? o.projekt : null;
       };
       // the runner needs the decoded loop (decision 13): wait for it here, inside the job
       const bis = Date.now() + (this.o.zeitlimitDekodierenMs ?? 120_000);
@@ -307,7 +292,7 @@ export class Modulexport {
         dateiName: () => `modul-${slot}`,
         hinfaellig: (o, anzahl) => {
           const veraltet = (grund: string, t: string): Record<string, unknown> => ({ zustand: 'veraltet', grund, text: t });
-          if (!o || o.slug !== slug || liveSlots(o.projekt)[slot] !== gruppeId || o.projekt.gruppen.some((x) => x.ausgang?.id === gruppeId)) {
+          if (!o || o.slug !== slug || modulAmPlatz(o.projekt, slot) !== gruppeId || o.projekt.gruppen.some((x) => x.ausgang?.id === gruppeId)) {
             return veraltet('veraltet', 'the module changed while separating; nothing was placed');
           }
           if (this.loopVon(o.projekt, gruppeId)?.sha256 !== l!.sha256) {
@@ -395,7 +380,7 @@ export function liveBereich(ctx: BereichKontext, zugang: ProjZugang, stems: Stem
     { methode: 'GET', pfad: '/modul/stand', schutz: 'offen',
       handler: async (_q, r) => antworte(r, () => {
         const st = m.stand() as Record<string, Record<string, unknown> | null>;
-        for (const s of ['A', 'B']) if (st[s]) Object.assign(st[s]!, tonart.stand(String(st[s]!.gruppe_id)));
+        for (const s of SLOTS) if (st[s]) Object.assign(st[s]!, tonart.stand(String(st[s]!.gruppe_id)));
         return { code: 200, j: { ...st, leeren: l.stand(), blend: bl.stand() } };
       }) },
     ...seqRouten(ctx, seq),

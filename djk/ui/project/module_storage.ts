@@ -10,9 +10,9 @@ import fs from 'node:fs';
 import { ablageOrdner } from '../paths.ts';
 import { lesbarerName } from '../names.ts';
 import path from 'node:path';
-import { MAX_BK_SPUREN, MAX_GRUPPEN, MAX_KIT_GERAETE, MAX_SPUREN, istBlendZiel, istKettenZiel, neueId } from './model.ts';
+import { MAX_BK_SPUREN, MAX_GRUPPEN, MAX_KIT_GERAETE, MAX_SPUREN, istBlendZiel, istKettenZiel, neueId, ersterFreierPlatz } from './model.ts';
 import type { Gruppe, Herkunft, ModulHerkunft, Projekt, Spur } from './model.ts';
-import { liveSlots } from './live.ts';
+import { slotPlatz, type Slot } from './live.ts';
 
 export const MODUL_FORMAT = 1;
 
@@ -106,7 +106,7 @@ export function speichereModul(projekt: Projekt, gruppeId: string, o: AblageOpti
   const modul = top0.modul ?? minimaleHerkunft(top0.name, o.jetzt);
   const id = top0.modul ? (top0.modul.id ?? modulId(top0.modul)) : inhaltsId(baum);
   const basis = o.basis ?? modulBasis();
-  const ordner = modulOrdner(id, basis) ?? neuerOrdner(basis, modul.titel, top0.modul?.slot, id);
+  const ordner = modulOrdner(id, basis) ?? neuerOrdner(basis, modul.titel, undefined, id);
   const audio = path.join(ordner, 'audio');
   fs.mkdirSync(audio, { recursive: true });
   const kopiert: { sha256: string; datei: string }[] = [], fehlt: string[] = [];
@@ -125,7 +125,7 @@ export function speichereModul(projekt: Projekt, gruppeId: string, o: AblageOpti
     if (!kopiert.some((k) => k.sha256 === sha)) kopiert.push({ sha256: sha, datei });
     c.quelle.pfad_hinweis = datei;                                              // relative to the module folder
   }
-  const inhalt = { format: MODUL_FORMAT, id, gespeichert: new Date().toISOString(), slot: top0.modul?.slot, herkunft: modul,
+  const inhalt = { format: MODUL_FORMAT, id, gespeichert: new Date().toISOString(), herkunft: modul,
     gruppen: structuredClone(baum.gruppen), spuren, audio: kopiert, ...(fehlt.length ? { audio_fehlt: fehlt } : {}) };
   const pfad = path.join(ordner, 'modul.json');
   fs.writeFileSync(`${pfad}.tmp-${process.pid}`, JSON.stringify(inhalt, null, 2));
@@ -193,12 +193,12 @@ export interface EinsetzOptionen {
   modulOrdner: string;          // the module's folder (modulOrdner(id, basis))
   audioZiel: string;            // folder in the target project the audio copies go to
   quelle: Herkunft;
-  slot?: 'A' | 'B';             // live project only: wanted slot, else the first free one
+  slot?: Slot;                  // live project only: wanted place (container letter), else the first free one (3, 4, 1, 2)
   jetzt?: () => Date;
 }
 // Places the module tree as a top group into a copy of `p0`: new ids and numbers for every group, track and clip, the audio copied into the project
-// (a project backup then holds everything; the hint is an absolute path like the one of every other clip), `modul.slot` dropped in a production project
-// and set to a free slot in the live container (whose module fader is closed, as after an export). One project value = one undo step for the caller.
+// (a project backup then holds everything; the hint is an absolute path like the one of every other clip), a stored `modul.slot` dropped, and in the
+// live container the module placed in the first free place (whose module fader is closed, as after an export). One project value = one undo step for the caller.
 export function setzeModulEin(p0: Projekt, j: ModulDateiInhalt, o: EinsetzOptionen): { projekt: Projekt; gruppeId: string; audio_fehlt: string[] } {
   const nicht = (text: string): EinsetzFehler => new EinsetzFehler(409, 'modul_nicht_einsetzbar', { text });
   // sends, inserts and racks hang on pools of the project (returns, stage slots) and are not carried; lanes only without chain targets (blend and plain)
@@ -219,11 +219,17 @@ export function setzeModulEin(p0: Projekt, j: ModulDateiInhalt, o: EinsetzOption
       + `${j.gruppen.length} free groups` });
   }
   const top = j.gruppen[0];
-  let slot: 'A' | 'B' | undefined;
+  let ort: 1 | 2 | 3 | 4 | null = null;
   if (p.live) {
-    const belegt = liveSlots(p);
-    slot = o.slot ?? (['A', 'B'] as const).find((s) => belegt[s] === undefined);
-    if (slot === undefined || belegt[slot] !== undefined) throw new EinsetzFehler(409, 'slot_belegt', { text: 'no free live slot for the module' });
+    // a wanted place that is taken refuses; else the module sits in the first free place (leer or track, scanning 3, 4, 1, 2)
+    if (o.slot !== undefined) {
+      const t = p.plaetze?.[slotPlatz(o.slot) - 1]?.typ;
+      if (t !== 'leer' && t !== 'track') throw new EinsetzFehler(409, 'slot_belegt', { slot: o.slot, text: `place ${o.slot} is taken` });
+      ort = slotPlatz(o.slot);
+    } else {
+      ort = ersterFreierPlatz(p);
+      if (ort === null) throw new EinsetzFehler(409, 'slot_belegt', { text: 'no free place for the module' });
+    }
   }
   const frei = (liste: { nr: number }[], max: number): number => Array.from({ length: max }, (_, i) => i + 1).find((n) => !liste.some((x) => x.nr === n))!;
   const gruppenId = new Map<string, string>();
@@ -281,9 +287,11 @@ export function setzeModulEin(p0: Projekt, j: ModulDateiInhalt, o: EinsetzOption
   if (p.live) {
     const alt = top.modul ?? { quelle_sha256: '0'.repeat(64), titel: top.name, fassung: '0', basis_bpm: p0.tempo_bpm, von_beat: 0,
       laenge_beats: 64, bpm: p0.tempo_bpm, datum: jetzt.toISOString().slice(0, 10) };
-    neuTop.modul = { ...structuredClone(alt), slot };
-    neuTop.fader_db = 0;                                                     // the channel pad/N is the only gain (DJ view places, decision 9)
-  } else if (neuTop.modul) delete neuTop.modul.slot;
+    const { slot: _alt, ...ohneSlot } = structuredClone(alt) as typeof alt & { slot?: string };   // a stored module file may still carry the old slot
+    neuTop.modul = ohneSlot;
+    neuTop.fader_db = 0;                                                     // the channel of the place is the only gain (DJ view places, decision 9)
+    p.plaetze![ort! - 1] = { typ: 'stems', gruppe: neuTop.id };
+  } else if (neuTop.modul) delete (neuTop.modul as { slot?: string }).slot;
   // an inserted module is a new module: its own store id (the one of the file stays with the file)
   if (neuTop.modul) neuTop.modul.id = neueModulId(neuTop.modul, p.gruppen.length, jetzt);
   return { projekt: p, gruppeId: neuTop.id, audio_fehlt: fehlt };

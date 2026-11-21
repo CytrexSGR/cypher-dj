@@ -139,10 +139,12 @@ async function fahre(o, url, n) {
 }
 
 // Slice 1 task 1: the page server opens deck 4 like deck 3 (decision 1) and the ear covers four decks (decision 3).
+// The strip of player n is the container of place n (deck/1, deck/2, pad/1, pad/2); there is no deck/3 or deck/4 channel any more.
+const streifen = (n) => ['deck/1', 'deck/2', 'pad/1', 'pad/2'][n - 1];
 const offenMachen = async (o, url, n) => {
-  assert.equal((await postJson(url, '/regler', { pfad: `deck/${n}/fader`, nach: 0, ab: 'jetzt' })).code, 200);
-  for (let i = 0; i < 50 && o.stand.regler[`deck/${n}/fader`] !== 0; i++) await warte(20);
-  assert.equal(o.stand.regler[`deck/${n}/fader`], 0, `fader ${n} open`);
+  assert.equal((await postJson(url, '/regler', { pfad: `${streifen(n)}/fader`, nach: 0, ab: 'jetzt' })).code, 200);
+  for (let i = 0; i < 50 && o.stand.regler[`${streifen(n)}/fader`] !== 0; i++) await warte(20);
+  assert.equal(o.stand.regler[`${streifen(n)}/fader`], 0, `fader ${n} open`);
 };
 const ringMitSchlag = (von, bis, bpm, { offsetMs = 5, amplitude = 0.3 } = {}) => {
   const beatMs = 60000 / bpm, n = Math.round((bis - von) * beatMs);
@@ -264,7 +266,7 @@ test('/regler gate: a valid hearing certificate opens deck 3 and 4 for Cypher li
   const cypher = (pfad, nach) => fetch(url + '/regler', { method: 'POST', headers: { 'content-type': 'application/json', 'x-djk-quelle': 'cypher' },
     body: JSON.stringify({ pfad, nach, takte: 0 }) }).then(async (r) => ({ code: r.status, j: await r.json() }));
   for (const n of [1, 3, 4]) {                                                    // without a certificate: refused, for every deck
-    const r = await cypher(`deck/${n}/fader`, 0);
+    const r = await cypher(`${streifen(n)}/fader`, 0);
     assert.deepEqual([r.code, r.j.fehler], [409, 'kein_hoerschein'], `deck ${n} without a certificate`);
   }
   const schein = (n) => ({ hs_id: `ohr-${n}-testschein`, kanal: `deck/${n}`, inhalt: `${NIGHTSHIFT}/128000_r1`, deck: n, bpm: 128,
@@ -274,9 +276,9 @@ test('/regler gate: a valid hearing certificate opens deck 3 and 4 for Cypher li
     summe_spitze_db: -6, clip_anteil: 0, eq_vorschlag: { tief: 0, mitte: 0, hoch: 0 } });
   for (const n of [1, 3, 4]) {
     o.hoerscheine[`deck/${n}`] = schein(n);
-    const r = await cypher(`deck/${n}/fader`, 0);
+    const r = await cypher(`${streifen(n)}/fader`, 0);
     assert.equal(r.code, 200, `deck ${n} with a valid certificate: ${JSON.stringify(r.j)}`);
-    const teil = log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/teil' && z.felder.pfad === `deck/${n}/fader`).at(-1);
+    const teil = log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/teil' && z.felder.pfad === `${streifen(n)}/fader`).at(-1);
     assert.equal(teil.felder.hoerschein, `ohr-${n}-testschein`, `the command of deck ${n} carries its certificate`);
   }
 });

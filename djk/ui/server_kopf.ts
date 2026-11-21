@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { reglerInfo } from '../conductor/src/controls_info.ts';
+import { pultMixIndexListe } from '../contract/pult.ts';
 import { SLUG } from './collection.ts';
 import type { ProjOptionen } from './areas/proj/area.ts';
 import type { GeraeteOptionen } from './areas/devices/area.ts';
@@ -122,8 +123,7 @@ export interface ServerOptionen {
 }
 
 // 1.15 A7b: the names of the selector values of spektrum/kanal (index = value; the kern sends the same names as the kanal of /zustand/spektrum)
-export const SPEKTRUM_QUELLEN: string[] = ['', 'deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/4', 'erz/5', 'erz/6', 'erz/7', 'erz/8',
-  'pad/1', 'pad/2', 'bus/1', 'bus/2', 'bus/3', 'bus/4', 'master'];
+export const SPEKTRUM_QUELLEN: string[] = ['', ...pultMixIndexListe];   // follows contract/pult.json mix_index (container core)
 export const KLANG_GRUPPEN = ['bass', 'melodie'];
 export const KLANG_AUS_MAX = 32768, KLANG_ERR_MAX = 8192;
 
@@ -134,9 +134,11 @@ export type Pruefmodus = 'an' | 'aus' | 'unbekannt';
 export const GRAPH_ABGELEHNT = [4, 6, 7, 8];   // quittung states of a refused command (INTERFACES 5.1; 5 = executed late, a positive answer)
 export const DROSSEL_MS: Record<string, number> = { '/uhr': 50, '/zustand/deck': 100, '/pegel': 100, '/zustand/komp': 100, '/zustand/arr': 50, '/zustand/ein': 250, '/zustand/rec': 100, '/zustand/mix': 100, '/e/ins_gr': 100, '/e/stufe_pegel': 100,
   '/zustand/spektrum': 40 };   // 1.15 A7b: 25 Hz, keyed per source (kanal)
+// /lage container.art: the core's code (/e/container/quelle) as the page reads it
+export const CONTAINER_ART = ['leer', 'player', 'modul'] as const;
 export const INS_GR_FRIST_MS = 500;   // 1.10 slice 4a: as the page's meters (MIX_FRIST_MS); the kern sends 20 Hz while a stage runs
 export const DURCHREICHEN = new Set(['/uhr', '/zustand/deck', '/pegel', '/e/regler', '/e/hand', '/e/geladen', '/e/hotcue', '/e/fx',
-  '/e/fx/zuweisung', '/e/fx/routing', '/e/platz/kanal', '/q', '/e/protokollfehler', '/e/halter', '/e/neustart', '/k/willkommen', '/e/ki', '/e/loop', '/e/mitschnitt', '/e/raster',
+  '/e/fx/zuweisung', '/e/fx/routing', '/e/container/quelle', '/q', '/e/protokollfehler', '/e/halter', '/e/neustart', '/k/willkommen', '/e/ki', '/e/mitschnitt', '/e/raster',
   '/zustand/komp',   // Effekt-Sektion 2026-10-11: Absenkung je aktivem Kompressor (10 Hz)
   '/zustand/arr', '/e/freeze', '/zustand/ein', '/zustand/rec', '/e/aufnahme',   // D1 S2 (Spec 3.4); I08 (§5.14)
   '/e/ins_gr',   // 1.10 slice 4a (§5.5f): gain reduction per running insert stage, 20 Hz from the kern, throttled per kanal
@@ -232,7 +234,7 @@ export const werkzeugAbweichend = (p: string, w: number): boolean => {
   return vorgabe !== undefined && Math.fround(w) !== Math.fround(vorgabe);
 };
 // S5r: graph knobs <channel>/bk/1..64 (default 0.5) show in lage only once they differ, like komp; S14: fx/3, fx/4 /bk/1..64 too; master/bk/1..64 (master insert graph)
-const BK_ZEILE = /^((?:deck\/[1-4]|erz\/[1-35-7]|pad\/[12]|fx\/[34]|master))\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/;
+const BK_ZEILE = /^((?:deck\/[1-4]|erz\/(?:[1-35-7]|9|10)|pad\/[12]|fx\/[34]|master))\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/;
 /** A graph knob row differs from where its graph starts it (the graph's `vorgabe`, 0.5 where it has none or no graph is known); `vorgabe` caches per graph name for one call. */
 export const bkAbweichend = (p: string, w: number, geladen: Record<string, string> = {}, vorgabe: Map<string, number[] | null> = new Map()): boolean => {
   const m = BK_ZEILE.exec(p);
@@ -243,23 +245,23 @@ export const bkAbweichend = (p: string, w: number, geladen: Record<string, strin
 };
 // Bug t_bffc3708: every channel whose mixer a player sets, not erz/1..3 only (a level helper took the missing erz/5..7 fader for 0 dB). erz/4 belongs to
 // the production, erz/8 is cue only: both stay out. Fader, trim, eq, kill and filter always show (a closed fader is a value); a send (1..4) only off its default.
-const LAGE_KANAL = '(?:deck\\/[1-4]|pad\\/[12]|erz\\/[1-35-7])';
+const LAGE_KANAL = '(?:deck\\/[1-4]|pad\\/[12]|erz\\/(?:[1-35-7]|9|10))';   // M8: the alias rows of the strom tracks (streams 9 and 10 included)
 export const LAGE_KANALZUG = new RegExp(`^${LAGE_KANAL}\\/(?:fader|trim|eq\\/|kill\\/|filter)`);
 export const LAGE_SEND = new RegExp(`^${LAGE_KANAL}\\/send\\/[1-4]$`);
 export const LAGE_ABWEICHEND: Record<string, number> = { 'master/kleber': 0, 'duck/tiefe': 0, 'duck/release': 200, 'fx/2/rueckweg': 0, 'color/art': 0, 'color/param': 0.5 };
 
-// Card t_7f487235: the memory the restore plan after a kern restart is made of (FX type of units 1/2, FX assignments 1-3, loop boxes with owner and live
-// grid offset, graphs with owner), kept in neustart_stand.json next to aktive_loops.json. `generation` is the kern generation it was true for, `sample` the kern's sample position of the last greeting seen (the same generation with a smaller
+// Card t_7f487235: the memory the restore plan after a kern restart is made of (FX type of units 1/2, FX assignments 1-3, graphs with owner; the loop boxes are gone with the container core, an old file
+// that still carries them is read and the parts are ignored), kept in neustart_stand.json next to aktive_loops.json. `generation` is the kern generation it was true for, `sample` the kern's sample position of the last greeting seen (the same generation with a smaller
 // sample position at the next greeting is another kern life, see Oberflaeche.vomKern).
 // The restore plan that waits for the guard time (offenerPlan) without the parts Andreas touched meanwhile, and when it is due (epoch ms)
 export interface NeustartPlan {
-  faellig: number; boxen: { box: number; name: string; status: number; besitzer: string; versatz?: number }[];
+  faellig: number;
   fx: { einheit: 1 | 2; felder: Record<string, unknown>; zuweisung: string[]; besitzer: string }[]; fx3: { zuweisung: string[]; besitzer: string } | null;
   graphen: { kanal: string; name: string; besitzer: string }[];
 }
 export interface NeustartStand {
-  generation: number; sample?: number; geschrieben?: number; plan?: NeustartPlan; fx: (Record<string, unknown> | null)[]; fxZuweisung: Record<string, boolean>[]; loops: Record<string, Record<string, unknown>>;
-  loopBesitzer: Record<string, string>; loopRasterLive: Record<string, { name: string; v: number }>; graphBesitzer: Record<string, string>; graphen_geladen: Record<string, string>;
+  generation: number; sample?: number; geschrieben?: number; plan?: NeustartPlan; fx: (Record<string, unknown> | null)[]; fxZuweisung: Record<string, boolean>[];
+  graphBesitzer: Record<string, string>; graphen_geladen: Record<string, string>;
 }
 const istObjekt = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
 const textKarte = (x: unknown): Record<string, string> | null => (istObjekt(x) && Object.values(x).every((v) => typeof v === 'string') ? x as Record<string, string> : null);
@@ -269,30 +271,27 @@ export function leseNeustartStand(text: string | null): NeustartStand | null {
   let j: unknown;
   try { j = JSON.parse(text); } catch { return null; }
   if (!istObjekt(j) || j.v !== 1 || typeof j.generation !== 'number' || !Number.isFinite(j.generation)) return null;
-  const { fx, fxZuweisung, loops, loopRasterLive } = j;
+  const { fx, fxZuweisung } = j;
   if (!Array.isArray(fx) || fx.length !== 2 || !fx.every((f) => f === null || istObjekt(f))) return null;
   if (!Array.isArray(fxZuweisung) || fxZuweisung.length !== 3 || !fxZuweisung.every((z) => istObjekt(z) && Object.values(z).every((v) => typeof v === 'boolean'))) return null;
-  if (!istObjekt(loops) || !Object.values(loops).every(istObjekt)) return null;
-  if (!istObjekt(loopRasterLive) || !Object.values(loopRasterLive).every((l) => istObjekt(l) && typeof l.name === 'string' && typeof l.v === 'number' && Number.isFinite(l.v))) return null;
-  const loopBesitzer = textKarte(j.loopBesitzer), graphBesitzer = textKarte(j.graphBesitzer), geladen = textKarte(j.graphen_geladen);
-  if (!loopBesitzer || !graphBesitzer || !geladen) return null;
+  const graphBesitzer = textKarte(j.graphBesitzer), geladen = textKarte(j.graphen_geladen);
+  if (!graphBesitzer || !geladen) return null;
   const sample = istZahl(j.sample) ? j.sample : undefined;
   const plan = lesePlan(j.plan);
   const geschrieben = istZahl(j.geschrieben) ? j.geschrieben : undefined;
-  return { generation: j.generation, ...(sample !== undefined ? { sample } : {}), ...(geschrieben !== undefined ? { geschrieben } : {}), ...(plan ? { plan } : {}), fx: fx as NeustartStand['fx'], fxZuweisung: fxZuweisung as NeustartStand['fxZuweisung'], loops: loops as NeustartStand['loops'],
-    loopBesitzer, loopRasterLive: loopRasterLive as NeustartStand['loopRasterLive'], graphBesitzer, graphen_geladen: geladen };
+  return { generation: j.generation, ...(sample !== undefined ? { sample } : {}), ...(geschrieben !== undefined ? { geschrieben } : {}), ...(plan ? { plan } : {}), fx: fx as NeustartStand['fx'], fxZuweisung: fxZuweisung as NeustartStand['fxZuweisung'],
+    graphBesitzer, graphen_geladen: geladen };
 }
 const istText = (x: unknown): x is string => typeof x === 'string';
 const textListe = (x: unknown): x is string[] => Array.isArray(x) && x.every(istText);
 const istZahl = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
 /** The waiting plan of the file, or undefined when it is missing or not exactly the shape this server writes (the stand itself stays valid then). */
 function lesePlan(x: unknown): NeustartPlan | undefined {
-  if (!istObjekt(x) || !istZahl(x.faellig) || !Array.isArray(x.boxen) || !Array.isArray(x.fx) || !Array.isArray(x.graphen)) return undefined;
-  const boxOk = x.boxen.every((b) => istObjekt(b) && istZahl(b.box) && istText(b.name) && istZahl(b.status) && istText(b.besitzer) && (b.versatz === undefined || istZahl(b.versatz)));
+  if (!istObjekt(x) || !istZahl(x.faellig) || !Array.isArray(x.fx) || !Array.isArray(x.graphen)) return undefined;
   const fxOk = x.fx.every((f) => istObjekt(f) && (f.einheit === 1 || f.einheit === 2) && istObjekt(f.felder) && textListe(f.zuweisung) && istText(f.besitzer));
   const fx3Ok = x.fx3 === null || (istObjekt(x.fx3) && textListe(x.fx3.zuweisung) && istText(x.fx3.besitzer));
   const grOk = x.graphen.every((g) => istObjekt(g) && istText(g.kanal) && istText(g.name) && istText(g.besitzer));
-  return boxOk && fxOk && fx3Ok && grOk ? x as unknown as NeustartPlan : undefined;
+  return fxOk && fx3Ok && grOk ? x as unknown as NeustartPlan : undefined;
 }
 /** Boot time of the machine in epoch ms: btime of /proc/stat, else now minus the uptime. The kern's state lives in /dev/shm and does not survive a reboot. */
 export function systemstartMs(): number {
@@ -309,7 +308,7 @@ export const NEUSTART_PLAN_VERSPAETUNG_MS = 5000;
 /** A kern that restarted longer ago than this (48 kHz samples between /e/neustart and /k/willkommen) has had its own set since: nothing is restored. */
 export const NEUSTART_FRISCH_FRAMES = 30 * 48000;
 /** The kern words after which the memory of the restore plan changed (the first three are the stand itself, /e/graph the graph map) */
-export const NEUSTART_STAND_ADRESSEN: ReadonlySet<string> = new Set(['/e/loop', '/e/fx', '/e/fx/zuweisung', '/e/graph']);
+export const NEUSTART_STAND_ADRESSEN: ReadonlySet<string> = new Set(['/e/fx', '/e/fx/zuweisung', '/e/graph']);
 
 /** The slug of offenes_projekt.json (the project that was open last), or null for anything that is not exactly the file this server writes (nothing remembered). */
 export function leseOffenesProjekt(text: string | null): string | null {

@@ -13,7 +13,7 @@
 
 #include "cypherdj/deck.h"
 #include "cypherdj/stretcher.h"
-#include "cypherdj/loopbox.h"
+#include "cypherdj/mixer.h"
 #include "cypherdj/stretch_source.h"
 #include "cypherdj/signalbox/controls.h"
 
@@ -60,9 +60,9 @@ struct DeckRegler {  // Indizes in der Regler-Tabelle des Stellwerks, -1 wenn es
 // darum vor ihnen abgebaut). Der Callback weckt Vorbereiter und Arbeits-Threads je Zyklus über die Semaphoren
 // (sem_post: wartefrei, keine Sperre; Vorlage M3 m3deck.cpp arbeiter, dort ebenso je Zyklus); jeder Faden wartet höchstens
 // KEYLOCK_TAKT_MS und arbeitet dann auch ohne Wecken (Ende, Callback steht).
-// Keylock Task 7 (Detailschnitt 7a 3.6): Quellen statt Decks. Quelle 0 bis 3 die Decks, 4 und 5 die Loop-Boxen; Platz 0
-// der Vorbereiter, 1 bis KEYLOCK_QUELLEN die Arbeits-Threads (Deck 1 bis 4, Box 1 und 2), danach der Wächter.
-constexpr int KEYLOCK_QUELLEN = DECKS + LOOP_BOXEN;
+// Keylock Task 7 (Detailschnitt 7a 3.6): Quellen statt Decks. Quelle 0 bis 3 die Decks (container core K1: the loop boxes, sources 4 and 5,
+// are gone); Platz 0 der Vorbereiter, 1 bis KEYLOCK_QUELLEN die Arbeits-Threads (Deck 1 bis 4), danach der Wächter.
+constexpr int KEYLOCK_QUELLEN = DECKS;
 constexpr int KEYLOCK_FAEDEN = KEYLOCK_QUELLEN + 2;
 constexpr int KEYLOCK_WAECHTER_FRIST_MS = 500;  // Fassung 4.1 Punkt 2: nicht quittiert binnen dieser Frist -> Meldung
 constexpr int KEYLOCK_TAKT_MS = 20;             // längstes Warten ohne Wecken (Arbeits-Thread, Vorbereiter)
@@ -151,7 +151,7 @@ struct DeckWerk {
   } wieder[DECKS];
   // Keylock (Plan 2026-10-06-keylock-echtzeit.md, Task 2): je Deck ein Dehner und seine Post, angelegt nur mit
   // Kern::setze_keylock_vorgabe(true) (außerhalb des Callbacks). Die Decks halten Zeiger darauf.
-  std::unique_ptr<DehnerBasis> dehner[KEYLOCK_QUELLEN];  // Task 7: 0 bis 3 Decks, 4 und 5 Loop-Boxen
+  std::unique_ptr<DehnerBasis> dehner[KEYLOCK_QUELLEN];  // Task 7: 0 bis 3 Decks
   StreckPost post[KEYLOCK_QUELLEN];
   bool keylock_vorgabe = false;  // übernommen (nur der Callback schreibt)
   // Umbauplan Bungee S2: die Maschine der Dehner (Kern::setze_keylock_maschine, vor dem Bau gestellt). Bungee fährt ohne Fäden:

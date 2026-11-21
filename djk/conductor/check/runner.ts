@@ -11,7 +11,7 @@
 // mit ohne_set_id: true ohne --set-id, wie ein Neustart durch systemd).
 // Ports: frei vom Betriebssystem vergeben; nichts unter /dev/shm (Arbeitsbestand und Zustand im eigenen tmp-Ordner).
 //
-// Aufruf: node check/runner.ts [--mutation-attrappe m1,m2] [--mutation-leitstand m] [--ki-spur deck/3]
+// Aufruf: node check/runner.ts [--mutation-attrappe m1,m2] [--mutation-leitstand m] [--ki-spur pad/1]
 //                               [--behalte] folge.jsonl ...
 // Rückgabe: 0 alle grün, 1 mindestens eine rot, 2 Aufruf- oder Aufbaufehler.
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';

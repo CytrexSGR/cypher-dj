@@ -81,18 +81,20 @@ test('focus: an instrument channel gives graph and base; a channel without bk ro
   assert.equal(a.code, 200);
   assert.deepEqual(a.j.fokus, { kanal: 'erz/5', graph: 'synth-poly', basis: 'erz/5/bk/' });
   assert.deepEqual((await x.fokus({ kanal: 'erz/4' })).j.fokus, { kanal: 'erz/4', graph: null, basis: null, grund: 'kein_bk' });
-  assert.deepEqual((await x.fokus({ kanal: 'erz/1' })).j.fokus, { kanal: 'erz/1', graph: null, basis: null, grund: 'kein_graph' });
-  assert.deepEqual((await x.get('/controller/fokus')).j.fokus, { kanal: 'erz/1', graph: null, basis: null, grund: 'kein_graph' });
+  // stream 1 is the drum kit and holds no bk graph (contract/streams.ts INSTRUMENT_STROEME); erz/7 is an instrument stream without a graph loaded
+  assert.deepEqual((await x.fokus({ kanal: 'erz/1' })).j.fokus, { kanal: 'erz/1', graph: null, basis: null, grund: 'kein_bk' });
+  assert.deepEqual((await x.fokus({ kanal: 'erz/7' })).j.fokus, { kanal: 'erz/7', graph: null, basis: null, grund: 'kein_graph' });
+  assert.deepEqual((await x.get('/controller/fokus')).j.fokus, { kanal: 'erz/7', graph: null, basis: null, grund: 'kein_graph' });
   assert.deepEqual((await x.fokus({})).j.fokus, null);
 });
 
-test('focus: a project track gives the slot of its Baukasten order as base; slot 9 has no rows; a track that is no Baukasten track or no track at all gives kein_bk', async (t) => {
+test('focus: a project track gives the slot of its Baukasten order as base; every bk slot up to BK_LIVE_SLOTS has rows; a track that is no Baukasten track or no track at all gives kein_bk', async (t) => {
   const spuren = [...Array.from({ length: 10 }, (_, i) => bk(`s${i + 1}`, i + 1)), { id: 'k1', nr: 20, name: 'Kit', art: 'instrument', geraet: { art: 'intern', name: 'kit', kit: 'k' } },
     { id: 'a1', nr: 21, name: 'Audio', art: 'audio', clips: [] }, bk('leer', 30, '')];
   const x = await aufbau(t, { stand: { projekt: { spuren } } });
   assert.deepEqual((await x.fokus({ spur_id: 's3' })).j.fokus, { spur_id: 's3', graph: 'synth-poly', basis: 'spur/3/bk/' });
   assert.deepEqual((await x.fokus({ spur_id: 's8' })).j.fokus, { spur_id: 's8', graph: 'synth-poly', basis: 'spur/8/bk/' });
-  assert.deepEqual((await x.fokus({ spur_id: 's9' })).j.fokus, { spur_id: 's9', graph: 'synth-poly', basis: null, grund: 'slot_ohne_zeile' });
+  assert.deepEqual((await x.fokus({ spur_id: 's9' })).j.fokus, { spur_id: 's9', graph: 'synth-poly', basis: 'spur/9/bk/' });
   assert.deepEqual((await x.fokus({ spur_id: 'k1' })).j.fokus, { spur_id: 'k1', graph: null, basis: null, grund: 'kein_bk' });
   assert.deepEqual((await x.fokus({ spur_id: 'a1' })).j.fokus, { spur_id: 'a1', graph: null, basis: null, grund: 'kein_bk' });
   assert.deepEqual((await x.fokus({ spur_id: 'nope' })).j.fokus, { spur_id: 'nope', graph: null, basis: null, grund: 'kein_bk' });
@@ -388,13 +390,13 @@ test('keys live: the sender is a no-op without an address; with an address it se
   assert.deepEqual(await sendeLiveTasten(ctx(3), 'erz/5', null), { ok: false, grund: 'kern_alt' });
   assert.deepEqual(gesendet, []);
   assert.deepEqual(await sendeLiveTasten(ctx(3), 'erz/5', '/k/test'), { ok: true });
-  assert.deepEqual(await sendeLiveTasten(ctx(3), 'pad/2', '/k/test'), { ok: true });
+  assert.deepEqual(await sendeLiveTasten(ctx(3), 'erz/10', '/k/test'), { ok: true });
   assert.deepEqual(await sendeLiveTasten(ctx(3), null, '/k/test'), { ok: true });
   assert.deepEqual(gesendet, [['/k/test', { strom: 5 }], ['/k/test', { strom: 10 }], ['/k/test', { strom: 0 }]]);
   assert.deepEqual(await sendeLiveTasten(ctx(7), 'erz/5', '/k/test'), { ok: false, grund: 'kern_alt' });
   assert.deepEqual(await sendeLiveTasten(ctx(null), 'erz/5', '/k/test'), { ok: false, grund: 'kern_alt' });
   assert.deepEqual(await sendeLiveTasten(ctx(3), 'erz/4', '/k/test'), { ok: false, grund: 'kern_alt' }, 'a channel without a stream is never sent');
-  assert.deepEqual([stromVonKanal('erz/1'), stromVonKanal('erz/2'), stromVonKanal('erz/8'), stromVonKanal('pad/1')], [null, 2, null, 9]);
+  assert.deepEqual([stromVonKanal('erz/1'), stromVonKanal('erz/2'), stromVonKanal('erz/8'), stromVonKanal('pad/1'), stromVonKanal('erz/9')], [null, 2, null, null, 9]);
 });
 
 test('pages: a focus with a page takes the entries of that page of the preset; the page stays for the same synth and goes with another one', async (t) => {

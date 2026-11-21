@@ -170,6 +170,11 @@ export const FEHLER_TEXT = {
   live_laeuft: 'The live container is playing while a deck plays: opening another project would stop it',
   kein_loop: 'The deck has no active loop to export', kein_bibliothekstrack: 'The deck track is not a library track', kein_liveprojekt: 'The live container is not open',
   kein_liveprojekt_flag: 'A project named live exists without the live flag: rename it',
+  // container core: place and stream rules of the live project, playback loader invariants, the core's refusal of a container
+  typ_doppelt: 'The strudel module already sits in another place', kein_strudel_modul: 'The live project has no strudel module: place one in a container first',
+  strom_belegt: 'That stream already has a track in the strudel module', returns_voll: 'All returns of the project are used',
+  send_ausser_modul: 'A send must stay inside its module', dj_doppelt: 'Two groups lead into the same DJ output',
+  live_ohne_container: 'A track or return of the live project does not play into a container', kern_lehnt_ab: 'The core refused the change',
   slot_leer: 'That live slot holds no module', modul_hat_stems: 'That module already has its stems',
   seq_fehlt: 'That group holds no SEQ deck', seq_belegt: 'That place already holds a SEQ deck',
   abschnitt_zu_lang: 'That section is longer than 64 beats: a SEQ deck takes at most 64', abschnitt_leer: 'That section holds nothing a SEQ deck can play',   // TO DJ

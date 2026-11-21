@@ -86,17 +86,16 @@ ReglerTabelle::ReglerTabelle() {
     d.transport = rolle == Rolle::transport;
     d.kurve = kurve;
   };
-  // Kanäle mit Kanalzug (§1.5): deck/1..4, erz/1..8, pad/1..2, bus/1..4
-  struct Gruppe { const char* name; int anzahl; };
-  const Gruppe gruppen[] = {{"deck", 4}, {"erz", 8}, {"pad", 2}, {"bus", 4}};
+  // Container core K9: the channels with a strip are the four containers A..D and the four buses (contract/pult.json; test_regler_gegen_pult compares the rows with the generated list).
+  // The channel order is the mixer order: containers 0..3, buses 4..7. The players (deck/1..4/stem/*, deck/<n>/transport) are rows of their own, below.
+  const char* const kanaele[] = {"deck/1", "deck/2", "pad/1", "pad/2", "bus/1", "bus/2", "bus/3", "bus/4"};
   char p[32];
   char kn[16];
-  for (const Gruppe& g : gruppen) {
-    for (int i = 1; i <= g.anzahl; i++) {
-      std::snprintf(kn, sizeof kn, "%s/%d", g.name, i);
+  {
+    for (const char* kanal_pfad : kanaele) {
+      std::snprintf(kn, sizeof kn, "%s", kanal_pfad);
       const int k = kanal(kn);
-      const bool bus = std::strcmp(g.name, "bus") == 0;
-      const bool deck = std::strcmp(g.name, "deck") == 0;
+      const bool bus = std::strncmp(kn, "bus/", 4) == 0;
       auto pf = [&](const char* rest) { std::snprintf(p, sizeof p, "%s/%s", kn, rest); return p; };
       neu(pf("fader"), k, Rolle::fader, -200, 0, -200, MS(10), bus, true, false, false, K_FADER);
       neu(pf("trim"), k, Rolle::trim, -24, 24, 0, MS(10), false, false, false, false, linear(-24, 24));
@@ -113,12 +112,6 @@ ReglerTabelle::ReglerTabelle() {
         neu(pf(rest), k, Rolle::send, -200, 0, -200, MS(10), false, true, false, false, K_FADER);
       }
       if (!bus) neu(pf("ziel"), k, Rolle::ziel, 0, 4, 0, 0, true, false, true, true, stufen(0, 4));
-      if (deck) {
-        neu(pf("stem/drums"), k, Rolle::stem_drums, -200, 6, 0, MS(10), false, true, false, false, K_EQ, i);
-        neu(pf("stem/bass"), k, Rolle::stem_bass, -200, 6, 0, MS(10), false, true, false, false, K_EQ, i);
-        neu(pf("stem/vocals"), k, Rolle::stem_vocals, -200, 6, 0, MS(10), false, true, false, false, K_EQ, i);
-        neu(pf("stem/other"), k, Rolle::stem_other, -200, 6, 0, MS(10), false, true, false, false, K_EQ, i);
-      }
       neu(pf("xseite"), k, Rolle::xseite, 0, 2, 1, 0, true, false, true, true, stufen(0, 2));
       neu(pf("pfl"), k, Rolle::pfl, 0, 1, 0, 0, true, false, true, true, K_SCHALTER);
       if (!bus) {   // Kompressor je Quellkanal (Plan 2026-10-11-effekt-sektion.md): nach EQ/Filter, vor dem Fader; alle dürfen
@@ -129,11 +122,19 @@ ReglerTabelle::ReglerTabelle() {
         neu(pf("komp/release"), k, Rolle::komp_release, 10, 1000, 120, MS(10), false, false, false, false, linear(10, 1000));
         neu(pf("komp/makeup"), k, Rolle::komp_makeup, 0, 24, 0, MS(10), false, false, false, false, linear(0, 24));
         neu(pf("komp/mix"), k, Rolle::komp_mix, 0, 1, 1, MS(10), false, false, false, false, linear(0, 1));
-        // Sidechain: 0 = eigenes Signal, sonst Quellkanal + 1 (deck/1 = 1 … erz/1 = 5 … pad/2 = 14), Schlüssel ist dessen Eingang
-        neu(pf("komp/sc"), k, Rolle::komp_sc, 0, 14, 0, 0, false, false, true, true, stufen(0, 14));
+        // Sidechain: 0 = own signal, else container + 1 (deck/1 = 1 … pad/2 = 4, F9 D-V3); the key is its input
+        neu(pf("komp/sc"), k, Rolle::komp_sc, 0, 4, 0, 0, false, false, true, true, stufen(0, 4));
       }
-      if (deck) neu(pf("transport"), k, Rolle::transport, 0, 0, 0, 0, true, false, true, true, K_SCHALTER, i);
     }
+  }
+  // The four players: the stem levels and the transport of deck n. No channel (-1): a player has no strip, its container has (F1). `deck` carries the player number.
+  for (int i = 1; i <= 4; i++) {
+    auto pf = [&](const char* rest) { std::snprintf(p, sizeof p, "deck/%d/%s", i, rest); return p; };
+    neu(pf("stem/drums"), -1, Rolle::stem_drums, -200, 6, 0, MS(10), false, true, false, false, K_EQ, i);
+    neu(pf("stem/bass"), -1, Rolle::stem_bass, -200, 6, 0, MS(10), false, true, false, false, K_EQ, i);
+    neu(pf("stem/vocals"), -1, Rolle::stem_vocals, -200, 6, 0, MS(10), false, true, false, false, K_EQ, i);
+    neu(pf("stem/other"), -1, Rolle::stem_other, -200, 6, 0, MS(10), false, true, false, false, K_EQ, i);
+    neu(pf("transport"), -1, Rolle::transport, 0, 0, 0, 0, true, false, true, true, K_SCHALTER, i);
   }
   const int master = kanal("master");
   const int cue = kanal("cue");
@@ -197,14 +198,12 @@ ReglerTabelle::ReglerTabelle() {
     gruppen_regler(n);
   }
   neu("pm/fader", -1, Rolle::pm_fader, -200, 6, 0, MS(10), false, true, false, false, K_SPUR_FADER);
-  // S5r: acht Graph-Regler je Kanal, auf dem der Kern einen Baukasten-Graphen annimmt: deck/1..4 (Effekt über
-  // /k/kanal/graph) und die Instrument-Kanäle von /erz/strom bk:<name> (net_erz.cpp: erz/1..8 und pad/1..2 ohne erz/4,
-  // reserviert für die Produktion, und ohne erz/8, Nur-Cue-Vorhöreingang). Am Tabellenende, damit kein Index wandert.
+  // S5r: eight graph knobs per container (K9: the channels that take an effect graph over /k/kanal/graph; the instrument graphs of the streams have their own rows strom/<n>/bk/<k>).
   // Schaltrampe 0: die FFI glättet selbst 20 ms (K15). Gegen das echte Verhalten gepinnt in test_net_erz.cpp.
-  for (const char* kn_bk : {"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "erz/5", "erz/6", "erz/7", "pad/1", "pad/2"}) {
-    const int k = kanal_suche(kn_bk);
+  for (const char* bk_kanal_1 : {"deck/1", "deck/2", "pad/1", "pad/2"}) {
+    const int k = kanal_suche(bk_kanal_1);
     for (int nr = 1; nr <= 8; nr++) {
-      std::snprintf(p, sizeof p, "%s/bk/%d", kn_bk, nr);
+      std::snprintf(p, sizeof p, "%s/bk/%d", bk_kanal_1, nr);
       neu(p, k, Rolle::bk_regler, 0, 1, 0.5f, 0, false, false, false, false, linear(0, 1));
     }
   }
@@ -213,7 +212,7 @@ ReglerTabelle::ReglerTabelle() {
   // ret/<r>/pan is a balance like grp/<n>/pan. ret/<r>/hall/* are normalised 0..1 (mapping to units: arr_returns.cpp), defaults hit the
   // Cypher Hall defaults (decay 2 s, size 60 ms, pre 10 ms, low decay 1.2, high cut 12 kHz, tail 0 dB). hall/an is a switch without ramp.
   // NAME TRAP: ret/<r>/hall/pre is the pre-delay of the hall, NOT a pre/post fader switch (that comes as a structure in slice 4).
-  for (int r = 1; r <= RET_REGLER_RETURNS; r++) {
+  for (int r = 1; r <= RET_REGLER_RETURNS_ALT; r++) {
     for (int n = 1; n <= SPUR_REGLER_SPUREN; n++) {
       std::snprintf(p, sizeof p, "spur/%d/send/%d", n, r);
       neu(p, -1, Rolle::snd_spur, -200, 6, -200, MS(10), false, true, false, false, K_SPUR_FADER);
@@ -243,11 +242,11 @@ ReglerTabelle::ReglerTabelle() {
   }
   // S14: eight graph knobs per send return fx/3, fx/4 (effect graph of section 4.10 on send bus 3, 4). Global (channel -1) like
   // fx/<n>/rueckweg: fx/3 is a send bus, not a mixer channel. The kern maps them to the rows MIX_BK_SEND_ZEILE + 0/1 of its
-  // knob matrix (core.cpp). Appended after the ret block: no index moves (897..912). Same shape as the kn_bk loop above,
+  // knob matrix (core.cpp). Appended after the ret block: no index moves (897..912). Same shape as the bk_kanal_1 loop above,
   // so djk/contract/check_name_lists.py reads the list. Ramp 0: the FFI smooths 20 ms.
-  for (const char* kn_bk_send : {"fx/3", "fx/4"}) {
+  for (const char* bk_send_1 : {"fx/3", "fx/4"}) {
     for (int nr = 1; nr <= 8; nr++) {
-      std::snprintf(p, sizeof p, "%s/bk/%d", kn_bk_send, nr);
+      std::snprintf(p, sizeof p, "%s/bk/%d", bk_send_1, nr);
       neu(p, -1, Rolle::bk_regler, 0, 1, 0.5f, 0, false, false, false, false, linear(0, 1));
     }
   }
@@ -284,30 +283,30 @@ ReglerTabelle::ReglerTabelle() {
   // 32-knob widening (2026-11-11): the Baukasten knobs 9..32 of the channels and send returns. Appended after the insert block so that
   // no index of the rows above moves (the rows 1..8 stay at their old index; ins/bk/<n>/k9..k32 come with the generated block above).
   // Same channel lists as the two bk loops above (pinned against net_erz.cpp in test_net_erz.cpp), same role, range, default and ramp.
-  for (const char* kn_bk_hoch : {"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "erz/5", "erz/6", "erz/7", "pad/1", "pad/2"}) {
-    const int k = kanal_suche(kn_bk_hoch);
+  for (const char* bk_kanal_9 : {"deck/1", "deck/2", "pad/1", "pad/2"}) {
+    const int k = kanal_suche(bk_kanal_9);
     for (int nr = 9; nr <= 32; nr++) {
-      std::snprintf(p, sizeof p, "%s/bk/%d", kn_bk_hoch, nr);
+      std::snprintf(p, sizeof p, "%s/bk/%d", bk_kanal_9, nr);
       neu(p, k, Rolle::bk_regler, 0, 1, 0.5f, 0, false, false, false, false, linear(0, 1));
     }
   }
-  for (const char* kn_bk_send_hoch : {"fx/3", "fx/4"}) {
+  for (const char* bk_send_9 : {"fx/3", "fx/4"}) {
     for (int nr = 9; nr <= 32; nr++) {
-      std::snprintf(p, sizeof p, "%s/bk/%d", kn_bk_send_hoch, nr);
+      std::snprintf(p, sizeof p, "%s/bk/%d", bk_send_9, nr);
       neu(p, -1, Rolle::bk_regler, 0, 1, 0.5f, 0, false, false, false, false, linear(0, 1));
     }
   }
   // 64-knob widening (2026-11-11): the rows 33..64, appended behind the rows 9..32 (same two loops, same order), so that no index above moves.
-  for (const char* kn_bk_hoch2 : {"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "erz/5", "erz/6", "erz/7", "pad/1", "pad/2"}) {
-    const int k = kanal_suche(kn_bk_hoch2);
+  for (const char* bk_kanal_33 : {"deck/1", "deck/2", "pad/1", "pad/2"}) {
+    const int k = kanal_suche(bk_kanal_33);
     for (int nr = 33; nr <= BK_REGLER_N; nr++) {
-      std::snprintf(p, sizeof p, "%s/bk/%d", kn_bk_hoch2, nr);
+      std::snprintf(p, sizeof p, "%s/bk/%d", bk_kanal_33, nr);
       neu(p, k, Rolle::bk_regler, 0, 1, 0.5f, 0, false, false, false, false, linear(0, 1));
     }
   }
-  for (const char* kn_bk_send_hoch2 : {"fx/3", "fx/4"}) {
+  for (const char* bk_send_33 : {"fx/3", "fx/4"}) {
     for (int nr = 33; nr <= BK_REGLER_N; nr++) {
-      std::snprintf(p, sizeof p, "%s/bk/%d", kn_bk_send_hoch2, nr);
+      std::snprintf(p, sizeof p, "%s/bk/%d", bk_send_33, nr);
       neu(p, -1, Rolle::bk_regler, 0, 1, 0.5f, 0, false, false, false, false, linear(0, 1));
     }
   }
@@ -317,7 +316,7 @@ ReglerTabelle::ReglerTabelle() {
   for (int n = GRP_REGLER_GRUPPEN + 1; n <= GRP_REGLER_GRUPPEN_ALLE; n++) {
     gruppen_regler(n);
   }
-  for (int r = 1; r <= RET_REGLER_RETURNS; r++) {
+  for (int r = 1; r <= RET_REGLER_RETURNS_ALT; r++) {
     for (int n = GRP_REGLER_GRUPPEN + 1; n <= GRP_REGLER_GRUPPEN_ALLE; n++) {
       std::snprintf(p, sizeof p, "grp/%d/send/%d", n, r);
       neu(p, -1, Rolle::snd_grp, -200, 6, -200, MS(10), false, true, false, false, K_SPUR_FADER);
@@ -336,14 +335,14 @@ ReglerTabelle::ReglerTabelle() {
     std::snprintf(p, sizeof p, "master/bk/%d", nr);
     neu(p, -1, Rolle::bk_regler, 0, 1, 0.5f, 0, false, false, false, false, linear(0, 1));
   }
-  // Production plan task 8: spur/<slot>/bk/<k>, slot 1..8, k 1..64, a transient override of a Baukasten knob (the Arrangement holds the written flag and clears it with every playback build, D11).
+  // Production plan task 8: spur/<slot>/bk/<k>, slot 1..SPUR_BK_SLOTS (16), k 1..64, a transient override of a Baukasten knob (the Arrangement holds the written flag and clears it with every playback build, D11).
   // Appended at the very end, slot-major: no index moves. Everybody may write (like the other graph knobs). Not stored in the state file (core_state.cpp).
   for (int slot = 1; slot <= SPUR_BK_SLOTS; slot++)
     for (int nr = 1; nr <= SPUR_BK_KNOEPFE; nr++) {
       std::snprintf(p, sizeof p, "spur/%d/bk/%d", slot, nr);
       neu(p, -1, Rolle::spur_bk, 0, 1, 0.5f, 0, false, false, false, false, linear(0, 1));
     }
-  // Loop deck K7a: spur/1..32/filter, the DJ filter of an arrangement track (-1 low-pass .. +1 high-pass, 0 neutral). Appended at the very end, after spur/8/bk/64: no index moves.
+  // Loop deck K7a: spur/1..32/filter, the DJ filter of an arrangement track (-1 low-pass .. +1 high-pass, 0 neutral). Appended at the very end, after spur/16/bk/64 (the filter, eq, strom and K7 rows moved by 512 indices when the slots went 8 -> 16: states are keyed by path).
   // Everybody may write it; ramp 10 ms like the track pan (the Arrangement smooths the field per sample).
   for (int n = 1; n <= SPUR_FILTER_N; n++) {
     std::snprintf(p, sizeof p, "spur/%d/filter", n);
@@ -358,6 +357,56 @@ ReglerTabelle::ReglerTabelle() {
     neu(p, -1, Rolle::spur_eq_mitte, -200, 6, 0, MS(5), false, true, false, false, K_EQ);
     std::snprintf(p, sizeof p, "spur/%d/eq/hoch", n);
     neu(p, -1, Rolle::spur_eq_hoch, -200, 6, 0, MS(5), false, true, false, false, K_EQ);
+  }
+  // Container core K2: strom/<n>/bk/<k>, the knobs of the Baukasten graph on Erzeuger stream n (1..16), k = 1..64. Appended at the very end, after
+  // spur/32/eq/hoch, n outer, k inner: no index moves. Global rows, everybody may write (like the other graph knobs). The old <kanal>/bk rows stay until K9.
+  for (int strom = 1; strom <= STROM_BK_STROEME; strom++)
+    for (int nr = 1; nr <= BK_REGLER_N; nr++) {
+      std::snprintf(p, sizeof p, "strom/%d/bk/%d", strom, nr);
+      neu(p, -1, Rolle::strom_bk, 0, 1, 0.5f, 0, false, false, false, false, linear(0, 1));
+    }
+  // Container core K6: the returns 5..8, 59 rows each (32 track sends, 16 group sends, the 11 rows of the return strip), same values, flags and ramps as ret/1..4 above.
+  // Appended at the very end, return outer: no index moves (the first 1258 rows are hashed).
+  for (int r = RET_REGLER_RETURNS_ALT + 1; r <= RET_REGLER_RETURNS; r++) {
+    for (int n = 1; n <= SPUR_REGLER_SPUREN; n++) {
+      std::snprintf(p, sizeof p, "spur/%d/send/%d", n, r);
+      neu(p, -1, Rolle::snd_spur, -200, 6, -200, MS(10), false, true, false, false, K_SPUR_FADER);
+    }
+    for (int n = 1; n <= GRP_REGLER_GRUPPEN_ALLE; n++) {
+      std::snprintf(p, sizeof p, "grp/%d/send/%d", n, r);
+      neu(p, -1, Rolle::snd_grp, -200, 6, -200, MS(10), false, true, false, false, K_SPUR_FADER);
+    }
+    std::snprintf(p, sizeof p, "ret/%d/fader", r);
+    neu(p, -1, Rolle::ret_fader, -200, 6, 0, MS(10), false, true, false, false, K_SPUR_FADER);
+    std::snprintf(p, sizeof p, "ret/%d/pan", r);
+    neu(p, -1, Rolle::ret_pan, -1, 1, 0, MS(10), false, false, false, false, linear(-1, 1));
+    std::snprintf(p, sizeof p, "ret/%d/mute", r);
+    neu(p, -1, Rolle::ret_mute, 0, 1, 0, 0, false, false, true, true, K_SCHALTER);
+    std::snprintf(p, sizeof p, "ret/%d/solo", r);
+    neu(p, -1, Rolle::ret_solo, 0, 1, 0, 0, false, false, true, true, K_SCHALTER);
+    std::snprintf(p, sizeof p, "ret/%d/hall/an", r);
+    neu(p, -1, Rolle::ret_hall_an, 0, 1, 1, 0, false, false, true, true, K_SCHALTER);
+    struct HallW { const char* feld; Rolle rolle; float vorgabe; };
+    const HallW hall[] = {{"pre", Rolle::ret_hall_pre, 0.04f},         {"decay", Rolle::ret_hall_decay, 0.5252f},
+                          {"groesse", Rolle::ret_hall_groesse, 0.282f}, {"tief", Rolle::ret_hall_tief, 0.5658f},
+                          {"highcut", Rolle::ret_hall_highcut, 0.8039f}, {"fahne", Rolle::ret_hall_fahne, 0.66667f}};
+    for (const HallW& h : hall) {
+      std::snprintf(p, sizeof p, "ret/%d/hall/%s", r, h.feld);
+      neu(p, -1, h.rolle, 0, 1, h.vorgabe, MS(10), false, false, false, false, linear(0, 1));
+    }
+  }
+  // Container core K7: the track rows of the container features, 5 per track (pfl, trim, kill/tief, kill/mitte, kill/hoch), n outer, appended behind ret/8/*: no index moves. Same flags and ramps as the
+  // container strip rows (trim 10 ms, kill 5 ms, switches without ramp), everybody may write (nur_hand false) like the other spur/* rows.
+  for (int n = 1; n <= SPUR_REGLER_SPUREN; n++) {
+    std::snprintf(p, sizeof p, "spur/%d/pfl", n);
+    neu(p, -1, Rolle::spur_pfl, 0, 1, 0, 0, false, false, true, true, K_SCHALTER);
+    std::snprintf(p, sizeof p, "spur/%d/trim", n);
+    neu(p, -1, Rolle::spur_trim, -24, 24, 0, MS(10), false, false, false, false, linear(-24, 24));
+    const struct { const char* name; Rolle rolle; } kill[] = {{"tief", Rolle::spur_kill_tief}, {"mitte", Rolle::spur_kill_mitte}, {"hoch", Rolle::spur_kill_hoch}};
+    for (const auto& k : kill) {
+      std::snprintf(p, sizeof p, "spur/%d/kill/%s", n, k.name);
+      neu(p, -1, k.rolle, 0, 1, 0, MS(5), false, false, true, true, K_SCHALTER);
+    }
   }
   for (int i = 0; i < n_; i++) sortiert_[i] = static_cast<int16_t>(i);
   std::sort(sortiert_, sortiert_ + n_, [&](int16_t a, int16_t b) { return std::strcmp(def_[a].pfad, def_[b].pfad) < 0; });

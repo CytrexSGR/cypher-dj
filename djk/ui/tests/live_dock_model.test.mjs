@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FX_REITER } from '../public/effects_reiter.js';
 import {
-  LIVE_KANAELE, FX_INDEX, graphArtVon, liveModell, gestaltLive, knopfBereich, wertVonK, kVonWert,
+  LIVE_KANAELE, liveKanaele, FX_INDEX, graphArtVon, liveModell, gestaltLive, knopfBereich, wertVonK, kVonWert,
   chipPunkte, kartenPunkte, wechselWahl, effektWahl, spektrumWert,
 } from '../public/live_dock/model.js';
 
@@ -20,21 +20,22 @@ function stand(extra = {}) {
     hostNamen: {}, inhalt: { 'deck/1': 'Song A' }, gewaehlt: 'erz/1', limiter: { gebaut: true, grund: '' }, ...extra,
   };
 }
+// The cards of the streams of a placed Strudel module come from `stand.strome` (the stream numbers of the module); the tests below that look at a stream card
+// place the module with the streams 1, 2, 3, 5, 6, 7.
+const STROEME_MODUL = [1, 2, 3, 5, 6, 7];
+const modell = (s) => liveModell({ strome: STROEME_MODUL, ...s });
 function tiefEinfrieren(o) { if (o && typeof o === 'object') { Object.values(o).forEach(tiefEinfrieren); Object.freeze(o); } return o; }
 const karte = (m, id) => [...m.zeilen.flatMap((z) => z.karten), ...m.master].find((c) => c.id === id);
 const teile = (k) => k.teile.map((t) => t.teil);
 
-test('ten channel cards in D5 order with exact labels and colours, FX3, FX4, one MASTER card', () => {
+test('four container cards A..D with exact labels and colours, FX3, FX4, one MASTER card', () => {
   const m = liveModell(stand());
   assert.equal(m.zeilen.length, 2);
   assert.deepEqual([m.zeilen[0].key, m.zeilen[0].titel, m.zeilen[0].w], ['kanaele', 'CHANNELS', 'dock-kanaele']);
   assert.deepEqual([m.zeilen[1].key, m.zeilen[1].titel, m.zeilen[1].w], ['fx', 'EFFECTS', 'dock-fx']);
   const kanaele = m.zeilen[0].karten;
   assert.deepEqual(kanaele.map((c) => [c.id, c.kurz, c.name, c.farbe]), [
-    ['deck/1', 'A', 'A', 'var(--a)'], ['deck/2', 'B', 'B', 'var(--b)'],
-    ['erz/1', 'I1', 'DRUMS', 'var(--c)'], ['erz/2', 'I2', 'BASS', 'var(--c)'], ['erz/3', 'I3', 'MELODY', 'var(--c)'],
-    ['erz/5', 'I5', 'I5', 'var(--c)'], ['erz/6', 'I6', 'I6', 'var(--c)'], ['erz/7', 'I7', 'I7', 'var(--c)'],
-    ['pad/1', 'L1', 'L1', 'var(--c3)'], ['pad/2', 'L2', 'L2', 'var(--c3)'],
+    ['deck/1', 'A', 'A', 'var(--a)'], ['deck/2', 'B', 'B', 'var(--b)'], ['pad/1', 'C', 'C', 'var(--c)'], ['pad/2', 'D', 'D', 'var(--c3)'],
   ]);
   assert.ok(kanaele.every((c) => c.art === 'kanal'));
   const fx = m.zeilen[1].karten;
@@ -47,7 +48,7 @@ test('ten channel cards in D5 order with exact labels and colours, FX3, FX4, one
 });
 
 test('BASS with an instrument graph: instrument is the subtitle, never a chip', () => {
-  const k = karte(liveModell(stand({ geladen: { 'erz/2': 'bass-acid' } })), 'erz/2');
+  const k = karte(modell(stand({ geladen: { 'erz/2': 'bass-acid' } })), 'erz/2');
   assert.equal(k.untertitel, 'bass-acid');
   assert.equal(k.untertitelArt, 'instrument');
   assert.deepEqual(teile(k), ['gate', 'komp', 'util']);
@@ -60,17 +61,17 @@ test('BASS with an instrument graph: instrument is the subtitle, never a chip', 
 });
 
 test('BASS with nothing loaded and host Surge XT: host name as subtitle, no knobs', () => {
-  const k = karte(liveModell(stand({ hostNamen: { 'erz/2': 'Surge XT' } })), 'erz/2');
+  const k = karte(modell(stand({ hostNamen: { 'erz/2': 'Surge XT' } })), 'erz/2');
   assert.equal(k.untertitel, 'Surge XT');
   assert.deepEqual(k.knoepfe, []);
   assert.deepEqual(k.teile.map((t) => t.text), ['GATE', 'COMP', 'UTIL']);
-  const leer = karte(liveModell(stand()), 'erz/3');
+  const leer = karte(modell(stand()), 'erz/3');
   assert.equal(leer.untertitel, 'Surge XT');
-  assert.equal(karte(liveModell(stand({ hostNamen: { 'erz/3': 'Pianoteq' } })), 'erz/3').untertitel, 'Pianoteq');
+  assert.equal(karte(modell(stand({ hostNamen: { 'erz/3': 'Pianoteq' } })), 'erz/3').untertitel, 'Pianoteq');
 });
 
 test('BASS with an effect graph (remix case): the effect is a chip, the subtitle says No instrument', () => {
-  const k = karte(liveModell(stand({ geladen: { 'erz/2': 'echo-tape' } })), 'erz/2');
+  const k = karte(modell(stand({ geladen: { 'erz/2': 'echo-tape' } })), 'erz/2');
   assert.deepEqual(teile(k), ['insert', 'gate', 'komp', 'util']);
   assert.equal(k.teile[0].text, 'echo-tape');
   assert.equal(k.teile[0].art, 'effekt');
@@ -82,17 +83,17 @@ test('BASS with an effect graph (remix case): the effect is a chip, the subtitle
 });
 
 test('instrument channel without any host name: No instrument', () => {
-  const k = karte(liveModell(stand()), 'erz/5');
+  const k = karte(modell(stand()), 'erz/5');
   assert.equal(k.untertitel, 'No instrument');
   assert.ok(k.wechsel && k.auf);
 });
 
 test('deck A: effect chip first, plus.aus follows the loaded effect, subtitle is what plays, COMP knobs', () => {
-  const mit = karte(liveModell(stand({ geladen: { 'deck/1': 'echo-tape' } })), 'deck/1');
+  const mit = karte(modell(stand({ geladen: { 'deck/1': 'echo-tape' } })), 'deck/1');
   assert.deepEqual(teile(mit), ['insert', 'gate', 'komp', 'util']);
   assert.equal(mit.plus.aus, true);
   assert.match(mit.plus.titel, /one effect/);
-  const leer = karte(liveModell(stand()), 'deck/1');
+  const leer = karte(modell(stand()), 'deck/1');
   assert.deepEqual(teile(leer), ['gate', 'komp', 'util']);
   assert.equal(leer.plus.aus, false);
   assert.equal(leer.plus.titel, 'Add an effect to this channel');
@@ -103,57 +104,57 @@ test('deck A: effect chip first, plus.aus follows the loaded effect, subtitle is
   assert.deepEqual(leer.knoepfe.map((x) => x.param), ['komp/schwelle', 'komp/ratio', 'komp/mix']);
   assert.equal(leer.knopfGruppe, 'COMP');
   assert.equal(leer.knoepfe[0].titel, 'Compressor threshold of A');
-  assert.equal(karte(liveModell(stand()), 'deck/2').untertitel, '–');
+  assert.equal(karte(modell(stand()), 'deck/2').untertitel, '–');
 });
 
 test('an effect graph name is cut for the chip', () => {
-  const k = karte(liveModell(stand({ geladen: { 'deck/1': 'a-very-long-effect-name' } })), 'deck/1');
+  const k = karte(modell(stand({ geladen: { 'deck/1': 'a-very-long-effect-name' } })), 'deck/1');
   assert.equal(k.teile[0].text, 'a-very-lon…');
   assert.match(k.teile[0].titel, /a-very-long-effect-name/);
 });
 
 test('DRUMS has no plus and no wechsel', () => {
-  const k = karte(liveModell(stand()), 'erz/1');
+  const k = karte(modell(stand()), 'erz/1');
   assert.equal(k.plus, null);
   assert.equal(k.wechsel, false);
   assert.equal(k.auf, false);
 });
 
-test('I5 with lead-saw: six knobs bk:k1 to bk:k6; an instrument graph on any channel is the subtitle', () => {
-  const k = karte(liveModell(stand({ geladen: { 'erz/5': 'lead-saw' } })), 'erz/5');
+test('stream 5 with lead-saw: six knobs bk:k1 to bk:k6; an instrument graph on any channel is the subtitle', () => {
+  const k = karte(modell(stand({ geladen: { 'erz/5': 'lead-saw' } })), 'erz/5');
   assert.deepEqual(k.knoepfe.map((x) => x.param), ['bk:k1', 'bk:k2', 'bk:k3', 'bk:k4', 'bk:k5', 'bk:k6']);
-  assert.equal(k.knoepfe[0].titel, 'Knob 1 of I5');
+  assert.equal(k.knoepfe[0].titel, 'Knob 1 of S5');
   assert.equal(k.knoepfe[0].vorgabe, 0.5);
-  const deck = karte(liveModell(stand({ geladen: { 'deck/1': 'lead-saw' } })), 'deck/1');
+  const deck = karte(modell(stand({ geladen: { 'deck/1': 'lead-saw' } })), 'deck/1');
   assert.equal(deck.untertitel, 'lead-saw');
   assert.equal(deck.untertitelArt, 'instrument');
   assert.deepEqual(teile(deck), ['gate', 'komp', 'util']);
 });
 
 test('COMP chip follows komp/an; its title carries the key source', () => {
-  const aus = karte(liveModell(stand()), 'erz/1').teile.find((t) => t.teil === 'komp');
+  const aus = karte(modell(stand()), 'erz/1').teile.find((t) => t.teil === 'komp');
   assert.equal(aus.an, false);
   assert.equal(aus.gr, true);
   assert.equal(aus.grSkala, 24);
   assert.equal(aus.titel, 'Compressor of DRUMS');
-  const an = karte(liveModell(stand({ regler: { 'erz/1/komp/an': 1, 'erz/1/komp/sc': 6 } })), 'erz/1').teile.find((t) => t.teil === 'komp');
+  const an = karte(modell(stand({ regler: { 'erz/1/komp/an': 1, 'erz/1/komp/sc': 2 } })), 'erz/1').teile.find((t) => t.teil === 'komp');
   assert.equal(an.an, true);
-  assert.match(an.titel, /KEY BASS/);
-  const gate = karte(liveModell(stand({ regler: { 'erz/1/gate/an': 1 } })), 'erz/1').teile.find((t) => t.teil === 'gate');
+  assert.match(an.titel, /KEY B/);
+  const gate = karte(modell(stand({ regler: { 'erz/1/gate/an': 1 } })), 'erz/1').teile.find((t) => t.teil === 'gate');
   assert.deepEqual([gate.an, gate.gr, gate.grSkala], [true, true, 60]);
-  const util = karte(liveModell(stand()), 'erz/1').teile.find((t) => t.teil === 'util');
+  const util = karte(modell(stand()), 'erz/1').teile.find((t) => t.teil === 'util');
   assert.deepEqual([util.an, util.gr], [true, false]);
 });
 
 test('channel cards carry meter, level text, menu and the chosen flag', () => {
-  const m = liveModell(stand({ gewaehlt: 'erz/2' }));
+  const m = modell(stand({ gewaehlt: 'erz/2' }));
   const b = karte(m, 'erz/2');
   assert.deepEqual([b.meter, b.pegelText, b.menue, b.aktiv], ['erz/2', true, true, true]);
   assert.equal(karte(m, 'erz/1').aktiv, false);
 });
 
 test('FX3 and FX4: effect cards without chips', () => {
-  const m = liveModell(stand({ geladen: { 'fx/3': 'echo-tape' }, front: { 'echo-tape': front8 } }));
+  const m = modell(stand({ geladen: { 'fx/3': 'echo-tape' }, front: { 'echo-tape': front8 } }));
   const a = karte(m, 'fx/3'), b = karte(m, 'fx/4');
   assert.deepEqual([a.untertitel, a.untertitelArt, a.wechsel, a.auf], ['echo-tape', 'effekt', true, true]);
   assert.deepEqual([b.untertitel, b.untertitelArt, b.wechsel, b.auf], ['No effect', 'effekt', true, false]);
@@ -164,7 +165,7 @@ test('FX3 and FX4: effect cards without chips', () => {
 });
 
 test('MASTER: effect chip, GLUE, LIMITER, four bus chips in a BUS section, glue knob', () => {
-  const m = liveModell(stand({ geladen: { master: 'echo-tape' }, regler: { 'master/kleber': 0.3, 'bus/2/mb/an': 1 } }));
+  const m = modell(stand({ geladen: { master: 'echo-tape' }, regler: { 'master/kleber': 0.3, 'bus/2/mb/an': 1 } }));
   const k = m.master[0];
   assert.deepEqual(teile(k), ['insert', 'glue', 'limiter', 'bus/1', 'bus/2', 'bus/3', 'bus/4']);
   assert.equal(k.kurz, '');
@@ -176,11 +177,11 @@ test('MASTER: effect chip, GLUE, LIMITER, four bus chips in a BUS section, glue 
   assert.equal(k.plus.aus, true);
   assert.deepEqual(k.knoepfe, [{ param: 'kleber', name: 'GLUE', titel: 'Master glue compressor', vorgabe: 0 }]);
   assert.deepEqual([k.auf, k.meter, k.menue], [true, 'master', false]);
-  const leer = liveModell(stand()).master[0];
+  const leer = modell(stand()).master[0];
   assert.equal(leer.teile.find((t) => t.teil === 'glue').an, false);
   assert.ok(!leer.teile.some((t) => t.teil === 'insert'));
   assert.equal(leer.plus.aus, false);
-  const lim2 = liveModell(stand({ regler: { 'bus/3/lim/an': 1 } })).master[0].teile.find((t) => t.teil === 'bus/3');
+  const lim2 = modell(stand({ regler: { 'bus/3/lim/an': 1 } })).master[0].teile.find((t) => t.teil === 'bus/3');
   assert.equal(lim2.an, true);
 });
 
@@ -194,24 +195,23 @@ test('graphArtVon: empty is null, own art, unknown name takes the channel kind',
 });
 
 test('gestaltLive: values do not change it, a loaded graph does', () => {
-  const a = gestaltLive(liveModell(stand()));
+  const a = gestaltLive(modell(stand()));
   assert.equal(typeof a, 'string');
   const werte = stand({ regler: { 'deck/1/komp/an': 1, 'deck/1/gate/an': 1, 'master/kleber': 0.5 }, gewaehlt: 'pad/1', inhalt: { 'deck/1': '▶ other' } });
-  assert.equal(gestaltLive(liveModell(werte)), a);
-  assert.equal(gestaltLive(liveModell(stand({ geladen: { 'deck/1': 'echo-tape' } }))) === a, false);
-  assert.equal(gestaltLive(liveModell(stand({ geladen: { 'erz/5': 'lead-saw' } }))) === a, false);
+  assert.equal(gestaltLive(modell(werte)), a);
+  assert.equal(gestaltLive(modell(stand({ geladen: { 'deck/1': 'echo-tape' } }))) === a, false);
+  assert.equal(gestaltLive(modell(stand({ geladen: { 'erz/5': 'lead-saw' } }))) === a, false);
 });
 
-test('chipPunkte: komp of DRUMS', () => {
-  const s = stand({ regler: { 'erz/1/komp/sc': 6, 'erz/1/komp/an': 1 } });
-  const k = karte(liveModell(s), 'erz/1');
+test('chipPunkte: komp of container A', () => {
+  const s = stand({ regler: { 'deck/1/komp/sc': 2, 'deck/1/komp/an': 1 } });
+  const k = karte(modell(s), 'deck/1');
   const p = chipPunkte(k, 'komp', s);
   assert.equal(p[0].text, 'Bypass');
   assert.equal(p[0].aktion, 'komp-an');
   const sc = p.filter((x) => x.aktion === 'komp-sc');
-  assert.ok(!sc.some((x) => /DRUMS/.test(x.text)));
-  assert.deepEqual(sc.map((x) => x.text), ['own signal', '✓ BASS', 'MELODY', 'A', 'B', 'L1', 'L2']);
-  assert.deepEqual(sc.map((x) => x.wert), [0, 6, 7, 1, 2, 13, 14]);
+  assert.deepEqual(sc.map((x) => x.text), ['own signal', '✓ B', 'C', 'D'], 'the container itself is not offered as its own key');
+  assert.deepEqual(sc.map((x) => x.wert), [0, 2, 3, 4]);
   assert.ok(p.some((x) => x.gruppe && x.text === 'Key source'));
   const pre = p.filter((x) => x.aktion === 'komp-preset');
   assert.equal(pre.length, 6);
@@ -224,7 +224,7 @@ test('chipPunkte: komp of DRUMS', () => {
 
 test('chipPunkte: gate, util, insert, bus, glue, limiter', () => {
   const s = stand({ regler: { 'erz/2/util/phase_l': 1, 'erz/2/gate/an': 1 }, limiter: { gebaut: false, grund: 'limiter not built (x)' } });
-  const m = liveModell(s);
+  const m = modell(s);
   const b = karte(m, 'erz/2');
   assert.deepEqual(chipPunkte(b, 'gate', s).map((x) => [x.text, x.aktion]), [['Bypass', 'gate-an']]);
   assert.equal(chipPunkte(karte(m, 'erz/1'), 'gate', s)[0].text, 'Enable');
@@ -247,15 +247,9 @@ test('chipPunkte: gate, util, insert, bus, glue, limiter', () => {
   assert.deepEqual(chipPunkte(ms, 'limiter', s), []);
 });
 
-test('kartenPunkte: Spectrum for channels, Loop automation for the pads only', () => {
-  const m = liveModell(stand());
-  const l1 = kartenPunkte(karte(m, 'pad/1'));
-  assert.ok(l1.some((x) => x.text === 'Loop automation…' && x.aktion === 'automation' && x.wert === 1));
-  assert.ok(l1.some((x) => x.text === 'Spectrum' && x.aktion === 'spektrum'));
-  assert.equal(kartenPunkte(karte(m, 'pad/2')).find((x) => x.aktion === 'automation').wert, 2);
-  const a = kartenPunkte(karte(m, 'deck/1'));
-  assert.ok(!a.some((x) => x.text === 'Loop automation…'));
-  assert.ok(a.some((x) => x.aktion === 'spektrum'));
+test('kartenPunkte: Spectrum for channels, nothing else (the loop box automation is gone with the loop boxes)', () => {
+  const m = modell(stand());
+  for (const id of ['deck/1', 'pad/1', 'pad/2']) assert.deepEqual(kartenPunkte(karte(m, id)), [{ text: 'Spectrum', aktion: 'spektrum' }], id);
 });
 
 test('wechselWahl and effektWahl', () => {
@@ -291,7 +285,9 @@ test('knob conversions', () => {
 
 test('spektrumWert', () => {
   assert.equal(spektrumWert('deck/1'), 1);
-  assert.equal(spektrumWert('erz/1'), 5);
+  assert.equal(spektrumWert('pad/1'), 3);
+  assert.equal(spektrumWert('master'), 9);
+  assert.equal(spektrumWert('erz/1'), 0, 'a stream is no mixer strip');
   assert.equal(spektrumWert('nichts'), 0);
 });
 
@@ -304,7 +300,7 @@ test('LIVE_KANAELE and FX_INDEX are bound to FX_REITER', () => {
 
 test('a deep-frozen snapshot does not throw', () => {
   const s = tiefEinfrieren(stand({ geladen: { 'erz/2': 'bass-acid', 'deck/1': 'echo-tape', master: 'echo-tape' }, regler: { 'erz/1/komp/an': 1 } }));
-  const m = liveModell(s);
+  const m = modell(s);
   gestaltLive(m);
   for (const c of [...m.zeilen.flatMap((z) => z.karten), ...m.master]) {
     kartenPunkte(c);
@@ -312,4 +308,20 @@ test('a deep-frozen snapshot does not throw', () => {
   }
   wechselWahl('erz/2', s);
   effektWahl('deck/1', s);
+});
+
+test('U6 the dock list is the four containers plus the stream aliases of the placed Strudel module, none when no module is placed', () => {
+  const ids = (l) => l.map(([id]) => id);
+  assert.deepEqual(ids(liveKanaele([])), ['deck/1', 'deck/2', 'pad/1', 'pad/2'], 'no module: the containers only');
+  assert.deepEqual(ids(liveKanaele(undefined)), ['deck/1', 'deck/2', 'pad/1', 'pad/2']);
+  assert.deepEqual(ids(liveKanaele([1, 2, 3, 5])), ['deck/1', 'deck/2', 'pad/1', 'pad/2', 'erz/1', 'erz/2', 'erz/3', 'erz/5']);
+  assert.deepEqual(ids(liveKanaele([5, 1])), ['deck/1', 'deck/2', 'pad/1', 'pad/2', 'erz/1', 'erz/5'], 'ascending');
+  assert.deepEqual(ids(liveKanaele([16, 4, 8, 9])), ['deck/1', 'deck/2', 'pad/1', 'pad/2', 'erz/9'], 'only streams that have an alias strip');
+  const k = liveKanaele([1, 5]).slice(4);
+  assert.deepEqual(k.map(([, kurz, name]) => [kurz, name]), [['S1', 'DRUMS'], ['S5', 'S5']]);
+  const m = liveModell(stand({ strome: [] }));
+  assert.deepEqual(m.zeilen[0].karten.map((c) => c.id), ['deck/1', 'deck/2', 'pad/1', 'pad/2']);
+  const m2 = liveModell(stand({ strome: [1, 6] }));
+  assert.deepEqual(m2.zeilen[0].karten.map((c) => c.id), ['deck/1', 'deck/2', 'pad/1', 'pad/2', 'erz/1', 'erz/6']);
+  assert.ok(m2.zeilen[0].karten.every((c) => c.art === 'kanal'));
 });

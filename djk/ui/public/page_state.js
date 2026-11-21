@@ -18,8 +18,9 @@ export const zustand = {
   bestand: [],            // aus /bestand
   geladen: {},            // deck → material_id
   eigeneLaden: new Map(), // id → deck (für /q)
-  loops: {},              // box → letzte /e/loop (MVP 2)
   loopliste: [],          // aus /loops
+  plaetze: null,          // the four places of the live project (GET /lage), null without one
+  container: null,        // GET /lage container: [{art}] x4 (leer|player|modul), null until the first answer
 };
 window.djk = zustand;      // für die Prüfung (lesen)
 export const deckAnsicht = {};    // deck → { lauf, ueber, kopf, id, raster } (Plan Oberfläche T5)

@@ -38,7 +38,7 @@ const INSERT_GERAETE = ['komp', 'eq', 'saett'] as const;
 export const KERN_KOMP: Readonly<Record<string, string>> = { thresh: 'schwelle', ratio: 'ratio', attack: 'attack', release: 'release', makeup: 'makeup', mix: 'mix' };
 // Channel kinds as the page names them (public/presets.js kanalArtVon)
 export const kanalArtVon = (kanal: string): 'quelle' | 'bus' | null =>
-  (/^(deck\/[1-4]|erz\/[1-7]|pad\/[12])$/.test(kanal) ? 'quelle' : /^bus\/[1-4]$/.test(kanal) ? 'bus' : null);
+  (/^(deck\/[1-4]|erz\/([1-7]|9|10)|pad\/[12])$/.test(kanal) ? 'quelle' : /^bus\/[1-4]$/.test(kanal) ? 'bus' : null);
 
 const zahlVon = (p: { def: GeraetDef['parameter'][number]['def'] } | undefined, w: Wert): number =>
   (typeof w === 'boolean' ? (w ? 1 : 0) : typeof w === 'string' ? (p?.def.art === 'auswahl' ? p.def.werte.indexOf(w) : Number.NaN) : w);

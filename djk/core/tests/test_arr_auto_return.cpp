@@ -85,7 +85,7 @@ static void lader_faelle() {
   PRUEF(grund("", ret(1, gut), V2) == "format");
   PRUEF(grund("", ret(1, gut), V3) == "+snap");
   // lader_alter_kern_format3_abgelehnt: what the gate of a core without the capability does with a /3 file: the format is unknown, reason `format`, no snapshot
-  PRUEF(grund("", ret(1, gut), "cypherdj-arr/4") == "format");
+  PRUEF(grund("", ret(1, gut), "cypherdj-arr/5") == "format");   // K5: /4 is valid now, /5 is the first unknown format
   PRUEF(grund("", ret(1, gut), "cypherdj-arr/9") == "format");
   PRUEF(grund("", ret(1, ""), "cypherdj-arr/") == "format");
   // lader_ret_ziel_pan_abgelehnt, the other targets, relative, twice

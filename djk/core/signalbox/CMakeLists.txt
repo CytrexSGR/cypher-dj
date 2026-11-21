@@ -20,9 +20,9 @@ if(STELLWERK_SANITIZE)
   set(SAN -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined)
 endif()
 
-# Jede Regel-Datei gibt es zweimal: src/<teil>.cpp (die Regel) und leer/<teil>.cpp (erfüllt nur die Kopfdatei).
+# Jede Regel-Datei gibt es zweimal: src/<teil>.cpp (die Regel) und empty/<teil>.cpp (erfüllt nur die Kopfdatei).
 # cypherdj_stellwerk nimmt src/, sobald die Datei existiert (neu konfigurieren, wenn eine dazukommt).
-# cypherdj_stellwerk_leer ist die leere Schnittstelle für den Fehlerfall: Regler-Tabelle (Daten) aus src/, sonst leer/.
+# cypherdj_stellwerk_leer ist die leere Schnittstelle für den Fehlerfall: Regler-Tabelle (Daten) aus src/, sonst empty/.
 set(TEILE controls core sort_in hand ai reporter view flow)
 set(QUELLEN src/types.cpp)
 set(QUELLEN_LEER src/types.cpp)
@@ -30,16 +30,16 @@ foreach(t ${TEILE})
   if(EXISTS ${D}/src/${t}.cpp)
     list(APPEND QUELLEN src/${t}.cpp)
   else()
-    list(APPEND QUELLEN leer/${t}.cpp)
+    list(APPEND QUELLEN empty/${t}.cpp)
   endif()
   if(t STREQUAL "controls" AND EXISTS ${D}/src/controls.cpp)
     list(APPEND QUELLEN_LEER src/controls.cpp)
   else()
-    list(APPEND QUELLEN_LEER leer/${t}.cpp)
+    list(APPEND QUELLEN_LEER empty/${t}.cpp)
   endif()
 endforeach()
 # i3 (Task 13): eigenständige Klassen (HoerscheinRegister, PrueferI3), kein Teil der Stellwerk-Ablaufkette und
-# darum nicht Teil des leer/-Fehlerfalls (der prüft die Ablaufkette ohne I3a-Logik); beide Bibliotheken linken
+# darum nicht Teil des empty/-Fehlerfalls (der prüft die Ablaufkette ohne I3a-Logik); beide Bibliotheken linken
 # dieselbe Datei, wie schon src/typen.cpp.
 if(EXISTS ${D}/src/i3.cpp)
   list(APPEND QUELLEN src/i3.cpp)
@@ -86,6 +86,9 @@ if(EXISTS ${D}/tool/controls_list.cpp)
   add_executable(stellwerk_regler_liste tool/controls_list.cpp)
   target_link_libraries(stellwerk_regler_liste cypherdj_stellwerk)
   stellwerk_ziel(stellwerk_regler_liste)
+  # Control table against contract/pult.json (container core K9)
+  add_test(NAME test_regler_gegen_pult
+           COMMAND python3 ${D}/tests/controls_against_pult.py $<TARGET_FILE:stellwerk_regler_liste> ${D}/../../contract/generate_pult.py)
   # Regler-Tabelle gegen den Vertragstext §1.5 (mit Selbsttest gegen einen verfälschten Text)
   set(VERTRAG_TEXT ${D}/../../../docs/architecture/INTERFACES.md CACHE FILEPATH "INTERFACES.md")
   if(EXISTS ${VERTRAG_TEXT})
@@ -116,7 +119,7 @@ foreach(f ${TESTDATEIEN})
     continue()   # ersetzt malloc; verträgt sich nicht mit ASan
   endif()
   add_executable(stellwerk_${n} ${f})
-  target_include_directories(stellwerk_${n} PRIVATE tests werkzeug)
+  target_include_directories(stellwerk_${n} PRIVATE tests werkzeug tool)
   target_link_libraries(stellwerk_${n} cypherdj_stellwerk)
   if(TARGET cypherdj_stellwerk_sim)
     target_link_libraries(stellwerk_${n} cypherdj_stellwerk_sim)
@@ -140,6 +143,7 @@ endforeach()
 #   INS_PFAD_ZU_LANG: one path of the insert vocabulary has 32 characters (test_insert_contract, 1.10 slice 4a T1)
 #   INS_BEREICH: ins/komp/<n>/schwelle ends at +6 dB instead of 0 (the range parity with the DJ-side komp/* rows, test_insert_contract)
 #   PICKUP_VOR_VERWURF: the pickup runs before the discard checks and for a release (test_hand_pickup)
+#   HOERSCHEIN_NACH_CONTAINERPFAD: the pass key is compared with the container strip path instead of deck/<player> (test_i3, case i3_c_player_geladen; container core K8)
 # The library sources are compiled again with the switch, so these executables do not link cypherdj_stellwerk.
 if(TARGET cypherdj_stellwerk_sim)
   foreach(m
@@ -147,7 +151,8 @@ if(TARGET cypherdj_stellwerk_sim)
       test_hand_grip:STELLWERK_GRIFF_SAMPLE_LETZTER test_hand_pickup:STELLWERK_PICKUP_VOR_VERWURF
       test_hand_grip:STELLWERK_RESEND_GRIFF test_hand_pickup:STELLWERK_RESEND_GRIFF
       test_hand_grip:STELLWERK_GRIFF_LETZTER_ERSTER
-      test_insert_contract:INS_PFAD_ZU_LANG test_insert_contract:INS_BEREICH)
+      test_insert_contract:INS_PFAD_ZU_LANG test_insert_contract:INS_BEREICH
+      test_i3:HOERSCHEIN_NACH_CONTAINERPFAD)
     string(REPLACE ":" ";" mp ${m})
     list(GET mp 0 mt)
     list(GET mp 1 mm)

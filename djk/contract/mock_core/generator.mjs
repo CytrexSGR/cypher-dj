@@ -3,21 +3,26 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { BEFEHLE } from './contract.mjs';
+import { BEFEHLE, SPIELKANAELE, playerVonContainer } from './contract.mjs';
 import { llround } from './clock.mjs';
 import { offen, sicht } from './level.mjs';
 import { gueltig } from './listening_slip.mjs';
 
-const ZIEL = /^(midi:[1-4]:([1-9]|1[0-6])|pad:[12])$/;
-const KANAL = /^(erz\/[1-8]|pad\/[12])$/;
+const ZIEL = /^(midi:[1-4]:([1-9]|1[0-6])|bk:\S{0,64})$/;
 
 function hsMuster(K, kanal, muster, beat) {
-  for (const hs of K.hs.values()) if (!gueltig(K, hs, kanal, `muster/${muster}`, beat)) return true;
+  const schluessel = `deck/${playerVonContainer(kanal)}`;   // the Hörschein key is the player name (C7)
+  for (const hs of K.hs.values()) if (!gueltig(K, hs, schluessel, `muster/${muster}`, beat)) return true;
   return false;
 }
 
-function ungehoert(K, kanal, muster, s) {
-  return offen(K, sicht(K, s), kanal) && !hsMuster(K, kanal, muster, K.uhr.beat(s));
+// MOCK APPROXIMATION (container core C6, review I3): the real core uses the container that holds the stream's top group; the mock reads no arrangement
+// and cannot know groups, so it takes the first container with art 2. Enough for the positive case; the negative control (closed container) is tested on the core (K8).
+// container core (C6): a stream has no mixer channel, and the mock knows no groups. The muster Hörschein (I3c) applies to the FIRST container
+// with art 2 (module); without one nothing is checked. The real core uses the container that holds the stream's top group.
+function ungehoert(K, muster, s) {
+  const kanal = SPIELKANAELE.find((_, i) => K.container[i].art === 2);
+  return kanal !== undefined && offen(K, sicht(K, s), kanal) && !hsMuster(K, kanal, muster, K.uhr.beat(s));
 }
 
 function fenster(K, m, von) {
@@ -39,7 +44,7 @@ function fenster(K, m, von) {
     const [s_, muster, ev_id, note, beat, dauer, velocity] = e.werte;
     if (s_ !== strom) continue;
     if (beat < jetztBeat) { z.zu_spaet++; continue; }
-    if (!K.mutation.has('i3c_aus') && ungehoert(K, st.kanal, muster, K.jetzt)) { z.ungehoert++; continue; }
+    if (!K.mutation.has('i3c_aus') && ungehoert(K, muster, K.jetzt)) { z.ungehoert++; continue; }
     K.erz.ev.push({ strom, muster, ev_id, note, beat, dauer, velocity });
     z.eingefuegt++;
   }
@@ -79,8 +84,8 @@ export default {
   },
   befehle: {
     '/erz/strom': (K, a, b) => {
-      if (!(a.strom >= 1 && a.strom <= 16) || !ZIEL.test(a.ziel) || !KANAL.test(a.kanal)) return K.q(b, 6, 'ausserhalb_bereich');
-      K.sofort(b, () => { K.erz.stroeme.set(a.strom, { ziel: a.ziel, kanal: a.kanal }); return null; });
+      if (!(a.strom >= 1 && a.strom <= 16) || !ZIEL.test(a.ziel)) return K.q(b, 6, 'ausserhalb_bereich');
+      K.sofort(b, () => { K.erz.stroeme.set(a.strom, { ziel: a.ziel }); return null; });
     },
     '#bundle': (K, m, b, von) => fenster(K, m, von),
     '/erz/fenster': (K, a, b, von) => K.protokollfehler('/erz/fenster', 'protokoll', von),
@@ -98,7 +103,7 @@ export default {
       if (s >= s0 && s < s1) {
         p.push({ s, prio: 4, seq: 0, tu: () => {
           const st = K.erz.stroeme.get(e.strom);
-          if (st && !K.mutation.has('i3c_aus') && ungehoert(K, st.kanal, e.muster, s)) K.erz.ungehoert++;
+          if (st && !K.mutation.has('i3c_aus') && ungehoert(K, e.muster, s)) K.erz.ungehoert++;
           else K.erz.gespielt++;
           K.erz.ev = K.erz.ev.filter((x) => x !== e);
         } });

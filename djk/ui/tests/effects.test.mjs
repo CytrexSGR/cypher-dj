@@ -8,7 +8,11 @@ import { WERK_FELDER, WERK_STREIFEN, werkText, werkzeugStreifenHtml, werkzeugKli
   BUS_FELDER, BUS_KANAELE, busStreifenHtml, limiterZustand, LIMITER_GRUND, mixAufnehmen, mixLesung, MIX_FRIST_MS,
   GATE_KANAELE, gateAufnehmen, mixAblaufIn, MIX_FELDER } from '../public/effects.js';
 import { kanalArtVon, kernGeraetAnfragen, kernGeraetWerte } from '../public/presets.js';
-import { kennlinie, kennlinienPfad, KOMP_PRESETS, AUTO_BEREICH, punktAusStelle, fxInhaltText } from '../public/effects.js';
+import { FX_KANAELE, FX_INDEX } from '../public/live_kanaele.js';
+import { CONTAINER, STROEME, fxIndex, stromKanal } from '../public/kanaele.js';
+import { REGLER } from '../../conductor/src/controls_info.ts';
+import { GRAPH_KANAL_ART, BK_KNOB_KANAELE, BK_KNOB_MIT_GRAPH, GRAPH_HOST_KANAELE } from '../public/effects.js';
+import { SC_KICK, kennlinie, kennlinienPfad, KOMP_PRESETS, AUTO_BEREICH, punktAusStelle, fxInhaltText } from '../public/effects.js';
 import { AUTO_BEREICH as SERVER_AUTO, pruefeAutomation } from '../loop_automation.ts';
 import { AUTO_VORLAGEN, vorlagePunkte, knobListe, KNOB_GRUPPE, htmlText, bkKnobListe, bkKnobHtml, graphWahlOptionen, graphWahlHtml, instrumentWahlHtml, instrumentKategorien, hostName, GRAPH_KATEGORIEN, sendRueckHtml, lernKnopfHtml, lernStand } from '../public/effects.js';
 
@@ -40,14 +44,14 @@ test('Kennlinienpfad: 121 Punkte, beginnt links unten, Makeup hebt', () => {
   assert.notEqual(kennlinienPfad(-20, 4, 6, 120, 84), p);
 });
 
-test('Presets der Seite = Presets des VST3; Sidechain = Schlüssel DRUMS (5), sonst ausdrücklich 0', () => {
+test('Presets der Seite = Presets des VST3; Sidechain = der Container des Kick (SC_KICK, beim Anwenden aufgelöst), sonst ausdrücklich 0', () => {
   const vst = JSON.parse(readFileSync(new URL('../../instruments/comp/presets/presets.json', import.meta.url), 'utf8'));
   const feld = { thresh: 'schwelle', ratio: 'ratio', attack: 'attack', release: 'release', makeup: 'makeup', mix: 'mix' };
   const alle = Object.entries(vst).filter(([n]) => !n.startsWith('_'));
   assert.deepEqual(Object.keys(KOMP_PRESETS).sort(), alle.map(([n]) => n).sort());
   for (const [n, w] of alle) {
     for (const [a, b] of Object.entries(feld)) assert.equal(KOMP_PRESETS[n][b], w[a], `${n} ${b}`);
-    assert.equal(KOMP_PRESETS[n].sc, w.extsc ? 5 : 0, `${n} sc`);
+    assert.equal(KOMP_PRESETS[n].sc, w.extsc ? SC_KICK : 0, `${n} sc`);
   }
 });
 
@@ -58,14 +62,17 @@ test('Automation: Bereiche der Seite = Bereiche des Servers; Punkt aus der Stell
   assert.deepEqual(punktAusStelle(479, 60, 480, 120, 8, [-1, 1]), [7.75, 0]);   // nie auf beats selbst
 });
 
-test('Inhalt je Kanal aus der Lage: Deck, Strudel mit Klang, Box, leer', () => {
+test('Inhalt je Kanal aus der Lage: Container aus plaetze (Typ und Modul je Platz), Strudel mit Klang', () => {
   const lage = { decks: [{ deck: 1, status: 3, titel: 'Uppermost', camelot: '1A' }, { deck: 2, status: 0 }],
-    boxen: { 1: { status: 3, name: 'komp-roh-drums', beats: 8 } },
+    boxen: { 1: { status: 3, name: 'stale-loop', beats: 8 } },   // the retired loop boxes are not read any more
+    plaetze: [{ typ: 'track' }, { typ: 'seq', gruppe: 'g-seq' }, { typ: 'loops', gruppe: 'g-loops' }, { typ: 'leer' }],
     studio: { stroeme: [{ strom: 1, autonom: true, text_kurz: 'stack(s("bd*4"))' }, { strom: 2, autonom: false, text_kurz: 'silence' }], klang: { bass: 'vst3:rb338' } } };
-  assert.equal(fxInhaltText('deck/1', lage), '▶ Uppermost · 1A');
-  assert.equal(fxInhaltText('deck/2', lage), 'empty');
-  assert.equal(fxInhaltText('pad/1', lage), '▶ komp-roh-drums · 8 beats');
+  assert.equal(fxInhaltText('deck/1', lage), '▶ Uppermost · 1A');   // place A holds a track: the deck title
+  assert.equal(fxInhaltText('deck/2', lage), 'seq · g-seq', 'a SEQ deck in place B is not "empty"');
+  assert.equal(fxInhaltText('pad/1', lage), 'loops · g-loops', 'place C reads its place, not boxen');
   assert.equal(fxInhaltText('pad/2', lage), 'empty');
+  assert.equal(fxInhaltText('pad/2', { plaetze: [{ typ: 'leer' }, { typ: 'leer' }, { typ: 'leer' }, { typ: 'stems', gruppe: 'g-st' }] }), 'stems · g-st');
+  assert.equal(fxInhaltText('deck/2', { decks: [] }), 'empty', 'no live project: empty');
   assert.equal(fxInhaltText('erz/1', lage), '▶ stack(s("bd*4"))');
   assert.equal(fxInhaltText('erz/2', lage), 'rb338 · silence · AUTO off');
 });
@@ -98,7 +105,7 @@ test('S5r bkKnobListe: eight graph knobs per channel with a graph, value from th
   assert.deepEqual(l.map((k) => k.name), [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `Knob ${n}`));
   assert.deepEqual(l.map((k) => k.wert), [0.5, 0.5, 0.8, 1, 0.5, 0.5, 0.5, 0.5]);   // 7 is clamped, 'x' falls back to the default
   assert.equal(bkKnobListe('pad/1', undefined).length, 8);
-  assert.equal(bkKnobListe('erz/1', {}).length, 8);
+  assert.equal(bkKnobListe(stromKanal(1), {}).length, 8);
   // channels with an instrument host block (Knob 1..8 through /klang) and channels without a graph get none
   for (const k of ['erz/2', 'erz/3', 'erz/4', 'bus/1', 'master']) assert.deepEqual(bkKnobListe(k, {}), [], k);
 });
@@ -324,21 +331,22 @@ test('S17 T5.2 bkSpeichernHtml: button only with a project and a loaded graph; m
 // ---- Baukasten S18 task 7: erz/5..7 and the pads take instruments; the page strips follow the stream table -----------------------
 import { INSTRUMENT_STROEME, kanalVonStrom, BK_STROEME } from '../../contract/streams.ts';
 
-test('S18 graphWahlOptionen: erz/5..7 and pad/1..2 list instruments only with "—" first; erz/4, erz/8, erz/1 list nothing', () => {
-  for (const k of ['erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2']) {
+test('S18 graphWahlOptionen: erz/5..7 and erz/9, erz/10 list instruments only with "—" first; erz/4, erz/8, erz/1 list nothing', () => {
+  for (const k of ['erz/5', 'erz/6', 'erz/7', 'erz/9', 'erz/10']) {
     const o = graphWahlOptionen(k, GRAPHEN, '');
     assert.deepEqual(o.map((x) => x.wert), ['', 'sampler-fairlight', 'saite'], k);
     assert.equal(o[0].text, 'Off', k);
   }
   for (const k of ['erz/4', 'erz/8', 'erz/1']) assert.deepEqual(graphWahlOptionen(k, GRAPHEN, ''), [], k);
   assert.deepEqual(graphWahlOptionen('deck/1', GRAPHEN, '').map((x) => x.wert), ['', 'fx-bandecho', 'fx-takt-pump'], 'effects stay on decks');
+  assert.deepEqual(graphWahlOptionen('pad/1', GRAPHEN, '').map((x) => x.wert), ['', 'fx-bandecho', 'fx-takt-pump'], 'pad/1 is a container strip: effects only');
 });
 
 test('S18 GRAPH_KANAL_ART: the instrument channels are exactly the ones of the stream table', async () => {
   const { GRAPH_KANAL_ART } = await import('../public/effects.js');
   const instrumente = Object.entries(GRAPH_KANAL_ART).filter(([, a]) => a === 'instrument').map(([k]) => k).sort();
   assert.deepEqual(instrumente, INSTRUMENT_STROEME.map(kanalVonStrom).sort());
-  assert.deepEqual(instrumente, ['erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2']);
+  assert.deepEqual(instrumente, ['erz/10', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'erz/9']);
 });
 
 test('S18 bkKnobListe: erz/6 and pad/2 name their eight knobs from the loaded graph; erz/4 and erz/8 have none', () => {
@@ -347,22 +355,17 @@ test('S18 bkKnobListe: erz/6 and pad/2 name their eight knobs from the loaded gr
   assert.equal(l.length, 8);
   assert.deepEqual([l[0].name, l[1].name, l[1].wert, l[2].name], ['Rate', 'Reverse (top third)', 0.25, 'Knob 3']);
   assert.equal(bkKnobListe('pad/2', {}, { graph: g })[0].name, 'Rate');
-  assert.equal(bkKnobListe('erz/6', {}).length, 8, 'without a graph info the plain names (no host block on erz/5..7)');
+  assert.deepEqual(bkKnobListe('erz/6', {}), [], 'a stream shows graph knobs only while a graph sits on it (no tab of its own)');
   for (const k of ['erz/4', 'erz/8']) assert.deepEqual(bkKnobListe(k, {}, { graph: g }), [], k);
 });
 
-test('S18 app.js: the strip list and the mixer index of every Baukasten channel follow the stream table (mixer index = stream + 3, pads 12, 13)', () => {
-  const app = liesApp();
-  const kanaele = [...app.match(/const FX_KANAELE = \[(.*)\];/)[1].matchAll(/\['([a-z]+\/\d)', '([^']+)'\]/g)].map((m) => m[1]);
-  const index = Object.fromEntries([...app.match(/const FX_INDEX = \{(.*?)\};/)[1].matchAll(/'([a-z]+\/\d)': (\d+)/g)].map((m) => [m[1], Number(m[2])]));
-  for (const s of [...INSTRUMENT_STROEME, 1]) {
-    const k = kanalVonStrom(s);
-    assert.ok(kanaele.includes(k), `${k} has a strip`);
-    if (k.startsWith('erz/')) assert.equal(index[k], s + 3, `${k}: mixer index is stream + 3`);
-  }
-  assert.deepEqual([index['pad/1'], index['pad/2']], [12, 13]);
-  for (const s of BK_STROEME) assert.ok(kanaele.includes(kanalVonStrom(s)), `stream ${s}`);
-  assert.ok(!kanaele.includes('erz/4') && !kanaele.includes('erz/8'), 'erz/4 (production) and erz/8 have no strip');
+test('container core: the strip list of the FX page is the four containers, and their wire index follows the table (streams have no strip)', () => {
+  assert.deepEqual(FX_KANAELE.map(([k]) => k), ['deck/1', 'deck/2', 'pad/1', 'pad/2']);
+  assert.deepEqual(FX_KANAELE.map(([, n]) => n), ['A', 'B', 'C', 'D']);
+  assert.deepEqual(FX_KANAELE, CONTAINER.map((c) => [c.pfad, c.id]));
+  assert.deepEqual(FX_INDEX, { 'deck/1': 0, 'deck/2': 1, 'pad/1': 2, 'pad/2': 3 });
+  for (const [k] of FX_KANAELE) assert.equal(FX_INDEX[k], fxIndex(k), k);
+  for (const s of [...INSTRUMENT_STROEME, 1]) assert.ok(!FX_KANAELE.some(([k]) => k === kanalVonStrom(s)), `stream ${s} has no strip of its own`);
 });
 
 // ---- A8: Gate and Utility strips on the FX page, and kern device presets ---------------------------------------------------------
@@ -370,7 +373,7 @@ const APP = liesApp();
 const KOPF_ZEILEN = [...readFileSync(new URL('../../core/signalbox/include/cypherdj/signalbox/tool_controls.h', import.meta.url), 'utf8')
   .matchAll(/^\s*\{WzTool::(\w+), "([a-z_/]+)", (-?[\d.]+)f?, (-?[\d.]+)f?, (-?[\d.]+)f?, KurvenTyp::(\w+), \d+, (true|false), WzKanalart::(\w+)\},$/gm)]
   .map((m) => ({ tool: m[1], suffix: m[2], min: Number(m[3]), max: Number(m[4]), vorgabe: Number(m[5]), kurve: m[6], ganz: m[7] === 'true', kanalart: m[8] }));
-const FX_KAN = [...APP.match(/const FX_KANAELE = \[(.*)\];/)[1].matchAll(/\['([a-z]+\/\d)', '([^']+)'\]/g)].map((m) => [m[1], m[2]]);
+const FX_KAN = FX_KANAELE;   // container core: one strip per container
 
 test('A8 the strip fields carry the ranges and defaults of the header, and every strip field is a row for source channels', () => {
   assert.equal(KOPF_ZEILEN.length, 44, 'the regex read the whole header');
@@ -378,7 +381,9 @@ test('A8 the strip fields carry the ranges and defaults of the header, and every
   for (const [suffix, f] of Object.entries(WERK_FELDER)) {
     const z = KOPF_ZEILEN.find((x) => x.suffix === suffix);
     assert.ok(z, `${suffix} is a header row`);
-    assert.deepEqual([f.min, f.max, f.vorgabe], [z.min, z.max, z.vorgabe], suffix);
+    // the core header tool_controls.h still allows gate/sc 0..14; the contract table (conductor controls_info.ts) and the page say 0..4 (0 own signal, 1..4 the containers)
+    const soll = suffix === 'gate/sc' ? [z.min, REGLER.get('deck/1/gate/sc').max, z.vorgabe] : [z.min, z.max, z.vorgabe];
+    assert.deepEqual([f.min, f.max, f.vorgabe], soll, suffix);
     assert.deepEqual([f.kurve, f.ganz], [z.kurve, z.ganz], `${suffix}: curve and integer flag`);
     assert.ok(['quellen', 'quellen_busse'].includes(z.kanalart), `${suffix} exists on source channels`);
   }
@@ -386,7 +391,7 @@ test('A8 the strip fields carry the ranges and defaults of the header, and every
 });
 
 test('A8 the Gate and Utility markup for each of the FX_KANAELE channels: controller rows only, nothing sent while building', () => {
-  assert.equal(FX_KAN.length, 10);
+  assert.equal(FX_KAN.length, 4, 'the container state: four containers');
   const gesendet = [];
   const echt = globalThis.fetch;
   globalThis.fetch = async (...a) => { gesendet.push(a); return { status: 200, json: async () => ({}) }; };
@@ -547,18 +552,19 @@ test('A8b meters: reductions >= 0, negative clamped to 0, non-finite ignored, ot
   assert.equal(mixLesung(stand, 'bus/1', 'mb_mitte_db', 1100), 0, 'a string is not a number: the old reading stays');
 });
 
-test('A6 gate meters: only the 13 live source channels count, reductions >= 0, non-finite ignored, 500 ms expiry, the next expiry is reported', () => {
-  assert.equal(GATE_KANAELE.length, 13);
-  assert.ok(!GATE_KANAELE.includes('erz/8') && !GATE_KANAELE.some((k) => k.startsWith('bus/')), 'no gate on erz/8 or the buses (D2)');
+test('A6 gate meters: GATE_KANAELE equals the four containers, reductions >= 0, non-finite ignored, 500 ms expiry, the next expiry is reported', () => {
+  assert.deepEqual(GATE_KANAELE, CONTAINER.map((c) => c.pfad), 'GATE_KANAELE equals the four containers');
+  assert.equal(GATE_KANAELE.length, 4);
+  assert.ok(!GATE_KANAELE.some((k) => k.startsWith('bus/') || k.startsWith('erz/')), 'no gate on a bus or a stream alias');
   const stand = {};
-  assert.equal(gateAufnehmen(stand, { kanal: 'erz/4', gate_db: 12.5 }, 1000), true);
-  assert.equal(mixLesung(stand, 'erz/4', 'gate_db', 1000), 12.5);
-  assert.equal(gateAufnehmen(stand, { kanal: 'erz/4', gate_db: -3 }, 1100), true);
-  assert.equal(mixLesung(stand, 'erz/4', 'gate_db', 1100), 0, 'negative clamped to 0');
-  assert.equal(gateAufnehmen(stand, { kanal: 'erz/4', gate_db: Number.NaN }, 1200), true);
-  assert.equal(mixLesung(stand, 'erz/4', 'gate_db', 1200), 0, 'NaN ignored: the old reading stays');
-  assert.equal(mixLesung(stand, 'erz/4', 'gate_db', 1600), null, '500 ms after the last accepted reading (1100): none');
-  for (const f of [{ kanal: 'bus/1', gate_db: 4 }, { kanal: 'erz/8', gate_db: 4 }, { kanal: 'deck/5', gate_db: 4 }, { kanal: 'erz/1/x', gate_db: 4 }, { gate_db: 4 }])
+  assert.equal(gateAufnehmen(stand, { kanal: 'deck/2', gate_db: 12.5 }, 1000), true);
+  assert.equal(mixLesung(stand, 'deck/2', 'gate_db', 1000), 12.5);
+  assert.equal(gateAufnehmen(stand, { kanal: 'deck/2', gate_db: -3 }, 1100), true);
+  assert.equal(mixLesung(stand, 'deck/2', 'gate_db', 1100), 0, 'negative clamped to 0');
+  assert.equal(gateAufnehmen(stand, { kanal: 'deck/2', gate_db: Number.NaN }, 1200), true);
+  assert.equal(mixLesung(stand, 'deck/2', 'gate_db', 1200), 0, 'NaN ignored: the old reading stays');
+  assert.equal(mixLesung(stand, 'deck/2', 'gate_db', 1600), null, '500 ms after the last accepted reading (1100): none');
+  for (const f of [{ kanal: 'bus/1', gate_db: 4 }, { kanal: 'erz/8', gate_db: 4 }, { kanal: 'erz/1', gate_db: 4 }, { kanal: 'deck/5', gate_db: 4 }, { kanal: 'deck/3', gate_db: 4 }, { kanal: 'deck/1/x', gate_db: 4 }, { gate_db: 4 }])
     assert.equal(gateAufnehmen({}, f, 0), false, JSON.stringify(f));
   const st2 = {};
   gateAufnehmen(st2, { kanal: 'pad/1', gate_db: 5 }, 2000);
@@ -662,4 +668,27 @@ test('single picker: instruments grouped by <optgroup> with the empty entry firs
   assert.match(graphWahlHtml('erz/2', INST, '', 'Cypher Modular', 'rolle'), /<option value="" selected>Cypher Modular<\/option>/);
   assert.deepEqual(GRAPH_KATEGORIEN.map((k) => k.id), ['drums', 'bass', 'lead', 'pad', 'keys', 'textur', 'sampler', 'host', 'sonst']);
   assert.equal(instrumentKategorien('erz/5', INST, '', null, 'rolle').gewaehlt, 'drums');
+});
+
+test('U6 GRAPH_KANAL_ART: effect for a container, instrument for the stream aliases that take instruments, no pad entry as instrument', () => {
+  for (const c of CONTAINER) assert.equal(GRAPH_KANAL_ART[c.pfad], 'effekt', c.pfad);
+  assert.equal(GRAPH_KANAL_ART[stromKanal(1)], undefined, 'stream 1 is the drum kit: no instrument');
+  for (const n of STROEME.filter((x) => x !== 1)) assert.equal(GRAPH_KANAL_ART[stromKanal(n)], 'instrument', `stream ${n}`);
+  assert.deepEqual(Object.entries(GRAPH_KANAL_ART).filter(([k, a]) => k.startsWith('pad/') && a === 'instrument'), [], 'no pad entry as instrument');
+  assert.equal(GRAPH_KANAL_ART['fx/3'], 'effekt');
+  assert.equal(GRAPH_KANAL_ART.master, 'effekt');
+});
+
+test('U6 the stream rows are not channels of the effects panel: BK_KNOB_KANAELE has no erz/5..7 entry, the graph knobs of a stream come with its graph', () => {
+  assert.deepEqual(BK_KNOB_KANAELE.filter((k) => /^erz\/(5|6|7)$/.test(k)), []);
+  assert.ok(CONTAINER.every((c) => BK_KNOB_KANAELE.includes(c.pfad)), 'the containers keep their knobs');
+  assert.deepEqual(BK_KNOB_MIT_GRAPH, STROEME.filter((n) => n !== 1).map(stromKanal), 'every instrument stream shows knobs while a graph sits on it');
+  assert.deepEqual(GRAPH_HOST_KANAELE, [stromKanal(2), stromKanal(3)]);
+  assert.equal(bkKnobListe('erz/9', {}, { graph: GRAPHEN[0] }).length, 8);
+  assert.deepEqual(bkKnobListe('erz/9', {}), []);
+});
+
+test('U6 the lists of effects.js are derived: no stream literal in the source outside the tables of kanaele.js', () => {
+  const q = readFileSync(new URL('../public/effects.js', import.meta.url), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.doesNotMatch(q, /['"`](erz|pad)\/\d/);
 });

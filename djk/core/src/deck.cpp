@@ -319,7 +319,7 @@ void Deck::start(int64_t s, int64_t f, bool loop_halten, uint64_t plan, double p
       ein_ = Blende(0.0f);
       ein_.ziel(1.0f, DECK_START_EIN);
 #else
-      // 3.8 Punkt 1 (wie loopbox.cpp 7b.2): klingt der Ring schon vor dem Einsatz, kommt der Einsatz aus Stille (Band) und
+      // 3.8 Punkt 1 (as the former loop box, 7b.2): klingt der Ring schon vor dem Einsatz, kommt der Einsatz aus Stille (Band) und
       // braucht keine Einblende; sie multiplizierte den Ring bei s mit 1/48 (mische, ge). Sonst F10 wie jeder Start.
       if (!hoer) {
         ein_ = Blende(0.0f);

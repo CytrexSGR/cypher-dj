@@ -27,7 +27,7 @@ test('the page builds a section for every deck of DECKS (1 to 4) and a channel s
   }
   assert.match(funktion('baueDecks'), /for \(const n of DECKS\)/);
   assert.match(funktion('baueDecks'), /\.deck\[data-deck="\$\{n\}"\]/);
-  assert.match(funktion('baueDecks'), /\.zug\[data-deck="\$\{n\}"\]/);
+  assert.match(funktion('baueDecks'), /for \(const c of CONTAINER\) baueZug\(\$\(`\.zug\[data-kanalzug="\$\{c\.pfad\}"\]`\), c\.pfad\)/, 'the strips are the container strips');
 });
 
 test('decks 3 and 4 are hidden in the old layout, decks 1 and 2 are not; the hidden rule beats the layout rules', () => {
@@ -39,9 +39,9 @@ test('decks 3 and 4 are hidden in the old layout, decks 1 and 2 are not; the hid
     assert.doesNotMatch(html, new RegExp(`<div class="zug" data-deck="${n}"[^>]*\\bhidden>`), `strip ${n} shown`);
   }
   assert.match(css, /\.deck\[hidden\], \.zug\[hidden\] \{ display: none !important; \}/);
-  // decks 3 and 4 have no channel strip anywhere on the page (Andreas 2026-11-15); #mischer-unten keeps the loop strips
+  // decks 3 and 4 have no channel strip anywhere on the page (Andreas 2026-11-15); #mischer-unten keeps the strips of containers C and D
   assert.doesNotMatch(html, /class="zug" data-deck="[34]"/);
-  assert.match(html, /id="mischer-unten"[\s\S]*?data-boxzug="1"/);
+  assert.match(html, /id="mischer-unten"[\s\S]*?data-kanalzug="pad\/1"/);
 });
 
 test('nothing in app.js compares a deck number against 2, and DECK3 is not a special case any more', () => {

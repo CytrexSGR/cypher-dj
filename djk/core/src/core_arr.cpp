@@ -295,10 +295,6 @@ void Kern::auto_melden(int64_t n0) {
 
 bool Kern::dj_laeuft() const noexcept {
   if (ein_deck_laeuft()) return true;
-  for (int b = 1; b <= LOOP_BOXEN; ++b) {
-    const BoxStatus st = loops_->status(b);
-    if (st == BoxStatus::wartet || st == BoxStatus::laeuft || st == BoxStatus::endet) return true;
-  }
   for (int s = 1; s <= ERZ_STROEME; ++s)
     if (erz_->offen(s) > 0) return true;
   return false;

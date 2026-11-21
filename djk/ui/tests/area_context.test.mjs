@@ -91,17 +91,17 @@ test('Haken ereignis: /e/regler über die Attrappe kommt an; nicht durchgereicht
 
 // Der Haken bekommt eine eingefrorene Kopie, nicht das lebende Objekt: vomKern legt dieselben felder in stand.* ab und verteilt sie an /strom.
 // Ein schreibender Haken (auch verschachtelt) darf weder Stand noch SSE verändern. Ohne Haken entsteht keine Kopie (Router.ereignis kehrt bei this.haken.length === 0 zurück; getestet in router.test.mjs).
-// Eingefroren wird die KOPIE: das lebende Objekt in stand.loops bleibt beschreibbar und ist nicht dasselbe Objekt wie im Haken.
+// Eingefroren wird die KOPIE: das lebende Objekt in stand.fx bleibt beschreibbar und ist nicht dasselbe Objekt wie im Haken.
 test('Haken ereignis: bekommt eine eingefrorene Kopie; ein schreibender Haken lässt Stand und SSE unverändert', async (t) => {
   const { o, url } = await stapel(t);
   const i = innen(o);
   const versuche = [];
   let imHaken = null;
   o.meldeBereich({ name: 'schreiber', routen: () => [], ereignis: (adresse, felder) => {
-    if (adresse !== '/e/loop') return;
+    if (adresse !== '/e/fx') return;
     imHaken = felder;
     versuche.push(Object.isFrozen(felder) && Object.isFrozen(felder.tags));
-    for (const schreib of [() => { felder.name = 'boese'; }, () => { felder.tags.push('boese'); }, () => { delete felder.box; }]) {
+    for (const schreib of [() => { felder.name = 'boese'; }, () => { felder.tags.push('boese'); }, () => { delete felder.einheit; }]) {
       try { schreib(); } catch { /* eingefroren: Wurf ist erwünscht, der Kern wird davon nicht gestört */ }
     }
   } });
@@ -109,17 +109,17 @@ test('Haken ereignis: bekommt eine eingefrorene Kopie; ein schreibender Haken l�
   const ac = new AbortController(); t.after(() => ac.abort());
   (async () => { const s = await fetch(`${url}/strom`, { signal: ac.signal }); for await (const teil of s.body) ereignisse.push(new TextDecoder().decode(teil)); })().catch(() => {});
   for (let n = 0; n < 50 && ereignisse.length === 0; n++) await warte(20);
-  i.vomKern('/e/loop', { box: 7, name: 'original', tags: ['a'] });
-  for (let n = 0; n < 50 && !ereignisse.join('').includes('"a":"/e/loop"'); n++) await warte(20);
+  i.vomKern('/e/fx', { einheit: 1, name: 'original', tags: ['a'] });
+  for (let n = 0; n < 50 && !ereignisse.join('').includes('"a":"/e/fx"'); n++) await warte(20);
   assert.deepEqual(versuche, [true], 'der Haken lief und bekam eine tief eingefrorene Kopie');
-  assert.deepEqual(i.stand.loops['7'], { box: 7, name: 'original', tags: ['a'] }, 'stand.loops unverändert');
-  const lebend = i.stand.loops['7'];
-  assert.notEqual(imHaken, lebend, 'der Haken bekommt eine Kopie, nicht das lebende Objekt aus stand.loops');
+  assert.deepEqual(i.stand.fx[0], { einheit: 1, name: 'original', tags: ['a'] }, 'stand.fx unverändert');
+  const lebend = i.stand.fx[0];
+  assert.notEqual(imHaken, lebend, 'der Haken bekommt eine Kopie, nicht das lebende Objekt aus stand.fx');
   assert.notEqual(imHaken.tags, lebend.tags, 'auch verschachtelt eine Kopie');
-  assert.equal(Object.isFrozen(lebend), false, 'das lebende Objekt in stand.loops ist nicht eingefroren');
+  assert.equal(Object.isFrozen(lebend), false, 'das lebende Objekt in stand.fx ist nicht eingefroren');
   assert.equal(Object.isFrozen(lebend.tags), false, 'auch verschachtelt nicht');
   const sse = ereignisse.join('');
-  assert.ok(sse.includes('"a":"/e/loop","f":{"box":7,"name":"original","tags":["a"]}'), `SSE unverändert: ${sse.slice(-200)}`);
+  assert.ok(sse.includes('"a":"/e/fx","f":{"einheit":1,"name":"original","tags":["a"]}'), `SSE unverändert: ${sse.slice(-200)}`);
   assert.ok(!sse.includes('boese'));
 });
 

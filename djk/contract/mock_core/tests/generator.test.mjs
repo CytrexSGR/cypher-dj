@@ -13,7 +13,7 @@ const cfg = { arbeitsbestand: AB };
 test('pad_ungehoert (I3b): Schuss auf offenes Pad nur mit Hörschein genau dieses Schusses; Andreas frei', () => {
   const schuss = (id, quelle, ab) => ['/k/schuss', 'hsdsiiifi', id, quelle, ab, ID, 1, 3, 1, 0, 0];
   const padOffen = [
-    sende(1000, hoerschein(1, 'hp', 'pad/1', 'muster/0')),
+    sende(1000, hoerschein(1, 'hp', 'deck/3', 'muster/0')),
     sende(1000, teil(2, 'cypher', 'p1', 0, 'pad/1/fader', 4, 0, 0, { hs: 'hp' })),
   ];
   const ohne = fahre([
@@ -35,9 +35,10 @@ test('pad_ungehoert (I3b): Schuss auf offenes Pad nur mit Hörschein genau diese
 
 test('muster_ungehoert (I3c): Ereignisse eines Musters ohne Hörschein auf offenem Erzeuger-Kanal zählen als ungehoert', () => {
   const r = fahre([
-    sende(1000, hoerschein(1, 'hm5', 'erz/1', 'muster/5')),
-    sende(1000, ['/erz/strom', 'hsiss', 2, 'erzeuger', 1, 'midi:1:1', 'erz/1']),
-    sende(1000, teil(3, 'erzeuger', 'p1', 0, 'erz/1/fader', 2, 0, 0, { hs: 'hm5' })),
+    sende(500, ['/k/container/quelle', 'hsii', 9, 'andreas', 1, 2]),   // the mock applies I3c to the first container with art 2 (C6)
+    sende(1000, hoerschein(1, 'hm5', 'deck/1', 'muster/5')),
+    sende(1000, ['/erz/strom', 'hsis', 2, 'erzeuger', 1, 'midi:1:1']),
+    sende(1000, teil(3, 'erzeuger', 'p1', 0, 'deck/1/fader', 2, 0, 0, { hs: 'hm5' })),
     erwarte(S(2), q(3, 'erzeuger', 3, S(2))),
   ], { cfg });
   gruen(r);
@@ -49,4 +50,19 @@ test('muster_ungehoert (I3c): Ereignisse eines Musters ohne Hörschein auf offen
   assert.deepEqual(erg[0], [1, 1, 0, 0, 1, 1, 2]);            // eingefuegt 1 (Muster 5), zu_spaet 1, ungehoert 2 (Muster 7)
   K.empfange(kodiereBundle([['/erz/fenster', 'iiiiddh', [1, 2, 66, 0, 8, 12, 0n]], ev(5, 5, 11)]));
   assert.deepEqual(erg[1], [1, 2, 1, 0, 1, 0, 0]);            // das alte Ereignis von Muster 5 ersetzt
+});
+
+test('/erz/strom: four arguments are accepted, the old fifth kanal string is a protokoll error, pad:1 is out of range, bk:name is accepted', () => {
+  const strom = (id, ziel) => ['/erz/strom', 'hsis', id, 'erzeuger', 1, ziel];
+  const r = fahre([
+    sende(1000, strom(1, 'midi:1:1')),
+    erwarte(3000, q(1, 'erzeuger', 3)),
+    sende(3500, strom(2, 'pad:1')),
+    erwarte(5000, q(2, 'erzeuger', 6, null, 'ausserhalb_bereich')),
+    sende(5500, strom(3, 'bk:bass')),
+    erwarte(7000, q(3, 'erzeuger', 3)),
+    sende(7500, ['/erz/strom', 'hsiss', 4, 'erzeuger', 1, 'midi:1:1', 'erz/1']),
+  ], { cfg });
+  gruen(r);
+  assert.ok(r.log.some((m) => m.adresse === '/e/protokollfehler' && m.werte[0] === '/erz/strom'), 'old five-argument form is a protocol error');
 });

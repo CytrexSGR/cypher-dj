@@ -29,10 +29,11 @@ test('Fehlerfall: falsche Typen, unbekannte Adresse, fehlendes Feld werden abgel
   assert.throws(() => baue('/k/hallo', { name: 'x', port: 1 }), /Feld protokoll fehlt/);
 });
 
-test('Keylock 7b.3: /zustand/box (§5.5b) wird dekodiert und bleibt aus dem Journal', () => {
-  const felder = { box: 1, status: 3, keylock_unterlauf: 2, keylock_aufgegeben: 1, keylock_ring_voll: 0, keylock_kein_platz: 4 };
-  assert.deepEqual(liesUndDekodiere(baue('/zustand/box', felder)), { adresse: '/zustand/box', felder });
-  assert.ok(NICHT_INS_JOURNAL.has('/zustand/box'));
+test('container core: the loop box address /zustand/box is gone (contract, decoder, journal list, used list)', () => {
+  assert.ok(!('/zustand/box' in VERTRAG), 'the contract no longer knows it');
+  assert.throws(() => baue('/zustand/box', { box: 1, status: 3 }), /unbekannte Adresse/);
+  assert.ok(!NICHT_INS_JOURNAL.has('/zustand/box'));
+  assert.ok(!GENUTZT.includes('/zustand/box'));
 });
 
 test('I08: /zustand/ein (§5.14, 20 Hz im Takt der Pegel, ohne Änderungs-Auslöser) bleibt aus dem Journal', () => {

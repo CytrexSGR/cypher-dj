@@ -1,5 +1,7 @@
 # ADR 037: Loop slots on DJ channels (DJ-channel output of the arrangement)
 
+Superseded by ADR 043 (containers as the console unit): the DJ-channel numbering, the place channel and the fixed module slots of this decision are replaced by the four containers and their one input each. The text below is kept as the record.
+
 Status: built on main (plan 2026-11-13 `dj-view-places`, slice 2, tasks 4 and 5: commits 8a67b0e0, 084abe96, 134aefcb). The server rules (module fader, `kanal_offen`) and the page follow in tasks 7 to 9; the measurements on the test instance are task 9. Andreas' listening acceptance is open.
 Decided: by Cypher as defaults in the plan `docs/superpowers/plans/2026-11-13-dj-view-places.md` (decisions 5 to 9, spec section 6) and during the build (decisions 10 to 14 below); Andreas may override. Origin: Andreas, 2026-11-13 (DJ view with places, loop slots as real channels).
 Supersedes: nothing. It adds an output kind; the production master and nested groups (ADR 036) work as before.

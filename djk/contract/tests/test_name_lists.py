@@ -37,11 +37,15 @@ def kopie(tmp_path, quelldateien):
     return tmp_path
 
 
+ZWEIFACH = ('Rolle::snd_spur, -200, 6, -200,', '{"decay", Rolle::ret_hall_decay, 0.5252f}')   # controls.cpp builds returns 1..4 and 5..8 in two blocks (container core K6)
+
+
 def mutiere(wurzel: Path, rel: str, alt: str, neu: str) -> None:
     p = wurzel / rel
     t = p.read_text(encoding="utf-8")
     treffer = t.count(alt)
-    assert treffer == 1, f"Mutation trifft {treffer}x statt 1x in {rel}: {alt!r}"   # sonst Mutation wirkungslos
+    soll = 2 if alt in ZWEIFACH else 1
+    assert treffer == soll, f"Mutation trifft {treffer}x statt {soll}x in {rel}: {alt!r}"   # sonst Mutation wirkungslos
     p.write_text(t.replace(alt, neu), encoding="utf-8")
 
 
@@ -125,13 +129,13 @@ MUTATIONEN = [
      "Ausnahme veraltet (tritt nicht mehr auf, streichen): ('A03 names.cpp', 'pfl')"),
     # ---- Regler-Teil (REGLER, ZIELE, PFAD, Regler-Ziele der Mappings)
     (VERTRAG_MJS, "'master/kleber': R(LIN, 0, 1, 0, true), ", "",
-     "Regler: curves.js ZIELE enthält master/kleber, attrappe REGLER nicht"),
+     "Regler: R04 curves.js ZIELE enthält master/kleber, attrappe REGLER nicht"),
     (VERTRAG_MJS, "'cue/pegel': R(DB", "'cue/pegelx': R(DB",
-     "Regler: attrappe REGLER kennt cue/pegelx, hand_bedienung.PFAD lehnt es ab"),
+     "Regler: attrappe REGLER kennt cue/pegelx, R06 hand_bedienung.PFAD lehnt es ab"),
     (KURVEN_JS, "'xfader', 'master/pegel',", "'xfader', 'master/pegelx',",
-     "Regler: curves.js ZIELE enthält master/pegelx, attrappe REGLER nicht"),
+     "Regler: R04 curves.js ZIELE enthält master/pegelx, attrappe REGLER nicht"),
     ("djk/ui/hand_operation.ts", "|xseite|pfl|ziel)$", "|xseite|ziel)$",
-     "Regler: attrappe REGLER kennt deck/1/pfl, hand_bedienung.PFAD lehnt es ab"),
+     "Regler: attrappe REGLER kennt deck/1/pfl, R06 hand_bedienung.PFAD lehnt es ab"),
     (SOFTCONTROLLER, '"ziel":"xfader"', '"ziel":"xfaderx"',
      "Mapping softcontroller.json: Regler-Ziel xfaderx kennt die Attrappe nicht"),
 ]
@@ -216,30 +220,26 @@ MUTATIONEN += [
      "bk-Regler=Kern: R04 curves.js ZIELE fehlt: pad/1/bk/1"),
     (VERTRAG_MJS, "for (const k of BK_KANAELE) for (let n = 1; n <= BK_REGLER_N; n++) REGLER.set(",
      "for (const k of BK_KANAELE) for (let n = 1; n <= 63; n++) REGLER.set(", "bk-Regler=Kern: R03 Attrappe REGLER fehlt: deck/1/bk/64"),
-    ("djk/conductor/src/controls_info.ts", "for (let n = 1; n <= BK_REGLER_N; n++) tabelle.set(`${k}/bk/${n}`",
-     "for (let n = 2; n <= BK_REGLER_N; n++) tabelle.set(`${k}/bk/${n}`", "bk-Regler=Kern: R05 controls_info.ts fehlt: deck/1/bk/1"),
-    ("djk/conductor/src/controls_info.ts", "'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];\nfor (const k of BK_KANAELE)",
-     "'erz/3', 'erz/4', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];\nfor (const k of BK_KANAELE)", "bk-Regler=Kern: R05 controls_info.ts steht ohne Vertrag: erz/4/bk/1"),
-    ("docs/architecture/INTERFACES.md", "erz/1, 2, 3, 5, 6, 7 und pad/1, 2 (Instrument", "erz/1, 2, 3, 4, 5, 6, 7 und pad/1, 2 (Instrument",
-     "bk-Regler=Kern: R02 INTERFACES §1.5 steht ohne Vertrag: erz/4/bk/1"),
-    ("djk/core/signalbox/src/controls.cpp", 'for (const char* kn_bk : {"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "erz/5"', 'for (const char* kn_bk : {"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "erz/4", "erz/5"',
-     "bk-Regler=Kern: R03 Attrappe REGLER fehlt: erz/4/bk/1"),
-    ("djk/ui/hand_operation.ts", "|^(deck\\/[1-4]|erz\\/[1-35-7]|pad\\/[12]|fx\\/[34]|master)\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;", "|^(deck\\/[1-4]|erz\\/[1-8]|pad\\/[12]|fx\\/[34]|master)\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;",
+    ("djk/conductor/src/controls_info.ts", "for (let n = 1; n <= BK_REGLER_N; n++) setze(`${k}/bk/${n}`, k, BK_ZEILE);",
+     "for (let n = 2; n <= BK_REGLER_N; n++) setze(`${k}/bk/${n}`, k, BK_ZEILE);", "bk-Regler=Kern: R05 controls_info.ts fehlt: deck/1/bk/1"),
+    ("docs/architecture/INTERFACES.md", "| all; only `<container>` = deck/1, deck/2, pad/1, pad/2 |", "| all; only `<container>` = deck/1, deck/2, pad/1 |",
+     "bk-Regler=Kern: R02 INTERFACES §1.5 fehlt: pad/2/bk/1"),
+    ("djk/ui/hand_operation.ts", "|^(deck\\/[12]|erz\\/(1|2|3|5|6|7|9|10)|pad\\/[12]|fx\\/[34]|master)\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;", "|^(deck\\/[12]|erz\\/(1|2|3|4|5|6|7|9|10)|pad\\/[12]|fx\\/[34]|master)\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;",
      "bk-Regler: R06 hand_bedienung.PFAD nimmt erz/4/bk/1 an"),
-    ("djk/ui/hand_operation.ts", "|^(deck\\/[1-4]|erz\\/[1-35-7]|pad\\/[12]|fx\\/[34]|master)\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;", "/;",
+    ("djk/ui/hand_operation.ts", "|^(deck\\/[12]|erz\\/(1|2|3|5|6|7|9|10)|pad\\/[12]|fx\\/[34]|master)\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;", "/;",
      "bk-Regler: R06 hand_bedienung.PFAD lehnt deck/1/bk/1 ab"),
-    ("djk/contract/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34]|master)/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34]|master)/bk/([1-9]|[1-5][0-9]|6[0-5]))$\"",
+    ("djk/contract/schemas/defs.schema.json", "|(deck/[12]|pad/[12]|fx/[34]|master)/bk/([1-9]|[1-5][0-9]|6[0-4])|strom/", "|(deck/[12]|pad/[12]|fx/[34]|master)/bk/([1-9]|[1-5][0-9]|6[0-5])|strom/",
      "bk-Regler: R07 defs.schema.json regler_pfad nimmt deck/1/bk/65 an"),
-    ("djk/contract/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34]|master)/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"", "|(deck/[1-4]|erz/[1-8]|pad/[12]|fx/[34]|master)/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"",
+    ("djk/contract/schemas/defs.schema.json", "|(deck/[12]|pad/[12]|fx/[34]|master)/bk/([1-9]|[1-5][0-9]|6[0-4])|strom/", "|(deck/[12]|pad/[12]|erz/[1-8]|fx/[34]|master)/bk/([1-9]|[1-5][0-9]|6[0-4])|strom/",
      "bk-Regler: R07 defs.schema.json regler_pfad nimmt erz/4/bk/1 an"),
 ]
 
 
 # ---- S14: graph knobs of the send returns fx/3/bk/1..64, fx/4/bk/1..64 (global controls) in all locations
 MUTATIONEN += [
-    ("djk/contract/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34]|master)/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|master)/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"",
+    ("djk/contract/schemas/defs.schema.json", "|(deck/[12]|pad/[12]|fx/[34]|master)/bk/([1-9]|[1-5][0-9]|6[0-4])|strom/", "|(deck/[12]|pad/[12]|master)/bk/([1-9]|[1-5][0-9]|6[0-4])|strom/",
      "bk-Regler: R07 defs.schema.json regler_pfad lehnt fx/3/bk/1 ab"),
-    ("djk/contract/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34]|master)/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[1-4]|master)/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"",
+    ("djk/contract/schemas/defs.schema.json", "|(deck/[12]|pad/[12]|fx/[34]|master)/bk/([1-9]|[1-5][0-9]|6[0-4])|strom/", "|(deck/[12]|pad/[12]|fx/[1-4]|master)/bk/([1-9]|[1-5][0-9]|6[0-4])|strom/",
      "bk-Regler: R07 defs.schema.json regler_pfad nimmt fx/1/bk/1 an"),
     ("djk/ui/hand_operation.ts", "|pad\\/[12]|fx\\/[34]|master)\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;", "|pad\\/[12]|master)\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;",
      "bk-Regler: R06 hand_bedienung.PFAD lehnt fx/3/bk/1 ab"),
@@ -253,11 +253,8 @@ MUTATIONEN += [
      "for (let m = 2; m <= BK_REGLER_N; m++) tabelle.set(`${k}/bk/${m}`", "bk-Regler=Kern: R05 controls_info.ts fehlt: fx/3/bk/1"),
     ("docs/architecture/INTERFACES.md", "`fx/<n>/bk/<m>` (n = 3 and 4, m = 1 to 64)", "`fx/<n>/bk/<m>` (n = 3, m = 1 to 64)",
      "bk-Regler=Kern: R02 INTERFACES §1.5 fehlt: fx/4/bk/1"),
-    ("djk/core/signalbox/src/controls.cpp", 'for (const char* kn_bk_send : {"fx/3", "fx/4"})', 'for (const char* kn_bk_send : {"fx/3"})',
+    ("djk/core/signalbox/src/controls.cpp", 'for (const char* bk_send_1 : {"fx/3", "fx/4"})', 'for (const char* bk_send_1 : {"fx/3"})',
      "bk-Regler=Kern: R02 INTERFACES §1.5 steht ohne Vertrag: fx/4/bk/1"),
-    # 32-/64-knob widening: the tail loops for knobs 9..64 must carry the same channels as the loops for 1..8
-    ("djk/core/signalbox/src/controls.cpp", 'for (const char* kn_bk_send_hoch : {"fx/3", "fx/4"})', 'for (const char* kn_bk_send_hoch : {"fx/3"})',
-     "bk-Regler=Kern: R01b Kern controls.cpp (9..64 loops) fehlt: fx/4/bk/1"),
 ]
 
 
@@ -266,7 +263,7 @@ MUTATIONEN += [
     (KURVEN_JS, "...SPUREN.flatMap((n) => RETURNS.map((r) => `spur/${n}/send/${r}`)),",
      "...SPUREN.filter((n) => n !== 1).flatMap((n) => RETURNS.map((r) => `spur/${n}/send/${r}`)),",
      "Return-Regler=Kern: R04 curves.js ZIELE fehlt: spur/1/send/1"),
-    ("djk/contract/schemas/defs.schema.json", "|ret/[1-4]/(fader|pan|mute|solo|hall/", "|ret/[1-4]/(pan|mute|solo|hall/",
+    ("djk/contract/schemas/defs.schema.json", "|ret/[1-8]/(fader|pan|mute|solo|hall/", "|ret/[1-8]/(pan|mute|solo|hall/",
      "Return-Regler: R07 defs.schema.json regler_pfad lehnt ret/1/fader ab"),
     ("docs/architecture/INTERFACES.md", "| `ret/<r>/hall/decay` |", "| `ret/<r>/hall/decai` |",
      "Return-Regler=Kern: R02 INTERFACES §1.5 fehlt: ret/1/hall/decay"),
@@ -274,10 +271,10 @@ MUTATIONEN += [
      "Return-Regler=Kern: R03 Attrappe REGLER fehlt: ret/1/mute"),
     ("djk/conductor/src/controls_info.ts", "for (let n = 1; n <= 16; n++) tabelle.set(`grp/${n}/send/${ret}`",
      "for (let n = 2; n <= 16; n++) tabelle.set(`grp/${n}/send/${ret}`", "Return-Regler=Kern: R05 controls_info.ts fehlt: grp/1/send/1"),
-    ("djk/ui/hand_operation.ts", "|^ret\\/[1-4]\\/(fader|pan|mute|solo|hall", "|^ret\\/[1-5]\\/(fader|pan|mute|solo|hall",
-     "Return-Regler: R06 hand_bedienung.PFAD nimmt ret/5/fader an"),
-    ("djk/contract/schemas/defs.schema.json", "|(spur/([1-9]|[12][0-9]|3[0-2])|grp/([1-9]|1[0-6]))/send/[1-4]|", "|(spur/([1-9]|[12][0-9]|3[0-2])|grp/([1-9]|1[0-6]))/send/[1-5]|",
-     "Return-Regler: R07 defs.schema.json regler_pfad nimmt spur/1/send/5 an"),
+    ("djk/ui/hand_operation.ts", "|^ret\\/[1-8]\\/(fader|pan|mute|solo|hall", "|^ret\\/[1-9]\\/(fader|pan|mute|solo|hall",
+     "Return-Regler: R06 hand_bedienung.PFAD nimmt ret/9/fader an"),
+    ("djk/contract/schemas/defs.schema.json", "|(spur/([1-9]|[12][0-9]|3[0-2])|grp/([1-9]|1[0-6]))/send/[1-8]|", "|(spur/([1-9]|[12][0-9]|3[0-2])|grp/([1-9]|1[0-6]))/send/[1-9]|",
+     "Return-Regler: R07 defs.schema.json regler_pfad nimmt spur/1/send/9 an"),
     ("djk/core/signalbox/src/controls.cpp", "Rolle::snd_spur, -200, 6, -200,", "Rolle::snd_spur, -200, 6, 0,",
      "Return-Bereich=Kern: R03 Attrappe REGLER spur/1/send/1 (min, max, vorgabe)"),
     ("djk/core/signalbox/src/controls.cpp", '{"decay", Rolle::ret_hall_decay, 0.5252f}', '{"decay", Rolle::ret_hall_decay, 0.6f}',
@@ -290,13 +287,13 @@ MUTATIONEN += [
 
 
 def test_bk_zeile_in_schnittstellen_weg_wirft_parserfehler(kopie):
-    mutiere(kopie, "docs/architecture/INTERFACES.md", "| `<k>/bk/<n>` (n = 1 bis 64)", "| `<k>/bx/<n>` (n = 1 bis 64)")
+    mutiere(kopie, "docs/architecture/INTERFACES.md", "| `<container>/bk/<n>` (n = 1 to 64)", "| `<container>/bx/<n>` (n = 1 to 64)")
     with pytest.raises(pn.ParserFehler, match="bk"):
         pn.pruefe(pn.Quelle(kopie))
 
 
 def test_bk_sendschleife_in_regler_cpp_weg_wirft_parserfehler(kopie):
-    mutiere(kopie, "djk/core/signalbox/src/controls.cpp", "for (const char* kn_bk_send : ", "for (const char* kn_bk_sendx : ")
+    mutiere(kopie, "djk/core/signalbox/src/controls.cpp", "for (const char* bk_send_1 : ", "for (const char* bk_send_1x : ")
     with pytest.raises(pn.ParserFehler, match="bk"):
         pn.pruefe(pn.Quelle(kopie))
 
@@ -327,7 +324,7 @@ MUTATIONEN += [
     (SCHEMA, "|tausch|dc)", "|dc)", "Werkzeug-Regler: R07 defs.schema.json regler_pfad lehnt deck/1/util/tausch ab"),
     (VERTRAG_MJS, "['mb/grenze_tief', LIN, 20, 20000, 200], ", "", "Werkzeug-Regler=Kern: R03 Attrappe REGLER fehlt: bus/1/mb/grenze_tief"),
     # too many: an extra channel or an extra path in a pattern, an extra row in a list
-    (HAND_BED, "|^(deck\\/[1-4]|erz\\/[1-7]|pad\\/[12])\\/gate\\/", "|^(deck\\/[1-4]|erz\\/[1-8]|pad\\/[12])\\/gate\\/",
+    (HAND_BED, "|^(deck\\/[12]|pad\\/[12])\\/gate\\/", "|^(deck\\/[12]|erz\\/[1-8]|pad\\/[12])\\/gate\\/",
      "Werkzeug-Regler: R06 hand_bedienung.PFAD nimmt erz/8/gate/an an"),
     (SCHEMA, "bus/[1-4]/lim/(an|decke|abklingen)", "bus/[1-4]/lim/(an|decke|abklingen|zz)", "Werkzeug-Regler: R07 defs.schema.json regler_pfad nimmt bus/1/lim/zz an"),
     (VERTRAG_MJS, "['lim/an', SCHALTER, 0, 1, 0], ", "['lim/an', SCHALTER, 0, 1, 0], ['lim/zz', LIN, 0, 1, 0], ",
@@ -336,16 +333,16 @@ MUTATIONEN += [
      "Werkzeug-Regler=Kern: R05 controls_info.ts steht ohne Vertrag: erz/8/gate/an"),
     # the contract text and the header
     (SPEC, "| `<k>/util/dc` |", "| `<k>/util/dx` |", "Werkzeug-Regler=Kern: R02 INTERFACES §1.5 fehlt: deck/1/util/dc"),
-    (SPEC, "| `<k>/gate/hold` | ms | 0 bis 2000 | 20 | 10 ms | alle; nur Quellkanäle ausser erz/8 |",
-     "| `<k>/gate/hold` | ms | 0 bis 2000 | 20 | 10 ms | alle; nur Quellkanäle |", "Werkzeug-Regler=Kern: R02 INTERFACES §1.5 steht ohne Vertrag: erz/8/gate/hold"),
+    (SPEC, "| `<k>/gate/hold` | ms | 0 bis 2000 | 20 | 10 ms | all; containers only |",
+     "| `<k>/gate/hold` | ms | 0 bis 2000 | 20 | 10 ms | all; containers and buses |", "Werkzeug-Regler=Kern: R02 INTERFACES §1.5 steht ohne Vertrag: bus/1/gate/hold"),
     (WZ_KOPF, '{WzTool::limiter, "lim/abklingen", 1, 2000, 80, KurvenTyp::linear, 10, false, WzKanalart::busse},\n',
      '{WzTool::limiter, "lim/abklingen", 1, 2000, 80, KurvenTyp::linear, 10, false, WzKanalart::busse},\n'
-     '    {WzTool::limiter, "lim/zz", 0, 1, 0, KurvenTyp::linear, 10, false, WzKanalart::busse},\n', "Werkzeug-Regler=Kern: R05 controls_info.ts fehlt: bus/1/lim/zz"),
+     '    {WzTool::limiter, "lim/zz", 0, 1, 0, KurvenTyp::linear, 10, false, WzKanalart::busse},\n', "Werkzeug-Regler=Kern: R01 Kern controls.cpp (tool_controls.h) steht ohne Vertrag: bus/1/lim/zz"),
     (WZ_KOPF, '{WzTool::gate, "gate/hold", 0, 2000, 20,', '{WzTool::gate, "gate/hold", 0, 1999, 20,',
      "Werkzeug-Regler: R05 controls_info.ts Bereich oder Vorgabe von deck/1/gate/hold"),
     (WZ_KOPF, '{WzTool::gate, "gate/hold", 0, 2000, 20,', '{WzTool::gate, "gate/hold", 0, 2000, 21,',
      "Werkzeug-Regler: R03 Attrappe REGLER Bereich oder Vorgabe von pad/2/gate/hold"),
-    (WZ_KOPF, '"erz/6",  "erz/7",', '"erz/6",  "erz/7", "erz/8",', "Werkzeug-Regler=Kern: R05 controls_info.ts fehlt: erz/8/gate/an"),
+    (WZ_KOPF, '{"deck/1", "deck/2", "pad/1", "pad/2"};', '{"deck/1", "deck/2", "pad/1", "pad/2", "pad/3"};', "Werkzeug-Regler=Kern: R01 Kern controls.cpp (tool_controls.h) steht ohne Vertrag: pad/3/gate/an"),
 ]
 
 # ---- 1.10 slice 4a T6 / 4b T12: the insert controls ins/komp|eq|saett/<n>/* (120 + 59 + 4 controls) in all locations. Dropped, too many, wrong range, per location.
@@ -412,7 +409,7 @@ MUTATION_IDS = [f"{m[0].split('/')[-1]}:{m[3][:40]}" for m in MUTATIONEN]
 def test_mutation_wird_rot(kopie, datei, alt, neu, erwartet):
     mutiere(kopie, datei, alt, neu)
     try:
-        f = pn.pruefe(pn.Quelle(kopie))
+        f = pn.pruefe_roh(pn.Quelle(kopie))   # raw: a finding that the ratchet would print as pending must still show up
     except pn.ParserFehler as e:   # ein blinder Parser zählt auch als rot, ist aber nicht die gemeinte Meldung
         pytest.fail(f"Parser blind statt gezielter Meldung: {e}")
     assert any(erwartet in x for x in f), f"keine Meldung mit {erwartet!r}; gemeldet: {f}"
@@ -472,7 +469,7 @@ PARSERFEHLER += [
      '{WzTool::gate, "gate/release", 1, 5000, 100, KurvenTyp::linear, 10, false, WzKanalart::quellen},', "doppelt"),
     (WZ_KOPF, "WERKZEUG_BUSSE[] = {", "WERKZEUG_BUSSEX[] = {", "BUSSE"),
     ("djk/core/signalbox/src/controls.cpp", "for (const WerkzeugZeile& z : WERKZEUG_ZEILEN)", "for (const WerkzeugZeile& z : ANDERE_ZEILEN)", "controls.cpp"),
-    (SPEC, "| `<k>/util/balance` | Balance (−1 links, +1 rechts) | −1 bis +1 | 0 | 10 ms | alle; Quellkanäle ausser erz/8 und Busse |",
+    (SPEC, "| `<k>/util/balance` | Balance (−1 links, +1 rechts) | −1 bis +1 | 0 | 10 ms | all; containers and buses |",
      "| `<k>/util/balance` | Balance | −1 bis +1 | 0 | 10 ms |", "Werkzeug-Zeile nicht lesbar"),
     (SPEC, "| `bus/<n>/mb/<b>/ratio` (b = tief, mitte, hoch) |", "| `bus/<n>/mb/<b>/ratio` |", "ohne 'b = tief, mitte, hoch'"),
 ]
@@ -522,7 +519,7 @@ def test_taste_ziel_in_zweitem_mapping_wird_geprueft(kopie):
     d = kopie / "djk/config/controller"
     t = (d / "softcontroller.json").read_text(encoding="utf-8")
     (d / "zweit.json").write_text(t.replace('"taste/zuruf"', '"taste/zurufx"'), encoding="utf-8")
-    f = pn.pruefe(pn.Quelle(kopie))
+    f = pn.pruefe_roh(pn.Quelle(kopie))
     assert any("zweit.json" in x and "taste/zurufx" in x for x in f), f
 
 
@@ -551,3 +548,170 @@ def test_wildcard_ausnahme_ohne_treffer_ist_veraltet(kopie, monkeypatch):
 def test_veraltete_ausnahme_wird_gemeldet(kopie, monkeypatch):
     monkeypatch.setitem(pn.AUSNAHMEN, ("T11 keyboard.h", "zuruf"), "erfunden")
     assert any("Ausnahme veraltet" in x and "zuruf" in x for x in pn.pruefe(pn.Quelle(kopie)))
+
+
+# ---- container core V6: expected sets from pult.json, the controls.cpp contract
+import json  # noqa: E402
+import re  # noqa: E402
+
+import generate_pult as ep  # noqa: E402
+
+REGLER_CPP = "djk/core/signalbox/src/controls.cpp"
+PULT_JSON = "djk/contract/pult.json"
+R02 = "R02 INTERFACES §1.5"
+R03 = "R03 Attrappe REGLER"
+
+
+def _pult():
+    return ep.laden(WURZEL / PULT_JSON)
+
+
+def _pult_pfade(d, ohne_transport=True):
+    aus = [p for fam in ep.FAMILIEN for p in ep.regler_pfade(d, fam)]
+    return [p for p in aus if not (ohne_transport and p.endswith("/transport"))]
+
+
+def _erwartet_bk(d):
+    aus = {p for p in _pult_pfade(d) if "/bk/" in p}
+    aus |= {f"{k}/bk/{n}" for k in ("fx/3", "fx/4", "master") for n in range(1, d["bk_n"] + 1)}
+    return sorted(aus)
+
+
+def _erwartet_werkzeug(d):
+    zug = [p for p in ep.regler_pfade(d, "zug") if re.search(r"/(gate|util)/", p)]
+    bus = [p for p in ep.regler_pfade(d, "bus") if re.search(r"/(util|mb|lim)/", p)]
+    return sorted(zug + bus + ["spektrum/kanal"])
+
+
+def _schema_muster():
+    return json.loads((WURZEL / SCHEMA).read_text(encoding="utf-8"))["$defs"]["regler_pfad"]["pattern"]
+
+
+def test_container_regler_in_allen_fundorten():
+    d = _pult()
+    q = pn.Quelle(WURZEL)
+    bk, wz = pn.bk_regler_listen(q), pn.werkzeug_regler_listen(q)
+    for ort in (R02, R03):
+        assert bk[ort] == _erwartet_bk(d), (ort, "bk")
+        assert wz[ort] == _erwartet_werkzeug(d), (ort, "werkzeug")
+    schema = _schema_muster()
+    abgelehnt = [p for p in _pult_pfade(d) if not re.fullmatch(schema, p)]
+    assert abgelehnt == [], abgelehnt[:10]
+    for falsch in ("deck/3/fader", "deck/4/bk/1", "erz/4/send/1", "strom/17/bk/1", "strom/1/bk/65", "pad/3/fader", "bus/1/bk/1",
+                   "master/bk/65", "deck/1/transport", "deck/5/stem/drums"):
+        assert not re.fullmatch(schema, falsch), falsch
+
+
+def test_strom_bk_zeilen(kopie):
+    strom = {f"strom/{n}/bk/{k}" for n in range(1, 17) for k in range(1, 65)}
+    bk = pn.bk_regler_listen(pn.Quelle(WURZEL))
+    for ort in (R02, R03):
+        assert strom <= set(bk[ort]), ort
+    mutiere(kopie, SPEC, "| `strom/<n>/bk/<k>` (n = 1 to 16, k = 1 to 64) |", "| `strom/<n>/bk/<k>` (n = 1 to 15, k = 1 to 64) |")
+    f = pn.pruefe_roh(pn.Quelle(kopie))
+    assert f"bk-Regler=Kern: {R02} fehlt: strom/16/bk/1" in f
+
+
+REGLER_INFO_TS = "djk/conductor/src/controls_info.ts"
+SC_ZEILEN = [   # (file, text of the landed row, row with the old wide range, row name)
+    (WZ_KOPF, '"gate/sc", 0, 4, 0,', '"gate/sc", 0, 14, 0,', "gate/sc"),
+    (WZ_KOPF, '"spektrum/kanal", 0, 9, 0,', '"spektrum/kanal", 0, 19, 0,', "spektrum/kanal"),
+    (REGLER_CPP, "komp_sc, 0, 4, 0, 0, false, false, true, true, stufen(0, 4)", "komp_sc, 0, 14, 0, 0, false, false, true, true, stufen(0, 14)",
+     "komp/sc"),
+    (REGLER_INFO_TS, "'komp/sc': r('stufe', 0, 4, 0)", "'komp/sc': r('stufe', 0, 14, 0)", "komp/sc"),
+    (REGLER_INFO_TS, "['gate/sc', 'stufe', 0, 4, 0]", "['gate/sc', 'stufe', 0, 14, 0]", "gate/sc"),
+    (REGLER_INFO_TS, "r('stufe', 0, 9, 0) });", "r('stufe', 0, 19, 0) });", "spektrum/kanal"),
+]
+
+
+def test_sc_bereiche(kopie):
+    # lane K lands 0..4 and 0..9 (D-V3); put the copy in that state first: no sc finding, then widen one row at a time
+    for datei, gelandet, alt, _ in SC_ZEILEN:
+        if alt in (kopie / datei).read_text(encoding="utf-8"):   # the sources have landed already; only a row that is still wide is landed here
+            mutiere(kopie, datei, alt, gelandet)
+    assert [x for x in pn.pruefe_roh(pn.Quelle(kopie)) if "sc-Bereich" in x] == []
+    for datei, gelandet, alt, name in SC_ZEILEN:
+        mutiere(kopie, datei, gelandet, alt)
+        f = [x for x in pn.pruefe_roh(pn.Quelle(kopie)) if "sc-Bereich" in x and name in x]
+        soll_hi = {"gate/sc": "0..4", "komp/sc": "0..4", "spektrum/kanal": "0..9"}[name]
+        ist_hi = "0..19" if name == "spektrum/kanal" else "0..14"
+        assert f and all(ist_hi in x and soll_hi in x for x in f), (name, f[:2])
+        mutiere(kopie, datei, alt, gelandet)
+
+
+@pytest.mark.parametrize("datei,alt,neu,erwartet", [
+    (SPEC, "| `<k>/util/dc` |", "| `<k>/util/dx` |", f"Werkzeug-Regler=Kern: {R02} fehlt: deck/1/util/dc"),
+    (VERTRAG_MJS, "['mb/grenze_tief', LIN, 20, 20000, 200], ", "", f"Werkzeug-Regler=Kern: {R03} fehlt: bus/1/mb/grenze_tief"),
+    (SCHEMA, "|tausch|dc)", "|dc)", "Werkzeug-Regler: R07 defs.schema.json regler_pfad lehnt deck/1/util/tausch ab"),
+], ids=["spec", "mock", "schema"])
+def test_v_fundorte_sind_strikt_rot(kopie, datei, alt, neu, erwartet):
+    mutiere(kopie, datei, alt, neu)
+    assert erwartet in pn.pruefe(pn.Quelle(kopie))
+
+
+def test_regler_cpp_marker_regel(kopie):
+    # landed form: the core test is registered and the old literal channel list is gone -> no finding
+    f: list[str] = []
+    pn.pruefe_regler_marker(pn.Quelle(kopie), f)
+    assert f == [], f
+    # the registration of test_regler_gegen_pult removed -> one finding
+    mutiere(kopie, "djk/core/signalbox/CMakeLists.txt", "add_test(NAME test_regler_gegen_pult", "add_test(NAME test_regler_anders")
+    f = []
+    pn.pruefe_regler_marker(pn.Quelle(kopie), f)
+    assert len(f) == 1 and "test_regler_gegen_pult is not registered" in f[0], f
+    # the old literal channel list back in controls.cpp -> a finding
+    p = kopie / REGLER_CPP
+    p.write_text(p.read_text(encoding="utf-8") + '\nconst char* alt[] = {"deck/1", "deck/2", "deck/3"};\n', encoding="utf-8")
+    f = []
+    pn.pruefe_regler_marker(pn.Quelle(kopie), f)
+    assert any("still carries the literal channel list" in x for x in f), f
+
+
+
+
+def test_schema_kanal_muster():
+    d = _pult()
+    kanaele = (json.loads((WURZEL / SCHEMA).read_text(encoding="utf-8")))["$defs"]
+    container = [c["pfad"] for c in d["container"]]
+    for p in container + list(d["busse"]) + ["master", "cue"]:
+        assert re.fullmatch(kanaele["kanal"]["pattern"], p), p
+    for p in ("deck/3", "deck/4", "erz/1", "erz/8", "pad/3", "bus/5", "fx/3"):
+        assert not re.fullmatch(kanaele["kanal"]["pattern"], p), p
+    for p in ("deck/1", "deck/2", "deck/3", "deck/4"):
+        assert re.fullmatch(kanaele["hoer_kanal"]["pattern"], p), p
+    for p in ("deck/5", "deck/0", "pad/3", "erz/1", "pad/3", "bus/1", "master", "cue"):
+        assert not re.fullmatch(kanaele["hoer_kanal"]["pattern"], p), p
+
+
+def test_schema_alias_gruppe():
+    d = _pult()
+    schema = _schema_muster()
+    for n in d["alias_stroeme"]:
+        for s in d["alias_suffixe"]:
+            for p in ([f"erz/{n}/bk/{k}" for k in range(1, d["bk_n"] + 1)] if s == "bk/<k>" else [f"erz/{n}/{s}"]):
+                assert re.fullmatch(schema, p), p
+    for falsch in ("erz/4/fader", "erz/8/fader", "erz/11/fader", "erz/0/fader", "erz/1/ziel", "erz/1/xseite", "erz/1/gate/an", "erz/1/send/5", "erz/1/komp/gain",
+                   "erz/1/bk/65", "erz/1/bk/0", "erz/01/fader"):
+        assert not re.fullmatch(schema, falsch), falsch
+
+
+ALIAS_SUFFIXE_VOLL = ["fader", "trim", "pfl", "eq/tief", "eq/mitte", "eq/hoch", "kill/tief", "kill/mitte", "kill/hoch", "filter",
+                      "komp/an", "komp/schwelle", "komp/ratio", "komp/attack", "komp/release", "komp/makeup", "komp/mix", "komp/sc",
+                      "pan", "mute", "solo", "send/1", "send/2", "send/3", "send/4", "bk/<k>"]
+
+
+def test_alias_suffixe_sind_der_volle_streifensatz():
+    """Container core V review I1: the alias strip set is the full one (F9 D-M6); refusals such as kein_modul_send are lane M's, not the schema's."""
+    d = _pult()
+    assert d["alias_suffixe"] == ALIAS_SUFFIXE_VOLL
+    schema = _schema_muster()
+    for n in d["alias_stroeme"]:
+        for s in ALIAS_SUFFIXE_VOLL:
+            if s != "bk/<k>":
+                assert re.fullmatch(schema, f"erz/{n}/{s}"), (n, s)
+
+
+def test_attrappe_regler_gleich_pult(kopie):
+    mutiere(kopie, VERTRAG_MJS, "'komp/mix': R(LIN, 0, 1, 1), ", "")
+    f = pn.pruefe_roh(pn.Quelle(kopie))
+    assert f"Regler=pult.json: {R03} fehlt: deck/1/komp/mix" in f

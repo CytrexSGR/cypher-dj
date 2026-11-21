@@ -120,7 +120,7 @@ export const GERAETE: readonly GeraetDef[] = [
   kern('gate', 'Channel Gate', ['quelle'], [
     ks('gate/an', 'On'), kz('gate/schwelle', 'Threshold', -90, 0, 'dB'), kz('gate/hysterese', 'Hysteresis', 0, 24, 'dB'),
     kz('gate/ratio', 'Ratio', 1, 100), kz('gate/bereich', 'Range', -120, 0, 'dB'), kz('gate/attack', 'Attack', 0.1, 500, 'ms'),
-    kz('gate/hold', 'Hold', 0, 2000, 'ms'), kz('gate/release', 'Release', 1, 5000, 'ms'), kst('gate/sc', 'Sidechain source', 0, 14),
+    kz('gate/hold', 'Hold', 0, 2000, 'ms'), kz('gate/release', 'Release', 1, 5000, 'ms'), kst('gate/sc', 'Sidechain source', 0, 4),
   ]),
   kern('utility', 'Channel Utility', ['quelle', 'bus'], [
     kz('util/balance', 'Balance', -1, 1), kz('util/breite', 'Width', 0, 200, '%'), kz('util/bassmono', 'Bass Mono', 0, 500, 'Hz'),

@@ -204,6 +204,16 @@ bool art_passt(const Eintrag& e, const stellwerk::ReglerTabelle& tab, std::strin
   return false;
 }
 
+// ADR 043 point 6: erz/<n>/<suffix> (n 1..16, a non-empty suffix) is an alias of the page server, not a core address
+bool ist_alias(const std::string& z) {
+  if (z.compare(0, 4, "erz/") != 0) return false;
+  size_t i = 4, n = 0;
+  int nr = 0;
+  while (i < z.size() && z[i] >= '0' && z[i] <= '9' && n < 3) nr = nr * 10 + (z[i++] - '0'), ++n;
+  if (n == 0 || z[4] == '0' || nr < 1 || nr > 16) return false;
+  return i + 1 < z.size() && z[i] == '/';
+}
+
 bool eintrag_lesen(Pruefung& p, const Wert& v, const stellwerk::ReglerTabelle& tab, Eintrag* e) {
   std::memset(e, 0, sizeof *e);
   e->regler = -1;
@@ -357,6 +367,15 @@ bool lade(const char* text, const stellwerk::ReglerTabelle& tab, Mapping* m, Feh
   for (const Wert& v : ein->l) {
     if (m->n_eintraege >= MAX_EINTRAEGE)
       return p.fehl(FehlerArt::zu_viele, v.zeile, "höchstens " + std::to_string(MAX_EINTRAEGE) + " Einträge");
+    if (v.art == Wert::objekt) {   // ADR 043: an alias entry is skipped (the page server resolves it), the rest of the map loads
+      const Wert::Feld* z = v.feld("ziel");
+#ifndef CYPHERDJ_MUTATION_HAND_ALIAS_ABGELEHNT   // failure case: an alias entry leaves the kern without any controller again
+      if (z && z->wert.art == Wert::text && ist_alias(z->wert.s) && tab.suche(z->wert.s.c_str()) < 0) {   // a table that still has the row (simulation) keeps it
+        ++m->n_alias;
+        continue;
+      }
+#endif
+    }
     Eintrag& e = m->eintrag[m->n_eintraege];
     if (!eintrag_lesen(p, v, tab, &e)) return false;
     int16_t& idx = m->index[static_cast<int>(e.nachricht.typ)][kanal_slot(e.nachricht.kanal)][e.nachricht.nr];

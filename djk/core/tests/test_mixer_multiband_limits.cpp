@@ -26,7 +26,7 @@ constexpr double LAG_TIEF_MS = 150.0;
 }  // namespace
 
 int main() {
-  for (const int K : {BUS1, 17}) {
+  for (const int K : {BUS1, BUS4}) {
     std::printf("-- bus %s\n", kname(K));
     for (const bool rampe : {true, false}) {
       // field, {target, sine Hz}, start value (0 = the default: tief 200, hoch 2000). The deep cases (target 20..45 Hz) need the longer warm-up.

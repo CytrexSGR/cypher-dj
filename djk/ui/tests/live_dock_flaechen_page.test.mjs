@@ -70,19 +70,19 @@ test('GATE and UTIL: popover at the chip, sliders send after 40 ms, chip menus s
 
 test('COMP: the chip opens the face; key, preset and history from the chip menu', { skip: !CHROME && 'no google-chrome' }, async (t) => {
   const s = await seite(t);
-  await s.w(`${chip('erz/1', 'komp')}.click()`);
+  await s.w(`${chip('deck/1', 'komp')}.click()`);
   await warte(300);
   assert.equal(await s.w(`document.querySelectorAll('.p-face').length`), 1, 'one face');
-  await s.w(`${chip('erz/1', 'komp')}.click()`);   // closes it again
+  await s.w(`${chip('deck/1', 'komp')}.click()`);   // closes it again
   await warte(200);
   await leere(s);
-  await menue(s, chip('erz/1', 'komp'), 'BASS');
-  assert.deepEqual(await gesendet(s, '/regler'), [{ pfad: 'erz/1/komp/sc', nach: 6, ab: 'jetzt' }]);
+  await menue(s, chip('deck/1', 'komp'), 'B');
+  assert.deepEqual(await gesendet(s, '/regler'), [{ pfad: 'deck/1/komp/sc', nach: 2, ab: 'jetzt' }]);
   await leere(s);
-  await menue(s, chip('erz/1', 'komp'), 'Bass');
-  assert.deepEqual((await gesendet(s, '/regler')).map((b) => b.pfad), ['schwelle', 'ratio', 'attack', 'release', 'makeup', 'mix', 'sc'].map((f) => `erz/1/komp/${f}`));
-  await menue(s, chip('erz/1', 'komp'), 'Gain reduction history');
-  assert.equal(await s.w(`document.querySelectorAll('#live-fenster [data-fenster-id="live:verlauf:erz/1"] canvas.live-verlauf').length`), 1);
+  await menue(s, chip('deck/1', 'komp'), 'Bass');
+  assert.deepEqual((await gesendet(s, '/regler')).map((b) => b.pfad), ['schwelle', 'ratio', 'attack', 'release', 'makeup', 'mix', 'sc'].map((f) => `deck/1/komp/${f}`));
+  await menue(s, chip('deck/1', 'komp'), 'Gain reduction history');
+  assert.equal(await s.w(`document.querySelectorAll('#live-fenster [data-fenster-id="live:verlauf:deck/1"] canvas.live-verlauf').length`), 1);
 });
 
 test('graph slot: CHANGE of BASS, OPEN of BASS, + INSERT on A, Remove of the effect chip', { skip: !CHROME && 'no google-chrome' }, async (t) => {
@@ -113,7 +113,7 @@ test('graph slot: CHANGE of BASS, OPEN of BASS, + INSERT on A, Remove of the eff
   assert.deepEqual(await gesendet(s, '/graph'), [{ kanal: 'deck/1', name: '' }]);
 });
 
-test('MASTER: bus window and menu, spectrum window moves the view and back, Spectrum of BASS, GLUE knob', { skip: !CHROME && 'no google-chrome' }, async (t) => {
+test('MASTER: bus window and menu, spectrum window moves the view and back, Spectrum of B, GLUE knob', { skip: !CHROME && 'no google-chrome' }, async (t) => {
   const s = await seite(t);
   await s.w(`${chip('master', 'bus/2')}.click()`);
   await warte(300);
@@ -134,19 +134,11 @@ test('MASTER: bus window and menu, spectrum window moves the view and back, Spec
   await warte(200);
   assert.equal(await s.w(`document.querySelector('#spektrum').parentElement === window.__heim`), true, 'back at home');
   await leere(s);
-  await menue(s, `document.querySelector('#live-dock [data-strang="erz/2"] .w-karte-name')`, 'Spectrum');
-  assert.deepEqual((await gesendet(s, '/regler')).filter((b) => b.pfad === 'spektrum/kanal'), [{ pfad: 'spektrum/kanal', nach: 6, ab: 'jetzt' }]);
+  await menue(s, `document.querySelector('#live-dock [data-strang="deck/2"] .w-karte-name')`, 'Spectrum');
+  assert.deepEqual((await gesendet(s, '/regler')).filter((b) => b.pfad === 'spektrum/kanal'), [{ pfad: 'spektrum/kanal', nach: 2, ab: 'jetzt' }]);
   await leere(s);
   await s.w(`(() => { const k = document.querySelector('#live-dock [data-strang="master"] [data-param="kleber"]'); k.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true })); })()`);
   await warte(400);
   const griff = await gesendet(s, '/griff');
   assert.ok(griff.length >= 1 && griff.every((b) => b.pfad === 'master/kleber' && b.u >= 0 && b.u <= 1), JSON.stringify(griff));
-});
-
-test('loop automation: the card menu of L1 opens the editor in a window', { skip: !CHROME && 'no google-chrome' }, async (t) => {
-  const s = await seite(t);
-  await menue(s, `document.querySelector('#live-dock [data-strang="pad/1"] .w-karte-name')`, 'Loop automation…');
-  assert.equal(await s.w(`document.querySelectorAll('#live-fenster [data-fenster-id="live:auto:1"] .autospur').length`), 1);
-  const fehler = s.b.konsole.filter((k) => k.typ === 'exception');
-  assert.deepEqual(fehler, [], 'no uncaught error');
 });

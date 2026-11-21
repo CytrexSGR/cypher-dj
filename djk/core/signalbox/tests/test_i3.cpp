@@ -12,9 +12,19 @@ using namespace cypherdj::stellwerk;
 
 namespace {
 
+int deck_kanal(int n);   // defined below, the double needs it for its default player numbers
+int pfad_kanal(const char* fader_pfad);
+
 // Deck-Modell-Doppel: fester Inhalt und feste Quellposition je Kanal-Index, ohne Allokation (feste Kanalzahl).
+// Container core K8: player(kanal) is the player number whose track sounds on that strip. By default the four deck strips carry their own player
+// (the container input art `player` of the start state); setze_player changes it (0: the strip carries no player, the container input is a module or nothing).
 class TestDeck : public DeckModell {
  public:
+  TestDeck() {
+    for (int n = 1; n <= 4; n++) player_[deck_kanal(n)] = n;
+  }
+  void setze_player(int kanal, int nr) { player_[kanal] = nr; }
+  int player(int kanal) const override { return kanal >= 0 && kanal < MAX_KANAELE ? player_[kanal] : 0; }
   void setze_inhalt(int kanal, const Inhalt& i) {
     inhalt_da_[kanal] = true;
     inhalt_[kanal] = i;
@@ -38,6 +48,7 @@ class TestDeck : public DeckModell {
   Inhalt inhalt_[MAX_KANAELE] = {};
   bool quell_da_[MAX_KANAELE] = {};
   double quell_[MAX_KANAELE] = {};
+  int player_[MAX_KANAELE] = {};
 };
 
 Inhalt inhalt_von(const char* material_id, double bpm, int fassung) {
@@ -52,10 +63,17 @@ Inhalt inhalt_von(const char* material_id, double bpm, int fassung) {
 int deck_kanal(int n) {
   Lauf sonde;
   char pfad[32];
-  std::snprintf(pfad, sizeof pfad, "deck/%d/fader", n);
+  // K9: the table has four containers; the players 3 and 4 sound through the strips pad/1 and pad/2
+  if (n <= 2) std::snprintf(pfad, sizeof pfad, "deck/%d/fader", n);
+  else std::snprintf(pfad, sizeof pfad, "pad/%d/fader", n - 2);
   return sonde.sw->tabelle().def(sonde.r(pfad)).kanal;
 }
 int deck2_kanal() { return deck_kanal(2); }
+// The channel index of a strip from any of its rows ("pad/1/fader" -> the index of pad/1)
+int pfad_kanal(const char* fader_pfad) {
+  Lauf sonde;
+  return sonde.sw->tabelle().def(sonde.r(fader_pfad)).kanal;
+}
 
 Schein schein_von(const char* hs_id, const char* kanal, const Inhalt& inhalt, double bpm, double gueltig_bis,
                    double quell_von = -1e9, double quell_bis = 1e9) {
@@ -201,11 +219,7 @@ FALL(erzeuger_kanal_oeffnet_ohne_schein) {
   HoerscheinRegister reg;   // leer
   TestDeck deck;
   deck.setze_inhalt(deck2_kanal(), inhalt_von("matA", 128.0, 1));   // a loaded track: the deck channel is locked
-  for (int n = 1; n <= 8; n++) {
-    char f[32];
-    std::snprintf(f, sizeof f, "erz/%d/fader", n);
-    PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, f) == Grund::kein);
-  }
+  // K9: the table has no erz/<n> strips any more (the generator strips are the containers); the erz/ exemption of PrueferI3 has no row to meet here
   PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "deck/2/fader") == Grund::kein_hoerschein);
   // Andreas 2026-10-05: „diese fader solltest du selber steuern können alle“. pad/* öffnet im Kern ohne Hörschein;
   // ob der Box-Inhalt Cyphers eigener Mitschnitt ist, prüft die Seite (server.ts eigenePad).
@@ -222,7 +236,7 @@ FALL(leeres_deck_oeffnet_ohne_schein) {
   TestDeck deck;            // nothing loaded on any deck
   for (int n = 1; n <= 4; n++) {
     char f[32];
-    std::snprintf(f, sizeof f, "deck/%d/fader", n);
+    std::snprintf(f, sizeof f, n <= 2 ? "deck/%d/fader" : "pad/%d/fader", n <= 2 ? n : n - 2);   // K9: the players 3, 4 sound through pad/1, pad/2
     PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, f) == Grund::kein);
   }
   // trim opens through the same exemption: the fader is up (-10 dB), the trim moves from its closed value to 0 dB
@@ -238,7 +252,7 @@ FALL(geladenes_deck_bleibt_gesperrt) {
   deck.setze_quell(deck_kanal(2), 4.0);   // inside the section of the pass
   for (int n = 1; n <= 4; n++) {
     char f[32];
-    std::snprintf(f, sizeof f, "deck/%d/fader", n);
+    std::snprintf(f, sizeof f, n <= 2 ? "deck/%d/fader" : "pad/%d/fader", n <= 2 ? n : n - 2);   // K9: the players 3, 4 sound through pad/1, pad/2
     PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, f) == Grund::kein_hoerschein);
   }
   PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "deck/2/trim", "deck/2/fader", -10.0f) == Grund::kein_hoerschein);
@@ -321,6 +335,93 @@ FALL(register_weg_entfernt) {
   PRUEFE(reg.finde("h1") != nullptr);
   reg.weg("h1");
   PRUEFE(reg.finde("h1") == nullptr);
+}
+
+// ---- container core K8: the hearing license follows the container (D-V6, R12: nothing gets stricter) --------------------------------------------------------------------------------
+// The key of a Hoerschein is the PLAYER name (deck/<player>), never the container path. A strip needs one only while its container input is `player` and that player holds a track.
+
+FALL(i3_a_player_geladen) {   // container A (deck/1), art player, player 1 loaded: a pass on deck/1 is needed and enough
+  HoerscheinRegister reg;
+  TestDeck deck;
+  deck.setze_inhalt(deck_kanal(1), inhalt_von("matA", 128.0, 1));
+  deck.setze_quell(deck_kanal(1), 4.0);   // inside the section of the pass
+  PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "deck/1/fader") == Grund::kein_hoerschein);
+  reg.setze(schein_von("h1", "deck/1", inhalt_von("matA", 128.0, 1), 128.0, 200.0), 0.0);
+  PRUEFE(lauf(reg, deck, true, "h1", Quelle::cypher, "deck/1/fader") == Grund::kein);
+}
+
+FALL(i3_c_player_geladen) {   // container C (pad/1), art player, player 3 loaded: needed, and the key is deck/3, not pad/1
+  HoerscheinRegister reg;
+  TestDeck deck;
+  const int c = pfad_kanal("pad/1/fader");
+  deck.setze_player(c, 3);
+  deck.setze_inhalt(c, inhalt_von("matC", 128.0, 1));
+  deck.setze_quell(c, 4.0);
+  PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "pad/1/fader") == Grund::kein_hoerschein);       // today deck/3 needed one, pad/1 did not: nothing gets stricter, nothing is lost
+  reg.setze(schein_von("h1", "pad/1", inhalt_von("matC", 128.0, 1), 128.0, 200.0), 0.0);
+  PRUEFE(lauf(reg, deck, true, "h1", Quelle::cypher, "pad/1/fader") == Grund::hoerschein_anderer_kanal);   // the container path is not the key
+  reg.setze(schein_von("h2", "deck/3", inhalt_von("matC", 128.0, 1), 128.0, 200.0), 0.0);
+  PRUEFE(lauf(reg, deck, true, "h2", Quelle::cypher, "pad/1/fader") == Grund::kein);                      // the player name is
+  PRUEFE(lauf(reg, deck, true, "", Quelle::andreas, "pad/1/fader") == Grund::kein);                       // the hand is never blocked
+}
+
+FALL(i3_seq_modul_frei) {   // a SEQ deck: container A takes the module (art modul); even a track left in player 1 is not heard there, the strip is free
+  HoerscheinRegister reg;
+  TestDeck deck;
+  const int a = deck_kanal(1);
+  deck.setze_player(a, 0);
+  PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "deck/1/fader") == Grund::kein);
+  deck.setze_inhalt(a, inhalt_von("matA", 128.0, 1));
+  PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "deck/1/fader") == Grund::kein);
+  PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "deck/1/trim", "deck/1/fader", -10.0f) == Grund::kein);
+  PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "deck/2/fader") == Grund::kein);   // an empty container B is free as before
+}
+
+FALL(i3_strudel_frei) {   // a stream (strudel) in a container: art modul on D (pad/2), free; the erz strips stay free
+  HoerscheinRegister reg;
+  TestDeck deck;
+  const int d = pfad_kanal("pad/2/fader");
+  deck.setze_player(d, 0);
+  deck.setze_inhalt(d, inhalt_von("matD", 128.0, 1));
+  PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "pad/2/fader") == Grund::kein);
+}
+
+FALL(i3_loopdeck_frei) {   // a loop deck (pad strips in the old table, containers C and D now) with art modul: free; with a player loaded behind art player it is not
+  HoerscheinRegister reg;
+  TestDeck deck;
+  const int c = pfad_kanal("pad/1/fader");
+  deck.setze_player(c, 0);
+  deck.setze_inhalt(c, inhalt_von("matC", 128.0, 1));
+  PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "pad/1/fader") == Grund::kein);
+  PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "pad/1/trim", "pad/1/fader", -10.0f) == Grund::kein);
+  deck.setze_player(c, 3);   // control: the same strip with the player behind it is locked
+  PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "pad/1/fader") == Grund::kein_hoerschein);
+}
+
+FALL(i3_leer_frei) {   // an empty container (art leer): nothing sounds, free, whatever the player holds
+  HoerscheinRegister reg;
+  TestDeck deck;
+  for (int n = 1; n <= 4; n++) {
+    char f[32];
+    std::snprintf(f, sizeof f, n <= 2 ? "deck/%d/fader" : "pad/%d/fader", n <= 2 ? n : n - 2);   // K9: the players 3, 4 sound through pad/1, pad/2
+    deck.setze_player(deck_kanal(n), 0);
+    deck.setze_inhalt(deck_kanal(n), inhalt_von("matX", 128.0, 1));
+    PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, f) == Grund::kein);
+  }
+  for (const char* f : {"pad/1/fader", "pad/2/fader"}) {
+    deck.setze_player(pfad_kanal(f), 0);
+    deck.setze_inhalt(pfad_kanal(f), inhalt_von("matX", 128.0, 1));
+    PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, f) == Grund::kein);
+  }
+}
+
+FALL(i3_spur_ausgenommen) {   // spur, grp and pm rows stay exempt next to loaded containers
+  HoerscheinRegister reg;
+  TestDeck deck;
+  deck.setze_inhalt(deck_kanal(1), inhalt_von("matA", 128.0, 1));
+  for (const char* f : {"spur/1/fader", "spur/8/fader", "spur/3/pan", "grp/1/fader", "grp/8/fader", "grp/3/pan", "pm/fader"})
+    PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, f) == Grund::kein);
+  PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "deck/1/fader") == Grund::kein_hoerschein);   // control
 }
 
 PRUEF_MAIN

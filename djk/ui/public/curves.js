@@ -8,6 +8,8 @@
 // (Plan M-1 Blocker 4). 'attrappe_linear' ist die Wahl für die Attrappe (13), die ohne Mapping linear
 // über den §1.5-Bereich rechnet (djk/contract/mock_core/hand.mjs, Kopf). Für die Seite wählt der Server:
 // server.ts --ziel-kurve (Vorgabe kern) meldet sie in /konfig, app.js ruft setzeZielKurve (live binding).
+import { CONTAINER, STROEME, stromKanal, bkKanaele, ALIAS_SUFFIXE, playerKanal } from './kanaele.js';
+
 export let ZIEL_KURVE = 'kern';
 export const ZIEL_KURVEN = ['kern', 'attrappe_linear'];
 export function setzeZielKurve(k) {
@@ -16,28 +18,29 @@ export function setzeZielKurve(k) {
 }
 
 export const DECKS = [1, 2, 3, 4];
-export const ERZEUGER = ['erz/1', 'erz/2', 'erz/3'];  // Strudel-Kanäle: Drums, Bass, Melodie (Studio S1)
-export const LOOPBOXEN = ['pad/1', 'pad/2'];  // Loop-Boxen L1, L2 (MVP 2, ADR 025)
+export const CONTAINER_PFADE = CONTAINER.map((c) => c.pfad);   // the four channel strips A..D (container core): deck/1, deck/2, pad/1, pad/2
+export const LOOPDECKS = [1, 2];   // the loop deck identities (LoopDeck.platz); the deck sounds on the container of the place that shows it
+export const STROM_KANAELE = STROEME.map(stromKanal);   // alias bases of the Strudel streams (the page server resolves erz/<n>/* onto the track of stream n)
 const KANALZUG = ['fader', 'trim', 'eq/hoch', 'eq/mitte', 'eq/tief', 'kill/hoch', 'kill/mitte', 'kill/tief', 'filter', 'pfl'];
 const DECK_TASTEN = ['play', 'cue'];
 const DECK_ZUWEISUNG = ['xseite'];  // Crossfader-Seite A/THRU/B, §1.5 „nur Hand“ (2026-09-27)
 export const SPUREN = Array.from({ length: 32 }, (_, i) => i + 1);   // D1 K1: Spur-Regler des Arrangements (§1.5 spur/<n>/*)
 const SPUR_REGLER = ['fader', 'pan', 'mute', 'solo'];
-const SPUR_ZIELE = [...SPUR_REGLER, 'filter', 'eq/tief', 'eq/mitte', 'eq/hoch'];   // loop deck K7a: spur/<n>/filter exists for tracks only, groups have no filter row
+const SPUR_ZIELE = [...SPUR_REGLER, 'filter', 'eq/tief', 'eq/mitte', 'eq/hoch', 'pfl', 'trim', 'kill/tief', 'kill/mitte', 'kill/hoch'];   // loop deck K7a: spur/<n>/filter exists for tracks only, groups have no filter row; container core K7: pfl, trim and kill rows of a track
 // S5r (§1.5): graph knobs <kanal>/bk/<1..64> auf den Kanälen, die einen Baukasten-Graphen annehmen (nicht erz/4, erz/8)
-export const BK_KANAELE = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
+export const BK_KANAELE = bkKanaele();
 export const BK_SEND_KANAELE = ['fx/3', 'fx/4'];   // S14: graph knobs of the send returns (global controls fx/<n>/bk/1..64)
 export const GRUPPEN = Array.from({ length: 16 }, (_, i) => i + 1);   // 1.10 Slice 1: Gruppen-Regler des Arrangements (§1.5 grp/<n>/*)
-export const RETURNS = [1, 2, 3, 4];   // 1.10 Slice 3: return strips with Cypher Hall (§1.5 ret/<r>/*, spur|grp/<n>/send/<r>)
+export const RETURNS = [1, 2, 3, 4, 5, 6, 7, 8];   // 1.10 Slice 3: return strips with Cypher Hall (§1.5 ret/<r>/*, spur|grp/<n>/send/<r>)
 const RET_REGLER = ['fader', 'pan', 'mute', 'solo'];
 export const RET_HALL = ['an', 'pre', 'decay', 'groesse', 'tief', 'highcut', 'fahne'];   // ret/<r>/hall/*: normalised 0..1, `an` is a switch
 
 // Jeder Pfad, den die Seite greifen darf; alles andere lehnt der Server ab (unbekanntes_ziel), ohne zu senden.
 // 60m-Nachtrag: PFL je Deck, Master-Pegel, Kopfhörer (cue/mix, cue/pegel), alle §1.5 „nur Hand“.
 export const ZIELE = new Set([
-  ...DECKS.flatMap((n) => [...KANALZUG, ...DECK_TASTEN, ...DECK_ZUWEISUNG].map((p) => `deck/${n}/${p}`)),
-  ...ERZEUGER.flatMap((k) => [...KANALZUG, ...DECK_ZUWEISUNG].map((p) => `${k}/${p}`)),  // ohne Tasten
-  ...LOOPBOXEN.flatMap((k) => [...KANALZUG, ...DECK_ZUWEISUNG].map((p) => `${k}/${p}`)),  // ohne Tasten
+  ...DECKS.flatMap((n) => DECK_TASTEN.map((p) => `${playerKanal(n)}/${p}`)),   // player keys of decks 1..4 (play, cue)
+  ...CONTAINER_PFADE.flatMap((k) => [...KANALZUG, ...DECK_ZUWEISUNG].map((p) => `${k}/${p}`)),   // container strips A..D, no keys
+  ...STROM_KANAELE.flatMap((k) => KANALZUG.filter((p) => ALIAS_SUFFIXE.includes(p)).map((p) => `${k}/${p}`)),   // alias strips of the Strudel streams, no keys, no crossfader side
   'xfader', 'master/pegel', 'master/kleber', 'cue/mix', 'cue/pegel',   // kleber (K2): Schwelle des Summen-Kompressors, nur Hand
   'master/pfl',   // MASTER CUE (2026-10-10): Master auf die PFL-Seite des Kopfhörers, nur Hand
   ...SPUREN.flatMap((n) => SPUR_ZIELE.map((p) => `spur/${n}/${p}`)),   // D1 K1: Spur-Mixer der Produktion
@@ -61,6 +64,9 @@ const BEREICH = {
   bk: [0, 1], pan: [-1, 1], schalter: [0, 1], spur_fader: [-200, 6],   // D1 K1: spur/<n>/pan, spur/<n>/mute|solo, spur/<n>/fader (Spec 6.16)
 };
 
+const maske = (pfade) => pfade.map((k) => k.replace(/\//g, '\\/')).join('|');
+const BK_ART = new RegExp(`^(?:${maske([...BK_KANAELE, ...BK_SEND_KANAELE])})\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$`);   // S5r: linear 0..1, default 0.5
+const KANALZUG_ART = new RegExp(`^(?:deck\\/[1-4]|${maske([...CONTAINER_PFADE, ...STROM_KANAELE])})\\/(fader|trim|eq|kill|filter|pfl|xseite|play|cue)(\\/|$)`);
 export function art(pfad) {
   if (pfad === 'xfader') return 'xfader';
   if (pfad === 'master/pegel' || pfad === 'cue/pegel') return 'pegel';
@@ -77,8 +83,8 @@ export function art(pfad) {
   if (/^(?:spur\/(?:[1-9]|[12][0-9]|3[0-2])|grp\/([1-9]|1[0-6]))\/send\/[1-4]$/.test(pfad)) return 'send';   // 1.10 Slice 3
   const rt = /^ret\/[1-4]\/(fader|pan|mute|solo|hall\/(an|pre|decay|groesse|tief|highcut|fahne))$/.exec(pfad);   // 1.10 Slice 3
   if (rt) return rt[1] === 'fader' ? 'spur_fader' : rt[1] === 'pan' ? 'pan' : rt[1] === 'mute' || rt[1] === 'solo' || rt[2] === 'an' ? 'schalter' : 'hall';
-  if (/^(?:deck\/[1-4]|erz\/[1-35-7]|pad\/[12]|fx\/[34])\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.test(pfad)) return 'bk';   // S5r: linear 0..1, Vorgabe 0,5
-  const m = /^(?:deck\/[1-4]|erz\/[1-3]|pad\/[12])\/(fader|trim|eq|kill|filter|pfl|xseite|play|cue)(\/|$)/.exec(pfad);
+  if (BK_ART.test(pfad)) return 'bk';   // S5r: linear 0..1, Vorgabe 0,5
+  const m = KANALZUG_ART.exec(pfad);
   if (!m) return null;
   return m[1] === 'play' || m[1] === 'cue' ? 'taste' : m[1];
 }

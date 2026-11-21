@@ -13,7 +13,7 @@ namespace {
 
 constexpr int N = 256;
 constexpr int64_t SPB = 22500;  // 128 BPM
-constexpr int ERZ1 = 4;         // Mixer-Index erz/1
+constexpr int ERZ1 = 0;         // output index of stream 1 (stream - 1)
 
 struct Welt {
   cdj::Karte karte{128.0, 0};
@@ -79,7 +79,7 @@ int main() {
   const cdj::Kit kit = impuls_kit();
   {  // 1. Einsatz am Sample, Form, beide Seiten, auch genau auf einer Blockgrenze (Beat 9,1022…: Sample 204 800 = 800 · 256)
     Welt w;
-    PRUEF(w.erz.setze_strom(1, &kit, ERZ1) == nullptr);
+    PRUEF(w.erz.setze_strom(1, &kit) == nullptr);
     const double b_grenze = 204800.0 / SPB;
     const auto z = w.erz.fenster(fenster(1, 8.0, 12.0, {{8.3, 36, 1, 1.0f}, {b_grenze, 36, 1, 1.0f}}), w.jetzt());
     PRUEF(z.eingefuegt == 2 && z.verworfen == 0 && z.zu_spaet == 0 && z.ungehoert == 0);
@@ -95,7 +95,7 @@ int main() {
   }
   {  // 2. Fenster ersetzen: nach Beat 5 ersetzt ein Fenster [4, 16) die Ereignisse 8 und 12 durch 8,5 (anderes Muster)
     Welt w;
-    w.erz.setze_strom(1, &kit, ERZ1);
+    w.erz.setze_strom(1, &kit);
     w.erz.fenster(fenster(1, 0.0, 16.0, {{4.0, 36, 1, 1.0f}, {8.0, 36, 1, 1.0f}, {12.0, 36, 1, 1.0f}}), w.jetzt());
     w.bis(5 * SPB);
     const auto z = w.erz.fenster(fenster(2, 4.0, 16.0, {{8.5, 36, 2, 1.0f}}), w.jetzt());
@@ -109,7 +109,7 @@ int main() {
   }
   {  // 3. zu spät: Beat 2 in einem Fenster, das bei Beat 3 ankommt; gleiches Muster zählt nicht als „anderes“
     Welt w;
-    w.erz.setze_strom(1, &kit, ERZ1);
+    w.erz.setze_strom(1, &kit);
     w.bis(3 * SPB);
     const auto z = w.erz.fenster(fenster(1, 0.0, 8.0, {{2.0, 36, 1, 1.0f}, {6.0, 36, 1, 1.0f}}), w.jetzt());
     PRUEF(z.zu_spaet == 1 && z.eingefuegt == 1);
@@ -125,7 +125,7 @@ int main() {
   }
   {  // 5. velocity linear, zwei Noten auf demselben Beat addieren sich, Note ohne Klang verfällt
     Welt w;
-    w.erz.setze_strom(1, &kit, ERZ1);
+    w.erz.setze_strom(1, &kit);
     w.erz.fenster(fenster(1, 0.0, 8.0, {{4.0, 36, 1, 0.5f}, {4.0, 38, 1, 1.0f}, {5.0, 99, 1, 1.0f}}), w.jetzt());
     w.bis(8 * SPB);
     PRUEF(w.aus_l[4 * SPB] == 0.5f + 0.125f && w.aus_r[4 * SPB] == 0.5f - 0.125f);
@@ -139,11 +139,11 @@ int main() {
     lang.klang[36].frames = 48000;
     lang.klang[36].daten.assign(96000, 0.5f);
     lang.n = 1;
-    w.erz.setze_strom(1, &lang, ERZ1);
+    w.erz.setze_strom(1, &lang);
     w.erz.fenster(fenster(1, 0.0, 8.0, {{1.0, 36, 1, 1.0f}}), w.jetzt());
     w.bis(2 * SPB);
     PRUEF(w.erz.stimmen() == 1);
-    PRUEF(w.erz.setze_strom(1, &kit, ERZ1) == &lang);
+    PRUEF(w.erz.setze_strom(1, &kit) == &lang);
     PRUEF(w.erz.stimmen() == 0 && w.erz.ausklaenge() == 1);
     const int64_t getauscht = w.s;  // bis() rendert bis zur Blockgrenze: vorher Gerendertes zählt nicht
     std::fill(lang.klang[36].daten.begin(), lang.klang[36].daten.end(), 9.0f);  // „freigegeben“: der Ausklang liest es nicht mehr
@@ -163,10 +163,10 @@ int main() {
     lang->klang[36].frames = 48000;
     lang->klang[36].daten.assign(96000, 0.5f);
     lang->n = 1;
-    w.erz.setze_strom(1, lang.get(), ERZ1);
+    w.erz.setze_strom(1, lang.get());
     w.erz.fenster(fenster(1, 0.0, 8.0, {{1.0, 36, 1, 1.0f}}), w.jetzt());
     w.bis(2 * SPB);
-    PRUEF(w.erz.setze_strom(1, &kit, ERZ1) == lang.get());
+    PRUEF(w.erz.setze_strom(1, &kit) == lang.get());
     lang.reset();
     const int64_t getauscht = w.s;
     w.bis(3 * SPB);
@@ -179,10 +179,10 @@ int main() {
     lang.klang[36].frames = 48000;
     lang.klang[36].daten.assign(96000, 0.5f);
     lang.n = 1;
-    w.erz.setze_strom(1, &lang, ERZ1);
+    w.erz.setze_strom(1, &lang);
     w.erz.fenster(fenster(1, 0.0, 8.0, {{1.0, 36, 1, 1.0f}}), w.jetzt());
     w.bis(2 * SPB);
-    PRUEF(w.erz.setze_strom(1, &lang, ERZ1) == nullptr);
+    PRUEF(w.erz.setze_strom(1, &lang) == nullptr);
     PRUEF(w.erz.stimmen() == 1 && w.erz.ausklaenge() == 0);
     const int64_t s0 = w.s;
     w.bis(3 * SPB);
@@ -194,7 +194,7 @@ int main() {
     for (int i = 0; i < 8; ++i) { k8.klang[40].daten.push_back((float)(i + 1)); k8.klang[40].daten.push_back((float)(i + 1)); }
     k8.n = 1;
     Welt w;
-    w.erz.setze_strom(1, &k8, ERZ1);
+    w.erz.setze_strom(1, &k8);
     cdj::ErzEv mitte{8.0, 40, 1, 1.0f};
     mitte.begin = 0.25f;
     mitte.end = 0.75f;
@@ -236,7 +236,7 @@ int main() {
     {  // Fehlerfall: begin 0,3125 → Frame 15000, end 0,5625 → Frame 27000 (12000 Frames)
       auto wp = std::make_unique<Welt>();
       Welt& w = *wp;
-      w.erz.setze_strom(1, &ks, ERZ1);
+      w.erz.setze_strom(1, &ks);
       cdj::ErzEv e{2.0, 36, 1, 1.0f};
       e.begin = 0.3125f;
       e.end = 0.5625f;
@@ -253,7 +253,7 @@ int main() {
     {  // Negativ-Kontrolle 1: begin 0 / end 1, Klangende leise: jedes Sample bitgleich zum Klang
       auto wp = std::make_unique<Welt>();
       Welt& w = *wp;
-      w.erz.setze_strom(1, &ks, ERZ1);
+      w.erz.setze_strom(1, &ks);
       w.erz.fenster(fenster(1, 0.0, 8.0, {{2.0, 36, 1, 1.0f}}), w.jetzt());
       w.bis(a + 48001 + N);
       bool gleich = true;
@@ -263,7 +263,7 @@ int main() {
     {  // Negativ-Kontrolle 2: Schnitt auf einem Nulldurchgang (begin 0,3 → Frame 14400, |x| < -60 dBFS): keine Einblende
       auto wp = std::make_unique<Welt>();
       Welt& w = *wp;
-      w.erz.setze_strom(1, &ks, ERZ1);
+      w.erz.setze_strom(1, &ks);
       cdj::ErzEv e{2.0, 36, 1, 1.0f};
       e.begin = 0.3f;
       w.erz.fenster(fenster(1, 0.0, 8.0, {e}), w.jetzt());
@@ -279,7 +279,7 @@ int main() {
       kr.n = 1;
       auto wp = std::make_unique<Welt>();
       Welt& w = *wp;
-      w.erz.setze_strom(1, &kr, ERZ1);
+      w.erz.setze_strom(1, &kr);
       w.erz.fenster(fenster(1, 0.0, 8.0, {{2.0, 36, 1, 1.0f}}), w.jetzt());
       w.bis(a + 4800 + N);
       PRUEF(w.aus_l[a] == 0.5f);  // Anschlag am Dateianfang: Absicht, keine Rampe
@@ -301,7 +301,7 @@ int main() {
     kl.n = 2;
     auto wp = std::make_unique<Welt>();
     Welt& w = *wp;
-    w.erz.setze_strom(1, &kl, ERZ1);
+    w.erz.setze_strom(1, &kl);
     cdj::ErzFenster f = fenster(1, 0.0, 16.0, {{0.0, 0, 1, 1.0f}});
     for (int j = 1; j < 63; ++j) f.ev[f.n++] = cdj::ErzEv{0.25 * j, 1, 1, 1.0f};
     w.erz.fenster(f, w.jetzt());
@@ -320,7 +320,7 @@ int main() {
     dc.n = 1;
     auto wp = std::make_unique<Welt>();
     Welt& w = *wp;
-    w.erz.setze_strom(1, &dc, ERZ1);
+    w.erz.setze_strom(1, &dc);
     cdj::ErzFenster f = fenster(1, 0.0, 16.0, {});
     for (int j = 0; j < 33; ++j) f.ev[f.n++] = cdj::ErzEv{0.25 * j, 0, 1, 1.0f};
     w.erz.fenster(f, w.jetzt());
@@ -341,7 +341,7 @@ int main() {
     z.n = 2;
     auto wp = std::make_unique<Welt>();
     Welt& w = *wp;
-    w.erz.setze_strom(1, &z, ERZ1);
+    w.erz.setze_strom(1, &z);
     w.erz.fenster(fenster(1, 0.0, 8.0, {{4.0, 255, 1, 1.0f}}), w.jetzt());
     w.bis(8 * SPB);
     std::printf("F08 Note 255: %.2f (Soll 0,25, vorher 0,75)\n", w.aus_l[4 * SPB]);
@@ -360,13 +360,13 @@ int main() {
     }
     auto wp = std::make_unique<Welt>();
     Welt& w = *wp;
-    w.erz.setze_strom(1, k1.get(), ERZ1);
+    w.erz.setze_strom(1, k1.get());
     cdj::ErzFenster f = fenster(1, 0.0, 16.0, {});
     for (int j = 0; j < 33; ++j) f.ev[f.n++] = cdj::ErzEv{0.25 * j, 0, 1, 1.0f};
     w.erz.fenster(f, w.jetzt());
     w.bis(704 * N);  // Block mit Sample 180000 ist [179968, 180224): der 33. Einsatz raubt dort
     const int64_t t = w.s;
-    w.erz.setze_strom(1, k2.get(), ERZ1);  // Kit-Tausch als Befehl vor dem nächsten Block
+    w.erz.setze_strom(1, k2.get());  // Kit-Tausch als Befehl vor dem nächsten Block
     PRUEF(w.erz.stimmen() == 0 && w.erz.ausklaenge() == 33);
     w.bis(t + 2 * N);
     const double s = groesster_sprung(w.aus_l, t, t + cdj::ERZ_AUSKLANG + 2);
@@ -384,7 +384,7 @@ int main() {
     kk->n = 33;
     auto wp = std::make_unique<Welt>();
     Welt& w = *wp;
-    w.erz.setze_strom(1, kk.get(), ERZ1);
+    w.erz.setze_strom(1, kk.get());
     cdj::ErzFenster f = fenster(1, 0.0, 1.0, {});
     for (int j = 0; j < 33; ++j) f.ev[f.n++] = cdj::ErzEv{j / 64.0, j, 1, 1.0f};
     w.erz.fenster(f, w.jetzt());
@@ -405,14 +405,14 @@ int main() {
     }
     auto wp = std::make_unique<Welt>();
     Welt& w = *wp;
-    w.erz.setze_strom(1, k1.get(), ERZ1);
+    w.erz.setze_strom(1, k1.get());
     cdj::ErzFenster f = fenster(1, 0.0, 1.0, {});
     for (int j = 0; j < 20; ++j) f.ev[f.n++] = cdj::ErzEv{j / 64.0, 0, 1, 1.0f};
     w.erz.fenster(f, w.jetzt());
     w.bis(8192);
     PRUEF(w.erz.stimmen() == 20);
     const int64_t t = w.s;
-    w.erz.setze_strom(1, k2.get(), ERZ1);
+    w.erz.setze_strom(1, k2.get());
     PRUEF(w.erz.stimmen() == 0 && w.erz.ausklaenge() == 20);
     w.bis(t + 2 * N);
     const double s = groesster_sprung(w.aus_l, t, t + cdj::ERZ_AUSKLANG + 2);

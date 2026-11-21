@@ -19,16 +19,21 @@ import { oeffneMenue } from '../production/context_menu.js';
 import { montiereFenster } from '../dock/window.js';
 import { frontKnoepfe } from '../dock/blocks.js';
 import { liveModell, gestaltLive, knopfBereich, wertVonK, kVonWert, chipPunkte, kartenPunkte, LIVE_KANAELE } from './model.js';
+import { stromVonKanal, stromListe } from '../kanaele.js';
+import { typVon } from '../slots.js';
+import { live } from '../live_view.js';
 import { neuesPopover } from './popover.js';
 import { werkzeugFlaeche, werkzeugAktion } from './tool.js';
 import { kompFlaeche, kompAktion } from './comp.js';
 import { wechsel, auf, effektFlaeche, effektAktion, plus } from './graph.js';
 import { glueFlaeche, limiterFlaeche, busFlaeche, busAktion, spektrumFenster } from './master.js';
-import { automationFenster } from './automation.js';
 
 const TICK_MS = 100;
 const KOMP_MS = 40;   // the strip sliders send the latest value per path every 40 ms (effects_view.js)
 const KANAL_IDS = new Set(LIVE_KANAELE.map(([id]) => id));
+const istKarte = (id) => KANAL_IDS.has(id) || stromVonKanal(id) !== null;   // a container, or the alias of a stream of the module
+// the streams of the placed Strudel module (its rows: the defaults and every stream track of the group); none while no place holds the module
+const modulStroeme = () => ([1, 2, 3, 4].some((n) => typVon(zustand.plaetze, n) === 'strudel') ? stromListe(live.projekt) : []);
 const sichtbar = () => { const e = $('#effekte'); return !!e && !e.hidden; };
 
 // ---- snapshot ----------------------------------------------------------------------------------------------------------------------------------------
@@ -56,6 +61,7 @@ export function liveStand() {
   }
   const lim = limiterJetzt?.() ?? null;
   return {
+    strome: modulStroeme(),
     regler: zustand.regler ?? {},
     geladen: { ...(graphenGeladen ?? {}) },
     graphen: graphenInfo?.graphen ?? [],
@@ -131,7 +137,6 @@ export function liveDockHost(opt = {}) {
     if (a.startsWith('effekt-')) return effektAktion(ctx, id, p, ankerVon(id, teil));
     if (a.startsWith('bus-')) return busAktion(ctx, teil, p);
     if (a === 'spektrum') return spektrumFenster(ctx, id);
-    if (a === 'automation') return automationFenster(ctx, p.wert);
     return undefined;
   }
   const alsMenue = (id, teil, punkte) => punkte.map((p) => (p.gruppe ? p : { text: p.text, aus: !!p.aus, titel: p.titel, aktion: () => punktAus(id, teil, p) }));
@@ -176,7 +181,7 @@ export function liveDockHost(opt = {}) {
     auf: (id) => { if (id === 'master') return spektrumFenster(ctx); const k = ctx.karte(id); return k ? auf(ctx, k) : undefined; },
     menue(id) { const k = ctx.karte(id); return k ? alsMenue(id, null, kartenPunkte(k)) : []; },
     vorn(id) {
-      if (!KANAL_IDS.has(id)) return;
+      if (!istKarte(id)) return;
       setzeFxGewaehlt(id);   // the PRESETS tab works on the card in front
       fokus.melde({ kanal: id }, 'effekte');
       ctx.tick();

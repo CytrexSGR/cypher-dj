@@ -198,7 +198,7 @@ export function aktionenFuer(t) {
 const IMPORT_GRUND = {
   bpm_unbekannt: ['No BPM', 'No BPM in the catalog: the loop cannot be stretched to 128 BPM'],
   takte_unklar: ['Length unclear', 'Length is not 1, 2, 4, 8, 16 or 32 beats at the given tempo'],
-  zu_lang: ['Over 8 bars', 'Longer than 8 bars (32 beats): the loop box takes no more'],
+  zu_lang: ['Over 8 bars', 'Longer than 8 bars (32 beats): a loop deck cell takes no more'],
 };
 export const IMPORT_FEHLER_TEXT = { ...Object.fromEntries(Object.entries(IMPORT_GRUND).map(([k, v]) => [k, v[1]])),
   nur_live: 'Ableton Live only', unbekannt: 'this entry is not in the library catalog anymore (the catalog may have been rebuilt); search again', kein_loop: 'this is not a loop', name_vergeben: 'a loop with that name already exists', sha_ungueltig: 'invalid file id', datei_fehlt: 'file not found', import_laeuft: 'another import is running, try again in a moment',
@@ -207,7 +207,7 @@ export function loopBoxStatus(t) {
   if (t.nur_live) return { aktiv: false, grund: 'Live only', titel: 'Ableton Live only: protected, cannot be loaded here' };
   if (!t.pfad_da) return { aktiv: false, grund: null, titel: 'File not found' };
   if (t.import_grund) { const [kurz, lang] = IMPORT_GRUND[t.import_grund] ?? [t.import_grund, t.import_grund]; return { aktiv: false, grund: kurz, titel: lang }; }
-  return { aktiv: true, grund: null, titel: 'Stretch to 128 BPM and load into the loop box' };
+  return { aktiv: true, grund: null, titel: 'Stretch to 128 BPM and load into a loop deck' };
 }
 
 // Vorhören (S7-Re-Review F1): ↓ lenkt um, wenn schon etwas läuft ODER noch lädt (wartet = ID der Anfrage in der Luft)

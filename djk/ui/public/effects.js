@@ -1,19 +1,40 @@
 // Effekt-Sektion (Plan 2026-10-11-effekt-sektion.md): reine Rechenteile, ohne DOM (getestet in tests/effects.test.mjs).
+import { CONTAINER, STROEME, fxIndex, stromKanal, stromVonKanal, platzVonPfad } from './kanaele.js';
+import { typVon, gruppeVon as platzGruppeVon } from './slots.js';
 import { GRAPH_KATEGORIEN, gruppenVon, gruppeVon, mitNeben, ohneVerborgene, sortiere } from './instrument_groups.js';
 
 // Startpunkte wie die Presets des VST3 (djk/instruments/comp/presets/presets.json). Der Sidechain heißt im Kern komp/sc
-// (Schlüssel = Quellkanal + 1); „Kick Sidechain“ hört auf DRUMS (erz/1 = 5), alle anderen setzen ihn ausdrücklich zurück.
+// (0 = own signal, 1..4 = the containers A..D, the contract range 0..4); „Kick Sidechain“ hört auf den Container, der den Kick spielt
+// (SC_KICK, see kickSchluessel), alle anderen setzen ihn ausdrücklich zurück.
 // Der Test hält beide gleich.
+/** Marker of the Kick key: the preset is applied to the container that plays the Kick, found when it is applied. */
+export const SC_KICK = 'kick';
 export const KOMP_PRESETS = {
   'Drum Bus': { schwelle: -18, ratio: 4, attack: 30, release: 100, makeup: 3, mix: 1, sc: 0 },
   'Bus Glue': { schwelle: -12, ratio: 2, attack: 30, release: 300, makeup: 1.5, mix: 1, sc: 0 },
   Bass: { schwelle: -20, ratio: 4, attack: 5, release: 120, makeup: 3, mix: 1, sc: 0 },
   Parallel: { schwelle: -30, ratio: 10, attack: 3, release: 80, makeup: 10, mix: 0.4, sc: 0 },
   Lead: { schwelle: -20, ratio: 3, attack: 5, release: 80, makeup: 4, mix: 1, sc: 0 },
-  'Kick Sidechain': { schwelle: -30, ratio: 8, attack: 1, release: 150, makeup: 0, mix: 1, sc: 5 },
+  'Kick Sidechain': { schwelle: -30, ratio: 8, attack: 1, release: 150, makeup: 0, mix: 1, sc: SC_KICK },
 };
+/** The key of the container that plays the Kick (DRUMS is stream 1, played by the place that holds the strudel module): place N is container N, key N.
+ *  0 (own signal) while no place holds a strudel module. */
+export function kickSchluessel(plaetze) {
+  const n = [1, 2, 3, 4].find((i) => typVon(plaetze, i) === 'strudel');
+  return n ? fxIndex(CONTAINER[n - 1].pfad) + 1 : 0;
+}
+/** The [field, value] pairs a compressor preset writes to `kanal`; the Kick key is resolved against the places and never keys a strip on itself. */
+export function kompPresetFelder(name, plaetze, kanal) {
+  const p = KOMP_PRESETS[name];
+  if (!p) return [];
+  return Object.entries(p).map(([feld, w]) => {
+    if (w !== SC_KICK) return [feld, w];
+    const sc = kickSchluessel(plaetze);
+    return [feld, sc === fxIndex(kanal) + 1 ? 0 : sc];
+  });
+}
 // Schlüssel des Kompressors (komp/sc): Wert = Quellkanal + 1
-export const KOMP_SCHLUESSEL = [[0, 'own signal'], [5, 'DRUMS'], [6, 'BASS'], [7, 'MELODY'], [1, 'A'], [2, 'B'], [13, 'L1'], [14, 'L2']];
+export const KOMP_SCHLUESSEL = [[0, 'own signal'], ...CONTAINER.map((c) => [fxIndex(c.pfad) + 1, c.id])];   // only the four containers are key sources (D-V3)
 // Was eine Loop-Automation fahren darf, mit Bereich (wie AUTO_BEREICH in loop_automation.ts, der Test hält beide gleich)
 export const AUTO_BEREICH = {
   'komp/schwelle': [-60, 0], 'komp/ratio': [1, 20], 'komp/attack': [0.1, 100], 'komp/release': [10, 1000],
@@ -23,17 +44,6 @@ export const AUTO_BEREICH = {
   'gate/hold': [0, 2000], 'gate/release': [1, 5000], 'util/balance': [-1, 1], 'util/breite': [0, 200], 'util/bassmono': [0, 500],
 };
 export const DURCHGAENGE = [1, 2, 4, 8, 16, 32];
-/** The loop automation editor of a pad box (L1, L2): name, control, LENGTH, template, SAVE, CLEAR LANE, status and the lane. Shown in the detail of the
- *  EFFECTS tab and in the window of the live dock (live_dock/automation.js); bindeAutomation (effects_bindung.js) wires it. */
-export function autoBereichHtml() {
-  return `<div class="autobereich"><span class="bildtitel">AUTOMATION OF THE LOOP <b class="autoname">–</b> · saved with the loop, plays on every pass ·
-      click: add point · drag: move · double click: remove</span>
-      <div class="autokopf"><select class="autopfad" aria-label="Automated control">${Object.keys(AUTO_BEREICH).map((p) => `<option>${p}</option>`).join('')}</select>
-      <label class="klein">LENGTH <select class="autolaenge" title="Lane length in loop passes; long lanes start on a multiple of their length (phrase)">${DURCHGAENGE.map((d) => `<option value="${d}">${d}× loop</option>`).join('')}</select></label>
-      <select class="autovorlage" aria-label="Template for this lane"></select>
-      <button class="autospeichern">SAVE</button><button class="autoleeren">CLEAR LANE</button><span class="autostatus"></span></div>
-      <svg class="autospur" viewBox="0 0 480 120" aria-label="Automation lane"></svg></div>`;
-}
 // Punkt der Automationsspur aus einer Stelle im Feld (breite × hoehe): Beat auf 1/4 gerastet, Wert im Bereich
 export function punktAusStelle(x, y, breite, hoehe, beats, [lo, hi]) {
   const beat = Math.min(beats - 0.25, Math.max(0, Math.round((x / breite) * beats * 4) / 4));
@@ -59,29 +69,30 @@ export function kennlinienPfad(t, r, makeup, breite, hoehe) {
   return `M${punkte.join(' L')}`;
 }
 
-// Was auf einem Kanal der Effekt-Sektion läuft, aus /lage: Deck-Titel, Strudel-Muster mit Klang, Loop der Box
-const STROM_VON = { 'erz/1': 1, 'erz/2': 2, 'erz/3': 3 };
+// What runs on a channel of the effects section, from /lage: a container reads its place (type and module of place A..D from `plaetze`; a track
+// place shows the deck title), a stream reads the Strudel pattern with its sound.
 export function fxInhaltText(k, lage) {
-  const d = /^deck\/(\d)$/.exec(k);
-  if (d) {
-    const x = (lage.decks ?? []).find((y) => y.deck === Number(d[1]));
-    if (!x || !x.status) return 'empty';
-    return `${x.status >= 2 ? '▶ ' : ''}${x.titel ?? x.material_id ?? 'loaded'}${x.camelot ? ` · ${x.camelot}` : ''}`;
+  const platz = platzVonPfad(k);
+  if (platz) {
+    const typ = typVon(lage.plaetze, platz);
+    if (typ === 'leer') return 'empty';
+    if (typ === 'track') {
+      const x = (lage.decks ?? []).find((y) => y.deck === platz);
+      if (!x?.status) return 'track';
+      return `${x.status >= 2 ? '▶ ' : ''}${x.titel ?? x.material_id ?? 'loaded'}${x.camelot ? ` · ${x.camelot}` : ''}`;
+    }
+    const gruppe = platzGruppeVon(lage.plaetze, platz);
+    return gruppe ? `${typ} · ${gruppe}` : typ;
   }
-  const p = /^pad\/(\d)$/.exec(k);
-  if (p) {
-    const b = lage.boxen?.[p[1]];
-    return b?.name ? `${b.status === 3 ? '▶ ' : ''}${b.name} · ${b.beats} beats` : 'empty';
-  }
-  const st = (lage.studio?.stroeme ?? []).find((y) => y.strom === STROM_VON[k]);
-  const klang = k === 'erz/2' ? lage.studio?.klang?.bass : k === 'erz/3' ? lage.studio?.klang?.melodie : null;
+  const st = (lage.studio?.stroeme ?? []).find((y) => y.strom === stromVonKanal(k));
+  const klang = k === stromKanal(2) ? lage.studio?.klang?.bass : k === stromKanal(3) ? lage.studio?.klang?.melodie : null;
   const muster = !st || st.text_kurz === 'silence' ? 'silence' : `▶ ${st.text_kurz}`;
   return `${klang ? `${String(klang).replace(/^vst3:/, '')} · ` : ''}${muster}${st && !st.autonom ? ' · AUTO off' : ''}`;
 }
 
 // Baukasten S2: die Knobs (1..64) eines Cypher-Modular-Wirts aus POST /klang params ({params: {"Knob 1": 0.5, …}, namen:
 // {"Knob 1": "Cutoff"}}). Nur die Knobs, die der Wirt meldet (ein Surge-Wirt meldet keine → leere Liste); ohne Namen steht „Knob n“.
-export const KNOB_GRUPPE = { 'erz/2': 'bass', 'erz/3': 'melodie' };
+export const KNOB_GRUPPE = { [stromKanal(2)]: 'bass', [stromKanal(3)]: 'melodie' };
 /** Text für innerHTML und Attribute: Knob-Namen stammen aus einer Graphdatei, nicht aus der Seite (Review F2). */
 export function htmlText(s) {
   return String(s).replace(/[&<>"']/g, (z) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[z]);
@@ -89,11 +100,11 @@ export function htmlText(s) {
 
 /** S5r: the graph knobs <channel>/bk/1..64 (8 to 64 rows, see bkKnobZahl) of a channel that takes a graph (POST /regler). Channels with an instrument host
  *  block (KNOB_GRUPPE) get none here, they use their own knobs; channels without a graph neither. Value from the control state, default 0.5. */
-export const BK_KNOB_KANAELE = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2', 'fx/3', 'fx/4'];
+export const BK_KNOB_KANAELE = [...CONTAINER.map((c) => c.pfad), stromKanal(1), 'fx/3', 'fx/4'];
 /** S12: erz/2 and erz/3 show the graph knobs only while a graph sits on them (opt.graph = {name, regler_namen}); otherwise
  *  they keep the Surge/host knobs. S14: fx/3, fx/4 (send returns) have the knobs fx/<n>/bk/1..64 too. Knob names come from the graph's
  *  regler_namen, else "Knob n". */
-export const BK_KNOB_MIT_GRAPH = ['erz/2', 'erz/3'];
+export const BK_KNOB_MIT_GRAPH = STROEME.filter((n) => n !== 1).map(stromKanal);
 export const BK_KNOB_MIN = 8, BK_KNOB_MAX = 64;
 /** How many knob rows the legacy slider field shows: as many as the graph defines (the highest number in its regler_namen or regler
  *  ranges), at least the first eight, at most 64. No graph info: 8, as before the knob limit moved. */
@@ -145,13 +156,18 @@ export function sendRueckHtml(kanaele = ['fx/3', 'fx/4']) {
     + kanaele.map((k) => `<div class="sendzeile" data-kanal="${htmlText(k)}"><span>${k === 'fx/3' ? 'RETURN 3' : 'RETURN 4'}</span>`
       + `<div class="graphplatz" data-graphplatz="${htmlText(k)}"></div><div class="bkliste"></div></div>`).join('');
 }
-/** S12/S18: graph picker. Instruments go on erz/2, erz/3, erz/5..7 and the pads (stream 1 is a drum kit, erz/4 the production, erz/8 unused),
- *  effects on decks and the send returns. The instrument keys are bound to contract/streams.ts by tests/effekte.test.mjs. */
-export const GRAPH_KANAL_ART = { 'erz/2': 'instrument', 'erz/3': 'instrument', 'erz/5': 'instrument', 'erz/6': 'instrument', 'erz/7': 'instrument', 'pad/1': 'instrument', 'pad/2': 'instrument', 'deck/1': 'effekt', 'deck/2': 'effekt', 'deck/3': 'effekt', 'deck/4': 'effekt', 'fx/3': 'effekt', 'fx/4': 'effekt', 'master': 'effekt' };
+/** S12/S18: graph picker. Instruments go on the instrument streams erz/2, erz/3, erz/5..7 and erz/9, erz/10 (stream 1 is a drum kit, erz/4 the production,
+ *  erz/8 unused); effects go on the four container strips (deck/1|2, pad/1|2: pad/1 and pad/2 are the strips of places C and D) and on the send returns.
+ *  The instrument keys are bound to contract/streams.ts by tests/effekte.test.mjs. */
+export const GRAPH_KANAL_ART = {
+  ...Object.fromEntries(STROEME.filter((n) => n !== 1).map((n) => [stromKanal(n), 'instrument'])),
+  ...Object.fromEntries(CONTAINER.map((c) => [c.pfad, 'effekt'])),
+  'fx/3': 'effekt', 'fx/4': 'effekt', master: 'effekt',
+};
 // The instrument roles of the picker now live in instrument_groups.js (with the synthesis types and the grouping rules); re-exported for the callers of this file.
 export { GRAPH_KATEGORIEN };
 /** Channels on which a host (Surge XT or a plugin) plays while no graph is loaded; the empty picker value means "the host plays" there. */
-export const GRAPH_HOST_KANAELE = ['erz/2', 'erz/3'];
+export const GRAPH_HOST_KANAELE = [stromKanal(2), stromKanal(3)];
 /** Display name of the host of a GET /klang group ({art, plugin?}): the plugin name, else the part after vst3:/sfz:, else Surge XT (art lv2 or unknown); the grand piano (sfz:grand) is 'Grand piano'. */
 export function hostName(wirt) {
   if (wirt?.art === 'sfz:grand') return 'Grand piano';
@@ -320,7 +336,7 @@ export const WERK_FELDER = {
   'gate/attack': { min: 0.1, max: 500, vorgabe: 1, schritt: 0.1, einheit: 'ms', kurve: 'linear', ganz: false },
   'gate/hold': { min: 0, max: 2000, vorgabe: 20, schritt: 1, einheit: 'ms', kurve: 'linear', ganz: false },
   'gate/release': { min: 1, max: 5000, vorgabe: 100, schritt: 1, einheit: 'ms', kurve: 'linear', ganz: false },
-  'gate/sc': { min: 0, max: 14, vorgabe: 0, schritt: 1, einheit: '', kurve: 'stufen', ganz: true },
+  'gate/sc': { min: 0, max: 4, vorgabe: 0, schritt: 1, einheit: '', kurve: 'stufen', ganz: true },
   'util/balance': { min: -1, max: 1, vorgabe: 0, schritt: 0.01, einheit: 'bal', kurve: 'linear', ganz: false },
   'util/breite': { min: 0, max: 200, vorgabe: 100, schritt: 1, einheit: '%', kurve: 'linear', ganz: false },
   'util/bassmono': { min: 0, max: 500, vorgabe: 0, schritt: 1, einheit: 'Hz', kurve: 'linear', ganz: false },
@@ -517,9 +533,9 @@ export function mixAblaufIn(stand, jetzt, kanaele = BUS_KANAELE, felder = MIX_FE
   return m;
 }
 
-// A6: the gate meters of the source channels (gate_db of /zustand/mix; the 13 live channels, erz/8 has no gate, D2). Same 500 ms rule as the bus
+// A6: the gate meters of the source channels (gate_db of /zustand/mix; the four containers, a stream alias has no gate of its own). Same 500 ms rule as the bus
 // meters; a gate can close by 80 dB and more, so the bar is scaled to 60 dB (the number shows the real value).
-export const GATE_KANAELE = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/4', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
+export const GATE_KANAELE = CONTAINER.map((c) => c.pfad);
 export const GATE_FELDER = ['gate_db'];
 export const GATE_SKALA_DB = 60;
 /** Take the gate reading of one event into `stand` (same shape as mixAufnehmen). A non-finite value is ignored, a negative one clamped to 0, a

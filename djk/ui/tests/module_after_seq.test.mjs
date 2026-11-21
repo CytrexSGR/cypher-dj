@@ -8,7 +8,7 @@ import { setzeModulNachSeq, NachSeqFehler } from '../project/module_after_seq.ts
 
 const bk = (graph = 'synth-mono', parameter = {}) => ({ art: 'intern', name: 'bk', graph, parameter });
 const lauf = (p, ...b) => fuehreListeAus(p, b).projekt;
-const live = () => { const p = neuesProjekt('live'); p.live = true; return p; };
+const live = () => { const p = neuesProjekt('live'); p.live = true; p.plaetze = [{ typ: 'track' }, { typ: 'track' }, { typ: 'track' }, { typ: 'track' }]; return p; };
 const modul = () => { const p = neuesProjekt('mod'); p.werkbank = { schema: 1 }; return p; };
 const spurNeu = (p, name, extra = {}) => lauf(p, { befehl: 'werkbank_spur_neu', name, geraet: bk('drums-909', { k3: 0.7 }), ...extra });
 const fehler = (f) => { try { f(); } catch (e) { return e; } return assert.fail('no refusal'); };
@@ -145,7 +145,7 @@ test('TO DJ: a 16 beat section becomes one pattern per track carrying notes, slo
   assert.equal(lead.clip.loop_beats, 16);
   assert.equal(bass.clip.noten.length, 2);
   assert.equal(bass.clip.fx, undefined);
-  assert.deepEqual(projekt.gruppen[0].seq, { schema: 2, platz: 2, lpb: 8, ticks: 3 });
+  assert.deepEqual(projekt.gruppen[0].seq, { schema: 2, lpb: 8, ticks: 3 });
   // the deck plays the section the way the tracker does: same frame, same slot lane, same pitch events inside the first copy
   assert.deepEqual([fxRahmen(projekt, lead.spur).lpb, fxRahmen(projekt, lead.spur).ticks], [8, 3]);
   const a = wlane(wspur(spiel(t), 1), 'geraet.k3'), b = wlane(wspur(spiel(projekt), 1), 'geraet.k3');
@@ -159,9 +159,9 @@ test('TO DJ: a section in the default frame writes no lpb or ticks; a project wi
     { befehl: 'tracker_setzen', an: true, lpb: 8, ticks: 3 });
   const t2 = lauf(t, { befehl: 'clip_neu', spur_id: t.spuren[0].id, art: 'midi', start_beat: 0, laenge_beats: 16, noten: [nt(0, 60)] });
   const plain = setzeModulNachSeq(live(), t2, 1, { abschnitt_id: 'a1' }).projekt;
-  assert.deepEqual(plain.gruppen[0].seq, { schema: 2, platz: 1 }, 'no fx and no slot: the frame is irrelevant and stays unwritten');
+  assert.deepEqual(plain.gruppen[0].seq, { schema: 2 }, 'no fx and no slot: the frame is irrelevant and stays unwritten');
   const d = trackerProjekt(4, 6);
-  assert.deepEqual(setzeModulNachSeq(live(), d, 1, { abschnitt_id: 'a2' }).projekt.gruppen[0].seq, { schema: 2, platz: 1 }, 'defaults are never written');
+  assert.deepEqual(setzeModulNachSeq(live(), d, 1, { abschnitt_id: 'a2' }).projekt.gruppen[0].seq, { schema: 2 }, 'defaults are never written');
 });
 
 test('TO DJ: a project without a tracker marker works, the section list is the default one; no section id loads nothing from a tracker project', () => {
@@ -241,7 +241,7 @@ test('TO DJ: a second section into a deck whose frame differs: refused when the 
   plain = lauf(plain, { befehl: 'clip_neu', spur_id: plain.spuren[0].id, art: 'midi', start_beat: 0, laenge_beats: 16, noten: [nt(0, 60)] });
   const nur = setzeModulNachSeq(live(), plain, 1, { abschnitt_id: 'a1' }).projekt;
   const danach = setzeModulNachSeq(nur, a, 1, { abschnitt_id: 'a2' }).projekt;
-  assert.deepEqual(danach.gruppen[0].seq, { schema: 2, platz: 1, lpb: 8, ticks: 3 });
+  assert.deepEqual(danach.gruppen[0].seq, { schema: 2, lpb: 8, ticks: 3 });
 });
 
 test('seq_folge_neu takes fx; a project without the new fields stays byte for byte the same', () => {
@@ -253,5 +253,5 @@ test('seq_folge_neu takes fx; a project without the new fields stays byte for by
   assert.equal(e.grund, 'fx_ungueltig');
   const ohne = lauf(l, { befehl: 'seq_folge_neu', gruppe_id: l.gruppen[0].id, name: 'F', geraet: bk(), noten: [nt(0, 60)] });
   assert.ok(!('fx' in ohne.spuren[0].clips[0]));
-  assert.deepEqual(ohne.gruppen[0].seq, { schema: 2, platz: 1 });
+  assert.deepEqual(ohne.gruppen[0].seq, { schema: 2 });
 });

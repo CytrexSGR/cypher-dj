@@ -221,7 +221,7 @@ def i3(grund):
     B = inhalt(MB)
     if grund == "ziel_ungehoert":
         return i3_ziel_ungehoert(f)
-    fall = {"kein_hoerschein": (None, ""), "hoerschein_anderer_kanal": (("h_d3", "deck/3", B, 192.0, 40.0, 60.0), "h_d3"),
+    fall = {"kein_hoerschein": (None, ""), "hoerschein_anderer_kanal": (("h_p1", "deck/3", B, 192.0, 40.0, 60.0), "h_p1"),
             "hoerschein_anderer_inhalt": (("h_a", "deck/2", inhalt(MA), 192.0, 40.0, 60.0), "h_a"),
             "hoerschein_anderes_tempo": (("h_t", "deck/2", B, 192.0, 40.0, 60.0, 130.0), "h_t"),
             "hoerschein_abgelaufen": (("h_alt", "deck/2", B, 60.0, 40.0, 60.0), "h_alt"),
@@ -279,7 +279,7 @@ def hoerschein_rand():
     assert h.hs_grund(h2, "deck/2", B, 64.0, 128.0, 48.0) is None
     assert h.hs_grund(h3, "deck/3", B, 65.0, 128.0, 49.0) == "hoerschein_abgelaufen"
     t2 = f.teil(48, "cypher", "p1", 0, "deck/2/fader", 64, 0, -15.0, hs="h_r2", herleitung="beat 64 ≤ gueltig_bis 64")
-    t3 = f.teil(48, "cypher", "p2", 0, "deck/3/fader", 65, 0, -15.0, hs="h_r3", herleitung="beat 65 > gueltig_bis 64")
+    t3 = f.teil(48, "cypher", "p2", 0, "pad/1/fader", 65, 0, -15.0, hs="h_r3", herleitung="beat 65 > gueltig_bis 64")
     f.gestartet(t2, "cypher", 64)
     f.abgelehnt_am_start(t3, "cypher", 65, "hoerschein_abgelaufen")
     return f
@@ -334,12 +334,12 @@ def pad_ungehoert():
 
 def muster_ungehoert():
     f = Folge("muster_ungehoert", "muster_ungehoert", ["20", "13", "54"],
-              "I3c: Muster auf offenem Erzeuger-Kanal ohne Hörschein → ungehoert in /erz/quittung")
-    for strom, kanal in ((1, "erz/1"), (2, "erz/2")):
-        i = f.nid()
-        f.sende(f.S(4), osc("/erz/strom", i, "leitstand", strom, f"midi:1:{strom}", kanal), "erzeuger", "§4.8 /erz/strom")
-        f.angenommen(i, "leitstand", f.S(4), "erzeuger")
-    f.hand_auf("erz/1/fader", 5)
+              "I3c positive case: pattern on an open container that holds a module, without a Hörschein → ungehoert in /erz/quittung. "
+              "The negative control (stream on a closed container) lives in K8's own tests on the real core; X1 replays this sequence on the real core.")
+    i = f.nid()
+    f.sende(f.S(4), osc("/erz/strom", i, "leitstand", 1, "midi:1:1"), "erzeuger", "§4.8 /erz/strom (a stream has no mixer channel)")
+    f.angenommen(i, "leitstand", f.S(4), "erzeuger")
+    f.hand_auf("pad/1/fader", 5)
 
     def fenster(sende_beat, strom, sendung, muster, ungehoert, n=4):
         ab = sende_beat + 4.0   # §3: Fenster [n+1, n+3) bei Takt n
@@ -353,11 +353,15 @@ def muster_ungehoert():
             f.erlaube(s, s + MARGE, osc("/e/invariante", "hoerschein", None, None, None, None), "invariante",
                       "FORMAT.md Punkt 22 a")
 
-    fenster(52, 1, 1, 7, 4)
-    f.hoerschein(60, "h_m7", "erz/1", "muster/7", 192.0, None, None)
-    fenster(64, 1, 2, 7, 0)
-    fenster(72, 1, 3, 8, 4)
-    fenster(72, 2, 1, 9, 0)
+    fenster(44, 1, 1, 6, 0)   # negative control: container 3 (pad/1) still holds a player (art 1), nothing is checked (C6)
+    i = f.nid()
+    f.sende(f.S(48), osc("/k/container/quelle", i, "leitstand", 3, 2), "erzeuger", "§4.10 container 3 takes a module (art 2)")
+    f.angenommen(i, "leitstand", f.S(48), "erzeuger")
+    f.erwarte(f.S(48) + MARGE, osc("/e/container/quelle", 3, 2), "erzeuger", ab=f.S(48), herleitung="§5.12 container input reported")
+    fenster(52, 1, 2, 7, 4)
+    f.hoerschein(60, "h_m7", "deck/3", "muster/7", 192.0, None, None)
+    fenster(64, 1, 3, 7, 0)
+    fenster(72, 1, 4, 8, 4)
     return f
 
 

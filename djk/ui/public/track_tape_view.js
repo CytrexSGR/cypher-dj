@@ -219,14 +219,17 @@ function reiterMerken(strom, k) { try { localStorage.setItem(`djk-band-reiter-${
 
 // Einstieg aus app.js: je Instanz (.instanz[data-strom]) die Bänder mit Reitern. `beatVon` liefert den letzten Kern-Beat.
 // GET /spur alle 250 ms, aber nur solange STUDIO sichtbar ist; der Abspielkopf folgt dem Beat je Bildschirmbild.
+let zeileHaken = null;
+/** Lanes for a stream row built after the page start (a no-op before bindeSpurbaender ran: it covers the rows that exist). */
+export function bindeSpurbandZeile(w) { zeileHaken?.(w); }
 export function bindeSpurbaender(post, beatVon = () => null) {
   const alle = [], instanzen = [];
   // Poll-Sperre (Final-Review F1): höchstens eine Anfrage offen (Timeout 2 s); jede Anfrage hat eine Laufnummer, und eine Antwort, die vor dem letzten
   // eigenen PLAY/STOP gestartet wurde (Nummer < gueltigAb), wird verworfen: sie zeigt einen Stand von vor der Änderung.
   let offen = false, nummer = 0, gueltigAb = 0;
-  for (const w of document.querySelectorAll('#deck-c .instanz')) {
+  const bindeZeile = (w) => {
     const strom = Number(w.dataset.strom), wurzel = w.querySelector('.spurbaender');
-    if (!wurzel) continue;
+    if (!wurzel) return;
     const def = baender(strom), laeuft = new Set();
     const bs = def.map((band) => neuesBand(wurzel, strom, band, post, () => { gueltigAb = nummer + 1; }));
     const zeilen = bs.map((x) => {   // eine Reiterzeile je Bandkopf, alle gleich und gemeinsam nachgeführt
@@ -253,7 +256,9 @@ export function bindeSpurbaender(post, beatVon = () => null) {
     zeige();
     instanzen.push({ bs, def, laeuft, zeige });
     alle.push(...bs);
-  }
+  };
+  for (const w of document.querySelectorAll('#deck-c .instanz')) bindeZeile(w);
+  zeileHaken = bindeZeile;   // rows of the Strudel module built later (strudel_module.js) get their lanes through bindeSpurbandZeile
   const studio = () => document.body.classList.contains('studio');
   const hole = async () => {
     if (!studio() || document.hidden || offen) return;   // DJ-Ansicht und verdeckter Tab: nicht pollen; keine zweite Anfrage, solange eine offen ist

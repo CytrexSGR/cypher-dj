@@ -164,21 +164,21 @@ FALL(stufen_nur_taste_an_stetigem_regler_2_bis_16) {
     return kopf + R"({"nachricht":{"typ":")" + typ + R"(","kanal":1,"nr":60},"ziel":")" + ziel + R"(","art":")" + art + "\"" +
            stufen + "}]}";
   };
-  PRUEFE(lade(e("erz/5/bk/3", "taste", ",\"stufen\":3").c_str(), tab(), m.get(), &f));
+  PRUEFE(lade(e("strom/5/bk/3", "taste", ",\"stufen\":3").c_str(), tab(), m.get(), &f));
   PRUEFE_GLEICH(m->eintrag[0].stufen, 3);
   PRUEFE(lade(e("spur/1/bk/14", "taste", ",\"stufen\":16", "note").c_str(), tab(), m.get(), &f));
   PRUEFE_GLEICH(m->eintrag[0].stufen, 16);
-  PRUEFE(lade(e("erz/5/bk/3", "taste", ",\"stufen\":2").c_str(), tab(), m.get(), &f));
+  PRUEFE(lade(e("strom/5/bk/3", "taste", ",\"stufen\":2").c_str(), tab(), m.get(), &f));
   // without stufen the old rule holds: taste at a continuous control is refused, the field defaults to 0
-  PRUEFE(!lade(e("erz/5/bk/3", "taste", "").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::falsche_art);
+  PRUEFE(!lade(e("strom/5/bk/3", "taste", "").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::falsche_art);
   PRUEFE(lade(e("deck/1/kill/tief", "taste", "", "note").c_str(), tab(), m.get(), &f));
   PRUEFE_GLEICH(m->eintrag[0].stufen, 0);
   // refused: out of range, not an integer, wrong art, switch control, non-control target, range not 0..1
-  PRUEFE(!lade(e("erz/5/bk/3", "taste", ",\"stufen\":1").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::feld_typ);
-  PRUEFE(!lade(e("erz/5/bk/3", "taste", ",\"stufen\":17").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::feld_typ);
-  PRUEFE(!lade(e("erz/5/bk/3", "taste", ",\"stufen\":2.5").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::feld_typ);
-  PRUEFE(!lade(e("erz/5/bk/3", "taste", ",\"stufen\":\"3\"").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::feld_typ);
-  PRUEFE(!lade(e("erz/5/bk/3", "absolut", ",\"stufen\":3").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::falsche_art);
+  PRUEFE(!lade(e("strom/5/bk/3", "taste", ",\"stufen\":1").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::feld_typ);
+  PRUEFE(!lade(e("strom/5/bk/3", "taste", ",\"stufen\":17").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::feld_typ);
+  PRUEFE(!lade(e("strom/5/bk/3", "taste", ",\"stufen\":2.5").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::feld_typ);
+  PRUEFE(!lade(e("strom/5/bk/3", "taste", ",\"stufen\":\"3\"").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::feld_typ);
+  PRUEFE(!lade(e("strom/5/bk/3", "absolut", ",\"stufen\":3").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::falsche_art);
   PRUEFE(!lade(e("deck/1/kill/tief", "taste", ",\"stufen\":3", "note").c_str(), tab(), m.get(), &f) &&
          f.art == FehlerArt::falsche_art);
   PRUEFE(!lade(e("taste/stopp", "taste", ",\"stufen\":3", "note").c_str(), tab(), m.get(), &f) && f.art == FehlerArt::falsche_art);
@@ -241,6 +241,28 @@ FALL(pflichtfelder_und_leere_datei) {
   PRUEFE(f.art == FehlerArt::feld_fehlt && f.zeile == 2);   // leds ohne ziel_port
   PRUEFE(!lade_datei("/nicht/da.json", tab(), m.get(), &f));
   PRUEFE(f.art == FehlerArt::datei && f.zeile == 0);
+}
+
+FALL(alias_eintraege_erz_werden_uebersprungen_nicht_abgelehnt) {
+  // ADR 043 point 6: erz/<n>/<suffix> is an alias the page server resolves, not a core address. The kern skips such an
+  // entry and counts it, and loads the rest of the map; before this a single alias left the kern without any controller.
+  auto m = std::make_unique<Mapping>();
+  Fehler f;
+  const std::string kopf = R"({"version":1,"geraet":"s","quelle_port":"q","eintraege":[)";
+  const std::string t = kopf + R"({"nachricht":{"typ":"cc","kanal":1,"nr":7},"ziel":"deck/1/fader","art":"absolut"},
+{"nachricht":{"typ":"cc","kanal":5,"nr":7},"ziel":"erz/1/fader","art":"absolut"},
+{"nachricht":{"typ":"note","kanal":5,"nr":48},"ziel":"erz/16/pfl","art":"taste"},
+{"nachricht":{"typ":"cc","kanal":6,"nr":7},"ziel":"erz/2/bk/3","art":"absolut"}]})";
+  PRUEFE(lade(t.c_str(), tab(), m.get(), &f));
+  PRUEFE(m->n_eintraege == 1);
+  PRUEFE(m->n_alias == 3);
+  PRUEFE(std::strcmp(m->eintrag[0].ziel, "deck/1/fader") == 0);
+  PRUEFE(m->index[0][4][7] == -1);   // the skipped alias leaves its message free
+  // still strict: no stream 0 or 17, no empty suffix, nothing else under erz/
+  for (const char* z : {"erz/0/fader", "erz/17/fader", "erz/1/", "erz/1", "erz/x/fader"}) {
+    const std::string k = kopf + R"({"nachricht":{"typ":"cc","kanal":1,"nr":7},"ziel":")" + z + R"(","art":"absolut"}]})";
+    PRUEFE(!lade(k.c_str(), tab(), m.get(), &f) && f.art == FehlerArt::unbekanntes_ziel);
+  }
 }
 
 FALL(negativ_kontrolle_harmlose_abwandlungen_laden) {

@@ -28,7 +28,7 @@ namespace {
 
 constexpr int N = 256;
 constexpr int64_t SPB = 22500;  // 128 BPM at 48 kHz
-constexpr int ERZ2 = 5;         // mixer channel of erz/2
+constexpr int ERZ2 = 1;         // output index of stream 2
 // saw x gate x velocity
 const char* GV = R"({"format":"baukasten/2","name":"t","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"v","art":"mul"},{"id":"w","art":"mul"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"s.aus","nach":"v.a"},{"von":"n.gate","nach":"v.b"},{"von":"v.aus","nach":"w.a"},{"von":"n.vel","nach":"w.b"},{"von":"w.aus","nach":"o.x"}]})";
 
@@ -88,7 +88,7 @@ struct Welt {
     return n;
   }
   void frei() {
-    erz.setze_bk(2, nullptr, ERZ2);
+    erz.setze_bk(2, nullptr);
     bis(s + 6 * N);
     CypherBk* f[8];
     for (int nf; (nf = erz.bk_frei(f, 8)) > 0;)
@@ -124,12 +124,12 @@ int main() {
   const int64_t S1 = 3000, T1 = 8000, S2 = 9100, T2 = 11000, ENDE = 14000;
   {  // 1) graph without Werk: key == pattern event at the same samples, velocity included
     Welt k;
-    k.erz.setze_bk(2, neu(), ERZ2);
+    k.erz.setze_bk(2, neu());
     k.erz.tasten_ziel(2);
     k.plan = {{S1, 57, 100, true}, {T1, 57, 0, false}, {S2, 61, 50, true}, {T2, 61, 0, false}};
     k.bis(ENDE);
     Welt o;
-    o.erz.setze_bk(2, neu(), ERZ2);
+    o.erz.setze_bk(2, neu());
     o.erz.fenster(fenster(2, {ev(beat_bei(S1), 57, 100.0f / 127.0f, beat_bei(T1) - beat_bei(S1)), ev(beat_bei(S2), 61, 50.0f / 127.0f, beat_bei(T2) - beat_bei(S2))}), 0.0);
     o.bis(ENDE);
     std::printf("bk ohne Werk: erstes Sample %lld (Soll > %lld), Pegel %g\n", (long long)erstes(k.aus), (long long)S1, (double)*std::max_element(k.aus.begin(), k.aus.end()));
@@ -147,12 +147,12 @@ int main() {
   for (int faeden : {0, 2}) {  // 2) graph with Werk: from the start of the next block, as a late pattern event
     const int64_t on1 = (S1 / N + 1) * N, off1 = (T1 / N + 1) * N, on2 = (S2 / N + 1) * N, off2 = (T2 / N + 1) * N;
     Welt k(faeden);
-    k.erz.setze_bk(2, neu(), ERZ2);
+    k.erz.setze_bk(2, neu());
     k.erz.tasten_ziel(2);
     k.plan = {{S1, 57, 100, true}, {T1, 57, 0, false}, {S2, 61, 50, true}, {T2, 61, 0, false}};
     k.bis(ENDE);
     Welt o(faeden);
-    o.erz.setze_bk(2, neu(), ERZ2);
+    o.erz.setze_bk(2, neu());
     o.erz.fenster(fenster(2, {ev(beat_bei(on1), 57, 100.0f / 127.0f, beat_bei(off1) - beat_bei(on1)), ev(beat_bei(on2), 61, 50.0f / 127.0f, beat_bei(off2) - beat_bei(on2))}), 0.0);
     o.bis(ENDE);
     std::printf("bk mit Werk (%d Faeden): erstes Sample %lld (Soll %lld)\n", faeden, (long long)erstes(k.aus), (long long)on1);
@@ -166,7 +166,7 @@ int main() {
     Welt k;
     k.erz.setze_midi_vorhalt(512);
     k.erz.setze_midi(2, 1, 3);
-    k.erz.setze_strom(2, nullptr, ERZ2);
+    k.erz.setze_strom(2, nullptr);
     k.erz.tasten_ziel(2);
     k.plan = {{S1, 60, 90, true}, {T1, 60, 0, false}};
     k.bis(ENDE);
@@ -180,7 +180,7 @@ int main() {
   {  // 4a) host: target change closes the held key (per-note off at the start of the block), the pattern note on the same stream keeps its own off, no CC 123
     Welt k;
     k.erz.setze_midi(2, 1, 3);
-    k.erz.setze_strom(2, nullptr, ERZ2);
+    k.erz.setze_strom(2, nullptr);
     k.erz.tasten_ziel(2);
     k.erz.fenster(fenster(2, {ev(beat_bei(1000), 62, 1.0f, beat_bei(9000) - beat_bei(1000))}), 0.0);
     k.plan = {{S1, 60, 90, true}};
@@ -200,7 +200,7 @@ int main() {
   {  // 4b) host: a change of the MIDI target sends the off to the OLD port and channel; the same target again changes nothing
     Welt k;
     k.erz.setze_midi(2, 1, 3);
-    k.erz.setze_strom(2, nullptr, ERZ2);
+    k.erz.setze_strom(2, nullptr);
     k.erz.tasten_ziel(2);
     k.plan = {{S1, 60, 90, true}};
     k.bis(5000);
@@ -219,7 +219,7 @@ int main() {
   {  // 4c) host: tasten_alle_aus (a midi_ein went away) closes and drops what has not been played
     Welt k;
     k.erz.setze_midi(2, 1, 3);
-    k.erz.setze_strom(2, nullptr, ERZ2);
+    k.erz.setze_strom(2, nullptr);
     k.erz.tasten_ziel(2);
     k.plan = {{S1, 60, 90, true}, {S1 + 2 * N, 67, 90, true}};
     k.bis(S1 + N);
@@ -232,7 +232,7 @@ int main() {
   }
   {  // 4d) graph: target change closes the held key (off at the start of the next block), graph change drops it with the instance
     Welt k;
-    k.erz.setze_bk(2, neu(), ERZ2);
+    k.erz.setze_bk(2, neu());
     k.erz.tasten_ziel(2);
     k.plan = {{S1, 57, 100, true}};
     k.bis(5000);
@@ -243,12 +243,12 @@ int main() {
     PRUEF(k.aus[k.aus.size() - 1] == 0.0f);   // gate 0: the graph is silent
     k.frei();
     Welt g;
-    g.erz.setze_bk(2, neu(), ERZ2);
+    g.erz.setze_bk(2, neu());
     g.erz.tasten_ziel(2);
     g.plan = {{S1, 57, 100, true}};
     g.bis(5000);
     PRUEF(g.erz.tasten_offen() == 1);
-    g.erz.setze_bk(2, neu(), ERZ2);   // another instance: the keys of the old one are gone
+    g.erz.setze_bk(2, neu());   // another instance: the keys of the old one are gone
     PRUEF(g.erz.tasten_offen() == 0);
     g.bis(g.s + 6 * N);
     g.frei();
@@ -256,7 +256,7 @@ int main() {
   {  // 5a) host, same pitch: a key held, a pattern note of the pitch ends: the pattern off is held back, the key release sends the off
     Welt k;
     k.erz.setze_midi(2, 1, 3);
-    k.erz.setze_strom(2, nullptr, ERZ2);
+    k.erz.setze_strom(2, nullptr);
     k.erz.tasten_ziel(2);
     k.erz.fenster(fenster(2, {ev(beat_bei(4096), 60, 1.0f, beat_bei(1500))}), 0.0);   // pattern note 4096 .. 5596
     k.plan = {{2048, 60, 90, true}, {9000, 60, 0, false}};
@@ -279,7 +279,7 @@ int main() {
   {  // 5b) host, same pitch: a pattern note long, a key of the pitch pressed and released inside it: the release sends no off, the pattern off ends the note
     Welt k;
     k.erz.setze_midi(2, 1, 3);
-    k.erz.setze_strom(2, nullptr, ERZ2);
+    k.erz.setze_strom(2, nullptr);
     k.erz.tasten_ziel(2);
     k.erz.fenster(fenster(2, {ev(beat_bei(2048), 60, 1.0f, beat_bei(8000))}), 0.0);   // pattern note 2048 .. 10048
     k.plan = {{4096, 60, 90, true}, {6144, 60, 0, false}};
@@ -295,7 +295,7 @@ int main() {
   {  // 5c) graph, same pitch: the key's release leaves a scheduled pattern note alone, the pattern off does not cut a held key (bit-identical to the one-voice sink)
     const int64_t P0 = 2048, P1 = 6000, K0 = 4096, K1 = 9000;
     Welt k;
-    k.erz.setze_bk(2, neu(), ERZ2);
+    k.erz.setze_bk(2, neu());
     k.erz.tasten_ziel(2);
     k.erz.fenster(fenster(2, {ev(beat_bei(P0), 57, 1.0f, beat_bei(P1) - beat_bei(P0))}), 0.0);
     k.plan = {{K0, 57, 100, true}, {K1, 57, 0, false}};
@@ -313,16 +313,16 @@ int main() {
     kit.klang[57].daten = {1.0f, 1.0f};
     kit.n = 1;
     Welt k;
-    k.erz.setze_strom(2, &kit, ERZ2);
+    k.erz.setze_strom(2, &kit);
     k.erz.tasten_ziel(2);
     k.plan = {{S1, 57, 100, true}, {T1, 57, 0, false}};
     k.bis(ENDE);
     PRUEF(erstes(k.aus) == -1 && k.erz.tasten_offen() == 0 && k.msgs.empty());
     Welt a, b;   // pattern run with and without keys offered to a stream that is not the target: bit-identical, nothing held
     a.erz.setze_midi(2, 1, 3);
-    a.erz.setze_strom(2, nullptr, ERZ2);
+    a.erz.setze_strom(2, nullptr);
     b.erz.setze_midi(2, 1, 3);
-    b.erz.setze_strom(2, nullptr, ERZ2);
+    b.erz.setze_strom(2, nullptr);
     for (Welt* w : {&a, &b}) w->erz.fenster(fenster(2, {ev(1.0, 60, 0.8f, 0.5), ev(1.5, 62, 0.8f, 0.25)}), 0.0);
     for (int i = 0; i < 100; ++i) b.erz.taste(60, 100, true, 0);   // target 0: ignored
     PRUEF(b.erz.tasten_offen() == 0);
@@ -333,7 +333,7 @@ int main() {
     // queue overflow: the Ons beyond it are counted, the offs are applied once the queue is empty
     Welt q;
     q.erz.setze_midi(2, 1, 3);
-    q.erz.setze_strom(2, nullptr, ERZ2);
+    q.erz.setze_strom(2, nullptr);
     q.erz.tasten_ziel(2);
     q.erz.taste(60, 100, true, 0);
     q.bis(2 * N);
@@ -350,7 +350,7 @@ int main() {
   for (int faeden : {-1, 0, 2}) {  // 8) key on and off on the same offset (one cycle, or stale stamps): the voice must end (graph: off lands after its own on)
     for (int fall = 0; fall < 3; ++fall) {
       Welt k(faeden);
-      k.erz.setze_bk(2, neu(), ERZ2);
+      k.erz.setze_bk(2, neu());
       k.erz.tasten_ziel(2);
       k.bis(3 * N);
       const int64_t b = k.s;
@@ -381,7 +381,7 @@ int main() {
   }
   {  // 9) pile-up: the keys wait in the queue while a Werk block is late; they come in one window, the voice still ends
     Welt k(2);
-    k.erz.setze_bk(2, neu(), ERZ2);
+    k.erz.setze_bk(2, neu());
     k.erz.tasten_ziel(2);
     k.bis(3 * N);
     for (int i = 0; i < 20; ++i) {   // 20 quick presses of two pitches, every release before the next window
@@ -398,7 +398,7 @@ int main() {
   {  // 10) tasten_midi_zu with a full buffer keeps the keys it could not write and retries in the next cycle
     Welt k;
     k.erz.setze_midi(2, 1, 3);
-    k.erz.setze_strom(2, nullptr, ERZ2);
+    k.erz.setze_strom(2, nullptr);
     k.erz.tasten_ziel(2);
     for (int n = 60; n < 63; ++n) k.erz.taste(n, 100, true, k.s + 5);
     k.bis(2 * N);
@@ -415,7 +415,7 @@ int main() {
   {  // 11) an off waiting for room must not close a key pressed again meanwhile (the new press retriggers)
     Welt k;
     k.erz.setze_midi(2, 1, 3);
-    k.erz.setze_strom(2, nullptr, ERZ2);
+    k.erz.setze_strom(2, nullptr);
     k.erz.tasten_ziel(2);
     k.erz.taste(60, 100, true, k.s + 5);
     k.bis(2 * N);
@@ -432,8 +432,8 @@ int main() {
   {  // 7) allocation guard
     Welt k;
     k.erz.setze_midi(2, 1, 3);
-    k.erz.setze_strom(2, nullptr, ERZ2);
-    k.erz.setze_bk(3, neu(), ERZ2 + 1);
+    k.erz.setze_strom(2, nullptr);
+    k.erz.setze_bk(3, neu());
     abfang_an();
     for (int i = 0; i < 40; ++i) {
       k.erz.tasten_ziel(i % 2 ? 2 : 3);
@@ -446,7 +446,7 @@ int main() {
     k.erz.tasten_alle_aus();
     const long allok = abfang_aus();
     PRUEF(!ALLOC_ABFANG_VERFUEGBAR || allok == 0);
-    k.erz.setze_bk(3, nullptr, ERZ2 + 1);
+    k.erz.setze_bk(3, nullptr);
     k.bis(k.s + 6 * N);
     CypherBk* f[8];
     for (int nf; (nf = k.erz.bk_frei(f, 8)) > 0;)

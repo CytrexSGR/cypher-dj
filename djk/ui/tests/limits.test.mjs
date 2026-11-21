@@ -85,7 +85,7 @@ test('slice 3: page and server have the same return limit', async () => {
   const { MAX_RETURNS: SEITE_R } = await import('../public/production/limits.js');
   const { MAX_RETURNS: SERVER_R } = await import('../project/model.ts');
   assert.equal(SEITE_R, SERVER_R);
-  assert.equal(SERVER_R, 4);
+  assert.equal(SERVER_R, 8);
 });
 
 test('1.9 U3: page and server have the same Surge host slot count, and the button title names both', async () => {

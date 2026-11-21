@@ -67,7 +67,7 @@ inline void cpu_pause() noexcept {
 
 struct HallPoolEinstellung {
   int faeden = 3;                // 0..3 workers; 0 creates no thread and the pool is off
-  int cpus[3] = {-1, -1, -1};    // pin worker i to cpus[i] when >= 0
+  int cpus[7] = {-1, -1, -1, -1, -1, -1, -1};    // pin worker i to cpus[i] when >= 0
   int prio = 0;                  // reserved, unused; the real priority is set by prioritaet()
   int spin_ns = 20000;           // warte spins this long before it sleeps in futex wait
   int frist_us = 0;              // deadline after schicke; 0 means 25 % of bloecke_us (and follows setze_bloecke_us)
@@ -77,7 +77,7 @@ struct HallPoolEinstellung {
 class HallPool {
  public:
   using Job = void (*)(void*, int);
-  static constexpr int MAX_W = 3;
+  static constexpr int MAX_W = 7;         // one worker per return except return 0 (ARR_RETURNS - 1; arr_returns.cpp asserts it)
   static constexpr int FENSTER = 64;       // blocks in the lateness window
   static constexpr int SPAET_MAX = 4;      // more late events than this in the window switch the pool off
 

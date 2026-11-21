@@ -21,7 +21,7 @@ export function wertVor(plan: Plan, t: ReglerTeil, wert: Wert): number {
   return v;
 }
 
-const BASS = /^(deck\/[1-4]|erz\/[1-8]|pad\/[12])\/(eq\/tief|kill\/tief|stem\/bass)$/;
+export const BASS = /^((deck\/[12]|pad\/[12]|erz\/(1|2|3|5|6|7|9|10))\/(eq\/tief|kill\/tief)|deck\/[1-4]\/stem\/bass)$/;
 
 // Öffnet (+1) oder schließt (−1) der Teil den Bass seines Kanals (§1.6 tief_offen: Kill tief aus, EQ tief und Stem Bass
 // über tief_offen_db)? 0: weder noch.

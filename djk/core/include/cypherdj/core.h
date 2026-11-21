@@ -31,14 +31,16 @@
 #include "cypherdj/arr_kit_sink.h"
 #include "cypherdj/arr_rb_sink.h"
 #include "cypherdj/arr_rack_sink.h"
+#include "cypherdj/arr_stream_sink.h"
 #include "cypherdj/arr_instrument_host_sink.h"
 #include "cypherdj/generator.h"
 #include "cypherdj/hulls.h"
-#include "cypherdj/loopbox.h"
+#include "cypherdj/capture.h"
 #include "cypherdj/hand_in.h"
 #include "cypherdj/core_clock.h"
 #include "cypherdj/click.h"
 #include "cypherdj/mixer.h"
+#include "cypherdj/quellpuffer.h"
 #include "cypherdj/ring.h"
 #include "cypherdj/spsc_ring.h"
 #include "cypherdj/signalbox/i3.h"
@@ -58,6 +60,8 @@ constexpr int MAX_BLOCK = 8192;
 // Schreibt "spur/<i+1>" nach aus (mindestens 9 Byte), ohne snprintf (Echtzeit-Faden).
 // Vorbedingung: 0 <= i < 999 (höchstens drei Ziffern); im Kern ist assert unüblich, daher nicht geprüft.
 void spur_pegel_name(int i, char* aus);
+constexpr int KERN_BK_STROM0 = MIX_BK_ZEILEN;                 // container core K2: first row of the stream knobs strom/<n>/bk/<k> in bk_wert_ (behind the mixer rows)
+constexpr int KERN_BK_ZEILEN = MIX_BK_ZEILEN + ERZ_STROEME;   // rows of bk_wert_: the mixer rows plus one per stream
 constexpr int KLICK_MASTER = MIX_KANAELE;  // Scheibe 25: Prüfklick-Ziele 0..17 = Mixer-Kanäle, 18 = master
 
 struct Befehl {
@@ -66,8 +70,8 @@ struct Befehl {
     TEIL = 5, ABBRUCH = 6, KI_STOPP = 7, KI_FREI = 8, KI_SPUR = 9, KI_STUFE = 10, HAND = 11,  // Scheibe 25
     DECK_LADEN = 12, DECK_ENTLADEN = 13, DECK_START = 14, DECK_STOPP = 15,                   // Scheibe 31
     MAPPING = 16,                                                                             // Scheibe 35: /k/mapping; S19: nr = slot (0 hand_in, 1..8 learn table of midi_ein_<nr>)
-    ERZ_STROM = 17, ERZ_FENSTER = 18,  // Plan 2026-09-27 (§4.8, ADR 024): nr = strom, pfad = kanal, zeiger = Kit*/ErzFenster*; form = -1: Baukasten-Graph, zeiger = CypherBk*
-    LOOP_LADEN = 19, LOOP_START = 20, LOOP_STOPP = 21,  // MVP 2 (§4.9, ADR 025): deck = box, pfad = name, zeiger = Loop*
+    ERZ_STROM = 17, ERZ_FENSTER = 18,  // Plan 2026-09-27 (§4.8, ADR 024): nr = strom, zeiger = Kit*/ErzFenster* (container core K1: a stream has no channel); form = -1: Baukasten-Graph, zeiger = CypherBk*
+    // 19, 20, 21: free (container core K1: the loop box commands LOOP_LADEN/START/STOPP are gone with the loop boxes)
     MITSCHNITT = 22,  // MVP 2 Scheibe 2 (§4.9 /k/loop/rec): nr = beats, pfad = name, zeiger = Mitschnitt*
     DECK_LOOP = 23, DECK_SPRUNG = 24, DECK_HOTCUE = 25, DECK_HOTCUE_SETZEN = 26,  // Plan E9 (§4.4): nr = Hotcue
     FX = 27,           // AUFTRAG 2026-09-28 (§4.10): deck = einheit (1,2), nr = art, dauer_beats = beats, wert = wet,
@@ -75,10 +79,10 @@ struct Befehl {
                        // reserviert; FX nutzt sonst weder Sprung-/Loop-Raster noch Start-Quellbeat), an = Einheit ON
     FX_ZUWEISUNG = 28,  // deck = einheit (1, 2, 3; 3 = FX3, insert on fx/3), pfad = kanal, an = zugewiesen (0/1)
     DECK_RASTER = 29,   // Plan Grid (§4.4 /k/deck/raster): deck, material_id, bpm = basis_bpm, fassung, versatz_f
-    LOOP_RASTER = 30,   // Plan Grid (§4.9 /k/loop/raster): deck = box, versatz_f
+    // 30: free (LOOP_RASTER went with the loop boxes)
     HOERSCHEIN = 31, HOERSCHEIN_WEG = 32,  // Ohr T12 (§4.5 /k/hoerschein, /k/hoerschein/weg)
     FX_ROUTING = 33,  // Ohr T17 (§4.10 /k/fx/routing): an = routing (0 Post Fader, 1 Insert); nur Andreas' Hand
-    // 34, 35: frei (bis Task 7 die Befehle der Keylock-Varianten, ADR 027; die Box dehnt jetzt live mit dem Dehner)
+    // 34, 35: frei
     DECK_TAUSCH = 36,  // Welle 3 (ADR 028, §4.4 /k/deck/basis_tausch): deck, bpm = basis_bpm, fassung, ab_beat
     // D1 K1 (§4.11): ARR_LADEN zeiger = ArrSnapshot*, arr_nr; ARR_START ab_beat = start_beat, politik = quant;
     // ARR_STOPP politik = quant; ARR_LOOP an, arr_von, arr_bis; ARR_METRONOM an, wert = pegel_db, nr = ziel
@@ -101,7 +105,7 @@ struct Befehl {
     ARR_STIFT = 60,        // kraken patch field (§4.11 /k/arr/stift): nr = spur (1..32), form = satz (0 A, 1 B), politik = zeile (0..15), fassung = spalte (0..15), wert = pin value (-1..1); sets one pin of the matrix of a bk track through Arrangement::live_stift (callback thread, stamped with the snapshot generation), no pointer, no allocation
     ARR_ZELLE_START = 61,  // loop deck K6 (§4.11 /k/arr/zelle_start): pfad = track id text (hashed with arr_id in the kern), nr = zelle (1..8), ab_beat = core beat of the effect, wert_beats = versatz_beats (position inside the cell at ab_beat), id, quelle; Arrangement::launch_start (callback thread), plain values, no pointer, no allocation
     ARR_ZELLE_STOPP = 62,  // loop deck K6 (§4.11 /k/arr/zelle_stopp): pfad = track id text, ab_beat = core beat at which the track falls silent, id, quelle; Arrangement::launch_stopp
-    PLATZ_KANAL = 63,      // DJ view places 3 and 4 (§4.10 /k/platz/kanal): deck = pad (1, 2), nr = inhalt (0 nothing, 1 Strudel sum, 2 deck/3, 3 deck/4); Mixer::platz_kanal_setze at the block start, the event PLATZ_KANAL answers
+    CONTAINER_QUELLE = 63, // container core K1 (the former place-channel command, value kept): the input selection of a container (/k/container/quelle); K8 fills it, nothing handles it before
     ARR_NOTE = 58,         // sampler plan A1 task 7 (§4.11 /k/arr/note): nr = spur (1..32), politik = ton (0..127), fassung = vel (0..127, 0 = off); plays one note on a project track through Arrangement::live_note (callback thread, stamp = cycle start), no pointer, no allocation
   };
   int32_t art;
@@ -134,7 +138,7 @@ struct Befehl {
   // DECK_HOTCUE_SETZEN trägt den Wert in quell_beat (NaN löscht), DECK_HOTCUE die Nummer in nr.
   double wert_beats;
   double raster_beats;
-  int64_t versatz_f;     // Plan Grid: DECK_RASTER, LOOP_RASTER (Frames, absolut)
+  int64_t versatz_f;     // Plan Grid: DECK_RASTER (Frames, absolut)
   // Scheibe 35: MAPPING trägt das im Netz-Faden geladene, geprüfte hand::Mapping (Besitz geht an den Kern, der es nach
   // dem Tausch als MAPPING_ALT zurückgibt)
   const void* zeiger;
@@ -160,8 +164,7 @@ struct Ereignis {
     PEGEL = 18,                                                    // Scheibe 35, §5.6 /pegel: pfad = Kanal, pegel[7] wie die Felder
     ERZ_ALT = 19,       // Plan 2026-09-27: abgelöstes Kit zur Freigabe im Netz-Faden (zeiger)
     ERZ_QUITTUNG = 20,  // §4.8 /erz/quittung: deck = strom, fassung = sendung, erz_zahl, zeiger = verbrauchtes ErzFenster
-    LOOP = 21,          // MVP 2, §5.11 /e/loop: deck = box, status, pfad = name, fassung = beats, fx_*
-    LOOP_ALT = 22,      // MVP 2: abgelöster Loop zur Freigabe im Netz-Faden (zeiger)
+    // 21, 22: free (container core K1: /e/loop and the loop release event went with the loop boxes)
     MITSCHNITT = 23,    // MVP 2 Scheibe 2, §5.11 /e/mitschnitt: status, beat = ab_beat, sample = ab_sample,
                         // fassung = beats, pfad = name, zeiger = Mitschnitt* (das Netz schreibt und gibt frei)
     HOTCUE = 24,        // Plan E9, §5.9 /e/hotcue: deck, material_id, status = nr, quell_beat, sample
@@ -170,8 +173,7 @@ struct Ereignis {
     FX_ZUWEISUNG = 26,  // §5.12 /e/fx/zuweisung: deck = einheit (1, 2, 3), pfad = kanal, status = zugewiesen (0/1)
     RASTER = 27,        // Plan Grid, §5.9 /e/raster: deck, material_id, quell_beat, wert = Änderung in ms, sample
     FX_ROUTING = 28,    // Ohr T17, §5.12 /e/fx/routing: status = routing (0 Post Fader, 1 Insert)
-    BOX = 29,           // Keylock 7b.3, §5.5b /zustand/box: deck = box, status, keylock_unterlauf, keylock_aufgegeben,
-                        // keylock_ring_voll, keylock_kein_platz (7c.3)
+    // 29: free (/zustand/box went with the loop boxes)
     KOMP = 30,          // Effekt-Sektion 2026-10-11, §5.5c /zustand/komp: pfad = Kanal, wert = Absenkung in dB (10 Hz, nur aktive)
     ARR_ALT = 31,       // D1 K1: abgelöster oder abgelehnter ArrSnapshot zur Freigabe im Lade-Faden (zeiger)
     ARR_ZUSTAND = 32,   // D1 K1, §5.13 /zustand/arr: arr_*
@@ -194,7 +196,7 @@ struct Ereignis {
     INS_HOST_ZUSTAND = 49,           // plan 1.11 T5 (/zustand/ins_host): host_gesund[h-1], host_rundweg[h-1]; on change and at 2 Hz while the host ports exist
     STUFE_PEGEL = 50,                // device faces T9 (/e/stufe_pegel): pfad = ins/komp/<n>, ins/lim/<n> or komp/<channel>, pegel[0] = input peak, pegel[1] = output peak in dBFS since the last report (-200 for none), 20 Hz with the levels, only stages that ran in the last block; netz_loop sends it as /e/stufe_pegel ,sff (§5.5g)
     ZELLE_ZUSTAND = 51,              // loop deck K6 (§5.13 /zustand/zelle): pfad = track id, zelle_*: one deck track, on change and at 2 Hz; verloren = launcher receipts dropped so far (the net thread logs a rise)
-    PLATZ_KANAL = 52,                // DJ view places 3 and 4 (§5.12 /e/platz/kanal ,ii): deck = pad (1, 2), status = inhalt (0 to 3)
+    CONTAINER_QUELLE = 52,           // container core K1 (the former place-channel event, value kept): /e/container/quelle ,ii, K8 fills it, nothing reports it before
     INS_GR = 43,                    // 1.10 S4a (/e/ins_gr): pfad = ins/komp/<n> or ins/lim/<n> (T8: the pooled limiter stages), wert = gain reduction of the pooled stage in dB (>= 0), 20 Hz with the levels, only stages that ran in the last block; netz_loop sends it as /e/ins_gr ,sf (§5.5f)
   };
   int32_t art;
@@ -231,14 +233,12 @@ struct Ereignis {
   int32_t hoerweg;          // DECK (§5.5): 0 direkt bzw. Varispeed, 1 Stretcher (Keylock: der Ring klingt mit)
   int32_t stretcher_fuell;  // DECK (§5.5): Arbeitsvorlauf in Blöcken (Keylock: Ring), −1 ohne Stretcher
   int32_t keylock_unterlauf, keylock_aufgegeben;  // DECK (§5.5, Keylock Task 3): Zähler des Decks seit dem Laden des Kerns
-  int32_t keylock_ring_voll;                      // BOX (§5.5b, Keylock 7b.3): Abschnitte, die nicht in den Ring passten
-  int32_t keylock_kein_platz;                     // BOX (§5.5b, Keylock 7c.3): Ansätze ohne freien Platz der Leihe
   const void* zeiger;  // MAPPING_ALT: das abgelöste hand::Mapping
   float pegel[7];      // PEGEL: spitze_db, echtspitze_dbtp, lufs_m, lufs_s, band_tief_db, band_mitte_db, band_hoch_db
   int32_t erz_zahl[5];  // ERZ_QUITTUNG: verworfen, verworfen_anderes_muster, eingefuegt, zu_spaet, ungehoert
-  int32_t fx_art;       // LOOP (MVP 2): Beat-FX der Box (Scheibe 3), bis dahin 0
-  double fx_beats;      // LOOP: Periode in Beats
-  float fx_wet;         // LOOP: Anteil 0..1
+  int32_t fx_art;       // FX (Beat-FX unit): kind
+  double fx_beats;      // FX: period in beats
+  float fx_wet;         // FX: share 0..1
   float fx_param;       // FX (Plan 3): param 0..1
   // D1 K1, ARR_ZUSTAND (§5.13): nr, status, loop_an, projekt_beat, ursprung_sample, start_beat, metronom_an
   int64_t arr_nr, arr_ursprung;
@@ -266,6 +266,9 @@ using Befehlsring = SpscRing<Befehl, 256>;
 using Ereignisring = SpscRing<Ereignis, 8192>;
 
 struct KernPruefZugang;   // tests only (test_arr_auto_eingriff_kern): plays the restart state of teile_nachreichen
+
+// Container core K8: a change of a container's input blends linearly over this many samples.
+inline constexpr int CONTAINER_BLENDE = 480;
 
 class Kern {
   friend struct KernPruefZugang;
@@ -406,7 +409,6 @@ class Kern {
   // Ohr T14 (§17 I3a, kern.toml hoerschein_pflicht, Vorgabe an): schaltet den Prüfer im Stellwerk. Nicht im Callback.
   void hoerschein_pflicht(bool an) noexcept { pruefer_i3_->schalte(an); }
   const Deck& deck(int n) const { return decks_->deck[n - 1]; }  // n = 1 bis 4
-  const LoopBoxen& loopboxen() const { return *loops_; }  // Task 7: Diagnose und Tests (nur aus dem Callback-Faden lesen)
   bool ein_deck_laeuft() const noexcept;
   void tausch_frei(int d);  // Welle 3: wartende basis_tausch-Fassung zurück an den Lader
   bool deck_offen(int n) const noexcept;         // §1.6 offen(deck/n): Trim + Fader > hoerbar_db
@@ -429,7 +431,7 @@ class Kern {
   bool keylock_vorgabe() const noexcept;
   void keylock_vorbereiten();
   void keylock_fuellen(int deck);
-  // n = 1 bis 6 (1 bis 4 Decks, 5 und 6 Boxen); nullptr ohne Keylock. Diagnose, Tests und (seit 7b.3) boxen_zustand im Callback
+  // n = 1 bis 4 (Decks); nullptr ohne Keylock. Diagnose und Tests
   DehnerBasis* keylock_dehner(int deck) const noexcept;
   // Keylock Task 2.5 (Fassung 4.1 Punkt 2; Vertrag 3, 12, 14, 18): die Fäden im Kern, angelegt von keylock_bauen (unten):
   // ein Vorbereiter für alle Decks, je Deck mit Dehner ein Arbeits-Thread, ein Wächter. Laufen sie, sind
@@ -467,9 +469,8 @@ class Kern {
   // von main.cpp. Liest Zustand der Fäden ohne Atom (kosten_render): nur nach keylock_faeden_stoppen und ohne Callback.
   std::string keylock_schluss_json() const;
   // Keylock Task 3 (Fassung 4): Stand des globalen Reglers `keylock`, wie der Callback ihn zuletzt übernommen hat (Diagnose,
-  // Tests; nur aus dem Callback-Faden lesen), und der Schalter der Loop-Boxen (folgt dem Regler).
+  // Tests; nur aus dem Callback-Faden lesen).
   bool keylock_knopf() const noexcept;
-  bool keylock_boxen() const noexcept;
 
   // Scheibe 35: Kern-Hand (core_hand.cpp). hand_midi() im Callback vor zyklus() je Ereignis des Eingangs hand_in, höchstens
   // MAX_MIDI je Zyklus (mehr zählt hand_ueberlauf()); übersetzt wird erst in zyklus(), nach dem Einsortieren der
@@ -512,6 +513,13 @@ class Kern {
   // I08: Audio-Eingänge ein_1..4_L/R für den NÄCHSTEN zyklus(); nullptr = Port fehlt. Wie rueck(): main.cpp setzt vor jedem zyklus() die
   // JACK-Puffer dieses Zyklus.
   void ein(int paar, const float* l, const float* r) noexcept { ein_bank_.zeiger(paar, l, r); }
+  // Container core K3 (F2): the source buffers of the sub-block that ran last (tests read them after zyklus(); valid until the next sub-block clears them).
+  const Quellpuffer& quellpuffer() const noexcept { return quell_; }
+  // Container core K8: the input art of container c (0..3 = A..D): CONTAINER_ART_*; the blend weights (0..CONTAINER_BLENDE) of its two sources. Audio thread / tests only.
+  static constexpr int CONTAINER_ART_LEER = 0, CONTAINER_ART_PLAYER = 1, CONTAINER_ART_MODUL = 2;
+  int container_art(int c) const noexcept { return container_art_[c]; }
+  int container_gewicht_player(int c) const noexcept { return container_gp_[c]; }
+  int container_gewicht_modul(int c) const noexcept { return container_gm_[c]; }
   // Voice channel (voice.h, kern.toml stimme_*): before the first cycle, not in the callback.
   void stimme_einstellen(const StimmEinstellung& e) { mixer_->stimme_einstellen(e); }
   // I08: roher MIDI-Eingang midi_ein_1..8 (port 0-based, 0..MIDI_EIN_PORTS-1), je Ereignis mit JACK-Versatz; aufzurufen im Callback vor dem zyklus(). Das Ereignis wird erst in
@@ -577,7 +585,7 @@ class Kern {
   // Taste der Hand am Sample s (Controller und /test/hand taste/<name>): /e/taste, die Stopp-Taste wirkt wie /k/ki/stopp.
   bool hand_taste(hand::Taste t, int32_t wert, int64_t s) noexcept;
   // D1 K1 (§7.2 arr/start_stopp): läuft das Arrangement oder wartet es, Stopp sofort mit Kurzblende; sonst Start an der
-  // letzten Startposition nach der Start-Regel, Quant 2 (Takt), wenn ein Deck, eine Loop-Box oder ein Erzeuger-Strom
+  // letzten Startposition nach der Start-Regel, Quant 2 (Takt), wenn ein Deck, ein Erzeuger-Strom
   // läuft, sonst 0 (sofort). Meldet /e/hand. false: ohne Wirkung (nichts geladen).
   bool arr_hand_start_stopp(int64_t s) noexcept;
   int64_t cue_punkt(int deck) const noexcept { return cue_frame(deck - 1); }  // Frame; für Tests
@@ -618,7 +626,6 @@ class Kern {
   void einsortieren31(const Befehl& c);
   void decks_uebernehmen();
   void decks_zustand(int64_t n0, int n);
-  void boxen_zustand(int64_t n0, int n);
   // D1 K1 (core_arr.cpp): Modul Arrangement
   void einsortieren_arr(const Befehl& c, double beat0);
   void arr_zustand(int64_t n0, int n);
@@ -728,13 +735,13 @@ class Kern {
   void arr_export_quittungen(const Karte& k);
   int64_t arr_export_id_ = 0;
   char arr_export_quelle_[48] = {};
-  bool dj_laeuft() const noexcept;   // Deck, Loop-Box oder Erzeuger-Strom läuft (Spec 2.2: dann Quant 2)
+  bool dj_laeuft() const noexcept;   // Deck oder Erzeuger-Strom läuft (Spec 2.2: dann Quant 2)
   std::unique_ptr<Arrangement> arr_;
-  int arr_kanal_ = -1;              // Mixer-Index von erz/4 (ARR_KANAL)
-  // Baukasten S5r: die Werte der Graph-Regler <kanal>/bk/1..32, Zeile = Mixer-Kanal. bk_ort_[regler] = kanal * 32 + nr - 1
+  // Baukasten S5r: die Werte der Graph-Regler <kanal>/bk/1..64, Zeile = Mixer-Kanal. bk_ort_[regler] = zeile * 64 + nr - 1
   // oder -1; einmal im Ctor gebaut, im Callback nur Indexzugriff. Mixer und Erzeuger lesen bk_wert_ über einen Zeiger.
-  // S14: rows 0..17 are the mixer channels, row MIX_BK_SEND_ZEILE (18) is fx/3 and 19 is fx/4 (graph knobs of the send returns).
-  float bk_wert_[MIX_BK_ZEILEN][cypherdj::stellwerk::BK_REGLER_N] = {};   // 32 knobs per row (BK_REGLER_N, signalbox/controls.h)
+  // S14: rows 0..17 are the mixer channels, row MIX_BK_SEND_ZEILE (18) is fx/3 and 19 is fx/4 (graph knobs of the send returns), 20 the master.
+  // Container core K2: the rows KERN_BK_STROM0 + n - 1 (n = 1..16) hold strom/<n>/bk/<k>; the Erzeuger reads them as its row n - 1.
+  float bk_wert_[KERN_BK_ZEILEN][cypherdj::stellwerk::BK_REGLER_N] = {};   // 64 knobs per row (BK_REGLER_N, signalbox/controls.h)
   int16_t bk_ort_[cypherdj::stellwerk::MAX_REGLER];
   int zyklus_n_ = 256;              // Größe des laufenden Zyklus (Start-Regel: Vorhalt 2n und + 1 Zyklus)
   int64_t zyklus_ns_ = 0;           // mehrkern 3.2: Blockanfang des Zyklus (CLOCK_MONOTONIC, der Stempel von zyklus()); 0 = unbekannt. Basis der Zeit-Tore der Spur-Phase
@@ -777,14 +784,16 @@ class Kern {
   // ReglerTabelle (§1.5 fest verdrahtet, dieselbe wie jeder Lauf baut), damit sie vor sw_ existieren kann.
   class DeckModellImpl : public cypherdj::stellwerk::DeckModell {
    public:
-    explicit DeckModellImpl(const std::unique_ptr<DeckWerk>& decks) : decks_(decks) {}
+    DeckModellImpl(const std::unique_ptr<DeckWerk>& decks, const int* art) : decks_(decks), art_(art) {}
     bool inhalt(int kanal, cypherdj::stellwerk::Inhalt& aus) const override;
+    int player(int kanal) const override;   // K8: the player whose track sounds on this container strip (art player), else 0
     double quell_beat_bei(int kanal, int64_t sample) const override;
 
    private:
     bool deck_nr_von_kanal(int kanal, int& deck_nr) const;
     cypherdj::stellwerk::ReglerTabelle tab_;
     const std::unique_ptr<DeckWerk>& decks_;
+    const int* art_;   // the four container arts of the kern (container_art_)
   };
   Tempoplan plan_;
   KernUhr uhr_{plan_};
@@ -827,12 +836,12 @@ class Kern {
   Klick kanal_klick_[MIX_KANAELE];
   // Plan 2026-09-27 (Strudel Stufe 1): Erzeuger-Schlange und Kit-Stimmen, Eingänge der Mixer-Kanäle
   std::unique_ptr<Erzeuger> erz_;
-  float* erz_l_[MIX_KANAELE] = {};
   MidiAus midi_aus_[ERZ_MIDI_PORTS];
   std::unique_ptr<ArrRbSenke> arr_rb_;                      // D1 K2b: RB-338 des Arrangements, im Konstruktor angelegt
   std::unique_ptr<ArrBkSenke> arr_bk_;                      // S20: Baukasten graphs of the internal tracks
   std::unique_ptr<ArrKitSenke> arr_kit_;                    // 1.9: Kits of the internal tracks
   std::unique_ptr<ArrInternSenke> arr_intern_;              // S20: the one internal sink of the arrangement, forwards by device
+  std::unique_ptr<ArrStromSenke> arr_strom_;                // container core K7: the sink of the strom tracks (reads quell_)
   std::unique_ptr<ArrRackSenke> arr_rack_;                  // 1.9 U6: the sink of the instrument-rack tracks, after the dispatcher and the Wirt sinks
   std::unique_ptr<ArrWirtSenke> arr_wirt_[ARR_WIRT_SLOTS];  // D1 K2b: Wirt-Slots 1..2, im Konstruktor angelegt
   int64_t zyklus_n0_ = 0;
@@ -846,11 +855,33 @@ class Kern {
   MidiEin midi_ein_;
   std::atomic<uint32_t> ein_verbunden_{0};
   uint32_t ein_verb_gesehen_ = 0;   // 1.8 T7b: the mask of the last cycle (callback only): a fall of any of bits 8..15 (midi_ein_1..8) closes the held live keys
-  float* erz_r_[MIX_KANAELE] = {};
-  // MVP 2 (ADR 025): Loop-Boxen in pad/1, pad/2; Eingänge wie erz_l_/erz_r_
-  std::unique_ptr<LoopBoxen> loops_;
-  void loops_frei(int64_t sample);  // Keylock: was die Boxen loswerden (LoopBoxen::abholen) als LOOP_ALT zurück
-  void loop_melden(int box, int64_t sample, double beat);  // /e/loop (§5.11) aus dem Stand der Box
+  // Container core K3 (F2): the source buffers of stage 1 (streams, players, inputs), one block of 48 x MIX_BLOCK floats allocated in the constructor; the Erzeuger knows only the
+  // stream index, its knob rows are KERN_BK_STROM0 + stream - 1 (K2). The streams feed the arrangement, the recorder and the pegel; the container inputs come from the players and modules (core_container.cpp).
+  std::unique_ptr<float[]> quell_mem_;
+  Quellpuffer quell_;
+  // K8: input selection per container (A..D). The weights count samples 0..CONTAINER_BLENDE and step one per sample toward their target (art), so a change blends linearly over 480 samples and a change inside a blend continues from the weight reached.
+  int container_art_[4] = {CONTAINER_ART_PLAYER, CONTAINER_ART_PLAYER, CONTAINER_ART_PLAYER, CONTAINER_ART_PLAYER};
+  int container_gp_[4] = {CONTAINER_BLENDE, CONTAINER_BLENDE, CONTAINER_BLENDE, CONTAINER_BLENDE};
+  int container_gm_[4] = {};
+  // Stage 3 helper (core_container.cpp): the container inputs of this sub-block into the mixer inputs, after Arrangement::block and before the test clicks.
+  void container_fuellen(int m) noexcept;
+  // K8 review F-B: container c (0-based) went back to art player. A track in its player then meets the strip like a fresh load on an open channel: the fader is closed
+  // (as the load does), so the hearing license (I3a) cannot be bypassed by a detour over art modul. Same rule as the load, neither stricter nor looser.
+  // The hand (andreas) is the exception that §4.4 deck_hoerbar makes for a deck that runs and is open: a switch by the hand never silences what is audible.
+  void container_player_schliessen(int c, double beat0, bool hand) noexcept;
+  bool player_gehoert(int d) const noexcept;   // player d (0-based) is what its container hears (art player)
+  // K4: the key sources handed to the arrangement each sub-block (index 0..3 containers A..D = player buffers until K8, 4..19 streams 1..16), bound once in the constructor
+  const float* schl_l_[ARR_SCHLUESSEL] = {};
+  const float* schl_r_[ARR_SCHLUESSEL] = {};
+  float strom_spitze_[QP_STROEME] = {};   // K4: peak of every stream buffer since the last /pegel report (only streams that are set are measured)
+  bool ein_da_[EIN_PAARE][2] = {};      // stage 1: the left/right port of input pair k + 1 existed in this sub-block (ein_l/ein_r[k] is a copy of it), else the consumers get nullptr
+  float vorhoer_l_[MIX_BLOCK] = {};     // stage 1 scratch: the previewer return (rueck_erz_8) of this sub-block
+  float vorhoer_r_[MIX_BLOCK] = {};
+  float prod_l_[MIX_BLOCK] = {};        // scratch for the production sum: Arrangement::block ADDS into it, so it is zeroed before each call
+  float prod_r_[MIX_BLOCK] = {};
+  // Stage 1 of the callback (core_sources.cpp): clear the buffers, decks, streams, host returns, previewer, inputs, duck, then the interim copy into the mixer inputs.
+  void quellen_block(int64_t s0, int m, int off, ErzAusloeser& ausl) noexcept;
+  MitschnittAufnahme mitschnitt_aufnahme_;   // /k/loop/rec (container core K1: what is left of the loop boxes)
   // MVP 2 Scheibe 2: /e/mitschnitt (§5.11) aus dem Mitschnitt selbst (status 0 fertig, 1 abgelehnt oder abgebrochen)
   void mitschnitt_melden(const Mitschnitt* mt, int32_t status);
   KlickZiel kanal_klick_q_[MIX_KANAELE];
@@ -872,11 +903,17 @@ class Kern {
   int nachreichen_in_ = 0;         // Neustart: im zweiten Zyklus der Generation Teile ins Stellwerk nachreichen
   float pm_abgriff_l_[MAX_BLOCK] = {};   // 1.10 Slice 2: Kopie des PM-Ausgangs je Zyklus (Export-Abgriff)
   float pm_abgriff_r_[MAX_BLOCK] = {};
-  // DJ view places (decision 7, ADR 038): the six DJ pairs of the arrangement exit (index 0 = pad/1, 1 = pad/2, 2..5 = deck/1..deck/4), sized at construction; zeroed and handed to Arrangement::dj_ausgang()
-  // per sub-block when a group of the snapshot leads into the channel, then added into the channel input (erz_l_/erz_r_ of that channel) after the loop boxes, the streams and the decks, before the strip
+  // DJ view places (decision 7, ADR 038): the four DJ pairs of the arrangement exit (K5: index i = container i + 1 = A..D), sized at construction; zeroed and handed to Arrangement::dj_ausgang()
+  // per sub-block when a group of the snapshot leads into the channel, then added into the channel input (Mixer::eingang_l/r of that container) after the loop boxes, the streams and the decks, before the strip
   float dj_aus_l_[Arrangement::DJ_KANAELE][MAX_BLOCK] = {};
   float dj_aus_r_[Arrangement::DJ_KANAELE][MAX_BLOCK] = {};
-  int dj_kanal_[Arrangement::DJ_KANAELE];   // mixer index of the DJ channel nr = c + 1: pad/1, pad/2, deck/1..deck/4; every entry is set in the constructor (core.cpp), -1 = none
+  int dj_kanal_[Arrangement::DJ_KANAELE];   // mixer index of the DJ channel nr = c + 1: container A..D = deck/1, deck/2, pad/1, pad/2 (K5, interim); every entry is set in the constructor (core.cpp), -1 = none
+  // K5: true when a DJ pair was handed to this sub-block for the DJ output whose container input is the mixer channel of deck `d` (deck/1, deck/2 are containers A, B; deck/3, deck/4 have none)
+  bool deck_gereicht(int d) const noexcept {
+    for (int c = 0; c < Arrangement::DJ_KANAELE; ++c)
+      if (dj_kanal_[c] == d && dj_gereicht_[c]) return true;
+    return false;
+  }
   bool dj_gereicht_[Arrangement::DJ_KANAELE] = {};      // the pair of channel c was zeroed and handed to Arrangement::dj_ausgang() in this sub-block (the add after the loop boxes uses the same answer)
   float links_[MAX_BLOCK];
   float rechts_[MAX_BLOCK];

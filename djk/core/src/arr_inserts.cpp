@@ -165,8 +165,8 @@ static bool struktureller_schluessel(const ArrSchluessel& k) {
     case ARR_SCHL_SPUR: return k.punkt == ARR_SCHL_POST && k.nr >= 1 && k.nr <= ARR_SPUREN;
     case ARR_SCHL_GRP: return k.nr >= 1 && k.nr <= ARR_GRUPPEN;
     case ARR_SCHL_RET: return k.nr >= 1 && k.nr <= ARR_RETURNS;
-    case ARR_SCHL_DECK: return k.nr >= 1 && k.nr <= 4;   // slice 5 U2b: the DJ inputs deck/1..4 and erz/1
-    case ARR_SCHL_ERZ: return k.nr == 1;
+    case ARR_SCHL_DECK: return k.nr >= 1 && k.nr <= 4;   // K4: the containers A..D (file name deck/1..4) and the streams 1..16
+    case ARR_SCHL_ERZ: return k.nr >= 1 && k.nr <= 16;
     default: return false;
   }
 }

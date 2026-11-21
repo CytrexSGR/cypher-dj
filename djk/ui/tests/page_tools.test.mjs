@@ -71,7 +71,7 @@ test('A8 the state case of the stream fills the Gate and Utility bodies (a runni
   assert.equal(knopf('erz/1', 'gate/an').getAttribute('aria-pressed'), 'false', 'before the state: off (default)');
   assert.equal(regler('erz/1', 'gate/schwelle').value, '-40');
   sendeStrom('stand', { regler: { 'erz/1/gate/an': 1, 'erz/1/gate/schwelle': -28, 'erz/1/gate/release': 250, 'erz/1/util/dc': 1, 'erz/1/util/breite': 150,
-    'erz/1/util/bassmono': 120, 'deck/1/util/tausch': 1 }, decks: {}, geladen: {}, loops: {}, fx: [null, null], fxZuweisung: [{}, {}] });
+    'erz/1/util/bassmono': 120, 'deck/1/util/tausch': 1, 'deck/1/gate/an': 1, 'deck/1/gate/schwelle': -28, 'deck/1/gate/release': 250 }, decks: {}, geladen: {}, loops: {}, fx: [null, null], fxZuweisung: [{}, {}] });
   frisch('erz/1', 'erz/2', 'deck/1');
   assert.equal(knopf('erz/1', 'gate/an').getAttribute('aria-pressed'), 'true');
   assert.ok(knopf('erz/1', 'gate/an').classList.contains('an'));
@@ -245,28 +245,30 @@ test('A6 meters: gate_db of /zustand/mix drives the gate meter of a source chann
   mock.method(performance, 'now', () => jetztFalsch);
   try {
     jetztFalsch = 5000;
-    assert.equal(gz('erz/1'), '–', 'before any event: no reading');
-    sendeStrom('/zustand/mix', { kanal: 'erz/1', gate_db: 30, mb_tief_db: 0, mb_mitte_db: 0, mb_hoch_db: 0, lim_db: 0 });
-    assert.equal(gz('erz/1'), '30.0 dB');
-    assert.equal(gb('erz/1'), '50%', '30 dB of the 60 dB scale');
-    sendeStrom('/zustand/mix', { kanal: 'erz/1', gate_db: 80 });
-    assert.equal(gz('erz/1'), '80.0 dB', 'the number shows the real value');
-    assert.equal(gb('erz/1'), '100%', 'the bar is capped');
+    assert.equal(gz('deck/2'), '–', 'before any event: no reading');
+    sendeStrom('/zustand/mix', { kanal: 'deck/2', gate_db: 30, mb_tief_db: 0, mb_mitte_db: 0, mb_hoch_db: 0, lim_db: 0 });
+    assert.equal(gz('deck/2'), '30.0 dB');
+    assert.equal(gb('deck/2'), '50%', '30 dB of the 60 dB scale');
+    sendeStrom('/zustand/mix', { kanal: 'deck/2', gate_db: 80 });
+    assert.equal(gz('deck/2'), '80.0 dB', 'the number shows the real value');
+    assert.equal(gb('deck/2'), '100%', 'the bar is capped');
     assert.equal(gz('pad/2'), '–', 'a channel without an event shows no reading');
-    sendeStrom('/zustand/mix', { kanal: 'erz/1', gate_db: Number.NaN });
+    sendeStrom('/zustand/mix', { kanal: 'deck/2', gate_db: Number.NaN });
     sendeStrom('/zustand/mix', { kanal: 'bus/1', gate_db: 12 });
     sendeStrom('/zustand/mix', { kanal: 'erz/8', gate_db: 12 });
-    assert.equal(gz('erz/1'), '80.0 dB', 'NaN is ignored: the old reading stays');
+    sendeStrom('/zustand/mix', { kanal: 'erz/1', gate_db: 12 });
+    assert.equal(gz('erz/1'), '–', 'negative control: a stream alias has no gate of its own, its event is ignored');
+    assert.equal(gz('deck/2'), '80.0 dB', 'NaN is ignored: the old reading stays');
     assert.equal(attrappe.body.querySelector('[data-messer-zahl="erz/8|gate_db"]'), null, 'erz/8 has no gate meter');
     sendeStrom('/zustand/mix', { kanal: 'deck/1', gate_db: -4 });
     assert.equal(gz('deck/1'), '0.0 dB', 'a negative reduction is clamped to 0');
     jetztFalsch = 5499;
     sendeStrom('/zustand/mix', { kanal: 'pad/2', gate_db: 6 });
-    assert.equal(gz('erz/1'), '80.0 dB', '499 ms: still shown');
+    assert.equal(gz('deck/2'), '80.0 dB', '499 ms: still shown');
     jetztFalsch = 5500;
     sendeStrom('/zustand/mix', { kanal: 'pad/2', gate_db: 6 });
-    assert.equal(gz('erz/1'), '–', '500 ms without an event: no reading');
-    assert.equal(gb('erz/1'), '0%');
+    assert.equal(gz('deck/2'), '–', '500 ms without an event: no reading');
+    assert.equal(gb('deck/2'), '0%');
     assert.equal(gz('pad/2'), '6.0 dB', 'the channel that kept reporting keeps its reading');
     jetztFalsch = 6100;
     await pause(560);
@@ -309,9 +311,9 @@ test('A8 APPLY of a gate preset through app.js sends one /regler per field on th
   await new Promise((r) => setTimeout(r, 60));
   const regel = attrappe.anrufe.slice(von).filter((a) => a.url === '/regler');
   assert.deepEqual(regel.map((a) => a.koerper), [
-    { pfad: 'erz/1/gate/schwelle', nach: -35, ab: 'jetzt' }, { pfad: 'erz/1/gate/release', nach: 60, ab: 'jetzt' }, { pfad: 'erz/1/gate/an', nach: 1, ab: 'jetzt' }]);
+    { pfad: 'deck/1/gate/schwelle', nach: -35, ab: 'jetzt' }, { pfad: 'deck/1/gate/release', nach: 60, ab: 'jetzt' }, { pfad: 'deck/1/gate/an', nach: 1, ab: 'jetzt' }]);
   assert.ok(!regel.some((a) => a.koerper.pfad.includes('/komp/')));
-  assert.match(hauptfeld().querySelector('.preset-meldung').textContent, /Applied Tight Gate \(channel DRUMS\)/);
+  assert.match(hauptfeld().querySelector('.preset-meldung').textContent, /Applied Tight Gate \(channel A\)/);
 });
 
 test('A8 negative control: a compressor preset is still applied to the compressor, not as a kern device', async () => {
@@ -321,7 +323,7 @@ test('A8 negative control: a compressor preset is still applied to the compresso
   const von = attrappe.anrufe.length;
   b.click();
   await new Promise((r) => setTimeout(r, 60));
-  assert.deepEqual(attrappe.anrufe.slice(von).filter((a) => a.url === '/regler').map((a) => [a.koerper.pfad, a.koerper.nach]), [['erz/1/komp/schwelle', -20], ['erz/1/komp/ratio', 3]]);
+  assert.deepEqual(attrappe.anrufe.slice(von).filter((a) => a.url === '/regler').map((a) => [a.koerper.pfad, a.koerper.nach]), [['deck/1/komp/schwelle', -20], ['deck/1/komp/ratio', 3]]);
 });
 
 test('A8 multiband (bus only) cannot be applied or saved from the page: the strips are source channels', () => {
@@ -343,7 +345,7 @@ test('A8 SAVE CURRENT of a gate reads the live values of the picked channel and 
   const post = attrappe.anrufe.slice(von).find((a) => a.url === '/presets' && a.methode === 'POST');
   assert.ok(post, 'a POST /presets was sent');
   assert.equal(post.koerper.geraet, 'gate');
-  assert.deepEqual(post.koerper.werte, { an: true, schwelle: -28, release: 250 }, 'only what the kern reported for erz/1: switch as boolean');
+  assert.deepEqual(post.koerper.werte, { an: true, schwelle: -28, release: 250 }, 'only what the kern reported for deck/1: switch as boolean');
 });
 
 // ---- review (MINOR): the refusal behaviour of the preset glue in app.js (host.anwenden) -----------------------------------------------
@@ -388,7 +390,7 @@ test('review: a refusal of the 2nd /regler request stops the apply: the 3rd is n
     aktion('anwenden', 'nutzer/gate/tight-gate').click();
     await new Promise((r) => setTimeout(r, 60));
     // Review 1.15: the on switch of a preset that switches the tool ON goes last, so the refusal of the 2nd request leaves the tool off, not on with half the values
-    assert.deepEqual(reglerKoerper(von).map((k) => k.pfad), ['erz/1/gate/schwelle', 'erz/1/gate/release'], 'the 3rd request (the on switch) is not sent');
+    assert.deepEqual(reglerKoerper(von).map((k) => k.pfad), ['deck/1/gate/schwelle', 'deck/1/gate/release'], 'the 3rd request (the on switch) is not sent');
     assert.match(hauptfeld().querySelector('.preset-meldung').textContent, /^Not applied: Tool control refused: no/);
   });
   // negative control: without a refusal all three go out and the panel says Applied
@@ -401,10 +403,12 @@ test('review: a refusal of the 2nd /regler request stops the apply: the 3rd is n
 
 test('dock helpers: gateGrJetzt and masterLimiterJetzt read the live values without the DOM', async () => {
   const { gateGrJetzt, busGrJetzt, masterLimiterJetzt, zeigeMasterLimiter } = await import('../public/effects_view.js');
-  assert.equal(gateGrJetzt('erz/1'), gateGrJetzt('erz/1'), 'callable');
-  sendeStrom('/zustand/mix', { kanal: 'erz/1', gate_db: 12 });
-  assert.equal(gateGrJetzt('erz/1'), 12);
-  assert.equal(gateGrJetzt('erz/2'), null, 'negative control: a channel without a reading');
+  assert.equal(gateGrJetzt('deck/1'), gateGrJetzt('deck/1'), 'callable');
+  sendeStrom('/zustand/mix', { kanal: 'deck/1', gate_db: 12 });
+  assert.equal(gateGrJetzt('deck/1'), 12);
+  assert.equal(gateGrJetzt('pad/1'), null, 'negative control: a channel without a reading');
+  sendeStrom('/zustand/mix', { kanal: 'erz/2', gate_db: 12 });
+  assert.equal(gateGrJetzt('erz/2'), null, 'negative control: a stream alias has no gate reading');
   sendeStrom('/zustand/mix', { kanal: 'bus/1', lim_db: 5 });
   assert.equal(busGrJetzt('bus/1', 'lim_db'), 5);
   zeigeMasterLimiter({ limiter_db: -3 });

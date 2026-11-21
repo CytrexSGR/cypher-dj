@@ -4,12 +4,12 @@
 //       tap on and off (the tap only reads)
 //  (S2) 1 kHz full-scale sine reads 0 dB (+-0.5) in its band (index 16), 5 kHz in band 23, 100 Hz peaks in band 6, master tap (19) and a bus tap
 //  (S3) the audio-thread call (block with tap, including the block of a switch) and analysiere() allocate nothing, take no lock (alloc_intercept.h)
-//  (S4) source change, full path. erz/1 carries 1 kHz, erz/2 carries 5 kHz. (a) the consumer ticks normally, the switch comes 1000 samples after the
-//       last tick; (b) the consumer stops for 16 800 samples (the ring is full and drops). After the switch: every frame is tagged erz/2, the 1 kHz
+//  (S4) source change, full path. deck/2 carries 1 kHz, pad/1 carries 5 kHz. (a) the consumer ticks normally, the switch comes 1000 samples after the
+//       last tick; (b) the consumer stops for 16 800 samples (the ring is full and drops). After the switch: every frame is tagged pad/1, the 1 kHz
 //       band stays below the clean reference (the same samples analysed from an empty analyser) + 0.5 dB, within 40 dB is never reached, the settled
-//       frames carry the stale band <= -60 dB, rahmen restarts at the first frame of the new source, and in (b) the first erz/2 frame arrives at the
+//       frames carry the stale band <= -60 dB, rahmen restarts at the first frame of the new source, and in (b) the first pad/1 frame arrives at the
 //       2nd tick after the switch (tick 1 cuts, tick 2 holds new data) with at least one hop of new samples. Positive control: before the switch the
-//       frames peak at 1 kHz and are tagged erz/1.
+//       frames peak at 1 kHz and are tagged deck/2.
 //       Race tests (hook between the generation reads): a switch between the first read and the second one discards that tick's frames (stage 1);
 //       a switch after the second read leaves the frames of the old source tagged with the old source (stage 2).
 //  (S5) the encoded string has exactly 29 integers (asserted from anzahl_baender() and from the arithmetic 1000 x 2^(i/3), i = -16 .. 12) and
@@ -17,11 +17,11 @@
 //  (S7) one tick analyses at most 32 frames (counted, always asserted); the median of 100 full-ring ticks is below 1 ms unless the 1-minute
 //       load is above half the cores (then "not timed") or this is a sanitizer build; min, median, p95 and max are printed
 //  (cadence) 40 calls of tick() at 2 ms spacing give at most 2 frames (the 40 ms rule)
-//  (erz/8) the cue-only channel (early return of kanal()) is still tapped
+//  (pad/2) the cue-only channel (early return of kanal()) is still tapped
 //  (window) the audio thread's change is a seqlock (odd while written): a tick inside the change at any of its three stages serves nothing and takes nothing over; after it, the right source with the right cut
 //  (race stage 0) a change between the generation read and the loads of source and cut is not served in that tick
 // Mutations (registered in CMakeLists.txt, each turns this test red): SPEK_SCHNITT_NULL, SPEK_GEN_STUMM, SPEK_IMMER_SCHREIBEN, SPEK_TAP_VERSCHOBEN,
-// SPEK_CUE_OHNE_ABGRIFF, SPEK_OHNE_UNGERADE (mixer.cpp); SPEKTRUM_NUR_LEEREN, SPEKTRUM_OHNE_G1, SPEKTRUM_ETIKETT_AKTUELL, SPEKTRUM_OHNE_TAKT, SPEKTRUM_OHNE_NEULESEN (net.cpp).
+// SPEK_OHNE_UNGERADE (mixer.cpp); SPEKTRUM_NUR_LEEREN, SPEKTRUM_OHNE_G1, SPEKTRUM_ETIKETT_AKTUELL, SPEKTRUM_OHNE_TAKT, SPEKTRUM_OHNE_NEULESEN (net.cpp).
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -160,9 +160,9 @@ struct S4Ergebnis {
 S4Ergebnis s4(bool voll) {
   S4Ergebnis erg;
   const char* nm = voll ? "S4b" : "S4a";
-  Szene sz(ERZ1, 1000.0, ERZ2, 5000.0);
-  sz.waehle(ERZ1 + 1);
-  // positive control: frames flow and peak at 1 kHz, tagged erz/1
+  Szene sz(DECK2, 1000.0, PAD1, 5000.0);
+  sz.waehle(DECK2 + 1);
+  // positive control: frames flow and peak at 1 kHz, tagged deck/2
   int vorher = 0;
   float db1k_vor = -999.0f;
   for (int i = 0; i < 20; ++i) {
@@ -170,7 +170,7 @@ S4Ergebnis s4(bool voll) {
     for (const auto& r : f) {
       const Parsed p = parse(r);
       PRUEF(p.ok);
-      PRUEF(p.kanal == "erz/1");
+      PRUEF(p.kanal == "deck/2");
       if (i >= 12) {
         PRUEF(argmax(p.db, NB) == B1K);
         db1k_vor = p.db[B1K];
@@ -180,7 +180,7 @@ S4Ergebnis s4(bool voll) {
   }
   PRUEF(vorher >= 18);
   PRUEF_NAH(db1k_vor, 0.0, 0.5);
-  std::printf("%s: before the switch %d frames tagged erz/1, peak band %d, level %.2f dB\n", nm, vorher, B1K, db1k_vor);
+  std::printf("%s: before the switch %d frames tagged deck/2, peak band %d, level %.2f dB\n", nm, vorher, B1K, db1k_vor);
 
   if (voll) {
     // the consumer stops: 70 blocks of 240 = 16 800 samples against a ring of 16 384, the surplus is dropped and counted
@@ -190,11 +190,11 @@ S4Ergebnis s4(bool voll) {
     std::printf("S4b: consumer stopped for 16800 samples, ring full, %ld samples dropped\n", verloren);
     PRUEF(verloren > 0);   // positive control: the ring really was full
   } else {
-    sz.samples(1000, 250);   // 1000 stale samples of erz/1 in the ring, after the last tick
+    sz.samples(1000, 250);   // 1000 stale samples of deck/2 in the ring, after the last tick
   }
   const std::size_t schnitt_erwartet = sz.l.m->spektrum().schreib_position();
   const long t_wechsel = sz.l.t;
-  sz.waehle(ERZ2 + 1);
+  sz.waehle(PAD1 + 1);
 
   std::vector<Parsed> nach;
   std::vector<int> tick_von;
@@ -218,11 +218,11 @@ S4Ergebnis s4(bool voll) {
     for (const auto& r : f) {
       const Parsed p = parse(r);
       PRUEF(p.ok);
-      PRUEF(p.kanal == "erz/2");   // never erz/1 after the switch
+      PRUEF(p.kanal == "pad/1");   // never deck/2 after the switch
       if (rahmen_erz2_tick < 0) {
         rahmen_erz2_tick = i;
         accepted_at_first_frame = static_cast<long>(sz.l.m->spektrum().schreib_position() - schnitt_erwartet);
-        std::printf("%s: first erz/2 frame at tick %d after the switch, rahmen %d, samples accepted since the cut %ld\n", nm, i, p.rahmen, accepted_at_first_frame);
+        std::printf("%s: first pad/1 frame at tick %d after the switch, rahmen %d, samples accepted since the cut %ld\n", nm, i, p.rahmen, accepted_at_first_frame);
       }
       nach.push_back(p);
       tick_von.push_back(i);
@@ -237,7 +237,7 @@ S4Ergebnis s4(bool voll) {
   if (nach.empty()) return erg;
   PRUEF(nach.front().rahmen >= 1 && nach.front().rahmen <= 4);   // restarted: 1920 samples / hop 512 = 3 frames in the tick
 
-  // reference: an empty analyser, the samples erz/2 carried after the cut (variant a: from the switch, variant b: from the tick that cut)
+  // reference: an empty analyser, the samples pad/1 carried after the cut (variant a: from the switch, variant b: from the tick that cut)
   const long t0 = voll ? t_tick1 : t_wechsel;
   const int ticks_ref = voll ? TICKS - 1 : TICKS;
   const Ref ref = referenz(sz, 1, t0, ticks_ref);
@@ -254,11 +254,11 @@ S4Ergebnis s4(bool voll) {
     PRUEF(rel <= -40.0f);   // the task's minimum: the 1 kHz band is never within 40 dB of the 5 kHz band
     if (tick_von[j] >= 28) settled_rel = std::max<double>(settled_rel, rel);
   }
-  std::printf("%s: erz/2 frames %zu, 1 kHz band relative to 5 kHz: max %.2f dB; against the clean reference: max %+.2f dB; settled (tick >= 28): %.2f dB\n", nm,
+  std::printf("%s: pad/1 frames %zu, 1 kHz band relative to 5 kHz: max %.2f dB; against the clean reference: max %+.2f dB; settled (tick >= 28): %.2f dB\n", nm,
               nach.size(), max_rel, max_ueber_ref, settled_rel);
   PRUEF(max_ueber_ref <= 0.5);       // A7a form, check 1: peak <= clean reference + 0.5 dB
   PRUEF(settled_rel <= -60.0);       // A7a form, check 2: settled frames carry the stale band <= -60 dB
-  // negative control: the 5 kHz band of the frames equals the reference (the source really is erz/2, level and all)
+  // negative control: the 5 kHz band of the frames equals the reference (the source really is pad/1, level and all)
   {
     const Parsed& p = nach.back();
     const int idx = voll ? tick_von.back() - 2 : tick_von.back() - 1;
@@ -273,20 +273,20 @@ struct HakenCtx {
   Szene* sz = nullptr;
   int stufe = -1;     // stage at which to switch (0, 1 or 2), -1 never
   bool gefeuert = false;
-  int ziel = ERZ2 + 1;   // the selector value the hook switches to
+  int ziel = PAD1 + 1;   // the selector value the hook switches to
 };
 void haken(void* c, int stufe) {
   auto* h = static_cast<HakenCtx*>(c);
   if (h->stufe != stufe || h->gefeuert) return;
   h->gefeuert = true;
   h->sz->waehle(h->ziel);
-  h->sz->samples(4 * BLK);   // the audio thread runs on: the selector change takes effect at the next block start, erz/2 samples enter the ring
+  h->sz->samples(4 * BLK);   // the audio thread runs on: the selector change takes effect at the next block start, pad/1 samples enter the ring
 }
 
 // The writer's own window (seqlock, D12): the hook runs on the audio side inside a change, while the generation is odd, between the stores of
-// source and cut. The reader ticks right there. Setting: change 1 (to erz/2) is not yet served, erz/2 samples are in the ring, change 2 (back to
-// erz/1) is being written. Without the odd phase a reader sees change 1's generation with change 2's source and change 1's cut: a frame of erz/2
-// samples tagged erz/1.
+// source and cut. The reader ticks right there. Setting: change 1 (to pad/1) is not yet served, pad/1 samples are in the ring, change 2 (back to
+// deck/2) is being written. Without the odd phase a reader sees change 1's generation with change 2's source and change 1's cut: a frame of pad/1
+// samples tagged deck/2.
 struct FensterCtx {
   Szene* sz = nullptr;
   int tick_ab = 0;                         // ticks at the stages >= this one (0: from the odd bump on)
@@ -306,17 +306,17 @@ void fenster_haken(void* c, int stufe) {
 
 void fenster() {
   for (int stufe = 0; stufe <= 2; ++stufe) {
-    Szene sz(ERZ1, 1000.0, ERZ2, 5000.0);
-    sz.waehle(ERZ1 + 1);
+    Szene sz(DECK2, 1000.0, PAD1, 5000.0);
+    sz.waehle(DECK2 + 1);
     for (int i = 0; i < 12; ++i) sz.periode();
     FensterCtx h;
     h.sz = &sz;
     h.tick_ab = stufe;
     h.bedient_vorher = sz.snd.bediente_generation();
-    sz.waehle(ERZ2 + 1);                       // change 1, not ticked yet
-    sz.samples(BLOECKE * BLK);                 // erz/2 samples (5 kHz) are in the ring after its cut
+    sz.waehle(PAD1 + 1);                       // change 1, not ticked yet
+    sz.samples(BLOECKE * BLK);                 // pad/1 samples (5 kHz) are in the ring after its cut
     sz.l.m->setze_spek_fenster_haken(fenster_haken, &h);
-    sz.waehle(ERZ1 + 1);                       // change 2 starts at the next block
+    sz.waehle(DECK2 + 1);                       // change 2 starts at the next block
     sz.samples(BLK);                           // ... and the hook ticks inside it, at stage >= tick_ab
     sz.l.m->setze_spek_fenster_haken(nullptr, nullptr);
     std::printf("window, ticks from stage %d: %d tick(s) inside the change, generation odd in %d of them, %d frame(s) served inside (%s), generation now %u\n", stufe,
@@ -326,17 +326,17 @@ void fenster() {
     PRUEF(h.rahmen == 0);                      // nothing is served inside the window (red without the odd phase)
     PRUEF(sz.snd.bediente_generation() == h.bedient_vorher);   // and nothing was taken over
     PRUEF((sz.l.m->spek_generation() & 1u) == 0);              // the window is closed
-    // after the bump: correct, for erz/1 only; the 5 kHz samples of erz/2 lie before the cut of change 2
+    // after the bump: correct, for deck/2 only; the 5 kHz samples of pad/1 lie before the cut of change 2
     sz.samples(BLOECKE * BLK);
     sz.jetzt += 4 * TICK_NS;   // past the slots the hook used
     const auto danach = sz.tick();
     PRUEF(danach.size() == 1);
     if (!danach.empty()) {
       const Parsed p = parse(danach[0]);
-      PRUEF(p.kanal == "erz/1");
+      PRUEF(p.kanal == "deck/2");
       std::printf("window: after the bump tag %s, rahmen %d, 5 kHz band %.1f dB below the 1 kHz band\n", p.kanal.c_str(), p.rahmen, p.db[B1K] - p.db[B5K]);
       PRUEF(argmax(p.db, NB) == B1K);
-      PRUEF(p.db[B5K] <= p.db[B1K] - 30.0f);   // measured 39.5: the splatter of a sine that starts in a partly filled window; stale erz/2 samples would sit at about 0
+      PRUEF(p.db[B5K] <= p.db[B1K] - 30.0f);   // measured 39.5: the splatter of a sine that starts in a partly filled window; stale pad/1 samples would sit at about 0
     }
     PRUEF(sz.snd.bediente_generation() == sz.l.m->spek_generation());
   }
@@ -345,8 +345,8 @@ void fenster() {
 void rennen() {
   // stage 1: the switch lands between the first generation read and the second one
   {
-    Szene sz(ERZ1, 1000.0, ERZ2, 5000.0);
-    sz.waehle(ERZ1 + 1);
+    Szene sz(DECK2, 1000.0, PAD1, 5000.0);
+    sz.waehle(DECK2 + 1);
     for (int i = 0; i < 12; ++i) sz.periode();
     HakenCtx h{&sz, 1};
     sz.snd.setze_haken(haken, &h);
@@ -356,7 +356,7 @@ void rennen() {
       HakenCtx aus{&sz, -1};
       sz.snd.setze_haken(haken, &aus);
       const auto kontrolle = sz.tick();
-      PRUEF(kontrolle.size() == 1 && kontrolle[0].kanal == "erz/1");
+      PRUEF(kontrolle.size() == 1 && kontrolle[0].kanal == "deck/2");
     }
     sz.snd.setze_haken(haken, &h);
     sz.samples(BLOECKE * BLK);
@@ -364,23 +364,23 @@ void rennen() {
     std::printf("race stage 1: switch between the two generation reads, tick returned %zu frame(s) (discarded: 0)\n", verworfen.size());
     PRUEF(h.gefeuert);
     PRUEF(verworfen.empty());
-    // the next tick cuts and serves erz/2 only, nothing of the mixed tick
+    // the next tick cuts and serves pad/1 only, nothing of the mixed tick
     sz.snd.setze_haken(nullptr, nullptr);
     sz.samples(BLOECKE * BLK);
     const auto danach = sz.tick();
     PRUEF(danach.size() == 1);
     if (!danach.empty()) {
       const Parsed p = parse(danach[0]);
-      PRUEF(p.kanal == "erz/2");
+      PRUEF(p.kanal == "pad/1");
       PRUEF(p.rahmen >= 1 && p.rahmen <= 4);
       PRUEF(argmax(p.db, NB) == B5K);
       PRUEF(p.db[B1K] - p.db[B5K] <= -40.0f);
     }
   }
-  // stage 2: the switch lands after the second read; the frames were computed from erz/1 only and keep their tag
+  // stage 2: the switch lands after the second read; the frames were computed from deck/2 only and keep their tag
   {
-    Szene sz(ERZ1, 1000.0, ERZ2, 5000.0);
-    sz.waehle(ERZ1 + 1);
+    Szene sz(DECK2, 1000.0, PAD1, 5000.0);
+    sz.waehle(DECK2 + 1);
     for (int i = 0; i < 12; ++i) sz.periode();
     HakenCtx h{&sz, 2};
     sz.snd.setze_haken(haken, &h);
@@ -391,24 +391,24 @@ void rennen() {
     if (!f.empty()) {
       const Parsed p = parse(f[0]);
       std::printf("race stage 2: switch after the second read, the frame stays tagged '%s' (peak band %d)\n", p.kanal.c_str(), argmax(p.db, NB));
-      PRUEF(p.kanal == "erz/1");   // not the current selection
+      PRUEF(p.kanal == "deck/2");   // not the current selection
       PRUEF(argmax(p.db, NB) == B1K);
     }
     sz.snd.setze_haken(nullptr, nullptr);
     sz.samples(BLOECKE * BLK);
     const auto danach = sz.tick();
-    PRUEF(danach.size() == 1 && parse(danach[0]).kanal == "erz/2");
+    PRUEF(danach.size() == 1 && parse(danach[0]).kanal == "pad/1");
   }
   // stage 0: a second change lands between the first generation read and the loads of source and cut (the D12 window): this generation is not served now
   {
-    Szene sz(ERZ1, 1000.0, ERZ2, 5000.0);
-    sz.waehle(ERZ1 + 1);
+    Szene sz(DECK2, 1000.0, PAD1, 5000.0);
+    sz.waehle(DECK2 + 1);
     for (int i = 0; i < 12; ++i) sz.periode();
     const uint32_t bedient_vorher = sz.snd.bediente_generation();
-    sz.waehle(ERZ2 + 1);   // change 1: the tick below reads its generation
+    sz.waehle(PAD1 + 1);   // change 1: the tick below reads its generation
     sz.samples(BLOECKE * BLK);
-    HakenCtx h{&sz, 0};    // hook: change 2 (back to erz/1) right after the generation read
-    h.ziel = ERZ1 + 1;
+    HakenCtx h{&sz, 0};    // hook: change 2 (back to deck/2) right after the generation read
+    h.ziel = DECK2 + 1;
     sz.snd.setze_haken(haken, &h);
     const auto f = sz.tick();
     std::printf("race stage 0: change between the generation read and the loads: %zu frame(s), served generation %u (before %u, now %u)\n", f.size(),
@@ -423,7 +423,7 @@ void rennen() {
     PRUEF(danach.size() == 1);
     if (!danach.empty()) {
       const Parsed p = parse(danach[0]);
-      PRUEF(p.kanal == "erz/1");   // the latest source
+      PRUEF(p.kanal == "deck/2");   // the latest source
       PRUEF(argmax(p.db, NB) == B1K);
     }
   }
@@ -473,7 +473,7 @@ int main() {
 
   // ---- S1: selector 0 ----
   {
-    Szene sz(ERZ1, 1000.0, ERZ2, 5000.0);
+    Szene sz(DECK2, 1000.0, PAD1, 5000.0);
     const auto& a = sz.l.m->spektrum();
     for (int i = 0; i < 20; ++i) sz.periode();   // twenty ticks, nothing selected
     std::printf("S1: selector 0, 20 periods: schreib_position %zu, verlorene %ld, rahmen %ld, generation %u\n", a.schreib_position(), a.verlorene_samples(), a.rahmen(),
@@ -485,8 +485,8 @@ int main() {
     PRUEF(sz.l.m->spek_quelle() == 0);
     PRUEF(sz.tick().empty());
     // the tap only reads: the same signal with the tap on gives bit-identical outputs (block by block)
-    Szene aus(ERZ1, 1000.0, ERZ2, 5000.0), an(ERZ1, 1000.0, ERZ2, 5000.0);
-    an.waehle(ERZ1 + 1);
+    Szene aus(DECK2, 1000.0, PAD1, 5000.0), an(DECK2, 1000.0, PAD1, 5000.0);
+    an.waehle(DECK2 + 1);
     bool gleich_alle = true;
     for (int i = 0; i < 40; ++i) {
       aus.block(BLK);
@@ -517,7 +517,7 @@ int main() {
         if (!fr.empty()) { p = parse(fr[0]); letzter = fr[0]; }
       }
       PRUEF(p.ok);
-      if (std::getenv("SPEKTRUM_FIXTURE") && sel == ERZ1 + 1 && amp == 1.0) {
+      if (std::getenv("SPEKTRUM_FIXTURE") && sel == DECK2 + 1 && amp == 1.0) {
         char z[512];
         std::snprintf(z, sizeof z, "%s{\"hz\": %g, \"kanal\": \"%s\", \"rahmen\": %d, \"pegel\": \"%s\"}", fixture.empty() ? "" : ",\n  ", f, letzter.kanal.c_str(),
                       letzter.rahmen, letzter.pegel.c_str());
@@ -525,16 +525,16 @@ int main() {
       }
       return p;
     };
-    const Parsed k1 = messe(ERZ1, 1000.0, ERZ1 + 1, 1.0);
-    std::printf("S2: 1 kHz amplitude 1 through erz/1: band %d reads %.2f dB, peak band %d\n", B1K, k1.db[B1K], argmax(k1.db, NB));
+    const Parsed k1 = messe(DECK2, 1000.0, DECK2 + 1, 1.0);
+    std::printf("S2: 1 kHz amplitude 1 through deck/2: band %d reads %.2f dB, peak band %d\n", B1K, k1.db[B1K], argmax(k1.db, NB));
     PRUEF_NAH(k1.db[B1K], 0.0, 0.5);
     PRUEF(argmax(k1.db, NB) == B1K);
-    const Parsed k5 = messe(ERZ1, 5000.0, ERZ1 + 1, 1.0);
-    std::printf("S2: 5 kHz through erz/1: peak band %d, %.2f dB\n", argmax(k5.db, NB), k5.db[B5K]);
+    const Parsed k5 = messe(DECK2, 5000.0, DECK2 + 1, 1.0);
+    std::printf("S2: 5 kHz through deck/2: peak band %d, %.2f dB\n", argmax(k5.db, NB), k5.db[B5K]);
     PRUEF(argmax(k5.db, NB) == B5K);
     PRUEF_NAH(k5.db[B5K], 0.0, 0.5);
-    const Parsed k100 = messe(ERZ1, 100.0, ERZ1 + 1, 1.0);
-    std::printf("S2: 100 Hz through erz/1: peak band %d (centre %.1f Hz), %.2f dB\n", argmax(k100.db, NB), 1000.0 * std::pow(2.0, (B100 - 16) / 3.0), k100.db[B100]);
+    const Parsed k100 = messe(DECK2, 100.0, DECK2 + 1, 1.0);
+    std::printf("S2: 100 Hz through deck/2: peak band %d (centre %.1f Hz), %.2f dB\n", argmax(k100.db, NB), 1000.0 * std::pow(2.0, (B100 - 16) / 3.0), k100.db[B100]);
     PRUEF(argmax(k100.db, NB) == B100);
     if (const char* datei = std::getenv("SPEKTRUM_FIXTURE")) {
       if (FILE* fp = std::fopen(datei, "w")) {
@@ -542,9 +542,9 @@ int main() {
         std::fclose(fp);
       }
     }
-    // the master tap (19) hears the sum: the 1 kHz on erz/1 arrives on the master at about the channel level; a bus tap hears its own input
-    const Parsed ms = messe(ERZ1, 1000.0, cdj::Mixer::SPEK_MASTER, 0.5);
-    std::printf("S2: master tap (19), 1 kHz amplitude 0.5 on erz/1: peak band %d, %.2f dB\n", argmax(ms.db, NB), ms.db[B1K]);
+    // the master tap (19) hears the sum: the 1 kHz on deck/2 arrives on the master at about the channel level; a bus tap hears its own input
+    const Parsed ms = messe(DECK2, 1000.0, cdj::Mixer::SPEK_MASTER, 0.5);
+    std::printf("S2: master tap (19), 1 kHz amplitude 0.5 on deck/2: peak band %d, %.2f dB\n", argmax(ms.db, NB), ms.db[B1K]);
     PRUEF(argmax(ms.db, NB) == B1K);
     PRUEF(ms.db[B1K] > -12.0f && ms.db[B1K] < 0.0f);
     {
@@ -558,16 +558,16 @@ int main() {
       std::printf("S2: bus/1 tap, 5 kHz on its input: tag %s, peak band %d\n", p.kanal.c_str(), argmax(p.db, NB));
       PRUEF(p.kanal == "bus/1" && argmax(p.db, NB) == B5K);
     }
-    // negative control: a channel nobody selected is not heard (erz/2 carries 5 kHz, the tap is erz/1 with silence)
+    // negative control: a channel nobody selected is not heard (pad/1 carries 5 kHz, the tap is deck/2 with silence)
     {
-      Szene sz(ERZ2, 5000.0, -1, 0.0, 1.0);
-      sz.waehle(ERZ1 + 1);
+      Szene sz(PAD1, 5000.0, -1, 0.0, 1.0);
+      sz.waehle(DECK2 + 1);
       Parsed p;
       for (int i = 0; i < 20; ++i) {
         const auto fr = sz.periode();
         if (!fr.empty()) p = parse(fr[0]);
       }
-      PRUEF(p.ok && p.kanal == "erz/1");
+      PRUEF(p.ok && p.kanal == "deck/2");
       PRUEF(p.db[B5K] <= -150.0f);
     }
   }
@@ -587,13 +587,13 @@ int main() {
       std::printf("S3: positive control: %ld allocations, %ld frees, %ld locks\n", pk.alloc, pk.frei, pk.sperren);
       PRUEF(pk.alloc >= 1 && pk.sperren >= 1);
     }
-    Szene sz(ERZ1, 1000.0, ERZ2, 5000.0);
+    Szene sz(DECK2, 1000.0, PAD1, 5000.0);
     // prepare the input outside the window (the helper allocates); then count the audio-thread call alone
     std::vector<float> in[2];
     for (int c = 0; c < 2; ++c) in[c].resize(BLK);
     AbfangZahlen summe;
     long bloecke = 0;
-    for (int sel : {ERZ1 + 1, ERZ2 + 1, BUS1 + 1, cdj::Mixer::SPEK_MASTER, 0, ERZ1 + 1}) {   // a switch every 20 blocks: the switching blocks are counted too
+    for (int sel : {DECK2 + 1, PAD1 + 1, BUS1 + 1, cdj::Mixer::SPEK_MASTER, 0, DECK2 + 1}) {   // a switch every 20 blocks: the switching blocks are counted too
       sz.waehle(sel);
       for (int i = 0; i < 20; ++i) {
         for (int c = 0; c < 2; ++c) sz.l.sinus(sz.kanal[c], sz.freq[c], 1.0, 1.0, BLK);
@@ -609,7 +609,7 @@ int main() {
                 summe.sperren, summe.schlafen);
     PRUEF(summe.summe() == 0);
     // analysiere() on a filled ring (the consumer side)
-    sz.waehle(ERZ1 + 1);
+    sz.waehle(DECK2 + 1);
     sz.samples(10 * BLK);
     sz.snd.tick(sz.jetzt);
     sz.jetzt += TICK_NS;
@@ -627,14 +627,14 @@ int main() {
   // ---- S4 ----
   const S4Ergebnis a = s4(false);
   const S4Ergebnis b = s4(true);
-  std::printf("S4: first erz/2 frame at tick %d (a) and tick %d (b) after the switch\n", a.erster_erz2_tick, b.erster_erz2_tick);
+  std::printf("S4: first pad/1 frame at tick %d (a) and tick %d (b) after the switch\n", a.erster_erz2_tick, b.erster_erz2_tick);
   rennen();
   fenster();
 
   // ---- cadence: the 2 ms loop calls tick() every 2 ms, a frame may leave only every 40 ms ----
   {
-    Szene sz(ERZ1, 1000.0, ERZ2, 5000.0);
-    sz.waehle(ERZ1 + 1);
+    Szene sz(DECK2, 1000.0, PAD1, 5000.0);
+    sz.waehle(DECK2 + 1);
     for (int i = 0; i < 12; ++i) sz.periode();   // warm: frames flow
     int mit_rahmen = 0;
     for (int i = 0; i < 40; ++i) {   // 40 calls x 2 ms = 80 ms, 96 samples of audio per call
@@ -646,26 +646,24 @@ int main() {
     PRUEF(mit_rahmen >= 1 && mit_rahmen <= 2);   // >= 1 is the positive control (frames do come); <= 2 is the 40 ms rule
   }
 
-  // ---- erz/8: the cue-only channel returns early in kanal(); its tap must still feed the analyser ----
+  // ---- pad/2: a channel whose fader stays closed (K3: no cue-only early path any more); its tap must still feed the analyser ----
   {
-    Szene sz(ERZ8, 1000.0, -1, 0.0);
-    sz.l.m->setze_nur_cue(ERZ8);
-    PRUEF(sz.l.m->nur_cue(ERZ8));
-    sz.waehle(ERZ8 + 1);
+    Szene sz(PAD2, 1000.0, -1, 0.0);
+    sz.waehle(PAD2 + 1);
     Parsed p;
     for (int i = 0; i < 20; ++i) {
       const auto f = sz.periode();
       if (!f.empty()) p = parse(f[0]);
     }
-    std::printf("erz/8 (cue only): tag %s, peak band %d, %.2f dB\n", p.kanal.c_str(), argmax(p.db, NB), p.db[B1K]);
-    PRUEF(p.ok && p.kanal == "erz/8");
+    std::printf("pad/2 (closed): tag %s, peak band %d, %.2f dB\n", p.kanal.c_str(), argmax(p.db, NB), p.db[B1K]);
+    PRUEF(p.ok && p.kanal == "pad/2");
     PRUEF(argmax(p.db, NB) == B1K);
   }
 
   // ---- S7: stall ----
   {
-    Szene sz(ERZ1, 1000.0, ERZ2, 5000.0);
-    sz.waehle(ERZ1 + 1);
+    Szene sz(DECK2, 1000.0, PAD1, 5000.0);
+    sz.waehle(DECK2 + 1);
     for (int i = 0; i < 4; ++i) sz.periode();
     std::vector<double> voll_us, leer_us;
     long max_rahmen = 0, min_rahmen = 1000;

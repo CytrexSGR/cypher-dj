@@ -149,8 +149,8 @@ test('narrow plates wrap instead of clipping; wide modules may grow to 200 px pe
 
 // ---- Task 6: spectrum of the channel on the device page (Decision 7) ----
 import { SpektrumLeihe, SpektrumAnsicht, spektrumIndex, spektrumFlaeche } from '../public/spectrum.js';
-import { GRAPH_KANAL_ART } from '../public/effects.js';
-const INSTRUMENTE = Object.keys(GRAPH_KANAL_ART).filter((k) => GRAPH_KANAL_ART[k] === 'instrument');
+import { CONTAINER } from '../public/kanaele.js';
+const INSTRUMENTE = CONTAINER.map((c) => c.pfad);   // the four containers A..D are the channels the device page can open
 const speicherAttrappe = () => { const m = new Map(); return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k), m }; };
 const leiheMit = (start = 0) => {
   const st = speicherAttrappe(), gesendet = [];
@@ -160,22 +160,22 @@ const leiheMit = (start = 0) => {
   return { l, st, gesendet, wert, beacon };
 };
 
-test('spectrum source index of all seven instrument channels (server.ts SPEKTRUM_QUELLEN)', () => {
-  assert.equal(INSTRUMENTE.length, 7);
-  assert.deepEqual(INSTRUMENTE.map(spektrumIndex), [6, 7, 9, 10, 11, 13, 14]);
+test('spectrum source index of the four container channels (pult.json wire order)', () => {
+  assert.equal(INSTRUMENTE.length, 4);
+  assert.deepEqual(INSTRUMENTE.map(spektrumIndex), [1, 2, 3, 4]);
   assert.equal(spektrumIndex('nope'), 0);
 });
 
 test('open sets the channel index and keeps the old value; a switch sets the new index; close restores the FIRST value and clears the key', () => {
-  const { l, st, gesendet } = leiheMit(19);   // EFFECTS showed the master sum
-  l.oeffnen('erz/5');
-  assert.deepEqual(gesendet, [['spektrum/kanal', 9]]);
-  assert.match(st.getItem('djk-spektrum-vorher'), /^[a-z0-9]+\|19$/);
-  l.oeffnen('pad/2');   // channel switch: the stored value stays the first one
-  assert.deepEqual(gesendet.at(-1), ['spektrum/kanal', 14]);
-  assert.match(st.getItem('djk-spektrum-vorher'), /^[a-z0-9]+\|19$/);
+  const { l, st, gesendet } = leiheMit(9);   // EFFECTS showed the master sum
+  l.oeffnen(INSTRUMENTE[0]);
+  assert.deepEqual(gesendet, [['spektrum/kanal', 1]]);
+  assert.match(st.getItem('djk-spektrum-vorher'), /^[a-z0-9]+\|9$/);
+  l.oeffnen(INSTRUMENTE[3]);   // channel switch: the stored value stays the first one
+  assert.deepEqual(gesendet.at(-1), ['spektrum/kanal', 4]);
+  assert.match(st.getItem('djk-spektrum-vorher'), /^[a-z0-9]+\|9$/);
   l.schliessen();
-  assert.deepEqual(gesendet.at(-1), ['spektrum/kanal', 19]);
+  assert.deepEqual(gesendet.at(-1), ['spektrum/kanal', 9]);
   assert.equal(st.getItem('djk-spektrum-vorher'), null);
   const n = gesendet.length;
   l.schliessen();   // a second close sends nothing
@@ -189,16 +189,16 @@ test('a close that never opened sends nothing (page init calls setzeGeraeteseite
 });
 
 test('page load with the key present: restored once when the row still shows an instrument channel, otherwise only cleared', () => {
-  const a = leiheMit(9); a.st.setItem('djk-spektrum-vorher', '0');
+  const a = leiheMit(1); a.st.setItem('djk-spektrum-vorher', '0');
   a.l.schliessen();   // the init-time close must not act on a key of the previous page life
   assert.deepEqual(a.gesendet, []);
-  a.l.beiStand(9);
+  a.l.beiStand(1);
   assert.deepEqual(a.gesendet, [['spektrum/kanal', 0]]);
   assert.equal(a.st.getItem('djk-spektrum-vorher'), null);
-  a.l.beiStand(9);
+  a.l.beiStand(1);
   assert.equal(a.gesendet.length, 1, 'only once');
-  const b = leiheMit(19); b.st.setItem('djk-spektrum-vorher', '0');   // somebody picked the master sum meanwhile: not ours to undo
-  b.l.beiStand(19);
+  const b = leiheMit(9); b.st.setItem('djk-spektrum-vorher', '0');   // somebody picked the master sum meanwhile: not ours to undo
+  b.l.beiStand(9);
   assert.deepEqual(b.gesendet, []);
   assert.equal(b.st.getItem('djk-spektrum-vorher'), null);
 });
@@ -208,8 +208,8 @@ test('without browser storage the old value is kept in memory', () => {
   const wert = { v: 3 };
   const l = new SpektrumLeihe({ speicher: { getItem() { throw new Error('x'); }, setItem() { throw new Error('x'); }, removeItem() { throw new Error('x'); } },
     kanaele: INSTRUMENTE, aktuell: () => wert.v, sende: (p, n) => { gesendet.push(n); wert.v = n; } });
-  l.oeffnen('erz/2'); l.schliessen();
-  assert.deepEqual(gesendet, [6, 3]);
+  l.oeffnen(INSTRUMENTE[1]); l.schliessen();
+  assert.deepEqual(gesendet, [2, 3]);
 });
 
 test('app.js: setzeGeraeteseite is the one place that opens and closes the lease; the tab switch and the first state snapshot use it too', () => {
@@ -235,22 +235,22 @@ test('two views both receive a frame; a frame of another source is ignored; the 
   const mk = () => ({ getContext: () => null, width: 600, height: 160 });
   const a = new SpektrumAnsicht({ leinwand: mk(), wahl: null, info: { textContent: '' }, sende: null });
   const b = new SpektrumAnsicht({ leinwand: mk(), wahl: null, info: { textContent: '' }, sende: null });
-  a.setzeQuelle(9); b.setzeQuelle(9);
-  const f = { kanal: 'erz/5', rahmen: 1, pegel: Array(29).fill(-300).join(',') };
+  a.setzeQuelle(1); b.setzeQuelle(1);
+  const f = { kanal: INSTRUMENTE[0], rahmen: 1, pegel: Array(29).fill(-300).join(',') };
   assert.ok(a.aufnehmen(f) && b.aufnehmen(f));
-  assert.ok(!a.aufnehmen({ ...f, kanal: 'erz/6' }));
+  assert.ok(!a.aufnehmen({ ...f, kanal: INSTRUMENTE[1] }));
   const d = { createElement: (t) => ({ tag: t, kinder: [], append(...k) { this.kinder.push(...k); }, setAttribute() {}, classList: { add() {} } }) };
   const { wurzel, ansicht } = spektrumFlaeche(d);
   assert.ok(wurzel && ansicht instanceof SpektrumAnsicht);
 });
 
 test('pagehide while the lease is held restores through the beacon (not the awaiting sender) and clears the key; without a lease it does nothing', () => {
-  const { l, st, gesendet, beacon } = leiheMit(19);
+  const { l, st, gesendet, beacon } = leiheMit(9);
   l.seiteVerlassen();
   assert.deepEqual(beacon, []);
-  l.oeffnen('erz/5');
+  l.oeffnen(INSTRUMENTE[0]);
   l.seiteVerlassen();
-  assert.deepEqual(beacon, [['spektrum/kanal', 19]]);
+  assert.deepEqual(beacon, [['spektrum/kanal', 9]]);
   assert.equal(gesendet.length, 1, 'only the open went through the normal sender');
   assert.equal(st.getItem('djk-spektrum-vorher'), null);
   l.schliessen();
@@ -258,31 +258,31 @@ test('pagehide while the lease is held restores through the beacon (not the awai
 });
 
 test('the stored key carries the page life id; a duplicated tab (inherited key, not reloaded) never restores or clears the original lease', () => {
-  const a = leiheMit(19);
-  a.l.oeffnen('erz/5');
-  const kopie = new SpektrumLeihe({ speicher: a.st, kanaele: INSTRUMENTE, aktuell: () => 9, sende: (p, n) => a.gesendet.push([p, n]), neuGeladen: false });
-  assert.match(a.st.getItem('djk-spektrum-vorher'), /^[a-z0-9]+\|19$/);
+  const a = leiheMit(9);
+  a.l.oeffnen(INSTRUMENTE[0]);
+  const kopie = new SpektrumLeihe({ speicher: a.st, kanaele: INSTRUMENTE, aktuell: () => 1, sende: (p, n) => a.gesendet.push([p, n]), neuGeladen: false });
+  assert.match(a.st.getItem('djk-spektrum-vorher'), /^[a-z0-9]+\|9$/);
   const n = a.gesendet.length;
-  kopie.beiStand(9);
+  kopie.beiStand(1);
   assert.equal(a.gesendet.length, n);
-  assert.match(a.st.getItem('djk-spektrum-vorher'), /\|19$/, 'key untouched');
-  const fremd = new SpektrumLeihe({ speicher: a.st, kanaele: INSTRUMENTE, aktuell: () => 9, sende: () => {}, id: 'zzz' });
-  fremd.oeffnen('erz/6'); fremd.schliessen();   // a foreign holder closing restores only what it stored itself
+  assert.match(a.st.getItem('djk-spektrum-vorher'), /\|9$/, 'key untouched');
+  const fremd = new SpektrumLeihe({ speicher: a.st, kanaele: INSTRUMENTE, aktuell: () => 1, sende: () => {}, id: 'zzz' });
+  fremd.oeffnen(INSTRUMENTE[1]); fremd.schliessen();   // a foreign holder closing restores only what it stored itself
   a.l.schliessen();
-  assert.deepEqual(a.gesendet.at(-1), ['spektrum/kanal', 19].map((x) => x));
+  assert.deepEqual(a.gesendet.at(-1), ['spektrum/kanal', 9].map((x) => x));
 });
 
 test('a snapshot while the lease is held sets the source again when the row does not point at the open channel (core restart)', () => {
   const { l, gesendet } = leiheMit(0);
-  l.oeffnen('erz/5');
+  l.oeffnen(INSTRUMENTE[0]);
   const n = gesendet.length;
-  l.beiStand(9);
+  l.beiStand(1);
   assert.equal(gesendet.length, n, 'row is right: nothing sent');
   l.beiStand(0);
-  assert.deepEqual(gesendet.at(-1), ['spektrum/kanal', 9]);
-  l.oeffnen('pad/1');
-  l.beiStand(9);
-  assert.deepEqual(gesendet.at(-1), ['spektrum/kanal', 13]);
+  assert.deepEqual(gesendet.at(-1), ['spektrum/kanal', 1]);
+  l.oeffnen(INSTRUMENTE[2]);
+  l.beiStand(1);
+  assert.deepEqual(gesendet.at(-1), ['spektrum/kanal', 3]);
 });
 
 test('app.js: pagehide handler with sendBeacon to /regler, unregistering of detached views, a per-reload flag', () => {

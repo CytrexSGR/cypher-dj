@@ -7,7 +7,7 @@ import { remixFenster } from './effects_gemeinsam.js';
 import { oeffneFensterRoh } from './window_open.js';
 import { $, $$, melde, postJson } from './page_state.js';
 import { graphenGeladen, graphenInfo, holePanel, kanalAdapter, schickeVorgaben } from './graphs_view.js';
-import { zeigePlaetze, aktuellesLayout } from './slots_view.js';
+import { zeigePlaetze } from './slots_view.js';
 import { fx3Zuweisung, sendeFxZuweisung, folgeZuweisung } from './beat_fx_view.js';
 // #tablet: the device page only, channel tabs on top (panel.css body.tablet). Entered by the address, left by changing it; nothing of the page header is reachable.
 // The Remix window (#remix): the page shows only the Remix plate with its channel row; the mixer's FX3 unit opens it. It is a full page
@@ -20,7 +20,7 @@ export function bindeRemixFenster() {
     oeffneFensterRoh({ adresse: '/#remix', name: 'djk-remix', breite: 1100, hoehe: 880, melde, meldung: 'The browser blocked the Remix window: allow pop-ups for this page', anpassen: true, klemme0: true });
   });
   for (const b of $$('[data-fx3-alle]')) b.addEventListener('click', () => {   // master key 3: every channel on FX3, or all off when all are on
-    const k = fx3Kanaele(aktuellesLayout()), z = fx3Zuweisung(), alle = k.length > 0 && k.every((x) => z[x]);
+    const k = fx3Kanaele(), z = fx3Zuweisung(), alle = k.length > 0 && k.every((x) => z[x]);
     for (const x of k) if (!!z[x] === alle) sendeFxZuweisung(2, x, !alle);
   });
   folgeZuweisung(zeigeRemix);
@@ -67,12 +67,12 @@ function remixEinpassen() {
   seiten.querySelectorAll('button').forEach((b, i) => { b.classList.toggle('an', i === remixSeite); b.setAttribute('aria-pressed', String(i === remixSeite)); });
 }
 export function zeigeRemix() {
-  const da = fx3Geladen(graphenGeladen), layout = aktuellesLayout(), z = fx3Zuweisung();
+  const da = fx3Geladen(graphenGeladen), z = fx3Zuweisung();
   for (const e of $$('[data-remix-ziel]')) {   // the FX3 unit of the mixer: the channels on 3, or what keeps FX3 from working
-    e.textContent = da ? zugewieseneText(z, layout) : fx3Fremd(graphenGeladen) || 'NO REMIX';
-    e.classList.toggle('an', da && fx3Kanaele(layout).some((k) => z[k]));
+    e.textContent = da ? zugewieseneText(z) : fx3Fremd(graphenGeladen) || 'NO REMIX';
+    e.classList.toggle('an', da && fx3Kanaele().some((k) => z[k]));
   }
-  for (const b of $$('[data-fx3-alle]')) { const k = fx3Kanaele(layout); b.classList.toggle('an', da && k.length > 0 && k.every((x) => z[x])); }
+  for (const b of $$('[data-fx3-alle]')) { const k = fx3Kanaele(); b.classList.toggle('an', da && k.length > 0 && k.every((x) => z[x])); }
   if (!remixFenster) return;   // the Remix plate lives in its own window (#remix)
   const wurzel = $('#platz-remix');
   const ziele = $('.remix-ziele', wurzel);
@@ -81,7 +81,7 @@ export function zeigeRemix() {
   etikett.className = 'remix-etikett';
   etikett.textContent = 'FX3 ON';
   ziele.append(etikett);
-  for (const k of fx3Kanaele(layout)) {
+  for (const k of fx3Kanaele()) {
     const b = document.createElement('button');
     b.textContent = kurzName(k);
     b.classList.toggle('an', !!z[k]);

@@ -8,7 +8,8 @@ import { ladeSetListe } from './library_view.js';
 import { istGeraeteseite, setzeBereich, setzeGeraeteseite } from './effects_gemeinsam.js';
 import { lernen } from './learn_view.js';
 import { hoerId, vorhoeren, vorhoerenSpringe, vorhoerenStopp } from './prelisten_view.js';
-import { instanzen, neueInstanz, waehleRolle } from './instanzen.js';
+import { instanzen } from './instanzen.js';
+import { bindeStromZeilen } from './strudel_module.js';
 // Tablet view (#tablet, task 10): the device page is the whole page and has no way out; bindeTablet() sets it, setzeGeraeteseite keeps the layer open.
 export let tabletModus = false;
 
@@ -144,11 +145,7 @@ export function bindeAnsicht() {
   setzeAnsicht(a);
 }
 export function bindeMusterFeld() {
-  for (const w of $$('#deck-c .instanz')) instanzen.set(Number(w.dataset.strom), neueInstanz(w));
-  for (const b of $$('.rollen [data-rolle]')) b.addEventListener('click', () => waehleRolle(Number(b.dataset.rolle)));
-  let gemerkt = 1;
-  try { gemerkt = Number(localStorage.getItem('djk-rolle')) || 1; } catch { /* Vorgabe */ }
-  waehleRolle([1, 2, 3].includes(gemerkt) ? gemerkt : 1);
+  bindeStromZeilen();   // the rows of the Strudel module (streams 1..3 as defaults), before the graph list arrives (zeigeGraphWahl fills their pickers)
   const alle = () => { for (const i of instanzen.values()) i.hole(); };
   setInterval(alle, 1000);
   alle();

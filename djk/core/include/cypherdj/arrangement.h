@@ -22,6 +22,7 @@
 #include "cypherdj/arr_returns.h"
 #include "cypherdj/arr_track_phase.h"
 #include "cypherdj/arr_playback.h"
+#include "cypherdj/pult_table.h"
 #include <cypherdj/dsp/djfilter.h>
 #include <cypherdj/dsp/isolator.h>
 #include "cypherdj/spsc_ring.h"
@@ -47,17 +48,23 @@ constexpr int ARR_STREIFEN = ARR_PM + 1 + ARR_RETURNS;
 // Automation slots: the lane machinery (auto_block and its state arrays) runs over the 32 tracks (slot = track) and the 4 returns (slot ARR_SPUREN + r, field 0 = fader only).
 // Groups and the PM have no slot: the master takes no volume curve.
 constexpr int ARR_AUTO_SLOTS = ARR_SPUREN + ARR_RETURNS;
-// Fields per strip: 0 fader (dB), 1 pan, 2 mute, 3 solo. Tracks and groups: 4..7 send to return 1..4 (dB). Returns: 4 hall on, 5..10 hall pre, decay, size, low, highcut, tail.
-constexpr int ARR_FELDER = 13;   // loop deck channel strip KZ1: 11 -> 13 (the track EQ fields 10..12)
+// Fields per strip: 0 fader (dB), 1 pan, 2 mute, 3 solo. Tracks and groups: 4..7 send to return 1..4 (dB), 13..16 send to return 5..8. Returns: 4 hall on, 5..10 hall pre, decay, size, low, highcut, tail.
+constexpr int ARR_FELDER = 21;   // loop deck channel strip KZ1: 11 -> 13 (the track EQ fields 10..12); container core K6: 13 -> 17 (the sends to returns 5..8, fields 13..16); K7: 17 -> 21 (track trim, fields 17..20: ARR_F_TRIM and the three kill fields; the track pfl rides on ARR_F_CUE)
 constexpr int ARR_F_SEND0 = 4;
+constexpr int ARR_F_SEND4 = 13;   // K6: the sends to returns 5..8 sit behind the track EQ fields so that no existing field moves
+constexpr int arr_f_send(int r) { return r < 4 ? ARR_F_SEND0 + r : ARR_F_SEND4 + (r - 4); }   // field of the send to return r (0-based)
 // Live modules task 6: field 8 of a GROUP strip is its headphone cue switch (grp/<n>/cue). Groups use 0..3 and the sends 4..7, so 8 is free there (the return fields 8..10 belong to the return strips).
 constexpr int ARR_F_CUE = 8;
-static_assert(ARR_F_CUE >= ARR_F_SEND0 + ARR_RETURNS && ARR_F_CUE < ARR_FELDER, "the group cue field must not collide with the sends");
+static_assert(ARR_F_CUE >= ARR_F_SEND0 + 4 && ARR_F_CUE < ARR_FELDER, "the group cue field must not collide with the sends");
 constexpr int ARR_F_FILTER = 9;   // loop deck K7a: spur/<n>/filter of a track (-1..+1); groups, returns and the PM never use it
 static_assert(ARR_F_FILTER > ARR_F_CUE && ARR_F_FILTER < ARR_FELDER, "the track filter field must not collide with the sends or the group cue field");
 // Loop deck channel strip KZ1: spur/<n>/eq/{tief,mitte,hoch} of a track (dB, -200 = kill), fields 10, 11, 12. Return strips use 8..10 for their hall values and tracks never read those, so the index 10 overlaps by design.
 constexpr int ARR_F_EQ0 = 10;
 static_assert(ARR_F_EQ0 > ARR_F_FILTER && ARR_F_EQ0 + 2 < ARR_FELDER, "the track EQ fields must follow the filter field and fit into the strip");
+constexpr int ARR_F_TRIM = 17;    // container core K7: spur/<n>/trim of a track (dB, before the strip)
+constexpr int ARR_F_KILL0 = 18;   // container core K7: spur/<n>/kill/{tief,mitte,hoch} of a track (fields 18..20, 0/1)
+static_assert(ARR_F_TRIM > arr_f_send(ARR_RETURNS - 1) && ARR_F_KILL0 == ARR_F_TRIM + 1 && ARR_F_KILL0 + 2 < ARR_FELDER, "the track trim and kill fields follow the sends and fit into the strip");
+static_assert(ARR_F_SEND4 > ARR_F_EQ0 + 2 && arr_f_send(ARR_RETURNS - 1) < ARR_FELDER, "the sends to returns 5..8 follow the EQ fields and fit into the strip");
 static_assert(ARR_KETTE_PM == ARR_PM && ARR_KETTE_RET0 == ARR_RET0 && ARR_KETTEN == ARR_STREIFEN, "the chain index is the strip index");
 static_assert(ARR_BLOCK == INS_BLOCK, "the insert scratch buffers must match the block size");
 static_assert(ARR_BLOCK == ARR_RET_BLOCK, "the return buffers must match the block size");
@@ -283,6 +290,7 @@ class Arrangement {
     if (slot >= 1 && slot <= ARR_WIRT_SLOTS) senke_wirt_[slot - 1] = s;
     spur_plan_gueltig_ = false;
   }
+  void setze_senke_strom(ArrSenke* s) { senke_strom_ = s; spur_plan_gueltig_ = false; }   // container core K7: the sink of the strom tracks (ArrArt::strom)
   void setze_senke_rack(ArrSenke* s) { senke_rack_ = s; spur_plan_gueltig_ = false; }   // 1.9 U6: the sink of the instrument-rack tracks (ArrArt::rack)
   void setze_filter_guete(double q) { for (cypherdj::dsp::DjFilter& f : filt_) f.setze_guete(q); }   // K7b: the Q of the track filters (kern.toml filter_guete, as the channel filters); not in the callback
   void sperre_metronom(bool ja) { metronom_gesperrt_ = ja; }   // Prüfmodus und Render: das Metronom klingt nie
@@ -362,15 +370,14 @@ class Arrangement {
     q.monitor = static_cast<int8_t>(monitor);
     q.aufnahme = aufnahme_laeuft;
   }
-  // ---- 1.10 slice 5 U2b: DJ sources of a sidechain key (plan E2, E6, E7). Before block() of the same cycle the kernel hands the inputs of the production mixer: l[i], r[i] for i = 0..3
-  // are deck/1..4, i = 4 is erz/1 (the Strudel share: a host return into erz/1 is added after the block and is not in it). The pointers are valid for this one block, a nullptr (or
-  // l = r = nullptr) is a silent input. The kernel hands them ALWAYS, live and in a render: a render has no deck playing and its inputs are silent by construction (E7).
-  static constexpr int DJ_EINGAENGE = 5;
+  // ---- 1.10 slice 5 U2b, K4: sources of a sidechain key (plan E2, E6, E7; D-V3). Before block() of the same cycle the kernel hands ARR_SCHLUESSEL buffers: l[i], r[i] for i = 0..3 are the containers
+  // A..D (deck/1..4 in the file), i = 4..19 the stream buffers 1..16 (strom/1..16, erz/1 = stream 1). The pointers are valid for this one block, a nullptr (or l = r = nullptr) is a silent input.
+  // The kernel hands them ALWAYS, live and in a render: a render has no deck playing and its inputs are silent by construction (E7).
   void dj_schluessel(const float* const* l, const float* const* r);
-  // ---- DJ view places (decision 7, ADR 038): the DJ channel outputs. Before block() of the same cycle the kernel hands the six stereo pairs (index 0 = pad/1, 1 = pad/2, 2..5 = deck/1..deck/4, each of the
+  // ---- DJ view places (decision 7, ADR 038; K5): the DJ outputs = the containers. Before block() of the same cycle the kernel hands the four stereo pairs (index i = container i + 1 = A..D, each of the
   // block's length, zeroed by the kernel) that the groups with a DJ output add into instead of the production master. The pointers are good for this one block and are cleared at its end (like dj_schluessel). A channel without a
   // pair (nullptr), or the offline switch, sends such a group to the master: nothing is lost and a caller without the pairs hears it on the master. No allocation, no lock: pointer stores.
-  static constexpr int DJ_KANAELE = 6;   // the DJ channels a group may lead into: nr 1..6 = pad/1, pad/2, deck/1..deck/4 (ADR 038)
+  static constexpr int DJ_KANAELE = PULT_CONTAINER;   // K5: the DJ outputs a group may lead into: nr 1..4 = containers A..D (DJ output n is container n - 1; was nr 1..6 = pad/1, pad/2, deck/1..deck/4, ADR 038)
   // The caller passes exactly DJ_KANAELE entries per side (an array of that size; an entry may be nullptr for a channel without a pair): the parameter types say so, so a later widening cannot read past the end.
   void dj_ausgang(float* const (&l)[DJ_KANAELE], float* const (&r)[DJ_KANAELE]) noexcept {
     for (int i = 0; i < DJ_KANAELE; ++i) {
@@ -392,7 +399,7 @@ class Arrangement {
   // ---- Zustand (nur im Callback-Faden lesen)
   ArrZustand zustand(const Karte& k, int64_t s) const;
   const ArrSnapshot* snapshot() const { return snap_; }
-  // DJ view places (decision 5): the DJ channel the group `gruppe` (its number 1..ARR_GRUPPEN, as in the snapshot file) leads into: 0 none (master or a parent group), 1 = pad/1, 2 = pad/2, 3..6 = deck/1..deck/4
+  // DJ view places (decision 5): the DJ channel the group `gruppe` (its number 1..ARR_GRUPPEN, as in the snapshot file) leads into: 0 none (master or a parent group), 1..4 = containers A..D (K5)
   int dj_nr(int gruppe) const noexcept { return snap_ && gruppe >= 1 && gruppe <= ARR_GRUPPEN ? snap_->gruppe_dj[gruppe - 1] : 0; }
   // counts the swaps (tausche): a new value is a new snapshot, whatever its address (the loader frees and allocates, an address can come back); sinks that act once per snapshot compare this, not the pointer
   uint64_t snapshot_generation() const { return snap_gen_; }
@@ -498,6 +505,10 @@ class Arrangement {
     return zyklus_start + std::min<int64_t>(versatz, erster - 1);
   }
   uint64_t noten_verloren() const { return noten_verloren_; }
+  // 2026-11-21 (Andreas: variant a): note-ons of a muted pattern are not sent, so its sink falls silent and rests (the Baukasten sink resets after 1 s of silence and
+  // computes nothing until a note) instead of computing at full cost behind a closed mute. Counted here. setze_stumm_ruhe(false) = the old way (test seam).
+  uint64_t noten_stumm() const { return noten_stumm_; }
+  void setze_stumm_ruhe(bool an) { stumm_ruhe_ = an; }
   // Ereignisse für Quittungen und /zustand/arr: Sample des letzten Einsatzes und Endes (−1: keiner); nach dem Lesen −1
   int64_t hole_gestartet() { const int64_t v = gestartet_bei_; gestartet_bei_ = -1; return v; }
   int64_t hole_gestoppt() { const int64_t v = gestoppt_bei_; gestoppt_bei_ = -1; return v; }
@@ -909,8 +920,8 @@ class Arrangement {
   float ret_pre_w_[ARR_RETURNS] = {};             // 1.10 slice 4a: blend 0 = post .. 1 = pre of the sends into each return (state across blocks)
   float ret_pre_t_[ARR_RETURNS][ARR_BLOCK] = {};  // the same per sample for the current block
   ArrInserts ins_;                               // 1.10 slice 4a: pooled insert stages (built in the constructor)
-  const float* dj_l_[DJ_EINGAENGE] = {};         // 1.10 slice 5 U2b: the DJ inputs of this block (dj_schluessel), reset at the end of block()
-  const float* dj_r_[DJ_EINGAENGE] = {};
+  const float* dj_l_[ARR_SCHLUESSEL] = {};         // 1.10 slice 5 U2b: the DJ inputs of this block (dj_schluessel), reset at the end of block()
+  const float* dj_r_[ARR_SCHLUESSEL] = {};
   float* dj_aus_l_[DJ_KANAELE] = {};             // DJ view places: the DJ pairs of this block (dj_ausgang), reset at the end of block()
   float* dj_aus_r_[DJ_KANAELE] = {};
   bool dj_master_ = false;                       // DJ view places: render only (setze_dj_als_master), never true in the live kern
@@ -939,9 +950,9 @@ class Arrangement {
   // group faders into the master. A group nobody feeds takes the target of the snapshot at once: the order of the group passes (parents first) comes from the snapshot. `ziel_ok_` / `gziel_ok_`: the strip's target in ziel_ / gziel_ was taken while the strip was held; set and read in ziele_pruefen only.
   bool ziel_ok_[ARR_SPUREN] = {};
   bool gziel_ok_[ARR_GRUPPEN] = {};
-  // Production plan task 8 (D10, D11): the rows spur/<slot>/bk/<k> as a transient override of the Baukasten knobs. regler_bkz_: row -> slot * 32 + (k - 1), -1: none (regler_binden).
-  // bk_ueber_[slot][k]: the written value and flag; the flag is cleared by every tausche(). bk_slot_[i]: slot (0..7) of track index i in the CURRENT snapshot (the running number among
-  // the tracks with the device bk, ascending track number), -1: not a bk track, or a bk track beyond the 8th (ARR_BK_MAX is 16; those have no override row). bk_ueber_melden() reports every written value to the bk sink in every block, before auto_geraet().
+  // Production plan task 8 (D10, D11): the rows spur/<slot>/bk/<k> as a transient override of the Baukasten knobs. regler_bkz_: row -> slot * BK_UEBER_KNOEPFE + (k - 1), -1: none (regler_binden).
+  // bk_ueber_[slot][k]: the written value and flag; the flag is cleared by every tausche(). bk_slot_[i]: slot (0..SPUR_BK_SLOTS-1) of track index i in the CURRENT snapshot (the running number among
+  // the tracks with the device bk, ascending track number), -1: not a bk track (every bk track has a slot: SPUR_BK_SLOTS == ARR_BK_MAX). bk_ueber_melden() reports every written value to the bk sink in every block, before auto_geraet().
   static constexpr int BK_UEBER_SLOTS = cypherdj::stellwerk::SPUR_BK_SLOTS, BK_UEBER_KNOEPFE = cypherdj::stellwerk::SPUR_BK_KNOEPFE;
   struct BkUeber {
     float wert = 0.0f;
@@ -980,8 +991,10 @@ class Arrangement {
   int q_m_ = 0;
   static constexpr int SPUR_MIN_LAST = 512;     // live units times block length below which the phase stays serial; task 9 sweep: 4 units already win (-60 us at 256, -25 us at 128), fewer were not measured
   bool spur_seriell_weil(int m);
+  bool spur_konto_aus_ = false;   // set by spur_seriell_weil: this phase is serial because the track account is off (the serial phase is then measured)
   ArrSenke* senke_wirt_[ARR_WIRT_SLOTS] = {};
   ArrSenke* senke_rack_ = nullptr;
+  ArrSenke* senke_strom_ = nullptr;   // container core K7
   // Fix F2 und K2b-Rest (a): je Senke, die eine Spur beim Tausch verlassen hat, ein Eintrag (Senke, Spur); im nächsten
   // Block blendet jede dieser Senken die Spur einmal aus. Wechselt eine Spur in einem Zyklus mehrmals (zwei /k/arr/laden vor
   // demselben Block), bleibt jede verlassene Senke stehen, nicht nur die letzte. Feste Größe, keine Allokation; ein Paar
@@ -998,6 +1011,11 @@ class Arrangement {
   int n_offen_ = 0;
   int64_t gesendet_bis_[ARR_SPUREN] = {};   // je Spur: Noten mit Ziel-Sample < gesendet_bis sind hinaus
   uint64_t noten_verloren_ = 0;
+  uint64_t noten_stumm_ = 0;     // note-ons not sent because their track was muted at their sample (note_stumm)
+  bool stumm_ruhe_ = true;
+  int64_t noten_s0_ = 0;         // the block noten_block() works on: the mute course w_[i][2].vl covers [noten_s0_, noten_s0_ + noten_m_)
+  int noten_m_ = 0;
+  bool note_stumm(int spur, const ArrSenke* se, int64_t an) const;
   // 1.8 T7b: the live table, per track and key the sink that got the live On (nullptr = not held) and the stamp of that On (live_aus_bis leaves a key that has not begun at the
   // stop sample). On the heap, made by the constructor: 64 KB inside the object would push test mains that hold a dozen Arrangements on the stack over the 8 MB limit.
   struct LiveTab {

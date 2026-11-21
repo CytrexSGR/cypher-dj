@@ -178,7 +178,7 @@ ports itself with JACK names (under `pw-jack` the null sink is called `cypher-st
   with 12 tests plus the attack cases from 09 NP (`angriff.mjs`) as regression. The JS prototype cost on
   average about 2 µs of algorithm per block, but in the worst block 7.053 µs (JS runtime, 09 NP b3): hence
   C++.
-- **Decks 1 to 4** (ADR 007, 020): band before the stretcher following the Mixxx pattern (loop, band roll with shadow,
+- **Decks 1 to 4** (ADR 007, 020; a deck player sounds through container N, ADR 043): band before the stretcher following the Mixxx pattern (loop, band roll with shadow,
   beat jump, hot cues, every command with a target beat; 03 §3.2, test 4d: band 0.0 frames deviation, R3 kicks after
   roll −0.00 samples). Three listening paths: **direct** (set tempo equals base of the file, bit-exact, no stretcher),
   **shadow stretcher** (R3, warm, takes over on deviation with a 20 ms cosine fade), **roll buffer** behind
@@ -187,7 +187,8 @@ ports itself with JACK names (under `pw-jack` the null sink is called `cypher-st
   Phase control per deck against `sample_at` on the stretcher path (02 NP K3/N5). Stretcher (provisional, see ADR 006 addendum 2026-09-23): at most 2 R3 per
   work thread (01 NP K1: 8 R3 with two phases in pull mode 377 overruns in 60 s), created and run through
   once in the loading thread (01 NP K3).
-- **Channel strips** for decks, generator channels, pads and four group buses: trim (from `ziel_lufs`), LR8 isolator
+- **Containers (ADR 043, container core; replaces the former channel list of this bullet).** The console has four containers A to D (`deck/1`, `deck/2`, `pad/1`, `pad/2`), each with exactly one strip and exactly one input: `leer`, `player` (deck player N) or `modul` (the DJ output of a top group of the arrangement engine), chosen with `/k/container/quelle` and blended over 480 samples. Every source writes its own source buffer with one writer (streams 1 to 16, deck players, inputs `ein_1..4`), so `Kern::audio` has three stages: `quellen_block`, the arrangement block, then the mixer. The Strudel module is a group of `strom` tracks in the arrangement engine; the paths `erz/<n>/*` are aliases that the page server resolves onto those tracks. Production and previewer are services without a mixer channel. The engine has eight returns. Nothing reaches the master past a container.
+- **Channel strips** (strip DSP, now one per container and one per bus) for four containers and four group buses: trim (from `ziel_lufs`), LR8 isolator
   246/2484 Hz with kill (second-order ramps), TPT filter on a control, PFL tap and measurement tap after the filter
   before the fader, fader, crossfader assignment, four sends after the fader, target master or bus (assignment table,
   A17; ADR 008, `INTERFACES.md` §1.5).

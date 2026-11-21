@@ -62,7 +62,7 @@ test('loopdeck: every aktion hits its route with the right body and the cypher h
   assert.deepEqual(Object.keys(e.kill.properties), ['tief', 'mitte', 'hoch']);
   assert.deepEqual(Object.keys(e.send.properties), ['hall', 'delay']);
   assert.deepEqual([e.graph.type, e.an.type], ['string', 'boolean']);
-  for (const grund of ['kein_platz', 'graph_unbekannt', 'tief', 'mitte', 'hoch']) assert.ok(w.description.includes(grund), `description names ${grund}`);
+  for (const grund of ['kein_platz', 'graph_unbekannt', 'tief', 'mitte', 'hoch', 'container', 'strip']) assert.ok(w.description.includes(grund), `description names ${grund}`);
   for (const grund of ['ki_gestoppt', 'zelle_leer', 'deck_voll', 'audio_budget', 'zu_lang', 'quelle_unbekannt', 'kein_loopdeck', 'nichts_gespielt', 'set_unbekannt', 'projekt_offen', 'modul_nicht_umwandelbar', 'set_defekt', 'audio_fehlt', 'keine_uhr', 'zelle_laedt']) {
     assert.ok(w.description.includes(grund), `description names ${grund}`);
   }

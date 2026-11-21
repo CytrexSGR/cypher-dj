@@ -165,7 +165,7 @@ void Kern::einsortieren25(const Befehl& c) {
       if (send >= 0) send = 5 - send;   // fx/3 <-> fx/4
 #endif
 #ifndef CYPHERDJ_MUTATION_KANAL_GRAPH_KI_OFFEN
-      if (q == sw::Quelle::cypher && sw_->ki_gestoppt()) {  // §4.7 Stopp-Taste, Muster LOOP_LADEN
+      if (q == sw::Quelle::cypher && sw_->ki_gestoppt()) {  // §4.7 Stopp-Taste, Muster MITSCHNITT
 #ifndef CYPHERDJ_MUTATION_KANAL_GRAPH_KI_LECK
 #ifdef CYPHERDJ_MUTATION_FX_GRAPH_KI_LECK
         if (send < 0)   // mutation: only the send path leaks
@@ -230,21 +230,28 @@ void Kern::einsortieren25(const Befehl& c) {
       quittung(c.id, c.quelle, 3, sample_, beat0);
       break;
     }
-    case Befehl::PLATZ_KANAL: {  // DJ view places 3 and 4 (§4.10): at the block start; the net layer has checked, checked here as well
-      if (c.deck < 1 || c.deck > 2 || c.nr < 0 || c.nr >= Mixer::PLATZ_INHALTE) {
+    case Befehl::CONTAINER_QUELLE: {  // container core K8 (§4.10 /k/container/quelle): nr = container 1..4, an = art 0 leer, 1 player, 2 modul; at the block start, the net layer has checked too
+      if (q == sw::Quelle::cypher && sw_->ki_gestoppt()) {   // §4.7 stop key, before the range check like in the net layer
+        quittung(c.id, c.quelle, 6, sample_, beat0, "ki_gestoppt");
+        break;
+      }
+      if (c.nr < 1 || c.nr > PULT_CONTAINER || c.an < CONTAINER_ART_LEER || c.an > CONTAINER_ART_MODUL) {
         quittung(c.id, c.quelle, 6, sample_, beat0, "ausserhalb_bereich");
         break;
       }
-      mixer_->platz_kanal_setze(c.deck - 1, c.nr);
+      const int art_vorher = container_art_[c.nr - 1];
+      container_art_[c.nr - 1] = c.an;   // the weights follow sample by sample in container_fuellen (blend over CONTAINER_BLENDE)
       quittung(c.id, c.quelle, 1, sample_, beat0);
+#ifndef CYPHERDJ_MUTATION_PLAYER_WECHSEL_OFFEN
+      if (c.an == CONTAINER_ART_PLAYER && art_vorher != CONTAINER_ART_PLAYER) container_player_schliessen(c.nr - 1, beat0, q == sw::Quelle::andreas);
+#endif
       Ereignis x{};
-      x.art = Ereignis::PLATZ_KANAL;
+      x.art = Ereignis::CONTAINER_QUELLE;
       x.sample = sample_;
       x.beat = beat0;
-      x.deck = c.deck;
-      x.status = c.nr;
+      x.deck = c.nr;
+      x.status = c.an;
       melde(x);
-      quittung(c.id, c.quelle, 2, sample_, beat0);
       quittung(c.id, c.quelle, 3, sample_, beat0);
       break;
     }
@@ -297,7 +304,7 @@ void Kern::einsortieren25(const Befehl& c) {
       quittung(c.id, c.quelle, 3, sample_, beat0);
       break;
     }
-    case Befehl::KI_STOPP: sw_->ki_stopp(c.id, q); break;  // §4.7 (F13: wartende cypher-Loops verwirft Kern::audio)
+    case Befehl::KI_STOPP: sw_->ki_stopp(c.id, q); break;  // §4.7
     case Befehl::KI_FREI: sw_->ki_frei(c.id, q); break;
     case Befehl::KI_SPUR:
       if (sw_->ki_spur(c.id, q, c.liste)) ki_spur_id_ = c.id;   // eine abgelehnte Liste nimmt der gültigen im selben Zyklus die Kennung nicht
@@ -450,23 +457,27 @@ void Kern::pegel_melden(int64_t n0, int n) {
     for (int i = 1; i < 7; ++i) e.pegel[i] = -200.0f;
     melde(e);
   };
-  // ADR 038: a deck channel reports while a track is loaded OR a group of the playback leads into it (a SEQ deck on an empty deck). dj_gereicht_[2 + d] is the answer of the last sub-block of this
+  // ADR 038: a deck channel reports while a track is loaded OR a group of the playback leads into it (a SEQ deck on an empty deck). deck_gereicht(d) is the answer of the last sub-block of this
   // cycle (dj_kanal_aktiv before block(), the held tail of a cleared group included); pegel_melden runs in the same callback right after audio(), so it is a plain member read of the audio thread.
-  static_assert(DECKS == 4 && Arrangement::DJ_KANAELE == 2 + DECKS, "DJ channels 3..6 are deck/1..deck/4");
-  for (int d = 0; d < DECKS; ++d) {
-    if (decks_->deck[d].geladen() || dj_gereicht_[2 + d]) melden(Mixer::kanal_name(d), d);
+  for (int d = 0; d < MIX_QUELLEN; ++d) {   // K9: the four containers; the strips pad/1, pad/2 (containers C, D) report always, as before
+    if (d >= 2 || decks_->deck[d].geladen() || deck_gereicht(d)) melden(Mixer::kanal_name(d), d);
     else mixer_->spitze_lesen(d);
   }
-  melden("erz/1", 4);  // Plan 2026-09-27: Strudel-Kanal, immer (auch ohne Strom: −200)
-  melden("erz/2", 5);  // Studio S1: Bass
-  melden("erz/3", 6);  // Studio S1: Melodie
-#ifndef CYPHERDJ_MUTATION_PEGEL_OHNE_ERZ567
-  melden("erz/5", 8);  // S18: Baukasten instruments on erz/5..7, always (-200 without a stream), like pad
-  melden("erz/6", 9);
-  melden("erz/7", 10);
+  for (int s = 0; s < QP_STROEME; ++s) {   // K4 (F9): strom/<n> for every stream that is set, from its buffer (peak since the last report, -200 for none); no literal channel list
+    const float sp = strom_spitze_[s];
+    strom_spitze_[s] = 0.0f;
+#ifndef CYPHERDJ_MUTATION_PEGEL_STROM_ALLE   // error case: the unset streams report too
+    if (!erz_->strom_gesetzt(s + 1)) continue;
 #endif
-  melden("pad/1", 12);  // MVP 2: Loop-Boxen, immer (ohne Loop −200)
-  melden("pad/2", 13);
+    Ereignis e{};
+    e.art = Ereignis::PEGEL;
+    e.sample = n0;
+    std::snprintf(e.pfad, sizeof e.pfad, "strom/%d", s + 1);
+    e.pegel[0] = sp > 1e-10f ? 20.0f * std::log10(sp) : -200.0f;
+    for (int i = 1; i < 7; ++i) e.pegel[i] = -200.0f;
+    melde(e);
+  }
+  for (int k = MIX_QUELLEN; k < MIX_KANAELE; ++k) melden(Mixer::kanal_name(k), k);   // K9: bus/1..4
   for (int i = 0; i < ARR_SPUREN; ++i) {  // D1 K1 (§5.6): spur/<n> je Spur mit Inhalt, Spitze nach dem Spur-Fader
     const float sp = arr_->spitze_lesen(i);
     if (!arr_->spur_belegt(i)) continue;
@@ -740,7 +751,7 @@ void Kern::audio(int64_t n0, int n) {
     for (int i = 0; i < na; ++i) {
       mixer_->verlauf(a[i].regler, a[i].verlauf);
       decks_verlauf(a[i].regler, a[i].verlauf);  // Scheibe 31: stem/* ins Deck
-      keylock_verlauf(a[i].regler, a[i].verlauf, s0, m);  // Keylock Task 3: Regler keylock an Decks und Boxen
+      keylock_verlauf(a[i].regler, a[i].verlauf, s0, m);  // Keylock Task 3: Regler keylock an den Decks
       arr_->verlauf(a[i].regler, a[i].verlauf);  // D1 K1: spur/<n>/* ins Modul Arrangement (Verlauf je Sample)
       if (const int o = bk_ort_[a[i].regler]; o >= 0) {
 #ifdef CYPHERDJ_MUTATION_BK_RAMPE_TOTZONE   // failure case S23: a change smaller than 0.005 inside one block is dropped, so every slow ramp stands still and only jumps get through
@@ -750,20 +761,10 @@ void Kern::audio(int64_t n0, int n) {
       }
     }
     arr_griffe_pruefen(s0, m);  // 1.12 S3 (D1): grips on spur/n/{fader,pan,mute,solo} override the lanes from their sample, before arr_->block
-    decks_block(s0, m);  // Scheibe 31: Decks in die Eingänge deck/1..4, Starts und Stopps am Sample
     ErzAusloeser ausl;
-    erz_->block(karte, s0, m, erz_l_, erz_r_, midi_aus_, zyklus_n0_, &ausl);  // Plan 2026-09-27 + Studio S5 (MIDI-Ströme)
-    {  // Baukasten S3a: ausgeklungene Graphen zur Freigabe in den Netz-Faden
-      CypherBk* frei[8];
-      for (int nf; (nf = erz_->bk_frei(frei, 8)) > 0;)
-        for (int i = 0; i < nf; ++i) {
-          Ereignis x{};
-          x.art = Ereignis::ERZ_BK_ALT;
-          x.sample = s0;
-          x.zeiger = frei[i];
-          melde(x);
-        }
-    }
+#ifndef CYPHERDJ_MUTATION_QUELLEN_NACH_ARR   // mutation (test_kern_stufen_reihenfolge): stage 1 runs behind stage 2
+    quellen_block(s0, m, off, ausl);   // container core K3: stage 1, the source buffers (decks, streams, host returns, previewer, inputs, duck), see core_sources.cpp
+#endif
     // D1 K1 (Spec 2.2): Arrangement nach dem Erzeuger, vor Rückwegen, Prüfklicks und Mixer. Summe in den Eingang von
     // erz/4, Metronom in die Master-Summe vor dem Limiter oder in die PFL-Summe. Ein KI-Stopp beendet Cyphers wartenden Start und ihren Freeze, einen laufenden Transport nicht (E-a).
     if (sw_->ki_gestoppt()) {
@@ -779,9 +780,8 @@ void Kern::audio(int64_t n0, int n) {
       for (int nr = 1; nr <= ARR_SPUREN; ++nr) {
         const RecSpur* rs = aufnahme_.spur(nr);
         if (!rs || !rec_extern(rs->eingang)) continue;
-        const float* pl = ein_bank_.links(rs->eingang);
-        const float* pr = ein_bank_.rechts(rs->eingang);
-        arr_->monitor_quelle(nr - 1, pl ? pl + off : nullptr, pr ? pr + off : nullptr, rs->modus, rs->monitor.load(std::memory_order_relaxed), nimmt);
+        const int ke = rs->eingang - 1;   // rec_extern: 1..EIN_PAARE
+        arr_->monitor_quelle(nr - 1, ein_da_[ke][0] ? quell_.ein_l[ke] : nullptr, ein_da_[ke][1] ? quell_.ein_r[ke] : nullptr, rs->modus, rs->monitor.load(std::memory_order_relaxed), nimmt);
       }
     }
     arr_bk_->takt(karte.beat_at((double)s0), karte.bpm_at((double)s0) / 60.0 / 48000.0);   // S20: beat and tempo for the graphs of the bk tracks
@@ -798,42 +798,25 @@ void Kern::audio(int64_t n0, int n) {
       }
       arr_->dj_ausgang(dl, dr);
     }
-    arr_->dj_schluessel(erz_l_, erz_r_);   // 1.10 slice 5 U2b (E6, E7): deck/1..4 and erz/1 (indices 0..4) for the sidechain keys; always handed, live and in a render (a render's inputs are silent)
+    arr_->dj_schluessel(schl_l_, schl_r_);   // 1.10 slice 5 U2b (E6, E7), K4: containers A..D and the streams 1..16 for the sidechain keys; always handed, live and in a render (a render's inputs are silent)
     for (int h = 1; h <= ARR_INS_HOST; ++h)   // plan 1.11 T4: the effect-host ports of this cycle, offset to this sub-block (pointer stores; a port that is not there stays nullptr: the stage plays dry)
       arr_->host_stufe().setze_zeiger(h, ins_aus_[h - 1][0] ? ins_aus_[h - 1][0] + off : nullptr, ins_aus_[h - 1][1] ? ins_aus_[h - 1][1] + off : nullptr,
                                       ins_rueck_[h - 1][0] ? ins_rueck_[h - 1][0] + off : nullptr, ins_rueck_[h - 1][1] ? ins_rueck_[h - 1][1] + off : nullptr);
     arr_->setze_zyklus_start(zyklus_ns_ != 0 ? zyklus_ns_ + static_cast<int64_t>(off) * 1000000000LL / 48000 : 0);   // mehrkern 3.2: the nominal start of this sub-block, for the time gates of phase Q
-    arr_->block(karte, s0, m, erz_l_[arr_kanal_], erz_r_[arr_kanal_], mixer_->summe_eingang_l(),
+    std::memset(prod_l_, 0, sizeof(float) * static_cast<size_t>(m));   // Arrangement::block ADDS into its output: a zeroed scratch, then the production service of the mixer
+    std::memset(prod_r_, 0, sizeof(float) * static_cast<size_t>(m));
+    arr_->block(karte, s0, m, prod_l_, prod_r_, mixer_->summe_eingang_l(),
                 mixer_->summe_eingang_r(), mixer_->pfl_eingang_l(), mixer_->pfl_eingang_r());
+#ifdef CYPHERDJ_MUTATION_QUELLEN_NACH_ARR
+    quellen_block(s0, m, off, ausl);
+#endif
+    mixer_->produktion_eingang(prod_l_, prod_r_, m);   // K3 (D-K5): into the hidden neutral production strip
+    container_fuellen(m);   // K8: the container inputs (player, DJ pair or nothing, blended) into the strip inputs, before the test clicks and the recorder taps
     ins_mess_block(off, m);   // plan 1.11 T5: a running round-trip measurement owns the send buffers of its host (after the stage wrote its copy of the input)
     std::memcpy(pm_abgriff_l_ + off, arr_->pm_l(), sizeof(float) * static_cast<size_t>(m));   // 1.10: Export-Abgriff (Spec 5.4)
     std::memcpy(pm_abgriff_r_ + off, arr_->pm_r(), sizeof(float) * static_cast<size_t>(m));
     arr_quittungen(karte);
     arr_freeze_quittungen(karte);  // Paket K3: Freeze 2, 3, 7 und Rückgabe des Auftrags
-    // K2: der Duck setzt AM Kick-Ereignis ein, nicht um den Wirt-Rundweg verzögert. Seit Glanz 2.7 (F19) gehen MIDI-Noten um den
-    // Rundweg früher hinaus: eine Bassnote mit dem Kick kommt gleichzeitig mit ihm an (vorher ~545 Samples später, Abnahme
-    // 2026-09-30) und trifft den Duck in seinem Attack (240 Samples, duck.h:17) statt im schon abgesenkten Pegel.
-#ifdef CYPHERDJ_MUTATION_DUCK_VERSATZ_NULL
-    for (int i = 0; i < ausl.n; ++i) mixer_->duck_ausloesen(0);   // Mutation: Duck am Blockanfang, ohne Auslöser-Sample
-#else
-    for (int i = 0; i < ausl.n; ++i) mixer_->duck_ausloesen(ausl.sample[i] - s0);
-#endif
-    for (int e = 0; e < 8; ++e) {  // Studio S5: Rückwege der Wirte in den Eingang erz/<e+1>, vor Trim (§8)
-      if (!rueck_l_[e] || !rueck_r_[e]) continue;
-#ifndef CYPHERDJ_MUTATION_ARR_RUECK_ERZ4
-      if (4 + e == arr_kanal_) continue;  // D1 K1 (Spec 2.3): erz/4 gehört der Produktion, rueck_erz_4 klingt nicht
-#endif
-      float* l = erz_l_[4 + e];
-      float* r = erz_r_[4 + e];
-      const int64_t o = s0 - zyklus_n0_;
-      for (int i = 0; i < m; ++i) {  // Audit F01: einziger Audio-Eingang ohne Prüfung; NaN/Inf raus, Ausreißer auf ±8
-        const float a = rueck_l_[e][o + i], c = rueck_r_[e][o + i];
-        const bool ok = std::isfinite(a) && std::isfinite(c);
-        l[i] += ok ? std::clamp(a, -8.0f, 8.0f) : 0.0f;
-        r[i] += ok ? std::clamp(c, -8.0f, 8.0f) : 0.0f;
-        if (!ok) ++rueck_unendlich_;
-      }
-    }  // Plan 2026-09-27: Erzeuger-Einsätze am Sample in erz/*, pad/*
     // Prüfklicks (Z1): Kanäle in ihren Eingang vor Trim, master in die Summe vor master/pegel
     KlickEinsatz e[8];
     for (int k = 0; k < MIX_KANAELE; ++k) {
@@ -853,42 +836,16 @@ void Kern::audio(int64_t n0, int n) {
       klick_seit_sample_ = e[0].sample;
       klick_seit_beat_ = e[0].beat;
     }
-    BoxMeldung bm[4];  // MVP 2: Loop-Boxen in pad/1, pad/2 (nach Erzeuger und Klicks, vor dem Mixer)
-    Mitschnitt* mt_fertig = nullptr;  // MVP 2 Scheibe 2: derselbe Aufruf kopiert erz/1 in einen laufenden Mitschnitt
-    // F13 x §4.7 (Prüfung 2.3 Befund 1): jeder Weg eines KI-Stopps (Befehl KI_STOPP, Stopp-Taste der Hand, Neustart-
-    // Zustand, teile_nachreichen) endet im Stellwerk-Zustand ki_gestoppt; hier, vor dem Block, in dem ein wartender Loop
-    // übernehmen könnte, gehen wartende cypher-Loops zurück. Ein Punkt für alle Wege, nicht je Aufrufer.
-    if (sw_->ki_gestoppt()) loops_->cypher_wartende_verwerfen();
-    const int nb = loops_->block(karte, s0, m, erz_l_, erz_r_, bm, 4, &mt_fertig);
-    loops_frei(s0);  // Keylock: Varianten, die eine Blende zu Ende gebracht hat, zurück an den Netz-Faden
-    for (int i = 0; i < nb; ++i) loop_melden(bm[i].box, bm[i].sample, karte.beat_at((double)bm[i].sample));
+    Mitschnitt* mt_fertig = nullptr;  // MVP 2 Scheibe 2: this call copies erz/1 into a running recording (container core K1: the recorder is what is left of the loop boxes)
+    mitschnitt_aufnahme_.block(karte, s0, m, quell_.strom_l, quell_.strom_r, &mt_fertig);   // K3 (D-V4): streams 1..3 from the stream buffers
     if (mt_fertig) mitschnitt_melden(mt_fertig, mt_fertig->abgebrochen ? 1 : 0);  // voll: das Netz schreibt und gibt frei; abgebrochen (Scheibe 3 E4): nur frei
-    // DJ view places (decision 7): the module of a loop slot into the input of its DJ channel, after the loop boxes and the streams (they are in erz_l_/erz_r_ already), before the recorder tap and the
-    // strip (trim, EQ, kill, filter, fader). A channel no group leads into was not handed a pair and is not touched. ADR 038: the channels deck/1..deck/4 take a group the same way; decks_block ran
-    // above, so the deck's own block is in the input of deck/N already and the pair is added to it, never overwritten.
-    for (int c = 0; c < Arrangement::DJ_KANAELE; ++c) {
-      if (dj_kanal_[c] < 0 || !dj_gereicht_[c]) continue;   // exactly the channels whose pair was handed to this block
-#ifdef CYPHERDJ_MUTATION_ARR_DJ_NACH_STRIP
-      float* kl = mixer_->summe_eingang_l();   // error case: behind the strip, into the master sum in front of the limiter (the channel fader, trim and EQ do not act on the module)
-      float* kr = mixer_->summe_eingang_r();
-#else
-      float* kl = erz_l_[dj_kanal_[c]];
-      float* kr = erz_r_[dj_kanal_[c]];
-#endif
-      for (int i = 0; i < m; ++i) {
-        kl[i] += dj_aus_l_[c][i];
-        kr[i] += dj_aus_r_[c][i];
-      }
-    }
-    // 1.8: Abgriff erz/1..3 (rec_tap) nach den Loop-Boxen, vor dem Mixer; Einsatz und Ende kommen aus dem Arrangement
+    // 1.8: Abgriff erz/1..3 (rec_tap) nach den Strömen, vor dem Mixer; Einsatz und Ende kommen aus dem Arrangement
     // S2a: the external pairs ein_1..4 of this sub-block (the JACK buffers of the cycle plus the sub-block offset); nullptr = the pair has no port
     const float* el[EIN_PAARE];
     const float* er[EIN_PAARE];
     for (int k = 0; k < EIN_PAARE; ++k) {
-      const float* pl = ein_bank_.links(k + 1);
-      const float* pr = ein_bank_.rechts(k + 1);
-      el[k] = pl ? pl + off : nullptr;
-      er[k] = pr ? pr + off : nullptr;
+      el[k] = ein_da_[k][0] ? quell_.ein_l[k] : nullptr;
+      er[k] = ein_da_[k][1] ? quell_.ein_r[k] : nullptr;
     }
     auto rec_abgriff = [&](const float* const* tl, const float* const* tr) {
       const int rst0 = aufnahme_.status();
@@ -899,16 +856,27 @@ void Kern::audio(int64_t n0, int n) {
     };
 #ifndef CYPHERDJ_MUTATION_REC_TAP_NACH_MIXER
     {
-      const float* tl[REC_ABGRIFFE];   // S18: one entry per code of REC_CODES (erz/1..3, erz/5..7, pad/1..2), before the fader
+      const float* tl[REC_ABGRIFFE];   // K3: one entry per code of REC_CODES (streams 1..3, 5..7, container inputs C, D, A, B), before the fader
       const float* tr[REC_ABGRIFFE];
       for (int i = 0; i < REC_ABGRIFFE; ++i) {
-#ifdef CYPHERDJ_MUTATION_REC_PAD_VERTAUSCHT
-        const int mi = i == 6 ? 13 : i == 7 ? 12 : REC_MIXER[i];   // mutation: pad/1 and pad/2 swapped
+        const RecQuelle& q = REC_QUELLEN[i];
+        if (q.strom) {
+#ifdef CYPHERDJ_MUTATION_REC_STROM_VERSETZT
+          tl[i] = quell_.strom_l[q.n];   // error case: every stream tap reads the next stream
+          tr[i] = quell_.strom_r[q.n];
 #else
-        const int mi = REC_MIXER[i];
+          tl[i] = quell_.strom_l[q.n - 1];
+          tr[i] = quell_.strom_r[q.n - 1];
 #endif
-        tl[i] = erz_l_[mi];
-        tr[i] = erz_r_[mi];
+        } else {
+#ifdef CYPHERDJ_MUTATION_REC_CONTAINER_VERTAUSCHT
+          tl[i] = mixer_->eingang_l(q.n ^ 1);   // error case: A and B, C and D swapped
+          tr[i] = mixer_->eingang_r(q.n ^ 1);
+#else
+          tl[i] = mixer_->eingang_l(q.n);   // the container inputs C, D, A, B (mixer indices 2, 3, 0, 1)
+          tr[i] = mixer_->eingang_r(q.n);
+#endif
+        }
       }
       rec_abgriff(tl, tr);
     }
@@ -920,11 +888,9 @@ void Kern::audio(int64_t n0, int n) {
 #else
       const int k = mixer_->stimme().an() ? mixer_->stimme().eingang() : 0;
 #endif
-      const float* vl = ein_bank_.l(k);
-      const float* vr = ein_bank_.r(k);
-      if (vl && vr) {
-        std::memcpy(mixer_->stimme_eingang_l(), vl + off, sizeof(float) * static_cast<size_t>(m));
-        std::memcpy(mixer_->stimme_eingang_r(), vr + off, sizeof(float) * static_cast<size_t>(m));
+      if (k >= 1 && k <= EIN_PAARE && ein_da_[k - 1][0] && ein_da_[k - 1][1]) {
+        std::memcpy(mixer_->stimme_eingang_l(), quell_.ein_l[k - 1], sizeof(float) * static_cast<size_t>(m));
+        std::memcpy(mixer_->stimme_eingang_r(), quell_.ein_r[k - 1], sizeof(float) * static_cast<size_t>(m));
       }
     }
     mixer_->verarbeite(m, links_ + off, rechts_ + off, cue_l_ + off, cue_r_ + off);
@@ -956,13 +922,13 @@ void Kern::audio(int64_t n0, int n) {
   }
 }
 
-// Ohr (§6.2): je Block ein Datensatz je vollendetem 48-Sample-Fenster, für alle 16 Kanäle. Belegt heißt: Deck k<4
-// geladen; erz/1..3, pad/1, pad/2, master, cue immer; erz/4 immer (D1 K1: Summe der Produktion); erz/5..8 nie. Der Master-Analysator
+// Ohr (§6.2): je Block ein Datensatz je vollendetem 48-Sample-Fenster, für alle 16 Kanäle. Belegt heißt: Slot 0, 1 Deck geladen oder gereicht, Slot 2, 3 Deck
+// geladen; Streams, Produktions-Dienst, Container C, D, master, cue immer; Slot 11 nie (K9, Belegung siehe unten). Der Master-Analysator
 // (immer belegt) bestimmt die Fenster; leere Kanäle schreiben Nullen, damit ihre Fenster bündig liegen, sobald sie
 // belegt werden. Echtzeit: keine Allokation, kein I/O.
 void Kern::huellen_block(int64_t s0, int m, const float* cue_l, const float* cue_r) {
   if (!huellen_) return;
-  constexpr int HK = HUELLEN_KANAELE;  // Ring hat 16 Kanäle, der Mixer 18 (Busse 14..17 gehören nicht in den Ring)
+  constexpr int HK = HUELLEN_KANAELE;  // Ring hat 16 Kanäle, der Mixer 9 Züge (Busse gehören nicht in den Ring)
   if (huellen_naechstes_s0_ != s0) {  // M1: Sample-Sprung (SET_NEU, Neustart) — alle 16 neu ausrichten
     for (int c = 0; c < HK; ++c) huellen_an_[c]->zuruecksetzen(s0);
   }
@@ -975,17 +941,31 @@ void Kern::huellen_block(int64_t s0, int m, const float* cue_l, const float* cue
   bool belegt[HK];
   const float* l[HK];
   const float* r[HK];
+  // K9 (D-K9): the 16 slots keep their place by today's name. 0, 1 = containers A, B (strip tap); 2, 3 = the raw buffers of players 3, 4 (deck/3, deck/4); 4..6 = streams 1..3;
+  // 7 = the production service (hidden strip); 8..10 = streams 5..7; 11 = zero; 12, 13 = containers C, D (pad/1, pad/2); 14 = master; 15 = cue.
   for (int c = 0; c < HK; ++c) {
-    // ADR 038: a deck channel is also occupied while a group of the playback leads into it (a SEQ deck on an empty deck): the ear reads it behind /hoeren. dj_gereicht_[2 + c] is the answer of this cycle's last sub-block
-    if (c < 4) belegt[c] = decks_->deck[c].geladen() || dj_gereicht_[2 + c];
-    else if (c <= 6) belegt[c] = true;    // erz/1..3 (Studio S1)
-    else if (c == arr_kanal_) belegt[c] = true;  // D1 K1 (Spec 2.3): erz/4 = Summe der Produktion
-    else if (c <= 11) belegt[c] = false;  // erz/5..8: nie
-    else belegt[c] = true;                // pad/1, pad/2, master, cue: immer
+    // ADR 038: a container channel is also occupied while a group of the playback leads into it (a SEQ deck on an empty deck): the ear reads it behind /hoeren
+    if (c < 2) belegt[c] = decks_->deck[c].geladen() || deck_gereicht(c);
+    else if (c < 4) belegt[c] = decks_->deck[c].geladen();
+    else if (c <= 10) belegt[c] = true;   // streams and the production service
+    else if (c == 11) belegt[c] = false;
+    else belegt[c] = true;                // containers C, D, master, cue: always
   }
-  for (int c = 0; c < 14; ++c) {
-    l[c] = mixer_->kanalzug(c).abgriff(0);
-    r[c] = mixer_->kanalzug(c).abgriff(1);
+  for (int c = 0; c < HK; ++c) {
+    const float* ql = nullptr;
+    const float* qr = nullptr;
+    if (c < 2) { ql = mixer_->kanalzug(c).abgriff(0); qr = mixer_->kanalzug(c).abgriff(1); }
+    else if (c < 4) { ql = quell_.player_l[c]; qr = quell_.player_r[c]; }
+    else if (c <= 6) { ql = quell_.strom_l[c - 4]; qr = quell_.strom_r[c - 4]; }
+    else if (c == 7) { ql = mixer_->kanalzug(Mixer::PRODUKTION_ZUG).abgriff(0); qr = mixer_->kanalzug(Mixer::PRODUKTION_ZUG).abgriff(1); }
+    else if (c <= 10) { ql = quell_.strom_l[c - 3]; qr = quell_.strom_r[c - 3]; }
+    else if (c == 11) { ql = cue_l; qr = cue_r; }   // never read (not occupied)
+#ifdef CYPHERDJ_MUTATION_HUELLE_SLOT_C_VERTAUSCHT
+    else if (c <= 13) { ql = mixer_->kanalzug(15 - c).abgriff(0); qr = mixer_->kanalzug(15 - c).abgriff(1); }   // C and D swapped
+#else
+    else if (c <= 13) { ql = mixer_->kanalzug(c - 10).abgriff(0); qr = mixer_->kanalzug(c - 10).abgriff(1); }
+#endif
+    if (ql) { l[c] = ql; r[c] = qr; }
   }
   l[14] = mixer_->master_summe_l();
   r[14] = mixer_->master_summe_r();

@@ -134,8 +134,8 @@ FALL(schalter_nur_beim_druck_beruehrung_nur_beim_beruehren) {
 
 FALL(stufen_taste_nur_beim_druck_cc_und_note) {
   const char* const M = R"({"version":1,"geraet":"s","quelle_port":"q","ziel_port":"z","eintraege":[
-    {"nachricht":{"typ":"cc","kanal":1,"nr":50},"ziel":"erz/5/bk/3","art":"taste","stufen":3},
-    {"nachricht":{"typ":"note","kanal":1,"nr":51},"ziel":"erz/5/bk/4","art":"taste","stufen":4}]})";
+    {"nachricht":{"typ":"cc","kanal":1,"nr":50},"ziel":"strom/5/bk/3","art":"taste","stufen":3},
+    {"nachricht":{"typ":"note","kanal":1,"nr":51},"ziel":"strom/5/bk/4","art":"taste","stufen":4}]})";
   auto m = std::make_unique<Mapping>();
   Fehler f;
   PRUEFE(lade(M, stellwerk::ReglerTabelle(), m.get(), &f));
@@ -162,7 +162,7 @@ FALL(kanal_0_trifft_jeden_kanal_exakt_gewinnt) {
     {"nachricht":{"typ":"cc","kanal":2,"nr":1},"ziel":"deck/2/fader","art":"absolut"},
     {"nachricht":{"typ":"cc","kanal":0,"nr":2},"ziel":"deck/1/eq/tief","art":"relativ","kodierung":"zweierkomplement"},
     {"nachricht":{"typ":"note","kanal":0,"nr":36},"ziel":"deck/1/kill/tief","art":"taste"},
-    {"nachricht":{"typ":"cc","kanal":0,"nr":3},"ziel":"erz/5/bk/3","art":"taste","stufen":3}]})";
+    {"nachricht":{"typ":"cc","kanal":0,"nr":3},"ziel":"strom/5/bk/3","art":"taste","stufen":3}]})";
   auto m = std::make_unique<Mapping>();
   Fehler f;
   PRUEFE(lade(M, stellwerk::ReglerTabelle(), m.get(), &f));

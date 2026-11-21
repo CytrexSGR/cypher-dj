@@ -1,6 +1,6 @@
-// Plan Mediathek-Browser S7 (Review S7 M2): der Kern selbst macht erz/8 zum Nur-Cue-Kanal (core.cpp, nach dem Mixer).
-// Rauschen über den Rückweg rueck(8), erz/8-Fader, -Send/2 und fx/2-Rückweg auf 0 dB: Master im Ring exakt 0, Cue hörbar.
-// Ohne die Zeile in core.cpp (Mutationsziel test_kern_vorhoeren_mutation) ist der Master hörbar — gemessen am 2026-10-11: 0,2453 (Review 0,2427 war ein älterer Stand).
+// Plan Mediathek-Browser S7 (Review S7 M2), container core K3 (F3): the previewer is a service of the core. The return rueck(8) goes into the PFL sum only (Mixer::vorhoer_eingang),
+// no strip, so there is no way into master, bus, send or beat FX. Noise over rueck(8) with everything that used to carry it open (the erz/8 rows, fx/2 return at 0 dB): master in the ring exactly 0, cue audible.
+// With the service pointed at the master sum (mutation target test_kern_vorhoeren_mutation, mixer.cpp VORHOER_AUF_MASTER) the master is audible.
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -35,8 +35,7 @@ int main() {
   auto bef = std::make_unique<cdj::Befehlsring>();
   auto ere = std::make_unique<cdj::Ereignisring>();
   auto kern = std::make_unique<cdj::Kern>(128.0, ring, bef.get(), ere.get());
-  PRUEF(kern->mixer().nur_cue(cdj::Mixer::kanal_index(cdj::VORHOER_KANAL)));
-  teil(*bef, 1, "erz/8/fader", 0.0f);       // alles auf, was erz/8 in den Master tragen könnte
+  teil(*bef, 1, "erz/8/fader", 0.0f);       // alles auf, was erz/8 früher in den Master tragen konnte (die Zeilen gibt es noch, bis K9)
   teil(*bef, 2, "erz/8/send/2", 0.0f);
   teil(*bef, 3, "fx/2/rueckweg", 0.0f);
   float l[N], r[N];

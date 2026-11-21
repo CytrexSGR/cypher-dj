@@ -66,7 +66,7 @@ export const TABLET_VERBOTEN: readonly { pfad: string; warum: string }[] = [
   { pfad: '/sammlungen', warum: 'sets: import, rename, delete' },
   { pfad: '/mediathek', warum: 'library preparation (spawns decoders)' },
   { pfad: '/vorhoeren', warum: 'pre-listening player' },
-  { pfad: '/loops', warum: 'loop import' }, { pfad: '/loop', warum: 'loop boxes: record, start, stop' },
+  { pfad: '/loops', warum: 'loop import' }, { pfad: '/loop', warum: 'loop record and kit' },
   { pfad: '/muster', warum: 'writes patterns' },
   { pfad: '/griff', warum: 'hand grips of the DJ view' }, { pfad: '/taste', warum: 'keys of the DJ view' },
   { pfad: '/laden', warum: 'loads material into a deck' }, { pfad: '/tempo', warum: 'master tempo' },

@@ -11,7 +11,7 @@
 // strip depends on itself) and a cycle of tracks (A keyed by B post, B keyed by A post). The edges come from the stages of the TRACK chains only; a group, return or PM stage
 // listening to a track post needs no edge, because every track has run before the group pass starts.
 //
-// U2b: DJ sources. `deck/1..4` and `erz/1` are inputs of the production mixer that the kernel hands to the arrangement before its block (Arrangement::dj_schluessel); the list of what
+// U2b, K4: DJ sources. `deck/1..4` (containers A..D) and the streams `strom/1..16` (`erz/1` = stream 1) are source buffers that the kernel hands to the arrangement before its block (Arrangement::dj_schluessel); the list of what
 // is allowed is the generated SCHL_DJ. A DJ key is live only (an export has no deck signal, plan E7). Key alignment (plan E9): arr_schluessel_versatz() compares, for every compressor
 // stage, the arrival of the key at its capture point with the arrival of the stage input, both read from the delay compensation table (arr_pdc.h) and the chains, and writes the delay of
 // the key (a ring in ArrInserts) or the lag (shown, not corrected) into the stage.
@@ -48,7 +48,7 @@ inline uint8_t arr_schluessel_urteil(const ArrSnapshot& s, int streifen, const A
   else { v = 2; nr = streifen - ARR_KETTE_RET0 + 1; }
   const int q = static_cast<int>(k.quelle) - 1;
   if (k.quelle == ARR_SCHL_DECK) return arr_schluessel_dj_urteil("deck", k.nr);   // slice 5 U2b: a DJ input is there before the arrangement block, for every consumer
-  if (k.quelle == ARR_SCHL_ERZ) return arr_schluessel_dj_urteil("erz", k.nr);
+  if (k.quelle == ARR_SCHL_ERZ) return k.nr >= 1 && k.nr <= ARR_SCHLUESSEL - 4 ? SCHL_JA : SCHL_QUELLE;   // K4 (D-V3): the stream distributors 1..16 (the loader has already refused the old erz/2..8 names)
   if (q < 0 || q > 3 || k.punkt > 1) return SCHL_QUELLE;
   uint8_t a = SCHL_ZELLEN[v][q][k.punkt];
   if (v == q && v != 3 && k.nr == nr) a = SCHL_ZYKLUS;                                  // its own strip: the key depends on the consumer

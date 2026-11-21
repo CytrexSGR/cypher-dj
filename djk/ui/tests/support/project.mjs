@@ -50,11 +50,11 @@ export const ohneAbgeleitetes = (x) => kanonisch(JSON.parse(JSON.stringify(x, (k
 // Das Projekt, wie es nach dem Laden aussieht: eine Spur ohne von gilt als andreas (Spec 6.22), fehlende Zähler setzt das Laden (Spec 6.35).
 // Die Zähler als feste Erwartung (Fix5 K6), nicht mit setzeFehlendeZaehler gerechnet, der geprüften Funktion. Vorgabe: specProjekt() trägt
 // s1 bis s3, c1 und c2, die Note n1, also naechste_id {spur: 4, clip: 3, gruppe: 1} und naechste_noten_id 2. Wer ein anderes Projekt prüft, gibt seine mit.
-// 1.10 (P3): das Laden hebt /1 auf /2 (gruppen [], master 0 dB, Gruppen-Zähler 1); die Erwartung trägt das fest, nicht aus model.ts gerechnet.
+// 1.10 (P3), container core: loading lifts /1 to /3 (gruppen [], master 0 dB, group counter 1); the expectation carries it as a literal, not computed from model.ts.
 export const SPEC_ZAEHLER = { naechste_id: { spur: 4, clip: 3, gruppe: 1 }, naechste_noten_id: 2 };
 export const mitVon = (p, zaehler = SPEC_ZAEHLER) => {
   const q = kopie(p);
-  if (q.format === 'cypherdj-projekt/1') { q.format = 'cypherdj-projekt/2'; q.gruppen = []; q.master = { fader_db: 0 }; }
+  if (q.format === 'cypherdj-projekt/1') { q.format = 'cypherdj-projekt/3'; q.gruppen = []; q.master = { fader_db: 0 }; }
   for (const s of q.spuren) s.von ??= 'andreas';
   return { ...q, ...kopie(zaehler) };
 };

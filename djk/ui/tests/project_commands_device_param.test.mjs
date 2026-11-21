@@ -148,28 +148,23 @@ test('refusals: spur_unbekannt, geraet_falsch (RB-338), argument_ungueltig, argu
   assert.equal(kein.hinweise, undefined);
 });
 
-// ARR_BK_MAX is 16 but the core has override rows for the first BK_LIVE_SLOTS (8) bk tracks only: tracks 9..16 take the general path (no row, playback rebuilt)
+// ARR_BK_MAX = MAX_BK_SPUREN = BK_LIVE_SLOTS = 16: every bk track has override rows
 const sechzehn = () => { const p = specProjekt(); p.spuren = Array.from({ length: MAX_BK_SPUREN }, (_, i) => spur(`t${i + 1}`, i + 1, bk())); return p; };
 
-test('tracks 9..16: bkSlot counts on, bkLive is false, geraet_param_setzen takes the general path (writes the knob, rebuilds the playback, names no spur/ row)', () => {
+test('tracks 1..16: bkSlot counts on, bkLive is true for all, geraet_param_setzen stays light (row spur/<slot>/bk/<k>, no rebuild)', () => {
   const p = sechzehn();
-  assert.equal(BK_LIVE_SLOTS, 8);
+  assert.equal(BK_LIVE_SLOTS, MAX_BK_SPUREN);
   for (let i = 1; i <= MAX_BK_SPUREN; i += 1) {
     assert.equal(bkSlot(p, `t${i}`), i, `slot of t${i}`);
-    assert.equal(bkLive(p, `t${i}`), i <= BK_LIVE_SLOTS, `live t${i}`);
+    assert.equal(bkLive(p, `t${i}`), true, `live t${i}`);
   }
   assert.equal(bkLive(p, 'nix'), false);
   for (const i of [9, 12, 16]) {
     const r = fuehreListeAus(p, [setze(`t${i}`, 'k5', 0.8)]);
-    assert.equal(r.betrifft_wiedergabe, true, `t${i}: the playback is rebuilt`);
-    assert.equal(spurVon(r.projekt, `t${i}`).geraet.parameter.k5, 0.8, `t${i}: the knob is written`);
-    assert.deepEqual(r.regler_aenderungen.filter((x) => BK_ZEILE.test(x.pfad)), [], `t${i}: no row of a slot the core does not have`);
+    assert.equal(r.betrifft_wiedergabe, false, `t${i}: no rebuild`);
+    assert.deepEqual(r.regler_aenderungen, [{ pfad: `spur/${i}/bk/5`, wert: 0.8 }], `t${i}: the row`);
     assert.equal(spurVon(p, `t${i}`).geraet.parameter.k5, undefined, 'the input project is untouched');
   }
-  const mix = fuehreListeAus(p, [setze('t3', 'k5', 0.1), setze('t10', 'k6', 0.2)]);   // one command beyond slot 8 puts the whole batch on the general path
-  assert.equal(mix.betrifft_wiedergabe, true);
-  assert.deepEqual(mix.regler_aenderungen.filter((x) => BK_ZEILE.test(x.pfad)), []);
-  assert.equal(spurVon(mix.projekt, 't3').geraet.parameter.k5, 0.1);
 });
 
 test('slot 8 is still light: spur/8/bk/<k>, no rebuild; a command for an unknown or an RB-338 track still raises the old error', () => {

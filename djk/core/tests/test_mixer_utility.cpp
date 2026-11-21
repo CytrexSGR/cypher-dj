@@ -7,13 +7,13 @@
 //  (U6) back to neutral: after the ramp bit-identical again and the object not called any more; positive control: not neutral differs
 //  (U7) the same row set works on bus/1
 //  (R)  the ramp survives on deck/1, deck/4, erz/1, pad/2 and bus/4 (max step per sample < 0.001); U2..U6 run on erz/1, deck/1 and deck/4
-// The golden digest of the neutral mixer is test_mixer_golden (A0).
+// The golden digest of the neutral mixer is test_mixer_orakel (A0).
 #include "mixer_wz_run.h"
 
 using namespace wzt;
 
 namespace {
-const int KANAELE_U[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17};   // Q13 and B4, not erz/8
+const int KANAELE_U[] = {0, 1, 2, 3, 4, 5, 6, 7};   // the four containers and the four buses
 
 void neutral_setzen(Lauf& l, int k) {
   l.setze(k, "util/balance", 0.0f);
@@ -28,15 +28,14 @@ int main() {
   {
     Lauf a, b;
     for (int k : KANAELE_U) neutral_setzen(b, k);
-    b.setze(ERZ1, "gate/schwelle", -3.0f);   // a gate that would cut everything, but is off
+    b.setze(DECK2, "gate/schwelle", -3.0f);   // a gate that would cut everything, but is off
     int ungleich = 0;
     for (int blk = 0; blk < 60; ++blk) {
       const int n = blk % 7 == 3 ? 61 : (blk % 11 == 5 ? 1000 : N);
       for (Lauf* l : {&a, &b}) {
         l->sinus(DECK1, 440.0, 0.4, 0.3, n);
-        l->sinus(ERZ1, 1000.0, 0.5, 0.0, n);
-        l->rausch(ERZ2, 0.2, n);
-        l->sinus(ERZ4, 60.0, 0.5, -0.5, n);
+        l->sinus(DECK2, 1000.0, 0.5, 0.0, n);
+        l->rausch(PAD1, 0.2, n);
         l->sinus(PAD2, 3000.0, 0.1, 0.2, n);
         l->verarbeite(n);
       }
@@ -44,10 +43,10 @@ int main() {
     }
     PRUEF(ungleich == 0);
     for (int k = 0; k < cdj::MIX_KANAELE; ++k) PRUEF(!b.m->util_aktiv(k));
-    std::printf("U1: %d of 60 blocks differ, utility in use on any channel: %d\n", ungleich, b.m->util_aktiv(ERZ1));
+    std::printf("U1: %d of 60 blocks differ, utility in use on any channel: %d\n", ungleich, b.m->util_aktiv(DECK2));
   }
-  // U2..U6 on a strip of the erz kind, on deck/1 and on deck/4 (A3 fix round: the first version ran on erz/1 only and missed the decks)
-  for (const int K : {ERZ1, DECK1, 3}) {
+  // U2..U6 on deck/2, deck/1 and pad/1 (A3 fix round: the first version ran on one strip only and missed the others)
+  for (const int K : {DECK2, DECK1, PAD1}) {
     std::printf("-- channel %s\n", kname(K));
   // (U2) breite 0: mono
   {
@@ -149,10 +148,10 @@ int main() {
   }
   }
   // (R) the ramp inside the utility survives on every strip: breite 0 <-> 100 on a constant input, no step per sample above 0.001
-  // (a jump would be 0.25; the ramp is 0.25 / 480 = 0.0005). deck/1 and deck/4 first, because there the gate array once ended on util_[0..3].
+  // (a jump would be 0.25; the ramp is 0.25 / 480 = 0.0005). deck/1 and pad/1 first, because there the gate array once ended on util_[0..3].
   {
     struct Fall { const char* name; int util_kanal; int quelle; int ziel; };
-    const Fall faelle[] = {{"deck/1", DECK1, DECK1, 0}, {"deck/4", 3, 3, 0}, {"erz/1", ERZ1, ERZ1, 0}, {"pad/2", PAD2, PAD2, 0}, {"bus/4", BUS1 + 3, ERZ1, 4}};
+    const Fall faelle[] = {{"deck/1", DECK1, DECK1, 0}, {"pad/1", PAD1, PAD1, 0}, {"deck/2", DECK2, DECK2, 0}, {"pad/2", PAD2, PAD2, 0}, {"bus/4", BUS4, DECK2, 4}};
     for (const Fall& f : faelle)
       for (int richtung = 0; richtung < 2; ++richtung) {
         Lauf l;
@@ -181,13 +180,13 @@ int main() {
   // (U7) on a bus: erz/1 -> bus/1, tausch on bus/1
   {
     Lauf ref, bus, neutral;
-    for (Lauf* l : {&ref, &bus, &neutral}) l->setze(ERZ1, "ziel", 1.0f);
+    for (Lauf* l : {&ref, &bus, &neutral}) l->setze(DECK2, "ziel", 1.0f);
     bus.setze(BUS1, "util/tausch", 1.0f);
     for (int k : {BUS1}) neutral_setzen(neutral, k);
     bool getauscht = true, neutral_gleich = true;
     for (int blk = 0; blk < 14; ++blk) {
       for (Lauf* l : {&ref, &bus, &neutral}) {
-        l->sinus(ERZ1, 1000.0, 0.5, 0.0);
+        l->sinus(DECK2, 1000.0, 0.5, 0.0);
         l->verarbeite();
       }
       neutral_gleich = neutral_gleich && gleich(ref, neutral);

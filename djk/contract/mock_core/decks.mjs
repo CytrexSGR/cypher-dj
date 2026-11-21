@@ -7,6 +7,7 @@ import path from 'node:path';
 import { SR, llround } from './clock.mjs';
 import { meldeRegler } from './controls.mjs';
 import { offen, sicht } from './level.mjs';
+import { containerVonPlayer } from './contract.mjs';
 
 const LAEUFT = new Set([2, 3, 4, 5]);
 export const laeuft = (d) => LAEUFT.has(d.status);
@@ -157,7 +158,7 @@ const deckArt = {
     }
     if (t.aktion === 'stopp' && t.i2warten && !K.mutation.has('i2_aus')) {
       const v = sicht(K, s);
-      const andere = K.hoerbarOhne?.(v, `deck/${t.deck}`);
+      const andere = K.hoerbarOhne?.(v, containerVonPlayer(t.deck));
       if (andere === false) return 'warten';
     }
     return K.pruefeI3?.(t, s) ?? null;
@@ -239,9 +240,9 @@ export default {
       if (belegt + r.info.bytes > K.cfg.speicher_budget_mib * 1024 * 1024) return K.q(b, 6, 'budget_speicher');
       K.sofort(b, (s) => {
         const d = K.decks[a.deck];
-        if (K.decks[a.deck]?.status >= 2 && offen(K, sicht(K, s), `deck/${a.deck}`)) return 'deck_hoerbar';  // §4.4: nur laufend und offen (2026-09-27)
+        if (K.decks[a.deck]?.status >= 2 && offen(K, sicht(K, s), containerVonPlayer(a.deck))) return 'deck_hoerbar';  // §4.4: nur laufend und offen (2026-09-27)
         Object.assign(d, neuesDeck(a.deck), { m: r.info, status: 1, hotcues: { ...r.info.hotcues }, hotcuesHand: {}, anker: { b: K.uhr.beat(s), q: 0 }, halterBis: d.halterBis });
-        const k = `deck/${a.deck}`;
+        const k = containerVonPlayer(a.deck);   // the strip of the container that carries player a.deck
         // 2026-11-19 (Kern Stellwerk::cypher_fahrt_beenden): a load ends the RUNNING parts of every source but andreas on the deck fader (reason
         // abbruch), each with its coupling group (a group falls together)
         for (const t of [...K.teile]) if (t.art === 'regler' && t.pfad === `${k}/fader` && t.status === 'laeuft' && t.quelle !== 'andreas') K.gruppeAbbrechen(t, s, 'abbruch');
@@ -258,7 +259,7 @@ export default {
     '/k/deck/entladen': (K, a, b) => {
       if (!(a.deck >= 1 && a.deck <= 4)) return K.q(b, 6, 'unbekanntes_deck');
       K.sofort(b, (s) => {
-        if (K.decks[a.deck]?.status >= 2 && offen(K, sicht(K, s), `deck/${a.deck}`)) return 'deck_hoerbar';  // §4.4: nur laufend und offen (2026-09-27)
+        if (K.decks[a.deck]?.status >= 2 && offen(K, sicht(K, s), containerVonPlayer(a.deck))) return 'deck_hoerbar';  // §4.4: nur laufend und offen (2026-09-27)
         const halter = K.decks[a.deck].halterBis;
         K.decks[a.deck] = Object.assign(neuesDeck(a.deck), { halterBis: halter });
         return null;
@@ -357,7 +358,7 @@ export default {
         K.uhr.bpm(s0) / d.m.basis_bpm, VORLAUF_MS, 0, -1, 0, 0, 0]);   // Keylock Task 3: Zähler 0 (kein Dehner in der Attrappe)
     }
     if (Math.floor((s1 - 1) / 2400) !== Math.floor((s0 - 1) / 2400)) {
-      for (const d of K.decks) if (d?.m) K.aus('/pegel', [`deck/${d.nr}`, -200, -200, -200, -200, -200, -200, -200]);
+      for (const d of K.decks) if (d?.m) K.aus('/pegel', [containerVonPlayer(d.nr), -200, -200, -200, -200, -200, -200, -200]);
       K.aus('/pegel', ['master', -200, -200, -200, -200, -200, -200, -200]);
       K.aus('/pegel', ['cue', -200, -200, -200, -200, -200, -200, -200]);
     }

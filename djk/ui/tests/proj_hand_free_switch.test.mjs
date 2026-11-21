@@ -61,7 +61,7 @@ test('/k/hand/frei: Andreas open and new send it first (prefixes, source andreas
   assert.equal(frei.length, 1, 'one per Andreas open');
   assert.equal(frei[0].felder.quelle, 'andreas');
   assert.ok(frei[0].felder.pfade.split(',').includes('spur/'), frei[0].felder.pfade);
-  assert.ok(frei[0].felder.pfade.split(',').includes('erz/4/') && !frei[0].felder.pfade.split(',').includes('erz/'), frei[0].felder.pfade);   // never erz/ whole
+  assert.ok(!frei[0].felder.pfade.split(',').some((x) => x.startsWith('erz/')), frei[0].felder.pfade);   // the streams have no strip any more: no erz/ prefix at all
   assert.ok(k.gesendet.findIndex((x) => x.adresse === '/k/hand/frei') < k.gesendet.findIndex((x) => x.adresse === '/k/teil'), 'before the first mixer write');
   k.leere();
   await s.oeffnen('eins', 'cypher');
@@ -87,17 +87,17 @@ test('Cypher opens after a grip: the holder stays and the refusal stays visible 
   assert.equal(regler(strom, 'spur/1/fader').halter, 'mensch', 'the hand still holds it');
 });
 
-test('a grip on erz/1 (instrument) survives Andreas open (the switch writes erz/4/ only; the erz/4 release is pinned by the prefix test above and the stand-in hand_frei test)', async (t) => {
+test('a grip on deck/1 survives Andreas open (the switch releases spur/, grp/, pm/fader and ret/ only; the prefix list is pinned by the test above)', async (t) => {
   const { url } = await stapel(t);
   const strom = sse(url);
   t.after(() => strom.zu());
   const a = await projekt(url, 'Alpha', -6);
   await projekt(url, 'Beta', -12);
-  await griff(url, 'erz/1/fader', 0);
-  await griff(url, 'erz/1/fader', -30);   // beyond the dead zone 3/128
-  assert.ok(await bis(() => regler(strom, 'erz/1/fader')?.halter === 'mensch'), 'erz/1 grip: ' + JSON.stringify(regler(strom, 'erz/1/fader')));
+  await griff(url, 'deck/1/fader', 0);
+  await griff(url, 'deck/1/fader', -30);   // beyond the dead zone 3/128
+  assert.ok(await bis(() => regler(strom, 'deck/1/fader')?.halter === 'mensch'), 'deck/1 grip: ' + JSON.stringify(regler(strom, 'deck/1/fader')));
   const r = await ruf(url, 'POST', '/proj/oeffnen', { slug: a });
   assert.equal(r.code, 200, JSON.stringify(r.j));
   assert.deepEqual(r.j.kern.regler_fehler, []);
-  assert.equal(regler(strom, 'erz/1/fader').halter, 'mensch', 'erz/1 untouched');
+  assert.equal(regler(strom, 'deck/1/fader').halter, 'mensch', 'deck/1 untouched');
 });

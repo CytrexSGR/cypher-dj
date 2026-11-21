@@ -56,6 +56,7 @@ from pathlib import Path
 HIER = Path(__file__).resolve().parent
 sys.dont_write_bytecode = True           # kein __pycache__ in djk/contract/ durch den Import unten
 sys.path.insert(0, str(HIER))
+import generate_pult as erzeuge_pult  # noqa: E402
 import sequences_comparison as fv  # noqa: E402  (Scheibe 09)
 
 RATE = 48000
@@ -73,40 +74,49 @@ BEREICHE_AUS = ("leitstand", "rechner")          # FORMAT.md Punkt 14: nicht geb
 DECK_FELDER = ("status", "quell_beat", "beats_bis_ende", "faktor")
 
 
+# §1.5 column "Vorgabe" per suffix of the container strip, the bus strip, the player rows and the stream rows (pult.json names the suffixes,
+# this table the defaults; a suffix without a default stops the module on import, so a new pult.json row cannot be forgotten here).
+_VORGABE_SUFFIX = {
+    "fader": -200.0, "trim": 0.0, "eq/tief": 0.0, "eq/mitte": 0.0, "eq/hoch": 0.0, "kill/tief": 0.0, "kill/mitte": 0.0, "kill/hoch": 0.0,
+    "filter": 0.0, "send/1": -200.0, "send/2": -200.0, "send/3": -200.0, "send/4": -200.0, "ziel": 0.0, "xseite": 1.0, "pfl": 0.0,
+    "komp/an": 0.0, "komp/schwelle": -18.0, "komp/ratio": 4.0, "komp/attack": 10.0, "komp/release": 120.0, "komp/makeup": 0.0,
+    "komp/mix": 1.0, "komp/sc": 0.0,
+    "gate/an": 0.0, "gate/schwelle": -40.0, "gate/hysterese": 4.0, "gate/ratio": 100.0, "gate/bereich": -80.0, "gate/attack": 1.0,
+    "gate/hold": 20.0, "gate/release": 100.0, "gate/sc": 0.0,
+    "util/balance": 0.0, "util/breite": 100.0, "util/bassmono": 0.0, "util/phase_l": 0.0, "util/phase_r": 0.0, "util/tausch": 0.0,
+    "util/dc": 0.0,
+    "mb/an": 0.0, "mb/grenze_tief": 200.0, "mb/grenze_hoch": 2000.0,
+    "lim/an": 0.0, "lim/decke": -0.3, "lim/abklingen": 80.0,
+    "stem/drums": 0.0, "stem/bass": 0.0, "stem/vocals": 0.0, "stem/other": 0.0,
+}
+_VORGABE_BAND = {"schwelle": 0.0, "ratio": 1.0, "attack": 10.0, "release": 100.0, "knie": 0.0, "makeup": 0.0, "umgehen": 0.0}
+_VORGABE_BK = 0.5
+
+
+def _vorgabe_zu(pfad: str) -> float | None:
+    """Default of one pult.json path (None: a core row that is no regler, `transport`)."""
+    suffix = pfad.split("/", 1)[1] if pfad.startswith("strom/") else pfad.split("/", 2)[2]
+    if suffix == "transport":
+        return None
+    if suffix.startswith("bk/") or (pfad.startswith("strom/") and suffix.split("/", 1)[1].startswith("bk/")):
+        return _VORGABE_BK
+    if pfad.startswith("strom/"):
+        suffix = suffix.split("/", 1)[1]
+    if suffix.startswith("mb/") and suffix.count("/") == 2:
+        return _VORGABE_BAND[suffix.rsplit("/", 1)[1]]
+    return _VORGABE_SUFFIX[suffix]
+
+
 def _vorgaben() -> dict[str, float]:
-    """§1.5 Spalte Vorgabe je Regler-Pfad (wie mock_core/contract.mjs); trim: Busse 0, sonst erst beim Laden."""
-    kanalzug = {"fader": -200.0, "trim": 0.0, "eq/tief": 0.0, "eq/mitte": 0.0, "eq/hoch": 0.0, "kill/tief": 0.0,
-                "kill/mitte": 0.0, "kill/hoch": 0.0, "filter": 0.0, "send/1": -200.0, "send/2": -200.0,
-                "send/3": -200.0, "send/4": -200.0, "xseite": 1.0, "pfl": 0.0}
-    v = {}
-    kanaele = ([f"deck/{n}" for n in range(1, 5)] + [f"erz/{n}" for n in range(1, 9)] + ["pad/1", "pad/2"]
-               + [f"bus/{n}" for n in range(1, 5)])
-    for k in kanaele:
-        for p, w in kanalzug.items():
-            v[f"{k}/{p}"] = w
-        if not k.startswith("bus/"):
-            v[f"{k}/ziel"] = 0.0
-            v.update({f"{k}/komp/{p}": w for p, w in (("an", 0.0), ("schwelle", -18.0), ("ratio", 4.0), ("attack", 10.0),
-                                                       ("release", 120.0), ("makeup", 0.0), ("mix", 1.0), ("sc", 0.0))})
-        if k.startswith("deck/"):
-            for stem in ("drums", "bass", "vocals", "other"):
-                v[f"{k}/stem/{stem}"] = 0.0
-        # 1.15 mix tools (defaults of signalbox/tool_controls.h; erz/8 is cue-only and has no tool rows)
-        if k != "erz/8":
-            v.update({f"{k}/util/{p}": w for p, w in (("balance", 0.0), ("breite", 100.0), ("bassmono", 0.0), ("phase_l", 0.0),
-                                                       ("phase_r", 0.0), ("tausch", 0.0), ("dc", 0.0))})
-            if not k.startswith("bus/"):
-                v.update({f"{k}/gate/{p}": w for p, w in (("an", 0.0), ("schwelle", -40.0), ("hysterese", 4.0), ("ratio", 100.0),
-                                                           ("bereich", -80.0), ("attack", 1.0), ("hold", 20.0), ("release", 100.0),
-                                                           ("sc", 0.0))})
-        if k.startswith("bus/"):
-            v[f"{k}/mb/an"] = 0.0
-            v[f"{k}/mb/grenze_tief"] = 200.0
-            v[f"{k}/mb/grenze_hoch"] = 2000.0
-            for b in ("tief", "mitte", "hoch"):
-                v.update({f"{k}/mb/{b}/{p}": w for p, w in (("schwelle", 0.0), ("ratio", 1.0), ("attack", 10.0), ("release", 100.0),
-                                                             ("knie", 0.0), ("makeup", 0.0), ("umgehen", 0.0))})
-            v.update({f"{k}/lim/an": 0.0, f"{k}/lim/decke": -0.3, f"{k}/lim/abklingen": 80.0})
+    """§1.5 Spalte Vorgabe je Regler-Pfad. The channel rows (containers, buses, player, streams) are expanded from pult.json
+    (erzeuge_pult.regler_pfade), so the list cannot drift from the contract; the families outside pult.json stay written out below."""
+    d = erzeuge_pult.laden()
+    v: dict[str, float] = {}
+    for familie in erzeuge_pult.FAMILIEN:
+        for pfad in erzeuge_pult.regler_pfade(d, familie):
+            w = _vorgabe_zu(pfad)
+            if w is not None:
+                v[pfad] = w
     v.update({"xfader": 0.0, "master/pegel": 0.0, "master/kleber": 0.0, "cue/mix": -1.0, "cue/pegel": -12.0, "cue/split": 0.0,
               "fx/1/notenwert": 0.75, "fx/2/notenwert": 0.75, "fx/1/rueckkopplung": 0.5, "fx/2/rueckkopplung": 0.5})
     v.update({f"fx/{n}/rueckweg": 0.0 for n in range(1, 5)})

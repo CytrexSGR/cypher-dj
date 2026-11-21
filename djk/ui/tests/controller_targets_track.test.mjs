@@ -31,11 +31,11 @@ function graphOrdner(t) {
   t.after(() => { if (alt === undefined) delete process.env.CYPHERDJ_BK_ORDNER; else process.env.CYPHERDJ_BK_ORDNER = alt; });
 }
 
-test('spur/<slot>/bk/<k> is a continuous target: capturable, assignable as a CC, never as a note; 9 and 0 and 65 are no target', () => {
+test('spur/<slot>/bk/<k> is a continuous target: capturable, assignable as a CC, never as a note; 17 and 0 and 65 are no target', () => {
   assert.equal(PFAD.test('spur/3/bk/64'), true);
-  for (const p of ['spur/1/bk/1', 'spur/8/bk/64', 'spur/5/bk/33']) { assert.equal(zielArt(p), 'regler', p); assert.equal(eintragsArt('regler', 'cc'), 'absolut'); }
+  for (const p of ['spur/1/bk/1', 'spur/16/bk/64', 'spur/5/bk/33']) { assert.equal(zielArt(p), 'regler', p); assert.equal(eintragsArt('regler', 'cc'), 'absolut'); }
   assert.equal(eintragsArt(zielArt('spur/1/bk/1'), 'note'), null);
-  for (const p of ['spur/0/bk/1', 'spur/9/bk/1', 'spur/1/bk/0', 'spur/1/bk/65', 'spur/1/bk/01', 'spur/1/bk']) { assert.equal(zielArt(p), null, p); assert.equal(PFAD.test(p), false, p); }
+  for (const p of ['spur/0/bk/1', 'spur/17/bk/1', 'spur/1/bk/0', 'spur/1/bk/65', 'spur/1/bk/01', 'spur/1/bk']) { assert.equal(zielArt(p), null, p); assert.equal(PFAD.test(p), false, p); }
 });
 
 test('names: the knob name of the graph on the slot track plus the track name; no project, no slot, no graph name: the plain path', (t) => {
@@ -84,7 +84,7 @@ test('GET /register/ziele?prefix=spur/1: the 64 knobs with the knob name and tra
   const leer = (await hole(url, '/register/ziele?prefix=spur/7/bk')).j.ziele;
   assert.equal(leer.length, 64);
   assert.ok(leer.every((x) => x.name === undefined));
-  assert.equal((await hole(url, '/register/ziele?prefix=spur/9/bk')).j.ziele.length, 0);
+  assert.equal((await hole(url, '/register/ziele?prefix=spur/17/bk')).j.ziele.length, 0);
   assert.equal((await hole(url, '/register/ziele?prefix=spur/1')).j.ziele.filter((x) => x.pfad.includes('/bk/')).length, 64, 'under spur/1 the 64 knobs sit with fader, pan and the rest');
 });
 

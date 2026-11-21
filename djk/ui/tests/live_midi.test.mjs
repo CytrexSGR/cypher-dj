@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { neuesProjekt, pruefeProjekt, MAX_BK_SPUREN } from '../project/model.ts';
-import { baueModul, baueNeuePfade, liveSlots, NEU_INSTRUMENT } from '../project/live.ts';
+import { baueModul, baueNeuePfade, modulAmPlatz, NEU_INSTRUMENT } from '../project/live.ts';
 import { pythonMidiLauf } from '../areas/live/midi.ts';
 import { rmsDbVonWav, pegelVersatz } from '../areas/live/level.ts';
 import os from 'node:os';
@@ -20,7 +20,7 @@ const HASH = 'c'.repeat(64), D = (n) => ({ sha256: n.repeat(64), pfad: `/x/${n}.
 const herkunft = (extra = {}) => ({ quelle_sha256: HASH, titel: 'Song', kuenstler: 'Art', fassung: '1', basis_bpm: 120, von_beat: 4, laenge_beats: 16, bpm: 120,
   tonart: '8A', datum: '2026-11-12', ...extra });
 const LOOP = { ...D('e'), beats: 16, frames: 16 * 24000 };
-const live = () => { const p = neuesProjekt('x'); p.live = true; return p; };
+const live = () => { const p = neuesProjekt('x'); p.live = true; p.plaetze = [{ typ: 'track' }, { typ: 'track' }, { typ: 'track' }, { typ: 'track' }]; return p; };
 const vier = () => ({ drums: D('1'), bass: D('2'), other: D('3'), vocals: D('4') });
 const KICK = [{ beat: 0, laenge: 0.25, ton: 36, vel: 100 }, { beat: 2, laenge: 0.25, ton: 39, vel: 90 }, { beat: 13, laenge: 0.25, ton: 42, vel: 80 }, { beat: 15.5, laenge: 0.5, ton: 42, vel: 70 }];
 const BASS = [{ beat: 0, laenge: 1, ton: 36, vel: 100 }, { beat: 8, laenge: 2, ton: 41, vel: 90 }];
@@ -119,7 +119,7 @@ test('a failing MIDI runner leaves the module with its stems and loop and no new
   assert.ok(await warteBis(() => z.nachStems.length === 1, 20000));
   const p = z.projekt();
   assert.equal(p.spuren.filter((s) => s.art === 'instrument').length, 0, 'all or nothing: no new path at all');
-  assert.equal(p.gruppen.filter((g) => g.ausgang?.id === liveSlots(p).A).length, 4, 'the stem groups stand');
+  assert.equal(p.gruppen.filter((g) => g.ausgang?.id === modulAmPlatz(p, 'A')).length, 4, 'the stem groups stand');
   assert.equal(p.spuren.find((s) => s.name === 'Loop').mute, true);
   assert.deepEqual(spuren(p, kind(p, 'Drums')).map((s) => [s.name, s.fader_db, s.mute]), [['Drums original', 0, false]]);
   const f = z.stand('A').midi_fehler;

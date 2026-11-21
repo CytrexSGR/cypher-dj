@@ -1,6 +1,6 @@
 // D1 K1: Prüfaufbau des Kerns mit Arrangement ohne JACK (Muster core35.h). Wiedergaben entstehen als Datei im
 // Arbeitsordner (arr_file.h), lade_wiedergabe() lädt sie wie der Lade-Faden (ohne mlock), der Schnappschuss geht als
-// Befehl ARR_LADEN in den Kern. ARR_ALT-Rückgaben gibt der Aufbau nach jedem Lauf frei. erz/4 ist offen (Fader 0 dB),
+// Befehl ARR_LADEN in den Kern. ARR_ALT-Rückgaben gibt der Aufbau nach jedem Lauf frei. der Produktions-Dienst hat keinen Fader (K9),
 // der Prüfmodus aus (das Metronom ist dort gesperrt). Mitgeschrieben: Master (k35::Lauf l, r) und Cue links (cue_l),
 // je Index = Kern-Sample des schreibenden Blocks; der Master liegt um den Limiter-Vorhalt vh (84) dahinter.
 #pragma once
@@ -25,7 +25,6 @@ struct Lauf : k35::Lauf {
 
   Lauf(const std::string& ab, const char* name, const char* mapping = nullptr) : k35::Lauf(ab, mapping), ordner(name) {
     kern->setze_pruefmodus(false);
-    teil("erz/4/fader", 0.0f, 0.0, 0.0);   // Spec 2.3: der Server setzt erz/4 neutral; die Vorgabe ist −200 dB
   }
   ~Lauf() {
     frei();

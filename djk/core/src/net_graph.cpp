@@ -10,6 +10,7 @@
 //   CYPHERDJ_MUTATION_GRAPH_KIT_BLEIBT        a kit/midi announce does not clear the stream's graph
 //   CYPHERDJ_MUTATION_GRAPH_FRAGE_NUR_BELEGT  /k/graph/frage skips empty slots
 //   CYPHERDJ_MUTATION_GRAPH_OHNE_QUELLE       a quittung matches its pending entry by id alone
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -103,10 +104,9 @@ void Netz::graph_anwenden(const GraphWartend& w) {
 }
 
 std::string Netz::graph_platz_name(const std::string& kanal) const {
-  if (kanal.compare(0, 4, "erz/") == 0 || kanal.compare(0, 4, "pad/") == 0) {
-    for (const auto& s : graph_strom_)  // lowest-numbered stream on this channel that carries a graph
-      if (s.kanal == kanal && !s.name.empty()) return s.name;
-    return "";
+  if (kanal.compare(0, 6, "strom/") == 0) {  // the graph a stream carries ("" = none)
+    const int n = std::atoi(kanal.c_str() + 6);
+    return n >= 1 && n <= GRAPH_STROEME ? graph_strom_[n - 1].name : std::string();
   }
   const auto it = graph_insert_.find(kanal);
   return it == graph_insert_.end() ? std::string() : it->second;

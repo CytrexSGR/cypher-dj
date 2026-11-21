@@ -26,7 +26,6 @@ const { values: opt } = parseArgs({ options: {
   'kit-zusatz': { type: 'string', default: '' },  // MVP 2 Scheibe 3: Mitschnitte (rec), live nachgeladen
   muster: { type: 'string', default: `/dev/shm/cypherdj${I ? `-${I}` : ''}/erzeuger/strom1.js` },
   strom: { type: 'string', default: '1' },
-  kanal: { type: 'string', default: 'erz/1' },
   ziel: { type: 'string', default: '' },   // Studio S5: midi:<port>:<kanal> statt Kit; Baukasten S3a: bk:<graph>
   name: { type: 'string', default: 'erzeuger' },   // Studio S1: Hallo-Name je Prozess (Kern führt Abonnenten nach Name)
 } });
@@ -61,7 +60,7 @@ const planer = new Planer({ strom: STROM, kit, sende, jetztUs: () => Number(proc
   taktart: leseTaktart(path.dirname(opt.muster), 4) });
 const neustartRegel = new NeustartRegel();   // S17: announce once per kern generation, not on the heartbeat repeat
 let id = BigInt(Date.now()) * 1000n;
-const stromMelden = () => sende(kodiere('/erz/strom', 'hsiss', [++id, 'erzeuger', STROM, KIT_ZIEL, opt.kanal]));
+const stromMelden = () => sende(kodiere('/erz/strom', 'hsis', [++id, 'erzeuger', STROM, KIT_ZIEL]));
 
 let wecker = null;
 function wecke() {  // kurz vor dem Taktanfang: die nächsten zwei Takte ersetzen

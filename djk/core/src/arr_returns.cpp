@@ -13,6 +13,7 @@
 
 namespace cdj {
 
+static_assert(HallPool::MAX_W == ARR_RETURNS - 1, "the Hall pool has one worker for every return except return 0");
 static_assert(ARR_RETURNS == cypherdj::stellwerk::RET_REGLER_RETURNS, "return slots and return controls must be the same number");
 
 CypherHallEinstellung arr_hall_einstellung(const float x[ARR_HALL_PARAM]) {
@@ -198,7 +199,7 @@ void ArrReturns::job(void* ctx, int r) {
 }
 
 void ArrReturns::hall_parallel(int m) {
-  static_assert(ARR_RETURNS - 1 <= HallPool::MAX_W, "returns 1..n-1 map to the workers, return 0 stays with the caller");
+  // returns 1..MAX_W map to the workers (return r on worker r - 1), return 0 stays with the caller; MAX_W = ARR_RETURNS - 1, so the pool can carry all eight returns in parallel (review I4)
   for (bool& b : vorab_) b = false;
   if (!pool_) return;
 #ifdef CYPHERDJ_MUTATION_HALL_OHNE_JOIN
@@ -230,7 +231,7 @@ void ArrReturns::hall_parallel(int m) {
   for (int r = 1; r < ARR_RETURNS; ++r)
     if (lauf[r] && r - 1 < pool_->faeden()) gesandt[r - 1] = pool_->schicke(r - 1, &ArrReturns::job, this, r, HallPool::HALL, mxcsr);
   for (int r = 0; r < ARR_RETURNS; ++r)
-    if (lauf[r] && (r == 0 || !gesandt[r - 1])) hall_block(r, m);   // the caller's share: return 0 and every Hall the pool did not take
+    if (lauf[r] && (r == 0 || r - 1 >= HallPool::MAX_W || !gesandt[r - 1])) hall_block(r, m);   // the caller's share: return 0 and every Hall the pool did not take
 #ifndef CYPHERDJ_MUTATION_HALL_OHNE_JOIN
   for (int w = 0; w < HallPool::MAX_W; ++w) {
     if (!gesandt[w]) continue;

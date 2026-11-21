@@ -2,11 +2,12 @@
 // Pure markup here; app.js supplies the knob binding (bindeBkKnobs), the picker fill (zeigeGraphWahl) and the loaded graphs (graphVon).
 import { htmlText } from './effects.js';
 import { geraeteknopfHtml } from './panel_kopf.js';
+import { containerName, stromVonKanal } from './kanaele.js';
 
-const LABEL = { 'erz/2': 'I2', 'erz/3': 'I3', 'erz/5': 'I5', 'erz/6': 'I6', 'erz/7': 'I7', 'pad/1': 'P1', 'pad/2': 'P2' };
 /** Whether a learn path (<channel>/bk/<n>) belongs to channel k. */
 export const lernPfadVon = (pfad, k) => typeof pfad === 'string' && pfad.startsWith(`${k}/bk/`);
-export const instrumentLabel = (k) => LABEL[k] ?? k;
+/** Tab label of an instrument channel: the container letter, or I<n> for stream n. */
+export const instrumentLabel = (k) => containerName(k) ?? (stromVonKanal(k) ? `I${stromVonKanal(k)}` : k);
 
 /** The body classes of the device page (the INSTRUMENTS element enlarged as a fixed layer): none while closed. PRODUCTION adds its own class because the narrow
  *  production browser hides the children of a collapsed library (panel.css lifts that for the open page). */

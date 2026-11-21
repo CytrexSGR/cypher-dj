@@ -14,7 +14,7 @@ import { schreibeLebt } from '../../generator/src/pattern_state.mjs';
 belegeTestInstanz();
 const hol = (u, o = {}) => fetch(u, { ...o, headers: { connection: 'close', ...(o.headers ?? {}) } });
 
-async function stapel(t) {
+async function stapel(t, { live = false } = {}) {
   const tmp = (p) => fs.mkdtempSync(path.join(os.tmpdir(), p));
   const huellen = path.join(tmp('s18-huellen-'), 'huellen'); schreibeLeerenRing(huellen);
   const alt = process.env.CYPHERDJ_INSTANZ;
@@ -24,9 +24,12 @@ async function stapel(t) {
     mutationen: [], loops: tmp('s18-loops-'), kits: tmp('s18-kits-'), welleCache: tmp('s18-welle-'), musterOrdner: muster, hotcueOrdner: tmp('s18-hc-'),
     rasterOrdner: tmp('s18-raster-'), huellen, wirtOrdner: tmp('s18-wirt-'), sammlungen: tmp('s18-sets-'), musterBibliothek: tmp('s18-mb-'), musterSets: tmp('s18-ms-'),
     mediathek: path.join(tmp('s18-med-'), 'nix.sqlite'), katalog: path.join(tmp('s18-kat-'), 'nix.sqlite'), digitalout: path.join(tmp('s18-do-'), 'nix'),
+    ...(live ? { proj: { wurzel: path.join(tmp('s18-proj-'), 'projekte'), arbeitsordner: path.join(tmp('s18-arr-'), 'arr') } } : {}),
     kernPruefmodus: true, geraete: { konfigPfad: path.join(tmp('s18-ger-'), 'geraete.json'), kantenPfad: path.join(tmp('s18-ger-'), 'kanten'), cacheMs: 0, erkenne: async () => ({ audio: [], midi: [] }) },
     log: () => {} });
   await o.starte();
+  // container core M6: POST /strudel needs the strudel module of an open live project
+  if (live) assert.equal((await o.proj.sitzung.liveOeffnen('andreas')).code, 200);
   t.after(async () => { await o.stoppe(); if (alt === undefined) delete process.env.CYPHERDJ_INSTANZ; else process.env.CYPHERDJ_INSTANZ = alt; });
   const url = `http://127.0.0.1:${47300 + K}`;
   const post = (pfad, daten, kopf = {}) => hol(`${url}${pfad}`, { method: 'POST', headers: { 'content-type': 'application/json', ...kopf }, body: JSON.stringify(daten) })
@@ -36,7 +39,7 @@ async function stapel(t) {
 }
 
 test('strudel route: streams 5, 6, 7, 9, 10 write into <muster>N/strom1.js; 4, 8, 11 and 0 are refused (400)', async (t) => {
-  const { post, muster } = await stapel(t);
+  const { post, muster } = await stapel(t, { live: true });
   for (const s of [5, 6, 7, 9, 10]) {
     const r = await post('/strudel', { strom: s, text: `note("c${s % 5 + 2}")` });
     assert.equal(r.code, 200, JSON.stringify([s, r]));
@@ -53,7 +56,7 @@ test('strudel route: streams 5, 6, 7, 9, 10 write into <muster>N/strom1.js; 4, 8
 });
 
 test('auto route: AUTO switch and read for stream 9 and 10 (own autonom.json), refused for 8', async (t) => {
-  const { post, url, muster } = await stapel(t);
+  const { post, url, muster } = await stapel(t, { live: true });
   let r = await post('/strudel/autonom', { strom: 9, an: false });
   assert.equal(r.code, 200, JSON.stringify(r));
   assert.equal(JSON.parse(fs.readFileSync(`${muster}9/autonom.json`, 'utf8')).an, false);

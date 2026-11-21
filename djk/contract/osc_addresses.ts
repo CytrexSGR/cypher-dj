@@ -45,19 +45,15 @@ export const ADRESSEN = {
   '/k/lernen': { typen: ',hsi', abschnitt: '4.7', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'an'], bereiche: { an: [0, 1] } },
   '/k/live/tasten': { typen: ',hsi', abschnitt: '4.7', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'strom'], bereiche: { strom: [0, 10] } },
   '/k/latenz': { typen: ',hssi', abschnitt: '4.7', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'ziel', 'samples'], bereiche: {} },
-  '/erz/strom': { typen: ',hsiss', abschnitt: '4.8', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'strom', 'ziel', 'kanal'], bereiche: { strom: [1, 16] } },
+  '/erz/strom': { typen: ',hsis', abschnitt: '4.8', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'strom', 'ziel'], bereiche: { strom: [1, 16] } },
   '/erz/fenster': { typen: ',iiiiddh', abschnitt: '4.8', richtung: 'an_kern', nurPruefmodus: false, felder: ['strom', 'sendung', 'modus', 'kappe', 'ab_beat', 'bis_beat', 't_send_us'], bereiche: { strom: [1, 16] } },
   '/erz/ev': { typen: ',iiiiddf', schwanz: 'if', abschnitt: '4.8', richtung: 'an_kern', nurPruefmodus: false, felder: ['strom', 'muster', 'ev_id', 'note', 'beat', 'dauer_beats', 'velocity'], bereiche: { strom: [1, 16], note: [0, 255], velocity: [0, 1] } },
   '/erz/cc': { typen: ',iiidf', abschnitt: '4.8', richtung: 'an_kern', nurPruefmodus: false, felder: ['strom', 'ev_id', 'cc', 'beat', 'wert'], bereiche: { strom: [1, 16], wert: [0, 1] } },
-  '/k/loop/laden': { typen: ',hsis', abschnitt: '4.9', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'box', 'name'], bereiche: { box: [1, 2] } },
-  '/k/loop/start': { typen: ',hsi', abschnitt: '4.9', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'box'], bereiche: { box: [1, 2] } },
-  '/k/loop/stopp': { typen: ',hsi', abschnitt: '4.9', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'box'], bereiche: { box: [1, 2] } },
-  '/k/loop/raster': { typen: ',hsii', abschnitt: '4.9', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'box', 'versatz_frames'], bereiche: { box: [1, 2] } },
   '/k/loop/rec': { typen: ',hsisi', abschnitt: '4.9', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'beats', 'name', 'summe'], bereiche: { summe: [0, 1] } },
   '/k/fx': { typen: ',hsiidddddi', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'einheit', 'art', 'beats', 'wet', 'param1', 'param2', 'param3', 'an'], bereiche: { einheit: [1, 2], art: [1, 12], wet: [0, 1], param1: [0, 1], param2: [0, 1], param3: [0, 1], an: [0, 1] } },
   '/k/fx/zuweisung': { typen: ',hsisi', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'einheit', 'kanal', 'an'], bereiche: { einheit: [1, 3], an: [0, 1] } },
   '/k/fx/routing': { typen: ',hsi', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'routing'], bereiche: { routing: [0, 1] } },
-  '/k/platz/kanal': { typen: ',hsii', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'pad', 'inhalt'], bereiche: { pad: [1, 2], inhalt: [0, 3] } },
+  '/k/container/quelle': { typen: ',hsii', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'container', 'art'], bereiche: { container: [1, 4], art: [0, 2] } },
   '/k/kanal/graph': { typen: ',hsss', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'kanal', 'name'], bereiche: {} },
   '/k/graph/frage': { typen: ',hs', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle'], bereiche: {} },
   '/k/arr/laden': { typen: ',hsi', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'nr'], bereiche: { nr: [0, null] } },
@@ -86,7 +82,6 @@ export const ADRESSEN = {
   '/takt': { typen: ',iihdd', abschnitt: '5.3', richtung: 'vom_kern', nurPruefmodus: false, felder: ['takt', 'phrase', 'sample', 'beat', 'bpm'], bereiche: { takt: [1, null], phrase: [1, null] } },
   '/zustand/kern': { typen: ',iihiiiiiiiih', abschnitt: '5.4', richtung: 'vom_kern', nurPruefmodus: false, felder: ['generation', 'quantum', 'sample', 'frame_luecken', 'ausgelassene_perioden', 'cb_max_us', 'cb_p99_us', 'aufwach_max_us', 'stretcher_aktiv', 'befehle_wartend', 'ki_gestoppt', 'ereignisse_verloren'], bereiche: {} },
   '/zustand/deck': { typen: ',iisdidddfiifii', abschnitt: '5.5', richtung: 'vom_kern', nurPruefmodus: false, felder: ['deck', 'status', 'material_id', 'basis_bpm', 'fassung', 'quell_beat', 'beats_bis_ende', 'faktor', 'vorlauf_ms', 'hoerweg', 'stretcher_fuell', 'versatz_intern_ms', 'keylock_unterlauf', 'keylock_aufgegeben'], bereiche: { deck: [1, 4], stretcher_fuell: [-1, null] } },
-  '/zustand/box': { typen: ',iiiiii', abschnitt: '5.5b', richtung: 'vom_kern', nurPruefmodus: false, felder: ['box', 'status', 'keylock_unterlauf', 'keylock_aufgegeben', 'keylock_ring_voll', 'keylock_kein_platz'], bereiche: { box: [1, 2] } },
   '/zustand/komp': { typen: ',sf', abschnitt: '5.5c', richtung: 'vom_kern', nurPruefmodus: false, felder: ['kanal', 'gr_db'], bereiche: {} },
   '/zustand/mix': { typen: ',sfffff', abschnitt: '5.5d', richtung: 'vom_kern', nurPruefmodus: false, felder: ['kanal', 'gate_db', 'mb_tief_db', 'mb_mitte_db', 'mb_hoch_db', 'lim_db'], bereiche: {} },
   '/e/ins_gr': { typen: ',sf', abschnitt: '5.5f', richtung: 'vom_kern', nurPruefmodus: false, felder: ['kanal', 'gr_db'], bereiche: {} },
@@ -112,12 +107,11 @@ export const ADRESSEN = {
   '/e/neustart': { typen: ',ih', abschnitt: '5.9', richtung: 'vom_kern', nurPruefmodus: false, felder: ['generation', 'sample'], bereiche: {} },
   '/e/protokollfehler': { typen: ',ss', abschnitt: '5.9', richtung: 'vom_kern', nurPruefmodus: false, felder: ['adresse', 'grund'], bereiche: {} },
   '/nb': { typen: ',iiih', abschnitt: '5.10', richtung: 'von_notbahn', nurPruefmodus: false, felder: ['zustand', 'takte_in_schleife', 'generation_gesehen', 'w'], bereiche: {} },
-  '/e/loop': { typen: ',iisiidf', abschnitt: '5.11', richtung: 'vom_kern', nurPruefmodus: false, felder: ['box', 'status', 'name', 'beats', 'fx_art', 'fx_beats', 'fx_wet'], bereiche: { box: [1, 2], status: [0, 5], fx_art: [0, 4] } },
   '/e/fx': { typen: ',iidddddi', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['einheit', 'art', 'beats', 'wet', 'param1', 'param2', 'param3', 'an'], bereiche: { einheit: [1, 2], art: [0, 12], an: [0, 1] } },
   '/e/fx/zuweisung': { typen: ',isi', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['einheit', 'kanal', 'an'], bereiche: { einheit: [1, 3], an: [0, 1] } },
   '/e/kanal_limiter': { typen: ',ii', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['gebaut', 'latenz_samples'], bereiche: {} },
   '/e/fx/routing': { typen: ',i', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['routing'], bereiche: { routing: [0, 1] } },
-  '/e/platz/kanal': { typen: ',ii', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['pad', 'inhalt'], bereiche: { pad: [1, 2], inhalt: [0, 3] } },
+  '/e/container/quelle': { typen: ',ii', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['container', 'art'], bereiche: { container: [1, 4], art: [0, 2] } },
   '/e/graph': { typen: ',ss', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['kanal', 'name'], bereiche: {} },
   '/zustand/arr': { typen: ',iiidhdif', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['nr', 'status', 'loop_an', 'projekt_beat', 'ursprung_sample', 'start_beat', 'metronom_an', 'limiter_db'], bereiche: { status: [0, 3], loop_an: [0, 1], metronom_an: [0, 1], limiter_db: [-200, 0] } },
   '/zustand/warp': { typen: ',iiiii', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['stimmen', 'unterlauf', 'kein_platz', 'spaet', 'faeden'], bereiche: {} },
@@ -181,19 +175,15 @@ export interface Werte {
   '/k/lernen': [id: bigint, quelle: string, an: number];
   '/k/live/tasten': [id: bigint, quelle: string, strom: number];
   '/k/latenz': [id: bigint, quelle: string, ziel: string, samples: number];
-  '/erz/strom': [id: bigint, quelle: string, strom: number, ziel: string, kanal: string];
+  '/erz/strom': [id: bigint, quelle: string, strom: number, ziel: string];
   '/erz/fenster': [strom: number, sendung: number, modus: number, kappe: number, ab_beat: number, bis_beat: number, t_send_us: bigint];
   '/erz/ev': [strom: number, muster: number, ev_id: number, note: number, beat: number, dauer_beats: number, velocity: number];
   '/erz/cc': [strom: number, ev_id: number, cc: number, beat: number, wert: number];
-  '/k/loop/laden': [id: bigint, quelle: string, box: number, name: string];
-  '/k/loop/start': [id: bigint, quelle: string, box: number];
-  '/k/loop/stopp': [id: bigint, quelle: string, box: number];
-  '/k/loop/raster': [id: bigint, quelle: string, box: number, versatz_frames: number];
   '/k/loop/rec': [id: bigint, quelle: string, beats: number, name: string, summe: number];
   '/k/fx': [id: bigint, quelle: string, einheit: number, art: number, beats: number, wet: number, param1: number, param2: number, param3: number, an: number];
   '/k/fx/zuweisung': [id: bigint, quelle: string, einheit: number, kanal: string, an: number];
   '/k/fx/routing': [id: bigint, quelle: string, routing: number];
-  '/k/platz/kanal': [id: bigint, quelle: string, pad: number, inhalt: number];
+  '/k/container/quelle': [id: bigint, quelle: string, container: number, art: number];
   '/k/kanal/graph': [id: bigint, quelle: string, kanal: string, name: string];
   '/k/graph/frage': [id: bigint, quelle: string];
   '/k/arr/laden': [id: bigint, quelle: string, nr: number];
@@ -222,7 +212,6 @@ export interface Werte {
   '/takt': [takt: number, phrase: number, sample: bigint, beat: number, bpm: number];
   '/zustand/kern': [generation: number, quantum: number, sample: bigint, frame_luecken: number, ausgelassene_perioden: number, cb_max_us: number, cb_p99_us: number, aufwach_max_us: number, stretcher_aktiv: number, befehle_wartend: number, ki_gestoppt: number, ereignisse_verloren: bigint];
   '/zustand/deck': [deck: number, status: number, material_id: string, basis_bpm: number, fassung: number, quell_beat: number, beats_bis_ende: number, faktor: number, vorlauf_ms: number, hoerweg: number, stretcher_fuell: number, versatz_intern_ms: number, keylock_unterlauf: number, keylock_aufgegeben: number];
-  '/zustand/box': [box: number, status: number, keylock_unterlauf: number, keylock_aufgegeben: number, keylock_ring_voll: number, keylock_kein_platz: number];
   '/zustand/komp': [kanal: string, gr_db: number];
   '/zustand/mix': [kanal: string, gate_db: number, mb_tief_db: number, mb_mitte_db: number, mb_hoch_db: number, lim_db: number];
   '/e/ins_gr': [kanal: string, gr_db: number];
@@ -248,12 +237,11 @@ export interface Werte {
   '/e/neustart': [generation: number, sample: bigint];
   '/e/protokollfehler': [adresse: string, grund: string];
   '/nb': [zustand: number, takte_in_schleife: number, generation_gesehen: number, w: bigint];
-  '/e/loop': [box: number, status: number, name: string, beats: number, fx_art: number, fx_beats: number, fx_wet: number];
   '/e/fx': [einheit: number, art: number, beats: number, wet: number, param1: number, param2: number, param3: number, an: number];
   '/e/fx/zuweisung': [einheit: number, kanal: string, an: number];
   '/e/kanal_limiter': [gebaut: number, latenz_samples: number];
   '/e/fx/routing': [routing: number];
-  '/e/platz/kanal': [pad: number, inhalt: number];
+  '/e/container/quelle': [container: number, art: number];
   '/e/graph': [kanal: string, name: string];
   '/zustand/arr': [nr: number, status: number, loop_an: number, projekt_beat: number, ursprung_sample: bigint, start_beat: number, metronom_an: number, limiter_db: number];
   '/zustand/warp': [stimmen: number, unterlauf: number, kein_platz: number, spaet: number, faeden: number];
@@ -282,11 +270,11 @@ export const POLITIK_TEIL = { musik: 0, zustand: 1 } as const;
 export const FORM = { linear: 0, s_kurve: 1 } as const;
 export const RASTER_BEATS = [0.25, 1, 4, 16, 32] as const;
 export const FX_BEATS = [0.25, 0.5, 1, 2, 4, 8, 16] as const;
-export const FX_KANAL = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/4', 'erz/5', 'erz/6', 'erz/7', 'erz/8', 'pad/1', 'pad/2', 'master'] as const;
-export const FX_KANAL_12 = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'pad/1', 'pad/2', 'master'] as const;
-export const FX_KANAL_3 = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/4', 'erz/5', 'erz/6', 'erz/7', 'erz/8', 'pad/1', 'pad/2'] as const;
-export const GRAPH_KANAL = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'fx/3', 'fx/4', 'master', 'erz/1', 'erz/2', 'erz/3', 'pad/1', 'pad/2'] as const;
-export const GRAPH_PLATZ = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'fx/3', 'fx/4', 'master', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'] as const;
+export const FX_KANAL = ['deck/1', 'deck/2', 'pad/1', 'pad/2', 'master'] as const;
+export const FX_KANAL_12 = ['deck/1', 'deck/2', 'pad/1', 'pad/2', 'master'] as const;
+export const FX_KANAL_3 = ['deck/1', 'deck/2', 'pad/1', 'pad/2'] as const;
+export const GRAPH_KANAL = ['deck/1', 'deck/2', 'pad/1', 'pad/2', 'fx/3', 'fx/4', 'master'] as const;
+export const GRAPH_PLATZ = ['deck/1', 'deck/2', 'pad/1', 'pad/2', 'fx/3', 'fx/4', 'master', 'strom/2', 'strom/3', 'strom/5', 'strom/6', 'strom/7', 'strom/9', 'strom/10'] as const;
 export const ROLL_ART = { band_schatten: 0, puffer_keylock: 1 } as const;
 export const AUTO_ZIEL = ['fader', 'pan', 'mute', 'solo'] as const;
 export const URTEIL = ['ok'] as const;
@@ -301,4 +289,4 @@ export const TASTE = ['annehmen', 'verwerfen', 'cypher_vorschlag', 'cypher_hoere
 export const INVARIANTE_ART = ['sub_doppelt', 'master_leer', 'hoerschein'] as const;
 export const PROTOKOLLFEHLER_GRUND = ['unbekannte_adresse', 'falsche_typen', 'protokoll'] as const;
 export const NB_ZUSTAND = { durchreichen: 0, schleife: 1, ausgeblendet: 2, rueckgabe: 3 } as const;
-export const GRUENDE = ['zu_spaet', 'regler_beim_menschen', 'regler_verplant', 'ueberlappung', 'nur_hand', 'unbekannter_regler', 'unbekanntes_deck', 'ausserhalb_bereich', 'kein_hoerschein', 'hoerschein_anderer_kanal', 'hoerschein_anderer_inhalt', 'hoerschein_anderes_tempo', 'hoerschein_abgelaufen', 'hoerschein_anderer_abschnitt', 'ziel_ungehoert', 'keine_stems', 'hoerschein_nicht_sync', 'hoerschein_pegel', 'invariante_sub_doppelt', 'invariante_master_leer', 'deck_beruehrt', 'deck_hoerbar', 'deck_laeuft', 'nicht_geladen', 'material_fehlt', 'pruefung', 'budget_speicher', 'budget_stretcher', 'karte_voll', 'tempo_rampe', 'ki_gestoppt', 'rechner_fehlt', 'kein_stretcher', 'autonomie', 'form', 'hand', 'abbruch', 'ki_stopp', 'unbekannte_adresse', 'falsche_typen', 'protokoll', 'grenze_sub', 'neustart', 'datei_fehlt', 'format', 'audio_fehlt', 'zu_gross', 'spur_bereich', 'reserviert', 'kein_eingang', 'aufnahme_laeuft', 'zu_viele_scharf', 'eingang_fehlt', 'kein_platz', 'warp_maschine_fehlt', 'nur_andreas', 'auto_ziel_unbekannt', 'laeuft', 'host_fehlt', 'kein_rueckweg', 'belegt', 'schreiber_ueberlauf', 'zelle_leer'] as const;
+export const GRUENDE = ['zu_spaet', 'regler_beim_menschen', 'regler_verplant', 'ueberlappung', 'nur_hand', 'unbekannter_regler', 'unbekanntes_deck', 'ausserhalb_bereich', 'kein_hoerschein', 'hoerschein_anderer_kanal', 'hoerschein_anderer_inhalt', 'hoerschein_anderes_tempo', 'hoerschein_abgelaufen', 'hoerschein_anderer_abschnitt', 'ziel_ungehoert', 'keine_stems', 'hoerschein_nicht_sync', 'hoerschein_pegel', 'invariante_sub_doppelt', 'invariante_master_leer', 'deck_beruehrt', 'deck_hoerbar', 'deck_laeuft', 'nicht_geladen', 'material_fehlt', 'pruefung', 'budget_speicher', 'budget_stretcher', 'karte_voll', 'tempo_rampe', 'ki_gestoppt', 'rechner_fehlt', 'kein_stretcher', 'autonomie', 'form', 'hand', 'abbruch', 'ki_stopp', 'unbekannte_adresse', 'falsche_typen', 'protokoll', 'grenze_sub', 'neustart', 'datei_fehlt', 'format', 'audio_fehlt', 'zu_gross', 'spur_bereich', 'reserviert', 'kein_eingang', 'aufnahme_laeuft', 'zu_viele_scharf', 'eingang_fehlt', 'kein_platz', 'warp_maschine_fehlt', 'nur_andreas', 'auto_ziel_unbekannt', 'laeuft', 'host_fehlt', 'kein_rueckweg', 'belegt', 'schreiber_ueberlauf', 'zelle_leer', 'live_ohne_container', 'dj_doppelt', 'send_ausser_modul'] as const;

@@ -1,5 +1,5 @@
 // Live container view: export, transport clock, project read. (The module panel and its faders left the page with loop deck P1.)
-import { oeffneLive, kanalAnsicht } from './live_module.js';   // live modules task 4
+import { oeffneLive, kanalKennung } from './live_module.js';   // live modules task 4
 import { Kopf } from './wave.js';
 import { kopfImLoop } from './production/timeline.js';
 import { DECKS } from './curves.js';
@@ -8,6 +8,8 @@ import { loopAktiv } from './deck_griffe.js';
 import { zeigePlaetzeSpaeter } from './slots_view.js';
 import { uhrKopf } from './loop_rec_view.js';
 import { zeichneSeq } from './seq_view.js';
+import { zeichneStems } from './stems_view.js';
+import { zeigeStromZeilen } from './strudel_module.js';
 import { beiExportAenderung, setzeLiveHaken, exportBusy, exportZiel, exportiereVonDeck, loopdeckAnzahl, sorgeFuerStand, zeigeLoopdecks } from './loopdeck/view.js';   // loop deck view (loop deck P2)
 import { szenenEreignis } from './seq_szenen.js';   // SEQ places (seq-deck-s1 task 7)
 
@@ -65,8 +67,10 @@ export function arrBeat(t) {
 export function zeichneLive() {
   zeigePlaetzeSpaeter();
   zeichneSeq();   // the SEQ places read their deck from the live project
+  zeichneStems();   // the stems places read the tracks of their group from it
+  zeigeStromZeilen();   // the Strudel module shows a row per stream track of the project
   zeigeLoopdecks();   // the loop deck places read their own stand (GET /loopdeck/stand)
-  live.kanal = `${kanalAnsicht('A', zustand.regler).offen}${kanalAnsicht('B', zustand.regler).offen}`;   // stream.js redraws when this flips
+  live.kanal = kanalKennung(zustand.regler);   // stream.js redraws when this flips
   for (const n of DECKS) zeigeExport(n);
 }
 // What the server says now: the slug and rev first (cheap), the whole project only when the live container changed

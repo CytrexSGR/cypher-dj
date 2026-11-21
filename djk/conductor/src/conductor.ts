@@ -1,7 +1,7 @@
 // cypherdj-leitstand, Grundgerüst (Scheibe 12): Kern-Anbindung, WS-Hub, Takt-Strom, Journal.
 // Scheibe 21: Annahme (Verriegelung, Autonomie, Vorschläge, Kopplung), Hörschein-Register, Tasten, Abgleich nach Neustart.
 // Aufruf: node src/conductor.ts [--konfig <pfad>] [--kern-port <n>] [--set-id JJJJ-MM-TT_hhmm]
-//                               [--ki-spur deck/3,erz/1] [--kern-konfig <kern.toml>] [--journal voll|schlank]
+//                               [--ki-spur deck/1,pad/1] [--kern-konfig <kern.toml>] [--journal voll|schlank]
 // Umgebung: CYPHERDJ_INSTANZ (ROADMAP Z2), LEITSTAND_MUTATION (nur Prüfung: autonomie_aus, kopplung_aus,
 // wiederaufnahme_aus). Ohne --set-id setzt der Leitstand ein laufendes Set fort (src/resume.ts).
 // Erste Zeile auf stdout beginnt mit "leitstand:" (bereit).

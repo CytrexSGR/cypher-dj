@@ -92,8 +92,8 @@ namespace {
 
 constexpr int N = 256;
 constexpr int64_t SPB = 22500;  // 128 BPM bei 48 kHz
-constexpr int ERZ2 = 5, ERZ3 = 6;
-constexpr int ERZ_5 = 8, ERZ_6 = 9;   // S5r: Mixer-Kanäle von erz/5 und erz/6 (erz/4 nimmt der Kern nicht an)
+constexpr int ERZ2 = 1, ERZ3 = 2;   // output indices of streams 2 and 3 (stream - 1)
+constexpr int ERZ_5 = 1, ERZ_6 = 2;   // S5r: the streams 2 and 3 of the knob cases (output index = stream - 1; also the knob row)
 
 void schlafe_ms(int ms) { std::this_thread::sleep_for(std::chrono::milliseconds(ms)); }
 void warte_im_rechnen() {
@@ -169,8 +169,8 @@ int main() {
     w.erz.setze_bk_wert(wert);
     CypherBk* a = cypher_bk_neu(nullptr, 48000.0, nullptr, 0);   // Strom 2 auf erz/5
     CypherBk* b = cypher_bk_neu(nullptr, 48000.0, nullptr, 0);   // Strom 3 auf erz/6
-    w.erz.setze_bk(2, a, ERZ_5);
-    w.erz.setze_bk(3, b, ERZ_6);
+    w.erz.setze_bk(2, a);
+    w.erz.setze_bk(3, b);
     w.bis(6 * N);
     const bool a1 = regler_gleich(a, wert[ERZ_5]), b1 = regler_gleich(b, wert[ERZ_6]);
     wert[ERZ_5][0] = 1.0f;   // nur erz/5/bk/1 ändert sich
@@ -178,7 +178,7 @@ int main() {
     const bool a2 = a->regler_wert[0] == 1.0f && a->regler_wert[1] == wert[ERZ_5][1], b2 = regler_gleich(b, wert[ERZ_6]);
     wert[ERZ_5][0] = 0.9f;   // Tausch: der neue Graph bekommt den aktuellen Wert, nicht seinen Vorgabewert 0,5
     CypherBk* c = cypher_bk_neu(nullptr, 48000.0, nullptr, 0);
-    w.erz.setze_bk(2, c, ERZ_5);
+    w.erz.setze_bk(2, c);
     w.bis(w.s + 30 * N);
     const bool c1 = regler_gleich(c, wert[ERZ_5]);
     std::printf("MESS regler_werk faeden=%d: a=%d b=%d nach_aenderung a=%d b=%d nach_tausch c=%d (c[0]=%.3f soll %.3f) aufrufe a=%d b=%d "
@@ -190,8 +190,8 @@ int main() {
     PRUEF(b2);   // erz/6 blieb unberührt
     PRUEF(c1);
     PRUEF(g_ueberlappt.load() - ue0 == 0);
-    w.erz.setze_bk(2, nullptr, ERZ_5);
-    w.erz.setze_bk(3, nullptr, ERZ_6);
+    w.erz.setze_bk(2, nullptr);
+    w.erz.setze_bk(3, nullptr);
     w.bis(w.s + 6 * N);
     CypherBk* f[8];
     int nf = 0;
@@ -208,7 +208,7 @@ int main() {
     Welt w(1);
     w.erz.setze_bk_wert(wert);
     CypherBk* h = cypher_bk_neu(nullptr, 48000.0, nullptr, 0);
-    w.erz.setze_bk(2, h, ERZ_5);
+    w.erz.setze_bk(2, h);
     w.erz.fenster(fenster(2, {ev(0.0, 48, 16.0)}), 0.0);
     w.bis(6 * N);
     const int vor = h->regler_aufrufe.load();
@@ -230,7 +230,7 @@ int main() {
     PRUEF(waehrend == 0);
     PRUEF(danach > 0);            // und danach wieder
     PRUEF(g_ueberlappt.load() - ue0 == 0);
-    w.erz.setze_bk(2, nullptr, ERZ_5);
+    w.erz.setze_bk(2, nullptr);
     w.bis(w.s + 3 * N);
     CypherBk* f[4];
     const int nf = w.erz.bk_frei(f, 4);
@@ -243,7 +243,7 @@ int main() {
     const int ue0 = g_ueberlappt.load();
     Welt w(1);
     CypherBk* h = cypher_bk_neu(nullptr, 48000.0, nullptr, 0);
-    w.erz.setze_bk(2, h, ERZ2);
+    w.erz.setze_bk(2, h);
     constexpr int B = 8;   // Note A im Block B, bei Sample B·N + 10; Grundton C hält von Beginn an
     const int64_t smp_a = B * N + 10;
     const int64_t aus_a = std::llround(w.karte.sample_at(beat_von(smp_a) + 2.0));
@@ -277,7 +277,7 @@ int main() {
     PRUEF(aus_a_n == 1);
     PRUEF(nach_off);
     PRUEF(ue == 0);
-    w.erz.setze_bk(2, nullptr, ERZ2);
+    w.erz.setze_bk(2, nullptr);
     w.bis(w.s + 3 * N);
     CypherBk* f[4];
     const int nf = w.erz.bk_frei(f, 4);
@@ -291,7 +291,7 @@ int main() {
     Welt w(1);
     CypherBk* h1 = cypher_bk_neu(nullptr, 48000.0, nullptr, 0);
     CypherBk* h2 = cypher_bk_neu(nullptr, 48000.0, nullptr, 0);
-    w.erz.setze_bk(2, h1, ERZ2);
+    w.erz.setze_bk(2, h1);
     const int64_t smp_n = 16 * N + 7;   // Note des neuen Graphen, lange nach dem Wechsel
     w.erz.fenster(fenster(2, {ev(0.0, 48, 32.0), ev(beat_von(smp_n), 60, 1.0)}), 0.0);
     w.bis(4 * N);
@@ -300,8 +300,7 @@ int main() {
     warte_im_rechnen();
     PRUEF(g_im_rechnen.load());
     const int aufrufe_halt = h1->aufrufe.load();
-    w.erz.setze_bk(2, h2, ERZ3);   // im selben Zyklus wie setze_strom auf einen anderen Kanal (M4)
-    w.erz.setze_strom(2, nullptr, ERZ3);
+    w.erz.setze_bk(2, h2);   // the same stream gets a new graph (container core K1: streams carry no channel, the swap stays on the stream)
     CypherBk* f[4];
     int frei_waehrend = 0;
     for (int i = 0; i < 3; ++i) { w.ein(); frei_waehrend += w.erz.bk_frei(f, 4); }
@@ -319,8 +318,8 @@ int main() {
       maxabw = std::max(maxabw, (double)std::abs(w.erz2[T + i] - soll));
     }
     float alt_danach = 0.0f;
-    for (size_t i = T + N; i < w.erz2.size(); ++i) alt_danach = std::max(alt_danach, std::abs(w.erz2[i]));
-    const bool neu_klingt = w.erz3[smp_n] == 0.5f && w.erz3[smp_n - 1] == 0.0f;
+    for (size_t i = T + N; i < (size_t)smp_n; ++i) alt_danach = std::max(alt_danach, std::abs(w.erz2[i]));
+    const bool neu_klingt = w.erz2[smp_n] == 0.5f && w.erz2[smp_n - 1] == 0.0f;
     const int ue = g_ueberlappt.load() - ue0;
     std::printf("MESS wechsel_besetzt: aufrufe_am_alten_waehrend=%d frei_waehrend=%d frei_nach=%d (alter=%s) rampe_maxabw=%g "
                 "alt_danach=%.2f neu_auf_erz3=%s ueberlappt=%d\n", aufrufe_waehrend, frei_waehrend, frei_nach,
@@ -328,11 +327,11 @@ int main() {
     PRUEF(aufrufe_waehrend == 0);
     PRUEF(frei_waehrend == 0);
     PRUEF(frei_nach == 1 && zurueck == h1);
-    PRUEF(maxabw < 1e-6);       // alter klingt auf dem ALTEN Kanal mit der Rampe aus
+    PRUEF(maxabw < 1e-6);       // the old graph rings out with the ramp
     PRUEF(alt_danach == 0.0f);
-    PRUEF(neu_klingt);          // neuer auf dem neuen Kanal, am Sample
+    PRUEF(neu_klingt);          // the new graph sounds on the same stream, at the sample
     PRUEF(ue == 0);
-    w.erz.setze_bk(2, nullptr, ERZ3);
+    w.erz.setze_bk(2, nullptr);
     w.bis(w.s + 3 * N);
     const int nf = w.erz.bk_frei(f, 4);
     w.werk->stoppe();
@@ -345,13 +344,13 @@ int main() {
     const int ue0 = g_ueberlappt.load();
     Welt w(1);
     static cdj::MidiAus midi[cdj::ERZ_MIDI_PORTS];
-    w.erz.setze_strom(2, nullptr, ERZ2);
+    w.erz.setze_strom(2, nullptr);
     w.erz.setze_midi(2, 1, 3);
     w.erz.fenster(fenster(2, {ev(0.0, 60, 8.0)}), 0.0);
     w.ein(midi);
     const bool an = midi[0].n == 1 && midi[0].ev[0].b[0] == 0x92;
     CypherBk* h = cypher_bk_neu(nullptr, 48000.0, nullptr, 0);
-    w.erz.setze_bk(2, h, ERZ2);
+    w.erz.setze_bk(2, h);
     w.erz.setze_midi(2, 0, 1);   // Kern: Graph statt MIDI, offene Noten sofort aus auf ihrem alten Port/Kanal
     for (int i = 0; i < 3; ++i) w.ein(nullptr);
     w.ein(midi);
@@ -362,7 +361,7 @@ int main() {
     PRUEF(an);
     PRUEF(off);
     PRUEF(ue == 0);
-    w.erz.setze_bk(2, nullptr, ERZ2);
+    w.erz.setze_bk(2, nullptr);
     w.bis(w.s + 3 * N);
     CypherBk* f[4];
     const int nf = w.erz.bk_frei(f, 4);
@@ -374,7 +373,7 @@ int main() {
     neu_lauf();
     Welt w(0);
     CypherBk* h = cypher_bk_neu(nullptr, 48000.0, nullptr, 0);
-    w.erz.setze_bk(2, h, ERZ2);
+    w.erz.setze_bk(2, h);
     const int64_t smp_a = 3 * N + 10;
     w.erz.fenster(fenster(2, {ev(beat_von(smp_a), 57, 0.5)}), 0.0);
     w.bis(3 * N);   // Zyklus 2 (n0 = 2N) hat A für [3N, 4N) vergeben
@@ -382,7 +381,7 @@ int main() {
     w.bis(6 * N);
     std::printf("MESS fenster_kein_doppel: note_an(A)=%d zu_spaet=%d eingefuegt=%d\n", h->an_zahl[57], z.zu_spaet, z.eingefuegt);
     PRUEF(h->an_zahl[57] == 1);
-    w.erz.setze_bk(2, nullptr, ERZ2);
+    w.erz.setze_bk(2, nullptr);
     w.bis(w.s + 3 * N);
     CypherBk* f[4];
     const int nf = w.erz.bk_frei(f, 4);

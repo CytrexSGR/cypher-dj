@@ -146,11 +146,11 @@ def i4_ueberlappung():
 def ki_stopp():
     f = Folge("ki_stopp", "ki_stopp", ["11", "13", "25", "35"],
               "/k/ki/stopp: alle cypher-Teile ab, kein Fader gesenkt (E-a), danach ki_gestoppt, frei nur durch andreas")
-    f.hand_auf("deck/3/fader", 2)
+    f.hand_auf("pad/1/fader", 2)
     i = f.nid()
-    f.sende(f.S(4), osc("/k/ki/spur", i, "leitstand", "deck/3,erz/1"), "ki", "§4.7 /k/ki/spur")
+    f.sende(f.S(4), osc("/k/ki/spur", i, "leitstand", "pad/1,deck/2"), "ki", "§4.7 /k/ki/spur")
     f.angenommen(i, "leitstand", f.S(4), "ki")
-    c0 = f.teil(24, "cypher", "c1", 0, "deck/3/eq/hoch", 40, 16, -20.0, herleitung="läuft beim Stopp")
+    c0 = f.teil(24, "cypher", "c1", 0, "pad/1/eq/hoch", 40, 16, -20.0, herleitung="läuft beim Stopp")
     c1 = f.teil(24, "cypher", "c1", 1, "deck/1/eq/mitte", 52, 8, -10.0, herleitung="wartet beim Stopp")
     l0 = f.teil(24, "leitstand", "l1", 0, "deck/1/filter", 40, 16, 0.5, herleitung="Negativ-Kontrolle: Quelle leitstand")
     stopp = f.S(48)
@@ -160,10 +160,10 @@ def ki_stopp():
         f.q(c, "cypher", ABGEBROCHEN, None, None, "ki_stopp", stopp + MARGE, ab=stopp,
             herleitung="§4.7: alle Teile mit Quelle cypher abgebrochen, Grund ki_stopp")
     f.erwarte(stopp + MARGE, osc("/e/ki", 1, None, None), "ki", ab=stopp, herleitung="§5.9 /e/ki gestoppt 1")
-    f.wert(f.S(50), "deck/3/fader", 0.0, 0.0, "ki",
+    f.wert(f.S(50), "pad/1/fader", 0.0, 0.0, "ki",
            "Entscheidung E-a (2026-10-20): der Stopp senkt keinen Fader, auch nicht den der KI-Spur (vorher über 4 Beats auf −200)")
-    f.wert(f.S(52) + MARGE, "deck/3/fader", 0.0, 0.0, "ki", "E-a: nach 4 Beats unverändert (vorher stumm, §1.2)")
-    f.wert(f.S(54), "deck/3/eq/hoch", h.rampe_wert("deck/3/eq/hoch", 0.0, -20.0, 40.0, 16.0, 48.0) - 0.028, 0.03, "ki",
+    f.wert(f.S(52) + MARGE, "pad/1/fader", 0.0, 0.0, "ki", "E-a: nach 4 Beats unverändert (vorher stumm, §1.2)")
+    f.wert(f.S(54), "pad/1/eq/hoch", h.rampe_wert("pad/1/eq/hoch", 0.0, -20.0, 40.0, 16.0, 48.0) - 0.028, 0.03, "ki",
            "§4.3 /k/abbruch-Semantik: laufender Teil hält am Ist-Wert (Ankunft zwischen Beat 48 und 48,044)")
     f.wert(f.S(58), "deck/1/eq/mitte", 0.0, 0.0, "ki", "wartender cypher-Teil entfällt")
     f.fertig(l0, "leitstand", 56)

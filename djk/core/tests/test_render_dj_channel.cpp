@@ -31,7 +31,7 @@ int main() {
     schreibe(1, 0);
     schreibe(2, 1);
     schreibe(3, 3);   // ADR 038: deck/1
-    schreibe(4, 6);   // ADR 038: deck/4
+    schreibe(4, 4);   // K5: pad/2
     for (cdj::RenderAbgriff ab : {cdj::RenderAbgriff::set, cdj::RenderAbgriff::produktion}) {
       auto rendere = [&](int64_t nr) {
         cdj::RenderAuftrag r;
@@ -48,7 +48,7 @@ int main() {
       PRUEF(ref.fehler.empty() && ref.frames > 0);
       std::fprintf(stderr, "abgriff %d: ref peak %g frames %lld [%s]\n", static_cast<int>(ab), spitze(ref.l), static_cast<long long>(ref.frames), ref.fehler.c_str());
       PRUEF(spitze(ref.l) > 0.1);
-      for (int64_t nr : {2, 3, 4}) {   // dj 1 (ADR 037), and ADR 038: dj 3 = deck/1 and dj 6 = deck/4 route into the master offline like dj 1
+      for (int64_t nr : {2, 3, 4}) {   // dj 1 (ADR 037), and ADR 038: dj 3 = pad/1 and dj 4 = pad/2 route into the master offline like dj 1
         const cdj::RenderErgebnis dj = rendere(nr);
         PRUEF(dj.fehler.empty() && dj.frames == ref.frames);
         PRUEF(gleich(dj.l, ref.l) && gleich(dj.r, ref.r));

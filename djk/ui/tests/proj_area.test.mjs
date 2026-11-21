@@ -36,7 +36,7 @@ test('neu und öffnen mit der Kern-Attrappe: Wiedergabe geladen (Quittung 3), er
   assert.equal(n.j.kern.wiedergabe.quittung.status, 3, 'Attrappe lädt die Wiedergabe');
   assert.deepEqual(n.j.kern.regler_fehler, [], 'erz/4 und Spur-Regler angenommen');
   assert.equal(anKern(log, '/k/teil').filter((z) => /^spur\/\d+\/(fader|pan|mute|solo)$/.test(z.felder.pfad)).length, 4 * MAX_SPUREN);
-  assert.equal(anKern(log, '/k/teil').filter((z) => /^erz\/4\//.test(z.felder.pfad)).length, 24);
+  assert.equal(anKern(log, '/k/teil').filter((z) => /^erz\//.test(z.felder.pfad)).length, 0, 'streams have no strip any more: nothing goes to erz/*');
   assert.deepEqual(anKern(log, '/k/arr/laden').map((z) => z.felder.nr), [n.j.projekt.wiedergabe_rev]);
   assert.deepEqual((await ruf(url, 'GET', '/proj/liste')).j.map((e) => [e.slug, e.name]), [['first-track', 'First Track']]);
   assert.equal((await ruf(url, 'GET', '/proj/aktuell')).j.slug, 'first-track');
@@ -63,7 +63,7 @@ test('POST /regler mit Pfad spur/* → 409 ueber_projekt (jede Quelle), nichts a
   }
   assert.equal(o.gesendet, gesendet0, 'nichts ging an den Kern');
   assert.equal((await ruf(url, 'POST', '/regler', { pfad: 'spur/33/fader', nach: 0 })).j.fehler, 'pfad', 'spur/33 gibt es nicht: weiter 400 pfad');
-  const ok = await ruf(url, 'POST', '/regler', { pfad: 'erz/2/fader', nach: -3 });
+  const ok = await ruf(url, 'POST', '/regler', { pfad: 'bus/1/fader', nach: -3 });
   assert.deepEqual([ok.code, ok.j.ok], [200, true], 'Negativ-Kontrolle: ein erlaubter Pfad geht weiter durch');
   assert.equal(o.gesendet, gesendet0 + 1);
 });

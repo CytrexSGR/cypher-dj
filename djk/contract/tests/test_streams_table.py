@@ -1,10 +1,14 @@
-"""Contract test S18 task 1: the shared stream <-> channel table djk/contract/streams.ts against the kern sources.
-pytest -q djk/contract/tests/test_streams_table.py -p no:cacheprovider. Runtime < 2 s.
-Mutation probes and negative controls work on copies in tmp_path, never in the working tree.
+"""Contract test S18 / container core V4: the shared stream, alias and recording tables djk/contract/stroeme.ts.
+pytest -q djk/contract/tests/test_streams_table.py -p no:cacheprovider. Runtime < 3 s.
 
-streams.ts is parsed with regexes (exported object and array literals only), so the file has to stay plain data."""
+Sources read (D-K18): streams.ts and the generated pult_table.h only. No core source file is parsed here: the core
+checks its own side against pult_table.h. Mutation probes and negative controls work on copies in tmp_path.
+
+streams.ts is parsed with regexes (exported object and array literals only), so the file has to stay plain data.
+The runtime test loads it with node (erasable TypeScript, type stripping)."""
 import re
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -13,12 +17,13 @@ HIER = Path(__file__).resolve().parents[1]
 WURZEL = HIER.parents[1]   # repo root of this working tree (also inside a worktree)
 
 STROEME_TS = "djk/contract/streams.ts"
-MIXER_H = "djk/core/include/cypherdj/mixer.h"
-NETZ_ERZ_CPP = "djk/core/src/net_erz.cpp"
-REGLER_CPP = "djk/core/signalbox/src/controls.cpp"
-ERZEUGER_H = "djk/core/include/cypherdj/generator.h"
-AUFNAHME_H = "djk/core/include/cypherdj/recording.h"
-QUELLEN = [STROEME_TS, MIXER_H, NETZ_ERZ_CPP, REGLER_CPP, ERZEUGER_H, AUFNAHME_H]
+PULT_H = "djk/core/include/cypherdj/pult_table.h"
+PULT_TS = "djk/contract/pult.ts"
+QUELLEN = [STROEME_TS, PULT_H, PULT_TS]
+
+STROM_KANAL_ERWARTET = {1: "erz/1", 2: "erz/2", 3: "erz/3", 5: "erz/5", 6: "erz/6", 7: "erz/7", 9: "erz/9", 10: "erz/10"}
+REC_ERWARTET = {"erz/1": 11, "erz/2": 12, "erz/3": 13, "erz/5": 15, "erz/6": 16, "erz/7": 17,
+                "pad/1": 21, "pad/2": 22, "deck/1": 23, "deck/2": 24}
 
 
 def lies(wurzel: Path, rel: str) -> str:
@@ -39,6 +44,7 @@ def objekt(ts: str, name: str) -> dict:
     out = {}
     for k, v in re.findall(r"""(?:^|,|\n)\s*('[^']*'|"[^"]*"|\d+)\s*:\s*('[^']*'|"[^"]*"|\d+)""", m.group(1)):
         out[_wert(k)] = _wert(v)
+    assert out, f"streams.ts: object literal {name} parsed empty"
     return out
 
 
@@ -46,110 +52,101 @@ def liste(ts: str, name: str) -> list:
     """`export const NAME = [ ... ]` -> list."""
     m = re.search(r"export const " + re.escape(name) + r"\b[^=]*=\s*\[(.*?)\]", ts, re.S)
     assert m, f"streams.ts: array literal {name} missing"
-    return [_wert(x) for x in re.findall(r"""'[^']*'|"[^"]*"|\d+""", m.group(1))]
+    out = [_wert(x) for x in re.findall(r"""'[^']*'|"[^"]*"|\d+""", m.group(1))]
+    assert out, f"streams.ts: array literal {name} parsed empty"
+    return out
 
 
-def cpp_zahlen(h: str, name: str) -> list:
-    """`constexpr int NAME[...] = {1, 2, 3};` -> [1, 2, 3]."""
-    m = re.search(r"constexpr int " + re.escape(name) + r"\[[^\]]*\]\s*=\s*\{([^}]*)\}", h)
-    assert m, f"recording.h: array {name} missing"
-    return [int(x) for x in re.findall(r"\d+", m.group(1))]
+def pult_zahl(h: str, name: str) -> int:
+    m = re.search(r"inline constexpr int " + re.escape(name) + r"\s*=\s*(\d+);", h)
+    assert m, f"pult_table.h: constant {name} missing"
+    return int(m.group(1))
 
 
-def mixer_index(mixer_h: str) -> dict:
-    """Layout comment of MIX_QUELLEN in mixer.h -> channel name -> mixer index."""
-    m = re.search(r"deck/1\.\.4 \((\d+)\.\.(\d+)\), erz/1\.\.8 \((\d+)\.\.(\d+)\), pad/1\.\.2 \((\d+), (\d+)\)", mixer_h)
-    assert m, "mixer.h: layout comment 'deck/1..4 (0..3), erz/1..8 (4..11), pad/1..2 (12, 13)' not found"
-    d0, d1, e0, e1, p0, p1 = map(int, m.groups())
-    idx = {}
-    for i in range(1, 5):
-        idx[f"deck/{i}"] = d0 + i - 1
-    for i in range(1, 9):
-        idx[f"erz/{i}"] = e0 + i - 1
-    for i in range(1, 3):
-        idx[f"pad/{i}"] = p0 + i - 1
-    assert d1 == 3 and e1 == 11 and p1 == 13
-    return idx
+def pult_pfade(h: str, name: str) -> list:
+    m = re.search(r"inline constexpr const char\* " + re.escape(name) + r"\[\d+\]\s*=\s*\{([^}]*)\}", h)
+    assert m, f"pult_table.h: array {name} missing"
+    out = re.findall(r'"([^"]+)"', m.group(1))
+    assert out, f"pult_table.h: array {name} parsed empty"
+    return out
+
+
+def alle_stroeme(wurzel: Path, f: list) -> list:
+    """ALLE_STROEME is not a copy: streams.ts imports PULT_ALIAS_STROEME from pult.ts (generated from pult.json alias_stroeme) and aliases it."""
+    ts = lies(wurzel, STROEME_TS)
+    if not re.search(r"import\s*\{\s*PULT_ALIAS_STROEME\s*\}\s*from\s*'\./pult\.ts'", ts) \
+            or not re.search(r"export const ALLE_STROEME\s*=\s*PULT_ALIAS_STROEME\b", ts):
+        f.append("ALLE_STROEME is a copy: it must be `= PULT_ALIAS_STROEME` imported from ./pult.ts")
+    return liste(lies(wurzel, PULT_TS), "PULT_ALIAS_STROEME")
 
 
 def pruefe(wurzel: Path) -> list:
     """All findings as strings; empty = green."""
     f = []
     ts = lies(wurzel, STROEME_TS)
-    idx = mixer_index(lies(wurzel, MIXER_H))
+    h = lies(wurzel, PULT_H)
+    container = pult_pfade(h, "PULT_CONTAINER_PFAD")
+    n_strom = pult_zahl(h, "PULT_STROEME")
 
-    # 1. STROM_KANAL and the stream = mixer index - 3 rule
-    erwartet = {1: "erz/1", 2: "erz/2", 3: "erz/3", 5: "erz/5", 6: "erz/6", 7: "erz/7", 9: "pad/1", 10: "pad/2"}
+    # 1. STROM_KANAL: alias path of the Strudel track per stream, never a pad entry, never a mixer index rule
     sk = objekt(ts, "STROM_KANAL")
-    if sk != erwartet:
-        f.append(f"STROM_KANAL differs: {sk} != {erwartet}")
+    if sk != STROM_KANAL_ERWARTET:
+        f.append(f"STROM_KANAL differs: {sk} != {STROM_KANAL_ERWARTET}")
     for s, k in sk.items():
-        if k not in idx or s != idx[k] - 3:
-            f.append(f"STROM_KANAL: stream {s} -> {k} violates stream == mixer index - 3")
+        if str(k).startswith("pad/"):
+            f.append(f"STROM_KANAL: stream {s} -> {k} is a pad entry")
+        if k != f"erz/{s}":
+            f.append(f"STROM_KANAL: stream {s} -> {k} is not erz/{s}")
+        if not 1 <= s <= n_strom:
+            f.append(f"STROM_KANAL: stream {s} is outside 1..{n_strom} (pult_table.h PULT_STROEME)")
+    alle = alle_stroeme(wurzel, f)
+    if alle != sorted(sk):
+        f.append(f"ALLE_STROEME {alle} differs from the keys of STROM_KANAL {sorted(sk)}")
+    for refused in (4, 8):
+        if refused in alle:
+            f.append(f"ALLE_STROEME contains the unused stream {refused}")
 
-    # 2. INSTRUMENT_STROEME against the kern rule (net_erz.cpp) and the kn_bk list (controls.cpp)
+    # 2. INSTRUMENT_STROEME, BK_STROEME, STROM_MIDI_ZIEL
     inst = liste(ts, "INSTRUMENT_STROEME")
-    if inst != [2, 3, 5, 6, 7, 9, 10]:
-        f.append(f"INSTRUMENT_STROEME differs: {inst}")
-    netz = lies(wurzel, NETZ_ERZ_CPP)
-    m = re.search(r"kanal_ok = k >= (\d+) && k <= (\d+) && k != Mixer::kanal_index\(VORHOER_KANAL\)", netz)
-    if not m:
-        f.append("net_erz.cpp: kanal_ok rule not found")
-    else:
-        lo, hi = int(m.group(1)), int(m.group(2))
-        vorhoer = re.search(r'VORHOER_KANAL = "([^"]+)"', lies(wurzel, MIXER_H)).group(1)
-        arr = re.search(r'ARR_KANAL = "([^"]+)"', lies(wurzel, MIXER_H)).group(1)
-        regler = lies(wurzel, REGLER_CPP)
-        kn_bk = re.search(r"for \(const char\* kn_bk : \{([^}]*)\}", regler)
-        kn_liste = re.findall(r'"([^"]+)"', kn_bk.group(1)) if kn_bk else []
-        for s in inst:
-            k = sk.get(s)
-            if k is None:
-                f.append(f"INSTRUMENT_STROEME: stream {s} has no channel")
-                continue
-            if not (lo <= idx[k] <= hi):
-                f.append(f"kern rule (net_erz.cpp k >= {lo} && k <= {hi}) refuses {k}")
-            if k in (vorhoer, arr):
-                f.append(f"kern refuses {k} (cue or production channel)")
-            if k not in kn_liste:
-                f.append(f"controls.cpp kn_bk list lacks {k}")
-
-    # 3. BK_STROEME and STROM_MIDI_ZIEL
+    if inst != [s for s in alle if s != 1]:
+        f.append(f"INSTRUMENT_STROEME differs: {inst} (stream 1 is the drum kit and carries no graph)")
     bk = liste(ts, "BK_STROEME")
     if bk != [5, 6, 7, 9, 10]:
         f.append(f"BK_STROEME differs: {bk}")
     mz = objekt(ts, "STROM_MIDI_ZIEL")
     if sorted(mz) != sorted(bk):
         f.append(f"STROM_MIDI_ZIEL keys {sorted(mz)} != BK_STROEME {sorted(bk)}")
-    ports = int(re.search(r"ERZ_MIDI_PORTS = (\d+)", lies(wurzel, ERZEUGER_H)).group(1))
     for s, z in mz.items():
         mm = re.fullmatch(r"midi:([1-4]):([1-9]|1[0-6])", str(z))
         if not mm:
             f.append(f"STROM_MIDI_ZIEL[{s}] = {z!r} is not midi:<1..4>:<1..16>")
-        elif int(mm.group(1)) > ports:
-            f.append(f"STROM_MIDI_ZIEL[{s}] = {z} uses a port above ERZ_MIDI_PORTS {ports}")
         if z in ("midi:1:1", "midi:2:1"):
             f.append(f"STROM_MIDI_ZIEL[{s}] = {z} collides with the studio's instrument targets")
     if len(set(mz.values())) != len(mz):
         f.append(f"STROM_MIDI_ZIEL has duplicate targets: {mz}")
 
-    # 4. REC_EINGANG and INTERNE_EINGAENGE
-    re_erw = {"erz/1": 11, "erz/2": 12, "erz/3": 13, "erz/5": 15, "erz/6": 16, "erz/7": 17, "pad/1": 21, "pad/2": 22}
+    # 3. REC_EINGANG and INTERNE_EINGAENGE
     rec = objekt(ts, "REC_EINGANG")
-    if rec != re_erw:
+    if rec != REC_ERWARTET:
         f.append(f"REC_EINGANG differs: {rec}")
     ie = liste(ts, "INTERNE_EINGAENGE")
-    if ie != list(re_erw):
-        f.append(f"INTERNE_EINGAENGE differs: {ie}")
-
-    # 5. recording.h: REC_CODES / REC_MIXER (the kern's tap table) agree with REC_EINGANG and the mixer layout
-    auf = lies(wurzel, AUFNAHME_H)
-    codes = cpp_zahlen(auf, "REC_CODES")
-    mix = cpp_zahlen(auf, "REC_MIXER")
-    if codes != list(re_erw.values()):
-        f.append(f"recording.h REC_CODES {codes} differs from REC_EINGANG {list(re_erw.values())}")
-    elif mix != [idx[k] for k in re_erw]:
-        f.append(f"recording.h REC_MIXER {mix} differs from the mixer index of {list(re_erw)}: {[idx[k] for k in re_erw]}")
+    if ie != list(rec):
+        f.append(f"INTERNE_EINGAENGE differs from the keys of REC_EINGANG: {ie}")
+    for k, code in rec.items():
+        if k.startswith("erz/"):
+            s = int(k[4:])
+            if code != 10 + s or s not in sk:
+                f.append(f"REC_EINGANG[{k}] = {code} is not a stream buffer code 10 + stream of a known stream")
+        elif k in container:
+            erwartet = 21 + (container.index(k) - 2) % 4   # C, D, A, B = 21, 22, 23, 24
+            if code != erwartet:
+                f.append(f"REC_EINGANG[{k}] = {code}, container input code should be {erwartet}")
+        else:
+            f.append(f"REC_EINGANG key {k} is neither erz/<n> nor a container path of pult_table.h")
+    if any(c in (14, 18) for c in rec.values()):
+        f.append("REC_EINGANG uses a refused code (14 or 18)")
+    if sorted(c for c in rec.values() if c >= 21) != [21, 22, 23, 24]:
+        f.append("REC_EINGANG container codes are not exactly 21..24")
     return f
 
 
@@ -184,20 +181,60 @@ def test_negative_control_whitespace_and_comment_only_change_stays_green(kopie):
     assert pruefe(kopie) == []
 
 
+def test_strom_kanal_hat_keine_pad_eintraege():
+    sk = objekt(lies(WURZEL, STROEME_TS), "STROM_KANAL")
+    assert not [v for v in sk.values() if v.startswith("pad/")]
+    assert sorted(sk) == alle_stroeme(WURZEL, [])
+    assert all(v == f"erz/{k}" for k, v in sk.items())
+
+
+def test_rec_eingang_deckt_container_eingaenge_und_strombuffer():
+    ts = lies(WURZEL, STROEME_TS)
+    rec = objekt(ts, "REC_EINGANG")
+    assert rec == REC_ERWARTET
+    assert liste(ts, "INTERNE_EINGAENGE") == list(rec)
+    container = pult_pfade(lies(WURZEL, PULT_H), "PULT_CONTAINER_PFAD")
+    assert all(k in container for k in rec if not k.startswith("erz/"))
+    assert sorted(c for c in rec.values() if c >= 21) == [21, 22, 23, 24]
+    assert 14 not in rec.values() and 18 not in rec.values()
+
+
+def test_kanal_von_strom_und_zurueck():
+    skript = (
+        f"import {{kanalVonStrom, stromVonKanal, istBkStrom}} from {str(WURZEL / STROEME_TS)!r};"
+        "console.log(JSON.stringify([kanalVonStrom(9), kanalVonStrom(4), stromVonKanal('erz/10'),"
+        "stromVonKanal('pad/1'), stromVonKanal('erz/4'), istBkStrom(9), istBkStrom(3)]))"
+    )
+    r = subprocess.run(["node", "--input-type=module", "-e", skript], capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == '["erz/9",null,10,null,null,true,false]'
+
+
+def test_alle_stroeme_gleich_alias_stroeme_der_pult_json():
+    """Runtime parity (container core V review I4): the stream list the page server reads equals pult.json alias_stroeme."""
+    import json
+    soll = json.loads((WURZEL / "djk/contract/pult.json").read_text(encoding="utf-8"))["alias_stroeme"]
+    skript = f"import {{ALLE_STROEME}} from {str(WURZEL / STROEME_TS)!r}; console.log(JSON.stringify([...ALLE_STROEME]))"
+    r = subprocess.run(["node", "--input-type=module", "-e", skript], capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout) == soll
+
+
 MUTATIONEN = [
-    (STROEME_TS, "9: 'pad/1'", "9: 'pad/2'", "violates stream == mixer index - 3"),
-    (NETZ_ERZ_CPP, "k <= 13", "k <= 12", "kern rule (net_erz.cpp k >= 4 && k <= 12) refuses pad/2"),
-    # anchored on the loop head: since the knob widening the same list stands three times (kn_bk, kn_bk_hoch, kn_bk_hoch2)
-    (REGLER_CPP, 'kn_bk : {"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "erz/5", "erz/6", "erz/7", ',
-     'kn_bk : {"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "erz/5", "erz/6", ', "controls.cpp kn_bk list lacks erz/7"),
+    (STROEME_TS, "  9: 'erz/9',", "  9: 'pad/1',", "is a pad entry"),
+    (PULT_TS, "PULT_ALIAS_STROEME = [1, 2, 3, 5, 6, 7, 9, 10]", "PULT_ALIAS_STROEME = [1, 2, 3, 5, 6, 7, 9]", "ALLE_STROEME"),
+    (STROEME_TS, "export const ALLE_STROEME = PULT_ALIAS_STROEME;", "export const ALLE_STROEME = [1, 2, 3, 5, 6, 7, 9, 10] as const;",
+     "is a copy"),
+    (STROEME_TS, "'erz/6': 16,", "'erz/6': 14,", "REC_EINGANG"),
+    (STROEME_TS, "'deck/2': 24,", "'deck/2': 25,", "REC_EINGANG"),
     (STROEME_TS, "10: 'midi:4:2'", "10: 'midi:4:1'", "duplicate targets"),
-    (AUFNAHME_H, "{4, 5, 6, 8, 9, 10, 12, 13}", "{4, 5, 6, 8, 9, 9, 12, 13}", "REC_MIXER"),   # code 17 would record the tap of erz/6
-    (AUFNAHME_H, "{4, 5, 6, 8, 9, 10, 12, 13}", "{4, 5, 6, 8, 9, 10, 13, 12}", "REC_MIXER"),   # pad taps swapped
-    (AUFNAHME_H, "{11, 12, 13, 15, 16, 17, 21, 22}", "{11, 12, 13, 15, 16, 17, 21, 23}", "REC_CODES"),
+    (PULT_H, '{"deck/1", "deck/2", "pad/1", "pad/2"}', '{"deck/1", "deck/2", "pad/1", "pad/3"}', "pad/2"),
+    (PULT_H, '{"deck/1", "deck/2", "pad/1", "pad/2"}', '{"deck/2", "deck/1", "pad/1", "pad/2"}', "container input code"),
+    (PULT_H, "PULT_STROEME = 16", "PULT_STROEME = 8", "outside 1..8"),
 ]
 
 
-@pytest.mark.parametrize("rel,alt,neu,meldung", MUTATIONEN, ids=[m[3][:40] for m in MUTATIONEN])
+@pytest.mark.parametrize("rel,alt,neu,meldung", MUTATIONEN, ids=[f"{i}-{m[3][:30]}" for i, m in enumerate(MUTATIONEN)])
 def test_mutation_turns_red(kopie, rel, alt, neu, meldung):
     mutiere(kopie, rel, alt, neu)
     gefunden = pruefe(kopie)

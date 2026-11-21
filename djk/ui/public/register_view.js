@@ -15,6 +15,7 @@
 // KEYS line under the device list: "KEYS -> <track or channel>" with a switch (POST /controller/fokus/tasten {an}); the field `tasten` of GET /controller/fokus says where
 // the MIDI keys go. An older page server without the field shows no line.
 // A page server that does not know the routes (404) leaves the switch disabled with a short text and shows no preset buttons; the rest works as before.
+import { CONTAINER, STROEME, containerName, stromKanal, stromName } from './kanaele.js';
 const FEHLER_TEXT = { json: 'does not parse', form: 'not a mapping file (version 1 with eintraege)' };
 const SOFTWARE = (q) => /^bluez_midi\./.test(q.port) || /Midi Through/i.test(`${q.port} ${q.alias ?? ''}`);
 const quelleName = (q) => String(q.alias || '').split(':')[0].trim() || q.port;
@@ -22,13 +23,12 @@ const WEG_TEXT = { pult: 'desk bridge', lernen: 'learn input', offen: 'not bound
 const TYP_TEXT = { cc: 'CC', note: 'Note' };
 const ART_TEXT = { absolut: 'knob', relativ: 'encoder', taste: 'button', beruehrung: 'touch', umschalten: 'toggle' };
 
-const DECK = { 1: 'A', 2: 'B', 3: '3', 4: '4' };
 /** The module of the studio a target belongs to, by its path: {id, name}. */
 export function modulVon(ziel) {
   const t = String(ziel).split('/'), n = t[1];
-  if (t[0] === 'deck') return { id: `deck/${n}`, name: `Deck ${DECK[n] ?? n}` };
-  if (t[0] === 'pad') return { id: `pad/${n}`, name: `Loops L${n}` };
-  if (t[0] === 'erz') return { id: `erz/${n}`, name: { 1: 'Drums', 2: 'Bass', 3: 'Melody' }[n] ?? `Instrument I${n}` };
+  const letter = containerName(`${t[0]}/${n}`);   // a container strip (deck/1, deck/2, pad/1, pad/2) is named by its place letter
+  if (letter) return { id: `${t[0]}/${n}`, name: `Container ${letter}` };
+  if (t[0] === 'erz') return { id: stromKanal(n), name: stromName(Number(n)) === `S${n}` ? `Stream ${n}` : { 1: 'Drums', 2: 'Bass', 3: 'Melody' }[n] };
   if (t[0] === 'fx') return { id: `fx/${n}`, name: n === '3' ? 'FX3 Remix' : `FX${n}` };
   if (t[0] === 'spur') return { id: `spur/${n}`, name: `Track ${n}` };
   if (t[0] === 'grp') return { id: `grp/${n}`, name: `Group ${n}` };
@@ -40,9 +40,8 @@ export function modulVon(ziel) {
 }
 // Which modules a view of the page shows (the module ids of modulVon; a trailing "/" is a prefix).
 export const SICHTEN = [
-  { id: 'dj', name: 'DJ', module: ['deck/', 'pad/', 'fx/', 'color', 'duck', 'xfader', 'master', 'ansicht'] },
-  { id: 'live', name: 'LIVE', module: ['erz/', 'pad/', 'fx/', 'color', 'duck', 'master', 'graph'] },
-  { id: 'studio', name: 'STUDIO', module: ['erz/5', 'erz/6', 'erz/7', 'master', 'graph'] },
+  { id: 'dj', name: 'DJ', module: [...CONTAINER.map((c) => c.pfad), 'fx/', 'color', 'duck', 'xfader', 'master', 'ansicht'] },
+  { id: 'live', name: 'LIVE', module: [...STROEME.map(stromKanal), ...CONTAINER.filter((c) => c.player > 2).map((c) => c.pfad), 'fx/', 'color', 'duck', 'master', 'graph'] },
   { id: 'production', name: 'PRODUCTION', module: ['spur/', 'master'] },
 ];
 const inSicht = (modulId, sichtId) => { const s = SICHTEN.find((x) => x.id === sichtId); return !s || s.module.some((m) => (m.endsWith('/') ? modulId.startsWith(m) : modulId === m)); };
@@ -275,7 +274,7 @@ export function geraeteZeilen(register, geraete, lern, tablets = null) {
 const GRUND_FOLGEN = {
   kein_graph: (ort) => `${ort} has no graph loaded`,
   kein_bk: (ort) => `${ort} is not a Baukasten synth`,
-  slot_ohne_zeile: (ort) => `${ort} has no controller row (only the first 8 Baukasten tracks have one)`,
+  slot_ohne_zeile: (ort) => `${ort} has no controller row (its Baukasten slot is beyond the controller rows)`,
 };
 const presetName = (id, liste) => (liste ?? []).find((p) => p.id === id)?.name ?? String(id).split('/').pop();
 /**

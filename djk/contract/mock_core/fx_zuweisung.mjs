@@ -2,10 +2,10 @@
 // Units 1 and 2 are the Beat FX (channels of fx_kanal_12, with master); unit 3 is FX3, the insert on fx/3 that carries the remix graph
 // (every source channel of fx_kanal_3, never master). The fake core holds the flags and reports each change; the audio side
 // (blend, fallback without a graph) belongs to the real core. A restart forgets all assignments, as the real core does.
-import { QUELLEN } from './contract.mjs';
+import { QUELLEN, SPIELKANAELE } from './contract.mjs';
 
-export const KANAL_12 = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'pad/1', 'pad/2', 'master'];
-export const KANAL_3 = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/4', 'erz/5', 'erz/6', 'erz/7', 'erz/8', 'pad/1', 'pad/2'];
+export const KANAL_12 = [...SPIELKANAELE, 'master'];
+export const KANAL_3 = [...SPIELKANAELE];
 
 export default {
   name: 'fx_zuweisung',

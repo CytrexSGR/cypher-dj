@@ -28,12 +28,20 @@ Regler-Tabelle der Attrappe mit
 stellwerk/regler.cpp (ein eigener Vergleich, hier nicht gelesen); ob hand_in.h die Tasten tatsächlich so verarbeitet,
 wie der Rumpf sie ablehnt (nur Namen, kein Verhalten); ANNAHME_SOLL selbst ist hier festgelegt und kennt nur die
 Begründung im Kommentar (server.ts:1685-1688), keine Maschinenquelle.
+Container core V6: the expected channel sets no longer come from controls.cpp loops but from pult.json (generate_pult.py): four
+containers (deck/1, deck/2, pad/1, pad/2), four buses, streams strom/1..16 with their bk rows, the player rows deck/1..4/stem/* and the
+sends fx/3, fx/4 and master for bk. KERN_NUR = {"transport"}: the player suffix `transport` is a core row only (not hand-addressable,
+not in the mock, not in the schema), so it is left out of every comparison. controls.cpp itself is read for markers only (see
+pruefe_regler_marker): lane K builds its table from the generated pult_table.h and the checker demands the tokens, never a green
+without them. The ranges of komp/sc, gate/sc (0..4) and spektrum/kanal (0..9)
+are pinned in SC_BEREICH (D-V3) against the kernel rows, the contract text and the mock.
 Aufruf: python3 djk/contract/check_name_lists.py [--wurzel DIR] [--rev GITREV]
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -43,6 +51,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 HIER = Path(__file__).resolve().parent
 sys.path.insert(0, str(HIER))
+import generate_pult as erzeuge_pult  # noqa: E402
 import contract_text as vertragstext  # noqa: E402
 
 # ---- begründete Ausnahmen: (Liste, Name) -> Grund. Jede Ausnahme MUSS einen Befund unterdrücken, den _diff sonst
@@ -69,6 +78,7 @@ class Quelle:
     def __init__(self, wurzel: Path | None = None, rev: str | None = None):
         self.wurzel = Path(wurzel).resolve() if wurzel else HIER.parents[1]
         self.rev = rev
+        self._importiert: set[str] = set()
         self.gelesen: set[str] = set()   # alle Quelldateien dieses Laufs (die Tests kopieren genau diese)
 
     def lies(self, rel: str) -> str:
@@ -93,11 +103,26 @@ class Quelle:
         """Dateien eines Ordners mit dieser Endung (relativ zur Wurzel); nur im Arbeitsbaum (wie node_json)."""
         return sorted(str(p.relative_to(self.wurzel)) for p in (self.wurzel / ordner).glob("*" + endung))
 
+    def _mit_importen(self, rel: str) -> None:
+        """Books `rel` and every file it imports through a relative specifier (transitively), so that the tests copy what node loads."""
+        if rel in self._importiert:
+            return
+        self._importiert.add(rel)
+        self.gelesen.add(rel)
+        pfad = self.wurzel / rel
+        if pfad.suffix not in (".js", ".mjs", ".ts") or not pfad.is_file():
+            return
+        text = pfad.read_text(encoding="utf-8")
+        for spez in re.findall(r"""(?:from|import)\s*\(?\s*['"](\.{1,2}/[^'"]+)['"]""", text):
+            ziel = Path(os.path.normpath(Path(rel).parent / spez)).as_posix()
+            self._mit_importen(ziel)
+
     def node_json(self, ausdruck: str):
         """Wertet ein ES-Modul-Skript in node aus (nur Lesen). Nur im Arbeitsbaum möglich."""
         if self.rev:
             raise ParserFehler("node-Auswertung nur im Arbeitsbaum")
-        self.gelesen.update(re.findall(r"@@/([^'\"]+)", ausdruck))
+        for rel in re.findall(r"@@/([^'\"]+)", ausdruck):
+            self._mit_importen(rel)
         r = subprocess.run(["node", "--input-type=module", "-e", ausdruck.replace("@@", self.wurzel.as_posix())],
                            capture_output=True, text=True, timeout=20)
         if r.returncode != 0:
@@ -429,6 +454,47 @@ def _pruefe_aktionen(q: Quelle, befunde: list[str], genutzt: set) -> None:
                     f"Mapping {liste}: Ziel deck/<n>/{name} lehnt die Attrappe hand.mjs ab (unbekannter_regler)")
 
 
+# ---------------------------------------------------------------- container core V6: pult.json as the source of the expected sets
+KERN_NUR = {"transport"}   # player suffixes that are core rows only: not hand-addressable, not in the mock, not in the schema
+PULT_FAMILIEN_ANFANG = {"deck", "pad", "bus", "strom", "erz"}   # first path segment of every row family that pult.json describes
+PULT_REL = "djk/contract/pult.json"
+
+
+def _pult(q: Quelle) -> dict:
+    """pult.json, validated by erzeuge_pult.laden; every fault is a ParserFehler (never a silent empty set). Working tree only."""
+    q.lies(PULT_REL)   # book-keeping: the tests copy exactly the files the checker read
+    q.lies("djk/contract/pult.ts")   # the Attrappe imports it; registered so that the mutation tests copy it
+    try:
+        return erzeuge_pult.laden(q.wurzel / PULT_REL)
+    except erzeuge_pult.PultFehler as fehler:
+        raise ParserFehler(f"{PULT_REL}: {fehler}") from fehler
+
+
+def pult_pfade(d: dict) -> list[str]:
+    """Every expanded control path of the four families (zug, bus, player, strom) without the KERN_NUR rows, in family order."""
+    aus = [p for fam in erzeuge_pult.FAMILIEN for p in erzeuge_pult.regler_pfade(d, fam)]
+    return [p for p in aus if p.split("/", 2)[-1] not in KERN_NUR]
+
+
+def ist_alias(d: dict, name: str) -> bool:
+    """`erz/<n>/<suffix>` with n in alias_stroeme and suffix in alias_suffixe (`bk/<k>` for k in 1..bk_n): a row of the page server's alias layer
+    (`alias: true` in pult.json). The core has no such row, so the Attrappe does not carry it; the pages and the controller maps address it."""
+    m = re.fullmatch(r"erz/(\d+)/(.+)", name)
+    if not m or int(m.group(1)) not in d["alias_stroeme"]:
+        return False
+    k = re.fullmatch(r"bk/([1-9]\d*)", m.group(2))
+    return (1 <= int(k.group(1)) <= d["bk_n"]) if k else m.group(2) in d["alias_suffixe"]
+
+
+def alias_zu_strom(d: dict, name: str) -> str:
+    """The core row an alias bk row stands for (`erz/<n>/bk/<k>` is `strom/<n>/bk/<k>`); every other name stays."""
+    return re.sub(r"^erz/(\d+)/bk/", r"strom/\1/bk/", name) if ist_alias(d, name) else name
+
+
+def _container_pfade(d: dict) -> list[str]:
+    return [c["pfad"] for c in d["container"]]
+
+
 _KANALZUG_ZIEL = r"^deck/\d/(fader|trim|eq|kill|filter|send|stem|xseite|ziel|komp|pfl)"
 
 
@@ -454,10 +520,17 @@ def _pruefe_regler(q: Quelle, befunde: list[str]) -> None:
     pfad = re.compile(pfad_quelltext.replace("\\/", "/"))
     for name in sorted(regler):
         if not pfad.search(name):
-            befunde.append(f"Regler: attrappe REGLER kennt {name}, hand_bedienung.PFAD lehnt es ab")
+            befunde.append(f"Regler: attrappe REGLER kennt {name}, R06 hand_bedienung.PFAD lehnt es ab")
+    d_alias = _pult(q)
     for name in sorted(ziele - regler):
+        if ist_alias(d_alias, name):
+            continue   # alias row erz/<n>/<suffix>: lives in the page server, not in the core (decision X1), so the Attrappe does not carry it
         if not re.fullmatch(r"deck/[1-4]/(play|cue)", name):   # deck keys of all four decks (80c70be7) are not controls
-            befunde.append(f"Regler: curves.js ZIELE enthält {name}, attrappe REGLER nicht")
+            befunde.append(f"Regler: R04 curves.js ZIELE enthält {name}, attrappe REGLER nicht")
+    # container core V6: the Attrappe carries exactly the rows pult.json describes (minus KERN_NUR) in its families; every other family
+    # (master, cue, fx, spur, grp, ret, ins, rack, ...) is not described there and is read by the checks below
+    _diff(befunde, "Regler=pult.json", sorted(pult_pfade(_pult(q))),
+          sorted(r for r in regler if r.split("/", 1)[0] in PULT_FAMILIEN_ANFANG), "R03 Attrappe REGLER")
     arr_ziele = set(re.findall(r"'([a-z_/]+)'", _such(r"const ARR_ZIELE = new Set\(\[(.*?)\]\)",
                                                        q.lies("djk/contract/mock_core/hand.mjs"), "hand.mjs ARR_ZIELE").group(1)))
     for rel in q.mappings():
@@ -467,6 +540,8 @@ def _pruefe_regler(q: Quelle, befunde: list[str]) -> None:
                 continue   # Tasten und Deck-Aktionen laufen über die Listen oben, nicht über REGLER
             if ziel.startswith("arr/") and ziel in arr_ziele:
                 continue   # hand target kind of the arrangement (mock_core/hand.mjs ARR_ZIELE), not a control row
+            if ist_alias(d_alias, ziel):
+                continue   # alias row of the page server (checked against alias_suffixe), the controller maps address streams through it
             if ziel != "tempo" and ziel not in regler:
                 befunde.append(f"Mapping {Path(rel).name}: Regler-Ziel {ziel} kennt die Attrappe nicht")
 
@@ -477,6 +552,9 @@ def spur_regler_listen(q: Quelle) -> tuple[int, dict[str, list[str]]]:
     regler_h = q.lies("djk/core/signalbox/include/cypherdj/signalbox/controls.h")
     n = int(_such(r"constexpr int SPUR_REGLER_SPUREN = (\d+);", regler_h, "controls.h").group(1))
     felder = re.findall(r'"spur/%d/([a-z_]+(?:/[a-z_]+)?)"', q.lies("djk/core/signalbox/src/controls.cpp"))   # KZ1: eq/<band> has one more segment
+    cpp_text = q.lies("djk/core/signalbox/src/controls.cpp")
+    if '"spur/%d/kill/%s"' in cpp_text:   # container core K7: the three kill rows come from one loop over {tief, mitte, hoch}
+        felder += [f"kill/{b}" for b in re.findall(r'\{"(tief|mitte|hoch)", Rolle::spur_kill_', cpp_text)]
     if not felder:
         raise ParserFehler("controls.cpp: kein Pfad spur/%d/…, Parser blind oder Quelle umgebaut")
     spec = q.lies("docs/architecture/INTERFACES.md")
@@ -548,7 +626,7 @@ def _pruefe_spur_regler(q: Quelle, befunde: list[str]) -> None:
             befunde.append(f"Spur-Regler: R06 hand_bedienung.PFAD lehnt {name} ab")
         if not re.fullmatch(schema, name):
             befunde.append(f"Spur-Regler: R07 defs.schema.json regler_pfad lehnt {name} ab")
-    for falsch in (f"spur/{n + 1}/fader", "spur/0/fader", "spur/1/trim"):   # Gegenprobe: kein Muster zu weit
+    for falsch in (f"spur/{n + 1}/fader", "spur/0/fader", "spur/1/zz"):   # Gegenprobe: kein Muster zu weit
         if pfad.search(falsch):
             befunde.append(f"Spur-Regler: R06 hand_bedienung.PFAD nimmt {falsch} an")
         if re.fullmatch(schema, falsch):
@@ -649,9 +727,11 @@ def _kern_return_regler(q: Quelle) -> tuple[list[str], dict[str, tuple[float, fl
     felder = re.findall(r'"ret/%d/([a-z_]+)"', cpp)
     if not felder or "ret/%d/hall/an" not in cpp or "ret/%d/hall/%s" not in cpp:
         raise ParserFehler("controls.cpp: keine ret/%d/…-Pfade, Parser blind oder Quelle umgebaut")
-    hall = [("an", None)] + [(f, v) for f, v in re.findall(r'\{"([a-z]+)", Rolle::ret_hall_[a-z]+, (-?[\d.]+)f?\}', cpp)]
-    if len(hall) != 7:
-        raise ParserFehler(f"controls.cpp: {len(hall) - 1} Hall-Werte statt 6, Parser blind oder Quelle umgebaut")
+    alle = re.findall(r'\{"([a-z]+)", Rolle::ret_hall_[a-z]+, (-?[\d.]+)f?\}', cpp)
+    # two tables: returns 1..4 (old rows) and returns 5..8 (appended by K6), six values each and identical
+    if len(alle) != 12 or alle[:6] != alle[6:]:
+        raise ParserFehler(f"controls.cpp: {len(alle)} Hall-Werte statt 2x6 gleiche, Parser blind oder Quelle umgebaut")
+    hall = [("an", None)] + alle[:6]
     pfade: list[str] = []
     snd = _such(r"Rolle::snd_spur, (-?[\d.]+)f?, (-?[\d.]+)f?, (-?[\d.]+)f?,", cpp, "controls.cpp snd_spur")
     retf = _such(r"Rolle::ret_fader, (-?[\d.]+)f?, (-?[\d.]+)f?, (-?[\d.]+)f?,", cpp, "controls.cpp ret_fader")
@@ -738,7 +818,7 @@ def _pruefe_return_regler(q: Quelle, befunde: list[str]) -> None:
             befunde.append(f"Return-Regler: R06 hand_bedienung.PFAD lehnt {name} ab")
         if not re.fullmatch(schema, name):
             befunde.append(f"Return-Regler: R07 defs.schema.json regler_pfad lehnt {name} ab")
-    for falsch in ("spur/33/send/1", "spur/1/send/5", "spur/1/send/0", "grp/17/send/1", "ret/5/fader", "ret/0/fader", "ret/1/hall/mix",
+    for falsch in ("spur/33/send/1", "spur/1/send/9", "spur/1/send/0", "grp/17/send/1", "ret/9/fader", "ret/0/fader", "ret/1/hall/mix",
                    "ret/1/send/1", "ret/1/trim"):   # Gegenprobe: kein Muster zu weit
         if pfad_re.search(falsch):
             befunde.append(f"Return-Regler: R06 hand_bedienung.PFAD nimmt {falsch} an")
@@ -746,93 +826,151 @@ def _pruefe_return_regler(q: Quelle, befunde: list[str]) -> None:
             befunde.append(f"Return-Regler: R07 defs.schema.json regler_pfad nimmt {falsch} an")
 
 
-# ---------------------------------------------------------------- S5r: Graph-Regler <kanal>/bk/<1..64> (A11)
-def _bk_kanaele_aus_spec(zelle: str) -> list[str]:
-    """'deck/1..4, erz/1, 2, 3, 5, 6, 7 und pad/1, 2' -> ['deck/1', ..., 'pad/2']"""
-    ergebnis: list[str] = []
-    for gruppe in ("deck", "erz", "pad"):
-        m = re.search(gruppe + r"/(\d+(?:\.\.\d+|(?:, \d+)*))", zelle)
-        if not m:
-            raise ParserFehler(f"INTERFACES §1.5 bk-Zeile: keine Kanäle für {gruppe}, Parser blind oder Quelle umgebaut")
-        t = m.group(1)
-        nummern = list(range(int(t.split("..")[0]), int(t.split("..")[1]) + 1)) if ".." in t else [int(x) for x in t.split(", ")]
-        ergebnis += [f"{gruppe}/{n}" for n in nummern]
-    return ergebnis
+# ---------------------------------------------------------------- S5r: Graph-Regler <kanal>/bk/<1..64> (A11), container core V6
+KERN_TEST = "add_test(NAME test_regler_gegen_pult"   # the core test that compares the whole control table with pult.json (container core K9)
+KERN_TEST_CMAKE = "djk/core/signalbox/CMakeLists.txt"
+ALTE_KANALLISTE = '{"deck/1", "deck/2", "deck/3"'   # the literal channel list of the pre-container table; it must be gone
+
+
+def pruefe_regler_marker(q: Quelle, befunde: list[str]) -> None:
+    """Contract for lane K: controls.cpp builds its channel list from the four containers and the four buses, and the ctest `test_regler_gegen_pult`
+    (signalbox/CMakeLists.txt) compares every row of the table with pult.json. The test must be registered and the old literal channel list
+    (deck/1, deck/2, deck/3 ...) must be gone. A missing registration is a finding, never a green."""
+    cmake = q.lies(KERN_TEST_CMAKE)
+    cpp = q.lies("djk/core/signalbox/src/controls.cpp")
+    if KERN_TEST not in cmake:
+        befunde.append(f"R01 Kern controls.cpp: the ctest test_regler_gegen_pult is not registered in {KERN_TEST_CMAKE}, nothing compares the core table with pult.json")
+    if ALTE_KANALLISTE in cpp:
+        befunde.append(f"R01 Kern controls.cpp: still carries the literal channel list {ALTE_KANALLISTE}...}}, must be the four containers and buses")
+
+
+def _bk_aus_spec(teil: str, d: dict) -> list[str]:
+    """The bk rows of INTERFACES section 1.5 -> expanded paths: `<container>/bk/<n>` over the containers named in its own
+    "Wer darf" cell, `strom/<n>/bk/<k>`, `fx/<n>/bk/<m>` and `master/bk/<m>` (S14). A row it cannot read is a ParserFehler."""
+    z = _such(r"^\| `<container>/bk/<n>` \(n = 1 to (\d+)\) \|.*\| all; only `<container>` = ([^|]*) \|$", teil,
+              "INTERFACES §1.5 bk row (<container>/bk/<n>)", re.M)
+    container = re.findall(r"(?:deck|pad)/[1-9]", z.group(2))
+    if not container:
+        raise ParserFehler("INTERFACES §1.5 bk row: no container in the 'Wer darf' cell, parser blind or source rebuilt")
+    zs = _such(r"^\| `strom/<n>/bk/<k>` \(n = 1 to (\d+), k = 1 to (\d+)\) \|", teil, "INTERFACES §1.5 strom bk row", re.M)
+    zf = _such(r"^\| `fx/<n>/bk/<m>` \(n = (\d+(?: and \d+)*), m = 1 to (\d+)\) \|", teil, "INTERFACES §1.5 bk-Sendezeile", re.M)   # S14
+    zm = _such(r"^\| `master/bk/<m>` \(m = 1 to (\d+)\) \|", teil, "INTERFACES §1.5 bk master row", re.M)
+    aus = [f"{k}/bk/{n}" for k in container for n in range(1, int(z.group(1)) + 1)]
+    aus += [f"strom/{n}/bk/{k}" for n in range(1, int(zs.group(1)) + 1) for k in range(1, int(zs.group(2)) + 1)]
+    aus += [f"fx/{n}/bk/{m}" for n in zf.group(1).split(" and ") for m in range(1, int(zf.group(2)) + 1)]
+    aus += [f"master/bk/{m}" for m in range(1, int(zm.group(1)) + 1)]
+    return sorted(aus)
 
 
 def bk_regler_listen(q: Quelle) -> dict[str, list[str]]:
-    """<kanal>/bk/<1..64> and fx/3|4/bk/<1..64> (S14) per location. The channel set sits in the kern (controls.cpp, loop over
-    kn_bk) and is pinned there against the real acceptance of net_erz.cpp (test_net_erz.cpp); the send-return set is the
-    second loop (kn_bk_send). Both are carried into all other locations here. Working tree only (node)."""
+    """bk rows per location, in the ORDER of the table: containers, streams (strom/1..16), the send returns fx/3|4 (S14), master. The
+    expected set (R01) is built from pult.json plus the send-return loop of controls.cpp (bk_send_1, unchanged); controls.cpp itself is
+    checked for its markers in pruefe_regler_marker. Working tree only (node)."""
+    d = _pult(q)
     cpp = q.lies("djk/core/signalbox/src/controls.cpp")
-    m = _such(r"for \(const char\* kn_bk : \{([^}]*)\}\)", cpp, "controls.cpp bk-Kanalschleife")
-    kanaele = re.findall(r'"([a-z]+/\d+)"', m.group(1))
-    if not kanaele or "%s/bk/%d" not in cpp:
-        raise ParserFehler("controls.cpp: keine bk-Kanäle oder kein Muster %s/bk/%d, Parser blind oder Quelle umgebaut")
-    ms = _such(r"for \(const char\* kn_bk_send : \{([^}]*)\}\)", cpp, "controls.cpp bk-Sendeschleife")   # S14
+    ms = _such(r"for \(const char\* bk_send_1 : \{([^}]*)\}\)", cpp, "controls.cpp bk-Sendeschleife")   # S14
     senden = re.findall(r'"(fx/\d+)"', ms.group(1))
     if not senden:
         raise ParserFehler("controls.cpp: keine Send-Returns in der bk-Sendeschleife, Parser blind oder Quelle umgebaut")
-    # 32-knob widening: knobs 9..64 sit in two further loops at the table end (indices of the older rows do not move); their channel
-    # sets must equal the first two loops, else a channel would have 1..8 only
-    mh = _such(r"for \(const char\* kn_bk_hoch : \{([^}]*)\}\)", cpp, "controls.cpp bk-Kanalschleife 9..64")
-    msh = _such(r"for \(const char\* kn_bk_send_hoch : \{([^}]*)\}\)", cpp, "controls.cpp bk-Sendeschleife 9..64")
-    kanaele_hoch = re.findall(r'"([a-z]+/\d+)"', mh.group(1))
-    senden_hoch = re.findall(r'"(fx/\d+)"', msh.group(1))
     spec = q.lies("docs/architecture/INTERFACES.md")
     teil = spec[_index(spec, "### 1.5 Kanäle und Regler-Pfade", "§1.5"):_index(spec, "### 1.6", "§1.5")]
-    z = _such(r"^\| `<k>/bk/<n>` \(n = 1 bis 64\) \|.*\| alle; nur `<k>` = ([^|]*) \|$", teil,
-              "INTERFACES §1.5 bk-Zeile", re.M)
-    zf = _such(r"^\| `fx/<n>/bk/<m>` \(n = (\d+(?: and \d+)*), m = 1 to 64\) \|", teil, "INTERFACES §1.5 bk-Sendezeile", re.M)   # S14
-    spec_senden = [f"fx/{n}" for n in zf.group(1).split(" and ")]
-    _such(r"^\| `master/bk/<m>` \(m = 1 to 64\) \|", teil, "INTERFACES §1.5 bk master row", re.M)   # the row must exist, it names no list
-    alle = lambda ks: sorted(f"{k}/bk/{n}" for k in ks for n in range(1, 65))   # noqa: E731
+    alle = lambda ks: sorted(f"{k}/bk/{n}" for k in ks for n in range(1, d["bk_n"] + 1))   # noqa: E731
     aus = q.node_json(
         "const v=await import('file://@@/djk/contract/mock_core/contract.mjs');"
         "const k=await import('file://@@/djk/ui/public/curves.js');"
         "const l=await import('file://@@/djk/conductor/src/controls_info.ts');"
         "const s=(m)=>[...m].filter((p)=>/\\/bk\\/[0-9]+$/.test(p)&&!p.startsWith('spur/'));"
         "console.log(JSON.stringify({a:s(v.REGLER.keys()),z:s(k.ZIELE),l:s(l.REGLER.keys())}))")
-    # master insert graph: master/bk/1..64, the last loop of the table (global like the send returns); every location must carry it
-    if 'std::snprintf(p, sizeof p, "master/bk/%d", nr)' not in cpp:
-        raise ParserFehler("controls.cpp: no master/bk/%d loop, parser blind or source rebuilt")
-    master = ["master"]
-    return {"R01 Kern controls.cpp": alle(kanaele + senden + master),
-            "R01b Kern controls.cpp (9..64 loops)": alle(kanaele_hoch + senden_hoch + master),
-            "R02 INTERFACES §1.5": alle(_bk_kanaele_aus_spec(z.group(1)) + spec_senden + master),
-            "R03 Attrappe REGLER": sorted(aus["a"]), "R04 curves.js ZIELE": sorted(aus["z"]),
-            "R05 controls_info.ts": sorted(aus["l"])}
+    soll = sorted({p for p in pult_pfade(d) if "/bk/" in p} | set(alle(senden + ["master"])))
+    # The pages and the conductor address the streams through the alias rows erz/<n>/bk/<k> (page server, decision X1), and only the alias
+    # streams (D-U5). The pages (R04) are compared as the strom row an alias row stands for, against the core rows of the alias streams; the
+    # conductor (R05) also lists the global rows strom/<1..16>/bk/<k> and is compared against the whole set.
+    nur_alias = sorted(p for p in soll if not (m := re.match(r"strom/(\d+)/bk/", p)) or int(m.group(1)) in d["alias_stroeme"])
+    seite = lambda ps: sorted({alias_zu_strom(d, p) for p in ps})   # noqa: E731
+    return {"R01 Kern controls.cpp (pult.json + kn_bk_send)": soll, "R02 INTERFACES §1.5": _bk_aus_spec(teil, d),
+            "R03 Attrappe REGLER": sorted(aus["a"]), "R04 curves.js ZIELE": seite(aus["z"]),
+            "R05 controls_info.ts": seite(aus["l"]), "_alias_soll": nur_alias}
 
 
-def _pruefe_bk_regler(q: Quelle, befunde: list[str]) -> None:
-    listen = bk_regler_listen(q)
-    soll = listen["R01 Kern controls.cpp"]
-    for name, ist in listen.items():
-        if name != "R01 Kern controls.cpp":
-            _diff(befunde, "bk-Regler=Kern", soll, ist, name)
+def _pfad_und_schema(q: Quelle) -> tuple[re.Pattern, str]:
     pfad = re.compile(_such(r"export const PFAD = /(.*)/;", q.lies("djk/ui/hand_operation.ts"),
                             "hand_operation.ts").group(1).replace("\\/", "/"))
     try:
         schema = json.loads(q.lies("djk/contract/schemas/defs.schema.json"))["$defs"]["regler_pfad"]["pattern"]
     except (ValueError, KeyError) as fehler:
         raise ParserFehler(f"defs.schema.json: kein $defs.regler_pfad.pattern ({fehler})") from fehler
+    return pfad, schema
+
+
+def _pruefe_bk_regler(q: Quelle, befunde: list[str]) -> None:
+    pruefe_regler_marker(q, befunde)
+    listen = bk_regler_listen(q)
+    soll = listen["R01 Kern controls.cpp (pult.json + kn_bk_send)"]   # the expected set; no location is "the" truth except pult.json
+    for name, ist in listen.items():
+        if name == "R04 curves.js ZIELE":
+            _diff(befunde, "bk-Regler=Kern", listen["_alias_soll"], ist, name)
+        elif not name.startswith(("R01", "_")):
+            _diff(befunde, "bk-Regler=Kern", soll, ist, name)
+    pfad, schema = _pfad_und_schema(q)
     for name in soll:
         if not pfad.search(name):
             befunde.append(f"bk-Regler: R06 hand_bedienung.PFAD lehnt {name} ab")
         if not re.fullmatch(schema, name):
             befunde.append(f"bk-Regler: R07 defs.schema.json regler_pfad lehnt {name} ab")
-    # Gegenprobe: kein Muster zu weit. Jeder Kanal der Spielkanäle und Busse, der nicht in der Menge steht, muss abgelehnt werden
+    # Gegenprobe: kein Muster zu weit. Every channel number of the old strips (deck/1..4, pad/1..3, bus/1..4) that is not in the set, the
+    # erz numbers that are no alias (the alias group has its own check), and the stream and count edges must be refused
+    d = _pult(q)
     kanaele = {n.rsplit("/bk/", 1)[0] for n in soll}
     assert "master" in kanaele
-    unbekannt = [f"{g}/{i}/bk/1" for g, n in (("deck", 4), ("erz", 8), ("pad", 2), ("bus", 4)) for i in range(1, n + 1)
-                 if f"{g}/{i}" not in kanaele]
+    unbekannt = [f"{g}/{i}/bk/1" for g, n in (("deck", 4), ("pad", 3), ("bus", 4)) for i in range(1, n + 1) if f"{g}/{i}" not in kanaele]
+    unbekannt += [f"erz/{i}/bk/1" for i in range(0, d["strom_n"] + 1) if i not in d["alias_stroeme"]]
+    strom_falsch = [f"strom/0/bk/1", f"strom/{d['strom_n'] + 1}/bk/1", "strom/1/bk/0", f"strom/1/bk/{d['bk_n'] + 1}", "strom/01/bk/1", "strom/1/bk/01"]
     # S14: only the send returns fx/3 and fx/4 have graph knobs
     fx_falsch = ["fx/1/bk/1", "fx/2/bk/1", "fx/5/bk/1", "fx/3/bk/0", "fx/3/bk/65", "fx/4/bk/70", "fx/4/bk/100"]
-    for falsch in unbekannt + fx_falsch + ["master/bk/0", "master/bk/65", "cue/bk/1", "deck/1/bk/65", "deck/1/bk/0", "pad/3/bk/1", "deck/1/bk/010", "deck/1/bk/033", "deck/1/bk/640", "deck/1/bk/9x"]:
+    for falsch in unbekannt + strom_falsch + fx_falsch + ["master/bk/0", "master/bk/65", "cue/bk/1", "deck/1/bk/65", "deck/1/bk/0", "pad/3/bk/1",
+                                                          "deck/1/bk/010", "deck/1/bk/033", "deck/1/bk/640", "deck/1/bk/9x"]:
         if pfad.search(falsch):
             befunde.append(f"bk-Regler: R06 hand_bedienung.PFAD nimmt {falsch} an")
         if re.fullmatch(schema, falsch):
             befunde.append(f"bk-Regler: R07 defs.schema.json regler_pfad nimmt {falsch} an")
+
+
+def _pruefe_alias_und_kanal(q: Quelle, befunde: list[str]) -> None:
+    """R07 only: the alias group erz/<n>/<suffix> of the schema (n in alias_stroeme, suffix in alias_suffixe) and the channel patterns
+    `kanal` and `hoer_kanal`. The page server resolves the alias; PFAD (hand) is not asked about it."""
+    d = _pult(q)
+    pfad_unused, schema = _pfad_und_schema(q)
+    ok = [f"erz/{n}/{s}" for n in d["alias_stroeme"] for s in d["alias_suffixe"] if s != "bk/<k>"]
+    ok += [f"erz/{n}/bk/{k}" for n in d["alias_stroeme"] for k in range(1, d["bk_n"] + 1)]
+    falsch = [f"erz/{n}/fader" for n in range(0, d["strom_n"] + 1) if n not in d["alias_stroeme"]]
+    falsch += [f"erz/{d['alias_stroeme'][0]}/{s}" for s in ("ziel", "xseite", "send/5", "komp/gain", "gate/an", "util/dc", "stem/drums", "bk/0",
+                                                            f"bk/{d['bk_n'] + 1}", "fader/x")]
+    falsch += ["erz/01/fader", "erz/1/bk/01"]
+    for name in ok:
+        if not re.fullmatch(schema, name):
+            befunde.append(f"Alias-Regler: R07 defs.schema.json regler_pfad lehnt {name} ab")
+    for name in falsch:
+        if re.fullmatch(schema, name):
+            befunde.append(f"Alias-Regler: R07 defs.schema.json regler_pfad nimmt {name} an")
+    try:
+        defs = json.loads(q.lies("djk/contract/schemas/defs.schema.json"))["$defs"]
+        kanal, hoer = defs["kanal"]["pattern"], defs["hoer_kanal"]["pattern"]
+    except (ValueError, KeyError) as fehler:
+        raise ParserFehler(f"defs.schema.json: kein $defs.kanal/hoer_kanal pattern ({fehler})") from fehler
+    container = _container_pfade(d)
+    for name in container + list(d["busse"]) + [d["master"], d["cue"]]:
+        if not re.fullmatch(kanal, name):
+            befunde.append(f"Kanal: R07 defs.schema.json kanal lehnt {name} ab")
+    for name in [f"deck/{n}" for n in range(1, 5)]:
+        if not re.fullmatch(hoer, name):
+            befunde.append(f"Kanal: R07 defs.schema.json hoer_kanal lehnt {name} ab")
+    fremd = ["deck/3", "deck/4", "pad/3", "erz/1", "erz/8", "bus/0", "bus/5", "fx/3", "spur/1"]
+    for name in fremd:
+        if re.fullmatch(kanal, name):
+            befunde.append(f"Kanal: R07 defs.schema.json kanal nimmt {name} an")
+    for name in ["pad/3", "deck/0", "deck/5", "erz/1", "erz/8", "bus/0", "bus/5", "fx/3", "spur/1"] + list(d["busse"]) + [d["master"], d["cue"]]:
+        if re.fullmatch(hoer, name):
+            befunde.append(f"Kanal: R07 defs.schema.json hoer_kanal nimmt {name} an")
 
 
 # ---------------------------------------------------------------- controller targets spur/<slot>/bk/<k> (production plan task 8)
@@ -865,7 +1003,7 @@ def _pruefe_spur_bk_regler(q: Quelle, befunde: list[str]) -> None:
             befunde.append(f"Spur-bk-Regler: R06 hand_bedienung.PFAD lehnt {name} ab")
         if not re.fullmatch(schema, name):
             befunde.append(f"Spur-bk-Regler: R07 defs.schema.json regler_pfad lehnt {name} ab")
-    for falsch in ("spur/0/bk/1", "spur/9/bk/1", "spur/1/bk/0", "spur/1/bk/65", "spur/1/bk/01", "spur/1/bk/1x", "spur/32/bk/1"):   # no pattern too wide
+    for falsch in ("spur/0/bk/1", "spur/17/bk/1", "spur/1/bk/0", "spur/1/bk/65", "spur/1/bk/01", "spur/1/bk/1x", "spur/32/bk/1"):   # no pattern too wide
         if pfad.search(falsch):
             befunde.append(f"Spur-bk-Regler: R06 hand_bedienung.PFAD nimmt {falsch} an")
         if re.fullmatch(schema, falsch):
@@ -876,8 +1014,6 @@ def _pruefe_spur_bk_regler(q: Quelle, befunde: list[str]) -> None:
 _WZ_KOPF = "djk/core/signalbox/include/cypherdj/signalbox/tool_controls.h"
 _WZ_ZEILE = re.compile(r'^\{WzTool::[a-z]+, "([a-z_/]+)", (-?[0-9.]+)f?, (-?[0-9.]+)f?, (-?[0-9.]+)f?, KurvenTyp::(?:schalter|stufen|linear), '
                        r'[0-9]+, (?:true|false), WzKanalart::(quellen|quellen_busse|busse|global)\},$')
-_WZ_ALLE_KANAELE = ([f"deck/{n}" for n in range(1, 5)] + [f"erz/{n}" for n in range(1, 9)] + ["pad/1", "pad/2"]
-                    + [f"bus/{n}" for n in range(1, 5)])
 _WZ_FILTER_JS = "(p)=>(!p.startsWith('ins/')&&/\\/(gate|util|mb|lim)\\//.test(p))||p.startsWith('spektrum/')"   # ins/lim/... is an insert row, not a mix tool
 
 
@@ -921,8 +1057,9 @@ def _wz_kopf(q: Quelle) -> dict[str, tuple[float, float, float]]:
 
 
 def _wz_vertrag(q: Quelle) -> list[str]:
-    """The tool rows of INTERFACES section 1.5, expanded over the channel list of their own "Wer darf" cell ('Quellkanäle' without the
-    channels after 'ausser', 'Busse' = bus/1..4, '<b>' over 'b = tief, mitte, hoch'). A tool row it cannot read is a ParserFehler."""
+    """The tool rows of INTERFACES section 1.5, expanded over the channel list of their own "Wer darf" cell ('containers' = the four
+    containers of pult.json, 'buses' = bus/1..4, '<b>' over 'b = tief, mitte, hoch'). A tool row it cannot read is a ParserFehler."""
+    d = _pult(q)
     spec = q.lies("docs/architecture/INTERFACES.md")
     teil = spec[_index(spec, "### 1.5 Kanäle und Regler-Pfade", "§1.5"):_index(spec, "### 1.6", "§1.5")]
     aus: list[str] = []
@@ -938,11 +1075,10 @@ def _wz_vertrag(q: Quelle) -> list[str]:
             aus.append(pfad)
             continue
         ks: list[str] = []
-        if "Quellkanäle" in wer:
-            ausser = set(re.findall(r"(?:deck|erz|pad)/\d", wer.split("ausser", 1)[1])) if "ausser" in wer else set()
-            ks += [k for k in _WZ_ALLE_KANAELE if not k.startswith("bus/") and k not in ausser]
-        if "Busse" in wer:
-            ks += [k for k in _WZ_ALLE_KANAELE if k.startswith("bus/")]
+        if "containers" in wer:
+            ks += _container_pfade(d)
+        if "buses" in wer:
+            ks += list(d["busse"])
         if not ks:
             raise ParserFehler(f"INTERFACES §1.5: keine Kanäle in der Zelle 'Wer darf' der Zeile {pfad}: {wer!r}")
         rest = pfad.split("/", 2)[2] if pfad.startswith("bus/<n>/") else pfad[4:]
@@ -965,31 +1101,42 @@ def _wz_node(q: Quelle) -> dict[str, dict[str, list[float]]]:
         "console.log(JSON.stringify({a:s(v.REGLER),l:s(l.REGLER)}))")
 
 
+WZ_R01 = "R01 Kern controls.cpp (tool_controls.h)"   # the header table is part of lane K's core table; one label keeps it pending with K
+
+
+def _wz_soll(d: dict) -> list[str]:
+    """The mix-tool paths pult.json describes: gate and util on the containers, util, mb and lim on the buses, plus the global spektrum/kanal."""
+    zug = [p for p in erzeuge_pult.regler_pfade(d, "zug") if re.search(r"/(gate|util)/", p)]
+    bus = [p for p in erzeuge_pult.regler_pfade(d, "bus") if re.search(r"/(util|mb|lim)/", p)]
+    return sorted(zug + bus + ["spektrum/kanal"])
+
+
 def werkzeug_regler_listen(q: Quelle) -> dict[str, list[str]]:
-    """The 345 mix-tool paths per location. R01 is the header (the table the Stellwerk is built from), R02 the contract text, R03 the
-    Attrappe, R05 controls_info.ts; R06 (PFAD) and R07 (schema) are acceptance patterns and are tested in _pruefe_werkzeug_regler. Working tree only."""
+    """The mix-tool paths per location. WZ_R01 is the header (the table the Stellwerk is built from), R02 the contract text, R03 the
+    Attrappe, R05 controls_info.ts; R06 (PFAD) and R07 (schema) are acceptance patterns and are tested in _pruefe_werkzeug_regler. The expected
+    set is built from pult.json (_wz_soll). Working tree only."""
     aus = _wz_node(q)
-    return {"R01 Kern tool_controls.h": sorted(_wz_kopf(q)), "R02 INTERFACES §1.5": sorted(_wz_vertrag(q)),
+    return {WZ_R01: sorted(_wz_kopf(q)), "R02 INTERFACES §1.5": sorted(_wz_vertrag(q)),
             "R03 Attrappe REGLER": sorted(aus["a"]), "R05 controls_info.ts": sorted(aus["l"])}
 
 
-def _wz_universum(kopf: dict[str, tuple[float, float, float]]) -> list[str]:
-    """Every tool suffix on every channel (incl. erz/8 and the buses), the families' unknown siblings, channel numbers just outside, and the
-    global row with a suffix: whatever a pattern accepts out of this and is not in the 345 is too wide."""
-    suffixe = sorted({p.split("/", 2)[2] if p.startswith(("deck/", "erz/", "pad/", "bus/")) else p for p in kopf})
+def _wz_universum(soll: list[str]) -> list[str]:
+    """Every tool suffix on every channel number around the real ones (deck/0..5, erz/0..10, pad/0..3, bus/0..5), the families' unknown
+    siblings, and the global row with a suffix: whatever a pattern accepts out of this and is not in the expected set is too wide."""
+    suffixe = sorted({p.split("/", 2)[2] for p in soll if p != "spektrum/kanal"})
     fremd = ["gate/zz", "util/zz", "util/gain_db", "mb/zz", "mb/solo", "mb/tief/solo", "mb/zz/ratio", "lim/zz", "lim/vorhalt_ms", "lim/echtspitze"]
-    kanaele = _WZ_ALLE_KANAELE + ["deck/0", "deck/5", "erz/0", "erz/9", "pad/0", "pad/3", "bus/0", "bus/5"]
-    u = {f"{k}/{x}" for k in kanaele for x in suffixe + fremd if x != "spektrum/kanal"}
+    kanaele = ([f"deck/{n}" for n in range(0, 6)] + [f"erz/{n}" for n in range(0, 11)] + [f"pad/{n}" for n in range(0, 4)]
+               + [f"bus/{n}" for n in range(0, 6)])
+    u = {f"{k}/{x}" for k in kanaele for x in suffixe + fremd}
     u |= {"spektrum", "spektrum/kanal/1", "spektrum/zz", "deck/1/spektrum/kanal", "master/gate/an", "fx/1/util/dc"}
-    return sorted(u - set(kopf))
+    return sorted(u - set(soll))
 
 
 def _pruefe_werkzeug_regler(q: Quelle, befunde: list[str]) -> None:
     listen = werkzeug_regler_listen(q)
-    soll = listen["R01 Kern tool_controls.h"]
+    soll = _wz_soll(_pult(q))
     for name, ist in listen.items():
-        if name != "R01 Kern tool_controls.h":
-            _diff(befunde, "Werkzeug-Regler=Kern", soll, ist, name)
+        _diff(befunde, "Werkzeug-Regler=Kern", soll, ist, name)
     # range and default in the Attrappe and in controls_info.ts equal the header (within 1e-6: the header writes float literals like 0.1f)
     kopf = _wz_kopf(q)
     zahlen = _wz_node(q)
@@ -997,23 +1144,67 @@ def _pruefe_werkzeug_regler(q: Quelle, befunde: list[str]) -> None:
         for name in sorted(set(kopf) & set(zahlen[schluessel])):
             ist = zahlen[schluessel][name]
             if any(abs(x - y) > 1e-6 for x, y in zip(ist, kopf[name])):
-                befunde.append(f"Werkzeug-Regler: {ort} Bereich oder Vorgabe von {name} ist {ist}, tool_controls.h sagt {list(kopf[name])}")
-    pfad = re.compile(_such(r"export const PFAD = /(.*)/;", q.lies("djk/ui/hand_operation.ts"),
-                            "hand_operation.ts").group(1).replace("\\/", "/"))
-    try:
-        schema = json.loads(q.lies("djk/contract/schemas/defs.schema.json"))["$defs"]["regler_pfad"]["pattern"]
-    except (ValueError, KeyError) as fehler:
-        raise ParserFehler(f"defs.schema.json: kein $defs.regler_pfad.pattern ({fehler})") from fehler
+                befunde.append(f"Werkzeug-Regler: {ort} Bereich oder Vorgabe von {name} ist {ist}, {WZ_R01} sagt {list(kopf[name])}")
+    pfad, schema = _pfad_und_schema(q)
     for name in soll:
         if not pfad.search(name):
             befunde.append(f"Werkzeug-Regler: R06 hand_bedienung.PFAD lehnt {name} ab")
         if not re.fullmatch(schema, name):
             befunde.append(f"Werkzeug-Regler: R07 defs.schema.json regler_pfad lehnt {name} ab")
-    for falsch in _wz_universum(kopf):   # Gegenprobe: kein Muster zu weit
+    for falsch in _wz_universum(soll):   # Gegenprobe: kein Muster zu weit
         if pfad.search(falsch):
             befunde.append(f"Werkzeug-Regler: R06 hand_bedienung.PFAD nimmt {falsch} an")
         if re.fullmatch(schema, falsch):
             befunde.append(f"Werkzeug-Regler: R07 defs.schema.json regler_pfad nimmt {falsch} an")
+
+
+# ---------------------------------------------------------------- D-V3: the source selectors komp/sc, gate/sc and spektrum/kanal
+SC_BEREICH = {"komp/sc": (0, 4), "gate/sc": (0, 4), "spektrum/kanal": (0, 9)}   # 0 own signal (spektrum: off), then containers A..D; spektrum 5..8 buses, 9 master
+
+
+def _sc_zeile(zeile: str, ort: str, lo: float, hi: float, befunde: list[str]) -> None:
+    slo, shi = SC_BEREICH[zeile]
+    if (lo, hi) != (slo, shi):
+        befunde.append(f"sc-Bereich: {ort} {zeile} {lo:g}..{hi:g}, expected {slo:g}..{shi:g} (D-V3)")
+
+
+def _pruefe_sc_bereiche(q: Quelle, befunde: list[str]) -> None:
+    d = _pult(q)
+    k1 = _container_pfade(d)[0]
+    kopf = _wz_kopf(q)
+    for zeile in ("gate/sc", "spektrum/kanal"):   # the header carries the tool rows
+        pfad = zeile if zeile == "spektrum/kanal" else f"{k1}/{zeile}"
+        if pfad not in kopf:
+            raise ParserFehler(f"tool_controls.h: Zeile {pfad} nicht gelesen, Parser blind oder Quelle umgebaut")
+        _sc_zeile(zeile, WZ_R01, kopf[pfad][0], kopf[pfad][1], befunde)
+    cpp = q.lies("djk/core/signalbox/src/controls.cpp")
+    m = _such(r"Rolle::komp_sc, (-?\d+), (-?\d+), -?\d+, [^;]*stufen\((-?\d+), (-?\d+)\)", cpp, "controls.cpp komp/sc row")
+    _sc_zeile("komp/sc", "R01 Kern controls.cpp", float(m.group(1)), float(m.group(2)), befunde)
+    if (m.group(3), m.group(4)) != (m.group(1), m.group(2)):
+        befunde.append(f"sc-Bereich: R01 Kern controls.cpp komp/sc row: range {m.group(1)}..{m.group(2)} but curve stufen({m.group(3)}, {m.group(4)})")
+    spec = q.lies("docs/architecture/INTERFACES.md")
+    teil = spec[_index(spec, "### 1.5 Kanäle und Regler-Pfade", "§1.5"):_index(spec, "### 1.6", "§1.5")]
+    for zeile, anfang in (("komp/sc", "| `<k>/komp/sc` |"), ("gate/sc", "| `<k>/gate/sc` |"), ("spektrum/kanal", "| `spektrum/kanal` |")):
+        treffer = [z for z in teil.split("\n") if z.startswith(anfang)]
+        if len(treffer) != 1:
+            raise ParserFehler(f"INTERFACES §1.5: Zeile {anfang!r} {len(treffer)}x gefunden, Parser blind oder Quelle umgebaut")
+        zellen = [c.strip() for c in treffer[0].strip().strip("|").split("|")]
+        r = re.fullmatch(r"(\d+) (?:bis|to) (\d+)", zellen[2]) if len(zellen) == 6 else None
+        if not r:
+            raise ParserFehler(f"INTERFACES §1.5: Bereich der Zeile {zeile} nicht lesbar: {treffer[0][:90]!r}")
+        _sc_zeile(zeile, "R02 INTERFACES §1.5", float(r.group(1)), float(r.group(2)), befunde)
+    aus = q.node_json(
+        "const v=await import('file://@@/djk/contract/mock_core/contract.mjs');"
+        "const l=await import('file://@@/djk/conductor/src/controls_info.ts');"
+        f"const z=['{k1}/komp/sc','{k1}/gate/sc','spektrum/kanal'];"
+        "const s=(m)=>z.map((p)=>m.get(p)?[m.get(p).min,m.get(p).max]:null);"
+        "console.log(JSON.stringify({a:s(v.REGLER),l:s(l.REGLER)}))")
+    for ort, schluessel in (("R03 Attrappe REGLER", "a"), ("R05 controls_info.ts", "l")):
+        for zeile, werte in zip(("komp/sc", "gate/sc", "spektrum/kanal"), aus[schluessel]):
+            if werte is None:
+                befunde.append(f"sc-Bereich: {ort} {zeile} fehlt")
+            else:
+                _sc_zeile(zeile, ort, werte[0], werte[1], befunde)
 
 
 # ---------------------------------------------------------------- 1.10 Slice 4a/4b: insert controls ins/komp|eq|saett|lim/<n>/* (T6, T12)
@@ -1250,6 +1441,12 @@ def _pruefe_zielarten(q: Quelle, befunde: list[str]) -> None:
 
 
 def pruefe(q: Quelle) -> list[str]:
+    """Every red finding."""
+    return pruefe_roh(q)
+
+
+def pruefe_roh(q: Quelle) -> list[str]:
+    """Every finding, pending or not."""
     befunde: list[str] = []
     genutzt: set = set()
     tasten_vertrag = _pruefe_tasten(q, befunde, genutzt)
@@ -1262,9 +1459,11 @@ def pruefe(q: Quelle) -> list[str]:
         _pruefe_regler(q, befunde)
         _pruefe_spur_regler(q, befunde)   # D1 K1
         _pruefe_routing_regler(q, befunde)   # 1.10 Slice 1
-        _pruefe_bk_regler(q, befunde)     # S5r
+        _pruefe_bk_regler(q, befunde)     # S5r, container core V6 (also the controls.cpp markers)
+        _pruefe_alias_und_kanal(q, befunde)   # container core V6
         _pruefe_spur_bk_regler(q, befunde)   # controller targets spur/<slot>/bk/<k>
         _pruefe_werkzeug_regler(q, befunde)   # 1.15 A2
+        _pruefe_sc_bereiche(q, befunde)   # D-V3
         _pruefe_return_regler(q, befunde)   # 1.10 Slice 3
         _pruefe_insert_regler(q, befunde)   # 1.10 Slice 4a
         _pruefe_gruende(q, befunde)       # D1 K1
@@ -1305,7 +1504,7 @@ def main() -> int:
         return 2
     for befund in fehler:
         print("ROT:", befund)
-    print("ERGEBNIS:", "ROT" if fehler else "GRÜN", f"({len(fehler)} Befunde)")
+    print("ERGEBNIS:", "ROT" if fehler else "GRÜN", f"({len(fehler)} Befunde, 0 ausstehend)")
     return 1 if fehler else 0
 
 

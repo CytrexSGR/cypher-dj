@@ -11,14 +11,15 @@ const SHA_C = 'c'.repeat(64);
 const opt = (extra = {}) => ({ nr: 1, audioOrdner: AUDIO, frames: (sha) => (sha === SHA_A ? 960000 : sha === SHA_B ? 48000 : null), ...extra });
 const zelle = (id, extra = {}) => ({ id, name: 'Loop', farbe: 3, art: 'loop', sha256: SHA_A, beats: 8, bpm: 120, gain_db: -3, ...extra });
 
-// a live project with a loop deck on `platz`, built as an object (not through the commands)
-function deck(platz = 2) {
-  let p = neuesProjekt('ld'); p.live = true;
+// a live project with a loop deck of identity `platz` (1|2) in place `ort` (default: the same number), built as an object (not through the commands)
+function deck(platz = 2, ort = platz) {
+  let p = neuesProjekt('ld'); p.live = true; p.plaetze = [1, 2, 3, 4].map(() => ({ typ: 'leer' }));
   for (let i = 1; i <= 4; i++) p = fuehreListeAus(p, [{ befehl: 'spur_neu', art: 'audio', name: `L${platz}.${i}` }]).projekt;
   p = fuehreListeAus(p, [{ befehl: 'gruppenspur_neu', name: `LOOP ${platz}`, mitglieder: p.spuren.map((s) => s.id) }]).projekt;
   p = JSON.parse(JSON.stringify(p));
   p.gruppen[0].loopdeck = { platz, raster: 'takt' };
   for (const s of p.spuren) s.zellen = Array.from({ length: 8 }, () => null);
+  p.plaetze = [1, 2, 3, 4].map((n) => (n === ort ? { typ: 'loops', gruppe: p.gruppen[0].id } : { typ: 'leer' }));
   return p;
 }
 
@@ -28,6 +29,7 @@ test('a deck on place 2 plays into dj channel 2; its tracks carry id and zellen,
   const w = uebersetze(p, opt());
   assert.deepEqual(w.gruppen[0].ausgang, { art: 'dj', nr: 2 });
   assert.equal(w.live, true);
+  assert.equal(w.format, 'cypherdj-arr/4');
   assert.deepEqual(w.spuren.map((s) => s.id), p.spuren.map((s) => s.id));
   assert.deepEqual(w.spuren[0].zellen, [{ index: 1, sha256: SHA_A, datei: `${AUDIO}/${SHA_A}.f32`, frames: 960000, beats: 8, art: 'loop', gain_db: -3, modus: 2 }]);
   for (const s of w.spuren.slice(1)) assert.deepEqual(s.zellen, []);
@@ -81,13 +83,13 @@ test('eq and kill are control rows, not in the snapshot', () => {
   assert.deepEqual(uebersetze(p, opt()), a);
 });
 
-test('deck returns play into the deck DJ channel, a plain return into the master', () => {
+test('deck returns play into the container of the deck, also a generic return the deck owns; a production project writes the master', () => {
   let p = deck(1);
   p = fuehreListeAus(p, [{ befehl: 'loopdeck_send', spur_id: p.spuren[0].id, ziel: 'hall', db: -6 }, { befehl: 'return_neu' }]).projekt;
   const w = uebersetze(p, opt());
   const hall = p.returns.find((r) => r.loopdeck), plain = p.returns.find((r) => !r.loopdeck);
   assert.deepEqual(w.returns.find((r) => r.nr === hall.nr).ausgang, { art: 'dj', nr: 1 });
-  assert.deepEqual(w.returns.find((r) => r.nr === plain.nr).ausgang, { art: 'master' });
+  assert.deepEqual(w.returns.find((r) => r.nr === plain.nr).ausgang, { art: 'dj', nr: 1 }, 'owned by the deck group');
   const q = JSON.parse(JSON.stringify(p)); delete q.live;   // never without the live flag (the model refuses it, the translator stays safe)
   assert.deepEqual(uebersetze(q, opt()).returns.find((r) => r.nr === hall.nr).ausgang, { art: 'master' });
 });
@@ -107,34 +109,32 @@ test('a project without a deck translates exactly as before', () => {
   assert.equal(JSON.stringify(w).includes('zellen'), false);
 });
 
-test('the playback view of groups carries loopdeck.platz (a new snapshot), not the grid', async () => {
+test('the deck identity (loopdeck.platz) and the grid do not move the playback; only the place does', async () => {
   const { vergleiche } = await import('../project/commands.ts');
   const alt = deck(1);
   const platz = structuredClone(alt); platz.gruppen[0].loopdeck.platz = 2;
-  assert.equal(vergleiche(alt, platz).betrifft_wiedergabe, true, 'place change moves the DJ channel');
+  assert.equal(vergleiche(alt, platz).betrifft_wiedergabe, false, 'identity is not the output; the place is');
   const raster = structuredClone(alt); raster.gruppen[0].loopdeck.raster = '1/2';
   assert.equal(vergleiche(alt, raster).betrifft_wiedergabe, false, 'grid change is server business');
 });
 
 const RETURNS = (platz) => [
-  { id: 'r1', nr: 1, name: 'HALL', fader_db: 0, pan: 0, mute: false, loopdeck: { platz, art: 'hall' } },
-  { id: 'r2', nr: 2, name: 'DELAY', fader_db: 0, pan: 0, mute: false, loopdeck: { platz, art: 'delay' } },
+  { id: 'r1', nr: 1, name: 'HALL', fader_db: 0, pan: 0, mute: false, loopdeck: { platz, art: 'hall' }, gruppe: 'g1' },
+  { id: 'r2', nr: 2, name: 'DELAY', fader_db: 0, pan: 0, mute: false, loopdeck: { platz, art: 'delay' }, gruppe: 'g1' },
 ];
-test('ausgang_platz maps the place to the DJ channel (3 = pad/1, 4 = pad/2, 1 = deck/1, 2 = deck/2); HALL and DELAY returns follow the deck', () => {
-  const nr = (ap) => { const p = deck(1); p.returns = RETURNS(1); if (ap) p.gruppen[0].loopdeck.ausgang_platz = ap; const w = uebersetze(p, opt()); return [w.gruppen[0].ausgang.nr, w.returns.map((r) => r.ausgang.nr)]; };
-  assert.deepEqual(nr(0), [1, [1, 1]], 'absent: the deck number');
-  assert.deepEqual(nr(3), [1, [1, 1]]);
-  assert.deepEqual(nr(4), [2, [2, 2]], 'deck 1 shown in place 4 sounds on pad/2');
-  assert.deepEqual(nr(1), [3, [3, 3]], 'place 1 = deck/1');
-  assert.deepEqual(nr(2), [4, [4, 4]], 'place 2 = deck/2');
-  const p = deck(2); assert.deepEqual(uebersetze(p, opt()).gruppen[0].ausgang, { art: 'dj', nr: 2 }, 'deck 2 default: pad/2');
+test('the place of the deck is the container it sounds in; HALL and DELAY returns follow the deck; a parked deck is not written', () => {
+  const nr = (ort) => { const p = deck(1, ort); p.returns = RETURNS(1); const w = uebersetze(p, opt()); return [w.gruppen[0].ausgang.nr, w.returns.map((r) => r.ausgang.nr)]; };
+  for (const ort of [1, 2, 3, 4]) assert.deepEqual(nr(ort), [ort, [ort, ort]], `place ${ort}`);
+  const p = deck(2); assert.deepEqual(uebersetze(p, opt()).gruppen[0].ausgang, { art: 'dj', nr: 2 }, 'deck 2 in place 2');
+  const parkt = deck(1); parkt.returns = RETURNS(1); parkt.plaetze = [1, 2, 3, 4].map(() => ({ typ: 'leer' }));
+  const w = uebersetze(parkt, opt());
+  assert.deepEqual([w.gruppen, w.spuren, 'returns' in w], [[], [], false]);
 });
 
-test('an output change moves the playback (new snapshot); writing the default explicitly does not', async () => {
+test('a place change moves the playback (new snapshot); the same place does not', async () => {
   const { vergleiche } = await import('../project/commands.ts');
   const alt = deck(1);
-  const neu = structuredClone(alt); neu.gruppen[0].loopdeck.ausgang_platz = 4;
+  const neu = structuredClone(alt); neu.plaetze = [1, 2, 3, 4].map((n) => (n === 4 ? { typ: 'loops', gruppe: neu.gruppen[0].id } : { typ: 'leer' }));
   assert.equal(vergleiche(alt, neu).betrifft_wiedergabe, true);
-  const gleich = structuredClone(alt); gleich.gruppen[0].loopdeck.ausgang_platz = 3;
-  assert.equal(vergleiche(alt, gleich).betrifft_wiedergabe, false);
+  assert.equal(vergleiche(alt, structuredClone(alt)).betrifft_wiedergabe, false);
 });

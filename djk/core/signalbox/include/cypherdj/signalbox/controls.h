@@ -7,12 +7,14 @@
 
 namespace cypherdj::stellwerk {
 
-constexpr int MAX_REGLER = 4096;   // 2026-10-11: 384 → 512 für komp/* je Quellkanal (98 Regler); 2026-10-20 (E1): 512 → 1024, Deckel
+constexpr int MAX_REGLER = 8192;   // 2026-10-11: 384 → 512 für komp/* je Quellkanal (98 Regler); 2026-10-20 (E1): 512 → 1024, Deckel
                                    // für 32 Spuren (564 Regler), gemessen: Median und p99,9 des Zyklus unverändert
                                    // (~/messungen/2026-10-20-e1-deckel/BERICHT.md). CDJ_Z_REGLER (state.h) muss mit.
                                    // 2026-11-03 (1.15 A1a): 1024 -> 2048, room for the 96 insert controls of slice 4 plus margin; cost measured (A0).
                                    // 2026-11-11 (arr-bk): 2048 -> 4096. The bk insert pool (8 stages x 9 rows = 72) took the table to 2036 rows and left 12; the check demands 44.
                                    // CDJ_Z_REGLER and the state file version move with it (state.h). Memory and cycle cost: ~/messungen/2026-11-10-kanban-vor-welle1/arr-bk.md.
+                                   // 2026-11-20 (container core K2): 4096 -> 8192. 1024 rows strom/1..16/bk/1..64 arrive before the old strips leave (K9), so the table
+                                   // holds 5076 rows in between and 4576 at the end; CDJ_Z_REGLER and CDJ_ZUSTAND_VERSION 4 -> 5 move with it.
 constexpr int MAX_KANAELE = 20;     // deck/1..4, erz/1..8, pad/1..2, bus/1..4, master, cue
 
 enum class Rolle : uint8_t {
@@ -62,7 +64,7 @@ enum class Rolle : uint8_t {
   ins_bk_k33, ins_bk_k34, ins_bk_k35, ins_bk_k36, ins_bk_k37, ins_bk_k38, ins_bk_k39, ins_bk_k40, ins_bk_k41, ins_bk_k42, ins_bk_k43, ins_bk_k44, ins_bk_k45, ins_bk_k46, ins_bk_k47, ins_bk_k48, ins_bk_k49, ins_bk_k50, ins_bk_k51, ins_bk_k52, ins_bk_k53, ins_bk_k54, ins_bk_k55, ins_bk_k56, ins_bk_k57, ins_bk_k58, ins_bk_k59, ins_bk_k60, ins_bk_k61, ins_bk_k62, ins_bk_k63, ins_bk_k64,
   // Live modules task 6 (appended after ins_bk_k64, now the last role: the order stays). grp/<n>/cue, n = 1..16: headphone cue of a group of the arrangement.
   grp_cue,
-  // Production plan task 8 (appended after grp_cue, now the last role: the order stays). spur/<slot>/bk/<k>, slot 1..8, k 1..64 (32 until the 64-knob live override of 2026-11-16): a TRANSIENT override of knob k of the Baukasten instance
+  // Production plan task 8 (appended after grp_cue, now the last role: the order stays). spur/<slot>/bk/<k>, slot 1..16, k 1..64 (32 until the 64-knob live override of 2026-11-16): a TRANSIENT override of knob k of the Baukasten instance
   // in that slot (slot = running number among the tracks with the device bk). Not saved in the state file and not restored (see Kern::abbild, regler_uebernehmen, wiederherstellen).
   spur_bk,
   // Loop deck K7a (appended after spur_bk, now the last role: the order stays). spur/<n>/filter, n = 1..32: DJ filter of an arrangement track, -1 (low-pass) .. +1 (high-pass), 0 is neutral and bit-neutral.
@@ -70,9 +72,20 @@ enum class Rolle : uint8_t {
   // Loop deck channel strip KZ1 (appended after spur_filter, now the last role: the order stays). spur/<n>/eq/{tief,mitte,hoch}, n = 1..32: the 3-band isolator of an arrangement track, dB -200 (kill) .. +6, 0 is neutral.
   spur_eq_tief,
   spur_eq_mitte,
-  spur_eq_hoch
+  spur_eq_hoch,
+  // Container core K2 (appended after spur_eq_hoch, now the last role: the order stays). strom/<n>/bk/<k>, n = 1..16, k = 1..64: knob k of the Baukasten graph
+  // on Erzeuger stream n. Global rows (channel -1); the stream, not a mixer channel, owns the graph.
+  strom_bk,
+  // Container core K7 (appended after strom_bk, now the last role: the order stays). spur/<n>/pfl (track into the cue sum, pre-fader), spur/<n>/trim (dB before the track strip), spur/<n>/kill/{tief,mitte,hoch}
+  // (0/1, cuts one isolator band while 1, the stored eq value returns on release), n = 1..32.
+  spur_pfl,
+  spur_trim,
+  spur_kill_tief,
+  spur_kill_mitte,
+  spur_kill_hoch
 };
-constexpr int SPUR_BK_SLOTS = 8;      // production plan task 8: Baukasten slots of spur/<slot>/bk/<k>: the first 8 bk tracks; the 9th to 16th (ARR_BK_MAX 16) have no row; <= ARR_BK_MAX (static_assert in arr_playback.h)
+constexpr int STROM_BK_STROEME = 16;   // container core K2: strom/<n>/bk/<k>, n = 1..16 (ERZ_STROEME of generator.h), appended behind spur/32/eq/hoch, n outer, k inner
+constexpr int SPUR_BK_SLOTS = 16;     // Baukasten slots of spur/<slot>/bk/<k>: one per bk track (8 until 2026-11-21, then = ARR_BK_MAX; static_assert in arr_playback.h)
 constexpr int SPUR_BK_KNOEPFE = 64;   // knobs of a slot reachable as a live override: spur/<slot>/bk/1..64 (32 until 2026-11-16; production plan task 8)
 constexpr int SPUR_EQ_N = 32;        // loop deck channel strip KZ1: spur/1..32/eq/{tief,mitte,hoch} rows (96), appended behind spur/32/filter: the table holds 4052 of 4096
 constexpr int SPUR_FILTER_N = 32;     // loop deck K7a: spur/1..32/filter rows (one per track), appended behind the last spur/<slot>/bk/<k> row
@@ -90,8 +103,9 @@ int spur_nr(const char* pfad);
 // "grp/<n>/<feld>" -> n (1..999, ohne führende Null), sonst 0; wie spur_nr
 int grp_nr(const char* pfad);
 
-constexpr int RET_REGLER_RETURNS = 4;    // 1.10 Slice 3: ret/<r>/..., r = 1..4 (own places next to the 32 tracks, decision F1)
-constexpr int SND_REGLER = 4;            // spur|grp/<n>/send/<r>, r = 1..4 (one per return)
+constexpr int RET_REGLER_RETURNS_ALT = 4;   // 1.10 Slice 3: the returns ret/1..4 sit inside the first hashed rows; K6 appends ret/5..8 at the table end (no index moves)
+constexpr int RET_REGLER_RETURNS = 8;    // ret/<r>/..., r = 1..8 (own places next to the 32 tracks, decision F1; 8 since container core K6)
+constexpr int SND_REGLER = 8;            // spur|grp/<n>/send/<r>, r = 1..8 (one per return)
 // "ret/<r>/<feld>" -> r (1..999, no leading zero), else 0; like spur_nr
 int ret_nr(const char* pfad);
 // "spur|grp/<n>/send/<r>" -> r (1..999, no leading zero), else 0. The track or group number is read by spur_nr / grp_nr.

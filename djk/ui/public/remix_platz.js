@@ -1,14 +1,17 @@
 // REMIX place (DJ view): the pure logic of the fourth place type. No DOM here, so it runs in node tests.
-// The fx-remix device sits on ONE target: the DJ master, deck 1..4, the loop slots L1, L2 or one of the three Strudel streams (graph channels `master`,
-// `deck/1`..`deck/4`, `pad/1`, `pad/2`, `erz/1`..`erz/3`; on a source channel it is an insert before the fader). The place does not keep its own
+// The fx-remix device sits on ONE target: the DJ master or one of the four containers A..D (graph channels `master` and the container strips;
+// on a container it is an insert before the fader). The place does not keep its own
 // memory of that: the target is read off the core state (`graphen` = { channel: graph name }, the page's graphenGeladen), so a reload of the page
 // or a load by Cypher's tools shows up the same way.
-import { zielName } from './slots.js';
+import { CONTAINER, containerName } from './kanaele.js';
+
+// Display name of a remix target channel: 'master' -> MASTER, a container strip -> its letter.
+export const zielName = (kanal) => (kanal === 'master' ? 'MASTER' : containerName(kanal) ?? '');
 
 export const GERAET = 'fx-remix';
-export const ZIELE = ['master', 'deck/1', 'deck/2', 'deck/3', 'deck/4', 'pad/1', 'pad/2', 'erz/1', 'erz/2', 'erz/3'];
-// Targets whose stream may play an instrument graph: there the core keeps one graph per channel, so a replacement takes the other graph off first.
-const QUELLEN = ['pad/1', 'pad/2', 'erz/1', 'erz/2', 'erz/3'];
+export const ZIELE = ['master', ...CONTAINER.map((c) => c.pfad)];
+// Targets that are a channel: there the core keeps one graph per channel, so a replacement takes the other graph off first.
+const QUELLEN = CONTAINER.map((c) => c.pfad);
 
 // The target that currently carries the device, or null (OFF). With several (should not happen) the first in ZIELE order wins.
 export const aktuellesZiel = (graphen) => ZIELE.find((k) => graphen?.[k] === GERAET) ?? null;

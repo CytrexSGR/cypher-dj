@@ -385,11 +385,6 @@ body.bereich-effekte #bestand .reiter, body.bereich-effekte #bestand #suche, bod
 .effekte { flex: 1; min-height: 0; overflow: auto; padding-top: 8px; }
 .effekte { display: block; }   /* the EFFECTS tab holds the live dock alone (live_dock/) */
 .effekte[hidden] { display: none; }   /* LIBRARY und EFFECTS schalten um: ohne die Zeile schlug display:flex das hidden (17.10., Andreas) */
-.live-auto .autobereich { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; }
-.live-auto .autokopf { display: flex; gap: 8px; align-items: center; }
-.live-auto .autostatus { color: var(--dim); }
-.live-auto .autospur { max-width: none; height: 140px; touch-action: none; cursor: crosshair; }
-.live-auto .autopunkt { fill: var(--warn); stroke: #0e0f12; stroke-width: 1.5; cursor: grab; }
 .colorfx [data-colorart].an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }   /* SOUND COLOR FX: die gewählte Art */
 .colorfx .colorparam { display: flex; align-items: center; gap: 4px; font-size: 9px; color: var(--dim); }
 .colorfx .colorparam input { width: 80px; }
@@ -423,16 +418,18 @@ body.bereich-effekte #bestand .reiter, body.bereich-effekte #bestand #suche, bod
 .mix-oben .seite { font-size: 12px; }
 
 /* Studio S1: drei Instanzen in Deck C (DJ-Ansicht: Reiter, eine sichtbar) und drei Kanalzüge an einem Platz */
-.rollen { display: flex; gap: 4px; margin-left: 12px; }
-.rollen button { font-size: 10px; font-weight: 800; letter-spacing: .08em; padding: 3px 10px; border-radius: 5px; color: var(--dim); border: 1px solid var(--line); }
-.rollen button.an { background: var(--farbe); border-color: var(--farbe); color: #0e0f12; }
-.instanzen { flex: 1; display: flex; min-height: 0; }
-.instanz { flex: 1; display: none; flex-direction: column; gap: 6px; min-height: 0; min-width: 0; border-top: 2px solid var(--farbe); padding-top: 4px; }
-.instanz.an { display: flex; }
+.instanzen { flex: 1; display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow-y: auto; }
+.instanz { flex: 0 0 auto; display: flex; flex-direction: column; gap: 4px; min-width: 0; border-top: 2px solid var(--farbe); padding-top: 4px; }
+.instanzkopf { display: flex; align-items: baseline; gap: 10px; }
+.erzeuger-hinweis { font-size: 10px; font-weight: 800; letter-spacing: .06em; color: var(--dim); }
+.erzeuger-hinweis[hidden] { display: none; }
+.strom-geraete { margin-left: auto; font-size: 10px; font-weight: 800; letter-spacing: .06em; padding: 2px 8px; }
+.strom-geraete[hidden] { display: none; }
+.instanz-koerper { display: grid; grid-template-columns: minmax(0, 1fr) 190px auto; column-gap: 10px; align-items: start; }
+.instanz-editor { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.strom-plus { align-self: flex-start; margin-top: 6px; font-size: 10px; font-weight: 800; letter-spacing: .08em; background: #0e0f12; color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 3px 8px; }
+.slotzeile { display: flex; flex-wrap: wrap; gap: 4px; grid-column: 1 / -1; }
 .instanzname { font-size: 10px; font-weight: 800; letter-spacing: .1em; color: var(--farbe); }
-.zugplatz { display: grid; min-height: 0; }
-.zugplatz > .zug { grid-area: 1 / 1; }
-.zugplatz > .zug:not(.an) { display: none; }
 
 /* Studio S1: Vollansicht STUDIO (Andreas 2026-09-29: „strudel studio vollansicht für strudel live jam session").
    Nur die SICHT wechselt: Kern, Decks und Loops laufen weiter. Oben drei Instanzen nebeneinander, unten ihre drei
@@ -445,11 +442,7 @@ body.studio #pult { grid-template-columns: calc(5 * var(--zug) + 36px) minmax(0,
 body.studio .deck[data-deck] { display: none; }
 body.studio #mischer.mix-oben { grid-template-columns: var(--zug); }
 body.studio #mischer.mix-oben > .zug, body.studio #mischer.mix-oben > .xfader { display: none; }
-body.studio .rollen { display: none; }
 body.studio .instanzen { gap: 10px; }
-body.studio .instanz { display: flex; }
-body.studio .zugplatz { display: contents; }
-body.studio .zugplatz > .zug { display: flex; grid-area: auto; }
 body.studio #mischer-unten { grid-template-columns: repeat(5, var(--zug)); justify-content: start; overflow-y: auto; overflow-x: hidden; }   /* Kanalzüge mit PFL sind höher als der Platz: scrollen statt über die Library ragen (Andreas 11.10.: LIBRARY nicht klickbar) */
 body.studio .muster-feld { font-size: 15px; }
 /* Studio S7: Spurbänder (Automationsspuren als Linien) nur in STUDIO */
@@ -673,16 +666,12 @@ body.studio .platzkopf, body.studio #platz-loops, body.studio #platz-loops2 { di
 #platz-loops, #platz-loops2 { overflow: hidden; }
 
 /* DJ view places, task 15: the mixer follows the places. In the DJ view the two mixer panels dissolve (display: contents) and their strips become
-   cells of the page grid: two rows of three columns in the middle, slots.js (wendeMixerAn) sets data-mix-zeile and data-mix-spalte. The master
+   cells of the page grid: two rows of three columns in the middle, index.html carries data-mix-zeile and data-mix-spalte of every strip. The master
    and the crossfader sit under the second row. The Studio view keeps both panels as they were. */
 body:not(.studio) #pult { grid-template-columns: minmax(0, 1fr) var(--zug) var(--mitte) var(--zug) minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto minmax(0, 1fr) auto; grid-template-areas: none; }
-/* 2026-11-14: the middle column (master, beat FX, COLOR) is fixed; an outer strip column exists only while a Loops place needs it (plan.spalten.aussen).
-   The places take the first and the last column by line numbers, so they hold for every column count. */
+/* The middle column (master, beat FX, COLOR) is fixed. Container strips A..D sit in the cells of places 1..4: A and C left of it, B and D right of it. */
 :root { --mitte: 150px; }
-body:not(.studio) #pult[data-mix-aussen="l"] { grid-template-columns: minmax(0, 1fr) var(--zug) var(--zug) var(--mitte) var(--zug) minmax(0, 1fr); }
-body:not(.studio) #pult[data-mix-aussen="r"] { grid-template-columns: minmax(0, 1fr) var(--zug) var(--mitte) var(--zug) var(--zug) minmax(0, 1fr); }
-body:not(.studio) #pult[data-mix-aussen="lr"] { grid-template-columns: minmax(0, 1fr) var(--zug) var(--zug) var(--mitte) var(--zug) var(--zug) minmax(0, 1fr); }
 /* 2026-11-14: each side column is a flex column of its own (platz_mini.js moves head and node of the top and the bottom place into it), so a place
    can shrink (mini view) without moving the mixer strips beside it. The Studio view dissolves the columns (display: contents). */
 .seitenspalte { display: contents; }
@@ -698,8 +687,6 @@ body:not(.studio) #pult [data-mix-zeile="1"] { grid-row: 1 / 3; } body:not(.stud
 body:not(.studio) #pult [data-mix-spalte="2"] { grid-column: 2; } body:not(.studio) #pult [data-mix-spalte="3"] { grid-column: 3; }
 body:not(.studio) #pult [data-mix-spalte="4"] { grid-column: 4; } body:not(.studio) #pult [data-mix-spalte="5"] { grid-column: 5; }
 body:not(.studio) #pult [data-mix-spalte="6"] { grid-column: 6; }
-body:not(.studio) #pult .zugplatz { min-height: 0; }
-body:not(.studio) #pult .zugplatz > .zug { background: var(--panel); }
 /* The master strip (2026-11-14, back in the middle column): level and glue, a tall meter, PFL, FX 1/2, then the headphones (moved here by ordneMitte). */
 body:not(.studio) #pult .mitte { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto auto minmax(40px, 1fr) auto auto auto;
   align-items: center; justify-items: center; gap: 4px 6px; padding: 4px 8px 8px; border-top: 2px solid #c9ccd6; min-height: 0; }
@@ -768,7 +755,7 @@ body:not(.studio) #pult .deck > .lauf { flex: .84 1 24px; min-height: 16px; }   
 
 /* DJ view, final review: the fader gets the free room of the strip. The strip becomes one grid (.knoepfe and .faderspalte dissolve): the empty cell
    left of LO takes PFL and the FX 1/2 buttons, so they no longer cost two rows above the fader; the knobs are 28 px, the fader cap 18 px. The Studio view keeps its strip. */
-body:not(.studio) #pult .zug:not(.zugplatz > .zug:not(.an)) { display: grid; grid-template-columns: 1fr 1fr; column-gap: 4px; row-gap: 1px; padding-bottom: 4px;
+body:not(.studio) #pult .zug { display: grid; grid-template-columns: 1fr 1fr; column-gap: 4px; row-gap: 1px; padding-bottom: 4px;
   grid-template-rows: auto repeat(3, auto) minmax(60px, 1fr) auto auto; align-content: stretch; }
 body:not(.studio) #pult .zug .knoepfe, body:not(.studio) #pult .zug .faderspalte { display: contents; }
 body:not(.studio) #pult .zug .zugname { grid-row: 1; grid-column: 1 / -1; }
@@ -862,12 +849,10 @@ body.remix-fenster > #kopf, body.remix-fenster > #bestand, body.remix-fenster #p
 body.remix-fenster #pult { display: flex; }
 body.remix-fenster #platz-remix { display: flex !important; flex-direction: column; flex: 1; min-width: 0; }
 
-/* DJ view, 2026-11-14: the Strudel place carries its own three channel strips (DRUMS, BASS, MELODY) right of the pattern editor; the mixer has none for it. */
-body:not(.studio) #deck-c { display: grid; grid-template-columns: minmax(0, 1fr) 190px auto; grid-template-rows: auto minmax(0, 1fr); column-gap: 10px; }
-body:not(.studio) #deck-c > .deckkopf { grid-column: 1 / -1; }
-body:not(.studio) #deck-c > .instanzen { grid-column: 1; grid-row: 2; }
-body:not(.studio) #deck-c > .zugplatz { grid-column: 3; grid-row: 2; display: grid; grid-template-columns: repeat(3, var(--zug)); gap: 4px; min-height: 0; }
-body:not(.studio) #deck-c .zugplatz > .zug { grid-area: auto; display: grid; grid-template-columns: 1fr 1fr; column-gap: 4px; row-gap: 1px; padding: 4px 4px 4px;
+/* DJ view: the Strudel place is one row per stream (editor, sound column, strip of the stream); the "+ STREAM" picker sits below the rows. */
+body:not(.studio) #deck-c { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; }
+body:not(.studio) #deck-c > .instanzen { grid-row: 2; }
+body:not(.studio) #deck-c .instanz .zug { display: grid; grid-template-columns: 1fr 1fr; column-gap: 4px; row-gap: 1px; padding: 4px 4px 4px; width: var(--zug);
   grid-template-rows: auto repeat(3, auto) minmax(60px, 1fr) auto auto; align-content: stretch; background: var(--panel2); border: 1px solid var(--line); border-top: 2px solid var(--farbe); border-radius: 8px; }
 
 /* 2026-11-14: mini view of a Track place (platz_mini.js): the running waveform, low, with bar and time left beside it. Everything else (title, cue pads,
@@ -893,9 +878,7 @@ body:not(.studio) #pult .deck:not(.mini) > .meta { grid-area: 2 / 2 / 3 / 4; ali
 body:not(.studio) #pult .deck:not(.mini) > :is(.lauf, .ueber, .bedienreihe, .meter, .tasten) { grid-column: 1 / -1; }
 body:not(.studio) #pult .deck:not(.mini) > .lauf { grid-row: 3; height: 100%; }
 
-/* 2026-11-14: SOUND column of the Strudel place (strudel_sound.js): per stream the instrument picker and its first four knobs. */
-.soundspalte { display: none; }
-body:not(.studio) #deck-c > .soundspalte { grid-column: 2; grid-row: 2; display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow-y: auto; }
+/* 2026-11-14: SOUND column of a Strudel row (strudel_sound.js): per stream the instrument picker and its first four knobs. */
 .sound-stimme { border: 1px solid var(--line); border-top: 2px solid var(--farbe); border-radius: 8px; background: var(--panel); padding: 5px 6px 6px; display: flex; flex-direction: column; gap: 4px; }
 .sound-kopf { display: flex; align-items: center; justify-content: space-between; font-size: 10px; font-weight: 800; letter-spacing: .12em; color: var(--farbe); }
 .sound-kopf [data-synth-oeffnen] { font-size: 9px; font-weight: 800; letter-spacing: .06em; padding: 2px 7px; border-radius: 4px; border: 1px solid var(--line); color: var(--text); }
@@ -1195,3 +1178,15 @@ body :is([data-p="play"], [data-w="play"], .taste.play, .muster-senden, #muster-
 body :is([data-p="stopp"], [data-w="stopp"], .taste-c.stopp, .muster-stopp, #muster-stopp, .halten) { border-color: var(--stopp); color: var(--stopp); }
 body :is([data-p="play"], [data-w="play"], .taste.play, .spielen):is(.an, [aria-pressed="true"]) { background: var(--play); border-color: var(--play); color: #04150b; }
 body :is([data-p="play"], [data-w="play"], [data-p="stopp"], [data-w="stopp"]):disabled { opacity: .45; }
+
+/* Container core U4: the stems place, one row per track of the group (stems_view.js). Shown by the places like any body, absent from the Studio view. */
+.stemsplatz { overflow: auto; padding: 8px 10px; gap: 8px; }
+.stemsplatz[hidden] { display: none; }
+.st-liste { display: flex; flex-direction: column; gap: 4px; min-height: 0; }
+.st-zeile { display: grid; grid-template-columns: minmax(60px, 1fr) minmax(80px, 2fr) 46px 26px; align-items: center; gap: 8px; font-size: 11px; }
+.st-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-wert { font-size: 10px; color: var(--dim); text-align: right; }
+.st-mute { font-size: 10px; font-weight: 800; padding: 2px 0; border-radius: 5px; color: var(--dim); border: 1px solid var(--line); }
+.st-mute.an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }
+.st-leer { color: var(--dim); font-size: 11px; }
+body.studio .stemsplatz { display: none; }

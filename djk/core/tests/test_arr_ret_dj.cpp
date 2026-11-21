@@ -26,7 +26,7 @@ using cdj::ArrStufe;
 
 #define TR(x) auto x##_p = std::make_unique<Treiber>(); Treiber& x = *x##_p;
 static constexpr int64_t V = 537;
-static constexpr int KAN = 6;
+static constexpr int KAN = cdj::Arrangement::DJ_KANAELE;
 static const double MITTE = 0.70710677;
 static const double D = 0.25 * MITTE;
 
@@ -162,7 +162,7 @@ int main() {
     PRUEF(laden(ret(1, DJ3), true) == "+snap");
     PRUEF(laden(ret(1, DJ3), false) == "format");                                           // without the head flag
     PRUEF(laden(ret(1, "{\"art\":\"dj\",\"nr\":0}"), true) == "format");
-    PRUEF(laden(ret(1, "{\"art\":\"dj\",\"nr\":7}"), true) == "format");
+    PRUEF(laden(ret(1, "{\"art\":\"dj\",\"nr\":5}"), true) == "format");
     PRUEF(laden(ret(1, "{\"art\":\"gruppe\",\"nr\":1}"), true) == "format");
     PRUEF(laden(ret(1, "{\"art\":\"master\"}"), true) == "+snap");                           // master stays
     PRUEF(laden(ret(1, "{\"art\":\"master\"}"), false) == "+snap");
@@ -223,7 +223,7 @@ int main() {
       Bau b(nr);
       b.spur(1, ArrArt::audio).clip(1, "c1", 0.0, 8.0, &lang->a).ausgang(1, 1);
       b.ret_dj(1, 3);
-      b.ret_dj(2, 6);
+      b.ret_dj(2, 4);
       b.ret(3);
       cdj::ArrSnapshot* s = b.fertig();
       s->live = true;

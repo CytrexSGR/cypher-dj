@@ -21,7 +21,6 @@ static float sig(int64_t s) { return 0.0001f * static_cast<float>(s % 9973 + 1);
 
 int main() {
   k35::Arbeitsbestand ab("test_kern_rec");
-  cdj::Loop pad_loop;   // S18: loop of box 1 (pad/1); declared before the run, the kern keeps the pointer
   arr35::Lauf x(ab.pfad, "test_kern_rec");
   const std::string ordner = ab.pfad + "/rec";
   PRUEF(std::system(("mkdir -p " + ordner).c_str()) == 0);
@@ -544,23 +543,9 @@ int main() {
   // S18: the tap also sees erz/5..7 (codes 15..17) and pad/1..2 (codes 21, 22). One take, four armed tracks:
   //   track 4 code 16 (erz/6, source sig)         -> bit identical to sig (like AK4)
   //   track 5 code 15 (erz/5, no source)          -> all zeros (negative control: the tap can see a difference)
-  //   track 6 code 21 (pad/1, loop box 1 plays)   -> not all zeros
-  //   track 7 code 22 (pad/2, empty box 2)        -> all zeros
+  //   track 6 code 21 (pad/1, nothing feeds it)   -> all zeros (container core K1: the loop boxes are gone, streams 9 and 10 feed the pads from K3 on)
+  //   track 7 code 22 (pad/2, nothing feeds it)   -> all zeros
   {
-    pad_loop.name = "konstant";
-    pad_loop.beats = 16;
-    pad_loop.frames = 16 * k35::SPB;
-    pad_loop.daten.assign(static_cast<size_t>(pad_loop.frames) * 2, 0.3f);
-    cdj::Befehl lb = x.neu(cdj::Befehl::LOOP_LADEN, "andreas");
-    lb.deck = 1;
-    lb.zeiger = &pad_loop;
-    x.sende(lb);
-    x.teil("pad/1/fader", 0.0f, 0.0, 0.0);
-    x.lauf(x.kern->sample() + 3 * N);
-    cdj::Befehl ls = x.neu(cdj::Befehl::LOOP_START, "andreas");
-    ls.deck = 1;
-    x.sende(ls);
-    x.lauf(x.kern->sample() + 40 * k35::SPB);   // the loop starts on its phrase boundary; 40 beats are enough
     x.erz_quelle[5] = sig;   // erz/6 only
     const int spuren[4] = {4, 5, 6, 7};
     const int codes[4] = {16, 15, 21, 22};
@@ -617,8 +602,8 @@ int main() {
     std::printf("rec S18: Spitze erz/5 %.5f, pad/1 %.5f, pad/2 %.5f; Frames %lld %lld %lld %lld\n", sp5, sp6, sp7,
                 (long long)frames[4], (long long)frames[5], (long long)frames[6], (long long)frames[7]);
     PRUEF(frames[5] > 0 && static_cast<int64_t>(datei(5).size()) == frames[5] * 8 && sp5 == 0.0f);   // erz/5: no source, all zeros
-    PRUEF(frames[6] > 0 && static_cast<int64_t>(datei(6).size()) == frames[6] * 8 && sp6 > 0.01f);   // pad/1: the loop is in the take
-    PRUEF(frames[7] > 0 && static_cast<int64_t>(datei(7).size()) == frames[7] * 8 && sp7 == 0.0f);   // pad/2: empty box, all zeros
+    PRUEF(frames[6] > 0 && static_cast<int64_t>(datei(6).size()) == frames[6] * 8 && sp6 == 0.0f);   // pad/1: no source
+    PRUEF(frames[7] > 0 && static_cast<int64_t>(datei(7).size()) == frames[7] * 8 && sp7 == 0.0f);   // pad/2: no source, all zeros
     for (int i = 0; i < 4; ++i) {   // S4a: disarm in the core BEFORE the memory goes (the later blocks look at every armed slot)
       const int64_t rd = x.rec_spur(spuren[i], 0, 0, nullptr);
       x.lauf(x.kern->sample() + 3 * N);

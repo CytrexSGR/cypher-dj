@@ -273,7 +273,7 @@ test('(c) POST /graph on the 53 graphs and the fixtures: one batch of /k/teil wi
     const teile = r.gesendet.slice(0, i);
     assert.ok(teile.every((z) => z.adresse === '/k/teil'));
     const e = erwartet(n);
-    const soll = Object.fromEntries(Object.entries(e).map(([nr, v]) => [`${kanal}/bk/${nr}`, v]));
+    const soll = Object.fromEntries(Object.entries(e).map(([nr, v]) => [`${kanal === 'erz/3' ? 'strom/3' : kanal}/bk/${nr}`, v]));
     assert.deepEqual(zeilen(teile), soll, `${n}: rows = the graph's vorgabe for the knobs it defines`);
     assert.equal(teile.length, Object.keys(e).length, `${n}: one row per knob, once`);
     assert.ok(teile.every((z) => z.felder.dauer_beats === 0 && z.felder.politik === 1), `${n}: set at once, late means now`);
@@ -348,13 +348,13 @@ test('(e) Cypher: a hand load of a different graph pushes, reloading the same gr
 test('(g) a load refused with status 6 sends the previous row values back; the pushed rows stay for an accepted load', async (t) => {
   const { lade, reglerSetzen } = await stapel(t);
   await lade({ kanal: 'erz/3', name: 'fix-inst' });                    // loaded: rows at the vorgabe
-  reglerSetzen('erz/3/bk/3', 0.77);                                    // the running graph has its own value on knob 3
+  reglerSetzen('strom/3/bk/3', 0.77);                                    // the running graph has its own value on knob 3
   const r = await lade({ kanal: 'erz/3', name: 'fix-inst2' }, 6);     // fix-inst2 defines knob 3 at 0.6; the kern refuses the load
   assert.equal(r.code, 200);
   const i = ladeIndex(r.gesendet);
   const davor = r.gesendet.slice(0, i), danach = r.gesendet.slice(i + 1);
-  assert.deepEqual(zeilen(davor), { 'erz/3/bk/3': 0.6 });
-  assert.deepEqual(zeilen(danach), { 'erz/3/bk/3': 0.77 }, 'rollback: the value before the push goes back');
+  assert.deepEqual(zeilen(davor), { 'strom/3/bk/3': 0.6 });
+  assert.deepEqual(zeilen(danach), { 'strom/3/bk/3': 0.77 }, 'rollback: the value before the push goes back');
   // positive control: an accepted load sends nothing after the load message
   const ok = await lade({ kanal: 'erz/3', name: 'fix-inst2' }, 3);
   assert.equal(ok.gesendet.slice(ladeIndex(ok.gesendet) + 1).length, 0);
@@ -402,7 +402,7 @@ test('(c) the load message leaves only after the end status of the LAST row; 64 
 test('(g) the rollback of a refused load is waited for as well (rows acknowledged before the call returns)', async (t) => {
   const { lade, reglerSetzen, antworten } = await stapel(t);
   await lade({ kanal: 'erz/3', name: 'fix-inst' });
-  reglerSetzen('erz/3/bk/3', 0.77);
+  reglerSetzen('strom/3/bk/3', 0.77);
   const n0 = antworten.length;
   const r = await lade({ kanal: 'erz/3', name: 'fix-inst2' }, 6);
   const danach = r.gesendet.slice(ladeIndex(r.gesendet) + 1);

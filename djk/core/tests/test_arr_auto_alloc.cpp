@@ -158,7 +158,7 @@ int main() {
   PRUEF(stapel_da && stapel_tief == 32);   // U9: the stacks were really loaded and play on all 32 tracks
   PRUEF(positiv >= 1);
   PRUEF(im_zyklus == 0);
-  PRUEF(tab.anzahl() == 693 + 204 + 16 + 345 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 14 * 56 + 64 + 16 + 64 + 8 * 64 + 32 + 96);   // loop deck channel strip KZ1: + 96 spur/<n>/eq/<band> rows   // loop deck K7a: + 32 spur/<n>/filter rows   // production plan task 8: + 8 x 64 spur/<slot>/bk/<k> rows (32 until 2026-11-16);   // master insert graph: + 64 master/bk rows;   // live modules task 6: + 16 grp/<n>/cue rows;   // nested groups task 1: + 64 rows of groups 9..16;   // arr-bk: + 8 bk instances x 9 rows; arr-fx: pools 8 eq, 4 saett, 2 lim (slice 2) and 8 utilities x 5 rows (slice 1); 2026-11-06: eq pool 2; master limiter: + 3 ins/lim rows   // 693 (before slice 3) + 204 send, return and hall controls + 16 send-return graph knobs (S14) + 345 mix-tool rows (1.15 A1b: gate 117, utility 119, multiband 96, limiter 12, spectrum 1) = 1258, + 120 ins/komp rows (1.10 slice 4a T1) = 1378, + 63 ins/eq and ins/saett rows (4b T12) = 1441, + 48 rack macro rows rack/<k>/m<n> (4c T15) = 1489
+  PRUEF(tab.anzahl() == 5088);   // 16 bk slots (4576 with 8);   // container core K9: the console of four containers and four buses replaced the deck, erz and loop-box strips; 5076 rows before it, 500 fewer now (measured, the old sum stays in the git history)
   PRUEF(voll == 0);
   PRUEF_ENDE();
 }

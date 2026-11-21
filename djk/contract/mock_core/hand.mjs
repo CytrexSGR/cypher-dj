@@ -4,7 +4,7 @@
 // Skalierte Übernahme aus proben/09-ki-steuerung/stellwerk.mjs (handAnwenden). Ohne Mapping-Datei gilt je Regler die
 // Kurve "linear" über den Bereich aus §1.5.
 
-import { REGLER, kanalVon } from './contract.mjs';
+import { REGLER, kanalVon, playerVonContainer } from './contract.mjs';
 import { llround } from './clock.mjs';
 import { wertBei, meldeRegler, setzeHalter } from './controls.mjs';
 import decksModul, { laeuft, loese, starteDeck, stoppeDeck } from './decks.mjs';
@@ -33,7 +33,7 @@ function handAmRegler(K, e, s) {
     if (s - r.handGemeldet >= HAND_ABSTAND) { r.handGemeldet = s; K.aus('/e/hand', [pfad, wertBei(K, pfad, s), BigInt(s), K.uhr.beat(s)]); }
   };
   const k = kanalVon(pfad);
-  if (k?.startsWith('deck/')) loese(K, K.decks[Number(k[5])], s);
+  if (playerVonContainer(k)) loese(K, K.decks[playerVonContainer(k)], s);
   if (r.physisch === null) {                       // erster Wert nach Start oder Neuverbindung: nur Stellung
     r.physisch = u;
     r.punkt = u;

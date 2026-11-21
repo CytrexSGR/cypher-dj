@@ -137,6 +137,7 @@ function bauePlatz(n) {
   const k = document.createElement('section');
   k.className = 'seqplatz deckflaeche';
   k.dataset.seq = String(n);
+  k.dataset.platzBody = 'seq';
   k.hidden = true;
   k.style.setProperty('--farbe', FARBE[n]);
   k.setAttribute('aria-label', `SEQ ${n}`);

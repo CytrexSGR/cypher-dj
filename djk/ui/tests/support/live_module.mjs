@@ -5,6 +5,8 @@ import path from 'node:path';
 import { aufbau } from './output_setup.mjs';
 import { warteBis } from './proj_context.mjs';
 import { Stems } from '../../areas/proj/stems.ts';
+import { Projekte } from '../../project/storage.ts';
+import { modulAmPlatz } from '../../project/live.ts';
 import { liveBereich } from '../../areas/live/export.ts';
 import { speichereModul } from '../../project/module_storage.ts';
 import { pythonVorgabe } from '../../server.ts';
@@ -21,8 +23,18 @@ export function basisDatei(dir) {
   return f;
 }
 
-export async function liveAufbau(t, { trenner = 'langsam', schritt = 0.1, speichern = true, kernDa = true, midi } = {}) {
+// `standard: true` keeps the layout a new live container gets (track, track, strudel, track); by default the four places are free, so a test that
+// puts a SEQ deck, a loop deck or a module in any place starts from an empty container
+export async function liveAufbau(t, { trenner = 'langsam', schritt = 0.1, speichern = true, kernDa = true, midi, standard = false } = {}) {
   const r = await aufbau(t, { mitKick: false });
+  if (!standard) {
+    const pr = new Projekte(path.join(r.tmp, 'projekte'));
+    const { slug } = pr.lege('Live', { live: true });
+    const p = pr.lies(slug);
+    p.gruppen = (p.gruppen ?? []).filter((g) => !g.strudel);
+    p.plaetze = [{ typ: 'track' }, { typ: 'track' }, { typ: 'track' }, { typ: 'track' }];
+    pr.speichere(slug, p);
+  }
   const dir = path.join(r.tmp, 'deckdaten');
   fs.mkdirSync(dir);
   const basis = basisDatei(dir);
@@ -58,7 +70,7 @@ export async function liveAufbau(t, { trenner = 'langsam', schritt = 0.1, speich
     }
   };
   const exportiere = async (slot) => { const a = await b.modul.exportiere({ deck: 1, slot }, 'andreas'); await abbruch(slot); return a; };
-  const gruppeVon = (p, slot) => p.gruppen.find((g) => g.ausgang === undefined && g.modul?.slot === slot);
+  const gruppeVon = (p, slot) => p.gruppen.find((g) => g.id === modulAmPlatz(p, slot));
   // the ramp rows: up to and including the first -200. What follows is the reset of the freed group slot to 0
   // that every group removal writes (commands.ts)
   const alleZeilen = () => r.protokoll.gesendet.filter((g) => g.adresse === '/k/teil' && /^grp\/\d+\/fader$/.test(g.felder.pfad));

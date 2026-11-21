@@ -261,94 +261,35 @@ test('nested groups: the translator writes the parent number; flat projects keep
   assert.throws(() => uebersetze(q, opt()), (e) => e instanceof WiedergabeFehler && e.grund === 'ziel_unbekannt');
 });
 
-// DJ view places, task 4 (decision 5, 6): the DJ-channel output of a live project's slot groups, derived from `modul.slot`
-const gMod = (id, nr, slot, extra = {}) => ({ id, nr, name: id, farbe: '#3b8de0', fader_db: 0, pan: 0, mute: false, solo: false, gefaltet: false,
-  ...(slot ? { modul: { slot } } : {}), ...extra });
-function mitModulen(live) {
+// Container core: the DJ output of a live project follows `plaetze` (the full set of cases is in project_container_playback.test.mjs); here only the
+// production side and the golden bytes stay. A module group is a plain group in a production project.
+const gMod = (id, nr, extra = {}) => ({ id, nr, name: id, farbe: '#3b8de0', fader_db: 0, pan: 0, mute: false, solo: false, gefaltet: false, ...extra });
+
+test('DJ output: a production project with module and seq groups writes no live flag and master', () => {
   const p = pruefeProjekt(specProjekt()).projekt;
-  p.gruppen.push(gMod('ga', 1, 'A'), gMod('gb', 2, 'B'));
-  if (live) p.live = true;
-  return p;
-}
-
-test('DJ output: a live project writes live:true and dj outputs for the slot groups (A = 1, B = 2)', () => {
-  const w = uebersetze(mitModulen(true), opt());
-  assert.equal(w.format, 'cypherdj-arr/2');
-  assert.equal(w.live, true);
-  assert.deepEqual(w.gruppen, [{ nr: 1, ausgang: { art: 'dj', nr: 1 } }, { nr: 2, ausgang: { art: 'dj', nr: 2 } }]);
-});
-
-test('DJ output: a production project with the same module groups writes no live flag and master (module without a live flag routes to the master)', () => {
-  const w = uebersetze(mitModulen(false), opt());
+  p.gruppen.push(gMod('ga', 1, { modul: { slot: 'A' } }), gMod('gb', 2, { seq: { schema: 2 } }));
+  const w = uebersetze(p, opt());
   assert.ok(!('live' in w));
   assert.deepEqual(w.gruppen, [{ nr: 1, ausgang: { art: 'master' } }, { nr: 2, ausgang: { art: 'master' } }]);
-  const p = mitModulen(true); for (const g of p.gruppen) delete g.modul;   // a live project, groups without a slot (a module placed without slot)
-  assert.deepEqual(uebersetze(p, opt()).gruppen, [{ nr: 1, ausgang: { art: 'master' } }, { nr: 2, ausgang: { art: 'master' } }]);
-});
-
-test('DJ output: only a top group takes the DJ output; a stem group inside the slot group stays a group', () => {
-  const p = mitModulen(true);
-  p.gruppen.push(gMod('s1', 3, undefined, { ausgang: { art: 'gruppe', id: 'ga' } }));
-  const g = uebersetze(p, opt()).gruppen;
-  assert.deepEqual(g.map((x) => x.ausgang), [{ art: 'dj', nr: 1 }, { art: 'dj', nr: 2 }, { art: 'gruppe', nr: 1 }]);
-  const q = mitModulen(true); q.gruppen[0].ausgang = { art: 'gruppe', id: 'gb' };   // a slot group that sits inside another group: no DJ output
-  assert.deepEqual(uebersetze(q, opt()).gruppen[0].ausgang, { art: 'gruppe', nr: 2 });
-});
-
-test('DJ output: a live project without any slot group keeps the bytes of a project without the flag (no live key written)', () => {
-  const p = pruefeProjekt(specProjekt()).projekt; p.live = true;
-  assert.equal(JSON.stringify(uebersetze(p, opt())), JSON.stringify(uebersetze(pruefeProjekt(specProjekt()).projekt, opt())));
-  assert.ok(!('live' in uebersetze(p, opt())));
 });
 
 test('DJ output: a production project with a module group is written byte for byte as before (stored string from before the change)', () => {
   const p = pruefeProjekt(specProjekt()).projekt;
-  p.gruppen.push(gMod('ga', 1, 'A'));
+  p.gruppen.push(gMod('ga', 1, { modul: { slot: 'A' } }));
   assert.equal(JSON.stringify(uebersetze(p, opt())), '{"format":"cypherdj-arr/2","nr":1,"spuren":[{"nr":1,"art":"audio","clips":[{"id":"c1","start_beat":0,"laenge_beats":1,"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","datei":"/arbeit/arr/audio/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.f32","frames":24000,"offset_frames":0,"gain_db":0,"ein_beats":0,"aus_beats":0}]},{"nr":2,"art":"intern","geraet":"rb338","parameter":{},"noten":[{"id":"c2/n1","beat":0,"laenge":0.5,"ton":36,"vel":100}]},{"nr":3,"art":"wirt","slot":1,"noten":[]}],"gruppen":[{"nr":1,"ausgang":{"art":"master"}}]}');
 });
 
-// SEQ deck, task 4 (ADR 038): the DJ channels grow to 6; a top group of a live project with a `seq` document plays into deck/<platz> = nr platz + 2
-test('DJ output (ADR 038): a live project with a seq group on platz 2 writes dj nr 4; platz 1 to 4 give nr 3 to 6, next to the slot groups A and B', () => {
-  const p = mitModulen(true);
-  p.gruppen.push(gMod('s2', 3, undefined, { seq: { platz: 2 } }));
-  const w = uebersetze(p, opt());
-  assert.equal(w.live, true);
-  assert.deepEqual(w.gruppen.map((x) => x.ausgang), [{ art: 'dj', nr: 1 }, { art: 'dj', nr: 2 }, { art: 'dj', nr: 4 }]);
-  for (const platz of [1, 2, 3, 4]) {
-    const q = pruefeProjekt(specProjekt()).projekt; q.live = true;
-    q.gruppen.push(gMod('s', 1, undefined, { seq: { platz } }));
-    assert.deepEqual(uebersetze(q, opt()).gruppen, [{ nr: 1, ausgang: { art: 'dj', nr: platz + 2 } }]);
-  }
-});
-
-test('DJ output (ADR 038): a seq group that is not a top group, or sits in a production project, keeps master or its group', () => {
-  const p = mitModulen(true);
-  p.gruppen.push(gMod('s2', 3, undefined, { seq: { platz: 2 }, ausgang: { art: 'gruppe', id: 'ga' } }));
-  assert.deepEqual(uebersetze(p, opt()).gruppen[2].ausgang, { art: 'gruppe', nr: 1 });
-  const q = pruefeProjekt(specProjekt()).projekt;   // no live flag
-  q.gruppen.push(gMod('s2', 1, undefined, { seq: { platz: 2 } }));
-  const w = uebersetze(q, opt());
-  assert.ok(!('live' in w));
-  assert.deepEqual(w.gruppen, [{ nr: 1, ausgang: { art: 'master' } }]);
-});
-
-test('DJ output (ADR 038): a live project without a seq group is written to the same bytes as before the change', () => {
-  const a = pruefeProjekt(specProjekt()).projekt, b = pruefeProjekt(specProjekt()).projekt;
-  for (const p of [a, b]) p.live = true;
-  a.gruppen.push(gMod('ga', 1, 'A'), gMod('gb', 2, 'B'));
-  b.gruppen.push(gMod('ga', 1, 'A'), gMod('gb', 2, 'B'));
-  assert.equal(JSON.stringify(uebersetze(a, opt())), JSON.stringify(uebersetze(b, opt())));
-  assert.equal(JSON.stringify(uebersetze(a, opt()).gruppen), '[{"nr":1,"ausgang":{"art":"dj","nr":1}},{"nr":2,"ausgang":{"art":"dj","nr":2}}]');
-});
-
-test('DJ output (ADR 038): a validated live project with a SEQ deck on platz 2 translates to dj nr 4 (the model of the deck marker, not a stub)', () => {
+test('DJ output: a validated live project with a SEQ deck in place 2 translates to dj 2 as /4 (the model of the deck marker, not a stub)', () => {
   let p = neuesProjekt('seq'); p.live = true;
+  p.plaetze = [{ typ: 'leer' }, { typ: 'leer' }, { typ: 'leer' }, { typ: 'leer' }];
   p = fuehreListeAus(p, [{ befehl: 'seq_anlegen', platz: 2 }]).projekt;
   p = fuehreListeAus(p, [{ befehl: 'seq_folge_neu', gruppe_id: p.gruppen[0].id, name: 'Drums', geraet: { art: 'intern', name: 'bk', graph: 'drums-909', parameter: {} } }]).projekt;
-  assert.deepEqual(p.gruppen[0].seq, { schema: 2, platz: 2 });
+  assert.deepEqual(p.gruppen[0].seq, { schema: 2 });
+  assert.deepEqual(p.plaetze[1], { typ: 'seq', gruppe: p.gruppen[0].id });
   const u = pruefeProjekt(kopie(p));
   assert.ok('projekt' in u, JSON.stringify(u));
   const w = uebersetze(u.projekt, opt());
+  assert.equal(w.format, 'cypherdj-arr/4');
   assert.equal(w.live, true);
-  assert.deepEqual(w.gruppen.map((x) => x.ausgang), [{ art: 'dj', nr: 4 }]);
+  assert.deepEqual(w.gruppen.map((x) => x.ausgang), [{ art: 'dj', nr: 2 }]);
 });

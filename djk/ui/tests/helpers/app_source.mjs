@@ -8,9 +8,9 @@ const PUBLIC = new URL('../../public/', import.meta.url);
 // app.js first, then the split-off modules; the order only decides where a text search starts.
 export const APP_DATEIEN = [
   'app.js', 'page_state.js', 'controls_view.js', 'deck_view.js', 'deck_griffe.js', 'output_view.js', 'loop_rec_view.js',
-  'tempo_view.js', 'color_view.js', 'beat_fx_view.js', 'live_view.js', 'slots_view.js', 'remix_window.js',
-  'live_kanaele.js', 'effects_gemeinsam.js', 'effects_view.js', 'learn_view.js', 'graphs_view.js', 'effects_bindung.js', 'prelisten_view.js',
-  'browse_table.js', 'browse_detail.js', 'library_view.js', 'seitenrahmen.js', 'instanzen.js', 'stream.js', 'loopdeck/view.js', 'loopdeck/model.js', 'loopdeck/menue.js', 'loopdeck/sets.js', 'loopdeck/drag.js',
+  'tempo_view.js', 'color_view.js', 'beat_fx_view.js', 'live_view.js', 'slots_view.js', 'stems_view.js', 'remix_window.js',
+  'pult.js', 'kanaele.js', 'live_kanaele.js', 'effects_gemeinsam.js', 'effects_view.js', 'learn_view.js', 'graphs_view.js', 'effects_bindung.js', 'prelisten_view.js',
+  'browse_table.js', 'browse_detail.js', 'library_view.js', 'seitenrahmen.js', 'instanzen.js', 'strudel_module.js', 'stream.js', 'loopdeck/view.js', 'loopdeck/model.js', 'loopdeck/menue.js', 'loopdeck/sets.js', 'loopdeck/drag.js',
 ];
 
 // The `export ` prefix the split added to shared declarations is module plumbing, not page logic: it is stripped, so the text reads as before the split.

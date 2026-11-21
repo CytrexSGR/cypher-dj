@@ -191,13 +191,13 @@ test('restart whose remembered project cannot be reopened: the stale meter files
 
 // ---- track planner (track.ts): bars follow the meter, 4 stays byte-identical ----
 import { plane, planeDurchlauf } from '../track.ts';
-const SPUR = { name: 'x', fahrten: [{ ziel: 'erz/2/filter', ab_takt: 2, takte: 2, nach: -6 }, { ziel: 'master/pegel', ab_takt: 4, nach: -3 }] };
+const SPUR = { name: 'x', fahrten: [{ ziel: 'deck/1/filter', ab_takt: 2, takte: 2, nach: -6 }, { ziel: 'master/pegel', ab_takt: 4, nach: -3 }] };
 
 test('plane/planeDurchlauf: default and proTakt 4 are identical, proTakt 3 counts bars of 3 beats', () => {
   assert.deepEqual(plane(SPUR, 8), plane(SPUR, 8, 4));
   assert.deepEqual(planeDurchlauf({ ...SPUR, schleife_takte: 4 }, 8, 1, 0), planeDurchlauf({ ...SPUR, schleife_takte: 4 }, 8, 1, 0, 4));
   const g = plane(SPUR, 9, 3);
-  assert.deepEqual(g.teile.map((x) => [x.pfad, x.ab_beat, x.dauer_beats]), [['erz/2/filter', 12, 6], ['master/pegel', 18, 0]]);
+  assert.deepEqual(g.teile.map((x) => [x.pfad, x.ab_beat, x.dauer_beats]), [['deck/1/filter', 12, 6], ['master/pegel', 18, 0]]);
   assert.equal(g.ende_beat, 18);
   const d = planeDurchlauf({ ...SPUR, schleife_takte: 4 }, 9, 0, 0, 3);
   assert.deepEqual([d.anfang_beat, d.ende_beat], [9, 21]);
@@ -207,7 +207,7 @@ test('plane/planeDurchlauf: default and proTakt 4 are identical, proTakt 3 count
 test('3/4 open: POST /spur answers with bars of 3 (anker on a multiple of 3, end after 3 beats per bar)', async (t) => {
   const s = await aufbau(t);
   await oeffne(s, [3, 4]);
-  const r = await post(s.url, '/spur', { spur: { name: 'b3', fahrten: [{ ziel: 'erz/2/filter', ab_takt: 3, takte: 1, nach: -6 }] } });
+  const r = await post(s.url, '/spur', { spur: { name: 'b3', fahrten: [{ ziel: 'deck/1/filter', ab_takt: 3, takte: 1, nach: -6 }] } });
   assert.equal(r.code, 200, JSON.stringify(r.j));
   assert.equal(r.j.anker_beat % 3, 0);
   assert.equal(r.j.ende_beat - r.j.anker_beat, 9, 'start of bar 3 = 6 beats, plus 1 bar of 3 beats');
@@ -217,7 +217,7 @@ test('3/4 open: POST /spur answers with bars of 3 (anker on a multiple of 3, end
 test('3/4 open: a loop track repeats every 3n beats and GET /spur names n bars', async (t) => {
   const s = await aufbau(t);
   await oeffne(s, [3, 4]);
-  const r = await post(s.url, '/spur', { spur: { name: 'l3', schleife_takte: 2, fahrten: [{ ziel: 'erz/2/filter', ab_takt: 1, takte: 1, nach: -6 }] } });
+  const r = await post(s.url, '/spur', { spur: { name: 'l3', schleife_takte: 2, fahrten: [{ ziel: 'deck/1/filter', ab_takt: 1, takte: 1, nach: -6 }] } });
   assert.equal(r.code, 200, JSON.stringify(r.j));
   assert.equal(r.j.ende_beat - r.j.anker_beat, 6);
   const l = (await hole(s.url, '/spur')).j.find((x) => x.name === 'l3');

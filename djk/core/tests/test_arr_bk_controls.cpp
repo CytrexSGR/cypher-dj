@@ -10,11 +10,11 @@
 //   5 slot mapping follows the snapshot: with the bk track on number 3 removed, the former slot 2 is slot 1; a row of slot 2 reaches nothing
 //   6 a row of a slot whose track holds an RB-338 (not bk) does nothing
 //   7 not persisted: the state of a core does not list the row, a state file that holds it does not set it (restart state and render take-over), a neighbour row is stored and restored
-//   8 table: the 512 rows exist and nothing around them; the reserve of the table stays 44 or more
+//   8 table: the 1024 rows exist and nothing around them; the reserve of the table stays 44 or more
 //   9 verlauf(): the pointer form reports the last sample of the block
 //  10 slot numbering pinned with the same example as the page (djk/ui/tests/project_commands_device_param.test.mjs): bk on the numbers 3, 7 and 9, an RB-338 on number 5: the slots are 1, 2, 3 in
 //     ascending track number, counted by device name (a bk track without an instance counts, too); nr 9 is slot 3
-//  11 ARR_BK_MAX is 16, the override rows stay at 8 slots: ten bk tracks on the numbers 1..10; the table has no row spur/9/bk/1; a row of slot 8 reaches the 8th bk track only
+//  11 ARR_BK_MAX = SPUR_BK_SLOTS = 16: sixteen bk tracks on the numbers 1..16; the table has no row spur/17/bk/1; a row of slot 16 reaches the 16th bk track only
 //     and nothing reaches the 9th and 10th (bk_slot_ -1: they take the release path of the page)
 #include <cmath>
 #include <cstdio>
@@ -252,14 +252,14 @@ int main() {
   }
   {  // 8: the table
     cypherdj::stellwerk::ReglerTabelle tab;
-    PRUEF(tab.suche("spur/1/bk/1") >= 0 && tab.suche("spur/8/bk/64") >= 0 && tab.suche("spur/8/bk/33") >= 0 && tab.suche("spur/5/bk/17") >= 0);
-    for (const char* p : {"spur/9/bk/1", "spur/1/bk/65", "spur/1/bk/0", "spur/0/bk/1", "spur/1/bk/01", "spur/10/bk/1", "spur/1/bk/", "spur/1/bk/100"})
+    PRUEF(tab.suche("spur/1/bk/1") >= 0 && tab.suche("spur/16/bk/64") >= 0 && tab.suche("spur/16/bk/33") >= 0 && tab.suche("spur/9/bk/1") >= 0 && tab.suche("spur/5/bk/17") >= 0);
+    for (const char* p : {"spur/17/bk/1", "spur/1/bk/65", "spur/1/bk/0", "spur/0/bk/1", "spur/1/bk/01", "spur/32/bk/1", "spur/1/bk/", "spur/1/bk/100"})
       PRUEF(tab.suche(p) < 0);
     const int r = tab.suche("spur/2/bk/5");
     PRUEF(tab.def(r).rolle == cypherdj::stellwerk::Rolle::spur_bk && tab.def(r).min == 0.0f && tab.def(r).max == 1.0f && tab.def(r).vorgabe == 0.5f);
-    PRUEF(tab.anzahl() == 3412 + 512 + 32 + 96);   // 64 live knobs per slot: 3924 of 4096; loop deck K7a: + 32 spur/<n>/filter rows, 3956; loop deck channel strip KZ1: + 96 spur/<n>/eq/<band> rows, 4052
-    PRUEF(cypherdj::stellwerk::MAX_REGLER - tab.anzahl() >= 44);   // reserve 172
-    PRUEF(tab.suche("spur/1/bk/1") == 3412);   // appended behind master/bk/64, slot-major
+    PRUEF(tab.anzahl() == 5088);   // 16 bk slots (4576 with 8);   // container core K9: the console of four containers and four buses replaced the deck, erz and loop-box strips (5076 before, 500 fewer, measured)
+    PRUEF(cypherdj::stellwerk::MAX_REGLER - tab.anzahl() >= 44);   // reserve
+    PRUEF(tab.suche("spur/1/bk/1") == 2516);   // container core K9: the strip rows before it are gone (3412 before); slot-major
   }
   {  // 9: the pointer form takes the last sample of the block
     Rig g;
@@ -288,27 +288,27 @@ int main() {
     g.blocks(1);
     PRUEF(g.rec.calls.size() == 1 && g.rec.calls[0].spur == 8 && g.rec.calls[0].param == 4 && std::fabs(g.rec.calls[0].wert - 0.4f) < 1e-6f);
   }
-  {  // 11: ten bk tracks, only eight slots
+  {  // 11: sixteen bk tracks, sixteen slots
     Rig g;
     Bau b;
-    for (int nr = 1; nr <= 10; ++nr) b.spur(nr, ArrArt::intern);
+    for (int nr = 1; nr <= cdj::ARR_BK_MAX; ++nr) b.spur(nr, ArrArt::intern);
     cdj::ArrSnapshot* s = b.fertig();
-    for (int nr = 1; nr <= 10; ++nr) mache_bk(s, nr, 0.25f);
+    for (int nr = 1; nr <= cdj::ARR_BK_MAX; ++nr) mache_bk(s, nr, 0.25f);
     g.t.laden(s);
-    PRUEF(g.zeile("spur/9/bk/1") == -1);
-    PRUEF(g.zeile("spur/8/bk/64") >= 0 && g.zeile("spur/8/bk/1") >= 0);
-    g.t.arr.setze_sofort(g.zeile("spur/8/bk/5"), 0.9f);
+    PRUEF(g.zeile("spur/17/bk/1") == -1);
+    PRUEF(g.zeile("spur/16/bk/64") >= 0 && g.zeile("spur/16/bk/1") >= 0 && g.zeile("spur/9/bk/1") >= 0);
+    g.t.arr.setze_sofort(g.zeile("spur/16/bk/5"), 0.9f);
     const int b0 = g.rec.cur + 1;
     g.blocks(3);
     for (int b = b0; b < b0 + 3; ++b) {
-      PRUEF(std::fabs(g.rec.letzter(b, 7, 4) - 0.9f) < 1e-6f);   // the 8th bk track (index 7), every block
-      PRUEF(g.rec.n_in(b) == 1);                                  // and nothing else: not the 9th and 10th (indices 8, 9)
+      PRUEF(std::fabs(g.rec.letzter(b, 15, 4) - 0.9f) < 1e-6f);   // the 16th bk track (index 15), every block
+      PRUEF(g.rec.n_in(b) == 1);                                   // and nothing else
     }
-    for (const auto& c : g.rec.calls) PRUEF(c.spur == 7);
-    g.t.arr.setze_sofort(g.zeile("spur/1/bk/5"), 0.6f);   // slot 1 reaches the first bk track only
+    for (const auto& c : g.rec.calls) PRUEF(c.spur == 15);
+    g.t.arr.setze_sofort(g.zeile("spur/9/bk/5"), 0.6f);   // slot 9 reaches the 9th bk track only (index 8)
     g.blocks(1);
-    PRUEF(std::fabs(g.rec.letzter(g.rec.cur, 0, 4) - 0.6f) < 1e-6f);
-    for (const auto& c : g.rec.calls) PRUEF(c.spur != 8 && c.spur != 9);
+    PRUEF(std::fabs(g.rec.letzter(g.rec.cur, 8, 4) - 0.6f) < 1e-6f);
+    for (const auto& c : g.rec.calls) PRUEF(c.spur == 15 || c.spur == 8);
   }
   PRUEF_ENDE();
 }

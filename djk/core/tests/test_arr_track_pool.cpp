@@ -1925,11 +1925,74 @@ void fall32() {
   std::printf("case 32 q_bitgleich_ueber_neu: ungleich=%d parallel=%llu auto_neu=%llu\n", ungleich, (unsigned long long)sl.z.blocks_parallel, (unsigned long long)sl.z.auto_neu);
 }
 
+// 33: a switch-off that makes things worse is taken back at once. When the serial phase that runs because the account is off takes longer than the hard
+// limit of the pool (75 percent of the period), the serial fallback cannot keep real time either: the account is switched on again at the next block, without
+// the back-off (live 2026-11-21: 14 Baukasten tracks, pool off after five hangs, the master clock ran at 50 of 122 BPM for minutes). A serial phase within
+// the limit keeps the ordinary back-off.
+void fall33() {
+  using K = cdj::HallPool;
+  struct Szene {
+    Pool pool{3};
+    AtomSenke sa;
+    Welt a{&sa};
+    cdj::SpurHaken hk;
+    int64_t s0 = 0;
+    explicit Szene(int64_t seriell_ns) {
+      a.t.arr.setze_hall_pool(&pool.p);
+      a.t.arr.setze_spur_pool(1);
+      cdj::SpurTest t = kein_tor();
+      t.seriell_ns = seriell_ns;
+      a.t.arr.setze_spur_test(t);
+      hk.warte_worker = 3;
+      a.t.arr.setze_spur_haken(&hk);
+      a.laden(snap(1, 0, 0, nullptr, 0, 8), 0);
+    }
+    const cdj::ArrSpurLauf& sl() const { return a.t.arr.spur_lauf(); }
+    void lauf(int n) {
+      for (int i = 0; i < n; ++i, s0 += M) a.block(s0);
+    }
+  };
+  const int64_t grenze = cdj::ArrSpurLauf::periode_ns(M) * cdj::ArrSpurLauf::GRENZE_PROZENT / 100;
+  {   // a. serial over the limit: off for one serial block, on again at the next one, and the pool forks again
+    Szene z(grenze + 1000);
+    z.lauf(10);
+    PRUEF(z.sl().z.blocks_parallel == 10);
+    for (int i = 0; i < 5; ++i) z.pool.p.spaet_melden(K::SPUR);
+    z.lauf(1);   // block_anfang takes the switch-off, this block runs serially and is measured
+    PRUEF(!z.pool.p.an(K::SPUR) && z.sl().z.seriell_teuer == 1);
+    z.lauf(1);   // switched on again without the back-off of 4096 blocks
+    PRUEF(z.pool.p.an(K::SPUR) && z.sl().z.neu_teuer == 1 && z.sl().z.blocks_parallel == 11);
+    z.lauf(20);
+    PRUEF(z.sl().z.blocks_parallel == 31);
+    std::printf("case 33 a q_seriell_teuer: seriell_teuer=%llu neu_teuer=%llu parallel=%llu\n", (unsigned long long)z.sl().z.seriell_teuer,
+                (unsigned long long)z.sl().z.neu_teuer, (unsigned long long)z.sl().z.blocks_parallel);
+  }
+  {   // b. serial within the limit: the ordinary back-off stays (4096 blocks)
+    Szene z(grenze / 2);
+    z.lauf(10);
+    for (int i = 0; i < 5; ++i) z.pool.p.spaet_melden(K::SPUR);
+    z.lauf(4095);
+    PRUEF(!z.pool.p.an(K::SPUR) && z.sl().z.seriell_teuer == 0 && z.sl().z.neu_teuer == 0 && z.sl().z.auto_neu == 0);
+    z.lauf(1);
+    PRUEF(z.pool.p.an(K::SPUR) && z.sl().z.auto_neu == 1 && z.sl().z.neu_teuer == 0);
+  }
+  {   // c. mode aus measures nothing and never switches on
+    Szene z(grenze + 1000);
+    z.a.t.arr.setze_spur_pool(0);
+    z.lauf(10);
+    for (int i = 0; i < 5; ++i) z.pool.p.spaet_melden(K::SPUR);
+    z.pool.p.block_anfang();
+    z.lauf(100);
+    PRUEF(!z.pool.p.an(K::SPUR) && z.sl().z.seriell_teuer == 0 && z.sl().z.blocks_parallel == 0);
+  }
+  std::printf("case 33 q_seriell_teuer: ok\n");
+}
+
 int main(int argc, char** argv) {
-  void (*falle[])() = {fall1, fall2, fall3, fall4, fall5, fall6, fall7, fall8, fall9, fall10, fall11, fall12, fall13, fall14, fall15, fall16, fall17, fall18, fall19, fall20, fall21, fall22, fall23, fall24, fall25, fall26, fall27, fall28, fall29, fall30, fall31, fall32};
-  if (argc > 1) {   // a single case for debugging: test_arr_spur_pool <1..32>
+  void (*falle[])() = {fall1, fall2, fall3, fall4, fall5, fall6, fall7, fall8, fall9, fall10, fall11, fall12, fall13, fall14, fall15, fall16, fall17, fall18, fall19, fall20, fall21, fall22, fall23, fall24, fall25, fall26, fall27, fall28, fall29, fall30, fall31, fall32, fall33};
+  if (argc > 1) {   // a single case for debugging: test_arr_spur_pool <1..33>
     const int n = std::atoi(argv[1]);
-    if (n >= 1 && n <= 32) falle[n - 1]();
+    if (n >= 1 && n <= 33) falle[n - 1]();
   } else {
     for (auto f : falle) {
       f();

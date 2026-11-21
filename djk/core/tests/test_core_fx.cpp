@@ -1,6 +1,6 @@
 // Plan 3 (Beat-FX, Spec E8, §4.10): die EINE Beat-FX-Einheit im Mixer ohne JACK. Rahmen wie test_core_deck_e9.cpp
 // (Klick-Material, Master links am Kern-Sample). Echo ½ Beat ohne Rückkopplung macht aus jedem Klick zwei im Abstand
-// 11 250; aus: keiner mehr; Fader zu: die Fahne klingt nach (nach dem Fader); an erz/1 bleibt Deck 1 trocken; master.
+// 11 250; aus: keiner mehr; Fader zu: die Fahne klingt nach (nach dem Fader); an pad/1 bleibt Deck 1 trocken; master.
 #include <unistd.h>
 
 #include <cmath>
@@ -270,33 +270,33 @@ int main() {
   PRUEF(pegel(26.0) > 0.5f * viertel);   // der Klick selbst bleibt
   PRUEF(a.fxz.back().status == 0 && a.quittung(z3, 3));
 
-  // 4) erz/1 an FX1 (deck/1 bleibt ab): deck/1 bleibt trocken
-  a.fxZuweisung(1, "erz/1", 1);
+  // 4) pad/1 an FX1 (deck/1 bleibt ab): deck/1 bleibt trocken
+  a.fxZuweisung(1, "pad/1", 1);
   a.zyklen(31 * SPB);
   PRUEF(pegel(29.5) < 0.01f * viertel && pegel(30.5) < 0.01f * viertel);
-  PRUEF(a.fxz.back().deck == 1 && !std::strcmp(a.fxz.back().pfad, "erz/1") && a.fxz.back().status == 1);
+  PRUEF(a.fxz.back().deck == 1 && !std::strcmp(a.fxz.back().pfad, "pad/1") && a.fxz.back().status == 1);
 
   // 5) deck/1 zusätzlich an FX1 (ersetzt das alte Umhängen): beide Kanäle hängen gleichzeitig an FX1
   a.fxZuweisung(1, "deck/1", 1);
   a.zyklen(35 * SPB);
   PRUEF(pegel(33.5) > 0.5f * viertel && pegel(34.5) > 0.5f * viertel);
   PRUEF(a.kern->mixer().fx_zugewiesen(0, cdj::Mixer::kanal_index("deck/1")));
-  PRUEF(a.kern->mixer().fx_zugewiesen(0, cdj::Mixer::kanal_index("erz/1")));
+  PRUEF(a.kern->mixer().fx_zugewiesen(0, cdj::Mixer::kanal_index("pad/1")));
   PRUEF(!a.kern->mixer().fx_zugewiesen(1, cdj::Mixer::kanal_index("deck/1")));
 
-  // 6) a channel the unit does not take: receipt 6. Units 1 and 2 take deck/3 and deck/4 now, but not erz/5; unit 3 (FX3) takes erz/5, never master.
+  // 6) a channel the unit does not take: receipt 6. Units 1 and 2 take deck/2 and deck/4 now, but not pad/2; unit 3 (FX3) takes pad/2, never master.
   const int64_t z6 = a.fxZuweisung(1, "erz/5", 1);
   a.zyklen(40 * SPB);
   PRUEF(a.quittung(z6, 6));
   PRUEF(!a.kern->mixer().fx_zugewiesen(0, cdj::Mixer::kanal_index("erz/5")));
-  const int64_t z6b = a.fxZuweisung(1, "deck/3", 1);
+  const int64_t z6b = a.fxZuweisung(1, "deck/2", 1);
   a.zyklen(a.kern->sample() + 1024);
-  PRUEF(a.quittung(z6b, 2) && a.kern->mixer().fx_zugewiesen(0, cdj::Mixer::kanal_index("deck/3")));
-  const int64_t z6c = a.fxZuweisung(3, "erz/5", 1);
+  PRUEF(a.quittung(z6b, 2) && a.kern->mixer().fx_zugewiesen(0, cdj::Mixer::kanal_index("deck/2")));
+  const int64_t z6c = a.fxZuweisung(3, "pad/2", 1);
   a.zyklen(a.kern->sample() + 1024);
-  PRUEF(a.quittung(z6c, 2) && a.kern->mixer().fx_zugewiesen(2, cdj::Mixer::kanal_index("erz/5")));
-  PRUEF(a.fxz.back().deck == 3 && !std::strcmp(a.fxz.back().pfad, "erz/5") && a.fxz.back().status == 1);   // reported like FX1 and FX2
-  PRUEF(!a.kern->mixer().fx_zugewiesen(0, cdj::Mixer::kanal_index("erz/5")) && !a.kern->mixer().fx_zugewiesen(1, cdj::Mixer::kanal_index("erz/5")));
+  PRUEF(a.quittung(z6c, 2) && a.kern->mixer().fx_zugewiesen(2, cdj::Mixer::kanal_index("pad/2")));
+  PRUEF(a.fxz.back().deck == 3 && !std::strcmp(a.fxz.back().pfad, "pad/2") && a.fxz.back().status == 1);   // reported like FX1 and FX2
+  PRUEF(!a.kern->mixer().fx_zugewiesen(0, cdj::Mixer::kanal_index("pad/2")) && !a.kern->mixer().fx_zugewiesen(1, cdj::Mixer::kanal_index("pad/2")));
   const int64_t z6d = a.fxZuweisung(3, "master", 1);
   a.zyklen(a.kern->sample() + 1024);
   PRUEF(a.quittung(z6d, 6));
@@ -329,7 +329,7 @@ int main() {
   // verzögerte Kopie des schon gefilterten Klicks bei Beat 48: Verhältnis 1. Liefe ECHO zuerst, gingen Klick und
   // Wiederholung an zwei verschiedenen LFO-Phasen durch den Filter.
   a.fxZuweisung(1, "deck/1", 0);
-  a.fxZuweisung(1, "erz/1", 0);
+  a.fxZuweisung(1, "pad/1", 0);
   a.zyklen(43 * SPB);
   a.fx(1, 4 /* FILTER */, 4.0, 1.0f, 1.0f, 0.5, 0.5, 1);
   a.fx(2, 1 /* ECHO */, 1.0, 1.0f, 0.0f, 0.5, 0.5, 1);

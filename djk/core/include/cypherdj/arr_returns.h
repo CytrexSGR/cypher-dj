@@ -127,7 +127,7 @@ class ArrReturns {
   bool vorab_[ARR_RETURNS] = {};                        // computed by hall_parallel in this block (by a worker, taken back or by the caller)
   int m_job_ = 0;                                       // block length for the jobs, written before schicke
 #ifdef CYPHERDJ_MUTATION_HALL_OHNE_JOIN
-  bool offen_[8] = {};   // >= HallPool::MAX_W (3); the pool header is not included here, arr_returns.cpp asserts it
+  bool offen_[8] = {};   // >= HallPool::MAX_W (7); the pool header is not included here, arr_returns.cpp asserts it
                                     // error case: jobs the caller did not wait for
 #endif
   static void job(void* ctx, int r);

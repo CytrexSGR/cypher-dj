@@ -322,8 +322,8 @@ the two loop box pads).
 **Cores.** `djk-start` gives the core four physical cores (with their SMT siblings) by default and every other CPU to
 stem separation; `CYPHERDJ_KERN_KERNE=<n>` changes the number (a value outside 1 to cores minus 1 is clamped, with a
 note), and `CYPHERDJ_KERN_CPUS` and `CYPHERDJ_STEMS_CPUS` set the CPU lists directly. In an arrangement the return Halls
-are computed on up to three worker threads, each on its own physical core inside the core's allowed CPUs: `hall_faeden`
-(0 to 3, default 3) and `hall_cpus` in `djk/config/kern.toml` control them. With `hall_faeden = 0` everything is computed in the
+are computed on up to seven worker threads, each on its own physical core inside the core's allowed CPUs: `hall_faeden`
+(0 to 7, default 7) and `hall_cpus` in `djk/config/kern.toml` control them. With `hall_faeden = 0` everything is computed in the
 audio callback, with the same output. With fewer free physical cores than workers the core starts fewer workers and
 prints a start line.
 

@@ -15,8 +15,8 @@ import { REGLER } from '../src/controls_info.ts';
 import { VERTRAG_ORDNER } from '../src/contract.ts';
 import { anKern, annahme, welt } from './support/world.ts';
 
-const KI = new Set(['deck/3', 'erz/1']);
-const IST: Record<string, number> = { 'deck/3/fader': -6, 'deck/1/fader': 0, 'erz/1/send/1': -10 };
+const KI = new Set(['pad/1', 'erz/1', 'deck/2']);   // deck/2: its stem rows belong to the player deck
+const IST: Record<string, number> = { 'pad/1/fader': -6, 'deck/1/fader': 0, 'erz/1/send/1': -10 };
 const wert = (p: string) => IST[p] ?? (REGLER.get(p)?.vorgabe as number);
 const mensch = (teile: MenschenTeil[]) => ausMenschenform({ grund: 't', teile }, 'p1', 'cypher');
 const kanonisch = (teile: Teil[]): Plan => ({
@@ -25,7 +25,7 @@ const kanonisch = (teile: Teil[]): Plan => ({
 const deckTeil = (aktion: 'hotcue' | 'sprung' | 'loop' | 'start', mehr: Record<string, number> = {}): Teil =>
   ({ nr: 0, art: 'deck', deck: 1, aktion, ab_beat: 80, politik: 0, gruppe: '', hoerschein: '', ...mehr }) as Teil;
 
-const KI_LEISER: MenschenTeil[] = [{ regler: 'deck/3/fader', art: 'rampe', ab_takt: 9, dauer_takte: 2, nach: -20 }];
+const KI_LEISER: MenschenTeil[] = [{ regler: 'pad/1/fader', art: 'rampe', ab_takt: 9, dauer_takte: 2, nach: -20 }];
 const EQ_A: MenschenTeil[] = [{ regler: 'deck/1/eq/hoch', art: 'setze', ab_takt: 17, nach: 6 }];
 
 // Methoden-Tabelle wie im Leitstand (lage, plan_einreichen, plan_abbrechen gebaut; alles andere aus §10 noch nicht)
@@ -171,13 +171,13 @@ test('P17 Stufe 1 und 2: spielzettel und Methoden außerhalb der Liste werden ab
 test('P18 Ausnahme leiser: Fader nach unten an der KI-Spur geht direkt an den Kern (Erlaubnis, Negativ-Kontrolle des Steckbriefs)', () => {
   const w = welt(); const a = annahme(w, 1);
   assert.equal(a.einreichen({ grund: 'leiser', teile: KI_LEISER }).status, 'angenommen');
-  assert.deepEqual(anKern(w).map((g) => [g.felder.quelle, g.felder.pfad]), [['cypher', 'deck/3/fader']]);
+  assert.deepEqual(anKern(w).map((g) => [g.felder.quelle, g.felder.pfad]), [['cypher', 'pad/1/fader']]);
 });
 
 test('P19 Ausnahme leiser: Send nach unten und Kill an an der KI-Spur gehen direkt (Erlaubnis)', () => {
   assert.equal(entscheide(1, 'plan_einreichen', mensch([{ regler: 'erz/1/send/1', art: 'setze', ab_takt: 9, nach: -200 }]), KI, wert), 'direkt');
   for (const k of ['tief', 'mitte', 'hoch']) {
-    assert.equal(entscheide(1, 'plan_einreichen', mensch([{ regler: `deck/3/kill/${k}`, art: 'setze', ab_takt: 9, nach: 1 }]), KI, wert), 'direkt', k);
+    assert.equal(entscheide(1, 'plan_einreichen', mensch([{ regler: `pad/1/kill/${k}`, art: 'setze', ab_takt: 9, nach: 1 }]), KI, wert), 'direkt', k);
   }
 });
 
@@ -188,35 +188,35 @@ test('P20 Ausnahme leiser: „ausschließlich KI-Spur“: ein Teil an einem ande
 });
 
 test('P21 Ausnahme leiser: nur Fader, Send, Kill: EQ, Trim, Stem, Filter nach unten an der KI-Spur sind Vorschlag', () => {
-  for (const [regler, nach] of [['deck/3/eq/tief', -30], ['deck/3/trim', -12], ['deck/3/stem/bass', -30], ['deck/3/filter', -0.5]] as Array<[string, number]>) {
+  for (const [regler, nach] of [['pad/1/eq/tief', -30], ['pad/1/trim', -12], ['deck/2/stem/bass', -30], ['pad/1/filter', -0.5]] as Array<[string, number]>) {
     assert.equal(entscheide(1, 'plan_einreichen', mensch([{ regler, art: 'setze', ab_takt: 9, nach }]), KI, wert), 'vorschlag', regler);
   }
 });
 
 test('P22 Ausnahme leiser: „nach unten“: lauter und gleich laut sind Vorschlag', () => {
-  assert.equal(entscheide(1, 'plan_einreichen', mensch([{ regler: 'deck/3/fader', art: 'setze', ab_takt: 9, nach: -3 }]), KI, wert), 'vorschlag');
-  assert.equal(entscheide(1, 'plan_einreichen', mensch([{ regler: 'deck/3/fader', art: 'setze', ab_takt: 9, nach: -6 }]), KI, wert), 'vorschlag');
+  assert.equal(entscheide(1, 'plan_einreichen', mensch([{ regler: 'pad/1/fader', art: 'setze', ab_takt: 9, nach: -3 }]), KI, wert), 'vorschlag');
+  assert.equal(entscheide(1, 'plan_einreichen', mensch([{ regler: 'pad/1/fader', art: 'setze', ab_takt: 9, nach: -6 }]), KI, wert), 'vorschlag');
   assert.equal(entscheide(1, 'plan_einreichen', mensch([{ regler: 'erz/1/send/1', art: 'setze', ab_takt: 9, nach: -10 }]), KI, wert), 'vorschlag');
 });
 
 test('P23 Ausnahme leiser: „Kill an“: Kill aus an der KI-Spur ist Vorschlag', () => {
-  assert.equal(entscheide(1, 'plan_einreichen', mensch([{ regler: 'deck/3/kill/tief', art: 'setze', ab_takt: 9, nach: 0 }]), KI, wert), 'vorschlag');
+  assert.equal(entscheide(1, 'plan_einreichen', mensch([{ regler: 'pad/1/kill/tief', art: 'setze', ab_takt: 9, nach: 0 }]), KI, wert), 'vorschlag');
 });
 
 test('P24 Ausnahme leiser: innerhalb des Plans zählt der Wert vor jedem Teil: erst leiser, dann lauter ist Vorschlag', () => {
-  assert.equal(entscheide(1, 'plan_einreichen', mensch([{ regler: 'deck/3/fader', art: 'setze', ab_takt: 9, nach: -20 },
-    { regler: 'deck/3/fader', art: 'setze', ab_takt: 10, nach: -10 }]), KI, wert), 'vorschlag');
+  assert.equal(entscheide(1, 'plan_einreichen', mensch([{ regler: 'pad/1/fader', art: 'setze', ab_takt: 9, nach: -20 },
+    { regler: 'pad/1/fader', art: 'setze', ab_takt: 10, nach: -10 }]), KI, wert), 'vorschlag');
 });
 
 test('P25 Ausnahme leiser: Vergleich gegen das Leiseste aus Ist-Wert und angenommenen Plänen (F9)', () => {
   const w = welt(); const a = annahme(w, 1);
-  assert.equal(a.einreichen({ grund: 'leiser', teile: [{ regler: 'deck/3/fader', art: 'rampe', ab_takt: 9, dauer_takte: 2, nach: -20 }] }).status, 'angenommen');
-  assert.equal(a.einreichen({ grund: 'wieder lauter', teile: [{ regler: 'deck/3/fader', art: 'setze', ab_takt: 12, nach: -10 }] }).status, 'vorgeschlagen');
+  assert.equal(a.einreichen({ grund: 'leiser', teile: [{ regler: 'pad/1/fader', art: 'rampe', ab_takt: 9, dauer_takte: 2, nach: -20 }] }).status, 'angenommen');
+  assert.equal(a.einreichen({ grund: 'wieder lauter', teile: [{ regler: 'pad/1/fader', art: 'setze', ab_takt: 12, nach: -10 }] }).status, 'vorgeschlagen');
 });
 
 test('P26 Ausnahme leiser: nur Regler-Teile: ein Deck- oder Tempo-Teil an der KI-Spur macht den Plan zum Vorschlag', () => {
   const stopp = { nr: 1, art: 'deck', deck: 3, aktion: 'stopp', ab_beat: 40, politik: 1, gruppe: '', hoerschein: '' } as Teil;
-  const leiser = { nr: 0, art: 'regler', pfad: 'deck/3/fader', ab_beat: 32, dauer_beats: 4, nach: -30, form: 0, politik: 0, gruppe: '', hoerschein: '' } as Teil;
+  const leiser = { nr: 0, art: 'regler', pfad: 'pad/1/fader', ab_beat: 32, dauer_beats: 4, nach: -30, form: 0, politik: 0, gruppe: '', hoerschein: '' } as Teil;
   assert.equal(entscheide(1, 'plan_einreichen', kanonisch([leiser, stopp]), KI, wert), 'vorschlag');
   const tempo = { nr: 1, art: 'tempo', ab_beat: 40, ziel_bpm: 126, dauer_beats: 16 } as Teil;
   assert.equal(entscheide(1, 'plan_einreichen', kanonisch([leiser, tempo]), KI, wert), 'vorschlag');
@@ -234,7 +234,7 @@ test('P28 Ausnahme leiser: ohne festgelegte KI-Spur gibt es keine Ausnahme', () 
 // ---------- Stufe 2 (bis Scheibe 56 wie 1, strenger, nie lockerer) und Stufe 3 ----------
 
 test('P29 Stufe 2 ist nicht lockerer als Stufe 1: KI-Spur lauter und EQ an Andreas Deck sind Vorschlag', () => {
-  assert.equal(entscheide(2, 'plan_einreichen', mensch([{ regler: 'deck/3/fader', art: 'setze', ab_takt: 9, nach: 0 }]), KI, wert), 'vorschlag');
+  assert.equal(entscheide(2, 'plan_einreichen', mensch([{ regler: 'pad/1/fader', art: 'setze', ab_takt: 9, nach: 0 }]), KI, wert), 'vorschlag');
   assert.equal(entscheide(2, 'plan_einreichen', mensch(EQ_A), KI, wert), 'vorschlag');
   assert.equal(entscheide(2, 'plan_einreichen', mensch(KI_LEISER), KI, wert), 'direkt'); // Negativ-Kontrolle
 });

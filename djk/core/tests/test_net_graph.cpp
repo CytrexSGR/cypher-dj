@@ -69,9 +69,9 @@ std::vector<std::pair<std::string, std::string>> graphen_aus(const std::vector<M
 }
 std::vector<std::pair<std::string, std::string>> graphen(Gegenstelle& g) { return graphen_aus(lies(g)); }
 
-void strom(cdj::Netz& n, int64_t id, const char* ziel, const char* kanal, int strom_nr) {
+void strom(cdj::Netz& n, int64_t id, const char* ziel, int strom_nr) {
   cdj::osc::Schreiber s(v::erz_strom);
-  s.h(id).s("erzeuger").i(strom_nr).s(ziel).s(kanal);
+  s.h(id).s("erzeuger").i(strom_nr).s(ziel);
   n.paket(s.daten(), s.groesse());
 }
 
@@ -160,7 +160,7 @@ int main() {
       frage(netz, 7, "andreas");
       const auto l = lies(g);
       const Liste gr = graphen_aus(l);
-      PRUEF(gr.size() == 15);
+      PRUEF(gr.size() == 14);
       for (size_t i = 0; i < gr.size() && i < v::werte::graph_platz.size(); ++i)
         PRUEF(gr[i].first == v::werte::graph_platz[i] && gr[i].second.empty());
       int q1 = 0, q3 = 0;
@@ -169,7 +169,7 @@ int main() {
       for (const auto& m : l) {
         if (m.adr == "/e/graph") ++graphen_gesehen;
         if (m.adr == "/q" && m.id == 7 && m.s0 == "andreas") {
-          graph_vor_q = graph_vor_q && graphen_gesehen == 15;
+          graph_vor_q = graph_vor_q && graphen_gesehen == 14;
           if (m.status == 1) ++q1;
           if (m.status == 3) { ++q3; q1_vor_q3 = q1 == 1; }
         }
@@ -178,61 +178,59 @@ int main() {
     }
 
     // 2. pending until the quittung: nothing before it, exactly one /e/graph at quittung 1, none at quittung 3
-    strom(netz, 101, "bk:saege", "erz/3", 3);
+    strom(netz, 101, "bk:saege", 3);
     PRUEF(hole_und_frei(bef, b) && b.art == cdj::Befehl::ERZ_STROM && b.id == 101);
     PRUEF(graphen(g).empty());
     PRUEF(netz.graph_wartend() == 1);
     quitt(ere, netz, 101, "erzeuger", 1);
-    PRUEF((graphen(g) == Liste{{"erz/3", "saege"}}));
+    PRUEF((graphen(g) == Liste{{"strom/3", "saege"}}));
     quitt(ere, netz, 101, "erzeuger", 3);
     PRUEF(graphen(g).empty());
     PRUEF(netz.graph_wartend() == 0);
 
     // 3. THE drift case: the erzeuger re-announces stream 3 as a kit target; the graph is gone in the kern
-    strom(netz, 102, "kit:gut", "erz/3", 3);
+    strom(netz, 102, "kit:gut", 3);
     PRUEF(hole_und_frei(bef, b) && b.id == 102);
     quitt(ere, netz, 102, "erzeuger", 1);
-    PRUEF((graphen(g) == Liste{{"erz/3", ""}}));
-    PRUEF(stand(netz, g)["erz/3"] == "");
+    PRUEF((graphen(g) == Liste{{"strom/3", ""}}));
+    PRUEF(stand(netz, g)["strom/3"] == "");
 
-    // 4. negative control, harmless re-announce: another stream's kit target leaves erz/3 alone
-    strom(netz, 103, "bk:saege", "erz/3", 3);
+    // 4. negative control, harmless re-announce: another stream's kit target leaves strom/3 alone
+    strom(netz, 103, "bk:saege", 3);
     PRUEF(hole_und_frei(bef, b));
     quitt(ere, netz, 103, "erzeuger", 1);
-    PRUEF((graphen(g) == Liste{{"erz/3", "saege"}}));
-    strom(netz, 104, "kit:gut", "erz/1", 1);
+    PRUEF((graphen(g) == Liste{{"strom/3", "saege"}}));
+    strom(netz, 104, "kit:gut", 1);
     PRUEF(hole_und_frei(bef, b));
     quitt(ere, netz, 104, "erzeuger", 1);
     PRUEF(graphen(g).empty());
-    PRUEF(stand(netz, g)["erz/3"] == "saege");
+    PRUEF(stand(netz, g)["strom/3"] == "saege");
 
-    // 5. stream moves: stream 3 goes to erz/5 as a midi target; erz/3 empties, erz/5 reports nothing
-    strom(netz, 105, "midi:1:1", "erz/5", 3);
+    // 5. re-announce as a midi target: the slot of that stream empties (strom/5 is another stream and reports nothing)
+    strom(netz, 105, "midi:1:1", 3);
     PRUEF(hole_und_frei(bef, b));
     quitt(ere, netz, 105, "erzeuger", 1);
-    PRUEF((graphen(g) == Liste{{"erz/3", ""}}));
+    PRUEF((graphen(g) == Liste{{"strom/3", ""}}));
 
-    // 6. two streams on one channel: the slot shows the graph of the lowest-numbered stream that carries one
-    strom(netz, 106, "bk:saege", "erz/3", 2);
+    // 6. container core K1: every stream owns its slot, no channel is shared any more
+    strom(netz, 106, "bk:saege", 2);
     PRUEF(hole_und_frei(bef, b));
     quitt(ere, netz, 106, "erzeuger", 1);
-    PRUEF((graphen(g) == Liste{{"erz/3", "saege"}}));
-    strom(netz, 150, "bk:saege2", "erz/3", 4);   // a higher stream with another graph: stream 2 still wins
+    PRUEF((graphen(g) == Liste{{"strom/2", "saege"}}));
+    strom(netz, 150, "bk:saege2", 5);   // another stream with another graph: strom/2 keeps its own
     PRUEF(hole_und_frei(bef, b));
     quitt(ere, netz, 150, "erzeuger", 1);
-    PRUEF(graphen(g).empty());
-    strom(netz, 107, "kit:gut", "erz/3", 3);   // stream 3 joins erz/3 without a graph
-    PRUEF(hole_und_frei(bef, b));
-    quitt(ere, netz, 107, "erzeuger", 1);
-    PRUEF(graphen(g).empty());
-    strom(netz, 108, "kit:gut", "erz/2", 2);   // stream 2 leaves: stream 4's graph shows
+    PRUEF((graphen(g) == Liste{{"strom/5", "saege2"}}));
+    PRUEF(stand(netz, g)["strom/2"] == "saege");
+    strom(netz, 108, "kit:gut", 2);   // stream 2 leaves its graph: strom/5 stays
     PRUEF(hole_und_frei(bef, b));
     quitt(ere, netz, 108, "erzeuger", 1);
-    PRUEF((graphen(g) == Liste{{"erz/3", "saege2"}}));
-    strom(netz, 151, "midi:1:1", "erz/5", 4);   // stream 4 leaves too
+    PRUEF((graphen(g) == Liste{{"strom/2", ""}}));
+    PRUEF(stand(netz, g)["strom/5"] == "saege2");
+    strom(netz, 151, "midi:1:1", 5);
     PRUEF(hole_und_frei(bef, b));
     quitt(ere, netz, 151, "erzeuger", 1);
-    PRUEF((graphen(g) == Liste{{"erz/3", ""}}));
+    PRUEF((graphen(g) == Liste{{"strom/5", ""}}));
 
     // 7. effect graph on a deck and a send return: refused in the callback changes nothing, accepted does
     kanal_graph(netz, 110, "cypher", "deck/1", "eff");
@@ -260,15 +258,15 @@ int main() {
     PRUEF((graphen(g) == Liste{{"fx/3", ""}}));
 
     // 8. id collision guard: the same id from another quelle must not apply the entry
-    strom(netz, 120, "bk:saege", "erz/2", 2);
+    strom(netz, 120, "bk:saege", 2);
     PRUEF(hole_und_frei(bef, b));
     quitt(ere, netz, 120, "andreas", 1);
     PRUEF(graphen(g).empty());
     quitt(ere, netz, 120, "erzeuger", 1);
-    PRUEF((graphen(g) == Liste{{"erz/2", "saege"}}));
+    PRUEF((graphen(g) == Liste{{"strom/2", "saege"}}));
 
     // 9. a refusal answered by the net thread enqueues nothing: a forged quittung for it changes nothing
-    strom(netz, 130, "bk:fehlt", "erz/3", 3);
+    strom(netz, 130, "bk:fehlt", 3);
     {
       const auto l = lies(g);
       bool q6 = false;
@@ -304,24 +302,23 @@ int main() {
       PRUEF(q6);
     }
 
-    // 12. the slot table equals the kern's rule: the mixer channels that take a graph, plus the send returns fx/3, fx/4
+    // 12. the slot table equals the contract: the graph_kanal entries plus strom/<n> for the streams 2,3,5,6,7,9,10
     {
       const auto in_platz = [](const std::string& k) {
         for (const auto& p : v::werte::graph_platz)
           if (p == k) return true;
         return false;
       };
-      PRUEF(v::werte::graph_platz.size() == 15);
-      for (int k = 0; k < 18; ++k) {
-        const bool soll = (k >= 0 && k <= 3) ||
-                          (k >= 4 && k <= 13 && k != cdj::Mixer::kanal_index(cdj::VORHOER_KANAL) &&
-                           k != cdj::Mixer::kanal_index(cdj::ARR_KANAL));
-        if (in_platz(cdj::Mixer::kanal_name(k)) != soll) {
-          std::fprintf(stderr, "slot table: channel %s expected %d\n", cdj::Mixer::kanal_name(k), soll);
+      PRUEF(v::werte::graph_platz.size() == 14);
+      for (const auto& k : v::werte::graph_kanal) PRUEF(in_platz(std::string(k)));
+      for (int n = 1; n <= 16; ++n) {
+        const bool soll = n == 2 || n == 3 || n == 5 || n == 6 || n == 7 || n == 9 || n == 10;
+        const std::string name = "strom/" + std::to_string(n);
+        if (in_platz(name) != soll) {
+          std::fprintf(stderr, "slot table: %s expected %d\n", name.c_str(), soll);
           PRUEF(false);
         }
       }
-      for (const auto& k : v::werte::graph_kanal) PRUEF(in_platz(std::string(k)));
     }
   }
   delete bef;

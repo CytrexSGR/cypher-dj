@@ -182,14 +182,14 @@ test('GET /graphen carries latenz per graph', async (t) => {
   assert.deepEqual(j.graphen.map((g) => [g.name, g.latenz]), [['mitlim', 95], ['plain', 0]]);
 });
 
-test('load on erz/3: /erz/strom strom 3, ziel bk:inst, kanal erz/3; geladen set on quittung 3', async (t) => {
+test('load on erz/3: /erz/strom strom 3, ziel bk:inst, no kanal field; geladen set on quittung 3', async (t) => {
   const { postMitQuittung, geladen } = await stapel(t);
   const r = await postMitQuittung({ kanal: 'erz/3', name: 'inst' });
   assert.equal(r.code, 200, JSON.stringify(r.j));
   assert.equal(r.j.ok, true);
   assert.equal(r.j.quittung.status, 3);
   assert.equal(r.gesendet.adresse, '/erz/strom');
-  assert.deepEqual({ ...r.gesendet.felder, id: 0 }, { id: 0, quelle: 'andreas', strom: 3, ziel: 'bk:inst', kanal: 'erz/3' });
+  assert.deepEqual({ ...r.gesendet.felder, id: 0 }, { id: 0, quelle: 'andreas', strom: 3, ziel: 'bk:inst' });
   assert.deepEqual(await geladen(), { 'erz/3': 'inst' });
 });
 
@@ -210,7 +210,7 @@ test('remove: erz/3 "" sends ziel bk:, deck/2 "" sends name ""; geladen entries 
   await postMitQuittung({ kanal: 'deck/1', name: 'eff' });
   const e = await postMitQuittung({ kanal: 'erz/3', name: '' });
   assert.equal(e.gesendet.adresse, '/erz/strom');
-  assert.deepEqual({ ...e.gesendet.felder, id: 0 }, { id: 0, quelle: 'andreas', strom: 3, ziel: 'bk:', kanal: 'erz/3' });
+  assert.deepEqual({ ...e.gesendet.felder, id: 0 }, { id: 0, quelle: 'andreas', strom: 3, ziel: 'bk:' });
   const d = await postMitQuittung({ kanal: 'deck/2', name: '' });
   assert.deepEqual({ ...d.gesendet.felder, id: 0 }, { id: 0, quelle: 'andreas', kanal: 'deck/2', name: '' });
   assert.deepEqual(await geladen(), { 'deck/1': 'eff' });
@@ -225,8 +225,10 @@ test('refusals before the kern: falsche_art, kein_midi_strom, unbekannt, ausserh
     [{ kanal: 'erz/3', name: 'nix' }, 404, 'unbekannt'],
     [{ kanal: 'erz/4', name: 'inst' }, 400, 'ausserhalb_bereich'],   // S18: erz/4 is the production, erz/8 the cue input; erz/5..7 are instrument channels now
     [{ kanal: 'erz/8', name: 'inst' }, 400, 'ausserhalb_bereich'],
-    [{ kanal: 'erz/6', name: 'eff' }, 400, 'falsche_art'],
-    [{ kanal: 'erz/7', name: 'eff' }, 400, 'falsche_art'],   // erz/2, erz/3, erz/1 and pad/1, pad/2 take effects since the remix targets (graph_source_effect.test.mjs); erz/5..7 do not
+    [{ kanal: 'pad/1', name: 'inst' }, 400, 'ausserhalb_bereich'],   // container core M9: the pad streams are gone, a pad is a container strip (effects only)
+    [{ kanal: 'pad/2', name: 'inst' }, 400, 'ausserhalb_bereich'],
+    [{ kanal: 'deck/3', name: 'eff' }, 400, 'ausserhalb_bereich'],   // deck/3 and deck/4 are no strips any more
+    [{ kanal: 'deck/4', name: 'eff' }, 400, 'ausserhalb_bereich'],
     [{ kanal: 'deck/5', name: 'eff' }, 400, 'ausserhalb_bereich'],
     [{ kanal: 'erz/3', name: '../x' }, 400, 'name'],
     [{ kanal: 'erz/3', name: 'Lead' }, 400, 'name'],
@@ -412,25 +414,25 @@ test('S16: stoppe() clears the ask timer', async (t) => {
   assert.equal(o.graphTakt, null);
 });
 
-// ---- S18: instruments on erz/5..7 and pad/1..2 (streams 5, 6, 7, 9, 10), served by the multi-stream erzeuger --------------
-const NEU = [['erz/5', 5, 'midi:3:1'], ['erz/6', 6, 'midi:3:2'], ['erz/7', 7, 'midi:3:3'], ['pad/1', 9, 'midi:4:1'], ['pad/2', 10, 'midi:4:2']];
+// ---- S18: instruments on erz/5..7, erz/9, erz/10 (streams 5, 6, 7, 9, 10), served by the multi-stream erzeuger --------------
+const NEU = [['erz/5', 5, 'midi:3:1'], ['erz/6', 6, 'midi:3:2'], ['erz/7', 7, 'midi:3:3'], ['erz/9', 9, 'midi:4:1'], ['erz/10', 10, 'midi:4:2']];
 const lebt = (muster, strom, zeit = Date.now()) => { fs.mkdirSync(`${muster}${strom}`, { recursive: true }); schreibeLebt(`${muster}${strom}`, { strom, ziel: 'x' }, zeit); };
 
-test('S18 load and remove on erz/5..7 and pad/1..2: /erz/strom with the stream of the table, ziel bk:inst, then bk:', async (t) => {
+test('S18 load and remove on erz/5..7, erz/9, erz/10: /erz/strom with the stream of the table, ziel bk:inst, then bk:', async (t) => {
   const { postMitQuittung, geladen, muster } = await stapel(t);
   for (const [kanal, strom] of NEU) lebt(muster, strom);
   for (const [kanal, strom] of NEU) {
     const r = await postMitQuittung({ kanal, name: 'inst' });
     assert.equal(r.code, 200, JSON.stringify([kanal, r.j]));
     assert.equal(r.gesendet.adresse, '/erz/strom');
-    assert.deepEqual({ ...r.gesendet.felder, id: 0 }, { id: 0, quelle: 'andreas', strom, ziel: 'bk:inst', kanal }, kanal);
+    assert.deepEqual({ ...r.gesendet.felder, id: 0 }, { id: 0, quelle: 'andreas', strom, ziel: 'bk:inst' }, kanal);
   }
-  assert.deepEqual(await geladen(), { 'erz/5': 'inst', 'erz/6': 'inst', 'erz/7': 'inst', 'pad/1': 'inst', 'pad/2': 'inst' });
+  assert.deepEqual(await geladen(), { 'erz/5': 'inst', 'erz/6': 'inst', 'erz/7': 'inst', 'erz/9': 'inst', 'erz/10': 'inst' });
   const e = await postMitQuittung({ kanal: 'erz/6', name: '' });
-  assert.deepEqual({ ...e.gesendet.felder, id: 0 }, { id: 0, quelle: 'andreas', strom: 6, ziel: 'bk:', kanal: 'erz/6' });
-  const p = await postMitQuittung({ kanal: 'pad/1', name: '' });
-  assert.deepEqual({ ...p.gesendet.felder, id: 0 }, { id: 0, quelle: 'andreas', strom: 9, ziel: 'bk:', kanal: 'pad/1' });
-  assert.deepEqual(Object.keys(await geladen()).sort(), ['erz/5', 'erz/7', 'pad/2']);
+  assert.deepEqual({ ...e.gesendet.felder, id: 0 }, { id: 0, quelle: 'andreas', strom: 6, ziel: 'bk:' });
+  const p = await postMitQuittung({ kanal: 'erz/9', name: '' });
+  assert.deepEqual({ ...p.gesendet.felder, id: 0 }, { id: 0, quelle: 'andreas', strom: 9, ziel: 'bk:' });
+  assert.deepEqual(Object.keys(await geladen()).sort(), ['erz/10', 'erz/5', 'erz/7']);
 });
 
 test('S18 kein_erzeuger: no lebt.json or one older than 6 s gives 409 and nothing is sent; a fresh one passes; removal never needs the process', async (t) => {
@@ -441,8 +443,8 @@ test('S18 kein_erzeuger: no lebt.json or one older than 6 s gives 409 and nothin
   lebt(muster, 6, Date.now() - 7000);
   r = await post({ kanal: 'erz/6', name: 'inst' });
   assert.deepEqual([r.code, r.j.fehler], [409, 'kein_erzeuger'], 'a heartbeat 7 s old counts as dead');
-  r = await post({ kanal: 'pad/2', name: 'inst' });
-  assert.deepEqual([r.code, r.j.fehler], [409, 'kein_erzeuger'], 'pad/2 is stream 10: its own folder, no heartbeat');
+  r = await post({ kanal: 'erz/10', name: 'inst' });
+  assert.deepEqual([r.code, r.j.fehler], [409, 'kein_erzeuger'], 'erz/10 is stream 10: its own folder, no heartbeat');
   assert.equal(sendungen().length, 0, 'nothing reached the kern');
   lebt(muster, 6, Date.now() - 4000);   // negative control: 4 s old is still alive
   const ok = await postMitQuittung({ kanal: 'erz/6', name: 'inst' });
@@ -472,41 +474,8 @@ test('S18 Cypher on a new stream: AUTO off for stream 6 gives 409 auto_aus, then
   assert.equal(sendungen().at(-1).felder.strom, 6);
 });
 
-test('S18 pad fader for Cypher: with an instrument graph on an empty box pad/1/fader opens without a hearing check; no graph, a foreign loop or the other box stay 409 kein_hoerschein', async (t) => {
-  const { o, url, postMitQuittung, muster, log } = await stapel(t);
-  const cypher = { 'x-djk-quelle': 'cypher' };
-  const teile = () => log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/teil' && /^pad\//.test(z.felder.pfad));
-  const regler = (pfad) => hol(`${url}/regler`, { method: 'POST', headers: { 'content-type': 'application/json', ...cypher }, body: JSON.stringify({ pfad, nach: -6, takte: 0 }) });
-  // negative controls first: nothing on the box
-  let r = await regler('pad/1/fader');
-  assert.deepEqual([r.status, (await r.json()).fehler], [409, 'kein_hoerschein'], 'an empty box with no graph stays closed for Cypher');
-  assert.equal(teile().length, 0);
-  // an instrument graph on pad/1 (live stream 9)
-  lebt(muster, 9);
-  assert.equal((await postMitQuittung({ kanal: 'pad/1', name: 'inst' }, 3, '', cypher)).code, 200);
-  // the other box is not affected
-  r = await regler('pad/2/fader');
-  assert.deepEqual([r.status, (await r.json()).fehler], [409, 'kein_hoerschein'], 'pad/2 has no graph');
-  // a foreign loop in the box keeps the check even with a graph on it
-  o.stand.loops['1'] = { name: 'fremd-loop' };
-  r = await regler('pad/1/fader');
-  assert.deepEqual([r.status, (await r.json()).fehler], [409, 'kein_hoerschein'], 'foreign loop plus graph: still closed');
-  delete o.stand.loops['1'];
-  assert.equal(teile().length, 0);
-  // the case: graph on an empty box -> the move goes to the kern
-  const p = regler('pad/1/fader');
-  assert.ok(await bis(() => teile().length === 1), 'the fader move reaches the kern');
-  const s = teile()[0];
-  o.vomKern({ adresse: '/q', felder: { id: s.felder.id, quelle: s.felder.quelle, status: 2, ist_sample: 0, ist_beat: 0, grund: '' } });
-  assert.equal((await p).status, 200);
-  // removing the graph closes the gate again
-  assert.equal((await postMitQuittung({ kanal: 'pad/1', name: '' }, 3, '', cypher)).code, 200);
-  r = await regler('pad/1/fader');
-  assert.deepEqual([r.status, (await r.json()).fehler], [409, 'kein_hoerschein'], 'graph removed: closed again');
-});
-
-test('S18 review fix: AUTO off holds the new streams for /regler and /spur (stream 9 = pad/1, stream 6 = erz/6); AUTO on and the other streams pass', async (t) => {
-  const { o, url, postMitQuittung, muster, log } = await stapel(t);
+test('S18 review fix: AUTO off holds the new streams for /regler and /spur (stream 9 = erz/9, stream 6 = erz/6); a container strip is no stream', async (t) => {
+  const { o, url, muster, log } = await stapel(t);
   const cypher = { 'x-djk-quelle': 'cypher' };
   const teile = () => log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/teil');
   const post = (weg, daten) => hol(`${url}${weg}`, { method: 'POST', headers: { 'content-type': 'application/json', ...cypher }, body: JSON.stringify(daten) });
@@ -515,50 +484,37 @@ test('S18 review fix: AUTO off holds the new streams for /regler and /spur (stre
     o.kern.uhr = { beat: 8, bpm: 128, mono_ns: 0 };
     try { return await post('/spur', { spur: { name: 'sperre', fahrten: [{ ziel, ab_takt: 1, nach: -6 }] } }); } finally { o.kern.uhr = null; }
   };
-  // graph on pad/1 (stream 9) opens the box for Cypher; then Andreas takes AUTO off for stream 9
-  lebt(muster, 9);
-  assert.equal((await postMitQuittung({ kanal: 'pad/1', name: 'inst' }, 3, '', cypher)).code, 200);
   setzeAutonom(`${muster}9`, false);
-  let r = await regler('pad/1/fader');
+  let r = await regler('erz/9/fader');
   let j = await r.json();
-  assert.deepEqual([r.status, j.fehler, j.strom], [409, 'auto_aus', 9], 'pad/1 fader: AUTO off for stream 9 is refused');
+  assert.deepEqual([r.status, j.fehler, j.strom], [409, 'auto_aus', 9], 'erz/9 fader: AUTO off for stream 9 is refused');
   assert.equal(teile().length, 0, 'nothing reached the kern');
-  r = await spur('pad/1/fader');
+  r = await spur('erz/9/fader');
   j = await r.json();
-  assert.deepEqual([r.status, j.fehler, j.strom], [409, 'auto_aus', 9], '/spur with a pad/1 target is refused too');
-  // the other streams are held by their own switch: erz/6 (stream 6) and pad/2 (stream 10)
+  // an erz/<n> row is an alias onto the strom track (M8): the alias check comes before the AUTO check, and without a live project it refuses first
+  assert.deepEqual([r.status, j.fehler, j.strom], [409, 'kein_liveprojekt', undefined], '/spur with an erz/9 target is refused by the alias without a live project');
+  assert.equal(teile().length, 0, 'still nothing reached the kern');
+  // the other streams are held by their own switch: erz/6 (stream 6) and erz/10 (stream 10)
   setzeAutonom(`${muster}6`, false);
   r = await regler('erz/6/fader'); j = await r.json();
   assert.deepEqual([r.status, j.fehler, j.strom], [409, 'auto_aus', 6], 'erz/6');
   setzeAutonom(`${muster}10`, false);
-  r = await regler('pad/2/trim'); j = await r.json();
-  assert.deepEqual([r.status, j.fehler, j.strom], [409, 'auto_aus', 10], 'pad/2');
-  // negative controls: erz/4 and erz/8 are no stream (no auto_aus), the AUTO state of one stream does not hold another
+  r = await regler('erz/10/trim'); j = await r.json();
+  assert.deepEqual([r.status, j.fehler, j.strom], [409, 'auto_aus', 10], 'erz/10');
+  // negative controls: the AUTO state of one stream does not hold another, and a container strip is never held by a stream
   setzeAutonom(`${muster}9`, true);
-  r = await regler('pad/2/fader'); j = await r.json();
-  assert.equal(j.fehler, 'auto_aus', 'pad/2 still held by stream 10');
-  // control: AUTO on for stream 9 -> the pad/1 fader goes to the kern with 200
-  const p = regler('pad/1/fader');
-  assert.ok(await bis(() => teile().length === 1), 'AUTO on: the fader move reaches the kern');
-  const s = teile()[0];
-  o.vomKern({ adresse: '/q', felder: { id: s.felder.id, quelle: s.felder.quelle, status: 2, ist_sample: 0, ist_beat: 0, grund: '' } });
-  assert.equal((await p).status, 200, 'AUTO on: 200');
+  r = await regler('erz/10/fader'); j = await r.json();
+  assert.equal(j.fehler, 'auto_aus', 'erz/10 still held by stream 10');
+  r = await regler('erz/9/fader'); j = await r.json();
+  assert.notEqual(j.fehler, 'auto_aus', 'AUTO on for stream 9: the alias then answers on its own terms (no live project here)');
+  r = await regler('pad/1/fader'); j = await r.json();
+  assert.notEqual(j.fehler, 'auto_aus', 'pad/1 is a container strip, not stream 9');
 });
 
 test('S18 review fix: stromVonZiel follows the shared table; erz/4, erz/8, decks and unknown pads are no stream', () => {
-  const erwartet = { 'erz/1/fader': 1, 'erz/3/trim': 3, 'erz/5/fader': 5, 'erz/6/eq/low': 6, 'erz/7/fader': 7, 'pad/1/fader': 9, 'pad/2/trim': 10,
-    'erz/4/fader': null, 'erz/8/fader': null, 'pad/3/fader': null, 'deck/1/fader': null, 'master/fader': null, 'wirt:bass/cutoff': 2, 'wirt:melodie/cutoff': 3, 'strom:2': 2 };
+  const erwartet = { 'erz/1/fader': 1, 'erz/3/trim': 3, 'erz/5/fader': 5, 'erz/6/eq/low': 6, 'erz/7/fader': 7, 'erz/9/fader': 9, 'erz/10/trim': 10,
+    'pad/1/fader': null, 'pad/2/trim': null, 'erz/4/fader': null, 'erz/8/fader': null, 'pad/3/fader': null, 'deck/1/fader': null, 'master/fader': null, 'wirt:bass/cutoff': 2, 'wirt:melodie/cutoff': 3, 'strom:2': 2 };
   for (const [ziel, strom] of Object.entries(erwartet)) assert.equal(stromVonZiel(ziel), strom, ziel);
-});
-
-test('S18 review fix: a pending foreign loop load keeps the pad check even with a graph on the box (boxNurGraph loopLadung clause)', async (t) => {
-  const { o, url, postMitQuittung, muster } = await stapel(t);
-  const cypher = { 'x-djk-quelle': 'cypher' };
-  lebt(muster, 9);
-  assert.equal((await postMitQuittung({ kanal: 'pad/1', name: 'inst' }, 3, '', cypher)).code, 200);
-  o.loopLadung['1'] = { name: 'fremd', quelle: 'andreas' };   // a foreign load was sent, no echo yet
-  const r = await hol(`${url}/regler`, { method: 'POST', headers: { 'content-type': 'application/json', ...cypher }, body: JSON.stringify({ pfad: 'pad/1/fader', nach: -6, takte: 0 }) });
-  assert.deepEqual([r.status, (await r.json()).fehler], [409, 'kein_hoerschein'], 'pending foreign load plus graph: still closed');
 });
 
 // Baukasten S15 task 2 (break 7): an instrument on a stream whose erzeuger runs in kit mode is refused (its notes are kit

@@ -1,5 +1,6 @@
 """Tests für generate_sequences.py und check_sequences.py (Format §19.0, Semantik sequences/FORMAT.md)."""
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -87,3 +88,16 @@ def test_uhr_golden_unterscheidet_gerundetes_s0(tmp_path):
     assert abs(schritt_gerundet - 191.99409583333335) < 1e-9
     assert abs(schritt_ungerundet - schritt_gerundet) > 1e-6, \
         "gerundetes s0 verfehlt die beat-Toleranz 1e-6 am /uhr-Schritt in uhr_golden"
+
+
+def test_sequenzen_nennen_keine_entfernten_kanaele():
+    """Container core V7: the golden sequences name only container channels (deck/1, deck/2, pad/1, pad/2) and no stream aliases."""
+    entfernt = re.compile(r"erz/[0-9]|deck/[34](?:/(?:fader|trim|eq|kill|filter|send|komp|gate|util|xseite|pfl|ziel)|[\",])|/k/platz/kanal")
+    treffer = []
+    for datei in sorted((HIER / "sequences").glob("*.jsonl")):
+        for nr, zeile in enumerate(datei.read_text(encoding="utf-8").splitlines(), 1):
+            if "/k/hoerschein" in zeile:   # the Hörschein key is the player name deck/1 to deck/4 (container core C7)
+                zeile = re.sub(r'"deck/[1-4]"', '""', zeile)
+            if entfernt.search(zeile):
+                treffer.append(f"{datei.name}:{nr}")
+    assert treffer == []

@@ -12,7 +12,7 @@
 //  (e) Signal nur rechts (und nur links): der Kanal wird genauso behandelt; der stille bleibt exakt 0
 //  (f) Ohr-Abgriff: master_summe_l/r() ist bei 1 bitgleich zu 0 (der Kleber wirkt danach), der Master-Ausgang (ml) und
 //      summe_nach_kleber_l() unterscheiden sich
-//  (g) Position: mit offenem erz/1/send/2 (Hall-Rückweg) ist die Summe nach Kleber gleich einem eigenen Kleber auf der
+//  (g) Position: mit offenem deck/2/send/2 (Hall-Rückweg) ist die Summe nach Kleber gleich einem eigenen Kleber auf der
 //      Summe bei 0 einschließlich Hall
 //  (h) nach Signal und 200 Blöcken Stille ist der Kleber-Zustand sauber: das nächste Signal klebt wie frisch
 //  (i) knackfrei aus: 1 -> 0 per setze_sofort (wie ein Handgriff): der Gain springt zwischen zwei Samples um höchstens
@@ -44,14 +44,14 @@ struct Lauf {
   std::vector<float> sl, sr;   // Ohr-Abgriff master_summe_l/r (vor dem Kleber)
   std::vector<float> nl, nr;   // Summe nach Kleber (summe_nach_kleber_l/r), die in master/pegel geht
   std::vector<float> ol;       // Master-Ausgang links (ml)
-  Lauf() : m(std::make_unique<cdj::Mixer>(tab)) { setze("erz/1/fader", 0.0f); }
+  Lauf() : m(std::make_unique<cdj::Mixer>(tab)) { setze("deck/2/fader", 0.0f); }
   void setze(const char* pfad, float w) { m->setze_sofort(tab.suche(pfad), w); }
-  // Block k: Sinus 100 Hz mit Amplitude a auf erz/1, links und/oder rechts
+  // Block k: Sinus 100 Hz mit Amplitude a auf deck/2, links und/oder rechts
   void block(int k, float a, bool links = true, bool rechts = true) {
     for (int i = 0; i < N; ++i) {
       const float v = a * std::sin(2.0f * 3.14159265f * 100.0f * float(k * N + i) / 48000.0f);
-      m->eingang_l(4)[i] = links ? v : 0.0f;
-      m->eingang_r(4)[i] = rechts ? v : 0.0f;
+      m->eingang_l(1)[i] = links ? v : 0.0f;
+      m->eingang_r(1)[i] = rechts ? v : 0.0f;
     }
     m->verarbeite(N, ml, mr, cl, cr);
     sl.insert(sl.end(), m->master_summe_l(), m->master_summe_l() + N);
@@ -217,7 +217,7 @@ int main() {
   {   // (g) Position nach dem Hall-Rückweg
     Lauf h0, h1;
     for (Lauf* h : {&h0, &h1}) {
-      h->setze("erz/1/send/2", 0.0f);
+      h->setze("deck/2/send/2", 0.0f);
       h->setze("fx/2/rueckweg", 0.0f);
     }
     h1.setze("master/kleber", 1.0f);

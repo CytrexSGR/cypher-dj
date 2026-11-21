@@ -168,10 +168,7 @@ RenderErgebnis rendere(const RenderAuftrag& a) {
   if (a.regler) {
     e.regler = kern->regler_uebernehmen(*a.regler);
     e.regler_quelle = "kern";
-  } else if (a.regler_projekt) {   // Spec 6.20: wie ein frisch gestarteter Kern, erz/4 neutral, darüber das Projekt
-#ifndef CYPHERDJ_MUTATION_RENDER_ERZ4_NICHT_NEUTRAL
-    kern->regler_setzen("erz/4/fader", 0.0f);   // 2.3: Fader 0 dB; Trim, EQ, Kill, Filter, Komp, Ziel, xseite und Sends
-#endif                                          // (−200) stehen schon auf der Vorgabe
+  } else if (a.regler_projekt) {   // Spec 6.20: wie ein frisch gestarteter Kern (K3: the production strip is neutral by itself), darüber das Projekt
     for (const SpurRegler& sr : a.spur_regler) {
       if (!mixer_pfad(sr.pfad) || !kern->regler_setzen(sr.pfad.c_str(), sr.wert)) {
         if (const ArrSnapshot* rest = kern->arrangement().snapshot()) gib_wiedergabe(const_cast<ArrSnapshot*>(rest), cache);

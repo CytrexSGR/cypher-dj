@@ -1,5 +1,5 @@
-// Voice channel (voice.h, kern.toml stimme_*), kern wiring without JACK. Music: a loud sine on erz/1 over the return
-// path (fader 0 dB). Voice: a full-scale burst on input pair ein_4.
+// Voice channel (voice.h, kern.toml stimme_*), kern wiring without JACK. Music: a loud sine on stream 1 over the return
+// path (strom track on pad/1, X1). Voice: a full-scale burst on input pair ein_4.
 //  (a) stimme_eingang 0 (the default) with a loud signal on ein_4: the master is bit-identical to a run without any input.
 //      The mutation CYPHERDJ_MUTATION_STIMME_IMMER_AN (the voice path always runs on pair 4) must turn this red.
 //  (b) stimme_eingang 4: loudest music plus loudest voice stays under the limiter ceiling (-1 dBTP), so under 0 dBFS.
@@ -10,6 +10,8 @@
 #include <vector>
 
 #include "cypherdj/voice.h"
+#include "arr_run.h"
+#include "stream_hoerbar.h"
 #include "core35.h"
 
 bool g_waechter = false;
@@ -32,14 +34,14 @@ struct Ergebnis {
 };
 
 static Ergebnis lauf(const std::string& ab, int eingang, bool mit_stimme, bool mit_musik = true) {
-  Lauf x(ab, nullptr);
+  arr35::Lauf x(ab, "test_kern_stimme");
   if (eingang > 0) {
     cdj::StimmEinstellung e;
     e.eingang = eingang;
     e.duck_db = -12.0f;
     x.kern->stimme_einstellen(e);
   }
-  x.teil("erz/1/fader", 0.0f, 0.0, 0.0);
+  arr35::strom_hoerbar(x, 1);   // X1: the music (stream 1) sounds through a strom track on pad/1
   if (mit_musik) x.erz_quelle[0] = musik;
   if (mit_stimme) x.ein_quelle[4] = stimme;
   x.zyklen(ENDE);

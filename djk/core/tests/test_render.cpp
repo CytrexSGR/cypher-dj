@@ -4,8 +4,8 @@
 // und Lesen bitgleich, Kopf 58 Bytes, keine Temp-Datei übrig, fremdes Format abgelehnt. RingLeser: lückenlos über mehrere
 // Lesungen, ueberlauf (Fix L6: schon ab CAP − 8192 + 1 Frames, der Block im Flug), sprung, ungueltig. Dazu:
 //   5 (6.24): eine interne RB-338-Spur klingt im Render ohne senke_intern (die RB des Kerns, K2b), Spitze > −60 dBFS;
-//   6 (6.20): ohne Neustart-Fach mit Regler-Quelle projekt: erz/4 neutral, darüber die Spur-Regler (−6,02 dB halbiert,
-//     Mute schweigt); ohne beides bleibt erz/4 auf der Vorgabe −200 dB (still);
+//   6 (6.20): ohne Neustart-Fach mit Regler-Quelle projekt: alle Regler neutral, darüber die Spur-Regler (−6,02 dB halbiert,
+//     Mute schweigt);
 //   7 (6.25): lies_spur_regler nimmt nur spur/<1..8>/{fader,pan,mute,solo} in Kern-Einheiten, sonst Fehler;
 //   8 (Fix 2/P4): schreibe_wav_f32 verschränkt in festen Stücken: beim Schreiben von 8 Mio. Frames (L und R 64 MB) wächst
 //     die Spitze des Arbeitsspeichers (VmHWM nach clear_refs 5) um weniger als 8 MB, vorher um die ganze Kopie (64 MB);
@@ -40,11 +40,12 @@ namespace {
 
 double db(float x) { return x > 0.0f ? 20.0 * std::log10(static_cast<double>(x)) : -200.0; }
 
-// Neustart-Fach mit nur erz/4/fader 0 dB (sonst Vorgabe −200: der Render wäre still)
+// Neustart-Fach mit einer Zeile, master/pegel 0 dB (the default, audio unchanged). X1: the production has no fader row any more (it is a
+// service), so the old erz/4/fader row is unknown to the core; the guard `e.regler == 1` needs one known row.
 std::unique_ptr<cdj_z_echtzeit> fach_erz4() {
   auto f = std::make_unique<cdj_z_echtzeit>();
   f->n_regler = 1;
-  std::snprintf(f->regler[0].pfad, sizeof f->regler[0].pfad, "erz/4/fader");
+  std::snprintf(f->regler[0].pfad, sizeof f->regler[0].pfad, "master/pegel");
   f->regler[0].wert = 0.0f;
   return f;
 }
@@ -285,10 +286,10 @@ int main() {
     r.bis_beat = 4.0;
     r.bpm = 128.0;
     r.regler_projekt = true;
-    const cdj::RenderErgebnis neutral = cdj::rendere(r);   // erz/4 neutral, alle Spur-Regler auf der Vorgabe
+    const cdj::RenderErgebnis neutral = cdj::rendere(r);   // alle Spur-Regler auf der Vorgabe
     std::printf("Fall 6: projekt ohne Spur-Regler Spitze %.1f dBFS\n", db(neutral.spitze));
     PRUEF(neutral.fehler.empty() && neutral.regler_quelle == "projekt" && neutral.regler == 0);
-    PRUEF(db(neutral.spitze) > -60.0 && neutral.l == kern_l);   // gleich dem Render mit erz/4/fader 0 aus dem Fach
+    PRUEF(db(neutral.spitze) > -60.0 && neutral.l == kern_l);   // gleich dem Render mit master/pegel 0 aus dem Fach
     r.spur_regler = {{"spur/3/fader", -6.0206f}, {"spur/3/pan", 0.0f}};
     const cdj::RenderErgebnis halb = cdj::rendere(r);
     PRUEF(halb.fehler.empty() && halb.regler == 2 && halb.regler_quelle == "projekt");
@@ -299,12 +300,12 @@ int main() {
     PRUEF(stumm.fehler.empty() && stumm.spitze == 0.0f);
     r.spur_regler = {{"spur/3/fader", 7.0f}};   // außerhalb −200..+6: abgelehnt, kein stilles Klemmen
     PRUEF(cdj::rendere(r).fehler == "regler");
-    // Negativ-Kontrolle: weder Fach noch projekt: erz/4 bleibt auf der Vorgabe −200 dB, der Render ist still
+    // Kontrolle: weder Fach noch projekt: der Produktionszug ist fest neutral (K3), der Render ist hörbar und gleich dem neutralen
     cdj::RenderAuftrag ohne = r;
     ohne.regler_projekt = false;
     ohne.spur_regler.clear();
     const cdj::RenderErgebnis still = cdj::rendere(ohne);
-    PRUEF(still.fehler.empty() && still.spitze == 0.0f && still.regler_quelle.empty());
+    PRUEF(still.fehler.empty() && still.regler_quelle.empty() && still.spitze > 0.0f && still.l == kern_l);
   }
   // 12 (1.10 slice 4a T6, AK-S4-12): the insert rows ins/komp/<1..12>/* are project mixer controls of the render: accepted with their range from the table,
   // refused with "regler" outside the table (instance 13, an instance beyond the eq or saett pool, a value out of range), and in the controls file
@@ -367,11 +368,11 @@ int main() {
     // 1.10: Gruppen-Regler und PM-Fader sind Mixer-Regler des Projekts; Grenzen der Tabelle gelten
     PRUEF(regler_datei(p, "{\"grp/1/fader\":-6,\"grp/8/pan\":0.5,\"grp/2/mute\":1,\"grp/3/solo\":0,\"grp/16/pan\":0.25,\"pm/fader\":-1.5}", v, fehler) && v.size() == 6);
     PRUEF(!regler_datei(p, "{\"grp/17/fader\":0}", v, fehler));        // n+1
-    PRUEF(!regler_datei(p, "{\"grp/1/send/5\":0}", v, fehler));       // r+1 (the group sends exist since slice 3: grp/n/send/1..4)
+    PRUEF(!regler_datei(p, "{\"grp/1/send/9\":0}", v, fehler));       // r+1 (the group sends are grp/n/send/1..8 since container core K6)
     // 1.10 slice 3: send, return and hall controls are project mixer controls; the table checks their ranges
     PRUEF(regler_datei(p, "{\"spur/1/send/1\":-6,\"grp/2/send/4\":-200,\"ret/1/fader\":-3,\"ret/4/pan\":0.5,\"ret/2/mute\":1,\"ret/3/hall/an\":0,\"ret/1/hall/decay\":0.8}", v, fehler) && v.size() == 7);
-    PRUEF(!regler_datei(p, "{\"spur/1/send/5\":0}", v, fehler));     // r+1
-    PRUEF(!regler_datei(p, "{\"ret/5/fader\":0}", v, fehler));       // r+1
+    PRUEF(!regler_datei(p, "{\"spur/1/send/9\":0}", v, fehler));     // r+1
+    PRUEF(!regler_datei(p, "{\"ret/9/fader\":0}", v, fehler));       // r+1
     PRUEF(!regler_datei(p, "{\"ret/1/hall/mix\":0.5}", v, fehler));  // no such control
     PRUEF(!regler_datei(p, "{\"ret/1/hall/decay\":1.5}", v, fehler));   // 0..1
     PRUEF(!regler_datei(p, "{\"ret/1/hall/an\":0.5}", v, fehler));   // switch: 0 or 1
@@ -523,6 +524,7 @@ int main() {
     PRUEF(e.fehler.empty() && e.regler == 4);
     PRUEF(e.hall_start_alt == 0);
     PRUEF(e.hall_decay[0] == 0.8f && e.hall_decay[1] == 0.6f);
+    static_assert(sizeof(e.hall_decay) / sizeof(float) == cdj::ARR_RETURNS, "hall_decay holds one value per return (the render loop writes ARR_RETURNS of them)");
     // the returns are in the export: the same project without the sends is quieter than with them (the Hall adds its tail), negative control above
     cdj::RenderAuftrag ohne = r;
     ohne.spur_regler = {{"ret/1/hall/decay", 0.8f}, {"ret/2/hall/decay", 0.6f}};
@@ -533,7 +535,7 @@ int main() {
     PRUEF(diff > 1e-3);
     // a control the table does not know is refused (no silent clamp)
     cdj::RenderAuftrag schlecht = r;
-    schlecht.spur_regler = {{"ret/5/fader", 0.0f}};
+    schlecht.spur_regler = {{"ret/9/fader", 0.0f}};
     PRUEF(cdj::rendere(schlecht).fehler == "regler");
   }
   PRUEF_ENDE();

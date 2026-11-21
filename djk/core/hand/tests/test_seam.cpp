@@ -29,9 +29,9 @@ const char* const MAPPING = R"({"version":1,"geraet":"test","quelle_port":"q",
   {"nachricht":{"typ":"note","kanal":1,"nr":36},"ziel":"deck/1/kill/tief","art":"taste"},
   {"nachricht":{"typ":"note","kanal":2,"nr":37},"ziel":"deck/2/fader","art":"beruehrung"},
   {"nachricht":{"typ":"note","kanal":1,"nr":44},"ziel":"deck/1/play","art":"taste"},
-  {"nachricht":{"typ":"cc","kanal":3,"nr":50},"ziel":"erz/5/bk/3","art":"taste","stufen":3},
+  {"nachricht":{"typ":"cc","kanal":3,"nr":50},"ziel":"strom/5/bk/3","art":"taste","stufen":3},
   {"nachricht":{"typ":"cc","kanal":0,"nr":9},"ziel":"deck/1/fader","art":"absolut"},
-  {"nachricht":{"typ":"note","kanal":3,"nr":51},"ziel":"erz/5/bk/4","art":"taste","stufen":16}]})";
+  {"nachricht":{"typ":"note","kanal":3,"nr":51},"ziel":"strom/5/bk/4","art":"taste","stufen":16}]})";
 
 // Ein Stellwerk an einer simulierten Uhr (128 BPM), Zyklen zu 256 Samples; MIDI geht wie im Kern hinein
 struct Kern {
@@ -171,7 +171,7 @@ FALL(taste_schaltet_kill_um) {
 FALL(stufen_taste_geht_reihum_und_springt_zurueck) {
   // stufen 3: from 0 the presses give 0.5, 1, 0, 0.5; releases change nothing
   Kern k;
-  const int r = k.r("erz/5/bk/3");
+  const int r = k.r("strom/5/bk/3");
   k.sw->setze_direkt(r, 0.0f);
   const double soll[] = {0.5, 1.0, 0.0, 0.5};
   int64_t t = 1000;
@@ -183,7 +183,7 @@ FALL(stufen_taste_geht_reihum_und_springt_zurueck) {
     t += 3000;
   }
   // stufen 16 from a value between the steps: round(0.52 * 15) = 8 -> next step 9/15; the current target counts (F18)
-  const int r2 = k.r("erz/5/bk/4");
+  const int r2 = k.r("strom/5/bk/4");
   k.sw->setze_direkt(r2, 0.52f);
   k.midi(t, 0x92, 51, 100);
   k.bis(t + 2000);

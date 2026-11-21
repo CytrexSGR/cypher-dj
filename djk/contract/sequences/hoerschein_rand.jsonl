@@ -19,7 +19,7 @@
 {"t":"erwarte","ab_sample":900000,"bis_sample":902400,"osc":["/q",",hsihds",7,"pruefstand",null,null,null,null],"bereich":"hoerschein","herleitung":"§4: jeder Befehl bekommt eine /q; welchen Status legt §4.5 nicht fest"}
 {"t":"sende","sample":1080000,"osc":["/k/teil",",hssisddfiiss",8,"cypher","p1",0,"deck/2/fader",64.0,0.0,-15.0,0,0,"","h_r2"],"bereich":"regler","herleitung":"beat 64 ≤ gueltig_bis 64"}
 {"t":"erwarte","ab_sample":1080000,"bis_sample":1082400,"osc":["/q",",hsihds",8,"cypher",1,null,null,""],"bereich":"regler","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
-{"t":"sende","sample":1080000,"osc":["/k/teil",",hssisddfiiss",9,"cypher","p2",0,"deck/3/fader",65.0,0.0,-15.0,0,0,"","h_r3"],"bereich":"regler","herleitung":"beat 65 > gueltig_bis 64"}
+{"t":"sende","sample":1080000,"osc":["/k/teil",",hssisddfiiss",9,"cypher","p2",0,"pad/1/fader",65.0,0.0,-15.0,0,0,"","h_r3"],"bereich":"regler","herleitung":"beat 65 > gueltig_bis 64"}
 {"t":"erwarte","ab_sample":1080000,"bis_sample":1082400,"osc":["/q",",hsihds",9,"cypher",1,null,null,""],"bereich":"regler","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
 {"t":"erwarte","ab_sample":1440000,"bis_sample":1442400,"osc":["/q",",hsihds",8,"cypher",2,1440000,64.0,""],"toleranz":1e-06,"bereich":"regler","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(64)) = 1440000"}
 {"t":"erwarte","ab_sample":1462500,"bis_sample":1464900,"osc":["/q",",hsihds",9,"cypher",6,1462500,65.0,"hoerschein_abgelaufen"],"toleranz":1e-06,"bereich":"regler","herleitung":"§17: am Start abgelehnt (hoerschein_abgelaufen), Start = Sample 1462500"}

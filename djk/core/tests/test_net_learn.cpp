@@ -91,7 +91,7 @@ int main() {
     ss << in.rdbuf();
     const std::string log = ss.str();
     std::printf("log: %s", log.c_str());
-    PRUEF(log.find("lernen.json: Zeile 2: unbekanntes_ziel: \"erz/5/bk/65\"") != std::string::npos);
+    PRUEF(log.find("lernen.json: Zeile 2: unbekanntes_ziel: \"pad/1/bk/65\"") != std::string::npos);
     // 16a) /k/lernen from the hand: Befehl LERNEN with id and an
     {
       cdj::osc::Schreiber s(v::k_lernen);

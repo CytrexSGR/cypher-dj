@@ -150,12 +150,13 @@
   },
   "lage_schluessel": [
    "ausgang",
-   "boxen",
+   "container",
    "decks",
    "fx",
    "fx_routing",
    "kanal_limiter",
    "ki",
+   "plaetze",
    "quittungen",
    "regler",
    "spur_pool",
@@ -194,12 +195,26 @@
     "master/pegel": -3,
     "keylock": 1
    },
-   "boxen": {},
    "fx": [
     null,
     null
    ],
    "fx_routing": "post_fader",
+   "plaetze": null,
+   "container": [
+    {
+     "art": "player"
+    },
+    {
+     "art": "player"
+    },
+    {
+     "art": "player"
+    },
+    {
+     "art": "player"
+    }
+   ],
    "kanal_limiter": {
     "gebaut": false,
     "latenz_samples": 0
@@ -508,12 +523,13 @@
   },
   "lage_schluessel": [
    "ausgang",
-   "boxen",
+   "container",
    "decks",
    "fx",
    "fx_routing",
    "kanal_limiter",
    "ki",
+   "plaetze",
    "quittungen",
    "regler",
    "spur_pool",
@@ -552,12 +568,26 @@
     "master/pegel": -3,
     "keylock": 1
    },
-   "boxen": {},
    "fx": [
     null,
     null
    ],
    "fx_routing": "post_fader",
+   "plaetze": null,
+   "container": [
+    {
+     "art": "player"
+    },
+    {
+     "art": "player"
+    },
+    {
+     "art": "player"
+    },
+    {
+     "art": "player"
+    }
+   ],
    "kanal_limiter": {
     "gebaut": false,
     "latenz_samples": 0

@@ -7,12 +7,12 @@ import { szeneAusMutes } from '../project/commands_szenen.ts';
 import { wende } from '../project/patch.ts';
 import { kopie } from './support/project.mjs';
 
-const live = () => { const p = neuesProjekt('x'); p.live = true; return p; };
+const live = () => { const p = neuesProjekt('x'); p.live = true; p.plaetze = [{ typ: 'track' }, { typ: 'track' }, { typ: 'track' }, { typ: 'track' }]; return p; };
 const lauf = (p, ...b) => fuehreListeAus(kopie(p), b).projekt;
 const ergebnis = (p, ...b) => fuehreListeAus(kopie(p), b);
 const grund = (p, b) => { try { fuehreListeAus(kopie(p), [b]); return null; } catch (e) { assert.ok(e instanceof BefehlFehler, String(e)); return e.grund; } };
 const bk = () => ({ art: 'intern', name: 'bk', graph: 'synth-mono', parameter: {} });
-const folge = (p, name, platz = 1, extra = {}) => lauf(p, { befehl: 'seq_folge_neu', gruppe_id: p.gruppen.find((g) => g.seq?.platz === platz).id, name, geraet: bk(), ...extra });
+const folge = (p, name, platz = 1, extra = {}) => lauf(p, { befehl: 'seq_folge_neu', gruppe_id: p.plaetze[platz - 1].gruppe, name, geraet: bk(), ...extra });
 const mute = (p, name) => p.spuren.find((s) => s.name === name).mute;
 const id = (p, name) => p.spuren.find((s) => s.name === name).id;
 

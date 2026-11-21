@@ -11,9 +11,10 @@ import { bindeKopplung } from './coupling.js';   // task 10: pair a tablet (main
 import { DECKS } from './curves.js';
 import { leitstand, strom, zeigeCypher } from './stream.js';
 import { baueDecks, ladeBestand, zeigeDeck } from './deck_view.js';
-import { baueLoopZuege, baueRec, ladeLoops, letzterBeat } from './loop_rec_view.js';
+import { baueRec, ladeLoops, letzterBeat } from './loop_rec_view.js';
 import { bindePlaetze } from './slots_view.js';
 import { baueSeqPlaetze } from './seq_view.js';
+import { baueStemsPlaetze } from './stems_view.js';
 import { $, $$, jsonPost, melde, zustand } from './page_state.js';
 import { pruefeLive, pruefeLiveSpaeter } from './live_view.js';
 import { bindeAnsicht, bindeMusterFeld, bindeReiter, bindeSchublade, bindeTablet, setzeProduktion, setzeWerkbank, setzeTracker, setzeAnsicht, meldeAnsicht } from './seitenrahmen.js';
@@ -31,7 +32,6 @@ import { bindeRemixFenster } from './remix_window.js';
 import { geraetFensterSpurId, geraetFensterAn } from './device_open.js';
 import { starteZielFenster } from './target_window.js';
 import { starteGeraetFenster } from './device_window.js';   // #geraet=<track id>: the device window of a project track
-import { bindeStrudelSound } from './strudel_sound.js';
 import { bindeFx, bindeFxZuweisung } from './beat_fx_view.js';
 import { bindeKnoepfe, zeigeWert } from './controls_view.js';
 import { ausgang, bild } from './output_view.js';
@@ -41,10 +41,9 @@ import { bindeLiveDock } from './live_dock/host.js';
 // das weiter unten stand: Temporal Dead Zone; hier unten gilt jedes const der Datei schon) ----------
 zeigeCypher();
 baueDecks();
-baueLoopZuege();
 baueSeqPlaetze();   // the four SEQ nodes exist before the layout is applied
+baueStemsPlaetze();   // and the four stems nodes
 bindePlaetze();
-bindeStrudelSound();   // SOUND column of the Strudel place, before the graph list arrives (zeigeGraphWahl fills its pickers)
 baueRec();
 bindeReiter();
 bindeLibrary(); markiereTyp();

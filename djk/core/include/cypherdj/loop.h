@@ -46,7 +46,7 @@ struct Loop {
 std::unique_ptr<Loop> lade_loop(const std::string& ordner, std::string* fehler);
 
 // MVP 2 Scheibe 2 (ADR 025 Folgeplan, §4.9 /k/loop/rec, §5.11 /e/mitschnitt): ein laufender Mitschnitt. Das Netz legt
-// ihn mit daten.resize(2 · frames) an, bevor es /k/loop/rec einreiht; LoopBoxen::block() (Echtzeit) füllt daten von
+// ihn mit daten.resize(2 · frames) an, bevor es /k/loop/rec einreiht; MitschnittAufnahme::block() (Echtzeit) füllt daten von
 // gefuellt an weiter, ohne Allokation. name ist der Ordnername (nicht geprüft: das prüft loop_name_ok beim Einreihen).
 struct Mitschnitt {
   char name[48] = {};

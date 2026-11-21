@@ -74,27 +74,28 @@ async function stapel(t) {
   const wieder = () => log.filter((z) => typeof z.typ === 'string' && z.typ.startsWith('graph_wieder'));
   return { o, log, muster, post, lade, sendungen, bkZeilen, quittiere, geladen, neustart, wieder };
 }
-const kurz = (s) => s.map((z) => [z.adresse, z.felder.kanal, z.adresse === '/erz/strom' ? z.felder.ziel : z.felder.name, z.felder.quelle]);
+const kurz = (s) => s.map((z) => [z.adresse, z.adresse === '/erz/strom' ? `erz/${z.felder.strom}` : z.felder.kanal, z.adresse === '/erz/strom' ? z.felder.ziel : z.felder.name, z.felder.quelle]);
 
-const kurz2 = (s) => s.map((z) => [z.adresse, z.felder.kanal, z.felder.name, z.felder.quelle]);
+const kurz2 = (s) => s.map((z) => [z.adresse, z.adresse === '/erz/strom' ? `erz/${z.felder.strom}` : z.felder.kanal, z.felder.name, z.felder.quelle]);
 
-test('an effect goes on pad/1 as an insert; an instrument there is then refused (belegt); "" takes the effect off the same way', async (t) => {
+test('an effect goes on pad/1 as an insert; an instrument there is refused (ausserhalb_bereich: a container takes no instrument); "" takes the effect off the same way', async (t) => {
   const { lade, post, sendungen, geladen } = await stapel(t);
   await lade({ kanal: 'pad/1', name: 'eff' });
   assert.deepEqual(kurz(sendungen()), [['/k/kanal/graph', 'pad/1', 'eff', 'andreas']]);
   assert.deepEqual(await geladen(), { 'pad/1': 'eff' });
   const b = await post({ kanal: 'pad/1', name: 'inst' });
-  assert.deepEqual([b.code, b.j.fehler, b.j.graph], [409, 'belegt', 'eff']);
+  assert.deepEqual([b.code, b.j.fehler], [400, 'ausserhalb_bereich']);
   assert.equal(sendungen().length, 1, 'the refused instrument never reached the kern');
   await lade({ kanal: 'pad/1', name: '' });
   assert.deepEqual(kurz(sendungen().slice(1)), [['/k/kanal/graph', 'pad/1', '', 'andreas']]);
   assert.deepEqual(await geladen(), {});
 });
 
-test('erz/1 (drums) takes an effect; an instrument there stays kein_midi_strom', async (t) => {
-  const { lade, post, sendungen } = await stapel(t);
-  await lade({ kanal: 'erz/1', name: 'eff' });
-  assert.deepEqual(kurz(sendungen()), [['/k/kanal/graph', 'erz/1', 'eff', 'andreas']]);
+test('erz/1 (drums): an effect is an insert of its strom track, so without a live project it is refused and nothing reaches the kern; an instrument stays kein_midi_strom', async (t) => {
+  const { post, sendungen } = await stapel(t);
+  const e = await post({ kanal: 'erz/1', name: 'eff' });
+  assert.deepEqual([e.code, e.j.fehler], [409, 'kein_liveprojekt']);
+  assert.equal(sendungen().length, 0, 'no strip of a stream any more: nothing goes to /k/kanal/graph');
   const b = await post({ kanal: 'erz/1', name: 'inst' });
   assert.deepEqual([b.code, b.j.fehler], [400, 'kein_midi_strom']);
 });
@@ -108,8 +109,9 @@ test('an instrument on erz/2 blocks an effect there (belegt); "" takes the instr
   await lade({ kanal: 'erz/2', name: '' });
   assert.deepEqual(kurz(sendungen().slice(1)), [['/erz/strom', 'erz/2', 'bk:', 'andreas']]);
   assert.deepEqual(await geladen(), {});
-  await lade({ kanal: 'erz/2', name: 'eff' });
-  assert.deepEqual(kurz(sendungen().slice(2)), [['/k/kanal/graph', 'erz/2', 'eff', 'andreas']], 'free again: the effect goes on');
+  const e = await post({ kanal: 'erz/2', name: 'eff' });
+  assert.deepEqual([e.code, e.j.fehler], [409, 'kein_liveprojekt'], 'free again: the effect is a project insert, which needs the live project');
+  assert.equal(sendungen().length, 2, 'the effect never reaches the kern');
 });
 
 test('channels outside stay refused: erz/4, bus/1', async (t) => {

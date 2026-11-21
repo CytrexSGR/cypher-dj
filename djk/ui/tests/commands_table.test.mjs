@@ -12,6 +12,7 @@ import { TRANSPORT } from '../project/commands_transport.ts';
 import { SZENEN } from '../project/commands_szenen.ts';
 import { TRACKER } from '../project/commands_tracker.ts';
 import { LOOPDECK } from '../project/commands_loopdeck.ts';
+import { CONTAINER } from '../project/commands_container.ts';
 import { neuesProjekt } from '../project/model.ts';
 import { mergeTabellen, PRO_BEFEHL as REGISTER } from '../project/commands_helpers.ts';
 
@@ -62,18 +63,20 @@ const NAMEN_VERBUND = ['clip_entknuepfen', 'clip_verknuepfen'];
 // the effect command (family TRACKER, task 12)
 const NAMEN_FX = ['fx_setzen'];
 // the loop deck commands (family LOOPDECK): 5 deck commands (neu, leeren, aendern, send, effekt) and 3 cell commands (setzen, aendern, bewegen)
-const NAMEN_LOOPDECK = ['loopdeck_aendern', 'loopdeck_effekt', 'loopdeck_plaetze', 'loopdeck_leeren', 'loopdeck_neu', 'loopdeck_send', 'zelle_aendern', 'zelle_bewegen', 'zelle_setzen'];
+const NAMEN_LOOPDECK = ['loopdeck_aendern', 'loopdeck_effekt', 'loopdeck_leeren', 'loopdeck_neu', 'loopdeck_send', 'zelle_aendern', 'zelle_bewegen', 'zelle_setzen'];
+// the container commands (family CONTAINER): the places and the strudel module
+const NAMEN_CONTAINER = ['platz_setzen', 'strom_send', 'strom_spur_neu'];
 const NAMEN_STECKFELD = ['geraet_stift_setzen', 'geraet_stifte_setzen'];
-const NAMEN_ALLE = [...NAMEN_MAIN, ...NAMEN_SZENEN, ...NAMEN_TRACKER, ...NAMEN_ABSCHNITTE, ...NAMEN_VERBUND, ...NAMEN_FX, ...NAMEN_LOOPDECK, ...NAMEN_STECKFELD];
+const NAMEN_ALLE = [...NAMEN_MAIN, ...NAMEN_SZENEN, ...NAMEN_TRACKER, ...NAMEN_ABSCHNITTE, ...NAMEN_VERBUND, ...NAMEN_FX, ...NAMEN_LOOPDECK, ...NAMEN_CONTAINER, ...NAMEN_STECKFELD];
 
-test('PRO_BEFEHL holds the 82 commands of the table before the split plus the 3 scene commands, the tracker command, the 8 time and section commands the 2 linked-clip commands and the effect command and the 9 loop deck commands', () => {
+test('PRO_BEFEHL holds the 82 commands of the table before the split plus the 3 scene commands, the tracker command, the 8 time and section commands the 2 linked-clip commands and the effect command, the 8 loop deck commands and the 3 container commands', () => {
   assert.equal(NAMEN_MAIN.length, 82);
-  assert.equal(NAMEN_ALLE.length, 108);
+  assert.equal(NAMEN_ALLE.length, 110);
   assert.deepEqual(Object.keys(PRO_BEFEHL).sort(), [...NAMEN_ALLE].sort());
 });
 
 test('every command is defined in exactly one family table; BEFEHL_NAMEN is the key list of the registry', () => {
-  const familien = { SPUR, CLIP, GRUPPE, INSERT, AUTO, TRANSPORT, SZENEN, TRACKER, LOOPDECK };
+  const familien = { SPUR, CLIP, GRUPPE, INSERT, AUTO, TRANSPORT, SZENEN, TRACKER, LOOPDECK, CONTAINER };
   for (const [name, t] of Object.entries(familien)) assert.ok(Object.keys(t).length > 0, `${name} is not empty`);
   const alle = Object.values(familien).flatMap((t) => Object.keys(t));
   assert.equal(new Set(alle).size, alle.length, 'no command twice');
@@ -84,7 +87,7 @@ test('every command is defined in exactly one family table; BEFEHL_NAMEN is the 
 
 test('handlers reach each other across families through the registry: seq_folge_neu (GRUPPE) creates its track (SPUR) and clip (CLIP)', () => {
   assert.ok(Object.hasOwn(GRUPPE, 'seq_folge_neu') && Object.hasOwn(SPUR, 'spur_neu') && Object.hasOwn(CLIP, 'clip_neu'));
-  const p0 = neuesProjekt('x'); p0.live = true;
+  const p0 = neuesProjekt('x'); p0.live = true; p0.plaetze = [{ typ: 'track' }, { typ: 'track' }, { typ: 'track' }, { typ: 'track' }];
   const p1 = fuehreAus(p0, { befehl: 'seq_anlegen', platz: 2 }).projekt;
   const g = p1.gruppen[0];
   const geraet = { art: 'intern', name: 'bk', graph: 'synth-mono', parameter: {} };

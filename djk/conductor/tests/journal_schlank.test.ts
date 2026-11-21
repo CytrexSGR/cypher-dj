@@ -196,8 +196,8 @@ test('the resume with the raw predicate equals the resume without it on a journa
   const mach = (von: string, typ: string, daten: Record<string, unknown>) =>
     zeilen.push({ sample: 0, beat: 0, takt: 1, mono_ns: zeilen.length + 1, von, typ, daten });
   mach('leitstand', 'set_start', { set_id: SET, generation: 0, vertrag: 1, konfiguration: {} });
-  mach('kern', '/e/regler', { pfad: 'deck/3/fader', wert: -6, halter: 'frei', sample: 0, beat: 0 });
-  const e = a0.einreichen({ grund: 'leiser', teile: [{ regler: 'deck/3/fader', art: 'rampe', ab_takt: 9, dauer_takte: 2, nach: -20 }] });
+  mach('kern', '/e/regler', { pfad: 'pad/1/fader', wert: -6, halter: 'frei', sample: 0, beat: 0 });
+  const e = a0.einreichen({ grund: 'leiser', teile: [{ regler: 'pad/1/fader', art: 'rampe', ab_takt: 9, dauer_takte: 2, nach: -20 }] });
   assert.equal(e.status, 'angenommen');
   for (const j of quelle.journal) mach(j.von, j.typ, j.daten);
   const id = quelle.gesendet.find((g) => g.adresse === '/k/teil')!.felder.id as number;
@@ -214,7 +214,7 @@ test('the resume with the raw predicate equals the resume without it on a journa
     const a = welteAnnahme(wk, 1);
     const n = a.wiederaufnehmen(journalZeilen(p, undefined, mitPraedikat ? resumeLiestZeile : undefined));
     const plaene = [...a.plaene.values()].map((ps) => [ps.plan.id, ps.status, [...ps.teile.values()]]);
-    return JSON.stringify({ n, plaene, offen: a.offeneTeile(), stufe: a.stufe, wert: a.spiegel.wert('deck/3/fader'), ki: a.spiegel.kiGestoppt,
+    return JSON.stringify({ n, plaene, offen: a.offeneTeile(), stufe: a.stufe, wert: a.spiegel.wert('pad/1/fader'), ki: a.spiegel.kiGestoppt,
       journal: wk.journal.map((x) => x.typ) });
   };
   const voll = lies(false);
@@ -302,7 +302,7 @@ async function aufbau(): Promise<Aufbau> {
 
 function leitstand(a: Aufbau, journal?: JournalModus, setId = SET): Leitstand {
   return new Leitstand({
-    konfigPfad: a.konfig, kernPort: a.kern.port, setId, env: ohneInstanz(), kiSpur: ['deck/3'], kernKonfig: a.kernToml, journal,
+    konfigPfad: a.konfig, kernPort: a.kern.port, setId, env: ohneInstanz(), kiSpur: ['pad/1'], kernKonfig: a.kernToml, journal,
   });
 }
 
@@ -388,9 +388,9 @@ test('mode schlank: refusals and late executions of any sender, receipts of an o
     try {
       await l1.starte();
       await bis(() => l1.kern.zustand === 'verbunden' && a.kern.zaehle('/k/led') > 0);
-      a.kern.sende('/e/regler', { pfad: 'deck/3/fader', wert: -6, halter: 'frei', sample: 0, beat: 0 });
+      a.kern.sende('/e/regler', { pfad: 'pad/1/fader', wert: -6, halter: 'frei', sample: 0, beat: 0 });
       await warte(100);
-      const e = l1.annahme.einreichen({ grund: 'leiser', teile: [{ regler: 'deck/3/fader', art: 'rampe', ab_takt: 400, dauer_takte: 2, nach: -20 }] });
+      const e = l1.annahme.einreichen({ grund: 'leiser', teile: [{ regler: 'pad/1/fader', art: 'rampe', ab_takt: 400, dauer_takte: 2, nach: -20 }] });
       assert.equal(e.status, 'angenommen');
       await bis(() => l1.annahme.plaene.get(e.plan_id)?.status === 'fertig', 5000, 'plan part finished');
       // foreign senders (the player, the work bench): accepted, started, finished are silent; refused or late are not

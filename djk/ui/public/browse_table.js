@@ -3,11 +3,13 @@ import { stoebernUrl, SPALTEN, zelle, aktionenFuer, loopBoxStatus } from './brow
 import { $, $$, BUCHSTABE, LADE_DECKS, el, klasseLaden, melde, postJson, zustand } from './page_state.js';
 import { TYP_ART, behalteWahl, ladeListe, leereDetail, oeffneListenMenue, postenKoerper } from './browse_detail.js';
 import { zeigeReiterInfo } from './seitenrahmen.js';
-import { BOXEN } from './loop_rec_view.js';
+import { LOOPDECKS } from './curves.js';
 import { zeigePlaetzeSpaeter } from './slots_view.js';
 import { ladeInDeck } from './loopdeck/view.js';
 import { quelleZiehbar } from './loopdeck/drag.js';
-import { instanzen, waehleRolle } from './instanzen.js';
+import { instanzen } from './instanzen.js';
+import { zeigeStrom } from './strudel_module.js';
+import { stromName } from './kanaele.js';
 import { aktivesSet, libKnoepfe, ladeKnopf, merkeZeile, nutzungPost } from './library_view.js';
 import { sternKnopf } from './usage.js';
 import { laden } from './deck_view.js';
@@ -95,7 +97,7 @@ function loopBoxKnoepfe(td, t) {
   const s = loopBoxStatus(t);
   const sp = el('span', 'loopbox-aktion');
   if (t.nur_live) { sp.append(el('span', 'loopbox-grund', s.grund)); td.append(sp); return; }
-  for (const n of BOXEN) {
+  for (const n of LOOPDECKS) {
     const b = el('button', `laden in-box l${n}`, `→ LOOP ${n}`);
     b.dataset.ok = s.aktiv ? '1' : '0';
     b.disabled = !s.aktiv || loopImportLaeuft;
@@ -143,10 +145,10 @@ function inEditor(t, strom) {
   if (!i) return melde('Strudel editor not ready', true);
   const f = $('.muster-feld', i.w);
   // Ungesendeter Text im Editor wird nicht still überschrieben (REVERT holt nur das Laufende zurück; Review S2b Befund 3)
-  if (i.schmutzig && f.value !== t.text && !confirm(`The ${['DRUMS', 'BASS', 'MELODY'][strom - 1]} editor has text that was not played. Replace it with “${t.name}”?`)) return;
-  waehleRolle(strom);
+  if (i.schmutzig && f.value !== t.text && !confirm(`The ${stromName(strom)} editor has text that was not played. Replace it with “${t.name}”?`)) return;
+  zeigeStrom(strom);
   f.value = t.text; f.dispatchEvent(new Event('input'));
-  melde(`“${t.name}” is in the ${['DRUMS', 'BASS', 'MELODY'][strom - 1]} editor — press PLAY when it fits (one change per 8 bars)`);
+  melde(`“${t.name}” is in the ${stromName(strom)} editor — press PLAY when it fits (one change per 8 bars)`);
 }
 // Track-Aktionen: im Bestand LOAD A/B, sonst PREPARE / MISSING / PREPARING… (wie die alte Trefferliste)
 function trackKnoepfe(td, t) {

@@ -174,9 +174,14 @@ void Arrangement::regler_binden(const sw::ReglerTabelle& tab) {
       case sw::Rolle::spur_eq_tief: feld = ARR_F_EQ0 + 0; break;   // loop deck channel strip KZ1
       case sw::Rolle::spur_eq_mitte: feld = ARR_F_EQ0 + 1; break;
       case sw::Rolle::spur_eq_hoch: feld = ARR_F_EQ0 + 2; break;
+      case sw::Rolle::spur_pfl: feld = ARR_F_CUE; break;   // container core K7: the track pfl rides on the cue field (groups use it as their cue switch)
+      case sw::Rolle::spur_trim: feld = ARR_F_TRIM; break;
+      case sw::Rolle::spur_kill_tief: feld = ARR_F_KILL0 + 0; break;
+      case sw::Rolle::spur_kill_mitte: feld = ARR_F_KILL0 + 1; break;
+      case sw::Rolle::spur_kill_hoch: feld = ARR_F_KILL0 + 2; break;
       case sw::Rolle::snd_spur: case sw::Rolle::snd_grp: {
         const int ri = sw::send_nr(d.pfad) - 1;   // "…/send/<r>"
-        if (ri >= 0 && ri < ARR_RETURNS) feld = ARR_F_SEND0 + ri;
+        if (ri >= 0 && ri < ARR_RETURNS) feld = arr_f_send(ri);
         break;
       }
       case sw::Rolle::ret_fader: feld = 0; break;
@@ -476,11 +481,25 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
     const float* vl = nullptr;
     float lin = 0.0f;
   };
-  const auto sends_bereiten = [&](int streifen, Send* sd) {
+  // K5 (D-K3): the structural send mask of a live cypherdj-arr/4 snapshot. A strip whose top group leads into DJ output N reaches only the returns with ret_dj N; the weight of any other send is
+  // ignored, whatever a row write set. dj = the DJ output of the strip's top group (0 = none: nothing is masked).
+  const auto top_dj = [&](int g) {   // g = 1-based group number, 0 = none
+    for (int n = 0; g > 0 && n <= ARR_GRUPPEN; ++n) {
+      if (snap_->gruppe_ausgang[g - 1] <= 0) return static_cast<int>(snap_->gruppe_dj[g - 1]);
+      g = snap_->gruppe_ausgang[g - 1];
+    }
+    return 0;
+  };
+  const auto sends_bereiten = [&](int streifen, Send* sd, int dj) {
     int n = 0;
     for (int r = 0; r < ARR_RETURNS; ++r) {
-      const Wert& sw_ = w_[streifen][ARR_F_SEND0 + r];
-      sd[r].aktiv = ret_.rechnet(r, da(r)) && (sw_.vl || sw_.w > -120.0f);
+      const Wert& sw_ = w_[streifen][arr_f_send(r)];
+#ifdef CYPHERDJ_MUTATION_ARR_SENDMASKE_AUS
+      const bool fremd = false;   // error case: the mask is off, a row write crosses modules
+#else
+      const bool fremd = snap_ && snap_->send_maske && snap_->ret_da[r] && snap_->ret_dj[r] != dj;
+#endif
+      sd[r].aktiv = !fremd && ret_.rechnet(r, da(r)) && (sw_.vl || sw_.w > -120.0f);
       sd[r].vl = sw_.vl;
       sd[r].lin = db_lin(sw_.w);
       if (!sd[r].aktiv) continue;
@@ -515,12 +534,25 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
   // chain output and does not depend on the order of the strips. A track without signal has a silent bus (memset above): a silent key.
   ins_.makros_planen(snap_ ? snap_->kette : nullptr, snap_ ? snap_->rack : nullptr, m);   // 1.10 slice 4c: the macro values of the racks become parameter values, before any parameter is read
   ins_.schluessel_planen(m);
-  // 1.10 slice 5 U2b (E6, E7): the DJ inputs of this block (deck/1..4, erz/1) go into the key buffers of the stages that listen to them. They are there before any strip runs, for every consumer. A nullptr
+  // 1.10 slice 5 U2b (E6, E7): the key sources of this block (containers A..D, streams 1..16) go into the key buffers of the stages that listen to them. They are there before any strip runs, for every consumer. A nullptr
   // input captures nothing: the buffer keeps the zero schluessel_planen() wrote, so a deck that stopped gives a silent key, never the samples of the block before.
 #ifndef CYPHERDJ_MUTATION_SC_DJ_NULL   // error case: the DJ pointers are ignored, the keys of deck and erz stay silent
-  for (int i = 0; i < DJ_EINGAENGE; ++i)
-    if (dj_l_[i] && dj_r_[i]) ins_.kopiere(i < 4 ? ARR_SCHL_DECK : ARR_SCHL_ERZ, ARR_SCHL_POST, i < 4 ? i + 1 : 1, dj_l_[i], dj_r_[i], m);
+  for (int i = 0; i < ARR_SCHLUESSEL; ++i)   // K4: i 0..3 containers A..D, i 4..19 streams 1..16
+    if (dj_l_[i] && dj_r_[i]) ins_.kopiere(i < 4 ? ARR_SCHL_DECK : ARR_SCHL_ERZ, ARR_SCHL_POST, i < 4 ? i + 1 : i - 3, dj_l_[i], dj_r_[i], m);
 #endif
+  // Container core K7: the track trim (spur/<n>/trim, dB, -24..+24) in front of everything the strip does, also in front of the key copy below: the strip, the sidechain keys and the sends all see the
+  // trimmed signal, like the trim of a container strip. A base value of 0 and no course is skipped (bit-equal). The gain is computed again only where the value changes. No allocation.
+  for (int i = 0; i < ARR_SPUREN; ++i) {
+    const Wert& tr = w_[i][ARR_F_TRIM];
+    if (!tr.vl && (tr.w == 0.0f || tr.w != tr.w)) continue;
+    auto klemm = [](float v) { return v != v ? 0.0f : std::min(24.0f, std::max(-24.0f, v)); };
+    float g = db_lin(klemm(tr.w));
+    for (int t = 0; t < m; ++t) {
+      if (tr.vl && (t == 0 || tr.vl[t] != tr.vl[t - 1])) g = db_lin(klemm(tr.vl[t]));
+      bus_l_[i][t] *= g;
+      bus_r_[i][t] *= g;
+    }
+  }
 #ifndef CYPHERDJ_MUTATION_INS_SC_NACH_KETTE
   for (int t = 0; t < ARR_SPUREN; ++t)
     if ((ins_.schluessel_maske() >> t) & 1u) ins_.schluessel_sichern(t, bus_l_[t], bus_r_[t], m);
@@ -590,6 +622,17 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
         } else if (fb.w == fb.w && fb.w != 0.0f) {
           neutral = false;
         }
+        const Wert& fk = w_[i][ARR_F_KILL0 + b];   // container core K7: a kill is not neutral while it is above 0 (anywhere in the block)
+        if (fk.vl) {
+          for (int t = 0; t < m; ++t) {
+            const float v = fk.vl[t];
+            if (v != v || v <= 0.0f) continue;
+            neutral = false;
+            break;
+          }
+        } else if (fk.w == fk.w && fk.w > 0.0f) {
+          neutral = false;
+        }
       }
       uint8_t lage = iso_lage_[i];
       if (lage == 0 && !neutral) { lage = 1; iso_blende_[i] = 0; }
@@ -605,6 +648,20 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
             }
           } else {
             std::fill(iso_g_[b], iso_g_[b] + m, db_lin(fb.w != fb.w ? 0.0f : std::min(6.0f, std::max(-200.0f, fb.w))));
+          }
+          // Container core K7: the kill (spur/<n>/kill/<band>, 0/1) scales the band gain by (1 - kill), as Kanalzug does; the eq value itself is never touched, so the stored eq returns on release.
+          const Wert& fk = w_[i][ARR_F_KILL0 + b];
+#ifdef CYPHERDJ_MUTATION_SPUR_KILL_OHNE_RUECKKEHR
+          if ((fk.vl ? fk.vl[0] : fk.w) > 0.5f) w_[i][ARR_F_EQ0 + b].w = -200.0f;   // error case: the kill overwrites the stored eq value, nothing brings it back
+#endif
+          if (fk.vl) {
+            for (int t = 0; t < m; ++t) {
+              const float v = fk.vl[t];
+              iso_g_[b][t] *= 1.0f - (v != v ? 0.0f : std::min(1.0f, std::max(0.0f, v)));
+            }
+          } else if (fk.w == fk.w && fk.w > 0.0f) {
+            const float k = 1.0f - std::min(1.0f, fk.w);
+            for (int t = 0; t < m; ++t) iso_g_[b][t] *= k;
           }
         }
         const bool blende = lage != 2 || iso_blende_[i] < ARR_NAHT;
@@ -640,6 +697,23 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
 #ifdef CYPHERDJ_MUTATION_INS_SC_NACH_KETTE
     if ((ins_.schluessel_maske() >> i) & 1u) ins_.schluessel_sichern(i, bus_l_[i], bus_r_[i], m);
 #endif
+    // Container core K7: the track pfl (spur/<n>/pfl, rides on the cue field) puts the track signal as it stands here (behind trim, chain, filter, EQ and kill, in front of fader, pan and the mute fade, like the
+    // group cue and the PFL of a container strip) into the cue sum; the master path is not touched. With the row at 0 nothing is written: the cue bus stays bit-identical.
+    if (cue_l_ && cue_r_) {
+      const Wert& pf = w_[i][ARR_F_CUE];
+      if (pf.vl) {
+        for (int t = 0; t < m; ++t)
+          if (pf.vl[t] >= 0.5f) {
+            cue_l_[t] += bus_l_[i][t];
+            cue_r_[t] += bus_r_[i][t];
+          }
+      } else if (pf.w >= 0.5f) {
+        for (int t = 0; t < m; ++t) {
+          cue_l_[t] += bus_l_[i][t];
+          cue_r_[t] += bus_r_[i][t];
+        }
+      }
+    }
     // 1. Spuren → Ziel (the fader loop of the track just processed)
     const Wert& fa = w_[i][0];
     const Wert& pa = w_[i][1];
@@ -672,7 +746,7 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
       ar = za == 0 ? pm_r_ : grp_r_[za - 1];
     }
     Send sd[ARR_RETURNS];
-    const int n_sends = sends_bereiten(i, sd);
+    const int n_sends = sends_bereiten(i, sd, snap_ ? (snap_->spur[i].ausgang > 0 ? top_dj(snap_->spur[i].ausgang) : 0) : 0);
     const float* gbl = zg > 0 ? gsend[zg - 1] : nullptr;   // fade of the target group and of its ancestors: a muted group silences the sends of its members too
     float* kpl[ARR_INS_KOMP];   // structural post keys (slice 5 U1): the key buffers of the stages listening to the post of this track, mostly none
     float* kpr[ARR_INS_KOMP];
@@ -902,8 +976,6 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
       const int dn = snap_ ? (snap_->gruppe_dj[g] ? snap_->gruppe_dj[g] : (dj_rest_gilt ? dj_rest_[g] : 0)) : 0;
 #ifdef CYPHERDJ_MUTATION_ARR_DJ_OFFLINE_AUS
       const bool dj_ziel = dn > 0 && zg == 0 && dj_aus_l_[dn - 1] && dj_aus_r_[dn - 1];   // error case: the offline switch is ignored
-#elif defined(CYPHERDJ_MUTATION_ARR_DJ_NUR_PAD)
-      const bool dj_ziel = dn > 0 && dn <= 2 && zg == 0 && !dj_master_ && dj_aus_l_[dn - 1] && dj_aus_r_[dn - 1];   // error case: only pad/1 and pad/2 are DJ channels, a nr above 2 falls to the master (ADR 038)
 #else
       const bool dj_ziel = dn > 0 && zg == 0 && !dj_master_ && dj_aus_l_[dn - 1] && dj_aus_r_[dn - 1];
 #endif
@@ -924,7 +996,7 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
       // a group's sends: its own fade is in the signal already; the fades of its ancestors scale them on top (decision 2). A top-level group: nothing more (bit-equal to before nesting)
       const float* ganc = zg > 0 ? gsend[zg - 1] : nullptr;
       Send sd[ARR_RETURNS];
-      const int n_sends = sends_bereiten(s, sd);
+      const int n_sends = sends_bereiten(s, sd, snap_ ? top_dj(g + 1) : 0);
       float* kpl[ARR_INS_KOMP];   // structural post keys of this group (slice 5 U2a): the key buffers of the stages listening to it, mostly none
       float* kpr[ARR_INS_KOMP];
       const int nk = ins_.ziele(ARR_SCHL_GRP, ARR_SCHL_POST, g + 1, kpl, kpr);

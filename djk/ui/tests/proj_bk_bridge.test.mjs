@@ -99,7 +99,7 @@ test('S17 T2.2 setzeGraph sends the stream target, answers 200 and records gelad
   await leser.read();   // the start message
   const r = await bruecke(o, sendungen, () => b.setzeGraph('erz/3', 'inst', 'andreas'));
   assert.equal(r.code, 200); assert.equal(r.j.ok, true);
-  assert.deepEqual([r.gesendet.adresse, r.gesendet.felder.strom, r.gesendet.felder.ziel, r.gesendet.felder.kanal, r.gesendet.felder.quelle], ['/erz/strom', 3, 'bk:inst', 'erz/3', 'andreas']);
+  assert.deepEqual([r.gesendet.adresse, r.gesendet.felder.strom, r.gesendet.felder.ziel, r.gesendet.felder.kanal, r.gesendet.felder.quelle], ['/erz/strom', 3, 'bk:inst', undefined, 'andreas']);
   assert.deepEqual(b.geladen(), { 'erz/3': 'inst' });
   let text = '';
   for (let i = 0; i < 20 && !text.includes('"a":"graphen"'); i++) { const { value: v } = await Promise.race([leser.read(), warte(500).then(() => ({ value: undefined }))]); if (v) text += dek.decode(v); }

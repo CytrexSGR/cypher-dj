@@ -49,8 +49,8 @@ test('one hello name over 2.5 s, five /erz/strom announcements with the MIDI tar
   const namen = new Set(x.eingang.filter((m) => m.adresse === '/k/hallo').map((m) => m.werte[0]));
   assert.deepEqual([...namen], ['erzeuger-bk']);                       // 1. a single subscriber slot
   assert.ok(x.eingang.filter((m) => m.adresse === '/k/hallo').length >= 2);   // the hello repeats every second
-  assert.deepEqual(stroeme(x.eingang), [                                // 2. (strom, ziel, kanal)
-    [5, 'midi:3:1', 'erz/5'], [6, 'midi:3:2', 'erz/6'], [7, 'midi:3:3', 'erz/7'], [9, 'midi:4:1', 'pad/1'], [10, 'midi:4:2', 'pad/2']]);
+  assert.deepEqual(stroeme(x.eingang), [                                // 2. (strom, ziel)
+    [5, 'midi:3:1'], [6, 'midi:3:2'], [7, 'midi:3:3'], [9, 'midi:4:1'], [10, 'midi:4:2']]);
 });
 
 test('a pattern in erzeuger6 produces MIDI notes on stream 6 only; stream 5 stays silent (negative control)', { timeout: 20000 }, async (t) => {

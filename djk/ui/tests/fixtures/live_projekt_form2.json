@@ -1,0 +1,692 @@
+{
+ "format": "cypherdj-projekt/2",
+ "gruppen": [
+  {
+   "fader_db": 0,
+   "farbe": "#d03b8d",
+   "gefaltet": false,
+   "id": "g17",
+   "mute": false,
+   "name": "SEQ 2",
+   "nr": 6,
+   "pan": 0,
+   "seq": {
+    "platz": 2,
+    "schema": 2
+   },
+   "solo": false
+  },
+  {
+   "fader_db": 0,
+   "farbe": "#3bc7d0",
+   "gefaltet": false,
+   "id": "g24",
+   "mute": true,
+   "name": "SEQ 1",
+   "nr": 7,
+   "pan": 0,
+   "seq": {
+    "platz": 1,
+    "schema": 2
+   },
+   "solo": false
+  },
+  {
+   "fader_db": 0,
+   "farbe": "#e0563b",
+   "gefaltet": false,
+   "id": "g25",
+   "loopdeck": {
+    "ausgang_platz": 4,
+    "platz": 1,
+    "raster": "takt"
+   },
+   "mute": false,
+   "name": "LOOP 1",
+   "nr": 1,
+   "pan": 0,
+   "solo": false
+  },
+  {
+   "fader_db": 0,
+   "farbe": "#3b8de0",
+   "gefaltet": false,
+   "id": "g26",
+   "loopdeck": {
+    "ausgang_platz": 3,
+    "platz": 2,
+    "raster": "takt"
+   },
+   "mute": false,
+   "name": "LOOP 2",
+   "nr": 2,
+   "pan": 0,
+   "solo": false
+  }
+ ],
+ "live": true,
+ "loop": {
+  "an": false,
+  "bis_beat": 32,
+  "von_beat": 0
+ },
+ "master": {
+  "fader_db": 0
+ },
+ "metronom": {
+  "an": false,
+  "pegel_db": -12,
+  "ziel": "master"
+ },
+ "naechste_id": {
+  "clip": 1,
+  "gruppe": 27,
+  "insert": 4,
+  "return": 5,
+  "spur": 60,
+  "zelle": 7
+ },
+ "naechste_noten_id": 1,
+ "name": "live form",
+ "returns": [
+  {
+   "fader_db": 0,
+   "farbe": "#3b8de0",
+   "hall": {
+    "an": true,
+    "decay": 0.6000000238418579,
+    "fahne": 0.550000011920929,
+    "groesse": 0.6000000238418579,
+    "highcut": 0.41999998688697815,
+    "pre": 0.03999999910593033,
+    "tief": 0.44999998807907104
+   },
+   "id": "r1",
+   "mute": false,
+   "name": "Hall dunkel",
+   "nr": 1,
+   "pan": 0,
+   "solo": false
+  },
+  {
+   "fader_db": 0,
+   "farbe": "#e0a83b",
+   "hall": {
+    "an": false,
+    "decay": 0.5252000093460083,
+    "fahne": 0.666670024394989,
+    "groesse": 0.28200000524520874,
+    "highcut": 0.8039000034332275,
+    "pre": 0.03999999910593033,
+    "tief": 0.5658000111579895
+   },
+   "id": "r2",
+   "inserts": [
+    {
+     "an": true,
+     "art": "bk",
+     "graph": "fx-delay-sync",
+     "id": "i1",
+     "slot": 1,
+     "werte": {
+      "k1": 0.5,
+      "k2": 0.5,
+      "k3": 0.5,
+      "k4": 0.5,
+      "k5": 0.5,
+      "k6": 0.5,
+      "k7": 0.5,
+      "k8": 0.5
+     }
+    }
+   ],
+   "mute": false,
+   "name": "Echo",
+   "nr": 2,
+   "pan": 0,
+   "solo": false
+  },
+  {
+   "fader_db": 0,
+   "farbe": "#3bc7d0",
+   "hall": {
+    "an": true,
+    "decay": 0.25,
+    "fahne": 0.666670024394989,
+    "groesse": 0.15000000596046448,
+    "highcut": 0.699999988079071,
+    "pre": 0,
+    "tief": 0.5658000111579895
+   },
+   "id": "r3",
+   "loopdeck": {
+    "art": "hall",
+    "platz": 1
+   },
+   "mute": false,
+   "name": "L1 HALL",
+   "nr": 3,
+   "pan": 0,
+   "solo": false
+  },
+  {
+   "fader_db": 0,
+   "farbe": "#8a8f98",
+   "hall": {
+    "an": false,
+    "decay": 0.5252000093460083,
+    "fahne": 0.666670024394989,
+    "groesse": 0.28200000524520874,
+    "highcut": 0.8039000034332275,
+    "pre": 0.03999999910593033,
+    "tief": 0.5658000111579895
+   },
+   "id": "r4",
+   "inserts": [
+    {
+     "an": true,
+     "art": "bk",
+     "graph": "fx-delay-sync",
+     "id": "i2",
+     "slot": 2,
+     "werte": {
+      "k1": 0.3889,
+      "k2": 0.5,
+      "k3": 0.5,
+      "k4": 0.5,
+      "k5": 0.5,
+      "k6": 0.5,
+      "k7": 0.5,
+      "k8": 0.5
+     }
+    }
+   ],
+   "loopdeck": {
+    "art": "delay",
+    "platz": 1
+   },
+   "mute": false,
+   "name": "L1 DLY",
+   "nr": 4,
+   "pan": 0,
+   "solo": false
+  }
+ ],
+ "rev": 0,
+ "spuren": [
+  {
+   "art": "instrument",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g17"
+   },
+   "clips": [],
+   "fader_db": -10.110237121582031,
+   "farbe": "#e0563b",
+   "geraet": {
+    "art": "intern",
+    "name": "rb338",
+    "parameter": {}
+   },
+   "id": "s31",
+   "mute": true,
+   "name": "s31",
+   "nr": 1,
+   "pan": 0,
+   "sends": [
+    {
+     "db": -16,
+     "id": "r1"
+    }
+   ],
+   "solo": false
+  },
+  {
+   "art": "instrument",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g17"
+   },
+   "clips": [],
+   "fader_db": -11.653160095214844,
+   "farbe": "#3b8de0",
+   "geraet": {
+    "art": "intern",
+    "name": "rb338",
+    "parameter": {}
+   },
+   "id": "s32",
+   "mute": true,
+   "name": "s32",
+   "nr": 2,
+   "pan": 0,
+   "solo": false
+  },
+  {
+   "art": "instrument",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g17"
+   },
+   "clips": [],
+   "fader_db": -14,
+   "farbe": "#d03b8d",
+   "geraet": {
+    "art": "intern",
+    "name": "rb338",
+    "parameter": {}
+   },
+   "id": "s36",
+   "mute": true,
+   "name": "s36",
+   "nr": 6,
+   "pan": 0,
+   "sends": [
+    {
+     "db": -14,
+     "id": "r1"
+    },
+    {
+     "db": -8,
+     "id": "r2"
+    }
+   ],
+   "solo": false
+  },
+  {
+   "art": "instrument",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g17"
+   },
+   "clips": [],
+   "fader_db": -200,
+   "farbe": "#9b59d0",
+   "geraet": {
+    "art": "intern",
+    "name": "rb338",
+    "parameter": {}
+   },
+   "id": "s37",
+   "mute": true,
+   "name": "s37",
+   "nr": 3,
+   "pan": 0,
+   "sends": [
+    {
+     "db": -10,
+     "id": "r1"
+    }
+   ],
+   "solo": false
+  },
+  {
+   "art": "instrument",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g17"
+   },
+   "clips": [],
+   "fader_db": -10,
+   "farbe": "#9b59d0",
+   "geraet": {
+    "art": "intern",
+    "name": "rb338",
+    "parameter": {}
+   },
+   "id": "s44",
+   "mute": false,
+   "name": "s44",
+   "nr": 11,
+   "pan": 0,
+   "sends": [
+    {
+     "db": -12,
+     "id": "r1"
+    },
+    {
+     "db": -10,
+     "id": "r2"
+    }
+   ],
+   "solo": false
+  },
+  {
+   "art": "instrument",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g17"
+   },
+   "clips": [],
+   "fader_db": -12,
+   "farbe": "#3bb07a",
+   "geraet": {
+    "art": "intern",
+    "name": "rb338",
+    "parameter": {}
+   },
+   "id": "s45",
+   "mute": true,
+   "name": "s45",
+   "nr": 12,
+   "pan": 0,
+   "sends": [
+    {
+     "db": -6,
+     "id": "r1"
+    },
+    {
+     "db": -12,
+     "id": "r2"
+    }
+   ],
+   "solo": false
+  },
+  {
+   "art": "instrument",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g17"
+   },
+   "clips": [],
+   "fader_db": -6,
+   "farbe": "#e0a83b",
+   "geraet": {
+    "art": "intern",
+    "name": "rb338",
+    "parameter": {}
+   },
+   "id": "s46",
+   "mute": true,
+   "name": "s46",
+   "nr": 13,
+   "pan": 0,
+   "solo": false
+  },
+  {
+   "art": "instrument",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g17"
+   },
+   "clips": [],
+   "fader_db": -6,
+   "farbe": "#d03b8d",
+   "geraet": {
+    "art": "intern",
+    "name": "rb338",
+    "parameter": {}
+   },
+   "id": "s47",
+   "mute": true,
+   "name": "s47",
+   "nr": 14,
+   "pan": 0,
+   "solo": false
+  },
+  {
+   "art": "instrument",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g24"
+   },
+   "clips": [],
+   "fader_db": -6,
+   "farbe": "#3bc7d0",
+   "geraet": {
+    "art": "intern",
+    "name": "rb338",
+    "parameter": {}
+   },
+   "id": "s50",
+   "mute": false,
+   "name": "s50",
+   "nr": 15,
+   "pan": 0,
+   "solo": false
+  },
+  {
+   "art": "audio",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g25"
+   },
+   "clips": [],
+   "fader_db": 0,
+   "farbe": "#3bb07a",
+   "filter": 0,
+   "id": "s51",
+   "mute": false,
+   "name": "s51",
+   "nr": 4,
+   "pan": 0,
+   "solo": false,
+   "zellen": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "art": "audio",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g25"
+   },
+   "clips": [],
+   "fader_db": 0,
+   "farbe": "#e0a83b",
+   "filter": 0,
+   "id": "s52",
+   "mute": false,
+   "name": "s52",
+   "nr": 5,
+   "pan": 0,
+   "solo": false,
+   "zellen": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "art": "audio",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g25"
+   },
+   "clips": [],
+   "fader_db": 0,
+   "farbe": "#3bc7d0",
+   "filter": 0,
+   "id": "s53",
+   "mute": false,
+   "name": "s53",
+   "nr": 7,
+   "pan": 0,
+   "solo": false,
+   "zellen": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "art": "audio",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g25"
+   },
+   "clips": [],
+   "fader_db": 0,
+   "farbe": "#8a8f98",
+   "filter": 0,
+   "id": "s54",
+   "mute": false,
+   "name": "s54",
+   "nr": 8,
+   "pan": 0,
+   "solo": false,
+   "zellen": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "art": "audio",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g26"
+   },
+   "clips": [],
+   "fader_db": 0,
+   "farbe": "#e0563b",
+   "filter": 0,
+   "id": "s55",
+   "mute": false,
+   "name": "s55",
+   "nr": 9,
+   "pan": 0,
+   "solo": false,
+   "zellen": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "art": "audio",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g26"
+   },
+   "clips": [],
+   "fader_db": 0,
+   "farbe": "#3b8de0",
+   "filter": 0,
+   "id": "s56",
+   "mute": false,
+   "name": "s56",
+   "nr": 10,
+   "pan": 0,
+   "solo": false,
+   "zellen": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "art": "audio",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g26"
+   },
+   "clips": [],
+   "fader_db": 0,
+   "farbe": "#8a8f98",
+   "filter": 0,
+   "id": "s57",
+   "mute": false,
+   "name": "s57",
+   "nr": 16,
+   "pan": 0,
+   "solo": false,
+   "zellen": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "art": "audio",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g26"
+   },
+   "clips": [],
+   "fader_db": 0,
+   "farbe": "#e0563b",
+   "filter": 0,
+   "id": "s58",
+   "mute": false,
+   "name": "s58",
+   "nr": 17,
+   "pan": 0,
+   "solo": false,
+   "zellen": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "art": "instrument",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g17"
+   },
+   "clips": [],
+   "fader_db": -6,
+   "farbe": "#3b8de0",
+   "geraet": {
+    "art": "intern",
+    "name": "rb338",
+    "parameter": {}
+   },
+   "id": "s59",
+   "mute": true,
+   "name": "s59",
+   "nr": 18,
+   "pan": 0,
+   "solo": false
+  }
+ ],
+ "taktart": [
+  4,
+  4
+ ],
+ "tempo_bpm": 120,
+ "wiedergabe_rev": 0
+}

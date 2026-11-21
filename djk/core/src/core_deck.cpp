@@ -56,7 +56,6 @@ void Kern::decks_anlegen() {
   DeckWerk& w = *decks_;
   // Welle 3: Lesekopf am Beat der Kern-Uhr (Adresse fest, tempo_plan.h); Keylock: mit dem Zähler der Karte (Vertrag 10)
   for (Deck& dk : w.deck) dk.setze_karte(&plan_.karte(), plan_.generation_zeiger());
-  loops_->setze_karte(&plan_.karte(), plan_.generation_zeiger());  // Task 7: dieselbe Karte wie block() (T11)
   const sw::ReglerTabelle& tab = sw_->tabelle();
   char p[64];
   auto such = [&](const char* fmt, int n, const char* rest) {
@@ -65,11 +64,20 @@ void Kern::decks_anlegen() {
   };
   for (int d = 0; d < DECKS; ++d) {
     DeckRegler& r = w.reg[d];
-    r.trim = such("deck/%d/%s", d + 1, "trim");
-    r.fader = such("deck/%d/%s", d + 1, "fader");
-    r.pfl = such("deck/%d/%s", d + 1, "pfl");
-    r.ziel = such("deck/%d/%s", d + 1, "ziel");
-    r.xseite = such("deck/%d/%s", d + 1, "xseite");
+    // K8: the strip rows of player d + 1 are those of the container whose PULT_CONTAINER_PLAYER is d + 1 (player 3 -> pad/1/*); the stem and transport rows stay deck/<n>/*
+    const char* streifen = nullptr;
+    for (int c = 0; c < PULT_CONTAINER; ++c)
+      if (PULT_CONTAINER_PLAYER[c] == d + 1) streifen = PULT_CONTAINER_PFAD[c];
+    auto streifen_such = [&](const char* rest) {
+      if (!streifen) return static_cast<int16_t>(-1);
+      std::snprintf(p, sizeof p, "%s/%s", streifen, rest);
+      return static_cast<int16_t>(tab.suche(p));
+    };
+    r.trim = streifen_such("trim");
+    r.fader = streifen_such("fader");
+    r.pfl = streifen_such("pfl");
+    r.ziel = streifen_such("ziel");
+    r.xseite = streifen_such("xseite");
     for (int k = 0; k < STEM_ANZAHL; ++k) {
       char rest[16];
       std::snprintf(rest, sizeof rest, "stem/%s", STEM_NAMEN[k]);
@@ -98,6 +106,26 @@ DehnerOptionen dehner_optionen(const DeckWerk& w) {
 }
 }  // namespace
 
+void Kern::container_player_schliessen(int c, double beat0, bool hand) noexcept {
+  if (c < 0 || c >= PULT_CONTAINER) return;
+  const int d = PULT_CONTAINER_PLAYER[c] - 1;
+  DeckWerk& w = *decks_;
+  if (d < 0 || d >= DECKS || !w.deck[d].geladen()) return;   // nothing in the player: nothing the license guards (an empty player strip is free, see PrueferI3)
+  const int16_t f = w.reg[d].fader;
+  if (f < 0) return;
+  if (hand && deck_laeuft_offen(d + 1)) return;   // a running open deck is already audible; the hand does not silence it (the load refuses the same deck, deck_hoerbar)
+  sw_->cypher_fahrt_beenden(f);   // like the load: a running ramp of cypher must not reopen the fader afterwards
+  sw_->setze_direkt(f, dsp::kStummDb);
+  Ereignis x{};
+  x.art = Ereignis::REGLER;
+  x.sample = sample_;
+  x.beat = beat0;
+  kopiere(x.pfad, sw_->tabelle().def(f).pfad, sizeof x.pfad);
+  x.wert = sw_->wert(f);
+  sw::halter_text(sw_->halter(f), x.text, sizeof x.text);
+  melde(x);
+}
+
 void Kern::setze_keylock_maschine(DehnerMaschine m, bool fein) noexcept {
   decks_->maschine = m;
   decks_->bungee_fein = fein;
@@ -116,7 +144,7 @@ bool Kern::setze_keylock_vorgabe(bool an) {
   }
   w.keylock_soll = an;
   if (an)
-    for (int d = 0; d < KEYLOCK_QUELLEN; ++d)  // Task 7: auch die Loop-Boxen (Quelle 5 und 6)
+    for (int d = 0; d < KEYLOCK_QUELLEN; ++d)
       if (!w.dehner[d]) w.dehner[d] = dehner_neu(d + 1, dehner_optionen(w));
   w.antrieb_sync = w.maschine == DehnerMaschine::Bungee;
   w.keylock_stand.store(1, std::memory_order_release);
@@ -139,8 +167,6 @@ void Kern::keylock_uebernehmen() noexcept {
     w.deck[d].keylock(sample_, an && w.knopf);  // Keylock Task 3: der Regler keylock gilt auch für das späte Anhängen
 #endif
   }
-  for (int b = 0; b < LOOP_BOXEN; ++b)  // Task 7 (7a 3.6): die Boxen am Dehner ihrer Quelle; eine spielende setzt neu an
-    if (an && w.dehner[DECKS + b]) loops_->setze_keylock(b + 1, w.dehner[DECKS + b].get(), &w.post[DECKS + b]);  // (der Schalter der Boxen steht schon: keylock_verlauf setzt ihn auch ohne Dehner, Task 3)
   w.keylock_vorgabe = an;
   if (an) w.keylock_ab = sample_;
   w.keylock_stand.store(2, std::memory_order_release);
@@ -416,14 +442,13 @@ void kl_waechter(DeckWerk& w) {
           std::fprintf(stderr,
                        "Keylock-Wächter: Arbeits-Thread %s %d quittiert seit %lld ms nicht (Epoche %u vergeben, %u "
                        "quittiert); %s\n",
-                       d < DECKS ? "Deck" : "Box", d < DECKS ? d + 1 : d + 1 - DECKS, static_cast<long long>((jetzt - x.seit) / 1000000LL), e, q,
-                       d < DECKS ? "Laden und Entladen dieser Quelle warten"
-                                 : "abgelöste Loops dieser Box kommen erst nach der Quittung zurück");  // E-m9: Boxen warten nicht
+                       "Deck", d + 1, static_cast<long long>((jetzt - x.seit) / 1000000LL), e, q,
+                       "Laden und Entladen dieser Quelle warten");
         }
       } else {
         if (x.gemeldet)
           std::fprintf(stderr, "Keylock-Wächter: Arbeits-Thread %s %d quittiert wieder (Epoche %u) nach %lld ms\n",
-                       d < DECKS ? "Deck" : "Box", d < DECKS ? d + 1 : d + 1 - DECKS, q, static_cast<long long>((jetzt - x.seit) / 1000000LL));
+                       "Deck", d + 1, q, static_cast<long long>((jetzt - x.seit) / 1000000LL));
         x.offen = x.gemeldet = false;
       }
     }
@@ -466,7 +491,6 @@ void* kl_faden(void* p) {
 const char* kl_name(int platz, char* b, size_t n) {
   if (platz == 0) std::snprintf(b, n, "Vorbereiter");
   else if (platz <= DECKS) std::snprintf(b, n, "Arbeits-Thread Deck %d", platz);
-  else if (platz <= KEYLOCK_QUELLEN) std::snprintf(b, n, "Arbeits-Thread Box %d", platz - DECKS);
   else std::snprintf(b, n, "Wächter");
   return b;
 }
@@ -538,7 +562,6 @@ int Kern::keylock_prioritaet(int jack_prio) {
 
 void Kern::keylock_faeden_stoppen() {
   if (decks_) decks_->faeden.stoppe();
-  if (loops_) loops_->keylock_getrennt();  // Task 7 (K1): kein Faden liest mehr, die Loops der Boxen sind abholbar
 }
 
 bool Kern::keylock_faeden_laufen() const noexcept { return decks_->faeden.laeuft.load(std::memory_order_acquire); }
@@ -635,7 +658,7 @@ std::string Kern::keylock_schluss_json() const {
   }
   o += "],\"leser\":[";
   for (int q = 0; q < KEYLOCK_QUELLEN; ++q) {
-    const StreckLeser* l = q < DECKS ? &w.deck[q].keylock_leser() : loops_->keylock_leser(q - DECKS + 1);
+    const StreckLeser* l = &w.deck[q].keylock_leser();
     std::snprintf(b, sizeof b,
                   "%s{\"q\":%d,\"unterlauf\":%llu,\"hart\":%llu,\"verpasst\":%llu,\"aufgegeben\":%llu,\"gelesen\":%llu,"
                   "\"kurz\":%llu}",
@@ -672,6 +695,7 @@ bool Kern::ein_deck_laeuft() const noexcept {
 
 // §1.6: Kanalpegel = Trim + Fader; effektiv mit Bus oder Crossfader-Seite und master/pegel.
 float Kern::effektiv_db(int d) const noexcept {
+  if (!player_gehoert(d)) return dsp::kStummDb;   // K8: nobody hears a player whose container takes a module or nothing
   const DeckWerk& w = *decks_;
   const DeckRegler& r = w.reg[d];
   auto wert = [&](int16_t i, float vorgabe) { return i >= 0 ? sw_->wert(i) : vorgabe; };
@@ -691,6 +715,7 @@ float Kern::effektiv_db(int d) const noexcept {
 }
 
 bool Kern::deck_offen(int n) const noexcept {
+  if (!player_gehoert(n - 1)) return false;   // K8
   const DeckRegler& r = decks_->reg[n - 1];
   const float trim = r.trim >= 0 ? sw_->wert(r.trim) : 0.0f;
   const float fader = r.fader >= 0 ? sw_->wert(r.fader) : -200.0f;
@@ -1019,15 +1044,21 @@ void Kern::decks_uebernehmen() {
       if (r.stem[k] >= 0) sw_->setze_direkt(r.stem[k], 0.0f);
       dk.stem_db(k, 0.0f);
     }
-    if (r.fader >= 0) sw_->cypher_fahrt_beenden(r.fader);   // seq-fader-frei: a running ramp of cypher must not reopen the fader after the load
-    if (r.fader >= 0) sw_->setze_direkt(r.fader, dsp::kStummDb);
-    if (r.pfl >= 0) sw_->setze_direkt(r.pfl, 0.0f);
-    if (r.trim >= 0)
+    // K8: the strip is closed and trimmed only while its container hears the player; with art modul or leer the load leaves the strip alone
+#ifdef CYPHERDJ_MUTATION_DECKLADEN_IGNORIERT_ART
+    const bool streifen_frei = true;   // mutation: the art is ignored, the load closes the fader in art modul too
+#else
+    const bool streifen_frei = player_gehoert(d);
+#endif
+    if (streifen_frei && r.fader >= 0) sw_->cypher_fahrt_beenden(r.fader);   // seq-fader-frei: a running ramp of cypher must not reopen the fader after the load
+    if (streifen_frei && r.fader >= 0) sw_->setze_direkt(r.fader, dsp::kStummDb);
+    if (streifen_frei && r.pfl >= 0) sw_->setze_direkt(r.pfl, 0.0f);
+    if (streifen_frei && r.trim >= 0)
       sw_->setze_direkt(r.trim, dsp::trim_aus_lufs(ziel_lufs_, static_cast<float>(e.material->lufs_integriert)));
     // §5.7: die drei Werte nach dem Laden immer melden, auch wenn einer schon so stand (das Stellwerk meldet nur
     // Änderungen); so sieht jeder Abonnent Fader −200, PFL 0 und den Trim der neuen Fassung (Golden-Folge laden)
     for (int16_t rr : {r.fader, r.pfl, r.trim}) {
-      if (rr < 0) continue;
+      if (rr < 0 || !streifen_frei) continue;
       Ereignis x{};
       x.art = Ereignis::REGLER;
       x.sample = sample_;
@@ -1105,7 +1136,6 @@ void Kern::decks_zustand(int64_t n0, int n) {
   }
 }
 
-// Keylock 7b.3 (§5.5b): je Box mit Loop im Takt von /zustand/deck die Zähler ihres Lesers und Dehners (0 ohne Dehner).
 // Effekt-Sektion (Plan 2026-10-11-effekt-sektion.md): je Quellkanal mit laufendem Kompressor die Absenkung, 10 Hz
 void Kern::komp_zustand(int64_t n0, int n) {
   constexpr int64_t ABSTAND = 4800;
@@ -1118,33 +1148,6 @@ void Kern::komp_zustand(int64_t n0, int n) {
     e.sample = n0;
     std::snprintf(e.pfad, sizeof e.pfad, "%s", Mixer::kanal_name(k));
     e.wert = mixer_->komp_gr_db(k);
-    melde(e);
-  }
-}
-
-void Kern::boxen_zustand(int64_t n0, int n) {
-  const int64_t naechstes = (n0 + DECK_ZUSTAND_ABSTAND - 1) / DECK_ZUSTAND_ABSTAND * DECK_ZUSTAND_ABSTAND;
-  if (naechstes >= n0 + n || !loops_) return;
-  for (int b = 1; b <= LOOP_BOXEN; ++b) {
-    if (!loops_->loop(b)) continue;
-    Ereignis e{};
-    e.art = Ereignis::BOX;
-    e.deck = b;
-    e.sample = n0;
-    e.status = static_cast<int32_t>(loops_->status(b));
-    if (loops_->keylock_bereit(b)) {
-      const StreckLeser& l = *loops_->keylock_leser(b);
-      const DehnerBasis* d = keylock_dehner(DECKS + b);
-#ifdef CYPHERDJ_MUTATION_BOX_ZAEHLER_VERTAUSCHT
-      e.keylock_unterlauf = static_cast<int32_t>(std::min<uint64_t>(l.aufgegeben_n(), INT32_MAX));  // Fehlerfall
-      e.keylock_aufgegeben = static_cast<int32_t>(std::min<uint64_t>(l.unterlauf_n(), INT32_MAX));
-#else
-      e.keylock_unterlauf = static_cast<int32_t>(std::min<uint64_t>(l.unterlauf_n(), INT32_MAX));
-      e.keylock_aufgegeben = static_cast<int32_t>(std::min<uint64_t>(l.aufgegeben_n(), INT32_MAX));
-#endif
-      e.keylock_ring_voll = d ? static_cast<int32_t>(std::min<uint64_t>(d->ring_voll(), INT32_MAX)) : 0;
-      e.keylock_kein_platz = static_cast<int32_t>(std::min<uint64_t>(loops_->keylock_kein_platz(b), INT32_MAX));
-    }
     melde(e);
   }
 }
@@ -1300,8 +1303,8 @@ void Kern::decks_block(int64_t s0, int m) {
   const Karte& k = plan_.karte();
   for (int d = 0; d < DECKS; ++d) {
     Deck& dk = w.deck[d];
-    float* l = mixer_->eingang_l(d);
-    float* r = mixer_->eingang_r(d);
+    float* l = quell_.player_l[d];   // K8: the player buffer (stage 1); container_fuellen hands it to the container whose player this is
+    float* r = quell_.player_r[d];
     deck_planen(w, k, d, s0, sw_->ki_gestoppt());  // Keylock 6a: geplanter Start aus dem Stand
     int off = 0;
     for (;;) {
@@ -1368,8 +1371,7 @@ void Kern::decks_block(int64_t s0, int m) {
 // Keylock Task 3 (Fassung 4: EIN Knopf für alle Quellen). Der Verlauf des Reglers keylock (Schalter, nur Setzen) über
 // [s0, s0 + m): wechselt der Stand, gilt der neue ab dem ersten Sample mit dem neuen Wert. Die Decks bekommen ihn in
 // decks_block am Sample (Deck::keylock: aus -> was klang, blendet in den Varispeed; an -> Ansatz, Ring ab s_h), die
-// Loop-Boxen ab diesem Block (LoopBoxen::keylock: aus -> was im Ring klingt, blendet in den Varispeed; an -> Ansatz). Ein Hin und
-// Zurück im selben Block ändert nichts.
+// Ein Hin und Zurück im selben Block ändert nichts.
 void Kern::keylock_verlauf(int regler, const float* verlauf, int64_t s0, int m) {
   DeckWerk& w = *decks_;
   if (regler != w.knopf_regler || regler < 0 || !verlauf || m <= 0) return;
@@ -1384,13 +1386,9 @@ void Kern::keylock_verlauf(int regler, const float* verlauf, int64_t s0, int m) 
 #else
   w.knopf_offen = static_cast<uint8_t>((1u << DECKS) - 1u);
 #endif
-#ifndef CYPHERDJ_MUTATION_KEYLOCK_KNOPF_OHNE_BOXEN
-  loops_->keylock(ende, s0);  // Task 7: mit Dehner am Blockanfang (der Leser kennt den Ring dieses Blocks)
-#endif
 }
 
 bool Kern::keylock_knopf() const noexcept { return decks_->knopf; }
-bool Kern::keylock_boxen() const noexcept { return loops_->keylock(); }
 
 void Kern::decks_verlauf(int regler, const float* verlauf) {
   DeckWerk& w = *decks_;
@@ -1469,12 +1467,22 @@ void Kern::decks_set_neu() {
 // verdrahtet), damit dieses Objekt schon vor dem Stellwerk selbst existieren kann (core.cpp: erst Prüfer, dann
 // Stellwerk). Kein I/O, keine Allokation: nur Feldzugriffe auf das schon geladene Material.
 bool Kern::DeckModellImpl::deck_nr_von_kanal(int kanal, int& deck_nr) const {
+  // K8: `kanal` is a container strip (deck/1, deck/2, pad/1, pad/2) whose art is player; the answer is the player number of that container (PULT_CONTAINER_PLAYER)
   if (kanal < 0 || kanal >= tab_.kanaele()) return false;
   const char* name = tab_.kanal_name(kanal);
-  if (!name || std::strncmp(name, "deck/", 5) != 0 || !name[5] || name[6]) return false;
-  if (name[5] < '1' || name[5] > '4') return false;
-  deck_nr = name[5] - '0';
-  return true;
+  if (!name) return false;
+  for (int c = 0; c < PULT_CONTAINER; ++c) {
+    if (std::strcmp(name, PULT_CONTAINER_PFAD[c]) != 0) continue;
+    if (art_[c] != CONTAINER_ART_PLAYER) return false;
+    deck_nr = PULT_CONTAINER_PLAYER[c];
+    return true;
+  }
+  return false;
+}
+
+int Kern::DeckModellImpl::player(int kanal) const {
+  int n = 0;
+  return deck_nr_von_kanal(kanal, n) ? n : 0;
 }
 
 bool Kern::DeckModellImpl::inhalt(int kanal, cypherdj::stellwerk::Inhalt& aus) const {

@@ -13,15 +13,15 @@ const cfg = { arbeitsbestand: AB };
 test('ki_stopp (E-a): alle cypher-Teile ab (ki_stopp), kein Fader gesenkt, danach ki_gestoppt; frei nur von andreas', () => {
   const r = fahre([
     ...deckRein(3, { id0: 10, ab: 8, mid: ID, quelle: 'cypher' }),
-    sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'deck/3,erz/1']),
+    sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'pad/1,deck/2']),
     sende(S(9), teil(2, 'cypher', 'p1', 0, 'deck/1/eq/mitte', 16, 16, -10)),
     sende(S(9), teil(3, 'cypher', 'p1', 1, 'deck/1/eq/hoch', 40, 0, -10)),
     sende(S(20), ['/k/ki/stopp', 'hs', 4, 'leitstand']),
     erwarte(S(20) + 512, q(2, 'cypher', 7, null, 'ki_stopp')),
     erwarte(S(20) + 512, q(3, 'cypher', 7, null, 'ki_stopp')),
     erwarte(S(20) + 512, ['/e/ki', 'ish', 1, 'ki_stopp', null]),
-    wert(S(22) + 256, 'deck/3/fader', 0),     // Entscheidung E-a: die KI-Spur (deck/3) wird nicht gesenkt (vorher −30, dann −200)
-    wert(S(24) + 512, 'deck/3/fader', 0),
+    wert(S(22) + 256, 'pad/1/fader', 0),     // Entscheidung E-a: die KI-Spur (pad/1) wird nicht gesenkt (vorher −30, dann −200)
+    wert(S(24) + 512, 'pad/1/fader', 0),
     sende(S(26), teil(5, 'cypher', 'p2', 0, 'deck/1/eq/tief', 30, 0, -3)),
     erwarte(S(26) + 512, q(5, 'cypher', 6, null, 'ki_gestoppt')),
     sende(S(27), ['/k/ki/frei', 'hs', 6, 'leitstand']),
@@ -64,9 +64,9 @@ test('LED, Kiste, Mapping, Latenz, Stufe, Vorschlagskanal: angenommen; falsche N
 
 test('E3 P1: /k/ki/spur nimmt für Spuren nur spur/0; spur/1, spur/135, spur/10 gehen den Weg eines unbekannten Kanals; der Stopp senkt keine', () => {
   const r = fahre([
-    sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'erz/1']),
+    sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'deck/2']),
     sende(1000, ['/k/ki/spur', 'hss', 2, 'andreas', 'spur/1,spur/2']),
-    sende(1000, ['/k/ki/spur', 'hss', 3, 'andreas', 'spur/0']),         // S2 erneuert, erz/1 bleibt
+    sende(1000, ['/k/ki/spur', 'hss', 3, 'andreas', 'spur/0']),         // S2 erneuert, deck/2 bleibt
     sende(1000, ['/k/ki/spur', 'hss', 4, 'andreas', 'spur/1x']),
     sende(1000, ['/k/ki/spur', 'hss', 5, 'andreas', 'spur/']),
     sende(1000, ['/k/ki/spur', 'hss', 8, 'andreas', 'spur/1']),
@@ -81,9 +81,9 @@ test('E3 P1: /k/ki/spur nimmt für Spuren nur spur/0; spur/1, spur/135, spur/10 
     erwarte(1600, q(11, 'andreas', 6, null, 'unbekannter_regler')),
     erwarte(1600, q(4, 'andreas', 6, null, 'unbekannter_regler')),
     erwarte(1600, q(5, 'andreas', 6, null, 'unbekannter_regler')),
-    sende(S(2), teil(6, 'andreas', 'p', 0, 'erz/1/fader', 4, 0, -6)),
+    sende(S(2), teil(6, 'andreas', 'p', 0, 'deck/2/fader', 4, 0, -6)),
     sende(S(10), ['/k/ki/stopp', 'hs', 7, 'andreas']),
-    wert(S(16), 'erz/1/fader', -6),   // E-a: die Listen senken nichts, jeder Fader behält seinen Wert (vorher alle −200 außer spur/2)
+    wert(S(16), 'deck/2/fader', -6),   // E-a: die Listen senken nichts, jeder Fader behält seinen Wert (vorher alle −200 außer spur/2)
     wert(S(16), 'spur/1/fader', 0),
     wert(S(16), 'spur/3/fader', 0),
     wert(S(16), 'spur/2/fader', 0),
@@ -94,33 +94,33 @@ test('E3 P1: /k/ki/spur nimmt für Spuren nur spur/0; spur/1, spur/135, spur/10 
 test('E3 P1 Zustand: spur/0 lässt die Kanal-Liste stehen, eine abgelehnte Liste ändert sie nicht, die leere Liste leert sie', () => {
   const kanaele = (schritte) => { const r = fahre([...schritte, wert(12000, 'spur/1/fader', 0)], { cfg });   // der letzte Schritt lässt den Kern die Befehle abarbeiten
     gruen(r); return r.kern.ki.kanaele; };
-  assert.deepEqual(kanaele([sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'erz/1,spur/0'])]), ['erz/1'], 'Kanal neben spur/0 übernommen');
+  assert.deepEqual(kanaele([sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'deck/2,spur/0'])]), ['deck/2'], 'Kanal neben spur/0 übernommen');
   assert.deepEqual(kanaele([
-    sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'erz/1']),
-    sende(4000, ['/k/ki/spur', 'hss', 2, 'andreas', 'spur/0']),         // S2 erneuert: erz/1 bleibt
-  ]), ['erz/1'], 'spur/0 allein lässt die Kanäle stehen');
+    sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'deck/2']),
+    sende(4000, ['/k/ki/spur', 'hss', 2, 'andreas', 'spur/0']),         // S2 erneuert: deck/2 bleibt
+  ]), ['deck/2'], 'spur/0 allein lässt die Kanäle stehen');
   assert.deepEqual(kanaele([
-    sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'erz/1']),
-    sende(4000, ['/k/ki/spur', 'hss', 2, 'andreas', 'erz/2,spur/4']),   // abgelehnt: auch erz/2 wird nicht übernommen
+    sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'deck/2']),
+    sende(4000, ['/k/ki/spur', 'hss', 2, 'andreas', 'pad/2,spur/4']),   // abgelehnt: auch pad/2 wird nicht übernommen
     sende(8000, ['/k/ki/spur', 'hss', 3, 'andreas', 'spur/0,spur/1']),
-  ]), ['erz/1'], 'abgelehnte Liste ändert nichts');
+  ]), ['deck/2'], 'abgelehnte Liste ändert nichts');
   assert.deepEqual(kanaele([
-    sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'erz/1']),
+    sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'deck/2']),
     sende(4000, ['/k/ki/spur', 'hss', 2, 'leitstand', '']),
   ]), [], 'die leere Liste leert die Kanäle');
 });
 
 test('E3 P1: spur/0 neben Kanälen wird angenommen, spur/4 abgelehnt, die leere Liste leert die Kanäle; keine Liste senkt etwas', () => {
   const r = fahre([
-    sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'erz/1,spur/0']),
+    sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'deck/2,spur/0']),
     sende(1000, ['/k/ki/spur', 'hss', 2, 'andreas', 'spur/0']),
     sende(1000, ['/k/ki/spur', 'hss', 3, 'andreas', 'spur/4']),
     sende(1000, ['/k/ki/spur', 'hss', 4, 'leitstand', '']),
     erwarte(1600, q(1, 'leitstand', 3)), erwarte(1600, q(2, 'andreas', 3)), erwarte(1600, q(4, 'leitstand', 3)),
     erwarte(1600, q(3, 'andreas', 6, null, 'unbekannter_regler')),
-    sende(S(2), teil(5, 'andreas', 'p', 0, 'erz/1/fader', 4, 0, -6)),
+    sende(S(2), teil(5, 'andreas', 'p', 0, 'deck/2/fader', 4, 0, -6)),
     sende(S(10), ['/k/ki/stopp', 'hs', 6, 'andreas']),
-    wert(S(16), 'erz/1/fader', -6),
+    wert(S(16), 'deck/2/fader', -6),
     wert(S(16), 'spur/2/fader', 0),
     wert(S(16), 'spur/4/fader', 0),   // E-a: auch die Spur in der Liste (spur/4) bleibt offen (vorher −200)
   ], { cfg });

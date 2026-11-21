@@ -596,7 +596,7 @@ if [ "$STRUDEL" = 1 ]; then  # Plan 2026-09-27 + Studio S1: drei Strudel-Erzeuge
       /usr/bin/node --permission --allow-fs-read="$DJK" --allow-fs-read="$HOME/strudel" \
       --allow-fs-read="$KITS" "${KR[@]}" --allow-fs-read="$ORD" --allow-fs-write="$ORD" \
       "$DJK/generator/generator.mjs" --kern-port "$P_KERN" --abo-port "$P" ${KIT_ORDNER:+--kit-ordner "$KIT_ORDNER"} --kit "$K" $ZUSATZ $ZIEL \
-      --name "erzeuger$N" --strom "$s" --kanal "erz/$s" --muster "$ORD/strom1.js" 2>&1 | sed 's/^/    /' >&2
+      --name "erzeuger$N" --strom "$s" --muster "$ORD/strom1.js" 2>&1 | sed 's/^/    /' >&2
     UNITS+=("$U")
     warte 10 "$U" lauscht u "$P" || abbruch "$(w "erzeuger $s does not listen on udp $P")" "$U"
   done

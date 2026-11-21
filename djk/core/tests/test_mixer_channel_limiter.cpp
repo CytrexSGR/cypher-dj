@@ -4,7 +4,7 @@
 //  (B)   the setter: vorhalt 0 builds nothing (L = 0); 0.5 ms gives 26, with echtspitze 38, 1.5 ms gives 74; L is the limiter's own latenz_samples()
 //  (G)   the getter kanal_limiter_reduktion_db(bus): 0 when not built, 0 with lim/an 0, 0 for a bus outside 0..3 (no indexing), about 9 dB for a
 //        +6 dBFS sine under a -3 dB ceiling, only on the bus that carries it
-//  (L1)  not built (vorhalt 0): lim/an 1 changes nothing (bit-identical to a mixer that never saw lim/an), L = 0. The golden digest: test_mixer_golden
+//  (L1)  not built (vorhalt 0): lim/an 1 changes nothing (bit-identical to a mixer that never saw lim/an), L = 0. The golden digest: test_mixer_orakel
 //  (L2)  built, lim/an 0: the bus output equals the input of the unbuilt mixer delayed by L bit for bit (tap and master); positive control lim/an 1
 //        with a +6 dBFS sine differs
 //  (L3)  on: a +6 dBFS sine (the bus fader at +6 dB after it) peaks at decke - 0.001 dB at the master, at 100 Hz and 1 kHz; with true peak too
@@ -46,21 +46,21 @@ struct Aufnahme {
   std::vector<float> tap, ml, mr;   // bus sum at the tap (master_summe_l), master out left/right
 };
 
-// A mixer with the limiters built as asked (vorhalt 0 = nothing built), bus `bus` fed from erz/1, all faders at 0 dB.
+// A mixer with the limiters built as asked (vorhalt 0 = nothing built), bus `bus` fed from deck/2, all faders at 0 dB.
 struct Aufbau {
   Lauf l;
   int bus;
   Aufbau(double vorhalt_ms, bool echt, int bus_) : bus(bus_) {
     l.m->setze_kanal_limiter(vorhalt_ms, echt);
-    l.setze(ERZ1, "ziel", static_cast<float>(bus));
+    l.setze(DECK2, "ziel", static_cast<float>(bus));
   }
   // one block of n samples; src(i, t) = source sample at absolute sample t; the block is recorded into a
   template <class F>
   void block(int n, F&& src, Aufnahme& a) {
     for (int i = 0; i < n; ++i) {
       const float v = src(l.t + i);
-      l.m->eingang_l(ERZ1)[i] = v;
-      l.m->eingang_r(ERZ1)[i] = v;
+      l.m->eingang_l(DECK2)[i] = v;
+      l.m->eingang_r(DECK2)[i] = v;
     }
     l.verarbeite(n);
     a.tap.insert(a.tap.end(), l.m->master_summe_l(), l.m->master_summe_l() + n);
@@ -475,22 +475,22 @@ void l8_alloc() {
     setze_bus(l, b, "lim/an", 1.0f);
     setze_bus(l, b, "lim/decke", -6.0f);
   }
-  ziel_bus(l, ERZ1, 1);
-  ziel_bus(l, ERZ2, 2);
-  ziel_bus(l, PAD1, 3);
+  ziel_bus(l, DECK2, 1);
+  ziel_bus(l, PAD1, 2);
+  ziel_bus(l, PAD2, 3);
   ziel_bus(l, DECK1, 4);
-  l.setze(ERZ1, "send/2", -6.0f);
+  l.setze(DECK2, "send/2", -6.0f);
   l.setze(BUS1, "send/2", -9.0f);
   const int groessen[] = {1, 256, 17, 1024, 64, 255, 512, 3, 128, 1000, 33, 32, 800, 2, 129};
   AbfangZahlen summe;
   long reduziert = 0, nicht_endlich = 0;
   for (long b = 0; b < 6000; ++b) {
     const int n = groessen[b % 15];
-    for (int k : {DECK1, ERZ1, ERZ2, PAD1}) l.rausch(k, 1.5, n);
+    for (int k : {DECK1, DECK2, PAD1, PAD2}) l.rausch(k, 1.5, n);
     if (b % 37 == 0) for (int bus = 1; bus <= 4; ++bus) setze_bus(l, bus, "lim/an", static_cast<float>((b / 37 + bus) % 2));
     if (b % 53 == 0) for (int bus = 1; bus <= 4; ++bus) setze_bus(l, bus, "lim/decke", static_cast<float>(-3 - (b % 7) * 6));
     if (b % 61 == 0) for (int bus = 1; bus <= 4; ++bus) setze_bus(l, bus, "lim/abklingen", static_cast<float>(1 + (b % 11) * 150));
-    if (b % 1500 == 7) l.m->eingang_l(ERZ1)[0] = NAN;   // the F01 guard (resets the limiters) is in the window too
+    if (b % 1500 == 7) l.m->eingang_l(DECK2)[0] = NAN;   // the F01 guard (resets the limiters) is in the window too
     abfang_an();
     l.m->verarbeite(n, l.ml, l.mr, l.cl, l.cr);
     abfang_aus();
@@ -523,11 +523,11 @@ void f01_setzt_limiter_zurueck() {
       for (long t = 0; t < END; t += n) {
         for (int i = 0; i < n; ++i) {
           const float v = static_cast<float>((t + i < T_NAN ? 2.0 : 0.1) * std::sin(2.0 * PI * 1000.0 * static_cast<double>(t + i) / 48000.0));
-          a.l.m->eingang_l(ERZ1)[i] = v;
-          a.l.m->eingang_r(ERZ1)[i] = v;
+          a.l.m->eingang_l(DECK2)[i] = v;
+          a.l.m->eingang_r(DECK2)[i] = v;
         }
         if (t == T_NAN) {
-          a.l.m->eingang_l(ERZ1)[0] = NAN;
+          a.l.m->eingang_l(DECK2)[0] = NAN;
           treffer_vorher = static_cast<int>(a.l.m->nan_treffer());
         }
         a.l.verarbeite(n);
@@ -552,14 +552,14 @@ void e_ohr_huellen() {
       int L = 0;
       for (int gebaut = 0; gebaut < 2; ++gebaut) {
         Aufbau a(gebaut ? v : 0.0, false, bus == 0 ? 1 : bus);
-        if (bus == 0) ziel_bus(a.l, ERZ1, 0);
+        if (bus == 0) ziel_bus(a.l, DECK2, 0);
         L = a.l.m->kanal_latenz();
         long k_abgriff = -1, k_master = -1;
         for (long t = 0; t < 4096; t += 256) {
-          for (int i = 0; i < 256; ++i) a.l.m->eingang_l(ERZ1)[i] = a.l.m->eingang_r(ERZ1)[i] = (t + i == 1000) ? 0.5f : 0.0f;
+          for (int i = 0; i < 256; ++i) a.l.m->eingang_l(DECK2)[i] = a.l.m->eingang_r(DECK2)[i] = (t + i == 1000) ? 0.5f : 0.0f;
           a.l.verarbeite(256);
           for (int i = 0; i < 256; ++i) {
-            if (k_abgriff < 0 && std::fabs(a.l.m->kanalzug(ERZ1).abgriff(0)[i]) > 0.1f) k_abgriff = t + i;
+            if (k_abgriff < 0 && std::fabs(a.l.m->kanalzug(DECK2).abgriff(0)[i]) > 0.1f) k_abgriff = t + i;
             if (k_master < 0 && std::fabs(a.l.m->master_summe_l()[i]) > 0.1f) k_master = t + i;
           }
         }
@@ -580,7 +580,7 @@ long xfader_einsatz(bool bus, double v, int n, int* L_aus) {
   l.m->setze_kanal_limiter(v, false);
   *L_aus = l.m->kanal_latenz();
   if (bus) {
-    l.setze(ERZ1, "ziel", 1.0f);
+    l.setze(DECK2, "ziel", 1.0f);
     l.setze(BUS1, "xseite", 0.0f);
   } else {
     l.setze(DECK1, "xseite", 0.0f);
@@ -589,7 +589,7 @@ long xfader_einsatz(bool bus, double v, int n, int* L_aus) {
   std::vector<float> tap;
   for (long t = 0; t < 8192; t += n) {
     if (t == T0) l.setze("xfader", 1.0f);   // side A weight 1 -> 0
-    for (int i = 0; i < n; ++i) l.m->eingang_l(bus ? ERZ1 : DECK1)[i] = l.m->eingang_r(bus ? ERZ1 : DECK1)[i] = 0.5f;
+    for (int i = 0; i < n; ++i) l.m->eingang_l(bus ? DECK2 : DECK1)[i] = l.m->eingang_r(bus ? DECK2 : DECK1)[i] = 0.5f;
     l.verarbeite(n);
     tap.insert(tap.end(), l.m->master_summe_l(), l.m->master_summe_l() + n);
   }
@@ -644,7 +644,7 @@ void i_busse_unabhaengig() {
   for (int n : GROESSEN) {
     Lauf l;
     l.m->setze_kanal_limiter(0.5, false);
-    const int quellen[4] = {ERZ1, ERZ2, PAD1, DECK1};
+    const int quellen[4] = {DECK2, PAD1, PAD2, DECK1};
     const float decken[4] = {-3.0f, -6.0f, -9.0f, -12.0f};
     const double freq[4] = {440.0, 700.0, 1100.0, 1700.0};
     for (int b = 1; b <= 4; ++b) {
@@ -691,7 +691,7 @@ void u_ueberschwingen() {
           for (long t = 0; t < END; t += n) {
             for (int i = 0; i < n; ++i) {
               const float x = static_cast<float>(2.0 * std::sin(2.0 * PI * 100.0 * static_cast<double>(t + i) / 48000.0 + PHASE));
-              a.l.m->eingang_l(ERZ1)[i] = a.l.m->eingang_r(ERZ1)[i] = x;
+              a.l.m->eingang_l(DECK2)[i] = a.l.m->eingang_r(DECK2)[i] = x;
             }
             if (fall == 0 && t == T0) setze_bus(a.l, bus, "lim/an", 1.0f);                       // A: 0 -> 1
             if (fall == 2) {                                                                     // B: on, then 1 -> 0 -> 1 within 64 samples
@@ -699,7 +699,7 @@ void u_ueberschwingen() {
               if (t == T0) setze_bus(a.l, bus, "lim/an", 0.0f);
               if (t == T0 + (n >= 64 ? n : 64)) { setze_bus(a.l, bus, "lim/an", 1.0f); t_ref = t; }
             }
-            if (fall == 1 && t == T0) a.l.m->eingang_l(ERZ1)[0] = NAN;                           // C: the F01 guard
+            if (fall == 1 && t == T0) a.l.m->eingang_l(DECK2)[0] = NAN;                           // C: the F01 guard
             a.l.verarbeite(n);
             tap.insert(tap.end(), a.l.m->master_summe_l(), a.l.m->master_summe_l() + n);
           }

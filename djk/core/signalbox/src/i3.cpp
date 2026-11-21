@@ -1,6 +1,7 @@
 #include "cypherdj/signalbox/i3.h"
 
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 
 namespace cypherdj::stellwerk {
@@ -105,21 +106,32 @@ Grund PrueferI3::vor_teilstart(const Sicht& s, const TeilSicht& t) {
   // für Cyphers /spur und /regler auf erz/<n>, Studio S6 F4), Stop Cypher dort inkl. Wirt und Muster. Deck-Kanäle bleiben gesperrt.
   const char* kanal_name = s.tabelle().kanal_name(d.kanal);
   if (ist_erzeuger_kanal(kanal_name)) return Grund::kein;
-  // Andreas 2026-10-05: pad/* wie erz/*; die Herkunftsprüfung (eigener Mitschnitt) liegt in der Seite.
-  if (ist_pad_kanal(kanal_name)) return Grund::kein;
 
-  // Andreas 2026-11-18 (SEQ deck): a deck channel with NOTHING loaded carries no track; the only thing that can sound there is what the SEQ deck of
-  // that place plays into the strip (ADR 038), Cyphers own patterns. The core cannot tell SEQ from "empty": the page decides, as for pad/*.
-  // Stateless on purpose (no flag that could go stale). A load closes the channel again (core_deck.cpp), so a track never meets an open fader here.
+  // Andreas 2026-11-18 (SEQ deck): a channel that carries NO track sounds only what the SEQ deck of that place plays into the strip (ADR 038), Cyphers own patterns.
+  // Container core K8 (D-V6): "carries a track" is asked of the player behind the strip: the container input must be `player` (art modul and leer are free,
+  // whatever the player holds) and the player must hold a track. Stateless on purpose (no flag that could go stale). A load closes the strip again
+  // (core_deck.cpp), so a track never meets an open fader here.
+  const int pl = deck_.player(d.kanal);
   Inhalt akt{};
-  const bool hat_inhalt = deck_.inhalt(d.kanal, akt);
-  if (ist_deck_kanal(kanal_name) && !hat_inhalt) return Grund::kein;
+  const bool hat_inhalt = pl > 0 && deck_.inhalt(d.kanal, akt);
+  if (pl == 0 && ist_deck_kanal(kanal_name)) return Grund::kein;   // a deck strip without a player (K8: art modul or leer)
+  if (pl > 0 && !hat_inhalt) return Grund::kein;                   // a player strip with nothing loaded
+  // Andreas 2026-10-05: pad/* wie erz/*; die Herkunftsprüfung (eigener Mitschnitt) liegt in der Seite. Seit K8 gilt das für die Streifen ohne Player;
+  // trägt ein pad/<n> Streifen einen Player (Container C, D mit art player), gilt wie für jedes Deck der Hörschein.
+  if (pl == 0 && ist_pad_kanal(kanal_name)) return Grund::kein;
 
   if (!t.hoerschein || !t.hoerschein[0]) return Grund::kein_hoerschein;
   const Schein* sch = reg_.finde(t.hoerschein);
   if (!sch) return Grund::kein_hoerschein;
 
-  if (!text_gleich(sch->kanal, kanal_name, sizeof(sch->kanal))) return Grund::hoerschein_anderer_kanal;
+  // K8 (C7): the key is the player name, not the container path (a pass for deck/3 holds on pad/1 while container C plays player 3)
+  char schluessel[16];
+  if (pl > 0) std::snprintf(schluessel, sizeof schluessel, "deck/%d", pl);
+  else std::snprintf(schluessel, sizeof schluessel, "%s", kanal_name);
+#ifdef CYPHERDJ_MUTATION_HOERSCHEIN_NACH_CONTAINERPFAD
+  std::snprintf(schluessel, sizeof schluessel, "%s", kanal_name);   // error case: the pass is compared with the container path
+#endif
+  if (!text_gleich(sch->kanal, schluessel, sizeof(sch->kanal))) return Grund::hoerschein_anderer_kanal;
 
   if (!hat_inhalt || !text_gleich(akt.material_id, sch->inhalt.material_id, sizeof(akt.material_id)) ||
       akt.bpm_milli != sch->inhalt.bpm_milli || akt.fassung != sch->inhalt.fassung) {
@@ -129,7 +141,7 @@ Grund PrueferI3::vor_teilstart(const Sicht& s, const TeilSicht& t) {
   if (std::fabs(s.uhr().bpm(t.start_sample) / sch->bpm - 1.0) > 0.005) return Grund::hoerschein_anderes_tempo;
   if (s.uhr().beat(t.start_sample) > sch->gueltig_bis + 1e-9) return Grund::hoerschein_abgelaufen;
 
-  if (ist_deck_kanal(kanal_name)) {
+  if (pl > 0) {
     const double p = deck_.quell_beat_bei(d.kanal, t.start_sample);
     if (!(p >= sch->quell_von - 1e-9 && p <= sch->quell_bis + 64.0 + 1e-9)) return Grund::hoerschein_anderer_abschnitt;
   }

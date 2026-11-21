@@ -1,21 +1,34 @@
-// Loop deck commands (index 1.1, plan loop-deck M2): create a deck (turning a module of the same place into cell 1), set its grid, clear it, and
+// Loop deck commands (index 1.1, plan loop-deck M2): create a deck (placed by `plaetze`), set its grid, clear it, and
 // set, change and move cells. A deck is a live-container group `LOOP <platz>` (marker `loopdeck`) with 4 audio tracks `L<platz>.1..4`, each with 8 cells.
 // The model rules (ids, ranges, who may carry cells) are checked by the model at the end of every command list; the handlers here check what a
 // refusal needs a reason for. Playback is not touched here (the translator reads the cells).
-import path from 'node:path';
 import {
-  LOOP_RASTER_BEATS, LOOP_ZELLEN, loopDjNr,
-  LOOP_SEND_MAX, FADER_MIN, MAX_INSERTS_PRO_STRANG, LOOP_SPUREN, LOOP_FARBEN, TEMPO_MIN, TEMPO_MAX, istObjekt, loopDeckGruppe,
+  LOOP_RASTER_BEATS, LOOP_ZELLEN, ersterFreierPlatz,
+  LOOP_SEND_MAX, FADER_MIN, MAX_INSERTS_PRO_STRANG, LOOP_SPUREN, LOOP_FARBEN, istObjekt, loopDeckGruppe,
   loopDeckSpuren, neueId,
   type Gruppe, type LoopRaster, type Projekt, type Spur, type Zelle,
 } from './model.ts';
-import { LOOP_SPUR, liveSlots } from './live.ts';
-import { ab, erlaube, flagge, gruppeVon, idArg, PRO_BEFEHL, spurVon, text, zahl, type Args, type Handler } from './commands_helpers.ts';
+import { ab, erlaube, flagge, gruppeVon, idArg, PRO_BEFEHL, spurVon, text, zahl, type Args, type Handler, type Kontext } from './commands_helpers.ts';
 
 // The undo labels of the commands (the routes that send them use these texts)
+// The deck group `LOOP <platz>` with its four tracks, marker and cells; no place is written here (the caller places it). `platz` is the identity 1|2.
+export function legeLoopdeckAn(p: Projekt, platz: 1 | 2, raster: LoopRaster, ctx: Kontext): Gruppe {
+  const ids: string[] = [];
+  for (let i = 1; i <= LOOP_SPUREN; i++) {
+    PRO_BEFEHL.spur_neu(p, { befehl: 'spur_neu', art: 'audio', name: `L${platz}.${i}` }, ctx);
+    ids.push(p.spuren[p.spuren.length - 1].id);
+  }
+  PRO_BEFEHL.gruppenspur_neu(p, { befehl: 'gruppenspur_neu', name: `LOOP ${platz}`, mitglieder: ids }, ctx);
+  const g = p.gruppen![p.gruppen!.length - 1];
+  g.loopdeck = { platz, raster };
+  // `filter: 0` and the eq zeros are written so the first knob drag is a replace (only replaces coalesce in the history)
+  for (const id of ids) { const s = spurVon(p, id); s.zellen = keineZellen(); s.filter = 0; s.eq = { tief: 0, mitte: 0, hoch: 0 }; }
+  return g;
+}
+
 export const LOOPDECK_LABEL = {
   loopdeck_neu: 'New loop deck', loopdeck_leeren: 'Clear loop deck', zelle_setzen: 'Set cell', zelle_aendern: 'Change cell', zelle_bewegen: 'Move cell',
-  loopdeck_aendern: 'Loop deck grid', loopdeck_plaetze: 'Loop deck places', loopdeck_send: 'Loop deck send', loopdeck_effekt: 'Loop deck effect',
+  loopdeck_aendern: 'Loop deck grid', loopdeck_send: 'Loop deck send', loopdeck_effekt: 'Loop deck effect',
 } as const;
 
 // The HALL and DELAY return of a deck (index 1.3): a short room and a dotted 1/8 delay with feedback 0.35 (graph knob 1 0..0.9, knob 2 level 0..2)
@@ -49,49 +62,13 @@ function stelleArg(x: unknown, k: string): { spur_id: string; index: number } {
   return { spur_id: idArg(x as Args, 'spur_id'), index: indexArg(x.index, `${k}.index`) };
 }
 
-// The cell a module's main loop becomes (M5): the Loop track of the module group and its loop clip (not the lead-in: that one has a warp offset).
-// beats and bpm come from the clip's warp (the markers map the source seconds to beats); the module's own numbers are the fallback.
-function zelleAusModul(p: Projekt, g: Gruppe, ordner?: string): Omit<Zelle, 'id'> {
-  const nein = (grund: string): never => ab('modul_nicht_umwandelbar', `the module ${g.id} cannot become a cell: ${grund}; it is left untouched`);
-  const spur = p.spuren.find((s) => s.ausgang?.id === g.id && s.name === LOOP_SPUR);
-  if (!spur) return nein('it has no Loop track');
-  const clips = spur.clips.flatMap((c) => (c.art === 'audio' ? [c] : []));
-  const clip = clips.find((c) => !c.warp?.versatz_beats) ?? clips[0];
-  if (!clip || !g.modul) return nein('its Loop track holds no audio clip');
-  const m = g.modul;
-  const ende = clip.warp?.marker?.at(-1);
-  const viertel = (b: number): boolean => Number.isFinite(b) && b >= 0.25 && b <= 64 && Number.isInteger(b * 4);
-  if (ende && Number.isFinite(ende[1]) && ende[1] > 64) return nein(`its loop is ${ende[1]} beats long (a cell holds at most 64)`);
-  if (!ende && Number.isFinite(m.laenge_beats) && m.laenge_beats > 64) return nein(`its loop is ${m.laenge_beats} beats long (a cell holds at most 64)`);
-  const beats = ende && viertel(ende[1]) ? ende[1] : viertel(m.laenge_beats) ? m.laenge_beats : null;
-  if (beats === null) return nein('its loop length is not a multiple of a quarter beat between 0.25 and 64');
-  const roh = ende && ende[0] > 0 ? (ende[1] * 60) / ende[0] : m.basis_bpm;
-  const bpm = Math.min(TEMPO_MAX, Math.max(TEMPO_MIN, Number.isFinite(roh) ? roh : m.basis_bpm));
-  // the module export writes an absolute path inside the project folder (areas/live/export.ts legeAb): the cell keeps it project-relative
-  let hinweis = clip.quelle.pfad_hinweis;
-  if (ordner !== undefined && path.isAbsolute(hinweis)) {
-    const r = path.relative(ordner, hinweis);
-    if (r !== '' && !r.startsWith('..') && !path.isAbsolute(r)) hinweis = r.split(path.sep).join('/');
-  }
-  const relativ = hinweis !== '' && !hinweis.startsWith('/') && !hinweis.includes('\\') && !hinweis.includes('\0')
-    && !hinweis.split('/').some((t) => t === '..' || t === '');
-  return { name: (m.titel.trim() || g.name).slice(0, 64), farbe: 0, art: 'loop', sha256: clip.quelle.sha256, beats, bpm,
-    gain_db: Math.min(12, Math.max(-60, clip.gain_db)), ...(relativ ? { pfad_hinweis: hinweis } : {}) };
-}
-
-// Removes a group with everything that plays into it (tracks, sub-groups), deepest first.
-function entferneBaum(p: Projekt, gruppeId: string, ctx: Parameters<Handler>[2]): void {
-  const kinder = (p.gruppen ?? []).filter((x) => x.ausgang?.id === gruppeId).map((x) => x.id);
-  for (const k of kinder) entferneBaum(p, k, ctx);
-  for (const s of p.spuren.filter((x) => x.ausgang?.id === gruppeId)) PRO_BEFEHL.spur_loeschen(p, { befehl: 'spur_loeschen', spur_id: s.id }, ctx);
-  PRO_BEFEHL.gruppenspur_loeschen(p, { befehl: 'gruppenspur_loeschen', gruppe_id: gruppeId }, ctx);
-}
-
 // the place of the deck a track belongs to
 const deckPlatz = (p: Projekt, s: Spur): 1 | 2 => (p.gruppen ?? []).find((g) => g.id === s.ausgang?.id)?.loopdeck?.platz
   ?? ab('kein_loopdeck', `${s.id} is not a track of a loop deck`);
 
 export const LOOPDECK = {
+  // `platz` is the deck identity (1 or 2), not a place. The deck takes the first `leer` or `track` place scanning 3, 4, 1, 2; with none free it is
+  // created parked (silent, nothing is displaced). platz_setzen loops places or moves it later.
   loopdeck_neu(p, a, ctx) {
     erlaube(a, 'platz', 'raster');
     if (!p.live) ab('kein_liveprojekt', 'a loop deck sits in the live container');
@@ -99,47 +76,15 @@ export const LOOPDECK = {
     if (platz !== 1 && platz !== 2) ab('argument_ungueltig', 'platz: 1 or 2 expected');
     const raster = rasterArg(a, true) ?? 'takt';
     if (loopDeckGruppe(p, platz)) ab('platz_belegt', `place ${platz} already holds a loop deck`);
-    // M5: a module in slot A/B of this place becomes cell 1 of track 1 and goes away (all its tracks and stems with it)
-    const modulId = liveSlots(p)[platz === 1 ? 'A' : 'B'];
-    let zelle: Omit<Zelle, 'id'> | null = null;
-    if (modulId !== undefined) {
-      zelle = zelleAusModul(p, gruppeVon(p, modulId), ctx.ordner);   // refuses before anything is removed
-      entferneBaum(p, modulId, ctx);
-    }
-    const ids: string[] = [];
-    for (let i = 1; i <= LOOP_SPUREN; i++) {
-      PRO_BEFEHL.spur_neu(p, { befehl: 'spur_neu', art: 'audio', name: `L${platz}.${i}` }, ctx);
-      ids.push(p.spuren[p.spuren.length - 1].id);
-    }
-    PRO_BEFEHL.gruppenspur_neu(p, { befehl: 'gruppenspur_neu', name: `LOOP ${platz}`, mitglieder: ids }, ctx);
-    // the output defaults to the deck number's pad; when the other deck was moved onto that pad, this deck takes the other pad
-    const andere = loopDeckGruppe(p, platz === 1 ? 2 : 1)?.loopdeck;
-    const frei = andere && loopDjNr(andere) === platz ? (platz === 1 ? 4 : 3) : undefined;
-    p.gruppen![p.gruppen!.length - 1].loopdeck = { platz, raster, ...(frei ? { ausgang_platz: frei as 3 | 4 } : {}) };
-    // `filter: 0` and the eq zeros are written so the first knob drag is a replace (only replaces coalesce in the history)
-    for (const id of ids) { const s = spurVon(p, id); s.zellen = keineZellen(); s.filter = 0; s.eq = { tief: 0, mitte: 0, hoch: 0 }; }
-    if (zelle) spurVon(p, ids[0]).zellen![0] = { id: neueId(p, 'zelle'), ...zelle };
+    const g = legeLoopdeckAn(p, platz, raster, ctx);
+    const ort = ersterFreierPlatz(p);
+    if (ort !== null) p.plaetze![ort - 1] = { typ: 'loops', gruppe: g.id };
   },
 
   loopdeck_aendern(p, a) {
     erlaube(a, 'gruppe_id', 'raster');
     const g = deckGruppe(p, idArg(a, 'gruppe_id'));
     g.loopdeck!.raster = rasterArg(a, false)!;
-  },
-
-  // The place whose channel each existing deck sounds on (platz_1, platz_2: 1..4, or null/absent = unchanged: the deck is not shown in any place).
-  // The faders belong to the places: 3 = pad/1, 4 = pad/2, 1 = deck/1, 2 = deck/2. The value of the default pad is stored as absent. The model
-  // refuses two groups on one channel (two loop decks, a module slot, an unmuted SEQ deck).
-  loopdeck_plaetze(p, a) {
-    erlaube(a, 'platz_1', 'platz_2');
-    const w = [a.platz_1 ?? null, a.platz_2 ?? null];
-    const schlecht = w.some((x) => x !== null && ![1, 2, 3, 4].includes(x as number)) || (w[0] !== null && w[0] === w[1]);
-    if (schlecht) ab('argument_ungueltig', 'platz_1 and platz_2: 1..4 or null, different');
-    for (const platz of [1, 2] as const) {
-      const l = loopDeckGruppe(p, platz)?.loopdeck, ziel = w[platz - 1];
-      if (!l || ziel === null) continue;
-      if (ziel === (platz === 1 ? 3 : 4)) delete l.ausgang_platz; else l.ausgang_platz = ziel as 1 | 2 | 3 | 4;
-    }
   },
 
   loopdeck_leeren(p, a) {
@@ -202,13 +147,14 @@ export const LOOPDECK = {
     if (ziel !== 'hall' && ziel !== 'delay') return ab('argument_ungueltig', "ziel: 'hall' or 'delay' expected");
     const db = zahl(a, 'db', FADER_MIN, LOOP_SEND_MAX)!;
     const platz = deckPlatz(p, s);
+    const deck = loopDeckGruppe(p, platz)!;
     let r = (p.returns ?? []).find((x) => x.loopdeck?.platz === platz && x.loopdeck.art === ziel);
     if (!r) {
       if (db <= FADER_MIN) return;                                   // no send and no return: nothing to do
       const vorher = new Set((p.returns ?? []).map((x) => x.id));
       PRO_BEFEHL.return_neu(p, ziel === 'hall'
-        ? { befehl: 'return_neu', name: `L${platz} HALL`, hall: { ...LOOP_HALL } }
-        : { befehl: 'return_neu', name: `L${platz} DLY`, effekt: { graph: LOOP_DELAY.graph, werte: { ...LOOP_DELAY.werte } } }, ctx);
+        ? { befehl: 'return_neu', name: `L${platz} HALL`, gruppe_id: deck.id, hall: { ...LOOP_HALL } }
+        : { befehl: 'return_neu', name: `L${platz} DLY`, gruppe_id: deck.id, effekt: { graph: LOOP_DELAY.graph, werte: { ...LOOP_DELAY.werte } } }, ctx);
       r = p.returns!.find((x) => !vorher.has(x.id))!;
       r.loopdeck = { platz, art: ziel };
     }

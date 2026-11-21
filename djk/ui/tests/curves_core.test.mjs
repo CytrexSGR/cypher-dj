@@ -97,7 +97,10 @@ test('Negativ-Kontrolle: harmlose Regler sind unter beiden Kurven gleich (Trim 0
   }
   assert.equal(griffZuMidi('deck/1/kill/tief', 1), 1);
   assert.equal(griffZuMidi('deck/1/pfl', 0), 0);
-  assert.equal(ZIELE.size, 87 + 128 + 33 + 12 * 64 + 204 + 2 * 64 + 64 + 16 + 2 * 13 + 64 + 32 + 96);   // loop deck channel strip KZ1: + spur/1..32/eq/{tief,mitte,hoch};   // loop deck K7a: + spur/1..32/filter;  // 1518 (+ master/bk/1..64, the graph place on the DJ master); 1454 (places slice 1 task 2: + deck/3 and deck/4, 2 x 13 = 26 (ten channel-strip rows, play, cue, crossfader side); 1428 (live modules task 6: + grp/1..16/cue, 16; 1412 (nested groups task 1: + groups 9..16, 64; before 1348; was 900 at 32 knobs); S14: + fx/3, fx/4 x 64 graph knobs; 1.10 Slice 3: + 204 send/return/hall controls; S5r: + 12 channels x bk/1..64; 1.10: + grp/1..8 je 4 + pm/fader; K2: + master/kleber; 28 + deck/1/xseite, deck/2/xseite (2026-09-27) + erz/1 11 (Strudel) + pad/1, pad/2 je 11 (MVP 2); D1 K1/E3: spur/1..32 je fader, pan, mute, solo
+  // container core: strips 30 deck (2 container strips + 4 players x play/cue) + 22 pad + 80 stream alias (8 streams x 10); 6 singles; 384 spur; 144 grp; 1 pm; 44 ret; graph knobs 64 x (11 graph channels + 2 returns + master)
+  // re-measured at the integration (X1): the table grew with the container strips (graph knobs on every container and stream alias strip), the 8 returns and the fx rows
+  // by prefix: deck 158 + pad 150 + erz 592 (8 streams x 74) + xfader 1 + master 67 + cue 2 + spur 672 (32 x (13 rows + 8 sends)) + grp 208 + pm 1 + ret 88 + fx 128 (graph knobs of fx/3 and fx/4), measured with the container-core ZIELE table
+  assert.equal(ZIELE.size, 2067);
 });
 
 test('float32 wie der Kern: Schwelle 0,001 und Kill entscheiden auf fround(x)', () => {

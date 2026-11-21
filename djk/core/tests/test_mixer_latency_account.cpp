@@ -2,7 +2,7 @@
 // master-bound path arrives at the master exactly L samples later than with L = 0, all of them by the same amount:
 //   the four buses (a delay of L after the bus strip), the direct sources, the hall return, the send-graph returns (the sum is delayed
 //   before the master FX and the buses are added there), the metronome (own delay) and the PFL (the cue delay is vh + L).
-//  (C1)  an impulse on deck/1 (target master) and an impulse on erz/1 routed to bus/1, then bus/4, appear on the same output sample,
+//  (C1)  an impulse on deck/1 (target master) and an impulse on deck/2 routed to bus/1, then bus/4, appear on the same output sample,
 //        that sample being the L = 0 sample + L; two buses at the same time; at block sizes 256, 128, 64, 32 and L = 26 and 2062
 //  (C2)  the send-graph return fx/3 and the hall return of a source (direct and bus-routed) keeps its place against the dry signal (both shift by L); the bus's own
 //        send: its wet part and its dry part keep their L = 0 offset (the residual of D8, measured and printed)
@@ -10,7 +10,7 @@
 //  (C4)  the cue: the PFL impulse leaves the cue vh + L samples after the input, and the master impulse leaves the master vh + L after
 //        the input (ADR 008 point 3); also for the PFL of a bus channel and for the metronome's cue input
 //  (C5)  L = 0 (the default): the mixer is bit-identical to one that never heard of the account; L set and set back to 0 is identical
-//        again (rings cleared), L > 0 differs (positive control). The golden digest itself: test_mixer_golden, unchanged.
+//        again (rings cleared), L > 0 differs (positive control). The golden digest itself: test_mixer_orakel, unchanged.
 //        (fix round 1) the same value again, in the middle of a run, is a no-op (bit-identical); a value outside 0..kMaxLatenz is clamped
 //  (C6)  the PFL ring at L = kMaxLatenz (2062): vh + L = 2146 of its kMaxVorhalt + 1 + kMaxLatenz = 3099 entries (the worst case vh = kMaxVorhalt
 //        is not settable; the size formula is pinned directly); correct at block sizes 32 and 256, clean under the sanitizer build
@@ -41,7 +41,6 @@ const char* DURCH =
     R"({"format":"baukasten/2","name":"durch","stimmen":1,"knoten":[{"id":"e","art":"eingang"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"e.l","nach":"o.l"},{"von":"e.r","nach":"o.r"}]})";
 
 constexpr int LMAX = cypherdj::dsp::KanalLimiter::kMaxLatenz;   // 2062
-constexpr int ERZ3 = 6;                                          // not in mixer_wz_run.h
 constexpr long GESAMT = 8192;                                    // divisible by every block size used below
 const int GROESSEN[] = {256, 128, 64, 32};
 
@@ -116,12 +115,12 @@ void c1() {
     for (int L : {26, LMAX})
       for (int bus : {1, 4}) {
         const int k_bus = BUS1 + bus - 1;
-        // three impulses one after the other: deck/1 on the master, erz/1 on bus `bus`, erz/2 on the other end bus
+        // three impulses one after the other: deck/1 on the master, deck/2 on bus `bus`, pad/1 on the other end bus
         const int bus2 = bus == 1 ? 4 : 1;
-        const std::vector<Impuls> imp = {{Art::quelle, DECK1, 100, 0.5f}, {Art::quelle, ERZ1, 3000, 0.5f}, {Art::quelle, ERZ2, 6000, 0.5f}};
+        const std::vector<Impuls> imp = {{Art::quelle, DECK1, 100, 0.5f}, {Art::quelle, DECK2, 3000, 0.5f}, {Art::quelle, PAD1, 6000, 0.5f}};
         const Vorbereitung vor = [&](Lauf& l) {
-          ziel_bus(l, ERZ1, bus);
-          ziel_bus(l, ERZ2, bus2);
+          ziel_bus(l, DECK2, bus);
+          ziel_bus(l, PAD1, bus2);
         };
         const Spur s0 = fahre(n, 0, imp, vor);
         const Spur sl = fahre(n, L, imp, vor);
@@ -141,10 +140,10 @@ void c1() {
   // two buses at the same time, and the direct source on the same sample as well
   for (int n : GROESSEN)
     for (int L : {26, LMAX}) {
-      const std::vector<Impuls> imp = {{Art::quelle, ERZ1, 300, 0.5f}, {Art::quelle, ERZ2, 300, -0.25f}, {Art::quelle, DECK1, 300, 0.125f}};
+      const std::vector<Impuls> imp = {{Art::quelle, DECK2, 300, 0.5f}, {Art::quelle, PAD1, 300, -0.25f}, {Art::quelle, DECK1, 300, 0.125f}};
       const Vorbereitung vor = [&](Lauf& l) {
-        ziel_bus(l, ERZ1, 1);
-        ziel_bus(l, ERZ2, 4);
+        ziel_bus(l, DECK2, 1);
+        ziel_bus(l, PAD1, 4);
       };
       const Spur s0 = fahre(n, 0, imp, vor);
       const Spur sl = fahre(n, L, imp, vor);
@@ -162,11 +161,11 @@ void c2() {
       for (int ziel : {0, 1, 4}) {   // 0: master; bus 1 and bus 4: the source is bus-routed
         auto lauf = [&](int ll, bool hall_an) {
           const Vorbereitung vor = [&](Lauf& l) {
-            l.setze(ERZ1, "send/2", 0.0f);   // send 2 = the hall
+            l.setze(DECK2, "send/2", 0.0f);   // send 2 = the hall
             l.setze("fx/2/rueckweg", hall_an ? 0.0f : -200.0f);
-            if (ziel) ziel_bus(l, ERZ1, ziel);
+            if (ziel) ziel_bus(l, DECK2, ziel);
           };
-          return fahre(n, ll, {{Art::quelle, ERZ1, 100, 0.5f}}, vor, 16384);
+          return fahre(n, ll, {{Art::quelle, DECK2, 100, 0.5f}}, vor, 16384);
         };
         const Spur t0 = lauf(0, false), h0 = lauf(0, true), tl = lauf(L, false), hl = lauf(L, true);
         // the hall return = with minus without
@@ -185,11 +184,11 @@ void c2() {
       // the bus's own send (the residual of D8): the wet part and the dry part of bus/1 keep the offset they have at L = 0
       auto lauf2 = [&](int ll, bool hall_an) {
         const Vorbereitung vor = [&](Lauf& l) {
-          ziel_bus(l, ERZ1, 1);
+          ziel_bus(l, DECK2, 1);
           l.setze(BUS1, "send/2", 0.0f);
           l.setze("fx/2/rueckweg", hall_an ? 0.0f : -200.0f);
         };
-        return fahre(n, ll, {{Art::quelle, ERZ1, 100, 0.5f}}, vor, 16384);
+        return fahre(n, ll, {{Art::quelle, DECK2, 100, 0.5f}}, vor, 16384);
       };
       const Spur t0 = lauf2(0, false), h0 = lauf2(0, true), tl = lauf2(L, false), hl = lauf2(L, true);
       std::vector<float> r0(h0.ml.size()), rl(hl.ml.size());
@@ -217,11 +216,11 @@ void c2_send_graph() {
               PRUEF(g != nullptr);
               l.m->setze_send_graph(2, g);
             }
-            l.setze(ERZ1, "send/3", nass ? 0.0f : -200.0f);
+            l.setze(DECK2, "send/3", nass ? 0.0f : -200.0f);
             l.setze("fx/3/rueckweg", 0.0f);
-            if (ziel) ziel_bus(l, ERZ1, ziel);
+            if (ziel) ziel_bus(l, DECK2, ziel);
           };
-          return fahre(n, ll, {{Art::quelle, ERZ1, 100, 0.5f}}, vor, 8192);
+          return fahre(n, ll, {{Art::quelle, DECK2, 100, 0.5f}}, vor, 8192);
         };
         const Spur t0 = lauf(0, false), h0 = lauf(0, true), tl = lauf(L, false), hl = lauf(L, true);
         std::vector<float> r0(h0.ml.size()), rl(hl.ml.size());
@@ -295,12 +294,12 @@ void c4() {
       PRUEF(ml == 300 + vh + L);                   // and the master impulse leaves the master vh + L after the input
       PRUEF(cl == ml);                             // equal (ADR 008 point 3)
       PRUEF(verschiebung_abstand(sl.cl, s0.cl, L, 0, GESAMT - L) < 1e-6);
-      // the PFL of a bus channel: erz/1 on bus/1, PFL on the bus (the tap before its fader), erz/1's own PFL off
+      // the PFL of a bus channel: deck/2 on bus/1, PFL on the bus (the tap before its fader), deck/2's own PFL off
       const Vorbereitung bpfl = [](Lauf& l) {
-        ziel_bus(l, ERZ1, 1);
+        ziel_bus(l, DECK2, 1);
         l.setze(BUS1, "pfl", 1.0f);
       };
-      const std::vector<Impuls> bimp = {{Art::quelle, ERZ1, 300, 0.5f}};
+      const std::vector<Impuls> bimp = {{Art::quelle, DECK2, 300, 0.5f}};
       const Spur b0 = fahre(n, 0, bimp, bpfl), bl = fahre(n, L, bimp, bpfl);
       const long bc0 = einsatz(b0.cl, 300, 1500), bm0 = einsatz(b0.ml, 300, 1500);
       const long bcl = einsatz(bl.cl, 300, 1500 + L), bml = einsatz(bl.ml, 300, 1500 + L);
@@ -320,17 +319,17 @@ void c4() {
 // ---- (C5) ----
 // a mixed scenario that touches every path; the same input for any instance
 void mischung(Lauf& l, int blocks, int n) {
-  l.setze(ERZ1, "send/2", -6.0f);
-  l.setze(ERZ2, "send/2", -3.0f);
+  l.setze(DECK2, "send/2", -6.0f);
+  l.setze(PAD1, "send/2", -3.0f);
   l.setze("fx/2/rueckweg", -6.0f);
-  ziel_bus(l, ERZ2, 1);
+  ziel_bus(l, PAD1, 1);
   ziel_bus(l, PAD1, 4);
   l.setze(DECK1, "pfl", 1.0f);
   l.setze(BUS1, "pfl", 1.0f);
   for (int b = 0; b < blocks; ++b) {
     l.rausch(DECK1, 0.3, n);
-    l.rausch(ERZ1, 0.2, n);
-    l.rausch(ERZ2, 0.2, n);
+    l.rausch(DECK2, 0.2, n);
+    l.rausch(PAD1, 0.2, n);
     l.sinus(PAD1, 440.0, 0.2, 0.2, n);
     for (int i = 0; i < n; ++i) {
       l.m->summe_eingang_l()[i] = (b * n + i) % 12000 == 0 ? 0.3f : 0.0f;
@@ -377,10 +376,10 @@ void c5() {
 void c6() {
   for (int n : {32, 256}) {
     const int L = LMAX;
-    const std::vector<Impuls> imp = {{Art::quelle, DECK1, 100, 0.5f}, {Art::quelle, ERZ1, 3000, 0.5f}, {Art::metro_master, 0, 6000, 0.5f},
+    const std::vector<Impuls> imp = {{Art::quelle, DECK1, 100, 0.5f}, {Art::quelle, DECK2, 3000, 0.5f}, {Art::metro_master, 0, 6000, 0.5f},
                                      {Art::metro_cue, 0, 9000, 0.5f}};
     const Vorbereitung vor = [](Lauf& l) {
-      ziel_bus(l, ERZ1, 4);
+      ziel_bus(l, DECK2, 4);
       l.setze(DECK1, "pfl", 1.0f);
       l.setze(BUS1 + 3, "pfl", 1.0f);
     };
@@ -410,12 +409,12 @@ void w_ganze_mischung() {
     for (int variante = 0; variante < 2; ++variante) {
       Lauf l;
       l.m->setze_kanal_latenz(variante ? L : 0);
-      l.setze(ERZ1, "send/2", -6.0f);
-      l.setze(ERZ2, "send/2", -3.0f);
+      l.setze(DECK2, "send/2", -6.0f);
+      l.setze(PAD1, "send/2", -3.0f);
       l.setze(BUS1, "send/2", -9.0f);
       l.setze("fx/2/rueckweg", -6.0f);
-      ziel_bus(l, ERZ2, 1);
-      ziel_bus(l, ERZ3, 4);
+      ziel_bus(l, PAD1, 1);
+      ziel_bus(l, PAD2, 4);
       ziel_bus(l, PAD1, 2);
       l.setze(DECK1, "pfl", 1.0f);
       l.setze(BUS1, "pfl", 1.0f);
@@ -427,9 +426,9 @@ void w_ganze_mischung() {
       for (int b = 0; b < 70; ++b) {
         const int n = groessen[b % 12];
         l.rausch(DECK1, 0.3, n);
-        l.rausch(ERZ1, 0.2, n);
-        l.rausch(ERZ2, 0.4, n);
-        l.rausch(ERZ3, 0.3, n);
+        l.rausch(DECK2, 0.2, n);
+        l.rausch(PAD1, 0.4, n);
+        l.rausch(PAD2, 0.3, n);
         l.sinus(PAD1, 440.0, 0.2, 0.2, n);
         for (int i = 0; i < n; ++i) {
           const bool klick = (t + i) % 5000 == 0;
@@ -464,9 +463,9 @@ void f01() {
     const int L = 600;
     // (1) impulses in flight on the three rings (sum, bus, metronome), then a NaN on a direct source in a later block: the guard drops them
     {
-      const std::vector<Impuls> imp = {{Art::quelle, DECK1, 10, 0.5f}, {Art::quelle, ERZ1, 11, 0.5f}, {Art::metro_master, 0, 12, 0.5f},
+      const std::vector<Impuls> imp = {{Art::quelle, DECK1, 10, 0.5f}, {Art::quelle, DECK2, 11, 0.5f}, {Art::metro_master, 0, 12, 0.5f},
                                        {Art::metro_cue, 0, 13, 0.5f}};
-      const Vorbereitung vor = [](Lauf& l) { ziel_bus(l, ERZ1, 1); };
+      const Vorbereitung vor = [](Lauf& l) { ziel_bus(l, DECK2, 1); };
       Lauf l;
       l.m->setze_kanal_latenz(L);
       vor(l);
@@ -479,7 +478,7 @@ void f01() {
             float* e = p.art == Art::quelle ? l.m->eingang_l(p.kanal) : p.art == Art::metro_cue ? l.m->pfl_eingang_l() : l.m->summe_eingang_l();
             e[p.s - t0] += p.a;
           }
-        if (t0 == gift) l.m->eingang_l(ERZ3)[0] = NAN;   // erz/3 goes to the master
+        if (t0 == gift) l.m->eingang_l(PAD2)[0] = NAN;   // pad/2 goes to the master
         l.verarbeite(n);
         for (int i = 0; i < n; ++i) PRUEF(std::isfinite(l.ml[i]) && std::isfinite(l.mr[i]) && std::isfinite(l.cl[i]));
         if (t0 > gift) {   // after the bad block: the three impulses (in flight at the bad block, 300 < 10 + 600) must not come out
@@ -497,13 +496,13 @@ void f01() {
     {
       Lauf l;
       l.m->setze_kanal_latenz(L);
-      ziel_bus(l, ERZ1, 1);
+      ziel_bus(l, DECK2, 1);
       const long gift = (1000 / n) * n;
       long erste_stille = -1, zurueck = -1;
       long treffer_im_giftblock = -1;
       for (long t0 = 0; t0 < 6000; t0 += n) {
-        l.sinus(ERZ1, 440.0, 0.3, 0.3, n);
-        if (t0 == gift) l.m->eingang_l(ERZ1)[3] = NAN;
+        l.sinus(DECK2, 440.0, 0.3, 0.3, n);
+        if (t0 == gift) l.m->eingang_l(DECK2)[3] = NAN;
         l.verarbeite(n);
         if (t0 == gift) treffer_im_giftblock = l.m->nan_treffer();
         double e = 0.0;
@@ -523,7 +522,7 @@ void f01() {
 }
 
 // ---- (F, L = 0) the F01 guard leaves the PFL ring alone at L = 0: behaviour as before the account ----
-// A clean deck/1 PFL cue runs, a NaN on erz/1 (a source that is not in the cue) fires the guard in block 40. The guard zeroes the block (n samples of
+// A clean deck/1 PFL cue runs, a NaN on deck/2 (a source that is not in the cue) fires the guard in block 40. The guard zeroes the block (n samples of
 // exact zeros in the cue), but the PFL ring still holds the cue material of the vh samples before: it comes out after the bad block. If the guard clears
 // the ring (as it does for L > 0) the whole window vh + n is exact zeros. The numbers are NOT from this code: measured on the base commit 4c01be5c with
 // the same scenario (probe test_probe_cue, ~/messungen/2026-11-03-a5a/r2/probe-base.log): n = 256: 256 exact zeros of 340, cue |x| sum 3.1832 in the
@@ -541,9 +540,9 @@ void f01_l0_cue() {
     double summe = 0.0;
     for (long b = 0; b < 100; ++b) {
       l.rausch(DECK1, 0.3, n);
-      l.rausch(ERZ1, 0.2, n);
-      l.rausch(ERZ2, 0.3, n);
-      if (b == gift) l.m->eingang_l(ERZ1)[3] = NAN;
+      l.rausch(DECK2, 0.2, n);
+      l.rausch(PAD1, 0.3, n);
+      if (b == gift) l.m->eingang_l(DECK2)[3] = NAN;
       l.verarbeite(n);
       for (int i = 0; i < n; ++i) {
         const long s = b * n + i;
@@ -596,8 +595,8 @@ void c5_gleicher_wert() {
     Lauf a, b, c;
     for (Lauf* l : {&a, &b, &c}) {
       l->m->setze_kanal_latenz(300);
-      ziel_bus(*l, ERZ2, 1);
-      l->setze(ERZ1, "send/2", -6.0f);
+      ziel_bus(*l, PAD1, 1);
+      l->setze(DECK2, "send/2", -6.0f);
       l->setze("fx/2/rueckweg", -6.0f);
       l->setze(DECK1, "pfl", 1.0f);
       l->setze(BUS1, "pfl", 1.0f);
@@ -606,8 +605,8 @@ void c5_gleicher_wert() {
     for (int blk = 0; blk < 60; ++blk) {
       for (Lauf* l : {&a, &b, &c}) {
         l->rausch(DECK1, 0.3, n);
-        l->rausch(ERZ1, 0.2, n);
-        l->rausch(ERZ2, 0.3, n);
+        l->rausch(DECK2, 0.2, n);
+        l->rausch(PAD1, 0.3, n);
         l->m->summe_eingang_l()[0] = l->m->pfl_eingang_l()[0] = blk % 7 == 0 ? 0.3f : 0.0f;
       }
       if (blk == 30) {
@@ -668,10 +667,10 @@ void c7() {
   }
   Lauf l;
   l.m->setze_kanal_latenz(LMAX);
-  l.setze(ERZ1, "send/2", -6.0f);
+  l.setze(DECK2, "send/2", -6.0f);
   l.setze(BUS1, "send/2", -9.0f);
   l.setze("fx/2/rueckweg", -6.0f);
-  ziel_bus(l, ERZ2, 1);
+  ziel_bus(l, PAD1, 1);
   ziel_bus(l, PAD1, 4);
   l.setze(DECK1, "pfl", 1.0f);
   l.setze(BUS1, "pfl", 1.0f);
@@ -680,8 +679,8 @@ void c7() {
   long nicht_endlich = 0;
   for (long b = 0; b < 6000; ++b) {
     const int n = groessen[b % 15];
-    for (int k : {DECK1, ERZ1, ERZ2, PAD1}) l.rausch(k, 0.3, n);
-    if (b % 1500 == 7) l.m->eingang_l(ERZ1)[0] = NAN;   // the F01 guard (clearing the rings) is in the window too
+    for (int k : {DECK1, DECK2, PAD1, PAD2}) l.rausch(k, 0.3, n);
+    if (b % 1500 == 7) l.m->eingang_l(DECK2)[0] = NAN;   // the F01 guard (clearing the rings) is in the window too
     abfang_an();
     l.m->verarbeite(n, l.ml, l.mr, l.cl, l.cr);
     abfang_aus();

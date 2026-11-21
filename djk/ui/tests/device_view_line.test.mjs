@@ -18,14 +18,16 @@ test('bkSlotNr: the running number among the bk tracks by ascending nr, other de
   assert.equal(bkSlotNr(undefined, 's1'), null);
 });
 
-test('bkZeilenPfad: spur/<slot>/bk/<k> for k1..k64 of the first 8 bk tracks, otherwise none', () => {
-  const spuren = Array.from({ length: 10 }, (_, i) => bk(`s${i + 1}`, i + 1));
+test('bkZeilenPfad: spur/<slot>/bk/<k> for k1..k64 of every bk track up to BK_LIVE_SLOTS (16), otherwise none', () => {
+  const spuren = Array.from({ length: 17 }, (_, i) => bk(`s${i + 1}`, i + 1));
   assert.equal(bkZeilenPfad(spuren, 's2', 'k7'), 'spur/2/bk/7');
   assert.equal(bkZeilenPfad(spuren, 's1', 'k64'), 'spur/1/bk/64');
   assert.equal(bkZeilenPfad(spuren, 's1', 'k65'), null, 'beyond the knob rows');
   assert.equal(bkZeilenPfad(spuren, 's1', 'cutoff'), null);
   assert.equal(bkZeilenPfad(spuren, `s${BK_LIVE_SLOTS}`, 'k1'), `spur/${BK_LIVE_SLOTS}/bk/1`);
-  assert.equal(bkZeilenPfad(spuren, `s${BK_LIVE_SLOTS + 1}`, 'k1'), null, 'the 9th bk track has no core row');
+  assert.equal(bkZeilenPfad(spuren, 's9', 'k1'), 'spur/9/bk/1', 'the 9th bk track has a core row too');
+  assert.equal(BK_LIVE_SLOTS, 16);
+  assert.equal(bkZeilenPfad(spuren, 's17', 'k1'), null, 'a 17th bk track (the project refuses it) has no row');
   assert.equal(bkZeilenPfad(spuren, 'gone', 'k1'), null);
 });
 
@@ -67,11 +69,11 @@ test('own gesture: the shown value stays until its write was answered, the row d
   assert.equal(ad.get('k3'), 0.1, 'the gesture value shows while the knob is held');
 });
 
-test('a bk track beyond the 8th, or any other device, has no row: the project value', () => {
-  const zeilen = { 'spur/9/bk/3': 0.9 };
-  const spuren = Array.from({ length: 9 }, (_, i) => bk(`s${i + 1}`, i + 1, { k3: 0.2 }));
+test('a bk track beyond BK_LIVE_SLOTS, or any other device, has no row: the project value', () => {
+  const zeilen = { [`spur/${BK_LIVE_SLOTS + 1}/bk/3`]: 0.9 };
+  const spuren = Array.from({ length: BK_LIVE_SLOTS + 1 }, (_, i) => bk(`s${i + 1}`, i + 1, { k3: 0.2 }));
   const ctx = { st: { projekt: { spuren } }, aendere: async () => true };
-  assert.equal(spurAdapter(ctx, spuren[8], TABELLE, { zeile: (p) => zeilen[p] }).get('k3'), 0.2);
+  assert.equal(spurAdapter(ctx, spuren[BK_LIVE_SLOTS], TABELLE, { zeile: (p) => zeilen[p] }).get('k3'), 0.2);
   const rbSpur = rb('r', 20);
   assert.equal(spurAdapter({ st: { projekt: { spuren: [rbSpur] } } }, rbSpur, [{ name: 'cutoff', vorgabe: 0.3 }], { zeile: () => 0.99 }).get('cutoff'), 0.3);
 });

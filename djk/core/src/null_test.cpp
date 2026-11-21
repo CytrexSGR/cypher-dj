@@ -92,19 +92,10 @@ std::vector<std::string> null_vorbedingungen(const cdj_z_echtzeit& f, const sw::
       std::snprintf(t, sizeof t, "deck/%d geladen (%.23s)", d + 1, f.decks[d].material_id);
       v.push_back(t);
     }
-  for (const char* p : {"erz/1/fader", "erz/2/fader", "erz/3/fader", "pad/1/fader", "pad/2/fader"}) {
+  for (const char* p : {"pad/1/fader", "pad/2/fader"}) {
     const int r = tab.suche(p);
     if (r >= 0 && ist(r) > -200.0f) {
       std::snprintf(t, sizeof t, "%s = %.2f dB statt -200", p, ist(r));
-      v.push_back(t);
-    }
-  }
-  for (int r = 0; r < tab.anzahl(); ++r) {
-    const char* p = tab.def(r).pfad;
-    if (std::strncmp(p, "erz/4/", 6) != 0 || !std::strcmp(p, "erz/4/pfl")) continue;
-    const float soll = !std::strcmp(p, "erz/4/fader") ? 0.0f : tab.def(r).vorgabe;
-    if (std::fabs(ist(r) - soll) > 1e-6f) {
-      std::snprintf(t, sizeof t, "%s = %.4g statt %.4g (erz/4 nicht neutral)", p, ist(r), soll);
       v.push_back(t);
     }
   }

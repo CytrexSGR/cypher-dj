@@ -151,9 +151,9 @@ int main() {
                 nl, n1, n2);
   }
 
-  // 6) Akai APC20
+  // 6) Akai APC20 (apc20_kern.json = config/controller/apc20.json without its erz alias rows: those targets live in the page server, the core refuses them)
   {
-    Lauf x(ab.pfad, "config/controller/apc20.json");
+    Lauf x(ab.pfad, "core/tests/hand/mappings/apc20_kern.json");
     std::vector<LedNachricht> aus;
     int nr = 0;
     zyklen(x, aus, nr, 3);

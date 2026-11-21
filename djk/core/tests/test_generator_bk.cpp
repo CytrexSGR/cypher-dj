@@ -21,8 +21,8 @@ namespace {
 
 constexpr int N = 256;
 constexpr int64_t SPB = 22500;  // 128 BPM bei 48 kHz
-constexpr int ERZ2 = 5, ERZ3 = 6;
-constexpr int ERZ_5 = 8, ERZ_6 = 9;   // S5r: Mixer-Kanäle von erz/5 und erz/6 (erz/4 nimmt der Kern nicht an)
+constexpr int ERZ2 = 1, ERZ3 = 2;   // output indices of streams 2 and 3 (stream - 1)
+constexpr int ERZ_5 = 1, ERZ_6 = 2;   // S5r: the streams 2 and 3 of the knob cases (output index = stream - 1; also the knob row)
 const char* G = R"({"format":"baukasten/2","name":"t","stimmen":2,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"v","art":"mul"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"s.aus","nach":"v.a"},{"von":"n.gate","nach":"v.b"},{"von":"v.aus","nach":"o.x"}]})";
 
 const char* GA = R"({"format":"baukasten/2","name":"t","stimmen":2,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"e","art":"adsr","a":0.001,"d":0.1,"s":1,"r":1.0},{"id":"v","art":"mul"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.gate","nach":"e.gate"},{"von":"s.aus","nach":"v.a"},{"von":"e.aus","nach":"v.b"},{"von":"v.aus","nach":"o.x"}]})";
@@ -100,20 +100,20 @@ int main() {
 
   {  // 1) Note am Beat 1 klingt ab Sample SPB, nicht früher (Vorhalt 0); Kit schweigt; Off nach dauer 0,5 Beat
     Welt w;
-    w.erz.setze_strom(2, &kit, ERZ2);
-    w.erz.setze_bk(2, graph(), ERZ2);
+    w.erz.setze_strom(2, &kit);
+    w.erz.setze_bk(2, graph());
     w.erz.fenster(fenster(2, {ev(1.0, 57, 1.0f, 0.5)}), 0.0);
     w.bis(3 * SPB);
     std::printf("bk: erstes Sample %lld (soll %lld)\n", (long long)erstes(w.erz2), (long long)SPB);
     PRUEF(erstes(w.erz2) == SPB + 1);   // Note am Sample SPB, die Säge liefert dort selbst 0
     {  // Kit schweigt: derselbe Lauf ohne Kit am Strom ist bitgleich
       Welt o;
-      o.erz.setze_bk(2, graph(), ERZ2);
+      o.erz.setze_bk(2, graph());
       o.erz.fenster(fenster(2, {ev(1.0, 57, 1.0f, 0.5)}), 0.0);
       o.bis(3 * SPB);
       PRUEF(o.erz2 == w.erz2);
       CypherBk* f[2];
-      o.erz.setze_bk(2, nullptr, ERZ2);
+      o.erz.setze_bk(2, nullptr);
       o.bis(o.s + 2 * N);
       for (int i = 0, nf = o.erz.bk_frei(f, 2); i < nf; ++i) cypher_bk_frei(f[i]);
     }
@@ -127,14 +127,14 @@ int main() {
     PRUEF(nach == 0.0f);   // gate 0 nach dem Off: der Graph (Säge · gate) schweigt
     CypherBk* frei[4];
     PRUEF(w.erz.bk_frei(frei, 4) == 0);
-    w.erz.setze_bk(2, nullptr, ERZ2);
+    w.erz.setze_bk(2, nullptr);
     w.bis(4 * SPB);
     PRUEF(w.erz.bk_frei(frei, 4) == 1);
     cypher_bk_frei(frei[0]);
   }
   {  // 2) Negativ-Kontrolle: ohne Graph ist der Strom ein Kit-Strom wie bisher (das Kit klingt am Beat)
     Welt w;
-    w.erz.setze_strom(3, &kit, ERZ3);
+    w.erz.setze_strom(3, &kit);
     w.erz.fenster(fenster(3, {ev(1.0, 57, 1.0f, 0.5)}), 0.0);
     w.bis(2 * SPB);
     PRUEF(erstes(w.erz3) == SPB);
@@ -142,11 +142,11 @@ int main() {
   }
   {  // 3) Wechsel während die Note klingt: der alte (G, ohne Hüllkurve) behält die Note und blendet linear aus
     Welt w;
-    w.erz.setze_bk(2, graph(), ERZ2);
+    w.erz.setze_bk(2, graph());
     w.erz.fenster(fenster(2, {ev(0.0, 57, 1.0f, 4.0)}), 0.0);
     w.bis(2 * N);
     CypherBk* frei[4];
-    w.erz.setze_bk(2, graph(), ERZ2);   // neuer Graph ohne Note: alles, was danach klingt, ist der Ausklang
+    w.erz.setze_bk(2, graph());   // neuer Graph ohne Note: alles, was danach klingt, ist der Ausklang
     const size_t a = w.erz2.size();
     w.bis(w.s + 2 * N);
     float vor = 0.0f, spaet = 0.0f;
@@ -174,7 +174,7 @@ int main() {
     int nf = w.erz.bk_frei(frei, 4);
     PRUEF(nf == 1);
     for (int i = 0; i < nf; ++i) cypher_bk_frei(frei[i]);
-    w.erz.setze_bk(2, nullptr, ERZ2);
+    w.erz.setze_bk(2, nullptr);
     w.bis(w.s + 2 * N);
     nf = w.erz.bk_frei(frei, 4);
     PRUEF(nf == 1);
@@ -183,15 +183,15 @@ int main() {
   {  // 3b) zweiter Wechsel noch im Ausklang: der erste Ausklang endet sofort, nichts geht verloren (A, B frei; C klingt)
     Welt w;
     CypherBk* frei[8];
-    w.erz.setze_bk(2, graphA(), ERZ2);
+    w.erz.setze_bk(2, graphA());
     w.bis(2 * N);
-    w.erz.setze_bk(2, graphA(), ERZ2);   // A klingt aus
-    w.erz.setze_bk(2, graphA(), ERZ2);   // B abgelöst, bevor ein Block lief: A geht sofort frei
+    w.erz.setze_bk(2, graphA());   // A klingt aus
+    w.erz.setze_bk(2, graphA());   // B abgelöst, bevor ein Block lief: A geht sofort frei
     w.bis(w.s + 4 * N);
     const int nf = w.erz.bk_frei(frei, 8);
     PRUEF(nf == 2);
     for (int i = 0; i < nf; ++i) cypher_bk_frei(frei[i]);
-    w.erz.setze_bk(2, nullptr, ERZ2);
+    w.erz.setze_bk(2, nullptr);
     w.bis(w.s + 4 * N);
     PRUEF(w.erz.bk_frei(frei, 8) == 1);
     cypher_bk_frei(frei[0]);
@@ -200,7 +200,7 @@ int main() {
     Welt w;
     CypherBk* a = graph();
     CypherBk* b = graph();
-    w.erz.setze_bk(2, a, ERZ2);
+    w.erz.setze_bk(2, a);
     w.erz.fenster(fenster(2, {ev(0.5, 57, 1.0f, 0.5), ev(1.0, 60, 1.0f, 0.5), ev(1.5, 64, 0.7f, 2.0)}), 0.0);
     w.bis(N);   // erster Block außerhalb der Zählung (Vectors der Welt wachsen)
     w.erz2.reserve(1 << 20);
@@ -216,7 +216,7 @@ int main() {
     PRUEF(!ALLOC_ABFANG_VERFUEGBAR || pos > 0);
     abfang_an();   // tests/alloc_intercept.h; Form wie tests/test_core_arr_sinks_alloc.cpp:52-54
     w.bis(2 * SPB);
-    w.erz.setze_bk(2, b, ERZ2);
+    w.erz.setze_bk(2, b);
     w.bis(w.s + 2 * N);
     nf = w.erz.bk_frei(frei, 4);
     const AbfangZahlen az = abfang_zahlen();
@@ -226,7 +226,7 @@ int main() {
     PRUEF(!ALLOC_ABFANG_VERFUEGBAR || allok == 0);
     PRUEF(nf == 1);
     for (int i = 0; i < nf; ++i) cypher_bk_frei(frei[i]);
-    w.erz.setze_bk(2, nullptr, ERZ2);
+    w.erz.setze_bk(2, nullptr);
     w.bis(w.s + 2 * N);
     nf = w.erz.bk_frei(frei, 4);
     for (int i = 0; i < nf; ++i) cypher_bk_frei(frei[i]);
@@ -239,12 +239,12 @@ int main() {
     CypherBk* h = cypher_bk_neu(GK, 48000.0, f, sizeof f);
     PRUEF(h != nullptr);
     Welt w;
-    w.erz.setze_bk(2, h, ERZ2);
+    w.erz.setze_bk(2, h);
     w.bis(2 * N);
     float mx = -1e9f, mn = 1e9f;
     for (float v : w.erz2) { mx = std::max(mx, v); mn = std::min(mn, v); }
     PRUEF(mx == 8.0f && mn == 8.0f);
-    w.erz.setze_bk(2, nullptr, ERZ2);
+    w.erz.setze_bk(2, nullptr);
     w.bis(w.s + 2 * N);
     CypherBk* frei[4];
     const int nf = w.erz.bk_frei(frei, 4);
@@ -260,7 +260,7 @@ int main() {
     CypherBk* h = cypher_bk_neu(text.str().c_str(), 48000.0, fehler, sizeof fehler);
     PRUEF(h != nullptr);
     Welt w;
-    w.erz.setze_bk(2, h, ERZ2);
+    w.erz.setze_bk(2, h);
     w.erz.fenster(fenster(2, {ev(0.0, 45, 0.8f, 1.0), ev(1.0, 49, 0.8f, 1.0), ev(2.0, 52, 0.8f, 1.0), ev(3.0, 57, 0.8f, 1.0),
                               ev(4.0, 45, 0.8f, 4.0), ev(4.0, 49, 0.8f, 4.0), ev(4.0, 52, 0.8f, 4.0), ev(4.0, 57, 0.8f, 4.0)}), 0.0);
     w.bis(10 * SPB);
@@ -282,7 +282,7 @@ int main() {
       o.write(reinterpret_cast<const char*>(&b), 2);
     }
     PRUEF(o.good());
-    w.erz.setze_bk(2, nullptr, ERZ2);
+    w.erz.setze_bk(2, nullptr);
     w.bis(w.s + 2 * N);
     CypherBk* frei[4];
     const int nf = w.erz.bk_frei(frei, 4);
@@ -298,8 +298,8 @@ int main() {
       for (auto& z : wert) for (float& v : z) v = 0.5f;
       Welt w;
       w.erz.setze_bk_wert(wert);
-      w.erz.setze_bk(2, graphR(), ERZ_5);
-      w.erz.setze_bk(3, graphR(), ERZ_6);
+      w.erz.setze_bk(2, graphR());
+      w.erz.setze_bk(3, graphR());
       w.erz.fenster(fenster(2, {ev(0.0, 57, 1.0f, 8.0), ev(0.5, 57, 1.0f, 4.0)}), 0.0);
       w.erz.fenster(fenster(3, {ev(0.0, 57, 1.0f, 8.0)}), 0.0);
       Aus a;
@@ -317,10 +317,10 @@ int main() {
       wert[ERZ_5][0] = wb;
       bis(40 * N);
       wert[ERZ_5][0] = wc;
-      if (tausch) w.erz.setze_bk(2, graphR(), ERZ_5);
+      if (tausch) w.erz.setze_bk(2, graphR());
       bis(N2 + 40 * N);
-      w.erz.setze_bk(2, nullptr, ERZ_5);
-      w.erz.setze_bk(3, nullptr, ERZ_6);
+      w.erz.setze_bk(2, nullptr);
+      w.erz.setze_bk(3, nullptr);
       bis(w.s + 3 * N);
       CypherBk* f[8];
       for (int nf; (nf = w.erz.bk_frei(f, 8)) > 0;) for (int i = 0; i < nf; ++i) cypher_bk_frei(f[i]);
@@ -349,7 +349,7 @@ int main() {
       for (auto& z : wert) for (float& v : z) v = 0.5f;
       Welt w;
       w.erz.setze_bk_wert(wert);
-      w.erz.setze_bk(2, graphR(), ERZ_5);
+      w.erz.setze_bk(2, graphR());
       w.erz.fenster(fenster(2, {ev(0.0, 57, 1.0f, 8.0)}), 0.0);
       w.bis(N);
       w.erz2.reserve(1 << 20);
@@ -364,7 +364,7 @@ int main() {
       abfang_aus();
       std::printf("bk regler: Allokationen/Freigaben über die Reglerfahrt %ld\n", az.summe());
       PRUEF(!ALLOC_ABFANG_VERFUEGBAR || az.summe() == 0);
-      w.erz.setze_bk(2, nullptr, ERZ_5);
+      w.erz.setze_bk(2, nullptr);
       w.bis(w.s + 2 * N);
       CypherBk* f[4];
       const int nf = w.erz.bk_frei(f, 4);
@@ -385,7 +385,7 @@ int main() {
         PRUEF(h != nullptr);
         Welt w;
         w.erz.setze_bk_wert(wert);
-        w.erz.setze_bk(2, h, ERZ_5);
+        w.erz.setze_bk(2, h);
         w.erz.fenster(fenster(2, {ev(0.0, 57, 1.0f, 8.0)}), 0.0);
         std::vector<float> k;
         const auto bis = [&](int64_t ende) {
@@ -400,7 +400,7 @@ int main() {
         bis(20 * N);
         wert[ERZ_5][bewegt - 1] = 1.0f;
         bis(40 * N);
-        w.erz.setze_bk(2, nullptr, ERZ_5);
+        w.erz.setze_bk(2, nullptr);
         bis(w.s + 3 * N);
         CypherBk* fr[8];
         for (int nf; (nf = w.erz.bk_frei(fr, 8)) > 0;) for (int i = 0; i < nf; ++i) cypher_bk_frei(fr[i]);
@@ -428,11 +428,11 @@ int main() {
     }
     {  // 7c) K10: ohne Werte-Zeiger keine Meldung, der Graph bleibt auf seinen Werten (kein Absturz)
       Welt w;
-      w.erz.setze_bk(2, graphR(), ERZ_5);
+      w.erz.setze_bk(2, graphR());
       w.erz.fenster(fenster(2, {ev(0.0, 57, 1.0f, 8.0)}), 0.0);
       w.bis(20 * N);
       PRUEF(w.erz2.size() == 20 * (size_t)N);
-      w.erz.setze_bk(2, nullptr, ERZ_5);
+      w.erz.setze_bk(2, nullptr);
       w.bis(w.s + 2 * N);
       CypherBk* f[4];
       const int nf = w.erz.bk_frei(f, 4);
@@ -444,7 +444,7 @@ int main() {
     // Note at beat 1 for 6 beats (to beat 7). Window [3, 8) replaces the future; with kappe the graph hears note_aus at beat 3.
     const auto lauf = [&](int kappe, bool neue_note) {
       Welt w;
-      w.erz.setze_bk(2, graph(), ERZ2);
+      w.erz.setze_bk(2, graph());
       w.erz.fenster(fenster(2, {ev(1.0, 57, 1.0f, 6.0)}), 0.0);
       w.bis(2 * SPB);   // the note sounds since beat 1
       cdj::ErzFenster f = neue_note ? fenster(2, {ev(5.0, 60, 1.0f, 0.5)}) : fenster(2, {});
@@ -453,7 +453,7 @@ int main() {
       w.erz.fenster(f, 2.0);
       w.bis(8 * SPB);
       CypherBk* fr[4];
-      w.erz.setze_bk(2, nullptr, ERZ2);
+      w.erz.setze_bk(2, nullptr);
       w.bis(w.s + 2 * N);
       for (int i = 0, nf = w.erz.bk_frei(fr, 4); i < nf; ++i) cypher_bk_frei(fr[i]);
       return w.erz2;
@@ -475,7 +475,7 @@ int main() {
   {  // Review t_bffc3708 Minor 1: stille, then a pattern with notes at the same ab (kappe 0 window): the pending cut is cancelled, the held note rings on
     const auto lauf = [&](bool zweites) {
       Welt w;
-      w.erz.setze_bk(2, graph(), ERZ2);
+      w.erz.setze_bk(2, graph());
       w.erz.fenster(fenster(2, {ev(1.0, 57, 1.0f, 6.0)}), 0.0);
       w.bis(2 * SPB);
       cdj::ErzFenster stille = fenster(2, {});
@@ -485,7 +485,7 @@ int main() {
       if (zweites) { cdj::ErzFenster f = fenster(2, {ev(7.5, 60, 1.0f, 0.25)}); f.ab_beat = 3.0; w.erz.fenster(f, 2.0); }
       w.bis(7 * SPB);
       CypherBk* fr[4];
-      w.erz.setze_bk(2, nullptr, ERZ2);
+      w.erz.setze_bk(2, nullptr);
       w.bis(w.s + 2 * N);
       for (int i = 0, nf = w.erz.bk_frei(fr, 4); i < nf; ++i) cypher_bk_frei(fr[i]);
       return w.erz2;
@@ -500,7 +500,7 @@ int main() {
   }
   {  // K5 (S3a): a note that starts at the cut beat, in the cut block, is new: it sounds its full length (beat 3 to 4), not one sample
     Welt w;
-    w.erz.setze_bk(2, graph(), ERZ2);
+    w.erz.setze_bk(2, graph());
     w.erz.fenster(fenster(2, {ev(1.0, 57, 1.0f, 6.0)}), 0.0);
     w.bis(2 * SPB);
     cdj::ErzFenster f = fenster(2, {ev(3.0, 60, 1.0f, 1.0)});
@@ -514,7 +514,7 @@ int main() {
     PRUEF(neu > 0.1f);
     PRUEF(danach == 0.0f);   // and nothing of the old note is left after the new one ended
     CypherBk* fr[4];
-    w.erz.setze_bk(2, nullptr, ERZ2);
+    w.erz.setze_bk(2, nullptr);
     w.bis(w.s + 2 * N);
     for (int i = 0, nf = w.erz.bk_frei(fr, 4); i < nf; ++i) cypher_bk_frei(fr[i]);
   }

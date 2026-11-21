@@ -702,7 +702,7 @@ test('bindeGeraetAnsicht with breit builds the wide plate; without it the small 
   }
 });
 
-// ARR_BK_MAX is 16, but the core has the override rows spur/<slot>/bk/<k> for the first 8 bk tracks only (BK_LIVE_SLOTS): the 9th takes the release path
+// ARR_BK_MAX = SPUR_BK_SLOTS = BK_LIVE_SLOTS = 16: every bk track drags live (the release path stays for a slot beyond BK_LIVE_SLOTS)
 const bkSpur = (i) => ({ id: `t${i}`, nr: i, name: `T${i}`, art: 'instrument', geraet: BK({ k1: 0.25 }), clips: [] });
 
 test('BK_LIVE_SLOTS of the page equals the model constant and SPUR_BK_SLOTS of the core header', () => {
@@ -711,8 +711,8 @@ test('BK_LIVE_SLOTS of the page equals the model constant and SPUR_BK_SLOTS of t
   assert.equal(BK_LIVE_SLOTS, Number(/constexpr int SPUR_BK_SLOTS = (\d+);/.exec(h)?.[1]));
 });
 
-test('slot 8 drags live; the 9th bk track sends nothing during a drag and ONE spur_aendern with every value at the end', async () => {
-  for (const [nr, live] of [[8, true], [9, false], [16, false]]) {
+test('slots 8, 9 and 16 drag live (every bk track has rows)', async () => {
+  for (const [nr, live] of [[8, true], [9, true], [16, true]]) {
     const sp = bkSpur(nr), u = uhr();
     const k = liveKontext(sp, { davor: Array.from({ length: nr - 1 }, (_, i) => bkSpur(i + 1)) });
     const ad = spurAdapter(k.ctx, sp, BK_TABELLE, { zeitgeber: u });

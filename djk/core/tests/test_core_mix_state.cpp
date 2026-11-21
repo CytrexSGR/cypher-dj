@@ -1,9 +1,9 @@
 // 1.15 A6: the kern publishes Ereignis::MIX_ZUSTAND (-> /zustand/mix) like komp_zustand: 10 Hz per channel, only where a tool runs.
 //  (Z1) nothing runs: no event at all (negative control, 150 cycles)
 //  Everything runs twice: blocks of 256 samples and of 240 (240 divides 4800, so there every gap must be exactly 4800).
-//  (Z2) gate on erz/1 (noise under threshold) and multiband on bus/1 (1 kHz sine over the mid threshold): per channel exactly 40 events in 192 000 samples (10 Hz), none for any other channel, pegel[0] = gate reduction (> 40 dB) on erz/1 only, pegel[1..3] =
+//  (Z2) gate on pad/1 (noise under threshold) and multiband on bus/1 (1 kHz sine over the mid threshold): per channel exactly 40 events in 192 000 samples (10 Hz), none for any other channel, pegel[0] = gate reduction (> 40 dB) on pad/1 only, pegel[1..3] =
 //       low/mid/high multiband reduction (mid > 3 dB) on bus/1 only, pegel[4] = 0 (limiter not built), all >= 0
-//  (Z3) gate switched off: erz/1 stops publishing, bus/1 goes on (positive control)
+//  (Z3) gate switched off: pad/1 stops publishing, bus/1 goes on (positive control)
 //  (Z4) multiband switched off as well: the stream ends, no event in the last 300 cycles
 //  A5c, limiter as a criterion (own kern per case, bus/2 carries a 1 kHz sine at -6 dBFS, no gate, no multiband):
 //  (Z5) limiter built, lim/an 1, bus fader open (hand only), ceiling -20 dBFS: bus/2 publishes 40 events in 192 000 samples with pegel[4] about 14 dB (13..15), nothing else does
@@ -56,6 +56,7 @@ static void szenario(const int N) {
   auto kern = std::make_unique<cdj::Kern>(128.0, ring, bef.get(), ere.get());
   cdj::Mixer& mix = const_cast<cdj::Mixer&>(kern->mixer());   // test only: the bus input has no other door
   const int BUS1 = cdj::Mixer::kanal_index("bus/1");
+  const int PAD1 = cdj::Mixer::kanal_index("pad/1");   // X1: the gate runs on a container (the old erz/1 strip is gone)
 
   std::vector<float> l(N), r(N);
   uint32_t z = 7;
@@ -71,9 +72,10 @@ static void szenario(const int N) {
         const float s = 0.3f * static_cast<float>(std::sin(2.0 * 3.14159265358979323846 * 1000.0 * static_cast<double>(t + i) / 48000.0));
         mix.eingang_l(BUS1)[i] = s;
         mix.eingang_r(BUS1)[i] = s;
+        mix.eingang_l(PAD1)[i] = l[i];
+        mix.eingang_r(PAD1)[i] = r[i];
       }
       t += N;
-      kern->rueck(1, l.data(), r.data());
       const int64_t n0 = kern->sample();
       kern->zyklus(N, n0 * 20833);
       cdj::Ereignis e;
@@ -92,18 +94,18 @@ static void szenario(const int N) {
   PRUEF(m.gesamt == 0);
 
   // (Z2)
-  teil(*bef, id++, "erz/1/gate/an", 1.0f);
+  teil(*bef, id++, "pad/1/gate/an", 1.0f);
   teil(*bef, id++, "bus/1/mb/an", 1.0f);
   teil(*bef, id++, "bus/1/mb/mitte/schwelle", -30.0f);
   teil(*bef, id++, "bus/1/mb/mitte/ratio", 8.0f);
   lauf(zyk(100), true);   // settle (the commands take effect, gate and band settle)
   lauf(ZYK_192000, true);   // 192 000 samples = 40 periods of 4800
-  const int ne = n_von("erz/1"), nb = n_von("bus/1");
-  std::printf("Z2: erz/1 %d events, bus/1 %d events, total %d (expected 40 each, none else)\n", ne, nb, m.gesamt);
+  const int ne = n_von("pad/1"), nb = n_von("bus/1");
+  std::printf("Z2: pad/1 %d events, bus/1 %d events, total %d (expected 40 each, none else)\n", ne, nb, m.gesamt);
   PRUEF(ne == 40);   // any 192 000-sample window holds exactly 40 multiples of 4800
   PRUEF(nb == 40);
   PRUEF(m.gesamt == ne + nb);   // no other channel
-  for (const auto& e : m.je_kanal["erz/1"]) {
+  for (const auto& e : m.je_kanal["pad/1"]) {
     PRUEF(e.pegel[0] > 40.0f && std::isfinite(e.pegel[0]));
     PRUEF(e.pegel[1] == 0.0f && e.pegel[2] == 0.0f && e.pegel[3] == 0.0f && e.pegel[4] == 0.0f);
   }
@@ -115,7 +117,7 @@ static void szenario(const int N) {
     PRUEF(e.pegel[4] == 0.0f);
   }
   // cadence: consecutive events of one channel are 4800 samples apart, give or take one block
-  for (const char* k : {"erz/1", "bus/1"}) {
+  for (const char* k : {"pad/1", "bus/1"}) {
     const auto& v = m.je_kanal[k];
     for (size_t i = 1; i < v.size(); ++i) {
       const int64_t d = v[i].sample - v[i - 1].sample;
@@ -125,11 +127,11 @@ static void szenario(const int N) {
   }
 
   // (Z3)
-  teil(*bef, id++, "erz/1/gate/an", 0.0f);
+  teil(*bef, id++, "pad/1/gate/an", 0.0f);
   lauf(zyk(10), true);    // the switch-off and the last block with the gate
   lauf(zyk(400), true);
-  std::printf("Z3: gate off: erz/1 %d events, bus/1 %d events\n", n_von("erz/1"), n_von("bus/1"));
-  PRUEF(n_von("erz/1") == 0);
+  std::printf("Z3: gate off: pad/1 %d events, bus/1 %d events\n", n_von("pad/1"), n_von("bus/1"));
+  PRUEF(n_von("pad/1") == 0);
   PRUEF(n_von("bus/1") >= 21);   // a window of 102 400 samples (240-sample blocks: 102 240) holds at least floor(102240 / 4800) = 21 multiples of 4800; measured 22
 
   // (Z4)
@@ -171,7 +173,6 @@ struct LimKern {
         mix.eingang_r(BUS2)[i] = s;
       }
       t += N;
-      kern->rueck(1, l.data(), r.data());
       const int64_t n0 = kern->sample();
       kern->zyklus(N, n0 * 20833);
       cdj::Ereignis e;

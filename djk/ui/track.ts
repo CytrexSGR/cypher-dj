@@ -22,7 +22,8 @@ export interface Geplant { teile: TeilPlan[]; wirt: WirtPlan[]; muster: MusterPl
 
 // Stream whose AUTO switch holds a target: the channel strips erz/<n>/* and pad/<n>/* through the shared table (erz/1..3, 5..7 =
 // streams 1..3, 5..7; pad/1, pad/2 = streams 9, 10; erz/4 and erz/8 are no stream), wirt:bass (stream 2), wirt:melodie (stream 3),
-// strom:<n> (1..3); otherwise null
+// strom:<n> (1..3); otherwise null. `erz/<n>/...` is the alias form the page server resolves onto the strom tracks (stream_alias.ts); this reader works on that
+// form BEFORE the resolution, so AUTO keeps holding stream n whatever row the alias lands on.
 export function stromVonZiel(ziel: string): number | null {
   const e = /^((?:erz|pad)\/[0-9]+)\//.exec(ziel);
   if (e) return stromVonKanal(e[1]);

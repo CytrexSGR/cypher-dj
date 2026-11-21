@@ -53,6 +53,10 @@ class DeckModell {
   virtual ~DeckModell() = default;
   virtual bool inhalt(int kanal, Inhalt& aus) const = 0;               // false: nichts geladen
   virtual double quell_beat_bei(int kanal, int64_t sample) const = 0;  // NaN außer Decks
+  // Container core K8 (D-V6): the number (1..4) of the player whose track sounds on this channel strip, 0 when no player does: the strip is no container
+  // strip, or the input of its container is a module or nothing (art modul, leer). The hearing license is bound to the player: the key of a Hoerschein
+  // is "deck/<player>", never the path of the container strip; a strip without a player is free.
+  virtual int player(int kanal) const = 0;
 };
 
 class PrueferI3 final : public Pruefer {

@@ -17,7 +17,7 @@ const mitGruppe = () => {
 
 test('1.10 Modell: neues Projekt ist /2 mit leeren Gruppen und PM bei 0 dB; Gruppen-Zähler startet bei 1', () => {
   const p = neuesProjekt('T');
-  assert.equal(p.format, FORMAT); assert.equal(FORMAT, 'cypherdj-projekt/2');
+  assert.equal(p.format, FORMAT); assert.equal(FORMAT, 'cypherdj-projekt/3');
   assert.deepEqual(p.gruppen, []); assert.deepEqual(p.master, { fader_db: 0 }); assert.equal(p.naechste_id.gruppe, 1);
   assert.equal(pruefeFehler(p), null);
 });
@@ -27,7 +27,7 @@ test('1.10 Modell: ein /1-Projekt öffnet, wird im Speicher /2 (ohne rev-Schritt
   assert.equal(alt.format, 'cypherdj-projekt/1');
   const g = pruefeProjekt(alt);
   assert.ok(g.projekt, JSON.stringify(g));
-  assert.equal(g.projekt.format, 'cypherdj-projekt/2'); assert.equal(g.projekt.rev, 17); assert.equal(g.projekt.wiedergabe_rev, 15);
+  assert.equal(g.projekt.format, 'cypherdj-projekt/3'); assert.equal(g.projekt.rev, 17); assert.equal(g.projekt.wiedergabe_rev, 15);
   assert.deepEqual(g.projekt.gruppen, []); assert.deepEqual(g.projekt.master, { fader_db: 0 });
   assert.deepEqual(g.projekt.spuren.map((s) => s.id), ['s1', 's2', 's3']);
   assert.equal(kanonisch(pruefeProjekt(g.projekt).projekt), kanonisch(g.projekt), 'idempotent (A8)');
@@ -45,9 +45,9 @@ test('1.10 Modell: Format und Pflichtfelder (Fehlerfälle und Negativ-Kontrolle)
   assert.match(pruefeFehler(alt), /gruppen/, '/1 kennt keine Gruppen');
   const alt2 = kopie(specProjekt()); alt2.spuren[0].ausgang = { art: 'gruppe', id: 'g1' };
   assert.match(pruefeFehler(alt2), /ausgang/, '/1 kennt kein Ziel');
-  const fremd = kopie(p); fremd.format = 'cypherdj-projekt/3';   // trägt gruppen und master: darf nicht als „unbekanntes Feld“ scheitern (Prüfung 2, C1)
+  const fremd = kopie(p); fremd.format = 'cypherdj-projekt/4';   // trägt gruppen und master: darf nicht als „unbekanntes Feld“ scheitern (Prüfung 2, C1)
   assert.match(pruefeFehler(fremd), /^format/);
-  const fremd1 = kopie(specProjekt()); fremd1.format = 'cypherdj-projekt/3';   // /1-förmig, aber fremdes Format
+  const fremd1 = kopie(specProjekt()); fremd1.format = 'cypherdj-projekt/4';   // /1-förmig, aber fremdes Format
   assert.match(pruefeFehler(fremd1), /^format/);
   const ohneFormat = kopie(p); delete ohneFormat.format;
   assert.match(pruefeFehler(ohneFormat), /format.*fehlt/, 'ein fehlendes Format bleibt „fehlt“');
@@ -100,11 +100,11 @@ test('1.10 Modell N2: ein /1-Projekt mit aufnahme wird geladen, gehoben, gespeic
   const w = tmpOrdner(t); const pr = new Projekte(w); const { slug } = pr.lege('N2');
   fs.writeFileSync(path.join(w, slug, 'project.json'), JSON.stringify(alt));   // so liegt es von der Vorgängerfassung auf der Platte
   const geladen = pr.lies(slug);                                           // laden + heben
-  assert.equal(geladen.format, 'cypherdj-projekt/2');
+  assert.equal(geladen.format, 'cypherdj-projekt/3');
   assert.deepEqual(geladen.spuren[0].aufnahme, aufnahme);
   pr.speichere(slug, geladen);                                             // speichern
   const roh = JSON.parse(fs.readFileSync(path.join(w, slug, 'project.json'), 'utf8'));
-  assert.equal(roh.format, 'cypherdj-projekt/2', 'gespeichert wird /2');
+  assert.equal(roh.format, 'cypherdj-projekt/3', 'gespeichert wird /3');
   assert.deepEqual(roh.spuren[0].aufnahme, aufnahme);
   const nochmal = pr.lies(slug);                                           // wieder laden
   assert.deepEqual(nochmal.spuren[0].aufnahme, aufnahme);
@@ -132,7 +132,7 @@ const mitReturn = () => {
 test('slice 3 model: a valid project with returns and sends passes; the Hall defaults are the stellwerk defaults', () => {
   const p = mitReturn();
   assert.equal(pruefeFehler(p), null);
-  assert.equal(MAX_RETURNS, 4);
+  assert.equal(MAX_RETURNS, 8);
   assert.deepEqual(HALL_VORGABE, { an: true, pre: 0.04, decay: 0.5252, groesse: 0.282, tief: 0.5658, highcut: 0.8039, fahne: 0.66667 });
   const g = pruefeProjekt(p);
   assert.ok(g.projekt, JSON.stringify(g));
@@ -140,12 +140,12 @@ test('slice 3 model: a valid project with returns and sends passes; the Hall def
   const vier = mitGruppe();
   vier.returns = Array.from({ length: MAX_RETURNS }, (_, i) => ret(i + 1));
   vier.spuren[0].sends = vier.returns.map((r) => ({ id: r.id, db: 0 }));
-  assert.equal(pruefeFehler(vier), null, 'negative control: four returns and four sends are accepted');
+  assert.equal(pruefeFehler(vier), null, 'negative control: eight returns and eight sends are accepted');
 });
 
 test('slice 3 model: closed validation of returns and sends (error cases)', () => {
   const schlecht = (aendere, muster) => { const p = mitReturn(); aendere(p); assert.match(pruefeFehler(p), muster); };
-  schlecht((p) => { p.returns = Array.from({ length: MAX_RETURNS + 1 }, (_, i) => ret(i + 1)); }, /returns|nr/);   // more than 4
+  schlecht((p) => { p.returns = Array.from({ length: MAX_RETURNS + 1 }, (_, i) => ret(i + 1)); }, /returns|nr/);   // more than 8
   schlecht((p) => { p.returns.push(ret(1, { id: 'r2' })); }, /nr/);                                              // nr twice
   schlecht((p) => { p.returns.push(ret(2, { id: 'r1' })); }, /id/);                                              // id twice
   schlecht((p) => { p.returns[0].nr = MAX_RETURNS + 1; }, /nr/);

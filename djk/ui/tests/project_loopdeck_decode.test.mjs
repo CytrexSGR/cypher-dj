@@ -15,11 +15,12 @@ const SHA = 'd'.repeat(64);
 const zelle = (id, extra = {}) => ({ id, name: 'Loop', farbe: 3, art: 'loop', sha256: SHA, beats: 1, bpm: 120, gain_db: 0, ...extra });
 
 function deck() {
-  let p = neuesProjekt('ld'); p.live = true;
+  let p = neuesProjekt('ld'); p.live = true; p.plaetze = [{ typ: 'track' }, { typ: 'track' }, { typ: 'track' }, { typ: 'track' }];
   for (let i = 1; i <= 4; i++) p = fuehreListeAus(p, [{ befehl: 'spur_neu', art: 'audio', name: `L1.${i}` }]).projekt;
   p = fuehreListeAus(p, [{ befehl: 'gruppenspur_neu', name: 'LOOP 1', mitglieder: p.spuren.map((s) => s.id) }]).projekt;
   p = JSON.parse(JSON.stringify(p));
   p.gruppen[0].loopdeck = { platz: 1, raster: 'takt' };
+  p.plaetze[0] = { typ: 'loops', gruppe: p.gruppen[0].id };   // container core: the deck sounds in the container its place holds, a deck no place holds is parked
   for (const s of p.spuren) s.zellen = Array.from({ length: 8 }, () => null);
   return p;
 }

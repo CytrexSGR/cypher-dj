@@ -14,12 +14,20 @@ export { neuesProjekt };
 const WURZEL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OEFFENTLICH = path.join(WURZEL, 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' };
+// What the page server answers on GET /lage for a live project, as far as the page reads it: four places with the Strudel module in place C
+// (the dock then shows four container cards plus the stream cards of the module), the four container kinds. Tests may replace it in the page.
+export const LAGE_ATTRAPPE = Object.freeze({
+  plaetze: [{ typ: 'track' }, { typ: 'seq', gruppe: 'g-seq' }, { typ: 'strudel', gruppe: 'g-strudel' }, { typ: 'loops', gruppe: 'g-loops' }],
+  container: [{ art: 'player' }, { art: 'modul' }, { art: 'modul' }, { art: 'modul' }],
+  decks: [], studio: { stroeme: [] },
+});
 export const warte = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function statisch() {
   const srv = http.createServer((q, a) => {
     const u = new URL(q.url, 'http://x');
     if (u.pathname === '/strom') { a.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' }); a.write(': open\n\n'); return; }   // the stub mixes its events in
+    if (u.pathname === '/lage') { a.writeHead(200, { 'content-type': 'application/json' }); a.end(JSON.stringify(LAGE_ATTRAPPE)); return; }
     if (u.pathname === '/bestand' || u.pathname === '/loops') { a.writeHead(200, { 'content-type': 'application/json' }); a.end('[]'); return; }
     const f = path.join(OEFFENTLICH, u.pathname === '/' ? 'index.html' : decodeURIComponent(u.pathname));
     if (f.startsWith(OEFFENTLICH + path.sep) && fs.existsSync(f) && fs.statSync(f).isFile()) {

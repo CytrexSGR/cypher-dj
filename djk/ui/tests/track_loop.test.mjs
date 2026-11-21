@@ -94,8 +94,12 @@ async function fakeWirt(t, ordner, gruppe, antwort = () => ({ ok: true })) {
 
 const teileVon = (log, name) => log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/teil' && z.felder.plan === `spur:${name}`);
 const bis = async (fn, ms = 15000) => { const ende = Date.now() + ms; while (!fn() && Date.now() < ende) await warte(25); return fn(); };
+// A loop on the bass wirt (stream 2): AUTO holds the wirt targets. A stream has no strip of its own, so this is the stream-bound target
+// that works without a live project (erz/<n> aliases need one, rule R9).
+const wirtSchleife = (name, n = 1, nach = -0.6) => ({ name, schleife_takte: n, fahrten: [
+  { ziel: 'wirt:bass/a_filter1_cutoff', ab_takt: 1, takte: n, nach, von: -40 }] });
 const fader = (name, n = 1, nach = -30) => ({ name, schleife_takte: n, fahrten: [
-  { ziel: 'erz/2/fader', ab_takt: 1, nach: 0 }, { ziel: 'erz/2/fader', ab_takt: 1, takte: n, nach, form: 'linear' }] });
+  { ziel: 'bus/2/fader', ab_takt: 1, nach: 0 }, { ziel: 'bus/2/fader', ab_takt: 1, takte: n, nach, form: 'linear' }] });
 
 test('S7 loop T12.3 AK30: passes follow without gap, parts consecutive, spacing 4n beats, STOP ends everything', async (t) => {
   const { url, log } = await stapel(t);
@@ -135,7 +139,7 @@ test('S7 loop T12.3 AK31 (1): the watcher is serial (a slow wirt plans no pass t
   const { url, log } = await stapel(t, { wirtOrdner: wo });
   // every fahre is answered after 600 ms: twelve ticks of the watcher fall into one await
   const bass = await fakeWirt(t, wo, 'bass', async (z) => { if (z.befehl === 'fahre') await warte(600); return { ok: true }; });
-  const spur = { name: 'cut', schleife_takte: 1, fahrten: [{ ziel: 'erz/2/filter', ab_takt: 1, takte: 1, nach: -0.6 },
+  const spur = { name: 'cut', schleife_takte: 1, fahrten: [{ ziel: 'bus/2/filter', ab_takt: 1, takte: 1, nach: -0.6 },
     { ziel: 'wirt:bass/a_filter1_cutoff', ab_takt: 1, takte: 1, nach: 0, von: -40 }] };
   const r = await postJson(url, '/spur', { spur }, CYPHER);
   assert.equal(r.code, 200, JSON.stringify(r.j));
@@ -252,7 +256,7 @@ test('S7 loop review rest 2: a wirt answering after the start of the pass: its c
   const { url, log } = await stapel(t, { wirtOrdner: wo });
   let nFahre = 0;
   await fakeWirt(t, wo, 'bass', async (z) => { if (z.befehl === 'fahre' && nFahre++ === 1) await warte(2000); return { ok: true }; });
-  const spur = { name: 'cut', schleife_takte: 1, fahrten: [{ ziel: 'erz/2/filter', ab_takt: 1, takte: 1, nach: -0.6 },
+  const spur = { name: 'cut', schleife_takte: 1, fahrten: [{ ziel: 'bus/2/filter', ab_takt: 1, takte: 1, nach: -0.6 },
     { ziel: 'wirt:bass/a_filter1_cutoff', ab_takt: 1, takte: 1, nach: 0, von: -40 }] };
   const r = await postJson(url, '/spur', { spur }, CYPHER);
   assert.equal(r.code, 200, JSON.stringify(r.j));
@@ -338,7 +342,7 @@ test('S7 loop T12.3: a loop is never cleaned up as expired (the end of its last 
   assert.deepEqual((await liste(url)).map((x) => x.name), ['lang']);
   assert.ok(o.spuren.get('lang').ende + 1 < u.beat, 'the end lies behind the beat (the case under test)');
   // negative control: a track without schleife_takte with the same end is cleaned up
-  assert.equal((await postJson(url, '/spur', { spur: { name: 'einmal', fahrten: [{ ziel: 'erz/3/filter', ab_takt: 1, takte: 1, nach: -0.6 }] } })).code, 200);
+  assert.equal((await postJson(url, '/spur', { spur: { name: 'einmal', fahrten: [{ ziel: 'bus/3/filter', ab_takt: 1, takte: 1, nach: -0.6 }] } })).code, 200);
   o.spuren.get('einmal').ende = o.spuren.get('lang').ende;
   assert.deepEqual((await liste(url)).map((x) => x.name), ['lang']);
 });
@@ -346,23 +350,25 @@ test('S7 loop T12.3: a loop is never cleaned up as expired (the end of its last 
 test('S7 loop T12.3 AK31 (3): a hand grip on a target ends Cypher\'s loop; another path or Andreas\' loop is untouched', async (t) => {
   const { o, url, log } = await stapel(t);
   assert.equal((await postJson(url, '/spur', { spur: fader('c2') }, CYPHER)).code, 200);
-  const andreas = { ...fader('a3'), fahrten: fader('a3').fahrten.map((f) => ({ ...f, ziel: 'erz/3/fader' })) };
+  const andreas = { ...fader('a3'), fahrten: fader('a3').fahrten.map((f) => ({ ...f, ziel: 'bus/3/fader' })) };
   assert.equal((await postJson(url, '/spur', { spur: andreas })).code, 200);
   const griff = (pfad) => o.vomKern({ adresse: '/e/halter', felder: { pfad, halter: 'mensch', sample: 0, beat: o.kern.uhr.beat } });
-  griff('erz/1/fader');   // negative control: a path no loop moves
-  griff('erz/2/fader');
-  griff('erz/3/fader');   // Andreas' own loop: his hand on his own lane does not end it
+  griff('bus/1/fader');   // negative control: a path no loop moves
+  griff('bus/2/fader');
+  griff('bus/3/fader');   // Andreas' own loop: his hand on his own lane does not end it
   await bis(() => log.some((x) => x.typ === 'spur_schleife_ende'));
   assert.deepEqual((await liste(url)).map((x) => x.name), ['a3']);
   const z = log.find((x) => x.typ === 'spur_schleife_ende');
-  assert.deepEqual([z.name, z.grund, z.pfad], ['c2', 'hand', 'erz/2/fader']);
+  assert.deepEqual([z.name, z.grund, z.pfad], ['c2', 'hand', 'bus/2/fader']);
   await postJson(url, '/spur/stopp', { name: 'a3' });
 });
 
 test('S7 loop T12.3 AK31 (3): AUTO off ends Cypher\'s loop at the next pass; Andreas\' loop on the same stream keeps running', async (t) => {
-  const { url, log } = await stapel(t);
-  assert.equal((await postJson(url, '/spur', { spur: fader('c2') }, CYPHER)).code, 200);
-  const andreas = { ...fader('a2'), fahrten: [{ ziel: 'erz/2/filter', ab_takt: 1, takte: 1, nach: -0.6 }] };
+  const wo = fs.mkdtempSync(path.join(TMP, 'w-'));
+  const { url, log } = await stapel(t, { wirtOrdner: wo });
+  await fakeWirt(t, wo, 'bass');
+  assert.equal((await postJson(url, '/spur', { spur: wirtSchleife('c2') }, CYPHER)).code, 200);
+  const andreas = { ...fader('a2'), fahrten: [{ ziel: 'bus/2/filter', ab_takt: 1, takte: 1, nach: -0.6 }] };
   assert.equal((await postJson(url, '/spur', { spur: andreas })).code, 200);
   await bis(() => teileVon(log, 'c2').length >= 4);
   assert.equal((await postJson(url, '/strudel/autonom', { an: false, strom: 2 })).code, 200);
@@ -447,7 +453,7 @@ test('S7 loop T13.1 AK32: /spur/aendern applies from the next unplanned pass, ex
   assert.equal(ohne.code, 400, 'a change of a loop stays a loop'); assert.match(ohne.j.text, /schleife_takte/);
   assert.equal((await postJson(url, '/spur/aendern', { name: 'band-2-fader', spur: { ...neu, name: 'andere' } })).code, 400, 'the name is the loop\'s');
   assert.equal((await postJson(url, '/spur/aendern', { name: '../x', spur: neu })).code, 400);
-  await postJson(url, '/spur', { spur: { name: 'einmal', fahrten: neu.fahrten.map((f) => ({ ...f, ziel: 'erz/3/fader' })) } });
+  await postJson(url, '/spur', { spur: { name: 'einmal', fahrten: neu.fahrten.map((f) => ({ ...f, ziel: 'bus/3/fader' })) } });
   const e = await postJson(url, '/spur/aendern', { name: 'einmal', spur: { name: 'einmal', schleife_takte: 1, fahrten: neu.fahrten } });
   assert.equal(e.code, 409); assert.equal(e.j.fehler, 'keine_schleife');
   await postJson(url, '/spur/stopp', { name: 'band-2-fader' });
@@ -458,7 +464,7 @@ test('S7 loop T13.1 AK32: a change during the sending of the next pass applies f
   const { o, url, log } = await stapel(t, { wirtOrdner: wo });
   let halten = false;
   const bass = await fakeWirt(t, wo, 'bass', async (z) => { if (z.befehl === 'fahre' && halten) await warte(500); return { ok: true }; });
-  const mk = (nach) => ({ name: 'cut', schleife_takte: 1, fahrten: [{ ziel: 'erz/2/filter', ab_takt: 1, takte: 1, nach },
+  const mk = (nach) => ({ name: 'cut', schleife_takte: 1, fahrten: [{ ziel: 'bus/2/filter', ab_takt: 1, takte: 1, nach },
     { ziel: 'wirt:bass/a_filter1_cutoff', ab_takt: 1, takte: 1, nach: 0, von: -40 }] });
   const r = await postJson(url, '/spur', { spur: mk(-0.6) });
   assert.equal(r.code, 200, JSON.stringify(r.j));
@@ -497,10 +503,12 @@ test('S7 loop T13.1: a change may change the length; later passes follow the new
 });
 
 test('S7 loop T13.2 MAJOR 3: only the owner changes a loop; Cypher\'s change obeys Stop Cypher, AUTO and D8', async (t) => {
-  const { o, url, log } = await stapel(t);
+  const wo = fs.mkdtempSync(path.join(TMP, 'w-'));
+  const { o, url, log } = await stapel(t, { wirtOrdner: wo });
+  await fakeWirt(t, wo, 'bass');
   assert.equal((await postJson(url, '/spur', { spur: fader('a2') })).code, 200);
-  assert.equal((await postJson(url, '/spur', { spur: { ...fader('c3'), fahrten: fader('c3').fahrten.map((f) => ({ ...f, ziel: 'erz/3/fader' })) } }, CYPHER)).code, 200);
-  const c3 = (nach) => ({ ...fader('c3', 1, nach), fahrten: fader('c3', 1, nach).fahrten.map((f) => ({ ...f, ziel: 'erz/3/fader' })) });
+  assert.equal((await postJson(url, '/spur', { spur: wirtSchleife('c3') }, CYPHER)).code, 200);
+  const c3 = (nach) => wirtSchleife('c3', 1, nach / 100);
   let x = await postJson(url, '/spur/aendern', { name: 'a2', spur: fader('a2', 1, -10) }, CYPHER);
   assert.equal(x.code, 403); assert.equal(x.j.fehler, 'nur_andreas');
   x = await postJson(url, '/spur/aendern', { name: 'c3', spur: c3(-10) });
@@ -509,12 +517,12 @@ test('S7 loop T13.2 MAJOR 3: only the owner changes a loop; Cypher\'s change obe
   assert.equal((await postJson(url, '/spur/aendern', { name: 'a2', spur: fader('a2', 1, -10) })).code, 200);
   assert.equal((await postJson(url, '/spur/aendern', { name: 'c3', spur: c3(-12) }, CYPHER)).code, 200);
   // AUTO off on stream 3: Cypher's change is refused like a start
-  assert.equal((await postJson(url, '/strudel/autonom', { an: false, strom: 3 })).code, 200);
+  assert.equal((await postJson(url, '/strudel/autonom', { an: false, strom: 2 })).code, 200);
   x = await postJson(url, '/spur/aendern', { name: 'c3', spur: c3(-14) }, CYPHER);
   // (if the watcher planned a pass in the few ms between the two requests, it ended the loop for the same reason: also correct)
   const geendet = log.some((z) => z.typ === 'spur_schleife_ende' && z.name === 'c3' && z.grund === 'auto_aus');
   assert.ok((x.code === 409 && x.j.fehler === 'auto_aus') || (x.code === 404 && geendet), JSON.stringify(x));
-  assert.equal((await postJson(url, '/strudel/autonom', { an: true, strom: 3 })).code, 200);
+  assert.equal((await postJson(url, '/strudel/autonom', { an: true, strom: 2 })).code, 200);
   if (geendet) assert.equal((await postJson(url, '/spur', { spur: c3(-12) }, CYPHER)).code, 200);
   // D8: a change of Cypher's deck loop that reopens a closed channel at the seam
   for (const [pfad, wert] of [['deck/1/fader', 0], ['deck/1/trim', 0]]) o.vomKern({ adresse: '/e/regler', felder: { pfad, wert, halter: 'frei', sample: 0, beat: 0 } });
@@ -556,7 +564,7 @@ test('S7 loop review timing 1: STOP during the pass-0 wirt await of POST /spur: 
   const { url, log } = await stapel(t, { wirtOrdner: wo });
   let nFahre = 0;
   const bass = await fakeWirt(t, wo, 'bass', async (z) => { if (z.befehl === 'fahre' && nFahre++ === 0) await warte(800); return { ok: true }; });
-  const spur = { name: 'cut', schleife_takte: 1, fahrten: [{ ziel: 'erz/2/filter', ab_takt: 1, takte: 1, nach: -0.6 },
+  const spur = { name: 'cut', schleife_takte: 1, fahrten: [{ ziel: 'bus/2/filter', ab_takt: 1, takte: 1, nach: -0.6 },
     { ziel: 'wirt:bass/a_filter1_cutoff', ab_takt: 1, takte: 1, nach: 0, von: -40 }] };
   const play = postJson(url, '/spur', { spur }, CYPHER);
   await bis(() => bass.some((z) => z.befehl === 'fahre'));

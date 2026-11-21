@@ -51,7 +51,7 @@ struct KernKonfig {
   // all Halls itself), pinned to the CPUs of hall_cpus (comma separated CPU ids; fewer ids than workers start as many workers as ids and say so; ids outside the unit's CPU mask or SMT siblings give a warning) or, when empty, to distinct physical cores
   // chosen by waehle_hall_cpus inside the CPU mask the process may use, and the JACK thread is pinned to the reserved core. Fewer free cores than workers asked for gives
   // fewer workers and a line at start.
-  int hall_faeden = 3;
+  int hall_faeden = 7;
   std::string hall_cpus = "";
   // Multi-core work, slice 3.2: the track phases (phase Q) on the Hall pool: "aus" | "an" | "auto". Default "an", in live and production alike. Needs hall_faeden > 0 (main maps
   // "no pool" to aus and says so at start). "auto" is a synonym of "an": after a stall switch-off both retry after a back-off (4096 blocks, doubling per switch-off up to 65536).

@@ -3,6 +3,29 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-21, sixteenth update
+
+**Containers as the console unit**
+- The mixer now has four containers, A to D, each with one channel strip and one input: empty, the deck player of that
+  container, or a module. Whatever sits in a container sounds through its fader, EQ, filter and sends, and nothing reaches
+  the master past a container.
+- Any module can sit in any container, a Strudel module in A or B included. A module no longer has fixed channels of its own.
+- The Strudel module holds one track per stream, up to 16 streams, each with its own strip (inserts, filter, EQ with kill,
+  fader, sends into a Hall and a Delay return). The streams 9 and 10 are normal streams now. The old `erz/<n>` paths keep
+  working, controller maps and scripts need no change.
+- The arrangement engine has eight returns instead of four.
+- The loop boxes are gone; loops play in the loop deck. Production runs as a service with a hidden strip and renders
+  bit for bit as before, and the previewer is a service as well.
+- Project files are written as `cypherdj-projekt/3` with the four places; older files are lifted when they are opened.
+
+**Engine load**
+- A muted pattern no longer computes behind its closed mute: it gets no new notes, its tail dies away and its instrument
+  rests. Whether a note is muted is decided on the note's own sample, so a scene that unmutes on the bar keeps the note on
+  that bar. With the track's PFL on, a muted track keeps its notes for the cue.
+- When the track workers have to step back and the serial fallback cannot keep up either, the workers come back on the next
+  block instead of staying off for minutes. Before, a heavy project could slow the clock to half its tempo.
+- Every one of the 16 Baukasten tracks of a project now moves its sound live when a knob is dragged (before: the first 8).
+
 ## 2026-11-20, fifteenth update
 
 **Loop decks**

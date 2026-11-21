@@ -396,7 +396,7 @@ void Arrangement::ruhe(int m) {
 }
 
 void Arrangement::dj_schluessel(const float* const* l, const float* const* r) {
-  for (int i = 0; i < DJ_EINGAENGE; ++i) {
+  for (int i = 0; i < ARR_SCHLUESSEL; ++i) {
     dj_l_[i] = l ? l[i] : nullptr;
     dj_r_[i] = r ? r[i] : nullptr;
   }
@@ -473,10 +473,14 @@ void Arrangement::spur_quelle(int64_t s0, int m) {
   q_s0_ = s0;   // the block position of this phase: the remainder and the units read it (also the workers, after schicke)
   q_m_ = m;
   if (spur_seriell_weil(m)) {
+    // the account is off: the serial phase is measured, a fallback slower than the pool's own limit switches the pool on again (ArrSpurLauf::seriell_gemessen)
+    const bool messen = spur_konto_aus_;
+    const int64_t t0 = messen ? spur_lauf_.jetzt() : 0;
     ArrArbeit& a0 = spur_arbeit_[0];
     for (int b = 0; b < spur_plan_.bahnen(); ++b)
       for (int k = 0; k < spur_plan_.n(b); ++k) spur_einheit_ausfuehren(spur_plan_.spur(b, k), s0, m, a0);
     spur_rest_lauf();
+    if (messen) spur_lauf_.seriell_gemessen(spur_lauf_.jetzt() - t0, m);
     spur_nach_join();
     return;
   }
@@ -491,6 +495,7 @@ void Arrangement::spur_quelle(int64_t s0, int m) {
 // The reason the phase stays on the caller, counted; false = fork. The order of the reasons is the order of the checks.
 bool Arrangement::spur_seriell_weil(int m) {
   ArrSpurLauf::Zaehler& z = spur_lauf_.z;
+  spur_konto_aus_ = false;
   if (spur_modus_gesehen_ == 0) {
     ++z.seriell_aus;
     return true;
@@ -502,6 +507,7 @@ bool Arrangement::spur_seriell_weil(int m) {
   }
   if (!spur_lauf_.konto_pruefen(*p, spur_modus_gesehen_)) {   // the track account switched itself off (mode auto: after a pause it may be switched on once)
     ++z.seriell_aus;
+    spur_konto_aus_ = true;
     return true;
   }
   if (spur_plan_.bahnen() < 2) {
@@ -588,7 +594,7 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
   if (!snap_ && n_offen_ == 0 && klick_rest_ == 0 && stimmen() == 0 && !weg && !ret_blendet && launch_ruhig()) {   // nichts geladen, nichts klingt:
     monitor_loeschen();   // 1.8 S3: the sources are valid for one block only
     ruhe(m);                                                                      // DJ-Betrieb ohne Kosten (Slice 11)
-    for (int i = 0; i < DJ_EINGAENGE; ++i) dj_l_[i] = dj_r_[i] = nullptr;         // slice 5 U2b: the pointers of dj_schluessel() are good for one block
+    for (int i = 0; i < ARR_SCHLUESSEL; ++i) dj_l_[i] = dj_r_[i] = nullptr;         // slice 5 U2b: the pointers of dj_schluessel() are good for one block
     for (int i = 0; i < DJ_KANAELE; ++i) dj_aus_l_[i] = dj_aus_r_[i] = nullptr;           // DJ view places: the pairs of dj_ausgang() likewise
     return;
   }
@@ -672,7 +678,7 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
     }
   }
   monitor_loeschen();   // 1.8 S3: the sources are valid for one block only
-  for (int i = 0; i < DJ_EINGAENGE; ++i) dj_l_[i] = dj_r_[i] = nullptr;   // slice 5 U2b: the pointers of dj_schluessel() are good for one block; the next block without a call has a silent DJ key
+  for (int i = 0; i < ARR_SCHLUESSEL; ++i) dj_l_[i] = dj_r_[i] = nullptr;   // slice 5 U2b: the pointers of dj_schluessel() are good for one block; the next block without a call has a silent DJ key
   for (int i = 0; i < DJ_KANAELE; ++i) dj_aus_l_[i] = dj_aus_r_[i] = nullptr;     // DJ view places: the pairs of dj_ausgang() are good for one block; a block without a call sends a DJ group to the master
   verlaeufe_nachfuehren(m);
   auto_ueber_abschluss(s0 + m);   // 1.12 S3: an override change inside this block has passed

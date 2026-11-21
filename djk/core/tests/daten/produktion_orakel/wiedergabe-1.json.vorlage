@@ -1,0 +1,4 @@
+{"format":"cypherdj-arr/3","nr":1,"spuren":[
+{"nr":1,"art":"audio","ausgang":{"art":"gruppe","nr":1},"clips":[{"id":"c1","start_beat":0.0,"laenge_beats":16.0,"sha256":"@SHA_A@","datei":"@ORDNER@/audio/@SHA_A@.f32","frames":@FRAMES@,"offset_frames":0,"gain_db":0.0,"ein_beats":0.0,"aus_beats":0.0}]},
+{"nr":2,"art":"audio","ausgang":{"art":"gruppe","nr":1},"clips":[{"id":"c2","start_beat":0.0,"laenge_beats":16.0,"sha256":"@SHA_B@","datei":"@ORDNER@/audio/@SHA_B@.f32","frames":@FRAMES@,"offset_frames":0,"gain_db":-1.5,"ein_beats":0.0,"aus_beats":0.0}]}
+],"gruppen":[{"nr":1,"ausgang":{"art":"master"}}],"returns":[]}

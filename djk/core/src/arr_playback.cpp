@@ -3,8 +3,10 @@
 #include "cypherdj/arr_playback.h"
 #include "cypherdj/warp_factory.h"
 #include "cypherdj/arr_pdc.h"
+#include "cypherdj/pult_table.h"
 #include "cypherdj/arr_key.h"
 #include "cypherdj/arr_inserts.h"
+#include "cypherdj/generator.h"
 
 #include "cypherdj/cypher_bk_ffi.h"
 
@@ -240,17 +242,21 @@ void lese_kette(const json& o, const std::string& wo, ArrKette& k, bool* slot_be
       if (a != ArrInsArt::komp) format(wk + "only a komp stage has a sidechain key (" + art + ")");
       const std::string q = text(kj, "q", wk);
       int nmax = 0;
-      bool dj = false;
+      bool dj = false, strom = false;
       if (q == "spur") { key.quelle = ARR_SCHL_SPUR; nmax = ARR_SPUREN; }
       else if (q == "grp") { key.quelle = ARR_SCHL_GRP; nmax = ARR_GRUPPEN; }
       else if (q == "ret") { key.quelle = ARR_SCHL_RET; nmax = ARR_RETURNS; }
       else if (q == "pm") key.quelle = ARR_SCHL_PM;   // refused by the table (sidechain_zyklus); the number means nothing
       else if (q == "deck" || q == "erz" || q == "pad") dj = true;   // slice 5 U2b: the DJ inputs; the generated list says which are allowed
-      else format(wk + "q " + q + " unbekannt (spur, grp, ret, pm, deck, erz, pad)");
+      else if (q == "strom") dj = strom = true;   // K4 (D-V3): the stream distributors 1..16; like a DJ input (no pre and post), but every number is a key
+      else format(wk + "q " + q + " unbekannt (spur, grp, ret, pm, deck, erz, pad, strom)");
       if (dj) {
         const int64_t kn = ganz(kj, "nr", wk);
-        if (const uint8_t ant = arr_schluessel_dj_urteil(q, kn); ant != SCHL_JA)   // erz/2..8, pad/1..2: not available in the block; erz/4: the arrangement's own output
+        if (strom) {
+          if (kn < 1 || kn > ARR_SCHLUESSEL - 4) format(wk + "nr außerhalb 1 bis " + std::to_string(ARR_SCHLUESSEL - 4) + " (strom)");
+        } else if (const uint8_t ant = arr_schluessel_dj_urteil(q, kn); ant != SCHL_JA) {   // erz/2..8, pad/1..2: not available in the block; erz/4: the arrangement's own output
           format(wk + q + "/" + std::to_string(kn) + " cannot be a key (" + SCHL_GRUND[ant] + ")");
+        }
         key.quelle = q == "deck" ? ARR_SCHL_DECK : ARR_SCHL_ERZ;
         key.nr = static_cast<uint8_t>(kn);
         key.punkt = ARR_SCHL_POST;   // a DJ input has no pre and post; punkt may be left out, "pre" and "post" are both accepted and mean the same
@@ -1135,9 +1141,10 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
       format(std::string("kein JSON: ") + e.what());
     }
     const std::string fmt = text(j, "format", "");
-    const bool v3 = fmt == "cypherdj-arr/3";   // /3 = /2 plus `returns[].auto` (the fader lane of a return); a core without it refuses the format
+    const bool v4 = fmt == "cypherdj-arr/4";   // K5: /4 = /3 plus the track source `quelle` (read by K7), DJ outputs 1..4 = containers A..D and the live invariants (below)
+    const bool v3 = fmt == "cypherdj-arr/3" || v4;   // /3 = /2 plus `returns[].auto` (the fader lane of a return); a core without it refuses the format
     const bool v2 = fmt == "cypherdj-arr/2" || v3;
-    if (fmt != "cypherdj-arr/1" && !v2) format("format ist weder cypherdj-arr/1 noch cypherdj-arr/2 noch cypherdj-arr/3");
+    if (fmt != "cypherdj-arr/1" && !v2) format("format ist weder cypherdj-arr/1 noch cypherdj-arr/2 noch cypherdj-arr/3 noch cypherdj-arr/4");
     // Spec 3.2, 6.1: Schlüssel "nr" (Wiedergabe-Nummer der Instanz, wie S2 sie schreibt), gleich der Nummer im Dateinamen
     if (ganz(j, "nr", "") != nummer) format("nr in der Datei weicht von " + std::to_string(nummer) + " ab");
     const json& spuren = feld(j, "spuren", "");
@@ -1153,7 +1160,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
       live = j.at("live").get<bool>();
     }
     snap->live = live;
-    bool dj_da[7] = {};   // the DJ channel numbers 1..6 given to a group (ADR 038: pad/1, pad/2, deck/1..deck/4), each at most once
+    bool dj_da[PULT_CONTAINER + 1] = {};   // the DJ output numbers 1..4 given to a group (K5: containers A..D), each at most once
     bool gruppe_da[ARR_GRUPPEN + 1] = {};
     bool rack_belegt[ARR_RACKS] = {};      // 1.10 slice 4c: rack pool slots used by a strip
     bool ins_belegt[ARR_INS_ALLE] = {};   // 1.10 slice 4a/4b: pool slots (global index) used by a stage
@@ -1180,8 +1187,12 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
           if (!live) format(wg + "ausgang.art dj nur im Live-Projekt (Kopf live fehlt)");
 #endif
           const int64_t dn = ganz(ag, "nr", wg + "ausgang.");
-          if (dn < 1 || dn > 6) format(wg + "ausgang.nr außerhalb 1 bis 6 (DJ-Kanal)");
-          if (dj_da[dn]) format(wg + "ausgang: DJ-Kanal " + std::to_string(dn) + " doppelt");
+          if (dn < 1 || dn > PULT_CONTAINER) format(wg + "ausgang.nr outside 1 to " + std::to_string(PULT_CONTAINER) + " (DJ output)");
+          if (dj_da[dn]) {
+            const std::string m = wg + "ausgang: DJ output " + std::to_string(dn) + " doppelt";   // "doppelt" stays in the text for the old callers
+            if (v4) throw Abbruch("dj_doppelt", m);   // K5 (V C9): its own reason in /4, `format` before
+            format(m);
+          }
           dj_da[dn] = true;
           snap->gruppe_dj[gn - 1] = static_cast<uint8_t>(dn);
         } else if (g_art != "master") {
@@ -1224,7 +1235,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
         if (r_art == "dj") {   // loop deck channel strip KZ3: a return of the live container can sound in a DJ channel pair; several returns may name the same channel (a deck's HALL and DELAY)
           if (!live) format(wr + "ausgang.art dj only in a live project (head flag live missing)");
           const int64_t dn = ganz(ar, "nr", wr + "ausgang.");
-          if (dn < 1 || dn > 6) format(wr + "ausgang.nr outside 1 to 6 (DJ channel)");
+          if (dn < 1 || dn > PULT_CONTAINER) format(wr + "ausgang.nr outside 1 to " + std::to_string(PULT_CONTAINER) + " (DJ output)");
           snap->ret_dj[rn - 1] = static_cast<uint8_t>(dn);
         } else if (r_art != "master") {
           format(wr + "ausgang: a return sends to master or dj only (not " + r_art + ")");
@@ -1317,6 +1328,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
     int n_bk = 0;                              // S20: bk tracks of this playback (at most ARR_BK_MAX)
     int n_kit = 0;                             // 1.9: kit tracks of this playback (at most ARR_KIT_MAX)
     std::set<int> nr_gesehen;
+    std::set<int> strom_gesehen;   // container core K7: the streams read by strom tracks (at most one track each)
     std::set<std::string> kennungen;   // loop deck: the track ids of this playback (unique)
     // 1.9 U6: the device of a track or of a rack member (the one code for both): art "intern" with geraet rb338, bk or kit, or art "wirt" with a
     // slot. glied: the object is a rack member (its device goes to snap->glied_spur, a graph instance is keyed by its member slot, a Surge slot
@@ -1455,7 +1467,21 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
         }
       }
       const std::string art = text(s, "art", wo);
-      if (art == "audio") {
+      if (s.contains("quelle")) {   // container core K7: a track that reads an Erzeuger stream. The decision key is quelle.art, the track `art` is "intern" (what M writes)
+        if (!v4) format(wo + "quelle gibt es erst in cypherdj-arr/4");
+        const json& q = s.at("quelle");
+        if (!q.is_object()) format(wo + "quelle is not an object");
+        const std::string qart = text(q, "art", wo + "quelle.");
+        if (qart != "strom") format(wo + "quelle.art " + qart + " unbekannt (strom)");
+        if (art != "intern") format(wo + "a track with quelle has art intern");
+        const int64_t sn = ganz(q, "strom", wo + "quelle.");
+        if (sn < 1 || sn > ERZ_STROEME) format(wo + "quelle.strom außerhalb 1 bis " + std::to_string(ERZ_STROEME));
+        if (!strom_gesehen.insert(static_cast<int>(sn)).second) format(wo + "quelle.strom " + std::to_string(sn) + " is read by another track (one track per stream)");
+        for (const char* nein : {"geraet", "clips", "noten", "graph", "kit", "parameter", "slot"})
+          if (s.contains(nein)) format(wo + std::string(nein) + " gibt es nicht bei einem Track mit quelle");
+        sp.art = ArrArt::strom;
+        sp.strom = static_cast<int8_t>(sn);
+      } else if (art == "audio") {
         sp.art = ArrArt::audio;
       } else if (art == "intern" && text(s, "geraet", wo) == "rack") {   // 1.9 U6: an instrument rack (spec E9, E10)
         if (!v2) format(wo + "geraet rack gibt es erst in cypherdj-arr/2");
@@ -1774,7 +1800,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
                   [](const ArrClip& a, const ArrClip& b) { return a.start_beat < b.start_beat; });
         sp.n_clips = static_cast<int>(snap->clips.size() - c0);
         sp.clips = sp.n_clips ? snap->clips.data() + c0 : nullptr;
-      } else {
+      } else if (sp.art != ArrArt::strom) {   // container core K7: a strom track has neither clips nor notes
         const json& noten = feld(s, "noten", wo);
         if (!noten.is_array()) format(wo + "noten ist keine Liste");
         const size_t n0 = snap->noten.size();
@@ -1901,6 +1927,22 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
       for (const json& r : j.at("returns")) lese_kette_auto(r, "returns[nr " + std::to_string(r.at("nr").get<int64_t>()) + "].", ARR_KETTE_RET0 + static_cast<int>(r.at("nr").get<int64_t>()) - 1, *snap);
     // nested groups: the level and the order of every group, a cycle is refused (the server refuses it at the command too). Before the key check: the key rules read the levels.
     if (std::string m; !arr_gruppen_rechnen(*snap, &m)) format(m);
+    snap->send_maske = v4 && live;
+    if (v4 && live) {   // K5: the live invariants (spec 7). Every track and every return belongs to a container: a track reaches a top group with a DJ output (never the PM), a return leads into a DJ output.
+      // (send_ausser_modul is not checked here: the sends are rows, not data, D-K3; mischen() masks them structurally.)
+      for (int t = 0; t < ARR_SPUREN; ++t) {
+        const ArrSpur& sp = snap->spur[t];
+        if (sp.nr == 0) continue;   // a gap: the slot is not in the file
+        int g = sp.ausgang;
+        if (g == 0) throw Abbruch("live_ohne_container", "spuren[nr " + std::to_string(sp.nr) + "]: a track of a live project must lead into a group with a DJ output, not into the production master");
+        while (snap->gruppe_ausgang[g - 1] > 0) g = snap->gruppe_ausgang[g - 1];   // arr_gruppen_rechnen has refused cycles
+        if (snap->gruppe_dj[g - 1] == 0)
+          throw Abbruch("live_ohne_container", "spuren[nr " + std::to_string(sp.nr) + "]: its top group " + std::to_string(g) + " has no DJ output");
+      }
+      for (int r = 0; r < ARR_RETURNS; ++r)
+        if (snap->ret_da[r] && snap->ret_dj[r] == 0)
+          throw Abbruch("live_ohne_container", "returns[nr " + std::to_string(r + 1) + "]: a return of a live project must lead into a DJ output");
+    }
     // 1.10 slice 5 U2a: every structural key against the table of docs/interfaces/schluessel_regeln.json (a source computed after the consumer, a strip keyed by itself, the PM)
     if (std::string m; !arr_schluessel_pruefe(*snap, &m)) format(m);
     // 1.10 slice 5 U1: the order the tracks run in when a stage listens to the post of another track; a track keyed by itself or a cycle is refused

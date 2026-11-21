@@ -1,23 +1,40 @@
-// Live container (plan live-module): reading the two slots (task 1) and building a module tree (task 2). A slot is a top-level group with modul.slot
-// 'A' or 'B'; the group name does not count.
+// Live container: reading the modules (a module is a top group with `modul` that sits in a `stems` place) and building a module tree. Where a module
+// sounds is `Projekt.plaetze`, not a field of the group.
 import { fuehreListeAus } from './commands.ts';
 import { SAMPLERATE, blendPfad, type Herkunft, type Projekt, type Spur, type Warp } from './model.ts';
 import { STEMS, type Stem } from './stems.ts';
 import { liveBeats, takteProLive } from './taktart_live.ts';
 import { TROMMEL_KARTEN } from './trommel_map.ts';
 
-export function liveSlots(p: Projekt): { A?: string; B?: string } {
-  const aus: { A?: string; B?: string } = {};
-  for (const g of p.gruppen) {
-    if (g.ausgang !== undefined || g.modul?.slot === undefined) continue;   // nested groups are no slots
-    if (aus[g.modul.slot] === undefined) aus[g.modul.slot] = g.id;
-  }
-  return aus;
+// The module groups of the places that hold `stems`, in place order (place 1 first)
+export function modulGruppen(p: Projekt): string[] {
+  return (p.plaetze ?? []).flatMap((x) => (x.typ === 'stems' ? [x.gruppe] : []));
 }
 
-// DJ view places task 13 (decision 13): a slot argument is 1/2 (number or string) or A/B (1 = A, 2 = B); anything else is undefined
-export function normiereSlot(v: unknown): 'A' | 'B' | undefined {
-  return v === 'A' || v === 1 || v === '1' ? 'A' : v === 'B' || v === 2 || v === '2' ? 'B' : undefined;
+// A module is addressed by its place: the container letter A..D is place 1..4 (the wire name stays `slot`). Nothing is derived from the order of the
+// modules; a place holds a module exactly when `plaetze[place - 1]` is `stems`.
+export type Slot = 'A' | 'B' | 'C' | 'D';
+export const SLOTS: readonly Slot[] = ['A', 'B', 'C', 'D'];
+export const slotPlatz = (s: Slot): 1 | 2 | 3 | 4 => (SLOTS.indexOf(s) + 1) as 1 | 2 | 3 | 4;
+export const platzSlot = (platz: number): Slot => SLOTS[platz - 1];
+
+// The group of the module that sits in the place of `slot`, or undefined (empty place, or a place of another type)
+export function modulAmPlatz(p: Projekt, slot: Slot): string | undefined {
+  const x = p.plaetze?.[slotPlatz(slot) - 1];
+  return x?.typ === 'stems' ? x.gruppe : undefined;
+}
+
+// The container letter of the place that holds the module group, or undefined (parked or no module place)
+export function platzVonModul(p: Projekt, gruppeId: string): Slot | undefined {
+  const i = (p.plaetze ?? []).findIndex((x) => x.typ === 'stems' && x.gruppe === gruppeId);
+  return i < 0 ? undefined : SLOTS[i];
+}
+
+// A place argument: 1..4 (number or string) or the container letter A..D; anything else is undefined
+export function normierePlatz(v: unknown): Slot | undefined {
+  if (typeof v === 'string' && /^[A-D]$/.test(v)) return v as Slot;
+  const n = typeof v === 'number' ? v : typeof v === 'string' && /^[1-4]$/.test(v) ? Number(v) : NaN;
+  return Number.isInteger(n) && n >= 1 && n <= 4 ? SLOTS[n - 1] : undefined;
 }
 
 export const LIVE_LOOP_BEATS = 64;                                   // the live loop region in 4/4: 16 bars
@@ -61,12 +78,12 @@ function clipBefehle(spurId: string, d: ModulDatei, loop: ModulLoop, vonBeat: nu
 //     group `Drums` / `Bass` / `Other` / `Vocals` (/ `Guitar` / `Piano`), each with the original track of that stem at 0 dB
 // Without stems the module is loop-only: the Loop track is audible. When the slot already holds a module, the stem groups are added to it and the
 // Loop track is muted; its fader and everything else stay as Andreas left them.
-export function baueModul(p0: Projekt, slot: 'A' | 'B', loop: ModulLoop, stems: Partial<Record<Stem, ModulDatei>>,
-  herkunft: Omit<ModulHerkunftSlot, 'slot'>, quelle: Herkunft = 'andreas'): Projekt {
+export function baueModul(p0: Projekt, slot: Slot, loop: ModulLoop, stems: Partial<Record<Stem, ModulDatei>>,
+  herkunft: ModulHerkunftSlot, quelle: Herkunft = 'andreas'): Projekt {
   const lauf = (p: Projekt, b: unknown): Projekt => fuehreListeAus(p, [b], { quelle }).projekt;
   const nimm = (p: Projekt, liste: unknown[]): Projekt => liste.reduce<Projekt>((q, b) => lauf(q, b), p);
   let p = p0;
-  const vorhanden = liveSlots(p)[slot];
+  const vorhanden = modulAmPlatz(p, slot);
   const von = herkunft.von_beat, eins = herkunft.eins_beat ?? 0, titel = herkunft.titel;
   let oben: string, loopId: string;
   if (vorhanden === undefined) {
@@ -93,7 +110,9 @@ export function baueModul(p0: Projekt, slot: 'A' | 'B', loop: ModulLoop, stems: 
   if (vorhanden === undefined) {
     p = lauf(p, { befehl: 'gruppenspur_neu', name: `${slot} · ${titel}`.slice(0, 80), mitglieder: [loopId, ...kinder] });
     oben = p.gruppen.at(-1)!.id;
-    p = lauf(p, { befehl: 'modul_setzen', gruppe_id: oben, modul: { ...herkunft, slot } });
+    p = lauf(p, { befehl: 'modul_setzen', gruppe_id: oben, modul: { ...herkunft } });
+    // the module sits in the place of its slot letter (the caller made sure it is a free place)
+    p = lauf(p, { befehl: 'platz_setzen', platz: slotPlatz(slot), typ: 'stems', gruppe_id: oben });
   } else {
     oben = vorhanden;
     for (const k of kinder) p = lauf(p, { befehl: 'ziel_setzen', strang_id: k, ausgang: { art: 'gruppe', id: oben } });
@@ -129,9 +148,9 @@ function midiClipBefehle(spurId: string, noten: NeueNote[], loopBeats: number, v
 // Adds to every Drums/Bass stem group of the slot's module (that has MIDI notes) an instrument track `<Stem> new` with its default graph, the
 // MIDI clips and the fader closed at -200 (blend 0 = the original alone, so nothing changes in the sound until Andreas blends). A stem group that
 // already has an instrument track, or has no original track, is left alone. One project value; the caller stores it as one undo step.
-export function baueNeuePfade(p0: Projekt, slot: 'A' | 'B', noten: Partial<Record<NeuStem, NeueNote[]>>, quelle: Herkunft = 'andreas'): Projekt {
+export function baueNeuePfade(p0: Projekt, slot: Slot, noten: Partial<Record<NeuStem, NeueNote[]>>, quelle: Herkunft = 'andreas'): Projekt {
   const lauf = (p: Projekt, b: unknown): Projekt => fuehreListeAus(p, [b], { quelle }).projekt;
-  const top = liveSlots(p0)[slot];
+  const top = modulAmPlatz(p0, slot);
   if (top === undefined) throw new Error(`live slot ${slot} holds no module`);
   const herkunft = p0.gruppen.find((g) => g.id === top)!.modul!;
   let p = p0;

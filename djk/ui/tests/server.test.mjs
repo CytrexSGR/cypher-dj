@@ -50,7 +50,15 @@ const BESTAND = process.env.CYPHERDJ_BESTAND ? LEBEND : baueSynthetisch();
 const warte = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Arbeitsbestand je Lauf in tmpfs wie im Betrieb (/dev/shm), die Attrappe liest nur dort (wie der echte Kern)
-async function stapel(t, mutationen = [], { bestand = BESTAND, vorher, kernPruefmodus, zielKurve, loops, kits, welleCache, musterOrdner, hotcueOrdner, rasterOrdner, huellen, wirtOrdner, klangBefehl, echteBegruessung, digitalout, baukastenOrdner } = {}) {
+// Strom tracks of the open live project (container core): the erz/<n> alias vocabulary of the old strips resolves onto them
+async function stromSpuren(o, ...stroeme) {
+  for (const strom of stroeme) {
+    const r = await o.proj.sitzung.aendern({ rev: o.proj.zugang.offen().projekt.rev, label: `track ${strom}`, befehle: [{ befehl: 'strom_spur_neu', strom }] }, 'andreas');
+    assert.equal(r.code, 200, JSON.stringify(r.j));
+  }
+}
+
+async function stapel(t, mutationen = [], { bestand = BESTAND, vorher, kernPruefmodus, zielKurve, loops, kits, welleCache, musterOrdner, hotcueOrdner, rasterOrdner, huellen, wirtOrdner, klangBefehl, echteBegruessung, digitalout, baukastenOrdner, live } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'djk60m-'));
   // V2 Fix-Runde 2 H2 (Spec 6.33, Muster tests/support/media_library.mjs): Hüllen und alle Vorgabe-Ordner (loops, kits, welle, muster, hc, raster, wirt) im
   // eigenen tmp-Ordner des Stapels, den t.after wegräumt; vorher lagen sie direkt unter TMPDIR und blieben je Stapel liegen. Übergebene Ordner bleiben.
@@ -75,7 +83,9 @@ async function stapel(t, mutationen = [], { bestand = BESTAND, vorher, kernPruef
   const log = [];
   const huellenPfad = huellen ?? (() => { const p = path.join(tmpd('huellen'), 'huellen'); schreibeLeerenRing(p); return p; })();
   serverInstanzSetzen(t);   // I08 Nachzug R2 (m4)
-  const o = new Oberflaeche({ port: 47300 + K, kernPort: 47100 + K, aboPort: 47150 + K, leitstandWs: 47200 + K, bestand, arbeitsbestand: ab, mutationen, kernPruefmodus, zielKurve, loops: loops ?? tmpd('loops'), kits: kits ?? tmpd('kits'), welleCache: welleCache ?? tmpd('welle'), musterOrdner: musterOrdner ?? tmpd('muster'), hotcueOrdner: hotcueOrdner ?? tmpd('hc'), rasterOrdner: rasterOrdner ?? tmpd('raster'), huellen: huellenPfad, wirtOrdner: wirt, klangBefehl, digitalout, baukastenOrdner: baukastenOrdner ?? tmpd('baukasten'), log: (z) => log.push(z) });
+  const o = new Oberflaeche({ port: 47300 + K, kernPort: 47100 + K, aboPort: 47150 + K, leitstandWs: 47200 + K, bestand, arbeitsbestand: ab, mutationen, kernPruefmodus, zielKurve, loops: loops ?? tmpd('loops'), kits: kits ?? tmpd('kits'), welleCache: welleCache ?? tmpd('welle'), musterOrdner: musterOrdner ?? tmpd('muster'), hotcueOrdner: hotcueOrdner ?? tmpd('hc'), rasterOrdner: rasterOrdner ?? tmpd('raster'), huellen: huellenPfad, wirtOrdner: wirt, klangBefehl, digitalout, baukastenOrdner: baukastenOrdner ?? tmpd('baukasten'),
+    // live: an own project folder (the instance's live container stays untouched); the live project is opened at the end of the stapel
+    ...(live ? { proj: { wurzel: path.join(tmpd('projekte'), 'projekte'), arbeitsordner: path.join(tmp, 'arr') } } : {}), log: (z) => log.push(z) });
   await o.starte();
   laufend = o;
   for (let i = 0; i < 100 && o.kern.zustand !== 'verbunden'; i++) await warte(20);
@@ -96,6 +106,8 @@ async function stapel(t, mutationen = [], { bestand = BESTAND, vorher, kernPruef
   // Darum fallen echte Begrüßungen nach dem Verbinden weg; Tests speisen /k/willkommen selbst ein.
   const empfange = o.kern.empfange.bind(o.kern);
   if (!echteBegruessung) o.kern.empfange = (buf) => { if (buf.includes('/k/willkommen')) return; return empfange(buf); };
+  // container core M6: POST /strudel needs the strudel module of an open live project (a new live project places it in place 3)
+  if (live) { const r = await o.proj.sitzung.liveOeffnen('andreas'); assert.equal(r.code, 200, JSON.stringify(r.j)); }
   return { o, log, ab, url: `http://127.0.0.1:${47300 + K}` };
 }
 
@@ -228,7 +240,7 @@ function schreibeLoop(dir, name, beats, alt = false, quelle = 'test') {  // alt:
   fs.writeFileSync(path.join(dir, name, 'loop.f32'), Buffer.alloc(beats * 22500 * 8));
 }
 
-test('Plan Tempo-Folge: /loops markiert defekte Loops (frames, bpm, Dateigröße), /loop laden lehnt sie mit Grund ab', async (t) => {
+test('Plan Tempo-Folge: /loops markiert defekte Loops (frames, bpm, Dateigröße)', async (t) => {
   const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   const schreibe = (name, json, bytes) => {
     fs.mkdirSync(path.join(loops, name), { recursive: true });
@@ -246,47 +258,24 @@ test('Plan Tempo-Folge: /loops markiert defekte Loops (frames, bpm, Dateigröße
     ['gut', true, ''],
     ['kurz', false, 'frames 20160, expected 22500 for 1 beat(s)'],
     ['tempo', false, 'bpm 130, expected 128']]);
-  const vorher = o.gesendet;
-  const r = await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'kurz' });
-  assert.equal(r.code, 400);
-  assert.equal(r.j.fehler, 'loop_defekt');
-  assert.equal(r.j.grund, 'frames 20160, expected 22500 for 1 beat(s)');
-  assert.equal(r.j.text, 'frames 20160, expected 22500 for 1 beat(s)');
-  assert.equal(o.gesendet, vorher, 'ein defekter Loop geht nicht an den Kern');
-  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'gut' })).code, 200);   // Negativ-Kontrolle
+  assert.equal(o.gesendet, 0, 'listing sends nothing to the kern');
 });
 
-test('Loop-Boxen: /loops listet, /loop schickt laden, start, stopp an den Kern, /e/loop kommt durch (MVP 2)', async (t) => {
+test('Loops: /loops lists the library, a half-written folder is not in it, the loop boxes are gone (MVP 2, container core)', async (t) => {
   const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   schreibeLoop(loops, 'pruef-a', 4);
   schreibeLoop(loops, 'pruef-b', 1);
   schreibeLoop(loops, 'hoertest-alt', 8, true);  // Scheibe 3 (E3): alte takte-Datei bleibt in der Liste, als 8 Beats
   fs.mkdirSync(path.join(loops, '.halb.neu'));
-  const { o, log, url } = await stapel(t, [], { loops });
-  const s = sse(url);
+  const { o, url } = await stapel(t, [], { loops });
   const liste = await (await fetch(url + '/loops')).json();
   assert.deepEqual(liste.map((l) => [l.name, l.beats, l.quelle]), [['hoertest-alt', 8, 'test'], ['pruef-a', 4, 'test'], ['pruef-b', 1, 'test']]);
-  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'pruef-a' })).code, 200);
-  assert.equal((await postJson(url, '/loop', { aktion: 'start', box: 1 })).code, 200);
-  assert.equal((await postJson(url, '/loop', { aktion: 'stopp', box: 2 })).code, 200);
-  const an = log.filter((z) => z.typ === 'an_kern' && String(z.adresse).startsWith('/k/loop/'))
-    .map((z) => [z.adresse, z.felder.quelle, z.felder.box, z.felder.name ?? '']);
-  assert.deepEqual(an, [['/k/loop/laden', 'andreas', 1, 'pruef-a'], ['/k/loop/start', 'andreas', 1, ''], ['/k/loop/stopp', 'andreas', 2, '']]);
   const vorher = o.gesendet;
-  for (const body of [{ aktion: 'laden', box: 1, name: 'gibt-es-nicht' }, { aktion: 'start', box: 3 }, { aktion: 'bogus', box: 1 }]) {
-    assert.equal((await postJson(url, '/loop', body)).code, 400, JSON.stringify(body));
+  for (const body of [{ aktion: 'laden', box: 1, name: 'pruef-a' }, { aktion: 'start', box: 1 }, { aktion: 'stopp', box: 2 }, { aktion: 'bogus', box: 1 }]) {
+    const r = await postJson(url, '/loop', body);
+    assert.deepEqual([r.code, r.j.fehler], [400, 'unbekannte_aktion'], JSON.stringify(body));
   }
-  assert.equal(o.gesendet, vorher, 'Abgelehntes geht nicht an den Kern');
-  const udp = dgram.createSocket('udp4');
-  await new Promise((ok) => udp.send(kodiere('/e/loop', 'iisiidf', [1, 3, 'pruef-a', 1, 0, 1, 0]), 47150 + K, '127.0.0.1', ok));
-  udp.close();
-  await warte(200);
-  assert.ok(s.ereignisse.some((e) => e.a === '/e/loop' && e.f.box === 1 && e.f.status === 3 && e.f.name === 'pruef-a'));
-  const s2 = sse(url);
-  await warte(200);
-  assert.equal(s2.ereignisse[0].f.loops['1'].name, 'pruef-a', 'eine neue Seite bekommt den Stand der Boxen');
-  s.zu();
-  s2.zu();
+  assert.equal(o.gesendet, vorher, 'nothing went to the kern');
 });
 
 test('Mitschnitt (MVP 2 Scheibe 2): /loop rec schickt an den Kern, /e/mitschnitt kommt durch', async (t) => {
@@ -315,13 +304,13 @@ test('Mitschnitt (MVP 2 Scheibe 2): /loop rec schickt an den Kern, /e/mitschnitt
   s.zu();
 });
 
-test('Griff an erz/1/fader kommt am Kern an (Strudel-Kanal, Plan 2026-09-27)', async (t) => {
+test('Griff an pad/1/fader kommt am Kern an (container strip pad/1)', async (t) => {
   const { url } = await stapel(t);
   const s = sse(url);
-  assert.equal((await postJson(url, '/griff', { pfad: 'erz/1/fader', u: 0.5 })).code, 200);
-  assert.equal((await postJson(url, '/griff', { pfad: 'erz/1/fader', u: 1 })).code, 200);
+  assert.equal((await postJson(url, '/griff', { pfad: 'pad/1/fader', u: 0.5 })).code, 200);
+  assert.equal((await postJson(url, '/griff', { pfad: 'pad/1/fader', u: 1 })).code, 200);
   await warte(200);
-  assert.ok(s.ereignisse.some((e) => e.a === '/e/regler' && e.f.pfad === 'erz/1/fader'));
+  assert.ok(s.ereignisse.some((e) => e.a === '/e/regler' && e.f.pfad === 'pad/1/fader'));
   s.zu();
 });
 
@@ -427,50 +416,24 @@ test('K2 Kleber: /griff master/kleber u 0,55 kommt am Kern an; cypher 403; falsc
 
 // Effekt-Sektion Schritt 4: Automation je Loop über /loop/automation; bei laufender Box plant der Server die Durchgänge als
 // /k/teil (Plan loopauto:<box>, Quelle andreas) und bricht sie ab, wenn die Box nicht mehr läuft
-test('Loop-Automation: speichern, lesen, ablehnen, je Durchgang planen, beim Stopp abbrechen', async (t) => {
-  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
-  schreibeLoop(loops, 'auto-a', 4, false, 'mitschnitt');
-  const { o, url } = await stapel(t, [], { loops });
-  const auto = [{ pfad: 'komp/schwelle', punkte: [[0, -10], [2, -30]] }];
-  assert.equal((await postJson(url, '/loop/automation', { name: 'auto-a', automation: auto })).code, 200);
-  assert.deepEqual((await (await fetch(`${url}/loop/automation?name=auto-a`)).json()).automation, auto);
-  assert.equal((await postJson(url, '/loop/automation', { name: 'auto-a', automation: [{ pfad: 'fader', punkte: [[0, 0]] }] })).code, 400);
-  assert.equal((await postJson(url, '/loop/automation', { name: 'gibts-nicht', automation: auto })).code, 404);
-  const gesendet = [];
-  const sende = o.kern.sende.bind(o.kern);
-  o.kern.sende = (adr, f) => { gesendet.push({ adr, ...f }); return sende(adr, f); };
-  for (let i = 0; i < 50 && o.kern.uhr === null; i++) await warte(50);
-  o.stand.loops['1'] = { box: 1, status: 3, name: 'auto-a', beats: 4 };
-  for (let i = 0; i < 60 && !gesendet.some((g) => g.adr === '/k/teil'); i++) await warte(50);
-  const teile = gesendet.filter((g) => g.adr === '/k/teil');
-  assert.ok(teile.length >= 3, JSON.stringify(gesendet));
-  assert.ok(teile.every((g) => g.plan === 'loopauto:1' && g.quelle === 'andreas' && g.pfad === 'pad/1/komp/schwelle'));
-  assert.equal(teile[0].dauer_beats, 0);                 // erster Durchgang: Setzen vorneweg
-  assert.equal(teile[0].ab_beat % 4, 0);                 // auf dem Anfang eines Durchgangs
-  o.stand.loops['1'] = { box: 1, status: 0, name: '', beats: 4 };
-  for (let i = 0; i < 20 && !gesendet.some((g) => g.adr === '/k/abbruch'); i++) await warte(50);
-  const abbruch = gesendet.find((g) => g.adr === '/k/abbruch');
-  assert.ok(abbruch && abbruch.plan === 'loopauto:1' && abbruch.teile === '*');
-});
-
 // Effekt-Sektion (2026-10-11): <k>/komp/* über /regler, in /lage nur abweichend von der Vorgabe; Busse haben keinen Kompressor
-test('Kompressor: erz/1/komp/* setzen, Lage nur abweichend, bus abgelehnt', async (t) => {
+test('Kompressor: pad/1/komp/* setzen, Lage nur abweichend, bus abgelehnt', async (t) => {
   const { url } = await stapel(t);
   const s = sse(url);
   await warte(100);
   const l0 = await (await fetch(`${url}/lage`)).json();
   assert.ok(!Object.keys(l0.regler).some((p) => p.includes('/komp/')), 'Vorgabe: kein komp in der Lage');
-  for (const [pfad, nach] of [['erz/1/komp/an', 1], ['erz/1/komp/schwelle', -30], ['pad/2/komp/mix', 0.5]]) {
+  for (const [pfad, nach] of [['pad/1/komp/an', 1], ['pad/1/komp/schwelle', -30], ['pad/2/komp/mix', 0.5]]) {
     const r = await postJson(url, '/regler', { pfad, nach, ab: 'jetzt' }, CYPHER);
     assert.equal(r.code, 200, JSON.stringify(r.j));
   }
   assert.equal((await postJson(url, '/regler', { pfad: 'bus/1/komp/an', nach: 1 }, CYPHER)).code, 400);   // Negativkontrolle
   await warte(300);
   const l = await (await fetch(`${url}/lage`)).json();
-  assert.equal(l.regler['erz/1/komp/an'], 1, JSON.stringify(l.regler));
-  assert.equal(l.regler['erz/1/komp/schwelle'], -30);
+  assert.equal(l.regler['pad/1/komp/an'], 1, JSON.stringify(l.regler));
+  assert.equal(l.regler['pad/1/komp/schwelle'], -30);
   assert.equal(l.regler['pad/2/komp/mix'], 0.5);
-  assert.ok(!('erz/1/komp/ratio' in l.regler), 'unverändertes Feld bleibt unsichtbar');
+  assert.ok(!('pad/1/komp/ratio' in l.regler), 'unverändertes Feld bleibt unsichtbar');
   s.zu();
 });
 
@@ -484,17 +447,17 @@ test('1.15 A2 /regler + /lage: gate, util, mb, lim, spektrum show in lage only a
   const werkzeug = (l) => Object.keys(l.regler).filter((p) => /\/(gate|util|mb|lim)\/|^spektrum\//.test(p));
   const l0 = await (await fetch(`${url}/lage`)).json();
   assert.deepEqual(werkzeug(l0), [], 'default: no tool control in lage');
-  for (const [pfad, nach] of [['deck/1/gate/an', 1], ['erz/7/gate/schwelle', -55], ['pad/2/util/breite', 150], ['bus/3/mb/tief/makeup', 6],
-    ['bus/1/lim/decke', -6], ['spektrum/kanal', 19], ['deck/2/gate/ratio', 100], ['bus/2/lim/decke', -0.3], ['bus/4/util/dc', 0]]) {
+  for (const [pfad, nach] of [['deck/1/gate/an', 1], ['pad/1/gate/schwelle', -55], ['pad/2/util/breite', 150], ['bus/3/mb/tief/makeup', 6],
+    ['bus/1/lim/decke', -6], ['spektrum/kanal', 9], ['deck/2/gate/ratio', 100], ['bus/2/lim/decke', -0.3], ['bus/4/util/dc', 0]]) {
     const r = await postJson(url, '/regler', { pfad, nach, ab: 'jetzt' }, CYPHER);
     assert.equal(r.code, 200, `${pfad}: ${JSON.stringify(r.j)}`);
   }
-  for (const pfad of ['erz/8/gate/an', 'bus/1/gate/an', 'deck/1/mb/an', 'deck/1/lim/an', 'bus/1/mb/tief/solo', 'bus/1/util/gain_db', 'spektrum/kanal/1']) {
+  for (const pfad of ['erz/8/gate/an', 'erz/7/gate/schwelle', 'deck/3/gate/an', 'bus/1/gate/an', 'deck/1/mb/an', 'deck/1/lim/an', 'bus/1/mb/tief/solo', 'bus/1/util/gain_db', 'spektrum/kanal/1']) {
     assert.equal((await postJson(url, '/regler', { pfad, nach: 1 }, CYPHER)).code, 400, pfad);   // negative controls
   }
   await warte(300);
   const l = await (await fetch(`${url}/lage`)).json();
-  const soll = { 'deck/1/gate/an': 1, 'erz/7/gate/schwelle': -55, 'pad/2/util/breite': 150, 'bus/3/mb/tief/makeup': 6, 'bus/1/lim/decke': -6, 'spektrum/kanal': 19 };
+  const soll = { 'deck/1/gate/an': 1, 'pad/1/gate/schwelle': -55, 'pad/2/util/breite': 150, 'bus/3/mb/tief/makeup': 6, 'bus/1/lim/decke': -6, 'spektrum/kanal': 9 };
   assert.deepEqual(Object.fromEntries(werkzeug(l).map((p) => [p, l.regler[p]])), soll, JSON.stringify(l.regler));
   assert.ok(!('deck/2/gate/ratio' in l.regler) && !('bus/2/lim/decke' in l.regler) && !('bus/4/util/dc' in l.regler),
     'a value set to its default stays invisible (lim/decke -0.3 after the float32 round trip too)');
@@ -513,22 +476,22 @@ test('S5r /regler: deck/1/bk/3 reaches the kernel as /k/teil, lage shows it once
   assert.equal(r.code, 200, JSON.stringify(r.j));
   assert.equal(r.j.felder.pfad, 'deck/1/bk/3');
   assert.equal(log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/teil').length, n0 + 1, 'exactly one /k/teil to the kernel');
-  assert.equal((await postJson(url, '/regler', { pfad: 'erz/1/bk/8', nach: 0.25, ab: 'jetzt' }, CYPHER)).code, 200);
+  assert.equal((await postJson(url, '/regler', { pfad: 'pad/1/bk/8', nach: 0.25, ab: 'jetzt' }, CYPHER)).code, 200);
   await warte(300);
   const l = await (await fetch(`${url}/lage`)).json();
   assert.equal(l.regler['deck/1/bk/3'], 0.8, JSON.stringify(l.regler));
-  assert.equal(l.regler['erz/1/bk/8'], 0.25);
+  assert.equal(l.regler['pad/1/bk/8'], 0.25);
   assert.ok(!('deck/1/bk/1' in l.regler), 'untouched knob stays invisible');
   // 32 knobs: knobs 9, 17 and 32 pass; bk/17 is its own path (not bk/1 and not bk/7)
-  for (const [pfad, w] of [['deck/1/bk/9', 0.1], ['erz/5/bk/17', 0.6], ['erz/1/bk/32', 0.9], ['deck/2/bk/33', 0.33], ['erz/6/bk/48', 0.48], ['erz/7/bk/64', 0.64]]) {
+  for (const [pfad, w] of [['deck/1/bk/9', 0.1], ['pad/2/bk/17', 0.6], ['pad/1/bk/32', 0.9], ['deck/2/bk/33', 0.33], ['pad/1/bk/48', 0.48], ['pad/2/bk/64', 0.64]]) {
     assert.equal((await postJson(url, '/regler', { pfad, nach: w, ab: 'jetzt' }, CYPHER)).code, 200, pfad);
   }
   await warte(300);
   const l2 = await (await fetch(`${url}/lage`)).json();
-  assert.equal(l2.regler['deck/1/bk/9'], 0.1); assert.equal(l2.regler['erz/5/bk/17'], 0.6); assert.equal(l2.regler['erz/1/bk/32'], 0.9);
-  assert.equal(l2.regler['deck/2/bk/33'], 0.33); assert.equal(l2.regler['erz/6/bk/48'], 0.48); assert.equal(l2.regler['erz/7/bk/64'], 0.64);
-  assert.ok(!('deck/2/bk/1' in l2.regler) && !('deck/2/bk/3' in l2.regler) && !('erz/6/bk/4' in l2.regler) && !('erz/7/bk/6' in l2.regler), 'bk/33 is not bk/1 or bk/3, bk/48 is not bk/4, bk/64 is not bk/6');
-  assert.ok(!('erz/5/bk/1' in l2.regler) && !('erz/5/bk/7' in l2.regler), 'bk/17 does not show as bk/1 or bk/7');
+  assert.equal(l2.regler['deck/1/bk/9'], 0.1); assert.equal(l2.regler['pad/2/bk/17'], 0.6); assert.equal(l2.regler['pad/1/bk/32'], 0.9);
+  assert.equal(l2.regler['deck/2/bk/33'], 0.33); assert.equal(l2.regler['pad/1/bk/48'], 0.48); assert.equal(l2.regler['pad/2/bk/64'], 0.64);
+  assert.ok(!('deck/2/bk/1' in l2.regler) && !('deck/2/bk/3' in l2.regler) && !('pad/1/bk/4' in l2.regler) && !('pad/2/bk/6' in l2.regler), 'bk/33 is not bk/1 or bk/3, bk/48 is not bk/4, bk/64 is not bk/6');
+  assert.ok(!('pad/2/bk/1' in l2.regler) && !('pad/2/bk/7' in l2.regler), 'bk/17 does not show as bk/1 or bk/7');
   for (const pfad of ['deck/1/bk/65', 'deck/1/bk/0', 'deck/1/bk/00', 'deck/1/bk/01', 'deck/1/bk/033', 'deck/1/bk/100', 'erz/4/bk/1', 'erz/4/bk/9', 'erz/8/bk/1', 'bus/1/bk/1']) {   // negative controls
     assert.equal((await postJson(url, '/regler', { pfad, nach: 0.5 }, CYPHER)).code, 400, pfad);
   }
@@ -557,20 +520,20 @@ test('S14 /regler: fx/3/bk/2 reaches the kernel as /k/teil, lage shows it once i
 });
 
 // S5r Task 4 (D10, K13): the AUTO lock of a stream also covers its graph knobs
-test('S5r AUTO off on stream 2 refuses cypher on erz/2/bk/1 (409 auto_aus, nothing to the kernel); andreas, erz/5 and AUTO on pass', async (t) => {
-  const { url, log } = await stapel(t);
+test('S5r AUTO off on stream 2 refuses cypher on erz/2/fader (409 auto_aus, nothing to the kernel); andreas, erz/5 and AUTO on pass', async (t) => {
+  const { url, log } = await stapel(t, [], { live: true });
   const teile = () => log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/teil').length;
   assert.equal((await postJson(url, '/strudel/autonom', { an: false, strom: 2 })).code, 200);
   const n0 = teile();
-  const x = await postJson(url, '/regler', { pfad: 'erz/2/bk/1', nach: 0.7, ab: 'jetzt' }, CYPHER);
+  const x = await postJson(url, '/regler', { pfad: 'erz/2/fader', nach: -6, ab: 'jetzt' }, CYPHER);
   assert.equal(x.code, 409, JSON.stringify(x.j)); assert.equal(x.j.fehler, 'auto_aus'); assert.equal(x.j.strom, 2);
   assert.equal(teile(), n0, 'nothing reached the kernel');
   // negative controls
-  assert.equal((await postJson(url, '/regler', { pfad: 'erz/2/bk/1', nach: 0.7, ab: 'jetzt' })).code, 200, 'andreas may');
-  assert.equal((await postJson(url, '/regler', { pfad: 'erz/5/bk/1', nach: 0.7, ab: 'jetzt' }, CYPHER)).code, 200, 'erz/5 has no stream lock');
-  assert.equal((await postJson(url, '/regler', { pfad: 'erz/3/bk/1', nach: 0.7, ab: 'jetzt' }, CYPHER)).code, 200, 'stream 3 AUTO on');
+  assert.equal((await postJson(url, '/regler', { pfad: 'erz/2/fader', nach: -6, ab: 'jetzt' })).code, 200, 'andreas may');
+  assert.equal((await postJson(url, '/regler', { pfad: 'erz/5/fader', nach: -6, ab: 'jetzt' }, CYPHER)).code, 200, 'erz/5 has no stream lock');
+  assert.equal((await postJson(url, '/regler', { pfad: 'erz/3/fader', nach: -6, ab: 'jetzt' }, CYPHER)).code, 200, 'stream 3 AUTO on');
   assert.equal((await postJson(url, '/strudel/autonom', { an: true, strom: 2 })).code, 200);
-  assert.equal((await postJson(url, '/regler', { pfad: 'erz/2/bk/1', nach: 0.7, ab: 'jetzt' }, CYPHER)).code, 200, 'AUTO back on');
+  assert.equal((await postJson(url, '/regler', { pfad: 'erz/2/fader', nach: -6, ab: 'jetzt' }, CYPHER)).code, 200, 'AUTO back on');
 });
 
 // SOUND COLOR FX (2026-10-11): color/art und color/param über /regler, Art sofort (Politik 1 wie keylock), in /lage nur
@@ -602,29 +565,29 @@ test('Color FX: color/art und color/param setzen, Art mit Politik 1, Lage nur ab
 
 // K2 Review: /lage zeigt duck/tiefe, duck/release, fx/2/rueckweg und <kanal>/send/2, wenn sie von der Vorgabe abweichen
 // (Vorgaben 0, 200, 0, −200), sonst nicht: Cypher sieht, ob Duck, Hall-Send und Rückweg an sind
-test('K2 Lage: duck/tiefe, duck/release, fx/2/rueckweg und erz/3/send/2 erscheinen nur abweichend von der Vorgabe', async (t) => {
+test('K2 Lage: duck/tiefe, duck/release, fx/2/rueckweg und pad/1/send/2 erscheinen nur abweichend von der Vorgabe', async (t) => {
   const { url } = await stapel(t);
   const s = sse(url);
   await warte(100);
   const l0 = await (await fetch(`${url}/lage`)).json();
-  for (const p of ['duck/tiefe', 'duck/release', 'fx/2/rueckweg', 'erz/3/send/2'])
+  for (const p of ['duck/tiefe', 'duck/release', 'fx/2/rueckweg', 'pad/1/send/2'])
     assert.ok(!(p in l0.regler), `Vorgabe: ${p} nicht in der Lage`);
-  for (const [pfad, nach] of [['duck/tiefe', -9], ['erz/3/send/2', -9], ['duck/release', 400], ['fx/2/rueckweg', -6]]) {
+  for (const [pfad, nach] of [['duck/tiefe', -9], ['pad/1/send/2', -9], ['duck/release', 400], ['fx/2/rueckweg', -6]]) {
     const r = await postJson(url, '/regler', { pfad, nach }, CYPHER);
     assert.equal(r.code, 200, JSON.stringify(r.j));
   }
   await warte(300);
   const l = await (await fetch(`${url}/lage`)).json();
   assert.equal(l.regler['duck/tiefe'], -9, JSON.stringify(l.regler));
-  assert.equal(l.regler['erz/3/send/2'], -9);
+  assert.equal(l.regler['pad/1/send/2'], -9);
   assert.equal(l.regler['duck/release'], 400);
   assert.equal(l.regler['fx/2/rueckweg'], -6);
   // zurück auf die Vorgabe: wieder unsichtbar
-  for (const [pfad, nach] of [['duck/tiefe', 0], ['erz/3/send/2', -200], ['duck/release', 200], ['fx/2/rueckweg', 0]])
+  for (const [pfad, nach] of [['duck/tiefe', 0], ['pad/1/send/2', -200], ['duck/release', 200], ['fx/2/rueckweg', 0]])
     assert.equal((await postJson(url, '/regler', { pfad, nach }, CYPHER)).code, 200);
   await warte(300);
   const l2 = await (await fetch(`${url}/lage`)).json();
-  for (const p of ['duck/tiefe', 'duck/release', 'fx/2/rueckweg', 'erz/3/send/2']) assert.ok(!(p in l2.regler), `zurück: ${p} weg`);
+  for (const p of ['duck/tiefe', 'duck/release', 'fx/2/rueckweg', 'pad/1/send/2']) assert.ok(!(p in l2.regler), `zurück: ${p} weg`);
   s.zu();
 });
 
@@ -825,7 +788,7 @@ const postJson = (url, pfad, daten, kopf = {}) => fetch(url + pfad, { method: 'P
 
 test('/strudel (Plan 2): lesen, schreiben mit von andreas, Fehler mit Zeile, AUTO-Schalter', { skip: OHNE_STRUDEL }, async (t) => {
   const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
-  const { url } = await stapel(t, [], { musterOrdner: d });
+  const { url } = await stapel(t, [], { musterOrdner: d, live: true });
   assert.deepEqual(await (await fetch(`${url}/strudel`)).json(), { text: '', von: null, zeit: null, status: null, autonom: true });
   const ok = await postJson(url, '/strudel', { text: 's("bd*4")' });
   assert.equal(ok.code, 200, JSON.stringify(ok.j));
@@ -844,7 +807,7 @@ test('/strudel (Plan 2): lesen, schreiben mit von andreas, Fehler mit Zeile, AUT
 
 test('/strudel (Plan-Review M3): ohne json 415, fremde Herkunft 403, eigene Herkunft 200; nichts geschrieben bei Abweisung', { skip: OHNE_STRUDEL }, async (t) => {
   const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
-  const { url } = await stapel(t, [], { musterOrdner: d });
+  const { url } = await stapel(t, [], { musterOrdner: d, live: true });
   assert.equal((await post(url, '/strudel', { text: 's("bd")' })).code, 415);
   assert.equal((await post(url, '/strudel/autonom', { an: false })).code, 415);
   assert.equal((await postJson(url, '/strudel', { text: 's("bd")' }, { origin: 'https://boese.example' })).code, 403);
@@ -856,7 +819,7 @@ test('/strudel (Plan-Review M3): ohne json 415, fremde Herkunft 403, eigene Herk
 test('/strudel (Plan-Review M3): Muster läuft ohne Schreibrecht und mit Zeitlimit, Server bleibt bedienbar', { skip: OHNE_STRUDEL }, async (t) => {
   const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
   const opfer = path.join(fs.mkdtempSync(path.join(TMP, 'djk-opfer-')), 'geschrieben');
-  const { url } = await stapel(t, [], { musterOrdner: d });
+  const { url } = await stapel(t, [], { musterOrdner: d, live: true });
   const boese = `s("bd").gain((process.getBuiltinModule('node:fs').writeFileSync(${JSON.stringify(opfer)}, 'x'), 1))`;
   const b = await postJson(url, '/strudel', { text: boese });
   assert.equal(b.code, 400, JSON.stringify(b.j));
@@ -874,7 +837,7 @@ test('/strudel (Plan-Review M3): Muster läuft ohne Schreibrecht und mit Zeitlim
 test('/strudel (Review F1–F4, F11): Reihenfolge, localhost, Endlosschleife, langer Körper, fehlender Ordner', { skip: OHNE_STRUDEL }, async (t) => {
   const eltern = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
   const d = path.join(eltern, 'erzeuger');   // F4: existiert noch nicht
-  const { url } = await stapel(t, [], { musterOrdner: d });
+  const { url } = await stapel(t, [], { musterOrdner: d, live: true });
   // F4: erster POST in einen fehlenden Ordner geht
   assert.equal((await postJson(url, '/strudel', { text: 's("bd")' })).code, 200);
   // F1: erst ein schweres, dann ein leichtes Muster → am Ende steht das zuletzt gesendete
@@ -1073,7 +1036,7 @@ test('/fx/zuweisung unit 3 (FX3, insert on fx/3): every source channel, never ma
   let g = await lies();
   for (let i = 0; i < 60 && g[2]['pad/2'] !== true; i++) { await warte(20); g = await lies(); }   // the fake core reports each assignment back
   assert.equal(g.length, 3);
-  assert.deepEqual(g[2], { 'deck/1': true, 'deck/4': true, 'erz/1': true, 'erz/8': true, 'pad/2': true });
+  assert.deepEqual(g[2], { 'deck/1': true, 'pad/2': true }, 'the core keeps the container sources only (deck/4, erz/1 and erz/8 are forwarded and not reported back)');
   assert.deepEqual([g[0], g[1]], [{}, {}], 'FX1 and FX2 untouched');
   o.vomKern({ adresse: '/e/fx/zuweisung', felder: { einheit: 3, kanal: 'deck/4', an: 0 } });
   g = await lies();
@@ -1319,7 +1282,7 @@ test('Loop-Raster L2b: LOOP bei schon laufendem Loop geht den alten Weg ab dem K
   assert.equal(log.filter((z) => z.typ === 'an_kern').at(-1).adresse, '/k/deck/loop', 'im Loop: alter Weg');
 });
 
-test('/deck/loop/sichern: aktiver Deck-Loop wird sample-genau (mit Grid-Versatz) ein Loop der Bibliothek, optional gleich in L1', async (t) => {
+test('/deck/loop/sichern: aktiver Deck-Loop wird sample-genau (mit Grid-Versatz) ein Loop der Bibliothek', async (t) => {
   const lo = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   const { o, url, log } = await geladenesDeck(t, { loops: lo });
   const e = eins();
@@ -1331,7 +1294,8 @@ test('/deck/loop/sichern: aktiver Deck-Loop wird sample-genau (mit Grid-Versatz)
   await zustand(o, (x) => Math.abs(x.quell_beat - (e + 8)) < 1e-6);
   await postJson(url, '/deck/loop', { deck: 1, laenge: 2, raster: 4 });
   await zustand(o, (x) => x.beats_bis_ende === null || x.beats_bis_ende === Infinity);
-  const r = await postJson(url, '/deck/loop/sichern', { deck: 1, box: 1 });
+  assert.deepEqual((await postJson(url, '/deck/loop/sichern', { deck: 1, box: 1 })).j.fehler, 'unbekannte_box', 'the loop boxes are gone');
+  const r = await postJson(url, '/deck/loop/sichern', { deck: 1 });
   assert.equal(r.code, 200, JSON.stringify(r.j));
   assert.match(r.j.name, /^a-\d{6}-2b$/);
   const j = JSON.parse(fs.readFileSync(path.join(lo, r.j.name, 'loop.json'), 'utf8'));
@@ -1346,8 +1310,7 @@ test('/deck/loop/sichern: aktiver Deck-Loop wird sample-genau (mit Grid-Versatz)
   assert.ok(ist.equals(soll), 'Loop-Bytes = Ausschnitt der Fassung');
   // Negativ-Kontrolle: um einen Frame daneben ist es NICHT gleich
   assert.ok(!ist.equals(basis.subarray((start + 1) * 8, (start + 45001) * 8)));
-  const ld = log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/loop/laden').at(-1);
-  assert.deepEqual([ld.felder.box, ld.felder.name], [1, r.j.name]);
+  assert.ok(!log.some((z) => z.typ === 'an_kern' && z.adresse === '/k/loop/laden'), 'saving loads nothing into the kern');
 });
 
 test('aktiver Deck-Loop überlebt den Neustart des Seiten-Servers (Datei neben den Hotcues)', async (t) => {
@@ -1648,40 +1611,6 @@ test('Hotcues: neue Fassung ohne Hotcues irgendwo → leer, nichts geschrieben',
   assert.deepEqual(fs.readdirSync(hc).filter((n) => n.startsWith(NIGHTSHIFT)), []);
 });
 
-test('/loop raster (Plan Grid): Schritt an den Kern, raster_fix schreibt versatz_frames in loop.json, andere Felder bleiben', async (t) => {
-  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
-  schreibeLoop(loops, 'pruef-a', 4);
-  const { o, log, url } = await stapel(t, [], { loops });
-  o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 1, name: 'pruef-a', beats: 4 } });
-  const r = await postJson(url, '/loop', { aktion: 'raster', box: 1, schritt_ms: -5 });
-  assert.equal(r.code, 200);
-  const an = log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/loop/raster').map((z) => [z.felder.box, z.felder.versatz_frames]);
-  assert.deepEqual(an, [[1, -240]]);
-  assert.deepEqual(await (await fetch(`${url}/loop/raster?box=1`)).json(), { versatz_frames: -240, gespeichert_frames: 0 });
-  const vorher = JSON.parse(fs.readFileSync(path.join(loops, 'pruef-a', 'loop.json'), 'utf8'));
-  assert.equal((await postJson(url, '/loop', { aktion: 'raster_fix', box: 1 })).code, 200);
-  const nachher = JSON.parse(fs.readFileSync(path.join(loops, 'pruef-a', 'loop.json'), 'utf8'));
-  assert.deepEqual(nachher, { ...vorher, versatz_frames: -240 });
-  assert.deepEqual(await (await fetch(`${url}/loop/raster?box=1`)).json(), { versatz_frames: -240, gespeichert_frames: -240 });
-  // Box leer: 409; über frames: wird in (−frames, frames) gefaltet; falsche Box 400
-  assert.equal((await postJson(url, '/loop', { aktion: 'raster', box: 2, schritt_ms: 5 })).code, 409);
-  assert.equal((await postJson(url, '/loop', { aktion: 'raster', box: 3, schritt_ms: 5 })).code, 400);
-  assert.equal((await postJson(url, '/loop', { aktion: 'raster', box: 1, versatz_frames: 90000 + 100 })).j.versatz_frames, 100);   // Review F10
-});
-
-test('Review F5 (Plan Grid): Loop neu geladen ohne FIX → Server meldet den Datei-Wert, wie der Kern ihn spielt', async (t) => {
-  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
-  schreibeLoop(loops, 'pruef-a', 4);
-  const { o, url } = await stapel(t, [], { loops });
-  o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 1, name: 'pruef-a', beats: 4 } });
-  assert.equal((await postJson(url, '/loop', { aktion: 'raster', box: 1, schritt_ms: -5 })).code, 200);
-  // derselbe Loop erneut in Box 1 geladen: der Kern nimmt versatz aus loop.json (0), LoopBoxen::laden
-  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'pruef-a' })).code, 200);
-  o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 1, name: 'pruef-a', beats: 4 } });
-  const j = await (await fetch(`${url}/loop/raster?box=1`)).json();
-  assert.deepEqual(j, { versatz_frames: 0, gespeichert_frames: 0 });
-});
-
 // Plan Hand (2026-09-28): Quelle je Anfrage. Kopf x-djk-quelle: cypher → jeder Kern-Befehl dieser Anfrage trägt cypher;
 // ohne Kopf andreas; die Hand (/griff, /taste) bleibt Andreas.
 const CYPHER = { 'x-djk-quelle': 'cypher' };
@@ -1806,9 +1735,9 @@ test('Hand T4/T5: GET /lage verdichtet; /deck/start synchron auf den Takt ab der
   assert.equal(log.filter((x) => x.typ === 'an_kern').length, n0);
 });
 
-test('Hand T7: cypher darf FX/Strudel nur bei AUTO an und ohne Stop Cypher; Andreas-Schalter 403; offene Box gesperrt', { skip: OHNE_STRUDEL }, async (t) => {
+test('Hand T7: cypher darf FX/Strudel nur bei AUTO an und ohne Stop Cypher; Andreas-Schalter 403', { skip: OHNE_STRUDEL }, async (t) => {
   const mo = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
-  const { o, url, log } = await geladenesDeck(t, { musterOrdner: mo });
+  const { o, url, log } = await geladenesDeck(t, { musterOrdner: mo, live: true });
   const fx1 = { einheit: 1, art: 1, beats: 1, wet: 0.5, param1: 0.5, param2: 0.5, param3: 0.5, an: true };
   // AUTO an (Vorgabe ohne Datei): FX mit cypher geht, Quelle cypher
   let r = await postJson(url, '/fx', fx1, CYPHER);
@@ -1835,10 +1764,6 @@ test('Hand T7: cypher darf FX/Strudel nur bei AUTO an und ohne Stop Cypher; Andr
   for (const [p, d] of [['/strudel/autonom', { an: true }], ['/deck/raster', { deck: 1, schritt_ms: 5 }], ['/deck/raster/fix', { deck: 1 }]]) {
     assert.equal((await postJson(url, p, d, CYPHER)).code, 403, p);
   }
-  // offene Box: laden/start mit cypher → 409, stopp frei
-  o.stand.regler['pad/1/fader'] = -6;
-  assert.equal((await postJson(url, '/loop', { aktion: 'start', box: 1 }, CYPHER)).code, 409);
-  assert.equal((await postJson(url, '/loop', { aktion: 'stopp', box: 1 }, CYPHER)).code, 200);
 });
 
 test('Hand T8: /abbruch bricht Cyphers eigene Teile ab (Quittung 7 abbruch), nur mit Kopf cypher', async (t) => {
@@ -2066,7 +1991,7 @@ test('Ohr T18 /fx/routing: Quelle cypher bekommt 403 nur_andreas und der Kern ni
 });
 
 test('Ohr T18 /fx/routing: der Wunsch überlebt den Kern-Neustart (insert wird nach /e/neustart erneut gesendet, post_fader nicht)', async (t) => {
-  const { o, url, log } = await stapel(t);
+  const { o, url, log } = await stapel(t, [], { live: true });
   o.vomKern({ adresse: '/e/neustart', felder: { generation: 2, sample: 0 } });   // Vorgabe im Wunsch: nichts zu senden
   await warte(300);
   assert.equal(routingSendungen(log).length, 0, 'Negativ-Kontrolle: bei der Vorgabe wird nichts erneut gesendet');
@@ -2104,7 +2029,7 @@ test('Ohr T18 /fx/routing: /e/fx/routing geht an jeden Strom (zweites Fenster) u
 
 test('Studio S1: /strudel mit strom 2 schreibt in <ordner>2, strom 1 unberührt; AUTO je Strom; strom 4 → 400', { skip: OHNE_STRUDEL }, async (t) => {
   const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
-  const { url } = await stapel(t, [], { musterOrdner: d });
+  const { url } = await stapel(t, [], { musterOrdner: d, live: true });
   assert.equal((await postJson(url, '/strudel', { text: 's("bat_synth*4")', strom: 2 })).code, 200);
   assert.equal(fs.readFileSync(`${d}2/strom1.js`, 'utf8'), 's("bat_synth*4")\n');
   assert.equal((await (await fetch(`${url}/strudel?strom=2`)).json()).text, 's("bat_synth*4")');
@@ -2123,7 +2048,8 @@ test('Studio S1: /fx/zuweisung nimmt erz/2 und erz/3, nicht erz/4', async (t) =>
 });
 
 test('Studio S6 T2: /spur schickt Kanalzug-Fahrten als /k/teil ab der Takt-Eins, /spur/stopp bricht ab, D8 für cypher', async (t) => {
-  const { url, log } = await stapel(t);
+  const { o, url, log } = await stapel(t, [], { live: true });
+  await stromSpuren(o, 1, 2, 3, 5);   // the alias paths erz/<n> need the strom tracks of the live project
   const teile = () => log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/teil');
   const spur = { name: 'aus-2', fahrten: [
     { ziel: 'erz/2/filter', ab_takt: 1, takte: 2, nach: -0.6 },
@@ -2133,7 +2059,7 @@ test('Studio S6 T2: /spur schickt Kanalzug-Fahrten als /k/teil ab der Takt-Eins,
   assert.equal(r.code, 200, JSON.stringify(r.j));
   assert.equal(r.j.anker_beat % 4, 0); assert.equal(r.j.teile, 2);
   assert.deepEqual(teile().slice(-2).map((z) => [z.felder.pfad, z.felder.ab_beat - r.j.anker_beat, z.felder.dauer_beats, z.felder.politik, z.felder.form, z.felder.plan, z.felder.quelle]),
-    [['erz/2/filter', 0, 8, 0, 1, 'spur:aus-2', 'cypher'], ['erz/2/fader', 8, 4, 1, 1, 'spur:aus-2', 'cypher']]);
+    [['spur/2/filter', 0, 8, 0, 1, 'spur:aus-2', 'cypher'], ['spur/2/fader', 8, 4, 1, 1, 'spur:aus-2', 'cypher']]);
   assert.deepEqual((await (await fetch(`${url}/spur`)).json()).map((s) => [s.name, s.quelle, s.anker_beat]), [['aus-2', 'cypher', r.j.anker_beat]]);
   assert.equal((await postJson(url, '/spur', { spur }, CYPHER)).j.fehler, 'laeuft');
   // Stopp: /k/abbruch mit dem Plan der Spur, danach keine laufende Spur
@@ -2152,7 +2078,7 @@ test('Studio S6 T2: /spur schickt Kanalzug-Fahrten als /k/teil ab der Takt-Eins,
   assert.equal(y.code, 200, JSON.stringify(y.j)); assert.equal(teile().at(-1).felder.quelle, 'andreas');
   // Strudel-Kanal (Andreas 2026-09-29): Cypher darf ihn aufziehen
   const erz = await postJson(url, '/spur', { spur: { name: 'auf-2', fahrten: [{ ziel: 'erz/2/fader', ab_takt: 1, takte: 4, nach: 0 }] } }, CYPHER);
-  assert.equal(erz.code, 200, JSON.stringify(erz.j)); assert.equal(teile().at(-1).felder.pfad, 'erz/2/fader');
+  assert.equal(erz.code, 200, JSON.stringify(erz.j)); assert.equal(teile().at(-1).felder.pfad, 'spur/2/fader');
   assert.notEqual(erz.j.quittung?.status, 6, `Kern lehnt ab: ${JSON.stringify(erz.j.quittung)}`);   // Final-Review F6: auch die Kern-Quittung, nicht nur HTTP 200
   // Form
   assert.equal((await postJson(url, '/spur', { spur: { name: 'X', fahrten: [] } })).code, 400);
@@ -2161,7 +2087,8 @@ test('Studio S6 T2: /spur schickt Kanalzug-Fahrten als /k/teil ab der Takt-Eins,
 });
 
 test('Studio S6 Review: Ablehnung eines Spurteils sichtbar in GET /spur (abgelehnt), Negativ-Kontrolle ohne', async (t) => {
-  const { url } = await stapel(t);
+  const { o, url } = await stapel(t, [], { live: true });
+  await stromSpuren(o, 1, 2, 3, 5);   // the alias paths erz/<n> need the strom tracks of the live project
   const gut = { name: 'gut', fahrten: [{ ziel: 'erz/2/filter', ab_takt: 1, takte: 1, nach: -0.6 }] };
   const g = await postJson(url, '/spur', { spur: gut }, CYPHER);
   assert.equal(g.code, 200, JSON.stringify(g.j));
@@ -2178,7 +2105,8 @@ test('Studio S6 Review: Ablehnung eines Spurteils sichtbar in GET /spur (abgeleh
 });
 
 test('Studio S6 Review: kurze Spur verschwindet nach ihrem Ende im Kern-Beat, nicht nach Wanduhr', async (t) => {
-  const { url } = await stapel(t);
+  const { o, url } = await stapel(t, [], { live: true });
+  await stromSpuren(o, 1, 2, 3, 5);   // the alias paths erz/<n> need the strom tracks of the live project
   const s = { name: 'kurz', fahrten: [{ ziel: 'erz/2/filter', ab_takt: 1, takte: 1, nach: -0.6 }] };
   assert.equal((await postJson(url, '/spur', { spur: s }, CYPHER)).code, 200);
   assert.equal((await (await fetch(`${url}/spur`)).json()).length, 1);
@@ -2188,7 +2116,8 @@ test('Studio S6 Review: kurze Spur verschwindet nach ihrem Ende im Kern-Beat, ni
 });
 
 test('Studio S6 Review: POST /abbruch (cypher) bricht Cyphers Spuren ab, Andreas\' Spur bleibt', async (t) => {
-  const { url, log } = await stapel(t);
+  const { o, url, log } = await stapel(t, [], { live: true });
+  await stromSpuren(o, 1, 2, 3, 5);   // the alias paths erz/<n> need the strom tracks of the live project
   const mk = (name) => ({ name, fahrten: [{ ziel: 'erz/2/filter', ab_takt: 1, takte: 8, nach: -0.6 }] });
   const mk3 = (name) => ({ name, fahrten: [{ ziel: 'erz/3/filter', ab_takt: 1, takte: 8, nach: -0.6 }] });
   assert.equal((await postJson(url, '/spur', { spur: mk('von-cypher') }, CYPHER)).code, 200);
@@ -2243,7 +2172,7 @@ test('Studio S6 T6: Surge-Fahrten gehen mit Startzeit aus der Kern-Uhr an den Wi
 
 test('Studio S6 T7: Muster-Fahrt schreibt den Strom zwei Beats vor ihrer Takt-Eins, als cypher', { skip: OHNE_STRUDEL }, async (t) => {
   const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
-  const { url, log } = await stapel(t, [], { musterOrdner: d });
+  const { url, log } = await stapel(t, [], { musterOrdner: d, live: true });
   const r = await postJson(url, '/spur', { spur: { name: 'still-2', fahrten: [{ ziel: 'strom:2', ab_takt: 2, muster: 'silence' }] } }, CYPHER);
   assert.equal(r.code, 200, JSON.stringify(r.j)); assert.equal(r.j.muster, 1);
   let z;
@@ -2264,7 +2193,8 @@ test('Studio S6 T7: Muster-Fahrt schreibt den Strom zwei Beats vor ihrer Takt-Ei
 
 test('Studio S6 Final-Review F1: Stop Cypher bricht Cyphers Spuren ab (Kern, Wirt halte, Muster), Andreas\' Spur bleibt', async (t) => {
   const wo = fs.mkdtempSync(path.join(TMP, 'djk-wirt-'));
-  const { o, url, log } = await stapel(t, [], { wirtOrdner: wo });
+  const { o, url, log } = await stapel(t, [], { wirtOrdner: wo, live: true });
+  await stromSpuren(o, 1, 2, 3, 5);   // the alias paths erz/<n> need the strom tracks of the live project
   const bass = await fakeWirt(t, wo, 'bass');
   const spur = { name: 'sp', fahrten: [
     { ziel: 'wirt:bass/a_filter1_cutoff', ab_takt: 1, takte: 8, nach: -15, von: -45 },
@@ -2287,7 +2217,8 @@ test('Studio S6 Final-Review F1: Stop Cypher bricht Cyphers Spuren ab (Kern, Wir
 });
 
 test('Studio S6 Final-Review F9: /spur/stopp als cypher auf Andreas\' Spur 403 nur_andreas, Negativ-Kontrolle eigene Spur', async (t) => {
-  const { url, log } = await stapel(t);
+  const { o, url, log } = await stapel(t, [], { live: true });
+  await stromSpuren(o, 1, 2, 3, 5);   // the alias paths erz/<n> need the strom tracks of the live project
   const mk = (name, z) => ({ name, fahrten: [{ ziel: z, ab_takt: 1, takte: 8, nach: -0.6 }] });
   assert.equal((await postJson(url, '/spur', { spur: mk('a-spur', 'erz/3/filter') })).code, 200);
   assert.equal((await postJson(url, '/spur', { spur: mk('c-spur', 'erz/2/filter') }, CYPHER)).code, 200);
@@ -2302,7 +2233,8 @@ test('Studio S6 Final-Review F9: /spur/stopp als cypher auf Andreas\' Spur 403 n
 
 test('Studio S6 Final-Review F4: AUTO aus hält Cyphers Spuren und /regler auf dem Strom, Andreas nie, andere Ströme frei', async (t) => {
   const wo = fs.mkdtempSync(path.join(TMP, 'djk-wirt-'));
-  const { url, log } = await stapel(t, [], { wirtOrdner: wo });
+  const { o, url, log } = await stapel(t, [], { wirtOrdner: wo, live: true });
+  await stromSpuren(o, 1, 2, 3, 5);   // the alias paths erz/<n> need the strom tracks of the live project
   const bass = await fakeWirt(t, wo, 'bass');
   const teile = () => log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/teil').length;
   const mk = (name, ziel, extra = {}) => ({ name, fahrten: [{ ziel, ab_takt: 1, takte: 1, nach: -0.6, ...extra }] });
@@ -2327,7 +2259,8 @@ test('Studio S6 Final-Review F4: AUTO aus hält Cyphers Spuren und /regler auf d
 });
 
 test('Studio S6 Final-Review F3: POST /spur meldet abgelehnte Teile wie GET /spur, Negativ-Kontrolle leer', async (t) => {
-  const { url } = await stapel(t);
+  const { o, url } = await stapel(t, [], { live: true });
+  await stromSpuren(o, 1, 2, 3, 5);   // the alias paths erz/<n> need the strom tracks of the live project
   const s = await postJson(url, '/spur', { spur: { name: 'nurx', fahrten: [{ ziel: 'xfader', ab_takt: 1, takte: 1, nach: 0.5 }] } }, CYPHER);
   assert.equal(s.code, 200, JSON.stringify(s.j));
   assert.deepEqual(s.j.abgelehnt.map((x) => [x.teil, x.pfad, x.status, x.grund]), [[0, 'xfader', 6, 'nur_hand']], JSON.stringify(s.j));
@@ -2351,7 +2284,7 @@ test('Studio S6 Final-Review F8: der Server loggt spur_wirt_ersetzt, wenn der Wi
 
 test('Studio S6 Final-Review F5: Tempowechsel nach dem Start verschiebt den Muster-Zeitpunkt nicht (Beat statt Wanduhr)', { skip: OHNE_STRUDEL }, async (t) => {
   const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
-  const { o, url, log } = await stapel(t, [], { musterOrdner: d });
+  const { o, url, log } = await stapel(t, [], { musterOrdner: d, live: true });
   const r = await postJson(url, '/spur', { spur: { name: 'mt', fahrten: [{ ziel: 'strom:2', ab_takt: 7, muster: 'silence' }] } }, CYPHER);
   assert.equal(r.code, 200, JSON.stringify(r.j));
   o.kern.sende('/k/tempo/rampe', { id: Number(++o.id), quelle: 'andreas', ab_beat: o.kern.uhr.beat + 0.5, ziel_bpm: 140, dauer_beats: 1 });
@@ -2375,12 +2308,14 @@ async function neustart(t, o) {
   assert.equal(o2.kern.zustand, 'verbunden');
   for (let i = 0; i < 100 && !o2.kern.uhr; i++) await warte(20);
   t.after(() => o2.stoppe());
+  if (o2.opt.proj) { const r = await o2.proj.sitzung.liveOeffnen('andreas'); assert.equal(r.code, 200, JSON.stringify(r.j)); }   // the live project (and its strom tracks) is back
   return { o2, log };
 }
 
 test('Studio S6 Final-Review F2: laufende Spuren überstehen den Neustart des Seiten-Servers (Liste, /spur/stopp, /abbruch, Stop Cypher)', async (t) => {
   const wo = fs.mkdtempSync(path.join(TMP, 'djk-wirt-'));
-  const { o, url } = await stapel(t, [], { wirtOrdner: wo });
+  const { o, url } = await stapel(t, [], { wirtOrdner: wo, live: true });
+  await stromSpuren(o, 1, 2, 3, 5);   // the alias paths erz/<n> need the strom tracks of the live project
   const bass = await fakeWirt(t, wo, 'bass');
   const start = async (name, ziel, kopf) => { const r = await postJson(url, '/spur', { spur: { name, fahrten: [{ ziel, ab_takt: 1, takte: 8, nach: ziel.startsWith('wirt') ? -15 : -0.6, ...(ziel.startsWith('wirt') ? { von: -45 } : {}) }] } }, kopf); assert.equal(r.code, 200, JSON.stringify(r.j)); return r.j; };
   await start('lang', 'wirt:bass/a_filter1_cutoff', CYPHER);
@@ -2412,11 +2347,13 @@ test('Studio S6 Final-Review F2: laufende Spuren überstehen den Neustart des Se
 test('Studio S6 Final-Review F2: abgelaufene Spuren fallen beim Laden weg, Muster-Fahrten werden neu eingeplant', { skip: OHNE_STRUDEL }, async (t) => {
   const wo = fs.mkdtempSync(path.join(TMP, 'djk-wirt-'));
   const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
-  const { o, url } = await stapel(t, [], { wirtOrdner: wo, musterOrdner: d });
+  const { o, url } = await stapel(t, [], { wirtOrdner: wo, musterOrdner: d, live: true });
+  await stromSpuren(o, 1, 2, 3, 5);   // the alias paths erz/<n> need the strom tracks of the live project
   const kurz = await postJson(url, '/spur', { spur: { name: 'kurz', fahrten: [{ ziel: 'erz/2/filter', ab_takt: 1, takte: 1, nach: -0.6 }] } }, CYPHER);
   const mus = await postJson(url, '/spur', { spur: { name: 'mus', fahrten: [{ ziel: 'strom:2', ab_takt: 4, muster: 'silence' }] } }, CYPHER);
   assert.equal(kurz.code, 200); assert.equal(mus.code, 200, JSON.stringify(mus.j));
   const { o2, log } = await neustart(t, o);
+  assert.equal((await o2.proj.sitzung.liveOeffnen('andreas')).code, 200);   // the new server holds the live project again, as in operation
   assert.deepEqual((await (await fetch(`${url}/spur`)).json()).map((x) => x.name).sort(), ['kurz', 'mus'], 'direkt nach dem Neustart noch beide');
   // 'kurz' endet nach Kern-Beat; danach ist sie weg, 'mus' schreibt ihr Muster im neuen Server
   let z;
@@ -2434,7 +2371,8 @@ test('Studio S6 Final-Review F2: abgelaufene Spuren fallen beim Laden weg, Muste
 
 test('S7 T11: GET /spur liefert die Fahrten der laufenden Spur, auch nach dem Neustart des Seiten-Servers', async (t) => {
   const wo = fs.mkdtempSync(path.join(TMP, 'djk-wirt-'));
-  const { o, url } = await stapel(t, [], { wirtOrdner: wo });
+  const { o, url } = await stapel(t, [], { wirtOrdner: wo, live: true });
+  await stromSpuren(o, 1, 2, 3, 5);   // the alias paths erz/<n> need the strom tracks of the live project
   const spur = { name: 'band-2-fader', fahrten: [
     { ziel: 'erz/2/fader', ab_takt: 1, nach: 0 }, { ziel: 'erz/2/fader', ab_takt: 1, takte: 4, nach: -30, form: 'linear' }] };
   assert.equal((await postJson(url, '/spur', { spur })).code, 200);
@@ -2468,25 +2406,6 @@ test('/loop rec wartet auf die Kern-Quittung: Status 6 kommt in der Antwort an, 
   o.vomKern({ adresse: '/q', felder: { id: id2, status: 2, grund: '', quelle: 'cypher' } });
   const r2 = await p2;
   assert.equal(r2.j.quittung.status, 2, JSON.stringify(r2.j));
-});
-
-test('Plan Tempo-Folge: /loop laden und start warten auf die Kern-Quittung, Status 6 steht in der Antwort', async (t) => {
-  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
-  schreibeLoop(loops, 'pruef-a', 4);
-  const { o, log, url } = await stapel(t, [], { loops });
-  const p = postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'pruef-a' });
-  let id;
-  for (let i = 0; i < 100 && id === undefined; i++) { id = log.find((z) => z.typ === 'an_kern' && z.adresse === '/k/loop/laden')?.felder.id; await warte(10); }
-  assert.ok(id !== undefined, 'laden ging an den Kern');
-  o.vomKern({ adresse: '/q', felder: { id, status: 6, grund: 'pruefung', quelle: 'andreas' } });
-  const r = await p;
-  assert.equal(r.code, 200, JSON.stringify(r.j));
-  assert.equal(r.j.quittung.status, 6);
-  assert.equal(r.j.quittung.grund, 'pruefung');
-  // Negativ-Kontrolle: keine Ablehnung → die Antwort kommt trotzdem (nach höchstens 400 ms), ohne Status 6
-  const r2 = await postJson(url, '/loop', { aktion: 'start', box: 1 });
-  assert.equal(r2.code, 200);
-  assert.notEqual(r2.j.quittung?.status, 6);
 });
 
 // Plan djk-hand-mcp-studio T1 (Review): loopKit-Riegel für Quelle cypher: Stop Cypher und AUTO Strom 1 aus (der Zusatz-Kit rec
@@ -2796,9 +2715,9 @@ test('T3 GET /klang: liest wirt-<gruppe>.json aus dem Wirt-Ordner, fehlende Date
 
 // Task 4 (djk-hand-Nachrüstung): /lage trägt den Studio-Zustand (AUTO/Muster je Strom, geladener Surge-Klang).
 test('T4 /lage.studio: 3 Ströme mit autonom/von/text_kurz (200 Zeichen), klang aus wirt-<g>.json, alte Schlüssel bleiben', { skip: OHNE_STRUDEL }, async (t) => {
-  const { url, wo } = await klangStapel(t);
+  const { url, wo } = await klangStapel(t, { live: true });
   const l0 = await (await fetch(`${url}/lage`)).json();
-  for (const k of ['uhr', 'ki', 'decks', 'regler', 'boxen', 'fx', 'fx_routing', 'quittungen']) assert.ok(k in l0, `alter Schlüssel ${k}`);
+  for (const k of ['uhr', 'ki', 'decks', 'regler', 'fx', 'fx_routing', 'quittungen']) assert.ok(k in l0, `alter Schlüssel ${k}`);
   assert.equal(l0.studio.stroeme.length, 3);
   assert.deepEqual(l0.studio.stroeme.map((s) => s.strom), [1, 2, 3]);
   assert.ok(l0.studio.stroeme.every((s) => s.autonom === true && s.text_kurz === '' && s.von === null));
@@ -2924,15 +2843,11 @@ test('Plan Tempo-Folge: POST /tempo schickt /k/tempo/rampe über einen Takt ab d
   assert.notEqual(r.j.quittung?.status, 6);
 });
 
-// Paket 2 Slice 5 (F07): Loop-Boxen und FX nach einem Kern-Neustart wiederherstellen. Der Neustart-Zustand des Kerns trägt
-// keine Boxen und keine FX-Einheiten; der Server merkt sie vor dem Leeren und schickt sie 500 ms nach /e/neustart erneut.
-async function boxAn(o, url, loops, box, name, kopf, { status = 3, raster } = {}) {
-  if (!fs.existsSync(path.join(loops, name))) schreibeLoop(loops, name, 4);
-  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box, name }, kopf)).code, 200);
-  o.vomKern({ adresse: '/e/loop', felder: { box, status, name, beats: 4 } });
-  if (raster !== undefined) assert.equal((await postJson(url, '/loop', { aktion: 'raster', box, versatz_frames: raster })).code, 200);
-}
-const kernBefehle = (log, ab = 0) => log.filter((z) => z.typ === 'an_kern' && /^\/k\/(loop|fx)/.test(z.adresse)).slice(ab);
+// Paket 2 Slice 5 (F07): FX nach einem Kern-Neustart wiederherstellen (the loop boxes are gone with the container core). Der Neustart-Zustand des Kerns
+// trägt keine FX-Einheiten; der Server merkt sie vor dem Leeren und schickt sie 500 ms nach /e/neustart erneut.
+const fxFelder = (e, extra = {}) => ({ einheit: e, art: 2, beats: 1, wet: 0.6, param1: 0.4, param2: 0.5, param3: 0.5, an: 1, ...extra });
+const fxVon = (d, von) => fs.writeFileSync(path.join(d, 'fx_von.json'), JSON.stringify(Object.fromEntries(Object.entries(von).map(([k, v]) => [k, { von: v, zeit: 1 }]))));
+const kernBefehle = (log, ab = 0) => log.filter((z) => z.typ === 'an_kern' && /^\/k\/fx/.test(z.adresse)).slice(ab);
 async function nachNeustart(o, log, generation, vorher, erwartet) {
   o.vomKern({ adresse: '/e/neustart', felder: { generation, sample: 0 } });
   await warte(erwartet === 0 ? 900 : 600);
@@ -2941,60 +2856,28 @@ async function nachNeustart(o, log, generation, vorher, erwartet) {
   return kernBefehle(log, vorher);
 }
 
-test('Slice 5 F07: laufende Box kommt mit Name, Besitzer, Live-Raster und start zurück; bereite/endende ohne start, leere gar nicht', async (t) => {
-  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
-  const { o, log, url } = await stapel(t, [], { loops });
-  await boxAn(o, url, loops, 1, 'pruef-a', CYPHER, { status: 3 });
-  await boxAn(o, url, loops, 2, 'pruef-b', {}, { status: 1, raster: 96 });   // Raster nur von Andreas; Box bereit
-  o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 3, name: 'pruef-a', beats: 4 } });
-  assert.equal((await postJson(url, '/loop', { aktion: 'raster', box: 1, versatz_frames: -480 })).code, 200);
-  const n0 = kernBefehle(log).length;
-  const b = await nachNeustart(o, log, 21, n0, 5);
-  const form = (z) => `${z.adresse}|b${z.felder.box}|${z.felder.quelle}${z.felder.name ? '|' + z.felder.name : ''}${z.felder.versatz_frames !== undefined ? '|' + z.felder.versatz_frames : ''}`;
-  assert.deepEqual(b.map(form), [
-    '/k/loop/laden|b1|cypher|pruef-a', '/k/loop/raster|b1|andreas|-480', '/k/loop/start|b1|cypher',
-    '/k/loop/laden|b2|andreas|pruef-b', '/k/loop/raster|b2|andreas|96']);
-  assert.deepEqual(o.loopRasterLive['1'], { name: 'pruef-a', v: -480 }, 'Live-Versatz wieder gefüllt (B15)');
-  assert.deepEqual(o.loopRasterLive['2'], { name: 'pruef-b', v: 96 });
-  // endet (4): laden, kein start; leere Box (0): nichts. Zweiter Neustart erst nach Ablauf der Sperre (Uhr zurückgestellt)
-  o.letzteBoxFxWieder = 0;
-  o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 4, name: 'pruef-a', beats: 4 } });
-  o.vomKern({ adresse: '/e/loop', felder: { box: 2, status: 0, name: '', beats: 0 } });
-  const n1 = kernBefehle(log).length;
-  const c = await nachNeustart(o, log, 22, n1, 2);
-  assert.deepEqual(c.map(form), ['/k/loop/laden|b1|cypher|pruef-a', '/k/loop/raster|b1|andreas|-480']);
-  // Negativ-Kontrolle: alles leer, nichts zu senden
-  o.letzteBoxFxWieder = 0;
-  for (const bx of [1, 2]) o.vomKern({ adresse: '/e/loop', felder: { box: bx, status: 0, name: '', beats: 0 } });
-  const n2 = kernBefehle(log).length;
-  assert.deepEqual(await nachNeustart(o, log, 23, n2, 0), []);
-});
-
-test('Slice 5 F07 B12: bei Stop Cypher kommen Cyphers Boxen und FX nicht zurück, Andreas\' schon', async (t) => {
-  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
+test('Slice 5 F07 B12: bei Stop Cypher kommen Cyphers FX nicht zurück, Andreas\' schon', async (t) => {
   const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
-  const { o, log, url } = await stapel(t, [], { loops, musterOrdner: d });
-  await boxAn(o, url, loops, 1, 'pruef-a', CYPHER);
-  await boxAn(o, url, loops, 2, 'pruef-b', {});
-  fs.writeFileSync(path.join(d, 'fx_von.json'), JSON.stringify({ '1': { von: 'cypher', zeit: 1 }, '2': { von: 'andreas', zeit: 1 } }));
-  o.vomKern({ adresse: '/e/fx', felder: { einheit: 1, art: 2, beats: 1, wet: 0.6, param1: 0.4, param2: 0.5, param3: 0.5, an: 1 } });
-  o.vomKern({ adresse: '/e/fx', felder: { einheit: 2, art: 1, beats: 0.5, wet: 0.7, param1: 0.2, param2: 0.5, param3: 0.5, an: 1 } });
+  const { o, log } = await stapel(t, [], { musterOrdner: d });
+  fxVon(d, { 1: 'cypher', 2: 'andreas' });
+  o.vomKern({ adresse: '/e/fx', felder: fxFelder(1) });
+  o.vomKern({ adresse: '/e/fx', felder: fxFelder(2, { art: 1, beats: 0.5 }) });
   o.kern.sende('/k/ki/stopp', { id: Number(++o.id), quelle: 'andreas' });   // echter Stopp: die Attrappe meldet ki_gestoppt auch in /zustand/kern
   for (let i = 0; i < 100 && !o.kiGestoppt; i++) await warte(20);
   assert.equal(o.kiGestoppt, true);
   const n0 = kernBefehle(log).length;
-  const b = await nachNeustart(o, log, 31, n0, 3);
-  assert.deepEqual(b.map((z) => [z.adresse, z.felder.box ?? z.felder.einheit, z.felder.quelle]),
-    [['/k/loop/laden', 2, 'andreas'], ['/k/loop/start', 2, 'andreas'], ['/k/fx', 2, 'andreas']]);
+  const b = await nachNeustart(o, log, 31, n0, 1);
+  assert.deepEqual(b.map((z) => [z.adresse, z.felder.einheit, z.felder.quelle]), [['/k/fx', 2, 'andreas']]);
 });
 
 test('Slice 5 F07 B13: höchstens eine Wiederherstellung je 30 s, die zweite wird gemeldet', async (t) => {
-  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
-  const { o, log, url } = await stapel(t, [], { loops });
-  await boxAn(o, url, loops, 1, 'pruef-a', {});
+  const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
+  const { o, log } = await stapel(t, [], { musterOrdner: d });
+  fxVon(d, { 1: 'andreas' });
+  o.vomKern({ adresse: '/e/fx', felder: fxFelder(1) });
   const n0 = kernBefehle(log).length;
-  assert.equal((await nachNeustart(o, log, 41, n0, 2)).length, 2, 'erste Wiederherstellung: laden + start');
-  o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 3, name: 'pruef-a', beats: 4 } });   // der Kern meldet die Box wieder
+  assert.equal((await nachNeustart(o, log, 41, n0, 1)).length, 1, 'erste Wiederherstellung: fx');
+  o.vomKern({ adresse: '/e/fx', felder: fxFelder(1) });   // der Kern meldet die Einheit wieder
   const n1 = kernBefehle(log).length;
   assert.deepEqual(await nachNeustart(o, log, 42, n1, 0), [], 'zweiter Neustart innerhalb von 30 s: nichts');
   assert.ok(log.some((z) => z.typ === 'wiederherstellung_uebersprungen' && z.grund === 'zu_schnell'), JSON.stringify(log.slice(-5)));
@@ -3021,109 +2904,39 @@ test('Slice 5 F07: FX-Einheiten und Zuweisungen kommen mit Werten und Besitzer z
 });
 
 // Slice 5 Review-Nacharbeit (F1 bis F7)
-const formS5 = (z) => `${z.adresse}|${z.felder.box !== undefined ? 'b' + z.felder.box : 'e' + z.felder.einheit}|${z.felder.quelle}${z.felder.name ? '|' + z.felder.name : ''}`;
+const formS5 = (z) => `${z.adresse}|e${z.felder.einheit}|${z.felder.quelle}`;
 async function stoppCypherS5(o) {
   o.kern.sende('/k/ki/stopp', { id: Number(++o.id), quelle: 'andreas' });
   for (let i = 0; i < 100 && !o.kiGestoppt; i++) await warte(20);
   assert.equal(o.kiGestoppt, true);
 }
 
-test('Slice 5 Review F1: der Besitzer wechselt erst mit bestätigter Ladung, nicht beim Versuch', async (t) => {
-  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
-  // (a) Andreas' Box, Cyphers Versuch scheitert mit 400: die Box bleibt Andreas', auch bei Stop Cypher
-  const s1 = await stapel(t, [], { loops });
-  await boxAn(s1.o, s1.url, loops, 1, 'pruef-a', {});
-  assert.equal((await postJson(s1.url, '/loop', { aktion: 'laden', box: 1, name: 'gibtsnicht' }, CYPHER)).code, 400);
-  await stoppCypherS5(s1.o);
-  const a = await nachNeustart(s1.o, s1.log, 71, kernBefehle(s1.log).length, 2);
-  assert.deepEqual(a.map(formS5), ['/k/loop/laden|b1|andreas|pruef-a', '/k/loop/start|b1|andreas']);
-});
-test('Slice 5 Review F1: Andreas\' 400 auf Cyphers Box macht sie nicht zu seiner (bei Stop Cypher bleibt sie weg)', async (t) => {
-  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
-  const { o, log, url } = await stapel(t, [], { loops });
-  await boxAn(o, url, loops, 1, 'pruef-a', CYPHER);
-  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'gibtsnicht' }, {})).code, 400);
-  await stoppCypherS5(o);
-  assert.deepEqual(await nachNeustart(o, log, 72, kernBefehle(log).length, 0), []);
-});
-test('Slice 5 Review F1: Cyphers vom Kern abgelehnte Ladung (Stop Cypher) auf Andreas\' Box ändert den Besitzer nicht', async (t) => {
-  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
-  const { o, log, url } = await stapel(t, [], { loops });
-  await boxAn(o, url, loops, 1, 'pruef-a', {});
-  schreibeLoop(loops, 'pruef-c', 4);
-  await stoppCypherS5(o);
-  await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'pruef-c' }, CYPHER);   // der Kern lehnt ab, kein /e/loop mit pruef-c
-  assert.deepEqual((await nachNeustart(o, log, 73, kernBefehle(log).length, 2)).map(formS5), ['/k/loop/laden|b1|andreas|pruef-a', '/k/loop/start|b1|andreas']);
-});
-
-test('Slice 5 Review F2: unbekannter Besitzer gilt als cypher (bei Stop Cypher nichts, sonst Quelle cypher)', async (t) => {
-  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
-  const { o, log } = await stapel(t, [], { loops });
-  schreibeLoop(loops, 'pruef-a', 4);
-  o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 1, name: 'pruef-a', beats: 4 } });   // geladen am Server vorbei (djk-loop)
-  const b = await nachNeustart(o, log, 81, kernBefehle(log).length, 1);
-  assert.deepEqual(b.map(formS5), ['/k/loop/laden|b1|cypher|pruef-a']);
-  o.letzteBoxFxWieder = 0;
-  o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 1, name: 'pruef-a', beats: 4 } });
-  await stoppCypherS5(o);
-  assert.deepEqual(await nachNeustart(o, log, 82, kernBefehle(log).length, 0), []);
-});
-
-test('Slice 5 Review F3: was in den 500 ms neu geladen oder gesetzt wird, bleibt von der Wiederherstellung unberührt', async (t) => {
-  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
+test('Slice 5 Review F3: was in den 500 ms neu gesetzt wird, bleibt von der Wiederherstellung unberührt', async (t) => {
   const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
-  const { o, log, url } = await stapel(t, [], { loops, musterOrdner: d });
-  await boxAn(o, url, loops, 1, 'pruef-a', {});
-  await boxAn(o, url, loops, 2, 'pruef-b', {});
-  schreibeLoop(loops, 'pruef-neu', 4);
-  fs.writeFileSync(path.join(d, 'fx_von.json'), JSON.stringify({ '1': { von: 'andreas', zeit: 1 }, '2': { von: 'andreas', zeit: 1 } }));
-  const fx = (e) => ({ einheit: e, art: 2, beats: 1, wet: 0.6, param1: 0.4, param2: 0.5, param3: 0.5, an: 1 });
-  o.vomKern({ adresse: '/e/fx', felder: fx(1) });
-  o.vomKern({ adresse: '/e/fx', felder: fx(2) });
+  const { o, log, url } = await stapel(t, [], { musterOrdner: d });
+  fxVon(d, { 1: 'andreas', 2: 'andreas' });
+  o.vomKern({ adresse: '/e/fx', felder: fxFelder(1) });
+  o.vomKern({ adresse: '/e/fx', felder: fxFelder(2) });
   const n0 = kernBefehle(log).length;
   o.vomKern({ adresse: '/e/neustart', felder: { generation: 91, sample: 0 } });
   await warte(100);
-  const antworten = await Promise.all([postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'pruef-neu' }, {}), postJson(url, '/loop', { aktion: 'stopp', box: 2 }, {}),
-    postJson(url, '/fx', { ...fx(1), an: false })]);   // gleichzeitig: alle drei treffen das 500-ms-Fenster
-  assert.deepEqual(antworten.map((x) => x.code), [200, 200, 200]);
+  const r = await postJson(url, '/fx', { ...fxFelder(1), an: false });   // Andreas setzt FX 1 im 500-ms-Fenster
+  assert.equal(r.code, 200);
   await warte(900);
   const b = kernBefehle(log, n0).map(formS5);
-  assert.deepEqual(b.filter((x) => /\|b1\|/.test(x) || /\|e1\|/.test(x)).sort(), ['/k/fx|e1|andreas', '/k/loop/laden|b1|andreas|pruef-neu'], `Box 1 und FX 1 nur Andreas' neuer Stand: ${b}`);
-  assert.ok(!b.includes('/k/loop/start|b2|andreas'), 'gestoppte Box 2 wird nicht gestartet');
+  assert.deepEqual(b.filter((x) => /\|e1\|/.test(x)), ['/k/fx|e1|andreas'], `FX 1: nur Andreas' neuer Stand: ${b}`);
   assert.ok(b.includes('/k/fx|e2|andreas'), 'FX 2 (unberührt) kommt zurück');
 });
 
 test('Slice 5 Review F4: /e/neustart mit unveränderter Generation (Neuanmeldung, Kern lief weiter) sendet nichts', async (t) => {
-  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
-  const { o, log, url } = await stapel(t, [], { loops });
-  await boxAn(o, url, loops, 1, 'pruef-a', {});
+  const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
+  const { o, log } = await stapel(t, [], { musterOrdner: d });
+  fxVon(d, { 1: 'andreas' });
+  o.vomKern({ adresse: '/e/fx', felder: fxFelder(1) });
   assert.notEqual(o.generation, null);
   assert.deepEqual(await nachNeustart(o, log, o.generation, kernBefehle(log).length, 0), []);
   assert.equal(o.letzteBoxFxWieder, 0, 'die 30-s-Sperre wurde nicht verbraucht');
-  assert.equal((await nachNeustart(o, log, o.generation + 1, kernBefehle(log).length, 2)).length, 2, 'Gegenprobe: neue Generation stellt wieder her');
-});
-
-test('Slice 5 Review F5: ein nicht mehr ladbarer Loop wird nicht gesendet, gemeldet und nicht als Stück gezählt', async (t) => {
-  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
-  const { o, log, url } = await stapel(t, [], { loops });
-  await boxAn(o, url, loops, 1, 'pruef-a', {});
-  fs.rmSync(path.join(loops, 'pruef-a'), { recursive: true, force: true });
-  assert.deepEqual(await nachNeustart(o, log, 101, kernBefehle(log).length, 0), []);
-  assert.deepEqual(log.filter((z) => z.typ === 'box_wieder_ausgelassen').map((z) => [z.box, z.grund]), [[1, 'nicht_ladbar']]);
-  assert.equal(log.filter((z) => z.typ === 'wiederherstellung').at(-1).stuecke, 0);
-});
-
-test('Slice 5 Review F6 (B14): wartet (2), läuft (3) und tempo (5) bekommen start, bereit (1) und endet (4) nicht', async (t) => {
-  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
-  const { o, log, url } = await stapel(t, [], { loops });
-  await boxAn(o, url, loops, 1, 'pruef-a', {});
-  let g = 110;
-  for (const [status, start] of [[2, true], [3, true], [5, true], [1, false], [4, false]]) {
-    o.letzteBoxFxWieder = 0;
-    o.vomKern({ adresse: '/e/loop', felder: { box: 1, status, name: 'pruef-a', beats: 4 } });
-    const b = await nachNeustart(o, log, ++g, kernBefehle(log).length, start ? 2 : 1);
-    assert.deepEqual(b.map((z) => z.adresse), start ? ['/k/loop/laden', '/k/loop/start'] : ['/k/loop/laden'], `Status ${status}`);
-  }
+  assert.equal((await nachNeustart(o, log, o.generation + 1, kernBefehle(log).length, 1)).length, 1, 'Gegenprobe: neue Generation stellt wieder her');
 });
 
 test('Slice 5 Review F7: Cyphers FX kommen bei AUTO aus nicht zurück, Andreas\' schon', async (t) => {
@@ -3142,9 +2955,7 @@ test('Slice 5 Review F7: Cyphers FX kommen bei AUTO aus nicht zurück, Andreas\'
 
 // Slice 5 Nacharbeit 2: /e/neustart mit GLEICHER Generation (Abonnent hat sich nur neu gemeldet, der Kern lief weiter) lässt den Stand stehen
 test('Slice 5 F4: gleiche Generation leert den Stand nicht und sendet nichts; neue Generation leert wie bisher', async (t) => {
-  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
-  const { o, log, url } = await stapel(t, [], { loops });
-  await boxAn(o, url, loops, 1, 'pruef-a', {}, { raster: 96 });
+  const { o, log, url } = await stapel(t);
   o.vomKern({ adresse: '/e/fx', felder: { einheit: 1, art: 2, beats: 1, wet: 0.6, param1: 0.4, param2: 0.5, param3: 0.5, an: 1 } });
   o.vomKern({ adresse: '/e/fx/zuweisung', felder: { einheit: 1, kanal: 'deck/1', an: 1 } });
   assert.equal((await postJson(url, '/fx/routing', { routing: 'insert' })).code, 200);
@@ -3154,14 +2965,12 @@ test('Slice 5 F4: gleiche Generation leert den Stand nicht und sendet nichts; ne
   o.vomKern({ adresse: '/e/neustart', felder: { generation: g, sample: 0 } });
   await warte(900);
   assert.deepEqual(log.filter((z) => z.typ === 'an_kern' && z.adresse !== '/k/hallo').slice(a0).map((z) => z.adresse), [], 'gleiche Generation: keine Befehle (auch kein Routing-Wunsch)');
-  assert.equal(o.stand.loops['1'].name, 'pruef-a');
   assert.equal(o.stand.fx[0].art, 2);
   assert.equal(o.stand.fxZuweisung[0]['deck/1'], true);
-  assert.deepEqual(o.loopRasterLive['1'], { name: 'pruef-a', v: 96 });
   assert.equal(o.stand.fxRouting, 'insert');
   // neue Generation: wie bisher (Stand leer, Routing zurück auf Post Fader und Wunsch erneut gesendet)
   o.vomKern({ adresse: '/e/neustart', felder: { generation: g + 1, sample: 0 } });
-  assert.deepEqual([o.stand.loops, o.stand.fx, o.stand.fxZuweisung, o.loopRasterLive], [{}, [null, null], [{}, {}, {}], {}]);
+  assert.deepEqual([o.stand.fx, o.stand.fxZuweisung], [[null, null], [{}, {}, {}]]);
   assert.equal(o.stand.fxRouting, 'post_fader');
   assert.ok(log.some((z, i) => z.typ === 'an_kern' && z.adresse === '/k/fx/routing' && z.felder.routing === 1 && i > 0 && log.slice(0, i).filter((y) => y.typ === 'an_kern').length >= a0), 'Routing-Wunsch geht erneut hin');
   await warte(900);   // die Wiederherstellung (500 ms) soll vor dem Ende des Tests laufen, nicht in den abgebauten Server
@@ -3171,12 +2980,10 @@ test('Slice 5 F4: gleiche Generation leert den Stand nicht und sendet nichts; ne
 const willkommen = (generation) => ({ adresse: '/k/willkommen', felder: { vertrag: 1, generation, sample: 0, beat: 0, bpm: 128, version: 'x' } });
 const ohneRouting = (b) => b.filter((z) => z.adresse !== '/k/fx/routing');
 test('Final-Review FR1: /k/willkommen mit KLEINERER Generation (gebremster Kern) leert den Stand, sendet den Routing-Wunsch, stellt nichts wieder her', async (t) => {
-  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
-  const { o, log, url } = await stapel(t, [], { loops });
+  const { o, log, url } = await stapel(t);
   o.vomKern({ adresse: '/e/neustart', felder: { generation: 5, sample: 0 } });
   await warte(700);
   o.letzteBoxFxWieder = 0;
-  await boxAn(o, url, loops, 1, 'pruef-a', {}, { status: 3 });
   o.vomKern({ adresse: '/e/fx', felder: { einheit: 1, art: 2, beats: 1, wet: 0.6, param1: 0.4, param2: 0.5, param3: 0.5, an: 1 } });
   assert.equal((await postJson(url, '/fx/routing', { routing: 'insert' })).code, 200);
   o.vomKern({ adresse: '/e/fx/routing', felder: { routing: 1 } });
@@ -3185,15 +2992,15 @@ test('Final-Review FR1: /k/willkommen mit KLEINERER Generation (gebremster Kern)
   o.vomKern(willkommen(5));
   await warte(700);
   assert.deepEqual(kernBefehle(log, a0), []);
-  assert.equal(o.stand.loops['1'].status, 3);
+  assert.equal(o.stand.fx[0].art, 2);
   // gebremst: Generation 0 < 5
   a0 = kernBefehle(log).length;
   o.vomKern(willkommen(0));
   await warte(900);
   const b = kernBefehle(log, a0);
-  assert.deepEqual(ohneRouting(b), [], 'nichts wiederhergestellt (kein laden, kein start, kein fx)');
+  assert.deepEqual(ohneRouting(b), [], 'nichts wiederhergestellt (kein fx)');
   assert.deepEqual(b.map((z) => [z.adresse, z.felder.routing, z.felder.quelle]), [['/k/fx/routing', 1, 'andreas']], 'Routing-Wunsch geht erneut hin');
-  assert.deepEqual([o.stand.loops, o.stand.fx, o.stand.fxZuweisung, o.loopRasterLive], [{}, [null, null], [{}, {}, {}], {}]);
+  assert.deepEqual([o.stand.fx, o.stand.fxZuweisung], [[null, null], [{}, {}, {}]]);
   assert.equal(o.generation, 0, 'gemerkte Generation ist die neue');
   assert.ok(log.some((z) => z.typ === 'wiederherstellung_uebersprungen' && z.grund === 'gebremster_start'));
   // der folgende gewöhnliche Neustart (Generation 0 → 1) stellt nichts Veraltetes her
@@ -3203,12 +3010,13 @@ test('Final-Review FR1: /k/willkommen mit KLEINERER Generation (gebremster Kern)
 });
 
 test('Final-Review FR2: ein geplanter Plan feuert nicht in einen inzwischen gebremsten Kern (Generation hat sich geändert)', async (t) => {
-  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
-  const { o, log, url } = await stapel(t, [], { loops });
+  const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
+  const { o, log } = await stapel(t, [], { musterOrdner: d });
+  fxVon(d, { 1: 'andreas' });
   o.vomKern({ adresse: '/e/neustart', felder: { generation: 5, sample: 0 } });
   await warte(700);
   o.letzteBoxFxWieder = 0;
-  await boxAn(o, url, loops, 1, 'pruef-a', {}, { status: 3 });
+  o.vomKern({ adresse: '/e/fx', felder: fxFelder(1) });
   const a0 = kernBefehle(log).length;
   o.vomKern({ adresse: '/e/neustart', felder: { generation: 6, sample: 0 } });   // plant
   await warte(150);
@@ -3235,28 +3043,28 @@ async function fahrtStarten(url, o, log, pfad, body, kopf, status) {
 
 import { ueberlappt, ersterFreierBeat } from '../hand_operation.ts';
 test('Glanz 1.2: Regler wartet auf die eigene laufende Fahrt desselben Pfads (verschoben_auf), Andreas und andere Pfade nie', async (t) => {
-  const { o, url, log } = await stapel(t);
-  const r1 = await postJson(url, '/regler', { pfad: 'erz/2/filter', nach: -1, takte: 8, ab: 'jetzt' }, CYPHER);
+  const { o, url, log } = await stapel(t, []);
+  const r1 = await postJson(url, '/regler', { pfad: 'deck/2/filter', nach: -1, takte: 8, ab: 'jetzt' }, CYPHER);
   assert.equal(r1.code, 200, JSON.stringify(r1.j));
   const b0 = r1.j.felder.ab_beat;
   assert.equal(r1.j.felder.dauer_beats, 32); assert.equal(r1.j.verschoben_auf, undefined);
   // 2. gleicher Pfad, sofort: landet am Ende der Fahrt
-  const r2 = await postJson(url, '/regler', { pfad: 'erz/2/filter', nach: 0, takte: 0, ab: 'jetzt' }, CYPHER);
+  const r2 = await postJson(url, '/regler', { pfad: 'deck/2/filter', nach: 0, takte: 0, ab: 'jetzt' }, CYPHER);
   assert.equal(r2.j.felder.ab_beat, b0 + 32, JSON.stringify(r2.j)); assert.equal(r2.j.verschoben_auf, b0 + 32);
-  // 3. Negativ-Kontrolle: gleicher Ablauf auf ANDEREM Pfad (erz/3/send/2) ist für sich unverschoben
-  const s1 = await postJson(url, '/regler', { pfad: 'erz/3/send/2', nach: -1, takte: 8, ab: 'jetzt' }, CYPHER);
-  assert.equal(s1.j.verschoben_auf, undefined); assert.ok(s1.j.felder.ab_beat < b0 + 31, 'erz/2/filter wirkt nicht auf erz/3/send/2');
+  // 3. Negativ-Kontrolle: gleicher Ablauf auf ANDEREM Pfad (pad/2/send/2) ist für sich unverschoben
+  const s1 = await postJson(url, '/regler', { pfad: 'pad/2/send/2', nach: -1, takte: 8, ab: 'jetzt' }, CYPHER);
+  assert.equal(s1.j.verschoben_auf, undefined); assert.ok(s1.j.felder.ab_beat < b0 + 31, 'deck/2/filter wirkt nicht auf pad/2/send/2');
   // 4. Negativ-Kontrolle: Andreas auf DEMSELBEN Pfad mit laufender Cypher-Fahrt wird nie verschoben
-  const r4 = await postJson(url, '/regler', { pfad: 'erz/2/filter', nach: 0, takte: 0, ab: 'jetzt' });
+  const r4 = await postJson(url, '/regler', { pfad: 'deck/2/filter', nach: 0, takte: 0, ab: 'jetzt' });
   assert.equal(r4.j.verschoben_auf, undefined); assert.ok(r4.j.felder.ab_beat < b0 + 31, `ab_beat ${r4.j.felder.ab_beat}`);
   // verschoben: nur das kurze Fenster, nicht bis zum Startbeat (30 Beat = ~14 s); keine Fehlerquittung ohne Konflikt
   assert.ok(r2.j.quittung === null || ![4, 6, 7, 8].includes(r2.j.quittung.status), JSON.stringify(r2.j.quittung));
 });
 
 test('Glanz 1.2: Phantom-Ende (Review M1): Quittung 6, 7, 4 oder 8 löscht das Ende; zweiter Aufruf bleibt unverschoben', async (t) => {
-  const { o, url, log } = await stapel(t);
+  const { o, url, log } = await stapel(t, []);
   for (const [i, status] of [6, 7, 4, 8].entries()) {
-    const pfad = `erz/${i + 1}/filter`;
+    const pfad = ['deck/1', 'deck/2', 'pad/1', 'pad/2'][i] + '/filter';
     const r1 = await fahrtStarten(url, o, log, pfad, { nach: -1, takte: 8 }, CYPHER, status);
     assert.equal(r1.j.quittung.status, status, JSON.stringify(r1.j));
     const r2 = await postJson(url, '/regler', { pfad, nach: 0, takte: 0, ab: 'jetzt' }, CYPHER);
@@ -3264,31 +3072,31 @@ test('Glanz 1.2: Phantom-Ende (Review M1): Quittung 6, 7, 4 oder 8 löscht das E
     assert.ok(r2.j.felder.ab_beat < r1.j.felder.ab_beat + 31, `Status ${status}`);
   }
   // Negativ-Kontrolle: Status 2 (läuft) lässt das Ende stehen
-  const r1 = await fahrtStarten(url, o, log, 'erz/5/filter', { nach: -1, takte: 8 }, CYPHER, 2);
-  const r2 = await postJson(url, '/regler', { pfad: 'erz/5/filter', nach: 0, takte: 0, ab: 'jetzt' }, CYPHER);
+  const r1 = await fahrtStarten(url, o, log, 'bus/1/filter', { nach: -1, takte: 8 }, CYPHER, 2);
+  const r2 = await postJson(url, '/regler', { pfad: 'bus/1/filter', nach: 0, takte: 0, ab: 'jetzt' }, CYPHER);
   assert.equal(r2.j.verschoben_auf, r1.j.felder.ab_beat + 32);
 });
 
 test('Glanz 1.2: Phantom-Ende nach Stop Cypher, /abbruch und neuem Kern', async (t) => {
-  const { o, url, log } = await stapel(t);
+  const { o, url, log } = await stapel(t, []);
   const nachher = async (pfad) => (await postJson(url, '/regler', { pfad, nach: 0, takte: 0, ab: 'jetzt' }, CYPHER)).j;
   // Stop Cypher
-  await postJson(url, '/regler', { pfad: 'erz/1/filter', nach: -1, takte: 8, ab: 'jetzt' }, CYPHER);
+  await postJson(url, '/regler', { pfad: 'deck/1/filter', nach: -1, takte: 8, ab: 'jetzt' }, CYPHER);
   o.vomKern({ adresse: '/e/ki', felder: { gestoppt: 1 } });
   o.vomKern({ adresse: '/e/ki', felder: { gestoppt: 0 } });
-  assert.equal((await nachher('erz/1/filter')).verschoben_auf, undefined, 'nach Stop Cypher');
+  assert.equal((await nachher('deck/1/filter')).verschoben_auf, undefined, 'nach Stop Cypher');
   // /abbruch
-  await postJson(url, '/regler', { pfad: 'erz/2/filter', nach: -1, takte: 8, ab: 'jetzt' }, CYPHER);
+  await postJson(url, '/regler', { pfad: 'deck/2/filter', nach: -1, takte: 8, ab: 'jetzt' }, CYPHER);
   assert.equal((await postJson(url, '/abbruch', {}, CYPHER)).code, 200);
-  assert.equal((await nachher('erz/2/filter')).verschoben_auf, undefined, 'nach /abbruch');
+  assert.equal((await nachher('deck/2/filter')).verschoben_auf, undefined, 'nach /abbruch');
   // neuer Kern (andere Generation)
-  await postJson(url, '/regler', { pfad: 'erz/3/filter', nach: -1, takte: 8, ab: 'jetzt' }, CYPHER);
+  await postJson(url, '/regler', { pfad: 'pad/1/filter', nach: -1, takte: 8, ab: 'jetzt' }, CYPHER);
   o.vomKern({ adresse: '/e/neustart', felder: { generation: 9, sample: 0 } });
-  assert.equal((await nachher('erz/3/filter')).verschoben_auf, undefined, 'nach neuem Kern');
+  assert.equal((await nachher('pad/1/filter')).verschoben_auf, undefined, 'nach neuem Kern');
   // Negativ-Kontrolle: gleiche Generation (nur neu gemeldet) lässt das Ende stehen
-  const a = await postJson(url, '/regler', { pfad: 'erz/4/filter', nach: -1, takte: 8, ab: 'jetzt' }, CYPHER);
+  const a = await postJson(url, '/regler', { pfad: 'pad/2/filter', nach: -1, takte: 8, ab: 'jetzt' }, CYPHER);
   o.vomKern({ adresse: '/e/neustart', felder: { generation: 9, sample: 0 } });
-  assert.equal((await nachher('erz/4/filter')).verschoben_auf, a.j.felder.ab_beat + 32);
+  assert.equal((await nachher('pad/2/filter')).verschoben_auf, a.j.felder.ab_beat + 32);
 });
 
 const grundVon = async (o, id) => { await warte(200); return o.quittungen.get(id)?.find((q) => Number(q.status) !== 1)?.grund ?? null; };
@@ -3309,199 +3117,54 @@ test('Glanz 1.2 ueberlappt(): die Regel des Kerns (sort_in.cpp:17-27) für Cyphe
 });
 
 test('Glanz 1.2: feste Werte und Rampen (Review): Fälle A, B, D und Anfang statt nur Ende; der Kern lehnt nichts ab', async (t) => {
-  const { o, url } = await stapel(t);
+  const { o, url } = await stapel(t, []);
   const beat = () => o.kern.uhr.beat;
   // Positiv-Gegenprobe des Instruments: zwei Setzen auf demselben Beat direkt an den Kern → die Attrappe quittiert ueberlappung
-  const roh = (n) => ({ id: Number(++o.id), quelle: 'cypher', plan: 'cypher', teil: 0, pfad: 'erz/8/filter', ab_beat: 250, dauer_beats: 0, nach: n, form: 1, politik: 0, gruppe: '', hoerschein: '' });
+  const roh = (n) => ({ id: Number(++o.id), quelle: 'cypher', plan: 'cypher', teil: 0, pfad: 'pad/2/filter', ab_beat: 250, dauer_beats: 0, nach: n, form: 1, politik: 0, gruppe: '', hoerschein: '' });
   const r1 = roh(-1), r2 = roh(0);
   o.kern.sende('/k/teil', r1); o.kern.sende('/k/teil', r2);
   assert.equal(await grundVon(o, r2.id), 'ueberlappung'); assert.notEqual(await grundVon(o, r1.id), 'ueberlappung');
   // D: drei feste auf einem Beat (Uhr eingefroren) → b, b+1, b+2
   o.abVon = () => 200;
-  const d = [await cy(url, 'erz/1/filter', -1, 0, 'jetzt'), await cy(url, 'erz/1/filter', -0.5, 0, 'jetzt'), await cy(url, 'erz/1/filter', 0, 0, 'jetzt')];
+  const d = [await cy(url, 'deck/1/filter', -1, 0, 'jetzt'), await cy(url, 'deck/1/filter', -0.5, 0, 'jetzt'), await cy(url, 'deck/1/filter', 0, 0, 'jetzt')];
   assert.deepEqual(d.map((x) => x.felder.ab_beat), [200, 201, 202]);
   assert.deepEqual(d.map((x) => x.verschoben_auf), [undefined, 201, 202]);
   for (const x of d) assert.notEqual(await grundVon(o, x.felder.id), 'ueberlappung');
   // A: Rampe 300..308, fest 'jetzt' 302 → 308, fest 'jetzt' 302 → 309 (nicht auf den zweiten)
   const ab = [300, 302, 302]; let i = 0; o.abVon = () => ab[i++];
-  const ra = [await cy(url, 'erz/2/filter', -1, 2, 'jetzt'), await cy(url, 'erz/2/filter', 0, 0, 'jetzt'), await cy(url, 'erz/2/filter', 0.5, 0, 'jetzt')];
+  const ra = [await cy(url, 'deck/2/filter', -1, 2, 'jetzt'), await cy(url, 'deck/2/filter', 0, 0, 'jetzt'), await cy(url, 'deck/2/filter', 0.5, 0, 'jetzt')];
   assert.deepEqual(ra.map((x) => x.felder.ab_beat), [300, 308, 309]);
   for (const x of ra) assert.notEqual(await grundVon(o, x.felder.id), 'ueberlappung');
   // B: fest auf 400 (takt), dann fest 'jetzt' 397 → bleibt auf 397 (kein Konflikt, vorher fälschlich auf 400)
   const bb = [400, 397]; i = 0; o.abVon = () => bb[i++];
-  const fb = [await cy(url, 'erz/3/filter', -1, 0, 'takt'), await cy(url, 'erz/3/filter', 0, 0, 'jetzt')];
+  const fb = [await cy(url, 'pad/1/filter', -1, 0, 'takt'), await cy(url, 'pad/1/filter', 0, 0, 'jetzt')];
   assert.deepEqual(fb.map((x) => x.felder.ab_beat), [400, 397]); assert.equal(fb[1].verschoben_auf, undefined);
   for (const x of fb) assert.notEqual(await grundVon(o, x.felder.id), 'ueberlappung');
   // Anfang statt nur Ende: Rampe 128..160 (phrase), fest 'jetzt' 101 liegt davor → unverschoben
   const ph = [128, 101]; i = 0; o.abVon = () => ph[i++];
-  const fp = [await cy(url, 'erz/4/filter', -1, 8, 'phrase'), await cy(url, 'erz/4/filter', 0, 0, 'jetzt')];
+  const fp = [await cy(url, 'pad/2/filter', -1, 8, 'phrase'), await cy(url, 'pad/2/filter', 0, 0, 'jetzt')];
   assert.deepEqual(fp.map((x) => x.felder.ab_beat), [128, 101]); assert.equal(fp[1].verschoben_auf, undefined);
   for (const x of fp) assert.notEqual(await grundVon(o, x.felder.id), 'ueberlappung');
   void beat;
 });
 
 test('Glanz 1.2: verschobener Teil, den der Kern sofort ablehnt (Andreas-Teil am Zielbeat), trägt die Ablehnung in der Antwort', async (t) => {
-  const { o, url } = await stapel(t);
+  const { o, url } = await stapel(t, []);
   const t0 = Date.now();
-  const x = await cy(url, 'erz/2/filter', -1, 8, 'jetzt');
+  const x = await cy(url, 'deck/2/filter', -1, 8, 'jetzt');
   const ziel = x.felder.ab_beat + 32;
   // Andreas' fester Wert genau auf dem Beat, auf den Cyphers zweiter Teil geschoben wird
-  o.kern.sende('/k/teil', { id: Number(++o.id), quelle: 'andreas', plan: '', teil: 0, pfad: 'erz/2/filter', ab_beat: ziel, dauer_beats: 0, nach: 0.1, form: 1, politik: 0, gruppe: '', hoerschein: '' });
+  o.kern.sende('/k/teil', { id: Number(++o.id), quelle: 'andreas', plan: '', teil: 0, pfad: 'deck/2/filter', ab_beat: ziel, dauer_beats: 0, nach: 0.1, form: 1, politik: 0, gruppe: '', hoerschein: '' });
   await warte(100);
-  const y = await cy(url, 'erz/2/filter', 0, 0, 'jetzt');
+  const y = await cy(url, 'deck/2/filter', 0, 0, 'jetzt');
   assert.equal(y.verschoben_auf, ziel);
   assert.equal(y.quittung?.status, 6, JSON.stringify(y)); assert.equal(y.quittung.grund, 'ueberlappung');
   assert.ok(Date.now() - t0 < 3000, 'wartet nicht bis zum Startbeat');
   // Negativ-Kontrolle: verschoben ohne Konflikt (anderer Pfad, nur Cypher) → kein Fehlerstatus
-  await cy(url, 'erz/3/filter', -1, 8, 'jetzt');
-  const z = await cy(url, 'erz/3/filter', 0, 0, 'jetzt');
+  await cy(url, 'pad/1/filter', -1, 8, 'jetzt');
+  const z = await cy(url, 'pad/1/filter', 0, 0, 'jetzt');
   assert.ok(z.verschoben_auf !== undefined && (z.quittung === null || ![4, 6, 7, 8].includes(z.quittung.status)), JSON.stringify(z));
 });
-
-// Plan Glanz 1.3 (Server-Teil, Review-Befunde 1-3): Kern lässt pad/* für Cypher ohne Hörschein öffnen; die Herkunft des
-// Box-Inhalts prüft die Seite, und zwar bei der Anfrage UND bei jedem Inhaltswechsel danach (offene Box, offene Rampe).
-async function padStapel(t, extra = {}) {
-  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
-  schreibeLoop(loops, 'c-eigen', 4, false, 'mitschnitt');
-  schreibeLoop(loops, 'c-eigen2', 4, false, 'mitschnitt');
-  schreibeLoop(loops, 'a-fremd', 4, false, 'deck');
-  const st = await geladenesDeck(t, { loops, ...extra });
-  const teile = () => st.log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/teil');
-  const laden_ = () => st.log.filter((z) => z.typ === 'an_kern' && /^\/k\/loop\/(laden|start)$/.test(z.adresse));
-  return { ...st, loops, teile, laden: laden_ };
-}
-const ablaufen = (o, pfad) => { for (const e of o.fahrtEnde.get(pfad) ?? []) { e.ab = -10; e.dauer = 0; } };   // Rampe ist abgelaufen
-
-test('Glanz 1.3 (i)(ii): pad/1/fader öffnet für Cypher mit eigenem Mitschnitt ohne Hörschein; fremder Loop bleibt kein_hoerschein', async (t) => {
-  const { o, url, loops, teile } = await padStapel(t);
-  await boxAn(o, url, loops, 1, 'c-eigen', CYPHER, { status: 1 });
-  const r = await postJson(url, '/regler', { pfad: 'pad/1/fader', nach: -6, takte: 0 }, CYPHER);
-  assert.equal(r.code, 200, JSON.stringify(r.j));
-  assert.equal(teile().at(-1).felder.pfad, 'pad/1/fader'); assert.equal(teile().at(-1).felder.quelle, 'cypher'); assert.equal(teile().at(-1).felder.hoerschein, '');
-  // fremder Loop (Deck-Schnitt) in Box 2: gesperrt, nichts an den Kern; Andreas' Hand geht (Negativ-Kontrolle)
-  await boxAn(o, url, loops, 2, 'a-fremd', {}, { status: 1 });
-  const n0 = teile().length;
-  const f = await postJson(url, '/regler', { pfad: 'pad/2/fader', nach: -6, takte: 0 }, CYPHER);
-  assert.equal(f.code, 409); assert.equal(f.j.fehler, 'kein_hoerschein'); assert.equal(teile().length, n0);
-  const tr = await postJson(url, '/regler', { pfad: 'pad/2/trim', nach: 0, takte: 0 }, CYPHER);   // Trim wie Fader: 0 + (-200) bleibt zu, aber Fader-Wert unbekannt
-  assert.equal(tr.code, 200);   // öffnet nichts (Fader zu): kein Fall für die Wache
-  assert.equal((await postJson(url, '/regler', { pfad: 'pad/2/fader', nach: -6, takte: 0 })).code, 200);
-});
-
-test('Glanz 1.3 (iii): deck/loop/sichern mit box lädt für Cypher nichts in eine offene Box oder unter laufende Rampe', async (t) => {
-  const { o, url, loops, teile, laden } = await padStapel(t);
-  const e = eins();
-  await postJson(url, '/deck/sprung', { deck: 1, ziel: e + 8, raster: 0 });
-  await zustand(o, (x) => Math.abs(x.quell_beat - (e + 8)) < 1e-6);
-  await postJson(url, '/deck/loop', { deck: 1, laenge: 2, raster: 4 });
-  await zustand(o, (x) => x.beats_bis_ende === null || x.beats_bis_ende === Infinity);
-  await boxAn(o, url, loops, 1, 'c-eigen', CYPHER, { status: 1 });
-  // (b) Rampe auf Box 1 (Eq öffnet nichts, die Box ist zu) und die Befund-Rampe auf dem Fader
-  assert.equal((await postJson(url, '/regler', { pfad: 'pad/1/fader', nach: -6, takte: 4 }, CYPHER)).code, 200);
-  const n0 = laden().length;
-  const x = await postJson(url, '/deck/loop/sichern', { deck: 1, box: 1 }, CYPHER);
-  assert.equal(x.code, 409, JSON.stringify(x.j)); assert.equal(x.j.fehler, 'box_offen_oder_faehrt');
-  assert.equal(laden().length, n0, 'nichts an /k/loop/laden');
-  assert.deepEqual(fs.readdirSync(loops).sort(), ['c-eigen', 'c-eigen2', 'a-fremd'].sort(), 'auch keine Datei geschrieben');
-  // andere Box ohne Rampe: frei; ohne box (nur sichern): frei; Andreas: nie gesperrt
-  assert.equal((await postJson(url, '/deck/loop/sichern', { deck: 1, box: 2 }, CYPHER)).code, 200);
-  await warte(1100);   // der Name trägt HHMMSS
-  assert.equal((await postJson(url, '/deck/loop/sichern', { deck: 1 }, CYPHER)).code, 200);
-  await warte(1100);   // der Name trägt HHMMSS
-  assert.equal((await postJson(url, '/deck/loop/sichern', { deck: 1, box: 1 })).code, 200, 'Andreas');
-  // nach Rampenende: Cypher darf wieder (Negativ-Kontrolle)
-  ablaufen(o, 'pad/1/fader');
-  await warte(1100);   // der Name trägt HHMMSS
-  assert.equal((await postJson(url, '/deck/loop/sichern', { deck: 1, box: 1 }, CYPHER)).code, 200);
-  // (a) offene Box: gesperrt. Erst die laufende Rampe vom Anfang abbrechen: ihr Echo /e/regler überschrieb sonst den
-  // gesetzten Wert, die Box galt als zu, und der Schnitt in derselben Sekunde scheiterte am Namen (500, Wackler 06.10.).
-  assert.equal((await postJson(url, '/abbruch', {}, CYPHER)).code, 200);
-  await warte(300);
-  o.stand.regler['pad/1/fader'] = -6;
-  o.stand.regler['pad/1/trim'] = 0;
-  await warte(1100);   // der Name trägt HHMMSS
-  const n1 = laden().length;
-  const y = await postJson(url, '/deck/loop/sichern', { deck: 1, box: 1 }, CYPHER);
-  assert.equal(y.code, 409); assert.equal(y.j.fehler, 'box_offen_oder_faehrt'); assert.equal(laden().length, n1);
-});
-
-test('Glanz 1.3 (iv)(v): /loop laden und start fremden Inhalts sind unter laufender Rampe gesperrt; eigener Mitschnitt, Andreas, Rampenende nicht', async (t) => {
-  const { o, url, loops, teile, laden } = await padStapel(t);
-  await boxAn(o, url, loops, 1, 'c-eigen', CYPHER, { status: 1 });
-  assert.equal((await postJson(url, '/regler', { pfad: 'pad/1/fader', nach: -6, takte: 4 }, CYPHER)).code, 200);
-  const n0 = laden().length;
-  const x = await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'a-fremd' }, CYPHER);
-  assert.equal(x.code, 409, JSON.stringify(x.j)); assert.equal(x.j.fehler, 'box_offen_oder_faehrt');
-  assert.equal(laden().length, n0, 'nichts an den Kern');
-  assert.equal(o.loopLadung['1']?.name ?? 'c-eigen', 'c-eigen', 'Besitzerbuchführung unberührt');
-  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'c-eigen2' }, CYPHER)).code, 200, 'eigener Mitschnitt darf');
-  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'a-fremd' })).code, 200, 'Andreas nie gesperrt');
-  // /loop start: der geladene Loop ist jetzt fremd (Andreas lud ihn), Rampe läuft noch
-  o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 1, name: 'a-fremd', beats: 4 } });
-  const s = await postJson(url, '/loop', { aktion: 'start', box: 1 }, CYPHER);
-  assert.equal(s.code, 409); assert.equal(s.j.fehler, 'box_offen_oder_faehrt');
-  assert.equal((await postJson(url, '/loop', { aktion: 'start', box: 1 })).code, 200, 'Andreas');
-  // Rampenende: Cypher darf fremd laden (Negativ-Kontrolle)
-  ablaufen(o, 'pad/1/fader');
-  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'a-fremd' }, CYPHER)).code, 200);
-  assert.equal((await postJson(url, '/loop', { aktion: 'start', box: 1 }, CYPHER)).code, 200);
-  // andere Box: nie betroffen
-  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 2, name: 'a-fremd' }, CYPHER)).code, 200);
-});
-
-test('Glanz 1.3 Re-Review 1: ausstehende Ladung eines Deck-Schnitts (kein Echo) zählt als fremd; nach Echo eines eigenen Mitschnitts frei', async (t) => {
-  const { o, url, loops, teile } = await padStapel(t);
-  const e = eins();
-  await postJson(url, '/deck/sprung', { deck: 1, ziel: e + 8, raster: 0 });
-  await zustand(o, (x) => Math.abs(x.quell_beat - (e + 8)) < 1e-6);
-  await postJson(url, '/deck/loop', { deck: 1, laenge: 2, raster: 4 });
-  await zustand(o, (x) => x.beats_bis_ende === null || x.beats_bis_ende === Infinity);
-  await boxAn(o, url, loops, 1, 'c-eigen', CYPHER, { status: 1 });
-  const s = await postJson(url, '/deck/loop/sichern', { deck: 1, box: 1 }, CYPHER);   // geschlossen, ruhend: erlaubt; Echo fehlt
-  assert.equal(s.code, 200, JSON.stringify(s.j));
-  const n0 = teile().length;
-  const f = await postJson(url, '/regler', { pfad: 'pad/1/fader', nach: -6, takte: 0 }, CYPHER);
-  assert.equal(f.code, 409); assert.equal(f.j.fehler, 'kein_hoerschein'); assert.equal(teile().length, n0);
-  // Negativ-Kontrolle: Echo eines EIGENEN Mitschnitts löst die Ladung ab
-  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 2, name: 'c-eigen2' }, CYPHER)).code, 200);
-  o.vomKern({ adresse: '/e/loop', felder: { box: 2, status: 1, name: 'c-eigen2', beats: 4 } });
-  assert.equal((await postJson(url, '/regler', { pfad: 'pad/2/fader', nach: -6, takte: 0 }, CYPHER)).code, 200);
-});
-
-test('Glanz 1.3 Re-Review 2: nur fader/trim-Rampen sperren das Nachladen; eq-Rampe nicht', async (t) => {
-  const { o, url, loops } = await padStapel(t);
-  await boxAn(o, url, loops, 1, 'c-eigen', CYPHER, { status: 1 });
-  assert.equal((await postJson(url, '/regler', { pfad: 'pad/1/eq/tief', nach: -12, takte: 4 }, CYPHER)).code, 200);
-  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'a-fremd' }, CYPHER)).code, 200, 'eq-Rampe sperrt nicht');
-  o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 1, name: 'a-fremd', beats: 4 } });
-  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'c-eigen' }, CYPHER)).code, 200);
-  o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 1, name: 'c-eigen', beats: 4 } });
-  assert.equal((await postJson(url, '/regler', { pfad: 'pad/1/trim', nach: -3, takte: 4 }, CYPHER)).code, 200);
-  const x = await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'a-fremd' }, CYPHER);
-  assert.equal(x.code, 409); assert.equal(x.j.fehler, 'box_offen_oder_faehrt', 'trim-Rampe sperrt');
-});
-
-async function ausstehendeLadung(t, neustart) {
-  {
-    const { o, log, url, loops, teile } = await padStapel(t);
-    await boxAn(o, url, loops, 1, 'a-fremd', {}, { status: 3 });   // Andreas' fremder Loop läuft in Box 1
-    assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'c-eigen' }, CYPHER)).code, 200);   // eigene Ladung, Echo steht aus
-    if (neustart) {
-      const n0 = kernBefehle(log).length;
-      const b = await nachNeustart(o, log, 31, n0, 2);   // laden a-fremd, start
-      assert.equal(b[0].felder.name, 'a-fremd');
-      o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 3, name: 'a-fremd', beats: 4 } });
-    }
-    // Naht F13: ohne Neustart erst nach der Übernahme (Echo mit dem eigenen Namen) eigen; vorher klingt noch a-fremd.
-    if (!neustart) o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 3, name: 'c-eigen', beats: 4 } });
-    const n1 = teile().length;
-    const r = await postJson(url, '/regler', { pfad: 'pad/1/fader', nach: -6, takte: 0 }, CYPHER);
-    if (neustart) { assert.equal(r.code, 409); assert.equal(r.j.fehler, 'kein_hoerschein'); assert.equal(teile().length, n1); }
-    else { assert.equal(r.code, 200, 'Negativ-Kontrolle: ohne Neustart ist die Box nach der Übernahme der eigenen Ladung eigen'); }
-  }
-}
-test('Glanz 1.3 Gesamt-Review: eine beim Kern-Neustart ausstehende eigene Ladung macht die wiederhergestellte fremde Box nicht zum eigenen Mitschnitt', (t) => ausstehendeLadung(t, true));
-test('Glanz 1.3 Gesamt-Review (Negativ-Kontrolle): ohne Neustart zählt die ausstehende eigene Ladung weiter', (t) => ausstehendeLadung(t, false));
 
 test('Glanz 2.1 F22: /ausgang und /lage.ausgang zeigen den Stand der Wache, ohne Datei unbewacht', async (t) => {
   const p = path.join(fs.mkdtempSync(path.join(TMP, 'djk-do-')), 'digitalout.json');
@@ -3516,33 +3179,6 @@ test('Glanz 2.1 F22: /ausgang und /lage.ausgang zeigen den Stand der Wache, ohne
 // Naht Klickfrei (F13) × Welle 1 (pad/*): der Kern lässt einen in eine klingende Box geladenen Loop bis zu 4 s warten
 // (/e/loop meldet erst den alten Namen) und verwirft bei Stop Cypher wartende cypher-Loops ohne Echo. Eigen ist eine
 // Box für Cyphers Fader nur, wenn der laufende UND der wartende Inhalt Cyphers Mitschnitt sind.
-test('Naht F13: eigener Loop wartet in einer Box, in der noch ein fremder klingt → pad-Fader bleibt kein_hoerschein, nach Übernahme frei', async (t) => {
-  const { o, url, loops, teile } = await padStapel(t);
-  await boxAn(o, url, loops, 1, 'a-fremd', {}, { status: 3 });                       // Andreas' Deck-Schnitt klingt
-  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'c-eigen' }, CYPHER)).code, 200);
-  o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 3, name: 'a-fremd', beats: 4 } });   // F13: erst der alte Name
-  const n0 = teile().length;
-  const r = await postJson(url, '/regler', { pfad: 'pad/1/fader', nach: -6, takte: 0 }, CYPHER);
-  assert.equal(r.code, 409, JSON.stringify(r.j)); assert.equal(r.j.fehler, 'kein_hoerschein'); assert.equal(teile().length, n0);
-  o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 3, name: 'c-eigen', beats: 4 } });   // Übernahme
-  assert.equal((await postJson(url, '/regler', { pfad: 'pad/1/fader', nach: -6, takte: 0 }, CYPHER)).code, 200, 'Negativ-Kontrolle: nach Übernahme eigen');
-});
-
-test('Naht F13: Stop Cypher verwirft Cyphers wartende Ladung → nach der Freigabe gilt wieder der klingende fremde Inhalt', async (t) => {
-  const { o, url, loops, teile } = await padStapel(t);
-  await boxAn(o, url, loops, 1, 'a-fremd', {}, { status: 3 });
-  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'c-eigen' }, CYPHER)).code, 200);
-  o.vomKern({ adresse: '/e/ki', felder: { gestoppt: 1 } });
-  o.vomKern({ adresse: '/e/ki', felder: { gestoppt: 0 } });
-  assert.equal(o.loopLadung['1'], undefined, 'wartende cypher-Ladung ist geräumt');
-  const r = await postJson(url, '/regler', { pfad: 'pad/1/fader', nach: -6, takte: 0 }, CYPHER);
-  assert.equal(r.code, 409, JSON.stringify(r.j)); assert.equal(teile().filter((z) => z.felder.pfad === 'pad/1/fader').length, 0);
-  // Negativ-Kontrolle: Andreas' wartende Ladung bleibt (Stop Cypher betrifft nur Cyphers)
-  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 2, name: 'a-fremd' })).code, 200);
-  o.vomKern({ adresse: '/e/ki', felder: { gestoppt: 1 } });
-  assert.equal(o.loopLadung['2']?.name, 'a-fremd');
-});
-
 // V2 Fix-Runde 2 H2 (Spec 6.33, wie tests/support/media_library.mjs F16): die Stapel-Hilfe dieser Datei legt Hüllen und alle Vorgabe-Ordner (loops, kits,
 // welle, muster, hc, raster, wirt) im eigenen tmp-Ordner an, den t.after wegräumt; ein ausdrücklich übergebener Ordner gehört dem Aufrufer und bleibt.
 // Vorher blieben je Stapel acht djk-*-Ordner unter TMPDIR liegen (ganzer Suite-Lauf: rund 1300 Einträge). Geprüft wird nur, was neu unter TMPDIR liegt.
@@ -3597,27 +3233,3 @@ test('demo overlay: POST /ansage reaches the stream, a late page gets the curren
   spaet.zu();
 });
 
-// ---------- Platz-Kanal: the page reports what sits in place 3/4, the kern routes it into pad/1, pad/2 ----------
-const platzSendungen = (log) => log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/platz/kanal');
-
-test('Platz-Kanal /platz/kanal: passes pad and inhalt to the kern, receipt, GET and /lage follow /e/platz/kanal', async (t) => {
-  const { url, log } = await stapel(t);
-  assert.deepEqual(await (await fetch(`${url}/platz/kanal`)).json(), { kanal: [0, 0] });
-  const r = await postJson(url, '/platz/kanal', { pad: 2, inhalt: 3 });
-  assert.equal(r.code, 200, JSON.stringify(r.j));
-  assert.equal(r.j.quittung.status, 2, JSON.stringify(r.j));
-  const f = platzSendungen(log);
-  assert.equal(f.length, 1);
-  assert.deepEqual({ ...f[0].felder, id: 0 }, { id: 0, quelle: 'andreas', pad: 2, inhalt: 3 });
-  await bis(async () => (await (await fetch(`${url}/platz/kanal`)).json()).kanal[1] === 3);
-  assert.deepEqual(await (await fetch(`${url}/platz/kanal`)).json(), { kanal: [0, 3] });
-  assert.deepEqual((await (await fetch(`${url}/lage`)).json()).platz_kanal, [0, 3]);
-});
-
-test('Platz-Kanal /platz/kanal: wrong values get 400 and the kern nothing', async (t) => {
-  const { url, log } = await stapel(t);
-  for (const falsch of [{ pad: 0, inhalt: 1 }, { pad: 3, inhalt: 1 }, { pad: 1, inhalt: 4 }, { pad: 1, inhalt: -1 }, { pad: 1, inhalt: 1.5 }, { pad: 1 }, { inhalt: 1 }, { pad: '1', inhalt: 1 }]) {
-    assert.equal((await postJson(url, '/platz/kanal', falsch)).code, 400, JSON.stringify(falsch));
-  }
-  assert.equal(platzSendungen(log).length, 0);
-});

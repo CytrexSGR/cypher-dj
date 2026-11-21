@@ -6,18 +6,19 @@ import { PFAD } from '../hand_operation.ts';
 
 const GUT = (p) => assert.ok(PFAD.test(p), `${p} must be a hand path`);
 const SCHLECHT = (p) => assert.ok(!PFAD.test(p), `${p} must not be a hand path`);
-const KANAELE = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
+// Container core: the knob rows of a graph channel are <kanal>/bk/<k> on the four container strips (deck/1, deck/2, pad/1, pad/2), on the instrument
+// streams erz/1, 2, 3, 5, 6, 7, 9, 10 (no strip, alias vocabulary), on fx/3, fx/4 and master; deck/3, deck/4, erz/4 and erz/8 carry no graph.
+// The stream rows strom/<n>/bk/<k> and the track rows spur/<nr>/bk/<k> are the core's own addresses.
+const KANAELE = ['deck/1', 'deck/2', 'pad/1', 'pad/2', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'erz/9', 'erz/10', 'fx/3', 'fx/4', 'master'];
+const STROEME = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16].map((n) => `strom/${n}`);
+const SPUREN = [1, 2, 3, 8].map((n) => `spur/${n}`);
 
-test('PFAD: <kanal>/bk/1..64 on all 12 graph channels, nothing else', () => {
-  for (const k of KANAELE) {
+test('PFAD: <kanal>/bk/1..64 on the graph channels, strom/<n>/bk and spur/<nr>/bk; nothing else', () => {
+  for (const k of [...KANAELE, ...STROEME, ...SPUREN]) {
     for (const n of [1, 8, 9, 32, 33, 48, 63, 64]) GUT(`${k}/bk/${n}`);
     for (const n of ['0', '65', '66', '70', '99', '100', '00', '01', '033', '09', '010', '1x', 'x', '', '1/2', '-1']) SCHLECHT(`${k}/bk/${n}`);
   }
-  for (const k of ['fx/3', 'fx/4']) {
-    for (const n of [1, 33, 64]) GUT(`${k}/bk/${n}`);
-    for (const n of ['0', '65', '033']) SCHLECHT(`${k}/bk/${n}`);
-  }
-  for (const p of ['erz/4/bk/9', 'erz/8/bk/9', 'deck/5/bk/9', 'fx/1/bk/9', 'fx/2/bk/32', 'bus/1/bk/32', 'pad/3/bk/9', 'xdeck/1/bk/9', 'deck/1/bk/9/x', '/deck/1/bk/9', 'erz/4/bk/64']) SCHLECHT(p);
+  for (const p of ['strom/0/bk/9', 'strom/17/bk/9', 'spur/17/bk/9', 'spur/0/bk/9', 'deck/3/bk/1', 'deck/4/bk/1', 'deck/5/bk/9', 'erz/4/bk/9', 'erz/8/bk/9', 'fx/1/bk/9', 'fx/2/bk/32', 'bus/1/bk/32', 'pad/3/bk/9', 'xdeck/1/bk/9', 'deck/1/bk/9/x', '/deck/1/bk/9', 'erz/4/bk/64']) SCHLECHT(p);
 });
 
 test('PFAD: ins/bk/<stage 1..8>/(an|k1..k64)', () => {

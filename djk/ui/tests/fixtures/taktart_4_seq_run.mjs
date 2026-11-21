@@ -26,7 +26,7 @@ noten hat  42   1/32  x...o...x...o...x...o...x.o.oxxX`;
 // the pure part: new deck, pattern text plan, round trip, length text, editierbar of clips of 64, 48 and 32 beats
 export function rein() {
   const lauf = (p, ...b) => fuehreListeAus(p, b).projekt;
-  const p0 = lauf(Object.assign(neuesProjekt('x'), { live: true }), { befehl: 'seq_anlegen', platz: 2 });
+  const p0 = lauf(Object.assign(neuesProjekt('x'), { live: true, plaetze: [{ typ: 'track' }, { typ: 'track' }, { typ: 'track' }, { typ: 'track' }] }), { befehl: 'seq_anlegen', platz: 2 });
   const gid = seqGruppe(p0, 2).id;
   const folgen = leseFolgeText(TEXT);
   const befehle = folgeBefehle(p0, gid, folgen, { stumm: false, geraetInfo: info });

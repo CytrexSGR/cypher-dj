@@ -97,10 +97,10 @@ test('resolver: an instrument preset lands on the base, the control gives channe
   assert.deepEqual(r.uebersprungen, [{ regler: 'Enc 99', grund: 'regler_unbekannt' }, { regler: 'Enc 3', grund: 'ziel_ungueltig' }, { regler: 'Enc 1', grund: 'doppelt' }]);
 });
 
-test('resolver: a project track base spur/<slot>/bk/ resolves for slots 1..8 and skips everything above', () => {
+test('resolver: a project track base spur/<slot>/bk/ resolves for slots 1..16 and skips everything above', () => {
   const p = instrument('synth-poly', [{ regler: 'Enc 1', knopf: 1 }]);
-  assert.deepEqual(loese(p, 'spur/8/bk/').eintraege, [{ pfad: 'spur/8/bk/1', kanal: 0, nr: 13 }]);
-  const r = loese(p, 'spur/9/bk/');
+  assert.deepEqual(loese(p, 'spur/16/bk/').eintraege, [{ pfad: 'spur/16/bk/1', kanal: 0, nr: 13 }]);
+  const r = loese(p, 'spur/17/bk/');
   assert.deepEqual(r.eintraege, []);
   assert.deepEqual(r.uebersprungen, [{ regler: 'Enc 1', grund: 'ziel_ungueltig' }]);
 });
@@ -135,7 +135,7 @@ test('bank: the default bank is the knobs of the device in layout order on knob 
   const lpd = bank('lpd8', 'spur/3/bk/').eintraege;
   assert.deepEqual(lpd.map((e) => [e.pfad, e.kanal, e.nr]), Array.from({ length: 8 }, (_, i) => [`spur/3/bk/${i + 1}`, 0, i + 1]));
   assert.deepEqual(bank('unknown', 'erz/5/bk/'), { eintraege: [], uebersprungen: [] });
-  assert.deepEqual(bank('lc3', 'spur/9/bk/').eintraege, [], 'a base without rows resolves to nothing');
+  assert.deepEqual(bank('lc3', 'spur/17/bk/').eintraege, [], 'a base without rows resolves to nothing');
 });
 
 test('resolver: a button with stufen steps a knob of the synth (art taste + stufen); a button without stufen cannot drive a knob', () => {

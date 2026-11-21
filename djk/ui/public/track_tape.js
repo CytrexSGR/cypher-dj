@@ -1,6 +1,7 @@
 // Studio S7: Spurbänder. Eine Linie aus Punkten ist eine andere Schreibweise der S6-Fahrten (djk/ui/track.ts).
 // Umwandlungsregeln: docs/superpowers/plans/2026-09-29-djk-studio-s7-spurbaender.md, Abschnitt „Umwandlungsregeln".
 // Läuft im Browser und in node (Tests).
+import { stromKanal } from './kanaele.js';
 
 export const LAENGEN = [4, 8, 16, 32];   // Takte je Linie
 const FORM_FAHRT = { rund: 's', gerade: 'linear' };
@@ -8,8 +9,8 @@ const FORM_FAHRT = { rund: 's', gerade: 'linear' };
 // Bänder je Strom (1 DRUMS, 2 BASS, 3 MELODY)
 export function baender(strom) {
   const b = [
-    { schluessel: 'fader', name: 'FADER', ziel: `erz/${strom}/fader`, min: -60, max: 0, aus: -200, wirt: false, vorgabe: 0, einheit: 'dB' },
-    { schluessel: 'filter', name: 'FILTER', ziel: `erz/${strom}/filter`, min: -1, max: 1, wirt: false, vorgabe: 0, einheit: '' },
+    { schluessel: 'fader', name: 'FADER', ziel: `${stromKanal(strom)}/fader`, min: -60, max: 0, aus: -200, wirt: false, vorgabe: 0, einheit: 'dB' },
+    { schluessel: 'filter', name: 'FILTER', ziel: `${stromKanal(strom)}/filter`, min: -1, max: 1, wirt: false, vorgabe: 0, einheit: '' },
   ];
   const gruppe = { 2: 'bass', 3: 'melodie' }[strom];
   // Bereich −60..70 aus djk/hosts/carla/surge_bereiche.json (a_filter1_cutoff.punkte); Vorgabe = Mitte, bis die Seite den Ist-Wert kennt

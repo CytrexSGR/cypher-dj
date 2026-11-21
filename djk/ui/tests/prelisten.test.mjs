@@ -23,12 +23,12 @@ function attrappe({ dauer = 200, fehler = null } = {}) {
 const neu = (o = {}) => { const k = attrappe(o); const kd = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'vh-')), 'kanten');
   return { k, kd, v: new Vorhoeren({ kopfhoererDa: async () => o.kopf ?? true, kernNurCue: () => o.nurCue ?? true, klient: () => k, kantenDatei: kd, instanz: '' }) }; };
 
-test('nurCueAus: Fähigkeiten-Datei mit lebendem cypherdj-kern und nur_cue erz/8 — sonst nein', () => {
+test('nurCueAus: Fähigkeiten-Datei mit lebendem cypherdj-kern und nur_cue vorhoer — sonst nein', () => {
   const comm = (pid) => (pid === 4711 ? 'cypherdj-kern' : pid === 4712 ? 'node' : null);
-  assert.equal(nurCueAus('{"pid":4711,"nur_cue":"erz/8"}', comm), true);
+  assert.equal(nurCueAus('{"pid":4711,"nur_cue":"vorhoer"}', comm), true);
   assert.equal(nurCueAus('{"pid":4711}', comm), false, 'alter Kern-Stand ohne Feld');
-  assert.equal(nurCueAus('{"pid":4712,"nur_cue":"erz/8"}', comm), false, 'PID gehört nicht dem Kern');
-  assert.equal(nurCueAus('{"pid":4713,"nur_cue":"erz/8"}', comm), false, 'tote PID (alter Kern neu gestartet)');
+  assert.equal(nurCueAus('{"pid":4712,"nur_cue":"vorhoer"}', comm), false, 'PID gehört nicht dem Kern');
+  assert.equal(nurCueAus('{"pid":4713,"nur_cue":"vorhoer"}', comm), false, 'tote PID (alter Kern neu gestartet)');
   assert.equal(nurCueAus(null, comm), false, 'keine Datei');
   assert.equal(nurCueAus('{kaputt', comm), false);
 });

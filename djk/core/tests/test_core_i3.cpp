@@ -89,7 +89,9 @@ struct Lauf {
   // dauer > 0: a ramp of that many beats (S curve), 0 = set
   int64_t fader(int deck, float db, double ab, const char* quelle, const char* hs = "", double dauer = 0.0) {
     cdj::Befehl b = neu(cdj::Befehl::TEIL, quelle);
-    std::snprintf(b.pfad, sizeof b.pfad, "deck/%d/fader", deck);
+    // K9: the strips are the four containers; the players 3 and 4 sound through pad/1 and pad/2 (deck/3, deck/4 have no rows)
+    if (deck <= 2) std::snprintf(b.pfad, sizeof b.pfad, "deck/%d/fader", deck);
+    else std::snprintf(b.pfad, sizeof b.pfad, "pad/%d/fader", deck - 2);
     b.ab_beat = ab;
     b.dauer_beats = dauer;
     b.form = dauer > 0.0 ? 1 : 0;
@@ -130,6 +132,13 @@ struct Lauf {
   int64_t hoerschein_weg(const char* hs) {
     cdj::Befehl b = neu(cdj::Befehl::HOERSCHEIN_WEG);
     std::snprintf(b.hoerschein, sizeof b.hoerschein, "%s", hs);
+    return sende(b);
+  }
+  // /k/container/quelle: container nr 1..4 (A..D) takes art 0 leer, 1 player, 2 modul
+  int64_t container(int nr, int art) {
+    cdj::Befehl b = neu(cdj::Befehl::CONTAINER_QUELLE, "andreas");
+    b.nr = nr;
+    b.an = art;
     return sende(b);
   }
   void zyklen(int64_t bis_sample, int n = 256) {
@@ -210,7 +219,7 @@ int main() {
   a.zyklen(114 * SPB);
   PRUEF(a.quittung(t6, 2));
   PRUEF(!a.quittung(t6, 6));
-  PRUEF_NAH(wert("deck/3/fader"), 0.0, 1e-3);
+  PRUEF_NAH(wert("pad/1/fader"), 0.0, 1e-3);
   PRUEF_NAH(wert("deck/2/fader"), -200.0, 1e-6);   // the loaded deck 2 stays closed
 
   // f) a part queued on the EMPTY deck 4 for a later beat, the track arrives before that beat: I3a is evaluated at the part START, with deck 4 then
@@ -225,7 +234,7 @@ int main() {
   const Q* q7 = a.quittung(t7, 6);
   PRUEF(q7 && q7->grund == "kein_hoerschein");
   PRUEF(!a.quittung(t7, 2));
-  PRUEF_NAH(wert("deck/4/fader"), -200.0, 1e-6);
+  PRUEF_NAH(wert("pad/2/fader"), -200.0, 1e-6);
 
   // g) a RAMP of cypher on the empty deck 1 (-200 -> 0 over 16 beats, started under the exemption), the track arrives in the middle of the ramp.
   //    The load writes -200 once and ends the running part of cypher on that fader (Stellwerk::cypher_fahrt_beenden): the ramp must not drive the
@@ -252,15 +261,15 @@ int main() {
   PRUEF(a.quittung(t8, 7));   // the part, started before the load, ended by it (abbruch)
 
   // h) 2026-11-19 (review of seq-fader-frei): the load ends the RUNNING parts of EVERY source but andreas on that fader, and nothing else. Deck 3 is
-  //    still empty (open at 0 dB since case d). A ramp of leitstand (not cypher) on deck/3/fader, 0 -> -100 over 16 beats, is running when a track
+  //    still empty (open at 0 dB since case d). A ramp of leitstand (not cypher) on pad/1/fader (player 3), 0 -> -100 over 16 beats, is running when a track
   //    arrives. Its coupling-group mate on pad/1/fader (same plan and group, a longer ramp) ends with it (a group falls together), and a
-  //    running part of andreas on another regler of the deck (deck/3/trim) is spared.
-  const int64_t h1 = a.teil("deck/3/fader", -100.0f, 170.0, "leitstand", "ph", 0, "gh", 16.0);
-  const int64_t h2 = a.teil("pad/1/fader", -100.0f, 170.0, "leitstand", "ph", 1, "gh", 64.0);
-  const int64_t h3 = a.teil("deck/3/trim", -10.0f, 170.0, "andreas", "pa", 0, "", 16.0);
+  //    running part of andreas on another regler of the deck (pad/1/trim) is spared.
+  const int64_t h1 = a.teil("pad/1/fader", -100.0f, 170.0, "leitstand", "ph", 0, "gh", 16.0);
+  const int64_t h2 = a.teil("pad/2/fader", -100.0f, 170.0, "leitstand", "ph", 1, "gh", 64.0);
+  const int64_t h3 = a.teil("pad/1/trim", -10.0f, 170.0, "andreas", "pa", 0, "", 16.0);
   a.zyklen(174 * SPB);
   PRUEF(a.quittung(h1, 2) && a.quittung(h2, 2) && a.quittung(h3, 2));
-  const double h_mitte = wert("deck/3/fader");
+  const double h_mitte = wert("pad/1/fader");
   PRUEF(h_mitte < 0.0 && h_mitte > -100.0);   // the ramp is running
   const int64_t l3 = a.laden(3, MID);
   a.zyklen(a.kern->sample() + 64 * 256);
@@ -269,10 +278,10 @@ int main() {
   PRUEF(qh1 && qh1->grund == "abbruch");   // the leitstand part on that fader ended
   PRUEF(a.quittung(h2, 7));                // the group mate on another fader ends with it
   PRUEF(!a.quittung(h3, 7));               // andreas is spared
-  double h_hoechst = wert("deck/3/fader");
+  double h_hoechst = wert("pad/1/fader");
   while (a.kern->sample() < 190 * SPB) {
     a.zyklen(a.kern->sample() + 256);
-    if (wert("deck/3/fader") > h_hoechst) h_hoechst = wert("deck/3/fader");
+    if (wert("pad/1/fader") > h_hoechst) h_hoechst = wert("pad/1/fader");
   }
   PRUEF_NAH(h_hoechst, -200.0, 1e-6);   // the fader stayed closed
 
@@ -287,7 +296,72 @@ int main() {
   PRUEF(b.quittung(t5, 2));
   PRUEF(!b.quittung(t5, 6));
 
+  // K8 review F-B and F-C, on the real kernel: container C (pad/1) with the player 3 behind it.
+  //   i)   art player: the key of the pass is the player name (deck/3), not the container path; without a pass cypher is refused on pad/1
+  //   ii)  art modul: the strip is free (the player is not heard), cypher opens pad/1 without a pass, the track of player 3 stays loaded
+  //   iii) the switch back to player counts like a fresh load on an open channel: it closes the strip, so the track never meets an open fader
+  //   iv)  art leer: free again
+  {
+    Lauf c;
+    c.zyklen(10 * 256);
+    c.kern->hoerschein_pflicht(true);
+    const int64_t l3c = c.laden(3, MID);
+    c.zyklen(c.kern->sample() + 40 * 256);
+    PRUEF(c.quittung(l3c, 3));
+    const auto cw = [&](const char* pfad) { return c.kern->stellwerk().wert(c.kern->stellwerk().tabelle().suche(pfad)); };
+    const auto in = [&](double beats) { return static_cast<double>(c.kern->sample()) / static_cast<double>(SPB) + beats; };
+    const auto bis = [&](double beat) { c.zyklen(static_cast<int64_t>(beat * static_cast<double>(SPB))); };
+    PRUEF(c.kern->container_art(2) == cdj::Kern::CONTAINER_ART_PLAYER);
+    // i)
+    const int64_t i1 = c.teil("pad/1/fader", 0.0f, in(2.0), "cypher", "", 0, "");
+    bis(in(4.0));
+    const Q* qi1 = c.quittung(i1, 6);
+    PRUEF(qi1 && qi1->grund == "kein_hoerschein");
+    PRUEF_NAH(cw("pad/1/fader"), -200.0, 1e-6);
+    c.hoerschein("hc", "deck/3", MID, 128.0, 1, 1000.0);
+    bis(in(2.0));
+    {   // the pass is named after the player (deck/3), the request is on the container strip pad/1
+      cdj::Befehl b = c.neu(cdj::Befehl::TEIL, "cypher");
+      std::snprintf(b.pfad, sizeof b.pfad, "pad/1/fader");
+      b.ab_beat = in(2.0);
+      b.wert = 0.0f;
+      b.politik = 1;
+      std::snprintf(b.hoerschein, sizeof b.hoerschein, "hc");
+      c.sende(b);
+      bis(in(4.0));
+      PRUEF(c.quittung(b.id, 2));
+      PRUEF_NAH(cw("pad/1/fader"), 0.0, 1e-3);
+    }
+    c.teil("pad/1/fader", -200.0f, in(1.0), "andreas", "", 0, "");
+    bis(in(3.0));
+    PRUEF_NAH(cw("pad/1/fader"), -200.0, 1e-6);
+    // ii) container C takes a module
+    c.container(3, cdj::Kern::CONTAINER_ART_MODUL);
+    bis(in(2.0));
+    PRUEF(c.kern->container_art(2) == cdj::Kern::CONTAINER_ART_MODUL);
+    c.hoerschein_weg("hc");
+    bis(in(2.0));
+    const int64_t m1 = c.teil("pad/1/fader", 0.0f, in(2.0), "cypher", "", 0, "");
+    bis(in(4.0));
+    PRUEF(c.quittung(m1, 2));
+    PRUEF(!c.quittung(m1, 6));
+    PRUEF_NAH(cw("pad/1/fader"), 0.0, 1e-3);
+    // iii) back to player with the track still in player 3 and the fader open: the strip closes, no pass was given
+    c.container(3, cdj::Kern::CONTAINER_ART_PLAYER);
+    bis(in(3.0));
+    PRUEF(c.kern->container_art(2) == cdj::Kern::CONTAINER_ART_PLAYER);
+    std::printf("kern case iii: pad/1/fader after the switch to player %.2f dB\n", cw("pad/1/fader"));
+    PRUEF_NAH(cw("pad/1/fader"), -200.0, 1e-6);
+    // iv) container C takes nothing
+    c.container(3, cdj::Kern::CONTAINER_ART_LEER);
+    bis(in(2.0));
+    const int64_t n1 = c.teil("pad/1/fader", 0.0f, in(2.0), "cypher", "", 0, "");
+    bis(in(4.0));
+    PRUEF(c.quittung(n1, 2));
+    PRUEF_NAH(cw("pad/1/fader"), 0.0, 1e-3);
+  }
+
   std::printf("test_kern_i3: alle Fälle wie erwartet (a kein_hoerschein, b gestartet, c andreas gestartet, "
               "d wieder kein_hoerschein, Negativ-Kontrolle gestartet)\n");
-  return 0;
+  PRUEF_ENDE();   // the file used to end with "return 0": failed checks were silent
 }

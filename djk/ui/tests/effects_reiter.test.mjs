@@ -4,23 +4,23 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { FX_REITER, reiterWahl } from '../public/effects_reiter.js';
 import { busStreifenHtml, masterPanelHtml, masterLimiterLesung, BUS_KANAELE } from '../public/effects.js';
-const FX_KANAELE = [...readFileSync(new URL('../public/live_kanaele.js', import.meta.url), 'utf8').match(/export const FX_KANAELE = \[(.*)\];/)[1].matchAll(/\['([a-z]+\/\d)', '([^']+)'\]/g)].map((m) => [m[1], m[2]]);
+import { FX_KANAELE } from '../public/live_kanaele.js';
 
-test('FX_REITER: MASTER first, then the ten channels, then SENDS and BUS', () => {
-  assert.equal(FX_REITER.length, 13);
+test('FX_REITER: MASTER first, then the containers A..D, then SENDS and BUS; no stream tab', () => {
+  assert.equal(FX_REITER.length, 7);
   assert.deepEqual(FX_REITER[0], { id: 'master', text: 'MASTER' });
-  assert.deepEqual(FX_REITER.slice(1, 11).map((r) => r.id), FX_KANAELE.map(([k]) => k));
-  assert.deepEqual(FX_REITER.slice(1, 11).map((r) => r.text), ['A', 'B', 'DRUMS', 'BASS', 'MELODY', 'I5', 'I6', 'I7', 'L1', 'L2'], 'channel tabs unchanged');
-  assert.deepEqual(FX_REITER.slice(11).map((r) => r.id), ['sends', 'bus']);
+  assert.deepEqual(FX_REITER.slice(1, 5).map((r) => r.id), FX_KANAELE.map(([k]) => k));
+  assert.deepEqual(FX_REITER.slice(1, 5).map((r) => r.text), ['A', 'B', 'C', 'D']);
+  assert.deepEqual(FX_REITER.slice(5).map((r) => r.id), ['sends', 'bus']);
 });
 
-test('reiterWahl: a stored id of the list, else the default', () => {
-  assert.equal(reiterWahl('erz/3'), 'erz/3');
+test('reiterWahl: a stored id of the list, else the default (container A)', () => {
+  assert.equal(reiterWahl('pad/1'), 'pad/1');
   assert.equal(reiterWahl('sends'), 'sends');
   assert.equal(reiterWahl('master'), 'master');
-  assert.equal(reiterWahl('erz/9'), 'erz/1');
-  assert.equal(reiterWahl(null), 'erz/1');
-  assert.equal(reiterWahl(''), 'erz/1');
+  assert.equal(reiterWahl('erz/3'), 'deck/1', 'a stream is no tab any more');
+  assert.equal(reiterWahl(null), 'deck/1');
+  assert.equal(reiterWahl(''), 'deck/1');
 });
 
 test('MASTER panel: the master chain in signal order, INSERT (picker, knob list), GLUE (master/kleber), LIMITER (meter); nothing of the buses', () => {

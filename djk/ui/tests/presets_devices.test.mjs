@@ -162,13 +162,13 @@ test('A8 a deliberately broken catalogue fails: a removed parameter, a range off
 
 test('A8 a user preset for gate is accepted by pruefeWerte, an unknown field, a wrong type and an out-of-range value are refused', () => {
   const gate = GERAETE.find((g) => g.id === 'gate');
-  const r = pruefeWerte(gate, { an: true, schwelle: -30, bereich: -60, sc: 5 }, true);
-  assert.deepEqual(r.werte, { an: true, schwelle: -30, bereich: -60, sc: 5 });
+  const r = pruefeWerte(gate, { an: true, schwelle: -30, bereich: -60, sc: 3 }, true);
+  assert.deepEqual(r.werte, { an: true, schwelle: -30, bereich: -60, sc: 3 });
   const fehler = (roh, code) => assert.throws(() => pruefeWerte(gate, roh, true), (e) => e instanceof PresetFehler && e.fehler === code, JSON.stringify(roh));
   fehler({ schwelle: -30, gain: 1 }, 'parameter_unbekannt');
   fehler({ schwelle: 3 }, 'wert_ungueltig');
   fehler({ an: 1 }, 'wert_ungueltig');
-  fehler({ sc: 15 }, 'wert_ungueltig');
+  fehler({ sc: 5 }, 'wert_ungueltig');
   // multiband takes the band fields under their flat names
   assert.deepEqual(pruefeWerte(GERAETE.find((g) => g.id === 'multiband'), { tief_schwelle: -20, mitte_umgehen: true, grenze_hoch: 3000 }, true).verworfen, []);
 });

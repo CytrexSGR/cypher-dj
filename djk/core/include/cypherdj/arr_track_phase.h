@@ -67,6 +67,7 @@ struct SpurTest {
   int64_t grenze_ns = 0;
   int min_last = -1;
   int64_t warte_spaet_ns = 0;
+  int64_t seriell_ns = 0;   // > 0: the measured duration of every serial phase with the track account off (seriell_gemessen), instead of the real clock
 };
 
 // The scheduler of phase Q: sticky lane lists, one atomic state per unit (0 free, 1 claimed, 2 done), claimed with one CAS. A lane runs its own list from
@@ -91,6 +92,8 @@ class ArrSpurLauf {
     uint64_t warte_spaet = 0;         // joins whose wait after the caller ran dry exceeded the threshold (one late event of the track account each)
     int64_t warte_max_ns = 0;         // the longest such wait
     uint64_t auto_neu = 0;            // mode auto: the account was switched on again
+    uint64_t seriell_teuer = 0;       // serial phases with the account off that took longer than the hard limit of the pool (the fallback cannot keep real time)
+    uint64_t neu_teuer = 0;           // switch-ons without the back-off because of such a phase (also counted in auto_neu)
     uint64_t unfertig = 0;            // a unit still claimed (not done) at the start of a phase: must stay 0
   };
   Zaehler z;
@@ -129,7 +132,11 @@ class ArrSpurLauf {
   // The state of the track account at the start of a phase: true when it is on. Modes an and auto (a synonym): with the account off, counts blocks and switches it on again
   // after neu_wartezeit(switch-offs so far) (true in that call), however often it fails. Mode aus never asks. Callback thread, every worker frei.
   bool konto_pruefen(HallPool& pool, int modus);
-  void auto_neu_beginnen() { auto_aus_n_ = 0; auto_aus_gesehen_ = false; auto_blocks_ = 0; auto_gesund_ = 0; }   // a mode change starts the retry story afresh
+  void auto_neu_beginnen() { auto_aus_n_ = 0; auto_aus_gesehen_ = false; auto_blocks_ = 0; auto_gesund_ = 0; seriell_teuer_ = false; }   // a mode change starts the retry story afresh
+  // The serial phase that ran because the track account is off took dauer_ns (the scheduler's clock) for m samples. Above GRENZE_PROZENT of the period the serial
+  // fallback is no safer than the pool (2026-11-21: 14 Baukasten tracks, the clock ran at half speed for minutes): the next konto_pruefen switches the account
+  // on again without the back-off. Callback thread, after the phase.
+  void seriell_gemessen(int64_t dauer_ns, int m);
   void setze_test(const SpurTest& t) { test_ = t; }
   int64_t warte_max_us() const { return z.warte_max_ns / 1000; }
   // The cost estimate of a track (or of every track) is forgotten: its sink or instrument changed. Callback thread, between phases (every worker idle).
@@ -170,6 +177,7 @@ class ArrSpurLauf {
   int auto_aus_n_ = 0;                     // switch-offs seen so far (callback thread only), counted up to 1000
   bool auto_aus_gesehen_ = false;
   int auto_blocks_ = 0;
+  bool seriell_teuer_ = false;             // the last serial phase with the account off was over the limit (callback thread only)
   int auto_gesund_ = 0;                    // blocks in a row with the account on since the last switch-off (callback thread only); AUTO_GESUND_BLOECKE forgets auto_aus_n_
   std::atomic<bool> erste_[BAHNEN] = {};   // seam: the lane has started a unit in this phase
   std::atomic<bool> gehalten_{false};      // seam: the hold of halte_bahn has been taken

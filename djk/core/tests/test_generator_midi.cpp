@@ -13,7 +13,7 @@ namespace {
 
 constexpr int N = 256;
 constexpr int64_t SPB = 22500;  // 128 BPM bei 48 kHz
-constexpr int ERZ2 = 5;         // Mixer-Index erz/2
+constexpr int ERZ2 = 1;         // output index of stream 2
 constexpr int NB = 1024;        // Glanz 2.7 Prüfung R3: Puffer für Zyklen bis Quantum 1024
 
 struct Ev { int port; int64_t sample; uint8_t s, d1, d2; };
@@ -87,7 +87,7 @@ int main() {
 
   {  // 1) zwei Noten: On am Sample, Off nach dauer, Velocity 0..1 → 1..127, Kanal 1 (Status 0x90/0x80)
     Welt w;
-    w.erz.setze_strom(2, &kit, ERZ2);
+    w.erz.setze_strom(2, &kit);
     w.erz.setze_midi(2, 1, 1);
     w.erz.fenster(fenster2(0.0, 8.0, {ev(1.0, 36, 1.0f, 0.5), ev(2.0, 39, 0.5f, 0.5)}), 0.0);
     w.bis(4 * SPB);
@@ -105,7 +105,7 @@ int main() {
   }
   {  // 2) Port umhängen mitten in der Note: Off auf dem ALTEN Port im nächsten Block, Kanal 3 → Status 0x92
     Welt w;
-    w.erz.setze_strom(2, nullptr, ERZ2);
+    w.erz.setze_strom(2, nullptr);
     w.erz.setze_midi(2, 1, 3);
     w.erz.fenster(fenster2(0.0, 8.0, {ev(1.0, 40, 1.0f, 2.0)}), 0.0);
     w.bis(SPB + N);
@@ -119,12 +119,12 @@ int main() {
   }
   {  // 3) Negativ-Kontrollen: Strom ohne MIDI → keine MIDI-Ereignisse (Kit klingt); midi = nullptr → nichts, kein Absturz
     Welt w;
-    w.erz.setze_strom(2, &kit, ERZ2);
+    w.erz.setze_strom(2, &kit);
     w.erz.fenster(fenster2(0.0, 8.0, {ev(1.0, 36, 1.0f, 0.5)}), 0.0);
     w.bis(2 * SPB);
     PRUEF(w.evs.empty() && w.max_erz2 > 0.5f);
     Welt v;
-    v.erz.setze_strom(2, nullptr, ERZ2);
+    v.erz.setze_strom(2, nullptr);
     v.erz.setze_midi(2, 1, 1);
     v.erz.fenster(fenster2(0.0, 8.0, {ev(1.0, 36, 1.0f, 0.5)}), 0.0);
     v.bis(2 * SPB, false);
@@ -134,7 +134,7 @@ int main() {
      // demselben Vorhalt klingt weiter genau am Sample des Beats.
     Welt w;
     w.erz.setze_midi_vorhalt(537);
-    w.erz.setze_strom(2, nullptr, ERZ2);
+    w.erz.setze_strom(2, nullptr);
     w.erz.setze_midi(2, 1, 1);
     w.erz.fenster(fenster2(0.0, 8.0, {ev(1.0, 36, 1.0f, 0.5)}), 0.0);
     w.bis(2 * SPB);
@@ -147,7 +147,7 @@ int main() {
     }
     Welt k;
     k.erz.setze_midi_vorhalt(537);
-    k.erz.setze_strom(2, &kit, ERZ2);
+    k.erz.setze_strom(2, &kit);
     k.erz.fenster(fenster2(0.0, 8.0, {ev(1.0, 36, 1.0f, 0.5)}), 0.0);
     k.bis(2 * SPB);
     std::printf("kit mit vorhalt: erstes erz/2-Sample %lld (Soll %lld)\n", (long long)k.erstes_erz2, (long long)SPB);
@@ -157,7 +157,7 @@ int main() {
      // (Beat 1) noch einmal bringt, spielt sie kein zweites Mal (zu_spaet); die Note dahinter (Beat 1,5) wird eingefügt.
     Welt w;
     w.erz.setze_midi_vorhalt(537);
-    w.erz.setze_strom(2, nullptr, ERZ2);
+    w.erz.setze_strom(2, nullptr);
     w.erz.setze_midi(2, 1, 1);
     w.erz.fenster(fenster2(0.0, 8.0, {ev(1.0, 36, 1.0f, 0.25)}), 0.0);
     w.bis(SPB - 256);  // s = 22272: das On (21963) ist hinaus, der Beat (22500) noch nicht
@@ -178,7 +178,7 @@ int main() {
      // Soll: keine doppelt, keine fehlt (vorher 14 doppelt). Negativ-Kontrolle 6b: dasselbe ohne Quantumwechsel.
     for (int wechsel = 1; wechsel >= 0; --wechsel) {
       Welt w;
-      w.erz.setze_strom(2, nullptr, ERZ2);
+      w.erz.setze_strom(2, nullptr);
       w.erz.setze_midi(2, 1, 1);
       std::vector<cdj::ErzEv> v;
       for (int i = 0; i < 40; ++i) v.push_back(ev(3.9 + 0.005 * i, i, 1.0f, 0.004));
@@ -204,7 +204,7 @@ int main() {
      // Zyklusanfang hinaus; kurze Noten (90 Samples) hatten dort On und Off am selben Sample (vorher 13). Soll: jedes Off
      // mindestens ein Sample nach seinem On, keine Note verloren.
     Welt w;
-    w.erz.setze_strom(2, nullptr, ERZ2);
+    w.erz.setze_strom(2, nullptr);
     w.erz.setze_midi(2, 1, 1);
     cdj::ErzFenster f = fenster2(0.0, 16.0, {});
     for (int i = 0; i < 40; ++i) f.ev[f.n++] = ev(3.9 + 0.005 * i, i, 1.0f, 0.004);
@@ -232,7 +232,7 @@ int main() {
   {  // Bug t_bffc3708 (2): kappe = 1 in the window sends the Note-Off of a note that still sounds at ab_beat, at that beat (stille on a MIDI stream)
     const auto lauf = [&](int kappe) {
       Welt w;
-      w.erz.setze_strom(2, nullptr, ERZ2);
+      w.erz.setze_strom(2, nullptr);
       w.erz.setze_midi(2, 1, 1);
       w.erz.fenster(fenster2(0.0, 8.0, {ev(1.0, 40, 1.0f, 6.0), ev(1.0, 44, 1.0f, 0.5)}), 0.0);   // 40 rings 6 beats, 44 ends by itself at 1.5
       w.bis(2 * SPB);
@@ -258,7 +258,7 @@ int main() {
     // the held note 40 rings to its own end (beat 7).
     const auto lauf = [&](bool zweites) {
       Welt w;
-      w.erz.setze_strom(2, nullptr, ERZ2);
+      w.erz.setze_strom(2, nullptr);
       w.erz.setze_midi(2, 1, 1);
       w.erz.fenster(fenster2(0.0, 8.0, {ev(1.0, 40, 1.0f, 6.0)}), 0.0);
       w.bis(2 * SPB);
@@ -275,7 +275,7 @@ int main() {
   }
   {  // K4/K5: a note that starts in the same block as the cut and at the cut beat is a NEW note: it keeps its own length (off at beat 4, not one sample after its on)
     Welt w;
-    w.erz.setze_strom(2, nullptr, ERZ2);
+    w.erz.setze_strom(2, nullptr);
     w.erz.setze_midi(2, 1, 1);
     w.erz.fenster(fenster2(0.0, 8.0, {ev(1.0, 40, 1.0f, 6.0)}), 0.0);
     w.bis(2 * SPB);
@@ -293,7 +293,7 @@ int main() {
   }
   {  // K1: a cut that lies before the block in which the note starts (the event came late) never puts the Off before the On: Off one sample after it
     Welt w;
-    w.erz.setze_strom(2, nullptr, ERZ2);
+    w.erz.setze_strom(2, nullptr);
     w.erz.setze_midi(2, 1, 1);
     w.erz.fenster(fenster2(0.0, 8.0, {ev(1.0, 40, 1.0f, 6.0)}), 0.0);
     cdj::ErzFenster f = fenster2(1.5, 8.0, {});
@@ -307,7 +307,7 @@ int main() {
   }
   {  // K2: MIDI goes out by the Vorhalt earlier (like On and Off of every MIDI note): the cut Off sits at the cut beat minus the Vorhalt, in that block
     Welt w;
-    w.erz.setze_strom(2, nullptr, ERZ2);
+    w.erz.setze_strom(2, nullptr);
     w.erz.setze_midi(2, 1, 1);
     w.erz.setze_midi_vorhalt(1000);
     w.erz.fenster(fenster2(0.0, 8.0, {ev(1.0, 40, 1.0f, 6.0)}), 0.0);

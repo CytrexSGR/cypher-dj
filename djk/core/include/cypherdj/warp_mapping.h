@@ -70,7 +70,7 @@ inline double warp_steigung(const ArrWarp& w, double b) noexcept {
   return (w.frame[i + 1] - w.frame[i]) / (w.beat[i + 1] - w.beat[i]);
 }
 
-// Catmull-Rom wie deck.cpp (LoopBoxen::spiele_frei, ADR 026); auf einer Geraden exakt, bei x = 0 genau y1
+// Catmull-Rom wie deck.cpp (the former loop box, ADR 026); auf einer Geraden exakt, bei x = 0 genau y1
 inline float warp_catmull(float y0, float y1, float y2, float y3, float x) noexcept {
   return y1 + 0.5f * x * (y2 - y0 + x * (2.0f * y0 - 5.0f * y1 + 4.0f * y2 - y3 + x * (3.0f * (y1 - y2) + y3 - y0)));
 }

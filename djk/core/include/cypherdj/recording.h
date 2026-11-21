@@ -18,22 +18,24 @@ namespace cdj {
 constexpr int64_t REC_FRIST_SAMPLES = 96000;   // 2 s: Vorgabe der Frist für den Transportstart nach /k/rec/start (Feld frist_samples = 0); sie endet, sobald das Arrangement wartet
 constexpr int64_t REC_FRIST_MIN = 48000, REC_FRIST_MAX = 1440000;   // 1 s bis 30 s: was der Befehl tragen darf (osc.json frist_samples)
 
-// S18: the internal tap list. Recording input codes (contract osc.json /k/rec/spur eingang): 11..13 = erz/1..3,
-// 15..17 = erz/5..7, 21, 22 = pad/1, pad/2 (rule: erz/N -> 10 + N, pad/N -> 20 + N). 14 (erz/4, production) and 18
-// (erz/8, cue) are not taps. A tap slot is the index of the code in REC_CODES (0..7); the table also lives in
-// djk/contract/streams.ts (REC_EINGANG), pinned by djk/contract/tests/test_stroeme_tabelle.py.
-constexpr int REC_ABGRIFFE = 8;
-constexpr int REC_CODES[REC_ABGRIFFE] = {11, 12, 13, 15, 16, 17, 21, 22};
-constexpr int REC_MIXER[REC_ABGRIFFE] = {4, 5, 6, 8, 9, 10, 12, 13};   // Mixer index of each code (mixer.h: erz/1..8 = 4..11, pad/1..2 = 12, 13)
+// S18 / container core K3: the internal tap list. Recording input codes (contract osc.json /k/rec/spur eingang): 11..13 and 15..17 = the stream buffers of
+// streams 1..3 and 5..7 (rule: stream n -> 10 + n; before any strip), 21 and 22 = the container inputs C and D (pad/1, pad/2, before the strip),
+// 23 and 24 = the container inputs A and B (deck/1, deck/2, before the strip). 14 and 18 are not taps. A tap slot is the index of the code in REC_CODES (0..9).
+// REC_QUELLEN says where the callback reads a slot from: a stream buffer of stage 1 (n = stream, 1-based) or the input of a mixer channel (index in mixer.h).
+constexpr int REC_ABGRIFFE = 10;
+constexpr int REC_CODES[REC_ABGRIFFE] = {11, 12, 13, 15, 16, 17, 21, 22, 23, 24};
+struct RecQuelle {
+  bool strom;   // true: stream buffer n (1..16); false: mixer input n (0-based mixer index)
+  int n;
+};
+constexpr RecQuelle REC_QUELLEN[REC_ABGRIFFE] = {{true, 1}, {true, 2}, {true, 3}, {true, 5}, {true, 6}, {true, 7}, {false, 2}, {false, 3}, {false, 0}, {false, 1}};
 constexpr int rec_abgriff_slot(int code) {
   for (int i = 0; i < REC_ABGRIFFE; ++i)
     if (REC_CODES[i] == code) return i;
   return -1;
 }
-constexpr int rec_mixer_index(int code) {
-  const int s = rec_abgriff_slot(code);
-  return s < 0 ? -1 : REC_MIXER[s];
-}
+// >= 0 for every internal tap code (the slot), -1 otherwise: the callers only ask whether the code is an internal tap
+constexpr int rec_mixer_index(int code) { return rec_abgriff_slot(code); }
 
 // 1.8 S2a: the external taps. Recording input codes 1..4 = ein_1..4 (a pair of JACK ports, EingangsBank); the callback hands the pointers of the
 // pair, already offset to the sub-block, to Aufnahme::block (el/er[paar - 1]); nullptr = no port = silence.

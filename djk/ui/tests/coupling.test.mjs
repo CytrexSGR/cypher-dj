@@ -307,7 +307,7 @@ test('expired link: 401; a link works once; revoking a device cuts its cookie an
 test('through the tablet a request counts as Andreas, whatever x-djk-quelle says; the tablet origin passes the POST guard, a foreign one does not', async (t) => {
   const { log } = await start(t, {});
   const { kopf } = await koppeln();
-  const body = JSON.stringify({ pfad: 'erz/2/fader', nach: -6, ab: 'jetzt' });
+  const body = JSON.stringify({ pfad: 'bus/2/fader', nach: -6, ab: 'jetzt' });
   const quellen = () => log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/teil').map((z) => z.felder.quelle);
   // the request is cut after 400 ms: without a kern the answer would wait for the receipt; what the server sent to the kern is in the log at once
   await lokal('POST', '/regler', { kopf: { ...JSONK, 'x-djk-quelle': 'cypher' }, body, zeit: 400 });

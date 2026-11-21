@@ -1,7 +1,7 @@
 // Event stream handling: /strom dispatch, announcements, Cypher state, control desk socket.
 import { DECKS, setzeZielKurve } from './curves.js';
 import { mixAufnehmen, gateAufnehmen } from './effects.js';
-import { kanalAnsicht } from './live_module.js';   // live modules task 4
+import { kanalKennung, istKanalZustand } from './live_module.js';   // live modules task 4
 import { cypherStand } from './messages.js';
 import { loopdeckEreignis } from './loopdeck/view.js';
 import { live, liveEreignis, liveOffen, merkeArr, pruefeLiveSpaeter, zeichneLive } from './live_view.js';
@@ -31,6 +31,7 @@ import { holeHotcues, holeRaster } from './deck_griffe.js';
 import { instrumenteAnsicht } from './effects_bindung.js';
 import { leitstandZaehlt, proTaktJetzt, setzeProTakt, takteProLive, zaehlerVon } from './bar_live.js';
 import { zeichneSeq } from './seq_view.js';
+import { holeLage } from './slots_view.js';
 
 // Demo overlay: the line "what Cypher is doing now" (POST /ansage). It stays while the text is new and fades after a
 // reading time (4 s plus 60 ms per character); an empty line (f null) hides it at once.
@@ -84,7 +85,6 @@ export function strom() {
         if ('spektrum/kanal' in f.regler) { for (const a of spektrumAnsichten) a.setzeQuelle(f.regler['spektrum/kanal']); spektrumLeihe.beiStand(f.regler['spektrum/kanal']); }   // A7b; a key left by a reload while the device page was open
         zeigeKeylock();   // Keylock 3
         DECKS.forEach(zeigeDeck); pruefeLiveSpaeter(0);   // live modules: the stream (re)connects, read the live container again
-        for (const [n, l] of Object.entries(f.loops ?? {})) zustand.loops[n] = l;
         if (Array.isArray(f.fx)) f.fx.forEach((x, u) => { if (x) fxVomKern(u, x); });
         if (f.fxZuweisung) f.fxZuweisung.forEach((m, u) => { for (const [kanal, an] of Object.entries(m)) fxZuweisungVomKern(u, kanal, an ? 1 : 0); });
         if (f.fxRouting) fxRoutingVomKern(f.fxRouting === 'insert' ? 1 : 0);
@@ -100,7 +100,7 @@ export function strom() {
       case 'controller_fokus': fokus.vomServer(f); registerFokus(f); zeigeCtlMarke(f); break;
       case 'pult': zeigeApcBank(f); break;   // the APC20 bank in PRODUCTION (areas/controller/pult_production.ts)   // the synth in front or what a controller place applied changed (page server, body of GET /controller/fokus)
       case '/e/hand': registerHand(String(f.pfad ?? '')); break;   // a controller moved a control: the Controllers window marks its row
-      case 'proj': holeBkSpaeter(); liveEreignis(a, f); break;   // S17: the project changed or was opened; live modules task 4: the panel follows
+      case 'proj': holeBkSpaeter(); liveEreignis(a, f); holeLage(); break;   // S17: the project changed or was opened; live modules task 4: the panel follows
       case 'modul': liveEreignis(a, f); break;   // live modules task 4: slot state of the module export (separation)
       case 'seq': liveEreignis(a, f); break;   // SEQ deck: a step or the deck itself was written ({platz, rev})
       case 'pruefmodus': zeigePruefmodus(f.stand); break;
@@ -116,8 +116,8 @@ export function strom() {
         break;
       case '/e/regler':
         zustand.regler[f.pfad] = f.wert; zeigeWert(f.pfad);
-        if (/^pad\/[12]\/(fader|trim)$/.test(f.pfad) && liveOffen()) {   // the channel state of a slot (Loop 1, Loop 2) follows the strip: redraw only when it flips
-          const k = `${kanalAnsicht('A', zustand.regler).offen}${kanalAnsicht('B', zustand.regler).offen}`;
+        if (istKanalZustand(f.pfad) && liveOffen()) {   // the channel state of a module place follows its container strip: redraw only when it flips
+          const k = kanalKennung(zustand.regler);
           if (k !== live.kanal) { live.kanal = k; zeichneLive(); }
         }
         if (/\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.test(f.pfad)) bkMarkeSpaeter();   // S17: the saved/differs marker follows the graph knobs
@@ -172,17 +172,13 @@ export function strom() {
         break;
       }
       case '/pegel': zeigePegel(f.kanal, f.spitze_db); break;
-      case '/e/loop': {
-        zustand.loops[f.box] = f;
-        break;
-      }
       case '/e/mitschnitt':
         if (f.name === recAktiv) recEnde(f.status === 0);  // ein fremder REC (Cypher) beendet den eigenen nicht
         melde(f.status === 0 ? `Loop “${f.name}” recorded (${taktText(f.beats)})`
           : `Recording “${f.name}” failed`, f.status !== 0);
         if (!$('[data-tabelle="loops"]').hidden) ladeLoops();
         break;
-      case '/e/neustart': zustand.loops = {}; recEnde(); break;  // REC: Puffer starb mit dem Kern
+      case '/e/neustart': recEnde(); break;  // REC: Puffer starb mit dem Kern
       case '/e/protokollfehler': melde(`Core rejected ${f.adresse}: ${f.grund}`, true); break;
       default: break;
     }

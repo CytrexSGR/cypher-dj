@@ -24,6 +24,7 @@
 #pragma once
 
 #include "cypherdj/comp.h"
+#include "cypherdj/pult_table.h"
 #include <cmath>
 #include <cstdint>
 #include <memory>
@@ -49,21 +50,22 @@ struct CypherBk;
 
 namespace cdj {
 
-constexpr int MIX_QUELLEN = 14;                    // deck/1..4 (0..3), erz/1..8 (4..11), pad/1..2 (12, 13)
-constexpr int MIX_BUSSE = 4;                       // bus/1..4 (14..17)
+// Container core K9: the console is four containers and four buses. Channel order is the order of pult.json: containers A..D (deck/1, deck/2, pad/1, pad/2) are 0..3, bus/1..4 are 4..7.
+constexpr int MIX_QUELLEN = PULT_CONTAINER;        // containers A..D (0..3)
+constexpr int MIX_BUSSE = PULT_BUSSE;              // bus/1..4 (4..7)
 constexpr int MIX_KANAELE = MIX_QUELLEN + MIX_BUSSE;
-constexpr int MIX_BK_SEND_ZEILE = MIX_KANAELE;       // S14: knob matrix row of fx/3 (fx/4 = +1), after the 18 mixer channels
+// The hidden production strip (K3, D-K5) is no console channel: it sits behind the eight channels at index MIX_KANAELE and exists in the per-strip arrays only (MIX_ZUEGE).
+constexpr int MIX_ZUEGE = MIX_KANAELE + 1;
+static_assert(PULT_CONTAINER == 4 && PULT_BUSSE == 4, "the console is four containers and four buses");
+constexpr int MIX_BK_SEND_ZEILE = MIX_KANAELE;       // S14: knob matrix row of fx/3 (fx/4 = +1), after the 8 mixer channels
 constexpr int MIX_BK_MASTER_ZEILE = MIX_KANAELE + 2;  // knob matrix row of the master insert graph (master/bk/1..64), after fx/3 and fx/4
-constexpr int MIX_BK_ZEILEN = MIX_KANAELE + 3;       // S14: rows of the knob matrix bk_wert_ (core.h): 18 channels + fx/3 + fx/4 + master
+constexpr int MIX_BK_ZEILEN = MIX_KANAELE + 3;       // S14: rows of the knob matrix bk_wert_ (core.h): 8 channels + fx/3 + fx/4 + master
 constexpr int MIX_BLOCK = cypherdj::dsp::kMaxFrames;  // größter Block je verarbeite() (1024)
 constexpr int HALL_RUHE_MAX = 1 << 20;             // Sättigung des Stillezählers im Hall (mixer.cpp)
 constexpr float KLEBER_AUS_DB = 60.0f;                   // master/kleber = 0: Schwelle des Summen-Kompressors unerreichbar hoch
 constexpr int MIX_ZIEL_BLENDE = 480;               // §1.5 <k>/ziel: 10-ms-Blende bei 48 kHz
-// Plan Mediathek-Browser S7: der Vorhör-Eingang des Browsers (djk/previewer → rueck_erz_8_L/R). Nur-Cue: PFL fest an,
-// kein Weg in Master, Bus, Sends oder Beat-FX — unabhängig von Fader, Ziel und Sends (Andreas' Bedingung: nie auf den Master).
-constexpr const char* VORHOER_KANAL = "erz/8";
-// D1 K1 (Spec 2.3): erz/4 ist für die Produktion reserviert; das Modul Arrangement speist die Summe seiner Spuren hier ein.
-constexpr const char* ARR_KANAL = "erz/4";
+// Container core K3 (F3): the stream distributors the sidechain duck acts on (the former erz/2 and erz/3 strips: bass and melody), 1-based.
+constexpr int DUCK_STROEME[2] = {2, 3};
 
 // Was ein Regler des Stellwerks im Mixer bewirkt (die Zuweisungstabelle).
 enum class MixRolle : uint8_t {
@@ -176,6 +178,15 @@ class Mixer {
   // Eingänge für den nächsten verarbeite()-Aufruf; verarbeite() leert sie danach wieder. Aufrufer addieren (+=).
   // K2: Kick-Ereignis → Duck auf erz/2, erz/3; versatz = Samples ab dem Anfang des nächsten verarbeite()
   void duck_ausloesen(int64_t versatz) { duck_.ausloesen(versatz); }
+  // Container core K3 (F3): the duck acts on the source buffers of stage 1, not on a mixer strip. l/r are the 16 stream buffers (index = stream - 1), `stroeme` the
+  // 1-based streams to duck (DUCK_STROEME), n the frame count of this sub-block. Once per sub-block, after duck_ausloesen and BEFORE the streams are handed on.
+  void duck_quellen(float* const* l, float* const* r, const int* stroeme, int ns, int n) noexcept;
+  // Container core K3 (F3): the previewer service. The preview pair goes into the PFL sum only (never master, bus, send or beat FX), raw: no strip.
+  void vorhoer_eingang(const float* l, const float* r, int n) noexcept;
+  // Container core K3 (F3, D-K5): the production service. The sum of the arrangement goes into a hidden strip that is always neutral (fader 0 dB, every other
+  // knob at its default, no row of the control table reaches it) and from there into the master like any strip. n <= MIX_BLOCK.
+  void produktion_eingang(const float* l, const float* r, int n) noexcept;
+  static constexpr int PRODUKTION_ZUG = MIX_KANAELE;   // mixer index of the hidden production strip (behind the eight console channels, K9)
   float* eingang_l(int k) { return ein_l_[k]; }
   float* eingang_r(int k) { return ein_r_[k]; }
   float* master_eingang_l() { return master_ein_l_; }
@@ -201,8 +212,6 @@ class Mixer {
   const cypherdj::dsp::Kanalzug& kanalzug(int k) const { return *kz_[k]; }
   float wert(int regler) const;   // letzter Wert eines Mixer-Reglers (nicht Kanalzug): für Tests
   int ziel_ist(int k) const { return ziel_ist_[k]; }
-  void setze_nur_cue(int k) { if (k >= 0 && k < MIX_QUELLEN) nur_cue_[k] = true; }   // nicht im Callback
-  bool nur_cue(int k) const { return k >= 0 && k < MIX_QUELLEN && nur_cue_[k]; }
   // Scheibe 25: Master-Limiter aus 14 am Ende des Masters (nach master/pegel), Decke limiter_dbtp (kern.toml §2.1).
   // Der Master ist um limiter_vorhalt() Samples verzögert; um genauso viel verzögert der Mixer die PFL-Summe, damit der
   // Cue den Master so hört wie der Saal (ADR 008 Punkt 3). Der Prüfklick master (Z1) geht am Limiter vorbei (F19).
@@ -231,10 +240,9 @@ class Mixer {
   // FX2 (seriell, wie an der S8). Nur param1 wirkt im DSP (an BeatFx::setze weitergereicht); param2/param3 werden
   // gespeichert und gemeldet, aber nicht verarbeitet (S8-Vertragskompatibilität).
   static constexpr int FX_EINHEITEN = 2;
-  static constexpr int FX_ZIELE = 9;   // deck/1..4, erz/1, erz/2, erz/3, pad/1, pad/2 (Studio S1; deck/3 and deck/4 since FX3)
-  static constexpr int FX_ZIEL_KANAL[FX_ZIELE] = {0, 1, 2, 3, 4, 5, 6, 12, 13};
+  static constexpr int FX_ZIELE = MIX_QUELLEN;   // K9: the beat FX act on the containers A..D, the target index is the container index
   static constexpr int FX_MASTER = -2, FX_KEIN = -1;
-  static int fx_ziel_index(int kanal) noexcept;   // Mixer-Kanalindex -> 0..8, sonst -1
+  static int fx_ziel_index(int kanal) noexcept;   // mixer channel index -> container index 0..3, else -1
   // FX3 (unit index 2, page unit 3): an insert on the GROUP of assigned source channels, carrying the effect graph of fx/3. It is not a
   // BeatFx. fx_zuweisung_setze(FX3_EINHEIT, k, an) takes every source channel k (0..MIX_QUELLEN-1; master and buses are ignored). What an
   // assigned channel k adds to the master sum (after its fader AND its crossfader weight, only while its target <k>/ziel is the master)
@@ -243,17 +251,6 @@ class Mixer {
   // assigned, within float rounding; no graph on fx/3 = the master path (never silent). Assigning or releasing a channel blends over
   // MIX_ZIEL_BLENDE samples (S-curve, like a <k>/ziel change), continuing from the weight reached when a blend is interrupted. A channel
   // that leaves FX3 stops feeding the bus; the graph keeps running on the bus, so its tail rings out.
-  // DJ view places 3 and 4 (the fader belongs to the place, not to the content): the content of place 3 / 4 sounds through pad/1 (L1) / pad/2 (L2).
-  // platz_kanal_setze(pad, inhalt), pad 0 = pad/1, 1 = pad/2; inhalt 0 nothing (the old paths, bit for bit), 1 the Strudel sum (erz/1..3, each after its
-  // own strip), 2 deck/3, 3 deck/4 (after its strip). What such a channel adds to the master sum goes into the INPUT of the pad strip instead (in front
-  // of trim, EQ, filter and fader), so the pad fader regulates all of it and the master hears it once. The source channels (0..11) run before
-  // pad/1, pad/2 (12, 13) in verarbeite(), so the redirect has no delay: same block, same sample. A change blends over MIX_ZIEL_BLENDE samples
-  // (linear weights that sum to 1, continuing from the weight reached), also while the source strip sleeps; no allocation. Out of range: ignored.
-  // Both pads on the same source: pad/2 wins. Callback thread only (the Stellwerk applies it at a block start).
-  static constexpr int PLATZ_INHALTE = 4, PLATZ_QUELLEN = MIX_QUELLEN - 2;
-  void platz_kanal_setze(int pad, int inhalt) noexcept;
-  int platz_kanal(int pad) const noexcept { return pad >= 0 && pad < 2 ? platz_inhalt_[pad] : 0; }
-  bool platz_kanal_wechselt() const noexcept;   // a redirect blend is still running
   static constexpr int FX3_EINHEIT = 2;
   void fx3_zuweisung_setze(int kanal, bool an) noexcept;
   bool fx3_zugewiesen(int kanal) const noexcept { return kanal >= 0 && kanal < MIX_QUELLEN && fx3_zuw_[kanal]; }
@@ -340,6 +337,7 @@ class Mixer {
     float w = 0.0f;
     const float* vl = nullptr;
   };
+  static constexpr bool ist_bus(int k) noexcept { return k >= MIX_QUELLEN && k < MIX_KANAELE; }   // not the hidden production strip behind the buses
   Wert* wert_von(int regler);
   void kanal(int k, int n);
   void fx_kette(int fzi, float* l, float* r, int n) noexcept;   // FX1 vor FX2 seriell auf [n] Samples, in place
@@ -349,8 +347,8 @@ class Mixer {
   const cypherdj::stellwerk::ReglerTabelle& tab_;
   int n_regler_ = 0;
   MixZuweisung zuw_[cypherdj::stellwerk::MAX_REGLER];
-  std::unique_ptr<cypherdj::dsp::Kanalzug> kz_[MIX_KANAELE];
-  Wert ziel_[MIX_KANAELE], xseite_[MIX_KANAELE], pfl_[MIX_KANAELE];
+  std::unique_ptr<cypherdj::dsp::Kanalzug> kz_[MIX_ZUEGE];
+  Wert ziel_[MIX_ZUEGE], xseite_[MIX_ZUEGE], pfl_[MIX_ZUEGE];
   Wert xfader_, master_pegel_, cue_mix_, cue_pegel_, cue_split_, duck_tiefe_, duck_release_, master_kleber_, master_pfl_;
   Wert color_art_, color_param_;   // SOUND COLOR FX: je Block in jeden Kanalzug (Art je Kanal wäre ein Regler je Kanal)
   Duck duck_;
@@ -362,14 +360,14 @@ class Mixer {
   Wert komp_w_[MIX_QUELLEN][KOMP_FELDER];
   // 1.15 A1b: slots of the mix-tool controllers (value and per-sample course like the compressor's); A3 reads the gate and utility
   // fields, the multiband and limiter fields follow with their tasks. [channel][wz_versatz(tool) + field], and the one global spectrum source.
-  Wert wz_w_[MIX_KANAELE][WZ_FELDER_JE_KANAL];
+  Wert wz_w_[MIX_ZUEGE][WZ_FELDER_JE_KANAL];
   Wert wz_spektrum_kanal_;
   // 1.15 A3: gate (13 live source channels) and utility (those plus the 4 buses); an object exists only where the table has rows
   // for it, created in the constructor, never in the callback. *_lief_: the object ran in the last block and has not
   // been reset since (the bypass is "not called", with leeren() on the way back, D6).
   std::unique_ptr<cypherdj::dsp::Gate> gate_[MIX_QUELLEN];
-  std::unique_ptr<cypherdj::dsp::Utility> util_[MIX_KANAELE];
-  bool gate_lief_[MIX_QUELLEN] = {}, util_lief_[MIX_KANAELE] = {};
+  std::unique_ptr<cypherdj::dsp::Utility> util_[MIX_ZUEGE];
+  bool gate_lief_[MIX_QUELLEN] = {}, util_lief_[MIX_ZUEGE] = {};
   float wz_wert(int k, int pos, int n) const;   // slot [k][pos] as the compressor reads it: w, or vl[n - 1] with a course
   bool util_gefordert(int k, int n, cypherdj::dsp::UtilityParameter& p) const;   // parameters from the slots; true if not all neutral
   void gate_block(int k, int n);
@@ -423,8 +421,8 @@ class Mixer {
   // Sleep state (see schlaf_schritt in mixer.cpp). stumm_[k]: the strip's tap and final output were exact zeros in its last awake block.
   bool schlaf_schritt(int k, int n, bool komp_an, bool gate_an, bool util_an, bool mb_laeuft, bool bk_an, int fzi);
   bool schlaf_an_ = true;
-  bool schlaeft_[MIX_KANAELE] = {};   // callback thread only (written in kanal(), read by schlaeft())
-  bool stumm_[MIX_KANAELE] = {};
+  bool schlaeft_[MIX_ZUEGE] = {};   // callback thread only (written in kanal(), read by schlaeft())
+  bool stumm_[MIX_ZUEGE] = {};
   std::atomic<uint64_t> schlaf_bloecke_{0};
   std::atomic<float> komp_gr_[MIX_QUELLEN] = {};        // Absenkung in dB nach dem letzten Block (Anzeige)
   std::atomic<float> komp_ein_[MIX_QUELLEN] = {};       // T9: linear peak at the input of the channel compressor since the last reading
@@ -444,12 +442,11 @@ class Mixer {
   const float* nk_pr_ = sum_r_;
   bool kleber_lief_ = false;
   int64_t nan_treffer_ = 0;                              // Audit F01                             // hat seit dem letzten Leeren gerechnet
-  int ziel_ist_[MIX_KANAELE] = {};
-  bool nur_cue_[MIX_KANAELE] = {};   // S7: MIX_KANAELE, nicht MIX_QUELLEN: kanal() läuft auch für die Busse 14..17
-  int blende_von_[MIX_KANAELE] = {};
-  int blende_rest_[MIX_KANAELE] = {};
-  float ein_l_[MIX_KANAELE][MIX_BLOCK] = {};
-  float ein_r_[MIX_KANAELE][MIX_BLOCK] = {};
+  int ziel_ist_[MIX_ZUEGE] = {};
+  int blende_von_[MIX_ZUEGE] = {};
+  int blende_rest_[MIX_ZUEGE] = {};
+  float ein_l_[MIX_ZUEGE][MIX_BLOCK] = {};
+  float ein_r_[MIX_ZUEGE][MIX_BLOCK] = {};
   float master_ein_l_[MIX_BLOCK] = {}, master_ein_r_[MIX_BLOCK] = {};
   float summe_ein_l_[MIX_BLOCK] = {}, summe_ein_r_[MIX_BLOCK] = {};   // D1 K1: Metronom master
   float pfl_ein_l_[MIX_BLOCK] = {}, pfl_ein_r_[MIX_BLOCK] = {};       // D1 K1: Metronom cue
@@ -493,14 +490,6 @@ class Mixer {
   bool fx3_zuw_[MIX_QUELLEN] = {};
   float fx3_gew_[MIX_QUELLEN] = {}, fx3_von_[MIX_QUELLEN] = {};
   int fx3_rest_[MIX_QUELLEN] = {};
-  // Place channel (platz_kanal_setze): per source channel k < PLATZ_QUELLEN the weight pz_w_[k][p] of the share that goes into the input of pad p
-  // and its target pz_ziel_[k][p] (0 or 1); the master share is 1 - the sum of both. rt_l_/rt_r_: the master share, handed to route().
-  int platz_inhalt_[2] = {};
-  float pz_w_[PLATZ_QUELLEN][2] = {}, pz_ziel_[PLATZ_QUELLEN][2] = {};
-  float rt_l_[MIX_BLOCK] = {}, rt_r_[MIX_BLOCK] = {};
-  bool pz_aktiv(int k) const noexcept;
-  void pz_vorruecken(int k, int n) noexcept;   // the blend runs on while the strip sleeps
-  void pz_umlenken(int k, int n) noexcept;     // splits aus_l_/aus_r_: the pad share into ein_*_[12 + p], the rest into rt_l_/rt_r_
   BeatFx fx_master_[FX_EINHEITEN];                // die Summe vor master/pegel
   bool fx_zuw_[FX_EINHEITEN][FX_ZIELE] = {};
   bool fx_master_zuw_[FX_EINHEITEN] = {};
@@ -569,13 +558,13 @@ class Mixer {
   // Seqlock (D12). spek_generation() is ODD while the audio thread writes source and cut, EVEN otherwise; a change of the selector steps it by 2.
   // A reader takes an even value, loads source and cut, and takes the generation again: only an unchanged even value proves the pair is whole.
   uint32_t spek_generation() const { return spek_gen_.load(std::memory_order_acquire); }
-  int spek_quelle() const { return spek_quelle_.load(std::memory_order_acquire); }          // 0 off, 1..18 channel + 1, 19 master; read between two generation reads
+  int spek_quelle() const { return spek_quelle_.load(std::memory_order_acquire); }          // 0 off, 1..8 strip + 1, 9 master; read between two generation reads
   std::size_t spek_schnitt() const { return spek_schnitt_.load(std::memory_order_acquire); } // write position at that change; read between two generation reads
   // Test seam (null in operation), called by the audio thread inside a change while the generation is odd: stage 0 after the odd bump,
   // stage 1 between the stores of source and cut, stage 2 after both stores, before the even bump. Set it only while no block runs.
   using SpekFensterHaken = void (*)(void* ctx, int stufe);
   void setze_spek_fenster_haken(SpekFensterHaken h, void* ctx) { spek_fenster_haken_ = h; spek_fenster_ctx_ = ctx; }
-  static constexpr int SPEK_MASTER = MIX_KANAELE + 1;   // selector value 19 = master sum
+  static constexpr int SPEK_MASTER = MIX_KANAELE + 1;   // selector value 9 = master sum (1..8 = the strips)
 
  private:
   std::unique_ptr<cypherdj::dsp::SpektrumAnalysator> spek_ = std::make_unique<cypherdj::dsp::SpektrumAnalysator>(

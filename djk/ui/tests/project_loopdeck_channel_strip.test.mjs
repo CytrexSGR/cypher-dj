@@ -8,7 +8,7 @@ import { Verlauf, aendere, rueckgaengig } from '../project/history.ts';
 import { alleSpurRegler, reglerZuBefehl, istMixerRegler } from '../areas/proj/mapping.ts';
 import { tmpOrdner } from './support/project.mjs';
 
-const live = () => { const p = neuesProjekt('x'); p.live = true; return p; };
+const live = () => { const p = neuesProjekt('x'); p.live = true; p.plaetze = [{ typ: 'track' }, { typ: 'track' }, { typ: 'track' }, { typ: 'track' }]; return p; };
 const lauf = (p, ...b) => fuehreListeAus(p, b).projekt;
 const fehler = (p, ...b) => { try { fuehreListeAus(p, b); } catch (e) { assert.ok(e instanceof BefehlFehler, String(e)); return e; } return assert.fail(`${b.map((x) => x.befehl)} was not refused`); };
 const kopie = (x) => JSON.parse(JSON.stringify(x));

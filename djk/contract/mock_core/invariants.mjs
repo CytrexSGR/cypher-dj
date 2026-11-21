@@ -5,7 +5,7 @@
 // I2: würde ein Planteil oder Deck-Stopp den letzten hörbaren Kanal unhörbar machen, hält der Teil am Ist-Wert bzw.
 //     wartet der Stopp, bis ein anderer Kanal hörbar ist; dann weiter mit unverändertem Ende-Beat.
 
-import { kanalVon, SPIELKANAELE } from './contract.mjs';
+import { kanalVon, SPIELKANAELE, containerVonPlayer } from './contract.mjs';
 import { sicht, hoerbarMenge, tiefOffenMenge, hoerbar, tiefOffen } from './level.mjs';
 import { wertBei } from './controls.mjs';
 
@@ -14,7 +14,7 @@ const PEGEL_PFADE = /\/(fader|trim)$/;
 
 export function kanalVonTeil(t) {
   if (t.art === 'regler') return kanalVon(t.pfad);
-  if (t.art === 'deck') return `deck/${t.deck}`;
+  if (t.art === 'deck') return containerVonPlayer(t.deck);
   return null;
 }
 

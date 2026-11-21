@@ -30,7 +30,7 @@ struct AufnahmeChunk {
 
 struct RecSpur {
   int spur = 0;       // 1..ARR_SPUREN
-  int eingang = 0;    // see REC_CODES (recording.h): 11..13 = erz/1..3, 15..17 = erz/5..7, 21, 22 = pad/1, pad/2; 1..4 = external pair ein_1..4 (1.8 S2a)
+  int eingang = 0;    // see REC_CODES (recording.h): 11..13, 15..17 = stream buffers 1..3, 5..7; 21..24 = container inputs C, D, A, B; 1..4 = external pair ein_1..4 (1.8 S2a)
   std::atomic<int8_t> monitor{1};   // 1.8 S3 (D12), external pairs only: 0 aus, 1 auto, 2 ein. Written by the net thread before the pointer travels; afterwards only by the callback (in place, Kern::einsortieren_rec), read by the callback
   int8_t modus = 0;   // 1.8 S2a (D14), external pairs only: 0 stereo, 1 links, 2 rechts, 3 summe; set by the net thread before the pointer travels, read-only in the callback
   SpscRing<AufnahmeChunk, REC_RING_CHUNKS> ring;

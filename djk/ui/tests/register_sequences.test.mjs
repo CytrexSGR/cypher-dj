@@ -42,7 +42,7 @@ test('folgenAnsicht: no synth in front, and a focus without a base says why', ()
   const grund = (g, f = { kanal: 'erz/6', graph: null, basis: null, grund: g }) => folgenAnsicht(stand(f), 2, opt).text;
   assert.match(grund('kein_graph'), /^follows: I6 has no graph loaded$/);
   assert.match(grund('kein_bk', { spur_id: 's4', graph: null, basis: null, grund: 'kein_bk' }), /^follows: track s4 is not a Baukasten synth$/);
-  assert.match(grund('slot_ohne_zeile', { spur_id: 's9', graph: 'synth-poly', basis: null, grund: 'slot_ohne_zeile' }), /track s9 .*first 8/);
+  assert.match(grund('slot_ohne_zeile', { spur_id: 's9', graph: 'synth-poly', basis: null, grund: 'slot_ohne_zeile' }), /track s9 .*beyond the controller rows/);
   assert.match(grund('etwas_neues'), /^follows: I6 cannot be followed$/, 'an unknown reason still reads');
 });
 

@@ -11,12 +11,13 @@ const zelle = (id, extra = {}) => ({ id, name: 'Loop', farbe: 3, art: 'loop', sh
 
 // a live project with one loop deck group (place `platz`) and 4 audio tracks outputting into it
 const deck = (platz = 1) => {
-  let p = neuesProjekt('ld'); p.live = true;
+  let p = neuesProjekt('ld'); p.live = true; p.plaetze = [{ typ: 'track' }, { typ: 'track' }, { typ: 'track' }, { typ: 'track' }];
   for (let i = 1; i <= 4; i++) p = lauf(p, { befehl: 'spur_neu', art: 'audio', name: `L${platz}.${i}` });
   p = lauf(p, { befehl: 'gruppenspur_neu', name: `LOOP ${platz}`, mitglieder: p.spuren.map((s) => s.id) });
   p = kopie(p);
   p.gruppen[0].loopdeck = { platz, raster: 'takt' };
   for (const s of p.spuren) s.zellen = Array.from({ length: 8 }, () => null);
+  p.plaetze[platz - 1] = { typ: 'loops', gruppe: p.gruppen[0].id };
   return p;
 };
 const fehler = (p) => { const u = pruefeProjekt(kopie(p)); return 'fehler' in u ? u.fehler : null; };
@@ -47,17 +48,10 @@ test('loopdeck, modul and seq exclude each other on one group', () => {
   assert.match(mut(1, (p) => { p.gruppen[0].modul = { quelle_sha256: SHA, titel: 't', fassung: 'f', basis_bpm: 120, von_beat: 0, laenge_beats: 4, bpm: 120, datum: '2026-01-01' }; }), /not several/);
 });
 
-test('one group per place; place n and module slot n exclude each other', () => {
+test('one deck identity per project; a module group in the stems place and the same group in two places are refused', () => {
   assert.match(mut(1, (p) => { p.gruppen.push({ ...kopie(p.gruppen[0]), id: 'g9', nr: 9 }); }), /duplicate/);
-  assert.match(mut(1, (p) => {
-    p.gruppen.push({ id: 'g9', nr: 9, name: 'M', farbe: '#112233', fader_db: 0, pan: 0, mute: false, solo: false, gefaltet: false,
-      modul: { quelle_sha256: SHA, titel: 't', fassung: 'f', basis_bpm: 120, von_beat: 0, laenge_beats: 4, bpm: 120, datum: '2026-01-01', slot: 'A' } });
-  }), /module slot/);
-  // slot B does not collide with place 1
-  assert.equal(mut(1, (p) => {
-    p.gruppen.push({ id: 'g9', nr: 9, name: 'M', farbe: '#112233', fader_db: 0, pan: 0, mute: false, solo: false, gefaltet: false,
-      modul: { quelle_sha256: SHA, titel: 't', fassung: 'f', basis_bpm: 120, von_beat: 0, laenge_beats: 4, bpm: 120, datum: '2026-01-01', slot: 'B' } });
-  }), null);
+  assert.match(mut(1, (p) => { p.plaetze[1] = { typ: 'loops', gruppe: p.gruppen[0].id }; }), /already sits in another place/);
+  assert.match(mut(1, (p) => { p.plaetze[1] = { typ: 'stems', gruppe: p.gruppen[0].id }; }), /not a stems group/);
 });
 
 test('exactly 4 audio member tracks without clips', () => {
@@ -88,7 +82,7 @@ test('zellen: exactly 8 entries, each null or a valid cell', () => {
 });
 
 test('zellen and filter are refused on other tracks; filter range', () => {
-  const plain = () => { let p = neuesProjekt('x'); p.live = true; p = lauf(p, { befehl: 'spur_neu', art: 'audio', name: 'A' }); return kopie(p); };
+  const plain = () => { let p = neuesProjekt('x'); p.live = true; p.plaetze = [{ typ: 'track' }, { typ: 'track' }, { typ: 'track' }, { typ: 'track' }]; p = lauf(p, { befehl: 'spur_neu', art: 'audio', name: 'A' }); return kopie(p); };
   let p = plain(); p.spuren[0].zellen = Array.from({ length: 8 }, () => null);
   assert.match(fehler(p), /only on a track of a loop deck group/);
   p = plain(); p.spuren[0].filter = 0.5;
@@ -125,35 +119,21 @@ test('a project without loop decks validates exactly as before', () => {
   assert.ok(!('zellen' in spurSicht(u.projekt.spuren[0])));
 });
 
-test('loopdeck.ausgang_platz: optional 1..4; two loop decks never share a channel; a module slot or an unmuted SEQ deck on the channel excludes the deck', () => {
-  assert.equal(mut(1, (p) => { p.gruppen[0].loopdeck.ausgang_platz = 4; }), null);
-  assert.match(mut(1, (p) => { p.gruppen[0].loopdeck.ausgang_platz = 5; }), /1\.\.4 expected/);
-  assert.match(mut(1, (p) => { p.gruppen[0].loopdeck.ausgang_platz = 'a'; }), /1\.\.4 expected/);
-  const zwei = (a1, a2) => {
+test('places: a loop deck sits in at most one place; both decks sit in two places or one is parked; a parked deck is valid', () => {
+  const zwei = (o1, o2) => {
     let p = deck(1); p = lauf(p, ...[1, 2, 3, 4].map((i) => ({ befehl: 'spur_neu', art: 'audio', name: `L2.${i}` })));
     p = lauf(p, { befehl: 'gruppenspur_neu', name: 'LOOP 2', mitglieder: p.spuren.slice(4).map((s) => s.id) });
     p = kopie(p);
     p.gruppen[1].loopdeck = { platz: 2, raster: 'takt' };
     for (const s of p.spuren.slice(4)) s.zellen = Array.from({ length: 8 }, () => null);
-    if (a1) p.gruppen[0].loopdeck.ausgang_platz = a1;
-    if (a2) p.gruppen[1].loopdeck.ausgang_platz = a2;
+    p.plaetze = [{ typ: 'track' }, { typ: 'track' }, { typ: 'track' }, { typ: 'track' }];
+    if (o1) p.plaetze[o1 - 1] = { typ: 'loops', gruppe: p.gruppen[0].id };
+    if (o2) p.plaetze[o2 - 1] = { typ: 'loops', gruppe: p.gruppen[1].id };
     return fehler(p);
   };
-  assert.equal(zwei(), null);
-  assert.equal(zwei(4, 3), null, 'swapped pads');
-  assert.equal(zwei(1, 2), null, 'both on the top row (deck/1, deck/2)');
-  assert.match(zwei(4, null), /duplicate \(place 4\)/, 'deck 1 on place 4 and deck 2 on its default (4)');
-  assert.match(zwei(null, 3), /duplicate \(place 3\)/);
-  assert.match(mut(1, (p) => {   // deck 1 on place 4 = pad/2, module slot B = pad/2
-    p.gruppen[0].loopdeck.ausgang_platz = 4;
-    p.gruppen.push({ id: 'g9', nr: 9, name: 'M', farbe: '#112233', fader_db: 0, pan: 0, mute: false, solo: false, gefaltet: false,
-      modul: { quelle_sha256: SHA, titel: 't', fassung: 'f', basis_bpm: 120, von_beat: 0, laenge_beats: 4, bpm: 120, datum: '2026-01-01', slot: 'B' } });
-  }), /channel 2 is taken by a module slot/);
-  // a SEQ deck on place 1 (deck/1) and a loop deck shown in place 1: refused; a muted (parked) SEQ deck does not count
-  const seq = (mute) => mut(1, (p) => {
-    p.gruppen[0].loopdeck.ausgang_platz = 1;
-    p.gruppen.push({ id: 'g9', nr: 9, name: 'S', farbe: '#112233', fader_db: 0, pan: 0, mute, solo: false, gefaltet: false, seq: { schema: 2, platz: 1 } });
-  });
-  assert.match(seq(false), /channel 3 is taken by a SEQ deck/);
-  assert.equal(seq(true), null);
+  assert.equal(zwei(3, 4), null);
+  assert.equal(zwei(4, 3), null, 'swapped');
+  assert.equal(zwei(1, 2), null, 'top row');
+  assert.equal(zwei(null, null), null, 'both parked');
+  assert.equal(zwei(2, null), null, 'one parked');
 });

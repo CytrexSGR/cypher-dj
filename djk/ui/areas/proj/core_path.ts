@@ -120,6 +120,11 @@ export class KernWeg {
     const id = this.ctx.sende('/k/arr/laden', { quelle, nr });
     return this.ctx.warteQuittung(id, this.beat() + WEIT_BEATS);
   }
+  // Container core (§4.10): what feeds container 1..4 (A..D): art 0 empty, 1 player, 2 module. The receipt is final at once (status 6 = refused).
+  async containerQuelle(container: number, art: number, quelle: Quelle): Promise<Quittung> {
+    const id = this.ctx.sende('/k/container/quelle', { quelle, container, art });
+    return this.ctx.warteQuittung(id);
+  }
   async loop(p: Projekt, quelle: Quelle): Promise<Quittung> {
     const id = this.ctx.sende('/k/arr/loop', { quelle, an: p.loop.an ? 1 : 0, von_beat: p.loop.von_beat, bis_beat: p.loop.bis_beat });
     return this.ctx.warteQuittung(id);

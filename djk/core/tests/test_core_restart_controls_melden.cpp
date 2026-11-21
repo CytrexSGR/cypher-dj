@@ -27,11 +27,11 @@ static const cdj::Ereignis* regler_ev(const Kern25& k, const char* pfad) {
 
 int main() {
   Kern25 a;
-  a.teil(1, "cypher", "p", 0, "spektrum/kanal", 4.0, 0.0, 19.0f, 0, 0, "", "");
+  a.teil(1, "cypher", "p", 0, "spektrum/kanal", 4.0, 0.0, 7.0f, 0, 0, "", "");
   a.teil(2, "cypher", "p", 0, "pad/1/fader", 4.0, 0.0, -4.6f, 0, 0, "", "");
   a.bis(200'000);
   const auto& tab = a.kern->stellwerk().tabelle();
-  PRUEF_NAH(a.kern->stellwerk().wert(tab.suche("spektrum/kanal")), 19.0, 1e-6);
+  PRUEF_NAH(a.kern->stellwerk().wert(tab.suche("spektrum/kanal")), 7.0, 1e-6);
   PRUEF_NAH(a.kern->stellwerk().wert(tab.suche("pad/1/fader")), -4.6, 1e-4);
   auto f = fach_von(a);
 
@@ -44,7 +44,7 @@ int main() {
   const cdj::Ereignis* s = regler_ev(b, "spektrum/kanal");
   const cdj::Ereignis* p = regler_ev(b, "pad/1/fader");
   std::printf("spektrum/kanal reported: %s, pad/1/fader reported: %s\n", s ? "yes" : "no", p ? "yes" : "no");
-  PRUEF(s && s->wert == 19.0f && !std::strcmp(s->text, "frei") && s->sample >= 204'096 && s->sample < 204'096 + 1024);
+  PRUEF(s && s->wert == 7.0f && !std::strcmp(s->text, "frei") && s->sample >= 204'096 && s->sample < 204'096 + 1024);
   PRUEF(p && std::fabs(p->wert + 4.6f) < 1e-4f && !std::strcmp(p->text, "frei"));
   // a controller at its default is neither stored nor reported
   PRUEF(regler_ev(b, "pad/2/fader") == nullptr);

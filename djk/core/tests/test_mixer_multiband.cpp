@@ -25,7 +25,6 @@ using namespace wzt;
 namespace dsp = cypherdj::dsp;
 
 namespace {
-constexpr int BUS3 = 16, BUS4 = 17;
 double db_zu_amp(double db) { return std::pow(10.0, db / 20.0); }
 double amp_zu_db(double a) { return 20.0 * std::log10(std::fmax(a, 1e-15)); }
 
@@ -88,7 +87,7 @@ int main() {
         if (blk == 40) c.setze(K, "mb/an", 0.0f);
         for (Lauf* l : {&a, &b, &c}) {
           l->sinus(K, 220.0, 0.3, 0.2);
-          l->sinus(ERZ2, 330.0, 0.2, 0.1);
+          l->sinus(PAD1, 330.0, 0.2, 0.1);
           l->verarbeite();
         }
         aus_ungleich += !gleich(a, b);
@@ -434,7 +433,7 @@ int main() {
     for (int blk = 0; blk < 40; ++blk)
       for (Lauf* l : {&a, &b}) {
         l->sinus(0, 500.0, 0.3, 0.2);
-        l->sinus(ERZ1, 300.0, 0.3, 0.2);
+        l->sinus(DECK2, 300.0, 0.3, 0.2);
         l->sinus(PAD2, 900.0, 0.3, 0.2);
         l->verarbeite();
         if (l == &b) ungleich += !gleich(a, b);

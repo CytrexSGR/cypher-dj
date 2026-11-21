@@ -22,12 +22,9 @@
 //   neustart  2.5b (F2): Zeit bis zum ersten Zyklus nach einem Neustart (ohne, Stand 2.5, Betriebsweg); bitgleich bis zum
 //             Anhängen.
 //   knopf     Task 3 (Fassung 4): globaler Regler keylock zur Laufzeit, laufendes Deck, Rampe: aus -> Varispeed (bitgleich
-//             zum Kern ohne Keylock), an -> Ansatz am Sample, Ring nach s_h; die Loop-Boxen folgen dem Knopf.
+//             zum Kern ohne Keylock), an -> Ansatz am Sample, Ring nach s_h.
 //   loop      Task 5: Loop auf dem Deck (/k/deck/loop, 4 Beats bei 132), an und aus: im Loop der Ring über die Nähte, ±2 ct,
 //             Klick am Loop-Anfang je Durchlauf ±12 gegen das Soll aus Karte und Loop; Fehlerfall LOOP_LEER -> loop rot.
-//   box       Task 7 (K1): Loop-Box mit Dehner und echten Fäden (8 Fäden, 7 SCHED_FIFO, siehe prio): Ring der Box hörbar,
-//             ±2 ct; Arbeits-Thread der Box angehalten -> Wächter meldet, der abgelöste Loop bleibt verliehen; nach
-//             keylock_faeden_stoppen kommt er heraus (kein Faden liest mehr).
 // Fehlerfälle (CMake kern_keylock_faeden_mutation, WILL_FAIL): FUELLE_NUR_LAUFEND (der Arbeits-Thread füllt nur bei
 // spielendem Deck: Pflicht verletzt) -> quittung rot; OHNE_WAECHTER -> guard rot; FADEN_HAELT (Arbeits-Thread von
 // Deck 1 hält nach rund 1 s an) -> guard rot; STOPP_OHNE_WECKEN -> stopp rot; PRIO_STILL -> prio rot;
@@ -135,7 +132,6 @@ struct Lauf {
   std::vector<std::pair<int64_t, float>> knopf_regler;  // Task 3: /e/regler keylock (Sample, Wert)
   int32_t uhr_keylock_aus = -1;                          // Task 3: zuletzt in /uhr (Ereignis::keylock_aus)
   int32_t deck1_unterlauf = -1, deck1_aufgegeben = -1;   // Task 3b: zuletzt im DECK-Ereignis von Deck 1
-  std::vector<const void*> loop_alt;                     // Task 7: Loops, die der Kern über LOOP_ALT zurückgab
   int64_t id = 100;
   int64_t t0 = 0, zyklen = 0, spaet = 0, cb_max_ns = 0;
   std::function<void()> je_zyklus;  // nach jedem Zyklus (im selben Faden)
@@ -256,7 +252,6 @@ struct Lauf {
       if (e.art == cdj::Ereignis::QUITTUNG) q.push_back({e.id, e.status, e.sample});
       if (e.art == cdj::Ereignis::REGLER && !std::strcmp(e.pfad, "keylock")) knopf_regler.push_back({e.sample, e.wert});  // Task 3
       if (e.art == cdj::Ereignis::UHR) uhr_keylock_aus = e.keylock_aus;
-      if (e.art == cdj::Ereignis::LOOP_ALT) loop_alt.push_back(e.zeiger);  // Task 7
       if (e.art == cdj::Ereignis::DECK && e.deck == 1) {  // Task 3b: Zähler aus /zustand/deck (Kern-Ereignis)
         deck1_unterlauf = e.keylock_unterlauf;
         deck1_aufgegeben = e.keylock_aufgegeben;
@@ -360,9 +355,11 @@ constexpr double START_BEAT = 8.0, RAMPE_AB = 12.0, RAMPE_BEATS = 8.0, ENDE_BEAT
 void rampe_befehle(Lauf& k, int master, int cue) {
   for (int d = 1; d <= 4; ++d) k.laden(d, MAT);
   char p[32];
-  std::snprintf(p, sizeof p, "deck/%d/fader", master);
+  // K9: decks 3 and 4 are players behind the containers C and D (pad/1, pad/2); their strips carry the fader and the PFL
+  auto strip = [](int d) { return d <= 2 ? "deck/" + std::to_string(d) : "pad/" + std::to_string(d - 2); };
+  std::snprintf(p, sizeof p, "%s/fader", strip(master).c_str());
   k.teil(p, 0.0f, 6.0);  // nach dem Laden (das setzt Fader −200 und PFL 0)
-  std::snprintf(p, sizeof p, "deck/%d/pfl", cue);
+  std::snprintf(p, sizeof p, "%s/pfl", strip(cue).c_str());
   // PFL ist nur_hand (signalbox/src/controls.cpp:83, nur_hand = true) und das Stellwerk lehnt jede andere Quelle ab
   // (signalbox/src/sort_in.cpp:38 `if (d.nur_hand && b.quelle != Quelle::andreas) return ablehnen(Grund::nur_hand)`);
   // einen Hörschein-Weg wie für Fader und Trim (I3a) gibt es dafür nicht. Darum hier, und nur hier, Quelle andreas.
@@ -468,7 +465,7 @@ void test_rampe() {
 // Rampe), an bei Beat 24 (132 fest). Soll: bis 16 klingt der Ring (±2 ct); nach dem Aus und seiner Blende klingt der
 // Varispeed, BITGLEICH zum selben Kern ohne Keylock (Bezug) und ab Beat 20 bei +53,2 ct; nach dem An setzt das Deck am
 // Sample an (s_h = Sample des Knopfs + ANSATZ_FRIST, Varispeed-Brücke bis dahin, bitgleich zum Bezug) und klingt nach
-// Einschwingen und Blende wieder ±2 ct. Die Loop-Boxen folgen dem Knopf (Kern::keylock_boxen), die Zähler bleiben 0.
+// Einschwingen und Blende wieder ±2 ct. The counters stay 0.
 constexpr double K_START = 8.0, K_RAMPE = 12.0, K_AUS = 16.0, K_AN = 24.0, K_ENDE = 34.0;
 
 void knopf_befehle(Lauf& k) {
@@ -490,7 +487,7 @@ void test_knopf() {
   knopf_befehle(ref);
   ref.bis(ende);
   Lauf k(true, true);
-  int64_t hoer_vor = 0, hoer_aus = 0, hoer_nach = 0, n_vor = 0, n_nach = 0, knopf_falsch = 0, boxen_falsch = 0;
+  int64_t hoer_vor = 0, hoer_aus = 0, hoer_nach = 0, n_vor = 0, n_nach = 0, knopf_falsch = 0;
   int64_t s_h_an = -1, uhr_aus = 0;
   k.je_zyklus = [&] {
     uhr_aus += k.uhr_keylock_aus == 1 ? 1 : 0;
@@ -498,7 +495,6 @@ void test_knopf() {
     const cdj::Deck& dk = k.kern->deck(1);
     const bool soll = !(s > s_aus && s <= s_an);  // Stand nach dem Block, der s - 1 enthielt
     if (k.kern->keylock_knopf() != soll) ++knopf_falsch;
-    if (k.kern->keylock_boxen() != soll) ++boxen_falsch;
     if (s > s_ring && s <= s_aus) { ++n_vor; hoer_vor += dk.keylock_ring_hoerbar() ? 1 : 0; }
     if (s > s_aus + cdj::DECK_KEYLOCK_BLENDE + B && s <= s_an) hoer_aus += dk.keylock_ring_beteiligt() ? 1 : 0;
     if (s > s_an && s_h_an < 0) s_h_an = dk.keylock_s_h();
@@ -553,9 +549,9 @@ void test_knopf() {
   const Ton t_vor = ton_messen(L, s_ring, s_aus, "vor dem Aus", &k.ch[1]);
   const int64_t s_r2 = s_h + cdj::DECK_KEYLOCK_EINSCHWING + cdj::DECK_KEYLOCK_BLENDE;
   const Ton t_nach = ton_messen(L, s_r2, ende - 4800, "nach dem An", &k.ch[1]);
-  std::printf("  knopf: aus bei %lld, an bei %lld; Knopf falsch %lld, Boxen falsch %lld; Ring vor dem Aus hörbar %lld/%lld "
+  std::printf("  knopf: aus bei %lld, an bei %lld; Knopf falsch %lld; Ring vor dem Aus hörbar %lld/%lld "
               "(%lld Samples gleich dem Bezug), nach der Blende beteiligt %lld\n",
-              (long long)s_aus, (long long)s_an, (long long)knopf_falsch, (long long)boxen_falsch, (long long)hoer_vor,
+              (long long)s_aus, (long long)s_an, (long long)knopf_falsch, (long long)hoer_vor,
               (long long)n_vor, (long long)gleich_vor, (long long)hoer_aus);
   std::printf("  knopf: aus: %lld Samples ungleich zum Bezug (Varispeed), Tonhöhe bei 132 %+.2f bis %+.2f ct (Soll +53,2); "
               "an: s_h %lld (Soll %lld), Brücke %lld ungleich, Ring hörbar %lld/%lld\n",
@@ -566,7 +562,7 @@ void test_knopf() {
               t_vor.max_ct, t_vor.fenster, t_vor.ueber, t_nach.max_ct, t_nach.fenster, t_nach.ueber, t_nach.null_laeufe,
               (unsigned long long)dk.keylock_unterlauf(), (unsigned long long)dk.keylock_aufgegeben(), (long long)k.spaet,
               k.cb_max_ns / 1000.0);
-  PRUEF(knopf_falsch == 0 && boxen_falsch == 0);
+  PRUEF(knopf_falsch == 0);
   PRUEF(n_vor > 100 && hoer_vor == n_vor);    // vor dem Aus: der Ring (Keylock an, Vorgabe)
   PRUEF(gleich_vor < (s_aus - s_ring) / 2);   // und der klingt anders als der Varispeed des Bezugs
   PRUEF(t_vor.k_max_ct <= 25.0 && t_vor.fenster + t_vor.k_fenster >= 10 && t_vor.fenster >= 10 / 2 && t_vor.ueber == 0);
@@ -858,81 +854,8 @@ void test_stopp() {
   ergebnis("faeden_stopp");
 }
 
-// ------------------------------------------------------------------------------------------ box (Task 7, K1)
-// Loop-Box mit Dehner und echten Fäden: der Arbeits-Thread der Box (Platz 5) rechnet, der Ring der Box klingt; hält er an
-// (keylock_test_halte(5)), meldet der Wächter die Box, und der abgelöste Loop bleibt verliehen (kein LOOP_ALT); nach
-// keylock_faeden_stoppen liest kein Faden mehr, der Loop kommt heraus.
-void test_box() {
-  auto sinus = [](double hz, const char* name) {
-    auto* l = new cdj::Loop();
-    l->name = name;
-    l->beats = 1;
-    l->frames = cdj::LOOP_SPB;
-    l->daten.assign((size_t)(2 * l->frames), 0.0f);
-    for (int64_t f = 0; f < l->frames; ++f)
-      l->daten[(size_t)(2 * f)] = l->daten[(size_t)(2 * f + 1)] = (float)(0.3 * std::sin(2 * PI * hz * (double)f / 48000.0));
-    return l;
-  };
-  cdj::Loop* a = sinus(416.0, "a");
-  cdj::Loop* b = sinus(832.0, "b");
-  Lauf k(true, true);
-  k.auf_132();
-  auto loop_befehl = [&](int art, const cdj::Loop* l) {
-    cdj::Befehl x = k.neu(art);
-    x.deck = 1;
-    x.zeiger = l;
-    return k.sende(x);
-  };
-  loop_befehl(cdj::Befehl::LOOP_LADEN, a);
-  k.teil("pad/1/fader", 0.0f, 0.5);
-  k.sekunden(0.3);
-  loop_befehl(cdj::Befehl::LOOP_START, nullptr);
-  k.sekunden(3.5);  // Einsatz auf der nächsten Eins (Beat 4 bei 132 BPM, 1,82 s), dann Brücke und Ring
-  const cdj::StreckLeser& les = *k.kern->loopboxen().keylock_leser(1);
-  const bool hoer = les.ring_hoerbar();
-  const int64_t s_a = k.kern->sample();
-  Ton t;  // ton_messen dieses Tests misst gegen 1000 Hz; die Box spielt 416 Hz
-  for (int64_t s = s_a - 48000 - 1024; s + 4800 <= s_a - 1024; s += 4800) {  // ch ist um den Vorhalt des Limiters versetzt gefüllt
-    const double ct = 1200.0 * std::log2(km::freq(k.ch[0], s, s + 4800) / 416.0);
-    t.max_ct = std::max(t.max_ct, std::fabs(ct));
-    t.ueber += std::fabs(ct) > 2.0 ? 1 : 0;
-    ++t.fenster;
-    if (std::fabs(ct) > 2.0) std::printf("    box: Fenster ab %lld: %+.3f ct\n", (long long)s, ct);
-  }
-  std::printf("  box: s_h %lld, verpasst %llu, unterlauf %llu, hart %llu, Einsatz bei Beat 4 = Sample %.0f\n",
-              (long long)les.s_h(), (unsigned long long)les.verpasst_n(), (unsigned long long)les.unterlauf_n(),
-              (unsigned long long)les.hart_n(), k.kern->karte().sample_at(4.0));
-  int pol = -1, prio = -1;
-  const bool faden5 = k.kern->keylock_faden_sched(5, pol, prio);
-  std::printf("  box: Ring der Box hörbar %d, Ton %d Fenster max %.3f ct, Arbeits-Thread Box 1 angelegt %d, gelesen %llu\n",
-              (int)hoer, t.fenster, t.max_ct, (int)faden5, (unsigned long long)les.gelesen());
-  PRUEF(hoer && faden5 && t.fenster >= 9 && t.ueber == 0);
-  const uint64_t w0 = k.kern->keylock_waechter_meldungen();
-  k.kern->keylock_test_halte(5, true);
-  k.sekunden(0.05);
-  loop_befehl(cdj::Befehl::LOOP_LADEN, b);  // a wird abgelöst, der neue Ansatz wird nicht quittiert
-  k.sekunden(1.0);
-  const uint64_t w1 = k.kern->keylock_waechter_meldungen();
-  bool a_raus = std::find(k.loop_alt.begin(), k.loop_alt.end(), (const void*)a) != k.loop_alt.end();
-  std::printf("  box: Arbeits-Thread Box 1 angehalten: Wächter-Meldungen %llu -> %llu, a zurück %d\n", (unsigned long long)w0,
-              (unsigned long long)w1, (int)a_raus);
-  PRUEF(w1 > w0 && !a_raus);
-  k.kern->keylock_faeden_stoppen();
-  k.sekunden(0.1);
-  a_raus = std::find(k.loop_alt.begin(), k.loop_alt.end(), (const void*)a) != k.loop_alt.end();
-  std::printf("  box: nach keylock_faeden_stoppen a zurück %d\n", (int)a_raus);
-  PRUEF(a_raus);
-  loop_befehl(cdj::Befehl::LOOP_LADEN, nullptr);
-  k.sekunden(0.1);
-  const bool b_raus = std::find(k.loop_alt.begin(), k.loop_alt.end(), (const void*)b) != k.loop_alt.end();
-  PRUEF(b_raus);
-  if (a_raus) delete a;
-  if (b_raus) delete b;
-  ergebnis("faeden_box");
-}
-
 // ------------------------------------------------------------------------------------------ prio
-// Task 7 (7a 3.6, K1): 8 Fäden (Vorbereiter, 4 Decks, 2 Boxen, Wächter), davon 7 SCHED_FIFO; der Wächter bleibt SCHED_OTHER
+// Task 7 (7a 3.6, K1), container core K1: 6 threads (preparer, 4 decks, watchdog), 5 of them SCHED_FIFO; the watchdog stays SCHED_OTHER
 constexpr int NF = cdj::KEYLOCK_FAEDEN, NFIFO = cdj::KEYLOCK_FAEDEN - 1;
 void sched_aller(cdj::Kern& kern, int pol[NF], int prio[NF]) {
   for (int i = 0; i < NF; ++i) {
@@ -982,8 +905,8 @@ void test_prio() {
     k.start(1, std::ceil(k.beat()) + 0.5, 0.0);
     k.sekunden(1.5);
     const bool hoerbar = k.kern->deck(1).keylock_ring_hoerbar();
-    std::printf("  prio c) ohne Recht (RLIMIT_RTPRIO 0): %d Fehler, Zähler %llu, %d von 8 SCHED_OTHER, Ring hörbar %d\n",
-                fehl, (unsigned long long)k.kern->keylock_prio_fehler(), other, (int)hoerbar);
+    std::printf("  prio c) ohne Recht (RLIMIT_RTPRIO 0): %d Fehler, Zähler %llu, %d von %d SCHED_OTHER, Ring hörbar %d\n",
+                fehl, (unsigned long long)k.kern->keylock_prio_fehler(), other, NF, (int)hoerbar);
     PRUEF(fehl == NFIFO && k.kern->keylock_prio_fehler() == (uint64_t)NFIFO);
     PRUEF(other == NF && hoerbar);
   }
@@ -1450,7 +1373,7 @@ int main(int argc, char** argv) {
                      {"stopp", test_stopp}, {"prio", test_prio}, {"startfehler", test_startfehler},
                      {"spaet", test_spaet}, {"neustart", test_neustart}, {"knopf", test_knopf},
                      {"konfig", test_konfig}, {"sperre", test_sperre}, {"sperre_alt", test_sperre_alt},
-                     {"loop", test_loop}, {"box", test_box},
+                     {"loop", test_loop},
                      {"knopf_spaet", test_knopf_spaet}, {"zaehler", test_zaehler}};
   for (const T& t : tests) {
     const bool allein = !std::strncmp(t.name, "sperre", 6);  // nur in eigenem Prozess (frischer Speicher)

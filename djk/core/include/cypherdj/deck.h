@@ -51,7 +51,7 @@ constexpr int SCRUB_WACHHUND = 96000;         // 2 s ohne Meldung der Hand (Pake
 constexpr int SCRUB_AUSSCHWING_MAX = 6000;    // nach dem Loslassen höchstens 125 ms nachführen, dann ausblenden
 
 constexpr int DECK_MAX_BLOCK = STRECK_MAX_BLOCK;  // größter Block (MIX_BLOCK)
-// Keylock 6a (Plan Task 6, Detailschnitt 3.8): Start aus dem Stand, geplant. Vorlage wie BOX_VORLAGE (loopbox.h, 7b.2): der
+// Keylock 6a (Plan Task 6, Detailschnitt 3.8): Start aus dem Stand, geplant. Vorlage wie the former loop box lead-in (7b.2): der
 // Ring klingt so viele Samples vor dem Einsatz s_t (das Band liefert davor Stille), s_h = s_t − STRECK_EINSCHWING − DECK_VORLAGE.
 // Startwert = BOX_VORLAGE (am Klick der Box gemessen, 60 BPM Einsatz bei E − 492). Am Deck gemessen nur 60 bis 132 BPM (Basis
 // 128, test_deck_geplant P4a/P4b/P4d); darunter schneidet E − 768 rohes R3 an (Prüfung 6a F4: 52 BPM 0,0087, 40 BPM 0,0129 bei
@@ -63,7 +63,7 @@ constexpr double DECK_START_F_MIN = 60.0 / 128.0;
 // Voller Vorlauf vom Planen (Blockanfang n0) bis s_t: s_h = s_t − 1408 − 768 liegt mindestens ANSATZ_FRIST hinter n0, der Ring
 // klingt die ganze Vorlage; nur dann Start aus Stille (Fix-Runde 2 F3-R1, Entscheid der Hauptinstanz). Bei Vorlauf V in
 // (ANSATZ_FRIST, DECK_START_VORLAUF): früher Ansatz ohne still, s_h = n0 + ANSATZ_FRIST; das Deck setzt im Varispeed ein, die Brücke
-// ist kürzer (max(0, 5504 − V) + 960 statt 6464 Samples). Die Box setzt dort still mit verkürzter Vorlage (loopbox.cpp:425), am Deck
+// ist kürzer (max(0, 5504 − V) + 960 statt 6464 Samples). The former loop box set silent there with a shortened lead-in, am Deck
 // gab das harte Kanten (80 BPM Klick 0,4889). Bei V ≤ ANSATZ_FRIST trüge auch der frühe Ansatz nicht vor s_t: heutiger Weg.
 constexpr int DECK_START_VORLAUF = ANSATZ_FRIST + STRECK_EINSCHWING + DECK_VORLAGE;
 // Fix-Runde 1 Q2: fällt ein geplanter Start, während der Ring in der Vorlage klingt, blendet er über so viele Frames aus (2,7 ms,

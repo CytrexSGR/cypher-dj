@@ -1,10 +1,10 @@
-// 1.15 "Mix tools" (A1b): the one flat table of the 345 tool rows of the controller table, INTERFACES section 1.5.
-// Source of the numbers: docs/architecture/INTERFACES.md section 1.5 (the 345 mix-tool rows). Defaults equal the library defaults, ranges its clamps
+// 1.15 "Mix tools" (A1b): the one flat table of the 201 tool rows of the controller table, INTERFACES section 1.5.
+// Source of the numbers: docs/architecture/INTERFACES.md section 1.5 (the mix-tool rows). Defaults equal the library defaults, ranges its clamps
 // (gate.h, utility.h, multiband.h, channel_limiter.h). The Stellwerk loops in controls.cpp create the rows from it, the Mixer
 // (mixer.cpp) maps them from it (matched on the path after the channel). One row per line, so a script can parse it.
 //
-// Channel sets: gate on the 13 live source channels, utility on those plus bus/1..4 (17), multiband and channel
-// limiter on bus/1..4, spectrum one global row. erz/8 gets no row: it is cue only and returns before every insert.
+// Channel sets: gate on the four containers (deck/1, deck/2, pad/1, pad/2), utility on those plus bus/1..4 (8), multiband and channel
+// limiter on bus/1..4, spectrum one global row.
 // Not exposed on purpose: utility gain_db (trim and fader exist), per-band solo (monitoring tool), limiter vorhalt_ms and
 // echtspitze (fixed after construction, kern.toml kanal_limiter_vorhalt_ms / kanal_limiter_echtspitze).
 // How a bypassed tool is handled and when the parameters are read belong to the Mixer wiring, not to this table.
@@ -16,7 +16,7 @@
 namespace cypherdj::stellwerk {
 
 enum class WzTool : uint8_t { gate, utility, multiband, limiter, spektrum };
-// Which channels carry the row: the 13 live sources (deck/1..4, erz/1..7, pad/1..2), the 13 sources plus the 4 buses, the 4
+// Which channels carry the row: the four containers, the containers plus the 4 buses, the 4
 // buses, or none (one global row without a channel).
 enum class WzKanalart : uint8_t { quellen, quellen_busse, busse, global };
 
@@ -30,8 +30,8 @@ struct WerkzeugZeile {
   WzKanalart kanalart;
 };
 
-inline constexpr const char* WERKZEUG_QUELLEN[] = {"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3",
-                                                   "erz/4",  "erz/5",  "erz/6",  "erz/7",  "pad/1", "pad/2"};
+// K9: the tools sit on the four containers A..D (pult.json), not on source channels.
+inline constexpr const char* WERKZEUG_QUELLEN[] = {"deck/1", "deck/2", "pad/1", "pad/2"};
 inline constexpr const char* WERKZEUG_BUSSE[] = {"bus/1", "bus/2", "bus/3", "bus/4"};
 inline constexpr int WERKZEUG_N_QUELLEN = sizeof WERKZEUG_QUELLEN / sizeof WERKZEUG_QUELLEN[0];
 inline constexpr int WERKZEUG_N_BUSSE = sizeof WERKZEUG_BUSSE / sizeof WERKZEUG_BUSSE[0];
@@ -46,7 +46,7 @@ inline constexpr WerkzeugZeile WERKZEUG_ZEILEN[] = {
     {WzTool::gate, "gate/attack", 0.1f, 500, 1, KurvenTyp::linear, 10, false, WzKanalart::quellen},
     {WzTool::gate, "gate/hold", 0, 2000, 20, KurvenTyp::linear, 10, false, WzKanalart::quellen},
     {WzTool::gate, "gate/release", 1, 5000, 100, KurvenTyp::linear, 10, false, WzKanalart::quellen},
-    {WzTool::gate, "gate/sc", 0, 14, 0, KurvenTyp::stufen, 0, true, WzKanalart::quellen},
+    {WzTool::gate, "gate/sc", 0, 4, 0, KurvenTyp::stufen, 0, true, WzKanalart::quellen},
     {WzTool::utility, "util/balance", -1, 1, 0, KurvenTyp::linear, 10, false, WzKanalart::quellen_busse},
     {WzTool::utility, "util/breite", 0, 200, 100, KurvenTyp::linear, 10, false, WzKanalart::quellen_busse},
     {WzTool::utility, "util/bassmono", 0, 500, 0, KurvenTyp::linear, 10, false, WzKanalart::quellen_busse},
@@ -81,11 +81,11 @@ inline constexpr WerkzeugZeile WERKZEUG_ZEILEN[] = {
     {WzTool::limiter, "lim/an", 0, 1, 0, KurvenTyp::schalter, 0, true, WzKanalart::busse},
     {WzTool::limiter, "lim/decke", -60, 0, -0.3f, KurvenTyp::linear, 10, false, WzKanalart::busse},
     {WzTool::limiter, "lim/abklingen", 1, 2000, 80, KurvenTyp::linear, 10, false, WzKanalart::busse},
-    {WzTool::spektrum, "spektrum/kanal", 0, 19, 0, KurvenTyp::stufen, 0, true, WzKanalart::global},
+    {WzTool::spektrum, "spektrum/kanal", 0, 9, 0, KurvenTyp::stufen, 0, true, WzKanalart::global},
 };
 inline constexpr int WERKZEUG_N_ZEILEN = sizeof WERKZEUG_ZEILEN / sizeof WERKZEUG_ZEILEN[0];
 
-// Rows of the controller table the table above produces (channels per row summed): 345.
+// Rows of the controller table the table above produces (channels per row summed): 201.
 constexpr int werkzeug_zaehlen() {
   int n = 0;
   for (const WerkzeugZeile& z : WERKZEUG_ZEILEN) {

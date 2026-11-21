@@ -16,7 +16,7 @@ import { SLUG, slugVon } from '../collection.ts';
 import { bkInsertKanonisch, bkReglerKanonisch, setzeVorgabenQuelle, vorgabenVonGraph as vorgabenQuelle } from './modular.ts';
 export { setzeVorgabenQuelle };
 import { seqV1Wandeln } from './seq.ts';
-import { alleStraenge, kanonisch, neuesProjekt, pruefeFehler, pruefeProjekt, sortiert, type Projekt } from './model.ts';
+import { alleStraenge, kanonisch, hebeAufDrei, neuesProjekt, pruefeFehler, pruefeProjekt, sortiert, type Projekt } from './model.ts';
 import { Verlauf, zieheNach, type VerlaufOptionen } from './history.ts';
 import { grundText } from '../http/reasons.ts';
 
@@ -154,7 +154,7 @@ export class Projekte {
       slug = `${basis.slice(0, 44)}-${i}`;
     }
     const projekt = neuesProjekt(n);
-    if (opt.live) { projekt.live = true; projekt.loop = { an: true, von_beat: 0, bis_beat: 64 }; }
+    if (opt.live) { projekt.live = true; projekt.loop = { an: true, von_beat: 0, bis_beat: 64 }; hebeAufDrei(projekt); }   // the default layout track, track, strudel, track
     // workbench module: marker, loop over 4 bars
     if (opt.werkbank) { projekt.werkbank = { schema: 1 }; projekt.loop = { an: true, von_beat: 0, bis_beat: 16 }; }
     if (opt.tracker) projekt.tracker = { schema: 1 };

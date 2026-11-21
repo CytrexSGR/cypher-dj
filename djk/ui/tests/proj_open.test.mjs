@@ -11,18 +11,15 @@ import { tmpOrdner } from './support/project.mjs';
 const fehlerVon = async (p) => { try { await p; } catch (e) { return e; } return null; };
 const lies = (datei) => JSON.parse(fs.readFileSync(datei, 'utf8'));
 
-test('neu: Projekt angelegt, Wiedergabe 1 geschrieben und geladen, erz/4 neutral (22 Regler), alle Spur-Regler (4 · MAX_SPUREN), Loop, Metronom; SSE proj', async (t) => {
+test('neu: Projekt angelegt, Wiedergabe 1 geschrieben und geladen, alle Spur-Regler (4 · MAX_SPUREN), Loop, Metronom; SSE proj', async (t) => {
   const { s, k, arr } = sitzung(t);
   const r = await s.neu('First Track', 'andreas');
   assert.equal(r.code, 200);
   assert.equal(r.j.slug, 'first-track'); assert.equal(r.j.projekt.rev, 0); assert.equal(r.j.projekt.wiedergabe_rev, 1);
   assert.deepEqual(k.an('/k/arr/laden').map((x) => x.felder), [{ quelle: 'andreas', nr: 1 }]);
   assert.deepEqual(lies(path.join(arr, 'wiedergabe-1.json')), { format: 'cypherdj-arr/1', nr: 1, spuren: [] });
-  assert.equal(k.teile(/^erz\/4\//).length, 24); assert.equal(k.teile(/^spur\/\d+\/(fader|pan|mute|solo)$/).length, 4 * MAX_SPUREN);
+  assert.equal(k.teile(/^erz\//).length, 0, 'container core: production is a service, no erz/ row'); assert.equal(k.teile(/^spur\/\d+\/(fader|pan|mute|solo)$/).length, 4 * MAX_SPUREN);
   assert.equal(k.teile(/^grp\/\d+\/(fader|pan|mute|solo)$/).length, 4 * 16); assert.equal(k.teile(/^pm\/fader$/).length, 1);   // 1.10: das Öffnen setzt alle 16 Gruppen-Slots und den PM
-  assert.deepEqual(k.teile(/^erz\/4\/(ziel|xseite)$/).map((x) => [x.felder.pfad, x.felder.nach]), [['erz/4/ziel', 0], ['erz/4/xseite', 1]], 'P6: bei Quelle andreas gesendet');
-  assert.deepEqual(k.teile(/^erz\/4\/send\/1$/)[0].felder, { quelle: 'andreas', plan: '', teil: 0, pfad: 'erz/4/send/1', ab_beat: k.teile(/^erz\/4\/send\/1$/)[0].felder.ab_beat,
-    dauer_beats: 0, nach: -200, form: 0, politik: 1, gruppe: '', hoerschein: '' });
   assert.deepEqual(k.an('/k/arr/loop')[0].felder, { quelle: 'andreas', an: 0, von_beat: 0, bis_beat: 32 });
   assert.deepEqual(k.an('/k/arr/metronom')[0].felder, { quelle: 'andreas', an: 0, pegel_db: -12, ziel: 0 });
   assert.deepEqual(r.j.kern.regler_fehler, []);
@@ -73,24 +70,6 @@ test('KI-Stopp (Spec 2.12, 3.5): Cypher legt kein Projekt an und öffnet keins (
   }
   assert.equal(k.gesendet.length, 0);
   assert.equal((await s.oeffnen('k', 'andreas')).code, 200);
-});
-
-// --- P6: erz/4 ziel und xseite nur bei Quelle andreas gesetzt, bei cypher als Meldung -----------------------------------------------------
-
-test('P6 erz/4: Quelle cypher sendet ziel und xseite nicht (der Kern lehnte nur_hand ab) und meldet sie, wenn bekannt anders; Quelle andreas setzt sie', async (t) => {
-  const c = sitzung(t);
-  c.s.ereignis('/e/regler', { pfad: 'erz/4/ziel', wert: 1, halter: 'frei', sample: 0n, beat: 0 });
-  c.s.ereignis('/e/regler', { pfad: 'erz/4/xseite', wert: 1, halter: 'frei', sample: 0n, beat: 0 });
-  const r = await c.s.neu('Cy', 'cypher');
-  assert.equal(c.k.teile(/^erz\/4\//).length, 22); assert.equal(c.k.teile(/^erz\/4\/(ziel|xseite)$/).length, 0);
-  assert.deepEqual(r.j.kern.erz4_nur_hand, [{ pfad: 'erz/4/ziel', soll: 0, ist: 1 }], 'xseite steht schon auf 1: keine Meldung');
-  const a = sitzung(t);
-  a.s.ereignis('/e/regler', { pfad: 'erz/4/ziel', wert: 1, halter: 'frei', sample: 0n, beat: 0 });
-  const r2 = await a.s.neu('An', 'andreas');
-  assert.equal(a.k.teile(/^erz\/4\/(ziel|xseite)$/).length, 2); assert.deepEqual(r2.j.kern.erz4_nur_hand, [], 'gesetzt, also keine Meldung');
-  const stumm = sitzung(t);
-  const r3 = await stumm.s.neu('Stumm', 'cypher');
-  assert.deepEqual(r3.j.kern.erz4_nur_hand, [], 'Negativ-Kontrolle: nichts bekannt, nichts gemeldet');
 });
 
 // --- P2 (Spec 6.21): Wiedergabe-Nummer entscheidet, wer beim Mixer gewinnt -----------------------------------------------------------------

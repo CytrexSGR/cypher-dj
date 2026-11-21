@@ -1,6 +1,6 @@
 // Scheibe 25: KI-Stopp, KI-Spur, KI-Stufe, Abbruch und /k/set/neu im Kern, offline über Kern::zyklus.
 //  1. Die Golden-Folge ki_stopp (INTERFACES §19.3, §4.7) ohne Läufer: alle cypher-Teile ab (Grund ki_stopp), die
-//     KI-Spur (deck/3) wird nicht gesenkt (Entscheidung E-a, 2026-10-20; vorher über 4 Beats auf −200), weitere cypher-Teile abgelehnt
+//     KI-Spur (pad/1) wird nicht gesenkt (Entscheidung E-a, 2026-10-20; vorher über 4 Beats auf −200), weitere cypher-Teile abgelehnt
 //     (ki_gestoppt), leitstand geht weiter
 //     (Negativ-Kontrolle), /k/ki/frei nur von andreas.
 //  2. /k/ki/stufe: Quittung 1 und 3, der Kern merkt die Stufe (LEDs ab Scheibe 35); Stufe 4 lehnt das Netz ab.
@@ -15,12 +15,12 @@ using B = cdj::Befehl;
 
 int main() {
   Kern25 k;
-  k.hand("deck/3/fader", 0.0f, 45'000);  // erster Wert: nur Stellung
-  k.hand("deck/3/fader", 1.0f, 67'500);  // Anschlag oben: 0 dB, Halter mensch
+  k.hand("pad/1/fader", 0.0f, 45'000);  // erster Wert: nur Stellung
+  k.hand("pad/1/fader", 1.0f, 67'500);  // Anschlag oben: 0 dB, Halter mensch
   k.bis(90'000);
-  k.einfach(B::KI_SPUR, 2, "leitstand", "deck/3,erz/1");
+  k.einfach(B::KI_SPUR, 2, "leitstand", "pad/1,bus/1");
   k.bis(540'000);
-  k.teil(3, "cypher", "c1", 0, "deck/3/eq/hoch", 40.0, 16.0, -20.0f, 0, 0, "", "");
+  k.teil(3, "cypher", "c1", 0, "pad/1/eq/hoch", 40.0, 16.0, -20.0f, 0, 0, "", "");
   k.teil(4, "cypher", "c1", 1, "deck/1/eq/mitte", 52.0, 8.0, -10.0f, 0, 0, "", "");
   k.teil(5, "leitstand", "l1", 0, "deck/1/filter", 40.0, 16.0, 0.5f, 0, 0, "", "");
   k.bis(1'080'000);
@@ -40,7 +40,7 @@ int main() {
   const cdj::Ereignis* q;
   bool halter_mensch = false, halter_frei = false;
   for (const auto& e : k.ev)
-    if (e.art == cdj::Ereignis::HALTER && !std::strcmp(e.pfad, "deck/3/fader")) {
+    if (e.art == cdj::Ereignis::HALTER && !std::strcmp(e.pfad, "pad/1/fader")) {
       if (!std::strcmp(e.text, "mensch") && e.sample == 67'500) halter_mensch = true;
       if (!std::strcmp(e.text, "frei") && e.sample >= 787'500 && e.sample < 788'012) halter_frei = true;
     }
@@ -53,9 +53,9 @@ int main() {
   for (const auto& e : k.ev)
     if (e.art == cdj::Ereignis::KI) (e.status ? ki1 : ki0)++;
   PRUEF(ki1 == 1 && ki0 == 1);
-  PRUEF_NAH(k.wert_bei("deck/3/fader", 1'125'000), 0.0, 0.0);  // E-a: die KI-Spur wird nicht gesenkt (vorher −30, dann −200)
-  PRUEF(k.wert_bei("deck/3/fader", 1'172'400) == 0.0);
-  PRUEF_NAH(k.wert_bei("deck/3/eq/hoch", 1'215'000), -10.028, 0.03);  // hält am Ist-Wert
+  PRUEF_NAH(k.wert_bei("pad/1/fader", 1'125'000), 0.0, 0.0);  // E-a: die KI-Spur wird nicht gesenkt (vorher −30, dann −200)
+  PRUEF(k.wert_bei("pad/1/fader", 1'172'400) == 0.0);
+  PRUEF_NAH(k.wert_bei("pad/1/eq/hoch", 1'215'000), -10.028, 0.03);  // hält am Ist-Wert
   PRUEF(std::isnan(k.wert_bei("deck/1/eq/mitte", 1'305'000)));        // wartender Teil entfiel: nie gemeldet
   PRUEF((q = k.q(5, 3)) && q->sample == 1'260'000);                   // leitstand fährt zu Ende
   PRUEF((q = k.q(7, 6)) && !std::strcmp(q->grund, "ki_gestoppt"));
@@ -67,8 +67,8 @@ int main() {
   PRUEF(!k.kern->ki_gestoppt());
 
   // 3. /k/abbruch
-  k.teil(20, "leitstand", "a1", 0, "deck/4/eq/tief", 90.0, 8.0, -20.0f, 0, 0, "", "");
-  k.teil(21, "leitstand", "a1", 1, "deck/4/eq/mitte", 96.0, 0.0, -10.0f, 0, 0, "", "");
+  k.teil(20, "leitstand", "a1", 0, "pad/2/eq/tief", 90.0, 8.0, -20.0f, 0, 0, "", "");
+  k.teil(21, "leitstand", "a1", 1, "pad/2/eq/mitte", 96.0, 0.0, -10.0f, 0, 0, "", "");
   k.bis(2'070'000);  // Beat 92: Teil 20 bei −5 dB
   k.einfach(B::ABBRUCH, 22, "leitstand", "0,,2", "a1");
   k.einfach(B::ABBRUCH, 23, "leitstand", "*", "a1");
@@ -77,8 +77,8 @@ int main() {
   PRUEF(k.q(23, 1) && k.q(23, 3));
   PRUEF((q = k.q(20, 7)) && !std::strcmp(q->grund, "abbruch"));
   PRUEF((q = k.q(21, 7)) && !std::strcmp(q->grund, "abbruch"));
-  PRUEF_NAH(k.wert_bei("deck/4/eq/tief", 2'250'000), -5.0, 0.02);
-  PRUEF(std::isnan(k.wert_bei("deck/4/eq/mitte", 2'250'000)));
+  PRUEF_NAH(k.wert_bei("pad/2/eq/tief", 2'250'000), -5.0, 0.02);
+  PRUEF(std::isnan(k.wert_bei("pad/2/eq/mitte", 2'250'000)));
 
   // 4. /k/set/neu beendet offene Teile der alten Zeitachse
   k.teil(30, "leitstand", "s1", 0, "deck/1/trim", 200.0, 4.0, 3.0f, 0, 0, "", "");

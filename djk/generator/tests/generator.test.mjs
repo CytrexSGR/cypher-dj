@@ -40,7 +40,7 @@ test('Strom anmelden, zwei Takte voraus, Musterwechsel, Neustart', { timeout: 20
   uhr(6.0);
   await warte(300);
   const strom = eingang.find((m) => m.adresse === '/erz/strom');
-  assert.deepEqual(strom?.werte.slice(1), ['erzeuger', 1, 'kit:t', 'erz/1']);
+  assert.deepEqual(strom?.werte.slice(1), ['erzeuger', 1, 'kit:t']);
   const fenster = () => eingang.filter((m) => m.bundle).map((b) => ({ ab: b.elemente[0].werte[4], bis: b.elemente[0].werte[5],
     evs: b.elemente.slice(1).map((e) => [e.werte[4], e.werte[3]]) }));
   const f0 = fenster();
@@ -232,7 +232,7 @@ test('Ziel bk:<name>: Strom mit diesem Ziel, kein Kit geladen, Noten im Fenster'
   kern.send(kodiere('/uhr', 'hhddd', [0n, process.hrtime.bigint(), 6.0, 128, 0]), abo, '127.0.0.1');
   await warte(300);
   const strom = eingang.find((m) => m.adresse === '/erz/strom');
-  assert.deepEqual(strom?.werte.slice(1), ['erzeuger', 1, 'bk:juno-pad', 'erz/1'], log);
+  assert.deepEqual(strom?.werte.slice(1), ['erzeuger', 1, 'bk:juno-pad'], log);
   const b = eingang.find((m) => m.bundle);
   assert.ok(b, `kein Fenster: ${log}`);
   assert.deepEqual(b.elemente.slice(1).map((e) => e.werte[3]), [45, 48, 52, 57, 45, 48, 52, 57]);   // a2 c3 e3 a3, zwei Takte

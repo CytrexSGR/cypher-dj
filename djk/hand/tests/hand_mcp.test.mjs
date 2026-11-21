@@ -155,7 +155,7 @@ test('djk-hand lage tool text names decks 1 to 4', async (t) => {
   assert.doesNotMatch(w.description, /both decks/);
   assert.doesNotMatch(w.description, /deck 1-2/);
   assert.match(w.description, /decks 1-4/);
-  assert.match(w.description, /deck 1-4, pad\/1-2/);
+  assert.match(w.description, /deck\/1, deck\/2, pad\/1, pad\/2/);
 });
 
 test('djk-hand stille: Negativ-Kontrolle, alle drei Ströme 200 → kein Fehler, drei POSTs', async (t) => {
@@ -375,7 +375,7 @@ test('djk-hand Keylock 3: tempo nennt den globalen Knopf keylock, regler den Pfa
 test('djk-hand S5r: regler names <kanal>/bk/1..64 and sends the path through to /regler', async (t) => {
   const { c, gesehen } = await aufbau(t, (m, u) => (u === '/regler' ? [200, { ok: true, felder: { id: 1 }, quittung: { status: 5, grund: '' } }] : undefined));
   const regler = (await c.listTools()).tools.find((x) => x.name === 'regler').description;
-  assert.match(regler, /<kanal>\/bk\/1\.\.64 \(deck\/1\.\.4, erz\/1\|2\|3\|5\|6\|7, pad\/1\|2; 0\.\.1, start value: the graph's own default, 0\.5 where it has none/);
+  assert.match(regler, /<kanal>\/bk\/1\.\.64 \(deck\/1\|2, pad\/1\|2, erz\/1\|2\|3\|5\|6\|7; 0\.\.1, start value: the graph's own default, 0\.5 where it has none/);
   await c.callTool({ name: 'regler', arguments: { pfad: 'deck/1/bk/3', nach: 0.8 } });
   assert.deepEqual(gesehen.filter((g) => g.pfad === '/regler').map((g) => [g.koerper.pfad, g.koerper.nach]), [['deck/1/bk/3', 0.8]]);
   await c.callTool({ name: 'regler', arguments: { pfad: 'erz/5/bk/32', nach: 0.1 } });
@@ -1233,7 +1233,8 @@ test('S18 djk-hand: strudel enum is the stream table, graph names erz/5..7 and p
   const graph = tools.find((x) => x.name === 'graph');
   assert.deepEqual(graph.inputSchema.properties.kanal.enum.slice(0, 7), ['erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2']);
   for (const s of ['erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2', 'djk-stroeme']) assert.match(graph.description, new RegExp(s.replace('/', '\\/')), s);
-  assert.match(graph.description, /summed with the loop/);
+  assert.match(graph.description, /ordinary streams/);
+  assert.doesNotMatch(graph.description, /summed with the loop/);
   assert.match(tools.find((x) => x.name === 'pegel').description, /erz\/5\.\.7/, 'pegel lists the new channels');
   assert.equal(tools.length, NAMEN.length)   // merge S17+S18: S18 adds no tool, the count follows the name list;
 });
@@ -1242,9 +1243,9 @@ test('S18 djk-hand: proj_aendern and proj_aufnahme name every recordable input o
   const { c } = await aufbau(t, () => null);
   const tools = (await c.listTools()).tools;
   const sp = Object.keys(REC_EINGANG).join('|');
-  assert.equal(sp, 'erz/1|erz/2|erz/3|erz/5|erz/6|erz/7|pad/1|pad/2');
+  assert.equal(sp, 'erz/1|erz/2|erz/3|erz/5|erz/6|erz/7|pad/1|pad/2|deck/1|deck/2');
   for (const n of ['proj_aendern', 'proj_aufnahme']) {
-    assert.ok(tools.find((x) => x.name === n).description.includes(`name: ${sp}}`), `${n} lists the eight inputs`);
+    assert.ok(tools.find((x) => x.name === n).description.includes(`name: ${sp}}`), `${n} lists the ten inputs`);
   }
   assert.doesNotMatch(tools.find((x) => x.name === 'proj_aufnahme').description, /name: erz\/1\|erz\/2\|erz\/3\}/, 'the old three-input text is gone');
 });
@@ -1356,15 +1357,15 @@ const WZ_UTIL = ['balance', 'breite', 'bassmono', 'phase_l', 'phase_r', 'tausch'
 const WZ_MB = ['mb/an', 'mb/grenze_tief', 'mb/grenze_hoch', ...['tief', 'mitte', 'hoch'].flatMap((b) =>
   ['schwelle', 'ratio', 'attack', 'release', 'knie', 'makeup', 'umgehen'].map((f) => `mb/${b}/${f}`))];
 const WZ_LIM = ['lim/an', 'lim/decke', 'lim/abklingen'];
-const WZ_Q13 = [...[1, 2, 3, 4].map((n) => `deck/${n}`), ...[1, 2, 3, 4, 5, 6, 7].map((n) => `erz/${n}`), 'pad/1', 'pad/2'];
+const WZ_Q13 = ['deck/1', 'deck/2', 'pad/1', 'pad/2'];   // the four containers; gate and util are not offered on the erz alias
 const WZ_B4 = [1, 2, 3, 4].map((n) => `bus/${n}`);
 const WZ_345 = [...WZ_Q13.flatMap((k) => WZ_GATE.map((f) => `${k}/${f}`)), ...[...WZ_Q13, ...WZ_B4].flatMap((k) => WZ_UTIL.map((f) => `${k}/${f}`)),
   ...WZ_B4.flatMap((k) => [...WZ_MB, ...WZ_LIM].map((f) => `${k}/${f}`)), 'spektrum/kanal'];
-const WZ_NEGATIV = ['erz/8/gate/an', 'erz/8/util/dc', 'bus/1/gate/an', 'deck/1/mb/an', 'deck/1/lim/an', 'bus/5/util/dc', 'spektrum/kanal/1',
+const WZ_NEGATIV = ['erz/1/gate/an', 'erz/7/util/dc', 'deck/3/gate/an', 'deck/4/util/dc', 'pad/3/gate/an', 'erz/8/gate/an', 'erz/8/util/dc', 'bus/1/gate/an', 'deck/1/mb/an', 'deck/1/lim/an', 'bus/5/util/dc', 'spektrum/kanal/1',
   'bus/1/mb/tief/solo', 'bus/1/util/gain_db'];   // negative list of A1b (d)
 // the universe: every tool suffix on every channel (18 channels incl. erz/8) plus the negative list and near misses
 function wzUniversum() {
-  const kanaele = [...WZ_Q13, 'erz/8', ...WZ_B4];
+  const kanaele = [...WZ_Q13, 'erz/1', 'erz/7', 'erz/8', 'deck/3', 'deck/4', 'pad/3', ...WZ_B4];
   return [...new Set([...kanaele.flatMap((k) => [...WZ_GATE, ...WZ_UTIL, ...WZ_MB, ...WZ_LIM].map((f) => `${k}/${f}`)), ...WZ_345, ...WZ_NEGATIV,
     ...WZ_B4.map((k) => `${k}/lim/zz`), 'spektrum/kanal', 'spektrum', 'bus/0/lim/an', 'bus/5/lim/an', 'erz/9/gate/an', 'deck/5/gate/an', 'bus/1/lim/vorhalt_ms', 'bus/1/mb/zz/ratio'])];
 }
@@ -1374,13 +1375,13 @@ const SCHEMA_REGLER_PFAD = new RegExp(JSON.parse(fs.readFileSync(path.join(path.
   'defs.schema.json'), 'utf8')).$defs.regler_pfad.pattern);
 
 test('1.15 A2: PFAD (hand) and regler_pfad (schema) take exactly the 345 tool paths and none of the negative list', () => {
-  assert.equal(WZ_345.length, 345);
-  assert.equal(new Set(WZ_345).size, 345);
-  assert.ok(wzUniversum().length > 345 + WZ_NEGATIV.length, 'the universe holds the wrong-kind paths too');
+  assert.equal(WZ_345.length, 201);
+  assert.equal(new Set(WZ_345).size, 201);
+  assert.ok(wzUniversum().length > 201 + WZ_NEGATIV.length, 'the universe holds the wrong-kind paths too');
   assert.deepEqual(wzAbweichung(PFAD), [], 'PFAD');
   assert.deepEqual(wzAbweichung(SCHEMA_REGLER_PFAD), [], 'schema regler_pfad');
   for (const n of WZ_NEGATIV) assert.equal(PFAD.test(n) || SCHEMA_REGLER_PFAD.test(n), false, n);
-  for (const p of ['deck/1/gate/an', 'bus/4/mb/hoch/umgehen', 'bus/2/lim/abklingen', 'erz/7/util/dc', 'spektrum/kanal']) assert.equal(PFAD.test(p), true, p);   // positive control
+  for (const p of ['deck/1/gate/an', 'bus/4/mb/hoch/umgehen', 'bus/2/lim/abklingen', 'pad/2/util/dc', 'spektrum/kanal']) assert.equal(PFAD.test(p), true, p);   // positive control
 });
 
 test('1.15 A2: negative control, one extra path or channel in the regex turns the exact-set check red', () => {
@@ -1388,10 +1389,10 @@ test('1.15 A2: negative control, one extra path or channel in the regex turns th
   assert.ok(PFAD.source.includes(lim), 'the limiter alternative is where the mutation expects it');
   const zuviel = new RegExp(PFAD.source.replace(lim, 'lim\\/(an|decke|abklingen|zz)'));
   assert.deepEqual(wzAbweichung(zuviel), ['bus/1/lim/zz', 'bus/2/lim/zz', 'bus/3/lim/zz', 'bus/4/lim/zz'], 'a 13th limiter path is found by name');
-  const kanal = new RegExp(PFAD.source.replace('erz\\/[1-7]|pad\\/[12])\\/gate', 'erz\\/[1-8]|pad\\/[12])\\/gate'));
+  const kanal = new RegExp(PFAD.source.replace('deck\\/[12]|pad\\/[12])\\/gate', 'deck\\/[12]|pad\\/[1-3])\\/gate'));
   assert.notEqual(kanal.source, PFAD.source, 'the channel mutation changed the regex');
-  assert.deepEqual(wzAbweichung(kanal).sort(), ['erz/8/gate/an', 'erz/8/gate/attack', 'erz/8/gate/bereich', 'erz/8/gate/hold', 'erz/8/gate/hysterese',
-    'erz/8/gate/ratio', 'erz/8/gate/release', 'erz/8/gate/sc', 'erz/8/gate/schwelle'], 'erz/8 gate is found by name');
+  assert.deepEqual(wzAbweichung(kanal).sort(), ['pad/3/gate/an', 'pad/3/gate/attack', 'pad/3/gate/bereich', 'pad/3/gate/hold', 'pad/3/gate/hysterese',
+    'pad/3/gate/ratio', 'pad/3/gate/release', 'pad/3/gate/sc', 'pad/3/gate/schwelle'], 'pad/3 gate is found by name');
 });
 
 // 1.15 A2: the tool description names the mix-tool paths and passes them through to POST /regler unchanged
@@ -1399,7 +1400,7 @@ test('djk-hand 1.15 A2: regler names the gate, util, mb, lim and spektrum paths 
   const { c, gesehen } = await aufbau(t, (m, u) => (u === '/regler' ? [200, { ok: true, felder: { id: 1 }, quittung: { status: 5, grund: '' } }] : undefined));
   const regler = (await c.listTools()).tools.find((x) => x.name === 'regler').description;
   for (const wort of ['<source>/gate/(an 0/1, schwelle dBFS -90..0', '/util/(balance -1..1', 'mb/(tief|mitte|hoch)/(schwelle dB -60..0', 'lim/(an 0/1, decke dBFS -60..0',
-    'spektrum/kanal (0 off, 1..18', 'not erz/8', 'kanal_limiter_vorhalt_ms is 0']) assert.ok(regler.includes(wort), `regler names ${wort}`);
+    'spektrum/kanal (0 off, 1..4 = the containers', 'no gate rows', 'kanal_limiter_vorhalt_ms is 0']) assert.ok(regler.includes(wort), `regler names ${wort}`);
   await c.callTool({ name: 'regler', arguments: { pfad: 'deck/1/gate/schwelle', nach: -30 } });
   await c.callTool({ name: 'regler', arguments: { pfad: 'bus/1/mb/tief/schwelle', nach: -12 } });
   assert.deepEqual(gesehen.filter((g) => g.pfad === '/regler').map((g) => [g.koerper.pfad, g.koerper.nach]),
@@ -1441,7 +1442,7 @@ test('djk-hand spektrum (1.15 A9): 29 bands with centres in Hz and dB as numbers
   assert.ok(gesehen.length === 3 && gesehen.every((x) => x.methode === 'GET' && x.pfad === '/spektrum' && x.quelle === 'cypher'), JSON.stringify(gesehen.map((x) => [x.methode, x.pfad])));
   // the description points to the selector and names the units
   const d = (await c.listTools()).tools.find((x) => x.name === 'spektrum').description;
-  for (const wort of ['regler', 'spektrum/kanal', '0 off', '1..18', '19', 'Hz', 'dB', 'leer']) assert.ok(d.includes(wort), `spektrum names ${wort}`);
+  for (const wort of ['regler', 'spektrum/kanal', '0 off', '1..4', '9 = master sum', 'Hz', 'dB', 'leer']) assert.ok(d.includes(wort), `spektrum names ${wort}`);
   // negative control: a harmless full-scale-quiet frame (all -900 = -90 dB) is a reading, not an error
   antwort = { leer: false, kanal: 'deck/2', rahmen: 2, pegel: Array(29).fill(-900).join(','), alter_ms: 1 };
   const stille = await c.callTool({ name: 'spektrum', arguments: {} });
@@ -1455,26 +1456,26 @@ test('djk-hand regler (1.15 A9): tool paths are sent as given; a wrong channel k
     if (u !== '/regler') return null;
     return PFAD.test(k?.pfad ?? '') ? [200, { ok: true, felder: { id: 1 }, quittung: { status: 0, grund: '' } }] : [400, { fehler: 'pfad' }];
   });
-  for (const falsch of ['bus/1/gate/an', 'erz/8/gate/an', 'deck/1/mb/an', 'deck/1/lim/an', 'bus/5/lim/an']) {
+  for (const falsch of ['bus/1/gate/an', 'erz/8/gate/an', 'erz/7/gate/schwelle', 'deck/1/mb/an', 'deck/1/lim/an', 'bus/5/lim/an']) {
     const r = await c.callTool({ name: 'regler', arguments: { pfad: falsch, nach: 1 } });
     assert.equal(r.isError, true, `${falsch} must be refused`); assert.match(r.content[0].text, /pfad/, falsch);
   }
-  for (const richtig of ['deck/1/gate/an', 'erz/7/gate/schwelle', 'bus/1/util/breite', 'bus/2/mb/mitte/ratio', 'bus/4/lim/decke', 'spektrum/kanal']) {
+  for (const richtig of ['deck/1/gate/an', 'deck/2/gate/schwelle', 'bus/1/util/breite', 'bus/2/mb/mitte/ratio', 'bus/4/lim/decke', 'spektrum/kanal']) {
     const r = await c.callTool({ name: 'regler', arguments: { pfad: richtig, nach: 1 } });
     assert.ok(!r.isError, `${richtig}: ${r.content[0].text}`);
   }
-  assert.deepEqual(gesehen.filter((x) => x.pfad === '/regler').slice(5).map((x) => x.koerper.pfad),
-    ['deck/1/gate/an', 'erz/7/gate/schwelle', 'bus/1/util/breite', 'bus/2/mb/mitte/ratio', 'bus/4/lim/decke', 'spektrum/kanal']);
+  assert.deepEqual(gesehen.filter((x) => x.pfad === '/regler').slice(6).map((x) => x.koerper.pfad),
+    ['deck/1/gate/an', 'deck/2/gate/schwelle', 'bus/1/util/breite', 'bus/2/mb/mitte/ratio', 'bus/4/lim/decke', 'spektrum/kanal']);
   assert.ok(gesehen.every((x) => x.quelle === 'cypher'));
 });
 
 test('djk-hand regler (1.15 A9): the description names the mix-tool families with their units and says lim/* does nothing while kanal_limiter_vorhalt_ms is 0', async (t) => {
   const { c } = await aufbau(t, () => null);
   const d = (await c.listTools()).tools.find((x) => x.name === 'regler').description;
-  for (const wort of ['/gate/(an', 'schwelle dBFS -90..0', 'hysterese dB 0..24', 'ratio 1..100', 'bereich dB -120..0', 'hold ms 0..2000', 'deck/1..4, erz/1..7, pad/1..2 (not erz/8)',
+  for (const wort of ['/gate/(an', 'schwelle dBFS -90..0', 'hysterese dB 0..24', 'ratio 1..100', 'bereich dB -120..0', 'hold ms 0..2000', 'deck/1|2 and pad/1|2 (the container strips; streams and their erz aliases have no gate rows)',
     '/util/(balance -1..1', 'breite % 0..200', 'bassmono Hz 0..500', 'phase_l|phase_r|tausch|dc', 'bus/1..4',
     'mb/an', 'mb/grenze_tief|grenze_hoch Hz 20..20000', 'mb/(tief|mitte|hoch)/(schwelle dB -60..0', 'makeup dB -24..24', 'umgehen 0/1',
-    'lim/(an 0/1, decke dBFS -60..0, abklingen ms 1..2000)', 'kanal_limiter_vorhalt_ms', 'spektrum/kanal (0 off, 1..18 = channel index + 1, 19 = master sum)']) {
+    'lim/(an 0/1, decke dBFS -60..0, abklingen ms 1..2000)', 'kanal_limiter_vorhalt_ms', 'spektrum/kanal (0 off, 1..4 = the containers A..D = deck/1, deck/2, pad/1, pad/2, 5..8 = bus/1..4, 9 = master sum)']) {
     assert.ok(d.includes(wort), `regler names ${wort}`);
   }
   assert.match(d, /lim\/\(an 0\/1[^)]*\) = channel limiter \(does nothing while kern\.toml kanal_limiter_vorhalt_ms is 0, the default\)/);
@@ -2114,7 +2115,7 @@ test('djk-hand: box start/stopp answer box_ersetzt, box laden and loop_nach_box 
   const werkzeuge = (await c.listTools()).tools;
   assert.equal(werkzeuge.length, 99);
   for (const name of ['modul_export', 'modul_leeren', 'modul_stems', 'modul_tonart', 'modul_einsetzen', 'modul_blend']) {
-    assert.deepEqual(werkzeuge.find((x) => x.name === name).inputSchema.properties.slot.enum, ['A', 'B', 1, 2], name);
+    assert.deepEqual(werkzeuge.find((x) => x.name === name).inputSchema.properties.slot.enum, ['A', 'B', 'C', 'D', 1, 2, 3, 4], name);
   }
   const letzte = () => gesehen.at(-1);
   assert.ok(!(await c.callTool({ name: 'loop_nach_box', arguments: { deck: 3, box: 2 } })).isError);

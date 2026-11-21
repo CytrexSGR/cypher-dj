@@ -12,13 +12,12 @@ import { leseTaktart, TAKTART_DATEI } from './taktart_file.mjs';
 
 export class StromLauf {
   /**
-   * @param {{strom: number, kanal: string, ziel: string, ordner: string, sende: (buf: Buffer) => void,
+   * @param {{strom: number, ziel: string, ordner: string, sende: (buf: Buffer) => void,
    *          beatJetzt: () => (number|null), log: (t: string) => void, jetztUs?: () => number}} o
    *   beatJetzt returns null before the first /uhr.
    */
-  constructor({ strom, kanal, ziel, ordner, sende, beatJetzt, log, jetztUs = () => Number(process.hrtime.bigint() / 1000n) }) {
+  constructor({ strom, ziel, ordner, sende, beatJetzt, log, jetztUs = () => Number(process.hrtime.bigint() / 1000n) }) {
     this.strom = strom;
-    this.kanal = kanal;
     this.ziel = ziel;
     this.ordner = ordner;
     this.muster = path.join(ordner, 'strom1.js');
@@ -35,7 +34,7 @@ export class StromLauf {
   log(t) { this.logRoh(`stream ${this.strom}: ${t}`); }
 
   stromMelden() {
-    this.sende(kodiere('/erz/strom', 'hsiss', [++this.id, 'erzeuger', this.strom, this.ziel, this.kanal]));
+    this.sende(kodiere('/erz/strom', 'hsis', [++this.id, 'erzeuger', this.strom, this.ziel]));
   }
 
   status(stand) {

@@ -32,7 +32,7 @@ test('H01 zu_spaet: die Ansage nennt den frühesten Takt und dass der Start dort
 
 test('H01 autonomie auf Stufe 0: die Ansage sagt, dass nur Zuhören geht', () => {
   const w = welt(); const a = annahme(w, 0);
-  const e = a.einreichen({ grund: 'x', teile: [{ regler: 'deck/3/fader', art: 'setze', ab_takt: 9, nach: -20 }] });
+  const e = a.einreichen({ grund: 'x', teile: [{ regler: 'pad/1/fader', art: 'setze', ab_takt: 9, nach: -20 }] });
   assert.equal(e.status, 'abgelehnt');
   assert.match(e.ansage, /autonomie: Stufe 0 erlaubt plan_einreichen nicht, nur zuhören/);
 });

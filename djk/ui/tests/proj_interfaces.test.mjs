@@ -41,12 +41,12 @@ test('K1 KI-Spur-Listen (Spec 6.15, 6.22; E-a): E3 P1: nur spur/0 angenommen, sp
   const q = async (adresse, felder) => ctx.warteQuittung(ctx.sende(adresse, felder));
   const ok = (x) => x !== null && ![4, 6, 7, 8].includes(x.status);
   const fahre = async (nach) => {
-    for (const pfad of ['erz/2/fader', 'spur/1/fader']) {
+    for (const pfad of ['deck/2/fader', 'spur/1/fader']) {
       await q('/k/teil', { quelle: 'andreas', plan: '', teil: 0, pfad, ab_beat: 0, dauer_beats: 0, nach, form: 0, politik: 1, gruppe: '', hoerschein: '' });
     }
-    return bis(() => ['erz/2/fader', 'spur/1/fader'].every((p) => regler.some((f) => f.pfad === p && f.wert === nach)), 3000);
+    return bis(() => ['deck/2/fader', 'spur/1/fader'].every((p) => regler.some((f) => f.pfad === p && f.wert === nach)), 3000);
   };
-  assert.ok(ok(await q('/k/ki/spur', { quelle: 'leitstand', kanaele: 'erz/2' })));
+  assert.ok(ok(await q('/k/ki/spur', { quelle: 'leitstand', kanaele: 'deck/2' })));
   assert.equal((await q('/k/ki/spur', { quelle: 'andreas', kanaele: 'spur/1' })).status, 6, 'E3 P1: spur/1 abgelehnt wie ein unbekannter Kanal');
   assert.ok(await fahre(-6), 'beide Fader stehen auf −6');
   regler.length = 0;

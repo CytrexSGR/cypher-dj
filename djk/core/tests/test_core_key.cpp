@@ -123,18 +123,18 @@ int main() {
     x.midi_ein_bei(4 * N + 5, 0x90, 57, 100);
     x.midi_ein_bei(8 * N + 5, 0x80, 57, 0);
     x.zyklen(12 * N);
-    const float still = pegel_max(x, "erz/2");
+    const float still = pegel_max(x, "strom/2");
     ziel(x, 2);
     x.ev.clear();
     const int64_t S = (x.kern->sample() / N + 4) * N + 5;
     x.midi_ein_bei(S, 0x90, 57, 100);
     x.midi_ein_bei(S + 6 * N, 0x80, 57, 0);
     x.zyklen(S + 5 * N);
-    const float klingt = pegel_max(x, "erz/2");
+    const float klingt = pegel_max(x, "strom/2");
     x.zyklen(S + 6 * N + 20 * N);
     x.ev.clear();
     x.zyklen(x.kern->sample() + 4 * N);
-    const float danach = pegel_max(x, "erz/2");
+    const float danach = pegel_max(x, "strom/2");
     std::printf("kern bk: level other target %.1f dB, key down %.1f dB, after release %.1f dB\n", still, klingt, danach);
     PRUEF(still < -80.0f && klingt > -40.0f && danach < -80.0f);
     // held key, then the target changes: silence
@@ -142,12 +142,12 @@ int main() {
     x.zyklen(x.kern->sample() + 6 * N);
     x.ev.clear();
     x.zyklen(x.kern->sample() + 4 * N);
-    PRUEF(pegel_max(x, "erz/2") > -40.0f );
+    PRUEF(pegel_max(x, "strom/2") > -40.0f );
     ziel(x, 0);
     x.zyklen(x.kern->sample() + 20 * N);
     x.ev.clear();
     x.zyklen(x.kern->sample() + 4 * N);
-    PRUEF(pegel_max(x, "erz/2") < -80.0f );
+    PRUEF(pegel_max(x, "strom/2") < -80.0f );
     x.zyklen(x.kern->sample() + 8 * N);
     host_strom(x, 2);   // releases the graph
     x.zyklen(x.kern->sample() + 8 * N);

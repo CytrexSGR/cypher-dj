@@ -4,11 +4,12 @@
 // Abgelaufene Hörscheine bleiben im Register, bis ihr Platz gebraucht wird: nur so kann der Kern
 // hoerschein_abgelaufen melden statt kein_hoerschein (Golden-Folge hoerschein_rand).
 
-import { SPIELKANAELE, ID_MUSTER, istDeck, deckNr, kanalVon } from './contract.mjs';
+import { SPIELKANAELE, ID_MUSTER, kanalVon, playerVonContainer, containerVonPlayer } from './contract.mjs';
 import { offen, sicht } from './level.mjs';
 import { pos, zielQuellBeat } from './decks.mjs';
 
 const MAX_HOERSCHEINE = 32;
+const HOER_KANAL = /^(deck\/[1-4]|pad\/[12])$/;   // deck/<player> for the channel rules, pad/1 and pad/2 for the Schuss (I3b, C15)
 const ABSCHNITT_ZUGABE = 64;
 
 export function gueltig(K, hs, kanal, inhalt, beat) {
@@ -29,18 +30,20 @@ function i3a(K, t, s) {
   if (!/\/(fader|trim)$/.test(t.pfad)) return null;
   const k = kanalVon(t.pfad);
   if (!SPIELKANAELE.includes(k)) return null;
-  if (k.startsWith('erz/')) return null;   // wie Kern e9baf64 (signalbox/src/i3.cpp): Strudel-Kanäle öffnen ohne Hörschein (Andreas 2026-09-29)
-  if (k.startsWith('pad/')) return null;   // Andreas 2026-10-05: „diese fader solltest du selber steuern können alle“; Herkunft des Box-Inhalts prüft die Seite (server.ts eigenePad)
+  const c = playerVonContainer(k);
+  // container core (D-V6, nothing gets stricter): a container that carries a module (art 2) opens without a pass, as the pad channels and the stream
+  // channels did (Andreas 2026-09-29, 2026-10-05); the page checks where the module content comes from
+  if (K.container[c - 1].art === 2) return null;
   const v = sicht(K, s);
   if (offen(K, v, k)) return null;
   const nachher = t.pfad.endsWith('/fader') ? t.nach + v.wert(`${k}/trim`) : t.nach + v.wert(`${k}/fader`);
   if (!(nachher > K.cfg.hoerbar_db)) return null;
   const beat = K.uhr.beat(s);
   const hs = K.hs.get(t.hoerschein);
-  const deck = istDeck(k) ? K.decks[deckNr(k)] : null;
+  const deck = K.decks[c];   // art 1: the player of the container
   // 2026-11-18 (SEQ deck): a deck channel with nothing loaded is free, like Kern signalbox/src/i3.cpp; a loaded deck keeps the lock
   if (deck && !deck.m) return null;
-  const g = gueltig(K, hs, k, deck ? deck.m?.inhalt ?? '' : null, beat);
+  const g = gueltig(K, hs, `deck/${c}`, deck ? deck.m?.inhalt ?? '' : null, beat);
   if (g) return g;
   if (deck && !imAbschnitt(hs, pos(deck, beat))) return 'hoerschein_anderer_abschnitt';
   return null;
@@ -49,14 +52,14 @@ function i3a(K, t, s) {
 // I3d: Cyphers Sprung oder Hotcue (und Start) auf einem offenen Deck braucht ein gemessenes Ziel oder die Annahme
 function i3d(K, t, s) {
   if (t.quelle !== 'cypher') return null;
-  const k = `deck/${t.deck}`;
+  const k = containerVonPlayer(t.deck);
   const d = K.decks[t.deck];
   if (!offen(K, sicht(K, s), k)) return null;
   if (t.hoerschein.startsWith('annahme:')) return null;
   const beat = K.uhr.beat(s);
   const ziel = zielQuellBeat(K, t, beat);
-  const kandidaten = t.hoerschein ? [K.hs.get(t.hoerschein)] : [...K.hs.values()].filter((h) => h.kanal === k);
-  for (const hs of kandidaten) if (hs && !gueltig(K, hs, k, d.m?.inhalt ?? '', beat) && imAbschnitt(hs, ziel)) return null;
+  const kandidaten = t.hoerschein ? [K.hs.get(t.hoerschein)] : [...K.hs.values()].filter((h) => h.kanal === `deck/${t.deck}`);
+  for (const hs of kandidaten) if (hs && !gueltig(K, hs, `deck/${t.deck}`, d.m?.inhalt ?? '', beat) && imAbschnitt(hs, ziel)) return null;
   return 'ziel_ungehoert';
 }
 
@@ -75,7 +78,7 @@ export default {
   befehle: {
     '/k/hoerschein': (K, a, b) => {
       if (!ID_MUSTER.test(a.hs_id)) return K.q(b, 6, 'ausserhalb_bereich');
-      if (!SPIELKANAELE.includes(a.kanal)) return K.q(b, 6, 'unbekannter_regler');
+      if (!HOER_KANAL.test(a.kanal)) return K.q(b, 6, 'unbekannter_regler');   // the key is the player name deck/1..4 (C7)
       if (a.urteil !== 'ok' || !(a.bpm_messung > 0) || !Number.isFinite(a.gueltig_bis_beat)) return K.q(b, 6, 'ausserhalb_bereich');
       if (!K.hs.has(a.hs_id) && K.hs.size >= MAX_HOERSCHEINE) {      // abgelaufene entfallen, wenn Platz gebraucht wird
         const beat = K.uhr.beat(K.jetzt);

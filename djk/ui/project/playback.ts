@@ -15,7 +15,7 @@ import { hkStrecke, hkWert, istModulation, modulationsZiel, type Huellkurve } fr
 import { hatFxArbeit, rolleFxAus, type FxRahmen } from './fx_ausrollen.ts';
 import { geraetFx as geraetFxRegister } from '../devices_parameter.ts';   // default device mode of `uebersetze` (a caller cannot forget it)
 import { trackerEinstellung } from '../public/tracker/grid_model.js';   // LPB and TICKS of the project (task 1)
-import { LOOP_MAX_FRAMES, loopDjNr, loopDjNrVon } from './model.ts';
+import { LOOP_MAX_FRAMES, MAX_RETURNS, loopDeckGruppe, platzVonGruppe, strudelGruppe } from './model.ts';
 import type { GliedGeraet, AudioClip, Clip, Insert, InsertTraeger, Lane, Ziel, MidiClip, Note, Projekt, Punkt, Spur, Warp } from './model.ts';
 import type { Stift } from '../steckfeld.ts';
 
@@ -24,6 +24,8 @@ export const WIEDERGABE_FORMAT = 'cypherdj-arr/1';
 export const WIEDERGABE_FORMAT_2 = 'cypherdj-arr/2';
 // /3 = /2 plus returns[].auto (the fader lane of a return, return automation slice 2); the format is the version gate: an old core refuses /3 as a whole
 export const WIEDERGABE_FORMAT_3 = 'cypherdj-arr/3';
+// /4 = /3 plus the strom track source, container outputs 1..4 and up to 8 returns; a live project is always written as /4 with the head flag `live`
+export const WIEDERGABE_FORMAT_4 = 'cypherdj-arr/4';
 export const MAX_WARP_PUNKTE = 262_144;                       // Marker aller Clips (und Loop-Kopien) einer Wiedergabe; gleich ARR_WARP_PUNKTE_MAX im Kern
 export const WARP_MODUS_NR: Readonly<Record<string, number>> = { repitch: 0, beats: 1, complex: 2, tones: 3 };
 // 1 spielt der Callback (Slice 4), 2 und 3 das Warp-Werk des Kerns
@@ -82,6 +84,8 @@ type WSpurKern =
   // 1.9 (L25): no parameter, the kit is the device
   | { nr: number; art: 'intern'; geraet: 'kit'; kit: string; noten: WNote[]; ausgang?: WZiel; auto?: WAuto[]; chain?: WInsert[]; rack?: WRack;
       chain_auto?: WKettenLane[] }
+  // container core (/4): a strom track reads the source buffer of its stream; no clips, no device; the loader keys on `quelle.art`
+  | { nr: number; art: 'intern'; quelle: { art: 'strom'; strom: number }; ausgang?: WZiel; auto?: WAuto[]; chain?: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] }
   | { nr: number; art: 'wirt'; slot: number; noten: WNote[]; ausgang?: WZiel; auto?: WAuto[]; chain?: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] }
   // 1.9 U7 (E9): an instrument rack; zones and gain_db are always written, explicit (the core's contract, arr_playback.cpp geraet_lesen / rack branch)
   | { nr: number; art: 'intern'; geraet: 'rack'; kette: number; glieder: WGlied[]; noten: WNote[]; ausgang?: WZiel; auto?: WAuto[]; chain?: WInsert[];
@@ -92,18 +96,18 @@ export type WGliedGeraet =
   | { art: 'wirt'; slot: number };
 export type WGlied = { id: string; ton: [number, number]; vel: [number, number]; kette: [number, number]; gain_db: number } & WGliedGeraet;
 // A group leads into the master or into another group (nested groups); returns always into the master
-// DJ view places (decision 5, ADR 038): a top group of a live project may lead into a DJ channel (nr 1..2 = pad/1, pad/2;
-// nr 3..6 = deck/1..deck/4); the core refuses it elsewhere
-export type WDjNr = 1 | 2 | 3 | 4 | 5 | 6;
+// Container core: a top group of a live project that sits in place N leads into the DJ output N = container A..D (deck/1, deck/2, pad/1, pad/2);
+// the core refuses it elsewhere
+export type WDjNr = 1 | 2 | 3 | 4;
 export interface WGruppe {
   nr: number; ausgang: { art: 'master' } | { art: 'gruppe'; nr: number } | { art: 'dj'; nr: WDjNr };
   chain?: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[]
 }
 // slice 4: the send taps before the fader (absent = post)
 // auto (only /3): the fader lane of the return, points [beat, dB, formcode] as on a track
-export interface WReturn extends Omit<WGruppe, 'ausgang'> { ausgang: { art: 'master' } | { art: 'dj'; nr: 1 | 2 }; pre?: true; auto?: WAuto[] }
+export interface WReturn extends Omit<WGruppe, 'ausgang'> { ausgang: { art: 'master' } | { art: 'dj'; nr: WDjNr }; pre?: true; auto?: WAuto[] }
 export interface Wiedergabe {
-  format: typeof WIEDERGABE_FORMAT | typeof WIEDERGABE_FORMAT_2 | typeof WIEDERGABE_FORMAT_3; nr: number; spuren: WSpur[]; live?: true; gruppen?: WGruppe[];
+  format: typeof WIEDERGABE_FORMAT | typeof WIEDERGABE_FORMAT_2 | typeof WIEDERGABE_FORMAT_3 | typeof WIEDERGABE_FORMAT_4; nr: number; spuren: WSpur[]; live?: true; gruppen?: WGruppe[];
   // returns (slice 3) like the groups; pm = the production master's chain, the kern's key (slice 4)
   returns?: WReturn[]; pm?: { chain: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] } }
 // slice 4c: the rack of a strip: its pooled slot and the mapping table (`stufe` = position in the chain, `param` = parameter index of the kind, `makro` 0..3)
@@ -595,6 +599,77 @@ export function uebersetze(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
   hostHaken = { host: opt.host, ohne: opt.ohneHost };
   try { return uebersetzeIntern(p, opt); } finally { hostHaken = {}; }
 }
+// The top group (no `ausgang`) a group id leads up to; undefined for an unknown id or none
+function spitze(p: Projekt, id: string | undefined): string | undefined {
+  const gl = p.gruppen ?? [];
+  for (let g = gl.find((x) => x.id === id), n = 0; g && n <= gl.length; n++) {
+    if (!g.ausgang) return g.id;
+    g = gl.find((x) => x.id === g!.ausgang!.id);
+  }
+  return undefined;
+}
+
+/** Container number 1..4 of a top group of a live project (the place that holds it); null = parked or not a live project */
+export function containerNr(p: Projekt, g: { id: string }): 1 | 2 | 3 | 4 | null {
+  return p.live === true ? platzVonGruppe(p, g.id) : null;
+}
+
+/** What feeds each container of a live project (F5): 0 empty, 1 the player (a track place), 2 the module of the arrangement engine (every other place type).
+ *  null = no places (a production project): nothing is sent. */
+export function containerQuellen(p: Projekt): [0 | 1 | 2, 0 | 1 | 2, 0 | 1 | 2, 0 | 1 | 2] | null {
+  if (p.live !== true || !p.plaetze) return null;
+  const art = (t: string): 0 | 1 | 2 => (t === 'leer' ? 0 : t === 'track' ? 1 : 2);
+  const [a, b, c, d] = p.plaetze;
+  return [art(a.typ), art(b.typ), art(c.typ), art(d.typ)];
+}
+
+// The top group that owns a return of a live project: its stored owner, else the deck or the strudel module it belongs to
+function returnEigner(p: Projekt, r: NonNullable<Projekt['returns']>[number]): string | undefined {
+  if (r.gruppe !== undefined) return r.gruppe;
+  if (r.loopdeck) return loopDeckGruppe(p, r.loopdeck.platz)?.id;
+  if (r.strudel) return strudelGruppe(p)?.id;
+  return undefined;
+}
+
+// send_ausser_modul: a send must stay inside its module. A track or group whose top group differs from the owner of the return it sends into is refused.
+function pruefeSendModule(p: Projekt, geparkt: (id: string | undefined) => boolean): void {
+  const eigner = new Map((p.returns ?? []).map((r) => [r.id, returnEigner(p, r)] as const));
+  const pruefe = (wer: string, spitzeId: string | undefined, sends: { id: string }[] | undefined): void => {
+    for (const sd of sends ?? []) {
+      const e = eigner.get(sd.id);
+      if (e !== undefined && spitzeId !== undefined && e !== spitzeId) {
+        throw new WiedergabeFehler('send_ausser_modul', `${wer} sends into the return ${sd.id}, which belongs to the module ${e}`);
+      }
+    }
+  };
+  for (const s of p.spuren) if (!geparkt(s.ausgang?.id)) pruefe(s.id, spitze(p, s.ausgang?.id), s.sends);
+  for (const g of p.gruppen ?? []) if (!geparkt(g.id)) pruefe(g.id, spitze(p, g.id), g.sends);
+}
+
+/**
+ * The loader invariants of a live playback (the core refuses these with the same reasons): `dj_doppelt` (two top groups on one DJ output) and
+ * `live_ohne_container` (a track or a return that does not end in a top group with a DJ output, or a track whose output is the production master).
+ */
+export function pruefeLiveWiedergabe(w: Wiedergabe): void {
+  const gruppen = new Map((w.gruppen ?? []).map((g) => [g.nr, g] as const));
+  const benutzt = new Set<number>();
+  for (const g of w.gruppen ?? []) {
+    if (g.ausgang.art !== 'dj') continue;
+    if (benutzt.has(g.ausgang.nr)) throw new WiedergabeFehler('dj_doppelt', `two groups lead into the DJ output ${g.ausgang.nr}`);
+    benutzt.add(g.ausgang.nr);
+  }
+  const imContainer = (ziel: { art: string; nr?: number } | undefined): boolean => {
+    for (let z = ziel, n = 0; z && n <= gruppen.size; n++) {
+      if (z.art === 'dj') return true;
+      if (z.art !== 'gruppe') return false;
+      z = gruppen.get(z.nr!)?.ausgang;
+    }
+    return false;
+  };
+  for (const s of w.spuren) if (!imContainer(s.ausgang)) throw new WiedergabeFehler('live_ohne_container', `track ${s.nr} does not play into a container`);
+  for (const r of w.returns ?? []) if (!imContainer(r.ausgang)) throw new WiedergabeFehler('live_ohne_container', `return ${r.nr} does not play into a container`);
+}
+
 function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
   if (!Number.isInteger(opt.nr) || opt.nr < 1) throw new WiedergabeFehler('nr_ungueltig', `Wiedergabe-Nummer ${opt.nr}`);
   if (p.spuren.length > MAX_SPUREN) throw new WiedergabeFehler('zu_gross', `spuren: ${p.spuren.length} > ${MAX_SPUREN}`);
@@ -602,6 +677,7 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
   let clips = 0, nZahl = 0, fxEvents = 0;
   const fxJe = new Map<string, SpurFx>();   // the effect events of the tracks that carry effect commands
   const ohneZiel = (s: Spur): WSpur => {
+    if (s.art === 'strom') return { nr: s.nr, art: 'intern', quelle: { art: 'strom', strom: s.strom! } };
     if (s.art === 'audio') {
       const cs = spurClips(s, o.vorhoeren).flatMap((c) => (c.art === 'audio' ? audioClips(c, o) : []))
         .sort((a, b) => a.start_beat - b.start_beat || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
@@ -639,7 +715,12 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
   // 1.10 (P2): Ziel je Spur; die Gruppen-Nummer, nicht die ID, steht in der Wiedergabe (der Kern kennt nur Nummern)
   const nrVon = new Map((p.gruppen ?? []).map((g) => [g.id, g.nr] as const));
   let autoPunkte = 0;
-  const spuren: WSpur[] = [...p.spuren].sort((a, b) => a.nr - b.nr).map((s): WSpur => {
+  // container core: in a live project a top group that no place holds is parked, so it and everything below it (tracks, groups) and the returns it owns are
+  // left out of the playback; their stored nr values stay as they are (the core accepts gaps)
+  const live = p.live === true;
+  const spitzeVon = (id: string | undefined): string | undefined => spitze(p, id);
+  const geparkt = (id: string | undefined): boolean => { const t = spitzeVon(id); return live && t !== undefined && platzVonGruppe(p, t) === null; };
+  const spuren: WSpur[] = [...p.spuren].filter((s) => !geparkt(s.ausgang?.id)).sort((a, b) => a.nr - b.nr).map((s): WSpur => {
     const w0 = ohneZiel(s);
     let w: WSpur = w0;
     if (opt.stummStart?.has(s.nr)) w = { ...w0, stumm_start: true };
@@ -679,24 +760,24 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
   });
   // groups, returns and the PM (slice 6: their chain lanes count with the others and go to the core, at most ARR_KLANES_MAX of them in all)
   const gruppenNr = new Map((p.gruppen ?? []).map((g) => [g.id, g.nr]));
-  const gruppenW = [...(p.gruppen ?? [])].sort((a, b) => a.nr - b.nr).map((g) => {
+  const gruppenW = [...(p.gruppen ?? [])].filter((g) => !geparkt(g.id)).sort((a, b) => a.nr - b.nr).map((g) => {
     const ziel = g.ausgang ? gruppenNr.get(g.ausgang.id) : undefined;
     if (g.ausgang && ziel === undefined) throw new WiedergabeFehler('ziel_unbekannt', `Gruppe ${g.id} zeigt auf ${g.ausgang.id}`);
-    // DJ view places (decision 6, ADR 038): derived, not stored. The top group of a live project that holds the module of slot A or B
-    // plays into pad/1 or pad/2, and one that holds a SEQ document in place N (Gruppe.seq.platz) plays into deck/N, DJ channel N + 2
-    const slotNr = g.modul?.slot ? (g.modul.slot === 'A' ? 1 : 2) : g.loopdeck ? loopDjNr(g.loopdeck) : g.seq ? g.seq.platz + 2 : 0;
-    const dj = p.live === true && ziel === undefined ? slotNr : 0;
+    // container core: the top group of a live project that sits in place N (`plaetze`) plays into container N
+    const dj = live && ziel === undefined ? (containerNr(p, g) ?? 0) : 0;
     const ausgang = dj ? { art: 'dj' as const, nr: dj as WDjNr }
       : ziel === undefined ? { art: 'master' as const } : { art: 'gruppe' as const, nr: ziel };
     return { nr: g.nr, ausgang, ...kette(g.inserts, g) };
   });
   // return automation slice 2: the fader lane of a return goes to the core as returns[].auto (the same conversion as on a track); only `fader` is legal there
-  const returnsW: WReturn[] = [...(p.returns ?? [])].sort((a, b) => a.nr - b.nr).map((r) => {
+  const returnsW: WReturn[] = [...(p.returns ?? [])].filter((r) => !(live && returnEigner(p, r) !== undefined && geparkt(returnEigner(p, r)))).sort((a, b) => a.nr - b.nr).map((r) => {
     const rl = (r.automation ?? []).filter((l) => l.ziel === 'fader');
     autoPunkte += rl.reduce((n, l) => n + l.punkte.length, 0);
     const auto = rl.map((l): WAuto => ({ ziel: 'fader', punkte: l.punkte.map((q) => [q.beat, q.wert, FORM_NR[q.form ?? 'linear']]) }));
-    // a loop deck return sounds in its deck's DJ channel (live container only); every other return goes to the master as before
-    return { nr: r.nr, ausgang: r.loopdeck && p.live === true ? { art: 'dj' as const, nr: loopDjNrVon(p, r.loopdeck.platz) } : { art: 'master' as const },
+    // a return sounds in the container of the module that owns it (live project only); a production return goes to the master as before
+    const eigner = live ? returnEigner(p, r) : undefined;
+    const rOrt = eigner !== undefined ? containerNr(p, { id: eigner }) : null;
+    return { nr: r.nr, ausgang: rOrt !== null ? { art: 'dj' as const, nr: rOrt as WDjNr } : { art: 'master' as const },
       ...(r.pre ? { pre: true as const } : {}), ...(auto.length ? { auto } : {}),
       ...kette(r.inserts, r) };
   });
@@ -710,7 +791,8 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
   if (nZahl > MAX_NOTEN) throw new WiedergabeFehler('zu_gross', `noten: ${nZahl} > ${MAX_NOTEN}`);
   if (fxEvents > MAX_FX_PUNKTE) throw new WiedergabeFehler('zu_gross', `after unrolling ${fxEvents} pitch and level events (at most ${MAX_FX_PUNKTE})`);
   const routing = spuren.some((s) => s.ausgang) || (p.gruppen ?? []).length > 0;
-  const hatReturns = (p.returns ?? []).length > 0;                          // slice 3: returns need /2 (the kern refuses them in /1)
+  if (returnsW.length > MAX_RETURNS) throw new WiedergabeFehler('zu_gross', `returns: ${returnsW.length} > ${MAX_RETURNS}`);
+  const hatReturns = returnsW.length > 0;                          // slice 3: returns need /2 (the kern refuses them in /1)
   // Paket 1.13: ein gewarpter Clip braucht /2 (der Kern lehnt warp in /1 ab); gruppen steht dann immer da, auch leer
   const gewarpt = spuren.some((sp) => sp.art === 'audio' && sp.clips.some((c) => c.warp !== undefined));
   if (gewarpt && zaehleWarpMarker(p, opt) > MAX_WARP_PUNKTE) throw new WiedergabeFehler('zu_gross', `warp-marker: > ${MAX_WARP_PUNKTE}`);
@@ -722,13 +804,19 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
   const huellen = spuren.some((sp) => sp.art === 'audio' && sp.clips.some((c) => c.gain_hk !== undefined));   // 1.12 slice 5: gain_hk is /2 only
   // bend and pegel are /2 only
   const fxDa = spuren.some((sp) => sp.art === 'intern' && sp.geraet === 'bk' && (sp.bend !== undefined || sp.pegel !== undefined));
+  if (live) {                                                              // a live project is always /4 with the head flag `live`
+    pruefeSendModule(p, geparkt);
+    const w4: Wiedergabe = { format: WIEDERGABE_FORMAT_4, nr: opt.nr, spuren, live: true, gruppen: gruppenW,
+      ...(hatReturns ? { returns: returnsW } : {}), ...(pmW ? { pm: pmW } : {}) };
+    pruefeLiveWiedergabe(w4);
+    return w4;
+  }
   // ohne Routing, Warp und Lane byteweise die alte Datei (AK3)
   if (!routing && !gewarpt && !automatisiert && !hatReturns && !eingefuegt && !huellen && !hatRack && !stummig && !fxDa) {
     return { format: WIEDERGABE_FORMAT, nr: opt.nr, spuren };
   }
   const retLane = returnsW.some((r) => r.auto !== undefined);              // return automation slice 2: a return lane needs /3 (the version gate)
   return { format: retLane ? WIEDERGABE_FORMAT_3 : WIEDERGABE_FORMAT_2, nr: opt.nr, spuren,
-    ...(p.live === true ? { live: true as const } : {}),   // the head flag of the live container (decision 5); absent otherwise
     gruppen: gruppenW,
     ...(hatReturns ? { returns: returnsW } : {}),
     ...(pmW ? { pm: pmW } : {}) };

@@ -18,7 +18,8 @@ namespace sw = cypherdj::stellwerk;
 constexpr int N = 256;
 constexpr double PI = 3.14159265358979323846;
 // mixer channel indices
-constexpr int DECK1 = 0, ERZ1 = 4, ERZ2 = 5, ERZ4 = 7, ERZ8 = 11, PAD1 = 12, PAD2 = 13, BUS1 = 14, BUS2 = 15;
+// K9: four containers (deck/1, deck/2, pad/1, pad/2 = 0..3) and four buses (bus/1..4 = 4..7); the former erz/* strips are gone
+constexpr int DECK1 = 0, DECK2 = 1, PAD1 = 2, PAD2 = 3, BUS1 = 4, BUS2 = 5, BUS3 = 6, BUS4 = 7;
 
 inline const char* kname(int k) { return cdj::Mixer::kanal_name(k); }
 

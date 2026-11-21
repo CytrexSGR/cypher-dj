@@ -44,7 +44,7 @@ test('T2.1 model: refusals (name, extra fields, freeze, device parameter, /1 fil
   assert.notEqual(pruefeFehler(mitFreeze), null, 'freeze on a kit track');
   const alt = specProjekt(); alt.spuren[1].geraet = kit();   // still format /1
   const f1 = pruefeFehler(alt);
-  assert.ok(f1 !== null && /cypherdj-projekt\/2/.test(f1), `/1 refuses the kit device: ${f1}`);
+  assert.ok(f1 !== null && /cypherdj-projekt\/3/.test(f1), `/1 refuses the kit device: ${f1}`);
   assert.equal(MAX_KIT_GERAETE, 8);
   const p = zwei(); p.spuren = [];
   for (let i = 1; i <= 9; i += 1) {

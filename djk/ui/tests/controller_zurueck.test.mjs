@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ReglerZurueck, laneTreibt } from '../areas/controller/zurueck.ts';
+import { BK_LIVE_SLOTS } from '../project/model.ts';
 
 const bk = (id, nr, extra = {}) => ({ id, nr, geraet: { art: 'intern', name: 'bk', graph: 'x', parameter: {} }, clips: [], ...extra });
 const projekt = (spuren, rev = 7) => ({ rev, spuren });
@@ -87,12 +88,17 @@ test('rows without a bk track (slot beyond the tracks), channel rows, other rows
   assert.equal(y.aendern.length, 0);
 });
 
-test('the ninth bk track has no core row: its slot gives nothing even if a row name is sent', async () => {
-  const spuren = Array.from({ length: 9 }, (_, i) => bk(`s${i + 1}`, i + 1));
+test('a slot beyond BK_LIVE_SLOTS has no core row: it gives nothing even if a row name is sent; the 16th bk track writes back', async () => {
+  const spuren = Array.from({ length: BK_LIVE_SLOTS + 1 }, (_, i) => bk(`s${i + 1}`, i + 1));
   const x = bau(projekt(spuren));
-  x.z.ereignis(ev('spur/9/bk/1', 0.9));
+  x.z.ereignis(ev(`spur/${BK_LIVE_SLOTS + 1}/bk/1`, 0.9));
   await warte();
   assert.equal(x.aendern.length, 0);
+  x.z.ereignis(ev(`spur/${BK_LIVE_SLOTS}/bk/1`, 0.9));
+  await warte();
+  assert.equal(BK_LIVE_SLOTS, 16);
+  assert.equal(x.aendern.length, 1);
+  assert.equal(x.aendern[0].d.befehle[0].spur_id, `s${BK_LIVE_SLOTS}`);
 });
 
 test('the project closes while the value waits: nothing is written; a refused change is logged and does not throw', async () => {

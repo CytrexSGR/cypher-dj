@@ -46,7 +46,8 @@ const fremdSpur = () => ({ id: 's3', nr: 3, name: 'Arranged', art: 'instrument',
   clips: [{ id: 'c3', art: 'midi', name: 'A', start_beat: 8, laenge_beats: 16, noten: [] }, { id: 'c4', art: 'midi', name: 'B', start_beat: 32, laenge_beats: 16, noten: [] }] });
 const projekt = (spuren = [kitSpur(), bkSpur()], extra = {}) => ({
   live: true, rev: 7, spuren: [...spuren, { id: 'sx', nr: 9, name: 'Other', art: 'instrument', ausgang: { art: 'gruppe', id: 'g_modul' }, clips: [] }],
-  gruppen: [{ id: 'g_modul', name: 'M', modul: { slot: 'A' } }, { id: 'g_seq', name: 'SEQ 2', seq: { schema: 2, platz: 2 } }], ...extra,
+  gruppen: [{ id: 'g_modul', name: 'M', modul: {} }, { id: 'g_seq', name: 'SEQ 2', seq: { schema: 2 } }],
+  plaetze: [{ typ: 'track' }, { typ: 'seq', gruppe: 'g_seq' }, { typ: 'leer' }, { typ: 'leer' }], ...extra,
 });
 const INFO_BK = { art: 'bk', regler: [{ nr: 3, name: 'Cutoff', vorgabe: 0.5 }, { nr: 4, name: 'Resonance', vorgabe: 0.3 }], klaenge: [] };
 const INFO_KIT = { art: 'kit', regler: [], klaenge: [{ ton: 36, name: 'Kick' }, { ton: 38, name: 'Snare' }] };
@@ -58,6 +59,9 @@ test('seqAnsicht: no deck on the place, no project, or a deck of another place i
   assert.deepEqual(seqAnsicht(null, 2), leer);
   assert.deepEqual(seqAnsicht({ live: true }, 2), leer, 'a project without groups');
   assert.deepEqual(seqAnsicht(projekt(), 3), leer, 'the deck sits on place 2');
+  assert.deepEqual(seqAnsicht(projekt(undefined, { plaetze: [{ typ: 'leer' }, { typ: 'leer' }, { typ: 'leer' }, { typ: 'leer' }] }), 2), leer, 'a place that is not typed seq shows no deck, whatever group exists');
+  assert.deepEqual(seqAnsicht(projekt(undefined, { plaetze: [{ typ: 'seq', gruppe: 'g_seq' }, { typ: 'leer' }, { typ: 'leer' }, { typ: 'leer' }] }), 2), leer, 'the place table, not the group, says where the deck sits');
+  assert.equal(seqAnsicht(projekt(undefined, { plaetze: [{ typ: 'seq', gruppe: 'g_seq' }, { typ: 'leer' }, { typ: 'leer' }, { typ: 'leer' }] }), 1).gruppe_id, 'g_seq', 'the deck follows the place table to place 1');
   const a = seqAnsicht(projekt(), 2);
   assert.equal(a.vorhanden, true); assert.equal(a.gruppe_id, 'g_seq');
   assert.deepEqual(a.folgen.map((f) => f.spur_id), ['s1', 's2'], 'the track of another group is not a pattern');
@@ -550,13 +554,14 @@ test('the page draws the nodes from the live project on every live change, and r
   assert.ok(app.indexOf('baueSeqPlaetze();') < app.indexOf('\nbindePlaetze();'), 'the nodes exist before the layout is applied');
 });
 
-test('a place switch away from SEQ asks whether the place holds a deck; the place head counts the patterns', () => {
+test('a place switch away from SEQ posts /plaetze and the server parks the deck; the place head counts the patterns', () => {
   const b = lies('slots_view.js');
-  assert.match(b, /wechsel\(plaetzeLayout, platz, b\.dataset\.platzTyp, still\(plaetzeLayout, platz, zustand\.regler\), seqAnsicht\(live\.projekt, platz\)\.vorhanden\)/);
-  assert.match(b, /if \(r\.parken && !\(await parkeDeck\(platz\)\)\)/, 'a switch away from a SEQ deck parks it (mutes its group) first');
-  assert.match(b, /if \(typ === 'seq'\) \{[^\n]*return \{ typ, folgen: a\.vorhanden \? a\.folgen\.length : undefined \}/, 'platzZustand gives the pattern count');
-  assert.match(b, /ordneSeqStudio\(plaetzeLayout\);/);
-  assert.match(b, /\$\(`section\.seqplatz\[data-seq="\$\{key\.slice\(4\)\}"\]`\)/);
+  assert.match(b, /const parkt = \(platz\) => \['seq', 'loops'\]\.includes\(typVon\(zustand\.plaetze, platz\)\);/, 'a SEQ place is parked by the server, the silence rule does not hold it');
+  assert.match(b, /if \(!s\.still && !parkt\(platz\)\)/);
+  assert.match(b, /fetch\('\/plaetze', \{ method: 'POST'/);
+  assert.match(b, /const a = seqAnsicht\(live\.projekt, platz\); return `SEQ \$\{platz\} · \$\{a\.vorhanden \? `\$\{a\.folgen\.length\} pattern/, 'the head counts the patterns');
+  assert.match(b, /ordneSeqStudio\(typen\(\)\);/);
+  assert.match(b, /seq: \(n\) => \$\(`section\.seqplatz\[data-seq="\$\{n\}"\]`\)/);
 });
 
 test('the SEQ button sits in each of the four place type rows', () => {
@@ -571,22 +576,22 @@ test('the CSS: the node scrolls, cells take their width from the grid, accent, t
   assert.match(css, /body\.studio \.seqplatz/); assert.match(css, /body\.studio #pult\[data-seq-n="2"\]/);
 });
 
-test('the Studio view shows the deck strip of every SEQ place after L2: the existing node moves, nothing is copied', () => {
+test('the Studio view shows the strip of place 1 and 2 while the place holds something: the existing node moves after the pad strips, nothing is copied', () => {
   const b = lies('slots_view.js');
-  assert.match(b, /wendeStudioZuegeAn\(plaetzeLayout, zugKnoten\)/);
-  assert.match(b, /\$\('#mischer-unten'\)\.append\(zugKnoten\(key\)\)/);
-  assert.doesNotMatch(b.slice(b.indexOf('function ordneStudioZuege'), b.indexOf('function platzZustand')), /cloneNode|innerHTML|createElement/);
+  const f = b.slice(b.indexOf('function zeigeStudioZuege'), b.indexOf('// The one entry point'));
+  assert.match(f, /\$\('#mischer-unten'\)\.append\(z\)/);
+  assert.match(f, /z\.dataset\.studioZug = '1'/);
+  assert.doesNotMatch(f, /cloneNode|innerHTML|createElement/);
   assert.match(css, /body\.studio \.zug\[data-deck\]:not\(\[data-studio-zug\]\) \{ display: none !important; \}/);
   assert.match(css, /body\.studio #pult \{ --mu-breite: min\(calc\(\(5 \+ var\(--seq-n, 0\)\) \* var\(--zug\) \+ 36px\), 42vw\); \}/);
   assert.match(knoten, /style\.setProperty\('--seq-n', String\(i\)\)/);
 });
 
-test('an own SEQ write lets the places re-evaluate, and the page follows a deck the server holds on a place that is not typed SEQ', () => {
+test('an own SEQ write lets the places re-evaluate; the place table of /lage is the only truth, the page follows no deck of its own', () => {
   assert.match(knoten, /zeigePlaetzeSpaeter\(\)/);
   const b = lies('slots_view.js');
-  assert.match(b, /folgeServer\(plaetzeLayout, PLAETZE\.filter\(deckAktiv\)/);
-  assert.match(b, /function zeigePlaetze\(\) \{\s*if \(folgeDemServer\(\)\) return;/);
-  assert.match(b, /melde\(`Place \$\{platz\} shows its SEQ deck`\)/);
+  assert.doesNotMatch(b, /folgeServer|folgeDemServer|deckAktiv/, 'a deck on a place not typed seq is not followed');
+  assert.match(lies('stream.js'), /case 'proj':[^\n]*holeLage\(\)/, 'the proj event reads /lage again');
   assert.match(lies('live_view.js'), /export function zeichneLive\(\) \{\s*zeigePlaetzeSpaeter\(\);/);
 });
 
@@ -1579,7 +1584,8 @@ test('the DOM: "hide empty" hides the lanes empty at the press, says how many, a
 });
 
 test('deckSpielSchritt: PLAY on a stopped container plays this deck alone, on a running one it joins; STOP mutes while another plays, else stops', () => {
-  const p = (m1, m2) => ({ gruppen: [{ id: 'ga', seq: { platz: 1 }, mute: m1 }, { id: 'gb', seq: { platz: 2 }, mute: m2 }, { id: 'gx', mute: false }] });
+  const p = (m1, m2) => ({ gruppen: [{ id: 'ga', seq: {}, mute: m1 }, { id: 'gb', seq: {}, mute: m2 }, { id: 'gx', mute: false }],
+    plaetze: [{ typ: 'seq', gruppe: 'ga' }, { typ: 'seq', gruppe: 'gb' }, { typ: 'leer' }, { typ: 'leer' }] });
   const stumm = (id, mute) => ({ befehl: 'gruppenspur_aendern', gruppe_id: id, mute });
   assert.deepEqual(deckSpielSchritt(p(false, false), 1, true, false), { befehle: [stumm('gb', true)], transport: 'start' }, 'the other deck is muted, no other group');
   assert.deepEqual(deckSpielSchritt(p(true, true), 1, true, false), { befehle: [stumm('ga', false)], transport: 'start' });
@@ -1619,13 +1625,12 @@ test('the DOM: PLAY on a stopped container mutes the other deck and starts the t
   merkeArr({ status: 0, projekt_beat: 0 });
 });
 
-test('wechsel: a SEQ place with a deck switches away, open or not, and says the deck is to be parked; without a deck nothing is parked', async () => {
-  const { wechsel } = await import('../public/slots.js');
-  const L = ['seq', 'seq', 'strudel', 'loops'];
-  assert.deepEqual(wechsel(L, 1, 'track', true, true), { ok: true, layout: ['track', 'seq', 'strudel', 'loops'], parken: true });
-  assert.deepEqual(wechsel(L, 1, 'track', true, false), { ok: true, layout: ['track', 'seq', 'strudel', 'loops'] });
-  assert.deepEqual(wechsel(L, 1, 'track', { still: false, text: 'deck/1 is open' }, true), { ok: true, layout: ['track', 'seq', 'strudel', 'loops'], parken: true }, 'an open channel does not hold a deck that is parked');
-  assert.equal(wechsel(L, 1, 'track', { still: false, text: 'deck/1 is open' }, false).grund, 'offen', 'a SEQ place without a deck still needs silence');
-  assert.equal(wechsel(L, 3, 'track', { still: false, text: 'erz/1 is open' }, false).grund, 'offen');
-  assert.equal(wechsel(L, 1, 'strudel', true, true).grund, 'doppelt', 'Strudel sits in place 3');
+test('the page asks the silence rule for a place that is not parked: a SEQ or loops place switches away open or not, the others need silence', async () => {
+  const { still } = await import('../public/slots.js');
+  const P = [{ typ: 'seq', gruppe: 'g' }, { typ: 'track' }, { typ: 'strudel', gruppe: 's' }, { typ: 'loops', gruppe: 'l' }];
+  const offen = { 'deck/1/trim': 0, 'deck/1/fader': 0, 'deck/2/trim': 0, 'deck/2/fader': 0 };
+  assert.equal(still(P, 1, offen).still, false, 'the model says open ...');
+  assert.equal(still(P, 2, offen).still, false);
+  const b = lies('slots_view.js');
+  assert.match(b, /frei = s\.still \|\| parkt\(platz\)/, '... and the page lets a parked type through: place 1 may switch, place 2 may not');
 });

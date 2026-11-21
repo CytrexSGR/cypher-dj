@@ -219,7 +219,7 @@ int main() {
       }
       for (const cdj::Ereignis& e : x.ev)
         if (e.art == cdj::Ereignis::INS_GR && std::string(e.pfad) == "ins/komp/1") erg.gr = std::max(erg.gr, e.wert);
-      for (const cdj::Ereignis& e : x.alle(cdj::Ereignis::PEGEL, "erz/1")) erg.erz_pegel = std::max(erg.erz_pegel, e.pegel[0]);
+      for (const cdj::Ereignis& e : x.alle(cdj::Ereignis::PEGEL, "strom/1")) erg.erz_pegel = std::max(erg.erz_pegel, e.pegel[0]);
       erg.pm = x.pm_l;
       delete f;
       return erg;
@@ -248,7 +248,7 @@ int main() {
     const int64_t o_erz = onset(ref.pm, erz.pm), o_zeile = onset(ref.pm, zeile.pm), o_rueck = onset(ref.pm, rueck.pm);
     std::printf("kernel erz/1: click on kernel sample %lld; onset of the reduction: erz/1 key %lld, track key %lld (lag %lld samples); reduction erz/1 %.2f dB, track %.2f dB\n", static_cast<long long>(ct),
                 static_cast<long long>(o_erz), static_cast<long long>(o_zeile), static_cast<long long>(o_erz - o_zeile), erz.gr, zeile.gr);
-    std::printf("kernel erz/1 return share (plan E6): a host return of level 0.5 (%.2f dBFS) into erz/1: key buffer peak %.4f (with the Strudel event instead: %.4f), reduction %.2f dB (the key lacks the return); meter of erz/1 with the return %.1f dB, without %.1f dB\n",
+    std::printf("kernel erz/1 return share (plan E6): a host return of level 0.5 (%.2f dBFS) into erz/1: key buffer peak %.4f (with the Strudel event instead: %.4f), reduction %.2f dB (since container core K4 the key contains the return); meter of erz/1 with the return %.1f dB, without %.1f dB\n",
                 20.0 * std::log10(0.5), rueck.key_spitze, erz.key_spitze, rueck.gr, rueck.erz_pegel, ref.erz_pegel);
     PRUEF(ct > 100000);                              // the click was found
     PRUEF(o_zeile >= ct && o_zeile < ct + 50);       // positive control: the track key ducks at the click
@@ -257,7 +257,7 @@ int main() {
     PRUEF(rueck.erz_pegel > ref.erz_pegel + 6.0f);   // positive control: the host return really reached erz/1 (the meter sees it)
     PRUEF(erz.key_spitze > 0.1f);                    // positive control of the key buffer reading: the Strudel event is in it
     PRUEF(ref.gr < 0.5f);                            // negative control: an erz/1 key nobody plays does not duck
-    PRUEF(rueck.gr < 0.5f && rueck.key_spitze == 0.0f && o_rueck < 0);   // the host return is not in the key: no reduction, the key buffer is silent, the output equals the silent run
+    PRUEF(rueck.gr > 6.0f && rueck.key_spitze > 0.1f);   // container core K4: host returns are added into the stream buffer before the arrangement, so the return is part of the key (this reverses plan E6)
   }
 
   PRUEF_ENDE();

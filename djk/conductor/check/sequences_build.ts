@@ -107,30 +107,30 @@ function k1OhneHand(): Z[] {
 }
 
 // Negativ-Kontrolle der Abnahme: Stufe 1, Plan macht ausschließlich KI-Spur leiser → direkt angenommen (Leitstand mit
-// --ki-spur deck/3). Dazu zwei Gegenproben aus derselben KI-Spur: lauter und EQ → Vorschlag.
+// --ki-spur pad/1: the KI track is container C, which plays deck 3). Dazu zwei Gegenproben aus derselben KI-Spur: lauter und EQ → Vorschlag.
 function kiSpurLeiser(): Z[] {
   return [
-    { t: 'notiz', text: 'Leitstand mit KI-Spur deck/3 (§4.7 /k/ki/spur)', leitstand_args: ['--ki-spur', 'deck/3'] },
+    { t: 'notiz', text: 'Leitstand mit KI-Spur pad/1 (§4.7 /k/ki/spur)', leitstand_args: ['--ki-spur', 'pad/1'] },
     sende(0, ['/k/set/neu', ',hsd', 1, 'pruefstand', 128.0]),
     sende(1, ['/k/deck/laden', ',hsisdii', 2, 'pruefstand', 3, 'f0000000000000a1', 128.0, 1, 0]),
     erwarte(1, 4, q(2, 'pruefstand', 3)),
     sende(6, ['/k/deck/start', ',hssssiddi', 3, 'pruefstand', '', '', '', 3, 8.0, 0.0, 0]),
-    hand(9, 'deck/3/fader', 0.0),
-    hand(10, 'deck/3/fader', 1.0),
-    erwarte(41.9, 42.2, ['/e/halter', ',sshd', 'deck/3/fader', 'frei', null, null], '§7.3 Punkt 4: frei nach 32 Beats'),
+    hand(9, 'pad/1/fader', 0.0),
+    hand(10, 'pad/1/fader', 1.0),
+    erwarte(41.9, 42.2, ['/e/halter', ',sshd', 'pad/1/fader', 'frei', null, null], '§7.3 Punkt 4: frei nach 32 Beats'),
     ws(12, 'mcp', 'hallo', { rolle: 'mcp', name: 'laeufer-mcp', protokoll: 1 }),
-    rpc(44, 1, 'plan_einreichen', { grund: 'eigene Spur leiser', teile: [{ regler: 'deck/3/fader', art: 'rampe', ab_takt: 13, dauer_takte: 2, nach: -20 }] }),
+    rpc(44, 1, 'plan_einreichen', { grund: 'eigene Spur leiser', teile: [{ regler: 'pad/1/fader', art: 'rampe', ab_takt: 13, dauer_takte: 2, nach: -20 }] }),
     antwort(44, 1, { status: 'angenommen' }),
     erwarte(44, 45, q(null, 'cypher', 1), 'direkt an den Kern (§10 Stufe 1, Ausnahme)'),
     erwarte(48, 48.2, ['/q', ',hsihds', null, 'cypher', 2, S(48), null, '']),
     erwarte(56, 56.2, ['/q', ',hsihds', null, 'cypher', 3, S(56), null, '']),
-    wert(56.5, 'deck/3/fader', -20.0, 0.01),
-    rpc(45, 2, 'plan_einreichen', { grund: 'eigene Spur lauter', teile: [{ regler: 'deck/3/fader', art: 'setze', ab_takt: 16, nach: -3 }] }),
+    wert(56.5, 'pad/1/fader', -20.0, 0.01),
+    rpc(45, 2, 'plan_einreichen', { grund: 'eigene Spur lauter', teile: [{ regler: 'pad/1/fader', art: 'setze', ab_takt: 16, nach: -3 }] }),
     antwort(45, 2, { status: 'vorgeschlagen' }),
-    rpc(46, 3, 'plan_einreichen', { grund: 'EQ an der eigenen Spur', teile: [{ regler: 'deck/3/eq/tief', art: 'setze', ab_takt: 16, nach: -10 }] }),
+    rpc(46, 3, 'plan_einreichen', { grund: 'EQ an der eigenen Spur', teile: [{ regler: 'pad/1/eq/tief', art: 'setze', ab_takt: 16, nach: -10 }] }),
     antwort(46, 3, { status: 'vorgeschlagen' }),
     nicht(45.5, 70, q(null, 'cypher', 1), 'Vorschläge erreichen den Kern nicht'),
-    wert(64, 'deck/3/eq/tief', 0.0, 0.0),
+    wert(64, 'pad/1/eq/tief', 0.0, 0.0),
   ];
 }
 
@@ -208,7 +208,7 @@ function verriegelung(): Z[] {
   const hs = (id: string, x: Z) => ({ ...H2, id, ...x });
   const z = aufbau(true, [H2, hs('h3', { urteil: 'nicht_sync' }), hs('h4', { urteil: 'zu_laut' }), hs('h5', { bpm: 130.0 }),
     hs('h6', { gueltig_bis_beat: 5.0 }), hs('h7', { quell_von: 300.0, quell_bis: 310.0 }),
-    hs('h8', { inhalt: 'f0000000000000b2/128000_r2' }), hs('h9', { kanal: 'deck/3', deck: 3 })]);
+    hs('h8', { inhalt: 'f0000000000000b2/128000_r2' }), hs('h9', { kanal: 'pad/1', deck: 3 })]);
   const offen = (h: string) => ({ hoerschein: h, grund: 'B auf', teile: [{ regler: 'deck/2/fader', art: 'setze', ab_takt: 30, nach: -10 }] });
   const verr = (beat: number, id: number, parameter: unknown, grund: string) => [
     rpc(beat, id, 'plan_einreichen', parameter),

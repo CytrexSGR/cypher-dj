@@ -25,7 +25,7 @@ function welt(): Welt {
 }
 
 function annahme(w: Welt, stufe = 1, mutationen: string[] = []): Annahme {
-  const a = new Annahme(w.u, { stufe, kiSpur: ['deck/3'], schwellen: { hoerbarDb: -26, tiefOffenDb: -12 }, maxStretcher: 4, mutationen });
+  const a = new Annahme(w.u, { stufe, kiSpur: ['pad/1'], schwellen: { hoerbarDb: -26, tiefOffenDb: -12 }, maxStretcher: 4, mutationen });
   for (const [adresse, felder] of [
     ['/e/geladen', { deck: 1, material_id: 'f0000000000000a1', basis_bpm: 128, fassung: 1, mit_stems: 0, sample: 0 }],
     ['/e/geladen', { deck: 2, material_id: 'f0000000000000b2', basis_bpm: 128, fassung: 1, mit_stems: 0, sample: 0 }],
@@ -33,7 +33,7 @@ function annahme(w: Welt, stufe = 1, mutationen: string[] = []): Annahme {
       beats_bis_ende: 200, faktor: 1, vorlauf_ms: 0, hoerweg: 0, stretcher_fuell: -1, versatz_intern_ms: 0,
       keylock_unterlauf: 0, keylock_aufgegeben: 0 }],
     ['/e/regler', { pfad: 'deck/1/fader', wert: 0, halter: 'frei', sample: 0, beat: 0 }],
-    ['/e/regler', { pfad: 'deck/3/fader', wert: -6, halter: 'frei', sample: 0, beat: 0 }],
+    ['/e/regler', { pfad: 'pad/1/fader', wert: -6, halter: 'frei', sample: 0, beat: 0 }],
   ] as Array<[string, Felder]>) {
     a.spiegel.aufnehmen({ adresse, felder });
     w.journal.push({ typ: adresse, von: 'kern', daten: felder });
@@ -64,9 +64,9 @@ test('Stufe 1: Einreichung wird Vorschlag, kein /k/teil; LED blinkt, Vorschlag-K
 
 test('Negativ-Kontrolle: nur KI-Spur leiser geht auf Stufe 1 direkt an den Kern, Quelle cypher, Politik 1', () => {
   const w = welt(); const a = annahme(w);
-  const e = a.einreichen({ grund: 'eigene Spur leiser', teile: [{ regler: 'deck/3/fader', art: 'rampe', ab_takt: 9, dauer_takte: 2, nach: -20 }] });
+  const e = a.einreichen({ grund: 'eigene Spur leiser', teile: [{ regler: 'pad/1/fader', art: 'rampe', ab_takt: 9, dauer_takte: 2, nach: -20 }] });
   assert.equal(e.status, 'angenommen');
-  assert.deepEqual(teile(w).map((g) => [g.felder.quelle, g.felder.pfad, g.felder.politik]), [['cypher', 'deck/3/fader', 1]]);
+  assert.deepEqual(teile(w).map((g) => [g.felder.quelle, g.felder.pfad, g.felder.politik]), [['cypher', 'pad/1/fader', 1]]);
 });
 
 test('Annahme per Taste vor dem Verfall: Teile gehen mit Quelle cypher an den Kern', () => {
@@ -193,15 +193,15 @@ test('plan_abbrechen: eigener Plan per /k/abbruch mit Quelle cypher; fremder Pla
 });
 
 test('Positivliste: leiser zählt gegen das Leiseste, was angenommene Pläne am Regler schon vorhaben', () => {
-  // gefunden 2026-09-23 mit check/sequences/ki_spur_leiser.jsonl: nach „deck/3 auf −20“ ging „deck/3 auf −3“ direkt durch,
+  // gefunden 2026-09-23 mit check/sequences/ki_spur_leiser.jsonl: nach „pad/1 auf −20“ ging „pad/1 auf −3“ direkt durch,
   // weil −3 unter dem Ist-Wert 0 dB bei der Einreichung lag, aber über den −20, auf denen der Regler dann steht
   const w = welt(); const a = annahme(w);
-  a.spiegel.aufnehmen({ adresse: '/e/regler', felder: { pfad: 'deck/3/fader', wert: 0, halter: 'frei', sample: 0, beat: 19 } });
-  const e1 = a.einreichen({ grund: 'leiser', teile: [{ regler: 'deck/3/fader', art: 'rampe', ab_takt: 9, dauer_takte: 2, nach: -20 }] });
+  a.spiegel.aufnehmen({ adresse: '/e/regler', felder: { pfad: 'pad/1/fader', wert: 0, halter: 'frei', sample: 0, beat: 19 } });
+  const e1 = a.einreichen({ grund: 'leiser', teile: [{ regler: 'pad/1/fader', art: 'rampe', ab_takt: 9, dauer_takte: 2, nach: -20 }] });
   assert.equal(e1.status, 'angenommen');
-  const e2 = a.einreichen({ grund: 'lauter', teile: [{ regler: 'deck/3/fader', art: 'setze', ab_takt: 12, nach: -3 }] });
+  const e2 = a.einreichen({ grund: 'lauter', teile: [{ regler: 'pad/1/fader', art: 'setze', ab_takt: 12, nach: -3 }] });
   assert.equal(e2.status, 'vorgeschlagen');
-  const e3 = a.einreichen({ grund: 'noch leiser', teile: [{ regler: 'deck/3/fader', art: 'setze', ab_takt: 13, nach: -30 }] });
+  const e3 = a.einreichen({ grund: 'noch leiser', teile: [{ regler: 'pad/1/fader', art: 'setze', ab_takt: 13, nach: -30 }] });
   assert.equal(e3.status, 'angenommen'); // Negativ-Kontrolle: unter −20 bleibt es leiser
 });
 

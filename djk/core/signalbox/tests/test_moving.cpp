@@ -219,7 +219,7 @@ int paket_senden(Stellwerk& sw, SimUhr& uhr, const std::vector<Soll>& soll, size
 }  // namespace
 
 FALL(maximalprojekt_hat_381_regler) {
-  PRUEFE_GLEICH(maximalprojekt_oeffnen().size(), 381);
+  PRUEFE_GLEICH(maximalprojekt_oeffnen().size(), 381 + 4 * 51);   // container core K6: returns 5..8 add 51 rows each (32 track sends, 8 group sends, 11 return rows)
   PRUEFE(maximalprojekt_oeffnen().size() > static_cast<size_t>(MAX_TEILE));   // the whole point: it does not fit in one go
 }
 

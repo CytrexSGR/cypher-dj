@@ -1,6 +1,6 @@
 // SEQ deck v2 (spec 2026-11-14-seq-deck-design, sections 2 to 4): the deck marker of a group, the view descriptor of a MIDI clip, the reader
 // conversion of the v1 document and the helpers that list the patterns of a deck.
-// A SEQ deck is a top group of the live container (`Gruppe.seq = {schema: 2, platz}`); a pattern is an instrument track that plays into the group,
+// A SEQ deck is a top group of the live container (`Gruppe.seq = {schema: 2}`; its place is `Projekt.plaetze`); a pattern is an instrument track that plays into the group,
 // with one MIDI clip; the lanes are a view on that clip's notes and envelopes, described by `MidiClip.seq` (`SeqSicht`). The descriptor holds
 // no music. This file holds the types and the pure checks of one marker and one descriptor (shape and limits, no project knowledge); the checks
 // that need the project (live flag, places, nesting) are in model.ts.
@@ -17,7 +17,7 @@ export const SEQ_STUFEN_MAX = 64;     // steps of the `zufall` shape (the same l
 
 // lpb, ticks (task 24): the effect frame (rows per beat, effect ticks per row) of the patterns that came from a tracker section with effect commands
 // or sample slots; absent = the project defaults (4 and 6), never written with a default. The live container has no tracker marker to carry them.
-export interface SeqDeck { schema: 2; platz: 1 | 2 | 3 | 4; lpb?: number; ticks?: number }   // later slices add `tonart` and nothing else
+export interface SeqDeck { schema: 2; lpb?: number; ticks?: number }   // later slices add `tonart` and nothing else
 
 export type SeqForm = {
   art: typeof SEQ_FORMEN[number]; von: number; bis: number; phase?: number; saat?: number; stufen?: number;
@@ -57,9 +57,8 @@ function schluessel(o: Record<string, unknown>, wo: string, pflicht: string[], o
 export function seqPruefung(x: unknown): Urteil | null {
   try {
     if (!istObjekt(x)) return ungueltig('seq: object expected');
-    schluessel(x, 'seq', ['schema', 'platz'], ['lpb', 'ticks']);
+    schluessel(x, 'seq', ['schema'], ['lpb', 'ticks']);
     if (x.schema !== 2) ungueltig('seq.schema: 2 expected');
-    if (!ganzIn(x.platz, 1, 4)) ungueltig('seq.platz: integer 1..4 expected');
     if ('lpb' in x && !LPB_WERTE.includes(x.lpb as number)) ungueltig(`seq.lpb: one of ${LPB_WERTE.join(' ')} expected`);
     if ('ticks' in x && !ganzIn(x.ticks, TICKS_MIN, TICKS_MAX)) ungueltig(`seq.ticks: integer ${TICKS_MIN}..${TICKS_MAX} expected`);
     return null;
@@ -168,8 +167,11 @@ export function seqSichtPruefung(x: unknown): Urteil | null {
 export const seqRegion = (p: Projekt): number => liveBeats(takteProLive(p.taktart));
 export const seqLaengeOk = (p: Projekt, laenge: number): boolean => Math.abs(laenge - seqRegion(p)) < 1e-9 || Math.abs(laenge - SEQ_BEATS) < 1e-9;
 
-// The group of place `platz` that holds a SEQ deck, if any.
-export const seqGruppe = (p: Projekt, platz: number): Gruppe | undefined => (p.gruppen ?? []).find((g) => g.seq?.platz === platz);
+// The group of place `platz` (1..4 = container A..D) that holds a SEQ deck, if any.
+export const seqGruppe = (p: Projekt, platz: number): Gruppe | undefined => {
+  const e = p.plaetze?.[platz - 1];
+  return e && e.typ === 'seq' ? (p.gruppen ?? []).find((g) => g.id === e.gruppe && g.seq) : undefined;
+};
 
 // The patterns of a deck: every track that plays into the group, in track order. `clip` is the track's only clip when that is a MIDI clip, else null.
 // `editierbar` is the rule of D8: an instrument track whose clips are none (an empty pattern) or exactly one MIDI clip from beat 0 over the whole

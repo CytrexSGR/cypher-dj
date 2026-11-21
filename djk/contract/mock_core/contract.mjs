@@ -3,6 +3,7 @@
 // gegen den Vertragstext und gegen djk/contract/osc.json ab (tests/contract.test.mjs).
 
 import { INSERT_REGLER_ZEILEN } from './insert_controls.mjs';
+import { pultContainerPfad, pultBusPfad, pultBkN, pultStroeme } from '../pult.ts';   // container core V1: the one table of the containers
 
 export const PROTOKOLL = 1;
 export const KERN_VERSION = 'attrappe-13.1';
@@ -50,20 +51,16 @@ export const BEFEHLE = {
   '/k/lernen': f('hsi', 'id quelle an'),
   '/k/live/tasten': f('hsi', 'id quelle strom'),
   '/k/latenz': f('hssi', 'id quelle ziel samples'),
-  '/erz/strom': f('hsiss', 'id quelle strom ziel kanal'),
+  '/erz/strom': f('hsis', 'id quelle strom ziel'),
   '/erz/fenster': f('iiiiddh', 'strom sendung modus kappe ab_beat bis_beat t_send_us'),
   '/erz/ev': f('iiiiddf', 'strom muster ev_id note beat dauer_beats velocity'),
   '/erz/cc': f('iiidf', 'strom ev_id cc beat wert'),
-  '/k/loop/laden': f('hsis', 'id quelle box name'),
-  '/k/loop/start': f('hsi', 'id quelle box'),
   '/k/fx': f('hsiidddddi', 'id quelle einheit art beats wet param1 param2 param3 an'),   // AUFTRAG 2026-09-28 (§4.10)
   '/k/fx/zuweisung': f('hsisi', 'id quelle einheit kanal an'),                          // AUFTRAG 2026-09-28 (§4.10)
   '/k/fx/routing': f('hsi', 'id quelle routing'),                                        // Ohr Task 15 (§4.10)
-  '/k/platz/kanal': f('hsii', 'id quelle pad inhalt'),   // DJ view places 3 and 4 (§4.10)
+  '/k/container/quelle': f('hsii', 'id quelle container art'),   // container core (§4.10)
   '/k/kanal/graph': f('hsss', 'id quelle kanal name'),   // Baukasten S3c (§4.10)
   '/k/graph/frage': f('hs', 'id quelle'),   // Baukasten S16 (§4.10)
-  '/k/loop/stopp': f('hsi', 'id quelle box'),
-  '/k/loop/raster': f('hsii', 'id quelle box versatz_frames'),
   '/k/loop/rec': f('hsisi', 'id quelle beats name summe'),
   '/k/arr/laden': f('hsi', 'id quelle nr'),                                       // D1 K1 (§4.11)
   '/k/arr/start': f('hsdi', 'id quelle start_beat quant'),
@@ -95,7 +92,6 @@ export const AUSGABEN = {
   '/takt': f('iihdd', 'takt phrase sample beat bpm'),
   '/zustand/kern': f('iihiiiiiiiih', 'generation quantum sample frame_luecken ausgelassene_perioden cb_max_us cb_p99_us aufwach_max_us stretcher_aktiv befehle_wartend ki_gestoppt ereignisse_verloren'),
   '/zustand/deck': f('iisdidddfiifii', 'deck status material_id basis_bpm fassung quell_beat beats_bis_ende faktor vorlauf_ms hoerweg stretcher_fuell versatz_intern_ms keylock_unterlauf keylock_aufgegeben'),
-  '/zustand/box': f('iiiiii', 'box status keylock_unterlauf keylock_aufgegeben keylock_ring_voll keylock_kein_platz'),  // Keylock 7b.3 (die Attrappe spielt keine Boxen und sendet es nicht)
   '/zustand/komp': f('sf', 'kanal gr_db'),   // Effekt-Sektion Schritt 2 (§5.5c), osc.json: /zustand/komp
   '/zustand/mix': f('sfffff', 'kanal gate_db mb_tief_db mb_mitte_db mb_hoch_db lim_db'),   // 1.15 A6 (§5.5d), type entry only: the Attrappe never sends it
   '/e/ins_gr': f('sf', 'kanal gr_db'),   // 1.10 slice 4a (§5.5f), type entry only: the Attrappe never sends it
@@ -121,11 +117,10 @@ export const AUSGABEN = {
   '/e/neustart': f('ih', 'generation sample'),
   '/e/protokollfehler': f('ss', 'adresse grund'),
   '/erz/quittung': f('iiiiiii', 'strom sendung verworfen verworfen_anderes_muster eingefuegt zu_spaet ungehoert'),
-  '/e/loop': f('iisiidf', 'box status name beats fx_art fx_beats fx_wet'),
   '/e/fx': f('iidddddi', 'einheit art beats wet param1 param2 param3 an'),   // AUFTRAG 2026-09-28 (§5.12)
   '/e/fx/zuweisung': f('isi', 'einheit kanal an'),                          // AUFTRAG 2026-09-28 (§5.12)
   '/e/fx/routing': f('i', 'routing'),                                       // Ohr Task 15 (§5.12)
-  '/e/platz/kanal': f('ii', 'pad inhalt'),   // DJ view places 3 and 4 (§5.12)
+  '/e/container/quelle': f('ii', 'container art'),   // container core (§5.12)
   '/e/kanal_limiter': f('ii', 'gebaut latenz_samples'),                             // 1.15 A5c (§5.12)
   '/e/graph': f('ss', 'kanal name'),   // Baukasten S16 (§5.12)
   '/e/mitschnitt': f('siid', 'name beats status ab_beat'),
@@ -164,15 +159,16 @@ export const GRUENDE = new Set(['zu_spaet', 'regler_beim_menschen', 'regler_verp
   'kein_eingang', 'aufnahme_laeuft', 'zu_viele_scharf', 'eingang_fehlt', 'kein_platz',   // 1.8 (§4.12)
   'warp_maschine_fehlt',                                                                    // 1.13 Slice 2 (§4.11, §16.2)
   'nur_andreas', 'auto_ziel_unbekannt',
-  'laeuft', 'host_fehlt', 'kein_rueckweg', 'belegt', 'schreiber_ueberlauf', 'zelle_leer']);                                                 // 1.12 Slice 3 (§4.11, §16.2)
+  'laeuft', 'host_fehlt', 'kein_rueckweg', 'belegt', 'schreiber_ueberlauf', 'zelle_leer',
+  'live_ohne_container', 'dj_doppelt', 'send_ausser_modul']);   // container core V3 (typed only, the mock does not send them)
 
-// §1.5 Kanäle
-export const DECKS = [1, 2, 3, 4].map((n) => `deck/${n}`);
-export const ERZ = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `erz/${n}`);
-export const PADS = ['pad/1', 'pad/2'];
-export const BUSSE = [1, 2, 3, 4].map((n) => `bus/${n}`);
-export const SPIELKANAELE = [...DECKS, ...ERZ, ...PADS];     // Kanäle, die "hörbar" werden können
+// §1.5 channels (container core): the four containers are the channel strips, then the four buses. Player N (deck/1..4, stem/* and the
+// player state) sounds through container N. DECKS, ERZ and PADS are gone; istDeck and deckNr mean "path of a player".
+export const BUSSE = [...pultBusPfad];
+export const SPIELKANAELE = [...pultContainerPfad];     // channels that can become "hörbar", order A..D
 export const KANALZUG_KANAELE = [...SPIELKANAELE, ...BUSSE];
+export const containerVonPlayer = (n) => pultContainerPfad[n - 1];
+export const playerVonContainer = (k) => pultContainerPfad.indexOf(k) + 1;   // 0 when k is no container
 
 const DB = 'db', LIN = 'lin', SCHALTER = 'schalter', STUFE = 'stufe';
 const R = (einheit, min, max, vorgabe, nurHand = false) => ({ einheit, min, max, vorgabe, nurHand });
@@ -190,13 +186,13 @@ function kanalzug(k) {
   if (!bus) m.ziel = R(STUFE, 0, 4, 0, true);
   if (!bus) Object.assign(m, {   // Kompressor je Quellkanal (2026-10-11), alle dürfen
     'komp/an': R(SCHALTER, 0, 1, 0), 'komp/schwelle': R(LIN, -60, 0, -18), 'komp/ratio': R(LIN, 1, 20, 4), 'komp/attack': R(LIN, 0.1, 100, 10),
-    'komp/release': R(LIN, 10, 1000, 120), 'komp/makeup': R(LIN, 0, 24, 0), 'komp/mix': R(LIN, 0, 1, 1), 'komp/sc': R(STUFE, 0, 14, 0),
+    'komp/release': R(LIN, 10, 1000, 120), 'komp/makeup': R(LIN, 0, 24, 0), 'komp/mix': R(LIN, 0, 1, 1), 'komp/sc': R(STUFE, 0, 4, 0),
   });
-  if (k.startsWith('deck/')) for (const s of ['drums', 'bass', 'vocals', 'other']) m[`stem/${s}`] = R(DB, -200, 6, 0);
   return m;
 }
 
 export const REGLER = new Map();
+for (let n = 1; n <= 4; n++) for (const s of ['drums', 'bass', 'vocals', 'other']) REGLER.set(`deck/${n}/stem/${s}`, { ...R(DB, -200, 6, 0), kanal: containerVonPlayer(n) });
 for (const k of KANALZUG_KANAELE) for (const [p, info] of Object.entries(kanalzug(k))) REGLER.set(`${k}/${p}`, { ...info, kanal: k });
 for (const [p, info] of Object.entries({
   xfader: R(LIN, -1, 1, 0, true), 'master/pegel': R(DB, -200, 0, 0, true), 'master/kleber': R(LIN, 0, 1, 0, true), 'cue/mix': R(LIN, -1, 1, -1, true),
@@ -214,6 +210,9 @@ for (let n = 1; n <= 32; n++) {   // D1 K1 (§1.5), E3: 32 Slots: Spur-Regler de
   REGLER.set(`spur/${n}/mute`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
   REGLER.set(`spur/${n}/solo`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
   REGLER.set(`spur/${n}/filter`, { ...R(LIN, -1, 1, 0), kanal: null });   // loop deck K7a: DJ filter of a track, -1 low-pass .. +1 high-pass
+  REGLER.set(`spur/${n}/pfl`, { ...R(SCHALTER, 0, 1, 0), kanal: null });   // container core K7: track cue switch
+  REGLER.set(`spur/${n}/trim`, { ...R(DB, -24, 24, 0), kanal: null });   // container core K7: gain before the strip
+  for (const b of ['tief', 'mitte', 'hoch']) REGLER.set(`spur/${n}/kill/${b}`, { ...R(SCHALTER, 0, 1, 0), kanal: null });   // container core K7
   for (const b of ['tief', 'mitte', 'hoch']) REGLER.set(`spur/${n}/eq/${b}`, { ...R(DB, -200, 6, 0), kanal: null });   // loop deck channel strip KZ1: isolator band of a track, -200 = kill
 }
 for (let n = 1; n <= 16; n++) {   // 1.10 Slice 1 (§1.5): Gruppen-Regler, global, alle dürfen
@@ -227,7 +226,7 @@ REGLER.set('pm/fader', { ...R(DB, -200, 6, 0), kanal: null });
 // 1.10 Slice 3 (§1.5): sends (post fader) from tracks and groups to the 4 returns, return strips and Cypher Hall values; global, everybody may.
 // Sends default to -200 (off). Hall values are normalised 0..1 (the unit mapping lives in the kernel, arr_returns.cpp); hall/an is a switch.
 const HALL_VORGABE = { pre: 0.04, decay: 0.5252, groesse: 0.282, tief: 0.5658, highcut: 0.8039, fahne: 0.66667 };
-for (let r = 1; r <= 4; r++) {
+for (let r = 1; r <= 8; r++) {   // container core K6: returns 1..8
   for (let n = 1; n <= 32; n++) REGLER.set(`spur/${n}/send/${r}`, { ...R(DB, -200, 6, -200), kanal: null });
   for (let n = 1; n <= 16; n++) REGLER.set(`grp/${n}/send/${r}`, { ...R(DB, -200, 6, -200), kanal: null });
   REGLER.set(`ret/${r}/fader`, { ...R(DB, -200, 6, 0), kanal: null });
@@ -240,26 +239,27 @@ for (let r = 1; r <= 4; r++) {
 // 1.10 Slice 4a/4b (§1.5): the insert controls ins/komp|eq|saett/<n>/* of the arrangement strips, global, project-only, everybody may. The rows are generated
 // from docs/interfaces/insert_module.json (insert_controls.mjs); the namenslisten checker compares them with insert_zeilen.inc.
 for (const [pfad, e, lo, hi, v] of INSERT_REGLER_ZEILEN) REGLER.set(pfad, { ...R(e === 'lin' ? LIN : e === 'stufe' ? STUFE : SCHALTER, lo, hi, v), kanal: null });
-// S5r (§1.5): 64 Graph-Regler <kanal>/bk/<1..64> auf den Kanälen, auf denen der Kern einen Baukasten-Graphen annimmt
-// (deck/1..4 als Effekt, erz/1,2,3,5,6,7 und pad/1,2 als Instrument; nicht erz/4 und erz/8), alle dürfen, 0..1, Vorgabe 0,5
-export const BK_REGLER_N = 64;   // knobs per channel: <kanal>/bk/1..64 (64-knob widening)
-export const BK_KANAELE = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
+// §1.5 (container core): 64 graph knobs <container>/bk/<1..64> on the four containers (effect graph on the strip), and 64 knobs strom/<1..16>/bk/<1..64>
+// per stream buffer (instrument graph of that stream, F4); all everybody may, 0..1, default 0.5
+export const BK_REGLER_N = pultBkN;   // knobs per strip: <k>/bk/1..64
+export const BK_KANAELE = [...pultContainerPfad];
 for (const k of BK_KANAELE) for (let n = 1; n <= BK_REGLER_N; n++) REGLER.set(`${k}/bk/${n}`, { ...R(LIN, 0, 1, 0.5), kanal: k });
+for (let s = 1; s <= pultStroeme; s++) for (let n = 1; n <= BK_REGLER_N; n++) REGLER.set(`strom/${s}/bk/${n}`, { ...R(LIN, 0, 1, 0.5), kanal: null });
 // S14 (§1.5): 64 graph knobs fx/<n>/bk/<m> per send return fx/3, fx/4; global (no channel), alle dürfen, 0..1, default 0.5
 export const BK_SEND_KANAELE = ['fx/3', 'fx/4'];
 for (const k of BK_SEND_KANAELE) for (let n = 1; n <= BK_REGLER_N; n++) REGLER.set(`${k}/bk/${n}`, { ...R(LIN, 0, 1, 0.5), kanal: null });
 // Master insert graph (effect graph on the DJ master sum): 64 global knobs master/bk/<m>, everybody may, 0..1, default 0.5
 for (let n = 1; n <= BK_REGLER_N; n++) REGLER.set(`master/bk/${n}`, { ...R(LIN, 0, 1, 0.5), kanal: null });
-// 1.15 A2 (§1.5, the 345 mix-tool rows): gate on the 13 live source channels (erz/8 has none: cue only), utility on those plus bus/1..4,
+// 1.15 A2 (§1.5, the mix-tool rows): gate on the four containers, utility on those plus bus/1..4,
 // multiband and channel limiter on bus/1..4, one global spectrum row. All rows: everybody may. Ranges and defaults as the C++ table
 // (core/signalbox/include/cypherdj/signalbox/tool_controls.h); check_name_lists.py compares the path sets.
-const WZ_QUELLEN = [...DECKS, ...ERZ.slice(0, 7), ...PADS];
+const WZ_QUELLEN = [...pultContainerPfad];
 const WZ_BAND = [['schwelle', LIN, -60, 0, 0], ['ratio', LIN, 1, 20, 1], ['attack', LIN, 0.1, 500, 10], ['release', LIN, 1, 5000, 100],
   ['knie', LIN, 0, 24, 0], ['makeup', LIN, -24, 24, 0], ['umgehen', SCHALTER, 0, 1, 0]];
 const WZ_REIHEN = [
   [WZ_QUELLEN, [['gate/an', SCHALTER, 0, 1, 0], ['gate/schwelle', LIN, -90, 0, -40], ['gate/hysterese', LIN, 0, 24, 4], ['gate/ratio', LIN, 1, 100, 100],
     ['gate/bereich', LIN, -120, 0, -80], ['gate/attack', LIN, 0.1, 500, 1], ['gate/hold', LIN, 0, 2000, 20], ['gate/release', LIN, 1, 5000, 100],
-    ['gate/sc', STUFE, 0, 14, 0]]],
+    ['gate/sc', STUFE, 0, 4, 0]]],
   [[...WZ_QUELLEN, ...BUSSE], [['util/balance', LIN, -1, 1, 0], ['util/breite', LIN, 0, 200, 100], ['util/bassmono', LIN, 0, 500, 0],
     ['util/phase_l', SCHALTER, 0, 1, 0], ['util/phase_r', SCHALTER, 0, 1, 0], ['util/tausch', SCHALTER, 0, 1, 0], ['util/dc', SCHALTER, 0, 1, 0]]],
   [BUSSE, [['mb/an', SCHALTER, 0, 1, 0], ['mb/grenze_tief', LIN, 20, 20000, 200], ['mb/grenze_hoch', LIN, 20, 20000, 2000],
@@ -267,7 +267,7 @@ const WZ_REIHEN = [
     ['lim/an', SCHALTER, 0, 1, 0], ['lim/decke', LIN, -60, 0, -0.3], ['lim/abklingen', LIN, 1, 2000, 80]]],
 ];
 for (const [kanaele, zeilen] of WZ_REIHEN) for (const k of kanaele) for (const [f, e, lo, hi, v] of zeilen) REGLER.set(`${k}/${f}`, { ...R(e, lo, hi, v), kanal: k });
-REGLER.set('spektrum/kanal', { ...R(STUFE, 0, 19, 0), kanal: null });   // 0 off, 1..18 = channel index + 1, 19 = master sum
+REGLER.set('spektrum/kanal', { ...R(STUFE, 0, 9, 0), kanal: null });   // 0 off, 1..8 = mixer index + 1 (containers, then buses), 9 = master sum
 
 export const kanalVon = (pfad) => REGLER.get(pfad)?.kanal ?? null;
 export const istDeck = (k) => typeof k === 'string' && /^deck\/[1-4]$/.test(k);

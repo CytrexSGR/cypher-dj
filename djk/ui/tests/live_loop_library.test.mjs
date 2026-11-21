@@ -8,6 +8,7 @@ import { aufbau } from './support/output_setup.mjs';
 import { warteBis } from './support/proj_context.mjs';
 import { Stems } from '../areas/proj/stems.ts';
 import { liveBereich } from '../areas/live/export.ts';
+import { modulAmPlatz } from '../project/live.ts';
 import { pythonVorgabe } from '../server.ts';
 import { REPO_PFADE } from '../paths.ts';
 import { OHNE_STEMS_PYTHON } from './support/stems_voraussetzung.mjs';
@@ -47,7 +48,7 @@ async function aufbauLoop(t, { trenner = 'gpu_belegt', live = true, kanalOffen =
   };
   return { ...r, b, lib, kanaele, projekt, fehl, ende, laden: (d, q = 'andreas') => b.modul.ladeLoop(d, q) };
 }
-const top = (p, slot = 'A') => p.gruppen.find((g) => g.ausgang === undefined && g.modul?.slot === slot);
+const top = (p, slot = 'A') => p.gruppen.find((g) => g.id === modulAmPlatz(p, slot));
 
 test('an imported loop becomes a module: WAV equals the loop frames, basis_bpm 128, eins_beat from versatz_frames, origin copied', async (t) => {
   const z = await aufbauLoop(t);
@@ -91,9 +92,10 @@ test('slot 1, 2, A and B all work and mean the same', async (t) => {
   }
   const z = await aufbauLoop(t);
   schreibeLoop(z.lib, 'l', 1);
-  assert.equal((await z.fehl(() => z.laden({ name: 'l', slot: 'C' }))).fehler, 'slot_ungueltig');
-  assert.equal((await z.fehl(() => z.laden({ name: 'l', slot: 3 }))).fehler, 'slot_ungueltig');
-  assert.equal((await z.laden({ name: 'l' })).j.slot, 'A', 'no slot: the first free one');
+  assert.equal((await z.fehl(() => z.laden({ name: 'l', slot: 'X' }))).fehler, 'slot_ungueltig');
+  assert.equal((await z.fehl(() => z.laden({ name: 'l', slot: 5 }))).fehler, 'slot_ungueltig');
+  assert.equal((await z.fehl(() => z.laden({ name: 'l', slot: 3 }))).fehler, 'slot_belegt', 'place 3 holds the Strudel module of the default layout');
+  assert.equal((await z.laden({ name: 'l' })).j.slot, 'D', 'no slot: the first free place in the order 3, 4, 1, 2');
 });
 
 test('an occupied slot is slot_belegt, an unknown name loop_unbekannt, no live project kein_liveprojekt', async (t) => {
@@ -109,7 +111,7 @@ test('an occupied slot is slot_belegt, an unknown name loop_unbekannt, no live p
 });
 
 test('an open channel refuses with kanal_offen and creates no group and no file in the project folder', async (t) => {
-  const z = await aufbauLoop(t, { kanalOffen: (k) => k === 'pad/1' });
+  const z = await aufbauLoop(t, { kanalOffen: (k) => k === 'deck/1' });
   schreibeLoop(z.lib, 'l', 1);
   const vor = z.projekt().gruppen.length;
   const f = await z.fehl(() => z.laden({ name: 'l', slot: 'A' }));
@@ -117,7 +119,7 @@ test('an open channel refuses with kanal_offen and creates no group and no file 
   assert.equal(z.projekt().gruppen.length, vor);
   const loops = path.join(z.offen().ordner, 'loops');
   assert.deepEqual(fs.existsSync(loops) ? fs.readdirSync(loops) : [], []);
-  assert.equal((await z.laden({ name: 'l' })).j.slot, 'B', 'no slot: the closed channel is taken');
+  assert.equal((await z.laden({ name: 'l' })).j.slot, 'D', 'no slot: the first free place with a closed channel');
 });
 
 test('without a free GPU the module sounds through its loop track and the state says separation waits (no error)', async (t) => {
@@ -138,5 +140,5 @@ test('the other slot verbs take 1/2 as well: modul/stems with slot 2 on an empty
   schreibeLoop(z.lib, 'l', 1);
   assert.equal((await z.laden({ name: 'l', slot: 1 })).code, 200);
   assert.equal((await z.fehl(() => z.b.modul.stemsNeu({ slot: 2 }, 'andreas'))).fehler, 'slot_leer');
-  assert.equal((await z.fehl(() => z.b.modul.stemsNeu({ slot: 'C' }, 'andreas'))).fehler, 'argument_ungueltig');
+  assert.equal((await z.fehl(() => z.b.modul.stemsNeu({ slot: 'X' }, 'andreas'))).fehler, 'argument_ungueltig');
 });

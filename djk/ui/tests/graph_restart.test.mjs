@@ -75,7 +75,7 @@ async function stapel(t) {
   const wieder = () => log.filter((z) => typeof z.typ === 'string' && z.typ.startsWith('graph_wieder'));
   return { o, log, muster, post, lade, sendungen, bkZeilen, quittiere, geladen, neustart, wieder };
 }
-const kurz = (s) => s.map((z) => [z.adresse, z.felder.kanal, z.adresse === '/erz/strom' ? z.felder.ziel : z.felder.name, z.felder.quelle]);
+const kurz = (s) => s.map((z) => [z.adresse, z.adresse === '/erz/strom' ? `erz/${z.felder.strom}` : z.felder.kanal, z.adresse === '/erz/strom' ? z.felder.ziel : z.felder.name, z.felder.quelle]);
 
 test('kern restart: what was loaded comes back after 500 ms, with the source of the last load and without default rows', async (t) => {
   const { lade, sendungen, bkZeilen, quittiere, geladen, neustart, wieder } = await stapel(t);

@@ -1,7 +1,8 @@
 // Live dock surfaces of the channel compressor (plan 2026-11-19-one-dock-stage-5a, task 6): the COMP chip opens the compressor face of the channel
 // (the same face as the FACE button of the strip); its menu holds Bypass/Enable, the key source, the presets and the gain reduction history (a window).
 // ctx = { host, fenster, popover, tick(), stand(), karte(id) } (host.js).
-import { KOMP_PRESETS } from '../effects.js';
+import { kompPresetFelder } from '../effects.js';
+import { zustand } from '../page_state.js';
 import { setzeKomp, kompWert } from '../effects_gemeinsam.js';
 import { oeffneKanalFace } from '../effects_face.js';
 import { zeichneVerlaufIn } from '../effects_bindung.js';
@@ -19,8 +20,7 @@ export async function kompAktion(ctx, kanal, punkt) {
   if (a === 'komp-an') await setzeKomp(`${kanal}/komp/an`, kompWert(kanal, 'an', 0) >= 0.5 ? 0 : 1);
   else if (a === 'komp-sc') await setzeKomp(`${kanal}/komp/sc`, Number(punkt.wert));
   else if (a === 'komp-preset') {
-    const p = KOMP_PRESETS[punkt.wert];
-    if (p) for (const [feld, w] of Object.entries(p)) await setzeKomp(`${kanal}/komp/${feld}`, w);
+    for (const [feld, w] of kompPresetFelder(punkt.wert, zustand.plaetze, kanal)) await setzeKomp(`${kanal}/komp/${feld}`, w);
   } else if (a === 'komp-verlauf') verlaufFenster(ctx, kanal);
   ctx.tick();
 }

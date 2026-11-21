@@ -4,7 +4,7 @@
 // q0 = e + floor((Q_ende − e − 16)/16)·16 (e = erste_eins_quell_beat) und meldet /e/rueckfall an = 1.
 // Nur ein ausgeführter Stopp mit Quelle andreas oder seine Play-Taste unterbindet ihn für dieses Material.
 
-import { SPIELKANAELE } from './contract.mjs';
+import { SPIELKANAELE, containerVonPlayer } from './contract.mjs';
 import { llround } from './clock.mjs';
 import { sicht, hoerbar, hoerbarMenge } from './level.mjs';
 import { wertBei } from './controls.mjs';
@@ -27,10 +27,11 @@ export function andererWirdHoerbar(K, n, bE) {
   }
   const v = {
     wert: (p) => (werte.has(p) ? werte.get(p) : wertBei(K, p, K.stempel)),
+    art: (c) => K.container?.[c - 1]?.art ?? 1,
     deckLaeuft: (m) => [2, 3, 4, 5].includes(status[m]),
     mitStems: (m) => Boolean(K.decks[m]?.m?.mit_stems),
   };
-  return SPIELKANAELE.some((k) => k !== `deck/${n}` && hoerbar(K, v, k));
+  return SPIELKANAELE.some((k) => k !== containerVonPlayer(n) && hoerbar(K, v, k));
 }
 
 export default {
@@ -44,7 +45,7 @@ export default {
     const H = hoerbarMenge(K, sicht(K, s1));
     for (const d of K.decks) {
       if (!d || !d.m || !laeuft(d)) continue;
-      const k = `deck/${d.nr}`;
+      const k = containerVonPlayer(d.nr);
       if (H.has(k) && !d.loop && !d.roll) {
         const bE = endeBeat(d);
         for (const f of FRISTEN) {

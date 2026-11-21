@@ -16,9 +16,6 @@ namespace dsp = cypherdj::dsp;
 
 namespace {
 
-const char* const KANAL_NAMEN[MIX_KANAELE] = {"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2",
-                                              "erz/3",  "erz/4",  "erz/5",  "erz/6",  "erz/7", "erz/8",
-                                              "pad/1",  "pad/2",  "bus/1",  "bus/2",  "bus/3", "bus/4"};
 
 // 1.15 A3: where the gate and utility fields sit inside the slots of one channel, and which field is which (the order of the rows in
 // signalbox/tool_controls.h). Constants, so the callback does not walk the table. Pinned by their effect in test_mixer_wz_felder
@@ -69,21 +66,28 @@ inline void addiere(float* z, const float* a, int n, float g) {
 
 }  // namespace
 
+// K9: the channel names are the paths of pult.json: containers first, then the buses.
 int Mixer::kanal_index(const char* name) {
   if (!name) return -1;
-  for (int k = 0; k < MIX_KANAELE; ++k)
-    if (!std::strcmp(name, KANAL_NAMEN[k])) return k;
+  for (int c = 0; c < PULT_CONTAINER; ++c)
+    if (!std::strcmp(name, PULT_CONTAINER_PFAD[c])) return c;
+  for (int b = 0; b < PULT_BUSSE; ++b)
+    if (!std::strcmp(name, PULT_BUS_PFAD[b])) return MIX_QUELLEN + b;
   return -1;
 }
 
-const char* Mixer::kanal_name(int k) { return (k >= 0 && k < MIX_KANAELE) ? KANAL_NAMEN[k] : ""; }
+const char* Mixer::kanal_name(int k) {
+  if (k >= 0 && k < MIX_QUELLEN) return PULT_CONTAINER_PFAD[k];
+  if (k >= MIX_QUELLEN && k < MIX_KANAELE) return PULT_BUS_PFAD[k - MIX_QUELLEN];
+  return "";
+}
 
 Mixer::Mixer(const sw::ReglerTabelle& tab) : tab_(tab), n_regler_(tab.anzahl()) {
   hall_ = std::make_unique<Hall>();
   for (auto& kp : komp_) kp = std::make_unique<Komp>();
   kleber_ = std::make_unique<Kleber>();
   limiter_ = std::make_unique<dsp::MasterLimiter>();  // Vorgabe: Decke −1 dBTP (limiter_dbtp)
-  for (int k = 0; k < MIX_KANAELE; ++k) {
+  for (int k = 0; k < MIX_ZUEGE; ++k) {
     kz_[k] = std::make_unique<dsp::Kanalzug>();
     kz_[k]->zuruecksetzen();
   }
@@ -162,7 +166,59 @@ Mixer::Mixer(const sw::ReglerTabelle& tab) : tab_(tab), n_regler_(tab.anzahl()) 
     }
     setze_sofort(r, d.vorgabe);   // Vorgaben aus §1.5 über die Tabelle des Stellwerks
   }
-  for (int k = 0; k < MIX_KANAELE; ++k) ziel_ist_[k] = ganz(ziel_[k].w);
+  // K3 (D-K5), K9: the production strip is hidden and neutral: every knob of a container strip at the default of the table (the same values the former erz/4 rows held), fader 0 dB. The
+  // table has no row for it, so nothing (a live write, a stored state, a Bahn) reaches it.
+  for (int r = 0; r < n_regler_; ++r) {
+    const MixZuweisung& z = zuw_[r];
+    if (z.kanal != 0) continue;   // container A's rows are the template of a strip
+    if (z.rolle == MixRolle::kanalzug) kz_[PRODUKTION_ZUG]->setze_sofort(z.regler, tab.def(r).vorgabe);
+    else if (z.rolle == MixRolle::ziel) ziel_[PRODUKTION_ZUG].w = tab.def(r).vorgabe;
+    else if (z.rolle == MixRolle::xseite) xseite_[PRODUKTION_ZUG].w = tab.def(r).vorgabe;
+    else if (z.rolle == MixRolle::pfl) pfl_[PRODUKTION_ZUG].w = tab.def(r).vorgabe;
+  }
+  if (const auto fd = dsp::regler_aus_pfad("fader")) kz_[PRODUKTION_ZUG]->setze_sofort(*fd, 0.0f);
+  for (int k = 0; k < MIX_ZUEGE; ++k) ziel_ist_[k] = ganz(ziel_[k].w);
+}
+
+void Mixer::duck_quellen(float* const* l, float* const* r, const int* stroeme, int ns, int n) noexcept {
+  duck_.setze(duck_tiefe_.w, duck_release_.w);   // K2: Werte je Block (Rampen der Tiefe kommen über .w am Blockende)
+  if (duck_.ruhig()) return;   // läuft auch nach dem Zurückdrehen auf 0 dB zu Ende (Erholung, endet am Boden 1e-4 in duck.h)
+  duck_.block(duck_gain_, n);
+#ifndef CYPHERDJ_MUTATION_DUCK_AUS
+  for (int j = 0; j < ns; ++j) {
+    const int s = stroeme[j] - 1;
+    if (s < 0 || s >= 16 || !l[s] || !r[s]) continue;
+    for (int i = 0; i < n; ++i) { l[s][i] *= duck_gain_[i]; r[s][i] *= duck_gain_[i]; }
+  }
+#endif
+}
+
+void Mixer::vorhoer_eingang(const float* l, const float* r, int n) noexcept {
+  if (n > MIX_BLOCK) n = MIX_BLOCK;
+#ifdef CYPHERDJ_MUTATION_VORHOER_AUF_MASTER   // error case: the preview goes into the master sum in front of the limiter
+  float* zl = summe_ein_l_;
+  float* zr = summe_ein_r_;
+#else
+  float* zl = pfl_ein_l_;
+  float* zr = pfl_ein_r_;
+#endif
+  for (int i = 0; i < n; ++i) {
+    if (!std::isfinite(l[i]) || !std::isfinite(r[i])) { ++nan_treffer_; continue; }   // Review-Kern m4: a NaN of the preview stays with the preview, it must not empty the PFL guard (verarbeite) for every strip
+    zl[i] += l[i];
+    zr[i] += r[i];
+  }
+}
+
+void Mixer::produktion_eingang(const float* l, const float* r, int n) noexcept {
+  if (n > MIX_BLOCK) n = MIX_BLOCK;
+#ifdef CYPHERDJ_MUTATION_PRODUKTION_OHNE_ZUG   // error case: the production sum bypasses its strip and goes into the master sum in front of the limiter
+  float* zl = summe_ein_l_;
+  float* zr = summe_ein_r_;
+#else
+  float* zl = ein_l_[PRODUKTION_ZUG];
+  float* zr = ein_r_[PRODUKTION_ZUG];
+#endif
+  for (int i = 0; i < n; ++i) { zl[i] += l[i]; zr[i] += r[i]; }
 }
 
 Mixer::Wert* Mixer::wert_von(int regler) {
@@ -403,9 +459,6 @@ void Mixer::setze_sofort(int regler, float wert) {
   if (regler < 0 || regler >= n_regler_) return;
   const MixZuweisung& z = zuw_[regler];
   if (z.rolle == MixRolle::kanalzug) {
-#ifndef CYPHERDJ_MUTATION_NUR_CUE_AUS
-    if (nur_cue_[z.kanal]) return;   // Review-Kern m2: Gehörschutz, Trim/EQ/Filter von erz/8 bleiben neutral
-#endif
     kz_[z.kanal]->setze_sofort(z.regler, wert);
     return;
   }
@@ -423,9 +476,6 @@ void Mixer::verlauf(int regler, const float* werte) {
   if (regler < 0 || regler >= n_regler_ || !werte) return;
   const MixZuweisung& z = zuw_[regler];
   if (z.rolle == MixRolle::kanalzug) {
-#ifndef CYPHERDJ_MUTATION_NUR_CUE_AUS
-    if (nur_cue_[z.kanal]) return;   // Review-Kern m2 (s. setze_sofort)
-#endif
     kz_[z.kanal]->verlauf(z.regler, werte);
     return;
   }
@@ -435,7 +485,7 @@ void Mixer::verlauf(int regler, const float* werte) {
 // Addiert den Ausgang (nach dem Fader) von Kanal k auf sein Ziel: Master mit Crossfader-Gewicht oder Eingang eines
 // Busses. Busse gehen immer auf den Master. Ein Zielwechsel blendet über MIX_ZIEL_BLENDE Samples.
 void Mixer::route(int k, int n, const float* l, const float* r) {
-  const bool bus = k >= MIX_QUELLEN;
+  const bool bus = ist_bus(k);
   const float* zvl = bus ? nullptr : ziel_[k].vl;
   const float* xsvl = xseite_[k].vl;
   const float* xfvl = xfader_.vl;
@@ -448,7 +498,7 @@ void Mixer::route(int k, int n, const float* l, const float* r) {
   auto ziel_r = [&](int z) { return z == 0 ? bsr : ein_r_[MIX_QUELLEN + z - 1]; };
   // FX3 (see mixer.h): a source channel that is assigned, blending or still carrying a weight splits its master share between the master
   // sum and the fx/3 bus input. Every other channel takes the code below bit for bit as before.
-  const bool fx3 = !bus && (fx3_zuw_[k] || fx3_gew_[k] > 0.0f || fx3_rest_[k] > 0);
+  const bool fx3 = !bus && k < MIX_QUELLEN && (fx3_zuw_[k] || fx3_gew_[k] > 0.0f || fx3_rest_[k] > 0);
   // audit U35: the wanted target. A retarget while a blend is open waits until that blend has ended (restarting it from a full swap stepped the weights);
   // the last value set (ziel_[k].w, carried on at the end of every block) is what the channel then moves to, also when the block that set it is over.
   const int ziel_wunsch = bus ? 0 : std::clamp(ganz(ziel_[k].w), 0, static_cast<int>(MIX_BUSSE));
@@ -558,66 +608,6 @@ void Mixer::fx3_zuweisung_setze(int kanal, bool an) noexcept {
   fx3_von_[kanal] = fx3_gew_[kanal];   // continue from the weight reached, also when a blend is interrupted
   fx3_zuw_[kanal] = an;
   fx3_rest_[kanal] = MIX_ZIEL_BLENDE;
-}
-
-// Place channel: which source channels a content stands for (0 nothing, 1 Strudel sum, 2 deck/3, 3 deck/4)
-static bool platz_quelle(int inhalt, int k) noexcept {
-  switch (inhalt) {
-    case 1: return k >= 4 && k <= 6;   // erz/1..3
-    case 2: return k == 2;             // deck/3
-    case 3: return k == 3;             // deck/4
-    default: return false;
-  }
-}
-
-void Mixer::platz_kanal_setze(int pad, int inhalt) noexcept {
-  if (pad < 0 || pad > 1 || inhalt < 0 || inhalt >= PLATZ_INHALTE) return;
-  platz_inhalt_[pad] = inhalt;
-  for (int k = 0; k < PLATZ_QUELLEN; ++k)
-    for (int p = 0; p < 2; ++p) pz_ziel_[k][p] = platz_quelle(platz_inhalt_[p], k) && !(p == 0 && platz_quelle(platz_inhalt_[1], k)) ? 1.0f : 0.0f;
-}
-
-bool Mixer::platz_kanal_wechselt() const noexcept {
-  for (int k = 0; k < PLATZ_QUELLEN; ++k)
-    for (int p = 0; p < 2; ++p)
-      if (pz_w_[k][p] != pz_ziel_[k][p]) return true;
-  return false;
-}
-
-bool Mixer::pz_aktiv(int k) const noexcept {
-  return k < PLATZ_QUELLEN && (pz_w_[k][0] != 0.0f || pz_w_[k][1] != 0.0f || pz_ziel_[k][0] != 0.0f || pz_ziel_[k][1] != 0.0f);
-}
-
-static inline float pz_schritt(float w, float ziel, float st) noexcept {
-  return w < ziel ? std::fmin(ziel, w + st) : (w > ziel ? std::fmax(ziel, w - st) : w);
-}
-
-void Mixer::pz_vorruecken(int k, int n) noexcept {
-  if (k >= PLATZ_QUELLEN) return;
-  const float st = static_cast<float>(n) / MIX_ZIEL_BLENDE;
-  for (int p = 0; p < 2; ++p) pz_w_[k][p] = pz_schritt(pz_w_[k][p], pz_ziel_[k][p], st);
-}
-
-void Mixer::pz_umlenken(int k, int n) noexcept {
-  constexpr float ST = 1.0f / MIX_ZIEL_BLENDE;
-  float* const pl[2] = {ein_l_[MIX_QUELLEN - 2], ein_l_[MIX_QUELLEN - 1]};
-  float* const pr[2] = {ein_r_[MIX_QUELLEN - 2], ein_r_[MIX_QUELLEN - 1]};
-  float w0 = pz_w_[k][0], w1 = pz_w_[k][1];
-  const float z0 = pz_ziel_[k][0], z1 = pz_ziel_[k][1];
-  for (int i = 0; i < n; ++i) {
-    w0 = pz_schritt(w0, z0, ST);
-    w1 = pz_schritt(w1, z1, ST);
-    const float wm = std::fmax(0.0f, 1.0f - w0 - w1);
-    const float l = aus_l_[i], r = aus_r_[i];
-    pl[0][i] += l * w0;
-    pr[0][i] += r * w0;
-    pl[1][i] += l * w1;
-    pr[1][i] += r * w1;
-    rt_l_[i] = l * wm;
-    rt_r_[i] = r * wm;
-  }
-  pz_w_[k][0] = w0;
-  pz_w_[k][1] = w1;
 }
 
 // Kompressor des Quellkanals k auf dem Abgriff (nach EQ/Filter, vor dem Fader); Werte am Blockende wie duck/*, das Knie
@@ -1198,9 +1188,6 @@ void Mixer::spek_blockanfang(int n) noexcept {
 }
 
 void Mixer::spek_abgriff(int k, int n) noexcept {
-#ifdef CYPHERDJ_MUTATION_SPEK_CUE_OHNE_ABGRIFF   // error case: the cue-only channel (erz/8, early return of kanal()) is not tapped
-  if (nur_cue_[k]) return;
-#endif
 #ifdef CYPHERDJ_MUTATION_SPEK_IMMER_SCHREIBEN   // error case: the tap writes also while the selector is 0
   if (spek_ist_ == 0 && k != 0) return;
 #elif defined(CYPHERDJ_MUTATION_SPEK_TAP_VERSCHOBEN)   // error case: the neighbour channel is tapped
@@ -1212,7 +1199,11 @@ void Mixer::spek_abgriff(int k, int n) noexcept {
 }
 
 void Mixer::spek_master(int n) noexcept {
+#ifdef CYPHERDJ_MUTATION_SPEK_MASTER_VERSETZT   // error case: the master tap answers to the selector one below (the last strip's number)
+  if (spek_ist_ != SPEK_MASTER - 1) return;
+#else
   if (spek_ist_ != SPEK_MASTER) return;
+#endif
   spek_->schreibe(sum_l_, sum_r_, n);
 }
 
@@ -1234,7 +1225,7 @@ void Mixer::spek_master(int n) noexcept {
 //    course (route() would start a crossfade from it);
 //  - no meter that decays: the compressor gain reduction, the gate and the limiter are off and reset, which is their rest value; the
 //    peak hold of /pegel takes max(peak, 0) so zero changes nothing.
-// Kept awake on purpose: strips in nur_cue_ (their own early path in kanal()), strips with a per-sample course on a knob (the Bahn runs).
+// Kept awake on purpose: strips with a per-sample course on a knob (the Bahn runs).
 bool Mixer::schlaf_schritt(int k, int n, bool komp_an, bool gate_an, bool util_an, bool mb_laeuft, bool bk_an, int fzi) {
   if (!schlaf_an_) return false;
   const float* el = ein_l_[k];
@@ -1255,7 +1246,7 @@ bool Mixer::schlaf_schritt(int k, int n, bool komp_an, bool gate_an, bool util_a
   if (fzi >= 0)
     for (int u = 0; u < FX_EINHEITEN; ++u)
       if (fx_kanal_[u][fzi].klingt()) return false;
-  if (k >= MIX_QUELLEN) {
+  if (ist_bus(k)) {
     const int b = k - MIX_QUELLEN;
     if (mb_lief_[b] || mb_pos_[b] != 0) return false;
     if (lim_[b] && (ganz(wz_wert(k, V_LIM + LM_AN, n)) == 1 || lim_lief_[b] || lim_pos_[b] != 0 || lim_warm_[b] != 0)) return false;
@@ -1284,33 +1275,10 @@ void Mixer::kanal(int k, int n) {
   // SOUND COLOR FX: globale Art und PARAMETER (Werte am Blockende wie duck/*), Echozeit aus dem Tempo der Uhr
   kz_[k]->setze_color(ganz(color_art_.w), color_param_.w, fx_bps_ > 0.0 ? 1.0 / fx_bps_ : 0.0);
 #ifdef CYPHERDJ_MUTATION_LIM_VOR_FADER   // error case (1.15 A5b): the limiter runs on the strip input, so in front of the fader and the sends
-  if (k >= MIX_QUELLEN && lim_[k - MIX_QUELLEN] && ganz(wz_wert(k, V_LIM + LM_AN, n)) == 1) {
+  if (ist_bus(k) && lim_[k - MIX_QUELLEN] && ganz(wz_wert(k, V_LIM + LM_AN, n)) == 1) {
     lim_[k - MIX_QUELLEN]->setze_decke_db(wz_wert(k, V_LIM + LM_DECKE, n));
     lim_[k - MIX_QUELLEN]->setze_abklingen_ms(wz_wert(k, V_LIM + LM_ABKLINGEN, n));
     lim_[k - MIX_QUELLEN]->verarbeite(ein_l_[k], ein_r_[k], ein_l_[k], ein_r_[k], n);
-  }
-#endif
-#ifndef CYPHERDJ_MUTATION_NUR_CUE_AUS
-  if (nur_cue_[k]) {   // S7 Vorhören: Kanalzug rechnen (Trim/EQ/Filter wirken auf den Abgriff), Abgriff in PFL, sonst nichts
-    schlaeft_[k] = stumm_[k] = false;   // never sleeps (own early path): the sleep state is cleared in case it was set before
-    dsp::KanalzugAusgang aus;
-    aus.haupt_l = aus_l_;
-    aus.haupt_r = aus_r_;
-    for (int s = 0; s < dsp::kAnzahlSends; ++s) { aus.send_l[s] = nullptr; aus.send_r[s] = nullptr; }   // channel_strip.cpp:117-119: nullptr = Send übersprungen
-    kz_[k]->verarbeite(ein_l_[k], ein_r_[k], n, aus);
-    // Review-Kern m4: ein NaN aus diesem Kanal bleibt bei ihm. Es käme sonst in die PFL-Summe, und die F01-Wache
-    // (verarbeite) leerte Hall, Kleber, Beat-FX und alle Kanalzüge: der Master stünde einen Block still.
-    bool endlich = true;
-    for (int i = 0; i < n; ++i)
-      endlich = endlich && std::isfinite(kz_[k]->abgriff(0)[i]) && std::isfinite(kz_[k]->abgriff(1)[i]);
-    if (!endlich) {
-      kz_[k]->zustaende_leeren();
-      ++nan_treffer_;
-      return;
-    }
-    addiere(pfl_l_, kz_[k]->abgriff(0), n, 1.0f);
-    addiere(pfl_r_, kz_[k]->abgriff(1), n, 1.0f);
-    return;   // kein route(): weder Master noch Bus; keine Spitze (Hüllen „nie belegt", core_signalbox.cpp:414)
   }
 #endif
   dsp::KanalzugAusgang aus;
@@ -1355,14 +1323,13 @@ void Mixer::kanal(int k, int n) {
 #ifdef CYPHERDJ_MUTATION_MB_OHNE_GUARD   // error case: mb_[] read for the sources too (manual UBSan demonstration only, not a registered test)
   const bool mb_hat = mb_[k - MIX_QUELLEN] != nullptr;
 #else
-  const bool mb_hat = k >= MIX_QUELLEN && mb_[k - MIX_QUELLEN];
+  const bool mb_hat = ist_bus(k) && mb_[k - MIX_QUELLEN];
 #endif
   const bool mb_an = mb_hat && ganz(wz_wert(k, V_MB + M_AN, n)) == 1;
   const bool mb_laeuft = mb_hat && (mb_an || mb_pos_[k - MIX_QUELLEN] > 0);
   if (schlaf_schritt(k, n, komp_an, gate_an, util_an, mb_laeuft, bk_an, fzi)) {
     // Silent strip, every holder idle: tap, PFL, spectrum, sends, peak, route would all add exact zeros (schlaf_schritt).
     schlaf_bloecke_.store(schlaf_bloecke_.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);   // one writer
-    pz_vorruecken(k, n);   // a place-channel blend goes on while the strip sleeps (the share is zeros)
     return;
   }
   schlaeft_[k] = false;
@@ -1414,11 +1381,7 @@ void Mixer::kanal(int k, int n) {
     addiere(pfl_l_, al, n, 1.0f);
     addiere(pfl_r_, ar, n, 1.0f);
   }
-#ifdef CYPHERDJ_MUTATION_PEGEL_OHNE_ERZ567
-  if (k < 7 || k == 12 || k == 13) {
-#else
-  if (k < 7 || (k >= 8 && k <= 10) || k == 12 || k == 13) {  // /pegel: Spitze nach dem Fader, deck/1..4, erz/1..3 (Studio S1), erz/5..7 (S18), pad/1..2 (MVP 2)
-#endif
+  if (k < MIX_QUELLEN) {  // /pegel: peak after the fader, the containers (K4: the streams report from their buffers, strom/<n>; K9: the hidden production strip reports nothing)
     float sp = spitze_[k];
     for (int i = 0; i < n; ++i) sp = std::max(sp, std::max(std::fabs(aus_l_[i]), std::fabs(aus_r_[i])));
     spitze_[k] = sp;
@@ -1427,7 +1390,7 @@ void Mixer::kanal(int k, int n) {
   // non-finite sample is caught here, before it enters the line (it would come out L samples later and keep the master silent for
   // another L): the block is cleared and the F01 guard of verarbeite() does the rest. Only buses own a line: k - MIX_QUELLEN is
   // in range only behind the k >= MIX_QUELLEN test.
-  if (kanal_latenz_ > 0 && k >= MIX_QUELLEN) {
+  if (kanal_latenz_ > 0 && ist_bus(k)) {
     if (!vor_leitung_endlich(aus_l_, aus_r_, n)) latenz_nan_ = true;
     const int b = k - MIX_QUELLEN;
     // 1.15 A5b (D1, D7): the channel limiter sits behind the fader and the sends (they were taken in verarbeite_nach), in front of route. The bus
@@ -1455,12 +1418,7 @@ void Mixer::kanal(int k, int n) {
       still = tl[i] == 0.0f && tr[i] == 0.0f && aus_l_[i] == 0.0f && aus_r_[i] == 0.0f;
     stumm_[k] = still;
   }
-  if (pz_aktiv(k)) {   // place channel: the pad share goes into the input of pad/1 or pad/2 (they run after the sources), the master share on
-    pz_umlenken(k, n);
-    route(k, n, rt_l_, rt_r_);
-  } else {
-    route(k, n, aus_l_, aus_r_);
-  }
+  route(k, n, aus_l_, aus_r_);
 }
 
 // FX1 (u = 0) vor FX2 (u = 1), seriell, auf dem Signal in place
@@ -1500,11 +1458,7 @@ void Mixer::fx_routing_fortschritt() noexcept {
     for (int i = 0; i < FX_ZIELE; ++i) fx_kanal_[u][i].weiter();   // zurück auf ihr gesetztes Wet
 }
 
-int Mixer::fx_ziel_index(int kanal) noexcept {
-  for (int i = 0; i < FX_ZIELE; ++i)
-    if (FX_ZIEL_KANAL[i] == kanal) return i;
-  return -1;
-}
+int Mixer::fx_ziel_index(int kanal) noexcept { return kanal >= 0 && kanal < FX_ZIELE ? kanal : -1; }   // K9: the target index is the container index
 
 void Mixer::fx_einheit_setze(int einheit, int art, double beats, float wet, float param1, double param2,
                              double param3, bool an) noexcept {
@@ -1571,18 +1525,8 @@ void Mixer::verarbeite(int n, float* ml, float* mr, float* cl, float* cr) {
     std::memset(fx_l_[s], 0, b);
     std::memset(fx_r_[s], 0, b);
   }
-  duck_.setze(duck_tiefe_.w, duck_release_.w);   // K2: Werte je Block (Rampen der Tiefe kommen über .w am Blockende)
-  if (!duck_.ruhig()) {   // läuft auch nach dem Zurückdrehen auf 0 dB zu Ende (Erholung, endet am Boden 1e-4 in duck.h)
-    duck_.block(duck_gain_, n);
-#ifndef CYPHERDJ_MUTATION_DUCK_AUS
-    for (int k : {5, 6}) {   // erz/2, erz/3: die MIDI-Ströme Bass und Melodie (Studio-Aufbau S1/S5)
-      float* l = ein_l_[k];
-      float* r = ein_r_[k];
-      for (int i = 0; i < n; ++i) { l[i] *= duck_gain_[i]; r[i] *= duck_gain_[i]; }
-    }
-#endif
-  }
   for (int k = 0; k < MIX_QUELLEN; ++k) { kanal(k, n); spek_abgriff(k, n); }   // Quellen zuerst: sie füllen die Bus-Eingänge; 1.15 A7b: spectrum tap right after the channel
+  kanal(PRODUKTION_ZUG, n);   // K9: the hidden production strip runs behind the containers and in front of the buses (it routes to the master only)
   for (int k = MIX_QUELLEN; k < MIX_KANAELE; ++k) { kanal(k, n); spek_abgriff(k, n); }
 #ifdef CYPHERDJ_MUTATION_LATENZ_MERGE_VOR_HALL   // error case: the merge sits in front of the hall and the send returns, so these arrive undelayed
   if (kanal_latenz_ > 0) {
@@ -1865,7 +1809,7 @@ void Mixer::verarbeite(int n, float* ml, float* mr, float* cl, float* cr) {
     spitze_[PEGEL_CUE] = sc;
   }
   // Eingänge leeren, Werte mit Verlauf auf ihren letzten Wert setzen
-  for (int k = 0; k < MIX_KANAELE; ++k) {
+  for (int k = 0; k < MIX_ZUEGE; ++k) {
     std::memset(ein_l_[k], 0, b);
     std::memset(ein_r_[k], 0, b);
   }
@@ -1883,7 +1827,7 @@ void Mixer::verarbeite(int n, float* ml, float* mr, float* cl, float* cr) {
       w.vl = nullptr;
     }
   };
-  for (int k = 0; k < MIX_KANAELE; ++k) {
+  for (int k = 0; k < MIX_ZUEGE; ++k) {
     nachfuehren(ziel_[k]);
     nachfuehren(xseite_[k]);
     nachfuehren(pfl_[k]);

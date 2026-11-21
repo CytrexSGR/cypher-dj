@@ -1,4 +1,5 @@
-// DJ view places, task 15: the mixer follows the places. The strips keep their nodes and core lines; slots.js decides which strip sits where.
+// Container core U4: the mixer row shows the four container strips A..D, each in the cell of its place. The cells are static in index.html (no plan is
+// computed in the page); the strips keep their template and core lines.
 import { liesApp } from './helpers/app_source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -6,85 +7,51 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ZIELE } from '../public/curves.js';
-import { mixerPlan, wendeMixerAn, ZUEGE, LAYOUT_STANDARD } from '../public/slots.js';
+import { CONTAINER } from '../public/kanaele.js';
 
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const lies = (n) => fs.readFileSync(path.join(PUBLIC, n), 'utf8');
-const app = liesApp(), html = lies('index.html'), css = lies('style.css'), plaetze = lies('slots.js');
+const app = liesApp(), html = lies('index.html'), css = lies('style.css');
 
-const LAYOUTE = {
-  standard: [...LAYOUT_STANDARD],
-  'track track track loops': ['track', 'track', 'track', 'loops'],
-  'loops track strudel track': ['loops', 'track', 'strudel', 'track'],
-  'loops2 seq loops track': ['loops2', 'seq', 'loops', 'track'],
-};
 const vorlage = html.slice(html.indexOf('<template id="zug-vorlage">'), html.indexOf('</template>', html.indexOf('<template id="zug-vorlage">')));
 const TEILE = [...vorlage.matchAll(/data-teil="([^"]+)"/g)].map((m) => m[1]);
-const praefixe = (s) => (s.art === 'erz' ? s.kanaele : [s.kanal]);
+/** the container strips of the markup: path, row and column of the grid cell */
+const zuege = [...html.matchAll(/<div class="zug"([^>]*data-kanalzug="((?:deck|pad)\/\d)"[^>]*)>/g)]
+  .map((m) => ({ pfad: m[2], zeile: /data-mix-zeile="(\d)"/.exec(m[1])?.[1], spalte: /data-mix-spalte="(\d)"/.exec(m[1])?.[1], deck: /data-deck="(\d)"/.exec(m[1])?.[1] }));
 
 test('the strip template carries fader, trim, EQ, filter, PFL and the crossfader side', () => {
   for (const t of ['fader', 'trim', 'eq/hoch', 'eq/mitte', 'eq/tief', 'filter', 'pfl', 'xseite']) assert.ok(TEILE.includes(t), t);
 });
 
-for (const [name, layout] of Object.entries(LAYOUTE)) {
-  test(`layout "${name}": the strips appear in place order with the right target prefix and every control maps to a core line`, () => {
-    const plan = mixerPlan(layout);
-    const gesehen = plan.reihen.flat().filter(Boolean);
-    // place order: row 1 holds the strips of places 1 and 2, row 2 of places 3 and 4, left place left
-    const decks = gesehen.filter((s) => s.art === 'deck').map((s) => s.platz);
-    assert.deepEqual(decks, [...decks].sort((a, b) => a - b), 'deck strips in place order');
-    assert.deepEqual(gesehen.filter((s) => s.art === 'pad').map((s) => s.kanal), ['pad/1', 'pad/2'], 'L1 and L2 are always in the plan');
-    for (const s of gesehen) {
-      if (s.art === 'pad') { assert.equal(s.platz, s.nr + 2, 'pad/1 is the fader of place 3, pad/2 of place 4'); continue; }
-      const erwartet = layout[s.platz - 1];
-      assert.ok(s.art === 'deck' ? ['track', 'seq', 'loops', 'loops2'].includes(erwartet) : s.art === 'erz' ? erwartet === 'strudel' : false);
-      if (s.art === 'deck') assert.equal(s.kanal, `deck/${s.platz}`, 'a Track place N shows the strip of deck N');
-      for (const k of praefixe(s)) for (const t of TEILE) assert.ok(ZIELE.has(`${k}/${t}`), `${k}/${t} is a control target`);
-    }
-    assert.ok(gesehen.every((s) => s.art !== 'pad' || /^pad\/[12]$/.test(s.kanal)));
-    assert.ok(plan.reihen.every((r) => r.length === 4 && r.filter(Boolean).length <= 3));
-  });
-}
-
-test('every strip of the page is reachable by the plan and a hidden strip is only hidden: no state is written', () => {
-  assert.deepEqual(ZUEGE, ['zug/deck/1', 'zug/deck/2', 'zug/pad/1', 'zug/pad/2']);   // the Strudel strips sit in the Strudel place
-  const f = plaetze.slice(plaetze.indexOf('export function wendeMixerAn'));
-  assert.doesNotMatch(f, /regler|fetch|zustand|xseite|localStorage/);
-  const z = Object.fromEntries(ZUEGE.map((k) => [k, { dataset: {}, hidden: false, classList: { add() {}, remove() {} } }]));
-  const vorher = { ...z };
-  wendeMixerAn(LAYOUTE['loops track strudel track'], (k) => z[k]);
-  for (const k of ZUEGE) assert.equal(z[k], vorher[k]);
+test('the four container strips sit in the cells of places 1..4: A and C left of the middle, B and D right of it', () => {
+  assert.deepEqual(zuege.map((z) => z.pfad), CONTAINER.map((c) => c.pfad), 'one strip per container, in the order of the places');
+  assert.deepEqual(zuege.map((z) => [z.zeile, z.spalte]), [['1', '2'], ['1', '4'], ['2', '2'], ['2', '4']]);
+  assert.deepEqual(zuege.filter((z) => z.deck).map((z) => [z.deck, z.pfad]), [['1', 'deck/1'], ['2', 'deck/2']], 'the strips of the players keep their data-deck');
+  for (const z of zuege) for (const t of TEILE) assert.ok(ZIELE.has(`${z.pfad}/${t}`), `${z.pfad}/${t} is a control target`);
+  assert.match(html, /<div class="mitte" data-mix-zeile="1" data-mix-spalte="3">/);
+  assert.match(html, /<div class="fxmitte" id="fxmitte" data-mix-zeile="2" data-mix-spalte="3"/);
 });
 
-test('the page applies the plan to the existing strips, deck strips by data-deck, loop strips by data-boxzug; the Strudel strips move into the Strudel place', () => {
-  assert.match(app, /wendeMixerAn\(plaetzeLayout, zugKnoten\)/);
-  const k = app.slice(app.indexOf('function zugKnoten('), app.indexOf('function wendePlaetzeAn('));
-  assert.match(k, /\.zug\[data-deck=/); assert.match(k, /\.zug\[data-boxzug=/);
-  assert.doesNotMatch(k, /innerHTML|cloneNode|createElement/);
-  assert.match(lies('mischer_mitte.js'), /if \(dj\) strudel\.append\(zp\); else unten\.prepend\(zp\)/);
+test('the page computes no mixer plan: no plan function, no data-mix write, no loop deck output write, no L1/L2 strip', () => {
+  assert.doesNotMatch(app, /mixerPlan|wendeMixerAn|zugKnoten|mixAussen|mixZeile|mixSpalte/);
+  assert.doesNotMatch(app, /\/loopdeck\/plaetze/);
+  assert.doesNotMatch(html, /data-boxzug/);
 });
 
 test('the DJ view lets the strips take cells of the page grid around a fixed middle column (master, beat FX), the crossfader below, the Studio view is untouched', () => {
   assert.match(css, /body:not\(\.studio\) #mischer, body:not\(\.studio\) #mischer-unten \{ display: contents; \}/);
   assert.match(css, /body:not\(\.studio\) #pult \{ grid-template-columns: minmax\(0, 1fr\) var\(--zug\) var\(--mitte\) var\(--zug\) minmax\(0, 1fr\);/);
-  assert.match(css, /#pult\[data-mix-aussen="r"\] \{ grid-template-columns: minmax\(0, 1fr\) var\(--zug\) var\(--mitte\) var\(--zug\) var\(--zug\) minmax\(0, 1fr\); \}/);
+  assert.doesNotMatch(css, /data-mix-aussen/, 'the outer strip columns are gone: the four strips always fit the five columns');
   assert.match(css, /\[data-mix-zeile="1"\] \{ grid-row: 1 \/ 3; \}/);
   assert.match(css, /\.xfader \{ grid-area: 5 \/ 2 \/ 6 \/ -2;/);
-  assert.match(app, /\$\('#pult'\)\.dataset\.mixAussen = mix\.spalten\.aussen/);
   assert.match(html, /<div class="fxmitte" id="fxmitte"/);
   assert.match(css, /body\.studio #pult \{[^}]*"c c mo" "mu d mo"/);
   assert.match(css, /body\.studio #mischer-unten \{ grid-template-columns: repeat\(5, var\(--zug\)\)/);
 });
 
-test('the page writes the loop deck outputs from the layout: after every place change and with the live project, one request, refusals not repeated; strip heads name the deck', () => {
-  const ansicht = lies('slots_view.js');
-  assert.match(ansicht, /holeJson\('\/loopdeck\/plaetze', \{ platz: body \}\)/);
-  const z = ansicht.slice(ansicht.indexOf('export function zeigePlaetze()'));
-  assert.match(z.slice(0, 300), /gleicheLoopPlaetzeAb\(\)/, 'the live project arriving draws the places, which compares once');
-  assert.match(ansicht, /loopPlatzAbweichung\(plaetzeLayout, live\.projekt\)/);
-  assert.match(ansicht, /schluessel === loopPlatzSchluessel\) return/, 'a refusal is not repeated until the revision moves');
-  const a = ansicht.slice(ansicht.indexOf('function wendePlaetzeAn()'), ansicht.indexOf('function platzZustand'));
-  assert.match(a, /zeigeZugKoepfe\(\)/);
-  assert.match(a, /zeigePlaetze\(\)/);
-  assert.match(ansicht, /textContent = zugKopf\(plaetzeLayout, art, nr\)/);
+test('the strip heads name the container letter and the type: the strip of place N is found by its container path', () => {
+  const f = app.slice(app.indexOf('function zeigeZugKoepfe('), app.indexOf('function zeigeStudioZuege('));
+  assert.match(f, /\.zug\[data-kanalzug="\$\{pfadVonPlatz\(n\)\}"\] \.zugname/);
+  assert.match(f, /zugKopf\(zustand\.plaetze, n\)/);
+  assert.doesNotMatch(f, /innerHTML|cloneNode|createElement/);
 });

@@ -17,7 +17,7 @@ import { leseFolgeText, folgeBefehle, schreibeFolgeText, laengeTextTakt } from '
 const INFO_KIT = { art: 'kit', regler: [], klaenge: [{ ton: 36, name: 'kick' }, { ton: 38, name: 'snare' }, { ton: 42, name: 'hat' }] };
 const info = () => INFO_KIT;
 const lauf = (p, ...b) => fuehreListeAus(p, b).projekt;
-const mitTakt = (n) => { const p = neuesProjekt('x'); p.live = true; return lauf(p, { befehl: 'taktart_setzen', taktart: [n, 4] }); };
+const mitTakt = (n) => { const p = neuesProjekt('x'); p.live = true; p.plaetze = [{ typ: 'track' }, { typ: 'track' }, { typ: 'track' }, { typ: 'track' }]; return lauf(p, { befehl: 'taktart_setzen', taktart: [n, 4] }); };
 const deck = (n) => lauf(mitTakt(n), { befehl: 'seq_anlegen', platz: 2 });
 const kit = { art: 'intern', name: 'kit', kit: '909' };
 const clipVon = (p, L) => { const s = p.spuren[0]; return lauf(lauf(p, { befehl: 'clip_loeschen', clip_id: s.clips[0].id }),

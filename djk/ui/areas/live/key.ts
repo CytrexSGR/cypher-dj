@@ -4,13 +4,12 @@
 // (`transponiert`), so a second call changes nothing. GET /modul/stand shows the distance
 // per slot (`tonart_abstand` = what adapting would still move, `transponiert`, `deck_tonart`).
 // The master key: the playing deck (status 2+, channel open) whose channel is the loudest on the master (the page server's peak buffer); see server.ts.
-import { liveSlots, normiereSlot, passeModulAn, tonartAbstand, tonartRest } from '../../project/live.ts';
+import { modulAmPlatz, normierePlatz, type Slot, passeModulAn, tonartAbstand, tonartRest } from '../../project/live.ts';
 import { aendereStand } from '../../project/state.ts';
 import type { BereichKontext } from '../../http/router.ts';
 import type { ProjZugang } from '../proj/area.ts';
 import { ProjFehler, type Antwort } from '../proj/session.ts';
 
-type Slot = 'A' | 'B';
 export interface MasterTonart { deck: number; tonart: string | null }
 export type MasterTonartQuelle = () => MasterTonart | { code: number; fehler: string };
 
@@ -34,14 +33,14 @@ export class ModulTonart {
 
   async passeAn(d: Record<string, unknown>, quelle: 'andreas' | 'cypher'): Promise<Antwort> {
     for (const k of Object.keys(d)) if (k !== 'slot') throw new ProjFehler(400, 'argument_unbekannt', { detail: k });
-    const s0 = normiereSlot(d.slot);                                           // 1/2 and A/B (decision 13)
-    if (s0 === undefined) throw new ProjFehler(400, 'argument_ungueltig', { detail: "slot: 1, 2, 'A' or 'B'" });
+    const s0 = normierePlatz(d.slot);                                          // a place: 1..4 or A..D
+    if (s0 === undefined) throw new ProjFehler(400, 'argument_ungueltig', { detail: "slot: a place 1..4 or 'A'..'D'" });
     d = { ...d, slot: s0 };
     const slot: Slot = s0;
     if (quelle === 'cypher' && this.ctx.kiGestoppt()) throw new ProjFehler(409, 'ki_gestoppt');
     const o = this.zugang.offen();
     if (!o || !o.projekt.live) throw new ProjFehler(409, 'kein_liveprojekt');
-    const gruppeId = liveSlots(o.projekt)[slot];
+    const gruppeId = modulAmPlatz(o.projekt, slot);
     if (gruppeId === undefined) throw new ProjFehler(409, 'slot_leer', { slot });
     const m = this.master?.() ?? { code: 409, fehler: 'kein_deck' };
     if ('fehler' in m) throw new ProjFehler(m.code, m.fehler);

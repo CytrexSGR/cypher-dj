@@ -3,7 +3,7 @@
 import {
   istRbGeraet, FADER_MAX, FADER_MIN, MAX_RETURNS, HALL_VORGABE, INSERT_ARTEN_AKTIV, insertWertParameter, type InsertPoolArt, MAX_INSERTS_PRO_STRANG,
   MAX_INS, alleInserts, insertVorgabe, sucheStrang, makroVon, BK_GRAPH_NAME, BK_PARAMETER, SPUR_FARBEN, SURGE_PARAMETER_MAX, istObjekt, neueId,
-  sucheSpur, type Gruppe, type Insert, type Return, type Send, type Spur, MAX_LATENZ_EXTRA,
+  sucheSpur, type Gruppe, type Insert, type Projekt, type Return, type Send, type Spur, MAX_LATENZ_EXTRA,
 } from './model.ts';
 import { bkSetzen } from './modular.ts';
 import { normaleStifte, stiftFehler, stiftEinzelFehler, STIFT_SAETZE, type Stift } from '../steckfeld.ts';
@@ -11,7 +11,7 @@ import { wendeAn as richtungAnwenden } from './direction.ts';
 import { pruefeStammbaum, type Stammbaum } from './sound_runde_contract.ts';   // find sound: the family tree of a track
 import { presetZuParameter } from './rb_mapping.ts';
 import {
-  ab, erlaube, zahlOk, zahl, flagge, text, hallArg, idArg, spurVon, returnVon, strangKennung, rackBereinigen, hostSetzen, insertVon,
+  ab, erlaube, zahlOk, zahl, flagge, text, hallArg, idArg, gruppeVon, spurVon, returnVon, strangKennung, rackBereinigen, hostSetzen, insertVon,
   DUCK_DURCH_KICK_WERTE, schluesselArg, schluesselDef, FARBE_OK, presetArg, PRO_BEFEHL, type Args, type Kontext, type Handler,
 } from './commands_helpers.ts';
 
@@ -45,13 +45,25 @@ function insertZahl(art: InsertPoolArt, q: { min: number; max: number; ganz?: bo
   return v;
 }
 
+// The owner top group of a return in a live project (D-M3): `gruppe_id`, else the group of the first place that holds one, else the lowest top group
+function eignerArg(p: Projekt, a: Args): string {
+  if (a.gruppe_id !== undefined) {
+    const g = gruppeVon(p, idArg(a, 'gruppe_id'));
+    if (g.ausgang) ab('argument_ungueltig', 'gruppe_id: the owner of a return is a top group');
+    return g.id;
+  }
+  const platz = (p.plaetze ?? []).find((x) => 'gruppe' in x);
+  const g = platz && 'gruppe' in platz ? platz.gruppe : [...(p.gruppen ?? [])].filter((x) => !x.ausgang).sort((x, y) => x.nr - y.nr)[0]?.id;
+  return g ?? ab('argument_ungueltig', 'gruppe_id: a live return needs an owner group and the project has none');
+}
+
 export const INSERT = {
   // 1.10 slice 3: returns (the Hall is a part of the return) and sends. A send is an entry {id: <return id>, db} of a track or group; -200 removes it.
   // arr-bk slice 4: `effekt` {graph, werte?} makes an EFFECT return: the Hall is off and the chain carries one bk stage with that effect graph
   // (the shipped standard case is the tempo-synchronous stereo delay fx-delay-sync). Without `effekt` the return keeps the Cypher Hall as before.
   // The send level into the return is send_setzen as always.
   return_neu(p, a, ctx) {
-    erlaube(a, 'name', 'farbe', 'hall', 'effekt');
+    erlaube(a, 'name', 'farbe', 'hall', 'effekt', 'gruppe_id');
     if (a.effekt !== undefined && a.hall !== undefined) ab('argument_ungueltig', 'effekt and hall exclude each other: an effect return has no Hall');
     if (a.effekt !== undefined && !istObjekt(a.effekt)) ab('argument_ungueltig', 'effekt: object {graph, werte?} expected');
     const rl = p.returns ?? [];
@@ -64,6 +76,8 @@ export const INSERT = {
     const r: Return = { id: neueId(p, 'return'), nr, name: name ?? `Return ${nr}`, farbe: a.farbe ?? SPUR_FARBEN[(nr + 3) % SPUR_FARBEN.length],
       fader_db: 0, pan: 0, mute: false, solo: false, hall };
     if (a.effekt !== undefined) r.hall.an = false;
+    if (p.live === true) r.gruppe = eignerArg(p, a);
+    else if (a.gruppe_id !== undefined) ab('argument_ungueltig', 'gruppe_id: only a live project has return owners');
     p.returns = [...rl, r].sort((x, y) => x.nr - y.nr);
     if (a.effekt !== undefined) {
       const e = a.effekt as Args;

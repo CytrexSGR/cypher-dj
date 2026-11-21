@@ -95,7 +95,7 @@ test('graph_fehlt (404, the instrument is not installed) for an unknown graph an
 });
 
 test('the latency rule of the SEQ picker is mirrored: a graph with latency is refused graph_latenz on a SEQ pattern track, fine on an ordinary track', () => {
-  let p = neuesProjekt('S'); p.live = true;
+  let p = neuesProjekt('S'); p.live = true; p.plaetze = [{ typ: 'track' }, { typ: 'track' }, { typ: 'track' }, { typ: 'track' }];
   const lauf = (b) => { p = fuehreListeAus(p, b, { quelle: 'andreas' }).projekt; };
   lauf([{ befehl: 'seq_anlegen', platz: 2 }]);
   lauf([{ befehl: 'seq_folge_neu', gruppe_id: p.gruppen[0].id, name: 'Bass', geraet: { art: 'intern', name: 'bk', graph: 'alt', parameter: {} } }]);
@@ -133,11 +133,11 @@ test('channel, the graph is already loaded: no graph field, the plan equals the 
   assert.equal(fehler(() => planeAnwendung(PRESET, { art: 'kanal', kanal: 'erz/6' }, null), 'kein_graph').zusatz.graph, 'neu-a');
 });
 
-test('a channel that cannot carry an instrument graph (deck, bus, the drum kit stream erz/1, the production stream erz/4) refuses the swap with kanal_art', () => {
-  for (const kanal of ['deck/1', 'bus/1', 'erz/1', 'erz/4']) {
+test('a channel that cannot carry an instrument graph (deck, container pad, bus, the drum kit stream erz/1, the production stream erz/4) refuses the swap with kanal_art', () => {
+  for (const kanal of ['deck/1', 'bus/1', 'pad/1', 'pad/2', 'erz/1', 'erz/4']) {   // container core: pad/1, pad/2 are containers, the graphs of the pad streams sit on erz/9, erz/10
     for (const geladen of ['alt', undefined]) fehler(() => planeAnwendung(PRESET, { art: 'kanal', kanal }, null, geladen, MIT), 'kanal_art');
   }
-  for (const kanal of ['erz/2', 'erz/3', 'erz/5', 'erz/7', 'pad/1', 'pad/2']) assert.deepEqual(planeAnwendung(PRESET, { art: 'kanal', kanal }, null, 'alt', MIT).graph, { kanal, name: 'neu-a' });
+  for (const kanal of ['erz/2', 'erz/3', 'erz/5', 'erz/7', 'erz/9', 'erz/10']) assert.deepEqual(planeAnwendung(PRESET, { art: 'kanal', kanal }, null, 'alt', MIT).graph, { kanal, name: 'neu-a' });
 });
 
 test('the flag changes nothing for other devices: komp channel and rb338 track plans are identical with it', () => {
@@ -214,7 +214,7 @@ test('POST /presets/anwenden: graph_laden on a channel gives the graph first; gr
 
 test('POST /presets/anwenden: a latency graph on a SEQ pattern track is refused graph_latenz (409) through the route', async (t) => {
   const s = await stapel(t);
-  let p = neuesProjekt('S'); p.live = true;
+  let p = neuesProjekt('S'); p.live = true; p.plaetze = [{ typ: 'track' }, { typ: 'track' }, { typ: 'track' }, { typ: 'track' }];
   const lauf = (b) => { p = fuehreListeAus(p, b, { quelle: 'andreas' }).projekt; };
   lauf([{ befehl: 'seq_anlegen', platz: 2 }]);
   lauf([{ befehl: 'seq_folge_neu', gruppe_id: p.gruppen[0].id, name: 'Bass', geraet: { art: 'intern', name: 'bk', graph: 'alt', parameter: {} } }]);

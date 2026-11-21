@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { neuesProjekt, blendFader, pruefeProjekt } from '../project/model.ts';
-import { baueModul, baueNeuePfade, liveSlots } from '../project/live.ts';
+import { baueModul, baueNeuePfade, modulAmPlatz } from '../project/live.ts';
 import { fuehreListeAus } from '../project/commands.ts';
 import { aendereStand } from '../project/state.ts';
 import { uebersetze } from '../project/playback.ts';
@@ -14,7 +14,7 @@ const herkunft = { quelle_sha256: HASH, titel: 'Song', kuenstler: 'Art', fassung
 const LOOP = { ...D('e'), beats: 16, frames: 16 * 24000 };
 const NOTEN = [{ beat: 0, laenge: 0.25, ton: 36, vel: 100 }, { beat: 4, laenge: 0.25, ton: 42, vel: 90 }];
 const mitPfad = () => {
-  const p0 = neuesProjekt('x'); p0.live = true;
+  const p0 = neuesProjekt('x'); p0.live = true; p0.plaetze = [{ typ: 'track' }, { typ: 'track' }, { typ: 'track' }, { typ: 'track' }];
   const p = baueModul(p0, 'A', LOOP, { drums: D('1'), bass: D('2'), other: D('3'), vocals: D('4') }, herkunft);
   return baueNeuePfade(p, 'A', { drums: NOTEN, bass: NOTEN });
 };

@@ -90,7 +90,7 @@ int main() {
     };
     const std::string gut = "{\"nr\":1,\"art\":\"audio\",\"clips\":[" + o.clip("c1", 0.0, 1.0, a, F) + "]}";
     PRUEF(grund(99) == "datei_fehlt");
-    o.roh(20, "{\"format\":\"cypherdj-arr/4\",\"nr\":20,\"spuren\":[]}");   // 1.10: /2 ist seit Task 5 gültig, /3 seit der return fader lane (returns[].auto), unbekannt ist jetzt /4
+    o.roh(20, "{\"format\":\"cypherdj-arr/5\",\"nr\":20,\"spuren\":[]}");   // 1.10: /2 ist seit Task 5 gültig, /3 seit der return fader lane (returns[].auto), container core K5: /4 is valid, unknown is now /5
     PRUEF(grund(20) == "format");
     o.roh(21, "{\"format\":\"cypherdj-arr/1\",\"nr\":7,\"spuren\":[]}");
     PRUEF(grund(21) == "format");   // nr der Datei weicht ab
@@ -475,7 +475,7 @@ int main() {
     PRUEF(e.snap == nullptr && e.grund == "format" && e.meldung.find("returns") != std::string::npos);
     if (e.snap) cdj::gib_wiedergabe(e.snap.release(), cache);
     // nr 0 and 5, doubled nr, output to a group: format
-    const std::string schlecht[] = {"{\"nr\":0,\"ausgang\":{\"art\":\"master\"}}", "{\"nr\":5,\"ausgang\":{\"art\":\"master\"}}",
+    const std::string schlecht[] = {"{\"nr\":0,\"ausgang\":{\"art\":\"master\"}}", "{\"nr\":9,\"ausgang\":{\"art\":\"master\"}}",
                                     ret1 + "," + ret1, "{\"nr\":2,\"ausgang\":{\"art\":\"gruppe\",\"nr\":1}}"};
     int nr = 63;
     for (const std::string& r : schlecht) {

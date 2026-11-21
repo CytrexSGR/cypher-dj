@@ -103,7 +103,7 @@ struct RenderErgebnis {
   // 1.10 slice 3 (P8 a, test seam): a Hall that woke on a pending target and got no setze credit (render: 0, hall_sofort() applied before block 0), and the
   // normalised decay each return Hall holds at the end
   uint64_t hall_start_alt = 0;
-  float hall_decay[4] = {0, 0, 0, 0};
+  float hall_decay[ARR_RETURNS] = {};   // one per return (ARR_RETURNS = 8 since container core K6; the render loop writes all of them)
 };
 
 RenderErgebnis rendere(const RenderAuftrag& a);

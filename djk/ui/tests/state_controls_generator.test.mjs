@@ -133,9 +133,10 @@ test('/lage.regler lists fader, trim, eq, kill, filter and non-default sends of 
   assert.ok(!('deck/5/fader' in (await regler())));
 });
 
-test('/griff accepts the control targets of deck 3 and 4 and refuses deck 5', { timeout: 60000 }, async (t) => {
+test('/griff accepts the strips of containers pad/1 and pad/2 (places C and D) and the keys of players 3 and 4, refuses deck 3/4 strips and deck 5', { timeout: 60000 }, async (t) => {
   const { url } = await realerServer(t);
   const griff = async (pfad) => (await hol(`${url}/griff`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pfad, u: 0.5 }) })).status;
-  for (const p of ['deck/3/fader', 'deck/4/fader', 'deck/4/eq/tief', 'deck/4/play', 'deck/3/cue', 'deck/4/pfl', 'deck/4/xseite']) assert.notEqual(await griff(p), 400, p);
-  for (const p of ['deck/5/fader', 'deck/0/fader']) assert.equal(await griff(p), 400, p);
+  for (const p of ['pad/1/fader', 'pad/2/fader', 'pad/2/eq/tief', 'deck/4/play', 'deck/3/cue', 'pad/2/pfl', 'pad/2/xseite']) assert.notEqual(await griff(p), 400, p);
+  // places C and D have no deck/3, deck/4 strip any more: their strip is the container strip
+  for (const p of ['deck/3/fader', 'deck/4/eq/tief', 'deck/5/fader', 'deck/0/fader']) assert.equal(await griff(p), 400, p);
 });

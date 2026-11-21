@@ -18,21 +18,22 @@ namespace {
 double db_zu_amp(double db) { return std::pow(10.0, db / 20.0); }
 }
 
-int main() {
+// Each Lauf holds a whole controller table (8192 rows since K2): the frame of the body exceeds the 8 MB default stack, so it runs on its own thread.
+static int haupt() {
   // (F1) hold: signal -20 dBFS, then -60 dBFS (threshold -40, release 50, floor -60)
   {
     Lauf ref, g;
-    g.setze(ERZ1, "gate/an", 1.0f);
-    g.setze(ERZ1, "gate/schwelle", -40.0f);
-    g.setze(ERZ1, "gate/bereich", -60.0f);
-    g.setze(ERZ1, "gate/release", 50.0f);
-    g.setze(ERZ1, "gate/attack", 1.0f);
-    g.setze(ERZ1, "gate/hold", 400.0f);
+    g.setze(DECK2, "gate/an", 1.0f);
+    g.setze(DECK2, "gate/schwelle", -40.0f);
+    g.setze(DECK2, "gate/bereich", -60.0f);
+    g.setze(DECK2, "gate/release", 50.0f);
+    g.setze(DECK2, "gate/attack", 1.0f);
+    g.setze(DECK2, "gate/hold", 400.0f);
     double mitte = 0.0, ende = 0.0;
     for (int blk = 0; blk < 300; ++blk) {
       const double amp = blk < 20 ? db_zu_amp(-20.0) : db_zu_amp(-60.0);
       for (Lauf* l : {&ref, &g}) {
-        l->sinus(ERZ1, 1000.0, amp, amp);
+        l->sinus(DECK2, 1000.0, amp, amp);
         l->verarbeite();
       }
       if (blk == 20 + 38) mitte = rms_db(ref.m->master_summe_l(), N) - rms_db(g.m->master_summe_l(), N);   // 200 ms after the drop
@@ -42,22 +43,22 @@ int main() {
     PRUEF(mitte < 1.0);
     PRUEF_NAH(ende, 60.0, 0.5);
   }
-  // (F2) attack: erz/2 keyed by a silent erz/1 closes; then the key opens it with attack 200 ms
+  // (F2) attack: pad/1 keyed by a silent deck/2 closes; then the key opens it with attack 200 ms
   {
     Lauf ref, g;
-    for (Lauf* l : {&ref, &g}) l->setze(ERZ1, "fader", -200.0f);
-    g.setze(ERZ2, "gate/an", 1.0f);
-    g.setze(ERZ2, "gate/schwelle", -40.0f);
-    g.setze(ERZ2, "gate/bereich", -60.0f);
-    g.setze(ERZ2, "gate/sc", 5.0f);
-    g.setze(ERZ2, "gate/attack", 200.0f);
-    g.setze(ERZ2, "gate/hold", 20.0f);
-    g.setze(ERZ2, "gate/release", 50.0f);
+    for (Lauf* l : {&ref, &g}) l->setze(DECK2, "fader", -200.0f);
+    g.setze(PAD1, "gate/an", 1.0f);
+    g.setze(PAD1, "gate/schwelle", -40.0f);
+    g.setze(PAD1, "gate/bereich", -60.0f);
+    g.setze(PAD1, "gate/sc", 2.0f);
+    g.setze(PAD1, "gate/attack", 200.0f);
+    g.setze(PAD1, "gate/hold", 20.0f);
+    g.setze(PAD1, "gate/release", 50.0f);
     double geschlossen = 0.0, nach50 = 0.0, nach_ende = 0.0;
     for (int blk = 0; blk < 130; ++blk) {
       for (Lauf* l : {&ref, &g}) {
-        l->sinus(ERZ2, 1000.0, 0.1, 0.1);
-        l->sinus(ERZ1, 100.0, blk < 80 ? 0.0 : 0.1, blk < 80 ? 0.0 : 0.1);
+        l->sinus(PAD1, 1000.0, 0.1, 0.1);
+        l->sinus(DECK2, 100.0, blk < 80 ? 0.0 : 0.1, blk < 80 ? 0.0 : 0.1);
         l->verarbeite();
       }
       const double d = rms_db(ref.m->master_summe_l(), N) - rms_db(g.m->master_summe_l(), N);
@@ -73,12 +74,12 @@ int main() {
   // (F3) phase_r, (F5) balance, (F4) dc
   {
     Lauf ref, pr, bal;
-    pr.setze(ERZ1, "util/phase_r", 1.0f);
-    bal.setze(ERZ1, "util/balance", 1.0f);
+    pr.setze(DECK2, "util/phase_r", 1.0f);
+    bal.setze(DECK2, "util/balance", 1.0f);
     bool u3 = true, u5 = true;
     for (int blk = 0; blk < 14; ++blk) {
       for (Lauf* l : {&ref, &pr, &bal}) {
-        l->sinus(ERZ1, 1000.0, 0.4, 0.3);
+        l->sinus(DECK2, 1000.0, 0.4, 0.3);
         l->verarbeite();
       }
       if (blk < 8) continue;
@@ -93,14 +94,14 @@ int main() {
   }
   {
     Lauf ref, dc;
-    dc.setze(ERZ1, "util/dc", 1.0f);
+    dc.setze(DECK2, "util/dc", 1.0f);
     double mr = 0.0, md = 0.0;
     for (int blk = 0; blk < 80; ++blk) {
       for (Lauf* l : {&ref, &dc}) {
-        l->sinus(ERZ1, 1000.0, 0.1, 0.1);
+        l->sinus(DECK2, 1000.0, 0.1, 0.1);
         for (int i = 0; i < N; ++i) {
-          l->m->eingang_l(ERZ1)[i] += 0.2f;
-          l->m->eingang_r(ERZ1)[i] += 0.2f;
+          l->m->eingang_l(DECK2)[i] += 0.2f;
+          l->m->eingang_r(DECK2)[i] += 0.2f;
         }
         l->verarbeite();
       }
@@ -113,7 +114,7 @@ int main() {
     PRUEF_NAH(mr, 0.2, 0.01);   // positive control: the offset reaches the master
     PRUEF(std::fabs(md) < 0.01);
   }
-  for (const int K : {BUS1, 17}) {
+  for (const int K : {BUS1, BUS4}) {
     std::printf("-- F6..F8 on %s\n", kname(K));
     // (F6) onset of a sine over the mid threshold: ratio 20, threshold -40, attack 300 ms, release 20 ms; ~27 ms after the onset
     {
@@ -178,4 +179,22 @@ int main() {
     }
   }
   PRUEF_ENDE();
+}
+
+#include <pthread.h>
+
+static void* haupt_faden(void* r) {
+  *static_cast<int*>(r) = haupt();
+  return nullptr;
+}
+
+int main() {
+  int rc = 1;
+  pthread_attr_t a;
+  pthread_attr_init(&a);
+  pthread_attr_setstacksize(&a, size_t{256} << 20);
+  pthread_t t;
+  if (pthread_create(&t, &a, haupt_faden, &rc) != 0) return 2;
+  pthread_join(t, nullptr);
+  return rc;
 }

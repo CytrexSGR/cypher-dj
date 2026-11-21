@@ -83,7 +83,7 @@ test('Hörschein: je Code ein Fall (I3a im Leitstand)', () => {
   // nur das Setzen auf −15 öffnet; die Rampe danach beginnt am offenen Kanal und braucht keinen
   assert.deepEqual(codes(plan(B_REIN, ''), umgebung()), ['kein_hoerschein']);
   assert.deepEqual(codes(plan(B_REIN, 'h9'), umgebung()), ['kein_hoerschein']);
-  assert.deepEqual(codes(plan(B_REIN), mit({ kanal: 'deck/3' })).slice(0, 1), ['hoerschein_anderer_kanal']);
+  assert.deepEqual(codes(plan(B_REIN), mit({ kanal: 'pad/1' })).slice(0, 1), ['hoerschein_anderer_kanal']);
   assert.deepEqual(codes(plan(B_REIN), mit({ urteil: 'nicht_sync' })).slice(0, 1), ['hoerschein_nicht_sync']);
   assert.deepEqual(codes(plan(B_REIN), mit({ urteil: 'zu_laut' })).slice(0, 1), ['hoerschein_pegel']);
   assert.deepEqual(codes(plan(B_REIN), mit({ inhalt: `${B2}/128000_r2` })).slice(0, 1), ['hoerschein_anderer_inhalt']);

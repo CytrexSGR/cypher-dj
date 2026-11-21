@@ -136,6 +136,7 @@ class Netz {
   // Aufrufer; "keylock" ist keine der sechs Vertragsquellen (osc_addresses.h) und ein Abonnent kennt keine Befehlsnummer 0
   bool einreihen(const Befehl& b, bool melden = true);
   void hallo(const osc::Nachricht& m, int64_t jetzt_ns);
+  void sende_container_stand(int nur_port);  // container core K8: /e/container/quelle for the four containers, to one port, 0 = to all
   void sende_neustart(int nur_port);  // Scheibe 18: /e/neustart an einen Port, 0 = an alle
   void sende_stand(int port);         // Scheibe 18: /q/stand je offenem Befehl
   void schreibe_abonnenten();         // Scheibe 18: Abonnenten-Fach
@@ -150,10 +151,9 @@ class Netz {
   bool erz_ereignis(const Ereignis& e);
   std::string kit_ordner_;
   std::string bk_ordner_;  // Baukasten S3a
-  // S12 task 1: per stream (1..16) the last ACCEPTED non-graph target (kit:/midi:) and its kanal, net thread only. `bk:`
+  // S12 task 1: per stream (1..16) the last ACCEPTED non-graph target (kit:/midi:) net thread only. `bk:`
   // with an empty name replays it, so an instrument graph can be taken off again. Graph targets are never stored.
   std::string erz_vorher_ziel_[16];
-  std::string erz_vorher_kanal_[16];
   // S16 (net_graph.cpp): which graph sits on each graph-capable slot (osc.json graph_platz), net thread only. Changed only when
   // the callback's quittung for the command arrives (1, 2, 3, 5), published as /e/graph; /k/graph/frage answers every slot.
   bool graph_paket(const cypherdj::osc::Adresse* a, const osc::Nachricht& m);  // /k/graph/frage (false: other address)
@@ -166,7 +166,7 @@ class Netz {
   std::deque<GraphWartend> graph_wartend_;
   std::map<std::string, std::string> graph_insert_;     // deck/1..4, fx/3, fx/4 -> name
   struct GraphStrom { std::string kanal, name; };
-  GraphStrom graph_strom_[16];                          // stream n-1 -> channel and graph it carries ("" none)
+  GraphStrom graph_strom_[16];                          // stream n-1 -> mirror slot strom/<n> and graph it carries ("" none)
   // MVP 2 (net_loop.cpp): /k/loop/* annehmen (false: keine Loop-Adresse), /e/loop senden, Freigaben
   bool loop_paket(const cypherdj::osc::Adresse* a, const osc::Nachricht& m);
   bool loop_ereignis(const Ereignis& e);
@@ -224,8 +224,6 @@ class Netz {
   // ein neuer Abonnent (die Seite nach ihrem Neustart) wüsste sonst nicht, dass ein Kompressor an ist oder welcher Loop in
   // welcher Box läuft (die Loop-Automation plante dann nicht mehr). Nur im Netz-Faden.
   std::map<std::string, std::pair<float, std::string>> regler_stand_;
-  struct LoopStand { bool da = false; int32_t status = 0, beats = 0, fx_art = 0; std::string name; double fx_beats = 0; float fx_wet = 0; };
-  LoopStand loop_stand_[3];
   bool kl_lim_gebaut_ = false;     // 1.15 A5c: set once before the net thread runs
   int kl_lim_latenz_ = 0;
   bool kl_knopf_bekannt_ = false;  // mindestens eine /uhr gesehen (sonst bekommt ein neuer Abonnent nichts)
@@ -244,7 +242,7 @@ class Netz {
   double stand_bpm_ = 0.0;
   int32_t stand_generation_ = 0;
   int64_t neustart_sample_ = 0;                    // Scheibe 18: erstes Sample der laufenden Generation
-  int32_t platz_kanal_stand_[2] = {};              // DJ view places 3 and 4: last reported inhalt of pad/1, pad/2 (0 = nothing, the default of the kern)
+  int32_t container_stand_[4] = {1, 1, 1, 1};      // container core K8: the last reported input art of the containers A..D (1 player = the default of the core)
   int32_t fx_routing_stand_ = 0;                   // Ohr T17: zuletzt gemeldetes FX-Routing (0 Post Fader = Vorgabe des Kerns)
   cdj_z_datei* zustand_ = nullptr;                 // Scheibe 18
   FachSchreiber<cdj_z_abos> abo_schreiber_;        // Scheibe 18

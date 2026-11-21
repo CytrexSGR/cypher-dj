@@ -182,7 +182,7 @@ KernKonfig lies_kern_toml_text(std::string_view text, const std::string& quelle,
   if (!k.arr_ordner.empty() && k.arr_ordner[0] != '/') fehler(quelle, "Schlüssel 'arr_ordner' muss ein absoluter Pfad sein");
   if (k.warp_faeden < 1 || k.warp_faeden > 8) fehler(quelle, "Schlüssel 'warp_faeden' muss zwischen 1 und 8 liegen (1.13 Slice 2)");
   if (k.graph_faeden < 0 || k.graph_faeden > 8) fehler(quelle, "Schlüssel 'graph_faeden' muss zwischen 0 und 8 liegen (Baukasten S3b)");
-  if (k.hall_faeden < 0 || k.hall_faeden > 3) fehler(quelle, "key 'hall_faeden' must be between 0 and 3");
+  if (k.hall_faeden < 0 || k.hall_faeden > 7) fehler(quelle, "key 'hall_faeden' must be between 0 and 7");
   if (k.stimme_eingang < 0 || k.stimme_eingang > 4) fehler(quelle, "key 'stimme_eingang' must be between 0 and 4");
   if (!(k.stimme_duck_db >= -40.0 && k.stimme_duck_db <= 0.0)) fehler(quelle, "key 'stimme_duck_db' must be between -40 and 0");
   if (!(k.stimme_pegel_db >= -40.0 && k.stimme_pegel_db <= 12.0)) fehler(quelle, "key 'stimme_pegel_db' must be between -40 and 12");

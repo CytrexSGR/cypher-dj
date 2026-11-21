@@ -31,8 +31,11 @@ HG, TEXT, GRAU, LINIE = (12, 14, 18), (230, 232, 236), (130, 136, 148), (40, 44,
 AKZENT = {1: (0, 190, 220), 2: (240, 150, 30)}  # deck A cyan, deck B orange
 GRUEN, ROT, GELB = (60, 200, 110), (230, 70, 60), (235, 200, 60)
 CUE_FARBE = (255, 140, 40)
-STROM_NAME = {1: "DRUMS", 2: "BASS", 3: "MELODY", 5: "I5", 6: "I6", 7: "I7", 9: "L1", 10: "L2"}
-STROM_KANAL = {1: "erz/1", 2: "erz/2", 3: "erz/3", 5: "erz/5", 6: "erz/6", 7: "erz/7", 9: "pad/1", 10: "pad/2"}
+STROM_NAME = {1: "DRUMS", 2: "BASS", 3: "MELODY", 5: "I5", 6: "I6", 7: "I7", 9: "I9", 10: "I10"}
+# every stream is an alias stream erz/<n> (contract/pult.json alias_stroeme); the pads are containers now, not streams
+STROM_KANAL = {n: f"erz/{n}" for n in STROM_NAME}
+SEITEN_STROEME = {1: (1, 2, 3), 2: (9, 10, 5, 6, 7)}   # the streams of the bottom row and of the studio view, per side
+STUDIO_TITEL = {1: "Strudel", 2: "Baukasten"}
 WELLE_Y, WELLE_H = 66, 76          # waveform band around the playhead
 UEBER_Y, UEBER_H = 146, 28         # whole-track overview (the touch strip maps onto it)
 CUES_Y = 178                       # hot cue row
@@ -363,7 +366,7 @@ def studio_bild(lage, pegel, nr, stroeme):
     ak = AKZENT[nr]
     d.rectangle([0, 0, 34, 34], fill=ak)
     d.text((17, 17), "AB"[nr - 1], font=FONT["titel"], fill=HG, anchor="mm")
-    d.text((44, 6), "STUDIO  " + ("Strudel" if nr == 1 else "loops + Baukasten"), font=FONT["titel"], fill=TEXT)
+    d.text((44, 6), "STUDIO  " + STUDIO_TITEL[nr], font=FONT["titel"], fill=TEXT)
     st = {s["strom"]: s for s in lage.get("studio", {}).get("stroeme", [])}
     reg = lage.get("regler", {})
     klang = lage.get("studio", {}).get("klang") or {}
@@ -527,7 +530,7 @@ class Anzeige:
                         stand.update(lage=lage, pegel=pegel, zeit=time.monotonic(), cues={1: cues[0], 2: cues[1]})
                     ansicht = (stand or {}).get("ansicht") or {}
                     groesse = (stand or {}).get("loop_groesse") or {}
-                    for i, nr, unten in ((0, 1, (1, 2, 3)), (1, 2, (9, 10, 5, 6, 7))):
+                    for i, nr, unten in ((0, 1, SEITEN_STROEME[1]), (1, 2, SEITEN_STROEME[2])):
                         if ansicht.get(nr) == "loops":  # drawn every frame below (the progress bars move)
                             kopf[i] = kopf[i] if kopf[i] is not None else leer_bild()
                             cues[i] = {}

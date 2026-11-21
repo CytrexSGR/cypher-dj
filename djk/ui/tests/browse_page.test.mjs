@@ -179,7 +179,7 @@ test('aktionenFuer: Loop → Loop-Box-Knöpfe (S6), Sample nie; Strudel ladbar �
 
 test('loopBoxStatus: aktiv nur mit Datei, ohne Ableton-Schutz und ohne Import-Grund; jeder Grund ist lesbar', () => {
   const gut = { typ: 'loop', pfad_da: true, nur_live: false, import_beats: 4 };
-  assert.deepEqual(loopBoxStatus(gut), { aktiv: true, grund: null, titel: 'Stretch to 128 BPM and load into the loop box' });
+  assert.deepEqual(loopBoxStatus(gut), { aktiv: true, grund: null, titel: 'Stretch to 128 BPM and load into a loop deck' });
   // Ableton-geschützt: kein aktiver Knopf, der Grund steht sichtbar da — auch wenn Datei und Beats stimmen würden
   const live = loopBoxStatus({ ...gut, nur_live: true });
   assert.deepEqual([live.aktiv, live.grund], [false, 'Live only']);

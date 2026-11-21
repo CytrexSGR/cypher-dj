@@ -12,7 +12,7 @@ import { OHNE_GPU } from './support/stems_voraussetzung.mjs';   // no GPU, or a 
 
 test('export saves modul.json with the origin, the tree and a copy of the loop WAV under audio/<sha>.wav', async (t) => {
   const z = await liveAufbau(t);
-  assert.equal((await z.m.exportiere({ deck: 1 }, 'andreas')).code, 200);
+  assert.equal((await z.m.exportiere({ deck: 1, slot: 'A' }, 'andreas')).code, 200);
   assert.equal(z.nach.length, 1);
   const p = z.projekt();
   const g = z.gruppeVon(p, 'A');
@@ -22,7 +22,7 @@ test('export saves modul.json with the origin, the tree and a copy of the loop W
   const j = JSON.parse(fs.readFileSync(datei, 'utf8'));
   assert.equal(j.id, id);
   assert.equal(j.format, 1);
-  assert.equal(j.slot, 'A');
+  assert.equal(j.slot, undefined, 'a module file carries no place: the project places it');
   const h = j.herkunft;
   assert.deepEqual([h.titel, h.kuenstler, h.quelle_sha256, h.von_beat, h.laenge_beats, h.tonart],
     ['Song', 'Art', 'a'.repeat(64), 5, 4, '8A']);
@@ -42,7 +42,7 @@ test('export saves modul.json with the origin, the tree and a copy of the loop W
 
 test('saving again: same id, existing audio copies stay (not copied again), a missing source is noted, not thrown', async (t) => {
   const z = await liveAufbau(t, { speichern: false });
-  await z.m.exportiere({ deck: 1 }, 'andreas');
+  await z.m.exportiere({ deck: 1, slot: 'A' }, 'andreas');
   const p = z.projekt();
   const g = z.gruppeVon(p, 'A');
   const a = speichereModul(p, g.id, { basis: z.modulOrdner });
@@ -64,10 +64,10 @@ test('saving again: same id, existing audio copies stay (not copied again), a mi
 
 test('the id is stable per module and differs between loops; the base can be set by the environment', async (t) => {
   const z = await liveAufbau(t, { speichern: false });
-  await z.m.exportiere({ deck: 1 }, 'andreas');
+  await z.m.exportiere({ deck: 1, slot: 'A' }, 'andreas');
   const g = z.gruppeVon(z.projekt(), 'A');
   assert.match(modulId(g.modul), /^[0-9a-f]{16}$/);
-  assert.equal(modulId(g.modul), modulId({ ...g.modul, slot: 'B', titel: 'other title', datum: '2030-01-01' }));
+  assert.equal(modulId(g.modul), modulId({ ...g.modul, titel: 'other title', datum: '2030-01-01' }));
   assert.notEqual(modulId(g.modul), modulId({ ...g.modul, von_beat: 9 }));
   const alt = process.env.CYPHERDJ_MODULE;
   process.env.CYPHERDJ_MODULE = path.join(z.tmp, 'env-basis');
@@ -79,7 +79,7 @@ test('the id is stable per module and differs between loops; the base can be set
 
 test('stems arrive: the hook saves again into the same module, now with four stem tracks and their audio', { skip: OHNE_GPU }, async (t) => {
   const z = await liveAufbau(t, { trenner: 'identitaet_vier' });
-  await z.m.exportiere({ deck: 1 }, 'andreas');
+  await z.m.exportiere({ deck: 1, slot: 'A' }, 'andreas');
   const { warteBis } = await import('./support/proj_context.mjs');
   assert.ok(await warteBis(() => z.stand('A').stems.stems === 'fertig', 60000), JSON.stringify(z.stand('A')));
   assert.ok(await warteBis(() => z.nachStems.length === 1, 5000), 'nachStems ran');
@@ -122,12 +122,12 @@ const mitId = (p, gid, id, slot) => {
 
 test('module folder: a new module gets <name>-<4hex>', async (t) => {
   const z = await liveAufbau(t, { speichern: false });
-  await z.m.exportiere({ deck: 1 }, 'andreas');
+  await z.m.exportiere({ deck: 1, slot: 'A' }, 'andreas');
   const p = z.projekt(), g = z.gruppeVon(p, 'A');
   const r = speichereModul(p, g.id, { basis: z.modulOrdner });
-  assert.deepEqual(fs.readdirSync(z.modulOrdner), [`song-a-${g.modul.id.slice(0, 4)}`]);
-  assert.equal(r.pfad, path.join(z.modulOrdner, `song-a-${g.modul.id.slice(0, 4)}`, 'modul.json'));
-  assert.equal(modulOrdner(g.modul.id, z.modulOrdner), path.join(z.modulOrdner, `song-a-${g.modul.id.slice(0, 4)}`));
+  assert.deepEqual(fs.readdirSync(z.modulOrdner), [`song-${g.modul.id.slice(0, 4)}`]);
+  assert.equal(r.pfad, path.join(z.modulOrdner, `song-${g.modul.id.slice(0, 4)}`, 'modul.json'));
+  assert.equal(modulOrdner(g.modul.id, z.modulOrdner), path.join(z.modulOrdner, `song-${g.modul.id.slice(0, 4)}`));
   assert.equal(modulOrdnerName('Pure and Simple', 'A', '276617b78ebc7a9f'), 'pure-and-simple-a-2766');
   await z.abbruch('A');
 });
@@ -148,7 +148,7 @@ test('an old 16-hex folder still resolves and lists', async (t) => {
 
 test('saving again writes into the existing folder', async (t) => {
   const z = await liveAufbau(t, { speichern: false });
-  await z.m.exportiere({ deck: 1 }, 'andreas');
+  await z.m.exportiere({ deck: 1, slot: 'A' }, 'andreas');
   const p = z.projekt(), g = z.gruppeVon(p, 'A');
   const a = speichereModul(p, g.id, { basis: z.modulOrdner });
   const q = structuredClone(p); q.gruppen.find((x) => x.id === g.id).modul.titel = 'Renamed Title';   // a new title does not move the module
@@ -160,7 +160,7 @@ test('saving again writes into the existing folder', async (t) => {
 
 test('a renamed folder resolves by the id in modul.json', async (t) => {
   const z = await liveAufbau(t, { speichern: false });
-  await z.m.exportiere({ deck: 1 }, 'andreas');
+  await z.m.exportiere({ deck: 1, slot: 'A' }, 'andreas');
   const p = z.projekt(), g = z.gruppeVon(p, 'A');
   const a = speichereModul(p, g.id, { basis: z.modulOrdner });
   assert.ok(modulOrdner(g.modul.id, z.modulOrdner));                       // the map knows the old name now
@@ -176,7 +176,7 @@ test('a renamed folder resolves by the id in modul.json', async (t) => {
 
 test('two modules with the same title get distinct folders', async (t) => {
   const z = await liveAufbau(t, { speichern: false });
-  await z.m.exportiere({ deck: 1 }, 'andreas');
+  await z.m.exportiere({ deck: 1, slot: 'A' }, 'andreas');
   const p = z.projekt(), g = z.gruppeVon(p, 'A');
   const a = speichereModul(mitId(p, g.id, 'abcd000000000001', undefined), g.id, { basis: z.modulOrdner });
   const b = speichereModul(mitId(p, g.id, 'abcd000000000002', undefined), g.id, { basis: z.modulOrdner });   // same title, same 4 hex

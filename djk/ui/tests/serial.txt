@@ -139,3 +139,10 @@ tracker_vorlagen.test.mjs
 proj_steckfeld_route.test.mjs
 controller_targets_track.test.mjs
 loopdeck_wave.test.mjs
+container_source.test.mjs
+entfernt_container.test.mjs
+graph_container.test.mjs
+hand_container_latch.test.mjs
+slots_route.test.mjs
+controls_alias_route.test.mjs
+strudel_module_route.test.mjs

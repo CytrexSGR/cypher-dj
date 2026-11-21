@@ -1,6 +1,6 @@
 // Kern schreibt den Hüllkurven-Ring §6.2 am Mess-Abgriff (vor dem Fader, nach EQ und Filter, ADR 008): ein
-// geschlossenes Deck (Fader −200 dB, Vorgabe) ist im Kanal deck/1 sichtbar, erreicht aber master nicht; ein nie
-// belegter Kanal (erz/5; erz/4 ist seit D1 K1 die Summe der Produktion und belegt) bleibt konstant null; das 48er-Raster hält auch über einen Sample-Sprung (/k/set/neu, M1).
+// geschlossenes Deck (Fader −200 dB, Vorgabe) ist im Kanal deck/1 sichtbar, erreicht aber master nicht; der nie
+// belegte Slot 11 bleibt konstant null (K9: Slot-Tabelle by name, 0, 1 = Container A, B, 2, 3 = Player 3, 4, 12, 13 = Container C, D); das 48er-Raster hält auch über einen Sample-Sprung (/k/set/neu, M1).
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -50,7 +50,7 @@ int main() {
 
   const auto deck1 = lies(h, r0, r1, 0);
   const auto master = lies(h, r0, r1, 14);
-  const auto erz5 = lies(h, r0, r1, 8);  // erz/5: nie belegt (D1 K1: erz/4 ist belegt, test_kern_arr_erz4)
+  const auto erz5 = lies(h, r0, r1, 11);  // slot 11: never occupied
 
   bool deck1_sichtbar = false;
   for (const auto& s : deck1)
@@ -159,6 +159,32 @@ int main() {
     std::printf("Fall 8: w=%llu, Wache %s, Zeilen %s\n", (unsigned long long)w, wache_heil ? "heil" : "ZERSTOERT",
                 zeilen_gleich ? "gleich" : "VERSCHOBEN");
     std::free(roh);
+  }
+
+  // Fall 9 (K9, slot table): player 3 plays and leads into container C (pad/1): slot 2 (raw buffer of player 3) and slot 12
+  // (container C strip tap) carry the signal, slot 13 (container D, nothing loaded on deck 4) and slot 3 stay silent. With the
+  // slots C and D swapped (mutation HUELLE_SLOT_C_VERTAUSCHT) slot 12 is silent and slot 13 carries it: red.
+  {
+    Lauf z(ab.pfad, "config/controller/softcontroller.json");
+    cdj_huellen_kopf* h3 = neue_huellen();
+    z.kern->verbinde_huellen(h3);
+    z.laden(3, "c1c0000000000e01");
+    z.zyklen(10 * N);
+    z.start(3, 2.0);
+    const uint64_t q0 = cdj_lade(&h3->w);
+    z.zyklen(z.kern->sample() + 72000);   // the start at beat 2.0 is about 0.94 s away
+    const uint64_t q1 = cdj_lade(&h3->w);
+    auto laut = [&](unsigned kanal) {
+      for (const auto& s : lies(h3, q0, q1, kanal))
+        if (s.spitze > 0.01f) return true;
+      return false;
+    };
+    PRUEF(laut(2));
+    PRUEF(laut(12));
+    PRUEF(!laut(13));
+    PRUEF(!laut(3));
+    PRUEF(!laut(0));
+    std::free(h3);
   }
   PRUEF_ENDE();
 }

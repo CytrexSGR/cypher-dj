@@ -463,6 +463,25 @@ int main() {
         pruefe_fall("dj " + q + "/" + std::to_string(nr) + " (not in the list)", f, "quelle");
         ++dj_geprueft;
       }
+      {   // K4 (D-V3): the stream distributors 1..16 are keys under the name strom; erz/1 stays the old name of stream 1
+        for (int nr = 1; nr <= 16; ++nr)
+          for (int vi = 0; vi < 4; ++vi) {
+            Fall f;
+            f.spuren = {{1, 0}};
+            f.gruppen = {1};
+            f.returns = {1};
+            f.stufen.push_back({wer[vi], json{{"q", "strom"}, {"nr", nr}}});
+            pruefe_fall("dj strom/" + std::to_string(nr) + " on " + wer[vi], f, "ja");
+            ++dj_geprueft;
+          }
+        for (int nr : {0, 17}) {
+          Fall f;
+          f.spuren = {{1, 0}};
+          f.stufen.push_back({"spur/1", json{{"q", "strom"}, {"nr", nr}}});
+          std::string m;
+          PRUEF(lade(f, &m) == "format" && m.find("strom") != std::string::npos);   // a direct load, like the punkt block: not counted in dj_geprueft
+        }
+      }
       {   // the punkt may be left out or given; a wrong one is refused; an unknown source name is refused as before
         Fall f;
         f.spuren = {{1, 0}};
@@ -495,6 +514,19 @@ int main() {
         PRUEF(k1.quelle == cdj::ARR_SCHL_DECK && k1.nr == 3 && k1.punkt == cdj::ARR_SCHL_POST);
         PRUEF(k2.quelle == cdj::ARR_SCHL_ERZ && k2.nr == 1 && k2.punkt == cdj::ARR_SCHL_POST);
         PRUEF(x.snap->spur_ordnung[0] == 0 && x.snap->spur_ordnung[1] == 1);   // a DJ key makes no track edge
+      }
+      cdj::gib_wiedergabe(x.snap.release(), cache);
+    }
+    {   // K4: a key strom/9 loads as the stream source with number 9 (not as erz/1)
+      komp_slot = 0;
+      const std::string s1 = "{\"nr\":1,\"art\":\"audio\",\"clips\":[" + o.clip("c1", 0.0, 1.0, a, 48000) + "],\"chain\":[{\"art\":\"komp\",\"slot\":1,\"key\":{\"q\":\"strom\",\"nr\":9}}]}";
+      const int64_t nr = nr_datei++;
+      o.roh(nr, "{\"format\":\"cypherdj-arr/2\",\"nr\":" + std::to_string(nr) + ",\"spuren\":[" + s1 + "]}");
+      cdj::ArrLadeErgebnis x = cdj::lade_wiedergabe(o.pfad, nr, cache);
+      PRUEF(x.snap != nullptr);
+      if (x.snap) {
+        const ArrSchluessel k = x.snap->kette[0].st[0].key;
+        PRUEF(k.quelle == cdj::ARR_SCHL_ERZ && k.nr == 9 && k.punkt == cdj::ARR_SCHL_POST);
       }
       cdj::gib_wiedergabe(x.snap.release(), cache);
     }
@@ -805,6 +837,31 @@ int main() {
     PRUEF(o_spaeter == o_zeile + 1);   // the instrument sees one sample
   }
 
+  {  // 16b K4 (D-V3): the key table is containers A..D (index 0..3) and the stream buffers 1..16 (index 4..19). strom/9 follows stream 9 (index 12) and only that; deck/2 follows container B (index 1);
+     // erz/1 is stream 1 (index 4). The runs are bit-identical to the row key run, like the DJ keys of case 16.
+    const auto projekt = [&](ArrSchluessel key) {
+      Bau b(1);
+      b.spur(1, ArrArt::audio).clip(1, "c1", 0.0, 8.0, &bass->a);
+      b.kette(1, {ArrStufe{ArrInsArt::komp, 0, true, key}});
+      b.spur(2, ArrArt::audio).clip(2, "c2", 0.0, 8.0, &klicks->a);
+      return b.fertig();
+    };
+    static_assert(cdj::ARR_SCHLUESSEL == 4 + 16, "containers A..D plus the 16 streams");
+    const Ausgabe zeile = fahre(projekt(ArrSchluessel{}), vor_schl(2.0f));
+    const Ausgabe strom9 = fahre(projekt(schl(cdj::ARR_SCHL_ERZ, 9, cdj::ARR_SCHL_POST)), vor_schl(0.0f), 0, 12);
+    const Ausgabe strom16 = fahre(projekt(schl(cdj::ARR_SCHL_ERZ, 16, cdj::ARR_SCHL_POST)), vor_schl(0.0f), 0, cdj::ARR_SCHLUESSEL - 1);
+    const Ausgabe strom9_falsch = fahre(projekt(schl(cdj::ARR_SCHL_ERZ, 9, cdj::ARR_SCHL_POST)), vor_schl(0.0f), 0, 4);   // the click sits on stream 1: silent key
+    const Ausgabe deck_b = fahre(projekt(schl(cdj::ARR_SCHL_DECK, 2, cdj::ARR_SCHL_POST)), vor_schl(0.0f), 0, 1);
+    const Ausgabe deck_b_falsch = fahre(projekt(schl(cdj::ARR_SCHL_DECK, 2, cdj::ARR_SCHL_POST)), vor_schl(0.0f), 0, 0);   // the click sits on container A
+    const Ausgabe erz1 = fahre(projekt(schl(cdj::ARR_SCHL_ERZ, 1, cdj::ARR_SCHL_POST)), vor_schl(0.0f), 0, 4);
+    const auto gleich = [&](const Ausgabe& x) { return x.pml.size() == zeile.pml.size() && std::memcmp(x.pml.data(), zeile.pml.data(), sizeof(float) * x.pml.size()) == 0; };
+    std::printf("16b: reduction strom/9 %.2f dB, strom/16 %.2f dB, deck/2 %.2f dB, erz/1 %.2f dB; wrong source: strom/9 on stream 1 %.2f dB, deck/2 on container A %.2f dB\n", strom9.gr, strom16.gr, deck_b.gr, erz1.gr,
+                strom9_falsch.gr, deck_b_falsch.gr);
+    PRUEF(strom9.gr >= 6.0f && strom16.gr >= 6.0f && deck_b.gr >= 6.0f && erz1.gr >= 6.0f);
+    PRUEF(strom9_falsch.gr < 1.0f && deck_b_falsch.gr < 1.0f);   // negative controls: the key hears its own source only
+    PRUEF(gleich(strom9) && gleich(strom16) && gleich(deck_b) && gleich(erz1));
+  }
+
   {  // 17 sc_dj_null (plan 3.2): the DJ input goes away - the kernel hands a nullptr entry, calls with nullptr arrays, or does not call at all. The key is silent from the next block on, never the
      // samples of the block before. Positive control: the same run where the deck keeps playing keeps ducking.
     std::vector<float> mono(400000);
@@ -818,7 +875,7 @@ int main() {
       Treiber& t = *tp;
       t.vor_block = [&](int64_t s0) {
         const bool da = s0 < T || art == 0;
-        const float* l[cdj::Arrangement::DJ_EINGAENGE] = {};
+        const float* l[cdj::ARR_SCHLUESSEL] = {};
         if (da) l[0] = mono.data() + s0;
         if (!da && art == 3) return;
         if (!da && art == 2) t.arr.dj_schluessel(nullptr, nullptr);

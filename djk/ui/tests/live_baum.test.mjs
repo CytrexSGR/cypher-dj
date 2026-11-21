@@ -2,14 +2,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { neuesProjekt, pruefeProjekt } from '../project/model.ts';
-import { baueModul, liveSlots, modulPhase } from '../project/live.ts';
+import { baueModul, modulAmPlatz, modulPhase } from '../project/live.ts';
 import { fuehreListeAus } from '../project/commands.ts';
 
 const HASH = 'c'.repeat(64), D = (n) => ({ sha256: n.repeat(64), pfad: `/x/${n}.wav` });
 const herkunft = (extra = {}) => ({ quelle_sha256: HASH, titel: 'Song', kuenstler: 'Art', fassung: '1', basis_bpm: 120, von_beat: 4, laenge_beats: 16, bpm: 120,
   tonart: '8A', datum: '2026-11-12', ...extra });
 const LOOP = { ...D('e'), beats: 16, frames: 16 * 24000 };
-const live = () => { const p = neuesProjekt('x'); p.live = true; return p; };
+const live = () => { const p = neuesProjekt('x'); p.live = true; p.plaetze = [{ typ: 'track' }, { typ: 'track' }, { typ: 'track' }, { typ: 'track' }]; return p; };
 const vier = () => ({ drums: D('1'), bass: D('2'), other: D('3'), vocals: D('4') });
 const sechs = () => ({ ...vier(), guitar: D('5'), piano: D('6') });
 const kinder = (p, id) => p.gruppen.filter((g) => g.ausgang?.id === id);
@@ -17,11 +17,12 @@ const valide = (p) => assert.ok('projekt' in pruefeProjekt(JSON.parse(JSON.strin
 
 test('baueModul with four stems: top group, Loop muted, four child groups in order with the original tracks at 0 dB', () => {
   const p = baueModul(live(), 'A', LOOP, vier(), herkunft());
-  const id = liveSlots(p).A;
+  const id = modulAmPlatz(p, 'A');
   const top = p.gruppen.find((g) => g.id === id);
   assert.equal(top.name, 'A · Song');
   assert.equal(top.fader_db, 0, 'the channel pad/N is the only gain (DJ view places decision 9)');
-  assert.equal(top.modul.slot, 'A');
+  assert.deepEqual(p.plaetze[0], { typ: 'stems', gruppe: id }, 'the place holds the module, the record has no slot field');
+  assert.equal('slot' in top.modul, false);
   assert.equal(top.modul.quelle_sha256, HASH);
   assert.equal(top.ausgang, undefined);
   assert.deepEqual(kinder(p, id).map((g) => g.name), ['Drums', 'Bass', 'Other', 'Vocals']);
@@ -43,16 +44,16 @@ test('baueModul with four stems: top group, Loop muted, four child groups in ord
 
 test('baueModul with guitar and piano gives six child groups; without them four', () => {
   const sechsP = baueModul(live(), 'B', LOOP, sechs(), herkunft());
-  assert.deepEqual(kinder(sechsP, liveSlots(sechsP).B).map((g) => g.name), ['Drums', 'Bass', 'Other', 'Vocals', 'Guitar', 'Piano']);
-  assert.equal(sechsP.gruppen.find((g) => g.id === liveSlots(sechsP).B).name, 'B · Song');
+  assert.deepEqual(kinder(sechsP, modulAmPlatz(sechsP, 'B')).map((g) => g.name), ['Drums', 'Bass', 'Other', 'Vocals', 'Guitar', 'Piano']);
+  assert.equal(sechsP.gruppen.find((g) => g.id === modulAmPlatz(sechsP, 'B')).name, 'B · Song');
   const nur = baueModul(live(), 'A', LOOP, { ...vier(), guitar: undefined }, herkunft());
-  assert.equal(kinder(nur, liveSlots(nur).A).length, 4);
+  assert.equal(kinder(nur, modulAmPlatz(nur, 'A')).length, 4);
   valide(sechsP);
 });
 
 test('baueModul without stems is a loop-only module: Loop unmuted, no child group, group fader 0 dB', () => {
   const p = baueModul(live(), 'A', LOOP, {}, herkunft());
-  const id = liveSlots(p).A;
+  const id = modulAmPlatz(p, 'A');
   assert.equal(kinder(p, id).length, 0);
   assert.equal(p.spuren.length, 1);
   assert.equal(p.spuren[0].mute, false);
@@ -62,10 +63,10 @@ test('baueModul without stems is a loop-only module: Loop unmuted, no child grou
 
 test('baueModul adds the stems to an existing loop-only module: Loop muted, module fader and group untouched', () => {
   const lo = baueModul(live(), 'A', LOOP, {}, herkunft());
-  const offen = fuehreListeAus(lo, [{ befehl: 'gruppenspur_aendern', gruppe_id: liveSlots(lo).A, fader_db: -3 }]).projekt;   // Andreas opened the module
+  const offen = fuehreListeAus(lo, [{ befehl: 'gruppenspur_aendern', gruppe_id: modulAmPlatz(lo, 'A'), fader_db: -3 }]).projekt;   // Andreas opened the module
   const p = baueModul(offen, 'A', LOOP, vier(), herkunft());
-  const id = liveSlots(p).A;
-  assert.equal(liveSlots(p).A, liveSlots(offen).A);
+  const id = modulAmPlatz(p, 'A');
+  assert.equal(modulAmPlatz(p, 'A'), modulAmPlatz(offen, 'A'));
   assert.equal(p.gruppen.find((g) => g.id === id).fader_db, -3);
   assert.equal(kinder(p, id).length, 4);
   assert.equal(p.spuren.find((s) => s.name === 'Loop').mute, true);
@@ -106,14 +107,14 @@ test('module clip phase: p = von_beat mod 4, none below 4 beats, none for a loop
   assert.deepEqual(voll.spuren[0].clips.map((c) => [c.start_beat, c.laenge_beats, c.loop_beats, c.warp.versatz_beats]), [[0, 1, undefined, 63], [1, 63, undefined, 0]]);
 });
 
-test('modul_setzen: one module per slot, only on a top group, valid record', () => {
+test('modul_setzen: only on a top group, a valid record; a slot field is refused (the place is platz_setzen)', () => {
   const p = baueModul(live(), 'A', LOOP, vier(), herkunft());
   const kind = p.gruppen.find((g) => g.name === 'Drums');
   const b = (gruppe_id, modul) => () => fuehreListeAus(p, [{ befehl: 'modul_setzen', gruppe_id, modul }]);
-  assert.throws(b(kind.id, { ...herkunft(), slot: 'B' }), (e) => e.grund === 'argument_ungueltig');
-  assert.throws(b(liveSlots(p).A, { ...herkunft(), slot: 'C' }), (e) => e.grund === 'argument_ungueltig');
+  assert.throws(b(kind.id, herkunft()), (e) => e.grund === 'argument_ungueltig');
+  assert.throws(b(modulAmPlatz(p, 'A'), { ...herkunft(), slot: 'C' }), (e) => e.grund === 'argument_ungueltig');
   const zwei = baueModul(p, 'B', LOOP, {}, herkunft());
-  assert.throws(() => fuehreListeAus(zwei, [{ befehl: 'modul_setzen', gruppe_id: liveSlots(zwei).B, modul: { ...herkunft(), slot: 'A' } }]), (e) => e.grund === 'slot_belegt');
+  assert.deepEqual([zwei.plaetze[0].gruppe, zwei.plaetze[1].gruppe], [modulAmPlatz(p, 'A'), modulAmPlatz(zwei, 'B')], 'two modules sit in two places');
 });
 
 test('a project without modules is untouched by the module code (no modul or live key appears)', () => {

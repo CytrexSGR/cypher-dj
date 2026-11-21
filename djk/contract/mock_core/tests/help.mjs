@@ -57,10 +57,11 @@ export const q = (id, quelle, status, sample = null, grund = null) => ['/q', 'hs
 
 // Deck laden, Hörschein registrieren, Deck am Quell-Beat qb starten und den Fader bei Beat ab auf 0 dB öffnen
 export function deckRein(n, { id0, ab, qb = 0, mid = ID, hs_id = `h${n}`, quelle = 'leitstand', eqTief = null, plan = '' }) {
-  const k = `deck/${n}`;
+  const k = ['deck/1', 'deck/2', 'pad/1', 'pad/2'][n - 1];   // player n sounds through container n (its strip path)
+  const hk = `deck/${n}`;   // the Hörschein key is the player name (C7)
   const s = [
     sende(S(ab) - 60000, laden(id0, n, { mid })),
-    sende(S(ab) - 50000, hoerschein(id0 + 1, hs_id, k, inhalt(mid))),
+    sende(S(ab) - 50000, hoerschein(id0 + 1, hs_id, hk, inhalt(mid))),
     sende(S(ab) - 40000, start(id0 + 2, quelle, n, ab, qb, { plan })),
   ];
   // Bass einen Beat vor dem Fader setzen (Lesart n: I1 über die Schaltrampe; INTERFACES §14.1 Teil 1 bei Beat 447)

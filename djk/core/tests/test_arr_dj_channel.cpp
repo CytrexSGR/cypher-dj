@@ -7,12 +7,12 @@
 // bit for bit (the flat golden of test_arr_ohne_inserts, with the pairs handed), and a caller without pairs hears a DJ group on the master, 10 offline: the production master tap carries the
 // DJ group (level.ts hangs on it).
 // (Case 11, the render program sets the offline switch, is test_render_dj_channel.cpp.)
-// ADR 038 (the channels grow from 2 to 6: 1, 2 = pad/1, pad/2, 3..6 = deck/1..deck/4): case 13 a group on nr 5 adds into pair index 4 and into nothing else (not the master sum, not the production
-// master tap), groups on 1, 2 and 5 each give their own pair; case 14 (kernel): a group on nr 3 is measured behind the strip of deck/1 and follows its fader, and a playing deck on deck/1 plus the group give
-// the sum of both; case 15 (kernel): the module groups of slot A and B and a group on every deck channel play together, each on its own strip.
-// case 16 (kernel): /pegel carries deck/N while a group leads into it on an empty deck, and nothing otherwise.
-// case 17 (kernel): the envelope ring (the ear behind /hoeren) carries the channel deck/N while a group leads into it on an empty deck, at the measuring tap before the fader, and nothing otherwise.
-// Mutation ARR_DJ_NUR_PAD (13, 14, 15: a nr above 2 falls to the master).
+// Container core K5: the DJ outputs are the four containers (nr 1..4 = A..D = deck/1, deck/2, pad/1, pad/2; nr 5 and 6 are gone, the loader refuses them, test_arr_lader). Interim until K8 the pair is
+// added into the old mixer input of the container. Case 13 a group on nr 4 adds into pair index 3 and into nothing else (not the master sum, not the production master tap), groups on 1, 2 and 4 each give
+// their own pair; case 14 (kernel): a group on nr 1 is measured behind the strip of deck/1 and follows its fader, and a playing deck on deck/1 plus the group give the sum of both; case 15 (kernel): a group on
+// every container plays together, each on its own strip. case 16 (kernel): /pegel carries deck/N while a group leads into it on an empty deck, and nothing otherwise. case 17 (kernel): the envelope ring (the ear
+// behind /hoeren) carries the channel deck/N while a group leads into it on an empty deck, at the measuring tap before the fader, and nothing otherwise. Case 18 (kernel, `cypherdj-arr/4` files): dj 1 sounds in
+// container A (deck/1), dj 4 in container D (pad/2), each behind its own fader only.
 // Case 5 (kernel, real mixer): the channel input sums the module with a source that is already there (a test click on pad/1), and the strip acts on the module (fader).
 // Mutations (CMakeLists.txt): ARR_DJ_INS_MASTER (1, 3: the DJ group is also in the master), ARR_DJ_OFFLINE_AUS (4, 10: the switch is ignored), ARR_DJ_NACH_STRIP (5: added behind the strip).
 #include <algorithm>
@@ -37,7 +37,7 @@ using cdj::ArrArt;
 static constexpr int64_t V = 537;
 #define TR(n) auto n##_p = std::make_unique<Treiber>(); Treiber& n = *n##_p;
 
-static constexpr int KAN = 6;   // the DJ channels: pad/1, pad/2, deck/1..deck/4 (ADR 038)
+static constexpr int KAN = 4;   // the DJ outputs: containers A..D = deck/1, deck/2, pad/1, pad/2 (K5)
 struct Paare {   // what the DJ pairs held in each block, one sample after the other
   std::vector<float> l[KAN], r[KAN];
 };
@@ -128,7 +128,14 @@ static int64_t lade_roh(arr35::Lauf& x, int64_t nr, const std::string& text) {  
 }
 static std::string live_datei(arr35::Lauf& x, int64_t nr, const std::string& audio, int64_t frames, bool dj) {
   const std::string spur = "{\"nr\":1,\"art\":\"audio\",\"ausgang\":{\"art\":\"gruppe\",\"nr\":1},\"clips\":[" + x.ordner.clip("c1", 0.0, 8.0, audio, frames) + "]}";
-  return "{\"format\":\"cypherdj-arr/2\",\"nr\":" + std::to_string(nr) + ",\"spuren\":[" + spur + "],\"live\":true,\"gruppen\":[{\"nr\":1,\"ausgang\":{\"art\":\"" + (dj ? "dj\",\"nr\":1" : "master\"") + "}}]}";
+  return "{\"format\":\"cypherdj-arr/2\",\"nr\":" + std::to_string(nr) + ",\"spuren\":[" + spur + "],\"live\":true,\"gruppen\":[{\"nr\":1,\"ausgang\":{\"art\":\"" + (dj ? "dj\",\"nr\":3" : "master\"") + "}}]}";
+}
+// K8: a container plays its DJ output only when its input is the module (art 2); the default is the player
+static void modul_quelle(arr35::Lauf& x, int container) {
+  cdj::Befehl b = x.neu(cdj::Befehl::CONTAINER_QUELLE, "andreas");
+  b.nr = container;
+  b.an = cdj::Kern::CONTAINER_ART_MODUL;
+  x.sende(b);
 }
 // one kernel run of 3 s: pad/1 fader (dB), the module playing (module), the test click on pad/1 (klick); returns the master left
 static std::vector<float> kern_lauf(const std::string& ab, double fader_db, bool modul, bool klick, bool dj = true) {
@@ -136,6 +143,7 @@ static std::vector<float> kern_lauf(const std::string& ab, double fader_db, bool
   const int64_t FR = 400000;
   const std::string a = x.ordner.audio('a', FR, 0.25f);
   x.teil("pad/1/fader", static_cast<float>(fader_db), 0.0, 0.0);
+  if (modul && dj) modul_quelle(x, 3);   // dj 3 is container C (pad/1)
   if (modul) {
     lade_roh(x, 1, live_datei(x, 1, a, FR, dj));
     x.start(0.0, 0);
@@ -157,6 +165,7 @@ static std::vector<float> kern_swap(const std::string& ab, int Q, size_t* swap_o
   const int64_t FR = 400000;
   const std::string a = x.ordner.audio('a', FR, 0.25f);
   x.teil("pad/1/fader", -12.0f, 0.0, 0.0);
+  modul_quelle(x, 3);
   lade_roh(x, 1, live_datei(x, 1, a, FR, true));
   x.start(0.0, 0);
   std::vector<float> l;
@@ -181,8 +190,8 @@ static std::vector<float> kern_swap(const std::string& ab, int Q, size_t* swap_o
 }
 
 
-// ---- ADR 038: the channels 3..6 are deck/1..deck/4 ---------------------------------------------------------------------------------------------------------------------------
-static const char* const KANAL_PFAD[KAN] = {"pad/1", "pad/2", "deck/1", "deck/2", "deck/3", "deck/4"};   // the mixer channel behind DJ channel nr = index + 1
+// ---- K5: the containers A..D = deck/1, deck/2, pad/1, pad/2 ---------------------------------------------------------------------------------------------------------------------------
+static const char* const KANAL_PFAD[KAN] = {"deck/1", "deck/2", "pad/1", "pad/2"};   // the mixer channel behind DJ output nr = index + 1 (PULT_CONTAINER_PFAD)
 // a live playback with one track and one group per entry: group i + 1 leads into DJ channel kan[i] (0 = master), every clip plays the audio sha
 static std::string live_datei_n(arr35::Lauf& x, int64_t nr, const std::string& audio, int64_t frames, const std::vector<int>& kan) {
   std::string spuren, gruppen;
@@ -191,13 +200,13 @@ static std::string live_datei_n(arr35::Lauf& x, int64_t nr, const std::string& a
     spuren += std::string(i ? "," : "") + "{\"nr\":" + n + ",\"art\":\"audio\",\"ausgang\":{\"art\":\"gruppe\",\"nr\":" + n + "},\"clips\":[" + x.ordner.clip(id.c_str(), 0.0, 8.0, audio, frames) + "]}";
     gruppen += std::string(i ? "," : "") + "{\"nr\":" + n + ",\"ausgang\":{\"art\":\"" + (kan[i] ? "dj\",\"nr\":" + std::to_string(kan[i]) : std::string("master\"")) + "}}";
   }
-  return "{\"format\":\"cypherdj-arr/2\",\"nr\":" + std::to_string(nr) + ",\"spuren\":[" + spuren + "],\"live\":true,\"gruppen\":[" + gruppen + "]}";
+  return "{\"format\":\"cypherdj-arr/4\",\"nr\":" + std::to_string(nr) + ",\"spuren\":[" + spuren + "],\"live\":true,\"gruppen\":[" + gruppen + "]}";
 }
-// one kernel run of 3 s: the faders of the six DJ channels (dB, indexed like KANAL_PFAD), the groups kan (see live_datei_n), a deck playing on deck/1 (deck: its material id is in the working set); returns the master
+// one kernel run of 3 s: the faders of the four containers (dB, indexed like KANAL_PFAD), the groups kan (see live_datei_n), a deck playing on deck/1 (deck: its material id is in the working set); returns the master
 struct Lauf6 {
   std::vector<float> l, r;
   int pegel_n[KAN] = {};                   // /pegel events of the channel KANAL_PFAD[c] over the run
-  float pegel_max[KAN] = {-1000, -1000, -1000, -1000, -1000, -1000};   // the largest value (dB) of those events
+  float pegel_max[KAN] = {-1000, -1000, -1000, -1000};   // the largest value (dB) of those events
 };
 static Lauf6 kern_lauf6(const std::string& ab, const double (&fader)[KAN], const std::vector<int>& kan, bool deck = false, cdj_huellen_kopf* huellen = nullptr) {
   arr35::Lauf x(ab, "test_arr_dj_kanal_kern6");
@@ -206,6 +215,7 @@ static Lauf6 kern_lauf6(const std::string& ab, const double (&fader)[KAN], const
   const std::string a = x.ordner.audio('a', FR, 0.25f);
   for (int c = 0; c < KAN; ++c) x.teil((std::string(KANAL_PFAD[c]) + "/fader").c_str(), static_cast<float>(fader[c]), 0.0, 0.0, "andreas");   // a hand fader: the deck load ends running parts of every other source on deck/N/fader (Review 2026-11-19)
   if (deck) x.k35::Lauf::laden(1, "a2a0000000000e01");   // the deck is loaded first (the loader answers within a few cycles) and starts at kern beat 2 (sample 45000)
+  for (int nr : kan) modul_quelle(x, nr);
   x.lauf(4 * k35::N);   // in every run, so the group starts at the same sample with and without the deck
   if (!kan.empty()) {
     lade_roh(x, 1, live_datei_n(x, 1, a, FR, kan));
@@ -366,18 +376,18 @@ int main() {
     PRUEF(spitze(ref.pml) > 0.3);
     PRUEF(gleich(t.pml, ref.pml) && gleich(t.pmr, ref.pmr));
   }
-  {  // 13 ADR 038: a group on nr 5 (deck/3) adds into the pair of index 4 and into nothing else: not the master sum, not the production master tap; with groups on 1, 2 and 5 each pair carries only its own
+  {  // 13 K5: a group on nr 4 (container D) adds into the pair of index 3 and into nothing else: not the master sum, not the production master tap; with groups on 1, 2 and 4 each pair carries only its own
     auto e = Audio::gleich(400000, 0.125f);
     TR(ref) TR(t) Paare pr, pt;
     spiele(ref, pr, snap(&a->a, &c->a, 0, 0, true, false));
-    spiele(t, pt, snap(&a->a, &c->a, 5, 0, true, false));
+    spiele(t, pt, snap(&a->a, &c->a, 4, 0, true, false));
     PRUEF(spitze(ref.l) > 0.1);   // negative control: on the master the group sounds
     PRUEF(nullen(t.l) && nullen(t.r) && nullen(t.pml) && nullen(t.pmr));
-    PRUEF(gleich(pt.l[4], ref.l) && gleich(pt.r[4], ref.r));
+    PRUEF(gleich(pt.l[3], ref.l) && gleich(pt.r[3], ref.r));
     for (int k = 0; k < KAN; ++k)
-      if (k != 4) PRUEF(nullen(pt.l[k]) && nullen(pt.r[k]));
-    // nr 3..6 each reach their own pair (index nr - 1) and no other
-    for (int nr = 3; nr <= 6; ++nr) {
+      if (k != 3) PRUEF(nullen(pt.l[k]) && nullen(pt.r[k]));
+    // nr 3..4 each reach their own pair (index nr - 1) and no other
+    for (int nr = 3; nr <= 4; ++nr) {
       TR(u) Paare pu;
       spiele(u, pu, snap(&a->a, &c->a, 0, nr, false, true));
       PRUEF(nullen(u.l) && nullen(u.r) && nullen(u.pml));
@@ -386,7 +396,7 @@ int main() {
         else PRUEF(nullen(pu.l[k]) && nullen(pu.r[k]));
       }
     }
-    // three groups on 1, 2 and 5: each pair equals its group alone, the others are exact zeros
+    // three groups on 1, 2 and 4: each pair equals its group alone, the others are exact zeros
     Bau b(1);
     b.spur(1, ArrArt::audio).clip(1, "c1", 0.0, 8.0, &a->a).ausgang(1, 1);
     b.spur(2, ArrArt::audio).clip(2, "c2", 0.0, 8.0, &c->a).ausgang(2, 2);
@@ -395,7 +405,7 @@ int main() {
     s->live = true;
     s->gruppe_dj[0] = 1;
     s->gruppe_dj[1] = 2;
-    s->gruppe_dj[2] = 5;
+    s->gruppe_dj[2] = 4;
     TR(r1) TR(r2) TR(r3) TR(d) Paare p1, p2, p3, pd;
     spiele(r1, p1, snap(&a->a, &c->a, 0, 0, true, false));
     spiele(r2, p2, snap(&a->a, &c->a, 0, 0, false, true));
@@ -406,15 +416,15 @@ int main() {
     }
     spiele(d, pd, s);
     PRUEF(spitze(r3.l) > 0.05);
-    PRUEF(gleich(pd.l[0], r1.l) && gleich(pd.l[1], r2.l) && gleich(pd.l[4], r3.l) && gleich(pd.r[4], r3.r));
-    PRUEF(nullen(pd.l[2]) && nullen(pd.l[3]) && nullen(pd.l[5]) && nullen(pd.r[2]) && nullen(pd.r[3]) && nullen(pd.r[5]));
+    PRUEF(gleich(pd.l[0], r1.l) && gleich(pd.l[1], r2.l) && gleich(pd.l[3], r3.l) && gleich(pd.r[3], r3.r));
+    PRUEF(nullen(pd.l[2]) && nullen(pd.r[2]));
     PRUEF(nullen(d.l) && nullen(d.r) && nullen(d.pml) && nullen(d.pmr));
-    PRUEF(d.arr.dj_nr(3) == 5 && d.arr.dj_kanal_aktiv(5) && d.arr.dj_kanal_aktiv(1) && !d.arr.dj_kanal_aktiv(3) && !d.arr.dj_kanal_aktiv(6) && !d.arr.dj_kanal_aktiv(7) && !d.arr.dj_kanal_aktiv(0));
-    // the offline switch routes nr 3..6 into the master like nr 1 and 2
+    PRUEF(d.arr.dj_nr(3) == 4 && d.arr.dj_kanal_aktiv(4) && d.arr.dj_kanal_aktiv(1) && !d.arr.dj_kanal_aktiv(3) && !d.arr.dj_kanal_aktiv(5) && !d.arr.dj_kanal_aktiv(6) && !d.arr.dj_kanal_aktiv(0));
+    // the offline switch routes nr 3..4 into the master like nr 1 and 2
     TR(o) TR(om) Paare po, pom;
     spiele(om, pom, snap(&a->a, &c->a, 0, 0, true, false));
     o.arr.setze_dj_als_master();
-    spiele(o, po, snap(&a->a, &c->a, 6, 0, true, false));
+    spiele(o, po, snap(&a->a, &c->a, 4, 0, true, false));
     PRUEF(gleich(o.l, om.l) && gleich(o.pml, om.pml));
     for (int k = 0; k < KAN; ++k) PRUEF(nullen(po.l[k]) && nullen(po.r[k]));
   }
@@ -440,73 +450,73 @@ int main() {
     PRUEF(fehler < 1e-5);
     PRUEF(spitze(b6, 0) > spitze(m6, 0) + 0.001);   // the click really is in the sum
   }
-  {  // 14 ADR 038, the kernel: a group on nr 3 is measured behind the strip of deck/1 and follows its fader; a playing deck on deck/1 and the group give the sum of both
+  {  // 14 K5, the kernel: a group on nr 1 (container A) is measured behind the strip of deck/1 and follows its fader; a playing deck on deck/1 and the group give the sum of both
     k35::Arbeitsbestand ab("test_arr_dj_kanal_ab14");
     k35::traeger(ab.pfad, "a2a0000000000e01", "--ohne-klick --traeger 0.1");   // the deck: a 12 kHz carrier on the right, silence on the left
     const double zu = -200.0;
-    const double f0[KAN] = {zu, zu, 0.0, zu, zu, zu}, f6[KAN] = {zu, zu, -6.0, zu, zu, zu}, fz[KAN] = {zu, zu, zu, zu, zu, zu};
+    const double f0[KAN] = {0.0, zu, zu, zu}, f6[KAN] = {-6.0, zu, zu, zu}, fz[KAN] = {zu, zu, zu, zu};
     const size_t w0 = 100000, w1 = 130000;
-    const Lauf6 g0 = kern_lauf6(ab.pfad, f0, {3});    // the group alone, deck/1 at 0 dB
-    const Lauf6 g6 = kern_lauf6(ab.pfad, f6, {3});    // the same at -6 dB
-    const Lauf6 gz = kern_lauf6(ab.pfad, fz, {3});    // the same with deck/1 closed: nothing may reach the master by another way
+    const Lauf6 g0 = kern_lauf6(ab.pfad, f0, {1});    // the group alone, deck/1 at 0 dB
+    const Lauf6 g6 = kern_lauf6(ab.pfad, f6, {1});    // the same at -6 dB
+    const Lauf6 gz = kern_lauf6(ab.pfad, fz, {1});    // the same with deck/1 closed: nothing may reach the master by another way
     const Lauf6 d0 = kern_lauf6(ab.pfad, f0, {}, true);   // the deck alone
-    const Lauf6 b0 = kern_lauf6(ab.pfad, f0, {3}, true);  // both
+    const Lauf6 b0 = kern_lauf6(ab.pfad, f0, {1}, true);  // both
     std::printf("14: group alone at 0 dB peak %.6f, at -6 dB %.6f, closed %.3g; deck alone (right) %.6f; both (right) %.6f\n", spitze(g0.l, w0, w1), spitze(g6.l, w0, w1), spitze(gz.l, 0),
                 spitze(d0.r, w0, w1), spitze(b0.r, w0, w1));
     PRUEF(spitze(g0.l, w0, w1) > 0.05);
     PRUEF_NAH(spitze(g6.l, w0, w1) / spitze(g0.l, w0, w1), std::pow(10.0, -6.0 / 20.0), 2e-3);   // the fader of deck/1 acts on the group
     PRUEF(spitze(gz.l, 0) < 1e-6 && spitze(gz.r, 0) < 1e-6);                                     // closed: silent, so nothing went into the production sum
     PRUEF(spitze(d0.r, w0, w1) > 0.01);
+    // K8: container A takes the module or the player, not both: with the module chosen the playing deck is displaced and the run equals the group alone
     double fehler = 0.0;
-    for (size_t i = 0; i < b0.r.size() && i < g0.r.size() && i < d0.r.size(); ++i) fehler = std::max(fehler, std::fabs(static_cast<double>(b0.r[i]) - g0.r[i] - d0.r[i]));
-    for (size_t i = 0; i < b0.l.size() && i < g0.l.size() && i < d0.l.size(); ++i) fehler = std::max(fehler, std::fabs(static_cast<double>(b0.l[i]) - g0.l[i] - d0.l[i]));
-    std::printf("14: largest difference between both and the sum of the two alone: %.3g\n", fehler);
+    for (size_t i = 0; i < b0.r.size() && i < g0.r.size(); ++i) fehler = std::max(fehler, std::fabs(static_cast<double>(b0.r[i]) - g0.r[i]));
+    for (size_t i = 0; i < b0.l.size() && i < g0.l.size(); ++i) fehler = std::max(fehler, std::fabs(static_cast<double>(b0.l[i]) - g0.l[i]));
+    std::printf("14: largest difference between group plus deck and the group alone: %.3g\n", fehler);
     PRUEF(fehler < 1e-5);
-    PRUEF(spitze(b0.r, w0, w1) > spitze(g0.r, w0, w1) + 0.005);   // the deck really is in the sum
   }
-  {  // 15 ADR 038, the review focus: groups on all six channels in one playback (slot A, slot B, the four decks). With only the fader of channel c open the master carries exactly what the group of c
+  {  // 15 K5, the review focus: groups on all four containers in one playback. With only the fader of channel c open the master carries exactly what the group of c
      // alone gives through its strip, and with all faders closed it is silent: every group plays on its own channel and nothing reaches the production sum
     k35::Arbeitsbestand ab("test_arr_dj_kanal_ab15");
     const double zu = -200.0;
     double fz[KAN];
     for (double& f : fz) f = zu;
-    const Lauf6 alle_zu = kern_lauf6(ab.pfad, fz, {1, 2, 3, 4, 5, 6});
+    const Lauf6 alle_zu = kern_lauf6(ab.pfad, fz, {1, 2, 3, 4});
     PRUEF(spitze(alle_zu.l, 0) < 1e-6 && spitze(alle_zu.r, 0) < 1e-6);
     for (int k = 0; k < KAN; ++k) {
       double fk[KAN];
       for (int j = 0; j < KAN; ++j) fk[j] = j == k ? 0.0 : zu;
-      const Lauf6 alle = kern_lauf6(ab.pfad, fk, {1, 2, 3, 4, 5, 6});
+      const Lauf6 alle = kern_lauf6(ab.pfad, fk, {1, 2, 3, 4});
       const Lauf6 allein = kern_lauf6(ab.pfad, fk, {k + 1});
-      std::printf("15: channel %s open: all six groups peak %.6f, its group alone %.6f\n", KANAL_PFAD[k], spitze(alle.l, 100000, 130000), spitze(allein.l, 100000, 130000));
+      std::printf("15: channel %s open: all four groups peak %.6f, its group alone %.6f\n", KANAL_PFAD[k], spitze(alle.l, 100000, 130000), spitze(allein.l, 100000, 130000));
       PRUEF(spitze(allein.l, 100000, 130000) > 0.05);
       double d = 0.0;
       for (size_t i = 0; i < alle.l.size() && i < allein.l.size(); ++i) d = std::max(d, std::fabs(static_cast<double>(alle.l[i]) - allein.l[i]));
-      PRUEF(d < 1e-4);   // the other five groups are closed behind their faders (-200 dB), not on this channel and not on the master
+      PRUEF(d < 1e-4);   // the other three groups are closed behind their faders (-200 dB), not on this channel and not on the master
     }
   }
-  {  // 16 ADR 038, level reporting: a group on nr 3 plays on deck/1 while no track is loaded; /pegel carries deck/1 with the level of the strip. Without such a group an unloaded deck reports nothing
-     // (as before), a group on nr 3 does not make deck/2 report, and a loaded deck still reports
+  {  // 16 K5, level reporting: a group on nr 1 plays on deck/1 while no track is loaded; /pegel carries deck/1 with the level of the strip. Without such a group an unloaded deck reports nothing
+     // (as before), a group on nr 1 does not make deck/2 report, and a loaded deck still reports
     k35::Arbeitsbestand ab("test_arr_dj_kanal_ab16");
     k35::traeger(ab.pfad, "a2a0000000000e01", "--ohne-klick --traeger 0.1");
     const double zu = -200.0;
-    const double f0[KAN] = {zu, zu, 0.0, 0.0, zu, zu};   // deck/1 and deck/2 open
-    const Lauf6 mit = kern_lauf6(ab.pfad, f0, {3});                  // group on deck/1, no deck loaded
+    const double f0[KAN] = {0.0, 0.0, zu, zu};   // deck/1 and deck/2 open
+    const Lauf6 mit = kern_lauf6(ab.pfad, f0, {1});                  // group on deck/1, no deck loaded
     const Lauf6 ohne = kern_lauf6(ab.pfad, f0, {});                  // nothing at all
     const Lauf6 geladen = kern_lauf6(ab.pfad, f0, {}, true);         // a loaded, playing deck 1 and no group
-    std::printf("16: group on deck/1: %d events, peak %.2f dB; deck/2 %d events; nothing: deck/1 %d events; loaded deck 1: %d events, peak %.2f dB\n", mit.pegel_n[2], mit.pegel_max[2], mit.pegel_n[3],
-                ohne.pegel_n[2], geladen.pegel_n[2], geladen.pegel_max[2]);
-    PRUEF(mit.pegel_n[2] > 10);                                       // 20 Hz over 2.8 s
-    PRUEF(mit.pegel_max[2] > -30.0f && mit.pegel_max[2] < 0.0f);      // the group's peak through the strip (0.18 is -15 dB), not silence
-    PRUEF(mit.pegel_n[3] == 0 && mit.pegel_n[4] == 0 && mit.pegel_n[5] == 0);   // the other deck channels are still silent without a deck
-    PRUEF(ohne.pegel_n[2] == 0 && ohne.pegel_n[3] == 0);              // an unloaded deck without a group reports nothing, as before
-    PRUEF(geladen.pegel_n[2] > 10);                                   // a loaded deck reports as before
+    std::printf("16: group on deck/1: %d events, peak %.2f dB; deck/2 %d events; nothing: deck/1 %d events; loaded deck 1: %d events, peak %.2f dB\n", mit.pegel_n[0], mit.pegel_max[0], mit.pegel_n[1],
+                ohne.pegel_n[0], geladen.pegel_n[0], geladen.pegel_max[0]);
+    PRUEF(mit.pegel_n[0] > 10);                                       // 20 Hz over 2.8 s
+    PRUEF(mit.pegel_max[0] > -30.0f && mit.pegel_max[0] < 0.0f);      // the group's peak through the strip (0.18 is -15 dB), not silence
+    PRUEF(mit.pegel_n[1] == 0);                                       // the other deck channel is still silent without a deck
+    PRUEF(ohne.pegel_n[0] == 0 && ohne.pegel_n[1] == 0);              // an unloaded deck without a group reports nothing, as before
+    PRUEF(geladen.pegel_n[0] > 10);                                   // a loaded deck reports as before
   }
-  {  // 17 the ear (envelope ring, /hoeren): a group on nr 4 plays on deck/2 while no track is loaded. The ring channel 1 (deck/2) carries it, behind a closed fader too (the tap sits before the fader);
+  {  // 17 the ear (envelope ring, /hoeren): a group on nr 2 (container B) plays on deck/2 while no track is loaded. The ring channel 1 (deck/2) carries it, behind a closed fader too (the tap sits before the fader);
      // deck/1 stays silent, an unloaded deck without a group stays silent, and a loaded deck still fills its channel
     k35::Arbeitsbestand ab("test_arr_dj_kanal_ab17");
     k35::traeger(ab.pfad, "a2a0000000000e01", "--ohne-klick --traeger 0.1");
     const double zu = -200.0;
-    const double f0[KAN] = {zu, zu, zu, zu, zu, zu};   // every channel closed
+    const double f0[KAN] = {zu, zu, zu, zu};   // every channel closed
     auto ring = [&](const std::vector<int>& kan, bool deck, double (&spitze_kanal)[2]) {
       auto* h = static_cast<cdj_huellen_kopf*>(std::aligned_alloc(64, CDJ_HUELLEN_BYTES));
       cdj_huellen_init(h);
@@ -519,7 +529,7 @@ int main() {
       return w;
     };
     double mit[2], ohne[2], geladen[2];
-    const uint64_t wm = ring({4}, false, mit);     // group on deck/2, no deck loaded
+    const uint64_t wm = ring({2}, false, mit);     // group on deck/2, no deck loaded
     ring({}, false, ohne);                         // nothing at all
     ring({}, true, geladen);                       // a loaded, playing deck 1, no group
     std::printf("17: ring over %llu records; group on deck/2: deck/1 %.4f deck/2 %.4f; nothing: %.4f %.4f; loaded deck 1: %.4f %.4f\n", static_cast<unsigned long long>(wm), mit[0], mit[1], ohne[0], ohne[1],
@@ -529,6 +539,25 @@ int main() {
     PRUEF(mit[0] == 0.0);                           // deck/1 has neither a track nor a group
     PRUEF(ohne[0] == 0.0 && ohne[1] == 0.0);        // as before: an unbelegt deck channel stays at zero
     PRUEF(geladen[0] > 0.01 && geladen[1] == 0.0);  // a loaded deck still fills its channel, as before
+  }
+  {  // 18 K5: `cypherdj-arr/4` files, the kernel. dj 1 sounds in container A (deck/1), dj 4 in container D (pad/2), each only behind its own fader; dj 5 is refused by the loader (test_arr_lader)
+    k35::Arbeitsbestand ab("test_arr_dj_kanal_ab18");
+    const double zu = -200.0;
+    const size_t w0 = 100000, w1 = 130000;
+    for (int nr = 1; nr <= 4; ++nr) {
+      double f[KAN], g[KAN];
+      for (int j = 0; j < KAN; ++j) {
+        f[j] = j == nr - 1 ? 0.0 : zu;   // only the fader of the container of this DJ output open
+        g[j] = zu;
+      }
+      const Lauf6 offen = kern_lauf6(ab.pfad, f, {nr});
+      const Lauf6 zu_ = kern_lauf6(ab.pfad, g, {nr});
+      const Lauf6 fremd = kern_lauf6(ab.pfad, f, {nr % 4 + 1});   // the module sits in another container: the open fader does not hear it
+      std::printf("18: dj %d: container %c open peak %.6f, all faders closed %.3g, the module in another container %.3g\n", nr, 'A' + nr - 1, spitze(offen.l, w0, w1), spitze(zu_.l, 0), spitze(fremd.l, 0));
+      PRUEF(spitze(offen.l, w0, w1) > 0.05);
+      PRUEF(spitze(zu_.l, 0) < 1e-6 && spitze(zu_.r, 0) < 1e-6);
+      PRUEF(spitze(fremd.l, 0) < 1e-6 && spitze(fremd.r, 0) < 1e-6);
+    }
   }
   {  // 12 the swap that clears the module, at three quanta
     k35::Arbeitsbestand ab("test_arr_dj_kanal_ab12");

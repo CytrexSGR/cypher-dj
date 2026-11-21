@@ -2,7 +2,7 @@
 // server. Pure functions: list the graphs with their art and knob names, check a name. The kern checks again; this only keeps
 // obviously wrong requests off the wire and tells the page what exists.
 import crypto from 'node:crypto';
-import { INSTRUMENT_STROEME, kanalVonStrom } from '../contract/streams.ts';
+import { ALLE_STROEME, INSTRUMENT_STROEME, kanalVonStrom } from '../contract/streams.ts';
 import fs from 'node:fs';
 import { ablageOrdner } from './paths.ts';
 import path from 'node:path';
@@ -188,14 +188,14 @@ export function graphHash(name: string, ordner: string = graphenOrdner()): strin
   try { return crypto.createHash('sha256').update(fs.readFileSync(path.join(ordner, `${name}.json`))).digest('hex'); } catch { return null; }
 }
 
-// Where a graph can go. Instruments: the channels of the instrument streams of the shared table (djk/contract/streams.ts):
-// erz/2, erz/3 (studio streams), erz/5..7 and pad/1, pad/2 (Baukasten streams 5, 6, 7, 9, 10, served by generator_bk.mjs).
-// Stream 1 runs in kit mode, its notes are kit indices. A graph on pad/N is summed with the loop of box N.
-// Effects: the decks, the send returns fx/3, fx/4, the DJ master sum (`master`) and, as an insert on the channel, the three Strudel streams erz/1..3 and
-// the loop slots pad/1, pad/2. A channel holds one graph: on erz/2, erz/3, pad/1, pad/2 an instrument or an effect, not both (POST /graph says `belegt`).
+// Where a graph can go (container core M9, D2). Instruments: the stream channels `erz/<n>` of the instrument streams of the shared table
+// (djk/contract/streams.ts: erz/2, erz/3, erz/5..7, erz/9, erz/10), served by the Erzeuger; stream 1 runs in kit mode, its notes are kit indices.
+// Effects: the container strips deck/1, deck/2, pad/1, pad/2 (/k/kanal/graph), the send returns fx/3, fx/4, the DJ master sum (`master`) and every stream
+// channel erz/<n>, where the effect becomes a bk insert on the strom track of the strudel module (a project edit).
+// A stream channel holds one graph: an instrument graph or the bk insert of its strom track, not both (POST /graph says `belegt`).
 export const INSTRUMENT_KANAELE: string[] = INSTRUMENT_STROEME.map((s) => kanalVonStrom(s) as string);
-export const EFFEKT_KANAELE = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'fx/3', 'fx/4', 'master', 'erz/1', 'erz/2', 'erz/3', 'pad/1', 'pad/2'];
-export const GRAPH_KANAELE = [...new Set(['erz/1', ...INSTRUMENT_KANAELE, ...EFFEKT_KANAELE])];
+export const EFFEKT_KANAELE = ['deck/1', 'deck/2', 'pad/1', 'pad/2', 'fx/3', 'fx/4', 'master', ...ALLE_STROEME.map((s) => kanalVonStrom(s) as string)];
+export const GRAPH_KANAELE = [...new Set([...INSTRUMENT_KANAELE, ...EFFEKT_KANAELE])];
 
 // Kern restart (Kanban t_e998388c): the kern keeps no graph over a restart, the page server loads again what was loaded. `vorher` is the server's map
 // before it clears it, `besitzer` the source of the last load per channel (unknown counts as andreas: a graph that was sounding comes back), and

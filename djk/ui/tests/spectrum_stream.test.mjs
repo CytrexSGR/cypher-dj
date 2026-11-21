@@ -53,22 +53,22 @@ test('S6 GET /spektrum: the last frame, or {leer:true}', async (t) => {
   const { i, lies } = await oeffneStrom(t);
   assert.deepEqual(await lies(), { leer: true }, 'no frame yet');
   i.vomKern('/e/regler', { pfad: 'spektrum/kanal', wert: 0, halter: 'frei', sample: 0, beat: 0 });
-  i.vomKern('/zustand/spektrum', rahmen('erz/1', 4));   // a late frame while the selector is 0
+  i.vomKern('/zustand/spektrum', rahmen('deck/1', 4));   // a late frame while the selector is 0
   assert.deepEqual(await lies(), { leer: true }, 'selector 0: empty even though a frame is stored');
-  i.vomKern('/e/regler', { pfad: 'spektrum/kanal', wert: 6, halter: 'frei', sample: 0, beat: 0 });   // erz/2
+  i.vomKern('/e/regler', { pfad: 'spektrum/kanal', wert: 2, halter: 'frei', sample: 0, beat: 0 });   // deck/2
   assert.deepEqual(await lies(), { leer: true }, 'the switch dropped the stored frame');
-  i.vomKern('/zustand/spektrum', rahmen('erz/1', 5));   // the old source arrives late
+  i.vomKern('/zustand/spektrum', rahmen('deck/1', 5));   // the old source arrives late
   assert.deepEqual(await lies(), { leer: true }, 'a late frame of the previous source is not served');
-  i.vomKern('/zustand/spektrum', rahmen('erz/2', 1));
+  i.vomKern('/zustand/spektrum', rahmen('deck/2', 1));
   const r = await lies();
   assert.equal(r.leer, false);
-  assert.equal(r.kanal, 'erz/2');
+  assert.equal(r.kanal, 'deck/2');
   assert.equal(r.rahmen, 1);
   assert.equal(r.pegel, '-300,-310,-320');
   assert.ok(r.alter_ms >= 0 && r.alter_ms < 1000);
-  i.vomKern('/e/regler', { pfad: 'spektrum/kanal', wert: 19, halter: 'frei', sample: 0, beat: 0 });
+  i.vomKern('/e/regler', { pfad: 'spektrum/kanal', wert: 9, halter: 'frei', sample: 0, beat: 0 });
   i.vomKern('/zustand/spektrum', rahmen('master', 2));
-  assert.equal((await lies()).kanal, 'master', 'selector 19 is master');
+  assert.equal((await lies()).kanal, 'master', 'selector 9 is master');
   i.vomKern('/e/regler', { pfad: 'spektrum/kanal', wert: 0, halter: 'frei', sample: 0, beat: 0 });
   assert.deepEqual(await lies(), { leer: true }, 'back to 0: empty again');
 });
@@ -83,14 +83,14 @@ test('S6 GET /spektrum: a server that missed the selector echo still serves the 
 
 test('S6 GET /spektrum: X -> 0 -> X does not serve the frame from before the stop', async (t) => {
   const { i, lies } = await oeffneStrom(t);
-  i.vomKern('/e/regler', { pfad: 'spektrum/kanal', wert: 6, halter: 'frei', sample: 0, beat: 0 });
-  i.vomKern('/zustand/spektrum', rahmen('erz/2', 41));
+  i.vomKern('/e/regler', { pfad: 'spektrum/kanal', wert: 2, halter: 'frei', sample: 0, beat: 0 });
+  i.vomKern('/zustand/spektrum', rahmen('deck/2', 41));
   assert.equal((await lies()).leer, false, 'control: the frame is served');
   i.vomKern('/e/regler', { pfad: 'spektrum/kanal', wert: 0, halter: 'frei', sample: 0, beat: 0 });
   await warte(300);
-  i.vomKern('/e/regler', { pfad: 'spektrum/kanal', wert: 6, halter: 'frei', sample: 0, beat: 0 });
+  i.vomKern('/e/regler', { pfad: 'spektrum/kanal', wert: 2, halter: 'frei', sample: 0, beat: 0 });
   const r = await lies();
-  assert.deepEqual(r, { leer: true }, 'back on erz/2 without a new frame: empty, not the old frame: ' + JSON.stringify(r));
-  i.vomKern('/zustand/spektrum', rahmen('erz/2', 1));
+  assert.deepEqual(r, { leer: true }, 'back on deck/2 without a new frame: empty, not the old frame: ' + JSON.stringify(r));
+  i.vomKern('/zustand/spektrum', rahmen('deck/2', 1));
   assert.equal((await lies()).rahmen, 1, 'positive control: a new frame is served');
 });

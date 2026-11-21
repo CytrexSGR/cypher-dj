@@ -1,5 +1,5 @@
 // Studio S1 T2: drei Erzeuger-Prozesse brauchen drei Namen, sonst verdrängen sie einander beim Kern (net.cpp:146,
-// Abonnenten nach Name). --name setzt den Hallo-Namen; Strom und Kanal kommen wie bisher aus --strom/--kanal.
+// Abonnenten nach Name). --name setzt den Hallo-Namen; The stream comes from --strom (streams carry no channel since container core K1).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import dgram from 'node:dgram';
@@ -34,13 +34,13 @@ async function starte(t, extra) {
   return { hallo: hallo(), kern, eingang };
 }
 
-test('--name erzeuger2 --strom 2 --kanal erz/2: Hallo und Strom tragen beides', { timeout: 15000 }, async (t) => {
-  const { hallo, kern, eingang } = await starte(t, ['--name', 'erzeuger2', '--strom', '2', '--kanal', 'erz/2']);
+test('--name erzeuger2 --strom 2: hello and stream carry both', { timeout: 15000 }, async (t) => {
+  const { hallo, kern, eingang } = await starte(t, ['--name', 'erzeuger2', '--strom', '2']);
   assert.equal(hallo?.werte[0], 'erzeuger2');
   kern.send(kodiere('/uhr', 'hhddd', [0n, process.hrtime.bigint(), 6.0, 128, 0]), hallo.werte[1], '127.0.0.1');
   await warte(300);
   const strom = eingang.find((m) => m.adresse === '/erz/strom');
-  assert.deepEqual(strom?.werte.slice(1), ['erzeuger', 2, 'kit:t', 'erz/2']);   // quelle bleibt 'erzeuger' (Vertrag)
+  assert.deepEqual(strom?.werte.slice(1), ['erzeuger', 2, 'kit:t']);   // quelle bleibt 'erzeuger' (Vertrag)
 });
 
 test('ohne --name: Vorgabe erzeuger (Negativ-Kontrolle, Betrieb wie bisher)', { timeout: 15000 }, async (t) => {

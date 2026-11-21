@@ -113,8 +113,10 @@ function bindeFxRouting() {
   b.addEventListener('click', () => deckPost('/fx/routing', { routing: fxRoutingInsert ? 'post_fader' : 'insert' }, 'FX routing'));
   zeigeFxRouting();
 }
-export function bindeFxZuweisung() {   // Tasten [1] [2] je Kanalzug (wie an der S8: links FX1, rechts FX2)
-  for (const b of $$('[data-fxzuweisung]')) {
+export function bindeFxZuweisung(wurzel = document) {   // Tasten [1] [2] je Kanalzug (wie an der S8: links FX1, rechts FX2); `wurzel`: a Strudel row built later
+  for (const b of $$('[data-fxzuweisung]', wurzel)) {
+    if (b.dataset.gebunden) continue;
+    b.dataset.gebunden = '1';
     const u = Number(b.dataset.fxzuweisung) - 1;
     b.addEventListener('click', () => sendeFxZuweisung(u, b.dataset.kanal));
   }

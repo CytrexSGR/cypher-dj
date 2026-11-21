@@ -19,14 +19,11 @@ import { neueGesten, bindeAutoAufnahme, istArmiert, GESTE_RUHE_MS } from './auto
 import { geraetSchluessel } from './device_view.js';
 import { fokus } from '../controller_fokus.js';
 import { kannGeraetFenster, oeffneGeraetFenster, GERAET_FENSTER_TEXT } from '../device_open.js';
+import { recEingaenge } from '../kanaele.js';
 
-// S18: the inputs a track can record, a literal list on purpose (the page cannot import the .ts table); tests/proj_inputs_s18.test.mjs
-// binds it to INTERNE_EINGAENGE of vertrag/stroeme.ts. erz/4 and erz/8 are missing on purpose: the kern has no tap for them.
-export const EINGANG_OPTIONEN = [
-  { wert: 'erz/1', text: 'erz/1' }, { wert: 'erz/2', text: 'erz/2' }, { wert: 'erz/3', text: 'erz/3' },
-  { wert: 'erz/5', text: 'erz/5 (bk)' }, { wert: 'erz/6', text: 'erz/6 (bk)' }, { wert: 'erz/7', text: 'erz/7 (bk)' },
-  { wert: 'pad/1', text: 'pad/1 (L1)' }, { wert: 'pad/2', text: 'pad/2 (L2)' },
-];
+// S18: the inputs a track can record, built from the channel tables of kanaele.js (the page cannot import the .ts table); tests/proj_inputs_s18.test.mjs
+// binds it to INTERNE_EINGAENGE of contract/stroeme.ts. Streams 4, 8, 9, 10 are missing on purpose: the kern has no tap for them.
+export const EINGANG_OPTIONEN = recEingaenge();
 
 // Fader −60..+6 dB; ganz unten heißt aus (−200), wie die Spurbänder es halten (track_tape.js baender: min −60, aus −200)
 export const FADER_MIN = -60, FADER_MAX = 6, FADER_AUS = -200;

@@ -12,7 +12,7 @@ import { arrOrdner } from '../areas/proj/config.ts';
 import { tempoRampe, abBeatVon } from '../tempo_ramp.ts';
 import { specProjekt, tmpOrdner } from './support/project.mjs';
 
-test('KernLage: Uhr, Decks, Boxen, Regler, /zustand/arr; djLaeuft nach Spec 2.2 (Deck ≥ 2, Box 2..4, erz/1..3 offen), sonst false', () => {
+test('KernLage: Uhr, Decks, Regler, /zustand/arr; djLaeuft nach Spec 2.2 (Deck ≥ 2, erz/1..3 offen), sonst false', () => {
   const l = new KernLage();
   assert.equal(l.djLaeuft(), false, 'nichts bekannt: quant 0');
   l.nimm('/uhr', { sample: 0n, mono_ns: 0n, beat: 12.5, bpm: 124, bpm_pro_s: 0 });
@@ -20,10 +20,6 @@ test('KernLage: Uhr, Decks, Boxen, Regler, /zustand/arr; djLaeuft nach Spec 2.2 
   l.nimm('/zustand/deck', { deck: 1, status: 1 }); assert.equal(l.djLaeuft(), false, 'geladen ist nicht laufend');
   l.nimm('/zustand/deck', { deck: 1, status: 2 }); assert.equal(l.djLaeuft(), true); assert.equal(l.deckLaeuft(), true);
   l.nimm('/zustand/deck', { deck: 1, status: 0 }); assert.equal(l.djLaeuft(), false);
-  for (const [status, laeuft] of [[1, false], [2, true], [3, true], [4, true], [0, false]]) {
-    l.nimm('/e/loop', { box: 2, status, name: 'x', beats: 4, fx_art: 0, fx_beats: 1, fx_wet: 0 });
-    assert.equal(l.djLaeuft(), laeuft, `Box Status ${status}`);
-  }
   l.nimm('/e/regler', { pfad: 'erz/2/fader', wert: -12, halter: 'mensch', sample: 0n, beat: 0 });
   assert.equal(l.djLaeuft(), true, 'Strom auf offenem Kanal'); assert.equal(l.deckLaeuft(), false);
   l.nimm('/e/regler', { pfad: 'erz/2/fader', wert: -200, halter: 'frei', sample: 0n, beat: 0 });
@@ -58,17 +54,9 @@ test('abbildung: alle 8 · MAX_SPUREN Spur-Regler, belegte Slots mit Werten (mut
   assert.deepEqual([w['spur/8/fader'], w['spur/8/pan'], w['spur/8/mute'], w['spur/8/solo']], [0, 0, 0, 0]);
   assert.deepEqual([w[`spur/${MAX_SPUREN}/fader`], w[`spur/${MAX_SPUREN}/pan`], w[`spur/${MAX_SPUREN}/mute`], w[`spur/${MAX_SPUREN}/solo`]], [0, 0, 0, 0], 'T08: die letzte Spur ist dabei');
   assert.ok(`spur/${MAX_SPUREN}/solo` in w); assert.ok(!(`spur/${MAX_SPUREN + 1}/solo` in w));
-  assert.ok(!AB.ERZ4_NEUTRAL.some((x) => x.pfad === 'erz/4/ziel' || x.pfad === 'erz/4/xseite'), 'nur Hand: bei Quelle cypher lehnt der Kern nur_hand ab');
-  assert.deepEqual(AB.ERZ4_NUR_HAND.map((x) => x.pfad), ['erz/4/ziel', 'erz/4/xseite']);
-  // P6: bei Quelle andreas gehören ziel=0 und xseite=1 in die Sollliste (der Kern lehnt nur_hand nur bei cypher ab, sort_in.cpp:38)
-  assert.deepEqual(AB.erz4Soll('andreas').slice(-2), [{ pfad: 'erz/4/ziel', wert: 0 }, { pfad: 'erz/4/xseite', wert: 1 }]);
-  assert.equal(AB.erz4Soll('andreas').length, 24); assert.equal(AB.erz4Soll('cypher').length, 22);
-  assert.equal(AB.ERZ4_NEUTRAL.find((x) => x.pfad === 'erz/4/send/2').wert, -200);
-  // 1.15 A3: the gate switch and the 7 utility values of erz/4 are reset on opening, with the neutral values of the table
-  const wz = Object.fromEntries(AB.ERZ4_NEUTRAL.filter((x) => /^erz\/4\/(gate|util)\//.test(x.pfad)).map((x) => [x.pfad, x.wert]));
-  assert.deepEqual(wz, { 'erz/4/gate/an': 0, 'erz/4/util/balance': 0, 'erz/4/util/breite': 100, 'erz/4/util/bassmono': 0, 'erz/4/util/phase_l': 0,
-    'erz/4/util/phase_r': 0, 'erz/4/util/tausch': 0, 'erz/4/util/dc': 0 });
-  assert.ok(!AB.ERZ4_NEUTRAL.some((x) => /^erz\/4\/gate\/(?!an$)/.test(x.pfad)), 'negative control: the gate parameters stay, only the switch is reset');
+  assert.equal(AB.ERZ4_NEUTRAL, undefined, 'container core: production is a service, no erz/4 rows exist');
+  assert.equal(AB.erz4Soll, undefined);
+  assert.ok(!r.some((x) => x.pfad.startsWith('erz/')), 'the control list has no erz/ row');
 });
 
 test('abbildung: Rückweg /e/regler → spur_aendern (Nummer → ID, 0/1 → bool, Klemmen), gleicher Wert und fremde Pfade → null', () => {

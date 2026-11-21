@@ -5,11 +5,11 @@ import path from 'node:path';
 import { neuesProjekt, pruefeProjekt, loopDeckGruppe, loopDeckSpuren } from '../project/model.ts';
 import { fuehreListeAus, BefehlFehler } from '../project/commands.ts';
 import { Verlauf, aendere, rueckgaengig } from '../project/history.ts';
-import { baueModul, liveSlots } from '../project/live.ts';
+import { baueModul, modulAmPlatz } from '../project/live.ts';
 import { alleSpurRegler, reglerZuBefehl } from '../areas/proj/mapping.ts';
 import { tmpOrdner } from './support/project.mjs';
 
-const live = () => { const p = neuesProjekt('x'); p.live = true; return p; };
+const live = () => { const p = neuesProjekt('x'); p.live = true; p.plaetze = [{ typ: 'leer' }, { typ: 'leer' }, { typ: 'leer' }, { typ: 'leer' }]; return p; };
 const lauf = (p, ...b) => fuehreListeAus(p, b).projekt;
 const fehler = (p, ...b) => { try { fuehreListeAus(p, b); } catch (e) { assert.ok(e instanceof BefehlFehler, String(e)); return e; } return assert.fail(`${b.map((x) => x.befehl)} was not refused`); };
 const kopie = (x) => JSON.parse(JSON.stringify(x));
@@ -49,73 +49,41 @@ test('loopdeck_neu twice on one place is refused platz_belegt; the other place a
   assert.equal(fehler(neuesProjekt('n'), { befehl: 'loopdeck_neu', platz: 1 }).grund, 'kein_liveprojekt');
 });
 
-test('loopdeck_neu over a module in that slot converts: cell 1 of track 1 carries the loop, module group gone, one undo restores both', (t) => {
-  const loop = { sha256: 'e'.repeat(64), pfad: 'audio/e.wav', beats: 16, frames: 16 * 24000 };
-  const herkunft = { quelle_sha256: 'c'.repeat(64), titel: 'Song', kuenstler: 'Art', fassung: '1', basis_bpm: 120, von_beat: 0, laenge_beats: 16, bpm: 120,
-    datum: '2026-11-12' };
-  const mit = baueModul(live(), 'B', loop, { drums: { sha256: 'd'.repeat(64), pfad: 'audio/d.wav' } }, herkunft);
-  assert.ok(liveSlots(mit).B);
+const herkunft = () => ({ quelle_sha256: 'c'.repeat(64), titel: 'Song', kuenstler: 'Art', fassung: '1', basis_bpm: 120, von_beat: 0, laenge_beats: 16, bpm: 120,
+  datum: '2026-11-12' });
+const LOOP = { sha256: 'e'.repeat(64), pfad: 'audio/e.wav', beats: 16, frames: 16 * 24000 };
+
+test('loopdeck_neu next to a module leaves the module alone (no conversion into a cell) and takes the first free place; one undo restores the deck away', (t) => {
+  const mit = baueModul(live(), 'C', LOOP, { drums: { sha256: 'd'.repeat(64), pfad: 'audio/d.wav' } }, herkunft());   // the module sits in place 3
+  assert.ok(modulAmPlatz(mit, 'C'));
   const { nachher: p } = mitUndo(t, mit, { befehl: 'loopdeck_neu', platz: 2 });
-  assert.equal(liveSlots(p).B, undefined);
-  assert.equal(p.gruppen.filter((g) => g.modul).length, 0);
-  assert.equal(p.gruppen.length, 1);
-  assert.equal(p.spuren.length, 4);
-  const [t1, t2] = loopDeckSpuren(p, loopDeckGruppe(p, 2));
-  const z = t1.zellen[0];
-  assert.deepEqual([z.name, z.art, z.sha256, z.beats, z.bpm, z.gain_db, z.pfad_hinweis], ['Song', 'loop', 'e'.repeat(64), 16, 120, 0, 'audio/e.wav']);
-  assert.match(z.id, /^z\d+$/);
-  assert.ok(t1.zellen.slice(1).every((x) => x === null) && t2.zellen.every((x) => x === null));
-  // a module in the other slot stays
-  const a = baueModul(live(), 'A', loop, {}, herkunft);
-  assert.ok(liveSlots(lauf(a, { befehl: 'loopdeck_neu', platz: 2 })).A);
+  assert.equal(modulAmPlatz(p, 'C'), modulAmPlatz(mit, 'C'), 'the module stays in place 3');
+  assert.equal(p.gruppen.filter((g) => g.modul).length, 1);
+  assert.deepEqual(p.plaetze.map((x) => x.typ), ['leer', 'leer', 'stems', 'loops'], 'the deck took place 4, the first free one after 3');
+  assert.equal(p.plaetze[3].gruppe, loopDeckGruppe(p, 2).id);
+  const spuren = loopDeckSpuren(p, loopDeckGruppe(p, 2));
+  assert.equal(spuren.length, 4);
+  assert.ok(spuren.every((x) => x.zellen.every((z) => z === null)), 'all cells empty');
 });
 
-// a module with a Loop track whose clip carries a warp; values differ between the warp and the module so that the source of each number shows
-function modulMit(f = () => {}, { ordner } = {}) {
-  const loop = { sha256: 'e'.repeat(64), pfad: ordner ? `${ordner}/loops/7-B-m.wav` : 'audio/e.wav', beats: 16, frames: 16 * 24000 };
-  const herkunft = { quelle_sha256: 'c'.repeat(64), titel: 'Song', kuenstler: 'Art', fassung: '1', basis_bpm: 100, von_beat: 0, laenge_beats: 8, bpm: 100,
-    datum: '2026-11-12' };
-  const p = kopie(baueModul(live(), 'B', loop, {}, herkunft));
-  f(p);
-  return p;
-}
-const loopClips = (p) => p.spuren.find((s) => s.name === 'Loop').clips;
-
-test('module conversion: beats and bpm come from the warp markers; without a warp the module values are the fallback', () => {
-  const mit = lauf(modulMit(), { befehl: 'loopdeck_neu', platz: 2 });
-  const z = loopDeckSpuren(mit, loopDeckGruppe(mit, 2))[0].zellen[0];
-  const ende = loopClips(modulMit()).find((c) => !c.warp.versatz_beats).warp.marker.at(-1);
-  assert.deepEqual([z.beats, z.bpm], [ende[1], (ende[1] * 60) / ende[0]], 'markers');
-  assert.notEqual(z.beats, 8); assert.notEqual(z.bpm, 100);
-  const ohne = lauf(modulMit((p) => { for (const c of loopClips(p)) delete c.warp; }), { befehl: 'loopdeck_neu', platz: 2 });
-  const f = loopDeckSpuren(ohne, loopDeckGruppe(ohne, 2))[0].zellen[0];
-  assert.deepEqual([f.beats, f.bpm], [8, 100], 'module fallback');
+test('loopdeck_neu scans the places 3, 4, 1, 2 for a free one; with none free the deck is created parked and nothing is displaced', () => {
+  let p = live();
+  p = lauf(p, { befehl: 'loopdeck_neu', platz: 1 });
+  assert.deepEqual(p.plaetze.map((x) => x.typ), ['leer', 'leer', 'loops', 'leer']);
+  p = lauf(p, { befehl: 'loopdeck_neu', platz: 2 });
+  assert.deepEqual(p.plaetze.map((x) => x.typ), ['leer', 'leer', 'loops', 'loops']);
+  let voll = baueModul(live(), 'C', LOOP, {}, herkunft());
+  voll = lauf(voll, { befehl: 'seq_anlegen', platz: 1 }, { befehl: 'platz_setzen', platz: 2, typ: 'strudel' }, { befehl: 'seq_anlegen', platz: 4 });
+  assert.deepEqual(voll.plaetze.map((x) => x.typ), ['seq', 'strudel', 'stems', 'seq']);
+  const q = lauf(voll, { befehl: 'loopdeck_neu', platz: 1 });
+  assert.deepEqual(q.plaetze, voll.plaetze, 'no place changed');
+  assert.ok(loopDeckGruppe(q, 1), 'the deck exists, parked');
 });
 
-test('module conversion refuses (and leaves the module alone) when no cell can be made: no Loop track, no clip, more than 64 beats', () => {
-  const faelle = {
-    'no Loop track': (p) => { p.spuren = p.spuren.filter((s) => s.name !== 'Loop'); },
-    'no clip': (p) => { loopClips(p).length = 0; },
-    'warp over 64 beats': (p) => { for (const c of loopClips(p)) { c.warp.marker[c.warp.marker.length - 1][1] = 128; } },
-    'module over 64 beats, no warp': (p) => { for (const c of loopClips(p)) delete c.warp; p.gruppen.find((g) => g.modul).modul.laenge_beats = 100; },
-  };
-  for (const [name, f] of Object.entries(faelle)) {
-    const p = modulMit(f);
-    const e = fehler(p, { befehl: 'loopdeck_neu', platz: 2 });
-    assert.equal(e.grund, 'modul_nicht_umwandelbar', name);
-    assert.match(String(e.detail ?? e.message), /left untouched/, name);
-    assert.ok(liveSlots(p).B, `${name}: the module is still there`);
-  }
-});
-
-test('module conversion keeps an absolute path inside the project folder as a project-relative hint; one outside is dropped', () => {
-  const ordner = '/work/proj/song';
-  const mit = lauf(modulMit(() => {}, { ordner }), { befehl: 'loopdeck_neu', platz: 2 });
-  const innen = fuehreListeAus(modulMit(() => {}, { ordner }), [{ befehl: 'loopdeck_neu', platz: 2 }], { quelle: 'andreas', ordner }).projekt;
-  assert.equal(loopDeckSpuren(innen, loopDeckGruppe(innen, 2))[0].zellen[0].pfad_hinweis, 'loops/7-B-m.wav');
-  assert.equal(loopDeckSpuren(mit, loopDeckGruppe(mit, 2))[0].zellen[0].pfad_hinweis, undefined, 'without a folder the absolute path is dropped');
-  const draussen = fuehreListeAus(modulMit(() => {}, { ordner }), [{ befehl: 'loopdeck_neu', platz: 2 }], { quelle: 'andreas', ordner: '/work/other' }).projekt;
-  assert.equal(loopDeckSpuren(draussen, loopDeckGruppe(draussen, 2))[0].zellen[0].pfad_hinweis, undefined, 'outside the folder');
+test('a loop deck cell is written and read back on a deck that sits in a place; the deck is one undo step', (t) => {
+  const { nachher: p } = mitUndo(t, mitDeck(1), { befehl: 'zelle_setzen', spur_id: loopDeckSpuren(mitDeck(1), loopDeckGruppe(mitDeck(1), 1))[0].id, index: 1, zelle: Z() });
+  const z = loopDeckSpuren(p, loopDeckGruppe(p, 1))[0].zellen[0];
+  assert.deepEqual([z.name, z.art, z.sha256, z.beats], ['Loop', 'loop', SHA, 4]);
 });
 
 test('a loop deck track takes no take lanes; a cell name of spaces only is refused', () => {

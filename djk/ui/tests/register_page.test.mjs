@@ -25,7 +25,7 @@ test('registerZeilen: only assignments in effect, the device by name, a readable
   const z = registerZeilen(daten, '', { namen: NAMEN });
   assert.equal(z.length, 4, 'the file apc20.json is not loaded: its row is left out');
   assert.deepEqual([z[0].geraet, z[0].loeschbar], ['Novation Launch Control 3', true], 'learned by hand comes first');
-  assert.deepEqual(z[1], { besitzer: 'apc20', geraet: 'Akai APC20', quelle: 'CC 7 · ch 1', ziel: 'deck/1/fader', modul: 'Deck A', modulId: 'deck/1', art: 'knob', loeschbar: false });
+  assert.deepEqual(z[1], { besitzer: 'apc20', geraet: 'Akai APC20', quelle: 'CC 7 · ch 1', ziel: 'deck/1/fader', modul: 'Container A', modulId: 'deck/1', art: 'knob', loeschbar: false });
   assert.equal(z[2].quelle, 'Note 10 · ch 13');
   assert.deepEqual([z[3].quelle, z[3].art], ['left touch strip', 'touch']);
 });
@@ -143,14 +143,30 @@ test('geraeteZeilen: places first, a detected controller without a place gets AD
   assert.equal(nach[0].wechsel, null);
 });
 
+test('U6 SICHTEN has no studio entry: the views are DJ, LIVE and PRODUCTION; a stream outside the alias streams is in no view', async () => {
+  const { SICHTEN, modulVon } = await import('../public/register_view.js');
+  assert.deepEqual(SICHTEN.map((x) => x.id), ['dj', 'live', 'production']);
+  assert.ok(!SICHTEN.some((x) => x.module.some((m) => /^erz\/(5|6|7)$/.test(m) && x.id !== 'live')), 'the instrument streams belong to the live view only');
+  assert.equal(modulVon('erz/5/fader').name, 'Stream 5', 'no I5..I7 instrument names');
+});
+
+test('U6 the module list of a container view names the container letter; the DJ view shows all four, the LIVE view the loop containers C and D', async () => {
+  const { modulVon, SICHTEN } = await import('../public/register_view.js');
+  assert.deepEqual(['deck/1', 'deck/2', 'pad/1', 'pad/2'].map((p) => modulVon(`${p}/fader`).name), ['Container A', 'Container B', 'Container C', 'Container D']);
+  assert.deepEqual(['deck/1', 'deck/2', 'pad/1', 'pad/2'].map((p) => modulVon(`${p}/fader`).id), ['deck/1', 'deck/2', 'pad/1', 'pad/2']);
+  for (const c of ['deck/1', 'deck/2', 'pad/1', 'pad/2']) assert.ok(SICHTEN.find((x) => x.id === 'dj').module.includes(c), `dj shows ${c}`);
+  for (const c of ['pad/1', 'pad/2']) assert.ok(SICHTEN.find((x) => x.id === 'live').module.includes(c), `live shows ${c}`);
+  assert.ok(!SICHTEN.find((x) => x.id === 'live').module.includes('deck/1'), 'live keeps showing no player container');
+});
+
 test('modules and views: a target belongs to a module by its path; a picked module or view keeps only its assignments', async () => {
   const { modulVon } = await import('../public/register_view.js');
   assert.deepEqual(['deck/2/eq/tief', 'pad/1/fader', 'erz/1/fader', 'erz/6/bk/3', 'fx/3/bk/4', 'xfader', 'spur/4/fader'].map((p) => modulVon(p).name),
-    ['Deck B', 'Loops L1', 'Drums', 'Instrument I6', 'FX3 Remix', 'Crossfader', 'Track 4']);
+    ['Container B', 'Container C', 'Drums', 'Stream 6', 'FX3 Remix', 'Crossfader', 'Track 4']);
   assert.deepEqual(registerZeilen(daten, '', { modul: 'deck/2' }).map((r) => r.ziel), ['deck/2/filter']);
   assert.deepEqual(registerZeilen(daten, '', { sicht: 'dj' }).length, 4);
   assert.deepEqual(registerZeilen(daten, '', { sicht: 'production' }), []);
-  assert.deepEqual(registerZeilen(daten, 'deck a').map((r) => r.ziel), ['deck/1/fader', 'deck/1/pfl', 'deck/1/scrub'], 'the text filter knows the module name');
+  assert.deepEqual(registerZeilen(daten, 'container a').map((r) => r.ziel), ['deck/1/fader', 'deck/1/pfl', 'deck/1/scrub'], 'the text filter knows the module name');
 });
 
 // ---- the device layouts, the module view and "free only" ----
@@ -178,8 +194,8 @@ test('kacheln: a tile per control of the layout, its target from the learn table
   const k = kacheln(LC3, LERN, { platz: 2, namen: new Map([['erz/6/bk/3', 'Cutoff']]) });
   assert.equal(k.length, 25, '24 controls and one extra');
   const enc1 = k.find((x) => x.name === 'Enc 1'), enc2 = k.find((x) => x.name === 'Enc 2'), enc3 = k.find((x) => x.name === 'Enc 3');
-  assert.deepEqual([enc1.ziel, enc1.label, enc1.modul, enc1.zuweisbar], ['deck/2/filter', 'Filter', 'Deck B', true]);
-  assert.deepEqual([enc2.ziel, enc2.label, enc2.modul], ['erz/6/bk/3', 'Cutoff', 'Instrument I6'], 'the graph knob name');
+  assert.deepEqual([enc1.ziel, enc1.label, enc1.modul, enc1.zuweisbar], ['deck/2/filter', 'Filter', 'Container B', true]);
+  assert.deepEqual([enc2.ziel, enc2.label, enc2.modul], ['erz/6/bk/3', 'Cutoff', 'Stream 6'], 'the graph knob name');
   assert.deepEqual([enc3.ziel, enc3.label], [null, ''], 'free');
   assert.deepEqual([enc1.zeile, enc1.spalte, k.find((x) => x.name === 'Enc 9').zeile, k.find((x) => x.name === 'Enc 9').spalte], [1, 1, 2, 1]);
   const btn4 = k.find((x) => x.name === 'Btn 4');
@@ -205,7 +221,7 @@ test('kachelSicht: free only keeps the free assignable controls; a view hides th
   const dj = kachelSicht(k, { sicht: 'dj' }).filter((x) => x.ziel).map((x) => x.ziel);
   assert.deepEqual(dj.sort(), ['deck/1/trim', 'deck/2/filter', 'master/pegel'], 'erz/6 is not in the DJ view');
   assert.equal(kachelSicht(k, { sicht: 'dj' }).filter((x) => !x.ziel).length, 21, 'free tiles stay');
-  assert.deepEqual(kachelSicht(k, { filter: 'deck b' }).map((x) => x.name), ['Enc 1']);
+  assert.deepEqual(kachelSicht(k, { filter: 'container b' }).map((x) => x.name), ['Enc 1']);
   assert.deepEqual(kachelSicht(k, { filter: 'btn 4' }).map((x) => x.name), ['Btn 4']);
   assert.deepEqual(kachelSicht(k, { filter: 'CC 14' }).map((x) => x.name), ['Enc 2']);
 });
@@ -290,7 +306,7 @@ test('baueKacheln: the picker of the open tile sits in the grid; baueWaehler lis
     assert.deepEqual(knoepfe().map((x) => x.alle().filter((y) => y.klassen.has('reg-wahlziel-name'))[0].textContent), ['Filter', 'Trim', 'Fader'], 'free targets first, then the assigned ones; PFL is not among the assignable targets here and is not offered');
     assert.deepEqual(knoepfe().map((x) => x.klassen.has('belegt')), [false, false, true]);
     knoepfe()[1].ev.click[0]();
-    const chip = panel.alle().find((x) => x.tag === 'button' && x.textContent.startsWith('Deck B'));
+    const chip = panel.alle().find((x) => x.tag === 'button' && x.textContent.startsWith('Container B'));
     chip.ev.click[0]();
     panel.alle().find((x) => x.textContent === 'CLOSE').ev.click[0]({ stopPropagation() {} });
     assert.deepEqual(gewaehlt, [['setze', 'deck/1/trim'], ['modul', 'deck/2'], ['zu']]);
@@ -300,7 +316,7 @@ test('baueKacheln: the picker of the open tile sits in the grid; baueWaehler lis
     assert.deepEqual(suchen, ['cutoff']);
     assert.deepEqual(knoepfe().map((x) => x.alle().filter((y) => y.klassen.has('reg-wahlziel-name'))[0].textContent), ['Cutoff'], 'with a module picked the search stays in it');
     baueWaehler(panel, ks[0], { module: [], modul: null, suche: 'cutoff', ziele: (t) => zielZeilen(ZIELE, DATEN, { filter: t }) });
-    assert.deepEqual(knoepfe().map((x) => x.alle().filter((y) => y.klassen.has('reg-wahlziel-name'))[0].textContent), ['Instrument I6 · Cutoff'], 'without a module it spans all modules, with the module name');
+    assert.deepEqual(knoepfe().map((x) => x.alle().filter((y) => y.klassen.has('reg-wahlziel-name'))[0].textContent), ['Stream 6 · Cutoff'], 'without a module it spans all modules, with the module name');
     baueWaehler(panel, ks[0], { module: [], modul: null, ziele: () => [] });
     assert.deepEqual(panel.alle().filter((x) => x.klassen.has('reg-leer')).map((x) => x.textContent), ['Pick a module above, or type to search every module']);
   } finally { globalThis.document = dok; }
@@ -339,11 +355,11 @@ test('baueWahl: the module chips carry "<free> of <all> free"; the picked chip i
     const wurzel = el('div'), w = [];
     baueWahl(wurzel, modulZaehler(ZIELE, DATEN, {}), { sicht: 'dj', modul: 'deck/2', waehle: (x) => w.push(x) });
     const chips = wurzel.alle().filter((x) => x.tag === 'button').map((x) => x.textContent);
-    assert.ok(chips.includes('Deck A · 2 of 3 free') && chips.includes('DJ'));
-    const b = wurzel.alle().find((x) => x.textContent === 'Deck B · 1 of 2 free');
+    assert.ok(chips.includes('Container A · 2 of 3 free') && chips.includes('DJ'));
+    const b = wurzel.alle().find((x) => x.textContent === 'Container B · 1 of 2 free');
     assert.equal(b.klassen.has('an'), true);
     b.ev.click[0]();
-    wurzel.alle().find((x) => x.textContent === 'Deck A · 2 of 3 free').ev.click[0]();
+    wurzel.alle().find((x) => x.textContent === 'Container A · 2 of 3 free').ev.click[0]();
     wurzel.alle().find((x) => x.textContent === 'DJ').ev.click[0]();
     assert.deepEqual(w, [{ modul: null }, { modul: 'deck/1' }, { sicht: null }]);
   } finally { globalThis.document = dok; }

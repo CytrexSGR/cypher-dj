@@ -12,6 +12,7 @@ import { tmpOrdner } from './support/project.mjs';
 
 const kopie = (x) => JSON.parse(JSON.stringify(x));
 const lauf = (p, ...b) => fuehreListeAus(p, b).projekt;
+const LEER = () => [{ typ: 'track' }, { typ: 'track' }, { typ: 'track' }, { typ: 'track' }];
 const BK = { art: 'intern', name: 'bk', graph: 'drums-909', parameter: {} };
 
 // the v1 document, as project/seq.ts of commit 6bd45190 defined it: two voices, six lanes in the first pattern, 16 slots
@@ -26,7 +27,7 @@ const dokumentV1 = (platz, s1, s2) => ({
 });
 // a live project with a v1 deck: two voice tracks with explicit-note clips of 64 beats (what v1 wrote), grouped under one top group
 const projektV1 = (platz = 2) => {
-  let p = neuesProjekt('v1'); p.live = true;
+  let p = neuesProjekt('v1'); p.live = true; p.plaetze = LEER();
   for (const name of ['Drums', 'Bass']) {
     p = lauf(p, { befehl: 'spur_neu', art: 'instrument', name, geraet: BK });
     p = lauf(p, { befehl: 'clip_neu', spur_id: p.spuren.at(-1).id, art: 'midi', start_beat: 0, laenge_beats: 64, name: 'SEQ',
@@ -34,6 +35,7 @@ const projektV1 = (platz = 2) => {
   }
   p = lauf(p, { befehl: 'gruppenspur_neu', name: `SEQ ${platz}`, mitglieder: [p.spuren[0].id, p.spuren[1].id] });
   const roh = kopie(p);
+  roh.format = 'cypherdj-projekt/2'; delete roh.plaetze;   // a stored /2 file: no places yet
   roh.gruppen[0].seq = dokumentV1(platz, p.spuren[0].id, p.spuren[1].id);
   return roh;
 };
@@ -41,26 +43,28 @@ const fehlerVon = (p) => { const u = pruefeProjekt(kopie(p)); return 'fehler' in
 
 // a live project with one deck group and the tracks given (default: none)
 const deck = (platz = 1) => {
-  let p = neuesProjekt('seq'); p.live = true;
+  let p = neuesProjekt('seq'); p.live = true; p.plaetze = LEER();
   p = lauf(p, { befehl: 'gruppenspur_neu', name: `SEQ ${platz}` });
-  p.gruppen[0].seq = { schema: 2, platz };
+  p.gruppen[0].seq = { schema: 2 };
+  p.plaetze[platz - 1] = { typ: 'seq', gruppe: p.gruppen[0].id };
   return p;
 };
 
 test('schema 2 deck marker passes seqPruefung and the project check on a top group of a live project', () => {
-  assert.equal(seqPruefung({ schema: 2, platz: 1 }), null);
-  for (const platz of [1, 2, 3, 4]) assert.equal(seqPruefung({ schema: 2, platz }), null, String(platz));
+  assert.equal(seqPruefung({ schema: 2 }), null);
+  assert.equal(seqPruefung({ schema: 2, lpb: 4, ticks: 12 }), null);
   const u = pruefeProjekt(kopie(deck(3)));
   assert.ok('projekt' in u, JSON.stringify(u));
-  assert.deepEqual(u.projekt.gruppen[0].seq, { schema: 2, platz: 3 });
+  assert.deepEqual(u.projekt.gruppen[0].seq, { schema: 2 });
   assert.equal(seqGruppe(u.projekt, 3)?.id, u.projekt.gruppen[0].id);
-  assert.equal(seqGruppe(u.projekt, 1), undefined);
+  assert.equal(seqGruppe(u.projekt, 1), undefined, 'a place without a deck');
 });
 
-test('an extra field is argument_unbekannt, limits are argument_ungueltig, schema 1 is refused by the check', () => {
-  assert.equal(seqPruefung({ schema: 2, platz: 1, extra: 1 })?.grund, 'argument_unbekannt');
-  assert.equal(seqPruefung({ schema: 2, platz: 1, tonart: '8A' })?.grund, 'argument_unbekannt');
-  for (const x of [{ schema: 2, platz: 0 }, { schema: 2, platz: 5 }, { schema: 2, platz: 1.5 }, { schema: 2 }, { platz: 1 }, null, [], 'x']) {
+test('an extra field (also the old platz) is argument_unbekannt, limits are argument_ungueltig, schema 1 is refused by the check', () => {
+  assert.equal(seqPruefung({ schema: 2, extra: 1 })?.grund, 'argument_unbekannt');
+  assert.equal(seqPruefung({ schema: 2, platz: 1 })?.grund, 'argument_unbekannt', 'the place is stored in plaetze now');
+  assert.equal(seqPruefung({ schema: 2, tonart: '8A' })?.grund, 'argument_unbekannt');
+  for (const x of [{ schema: 3 }, { schema: 2, lpb: 5 }, { schema: 2, ticks: 1.5 }, {}, null, [], 'x']) {
     assert.equal(seqPruefung(x)?.grund, 'argument_ungueltig', JSON.stringify(x));
   }
   const v1 = seqPruefung(dokumentV1(1, 'a', 'b'));
@@ -68,25 +72,27 @@ test('an extra field is argument_unbekannt, limits are argument_ungueltig, schem
   assert.match(fehlerVon({ ...deck(), gruppen: [{ ...deck().gruppen[0], seq: dokumentV1(1, 'a', 'b') }] }) ?? '', /seq/);
 });
 
-test('the project check keeps its rules: live container only, one deck per place, top group, not together with a module', () => {
+test('the project check keeps its rules: live container only, one place per deck, top group, not together with a module', () => {
   const p = deck(2);
   assert.equal(fehlerVon(p), null);
-  const ohneLive = kopie(p); delete ohneLive.live;
+  const ohneLive = kopie(p); delete ohneLive.live; delete ohneLive.plaetze;
   assert.match(fehlerVon(ohneLive) ?? '', /live container/);
   let zwei = lauf(p, { befehl: 'gruppenspur_neu', name: 'zweite' });
-  zwei.gruppen[1].seq = { schema: 2, platz: 2 };
-  assert.match(fehlerVon(zwei) ?? '', /platz/);
-  zwei.gruppen[1].seq = { schema: 2, platz: 3 };
+  zwei.gruppen[1].seq = { schema: 2 };
+  assert.equal(fehlerVon(zwei), null, 'a second deck with no place is parked');
+  zwei.plaetze[2] = { typ: 'seq', gruppe: zwei.gruppen[0].id };
+  assert.match(fehlerVon(zwei) ?? '', /already sits in another place/);
+  zwei.plaetze[2] = { typ: 'seq', gruppe: zwei.gruppen[1].id };
   assert.equal(fehlerVon(zwei), null);
   const innen = lauf(p, { befehl: 'gruppenspur_neu', name: 'aussen' });
   innen.gruppen[0].ausgang = { art: 'gruppe', id: innen.gruppen[1].id };
-  assert.match(fehlerVon(innen) ?? '', /nested/);
+  assert.match(fehlerVon(innen) ?? '', /nested|top group/);
   const mod = kopie(p);
-  mod.gruppen[0].modul = { quelle_sha256: 'c'.repeat(64), titel: 'T', fassung: 'f', basis_bpm: 120, von_beat: 0, laenge_beats: 16, bpm: 120, datum: '2026-11-14', slot: 'A' };
+  mod.gruppen[0].modul = { quelle_sha256: 'c'.repeat(64), titel: 'T', fassung: 'f', basis_bpm: 120, von_beat: 0, laenge_beats: 16, bpm: 120, datum: '2026-11-14' };
   assert.match(fehlerVon(mod) ?? '', /seq|module/);
 });
 
-test('seqV1Wandeln: a v1 group becomes {schema: 2, platz}, clips and tracks stay byte-equal, the converted project passes the check', () => {
+test('seqV1Wandeln: a v1 group becomes {schema: 2, platz} (the lift moves the place into plaetze), clips and tracks stay byte-equal, the converted project passes the check', () => {
   const roh = projektV1(2);
   assert.match(fehlerVon(roh) ?? '', /seq/, 'a v1 document alone is refused');
   const vorher = JSON.stringify({ spuren: roh.spuren, rest: { ...roh, gruppen: undefined, spuren: undefined } });
@@ -96,7 +102,7 @@ test('seqV1Wandeln: a v1 group becomes {schema: 2, platz}, clips and tracks stay
   assert.equal(JSON.stringify({ ...roh.gruppen[0], seq: undefined }), gruppeVorher);
   assert.equal(JSON.stringify({ spuren: roh.spuren, rest: { ...roh, gruppen: undefined, spuren: undefined } }), vorher);
   assert.equal(roh.spuren[0].clips[0].noten.length, 4);
-  assert.equal(fehlerVon(roh), null);
+  assert.equal(fehlerVon(roh), null, 'a /2 file is checked as its lift');
   assert.equal(seqV1Wandeln(roh), false, 'a second call changes nothing');
 });
 
@@ -118,12 +124,13 @@ test('Projekte.lies converts a stored v1 project before the check, speichere wri
   fs.writeFileSync(datei, JSON.stringify(roh, null, 1) + '\n');
   assert.ok(fs.readFileSync(datei, 'utf8').includes('"stimmen"'));
   const gelesen = pr.lies(slug);
-  assert.deepEqual(gelesen.gruppen[0].seq, { schema: 2, platz: 2 });
+  assert.deepEqual(gelesen.gruppen[0].seq, { schema: 2 });
+  assert.deepEqual(gelesen.plaetze[1], { typ: 'seq', gruppe: gelesen.gruppen[0].id }, 'the v1 place became place 2');
   assert.equal(JSON.stringify(gelesen.spuren[0].clips), JSON.stringify(roh.spuren[0].clips));
   pr.speichere(slug, gelesen);
   const text = fs.readFileSync(datei, 'utf8');
   assert.ok(!text.includes('"stimmen"') && !text.includes('"folgen"'));
-  assert.deepEqual(pr.lies(slug).gruppen[0].seq, { schema: 2, platz: 2 });
+  assert.deepEqual(pr.lies(slug).gruppen[0].seq, { schema: 2 });
 });
 
 // --- the view descriptor ---------------------------------------------------------------------------------------------------

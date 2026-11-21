@@ -201,7 +201,7 @@ test('HTTP: the routes answer JSON with the same bodies', async (t) => {
   z.uhr(10.3);
   const routen = z.bereich.routen();
   assert.deepEqual(routen.map((r) => `${r.methode} ${r.pfad}`), ['GET /loopdeck/stand', 'POST /loopdeck/start', 'POST /loopdeck/sprung', 'POST /loopdeck/stopp', 'POST /loopdeck/szene',
-    'POST /loopdeck/laden', 'POST /loopdeck/zelle', 'POST /loopdeck/bewegen', 'POST /loopdeck/raster', 'POST /loopdeck/plaetze', 'POST /loopdeck/spur', 'POST /loopdeck/effekt', 'GET /loopdeck/effekte', 'POST /loopdeck/leeren', 'POST /loopdeck/neu']);
+    'POST /loopdeck/laden', 'POST /loopdeck/zelle', 'POST /loopdeck/bewegen', 'POST /loopdeck/raster', 'POST /loopdeck/spur', 'POST /loopdeck/effekt', 'GET /loopdeck/effekte', 'POST /loopdeck/leeren', 'POST /loopdeck/neu']);
   assert.ok(routen.filter((r) => r.methode === 'POST').every((r) => r.schutz === 'fremdePost'));
   const ruf = async (r, body) => {
     const q = Readable.from(body === undefined ? [] : [Buffer.from(JSON.stringify(body))]);
@@ -283,7 +283,7 @@ test('spur eq and kill: 200, the core got the EQ rows (kill as -200), stand keep
 });
 
 // channel strip MZ2: send through POST /loopdeck/spur
-test('spur send: 200, the core got spur/<n>/send/<r> for the new return, stand shows it; four production returns give 409 kein_platz', async (t) => {
+test('spur send: 200, the core got spur/<n>/send/<r> for the new return, stand shows it; eight production returns give 409 kein_platz', async (t) => {
   const z = await aufbau(t);
   const teile = (re) => z.protokoll.gesendet.filter((g) => g.adresse === '/k/teil' && re.test(g.felder.pfad));
   const nr = z.spuren()[0].nr;
@@ -304,12 +304,12 @@ test('spur send: 200, the core got spur/<n>/send/<r> for the new return, stand s
   assert.equal((await z.bereich.spurAendern({ deck: 1, spur: 2, fader_db: -3, eq: { tief: -2 }, send: { hall: -9 } }, 'andreas')).code, 200);
   assert.equal(z.projekt().rev, rev2 + 1);
   // fill the returns with production returns: a new delay return is refused
-  await z.aendern([{ befehl: 'return_neu' }, { befehl: 'return_neu' }, { befehl: 'return_neu' }]);
-  assert.equal(z.projekt().returns.length, 4);
+  await z.aendern(Array.from({ length: 7 }, () => ({ befehl: 'return_neu' })));   // MAX_RETURNS is 8 since the container core
+  assert.equal(z.projekt().returns.length, 8);
   const full = await z.bereich.spurAendern({ deck: 1, spur: 1, send: { delay: -6 } }, 'andreas');
   assert.deepEqual([full.code, full.j.ok, full.j.grund], [409, false, 'kein_platz']);
   assert.match(full.j.text, /returns/);
-  assert.equal(z.projekt().returns.length, 4, 'nothing changed');
+  assert.equal(z.projekt().returns.length, 8, 'nothing changed');
 });
 
 // channel strip MZ3: the effect slot through POST /loopdeck/effekt and GET /loopdeck/effekte, with a temp graph folder (fx-remix, fx-crunch of the demos, fx-delay-sync)

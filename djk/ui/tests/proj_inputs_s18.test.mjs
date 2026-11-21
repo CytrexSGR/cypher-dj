@@ -16,8 +16,8 @@ const ein = (name) => ({ art: 'intern', name });
 const grund = (f) => { try { f(); } catch (e) { return e.grund ?? String(e); } return null; };
 const mitSpur = () => fuehreListeAus(neuesProjekt('T'), [{ befehl: 'spur_neu', art: 'audio', name: 'A' }]).projekt;
 
-test('S18 eingangsCode: the eight inputs map to the kern tap codes, erz/4, erz/8 and master are refused', () => {
-  assert.deepEqual(INTERNE_EINGAENGE.map(eingangsCode), [11, 12, 13, 15, 16, 17, 21, 22]);
+test('S18 eingangsCode: the ten inputs map to the kern tap codes, erz/4, erz/8 and master are refused', () => {
+  assert.deepEqual(INTERNE_EINGAENGE.map(eingangsCode), [11, 12, 13, 15, 16, 17, 21, 22, 23, 24]);
   for (const n of ['erz/4', 'erz/8', 'master', 'pad/3', '']) assert.throws(() => eingangsCode(n), /eingang_fehlt/, n);
 });
 

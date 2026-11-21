@@ -12,7 +12,6 @@
 #include <string>
 
 #include "cypherdj/loop.h"
-#include "cypherdj/loopbox.h"
 #include "cypherdj/net.h"
 
 namespace cdj {
@@ -35,11 +34,7 @@ bool quelle_ok(const char* q) {
 }  // namespace
 
 bool Netz::loop_paket(const v::Adresse* a, const osc::Nachricht& m) {
-  const bool laden = a->pfad == v::k_loop_laden.pfad;
-  const bool start = a->pfad == v::k_loop_start.pfad;
-  const bool stopp = a->pfad == v::k_loop_stopp.pfad;
   const bool rec = a->pfad == v::k_loop_rec.pfad;
-  const bool raster = a->pfad == v::k_loop_raster.pfad;
   if (a->pfad == v::k_fx.pfad) {  // AUFTRAG 2026-09-28 (§4.10): /k/fx ,hsiidddddi, Einheits-Parameter
     namespace f = v::feld::k_fx;
     Befehl b{};
@@ -88,21 +83,6 @@ bool Netz::loop_paket(const v::Adresse* a, const osc::Nachricht& m) {
     einreihen(b);
     return true;
   }
-  if (a->pfad == v::k_platz_kanal.pfad) {  // /k/platz/kanal ,hsii
-    namespace f = v::feld::k_platz_kanal;
-    Befehl b{};
-    b.art = Befehl::PLATZ_KANAL;
-    b.id = m.werte[f::id].h;
-    kopiere(b.quelle, m.werte[f::quelle].s, sizeof b.quelle);
-    b.deck = m.werte[f::pad].i;
-    b.nr = m.werte[f::inhalt].i;
-    if (!quelle_ok(b.quelle) || b.deck < 1 || b.deck > 2 || b.nr < 0 || b.nr > 3) {
-      quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "ausserhalb_bereich");
-      return true;
-    }
-    einreihen(b);
-    return true;
-  }
   if (a->pfad == v::k_fx_routing.pfad) {  // Ohr T17: /k/fx/routing ,hsi
     namespace f = v::feld::k_fx_routing;
     Befehl b{};
@@ -117,7 +97,31 @@ bool Netz::loop_paket(const v::Adresse* a, const osc::Nachricht& m) {
     einreihen(b);   // ob die Quelle schalten darf (cypher: nur_hand), entscheidet der Kern
     return true;
   }
-  if (!laden && !start && !stopp && !rec && !raster) return false;
+  if (a->pfad == v::k_container_quelle.pfad) {  // container core K8: /k/container/quelle ,hsii (container 1..4, art 0 leer, 1 player, 2 modul)
+    namespace f = v::feld::k_container_quelle;
+    namespace g = v::bereich::k_container_quelle;
+    Befehl b{};
+    b.art = Befehl::CONTAINER_QUELLE;
+    b.id = m.werte[f::id].h;
+    kopiere(b.quelle, m.werte[f::quelle].s, sizeof b.quelle);
+    b.nr = m.werte[f::container].i;
+    b.an = m.werte[f::art].i;
+    if (!quelle_ok(b.quelle)) {
+      quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "ausserhalb_bereich");
+      return true;
+    }
+    if (!std::strcmp(b.quelle, "cypher") && ki_gestoppt_) {   // §4.7 stop key, before the range; the core checks again
+      quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "ki_gestoppt");
+      return true;
+    }
+    if (b.nr < g::container_min || b.nr > g::container_max || b.an < g::art_min || b.an > g::art_max) {
+      quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "ausserhalb_bereich");
+      return true;
+    }
+    einreihen(b);
+    return true;
+  }
+  if (!rec) return false;
   if (rec) {  // /k/loop/rec: id, quelle, beats, name (§4.9) — kein Box-Feld, eigener Zweig
     Befehl b{};
     b.id = m.werte[v::feld::k_loop_rec::id].h;
@@ -142,44 +146,6 @@ bool Netz::loop_paket(const v::Adresse* a, const osc::Nachricht& m) {
     if (einreihen(b)) mt.release();  // der Kern besitzt ihn jetzt; zurück kommt er als Ereignis::MITSCHNITT
     return true;
   }
-  Befehl b{};  // alle übrigen /k/loop/* beginnen mit id, quelle, box (§4.9)
-
-  b.id = m.werte[0].h;
-  kopiere(b.quelle, m.werte[1].s, sizeof b.quelle);
-  b.deck = m.werte[2].i;
-  if (!quelle_ok(b.quelle) || b.deck < 1 || b.deck > LOOP_BOXEN) {
-    quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "ausserhalb_bereich");
-    return true;
-  }
-  if (raster) {  // Plan Grid (§4.9): Betrag gegen frames prüft der Kern (er kennt den geladenen Loop)
-    b.art = Befehl::LOOP_RASTER;
-    b.versatz_f = m.werte[v::feld::k_loop_raster::versatz_frames].i;
-    einreihen(b);
-    return true;
-  }
-  if (start || stopp) {
-    b.art = start ? Befehl::LOOP_START : Befehl::LOOP_STOPP;
-    einreihen(b);
-    return true;
-  }
-  const char* name = m.werte[v::feld::k_loop_laden::name].s;
-  if (!loop_name_ok(name)) {
-    quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "ausserhalb_bereich");
-    return true;
-  }
-  std::string fehler;
-  std::unique_ptr<Loop> l = lade_loop(loop_ordner_ + "/" + name, &fehler);
-  if (!l) {
-    std::fprintf(stderr, "/k/loop/laden: %s\n", fehler.c_str());
-    quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "pruefung");
-    return true;
-  }
-  l->name = name;  // der Ordnername gilt, nicht das Feld in loop.json
-  b.art = Befehl::LOOP_LADEN;
-  kopiere(b.pfad, name, sizeof b.pfad);
-  b.zeiger = l.get();
-  if (einreihen(b)) l.release();  // der Kern besitzt ihn jetzt; zurück kommt er als LOOP_ALT (Task 7: ohne Varianten-Render)
-  return true;
 }
 
 void Netz::keylock_beenden() {
@@ -263,16 +229,6 @@ bool Netz::loop_ereignis(const Ereignis& e) {
     an_alle(s);
     return true;
   }
-  if (e.art == Ereignis::BOX) {  // Keylock 7b.3, §5.5b /zustand/box ,iiiiii (7c.3: kein_platz)
-    osc::Schreiber s(v::zustand_box);
-    s.i(e.deck).i(e.status).i(e.keylock_unterlauf).i(e.keylock_aufgegeben).i(e.keylock_ring_voll).i(e.keylock_kein_platz);
-    an_alle(s);
-    return true;
-  }
-  if (e.art == Ereignis::LOOP_ALT) {
-    delete static_cast<const Loop*>(e.zeiger);
-    return true;
-  }
   if (e.art == Ereignis::MITSCHNITT) {  // Scheibe 2: fertig geschrieben, abgelehnt oder abgebrochen
     const auto* mt = static_cast<const Mitschnitt*>(e.zeiger);
     int32_t status = e.status;
@@ -317,9 +273,9 @@ bool Netz::loop_ereignis(const Ereignis& e) {
     an_alle(s);
     return true;
   }
-  if (e.art == Ereignis::PLATZ_KANAL) {  // DJ view places 3 and 4, §5.12 /e/platz/kanal ,ii
-    if (e.deck >= 1 && e.deck <= 2) platz_kanal_stand_[e.deck - 1] = e.status;
-    osc::Schreiber s(v::e_platz_kanal);
+  if (e.art == Ereignis::CONTAINER_QUELLE) {  // container core K8, §5.12 /e/container/quelle ,ii
+    if (e.deck >= 1 && e.deck <= 4) container_stand_[e.deck - 1] = e.status;
+    osc::Schreiber s(v::e_container_quelle);
     s.i(e.deck).i(e.status);
     an_alle(s);
     return true;
@@ -331,16 +287,7 @@ bool Netz::loop_ereignis(const Ereignis& e) {
     an_alle(s);
     return true;
   }
-  if (e.art != Ereignis::LOOP) return false;
-  if (e.deck >= 1 && e.deck <= 2) {   // Stand für neue Abonnenten (Effekt-Sektion 2026-10-11)
-    LoopStand& l = loop_stand_[e.deck];
-    l.da = true; l.status = e.status; l.name = e.pfad; l.beats = e.fassung; l.fx_art = e.fx_art; l.fx_beats = e.fx_beats; l.fx_wet = e.fx_wet;
-  }
-
-  osc::Schreiber s(v::e_loop);
-  s.i(e.deck).i(e.status).s(e.pfad).i(e.fassung).i(e.fx_art).d(e.fx_beats).f(e.fx_wet);
-  an_alle(s);
-  return true;
+  return false;
 }
 
 }  // namespace cdj

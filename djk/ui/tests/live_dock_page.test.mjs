@@ -1,5 +1,5 @@
 // Live dock (plan 2026-11-19-one-dock-stage-5a, task 4) in a real page: headless Chrome against the project stub (check/page_mock.mjs).
-// The EFFECTS tab of the DJ view shows the dock: ten channel cards, FX3 and FX4, one MASTER card in its own column; a control value changes a chip in place;
+// The EFFECTS tab of the DJ view shows the dock: seven channel cards (four containers, three streams), FX3 and FX4, one MASTER card in its own column; a control value changes a chip in place;
 // a click on a free spot of a card puts it in front and reports the controller focus; leaving the tab and coming back keeps the rows. Without google-chrome skipped.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,7 +19,7 @@ test('the EFFECTS tab shows the live dock; values refresh in place; a card click
   await s.w(`(() => { window.__gesendet = []; const f = window.fetch; window.fetch = (u, o) => { const w = String(u); if (o?.method === 'POST') window.__gesendet.push({ w, body: o.body }); return /\\/(regler|controller\\/fokus)$/.test(w) ? Promise.resolve(new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })) : f(u, o); }; })()`);
   await s.b.klick('[data-bereich="effekte"]');
   await warte(400);
-  assert.equal(await s.w(`document.querySelectorAll('[data-w="dock-kanaele"] [data-w="karte-live"]').length`), 10, 'ten channel cards');
+  assert.equal(await s.w(`document.querySelectorAll('[data-w="dock-kanaele"] [data-w="karte-live"]').length`), 7, 'four containers and three streams');
   assert.deepEqual(await s.w(`[...document.querySelectorAll('[data-w="dock-fx"] [data-w="karte-live"]')].map((e) => e.dataset.strang)`), ['fx/3', 'fx/4']);
   assert.equal(await s.w(`document.querySelectorAll('[data-w="dock-master"] [data-w="karte-live"]').length`), 1, 'one MASTER card');
   assert.equal(await s.w(`[...document.querySelectorAll('#live-dock .w-chip-teil')].filter((b) => /INSERT/.test(b.textContent) && b.dataset.w === 'karte-teil').length`), 0, 'no chip is labelled INSERT');
@@ -45,5 +45,5 @@ test('the EFFECTS tab shows the live dock; values refresh in place; a card click
   assert.equal(await s.w(`document.querySelectorAll('#live-dock [data-w="karte-live"]').length`), 0, 'leaving empties the dock');
   await s.b.klick('[data-bereich="effekte"]');
   await warte(300);
-  assert.equal(await s.w(`document.querySelectorAll('#live-dock [data-w="karte-live"]').length`), 13, 'coming back shows the cards at once');
+  assert.equal(await s.w(`document.querySelectorAll('#live-dock [data-w="karte-live"]').length`), 10, 'coming back shows the cards at once');
 });

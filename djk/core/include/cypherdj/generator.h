@@ -96,27 +96,31 @@ struct ErzAusloeser {
 
 class Erzeuger {
  public:
-  // Strom (1..16) auf ein Kit und einen Mixer-Kanal legen. Gibt das vorige Kit zurück (nullptr, wenn keins oder
+  // Strom (1..16) auf ein Kit legen (container core K1: a stream has no mixer channel any more; block() writes into the buffer of
+  // its own index). Gibt das vorige Kit zurück (nullptr, wenn keins oder
   // dasselbe), bei ungültigem Strom das übergebene: der Aufrufer gibt es außerhalb des Callbacks frei. Stimmen des
   // abgelösten Kits klingen ERZ_AUSKLANG Frames aus einer Kopie aus (F11); das alte Kit liest der Callback danach nicht mehr.
-  const Kit* setze_strom(int strom, const Kit* kit, int kanal);
+  const Kit* setze_strom(int strom, const Kit* kit);
+  // True once setze_strom gave this stream a kit, a MIDI sink or a graph (setze_bk with a graph). Events of a stream that was never
+  // set are dropped, as before the stream had a channel.
+  bool strom_gesetzt(int strom) const noexcept { return strom >= 1 && strom <= ERZ_STROEME && st_[strom - 1].gesetzt; }
   // Studio S5: Strom als MIDI-Strom (port 1..ERZ_MIDI_PORTS, midi_kanal 1..16); port 0 = kein MIDI (Kit wie bisher).
   // Offene Noten gehen im nächsten block() auf dem ALTEN Port/Kanal aus. Solange MIDI gilt, spielt das Kit nicht.
   void setze_midi(int strom, int port, int midi_kanal);
   // Glanz 2.7 (F19): Note-On/Off der MIDI-Ströme gehen um samples früher hinaus. Der Kern setzt das je Zyklus auf
   // erz_midi_vorhalt(n) = ERZ_MIDI_RUNDWEG_ZYKLEN · n; 0 (Vorgabe) = am Sample des Beats.
   void setze_midi_vorhalt(int64_t samples) { midi_vorhalt_ = samples > 0 ? samples : 0; }
-  // Baukasten S3a: Strom als Baukasten-Graph (bk aus cypher_bk_neu, nullptr = keiner) auf Mixer-Kanal kanal. Der Erzeuger
+  // Baukasten S3a: Strom als Baukasten-Graph (bk aus cypher_bk_neu, nullptr = keiner). Der Erzeuger
   // besitzt ihn bis bk_frei(). Solange ein Graph gilt, spielen Kit und MIDI dieses Stroms nicht; Noten gehen am Sample
   // des Beats ohne Vorhalt an den Graphen, das Off nach dauer. Ein abgelöster Graph klingt mit seinen gehaltenen Noten
-  // ERZ_AUSKLANG Frames linear aus und kommt danach über bk_frei() zurück. Vor setze_strom aufrufen (Kanal des abgelösten
-  // Graphen). Allokiert nicht.
-  void setze_bk(int strom, CypherBk* bk, int kanal);
+  // ERZ_AUSKLANG Frames linear aus und kommt danach über bk_frei() zurück. Allokiert nicht.
+  void setze_bk(int strom, CypherBk* bk);
   // Baukasten S3b: Graphen im Graph-Werk mit einem Block Vorlauf (nullptr = S3a im Callback). Vor dem ersten block().
   // Mit Werk wartet ein neuer Graph (setze_bk) in Strom::bk_neu, bis die Plätze des Stroms frei sind; der alte spielt im
   // Wechselblock seinen vorgerechneten Block mit der Ausklang-Rampe ab 0, der neue klingt ab dem Folgeblock.
   void setze_graph_werk(GraphWerk* w) { werk_ = w; }
-  // S5r: die Werte der Graph-Regler <kanal>/bk/1..32 (Zeile = Mixer-Kanal), vom Kern geführt. nullptr (Tests ohne Kern): keine
+  // S5r: die Werte der Graph-Regler der Ströme strom/<n>/bk/<k>, vom Kern geführt: w[strom - 1][k - 1] (container core K2: row = stream - 1, the
+  // rows of the stream matrix, not of a mixer channel). nullptr (Tests ohne Kern): keine
   // Meldung, der Graph bleibt auf seinen Werten (K10). Der Erzeuger meldet sie je Block an den Graphen des Stroms, nie an einen
   // Platz, an dem ein Faden rechnet.
   void setze_bk_wert(const float (*w)[cypherdj::stellwerk::BK_REGLER_N]) { bk_wert_ = w; }
@@ -130,7 +134,7 @@ class Erzeuger {
   // "jetzt" das tatsächlich schon Gesendete (Strom::gesendet_bis, Sample + Vorhalt des letzten block()), nicht Sample + Vorhalt
   // des neuen Quantums (Re-Prüfung N2: das wäre bei wachsendem Quantum zu weit vorn, ein Ersatz noch nicht gesendeter Noten fiele aus).
   ErzZaehler fenster(const ErzFenster& f, double jetzt_beat);
-  // Samples [n0, n0 + n), n <= MIX_BLOCK. ein_l[k], ein_r[k]: Eingang des Mixer-Kanals k (addiert). midi (ERZ_MIDI_PORTS
+  // Samples [n0, n0 + n), n <= MIX_BLOCK. ein_l[i], ein_r[i]: output buffer of the stream with index i = strom - 1 (added; a null entry: the stream is not mixed). midi (ERZ_MIDI_PORTS
   // Puffer oder nullptr): Note-On/Off der MIDI-Ströme mit t = Sample − zyklus_n0. ausl (oder nullptr): K2, meldet die
   // Einsatz-Samples der gespielten Klänge mit duck (höchstens ErzAusloeser::MAX, der Rest verfällt still).
   void block(const Karte& k, int64_t n0, int n, float* const* ein_l, float* const* ein_r, MidiAus* midi = nullptr,
@@ -157,15 +161,12 @@ class Erzeuger {
  private:
   struct Strom {
     const Kit* kit = nullptr;
-    int kanal = -1;
+    bool gesetzt = false;   // setze_strom / setze_bk gave the stream a place; replaces the old "kanal >= 0"
     int n = 0;
     int midi_port = 0, midi_kanal = 1;  // Studio S5: 0 = Kit-Strom
     CypherBk* bk = nullptr;  // Baukasten S3a: Graph, Vorrang vor Kit und MIDI
-    // Baukasten S3b (mit Werk): Kanal des Graphen, fest ab dem Wechsel (setze_strom ändert nur kanal, D7); ein neuer
-    // Graph wartet in bk_neu (auch nullptr: Graph ab), bis aktiver und Ausklang-Platz frei sind (D6).
-    int bk_kanal = -1;
+    // Baukasten S3b (mit Werk): ein neuer Graph wartet in bk_neu (auch nullptr: Graph ab), bis aktiver und Ausklang-Platz frei sind (D6).
     CypherBk* bk_neu = nullptr;
-    int bk_neu_kanal = -1;
     bool bk_neu_gesetzt = false;
     // Glanz 2.7 Prüfung R3: Beat, bis zu dem MIDI dieses Stroms schon hinaus ist (alles mit beat < gesendet_bis). Wächst mit
     // jedem block() um n + Vorhalt; schrumpft das Quantum, liegt es weiter vorn als Sample + neuer Vorhalt.
@@ -186,7 +187,7 @@ class Erzeuger {
   };
   struct Stimme {
     const KitKlang* klang = nullptr;
-    int kanal = -1;
+    int strom = 0;   // 0-based stream index: the output buffer ein_l[strom]
     int64_t pos = 0;
     int64_t ende = 0;  // Scheibe 3: floor(end · frames), die Stimme endet dort
     float g = 0.0f;
@@ -208,24 +209,24 @@ class Erzeuger {
   // F16/F11 (Glanz 2.5.2): Kopie der nächsten ERZ_AUSKLANG Frames einer abgelösten Stimme, Hüllkurve und Ausblende
   // eingerechnet. Liest nach dem Kopieren kein Kit mehr: das alte Kit darf sofort zur Freigabe (ERZ_ALT).
   struct Ausklang {
-    int kanal = -1, n = 0, pos = 0;
+    int strom = 0, n = 0, pos = 0;
     float d[2 * ERZ_AUSKLANG];
   };
   Ausklang ak_[ERZ_AUSKLAENGE];  // 64 · 240 · 2 · 4 B = 123 KB (Erhebung nannte 32 Slots, die Prüfung 06.10. zeigte: 64), im Kern-Konstruktor angelegt
-  struct BkAus { CypherBk* bk = nullptr; int kanal = -1, pos = 0; };  // Baukasten S3a: Ausklang eines abgelösten Graphen
+  struct BkAus { CypherBk* bk = nullptr; int strom = 0, pos = 0; };  // Baukasten S3a: Ausklang eines abgelösten Graphen
   BkAus bk_aus_[ERZ_STROEME];
   CypherBk* bk_frei_[ERZ_BK_FREI] = {};
   int n_bk_frei_ = 0;
   BkStand bk_stand_;
   float bk_l_[MIX_BLOCK], bk_r_[MIX_BLOCK];  // Baukasten S3a: Ausgabe eines Graphen vor dem Addieren
   void bk_zur_freigabe(CypherBk* bk);
-  void bk_addiere(const float* q_l, const float* q_r, int kanal, int n, float* const* ein_l, float* const* ein_r, int ausblende_ab,
+  void bk_addiere(const float* q_l, const float* q_r, int strom, int n, float* const* ein_l, float* const* ein_r, int ausblende_ab,
                   int ausblende_n);
   // Baukasten S3b
   GraphWerk* werk_ = nullptr;
   const float (*bk_wert_)[cypherdj::stellwerk::BK_REGLER_N] = nullptr;
-  void bk_regler_melden(CypherBk* bk, int kanal);
-  void bk_wechsel(Strom& s, CypherBk* bk, int kanal);
+  void bk_regler_melden(CypherBk* bk, int strom);
+  void bk_wechsel(Strom& s, CypherBk* bk);
   // Graph-Ereignisse mit Sample < bis an den Graphen (Versatz relativ zu von, frühere am Fensteranfang), dann die Offs bis bis.
   void bk_noten(Strom& s, const Karte& k, int64_t von, int64_t bis);
   void bk_ausklang_werk(int a, int64_t n0, int n, float* const* ein_l, float* const* ein_r);

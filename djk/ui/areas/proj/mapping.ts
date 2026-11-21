@@ -43,24 +43,7 @@ export const BEREICH_GRUENDE: readonly string[] = ['kein_projekt', 'rev_veraltet
 
 // --- Regler -----------------------------------------------------------------------------------------------------------
 export interface Soll { pfad: string; wert: number }
-// Spec 2.3: erz/4 neutral beim Öffnen. ziel und xseite sind „nur Hand“ (INTERFACES §1.5), doch der Kern lehnt nur_hand nur bei Quelle
-// cypher ab (sort_in.cpp:38): bei Quelle andreas gehören sie in die Sollliste (P6, erz4Soll), bei Quelle cypher meldet der Server
-// nur, wenn sie bekannt anders stehen (ERZ4_NUR_HAND).
-export const ERZ4_NEUTRAL: readonly Soll[] = [
-  { pfad: 'erz/4/fader', wert: 0 }, { pfad: 'erz/4/trim', wert: 0 },
-  { pfad: 'erz/4/eq/tief', wert: 0 }, { pfad: 'erz/4/eq/mitte', wert: 0 }, { pfad: 'erz/4/eq/hoch', wert: 0 },
-  { pfad: 'erz/4/kill/tief', wert: 0 }, { pfad: 'erz/4/kill/mitte', wert: 0 }, { pfad: 'erz/4/kill/hoch', wert: 0 },
-  { pfad: 'erz/4/filter', wert: 0 }, { pfad: 'erz/4/komp/an', wert: 0 },
-  // 1.15 A3: gate and utility act on the production now (like komp/an: the switch of the gate, every value of the utility, whose
-  // neutral values are the Vorgabe of the table); a setting left by the hand or by Cypher must not follow into the next project
-  { pfad: 'erz/4/gate/an', wert: 0 },
-  { pfad: 'erz/4/util/balance', wert: 0 }, { pfad: 'erz/4/util/breite', wert: 100 }, { pfad: 'erz/4/util/bassmono', wert: 0 },
-  { pfad: 'erz/4/util/phase_l', wert: 0 }, { pfad: 'erz/4/util/phase_r', wert: 0 }, { pfad: 'erz/4/util/tausch', wert: 0 },
-  { pfad: 'erz/4/util/dc', wert: 0 },
-  { pfad: 'erz/4/send/1', wert: -200 }, { pfad: 'erz/4/send/2', wert: -200 }, { pfad: 'erz/4/send/3', wert: -200 }, { pfad: 'erz/4/send/4', wert: -200 },
-];
-export const ERZ4_NUR_HAND: readonly Soll[] = [{ pfad: 'erz/4/ziel', wert: 0 }, { pfad: 'erz/4/xseite', wert: 1 }];
-export const erz4Soll = (quelle: Quelle): Soll[] => (quelle === 'andreas' ? [...ERZ4_NEUTRAL, ...ERZ4_NUR_HAND] : [...ERZ4_NEUTRAL]);
+// Container core: production is the service "Produktion" (contract/pult.json dienste), not a mixer channel. A project open sends no row for it.
 
 const FELD = { fader: 'fader_db', pan: 'pan', mute: 'mute', solo: 'solo' } as const;
 // the filter row of a loop deck track (-1..+1, absent = 0): a track row only, groups and returns have none

@@ -40,7 +40,8 @@ def test_bezeichner_sind_eindeutig_und_vollstaendig():
     namen = [erzeuge_osc.bezeichner(e["adresse"]) for e in daten["adressen"]]
     # eindeutig: so viele verschiedene Bezeichner wie Adressen in osc.json (Zahl aus der Quelle, nicht fest)
     assert len(daten["adressen"]) > 0 and len(set(namen)) == len(namen) == len({e["adresse"] for e in daten["adressen"]})
-    assert "k_loop_rec" in namen and "e_mitschnitt" in namen and "k_loop_laden" in namen and "e_loop" in namen and "k_deck_hotcue_setzen" in namen and "q_stand" in namen
+    assert "k_loop_rec" in namen and "e_mitschnitt" in namen and "k_container_quelle" in namen and "e_container_quelle" in namen and "k_deck_hotcue_setzen" in namen and "q_stand" in namen
+    assert not {"k_platz_kanal", "e_platz_kanal", "k_loop_laden", "e_loop"} & set(namen)
 
 
 # Scheibe 3 (Resampling, E1 in Form des Plan-Reviews Q2): /erz/ev trägt nach den festen Feldern einen optionalen

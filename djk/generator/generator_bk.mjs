@@ -9,7 +9,7 @@ import dgram from 'node:dgram';
 import fs from 'node:fs';
 import { parseArgs } from 'node:util';
 import { kodiere, dekodiere } from '../contract/mock_core/osc.mjs';
-import { BK_STROEME, STROM_KANAL, STROM_MIDI_ZIEL } from '../contract/streams.ts';
+import { BK_STROEME, STROM_MIDI_ZIEL } from '../contract/streams.ts';
 import { WECHSEL_ABSTAND } from './src/planner.mjs';
 import { StromLauf } from './src/stream_run.mjs';
 import { NeustartRegel } from './src/generation.mjs';
@@ -38,7 +38,7 @@ const sende = (buf) => sock.send(buf, KERN, '127.0.0.1');
 let uhr = null;   // last /uhr: {mono_ns: BigInt, beat, bpm}
 const beatJetzt = () => uhr === null ? null : uhr.beat + (Number(process.hrtime.bigint() - uhr.mono_ns) / 1e9) * uhr.bpm / 60;
 const msBisBeat = (b) => ((b - beatJetzt()) * 60000) / uhr.bpm;
-const laeufe = new Map(streams.map((s) => [s, new StromLauf({ strom: s, kanal: STROM_KANAL[s], ziel: STROM_MIDI_ZIEL[s],
+const laeufe = new Map(streams.map((s) => [s, new StromLauf({ strom: s, ziel: STROM_MIDI_ZIEL[s],
   ordner: `${opt['muster-basis']}${s}`, sende, beatJetzt, log })]));
 
 const neustartRegel = new NeustartRegel();   // S17: announce once per kern generation, not on the heartbeat repeat

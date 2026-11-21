@@ -3,10 +3,10 @@
 //  1. Setzen von andreas: Quittungen 1, 2, 3; nach der Blende hat deck/2 (Träger 200 Hz) im Master die halbe Spitze (−6,02 dB ±0,05).
 //  2. Entfernen (zeiger null): Quittungen 1, 2, 3, danach wieder volle Spitze; genau ein ERZ_BK_ALT mit dem gesetzten Zeiger.
 //  3. Quelle cypher darf setzen (D11).
-//  4. Kanal außerhalb (bus/1; a source like erz/1 or pad/1 has an insert slot since the remix targets): Quittung 6 ausserhalb_bereich, der Zeiger kommt als ERZ_BK_ALT zurück.
+//  4. Kanal außerhalb (bus/1; a container like deck/2 or pad/1 has an insert slot since the remix targets): Quittung 6 ausserhalb_bereich, der Zeiger kommt als ERZ_BK_ALT zurück.
 //  5. KI-Stopp, Quelle cypher: Quittung 6 ki_gestoppt, der Zeiger kommt als ERZ_BK_ALT zurück; andreas darf weiter.
 //  6. Allokationsfrei: Blöcke mit gesetztem Graphen, Wechsel und Blende allokieren nicht.
-//  9. (S5r) Graph-Regler <kanal>/bk/1: deck/2/bk/1 setzt den Pegel des Graphen auf deck/2 (Eingang x Regler -> Ausgang), deck/3/bk/1
+//  9. (S5r) Graph-Regler <kanal>/bk/1: deck/2/bk/1 setzt den Pegel des Graphen auf deck/2 (Eingang x Regler -> Ausgang), pad/1/bk/1
 //     ändert deck/2 nicht, ein getauschter Graph steht auf dem aktuellen Wert, keine Allokation über die Reglerfahrt.
 //  7. Wechsel A -> B -> A vor demselben Block: jeder Zeiger kommt genau einmal zurück (kein Doppel-Free), A bleibt gesetzt.
 // S6 Task 2 (Plan 2026-10-31-baukasten-s6-send-graphen.md, send returns fx/3 and fx/4, notation fx/3, fx/4 only):
@@ -15,7 +15,7 @@
 // 11. fx4_ki_stopp: cypher may set fx/4; after the KI stop cypher gets ki_gestoppt and the graph comes back once, andreas may.
 // 12. fx_burst_no_leak: 20 switches on fx/3 in one cycle: 19 come back exactly once, none lost, the last one stays.
 // 13. fx2_rejected: fx/2 (the hall) and fx/5 reach the core only past the network: ausserhalb_bereich, graph comes back once.
-// 14. fx3_ignores_deck3_knobs: a regler node on fx/3 does not hear deck/3/bk/1 (S5r binds knobs to channel names).
+// 14. fx3_ignores_deck3_knobs: a regler node on fx/3 does not hear pad/1/bk/1 (S5r binds knobs to channel names).
 // Der Kern gibt einen übergebenen Graphen nie selbst frei, nur über ERZ_BK_ALT (der Test sammelt und gibt frei).
 #include <unistd.h>
 
@@ -268,9 +268,9 @@ int main() {
     a.sende(a.neu(cdj::Befehl::KI_STOPP, "andreas"));
     a.zyklen(40 * N);
     CypherBk* g5 = graph(HALB);
-    const int64_t i5 = a.graph_setzen("deck/3", g5, "cypher");
+    const int64_t i5 = a.graph_setzen("pad/1", g5, "cypher");
     CypherBk* g5b = graph(HALB);
-    const int64_t i5b = a.graph_setzen("deck/3", g5b, "andreas");   // die Hand darf im Stopp
+    const int64_t i5b = a.graph_setzen("pad/1", g5b, "andreas");   // die Hand darf im Stopp
     a.zyklen(50 * N);
     PRUEF(a.abgelehnt(i5) == "ki_gestoppt");
     PRUEF(a.zurueck(g5) == 1);
@@ -278,11 +278,11 @@ int main() {
     PRUEF(a.angenommen(i5b));
     PRUEF(a.zurueck(g5b) == 0);
 
-    // Fall 8: Burst, zwölf Wechsel auf deck/4 im selben Zyklus (mehr als die Ablage MIX_BK_FREI fasst)
+    // Fall 8: Burst, zwölf Wechsel auf pad/2 im selben Zyklus (mehr als die Ablage MIX_BK_FREI fasst)
     CypherBk* b8[12];
     for (int i = 0; i < 12; ++i) {
       b8[i] = graph(i % 2 ? DURCH : HALB);
-      a.graph_setzen("deck/4", b8[i]);
+      a.graph_setzen("pad/2", b8[i]);
     }
     a.zyklen(60 * N);
     int einmal = 0;
@@ -332,7 +332,7 @@ int main() {
     CypherBk* g1 = graph(REGLER_PEGEL);
     const int64_t i1 = a.graph_setzen("deck/2", g1);
     regler("deck/2/bk/1", 11.0, 1.0f);
-    regler("deck/3/bk/1", 12.0, 0.0f);   // Gegenprobe: ein anderer Kanal
+    regler("pad/1/bk/1", 12.0, 0.0f);   // Gegenprobe: ein anderer Kanal
     regler("deck/2/bk/1", 13.0, 0.25f);
     g_allokationen = 0;
     a.bewachen = true;
@@ -348,8 +348,8 @@ int main() {
     a.zyklen(12 * SPB + 15000);
     a.bewachen = false;
     const double p_fremd = pegel(12 * SPB + 9000);
-    std::printf("Fall 9: deck/3/bk/1 = 0 -> deck/2 %.3f dB\n", p_fremd);
-    PRUEF(std::fabs(p_fremd) < 0.05);                  // deck/2 hört nichts von deck/3
+    std::printf("Fall 9: pad/1/bk/1 = 0 -> deck/2 %.3f dB\n", p_fremd);
+    PRUEF(std::fabs(p_fremd) < 0.05);                  // deck/2 hört nichts von pad/1
     a.bewachen = true;
     a.zyklen(13 * SPB + 15000);
     a.bewachen = false;
@@ -417,16 +417,16 @@ int main() {
     PRUEF(a.zurueck(durch) == 0);
     PRUEF(g_allokationen == 0);
 
-    // Fall 14: replace by the knob graph (default 0.5 -> dry 1 + send 0.5 = +3.52 dB), then turn deck/3/bk/1 up
+    // Fall 14: replace by the knob graph (default 0.5 -> dry 1 + send 0.5 = +3.52 dB), then turn pad/1/bk/1 up
     CypherBk* knopf = graph(REGLER_PEGEL);
     a.graph_setzen("fx/3", knopf);
     a.zyklen(10 * SPB + 40 * N);
     const double p05 = db(a.spitze(10 * SPB + 30 * N, 10 * SPB + 40 * N), voll);
-    regler("deck/3/bk/1", 11.0, 1.0f);   // another channel's knob
-    regler("deck/4/bk/1", 11.0, 1.0f);
+    regler("pad/1/bk/1", 11.0, 1.0f);   // another channel's knob
+    regler("pad/2/bk/1", 11.0, 1.0f);
     a.zyklen(11 * SPB + 15000);
     const double p_fremd = db(a.spitze(11 * SPB + 9000, 11 * SPB + 15000), voll);
-    std::printf("Fall 14: fx/3 mit Vorgabe 0,5 -> %.3f dB, nach deck/3/bk/1 und deck/4/bk/1 = 1 -> %.3f dB (soll beide 3,522)\n", p05, p_fremd);
+    std::printf("Fall 14: fx/3 mit Vorgabe 0,5 -> %.3f dB, nach pad/1/bk/1 und pad/2/bk/1 = 1 -> %.3f dB (soll beide 3,522)\n", p05, p_fremd);
     PRUEF(std::fabs(p05 - 3.5218) < 0.1);
     PRUEF(std::fabs(p_fremd - 3.5218) < 0.1);
     PRUEF(a.zurueck(durch) == 1);   // the replaced graph came back
@@ -618,7 +618,7 @@ int main() {
   // dauer_beats > 0, the next starting where the last ends. Cases 9 and 14..16 only SET knobs (dauer_beats 0). This pins that
   // ramps of a plan reach the graph too, block by block: linear moves 1 -> 0 (4 beats), 0 -> 1 (4 beats), 1 -> 0.7 (2 beats),
   // checked at the middle and at the end of each move against the gain the knob stands for. Negative control: the same
-  // ramp on deck/3/bk/1 afterwards leaves deck/2 where it is.
+  // ramp on pad/1/bk/1 afterwards leaves deck/2 where it is.
   {
     Lauf a;
     a.zyklen(10 * N);
@@ -684,9 +684,9 @@ int main() {
     PRUEF(std::fabs(g_m2 + 1.4116) < 0.4);
     PRUEF(std::fabs(g_e2 + 3.0980) < 0.3);
     // negative control: the same kind of ramp on another channel's knob leaves deck/2 at 0.7
-    teil("deck/3/bk/1", 24.0, 2.0, 0.0f, 0, "spur:u");
+    teil("pad/1/bk/1", 24.0, 2.0, 0.0f, 0, "spur:u");
     const double g_fremd = gewinn(26.5);
-    std::printf("Fall 17: deck/3/bk/1 ramped to 0 -> deck/2 %.2f dB (soll -3,10)\n", g_fremd);
+    std::printf("Fall 17: pad/1/bk/1 ramped to 0 -> deck/2 %.2f dB (soll -3,10)\n", g_fremd);
     PRUEF(std::fabs(g_fremd + 3.0980) < 0.3);
     a.spaeter.push_back(g1);
   }

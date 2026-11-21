@@ -17,7 +17,7 @@ test('1.10 POST /spur mit Ziel grp/* oder pm/fader → 409 ueber_projekt (jede Q
       assert.match(r.j.text, /project/);
     }
   }
-  const gemischt = await ruf(url, 'POST', '/spur', spur('gem', 'erz/2/filter', 'grp/1/fader'), CYPHER);
+  const gemischt = await ruf(url, 'POST', '/spur', spur('gem', 'bus/2/fader', 'grp/1/fader'), CYPHER);
   assert.deepEqual([gemischt.code, gemischt.j.fehler, gemischt.j.ziel, gemischt.j.index], [409, 'ueber_projekt', 'grp/1/fader', 1]);
   assert.equal(anKern(log, '/k/teil').length, vorher, 'nichts ging an den Kern');
   assert.deepEqual((await ruf(url, 'GET', '/spur')).j.laufend ?? [], [], 'keine Spur läuft');
@@ -34,12 +34,12 @@ test('1.10 POST /regler mit Pfad grp/* oder pm/fader → 409 ueber_projekt (jede
   assert.equal(anKern(log, '/k/teil').length, 0, 'nichts ging an den Kern');
 });
 
-test('1.10 Negativ-Kontrolle: erz/* geht weiter durch, grp/17 und pm/pan bleiben 400, ein anderes Ziel in einer Spur bleibt 200', async (t) => {
+test('1.10 Negativ-Kontrolle: bus/* geht weiter durch, grp/17 und pm/pan bleiben 400, ein anderes Ziel in einer Spur bleibt 200', async (t) => {
   const { url, log } = await stapel(t);
-  const ok = await ruf(url, 'POST', '/spur', spur('erlaubt', 'erz/2/filter'), CYPHER);
+  const ok = await ruf(url, 'POST', '/spur', spur('erlaubt', 'bus/2/fader'), CYPHER);
   assert.deepEqual([ok.code, ok.j.ok], [200, true], JSON.stringify(ok.j));
-  assert.deepEqual(anKern(log, '/k/teil').map((z) => z.felder.pfad), ['erz/2/filter']);
-  assert.equal((await ruf(url, 'POST', '/regler', { pfad: 'erz/2/fader', nach: -3 })).j.ok, true);
+  assert.deepEqual(anKern(log, '/k/teil').map((z) => z.felder.pfad), ['bus/2/fader']);
+  assert.equal((await ruf(url, 'POST', '/regler', { pfad: 'bus/1/fader', nach: -3 })).j.ok, true);
   assert.equal((await ruf(url, 'POST', '/regler', { pfad: 'grp/17/fader', nach: 0 })).j.fehler, 'pfad');
   assert.equal((await ruf(url, 'POST', '/regler', { pfad: 'pm/pan', nach: 0 })).j.fehler, 'pfad');
   assert.deepEqual((await ruf(url, 'POST', '/spur', spur('neun', 'grp/17/fader'))).j.fehler, 'spur');
@@ -67,13 +67,13 @@ test('slice 3 POST /spur: an automation track cannot drive ret/1/hall/decay or a
     const r = await ruf(url, 'POST', '/spur', spur(`r${i}`, ziel), CYPHER);
     assert.deepEqual([r.code, r.j.fehler, r.j.ziel, r.j.index], [409, 'ueber_projekt', ziel, 0], `${ziel}: ${JSON.stringify(r.j)}`);
   }
-  const gemischt = await ruf(url, 'POST', '/spur', spur('gem', 'erz/2/filter', 'ret/1/hall/decay'), CYPHER);
+  const gemischt = await ruf(url, 'POST', '/spur', spur('gem', 'bus/2/fader', 'ret/1/hall/decay'), CYPHER);
   assert.deepEqual([gemischt.code, gemischt.j.fehler, gemischt.j.ziel, gemischt.j.index], [409, 'ueber_projekt', 'ret/1/hall/decay', 1]);
   assert.equal(anKern(log, '/k/teil').length, 0, 'nothing went to the core');
-  // negative control: ret/5 and spur/1/send/5 are not vocabulary (400), and erz/2/filter still passes
-  assert.equal((await ruf(url, 'POST', '/regler', { pfad: 'ret/5/fader', nach: 0 })).j.fehler, 'pfad');
-  assert.equal((await ruf(url, 'POST', '/regler', { pfad: 'spur/1/send/5', nach: 0 })).j.fehler, 'pfad');
-  assert.equal((await ruf(url, 'POST', '/spur', spur('ok', 'erz/2/filter'), CYPHER)).code, 200);
+  // negative control: ret/5 and spur/1/send/9 are not vocabulary (400), and bus/2/fader still passes
+  assert.equal((await ruf(url, 'POST', '/regler', { pfad: 'ret/9/fader', nach: 0 })).j.fehler, 'pfad');
+  assert.equal((await ruf(url, 'POST', '/regler', { pfad: 'spur/1/send/9', nach: 0 })).j.fehler, 'pfad');
+  assert.equal((await ruf(url, 'POST', '/spur', spur('ok', 'bus/2/fader'), CYPHER)).code, 200);
 });
 
 test('live modules: grp/<n>/cue is no project value: POST /regler lets Andreas through to the core, Cypher gets the core refusal, not ueber_projekt', async (t) => {

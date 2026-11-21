@@ -14,12 +14,13 @@ import type { BereichKontext } from '../../http/router.ts';
 import { Katalog, type Zeile } from '../../catalog.ts';
 import { AblageFehler, Projekte, projektWurzelVorgabe, setzeVorgabenQuelle } from '../../project/storage.ts';
 import { kanalOffen } from '../../hand_operation.ts';
-import { liveSlots } from '../../project/live.ts';
+import { istStromZeile } from '../../stream_alias.ts';
+import { modulAmPlatz, SLOTS, type Slot } from '../../project/live.ts';
+import { pultContainerPfad } from '../../../contract/pult.ts';
 import { takteProLive } from '../../project/taktart_live.ts';
 import { vorlageBefehle, vorlageVon, vorlagenListe } from '../../project/werkbank.ts';
 import { sichereWerksProbenImStandardOrdner } from '../../sampler/werksproben.ts';
 import { trackerVorlageBefehle, trackerVorlageVon, trackerVorlagenListe } from '../../project/tracker.ts';
-import { seqGruppe } from '../../project/seq.ts';
 import { teileReglerLive, teileStummStart } from '../../project/controls_order.ts';
 import { loeseQuelle } from '../../project/source_path.ts';
 import type { Einsammler } from '../../project/einsammeln.ts';
@@ -38,7 +39,7 @@ import { TransientenLager } from '../../project/transients.ts';
 import { DekodierCache, type DekodierEreignis } from '../../project/decode.ts';
 import { deckleDekodiert } from '../../project/cache_deckel.ts';
 import {
-  alleInserts, alleStraenge, alleZellen, BK_LIVE_SLOTS, BK_PARAMETER, bkSlot, FADER_MAX, FADER_MIN,
+  alleInserts, alleStraenge, alleZellen, platzVonGruppe, BK_LIVE_SLOTS, BK_PARAMETER, bkSlot, FADER_MAX, FADER_MIN,
   HALL_FELDER, MAX_BEAT, TEMPO_MIN, TEMPO_MAX, kanonisch, sucheClip, sucheSpur, sucheStrang, wertImBereich,
   type AudioClip, type Clip, type DekodiertZustand, type Lane, type Projekt, type Spur, type Warp, type Ziel,
 } from '../../project/model.ts';
@@ -49,9 +50,9 @@ import {
   WarpFehler, abHierStart, autoWarp, beatBeiQuelle, fensterTempo, handWarp, quantisiere, quellSekunde, segmentBpm, type TempoQuelle,
 } from '../../project/warp.ts';
 import { aendere, rueckgaengig, wiederholen, type Haken, type Meta, type Verlauf, type Wirkung } from '../../project/history.ts';
-import { WiedergabeFehler, WiedergabeZaehler, schreibeWiedergabe, uebersetze, wiedergabeDatei, type Wiedergabe } from '../../project/playback.ts';
+import { WiedergabeFehler, WiedergabeZaehler, containerQuellen, schreibeWiedergabe, uebersetze, wiedergabeDatei, type Wiedergabe } from '../../project/playback.ts';
 import { geraetFx } from '../../devices_parameter.ts';
-import { ERZ4_NUR_HAND, alleRegler, erz4Soll, istMixerRegler, reglerZuBefehl, type Soll } from './mapping.ts';
+import { alleRegler, istMixerRegler, reglerZuBefehl, type Soll } from './mapping.ts';
 import { arrOrdner, zaehlerDateiVorgabe } from './config.ts';
 import { grundText } from '../../http/reasons.ts';
 import { KernLage } from './state.ts';
@@ -150,7 +151,7 @@ type Koerper = Record<string, unknown>;
 interface Hinweis { index: number; hinweis: string; [feld: string]: unknown }                // Paket 1.13: z. B. kein_tempo (Auto-Warp fand kein Tempo)
 
 const LIVE_SLUG = 'live';
-const liveSlotsAntwort = (p: Projekt): { A: string | null; B: string | null } => { const s = liveSlots(p); return { A: s.A ?? null, B: s.B ?? null }; };
+const liveSlotAntwort = (p: Projekt): Record<Slot, string | null> => Object.fromEntries(SLOTS.map((s) => [s, modulAmPlatz(p, s) ?? null])) as Record<Slot, string | null>;
 const schlaf = (ms: number): Promise<void> => new Promise((ok) => setTimeout(ok, ms));
 // Baukasten S20: lookup of a graph in the graph folder for the commands that set a bk device (null = no such graph)
 const graphArt = (name: string): 'instrument' | 'effekt' | null => findeGraph(name)?.art ?? null;
@@ -268,6 +269,8 @@ export class ProjSitzung {
   private readonly transienten = (sha: string): number[] | null => this.transientenLager.fuer(sha);
   private readonly ctx: BereichKontext;
   private readonly kern: KernWeg;
+  // Container core M5: what this session last told the core feeds container A..D (null = not told since this server or the core started)
+  private containerGesendet: (0 | 1 | 2 | null)[] = [null, null, null, null];
   private readonly bk: ProjBk;   // S17
   private readonly projekte: Projekte;
   private readonly cache: DekodierCache;
@@ -300,7 +303,7 @@ export class ProjSitzung {
   // mensch_bei: the holder stays `mensch` up to 32 beats without a grip). It waits here by regulator path and is sent when the holder is released.
   private readonly basisWartend = new Map<string, { spurId: string; ziel: AufnahmeZiel }>();
   readonly aufAuto: AutoAufnahme;   // 1.12 slice 3 (task 8): arm state and the take collector
-  private readonly rueckwegWartend = new Map<string, number>();     // Rückweg: letzter Wert je Pfad, noch nicht gespeichert
+  private readonly rueckwegWartend = new Map<string, { wert: number; quelle: Quelle }>();     // Rückweg: letzter Wert je Pfad und wer ihn bewegt hat, noch nicht gespeichert
   private rueckwegTimer: ReturnType<typeof setTimeout> | null = null;
   private wirtWache: ReturnType<typeof setInterval> | null = null;   // audit U07: asks for a Surge sync when a host got a new pid
   private readonly wirtWacheMs: number;
@@ -752,6 +755,10 @@ export class ProjSitzung {
     const w = (n: string): number | undefined => this.lage.reglerWert(`${kanal}/${n}`) ?? undefined;
     return kanalOffen({ [`${kanal}/fader`]: w('fader') as number, [`${kanal}/trim`]: w('trim') as number }, kanal) || (this.kanalHaken?.(kanal) ?? false);
   }
+  // The strip of a container sounds or is monitored: open by trim + fader or a planned ramp (kanalOffenGesehen), or PFL on (the gate of a place change)
+  private kanalBelegtGesehen(kanal: string): boolean {
+    return this.kanalOffenGesehen(kanal) || (this.lage.reglerWert(`${kanal}/pfl`) ?? 0) >= 0.5;
+  }
   // DJ view places, decision 9: the module group fader is 0 dB from now on, the channel fader of pad/N is the only gain. A live project from before has
   // its module group at -200. The migration happens ONCE per open of the live project: on the open the group goes to 0 dB when pad/N is closed (kanalOffen
   // false, no ramp planned) and its fader is known. Otherwise (channel open, ramping or unknown) the group is remembered as waiting and reported.
@@ -764,17 +771,21 @@ export class ProjSitzung {
     return lauf;
   }
   private liveSpielt(): boolean { const a = this.lage.arr; return !!a && (a.status === 1 || a.status === 2); }
-  private slotGruppe(p: Projekt, slot: 'A' | 'B'): Projekt['gruppen'][number] | undefined {
-    return p.gruppen.find((x) => x.ausgang === undefined && x.modul?.slot === slot);
+  // slot A..D = the container letter of a place (1..4); the channel is the container strip of that place
+  private slotGruppe(p: Projekt, slot: Slot): Projekt['gruppen'][number] | undefined {
+    const id = modulAmPlatz(p, slot);
+    return id === undefined ? undefined : p.gruppen.find((x) => x.id === id);
   }
-  private kanalZuUndBekannt(slot: 'A' | 'B'): boolean {
-    const kanal = `pad/${slot === 'A' ? 1 : 2}`;
+  private kanalZuUndBekannt(slot: Slot): boolean {
+    const p = this.offen?.projekt, g = p && this.slotGruppe(p, slot), platz = p && g ? platzVonGruppe(p, g.id) : null;
+    if (platz === null || platz === undefined) return false;
+    const kanal = pultContainerPfad[platz - 1];
     return this.lage.reglerWert(`${kanal}/fader`) !== null && !this.kanalOffenGesehen(kanal);
   }
   private liveFaderFaellig(): boolean {
     const o = this.offen;
     if (!o?.projekt.live || this.liveFaderWartend.size === 0 || this.liveSpielt()) return false;
-    return (['A', 'B'] as const).some((slot) => {
+    return SLOTS.some((slot) => {
       const g = this.slotGruppe(o.projekt, slot);
       return !!g && this.liveFaderWartend.has(g.id) && this.kanalZuUndBekannt(slot);
     });
@@ -787,7 +798,7 @@ export class ProjSitzung {
       if (!o?.projekt.live) return aus;
       const befehle: unknown[] = [];
       const hebt: string[] = [];
-      for (const slot of ['A', 'B'] as const) {
+      for (const slot of SLOTS) {
         const g = this.slotGruppe(o.projekt, slot);
         if (!g) continue;
         if (modus === 'oeffnen' ? g.fader_db === -200 : this.liveFaderWartend.has(g.id)) {
@@ -829,7 +840,7 @@ export class ProjSitzung {
   private liveOeffnenOhneTempo(quelle: Quelle, bestaetigt = false, nurWennLeer = false): Promise<Antwort> {
     return this.seriell(async () => {
       this.riegel(quelle);
-      if (this.offen?.projekt.live) return { code: 200, j: { slug: this.offen.slug, slots: liveSlotsAntwort(this.offen.projekt) } };
+      if (this.offen?.projekt.live) return { code: 200, j: { slug: this.offen.slug, slots: liveSlotAntwort(this.offen.projekt) } };
       if (nurWennLeer && this.offen) {
         throw new ProjFehler(409, 'projekt_offen',
           { text: 'A project is open. Open the live container first (LIVE); the loop deck never closes a project by itself.' });
@@ -837,7 +848,7 @@ export class ProjSitzung {
       this.sperreOeffnen(); this.sperreLiveLaeuft(quelle, bestaetigt); this.sperreFremderTransport(quelle);
       return this.oeffnetGerade(async () => {
         try {
-          // a project named `live` without the flag is somebody's project: opening it as the container would send the 24 erz/4 rows (nothing is sent before)
+          // a project named `live` without the flag is somebody's project: opening it as the container would be opened as the container (nothing is sent before)
           if (this.projekte.lies(LIVE_SLUG).live !== true) {
             throw new ProjFehler(409, 'kein_liveprojekt_flag', { text: 'a project named live exists without the live flag; rename it' });
           }
@@ -849,7 +860,7 @@ export class ProjSitzung {
         }
         const r = await this.oeffneIntern(LIVE_SLUG, quelle);
         if (r.code !== 200) return r;
-        return { code: 200, j: { slug: LIVE_SLUG, slots: liveSlotsAntwort(this.brauchOffen().projekt) } };
+        return { code: 200, j: { slug: LIVE_SLUG, slots: liveSlotAntwort(this.brauchOffen().projekt) } };
       });
     });
   }
@@ -920,9 +931,13 @@ export class ProjSitzung {
     // Spec 6.21: die Wiedergabe-Nummer entscheidet, wer beim Mixer gewinnt (gleiche Nummer: Wiederanlauf, die Spur-Regler des Kerns gewinnen)
     const wieder = await this.istWiederanlauf(projekt);
     // S17: the saved sound goes back while the controls are synchronised (not after a page server restart in front of a running kern: it kept everything)
-    const [kern, bk] = await Promise.all([this.synchronisiere(quelle, true, wieder),
+    const [kern, bk] = await Promise.all([this.synchronisiere(quelle, wieder),
       wieder || !projekt.baukasten ? Promise.resolve(null) : this.bk.wiederherstellen(projekt, quelle, { schonGeladenUeberspringen: true }), autoFrei]);
     if (wieder && projekt.baukasten) kern.baukasten = { uebersprungen: 'wiederanlauf' }; else if (bk) kern.baukasten = bk;
+    if (projekt.live) {   // the playback is loaded: now the container sources (a refusal is reported, it never fails the open)
+      const abgelehnt = await this.sendeContainer(projekt, 'beide', quelle);
+      if (abgelehnt.length) { kern.container_abgelehnt = abgelehnt; this.ctx.log({ typ: 'proj_container_abgelehnt', abgelehnt }); }
+    }
     if (wieder) {
       const n = this.uebernimmMixer(this.offen);
       kern.wiederanlauf = true; kern.mixer_uebernommen = n;
@@ -968,13 +983,13 @@ export class ProjSitzung {
     if (o) try { o.verlauf.schliesse(); } catch { /* der Server endet ohnehin */ }
   }
 
-  // Wiedergabe laden, Mixer-Regler (alle), auf Wunsch erz/4 neutral, Loop, Metronom, Leeren der KI-Maske; alles parallel, Quittungen abgewartet
-  // wiederanlauf (Spec 6.21, 6.30): der Kern gewinnt ganz. Keine neue Wiedergabe, kein erz/4, kein Loop, kein Metronom; von den Spur-Reglern
+  // Wiedergabe laden, Mixer-Regler (alle), Loop, Metronom, Leeren der KI-Maske; alles parallel, Quittungen abgewartet
+  // wiederanlauf (Spec 6.21, 6.30): der Kern gewinnt ganz. Keine neue Wiedergabe, kein Loop, kein Metronom; von den Spur-Reglern
   // nur die mit unbekanntem Ist-Wert (für genau diese gewinnt das Projekt).
-  private async synchronisiere(quelle: Quelle, erz4: boolean, wiederanlauf = false): Promise<Record<string, unknown>> {
+  private async synchronisiere(quelle: Quelle, wiederanlauf = false): Promise<Record<string, unknown>> {
     const o = this.brauchOffen();
     const soll: Soll[] = wiederanlauf ? this.unbekannteSpurRegler(o.projekt)
-      : [...(erz4 && !o.projekt.live ? erz4Soll(quelle) : []), ...alleRegler(o.projekt)];   // live container: erz/4 belongs to the set, never moved
+      : alleRegler(o.projekt);
     // A switch is a fresh start (Andreas, 2026-11-02): the hand holder of the regulators written below ends first, in the same order as the writes.
     // Not on a restart of the page server in front of a running core (wiederanlauf): there the core wins. Only Andreas's own switch breaks his hand (D9):
     // when Cypher opens or creates, nothing is sent and the core's refusal stays visible in kern.regler_fehler.
@@ -986,13 +1001,9 @@ export class ProjSitzung {
       this.kern.setzeReglerPakete(soll, quelle),
       wiederanlauf ? Promise.resolve(null) : this.loopOderMerke(o, quelle),
       wiederanlauf ? Promise.resolve(null) : this.kern.metronom(o.projekt, quelle), this.leereKiMaske()]);
-    // P6: nur bei Quelle cypher werden ziel und xseite nicht gesendet (der Kern lehnt nur_hand ab) und als Meldung geführt
-    const nurHand = erz4 && !o.projekt.live && !wiederanlauf && quelle === 'cypher'
-      ? ERZ4_NUR_HAND.filter((r) => { const ist = this.lage.reglerWert(r.pfad); return ist !== null && ist !== r.wert; })
-      .map((r) => ({ pfad: r.pfad, soll: r.wert, ist: this.lage.reglerWert(r.pfad) })) : [];
     const bkFehlt = bkGraphenFehlen(o.projekt);   // arr-bk: a stage whose graph file is gone plays dry; the answer says which
     return { wiedergabe, regler: regler.ergebnis.length, regler_nicht_gesendet: regler.nicht_gesendet, ...reglerBefund(regler.ergebnis),
-      loop, metronom, ki, erz4_nur_hand: nurHand, ...(bkFehlt.length > 0 ? { bk_graph_fehlt: bkFehlt } : {}) };
+      loop, metronom, ki, ...(bkFehlt.length > 0 ? { bk_graph_fehlt: bkFehlt } : {}) };
   }
 
   // Spec 6.21: gleicht /zustand/arr.nr der wiedergabe_rev des Projekts, spielt der Kern genau dessen letzte Wiedergabe. Kennt der Server den
@@ -1041,6 +1052,23 @@ export class ProjSitzung {
     }
   }
 
+  // Container core M5: /k/container/quelle for every container whose source differs from what the core was last told (`alle`: all four, the replay after a
+  // core restart). Order (F5): a container that gets a module (art 2) is told AFTER the playback swap (the module exists), every other one BEFORE it (the
+  // group is dropped last), so `welche` picks the half. A receipt of status 6 is a refusal and is returned; no receipt (no core) is not told, so the
+  // next call sends it again. Production projects have no places: nothing is sent.
+  private async sendeContainer(p: Projekt, welche: 'vor' | 'nach' | 'beide', quelle: Quelle, alle = false): Promise<{ container: number; art: number; status: number; grund: string }[]> {
+    const soll = containerQuellen(p);
+    if (!soll) return [];
+    const abgelehnt: { container: number; art: number; status: number; grund: string }[] = [];
+    for (let i = 0; i < 4; i++) {
+      if (!alle && soll[i] === this.containerGesendet[i]) continue;
+      if (welche !== 'beide' && (soll[i] === 2) !== (welche === 'nach')) continue;
+      const q = await this.kern.containerQuelle(i + 1, soll[i], quelle);
+      if (quittungAbgelehnt(q)) { abgelehnt.push({ container: i + 1, art: soll[i], status: q!.status, grund: q!.grund }); continue; }
+      if (q !== null) this.containerGesendet[i] = soll[i];
+    }
+    return abgelehnt;
+  }
   // Spec 6.1: neue Wiedergabe-Nummer, Datei schreiben, /k/arr/laden; project.json führt die Nummer als wiedergabe_rev (ohne neue rev)
   private async ladeWiedergabe(quelle: Quelle, vorhoeren?: ReadonlyMap<string, string>): Promise<Record<string, unknown>> {
     const o = this.brauchOffen();
@@ -1363,31 +1391,23 @@ export class ProjSitzung {
       }
       this.pruefeMarkerInQuelle(o.projekt, probe.projekt);
       this.pruefeSperre(o.projekt, probe.projekt, probe.betrifft_wiedergabe);
-      // DJ view places (decision 10): a command that puts a module into a live slot is refused while that channel is open, whoever sends it.
-      // Undo, redo and the open of a project are not gated (known limit, AUFRUF.md).
+      // DJ view places (decision 10), by place (container core D3): every change of type or group at place N is refused with kanal_offen while the strip of
+      // that container (pultContainerPfad) is open (trim + fader above -26 dB, a planned ramp, or PFL on), whoever sends it and whatever the new type is
+      // (strudel, loops, track, leer, stems, seq). One exception, parking: a place that holds a SEQ deck or a loop deck may be switched away (the deck stays
+      // in the project, silent; the page mutes it first), except that Cypher never takes a SEQ deck away from an open strip. Step edits, undo, redo and the
+      // open of a project are not gated (known limit, AUFRUF.md).
       if (probe.projekt.live) {
-        const vor = liveSlots(o.projekt), nach = liveSlots(probe.projekt);
-        for (const slot of ['A', 'B'] as const) {
-          const kanal = `pad/${slot === 'A' ? 1 : 2}`;
-          if (nach[slot] !== undefined && nach[slot] !== vor[slot] && this.kanalOffenGesehen(kanal)) {
-            throw new ProjFehler(409, 'kanal_offen', { slot, kanal,
-              text: `the channel ${kanal} of Loop ${slot === 'A' ? 1 : 2} is open; close it before a module is placed` });
-          }
-        }
-        // SEQ deck: a new deck on a place whose channel deck/N is open is refused for every source; a deck removed while its channel is open only for
-        // Cypher (Andreas' hand is not restricted). Step edits are not gated. Undo, redo and the open of a project are not gated (as above).
-        // So a redo can put a deck back on an open channel. The channel is open by trim and fader; a ramp counts only for pad/1 and pad/2.
-        for (const platz of [1, 2, 3, 4]) {
-          const vorG = seqGruppe(o.projekt, platz), nachG = seqGruppe(probe.projekt, platz);
-          const kanal = `deck/${platz}`;
-          if (nachG && !vorG && this.kanalOffenGesehen(kanal)) {
-            throw new ProjFehler(409, 'kanal_offen', { platz, kanal,
-              text: `the channel ${kanal} of place ${platz} is open; close it before a SEQ deck is created there` });
-          }
-          if (vorG && !nachG && quelle === 'cypher' && this.kanalOffenGesehen(kanal)) {
-            throw new ProjFehler(409, 'kanal_offen', { platz, kanal,
-              text: `the channel ${kanal} of place ${platz} is open; Cypher does not remove a SEQ deck that is playing` });
-          }
+        for (const platz of [1, 2, 3, 4] as const) {
+          const vor = o.projekt.plaetze?.[platz - 1], nach = probe.projekt.plaetze?.[platz - 1];
+          if (!vor || !nach) continue;
+          const gleich = vor.typ === nach.typ && ('gruppe' in vor ? 'gruppe' in nach && vor.gruppe === nach.gruppe : !('gruppe' in nach));
+          if (gleich) continue;
+          const kanal = pultContainerPfad[platz - 1];
+          const parken = vor.typ === 'seq' || vor.typ === 'loops';
+          if (parken && !(vor.typ === 'seq' && quelle === 'cypher')) continue;
+          if (!this.kanalBelegtGesehen(kanal)) continue;
+          if (parken) throw new ProjFehler(409, 'kanal_offen', { platz, kanal, text: `the channel ${kanal} of place ${platz} is open; Cypher does not remove a SEQ deck that is playing` });
+          throw new ProjFehler(409, 'kanal_offen', { platz, kanal, text: `the channel ${kanal} of place ${platz} is open; close it (fader down, PFL off) before the place changes to ${nach.typ}` });
         }
       }
       // Spec 6.31 (Leistung): die Probe IST die Ausführung; aendere rechnet sie nicht noch einmal. Gültig, weil vollziehe nach dem Warten auf die
@@ -1396,7 +1416,7 @@ export class ProjSitzung {
       // task 8: the value before a page write of a gesture (not for the take's own write)
       if (erwartet === undefined && quelle === 'andreas') this.aufAuto.merkeBasen(projekt, probe.projekt);
       const antwort = await this.vollziehe(o, quelle, probe.regler_aenderungen,
-        (h) => aendere(o.verlauf, projekt, befehle as never, meta, h, { ergebnis: probe }), quellen, probe.betrifft_wiedergabe, probe.stift_aenderungen ?? []);
+        (h) => aendere(o.verlauf, projekt, befehle as never, meta, h, { ergebnis: probe }), quellen, probe.betrifft_wiedergabe, probe.stift_aenderungen ?? [], probe.projekt);
       if (antwort.code === 200) this.starteAnalysen(o, quelle, wuensche, alt);
       const alle = antwort.code === 200 ? [...hinweise, ...(probe.hinweise ?? []), ...this.einsRueckweg(o, d.befehle, quelle)] : hinweise;
       const mitMuster = (j: object): object => (musterBerichte.length ? { ...j, muster: musterBerichte } : j);   // strudel-clip: one report per generated clip
@@ -1522,22 +1542,26 @@ export class ProjSitzung {
       const o = this.brauchOffen();
       this.riegel(quelle);
       this.pruefeRev(o, d.rev);
-      const ziel = art === 'undo' ? o.verlauf.naechstesUndo() : o.verlauf.naechstesRedo();
-      let probe: Projekt;
-      try { probe = wende(o.projekt, art === 'undo' ? ziel.zurueck : ziel.vor); } catch (e) {
-        if (e instanceof PatchFehler) throw new ProjFehler(409, 'verlauf_inkonsistent', { detail: e.message });   // R2: deutsche Meldung nur als detail
-        throw e;
-      }
-      setzeDekodiert(probe, (sha) => this.zustandVon(sha));
-      if (probe.tempo_bpm !== o.projekt.tempo_bpm && this.lage.deckLaeuft()) throw new ProjFehler(409, 'deck_laeuft');
-      const vergleich = vergleiche(o.projekt, probe);
-      this.pruefeSperre(o.projekt, probe, vergleich.betrifft_wiedergabe);
-      const f = art === 'undo' ? rueckgaengig : wiederholen;
-      // Spec 6.31 (Leistung): die Probe ist der Stand; der Verlauf wendet den Patch nicht noch einmal an (gültig wie in aendern, über die rev-Prüfung)
-      const projekt = o.projekt;
-      return this.vollziehe(o, quelle, vergleich.regler_aenderungen, (h) => f(o.verlauf, projekt, { quelle }, h, { ziel, stand: probe, vergleich }), new Map(),
-        vergleich.betrifft_wiedergabe);
+      return this.umkehrVollzug(o, art, quelle);
     });
+  }
+  // The undo/redo step after the checks of the caller (also the roll-back of a change the core refused after the swap, see vollziehe)
+  private umkehrVollzug(o: Offen, art: 'undo' | 'redo', quelle: Quelle): Promise<Antwort> {
+    const ziel = art === 'undo' ? o.verlauf.naechstesUndo() : o.verlauf.naechstesRedo();
+    let probe: Projekt;
+    try { probe = wende(o.projekt, art === 'undo' ? ziel.zurueck : ziel.vor); } catch (e) {
+      if (e instanceof PatchFehler) throw new ProjFehler(409, 'verlauf_inkonsistent', { detail: e.message });   // R2: deutsche Meldung nur als detail
+      throw e;
+    }
+    setzeDekodiert(probe, (sha) => this.zustandVon(sha));
+    if (probe.tempo_bpm !== o.projekt.tempo_bpm && this.lage.deckLaeuft()) throw new ProjFehler(409, 'deck_laeuft');
+    const vergleich = vergleiche(o.projekt, probe);
+    this.pruefeSperre(o.projekt, probe, vergleich.betrifft_wiedergabe);
+    const f = art === 'undo' ? rueckgaengig : wiederholen;
+    // Spec 6.31 (Leistung): die Probe ist der Stand; der Verlauf wendet den Patch nicht noch einmal an (gültig wie in aendern, über die rev-Prüfung)
+    const projekt = o.projekt;
+    return this.vollziehe(o, quelle, vergleich.regler_aenderungen, (h) => f(o.verlauf, projekt, { quelle }, h, { ziel, stand: probe, vergleich }), new Map(),
+      vergleich.betrifft_wiedergabe, [], probe);
   }
 
   // Regler zuerst (Quittungen abwarten), dann speichern. Spec 3.4: Ablehnung eines /k/teil setzt die Änderung zurück.
@@ -1547,7 +1571,7 @@ export class ProjSitzung {
   // REGLER_PAKET) and are handled like
   // them: a stale rev puts the pins back to the OPEN state, a refusal writes nothing and puts the accepted pins back to `alt`.
   private async vollziehe(o: Offen, quelle: Quelle, regler: Soll[], schreibe: (h: Haken) => Wirkung, quellen: Map<string, string>,
-    betrifftWiedergabe: boolean, stifte: StiftAenderung[] = []): Promise<Antwort> {
+    betrifftWiedergabe: boolean, stifte: StiftAenderung[] = [], ziel?: Projekt): Promise<Antwort> {
     const alt = o.projekt;
     const gesetzt = await this.kern.setzeRegler(regler, quelle);
     const stiftQ = stifte.length ? await this.kern.stifte(stifte, quelle) : [];
@@ -1572,6 +1596,16 @@ export class ProjSitzung {
     if (stiftAbgelehnt.length) {
       await zurueck(alt);
       throw new ProjFehler(409, 'stift_abgelehnt', { stifte: stiftAbgelehnt, kern: stiftAbgelehnt[0].grund });
+    }
+    // Container core M5: a container that leaves a module (or goes empty) is told before the swap; a refusal changes nothing
+    if (ziel?.live) {
+      const nein = await this.sendeContainer(ziel, 'vor', quelle);
+      if (this.offen !== o || o.projekt !== alt || o.projekt.rev !== alt.rev) {
+        await zurueck(o.projekt);
+        if (this.offen !== o) throw new ProjFehler(409, 'kein_projekt');
+        throw new ProjFehler(409, 'rev_veraltet', { rev: o.projekt.rev });
+      }
+      if (nein.length) { await zurueck(alt); throw new ProjFehler(409, 'kern_lehnt_ab', { container: nein[0].container, status: nein[0].status, kern: nein[0].grund }); }
     }
     // Haken-Vertrag mit history.ts (speichereDannProtokolliere, Spec 6.31 festgehalten): speichere wird genau einmal mit dem NEUEN Stand gerufen, vor
     // dem Log-Eintrag; nur wenn das Log scheitert, folgt ein zweiter Aufruf mit dem alten Stand (zurückschreiben). vollziehe hängt an genau dieser
@@ -1624,11 +1658,24 @@ export class ProjSitzung {
       if (this.sperren > 0) { o.merk.loop = true; kern.loop = { aufgeschoben: true }; } else kern.loop = await this.kern.loop(neu, quelle);
     }
     if (kanonisch(alt.metronom) !== kanonisch(neu.metronom)) kern.metronom = await this.kern.metronom(neu, quelle);
+    // a container that gets a module is told after the swap; a refusal takes the swap back (below); what the core reported stays in /lage
+    const nach = neu.live ? await this.sendeContainer(neu, 'nach', quelle) : [];
     if (alt.tempo_bpm !== neu.tempo_bpm) {                                                               // Spec 2.7: ein Tempo-Weg
       if (this.sperren > 0) { o.merk.tempo = true; kern.tempo = { aufgeschoben: true }; } else kern.tempo = await this.kern.tempo(neu.tempo_bpm, quelle);
     }
     this.hosts.abgleich(neu);                  // plan 1.11 task 7: after the playback is loaded (a removed stage is gone from the core before its host stops)
     this.ctx.verteile({ a: 'proj', f: { slug: o.slug, rev: neu.rev, label: w.eintrag.label, quelle } });
+    if (nach.length) {
+      // the core refused a container source after the swap: the change is taken back (one undo step), so a refusal never leaves the project changed
+      const grund = { fehler: 'kern_lehnt_ab', text: 'the core refused the container change; the project was set back', container: nach[0].container, status: nach[0].status, kern: nach[0].grund };
+      try {
+        const zu = await this.umkehrVollzug(o, 'undo', quelle);
+        return { code: 409, j: { ...grund, rev: o.projekt.rev, projekt: o.projekt, zurueckgenommen: zu.code === 200 } };
+      } catch (e) {
+        this.ctx.log({ typ: 'proj_kern_lehnt_ab_zurueck_fehler', fehler: (e as Error).message });
+        return { code: 409, j: { ...grund, rev: neu.rev, projekt: neu, zurueckgenommen: false } };
+      }
+    }
     return { code: 200, j: { rev: neu.rev, projekt: neu, kern } };
   }
   // Kraken patch field: the accepted pins of a refused or stale change go back to the value `stand` holds (0 = no pin, also when the track or its
@@ -1878,10 +1925,10 @@ export class ProjSitzung {
     if (!o) throw new ProjFehler(409, 'kein_projekt');
     const slot = bkSlot(o.projekt, spurId);
     if (slot === null) throw new ProjFehler(409, sucheSpur(o.projekt, spurId) ? 'geraet_falsch' : 'spur_unbekannt');
-    // the core has the rows spur/<slot>/bk/<k> for the first BK_LIVE_SLOTS bk tracks only
+    // the core has the rows spur/<slot>/bk/<k> for the first BK_LIVE_SLOTS bk tracks (= every bk track)
     if (slot > BK_LIVE_SLOTS) {
       throw new ProjFehler(409, 'param_nicht_live', {
-        text: `only the first ${BK_LIVE_SLOTS} Baukasten tracks sound while a knob is dragged; change the track to hear the others`,
+        text: `only the first ${BK_LIVE_SLOTS} Baukasten tracks have rows while a knob is dragged; change the track to hear the others`,
       });
     }
     const soll: Soll[] = [];
@@ -2086,8 +2133,12 @@ export class ProjSitzung {
       else if (w) { this.basisWartend.delete(String(f.pfad)); void this.basisSenden([w]).catch(() => undefined); }   // released: the base value can go
     }
     // D10: an armed track that plays keeps the hand value for the take, not for the project base value
-    if (adresse === '/e/regler' && f.halter === 'mensch' && istMixerRegler(String(f.pfad)) && !this.aufAuto.unterdrueckt(String(f.pfad))) {
-      this.rueckweg(String(f.pfad), Number(f.wert));
+    // M8 / C1: a row of a strom track also follows Cypher's moves (halter cypher, or plan:<id> of a ramp) into the project, coalesced like the hand, so a
+    // later playback swap does not reset the fader. The one place where this lane writes a project from a core echo for Cypher.
+    const stromHalter = f.halter === 'cypher' || String(f.halter).startsWith('plan:');
+    if (adresse === '/e/regler' && (f.halter === 'mensch' || (stromHalter && istStromZeile(this.offen?.projekt ?? null, String(f.pfad))))
+      && istMixerRegler(String(f.pfad)) && !this.aufAuto.unterdrueckt(String(f.pfad))) {
+      this.rueckweg(String(f.pfad), Number(f.wert), f.halter === 'mensch' ? 'andreas' : 'cypher');   // the follow-up keeps the source of the move that caused it
     }
     // /zustand/arr status 0 setzt transportQuelle bewusst nicht zurück; ein neuer Start überschreibt die Quelle.
     // Spec 6.37 (REVIEW-5-opus M2): die Hand-Taste am Gerät führt der Kern selbst aus (core_arr.cpp arr_hand_start_stopp) und meldet danach
@@ -2108,13 +2159,13 @@ export class ProjSitzung {
   // Spec 3.4 Rückweg: Andreas' Hand an spur/<n>/* landet im Projekt (Quelle andreas). Spec 6.30: zusammengefasst. Je Pfad zählt der letzte Wert;
   // gespeichert wird höchstens einmal je RUECKWEG_MS (das erste Ereignis nach einer Pause sofort), und eine Geste ist ein Verlaufseintrag: sie
   // endet nach GESTE_RUHE_MS ohne Ereignis. Vorher speicherte jedes Hand-Ereignis das ganze Projekt.
-  private rueckweg(pfad: string, wert: number): void {
+  private rueckweg(pfad: string, wert: number, quelle: Quelle = 'andreas'): void {
     const o = this.offen;
     if (!o) return;
     const jetzt = Date.now();
     if (this.geste.offen !== o || jetzt - this.geste.letzteMs > GESTE_RUHE_MS) this.geste = { nr: this.geste.nr + 1, letzteMs: jetzt, labels: [], offen: o };
     this.geste.letzteMs = jetzt;
-    this.rueckwegWartend.set(pfad, wert);
+    this.rueckwegWartend.set(pfad, { wert, quelle });
     if (this.rueckwegTimer) return;
     this.rueckwegTimer = setTimeout(() => {
       this.rueckwegTimer = null;
@@ -2128,25 +2179,31 @@ export class ProjSitzung {
     this.rueckwegWartend.clear();
     const o = this.offen, g = this.geste;
     if (!o || g.offen !== o || !liste.length) return;
-    const befehle: Record<string, unknown>[] = [];
-    for (const [p, w] of liste) {
-      const b = reglerZuBefehl(o.projekt, p, w);
+    // one change per source (a log entry has one source; only equal sources coalesce within a gesture)
+    const quellen = [...new Set(liste.map(([, v]) => v.quelle))];
+    const proQuelle = new Map<Quelle, Record<string, unknown>[]>();
+    for (const [p, v] of liste) {
+      const b = reglerZuBefehl(o.projekt, p, v.wert);
       if (!b) continue;
-      befehle.push(b.befehl);
+      proQuelle.set(v.quelle, [...(proQuelle.get(v.quelle) ?? []), b.befehl]);
       if (!g.labels.includes(b.label)) g.labels.push(b.label);
     }
-    if (!befehle.length) return;
+    if (!proQuelle.size) return;
     this.rueckwegGespeichertMs = Date.now();
     const label = (g.labels.length === 1 ? g.labels[0] : `Mixer: ${g.labels.map((l) => l.replace(/^Mixer: /, '')).join(', ')}`).slice(0, 200);
-    try {
-      const r = aendere(o.verlauf, o.projekt, befehle as never, { quelle: 'andreas', label }, this.haken(o), {
-        schluessel: `rueckweg:${g.nr}`, transienten: this.transienten });
-      if (!r.eintrag) return;
-      r.projekt.wiedergabe_rev = o.projekt.wiedergabe_rev;
-      o.projekt = r.projekt;
-      this.meldeStand(o);
-      this.ctx.verteile({ a: 'proj', f: { slug: o.slug, rev: r.projekt.rev, label, quelle: 'andreas' } });
-    } catch (e) { this.ctx.log({ typ: 'proj_rueckweg_fehler', pfade: liste.map(([p]) => p), fehler: (e as Error).message }); }
+    for (const quelle of quellen) {
+      const befehle = proQuelle.get(quelle);
+      if (!befehle?.length) continue;
+      try {
+        const r = aendere(o.verlauf, o.projekt, befehle as never, { quelle, label }, this.haken(o), {
+          schluessel: `rueckweg:${g.nr}`, transienten: this.transienten });
+        if (!r.eintrag) continue;
+        r.projekt.wiedergabe_rev = o.projekt.wiedergabe_rev;
+        o.projekt = r.projekt;
+        this.meldeStand(o);
+        this.ctx.verteile({ a: 'proj', f: { slug: o.slug, rev: r.projekt.rev, label, quelle } });
+      } catch (e) { this.ctx.log({ typ: 'proj_rueckweg_fehler', pfade: liste.map(([p]) => p), fehler: (e as Error).message }); }
+    }
   }
 
   // Spec 2.12: nach /e/neustart (neue Generation) die letzte Wiedergabe neu laden, Spur-Regler, Loop, Metronom und KI-Maske neu setzen.
@@ -2167,6 +2224,8 @@ export class ProjSitzung {
         ? { nr, quittung: await this.kern.laden(nr, 'andreas') } : await this.ladeWiedergabe('andreas');
       if (typeof wiedergabe.nr === 'number' && quittungOk(wiedergabe.quittung as Quittung)) { o.merk.laden = false; o.merk.loop = false; }
       this.transportQuelle = null;
+      this.containerGesendet = [null, null, null, null];   // the new core knows nothing of what it was told
+      const containerNein = o.projekt.live ? await this.sendeContainer(o.projekt, 'beide', 'andreas', true) : [];   // all four again, like the graphs
       // Spec 6.31, 6.32: wartende Handwerte ins Projekt, unmittelbar vor dem Senden der Regler (nach der Lade-Quittung, kein await dazwischen),
       // damit auch, was während des Ladens kam, an den neuen Kern geht und Kern und Projekt denselben Wert haben
       this.rueckwegSpeichern();
@@ -2175,7 +2234,7 @@ export class ProjSitzung {
         this.kern.loop(o.projekt, 'andreas'), this.kern.metronom(o.projekt, 'andreas'), this.leereKiMaske()]);
       // S17: the sound snapshot again (a new kern knows no graph); source andreas like the controls above (Spec 6.35 E-a)
       const baukasten = o.projekt.baukasten ? await this.bk.wiederherstellen(o.projekt, 'andreas', { schonGeladenUeberspringen: false }) : undefined;
-      this.ctx.log({ typ: 'proj_neustart', slug: o.slug, wiedergabe, ...reglerBefund(regler), loop, metronom, ki, ...(baukasten ? { baukasten } : {}) });
+      this.ctx.log({ typ: 'proj_neustart', slug: o.slug, wiedergabe, ...(containerNein.length ? { container_abgelehnt: containerNein } : {}), ...reglerBefund(regler), loop, metronom, ki, ...(baukasten ? { baukasten } : {}) });
       this.meldeStand(o);                      // 1.8 S3 (D13): the new core gets arm, input, mode and monitor of every armed track
     }).catch((e) => this.ctx.log({ typ: 'proj_neustart_fehler', fehler: (e as Error).message }));
   }

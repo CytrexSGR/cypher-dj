@@ -79,10 +79,11 @@ test('pure rule: seqDeckFrei only for deck fader/trim of a SEQ place without a l
   const seq = new Set([2]), leer = new Set();
   assert.equal(seqDeckFrei('deck/2/fader', seq, leer), true);
   assert.equal(seqDeckFrei('deck/2/trim', seq, leer), true);
-  for (const pfad of ['erz/1/fader', 'deck/2/eq/tief', 'pad/1/fader', 'deck/5/fader', 'deck/0/fader', 'deck/2/pfl', 'deck/2/filter', 'bus/1/fader', 'spur/1/fader']) {
+  for (const pfad of ['erz/1/fader', 'deck/2/eq/tief', 'deck/5/fader', 'deck/0/fader', 'deck/2/pfl', 'deck/2/filter', 'bus/1/fader', 'spur/1/fader']) {
     assert.equal(seqDeckFrei(pfad, new Set([0, 1, 2, 3, 4, 5]), leer), false, pfad);
   }
-  assert.equal(seqDeckFrei('deck/3/fader', seq, leer), false, 'no SEQ deck on place 3');
+  assert.equal(seqDeckFrei('deck/3/fader', seq, leer), false, 'deck/3 has no strip any more (container C is pad/1)');
+  assert.equal(seqDeckFrei('pad/1/fader', new Set([3]), leer), true, 'a SEQ deck in container C');
   assert.equal(seqDeckFrei('deck/2/fader', seq, new Set([2])), false, 'a loaded track on place 2');
   assert.equal(seqDeckFrei('deck/2/trim', seq, new Set([2])), false);
   assert.equal(seqDeckFrei('deck/2/fader', seq, new Set([1, 3])), true, 'a track on another place does not matter');
@@ -114,13 +115,13 @@ test('the same on a place without a SEQ deck stays 409 kein_hoerschein; an andre
   uhr(16);
   await seqAn();
   const n = o.gesendet;
-  const r = await post('/regler', { pfad: 'deck/3/fader', nach: 0, takte: 0 }, CYPHER);
+  const r = await post('/regler', { pfad: 'deck/1/fader', nach: 0, takte: 0 }, CYPHER);
   assert.deepEqual([r.code, r.j.fehler], [409, 'kein_hoerschein'], JSON.stringify(r.j));
-  assert.equal(teile('deck/3/fader').length, 0);
+  assert.equal(teile('deck/1/fader').length, 0);
   assert.equal(o.gesendet, n, 'nothing was sent');
   assert.equal(log.filter((z) => z.typ === 'seq_frei').length, 0);
   // andreas: deck 2 (SEQ) and deck 3 (no SEQ) go through as before, the core decides, never a seq_frei log
-  for (const pfad of ['deck/2/fader', 'deck/3/fader']) {
+  for (const pfad of ['deck/2/fader', 'deck/1/fader']) {
     const a = await setze(pfad, 0, ANDREAS);
     assert.equal(a.code, 200, JSON.stringify(a.j));
     assert.equal(teile(pfad).at(-1).felder.quelle, 'andreas');
@@ -242,10 +243,11 @@ test('eject: nothing is sent for a playing track (deck_laeuft), an open channel 
   deckZustand(2, 2);
   const a = await post('/seq/anlegen', { platz: 2 }, ANDREAS);
   assert.deepEqual([a.code, a.j.fehler], [409, 'deck_laeuft'], JSON.stringify(a.j));
-  deckZustand(3, 1); regler('deck/3/trim', 0); regler('deck/3/fader', -6);
-  const b = await post('/seq/anlegen', { platz: 3 }, ANDREAS);
+  deckZustand(4, 1); regler('pad/2/trim', 0); regler('pad/2/fader', -6);   // place 3 holds the strudel module: the second track place is 4, served by the strip pad/2
+  const b = await post('/seq/anlegen', { platz: 4 }, ANDREAS);
   assert.deepEqual([b.code, b.j.fehler], [409, 'kanal_offen'], JSON.stringify(b.j));
-  const c = await post('/seq/anlegen', { platz: 4 }, ANDREAS);   // nothing loaded on place 4
+  deckZustand(2, 0);                                              // the track on place 2 stopped and nothing is loaded there any more
+  const c = await post('/seq/anlegen', { platz: 2 }, ANDREAS);
   assert.equal(c.code, 200, JSON.stringify(c.j));
   assert.equal(entladen().length, 0, 'no unload for any of the three places');
 });
@@ -306,10 +308,10 @@ test('eject lazily: a track loaded AFTER the SEQ deck existed (empty deck seen f
   assert.equal(entladen().length, 0, 'the track of Andreas stays on the deck');
   assert.equal(log.filter((z) => z.typ === 'seq_aufgeraeumt').length, 0);
   // a track that was there before the SEQ deck is still ejected by anlegen (creation path), whatever the page server saw before
-  deckZustand(2, 0); deckZustand(3, 0); deckZustand(3, 1);
-  assert.equal((await post('/seq/anlegen', { platz: 3 }, ANDREAS)).code, 200);
+  deckZustand(2, 0); deckZustand(4, 0); deckZustand(4, 1);
+  assert.equal((await post('/seq/anlegen', { platz: 4 }, ANDREAS)).code, 200);
   assert.equal(entladen().length, 1);
-  assert.equal(entladen()[0].felder.deck, 3);
+  assert.equal(entladen()[0].felder.deck, 4);
 });
 
 test('eject: a planned start of Andreas (status still 1) is not cancelled, neither lazily nor at anlegen; it ends with the planned beat', async (t) => {
@@ -329,11 +331,11 @@ test('eject: a planned start of Andreas (status still 1) is not cancelled, neith
   assert.equal(entladen().length, 1);
   await p;
   // creation path: a stopped track with a planned start on a place that becomes a SEQ deck is not unloaded
-  uhr(16); deckZustand(3, 1);
-  const p3 = post('/deck/start', { deck: 3, ab: 'phrase' }, ANDREAS);
+  uhr(16); deckZustand(4, 1);
+  const p3 = post('/deck/start', { deck: 4, ab: 'phrase' }, ANDREAS);
   assert.ok(await bis(() => an('/k/deck/start').length === 2));
   const n = entladen().length;
-  assert.equal((await post('/seq/anlegen', { platz: 3 }, ANDREAS)).code, 200);
+  assert.equal((await post('/seq/anlegen', { platz: 4 }, ANDREAS)).code, 200);
   assert.equal(entladen().length, n, 'no unload of a track with a planned start');
   uhr(1000);
   await p3;
@@ -347,8 +349,8 @@ test('eject lazily: a playing track is never ejected (409 without seq_geleert); 
   deckZustand(2, 2);
   const a = await post('/regler', { pfad: 'deck/2/fader', nach: 0, takte: 0 }, CYPHER);
   assert.deepEqual([a.code, a.j.fehler, a.j.seq_geleert], [409, 'kein_hoerschein', undefined], JSON.stringify(a.j));
-  deckZustand(3, 1);   // place 3 has no SEQ deck
-  const b = await post('/regler', { pfad: 'deck/3/fader', nach: 0, takte: 0 }, CYPHER);
+  deckZustand(1, 1);   // place 1 has no SEQ deck
+  const b = await post('/regler', { pfad: 'deck/1/fader', nach: 0, takte: 0 }, CYPHER);
   assert.deepEqual([b.code, b.j.fehler, b.j.seq_geleert], [409, 'kein_hoerschein', undefined], JSON.stringify(b.j));
   assert.equal(entladen().length, 0);
 });

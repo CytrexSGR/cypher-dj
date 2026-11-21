@@ -1,7 +1,7 @@
 // K2 Task 2.2: der Mixer schließt den Rückweg fx/2 über den Hall: Send 2 aller Kanäle (nach dem Fader) → Hall →
 // mal fx/2/rueckweg → Master-Summe. Gelesen wird master_summe_l() (vor master/pegel und Limiter).
 //  (a) Vorgabe (alle Sends −200): Master bitgleich zum Mixer mit fx/2/rueckweg = −200 (der Hall liefert bei Stille 0)
-//  (b) erz/2/send/2 = 0 dB, fx/2/rueckweg = 0 dB: Impuls in Block 0, danach Stille → Energie in Block 10..40;
+//  (b) pad/1/send/2 = 0 dB, fx/2/rueckweg = 0 dB: Impuls in Block 0, danach Stille → Energie in Block 10..40;
 //      ohne Send nicht (nur Filterreste < 1e-20)
 //  (c) fx/2/rueckweg = −200 bei offenem Send: kein Nachhall am Master
 //  (d) fx/1/rueckweg bleibt ohne Wirkung (nur fx/2 ist der Hall)
@@ -29,15 +29,15 @@ struct Lauf {
   float ml[N], mr[N], cl[N], cr[N];
   std::vector<float> summe;   // alle Master-Samples links
   Lauf() : m(std::make_unique<cdj::Mixer>(tab)) {
-    for (const char* k : {"erz/1", "erz/2", "erz/3"}) setze((std::string(k) + "/fader").c_str(), 0.0f);
+    for (const char* k : {"deck/2", "pad/1", "pad/2"}) setze((std::string(k) + "/fader").c_str(), 0.0f);
   }
   void setze(const char* pfad, float w) { m->setze_sofort(tab.suche(pfad), w); }
-  // ein Block auf erz/2: Impuls am ersten Sample (impuls) oder Stille; bei `dauer` konstant 0,3
+  // ein Block auf pad/1: Impuls am ersten Sample (impuls) oder Stille; bei `dauer` konstant 0,3
   void block(bool impuls, bool dauer = false) {
     for (int i = 0; i < N; ++i) {
       const float v = dauer ? 0.3f : (impuls && i == 0 ? 0.5f : 0.0f);
-      m->eingang_l(5)[i] = v;
-      m->eingang_r(5)[i] = v;
+      m->eingang_l(2)[i] = v;
+      m->eingang_r(2)[i] = v;
     }
     m->verarbeite(N, ml, mr, cl, cr);
     summe.insert(summe.end(), m->master_summe_l(), m->master_summe_l() + N);
@@ -70,7 +70,7 @@ int main() {
   double mit = 0, ohne = 0;
   {
     Lauf l;
-    l.setze("erz/2/send/2", 0.0f);
+    l.setze("pad/1/send/2", 0.0f);
     impuls_lauf(l);
     mit = l.energie(10, 40);
     Lauf s;
@@ -84,7 +84,7 @@ int main() {
   // (c) Rückweg aus (−200) bei offenem Send: kein Nachhall
   {
     Lauf l;
-    l.setze("erz/2/send/2", 0.0f);
+    l.setze("pad/1/send/2", 0.0f);
     l.setze("fx/2/rueckweg", -200.0f);
     impuls_lauf(l);
     PRUEF(l.energie(10, 40) < mit * 1e-9);
@@ -93,7 +93,7 @@ int main() {
   // (d) fx/1/rueckweg −200 ändert nichts (bitgleich zum Lauf mit Vorgabe); Gegenprobe: fx/2/rueckweg −6 ändert
   {
     Lauf a, b, c;
-    for (Lauf* l : {&a, &b, &c}) l->setze("erz/2/send/2", 0.0f);
+    for (Lauf* l : {&a, &b, &c}) l->setze("pad/1/send/2", 0.0f);
     b.setze("fx/1/rueckweg", -200.0f);
     c.setze("fx/2/rueckweg", -6.0f);
     impuls_lauf(a);
@@ -116,9 +116,9 @@ int main() {
   // (f) Impuls mit offenem Send, danach Stille bis Block 3000 (16 s): der Nachhall klingt ab und der Master wird 0
   {
     Lauf l;
-    l.setze("erz/2/send/2", 0.0f);
+    l.setze("pad/1/send/2", 0.0f);
     for (int k = 0; k < 3000; ++k) {
-      if (k == 4) l.setze("erz/2/send/2", -200.0f);   // die Filterreste des Impulses sind bis dahin im Send
+      if (k == 4) l.setze("pad/1/send/2", -200.0f);   // die Filterreste des Impulses sind bis dahin im Send
       l.block(k == 0);
     }
     std::printf("(f) Energie Block 10..40: %g, 500..600: %g\n", l.energie(10, 40), l.energie(500, 600));
@@ -130,25 +130,25 @@ int main() {
     PRUEF(nicht_null == 0);
   }
 
-  // (g), (h): erz/1 geht auf bus/1 (Ziel 1, Bus-Fader zu): in der Summe steht nur der Hall-Rückweg
+  // (g), (h): deck/2 geht auf bus/1 (Ziel 1, Bus-Fader zu): in der Summe steht nur der Hall-Rückweg
   struct Nur {
     sw::ReglerTabelle tab;
     std::unique_ptr<cdj::Mixer> m;
     float ml[N], mr[N], cl[N], cr[N];
     unsigned z = 99;
     Nur() : m(std::make_unique<cdj::Mixer>(tab)) {
-      setze("erz/1/fader", 0.0f);
-      setze("erz/1/send/2", 0.0f);
-      setze("erz/1/ziel", 1.0f);
+      setze("deck/2/fader", 0.0f);
+      setze("deck/2/send/2", 0.0f);
+      setze("deck/2/ziel", 1.0f);
     }
     void setze(const char* pfad, float w) { m->setze_sofort(tab.suche(pfad), w); }
-    // Rauschen auf erz/1; rechts nur, wenn mit_l falsch ist (links stumm)
+    // Rauschen auf deck/2; rechts nur, wenn mit_l falsch ist (links stumm)
     void block(bool mit_l = true) {
       for (int i = 0; i < N; ++i) {
         z = z * 1664525u + 1013904223u;
         const float v = ((z >> 9) / 8388608.0f - 1.0f) * 0.3f;
-        m->eingang_l(4)[i] = mit_l ? v : 0.0f;
-        m->eingang_r(4)[i] = v;
+        m->eingang_l(1)[i] = mit_l ? v : 0.0f;
+        m->eingang_r(1)[i] = v;
       }
       m->verarbeite(N, ml, mr, cl, cr);
     }

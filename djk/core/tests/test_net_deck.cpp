@@ -151,12 +151,12 @@ int main() {
   // /k/fx/zuweisung mit allen Feldern, Bereiche
   { cdj::osc::Schreiber s(v::k_fx_zuweisung); s.h(45).s("andreas").i(2).s("pad/2").i(1); g.sende(s); }
   PRUEF(hole(bef, b) && b.art == cdj::Befehl::FX_ZUWEISUNG && b.deck == 2 && !std::strcmp(b.pfad, "pad/2") && b.an == 1);
-  { cdj::osc::Schreiber s(v::k_fx_zuweisung); s.h(46).s("andreas").i(1).s("deck/3").i(1); g.sende(s); }
-  PRUEF(hole(bef, b) && b.art == cdj::Befehl::FX_ZUWEISUNG && b.deck == 1 && !std::strcmp(b.pfad, "deck/3") && b.an == 1);   // deck/3, deck/4 take FX1 and FX2
+  { cdj::osc::Schreiber s(v::k_fx_zuweisung); s.h(46).s("andreas").i(1).s("deck/2").i(1); g.sende(s); }
+  PRUEF(hole(bef, b) && b.art == cdj::Befehl::FX_ZUWEISUNG && b.deck == 1 && !std::strcmp(b.pfad, "deck/2") && b.an == 1);   // container core K1: deck/3, deck/4 are gone from fx_kanal_12
   { cdj::osc::Schreiber s(v::k_fx_zuweisung); s.h(260).s("andreas").i(1).s("erz/5").i(1); g.sende(s); }
   abgelehnt(260, "ausserhalb_bereich");  // erz/5 is no Beat FX target (only unit 3 takes every source channel)
-  { cdj::osc::Schreiber s(v::k_fx_zuweisung); s.h(261).s("andreas").i(3).s("erz/5").i(1); g.sende(s); }
-  PRUEF(hole(bef, b) && b.art == cdj::Befehl::FX_ZUWEISUNG && b.deck == 3 && !std::strcmp(b.pfad, "erz/5") && b.an == 1);   // FX3: every source channel
+  { cdj::osc::Schreiber s(v::k_fx_zuweisung); s.h(261).s("andreas").i(3).s("pad/1").i(1); g.sende(s); }
+  PRUEF(hole(bef, b) && b.art == cdj::Befehl::FX_ZUWEISUNG && b.deck == 3 && !std::strcmp(b.pfad, "pad/1") && b.an == 1);   // FX3: every container
   { cdj::osc::Schreiber s(v::k_fx_zuweisung); s.h(262).s("andreas").i(3).s("master").i(1); g.sende(s); }
   abgelehnt(262, "ausserhalb_bereich");  // FX3 has no master assignment
   { cdj::osc::Schreiber s(v::k_fx_zuweisung); s.h(263).s("andreas").i(4).s("deck/1").i(1); g.sende(s); }
@@ -172,23 +172,6 @@ int main() {
   PRUEF(hole(bef, b) && b.art == cdj::Befehl::FX_ROUTING && b.an == 0 && !std::strcmp(b.quelle, "cypher"));
   { cdj::osc::Schreiber s(v::k_fx_routing); s.h(56).s("andreas").i(2); g.sende(s); }
   abgelehnt(56, "ausserhalb_bereich");
-  // DJ view places 3 and 4: /k/platz/kanal ,hsii — pad 1 or 2, inhalt 0 to 3, anything else is refused by the net layer
-  { cdj::osc::Schreiber s(v::k_platz_kanal); s.h(270).s("andreas").i(1).i(1); g.sende(s); }
-  PRUEF(hole(bef, b) && b.art == cdj::Befehl::PLATZ_KANAL && b.deck == 1 && b.nr == 1 && !std::strcmp(b.quelle, "andreas"));
-  { cdj::osc::Schreiber s(v::k_platz_kanal); s.h(271).s("cypher").i(2).i(3); g.sende(s); }
-  PRUEF(hole(bef, b) && b.art == cdj::Befehl::PLATZ_KANAL && b.deck == 2 && b.nr == 3 && !std::strcmp(b.quelle, "cypher"));
-  { cdj::osc::Schreiber s(v::k_platz_kanal); s.h(272).s("andreas").i(2).i(0); g.sende(s); }
-  PRUEF(hole(bef, b) && b.art == cdj::Befehl::PLATZ_KANAL && b.deck == 2 && b.nr == 0);
-  { cdj::osc::Schreiber s(v::k_platz_kanal); s.h(273).s("andreas").i(3).i(1); g.sende(s); }
-  abgelehnt(273, "ausserhalb_bereich");  // pad 3 does not exist
-  { cdj::osc::Schreiber s(v::k_platz_kanal); s.h(274).s("andreas").i(0).i(1); g.sende(s); }
-  abgelehnt(274, "ausserhalb_bereich");
-  { cdj::osc::Schreiber s(v::k_platz_kanal); s.h(275).s("andreas").i(1).i(4); g.sende(s); }
-  abgelehnt(275, "ausserhalb_bereich");  // inhalt 4 does not exist
-  { cdj::osc::Schreiber s(v::k_platz_kanal); s.h(276).s("andreas").i(1).i(-1); g.sende(s); }
-  abgelehnt(276, "ausserhalb_bereich");
-  { cdj::osc::Schreiber s(v::k_platz_kanal); s.h(277).s("dj").i(1).i(1); g.sende(s); }
-  abgelehnt(277, "ausserhalb_bereich");  // §1.4: unknown source
 
   // 3) Ereignisse: /zustand/deck, /e/geladen, /e/frist
   cdj::Ereignis e{};
@@ -237,11 +220,6 @@ int main() {
   fxr.status = 1;
   ere->schiebe(fxr);
   PRUEF(g.warte("/e/fx/routing", 500) && !std::strcmp(g.m.typen, "i") && g.i(0) == 1);
-  cdj::Ereignis pkz{};   // DJ view places 3 and 4: /e/platz/kanal ,ii
-  pkz.art = cdj::Ereignis::PLATZ_KANAL;
-  pkz.deck = 2; pkz.status = 3;
-  ere->schiebe(pkz);
-  PRUEF(g.warte("/e/platz/kanal", 500) && !std::strcmp(g.m.typen, "ii") && g.i(0) == 2 && g.i(1) == 3);
   cdj::Ereignis hc{};   // Plan E9: /e/hotcue ,isidh (deck, material_id, nr, quell_beat, sample)
   hc.art = cdj::Ereignis::HOTCUE;
   hc.deck = 2; std::strcpy(hc.material_id, "f0000000000000c3"); hc.status = 5; hc.quell_beat = 96.0; hc.sample = 123456;
@@ -278,11 +256,6 @@ int main() {
     std::strcpy(r.pfad, "erz/1/komp/an"); r.wert = 1.0f; std::strcpy(r.text, "cypher"); r.sample = 480000; r.beat = 20.0;
     ere->schiebe(r);
     PRUEF(g.warte("/e/regler", 500));
-    cdj::Ereignis l{};
-    l.art = cdj::Ereignis::LOOP;
-    l.deck = 1; l.status = 3; std::strcpy(l.pfad, "auto-a"); l.fassung = 8;
-    ere->schiebe(l);
-    PRUEF(g.warte("/e/loop", 500));
     Gegenstelle n(netz.port());
     { cdj::osc::Schreiber s(v::k_hallo); s.s("seite-neu").i(n.port).i(1); n.sende(s); }
     bool regler = false;
@@ -290,9 +263,7 @@ int main() {
       if (!n.warte("/e/regler", 300)) break;
       regler = !std::strcmp(n.s(0), "erz/1/komp/an") && n.f(1) == 1.0f;
     }
-    const bool box = n.warte("/e/loop", 300) && n.i(0) == 1 && n.i(1) == 3 && !std::strcmp(n.s(2), "auto-a") && n.i(3) == 8;
     PRUEF(regler);
-    PRUEF(box);
     { cdj::osc::Schreiber s(v::k_tschuess); s.s("seite-neu"); n.sende(s); }
   }
   stop = true;

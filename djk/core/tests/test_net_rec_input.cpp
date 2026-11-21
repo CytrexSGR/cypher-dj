@@ -58,8 +58,8 @@ int main() {
       PRUEF(ok);
     };
     for (int c : {11, 12, 13}) antwort(c, "datei_fehlt");   // control: the codes that always worked
-    for (int c : {15, 16, 17, 21, 22}) antwort(c, "datei_fehlt");   // S18: erz/5..7, pad/1..2 pass the range check
-    for (int c : {14, 18, 19, 23, 10, 24, -1, 99}) antwort(c, "ausserhalb_bereich");   // erz/4, erz/8 and strays
+    for (int c : {15, 16, 17, 21, 22, 23, 24}) antwort(c, "datei_fehlt");   // S18: erz/5..7, pad/1..2 pass the range check; container core F2: 23, 24 are the container inputs A, B
+    for (int c : {14, 18, 19, 10, -1, 99}) antwort(c, "ausserhalb_bereich");   // erz/4, erz/8 and strays (23, 24 became taps in the container core)
     antwort(20, "eingang_fehlt");   // master before the fader: valid code, no tap yet
     // 1.8 S0: the new fields. Non-default values are refused until their slice; the refusals and the accepted cases:
     antwort(1, "datei_fehlt");                // S2a: external pair ein_1 is accepted (this fixture has no record thread)

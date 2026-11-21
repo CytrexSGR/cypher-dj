@@ -14,7 +14,7 @@ test('FX3 lives on fx/3 and carries fx-remix', () => {
 });
 
 test('loading takes old-style Remix inserts off first, then loads fx/3', () => {
-  const g = { 'deck/1': 'fx-remix', 'erz/2': 'surge', master: 'fx-remix' };
+  const g = { 'deck/1': 'fx-remix', 'erz/2': 'surge', master: 'fx-remix' };   // erz/2 is no channel any more: a graph there is not an old insert
   assert.deepEqual(altlasten(g), ['master', 'deck/1']);
   assert.deepEqual(ladeSchritte(g), [{ kanal: 'master', name: '' }, { kanal: 'deck/1', name: '' }, { kanal: 'fx/3', name: 'fx-remix' }]);
   assert.deepEqual(ladeSchritte({ 'fx/3': 'fx-remix' }), []);
@@ -22,18 +22,14 @@ test('loading takes old-style Remix inserts off first, then loads fx/3', () => {
   assert.deepEqual(entladeSchritte({}), []);
 });
 
-test('the channels offered follow the places', () => {
-  assert.deepEqual(kanaele(['track', 'track', 'strudel', 'loops']), ['deck/1', 'deck/2', 'pad/1', 'pad/2', 'erz/1', 'erz/2', 'erz/3']);
-  // decks 3 and 4 have no channel strip on the page (d3268f8b, deleted on purpose), so a Track place 3 or 4 offers no channel
-  // the loop strips L1 and L2 are always in the mixer (loop deck P1), so they are offered whatever the places show
-  assert.deepEqual(kanaele(['track', 'track', 'track', 'track']), ['deck/1', 'deck/2', 'pad/1', 'pad/2']);
+test('the channels offered are the four container strips', () => {
+  assert.deepEqual(kanaele(), ['deck/1', 'deck/2', 'pad/1', 'pad/2']);
 });
 
 test('the FX3 unit names the channels on 3 in mixer order', () => {
-  const layout = ['track', 'track', 'strudel', 'loops'];
-  assert.equal(zugewieseneText({ 'pad/1': true, 'deck/1': true, 'deck/2': false }, layout), 'A L1');
-  assert.equal(zugewieseneText({}, layout), '–');
-  assert.equal(zugewieseneText({ 'deck/4': true }, layout), '–');   // a channel no place shows does not count
-  assert.equal(kurzName('erz/1'), 'DR');
-  assert.equal(kurzName('deck/3'), 'D3');
+  assert.equal(zugewieseneText({ 'pad/1': true, 'deck/1': true, 'deck/2': false }), 'A C');
+  assert.equal(zugewieseneText({}), '–');
+  assert.equal(zugewieseneText({ 'deck/4': true, 'erz/1': true }), '–');   // a path that is no container strip does not count
+  assert.equal(kurzName('pad/2'), 'D');
+  assert.equal(kurzName('deck/1'), 'A');
 });

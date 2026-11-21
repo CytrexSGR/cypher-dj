@@ -43,8 +43,8 @@ int null_phase(int64_t einsatz, int64_t grenze, int quantum);
 
 const char* null_urteil_text(NullUrteil u);
 
-// A7, 1.: aus dem Neustart-Fach f: Decks leer, erz/1..3 und pad/1..2 Fader −200, kein Prüfklick, erz/4 neutral (Fader 0,
-// sonst Vorgabe, pfl ausgenommen), keine Tempo-Rampe offen, wirksames Tempo konstant gleich bpm; metronom_an aus
+// A7, 1.: aus dem Neustart-Fach f: Decks leer, pad/1..2 Fader −200, kein Prüfklick (K9: the production strip is hidden and
+// neutral by construction, there is no row to check), keine Tempo-Rampe offen, wirksames Tempo konstant gleich bpm; metronom_an aus
 // /zustand/arr. fx_master (Plan-Review K3): eine FX-Einheit hängt an master (/e/fx/zuweisung) und ist an oder seit weniger
 // als 5 s aus (/e/fx, SSE-Anfangsbild); der Neustart-Zustand trägt keinen FX-Stand, der Render-Kern hat die FX aus, der
 // Export nimmt FX-Einheiten nicht mit. Rückgabe: die Verstöße als Text, leer = erfüllt.

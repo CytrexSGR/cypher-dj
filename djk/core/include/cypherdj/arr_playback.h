@@ -34,11 +34,11 @@ constexpr int ARR_HOST_LAT_MAX = 8192;  // plan 1.11 (D5): longest host-stage la
 constexpr int ARR_INS_HOST = 4;         // plan 1.11 (D1): effect hosts, one Carla process per plugin; host h = pool instance ins/host/<h> = playback slot h - 1; ports arr_ins_<h>_L/R out, arr_insret_<h>_L/R in
 constexpr int ARR_WIRT_SLOTS = 2;       // arr_midi_<s>, s = 1..2 (Spec 2.4)
 constexpr int ARR_GRUPPEN = 16;         // Gruppen-Spuren grp/1..16 (1.10, F1; 16 since nested groups task 1: eigene Plätze neben den 32 Spuren); = GRP_REGLER_GRUPPEN_ALLE (static_assert in arr_output.cpp)
-constexpr int ARR_RETURNS = 4;          // 1.10 Slice 3: return strips ret/1..4 (own places next to the 32 tracks and 16 groups); = RET_REGLER_RETURNS (static_assert in arr_returns.cpp)
+constexpr int ARR_RETURNS = 8;          // 1.10 Slice 3: return strips ret/1..8 (4 until container core K6; own places next to the 32 tracks and 16 groups); = RET_REGLER_RETURNS (static_assert in arr_returns.cpp)
 constexpr int ARR_KETTE = 5;            // 1.10 slice 4a: stages per insert chain (4 until the dress rehearsal 2: EQ, comp, sat, util, lim need five)
 constexpr int ARR_KETTE_PM = ARR_SPUREN + ARR_GRUPPEN;     // chain index of the PM (= ARR_PM, static_assert in arrangement.h)
 constexpr int ARR_KETTE_RET0 = ARR_KETTE_PM + 1;           // chain index of return 1 (= ARR_RET0)
-constexpr int ARR_KETTEN = ARR_KETTE_RET0 + ARR_RETURNS;   // strips with a chain, indexed like the strips: tracks 0..31, groups 32..47, PM 48, returns 49..52
+constexpr int ARR_KETTEN = ARR_KETTE_RET0 + ARR_RETURNS;   // strips with a chain, indexed like the strips: tracks 0..31, groups 32..47, PM 48, returns 49..56
 constexpr int ARR_INS_KOMP = 12;        // 1.10 slice 4a: pooled compressors ins/komp/1..12
 // 1.10 slice 4b: pooled EQs ins/eq/1..ARR_INS_EQ and saturators ins/saett/1..ARR_INS_SAETT. The sizes were decided by the cost measurement (T11, routing-1-10.md)
 // and equal "instanzen" of docs/interfaces/insert_module.json (pinned by test_arr_inserts_vertrag and by the contract test in the stellwerk project).
@@ -61,8 +61,8 @@ constexpr int ARR_INS_ALLE = ARR_INS_KOMP + ARR_INS_EQ + ARR_INS_SAETT + ARR_INS
 constexpr int BK_KNOEPFE = cypherdj::stellwerk::BK_REGLER_N;   // knobs k1..k64 of a Baukasten graph (track device parameters, insert stages, channel rows)
 constexpr int ARR_PARAMETER = BK_KNOEPFE;   // device parameters per internal track: the four RB-338 ones and the Baukasten knobs k1..k64 (was 8 before the 32-knob widening, 32 before the 64-knob one)
 constexpr int ARR_BK_MAX = 16;          // S20: Baukasten tracks per playback (8 until 2026-11-18); = MAX_BK_SPUREN in model.ts (pinned by tests/project_bk_device.test.mjs)
-// The live override rows spur/<slot>/bk/<k> exist for the first SPUR_BK_SLOTS bk tracks only; the 9th to 16th bk track has no row (Arrangement::bk_slot_ stays -1).
-static_assert(cypherdj::stellwerk::SPUR_BK_SLOTS <= ARR_BK_MAX, "the live override rows address bk slots 1..SPUR_BK_SLOTS of at most ARR_BK_MAX tracks");
+// Every bk track has live override rows spur/<slot>/bk/<k> (since 2026-11-21 SPUR_BK_SLOTS == ARR_BK_MAX; Arrangement::bk_slot_ is -1 only for non-bk tracks).
+static_assert(cypherdj::stellwerk::SPUR_BK_SLOTS == ARR_BK_MAX, "every bk track has live override rows: SPUR_BK_SLOTS must equal ARR_BK_MAX");
 constexpr int ARR_BK_INSERT_NR = 1000;  // arr-bk slice 3: the track number an insert stage uses in the key of the graph store (tracks and members are below 100)
 constexpr int ARR_KIT_MAX = 8;          // 1.9: kit tracks per playback (spec E15); counted over tracks AND rack members
 // 1.9 U6 (spec E10, E15): instrument racks. A rack track holds up to ARR_RACK_GLIEDER members; every member of every rack takes one member slot
@@ -172,7 +172,7 @@ struct ArrFxPunkt {
   float gleit;
 };
 
-enum class ArrArt : uint8_t { leer = 0, audio = 1, intern = 2, wirt = 3, rack = 4 };   // 1.9: rack = an instrument rack (ArrSpur::glied)
+enum class ArrArt : uint8_t { leer = 0, audio = 1, intern = 2, wirt = 3, rack = 4, strom = 5 };   // 1.9: rack = an instrument rack (ArrSpur::glied); container core K7: strom = reads an Erzeuger stream buffer (ArrSpur::strom)
 
 struct ArrParameter {
   char name[16];
@@ -222,6 +222,7 @@ struct ArrSpur {
   int n_zellen = 0;                  // filled cells
   ArrZelle zellen[ARR_ZELLEN] = {};  // index i = cell i+1
   int slot = 0;                      // wirt: 1..2
+  int8_t strom = 0;                  // container core K7, art strom: the Erzeuger stream 1..16 this track reads (/4 `quelle.strom`); 0 = none
   char geraet[16] = {};              // intern: "rb338" or "bk"
   // S20, device bk: graph name (the file stem in the graph folder) and the instance. The instance belongs to the graph store of the
   // ArrAudioCache (reference counted by the snapshots, ArrSnapshot::bk_refs); the callback reads it only. bk_gen is unique per built
@@ -321,8 +322,10 @@ constexpr uint8_t ARR_SCHL_SPUR = 1;
 constexpr uint8_t ARR_SCHL_GRP = 2;    // slice 5 U2a: group `nr` 1..ARR_GRUPPEN; pre = the member sum before the group chain, post = after the group fader
 constexpr uint8_t ARR_SCHL_RET = 3;    // slice 5 U2a: return `nr` 1..ARR_RETURNS; pre = the return input after the Hall blend, before its chain, post = after fader and fades
 constexpr uint8_t ARR_SCHL_PM = 4;     // slice 5 U2a: only to be refused (sidechain_zyklus): every strip feeds the PM
-constexpr uint8_t ARR_SCHL_DECK = 5;   // slice 5 U2b: the input deck/`nr` 1..4 (live only: a render has no deck signal, plan E7); a DJ source has no pre and post, the point is stored as post
-constexpr uint8_t ARR_SCHL_ERZ = 6;    // slice 5 U2b: the input erz/1 (the production's Strudel share: a host return into erz/1 is added after the arrangement block and is not in the key, plan E6)
+constexpr uint8_t ARR_SCHL_DECK = 5;   // slice 5 U2b: the container `nr` 1..4 = A..D (file name deck/<nr>; live only: a render has no deck signal, plan E7); a DJ source has no pre and post, the point is stored as post
+constexpr uint8_t ARR_SCHL_ERZ = 6;    // K4 (D-V3): the stream distributor `nr` 1..16 (file names strom/<nr>, and erz/1 as the old name of stream 1); the stream buffer after the host return and the duck
+// Key table of the kernel hand-over (Arrangement::dj_schluessel): index 0..3 = containers A..D, index 4..19 = the stream buffers 1..16.
+constexpr int ARR_SCHLUESSEL = 4 + 16;
 constexpr uint8_t ARR_SCHL_PRE = 0;
 constexpr uint8_t ARR_SCHL_POST = 1;
 struct ArrSchluessel {
@@ -433,11 +436,12 @@ struct ArrSnapshot {
   uint8_t spur_ordnung[ARR_SPUREN];  // 1.10 slice 5 U1: the order the tracks run in (chain, then fader loop): a stable topological order over the track-post key edges, the identity without such edges (arr_key.h). A fixed array in the head, so inside the first locked region.
   // Nested groups (computed once by arr_gruppen_rechnen() below, in the loader and in the test builder; the callback only reads them). Fixed arrays in the head.
   int8_t gruppe_ausgang[ARR_GRUPPEN];   // output of group g+1: 0 = master, 1..ARR_GRUPPEN = the parent group
-  // DJ view places (decision 5): the live container. `live` is the head flag (written only by a live project); gruppe_dj[g] = 1..6: the group g+1 (a top group, gruppe_ausgang = 0) leads into the DJ
-  // channel instead of the production master (ADR 037, ADR 038: 1 = pad/1, 2 = pad/2, 3..6 = deck/1..deck/4); 0 = no DJ output. Read by Arrangement::dj_nr(). A snapshot without DJ outputs has all zeros: the old behaviour bit for bit.
+  // DJ view places (decision 5): the live container. `live` is the head flag (written only by a live project); gruppe_dj[g] = 1..4: the group g+1 (a top group, gruppe_ausgang = 0) leads into the DJ
+  // output instead of the production master (ADR 037, ADR 038, K5: 1..4 = containers A..D); 0 = no DJ output. Read by Arrangement::dj_nr(). A snapshot without DJ outputs has all zeros: the old behaviour bit for bit.
   bool live = false;
+  bool send_maske = false;   // K5 (D-K3): set by the loader for a live cypherdj-arr/4 file: Arrangement::mischen() forces the send of a strip to a return with another DJ output than its top group to 0 (no row write crosses modules)
   uint8_t gruppe_dj[ARR_GRUPPEN] = {};
-  uint8_t ret_dj[ARR_RETURNS] = {};   // loop deck channel strip KZ3: the same for a return (returns[].ausgang {art: dj, nr}); 0 = the PM (as before), 1..6 = DJ channel (1 = pad/1, 2 = pad/2, 3..6 = deck/1..4); live containers only
+  uint8_t ret_dj[ARR_RETURNS] = {};   // loop deck channel strip KZ3: the same for a return (returns[].ausgang {art: dj, nr}); 0 = the PM (as before), 1..4 = DJ output (container A..D, K5); live containers only
   uint8_t gruppen_ebene[ARR_GRUPPEN];   // height: a group with no child group 0, a parent 1 + its highest child; the mixer runs the levels lowest first
   uint8_t gruppen_ordnung[ARR_GRUPPEN]; // the groups sorted by level, then index (the identity for a flat project)
   uint8_t ebenen = 1;                   // number of levels (highest level + 1)

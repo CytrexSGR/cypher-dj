@@ -36,7 +36,7 @@
     <div class="feld"><label>BAR</label><b id="takt">–</b></div>
     <div class="schlaege" id="schlaege"><i></i><i></i><i></i><i></i></div>
     <div class="feld"><label>PHRASE</label><b id="phrase">–</b></div>
-    <div class="feld tempo"><label for="bpm">BPM</label><button id="bpm-minus" title="1 BPM slower (Shift: 0.1)" aria-label="Master tempo down">−</button><input id="bpm" value="–" inputmode="decimal" autocomplete="off" spellcheck="false" title="Master tempo: type a value, Enter sets it from the next bar" aria-label="Master tempo in BPM"><button id="bpm-plus" title="1 BPM faster (Shift: 0.1)" aria-label="Master tempo up">+</button><button id="keylock" class="an" aria-pressed="true" title="Keylock for all sources (decks and loop boxes): pitch stays put at any tempo. Off: pitch follows the tempo (varispeed)" aria-label="Keylock for all sources">KEY</button></div>
+    <div class="feld tempo"><label for="bpm">BPM</label><button id="bpm-minus" title="1 BPM slower (Shift: 0.1)" aria-label="Master tempo down">−</button><input id="bpm" value="–" inputmode="decimal" autocomplete="off" spellcheck="false" title="Master tempo: type a value, Enter sets it from the next bar" aria-label="Master tempo in BPM"><button id="bpm-plus" title="1 BPM faster (Shift: 0.1)" aria-label="Master tempo up">+</button><button id="keylock" class="an" aria-pressed="true" title="Keylock for all sources (decks and loop decks): pitch stays put at any tempo. Off: pitch follows the tempo (varispeed)" aria-label="Keylock for all sources">KEY</button></div>
   </div>
   <button id="kopplung-knopf" class="kopplung-knopf" type="button" title="Pair a tablet in the home network: shows a QR code with a one-time link">PAIR TABLET</button>
   <div class="kopfmix">
@@ -107,14 +107,9 @@
 </header>
 
 <main id="pult">
-  <section class="deck" data-deck="1" style="--farbe:var(--a)"></section>
-  <section id="deck-c" class="deckflaeche" style="--farbe:var(--c)">
+  <section class="deck" data-deck="1" data-platz-body="track" style="--farbe:var(--a)"></section>
+  <section id="deck-c" class="deckflaeche" data-platz-body="strudel" style="--farbe:var(--c)">
     <div class="deckkopf"><span class="buchstabe">C</span><span class="decktitel">STRUDEL</span>
-      <div class="rollen" role="tablist" aria-label="Strudel instance">
-        <button role="tab" data-rolle="1" class="an" aria-selected="true" style="--farbe:var(--c)">DRUMS</button>
-        <button role="tab" data-rolle="2" aria-selected="false" style="--farbe:var(--c2)">BASS</button>
-        <button role="tab" data-rolle="3" aria-selected="false" style="--farbe:var(--c3)">MELODY</button>
-      </div>
       <div class="recreihe">
         <div class="reclaenge" role="radiogroup" aria-label="Recording length in bars">
           <button data-recbeats="1">¼</button><button data-recbeats="2">½</button><button data-recbeats="4" class="an">1</button>
@@ -128,60 +123,11 @@
         <span class="recdeck">LOOP 2 <button data-recziel="2:1">1</button><button data-recziel="2:2">2</button><button data-recziel="2:3">3</button><button data-recziel="2:4">4</button></span>
       </div>
     </div>
-    <div class="instanzen">
-      <div class="instanz an" data-strom="1" style="--farbe:var(--c)">
-        <div class="instanzname">DRUMS</div>
-        <textarea id="muster-feld" class="muster-feld" spellcheck="false" autocomplete="off" placeholder='s("bd*4, hh*8")'
-          aria-label="Drums pattern (Ctrl+Enter plays from the next bar)"></textarea>
-        <div class="musterzeile">
-          <button id="muster-auto" class="muster-auto an" aria-pressed="true" title="AUTO on: Cypher plays on its own. Off: the last pattern keeps playing until you send one.">AUTO</button>
-          <span id="muster-stand" class="muster-stand">–</span>
-          <span id="muster-fehler" class="muster-fehler" role="status"></span>
-          <button id="muster-uebernehmen" class="muster-uebernehmen" hidden>take over</button>
-          <button id="muster-senden" class="muster-senden" title="Play from the next bar (Ctrl+Enter)">PLAY ⏎</button>
-          <button id="muster-stopp" class="muster-stopp" title="Stop from the next bar, your text stays (Ctrl+Backspace)">STOP</button>
-          <button id="muster-zurueck" class="muster-zurueck" title="Back to what is playing (Ctrl+.)">REVERT</button>
-          <button class="muster-sichern" title="Save the pattern that is playing now (not the text in the box) to the library">SAVE</button><input class="muster-name" placeholder="name" size="12" maxlength="48" aria-label="Pattern name" hidden>
-        </div>
-        <div class="spurbaender" aria-label="Automation lanes"></div>
-      </div>
-      <div class="instanz" data-strom="2" style="--farbe:var(--c2)">
-        <div class="instanzname">BASS</div>
-        <textarea class="muster-feld" spellcheck="false" autocomplete="off" placeholder='s("bat_synth*4")'
-          aria-label="Bass pattern (Ctrl+Enter plays from the next bar)"></textarea>
-        <div class="musterzeile">
-          <button class="muster-auto an" aria-pressed="true" title="AUTO on: Cypher plays on its own. Off: the last pattern keeps playing until you send one.">AUTO</button>
-          <span class="muster-stand">–</span>
-          <span class="muster-fehler" role="status"></span>
-          <button class="muster-uebernehmen" hidden>take over</button>
-          <button class="muster-senden" title="Play from the next bar (Ctrl+Enter)">PLAY ⏎</button>
-          <button class="muster-stopp" title="Stop from the next bar, your text stays (Ctrl+Backspace)">STOP</button>
-          <button class="muster-zurueck" title="Back to what is playing (Ctrl+.)">REVERT</button>
-          <button class="muster-sichern" title="Save the pattern that is playing now (not the text in the box) to the library">SAVE</button><input class="muster-name" placeholder="name" size="12" maxlength="48" aria-label="Pattern name" hidden>
-        </div>
-        <div class="spurbaender" aria-label="Automation lanes"></div>
-      </div>
-      <div class="instanz" data-strom="3" style="--farbe:var(--c3)">
-        <div class="instanzname">MELODY</div>
-        <textarea class="muster-feld" spellcheck="false" autocomplete="off" placeholder='s("bat_stab*2")'
-          aria-label="Melody pattern (Ctrl+Enter plays from the next bar)"></textarea>
-        <div class="musterzeile">
-          <button class="muster-auto an" aria-pressed="true" title="AUTO on: Cypher plays on its own. Off: the last pattern keeps playing until you send one.">AUTO</button>
-          <span class="muster-stand">–</span>
-          <span class="muster-fehler" role="status"></span>
-          <button class="muster-uebernehmen" hidden>take over</button>
-          <button class="muster-senden" title="Play from the next bar (Ctrl+Enter)">PLAY ⏎</button>
-          <button class="muster-stopp" title="Stop from the next bar, your text stays (Ctrl+Backspace)">STOP</button>
-          <button class="muster-zurueck" title="Back to what is playing (Ctrl+.)">REVERT</button>
-          <button class="muster-sichern" title="Save the pattern that is playing now (not the text in the box) to the library">SAVE</button><input class="muster-name" placeholder="name" size="12" maxlength="48" aria-label="Pattern name" hidden>
-        </div>
-        <div class="spurbaender" aria-label="Automation lanes"></div>
-      </div>
-    </div>
+    <div class="instanzen" id="strudel-zeilen"></div>
   </section>
   <section id="mischer" class="mix-oben">
-    <div class="zug" data-deck="1" style="--farbe:var(--a)"><div class="zugname">A</div></div>
-    <div class="mitte">
+    <div class="zug" data-deck="1" data-kanalzug="deck/1" data-mix-zeile="1" data-mix-spalte="2" style="--farbe:var(--a)"><div class="zugname">A</div></div>
+    <div class="mitte" data-mix-zeile="1" data-mix-spalte="3">
       <label>MASTER</label>
       <div class="summe">
         <div class="knopf regler" data-griff="pegel" data-pfad="master/pegel" role="slider" tabindex="0" aria-label="Master level"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div>
@@ -200,7 +146,7 @@
         <button data-fx3-alle title="FX3 (Remix) on everything: puts every channel on 3, or takes them all off">3</button>
       </div>
     </div>
-    <div class="zug" data-deck="2" style="--farbe:var(--b)"><div class="zugname">B</div></div>
+    <div class="zug" data-deck="2" data-kanalzug="deck/2" data-mix-zeile="1" data-mix-spalte="4" style="--farbe:var(--b)"><div class="zugname">B</div></div>
     <div class="xfader">
       <span class="seite a">A</span>
       <div class="regler waagrecht" data-pfad="xfader" data-griff="xfader" aria-label="Crossfader" role="slider" tabindex="0">
@@ -211,22 +157,17 @@
     </div>
   </section>
   <section id="mischer-unten" class="mix-unten">
-    <div class="zugplatz">
-      <div class="zug an" data-kanalzug="erz/1" style="--farbe:var(--c)"><div class="zugname" title="Strudel DRUMS (switch with the DRUMS/BASS/MELODY tabs of the Strudel place)">DRUMS</div></div>
-      <div class="zug" data-kanalzug="erz/2" style="--farbe:var(--c2)"><div class="zugname" title="Strudel BASS">BASS</div></div>
-      <div class="zug" data-kanalzug="erz/3" style="--farbe:var(--c3)"><div class="zugname" title="Strudel MELODY">MELODY</div></div>
-    </div>
-    <div class="fxmitte" id="fxmitte" aria-label="Beat FX, COLOR and Remix (DJ view)"></div>
-    <div class="zug" data-boxzug="1" style="--farbe:var(--l1)"><div class="zugname">L1</div></div>
-    <div class="zug" data-boxzug="2" style="--farbe:var(--l2)"><div class="zugname">L2</div></div>
+    <div class="fxmitte" id="fxmitte" data-mix-zeile="2" data-mix-spalte="3" aria-label="Beat FX, COLOR and Remix (DJ view)"></div>
+    <div class="zug" data-kanalzug="pad/1" data-mix-zeile="2" data-mix-spalte="2" style="--farbe:var(--l1)"><div class="zugname">C</div></div>
+    <div class="zug" data-kanalzug="pad/2" data-mix-zeile="2" data-mix-spalte="4" style="--farbe:var(--l2)"><div class="zugname">D</div></div>
   </section>
-  <section class="deck" data-deck="2" style="--farbe:var(--b)"></section>
-  <section class="deck" data-deck="3" style="--farbe:var(--d3)" hidden></section>
-  <section class="deck" data-deck="4" style="--farbe:var(--d3)" hidden></section>
-  <section id="platz-loops" class="deckflaeche" style="--farbe:var(--l1)" aria-label="Loops">
+  <section class="deck" data-deck="2" data-platz-body="track" style="--farbe:var(--b)"></section>
+  <section class="deck" data-deck="3" data-platz-body="track" style="--farbe:var(--d3)" hidden></section>
+  <section class="deck" data-deck="4" data-platz-body="track" style="--farbe:var(--d3)" hidden></section>
+  <section id="platz-loops" class="deckflaeche" data-platz-body="loops" style="--farbe:var(--l1)" aria-label="Loops">
     <div class="loopdeck" data-deck="1"></div>
   </section>
-  <section id="platz-loops2" class="deckflaeche" style="--farbe:var(--l2)" aria-label="Loops 2">
+  <section id="platz-loops2" class="deckflaeche" data-platz-body="loops" style="--farbe:var(--l2)" aria-label="Loops 2">
     <div class="loopdeck" data-deck="2"></div>
   </section>
   <section id="platz-remix" class="deckflaeche" style="--farbe:var(--l2)" aria-label="Remix" hidden>
@@ -244,7 +185,7 @@
     <span class="platztext" data-platz-text></span>
     <span class="platzhinweis" data-platz-hinweis role="status"></span>
     <div class="platzwahl" role="group" aria-label="Type of place 1">
-      <button data-platz-typ="track" title="Track: deck 1">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: loop deck 1 (strip L1)">LOOPS</button><button data-platz-typ="loops2" title="Loops 2: loop deck 2 (strip L2)">LOOPS 2</button><button data-platz-typ="seq" title="SEQ: patterns of notes, values and curves, plays on the strip of this place">SEQ</button>
+      <button data-platz-typ="leer" title="Empty: nothing in this container">EMPTY</button><button data-platz-typ="track" title="Track: deck 1">TRACK</button><button data-platz-typ="strudel" title="Strudel: the generators of the Strudel module">STRUDEL</button><button data-platz-typ="seq" title="SEQ: patterns of notes, values and curves, plays on the strip of this place">SEQ</button><button data-platz-typ="loops" title="Loops: a loop deck">LOOPS</button><button data-platz-typ="stems" title="Stems: the separated stems of a module">STEMS</button>
     </div>
   </div>
   <div class="platzkopf" data-platz-kopf="2">
@@ -252,7 +193,7 @@
     <span class="platztext" data-platz-text></span>
     <span class="platzhinweis" data-platz-hinweis role="status"></span>
     <div class="platzwahl" role="group" aria-label="Type of place 2">
-      <button data-platz-typ="track" title="Track: deck 2">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: loop deck 1 (strip L1)">LOOPS</button><button data-platz-typ="loops2" title="Loops 2: loop deck 2 (strip L2)">LOOPS 2</button><button data-platz-typ="seq" title="SEQ: patterns of notes, values and curves, plays on the strip of this place">SEQ</button>
+      <button data-platz-typ="leer" title="Empty: nothing in this container">EMPTY</button><button data-platz-typ="track" title="Track: deck 2">TRACK</button><button data-platz-typ="strudel" title="Strudel: the generators of the Strudel module">STRUDEL</button><button data-platz-typ="seq" title="SEQ: patterns of notes, values and curves, plays on the strip of this place">SEQ</button><button data-platz-typ="loops" title="Loops: a loop deck">LOOPS</button><button data-platz-typ="stems" title="Stems: the separated stems of a module">STEMS</button>
     </div>
   </div>
   <div class="platzkopf" data-platz-kopf="3">
@@ -260,7 +201,7 @@
     <span class="platztext" data-platz-text></span>
     <span class="platzhinweis" data-platz-hinweis role="status"></span>
     <div class="platzwahl" role="group" aria-label="Type of place 3">
-      <button data-platz-typ="track" title="Track: deck 3">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: loop deck 1 (strip L1)">LOOPS</button><button data-platz-typ="loops2" title="Loops 2: loop deck 2 (strip L2)">LOOPS 2</button><button data-platz-typ="seq" title="SEQ: patterns of notes, values and curves, plays on the strip of this place">SEQ</button>
+      <button data-platz-typ="leer" title="Empty: nothing in this container">EMPTY</button><button data-platz-typ="track" title="Track: deck 3">TRACK</button><button data-platz-typ="strudel" title="Strudel: the generators of the Strudel module">STRUDEL</button><button data-platz-typ="seq" title="SEQ: patterns of notes, values and curves, plays on the strip of this place">SEQ</button><button data-platz-typ="loops" title="Loops: a loop deck">LOOPS</button><button data-platz-typ="stems" title="Stems: the separated stems of a module">STEMS</button>
     </div>
   </div>
   <div class="platzkopf" data-platz-kopf="4">
@@ -268,7 +209,7 @@
     <span class="platztext" data-platz-text></span>
     <span class="platzhinweis" data-platz-hinweis role="status"></span>
     <div class="platzwahl" role="group" aria-label="Type of place 4">
-      <button data-platz-typ="track" title="Track: deck 4">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: loop deck 1 (strip L1)">LOOPS</button><button data-platz-typ="loops2" title="Loops 2: loop deck 2 (strip L2)">LOOPS 2</button><button data-platz-typ="seq" title="SEQ: patterns of notes, values and curves, plays on the strip of this place">SEQ</button>
+      <button data-platz-typ="leer" title="Empty: nothing in this container">EMPTY</button><button data-platz-typ="track" title="Track: deck 4">TRACK</button><button data-platz-typ="strudel" title="Strudel: the generators of the Strudel module">STRUDEL</button><button data-platz-typ="seq" title="SEQ: patterns of notes, values and curves, plays on the strip of this place">SEQ</button><button data-platz-typ="loops" title="Loops: a loop deck">LOOPS</button><button data-platz-typ="stems" title="Stems: the separated stems of a module">STEMS</button>
     </div>
   </div>
 </main>

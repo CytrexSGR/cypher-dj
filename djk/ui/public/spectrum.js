@@ -3,19 +3,20 @@
 // i = -16 .. 12, i.e. 24.8 Hz .. 16 kHz). This file holds the pure parts (parsing, bar geometry, labels, the tag rule) and the canvas view.
 // The pure parts are tested without a DOM (tests/spectrum.test.mjs); the view is executed against the DOM stand-in (tests/page_spectrum.test.mjs).
 
+import { pultMixIndexListe } from './pult.js';
+import { CONTAINER, BUSSE } from './kanaele.js';
+
 export const SPEKTRUM_BAENDER = 29;
 export const SPEKTRUM_ERSTES_I = -16;
 export const SPEKTRUM_MIN_DB = -90;      // bottom of the plot
 export const SPEKTRUM_MAX_DB = 6;        // top of the plot (a full-scale sine reads 0 dB)
 export const SPEKTRUM_FRIST_MS = 500;    // a reading older than this counts as "no reading" (25 Hz expected)
 
-// The selector values of spektrum/kanal: 0 off, 1..18 the mixer channels (index + 1), 19 the master sum (INTERFACES section 1.5, osc.json).
-export const SPEKTRUM_QUELLEN = [
-  'off', 'deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/4', 'erz/5', 'erz/6', 'erz/7', 'erz/8',
-  'pad/1', 'pad/2', 'bus/1', 'bus/2', 'bus/3', 'bus/4', 'master',
-];
-const SCHOENE_NAMEN = { 'deck/1': 'DECK 1', 'deck/2': 'DECK 2', 'deck/3': 'DECK 3', 'deck/4': 'DECK 4', 'pad/1': 'PAD 1', 'pad/2': 'PAD 2',
-  'bus/1': 'BUS 1', 'bus/2': 'BUS 2', 'bus/3': 'BUS 3', 'bus/4': 'BUS 4', master: 'MASTER', off: 'OFF' };
+// The selector values of spektrum/kanal: 0 off, then the console strips in the wire order of pult.json (D-V3): 1..4 the containers A..D,
+// 5..8 the buses, 9 the master sum (INTERFACES section 1.5, osc.json).
+export const SPEKTRUM_QUELLEN = ['off', ...pultMixIndexListe];
+const SCHOENE_NAMEN = Object.fromEntries([...CONTAINER.map((c) => [c.pfad, `CONTAINER ${c.id}`]),
+  ...BUSSE.map((b) => [b, b.toUpperCase().replace('/', ' ')]), ['master', 'MASTER'], ['off', 'OFF']]);
 export function quellenText(wert) {
   const n = SPEKTRUM_QUELLEN[wert];
   if (n === undefined) return '';
@@ -163,7 +164,7 @@ export class SpektrumAnsicht {
 
 // ---- Device page (Decision 7 of the surfaces plan): the spectrum source is one global core row, so the page only borrows it. ----
 export const SPEKTRUM_VORHER = 'djk-spektrum-vorher';   // sessionStorage: the value to put back (survives a reload of the page while it is open)
-/** The selector value of a channel name ('erz/5' -> 9); 0 (off) for a name that is no source. */
+/** The selector value of a channel name ('pad/1' -> 3); 0 (off) for a name that is no source. */
 export function spektrumIndex(kanal) { const i = SPEKTRUM_QUELLEN.indexOf(kanal); return i > 0 ? i : 0; }
 
 /** Borrows the row spektrum/kanal while the device page is open. speicher: sessionStorage (may throw or be absent), kanaele: the instrument channel names,

@@ -539,7 +539,7 @@ export function bauePresetPanel(wurzel, host) {
 // ---- A8: the kern mix tools as a second kind of device (GET /presets/geraete: herkunft 'kern', kanalArten, pfad per parameter) ----------
 // Applying one = one POST /regler per field on the chosen channel, like the compressor above. Switches are stored as true/false and
 // sent as 1/0. A channel kind the device does not have (Gate on a bus, Multiband on a source) is refused, never sent.
-export const kanalArtVon = (kanal) => (/^(deck\/[1-4]|erz\/[1-7]|pad\/[12])$/.test(kanal) ? 'quelle' : /^bus\/[1-4]$/.test(kanal) ? 'bus' : null);
+export const kanalArtVon = (kanal) => (/^(deck\/[1-4]|erz\/([1-7]|9|10)|pad\/[12])$/.test(kanal) ? 'quelle' : /^bus\/[1-4]$/.test(kanal) ? 'bus' : null);
 const ARTEN_TEXT = { quelle: 'source channels (deck, erz, pad)', bus: 'buses' };
 export const istKernGeraet = (g) => g?.herkunft === 'kern';
 export function kernGeraetAnfragen(g, werte, kanal) {

@@ -31,11 +31,12 @@ import { TRANSPORT } from './commands_transport.ts';
 import { SZENEN } from './commands_szenen.ts';
 import { TRACKER } from './commands_tracker.ts';
 import { LOOPDECK } from './commands_loopdeck.ts';
+import { CONTAINER } from './commands_container.ts';
 export { BefehlFehler, bereinigeGliedZiele, DUCK_DURCH_KICK_WERTE, laneStart, COMP_FADE_S, teileClipsAn, compFade } from './commands_helpers.ts';
 export type { ReglerAenderung, StiftAenderung, BefehlErgebnis, LaneHinweis, Befehl, PresetInhalt, MusterMeldung, PluginEintrag } from './commands_helpers.ts';
 export { PRO_BEFEHL } from './commands_helpers.ts';
 
-mergeTabellen(PRO_BEFEHL, SPUR, CLIP, GRUPPE, INSERT, AUTO, TRANSPORT, SZENEN, TRACKER, LOOPDECK);
+mergeTabellen(PRO_BEFEHL, SPUR, CLIP, GRUPPE, INSERT, AUTO, TRANSPORT, SZENEN, TRACKER, LOOPDECK, CONTAINER);
 export const BEFEHL_NAMEN: readonly string[] = Object.keys(PRO_BEFEHL);
 
 // Ein eingefrorener Wirt-Spur-Klang gilt nur zu genau den Noten, dem Gerät und dem Tempo, mit denen er entstanden ist
@@ -244,7 +245,7 @@ function istLeicht(projekt: Projekt, b: unknown): boolean {
     // slice 4: knob and bypass of a stage are live only (the key `sc` may add or remove a field, and `key` is structure, so both take the general path)
     case 'insert_param_setzen': return b.param !== 'sc' && b.param !== 'key';
     case 'insert_an': return true;
-    // production plan task 9: a knob of a Baukasten track, live. Only the first BK_LIVE_SLOTS bk tracks have a core row; the 9th to 16th take the general path
+    // production plan task 9: a knob of a Baukasten track, live. Every bk track (BK_LIVE_SLOTS = MAX_BK_SPUREN) has a core row; a slot beyond it would take the general path
     // (playback rebuild, no spur/ row). An unknown or non-bk id keeps this route: the handler raises the same error as before.
     case 'geraet_param_setzen': return typeof b.spur_id !== 'string' || bkSlot(projekt, b.spur_id) === null || bkLive(projekt, b.spur_id);
     // Kraken patch field: a pin is live only when the track is a bk track that already HAS a pin list and no freeze (the first pin takes the general

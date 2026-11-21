@@ -5,13 +5,12 @@
 import { execFile } from 'node:child_process';
 import type { BereichKontext } from '../../http/router.ts';
 import { aendereStand } from '../../project/state.ts';
-import { baueNeuePfade, liveSlots, type NeuStem, type NeueNote } from '../../project/live.ts';
+import { baueNeuePfade, modulAmPlatz, type Slot, type NeuStem, type NeueNote } from '../../project/live.ts';
 import { fuehreListeAus } from '../../project/commands.ts';
 import { blendPfad, type Projekt } from '../../project/model.ts';
 import { pegelVersatz, type PegelMesser } from './level.ts';
 import type { ProjZugang } from '../proj/area.ts';
 
-type Slot = 'A' | 'B';
 export type MidiLauf = (art: NeuStem, wav: string, beats: number) => Promise<NeueNote[]>;
 export interface MidiOptionen {
   laufe?: MidiLauf;                       // the extractor; absent = the real runner (python + cwd below)
@@ -74,7 +73,7 @@ export class ModulMidi {
       const bis = Date.now() + (this.o.zeitlimitDekodierenMs ?? 60_000);
       for (;;) {
         const o = this.zugang.offen();
-        if (!o || liveSlots(o.projekt)[slot] !== gruppeId) return aus;
+        if (!o || modulAmPlatz(o.projekt, slot) !== gruppeId) return aus;
         const offen = o.projekt.spuren.some((s) => s.ausgang && o.projekt.gruppen.some((k) => k.id === s.ausgang!.id && k.ausgang?.id === gruppeId)
           && s.clips.some((c) => c.art === 'audio' && c.dekodiert !== 'fertig'));
         if (!offen) break;
@@ -104,7 +103,7 @@ export class ModulMidi {
   async nachStems(slot: Slot, gruppeId: string, quelle: 'andreas' | 'cypher'): Promise<void> {
     const gleich = (): { o: NonNullable<ReturnType<ProjZugang['offen']>>; p: Projekt } | null => {
       const o = this.zugang.offen();
-      return o && o.projekt.live && liveSlots(o.projekt)[slot] === gruppeId ? { o, p: o.projekt } : null;
+      return o && o.projekt.live && modulAmPlatz(o.projekt, slot) === gruppeId ? { o, p: o.projekt } : null;
     };
     try {
       const g0 = gleich();

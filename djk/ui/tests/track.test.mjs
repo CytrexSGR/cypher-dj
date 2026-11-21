@@ -27,7 +27,7 @@ test('pruefeSpur: Formfehler mit Ort', () => {
   assert.match(pruefeSpur({ name: 'X', fahrten: [] }, FAHRBAR).fehler, /^name/);
   assert.match(pruefeSpur({ name: 'a', fahrten: [] }, FAHRBAR).fehler, /^fahrten/);
   assert.match(ok([{ ziel: 'erz/2/filter', ab_takt: 0, nach: 0 }]).fehler, /fahrten\[0\]\.ab_takt/);
-  assert.match(ok([{ ziel: 'erz/9/filter', ab_takt: 1, nach: 0 }]).fehler, /fahrten\[0\]\.ziel/);
+  assert.match(ok([{ ziel: 'erz/17/filter', ab_takt: 1, nach: 0 }]).fehler, /fahrten\[0\]\.ziel/);
   assert.match(ok([{ ziel: 'wirt:bass/a_filter1_type', ab_takt: 1, nach: 2 }]).fehler, /not a continuous Surge parameter/);
   assert.match(ok([{ ziel: 'erz/2/filter', ab_takt: 1, takte: 65, nach: 0 }]).fehler, /takte/);
   assert.match(ok([{ ziel: 'erz/2/filter', ab_takt: 1 }]).fehler, /nach/);

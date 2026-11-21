@@ -5,11 +5,11 @@ import { neuesProjekt, pruefeProjekt } from '../project/model.ts';
 import { fuehreListeAus, BefehlFehler } from '../project/commands.ts';
 import { uebersetze } from '../project/playback.ts';
 import { wende } from '../project/patch.ts';
-import { baueModul, liveSlots } from '../project/live.ts';
+import { baueModul, modulAmPlatz } from '../project/live.ts';
 import { seqGruppe, seqFolgen, seqSichtPruefung } from '../project/seq.ts';
 import { ohneAbgeleitetes } from './support/project.mjs';
 
-const live = () => { const p = neuesProjekt('x'); p.live = true; return p; };
+const live = () => { const p = neuesProjekt('x'); p.live = true; p.plaetze = [{ typ: 'leer' }, { typ: 'leer' }, { typ: 'leer' }, { typ: 'leer' }]; return p; };
 const lauf = (p, ...b) => fuehreListeAus(p, b).projekt;
 const ergebnis = (p, ...b) => fuehreListeAus(p, b);
 const fehler = (p, ...b) => { try { fuehreListeAus(p, b); } catch (e) { assert.ok(e instanceof BefehlFehler, String(e)); return e; } return assert.fail(`${b.map((x) => x.befehl)} was not refused`); };
@@ -26,29 +26,36 @@ const herkunft = () => ({ quelle_sha256: 'c'.repeat(64), titel: 'Song', kuenstle
 const folge = (p, extra = {}, gruppe = p.gruppen[0]) => lauf(p, { befehl: 'seq_folge_neu', gruppe_id: gruppe.id, name: 'Bass', geraet: bk(), ...extra });
 const sicht = (...zeilen) => ({ schema: 1, zeilen });
 
-test('seq_anlegen on a live project: an empty top group SEQ <platz> at 0 dB, marker {schema: 2, platz}, no tracks', () => {
+test('seq_anlegen on a live project: an empty top group SEQ <platz> at 0 dB, marker {schema: 2}, the place holds it, no tracks', () => {
   const p = mitSeq(2);
   valide(p);
   assert.equal(p.gruppen.length, 1);
   assert.equal(p.spuren.length, 0);
   const g = p.gruppen[0];
-  assert.deepEqual([g.name, g.fader_db, g.ausgang, g.seq], ['SEQ 2', 0, undefined, { schema: 2, platz: 2 }]);
+  assert.deepEqual([g.name, g.fader_db, g.ausgang, g.seq], ['SEQ 2', 0, undefined, { schema: 2 }]);
+  assert.deepEqual(p.plaetze[1], { typ: 'seq', gruppe: g.id });
   assert.equal(seqGruppe(p, 2)?.id, g.id);
   assert.deepEqual(seqFolgen(p, g), []);
 });
 
-test('the playback of an empty deck group on place N plays into the strip of deck/N: dj nr N + 2', () => {
+test('the playback of an empty deck group on place N plays into the container N: dj nr N', () => {
   for (const platz of [1, 2, 3, 4]) {
     const w = uebersetze(mitSeq(platz), opt());
     assert.equal(w.live, true);
-    assert.deepEqual(w.gruppen.map((x) => x.ausgang), [{ art: 'dj', nr: platz + 2 }], String(platz));
+    assert.deepEqual(w.gruppen.map((x) => x.ausgang), [{ art: 'dj', nr: platz }], String(platz));
   }
 });
 
 test('seq_anlegen takes the place from its argument; other places stay free', () => {
   const p = lauf(mitSeq(2), { befehl: 'seq_anlegen', platz: 3 });
   valide(p);
-  assert.deepEqual(p.gruppen.map((g) => [g.name, g.seq.platz]), [['SEQ 2', 2], ['SEQ 3', 3]]);
+  assert.deepEqual(p.gruppen.map((g) => g.name), ['SEQ 2', 'SEQ 3']);
+  assert.deepEqual(p.plaetze.map((x) => x.typ), ['leer', 'seq', 'seq', 'leer']);
+});
+
+test('seq_anlegen on a live project without places is refused kein_liveprojekt, not a TypeError', () => {
+  const p = neuesProjekt('x'); p.live = true;
+  assert.equal(fehler(p, { befehl: 'seq_anlegen', platz: 2 }).grund, 'kein_liveprojekt');
 });
 
 test('seq_anlegen refusals: seq_belegt, kein_liveprojekt, bad arguments, the group limit; the project stays as it was', () => {
@@ -111,7 +118,7 @@ test('the playback holds the notes of a pattern clip with loop_beats 4 rolled ou
   assert.equal(n.length, 32, 'two notes in each of the 16 copies of 4 beats');
   assert.equal(Math.max(...n.map((x) => x.beat)), 62);
   assert.deepEqual(n.slice(0, 3).map((x) => [x.beat, x.ton]), [[0, 36], [2, 38], [4, 36]]);
-  assert.deepEqual(w.gruppen.map((x) => x.ausgang), [{ art: 'dj', nr: 4 }]);
+  assert.deepEqual(w.gruppen.map((x) => x.ausgang), [{ art: 'dj', nr: 2 }]);
 });
 
 test('seq_folge_neu: the 17th Baukasten track is refused with the model text, nothing changes; a kit track still fits', () => {
@@ -162,14 +169,14 @@ test('seq_leeren removes the group and every track that plays into it, a track o
   assert.equal(ohneAbgeleitetes(wende(r.projekt, r.zurueck)), ohneAbgeleitetes(p), 'one patch back');
 });
 
-test('seq_leeren leaves a loop module in slot A untouched; the place can be built again afterwards', () => {
+test('seq_leeren leaves a loop module in place 1 untouched; the place can be built again afterwards', () => {
   const basis = baueModul(live(), 'A', LOOP, {}, herkunft());
-  const slotA = liveSlots(basis).A;
+  const slotA = modulAmPlatz(basis, 'A');
   let p = lauf(basis, { befehl: 'seq_anlegen', platz: 2 });
   p = folge(p, { name: 'A' }, seqGruppe(p, 2));
   const q = lauf(p, { befehl: 'seq_leeren', gruppe_id: seqGruppe(p, 2).id });
   valide(q);
-  assert.equal(liveSlots(q).A, slotA);
+  assert.equal(modulAmPlatz(q, 'A'), slotA);
   assert.deepEqual(q.gruppen, basis.gruppen);
   assert.deepEqual(q.spuren, basis.spuren);
   valide(lauf(q, { befehl: 'seq_anlegen', platz: 2 }));

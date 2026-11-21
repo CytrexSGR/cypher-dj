@@ -10,35 +10,31 @@ import { stapel } from './support/media_library.mjs';
 import { bis, ruf, CYPHER } from './support/proj_stack.mjs';
 import { bauFlach } from './support/flach_golden.mjs';
 import { pruefeProjekt, neuesProjekt, kanonisch } from '../project/model.ts';
-import { liveSlots } from '../project/live.ts';
+import { modulAmPlatz } from '../project/live.ts';
 import { GRUND_TEXT } from '../http/reasons.ts';
 
 const erz4 = (k) => k.teile(/^erz\/4\//).map((x) => x.felder.pfad);
 const arr = (nr, status) => ({ ...arrNr(nr), status });
 const HASH = 'c'.repeat(64);
 const modul = (slot, extra = {}) => ({ quelle_sha256: HASH, titel: 'T', kuenstler: 'K', fassung: 'f1', basis_bpm: 124, von_beat: 32, laenge_beats: 16,
-  bpm: 124, tonart: '8A', datum: '2026-11-12', slot, ...extra });
+  bpm: 124, tonart: '8A', datum: '2026-11-12', ...extra });
 const gruppe = (id, nr, extra = {}) => ({ id, nr, name: id, farbe: '#aabbcc', fader_db: 0, pan: 0, mute: false, solo: false, gefaltet: false, ...extra });
 const mitGruppen = (gruppen) => { const p = neuesProjekt('x'); p.gruppen = gruppen; return p; };
 
-test('live container: opening and creating it sends no erz/4 row; a flat project still sends erz4Soll (compared with and without the flag)', async (t) => {
+test('live container: no open or create sends an erz/4 row (production is a service), flat or live', async (t) => {
   const flach = sitzung(t, { arrFristMs: 30 });
   await flach.s.neu('Flat', 'andreas');
-  const mit = erz4(flach.k);
-  assert.ok(mit.length >= 24, `the flat project sends the erz/4 rows (${mit.length})`);
-  assert.ok(mit.includes('erz/4/fader') && mit.includes('erz/4/ziel'));
+  assert.deepEqual(erz4(flach.k), [], 'the flat project sends no erz/4 row');
+  assert.ok(flach.k.teile(/^spur\//).length > 0, 'negative control: the mixer rows are sent');
   for (const quelle of ['andreas', 'cypher']) {
     const z = sitzung(t, { arrFristMs: 30 });
     const r = await z.s.liveOeffnen(quelle);
     assert.equal(r.code, 200, JSON.stringify(r.j));
     assert.deepEqual(erz4(z.k), [], `create (${quelle}): no erz/4 row`);
-    assert.ok(z.k.teile(/^spur\//).length > 0, 'the other mixer rows are still sent (the flag only spares erz/4)');
     z.k.leere();
-    await z.s.neu('Flat', 'andreas');   // leave the live container (not playing), then come back
+    await z.s.neu('Flat', 'andreas');
     const b = await z.s.liveOeffnen(quelle);
     assert.equal(b.code, 200, JSON.stringify(b.j));
-    const zeilen = erz4(z.k);
-    assert.equal(zeilen.length, mit.length, 'the flat project in between sent erz/4 again');   // sanity: the rows of the flat open are in the log
     z.k.leere();
     await z.s.oeffnen('live', quelle);
     assert.deepEqual(erz4(z.k), [], `open (${quelle}): no erz/4 row`);
@@ -49,7 +45,7 @@ test('live container: created with live true, loop region on 0..64, never writte
   const z = sitzung(t, { arrFristMs: 30 });
   const r = await z.s.liveOeffnen('andreas');
   assert.equal(r.j.slug, 'live');
-  assert.deepEqual(r.j.slots, { A: null, B: null });
+  assert.deepEqual(r.j.slots, { A: null, B: null, C: null, D: null });
   const datei = JSON.parse(fs.readFileSync(path.join(z.wurzel, 'live', 'project.json'), 'utf8'));
   assert.equal(datei.live, true);
   assert.deepEqual(datei.loop, { an: true, von_beat: 0, bis_beat: 64 });
@@ -66,7 +62,7 @@ test('live container: opening it again while it is open does not reopen it (idem
   z.k.leere();
   const r = await z.s.liveOeffnen('cypher');
   assert.equal(r.code, 200);
-  assert.deepEqual(r.j.slots, { A: null, B: null });
+  assert.deepEqual(r.j.slots, { A: null, B: null, C: null, D: null });
   assert.equal(z.k.gesendet.length, 0, 'nothing sent');
 });
 
@@ -124,7 +120,7 @@ test('route: POST /live/oeffnen answers slug and slots; Cypher\'s open of anothe
   const { o, url } = st;
   const r = await ruf(url, 'POST', '/live/oeffnen', {}, CYPHER);
   assert.equal(r.code, 200, JSON.stringify(r.j));
-  assert.deepEqual(r.j, { slug: 'live', slots: { A: null, B: null } });
+  assert.deepEqual(r.j, { slug: 'live', slots: { A: null, B: null, C: null, D: null } });
   const zwei = (await ruf(url, 'POST', '/proj/neu', { name: 'Zwei' }, { ...CYPHER })).j;
   assert.equal(zwei.fehler, undefined);   // no deck, no transport: free
   assert.equal((await ruf(url, 'POST', '/live/oeffnen', {})).code, 200);
@@ -146,19 +142,18 @@ test('route: POST /live/oeffnen answers slug and slots; Cypher\'s open of anothe
 
 test('schema: Projekt.live and Gruppe.modul/blend are accepted when well formed, refused otherwise; absent fields stay absent', () => {
   const live = neuesProjekt('Live'); live.live = true;
+  assert.ok('fehler' in pruefeProjekt(live), 'a live project without its four places is refused');
+  live.plaetze = [{ typ: 'track' }, { typ: 'track' }, { typ: 'track' }, { typ: 'track' }];
   assert.ok('projekt' in pruefeProjekt(live));
   assert.equal('live' in pruefeProjekt(neuesProjekt('x')).projekt, false);
   for (const v of [false, 1, 'true', null]) assert.ok('fehler' in pruefeProjekt({ ...neuesProjekt('x'), live: v }), `live ${JSON.stringify(v)}`);
   const ok = mitGruppen([gruppe('g1', 1, { modul: modul('A'), blend: 0.5 }), gruppe('g2', 2, { modul: modul('B', { set: 'Friday' }) }), gruppe('g3', 3)]);
   const g = pruefeProjekt(ok).projekt.gruppen;
   assert.deepEqual(g[0].modul, modul('A')); assert.equal(g[0].blend, 0.5); assert.equal('modul' in g[2], false); assert.equal('blend' in g[2], false);
-  for (const [name, extra] of [['slot C', { modul: modul('C') }], ['unknown module field', { modul: modul('A', { x: 1 }) }], ['bad sha', { modul: modul('A', { quelle_sha256: 'zz' }) }],
+  for (const [name, extra] of [['slot field (removed, the place is platz_setzen)', { modul: modul('A', { slot: 'C' }) }], ['unknown module field', { modul: modul('A', { x: 1 }) }], ['bad sha', { modul: modul('A', { quelle_sha256: 'zz' }) }],
     ['laenge 0', { modul: modul('A', { laenge_beats: 0 }) }], ['blend 2', { blend: 2 }], ['blend string', { blend: '1' }], ['set empty', { modul: modul('A', { set: '' }) }]]) {
     assert.ok('fehler' in pruefeProjekt(mitGruppen([gruppe('g1', 1, extra)])), name);
   }
-  // task 10: a module in a production project has no slot (its origin stays); the live container only counts groups with a slot
-  const ohneSlot = mitGruppen([gruppe('g1', 1, { modul: (({ slot, ...r }) => r)(modul('A')) })]);
-  assert.equal('slot' in pruefeProjekt(ohneSlot).projekt.gruppen[0].modul, false, 'slot missing is accepted and stays absent');
   assert.equal(kanonisch(pruefeProjekt(neuesProjekt('x')).projekt), kanonisch(neuesProjekt('x')), 'a project without the fields round-trips');
 });
 
@@ -167,12 +162,14 @@ test('flat project without live: byte-identical to the golden', () => {
   assert.equal(bauFlach().datei, golden.datei);
 });
 
-test('liveSlots reads modul.slot of top-level groups, not the name; nested and slotless groups do not count', () => {
-  assert.deepEqual(liveSlots(neuesProjekt('x')), {});
-  const p = mitGruppen([gruppe('g1', 1, { name: 'B', modul: modul('A') }), gruppe('g2', 2, { name: 'A', modul: modul('B') }),
-    gruppe('g3', 3, { name: 'A' }), gruppe('g4', 4, { modul: modul('A'), ausgang: { art: 'gruppe', id: 'g1' } })]);
-  assert.deepEqual(liveSlots(p), { A: 'g1', B: 'g2' });
-  assert.deepEqual(liveSlots(mitGruppen([gruppe('g1', 1, { modul: modul('B') })])), { B: 'g1' });
+test('modulAmPlatz reads plaetze, not group names or numbers; a parked or nested module group does not count', () => {
+  assert.equal(modulAmPlatz(neuesProjekt('x'), 'A'), undefined);
+  const p = mitGruppen([gruppe('g1', 1, { name: 'B', modul: modul() }), gruppe('g2', 2, { name: 'A', modul: modul() }), gruppe('g3', 3, { name: 'A' })]);
+  p.live = true;
+  p.plaetze = [{ typ: 'track' }, { typ: 'stems', gruppe: 'g2' }, { typ: 'track' }, { typ: 'stems', gruppe: 'g1' }];
+  assert.deepEqual(['A', 'B', 'C', 'D'].map((s) => modulAmPlatz(p, s)), [undefined, 'g2', undefined, 'g1']);
+  p.plaetze[1] = { typ: 'track' };                          // g2 is parked now
+  assert.equal(modulAmPlatz(p, 'B'), undefined);
 });
 
 test('live_laeuft has an English text', () => {

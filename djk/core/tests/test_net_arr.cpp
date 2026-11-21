@@ -133,14 +133,14 @@ int main() {
       PRUEF(g.warte("/zustand/arr", 200) && g.m.werte[0].i == 17 && g.m.werte[1].i == 2 && g.m.werte[2].i == 1 &&
             g.m.werte[3].d == 3.5 && g.m.werte[4].h == 90000 && g.m.werte[6].i == 0 && g.m.werte[7].f == -2.5f);
     }
-    // 7: /erz/strom auf erz/4: reserviert; erz/5 mit unbekanntem Kit: pruefung (Negativ-Kontrolle)
+    // 7: /erz/strom for stream 4: reserviert; stream 5 with an unknown kit: pruefung (Negativ-Kontrolle)
     {
       cdj::osc::Schreiber s(v::erz_strom);
-      s.h(83).s("andreas").i(5).s("kit:gibtsnicht").s("erz/4");
+      s.h(83).s("andreas").i(4).s("kit:gibtsnicht");
       netz.paket(s.daten(), s.groesse());
       PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 83 && !std::strcmp(g.s(5), "reserviert"));
       cdj::osc::Schreiber t(v::erz_strom);
-      t.h(84).s("andreas").i(5).s("kit:gibtsnicht").s("erz/5");
+      t.h(84).s("andreas").i(5).s("kit:gibtsnicht");
       netz.paket(t.daten(), t.groesse());
       PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 84 && !std::strcmp(g.s(5), "pruefung"));
     }

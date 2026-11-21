@@ -27,13 +27,14 @@ test('the Mediathek buttons and the deck export no longer depend on a Loops plac
 test('the hand is not restricted: the server verbs are not touched by the layout (no layout check before a call)', () => {
   const lad = app.slice(app.indexOf('async function ladeInDeck('), app.indexOf('async function exportiereVonDeck('));
   assert.ok(lad.length > 40, 'ladeInDeck');
-  assert.doesNotMatch(lad, /loopsPlatz|plaetzeLayout/);
+  assert.doesNotMatch(lad, /loopsPlatz|plaetzeLayout|zustand\.plaetze/);
 });
 
-test('the loop places hold only the empty deck containers: the LIVE head, the closed-container hint and the module panel left (loop deck P1)', () => {
+test('a loops place holds the deck container of its group: the LIVE head, the closed-container hint and the module panel left (loop deck P1)', () => {
   const loops = html.slice(html.indexOf('<section id="platz-loops"'), html.indexOf('<section id="platz-remix"'));
   assert.match(loops, /<section id="platz-loops"[^>]*>\s*<div class="loopdeck" data-deck="1"><\/div>\s*<\/section>/);
   assert.match(loops, /<section id="platz-loops2"[^>]*>\s*<div class="loopdeck" data-deck="2"><\/div>\s*<\/section>/);
+  assert.match(funktion('loopDeckVon'), /g\?\.loopdeck\?\.platz/, 'the deck identity comes from the group, not from the place number');
   assert.doesNotMatch(html, /live-panel|live-slot|data-loops-leer|data-liveoeffnen/);
   const z = funktion('zeichneLive');
   assert.doesNotMatch(z, /innerHTML|live-panel|modulHtml|bindeLoopWellen/);
@@ -58,18 +59,13 @@ test('the page never opens the live container by itself and never closes it', ()
   assert.doesNotMatch(app + modul, /\/live\/(?:schliessen|zu|close)|\/proj\/schliessen/);
 });
 
-test('the deck 3 bar and the module panel are gone; both loop places carry a deck container', () => {
-  assert.doesNotMatch(html, /id="deck-3"|data-deck3|id="live-panel"/);
-  assert.equal((html.match(/class="loopdeck" data-deck="[12]"/g) ?? []).length, 2);
-  assert.doesNotMatch(css, /#live-panel \{ grid-area/, 'the panel has no cell of its own');
-});
-
 test('a place switch leaves the container and the slots alone', () => {
-  const block = app.slice(app.indexOf('// ---------- DJ view places'), app.indexOf('// ---------- Aufbau'));
+  const block = ['wechsle', 'holeLage', 'wendePlaetzeAn', 'ordneKnoten'].map(funktion).join('');
   assert.doesNotMatch(block, /live\.projekt\s*=|live\.stand\s*=|oeffneLive|\/modul\/|\/live\//);
+  assert.deepEqual([...funktion('wechsle').matchAll(/fetch\('([^']+)'/g)].map((m) => m[1]), ['/plaetze'], 'the place switch sends only /plaetze');
   // the slot model is a pure function of the project, not of the place: the same model comes back after a switch away and back
-  const projekt = { live: true, gruppen: [{ id: 'g1', name: 'M', modul: { slot: 'A', titel: 'Loop X', kuenstler: '', bpm: 128, tonart: '5A', laenge_beats: 16 }, fader_db: 0 }], spuren: [] };
-  const regler = { 'pad/1/fader': -60 };
+  const projekt = { live: true, plaetze: [{ typ: 'stems', gruppe: 'g1' }, { typ: 'leer' }, { typ: 'leer' }, { typ: 'leer' }], gruppen: [{ id: 'g1', name: 'M', modul: { titel: 'Loop X', kuenstler: '', bpm: 128, tonart: '5A', laenge_beats: 16 }, fader_db: 0 }], spuren: [] };
+  const regler = { 'deck/1/fader': -60 };
   const a = modulAnsicht(projekt, { A: { stems: 'fertig' } }, null, regler);
   const b = modulAnsicht(projekt, { A: { stems: 'fertig' } }, null, regler);
   assert.deepEqual(a, b); assert.equal(a.slots[0].titel, 'Loop X');

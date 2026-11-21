@@ -1,4 +1,4 @@
-// K2 Task 1.5, Kern-Verdrahtung ohne JACK: ein bd-Klang auf Strom 1 löst den Duck aus, die Absenkung auf erz/2 (Rückweg
+// K2 Task 1.5, Kern-Verdrahtung ohne JACK: ein bd-Klang auf Strom 1 löst den Duck aus, die Absenkung auf Strom 2 (Rückweg
 // mit konstantem Pegel) beginnt im Master GENAU bei sample(bd) + Vorhalt des Limiters
 // (Duck ohne Verzug, Abnahme 2026-09-30: gemessen 545 Samples Rundweg).
 // Zykluslänge n = 2048 (zwei Teilblöcke à MIX_BLOCK 1024); bd bei 191250 = 786 Samples NACH dem Teilblockanfang (190464),
@@ -11,6 +11,8 @@
 
 #include "cypherdj/generator.h"
 #include "cypherdj/mixer.h"
+#include "arr_run.h"
+#include "stream_hoerbar.h"
 #include "core35.h"
 
 bool g_waechter = false;
@@ -26,14 +28,14 @@ static std::vector<float> lauf(const std::string& ab, float tiefe, bool bd, int 
   kit.klang[36].daten = {0.5f, 0.5f};
   kit.klang[36].duck = bd;
   kit.n = 1;
-  Lauf x(ab, nullptr);
+  arr35::Lauf x(ab, "test_kern_duck");
   vh_aus[0] = x.vh;
   auto b = x.neu(cdj::Befehl::ERZ_STROM, "erzeuger");
   b.nr = 1;
   std::snprintf(b.pfad, sizeof b.pfad, "erz/1");
   b.zeiger = &kit;
   x.sende(b);
-  x.teil("erz/2/fader", 0.0f, 0.0, 0.0);   // nur erz/2 hörbar; erz/1 (Kick) bleibt auf Vorgabe −200
+  arr35::strom_hoerbar(x, 2);   // X1: only stream 2 is audible (strom track on pad/1); stream 1 (the kick) has no track
   x.teil("duck/tiefe", tiefe, 0.0, 0.0);
   x.teil("duck/release", 600.0f, 0.0, 0.0);
   static float wirt[ZN];

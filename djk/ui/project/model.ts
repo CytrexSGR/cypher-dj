@@ -20,12 +20,14 @@ import { PRESET_ID } from '../presets/preset_id.ts';   // 1.16 rest: zero-import
 import { stiftFehler, type Stift } from '../steckfeld.ts';   // Kraken patch field: zero-import file too
 export type { Punkt, LaneForm } from './lane.ts';
 
-export const FORMAT = 'cypherdj-projekt/2';
+export const FORMAT = 'cypherdj-projekt/3';   // container core: places (plaetze), strudel group, strom tracks, Return.gruppe
+export const FORMAT_ALT2 = 'cypherdj-projekt/2';   // lifted in memory to /3 by pruefeProjekt (hebeAufDrei), no rev step
 export const FORMAT_ALT = 'cypherdj-projekt/1';   // 1.10 (P3): /1 öffnet weiter und wird beim Laden im Speicher zu /2
 export const MAX_SPUREN = 32;          // gleich public/production/limits.js, geprüft von tests/limits.test.mjs
 export const MAX_GRUPPEN = 16;         // 1.10 (F1: eigene Plätze neben den 32 Spuren), 16 since nested groups; gleich limits.js
 // 1.10 slice 3: returns (own strips next to the 16 groups); equal to public/production/limits.js, checked by tests/limits.test.mjs
-export const MAX_RETURNS = 4;
+export const MAX_RETURNS = 8;   // the page (public/production/limits.js, lane U) still says 4: request R-U1
+export const PLAETZE = 4, MAX_STROEME = 16;
 // 1.10 slice 4: insert chain per strip (track, group, return, master). The pool sizes equal the generated contract (insert_key.ts),
 // pinned by tests/projekt_inserts.test.mjs. `komp` (4a), `eq`, `saett` and `lim` (4b) and `utility` (arr-fx) are accepted
 // (INSERT_ARTEN_AKTIV); the sizes of eq and
@@ -395,7 +397,7 @@ export interface Gruppe {
   // nested groups: the group this one outputs into. Absent = master (never written for master, so a flat project file is unchanged).
   ausgang?: AusgangGruppe;
   // live modules (plan live-module, decision 15): the origin of a module group and its live slot; absent on every other group, never written then
-  modul?: ModulHerkunft & { slot?: 'A' | 'B' };   // slot: absent once the module sits in a production project (task 10)
+  modul?: ModulHerkunft;   // placement is `Projekt.plaetze` (typ 'stems'), not a slot field
   blend?: number;   // 0..1 blend position of a module group; absent = not set, never written then
   neu_trim_db?: number;   // level offset of the new path against the original (dB, measured by the render after the MIDI); absent = 0
   // SEQ deck (spec 2026-11-14-seq-deck-design, project/seq.ts): the step document of a top group of the live container; absent on every other group,
@@ -404,15 +406,16 @@ export interface Gruppe {
   // loop deck (index 1.1, plan loop-deck M1): a top group of the live container that holds 4 audio tracks with 8 cells each; absent on every
   // other group, never written then. A group has this, `modul` or `seq`, never two of them.
   loopdeck?: LoopDeck;
+  // strudel module (container core): the one top group of the live container whose members are `strom` tracks (one per stream); `{}` is the whole
+  // marker. A group has this, `seq`, `loopdeck` or `modul`, never two of them.
+  strudel?: Record<string, never>;
 }
 // Loop deck (two decks, 4 tracks of 8 cells each). Grid = the quantum a cell start waits for, in beats (LOOP_RASTER_BEATS).
 export type LoopRaster = '1/4' | '1/2' | '1' | 'takt' | '4takte';
 export const LOOP_RASTER_BEATS: Readonly<Record<LoopRaster, number>> = { '1/4': 0.25, '1/2': 0.5, '1': 1, takt: 4, '4takte': 16 };
 export const LOOP_ZELLEN = 8, LOOP_SPUREN = 4, LOOP_FARBEN = 16, LOOP_MAX_FRAMES = 2_880_000;
-// platz = the deck number (LOOP 1, LOOP 2). ausgang_platz = the DJ view place (1..4) whose fixed channel the deck sounds on: the faders belong to the
-// places, not to the content (Andreas 2026-11-20). Place 3 = pad/1 (L1), 4 = pad/2 (L2), 1 = deck/1, 2 = deck/2. Absent = the deck number's pad
-// (deck 1 -> L1, deck 2 -> L2). A deck that no place shows keeps its last value. The page writes it (POST /loopdeck/plaetze).
-export interface LoopDeck { platz: 1 | 2; raster: LoopRaster; ausgang_platz?: 1 | 2 | 3 | 4 }
+// platz = the deck identity (LOOP 1, LOOP 2). The container the deck sounds in is `Projekt.plaetze` (typ 'loops'), a deck no place holds is parked.
+export interface LoopDeck { platz: 1 | 2; raster: LoopRaster }
 export interface Zelle {
   id: string; name: string; farbe: number; art: 'loop' | 'einmal'; sha256: string;
   beats?: number; bpm?: number; gain_db: number; pfad_hinweis?: string;
@@ -500,13 +503,17 @@ export interface Return {
   id: string; nr: number; name: string; farbe: string; fader_db: number; pan: number; mute: boolean; solo: boolean; hall: ReturnHall;
   pre?: true; inserts?: Insert[]; rack?: Rack; automation?: Lane[];
   loopdeck?: ReturnLoopdeck;   // the HALL or DELAY return of a loop deck; only in a project with live: true, unique per (platz, art)
+  strudel?: ReturnStrudel;     // the HALL or DELAY return of the strudel module; only with a strudel group, unique per art
+  gruppe?: string;             // owner top group (D-M3); required for every return of a live project, absent otherwise
 }
+export interface ReturnStrudel { art: 'hall' | 'delay' }
 // A return that belongs to a loop deck place and sounds inside that deck's DJ channel (the translator writes the DJ output for it)
 export interface ReturnLoopdeck { platz: 1 | 2; art: 'hall' | 'delay' }
 export const LOOP_SEND_MAX = 0;   // the send range of a loop deck track is -200..0 dB
 export interface Master { fader_db: number; inserts?: Insert[]; rack?: Rack; automation?: Lane[] }
 export interface Spur {
-  id: string; von?: Herkunft; gruppe?: string; nr: number; name: string; farbe: string; art: 'audio' | 'instrument';
+  id: string; von?: Herkunft; gruppe?: string; nr: number; name: string; farbe: string; art: 'audio' | 'instrument' | 'strom';
+  strom?: number;   // 'strom' tracks: the stream 1..MAX_STROEME the track reads; unique, only inside the strudel group
   geraet?: Geraet; freeze?: Freeze | null; aufnahme?: SpurAufnahme; ausgang?: AusgangGruppe; automation?: Lane[]; takes?: Take[];
   stammbaum?: Stammbaum;   // find sound: the family tree of a Baukasten track (instrument tracks only); project data, not playback (spurSicht omits it)
   fader_db: number; pan: number; mute: boolean; solo: boolean; clips: Clip[]; sends?: Send[]; inserts?: Insert[]; rack?: Rack;
@@ -537,6 +544,7 @@ export interface Projekt {
   gruppen: Gruppe[]; master: Master;   // 1.10 (P3): ab /2 Pflicht
   // 1.10 slice 3: only in /2 and only with at least one return (absent otherwise: projects without returns stay byte-identical)
   returns?: Return[];
+  plaetze?: [Platz, Platz, Platz, Platz];   // live project: what sits in containers A..D; required iff live, absent otherwise
   baukasten?: BkKanal[];   // S17: sound snapshot (project/modular.ts), only in /2, absent when empty
   live?: true;             // the live container (plan live-module): the one project that runs during a DJ set; never written when absent
   tracker?: TrackerMarke;   // tracker view marker (project/tracker.ts): only in /2, never together with live or werkbank; never written when absent
@@ -546,6 +554,10 @@ export interface Projekt {
 }
 
 // A SEQ scene: the pattern tracks (ids) that are ON and those that are OFF at the moment of saving. A pattern in neither list is left alone by a launch.
+// What sits in a container of the live console. `gruppe` names the top group of the matching kind (strudel, seq, loopdeck, modul).
+export type PlatzTyp = 'leer' | 'track' | 'strudel' | 'seq' | 'loops' | 'stems';
+export type Platz = { typ: 'leer' } | { typ: 'track' } | { typ: 'strudel' | 'seq' | 'loops' | 'stems'; gruppe: string };
+export const PLATZ_TYPEN: readonly PlatzTyp[] = ['leer', 'track', 'strudel', 'seq', 'loops', 'stems'];
 export type Szene = { an: string[]; aus: string[] };
 export const SZENEN_SLOTS = 8;
 
@@ -564,9 +576,9 @@ export const BK_PARAMETER: readonly string[] = Array.from({ length: 64 }, (_, i)
 export const BK_KNOPF_VORGABE = 0.5;   // an untouched knob (the core plays 0.5 for a knob the playback does not name)
 export const BK_GRAPH_NAME = /^[a-z0-9_-]{1,32}$/;
 export const MAX_BK_SPUREN = 16;
-// = SPUR_BK_SLOTS in core/signalbox/include/cypherdj/signalbox/controls.h (pinned by tests/project_bk_device.test.mjs): only the first 8 bk tracks
-// have the core rows spur/<slot>/bk/<k>, the 9th to 16th are changed through the general path (a playback rebuild), see bkLive.
-export const BK_LIVE_SLOTS = 8;
+// = SPUR_BK_SLOTS in core/signalbox/include/cypherdj/signalbox/controls.h (pinned by tests/project_bk_device.test.mjs): every bk track (MAX_BK_SPUREN)
+// has the core rows spur/<slot>/bk/<k> (8 until 2026-11-21); a slot beyond it would be changed through the general path (a playback rebuild), see bkLive.
+export const BK_LIVE_SLOTS = MAX_BK_SPUREN;
 // Production plan task 9 (D10): the slot of a Baukasten track in the core rows spur/<slot>/bk/<k> is its running number among the tracks with the device bk,
 // in ascending track number (nr), counted from 1, tracks only (a rack member does not count), by device name.
 // The core derives the same number from the playback snapshot
@@ -576,7 +588,7 @@ export function bkSlot(projekt: Projekt, spurId: string): number | null {
   const i = bk.findIndex((s) => s.id === spurId);
   return i < 0 ? null : i + 1;
 }
-// true: the track is a bk track whose slot has core rows spur/<slot>/bk/<k> (the first BK_LIVE_SLOTS bk tracks), so a knob of it can move live.
+// true: the track is a bk track whose slot has core rows spur/<slot>/bk/<k> (every bk track up to BK_LIVE_SLOTS), so a knob of it can move live.
 export const bkLive = (projekt: Projekt, spurId: string): boolean => {
   const slot = bkSlot(projekt, spurId);
   return slot !== null && slot <= BK_LIVE_SLOTS;
@@ -725,15 +737,24 @@ function alleZellenIds(p: Projekt): string[] {
 export function loopDeckGruppe(p: Projekt, platz: 1 | 2): Gruppe | null {
   return (p.gruppen ?? []).find((g) => g.loopdeck?.platz === platz && !g.ausgang) ?? null;
 }
-// The place a loop deck sounds on (ausgang_platz, else the place of its default pad: deck 1 -> 3, deck 2 -> 4)
-export const loopAusgangPlatz = (l: LoopDeck): 1 | 2 | 3 | 4 => l.ausgang_platz ?? (l.platz === 1 ? 3 : 4);
-// The DJ channel number of the translator for a place: places 3 and 4 are pad/1 and pad/2 (1, 2), places 1 and 2 are deck/1 and deck/2 (3, 4)
-export const LOOP_DJ_NR: Readonly<Record<1 | 2 | 3 | 4, 1 | 2 | 3 | 4>> = { 1: 3, 2: 4, 3: 1, 4: 2 };
-export const loopDjNr = (l: LoopDeck): 1 | 2 | 3 | 4 => LOOP_DJ_NR[loopAusgangPlatz(l)];
-// The DJ channel number of the loop deck `platz` of a project; a project without that deck: the default pad
-export function loopDjNrVon(p: Projekt, platz: 1 | 2): 1 | 2 | 3 | 4 {
-  const l = loopDeckGruppe(p, platz)?.loopdeck;
-  return l ? loopDjNr(l) : platz;
+// The place (container 1..4 = A..D) a top group sits in; null = parked (a live top group no place holds) or no live project
+export function platzVonGruppe(p: Projekt, gruppeId: string): 1 | 2 | 3 | 4 | null {
+  const i = (p.plaetze ?? []).findIndex((x) => 'gruppe' in x && x.gruppe === gruppeId);
+  return i < 0 ? null : (i + 1) as 1 | 2 | 3 | 4;
+}
+// The first place a new group may take without displacing anything: a `leer` or `track` place, scanning 3, 4, 1, 2 (the old defaults first); null = none free
+export function ersterFreierPlatz(p: Projekt): 1 | 2 | 3 | 4 | null {
+  for (const n of [3, 4, 1, 2] as const) { const t = p.plaetze?.[n - 1]?.typ; if (t === 'leer' || t === 'track') return n; }
+  return null;
+}
+// The strudel group of the project (placed or parked), if any
+export const strudelGruppe = (p: Projekt): Gruppe | null => (p.gruppen ?? []).find((g) => g.strudel !== undefined && !g.ausgang) ?? null;
+// The strom track that reads stream `strom`, if any
+export const stromSpur = (p: Projekt, strom: number): Spur | null => p.spuren.find((s) => s.art === 'strom' && s.strom === strom) ?? null;
+// Live top groups that hold a deck, a module or the strudel marker but sit in no place (parked: silent, nothing deleted)
+export function geparkteGruppen(p: Projekt): Gruppe[] {
+  if (p.live !== true) return [];
+  return (p.gruppen ?? []).filter((g) => !g.ausgang && (g.seq || g.loopdeck || g.modul || g.strudel) && platzVonGruppe(p, g.id) === null);
 }
 // The 4 tracks of a loop deck group in member order (the order of the track list)
 export function loopDeckSpuren(p: Projekt, g: Gruppe): Spur[] {
@@ -1424,7 +1445,13 @@ function pruefeRack(x: unknown, wo: string): Rack {
 }
 
 function pruefeReturn(g: unknown, wo: string): Return {
-  const o = felder(g, wo, ['id', 'nr', 'name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'hall'], ['pre', 'inserts', 'rack', 'automation', 'loopdeck']);
+  const o = felder(g, wo, ['id', 'nr', 'name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'hall'], ['pre', 'inserts', 'rack', 'automation', 'loopdeck', 'strudel', 'gruppe']);
+  if ('strudel' in o) {
+    const l = felder(o.strudel, `${wo}.strudel`, ['art']);
+    if (l.art !== 'hall' && l.art !== 'delay') werfe(`${wo}.strudel.art`, 'hall or delay expected');
+    if ('loopdeck' in o) werfe(`${wo}.strudel`, 'a return belongs to a loop deck or to the strudel module, not both');
+  }
+  if ('gruppe' in o && (typeof o.gruppe !== 'string' || !ID.test(o.gruppe))) werfe(`${wo}.gruppe`, 'ID expected');
   if ('loopdeck' in o) {
     const l = felder(o.loopdeck, `${wo}.loopdeck`, ['platz', 'art']);
     if (l.platz !== 1 && l.platz !== 2) werfe(`${wo}.loopdeck.platz`, '1 or 2 expected');
@@ -1532,10 +1559,17 @@ const deckFeld = (s: Spur): string | null => (['zellen', 'filter', 'eq', 'kill']
 function pruefeSpur(s: unknown, wo: string, warpErlaubt: boolean): Spur {
   if (!istObjekt(s)) return werfe(wo, 'Objekt erwartet');
   const basis = ['id', 'nr', 'name', 'farbe', 'art', 'fader_db', 'pan', 'mute', 'solo', 'clips'];
-  if (s.art !== 'audio' && s.art !== 'instrument') werfe(`${wo}.art`, 'audio oder instrument erwartet');
-  const o = s.art === 'audio'
+  if (s.art !== 'audio' && s.art !== 'instrument' && s.art !== 'strom') werfe(`${wo}.art`, 'audio, instrument or strom expected');
+  const o = s.art === 'strom'
+    ? felder(s, wo, [...basis, 'strom'], ['von', 'gruppe', 'ausgang', 'automation', 'sends', 'inserts', 'rack', 'filter', 'eq', 'kill'])
+    : s.art === 'audio'
     ? felder(s, wo, basis, ['von', 'gruppe', 'aufnahme', 'ausgang', 'automation', 'sends', 'inserts', 'rack', 'takes', 'zellen', 'filter', 'eq', 'kill'])
     : felder(s, wo, [...basis, 'geraet'], ['freeze', 'von', 'gruppe', 'ausgang', 'automation', 'sends', 'inserts', 'rack', 'aufnahme', 'stammbaum']);
+  if (s.art === 'strom') {
+    zahlIn(o.strom, `${wo}.strom`, 1, MAX_STROEME, true);
+    if (!Array.isArray(o.clips) || o.clips.length > 0) werfe(`${wo}.clips`, 'a strom track has no clips');
+    if (!('ausgang' in o)) werfe(`${wo}.ausgang`, 'a strom track sits inside the strudel group');
+  }
   if ('zellen' in o) pruefeZellen(o.zellen, `${wo}.zellen`);
   if ('filter' in o) zahlIn(o.filter, `${wo}.filter`, -1, 1);
   if ('eq' in o) {
@@ -1618,7 +1652,7 @@ function pruefeSpur(s: unknown, wo: string, warpErlaubt: boolean): Spur {
 
 function pruefeModul(m: unknown, wo: string): void {
   const o = felder(m, wo, ['quelle_sha256', 'titel', 'fassung', 'basis_bpm', 'von_beat', 'laenge_beats', 'bpm', 'datum'],
-    ['set', 'eins_beat', 'transponiert', 'slot', 'kuenstler', 'tonart', 'id', 'quelle']);
+    ['set', 'eins_beat', 'transponiert', 'kuenstler', 'tonart', 'id', 'quelle']);
   if ('quelle' in o && o.quelle !== 'mitschnitt') werfe(`${wo}.quelle`, "'mitschnitt' expected");
   if ('id' in o && (typeof o.id !== 'string' || !/^[0-9a-f]{16}$/.test(o.id))) werfe(`${wo}.id`, '16 hex characters expected');
   if ('transponiert' in o && (!ganz(o.transponiert) || o.transponiert < -12 || o.transponiert > 12 || o.transponiert === 0)) {
@@ -1634,7 +1668,6 @@ function pruefeModul(m: unknown, wo: string): void {
   if (!zahl(o.laenge_beats) || o.laenge_beats <= 0 || o.laenge_beats > MAX_BEAT) {
     werfe(`${wo}.laenge_beats`, `number above 0 up to ${MAX_BEAT} expected`);
   }
-  if ('slot' in o && o.slot !== 'A' && o.slot !== 'B') werfe(`${wo}.slot`, "'A' or 'B' expected");
 }
 
 // The check of a module record as a message (null = fine), for the command modul_setzen
@@ -1644,12 +1677,16 @@ export function pruefeModulFehler(m: unknown): string | null {
 
 function pruefeGruppe(g: unknown, wo: string): Gruppe {
   const o = felder(g, wo, ['id', 'nr', 'name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'gefaltet'],
-    ['sends', 'inserts', 'rack', 'automation', 'ausgang', 'modul', 'blend', 'neu_trim_db', 'seq', 'loopdeck']);
+    ['sends', 'inserts', 'rack', 'automation', 'ausgang', 'modul', 'blend', 'neu_trim_db', 'seq', 'loopdeck', 'strudel']);
   if ('modul' in o) pruefeModul(o.modul, `${wo}.modul`);
+  if ('strudel' in o) {
+    felder(o.strudel, `${wo}.strudel`, []);
+    for (const k of ['modul', 'seq', 'loopdeck']) if (k in o) werfe(`${wo}.strudel`, 'a group holds a strudel marker, a loop deck, a module or a SEQ deck, not several');
+    if ('ausgang' in o) werfe(`${wo}.strudel`, 'the strudel module sits on a top group, not on a nested one');
+  }
   if ('loopdeck' in o) {
-    const d = felder(o.loopdeck, `${wo}.loopdeck`, ['platz', 'raster'], ['ausgang_platz']);
+    const d = felder(o.loopdeck, `${wo}.loopdeck`, ['platz', 'raster']);
     if (d.platz !== 1 && d.platz !== 2) werfe(`${wo}.loopdeck.platz`, '1 or 2 expected');
-    if ('ausgang_platz' in d && ![1, 2, 3, 4].includes(d.ausgang_platz as number)) werfe(`${wo}.loopdeck.ausgang_platz`, '1..4 expected');
     if (typeof d.raster !== 'string' || !Object.hasOwn(LOOP_RASTER_BEATS, d.raster)) {
       werfe(`${wo}.loopdeck.raster`, "'1/4', '1/2', '1', 'takt' or '4takte' expected");
     }
@@ -1699,12 +1736,116 @@ export function pruefeFehler(x: unknown): string | null {
 function bkInsertWerteAuffuellen(p: Projekt): void {
   for (const { strang } of alleStraenge(p)) for (const i of strang.inserts ?? []) if (i.art === 'bk') bkInsertAuffuellen(i.werte);
 }
+// --- Upgrade /2 -> /3 -----------------------------------------------------------------------------------------------
+const STANDARD_PLAETZE: readonly PlatzTyp[] = ['track', 'track', 'strudel', 'loops'];
+const oberste = (gruppen: Gruppe[], id: string | undefined): Gruppe | undefined => {
+  let g = gruppen.find((x) => x.id === id);
+  for (let n = 0; g?.ausgang && n <= gruppen.length; n++) { const z = g.ausgang.id; g = gruppen.find((x) => x.id === z); }
+  return g && !g.ausgang ? g : undefined;
+};
+/**
+ * Lifts a /2 project to /3 in place (no rev step). The removed fields (seq.platz, loopdeck.ausgang_platz, modul.slot) are dropped; a live project
+ * gets `plaetze` and `Return.gruppe` derived in this order, a place is claimed by the first claimant and a later claimant is parked, never dropped:
+ * 1. a SEQ deck claims `seq.platz`; 2. a loop deck claims `ausgang_platz`, absent = deck 1 -> 3, deck 2 -> 4; 3. a module claims 3 for slot A and
+ * 4 for slot B (no slot: parked); 4. unclaimed places take the default layout `track, track, strudel, loops` where that type is free (strudel
+ * once, creating the empty STRUDEL group; loops only while no loops place exists, filled by a parked loop deck, else track); 5. return owners.
+ * A production project only changes its format string.
+ */
+export function hebeAufDrei(p: Projekt): void {
+  (p as unknown as { format: string }).format = FORMAT;
+  const gruppen = p.gruppen ?? [];
+  // read the removed fields first, then drop them
+  const alt = new Map<string, { seq?: number; ort?: number; slot?: 'A' | 'B' }>();
+  for (const g of gruppen) {
+    const e: { seq?: number; ort?: number; slot?: 'A' | 'B' } = {};
+    if (istObjekt(g.seq)) { e.seq = (g.seq as { platz?: number }).platz; delete (g.seq as { platz?: number }).platz; }
+    if (istObjekt(g.loopdeck)) { e.ort = (g.loopdeck as { ausgang_platz?: number }).ausgang_platz; delete (g.loopdeck as { ausgang_platz?: number }).ausgang_platz; }
+    if (istObjekt(g.modul)) { e.slot = (g.modul as { slot?: 'A' | 'B' }).slot; delete (g.modul as { slot?: string }).slot; }
+    alt.set(g.id, e);
+  }
+  if (p.live !== true) return;
+  const spitzen = gruppen.filter((g) => !g.ausgang);
+  const plaetze: (Platz | null)[] = [null, null, null, null];
+  const belege = (i: number | undefined, platz: Platz): boolean => {
+    if (i === undefined || !Number.isInteger(i) || i < 1 || i > PLAETZE || plaetze[i - 1] !== null) return false;
+    plaetze[i - 1] = platz; return true;
+  };
+  for (const g of spitzen) if (g.seq) belege(alt.get(g.id)?.seq, { typ: 'seq', gruppe: g.id });
+  for (const g of spitzen) if (g.loopdeck) belege(alt.get(g.id)?.ort ?? (g.loopdeck.platz === 1 ? 3 : 4), { typ: 'loops', gruppe: g.id });
+  for (const g of spitzen) if (g.modul) { const s = alt.get(g.id)?.slot; belege(s === 'A' ? 3 : s === 'B' ? 4 : undefined, { typ: 'stems', gruppe: g.id }); }
+  const belegt = (g: Gruppe): boolean => plaetze.some((e) => e !== null && 'gruppe' in e && e.gruppe === g.id);
+  const hatStrudel = (): boolean => gruppen.some((g) => g.strudel) || plaetze.some((e) => e?.typ === 'strudel');
+  for (let i = 0; i < PLAETZE; i++) {
+    if (plaetze[i] !== null) continue;
+    const wunsch = STANDARD_PLAETZE[i];
+    if (wunsch === 'strudel' && !hatStrudel() && gruppen.length < MAX_GRUPPEN) {
+      const nrs = new Set(gruppen.map((g) => g.nr));
+      let nr = 1; while (nrs.has(nr)) nr++;
+      const id = neueId(p, 'gruppe');
+      gruppen.push({ id, nr, name: 'STRUDEL', farbe: '#8a8f98', fader_db: 0, pan: 0, mute: false, solo: false, gefaltet: false, strudel: {} });
+      plaetze[i] = { typ: 'strudel', gruppe: id };
+    } else if (wunsch === 'loops' && !plaetze.some((e) => e?.typ === 'loops')) {
+      const frei = spitzen.filter((g) => g.loopdeck && !belegt(g)).sort((a, b) => a.loopdeck!.platz - b.loopdeck!.platz)[0];
+      plaetze[i] = frei ? { typ: 'loops', gruppe: frei.id } : { typ: 'track' };
+    } else plaetze[i] = { typ: 'track' };
+  }
+  p.gruppen = gruppen;
+  p.plaetze = plaetze as [Platz, Platz, Platz, Platz];
+  // return owners
+  const returns = p.returns ?? [];
+  if (!returns.length) return;
+  const strudel = gruppen.find((g) => g.strudel);
+  const platz1 = (p.plaetze[0] as { gruppe?: string }).gruppe;
+  const standard = gruppen.find((g) => g.id === platz1) ?? strudel ?? [...spitzen].sort((a, b) => a.nr - b.nr)[0];
+  const behalten: Return[] = [];
+  const neue: Return[] = [];
+  for (const r of returns) {
+    if (r.loopdeck && !loopDeckGruppe(p, r.loopdeck.platz)) delete r.loopdeck;
+    if (r.loopdeck) { r.gruppe = loopDeckGruppe(p, r.loopdeck.platz)!.id; behalten.push(r); continue; }
+    const sender: string[] = [];   // top groups that send into the return, in group order
+    const spitze = (id: string | undefined): string | undefined => oberste(gruppen, id)?.id;
+    const sendet = new Set<string>();
+    for (const s of p.spuren) if ((s.sends ?? []).some((x) => x.id === r.id)) { const o = spitze(s.ausgang?.id); if (o) sendet.add(o); }
+    for (const g of gruppen) if ((g.sends ?? []).some((x) => x.id === r.id)) { const o = spitze(g.id); if (o) sendet.add(o); }
+    for (const g of spitzen) if (sendet.has(g.id)) sender.push(g.id);
+    if (sender.length === 0) {
+      if (!r.inserts?.length && !r.rack || !standard) continue;   // nothing hears it and it holds nothing: dropped
+      r.gruppe = standard.id; behalten.push(r); continue;
+    }
+    r.gruppe = sender[0]; behalten.push(r);
+    for (const gid of sender.slice(1)) {
+      const kopieR = structuredClone(r) as Return;
+      delete kopieR.inserts; delete kopieR.rack; delete kopieR.automation;
+      kopieR.id = ''; kopieR.gruppe = gid;
+      kopieR.name = `${r.name} ${gruppen.find((g) => g.id === gid)!.name}`.slice(0, 80);
+      neue.push(Object.assign(kopieR, { __von: r.id }) as Return);
+    }
+  }
+  p.returns = behalten;
+  if (behalten.length + neue.length > MAX_RETURNS) throw new Fehl('returns: returns_voll (the upgrade needs more than ' + MAX_RETURNS + ' returns)');
+  for (const n of neue) {
+    const von = (n as unknown as { __von: string }).__von;
+    delete (n as unknown as { __von?: string }).__von;
+    n.id = neueId({ ...p, returns: p.returns } as Projekt, 'return');
+    p.naechste_id = { ...p.naechste_id, return: Number(n.id.slice(1)) + 1 };
+    const nrs = new Set(p.returns!.map((q) => q.nr));
+    let nr = 1; while (nrs.has(nr)) nr++;
+    n.nr = nr;
+    p.returns!.push(n);
+    const umlenken = (x: { sends?: Send[] }): void => { for (const sd of x.sends ?? []) if (sd.id === von) sd.id = n.id; };
+    for (const s of p.spuren) if (oberste(gruppen, s.ausgang?.id)?.id === n.gruppe) umlenken(s);
+    for (const g of gruppen) if (oberste(gruppen, g.id)?.id === n.gruppe) umlenken(g);
+  }
+  if (neue.length) p.returns.sort((a, b) => a.nr - b.nr);
+}
+
 export function pruefeProjekt(x: unknown): { projekt: Projekt } | { fehler: string } {
   const fehler = pruefeFehler(x);
   if (fehler !== null) return { fehler };
   const p = structuredClone(x) as Projekt;
   // 1.10 (P3): /1 → /2, kein rev-Schritt. Paket 1.13: ein /1-Projekt hat keinen Warp (die Prüfung lehnt ihn dort ab), die Hebung setzt keinen
   if ((p as { format: string }).format === FORMAT_ALT) { p.format = FORMAT; p.gruppen = []; p.master = { fader_db: 0 }; }
+  if ((p as { format: string }).format === FORMAT_ALT2) hebeAufDrei(p);   // container core: /2 -> /3, places derived, no rev step
   for (const s of p.spuren) for (const l of s.automation ?? []) normalisiereLane(l);   // slice 2 (E2): mute/solo points without form are sprung
   bkInsertWerteAuffuellen(p);                                                        // a bk stage of an older project: k9..k64 = 0.5
   for (const s of p.spuren) s.von = herkunft(s);                                     // Spec 6.22: fehlt von (älteres Projekt), gilt andreas
@@ -1730,16 +1871,30 @@ function pruefeAlles(x: unknown): void {
   // Format zuerst (Prüfung 2, C1): ein fremdes Format, auch eines mit gruppen und master, ist der Fehler „format“
   // und scheitert nicht an „unbekanntes Feld“.
   // Ein fehlendes Format bleibt Sache von `felder` („projekt.format: fehlt“).
-  if (istObjekt(x) && 'format' in x && x.format !== FORMAT && x.format !== FORMAT_ALT) werfe('format', `${FORMAT} oder ${FORMAT_ALT} erwartet`);
+  if (istObjekt(x) && 'format' in x && x.format !== FORMAT && x.format !== FORMAT_ALT2 && x.format !== FORMAT_ALT) {
+    werfe('format', `${FORMAT}, ${FORMAT_ALT2} or ${FORMAT_ALT} expected`);
+  }
+  // a /2 file is checked as its lift: the /3 rules applied to a copy that hebeAufDrei changed (a /2 file never holds plaetze)
+  if (istObjekt(x) && x.format === FORMAT_ALT2) {
+    if ('plaetze' in x) werfe('plaetze', `unknown field (places exist only from ${FORMAT} on)`);
+    const k = structuredClone(x) as unknown as Projekt;
+    try { hebeAufDrei(k); } catch (e) {
+      if (e instanceof Fehl) throw e;
+      k.format = FORMAT;   // malformed input: let the /3 check name the problem
+    }
+    return pruefeAlles(k);
+  }
   const neu2 = istObjekt(x) && x.format === FORMAT;   // /2 verlangt gruppen und master, /1 hat sie nicht
   const pflicht = ['format', 'name', 'rev', 'wiedergabe_rev', 'tempo_bpm', 'taktart', 'loop', 'metronom', 'spuren', ...(neu2 ? ['gruppen', 'master'] : [])];
   // returns, baukasten in /1: unknown field
-  const nur2 = ['returns', 'baukasten', 'aufnahme', 'live', 'werkbank', 'tracker', 'tonart', 'szenen'];
+  const nur2 = ['returns', 'baukasten', 'aufnahme', 'live', 'werkbank', 'tracker', 'tonart', 'szenen', 'plaetze'];
   const o = felder(x, 'projekt', pflicht, ['naechste_id', 'naechste_noten_id', ...(neu2 ? nur2 : [])]);
   if ('szenen' in o) pruefeSzenen(o.szenen);
   const tf = 'tonart' in o ? tonartFehler(o.tonart) : null;
   if (tf) werfe('tonart', tf.replace(/^tonart[.:]?\s*/, ''));
   if ('live' in o && o.live !== true) werfe('live', 'true expected (absent when not a live container)');
+  if ('plaetze' in o && o.live !== true) werfe('plaetze', 'unknown field (places exist only in the live container)');
+  if (o.live === true && !('plaetze' in o)) werfe('plaetze', 'fehlt (a live project holds its four places)');
   if ('werkbank' in o) {
     const w = werkbankPruefung(o.werkbank);
     if (w) werfe('werkbank', w.text);
@@ -1824,8 +1979,7 @@ function pruefeAlles(x: unknown): void {
       });
     });
   });
-  const gruppenIds = new Set<string>(), gruppenNrs = new Set<number>(), seqPlaetze = new Set<number>(),
-    deckPlaetze = new Set<number>(), deckKanaele = new Set<number>();
+  const gruppenIds = new Set<string>(), gruppenNrs = new Set<number>(), deckPlaetze = new Set<number>();
   if (neu2) {
     if (!Array.isArray(o.gruppen)) werfe('gruppen', 'Liste erwartet');
     if ((o.gruppen as unknown[]).length > MAX_GRUPPEN) werfe('gruppen', `höchstens ${MAX_GRUPPEN}`);
@@ -1835,19 +1989,13 @@ function pruefeAlles(x: unknown): void {
       if (gruppenNrs.has(g.nr)) werfe(`gruppen[${i}].nr`, `doppelt (${g.nr})`);
       gruppenIds.add(g.id); gruppenNrs.add(g.nr);
       laneZaehle(g, `gruppen[${i}]`);
-      if (g.seq) {   // SEQ deck: live container only, one deck per place (the patterns are the tracks that output into the group, found by routing)
-        if (o.live !== true) werfe(`gruppen[${i}].seq`, 'a SEQ deck exists only in the live container');
-        if (seqPlaetze.has(g.seq.platz)) werfe(`gruppen[${i}].seq.platz`, `duplicate (${g.seq.platz}): the place already holds a SEQ deck`);
-        seqPlaetze.add(g.seq.platz);
-      }
-      if (g.loopdeck) {   // loop deck: live container only, one group per place, a place and a module slot of the same number exclude each other
+      if (g.seq && o.live !== true) werfe(`gruppen[${i}].seq`, 'a SEQ deck exists only in the live container');   // the patterns are the tracks that output into the group
+      if (g.strudel && o.live !== true) werfe(`gruppen[${i}].strudel`, 'the strudel module exists only in the live container');
+      if (g.strudel && (o.gruppen as unknown[]).slice(0, i).some((m) => (m as Gruppe).strudel)) werfe(`gruppen[${i}].strudel`, 'strudel is unique: the project has one strudel group');
+      if (g.loopdeck) {   // loop deck: live container only, one group per deck identity
         if (o.live !== true) werfe(`gruppen[${i}].loopdeck`, 'a loop deck exists only in the live container');
-        if (deckPlaetze.has(g.loopdeck.platz)) werfe(`gruppen[${i}].loopdeck.platz`, `duplicate (${g.loopdeck.platz}): the place already holds a loop deck`);
+        if (deckPlaetze.has(g.loopdeck.platz)) werfe(`gruppen[${i}].loopdeck.platz`, `duplicate (${g.loopdeck.platz}): the project already holds this loop deck`);
         deckPlaetze.add(g.loopdeck.platz);
-        const nr = loopDjNr(g.loopdeck);
-        const ort = loopAusgangPlatz(g.loopdeck);
-        if (deckKanaele.has(nr)) werfe(`gruppen[${i}].loopdeck.ausgang_platz`, `duplicate (place ${ort}): the channel already holds a loop deck`);
-        deckKanaele.add(nr);
       }
     });
     // group targets: a known group, not itself, and the tree has no cycle
@@ -1870,18 +2018,10 @@ function pruefeAlles(x: unknown): void {
     if ('automation' in ms) pruefeLanen(ms.automation, 'master', ms as { inserts?: Insert[]; rack?: Rack }, undefined, 'master');
     laneZaehle(ms as { automation?: Lane[] }, 'master');
   }
-  // loop deck: a place and a module slot (A = 1, B = 2) of the same number exclude each other; 4 audio member tracks without clips;
-  // cells and filter only on those tracks; cell ids unique over the project
+  // loop deck: 4 audio member tracks without clips; cells and filter only on those tracks; cell ids unique over the project
   if (neu2) {
     (o.gruppen as Gruppe[]).forEach((g, i) => {
       if (!g.loopdeck) return;
-      const slotNr = (o.gruppen as Gruppe[]).some((m) => m.modul?.slot === (g.loopdeck!.platz === 1 ? 'A' : 'B'));
-      if (slotNr) werfe(`gruppen[${i}].loopdeck.platz`, `place ${g.loopdeck.platz} is taken by a module slot`);
-      // the DJ channel of the deck: not a module slot's (A = pad/1, B = pad/2), not an unmuted SEQ deck's (deck/N = nr N + 2)
-      const nr = loopDjNr(g.loopdeck);
-      const alle = o.gruppen as Gruppe[], wo = `gruppen[${i}].loopdeck.ausgang_platz`;
-      if (alle.some((m) => m.modul?.slot === (nr === 1 ? 'A' : nr === 2 ? 'B' : '-'))) werfe(wo, `channel ${nr} is taken by a module slot`);
-      if (alle.some((m) => m.seq && !m.mute && m.seq.platz + 2 === nr)) werfe(wo, `channel ${nr} is taken by a SEQ deck`);
       const mitglieder = (o.spuren as Spur[]).filter((s) => s.ausgang?.id === g.id);
       if (mitglieder.length !== LOOP_SPUREN || (o.gruppen as Gruppe[]).some((m) => m.ausgang?.id === g.id)) {
         werfe(`gruppen[${i}].loopdeck`, `a loop deck group has exactly ${LOOP_SPUREN} member tracks and no nested group`);
@@ -1893,12 +2033,12 @@ function pruefeAlles(x: unknown): void {
     });
     const deckGruppen = new Set((o.gruppen as Gruppe[]).filter((g) => g.loopdeck).map((g) => g.id));
     (o.spuren as Spur[]).forEach((s, i) => {
-      if (deckFeld(s) !== null && !(s.ausgang && deckGruppen.has(s.ausgang.id))) {
+      if (deckFeld(s) !== null && s.art !== 'strom' && !(s.ausgang && deckGruppen.has(s.ausgang.id))) {
         werfe(`spuren[${i}].${deckFeld(s)}`, 'only on a track of a loop deck group');
       }
     });
   } else {
-    (o.spuren as Spur[]).forEach((s, i) => { if (deckFeld(s) !== null) werfe(`spuren[${i}].zellen`, 'only on a track of a loop deck group'); });
+    (o.spuren as Spur[]).forEach((s, i) => { if (deckFeld(s) !== null && s.art !== 'strom') werfe(`spuren[${i}].zellen`, 'only on a track of a loop deck group'); });
   }
   const zellenIds = new Set<string>();
   (o.spuren as Spur[]).forEach((s, i) => (s.zellen ?? []).forEach((z, k) => {
@@ -1945,6 +2085,57 @@ function pruefeAlles(x: unknown): void {
       }));
     pruefe(o.spuren as Spur[], 'spuren', platzVon as (e: never) => number | null);
     pruefe(gruppen, 'gruppen', () => null);
+  }
+  // container core: places, the strudel group, strom tracks and the owner of every return
+  {
+    const gruppen = (o.gruppen ?? []) as Gruppe[], spuren = o.spuren as Spur[], returns = (o.returns ?? []) as Return[];
+    const top = new Map(gruppen.filter((g) => !g.ausgang).map((g) => [g.id, g] as const));
+    const strudel = gruppen.find((g) => g.strudel);
+    const stroeme = new Set<number>();
+    spuren.forEach((s, i) => {
+      if (s.art === 'strom') {
+        if (stroeme.has(s.strom!)) werfe(`spuren[${i}].strom`, `duplicate (${s.strom})`);
+        stroeme.add(s.strom!);
+        if (!strudel || s.ausgang?.id !== strudel.id) werfe(`spuren[${i}].ausgang`, 'a strom track sits inside the strudel group');
+      } else if (strudel && s.ausgang?.id === strudel.id) werfe(`spuren[${i}].ausgang`, 'the strudel group holds strom tracks only');
+    });
+    if (strudel) gruppen.forEach((g, i) => { if (g.ausgang?.id === strudel.id) werfe(`gruppen[${i}].ausgang`, 'the strudel group holds strom tracks only'); });
+    if (o.live === true) {
+      const pl = o.plaetze;
+      if (!Array.isArray(pl) || pl.length !== PLAETZE) werfe('plaetze', `array of ${PLAETZE} entries expected`);
+      const belegt = new Set<string>(), zaehl = { strudel: 0, loops: 0, stems: 0 };
+      (pl as unknown[]).forEach((e, i) => {
+        const wo = `plaetze[${i}]`;
+        if (!istObjekt(e)) return werfe(wo, 'Objekt erwartet');
+        if (!(PLATZ_TYPEN as readonly unknown[]).includes(e.typ)) werfe(`${wo}.typ`, `one of ${PLATZ_TYPEN.join(' | ')} expected`);
+        if (e.typ === 'leer' || e.typ === 'track') { felder(e, wo, ['typ']); return; }
+        felder(e, wo, ['typ', 'gruppe']);
+        const g = typeof e.gruppe === 'string' ? top.get(e.gruppe) : undefined;
+        if (!g) return werfe(`${wo}.gruppe`, `no top group ${String(e.gruppe)}`);
+        const art = e.typ === 'strudel' ? g.strudel : e.typ === 'seq' ? g.seq : e.typ === 'loops' ? g.loopdeck : g.modul;
+        if (!art) werfe(`${wo}.gruppe`, `group ${g.id} is not a ${e.typ as string} group`);
+        if (belegt.has(g.id)) werfe(`${wo}.gruppe`, `group ${g.id} already sits in another place`);
+        belegt.add(g.id);
+        if (e.typ === 'strudel' && ++zaehl.strudel > 1) werfe(`${wo}.typ`, 'strudel is unique: one strudel place at most');
+        if (e.typ === 'loops' && ++zaehl.loops > 2) werfe(`${wo}.typ`, 'at most two loops places (one per loop deck)');
+        if (e.typ === 'stems' && ++zaehl.stems > 2) werfe(`${wo}.typ`, 'at most two stems places');
+      });
+    }
+    const strRet = new Set<string>();
+    returns.forEach((r, i) => {
+      const wo = `returns[${i}]`;
+      if (o.live === true) { if (r.gruppe === undefined) werfe(`${wo}.gruppe`, 'fehlt (owner top group of a live return)'); }
+      else if (r.gruppe !== undefined) werfe(`${wo}.gruppe`, 'unknown field (only in the live container)');
+      const eigner = r.gruppe === undefined ? undefined : top.get(r.gruppe);
+      if (r.gruppe !== undefined && !eigner) werfe(`${wo}.gruppe`, `no top group ${r.gruppe}`);
+      if (r.loopdeck && eigner?.loopdeck?.platz !== r.loopdeck.platz) werfe(`${wo}.gruppe`, `a loop deck return is owned by its loop deck ${r.loopdeck.platz}`);
+      if (r.strudel) {
+        if (!strudel) werfe(`${wo}.strudel`, 'only with a strudel group');
+        if (strRet.has(r.strudel.art)) werfe(`${wo}.strudel`, `duplicate (${r.strudel.art})`);
+        strRet.add(r.strudel.art);
+        if (eigner !== strudel) werfe(`${wo}.gruppe`, 'a strudel return is owned by the strudel group');
+      }
+    });
   }
   // slice 4: stage IDs and pooled slots are unique over the whole project
   const insertIds = new Set<string>(), insertSlots = new Set<string>();
@@ -2034,7 +2225,7 @@ const ohnePreset = (g: Geraet | undefined): Geraet | undefined => {
 };
 export function spurSicht(s: Spur, mitFreeze = true): unknown {
   return {
-    nr: s.nr, art: s.art, geraet: ohnePreset(s.geraet) ?? null, ...(mitFreeze ? { freeze: s.freeze ?? null } : {}),
+    nr: s.nr, art: s.art, ...(s.strom !== undefined ? { strom: s.strom } : {}), geraet: ohnePreset(s.geraet) ?? null, ...(mitFreeze ? { freeze: s.freeze ?? null } : {}),
     // 1.10: das Ziel gehört zur Wiedergabe, nicht zum Freeze (ein Ziel-Wechsel verwirft keinen Freeze)
     ...(mitFreeze && s.ausgang ? { ausgang: s.ausgang.id } : {}),
     // slice 4: the chain is playback structure (art and slot: `an`, the values and the row key `sc` are controls; slice 5: a structural `key` is part of it),
@@ -2069,13 +2260,13 @@ export const wiedergabeSicht = (p: Projekt): unknown => ({
   // 1.10: die Topologie nur, wenn es welche gibt (neutral: wie vorher)
   ...((p.gruppen ?? []).length ? { gruppen: [...p.gruppen].sort((a, b) => a.nr - b.nr)
     .map((g) => ({ id: g.id, nr: g.nr, ...(g.ausgang ? { ausgang: g.ausgang.id } : {}),
-      // loop deck: the channel decides the DJ channel the deck plays into; the grid (`raster`) is server business and stays out
-      ...(g.loopdeck ? { loopdeck: loopDjNr(g.loopdeck) } : {}),
+      // live: the place of a top group decides the container it plays into (absent = parked); the grid (`raster`) is server business and stays out
+      ...(platzVonGruppe(p, g.id) !== null ? { dj: platzVonGruppe(p, g.id) } : {}),
       ...(g.inserts?.length ? { inserts: kettenSicht(g.inserts) } : {}), ...(g.rack ? { rack: rackSicht(g) } : {}),
       ...laneSicht(g) })) } : {}),
   // 1.10 slice 3: the return topology (id, nr) only when there are returns; sends and hall values are controls, not part of the view
   ...((p.returns ?? []).length ? { returns: [...(p.returns ?? [])].sort((a, b) => a.nr - b.nr).map((r) => ({ id: r.id, nr: r.nr,
-    ...(r.pre ? { pre: true } : {}), ...(r.loopdeck ? { loopdeck: loopDjNrVon(p, r.loopdeck.platz) } : {}),   // the loop deck marker decides the DJ output
+    ...(r.pre ? { pre: true } : {}), ...(r.gruppe !== undefined && platzVonGruppe(p, r.gruppe) !== null ? { dj: platzVonGruppe(p, r.gruppe) } : {}),   // the owner's place decides the DJ output
     ...(r.inserts?.length ? { inserts: kettenSicht(r.inserts) } : {}), ...(r.rack ? { rack: rackSicht(r) } : {}),
     ...laneSicht(r) })) } : {}),
   // slice 4: only with a chain on the master

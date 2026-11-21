@@ -18,7 +18,7 @@
 // is 409 projekt_offen (nothing is closed, stopped or switched). The body is checked before anything is opened:
 //   POST /loopdeck/laden {deck, spur?, zelle?, quelle}    -> {ok, spur, zelle, zelle_id}; sources in loopdeck_load.ts; a missing deck is created in the same undo step
 //   POST /loopdeck/zelle {deck, spur, zelle, name?, farbe?, art?, gain_db?, beats?, leeren?: true}   -> {ok}
-//   POST /loopdeck/bewegen {von: {deck, spur, zelle}, nach: {deck, spur, zelle}}   -> {ok}; POST /loopdeck/raster {deck, raster}; POST /loopdeck/plaetze {platz: {"1": 1..4|null, "2": 1..4|null}} (the place whose channel each deck sounds on, one undo step); POST /loopdeck/leeren {deck}
+//   POST /loopdeck/bewegen {von: {deck, spur, zelle}, nach: {deck, spur, zelle}}   -> {ok}; POST /loopdeck/raster {deck, raster}; POST /loopdeck/leeren {deck}
 //   POST /loopdeck/spur {deck, spur, fader_db?, mute?, filter?, eq?: {tief?, mitte?, hoch?} dB, kill?: {tief?, mitte?, hoch?} booleans, send?: {hall?, delay?} dB}   -> {ok}; POST /loopdeck/neu {deck, raster?} -> {ok, gruppe_id} (idempotent)
 //   POST /loopdeck/effekt {deck, spur, graph} (graph '' removes) or {deck, spur, an}   -> {ok, effekt: {id, graph, an} | null}; GET /loopdeck/effekte -> {graphen: [{name, kurz, latenz}]}
 // Limits: a cell holds at most 60 s (zu_lang); the distinct decoded audio of the live project (frames x 8 bytes, every sha once over clips and cells,
@@ -33,7 +33,7 @@ import { ProjFehler } from '../proj/session.ts';
 import { alleAudioClips, BefehlFehler, fuehreListeAus } from '../../project/commands.ts';
 import { LOOPDECK_LABEL } from '../../project/commands_loopdeck.ts';
 import { grundText } from '../../http/reasons.ts';
-import { LOOP_RASTER_BEATS, LOOP_SPUREN, LOOP_ZELLEN, LOOP_FARBEN, LOOP_MAX_FRAMES, LOOP_SEND_MAX, FADER_MIN, EQ_BAENDER, type EqBand, loopDeckGruppe, loopDeckSpuren, loopAusgangPlatz, type LoopRaster, type Projekt, type Spur, type Zelle } from '../../project/model.ts';
+import { LOOP_RASTER_BEATS, LOOP_SPUREN, LOOP_ZELLEN, LOOP_FARBEN, LOOP_MAX_FRAMES, LOOP_SEND_MAX, FADER_MIN, EQ_BAENDER, type EqBand, loopDeckGruppe, loopDeckSpuren, platzVonGruppe, type LoopRaster, type Projekt, type Spur, type Zelle } from '../../project/model.ts';
 import { loopFxGraphen } from './loopdeck_effects.ts';
 import { listeGraphen, type GraphEintrag } from '../../graphs.ts';
 import { ladeQuelle, LadenFehler, pruefeQuelle, type LadeAbhaengig, type Quelle as LadeQuelle } from './loopdeck_load.ts';
@@ -48,8 +48,8 @@ export type DeckSpur = { spur_id: string; nr: number; name: string; fader_db: nu
   eq: Record<EqBand, number>; kill: Record<EqBand, boolean>; send: { hall: number; delay: number };
   zellen: (ZelleSicht | null)[]; lauf: Lauf; effekt: Effekt | null };
 export type Effekt = { id: string; graph: string; an: boolean };
-// ausgang_platz: the DJ view place (1..4) whose channel the deck sounds on (3 = L1, 4 = L2, 1 = deck/1, 2 = deck/2); the S8 shows the deck of its side
-export type Deck = { gruppe_id: string; platz: 1 | 2; ausgang_platz: 1 | 2 | 3 | 4; raster: LoopRaster; spuren: DeckSpur[] };
+// ausgang_platz: the place (1..4) of the container the deck sits in (`plaetze`); null = parked (silent)
+export type Deck = { gruppe_id: string; platz: 1 | 2; ausgang_platz: 1 | 2 | 3 | 4 | null; raster: LoopRaster; spuren: DeckSpur[] };
 export interface LoopdeckOptionen {
   frames?(sha: string): number | null;   // decoded length of a cell's audio (server.ts: the decode cache); absent or unknown = null
   jetzt?(): number;                      // wall clock in ms for the /uhr extrapolation; absent = Date.now (tests pass their own)
@@ -183,7 +183,7 @@ export class LoopdeckBereich {
   private deckVon(p: Projekt | undefined, platz: 1 | 2): Deck | null {
     const g = p ? loopDeckGruppe(p, platz) : null;
     if (!p || !g?.loopdeck) return null;
-    return { gruppe_id: g.id, platz, ausgang_platz: loopAusgangPlatz(g.loopdeck), raster: g.loopdeck.raster, spuren: loopDeckSpuren(p, g).map((s) => ({
+    return { gruppe_id: g.id, platz, ausgang_platz: platzVonGruppe(p, g.id), raster: g.loopdeck.raster, spuren: loopDeckSpuren(p, g).map((s) => ({
       spur_id: s.id, nr: s.nr, name: s.name, fader_db: s.fader_db, mute: s.mute, filter: s.filter ?? 0,
       eq: { tief: s.eq?.tief ?? 0, mitte: s.eq?.mitte ?? 0, hoch: s.eq?.hoch ?? 0 }, kill: { tief: !!s.kill?.tief, mitte: !!s.kill?.mitte, hoch: !!s.kill?.hoch },
       send: { hall: sendDb(p!, s, platz, 'hall'), delay: sendDb(p!, s, platz, 'delay') },
@@ -432,28 +432,6 @@ export class LoopdeckBereich {
     return { code: 200, j: { ok: true, gruppe_id: loopDeckGruppe(p, platz)!.id } };
   }
 
-  // POST /loopdeck/plaetze {platz: {"1": 1..4|null, "2": 1..4|null}}: the DJ view place whose channel each deck sounds on, both decks in one undo step
-  // (the faders belong to the places: 3 = L1, 4 = L2, 1 = deck/1, 2 = deck/2). null (or a deck that does not exist) leaves that deck as it is.
-  // A request that changes nothing writes nothing; a place whose channel another group holds is refused by the model.
-  plaetze(d: Record<string, unknown>, quelle: Quelle): Promise<Antwort> {
-    return this.antwort(async () => {
-      nurFelder(d, ['platz']);
-      this.riegel(quelle);
-      const k = d.platz as Record<string, unknown> | undefined;
-      if (k === undefined || k === null || typeof k !== 'object' || Array.isArray(k)) ungueltig('platz: {"1": 1..4|null, "2": 1..4|null} expected');
-      const w = [k['1'] ?? null, k['2'] ?? null];
-      if (w.every((x) => x === null) && !('1' in k) && !('2' in k)) ungueltig('platz: "1" or "2" expected');
-      if (w.some((x) => x !== null && ![1, 2, 3, 4].includes(x as number))) ungueltig('platz: each value 1..4 or null');
-      if (w[0] !== null && w[0] === w[1]) ungueltig('platz: the two decks need different places');
-      await this.container(quelle);
-      const p = this.zugang.offen()!.projekt;
-      const aendert = ([1, 2] as const).some((n) => { const l = loopDeckGruppe(p, n)?.loopdeck; return l && w[n - 1] !== null && loopAusgangPlatz(l) !== w[n - 1]; });
-      if (!aendert) return { code: 200, j: { ok: true, geaendert: false } };
-      await this.schreibe([{ befehl: 'loopdeck_plaetze', platz_1: w[0], platz_2: w[1] }], LOOPDECK_LABEL.loopdeck_plaetze, quelle);
-      return { code: 200, j: { ok: true, geaendert: true } };
-    });
-  }
-
   laden(d: Record<string, unknown>, quelle: Quelle): Promise<Antwort> {
     return this.antwort(async () => {
       nurFelder(d, ['deck', 'spur', 'zelle', 'quelle']);
@@ -618,7 +596,6 @@ export class LoopdeckBereich {
       post('/loopdeck/zelle', (d, q) => this.zelle(d, q)),
       post('/loopdeck/bewegen', (d, q) => this.bewegen(d, q)),
       post('/loopdeck/raster', (d, q) => this.raster(d, q)),
-      post('/loopdeck/plaetze', (d, q) => this.plaetze(d, q)),
       post('/loopdeck/spur', (d, q) => this.spurAendern(d, q)),
       post('/loopdeck/effekt', (d, q) => this.effektAendern(d, q)),
       { methode: 'GET', pfad: '/loopdeck/effekte', schutz: 'offen', handler: async (_q, r) => antworte(r, () => this.effekte()) },

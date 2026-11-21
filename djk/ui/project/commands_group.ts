@@ -8,7 +8,7 @@ import {
 import { LPB_VORGABE, TICKS_VORGABE } from '../public/tracker/grid_model.js';
 import { LPB_WERTE, TICKS_MAX, TICKS_MIN } from './tracker.ts';
 import { MAX_WERKBANK_SPUREN } from './werkbank.ts';
-import { SEQ_BEATS, seqGruppe, seqRegion } from './seq.ts';
+import { SEQ_BEATS, seqRegion } from './seq.ts';
 import { nachkommen, pruefeAlleSchluessel, vorfahren } from './routing_rules.ts';
 import {
   ab, erlaube, zahlOk, zahl, flagge, text, gruppeArg, idArg, variationArgs, spurVon, freezeFeld, gruppeVon, kettenLanenBereinigen,
@@ -67,6 +67,14 @@ function setzeDeckRaster(p: Projekt, g: Gruppe, x: unknown): void {
   }
   if (lpb === LPB_VORGABE) delete g.seq!.lpb; else g.seq!.lpb = lpb;
   if (ticks === TICKS_VORGABE) delete g.seq!.ticks; else g.seq!.ticks = ticks as number;
+}
+
+// The empty SEQ deck group `SEQ <n>` (no place is written here: the caller places it). `n` only names the group.
+export function legeSeqGruppeAn(p: Projekt, n: number, ctx: Kontext): Gruppe {
+  PRO_BEFEHL.gruppenspur_neu(p, { befehl: 'gruppenspur_neu', name: `SEQ ${n}` }, ctx);
+  const g = p.gruppen![p.gruppen!.length - 1];
+  g.seq = { schema: 2 };
+  return g;
 }
 
 export const GRUPPE = {
@@ -196,30 +204,30 @@ export const GRUPPE = {
     pf.neu.fader_db = blendFader(g.blend ?? 0, db).neu;
   },
 
-  // Live modules (plan live-module decision 15): marks a top-level group as the module of slot A or B. Internal: only baueModul (project/live.ts) calls it
-  // as one step of building the module tree; gruppenspur_aendern's allow list stays as it is. One module per slot.
+  // Live modules (plan live-module decision 15): marks a top-level group as a module. Internal: only baueModul (project/live.ts) calls it as one step
+  // of building the module tree; gruppenspur_aendern's allow list stays as it is. Where the module sounds is `plaetze` (platz_setzen typ stems), not a field.
   modul_setzen(p, a) {
     erlaube(a, 'gruppe_id', 'modul');
     const g = gruppeVon(p, idArg(a, 'gruppe_id'));
     if (g.ausgang) ab('argument_ungueltig', 'modul: only a group that plays into the master can be a module');
     const f = pruefeModulFehler(a.modul);
     if (f) ab('argument_ungueltig', f);
-    const slot = (a.modul as { slot?: 'A' | 'B' }).slot;
-    const belegt = (p.gruppen ?? []).some((x) => x.id !== g.id && x.ausgang === undefined && x.modul?.slot === slot);
-    if (slot !== undefined && belegt) ab('slot_belegt', `live slot ${slot} is taken`);
     g.modul = structuredClone(a.modul) as NonNullable<Gruppe['modul']>;
   },
 
-  // SEQ deck: the empty top group `SEQ <platz>` at 0 dB with the marker {schema: 2, platz} in the live container. The patterns come with
-  // seq_folge_neu. The group limit is the model's own: it refuses the step.
+  // SEQ deck: the empty top group `SEQ <platz>` at 0 dB with the marker {schema: 2} that sits in place <platz> of the live container (`plaetze`). The
+  // patterns come with seq_folge_neu. A `track` or `leer` place is replaced; a place that holds strudel, loops or a module is refused (platz_belegt), one
+  // that holds a SEQ deck is seq_belegt. The group limit is the model's own: it refuses the step.
   seq_anlegen(p, a, ctx) {
     erlaube(a, 'platz');
-    if (!p.live) ab('kein_liveprojekt', 'a SEQ deck sits in the live container');
+    if (!p.live || !p.plaetze) ab('kein_liveprojekt', 'a SEQ deck sits in the live container');
     const platz = a.platz;
     if (platz !== 1 && platz !== 2 && platz !== 3 && platz !== 4) ab('argument_ungueltig', 'platz: integer 1..4 expected');
-    if (seqGruppe(p, platz as number)) ab('seq_belegt', `place ${platz} already holds a SEQ deck`);
-    PRO_BEFEHL.gruppenspur_neu(p, { befehl: 'gruppenspur_neu', name: `SEQ ${platz}` }, ctx);
-    p.gruppen![p.gruppen!.length - 1].seq = { schema: 2, platz: platz as 1 | 2 | 3 | 4 };
+    const typ = p.plaetze?.[(platz as number) - 1]?.typ;
+    if (typ === 'seq') ab('seq_belegt', `place ${platz} already holds a SEQ deck`);
+    if (typ === 'strudel' || typ === 'loops' || typ === 'stems') ab('platz_belegt', `place ${platz} already holds ${typ}`);
+    const g = legeSeqGruppeAn(p, platz as number, ctx);
+    p.plaetze![(platz as number) - 1] = { typ: 'seq', gruppe: g.id };
   },
 
   // SEQ deck: one pattern = an instrument track that plays into the deck group, with its one MIDI clip (name = track name, beat 0, seqRegion beats = 64 in 4/4,
@@ -281,11 +289,14 @@ export const GRUPPE = {
     PRO_BEFEHL.gruppenspur_loeschen(p, { befehl: 'gruppenspur_loeschen', gruppe_id: g.id }, ctx);
   },
 
-  gruppenspur_loeschen(p, a) {   // tracks and child groups move to the deleted group's own target (its parent or master, same step), never orphaned targets
+  gruppenspur_loeschen(p, a, ctx) {   // tracks and child groups move to the deleted group's own target (its parent or master, same step), never orphaned targets
     erlaube(a, 'gruppe_id');
     const gl = (p.gruppen ??= []);
     const g = gruppeVon(p, idArg(a, 'gruppe_id'));
     for (const s of [...p.spuren, ...gl]) if (s.ausgang?.id === g.id) { if (g.ausgang) s.ausgang = { art: 'gruppe', id: g.ausgang.id }; else delete s.ausgang; }
+    // a real removal (unlike parking): the place that held the group becomes a track place, and the returns it owned go with it
+    if (p.plaetze) p.plaetze = p.plaetze.map((e) => ('gruppe' in e && e.gruppe === g.id ? { typ: 'track' } : e)) as typeof p.plaetze;
+    for (const r of (p.returns ?? []).filter((x) => x.gruppe === g.id)) PRO_BEFEHL.return_loeschen(p, { befehl: 'return_loeschen', return_id: r.id }, ctx);
     gl.splice(gl.indexOf(g), 1);
     // slice 5: a key on this group would dangle
     for (const x of alleInserts(p)) if (x.insert.key?.quelle === 'grp' && x.insert.key.nr === g.nr) delete x.insert.key;

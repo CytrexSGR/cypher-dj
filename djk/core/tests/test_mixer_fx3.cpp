@@ -10,7 +10,7 @@
 //  (g) a graph set or removed on fx/3 while channels are assigned: no hole and no jump (idle graph, sum equals the unassigned reference)
 //  (h) an FX3 blend advances while the strip is silent (sleeping strips are woken for it)
 //  (i) FX3 on every source channel, a bus target is untouched, master and buses are ignored, the state is reported back
-//  (j) FX1/FX2 on deck/3 and deck/4: the Beat FX acts there (and only there), they were no targets before
+//  (j) FX1/FX2 on pad/1 and pad/2: the Beat FX acts there (and only there), they were no targets before
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -49,7 +49,7 @@ struct Lauf {
   float aus_l[N] = {}, aus_r[N] = {};
   long t = 0;
   explicit Lauf(unsigned mask) : m(std::make_unique<cdj::Mixer>(tab)), maske(mask) {
-    for (const char* p : {"deck/1/fader", "deck/2/fader", "deck/3/fader", "deck/4/fader"}) {
+    for (const char* p : {"deck/1/fader", "deck/2/fader", "pad/1/fader", "pad/2/fader"}) {
       const int r = tab.suche(p);
       PRUEF(r >= 0);
       m->setze_sofort(r, 0.0f);
@@ -277,10 +277,10 @@ int main() {
       if (std::fabs(r.aus_l[i]) > 0.3f) g = a.aus_l[i] / r.aus_l[i];
     PRUEF(std::fabs(g - 0.5f) < 1e-3f);
   }
-  // (i) every source channel takes FX3; master, buses and out-of-range indices are ignored; a channel routed to a bus keeps its path
+  // (i) every container takes FX3; master, buses and out-of-range indices are ignored; a channel routed to a bus keeps its path
   {
     Lauf a(0x1);
-    const char* quellen[] = {"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "erz/4", "erz/5", "erz/6", "erz/7", "erz/8", "pad/1", "pad/2"};
+    const char* quellen[] = {"deck/1", "deck/2", "pad/1", "pad/2"};
     for (const char* q : quellen) {
       PRUEF(!a.m->fx_zugewiesen(F3, kanal(q)));
       a.m->fx_zuweisung_setze(F3, kanal(q), true);
@@ -307,9 +307,9 @@ int main() {
     for (int k = 0; k < 20; ++k) { b.block(); r.block(); grenze = std::fmax(grenze, abstand(b, r)); }
     PRUEF(grenze < 2e-6f && r.spitze() > 0.3f);
   }
-  // (j) FX1 and FX2 on deck/3 and deck/4: the echo shows only on the channel it is assigned to
+  // (j) FX1 and FX2 on pad/1 and pad/2: the echo shows only on the channel it is assigned to
   {
-    for (const char* ziel : {"deck/3", "deck/4"}) {
+    for (const char* ziel : {"pad/1", "pad/2"}) {
       for (int einheit = 0; einheit < 2; ++einheit) {
         const unsigned maske = 0xF;
         Lauf a(maske), b(maske);
@@ -319,10 +319,10 @@ int main() {
         float grenze = 0.0f;
         for (int k = 0; k < 80; ++k) { a.block(); b.block(); grenze = std::fmax(grenze, abstand(a, b)); }
         PRUEF(grenze > 0.05f);   // the Beat FX changed the sum
-        // the same unit on deck/1 gives a different sum from deck/3: the effect sits on the assigned channel (the channels differ in pitch)
+        // the same unit on deck/1 gives a different sum from pad/1: the effect sits on the assigned channel (the channels differ in pitch)
         Lauf c(0x1);
         c.m->fx_einheit_setze(einheit, cdj::BeatFx::ECHO, 0.25, 0.5f, 0.5f, 0.5, 0.5, true);
-        c.m->fx_zuweisung_setze(einheit, kanal("deck/3"), true);   // deck/3 carries no signal in this mixer: nothing may change
+        c.m->fx_zuweisung_setze(einheit, kanal("pad/1"), true);   // pad/1 carries no signal in this mixer: nothing may change
         Lauf d(0x1);
         float stumm = 0.0f;
         for (int k = 0; k < 80; ++k) { c.block(); d.block(); stumm = std::fmax(stumm, abstand(c, d)); }

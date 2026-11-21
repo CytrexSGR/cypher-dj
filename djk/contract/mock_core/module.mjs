@@ -13,12 +13,12 @@ import invarianten from './invariants.mjs';
 import frist from './deadline.mjs';
 import fxRouting from './fx_routing.mjs';
 import fxZuweisung from './fx_zuweisung.mjs';
-import platzKanal from './platz_channel.mjs';
+import containerQuelle from './container_source.mjs';
 import arr from './arr.mjs';
 import rec from './rec.mjs';
 import graph from './graph.mjs';
 
-export const MODULE = [verbindung, regler, decks, hand, hoerschein, erzeuger, ki, invarianten, frist, fxRouting, fxZuweisung, platzKanal, arr, rec, graph];
+export const MODULE = [verbindung, regler, decks, hand, hoerschein, erzeuger, ki, invarianten, frist, fxRouting, fxZuweisung, containerQuelle, arr, rec, graph];
 
 // Mutationen für den Fehlerfall der Abnahme: je eine Regel aus (INTERFACES §17, ROADMAP Scheibe 13)
 // arr_ki_stopp_ab (D1 Spec 6.27): /k/arr/stopp von cypher während des KI-Stopps abgelehnt wie vor 6.27; arr_zustand_alt

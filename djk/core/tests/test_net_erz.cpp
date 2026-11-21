@@ -37,9 +37,9 @@ static std::vector<char> bundle(std::initializer_list<const cdj::osc::Schreiber*
   return b;
 }
 
-static void strom(cdj::Netz& n, int64_t id, const char* ziel, const char* kanal, int strom_nr = 1) {
+static void strom(cdj::Netz& n, int64_t id, const char* ziel, int strom_nr = 1) {
   cdj::osc::Schreiber s(v::erz_strom);
-  s.h(id).s("erzeuger").i(strom_nr).s(ziel).s(kanal);
+  s.h(id).s("erzeuger").i(strom_nr).s(ziel);
   n.paket(s.daten(), s.groesse());
 }
 
@@ -65,46 +65,46 @@ int main() {
       PRUEF(g.warte("/k/willkommen", 200));
     }
     // 1. gutes Kit
-    strom(netz, 51, "kit:gut", "erz/1");
-    PRUEF(bef->hole(b) && b.art == cdj::Befehl::ERZ_STROM && b.id == 51 && b.nr == 1 && !std::strcmp(b.pfad, "erz/1"));
+    strom(netz, 51, "kit:gut");
+    PRUEF(bef->hole(b) && b.art == cdj::Befehl::ERZ_STROM && b.id == 51 && b.nr == 1 && !std::strcmp(b.pfad, ""));
     if (b.zeiger) {
       const auto* k = static_cast<const cdj::Kit*>(b.zeiger);
       PRUEF(k->n == 1 && k->klang[0].frames == 2);
       delete k;
     }
     // 2. Kit fehlt → pruefung; 3. midi: noch nicht gebaut; 4. Kanal deck/1; 5. Name mit Pfad
-    strom(netz, 52, "kit:fehlt", "erz/1");
+    strom(netz, 52, "kit:fehlt");
     PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 52 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "pruefung"));
     // Studio S5.1 T2: midi:<port>:<kanal> wird angenommen (kein /q vom Netz; Quittung 1/3 kommt vom Kern): ein
     // ERZ_STROM-Befehl mit form = Port, politik = Kanal, ohne Kit; midi:5:1 (Port ausserhalb) → Status 6, kein Befehl.
-    strom(netz, 53, "midi:1:1", "erz/1");
+    strom(netz, 53, "midi:1:1");
     {
       cdj::Befehl mb{};
       PRUEF(bef->hole(mb) && mb.art == cdj::Befehl::ERZ_STROM && mb.id == 53 && mb.form == 1 && mb.politik == 1 &&
             mb.zeiger == nullptr);
       PRUEF(!bef->hole(mb));
     }
-    strom(netz, 57, "midi:5:1", "erz/1");
+    strom(netz, 57, "midi:5:1");
     PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 57 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
     {
       cdj::Befehl mb{};
       PRUEF(!bef->hole(mb));
     }
-    // Review-Kern m3: erz/8 ist der Nur-Cue-Vorhöreingang, ein Strom dort bliebe im Saal still → Status 6, kein Befehl
-    strom(netz, 61, "kit:gut", "erz/8");
+    // Review-Kern m3 (container core K1: by stream): stream 8 was the cue-only preview input, it stays outside the range → status 6, no command
+    strom(netz, 61, "kit:gut", 8);
     PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 61 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
-    strom(netz, 62, "midi:1:1", "erz/8");
+    strom(netz, 62, "midi:1:1", 8);
     PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 62 && g.m.werte[2].i == 6);
     {
       cdj::Befehl mb{};
       PRUEF(!bef->hole(mb));
     }
-    strom(netz, 63, "kit:gut", "erz/7");   // Negativ-Kontrolle: erz/7 wird weiter angenommen
+    strom(netz, 63, "kit:gut", 7);   // negative control: stream 7 is still accepted
     PRUEF(bef->hole(b) && b.art == cdj::Befehl::ERZ_STROM && b.id == 63);
     if (b.zeiger) delete static_cast<const cdj::Kit*>(b.zeiger);
-    strom(netz, 54, "kit:gut", "deck/1");
+    strom(netz, 54, "kit:gut", 11);   // container core K1: stream 11 is outside the range
     PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 54 && g.m.werte[2].i == 6);
-    strom(netz, 55, "kit:../gut", "erz/1");
+    strom(netz, 55, "kit:../gut");
     PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 55 && g.m.werte[2].i == 6);
     PRUEF(!bef->hole(b));
     // Baukasten S3a: bk:<name> lädt <bk_ordner>/<name>.json, übersetzt im Netz-Faden; ERZ_STROM mit form = -1 und
@@ -114,15 +114,15 @@ int main() {
       std::ofstream(dir / "bk/saege.json") << R"({"format":"baukasten/2","name":"t","stimmen":1,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"s.aus","nach":"o.x"}]})";
       std::ofstream(dir / "bk/kaputt.json") << R"({"format":"baukasten/2","name":"t","stimmen":1,"knoten":[{"id":"x","art":"gibtsnicht"}],"kanten":[]})";
       netz.setze_bk_ordner((dir / "bk").string());
-      strom(netz, 71, "bk:saege", "erz/2");
+      strom(netz, 71, "bk:saege");
       cdj::Befehl bb{};
       PRUEF(bef->hole(bb) && bb.art == cdj::Befehl::ERZ_STROM && bb.id == 71 && bb.form == -1 && bb.zeiger != nullptr);
       if (bb.zeiger) cypher_bk_frei(static_cast<CypherBk*>(const_cast<void*>(bb.zeiger)));
-      strom(netz, 72, "bk:fehlt", "erz/2");
+      strom(netz, 72, "bk:fehlt");
       PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 72 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "pruefung"));
-      strom(netz, 73, "bk:kaputt", "erz/2");
+      strom(netz, 73, "bk:kaputt");
       PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 73 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "pruefung"));
-      strom(netz, 74, "bk:../saege", "erz/2");
+      strom(netz, 74, "bk:../saege");
       PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 74 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
       PRUEF(!bef->hole(bb));   // keiner der Fehlerfälle reiht einen Befehl ein
       // ERZ_BK_ALT: der Netz-Faden gibt den Graphen frei (Weg wie ERZ_ALT in Fall 10, über den Ring; im normalen Bau nur
@@ -159,9 +159,9 @@ int main() {
       graph(83, "andreas", "deck/2", "fx-limit");         // (3) Latenz > 0: pruefung
       PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 83 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "pruefung"));
       kb = cdj::Befehl{};
-      graph(84, "cypher", "deck/3", "");                  // (4) leerer Name (und cypher darf): eingereiht, zeiger null
+      graph(84, "cypher", "deck/1", "");                  // (4) leerer Name (und cypher darf): eingereiht, zeiger null
       PRUEF(bef->hole(kb) && kb.art == cdj::Befehl::KANAL_GRAPH && kb.id == 84 && kb.zeiger == nullptr &&
-            !std::strcmp(kb.pfad, "deck/3") && !std::strcmp(kb.quelle, "cypher"));
+            !std::strcmp(kb.pfad, "deck/1") && !std::strcmp(kb.quelle, "cypher"));
       graph(85, "andreas", "deck/5", "fx-echo-achtel");   // (5) Kanal außerhalb: ausserhalb_bereich
       PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 85 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
       graph(86, "andreas", "deck/1", "fehlt");            // Datei fehlt: pruefung
@@ -181,14 +181,14 @@ int main() {
       graph(91, "andreas", "fx/4", "juno-pad");           // an instrument on a send: kein_eingang
       PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 91 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "kein_eingang"));
       PRUEF(!bef->hole(kb));
-      // remix targets: the loop slots and the three Strudel streams take an effect insert; erz/4 and the buses do not
-      for (const char* k : {"pad/1", "pad/2", "erz/1", "erz/2", "erz/3"}) {
+      // remix targets: the containers take an effect insert; the old erz channels and the buses do not
+      for (const char* k : {"pad/1", "pad/2", "deck/1", "deck/2"}) {
         kb = cdj::Befehl{};
         graph(92, "andreas", k, "fx-echo-achtel");
         PRUEF(bef->hole(kb) && kb.art == cdj::Befehl::KANAL_GRAPH && kb.id == 92 && kb.zeiger != nullptr && !std::strcmp(kb.pfad, k));
         if (kb.zeiger) cypher_bk_frei(static_cast<CypherBk*>(const_cast<void*>(kb.zeiger)));
       }
-      graph(93, "andreas", "erz/4", "fx-echo-achtel");
+      graph(93, "andreas", "erz/1", "fx-echo-achtel");
       PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 93 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
       graph(94, "andreas", "bus/1", "fx-echo-achtel");
       PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 94 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
@@ -215,12 +215,12 @@ int main() {
       std::ofstream(dir / "bk/sampler-pfad.json") << sampler_json("../x.f32");
       std::ofstream(dir / "bk/sampler-fehlt.json") << sampler_json("nope.f32");
       cdj::Befehl sb{};
-      strom(netz, 75, "bk:sampler", "erz/2");
+      strom(netz, 75, "bk:sampler");
       PRUEF(bef->hole(sb) && sb.art == cdj::Befehl::ERZ_STROM && sb.id == 75 && sb.form == -1 && sb.zeiger != nullptr);
       if (sb.zeiger) cypher_bk_frei(static_cast<CypherBk*>(const_cast<void*>(sb.zeiger)));
-      strom(netz, 76, "bk:sampler-pfad", "erz/2");
+      strom(netz, 76, "bk:sampler-pfad");
       PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 76 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "pruefung"));
-      strom(netz, 77, "bk:sampler-fehlt", "erz/2");
+      strom(netz, 77, "bk:sampler-fehlt");
       PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 77 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "pruefung"));
       PRUEF(!bef->hole(sb));   // neither failure queues a command
       cdj::osc::Schreiber ks(v::k_kanal_graph);
@@ -230,46 +230,32 @@ int main() {
       PRUEF(!bef->hole(sb));
     }
 
-    // S5r K2: die Regler <kanal>/bk/<1..8> der Stellwerk-Tabelle gibt es genau auf den Kanälen, auf denen der Kern einen
-    // Baukasten-Graphen annimmt. Gemessen am echten Verhalten: für jeden Kanal der Tabelle ein Instrument-Graph über
-    // /erz/strom (bk:) und ein Effekt-Graph über /k/kanal/graph; "angenommen" heißt, ein Befehl liegt im Ring.
+    // Container core K1: /k/kanal/graph takes exactly the contract's graph_kanal channels; the old erz/<n> channel names are gone.
+    // (The control table against the contract is back in K9; test_regler_gegen_vertrag is red until then.)
     {
       cypherdj::stellwerk::ReglerTabelle tab;
-      int angenommen = 0, mit_pfad = 0;
+      int angenommen = 0;
       int64_t id = 900;
       for (int k = 0; k < tab.kanaele(); k++) {
         const char* kanal = tab.kanal_name(k);
-        bool nimmt = false;
-        cdj::Befehl pb{};
-        strom(netz, id++, "bk:saege", kanal);
-        if (bef->hole(pb)) {
-          nimmt = true;
-          PRUEF(pb.art == cdj::Befehl::ERZ_STROM && pb.zeiger);
-          if (pb.zeiger) cypher_bk_frei(static_cast<CypherBk*>(const_cast<void*>(pb.zeiger)));
-        } else {
-          PRUEF(g.warte("/q", 200) && g.m.werte[2].i == 6);
-        }
+        bool soll = false;
+        for (const auto& n : v::werte::graph_kanal) soll = soll || n == kanal;
         cdj::osc::Schreiber s(v::k_kanal_graph);
         s.h(id++).s("andreas").s(kanal).s("fx-echo-achtel");
         netz.paket(s.daten(), s.groesse());
-        pb = cdj::Befehl{};
-        if (bef->hole(pb)) {
-          nimmt = true;
+        cdj::Befehl pb{};
+        const bool nimmt = bef->hole(pb);
+        if (nimmt) {
           PRUEF(pb.art == cdj::Befehl::KANAL_GRAPH && pb.zeiger);
           if (pb.zeiger) cypher_bk_frei(static_cast<CypherBk*>(const_cast<void*>(pb.zeiger)));
         } else {
           PRUEF(g.warte("/q", 200) && g.m.werte[2].i == 6);
         }
-        char p[40];
-        std::snprintf(p, sizeof p, "%s/bk/1", kanal);
-        const bool hat_pfad = tab.suche(p) >= 0;
-        if (hat_pfad != nimmt) std::fprintf(stderr, "bk-Pfade und Graph-Annahme weichen bei %s ab (Pfad %d, Annahme %d)\n", kanal, hat_pfad, nimmt);
-        PRUEF(hat_pfad == nimmt);
+        if (nimmt != soll) std::fprintf(stderr, "graph acceptance differs from graph_kanal at %s (accepted %d, expected %d)\n", kanal, nimmt, soll);
+        PRUEF(nimmt == soll);
         angenommen += nimmt;
-        mit_pfad += hat_pfad;
       }
-      PRUEF(angenommen == 13 && mit_pfad == 13);   // positive control: channels that hit (deck/1..4, 6 x erz, pad/1..2, master insert graph)
-      PRUEF(angenommen < tab.kanaele());           // and channels that do not (erz/4, erz/8, bus, cue)
+      PRUEF(angenommen >= 1);   // positive control: some table channels do take a graph
     }
 
     // MVP 2 Scheibe 3 (E2): kit:<a>+<b> verschmilzt; b fehlt → nur a; zwei '+' oder leerer Teil → ausserhalb_bereich
@@ -280,7 +266,7 @@ int main() {
       std::ofstream(dir / "rec/kit.json") << R"({"schema":1,"name":"rec","klaenge":[{"note":112,"name":"rec0:0","datei":"rec0_0.f32","frames":1}]})";
     }
     b = cdj::Befehl{};
-    strom(netz, 56, "kit:gut+rec", "erz/1");
+    strom(netz, 56, "kit:gut+rec");
     PRUEF(bef->hole(b) && b.art == cdj::Befehl::ERZ_STROM && b.id == 56 && b.zeiger);
     if (b.zeiger) {
       const auto* k = static_cast<const cdj::Kit*>(b.zeiger);
@@ -288,15 +274,15 @@ int main() {
       delete k;
     }
     b = cdj::Befehl{};
-    strom(netz, 57, "kit:gut+nochnicht", "erz/1");
+    strom(netz, 57, "kit:gut+nochnicht");
     PRUEF(bef->hole(b) && b.id == 57 && b.zeiger);
     if (b.zeiger) {
       PRUEF(static_cast<const cdj::Kit*>(b.zeiger)->n == 1);
       delete static_cast<const cdj::Kit*>(b.zeiger);
     }
-    strom(netz, 58, "kit:gut+rec+rec", "erz/1");
+    strom(netz, 58, "kit:gut+rec+rec");
     PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 58 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
-    strom(netz, 59, "kit:gut+", "erz/1");
+    strom(netz, 59, "kit:gut+");
     PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 59 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
     b = cdj::Befehl{};
     PRUEF(!bef->hole(b));
@@ -463,7 +449,7 @@ int main() {
       netz.paket(h.daten(), h.groesse());
       PRUEF(g.warte("/k/willkommen", 200));
       cdj::Befehl x{};
-      strom(netz, 801, "bk:", "erz/3", 5);   // bk_leer_ohne_vorher
+      strom(netz, 801, "bk:", 5);   // bk_leer_ohne_vorher
       PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 801 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
       PRUEF(!bef->hole(x));
     }
@@ -479,65 +465,65 @@ int main() {
     }
     cdj::Befehl x{};
     // 1. bk_leer_stellt_vorher_her: midi:2:1 -> graph -> `bk:` gives midi:2:1 back, no graph on the stream
-    strom(netz, 810, "midi:2:1", "erz/3", 3);
+    strom(netz, 810, "midi:2:1", 3);
     PRUEF(bef->hole(x) && x.id == 810 && x.form == 2 && x.politik == 1 && x.zeiger == nullptr);
-    strom(netz, 811, "bk:saege", "erz/3", 3);
+    strom(netz, 811, "bk:saege", 3);
     PRUEF(bef->hole(x) && x.id == 811 && x.form == -1 && x.zeiger != nullptr);
     frei(x);
-    strom(netz, 812, "bk:", "erz/3", 3);
+    strom(netz, 812, "bk:", 3);
     PRUEF(bef->hole(x) && x.art == cdj::Befehl::ERZ_STROM && x.id == 812 && x.nr == 3 && x.form == 2 && x.politik == 1 &&
-          x.zeiger == nullptr && !std::strcmp(x.pfad, "erz/3") && !std::strcmp(x.quelle, "erzeuger"));
+          x.zeiger == nullptr && !std::strcmp(x.pfad, "") && !std::strcmp(x.quelle, "erzeuger"));
     PRUEF(!bef->hole(x));
     // per stream: stream 5 never had a target, so `bk:` there stays refused even though stream 3 has one
-    strom(netz, 813, "bk:", "erz/5", 5);
+    strom(netz, 813, "bk:", 5);
     PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 813 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
     PRUEF(!bef->hole(x));
     // 2. bk_leer_kit: the first target is a kit; the kit comes back as a fresh object (pointer non-null, graph off)
-    strom(netz, 820, "kit:gut", "erz/2", 2);
+    strom(netz, 820, "kit:gut", 2);
     PRUEF(bef->hole(x) && x.form == 0 && x.zeiger != nullptr);
     frei(x);
-    strom(netz, 821, "bk:welle", "erz/2", 2);
+    strom(netz, 821, "bk:welle", 2);
     PRUEF(bef->hole(x) && x.form == -1);
     frei(x);
-    strom(netz, 822, "bk:", "erz/2", 2);
-    PRUEF(bef->hole(x) && x.id == 822 && x.form == 0 && x.zeiger != nullptr && !std::strcmp(x.pfad, "erz/2"));
+    strom(netz, 822, "bk:", 2);
+    PRUEF(bef->hole(x) && x.id == 822 && x.form == 0 && x.zeiger != nullptr && !std::strcmp(x.pfad, ""));
     if (x.zeiger) PRUEF(static_cast<const cdj::Kit*>(x.zeiger)->n == 1);
     frei(x);
     // 4. bk_ueber_bk: midi:1:1, bk:saege, bk:welle, bk: -> midi 1:1 (a graph never becomes the stored target)
-    strom(netz, 830, "midi:1:1", "erz/3", 3);
+    strom(netz, 830, "midi:1:1", 3);
     PRUEF(bef->hole(x) && x.form == 1);
-    strom(netz, 831, "bk:saege", "erz/3", 3);
+    strom(netz, 831, "bk:saege", 3);
     PRUEF(bef->hole(x) && x.form == -1);
     frei(x);
-    strom(netz, 832, "bk:welle", "erz/3", 3);
+    strom(netz, 832, "bk:welle", 3);
     PRUEF(bef->hole(x) && x.form == -1);
     frei(x);
-    strom(netz, 833, "bk:", "erz/3", 3);
+    strom(netz, 833, "bk:", 3);
     PRUEF(bef->hole(x) && x.id == 833 && x.form == 1 && x.politik == 1 && x.zeiger == nullptr);
     // a refused target (midi:5:1) and a failing graph are not stored: the stored one stays midi:1:1
-    strom(netz, 834, "midi:5:1", "erz/3", 3);
+    strom(netz, 834, "midi:5:1", 3);
     PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 834 && g.m.werte[2].i == 6);
-    strom(netz, 835, "bk:kaputt", "erz/3", 3);
+    strom(netz, 835, "bk:kaputt", 3);
     PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 835 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "pruefung"));
     PRUEF(!bef->hole(x));
-    strom(netz, 836, "bk:", "erz/3", 3);
+    strom(netz, 836, "bk:", 3);
     PRUEF(bef->hole(x) && x.id == 836 && x.form == 1 && x.politik == 1);
     // the newest accepted non-graph target wins
-    strom(netz, 837, "midi:3:7", "erz/3", 3);
+    strom(netz, 837, "midi:3:7", 3);
     PRUEF(bef->hole(x) && x.form == 3 && x.politik == 7);
-    strom(netz, 838, "bk:saege", "erz/3", 3);
+    strom(netz, 838, "bk:saege", 3);
     PRUEF(bef->hole(x) && x.form == -1);
     frei(x);
-    strom(netz, 839, "bk:", "erz/3", 3);
+    strom(netz, 839, "bk:", 3);
     PRUEF(bef->hole(x) && x.form == 3 && x.politik == 7);
-    // 3. bk_leer_kanal: the stored kanal wins. First target on erz/2, remove arrives on erz/1 -> replay goes to erz/2
-    strom(netz, 840, "midi:1:2", "erz/2", 6);
-    PRUEF(bef->hole(x) && x.form == 1 && x.politik == 2 && !std::strcmp(x.pfad, "erz/2"));
-    strom(netz, 841, "bk:saege", "erz/2", 6);
-    PRUEF(bef->hole(x) && x.form == -1 && !std::strcmp(x.pfad, "erz/2"));
+    // 3. bk_leer_stream: the stored target belongs to the stream, not to a channel. First target on stream 6, remove for stream 6 replays it
+    strom(netz, 840, "midi:1:2", 6);
+    PRUEF(bef->hole(x) && x.form == 1 && x.politik == 2 && x.nr == 6);
+    strom(netz, 841, "bk:saege", 6);
+    PRUEF(bef->hole(x) && x.form == -1 && x.nr == 6);
     frei(x);
-    strom(netz, 842, "bk:", "erz/1", 6);
-    PRUEF(bef->hole(x) && x.id == 842 && x.nr == 6 && x.form == 1 && x.politik == 2 && !std::strcmp(x.pfad, "erz/2"));
+    strom(netz, 842, "bk:", 6);
+    PRUEF(bef->hole(x) && x.id == 842 && x.nr == 6 && x.form == 1 && x.politik == 2);
     PRUEF(!bef->hole(x));
   }
   delete bef;

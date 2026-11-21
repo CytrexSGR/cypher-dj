@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { neuesProjekt, pruefeProjekt } from '../project/model.ts';
-import { baueModul, baueNeuePfade, liveSlots, tonartAbstand, tonartWurzel, passeModulAn } from '../project/live.ts';
+import { baueModul, baueNeuePfade, modulAmPlatz, tonartAbstand, tonartWurzel, passeModulAn } from '../project/live.ts';
 import { fuehreListeAus } from '../project/commands.ts';
 import { ModulTonart } from '../areas/live/key.ts';
 import { liveAufbau } from './support/live_module.mjs';
@@ -11,13 +11,13 @@ const HASH = 'c'.repeat(64), D = (n) => ({ sha256: n.repeat(64), pfad: `/x/${n}.
 const herkunft = (extra = {}) => ({ quelle_sha256: HASH, titel: 'Song', kuenstler: 'Art', fassung: '1', basis_bpm: 120, von_beat: 4, laenge_beats: 16, bpm: 120,
   tonart: '8A', datum: '2026-11-12', ...extra });
 const LOOP = { ...D('e'), beats: 16, frames: 16 * 24000 };
-const live = () => { const p = neuesProjekt('x'); p.live = true; return p; };
+const live = () => { const p = neuesProjekt('x'); p.live = true; p.plaetze = [{ typ: 'track' }, { typ: 'track' }, { typ: 'track' }, { typ: 'track' }]; return p; };
 const vier = () => ({ drums: D('1'), bass: D('2'), other: D('3'), vocals: D('4') });
 const valide = (p) => assert.ok('projekt' in pruefeProjekt(JSON.parse(JSON.stringify(p))), JSON.stringify(pruefeProjekt(JSON.parse(JSON.stringify(p)))));
 // a module with stems plus a MIDI track in its tree (task 8 brings MIDI clips; every MIDI clip of the tree is moved)
 function mitMidi() {
   let p = baueModul(live(), 'A', LOOP, vier(), herkunft());
-  const top = liveSlots(p).A;
+  const top = modulAmPlatz(p, 'A');
   p = fuehreListeAus(p, [{ befehl: 'spur_neu', art: 'instrument', name: 'Keys' }]).projekt;
   const sid = p.spuren.at(-1).id;
   p = fuehreListeAus(p, [{ befehl: 'clip_neu', spur_id: sid, art: 'midi', start_beat: 0, laenge_beats: 16,
@@ -48,7 +48,7 @@ test('distance: A minor under C minor is +3; Am and C are 0 apart; shortest way 
 
 test('adapt: MIDI notes +3, transpose_st 3 on the stem clips (drums in repitch stay), idempotent, in range', () => {
   const p0 = mitMidi();
-  const top = liveSlots(p0).A;
+  const top = modulAmPlatz(p0, 'A');
   const p1 = passeModulAn(p0, top, 3);
   assert.deepEqual(toene(p1), [60, 63]);
   for (const [name, modus, st] of warps(p1)) assert.equal(st, modus === 'repitch' ? 0 : 3, name);
@@ -81,7 +81,7 @@ test('adapt: drum MIDI (a drum-map graph or a kit track) is not transposed, melo
   p = fuehreListeAus(p, [{ befehl: 'clip_neu', spur_id: kit.id, art: 'midi', start_beat: 0, laenge_beats: 16, noten: [{ id: 'k1', beat: 0, laenge: 0.25, ton: 36, vel: 100 }] },
     { befehl: 'ziel_setzen', strang_id: kit.id, ausgang: { art: 'gruppe', id: p.gruppen.find((g) => g.name === 'Drums').id } }]).projekt;
   const tonVon = (q, name) => q.spuren.filter((x) => x.name === name).flatMap((x) => x.clips.flatMap((c) => (c.art === 'midi' ? c.noten.map((n) => n.ton) : []))).sort((a, b) => a - b);
-  const top = liveSlots(p).A;
+  const top = modulAmPlatz(p, 'A');
   for (const d of [3, -2, 0]) {
     const q = passeModulAn(p, top, d);
     assert.deepEqual(tonVon(q, 'Drums new'), tonVon(p, 'Drums new'), `${d}: kick, clap and hat stay kick, clap and hat`);
@@ -94,8 +94,8 @@ test('adapt: drum MIDI (a drum-map graph or a kit track) is not transposed, melo
 
 test('validator: transponiert is optional, an integer -12..12, never 0', () => {
   const p = baueModul(live(), 'A', LOOP, {}, herkunft());
-  const top = liveSlots(p).A;
-  const setze = (t) => () => fuehreListeAus(p, [{ befehl: 'modul_setzen', gruppe_id: top, modul: { ...herkunft(), slot: 'A', transponiert: t } }]);
+  const top = modulAmPlatz(p, 'A');
+  const setze = (t) => () => fuehreListeAus(p, [{ befehl: 'modul_setzen', gruppe_id: top, modul: { ...herkunft(), transponiert: t } }]);
   setze(3)();
   for (const t of [0, 1.5, 13, '3']) assert.throws(setze(t), (e) => e.grund === 'argument_ungueltig', String(t));
 });
@@ -110,7 +110,7 @@ async function aufbauMitMaster(t, master) {
 test('POST /modul/tonart: +3 under 5A, one undo step for all clips, second call changes nothing, stand shows the rest', async (t) => {
   const quelle = { m: { deck: 2, tonart: '5A' } };
   const { z, tonart } = await aufbauMitMaster(t, () => quelle.m);
-  const gid = liveSlots(z.projekt()).A;
+  const gid = modulAmPlatz(z.projekt(), 'A');
   assert.equal(tonart.stand(gid).tonart_abstand, 3);
   const a = await tonart.passeAn({ slot: 'A' }, 'andreas');
   assert.equal(a.code, 200, JSON.stringify(a.j));
@@ -141,7 +141,8 @@ test('POST /modul/tonart refusals: no deck, unknown key, empty slot, no live pro
   assert.deepEqual(await f({ slot: 'A' }), { code: 409, fehler: 'tonart_unbekannt' });
   q.m = { deck: 1, tonart: '5A' };
   assert.deepEqual(await f({ slot: 'B' }), { code: 409, fehler: 'slot_leer' });
-  assert.deepEqual(await f({ slot: 'C' }), { code: 400, fehler: 'argument_ungueltig' });
+  assert.deepEqual(await f({ slot: 'E' }), { code: 400, fehler: 'argument_ungueltig' });
+  assert.deepEqual(await f({ slot: 'C' }), { code: 409, fehler: 'slot_leer' });   // C is place 3 now
   assert.deepEqual(await f({ slot: 'A', x: 1 }), { code: 400, fehler: 'argument_unbekannt' });
   assert.equal(toene(z.projekt()).length, 0);
   assert.equal(z.projekt().gruppen.find((g) => g.modul).modul.transponiert, undefined, 'nothing changed');

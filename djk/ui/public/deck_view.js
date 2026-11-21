@@ -1,5 +1,6 @@
 // Deck sections: building, library load, waveforms, status line, level meters.
-import { DECKS, ERZEUGER } from './curves.js';
+import { DECKS } from './curves.js';
+import { CONTAINER, playerKanal } from './kanaele.js';
 import { Laufansicht, Uebersicht, Kopf, SR, leseWelle, ersteVolleEins } from './wave.js';
 import { einsHinweis, EINS_HINWEIS_TEXT, KOPIE_TEXT, variText, keylockStand } from './messages.js';
 import { $, $$, BUCHSTABE, LADE_DECKS, deckAnsicht, klasseLaden, melde, zustand } from './page_state.js';
@@ -26,25 +27,19 @@ export function baueDecks() {
     bindeDeckBedienung(n, d);   // Plan E9
     $('.buchstabe', d).textContent = BUCHSTABE[n];
     $('.nr', d).textContent = n;
-    $('[data-kanal]', d).dataset.kanal = `deck/${n}`;
-    for (const t of $$('[data-taste]', d)) { t.dataset.pfad = `deck/${n}/${t.dataset.taste}`; t.disabled = true; }
-    const z = $(`.zug[data-deck="${n}"]`);
-    if (!z) continue;   // decks 3 and 4 have no channel strip on the page (Andreas 2026-11-15: four channels in the main mixer)
-    z.append($('#zug-vorlage').content.cloneNode(true));
-    for (const e of $$('[data-teil]', z)) e.dataset.pfad = `deck/${n}/${e.dataset.teil}`;
-    for (const e of $$('[data-wert-teil]', z)) e.dataset.wert = `deck/${n}/${e.dataset.wertTeil}`;
-    $('[data-kanal]', z).dataset.kanal = `deck/${n}`;
-    for (const b of $$('[data-fxzuweisung]', z)) b.dataset.kanal = `deck/${n}`;
+    $('[data-kanal]', d).dataset.kanal = playerKanal(n);
+    for (const t of $$('[data-taste]', d)) { t.dataset.pfad = `${playerKanal(n)}/${t.dataset.taste}`; t.disabled = true; }
   }
-  for (const k of ERZEUGER) {  // Strudel-Kanal (Plan 2026-09-27): Kanalzug wie ein Deck, ohne Tasten
-    const z = $(`.zug[data-kanalzug="${k}"]`);
-    if (!z) continue;   // Studio S1: Kanalzug erst ab Task 7 im Markup
-    z.append($('#zug-vorlage').content.cloneNode(true));
-    for (const e of $$('[data-teil]', z)) e.dataset.pfad = `${k}/${e.dataset.teil}`;
-    for (const e of $$('[data-wert-teil]', z)) e.dataset.wert = `${k}/${e.dataset.wertTeil}`;
-    $('[data-kanal]', z).dataset.kanal = k;
-    for (const b of $$('[data-fxzuweisung]', z)) b.dataset.kanal = k;
-  }
+  for (const c of CONTAINER) baueZug($(`.zug[data-kanalzug="${c.pfad}"]`), c.pfad);   // the four container strips A..D, one per place
+}
+// A channel strip from the template: the controls address `<kanal>/<teil>`; a strip the page does not carry is skipped
+export function baueZug(z, k) {
+  if (!z) return;
+  z.append($('#zug-vorlage').content.cloneNode(true));
+  for (const e of $$('[data-teil]', z)) e.dataset.pfad = `${k}/${e.dataset.teil}`;
+  for (const e of $$('[data-wert-teil]', z)) e.dataset.wert = `${k}/${e.dataset.wertTeil}`;
+  $('[data-kanal]', z).dataset.kanal = k;
+  for (const b of $$('[data-fxzuweisung]', z)) b.dataset.kanal = k;
 }
 
 // ---------- Bestand ----------

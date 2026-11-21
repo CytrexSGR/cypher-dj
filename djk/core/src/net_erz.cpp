@@ -138,15 +138,12 @@ bool Netz::erz_paket(const v::Adresse* a, const osc::Nachricht& m) {
   b.id = m.werte[f::id].h;
   kopiere(b.quelle, m.werte[f::quelle].s, sizeof b.quelle);
   b.nr = m.werte[f::strom].i;
-  kopiere(b.pfad, m.werte[f::kanal].s, sizeof b.pfad);
+  b.pfad[0] = '\0';  // container core K1: a stream carries no channel
   std::string ziel_eff(m.werte[f::ziel].s);  // S12: `bk:` (empty name) is rewritten to the stored target below
   const bool bk_leer = ziel_eff == "bk:";
   [[maybe_unused]] bool wiederholt = false;
   if (bk_leer && quelle_ok(b.quelle) && b.nr >= 1 && b.nr <= ERZ_STROEME && !erz_vorher_ziel_[b.nr - 1].empty()) {
     ziel_eff = erz_vorher_ziel_[b.nr - 1];  // replay through the normal kit/midi path with the incoming id and quelle
-#ifndef CYPHERDJ_MUTATION_BK_LEER_KANAL_EINGANG
-    kopiere(b.pfad, erz_vorher_kanal_[b.nr - 1].c_str(), sizeof b.pfad);  // the stored kanal wins
-#endif
     wiederholt = true;
   }
 #ifdef CYPHERDJ_MUTATION_BK_LEER_OHNE_VORHER_ERFOLG
@@ -162,16 +159,16 @@ bool Netz::erz_paket(const v::Adresse* a, const osc::Nachricht& m) {
   }
 #endif
   const char* ziel = ziel_eff.c_str();
-  const int k = Mixer::kanal_index(b.pfad);
   // remember an accepted kit/midi target (not a graph) for `bk:` (S12); called only after the command is in the ring
   auto merke = [&]() {
     erz_vorher_ziel_[b.nr - 1] = ziel_eff;
-    erz_vorher_kanal_[b.nr - 1] = b.pfad;
   };
-  // erz/1..8, pad/1..2 (§1.5); erz/8 nicht: Nur-Cue-Vorhöreingang (S7, Review-Kern m3), ein Strom bliebe im Saal still
-  const bool kanal_ok = k >= 4 && k <= 13 && k != Mixer::kanal_index(VORHOER_KANAL);
+  // Streams 1, 2, 3, 5, 6, 7, 9, 10 are free (F9 D-U5). Stream 4 belongs to the production (the former erz/4), 8 was the cue-only
+  // listen input, 11..16 have no consumer yet. The check replaces the former channel range.
+  const bool kanal_ok = b.nr == 1 || b.nr == 2 || b.nr == 3 || (b.nr >= 5 && b.nr <= 7) || b.nr == 9 || b.nr == 10;
+  const std::string strom_slot = "strom/" + std::to_string(b.nr);  // mirror slot of /e/graph
 #ifndef CYPHERDJ_MUTATION_ARR_ERZ4_FREI
-  if (k == Mixer::kanal_index(ARR_KANAL)) {  // D1 K1 (Spec 2.3): erz/4 gehört der Produktion
+  if (b.nr == 4) {  // D1 K1 (Spec 2.3): stream 4 (the former erz/4) belongs to the production
     quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "reserviert");
     return true;
   }
@@ -195,7 +192,7 @@ bool Netz::erz_paket(const v::Adresse* a, const osc::Nachricht& m) {
     if (!einreihen(b)) {
       cypher_bk_frei(g);  // nicht angenommen: wir besitzen ihn noch
     } else {
-      graph_vormerken(b.id, b.quelle, b.pfad, name, b.nr);  // S16
+      graph_vormerken(b.id, b.quelle, strom_slot.c_str(), name, b.nr);  // S16
 #ifdef CYPHERDJ_MUTATION_BK_LEER_VORHER_UEBERSCHRIEBEN
       merke();  // fault case: a graph target overwrites the stored one
 #endif
@@ -216,7 +213,7 @@ bool Netz::erz_paket(const v::Adresse* a, const osc::Nachricht& m) {
     b.zeiger = nullptr;
     if (einreihen(b)) {
       merke();
-      graph_vormerken(b.id, b.quelle, b.pfad, "", b.nr);  // S16: this stream carries no graph
+      graph_vormerken(b.id, b.quelle, strom_slot.c_str(), "", b.nr);  // S16: this stream carries no graph
     }
     return true;
   }
@@ -248,7 +245,7 @@ bool Netz::erz_paket(const v::Adresse* a, const osc::Nachricht& m) {
   if (einreihen(b)) {
     geladen.release();  // der Kern besitzt es jetzt; zurück kommt es als ERZ_ALT
     merke();
-    graph_vormerken(b.id, b.quelle, b.pfad, "", b.nr);  // S16: this stream carries no graph
+    graph_vormerken(b.id, b.quelle, strom_slot.c_str(), "", b.nr);  // S16: this stream carries no graph
   }
   return true;
 }

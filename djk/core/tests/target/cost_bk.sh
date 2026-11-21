@@ -61,7 +61,7 @@ for _ in $(seq 1 100); do ss -uln | grep -q ":$KPORT " && break; sleep 0.1; done
 ss -uln | grep -q ":$KPORT " || { echo "[$LAUF] Kern-Port $KPORT lauscht nicht" >&2; exit 4; }
 for k in $(seq 1 "$N"); do
   CYPHERDJ_INSTANZ=$I node "$DJK/generator/generator.mjs" --kern-port "$KPORT" --abo-port $((47160 + 1000 * K + k)) \
-    --name "kosten-$k" --strom "$k" --kanal "erz/${KANAL[$k]}" --ziel bk:juno-pad --muster "$MUSTER_ORDNER/akkord.js" \
+    --name "kosten-$k" --strom "$k" --ziel bk:juno-pad --muster "$MUSTER_ORDNER/akkord.js" \
     2> "$MUSTER_ORDNER/erz$k.log" & ERZ+=($!)
 done
 wait "$KP"; RC=$?; KP=""
