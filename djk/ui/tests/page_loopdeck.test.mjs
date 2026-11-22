@@ -20,7 +20,7 @@ async function start(stand = { decks: { 1: deck1(), 2: null }, beat: 16, bpm: 12
 }
 const posts = (a) => a.anrufe.filter((c) => c.methode === 'POST');
 const deck = (n = 1) => document.querySelector(`.loopdeck[data-deck="${n}"]`);
-const zellKnoten = (n, spurNr, z) => deck(n).querySelectorAll('.ld-spur')[spurNr - 1].querySelectorAll('.ld-zelle')[z - 1];
+const zellKnoten = (n, spurNr, z) => deck(n).querySelectorAll('.ld-spur')[spurNr - 1].querySelectorAll('.zelle')[z - 1];
 
 test('the view builds head, scene column and four tracks of eight cells', async () => {
   await start();
@@ -29,10 +29,31 @@ test('the view builds head, scene column and four tracks of eight cells', async 
   assert.deepEqual(d.querySelectorAll('.ld-r').map((b) => b.textContent), ['1/4', '1/2', '1', 'BAR', '4']);
   assert.equal(d.querySelectorAll('.ld-szene').length, 8);
   assert.equal(d.querySelectorAll('.ld-spur').length, 4);
-  assert.equal(d.querySelectorAll('.ld-zelle').length, 32);
+  assert.equal(d.querySelectorAll('.zelle').length, 32);
   assert.ok(zellKnoten(1, 1, 1).classList.contains('voll')); assert.ok(zellKnoten(1, 1, 2).classList.contains('leer'));
   assert.ok(d.querySelector('.ld-r[data-raster="1"]').classList.contains('an'));
   assert.equal(d.querySelector('.ld-neu').hidden, true);
+});
+
+test('the loop deck place renders four .spalte[data-variante=kompakt] with eight .zelle each and a .jetzt strip per column', async () => {
+  await start();
+  const spalten = deck().querySelectorAll('.spalte[data-variante="kompakt"]');
+  assert.equal(spalten.length, 4);
+  for (const sp of spalten) {
+    assert.equal(sp.querySelectorAll('.zelle').length, 8);
+    assert.equal(sp.querySelectorAll('.jetzt').length, 1);
+  }
+  assert.equal(deck().querySelectorAll('.ld-spur')[0].querySelector('.zug-slot .ld-strip') !== null, true, 'the strip row sits in the zug-slot');
+});
+
+test('a cell without beats keeps its play head: the length comes from frames and the clock tempo', async () => {
+  const st = deck1(); st.spuren[0].zellen[0] = { ...zelle(1), beats: undefined, bpm: undefined, frames: 96000 };   // 2 s = 4 beats at 120 bpm
+  st.spuren[0].lauf = { ...lauf0(), zelle: 1, ab_beat: 16 };
+  const { m } = await start({ decks: { 1: st, 2: null }, beat: 18, bpm: 120 });
+  m.zeichnePositionen(performance.now());
+  const kopf = deck().querySelectorAll('.kopf-ph')[0];
+  assert.equal(kopf.hidden, false);
+  assert.ok(Math.abs(parseFloat(kopf.style.left) - 50) < 3, `head at ${kopf.style.left}`);
 });
 
 test('click on a filled cell posts start with deck, track and cell', async () => {
@@ -45,11 +66,11 @@ test('click on a filled cell posts start with deck, track and cell', async () =>
 test('click on an empty cell selects it as the load target, one per deck', async () => {
   const { a, m } = await start();
   zellKnoten(1, 1, 2).click(); await ruhe();
-  assert.ok(zellKnoten(1, 1, 2).classList.contains('ziel'));
+  assert.ok(zellKnoten(1, 1, 2).classList.contains('gewaehlt'));
   assert.deepEqual(m.zielVon(1), { spur: 1, zelle: 2 });
   zellKnoten(1, 3, 4).click(); await ruhe();
-  assert.ok(!zellKnoten(1, 1, 2).classList.contains('ziel')); assert.ok(zellKnoten(1, 3, 4).classList.contains('ziel'));
-  assert.equal(deck().querySelectorAll('.ziel').length, 1);
+  assert.ok(!zellKnoten(1, 1, 2).classList.contains('gewaehlt')); assert.ok(zellKnoten(1, 3, 4).classList.contains('gewaehlt'));
+  assert.equal(deck().querySelectorAll('.gewaehlt').length, 1);
   assert.equal(posts(a).filter((c) => c.url === '/loopdeck/start').length, 0);   // selecting does not launch
 });
 
@@ -64,11 +85,11 @@ test('an SSE with wartend makes the cell blink, one with zelle lights it', async
   // stream.js hands the stream's events to loopdeckEreignis; the test calls that entry point
   const m = await import('../public/loopdeck/view.js');
   m.loopdeckEreignis('loopdeck', { deck: 1, spur: 1, lauf: { ...lauf0(), wartend: { zelle: 3, ab_beat: 20 } } });
-  assert.ok(zellKnoten(1, 1, 3).classList.contains('wartend'));
-  assert.ok(!zellKnoten(1, 2, 3).classList.contains('wartend'));   // only that track
+  assert.ok(zellKnoten(1, 1, 3).classList.contains('wartet'));
+  assert.ok(!zellKnoten(1, 2, 3).classList.contains('wartet'));   // only that track
   m.loopdeckEreignis('loopdeck', { deck: 1, spur: 1, lauf: { ...lauf0(), zelle: 3, ab_beat: 20 } });
-  assert.ok(zellKnoten(1, 1, 3).classList.contains('spielt')); assert.ok(!zellKnoten(1, 1, 3).classList.contains('wartend'));
-  assert.equal(deck().querySelectorAll('.ld-spur')[0].querySelector('.ld-titel').textContent, 'cell 3');
+  assert.ok(zellKnoten(1, 1, 3).classList.contains('spielt')); assert.ok(!zellKnoten(1, 1, 3).classList.contains('wartet'));
+  assert.equal(deck().querySelectorAll('.ld-spur')[0].querySelector('.tname').textContent, 'cell 3');
 });
 
 test('an orphaned track shows playing with no cell lit', async () => {
@@ -83,7 +104,7 @@ test('the play head follows the beat clock', async () => {
   const { m } = await start();
   m.loopdeckEreignis('/uhr', { beat: 20, bpm: 120 });
   m.loopdeckEreignis('loopdeck', { deck: 1, spur: 1, lauf: { ...lauf0(), zelle: 1, ab_beat: 16 } });
-  const kopf = deck().querySelectorAll('.ld-kopf')[0];
+  const kopf = deck().querySelectorAll('.kopf-ph')[0];
   const t0 = performance.now();
   m.zeichnePositionen(t0);   // 4 beats into an 8 beat cell, up to the few ms since the event
   assert.equal(kopf.hidden, false);
@@ -93,7 +114,7 @@ test('the play head follows the beat clock', async () => {
 test('foot row: stop, mute, volume and filter post their bodies', async () => {
   const { a } = await start();
   const s = deck().querySelectorAll('.ld-spur')[1];
-  s.querySelector('.ld-stopp').click(); await ruhe();
+  s.querySelector('.stopp').click(); await ruhe();
   assert.deepEqual(posts(a).at(-1), { url: '/loopdeck/stopp', methode: 'POST', koerper: { deck: 1, spur: 2 } });
   s.querySelector('.ld-mute').click(); await ruhe();
   assert.deepEqual(posts(a).at(-1), { url: '/loopdeck/spur', methode: 'POST', koerper: { deck: 1, spur: 2, mute: true } });
@@ -131,7 +152,7 @@ test('a deck that does not exist is created once (POST neu) while the live conta
   assert.equal(posts(a).filter((c) => c.url === '/loopdeck/neu' && c.koerper.deck === 2).length, 1);   // place 2 shows, deck 2 is null
   assert.equal(posts(a).filter((c) => c.url === '/loopdeck/neu' && c.koerper.deck === 1).length, 0);
   assert.equal(deck(2).querySelector('.ld-neu').hidden, false);
-  assert.ok(deck(2).querySelectorAll('.ld-zelle').every((c) => c.classList.contains('leer')));   // the empty grid until the answer
+  assert.ok(deck(2).querySelectorAll('.zelle').every((c) => c.classList.contains('leer')));   // the empty grid until the answer
   deck(2).querySelector('.ld-neu').click(); await ruhe();
   assert.equal(posts(a).filter((c) => c.url === '/loopdeck/neu' && c.koerper.deck === 2).length, 2);
   la.live.projekt = null;
@@ -153,7 +174,7 @@ test('a refusal is shown, not swallowed', async () => {
 });
 
 // ---- loop deck X1: a click in the waveform strip jumps to a slice ----
-const streifen = (n = 1, spurNr = 1) => deck(n).querySelectorAll('.ld-spur')[spurNr - 1].querySelector('.ld-welle');
+const streifen = (n = 1, spurNr = 1) => deck(n).querySelectorAll('.ld-spur')[spurNr - 1].querySelector('.jetzt');
 
 test('a click in the strip posts sprung with the slice under the pointer (x = 0, w/8 - 1, w - 1)', async () => {
   const { a } = await start();
@@ -174,4 +195,13 @@ test('a click in the strip of a one-shot cell posts nothing; a refusal shows its
   streifen(1, 2).dispatch('click', { clientX: 10 }); await ruhe();
   assert.equal(posts(a).filter((c) => c.url === '/loopdeck/sprung').length, 1);
   assert.match(document.querySelector('#meldung').textContent, /Nothing played on that track yet/);
+});
+
+test('a click at 40 % of the strip of a playing loop sends /loopdeck/sprung { slice: 4 } (through beiWelleKlick)', async () => {
+  const st = { decks: { 1: deck1(), 2: null }, beat: 16, bpm: 120 };
+  st.decks[1].spuren[0].lauf = { ...lauf0(), zelle: 1, ab_beat: 16 };
+  const { a } = await start(st);
+  streifen().dispatch('click', { clientX: 40 }); await ruhe();
+  assert.deepEqual(posts(a).at(-1), { url: '/loopdeck/sprung', methode: 'POST', koerper: { deck: 1, spur: 1, slice: 4 } });
+  assert.equal(streifen().querySelectorAll('.marke').length, 7);
 });

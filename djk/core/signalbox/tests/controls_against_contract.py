@@ -283,7 +283,7 @@ def main():
     assert acht != text, 'Selbsttest: Satz "n = 1 bis 32" der Spur-Regler im Vertrag nicht gefunden'
     f_acht = abgleich(bib, vertrag(acht))
     # slots 9..32 (24) x (fader, pan, mute, solo, filter, eq tief|mitte|hoch + one send per return); the sends of slice 3 are keyed to the same n, so 96 was stale
-    erwartet_acht = 24 * (13 + RETURNS[0])   # loop deck K7a: + the filter row; loop deck channel strip KZ1: + the three eq rows; container core K7: + pfl, trim and the three kill rows
+    erwartet_acht = 24 * (16 + RETURNS[0])   # loop deck K7a: + the filter row; loop deck channel strip KZ1: + the three eq rows; container core K7: + pfl, trim and the three kill rows; loop lane strip K1: + the three fx rows
     print(f'Selbsttest Vertragstext n = 1 bis 8: {len(f_acht)} Abweichungen, erwartet {erwartet_acht} (Slots 9 bis 32 mal 13 Regler plus {RETURNS[0]} Sends)')
     if len(f_acht) != erwartet_acht:
         print('FEHLER: der Abgleich liest den Bereich nicht aus dem Vertragstext')

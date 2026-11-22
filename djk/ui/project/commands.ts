@@ -10,7 +10,7 @@
 import {
   MAX_AUTO_PUNKTE, MAX_FX_PUNKTE, MAX_LANE_PUNKTE, alleStraenge, FADER_MIN, MAX_CLIPS, MAX_NOTEN, MAX_RETURNS, HALL_FELDER, HALL_VORGABE, type InsertPoolArt,
   alleInserts, notenZaehler, sucheStrang, alleRacks, MAX_MAKROS, type Rack, bkSlot, bkLive, istObjekt, kanonisch, pruefeFehler, spurSicht, wiedergabeSicht,
-  type AudioClip, EQ_BAENDER, eqZeilenWert,
+  type AudioClip, EQ_BAENDER, eqZeilenWert, FX_NUMMERN, fxZeilenWert,
   type Gruppe, type Herkunft, type Insert, type Projekt, type Return, type Spur, type DekodiertZustand,
 } from './model.ts';
 import { INSERT_ARTEN } from './insert_key.ts';
@@ -31,12 +31,13 @@ import { TRANSPORT } from './commands_transport.ts';
 import { SZENEN } from './commands_szenen.ts';
 import { TRACKER } from './commands_tracker.ts';
 import { LOOPDECK } from './commands_loopdeck.ts';
+import { SESSION } from './commands_session.ts';
 import { CONTAINER } from './commands_container.ts';
 export { BefehlFehler, bereinigeGliedZiele, DUCK_DURCH_KICK_WERTE, laneStart, COMP_FADE_S, teileClipsAn, compFade } from './commands_helpers.ts';
 export type { ReglerAenderung, StiftAenderung, BefehlErgebnis, LaneHinweis, Befehl, PresetInhalt, MusterMeldung, PluginEintrag } from './commands_helpers.ts';
 export { PRO_BEFEHL } from './commands_helpers.ts';
 
-mergeTabellen(PRO_BEFEHL, SPUR, CLIP, GRUPPE, INSERT, AUTO, TRANSPORT, SZENEN, TRACKER, LOOPDECK, CONTAINER);
+mergeTabellen(PRO_BEFEHL, SPUR, CLIP, GRUPPE, INSERT, AUTO, TRANSPORT, SZENEN, TRACKER, LOOPDECK, CONTAINER, SESSION);
 export const BEFEHL_NAMEN: readonly string[] = Object.keys(PRO_BEFEHL);
 
 // Ein eingefrorener Wirt-Spur-Klang gilt nur zu genau den Noten, dem Gerät und dem Tempo, mit denen er entstanden ist
@@ -183,12 +184,20 @@ function reglerAenderungen(alt: Projekt, neu: Projekt): ReglerAenderung[] {
         aus.push({ pfad: `spur/${s.nr}/eq/${b}`, wert: e });
       }
     }
+    // loop deck FX 1 2 3 switches: same rule as the EQ rows
+    for (const u of FX_NUMMERN) {
+      const f = fxZeilenWert(s, u);
+      if (a ? fxZeilenWert(a, u) !== f : f !== 0 || alt.spuren.some((x) => x.nr === s.nr && fxZeilenWert(x, u) !== 0)) {
+        aus.push({ pfad: `spur/${s.nr}/fx/${u}`, wert: f });
+      }
+    }
   }
   for (const a of alt.spuren) {
     if (neu.spuren.some((s) => s.nr === a.nr)) continue;                      // die Nummer lebt weiter (ggf. mit neuer Spur): oben erledigt
     for (const k of MIXER) aus.push({ pfad: `spur/${a.nr}/${KURZ[k]}`, wert: 0 });
     if ((a.filter ?? 0) !== 0) aus.push({ pfad: `spur/${a.nr}/filter`, wert: 0 });
     for (const b of EQ_BAENDER) if (eqZeilenWert(a, b) !== 0) aus.push({ pfad: `spur/${a.nr}/eq/${b}`, wert: 0 });
+    for (const u of FX_NUMMERN) if (fxZeilenWert(a, u) !== 0) aus.push({ pfad: `spur/${a.nr}/fx/${u}`, wert: 0 });
   }
   // 1.10: Gruppen-Regler grp/<nr>/* und pm/fader; eine gelöschte oder neue Gruppe setzt den Slot auf die Vorgabe (alles 0) beziehungsweise auf ihre Werte
   const gw = (g: Gruppe): Record<(typeof MIXER)[number], number> => ({ fader_db: g.fader_db, pan: g.pan, mute: g.mute ? 1 : 0, solo: g.solo ? 1 : 0 });
@@ -238,7 +247,7 @@ function istLeicht(projekt: Projekt, b: unknown): boolean {
   if (!istObjekt(b) || typeof b.befehl !== 'string') return false;
   switch (b.befehl) {
     // ein Gerätewechsel berührt Freeze, Slots und Klang; gruppe kann neu entstehen, und leichterUnterschied sieht nur Schlüssel, die schon da sind
-    case 'spur_aendern': return b.geraet === undefined && b.gruppe === undefined && b.filter === undefined && b.eq === undefined && b.kill === undefined
+    case 'spur_aendern': return b.geraet === undefined && b.gruppe === undefined && b.filter === undefined && b.eq === undefined && b.kill === undefined && b.fx === undefined
       && b.arm === undefined && b.eingang === undefined && b.monitor === undefined;
     case 'loop_setzen': case 'metronom_setzen': return true;
     case 'gruppenspur_aendern': case 'master_aendern': return true;

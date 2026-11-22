@@ -408,6 +408,14 @@ ReglerTabelle::ReglerTabelle() {
       neu(p, -1, k.rolle, 0, 1, 0, MS(5), false, false, true, true, K_SCHALTER);
     }
   }
+  // Loop lane strip K1: spur/<n>/fx/{1,2,3} (0/1 switches, no ramp), 3 per track, n outer, appended behind the K7 rows: no index moves.
+  for (int n = 1; n <= SPUR_REGLER_SPUREN; n++) {
+    const Rolle fx[] = {Rolle::spur_fx_1, Rolle::spur_fx_2, Rolle::spur_fx_3};
+    for (int u = 0; u < 3; u++) {
+      std::snprintf(p, sizeof p, "spur/%d/fx/%d", n, u + 1);
+      neu(p, -1, fx[u], 0, 1, 0, 0, false, false, true, true, K_SCHALTER);
+    }
+  }
   for (int i = 0; i < n_; i++) sortiert_[i] = static_cast<int16_t>(i);
   std::sort(sortiert_, sortiert_ + n_, [&](int16_t a, int16_t b) { return std::strcmp(def_[a].pfad, def_[b].pfad) < 0; });
 }

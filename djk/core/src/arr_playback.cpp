@@ -1,6 +1,7 @@
 // D1 K1: Wiedergabe lesen, prüfen, Audio laden (arr_playback.h). Muster: rendition.cpp (nlohmann, Feldprüfung mit
 // Namen), loader.cpp (mmap + MAP_POPULATE + mlock, Budget vor dem Einblenden).
 #include "cypherdj/arr_playback.h"
+#include "cypherdj/arrangement.h"   // S1b K2: ARR_F_FILTER and arr_f_send (header-only constants) for the cell envelope fields
 #include "cypherdj/warp_factory.h"
 #include "cypherdj/arr_pdc.h"
 #include "cypherdj/pult_table.h"
@@ -175,6 +176,112 @@ std::string text(const json& o, const char* name, const std::string& wo) {
   const json& w = feld(o, name, wo);
   if (!w.is_string()) format(wo + name + " ist kein Text");
   return w.get<std::string>();
+}
+
+// Session view S1b K2 (index 2.2): the keys `rueckwaerts`, `blende`, `scheiben`, `pitch` and `huellen` of one cell into z.karte, z.pitch and z.huellen.
+// Every violation is `zellen_ungueltig` and the snapshot is not loaded. `beats` is the cell length of the entry (a one-shot carries it for the slice table
+// and the envelope range although ArrZelle::beats stays 0 there). Beats become source frames linearly (frames / beats).
+void zelle_erweitern(const json& zj, const std::string& wz, ArrZelle& z, double beats, bool loop, int64_t frames, int64_t modus) {
+  const auto ung = [&](const std::string& m) { throw Abbruch("zellen_ungueltig", wz + m); };
+  const auto flag = [&](const char* name) {
+    if (!zj.contains(name)) return false;
+    const json& w = zj.at(name);
+    if (w.is_boolean()) return w.get<bool>();
+    if (w.is_number_integer() && (w.get<int64_t>() == 0 || w.get<int64_t>() == 1)) return w.get<int64_t>() == 1;
+    ung(std::string(name) + " must be 0 or 1");
+    return false;
+  };
+  const auto zahl_in = [&](const json& w, const std::string& was) {
+    if (!w.is_number() || !std::isfinite(w.get<double>())) ung(was + " is not a finite number");
+    return w.get<double>();
+  };
+  ZellKarte& k = z.karte;
+  k = ZellKarte{};
+  k.frames = frames;
+  k.kreis = loop;
+  k.rueck = flag("rueckwaerts");
+  k.blende = flag("blende");
+  if (zj.contains("scheiben")) {
+    const json& sj = zj.at("scheiben");
+    if (!sj.is_array() || sj.empty()) ung("scheiben must be a non-empty list of [start, source slot]");
+    if (sj.size() > static_cast<size_t>(ZELL_SCHEIBEN_MAX)) ung("scheiben: more than " + std::to_string(ZELL_SCHEIBEN_MAX) + " slots");
+    if (!(beats > 0.0)) ung("scheiben need the cell length in beats (beats > 0)");
+    const int n = static_cast<int>(sj.size());
+    double letzter = -1.0;
+    for (int i = 0; i < n; ++i) {
+      const json& e = sj[static_cast<size_t>(i)];
+      const std::string wi = "scheiben[" + std::to_string(i) + "] ";
+      if (!e.is_array() || e.size() != 2) ung(wi + "is not a pair [start, source slot]");
+      const double start = zahl_in(e[0], wi + "start");
+      if (!e[1].is_number_integer() || e[1].get<int64_t>() < 0 || e[1].get<int64_t>() >= n) ung(wi + "source slot outside 0 to " + std::to_string(n - 1));
+      if (i == 0 ? start != 0.0 : !(start > letzter)) ung(wi + (i == 0 ? "first start must be 0" : "starts must rise"));
+      if (!(start < beats)) ung(wi + "start beyond the cell length");
+      letzter = start;
+      k.g[i] = static_cast<double>(std::llround(start * static_cast<double>(frames) / beats));
+      k.s[i] = static_cast<uint8_t>(e[1].get<int64_t>());
+    }
+    k.g[n] = static_cast<double>(frames);
+    for (int i = 0; i < n; ++i)   // every slot is a played slot and a source slot: none shorter than 2 * ARR_NAHT (it would overlap the crossfade of its neighbour)
+      if (k.g[i + 1] - k.g[i] < static_cast<double>(ZELL_SLOT_MIN)) ung("scheiben[" + std::to_string(i) + "] shorter than " + std::to_string(ZELL_SLOT_MIN) + " frames");
+    k.n = n;
+  }
+  z.pitch = 1.0;
+  if (zj.contains("pitch")) {
+    if (!loop || modus != 2) ung("pitch needs a loop cell with keylock (modus 2)");
+    const double p = zahl_in(zj.at("pitch"), "pitch");
+    if (!(p >= 0.25 - 1e-9 && p <= 4.0 + 1e-9)) ung("pitch outside 24 semitones (0.25 to 4)");
+    z.pitch = p;
+  }
+  z.n_huellen = 0;
+  if (zj.contains("huellen")) {
+    const json& hj = zj.at("huellen");
+    if (!hj.is_array()) ung("huellen is not a list");
+    if (hj.size() > static_cast<size_t>(ZELL_HUELLEN_MAX)) ung("huellen: more than " + std::to_string(ZELL_HUELLEN_MAX) + " envelopes");
+    for (size_t hi = 0; hi < hj.size(); ++hi) {
+      const json& h = hj[hi];
+      const std::string wh = "huellen[" + std::to_string(hi) + "] ";
+      if (!h.is_object() || !h.contains("art") || !h.at("art").is_string()) ung(wh + "has no art");
+      const std::string art = h.at("art").get<std::string>();
+      ZellHuelle& hu = z.huellen[hi];
+      hu = ZellHuelle{};
+      float lo = -200.0f, hi_w = 0.0f;   // gain and sends: dB
+      if (art == "gain") {
+        hu.art = 2;
+      } else if (art == "feld") {
+        hu.art = 0;
+        if (!h.contains("feld") || !h.at("feld").is_number_integer()) ung(wh + "feld is missing or not an integer");
+        const int64_t f = h.at("feld").get<int64_t>();
+        bool ok = f == ARR_F_FILTER;
+        for (int r = 0; r < ARR_RETURNS; ++r) ok = ok || f == arr_f_send(r);
+        if (!ok) ung(wh + "feld is neither the track filter nor a send");
+        hu.feld = static_cast<uint8_t>(f);
+        if (f == ARR_F_FILTER) { lo = -1.0f; hi_w = 1.0f; }
+      } else {
+        ung(wh + "art " + art + " unknown (feld or gain)");
+      }
+      if (!h.contains("punkte") || !h.at("punkte").is_array() || h.at("punkte").empty()) ung(wh + "needs 1 to " + std::to_string(ZELL_PUNKTE_MAX) + " points");
+      const json& pj = h.at("punkte");
+      if (pj.size() > static_cast<size_t>(ZELL_PUNKTE_MAX)) ung(wh + "more than " + std::to_string(ZELL_PUNKTE_MAX) + " points");
+      double vorher = 0.0;
+      for (size_t pi = 0; pi < pj.size(); ++pi) {
+        const json& p = pj[pi];
+        const std::string wp = wh + "punkte[" + std::to_string(pi) + "] ";
+        if (!p.is_array() || p.size() != 3) ung(wp + "is not [beat, value, form]");
+        const double b = zahl_in(p[0], wp + "beat");
+        const double w = zahl_in(p[1], wp + "value");
+        if (b < 0.0 || b < vorher || (beats > 0.0 && !(b < beats))) ung(wp + "beat must be rising and inside the cell");
+        if (!(w >= lo && w <= hi_w)) ung(wp + "value outside " + std::to_string(lo) + " to " + std::to_string(hi_w));
+        if (!p[2].is_number_integer() || p[2].get<int64_t>() < 0 || p[2].get<int64_t>() > 2) ung(wp + "form must be 0, 1 or 2");
+        if (pi > 1 && b == vorher && b == hu.p[pi - 2].beat) ung(wp + "three points at one beat");
+        vorher = b;
+        hu.p[pi] = ArrAutoPunkt{b, static_cast<float>(w), static_cast<uint8_t>(p[2].get<int64_t>())};
+      }
+      hu.n = static_cast<int>(pj.size());
+      for (size_t o = 0; o < hi; ++o)   // one envelope per target (index 2.1)
+        if (z.huellen[o].art == hu.art && z.huellen[o].feld == hu.feld) ung(wh + "second envelope for the same target");
+      ++z.n_huellen;
+    }
+  }
 }
 
 // D1 Spec 6.14: lexikalisch normalisiert, ohne abschließenden Schrägstrich (Symlinks löst sie nicht auf)
@@ -1575,7 +1682,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
             const int64_t modus = ganz(zj, "modus", wz);
             if (zart == "loop") {
               if (!(beats > 0.0)) format(wz + "a loop needs beats > 0");
-              if (modus != 2) format(wz + "a loop needs modus 2");
+              if (modus != 2 && modus != 0) format(wz + "a loop needs modus 2 (keylock) or 0 (keylock off)");
             } else if (zart == "einmal") {
               if (modus != 0) format(wz + "an einmal cell needs modus 0");
             } else {
@@ -1590,6 +1697,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
             if (frames < 1 || frames > ARR_ZELLE_FRAMES_MAX) format(wz + "frames outside 1 to " + std::to_string(ARR_ZELLE_FRAMES_MAX));
             const double gain_db = zahl(zj, "gain_db", wz);
             if (gain_db < -60.0 || gain_db > 12.0) format(wz + "gain_db outside -60 to +12");
+            zelle_erweitern(zj, wz, z, beats, zart == "loop", frames, modus);   // S1b K2: before cache.hole, a refused cell maps and locks nothing
             ArrAudio*& a = je_sha[sha];
             if (!a) {
               std::string grund, meldung;
@@ -1603,6 +1711,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
             z.audio = a;
             z.frames = frames;
             z.beats = zart == "loop" ? beats : 0.0;
+            z.huell_beats = beats;
             z.gain = static_cast<float>(std::pow(10.0, gain_db / 20.0));
             z.modus = static_cast<int8_t>(modus);
             ++sp.n_zellen;

@@ -32,9 +32,10 @@ export function veredleKnopf(el) {
 // (append), so their listeners and state stay.
 export function ordneMitte(ansicht, $ = (s) => document.querySelector(s)) {
   const dj = ansicht === 'dj', fx = $('#fx'), mitte = $('#fxmitte'), km = $('.kopfmix'), master = $('#mischer .mitte'), kopf = $('#kopf');
-  if (!fx || !mitte || !km || !master || !kopf) return;
+  if (!fx || !mitte || !km || !kopf) return;
   for (const id of ['#fx-1', '#fx-2', '#colorfx', '#remix-einheit']) { const e = $(id); if (e) (dj ? mitte : fx).append(e); }
-  if (dj) master.append(km); else kopf.insertBefore(km, fx);
+  // Missing master strip: it must not stop the other views' part (found 2026-11-22: the header FX row stayed empty because this function returned early).
+  if (dj) { if (master) master.append(km); } else kopf.insertBefore(km, fx);
 }
 
 // COLOR PARAMETER as a knob (Andreas 2026-11-14: "sollte auch drehknopf sein"). The range input stays as the value carrier the page already reads

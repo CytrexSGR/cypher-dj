@@ -5,11 +5,12 @@
 // DOM:
 //   section.seqplatz[data-seq=N]
 //   (section.seqplatz.gross = the large view: the place fixed under the page header to the bottom edge, one place at a time, style.css)
-//     .deckkopf: .sq-zahl .sq-baukasten .sq-stand | .sq-rechts: [data-sq-spiel] · [data-sq-gross] · .sq-breite [data-sq-breite] · [data-sq-leer-aus] · [data-sq-produktion] · [data-sq-neu] · [data-sq-modul] · [data-seq-leeren]
+//     .deckkopf: .sq-zahl .sq-baukasten .sq-stand | .sq-rechts: [data-sq-spiel] · [data-sq-gross] · .sq-breite [data-sq-breite] · [data-sq-alle-zu] · [data-sq-leer-aus] · [data-sq-produktion] · [data-sq-neu] · [data-sq-modul] · [data-seq-leeren]
 //     .sq-leer (no deck: [data-seq-anlegen])
 //     .sq-feld (scrolls both ways; --sq-beat = pixels per beat)
 //       .sq-folge[data-folge=<spur_id>][data-clip=<clip_id>] (.stumm, .fremd = arranged in PRODUCTION)
-//         .sq-folgenkopf: [data-sq-name] [data-sq-geraet] [data-sq-laenge] [data-sq-stumm] .sq-hinter [data-sq-neue-zeile]
+//         .sq-folgenkopf: [data-sq-zu] (collapse chevron) [data-sq-name] [data-sq-geraet] [data-sq-laenge] [data-sq-stumm] .sq-hinter [data-sq-unbenutzt] (kit patterns) [data-sq-neue-zeile]
+//           (.sq-folge.zu = collapsed: the head only, no ruler and no lanes)
 //         .sq-lineal: .sq-nr (one per beat; .wiederholung after the pattern end up to the visible width)
 //         .sq-zeile[data-folge][data-zeile=<lane id>][data-art=noten|werte|kurve]
 //           .sq-zeilenkopf: .sq-zeilenname, .sq-zeilenmeta ([data-sq-ziel] target, [data-sq-gitter] grid, [data-sq-eigen] own length, [data-sq-form] shape), [data-sq-weg]
@@ -33,7 +34,7 @@ import {
   griffArt, velNeu, laengeNeu, tonNeu, loslassFelder, imRechteck, radFelder, tonVonText, kurvePfad, laengeText, laengeAusSchritten, pxProBeat,
   sende, legeAn, leereDeck, ladeModul, neueFolge, laengenWahl, SICHT_BREITEN, sichtbarBeats, linealZellen, freierName, holeMitFrist, pruefeReglerInfo, vergissLeereInfos, grossLesen, grossSchreiben, grossUmschalten, grossGilt, grossEscape,
   ueberlagere, wertAusPos, wertBruch, wertText, wertSchreibe, wiederholZellen, kurveBeatAusX, kurveWertAusY, kurveY, kurvePunkte, kurveMarken, kurveNeu, kurveVerschiebe, kurveWeg, kurvePunktBei,
-  kurveSchreibe, FORM_ARTEN, formAus, formSchreibe, eigenLaengen, eigenLaengeText, eigenAusSchritten, laengeZeileBefehle, zielWahl, zielUmhaengen, sprungZiel, leereZeilen,
+  kurveSchreibe, FORM_ARTEN, formAus, formSchreibe, eigenLaengen, eigenLaengeText, eigenAusSchritten, laengeZeileBefehle, zielWahl, zielUmhaengen, sprungZiel, leereZeilen, zeileBenutzt,
   deckSpielt, deckSpielSchritt, msBisTakt,
 } from './seq_field.js';
 
@@ -49,6 +50,62 @@ const DOPPEL_FRIST = 400;  // ms: a second press on the same value cell within t
 const PUNKT_R = 5;         // px: radius of a curve point
 
 const knoten = new Map();  // place -> node
+
+// Per-viewer view state (localStorage, never the project): collapsed patterns and the patterns whose "hide unused" is on, both as lists of track ids.
+// Every storage access may throw (private window, blocked data): the page then works with the state of this page load only.
+const ZU_SCHLUESSEL = 'djk-seq-zu', UNBENUTZT_SCHLUESSEL = 'djk-seq-unbenutzt';
+const liesListe = (schluessel) => {
+  try { const v = JSON.parse(localStorage.getItem(schluessel)); return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []; } catch { return []; }
+};
+const schreibeListe = (schluessel, menge) => { try { localStorage.setItem(schluessel, JSON.stringify([...menge])); } catch { /* no storage: this page load only */ } };
+// Track ids (s1, s2, ...) are counters of one project, so an entry is kept under the identity of the project it was made in. The page has no stable project
+// id (the live container is always slug "live", ids are counters), so the best available identity is the slug plus the project name.
+const TRENNER = '\u0001', MAX_EINTRAEGE = 400;
+const bereich = () => `${live.slug ?? ''}|${live.projekt?.name ?? ''}`;
+const bereichsMenge = (schluessel) => {
+  const roh = new Set(liesListe(schluessel));   // "<project identity>\u0001<track id>"
+  const schl = (id) => `${bereich()}${TRENNER}${id}`;
+  return { roh, has: (id) => roh.has(schl(id)), add: (id) => roh.add(schl(id)), delete: (id) => roh.delete(schl(id)) };
+};
+const zuMenge = bereichsMenge(ZU_SCHLUESSEL);              // collapsed patterns
+const unbenutztAn = bereichsMenge(UNBENUTZT_SCHLUESSEL);   // patterns with "hide unused" on (the hidden set itself lives in node._unbenutzt)
+/** Reads both lists from the storage again (a page load does it once at import; the tests call it after they filled the storage). */
+export function ladeSeqSicht() {
+  zuMenge.roh.clear(); unbenutztAn.roh.clear();
+  for (const x of liesListe(ZU_SCHLUESSEL)) zuMenge.roh.add(x);
+  for (const x of liesListe(UNBENUTZT_SCHLUESSEL)) unbenutztAn.roh.add(x);
+  for (const k of knoten.values()) k._unbenutzt = new Map();
+  for (const n of PLAETZE) neuZeichnen(n);
+}
+// Writes both lists; track ids that no longer exist in any deck are dropped from the lists first (nothing to drop while no project is held).
+function sichereSeqSicht() {
+  if (live.projekt) {
+    const da = new Set(PLAETZE.flatMap((n) => ansicht(n, live.projekt).folgen.map((f) => f.spur_id)));
+    const vorsatz = `${bereich()}${TRENNER}`;
+    // stale entries go only within the scope of the open project; entries of other projects stay; an entry without a scope (older format) is dropped
+    for (const { roh } of [zuMenge, unbenutztAn]) for (const e of [...roh]) if (!e.includes(TRENNER) || (e.startsWith(vorsatz) && !da.has(e.slice(vorsatz.length)))) roh.delete(e);
+  }
+  for (const { roh } of [zuMenge, unbenutztAn]) while (roh.size > MAX_EINTRAEGE) roh.delete(roh.values().next().value);   // the oldest entries go first
+  schreibeListe(ZU_SCHLUESSEL, zuMenge.roh); schreibeListe(UNBENUTZT_SCHLUESSEL, unbenutztAn.roh);
+}
+const istKit = (f) => f.spur?.geraet?.art === 'intern' && f.spur.geraet.name === 'kit';
+// Keys "spur_id/lane id" of the trigger lanes of a kit pattern that hold no note now (the samples the pattern does not use).
+const unbenutzteZeilen = (f) => new Set((f.sicht?.zeilen ?? []).filter((z) => z.art === 'noten' && z.ton !== undefined && !zeileBenutzt(z)).map((z) => `${f.spur_id}/${z.id}`));
+// The hidden set is taken when the toggle goes on and is not recomputed under the owner's hand (a lane he empties stays); a hidden lane that holds a note
+// again (hand tool, text, another window) leaves the set and shows. A pattern whose toggle was stored but whose set is not taken yet (page load) takes it here.
+function pflegeUnbenutzt(k, a) {
+  if (k._bereich !== bereich()) { k._unbenutzt = new Map(); k._bereich = bereich(); }   // another project: its patterns have the same ids but another state
+  for (const f of a.folgen) {
+    if (!f.editierbar || !istKit(f)) { k._unbenutzt.delete(f.spur_id); continue; }
+    let menge = k._unbenutzt.get(f.spur_id);
+    if (!menge && unbenutztAn.has(f.spur_id)) { menge = unbenutzteZeilen(f); k._unbenutzt.set(f.spur_id, menge); }
+    if (!menge) continue;
+    for (const schl of [...menge]) {
+      const z = f.sicht?.zeilen.find((x) => `${f.spur_id}/${x.id}` === schl);
+      if (!z || zeileBenutzt(z)) menge.delete(schl);
+    }
+  }
+}
 // The deck as drawn: the lanes carry the pending length of a lane that has no envelope yet (node._eigen, seq_field.js ueberlagere).
 const ansicht = (n, p) => ueberlagere(deckAnsicht(p, n, infosAusCache(p, n)), knoten.get(n)?._eigen);
 // Draws the field again from the project even when it looks the same (a gesture changed the nodes by hand: a bar, a point).
@@ -162,7 +219,9 @@ function bauePlatz(n) {
   spiel.title = 'Play or stop this deck: it joins a running transport on the next bar; on a stopped one it starts alone';
   const leerAus = knopf('sq-chip sq-leer-aus', 'hide empty', 'sqLeerAus');
   leerAus.title = 'Hide the lanes that are empty now; press again to show them'; leerAus.setAttribute('aria-pressed', 'false');
-  rechts.append(spiel, gross, breite, leerAus, sprung, neu, modul, leeren);
+  const alleZu = knopf('sq-chip sq-alle-zu', 'collapse all', 'sqAlleZu');
+  alleZu.title = 'Collapse or expand all patterns of this deck';
+  rechts.append(spiel, gross, breite, alleZu, leerAus, sprung, neu, modul, leeren);
   kopf.append(el('span', 'buchstabe', BUCHSTABE[n]), el('span', 'decktitel', `SEQ ${n}`), el('span', 'sq-zahl'), el('span', 'sq-baukasten'), el('span', 'sq-stand'), rechts);
   const leer = el('div', 'sq-leer');
   const anlegen = el('button', 'sq-anlegen', 'CREATE');
@@ -177,6 +236,12 @@ function bauePlatz(n) {
   bindePlatz(k, n, feld, anlegen, leeren, neu, breite, sprung, modul);
   gross.addEventListener('click', () => { grossWahl = grossUmschalten(grossWahl, n); wendeGross(); });
   spiel.addEventListener('click', () => deckSpiel(n, spiel));
+  alleZu.addEventListener('click', () => {
+    const ids = ansicht(n, live.projekt).folgen.filter((f) => f.editierbar).map((f) => f.spur_id);
+    if (ids.some((id) => !zuMenge.has(id))) for (const id of ids) zuMenge.add(id); else for (const id of ids) zuMenge.delete(id);
+    sichereSeqSicht();
+    neuZeichnen(n);
+  });
   leerAus.addEventListener('click', () => {
     k._versteckt = k._versteckt ? null : leereZeilen(ansicht(n, live.projekt));
     neuZeichnen(n);
@@ -226,7 +291,8 @@ function baueFremd(f, i) {
 
 function baueFolge(k, f, i, px, sichtbar) {
   const sicht = f.sicht;
-  const b = el('div', f.stumm ? 'sq-folge stumm' : 'sq-folge');
+  const zu = zuMenge.has(f.spur_id);
+  const b = el('div', `sq-folge${f.stumm ? ' stumm' : ''}${zu ? ' zu' : ''}`);
   b.dataset.folge = f.spur_id; b.dataset.clip = f.clip_id ?? '';
   b.style.setProperty('--col', FOLGEN_FARBEN[i % FOLGEN_FARBEN.length]);
   const kopf = el('div', 'sq-folgenkopf');
@@ -235,15 +301,23 @@ function baueFolge(k, f, i, px, sichtbar) {
   const geraet = knopf('sq-chip sq-geraet', `${f.geraet_text} ▾`, 'sqGeraet'); geraet.title = 'Instrument of this pattern';
   const laenge = knopf('sq-chip', `${laengeText(sicht.laenge_beats, proTaktJetzt())} ▾`, 'sqLaenge'); laenge.title = 'Pattern length';
   const stumm = knopf(f.stumm ? 'sq-chip an' : 'sq-chip', 'M', 'sqStumm'); stumm.title = 'Mute this pattern'; stumm.setAttribute('aria-pressed', String(f.stumm));
-  kopf.append(name, geraet);
+  const zuKnopf = knopf('sq-chip sq-zu', zu ? '▸' : '▾', 'sqZu'); zuKnopf.title = 'Collapse or expand this pattern'; zuKnopf.setAttribute('aria-expanded', String(!zu));
+  kopf.append(zuKnopf, name, geraet);
   if (kannGeraetFenster(f.spur)) { const fenster = knopf('sq-chip sq-fenster', GERAET_FENSTER_TEXT.knopf, 'sqFenster'); fenster.title = GERAET_FENSTER_TEXT.titel; kopf.append(fenster); }   // the instrument in its own browser window
   kopf.append(laenge, stumm);
   if (sicht.hinter_loop > 0) kopf.append(el('span', 'sq-hinter', `${sicht.hinter_loop} note${sicht.hinter_loop === 1 ? '' : 's'} behind the loop`));
   const weg = sicht.zeilen.filter((z) => k._versteckt?.has(`${f.spur_id}/${z.id}`));   // hidden by "hide empty"
   if (weg.length) kopf.append(el('span', 'sq-hinter', `${weg.length} empty lane${weg.length === 1 ? '' : 's'} hidden`));
+  const unbenutzt = k._unbenutzt?.get(f.spur_id);   // set only on a kit pattern with the toggle on
+  if (istKit(f)) {
+    const u = knopf(unbenutzt ? 'sq-chip sq-unbenutzt an' : 'sq-chip sq-unbenutzt', unbenutzt ? `show unused (${unbenutzt.size})` : 'hide unused', 'sqUnbenutzt');
+    u.title = 'Hide the sample lanes of this kit pattern that hold no note; press again to show them'; u.setAttribute('aria-pressed', String(!!unbenutzt));
+    kopf.append(u);
+  }
   const neueZeile = knopf('sq-chip sq-neuezeile', '+ lane ▾', 'sqNeueZeile');
   kopf.append(el('span', 'sq-grow'), neueZeile);
   b.append(kopf);
+  if (zu) return b;   // collapsed: the head only (name, instrument, length and mute stay usable)
   const lineal = el('div', 'sq-lineal');
   lineal.append(el('div', 'sq-zeilenkopf'));
   const takte = el('div', 'sq-zellen');
@@ -255,7 +329,7 @@ function baueFolge(k, f, i, px, sichtbar) {
   }
   lineal.append(takte);
   b.append(lineal);
-  for (const z of sicht.zeilen) if (!weg.includes(z)) b.append(baueZeile(k, f, z, sicht, px, sichtbar));
+  for (const z of sicht.zeilen) if (!weg.includes(z) && !unbenutzt?.has(`${f.spur_id}/${z.id}`)) b.append(baueZeile(k, f, z, sicht, px, sichtbar));
   return b;
 }
 
@@ -355,6 +429,10 @@ function zeichnePlatz(n) {
   leer.hidden = a.vorhanden; feld.hidden = !a.vorhanden; leeren.hidden = !a.vorhanden; neu.hidden = !a.vorhanden; breite.hidden = !a.vorhanden; $('[data-sq-produktion]', k).hidden = !a.vorhanden;
   $('[data-sq-spiel]', k).hidden = !a.vorhanden; $('[data-sq-leer-aus]', k).hidden = !a.vorhanden;
   const la = $('[data-sq-leer-aus]', k);
+  pflegeUnbenutzt(k, a);
+  const az = $('[data-sq-alle-zu]', k), editierbar = a.folgen.filter((f) => f.editierbar);
+  az.hidden = !editierbar.length;
+  az.textContent = editierbar.length && editierbar.every((f) => zuMenge.has(f.spur_id)) ? 'expand all' : 'collapse all';
   la.classList.toggle('an', !!k._versteckt); la.setAttribute('aria-pressed', String(!!k._versteckt)); la.textContent = k._versteckt ? `show empty (${k._versteckt.size})` : 'hide empty';
   $('.sq-zahl', k).textContent = a.vorhanden ? `${a.folgen.length} pattern${a.folgen.length === 1 ? '' : 's'}` : '';   // the DJ view has it in the place head
   const bk = $('.sq-baukasten', k);
@@ -370,7 +448,7 @@ function zeichnePlatz(n) {
   }
   for (const b of $$('[data-sq-breite]', k)) b.classList.toggle('an', b.dataset.sqBreite === String(k._wahl));
   const px = pxProBeat(k._wahl, a.laenge_beats, Number(feld.clientWidth) - KOPF_BREITE, proTaktJetzt()), sichtbar = sichtbarBeats(k._wahl, a.laenge_beats, proTaktJetzt());
-  const sig = JSON.stringify([px, sichtbar, proTaktJetzt(), [...(k._versteckt ?? [])], a.folgen.map((f) => [f.spur_id, f.clip_id, f.name, f.geraet_text, f.stumm, f.editierbar, f.sicht])]);
+  const sig = JSON.stringify([px, sichtbar, proTaktJetzt(), [...(k._versteckt ?? [])], a.folgen.map((f) => [f.spur_id, f.clip_id, f.name, f.geraet_text, f.stumm, f.editierbar, f.sicht, zuMenge.has(f.spur_id), istKit(f), k._unbenutzt.has(f.spur_id) ? [...k._unbenutzt.get(f.spur_id)] : null])]);
   if (feld._sig !== sig) { baueFeld(k, feld, a, px, sichtbar); feld._sig = sig; k._px = px; }
   if (fehlendeInfos(live.projekt, n).length) ladeInfos(live.projekt, n, holeGet).then(() => zeichnePlatz(n));   // knob names and kit sounds arrive later
   setzeKopf(k, k._beat ?? null);
@@ -657,7 +735,16 @@ const seqFolge = (n, p, folgeId) => ansicht(n, p).folgen.find((x) => x.spur_id =
 function knopfGedrueckt(n, b) {
   const r = b.getBoundingClientRect(), folgeId = b.closest('.sq-folge')?.dataset.folge, d = b.dataset;
   const schreibeFolge = (label, befehle) => schreibe((p) => { const f = seqFolge(n, p, folgeId); return sende(n, label, befehle(f, p), p, holeJsonFrist); });
-  if ('sqFenster' in d) {
+  if ('sqZu' in d) {
+    if (folgeId) { if (zuMenge.has(folgeId)) zuMenge.delete(folgeId); else zuMenge.add(folgeId); sichereSeqSicht(); neuZeichnen(n); }
+  } else if ('sqUnbenutzt' in d) {
+    const k = knoten.get(n), f = ansicht(n, live.projekt).folgen.find((x) => x.spur_id === folgeId);
+    if (!k || !f) return;
+    k._unbenutzt ??= new Map();
+    if (k._unbenutzt.has(folgeId)) { k._unbenutzt.delete(folgeId); unbenutztAn.delete(folgeId); } else { k._unbenutzt.set(folgeId, unbenutzteZeilen(f)); unbenutztAn.add(folgeId); }
+    sichereSeqSicht();
+    neuZeichnen(n);
+  } else if ('sqFenster' in d) {
     oeffneGeraetFenster(folgeId, melde);
   } else if ('sqStumm' in d) {
     schreibe((p) => sende(n, 'Mute', [{ befehl: 'spur_aendern', spur_id: folgeId, mute: !seqFolge(n, p, folgeId).spur.mute }], p, holeJsonFrist));

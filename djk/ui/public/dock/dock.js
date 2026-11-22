@@ -37,6 +37,10 @@
 //   masterSpalte?           true: the MASTER card stands in a column of its own at the right edge of the dock, outside the rows (PRODUCTION); false (default):
 //                           it ends the EFFECTS row (STUDIO, unchanged markup). The column is div[data-w="dock-master"], the rows sit in div.w-dock-reihen.
 //   einzel?                 'ret:<id>' | 'grp:<id>' | 'master' (dock/target.js text): the dock draws exactly that one strip card, no rows, no + cards (the strip window, target_window.js)
+//   alleReturns?            true: the EFFECTS row lists every return of the project, the HALL and DELAY returns of the loop decks too (SESSION); the send
+//                           knobs stay with the returns every track may send into. A deck return is labelled FROM L<deck>.
+//   spurKnoepfe?(spurId) -> [{ param, name, titel, vorgabe, lies() -> 0..1, setze(k), text(k), ende? }]   front knobs of an AUDIO track card, which has no device panel
+//   masterHaken?(karteEl)   called with the MASTER card after it was built (SESSION puts the master strip of the page into it)
 //   schalter: { gruppen, sends, mischer, stufenFenster }   switches of the later stages; all false by default
 //   hostLage(insertId) -> HostLage | null, grLesung(insert, jetzt), presetMarke(insertId), pluginFenster(insertId), stufenPopover(strang, insert, anker), kopfBeat() -> number | null
 //                           the state of the stages (read by the chips and the stage windows of the later tasks; kopfBeat defaults to null)
@@ -165,7 +169,7 @@ export function montiereDock(hostRoh) {
   function zeichne(erzwingen = false) {
     const p = host.projekt();
     if (!p) return;
-    const m = dockModell(p, { zuege: host.zuege, kurz: host.kurz, schalter: host.schalter, hostLage: host.hostLatenzen?.() ?? null, graphLatenzen: host.graphLatenzen?.() ?? null });
+    const m = dockModell(p, { zuege: host.zuege, kurz: host.kurz, schalter: host.schalter, alleReturns: host.alleReturns === true, hostLage: host.hostLatenzen?.() ?? null, graphLatenzen: host.graphLatenzen?.() ?? null });
     werk.modell = m;
     const g = gestalt(m, p);
     // a card name is being typed (task 8): no rebuild under the input; the next project update after it closed builds again
@@ -197,15 +201,15 @@ export function montiereDock(hostRoh) {
         host.oeffneMenue(punkte, q.left, q.bottom);
       });
       const master = masterKarte(werk, meine);
-      reiheFx.replaceChildren(...returnListe(p).map((r) => fxKarte(werk, r, meine)), laden, ...(reiheMaster ? [] : [master]));
+      reiheFx.replaceChildren(...returnListe(p, { mitLoopdeck: host.alleReturns === true }).map((r) => fxKarte(werk, r, meine)), laden, ...(reiheMaster ? [] : [master]));
       reiheMaster?.replaceChildren(master);
       setzeVorn();
     }
     frischAlle();
     const wahl = host.wahl.lies();
     for (const k of reiheSynth.querySelectorAll('[data-w="karte-spur"]')) k.classList.toggle('aktiv', k.getAttribute('data-spur-id') === wahl);
-    // PRODUCTION: the card of the track selected at its head scrolls into view
-    if (host.ansicht === 'production' && wahl && wahl !== wahlVorher) {
+    // PRODUCTION and SESSION: the card of the selected track scrolls into view
+    if ((host.ansicht === 'production' || host.ansicht === 'session') && wahl && wahl !== wahlVorher) {
       [...reiheSynth.querySelectorAll('[data-w="karte-spur"]')].find((k) => k.getAttribute('data-spur-id') === wahl)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
     }
     wahlVorher = wahl;

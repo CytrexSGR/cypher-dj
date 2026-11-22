@@ -19,7 +19,7 @@ import { json } from '../../http/transport.ts';
 import { alsAntwort, leseKoerper, type ProjZugang } from '../proj/area.ts';
 import { fuehreListeAus } from '../../project/commands.ts';
 import { LOOPDECK_LABEL } from '../../project/commands_loopdeck.ts';
-import { LOOP_MAX_FRAMES, LOOP_RASTER_BEATS, LOOP_SPUREN, LOOP_ZELLEN, loopDeckGruppe, loopDeckSpuren, type LoopRaster, type Projekt, type Zelle } from '../../project/model.ts';
+import { LOOP_MAX_FRAMES, LOOP_RASTER_BEATS, LOOP_SPUREN, LOOP_ZELLEN, loopDeckGruppe, loopDeckSpuren, istHalten, type LoopRaster, type Projekt, type Zelle } from '../../project/model.ts';
 import { leseWavF32Bloecke } from '../../sampler/wav.ts';
 import { ablageOrdner } from '../../paths.ts';
 import { AUDIO_BUDGET_BYTES, LoopFehler, loopdeckBereichVon, type LoopdeckBereich } from './loopdeck.ts';
@@ -135,7 +135,7 @@ export class LoopsetsBereich {
       for (const s of spuren) {
         const zellen: (SetZelle | null)[] = [];
         for (const z of s.zellen ?? []) {
-          if (!z) { zellen.push(null); continue; }
+          if (!z || istHalten(z)) { zellen.push(null); continue; }   // a halten slot is stored as null (sets stay format 1)
           const hinweis = z.pfad_hinweis ?? '';
           const quell = path.join(o.ordner, hinweis);
           if (!sicherRelativ(hinweis) || !fs.existsSync(quell)) throw fehler(409, 'audio_fehlt', `The audio of cell '${z.name}' is missing in the project.`);

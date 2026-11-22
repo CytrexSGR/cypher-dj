@@ -6,6 +6,7 @@
 
 #include "arr_file.h"
 #include "cypherdj/arr_playback.h"
+#include "cypherdj/arrangement.h"   // ARR_F_FILTER, arr_f_send
 #include "check.h"
 
 static const int64_t F = 48000;
@@ -78,7 +79,8 @@ int main() {
     PRUEF(grund(true, spur(1, "", loop(2) + "," + loop(2))) == "format");                       // duplicate index
     PRUEF(grund(true, spur(1, "", loop(1) + "," + loop(2))).empty());
     PRUEF(grund(true, spur(1, "", zelle(1, a, F, "loop", 0.0, 0.0, 2))) == "format");           // loop without beats
-    PRUEF(grund(true, spur(1, "", zelle(1, a, F, "loop", 2.0, 0.0, 0))) == "format");           // loop with modus 0
+    PRUEF(grund(true, spur(1, "", zelle(1, a, F, "loop", 2.0, 0.0, 1))) == "format");           // loop with modus 1
+    PRUEF(grund(true, spur(1, "", zelle(1, a, F, "loop", 2.0, 0.0, 0))).empty());               // session view K2: keylock off is a loop with modus 0
     PRUEF(grund(true, spur(1, "", zelle(1, a, F, "einmal", 0.0, 0.0, 0))).empty());
     PRUEF(grund(true, spur(1, "", zelle(1, a, F, "einmal", 0.0, 0.0, 2))) == "format");         // einmal with modus 2
     PRUEF(grund(true, spur(1, "", zelle(1, a, F, "gleis", 2.0, 0.0, 2))) == "format");          // unknown art
@@ -130,6 +132,152 @@ int main() {
     }
     cdj::gib_wiedergabe(e.snap.release(), cache);
     PRUEF(cache.eintraege() == 0 && konto.gesperrt() == 0);
+  }
+  {  // 6 (session view K2): the map, the pitch and the envelopes of a cell
+    const auto mit = [&](int index, const char* art, double beats, int modus, const std::string& extra) {
+      std::string z = zelle(index, a, F, art, beats, 0.0, modus);
+      z.pop_back();   // the closing brace
+      return z + (extra.empty() ? "" : "," + extra) + "}";
+    };
+    const auto lade1 = [&](const std::string& z) {
+      ++nr;
+      o.wiedergabe2_warp(nr, spur(1, "s1", z));
+      return cdj::lade_wiedergabe(o.pfad, nr, cache);
+    };
+    {  // 6a: every key arrives
+      cdj::ArrLadeErgebnis e = lade1(mit(1, "loop", 2.0, 2,
+          "\"rueckwaerts\":1,\"blende\":1,\"scheiben\":[[0,1],[1,0]],\"pitch\":1.1225,"
+          "\"huellen\":[{\"art\":\"feld\",\"feld\":9,\"punkte\":[[0,-1,0],[1,1,1]]},{\"art\":\"gain\",\"punkte\":[[0,-6,2]]},"
+          "{\"art\":\"feld\",\"feld\":13,\"punkte\":[[0.5,-12,0]]}]"));
+      PRUEF(e.snap && e.grund.empty());
+      if (e.snap) {
+        const cdj::ArrZelle& z = e.snap->spur[0].zellen[0];
+        PRUEF(z.karte.n == 2 && z.karte.frames == F && z.karte.rueck && z.karte.blende && z.karte.kreis);
+        PRUEF(z.karte.g[0] == 0.0 && z.karte.g[1] == 24000.0 && z.karte.g[2] == static_cast<double>(F));
+        PRUEF(z.karte.s[0] == 1 && z.karte.s[1] == 0);
+        PRUEF(z.pitch == 1.1225);
+        PRUEF(z.n_huellen == 3);
+        PRUEF(z.huellen[0].art == 0 && z.huellen[0].feld == cdj::ARR_F_FILTER && z.huellen[0].n == 2);
+        PRUEF(z.huellen[0].p[0].beat == 0.0 && z.huellen[0].p[0].wert == -1.0f && z.huellen[0].p[0].form == 0);
+        PRUEF(z.huellen[0].p[1].beat == 1.0 && z.huellen[0].p[1].wert == 1.0f && z.huellen[0].p[1].form == 1);
+        PRUEF(z.huellen[1].art == 2 && z.huellen[1].n == 1 && z.huellen[1].p[0].wert == -6.0f && z.huellen[1].p[0].form == 2);
+        PRUEF(z.huellen[2].art == 0 && z.huellen[2].feld == cdj::arr_f_send(4) && z.huellen[2].p[0].beat == 0.5);
+      }
+      cdj::gib_wiedergabe(e.snap.release(), cache);
+      PRUEF(cache.eintraege() == 0 && konto.gesperrt() == 0);
+    }
+    {  // 6b: absent keys give today's cell; kreis follows the art
+      cdj::ArrLadeErgebnis e = lade1(loop(1) + "," + zelle(2, b, F / 2, "einmal", 0.0, 0.0, 0));
+      PRUEF(e.snap && e.grund.empty());
+      if (e.snap) {
+        const cdj::ArrZelle& l = e.snap->spur[0].zellen[0];
+        PRUEF(l.karte.n == 0 && !l.karte.rueck && !l.karte.blende && l.karte.kreis && l.karte.frames == F);
+        PRUEF(l.pitch == 1.0 && l.n_huellen == 0);
+        const cdj::ArrZelle& m = e.snap->spur[0].zellen[1];
+        PRUEF(m.karte.n == 0 && !m.karte.kreis && m.karte.frames == F / 2 && m.pitch == 1.0 && m.n_huellen == 0);
+      }
+      cdj::gib_wiedergabe(e.snap.release(), cache);
+      PRUEF(cache.eintraege() == 0 && konto.gesperrt() == 0);
+    }
+    {  // 6c: slices on a one-shot cell take the cell beats from the entry; keylock off loop with modus 0 loads
+      cdj::ArrLadeErgebnis e = lade1(mit(1, "einmal", 2.0, 0, "\"scheiben\":[[0,0],[1,1]]"));
+      PRUEF(e.snap && e.grund.empty());
+      if (e.snap) {
+        const cdj::ArrZelle& z = e.snap->spur[0].zellen[0];
+        PRUEF(z.karte.n == 2 && z.karte.g[1] == 24000.0 && !z.karte.kreis && z.beats == 0.0);
+      }
+      cdj::gib_wiedergabe(e.snap.release(), cache);
+      PRUEF(cache.eintraege() == 0 && konto.gesperrt() == 0);
+    }
+    {  // 6c2: a one-shot with an envelope carries its length in beats (huell_beats, the position the envelope is read on); beats 0: unknown, the transport rules
+      const std::string env = "\"huellen\":[{\"art\":\"feld\",\"feld\":9,\"punkte\":[[0,0,0],[1,0.5,0]]}]";
+      cdj::ArrLadeErgebnis e = lade1(mit(1, "einmal", 4.0, 0, env));
+      PRUEF(e.snap && e.grund.empty());
+      if (e.snap) {
+        const cdj::ArrZelle& z = e.snap->spur[0].zellen[0];
+        PRUEF(z.art == cdj::ArrZellArt::einmal && z.beats == 0.0 && z.huell_beats == 4.0 && z.n_huellen == 1);
+      }
+      cdj::gib_wiedergabe(e.snap.release(), cache);
+      cdj::ArrLadeErgebnis n = lade1(mit(1, "einmal", 0.0, 0, env));   // without a length the envelope still loads
+      PRUEF(n.snap && n.grund.empty());
+      if (n.snap) PRUEF(n.snap->spur[0].zellen[0].huell_beats == 0.0);
+      cdj::gib_wiedergabe(n.snap.release(), cache);
+      PRUEF(cache.eintraege() == 0 && konto.gesperrt() == 0);
+    }
+    // 6d: refusals zellen_ungueltig, each next to its positive control
+    const auto raster = [](int n, double schritt) {   // n slots, identity source order
+      std::string t = "\"scheiben\":[";
+      for (int i = 0; i < n; ++i) t += (i ? "," : "") + std::string("[") + std::to_string(i * schritt) + "," + std::to_string(i) + "]";
+      return t + "]";
+    };
+    const auto punkte = [](int n) {
+      std::string t = "[";
+      for (int i = 0; i < n; ++i) t += (i ? "," : "") + std::string("[") + std::to_string(i * 0.01) + ",-3,0]";
+      return t + "]";
+    };
+    const auto ungueltig = [&](const std::string& z) { return grund(true, spur(1, "s1", z)) == "zellen_ungueltig"; };
+    const auto gut = [&](const std::string& z) { return grund(true, spur(1, "s1", z)).empty(); };
+    PRUEF(gut(mit(1, "loop", 2.0, 2, raster(64, 0.03))));                        // 64 slots
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, raster(65, 0.03))));                  // 65 slots
+    {
+      const std::string h = "{\"art\":\"gain\",\"punkte\":[[0,-3,0]]}";
+      const std::string h9 = "{\"art\":\"feld\",\"feld\":9,\"punkte\":[[0,0,0]]}", h4 = "{\"art\":\"feld\",\"feld\":4,\"punkte\":[[0,-3,0]]}", h5 = "{\"art\":\"feld\",\"feld\":5,\"punkte\":[[0,-3,0]]}";
+      PRUEF(gut(mit(1, "loop", 2.0, 2, "\"huellen\":[" + h + "," + h9 + "," + h4 + "," + h5 + "]")));          // 4 envelopes, 4 targets
+      PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"huellen\":[" + h + "," + h9 + "," + h4 + "," + h5 + ",{\"art\":\"feld\",\"feld\":6,\"punkte\":[[0,-3,0]]}]")));   // 5 envelopes, 5 targets
+    }
+    PRUEF(gut(mit(1, "loop", 2.0, 2, "\"huellen\":[{\"art\":\"gain\",\"punkte\":" + punkte(64) + "}]")));      // 64 points
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"huellen\":[{\"art\":\"gain\",\"punkte\":" + punkte(65) + "}]")));  // 65 points
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"huellen\":[{\"art\":\"gain\",\"punkte\":[]}]")));                // no point
+    PRUEF(gut(mit(1, "loop", 2.0, 2, "\"huellen\":[{\"art\":\"feld\",\"feld\":9,\"punkte\":[[0,0,0]]}]")));
+    PRUEF(gut(mit(1, "loop", 2.0, 2, "\"huellen\":[{\"art\":\"feld\",\"feld\":4,\"punkte\":[[0,-20,0]]}]")));   // send to return 1
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"huellen\":[{\"art\":\"feld\",\"feld\":8,\"punkte\":[[0,0,0]]}]")));    // the cue field
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"huellen\":[{\"art\":\"feld\",\"feld\":10,\"punkte\":[[0,0,0]]}]")));   // an EQ field
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"huellen\":[{\"art\":\"feld\",\"feld\":0,\"punkte\":[[0,0,0]]}]")));    // the fader
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"huellen\":[{\"art\":\"feld\",\"punkte\":[[0,0,0]]}]")));                // feld missing
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"huellen\":[{\"art\":\"klang\",\"punkte\":[[0,0,0]]}]")));               // unknown art
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"huellen\":[{\"art\":\"feld\",\"feld\":9,\"punkte\":[[0,1.5,0]]}]")));   // filter out of range
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"huellen\":[{\"art\":\"gain\",\"punkte\":[[0,3,0]]}]")));                 // gain above 0 dB
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"huellen\":[{\"art\":\"gain\",\"punkte\":[[1,0,0],[0.5,0,0]]}]")));        // beats falling
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"huellen\":[{\"art\":\"gain\",\"punkte\":[[2,0,0]]}]")));                 // beat at the cell end
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"huellen\":[{\"art\":\"gain\",\"punkte\":[[0,0,3]]}]")));                 // form 3
+    {  // one envelope per target; three points at one beat refused, two are a jump
+      const std::string g = "{\"art\":\"gain\",\"punkte\":[[0,-3,0]]}", f9 = "{\"art\":\"feld\",\"feld\":9,\"punkte\":[[0,0,0]]}";
+      const std::string f4 = "{\"art\":\"feld\",\"feld\":4,\"punkte\":[[0,0,0]]}";
+      PRUEF(gut(mit(1, "loop", 2.0, 2, "\"huellen\":[" + g + "," + f9 + "," + f4 + "]")));
+      PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"huellen\":[" + g + "," + g + "]")));          // twice gain
+      PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"huellen\":[" + f9 + "," + g + "," + f9 + "]")));   // twice the filter
+      PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"huellen\":[" + f4 + "," + f4 + "]")));        // twice the same send
+      PRUEF(gut(mit(1, "loop", 2.0, 2, "\"huellen\":[{\"art\":\"gain\",\"punkte\":[[0,-3,0],[1,-6,2],[1,0,0],[1.5,0,0]]}]")));   // two at beat 1: a jump
+      PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"huellen\":[{\"art\":\"gain\",\"punkte\":[[0,-3,0],[1,-6,2],[1,0,0],[1,-1,0]]}]")));   // three at beat 1
+    }
+    {  // the cell JSON is checked before the audio is fetched: a refused cell whose file is missing gives the cell reason
+      const std::string fehlt(64, 'e');
+      std::string z = zelle(1, fehlt, F, "loop", 2.0, 0.0, 2);
+      PRUEF(grund(true, spur(1, "s1", z)) != "zellen_ungueltig" && !grund(true, spur(1, "s1", z)).empty());   // control: the missing file alone
+      z.pop_back();
+      PRUEF(ungueltig(z + ",\"pitch\":9}"));
+    }
+    PRUEF(gut(mit(1, "loop", 2.0, 2, "\"pitch\":1.5")));
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 0, "\"pitch\":1.5")));                  // pitch on a keylock-off cell
+    PRUEF(ungueltig(mit(1, "einmal", 0.0, 0, "\"pitch\":1.5")));                // pitch on a one-shot
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"pitch\":4.5")));                  // beyond 24 semitones
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"pitch\":0")));
+    PRUEF(gut(mit(1, "loop", 2.0, 2, "\"scheiben\":[[0,0],[1,1]]")));
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"scheiben\":[[0,0],[1,2]]")));      // source slot 2 of 2 (0-based)
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"scheiben\":[[0,0],[1,-1]]")));
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"scheiben\":[[0.5,0],[1,1]]")));    // first boundary not 0
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"scheiben\":[[0,0],[1,1],[1,0]]"))); // not rising
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"scheiben\":[[0,0],[1,1],[0.5,0]]")));
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"scheiben\":[[0,0],[2,1]]")));      // boundary at the cell end
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"scheiben\":[[0,0,1],[1,1]]")));    // pair of three
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"scheiben\":[[0],[1,1]]")));        // pair of one
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"scheiben\":[]")));                 // empty table
+    PRUEF(gut(mit(1, "loop", 2.0, 2, "\"scheiben\":[[0,0],[0.008,1]]")));         // first slot exactly 192 frames (ZELL_SLOT_MIN)
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"scheiben\":[[0,0],[0.0079,1]]")));  // 190 frames
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"scheiben\":[[0,0],[1.9921,1]]")));  // last slot 190 frames
+    PRUEF(ungueltig(mit(1, "einmal", 0.0, 0, "\"scheiben\":[[0,0],[1,1]]")));     // one-shot without cell beats for the table
+    PRUEF(ungueltig(mit(1, "loop", 2.0, 2, "\"rueckwaerts\":2")));
+    PRUEF(gut(mit(1, "loop", 2.0, 2, "\"rueckwaerts\":1,\"blende\":1")));
   }
   PRUEF_ENDE();
 }

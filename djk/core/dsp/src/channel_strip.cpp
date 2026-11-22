@@ -124,18 +124,30 @@ void Kanalzug::verarbeite_vor(const float* in_l, const float* in_r, int n) {
 
 void Kanalzug::verarbeite_nach(int n, const KanalzugAusgang& aus) {
     [[maybe_unused]] DenormalSchutz schutz;
-    double k;
+    double k = 0.0;
     const float* a_l = abgriff_[0];
     const float* a_r = abgriff_[1];
 
     // 5. Fader
     float* h_l = aus.haupt_l;
     float* h_r = aus.haupt_r;
-    if (db_gains(Regler::fader, g_fader_, n, k)) {
+    const bool zus_fader_ramp = db_gains(Regler::fader, g_fader_, n, k);
+    const double zus_fader_k = k;
+    if (zus_fader_ramp) {
         for (int i = 0; i < n; ++i) { h_l[i] = a_l[i] * g_fader_[i]; h_r[i] = a_r[i] * g_fader_[i]; }
     } else {
         const float g = static_cast<float>(k);
         for (int i = 0; i < n; ++i) { h_l[i] = a_l[i] * g; h_r[i] = a_r[i] * g; }
+    }
+
+    // 5b. Loop lane strip K4: the extra pair takes the same fader gain (per sample or constant, as above)
+    if (aus.zus_ein_l && aus.zus_ein_r && aus.zus_aus_l && aus.zus_aus_r) {
+        if (zus_fader_ramp) {
+            for (int i = 0; i < n; ++i) { aus.zus_aus_l[i] = aus.zus_ein_l[i] * g_fader_[i]; aus.zus_aus_r[i] = aus.zus_ein_r[i] * g_fader_[i]; }
+        } else {
+            const float g = static_cast<float>(zus_fader_k);
+            for (int i = 0; i < n; ++i) { aus.zus_aus_l[i] = aus.zus_ein_l[i] * g; aus.zus_aus_r[i] = aus.zus_ein_r[i] * g; }
+        }
     }
 
     // 6. Sends nach dem Fader; die Bahnen laufen auch ohne Bus weiter

@@ -54,6 +54,7 @@ export function bindeSchublade() {
   $('#schublade').addEventListener('click', () => schublade(document.body.classList.contains('lib-zu')));
   $('#gross').addEventListener('click', () => gross(!document.body.classList.contains('lib-gross')));
   document.addEventListener('keydown', (e) => {
+    if (grossOffen) return;   // the loop deck pop-up owns the keys while it is open (its Esc handler is in loopdeck/gross.js)
     if (e.target.closest('input, textarea, [contenteditable]')) { if (e.key === 'Escape') e.target.blur(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;          // Review: Strg+L u. a. bleiben beim Browser
     if (document.body.classList.contains('tracker')) return;   // TRACKER has no library drawer; its grid owns L, G, S, Space, Escape and the arrows (tracker/grid_view.js)
@@ -80,24 +81,28 @@ export function bindeSchublade() {
   try { gespeichert = localStorage.getItem('djk-lib') ?? 'auf'; } catch { /* leer */ }
   schublade(gespeichert !== 'zu');
 }
-// Studio S1: Ansicht DJ | STUDIO; wechselt nur die Sicht, nie den Klang. Gemerkt pro Browser (nur Bequemlichkeit).
+// Studio S1: Ansicht DJ | PRODUCTION | STUDIO | TRACKER; wechselt nur die Sicht, nie den Klang. Gemerkt pro Browser (nur Bequemlichkeit).
 // D1 V1: dritter Wert PRODUCTION (Modul production/production.js, gekapselt wie die Spurbänder)
-const ANSICHTEN = ['dj', 'studio', 'produktion', 'werkbank', 'tracker'];
+const ANSICHTEN = ['dj', 'produktion', 'werkbank', 'tracker'];   // a remembered 'studio' (the removed SESSION view) is not in the list: it reads as DJ
 export let produktion = null;
 export let tracker = null;    // the tracker view (tracker/tracker.js), the fifth value: label TRACKER
 export let werkbank = null;   // the workbench view (werkbank/werkbank.js), the fourth value: label STUDIO, value werkbank
 // The main window tells the page server which view it shows: the APC20 is the project mixer while it is PRODUCTION (areas/controller/pult_production.ts,
 // djk/hand_bruecke/apc_production.py). Only the main window (no address); the Remix, Controllers and device windows have one of their own.
 const istHauptfenster = () => (globalThis.location?.hash ?? '') === '';
-let gemeldeteAnsicht = null, gezeigteAnsicht = null;
+let gemeldeteAnsicht = null, gezeigteAnsicht = null, grossOffen = false;
+// While the loop deck pop-up is open the main window reports `studio` (the contract value the APC20 session mode follows: the grid launches cells);
+// on close it reports the view that shows again. A re-report (focus, 20 s interval) keeps saying `studio` while the pop-up is open.
+export function setzeGrossOffen(offen) { grossOffen = !!offen; meldeAnsicht(); }
 export function meldeAnsicht(a = gezeigteAnsicht, erneut = false) {
+  if (grossOffen && a) a = 'studio';
   if (!a || !istHauptfenster() || (a === gemeldeteAnsicht && !erneut)) return;
   gemeldeteAnsicht = a;
   try { void fetch('/controller/ansicht', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ansicht: a }) }).catch(() => { gemeldeteAnsicht = null; }); } catch { gemeldeteAnsicht = null; }
 }
 export function setzeAnsicht(a, merken = true) {
   setzeGeraeteseite(false);   // the layer sits on the page of one view; another view never keeps it
-  for (const k of ['studio', 'produktion', 'werkbank', 'tracker']) document.body.classList.toggle(k, a === k);
+  for (const k of ['produktion', 'werkbank', 'tracker']) document.body.classList.toggle(k, a === k);
   for (const b of $$('[data-ansicht]')) { const an = b.dataset.ansicht === a; b.classList.toggle('an', an); b.setAttribute('aria-pressed', String(an)); }
   if (merken) try { localStorage.setItem('djk-ansicht', a); } catch { /* ohne Speicher: DJ */ }
   gezeigteAnsicht = a;

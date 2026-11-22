@@ -28,11 +28,11 @@ async function aufbau(t) {
   return { url, c, aufruf, log };
 }
 
-test('T5.6 echt: tools/list of the live hand has 99 tools = the grep count; presets_suchen {familie: instrument} returns the 10 rb338 factory presets, {art: [bass]} the 7 bass ones', async (t) => {
+test('T5.6 echt: tools/list of the live hand has 100 tools = the grep count; presets_suchen {familie: instrument} returns the 10 rb338 factory presets, {art: [bass]} the 7 bass ones', async (t) => {
   const { c, aufruf } = await aufbau(t);
   const n = (await c.listTools()).tools.length;
   const imCode = fs.readFileSync(HAND, 'utf8').split('\n').filter((z) => z.startsWith("  { name: '")).length;
-  assert.deepEqual([n, imCode], [99, 99]);
+  assert.deepEqual([n, imCode], [100, 100]);
   const alle = await aufruf('presets_suchen', { familie: 'instrument', geraet: ['rb338'] });
   assert.ok(!alle.r.isError, JSON.stringify(alle.j));
   assert.equal(alle.j.gesamt, 10);

@@ -1,6 +1,6 @@
 # ADR 042: loop deck cells play through a launcher in the arrangement engine
 
-Status: decided, being built by the plan `docs/superpowers/plans/2026-11-20-loop-deck.md` (index) and its lane files. Nothing of it is merged or measured at the time of writing; the stand document `docs/architecture/stand/loop-deck.md` describes what exists and what is still open.
+Status: decided, being built by the plan `docs/superpowers/plans/2026-11-20-loop-deck.md` (index) and its lane files. It is merged on main and was extended by the session view (S1, `docs/architecture/stand/session-view.md`), which uses the same launcher and the same column component; the stand documents `docs/architecture/stand/loop-deck.md` and `session-view.md` describe what exists and what is still open.
 Decided: in the spec `docs/superpowers/specs/2026-11-20-loop-deck-design.md` (design v1, 2026-11-20), points D1 to D5 by Andreas, the rest by Cypher as defaults.
 Supersedes: nothing. It replaces the module slots A and B of the LOOPS place in use (they stay in the code until a clean-up) and does not touch ADR 025 (loop boxes) or ADR 037 (loop slots on DJ channels) beyond that.
 Spec: `docs/superpowers/specs/2026-11-20-loop-deck-design.md`.

@@ -18,7 +18,7 @@ Built in Germany by Andreas, a DJ, and Cypher, an AI agent (Claude models), sinc
 
 One real-time core in C++ and Rust keeps a single sample clock for everything: the decks, the pattern channels and
 the arrangement. The browser page and the agent sit on the same functions. The agent reaches them through an MCP
-server with 99 tools, so nearly everything you can click, it can do too (a few controls such as the crossfader stay
+server with 100 tools, so nearly everything you can click, it can do too (a few controls such as the crossfader stay
 in your hand), and anything it does shows up on your page. When it
 cannot do something it answers with a reason (for example `sidechain_zyklus` for a sidechain that would depend on
 itself) instead of guessing. When you grab a fader, your
@@ -87,8 +87,8 @@ return or the master into a new audio track.
 pattern channels ([Strudel](https://strudel.cc)) and two loop decks, all on the same clock. The DJ view has four
 places, each showing a track deck, the Strudel channels, a loop deck or a SEQ deck; the main mixer has four
 channels and each fader belongs to its place (1 is A, 2 is B, 3 is L1, 4 is L2), whatever the place shows. A loop deck has
-four tracks of eight cells that launch on a grid, scenes, slices and a channel strip per track (EQ, HALL and DELAY sends, an
-effect); the Strudel sum can be recorded into a loop track as a cell. The SEQ deck is a pattern sequencer:
+four tracks of eight cells that launch on a grid, scenes, slices and a channel strip per track (three-band EQ, COLOR, HALL and DELAY
+sends, keys for the FX units 1 to 3); the Strudel sum can be recorded into a loop track as a cell. The SEQ deck is a pattern sequencer:
 a pattern plays one instrument, you add lanes of notes, of values per step or of drawn curves on any knob of that
 instrument, in 1/4 to 1/32 per lane. Cypher Remix, a beat-synchronous remix station (build-up and break-down effects,
 a three-band isolator, a pad with roll and drum voices, a release lever), is the third FX unit: every channel strip
@@ -125,8 +125,7 @@ In this order, without dates:
 2. **Hardware controllers, further.** More devices (a Maschine Jam and a Pioneer XDJ-XZ are known but not bound), the
    S8 button lights beyond PLAY and LOOP, finer touch strip feel, and a check by hand of what so far was only tested
    by injecting MIDI (see [Hardware controllers](docs/features.md#hardware-controllers)).
-3. **Live.** A session view with a clip launcher and scenes, follow actions, recording into slots,
-   swapping motifs live, MIDI effects.
+3. **Live.** Follow actions for scenes, recording into cells, swapping motifs live, MIDI effects.
 
 Not planned for now: automation of plugin parameters, sidechain into plugins, CLAP plugins.
 

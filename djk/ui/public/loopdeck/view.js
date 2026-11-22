@@ -3,13 +3,15 @@
 // { a: 'loopdeck', f: { deck, spur, lauf } } (run state of one track). The nodes are built once and only updated afterwards, so focus and
 // drags survive a redraw. Per deck: head row (name, grid, STOP ALL, set menu, create button), scene column, four track columns.
 import { $$, el, melde } from '../page_state.js';
-import { leseWelle, spalten, zeichneSpalte } from '../wave.js';
+import { leereWellen, starteTakt } from '../session/waves.js';
+import { baueSpalte } from '../session/spalte.js';
 import { KERN, kernAusX, kernZuX } from '../curves.js';
-import { baueMenue, baueFxMenue } from './menue.js';
-import { oeffneGeraetFenster } from '../device_open.js';
+import { knopf, EQ_OPT, SEND_OPT, EQ_BAENDER, FX_EINHEITEN } from '../session/strip.js';
+import { zeigeColorName } from '../color_kinds.js';
+import { baueMenue } from './menue.js';
 import { baueSetMenue } from './sets.js';
-import { bindeAblage, schreibeZelle } from './drag.js';
-import { RASTER, SPUREN, ZELLEN, beatJetzt, deckAnsicht, laufEreignis, neueUhr, spielPos, uhrMelde } from './model.js';
+import { schreibeZelle } from './drag.js';
+import { RASTER, SPUREN, ZELLEN, beatJetzt, deckAnsicht, laufEreignis, neueUhr, uhrMelde } from './model.js';
 
 const jetzt = () => performance.now();
 const stand = { decks: { 1: null, 2: null }, geladen: false };
@@ -18,16 +20,18 @@ const ansichten = new Map();   // deck number -> { wurzel, kopf, szenen, spuren:
 let letztesDeck = null;       // the deck whose load target was selected last (export target when none is selected)
 let exportDeck = null;        // the deck chosen with the toggle of the track decks' export row; null = follow the selection
 const hoerer = new Set();     // called after every change of the stand or of the export target (the export row redraws itself)
-let ladend = false, nochmal = false, veraltet = false, schleifeLaeuft = false;
-const wellen = new Map();      // sha -> Promise of the decoded waveform or null (no waveform: the strip stays empty); a failed request is not kept
+let ladend = false, nochmal = false, veraltet = false, schleifeAb = null;   // schleifeAb: unsubscribes from the shared animation loop (waves.js)
 let standAngefragt = false;    // the stand was asked for once (the export row asks when no loop place does)
-let effekteListe = null, effekteAnfrage = null;   // GET /loopdeck/effekte, fetched once per page load; a failed request is asked again at the next opening
 const exportLaeuft = new Set();   // track decks with an export request in flight
 
 // The live container belongs to live_view.js (which imports this module): it registers how to read "is it open" and how to open it (with its own
 // confirmation). Without it (tests of this view alone) the container counts as closed and opening fails.
 const haken = { liveOffen: () => false, oeffneLive: async () => ({ ok: false }), frage: (t) => window.confirm(t) };
 export function setzeLiveHaken(h) { Object.assign(haken, h); }
+// The large view of a deck (gross.js, the pop-up) registers how to open it: the head button and a double click on the deck name call it.
+let grossHaken = null;
+export function setzeGrossHaken(f) { grossHaken = typeof f === 'function' ? f : null; }
+const GROSS_TITEL = 'Open the loop deck large: cells, strips and the clip editor';
 // Reasons the page words itself when the server sends none (the server's `text` wins).
 const GRUND_TEXTE = { zelle_laedt: 'That cell is still loading.', nichts_gespielt: 'Nothing played on that track yet.', kein_platz: 'No room for another effect stage or return.', graph_unbekannt: 'That effect cannot be used on a loop deck track.', nur_loop: 'A one-shot has no slices to jump to.' };
 export const FRAGE_PROJEKT = 'Opening the live container closes the open project. Continue?';
@@ -88,69 +92,10 @@ export async function ladeStand() {
 }
 
 // ---------- building ----------
-// Rotary knob. Without `opt` it is the filter knob (-1..+1, double click 0). `opt` generalises it for the strip row: the knob works on
-// x = nachX(value) between nachX(min) and nachX(max); drag and keys move x, `beiWert` gets vonX(x) rounded to 1/rund; a double click sets `neutral`.
-function knopf(wert, beiWert, opt = {}) {
-  const { klasse = 'knopf ld-filter', label = 'Filter', titel = 'Filter: low-pass left, high-pass right (double click: off)', min = -1, max = 1, neutral = 0,
-    nachX = (v) => v, vonX = (x) => x, schritt = 0.05, rund = 100 } = opt;
-  const x0 = nachX(min), x1 = nachX(max), spanne = x1 - x0;
-  const k = el('div', klasse); k.setAttribute('role', 'slider'); k.tabIndex = 0; k.setAttribute('tabindex', '0');
-  k.setAttribute('aria-label', label); k.title = titel;
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('viewBox', '0 0 48 48');
-  const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle'); ring.setAttribute('class', 'ring'); ring.setAttribute('cx', '24'); ring.setAttribute('cy', '24'); ring.setAttribute('r', '20');
-  const zeiger = document.createElementNS('http://www.w3.org/2000/svg', 'line'); zeiger.setAttribute('class', 'zeiger'); zeiger.setAttribute('x1', '24'); zeiger.setAttribute('y1', '24');
-  svg.append(ring, zeiger); k.append(svg);
-  const xVon = (v) => Math.max(x0, Math.min(x1, nachX(Math.max(min, Math.min(max, v)))));
-  const runde = (v) => Math.round(v * rund) / rund;
-  let akt = wert;
-  const setze = (v) => {
-    const w = Math.max(min, Math.min(max, v)); akt = w;
-    const a = ((xVon(w) - x0) / spanne * 2 - 1) * 135 * Math.PI / 180;
-    zeiger.setAttribute('x2', (24 + 15 * Math.sin(a)).toFixed(2)); zeiger.setAttribute('y2', (24 - 15 * Math.cos(a)).toFixed(2));
-    k.setAttribute('aria-valuenow', w.toFixed(2));
-  };
-  const ausX = (x) => runde(Math.max(min, Math.min(max, vonX(Math.max(x0, Math.min(x1, x))))));
-  let start = null;
-  k.addEventListener('pointerdown', (e) => { start = { y: e.clientY ?? 0, x: xVon(akt) }; k.classList.add('gegriffen'); k.setPointerCapture?.(e.pointerId); });
-  k.addEventListener('pointermove', (e) => {
-    if (!start) return;
-    const v = ausX(start.x + (start.y - (e.clientY ?? 0)) / (e.shiftKey ? 600 : 150) * spanne);
-    setze(v); beiWert(v);
-  });
-  const ende = () => { start = null; k.classList.remove('gegriffen'); };
-  k.addEventListener('pointerup', ende); k.addEventListener('pointercancel', ende);
-  k.addEventListener('dblclick', () => { setze(neutral); beiWert(neutral); });
-  k.addEventListener('keydown', (e) => {
-    const d = e.key === 'ArrowUp' || e.key === 'ArrowRight' ? schritt : e.key === 'ArrowDown' || e.key === 'ArrowLeft' ? -schritt : null;
-    if (d === null) return;
-    e.preventDefault?.();
-    const v = ausX(xVon(akt) + d);
-    setze(v); beiWert(v);
-  });
-  setze(wert);
-  return { knoten: k, setze, gegriffen: () => start !== null };
-}
-
-async function holeEffekte() {
-  if (effekteListe) return effekteListe;
-  effekteAnfrage ??= (async () => {
-    try {
-      const r = await fetch('/loopdeck/effekte');
-      const j = r.ok ? await r.json() : null;
-      if (Array.isArray(j?.graphen)) effekteListe = j.graphen;
-    } catch { /* the choice shows what it has */ }
-    effekteAnfrage = null;
-    return effekteListe;
-  })();
-  return effekteAnfrage;
-}
-// Same rule as the server's `kurz` (index 1.4): name without `fx-`, first 6 characters, upper case; the server's list wins once it is loaded.
-const kurzVon = (graph) => effekteListe?.find((g) => g.name === graph)?.kurz ?? String(graph).replace(/^fx-/, '').slice(0, 6).toUpperCase();
-
-// ---------- strip row (channel strip PZ1): LO MID HI per track, kill on the label ----------
+// ---------- strip row: HI MID LOW, COLOR HALL DLY knobs and the keys 1 2 3 per lane (M and the fader sit on the lane's foot) ----------
 export const STRIP_VORGABE = false;   // collapsed by default: measured at 1920 x 1080 with the dock open, the place is 765 x 302 px and each of the 8 cell rows
                                       // is 17 px; a 28 px strip would push them under the 14 px minimum. The STRIP toggle shows it. Flip here if the place grows.
-const BAENDER = [['tief', 'LO'], ['mitte', 'MID'], ['hoch', 'HI']];
+const COLOR_TITEL = 'COLOR: the effect chosen at the main mixer (FILTER: low-pass left, high-pass right); centre is dry (double click: centre)';
 const stripSchluessel = (nr) => `loopdeck.strip.${nr}`;
 function leseStrip(nr) {
   try { const w = globalThis.localStorage?.getItem(stripSchluessel(nr)); if (w === '1') return true; if (w === '0') return false; } catch { /* storage blocked: the default */ }
@@ -159,77 +104,70 @@ function leseStrip(nr) {
 function schreibeStrip(nr, an) { try { globalThis.localStorage?.setItem(stripSchluessel(nr), an ? '1' : '0'); } catch { /* storage blocked: not remembered */ } }
 
 function baueStrip(nr, s) {
-  const strip = el('div', 'ld-strip'), baender = {};
-  for (const [band, text] of BAENDER) {
-    const einheit = el('div', 'ld-einheit');
+  const strip = el('div', 'ld-strip'), baender = {}, sends = {};
+  const einheit = (klasse, k, text) => { const e = el('div', `ld-einheit ${klasse}`); const n = el('span', 'ld-sendname', text); e.append(k.knoten, n); strip.append(e); return n; };
+  for (const [band, text] of EQ_BAENDER) {
     const k = knopf(0, (db) => {
-      const sp = stand.decks[nr]?.spuren?.[s]; if (sp) sp.eq = { ...(sp.eq ?? {}), [band]: db };
-      schickeLetzten(`eq/${nr}/${s}/${band}`, '/loopdeck/spur', { deck: nr, spur: s + 1, eq: { [band]: db } });
-    }, { klasse: 'ld-mini', label: `${text} EQ`, titel: `${text}: band gain in dB (double click: 0 dB)`, min: -200, max: 6, neutral: 0,
-      nachX: (db) => kernZuX(KERN.eq, db), vonX: (x) => kernAusX(KERN.eq, x), schritt: 0.025 });
-    const b = el('button', 'ld-band', text); b.type = 'button'; b.dataset.band = band; b.title = `${text}: click to kill the band`; b.setAttribute('aria-pressed', 'false');
-    b.addEventListener('click', () => {
       const sp = stand.decks[nr]?.spuren?.[s];
-      const alt = !!sp?.kill?.[band], neu = !alt;
-      if (sp) sp.kill = { ...(sp.kill ?? {}), [band]: neu };
-      zeichneDeck(nr);
-      senden('/loopdeck/spur', { deck: nr, spur: s + 1, kill: { [band]: neu } }).then((r) => {
-        if (!r.ok && sp && !!sp.kill?.[band] === neu) { sp.kill = { ...sp.kill, [band]: alt }; zeichneDeck(nr); }
-      });
-    });
-    einheit.append(k.knoten, b); strip.append(einheit); baender[band] = { knopf: k, label: b };
+      const loese = !!sp?.kill?.[band];   // a killed band shows its knob fully left; turning it takes the kill off in the same request
+      if (sp) { sp.eq = { ...(sp.eq ?? {}), [band]: db }; if (loese) sp.kill = { ...sp.kill, [band]: false }; }
+      schickeLetzten(`eq/${nr}/${s}/${band}`, '/loopdeck/spur', { deck: nr, spur: s + 1, eq: { [band]: db }, ...(loese ? { kill: { [band]: false } } : {}) });
+    }, { ...EQ_OPT, klasse: 'ld-mini', label: `${text} EQ`, titel: `${text}: band gain in dB, fully left is off (double click: 0 dB)` });
+    einheit('ld-band-einheit', k, text); baender[band] = { knopf: k };
   }
-  // PZ2: HALL and DLY sends (the fader law up to 0 dB, double click turns the send off) and the effect chip
-  const sends = {};
+  // COLOR is the lane's `filter` (-1..+1, centre = dry); its label names the art chosen at the main mixer
+  const color = knopf(0, (v) => {
+    const sp = stand.decks[nr]?.spuren?.[s]; if (sp) sp.filter = v;
+    schickeLetzten(`filter/${nr}/${s}`, '/loopdeck/spur', { deck: nr, spur: s + 1, filter: v });
+  }, { klasse: 'ld-mini', label: 'COLOR', titel: COLOR_TITEL });
+  const colorName = einheit('ld-color', color, 'COLOR'); colorName.dataset.colorname = '1'; zeigeColorName(colorName);
   for (const [art, text] of [['hall', 'HALL'], ['delay', 'DLY']]) {
-    const einheit = el('div', 'ld-einheit ld-send'); einheit.dataset.send = art;
     const k = knopf(-200, (db) => {
       const sp = stand.decks[nr]?.spuren?.[s]; if (sp) sp.send = { ...(sp.send ?? {}), [art]: db };
       schickeLetzten(`send/${nr}/${s}/${art}`, '/loopdeck/spur', { deck: nr, spur: s + 1, send: { [art]: db } });
-    }, { klasse: 'ld-mini', label: `${text} send`, titel: `${text} send in dB (double click: off)`, min: -200, max: 0, neutral: -200,
-      nachX: (db) => kernZuX(KERN.fader, db), vonX: (x) => Math.min(0, kernAusX(KERN.fader, x)), schritt: 0.025 });
-    const name = el('span', 'ld-sendname', text);
-    einheit.append(k.knoten, name); strip.append(einheit); sends[art] = k;
+    }, { ...SEND_OPT, klasse: 'ld-mini', label: `${text} send`, titel: `${text} send in dB (double click: off)` });
+    einheit('ld-send', k, text).parentElement.dataset.send = art; sends[art] = k;
   }
-  const fx = el('button', 'ld-fx', '+'); fx.type = 'button'; fx.title = 'Effect slot: click to choose';
-  fx.addEventListener('click', () => klickChip(nr, s));
-  strip.append(fx);
-  return { strip, baender, sends, fx };
+  // keys 1 2 3: Beat FX 1, Beat FX 2 and FX3 (Remix) of this lane, lit = assigned (the look of the 1 2 3 keys of a mixer channel)
+  const fxTasten = {}, fxReihe = el('div', 'ld-fxreihe');
+  for (const u of FX_EINHEITEN) {
+    const b = el('button', 'ld-fxtaste', u); b.type = 'button'; b.dataset.einheit = u; b.setAttribute('aria-pressed', 'false');
+    b.title = `Assign this lane to ${u === '3' ? 'FX3 (Remix)' : `Beat FX ${u}`}`;
+    b.addEventListener('click', () => {
+      const sp = stand.decks[nr]?.spuren?.[s];
+      const alt = !!sp?.fx?.[u], neu = !alt;
+      if (sp) sp.fx = { ...(sp.fx ?? {}), [u]: neu };
+      zeichneDeck(nr);
+      senden('/loopdeck/spur', { deck: nr, spur: s + 1, fx: { [u]: neu } }).then((r) => {
+        if (!r.ok && sp && !!sp.fx?.[u] === neu) { sp.fx = { ...sp.fx, [u]: alt }; zeichneDeck(nr); }
+      });
+    });
+    fxReihe.append(b); fxTasten[u] = b;
+  }
+  strip.append(fxReihe);
+  return { strip, baender, sends, color, colorName, fxTasten };
 }
 
 function baueSpur(nr, s) {
   const spur = el('div', 'ld-spur');
-  const titel = el('div', 'ld-titel', '');
-  const welle = el('div', 'ld-welle'), leinwand = document.createElement('canvas'); leinwand.width = 240; leinwand.height = 36;
-  const kopf = el('div', 'ld-kopf'); kopf.hidden = true;
-  welle.append(leinwand); for (let i = 1; i < 8; i++) { const m = el('span', 'ld-marke'); m.style.left = `${i * 12.5}%`; welle.append(m); }
-  welle.append(kopf);
-  welle.addEventListener('click', (e) => klickWelle(nr, s, e, welle));
-  const zellen = el('div', 'ld-zellen'), knoepfe = [];
-  for (let i = 0; i < ZELLEN; i++) {
-    const b = el('button', 'ld-zelle leer'); b.type = 'button'; b.dataset.zelle = String(i + 1);
-    const chip = el('span', 'ld-chip'), icon = el('span', 'ld-art', ''), name = el('span', 'ld-name', '');
-    const griff = el('span', 'ld-griff', '⋮'); griff.title = 'Cell menu'; griff.hidden = true;
-    b.append(chip, icon, name, griff);
-    b.addEventListener('click', () => klickZelle(nr, s, i + 1));
-    b.addEventListener('contextmenu', (e) => { e.preventDefault?.(); oeffneZellmenue(nr, s, i + 1); });
-    griff.addEventListener('click', (e) => { e.stopPropagation?.(); oeffneZellmenue(nr, s, i + 1); });
-    b.addEventListener('dragstart', (e) => {   // a filled cell, playing or not, can be dragged; an empty one cannot
-      if (!stand.decks[nr]?.spuren?.[s]?.zellen?.[i]) { e.preventDefault?.(); return; }
-      schreibeZelle(e, { deck: nr, spur: s + 1, zelle: i + 1 });
-    });
-    bindeAblage(b, (inhalt) => ablegen(nr, s + 1, i + 1, inhalt));
-    zellen.append(b); knoepfe.push({ b, chip, icon, name, griff });
-  }
+  // the column and cell component (session/spalte.js, shared with the pop-up), compact: head, now-playing strip, eight cells, stop; the strip row goes into its zug-slot
+  const spalte = baueSpalte(spur, {
+    variante: 'kompakt',
+    beiStart: (zelle) => klickZelle(nr, s, zelle),   // a filled cell launches
+    beiWahl: (zelle) => klickZelle(nr, s, zelle),    // an empty one is selected as load target
+    beiStopp: () => senden('/loopdeck/stopp', { deck: nr, spur: s + 1 }),
+    beiAblegen: (zelle, inhalt) => ablegen(nr, s + 1, zelle, inhalt),
+    beiWelleKlick: (anteil) => klickWelle(nr, s, anteil),
+    beiMenue: (zelle, anker) => oeffneZellmenue(nr, s, zelle, anker),
+    beiZiehen: (zelle, e) => schreibeZelle(e, { deck: nr, spur: s + 1, zelle }),
+  });
   const fuss = el('div', 'ld-fuss');
-  const stopp = el('button', 'ld-stopp', 'STOP'); stopp.type = 'button'; stopp.title = 'Stop this track on the next grid point';
   const mute = el('button', 'ld-mute', 'M'); mute.type = 'button'; mute.title = 'Mute'; mute.setAttribute('aria-pressed', 'false');
   const fader = el('input', 'live-regler ld-fader'); fader.type = 'range'; fader.setAttribute('type', 'range'); fader.min = '-60'; fader.max = '6'; fader.step = '0.5'; fader.value = '0'; fader.title = 'Track volume (dB)';
   const filter = knopf(0, (v) => {
     const sp = stand.decks[nr]?.spuren?.[s]; if (sp) sp.filter = v;
     schickeLetzten(`filter/${nr}/${s}`, '/loopdeck/spur', { deck: nr, spur: s + 1, filter: v });
   });
-  stopp.addEventListener('click', () => senden('/loopdeck/stopp', { deck: nr, spur: s + 1 }));
   mute.addEventListener('click', () => {
     const sp = stand.decks[nr]?.spuren?.[s];
     const alt = sp?.mute ?? false, neu = !alt;
@@ -242,10 +180,11 @@ function baueSpur(nr, s) {
     if (sp) sp.fader_db = v;
     schickeLetzten(`fader/${nr}/${s}`, '/loopdeck/spur', { deck: nr, spur: s + 1, fader_db: v });
   });
-  fuss.append(stopp, mute, fader, filter.knoten);
+  fuss.append(mute, fader, filter.knoten);
   const kz = baueStrip(nr, s);
-  spur.append(titel, welle, zellen, kz.strip, fuss);
-  return { spur, titel, leinwand, kopf, knoepfe, stopp, mute, fader, filter, strip: kz, sha: null };
+  spur.querySelector('.zug-slot').append(kz.strip);
+  spur.append(fuss);
+  return { spur, spalte, mute, fader, filter, strip: kz };
 }
 
 function baueDeck(wurzel, nr) {
@@ -275,40 +214,41 @@ function baueDeck(wurzel, nr) {
   const neu = el('button', 'ld-neu', 'CREATE DECK'); neu.type = 'button'; neu.hidden = true; neu.title = 'Create this loop deck in the live container';
   neu.addEventListener('click', () => anlegen(nr));
   const hinweis = el('span', 'ld-hinweis', 'The live container is not open: CREATE DECK opens it.'); hinweis.hidden = true;
-  const stripTaste = el('button', 'ld-strip-taste', 'STRIP'); stripTaste.type = 'button'; stripTaste.title = 'Show or hide the channel strip row (EQ, sends, effect)';
+  const stripTaste = el('button', 'ld-strip-taste', 'STRIP'); stripTaste.type = 'button'; stripTaste.title = 'Show or hide the lane strip row (EQ, COLOR, sends, FX 1 2 3)';
   const setzeStrip = (an) => { wurzel.classList.toggle('mit-strip', an); stripTaste.classList.toggle('an', an); stripTaste.setAttribute('aria-pressed', String(an)); };
   setzeStrip(leseStrip(nr));
   stripTaste.addEventListener('click', () => { const an = !wurzel.classList.contains('mit-strip'); setzeStrip(an); schreibeStrip(nr, an); });
-  kopf.append(name, raster, hinweis, stopAlle, set, stripTaste, neu);
+  const gross = el('button', 'ld-gross', '⤢'); gross.type = 'button'; gross.title = GROSS_TITEL;
+  gross.addEventListener('click', () => grossHaken?.(nr, gross));
+  name.addEventListener('dblclick', () => grossHaken?.(nr, gross));
+  name.title = GROSS_TITEL;
+  kopf.append(name, raster, hinweis, stopAlle, set, stripTaste, neu, gross);
   const rumpf = el('div', 'ld-rumpf');
-  // the scene column has the row template of a track (title, wave, cell rows, foot): its buttons sit exactly beside the cell rows
+  // the scene column has the row template of a track (head, strip, cell rows, stop, [strip row], foot): its buttons sit exactly beside the cell rows
   const szenen = el('div', 'ld-szenen'), szenenZeilen = el('div', 'ld-szenenzeilen');
   for (let z = 1; z <= ZELLEN; z++) {
     const b = el('button', 'ld-szene', String(z)); b.type = 'button'; b.dataset.zeile = String(z); b.title = `Launch row ${z} of all tracks`;
     b.addEventListener('click', () => senden('/loopdeck/szene', { deck: nr, zeile: z }));
     szenenZeilen.append(b);
   }
-  szenen.append(el('span', 'ld-szenenluecke'), el('span', 'ld-szenenluecke'), szenenZeilen, el('span', 'ld-szenenluecke ld-szenenstrip'), el('span', 'ld-szenenluecke'));
+  szenen.append(el('span', 'ld-szenenluecke'), el('span', 'ld-szenenluecke'), szenenZeilen, el('span', 'ld-szenenluecke'), el('span', 'ld-szenenluecke ld-szenenstrip'), el('span', 'ld-szenenluecke'));
   const spurenKnoten = el('div', 'ld-spuren');
   const spuren = Array.from({ length: SPUREN }, (_, s) => { const x = baueSpur(nr, s); spurenKnoten.append(x.spur); return x; });
   rumpf.append(szenen, spurenKnoten);
   const zellmenue = baueMenue((koerper) => { const m = zellmenue.ctx; if (m) zelleAendern(nr, m, koerper); });
   zellmenue.ctx = null;
-  const fxmenue = baueFxMenue((koerper) => { const sp = fxmenue.spurNr(); if (sp) setzeEffekt(nr, sp, koerper); });
-  wurzel.append(kopf, menue, rumpf, zellmenue.knoten, fxmenue.knoten);
-  return { wurzel, name, rasterKnoepfe, neu, hinweis, menue, zellmenue, fxmenue, spuren, ziel: null, neuVersucht: false };
+  wurzel.append(kopf, menue, rumpf, zellmenue.knoten);
+  return { wurzel, name, rasterKnoepfe, neu, hinweis, menue, zellmenue, spuren, ziel: null, neuVersucht: false };
 }
 
 // ---------- actions ----------
 // A click in the strip jumps the track to the slice under the pointer (the playing cell, else the last one that played; the server decides).
 // A one-shot has no slices: nothing is posted. Without any cell known the server answers nichts_gespielt, which the page shows.
-function klickWelle(nr, s, e, welle) {
+function klickWelle(nr, s, anteil) {
   const sp = stand.decks[nr]?.spuren?.[s];
   const n = sp?.lauf?.zelle ?? sp?.lauf?.zuletzt ?? null;
   if (n !== null && sp?.zellen?.[n - 1]?.art === 'einmal') return;
-  const r = welle.getBoundingClientRect(), w = r.width;
-  if (!(w > 0)) return;
-  const slice = Math.min(8, Math.max(1, Math.floor(((e.clientX ?? 0) - r.left) / w * 8) + 1));
+  const slice = Math.min(8, Math.max(1, Math.floor(anteil * 8) + 1));
   senden('/loopdeck/sprung', { deck: nr, spur: s + 1, slice });
 }
 function klickZelle(nr, s, zelle) {
@@ -348,28 +288,6 @@ async function ladeInZelle(nr, spur, zelle, quelle) {
   return true;
 }
 
-// ---------- effect slot ----------
-// The chip: without a stage it opens the choice; with a stage the first click opens the choice, a second click while it is open closes it
-// and opens the device window of the stage (`ins:<stage id>`).
-async function klickChip(nr, s) {
-  const a = ansichten.get(nr), sp = stand.decks[nr]?.spuren?.[s];
-  if (!a) return;
-  if (a.fxmenue.istOffen() && a.fxmenue.spurNr() === s + 1) {
-    a.fxmenue.schliesse();
-    if (sp?.effekt?.id) oeffneGeraetFenster(`ins:${sp.effekt.id}`, melde);
-    return;
-  }
-  const graphen = (await holeEffekte()) ?? [];
-  a.fxmenue.oeffne(graphen, sp?.effekt ?? null, a.spuren[s].strip.fx, s + 1);
-}
-// One request per pick; the chip changes only with the server's answer (a refusal shows its text and changes nothing).
-async function setzeEffekt(nr, spurNr, koerper) {
-  const r = await senden('/loopdeck/effekt', { deck: nr, spur: spurNr, ...koerper });
-  if (!r.ok) return;
-  const sp = stand.decks[nr]?.spuren?.[spurNr - 1];
-  if (sp) { sp.effekt = r.j.effekt ?? null; zeichneDeck(nr); }
-}
-
 // ---------- sets ----------
 async function holeSets() {
   try {
@@ -399,6 +317,8 @@ async function leereDeck(nr) {
   return true;
 }
 
+// The launch grid of a deck as the place has it (the large view shows the same value); null before the stand is read.
+export const deckRaster = (nr) => stand.decks[nr]?.raster ?? null;
 export const zielVon = (nr) => ansichten.get(nr)?.ziel ?? null;
 // The export row of the track decks (P5) and the library buttons share this one target: the deck of the toggle, else the deck that holds the
 // selected cell, else the only loop deck there is, else deck 1; plus the selected cell when it lies in that deck.
@@ -457,11 +377,11 @@ async function sendeExport(von, spur) {
 }
 
 // ---------- cell menu ----------
-function oeffneZellmenue(nr, s, zelle) {
+function oeffneZellmenue(nr, s, zelle, anker) {
   const a = ansichten.get(nr), z = stand.decks[nr]?.spuren?.[s]?.zellen?.[zelle - 1];
   if (!a || !z) return;   // an empty cell has no menu
   a.zellmenue.ctx = { spur: s + 1, zelle };
-  a.zellmenue.oeffne(z, a.spuren[s].knoepfe[zelle - 1].b);
+  a.zellmenue.oeffne(z, anker);
 }
 async function zelleAendern(nr, ctx, koerper) {
   const r = await senden('/loopdeck/zelle', { deck: nr, spur: ctx.spur, zelle: ctx.zelle, ...koerper });
@@ -491,29 +411,6 @@ function sichtbar(w) {
   for (let e = w; e; e = e.parentElement) if (e.hidden || e.classList?.contains('platz-aus')) return false;
   return true;
 }
-function zeichneWelle(sp, sha) {
-  if (sp.sha === sha) return;
-  sp.sha = sha;
-  const g = sp.leinwand.getContext('2d'), B = sp.leinwand.width, H = sp.leinwand.height;
-  g.clearRect(0, 0, B, H);
-  if (!sha) return;
-  if (!wellen.has(sha)) {
-    let fehl = false;
-    const p = (async () => {
-      try {
-        const r = await fetch(`/welle?sha=${encodeURIComponent(sha)}`);
-        if (!r.ok) { fehl = true; return null; }
-        return leseWelle(await r.arrayBuffer());
-      } catch { fehl = true; return null; }
-    })();
-    wellen.set(sha, p);
-    p.then(() => { if (fehl && wellen.get(sha) === p) wellen.delete(sha); });   // a failed request is asked again at the next change of the playing cell
-  }
-  wellen.get(sha).then((w) => {
-    if (!w || sp.sha !== sha) return;
-    for (let x = 0; x < B; x++) zeichneSpalte(g, x, H / 2, spalten(w, x * w.spalten / B, (x + 1) * w.spalten / B), w.gain);
-  });
-}
 export function zeichneDeck(nr) {
   const a = ansichten.get(nr);
   if (!a) return;
@@ -527,34 +424,19 @@ export function zeichneDeck(nr) {
   v.spuren.forEach((s, k) => {
     const x = a.spuren[k];
     x.spur.className = `ld-spur${s.spielt ? ' spielt' : ''}${s.verwaist ? ' verwaist' : ''}${s.mute ? ' stumm' : ''}`;
-    x.titel.textContent = s.titel;
-    x.stopp.classList.toggle('wartend', s.stoppWartet);
     x.mute.classList.toggle('an', s.mute); x.mute.setAttribute('aria-pressed', String(s.mute));
     if (document.activeElement !== x.fader) x.fader.value = String(s.faderDb);
     if (!x.filter.gegriffen()) x.filter.setze(s.filter);   // a redraw does not take the knob out of the hand
     const roh = stand.decks[nr]?.spuren?.[k];
     for (const art of ['hall', 'delay']) if (!x.strip.sends[art].gegriffen()) x.strip.sends[art].setze(Number(roh?.send?.[art] ?? -200));
-    const fxn = roh?.effekt ?? null, chipKnoten = x.strip.fx;
-    chipKnoten.textContent = fxn ? kurzVon(fxn.graph) : '+';
-    chipKnoten.classList.toggle('aus', !!fxn && fxn.an === false); chipKnoten.classList.toggle('gesetzt', !!fxn);
-    chipKnoten.title = fxn ? `${fxn.graph}${fxn.an === false ? ' (off)' : ''}: click to change, again to open its window` : 'Effect slot: click to choose';
-    for (const [band] of BAENDER) {
+    if (!x.strip.color.gegriffen()) x.strip.color.setze(s.filter);
+    zeigeColorName(x.strip.colorName);
+    for (const [band] of EQ_BAENDER) {
       const bd = x.strip.baender[band], gekillt = !!roh?.kill?.[band];
-      if (!bd.knopf.gegriffen()) bd.knopf.setze(Number(roh?.eq?.[band] ?? 0));   // the stored value, also while killed
-      bd.knopf.knoten.classList.toggle('kill', gekillt); bd.label.classList.toggle('kill', gekillt); bd.label.setAttribute('aria-pressed', String(gekillt));
+      if (!bd.knopf.gegriffen()) bd.knopf.setze(gekillt ? -200 : Number(roh?.eq?.[band] ?? 0));   // a killed band shows its knob fully left
     }
-    s.zellen.forEach((z, i) => {
-      const c = x.knoepfe[i], ziel = a.ziel && a.ziel.spur === s.nr && a.ziel.zelle === z.nr && z.zustand === 'leer';
-      c.b.className = `ld-zelle ${z.zustand}${ziel ? ' ziel' : ''}${z.laedt ? ' laedt' : ''}`;
-      c.chip.style.background = z.farbe ?? 'transparent'; c.chip.dataset.farbe = z.farbe ?? '';
-      c.icon.textContent = z.zustand === 'leer' ? '' : z.art === 'einmal' ? '▪' : '↻';
-      c.name.textContent = z.name;
-      c.griff.hidden = z.zustand === 'leer';
-      c.b.draggable = z.zustand !== 'leer'; c.b.setAttribute('draggable', String(z.zustand !== 'leer'));
-      c.b.title = z.zustand === 'leer' ? 'Empty: click to select it as load target (or drop a loop here)'
-        : `${z.name}: click launches on the next grid point${z.laedt ? ' (still loading: a launch is refused until it is decoded)' : ''}; drag to move it`;
-    });
-    zeichneWelle(x, s.sha);
+    for (const u of FX_EINHEITEN) { const t = x.strip.fxTasten[u], an = !!roh?.fx?.[u]; t.classList.toggle('an', an); t.setAttribute('aria-pressed', String(an)); }
+    x.spalte.zeichne({ kurz: s.name, name: s.titel, zellen: roh?.zellen ?? [], lauf: s.lauf }, a.ziel && a.ziel.spur === s.nr ? a.ziel.zelle : null, uhr.bpm);
   });
   zeichnePositionen(jetzt());
   starteSchleife();
@@ -567,23 +449,16 @@ export function zeichnePositionen(t) {
   const beat = beatJetzt(uhr, t);
   for (const [nr, a] of ansichten) {
     const v = deckAnsicht(stand.decks[nr], nr);
-    v.spuren.forEach((s, k) => {
-      const x = a.spuren[k], p = spielPos(s.lauf, s.spielZelle, beat, uhr.bpm);
-      x.kopf.hidden = p === null;
-      if (p !== null) x.kopf.style.left = `${(p * 100).toFixed(2)}%`;
-      s.zellen.forEach((z, i) => { if (z.zustand === 'spielt') x.knoepfe[i].b.style.setProperty('--pos', p === null ? '0' : p.toFixed(3)); });
-    });
+    v.spuren.forEach((_, k) => a.spuren[k].spalte.position(beat, uhr.bpm));
   }
 }
 function istAktiv() { return [...ansichten.keys()].some((nr) => deckAnsicht(stand.decks[nr], nr).spuren.some((s) => s.spielt)); }
 function starteSchleife() {
-  if (schleifeLaeuft || typeof requestAnimationFrame !== 'function' || !istAktiv()) return;
-  schleifeLaeuft = true;
-  const schritt = () => {
+  if (schleifeAb || !istAktiv()) return;
+  schleifeAb = starteTakt(() => {
     zeichnePositionen(jetzt());
-    if (istAktiv()) requestAnimationFrame(schritt); else schleifeLaeuft = false;
-  };
-  requestAnimationFrame(schritt);
+    if (!istAktiv()) { schleifeAb?.(); schleifeAb = null; }
+  });
 }
 
 // ---------- entry points ----------
@@ -608,6 +483,6 @@ export function loopdeckEreignis(a, f) {
 }
 // For tests: forget everything built and read so far.
 export function zuruecksetzen() {
-  ansichten.clear(); letztesDeck = null; exportDeck = null; stand.decks = { 1: null, 2: null }; stand.geladen = false; wellen.clear(); fluege.clear(); effekteListe = null; effekteAnfrage = null;
-  ladend = false; nochmal = false; veraltet = false; schleifeLaeuft = false; standAngefragt = false; exportLaeuft.clear(); Object.assign(uhr, neueUhr());
+  ansichten.clear(); letztesDeck = null; exportDeck = null; stand.decks = { 1: null, 2: null }; stand.geladen = false; leereWellen(); fluege.clear();
+  ladend = false; nochmal = false; veraltet = false; schleifeAb?.(); schleifeAb = null; standAngefragt = false; exportLaeuft.clear(); Object.assign(uhr, neueUhr());
 }

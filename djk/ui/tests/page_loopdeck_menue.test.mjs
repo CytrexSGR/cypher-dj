@@ -18,7 +18,7 @@ async function start(extra = {}) {
 }
 const posts = (a) => a.anrufe.filter((c) => c.methode === 'POST');
 const dk = (n = 1) => document.querySelector(`.loopdeck[data-deck="${n}"]`);
-const zk = (n, s, z) => dk(n).querySelectorAll('.ld-spur')[s - 1].querySelectorAll('.ld-zelle')[z - 1];
+const zk = (n, s, z) => dk(n).querySelectorAll('.ld-spur')[s - 1].querySelectorAll('.zelle')[z - 1];
 const menue = (n = 1) => dk(n).querySelector('.ld-zellmenue');
 const eintrag = (n, art) => menue(n).querySelector(`[data-eintrag="${art}"]`);
 
@@ -40,9 +40,9 @@ test('right click on a filled cell opens the menu with its values; an empty cell
 
 test('the handle opens the menu, only on filled cells', async () => {
   await start();
-  assert.equal(zk(1, 1, 1).querySelector('.ld-griff').hidden, false);
-  assert.equal(zk(1, 1, 2).querySelector('.ld-griff').hidden, true);
-  zk(1, 1, 1).querySelector('.ld-griff').click(); await ruhe();
+  assert.equal(zk(1, 1, 1).querySelector('.griff').hidden, false);
+  assert.equal(zk(1, 1, 2).querySelector('.griff').hidden, true);
+  zk(1, 1, 1).querySelector('.griff').click(); await ruhe();
   assert.equal(menue().hidden, false);
 });
 

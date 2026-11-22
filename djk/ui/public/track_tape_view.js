@@ -218,8 +218,12 @@ function reiterLesen(strom, schluessel) {
 function reiterMerken(strom, k) { try { localStorage.setItem(`djk-band-reiter-${strom}`, k); } catch { /* ohne Speicher */ } }
 
 // Einstieg aus app.js: je Instanz (.instanz[data-strom]) die Bänder mit Reitern. `beatVon` liefert den letzten Kern-Beat.
-// GET /spur alle 250 ms, aber nur solange STUDIO sichtbar ist; der Abspielkopf folgt dem Beat je Bildschirmbild.
+// GET /spur alle 250 ms, aber nur solange die Bänder sichtbar sind (setzeBandSichtbar); der Abspielkopf folgt dem Beat je Bildschirmbild.
 let zeileHaken = null;
+// The track bands of a stream row poll and follow the beat only while a view shows them: the STRUDEL tab of SESSION sets this (task V6).
+// No view shows them yet, so nothing polls (the poll used to run while the old LIVE view was open).
+let bandSichtbar = () => false;
+export function setzeBandSichtbar(f) { bandSichtbar = typeof f === 'function' ? f : () => false; }
 /** Lanes for a stream row built after the page start (a no-op before bindeSpurbaender ran: it covers the rows that exist). */
 export function bindeSpurbandZeile(w) { zeileHaken?.(w); }
 export function bindeSpurbaender(post, beatVon = () => null) {
@@ -259,9 +263,8 @@ export function bindeSpurbaender(post, beatVon = () => null) {
   };
   for (const w of document.querySelectorAll('#deck-c .instanz')) bindeZeile(w);
   zeileHaken = bindeZeile;   // rows of the Strudel module built later (strudel_module.js) get their lanes through bindeSpurbandZeile
-  const studio = () => document.body.classList.contains('studio');
   const hole = async () => {
-    if (!studio() || document.hidden || offen) return;   // DJ-Ansicht und verdeckter Tab: nicht pollen; keine zweite Anfrage, solange eine offen ist
+    if (!bandSichtbar() || document.hidden || offen) return;   // Bänder nicht sichtbar und verdeckter Tab: nicht pollen; keine zweite Anfrage, solange eine offen ist
     offen = true;
     const meine = ++nummer, ac = new AbortController(), zeit = setTimeout(() => ac.abort(), 2000);
     let liste;
@@ -274,7 +277,7 @@ export function bindeSpurbaender(post, beatVon = () => null) {
       i.zeige();
     }
   };
-  const bild = () => { if (studio()) { const beat = beatVon(); for (const x of alle) x.kopfNachBeat(beat); } requestAnimationFrame(bild); };
+  const bild = () => { if (bandSichtbar()) { const beat = beatVon(); for (const x of alle) x.kopfNachBeat(beat); } requestAnimationFrame(bild); };
   setInterval(hole, 250);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) hole(); });   // Final-Review F4: beim Zeigen sofort wieder aufnehmen
   hole();

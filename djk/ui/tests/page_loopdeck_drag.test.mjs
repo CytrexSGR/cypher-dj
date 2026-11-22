@@ -18,7 +18,7 @@ async function start(extra = {}) {
   return { a, m };
 }
 const posts = (a) => a.anrufe.filter((c) => c.methode === 'POST');
-const zk = (n, s, z) => document.querySelector(`.loopdeck[data-deck="${n}"]`).querySelectorAll('.ld-spur')[s - 1].querySelectorAll('.ld-zelle')[z - 1];
+const zk = (n, s, z) => document.querySelector(`.loopdeck[data-deck="${n}"]`).querySelectorAll('.ld-spur')[s - 1].querySelectorAll('.zelle')[z - 1];
 // a drag event with a transfer that remembers what was set
 const transfer = (daten = {}) => {
   const d = { ...daten };

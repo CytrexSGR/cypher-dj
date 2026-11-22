@@ -260,6 +260,17 @@ class Mixer {
   bool fx_zugewiesen(int einheit, int kanal) const noexcept;      // für Tests
   const BeatFx& beatfx(int einheit, int kanal) const noexcept;    // für Tests
   void fx_takt(double beat0, double bps) noexcept { fx_beat0_ = beat0; fx_bps_ = bps; }
+  // Loop lane strip K2: the colour art, parameter and samples per beat the mixer hands to its Kanalzug objects (kanal()), so that the core can hand the arrangement tracks the very same values
+  int color_art_ganz() const noexcept;
+  float color_param_wert() const noexcept { return color_param_.w; }
+  double color_samples_pro_beat() const noexcept { return fx_bps_ > 0.0 ? 1.0 / fx_bps_ : 0.0; }
+  // Loop lane strip K4: the diverted FX 3 share of the arrangement tracks of container k (0..MIX_QUELLEN-1). The core writes the share, already weighted by the container module weight, into
+  // arr_fx3_eingang_l/r(k) and marks it; the strip then applies ITS fader (the very gain of the main path, per sample) and the crossfader weight and adds the result into the fx/3 bus input while a graph sits
+  // on fx/3, else into the master sum (never silent). A strip that is not on the master (group bus target) gets the share into that bus input. The mark is cleared by kanal(k).
+  float* arr_fx3_eingang_l(int k) noexcept { return arr3_l_[k]; }
+  float* arr_fx3_eingang_r(int k) noexcept { return arr3_r_[k]; }
+  void arr_fx3_markiere(int k) noexcept { if (k >= 0 && k < MIX_QUELLEN) arr3_da_[k] = true; }
+  bool fx3_graph_da() const noexcept { return send_bk_[0] != nullptr || send_blende_[0] > 0; }   // a graph sits on fx/3 (or its blend is still open): the slot test of route()
   int hall_ruhe() const { return hall_ruhe_; }
   // Audit F01: Blöcke, in denen Summe oder PFL nicht endlich war (Zustände geleert, Block still)
   int64_t nan_treffer() const { return nan_treffer_; }           // Test: Stillezähler des Halls (nur wach gezählt, gesättigt)
@@ -445,6 +456,10 @@ class Mixer {
   int ziel_ist_[MIX_ZUEGE] = {};
   int blende_von_[MIX_ZUEGE] = {};
   int blende_rest_[MIX_ZUEGE] = {};
+  float arr3_l_[MIX_QUELLEN][MIX_BLOCK] = {}, arr3_r_[MIX_QUELLEN][MIX_BLOCK] = {};   // loop lane strip K4: the diverted FX 3 share per container strip (input of the fader stage)
+  float arr3_aus_l_[MIX_BLOCK] = {}, arr3_aus_r_[MIX_BLOCK] = {};                    // ... and after the fader (one strip at a time)
+  bool arr3_da_[MIX_QUELLEN] = {};
+  void arr3_route(int k, int n) noexcept;
   float ein_l_[MIX_ZUEGE][MIX_BLOCK] = {};
   float ein_r_[MIX_ZUEGE][MIX_BLOCK] = {};
   float master_ein_l_[MIX_BLOCK] = {}, master_ein_r_[MIX_BLOCK] = {};

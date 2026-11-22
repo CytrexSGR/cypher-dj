@@ -20,6 +20,7 @@
 #include "cypherdj/store_account.h"
 #include "cypherdj/signalbox/controls.h"   // BK_REGLER_N: the knob count of a Baukasten graph (header-only constants)
 #include "cypherdj/warp_mapping.h"
+#include "cypherdj/zell_map.h"      // session view S1b K2: ZellKarte and the limits of a cell (slots, envelopes, points)
 
 struct CypherBk;   // cypher_bk_ffi.h (global, extern "C" functions): a Baukasten graph instance
 
@@ -203,13 +204,26 @@ struct ArrStift {
 // Loop deck K1: one cell of a loop deck track (playback /2 and up, key `zellen`). Index i of ArrSpur::zellen is cell i+1.
 constexpr int ARR_ZELLEN = 8;
 enum class ArrZellArt : uint8_t { leer = 0, loop = 1, einmal = 2 };
+// Session view S1b K2: one envelope of a cell. art 0 = a strip field (feld: ARR_F_FILTER or arr_f_send(r)), 2 = gain (dB). The points sit in cell beats [0, beats)
+// and are absolute values in the unit of the target; form as ArrAutoPunkt. Copied by value into the voice and the pending start (no pointer into the snapshot).
+struct ZellHuelle {
+  uint8_t art = 0;
+  uint8_t feld = 0;
+  int n = 0;
+  ArrAutoPunkt p[ZELL_PUNKTE_MAX];
+};
 struct ArrZelle {
   ArrZellArt art = ArrZellArt::leer;
   const ArrAudio* audio = nullptr;   // from ArrAudioCache::hole, released with the snapshot like clip audio
   int64_t frames = 0;
   double beats = 0;                  // loop: > 0; einmal: 0
   float gain = 1.0f;                 // linear, from gain_db
-  int8_t modus = 0;                  // 2 complex (loop), 0 repitch (einmal)
+  int8_t modus = 0;                  // 2 complex (loop, keylock), 0 repitch (einmal, or a loop with keylock off)
+  ZellKarte karte{};                 // S1b K2: the source read map (n 0 = identity); karte.kreis = loop cell, karte.frames = frames
+  double pitch = 1.0;                // S1b K2: transpose factor of a keylock loop cell (not applied by the re-pitch fallback when no keylock pass slot or werk slot is free: it plays at the source pitch)
+  double huell_beats = 0;            // S1b K5: the cell length in beats the envelopes are drawn on (loop: = beats; einmal: beats stays 0, this carries it: frames per cell beat = frames / huell_beats; 0: unknown)
+  int n_huellen = 0;
+  ZellHuelle huellen[ZELL_HUELLEN_MAX] = {};
 };
 
 struct ArrSpur {
@@ -219,8 +233,6 @@ struct ArrSpur {
   bool stumm_start = false;          // initial state: the track starts this playback muted (mute row 1, mute fade at 0 in the block of the swap; Wiedergabe /2 `stumm_start`)
   uint64_t kennung = 0;              // loop deck: arr_id(id) of the project track id (playback key `id`); 0 = no id
   char kennung_text[33] = {};
-  int n_zellen = 0;                  // filled cells
-  ArrZelle zellen[ARR_ZELLEN] = {};  // index i = cell i+1
   int slot = 0;                      // wirt: 1..2
   int8_t strom = 0;                  // container core K7, art strom: the Erzeuger stream 1..16 this track reads (/4 `quelle.strom`); 0 = none
   char geraet[16] = {};              // intern: "rb338" or "bk"
@@ -261,6 +273,10 @@ struct ArrSpur {
   int n_glieder = 0;
   ArrGlied glied[ARR_RACK_GLIEDER] = {};
   int kette = 0;                     // 0..127
+  // Loop deck cells (at the end: each ArrZelle carries its slice map and envelopes, ~4.8 KB, so the hot fields above stay near the head of the struct).
+  // S1b K5 reads the envelopes (`huellen`) at the cell position; for an `einmal` cell ArrZelle::beats is 0, so K5 must not divide by it.
+  int n_zellen = 0;                  // filled cells
+  ArrZelle zellen[ARR_ZELLEN] = {};  // index i = cell i+1
 };
 
 // K1-Fix 8: Speicher in eigenen, anonym abgebildeten Seiten. Der Lade-Faden sperrt ihn nach dem Bau (mlock) und bucht ihn

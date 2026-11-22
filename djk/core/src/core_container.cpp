@@ -8,6 +8,8 @@
 
 namespace cdj {
 
+static_assert(ARR_FX3_BLENDE == MIX_ZIEL_BLENDE, "the FX 3 share of an arrangement track blends like the mixer channels' (Mixer::fx3_zuweisung_setze)");
+
 void Kern::container_fuellen(int m) noexcept {
 #ifdef CYPHERDJ_MUTATION_CONTAINER_ALLOK
   {   // mutation (positive control of the allocation guard of test_kern_container_alloc): one allocation per block
@@ -39,6 +41,7 @@ void Kern::container_fuellen(int m) noexcept {
     mr = mixer_->summe_eingang_r();
 #endif
     constexpr float EINS = 1.0f / static_cast<float>(CONTAINER_BLENDE);
+    const int gm0 = gm;
     for (int i = 0; i < m; ++i) {
       if (gp > 0) {
         const float w = static_cast<float>(gp) * EINS;
@@ -55,6 +58,18 @@ void Kern::container_fuellen(int m) noexcept {
     }
     container_gp_[c] = gp;
     container_gm_[c] = gm;
+    if (modul && k < MIX_QUELLEN && arr_->dj_fx3_da(c + 1)) {   // loop lane strip K4: the diverted FX 3 share, weighted by the same module weight (gm, per sample, from the value this sub-block started with), then through the strip's fader
+      float* fl3 = mixer_->arr_fx3_eingang_l(k);
+      float* fr3 = mixer_->arr_fx3_eingang_r(k);
+      int g3 = gm0;
+      for (int i = 0; i < m; ++i) {
+        const float w = static_cast<float>(g3) * EINS;
+        fl3[i] = dj_fx3_l_[c][i] * w;
+        fr3[i] = dj_fx3_r_[c][i] * w;
+        if (g3 != zm) g3 += g3 < zm ? 1 : -1;
+      }
+      mixer_->arr_fx3_markiere(k);
+    }
   }
 }
 

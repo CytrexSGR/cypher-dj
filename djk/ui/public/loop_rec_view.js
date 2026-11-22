@@ -51,7 +51,7 @@ export function baueRec() {
   for (const b of $$('[data-recbeats]', kopf)) {
     b.addEventListener('click', () => {
       recBeats = Number(b.dataset.recbeats);
-      for (const x of $$('[data-recbeats]', kopf)) x.classList.toggle('an', x === b);
+      for (const x of $$('[data-recbeats]', b.closest('.recreihe') ?? b.parentElement)) x.classList.toggle('an', x === b);   // the row of this chip: it may have moved out of #deck-c
     });
   }
   $('#rec-knopf').addEventListener('click', () => starteRec(false, null));

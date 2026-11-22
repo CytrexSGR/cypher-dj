@@ -1,15 +1,15 @@
 // Sound color FX (zeigeColor, bindeColor).
 import { colorKnopf } from './mischer_mitte.js';   // mixer middle column, knob look
 import { $, $$, melde, zustand } from './page_state.js';
+import { COLOR_ARTEN, colorArt, zeigeColorName } from './color_kinds.js';
 
 // SOUND COLOR FX (2026-10-11, wie am XDJ-XZ): Art und PARAMETER global über /regler (sofort, Quelle andreas), angezeigt aus
 // /e/regler. Der COLOR-Regler jedes Kanals ist `filter`; seine Beschriftung zeigt die gewählte Art.
-const COLOR_ARTEN = ['FILTER', 'SPACE', 'DUB ECHO', 'SWEEP', 'NOISE', 'CRUSH'];
-function colorArt() { const w = zustand.regler?.['color/art']; return typeof w === 'number' ? Math.round(w) : 0; }
 export function zeigeColor() {
   const a = colorArt();
   for (const b of $$('[data-colorart]')) { const an = Number(b.dataset.colorart) === a; b.classList.toggle('an', an); b.setAttribute('aria-checked', String(an)); }
   for (const l of $$('.knopf[data-teil="filter"] + .beschrift label')) { l.textContent = COLOR_ARTEN[a] ?? 'FILTER'; l.classList.toggle('color-an', a !== 0); }
+  for (const l of $$('[data-colorname]')) zeigeColorName(l);   // the loop lane strips (pop-up and DJ place): their COLOR knob names the same art
   const p = zustand.regler?.['color/param'];
   const s = $('#colorparam');
   if (s && typeof p === 'number' && !document.querySelector('.colorknopf.gegriffen')) { s.value = String(p); zeichneColorKnopf(); }

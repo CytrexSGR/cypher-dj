@@ -573,17 +573,13 @@ test('the CSS: the node scrolls, cells take their width from the grid, accent, t
   assert.match(css, /\.seqplatz \{/); assert.match(css, /\.sq-feld \{[^}]*overflow: auto;/); assert.match(css, /\.sq-zelle\.an/); assert.match(css, /\.sq-zelle\.akzent/);
   assert.match(css, /\.sq-zelle\.gebunden/); assert.match(css, /\.sq-zelle\.kopf/); assert.match(css, /var\(--sq-beat/);
   assert.match(css, /body:not\(\.studio\) \.platz-aus \{ display: none !important; \}/);
-  assert.match(css, /body\.studio \.seqplatz/); assert.match(css, /body\.studio #pult\[data-seq-n="2"\]/);
+  assert.doesNotMatch(css, /body\.studio #pult|body\.studio \.seqplatz/);
 });
 
-test('the Studio view shows the strip of place 1 and 2 while the place holds something: the existing node moves after the pad strips, nothing is copied', () => {
+test('the old Studio strip move is gone: nothing hides the desk or places the SEQ node but the places table', () => {
   const b = lies('slots_view.js');
-  const f = b.slice(b.indexOf('function zeigeStudioZuege'), b.indexOf('// The one entry point'));
-  assert.match(f, /\$\('#mischer-unten'\)\.append\(z\)/);
-  assert.match(f, /z\.dataset\.studioZug = '1'/);
-  assert.doesNotMatch(f, /cloneNode|innerHTML|createElement/);
-  assert.match(css, /body\.studio \.zug\[data-deck\]:not\(\[data-studio-zug\]\) \{ display: none !important; \}/);
-  assert.match(css, /body\.studio #pult \{ --mu-breite: min\(calc\(\(5 \+ var\(--seq-n, 0\)\) \* var\(--zug\) \+ 36px\), 42vw\); \}/);
+  assert.doesNotMatch(b, /zeigeStudioZuege|studioZug/);
+  assert.doesNotMatch(css, /data-studio-zug|--mu-breite/);
   assert.match(knoten, /style\.setProperty\('--seq-n', String\(i\)\)/);
 });
 
@@ -1633,4 +1629,205 @@ test('the page asks the silence rule for a place that is not parked: a SEQ or lo
   assert.equal(still(P, 2, offen).still, false);
   const b = lies('slots_view.js');
   assert.match(b, /frei = s\.still \|\| parkt\(platz\)/, '... and the page lets a parked type through: place 1 may switch, place 2 may not');
+});
+
+// ---------- collapse patterns and hide unused kit samples (Andreas 2026-11-22) ----------
+const kitMit = (noten, extra = {}) => {
+  const s = kitSpur();
+  s.clips[0].noten = noten;
+  s.clips[0].seq = { schema: 1, zeilen: [36, 38, 42, 46].map((ton) => ({ id: `t${ton}`, art: 'noten', teiler: 0.25, ton })) };
+  return { ...s, ...extra };
+};
+const kitProjekt = (noten = [note('n1', 0, 36), note('n2', 1, 38)]) => projekt([kitMit(noten), bkSpur()]);
+const folge = (i) => platz(2).querySelectorAll('.sq-folge')[i];
+const zeilenIds = (i) => folge(i).querySelectorAll('.sq-zeile').map((z) => z.dataset.zeile);
+const unbenutztKnopf = (i = 0) => folge(i).querySelector('[data-sq-unbenutzt]');
+// the stored entries are "<project identity>\u0001<track id>": the tests compare the ids
+const gespeichert = (k) => JSON.parse(localStorage.getItem(k)).map((e) => e.split('\u0001')[1]);
+const saubere = async () => { localStorage.removeItem('djk-seq-zu'); localStorage.removeItem('djk-seq-unbenutzt'); seqAnsichtModul.ladeSeqSicht(); };
+
+test('collapse: the chevron of a pattern head hides its ruler and lanes, a second press brings them back, the other patterns stay', async () => {
+  await saubere();
+  await zeige(kitProjekt());
+  const vorher = zeilenIds(1);
+  assert.ok(zeilenIds(0).length === 4 && vorher.length > 0);
+  const knopf = folge(0).querySelector('[data-sq-zu]');
+  assert.ok(knopf); assert.equal(knopf.title, 'Collapse or expand this pattern');
+  assert.equal(folge(0).querySelector('.sq-folgenkopf').children[0], knopf, 'the chevron is the first element of the head');
+  knopf.dispatch('click', {});
+  assert.ok(folge(0).classList.contains('zu'));
+  assert.equal(zeilenIds(0).length, 0); assert.equal(folge(0).querySelectorAll('.sq-lineal').length, 0);
+  assert.deepEqual(zeilenIds(1), vorher, 'the other pattern is untouched');
+  assert.equal(folge(0).querySelector('[data-sq-zu]').getAttribute('aria-expanded'), 'false');
+  assert.deepEqual(gespeichert('djk-seq-zu'), ['s1']);
+  folge(0).querySelector('[data-sq-zu]').dispatch('click', {});
+  assert.equal(zeilenIds(0).length, 4); assert.deepEqual(gespeichert('djk-seq-zu'), []);
+});
+
+test('collapse: a collapsed head still renames and mutes the pattern', async () => {
+  await saubere();
+  await zeige(kitProjekt());
+  folge(0).querySelector('[data-sq-zu]').dispatch('click', {});
+  const von = posts.length;
+  const name = folge(0).querySelector('[data-sq-name]');
+  name.value = 'Kit new'; name.dispatch('change', {});
+  await warte();
+  folge(0).querySelector('[data-sq-stumm]').dispatch('click', {});
+  await warte();
+  const befehle = posts.slice(von).flatMap((p) => p.befehle ?? []);
+  assert.ok(befehle.some((b) => b.befehl === 'spur_aendern' && b.name === 'Kit new'), 'rename went out');
+  assert.ok(befehle.some((b) => b.befehl === 'spur_aendern' && b.mute === true), 'mute went out');
+});
+
+test('collapse all / expand all: one chip in the deck head, its label follows the state', async () => {
+  await saubere();
+  await zeige(kitProjekt());
+  const chip = platz(2).querySelector('[data-sq-alle-zu]');
+  assert.ok(chip && !chip.hidden); assert.equal(chip.textContent, 'collapse all');
+  chip.dispatch('click', {});
+  assert.deepEqual([zeilenIds(0).length, zeilenIds(1).length], [0, 0]);
+  assert.equal(chip.textContent, 'expand all');
+  assert.deepEqual(gespeichert('djk-seq-zu').sort(), ['s1', 's2']);
+  folge(1).querySelector('[data-sq-zu]').dispatch('click', {});
+  assert.equal(chip.textContent, 'collapse all', 'one pattern open again: the chip collapses the rest');
+  chip.dispatch('click', {});
+  assert.equal(chip.textContent, 'expand all');
+  chip.dispatch('click', {});
+  assert.ok(zeilenIds(0).length > 0 && zeilenIds(1).length > 0);
+  assert.equal(chip.textContent, 'collapse all');
+});
+
+test('collapse: the state is remembered per viewer and read back at load; stale ids go only within the open project', async () => {
+  await saubere();
+  await zeige({ ...kitProjekt(), name: 'Set' });
+  const sch = (name, id) => `${live.slug ?? ''}|${name}\u0001${id}`;
+  localStorage.setItem('djk-seq-zu', JSON.stringify([sch('Set', 's2'), sch('Set', 'gone'), sch('Other', 's9'), 's1']));
+  seqAnsichtModul.ladeSeqSicht();
+  assert.ok(folge(1).classList.contains('zu') && !folge(0).classList.contains('zu'), 'the stored list is read');
+  folge(0).querySelector('[data-sq-zu]').dispatch('click', {});   // writes
+  assert.deepEqual(JSON.parse(localStorage.getItem('djk-seq-zu')).sort(), [sch('Other', 's9'), sch('Set', 's1'), sch('Set', 's2')].sort(),
+    'gone (this project) and the entry without a project identity are dropped, the other project keeps its entry');
+  localStorage.setItem('djk-seq-zu', 'not json');
+  seqAnsichtModul.ladeSeqSicht();
+  assert.ok(!folge(0).classList.contains('zu'), 'unreadable storage: everything open');
+});
+
+test('per-project state: the state of project A survives a visit to B and back, and B does not inherit A for the same track id', async () => {
+  await saubere();
+  const benannt = (name, noten) => ({ ...kitProjekt(noten), name });
+  await zeige(benannt('A'));
+  folge(0).querySelector('[data-sq-zu]').dispatch('click', {});
+  folge(1).querySelector('[data-sq-zu]').dispatch('click', {});
+  await zeige(benannt('A'));   // a redraw of the same project keeps it
+  unbenutztKnopf().dispatch('click', {});
+  assert.ok(folge(0).classList.contains('zu') && folge(1).classList.contains('zu'));
+  // project B has the same track ids s1 and s2: nothing of A shows
+  await zeige(benannt('B'));
+  assert.ok(!folge(0).classList.contains('zu') && !folge(1).classList.contains('zu'), 'B does not inherit the collapsed patterns');
+  assert.equal(unbenutztKnopf().textContent, 'hide unused', 'nor hide unused');
+  assert.deepEqual(zeilenIds(0), ['t36', 't38', 't42', 't46']);
+  folge(0).querySelector('[data-sq-zu]').dispatch('click', {});   // B writes its own state: A's entries must stay
+  // back to A: its state is still there
+  await zeige(benannt('A'));
+  assert.ok(folge(0).classList.contains('zu') && folge(1).classList.contains('zu'), 'A is as it was left');
+  folge(0).querySelector('[data-sq-zu]').dispatch('click', {}); folge(0).querySelector('[data-sq-zu]').dispatch('click', {});
+  assert.equal(unbenutztKnopf().textContent, 'show unused (2)', 'hide unused of A is still on and the set is taken from the clip');
+  await zeige(benannt('B'));
+  assert.ok(folge(0).classList.contains('zu'), 'B keeps what it wrote');
+  assert.equal(unbenutztKnopf().textContent, 'hide unused');
+});
+
+test('hide unused: only a kit pattern has the toggle; it hides the trigger lanes that hold no note and counts them in its label', async () => {
+  await saubere();
+  await zeige(kitProjekt());
+  assert.equal(folge(1).querySelector('[data-sq-unbenutzt]'), null, 'a Baukasten pattern has none');
+  const u = unbenutztKnopf();
+  assert.ok(u); assert.equal(u.textContent, 'hide unused');
+  assert.deepEqual(zeilenIds(0), ['t36', 't38', 't42', 't46']);
+  u.dispatch('click', {});
+  assert.deepEqual(zeilenIds(0), ['t36', 't38'], 'only the lanes with a note stay');
+  assert.equal(unbenutztKnopf().textContent, 'show unused (2)');
+  assert.equal(unbenutztKnopf().getAttribute('aria-pressed'), 'true');
+  assert.ok(zeilenIds(1).length > 0, 'the other pattern keeps its lanes');
+  assert.deepEqual(gespeichert('djk-seq-unbenutzt'), ['s1']);
+  unbenutztKnopf().dispatch('click', {});
+  assert.deepEqual(zeilenIds(0), ['t36', 't38', 't42', 't46']);
+  assert.equal(unbenutztKnopf().textContent, 'hide unused'); assert.deepEqual(gespeichert('djk-seq-unbenutzt'), []);
+});
+
+test('hide unused: a lane that gets a note from elsewhere shows again, a lane the owner empties stays until the toggle is pressed again', async () => {
+  await saubere();
+  await zeige(kitProjekt());
+  unbenutztKnopf().dispatch('click', {});
+  assert.deepEqual(zeilenIds(0), ['t36', 't38']);
+  // another window writes a hit on the hi-hat lane: the next draw shows it
+  live.projekt = kitProjekt([note('n1', 0, 36), note('n2', 1, 38), note('n3', 2, 42)]);
+  seqAnsichtModul.zeichneSeq();
+  assert.deepEqual(zeilenIds(0), ['t36', 't38', 't42']);
+  assert.equal(unbenutztKnopf().textContent, 'show unused (1)');
+  // the owner deletes the last snare hit: its lane stays in view
+  live.projekt = kitProjekt([note('n1', 0, 36), note('n3', 2, 42)]);
+  seqAnsichtModul.zeichneSeq();
+  assert.deepEqual(zeilenIds(0), ['t36', 't38', 't42'], 'the emptied lane stays');
+  // ... and so does a lane the hi-hat loses again once it was shown
+  live.projekt = kitProjekt([note('n1', 0, 36)]);
+  seqAnsichtModul.zeichneSeq();
+  assert.deepEqual(zeilenIds(0), ['t36', 't38', 't42']);
+  // toggled off and on again, the set is taken anew
+  unbenutztKnopf().dispatch('click', {}); unbenutztKnopf().dispatch('click', {});
+  assert.deepEqual(zeilenIds(0), ['t36']);
+  assert.equal(unbenutztKnopf().textContent, 'show unused (3)');
+});
+
+test('hide unused: the toggle is remembered per pattern and the hidden set is taken from the clip at page load', async () => {
+  await saubere();
+  await zeige(kitProjekt());
+  const sch = (id) => `${live.slug ?? ''}|${live.projekt.name ?? ''}\u0001${id}`;
+  localStorage.setItem('djk-seq-unbenutzt', JSON.stringify([sch('s1'), sch('gone')]));
+  seqAnsichtModul.ladeSeqSicht();
+  assert.deepEqual(zeilenIds(0), ['t36', 't38']);
+  assert.equal(unbenutztKnopf().textContent, 'show unused (2)');
+  unbenutztKnopf().dispatch('click', {});   // off; the write drops the id that no deck has
+  assert.deepEqual(gespeichert('djk-seq-unbenutzt'), []);
+  assert.deepEqual(zeilenIds(0).length, 4);
+});
+
+test('hide unused and collapse together: collapsed lanes stay out, the head keeps the toggle and its count', async () => {
+  await saubere();
+  await zeige(kitProjekt());
+  unbenutztKnopf().dispatch('click', {});
+  folge(0).querySelector('[data-sq-zu]').dispatch('click', {});
+  assert.equal(zeilenIds(0).length, 0);
+  assert.equal(unbenutztKnopf().textContent, 'show unused (2)');
+  folge(0).querySelector('[data-sq-zu]').dispatch('click', {});
+  assert.deepEqual(zeilenIds(0), ['t36', 't38']);
+});
+
+test('broken storage: neither reading nor writing the view state throws, and the toggles still work for this page load', async () => {
+  await saubere();
+  await zeige(kitProjekt());
+  const alt = globalThis.localStorage;
+  globalThis.localStorage = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); }, removeItem() { throw new Error('blocked'); } };
+  try {
+    seqAnsichtModul.ladeSeqSicht();
+    folge(0).querySelector('[data-sq-zu]').dispatch('click', {});
+    assert.equal(zeilenIds(0).length, 0);
+    folge(0).querySelector('[data-sq-zu]').dispatch('click', {});
+    unbenutztKnopf().dispatch('click', {});
+    assert.deepEqual(zeilenIds(0), ['t36', 't38']);
+    platz(2).querySelector('[data-sq-alle-zu]').dispatch('click', {});
+    assert.equal(zeilenIds(1).length, 0);
+  } finally { globalThis.localStorage = alt; await saubere(); }
+});
+
+test('the deck chip "hide empty" stays a deck-wide snapshot of its own and works next to the per-pattern toggle', async () => {
+  await saubere();
+  await zeige(kitProjekt());
+  unbenutztKnopf().dispatch('click', {});
+  platz(2).querySelector('[data-sq-leer-aus]').dispatch('click', {});
+  assert.deepEqual(zeilenIds(0), ['t36', 't38']);
+  platz(2).querySelector('[data-sq-leer-aus]').dispatch('click', {});
+  assert.deepEqual(zeilenIds(0), ['t36', 't38'], 'the per-pattern toggle is not touched by the deck chip');
+  unbenutztKnopf().dispatch('click', {});
+  assert.deepEqual(zeilenIds(0).length, 4);
 });

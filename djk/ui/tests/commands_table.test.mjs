@@ -10,6 +10,7 @@ import { INSERT } from '../project/commands_insert.ts';
 import { AUTO } from '../project/commands_auto.ts';
 import { TRANSPORT } from '../project/commands_transport.ts';
 import { SZENEN } from '../project/commands_szenen.ts';
+import { SESSION } from '../project/commands_session.ts';
 import { TRACKER } from '../project/commands_tracker.ts';
 import { LOOPDECK } from '../project/commands_loopdeck.ts';
 import { CONTAINER } from '../project/commands_container.ts';
@@ -66,17 +67,19 @@ const NAMEN_FX = ['fx_setzen'];
 const NAMEN_LOOPDECK = ['loopdeck_aendern', 'loopdeck_effekt', 'loopdeck_leeren', 'loopdeck_neu', 'loopdeck_send', 'zelle_aendern', 'zelle_bewegen', 'zelle_setzen'];
 // the container commands (family CONTAINER): the places and the strudel module
 const NAMEN_CONTAINER = ['platz_setzen', 'strom_send', 'strom_spur_neu'];
+// the session view commands (family SESSION): the launch grid, the hold slot and the scene rows (szene_loeschen stays in SZENEN and takes slot or zeile)
+const NAMEN_SESSION = ['session_aendern', 'szene_aendern', 'szene_doppeln', 'szene_fangen', 'szene_neu', 'zelle_halten', 'zelle_huelle'];
 const NAMEN_STECKFELD = ['geraet_stift_setzen', 'geraet_stifte_setzen'];
-const NAMEN_ALLE = [...NAMEN_MAIN, ...NAMEN_SZENEN, ...NAMEN_TRACKER, ...NAMEN_ABSCHNITTE, ...NAMEN_VERBUND, ...NAMEN_FX, ...NAMEN_LOOPDECK, ...NAMEN_CONTAINER, ...NAMEN_STECKFELD];
+const NAMEN_ALLE = [...NAMEN_MAIN, ...NAMEN_SZENEN, ...NAMEN_TRACKER, ...NAMEN_ABSCHNITTE, ...NAMEN_VERBUND, ...NAMEN_FX, ...NAMEN_LOOPDECK, ...NAMEN_CONTAINER, ...NAMEN_SESSION, ...NAMEN_STECKFELD];
 
-test('PRO_BEFEHL holds the 82 commands of the table before the split plus the 3 scene commands, the tracker command, the 8 time and section commands the 2 linked-clip commands and the effect command, the 8 loop deck commands and the 3 container commands', () => {
+test('PRO_BEFEHL holds the 82 commands of the table before the split plus the 3 scene commands, the tracker command, the 8 time and section commands the 2 linked-clip commands and the effect command, the 8 loop deck commands, the 3 container commands and the 7 session commands', () => {
   assert.equal(NAMEN_MAIN.length, 82);
-  assert.equal(NAMEN_ALLE.length, 110);
+  assert.equal(NAMEN_ALLE.length, 117);
   assert.deepEqual(Object.keys(PRO_BEFEHL).sort(), [...NAMEN_ALLE].sort());
 });
 
 test('every command is defined in exactly one family table; BEFEHL_NAMEN is the key list of the registry', () => {
-  const familien = { SPUR, CLIP, GRUPPE, INSERT, AUTO, TRANSPORT, SZENEN, TRACKER, LOOPDECK, CONTAINER };
+  const familien = { SPUR, CLIP, GRUPPE, INSERT, AUTO, TRANSPORT, SZENEN, TRACKER, LOOPDECK, CONTAINER, SESSION };
   for (const [name, t] of Object.entries(familien)) assert.ok(Object.keys(t).length > 0, `${name} is not empty`);
   const alle = Object.values(familien).flatMap((t) => Object.keys(t));
   assert.equal(new Set(alle).size, alle.length, 'no command twice');

@@ -328,7 +328,7 @@ test('the wiring of the fifth view is pinned in the page files', () => {
   assert.ok(strom.includes("import { produktion, werkbank, tracker } from './seitenrahmen.js';"));
   assert.ok(strom.includes("try { tracker?.ereignis(a, f); } catch (e) { console.error('Tracker view:', e); }"));
   const pult = lies('areas/controller/pult_production.ts');
-  assert.ok(pult.includes("'ansicht: dj, studio, produktion, werkbank or tracker'"));
+  assert.ok(pult.includes("'ansicht: dj, studio (the loop deck pop-up is open, the APC20 grid launches cells), produktion, werkbank or tracker'"));
   assert.match(pult, /const ANSICHT = \/\^\(dj\|studio\|produktion\|werkbank\|tracker\)\$\/;/);
 });
 

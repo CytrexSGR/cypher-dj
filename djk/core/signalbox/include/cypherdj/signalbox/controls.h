@@ -82,7 +82,11 @@ enum class Rolle : uint8_t {
   spur_trim,
   spur_kill_tief,
   spur_kill_mitte,
-  spur_kill_hoch
+  spur_kill_hoch,
+  // Loop lane strip K1 (appended behind spur_kill_hoch, now the last role: the order stays). spur/<n>/fx/{1,2,3} (0/1): the track enters beat FX unit 1 / unit 2 / the FX 3 bus, n = 1..32.
+  spur_fx_1,
+  spur_fx_2,
+  spur_fx_3
 };
 constexpr int STROM_BK_STROEME = 16;   // container core K2: strom/<n>/bk/<k>, n = 1..16 (ERZ_STROEME of generator.h), appended behind spur/32/eq/hoch, n outer, k inner
 constexpr int SPUR_BK_SLOTS = 16;     // Baukasten slots of spur/<slot>/bk/<k>: one per bk track (8 until 2026-11-21, then = ARR_BK_MAX; static_assert in arr_playback.h)

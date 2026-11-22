@@ -19,7 +19,7 @@
 //   POST /loopdeck/laden {deck, spur?, zelle?, quelle}    -> {ok, spur, zelle, zelle_id}; sources in loopdeck_load.ts; a missing deck is created in the same undo step
 //   POST /loopdeck/zelle {deck, spur, zelle, name?, farbe?, art?, gain_db?, beats?, leeren?: true}   -> {ok}
 //   POST /loopdeck/bewegen {von: {deck, spur, zelle}, nach: {deck, spur, zelle}}   -> {ok}; POST /loopdeck/raster {deck, raster}; POST /loopdeck/leeren {deck}
-//   POST /loopdeck/spur {deck, spur, fader_db?, mute?, filter?, eq?: {tief?, mitte?, hoch?} dB, kill?: {tief?, mitte?, hoch?} booleans, send?: {hall?, delay?} dB}   -> {ok}; POST /loopdeck/neu {deck, raster?} -> {ok, gruppe_id} (idempotent)
+//   POST /loopdeck/spur {deck, spur, fader_db?, mute?, filter?, eq?: {tief?, mitte?, hoch?} dB, kill?: {tief?, mitte?, hoch?} booleans, fx?: {"1"?, "2"?, "3"?} booleans, send?: {hall?, delay?} dB}   -> {ok}; POST /loopdeck/neu {deck, raster?} -> {ok, gruppe_id} (idempotent)
 //   POST /loopdeck/effekt {deck, spur, graph} (graph '' removes) or {deck, spur, an}   -> {ok, effekt: {id, graph, an} | null}; GET /loopdeck/effekte -> {graphen: [{name, kurz, latenz}]}
 // Limits: a cell holds at most 60 s (zu_lang); the distinct decoded audio of the live project (frames x 8 bytes, every sha once over clips and cells,
 // counting the new cell) stays within 512 MiB (audio_budget). A refused load writes nothing and removes the WAV it wrote.
@@ -29,11 +29,11 @@ import type { BereichKontext, Route } from '../../http/router.ts';
 import { json } from '../../http/transport.ts';
 import { alsAntwort, leseKoerper, type ProjZugang } from '../proj/area.ts';
 import { grundCode } from '../proj/mapping.ts';
-import { ProjFehler } from '../proj/session.ts';
+import { ProjFehler, REV_JETZT } from '../proj/session.ts';
 import { alleAudioClips, BefehlFehler, fuehreListeAus } from '../../project/commands.ts';
 import { LOOPDECK_LABEL } from '../../project/commands_loopdeck.ts';
 import { grundText } from '../../http/reasons.ts';
-import { LOOP_RASTER_BEATS, LOOP_SPUREN, LOOP_ZELLEN, LOOP_FARBEN, LOOP_MAX_FRAMES, LOOP_SEND_MAX, FADER_MIN, EQ_BAENDER, type EqBand, loopDeckGruppe, loopDeckSpuren, platzVonGruppe, type LoopRaster, type Projekt, type Spur, type Zelle } from '../../project/model.ts';
+import { LOOP_RASTER_BEATS, LOOP_SPUREN, LOOP_ZELLEN, LOOP_FARBEN, LOOP_MAX_FRAMES, LOOP_SEND_MAX, FADER_MIN, EQ_BAENDER, FX_NUMMERN, type EqBand, type FxNr, loopDeckGruppe, loopDeckSpuren, platzVonGruppe, istHalten, type LoopRaster, type Projekt, type Spur, type Zelle } from '../../project/model.ts';
 import { loopFxGraphen } from './loopdeck_effects.ts';
 import { listeGraphen, type GraphEintrag } from '../../graphs.ts';
 import { ladeQuelle, LadenFehler, pruefeQuelle, type LadeAbhaengig, type Quelle as LadeQuelle } from './loopdeck_load.ts';
@@ -45,7 +45,7 @@ export type Lauf = { zelle: number | null; verwaist: boolean; ab_beat: number; v
   wartend: { zelle: number | null; ab_beat: number } | null; zuletzt: number | null };
 export type ZelleSicht = Zelle & { frames: number | null };
 export type DeckSpur = { spur_id: string; nr: number; name: string; fader_db: number; mute: boolean; filter: number;
-  eq: Record<EqBand, number>; kill: Record<EqBand, boolean>; send: { hall: number; delay: number };
+  eq: Record<EqBand, number>; kill: Record<EqBand, boolean>; fx: Record<FxNr, boolean>; send: { hall: number; delay: number };
   zellen: (ZelleSicht | null)[]; lauf: Lauf; effekt: Effekt | null };
 export type Effekt = { id: string; graph: string; an: boolean };
 // ausgang_platz: the place (1..4) of the container the deck sits in (`plaetze`); null = parked (silent)
@@ -99,6 +99,14 @@ function baenderPruefen(x: unknown, k: string, typ: 'number' | 'boolean'): void 
     if (typeof v !== typ || (typ === 'number' && !Number.isFinite(v))) ungueltig(`${k}.${b}: ${typ === 'number' ? 'number' : 'true or false'} expected`);
   }
 }
+// fx: {"1"?, "2"?, "3"?} of booleans; the track rule is the command's
+function fxPruefen(x: unknown): void {
+  if (x === null || typeof x !== 'object' || Array.isArray(x) || Object.keys(x).length === 0) return ungueltig('fx: {"1"?, "2"?, "3"?} expected');
+  for (const [u, v] of Object.entries(x)) {
+    if (!(FX_NUMMERN as readonly string[]).includes(u)) ungueltig(`fx.${u}: unknown FX (1, 2, 3)`);
+    if (typeof v !== 'boolean') ungueltig(`fx.${u}: true or false expected`);
+  }
+}
 // the send level of a deck track into the deck's return of that art; -200 when there is no send or no return
 const sendDb = (p: Projekt, s: Spur, platz: 1 | 2, art: 'hall' | 'delay'): number => {
   const r = (p.returns ?? []).find((x) => x.loopdeck?.platz === platz && x.loopdeck.art === art);
@@ -120,18 +128,34 @@ const effektVon = (s: Spur): Effekt | null => {
 };
 const leerLauf = (): Lauf => ({ zelle: null, verwaist: false, ab_beat: 0, versatz_beats: 0, wartend: null, zuletzt: null });
 
+// One deck track as the stand shows it (also the session view's columns); a halten slot is empty for the loop deck
+export function deckSpurSicht(p: Projekt, s: Spur, platz: 1 | 2, lauf: Lauf, frames?: (sha: string) => number | null): DeckSpur {
+  return {
+    spur_id: s.id, nr: s.nr, name: s.name, fader_db: s.fader_db, mute: s.mute, filter: s.filter ?? 0,
+    eq: { tief: s.eq?.tief ?? 0, mitte: s.eq?.mitte ?? 0, hoch: s.eq?.hoch ?? 0 }, kill: { tief: !!s.kill?.tief, mitte: !!s.kill?.mitte, hoch: !!s.kill?.hoch },
+    fx: { '1': !!s.fx?.['1'], '2': !!s.fx?.['2'], '3': !!s.fx?.['3'] },
+    send: { hall: sendDb(p, s, platz, 'hall'), delay: sendDb(p, s, platz, 'delay') },
+    zellen: (s.zellen ?? []).map((z) => (z && !istHalten(z) ? { ...z, frames: frames?.(z.sha256) ?? null } : null)), lauf, effekt: effektVon(s),
+  };
+}
+
 export class LoopdeckBereich {
   readonly name = 'loopdeck';
   private uhr: UhrStand | null = null;
   private generation: number | null = null;
   private readonly spiegel = new Map<string, Lauf>();   // track id -> mirror of /zustand/zelle
   private readonly zuletzt = new Map<string, number>();  // track id -> last cell that played
+  private readonly lauscher: ((spurId: string, lauf: Lauf | null) => void)[] = [];
   private readonly ctx: BereichKontext;
   private readonly zugang: ProjZugang;
   private readonly o: LoopdeckOptionen;
   constructor(ctx: BereichKontext, zugang: ProjZugang, o: LoopdeckOptionen = {}) { this.ctx = ctx; this.zugang = zugang; this.o = o; }
 
   private jetzt(): number { return (this.o.jetzt ?? Date.now)(); }
+
+  // Called on every change of the /zustand/zelle mirror (and with null when a new core generation clears it): the session area emits its own event from it.
+  beimLauf(f: (spurId: string, lauf: Lauf | null) => void): void { this.lauscher.push(f); }
+  private meldeLauf(id: string, lauf: Lauf | null): void { for (const f of this.lauscher) f(id, lauf); }
 
   // every core event, before throttling
   ereignis(adresse: string, f: Record<string, unknown>): void {
@@ -146,6 +170,7 @@ export class LoopdeckBereich {
           for (const id of this.spiegel.keys()) {
             const ort = p ? this.ort(p, id) : null;
             if (ort) this.ctx.verteile({ a: 'loopdeck', f: { deck: ort.deck, spur: ort.spur, lauf: null } });
+            this.meldeLauf(id, null);
           }
           this.spiegel.clear(); this.zuletzt.clear(); this.uhr = null;   // the old clock is not the new core's clock
         }
@@ -167,6 +192,7 @@ export class LoopdeckBereich {
     const p = this.zugang.offen()?.projekt;
     const ort = p ? this.ort(p, id) : null;
     if (ort) this.ctx.verteile({ a: 'loopdeck', f: { deck: ort.deck, spur: ort.spur, lauf: neu } });
+    this.meldeLauf(id, neu);
   }
   private ort(p: Projekt, spurId: string): { deck: 1 | 2; spur: number } | null {
     for (const platz of [1, 2] as const) {
@@ -183,18 +209,18 @@ export class LoopdeckBereich {
   private deckVon(p: Projekt | undefined, platz: 1 | 2): Deck | null {
     const g = p ? loopDeckGruppe(p, platz) : null;
     if (!p || !g?.loopdeck) return null;
-    return { gruppe_id: g.id, platz, ausgang_platz: platzVonGruppe(p, g.id), raster: g.loopdeck.raster, spuren: loopDeckSpuren(p, g).map((s) => ({
-      spur_id: s.id, nr: s.nr, name: s.name, fader_db: s.fader_db, mute: s.mute, filter: s.filter ?? 0,
-      eq: { tief: s.eq?.tief ?? 0, mitte: s.eq?.mitte ?? 0, hoch: s.eq?.hoch ?? 0 }, kill: { tief: !!s.kill?.tief, mitte: !!s.kill?.mitte, hoch: !!s.kill?.hoch },
-      send: { hall: sendDb(p!, s, platz, 'hall'), delay: sendDb(p!, s, platz, 'delay') },
-      zellen: (s.zellen ?? []).map((z) => (z ? { ...z, frames: this.o.frames?.(z.sha256) ?? null } : null)), lauf: this.lauf(s), effekt: effektVon(s) })) };
+    return { gruppe_id: g.id, platz, ausgang_platz: platzVonGruppe(p, g.id), raster: g.loopdeck.raster, spuren: loopDeckSpuren(p, g).map((s) => deckSpurSicht(p, s, platz, this.lauf(s), this.o.frames)) };
+  }
+
+  // the core clock extrapolated to now; null before the first /uhr (the session view shows it in its stand)
+  uhrJetzt(): { beat: number; bpm: number } | null {
+    try { return { beat: loopBeatJetzt(this.uhr, this.jetzt()), bpm: this.uhr!.bpm }; } catch (e) { if (e instanceof KeineUhrFehler) return null; throw e; }
   }
 
   stand(): Antwort {
     const p = this.zugang.offen()?.projekt;
-    let beat: number | null = null, bpm: number | null = null;
-    try { beat = loopBeatJetzt(this.uhr, this.jetzt()); bpm = this.uhr!.bpm; } catch (e) { if (!(e instanceof KeineUhrFehler)) throw e; }
-    return { code: 200, j: { decks: { 1: this.deckVon(p, 1), 2: this.deckVon(p, 2) }, beat, bpm } };
+    const u = this.uhrJetzt();
+    return { code: 200, j: { decks: { 1: this.deckVon(p, 1), 2: this.deckVon(p, 2) }, beat: u ? u.beat : null, bpm: u ? u.bpm : null } };
   }
 
   // the deck of a request with its 4 tracks; kein_loopdeck without a live container or a deck on that place
@@ -210,7 +236,7 @@ export class LoopdeckBereich {
   riegel(quelle: Quelle): void {   // not private: loopsets.ts (lane S) shares the gate, the container, the command path and the budget check
     if (quelle === 'cypher' && this.ctx.kiGestoppt()) throw new LoopFehler(409, 'ki_gestoppt');
   }
-  private ziel(raster: LoopRaster): number {
+  zielBeat(raster: LoopRaster): number {   // not private: the session area aims its launches at the same grid
     try { return loopZielBeat(this.uhr, LOOP_RASTER_BEATS[raster], this.jetzt()); } catch (e) {
       if (e instanceof KeineUhrFehler) throw new LoopFehler(409, 'keine_uhr');
       throw e;
@@ -247,13 +273,19 @@ export class LoopdeckBereich {
     const versatz = d.versatz_beats === undefined ? 0 : d.versatz_beats;
     if (typeof versatz !== 'number' || !Number.isFinite(versatz) || versatz < 0) ungueltig('versatz_beats: number >= 0 expected');
     const raster = this.rasterArg(d, deck);
-    const z = deck.spuren[spur - 1].zellen[zelle - 1];
-    if (!z) throw new LoopFehler(409, 'zelle_leer');
-    if (this.laedt(z)) throw new LoopFehler(409, 'zelle_laedt');   // in the model, not yet decoded for the core: not sent
-    const ab = this.ziel(raster);
-    const status = await this.quittung(this.sendeStart(quelle, spuren[spur - 1], zelle, ab, versatz as number));
-    return { code: 200, j: { ok: true, ab_beat: ab, status } };
+    const r = await this.spurStarten(spuren[spur - 1], zelle, raster, quelle, versatz as number);
+    return { code: 200, j: { ok: true, ab_beat: r.ab_beat, status: r.status } };
   }
+  // One track, one cell, at the next grid point of `raster`: zelle_leer / zelle_laedt (nothing sent), keine_uhr, or the core's refusal. Throws LoopFehler.
+  async spurStarten(s: Spur, zelle: number, raster: LoopRaster, quelle: Quelle, versatz = 0): Promise<{ ab_beat: number; status: number }> {
+    const z = s.zellen?.[zelle - 1];
+    if (!z || istHalten(z)) throw new LoopFehler(409, 'zelle_leer');
+    if (this.laedt(this.sicht(z))) throw new LoopFehler(409, 'zelle_laedt');   // in the model, not yet decoded for the core: not sent
+    const ab = this.zielBeat(raster);
+    const status = await this.quittung(this.sendeStart(quelle, s, zelle, ab, versatz));
+    return { ab_beat: ab, status };
+  }
+  private sicht(z: Zelle): ZelleSicht { return { ...z, frames: this.o.frames?.(z.sha256) ?? null }; }
 
   sprung(d: Record<string, unknown>, quelle: Quelle): Promise<Antwort> { return this.antwort(() => this.sprungSicher(d, quelle)); }
   private async sprungSicher(d: Record<string, unknown>, quelle: Quelle): Promise<Antwort> {
@@ -268,7 +300,7 @@ export class LoopdeckBereich {
     if (z.art === 'einmal') throw new LoopFehler(409, 'nur_loop');
     if (this.laedt(z)) throw new LoopFehler(409, 'zelle_laedt');
     const versatz = (slice - 1) * z.beats / 8;
-    const ab = this.ziel(deck.raster);
+    const ab = this.zielBeat(deck.raster);
     await this.quittung(this.sendeStart(quelle, spuren[spur - 1], nr, ab, versatz));
     return { code: 200, j: { ok: true, ab_beat: ab, zelle: nr, versatz_beats: versatz } };
   }
@@ -279,11 +311,18 @@ export class LoopdeckBereich {
     this.riegel(quelle);
     const { deck, spuren } = this.brauche(d);
     const nr = d.spur === undefined ? null : ganz(d, 'spur', 1, LOOP_SPUREN);
-    const ab = this.ziel(deck.raster);
-    // a track without any cell is unknown to the core's launcher (spur_bereich): nothing can play there, so nothing is sent
-    const nrn = spuren.map((_, i) => i + 1).filter((n) => (nr === null || n === nr) && deck.spuren[n - 1].zellen.some((z) => z));
-    const r = await this.ergebnisse(nrn.map((n) => this.sendeStopp(quelle, spuren[n - 1], ab)), nrn);
-    return { code: 200, j: { ok: true, ab_beat: ab, ...(r.abgelehnt.length ? { abgelehnt: r.abgelehnt } : {}) } };
+    const ab = this.zielBeat(deck.raster);
+    const r = await this.spurStoppen(spuren.filter((_, i) => nr === null || i + 1 === nr), ab, quelle);
+    const nrn = new Map(spuren.map((s, i) => [s.id, i + 1]));
+    return { code: 200, j: { ok: true, ab_beat: ab, ...(r.abgelehnt.length ? { abgelehnt: r.abgelehnt.map((x) => ({ spur: nrn.get(x.spur_id)!, grund: x.grund })) } : {}) } };
+  }
+  // Stops the given tracks at `ab`. A track without any cell is unknown to the core's launcher (spur_bereich): nothing can play there, so nothing is sent.
+  // One refused track is listed in abgelehnt; when every track that was sent is refused it throws the first refusal.
+  async spurStoppen(spuren: Spur[], ab: number, quelle: Quelle): Promise<{ gestoppt: string[]; abgelehnt: { spur_id: string; grund: string }[] }> {
+    const ziel = spuren.filter((s) => (s.zellen ?? []).some((z) => z && !istHalten(z)));
+    const r = await this.ergebnisse(ziel.map((s) => this.sendeStopp(quelle, s, ab)), ziel.map((s) => s.id));
+    const nein = new Set(r.abgelehnt.map((x) => x.spur));
+    return { gestoppt: ziel.map((s) => s.id).filter((id) => !nein.has(id)), abgelehnt: r.abgelehnt.map((x) => ({ spur_id: x.spur, grund: x.grund })) };
   }
 
   szene(d: Record<string, unknown>, quelle: Quelle): Promise<Antwort> { return this.antwort(() => this.szeneSicher(d, quelle)); }
@@ -292,23 +331,42 @@ export class LoopdeckBereich {
     this.riegel(quelle);
     const { deck, spuren } = this.brauche(d);
     const zeile = ganz(d, 'zeile', 1, LOOP_ZELLEN);
-    const ab = this.ziel(deck.raster);
-    // an empty cell stops its track; a cell that is not decoded yet is skipped the same way (its track stops, nothing is sent to start it)
-    const start: number[] = [], stopp: number[] = [], laedt: number[] = [];
-    const nrn: number[] = [];
-    const ids = spuren.flatMap((s, i) => {
-      const z = deck.spuren[i].zellen[zeile - 1];
-      if (z && !this.laedt(z)) { start.push(i + 1); nrn.push(i + 1); return [this.sendeStart(quelle, s, zeile, ab, 0)]; }
-      if (z) laedt.push(i + 1);
-      if (!deck.spuren[i].zellen.some((c) => c)) return [];   // no cell at all: unknown to the launcher, nothing to stop
-      stopp.push(i + 1); nrn.push(i + 1); return [this.sendeStopp(quelle, s, ab)];
+    const ab = this.zielBeat(deck.raster);
+    const r = await this.zeileStarten(spuren, zeile, ab, quelle);
+    const nr = new Map(spuren.map((s, i) => [s.id, i + 1]));
+    const num = (ids: string[]): number[] => ids.map((id) => nr.get(id)!);
+    return { code: 200, j: { ok: true, ab_beat: ab, gestartet: num(r.gestartet), gestoppt: num(r.gestoppt),
+      ...(r.gehalten.length ? { gehalten: num(r.gehalten) } : {}),
+      ...(r.laedt.length ? { laedt: num(r.laedt) } : {}), ...(r.abgelehnt.length ? { abgelehnt: r.abgelehnt.map((x) => ({ spur: nr.get(x.spur_id)!, grund: x.grund })) } : {}) } };
+  }
+  // Row `zeile` of the given tracks at one `ab`: a filled cell starts, an empty one stops its track, a hold slot gets nothing (gehalten). A cell that is not
+  // decoded yet is skipped like an empty one (its track stops, `laedt` lists it); a track without any cell is unknown to the launcher and gets nothing.
+  // Refusals of single tracks are listed in `abgelehnt`; when every command that was sent is refused it throws the first one.
+  async zeileStarten(spuren: Spur[], zeile: number, ab: number, quelle: Quelle): Promise<{ gestartet: string[]; gestoppt: string[]; gehalten: string[];
+    laedt: string[]; abgelehnt: { spur_id: string; grund: string }[] }> {
+    const start: string[] = [], stopp: string[] = [], gehalten: string[] = [], laedt: string[] = [];
+    const ids = spuren.flatMap((s) => {
+      const z = s.zellen?.[zeile - 1] ?? null;
+      if (z && istHalten(z)) { gehalten.push(s.id); return []; }
+      if (z && !this.laedt(this.sicht(z))) { start.push(s.id); return [this.sendeStart(quelle, s, zeile, ab, 0)]; }
+      if (z) laedt.push(s.id);
+      if (!(s.zellen ?? []).some((c) => c && !istHalten(c))) return [];   // no cell at all: unknown to the launcher, nothing to stop
+      stopp.push(s.id); return [this.sendeStopp(quelle, s, ab)];
     });
-    const r = await this.ergebnisse(ids, nrn);
-    const ab2 = new Set(r.abgelehnt.map((x) => x.spur));
-    return { code: 200, j: { ok: true, ab_beat: ab, gestartet: start.filter((n) => !ab2.has(n)), gestoppt: stopp.filter((n) => !ab2.has(n)),
-      ...(laedt.length ? { laedt } : {}), ...(r.abgelehnt.length ? { abgelehnt: r.abgelehnt } : {}) } };
+    const gesendet = [...start, ...stopp].sort((a, b) => spuren.findIndex((s) => s.id === a) - spuren.findIndex((s) => s.id === b));
+    const r = await this.ergebnisse(ids, spuren.map((s) => s.id).filter((id) => gesendet.includes(id)));
+    const nein = new Set(r.abgelehnt.map((x) => x.spur));
+    return { gestartet: start.filter((id) => !nein.has(id)), gestoppt: stopp.filter((id) => !nein.has(id)), gehalten, laedt,
+      abgelehnt: r.abgelehnt.map((x) => ({ spur_id: x.spur, grund: x.grund })) };
   }
 
+  // spalten: the 8 deck tracks of the project in deck, track order, each with its mirror state
+  spalten(p: Projekt): { spur: Spur; deck: 1 | 2; nr: 1 | 2 | 3 | 4; lauf: Lauf }[] {
+    return ([1, 2] as const).flatMap((deck) => {
+      const g = loopDeckGruppe(p, deck);
+      return g?.loopdeck ? loopDeckSpuren(p, g).map((spur, i) => ({ spur, deck, nr: (i + 1) as 1 | 2 | 3 | 4, lauf: this.lauf(spur) })) : [];
+    });
+  }
 
   // ---- writes (M5) ----------------------------------------------------------------------------------------------------------------------
 
@@ -338,7 +396,7 @@ export class LoopdeckBereich {
     const o = this.zugang.offen();
     if (!o) throw new LoopFehler(409, 'kein_loopdeck');
     try {
-      const r = await this.zugang.aendern({ rev: o.projekt.rev, label, befehle }, quelle);
+      const r = await this.zugang.aendern({ rev: REV_JETZT, label, befehle }, quelle);
       if (r.code !== 200) { const j = r.j as { fehler?: string; text?: string }; throw new LoopFehler(r.code, j.fehler ?? 'abgelehnt', j.text ?? ''); }
     } catch (e) { throw this.fehlerVon(e); }
     return this.zugang.offen()!.projekt;
@@ -356,7 +414,7 @@ export class LoopdeckBereich {
     const frames = new Map<string, number>();
     const merke = (sha: string): void => { if (!frames.has(sha)) frames.set(sha, this.o.frames?.(sha) ?? 0); };
     for (const c of alleAudioClips(p)) merke(c.quelle.sha256);
-    for (const s of p.spuren) for (const z of s.zellen ?? []) if (z) merke(z.sha256);
+    for (const s of p.spuren) for (const z of s.zellen ?? []) if (z && !istHalten(z)) merke(z.sha256);
     for (const n of Array.isArray(neu) ? neu : [neu]) frames.set(n.sha256, n.frames);
     let n = 0;
     for (const f of frames.values()) n += f * 8;
@@ -493,13 +551,14 @@ export class LoopdeckBereich {
 
   spurAendern(d: Record<string, unknown>, quelle: Quelle): Promise<Antwort> {
     return this.antwort(async () => {
-      nurFelder(d, ['deck', 'spur', 'fader_db', 'mute', 'filter', 'eq', 'kill', 'send']);
+      nurFelder(d, ['deck', 'spur', 'fader_db', 'mute', 'filter', 'eq', 'kill', 'fx', 'send']);
       this.riegel(quelle);
       const spur = ganz(d, 'spur', 1, LOOP_SPUREN);
-      const felder = Object.fromEntries(['fader_db', 'mute', 'filter', 'eq', 'kill'].filter((k) => d[k] !== undefined).map((k) => [k, d[k]]));
-      if (Object.keys(felder).length === 0 && d.send === undefined) ungueltig('fader_db, mute, filter, eq, kill or send expected');
+      const felder = Object.fromEntries(['fader_db', 'mute', 'filter', 'eq', 'kill', 'fx'].filter((k) => d[k] !== undefined).map((k) => [k, d[k]]));
+      if (Object.keys(felder).length === 0 && d.send === undefined) ungueltig('fader_db, mute, filter, eq, kill, fx or send expected');
       if (d.eq !== undefined) baenderPruefen(d.eq, 'eq', 'number');
       if (d.kill !== undefined) baenderPruefen(d.kill, 'kill', 'boolean');
+      if (d.fx !== undefined) fxPruefen(d.fx);
       const sends = d.send === undefined ? [] : sendArg(d.send);
       const { spuren } = await this.schreibDeck(d, quelle);
       const id = spuren[spur - 1].id;
@@ -560,9 +619,9 @@ export class LoopdeckBereich {
   }
   // all receipts of one gesture are waited for (none is left dangling); the first refusal is the answer
   // A track that is refused is listed in `abgelehnt`; the call only fails (the first refusal) when no track went out at all.
-  private async ergebnisse(ids: number[], spuren: number[]): Promise<{ abgelehnt: { spur: number; grund: string }[] }> {
+  private async ergebnisse<T>(ids: number[], spuren: T[]): Promise<{ abgelehnt: { spur: T; grund: string }[] }> {
     const r = await Promise.allSettled(ids.map((id) => this.quittung(id)));
-    const abgelehnt: { spur: number; grund: string }[] = [];
+    const abgelehnt: { spur: T; grund: string }[] = [];
     const fehler: LoopFehler[] = [];
     for (let i = 0; i < r.length; i++) {
       const x = r[i];

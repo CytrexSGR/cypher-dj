@@ -138,8 +138,8 @@ test('the schema and the description', async (t) => {
   }
 });
 
-test('the tool count is 99', async (t) => {
+test('the tool count is 100', async (t) => {
   const { c } = await verbinde(t, () => [200, {}]);
-  assert.equal((await c.listTools()).tools.length, 99);
-  assert.equal(fs.readFileSync(HAND, 'utf8').split('\n').filter((z) => z.startsWith("  { name: '")).length, 99);
+  assert.equal((await c.listTools()).tools.length, 100);
+  assert.equal(fs.readFileSync(HAND, 'utf8').split('\n').filter((z) => z.startsWith("  { name: '")).length, 100);
 });

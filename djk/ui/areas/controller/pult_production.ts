@@ -4,7 +4,7 @@
 // Shift + left / right = the bank (8 tracks), Shift + up / down = the track in front (the controller focus, the synths follow it).
 // Faders, mute and solo go through the kern (pult.json, channel 16, rows spur/<nr>/* and pm/fader; the hand's write-back stores them in the project like a
 // mouse move). This Bereich keeps what the bridge needs to know and cannot measure itself:
-//   POST /controller/ansicht {ansicht}  the main window tells the view it shows (dj, studio, produktion, werkbank, tracker)
+//   POST /controller/ansicht {ansicht}  the main window tells the view it shows (dj, produktion, werkbank, tracker) or studio = the loop deck pop-up is open, the APC20 grid launches cells
 //   GET  /controller/pult               { produktion, ansicht, bank, banken, laeuft, spalten: 8 x ({nr, id, name, mute, solo, arm} | null), spuren }
 //   POST /controller/pult/bank {schritt | bank}
 //   POST /controller/pult/arm {nr}      toggles the arm of track <nr> (project command, label "Arm <name>" like the track head)
@@ -66,7 +66,7 @@ export function pultBereich(ctx: BereichKontext, opt: { zugang?: ZurueckZugang; 
     routen: () => [
       { methode: 'GET', pfad: '/controller/pult', schutz: 'offen', handler: (_q: http.IncomingMessage, a: http.ServerResponse) => json(a, 200, lage()) },
       post('/controller/ansicht', (d, a) => {
-        if (typeof d.ansicht !== 'string' || !ANSICHT.test(d.ansicht)) { fehler(a, 400, 'argument_ungueltig', 'ansicht: dj, studio, produktion, werkbank or tracker'); return; }
+        if (typeof d.ansicht !== 'string' || !ANSICHT.test(d.ansicht)) { fehler(a, 400, 'argument_ungueltig', 'ansicht: dj, studio (the loop deck pop-up is open, the APC20 grid launches cells), produktion, werkbank or tracker'); return; }
         const neu = d.ansicht !== ansicht;
         ansicht = d.ansicht;
         if (neu) melde();

@@ -1,87 +1,87 @@
 /* Workbench dock (dock.js) and floating windows (window.js). */
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-dock { display: flex; flex-direction: column; gap: 6px; max-height: 44vh; overflow: auto; padding: 8px; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-dock-zeile { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 8px; align-items: stretch; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-dock-etikett { display: flex; align-items: center; justify-content: center; border-right: 1px solid var(--line); font-size: 10px; letter-spacing: .14em; font-weight: 700; color: var(--dim); }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-dock-karten { display: flex; gap: 6px; overflow-x: auto; scrollbar-color: var(--line) transparent; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-dock {
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-dock { display: flex; flex-direction: column; gap: 6px; max-height: 44vh; overflow: auto; padding: 8px; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-dock-zeile { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 8px; align-items: stretch; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-dock-etikett { display: flex; align-items: center; justify-content: center; border-right: 1px solid var(--line); font-size: 10px; letter-spacing: .14em; font-weight: 700; color: var(--dim); }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-dock-karten { display: flex; gap: 6px; overflow-x: auto; scrollbar-color: var(--line) transparent; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-dock {
   --farbe: var(--d3); flex: none; display: flex; flex-direction: column; gap: 5px; padding: 5px 8px 6px; border: 1px solid var(--line); border-top: 3px solid var(--farbe);
   border-radius: 6px; background: var(--panel2); cursor: default; position: relative;   /* the CTL mark of a track card sits on its corner */
 }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-dock[data-w="karte-spur"] { cursor: pointer; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-dock.aktiv { border-color: var(--d3); border-top-color: var(--farbe); background: color-mix(in srgb, var(--d3) 12%, var(--panel2)); }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-kopf { display: flex; align-items: center; gap: 6px; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-dock[data-w="karte-spur"] { cursor: pointer; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-dock.aktiv { border-color: var(--d3); border-top-color: var(--farbe); background: color-mix(in srgb, var(--d3) 12%, var(--panel2)); }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-kopf { display: flex; align-items: center; gap: 6px; }
 /* the track letter on a card head (the rule of the STUDIO track row without its grid area) */
 /* (placed before the card size rule below, which sets the 20px box and must win) */
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-kopf .w-buchstabe { width: 26px; height: 26px; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #0b0d12; background: var(--dim); }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-kopf .w-buchstabe { width: 20px; height: 20px; font-size: 11px; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-name { font-size: 12px; white-space: nowrap; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-geraet { color: var(--dim); font-size: 10px; white-space: nowrap; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-sp { flex: 1; min-width: 6px; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-knoepfe { display: flex; gap: 2px; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-zeile { display: flex; align-items: stretch; gap: 8px; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-zeile .meter.senkrecht { width: 6px; align-self: stretch; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-chip-teil, :is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-knopf, :is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-auf {
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-kopf .w-buchstabe { width: 26px; height: 26px; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #0b0d12; background: var(--dim); }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-kopf .w-buchstabe { width: 20px; height: 20px; font-size: 11px; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-name { font-size: 12px; white-space: nowrap; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-geraet { color: var(--dim); font-size: 10px; white-space: nowrap; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-sp { flex: 1; min-width: 6px; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-knoepfe { display: flex; gap: 2px; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-zeile { display: flex; align-items: stretch; gap: 8px; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-zeile .meter.senkrecht { width: 6px; align-self: stretch; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-chip-teil, :is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-knopf, :is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-auf {
   font-size: 9px; font-weight: 800; letter-spacing: .06em; border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; color: var(--dim); background: transparent; white-space: nowrap; cursor: pointer;
 }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-chip-teil:not(.aus):not(.w-chip-plus) { color: var(--text); background: var(--panel); }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-chip-teil.aus { text-decoration: line-through; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-chip-teil[data-w="karte-von"] { cursor: default; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-knopf.an { background: var(--d3); color: #0b0d12; border-color: var(--d3); }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-knopf[data-w="karte-weg"]:hover { color: var(--kill); border-color: var(--kill); }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-auf:disabled { opacity: .4; cursor: default; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-neu { align-items: center; justify-content: center; min-width: 150px; border-style: dashed; background: none; color: var(--dim); font-weight: 700; letter-spacing: .08em; font-size: 11px; cursor: pointer; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-neu:hover:not(:disabled) { color: var(--d3); border-color: var(--d3); }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-neu:disabled { opacity: .5; cursor: not-allowed; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-master { margin-left: auto; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-chip-teil:not(.aus):not(.w-chip-plus) { color: var(--text); background: var(--panel); }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-chip-teil.aus { text-decoration: line-through; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-chip-teil[data-w="karte-von"] { cursor: default; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-knopf.an { background: var(--d3); color: #0b0d12; border-color: var(--d3); }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-knopf[data-w="karte-weg"]:hover { color: var(--kill); border-color: var(--kill); }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-auf:disabled { opacity: .4; cursor: default; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-neu { align-items: center; justify-content: center; min-width: 150px; border-style: dashed; background: none; color: var(--dim); font-weight: 700; letter-spacing: .08em; font-size: 11px; cursor: pointer; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-neu:hover:not(:disabled) { color: var(--d3); border-color: var(--d3); }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-neu:disabled { opacity: .5; cursor: not-allowed; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-master { margin-left: auto; }
 /* PRODUCTION (host.masterSpalte): the rows take the width that is left and fold on their own; the MASTER card keeps a column at the right edge */
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-dock.w-dock-geteilt { flex-direction: row; gap: 8px; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-dock-reihen { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-dock-master { flex: none; display: flex; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-dock-master .w-karte-master { margin-left: 0; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-dreh { display: flex; flex-direction: column; align-items: center; gap: 1px; width: 56px; cursor: ns-resize; touch-action: none; user-select: none; --farbe: var(--d3); --k: 0; outline: none; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-dock.w-dock-geteilt { flex-direction: row; gap: 8px; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-dock-reihen { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-dock-master { flex: none; display: flex; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-dock-master .w-karte-master { margin-left: 0; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-dreh { display: flex; flex-direction: column; align-items: center; gap: 1px; width: 56px; cursor: ns-resize; touch-action: none; user-select: none; --farbe: var(--d3); --k: 0; outline: none; }
 /* floating windows */
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-fenster-flaeche { position: absolute; inset: 0; z-index: 12; pointer-events: none; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-fenster {
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-fenster-flaeche { position: absolute; inset: 0; z-index: 12; pointer-events: none; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-fenster {
   position: absolute; pointer-events: auto; width: min(980px, calc(100% - 40px)); max-height: calc(100% - 20px); display: flex; flex-direction: column;
   background: var(--panel); border: 1px solid var(--d3); border-radius: 8px; box-shadow: 0 18px 60px rgba(0, 0, 0, .8);
 }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-fenster-kopf { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--line); cursor: move; touch-action: none; user-select: none; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-fenster-unter { color: var(--dim); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-fenster-leiste { margin-left: auto; display: flex; gap: 6px; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-fenster-zu { min-width: 44px; min-height: 32px; font-weight: 800; cursor: pointer; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-fenster-koerper { padding: 12px; overflow: auto; min-height: 0; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-fenster .w-effekt-knopf { min-width: 44px; min-height: 32px; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-fenster .fp-knopf { min-width: 44px; min-height: 44px; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-fenster-geraet p { color: var(--dim); }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-regal-auf { margin-left: auto; font-weight: 700; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-regal-auf.an { border-color: var(--d3); color: var(--d3); }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-fenster-kopf { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--line); cursor: move; touch-action: none; user-select: none; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-fenster-unter { color: var(--dim); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-fenster-leiste { margin-left: auto; display: flex; gap: 6px; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-fenster-zu { min-width: 44px; min-height: 32px; font-weight: 800; cursor: pointer; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-fenster-koerper { padding: 12px; overflow: auto; min-height: 0; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-fenster .w-effekt-knopf { min-width: 44px; min-height: 32px; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-fenster .fp-knopf { min-width: 44px; min-height: 44px; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-fenster-geraet p { color: var(--dim); }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-regal-auf { margin-left: auto; font-weight: 700; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-regal-auf.an { border-color: var(--d3); color: var(--d3); }
 /* the shelf cards use the same class names with their own placement (regal.css); inside a dock card they are plain flow */
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-dock .w-karte-knoepfe { position: static; left: auto; bottom: auto; display: flex; gap: 2px; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-dock .w-karte-name { display: inline; margin: 0; width: auto; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-dock .w-dreh-name { max-width: 56px; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-dock .w-dreh:not(.klein) .w-dreh-rad { width: 36px; height: 36px; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-dock .w-dreh-wert { font-size: 10px; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-dock .w-karte-knoepfe { position: static; left: auto; bottom: auto; display: flex; gap: 2px; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-dock .w-karte-name { display: inline; margin: 0; width: auto; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-dock .w-dreh-name { max-width: 56px; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-dock .w-dreh:not(.klein) .w-dreh-rad { width: 36px; height: 36px; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-dock .w-dreh-wert { font-size: 10px; }
 /* a window leaves the dock visible below it, so the cards stay in reach while a device is open */
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-fenster { max-height: calc(100% - 230px); }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-fenster-koerper, :is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-dock { scrollbar-color: var(--line) transparent; scrollbar-width: thin; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-fenster { width: fit-content; min-width: 420px; max-width: min(980px, calc(100% - 40px)); }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-fenster { max-height: calc(100% - 230px); }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-fenster-koerper, :is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-dock { scrollbar-color: var(--line) transparent; scrollbar-width: thin; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-fenster { width: fit-content; min-width: 420px; max-width: min(980px, calc(100% - 40px)); }
 /* the FROM chip keeps its width, so a card does not change size while a send is turned */
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-chip-teil[data-w="karte-von"] { min-width: 92px; text-align: center; box-sizing: border-box; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-chip-teil[data-w="karte-von"] { min-width: 92px; text-align: center; box-sizing: border-box; }
 /* PRODUCTION cards: the group card (indent bars before the colour field), the latency text right of the name */
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-balken { align-self: stretch; width: 3px; border-radius: 2px; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-latenz { font-size: 10px; color: var(--dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-balken { align-self: stretch; width: 3px; border-radius: 2px; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-latenz { font-size: 10px; color: var(--dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
 /* send knobs of a track or group card: one row, each small knob with its short return name below (like STUDIO's .w-spursends) */
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-sends { display: flex; gap: 8px; align-items: flex-start; flex-wrap: nowrap; padding: 2px 0 0 8px; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-sendspalte { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-sends .w-dreh.klein, :is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-sends .w-dreh.klein .w-dreh-rad { width: 26px; height: 26px; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-karte-sendname { font-size: 8px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; max-width: 44px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-sends { display: flex; gap: 8px; align-items: flex-start; flex-wrap: nowrap; padding: 2px 0 0 8px; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-sendspalte { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-sends .w-dreh.klein, :is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-sends .w-dreh.klein .w-dreh-rad { width: 26px; height: 26px; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-sendname { font-size: 8px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; max-width: 44px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); }
 /* the AUTO mark of a LEVEL knob whose fader lane plays (same look as the track head: production.css .p-kopf.auto .p-faderwert) */
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-dreh.auto .w-dreh-wert::before { content: "AUTO"; display: block; font-size: 8px; line-height: 1; color: var(--a); font-weight: 800; letter-spacing: .06em; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-dreh.auto .w-dreh-wert::before { content: "AUTO"; display: block; font-size: 8px; line-height: 1; color: var(--a); font-weight: 800; letter-spacing: .06em; }
 
 /* chip decorations: the status dot of a host plugin, the preset origin mark and the gain reduction bar (the look of .p-host-punkt and .p-ins-preset of the old lists).
    STUDIO renders the same spans (the dot and the mark empty) and shows neither. */
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-chip-teil { position: relative; }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster) .w-chip-gr { position: absolute; left: 0; bottom: 0; height: 2px; width: 0; background: var(--d3, #2fd6c3); pointer-events: none; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-chip-teil { position: relative; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-chip-gr { position: absolute; left: 0; bottom: 0; height: 2px; width: 0; background: var(--d3, #2fd6c3); pointer-events: none; }
 #werkbank .w-chip-punkt, #werkbank .w-chip-marke { display: none; }
 #produktion .w-chip-punkt { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--dim); display: inline-block; vertical-align: middle; margin-right: 3px; }
 #produktion .w-chip-punkt.bereit { background: var(--gut); }

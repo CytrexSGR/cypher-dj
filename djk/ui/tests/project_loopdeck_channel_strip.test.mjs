@@ -330,3 +330,53 @@ test('undo of an effect set is one step, and the set is on the general path whil
   const an = fuehreListeAus(r.projekt, [{ befehl: 'insert_an', insert_id: r.projekt.spuren[0].inserts[0].id, an: false }]);
   assert.deepEqual(an.regler_aenderungen.map((x) => x.pfad), [`ins/bk/${r.projekt.spuren[0].inserts[0].slot}/an`]);
 });
+
+// lane strip: FX 1 2 3 assignment of a deck track
+test('fx validates: key, boolean, deck tracks only', () => {
+  const p = mitPlain();
+  const mut = (f) => { const q = kopie(p); f(q); return pruefeProjekt(q); };
+  const ok = (u) => 'projekt' in u;
+  assert.ok(ok(mut((q) => { q.spuren[0].fx = { 1: true, 3: false }; })));
+  assert.ok(!ok(mut((q) => { q.spuren[0].fx = { 4: true }; })), 'wrong key');
+  assert.ok(!ok(mut((q) => { q.spuren[0].fx = { 1: 1 }; })), 'boolean expected');
+  assert.ok(!ok(mut((q) => { q.spuren[4].fx = { 1: true }; })), 'fx on a plain track');
+});
+
+test('spur_aendern fx merges per key, false deletes, empty vanishes, plain track and bad input are refused', () => {
+  const p = mitPlain();
+  const id = p.spuren[0].id, plain = p.spuren[4].id;
+  let q = lauf(p, { befehl: 'spur_aendern', spur_id: id, fx: { 2: true } });
+  assert.deepEqual(q.spuren[0].fx, { 2: true });
+  q = lauf(q, { befehl: 'spur_aendern', spur_id: id, fx: { 1: true, 3: true } });
+  assert.deepEqual(q.spuren[0].fx, { 1: true, 2: true, 3: true });
+  q = lauf(q, { befehl: 'spur_aendern', spur_id: id, fx: { 2: false } });
+  assert.deepEqual(q.spuren[0].fx, { 1: true, 3: true });
+  q = lauf(q, { befehl: 'spur_aendern', spur_id: id, fx: { 1: false, 3: false } });
+  assert.ok(q.spuren[0].fx === undefined);
+  for (const fx of [{}, { 4: true }, { 1: 1 }, { 1: 'true' }, [], 5, null]) assert.equal(fehler(p, { befehl: 'spur_aendern', spur_id: id, fx }).grund, 'argument_ungueltig');
+  assert.equal(fehler(p, { befehl: 'spur_aendern', spur_id: plain, fx: { 1: true } }).grund, 'argument_ungueltig');
+});
+
+test('fx rows: 0/1 on spur/<n>/fx/<u>, only on change, a deleted deck track resets, alleSpurRegler and reglerZuBefehl carry them, undo restores', (t) => {
+  let p = mitDeck(1);
+  const id = p.spuren[1].id;
+  const an = fuehreListeAus(p, [{ befehl: 'spur_aendern', spur_id: id, fx: { 1: true, 3: true } }]);
+  assert.deepEqual(an.regler_aenderungen.filter((x) => /\/fx\//.test(x.pfad)), [{ pfad: 'spur/2/fx/1', wert: 1 }, { pfad: 'spur/2/fx/3', wert: 1 }]);
+  p = an.projekt;
+  const w = (pfad) => alleSpurRegler(p).find((x) => x.pfad === pfad).wert;
+  assert.equal(alleSpurRegler(p).filter((x) => /\/fx\//.test(x.pfad)).length, 96);
+  assert.deepEqual([w('spur/2/fx/1'), w('spur/2/fx/2'), w('spur/2/fx/3'), w('spur/9/fx/1')], [1, 0, 1, 0]);
+  const weg = fuehreListeAus(p, [...p.spuren.slice(0, 4).map((x) => ({ befehl: 'spur_loeschen', spur_id: x.id })), { befehl: 'gruppenspur_loeschen', gruppe_id: p.gruppen[0].id }]);
+  assert.deepEqual(weg.regler_aenderungen.filter((x) => /\/fx\//.test(x.pfad)), [{ pfad: 'spur/2/fx/1', wert: 0 }, { pfad: 'spur/2/fx/3', wert: 0 }]);
+  assert.deepEqual(reglerZuBefehl(p, 'spur/2/fx/2', 1).befehl, { befehl: 'spur_aendern', spur_id: id, fx: { 2: true } });
+  assert.equal(reglerZuBefehl(p, 'spur/2/fx/1', 1), null, 'already on');
+  assert.deepEqual(reglerZuBefehl(p, 'spur/2/fx/1', 0).befehl.fx, { 1: false });
+  assert.equal(reglerZuBefehl(mitPlain(), 'spur/5/fx/1', 1), null, 'a plain track has no FX keys');
+  assert.ok(istMixerRegler('spur/2/fx/3'));
+  const v = new Verlauf(path.join(tmpOrdner(t), 'undo.jsonl'), { jetzt: () => 0, zeitgeber: false });
+  const r = aendere(v, mitDeck(1), [{ befehl: 'spur_aendern', spur_id: id, fx: { 2: true } }], A);
+  assert.deepEqual(zeile(r, 'spur/2/fx/2'), [{ pfad: 'spur/2/fx/2', wert: 1 }]);
+  const u = rueckgaengig(v, r.projekt, { quelle: 'andreas' });
+  assert.deepEqual(zeile(u, 'spur/2/fx/2'), [{ pfad: 'spur/2/fx/2', wert: 0 }]);
+  assert.ok(u.projekt.spuren[1].fx === undefined);
+});

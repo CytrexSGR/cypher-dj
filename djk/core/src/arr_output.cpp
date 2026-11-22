@@ -124,6 +124,8 @@ bool ins_zeile(const sw::ReglerDef& d, int* slot, int* param) {
 }  // namespace
 
 void Arrangement::regler_binden(const sw::ReglerTabelle& tab) {
+  for (auto& je_spur : feld_regler_)
+    for (int16_t& r : je_spur) r = -1;
   for (int r = 0; r < sw::MAX_REGLER; ++r) {
     regler_spur_[r] = -1;   // strip index (track 0..31, group 32..47, PM 48, returns 49..52), name from D1 K1
     regler_feld_[r] = -1;
@@ -179,6 +181,9 @@ void Arrangement::regler_binden(const sw::ReglerTabelle& tab) {
       case sw::Rolle::spur_kill_tief: feld = ARR_F_KILL0 + 0; break;
       case sw::Rolle::spur_kill_mitte: feld = ARR_F_KILL0 + 1; break;
       case sw::Rolle::spur_kill_hoch: feld = ARR_F_KILL0 + 2; break;
+      case sw::Rolle::spur_fx_1: feld = ARR_F_FX0 + 0; break;   // loop lane strip K1
+      case sw::Rolle::spur_fx_2: feld = ARR_F_FX0 + 1; break;
+      case sw::Rolle::spur_fx_3: feld = ARR_F_FX0 + 2; break;
       case sw::Rolle::snd_spur: case sw::Rolle::snd_grp: {
         const int ri = sw::send_nr(d.pfad) - 1;   // "…/send/<r>"
         if (ri >= 0 && ri < ARR_RETURNS) feld = arr_f_send(ri);
@@ -217,6 +222,7 @@ void Arrangement::regler_binden(const sw::ReglerTabelle& tab) {
     if (streifen < 0) continue;
     regler_spur_[r] = static_cast<int16_t>(streifen);
     regler_feld_[r] = static_cast<int8_t>(feld);
+    if (streifen < ARR_SPUREN && feld >= 0 && feld < ARR_FELDER) feld_regler_[streifen][feld] = static_cast<int16_t>(r);
     if (streifen < ARR_SPUREN && feld < 4 &&
         (d.rolle == sw::Rolle::spur_fader || d.rolle == sw::Rolle::spur_pan || d.rolle == sw::Rolle::spur_mute || d.rolle == sw::Rolle::spur_solo))
       spur_regler_[streifen][feld] = static_cast<int16_t>(r);   // 1.12 S3: only spur/1..32/{fader,pan,mute,solo} can be grabbed (D1)
@@ -339,6 +345,7 @@ void Arrangement::ziele_pruefen() {
 
 void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
   ziele_pruefen();
+  for (bool& b : dj_fx3_da_) b = false;   // loop lane strip K4: the pairs of the diverted FX 3 share are untouched until a track adds to them
   const bool dj_rest_gilt = dj_rest_n_ > 0;   // DJ view places: the held DJ channels of groups that just left (tausche); block() counts them down AFTER this pass, so the block that ends the hold still uses it
   // 1.10 slice 3: a return exists when the playback knows it (ret_da); an unloaded playback knows none (P15)
   const auto da = [&](int r) { return snap_ && snap_->ret_da[r]; };
@@ -493,7 +500,7 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
   const auto sends_bereiten = [&](int streifen, Send* sd, int dj) {
     int n = 0;
     for (int r = 0; r < ARR_RETURNS; ++r) {
-      const Wert& sw_ = w_[streifen][arr_f_send(r)];
+      const Wert sw_ = wert_ueber(streifen, arr_f_send(r));   // S1b K5: a cell envelope wins over the knob
 #ifdef CYPHERDJ_MUTATION_ARR_SENDMASKE_AUS
       const bool fremd = false;   // error case: the mask is off, a row write crosses modules
 #else
@@ -582,8 +589,39 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
     // Loop deck K7b: the DJ filter of the track (spur/<n>/filter, -1 low-pass .. +1 high-pass), behind the chain and the delay compensation, in front of the monitor join and the fader loop.
     // The value is read per sample like the fader (a lane or a stellwerk course in vl, else the base value). Skipped while it is 0 over the whole block and the filter holds no state:
     // that is bit-equal to running it (DjFilter is exactly dry at k = 0). Scratch is a member: no allocation, no lock.
+    // Loop lane strip K2: while the colour art is not FILTER the same value drives the track's ColorFx instead of the DjFilter, with the per-sample k the DjFilter would get (cell envelopes included), the
+    // switching of the mixer's Kanalzug: an art change clears the states of the instance (and of the DjFilter when it comes from FILTER), the dead zone |k| < 0.05 is bit-dry unless a tail runs, and an idle
+    // track (dead zone over the whole block, no tail, states clear) skips the work. With the art FILTER nothing of this runs and the DjFilter path below is what it was.
     {
-      const Wert& fi = w_[i][ARR_F_FILTER];
+      const Wert fi = wert_ueber(i, ARR_F_FILTER);   // S1b K5: a cell envelope wins over the knob
+#ifdef CYPHERDJ_MUTATION_ARR_COLOR_ART_STARR
+      const int col_art_ = 0;   // error case: the colour art is never taken over, the track always runs the DjFilter
+#endif
+      if (col_art_ != col_lage_[i]) {   // the art changed since this track last ran its filter stage
+        if (col_lage_[i] == 0) filt_[i].leeren();
+        col_[i].setze(col_art_, col_param_, col_spb_);   // an art change clears the instance (back to FILTER: idle, nothing runs)
+        if (col_art_ == 0) col_[i].leeren();
+        col_lage_[i] = static_cast<int8_t>(col_art_);
+      }
+      if (col_art_ != 0) {
+        double kmax = 0.0;
+        if (fi.vl) {
+          for (int t = 0; t < m; ++t) {
+            const float v = fi.vl[t];
+            const double k = v != v ? 0.0 : std::min(1.0, std::max(-1.0, static_cast<double>(v)));
+            filt_k_[t] = k;
+            kmax = std::max(kmax, std::fabs(k));
+          }
+        } else {
+          const double k = fi.w != fi.w ? 0.0 : std::min(1.0, std::max(-1.0, static_cast<double>(fi.w)));
+          std::fill(filt_k_, filt_k_ + m, k);
+          kmax = std::fabs(k);
+        }
+        if (!col_[i].ruhig(kmax)) {
+          col_[i].setze(col_art_, col_param_, col_spb_);
+          col_[i].verarbeite(bus_l_[i], bus_r_[i], m, filt_k_);
+        }
+      } else {
       bool alle_null = !fi.vl && fi.w == 0.0f;
       if (!alle_null || !filt_[i].leer()) {
         if (fi.vl) {
@@ -603,6 +641,7 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
           filt_[i].verarbeite(bus_l_[i], bus_r_[i], m, filt_k_);
           filt_[i].abschneiden(1e-300);   // as Kanalzug does: a decayed state becomes exactly 0, so a silent track at k = 0 skips the filter again
         }
+      }
       }
     }
     // Loop deck channel strip KZ2: the 3-band isolator of the track (spur/<n>/eq/{tief,mitte,hoch}, dB per sample from ARR_F_EQ0 + 0..2), directly behind the DJ filter. While all three bands are
@@ -745,8 +784,47 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
       al = za == 0 ? pm_l_ : grp_l_[za - 1];
       ar = za == 0 ? pm_r_ : grp_r_[za - 1];
     }
+    const int dj_k = snap_ && snap_->spur[i].ausgang > 0 ? top_dj(snap_->spur[i].ausgang) : 0;   // the DJ channel the track's top group leads into (0 = none)
     Send sd[ARR_RETURNS];
-    const int n_sends = sends_bereiten(i, sd, snap_ ? (snap_->spur[i].ausgang > 0 ? top_dj(snap_->spur[i].ausgang) : 0) : 0);
+    const int n_sends = sends_bereiten(i, sd, dj_k);
+    // Loop lane strip K3: the track's beat FX instances (spur/<n>/fx/1, /2). A row switch opens or closes the input of the instance of the track's pool slot (Mixer::fx_zuweisung_setze); an instance that is open
+    // or still ringing takes the track's signal after fader, pan and mute/solo fade, FX 1 then FX 2 in series, before it goes into the target. Nothing of this runs for an idle lane: bit-equal.
+    const int fx_s = fx_slot_[i];
+    bool fx_weg = false;
+    if (fx_s >= 0) {
+      for (int u = 0; u < ARR_FX_EINHEITEN; ++u) {
+        const Wert& fw = w_[i][ARR_F_FX0 + u];
+        const bool auf = (fw.vl ? fw.vl[m - 1] : fw.w) >= 0.5f;
+        cdj::BeatFx& b = fx_pool_[u * ARR_FX_POOL + fx_s];
+        if (auf != fx_auf_[u][fx_s]) {
+          fx_auf_[u][fx_s] = auf;
+          b.setze(fx_art_[u], fx_beats_[u], fx_wet_[u], fx_p1_[u], fx_an_[u] && auf);
+        }
+#ifdef CYPHERDJ_MUTATION_ARR_FX_OHNE_SCHWANZ
+        fx_weg = fx_weg || (auf && b.klingt());   // error case: closing the input drops the instance at once, the tail is cut
+#else
+        fx_weg = fx_weg || b.klingt();
+#endif
+      }
+    }
+    // Loop lane strip K4: spur/<n>/fx/3 with a graph on fx/3 sends what the track adds into its target into the fx/3 bus input instead (scaled by the container strip in the core); assign and release blend over
+    // ARR_FX3_BLENDE samples (S-curve, as Mixer::fx3_zuweisung_setze). A track that does not lead into a DJ channel, or without a graph on fx/3, stays on its normal path: never silent.
+    const bool fx3_kann = dj_k > 0 && !dj_master_ && dj_fx3_l_[dj_k - 1] && dj_fx3_r_[dj_k - 1] && dj_aus_l_[dj_k - 1];
+    {
+      const Wert& f3 = w_[i][ARR_F_FX0 + 2];
+      const bool wunsch = fx3_kann && fx3_graph_ && (f3.vl ? f3.vl[m - 1] : f3.w) >= 0.5f;
+      if (!fx3_kann) {
+        fx3_gew_[i] = fx3_von_[i] = 0.0f;
+        fx3_rest_[i] = 0;
+        fx3_zuw_[i] = false;
+      } else if (wunsch != fx3_zuw_[i]) {
+        fx3_von_[i] = fx3_gew_[i];   // continue from the weight reached, also when a blend is interrupted
+        fx3_zuw_[i] = wunsch;
+        fx3_rest_[i] = ARR_FX3_BLENDE;
+      }
+    }
+    const bool fx3 = fx3_kann && (fx3_zuw_[i] || fx3_gew_[i] > 0.0f || fx3_rest_[i] > 0);
+    const bool puffer = fx_weg || fx3;   // what goes into the target is held back for the second pass after this loop
     const float* gbl = zg > 0 ? gsend[zg - 1] : nullptr;   // fade of the target group and of its ancestors: a muted group silences the sends of its members too
     float* kpl[ARR_INS_KOMP];   // structural post keys (slice 5 U1): the key buffers of the stages listening to the post of this track, mostly none
     float* kpr[ARR_INS_KOMP];
@@ -794,7 +872,15 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
 #endif
       }
       const float lz = l * gz, rz = r * gz;   // what the track adds into its target (the key above is taken before the mask)
-      if (!blende) {
+      if (puffer) {   // loop lane strip K3/K4: held back, the second pass below runs the fx chain and splits off the fx/3 share (the target blend advances as in the cases below)
+        if (blende) {
+          zw = std::min(1.0f, zw + 1.0f / ARR_ZIEL_BLENDE);
+          blende = zw < 1.0f;
+        }
+        fxs_l_[t] = lz;
+        fxs_r_[t] = rz;
+        fxs_zw_[t] = zw;
+      } else if (!blende) {
         zl[t] += lz;
         zr[t] += rz;
       } else {
@@ -835,6 +921,52 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
         }
       }
       sp = std::max(sp, std::max(std::fabs(l), std::fabs(r)));
+    }
+    if (puffer) {   // loop lane strip K3/K4: the second pass of the target add
+      if (fx_weg) {
+        for (int u = 0; u < ARR_FX_EINHEITEN; ++u) {   // FX 1 then FX 2, in series, in place (the Mixer's fx_kette)
+          cdj::BeatFx& b = fx_pool_[u * ARR_FX_POOL + fx_s];
+          if (b.klingt()) b.block(fxs_l_, fxs_r_, m, fx_beat0_, fx_bps_);
+        }
+      }
+      float* d3l = fx3 ? dj_fx3_l_[dj_k - 1] : nullptr;
+      float* d3r = fx3 ? dj_fx3_r_[dj_k - 1] : nullptr;
+      if (fx3) dj_fx3_da_[dj_k - 1] = true;
+      for (int t = 0; t < m; ++t) {
+        float nl = fxs_l_[t], nr = fxs_r_[t];
+        if (fx3) {
+          float a = fx3_zuw_[i] ? 1.0f : 0.0f;
+          if (fx3_rest_[i] > 0) {
+#ifdef CYPHERDJ_MUTATION_ARR_FX3_OHNE_BLENDE
+            fx3_rest_[i] = 0;   // error case: the assignment jumps, no blend
+#else
+            const float v = 1.0f - static_cast<float>(fx3_rest_[i]) / ARR_FX3_BLENDE;
+            a = fx3_von_[i] + (a - fx3_von_[i]) * (v * v * (3.0f - 2.0f * v));
+            --fx3_rest_[i];
+#endif
+          }
+          fx3_gew_[i] = a;
+#ifdef CYPHERDJ_MUTATION_ARR_FX3_KOPIE
+          d3l[t] += nl * a;   // error case: the share stays on the normal path as well (copy, not insert)
+          d3r[t] += nr * a;
+#else
+          d3l[t] += nl * a;
+          d3r[t] += nr * a;
+          nl *= 1.0f - a;
+          nr *= 1.0f - a;
+#endif
+        }
+        if (!al) {
+          zl[t] += nl;
+          zr[t] += nr;
+        } else {
+          const float w1 = fxs_zw_[t];
+          al[t] += nl * (1.0f - w1);
+          ar[t] += nr * (1.0f - w1);
+          zl[t] += nl * w1;
+          zr[t] += nr * w1;
+        }
+      }
     }
     ms_gain_[i] = g_ms;
     spitze_[i] = sp;
@@ -1405,6 +1537,34 @@ void Arrangement::bk_ueber_melden(int m) {
 void Arrangement::bk_ueber_loeschen() {
   for (auto& je_slot : bk_ueber_)
     for (BkUeber& u : je_slot) u = BkUeber{};
+}
+
+float Arrangement::feld_ziel(int streifen, int feld) const {
+  return wert_ueber(streifen, feld).w;
+}
+
+// The value the strip mixes with: the cell envelope while a launcher cell plays one for the field (end value in w, the ramp of this block in vl), else the knob.
+Arrangement::Wert Arrangement::wert_ueber(int streifen, int feld) const {
+  if (streifen >= 0 && streifen < ARR_SPUREN && feld >= 0 && feld < ARR_FELDER && zell_ueber_[streifen][feld].da && zell_ueber_[streifen][feld].zeile >= 0) {
+    Wert w;
+    w.w = zell_ueber_[streifen][feld].w;
+    w.vl = zell_buf_[zell_ueber_[streifen][feld].zeile];
+    return w;
+  }
+  return w_[streifen][feld];
+}
+
+bool Arrangement::huelle_wert(int streifen, int feld, float& w) const {
+  if (streifen < 0 || streifen >= ARR_SPUREN || feld < 0 || feld >= ARR_FELDER) return false;
+  const ZellUeber& u = zell_ueber_[streifen][feld];
+  if (!u.da || u.frei || u.zeile < 0) return false;
+  w = u.w;
+  return true;
+}
+
+bool Arrangement::regler_huelle(int regler, float& w) const {
+  if (!zell_an_ || regler < 0 || regler >= sw::MAX_REGLER || regler_spur_[regler] < 0) return false;
+  return huelle_wert(regler_spur_[regler], regler_feld_[regler], w);
 }
 
 void Arrangement::verlaeufe_nachfuehren(int m) {

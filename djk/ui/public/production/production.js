@@ -198,6 +198,8 @@ export const FEHLER_TEXT = {
   kette_voll: 'The insert chain of that strip is full (five stages at most)', ins_voll: 'All stages of that kind are in use (twelve compressors, eight EQs, four saturators, two limiters, eight utilities and eight effect graphs at most)',
   kein_loopdeck: 'That group or track does not belong to a loop deck', platz_belegt: 'That place already holds a loop deck',
   zelle_leer: 'That loop deck cell is empty', modul_nicht_umwandelbar: 'That module cannot become a loop deck cell; it is left untouched',
+  zelle_voll: 'That slot holds a cell: empty it first', zeilen_voll: 'All 8 rows are in use; 16 rows come with the next slice',
+  huelle_ungueltig: 'That envelope is not valid: a known target, at most 4 envelopes per cell, at most 64 points, beats rising inside the cell, values inside the range of the target',
   host_grenze: 'All four plugin hosts are in use: remove a plugin stage before adding another', host_fehlt: 'The plugin host is not running or not ready yet',
   plugin_nicht_ladbar: 'That plugin cannot be loaded', zustand_passt_nicht: 'The saved plugin state belongs to another plugin and was not applied',
   param_unbekannt: 'That plugin has no such parameter',

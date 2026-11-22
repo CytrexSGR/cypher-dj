@@ -431,23 +431,12 @@ body.bereich-effekte #bestand .reiter, body.bereich-effekte #bestand #suche, bod
 .slotzeile { display: flex; flex-wrap: wrap; gap: 4px; grid-column: 1 / -1; }
 .instanzname { font-size: 10px; font-weight: 800; letter-spacing: .1em; color: var(--farbe); }
 
-/* Studio S1: Vollansicht STUDIO (Andreas 2026-09-29: „strudel studio vollansicht für strudel live jam session").
-   Nur die SICHT wechselt: Kern, Decks und Loops laufen weiter. Oben drei Instanzen nebeneinander, unten ihre drei
-   Kanalzüge mit L1/L2, rechts die Loop-Boxen; vom oberen Mischer bleibt nur MASTER. */
+/* View switch (DJ, STUDIO, PRODUCTION, TRACKER). The SESSION view (view id `studio`) is gone since 2026-11-22: the loop deck pop-up replaces it. */
 .ansicht { display: flex; gap: 2px; }
 .ansicht button { font-size: 10px; font-weight: 800; letter-spacing: .08em; padding: 4px 10px; border-radius: 5px; color: var(--dim); border: 1px solid var(--line); }
 .ansicht button.an { background: var(--text); border-color: var(--text); color: #0e0f12; }
-body.studio #pult { grid-template-columns: calc(5 * var(--zug) + 36px) minmax(0, 1fr) calc(var(--zug) + 10px);
-  grid-template-rows: minmax(0, 1.4fr) minmax(0, 1fr); grid-template-areas: "c c mo" "mu d mo"; }
-body.studio .deck[data-deck] { display: none; }
-body.studio #mischer.mix-oben { grid-template-columns: var(--zug); }
-body.studio #mischer.mix-oben > .zug, body.studio #mischer.mix-oben > .xfader { display: none; }
-body.studio .instanzen { gap: 10px; }
-body.studio #mischer-unten { grid-template-columns: repeat(5, var(--zug)); justify-content: start; overflow-y: auto; overflow-x: hidden; }   /* Kanalzüge mit PFL sind höher als der Platz: scrollen statt über die Library ragen (Andreas 11.10.: LIBRARY nicht klickbar) */
-body.studio .muster-feld { font-size: 15px; }
-/* Studio S7: Spurbänder (Automationsspuren als Linien) nur in STUDIO */
+/* Studio S7: Spurbänder (Automationsspuren als Linien): no view shows them any more (the STRUDEL tab of the removed SESSION view did) */
 .spurbaender { display: none; }
-body.studio .spurbaender { display: flex; flex-direction: column; gap: 4px; margin-top: 0; }
 /* Kopfspalte 104 px als 2x2-Raster, die Meldung darunter einzeilig über die ganze Breite und immer da (feste Höhe):
    keine Meldung ändert je die Höhe der Zeile oder der Strudel-Felder (Rereview2 Q1) */
 .spurband { display: grid; grid-template-columns: 104px minmax(0, 1fr); grid-template-rows: 72px 14px; gap: 2px 4px; align-items: start; }
@@ -636,12 +625,9 @@ button.laden.in-box:disabled { opacity: .4; }
 #demo-ansage[data-art="stimme"] { border-color: var(--c); }
 #demo-ansage[data-art="stimme"] .ansage-wer { color: var(--c); }
 
-/* Deck 3 (plan live modules, task 0): compact strip under both deck rows, across the whole desk. Studio view hides it (it only shows Strudel). */
+/* Deck 3 (plan live modules, task 0): compact strip under both deck rows, across the whole desk. */
 #pult { grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) auto; grid-template-areas: "a mo b" "c mu d" "s s s"; }
-  border: 1px solid var(--line); border-top: 2px solid var(--farbe); border-radius: 8px; }
-body.studio 
 /* Live modules (plan live-module task 4): EXPORT in the deck loop rows; .live-regler is also the class of the loop deck fader. */
-.exportknopf { margin-left: 6px; font-weight: 700; letter-spacing: .08em; border-color: var(--farbe); color: var(--farbe); }
 .exportknopf:disabled { opacity: .35; color: var(--dim); border-color: var(--line); }
 .live-regler { height: 34px; margin: 0; accent-color: var(--farbe); cursor: pointer; touch-action: none; }
 
@@ -655,7 +641,6 @@ body:not(.studio) #pult > [data-platz="3"] { grid-area: p3; } body:not(.studio) 
 .platzkopf[data-platz-kopf="1"] { grid-area: h1; } .platzkopf[data-platz-kopf="2"] { grid-area: h2; }
 .platzkopf[data-platz-kopf="3"] { grid-area: h3; } .platzkopf[data-platz-kopf="4"] { grid-area: h4; }
 body:not(.studio) .platz-aus { display: none !important; }
-body.studio .platzkopf, body.studio #platz-loops, body.studio #platz-loops2 { display: none; }
 .platzkopf { display: flex; align-items: center; gap: 10px; padding: 0 4px; min-height: 26px; min-width: 0; }
 .platztext { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 650; letter-spacing: .06em; color: var(--text); }
 .platzhinweis { color: var(--warn, #e0a040); font-size: 11px; white-space: nowrap; }
@@ -687,6 +672,11 @@ body:not(.studio) #pult [data-mix-zeile="1"] { grid-row: 1 / 3; } body:not(.stud
 body:not(.studio) #pult [data-mix-spalte="2"] { grid-column: 2; } body:not(.studio) #pult [data-mix-spalte="3"] { grid-column: 3; }
 body:not(.studio) #pult [data-mix-spalte="4"] { grid-column: 4; } body:not(.studio) #pult [data-mix-spalte="5"] { grid-column: 5; }
 body:not(.studio) #pult [data-mix-spalte="6"] { grid-column: 6; }
+/* 2026-11-22 (owner: "die fader ... so eingefroren wie wenn die library unten aufgeklappt ist"): the channel strips and the master keep the
+   height they have with the library open; a collapsed library gives its room to the places, not to longer faders. The strip sits at the top of
+   its row; on a smaller window the row is lower than the cap and nothing changes. */
+:root { --zug-hoehe-max: 360px; }
+body:not(.studio) #pult .zug, body:not(.studio) #pult .mitte { align-self: start; height: 100%; max-height: var(--zug-hoehe-max); }
 /* The master strip (2026-11-14, back in the middle column): level and glue, a tall meter, PFL, FX 1/2, then the headphones (moved here by ordneMitte). */
 body:not(.studio) #pult .mitte { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto auto minmax(40px, 1fr) auto auto auto;
   align-items: center; justify-items: center; gap: 4px 6px; padding: 4px 8px 8px; border-top: 2px solid #c9ccd6; min-height: 0; }
@@ -712,7 +702,6 @@ body:not(.studio) #pult .mitte .kopfhoerer .summe { flex-direction: column; }
 body:not(.studio) #pult .mitte .kopfhoerer .summe > span { font-size: 9px; letter-spacing: .1em; color: var(--dim); }
 body:not(.studio) #pult .mitte .kopfhoerer .knopf { width: 32px; height: 32px; }
 /* Beat FX 1, 2 and COLOR under the master (moved here by ordneMitte); the Studio view keeps them in the header. */
-body.studio .fxmitte { display: none; }
 body:not(.studio) #pult .fxmitte { display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow-y: auto; overflow-x: hidden; background: none; border: 0; }
 body:not(.studio) #pult .fxmitte > .fxeinheit { display: grid; grid-template-columns: 1fr 1fr; align-items: center; justify-items: center; gap: 4px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 5px 6px 6px; row-gap: 3px; }
@@ -826,7 +815,6 @@ body:not(.studio):not(.produktion) #kopf > #fx { order: 4; }   /* DJ view: only 
 #platz-remix .remix-feld { flex: 1 1 0; min-height: 0; min-width: 0; overflow: hidden; }
 #platz-remix .remix-feld > * { width: max-content; box-sizing: border-box; }
 #platz-remix .remix-feld.remix-aus { opacity: .4; pointer-events: none; }
-body.studio #platz-remix { display: none; }
 
 /* COLOR PARAMETER knob (mischer_mitte.js colorKnopf): the range input only carries the value. On FILTER the parameter does nothing (colorfx.cpp), so it is dimmed. */
 .colorfx .colorknopf { width: 30px; height: 30px; --farbe: var(--warn); }
@@ -976,21 +964,6 @@ button.sq-zelle:hover { border-color: var(--text); }
 .sq-punkt { fill: var(--col); stroke: var(--panel); stroke-width: 1.5; cursor: grab; }
 .sq-punkt:hover { stroke: var(--text); }
 .sq-punkt.geklemmt { stroke: var(--warn); stroke-width: 2; }   /* base plus offset leaves 0..1 */
-body.studio .seqplatz[data-seq-sp="1"] { grid-area: d; }
-body.studio .seqplatz[data-seq-sp="2"] { grid-area: q2; } body.studio .seqplatz[data-seq-sp="3"] { grid-area: q3; } body.studio .seqplatz[data-seq-sp="4"] { grid-area: q4; }
-/* Studio view: the SEQ nodes sit in the lower row next to the strips, below the Strudel instances; a second node takes a column beside the first, a third and fourth a second row */
-body.studio #pult[data-seq-n="2"] { grid-template-columns: var(--mu-breite) minmax(0, 1fr) minmax(0, 1fr) calc(var(--zug) + 10px); grid-template-areas: "c c c mo" "mu d q2 mo"; }
-body.studio #pult[data-seq-n="3"], body.studio #pult[data-seq-n="4"] { grid-template-columns: var(--mu-breite) minmax(0, 1fr) minmax(0, 1fr) calc(var(--zug) + 10px);
-  grid-template-rows: minmax(0, 1.1fr) minmax(0, .9fr) minmax(0, .9fr); }   /* three or four SEQ nodes: two rows of two beside the strips, so a cell stays readable */
-body.studio #pult[data-seq-n="3"] { grid-template-areas: "c c c mo" "mu d q2 mo" "mu q3 q3 mo"; }
-body.studio #pult[data-seq-n="4"] { grid-template-areas: "c c c mo" "mu d q2 mo" "mu q3 q4 mo"; }
-/* Studio view: the deck strip of a SEQ place (the node of the DJ view, moved after L2 by slots_view.js) is shown with the other strips; the strip column
-   grows by one strip per SEQ place up to 42vw, beyond that the row scrolls sideways. The other deck strips stay out of the Studio view as before. */
-body.studio #pult { --mu-breite: min(calc((5 + var(--seq-n, 0)) * var(--zug) + 36px), 42vw); }
-body.studio #pult[data-seq-n="1"] { grid-template-columns: var(--mu-breite) minmax(0, 1fr) calc(var(--zug) + 10px); }
-body.studio .zug[data-deck]:not([data-studio-zug]) { display: none !important; }
-body.studio .zug[data-studio-zug] { display: flex !important; }
-body.studio #pult:not([data-seq-n="0"]) #mischer-unten { grid-auto-flow: column; grid-template-columns: none; grid-auto-columns: var(--zug); overflow-x: auto; }
 
 /* CONTROLLERS tab: the read-only controller register (register_view.js) */
 body.bereich-controller #bestand .reiter, body.bereich-controller #bestand #suche, body.bereich-controller #bestand #bestand-info,
@@ -1189,4 +1162,18 @@ body :is([data-p="play"], [data-w="play"], [data-p="stopp"], [data-w="stopp"]):d
 .st-mute { font-size: 10px; font-weight: 800; padding: 2px 0; border-radius: 5px; color: var(--dim); border: 1px solid var(--line); }
 .st-mute.an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }
 .st-leer { color: var(--dim); font-size: 11px; }
-body.studio .stemsplatz { display: none; }
+
+/* Strudel place: one tab per stream (strudel_module.js). Only the selected row is shown, and it takes the height of the place: no scrollbar by default. */
+.strom-reiter { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+.strom-reiter-tab { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 800; letter-spacing: .08em; padding: 3px 12px; border-radius: 5px 5px 0 0; background: #0e0f12; color: var(--dim); border: 1px solid var(--line); border-bottom: 2px solid transparent; }
+.strom-reiter-tab.an { color: var(--farbe); border-bottom-color: var(--farbe); background: var(--panel2); }
+.strom-aktiv { width: 7px; height: 7px; border-radius: 50%; background: var(--gut, #4ade80); }
+.strom-aktiv[hidden] { display: none; }
+.strom-reiter .strom-plus { margin: 0 0 0 4px; align-self: center; }
+.instanz[hidden] { display: none; }
+body:not(.studio) #deck-c .instanz:not([hidden]) { flex: 1 1 auto; min-height: 0; }
+body:not(.studio) #deck-c .instanz:not([hidden]) > .instanz-koerper { flex: 1 1 auto; min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+body:not(.studio) #deck-c .instanz-editor > .muster-feld { flex: 1 1 auto; min-height: 80px; }
+
+.sq-zu { min-width: 22px; padding: 0 6px; }
+.sq-unbenutzt.an { border-color: var(--text); }

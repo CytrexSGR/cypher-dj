@@ -104,6 +104,7 @@ void Kern::einsortieren25(const Befehl& c) {
       }
       mixer_->fx_einheit_setze(einheit - 1, c.nr, c.dauer_beats, c.wert, static_cast<float>(c.wert_beats),
                                c.raster_beats, c.quell_beat, c.an != 0);
+      arr_->fx_einheit_setze(einheit - 1, c.nr, c.dauer_beats, c.wert, static_cast<float>(c.wert_beats), c.an != 0);   // loop lane strip K3: the same unit settings feed the track instances
       quittung(c.id, c.quelle, 1, sample_, beat0);
       Ereignis x{};
       x.art = Ereignis::FX;
@@ -785,9 +786,13 @@ void Kern::audio(int64_t n0, int n) {
       }
     }
     arr_bk_->takt(karte.beat_at((double)s0), karte.bpm_at((double)s0) / 60.0 / 48000.0);   // S20: beat and tempo for the graphs of the bk tracks
+    arr_->fx_takt(karte.beat_at((double)s0), karte.bpm_at((double)s0) / 60.0 / 48000.0);   // loop lane strip K3: the beat and tempo of the track instances, as mixer_->fx_takt below
+    arr_->setze_fx3_graph(mixer_->fx3_graph_da());   // loop lane strip K4: no graph on fx/3, no share diverted
     {   // DJ view places (decision 7): the pairs of the DJ channels that a group of the snapshot leads into, zeroed here and added into the channel input after the block (below). A channel nobody feeds is not touched.
       float* dl[Arrangement::DJ_KANAELE] = {};
       float* dr[Arrangement::DJ_KANAELE] = {};
+      float* fl[Arrangement::DJ_KANAELE] = {};   // loop lane strip K4: the pairs of the diverted FX 3 share, handed with the DJ pair of the same channel
+      float* fr[Arrangement::DJ_KANAELE] = {};
       for (int c = 0; c < Arrangement::DJ_KANAELE; ++c) {
         dj_gereicht_[c] = arr_->dj_kanal_aktiv(c + 1);   // asked once per sub-block, BEFORE block(): block() counts the held tail of a cleared module down and would answer false afterwards
         if (!dj_gereicht_[c]) continue;
@@ -795,8 +800,13 @@ void Kern::audio(int64_t n0, int n) {
         std::memset(dj_aus_r_[c], 0, sizeof(float) * static_cast<size_t>(m));
         dl[c] = dj_aus_l_[c];
         dr[c] = dj_aus_r_[c];
+        std::memset(dj_fx3_l_[c], 0, sizeof(float) * static_cast<size_t>(m));
+        std::memset(dj_fx3_r_[c], 0, sizeof(float) * static_cast<size_t>(m));
+        fl[c] = dj_fx3_l_[c];
+        fr[c] = dj_fx3_r_[c];
       }
       arr_->dj_ausgang(dl, dr);
+      arr_->dj_fx3_ausgang(fl, fr);
     }
     arr_->dj_schluessel(schl_l_, schl_r_);   // 1.10 slice 5 U2b (E6, E7), K4: containers A..D and the streams 1..16 for the sidechain keys; always handed, live and in a render (a render's inputs are silent)
     for (int h = 1; h <= ARR_INS_HOST; ++h)   // plan 1.11 T4: the effect-host ports of this cycle, offset to this sub-block (pointer stores; a port that is not there stays nullptr: the stage plays dry)
@@ -805,6 +815,7 @@ void Kern::audio(int64_t n0, int n) {
     arr_->setze_zyklus_start(zyklus_ns_ != 0 ? zyklus_ns_ + static_cast<int64_t>(off) * 1000000000LL / 48000 : 0);   // mehrkern 3.2: the nominal start of this sub-block, for the time gates of phase Q
     std::memset(prod_l_, 0, sizeof(float) * static_cast<size_t>(m));   // Arrangement::block ADDS into its output: a zeroed scratch, then the production service of the mixer
     std::memset(prod_r_, 0, sizeof(float) * static_cast<size_t>(m));
+    arr_->setze_color(mixer_->color_art_ganz(), mixer_->color_param_wert(), mixer_->color_samples_pro_beat());   // loop lane strip K2: the colour art of the mixer's channel strips for the track filter stage
     arr_->block(karte, s0, m, prod_l_, prod_r_, mixer_->summe_eingang_l(),
                 mixer_->summe_eingang_r(), mixer_->pfl_eingang_l(), mixer_->pfl_eingang_r());
 #ifdef CYPHERDJ_MUTATION_QUELLEN_NACH_ARR
@@ -918,6 +929,7 @@ void Kern::audio(int64_t n0, int n) {
     huellen_block(s0, m, cue_l_ + off, cue_r_ + off);  // Ohr (§6.2): Mess-Abgriff vor dem Fader
     decks_verlauf_ende(m);  // Scheibe 31
     ereignisse_uebernehmen();
+    huellen_melden(s0, m);
     off += m;
   }
 }
@@ -1005,6 +1017,35 @@ void Kern::huellen_block(int64_t s0, int m, const float* cue_l, const float* cue
   }
 }
 
+// S1b K6: see core.h. Runs after arr_->block of the sub-block, so huelle_wert is the value at the last sample s0 + m - 1.
+void Kern::huellen_melden(int64_t s0, int m) {
+  if (!arr_->huellen_da() && huelle_offen_ == 0) return;
+  const sw::ReglerTabelle& tab = sw_->tabelle();
+  const int64_t s = s0 + m - 1;
+  for (int sp = 0; sp < ARR_SPUREN; ++sp)
+    for (int f = 0; f < ARR_FELDER; ++f) {
+      const int r = arr_->feld_regler(sp, f);
+      if (r < 0) continue;
+      HuelleMeldung& g = huelle_gemeldet_[sp][f];
+      float w;
+      const bool treibt = arr_->huelle_wert(sp, f, w);
+      if (!treibt && !g.an) continue;
+      if (treibt && g.an && s - g.sample < sw::REGLER_MELDUNG_ABSTAND) continue;   // 50 Hz at most, like every regulator
+      Ereignis x{};
+      x.art = Ereignis::REGLER;
+      x.sample = s;
+      x.beat = plan_.karte().beat_at(static_cast<double>(s));
+      kopiere(x.pfad, tab.def(r).pfad, sizeof x.pfad);
+      x.wert = treibt ? w : sw_->wert_fest(r);   // let go: the knob is the truth again
+      kopiere(x.text, "huelle", sizeof x.text);   // S1b K2: state mirror, never a hand; the release event (knob value) is part of the mirror too (INTERFACES 5.7)
+      if (!ereignisse_->schiebe(x)) continue;   // ring full: try again next sub-block (the state stays as it was)
+      if (treibt && !g.an) ++huelle_offen_;
+      if (!treibt && g.an) --huelle_offen_;
+      g.an = treibt;
+      g.sample = s;
+    }
+}
+
 void Kern::ereignisse_uebernehmen() {
   const sw::Ereignis* ev;
   const int ne = sw_->ereignisse(&ev);
@@ -1031,7 +1072,7 @@ void Kern::ereignisse_uebernehmen() {
       case sw::EreignisArt::regler:
         x.art = Ereignis::REGLER;
         kopiere(x.pfad, tab.def(s.regler).pfad, sizeof x.pfad);
-        x.wert = s.wert;
+        x.wert = s.wert;   // S1b K2: always the knob's real value and holder (a grip during an envelope is Andreas' knob); the envelope value goes out as halter `huelle` (huellen_melden)
         kopiere(x.text, s.halter, sizeof x.text);
         break;
       case sw::EreignisArt::hand:

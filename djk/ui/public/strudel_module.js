@@ -18,6 +18,23 @@ const KNOPF = '<svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="
 const farbe = (n) => { const k = (n - 1) % 3; return `var(--c${k ? k + 1 : ''})`; };   // three colours, repeated
 const PLATZHALTER = { 1: 's("bd*4, hh*8")', 2: 's("bat_synth*4")', 3: 's("bat_stab*2")' };
 const wurzel = () => $('#strudel-zeilen');
+// Tabs (one per stream row, only the selected row is shown). The choice is per viewer; every storage access may throw and the page works without it.
+const TAB_SCHLUESSEL = 'djk-strudel-tab';
+let gewaehlt = null;   // the stream the viewer picked (stored value until a pick); the shown stream falls back to the first tab when it has no row
+let gewaehltGelesen = false;
+function leseTab() {
+  if (gewaehltGelesen) return;
+  gewaehltGelesen = true;
+  try { const v = Number(localStorage.getItem(TAB_SCHLUESSEL)); if (Number.isInteger(v) && v > 0) gewaehlt = v; } catch { /* no storage */ }
+}
+function merkeTab(n) { try { localStorage.setItem(TAB_SCHLUESSEL, String(n)); } catch { /* no storage */ } }
+/** The stream whose row is shown: the pick when it has a row, else the first row. */
+export function gewaehlterStrom() {
+  leseTab();
+  const ns = $$('.instanz', wurzel()).map((x) => Number(x.dataset.strom));
+  return ns.includes(gewaehlt) ? gewaehlt : (ns[0] ?? null);
+}
+function waehleTab(n) { leseTab(); gewaehlt = n; merkeTab(n); zeigeAuswahl(); }
 
 function zeilenHtml(n) {
   return `<div class="instanzkopf"><span class="instanzname">${stromName(n)}</span><span class="erzeuger-hinweis" hidden>no generator</span>`
@@ -88,9 +105,67 @@ function zeigeSlotRegler(z, n) {
   for (const k of $$('.schalter[data-pfad]', s)) zeigeWert(k.dataset.pfad);
 }
 
+/** The tab bar: the first child of the place body, created on demand. */
+function reiterLeiste() {
+  const w = wurzel();
+  let l = $('.strom-reiter', w);
+  if (!l) {
+    l = document.createElement('div');
+    l.className = 'strom-reiter'; l.setAttribute('role', 'tablist'); l.setAttribute('aria-label', 'Strudel streams');
+    w.prepend(l);
+  }
+  return l;
+}
+
+/** A stream plays when its generator exists AND the pattern the server holds is not empty or `silence` (what STOP sends). hatErzeuger alone only says the mixer row exists. */
+function spieltStrom(n) {
+  const text = String(instanzen.get(n)?.server?.text ?? '').trim();
+  return hatErzeuger(zustand.regler, n) && text !== '' && text !== 'silence';
+}
+
+/** Marks that follow the playing state of each stream (cheap, no polling of its own: called with the 250 ms follow-up and on every reconcile). */
+function zeigeMarken() {
+  for (const b of $$('.strom-reiter-tab', wurzel())) {
+    const an = spieltStrom(Number(b.dataset.stromReiter));
+    $('.strom-aktiv', b).hidden = !an;
+    b.dataset.aktiv = an ? '1' : '0';
+  }
+}
+
+/** Shows the row of the selected tab and hides the others (hidden, never rebuilt or moved: editors keep text, focus history and bindings). */
+function zeigeAuswahl() {
+  const w = wurzel();
+  const aktiv = gewaehlterStrom();
+  for (const z of $$('.instanz', w)) z.hidden = Number(z.dataset.strom) !== aktiv;
+  for (const b of $$('.strom-reiter-tab', w)) {
+    const an = Number(b.dataset.stromReiter) === aktiv;
+    b.classList.toggle('an', an); b.setAttribute('aria-selected', an ? 'true' : 'false');
+  }
+}
+
+function zeigeReiter(soll) {
+  const leiste = reiterLeiste();
+  const sel = $('select[data-strom-plus]', leiste);
+  for (const b of $$('.strom-reiter-tab', leiste)) if (!soll.includes(Number(b.dataset.stromReiter))) b.remove();
+  let nach = sel;   // walks backwards: the picker stays last, a tab that already sits in place is not touched
+  for (const n of [...soll].reverse()) {
+    let b = $(`.strom-reiter-tab[data-strom-reiter="${n}"]`, leiste);
+    if (!b) {
+      b = document.createElement('button');
+      b.className = 'strom-reiter-tab'; b.dataset.stromReiter = String(n); b.setAttribute('role', 'tab');
+      b.setAttribute('style', `--farbe:${farbe(n)}`);
+      b.title = `Show the ${stromName(n)} row (a dot marks a stream with a running pattern)`;
+      b.innerHTML = `<span class="strom-reiter-name">${stromName(n)}</span><span class="strom-aktiv" hidden aria-label="playing"></span>`;
+      b.addEventListener('click', () => waehleTab(n));
+    }
+    if (b.parentElement !== leiste || b.nextElementSibling !== nach) leiste.insertBefore(b, nach ?? null);   // keeps stream order
+    nach = b;
+  }
+}
+
 function zeigePicker() {
   const w = wurzel();
-  let sel = $('select[data-strom-plus]', w.parent ?? w);
+  let sel = $('select[data-strom-plus]', w);
   const gezeigt = new Set($$('.instanz', w).map((x) => Number(x.dataset.strom)));
   const frei = STROEME.filter((n) => !gezeigt.has(n));
   if (!sel) {
@@ -101,9 +176,10 @@ function zeigePicker() {
       sel.value = '';
       if (!STROEME.includes(n)) return;
       geoeffnet.add(n);
+      leseTab(); gewaehlt = n; merkeTab(n);   // the new stream's tab is selected
       zeigeStromZeilen();
     });
-    (w.parent ?? w).append(sel);
+    reiterLeiste().append(sel);
   }
   sel.innerHTML = `<option value="">+ STREAM</option>${frei.map((n) => `<option value="${n}">${stromName(n)}${n > 3 ? '' : ` (${n})`}</option>`).join('')}`;
   sel.hidden = frei.length === 0;
@@ -123,7 +199,10 @@ export function zeigeStromZeilen() {
     $('[data-strom-geraete]', z).hidden = !stromSpur(live.projekt, n);   // per-stream effects live in the device window of the track; no track, nothing to open
     zeigeSlotRegler(z, n);
   }
+  zeigeReiter(soll);
   zeigePicker();
+  zeigeAuswahl();
+  zeigeMarken();
 }
 
 /** Closes the rows that were opened by hand and have no track. */
@@ -132,9 +211,9 @@ export function schliesseGeoeffnete() { geoeffnet.clear(); zeigeStromZeilen(); }
 /** Page start: the default rows, then the follow-up of generator hint and sound column (4 times a second, cheap). */
 export function bindeStromZeilen() {
   zeigeStromZeilen();
-  const auffrischen = () => { auffrischeSound(); for (const z of $$('.instanz', wurzel())) $('.erzeuger-hinweis', z).hidden = hatErzeuger(zustand.regler, Number(z.dataset.strom)); };
+  const auffrischen = () => { auffrischeSound(); for (const z of $$('.instanz', wurzel())) $('.erzeuger-hinweis', z).hidden = hatErzeuger(zustand.regler, Number(z.dataset.strom)); zeigeMarken(); };
   setInterval(auffrischen, 250);
 }
 
-/** Brings the row of stream n to the front (a pattern was loaded into it from the library). */
-export function zeigeStrom(n) { $(`.instanz[data-strom="${n}"]`)?.scrollIntoView?.({ block: 'nearest' }); }
+/** Brings the row of stream n to the front (a pattern was loaded into it from the library): selects its tab. */
+export function zeigeStrom(n) { if (wurzel()) waehleTab(n); }

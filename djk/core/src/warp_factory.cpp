@@ -33,6 +33,21 @@ namespace {
 constexpr int INTAKE_JE_RUNDE = 2;       // Aufträge, die ein Faden je Runde übernimmt (ein Ansatz kostet ~780 µs, die Ringe der anderen Stimmen tragen 171 ms)
 constexpr int BLOECKE_JE_BESUCH = 8;     // Blöcke, die ein Faden je Besuch einer Stimme schreibt, bevor er zur nächsten geht
 constexpr int WARTE_MS = 5;
+// K4: one frame of a loop source at the fractional position q (Catmull-Rom, the neighbours wrap around the loop: the launcher's lies_kreis)
+inline void lies_rund(const float* d, int64_t n, double q, float& l, float& r) noexcept {
+  const int64_t i1 = static_cast<int64_t>(std::floor(q));
+  const float x = static_cast<float>(q - static_cast<double>(i1));
+  float a[4][2];
+  for (int j = 0; j < 4; ++j) {
+    int64_t i = (i1 - 1 + j) % n;
+    if (i < 0) i += n;
+    a[j][0] = d[2 * i];
+    a[j][1] = d[2 * i + 1];
+  }
+  l = warp_catmull(a[0][0], a[1][0], a[2][0], a[3][0], x);
+  r = warp_catmull(a[0][1], a[1][1], a[2][1], a[3][1], x);
+}
+
 constexpr int64_t QUELLE_NACHLAUF = 1024;   // Frames hinter dem Dateiende, bis die Quelle als erschöpft gilt (Bungee läuft über Nullen aus)
 
 int64_t jetzt_ns() {
@@ -67,6 +82,8 @@ struct Stimme final : WarpAbbild {
   Karte karte;
   const ArrAudio* audio = nullptr;
   bool kreis = false;                    // Schleife (WarpAnsatz::kreis): band() liest rund um die Quelle
+  bool zk_da = false;                    // K4: zk is the read map of this voice (WarpAnsatz::zell_karte, copied at the takeover)
+  ZellKarte zk;
   int64_t frames = 0;                    // Länge der Quelle, beim Übernehmen gelesen (das Audio selbst nur, solange haelt es hält)
   int modus = ARR_WARP_COMPLEX;
   std::vector<double> mb, mf;            // Marker (Kopie), je höchstens ARR_WARP_MARKER_MAX
@@ -84,6 +101,25 @@ struct Stimme final : WarpAbbild {
   void band(int64_t ab, int n, float* l, float* r) const noexcept override {
     const float* d = audio->daten;
     const int64_t fr = audio->frames;
+    if (zk_da && kreis && fr > 0) {   // K4: the played frame f of the cell is the source read zell_lesen(zk, f); silence reads (-1) are 0, a seam crossfade is a + b
+      for (int i = 0; i < n; ++i) {
+        int64_t f = (ab + i) % fr;
+        if (f < 0) f += fr;
+        const ZellLesung zl = zell_lesen(zk, static_cast<double>(f));
+        float al = 0.0f, ar = 0.0f;
+        if (zl.a >= 0.0) lies_rund(d, fr, zl.a, al, ar);
+        if (!(zl.wb > 0.0f)) {
+          l[i] = al;
+          r[i] = ar;
+        } else {
+          float bl = 0.0f, br = 0.0f;
+          if (zl.b >= 0.0) lies_rund(d, fr, zl.b, bl, br);
+          l[i] = al * (1.0f - zl.wb) + bl * zl.wb;
+          r[i] = ar * (1.0f - zl.wb) + br * zl.wb;
+        }
+      }
+      return;
+    }
     if (kreis && fr > 0) {
       for (int i = 0; i < n; ++i) {
         int64_t f = (ab + i) % fr;
@@ -399,6 +435,8 @@ class WerkImpl final : public WarpWerk {
     st.audio = a.clip->audio;
     st.frames = a.clip->audio->frames;
     st.kreis = a.kreis;
+    st.zk_da = a.zell_karte && a.kreis && a.zell_karte->frames == a.clip->audio->frames;   // a map for another source length would read out of range: ignored
+    if (st.zk_da) st.zk = *a.zell_karte;   // a copy: the launcher's pass may be reused as soon as this order is closed
     st.modus = wq.modus;
     std::memcpy(st.mb.data(), wq.beat, static_cast<std::size_t>(wq.n) * sizeof(double));
     std::memcpy(st.mf.data(), wq.frame, static_cast<std::size_t>(wq.n) * sizeof(double));

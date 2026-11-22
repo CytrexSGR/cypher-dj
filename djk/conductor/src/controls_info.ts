@@ -90,6 +90,7 @@ for (let n = 1; n <= 32; n++) {   // D1 K1 (§1.5), E3: 32 Slots: Spur-Regler de
   tabelle.set(`spur/${n}/trim`, { pfad: `spur/${n}/trim`, kanal: null, ...r('db', -24, 24, 0) });   // container core K7
   for (const b of ['tief', 'mitte', 'hoch']) tabelle.set(`spur/${n}/kill/${b}`, { pfad: `spur/${n}/kill/${b}`, kanal: null, ...r('schalter', 0, 1, 0) });   // container core K7
   for (const b of ['tief', 'mitte', 'hoch']) tabelle.set(`spur/${n}/eq/${b}`, { pfad: `spur/${n}/eq/${b}`, kanal: null, ...r('db', -200, 6, 0) });   // loop deck channel strip KZ1: isolator band of a track, -200 = kill
+  for (const u of [1, 2, 3]) tabelle.set(`spur/${n}/fx/${u}`, { pfad: `spur/${n}/fx/${u}`, kanal: null, ...r('schalter', 0, 1, 0) });   // loop deck lane strip: FX 1 2 3 assignment of a track
 }
 for (let n = 1; n <= 16; n++) {   // 1.10 Slice 1 (§1.5): Gruppen-Regler des Arrangements, global, alle dürfen; Fader bis +6 dB
   tabelle.set(`grp/${n}/fader`, { pfad: `grp/${n}/fader`, kanal: null, ...r('db', -200, 6, 0) });

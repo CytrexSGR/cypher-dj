@@ -30,6 +30,7 @@
 #include "cypherdj/arr_playback.h"
 #include "cypherdj/stretch_ring.h"
 #include "cypherdj/clock.h"
+#include "cypherdj/zell_map.h"
 
 namespace cdj {
 
@@ -48,6 +49,11 @@ struct WarpAnsatz {
   double beat_versatz = 0.0;
   Karte karte;
   uint32_t epoche = 0;        // vergibt ansetzen()
+  // K4: read map of a launcher cell (slice order, reverse, seam fades; zell_map.h). The work reads its source through it: the stretcher sees the played cell,
+  // the played frame f is the source read zell_lesen(*zell_karte, f). nullptr (clips, an identity cell): the plain read, bit-equal to before. The pointer points into
+  // the launcher's LPass (never into the snapshot) and is only read while the order is taken (uebernehmen copies the map): the pass is kept until the order is
+  // closed (LPass::warte, offen), so it is covered by the same rule as the marker arrays of the clip. (Not called `karte`: that is the tempo map above.)
+  const ZellKarte* zell_karte = nullptr;
   bool kreis = false;         // the source is a loop (launcher passes): the stretcher reads past either end around the loop, not zeros; the clip beat range is one turn
 };
 

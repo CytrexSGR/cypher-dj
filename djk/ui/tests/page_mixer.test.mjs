@@ -45,13 +45,21 @@ test('the DJ view lets the strips take cells of the page grid around a fixed mid
   assert.match(css, /\[data-mix-zeile="1"\] \{ grid-row: 1 \/ 3; \}/);
   assert.match(css, /\.xfader \{ grid-area: 5 \/ 2 \/ 6 \/ -2;/);
   assert.match(html, /<div class="fxmitte" id="fxmitte"/);
-  assert.match(css, /body\.studio #pult \{[^}]*"c c mo" "mu d mo"/);
-  assert.match(css, /body\.studio #mischer-unten \{ grid-template-columns: repeat\(5, var\(--zug\)\)/);
+  assert.doesNotMatch(css, /body\.studio #pult/, 'the SESSION view and its rule that hid the desk are gone');
+  assert.doesNotMatch(css, /body\.studio #mischer-unten/);
 });
 
 test('the strip heads name the container letter and the type: the strip of place N is found by its container path', () => {
-  const f = app.slice(app.indexOf('function zeigeZugKoepfe('), app.indexOf('function zeigeStudioZuege('));
+  const f = app.slice(app.indexOf('function zeigeZugKoepfe('), app.indexOf('// The one entry point'));
   assert.match(f, /\.zug\[data-kanalzug="\$\{pfadVonPlatz\(n\)\}"\] \.zugname/);
   assert.match(f, /zugKopf\(zustand\.plaetze, n\)/);
   assert.doesNotMatch(f, /innerHTML|cloneNode|createElement/);
+});
+
+test('DJ view: strips and master keep the library-open height; a collapsed library does not stretch the faders', () => {
+  assert.match(css, /--zug-hoehe-max:\s*360px/);
+  const regel = css.match(/body:not\(\.studio\) #pult \.zug, body:not\(\.studio\) #pult \.mitte \{([^}]*)\}/);
+  assert.ok(regel, 'one rule caps strips and master');
+  assert.match(regel[1], /align-self:\s*start/);
+  assert.match(regel[1], /max-height:\s*var\(--zug-hoehe-max\)/);
 });

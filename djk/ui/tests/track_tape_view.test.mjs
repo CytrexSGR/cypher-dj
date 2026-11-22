@@ -63,7 +63,8 @@ test('S7 loop view: PLAY loops the line; a drag of the running loop sends exactl
   const altInterval = globalThis.setInterval;
   globalThis.setInterval = (f, ms) => { const h = altInterval(f, ms); uhren.push(h); return h; };
   t.after(() => { for (const h of uhren) clearInterval(h); globalThis.setInterval = altInterval; });
-  const { bindeSpurbaender } = await import('../public/track_tape_view.js');
+  const { bindeSpurbaender, setzeBandSichtbar } = await import('../public/track_tape_view.js');
+  setzeBandSichtbar(() => true);   // a view (the STRUDEL tab, V6) shows the bands
   const [fader] = bindeSpurbaender(post, () => 20);
   const kopf = fader.b;   // the fake keeps the head's controls flat under the band
   const svg = fader.b.kinder.find((x) => x.tag === 'svg');
@@ -124,7 +125,8 @@ test('S7 loop view review timing 2: an edit during a pending PLAY reaches the ne
   const altInterval = globalThis.setInterval;
   globalThis.setInterval = (f, ms) => { const h = altInterval(f, ms); uhren.push(h); return h; };
   t.after(() => { for (const h of uhren) clearInterval(h); globalThis.setInterval = altInterval; });
-  const { bindeSpurbaender } = await import('../public/track_tape_view.js?t2');
+  const { bindeSpurbaender, setzeBandSichtbar } = await import('../public/track_tape_view.js?t2');
+  setzeBandSichtbar(() => true);
   const [fader] = bindeSpurbaender(post, () => 20);
   const svg = fader.b.kinder.find((x) => x.tag === 'svg');
   const spielen = fader.b.querySelector('.spielen');
@@ -148,4 +150,18 @@ test('S7 loop view review timing 2: an edit during a pending PLAY reaches the ne
   const ae = posts.filter((p) => p.pfad === '/spur/aendern');
   assert.equal(ae.length, 1, `the edit made during PLAY reaches the new loop once: ${ae.length}`);
   assert.notEqual(JSON.stringify(ae[0].daten.spur), gesendet, 'it carries the edited line');
+});
+
+test('no view shows the bands by default: no GET /spur poll happens, even with the body class studio (SESSION)', async (t) => {
+  seite();
+  const gets = [];
+  globalThis.fetch = async (u) => { gets.push(u); return antwort(200, []); };
+  const uhren = [];
+  const altInterval = globalThis.setInterval;
+  globalThis.setInterval = (f, ms) => { const h = altInterval(f, ms); uhren.push(h); return h; };
+  t.after(() => { for (const h of uhren) clearInterval(h); globalThis.setInterval = altInterval; });
+  const { bindeSpurbaender } = await import('../public/track_tape_view.js?t3');
+  bindeSpurbaender(async () => antwort(200, { ok: true }), () => 20);
+  await warte(700);
+  assert.equal(gets.filter((u) => String(u).startsWith('/spur')).length, 0, 'no poll without a visible band view');
 });

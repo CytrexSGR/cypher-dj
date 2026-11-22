@@ -22,6 +22,7 @@ const ERLAUBT = [
   { datei: 'ui/hand_operation.ts', fragment: 'spur\\/([1-9]|[12][0-9]|3[0-2])', grund: 'track mixer paths spur/1..32/*: 32 tracks' },
   { datei: 'ui/areas/proj/mapping.ts', fragment: 'spur\\/([1-9]|[12][0-9]|3[0-2])\\/eq', grund: 'EQ_PFAD counts tracks: the EQ row of a loop deck track' },
   { datei: 'ui/areas/proj/mapping.ts', fragment: '(spur)\\/([1-9]|[12][0-9]|3[0-2])', grund: 'SEND_PFAD counts tracks: 32 tracks' },
+  { datei: 'ui/areas/proj/mapping.ts', fragment: 'spur\\/([1-9]|[12][0-9]|3[0-2])\\/fx', grund: 'FX_PFAD counts tracks: the FX 1 2 3 key of a loop deck track' },
   { datei: 'ui/public/curves.js', fragment: 'spur\\/(?:[1-9]|[12][0-9]|3[0-2])', grund: 'track patterns spur/1..32 (curves.js:67, :72): 32 tracks' },
   { datei: 'ui/areas/proj/core_path.ts', fragment: 'track number 1..32', grund: 'comment: lane override per track' },
   { datei: 'ui/areas/proj/session_auto.ts', fragment: 'spur(1..32 = track number nr)', grund: 'comment: /e/auto per track' },

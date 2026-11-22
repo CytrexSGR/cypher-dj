@@ -39,7 +39,7 @@ const FAELLE = [
   [{ aktion: 'set_laden', deck: 2, name: 'peak' }, 'POST', '/loopset/laden', { deck: 2, name: 'peak' }],
   [{ aktion: 'sets' }, 'GET', '/loopsets', null],
   [{ aktion: 'spur', deck: 1, spur: 2, eq: { tief: -200 } }, 'POST', '/loopdeck/spur', { deck: 1, spur: 2, eq: { tief: -200 } }],
-  [{ aktion: 'spur', deck: 1, spur: 2, fader_db: -6, mute: true, filter: 0.5, eq: { tief: 0, mitte: -3, hoch: 6 }, kill: { tief: true, hoch: false }, send: { hall: -12, delay: -200 }, unbekannt: 1 }, 'POST', '/loopdeck/spur', { deck: 1, spur: 2, fader_db: -6, mute: true, filter: 0.5, eq: { tief: 0, mitte: -3, hoch: 6 }, kill: { tief: true, hoch: false }, send: { hall: -12, delay: -200 } }],
+  [{ aktion: 'spur', deck: 1, spur: 2, fader_db: -6, mute: true, filter: 0.5, eq: { tief: 0, mitte: -3, hoch: 6 }, kill: { tief: true, hoch: false }, fx: { 1: true, 3: false }, send: { hall: -12, delay: -200 }, unbekannt: 1 }, 'POST', '/loopdeck/spur', { deck: 1, spur: 2, fader_db: -6, mute: true, filter: 0.5, eq: { tief: 0, mitte: -3, hoch: 6 }, kill: { tief: true, hoch: false }, fx: { 1: true, 3: false }, send: { hall: -12, delay: -200 } }],
   [{ aktion: 'effekt', deck: 1, spur: 1, graph: 'fx-remix' }, 'POST', '/loopdeck/effekt', { deck: 1, spur: 1, graph: 'fx-remix' }],
   [{ aktion: 'effekt', deck: 2, spur: 3, an: false }, 'POST', '/loopdeck/effekt', { deck: 2, spur: 3, an: false }],
   [{ aktion: 'effekt', deck: 1, spur: 1, graph: '' }, 'POST', '/loopdeck/effekt', { deck: 1, spur: 1, graph: '' }],
@@ -60,6 +60,7 @@ test('loopdeck: every aktion hits its route with the right body and the cypher h
   assert.equal(e.mute.type, 'boolean');
   assert.deepEqual(Object.keys(e.eq.properties), ['tief', 'mitte', 'hoch']);
   assert.deepEqual(Object.keys(e.kill.properties), ['tief', 'mitte', 'hoch']);
+  assert.deepEqual(Object.keys(e.fx.properties), ['1', '2', '3']);
   assert.deepEqual(Object.keys(e.send.properties), ['hall', 'delay']);
   assert.deepEqual([e.graph.type, e.an.type], ['string', 'boolean']);
   for (const grund of ['kein_platz', 'graph_unbekannt', 'tief', 'mitte', 'hoch', 'container', 'strip']) assert.ok(w.description.includes(grund), `description names ${grund}`);

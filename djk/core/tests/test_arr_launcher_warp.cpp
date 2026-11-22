@@ -12,6 +12,15 @@
 //      the steady level, no click (largest step <= 120 % of the tone's own)
 //   9  pool exhausted (no pass slot): the pass plays as re-pitch, sound and no step above the bound at the keylock -> re-pitch and re-pitch -> keylock joins
 //  10  133.33 BPM, 16 one-beat passes: consecutive passes butt-join exactly (no gap, no overlap)
+//  12  K4 pins: keylock identity (no map, pitch 1) at 0.9x and 1.0x: the track bus is bit-equal to the build before K4 (checksums recorded on f82e469b5)
+//  13  K4 keylock cell, shuffled 16-slot table, 0.9x: the click of source slot 3 and 12 sounds at its played slot, within 2 ms of the grid, nothing elsewhere
+//  14  K4 keylock cell, shuffled table, sine: largest step around the slot seams <= 1.5x the sine's step at 0.93x, 0.97x, 1.03x, 1.07x
+//  15  K4 pitch 2^(3/12): a 440 Hz sine cell sounds at 523.25 Hz +- 0.5 %, the loop length stays on the grid (click of the next pass)
+//  16  K4 keylock off (modus 0) loop cell, shuffled table, 0.9x: re-pitch through the map, on the grid
+//  17  K4 pool full (test_launch_paesse_sperren) with a shuffled table: the re-pitch fallback plays the map, counted in kein_platz
+//  19  K4 blende on a keylock cell (constant source): one dip at the loop seam, none doubled, nothing above the level; a hard onset mid-cell fades in
+//  18  K4 cost per 256 block of a keylock cell (identity and shuffled map): printed only
+//  20  K4 threaded werk (2 threads), 16-slot table, +3 st, tempo changes and restarts: the cell map is copied into the pass before the order (TSan), 523.25 Hz, no underrun
 //  11  threaded werk (2 threads), a tempo change every few blocks: the launcher never touches a pass the werk thread may still read (the TSan target)
 #include <algorithm>
 #include <cmath>
@@ -418,6 +427,310 @@ void fall10_naht_exakt() {   // 133.33 BPM: 16 passes butt-join
   PRUEF(luecke == 0 && doppelt == 0);
 }
 
+// ---- K4: the keylock pass reads through the cell map; transpose
+constexpr int64_t CELL4 = 4 * SPB;   // 4-beat cell of a 128 BPM source: 90 000 frames
+constexpr int64_t SLOT4 = CELL4 / 16;
+
+void karte_setzen(ArrZelle& z, const std::vector<int>& folge, bool rueck = false) {
+  cdj::ZellKarte& k = z.karte;
+  k.frames = z.frames;
+  k.kreis = true;
+  k.rueck = rueck;
+  k.blende = false;
+  k.n = static_cast<int>(folge.size());
+  for (int i = 0; i < k.n; ++i) {
+    k.g[i] = static_cast<double>(i) * static_cast<double>(z.frames) / k.n;
+    k.s[i] = static_cast<uint8_t>(folge[static_cast<size_t>(i)]);
+  }
+  if (k.n) k.g[k.n] = static_cast<double>(z.frames);
+}
+
+ArrZelle zelle128(Audio& a, int modus) {
+  ArrZelle z = zelle(a, 4.0);
+  z.modus = static_cast<int8_t>(modus);
+  return z;
+}
+
+// Hann clicks 100 frames into source slots 3 and 12 (the others silent)
+std::unique_ptr<Audio> klick_scheiben() {
+  auto x = Audio::gleich(CELL4, 0.0f);
+  const std::vector<float> h = hann_impuls();
+  for (const int sl : {3, 12})
+    for (int i = 0; i < HANN; ++i) x->d[static_cast<size_t>(2 * (sl * SLOT4 + 100 + i))] = x->d[static_cast<size_t>(2 * (sl * SLOT4 + 100 + i)) + 1] = h[static_cast<size_t>(i)];
+  x->fuellen(CELL4);
+  return x;
+}
+
+const std::vector<int> FOLGE = {3, 0, 15, 7, 1, 12, 5, 9, 2, 14, 6, 11, 4, 8, 13, 10};
+
+// The clicks of played slots k (folge[k] is 3 or 12) are measured against the grid; every other played slot is silent around its click position.
+// Returns the worst distance (1e9: a click missing or a sound where none belongs).
+double onsets(const std::vector<float>& bus, const cdj::Karte& k, double beat0, int pass) {
+  double schlimmste = 0.0;
+  for (int sl = 0; sl < 16; ++sl) {
+    const double b = beat0 + pass * 4.0 + static_cast<double>(sl * SLOT4 + 100 + 71.5) / static_cast<double>(SPB);
+    const int64_t e = static_cast<int64_t>(std::llround(k.sample_at(b)));
+    if (FOLGE[static_cast<size_t>(sl)] == 3 || FOLGE[static_cast<size_t>(sl)] == 12) {
+      const double m = klick_mitte(bus, e, 300);
+      if (m < -1e8) return 1e9;
+      schlimmste = std::max(schlimmste, std::fabs(m - static_cast<double>(e)));
+    } else {
+      float sp = 0.0f;
+      for (int64_t i = e - 150; i < e + 150; ++i) sp = std::max(sp, std::fabs(bus[static_cast<size_t>(i)]));
+      if (sp > 0.03f) return 1e9;
+    }
+  }
+  return schlimmste;
+}
+
+uint64_t fnv_bus(const std::vector<float>& v) {
+  uint64_t h = 1469598103934665603ull;
+  for (float x : v) {
+    uint32_t u;
+    std::memcpy(&u, &x, 4);
+    for (int i = 0; i < 4; ++i) h = (h ^ ((u >> (8 * i)) & 0xff)) * 1099511628211ull;
+  }
+  return h;
+}
+
+constexpr uint64_t SUMME_KL09 = 0x461ed38ab9702a96ull, SUMME_KL10 = 0xa442798ac0eba288ull;   // recorded on f82e469b5 (before K4)
+
+void fall12_pins() {
+  ++g_faelle;
+  auto sin = Audio::sinus(CELL4, 440.0, 0.5f);
+  uint64_t summe[2] = {0, 0};
+  int i = 0;
+  for (const double ratio : {0.9, 1.0}) {
+    Lauf x;
+    x.t.k = cdj::Karte{128.0 * ratio, 0};
+    x.t.laden(bauen({zelle128(*sin, 2)}));
+    PRUEF(x.t.arr.launch_start(ID, 1, 8.0, 0.0, 1, false) == LaunchGrund::ok);
+    x.bis(static_cast<int64_t>(x.t.k.sample_at(8.0 + 3 * 4.0 + 2.0)));
+    summe[i++] = fnv_bus(x.bus);
+  }
+  std::printf("Fall 12: keylock identity checksums 0x%llxull (0.9x) 0x%llxull (1.0x)\n", static_cast<unsigned long long>(summe[0]), static_cast<unsigned long long>(summe[1]));
+  PRUEF(summe[0] == SUMME_KL09);
+  PRUEF(summe[1] == SUMME_KL10);
+}
+
+void fall13_onsets() {
+  ++g_faelle;
+  auto kl = klick_scheiben();
+  ArrZelle z = zelle128(*kl, 2);
+  karte_setzen(z, FOLGE);
+  Lauf x;
+  x.t.k = cdj::Karte{128.0 * 0.9, 0};
+  x.t.laden(bauen({z}));
+  PRUEF(x.t.arr.launch_start(ID, 1, 8.0, 0.0, 1, false) == LaunchGrund::ok);
+  x.bis(static_cast<int64_t>(x.t.k.sample_at(8.0 + 2 * 4.0 + 1.0)));
+  const double d1 = onsets(x.bus, x.t.k, 8.0, 0), d2 = onsets(x.bus, x.t.k, 8.0, 1);
+  std::printf("Fall 13: keylock, shuffled table, 0.9x: worst click distance pass 1 %.2f, pass 2 %.2f samples (limit 96), kein_platz %llu\n", d1, d2,
+              static_cast<unsigned long long>(x.t.arr.warp_kein_platz()));
+  PRUEF(d1 <= 96.0 && d2 <= 96.0);
+  PRUEF(x.t.arr.warp_kein_platz() == 0);
+}
+
+void fall14_naehte() {
+  ++g_faelle;
+  auto sin = Audio::sinus(CELL4, 440.0, 0.5f);
+  const double eigen = 0.5 * 2.0 * PI * 440.0 / 48000.0;
+  for (const double ratio : {0.93, 0.97, 1.03, 1.07}) {
+    ArrZelle z = zelle128(*sin, 2);
+    karte_setzen(z, FOLGE);
+    Lauf x;
+    x.t.k = cdj::Karte{128.0 * ratio, 0};
+    x.t.laden(bauen({z}));
+    PRUEF(x.t.arr.launch_start(ID, 1, 8.0, 0.0, 1, false) == LaunchGrund::ok);
+    x.bis(static_cast<int64_t>(x.t.k.sample_at(8.0 + 2 * 4.0 + 1.0)));
+    {  // the table is read: the pass differs clearly from the table-less cell (a shuffled table with phase jumps; the rms of the difference is large)
+      ArrZelle zi = zelle128(*sin, 2);
+      Lauf y;
+      y.t.k = cdj::Karte{128.0 * ratio, 0};
+      y.t.laden(bauen({zi}));
+      PRUEF(y.t.arr.launch_start(ID, 1, 8.0, 0.0, 1, false) == LaunchGrund::ok);
+      y.bis(static_cast<int64_t>(x.t.k.sample_at(8.0 + 2 * 4.0 + 1.0)));
+      const int64_t a = static_cast<int64_t>(x.t.k.sample_at(9.0));
+      double q = 0.0;
+      for (int64_t i = a; i < a + 20000; ++i) q += std::pow(static_cast<double>(x.bus[static_cast<size_t>(i)]) - static_cast<double>(y.bus[static_cast<size_t>(i)]), 2.0);
+      const double dr = std::sqrt(q / 20000.0);
+      std::printf("Fall 14: ratio %.2f: rms of the difference to the table-less cell %.3f\n", ratio, dr);
+      PRUEF(dr > 0.1);
+    }
+    double gross = 0.0, stetig = 0.0;
+    for (int k = 1; k < 32; ++k) {   // slot seams of two passes (k 16: the loop seam)
+      const int64_t J = static_cast<int64_t>(std::llround(x.t.k.sample_at(8.0 + k * 0.25)));
+      gross = std::max(gross, groesster_schritt(x.bus, J - 200, J + 200));
+      stetig = std::max(stetig, groesster_schritt(x.bus, J + 600, J + 1400));
+    }
+    std::printf("Fall 14: ratio %.2f: largest step at seams %.5f, in steady sine %.5f, sine's own %.5f (%.2fx), unterlauf %llu\n", ratio, gross, stetig, eigen, gross / eigen,
+                static_cast<unsigned long long>(x.t.arr.warp_unterlauf()));
+    PRUEF(gross < 1.5 * eigen);
+  }
+}
+
+double frequenz_bus(const std::vector<float>& l, int64_t a, int64_t b) {
+  double erste = -1, letzte = -1;
+  int zahl = 0;
+  for (int64_t i = a; i + 1 < b; ++i) {
+    const double x0 = l[static_cast<size_t>(i)], x1 = l[static_cast<size_t>(i + 1)];
+    if (x0 < 0 && x1 >= 0) {
+      const double t = static_cast<double>(i) + (-x0) / (x1 - x0);
+      if (erste < 0) erste = t;
+      letzte = t;
+      ++zahl;
+    }
+  }
+  return zahl < 2 ? 0.0 : (zahl - 1) * 48000.0 / (letzte - erste);
+}
+
+void fall15_pitch() {
+  ++g_faelle;
+  const double faktor = std::pow(2.0, 3.0 / 12.0);
+  {  // frequency
+    auto sin = Audio::sinus(CELL4, 440.0, 0.5f);
+    ArrZelle z = zelle128(*sin, 2);
+    z.pitch = faktor;
+    Lauf x;
+    x.t.laden(bauen({z}));
+    PRUEF(x.t.arr.launch_start(ID, 1, 8.0, 0.0, 1, false) == LaunchGrund::ok);
+    x.bis(static_cast<int64_t>(x.t.k.sample_at(8.0 + 2 * 4.0)));
+    const int64_t a = static_cast<int64_t>(x.t.k.sample_at(9.0)), b = static_cast<int64_t>(x.t.k.sample_at(11.0));
+    const double hz = frequenz_bus(x.bus, a, b);
+    std::printf("Fall 15: +3 st: %.2f Hz (440 * %.4f = %.2f), ratio %.4f\n", hz, faktor, 440.0 * faktor, hz / 440.0);
+    PRUEF(std::fabs(hz / 440.0 / faktor - 1.0) < 0.005);
+  }
+  {  // the loop length stays on the grid: the click of beat 0 of passes 1 to 3
+    auto kl = Audio::gleich(CELL4, 0.0f);   // a Hann click on every beat of the 128 BPM source
+    const std::vector<float> h = hann_impuls();
+    for (int b = 0; b < 4; ++b)
+      for (int i = 0; i < HANN; ++i) kl->d[static_cast<size_t>(2 * (b * SPB + i))] = kl->d[static_cast<size_t>(2 * (b * SPB + i) + 1)] = h[static_cast<size_t>(i)];
+    kl->fuellen(CELL4);
+    ArrZelle z = zelle128(*kl, 2);
+    z.pitch = faktor;
+    Lauf x;
+    x.t.laden(bauen({z}));
+    PRUEF(x.t.arr.launch_start(ID, 1, 8.0, 0.0, 1, false) == LaunchGrund::ok);
+    x.bis(static_cast<int64_t>(x.t.k.sample_at(8.0 + 3 * 4.0 + 1.0)));
+    double schlimmste = 0.0;
+    for (int p = 0; p < 3; ++p)
+      for (int b = 0; b < 4; ++b) {
+        const int64_t e = static_cast<int64_t>(std::llround(x.t.k.sample_at(8.0 + p * 4.0 + b + 71.5 / static_cast<double>(SPB))));
+        int64_t bt = e - 300;
+        float best = 0.0f;
+        for (int64_t i = e - 300; i < e + 300; ++i)
+          if (std::fabs(x.at(i)) > best) best = std::fabs(x.at(i)), bt = i;
+        if (best < 0.05f) schlimmste = 1e9;
+        schlimmste = std::max(schlimmste, std::fabs(static_cast<double>(bt - e)));
+      }
+    std::printf("Fall 15: +3 st, 12 clicks of 3 passes: worst peak distance to the grid %.0f samples\n", schlimmste);
+    PRUEF(schlimmste <= 96.0);
+  }
+}
+
+void fall16_repitch_modus0() {
+  ++g_faelle;
+  auto kl = klick_scheiben();
+  ArrZelle z = zelle128(*kl, 0);
+  karte_setzen(z, FOLGE);
+  Lauf x;
+  x.t.k = cdj::Karte{128.0 * 0.9, 0};
+  x.t.laden(bauen({z}));
+  PRUEF(x.t.arr.launch_start(ID, 1, 8.0, 0.0, 1, false) == LaunchGrund::ok);
+  x.bis(static_cast<int64_t>(x.t.k.sample_at(8.0 + 2 * 4.0 + 1.0)));
+  const double d1 = onsets(x.bus, x.t.k, 8.0, 0), d2 = onsets(x.bus, x.t.k, 8.0, 1);
+  std::printf("Fall 16: keylock off, shuffled table, 0.9x: worst click distance %.2f / %.2f samples, werk voices %d\n", d1, d2, x.t.arr.werk_stimmen());
+  PRUEF(d1 <= 96.0 && d2 <= 96.0);
+  PRUEF(x.t.arr.werk_stimmen() == 0);
+}
+
+void fall17_pool_voll_karte() {
+  ++g_faelle;
+  auto kl = klick_scheiben();
+  ArrZelle z = zelle128(*kl, 2);
+  karte_setzen(z, FOLGE);
+  Lauf x;
+  x.t.k = cdj::Karte{128.0 * 0.9, 0};
+  x.t.laden(bauen({z}));
+  x.t.arr.test_launch_paesse_sperren();
+  const uint64_t kp0 = x.t.arr.warp_kein_platz();
+  PRUEF(x.t.arr.launch_start(ID, 1, 8.0, 0.0, 1, false) == LaunchGrund::ok);
+  x.bis(static_cast<int64_t>(x.t.k.sample_at(8.0 + 2 * 4.0 + 1.0)));
+  const double d1 = onsets(x.bus, x.t.k, 8.0, 0), d2 = onsets(x.bus, x.t.k, 8.0, 1);
+  std::printf("Fall 17: pool full, shuffled table: worst click distance %.2f / %.2f samples, kein_platz +%llu\n", d1, d2, static_cast<unsigned long long>(x.t.arr.warp_kein_platz() - kp0));
+  PRUEF(d1 <= 96.0 && d2 <= 96.0);
+  PRUEF(x.t.arr.warp_kein_platz() > kp0);
+}
+
+void fall18_kosten() {
+  ++g_faelle;
+  auto sin = Audio::sinus(CELL4, 440.0, 0.5f);
+  for (const bool mit_karte : {false, true}) {
+    ArrZelle z = zelle128(*sin, 2);
+    if (mit_karte) karte_setzen(z, FOLGE);
+    Lauf x;
+    x.t.k = cdj::Karte{128.0 * 0.97, 0};
+    x.t.laden(bauen({z}));
+    PRUEF(x.t.arr.launch_start(ID, 1, 8.0, 0.0, 1, false) == LaunchGrund::ok);
+    x.bis(static_cast<int64_t>(x.t.k.sample_at(7.0)));
+    std::vector<double> us;
+    const int64_t bis = static_cast<int64_t>(x.t.k.sample_at(8.0 + 3 * 4.0));
+    while (x.t.s < bis) {
+      const auto a = std::chrono::steady_clock::now();
+      x.t.lauf(x.t.s + x.t.n);
+      us.push_back(std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - a).count());
+    }
+    std::sort(us.begin(), us.end());
+    std::printf("Fall 18: cost per 256 block (synchronous werk, callback + werk), %s: p50 %.1f us, p99 %.1f us, max %.1f us over %zu blocks\n", mit_karte ? "shuffled map" : "identity", us[us.size() / 2],
+                us[us.size() * 99 / 100], us.back(), us.size());
+  }
+}
+
+void fall19_blende() {
+  ++g_faelle;
+  auto g = Audio::gleich(CELL4, 0.5f);
+  {  // loop seams of passes 1 to 3
+    ArrZelle z = zelle128(*g, 2);
+    karte_setzen(z, {});
+    z.karte.blende = true;
+    Lauf x;
+    x.t.k = cdj::Karte{128.0 * 0.97, 0};
+    x.t.laden(bauen({z}));
+    PRUEF(x.t.arr.launch_start(ID, 1, 8.0, 0.0, 1, false) == LaunchGrund::ok);
+    x.bis(static_cast<int64_t>(x.t.k.sample_at(8.0 + 3 * 4.0 + 1.0)));
+    float hoch = 0.0f;
+    double schritt = 0.0, tief = 1.0, stetig = 1.0;
+    for (int p = 1; p <= 2; ++p) {
+      const int64_t J = static_cast<int64_t>(std::llround(x.t.k.sample_at(8.0 + 4.0 * p)));
+      for (int64_t i = J - 600; i < J + 600; ++i) {
+        hoch = std::max(hoch, x.at(i));
+        tief = std::min(tief, static_cast<double>(x.at(i)));
+      }
+      schritt = std::max(schritt, groesster_schritt(x.bus, J - 600, J + 600));
+      stetig = std::min(stetig, static_cast<double>(x.at(J + 3000)));
+    }
+    std::printf("Fall 19: blende keylock: level %.3f, dip minimum %.3f, highest %.3f, largest step %.4f (a linear dip over 96 frames steps 0.0052)\n", stetig, tief, hoch, schritt);
+    PRUEF_NAH(stetig, 0.5, 0.03);
+    PRUEF(tief < 0.1);
+    PRUEF(hoch < 0.52f);
+    PRUEF(schritt < 0.012);
+  }
+  {  // hard onset mid-cell (one beat in): fades in over the first samples
+    ArrZelle z = zelle128(*g, 2);
+    karte_setzen(z, {});
+    z.karte.blende = true;
+    Lauf x;
+    x.t.laden(bauen({z}));
+    PRUEF(x.t.arr.launch_start(ID, 1, 8.0, 1.0, 1, false) == LaunchGrund::ok);
+    x.bis(static_cast<int64_t>(x.t.k.sample_at(8.0 + 2.0)));
+    const int64_t T = static_cast<int64_t>(std::llround(x.t.k.sample_at(8.0)));
+    std::printf("Fall 19: blende keylock, onset mid-cell: x[T] %.3f x[T+48] %.3f x[T+200] %.3f, largest step in the first 400 samples %.4f\n", x.at(T), x.at(T + 48), x.at(T + 200),
+                groesster_schritt(x.bus, T - 2, T + 400));
+    PRUEF(x.at(T) < 0.05f);
+    PRUEF_NAH(x.at(T + 200), 0.5, 0.03);
+    PRUEF(groesster_schritt(x.bus, T - 2, T + 400) < 0.012);
+  }
+}
+
 void fall11_faeden() {   // threaded werk, tempo changes while passes are prepared and freed
   ++g_faelle;
   auto src = Audio::sinus(SINUS_FRAMES / 2, SINUS_HZ, SINUS_AMP);
@@ -442,6 +755,80 @@ void fall11_faeden() {   // threaded werk, tempo changes while passes are prepar
   PRUEF(x.t.arr.warp_kein_platz() == 0);
 }
 
+// K4: the cell map crosses to the werk thread. A real werk thread (2 threads), a 16-slot table (identity order: the sine stays continuous and measurable), +3 st, tempo
+// changes (karte_neu sets up the passes again) and restarts (launch_start with the voice sounding: the prepared voice goes through launch_kl_vorab, launch_pass_vor
+// copies the map into the pass). The copy in the pass must be written before werk->ansetzen: the TSan build reports a race otherwise (positive control: write p.zk after
+// ansetzen). Restarts are placed in the middle of a pass of the sounding voice, so no pass boundary of the old voice falls into the window; for each one the werk's
+// order count (WarpZaehler::ansaetze) must rise, i.e. launch_pass_vor really ran (a start overwritten before its prepared pass never gets there).
+void fall20_faeden_karte() {
+  ++g_faelle;
+  const double faktor = std::pow(2.0, 3.0 / 12.0);
+  auto sin = Audio::sinus(CELL4, 440.0, 0.5f);
+  ArrZelle z = zelle128(*sin, 2);
+  karte_setzen(z, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15});
+  z.pitch = faktor;
+  Lauf x(true, 2);
+  x.t.laden(bauen({z}));
+#if defined(__SANITIZE_THREAD__)
+  const auto pause = std::chrono::microseconds(3000);   // the instrumented werk threads are several times slower
+#else
+  const auto pause = std::chrono::microseconds(150);
+#endif
+  auto weiter = [&](int64_t ziel) {
+    while (x.t.s < ziel) {
+      x.t.lauf(x.t.s + x.t.n);
+      x.bus.insert(x.bus.end(), x.t.arr.spur_bus_l(0), x.t.arr.spur_bus_l(0) + x.t.n);
+      std::this_thread::sleep_for(pause);
+    }
+  };
+  auto bis_beat = [&](double b) { weiter(static_cast<int64_t>(std::llround(x.t.k.sample_at(b)))); };
+  auto jetzt = [&] { return x.t.k.beat_at(static_cast<double>(x.t.s)); };
+  double ab_cur = 8.0;
+  int64_t id = 1;
+  PRUEF(x.t.arr.launch_start(ID, 1, ab_cur, 0.0, id++, false) == LaunchGrund::ok);
+  bis_beat(ab_cur + 2 * 4.0);   // the start-up is over
+  const uint64_t ul0 = x.t.arr.warp_unterlauf();
+  const uint64_t an0 = x.t.werk->zaehler().ansaetze;
+  int neustarts = 0, erreicht = 0;
+  double bpm = 140.0;
+  for (int i = 0; i < 6; ++i) {
+    {  // tempo change: the passes that have not started are set up again
+      const double ab = jetzt() + 0.5;
+      if (x.t.k.rampe(ab, bpm, 0.25)) ++x.t.gen;
+      bpm = bpm == 140.0 ? 120.0 : 140.0;
+      bis_beat(ab + 1.5);
+    }
+    {  // restart in the middle of a pass of the sounding voice (1.0 to 1.5 beats after its pass start; the window of 1.5 beats ends before the next pass is prepared)
+      const double m = std::fmod(jetzt() - ab_cur, 4.0);
+      const double bis = m < 1.0 ? jetzt() + (1.0 - m) : m > 1.5 ? jetzt() + (4.0 - m) + 1.0 : jetzt();
+      bis_beat(bis);
+      const double ab_neu = jetzt() + 1.0;
+      const uint64_t n0 = x.t.werk->zaehler().ansaetze;
+      PRUEF(x.t.arr.launch_start(ID, 1, ab_neu, 0.0, id++, false) == LaunchGrund::ok);
+      bis_beat(ab_neu + 0.5);
+      ++neustarts;
+      if (x.t.werk->zaehler().ansaetze > n0) ++erreicht;
+      ab_cur = ab_neu;
+    }
+  }
+  bis_beat(ab_cur + 12.0 + 3.0);   // steady tempo for three passes: the last tempo change lies far back
+  const int64_t a = static_cast<int64_t>(std::llround(x.t.k.sample_at(ab_cur + 12.0 + 1.5))), b = static_cast<int64_t>(std::llround(x.t.k.sample_at(ab_cur + 12.0 + 2.5)));
+  const double hz = frequenz_bus(x.bus, a, b);
+  float spitze = 0.0f;
+  for (int64_t i = a; i < b; ++i) spitze = std::max(spitze, std::fabs(x.at(i)));
+  const uint64_t ansaetze = x.t.werk->zaehler().ansaetze - an0;
+  std::printf("Fall 20: threaded werk, 16-slot map, +3 st, %d tempo changes and restarts: %.2f Hz (440 * %.4f = %.2f), peak %.3f, orders taken %llu, restarts reaching launch_pass_vor %d of %d, "
+              "unterlauf +%llu, kein_platz %llu\n",
+              6, hz, faktor, 440.0 * faktor, spitze, static_cast<unsigned long long>(ansaetze), erreicht, neustarts, static_cast<unsigned long long>(x.t.arr.warp_unterlauf() - ul0),
+              static_cast<unsigned long long>(x.t.arr.warp_kein_platz()));
+  PRUEF(erreicht == neustarts);
+  PRUEF(ansaetze >= 20);
+  PRUEF(std::fabs(hz / 440.0 / faktor - 1.0) < 0.005);
+  PRUEF(spitze > 0.4f);
+  PRUEF(x.t.arr.warp_unterlauf() == ul0);
+  PRUEF(x.t.arr.warp_kein_platz() == 0);
+}
+
 }  // namespace
 
 int main() {
@@ -457,8 +844,17 @@ int main() {
   fall9_pool();
   fall10_naht_exakt();
   fall11_faeden();
+  fall12_pins();
+  fall13_onsets();
+  fall14_naehte();
+  fall15_pitch();
+  fall16_repitch_modus0();
+  fall17_pool_voll_karte();
+  fall18_kosten();
+  fall19_blende();
+  fall20_faeden_karte();
   std::printf("test_arr_launcher_warp: %d cases executed\n", g_faelle);
-  PRUEF(g_faelle == 12);   // 1, 2, 3, 4, 5 (two runs), 6, 7, 8, 9, 10, 11
+  PRUEF(g_faelle == 21);   // 1, 2, 3, 4, 5 (two runs), 6, 7, 8, 9, 10, 11, 12 to 19, 20
   PRUEF_ENDE();
 }
 

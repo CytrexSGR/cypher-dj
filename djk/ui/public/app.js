@@ -6,7 +6,8 @@ import { bindeProduktion } from './production/production.js';
 import { bindeWerkbank } from './werkbank/werkbank.js';
 import { bindeTracker } from './tracker/tracker.js';
 import { bindeModule } from './module_library.js';   // plan live-module task 10: the MODULES tab
-import { ladeInDeck } from './loopdeck/view.js';   // the MODULES tab loads module sources into a loop deck cell
+import { ladeInDeck, setzeGrossHaken } from './loopdeck/view.js';   // the MODULES tab loads module sources into a loop deck cell
+import { bindeLoopdeckGross } from './loopdeck/gross.js';   // the loop deck pop-up
 import { bindeKopplung } from './coupling.js';   // task 10: pair a tablet (main page only)
 import { DECKS } from './curves.js';
 import { leitstand, strom, zeigeCypher } from './stream.js';
@@ -16,8 +17,9 @@ import { bindePlaetze } from './slots_view.js';
 import { baueSeqPlaetze } from './seq_view.js';
 import { baueStemsPlaetze } from './stems_view.js';
 import { $, $$, jsonPost, melde, zustand } from './page_state.js';
-import { pruefeLive, pruefeLiveSpaeter } from './live_view.js';
-import { bindeAnsicht, bindeMusterFeld, bindeReiter, bindeSchublade, bindeTablet, setzeProduktion, setzeWerkbank, setzeTracker, setzeAnsicht, meldeAnsicht } from './seitenrahmen.js';
+import { pruefeLive, pruefeLiveSpaeter, exportTaste, zeigeExport, liveOeffnen, setzeSessionHaken, setzeProjektHaken, live, holeJson } from './live_view.js';
+import { neuerSessionSchreiber } from './session/schreibweg.js';
+import { bindeAnsicht, bindeMusterFeld, bindeReiter, bindeSchublade, bindeTablet, setzeProduktion, setzeWerkbank, setzeTracker, setzeAnsicht, meldeAnsicht, setzeGrossOffen } from './seitenrahmen.js';
 import { bindeLibrary, bindeSets } from './library_view.js';
 import { ladeBaum, markiereTyp } from './browse_detail.js';
 import { bindeTempo } from './tempo_view.js';
@@ -59,6 +61,17 @@ try { bindeSpurbaender(jsonPost, () => letzterBeat); } catch (e) { console.error
 if (!geraetFensterAn) try { setzeProduktion(bindeProduktion({ presetsZeigen: () => zeigePresets(), presetsNeu: () => presetPanel?.aktualisiereZiele(), presetListe: () => presetPanel?.z.liste ?? [], post: jsonPost, bpm: () => zustand.bpm ?? 128, stoebern: () => zustand.stoebern, bibliothek: () => { if (!stz.treffer.length) { stoebernLaden(); ladeBaum(); } } })); } catch (e) { console.error('Production view:', e); }   // D1 V1
 if (!geraetFensterAn) try { setzeWerkbank(bindeWerkbank({ post: jsonPost, zeigeDj: () => { setzeAnsicht('dj'); pruefeLiveSpaeter(0); } })); } catch (e) { console.error('Workbench view:', e); }   // the fourth view, STUDIO; TO SEQ DECK: the DJ view then reads the changed live container
 if (!geraetFensterAn) try { setzeTracker(bindeTracker({ post: jsonPost, zeigeDj: () => { setzeAnsicht('dj'); pruefeLiveSpaeter(0); } })); } catch (e) { console.error('Tracker view:', e); }   // the fifth view, TRACKER: the open project as rows
+// the loop deck pop-up (opened from the loop deck places): reads the same stand and events as the places and writes through the SESSION routes
+if (!geraetFensterAn) try { const gross = bindeLoopdeckGross({ beatVon: () => letzterBeat, oeffneLive: liveOeffnen, spurAendern: sessionSpurAendern, aendere: sessionAendere, projekt: () => live.projekt, holeJson, beiOffen: setzeGrossOffen }); setzeGrossHaken((nr, anker) => gross.oeffne(nr, anker)); setzeSessionHaken(gross.ereignis); setzeProjektHaken(gross.projekt); } catch (e) { console.error('Loop deck pop-up:', e); }
+// Project writes of the loop deck pop-up (and the same commands PRODUCTION writes): solo, arm and the grid of a cell are track and cell commands: one /proj/aendern, one undo step (PRODUCTION writes the same commands)
+const sessionSchreiber = neuerSessionSchreiber({ holeJson, rev: () => live.projekt?.rev ?? live.rev, laden: () => pruefeLive(), aktuelleRev: async () => (await (await fetch('/proj/aktuell?nur=rev')).json()).rev, melde: (t, f) => melde(t, f) });
+async function sessionAendere(label, befehle) {
+  if (!live.projekt) return false;
+  const ok = await sessionSchreiber.aendere(label, befehle);
+  if (ok) pruefeLiveSpaeter(0);
+  return ok;
+}
+function sessionSpurAendern(spurId, feld, wert, label) { return sessionAendere(label, [{ befehl: 'spur_aendern', spur_id: spurId, [feld]: wert }]); }
 bindeAnsicht();
 bindeTablet();
 bindeRemixFenster();

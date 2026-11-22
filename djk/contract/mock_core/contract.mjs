@@ -160,7 +160,8 @@ export const GRUENDE = new Set(['zu_spaet', 'regler_beim_menschen', 'regler_verp
   'warp_maschine_fehlt',                                                                    // 1.13 Slice 2 (§4.11, §16.2)
   'nur_andreas', 'auto_ziel_unbekannt',
   'laeuft', 'host_fehlt', 'kein_rueckweg', 'belegt', 'schreiber_ueberlauf', 'zelle_leer',
-  'live_ohne_container', 'dj_doppelt', 'send_ausser_modul']);   // container core V3 (typed only, the mock does not send them)
+  'live_ohne_container', 'dj_doppelt', 'send_ausser_modul',
+  'zellen_ungueltig']);   // container core V3 and session view K2 (typed only, the mock does not send them)
 
 // §1.5 channels (container core): the four containers are the channel strips, then the four buses. Player N (deck/1..4, stem/* and the
 // player state) sounds through container N. DECKS, ERZ and PADS are gone; istDeck and deckNr mean "path of a player".

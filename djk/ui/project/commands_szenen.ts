@@ -4,6 +4,7 @@
 import { SZENEN_SLOTS, type Projekt, type Szene } from './model.ts';
 import { seqFolgen } from './seq.ts';
 import { ab, erlaube, zahl, type Args } from './commands_helpers.ts';
+import { loescheSzene } from './commands_session.ts';
 
 // Every pattern track of every SEQ deck of the project, in deck and track order.
 function alleFolgen(p: Projekt): { id: string; mute: boolean }[] {
@@ -36,8 +37,11 @@ export const SZENEN = {
     p.szenen[slot] = { an: [...an], aus: [...aus] };
   },
 
+  // Exactly one of `slot` (the SEQ mute image, emptied) or `zeile` (a session scene row, deleted across all columns; label "Delete scene").
   szene_loeschen(p, a) {
-    erlaube(a, 'slot');
+    erlaube(a, 'slot', 'zeile');
+    if ((a.slot === undefined) === (a.zeile === undefined)) ab('argument_ungueltig', 'exactly one of slot or zeile expected');
+    if (a.zeile !== undefined) return loescheSzene(p, { zeile: a.zeile });
     const slot = slotArg(a);
     if (p.szenen) p.szenen[slot] = null;
   },

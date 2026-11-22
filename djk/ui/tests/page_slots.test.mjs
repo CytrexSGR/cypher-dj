@@ -30,9 +30,9 @@ test('the CSS gives the four cells by data-platz, beats the id rules, and leaves
   for (const n of [1, 2, 3, 4]) assert.match(css, new RegExp(`body:not\\(\\.studio\\) #pult > \\[data-platz="${n}"\\] \\{ grid-area: p${n}; \\}`));
   assert.match(css, /body:not\(\.studio\) #pult \{[^}]*"h1 mo h2" "p1 mo p2" "h3 mu h4" "p3 mu p4"/);
   assert.match(css, /body:not\(\.studio\) \.platz-aus \{ display: none !important; \}/);
-  assert.match(css, /body\.studio \.platzkopf, body\.studio #platz-loops, body\.studio #platz-loops2 \{ display: none; \}/);
+  assert.doesNotMatch(css, /body\.studio \.platzkopf/);
   assert.doesNotMatch(css, /body\.live-offen #pult/);
-  assert.match(css, /body\.studio #pult \{[^}]*"c c mo" "mu d mo"/, 'the Studio areas are as they were');
+  assert.doesNotMatch(css, /body\.studio #pult/, 'no view hides the desk any more (the SESSION view with the id studio is gone)');
 });
 
 test('applying lage.plaetze only changes attributes of the existing nodes (no rebuild)', () => {
@@ -68,7 +68,7 @@ test('the Remix plate: node, shown by the Remix window and not by a place, and t
   assert.match(app, /const fx3Adapter = kanalAdapter\(FX3_PLATZ\)/);
   assert.match(css, /#platz-remix \.remix-feld \{[^}]*overflow: hidden/);   // nothing scrolls: the plate is scaled into the place
   assert.match(funktion('remixEinpassen'), /platte\.style\.zoom = String\(Math\.max\(0\.3, z\)\)/);
-  assert.match(css, /body\.studio #platz-remix \{ display: none; \}/);
+  assert.doesNotMatch(css, /body\.studio #platz-remix/);   // no view hides the desk any more
 });
 
 test('the head names the strip: container letter and type', () => {

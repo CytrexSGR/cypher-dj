@@ -145,7 +145,7 @@ test('stand: deck shape, cells with frames, null for a free place, beat and bpm 
   assert.equal(st.decks[2], null);
   const d = st.decks[1];
   assert.deepEqual([d.platz, d.raster, d.spuren.length, d.gruppe_id], [1, 'takt', 4, z.projekt().gruppen.find((g) => g.loopdeck).id]);
-  assert.deepEqual(Object.keys(d.spuren[0]), ['spur_id', 'nr', 'name', 'fader_db', 'mute', 'filter', 'eq', 'kill', 'send', 'zellen', 'lauf', 'effekt']);
+  assert.deepEqual(Object.keys(d.spuren[0]), ['spur_id', 'nr', 'name', 'fader_db', 'mute', 'filter', 'eq', 'kill', 'fx', 'send', 'zellen', 'lauf', 'effekt']);
   assert.equal(d.spuren[0].zellen.length, 8);
   assert.equal(d.spuren[0].zellen[0].frames, 96000);
   assert.equal(d.spuren[0].zellen[0].name, 'c1.1');
@@ -282,6 +282,32 @@ test('spur eq and kill: 200, the core got the EQ rows (kill as -200), stand keep
   }
 });
 
+// lane strip: FX 1 2 3 through POST /loopdeck/spur, the translator rows and the stand
+test('spur fx: 200, one undo step, the core got spur/<n>/fx/<u> 0/1, stand shows three booleans; bad input is 400', async (t) => {
+  const z = await aufbau(t);
+  const reihe = (pfad) => z.protokoll.gesendet.filter((g) => g.adresse === '/k/teil' && g.felder.pfad === pfad).map((g) => g.felder.nach);
+  const nr = z.spuren()[0].nr;
+  const s0 = (await z.bereich.stand()).j.decks[1].spuren[0];
+  assert.deepEqual(s0.fx, { 1: false, 2: false, 3: false });
+  const rev = z.projekt().rev;
+  const a = await z.bereich.spurAendern({ deck: 1, spur: 1, fx: { 1: true, 3: true } }, 'andreas');
+  assert.equal(a.code, 200, JSON.stringify(a.j));
+  assert.deepEqual(a.j, { ok: true });
+  assert.equal(z.projekt().rev, rev + 1, 'one undo step');
+  assert.deepEqual([reihe(`spur/${nr}/fx/1`).at(-1), reihe(`spur/${nr}/fx/2`).at(-1), reihe(`spur/${nr}/fx/3`).at(-1)], [1, 0, 1]);
+  assert.deepEqual((await z.bereich.stand()).j.decks[1].spuren[0].fx, { 1: true, 2: false, 3: true });
+  assert.deepEqual(z.projekt().spuren.find((x) => x.nr === nr).fx, { 1: true, 3: true }, 'stored sparse, true only');
+  const b = await z.bereich.spurAendern({ deck: 1, spur: 1, fx: { 1: false, 3: false } }, 'andreas');
+  assert.equal(b.code, 200);
+  assert.deepEqual([reihe(`spur/${nr}/fx/1`).at(-1), reihe(`spur/${nr}/fx/3`).at(-1)], [0, 0]);
+  assert.ok(z.projekt().spuren.find((x) => x.nr === nr).fx === undefined, 'all off removes the field');
+  for (const bad of [{ fx: { 1: 1 } }, { fx: { 4: true } }, { fx: { 2: 'true' } }, { fx: [] }, { fx: {} }, { fx: 5 }]) {
+    const r = await z.bereich.spurAendern({ deck: 1, spur: 1, ...bad }, 'andreas');
+    assert.equal(r.code, 400, JSON.stringify(bad) + JSON.stringify(r.j));
+    assert.equal(r.j.grund, 'argument_ungueltig');
+  }
+});
+
 // channel strip MZ2: send through POST /loopdeck/spur
 test('spur send: 200, the core got spur/<n>/send/<r> for the new return, stand shows it; eight production returns give 409 kein_platz', async (t) => {
   const z = await aufbau(t);
@@ -394,4 +420,103 @@ test('POST /loopdeck/effekt: a full Baukasten pool is 409 kein_platz; a track at
   await z.aendern([0, 1, 2, 3, 4].map((i) => ({ befehl: 'insert_setzen', strang_id: id, pos: i, art: i < 3 ? 'komp' : 'eq' })));
   const b = await rufRoute(r, { deck: 1, spur: 2, graph: 'fx-crunch' });
   assert.deepEqual([b.code, b.j.grund], [409, 'kein_platz']);
+});
+
+// ---- session view M4: the row and track launch helpers shared with the session area ----------------------------------------------------------------------
+// two decks: deck 1 as `aufbau` makes it, deck 2 gets a cell in row 1 on its tracks 1 and 4 and a hold slot in row 1 on track 2
+async function zweiDecks(t) {
+  const z = await aufbau(t);
+  await z.aendern([{ befehl: 'loopdeck_neu', platz: 2 }]);
+  const alle = z.spuren();
+  await z.aendern([
+    { befehl: 'zelle_setzen', spur_id: alle[4].id, index: 1, zelle: Z({ name: 'd2.1' }) },
+    { befehl: 'zelle_setzen', spur_id: alle[7].id, index: 1, zelle: Z({ name: 'd2.4' }) },
+    { befehl: 'zelle_halten', spur_id: alle[5].id, index: 1, an: true },
+    { befehl: 'zelle_setzen', spur_id: alle[6].id, index: 2, zelle: Z({ name: 'd2.3' }) },
+  ]);
+  return z;
+}
+
+test('spalten lists the 8 deck tracks in deck and track order', async (t) => {
+  const z = await zweiDecks(t);
+  const sp = z.bereich.spalten(z.projekt());
+  assert.deepEqual(sp.map((x) => [x.deck, x.nr]), [[1, 1], [1, 2], [1, 3], [1, 4], [2, 1], [2, 2], [2, 3], [2, 4]]);
+  assert.deepEqual(sp.map((x) => x.spur.id), z.spuren().map((s) => s.id));
+  assert.equal(sp[0].lauf.zelle, null);
+});
+
+test('zeileStarten over 8 tracks sends 8 commands with one ab_beat', async (t) => {
+  const z = await zweiDecks(t);
+  z.uhr(10.3);
+  const r = await z.bereich.zeileStarten(z.spuren(), 1, 12, 'andreas');
+  const id = (...i) => i.map((n) => z.spuren()[n].id);
+  assert.deepEqual(r.gestartet, id(0, 1, 4, 7));
+  assert.deepEqual(r.gestoppt, id(2, 6), 'tracks that hold cells in other rows stop; track 4 of deck 1 has no cell at all and gets nothing');
+  assert.deepEqual(r.gehalten, id(5));
+  assert.deepEqual(r.abgelehnt, []);
+  assert.equal(z.kern.gesendet.length, 6, '4 starts and 2 stops: the hold slot and the cell-less track send nothing');
+  assert.deepEqual([...new Set(z.kern.gesendet.map((g) => g.felder.ab_beat))], [12]);
+});
+
+test('a halten slot sends nothing and is listed in gehalten', async (t) => {
+  const z = await zweiDecks(t);
+  z.uhr(10);
+  const r = await z.bereich.zeileStarten(z.bereich.spalten(z.projekt()).map((x) => x.spur), 1, 12, 'andreas');
+  const id = z.spuren()[5].id;
+  assert.deepEqual(r.gehalten, [id]);
+  assert.ok(!z.kern.gesendet.some((g) => g.felder.spur === id));
+  assert.ok(!r.gestartet.includes(id) && !r.gestoppt.includes(id));
+});
+
+test('beimLauf fires once per mirror change and not for an unchanged repeat; a new core generation reports null', async (t) => {
+  const z = await aufbau(t);
+  const f = [];
+  z.bereich.beimLauf((id, lauf) => f.push([id, lauf]));
+  z.zelleEv(1, { zelle: 1, ab_beat: 8 });
+  z.zelleEv(1, { zelle: 1, ab_beat: 8 });
+  assert.equal(f.length, 1);
+  assert.equal(f[0][0], z.spuren()[0].id);
+  assert.equal(f[0][1].zelle, 1);
+  z.zelleEv(1, { zelle: 3, ab_beat: 16 });
+  assert.equal(f.length, 2);
+  z.bereich.ereignis('/k/willkommen', { generation: 1 });
+  z.bereich.ereignis('/e/neustart', { generation: 2 });
+  assert.deepEqual(f.at(-1), [z.spuren()[0].id, null]);
+});
+
+test('spurStarten and spurStoppen send one command each at the given grid point; zielBeat is the clock rounded to the raster', async (t) => {
+  const z = await aufbau(t);
+  z.uhr(10.3);
+  assert.equal(z.bereich.zielBeat('takt'), 12);
+  const s = z.spuren()[0];
+  const a = await z.bereich.spurStarten(s, 3, '1/2', 'cypher');
+  assert.equal(a.ab_beat, 10.5);
+  assert.deepEqual(z.gesendet('/k/arr/zelle_start')[0].felder, { quelle: 'cypher', spur: s.id, zelle: 3, ab_beat: 10.5, versatz_beats: 0 });
+  await assert.rejects(() => z.bereich.spurStarten(s, 5, 'takt', 'andreas'), (e) => e.grund === 'zelle_leer');
+  const r = await z.bereich.spurStoppen(z.spuren(), 12, 'andreas');
+  assert.deepEqual(r.gestoppt, z.spuren().slice(0, 3).map((x) => x.id), 'track 4 has no cell: nothing is sent');
+  assert.deepEqual(z.gesendet('/k/arr/zelle_stopp').map((g) => g.felder.ab_beat), [12, 12, 12]);
+});
+
+test('POST /loopdeck/szene on deck 1 touches only deck 1\'s 4 tracks (D5)', async (t) => {
+  const z = await zweiDecks(t);
+  z.uhr(10.3);
+  const a = await z.bereich.szene({ deck: 1, zeile: 1 }, 'andreas');
+  assert.equal(a.code, 200, JSON.stringify(a.j));
+  const eigene = new Set(z.spuren().slice(0, 4).map((s) => s.id));
+  assert.ok(z.kern.gesendet.length > 0);
+  for (const g of z.kern.gesendet) assert.ok(eigene.has(g.felder.spur), `${g.adresse} went to ${g.felder.spur}`);
+  assert.deepEqual(a.j, { ok: true, ab_beat: 12, gestartet: [1, 2], gestoppt: [3] });
+});
+
+test('POST /loopdeck/szene reports a halten slot of that deck in gehalten and sends nothing to it', async (t) => {
+  const z = await zweiDecks(t);
+  z.uhr(10.3);
+  const a = await z.bereich.szene({ deck: 2, zeile: 1 }, 'andreas');
+  assert.equal(a.code, 200, JSON.stringify(a.j));
+  const id = z.spuren()[5].id;
+  assert.deepEqual(a.j.gehalten, [2], 'track 2 of deck 2 (answers carry the track number)');
+  assert.ok(!z.kern.gesendet.some((g) => g.felder.spur === id));
+  const b = await z.bereich.szene({ deck: 1, zeile: 1 }, 'andreas');
+  assert.equal(b.j.gehalten, undefined, 'a deck without a hold slot adds no gehalten');
 });

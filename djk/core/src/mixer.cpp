@@ -1288,6 +1288,13 @@ void Mixer::kanal(int k, int n) {
     aus.send_l[s] = fx_l_[s];
     aus.send_r[s] = fx_r_[s];
   }
+  const bool a3 = k < MIX_QUELLEN && arr3_da_[k];   // loop lane strip K4: a diverted FX 3 share waits for this strip's fader
+  if (a3) {
+    aus.zus_ein_l = arr3_l_[k];
+    aus.zus_ein_r = arr3_r_[k];
+    aus.zus_aus_l = arr3_aus_l_;
+    aus.zus_aus_r = arr3_aus_r_;
+  }
   const int fzi = fx_ziel_index(k);
   const bool komp_an = k < MIX_QUELLEN && ganz(komp_w_[k][0].w) == 1;
   if (k < MIX_QUELLEN && !komp_an && komp_lief_[k]) {   // ausgeschaltet: nächstes Einschalten beginnt ohne alte Absenkung
@@ -1327,7 +1334,7 @@ void Mixer::kanal(int k, int n) {
 #endif
   const bool mb_an = mb_hat && ganz(wz_wert(k, V_MB + M_AN, n)) == 1;
   const bool mb_laeuft = mb_hat && (mb_an || mb_pos_[k - MIX_QUELLEN] > 0);
-  if (schlaf_schritt(k, n, komp_an, gate_an, util_an, mb_laeuft, bk_an, fzi)) {
+  if (!a3 && schlaf_schritt(k, n, komp_an, gate_an, util_an, mb_laeuft, bk_an, fzi)) {
     // Silent strip, every holder idle: tap, PFL, spectrum, sends, peak, route would all add exact zeros (schlaf_schritt).
     schlaf_bloecke_.store(schlaf_bloecke_.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);   // one writer
     return;
@@ -1416,9 +1423,44 @@ void Mixer::kanal(int k, int n) {
     const float* tr = kz_[k]->abgriff(1);
     for (int i = 0; i < n && still; ++i)
       still = tl[i] == 0.0f && tr[i] == 0.0f && aus_l_[i] == 0.0f && aus_r_[i] == 0.0f;
-    stumm_[k] = still;
+    stumm_[k] = still && !a3;
   }
   route(k, n, aus_l_, aus_r_);
+  if (a3) {
+#ifdef CYPHERDJ_MUTATION_ARR_FX3_OHNE_FADER
+    std::memcpy(arr3_aus_l_, arr3_l_[k], sizeof(float) * static_cast<size_t>(n));   // error case: the share skips the strip's fader
+    std::memcpy(arr3_aus_r_, arr3_r_[k], sizeof(float) * static_cast<size_t>(n));
+#endif
+    arr3_route(k, n);
+    arr3_da_[k] = false;
+  }
+}
+
+// Loop lane strip K4: the diverted share of an arrangement track after the strip's fader (arr3_aus_*, done by the Kanalzug) times the crossfader weight of the strip, as route() weights a master share.
+void Mixer::arr3_route(int k, int n) noexcept {
+  const float* xsvl = xseite_[k].vl;
+  const float* xfvl = xfader_.vl;
+  const int z = std::clamp(ziel_ist_[k], 0, static_cast<int>(MIX_BUSSE));
+  const bool slot = fx3_graph_da();
+  for (int i = 0; i < n; ++i) {
+    const float gs = z == 0 ? seitengewicht(ganz(xsvl ? xsvl[i] : xseite_[k].w), xfvl ? xfvl[i] : xfader_.w) : 1.0f;
+    const float l = arr3_aus_l_[i] * gs, r = arr3_aus_r_[i] * gs;
+    if (z != 0) {   // a group bus target: FX 3 does not touch it, the share joins that bus input like the rest of the strip
+      ein_l_[MIX_QUELLEN + z - 1][i] += l;
+      ein_r_[MIX_QUELLEN + z - 1][i] += r;
+    } else if (slot) {
+#ifdef CYPHERDJ_MUTATION_ARR_FX3_OHNE_XFADER
+      fx_l_[2][i] += arr3_aus_l_[i];   // error case: the share ignores the crossfader weight
+      fx_r_[2][i] += arr3_aus_r_[i];
+#else
+      fx_l_[2][i] += l;
+      fx_r_[2][i] += r;
+#endif
+    } else {   // no graph on fx/3: never silent, the share stays on the master sum
+      sum_l_[i] += l;
+      sum_r_[i] += r;
+    }
+  }
 }
 
 // FX1 (u = 0) vor FX2 (u = 1), seriell, auf dem Signal in place
@@ -1472,6 +1514,8 @@ void Mixer::fx_einheit_setze(int einheit, int art, double beats, float wet, floa
   for (int i = 0; i < FX_ZIELE; ++i) fx_kanal_[einheit][i].setze(art, beats, wet, param1, an && fx_zuw_[einheit][i]);
   fx_master_[einheit].setze(art, beats, wet, param1, an && fx_master_zuw_[einheit]);
 }
+
+int Mixer::color_art_ganz() const noexcept { return ganz(color_art_.w); }
 
 // Zuweisung ab schließt nur den Eingang der Instanz: die Fahne klingt aus (Andreas 2026-09-28).
 void Mixer::fx_zuweisung_setze(int einheit, int kanal, bool an) noexcept {

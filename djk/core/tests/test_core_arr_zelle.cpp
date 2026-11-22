@@ -10,6 +10,14 @@
 //   8  /k/set/neu ends the voice (silence within the seam fade) and drops a pending launch (7); an unload drops a pending launch too (7)
 //   9  a pending stop: 3 at its sample, the state shows zelle 0 and the track falls silent
 //  10  no allocation, lock or sleep in kern->zyklus() on the command path (accept, refuse, replace, effect, stop, events)
+//  11  S1b K6: a cell with a shuffled slice table (16 slots), rueckwaerts 0 and a filter envelope, launched on a bar over OSC: receipt 3 at the bar, the slot onsets sit on the grid
+//      (within 2 ms, all alike), source slot by amplitude, the /zustand/zelle event has the shape of every other cell; the same cell with `scheiben` dropped fails the onset check
+//  12  S1b K6 part 2: while a cell envelope drives the track filter the /e/regler value of spur/1/filter is the envelope value (path and fields unchanged); when another cell without
+//      envelope takes over, or the cell stops, it reports the knob again. K2: those mirror events (and the release event) carry the holder text `huelle`; a hand grip during an
+//      envelope reports the grip value with `mensch` (the stellwerk's own event is never replaced)
+//  13  S1b K6 review: an unload (ARR_LADEN with nullptr) while an envelope drives the filter lets the mirror go: the knob once, then nothing; after a reload nothing stale is reported
+//      and the next launch reports the envelope again
+//  14  case 10 also with an envelope cell and a turning knob: the mirror events (many) cost no allocation, lock or sleep
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -43,6 +51,68 @@ std::string zelle(arr35::Lauf& x, int index, const std::string& sha, const char*
 std::string spuren(arr35::Lauf& x, const std::string& sha) {
   return "{\"nr\":1,\"art\":\"audio\",\"id\":\"s1\",\"zellen\":[" + zelle(x, 1, sha, "loop", 4.0) + "," + zelle(x, 3, sha, "einmal", 0.0) + "],\"clips\":[" +
          x.ordner.clip("c1", 0.0, 1.0, sha, FRAMES) + "]}";
+}
+
+float spitze(const std::vector<float>& v, int64_t von, int64_t bis);
+
+// a click of value (k + 1) / 32 at frame 100 of each of the 16 source slots of a cell (silence elsewhere); the file of sha 'k...'
+std::string klick(arr35::Lauf& x) {
+  const std::string sha(64, 'b');
+  std::vector<float> d(static_cast<size_t>(FRAMES) * 2, 0.0f);
+  for (int k = 0; k < 16; ++k) d[static_cast<size_t>(2 * (k * (FRAMES / 16) + 100))] = d[static_cast<size_t>(2 * (k * (FRAMES / 16) + 100)) + 1] = static_cast<float>(k + 1) / 32.0f;
+  std::FILE* f = std::fopen((x.ordner.pfad + "/audio/" + sha + ".f32").c_str(), "wb");
+  if (f) {
+    std::fwrite(d.data(), sizeof(float), d.size(), f);
+    std::fclose(f);
+  }
+  return sha;
+}
+
+const int FOLGE[16] = {3, 0, 15, 7, 1, 12, 5, 9, 2, 14, 6, 11, 4, 8, 13, 10};
+
+// cell 4 (loop, 4 beats, keylock off): the shuffled slice table (unless `ohne_scheiben`), rueckwaerts 0 and a filter envelope that stays neutral for the first three beats
+std::string zelle_k6(arr35::Lauf& x, const std::string& sha, bool ohne_scheiben, const char* huellen) {
+  std::string sch;
+  if (!ohne_scheiben) {
+    sch = ",\"scheiben\":[";
+    for (int k = 0; k < 16; ++k) sch += (k ? "," : "") + std::string("[") + std::to_string(k * 0.25) + "," + std::to_string(FOLGE[k]) + "]";
+    sch += "]";
+  }
+  char z[1536];
+  std::snprintf(z, sizeof z, "{\"index\":4,\"sha256\":\"%s\",\"datei\":\"%s/audio/%s.f32\",\"frames\":%lld,\"beats\":4,\"art\":\"loop\",\"gain_db\":0,\"modus\":0,\"rueckwaerts\":0%s%s}", sha.c_str(),
+                x.ordner.pfad.c_str(), sha.c_str(), static_cast<long long>(FRAMES), sch.c_str(), huellen);
+  return z;
+}
+
+const char* HUELLE_FILTER = ",\"huellen\":[{\"art\":\"feld\",\"feld\":9,\"punkte\":[[0,0,0],[3,0,0],[3.9,0.8,0]]}]";
+
+std::string spuren_k6(arr35::Lauf& x, const std::string& sha, const std::string& sin, bool ohne_scheiben) {
+  return "{\"nr\":1,\"art\":\"audio\",\"id\":\"s1\",\"zellen\":[" + zelle(x, 1, sin, "loop", 4.0) + "," + zelle(x, 3, sin, "einmal", 0.0) + "," +
+         zelle_k6(x, sha, ohne_scheiben, HUELLE_FILTER) + "],\"clips\":[" + x.ordner.clip("c1", 0.0, 1.0, sin, FRAMES) + "]}";
+}
+
+// the onsets of the 16 played slots of a pass starting at sample t0 on the master: returns true if every slot sounds its source slot (amplitude ratio) on the grid. dmax: the largest
+// distance of an onset from the grid (slot k at t0 + k * SLOT + 100, plus the fixed latency of the master chain, which is the offset of slot 0)
+bool onsets_auf_raster(const arr35::Lauf& x, int64_t t0, int slots, int64_t* dmax, int64_t* latenz) {
+  const int64_t SLOT = FRAMES / 16;
+  int64_t l0 = -1;
+  float a0 = 0.0f;
+  *dmax = 0;
+  bool ok = true;
+  for (int k = 0; k < slots; ++k) {
+    const int64_t soll = t0 + k * SLOT + 100;
+    int64_t o = -1;
+    for (int64_t i = soll - 60; i < soll + 400 && i < static_cast<int64_t>(x.l.size()); ++i)
+      if (std::fabs(x.l[static_cast<size_t>(i)]) > 2e-3f) { o = i; break; }
+    if (o < 0) { ok = false; continue; }
+    float a = spitze(x.l, o, o + 200);
+    if (k == 0) { l0 = o - soll; a0 = a; }
+    *dmax = std::max<int64_t>(*dmax, std::llabs((o - soll) - l0));
+    const double soll_a = static_cast<double>(a0) * (FOLGE[k] + 1) / (FOLGE[0] + 1);
+    if (std::fabs(a - soll_a) > 0.1 * soll_a) ok = false;
+  }
+  *latenz = l0;
+  return ok && *dmax <= 2 && l0 >= 0 && l0 <= 96;   // all alike within 2 samples, the chain latency itself below 2 ms
 }
 
 int64_t start(arr35::Lauf& x, const char* quelle, const char* spur, int zelle_nr, double ab, double versatz = 0.0) {
@@ -267,6 +337,150 @@ int main() {
     PRUEF(hat_status(x, i3, 7, "abbruch"));
     std::printf("8: unload: pending launch got 7 abbruch\n");
   }
+  {  // 11: slice map and envelope end to end through the kern
+    for (int ohne = 0; ohne < 2; ++ohne) {
+      arr35::Lauf x(ab.pfad, "test_kern_arr_zelle");
+      const std::string a = x.ordner.sinus('a', FRAMES, 441.0, 0.4f);
+      const std::string kl = klick(x);
+      x.laden(1, spuren_k6(x, kl, a, ohne != 0), "andreas", true);
+      x.lauf(4 * N);
+      const int64_t id = start(x, "andreas", "s1", 4, 8.0);
+      x.lauf(8 * SPB + 4 * SPB + 4 * N);
+      const k35::Q* d = q(x, id, 3);
+      PRUEF(hat_status(x, id, 1) && d != nullptr && !q(x, id, 7));
+      if (d) PRUEF(d->sample == 8 * SPB && d->beat == 8.0);
+      int64_t dmax = -1, lat = -1;
+      const bool ok = onsets_auf_raster(x, 8 * SPB, 12, &dmax, &lat);   // the first 12 slots: the envelope is still neutral
+      std::printf("11: %s: slot onsets on the grid %d, largest deviation %lld samples, chain latency %lld samples\n", ohne ? "scheiben dropped" : "shuffled", ok ? 1 : 0,
+                  static_cast<long long>(dmax), static_cast<long long>(lat));
+      if (!ohne) PRUEF(ok);
+      else PRUEF(!ok);   // the check bites: the unshuffled cell fails it
+      const E* w = letzter(x.alle(E::ZELLE_ZUSTAND, "s1"));
+      PRUEF(w && w->zelle_zelle == 4 && w->zelle_wartend == -1 && w->zelle_wartend_ab == 0.0 && w->zelle_ab_beat == 8.0 && w->zelle_versatz == 0.0 && w->zelle_verwaist == 0);
+    }
+  }
+  {  // 12: the /e/regler mirror of spur/1/filter shows the envelope while a cell drives the field, the knob otherwise
+    arr35::Lauf x(ab.pfad, "test_kern_arr_zelle");
+    const std::string a = x.ordner.sinus('a', FRAMES, 441.0, 0.4f);
+    x.laden(1, spuren_k6(x, a, a, false), "andreas", true);
+    x.lauf(4 * N);
+    x.teil("spur/1/filter", 0.25f, 1.0, 0.25);   // the knob
+    x.lauf(4 * SPB);
+    auto wert_bei = [&](int64_t s) {   // the last /e/regler value of the filter at or before sample s
+      float w = -9.0f;
+      for (const E& e : x.alle(E::REGLER, "spur/1/filter"))
+        if (e.sample <= s) w = e.wert;
+      return w;
+    };
+    PRUEF(std::fabs(wert_bei(x.kern->sample()) - 0.25f) < 1e-6f);
+    // the envelope of cell 4 is 0 for beats 0..3 of the cell, then rises to 0.8 at 3.9
+    auto huelle = [](int64_t s, int64_t t0) {
+      const double p = std::fmod(static_cast<double>(s - t0) / SPB, 4.0);
+      return p < 3.0 ? 0.0 : 0.8 * (p - 3.0) / 0.9;
+    };
+    start(x, "andreas", "s1", 4, 8.0);
+    x.lauf(8 * SPB + 3 * SPB + SPB / 2 + 4 * N);
+    PRUEF(std::fabs(wert_bei(8 * SPB + 1 * SPB) - 0.0f) < 1e-6f);   // the envelope (0), not the knob (0.25)
+    const int64_t s35 = 8 * SPB + 3 * SPB + SPB / 2;
+    const float w35 = wert_bei(s35);
+    std::printf("12: mirror at cell beat 1: %.4f, at beat 3.5: %.4f (envelope %.4f), knob 0.25\n", wert_bei(9 * SPB), w35, huelle(s35, 8 * SPB));
+    PRUEF(std::fabs(w35 - huelle(s35, 8 * SPB)) < 0.06);   // reported at 50 Hz: up to 1216 samples old (0.05 on the ramp)
+    int64_t n_ev = 0;
+    for (const E& e : x.alle(E::REGLER, "spur/1/filter"))
+      if (e.sample > 8 * SPB && e.sample <= s35) {
+        ++n_ev;
+        if (e.sample > 8 * SPB + 2 * N) PRUEF(std::fabs(e.wert - huelle(e.sample, 8 * SPB)) < 0.03);
+        if (e.sample > 8 * SPB + 2 * N) PRUEF(!std::strcmp(e.text, "huelle"));   // K2: the mirror is no hand: its own holder text
+      }
+    PRUEF(n_ev > 20 && n_ev < 160);   // it is reported, and no faster than 50 Hz (about 70 events in 1.5 s at most plus the ramps)
+    // cell 3 (a one-shot without envelope) takes over at beat 11.5: the mirror returns to the knob
+    start(x, "andreas", "s1", 3, 11.5);
+    x.lauf(11 * SPB + SPB / 2 + 6 * N);
+    PRUEF(std::fabs(wert_bei(x.kern->sample()) - 0.25f) < 1e-6f);
+    const size_t n_nach = x.alle(E::REGLER, "spur/1/filter").size();
+    x.lauf(x.kern->sample() + 8 * N);
+    PRUEF(x.alle(E::REGLER, "spur/1/filter").size() == n_nach);   // nothing more is sent while nothing drives it
+    std::printf("12: after the take-over the mirror shows the knob %.4f\n", wert_bei(x.kern->sample()));
+    // a stop gives the knob back too
+    const int64_t t16 = 16 * SPB;
+    start(x, "andreas", "s1", 4, 16.0);
+    x.lauf(t16 + 2 * N);
+    stopp(x, "andreas", "s1", 19.5);   // (a newer command replaces a pending one: the stop goes in after the start took effect)
+    x.lauf(t16 + 3 * SPB + 4 * N);   // the envelope is rising before the stop
+    PRUEF(std::fabs(wert_bei(x.kern->sample()) - 0.25f) > 0.05f);
+    x.lauf(19 * SPB + SPB / 2 + 6 * N);
+    PRUEF(std::fabs(wert_bei(x.kern->sample()) - 0.25f) < 1e-6f);
+    // the knob moves while the envelope drives: the mirror keeps the envelope, and shows the new knob after the release
+    start(x, "andreas", "s1", 4, 24.0);
+    x.lauf(24 * SPB + SPB + 4 * N);
+    x.teil("spur/1/filter", -0.5f, static_cast<double>(x.kern->sample() / SPB) + 1.0, 0.25);
+    x.lauf(26 * SPB + SPB / 2);   // the knob ramp of the Stellwerk is over, the envelope is still 0 here
+    PRUEF(std::fabs(wert_bei(x.kern->sample()) - 0.0f) < 1e-6f);
+    stopp(x, "andreas", "s1", 28.0);
+    x.lauf(28 * SPB + 6 * N);
+    PRUEF(std::fabs(wert_bei(x.kern->sample()) + 0.5f) < 1e-6f);
+    {   // K2: the release event (envelope lets go, the knob is the truth again) is a mirror event too: holder `huelle`, display only
+      const E* l = nullptr;
+      for (const E& e : x.alle(E::REGLER, "spur/1/filter")) l = &e;
+      PRUEF(l && !std::strcmp(l->text, "huelle") && std::fabs(l->wert + 0.5f) < 1e-6f);
+    }
+    // K2: a hand grip (the hand path, halter mensch) while an envelope drives the field reports the GRIP value with `mensch`; the mirror keeps the envelope value
+    start(x, "andreas", "s1", 4, 32.0);
+    x.lauf(32 * SPB + SPB + 4 * N);   // envelope is 0 here
+    const size_t n_vor_hand = x.alle(E::REGLER, "spur/1/filter").size();
+    const int64_t sh = x.kern->sample() + N;
+    x.test_hand("spur/1/filter", 0.2f, sh);        // first value: position only
+    x.lauf(sh + 2 * N);
+    x.test_hand("spur/1/filter", 0.9f, sh + 3 * N);   // the grip moves the knob
+    x.lauf(32 * SPB + 2 * SPB);
+    const E* griff = nullptr;
+    int n_mensch = 0;
+    const std::vector<E> alle_f = x.alle(E::REGLER, "spur/1/filter");
+    for (size_t i = n_vor_hand; i < alle_f.size(); ++i)
+      if (!std::strcmp(alle_f[i].text, "mensch")) { griff = &alle_f[i]; ++n_mensch; }
+    std::printf("12: grip during the envelope: %d mensch events, value %.4f\n", n_mensch, griff ? griff->wert : -9.0f);
+    PRUEF(griff && n_mensch >= 1 && griff->wert > 0.3f);   // the grip value (envelope is 0 here), not the envelope
+    for (size_t i = n_vor_hand; i < alle_f.size(); ++i)
+      if (std::strcmp(alle_f[i].text, "mensch")) PRUEF(!std::strcmp(alle_f[i].text, "huelle") && std::fabs(alle_f[i].wert) < 0.01f);   // the rest is the mirror: still the envelope (0)
+    stopp(x, "andreas", "s1", 36.0);
+    x.lauf(36 * SPB + 6 * N);
+  }
+  {  // 13: unload while the envelope drives
+    arr35::Lauf x(ab.pfad, "test_kern_arr_zelle");
+    const std::string a = x.ordner.sinus('a', FRAMES, 441.0, 0.4f);
+    x.laden(1, spuren_k6(x, a, a, false), "andreas", true);
+    x.lauf(4 * N);
+    x.teil("spur/1/filter", 0.25f, 1.0, 0.25);
+    x.lauf(4 * SPB);
+    start(x, "andreas", "s1", 4, 8.0);
+    x.lauf(11 * SPB + SPB / 2);   // the envelope is rising (cell beat 3.5)
+    auto letzter_wert = [&]() {
+      const std::vector<E> v = x.alle(E::REGLER, "spur/1/filter");
+      return v.empty() ? -9.0f : v.back().wert;
+    };
+    PRUEF(std::fabs(letzter_wert() - 0.25f) > 0.1f);   // driven
+    B ul = x.neu(B::ARR_LADEN, "andreas");
+    ul.zeiger = nullptr;
+    ul.arr_nr = 0;
+    x.sende(ul);
+    x.lauf(x.kern->sample() + 8 * N);
+    const float nach = letzter_wert();
+    x.lauf(x.kern->sample() + 2 * SPB);
+    const size_t n2 = x.alle(E::REGLER, "spur/1/filter").size();
+    x.lauf(x.kern->sample() + 2 * SPB);
+    const size_t n3 = x.alle(E::REGLER, "spur/1/filter").size();
+    std::printf("13: after the unload the mirror shows %.4f, %zu events in the following 2 beats\n", nach, n3 - n2);
+    PRUEF(std::fabs(nach - 0.25f) < 1e-6f);
+    PRUEF(n3 == n2);
+    // reload and launch again: the mirror is the envelope again from its first value (0 at cell beat 0..3), not a stale one
+    x.laden(2, spuren_k6(x, a, a, false), "andreas", true);
+    x.lauf(x.kern->sample() + 4 * N);
+    PRUEF(x.alle(E::REGLER, "spur/1/filter").size() == n3 && std::fabs(letzter_wert() - 0.25f) < 1e-6f);
+    const int64_t t1 = (x.kern->sample() / SPB + 2) * SPB;
+    start(x, "andreas", "s1", 4, static_cast<double>(t1 / SPB));
+    x.lauf(t1 + SPB + 4 * N);
+    PRUEF(std::fabs(letzter_wert()) < 1e-6f);
+  }
   if (!ALLOC_ABFANG_VERFUEGBAR) {
     std::printf("10: skipped (sanitizer build): allocation guard not available\n");
   } else {  // 10: no allocation, lock or sleep in the cycle
@@ -275,7 +489,7 @@ int main() {
     x.laden(1, spuren(x, a), "andreas", true);
     x.lauf(4 * N);
     AbfangZahlen summe;
-    long zyklen = 0, zustaende = 0, quittungen = 0;
+    long zyklen = 0, zustaende = 0, quittungen = 0, reglers = 0;
     auto lauf = [&](int n) {
       for (int i = 0; i < n; ++i) {
         const int64_t n0 = x.kern->sample();
@@ -288,6 +502,7 @@ int main() {
         while (x.ere->hole(e)) {
           if (e.art == E::ZELLE_ZUSTAND) ++zustaende;
           if (e.art == E::QUITTUNG) ++quittungen;
+          if (e.art == E::REGLER && !std::strcmp(e.pfad, "spur/1/filter")) ++reglers;
           if (e.art == E::ARR_ALT) cdj::gib_wiedergabe(static_cast<cdj::ArrSnapshot*>(const_cast<void*>(e.zeiger)), x.cache);
         }
       }
@@ -304,6 +519,28 @@ int main() {
       lauf(static_cast<int>(3 * SPB / N));              // the stop takes effect, the state goes to 0
     }
     lauf(200);
+    // 14: the same with an envelope cell (index 4) and a turning knob: the mirror reports at 50 Hz
+    {
+      const std::string kl = klick(x);
+      x.laden(2, spuren_k6(x, kl, a, false), "andreas", true);
+      lauf(4);
+      long vorher = zustaende;
+      reglers = 0;
+      for (int round = 0; round < 3; ++round) {
+        start(x, "andreas", "s1", 4, static_cast<double>((x.kern->sample() / SPB) + 2));
+        for (int k = 0; k < 6; ++k) {
+          lauf(static_cast<int>(SPB / (2 * N)));
+          x.teil("spur/1/filter", k % 2 ? -0.5f : 0.4f, static_cast<double>(x.kern->sample() / SPB) + 1.0, 0.25);
+        }
+        lauf(static_cast<int>(SPB / N));
+        start(x, "andreas", "s1", 3, static_cast<double>((x.kern->sample() / SPB) + 2));   // an envelope-less cell takes over: the knob once
+        lauf(static_cast<int>(3 * SPB / N));
+        stopp(x, "andreas", "s1", static_cast<double>((x.kern->sample() / SPB) + 2));
+        lauf(static_cast<int>(3 * SPB / N));
+      }
+      std::printf("14: %ld /e/regler events with the envelope cell, %ld state events\n", reglers, zustaende - vorher);
+      PRUEF(reglers > 100);   // the mirror really ran
+    }
     abfang_an();
     void* p = std::malloc(16);
     const long positiv = abfang_aus();

@@ -23,6 +23,8 @@
 #include "cypherdj/arr_track_phase.h"
 #include "cypherdj/arr_playback.h"
 #include "cypherdj/pult_table.h"
+#include <cypherdj/beatfx.h>
+#include <cypherdj/dsp/colorfx.h>
 #include <cypherdj/dsp/djfilter.h>
 #include <cypherdj/dsp/isolator.h>
 #include "cypherdj/spsc_ring.h"
@@ -49,7 +51,7 @@ constexpr int ARR_STREIFEN = ARR_PM + 1 + ARR_RETURNS;
 // Groups and the PM have no slot: the master takes no volume curve.
 constexpr int ARR_AUTO_SLOTS = ARR_SPUREN + ARR_RETURNS;
 // Fields per strip: 0 fader (dB), 1 pan, 2 mute, 3 solo. Tracks and groups: 4..7 send to return 1..4 (dB), 13..16 send to return 5..8. Returns: 4 hall on, 5..10 hall pre, decay, size, low, highcut, tail.
-constexpr int ARR_FELDER = 21;   // loop deck channel strip KZ1: 11 -> 13 (the track EQ fields 10..12); container core K6: 13 -> 17 (the sends to returns 5..8, fields 13..16); K7: 17 -> 21 (track trim, fields 17..20: ARR_F_TRIM and the three kill fields; the track pfl rides on ARR_F_CUE)
+constexpr int ARR_FELDER = 24;   // loop deck channel strip KZ1: 11 -> 13 (the track EQ fields 10..12); container core K6: 13 -> 17 (the sends to returns 5..8, fields 13..16); K7: 17 -> 21 (track trim, fields 17..20: ARR_F_TRIM and the three kill fields; the track pfl rides on ARR_F_CUE); loop lane strip K1: 21 -> 24 (fields 21..23: spur/<n>/fx/1..3)
 constexpr int ARR_F_SEND0 = 4;
 constexpr int ARR_F_SEND4 = 13;   // K6: the sends to returns 5..8 sit behind the track EQ fields so that no existing field moves
 constexpr int arr_f_send(int r) { return r < 4 ? ARR_F_SEND0 + r : ARR_F_SEND4 + (r - 4); }   // field of the send to return r (0-based)
@@ -63,6 +65,8 @@ constexpr int ARR_F_EQ0 = 10;
 static_assert(ARR_F_EQ0 > ARR_F_FILTER && ARR_F_EQ0 + 2 < ARR_FELDER, "the track EQ fields must follow the filter field and fit into the strip");
 constexpr int ARR_F_TRIM = 17;    // container core K7: spur/<n>/trim of a track (dB, before the strip)
 constexpr int ARR_F_KILL0 = 18;   // container core K7: spur/<n>/kill/{tief,mitte,hoch} of a track (fields 18..20, 0/1)
+constexpr int ARR_F_FX0 = 21;     // loop lane strip K1: spur/<n>/fx/{1,2,3} of a track (fields 21..23, 0/1: beat FX unit 1, unit 2, the FX 3 bus)
+static_assert(ARR_F_FX0 == ARR_F_KILL0 + 3 && ARR_F_FX0 + 2 < ARR_FELDER, "the track fx fields follow the kill fields and fit into the strip");
 static_assert(ARR_F_TRIM > arr_f_send(ARR_RETURNS - 1) && ARR_F_KILL0 == ARR_F_TRIM + 1 && ARR_F_KILL0 + 2 < ARR_FELDER, "the track trim and kill fields follow the sends and fit into the strip");
 static_assert(ARR_F_SEND4 > ARR_F_EQ0 + 2 && arr_f_send(ARR_RETURNS - 1) < ARR_FELDER, "the sends to returns 5..8 follow the EQ fields and fit into the strip");
 static_assert(ARR_KETTE_PM == ARR_PM && ARR_KETTE_RET0 == ARR_RET0 && ARR_KETTEN == ARR_STREIFEN, "the chain index is the strip index");
@@ -242,6 +246,11 @@ inline constexpr int auto_spur_osc(int index) { return index + 1; }
 
 // Loop deck K2: the launcher plays cells (loops, one-shots) on its own voices, independent of the transport and of the clip pool.
 constexpr int ARR_LAUNCH_SPUREN = 8;      // 2 decks x 4 tracks
+// Loop lane strip K3/K4: the beat FX units of the launcher tracks. One BeatFx is about 5.6 MB resident (echo line 2.9 MB, Cypher Hall 2.6 MB, flanger), so the arrangement holds a POOL of ARR_FX_POOL instances per unit,
+// not one per track: a track gets a slot while it is a launcher track (it has cells); the pool is the 8 launcher tracks, 2 units x 8 = 16 instances. A track without a slot plays dry on spur/<n>/fx/1 and /2.
+constexpr int ARR_FX_EINHEITEN = 2;       // beat FX unit 1 and 2 (the Mixer's FX_EINHEITEN)
+constexpr int ARR_FX_POOL = ARR_LAUNCH_SPUREN;
+constexpr int ARR_FX3_BLENDE = 480;       // the assign / release blend of the FX 3 share, S-curve: the Mixer's MIX_ZIEL_BLENDE (static_assert in core_container.cpp)
 constexpr int ARR_LAUNCH_STIMMEN = 24;    // per track: playing + incoming + fading tails
 constexpr int ARR_LAUNCH_PAESSE = 48;     // K3: keylock passes (one werk voice each) shared by all launcher voices
 constexpr int ARR_LAUNCH_PAESSE_JE = 4;   // K3: passes one keylock voice holds at a time (playing, its successor after a tempo change, the next ones)
@@ -256,6 +265,27 @@ struct LaunchStand {
   int wartend;          // -1 none, 0 stop, 1..8 start
   double wartend_ab;
   uint64_t meldungen_verloren;   // K5: receipts dropped because the 128-entry buffer was full (same value in every entry; for K6 and diagnosis)
+};
+
+// S1b K5: the gain envelope of a launcher voice on the re-pitch paths (plain and fallback) is read per sample on the cell position. At a discontinuity (the loop wrap of a
+// sawtooth, a step form) the factor glides linearly over ARR_NAHT samples from the factor played before it, as the keylock passes do by cross-fading. The state lives in the
+// voice, so a discontinuity on a block boundary is seen too. Without a discontinuity the factor passes unchanged (bit-equal).
+struct ZellGainGlatt {
+  float vor = -1.0f;   // the envelope factor of the last sample read (-1: none yet)
+  float aus = 1.0f;    // the factor played at the last sample
+  float alt = 1.0f;    // the factor played just before the last discontinuity
+  int64_t ab = -1;     // the sample of the last discontinuity, -1: none
+  float an(float lin, int64_t t) {
+    if (vor >= 0.0f && std::fabs(lin - vor) > 0.02f * std::max(lin, vor)) {
+      alt = aus;
+      ab = t;
+    }
+    vor = lin;
+    float g = lin;
+    if (ab >= 0 && t - ab < ARR_NAHT) g = alt + (lin - alt) * static_cast<float>(t - ab) / static_cast<float>(ARR_NAHT);
+    aus = g;
+    return g;
+  }
 };
 
 struct ArrPruefZugang;   // nur Tests (test_warp_werk_folgen): liest Spur-Busse und Stimmen, schreibt nichts
@@ -293,6 +323,20 @@ class Arrangement {
   void setze_senke_strom(ArrSenke* s) { senke_strom_ = s; spur_plan_gueltig_ = false; }   // container core K7: the sink of the strom tracks (ArrArt::strom)
   void setze_senke_rack(ArrSenke* s) { senke_rack_ = s; spur_plan_gueltig_ = false; }   // 1.9 U6: the sink of the instrument-rack tracks (ArrArt::rack)
   void setze_filter_guete(double q) { for (cypherdj::dsp::DjFilter& f : filt_) f.setze_guete(q); }   // K7b: the Q of the track filters (kern.toml filter_guete, as the channel filters); not in the callback
+  // Loop lane strip K2: the SOUND COLOR FX of the track filter stage. The core hands every sub-block the same art (0 FILTER = the DjFilter, 1..5 = ColorFx), parameter and samples per beat that the mixer gives its Kanalzug
+  // objects (Mixer::color_art_ganz and friends). Pointer-free stores, callback thread, no allocation.
+  void setze_color(int art, float param, double samples_pro_beat) noexcept {
+    col_art_ = art >= 1 && art <= cypherdj::dsp::kColorArtMax ? art : 0;
+    col_param_ = param;
+    col_spb_ = samples_pro_beat;
+  }
+  // Loop lane strip K3: the unit settings of the beat FX (the core forwards Mixer::fx_einheit_setze and fx_takt here: the same art, beats, wet and parameter feed the instances of the tracks). Callback thread.
+  void fx_einheit_setze(int einheit, int art, double beats, float wet, float param1, bool an) noexcept;
+  void fx_slots_tauschen(const ArrSnapshot* neu) noexcept;
+  void fx_takt(double beat0, double bps) noexcept { fx_beat0_ = beat0; fx_bps_ = bps; }
+  // Loop lane strip K4: whether a graph sits on fx/3 (Mixer::fx3_graph_da), handed by the core before every block. Without a graph no track share is diverted.
+  void setze_fx3_graph(bool da) noexcept { fx3_graph_ = da; }
+  bool dj_fx3_da(int nr) const noexcept { return nr >= 1 && nr <= DJ_KANAELE && dj_fx3_da_[nr - 1]; }   // the pair of channel nr received a share in the last block
   void sperre_metronom(bool ja) { metronom_gesperrt_ = ja; }   // Prüfmodus und Render: das Metronom klingt nie
 
   // ---- Befehle, im Callback am Blockanfang s
@@ -342,6 +386,15 @@ class Arrangement {
   bool auto_lane_wert(int regler, float& wert);
   int auto_regler(int spur, int feld) const { return spur >= 0 && spur < ARR_AUTO_SLOTS && feld >= 0 && feld < AUTO_FELDER ? spur_regler_[spur][feld] : -1; }
   bool auto_spielt() const { return status_ == ArrStatus::spielt; }
+  // Session view S1b K5: the value strip field `feld` of strip `streifen` is mixed with at the end of the last block: the cell envelope while a launcher cell plays one for the field, else the knob value.
+  float feld_ziel(int streifen, int feld) const;
+  // S1b K6: the state mirror of the cell envelopes. Callback thread only (the kern reports /e/regler in the thread that runs block(), like auto_uebersteuert), so plain reads, no atomics.
+  // huelle_wert: true while a launcher cell envelope drives the strip field (w = its value at the end of the last block); false when the knob rules, also in the release block back to it.
+  // regler_huelle is the same asked by regulator index; feld_regler is the regulator of a strip field (-1: none), huellen_da() the cheap test whether any envelope is active.
+  bool huelle_wert(int streifen, int feld, float& w) const;
+  bool regler_huelle(int regler, float& w) const;
+  int feld_regler(int streifen, int feld) const { return streifen >= 0 && streifen < ARR_SPUREN && feld >= 0 && feld < ARR_FELDER ? feld_regler_[streifen][feld] : -1; }
+  bool huellen_da() const { return zell_an_; }
   // true if the lane of the field has played in the last block, i.e. auto_letzter_wert is a real lane value (same condition auto_lane_wert applies)
   bool auto_gespielt(int spur, int feld) const { return spur >= 0 && spur < ARR_AUTO_SLOTS && feld >= 0 && feld < AUTO_FELDER && auto_war_[spur][feld]; }
 
@@ -383,6 +436,14 @@ class Arrangement {
     for (int i = 0; i < DJ_KANAELE; ++i) {
       dj_aus_l_[i] = l[i];
       dj_aus_r_[i] = r[i];
+    }
+  }
+  // Loop lane strip K4: the pairs that the diverted FX 3 share of the tracks of DJ channel nr is added into (index i = container i + 1), zeroed by the kernel and valid for this one block like dj_ausgang. A channel
+  // without a pair (or the offline render) diverts nothing.
+  void dj_fx3_ausgang(float* const (&l)[DJ_KANAELE], float* const (&r)[DJ_KANAELE]) noexcept {
+    for (int i = 0; i < DJ_KANAELE; ++i) {
+      dj_fx3_l_[i] = l[i];
+      dj_fx3_r_[i] = r[i];
     }
   }
   // true when the snapshot has a group on DJ channel nr (1..DJ_KANAELE) that the live path routes to a pair: the kernel zeroes and hands the pair only then (the other channels stay untouched, bit for bit)
@@ -454,7 +515,12 @@ class Arrangement {
   const float* pm_l() const { return pm_l_; }
   const float* pm_r() const { return pm_r_; }
   bool eq_leer(int spur) const { return iso_lage_[spur] == 0 && iso_[spur].leer(); }   // loop deck channel strip KZ2 (tests): the isolator of the track is in bypass and holds no state
-  bool filter_leer(int spur) const { return filt_[spur].leer(); }   // loop deck K7b (tests): the DJ filter of the track holds no state
+  bool filter_leer(int spur) const { return filt_[spur].leer(); }
+  bool color_leer(int spur) const { return col_[spur].ruhig(0.0); }   // loop lane strip K2 (tests): the colour fx of the track holds no state (art FILTER counts as empty)
+  int color_art() const { return col_art_; }
+  int fx_slot(int spur) const { return fx_slot_[spur]; }   // loop lane strip K3 (tests): the pool slot of the track, -1 none
+  const cdj::BeatFx& fx_instanz(int einheit, int spur) const { return fx_pool_[einheit * ARR_FX_POOL + (fx_slot_[spur] < 0 ? 0 : fx_slot_[spur])]; }   // the instance of the track's slot (slot 0 when it has none)
+  float fx3_gewicht(int spur) const { return fx3_gew_[spur]; }   // loop lane strip K4 (tests): the share of the track that goes into the fx/3 bus input   // loop deck K7b (tests): the DJ filter of the track holds no state
   float wert(int spur, int feld) const { return w_[spur][feld].w; }   // feld 0 fader (dB), 1 pan, 2 mute, 3 solo
   int stimmen() const;
   // Loop deck K2 (arr_launcher.cpp). Callback thread, no allocation, no lock. See the plan lane K, task K2.
@@ -789,6 +855,7 @@ class Arrangement {
     int64_t fb_von = -1, fb_ende = -1;          // first sounding sample, end of the last pass (exclusive); fb_ende <= fb_von: none
     int64_t fb_ein_ab = -1, fb_aus_ab = -1;     // -1: none
     int64_t fb_nr0 = 0, fb_nr1 = 0;             // first and last pass number of the range
+    ZellGainGlatt gl;                           // S1b K5: the glide of the gain envelope at a discontinuity (re-pitch and fallback reads)
   };
   struct LPass {
     bool belegt = false;
@@ -800,6 +867,7 @@ class Arrangement {
     ArrClip c;                // the copy the werk reads (start_beat 0, laenge_beats = cell beats, 2-marker warp)
     ArrWarp w;
     double wb[2] = {0.0, 0.0}, wf[2] = {0.0, 0.0};
+    ZellKarte zk;             // K4: the cell's read map the werk thread copies at the takeover (WarpAnsatz::zell_karte); freed with the pass (warte), like c and w
   };
   struct LSpur {
     bool belegt = false;
@@ -842,7 +910,31 @@ class Arrangement {
   void launch_vorab(LSpur& t, const Karte& k, int64_t s0, int m, bool karte_neu);
   void launch_vorab_frei(LSpur& t);
   void launch_kl_aus(LStimme& v, int64_t ab);
+  // S1b K5: cell envelopes on the cell position. launch_huellen() (end of launch_block) evaluates the field envelopes of each track's current voice at the block end and writes the ramp
+  // from the value of the last block into zell_buf_; mischen() reads the strip field through wert_ueber(). A release (the cell stopped, or another cell without envelope for the field
+  // took over) ramps back to the knob value over that one block (frei), then the knob rules again. Only the filter and the sends are ever set (zell_slot).
+  void launch_huellen(const Karte& k, int64_t s0, int m);
+  Wert wert_ueber(int streifen, int feld) const;
+  void zell_ueber_loslassen();   // the quiet path (nothing loaded, nothing sounds): every envelope override ends at once
   uint64_t stimmen_verloren_ = 0;
+  static constexpr int ZELL_SLOTS = 1 + ARR_RETURNS;   // S1b K5: slot 0 the filter, slot 1 + r the send to return r
+  static int zell_slot(int feld) {
+    if (feld == ARR_F_FILTER) return 0;
+    for (int r = 0; r < ARR_RETURNS; ++r)
+      if (feld == arr_f_send(r)) return 1 + r;
+    return -1;
+  }
+  struct ZellUeber {
+    bool da = false;     // the strip reads w (end of block) and zell_buf_ (per sample) instead of the knob
+    bool frei = false;   // this block is the release ramp back to the knob; the flag ends at the next block
+    float w = 0.0f;      // value at the end of the last block
+    int8_t zeile = -1;   // the row of zell_buf_ holding the ramp of this block
+  };
+  static constexpr int ZELL_ZEILEN = 80;   // 8 launcher tracks * (filter + ARR_RETURNS sends) = 72 fields at most, one row each (a release block reuses the row of its field)
+  ZellUeber zell_ueber_[ARR_SPUREN][ARR_FELDER];
+  float zell_buf_[ZELL_ZEILEN][ARR_BLOCK] = {};   // 320 KiB (80 rows * ARR_BLOCK * 4 B), a member: no allocation in the callback
+  bool zell_zeile_[ZELL_ZEILEN] = {};             // row taken
+  bool zell_an_ = false;                                     // some zell_ueber_ is set (the release scan can be skipped otherwise)
   // Automation: 8 KiB of project beats per block (ap_); the lane buffers auto_buf_ below are 32 tracks * 4 fields * 1024 * 4 B = 512 KiB (slice 1 had one field: 128 KiB)
   double ap_[ARR_BLOCK] = {};                      // project beat per sample of the block (only filled while a lane plays)
   // Automation slice 2: the fields 0..3 of a track (fader dB, pan, mute 0/1, solo 0/1) can each play a lane. One buffer per track and field (E7, 512 KiB, members: no allocation).
@@ -890,6 +982,33 @@ class Arrangement {
   const uint32_t* karte_gen_ = nullptr;
   uint32_t karte_gen_gesehen_ = 0;
   cypherdj::dsp::DjFilter filt_[ARR_SPUREN];   // loop deck K7b: DJ filter of every track (field ARR_F_FILTER), run in mischen() behind the chain and the delay compensation
+  // Loop lane strip K2: one ColorFx per track (heap, constructor; about 0.78 MB each, 25 MB for all 32), run in place of the DjFilter while the colour art is not FILTER
+  std::unique_ptr<cypherdj::dsp::ColorFx[]> col_;
+  int col_art_ = 0;                  // the art handed by the core (0 FILTER)
+  float col_param_ = 0.5f;
+  double col_spb_ = 0.0;
+  int8_t col_lage_[ARR_SPUREN] = {};   // the art this track's filter stage last ran under (0 FILTER): a change clears the states
+  // Loop lane strip K3: BeatFx instances (heap, constructor): [unit * ARR_FX_POOL + slot]. fx_slot_[track] is the slot of a launcher track (-1 none), fx_slot_kennung_[slot] the track identity that holds it.
+  std::unique_ptr<cdj::BeatFx[]> fx_pool_;
+  int8_t fx_slot_[ARR_SPUREN];
+  uint64_t fx_slot_kennung_[ARR_FX_POOL] = {};
+  int fx_art_[ARR_FX_EINHEITEN] = {};
+  double fx_beats_[ARR_FX_EINHEITEN] = {1.0, 1.0};
+  float fx_wet_[ARR_FX_EINHEITEN] = {};
+  float fx_p1_[ARR_FX_EINHEITEN] = {0.5f, 0.5f};
+  bool fx_an_[ARR_FX_EINHEITEN] = {};
+  bool fx_auf_[ARR_FX_EINHEITEN][ARR_FX_POOL] = {};   // the instance input of the slot is open (spur/<n>/fx/<u> switched on), as Mixer::fx_zuw_
+  double fx_beat0_ = 0.0, fx_bps_ = 128.0 / 60.0 / 48000.0;
+  float fxs_l_[ARR_BLOCK], fxs_r_[ARR_BLOCK], fxs_zw_[ARR_BLOCK];   // what the track adds into its target, held back for the fx chain and the fx/3 split (scratch, mischen())
+  // Loop lane strip K4: the share of a track that goes into the fx/3 bus input instead of its target (state as Mixer::fx3_*)
+  bool fx3_graph_ = false;
+  float fx3_gew_[ARR_SPUREN] = {};
+  float fx3_von_[ARR_SPUREN] = {};
+  int fx3_rest_[ARR_SPUREN] = {};
+  bool fx3_zuw_[ARR_SPUREN] = {};
+  float* dj_fx3_l_[DJ_KANAELE] = {};
+  float* dj_fx3_r_[DJ_KANAELE] = {};
+  bool dj_fx3_da_[DJ_KANAELE] = {};
   double filt_k_[ARR_BLOCK];               // the per-sample filter value of the track in work (scratch, mischen())
   // Loop deck channel strip KZ2: one 3-band isolator per track (fields ARR_F_EQ0 + 0..2), run in mischen() right behind the DJ filter. Heap, allocated once in the constructor (about 24 KB each: not on the stack).
   std::unique_ptr<cypherdj::dsp::Isolator[]> iso_;   // ARR_SPUREN isolators
@@ -959,6 +1078,7 @@ class Arrangement {
     bool da = false;
     const float* vl = nullptr;   // verlauf(): the course of this block, the last sample is taken (bk_ueber_nehmen)
   };
+  int16_t feld_regler_[ARR_SPUREN][ARR_FELDER];   // S1b K6: inverse of regler_spur_/regler_feld_ for the track strips (-1: no regulator)
   int16_t regler_bkz_[cypherdj::stellwerk::MAX_REGLER];
   BkUeber bk_ueber_[BK_UEBER_SLOTS][BK_UEBER_KNOEPFE];
   int8_t bk_slot_[ARR_SPUREN];

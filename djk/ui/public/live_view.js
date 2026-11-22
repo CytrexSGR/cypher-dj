@@ -64,8 +64,11 @@ export function arrBeat(t) {
   if (!arr || arr.status !== 2 || t - arrZeit > 1000) return null;   // stale: no playhead rather than a guessed one
   return kopfImLoop(arrKopf.beat(t), live.projekt?.loop, Number(arr.projekt_beat));
 }
+let projektHaken = null;   // the loop deck pop-up dock reads the live project: it is told when the project was read again
+export function setzeProjektHaken(f) { projektHaken = typeof f === 'function' ? f : null; }
 export function zeichneLive() {
   zeigePlaetzeSpaeter();
+  try { projektHaken?.(); } catch (e) { console.error('Loop deck pop-up dock:', e); }
   zeichneSeq();   // the SEQ places read their deck from the live project
   zeichneStems();   // the stems places read the tracks of their group from it
   zeigeStromZeilen();   // the Strudel module shows a row per stream track of the project
@@ -92,7 +95,11 @@ export async function pruefeLive() {
     zeichneLive();
   } catch { /* the next event or reconnect tries again */ }
 }
+// The loop deck pop-up takes the events it follows (`proj`, `session`) through this hook; app.js registers it. An error there never stops the LIVE read.
+let sessionHaken = null;
+export function setzeSessionHaken(f) { sessionHaken = typeof f === 'function' ? f : null; }
 export function liveEreignis(a, f) {
+  try { sessionHaken?.(a, f); } catch (e) { console.error('Loop deck pop-up:', e); }
   if (a === 'modul') {   // the event's stand has no key distance: read /modul/stand again (it adds tonart_abstand per slot)
     live.stand = f.stand ?? live.stand; zeichneLive();
     if (f.stand && live.projekt) fetch('/modul/stand').then((r) => r.json()).then((s) => { live.stand = s; zeichneLive(); }, () => undefined);

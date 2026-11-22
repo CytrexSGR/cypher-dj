@@ -19,7 +19,7 @@ const HAND = path.resolve(HIER, '..', 'hand.ts');
 // The handler tables live in the family files of ui/project (befehle_<familie>.ts); the source is their text one after the other.
 // Whole file names, not built from the family word: the public export renames these files and rewrites file names it can resolve.
 const FAMILIEN = ['commands_track.ts', 'commands_clip.ts', 'commands_group.ts', 'commands_insert.ts', 'commands_auto.ts', 'commands_transport.ts',
-  'commands_szenen.ts', 'commands_tracker.ts', 'commands_loopdeck.ts', 'commands_container.ts'];
+  'commands_szenen.ts', 'commands_tracker.ts', 'commands_loopdeck.ts', 'commands_container.ts', 'commands_session.ts'];
 const QUELLE = FAMILIEN.map((f) => fs.readFileSync(path.resolve(HIER, '..', '..', 'ui', 'project', f), 'utf8')).join('\n');
 
 // Arguments a handler accepts, from its erlaube(a, 'x', 'y') calls (a call may span lines). Handlers without erlaube yield an empty list.

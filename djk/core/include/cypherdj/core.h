@@ -640,6 +640,15 @@ class Kern {
   // 1.12 S3 (§5.13 /e/auto): callback thread, at the end of the cycle. Drains the Arrangement ring into the event ring; when events were lost (the ring dropped one, or
   // the event ring was full) the queue is discarded and the full state is re-reported (every field with a lane, every field last reported as 1).
   void auto_melden(int64_t n0);
+  // S1b K6: /e/regler for the track fields a launcher cell envelope drives (filter, sends): the envelope value at 50 Hz while it drives, the knob once when it lets go. The events of the
+  // Stellwerk for such a field carry the envelope value too (ereignisse_uebernehmen), so the mirror never shows the knob while the envelope plays.
+  void huellen_melden(int64_t s0, int m);
+  struct HuelleMeldung {
+    bool an = false;               // the last report was the envelope value
+    int64_t sample = INT64_MIN / 2;   // sample of the last envelope report
+  };
+  HuelleMeldung huelle_gemeldet_[ARR_SPUREN][ARR_FELDER];
+  int huelle_offen_ = 0;           // fields whose last report was an envelope value
   bool auto_gemeldet_[ARR_SPUREN][Arrangement::AUTO_FELDER] = {};    // what the reader was last told (only pushed events count)
   uint32_t auto_verloren_gesehen_ = 0;
   int auto_abgleich_ = -1;            // >= 0: the re-report is under way, next field index (spur * 4 + field)
@@ -907,6 +916,8 @@ class Kern {
   // per sub-block when a group of the snapshot leads into the channel, then added into the channel input (Mixer::eingang_l/r of that container) after the loop boxes, the streams and the decks, before the strip
   float dj_aus_l_[Arrangement::DJ_KANAELE][MAX_BLOCK] = {};
   float dj_aus_r_[Arrangement::DJ_KANAELE][MAX_BLOCK] = {};
+  float dj_fx3_l_[Arrangement::DJ_KANAELE][MAX_BLOCK] = {};   // loop lane strip K4: the share of the tracks of the channel that goes into the fx/3 bus input (Arrangement::dj_fx3_ausgang), weighted and handed to the mixer by container_fuellen
+  float dj_fx3_r_[Arrangement::DJ_KANAELE][MAX_BLOCK] = {};
   int dj_kanal_[Arrangement::DJ_KANAELE];   // mixer index of the DJ channel nr = c + 1: container A..D = deck/1, deck/2, pad/1, pad/2 (K5, interim); every entry is set in the constructor (core.cpp), -1 = none
   // K5: true when a DJ pair was handed to this sub-block for the DJ output whose container input is the mixer channel of deck `d` (deck/1, deck/2 are containers A, B; deck/3, deck/4 have none)
   bool deck_gereicht(int d) const noexcept {

@@ -419,7 +419,129 @@ export interface LoopDeck { platz: 1 | 2; raster: LoopRaster }
 export interface Zelle {
   id: string; name: string; farbe: number; art: 'loop' | 'einmal'; sha256: string;
   beats?: number; bpm?: number; gain_db: number; pfad_hinweis?: string;
+  raster?: LoopRaster;   // session view: this cell's own launch grid, wins over the global grid ('ende' comes in S2); absent = the global grid
+  // session view S1b (index 2.1): the clip editor fields. All absent by default; the translator writes them only when present.
+  transponieren?: number;   // semitones, integer -24..24, never 0; only art 'loop' with keylock on (nur_keylock otherwise)
+  rueckwaerts?: true;       // play backwards
+  blende?: true;            // fade at the launch onset and at the loop seam
+  scheiben?: ZellScheiben;  // slot map: slot k starts at grenzen[k] (cell beats) and plays source slot folge[k] (1-based)
+  keylock?: false;          // loop only: follows the tempo as re-pitch; absent = keylock on (true is never stored)
+  huellen?: ZellHuelle[];   // at most 4, one per target; absolute values replace the control while the cell plays
 }
+export const ZELL_TEILUNGEN = ['1/16', '1/8', 'takt', 'transienten'] as const;
+export interface ZellScheiben { teilung: (typeof ZELL_TEILUNGEN)[number]; grenzen: number[]; folge: number[] }
+export type ZellZiel = 'gain' | 'filter' | 'send.hall' | 'send.delay';
+export const ZELL_ZIELE: readonly ZellZiel[] = ['gain', 'filter', 'send.hall', 'send.delay'];
+export interface ZellHuelle { ziel: ZellZiel; punkte: Punkt[] }
+// the limits of the core loader (zell_map.h: ZELL_SCHEIBEN_MAX, ZELL_HUELLEN_MAX, ZELL_PUNKTE_MAX, ZELL_SLOT_MIN)
+export const ZELL_SCHEIBEN_MAX = 64, ZELL_HUELLEN_MAX = 4, ZELL_PUNKTE_MAX = 64, ZELL_SLOT_MIN = 192, ZELL_TRANSPONIEREN_MAX = 24;
+// the value range of an envelope target (the loader's: gain and sends dB, filter -1..1); undefined for a target a cell has no envelope for
+export function ZELL_ZIEL_BEREICH(ziel: string): { min: number; max: number } | undefined {
+  if (ziel === 'filter') return { min: -1, max: 1 };
+  return ziel === 'gain' || ziel === 'send.hall' || ziel === 'send.delay' ? { min: -200, max: 0 } : undefined;
+}
+// A source slot or played slot must hold at least ZELL_SLOT_MIN frames after rounding; the model checks it with 2 frames of margin from the beats
+// and the source tempo (frames = beats * 60 / bpm * 48000). The translator checks again with the decoded frames.
+const ZELL_SLOT_RAND = 2;
+// Everything the core loader refuses about the S1b fields of one cell, as { grund, text }, or null. Shared by the commands and the project check.
+// Shape and range errors are argument_ungueltig; nur_keylock, scheiben_ungueltig and huelle_ungueltig are the named refusals (index 2.4).
+export function zellFehler(z: Zelle): { grund: string; text: string } | null {
+  const ab = (grund: string, text: string) => ({ grund, text });
+  const r = z as unknown as Record<string, unknown>;
+  const loop = z.art === 'loop';
+  if ('keylock' in r && r.keylock !== false) return ab('argument_ungueltig', 'keylock: only false is stored (absent = keylock on)');
+  if ('rueckwaerts' in r && r.rueckwaerts !== true) return ab('argument_ungueltig', 'rueckwaerts: true or absent');
+  if ('blende' in r && r.blende !== true) return ab('argument_ungueltig', 'blende: true or absent');
+  if ('transponieren' in r) {
+    const t = r.transponieren;
+    if (typeof t !== 'number' || !Number.isInteger(t) || t < -ZELL_TRANSPONIEREN_MAX || t > ZELL_TRANSPONIEREN_MAX || t === 0) {
+      return ab('argument_ungueltig', `transponieren: integer -${ZELL_TRANSPONIEREN_MAX}..${ZELL_TRANSPONIEREN_MAX} (not 0) expected`);
+    }
+    if (!loop || r.keylock === false) return ab('nur_keylock', 'transponieren needs a loop cell with keylock on');
+  }
+  if ('keylock' in r && !loop && !('transponieren' in r)) return ab('argument_ungueltig', 'keylock: false applies to loop cells only (a one-shot plays unstretched)');
+  const beats = typeof z.beats === 'number' ? z.beats : 0;
+  if ('scheiben' in r) {
+    const bad = (text: string) => ab('scheiben_ungueltig', text);
+    const s = r.scheiben;
+    if (!istObjekt(s) || Object.keys(s).some((k) => k !== 'teilung' && k !== 'grenzen' && k !== 'folge') || !('grenzen' in s) || !('folge' in s) || !('teilung' in s)) {
+      return bad('scheiben: {teilung, grenzen, folge} expected');
+    }
+    if (!(ZELL_TEILUNGEN as readonly unknown[]).includes(s.teilung)) return bad(`scheiben.teilung: ${ZELL_TEILUNGEN.join(' | ')} expected`);
+    const g = s.grenzen, f = s.folge;
+    if (!Array.isArray(g) || !Array.isArray(f) || g.length < 1 || g.length > ZELL_SCHEIBEN_MAX) return bad(`scheiben: 1..${ZELL_SCHEIBEN_MAX} slots expected`);
+    if (!(beats > 0)) return bad('scheiben need the cell length: set beats first');
+    if (f.length !== g.length) return bad('scheiben.folge: as many entries as grenzen expected');
+    for (let i = 0; i < g.length; i++) {
+      if (!zahl(g[i])) return bad(`scheiben.grenzen[${i}]: number expected`);
+      if (i === 0 ? g[i] !== 0 : !(g[i] > g[i - 1])) return bad(i === 0 ? 'scheiben.grenzen: the first boundary is 0' : `scheiben.grenzen[${i}]: rising expected`);
+      if (!(g[i] < beats)) return bad(`scheiben.grenzen[${i}]: below the cell length (${beats} beats) expected`);
+      if (!Number.isInteger(f[i]) || f[i] < 1 || f[i] > g.length) return bad(`scheiben.folge[${i}]: integer 1..${g.length} expected`);
+    }
+    if (typeof z.bpm === 'number') {
+      const min = (ZELL_SLOT_MIN + ZELL_SLOT_RAND) * z.bpm / 60 / SAMPLERATE;   // beats of the shortest slot
+      for (let i = 0; i < g.length; i++) {
+        if ((i + 1 < g.length ? g[i + 1] : beats) - g[i] < min) return bad(`scheiben.grenzen[${i}]: slot shorter than ${ZELL_SLOT_MIN} frames at ${z.bpm} bpm`);
+      }
+    }
+  }
+  if ('huellen' in r) {
+    const bad = (text: string) => ab('huelle_ungueltig', text);
+    const h = r.huellen;
+    if (!Array.isArray(h) || h.length < 1 || h.length > ZELL_HUELLEN_MAX) return bad(`huellen: 1..${ZELL_HUELLEN_MAX} envelopes expected (absent when there are none)`);
+    const gesehen = new Set<string>();
+    for (let hi = 0; hi < h.length; hi++) {
+      const e = h[hi] as unknown;
+      if (!istObjekt(e) || Object.keys(e).some((k) => k !== 'ziel' && k !== 'punkte')) return bad(`huellen[${hi}]: {ziel, punkte} expected`);
+      const bereich = typeof e.ziel === 'string' ? ZELL_ZIEL_BEREICH(e.ziel) : undefined;
+      if (!bereich) return bad(`huellen[${hi}].ziel: ${ZELL_ZIELE.join(' | ')} expected`);
+      if (gesehen.has(e.ziel as string)) return bad(`huellen[${hi}].ziel: one envelope per target (${e.ziel})`);
+      gesehen.add(e.ziel as string);
+      const pk = e.punkte;
+      if (!Array.isArray(pk) || pk.length < 1 || pk.length > ZELL_PUNKTE_MAX) return bad(`huellen[${hi}].punkte: 1..${ZELL_PUNKTE_MAX} points expected`);
+      if (!(beats > 0)) return bad('huellen need the cell length: set beats first');
+      for (let i = 0; i < pk.length; i++) {
+        const q = pk[i] as unknown, wp = `huellen[${hi}].punkte[${i}]`;
+        if (!istObjekt(q) || Object.keys(q).some((k) => k !== 'beat' && k !== 'wert' && k !== 'form')) return bad(`${wp}: {beat, wert, form?} expected`);
+        if (!zahl(q.beat) || q.beat < 0 || !(q.beat < beats)) return bad(`${wp}.beat: 0 up to the cell length (${beats} beats) expected`);
+        if (!zahl(q.wert) || q.wert < bereich.min || q.wert > bereich.max) return bad(`${wp}.wert: number ${bereich.min}..${bereich.max} expected`);
+        if ('form' in q && !(AUTO_FORMEN as readonly unknown[]).includes(q.form)) return bad(`${wp}.form: ${AUTO_FORMEN.join(' | ')} expected`);
+        if (i > 0) {
+          const v = pk[i - 1] as { beat: number };
+          if (q.beat < v.beat) return bad(`${wp}.beat: rising expected`);
+          if (i > 1 && q.beat === v.beat && q.beat === (pk[i - 2] as { beat: number }).beat) return bad(`${wp}.beat: at most two points at one beat`);
+        }
+      }
+    }
+  }
+  return null;
+}
+// Session view (index 1.1). An empty slot that a scene leaves alone: `{ halten: true }` (D6). It is no cell: it has no id, no audio and never
+// reaches the translator, the budget, the id counter or a loop set (a set stores it as null).
+export type Halten = { halten: true };
+export type ZellSlot = Zelle | null | Halten;
+export const istHalten = (z: unknown): z is Halten => istObjekt(z) && Object.keys(z).length === 1 && z.halten === true;
+// One scene = one row of the session grid (row i+1 = entry i). The list lives in Projekt.session, not Projekt.szenen (that name holds the SEQ mute images).
+// Named SessionSzene because `Szene` below is the SEQ mute image (index 1.1 calls this interface `Szene`; the main instance decides on the rename).
+export interface SessionSzene {
+  id: string;      // neueId(p, 'szene'): sz<n>
+  name: string;    // 0..32 characters
+  farbe: number;   // 0..LOOP_FARBEN-1
+  bpm?: number;    // TEMPO_MIN..TEMPO_MAX: launching the scene ramps the tempo here
+  takte?: number;  // 1..SZENE_TAKTE_MAX, shown; used by follow actions in S5
+  folge?: 'loop' | 'weiter' | 'stopp' | { sprung: number };   // stored and shown, runs in S5
+}
+export interface SessionEinstellung { raster: LoopRaster; szenen: SessionSzene[] }
+export const SZENEN_ZEILEN = 8, SZENE_NAME_MAX = 32, SZENE_TAKTE_MAX = 256;
+const standardSzene = (n: number): SessionSzene => ({ id: `sz${n}`, name: '', farbe: 0 });
+// the eight scenes of a project: the stored ones, else eight defaults (name '', colour 0; ids sz1..sz8). Reading writes nothing.
+export function sessionSzenen(p: Projekt | undefined): SessionSzene[] {
+  return p?.session?.szenen ?? Array.from({ length: SZENEN_ZEILEN }, (_, i) => standardSzene(i + 1));
+}
+// the global launch grid: the stored one, else 'takt'
+// Without a session block the grid is the one the loop decks already launch on (a project from before the session view), else takt.
+export const sessionRaster = (p: Projekt): LoopRaster =>
+  p.session?.raster ?? loopDeckGruppe(p, 1)?.loopdeck?.raster ?? loopDeckGruppe(p, 2)?.loopdeck?.raster ?? 'takt';
 // Where a live module comes from: one loop of a deck rendering, split into stems. von_beat is on the beat axis of the rendering.
 export interface ModulHerkunft {
   quelle_sha256: string; titel: string; fassung: string; basis_bpm: number; von_beat: number; laenge_beats: number;
@@ -517,11 +639,16 @@ export interface Spur {
   geraet?: Geraet; freeze?: Freeze | null; aufnahme?: SpurAufnahme; ausgang?: AusgangGruppe; automation?: Lane[]; takes?: Take[];
   stammbaum?: Stammbaum;   // find sound: the family tree of a Baukasten track (instrument tracks only); project data, not playback (spurSicht omits it)
   fader_db: number; pan: number; mute: boolean; solo: boolean; clips: Clip[]; sends?: Send[]; inserts?: Insert[]; rack?: Rack;
-  zellen?: (Zelle | null)[];   // loop deck: exactly LOOP_ZELLEN entries; only on the audio tracks of a loopdeck group
+  zellen?: ZellSlot[];   // loop deck: exactly LOOP_ZELLEN entries (a cell, null, or the slot { halten: true }); only on the audio tracks of a loopdeck group
   filter?: number;             // loop deck: -1..+1, absent = 0; same tracks as `zellen`
   eq?: Partial<Record<EqBand, number>>;     // loop deck: -200..+6 dB per band, absent band = 0; same tracks as `zellen`
   kill?: Partial<Record<EqBand, true>>;     // loop deck: a band that is killed (absent = off, never stored as false); same tracks as `zellen`
+  fx?: Partial<Record<FxNr, boolean>>;      // loop deck: the FX 1 2 3 (Remix) assignment, like the 1 2 3 keys of a mixer channel (absent = all off; the commands store only true); same tracks as `zellen`
 }
+export type FxNr = '1' | '2' | '3';
+export const FX_NUMMERN: readonly FxNr[] = ['1', '2', '3'];
+// the core row value of the FX u key of a track (spur/<n>/fx/<u>, a switch 0/1)
+export const fxZeilenWert = (s: { fx?: Partial<Record<FxNr, boolean>> } | undefined, u: FxNr): number => (s?.fx?.[u] ? 1 : 0);
 // The 3-band isolator EQ of a loop deck track. A kill is model state; the one place it meets the core is the row value (the band's EQ row gets -200).
 export type EqBand = 'tief' | 'mitte' | 'hoch';
 export const EQ_BAENDER: readonly EqBand[] = ['tief', 'mitte', 'hoch'];
@@ -535,7 +662,7 @@ export interface Tonart { grundton: number; skala: string }
 export interface Projekt {
   format: typeof FORMAT; name: string; rev: number; wiedergabe_rev: number; tempo_bpm: number; taktart: [number, number];
   naechste_id?: { spur?: number; clip?: number; gruppe?: number; lane?: number; return?: number; insert?: number; take?: number; verbund?: number;
-    zelle?: number };
+    zelle?: number; szene?: number };
   naechste_noten_id?: number;
   loop: { an: boolean; von_beat: number; bis_beat: number };
   metronom: { an: boolean; pegel_db: number; ziel: 'master' | 'cue' };
@@ -550,6 +677,7 @@ export interface Projekt {
   tracker?: TrackerMarke;   // tracker view marker (project/tracker.ts): only in /2, never together with live or werkbank; never written when absent
   werkbank?: WerkbankMarke;   // loop workbench module (project/werkbank.ts): only in /2, never together with live; never written when absent
   tonart?: Tonart;          // key of the project (public/harmonie.js): the note editors mark and fold by it; only in /2, absent without a key
+  session?: SessionEinstellung;   // session view: global grid and the 8 scenes; only in a live project, written with the first session command
   szenen?: (Szene | null)[];   // SEQ scenes (project/commands_szenen.ts): exactly SZENEN_SLOTS entries when present, absent until the first save; only in /2
 }
 
@@ -663,7 +791,8 @@ export function hoechste(ids: Iterable<string>, praefix: string): number {
 // Byte für Byte gleich bleiben und ein älterer Stand sie weiter liest; setzeFehlendeZaehler fasst ihn nicht an.
 // Return-IDs r<n> (slice 3): like the lane counter, naechste_id.return arises with the first return. Insert IDs i<n> (slice 4): the same, with the first stage.
 // Take ids t<n> (1.14): like the lane counter, naechste_id.take arises with the first use. Clip ids are project wide over main AND take clips.
-export function neueId(p: Projekt, art: 'spur' | 'clip' | 'gruppe' | 'lane' | 'return' | 'insert' | 'take' | 'verbund' | 'zelle'): string {
+export function neueId(p: Projekt, art: 'spur' | 'clip' | 'gruppe' | 'lane' | 'return' | 'insert' | 'take' | 'verbund' | 'zelle' | 'szene'): string {
+  if (art === 'szene') return neueSzenenId(p);
   const praefix = art === 'spur' ? 's' : art === 'clip' ? 'c' : art === 'lane' ? 'a' : art === 'return' ? 'r'
     : art === 'insert' ? 'i' : art === 'take' ? 't' : art === 'verbund' ? 'v' : art === 'zelle' ? 'z' : 'g';
   const ids = art === 'spur' ? p.spuren.map((s) => s.id)
@@ -678,6 +807,15 @@ export function neueId(p: Projekt, art: 'spur' | 'clip' | 'gruppe' | 'lane' | 'r
   const n = Math.max(p.naechste_id?.[art] ?? 1, lebend + 1);
   p.naechste_id = { ...p.naechste_id, [art]: n + 1 };
   return `${praefix}${n}`;
+}
+// Scene ids sz<n> (session view): own two-letter prefix, so `hoechste` (one character) does not serve. Like the lane counter, naechste_id.szene
+// arises with the first scene command; the defaults of sessionSzenen are sz1..sz8, so the first new id is sz9.
+function neueSzenenId(p: Projekt): string {
+  let lebend = 0;
+  for (const s of sessionSzenen(p)) { const m = /^sz(\d+)$/.exec(s.id); if (m) lebend = Math.max(lebend, Number(m[1])); }
+  const n = Math.max(p.naechste_id?.szene ?? 1, lebend + 1);
+  p.naechste_id = { ...p.naechste_id, szene: n + 1 };
+  return `sz${n}`;
 }
 // Stand des Noten-Zählers: der Projekt-Zähler, sonst das Maximum aller Noten-IDs und alter Clip-Zähler (Spec 6.28) plus 1
 export function notenZaehler(p: Projekt): number {
@@ -721,17 +859,18 @@ export function setzeFehlendeZaehler(p: Projekt): void {
     ...(z?.take !== undefined ? { take: z.take } : {}),         // 1.14: same for the take counter
     ...(z?.verbund !== undefined ? { verbund: z.verbund } : {}),   // tracker patterns: same, it arises with the first link
     ...(z?.zelle !== undefined ? { zelle: z.zelle } : {}),         // loop deck: same, it arises with the first cell
+    ...(z?.szene !== undefined ? { szene: z.szene } : {}),         // session view: same, it arises with the first scene command
   };
   if (p.naechste_noten_id === undefined) p.naechste_noten_id = notenZaehler(p);
 }
 
 // every filled cell of the project (all tracks)
 export function* alleZellen(p: Projekt): Generator<Zelle> {
-  for (const s of p.spuren) for (const z of s.zellen ?? []) if (z) yield z;
+  for (const s of p.spuren) for (const z of s.zellen ?? []) if (z && !istHalten(z)) yield z;
 }
 // every cell id of the project (all tracks)
 function alleZellenIds(p: Projekt): string[] {
-  return p.spuren.flatMap((s) => (s.zellen ?? []).flatMap((z) => (z ? [z.id] : [])));
+  return p.spuren.flatMap((s) => (s.zellen ?? []).flatMap((z) => (z && !istHalten(z) ? [z.id] : [])));
 }
 // The loop deck group of a place (1 = deck A, 2 = deck B): the top group whose `loopdeck.platz` is `platz`
 export function loopDeckGruppe(p: Projekt, platz: 1 | 2): Gruppe | null {
@@ -1522,9 +1661,36 @@ function pruefeLanen(automation: unknown, wo: string, strang: { inserts?: Insert
 }
 
 const SHA_HEX = /^[0-9a-f]{64}$/;
+function loopRasterPruefen(x: unknown, wo: string): void {
+  if (typeof x !== 'string' || !Object.hasOwn(LOOP_RASTER_BEATS, x)) werfe(wo, "'1/4', '1/2', '1', 'takt' or '4takte' expected");
+}
+// session settings: the global grid and exactly 8 scenes (row i+1 = entry i); ids unique
+function pruefeSession(x: unknown): void {
+  const o = felder(x, 'session', ['raster', 'szenen']);
+  loopRasterPruefen(o.raster, 'session.raster');
+  if (!Array.isArray(o.szenen) || o.szenen.length !== SZENEN_ZEILEN) werfe('session.szenen', `array of ${SZENEN_ZEILEN} scenes expected`);
+  const ids = new Set<string>();
+  (o.szenen as unknown[]).forEach((e, i) => {
+    const wo = `session.szenen[${i}]`;
+    const s = felder(e, wo, ['id', 'name', 'farbe'], ['bpm', 'takte', 'folge']);
+    if (typeof s.id !== 'string' || !/^sz[1-9][0-9]{0,14}$/.test(s.id)) werfe(`${wo}.id`, 'sz<n> expected');
+    if (ids.has(s.id)) werfe(`${wo}.id`, `duplicate (${s.id})`);
+    ids.add(s.id);
+    if (typeof s.name !== 'string' || s.name.length > SZENE_NAME_MAX) werfe(`${wo}.name`, `text 0..${SZENE_NAME_MAX} characters expected`);
+    zahlIn(s.farbe, `${wo}.farbe`, 0, LOOP_FARBEN - 1, true);
+    if ('bpm' in s) zahlIn(s.bpm, `${wo}.bpm`, TEMPO_MIN, TEMPO_MAX);
+    if ('takte' in s) zahlIn(s.takte, `${wo}.takte`, 1, SZENE_TAKTE_MAX, true);
+    if ('folge' in s) {
+      const f = s.folge;
+      if (f === 'loop' || f === 'weiter' || f === 'stopp') return;
+      const sp = istObjekt(f) && Object.keys(f).length === 1 && 'sprung' in f ? f.sprung : undefined;
+      if (!zahl(sp) || !ganz(sp) || sp < 1 || sp > SZENEN_ZEILEN) werfe(`${wo}.folge`, "'loop', 'weiter', 'stopp' or { sprung: 1..8 } expected");
+    }
+  });
+}
 // one cell of a loop deck track (the id is checked for uniqueness by pruefeAlles)
 function pruefeZelle(x: unknown, wo: string): void {
-  const o = felder(x, wo, ['id', 'name', 'farbe', 'art', 'sha256', 'gain_db'], ['beats', 'bpm', 'pfad_hinweis']);
+  const o = felder(x, wo, ['id', 'name', 'farbe', 'art', 'sha256', 'gain_db'], ['beats', 'bpm', 'pfad_hinweis', 'raster', 'transponieren', 'rueckwaerts', 'blende', 'scheiben', 'keylock', 'huellen']);
   if (typeof o.id !== 'string' || !ID.test(o.id)) werfe(`${wo}.id`, 'ID erwartet');
   text(o.name, `${wo}.name`, 64);
   if ((o.name as string).trim() === '') werfe(`${wo}.name`, 'a cell name of spaces only is not a name');
@@ -1541,6 +1707,9 @@ function pruefeZelle(x: unknown, wo: string): void {
     if (!ganz(b * 4)) werfe(`${wo}.beats`, 'a multiple of 0.25 expected');
   }
   if ('bpm' in o) zahlIn(o.bpm, `${wo}.bpm`, TEMPO_MIN, TEMPO_MAX);
+  if ('raster' in o) loopRasterPruefen(o.raster, `${wo}.raster`);
+  const zf = zellFehler(o as unknown as Zelle);
+  if (zf) werfe(wo, `${zf.grund}: ${zf.text}`);
   if ('pfad_hinweis' in o) {
     const h = text(o.pfad_hinweis, `${wo}.pfad_hinweis`, 1024);
     if (h.startsWith('/') || h.includes('\\') || h.includes('\0') || h.split('/').some((t) => t === '..' || t === '')) {
@@ -1550,20 +1719,27 @@ function pruefeZelle(x: unknown, wo: string): void {
 }
 function pruefeZellen(x: unknown, wo: string): void {
   if (!Array.isArray(x) || x.length !== LOOP_ZELLEN) werfe(wo, `array of ${LOOP_ZELLEN} entries expected`);
-  (x as unknown[]).forEach((z, i) => { if (z !== null) pruefeZelle(z, `${wo}[${i}]`); });
+  (x as unknown[]).forEach((z, i) => {
+    if (z === null) return;
+    if (istObjekt(z) && 'halten' in z) {   // the slot { halten: true } and nothing else
+      if (!istHalten(z)) werfe(`${wo}[${i}]`, 'the slot is exactly { halten: true }');
+      return;
+    }
+    pruefeZelle(z, `${wo}[${i}]`);
+  });
 }
 
 // the first field of a track that only a loop deck track may carry, or null
-const deckFeld = (s: Spur): string | null => (['zellen', 'filter', 'eq', 'kill'] as const).find((k) => s[k] !== undefined) ?? null;
+const deckFeld = (s: Spur): string | null => (['zellen', 'filter', 'eq', 'kill', 'fx'] as const).find((k) => s[k] !== undefined) ?? null;
 
 function pruefeSpur(s: unknown, wo: string, warpErlaubt: boolean): Spur {
   if (!istObjekt(s)) return werfe(wo, 'Objekt erwartet');
   const basis = ['id', 'nr', 'name', 'farbe', 'art', 'fader_db', 'pan', 'mute', 'solo', 'clips'];
   if (s.art !== 'audio' && s.art !== 'instrument' && s.art !== 'strom') werfe(`${wo}.art`, 'audio, instrument or strom expected');
   const o = s.art === 'strom'
-    ? felder(s, wo, [...basis, 'strom'], ['von', 'gruppe', 'ausgang', 'automation', 'sends', 'inserts', 'rack', 'filter', 'eq', 'kill'])
+    ? felder(s, wo, [...basis, 'strom'], ['von', 'gruppe', 'ausgang', 'automation', 'sends', 'inserts', 'rack', 'filter', 'eq', 'kill', 'fx'])
     : s.art === 'audio'
-    ? felder(s, wo, basis, ['von', 'gruppe', 'aufnahme', 'ausgang', 'automation', 'sends', 'inserts', 'rack', 'takes', 'zellen', 'filter', 'eq', 'kill'])
+    ? felder(s, wo, basis, ['von', 'gruppe', 'aufnahme', 'ausgang', 'automation', 'sends', 'inserts', 'rack', 'takes', 'zellen', 'filter', 'eq', 'kill', 'fx'])
     : felder(s, wo, [...basis, 'geraet'], ['freeze', 'von', 'gruppe', 'ausgang', 'automation', 'sends', 'inserts', 'rack', 'aufnahme', 'stammbaum']);
   if (s.art === 'strom') {
     zahlIn(o.strom, `${wo}.strom`, 1, MAX_STROEME, true);
@@ -1584,6 +1760,13 @@ function pruefeSpur(s: unknown, wo: string, warpErlaubt: boolean): Spur {
     for (const k of Object.keys(e)) {
       if (!EQ_BAENDER.includes(k as EqBand)) werfe(`${wo}.kill.${k}`, 'unknown band');
       if (e[k] !== true) werfe(`${wo}.kill.${k}`, 'true expected');
+    }
+  }
+  if ('fx' in o) {
+    const e = istObjekt(o.fx) ? o.fx : werfe(`${wo}.fx`, 'Objekt erwartet');
+    for (const k of Object.keys(e)) {
+      if (!FX_NUMMERN.includes(k as FxNr)) werfe(`${wo}.fx.${k}`, 'unknown FX (1, 2, 3)');
+      boolean(e[k], `${wo}.fx.${k}`);
     }
   }
   if ('stammbaum' in o) { const f = pruefeStammbaum(o.stammbaum, `${wo}.stammbaum`); if (f.length) werfe(`${wo}.stammbaum`, f[0]); }
@@ -1887,9 +2070,13 @@ function pruefeAlles(x: unknown): void {
   const neu2 = istObjekt(x) && x.format === FORMAT;   // /2 verlangt gruppen und master, /1 hat sie nicht
   const pflicht = ['format', 'name', 'rev', 'wiedergabe_rev', 'tempo_bpm', 'taktart', 'loop', 'metronom', 'spuren', ...(neu2 ? ['gruppen', 'master'] : [])];
   // returns, baukasten in /1: unknown field
-  const nur2 = ['returns', 'baukasten', 'aufnahme', 'live', 'werkbank', 'tracker', 'tonart', 'szenen', 'plaetze'];
+  const nur2 = ['returns', 'baukasten', 'aufnahme', 'live', 'werkbank', 'tracker', 'tonart', 'szenen', 'plaetze', 'session'];
   const o = felder(x, 'projekt', pflicht, ['naechste_id', 'naechste_noten_id', ...(neu2 ? nur2 : [])]);
   if ('szenen' in o) pruefeSzenen(o.szenen);
+  if ('session' in o) {
+    if (o.live !== true) werfe('session', 'unknown field (the session settings exist only in the live container)');
+    pruefeSession(o.session);
+  }
   const tf = 'tonart' in o ? tonartFehler(o.tonart) : null;
   if (tf) werfe('tonart', tf.replace(/^tonart[.:]?\s*/, ''));
   if ('live' in o && o.live !== true) werfe('live', 'true expected (absent when not a live container)');
@@ -1908,8 +2095,8 @@ function pruefeAlles(x: unknown): void {
   }
   if ('naechste_noten_id' in o) zahlIn(o.naechste_noten_id, 'naechste_noten_id', 1, Number.MAX_SAFE_INTEGER, true);
   if ('naechste_id' in o) {
-    const z = felder(o.naechste_id, 'naechste_id', [], ['spur', 'clip', 'gruppe', 'lane', 'return', 'insert', 'take', 'verbund', 'zelle']);
-    for (const k of ['spur', 'clip', 'gruppe', 'lane', 'return', 'insert', 'take', 'verbund', 'zelle']) {
+    const z = felder(o.naechste_id, 'naechste_id', [], ['spur', 'clip', 'gruppe', 'lane', 'return', 'insert', 'take', 'verbund', 'zelle', 'szene']);
+    for (const k of ['spur', 'clip', 'gruppe', 'lane', 'return', 'insert', 'take', 'verbund', 'zelle', 'szene']) {
       if (k in z) zahlIn(z[k], `naechste_id.${k}`, 1, Number.MAX_SAFE_INTEGER, true);
     }
   }
@@ -2042,7 +2229,7 @@ function pruefeAlles(x: unknown): void {
   }
   const zellenIds = new Set<string>();
   (o.spuren as Spur[]).forEach((s, i) => (s.zellen ?? []).forEach((z, k) => {
-    if (!z) return;
+    if (!z || istHalten(z)) return;
     if (zellenIds.has(z.id)) werfe(`spuren[${i}].zellen[${k}].id`, `duplicate (${z.id})`);
     zellenIds.add(z.id);
   }));
@@ -2242,7 +2429,15 @@ export function spurSicht(s: Spur, mitFreeze = true): unknown {
       ? { huellkurven: s.clips.flatMap((c) => (c.huellkurven ?? []).filter((h) => h.ziel !== 'transpose').map((h) => ({ clip: c.id, ...h }))) } : {}),
     // loop deck cells: only what the snapshot is built from (sha, kind, beats, gain, the slot); a rename or a recolour is no new playback. Absent adds no key.
     // `filter` is a control row (spur/<n>/filter), not playback
-    ...(s.zellen ? { zellen: s.zellen.map((z) => (z ? { sha256: z.sha256, art: z.art, beats: z.beats ?? null, gain_db: z.gain_db } : null)) } : {}),
+    // S1b: the editor fields change the snapshot too (added only when present, so a cell without them keeps its view); bpm only where it stands in for a missing beats
+    ...(s.zellen ? { zellen: s.zellen.map((z) => (z && !istHalten(z)
+      ? { sha256: z.sha256, art: z.art, beats: z.beats ?? null, gain_db: z.gain_db,
+        ...(z.beats === undefined && z.bpm !== undefined && (z.scheiben || z.huellen) ? { bpm: z.bpm } : {}),
+        ...(z.transponieren !== undefined ? { transponieren: z.transponieren } : {}), ...(z.rueckwaerts ? { rueckwaerts: true } : {}),
+        ...(z.blende ? { blende: true } : {}), ...(z.keylock === false ? { keylock: false } : {}),
+        ...(z.scheiben ? { scheiben: z.scheiben.grenzen.map((g, k) => [g, z.scheiben!.folge[k]]) } : {}),
+        ...(z.huellen ? { huellen: z.huellen.map((h) => ({ ziel: h.ziel, punkte: h.punkte.map((q) => [q.beat, q.wert, q.form ?? 'linear']) })) } : {}) }
+      : null)) } : {}),
     clips: s.clips.map((c) => (c.art === 'audio'
       ? { id: c.id, art: c.art, sha256: c.quelle.sha256, dekodiert: c.dekodiert, start_beat: c.start_beat, laenge_beats: c.laenge_beats,
         loop_beats: c.loop_beats ?? null, offset_s: c.offset_s, gain_db: c.gain_db, fade_ein_beats: c.fade_ein_beats, fade_aus_beats: c.fade_aus_beats,

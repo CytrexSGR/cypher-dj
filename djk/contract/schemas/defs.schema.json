@@ -53,7 +53,7 @@
     "unbekannte_adresse", "falsche_typen", "protokoll", "neustart", "grenze_sub",
     "datei_fehlt", "format", "audio_fehlt", "zu_gross", "spur_bereich", "reserviert",
     "kein_eingang", "aufnahme_laeuft", "zu_viele_scharf", "eingang_fehlt", "kein_platz",
-    "warp_maschine_fehlt", "nur_andreas", "auto_ziel_unbekannt", "laeuft", "host_fehlt", "kein_rueckweg", "belegt", "schreiber_ueberlauf", "zelle_leer", "live_ohne_container", "dj_doppelt", "send_ausser_modul"]
+    "warp_maschine_fehlt", "nur_andreas", "auto_ziel_unbekannt", "laeuft", "host_fehlt", "kein_rueckweg", "belegt", "schreiber_ueberlauf", "zelle_leer", "live_ohne_container", "dj_doppelt", "send_ausser_modul", "zellen_ungueltig"]
   },
   "zeit": {"description": "§9.1 zeit: Kern-Zeitpunkt", "type": "object", "required": ["sample", "beat", "takt", "phrase"],
    "properties": {"sample": {"$ref": "#/$defs/sample"}, "beat": {"$ref": "#/$defs/beat"},

@@ -23,9 +23,78 @@ Arrangement::Arrangement(const sw::ReglerTabelle& tab, bool mit_hall) : ret_(mit
     for (int64_t& b : je_spur) b = INT64_MIN;
   for (auto& je_spur : blende_s2_)
     for (int64_t& b : je_spur) b = INT64_MIN;
+  fx_pool_ = std::make_unique<cdj::BeatFx[]>(ARR_FX_EINHEITEN * ARR_FX_POOL);   // loop lane strip K3: main thread, never in the callback
+  for (int8_t& s : fx_slot_) s = -1;
+  col_ = std::make_unique<cypherdj::dsp::ColorFx[]>(ARR_SPUREN);   // loop lane strip K2: main thread, never in the callback
   iso_ = std::make_unique<cypherdj::dsp::Isolator[]>(ARR_SPUREN);   // loop deck channel strip KZ2: main thread, never in the callback
   spur_arbeit_ = std::make_unique<ArrArbeit[]>(ARR_ARBEIT_BAHNEN);
   for (int b = 0; b < ARR_ARBEIT_BAHNEN; ++b) spur_arbeit_[b].bahn = b;
+}
+
+// Loop lane strip K3: the unit settings reach the instances that are open or still ringing, as Mixer::fx_einheit_setze does for its channels. An idle instance (input closed, nothing ringing) is not touched, so it never
+// runs its art change (a clearing of about 6 MB) in the callback: it takes the stored settings when its track opens it (mischen).
+void Arrangement::fx_einheit_setze(int einheit, int art, double beats, float wet, float param1, bool an) noexcept {
+  if (einheit < 0 || einheit >= ARR_FX_EINHEITEN) return;
+  fx_art_[einheit] = art;
+  fx_beats_[einheit] = beats;
+  fx_wet_[einheit] = wet;
+  fx_p1_[einheit] = param1;
+  fx_an_[einheit] = an;
+  for (int s = 0; s < ARR_FX_POOL; ++s) {
+    cdj::BeatFx& b = fx_pool_[einheit * ARR_FX_POOL + s];
+    if (fx_auf_[einheit][s] || b.klingt()) b.setze(art, beats, wet, param1, an && fx_auf_[einheit][s]);
+  }
+}
+
+// Loop lane strip K3: the slots follow the track identity (kennung) among the tracks with cells, like the launcher: the order of the tracks may change, a slot (and so its tail) stays with its track. A slot that
+// changes hands, or loses its track, closes its inputs and is cleared if it still rings (callback thread, rare).
+void Arrangement::fx_slots_tauschen(const ArrSnapshot* neu) noexcept {
+  int8_t neu_slot[ARR_SPUREN];
+  bool belegt[ARR_FX_POOL] = {};
+  for (int8_t& s : neu_slot) s = -1;
+  const auto launcher = [&](int i) { return neu && neu->spur[i].n_zellen > 0 && neu->spur[i].kennung != 0; };
+  for (int i = 0; i < ARR_SPUREN; ++i) {
+    if (!launcher(i)) continue;
+    for (int s = 0; s < ARR_FX_POOL; ++s)
+      if (!belegt[s] && fx_slot_kennung_[s] == neu->spur[i].kennung) {
+        neu_slot[i] = static_cast<int8_t>(s);
+        belegt[s] = true;
+        break;
+      }
+  }
+  for (int i = 0; i < ARR_SPUREN; ++i) {
+    if (neu_slot[i] >= 0 || !launcher(i)) continue;
+    int best = -1;
+    for (int s = 0; s < ARR_FX_POOL && best < 0; ++s)   // a free slot that is not ringing is preferred
+      if (!belegt[s] && !fx_pool_[s].klingt() && !fx_pool_[ARR_FX_POOL + s].klingt()) best = s;
+    for (int s = 0; s < ARR_FX_POOL && best < 0; ++s)
+      if (!belegt[s]) best = s;
+    if (best < 0) break;   // more launcher tracks than slots: the rest plays dry
+    belegt[best] = true;
+    neu_slot[i] = static_cast<int8_t>(best);
+    fx_slot_kennung_[best] = neu->spur[i].kennung;
+    for (int u = 0; u < ARR_FX_EINHEITEN; ++u) {   // a new owner: input closed, the old tail does not leak into the new track
+      cdj::BeatFx& b = fx_pool_[u * ARR_FX_POOL + best];
+      fx_auf_[u][best] = false;
+      if (b.klingt()) {
+        b.setze(fx_art_[u], fx_beats_[u], fx_wet_[u], fx_p1_[u], false);
+        b.leeren();
+      }
+    }
+  }
+  for (int s = 0; s < ARR_FX_POOL; ++s) {
+    if (belegt[s]) continue;
+    fx_slot_kennung_[s] = 0;
+    for (int u = 0; u < ARR_FX_EINHEITEN; ++u) {
+      cdj::BeatFx& b = fx_pool_[u * ARR_FX_POOL + s];
+      fx_auf_[u][s] = false;
+      if (b.klingt()) {
+        b.setze(fx_art_[u], fx_beats_[u], fx_wet_[u], fx_p1_[u], false);
+        b.leeren();
+      }
+    }
+  }
+  for (int i = 0; i < ARR_SPUREN; ++i) fx_slot_[i] = neu_slot[i];
 }
 
 int64_t Arrangement::naht_sample(const Karte& k) const {
@@ -128,8 +197,13 @@ const ArrSnapshot* Arrangement::tausche(const ArrSnapshot* neu, int64_t s, const
       iso_lage_[i] = 0;
       iso_blende_[i] = 0;
       filt_[i].leeren();
+      col_[i].leeren();   // loop lane strip K2
+      fx3_gew_[i] = fx3_von_[i] = 0.0f;   // loop lane strip K4: another track on this index starts on its normal path
+      fx3_rest_[i] = 0;
+      fx3_zuw_[i] = false;
     }
   }
+  fx_slots_tauschen(neu);   // loop lane strip K3
   spur_plan_bauen();   // mehrkern slice 3.1: after the swap the sinks see the new snapshot (innen) and the old zuletzt_: exactly what the transition predicate needs
   snap_werk_ = false;   // Slice 2: hat der neue Schnappschuss Clips des Warp-Werks (COMPLEX, TONES)?
   if (snap_)
@@ -592,10 +666,11 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
   const bool ret_blendet = ret_.blendet();   // 1.10 slice 3 (P15): a return strip still fades, no quiet path yet
 #endif
   if (!snap_ && n_offen_ == 0 && klick_rest_ == 0 && stimmen() == 0 && !weg && !ret_blendet && launch_ruhig()) {   // nichts geladen, nichts klingt:
+    if (zell_an_) zell_ueber_loslassen();   // S1b K6: launch_huellen no longer runs here; the envelope lets go (nothing sounds), the kern reports the knob once
     monitor_loeschen();   // 1.8 S3: the sources are valid for one block only
     ruhe(m);                                                                      // DJ-Betrieb ohne Kosten (Slice 11)
     for (int i = 0; i < ARR_SCHLUESSEL; ++i) dj_l_[i] = dj_r_[i] = nullptr;         // slice 5 U2b: the pointers of dj_schluessel() are good for one block
-    for (int i = 0; i < DJ_KANAELE; ++i) dj_aus_l_[i] = dj_aus_r_[i] = nullptr;           // DJ view places: the pairs of dj_ausgang() likewise
+    for (int i = 0; i < DJ_KANAELE; ++i) dj_aus_l_[i] = dj_aus_r_[i] = dj_fx3_l_[i] = dj_fx3_r_[i] = nullptr;           // DJ view places: the pairs of dj_ausgang() likewise
     return;
   }
   if (spur_pool_) spur_pool_->block_anfang();   // mehrkern slice 3.1: once per block with work, after the quiet path (the lateness window counts blocks that did pool work); phases Q and H share this block clock
@@ -679,7 +754,7 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
   }
   monitor_loeschen();   // 1.8 S3: the sources are valid for one block only
   for (int i = 0; i < ARR_SCHLUESSEL; ++i) dj_l_[i] = dj_r_[i] = nullptr;   // slice 5 U2b: the pointers of dj_schluessel() are good for one block; the next block without a call has a silent DJ key
-  for (int i = 0; i < DJ_KANAELE; ++i) dj_aus_l_[i] = dj_aus_r_[i] = nullptr;     // DJ view places: the pairs of dj_ausgang() are good for one block; a block without a call sends a DJ group to the master
+  for (int i = 0; i < DJ_KANAELE; ++i) dj_aus_l_[i] = dj_aus_r_[i] = dj_fx3_l_[i] = dj_fx3_r_[i] = nullptr;     // DJ view places: the pairs of dj_ausgang() are good for one block; a block without a call sends a DJ group to the master
   verlaeufe_nachfuehren(m);
   auto_ueber_abschluss(s0 + m);   // 1.12 S3: an override change inside this block has passed
   if (werk_) werk_->takt(s0 + m);   // Slice 2: Stand des Callbacks an das Warp-Werk (synchron: es füllt die Ringe jetzt)

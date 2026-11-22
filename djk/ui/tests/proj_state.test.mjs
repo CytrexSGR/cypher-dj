@@ -47,8 +47,8 @@ test('abbildung: Gründe → HTTP (400, 404, 409, 413, 503)', () => {
 test('abbildung: alle 8 · MAX_SPUREN Spur-Regler, belegte Slots mit Werten (mute/solo 0/1), freie mit der Vorgabe; erz/4 neutral ohne nur-Hand-Pfade', () => {
   const p = specProjekt(); p.spuren[1].fader_db = -6; p.spuren[1].pan = 0.25; p.spuren[1].mute = true;
   const r = AB.alleSpurRegler(p);
-  assert.equal(r.length, 8 * MAX_SPUREN, '4 mixer rows, filter and 3 eq rows per track');
-  assert.equal(r.length, 256, 'MAX_SPUREN = 32');
+  assert.equal(r.length, 11 * MAX_SPUREN, '4 mixer rows, filter, 3 eq rows and 3 fx rows per track');
+  assert.equal(r.length, 352, 'MAX_SPUREN = 32');
   const w = Object.fromEntries(r.map((x) => [x.pfad, x.wert]));
   assert.deepEqual([w['spur/2/fader'], w['spur/2/pan'], w['spur/2/mute'], w['spur/2/solo']], [-6, 0.25, 1, 0]);
   assert.deepEqual([w['spur/8/fader'], w['spur/8/pan'], w['spur/8/mute'], w['spur/8/solo']], [0, 0, 0, 0]);

@@ -2,7 +2,7 @@
 // Befehl (Rückweg). Kein Server, kein Kern, keine Datei.
 import {
   FADER_MAX, FADER_MIN, HALL_FELDER, HALL_VORGABE, alleInserts, alleRacks, insertVorgabe, insertZeilen, MAX_GRUPPEN, MAX_MAKROS, MAX_RACK, MAX_INS,
-  MAX_RETURNS, MAX_SPUREN, EQ_BAENDER, EQ_MIN, EQ_MAX, eqZeilenWert, type EqBand,
+  MAX_RETURNS, MAX_SPUREN, EQ_BAENDER, EQ_MIN, EQ_MAX, eqZeilenWert, FX_NUMMERN, fxZeilenWert, type FxNr, type EqBand,
   type Projekt, type Spur,
 } from '../../project/model.ts';
 import type { Quelle } from '../../project/history.ts';
@@ -58,6 +58,7 @@ export function alleSpurRegler(p: Projekt): Soll[] {
     for (const k of Object.keys(FELD) as (keyof typeof FELD)[]) aus.push({ pfad: `spur/${n}/${k}`, wert: w[k] });
     aus.push({ pfad: `spur/${n}/${SPUR_FILTER}`, wert: p.spuren.find((s) => s.nr === n)?.filter ?? 0 });
     for (const b of EQ_BAENDER) aus.push({ pfad: `spur/${n}/eq/${b}`, wert: eqZeilenWert(p.spuren.find((s) => s.nr === n), b) });   // kill applied
+    for (const u of FX_NUMMERN) aus.push({ pfad: `spur/${n}/fx/${u}`, wert: fxZeilenWert(p.spuren.find((s) => s.nr === n), u) });
   }
   return aus;
 }
@@ -132,6 +133,7 @@ export const alleRegler = (p: Projekt): Soll[] => [...alleSpurRegler(p), ...alle
 
 // Rückweg (Spec 3.4): /e/regler spur/<n>/<feld> mit Halter mensch → Befehl spur_aendern, oder null (keine Spur auf n, Wert schon da)
 const REGLER_PFAD = /^spur\/([1-9][0-9]?)\/(fader|pan|mute|solo|filter)$/;
+const FX_PFAD = /^spur\/([1-9]|[12][0-9]|3[0-2])\/fx\/([123])$/;
 const EQ_PFAD = /^spur\/([1-9]|[12][0-9]|3[0-2])\/eq\/(tief|mitte|hoch)$/;
 const GRUPPEN_PFAD = /^grp\/([1-9]|1[0-6])\/(fader|pan|mute|solo)$/;
 const SEND_PFAD = /^(?:(spur)\/([1-9]|[12][0-9]|3[0-2])|(grp)\/([1-9]|1[0-6]))\/send\/([1-4])$/;
@@ -183,6 +185,14 @@ export function reglerZuBefehl(p: Projekt, pfad: string, wert: number): { befehl
     const w = Math.min(EQ_MAX, Math.max(EQ_MIN, wert));
     return (s.eq?.[b] ?? 0) === w ? null : { befehl: { befehl: 'spur_aendern', spur_id: s.id, eq: { [b]: w } }, label: `Mixer: ${s.name} eq ${b}` };
   }
+  const fm = FX_PFAD.exec(pfad);
+  if (fm) {                                                              // loop deck FX 1 2 3 key: a switch
+    const s = p.spuren.find((x) => x.nr === Number(fm[1]));
+    const u = fm[2] as FxNr;
+    if (!s || s.zellen === undefined || !Number.isFinite(wert)) return null;
+    const an = wert >= 0.5;
+    return !!s.fx?.[u] === an ? null : { befehl: { befehl: 'spur_aendern', spur_id: s.id, fx: { [u]: an } }, label: `Mixer: ${s.name} fx ${u}` };
+  }
   const m = REGLER_PFAD.exec(pfad);
   if (!m || Number(m[1]) > MAX_SPUREN || !Number.isFinite(wert)) return null;
   const s = p.spuren.find((x) => x.nr === Number(m[1]));
@@ -199,5 +209,5 @@ export function reglerZuBefehl(p: Projekt, pfad: string, wert: number): { befehl
   return { befehl: { befehl: 'spur_aendern', spur_id: s.id, [feld]: w }, label: `Mixer: ${s.name} ${k}` };
 }
 export const istSpurRegler = (pfad: string): boolean => REGLER_PFAD.test(pfad);
-export const istMixerRegler = (pfad: string): boolean => REGLER_PFAD.test(pfad) || EQ_PFAD.test(pfad) || GRUPPEN_PFAD.test(pfad) || pfad === 'pm/fader'
+export const istMixerRegler = (pfad: string): boolean => REGLER_PFAD.test(pfad) || EQ_PFAD.test(pfad) || FX_PFAD.test(pfad) || GRUPPEN_PFAD.test(pfad) || pfad === 'pm/fader'
   || SEND_PFAD.test(pfad) || RET_PFAD.test(pfad) || HALL_PFAD.test(pfad);

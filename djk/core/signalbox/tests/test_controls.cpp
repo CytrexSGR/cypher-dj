@@ -19,6 +19,8 @@ constexpr int SPUR_FILTER_ZEILEN = SPUR_FILTER_N;   // loop deck K7a: spur/1..32
 constexpr int SPUR_EQ_ZEILEN = 3 * SPUR_EQ_N;   // loop deck channel strip KZ1: spur/<n>/eq/{tief,mitte,hoch}, n = 1..32, the very last rows (behind spur/32/filter)
 constexpr int STROM_BK_ZEILEN = STROM_BK_STROEME * BK_REGLER_N;   // container core K2: strom/<n>/bk/<k>, n = 1..16, the very last rows (behind spur/32/eq/hoch)
 constexpr int SPUR_ZEILEN_K7 = 5 * SPUR_REGLER_SPUREN;   // container core K7: spur/<n>/{pfl,trim,kill/tief,kill/mitte,kill/hoch}, n = 1..32, the very last rows (behind ret/8/*)
+constexpr int SPUR_FX_ZEILEN = 3 * SPUR_REGLER_SPUREN;   // loop lane strip K1: spur/<n>/fx/{1,2,3}, n = 1..32, the very last rows (behind the K7 rows)
+constexpr int SPUR_ZEILEN_HINTEN = SPUR_ZEILEN_K7 + SPUR_FX_ZEILEN;   // everything behind ret/8/*
 constexpr int MASTER_BK_ZEILEN = BK_REGLER_N;   // master insert graph: master/bk/1..64 at the very end (behind grp/<n>/cue)
 const ReglerTabelle& tab() {
   static ReglerTabelle t;
@@ -44,15 +46,15 @@ FALL(zahl_der_regler_und_kanaele) {
   // 1.10 slice 4b T12: plus the eq rows (59 per instance, 1 instance) and the saett rows (4 per instance, 1 instance): 1378 + 63 = 1441.
   // The pool sizes are the measured ones (T11): a change of either is a decision with a new measurement, and this pin goes red first.
   // 2026-11-06: the eq pool has 2 instances (Andreas' decision of 2026-11-05, lane measured quiet): 59 more rows.
-  PRUEFE_GLEICH(tab().anzahl(), 357 + 4 * 8 + 204 + 2 * 8 + WERKZEUG_REGLER + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 6 * 56 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN + SPUR_FILTER_ZEILEN + SPUR_EQ_ZEILEN + STROM_BK_ZEILEN + RETURNS_ACHT_ZEILEN + SPUR_ZEILEN_K7);   // + the 48 rack rows (slice 4c), + the 3 ins/lim rows per limiter, + the 4 ins/host rows (plan 1.11), + the 5 ins/utility rows per instance (arr-fx)
+  PRUEFE_GLEICH(tab().anzahl(), 357 + 4 * 8 + 204 + 2 * 8 + WERKZEUG_REGLER + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 6 * 56 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN + SPUR_FILTER_ZEILEN + SPUR_EQ_ZEILEN + STROM_BK_ZEILEN + RETURNS_ACHT_ZEILEN + SPUR_ZEILEN_HINTEN);   // + the 48 rack rows (slice 4c), + the 3 ins/lim rows per limiter, + the 4 ins/host rows (plan 1.11), + the 5 ins/utility rows per instance (arr-fx)
   // 1.10 slice 4c T15: plus the 48 rack macro rows rack/<1..12>/m1..m4: 1500 + 48 = 1548.
   // Master limiter: plus the 3 rows ins/lim/1/{an,decke,abklingen}: 1548 + 3 = 1551.
   // Plan 1.11 T4: plus the 4 rows ins/host/1..4/an: 1551 + 4 = 1555.
   // arr-fx slice 1: plus the utility kind, 8 instances x 5 rows (an, breite, mono_unter, gain, balance), appended last: 1555 + 40 = 1595.
   // arr-fx slice 2: the pools grow to 8 EQs (+6 x 59), 4 saturators (+3 x 4) and 2 limiters (+3): 1595 + 354 + 12 + 3 = 1964; rack, lim, host and utility rows move up.
   // arr-bk slice 3: plus the bk kind, 8 instances x 9 rows (an, k1..k8), appended last: 1964 + 72 = 2036 of the ceiling 4096.
-  PRUEFE_GLEICH(tab().anzahl(), 609 + 201 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 6 * 56 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN + SPUR_FILTER_ZEILEN + SPUR_EQ_ZEILEN + STROM_BK_ZEILEN + RETURNS_ACHT_ZEILEN + SPUR_ZEILEN_K7);
-  PRUEFE_GLEICH(tab().anzahl(), 2372 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN + SPUR_FILTER_ZEILEN + SPUR_EQ_ZEILEN + STROM_BK_ZEILEN + RETURNS_ACHT_ZEILEN + SPUR_ZEILEN_K7);   // nested groups task 1: + 64 rows of groups 9..16 at the end; 64-knob widening: 2564 + 8 x 32 (ins/bk/<n>/k33..k64) + 14 x 32 (<kanal>/bk/33..64 of 12 channels, fx/3, fx/4) of the ceiling 4096
+  PRUEFE_GLEICH(tab().anzahl(), 609 + 201 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 6 * 56 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN + SPUR_FILTER_ZEILEN + SPUR_EQ_ZEILEN + STROM_BK_ZEILEN + RETURNS_ACHT_ZEILEN + SPUR_ZEILEN_HINTEN);
+  PRUEFE_GLEICH(tab().anzahl(), 2372 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN + SPUR_FILTER_ZEILEN + SPUR_EQ_ZEILEN + STROM_BK_ZEILEN + RETURNS_ACHT_ZEILEN + SPUR_ZEILEN_HINTEN);   // nested groups task 1: + 64 rows of groups 9..16 at the end; 64-knob widening: 2564 + 8 x 32 (ins/bk/<n>/k33..k64) + 14 x 32 (<kanal>/bk/33..64 of 12 channels, fx/3, fx/4) of the ceiling 4096
   // the contract (INTERFACES 1.5) says indices 1258 to 1377: the table counts the 4 deck/<n>/transport rows, the dump of stellwerk_regler_liste does not (1374 lines)
   PRUEFE_GLEICH(tab().suche("ins/komp/1/an"), 810);
   PRUEFE_GLEICH(tab().suche("ins/komp/12/sc"), 929);
@@ -512,7 +514,7 @@ FALL(werkzeug_zeilen_201_und_ihre_zaehlung) {
   PRUEFE_GLEICH(spektrum, 1);
   PRUEFE_GLEICH(gesamt, 201);
   PRUEFE_GLEICH(WERKZEUG_REGLER, 201);
-  PRUEFE_GLEICH(tab().anzahl(), 810 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 6 * 56 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN + SPUR_FILTER_ZEILEN + SPUR_EQ_ZEILEN + STROM_BK_ZEILEN + RETURNS_ACHT_ZEILEN + SPUR_ZEILEN_K7);   // arr-bk: + 8 x 9 bk rows;   // 1.10 slice 4a/4b/4c + limiter + arr-fx: the 706 insert rows (120 komp, 8 x 59 eq, 4 x 4 saett, 48 rack, 2 x 3 lim, 4 host, 8 x 5 utility) follow the tool block
+  PRUEFE_GLEICH(tab().anzahl(), 810 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 6 * 56 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN + SPUR_FILTER_ZEILEN + SPUR_EQ_ZEILEN + STROM_BK_ZEILEN + RETURNS_ACHT_ZEILEN + SPUR_ZEILEN_HINTEN);   // arr-bk: + 8 x 9 bk rows;   // 1.10 slice 4a/4b/4c + limiter + arr-fx: the 706 insert rows (120 komp, 8 x 59 eq, 4 x 4 saett, 48 rack, 2 x 3 lim, 4 host, 8 x 5 utility) follow the tool block
   // and the table holds no other row of this kind: the count by role is 201 as well
   int rollen = 0;
   for (int r = 0; r < tab().anzahl(); r++)
@@ -668,7 +670,7 @@ FALL(container_zeilen_wie_vorher) {
   PRUEFE_GLEICH(d("deck/4/transport").deck, 4);
   PRUEFE_GLEICH(tab().suche("deck/3/fader"), -1);
   PRUEFE_GLEICH(tab().suche("deck/4/pfl"), -1);
-  PRUEFE_GLEICH(tab().anzahl(), 5088);   // 16 bk slots x 64 knobs (was 8: 4576)
+  PRUEFE_GLEICH(tab().anzahl(), 5088 + SPUR_FX_ZEILEN);   // 16 bk slots x 64 knobs (was 8: 4576)
   PRUEFE_GLEICH(std::strcmp(tab().def(609 + 200).pfad, "spektrum/kanal"), 0);
   PRUEFE_GLEICH(std::strcmp(tab().def(810).pfad, "ins/komp/1/an"), 0);   // the insert block starts right behind the tool block
   PRUEFE_GLEICH(std::strcmp(tab().def(929).pfad, "ins/komp/12/sc"), 0);
@@ -679,10 +681,10 @@ FALL(container_zeilen_wie_vorher) {
 // the send returns), the rows 9..32 moved by 256 (2228 -> 2484) because the insert block before them grew to 65 rows per stage; the restart state is keyed by path, so nothing reads them by index; two-digit numbers are their own rows and never alias bk/1..bk/8.
 FALL(bk_regler_9_bis_64_haengen_am_tabellenende) {
   const int n = tab().anzahl();
-  PRUEFE_GLEICH(n, 2372 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN + SPUR_FILTER_ZEILEN + SPUR_EQ_ZEILEN + STROM_BK_ZEILEN + RETURNS_ACHT_ZEILEN + SPUR_ZEILEN_K7);
+  PRUEFE_GLEICH(n, 2372 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN + SPUR_FILTER_ZEILEN + SPUR_EQ_ZEILEN + STROM_BK_ZEILEN + RETURNS_ACHT_ZEILEN + SPUR_ZEILEN_HINTEN);
   PRUEFE(n < cypherdj::stellwerk::MAX_REGLER);
   PRUEFE_GLEICH(cypherdj::stellwerk::BK_REGLER_N, 64);
-  PRUEFE_GLEICH(cypherdj::stellwerk::MAX_REGLER - n, 8192 - 5088);   // live override for all 16 bk slots: 1024 spur/<slot>/bk/<k> rows (512 with 8 slots: 4576; 3924 of 4096 before the table moved to 8192), 428 with 32 knobs; production plan task 8: 256 rows, 684 before ("Regler 3412 von 4096, Reserve 684")   // "Regler 3412 von 4096, Reserve 684" (master insert graph: 64 master/bk rows; 748 and 3348 before) (live modules task 6: 16 grp/<n>/cue rows; 764 before, 3268 and 828 before nested groups task 1)
+  PRUEFE_GLEICH(cypherdj::stellwerk::MAX_REGLER - n, 8192 - 5088 - SPUR_FX_ZEILEN);   // live override for all 16 bk slots: 1024 spur/<slot>/bk/<k> rows (512 with 8 slots: 4576; 3924 of 4096 before the table moved to 8192), 428 with 32 knobs; production plan task 8: 256 rows, 684 before ("Regler 3412 von 4096, Reserve 684")   // "Regler 3412 von 4096, Reserve 684" (master insert graph: 64 master/bk rows; 748 and 3348 before) (live modules task 6: 16 grp/<n>/cue rows; 764 before, 3268 and 828 before nested groups task 1)
   // rows 9..32: 4 channels x 24 knobs, then fx/3 and fx/4 x 24, at 2036..2179
   PRUEFE_GLEICH(tab().suche("deck/1/bk/9"), 2036);
   PRUEFE_GLEICH(tab().suche("deck/1/bk/32"), 2036 + 23);
@@ -698,11 +700,11 @@ FALL(bk_regler_9_bis_64_haengen_am_tabellenende) {
   PRUEFE_GLEICH(tab().suche("fx/3/bk/33"), 2372 - 2 * 32);
   PRUEFE_GLEICH(tab().suche("fx/4/bk/64"), 2372 - 1);
   // master insert graph: master/bk/1..64 are the very last rows (behind grp/16/cue), global, everybody may (not nur_hand)
-  PRUEFE_GLEICH(tab().suche("master/bk/1"), tab().anzahl() - STROM_BK_ZEILEN - RETURNS_ACHT_ZEILEN - SPUR_ZEILEN_K7 - 64 - SPUR_BK_ZEILEN - SPUR_FILTER_ZEILEN - SPUR_EQ_ZEILEN);   // production plan task 8: the 1024 spur/<slot>/bk/<k> rows follow them
-  PRUEFE_GLEICH(tab().suche("master/bk/64"), tab().anzahl() - STROM_BK_ZEILEN - RETURNS_ACHT_ZEILEN - SPUR_ZEILEN_K7 - 1 - SPUR_BK_ZEILEN - SPUR_FILTER_ZEILEN - SPUR_EQ_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("spur/1/bk/1"), tab().anzahl() - STROM_BK_ZEILEN - RETURNS_ACHT_ZEILEN - SPUR_ZEILEN_K7 - SPUR_BK_ZEILEN - SPUR_FILTER_ZEILEN - SPUR_EQ_ZEILEN);   // slot-major, followed by the 32 filter rows (K7a)
-  PRUEFE_GLEICH(tab().suche("spur/16/bk/64"), tab().anzahl() - STROM_BK_ZEILEN - RETURNS_ACHT_ZEILEN - SPUR_ZEILEN_K7 - 1 - SPUR_FILTER_ZEILEN - SPUR_EQ_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("spur/2/bk/1"), tab().anzahl() - STROM_BK_ZEILEN - RETURNS_ACHT_ZEILEN - SPUR_ZEILEN_K7 - SPUR_BK_ZEILEN - SPUR_FILTER_ZEILEN - SPUR_EQ_ZEILEN + 64);
+  PRUEFE_GLEICH(tab().suche("master/bk/1"), tab().anzahl() - STROM_BK_ZEILEN - RETURNS_ACHT_ZEILEN - SPUR_ZEILEN_HINTEN - 64 - SPUR_BK_ZEILEN - SPUR_FILTER_ZEILEN - SPUR_EQ_ZEILEN);   // production plan task 8: the 1024 spur/<slot>/bk/<k> rows follow them
+  PRUEFE_GLEICH(tab().suche("master/bk/64"), tab().anzahl() - STROM_BK_ZEILEN - RETURNS_ACHT_ZEILEN - SPUR_ZEILEN_HINTEN - 1 - SPUR_BK_ZEILEN - SPUR_FILTER_ZEILEN - SPUR_EQ_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("spur/1/bk/1"), tab().anzahl() - STROM_BK_ZEILEN - RETURNS_ACHT_ZEILEN - SPUR_ZEILEN_HINTEN - SPUR_BK_ZEILEN - SPUR_FILTER_ZEILEN - SPUR_EQ_ZEILEN);   // slot-major, followed by the 32 filter rows (K7a)
+  PRUEFE_GLEICH(tab().suche("spur/16/bk/64"), tab().anzahl() - STROM_BK_ZEILEN - RETURNS_ACHT_ZEILEN - SPUR_ZEILEN_HINTEN - 1 - SPUR_FILTER_ZEILEN - SPUR_EQ_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("spur/2/bk/1"), tab().anzahl() - STROM_BK_ZEILEN - RETURNS_ACHT_ZEILEN - SPUR_ZEILEN_HINTEN - SPUR_BK_ZEILEN - SPUR_FILTER_ZEILEN - SPUR_EQ_ZEILEN + 64);
   PRUEFE(tab().suche("spur/9/bk/1") >= 0 && tab().suche("spur/17/bk/1") < 0 && tab().suche("spur/1/bk/65") < 0 && tab().suche("spur/16/bk/65") < 0 && tab().suche("spur/1/bk/0") < 0 && tab().suche("spur/0/bk/1") < 0);
   {
     const ReglerDef& x = d("spur/3/bk/17");
@@ -750,7 +752,7 @@ PRUEF_MAIN
 FALL(strom_bk_zeilen) {
   PRUEFE_GLEICH(STROM_BK_STROEME, 16);
   PRUEFE(tab().anzahl() <= cypherdj::stellwerk::MAX_REGLER);
-  const int n = tab().anzahl() - RETURNS_ACHT_ZEILEN - SPUR_ZEILEN_K7;   // the ret/5..8 rows follow (container core K6)
+  const int n = tab().anzahl() - RETURNS_ACHT_ZEILEN - SPUR_ZEILEN_HINTEN;   // the ret/5..8 rows follow (container core K6)
   PRUEFE_GLEICH(tab().suche("strom/1/bk/1"), n - STROM_BK_ZEILEN);
   PRUEFE_GLEICH(tab().suche("strom/1/bk/2"), n - STROM_BK_ZEILEN + 1);
   PRUEFE_GLEICH(tab().suche("strom/2/bk/1"), n - STROM_BK_ZEILEN + 64);
@@ -767,7 +769,7 @@ FALL(strom_bk_zeilen) {
 // Loop deck K7a: spur/1..32/filter, the DJ filter of an arrangement track, appended behind the last spur/<slot>/bk/<k> row.
 FALL(spur_filter_zeilen_haengen_hinter_spur_bk) {
   PRUEFE_GLEICH(SPUR_FILTER_N, 32);
-  const int n = tab().anzahl() - STROM_BK_ZEILEN - RETURNS_ACHT_ZEILEN - SPUR_ZEILEN_K7;   // the strom/<n>/bk/<k> rows follow (container core K2)
+  const int n = tab().anzahl() - STROM_BK_ZEILEN - RETURNS_ACHT_ZEILEN - SPUR_ZEILEN_HINTEN;   // the strom/<n>/bk/<k> rows follow (container core K2)
   PRUEFE_GLEICH(tab().suche("spur/1/filter"), n - SPUR_FILTER_ZEILEN - SPUR_EQ_ZEILEN);
   PRUEFE_GLEICH(tab().suche("spur/32/filter"), n - 1 - SPUR_EQ_ZEILEN);
   PRUEFE_GLEICH(tab().suche("spur/2/filter"), n - SPUR_FILTER_ZEILEN - SPUR_EQ_ZEILEN + 1);
@@ -784,9 +786,9 @@ FALL(spur_filter_zeilen_haengen_hinter_spur_bk) {
 // The flags are those of the mixer eq rows (db: the -200 kill ramps through -60 dB like every dB row), the ramp is 5 ms, everybody may write.
 FALL(spur_eq_zeilen_haengen_hinter_spur_filter) {
   PRUEFE_GLEICH(SPUR_EQ_N, 32);
-  const int n = tab().anzahl() - STROM_BK_ZEILEN - RETURNS_ACHT_ZEILEN - SPUR_ZEILEN_K7;   // the strom/<n>/bk/<k> rows follow (container core K2)
+  const int n = tab().anzahl() - STROM_BK_ZEILEN - RETURNS_ACHT_ZEILEN - SPUR_ZEILEN_HINTEN;   // the strom/<n>/bk/<k> rows follow (container core K2)
   PRUEFE_GLEICH(n, 3668);   // 3156 with 8 bk slots (512 rows fewer)
-  PRUEFE_GLEICH(cypherdj::stellwerk::MAX_REGLER - tab().anzahl(), 8192 - 5088);   // the ceiling is 8192 rows
+  PRUEFE_GLEICH(cypherdj::stellwerk::MAX_REGLER - tab().anzahl(), 8192 - 5088 - SPUR_FX_ZEILEN);   // the ceiling is 8192 rows
   PRUEFE_GLEICH(tab().suche("spur/1/eq/tief"), tab().suche("spur/32/filter") + 1);   // the first sits right after the last filter row
   PRUEFE_GLEICH(tab().suche("spur/1/eq/tief"), n - SPUR_EQ_ZEILEN);
   PRUEFE_GLEICH(tab().suche("spur/1/eq/mitte"), n - SPUR_EQ_ZEILEN + 1);
@@ -842,7 +844,7 @@ FALL(returns_acht) {   // container core K6: eight returns, ret/5..8 and their s
   PRUEFE_GLEICH(SND_REGLER, 8);
   PRUEFE_GLEICH(RETURNS_ACHT_ZEILEN, 4 * 59);
   const int erste_neu = tab().suche("spur/1/send/5");
-  PRUEFE_GLEICH(erste_neu, tab().anzahl() - RETURNS_ACHT_ZEILEN - SPUR_ZEILEN_K7);   // behind strom/16/bk/64
+  PRUEFE_GLEICH(erste_neu, tab().anzahl() - RETURNS_ACHT_ZEILEN - SPUR_ZEILEN_HINTEN);   // behind strom/16/bk/64
   PRUEFE(tab().suche("ret/8/fader") > erste_neu && tab().suche("spur/32/send/8") > erste_neu);
   PRUEFE(tab().suche("ret/4/fader") < 810 && tab().suche("spur/32/send/4") < 810);   // the old four stay before the insert block
   PRUEFE_GLEICH(tab().suche("ret/9/fader"), -1);
@@ -868,7 +870,7 @@ FALL(returns_acht) {   // container core K6: eight returns, ret/5..8 and their s
 // Everybody may write them (nur_hand false), like the other spur/* rows. No index moves: the first 810 rows stay where they were.
 FALL(spur_zeilen_kz2) {
   PRUEFE_GLEICH(SPUR_ZEILEN_K7, 160);
-  const int n = tab().anzahl() - SPUR_ZEILEN_K7;
+  const int n = tab().anzahl() - SPUR_ZEILEN_HINTEN;
   PRUEFE_GLEICH(tab().suche("spur/1/pfl"), n);
   PRUEFE_GLEICH(tab().suche("spur/1/trim"), n + 1);
   PRUEFE_GLEICH(tab().suche("spur/1/kill/tief"), n + 2);
@@ -888,6 +890,26 @@ FALL(spur_zeilen_kz2) {
     const ReglerDef& x = d(f.p);
     PRUEFE(x.rolle == f.r && x.min == f.min && x.max == f.max && x.vorgabe == f.vorgabe && x.kanal == -1);
     PRUEFE(x.schalt_samples == f.ms && x.ganzzahlig == f.ganz && x.keine_rampe == f.keine_rampe);
+    PRUEFE(!x.nur_hand && !x.db && !x.transport);
+  }
+}
+
+// Loop lane strip K1: spur/<n>/fx/{1,2,3} of the 32 arrangement tracks, 96 rows, the very last rows (behind the K7 rows; n outer, 3 rows each). Switches 0/1 without a ramp.
+FALL(spur_zeilen_fx) {
+  PRUEFE_GLEICH(SPUR_FX_ZEILEN, 96);
+  const int n = tab().anzahl() - SPUR_FX_ZEILEN;
+  PRUEFE_GLEICH(tab().suche("spur/1/fx/1"), n);
+  PRUEFE_GLEICH(tab().suche("spur/1/fx/2"), n + 1);
+  PRUEFE_GLEICH(tab().suche("spur/1/fx/3"), n + 2);
+  PRUEFE_GLEICH(tab().suche("spur/2/fx/1"), n + 3);
+  PRUEFE_GLEICH(tab().suche("spur/32/fx/3"), n + 95);
+  PRUEFE(tab().suche("spur/32/kill/hoch") == n - 1);   // the K7 rows end right in front
+  PRUEFE(tab().suche("spur/0/fx/1") < 0 && tab().suche("spur/33/fx/1") < 0 && tab().suche("spur/1/fx/0") < 0 && tab().suche("spur/1/fx/4") < 0 && tab().suche("spur/1/fx") < 0);
+  const struct { const char* p; Rolle r; } faelle[] = {{"spur/1/fx/1", Rolle::spur_fx_1}, {"spur/7/fx/2", Rolle::spur_fx_2}, {"spur/32/fx/3", Rolle::spur_fx_3}};
+  for (const auto& f : faelle) {
+    const ReglerDef& x = d(f.p);
+    PRUEFE(x.rolle == f.r && x.min == 0 && x.max == 1 && x.vorgabe == 0 && x.kanal == -1);
+    PRUEFE(x.schalt_samples == 0 && x.ganzzahlig && x.keine_rampe);
     PRUEFE(!x.nur_hand && !x.db && !x.transport);
   }
 }

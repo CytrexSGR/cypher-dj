@@ -79,6 +79,8 @@ import {
   InstrumentWirte, instrumenteStart, wirtSockAnfrage, wirtStandLesen, type InstrumentAbhaengig, type InstrumentZeiten,
 } from '../../plugins/instrumentwirte.ts';
 
+/** In-process only (a Symbol cannot come over HTTP): `rev: REV_JETZT` in an aendern body means "the project as it is when this write's turn comes". */
+export const REV_JETZT = Symbol('rev_jetzt');
 export class ProjFehler extends Error {
   readonly code: number;
   readonly fehler: string;
@@ -1344,6 +1346,7 @@ export class ProjSitzung {
     return { ist: (slot, name) => gelesen.get(`${slot}:${name}`) ?? null, filter1An: (slot) => filter.get(slot) ?? null };
   }
   private pruefeRev(o: Offen, rev: unknown): void {
+    if (rev === REV_JETZT) return;   // an in-process caller (the loop deck writes): the rev of the moment the write runs, read inside the serial chain
     if (rev !== o.projekt.rev) throw new ProjFehler(409, 'rev_veraltet', { rev: o.projekt.rev });
   }
 
@@ -2126,8 +2129,10 @@ export class ProjSitzung {
     // 1.12 slice 3 (task 8): the take collector. /zustand/arr (start, seam, stop), the hand points, the release of the hand
     if (adresse === '/zustand/arr') this.aufAuto.zustand(f);
     if (adresse === '/e/auto_punkt') this.aufAuto.handPunkt(f);
-    if (adresse === '/e/regler' && f.halter !== 'mensch') this.aufAuto.reglerFrei(String(f.pfad));
-    if (adresse === '/e/regler' && this.basisWartend.size) {
+    // S1b K2: halter `huelle` is the state mirror of a cell envelope (INTERFACES 5.7): display only, never a hand, a release or a move to store
+    const huelleSpiegel = adresse === '/e/regler' && f.halter === 'huelle';
+    if (adresse === '/e/regler' && !huelleSpiegel && f.halter !== 'mensch') this.aufAuto.reglerFrei(String(f.pfad));
+    if (adresse === '/e/regler' && !huelleSpiegel && this.basisWartend.size) {
       const w = this.basisWartend.get(String(f.pfad));
       if (f.halter === 'mensch') this.basisWartend.delete(String(f.pfad));            // the hand moved it again: its value is the truth now
       else if (w) { this.basisWartend.delete(String(f.pfad)); void this.basisSenden([w]).catch(() => undefined); }   // released: the base value can go

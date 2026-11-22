@@ -4,9 +4,9 @@
 // refusal needs a reason for. Playback is not touched here (the translator reads the cells).
 import {
   LOOP_RASTER_BEATS, LOOP_ZELLEN, ersterFreierPlatz,
-  LOOP_SEND_MAX, FADER_MIN, MAX_INSERTS_PRO_STRANG, LOOP_SPUREN, LOOP_FARBEN, istObjekt, loopDeckGruppe,
-  loopDeckSpuren, neueId,
-  type Gruppe, type LoopRaster, type Projekt, type Spur, type Zelle,
+  LOOP_SEND_MAX, FADER_MIN, sessionSzenen, MAX_INSERTS_PRO_STRANG, LOOP_SPUREN, LOOP_FARBEN, istObjekt, loopDeckGruppe,
+  loopDeckSpuren, neueId, istHalten, zellFehler, TEMPO_MIN, TEMPO_MAX,
+  type Gruppe, type LoopRaster, type Projekt, type SessionEinstellung, type Spur, type Zelle, type ZellSlot,
 } from './model.ts';
 import { ab, erlaube, flagge, gruppeVon, idArg, PRO_BEFEHL, spurVon, text, zahl, type Args, type Handler, type Kontext } from './commands_helpers.ts';
 
@@ -34,23 +34,52 @@ export const LOOPDECK_LABEL = {
 // The HALL and DELAY return of a deck (index 1.3): a short room and a dotted 1/8 delay with feedback 0.35 (graph knob 1 0..0.9, knob 2 level 0..2)
 export const LOOP_HALL = { decay: 0.25, groesse: 0.15, pre: 0, highcut: 0.7 } as const;   // merged over HALL_VORGABE by return_neu
 export const LOOP_DELAY = { graph: 'fx-delay-sync', werte: { k1: 0.3889, k2: 0.5 } } as const;
+// A shortened cell loses what lies beyond its new length in the same command: envelope points at or after it (an envelope without a point goes with them)
+// and slots that start at or after it. Entries of `folge` that pointed at a dropped slot play their own slot instead.
+function kuerzeZelle(z: Zelle): void {
+  const beats = z.beats!;
+  if (z.huellen) {
+    z.huellen = z.huellen.map((h) => ({ ...h, punkte: h.punkte.filter((q) => q.beat < beats) })).filter((h) => h.punkte.length > 0);
+    if (z.huellen.length === 0) delete z.huellen;
+  }
+  if (z.scheiben) {
+    const n = z.scheiben.grenzen.filter((g) => g < beats).length;
+    if (n < z.scheiben.grenzen.length) {
+      z.scheiben = { teilung: z.scheiben.teilung, grenzen: z.scheiben.grenzen.slice(0, n), folge: z.scheiben.folge.slice(0, n).map((f, k) => (f <= n ? f : k + 1)) };
+    }
+  }
+}
 const RASTER = Object.keys(LOOP_RASTER_BEATS) as LoopRaster[];
-const ZELLE_FELDER = ['name', 'farbe', 'art', 'sha256', 'beats', 'bpm', 'gain_db', 'pfad_hinweis'];
-const keineZellen = (): (Zelle | null)[] => Array.from({ length: LOOP_ZELLEN }, () => null);
+const ZELLE_FELDER = ['name', 'farbe', 'art', 'sha256', 'beats', 'bpm', 'gain_db', 'pfad_hinweis', 'transponieren', 'rueckwaerts', 'blende', 'scheiben', 'keylock', 'huellen'];
+// the S1b editor fields of zelle_aendern (each null removes it; the rest is checked by zellFehler)
+const ZELLE_EDITOR = ['transponieren', 'rueckwaerts', 'blende', 'scheiben', 'keylock'] as const;
+const keineZellen = (): ZellSlot[] => Array.from({ length: LOOP_ZELLEN }, () => null);
 
-function rasterArg(a: Args, opt: boolean): LoopRaster | undefined {
+export function rasterArg(a: Args, opt: boolean): LoopRaster | undefined {
   const r = a.raster;
   if (r === undefined && opt) return undefined;
   if (typeof r !== 'string' || !RASTER.includes(r as LoopRaster)) ab('argument_ungueltig', `raster: one of ${RASTER.join(' ')} expected`);
   return r as LoopRaster;
 }
+// The session settings of a live project, written with the first session command: the global grid and the 8 default scenes.
+export function sessionAnlegen(p: Projekt): SessionEinstellung {
+  p.session ??= { raster: 'takt', szenen: structuredClone(sessionSzenen(p)) };
+  return p.session;
+}
+// One grid for the project (session view M1): the global grid and the `raster` of every loop deck are written together. The session block is
+// written only when it already exists or the grid differs from the default (or `schreibe`: the session command itself), so a deck write that
+// changes nothing adds nothing.
+export function setzeRaster(p: Projekt, raster: LoopRaster, schreibe = false): void {
+  if (schreibe || p.session || raster !== 'takt') sessionAnlegen(p).raster = raster;
+  for (const platz of [1, 2] as const) { const g = loopDeckGruppe(p, platz); if (g?.loopdeck) g.loopdeck.raster = raster; }
+}
 function deckGruppe(p: Projekt, id: string): Gruppe {
   const g = gruppeVon(p, id);
   return g.loopdeck ? g : ab('kein_loopdeck', `${id} holds no loop deck`);
 }
-function deckSpur(p: Projekt, id: string): Spur & { zellen: (Zelle | null)[] } {
+function deckSpur(p: Projekt, id: string): Spur & { zellen: ZellSlot[] } {
   const s = spurVon(p, id);
-  return s.zellen !== undefined ? (s as Spur & { zellen: (Zelle | null)[] }) : ab('kein_loopdeck', `${id} is not a track of a loop deck`);
+  return s.zellen !== undefined ? (s as Spur & { zellen: ZellSlot[] }) : ab('kein_loopdeck', `${id} is not a track of a loop deck`);
 }
 const indexArg = (x: unknown, k: string): number => {
   if (typeof x !== 'number' || !Number.isInteger(x) || x < 1 || x > LOOP_ZELLEN) ab('argument_ungueltig', `${k}: integer 1..${LOOP_ZELLEN} expected`);
@@ -74,9 +103,12 @@ export const LOOPDECK = {
     if (!p.live) ab('kein_liveprojekt', 'a loop deck sits in the live container');
     const platz = a.platz;
     if (platz !== 1 && platz !== 2) ab('argument_ungueltig', 'platz: 1 or 2 expected');
-    const raster = rasterArg(a, true) ?? 'takt';
+    const gegeben = rasterArg(a, true);
     if (loopDeckGruppe(p, platz)) ab('platz_belegt', `place ${platz} already holds a loop deck`);
-    const g = legeLoopdeckAn(p, platz, raster, ctx);
+    // one grid: a new deck takes the session grid, else the other deck's; an explicit raster is the grid of the whole project
+    const andere = loopDeckGruppe(p, platz === 1 ? 2 : 1)?.loopdeck?.raster;
+    const g = legeLoopdeckAn(p, platz, gegeben ?? p.session?.raster ?? andere ?? 'takt', ctx);
+    if (gegeben) setzeRaster(p, gegeben);
     const ort = ersterFreierPlatz(p);
     if (ort !== null) p.plaetze![ort - 1] = { typ: 'loops', gruppe: g.id };
   },
@@ -84,7 +116,7 @@ export const LOOPDECK = {
   loopdeck_aendern(p, a) {
     erlaube(a, 'gruppe_id', 'raster');
     const g = deckGruppe(p, idArg(a, 'gruppe_id'));
-    g.loopdeck!.raster = rasterArg(a, false)!;
+    setzeRaster(p, rasterArg(a, false)!);   // the one grid: both decks and the session grid
   },
 
   loopdeck_leeren(p, a) {
@@ -104,19 +136,23 @@ export const LOOPDECK = {
     // the model's own checks refuse a malformed cell at the end of the command list
     s.zellen[i] = null;   // a replaced cell gives its id back before the new one is numbered
     s.zellen[i] = { id: neueId(p, 'zelle'), ...(structuredClone(z) as Omit<Zelle, 'id'>) };
+    const f = zellFehler(s.zellen[i] as Zelle);   // the S1b fields: refuse here what the core loader would refuse (the model check stays the net)
+    if (f) ab(f.grund, f.text);
   },
 
   zelle_aendern(p, a) {
-    erlaube(a, 'spur_id', 'index', 'name', 'farbe', 'art', 'gain_db', 'beats');
+    erlaube(a, 'spur_id', 'index', 'name', 'farbe', 'art', 'gain_db', 'beats', 'raster', 'bpm', 'transponieren', 'rueckwaerts', 'blende', 'scheiben', 'keylock');
     const s = deckSpur(p, idArg(a, 'spur_id'));
     const i = indexArg(a.index, 'index') - 1;
-    if (['name', 'farbe', 'art', 'gain_db', 'beats'].every((k) => a[k] === undefined)) ab('argument_ungueltig', 'no change given');
+    if (['name', 'farbe', 'art', 'gain_db', 'beats', 'raster', 'bpm', ...ZELLE_EDITOR].every((k) => a[k] === undefined)) ab('argument_ungueltig', 'no change given');
     const z = s.zellen[i];
-    if (!z) ab('zelle_leer', `${s.id} cell ${i + 1} is empty`);
+    if (!z || istHalten(z)) ab('zelle_leer', `${s.id} cell ${i + 1} is empty`);
     const name = text(a, 'name', 64);
     const farbe = zahl(a, 'farbe', 0, LOOP_FARBEN - 1, { opt: true, ganz: true });
     const gain = zahl(a, 'gain_db', -60, 12, { opt: true });
     const beats = zahl(a, 'beats', 0.25, 64, { opt: true });
+    const bpm = a.bpm === null ? null : zahl(a, 'bpm', TEMPO_MIN, TEMPO_MAX, { opt: true });   // null removes the source tempo (a one-shot only)
+    const zellRaster = a.raster === null ? null : rasterArg(a, true);   // null removes the cell's own grid
     if (a.art !== undefined && a.art !== 'loop' && a.art !== 'einmal') ab('argument_ungueltig', "art: 'loop' or 'einmal' expected");
     if (beats !== undefined && !Number.isInteger(beats * 4)) ab('argument_ungueltig', 'beats: a multiple of 0.25 expected');
     const n = z!;
@@ -124,7 +160,22 @@ export const LOOPDECK = {
     if (farbe !== undefined) n.farbe = farbe;
     if (a.art !== undefined) n.art = a.art;
     if (gain !== undefined) n.gain_db = gain;
-    if (beats !== undefined) n.beats = beats;
+    if (beats !== undefined) { n.beats = beats; kuerzeZelle(n); }
+    if (bpm === null) delete (n as Zelle).bpm;
+    else if (bpm !== undefined) n.bpm = bpm;
+    if (zellRaster === null) delete (n as Zelle).raster;
+    else if (zellRaster !== undefined) (n as Zelle).raster = zellRaster;
+    // the editor fields: null removes; the value that means "default" (0 semitones, true keylock, false flag) removes too; anything else is stored as given
+    // and checked by zellFehler below, which refuses a malformed value with its reason
+    const w = n as unknown as Record<string, unknown>;
+    for (const k of ZELLE_EDITOR) {
+      const v = a[k];
+      if (v === undefined) continue;
+      if (v === null || (k === 'transponieren' && v === 0) || (k === 'keylock' && v === true) || ((k === 'rueckwaerts' || k === 'blende') && v === false)) delete w[k];
+      else w[k] = structuredClone(v);
+    }
+    const f = zellFehler(n as Zelle);
+    if (f) ab(f.grund, f.text);
   },
 
   zelle_bewegen(p, a) {
@@ -133,7 +184,7 @@ export const LOOPDECK = {
     const sv = deckSpur(p, von.spur_id), sn = deckSpur(p, nach.spur_id);
     const iv = von.index - 1, in_ = nach.index - 1;
     const z = sv.zellen[iv];
-    if (!z) ab('zelle_leer', `${sv.id} cell ${von.index} is empty`);
+    if (!z || istHalten(z)) ab('zelle_leer', `${sv.id} cell ${von.index} is empty`);
     if (sv === sn && iv === in_) return;
     sv.zellen[iv] = sn.zellen[in_];   // swap (a null target just leaves the source empty)
     sn.zellen[in_] = z!;

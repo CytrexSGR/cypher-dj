@@ -77,6 +77,7 @@ export function strom() {
     if (a === '/zustand/arr') { merkeArr(f); zeigeMasterLimiter(f); }   // the transport clock of the live container; the MASTER tab's LIMITER meter reads limiter_db
     switch (a) {
       case 'stand':
+        liveEreignis(a, f);   // loop deck pop-up: the stream (re)connected, read the stand again (D13)
         Object.assign(zustand.regler, f.regler);
         for (const [n, z] of Object.entries(f.decks)) zustand.decks[n] = z;
         for (const [n, g] of Object.entries(f.geladen)) zustand.geladen[n] = g.material_id;
@@ -102,6 +103,7 @@ export function strom() {
       case '/e/hand': registerHand(String(f.pfad ?? '')); break;   // a controller moved a control: the Controllers window marks its row
       case 'proj': holeBkSpaeter(); liveEreignis(a, f); holeLage(); break;   // S17: the project changed or was opened; live modules task 4: the panel follows
       case 'modul': liveEreignis(a, f); break;   // live modules task 4: slot state of the module export (separation)
+      case 'session': liveEreignis(a, f); break;   // loop deck pop-up: the state of one column changed ({spur_id, lauf})
       case 'seq': liveEreignis(a, f); break;   // SEQ deck: a step or the deck itself was written ({platz, rev})
       case 'pruefmodus': zeigePruefmodus(f.stand); break;
       case 'kern': $('#v-kern').classList.toggle('an', f.zustand === 'verbunden'); break;

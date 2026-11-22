@@ -10,13 +10,14 @@ import path from 'node:path';
 import { BEATS_VORGABE, MAX_AUTO_PUNKTE, MAX_FX_PUNKTE, ZIEL_BEREICH, MAX_CLIPS, MAX_NOTEN, MAX_SPUREN, SAMPLERATE, insertParamIndex, istKettenZiel,
   istBlendZiel, blendFader, blendPfad, MAX_KETTEN_LANEN, makroVon, pitchFaktor, rackSicht, wirtSlots, zerlegeKettenZiel,
   type InsertPoolArt } from './model.ts';
+import { zellBeatsAusFrames } from './scheiben.ts';
 import { MAX_BEATS_EINHEITEN, beatsEinheiten, beatsEinheitenZahl } from './warp.ts';
 import { hkStrecke, hkWert, istModulation, modulationsZiel, type Huellkurve } from './envelope.ts';
 import { hatFxArbeit, rolleFxAus, type FxRahmen } from './fx_ausrollen.ts';
 import { geraetFx as geraetFxRegister } from '../devices_parameter.ts';   // default device mode of `uebersetze` (a caller cannot forget it)
 import { trackerEinstellung } from '../public/tracker/grid_model.js';   // LPB and TICKS of the project (task 1)
-import { LOOP_MAX_FRAMES, MAX_RETURNS, loopDeckGruppe, platzVonGruppe, strudelGruppe } from './model.ts';
-import type { GliedGeraet, AudioClip, Clip, Insert, InsertTraeger, Lane, Ziel, MidiClip, Note, Projekt, Punkt, Spur, Warp } from './model.ts';
+import { LOOP_MAX_FRAMES, MAX_RETURNS, zellFehler, loopDeckGruppe, platzVonGruppe, strudelGruppe, istHalten } from './model.ts';
+import type { GliedGeraet, AudioClip, Clip, Insert, InsertTraeger, Lane, Ziel, MidiClip, Note, Projekt, Punkt, Spur, Warp, Zelle } from './model.ts';
 import type { Stift } from '../steckfeld.ts';
 
 export const WIEDERGABE_FORMAT = 'cypherdj-arr/1';
@@ -46,7 +47,11 @@ export interface WAudioClip {
 }
 // loop deck cell in the playback (index 1.2): modus 2 (complex) for a loop, 0 (repitch, played unstretched) for einmal;
 // the core loader wants beats on every cell, 0 for einmal
-export interface WZelle { index: number; sha256: string; datei: string; frames: number; beats: number; art: 'loop' | 'einmal'; gain_db: number; modus: 0 | 2 }
+// session view S1b (index 2.2), all optional: `scheiben` = [[slot start in cell beats, source slot 0-based], ...], `pitch` = frequency ratio of a keylock loop,
+// `huellen` = envelopes that replace a control while the cell plays (art 'feld': a strip field of the deck's track, art 'gain'); points [beat, value, formcode]
+export type WZellHuelle = { art: 'feld'; feld: number; punkte: [number, number, number][] } | { art: 'gain'; punkte: [number, number, number][] };
+export interface WZelle { index: number; sha256: string; datei: string; frames: number; beats: number; art: 'loop' | 'einmal'; gain_db: number; modus: 0 | 2;
+  rueckwaerts?: 1; blende?: 1; scheiben?: [number, number][]; pitch?: number; huellen?: WZellHuelle[] }
 export interface WNote { id: string; beat: number; laenge: number; ton: number; vel: number }
 export type WZiel = { art: 'gruppe'; nr: number };   // fehlt `ausgang`, zeigt die Spur auf den Produktions-Master
 // Automation Slice 1 (nur /2): je Lane Ziel und Punkte [beat, wert dB, formcode], Formcode 0 linear, 1 s, 2 sprung; die Spur trägt `auto` nur mit Lane
@@ -194,6 +199,9 @@ export interface UebersetzOptionen {
   ohneHost?: ReadonlySet<number>;   // host slots left out of this playback (the split of a slot that would change strips inside one load)
   // tracker effect commands (task 14): how a bk device runs its effects (register entry); absent: the register (devices_parameter.ts); unknown graph: smooth
   geraetFx?: GeraetFxFn;
+  // notes of the translation: what it left out of a loop deck cell because the core would refuse the whole snapshot or the deck cannot play it
+  // (a send envelope without its return, a slice map that is too fine for the decoded length). Absent: nothing is collected.
+  hinweise?: string[];
 }
 export type GeraetFx = Pick<FxRahmen, 'stufig' | 'rollen'>;
 export type GeraetFxFn = (graph: string) => GeraetFx;
@@ -339,17 +347,84 @@ const spurClips = (s: Spur, vorhoeren?: ReadonlyMap<string, string>): readonly C
   return id === undefined ? s.clips : s.takes?.find((t) => t.id === id)?.clips ?? s.clips;
 };
 
+// Strip fields of the core (arrangement.h: ARR_F_FILTER, arr_f_send); a test reads the header and holds these numbers to it.
+export const ARR_F_FILTER = 9;
+export const arrFSend = (r: number): number => (r < 4 ? 4 + r : 13 + (r - 4));   // field of the send to return r (0-based)
+// the shortest slot the core loader takes, in frames (ZELL_SLOT_MIN in zell_map.h)
+const ZELL_SLOT_MIN_FRAMES = 192;
+
+// The S1b keys of one cell (index 2.2). Everything the loader would refuse is left out with a note instead of reaching it: one bad cell would keep the
+// whole live snapshot from loading. The model refuses these cases already; what it cannot see are the decoded length and the deck's returns.
+function zellErweiterung(p: Projekt, platz: 1 | 2 | undefined, z: Zelle, nr: number, frames: number, beats: number, modus: 0 | 2,
+  hinweis: (t: string) => void): Partial<WZelle> {
+  const aus: Partial<WZelle> = {};
+  const wer = `cell ${z.id} (${nr})`;
+  if (z.rueckwaerts) aus.rueckwaerts = 1;
+  if (z.blende) aus.blende = 1;
+  // the model check of the editor fields, per part (the model is the only guard of most loader rules otherwise): a part that fails drops alone
+  const teil = (extra: Record<string, unknown>) => zellFehler({ id: z.id, name: z.name, farbe: z.farbe, art: z.art, sha256: z.sha256, gain_db: z.gain_db, bpm: z.bpm, ...extra, beats } as unknown as Zelle);
+  if (z.scheiben) {
+    const { grenzen: g, folge: f } = z.scheiben;
+    const n = g.length;
+    const starts = g.map((x) => Math.round(x * frames / beats)).concat(frames);
+    const grund = !(beats > 0) ? 'no cell length'
+      : n < 1 || n > 64 || f.length !== n || f.some((x) => !Number.isInteger(x) || x < 1 || x > n) ? 'slice table out of range'
+      : g.some((x, i) => (i === 0 ? x !== 0 : !(x > g[i - 1])) || !(x < beats)) ? 'slice starts not rising inside the cell'
+      : starts.some((x, i) => i < n && starts[i + 1] - x < ZELL_SLOT_MIN_FRAMES) ? `a slot is shorter than ${ZELL_SLOT_MIN_FRAMES} frames at ${frames} frames in ${beats} beats`
+      : null;
+    const fehler = grund ? null : teil({ scheiben: z.scheiben });
+    if (fehler) hinweis(`${wer}: scheiben not written (${fehler.text})`);
+    else if (grund) hinweis(`${wer}: scheiben not written (${grund})`);
+    else aus.scheiben = g.map((x, k): [number, number] => [x, f[k] - 1]);
+  }
+  if (z.transponieren !== undefined) {
+    const fehler = teil({ transponieren: z.transponieren });
+    if (z.art === 'loop' && modus === 2 && !(fehler && fehler.grund !== 'nur_keylock')) aus.pitch = 2 ** (z.transponieren / 12);
+    else if (fehler && fehler.grund !== 'nur_keylock') hinweis(`${wer}: transponieren not written (${fehler.text})`);
+    else hinweis(`${wer}: transponieren not written (it needs a loop cell with keylock)`);
+  }
+  if (z.huellen) {
+    const huellen: WZellHuelle[] = [];
+    const gesehen = new Set<string>();
+    for (const h of z.huellen) {
+      const fehler = teil({ huellen: [h] });
+      if (fehler) { hinweis(`${wer}: ${String(h?.ziel)} envelope not written (${fehler.text})`); continue; }
+      if (gesehen.has(h.ziel) || huellen.length >= 4) { hinweis(`${wer}: ${h.ziel} envelope not written (${gesehen.has(h.ziel) ? 'one envelope per target' : 'at most 4 envelopes'})`); continue; }
+      gesehen.add(h.ziel);
+      let ziel: { art: 'gain' } | { art: 'feld'; feld: number } | null;
+      if (h.ziel === 'gain') ziel = { art: 'gain' };
+      else if (h.ziel === 'filter') ziel = { art: 'feld', feld: ARR_F_FILTER };
+      else {
+        const art = h.ziel === 'send.hall' ? 'hall' : 'delay';
+        const r = (p.returns ?? []).find((x) => platz !== undefined && x.loopdeck?.platz === platz && x.loopdeck.art === art);
+        ziel = r ? { art: 'feld', feld: arrFSend(r.nr - 1) } : null;
+        if (!r) { hinweis(`${wer}: ${h.ziel} envelope not written (the deck has no ${art === 'hall' ? 'HALL' : 'DELAY'} return)`); continue; }
+      }
+      if (!(beats > 0) || h.punkte.some((q) => !(q.beat < beats))) { hinweis(`${wer}: ${h.ziel} envelope not written (a point lies beyond the cell length)`); continue; }
+      huellen.push({ ...ziel!, punkte: tripel(h.punkte) } as WZellHuelle);
+    }
+    if (huellen.length > 0) aus.huellen = huellen;
+  }
+  return aus;
+}
+
 // The cells of a loop deck track for the snapshot (index 1.2): only filled cells whose decoded frames are known. Undefined for every other track
 // (they get neither `id` nor `zellen`). The filter is a control row and is not written here.
-function deckZellen(s: Spur, o: Required<Pick<UebersetzOptionen, 'frames'>> & UebersetzOptionen): WZelle[] | undefined {
+function deckZellen(p: Projekt, s: Spur, o: Required<Pick<UebersetzOptionen, 'frames'>> & UebersetzOptionen): WZelle[] | undefined {
   if (s.zellen === undefined) return undefined;
   const aus: WZelle[] = [];
+  const deck = s.ausgang ? (p.gruppen ?? []).find((g) => g.id === s.ausgang!.id)?.loopdeck : undefined;
   s.zellen.forEach((z, i) => {
-    if (!z) return;
+    if (!z || istHalten(z)) return;   // a halten slot is no cell (session view)
     const frames = o.frames!(z.sha256);
     if (frames === null || frames > LOOP_MAX_FRAMES) return;   // not decoded yet, or longer than the core takes (index 1.2)
+    // a cell with slices or envelopes needs its length in the snapshot (the loader wants beats > 0 there): from frames and the source tempo, as the page does
+    const feature = z.scheiben !== undefined || z.huellen !== undefined;
+    const beats = z.beats ?? (feature ? zellBeatsAusFrames(frames, z.bpm ?? p.tempo_bpm) : 0);
+    const modus: 0 | 2 = z.art === 'loop' && z.keylock !== false ? 2 : 0;
     aus.push({ index: i + 1, sha256: z.sha256, datei: path.join(o.audioOrdner, `${z.sha256}.f32`), frames,
-      beats: z.beats ?? 0, art: z.art, gain_db: z.gain_db, modus: z.art === 'loop' ? 2 : 0 });
+      beats, art: z.art, gain_db: z.gain_db, modus,
+      ...zellErweiterung(p, deck?.platz, z, i + 1, frames, beats, modus, (t) => o.hinweise?.push(t)) });
   });
   return aus;
 }
@@ -682,7 +757,7 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
       const cs = spurClips(s, o.vorhoeren).flatMap((c) => (c.art === 'audio' ? audioClips(c, o) : []))
         .sort((a, b) => a.start_beat - b.start_beat || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
       clips += cs.length;
-      const zellen = deckZellen(s, o);
+      const zellen = deckZellen(p, s, o);
       return { nr: s.nr, art: 'audio', clips: cs, ...(zellen ? { id: s.id, zellen } : {}) };
     }
     const g = s.geraet!;

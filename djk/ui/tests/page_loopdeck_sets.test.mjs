@@ -134,7 +134,7 @@ test('zelle_laedt is worded by the page; scene and stop answers with skipped tra
     'POST /loopdeck/stopp': { j: { ok: true, gestartet: [], abgelehnt: [{ spur: 3, grund: 'zelle_leer' }] } },
   });
   const spurKnoten = dk().querySelectorAll('.ld-spur')[0];
-  spurKnoten.querySelectorAll('.ld-zelle')[0].click(); await ruhe();
+  spurKnoten.querySelectorAll('.zelle')[0].click(); await ruhe();
   assert.match(meldung(), /That cell is still loading\./);
   assert.equal(document.querySelector('#meldung').className, 'fehler');
   document.querySelector('#meldung').textContent = ''; document.querySelector('#meldung').className = '';
@@ -147,9 +147,9 @@ test('zelle_laedt is worded by the page; scene and stop answers with skipped tra
 test('a cell whose stand entry has frames: null is marked as loading, not as broken', async () => {
   const d = deck(1); d.spuren[0].zellen[0] = zelle(1, { frames: null });
   await start({ 'GET /loopdeck/stand': () => ({ j: { decks: { 1: d, 2: deck(2) }, beat: 16, bpm: 120 } }) });
-  const c = dk().querySelectorAll('.ld-spur')[0].querySelectorAll('.ld-zelle');
+  const c = dk().querySelectorAll('.ld-spur')[0].querySelectorAll('.zelle');
   assert.ok(c[0].classList.contains('laedt'));
   assert.match(c[0].title, /still loading/);
   assert.equal(c[0].classList.contains('voll'), true);
-  assert.equal(dk().querySelectorAll('.ld-spur')[1].querySelectorAll('.ld-zelle')[0].classList.contains('laedt'), false);
+  assert.equal(dk().querySelectorAll('.ld-spur')[1].querySelectorAll('.zelle')[0].classList.contains('laedt'), false);
 });

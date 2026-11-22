@@ -289,7 +289,9 @@ set(ARR_QUELLEN src/arrangement.cpp src/arr_voices.cpp src/arr_output.cpp src/ar
     src/arr_track_phase.cpp # mehrkern slice 3.1: the sticky plan of the track phase
     src/arr_monitor.cpp # 1.8 Slice 3: monitor of the external inputs (R10)
     src/arr_warp.cpp    # Paket 1.13 Slice 2: Seite des Arrangements am Warp-Werk (nur die Schnittstelle warp_factory.h, kein Bungee)
-    src/arr_launcher.cpp)   # loop deck K2: launcher voices
+    src/zell_map.cpp  # S1b K1: the cell read map (arr_launcher.cpp, and the warp work since K4)
+    src/arr_launcher.cpp    # loop deck K2: launcher voices
+    src/beatfx.cpp)         # loop lane strip K3: the beat FX instances of the launcher tracks (the Mixer uses the same class)
 list(APPEND ARR_QUELLEN src/arr_bk_sink.cpp src/arr_kit_sink.cpp src/arr_intern_sink.cpp src/arr_rb_sink.cpp src/arr_instrument_host_sink.cpp
      src/arr_rack_sink.cpp
      src/arr_stream_sink.cpp)   # container core K7: the strom tracks read the stream buffers. 1.9 U6: instrument rack. D1 K2b: Senken (RB-338 über cypherdj::dsp -> libhall_ffi.a, Wirt-Slots)
@@ -655,16 +657,16 @@ if(CYPHERDJ_BUNGEE)
   # Paket 1.13 Warp, Slice 2: Fehlerfälle des Warp-Werks (das Werk wird als eigenes Objekt mutiert), jede macht ihren Fall in test_warp_factory rot
   foreach(m SOLL_NACH_SCHREIBE RING_VOLL_DREHT)
     string(TOLOWER ${m} mk)
-    test_mutation(test_warp_werk_${mk}_mutation test_warp_factory CYPHERDJ_MUTATION_WARP_${m} src/warp_factory.cpp src/warp_factory_bungee.cpp src/clock.cpp cypherdj::bungee)
+    test_mutation(test_warp_werk_${mk}_mutation test_warp_factory CYPHERDJ_MUTATION_WARP_${m} src/warp_factory.cpp src/warp_factory_bungee.cpp src/zell_map.cpp src/clock.cpp cypherdj::bungee)
   endforeach()
   # Paket 1.13 Warp, Slice 5: Fehlerfälle von Transpose/Detune im Werk (PITCH_VERGESSEN bricht Fall 1, HOP_FEST Fall 3)
   foreach(m PITCH_VERGESSEN HOP_FEST)
     string(TOLOWER ${m} mk)
-    test_mutation(test_warp_werk_pitch_${mk}_mutation test_warp_factory_pitch CYPHERDJ_MUTATION_WARP_${m} src/warp_factory.cpp src/warp_factory_bungee.cpp src/clock.cpp cypherdj::bungee)
+    test_mutation(test_warp_werk_pitch_${mk}_mutation test_warp_factory_pitch CYPHERDJ_MUTATION_WARP_${m} src/warp_factory.cpp src/warp_factory_bungee.cpp src/zell_map.cpp src/clock.cpp cypherdj::bungee)
   endforeach()
   # Task 3 Step 6, ohne die Quelle anzufassen: die Reihenfolge der ersten Fassung (schreibe vor soll) mit dem engen Fenster. Kein Test, denn der Verlust tritt nur in einem Teil
   # der Läufe auf (ein ctest-Ziel wäre unzuverlässig): der Plan fährt das Ziel fünfmal von Hand
-  add_executable(test_warp_werk_soll_nach_schreibe_eng tests/test_warp_factory.cpp src/warp_factory.cpp src/warp_factory_bungee.cpp src/clock.cpp)
+  add_executable(test_warp_werk_soll_nach_schreibe_eng tests/test_warp_factory.cpp src/warp_factory.cpp src/warp_factory_bungee.cpp src/zell_map.cpp src/clock.cpp)
   target_include_directories(test_warp_werk_soll_nach_schreibe_eng PRIVATE include tests ${DJK}/contract)
   target_compile_definitions(test_warp_werk_soll_nach_schreibe_eng PRIVATE CYPHERDJ_MUTATION_WARP_SOLL_NACH_SCHREIBE_ENG=1 CYPHERDJ_BUNGEE=1 CYPHERDJ_DJK="${DJK}")
   target_link_libraries(test_warp_werk_soll_nach_schreibe_eng PRIVATE PkgConfig::JACK Threads::Threads cypherdj::dsp cypherdj::stellwerk cypherdj_dsp_messer cypherdj::json
@@ -2171,7 +2173,7 @@ if(CYPHERDJ_BUNGEE)
   # die Regel selbst, im Werk mutiert: liest() fragt die Stimmen nicht (Fall 1b), das Audio wird erst nach dem Übernehmen angemeldet (Fall 1)
   foreach(m LIEST_OHNE_STIMME HALTE_NACH_GELESEN)
     string(TOLOWER ${m} mk)
-    test_mutation(test_warp_werk_lebensdauer_${mk}_mutation test_warp_factory_lifetime CYPHERDJ_MUTATION_WARP_${m} src/warp_factory.cpp src/warp_factory_bungee.cpp src/clock.cpp cypherdj::bungee)
+    test_mutation(test_warp_werk_lebensdauer_${mk}_mutation test_warp_factory_lifetime CYPHERDJ_MUTATION_WARP_${m} src/warp_factory.cpp src/warp_factory_bungee.cpp src/zell_map.cpp src/clock.cpp cypherdj::bungee)
   endforeach()
 endif()
 
@@ -2456,3 +2458,11 @@ endforeach()
 test_mutation(test_arr_abgriff_vor_fader_mutation test_arr_tap CYPHERDJ_MUTATION_ABGRIFF_VOR_FADER ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)       # cases 3 (group post level) and 4 (track pre/post): the post is taken in front of the fader
 test_mutation(test_arr_abgriff_nachlauf_mutation test_arr_tap CYPHERDJ_MUTATION_ABGRIFF_NACHLAUF ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)         # case 1 (frames): the freeze tail is added to the length
 test_mutation(test_arr_abgriff_ohne_ankunft_mutation test_arr_tap CYPHERDJ_MUTATION_ABGRIFF_OHNE_ANKUNFT ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp) # case 5 (ankunft): the window is not shifted by the path latency
+
+# Loop lane strip K2..K4: every new behaviour of the lane strip has a failure case that must turn its test red.
+test_mutation(test_arr_spur_lane_color_starr_mutation test_arr_track_lane CYPHERDJ_MUTATION_ARR_COLOR_ART_STARR ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)      # case 2: the colour art is never taken over
+test_mutation(test_arr_spur_lane_fx_schwanz_mutation test_arr_track_lane CYPHERDJ_MUTATION_ARR_FX_OHNE_SCHWANZ ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)     # case 3: closing the row cuts the tail
+test_mutation(test_arr_spur_lane_fx3_blende_mutation test_arr_track_lane CYPHERDJ_MUTATION_ARR_FX3_OHNE_BLENDE ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)     # case 4: the assignment jumps
+test_mutation(test_arr_spur_lane_fx3_kopie_mutation test_arr_track_lane CYPHERDJ_MUTATION_ARR_FX3_KOPIE ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)           # case 4: the share is copied, not moved
+test_mutation(test_mixer_fx3_lane_ohne_fader_mutation test_mixer_fx3_lane CYPHERDJ_MUTATION_ARR_FX3_OHNE_FADER src/mixer.cpp src/beatfx.cpp)                         # the share skips the strip's fader
+test_mutation(test_mixer_fx3_lane_ohne_xfader_mutation test_mixer_fx3_lane CYPHERDJ_MUTATION_ARR_FX3_OHNE_XFADER src/mixer.cpp src/beatfx.cpp)                       # the share ignores the crossfader weight

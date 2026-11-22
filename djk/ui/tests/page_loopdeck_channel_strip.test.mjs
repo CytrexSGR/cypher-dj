@@ -1,4 +1,4 @@
-// Loop deck channel strip row (channel strip PZ1): LO MID HI knobs with kill, STRIP toggle. Stubbed requests, DOM stand-in, no studio port.
+// Loop deck lane strip row: HI MID LOW, COLOR, HALL, DLY knobs and the keys 1 2 3, STRIP toggle. Stubbed requests, DOM stand-in, no studio port.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { installiere } from './helpers/pages_mock.mjs';
@@ -8,7 +8,7 @@ const HTML = '<body><div id="meldung"></div><section id="platz-loops"><div class
 const ruhe = async () => { for (let i = 0; i < 20; i++) await new Promise((ok) => setImmediate(ok)); };
 const lauf0 = () => ({ zelle: null, verwaist: false, ab_beat: 0, versatz_beats: 0, wartend: null, zuletzt: null });
 const spur = (nr, extra = {}) => ({ spur_id: `s${nr}`, nr, name: `L1.${nr}`, fader_db: 0, mute: false, filter: 0, zellen: [null, null, null, null, null, null, null, null], lauf: lauf0(),
-  eq: { tief: 0, mitte: 0, hoch: 0 }, kill: { tief: false, mitte: false, hoch: false }, send: { hall: -200, delay: -200 }, effekt: null, ...extra });
+  eq: { tief: 0, mitte: 0, hoch: 0 }, kill: { tief: false, mitte: false, hoch: false }, send: { hall: -200, delay: -200 }, fx: { 1: false, 2: false, 3: false }, effekt: null, ...extra });
 const deck1 = (extra = {}) => ({ gruppe_id: 'g1', platz: 1, raster: '1', spuren: [1, 2, 3, 4].map((n) => spur(n, n === 1 ? extra : {})) });
 
 async function start(extra = {}, antworten = {}, nachInstall = () => {}) {
@@ -24,13 +24,19 @@ async function start(extra = {}, antworten = {}, nachInstall = () => {}) {
 const posts = (a) => a.anrufe.filter((c) => c.methode === 'POST');
 const deck = (n = 1) => document.querySelector(`.loopdeck[data-deck="${n}"]`);
 const strip = (s = 1) => deck().querySelectorAll('.ld-spur')[s - 1].querySelector('.ld-strip');
-const mini = (band, s = 1) => strip(s).querySelectorAll('.ld-einheit')[['tief', 'mitte', 'hoch'].indexOf(band)];
+const mini = (band, s = 1) => strip(s).querySelectorAll('.ld-einheit')[['hoch', 'mitte', 'tief'].indexOf(band)];
+const farbe = (s = 1) => strip(s).querySelector('.ld-color');
+const sendKnopf = (art, s = 1) => deck().querySelectorAll('.ld-spur')[s - 1].querySelector(`.ld-send[data-send="${art}"] .ld-mini`);
+const fxTaste = (u, s = 1) => strip(s).querySelector(`.ld-fxtaste[data-einheit="${u}"]`);
 
-test('each track has a strip with LO, MID and HI; the deck has a STRIP button', async () => {
+test('each lane strip has HI MID LOW, COLOR, HALL, DLY knobs in that order and the keys 1 2 3; no kill keys, no effect chip', async () => {
   const { m: m0 } = await start();
   for (let s = 1; s <= 4; s++) {
-    assert.deepEqual(strip(s).querySelectorAll('.ld-band').map((b) => b.textContent), ['LO', 'MID', 'HI']);
-    assert.equal(strip(s).querySelectorAll('.ld-mini').length, 5);   // LO MID HI, HALL, DLY (PZ2)
+    assert.deepEqual(strip(s).querySelectorAll('.ld-einheit').map((e) => e.querySelector('.ld-sendname').textContent), ['HI', 'MID', 'LOW', 'FILTER', 'HALL', 'DLY']);
+    assert.equal(strip(s).querySelectorAll('.ld-mini').length, 6);
+    assert.deepEqual(strip(s).querySelectorAll('.ld-fxtaste').map((b) => b.textContent), ['1', '2', '3']);
+    assert.equal(strip(s).querySelectorAll('.ld-band').length, 0);
+    assert.equal(deck().querySelectorAll('.ld-fx').length, 0);
   }
   const taste = deck().querySelector('.ld-strip-taste');
   assert.equal(taste.textContent, 'STRIP');
@@ -49,33 +55,64 @@ test('dragging MID posts the dB of the EQ law; double click posts 0', async () =
   assert.deepEqual(posts(a).at(-1).koerper, { deck: 1, spur: 1, eq: { mitte: 0 } });
 });
 
-test('dragging a knob all the way down is -200 dB (the kill end of the law)', async () => {
+test('dragging a knob all the way down is -200 dB (the band off end of the law)', async () => {
   const { a } = await start();
   const k = mini('hoch', 2).querySelector('.ld-mini');
   k.dispatch('pointerdown', { clientY: 0, pointerId: 1 }); k.dispatch('pointermove', { clientY: 400 }); k.dispatch('pointerup'); await ruhe();
   assert.deepEqual(posts(a).at(-1).koerper, { deck: 1, spur: 2, eq: { hoch: -200 } });
 });
 
-test('the LO label toggles the kill and draws it; a refusal rolls back', async () => {
-  const { a } = await start();
-  const lo = mini('tief').querySelector('.ld-band');
-  lo.click(); await ruhe();
-  assert.deepEqual(posts(a).at(-1).koerper, { deck: 1, spur: 1, kill: { tief: true } });
-  assert.ok(lo.classList.contains('kill')); assert.ok(mini('tief').querySelector('.ld-mini').classList.contains('kill'));
-  lo.click(); await ruhe();
-  assert.deepEqual(posts(a).at(-1).koerper, { deck: 1, spur: 1, kill: { tief: false } });
-  assert.ok(!lo.classList.contains('kill'));
-  a.antworten['POST /loopdeck/spur'] = { code: 400, j: { ok: false, grund: 'form', text: 'no' } };
-  lo.click(); await ruhe();
-  assert.ok(!lo.classList.contains('kill'));   // rolled back
+test('a band whose kill is on shows its knob fully left; turning it sends the eq value and kill off together', async () => {
+  const { a } = await start({ eq: { tief: 0, mitte: 0, hoch: -6 }, kill: { tief: false, mitte: false, hoch: true } });
+  const hi = mini('hoch').querySelector('.ld-mini');
+  assert.equal(hi.getAttribute('aria-valuenow'), '-200.00');
+  assert.equal(mini('mitte').querySelector('.ld-mini').getAttribute('aria-valuenow'), '0.00');
+  hi.dispatch('pointerdown', { clientY: 150, pointerId: 1 }); hi.dispatch('pointermove', { clientY: 120 }); hi.dispatch('pointerup'); await ruhe();
+  const k = posts(a).at(-1).koerper;
+  assert.deepEqual(Object.keys(k), ['deck', 'spur', 'eq', 'kill']);
+  assert.ok(k.eq.hoch > -200); assert.deepEqual(k.kill, { hoch: false });
+  assert.ok(k.eq.hoch !== undefined);
 });
 
-test('a stand with kill on HI draws it killed with the knob at the stored value', async () => {
-  await start({ eq: { tief: 0, mitte: 0, hoch: -6 }, kill: { tief: false, mitte: false, hoch: true } });
-  const hi = mini('hoch');
-  assert.ok(hi.querySelector('.ld-band').classList.contains('kill')); assert.ok(hi.querySelector('.ld-mini').classList.contains('kill'));
-  assert.equal(hi.querySelector('.ld-mini').getAttribute('aria-valuenow'), '-6.00');
-  assert.ok(!mini('tief').querySelector('.ld-band').classList.contains('kill'));
+test('COLOR writes the lane filter and a double click goes back to the centre', async () => {
+  const { a } = await start();
+  const k = farbe().querySelector('.ld-mini');
+  k.dispatch('pointerdown', { clientY: 150, pointerId: 1 }); k.dispatch('pointermove', { clientY: 120 }); k.dispatch('pointerup'); await ruhe();
+  const f = posts(a).at(-1).koerper;
+  assert.deepEqual(Object.keys(f), ['deck', 'spur', 'filter']); assert.ok(f.filter > 0 && f.filter <= 1);
+  k.dispatch('dblclick'); await ruhe();
+  assert.deepEqual(posts(a).at(-1).koerper, { deck: 1, spur: 1, filter: 0 });
+});
+
+test('the COLOR label names the art of the main mixer and follows a change of color/art', async () => {
+  await start();
+  const { zustand } = await import('../public/page_state.js');
+  const { zeigeColor } = await import('../public/color_view.js');
+  assert.equal(farbe().querySelector('.ld-sendname').textContent, 'FILTER');   // art 0
+  for (const [art, name] of [[1, 'SPACE'], [2, 'DUB ECHO'], [3, 'SWEEP'], [4, 'NOISE'], [5, 'CRUSH'], [0, 'FILTER']]) {
+    zustand.regler = { ...(zustand.regler ?? {}), 'color/art': art };
+    zeigeColor();
+    for (let s = 1; s <= 4; s++) assert.equal(farbe(s).querySelector('.ld-sendname').textContent, name, `lane ${s}, art ${art}`);
+  }
+});
+
+test('keys 1 2 3 are lit from the stand and a click posts fx for that unit only; a refusal rolls back', async () => {
+  const { a } = await start({ fx: { 1: false, 2: true, 3: false } });
+  assert.ok(!fxTaste('1').classList.contains('an')); assert.ok(fxTaste('2').classList.contains('an')); assert.ok(!fxTaste('3').classList.contains('an'));
+  fxTaste('3').click(); await ruhe();
+  assert.deepEqual(posts(a).at(-1).koerper, { deck: 1, spur: 1, fx: { 3: true } });
+  assert.ok(fxTaste('3').classList.contains('an'));
+  fxTaste('2').click(); await ruhe();
+  assert.deepEqual(posts(a).at(-1).koerper, { deck: 1, spur: 1, fx: { 2: false } });
+  assert.ok(!fxTaste('2').classList.contains('an'));
+  a.antworten['POST /loopdeck/spur'] = { code: 400, j: { ok: false, grund: 'form', text: 'no' } };
+  fxTaste('1').click(); await ruhe();
+  assert.ok(!fxTaste('1').classList.contains('an'));   // rolled back
+});
+
+test('a stand without fx draws all three keys dark', async () => {
+  await start({ fx: undefined });
+  for (const u of ['1', '2', '3']) assert.ok(!fxTaste(u).classList.contains('an'));
 });
 
 test('STRIP toggles the class and stores the state; a throwing localStorage does not break the view', async () => {
@@ -93,14 +130,7 @@ test('STRIP toggles the class and stores the state; a throwing localStorage does
   assert.equal(deck().classList.contains('mit-strip'), !v2);
 });
 
-// ---------- PZ2: sends, effect chip, device window ----------
-const GRAPHEN = { graphen: [{ name: 'fx-remix', kurz: 'REMIX', latenz: 0 }, { name: 'fx-crunch', kurz: 'CRUNCH', latenz: 46 }] };
-const EFFEKTE = { 'GET /loopdeck/effekte': { j: GRAPHEN } };
-const chip = (s = 1) => deck().querySelectorAll('.ld-spur')[s - 1].querySelector('.ld-fx');
-const sendKnopf = (art, s = 1) => deck().querySelectorAll('.ld-spur')[s - 1].querySelector(`.ld-send[data-send="${art}"] .ld-mini`);
-const fxMenue = () => deck().querySelector('.ld-fxmenue');
-const fxWahl = (text) => fxMenue().querySelectorAll('.ld-fxwahl, .ld-fxeintrag').find((b) => b.textContent === text);
-
+// ---------- sends ----------
 test('HALL drag sends the send in dB (at most 0); double click on DLY turns the send off', async () => {
   const { a } = await start();
   const h = sendKnopf('hall');
@@ -118,60 +148,4 @@ test('a stand with sends draws the knobs at the stored dB', async () => {
   await start({ send: { hall: -6, delay: -200 } });
   assert.equal(sendKnopf('hall').getAttribute('aria-valuenow'), '-6.00');
   assert.equal(sendKnopf('delay').getAttribute('aria-valuenow'), '-200.00');
-});
-
-test('chip shows + without an effect; its click opens the choice with the graphs; picking CRUNCH posts the graph', async () => {
-  const { a } = await start({}, { ...EFFEKTE, 'POST /loopdeck/effekt': { j: { ok: true, effekt: { id: 'i9', graph: 'fx-crunch', an: true } } } });
-  assert.equal(chip().textContent, '+');
-  assert.ok(fxMenue().hidden);
-  chip().click(); await ruhe();
-  assert.ok(!fxMenue().hidden);
-  assert.deepEqual(fxMenue().querySelectorAll('.ld-fxwahl').map((b) => b.textContent), ['REMIX', 'CRUNCH']);
-  assert.equal(fxWahl('On'), undefined); assert.equal(fxWahl('Remove'), undefined);   // nothing set: no on/off, no remove
-  fxWahl('CRUNCH').click(); await ruhe();
-  assert.deepEqual(posts(a).at(-1), { url: '/loopdeck/effekt', methode: 'POST', koerper: { deck: 1, spur: 1, graph: 'fx-crunch' } });
-  assert.equal(chip().textContent, 'CRUNCH');
-  assert.ok(fxMenue().hidden);
-  assert.equal(a.anrufe.filter((c) => c.url === '/loopdeck/effekte').length, 1);   // fetched once
-});
-
-test('a set chip shows the short name, dim when off; Off posts an:false, Remove posts graph empty', async () => {
-  const { a } = await start({ effekt: { id: 'i9', graph: 'fx-remix', an: false } }, { ...EFFEKTE, 'POST /loopdeck/effekt': (k) => ({ j: { ok: true, effekt: k.graph === '' ? null : { id: 'i9', graph: 'fx-remix', an: k.an ?? true } } }) });
-  assert.equal(chip().textContent, 'REMIX');
-  assert.ok(chip().classList.contains('aus'));
-  chip().click(); await ruhe();
-  fxWahl('On').click(); await ruhe();
-  assert.deepEqual(posts(a).at(-1).koerper, { deck: 1, spur: 1, an: true });
-  assert.ok(!chip().classList.contains('aus'));
-  chip().click(); await ruhe();
-  assert.equal(fxWahl('On'), undefined); assert.ok(fxWahl('Off'));
-  fxWahl('Off').click(); await ruhe();
-  assert.deepEqual(posts(a).at(-1).koerper, { deck: 1, spur: 1, an: false });
-  assert.ok(chip().classList.contains('aus'));
-  chip().click(); await ruhe();
-  fxWahl('Remove').click(); await ruhe();
-  assert.deepEqual(posts(a).at(-1).koerper, { deck: 1, spur: 1, graph: '' });
-  assert.equal(chip().textContent, '+');
-});
-
-test('set chip, choice open, second click on the chip opens the device window of the stage', async () => {
-  await start({ effekt: { id: 'i9', graph: 'fx-remix', an: true } }, EFFEKTE);
-  const offen = [];
-  globalThis.open = (...x) => { offen.push(x); return { focus() {} }; };   // window is globalThis in the stand-in
-  chip().click(); await ruhe();
-  assert.ok(!fxMenue().hidden); assert.equal(offen.length, 0);
-  chip().click(); await ruhe();
-  assert.ok(fxMenue().hidden);
-  assert.equal(offen.length, 1);
-  assert.equal(offen[0][0], '/#geraet=ins%3Ai9');
-  delete globalThis.open;
-});
-
-test('a refusal kein_platz shows its text and leaves the chip +', async () => {
-  const { a } = await start({}, { ...EFFEKTE, 'POST /loopdeck/effekt': { code: 409, j: { ok: false, grund: 'kein_platz', text: 'All 8 effect stages are in use.' } } });
-  chip().click(); await ruhe();
-  fxWahl('REMIX').click(); await ruhe();
-  assert.equal(chip().textContent, '+');
-  assert.equal(document.querySelector('#meldung').textContent, 'Loop deck: All 8 effect stages are in use.');
-  assert.ok(posts(a).some((c) => c.url === '/loopdeck/effekt'));
 });

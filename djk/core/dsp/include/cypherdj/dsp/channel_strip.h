@@ -32,6 +32,12 @@ struct KanalzugAusgang {
     float* haupt_r = nullptr;
     float* send_l[kAnzahlSends] = {};           // optional: += Haupt · Send-Gain; nullptr = kein Bus
     float* send_r[kAnzahlSends] = {};
+    // Loop lane strip K4 (additive, at the end): a second input pair that only takes the FADER of the strip, bit for bit the gain the main path gets in the same block (the diverted FX 3 share of the arrangement
+    // tracks). nullptr = nothing: the stage does not run and the main path is unchanged.
+    const float* zus_ein_l = nullptr;
+    const float* zus_ein_r = nullptr;
+    float* zus_aus_l = nullptr;                 // gets zus_ein * fader (overwritten)
+    float* zus_aus_r = nullptr;
 };
 
 class Kanalzug {

@@ -52,7 +52,11 @@ test('the page never opens the live container by itself and never closes it', ()
   assert.equal(hook.length, 1, 'one use of the hook');
   assert.match(app, /!haken\.frage\(FRAGE_PROJEKT\)\) return[^\n]*\n\s*const o = await haken\.oeffneLive\(\);/, 'the question comes first');
   const ohneImport = app.replace(/^import .*$/gm, '');   // since the module split a use is also imported once; the import lines are not uses
-  assert.equal((ohneImport.match(/liveOeffnen/g) ?? []).length, 2, 'the definition and the registration, nothing else');
+  assert.equal((ohneImport.match(/liveOeffnen/g) ?? []).length, 3, 'the definition, the registration and the OPEN LIVE button of the loop deck pop-up, nothing else');
+  // that button opens the container only on a click (the pop-up shows one line "No live project open"; nothing opens it by itself)
+  const sitzung = lies('loopdeck/gross.js');
+  assert.equal((sitzung.match(/oeffneLive\(\)/g) ?? []).length, 1);
+  assert.match(sitzung, /addEventListener\('click', async \(\) => \{ await opt\.oeffneLive\(\);/);
   assert.doesNotMatch(app, /\[data-liveoeffnen\]/, 'the dead binding is gone: no element carries the attribute any more');
   const lesen = funktion('pruefeLive');
   assert.doesNotMatch(lesen, /oeffneLive|liveOeffnen|\/live\/oeffnen|confirm/);

@@ -15,7 +15,7 @@ const deck = (g, extra = {}) => ({ gruppe_id: `g${g}`, platz: g, raster: '1', sp
 const posts = (a) => a.anrufe.filter((c) => c.methode === 'POST');
 const urls = (a) => posts(a).map((c) => c.url);
 const dk = (n = 1) => document.querySelector(`.loopdeck[data-deck="${n}"]`);
-const zk = (n, s, z) => dk(n).querySelectorAll('.ld-spur')[s - 1].querySelectorAll('.ld-zelle')[z - 1];
+const zk = (n, s, z) => dk(n).querySelectorAll('.ld-spur')[s - 1].querySelectorAll('.zelle')[z - 1];
 
 async function start({ stand = { decks: { 1: deck(1), 2: null }, beat: 16, bpm: 120 }, live = null, extra = {}, html = HTML, frage = () => true } = {}) {
   const a = installiere({ html, antworten: { 'GET /loopdeck/stand': () => ({ j: typeof stand === 'function' ? stand() : stand }), 'POST /loopdeck/neu': { j: { ok: true } }, ...extra } });
@@ -198,13 +198,14 @@ test('waveform: a failed /welle is not remembered as null; the next change of th
   m.loopdeckEreignis('loopdeck', { deck: 1, spur: 1, lauf: lauf(1) }); await ruhe();
   m.loopdeckEreignis('loopdeck', { deck: 1, spur: 1, lauf: lauf(3) }); await ruhe();
   m.loopdeckEreignis('loopdeck', { deck: 1, spur: 1, lauf: lauf(1) }); await ruhe();
-  assert.equal(a.anrufe.filter((c) => c.url === '/welle?sha=sha1').length, 2);
+  // the cell thumbnails ask for the same sha too (session column component), so the count is not exactly 2; the failed first request is asked again
+  assert.ok(a.anrufe.filter((c) => c.url === '/welle?sha=sha1').length >= 2);
 });
 
 test('clock: beat or bpm null from the stand set no clock (no play head from Number(null))', async () => {
   const stand = { decks: { 1: deck(1, { spur: (nr) => (nr === 1 ? { lauf: { ...lauf0(), zelle: 1, ab_beat: 0 } } : {}) }), 2: null }, beat: null, bpm: null };
   await start({ stand, live: { live: true } });
-  assert.equal(dk(1).querySelectorAll('.ld-kopf')[0].hidden, true);
+  assert.equal(dk(1).querySelectorAll('.kopf-ph')[0].hidden, true);
 });
 
 test('filter knob: a redraw during the drag does not reset it', async () => {
@@ -220,18 +221,18 @@ test('filter knob: a redraw during the drag does not reset it', async () => {
 test('scene column: it shares the row template of the tracks and has no fixed paddings', () => {
   const css = fs.readFileSync(new URL('../public/loopdeck/loopdeck.css', import.meta.url), 'utf8');
   assert.doesNotMatch(css, /\.ld-szenen \{[^}]*padding-(top|bottom): \d+px/);
-  assert.match(css, /\.ld-spur, \.ld-szenen \{[^}]*grid-template-rows: 14px 36px minmax\(0, 1fr\) 26px/);
-  assert.match(css, /\.ld-zellen, \.ld-szenenzeilen \{[^}]*grid-template-rows: repeat\(8, minmax\(14px, 1fr\)\)/);
-  assert.doesNotMatch(css, /\.ld-zelle \{[^}]*max-height/);
+  assert.match(css, /\.ld-spur, \.ld-szenen \{[^}]*grid-template-rows: 14px 14px minmax\(0, 1fr\) 18px 26px/);
+  assert.match(css, /\.ld-spur \.zellen, \.ld-szenenzeilen \{[^}]*grid-template-rows: repeat\(8, minmax\(14px, 1fr\)\)/);
+  assert.doesNotMatch(css, /\.ld-spur \.zelle \{[^}]*max-height/);
 });
 
 // ---------- missing tests ----------
-test('a click on the playing cell sends start again', async () => {
+test('a click on the playing cell stops its track (toggle, Andreas 2026-11-22; it used to send start again)', async () => {
   const stand = { decks: { 1: deck(1, { spur: (nr) => (nr === 1 ? { lauf: { ...lauf0(), zelle: 1, ab_beat: 0 } } : {}) }), 2: null }, beat: 1, bpm: 120 };
   const { a } = await start({ stand, live: { live: true } });
   assert.ok(zk(1, 1, 1).classList.contains('spielt'));
   zk(1, 1, 1).click(); await ruhe();
-  assert.deepEqual(posts(a).at(-1), { url: '/loopdeck/start', methode: 'POST', koerper: { deck: 1, spur: 1, zelle: 1 } });
+  assert.deepEqual(posts(a).at(-1), { url: '/loopdeck/stopp', methode: 'POST', koerper: { deck: 1, spur: 1 } });
 });
 
 test('deck 2: menu, stop, scene and stream events address deck 2', async () => {
@@ -239,7 +240,7 @@ test('deck 2: menu, stop, scene and stream events address deck 2', async () => {
   zk(2, 3, 1).dispatch('contextmenu'); await ruhe();
   dk(2).querySelector('[data-eintrag="leeren"]').click(); await ruhe();
   assert.deepEqual(posts(a).at(-1), { url: '/loopdeck/zelle', methode: 'POST', koerper: { deck: 2, spur: 3, zelle: 1, leeren: true } });
-  dk(2).querySelectorAll('.ld-spur')[1].querySelector('.ld-stopp').click(); await ruhe();
+  dk(2).querySelectorAll('.ld-spur')[1].querySelector('.stopp').click(); await ruhe();
   assert.deepEqual(posts(a).at(-1).koerper, { deck: 2, spur: 2 });
   dk(2).querySelectorAll('.ld-szene')[2].click(); await ruhe();
   assert.deepEqual(posts(a).at(-1), { url: '/loopdeck/szene', methode: 'POST', koerper: { deck: 2, zeile: 3 } });

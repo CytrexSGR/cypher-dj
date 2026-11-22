@@ -37,7 +37,8 @@ test('the strudel strom enum is the stream table of streams.ts', async (t) => {
 
 test('no description names a pad as an instrument slot, streams 9 and 10 as pads, ausgang_platz, loop boxes or decks 3 and 4 as strips', async (t) => {
   const { c } = await aufbau(t, () => null);
-  const VERBOTEN = [/ausgang_platz/, /loop boxes?/i, /\bL1\b|\bL2\b/, /pad boxes?/i, /9, 10 \(pad/, /pad\/1 carries/, /pad\/2 slot B/,
+  // L1/L2 as old loop box names are banned; the session column labels L1.1 .. L2.4 are the names the page shows.
+  const VERBOTEN = [/ausgang_platz/, /loop boxes?/i, /\bL[12]\b(?!\.\d)/, /pad boxes?/i, /9, 10 \(pad/, /pad\/1 carries/, /pad\/2 slot B/,
     /deck\/1\.\.4|deck\/3|deck\/4/, /instrument slots?: [^.]*pad\/1/, /the loop of box N/, /loop slots/];
   const treffer = [];
   for (const [name, d] of await beschreibungen(c)) for (const re of VERBOTEN) { const m = re.exec(d); if (m) treffer.push(`${name}: ${m[0]}`); }

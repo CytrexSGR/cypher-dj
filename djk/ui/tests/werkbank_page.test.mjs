@@ -278,8 +278,7 @@ test('every region of the contract exists as a host and as a binder file', () =>
 });
 
 test('the fourth view is wired', () => {
-  assert.match(lies('seitenrahmen.js'), /const ANSICHTEN = \['dj', 'studio', 'produktion', 'werkbank', 'tracker'\]/);
-  assert.match(lies('index.html'), /data-ansicht="studio"[^>]*>LIVE</);
+  assert.match(lies('seitenrahmen.js'), /const ANSICHTEN = \['dj', 'produktion', 'werkbank', 'tracker'\]/);
   assert.match(lies('index.html'), /data-ansicht="werkbank"[^>]*>STUDIO</);
   assert.match(lies('index.html'), /<section id="werkbank" aria-label="Studio"><\/section>/);
   assert.match(lies('index.html'), /<link rel="stylesheet" href="werkbank\/werkbank\.css">/);

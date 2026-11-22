@@ -111,6 +111,11 @@ export function synthKarte(werk, z, spur, meine) {
     zeile.append(knoepfe, ...sends);
     e.append(kopf, zeile);
   } else e.append(kopf, knoepfe);
+  for (const d of audio ? host.spurKnoepfe?.(z.id) ?? [] : []) {   // an audio track has no panel: the host hands out its own knobs (SESSION: FILTER and the isolator)
+    const k = neuerDrehknopf({ w: 'karte-knopf', name: d.name, titel: d.titel, farbe: z.farbe, lies: d.lies, setze: d.setze, ende: d.ende, text: d.text, vorgabe: d.vorgabe });
+    k.setAttribute('data-param', d.param);
+    werk.frisch.push(k.frisch); k.frisch(); knoepfe.append(k);
+  }
   e.addEventListener('click', () => host.wahl.setze(z.id));
   if (karte()) bindeKartenGesten(host, karte(), { el: e, nameEl: kopf.querySelector?.('.w-karte-name') ?? null, farbEl: b });
   if (!audio) werk.geraetInfo(spur).then((info) => { if (info) panelKnoepfe(werk, knoepfe, info, info.adapter, z.farbe, MAX_FRONT, meine); });
@@ -221,6 +226,7 @@ export function masterKarte(werk, meine) {
   if (erstes) stufenKnoepfe(werk, knoepfe, 'master', erstes, MASTER_FARBE, meine);
   vornKlick(werk, e, 'master');
   if (karte()) bindeKartenGesten(host, karte(), { el: e, nameEl: null, farbEl: null });
+  host.masterHaken?.(e);
   return e;
 }
 export const neuKarte = (w, text, titel, klick) => { const b = knopfEl('w-karte-dock w-karte-neu', w, text, titel); b.addEventListener('click', klick); return b; };

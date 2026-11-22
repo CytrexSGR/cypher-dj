@@ -245,6 +245,47 @@ export function legeKit(a: { id: string; scheiben: number[]; banken?: string[]; 
   return { kit, klaenge, muster: kitMuster(s, klaenge) };
 }
 
+/** A new kit from frame ranges of decoded audio (stereo float32 48 kHz), not from a stored cut: session view `→ SAMPLER INSTRUMENT` (B5). The k-th range
+ *  becomes note `ERSTE_NOTE + k`, with the bank proposed from its band balance and the same 5 ms end fade as `legeKit`; `quelle` names where it came from
+ *  (kit.json `quelle`: `<quelle>/<k+1>`). Every refusal comes before anything is written; a failed write removes the folder again. */
+export function legeKitAusAudio(a: { name: string; daten: Float32Array; scheiben: { von: number; bis: number }[]; quelle: string; kit?: string }, o: KitOrdner = {}): {
+  kit: string; klaenge: { scheibe: number; note: number; name: string; datei: string; frames: number }[];
+} {
+  const frames = Math.floor(a.daten.length / 2);
+  if (!Array.isArray(a.scheiben) || a.scheiben.length === 0) throw arg('scheiben: a non-empty list of frame ranges expected');
+  if (ERSTE_NOTE + a.scheiben.length - 1 > 127) throw arg(`scheiben: ${a.scheiben.length} sounds would pass note 127 (at most ${128 - ERSTE_NOTE})`);
+  if (a.kit !== undefined && (typeof a.kit !== 'string' || !KIT_NAME.test(a.kit))) throw arg(`kit: a name of 1..${NAME_MAX} characters from a-z, 0-9, _ and - expected`);
+  for (const [i, r] of a.scheiben.entries()) {
+    if (!Number.isInteger(r.von) || !Number.isInteger(r.bis) || r.von < 0 || r.bis > frames || r.bis <= r.von) throw arg(`scheiben[${i}]: a frame range inside the audio expected`);
+    if (r.bis - r.von > KLANG_MAX_FRAMES) {
+      throw new SchnittFehler(400, 'klang_zu_lang', `slice ${i + 1} is ${text(r.bis - r.von)} s long; a kit sound is at most ${text(KLANG_MAX_FRAMES)} s`);
+    }
+  }
+  const gesamt = a.scheiben.reduce((sum, r) => sum + (r.bis - r.von) * 8, 0);
+  if (gesamt > KIT_MAX_BYTES) throw arg(`scheiben: the sounds are ${Math.ceil(gesamt / 1048576)} MiB, a kit holds at most 256 MiB`);
+  const namen = nummeriere(a.scheiben.map((r) => bankVorschlag(baender(a.daten, r.von, r.bis))));
+  const wurzel = kitsOrdner(o);
+  const kit = a.kit ?? freierKitName(a.name, o);
+  const ordner = path.join(wurzel, kit);
+  fs.mkdirSync(wurzel, { recursive: true });
+  try { fs.mkdirSync(ordner); } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'EEXIST') throw new SchnittFehler(409, 'kit_vorhanden', `a kit named ${kit} exists already; choose another name`);
+    throw e;
+  }
+  const klaenge = a.scheiben.map((r, k) => ({ scheibe: k, note: ERSTE_NOTE + k, name: namen[k], datei: `${ERSTE_NOTE + k}.f32`, frames: r.bis - r.von }));
+  try {
+    mitSperre(ordner, () => {
+      for (const k of klaenge) dateiSchreiben(path.join(ordner, k.datei), klangDaten(a.daten, a.scheiben[k.scheibe].von, a.scheiben[k.scheibe].bis));
+      const j = { schema: 1, name: kit, klaenge: klaenge.map((k) => ({ note: k.note, name: k.name, datei: k.datei, frames: k.frames, quelle: `${a.quelle}/${k.scheibe + 1}` })) };
+      dateiSchreiben(path.join(ordner, 'kit.json'), JSON.stringify(j, null, 1));
+    });
+  } catch (e) {
+    try { fs.rmSync(ordner, { recursive: true, force: true }); } catch { /* the original error is the one to report */ }
+    throw e;
+  }
+  return { kit, klaenge };
+}
+
 /** The hits of the kit where its slices sit in the cut, so that KIT TO TRACK plays at once (A, 2026-11-16: the new kit track was empty and silent).
  *  The positions are those of the slice track (spurBefehl): a grid cut on the exact grid, a hit or hand cut on the beat of its bound. One step long,
  *  as a drum hit of the grid; `beats` is the length of the cut, the loop of the new track. */

@@ -17,7 +17,7 @@ const posts = (a) => a.anrufe.filter((c) => c.methode === 'POST');
 const sektion = (n) => document.querySelector(`.deck[data-deck="${n}"]`);
 const taste = (n, s) => sektion(n).querySelector(`[data-nachspur="${s}"]`);
 const wahl = (n) => sektion(n).querySelector('[data-nachdeck]');
-const zk = (n, s, z) => document.querySelector(`.loopdeck[data-deck="${n}"]`).querySelectorAll('.ld-spur')[s - 1].querySelectorAll('.ld-zelle')[z - 1];
+const zk = (n, s, z) => document.querySelector(`.loopdeck[data-deck="${n}"]`).querySelectorAll('.ld-spur')[s - 1].querySelectorAll('.zelle')[z - 1];
 
 async function start({ decks = { 1: deck(1), 2: deck(2) }, laden = () => ({ j: { ok: true, spur: 2, zelle: 3, zelle_id: 'x' } }), loop = true } = {}) {
   const a = installiere({ html: HTML, antworten: { 'GET /loopdeck/stand': () => ({ j: { decks, beat: 16, bpm: 120 } }), 'POST /loopdeck/laden': laden } });

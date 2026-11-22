@@ -4,8 +4,8 @@
 // Origin: the kern event /e/regler carries `halter` (INTERFACES 5.7: frei | mensch | plan:<id> | <source>). `mensch` is set ONLY by the stellwerk's hand
 // path (a controller grip through a mapping table, hand.cpp hand_anwenden); everything the page server writes goes out as /k/teil with the holder
 // `andreas` or `cypher` (core_path.ts teile), and a /k/teil on a row the hand holds is refused (regler_beim_menschen) and sends no value event.
-// The arrangement is a sink of the row, never a source: a playback rebuild, a lane and a clip envelope emit no /e/regler for the row (arr_output.cpp
-// bk_ueber_*), and spur_bk rows are not stored in the state file, so a kern restart restores none. The session's own mixer return path (session.ts
+// The arrangement is a sink of the row, never a source: a playback rebuild and a lane emit no /e/regler for the row (arr_output.cpp
+// bk_ueber_*); a clip envelope on a cell mirrors the value it applies as /e/regler with halter `huelle` (S1b K2, display only, never `mensch`), and spur_bk rows are not stored in the state file, so a kern restart restores none. The session's own mixer return path (session.ts
 // rueckweg) relies on the same field. So: only events with halter `mensch` are taken, and only when the value differs from the one seen before
 // (a touch without a move repeats the value) and from the project's value (an echo of what the project holds).
 //

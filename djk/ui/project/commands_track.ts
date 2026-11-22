@@ -2,7 +2,7 @@
 // The handlers reach each other through PRO_BEFEHL (commands_helpers.ts) at call time; commands.ts merges the tables.
 import {
   istGeraetZiel, passtGeraetZiel, FADER_MAX, FADER_MIN, MAX_ARM_AUDIO, MAX_BEAT, MAX_SPUREN, alleInserts, SPUR_FARBEN, MAX_TAKES_PRO_SPUR,
-  entferneLeereTakes, EQ_BAENDER, EQ_MIN, EQ_MAX, istObjekt, type EqBand, type Take, kanonisch, neueId, type AudioClip, type Clip, type Spur, wirtSlots,
+  entferneLeereTakes, EQ_BAENDER, FX_NUMMERN, type FxNr, EQ_MIN, EQ_MAX, istObjekt, type EqBand, type Take, kanonisch, neueId, type AudioClip, type Clip, type Spur, wirtSlots,
   type SpurAufnahme,
 } from './model.ts';
 import {
@@ -31,6 +31,16 @@ function killArg(x: unknown): Partial<Record<EqBand, boolean>> {
   return o as Partial<Record<EqBand, boolean>>;
 }
 
+// fx: {"1"|"2"|"3": boolean}; at least one key, nothing else
+function fxArg(x: unknown): Partial<Record<FxNr, boolean>> {
+  if (!istObjekt(x) || Object.keys(x).length === 0) return ab('argument_ungueltig', 'fx: {"1"?, "2"?, "3"?} expected');
+  for (const k of Object.keys(x)) {
+    if (!FX_NUMMERN.includes(k as FxNr)) ab('argument_ungueltig', `fx.${k}: unknown FX (1, 2, 3)`);
+    if (typeof x[k] !== 'boolean') ab('argument_ungueltig', `fx.${k}: true or false expected`);
+  }
+  return x as Partial<Record<FxNr, boolean>>;
+}
+
 export const SPUR = {
   spur_neu(p, a, ctx) {
     erlaube(a, 'art', 'name', 'geraet', 'gruppe');
@@ -55,9 +65,9 @@ export const SPUR = {
 
   spur_aendern(p, a, ctx) {
     if (a.von !== undefined) ab('argument_ungueltig', 'von: unveränderlich (Spec 6.22), die Herkunft einer Spur ändert kein Befehl');
-    erlaube(a, 'spur_id', 'name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'geraet', 'gruppe', 'arm', 'eingang', 'monitor', 'filter', 'eq', 'kill');
+    erlaube(a, 'spur_id', 'name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'geraet', 'gruppe', 'arm', 'eingang', 'monitor', 'filter', 'eq', 'kill', 'fx');
     const s = spurVon(p, idArg(a, 'spur_id'));
-    const FELDER = ['name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'geraet', 'gruppe', 'arm', 'eingang', 'monitor', 'filter', 'eq', 'kill'];
+    const FELDER = ['name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'geraet', 'gruppe', 'arm', 'eingang', 'monitor', 'filter', 'eq', 'kill', 'fx'];
     if (FELDER.every((k) => a[k] === undefined)) {
       ab('argument_ungueltig', 'keine Änderung angegeben');
     }
@@ -71,6 +81,8 @@ export const SPUR = {
     const eq = a.eq === undefined ? undefined : eqArg(a.eq), kill = a.kill === undefined ? undefined : killArg(a.kill);
     if (eq !== undefined && s.zellen === undefined) ab('argument_ungueltig', 'eq: only for a track of a loop deck');
     if (kill !== undefined && s.zellen === undefined) ab('argument_ungueltig', 'kill: only for a track of a loop deck');
+    const fx = a.fx === undefined ? undefined : fxArg(a.fx);
+    if (fx !== undefined && s.zellen === undefined) ab('argument_ungueltig', 'fx: only for a track of a loop deck');
     const mute = flagge(a, 'mute', true), solo = flagge(a, 'solo', true);
     if (a.geraet !== undefined && s.art !== 'instrument') ab('argument_ungueltig', 'geraet: nur für Instrument-Spuren');
     const geraet = a.geraet !== undefined ? baueGeraet(p, a.geraet, s.id, ctx) : undefined;
@@ -103,6 +115,11 @@ export const SPUR = {
       const k: Partial<Record<EqBand, true>> = { ...(s.kill ?? {}) };
       for (const b of EQ_BAENDER) { if (kill[b] === true) k[b] = true; else if (kill[b] === false) delete k[b]; }
       if (Object.keys(k).length > 0) s.kill = k; else delete s.kill;
+    }
+    if (fx !== undefined) {
+      const f: Partial<Record<FxNr, boolean>> = { ...(s.fx ?? {}) };
+      for (const u of FX_NUMMERN) { if (fx[u] === true) f[u] = true; else if (fx[u] === false) delete f[u]; }
+      if (Object.keys(f).length > 0) s.fx = f; else delete s.fx;
     }
     if (mute !== undefined) s.mute = mute;
     if (solo !== undefined) s.solo = solo;

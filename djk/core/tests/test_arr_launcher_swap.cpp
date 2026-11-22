@@ -12,6 +12,8 @@
 //  10  pending start, its track gone: dropped with 7, nothing sounds
 //  11  holds: alles_aus, ki_stopp, a gone track and a cleared cell release the audio to the cache at once
 //  12  receipt overflow is counted and shown by launch_stand
+//  13  session view K2: a swap that changes the slice table and the envelopes of the playing cell leaves the playing voice on its copy until
+//      the next start of that column; sizeof(Arrangement) grows by less than 2 MiB
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -26,6 +28,18 @@
 #include "check.h"
 
 bool g_waechter = false;
+
+namespace cdj {
+struct ArrPruefZugang {   // friend of Arrangement: the cell copy of the current voice of a deck track
+  static const ArrZelle* stimme_z(const Arrangement& a, uint64_t kennung) {
+    for (const auto& t : a.ls_)
+      if (t.belegt && t.kennung == kennung)
+        for (const auto& v : t.v)
+          if (v.aktiv && v.aktuell) return &v.z;
+    return nullptr;
+  }
+};
+}  // namespace cdj
 
 using namespace arrtest;
 using cdj::ArrArt;
@@ -422,6 +436,41 @@ int main() {
     PRUEF(stand(x.t.arr, st) == 1 && st[0].meldungen_verloren == 2);
     const auto m = meldungen(x.t.arr);
     PRUEF(m.size() == 128 && m[0].id == 102 && m[127].id == 229);   // the two oldest are the ones counted
+  }
+  {  // 13: the playing voice keeps its copy of the map and the envelopes (ADR 042 item 6)
+    ArrZelle z1 = zelle(*ram);
+    z1.karte.n = 2;
+    z1.karte.frames = z1.frames;
+    z1.karte.g[0] = 0.0;
+    z1.karte.g[1] = static_cast<double>(z1.frames) / 2.0;
+    z1.karte.g[2] = static_cast<double>(z1.frames);
+    z1.karte.s[0] = 1;
+    z1.karte.s[1] = 0;
+    z1.n_huellen = 1;
+    z1.huellen[0].art = 2;
+    z1.huellen[0].n = 1;
+    z1.huellen[0].p[0] = {0.0, -6.0f, 0};
+    ArrZelle z2 = zelle(*ram);
+    z2.karte.n = 3;
+    z2.karte.frames = z2.frames;
+    z2.karte.g[3] = static_cast<double>(z2.frames);
+    Lauf x;
+    x.t.laden(bauen({{1, "s1", {z1}}}));
+    PRUEF(x.t.arr.launch_start(ID, 1, 0.0, 0.0, 1, false) == LaunchGrund::ok);
+    x.bis(SPB);
+    const ArrZelle* v = cdj::ArrPruefZugang::stimme_z(x.t.arr, ID);
+    PRUEF(v && v->karte.n == 2 && v->karte.s[0] == 1 && v->n_huellen == 1 && v->huellen[0].p[0].wert == -6.0f);
+    x.t.laden(bauen({{1, "s1", {z2}}}));   // the table and the envelopes of cell 1 change while it plays
+    x.bis(2 * SPB);
+    v = cdj::ArrPruefZugang::stimme_z(x.t.arr, ID);
+    PRUEF(v && v->karte.n == 2 && v->karte.s[0] == 1 && v->n_huellen == 1 && v->huellen[0].p[0].wert == -6.0f);
+    PRUEF(x.t.arr.launch_start(ID, 1, 8.0, 0.0, 2, false) == LaunchGrund::ok);   // the next start of the column takes the new cell
+    x.bis(9 * SPB);
+    v = cdj::ArrPruefZugang::stimme_z(x.t.arr, ID);
+    PRUEF(v && v->karte.n == 3 && v->n_huellen == 0);
+    const size_t vorher = 2553024;   // sizeof(Arrangement) before K2 (measured at the commit this task started from)
+    std::printf("sizeof(Arrangement) before %zu, after %zu, growth %zu\n", vorher, sizeof(cdj::Arrangement), sizeof(cdj::Arrangement) - vorher);
+    PRUEF(sizeof(cdj::Arrangement) < vorher + (2u << 20));
   }
   PRUEF_ENDE();
 }

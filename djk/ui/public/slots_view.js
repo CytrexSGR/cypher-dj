@@ -57,8 +57,12 @@ const PLATZ_ANSICHT = {
 };
 const knotenVon = (n) => PLATZ_ANSICHT[typVon(zustand.plaetze, n)]?.(n) ?? null;
 const knotenAmPlatz = (p) => $(`#pult [data-platz="${p}"]`);
+// Which node every place shows, as text: the project can arrive after /lage, so the loop deck of a place may change without a new /lage (see zeigePlaetzeSpaeter)
+const ordnung = () => PLAETZE.map((n) => `${typVon(zustand.plaetze, n)}${typVon(zustand.plaetze, n) === 'loops' ? loopDeckVon(n) : ''}`).join('|');
+let ordnungStand = '';
 // Only attributes change: data-platz (the grid cell), hidden and platz-aus, so the node objects, their listeners and the Strudel editors stay as they are.
 function ordneKnoten() {
+  ordnungStand = ordnung();
   const platz = new Map();
   for (const n of PLAETZE) { const k = knotenVon(n); if (k) platz.set(k, n); }
   for (const k of KNOTEN()) {
@@ -76,16 +80,6 @@ function zeigeZugKoepfe() {
     if (k) k.textContent = zugKopf(zustand.plaetze, n);
   }
 }
-// The Studio view has no deck strips of its own: the strip of place 1 or 2 shows there while the place holds something, after the pad strips
-function zeigeStudioZuege() {
-  for (const n of [1, 2]) {
-    const z = $(`.zug[data-kanalzug="${pfadVonPlatz(n)}"]`);
-    if (!z) continue;
-    if (typVon(zustand.plaetze, n) === 'leer') { delete z.dataset.studioZug; continue; }
-    z.dataset.studioZug = '1';
-    $('#mischer-unten').append(z);
-  }
-}
 // The one entry point after a /lage answer: attributes of existing nodes only
 export function wendePlaetzeAn() {
   ordneKnoten();
@@ -93,7 +87,6 @@ export function wendePlaetzeAn() {
   ordneSpalten($, knotenAmPlatz);
   zeigeMini();
   zeigeZugKoepfe();
-  zeigeStudioZuege();
   zeigeLoopsSperre();
   zeigePlaetze();
   zeichneSeq();
@@ -156,7 +149,9 @@ function zeigeLadeSperre() {
   }
 }
 let plaetzeFrist = 0;
-export function zeigePlaetzeSpaeter() { if (!plaetzeFrist) plaetzeFrist = requestAnimationFrame(() => { plaetzeFrist = 0; zeigePlaetze(); }); }
+// The live project (read apart from /lage) says which loop deck a group is (LoopDeck.platz): when it arrives or changes after the nodes were placed, the nodes are placed again,
+// so a loops place shows the same deck as the SESSION container of that group (D13); otherwise only the heads are drawn.
+export function zeigePlaetzeSpaeter() { if (!plaetzeFrist) plaetzeFrist = requestAnimationFrame(() => { plaetzeFrist = 0; if (zustand.plaetze && ordnung() !== ordnungStand) wendePlaetzeAn(); else zeigePlaetze(); }); }
 
 // ---------- switching ----------
 async function wechsle(platz, typ) {

@@ -10,6 +10,8 @@
 //   8  Überholen      ein zweiter Auftrag auf demselben Platz (gib, belege, ansetzen, wie an einer Naht oder bei einer neuen Karte) kommt immer an,
 //                     auch wenn der Faden den ersten gerade holt (D4: der neueste gewinnt, nie verlieren)
 //   9  Ring voll      liest der Callback nicht, wartet der Faden auf den nächsten takt() und dreht nicht leer (er läuft auf Echtzeit-Priorität)
+//  10  Clip ohne Karte  a clip order without zell_karte renders bit-equal to the build before K4 (FNV pin over 48 000 frames, L and R)
+//  11  Karte        K4: an order with zell_karte (reverse, loop) reads the source through the map: a step source (0.5 then 0) plays 0 then 0.5; without the map the other way round
 //   0  Speicher       das Werk (64 Plätze, je zwei Bungee-Instanzen, Ringe, Markerkopien) belegt höchstens 100 MiB (gemessen 59 MiB)
 // Mutationen (WILL_FAIL, jede macht ihren Fall rot): WARP_SOLL_NACH_SCHREIBE (Fall 8; der Auftrag ist sichtbar, bevor `soll` ihn deckt), WARP_RING_VOLL_DREHT
 // (Fall 9). Die Epochen des Rings (Fall 5 und 6) und Fall 4 sind die Gegenproben der übrigen Regeln.
@@ -18,6 +20,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <memory>
 #include <random>
@@ -30,6 +33,7 @@
 #include "check.h"
 
 bool g_waechter = false;
+static constexpr uint64_t SUMME_CLIP = 0x1b7868e969733553ull;   // recorded on f82e469b5 (before K4)
 
 using namespace std::chrono_literals;
 namespace {
@@ -310,6 +314,67 @@ int main() {
       PRUEF(z.ring_voll >= 1 && z.ring_voll < 200);   // 300 ms / 5 ms Wartezeit = 60; ein drehender Faden zählte Millionen
       eins->stoppe();
     }
+  }
+  // ---- 10: a clip order (no zell_karte) is bit-equal to the build before K4 (checksum recorded on f82e469b5)
+  {
+    Quelle q(arrtest::Audio::sinus(9 * FPB125, 1000.0, 0.5f), cdj::ARR_WARP_COMPLEX);
+    const int p = werk->belege();
+    cdj::WarpAnsatz a = auftrag(q, S_C, S_C);
+    werk->ansetzen(p, a);
+    std::vector<float> l, r;
+    PRUEF(lies(*werk, p, S_C, 48000, l, r));
+    uint64_t h = 1469598103934665603ull;
+    for (const std::vector<float>* v : {&l, &r})
+      for (float x : *v) {
+        uint32_t u;
+        std::memcpy(&u, &x, 4);
+        for (int i = 0; i < 4; ++i) h = (h ^ ((u >> (8 * i)) & 0xff)) * 1099511628211ull;
+      }
+    std::printf("Fall 10: clip checksum 0x%llxull\n", static_cast<unsigned long long>(h));
+    PRUEF(h == SUMME_CLIP);
+    werk->gib(p);
+  }
+  // ---- 11: the map. Source: 0.5 for the first half of the cell, then 0. Reversed through the map the stream plays 0 first, then 0.5.
+  // Variant 2 is the same stream without a map from a physically reversed source (0 first, then 0.5): the map read must be bit-equal to it.
+  {
+    const int64_t N = 8 * FPB125;
+    std::vector<float> l_karte, l_tausch;
+    for (const int variante : {0, 1, 2}) {   // 0 no map, 1 map: reversed, 2 no map, physically reversed source
+      const bool mit_karte = variante == 1, getauscht = variante == 2;
+      auto src = arrtest::Audio::gleich(N, 0.0f);
+      for (int64_t f = 0; f < N / 2; ++f) {
+        const int64_t g = getauscht ? N / 2 + f : f;
+        src->d[2 * static_cast<size_t>(g)] = src->d[2 * static_cast<size_t>(g) + 1] = 0.5f;
+      }
+      Quelle q(std::move(src), cdj::ARR_WARP_COMPLEX);
+      cdj::ZellKarte zk;
+      zk.n = 0;
+      zk.rueck = true;
+      zk.kreis = true;
+      zk.frames = N;
+      const int p = werk->belege();
+      cdj::WarpAnsatz a = auftrag(q, S_C, S_C);
+      a.kreis = true;
+      if (mit_karte) a.zell_karte = &zk;
+      werk->ansetzen(p, a);
+      std::vector<float> l, r;
+      PRUEF(lies(*werk, p, S_C, 8 * SPB, l, r));
+      auto mittel = [&](double von, double bis) {
+        double m = 0.0;
+        const int64_t a0 = static_cast<int64_t>(von * 8 * SPB), a1 = static_cast<int64_t>(bis * 8 * SPB);
+        for (int64_t i = a0; i < a1; ++i) m += l[static_cast<size_t>(i)];
+        return m / static_cast<double>(a1 - a0);
+      };
+      const double vorn = mittel(0.1, 0.4), hinten = mittel(0.6, 0.9);
+      std::printf("Fall 11 (%s): first part %.3f, last part %.3f\n", variante == 0 ? "no map" : mit_karte ? "map: reversed" : "no map, source reversed", vorn, hinten);
+      PRUEF_NAH(vorn, variante == 0 ? 0.5 : 0.0, 0.02);
+      if (variante == 0) PRUEF_NAH(hinten, 0.0, 0.03);   // the stretcher settles at 0.476 after a step from silence: the reversed variants are judged by bit equality below
+      if (mit_karte) l_karte = l;
+      if (getauscht) l_tausch = l;
+      werk->gib(p);
+    }
+    std::printf("Fall 11: map read vs physically reversed source: %s (%zu samples)\n", l_karte == l_tausch ? "bit-equal" : "DIFFERENT", l_karte.size());
+    PRUEF(!l_karte.empty() && l_karte == l_tausch);
   }
   PRUEF_ENDE();
 }

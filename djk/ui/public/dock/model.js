@@ -45,9 +45,10 @@ export function masterLatenz(p, pdc, hostLage = null, graphLatenzen = null) {
 const insertTeile = (strang) => (strang?.inserts ?? []).map((i) => { const k = effektKachel(i); return { teil: i.id, text: k.text, an: k.an, art: i.art, slot: i.slot }; });
 
 /** The cards of the dock rows: { spuren, gruppen, effekte, master }. Host input: { zuege(p), kurz(p, id), schalter, hostLage?, graphLatenzen? }. */
-export function dockModell(p, { zuege, kurz = produktionKurz, schalter = {}, hostLage = null, graphLatenzen = null } = {}) {
+export function dockModell(p, { zuege, kurz = produktionKurz, schalter = {}, hostLage = null, graphLatenzen = null, alleReturns = false } = {}) {
   const pdc = pdcRechnen(p, hostLage, graphLatenzen);
-  const returns = returnListe(p);
+  const returns = returnListe(p);   // the returns every track may send into
+  const wirken = alleReturns ? returnListe(p, { mitLoopdeck: true }) : returns;   // the EFFECTS row: with `alleReturns` the loop deck returns too
   const spurVon = new Map((p?.spuren ?? []).map((s) => [s.id, s]));
   const gruppeVon = new Map((p?.gruppen ?? []).map((g) => [g.id, g]));
   const sendsVon = (strang) => (schalter.sends ? returns.map((r) => ({ return_id: r.id, name: r.name, kurz: sendKurz(r.name), db: sendWert(strang, r.id) })) : []);
@@ -73,11 +74,11 @@ export function dockModell(p, { zuege, kurz = produktionKurz, schalter = {}, hos
   // FROM: tracks in order, then (with groups) the groups in tree order
   const sender = [...zl.filter((z) => spurVon.has(z.id)).map((z) => ({ kurz: z.kurz, strang: spurVon.get(z.id) })),
     ...gruppen.map((g) => ({ kurz: g.kurz, strang: gruppeVon.get(g.id) }))];
-  const effekte = returns.map((r) => {
+  const effekte = wirken.map((r) => {
     const teile = rackTeile(r), haupt = teile[0] ?? null;
     const hauptText = !haupt ? '' : haupt.teil === 'hall' ? 'Hall' : haupt.art === 'bk' ? String((r.inserts ?? []).find((i) => i.id === haupt.teil)?.graph ?? haupt.text) : haupt.text;
     return { art: 'ret', id: r.id, nr: r.nr, kurz: kurz(p, r.id), name: r.name, farbe: r.farbe ?? '', teile, haupt, hauptText,
-      von: sender.filter((x) => sendWert(x.strang, r.id) > SEND_AUS_DB).map((x) => x.kurz),
+      von: r.loopdeck ? [`L${r.loopdeck.platz}`] : sender.filter((x) => sendWert(x.strang, r.id) > SEND_AUS_DB).map((x) => x.kurz),
       fader_db: r.fader_db, pan: r.pan, mute: r.mute, solo: r.solo, pre: r.pre, latenz: latenzVon(pdc, r.id) };
   });
 

@@ -3,6 +3,35 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-22, eighteenth update
+
+**Loop deck pop-up**
+- The key ⤢ on a loop deck place opens the deck large: its four columns with eight cells each, a scene key on every row,
+  a strip under every column and a bottom area with the tabs CLIP (the clip editor of the selected cell) and DEVICES (the
+  device dock). A scene starts a whole row on one point of the launch grid; a scene with a tempo ramps the tempo over one
+  beat there. A second press on a playing cell stops it, in the pop-up, on the DJ place and on the APC20.
+- While the pop-up is open, the Akai APC20 is its launch grid: clip grid, clip stop, scene launch and stop all, with LEDs
+  that follow the launch. The hand tool `session` drives the same grid. A separate SESSION view existed for a day during
+  development and is gone again: two places for the same launch grid were one too many.
+- Clip editor for audio cells: CLIP (transpose, reverse, fade), SLICES (slice grid by bars or transients, pads, play order
+  with shuffle and stutter, slices to a sampler kit, the re-ordered cell rendered into a new cell), WARP (key lock) and
+  ENVELOPES (filter, send and gain envelopes per cell that restart with every loop).
+
+**Loop lane strip**
+- Every loop track has the same strip in the pop-up and in the STRIP row of the DJ place: HI, MID and LOW knobs (fully
+  left takes the band out, so there are no separate kill keys), a COLOR knob, HALL and DELAY sends, mute and solo, and the
+  keys 1, 2 and 3.
+- COLOR on a loop track is the COLOR of the main mixer: the art chosen there (FILTER, SPACE, DUB ECHO, SWEEP, NOISE, CRUSH)
+  works on every loop track too, the centre is dry.
+- The keys 1, 2 and 3 work like the keys of a main mixer channel: 1 and 2 send the track through the beat FX units, 3 sends
+  it through the Cypher Remix on FX3. A track in FX3 still follows the fader and crossfader of the channel its deck plays
+  on. The hand tool `loopdeck` sets the same keys (`fx`).
+
+**Places**
+- Strudel place: one tab per stream instead of stacked rows.
+- SEQ place: patterns can be collapsed, and unused kit samples hidden, remembered per project.
+- DJ view mixer: the channel strips keep their height when the library is collapsed; the places get the room.
+
 ## 2026-11-22, seventeenth update
 
 **Installing on a fresh machine**

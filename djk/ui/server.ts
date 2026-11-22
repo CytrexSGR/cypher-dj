@@ -21,12 +21,14 @@
 //   [--kern-pruefmodus an|aus]  (ohne Angabe unbekannt: gelernt aus /e/protokollfehler des Kerns auf /test/hand;
 //   aus → POST /griff 409 pruefmodus_aus, „hand input needs test mode until slice 35“, nichts an den Kern)
 // Umgebung: CYPHERDJ_INSTANZ (Z2: Ports +1000·k), OBERFLAECHE_MUTATION=riegel_aus (nur Prüfung: Ziel-Riegel aus).
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import http from 'node:http';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import os from 'node:os';
 import path from 'node:path';
+import { alsFloat32, TransientenLager } from './project/transients.ts';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { KernAnbindung } from '../conductor/src/core.ts';
@@ -63,9 +65,12 @@ import { sichereWerksProbenImStandardOrdner } from './sampler/werksproben.ts';
 import { raeumeWaisenImStandardOrdner } from './sampler/waisen.ts';
 import { projektWurzelVorgabe } from './project/storage.ts';
 import { samplerBereich, schnittKurz } from './areas/sampler/area.ts';   // sampler A1 task 4
+import { legeKitAusAudio } from './sampler/kit.ts';
+import { wavKopf } from './project/recording.ts';
 import { samplerKitBereich } from './areas/sampler/kit_routes.ts';   // sampler B task 2
 import { liveBereich, type DeckLoopAusschnitt } from './areas/live/export.ts';
 import { loopdeckBereich } from './areas/live/loopdeck.ts';
+import { sessionBereich } from './areas/live/session.ts';
 import { loopsetsBereich } from './areas/live/loopsets.ts';
 import { leseBusRing, messeLive } from './project/sound_live.ts';
 import { LIVE_VORLAUF_FRAMES, LIVE_LAUTHEIT_FRAMES } from './project/sound_contract.ts';
@@ -477,13 +482,31 @@ export class Oberflaeche {
         kern: { uhr: () => (this.kern.uhr as { beat: number; bpm: number } | null),
           laeuft: () => { const st = this.proj.sitzung.lage.arr?.status; return st === 1 || st === 2; } } } }));
     // loop deck M4: /loopdeck/stand, /start, /stopp, /szene; the decoded length of a cell comes from the decode folder of the project
-    this.router.melde(loopdeckBereich(this.bereichKontext(), this.proj.zugang, {
-      frames: (sha) => {
-        try { const g = fs.statSync(path.join(this.proj.zugang.arbeitsordner(), 'audio', `${sha}.f32`)).size; return g >= 8 ? Math.floor(g / 8) : null; } catch { return null; }
-      },
+    const zellFrames = (sha: string): number | null => {
+      try { const g = fs.statSync(path.join(this.proj.zugang.arbeitsordner(), 'audio', `${sha}.f32`)).size; return g >= 8 ? Math.floor(g / 8) : null; } catch { return null; }
+    };
+    // slice boundaries by transients (POST /session/scheiben): the same store beside the decoded .f32 as the project session's (content-addressed, atomic writes)
+    const transientenLager = new TransientenLager(path.join(this.proj.zugang.arbeitsordner(), 'audio'));
+    const loopdeck = loopdeckBereich(this.bereichKontext(), this.proj.zugang, {
+      frames: zellFrames,
       liveOeffnen: (q) => this.proj.sitzung.liveOeffnen(q, false, true),   // M5 writes open or create the live container the way POST /live/oeffnen does
       loopOrdner: () => this.loopOrdner(), modulBasis: () => modulBasisVon(opt.modulOrdner, inst),
-      katalogLoop: (sha) => this.katalogFuerDeck(sha), deckLoop: (deck) => this.deckLoopAusschnitt(deck) }));
+      katalogLoop: (sha) => this.katalogFuerDeck(sha), deckLoop: (deck) => this.deckLoopAusschnitt(deck) });
+    this.router.melde(loopdeck);
+    // session view M6: /session/*; the scene tempo uses the freeze lock like POST /tempo
+    this.router.melde(sessionBereich(this.bereichKontext(), this.proj.zugang, loopdeck, { frames: zellFrames, transienten: (sha) => transientenLager.fuer(sha),
+      kit: (a) => legeKitAusAudio({ name: a.name, daten: a.daten, quelle: a.quelle, scheiben: a.scheiben.map((r) => ({ von: Math.round(r.von_s * 48000), bis: Math.round(r.bis_s * 48000) })) },
+        { kits: this.opt.kits ?? kitsOrdnerVorgabe() }),
+      vorhoeren: async (a) => {   // slot audition: the previewer takes a file, so the rendered slot goes to a WAV named by its content (older ones are removed)
+        const wav = Buffer.concat([wavKopf(a.daten.length / 2), Buffer.from(a.daten.buffer, a.daten.byteOffset, a.daten.byteLength)]);
+        const dir = path.join(this.proj.zugang.arbeitsordner(), 'vorhoer'), id = crypto.createHash('sha256').update(wav).digest('hex').slice(0, 16);
+        fs.mkdirSync(dir, { recursive: true });
+        for (const n of fs.readdirSync(dir)) fs.rmSync(path.join(dir, n), { force: true });
+        const pfad = path.join(dir, `slot-${id}.wav`);
+        fs.writeFileSync(pfad, wav);
+        await this.vorhoeren.spiele({ pfad, typ: 'oneshot', sha: `${a.sha}/${a.slot}`, bpm: null });
+      },
+      audio: (sha) => { try { return alsFloat32(fs.readFileSync(path.join(this.proj.zugang.arbeitsordner(), 'audio', `${sha}.f32`))); } catch { return null; } }, ladenGesperrt: () => this.proj.sitzung.ladenGesperrt() }));
     this.router.melde(loopsetsBereich(this.bereichKontext(), this.proj.zugang));   // loop deck S1b: /loopsets, /loopset/speichern, /loopset/laden (store kind loopsets)
     // plan live-module task 10: GET /module, POST /modul/einsetzen, POST /modul/speichern (the same store as above)
     this.router.melde(bibliothekBereich(this.bereichKontext(), this.proj.zugang, { basis: () => modulBasisVon(opt.modulOrdner, inst), kanalOffen: (k) => this.kanalGeoeffnet(k) }));

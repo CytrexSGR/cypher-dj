@@ -1,9 +1,13 @@
-/* Loop deck view (loop deck P2): the places `loops` (deck 1, --l1) and `loops2` (deck 2, --l2). Sized for about 765 x 320 px with the
-   library dock open; the track columns take the extra height when it is closed (the cell rows stretch, no cap).
-   The scene column and every track share one row template (title, wave, 8 cell rows, foot) and the same paddings, so a scene button
-   sits exactly beside its cell row at any height. The channel strip row (class `mit-strip` on `.loopdeck`, per deck, toggled by STRIP) is a fifth
-   row of 28 px between the cells and the foot; collapsed it is not in the grid. Default collapsed: at 1920 x 1080 with the dock open the place
-   is 765 x 302 px, a cell row is 17 px, and the strip would push the rows under their 14 px minimum. */
+/* Loop deck view (loop deck P2, rebuilt on the session column component in session view S1): the places `loops` (deck 1, --l1) and `loops2`
+   (deck 2, --l2). Sized for about 765 x 302 px with the library dock open; the cell rows take the extra height when it is closed (no cap).
+   Budget of one track column: border and padding 4 + 4 + 2 + 1 = 11, rows head 14 + now-playing strip 14 + cells (1fr) + stop 18 + foot 26,
+   gaps 3 x 4 (5 rows). Arithmetic: 302 - 26 (head row) - 4 - 10 (place padding) - 11 - 72 - 12 = 167 px for the cells = 8 rows of about 19.1 px
+   (gap 2 px, minimum 14 px each); about 17 px measured on the place, the number the first loop deck budget was built on. The scene column has
+   the same row template, so a scene button sits beside its cell row at any height.
+   The column itself is `.spalte` (spalte.css, `display: contents` here: its head, strip, cells and stop row are rows of `.ld-spur`).
+   The lane strip row (class `mit-strip` on `.loopdeck`, per deck, toggled by STRIP) sits in the `.zug-slot` of the column: a sixth row of
+   28 px between the stop row and the foot; collapsed it is not in the grid. Default collapsed: with the strip the cells would drop to
+   about 14 px. */
 #platz-loops, #platz-loops2 { display: flex; flex-direction: column; min-height: 0; }
 .loopdeck { position: relative; --farbe: var(--l1); display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; gap: 4px; padding: 4px 6px 6px; }
 #platz-loops2 .loopdeck { --farbe: var(--l2); }
@@ -15,12 +19,12 @@
 .ld-stopall { color: var(--text); }
 .ld-neu { color: var(--farbe); border-color: var(--farbe); }
 .ld-hinweis { font-size: 10px; color: var(--dim); }
-.ld-neu[hidden], .ld-setmenu[hidden], .ld-kopf[hidden], .ld-hinweis[hidden] { display: none; }
+.ld-neu[hidden], .ld-setmenu[hidden], .ld-hinweis[hidden] { display: none; }
 .ld-setmenu { display: flex; gap: 6px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); font-size: 11px; color: var(--dim); }
 .ld-rumpf { display: flex; gap: 6px; flex: 1 1 0; min-height: 0; }
-.ld-spur, .ld-szenen { display: grid; grid-template-rows: 14px 36px minmax(0, 1fr) 26px; row-gap: 3px; min-width: 0; min-height: 0; padding: 4px; border: 1px solid transparent; border-top-width: 2px; }
+.ld-spur, .ld-szenen { display: grid; grid-template-rows: 14px 14px minmax(0, 1fr) 18px 26px; row-gap: 3px; min-width: 0; min-height: 0; padding: 4px; border: 1px solid transparent; border-top-width: 2px; }
 .ld-szenen { flex: 0 0 22px; padding-left: 0; padding-right: 0; }
-.ld-zellen, .ld-szenenzeilen { display: grid; grid-template-rows: repeat(8, minmax(14px, 1fr)); gap: 2px; min-height: 0; }
+.ld-spur .zellen, .ld-szenenzeilen { display: grid; grid-template-rows: repeat(8, minmax(14px, 1fr)); gap: 2px; min-height: 0; }
 .ld-szene { min-height: 0; padding: 0; font-size: 10px; font-weight: 700; color: var(--dim); border: 1px solid var(--line); border-radius: 4px; }
 .ld-szene:hover { color: var(--farbe); border-color: var(--farbe); }
 .ld-spuren { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; flex: 1 1 0; min-width: 0; min-height: 0; }
@@ -29,36 +33,23 @@
 .ld-spur.verwaist { border-top-color: var(--warn, #e0a040); }
 .ld-spur.stumm { opacity: .6; }
 
-.ld-titel { font-size: 10px; line-height: 14px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ld-spur.verwaist .ld-titel { color: var(--warn, #e0a040); }
-.ld-welle { position: relative; background: #0c0d10; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
-.ld-welle canvas { display: block; width: 100%; height: 100%; }
-.ld-marke { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255, 255, 255, .16); pointer-events: none; }
-.ld-welle .ld-kopf { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--farbe); box-shadow: 0 0 4px var(--farbe); pointer-events: none; }
-.ld-zelle { position: relative; display: flex; align-items: center; gap: 5px; min-height: 0; padding: 0 5px; text-align: left; overflow: hidden;
-  font-size: 10px; color: var(--dim); background: var(--panel2); border: 1px solid var(--line); border-radius: 4px; }
-.ld-chip { flex: 0 0 8px; height: 8px; border-radius: 2px; background: transparent; }
-.ld-art { flex: 0 0 10px; font-size: 10px; text-align: center; }
-.ld-name { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ld-zelle.leer { border-style: dashed; opacity: .55; }
-.ld-zelle.voll { color: var(--text); }
-.ld-zelle.ziel { opacity: 1; border-color: var(--farbe); box-shadow: inset 0 0 0 1px var(--farbe); }
-.ld-zelle.wartend { color: var(--text); animation: ld-blink .5s steps(2, jump-none) infinite; border-color: var(--farbe); }
-.ld-zelle.spielt { color: #0e0f12; font-weight: 700; background: var(--farbe); border-color: var(--farbe);
-  background-image: linear-gradient(90deg, rgba(255, 255, 255, .45) calc(var(--pos, 0) * 100%), transparent calc(var(--pos, 0) * 100%)); }
-.ld-zelle.spielt::after { content: ""; position: absolute; top: 0; bottom: 0; left: calc(var(--pos, 0) * 100%); width: 2px; background: #fff; }
-@keyframes ld-blink { 50% { background: var(--farbe); color: #0e0f12; } }
+/* the session column component inside a track column */
+.ld-spur .spalte { display: contents; --f: var(--farbe); --gut: var(--farbe); }
+.ld-spur .kopf-spalte { padding: 0 4px; gap: 4px; border-top-width: 2px; font-size: 10px; }
+.ld-spur .tname { font-size: 10px; font-weight: 400; }
+.ld-spur.verwaist .tname { color: var(--warn, #e0a040); }
+.ld-spur .zug-slot { display: none; }
+.ld-spur .zelle { padding-right: 4px; border-radius: 4px; font-size: 10px; }
+.ld-spur .zelle .nm { font-size: 10px; }
+.ld-spur .zelle.gewaehlt { outline: none; opacity: 1; border-color: var(--farbe); box-shadow: inset 0 0 0 1px var(--farbe); }
+.ld-spur .stopp { font-weight: 800; letter-spacing: .06em; border: 1px solid var(--line); border-radius: 4px; }
 .ld-fuss { display: flex; align-items: center; gap: 4px; height: 26px; min-width: 0; }
-.ld-stopp, .ld-mute { font-size: 9px; font-weight: 800; letter-spacing: .06em; padding: 3px 5px; border-radius: 4px; border: 1px solid var(--line); color: var(--dim); }
-.ld-stopp.wartend { animation: ld-blink .5s steps(2, jump-none) infinite; }
+.ld-mute { font-size: 9px; font-weight: 800; letter-spacing: .06em; padding: 3px 5px; border-radius: 4px; border: 1px solid var(--line); color: var(--dim); }
 .ld-mute.an { background: var(--warn, #e0a040); border-color: var(--warn, #e0a040); color: #0e0f12; }
 .ld-fader { flex: 1 1 0; min-width: 0; height: 22px; }
 .ld-filter { flex: 0 0 26px; width: 26px; height: 26px; }
-@media (prefers-reduced-motion: reduce) { .ld-zelle.wartend, .ld-stopp.wartend { animation: none; background: var(--farbe); color: #0e0f12; } }
+@media (prefers-reduced-motion: reduce) { .ld-spur .zelle.wartet .go, .ld-spur .stopp.wartet, .ld-spur .zelle.stopp_wartet .go { animation: none; } }
 /* Cell menu (loop deck P3) */
-.ld-griff { flex: 0 0 12px; text-align: center; font-weight: 800; color: var(--dim); cursor: pointer; }
-.ld-griff[hidden] { display: none; }
-.ld-zelle:hover .ld-griff, .ld-zelle.spielt .ld-griff { color: inherit; }
 .ld-zellmenue { position: absolute; z-index: 20; min-width: 190px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; font-size: 11px; color: var(--text);
   background: var(--panel); border: 1px solid var(--farbe); border-radius: 6px; box-shadow: 0 4px 16px rgba(0, 0, 0, .5); }
 .ld-zellmenue[hidden], .ld-meintrag[hidden] { display: none; }
@@ -82,31 +73,29 @@
 .ld-setwahl { display: inline-flex; gap: 6px; padding: 2px 8px; font-size: 11px; border: 1px solid var(--line); border-radius: 5px; color: var(--text); }
 .ld-setwahl:hover { border-color: var(--farbe); }
 .ld-setinfo { color: var(--dim); }
-.ld-zelle.ablage { outline: 2px dashed var(--farbe); outline-offset: -2px; }
-.ld-zelle.laedt .ld-name { font-style: italic; opacity: .65; }
-/* Channel strip row (channel strip PZ1) */
-.loopdeck { --ld-kill: #7a1a1a; }
+/* Lane strip row: HI MID LOW, COLOR HALL DLY knobs and the keys 1 2 3 in one 28 px row (one track column is about 167 px wide at 1920 x 1080 with the dock open:
+   6 knob units of 18 px (COLOR 24 px) with 1 px gaps leave about 17 px for each key). M and the fader sit on the lane's foot. */
 .ld-strip, .ld-szenenstrip { display: none; }
-.mit-strip .ld-spur, .mit-strip .ld-szenen { grid-template-rows: 14px 36px minmax(0, 1fr) 28px 26px; }
-.mit-strip .ld-strip { display: flex; align-items: center; gap: 2px; height: 28px; min-width: 0; }
+.mit-strip .ld-spur, .mit-strip .ld-szenen { grid-template-rows: 14px 14px minmax(0, 1fr) 18px 28px 26px; }
+.mit-strip .ld-spur .zug-slot { display: block; height: 28px; min-width: 0; }
+.mit-strip .ld-strip { display: flex; align-items: center; gap: 1px; height: 28px; min-width: 0; }
 .mit-strip .ld-szenenstrip { display: block; }
 .ld-strip-taste { font-size: 10px; font-weight: 800; letter-spacing: .08em; padding: 3px 9px; border-radius: 5px; color: var(--dim); border: 1px solid var(--line); }
 .ld-strip-taste.an { background: var(--farbe); border-color: var(--farbe); color: #0e0f12; }
-.ld-einheit { flex: 0 0 22px; display: flex; flex-direction: column; align-items: center; height: 28px; min-width: 0; }
-.ld-mini { flex: 0 0 20px; width: 20px; height: 20px; cursor: ns-resize; touch-action: none; }
+.ld-einheit { flex: 0 0 18px; display: flex; flex-direction: column; align-items: center; height: 28px; min-width: 0; }
+.ld-einheit.ld-color { flex-basis: 24px; }
+.ld-mini { flex: 0 0 18px; width: 18px; height: 18px; cursor: ns-resize; touch-action: none; }
 .ld-mini svg { width: 100%; height: 100%; display: block; }
 .ld-mini .ring { fill: var(--panel2); stroke: var(--line); stroke-width: 5; }
 .ld-mini .zeiger { stroke: var(--text); stroke-width: 5; stroke-linecap: round; }
 .ld-mini.gegriffen .ring { stroke: var(--farbe); }
-.ld-mini.kill .ring { fill: var(--ld-kill); stroke: var(--ld-kill); }
-.ld-band { flex: 0 0 8px; width: 100%; height: 8px; padding: 0; font-size: 7px; line-height: 8px; font-weight: 800; letter-spacing: .04em; color: var(--dim); }
-.ld-band.kill { color: #fff; background: var(--ld-kill); border-radius: 2px; }
-/* Sends and effect chip (channel strip PZ2) */
-.ld-sendname { flex: 0 0 8px; font-size: 7px; line-height: 8px; font-weight: 800; letter-spacing: .02em; color: var(--dim); white-space: nowrap; }
-.ld-send { flex-basis: 24px; }
-.ld-fx { flex: 1 1 0; min-width: 0; height: 18px; margin-left: 2px; padding: 0 2px; font-size: 8px; font-weight: 800; letter-spacing: .02em; color: var(--dim); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ld-fx.gesetzt { color: var(--farbe); border-color: var(--farbe); }
-.ld-fx.gesetzt.aus { color: var(--dim); border-color: var(--line); opacity: .5; }
+.ld-sendname { flex: 0 0 8px; max-width: 100%; overflow: hidden; font-size: 7px; line-height: 8px; font-weight: 800; letter-spacing: .02em; color: var(--dim); white-space: nowrap; }
+.ld-sendname.color-an { color: var(--warn, #ffb020); }   /* the COLOR knob names the chosen COLOR type in its colour, as on a mixer channel */
+.ld-fxreihe { flex: 1 1 0; min-width: 0; display: flex; gap: 1px; margin-left: 2px; }
+.ld-fxtaste { flex: 1 1 0; min-width: 10px; height: 18px; padding: 0; font-size: 8px; font-weight: 800; color: var(--dim); border: 1px solid var(--line); border-radius: 4px; }
+.ld-fxtaste[data-einheit="1"].an { background: var(--text); border-color: var(--text); color: #0e0f12; }   /* the colours of the 1 2 3 keys of a mixer channel */
+.ld-fxtaste[data-einheit="2"].an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }
+.ld-fxtaste[data-einheit="3"].an { background: var(--l2); border-color: var(--l2); color: #0e0f12; }   /* FX3 = Remix, its colour */
 .ld-fxmenue { position: absolute; z-index: 20; min-width: 110px; display: flex; flex-wrap: wrap; gap: 4px; padding: 6px; font-size: 11px; color: var(--text);
   background: var(--panel); border: 1px solid var(--farbe); border-radius: 6px; box-shadow: 0 4px 16px rgba(0, 0, 0, .5); }
 .ld-fxmenue[hidden] { display: none; }
@@ -114,3 +103,6 @@
 .ld-fxwahl.an { background: var(--farbe); border-color: var(--farbe); color: #0e0f12; }
 .ld-fxeintrag { color: var(--dim); }
 .ld-fxleer { color: var(--dim); font-size: 10px; }
+.ld-gross { font-size: 13px; line-height: 1; padding: 2px 8px; border-radius: 5px; color: var(--dim); border: 1px solid var(--line); cursor: pointer; }
+.ld-gross:hover { color: var(--farbe); border-color: var(--farbe); }
+.ld-deckname[title] { cursor: pointer; }
