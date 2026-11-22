@@ -1,0 +1,92 @@
+/* Loop deck pop-up (loopdeck/gross.js): an overlay above the DJ view, about 90 % of the window, at most 1600 x 1000 px, centred. */
+.ldg-overlay { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .55); }
+.ldg-panel { --farbe: var(--l1); position: relative; display: flex; flex-direction: column; width: min(90vw, 1600px); height: min(90vh, 1000px); min-height: 0; box-sizing: border-box;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 40px rgba(0, 0, 0, .6); overflow: hidden; outline: none; }
+.ldg-panel[data-deck="2"] { --farbe: var(--l2); }
+.ldg-kopf { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.ldg-kopf .band { display: flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; }
+.ldg-kopf .band .bu { font-weight: 700; color: var(--farbe); }
+.ldg-kopf .band .art { color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+.ldg-kopf .band .gn { font-weight: 800; letter-spacing: .08em; }
+.ldg-kopf .ld-raster { margin-right: 0; }
+.ldg-zu { margin-left: auto; width: 28px; height: 28px; padding: 0; border-radius: 6px; font-size: 18px; line-height: 1; }
+.ldg-mitte { display: flex; flex: 1 1 0; min-height: 0; }
+.ldg-spalten { display: flex; align-items: stretch; justify-content: center; gap: 6px; flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; padding: 6px 8px; }
+.ldg-spalten .spalte-host { flex: 0 1 260px; width: 260px; min-width: 0; }
+.ldg-spalten .spalte-host.spalte-gewaehlt { outline: 2px solid var(--akzent, #e0a33e); outline-offset: -2px; border-radius: 4px; }
+.ldg-spalten .session-leer { display: flex; align-items: center; gap: 12px; margin: 24px auto; color: var(--dim); }
+.ldg-szenen { display: flex; flex-direction: column; gap: 3px; flex: 0 0 56px; width: 56px; padding: 6px; border-left: 1px solid var(--line); overflow-y: auto; }
+.ldg-szenen[hidden] { display: none; }
+.ldg-szenen .ld-szene { flex: 1 1 0; min-height: 22px; }
+
+/* the lane strip: a long fader with its meter at the left; at the right the knob rows HI MID LOW and COLOR HALL DLY, the keys M S and the keys 1 2 3.
+   Do not use the class names of the mixer strip (.knopf, .kill, .knoepfe, .fxzuweisung): style.css has rules for them under .zug. */
+.spalte .zug { display: grid; grid-template-columns: 34px minmax(0, 1fr); grid-template-rows: auto auto auto auto; align-content: space-between; column-gap: 6px; row-gap: 4px; min-width: 0; box-sizing: border-box; padding: 4px 4px 0; }
+.spalte[data-variante="voll"] .zug { height: 150px; }
+.zug .zug-vf { grid-row: 1 / 5; display: flex; gap: 4px; justify-content: center; min-height: 0; }
+.zug .meter.senkrecht { position: relative; flex: 0 0 6px; width: 6px; height: 100%; border-radius: 2px; background: #0a0b0e; overflow: hidden; }
+.zug .meter.senkrecht i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: linear-gradient(to top, var(--gut, #58d66b) 70%, var(--warn, #ffb020) 88%, var(--rec, #ff4d5e)); }
+.zug .zug-fader { flex: 0 0 18px; width: 18px; height: 100%; margin: 0; writing-mode: vertical-lr; direction: rtl; accent-color: var(--text, #e8e8ec); }
+.zug .zug-knoepfe { display: flex; gap: 4px; justify-content: space-between; min-width: 0; }
+.zug .zug-einheit { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 0; }
+.zug .zug-knopf { width: 28px; height: 28px; cursor: ns-resize; touch-action: none; }
+.zug .zug-knopf svg { width: 100%; height: 100%; display: block; }
+.zug .zug-knopf .ring { fill: var(--panel2, #1c1f27); stroke: var(--line, #2a2d36); stroke-width: 5; }
+.zug .zug-knopf .zeiger { stroke: var(--text, #e8e8ec); stroke-width: 5; stroke-linecap: round; }
+.zug .zug-knopf.gegriffen .ring { stroke: var(--sel, #7fb6ff); }
+.zug .zug-name { font-size: 8px; font-weight: 800; letter-spacing: .06em; color: var(--dim, #8a8d98); white-space: nowrap; }
+.zug .zug-name.color-an { color: var(--warn, #ffb020); }   /* the COLOR knob names the chosen COLOR type in its colour, as on a mixer channel */
+.zug .zug-msr, .zug .zug-fxreihe { display: flex; gap: 3px; }
+.zug .zug-m, .zug .zug-s, .zug .zug-fx { flex: 1 1 0; min-width: 0; height: 18px; padding: 0; border: 1px solid var(--line, #2a2d36); border-radius: 4px; background: transparent; font-size: 9px; font-weight: 800; color: var(--dim, #8a8d98); cursor: pointer; }
+.zug .zug-m.an { background: var(--warn, #ffb020); border-color: var(--warn, #ffb020); color: #111; }
+.zug .zug-s.an { background: var(--sel, #7fb6ff); border-color: var(--sel, #7fb6ff); color: #111; }
+.zug .zug-fx[data-einheit="1"].an { background: var(--text, #e8e8ec); border-color: var(--text, #e8e8ec); color: #0e0f12; }   /* the colours of the 1 2 3 keys of a mixer channel */
+.zug .zug-fx[data-einheit="2"].an { background: var(--warn, #ffb020); border-color: var(--warn, #ffb020); color: #0e0f12; }
+.zug .zug-fx[data-einheit="3"].an { background: var(--l2); border-color: var(--l2); color: #0e0f12; }   /* FX3 = Remix, its colour */
+
+/* The bottom area (mockup v6): tabs CLIP | DEVICES, 300 px; CLIP = cell properties and the clip editor side by side, each pane scrolls inside.
+   The editor and dock styles key on #session-unten (editor.css, dock/dock.css, werkbank/mix.css): one pop-up at a time. */
+#session-unten { display: flex; flex-direction: column; flex: 0 0 300px; min-height: 0; height: 300px; box-sizing: border-box; padding: 4px 8px 6px; border-top: 1px solid var(--line); overflow: hidden; }
+#session-unten .dpanes { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+#session-unten .dtabs { display: flex; align-items: center; gap: 2px; flex: 0 0 28px; height: 28px; box-sizing: border-box; border-bottom: 1px solid var(--line); }
+#session-unten .dtab { border: 0; border-radius: 6px 6px 0 0; background: none; color: var(--dim); font-size: 11px; font-weight: 800; letter-spacing: .1em; padding: 5px 12px; border-bottom: 2px solid transparent; cursor: pointer; }
+#session-unten .dtab.an { color: var(--text); border-bottom-color: var(--a, #2fd6c3); }
+#session-unten .pane { height: 100%; min-height: 0; box-sizing: border-box; overflow: auto; }
+#session-unten .pane[hidden] { display: none; }
+#session-unten .pane-clip { display: grid; grid-template-columns: 300px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 8px; padding-top: 6px; min-height: 0; overflow: hidden; }
+#session-unten .props, #session-unten .ed { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; min-height: 0; overflow: auto; }
+#session-unten .pr-kopf { margin: 0 0 6px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+#session-unten .pr-chip { width: 12px; height: 12px; border-radius: 3px; background: var(--cf, var(--a)); }
+#session-unten .pr { display: flex; align-items: center; gap: 8px; margin: 4px 0; min-width: 0; }
+#session-unten .pr > label, #session-unten .ed-zeile > .pr > label { flex: 0 0 72px; font-size: 9px; font-weight: 800; letter-spacing: .12em; color: var(--dim); }
+#session-unten input { min-width: 0; background: var(--bg, #0e0f12); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 2px 6px; font-size: 12px; }
+#session-unten input[type="number"] { width: 72px; }
+#session-unten input:disabled, #session-unten button:disabled { opacity: .4; cursor: default; }
+#session-unten .ed-einheit { font-size: 10px; color: var(--dim); }
+#session-unten .seg { display: flex; gap: 2px; flex-wrap: wrap; }
+#session-unten .seg-b, #session-unten .ed-schalter, #session-unten .ed-tab { border: 1px solid var(--line); border-radius: 4px; background: none; color: var(--dim); font-size: 9px; font-weight: 800; letter-spacing: .08em; padding: 3px 7px; cursor: pointer; }
+#session-unten .seg-b.an, #session-unten .ed-tab.an, #session-unten .ed-schalter.an { color: var(--text); border-color: var(--text); }
+#session-unten .pr-farben { display: flex; gap: 3px; flex-wrap: wrap; }
+#session-unten .pr-swatch { width: 14px; height: 14px; padding: 0; border: 1px solid transparent; border-radius: 3px; background: var(--cf); cursor: pointer; }
+#session-unten .pr-swatch.an { border-color: var(--text); }
+#session-unten .ed-tabs { display: flex; gap: 2px; margin-bottom: 6px; }
+#session-unten .ed-zeile { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+#session-unten .ed-welle { position: relative; height: 70px; background: #0b0c0f; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+#session-unten .ed-welle canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+#session-unten .ed-schleife { position: absolute; inset: 0; border-left: 2px solid var(--gut, #58d66b); border-right: 2px solid var(--gut, #58d66b); pointer-events: none; }
+#session-unten .ed-marke { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255, 255, 255, .25); pointer-events: none; }
+#session-unten .ed-leer { color: var(--dim); font-size: 12px; padding: 8px 2px; }
+
+/* V8: the DEVICES tab holds the shared dock (dock/dock.css styles the cards; its selectors list #session-unten) */
+#session-unten .pane-devices { min-height: 0; overflow: auto; }
+#session-unten .session-dock { min-height: 0; }
+/* 2026-11-22 studio check: the four columns share the pop-up width (at most 420 px each), the eight cells share the height left by head,
+   now-playing strip, STOP and the strip, and the scene keys sit on the cell rows (top padding = 6 + head 30 + 3 + strip 40 + 3, bottom padding =
+   3 + STOP 24 + 3 + strip 150 + 6, the same 3 px gap as the cells). */
+.ldg-spalten { justify-content: stretch; }
+.ldg-spalten .spalte-host { flex: 1 1 0; width: auto; max-width: 420px; }
+.ldg-spalten .spalte { height: 100%; grid-template-rows: 30px 40px minmax(0, 1fr) 24px 150px; }
+.ldg-spalten .spalte .zellen { grid-template-rows: repeat(8, minmax(0, 1fr)); }
+.ldg-spalten .spalte .zelle { height: auto; min-height: 0; }
+.ldg-szenen { gap: 3px; padding: 82px 6px 186px; overflow: hidden; }
+.ldg-szenen .ld-szene { min-height: 0; }

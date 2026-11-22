@@ -1,0 +1,51 @@
+/* Session column and cell component (D13). 'voll': rows 22 px, head 30 px, waveform strip 40 px (mockup v6); 'kompakt': rows 17 px, strip 14 px (DJ loop deck place).
+   The host sets the column width and the colour of the head (--f). */
+.spalte { --f: #28a0ff; --gut: #32dc46; --kopfh: 30px; --streifen: 40px; --zeile: 22px; --stoppzeile: 24px;
+  display: grid; grid-template-rows: var(--kopfh) var(--streifen) auto var(--stoppzeile); grid-auto-rows: auto; gap: 3px; min-width: 0; min-height: 0; }
+.spalte[data-variante="kompakt"] { --kopfh: 14px; --streifen: 14px; --zeile: 17px; --stoppzeile: 18px; }
+.spalte .kopf-spalte { display: flex; align-items: center; gap: 6px; padding: 0 6px; min-width: 0; border-radius: 6px;
+  background: var(--panel2, #1a1d24); border: 1px solid var(--line, #2a2e38); border-top: 3px solid var(--f); }
+.spalte .ki { flex: 0 0 16px; text-align: center; font-size: 12px; color: var(--f); }
+.spalte .tname { flex: 1 1 auto; min-width: 0; font-size: 12px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spalte .kurz { flex: 0 0 auto; font-size: 9px; color: var(--dim, #8a90a0); letter-spacing: .06em; }
+.spalte .jetzt { position: relative; overflow: hidden; border-radius: 5px; background: #0b0c0f; border: 1px solid var(--line, #2a2e38); }
+.spalte .jetzt-wv { position: absolute; inset: 0; }
+.spalte .jetzt canvas { width: 100%; height: 100%; display: block; }
+.spalte .kopf-ph { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--text, #e8eaf0); box-shadow: 0 0 4px var(--text, #e8eaf0); pointer-events: none; }
+.spalte .zellen { display: grid; grid-template-rows: repeat(8, var(--zeile)); gap: 3px; min-height: 0; }
+.spalte .zelle { position: relative; display: flex; align-items: center; gap: 5px; padding: 0 5px 0 0; min-height: 0; overflow: hidden; border-radius: 5px;
+  background: var(--panel2, #1a1d24); border: 1px solid var(--line, #2a2e38); --cf: #8c96aa; }
+.spalte .zelle.voll { background: color-mix(in srgb, var(--cf) 22%, var(--panel2, #1a1d24)); border-color: color-mix(in srgb, var(--cf) 45%, var(--line, #2a2e38)); }
+.spalte .zelle .go { flex: 0 0 22px; align-self: stretch; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--dim, #8a90a0); font-size: 10px; cursor: pointer; }
+.spalte .zelle.voll .go { color: var(--text, #e8eaf0); }
+.spalte .zelle.leer .go, .spalte .zelle.halten .go { cursor: default; color: #3d414d; }
+.spalte .zelle.halten { border-style: dashed; }
+.spalte .zelle .mw { position: absolute; inset: 2px 2px 2px 22px; width: calc(100% - 24px); height: calc(100% - 4px); opacity: .3; pointer-events: none; }
+.spalte .zelle .nm { position: relative; flex: 1; min-width: 0; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.spalte .zelle .kd { position: relative; flex: 0 0 auto; font-size: 9px; color: var(--dim, #8a90a0); }
+.spalte .zelle .prog { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: var(--gut); pointer-events: none; }
+.spalte .zelle.spielt, .spalte .zelle.stopp_wartet { border-color: var(--gut); box-shadow: inset 0 0 0 1px var(--gut); }
+.spalte .zelle.spielt .go, .spalte .zelle.stopp_wartet .go { color: var(--gut); font-size: 12px; }
+.spalte .zelle.wartet { border-color: var(--gut); }
+.spalte .zelle.wartet .go, .spalte .zelle.stopp_wartet .go { animation: spalte-blink .25s steps(1) infinite alternate; }   /* 2 Hz */
+.spalte .zelle.gewaehlt { outline: 2px solid var(--sel, #ffd24a); outline-offset: -1px; }
+.spalte .zelle.ablage { outline: 2px dashed var(--gut); outline-offset: -2px; }
+.spalte .stopp { padding: 0; font-size: 10px; color: var(--dim, #8a90a0); border-radius: 5px; }
+.spalte .stopp.wartet { animation: spalte-blink-rahmen .25s steps(1) infinite alternate; }
+.spalte .zug-slot { min-width: 0; min-height: 0; }
+.spalte .zug-slot:empty { display: none; }
+@keyframes spalte-blink { from { color: var(--gut); } to { color: transparent; } }
+@keyframes spalte-blink-rahmen { from { border-color: var(--text, #e8eaf0); } to { border-color: var(--line, #2a2e38); } }
+.spalte .zelle .art { position: relative; flex: 0 0 10px; font-size: 10px; text-align: center; }
+.spalte .zelle .griff { position: relative; flex: 0 0 12px; text-align: center; font-weight: 800; color: var(--dim, #8a90a0); cursor: pointer; }
+.spalte .zelle .griff[hidden] { display: none; }
+.spalte .zelle:hover .griff, .spalte .zelle.spielt .griff { color: inherit; }
+.spalte .zelle.laedt .nm { font-style: italic; opacity: .65; }
+.spalte .jetzt .marke { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255, 255, 255, .16); pointer-events: none; }
+.spalte .jetzt.einmal .marke { display: none; }
+.spalte .zelle .mw canvas { width: 100%; height: 100%; display: block; }
+@media (prefers-reduced-motion: reduce) {
+  .spalte .zelle.wartet .go, .spalte .zelle.stopp_wartet .go, .spalte .stopp.wartet { animation: none; }
+  .spalte .zelle.wartet .go, .spalte .zelle.stopp_wartet .go { color: var(--gut); }
+  .spalte .stopp.wartet { background: var(--f); border-color: var(--f); color: #0e0f12; }
+}
