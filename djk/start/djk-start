@@ -341,10 +341,29 @@ fi
 for p in "$DJK/core/build/cypherdj-kern" "$DJK/fallback/build/cypherdj-notbahn" /usr/bin/node /usr/bin/pw-jack; do
   [ -x "$p" ] || { echo "djk-start: missing program $p" >&2; exit 2; }
 done
+command -v pactl >/dev/null 2>&1 || { echo "djk-start: missing program pactl (Ubuntu package pulseaudio-utils; sudo apt install pulseaudio-utils)" >&2; exit 2; }
 for d in "$DJK/units/cypherdj-kern.service" "$DJK/units/cypherdj-notbahn.service" "$DJK/units/cypherdj-leitstand.service"; do
   [ -f "$d" ] || { echo "djk-start: missing unit $d" >&2; exit 2; }
 done
 pw-link -o >/dev/null 2>&1 || { echo "djk-start: PipeWire not reachable (pw-link failed)" >&2; exit 2; }
+
+# 2a0 Real-time limits as the user services will get them. The units run under the user manager, which keeps the limits it started with:
+# joining the group pipewire is not enough until the manager is restarted. A warning only, the studio still starts (without real-time priority).
+rt_probe() {
+  local out m r budget cfg
+  command -v systemd-run >/dev/null 2>&1 || return 0
+  out=$(timeout 15 systemd-run --user --pipe --quiet bash -c 'ulimit -l; ulimit -r' 2>/dev/null) || return 0
+  m=$(sed -n 1p <<<"$out"); r=$(sed -n 2p <<<"$out")
+  cfg=${KERN_KONFIG:-$DJK/config/kern.toml}
+  budget=$(sed -n 's/^speicher_budget_mib *= *\([0-9][0-9]*\).*/\1/p' "$cfg" 2>/dev/null | head -n 1)
+  budget=${budget:-3800}
+  [[ "$m" =~ ^([0-9]+|unlimited)$ && "$r" =~ ^([0-9]+|unlimited)$ ]] || return 0
+  if [ "$r" = 0 ] || { [ "$m" != unlimited ] && [ "$m" -lt $((budget * 1024)) ]; }; then
+    echo "djk-start: warning: the user services get memlock ${m} KiB and rtprio ${r}, but the core needs memlock of at least $((budget * 1024)) KiB (its budget of ${budget} MiB) and rtprio above 0; it will run without real-time priority and decks may refuse to load." >&2
+    echo "  Fix: sudo usermod -aG pipewire \"\$USER\", then sudo systemctl restart user@\$(id -u) (or reboot). Check: systemd-run --user --pipe --quiet bash -c 'ulimit -l; ulimit -r' (4194304 and 95)." >&2
+  fi
+}
+[ "$MODUS" = vorlagen ] || rt_probe
 
 # 2b Shipped graphs the product relies on (arr-bk: the page button "+ Fx" and the Hand text name fx-delay-sync): copy them into the graph folder
 # of the kern when missing. Never overwrites a file, and only this list, so a graph deleted on purpose from the folder stays deleted.
@@ -368,8 +387,11 @@ installiere() {
       return 0
     fi
   fi
-  mkdir -p "$(dirname "$ziel")" && cp -- "$quelle" "$ziel" && echo "djk-start: installed the $text"
+  mkdir -p "$(dirname "$ziel")" && cp -- "$quelle" "$ziel" || return 0
+  INST_N=$((INST_N + 1))
+  [ -n "${INST_STILL:-}" ] || echo "djk-start: installed the $text"
 }
+INST_N=0
 # 2b2 Every graph of the device register (geraete.json, entries of art bk; `device.ts neu` adds them): a new or changed device reaches the studio
 # (production start; see above for a test instance). Names that do not match the graph rule are skipped.
 REGISTER="$DJK/instruments/modular_dsp/geraete.json"
@@ -396,10 +418,14 @@ fi
 
 # 2c Shipped front panels (sidecar files of the graphs, format cypherdj-panel/2): copied into <graph folder>/panels, same rule as 2b2, so an updated
 # panel reaches the studio. The kern reads only top-level *.json of the graph folder, the subfolder is inert for it.
+# One summary line instead of one per file (a first start copies well over a hundred).
+INST_STILL=1; INST_N=0
 for f in "$DJK"/instruments/modular_dsp/paneele/*.json; do
   [ -f "$f" ] || continue
   installiere "$f" "$BK_ORDNER/panels/$(basename "$f")" "shipped panel $(basename "$f") into $BK_ORDNER/panels"
 done
+INST_STILL=""
+[ "$INST_N" -gt 0 ] && echo "djk-start: installed $INST_N shipped panels into $BK_ORDNER/panels"
 
 # 2d Instrument categories and descriptions (kategorien.json, read by the page server for GET /graphen): copied next to the panels, same rule as 2b2.
 # The kern reads only top-level *.json of the graph folder, so it goes into panels/ like the panel files.

@@ -7,7 +7,7 @@ every change it makes to a project is one undo step. You keep the last word.
 Built in Germany by Andreas, a DJ, and Cypher, an AI agent (Claude models), since 19 September 2026. See
 [Who builds it](#who-builds-it).
 
-> **Status: public beta, looking for testers.** It runs on Linux and has been tested on one machine so far, see
+> **Status: public beta, looking for testers.** It runs on Linux; it is used on one machine and was installed and started from scratch on a fresh Ubuntu 24.04, see
 > [Try it](#try-it-we-are-looking-for-testers).
 
 ![Overview: DJ view with four places, the SEQ pattern deck, three Strudel channels, the tracker, arrangement with piano roll, warp and stems, the loop workbench, Cypher Remix, a Cypher Modular device page, media library, cue tool, the loop deck with channel strips](docs/screens/overview.png)
@@ -151,7 +151,7 @@ No music is included. djk-starter generates kits, loops and a demo on your machi
 
 The main ones; the full list is in [docs/features.md](docs/features.md#known-limits-of-the-beta).
 
-- Linux with PipeWire only, tested on Ubuntu 24.04, built and used on one machine.
+- Linux with PipeWire only, tested on Ubuntu 24.04: used on one machine, and installed from scratch on a fresh Ubuntu 24.04.5 (2026-11-22) up to the demo playing, without a real audio device.
 - Third-party plugins (VST3, LV2) run in their own host processes through Carla, at most four effect hosts at a time; most commercial plugins have no Linux build and need yabridge and Wine.
 - Human and agent are told apart by a label on localhost. That is a convention, not a security boundary: do not
   expose the ports to a network.

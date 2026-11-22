@@ -3,6 +3,20 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-22, seventeenth update
+
+**Installing on a fresh machine**
+- INSTALL.md was followed word for word on a fresh Ubuntu 24.04.5 machine, and every place where it broke is fixed: it now
+  names the Rust install (rustup; Ubuntu's own cargo is too old for the lock file), lists `pulseaudio-utils` with the system
+  packages, installs pnpm 10 for Strudel and gives the NodeSource commands for Node.js. With these, the path from a clean
+  system to the demo playing took about four minutes of machine time.
+- Real-time limits: after joining the group `pipewire`, the user services keep the old limits until the user manager
+  restarts. INSTALL.md says how to restart it and how to check the limits the services really get.
+- `djk-start` checks those limits itself and warns when the core would run without real-time priority or with too little
+  locked memory; before, it started silently without them. It stops with a clear message when `pactl` is missing, and on
+  the first start it prints one line for the installed panels instead of one line each.
+- `djk/hand` ships its `package-lock.json`, so `npm ci` installs the tested versions.
+
 ## 2026-11-21, sixteenth update
 
 **Containers as the console unit**

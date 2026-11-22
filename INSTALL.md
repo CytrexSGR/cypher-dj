@@ -1,35 +1,55 @@
 # Installing cypher-dj (beta)
 
-Tested on Ubuntu 24.04 (x86_64). Steps marked **checked** were run on a fresh Ubuntu 24.04 container on
-5 October 2026. Since then the core build has gained a Rust dependency (section 1) and the workshop has changed
-(section 7), so a fresh run of the current version is still to do. The other steps were only run on the development
-machine. Please report what breaks.
+Tested on Ubuntu 24.04 (x86_64). Steps marked **checked** were run on a fresh Ubuntu 24.04.5 VM on 22 November 2026
+(sections 1, 2, 4, 5, 8 to 11 and part of 6), and the demo played (master peaks -10.9 / -6.4 dBFS). Section 3 (tests) and
+section 7 (workshop) were not part of that run, and the VM had no real audio device and no Surge. The other steps were
+only run on the development machine. Please report what breaks.
 
-## 1. System packages (checked, except the Rust paragraph)
+## 1. System packages (checked)
 
 ```sh
 sudo apt install build-essential cmake ninja-build pkg-config \
   libjack-jackd2-dev librubberband-dev libssl-dev \
-  python3 python3-venv ffmpeg pipewire-jack rubberband-cli
+  python3 python3-venv ffmpeg pipewire-jack rubberband-cli pulseaudio-utils
 ```
 
 `rubberband-cli` is the `rubberband` program that the workshop's warp calls (the core links the library `librubberband-dev`).
+`pulseaudio-utils` provides `pactl`, which `djk-start` calls to create the silent output.
 
 **Real-time limits.** The core locks its audio material in RAM (up to about 4 GiB) and runs with
 real-time priority. Ubuntu's PipeWire package ships the limits for the group `pipewire`
-(`/etc/security/limits.d/25-pw-rlimits.conf`: rtprio 95, memlock 4 GiB). Add yourself and log in again:
+(`/etc/security/limits.d/25-pw-rlimits.conf`: rtprio 95, memlock 4 GiB; the stock `pipewire-bin` package ships it, no PPA
+needed). Add yourself and log in again:
 
 ```sh
 sudo usermod -aG pipewire "$USER"
-ulimit -l    # should now print 4194304
 ```
+
+A fresh login is not enough when a user manager keeps running (lingering, or another open session): the services that
+`djk-start` launches keep the old limits until you run `sudo systemctl restart user@$(id -u)` or reboot. Check what
+those services will get, not your shell:
+
+```sh
+systemd-run --user --pipe --quiet bash -c 'ulimit -l; ulimit -r'    # should print 4194304 and 95
+```
+
+`djk-start` runs the same probe and warns when the values are too low.
 
 Without it, decks refuse to load with `budget_speicher: mlock Cannot allocate memory`.
 
 **Rust.** The core links a Rust library (Cypher Hall, Cypher Komp, the RB-338 voice, the EQ and saturation inserts and the
 Cypher Modular graph engine, all under `djk/instruments/`), so the build needs `cargo` and `rustc`: `djk/core/CMakeLists.txt`
-stops without `cargo`. The development machine uses Rust 1.93.1; Ubuntu's own cargo package has not been tried. The first
-build downloads the crates pinned in `djk/instruments/Cargo.lock`, so it needs network access.
+stops without `cargo`. Install it with rustup, then load it into the current shell:
+
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+. "$HOME/.cargo/env"
+```
+
+Do not use Ubuntu's `cargo` package (1.75): `Cargo.lock` is version 4, which needs Cargo 1.78 or newer
+(`lock file version 4 requires -Znext-lockfile-bump`). The development machine uses Rust 1.93.1; rustup's stable 1.100.0
+built everything on 22 November 2026. The first build downloads the crates pinned in `djk/instruments/Cargo.lock`, so it
+needs network access.
 
 `/dev/shm` must have room: the core keeps its working material there (several hundred MB per set).
 On a normal desktop it is half the RAM; in Docker pass `--shm-size=4g`.
@@ -60,7 +80,7 @@ going if the core dies) and `cypherdj-vorhoerer` (the headphone previewer).
 
 `ctest --test-dir djk/core/build` runs the core's tests. Run them in a normal desktop session:
 several tests (and `djk-start`) need `XDG_RUNTIME_DIR` and a running PipeWire with `pactl`
-(package `pulseaudio-utils`).
+(package `pulseaudio-utils`, section 1).
 A few of them call `node`, so install Node.js (section 4) before you run them.
 
 `(cd djk/ui && npm test)` runs the web interface's tests (Node.js, section 4). Some of them
@@ -74,26 +94,38 @@ otherwise about twenty tests fail for that reason alone (stems, warp corrections
 
 The web interface, the conductor, the agent interface and the pattern channels run on Node.js with
 built-in TypeScript support, so 22.18 is the minimum. Ubuntu's own package is too old; use the
-packages from nodejs.org or NodeSource. `djk-start` expects `node` at `/usr/bin/node`.
+packages from nodejs.org or NodeSource. `djk-start` expects `node` at `/usr/bin/node`. NodeSource, as checked:
+
+```sh
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install nodejs
+```
+
+Then install the dependencies:
 
 ```sh
 (cd djk/conductor && npm ci)
-(cd djk/hand && npm install)
+(cd djk/hand && npm ci)
 ```
 
 ## 5. Strudel for the pattern channels (optional, checked)
 
 ```sh
+sudo npm install -g pnpm@10
 git clone https://codeberg.org/uzu/strudel.git ~/strudel
 cd ~/strudel && git checkout 8f81463 && pnpm install
 ```
+
+Use pnpm 10: pnpm 12 fails with `ERR_PNPM_IGNORED_BUILDS`. If you switch pnpm versions in the same folder, remove
+`node_modules` first.
 
 The generators read `~/strudel/packages` (override with `STRUDEL_PAKETE`; note that `djk-start` grants
 Node read access to `~/strudel` only).
 
 ## 6. Instruments (optional)
 
-Carla 2.5 and the Surge XT LV2 plugin. `djk/start/djk-instrumente` describes where it looks for them.
+Carla 2.5 and the Surge XT LV2 plugin. Carla from Ubuntu's apt (2.5.8) carried RB-338 and Cypher Modular in the
+fresh-VM run; Surge was not part of it. `djk/start/djk-instrumente` describes where it looks for them.
 
 The own instruments are Rust crates built as VST3 plugins (nih-plug). With the Rust toolchain from section 1:
 
