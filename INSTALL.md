@@ -7,7 +7,7 @@ only run on the development machine. Please report what breaks.
 
 ## From the package
 
-On Ubuntu 24.04 (x86_64) the .deb is the short way. Download it from the [latest release](https://github.com/CytrexSGR/cypher-dj/releases/latest), then:
+On Ubuntu 24.04 (x86_64) the .deb is the short way. Download it from the [releases page](https://github.com/CytrexSGR/cypher-dj/releases), then:
 
 ```sh
 sudo apt install ./cypher-dj_<version>_amd64.deb
@@ -151,8 +151,8 @@ fresh-VM run (`sudo apt install carla`); Surge was not part of it. `djk/start/dj
 The own instruments are Rust crates built as VST3 plugins (nih-plug). With the Rust toolchain from section 1:
 
 ```sh
-djk/instruments/install.sh rb338       # RB-338, the 303-style bass
-djk/instruments/install.sh baukasten   # Cypher Modular, the modular synth
+djk/instruments/installiere.sh rb338       # RB-338, the 303-style bass
+djk/instruments/installiere.sh baukasten   # Cypher Modular, the modular synth
 djk/start/djk-instrumente --bass rb338 --melodie baukasten
 ```
 
@@ -169,7 +169,7 @@ cd djk/workshop && ./einrichten.sh
 It needs a system PyTorch 2.10 with CUDA: the script keeps your torch, and torchaudio is pinned to 2.10.0 from the
 PyTorch cu128 index. It installs Essentia, beat_this, soundfile, soxr and the runtime packages of the stem model
 (rotary-embedding-torch, einops, beartype) into a virtual environment, then fetches the BS-RoFormer-SW weights (about
-700 MB, checked by sha256; `python -m werkstatt.weights_stems --von <file>` takes a local copy instead of the network)
+700 MB, checked by sha256; `python -m werkstatt.gewichte_stems --von <file>` takes a local copy instead of the network)
 for stem separation in PRODUCTION. The model code itself is in `djk/third_party/bs_roformer/`.
 
 Stem separation runs on the GPU only. It needs a CUDA GPU with about 4.5 GB of free video memory (the threshold is
@@ -275,7 +275,7 @@ and reported as `kept`. Steps:
 
 `--nur <step>` runs one step (repeatable). Return codes: 0 all done, 2 usage, 4 done with skipped steps; the missing
 tool (for example no usable `cargo`) is named on stderr. If the catalog at the target was built by another program,
-that step leaves it alone and says so. The demo plays in the studio; `djk/starter/render_project.ts` renders it
+that step leaves it alone and says so. The demo plays in the studio; `djk/starter/render_projekt.ts` renders it
 offline to a WAV file, which needs the `cypherdj-render` built in section 2. Surge XT factory sounds are not part of
 this repository and not generated.
 

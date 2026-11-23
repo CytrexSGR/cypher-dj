@@ -132,13 +132,13 @@ Not planned for now: automation of plugin parameters, sidechain into plugins, CL
 
 You would be a good fit if you run Linux with PipeWire and you DJ, produce, or want to see an AI agent make music with you. An MCP-capable agent is optional (we use Claude
 Code); without one, cypher-dj is a studio you play from the browser. On Ubuntu 24.04 the package from the
-[latest release](../../releases/latest) installs it without a compiler; elsewhere you build it from source (C++, Rust,
+[releases page](../../releases) installs it without a compiler; elsewhere you build it from source (C++, Rust,
 Node.js, Python). Stems need an NVIDIA GPU, and the track
 analysis workshop expects PyTorch with CUDA (see [INSTALL.md](INSTALL.md)).
 
 What helps us most, each as a [test report issue](../../issues/new?template=test-report.md):
 
-1. **Install it.** Take the .deb from the [latest release](../../releases/latest) or follow [INSTALL.md](INSTALL.md) on
+1. **Install it.** Take the .deb from the [releases page](../../releases) or follow [INSTALL.md](INSTALL.md) on
    your machine, and tell us where it broke.
 2. **Use it for half an hour.** Mix two of your tracks into each other, or build eight bars in the arrangement. What
    felt wrong, what was missing, what did you look for and not find?
