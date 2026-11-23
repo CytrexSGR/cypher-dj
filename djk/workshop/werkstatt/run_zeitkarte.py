@@ -7,7 +7,7 @@ dropped; a line written by lauf_eins (von=werkstatt) applies the Eins but keeps 
 Usage (from djk/workshop):
   .venv/bin/python -m werkstatt.run_zeitkarte <track folder or id> --aus <target folder>
 `<track>` is a folder holding `material.json` (store or analysis depot layout) or a material id, looked up in the
-store ($CYPHERDJ_BESTAND, default ~/cypher-dj/bestand) and then in the depot. The audio is `quelle.datei` of the
+store (the storage table, kind bestand; $CYPHERDJ_BESTAND wins) and then in the depot. The audio is `quelle.datei` of the
 material (relative to the track folder, or absolute). The target folder may not lie inside the store or the depot."""
 import argparse
 import json

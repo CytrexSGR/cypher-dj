@@ -218,6 +218,8 @@ tr.auf-1 td.titelzelle { color: var(--a); } tr.auf-2 td.titelzelle { color: var(
 #loopliste tr.defekt td { opacity: .55; }
 #loopliste tr.defekt .titelzelle .name { text-decoration: line-through; text-decoration-thickness: 1px; }
 #loopliste tr.defekt .titelzelle .grund { margin-left: 10px; font-weight: 400; }
+#loopliste tr.still td { opacity: .55; }
+#loopliste tr.still .titelzelle .grund { margin-left: 6px; font-weight: 400; }
 .taste.blinkt { animation: blinken .5s steps(2) infinite; }
 @keyframes blinken { 50% { opacity: .45; } }
 /* MVP 2 Scheibe 3: → STRUDEL in der Loop-Liste; die Antwort steht am Knopf */

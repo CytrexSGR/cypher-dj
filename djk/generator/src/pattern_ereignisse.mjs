@@ -8,8 +8,9 @@
 //      or { ok: false, grund, fehler: 'Zeile N: ...' }
 import { SCOPE, SCOPE_NAMEN, acorn } from './strudel.mjs';
 import { midiNote } from './window.mjs';
+import { strudelOrdner } from '../../contract/orte.ts';
 
-const P = process.env.STRUDEL_PAKETE ?? `${process.env.HOME}/strudel/packages`;
+const P = process.env.STRUDEL_PAKETE ?? `${strudelOrdner()}/packages`;
 const core = await import(`${P}/core/index.mjs`);
 const mini = await import(`${P}/mini/index.mjs`);
 

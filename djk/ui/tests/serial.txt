@@ -16,7 +16,6 @@ catalog.test.mjs
 collections_area.test.mjs
 state_controls_generator.test.mjs
 learn_route.test.mjs
-loop_import.test.mjs
 live_container.test.mjs
 live_loop_library.test.mjs
 media_library.test.mjs

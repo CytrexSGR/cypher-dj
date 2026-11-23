@@ -5,9 +5,31 @@ Tested on Ubuntu 24.04 (x86_64). Steps marked **checked** were run on a fresh Ub
 section 7 (workshop) were not part of that run, and the VM had no real audio device and no Surge. The other steps were
 only run on the development machine. Please report what breaks.
 
+## From the package
+
+On Ubuntu 24.04 (x86_64) the .deb is the short way. Download it from the [latest release](https://github.com/CytrexSGR/cypher-dj/releases/latest), then:
+
+```sh
+sudo apt install ./cypher-dj_<version>_amd64.deb
+sudo usermod -aG pipewire "$USER"   # real-time limits for the audio services; log in again (or reboot) afterwards
+cypher-dj start                     # real output on your default sink; prints the address of the web interface
+cypher-dj demo                      # opens the starter project "demo" and plays it
+cypher-dj mcp                       # prints the one JSON line that registers the agent tools in an MCP client
+```
+
+`cypher-dj stop` and `cypher-dj status` do what they say. Run `cypher-dj start` as your normal user, not as root.
+If the real-time limits are missing, the start prints the fix.
+
+Surge XT is not part of the package. Without it the melody channel plays the Cypher Modular instrument and the bass
+channel the RB-338, so the package sounds without it. If you want Surge, install its LV2 plugin by hand (section 6);
+the next `cypher-dj start` picks it up.
+
+Building from source stays below.
+
 ## 1. System packages (checked)
 
 ```sh
+sudo apt update
 sudo apt install build-essential cmake ninja-build pkg-config \
   libjack-jackd2-dev librubberband-dev libssl-dev \
   python3 python3-venv ffmpeg pipewire-jack rubberband-cli pulseaudio-utils
@@ -76,7 +98,7 @@ the core's tests (section 3), build everything first with `ninja -C djk/core/bui
 This gives `cypherdj-kern` (the real-time core), `cypherdj-notbahn` (a fallback path that keeps audio
 going if the core dies) and `cypherdj-vorhoerer` (the headphone previewer).
 
-## 3. Tests (checked)
+## 3. Tests
 
 `ctest --test-dir djk/core/build` runs the core's tests. Run them in a normal desktop session:
 several tests (and `djk-start`) need `XDG_RUNTIME_DIR` and a running PipeWire with `pactl`
@@ -97,8 +119,7 @@ built-in TypeScript support, so 22.18 is the minimum. Ubuntu's own package is to
 packages from nodejs.org or NodeSource. `djk-start` expects `node` at `/usr/bin/node`. NodeSource, as checked:
 
 ```sh
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt install nodejs
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt install -y nodejs
 ```
 
 Then install the dependencies:
@@ -125,7 +146,7 @@ Node read access to `~/strudel` only).
 ## 6. Instruments (optional)
 
 Carla 2.5 and the Surge XT LV2 plugin. Carla from Ubuntu's apt (2.5.8) carried RB-338 and Cypher Modular in the
-fresh-VM run; Surge was not part of it. `djk/start/djk-instrumente` describes where it looks for them.
+fresh-VM run (`sudo apt install carla`); Surge was not part of it. `djk/start/djk-instrumente` describes where it looks for them.
 
 The own instruments are Rust crates built as VST3 plugins (nih-plug). With the Rust toolchain from section 1:
 

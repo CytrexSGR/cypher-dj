@@ -73,39 +73,3 @@ export function baueMenue(sende) {
   return { knoten, oeffne, schliesse, istOffen: () => offen };
 }
 
-// Effect slot choice (channel strip PZ2): one small menu node per deck, opened by the chip of a track. Entries: one button per qualifying graph
-// (the short name, the graph name as title), then On / Off and Remove when a stage is set. `sende(body)` gets { graph } | { graph: '' } | { an }.
-// The caller owns the request, the refusal text and the placement context; this module knows no network.
-export function baueFxMenue(sende) {
-  const knoten = el('div', 'ld-fxmenue'); knoten.hidden = true; knoten.setAttribute('role', 'menu');
-  let offen = false, spur = null;
-  function oeffne(graphen, effekt, anker, spurNr) {
-    knoten.replaceChildren();
-    for (const g of graphen) {
-      const b = el('button', 'ld-fxwahl', g.kurz); b.type = 'button'; b.dataset.graph = g.name; b.title = g.name;
-      b.classList.toggle('an', effekt?.graph === g.name);
-      b.addEventListener('click', () => { sende({ graph: g.name }); schliesse(); });
-      knoten.append(b);
-    }
-    if (!graphen.length) knoten.append(el('span', 'ld-fxleer', 'No effects available'));
-    if (effekt) {
-      const an = el('button', 'ld-fxeintrag', effekt.an ? 'Off' : 'On'); an.type = 'button'; an.dataset.eintrag = 'an';
-      an.addEventListener('click', () => { sende({ an: !effekt.an }); schliesse(); });
-      const weg = el('button', 'ld-fxeintrag', 'Remove'); weg.type = 'button'; weg.dataset.eintrag = 'weg'; weg.title = 'Remove the effect from this track';
-      weg.addEventListener('click', () => { sende({ graph: '' }); schliesse(); });
-      knoten.append(an, weg);
-    }
-    knoten.hidden = false; offen = true; spur = spurNr;
-    const wurzel = knoten.parentElement;
-    if (wurzel && anker) {   // below the chip, inside the deck container; above it when it does not fit
-      const w = wurzel.getBoundingClientRect(), a = anker.getBoundingClientRect(), m = knoten.getBoundingClientRect();
-      const breite = m.width || 120, hoch = m.height || 0, rand = 2;
-      const unten = a.bottom - w.top;
-      const top = unten + hoch + rand <= w.height ? unten : Math.max(rand, a.top - w.top - hoch);
-      knoten.style.left = `${Math.round(Math.max(0, Math.min(a.right - w.left - breite, w.width - breite - rand)))}px`; knoten.style.top = `${Math.round(top)}px`;
-    }
-  }
-  function schliesse() { knoten.hidden = true; offen = false; spur = null; }
-  knoten.addEventListener('keydown', (e) => { if (e.key === 'Escape') schliesse(); });
-  return { knoten, oeffne, schliesse, istOffen: () => offen, spurNr: () => spur };
-}

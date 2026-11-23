@@ -26,9 +26,9 @@ FASSUNG_MUSTER = re.compile(r"^([1-9][0-9]*)_r([1-9][0-9]*)$")
 
 
 def standard_bestand():
-    """CYPHERDJ_BESTAND (empty counts as unset), else ~/cypher-dj/bestand (no entry in the storage table)."""
-    vorgabe = os.environ.get("CYPHERDJ_BESTAND", "")
-    return Path(vorgabe) if vorgabe != "" else Path.home() / "cypher-dj" / "bestand"
+    """The track library folder from the storage table: CYPHERDJ_BESTAND (empty counts as unset), else the old place
+    {REPO}/bestand when it exists and is not empty, else {HEIM}/werke/bestand."""
+    return ablage.ordner("bestand")
 
 
 def standard_ablage():

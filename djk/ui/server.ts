@@ -89,7 +89,7 @@ import { beatsVon, importiereLoop, loopNameVon, findeImport, raeumeImportReste, 
 import { WelleCache, WelleFehler, loopQuelle, schnittQuelle, fassungQuelle, dateiQuelle } from './wave_cache.ts';
 import { OEFFENTLICH, REPO, REPO_PFADE, instanz, ports, shmOrdner, rasterOrdnerVorgabe, hotcueOrdnerVorgabe, huellenVorgabe, musterOrdnerVorgabe,
   wirtOrdnerVorgabe, baukastenOrdnerVorgabe, kitsOrdnerVorgabe, zusatzKit, strudelPakete, loopOrdnerVorgabe, welleCacheVorgabe, arbeitsbestandVorgabe,
-  analyseVorgabe } from './paths.ts';
+  analyseVorgabe, ablageOrdner } from './paths.ts';
 import { WerkstattAnalyse } from './areas/proj/analysis.ts';
 import { tempoRampe, vorlaufBeats } from './tempo_ramp.ts';
 import { takteProLive } from './project/taktart_live.ts';
@@ -420,8 +420,8 @@ export class Oberflaeche {
     const shm = shmOrdner(inst);
     this.vorhoeren = opt.vorhoeren ?? new Vorhoeren({ kopfhoererDa: () => Vorhoeren.kopfhoererDaVorgabe(inst), kernNurCue: () => kernNurCueVorgabe(shm),
       klient: () => vorhoeerKlientVorgabe(REPO, inst, opt.log), kantenDatei: path.join(shm, 'kanten'), instanz: inst });
-    this.sammlungen = new Sammlungen(opt.sammlungen ?? REPO_PFADE.sammlungen);
-    this.muster = new MusterBibliothek({ eigen: opt.musterBibliothek ?? REPO_PFADE.musterBibliothek, sets: opt.musterSets ?? REPO_PFADE.musterSets, starter: opt.musterStarter ?? REPO_PFADE.musterStarter });
+    this.sammlungen = new Sammlungen(opt.sammlungen ?? ablageOrdner('sammlungen'));
+    this.muster = new MusterBibliothek({ eigen: opt.musterBibliothek ?? ablageOrdner('muster'), sets: opt.musterSets ?? REPO_PFADE.musterSets, starter: opt.musterStarter ?? REPO_PFADE.musterStarter });
     this.vorbereiter = new Vorbereiter({ python: python,
       cwd: REPO_PFADE.werkstatt, bestand: opt.bestand, modul: opt.einleserModul, log: opt.log });
     this.ohr = new OhrLeser(this.huellenPfad(), [OHR_K.deck1, OHR_K.deck2, OHR_K.deck3, OHR_K.deck4, OHR_K.master]);
@@ -3631,7 +3631,7 @@ async function main(): Promise<void> {
     kernPort: v['kern-port'] ? Number(v['kern-port']) : vorgabe.kernPort,
     aboPort: v['abo-port'] ? Number(v['abo-port']) : vorgabe.aboPort,
     leitstandWs: v['leitstand-ws'] ? Number(v['leitstand-ws']) : vorgabe.leitstandWs,
-    bestand: v.bestand ?? REPO_PFADE.bestand,
+    bestand: v.bestand ?? ablageOrdner('bestand'),
     arbeitsbestand: v.arbeitsbestand ?? arbeitsbestandVorgabe(instanz()),
     mutationen: (process.env.OBERFLAECHE_MUTATION ?? '').split(',').filter(Boolean),
     kernPruefmodus: pm === undefined ? null : pm === 'an',

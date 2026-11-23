@@ -35,7 +35,10 @@ def setze(wert):
 def exec_args(text, var, djk, home):
     """Zerlegt die ExecStart-Zeile zuerst (mit Platzhaltern), setzt danach ein: so zerfällt kein Wert."""
     aus = []
-    for wort in shlex.split(text.replace("%h/cypher-dj/djk", djk).replace("%h", home)):
+    for i, wort in enumerate(shlex.split(text.replace("%h/cypher-dj/djk", djk).replace("%h", home))):
+        if i == 0 and wort == "/usr/bin/node" and var.get("NODE"):
+            aus.append(var["NODE"])   # the node binary resolved from the code's place (orte.sh), not a fixed path
+            continue
         m = re.fullmatch(r"@([A-Z_]+)@", wort)
         if m and m.group(1) in var:
             w = var[m.group(1)]
@@ -120,6 +123,8 @@ def rendern(ziel, quelle, var):
         offen = set(re.findall(r"@([A-Z_]+)@", z)) - set(var)
         if offen:
             raise SystemExit(f"unit.py: Platzhalter ungefüllt: {', '.join(sorted(offen))}")
+        if var.get("NODE"):
+            z = re.sub(r"^(ExecStart=)/usr/bin/node(?= )", lambda m: m.group(1) + setze(var["NODE"]), z)
         z = re.sub(r" ?@([A-Z_]+)@", lambda m: "" if not var[m.group(1)] else m.group(0), z)
         z = re.sub(r"  +", " ", z).rstrip()
         z = re.sub(r"@([A-Z_]+)@", lambda m: var[m.group(1)] if m.group(1) in ARG_VARS else setze(var[m.group(1)]), z)

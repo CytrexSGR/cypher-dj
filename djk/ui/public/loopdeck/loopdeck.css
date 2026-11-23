@@ -96,13 +96,6 @@
 .ld-fxtaste[data-einheit="1"].an { background: var(--text); border-color: var(--text); color: #0e0f12; }   /* the colours of the 1 2 3 keys of a mixer channel */
 .ld-fxtaste[data-einheit="2"].an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }
 .ld-fxtaste[data-einheit="3"].an { background: var(--l2); border-color: var(--l2); color: #0e0f12; }   /* FX3 = Remix, its colour */
-.ld-fxmenue { position: absolute; z-index: 20; min-width: 110px; display: flex; flex-wrap: wrap; gap: 4px; padding: 6px; font-size: 11px; color: var(--text);
-  background: var(--panel); border: 1px solid var(--farbe); border-radius: 6px; box-shadow: 0 4px 16px rgba(0, 0, 0, .5); }
-.ld-fxmenue[hidden] { display: none; }
-.ld-fxwahl, .ld-fxeintrag { font-size: 10px; font-weight: 800; letter-spacing: .06em; padding: 3px 8px; border-radius: 4px; color: var(--text); border: 1px solid var(--line); }
-.ld-fxwahl.an { background: var(--farbe); border-color: var(--farbe); color: #0e0f12; }
-.ld-fxeintrag { color: var(--dim); }
-.ld-fxleer { color: var(--dim); font-size: 10px; }
 .ld-gross { font-size: 13px; line-height: 1; padding: 2px 8px; border-radius: 5px; color: var(--dim); border: 1px solid var(--line); cursor: pointer; }
 .ld-gross:hover { color: var(--farbe); border-color: var(--farbe); }
 .ld-deckname[title] { cursor: pointer; }

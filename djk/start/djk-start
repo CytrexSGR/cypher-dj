@@ -75,6 +75,8 @@ set -uo pipefail
 HIER=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
 DJK=${DJK:-$(cd "$HIER/.." && pwd)}
 VORL=$HIER/templates
+. "$HIER/orte.sh"   # node binary, Strudel folder and VST3 folders from the code's own place (package 1.0)
+NODE=$(orte_node)
 # Persönliche Pfade (Musik, Mediathek, Samples ...): Vorlage djk/config/umgebung.env.beispiel, Datei außerhalb des Repos.
 # Schon gesetzte CYPHERDJ_*-Variablen des Aufrufers gewinnen gegen die Datei (Tests, Prüfinstanzen).
 UMG=${CYPHERDJ_UMGEBUNG:-$HOME/.config/cypherdj/umgebung.env}   # CYPHERDJ_UMGEBUNG: andere Datei (Tests)
@@ -270,6 +272,10 @@ LS_ARGS="--kern-port $P_KERN"; [ -n "$LS_KONFIG" ] && LS_ARGS="--konfig $LS_KONF
 # The leitstand takes the option before the key `journal` of its config file.
 [ -z "$JOURNAL" ] && [ -z "$I" ] && JOURNAL=schlank
 [ -n "$JOURNAL" ] && LS_ARGS="$LS_ARGS --journal $JOURNAL"
+# Journal and track library folders come from the storage table (kinds journal and bestand, resolved above): the leitstand gets them as options
+# (it must not guess a place inside the checkout; in the package that is read-only). A test instance keeps its shm journal (leitstand default).
+[ -z "$I" ] && LS_ARGS="$LS_ARGS --sets-ordner $(q "$ABLAGE_JOURNAL")"
+LS_ARGS="$LS_ARGS --bestand-ordner $(q "$ABLAGE_BESTAND")"
 # MVP 2 (ADR 025): Loop-Ordner je Instanz wie im Kern (main.cpp); die Seite liest ihn für /loops
 if [ -n "$I" ]; then LOOPS=/dev/shm/cypherdj-$I/loops; else LOOPS=$ABLAGE_LOOPS; fi
 mkdir -p "$LOOPS"
@@ -324,7 +330,7 @@ KERN_CPUS=$(sed -n 's/^KERN_CPUS=//p' <<<"$KERNE_AUS"); STEMS_CPUS=$(sed -n 's/^
 if [ "$KERN_KERNE" = - ]; then KERN_TXT="kern process CYPHERDJ_KERN_CPUS"; else KERN_TXT="kern process $KERN_KERNE physical cores"; fi
 echo "Cores: $KERN_TXT (CPUs $KERN_CPUS), stems CPUs $STEMS_CPUS" >&2
 VARS=(--var "MASTER=$KMASTER" --var "CUE_ARG=$CUE_ARG" --var "TON_FREI=$TF_ARG" --var "KERN_ARGS=$KERN_ARGS" --var "KERN_CPUS=$KERN_CPUS" --var "STEMS_CPUS=$STEMS_CPUS"
-      --var "KERN_CLIENT=$KERN_CLIENT" --var "LEITSTAND_ARGS=$LS_ARGS" --var "OBERFLAECHE_ARGS=$OF_ARGS")
+      --var "NODE=$NODE" --var "KERN_CLIENT=$KERN_CLIENT" --var "LEITSTAND_ARGS=$LS_ARGS" --var "OBERFLAECHE_ARGS=$OF_ARGS")
 
 if [ "$MODUS" = vorlagen ]; then
   mkdir -p "$VORLAGEN_NACH"
@@ -338,9 +344,16 @@ if [ "$MODUS" = vorlagen ]; then
 fi
 
 # 2 Programme und PipeWire
-for p in "$DJK/core/build/cypherdj-kern" "$DJK/fallback/build/cypherdj-notbahn" /usr/bin/node /usr/bin/pw-jack; do
+for p in "$DJK/core/build/cypherdj-kern" "$DJK/fallback/build/cypherdj-notbahn" "$NODE" /usr/bin/pw-jack; do
   [ -x "$p" ] || { echo "djk-start: missing program $p" >&2; exit 2; }
 done
+STRUDEL_ORDNER=""
+PAKETE_ENV=()
+if [ "$STRUDEL" = 1 ]; then
+  STRUDEL_ORDNER=$(orte_strudel) || { echo "djk-start: Strudel folder not usable. Nothing started." >&2; exit 2; }
+  # a unit does not inherit the caller's environment: always hand it the import path, so import and read grant name the same folder
+  PAKETE_ENV=(--setenv=STRUDEL_PAKETE="${STRUDEL_PAKETE:-$STRUDEL_ORDNER/packages}")
+fi
 command -v pactl >/dev/null 2>&1 || { echo "djk-start: missing program pactl (Ubuntu package pulseaudio-utils; sudo apt install pulseaudio-utils)" >&2; exit 2; }
 for d in "$DJK/units/cypherdj-kern.service" "$DJK/units/cypherdj-notbahn.service" "$DJK/units/cypherdj-leitstand.service"; do
   [ -f "$d" ] || { echo "djk-start: missing unit $d" >&2; exit 2; }
@@ -619,7 +632,8 @@ if [ "$STRUDEL" = 1 ]; then  # Plan 2026-09-27 + Studio S1: drei Strudel-Erzeuge
     KR=(); KITS_ECHT=$(readlink -f -- "$KITS") && [ "$KITS_ECHT" != "$KITS" ] && KR=(--allow-fs-read="$KITS_ECHT")   # a linked kit folder: node 22.23 follows the link, a later node may not
     systemd-run --user --quiet --collect --unit="$U" ${I:+--setenv=CYPHERDJ_INSTANZ=$I} \
       -p Restart=always -p RestartSec=1 -p RestartPreventExitStatus=2 -p PartOf=cypherdj.target \
-      /usr/bin/node --permission --allow-fs-read="$DJK" --allow-fs-read="$HOME/strudel" \
+      "${PAKETE_ENV[@]}" \
+      "$NODE" --permission --allow-fs-read="$DJK" --allow-fs-read="$STRUDEL_ORDNER" \
       --allow-fs-read="$KITS" "${KR[@]}" --allow-fs-read="$ORD" --allow-fs-write="$ORD" \
       "$DJK/generator/generator.mjs" --kern-port "$P_KERN" --abo-port "$P" ${KIT_ORDNER:+--kit-ordner "$KIT_ORDNER"} --kit "$K" $ZUSATZ $ZIEL \
       --name "erzeuger$N" --strom "$s" --muster "$ORD/strom1.js" 2>&1 | sed 's/^/    /' >&2

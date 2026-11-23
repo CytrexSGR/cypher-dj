@@ -272,7 +272,8 @@ test('every region of the contract exists as a host and as a binder file', () =>
     assert.ok(fs.existsSync(path.join(PUBLIC, 'werkbank', f)), f);
   }
   const css = lies('werkbank/werkbank.css');
-  const reihe = ['kopf', 'regal', 'spuren', 'raster', 'klang', 'dock'].map((n) => css.indexOf(`@import url('${n}.css')`));
+  // whole file names, so the public export's file renaming (tracks.css -> tracks.css) reaches them
+  const reihe = ['kopf.css', 'regal.css', 'tracks.css', 'grid.css', 'sound.css', 'dock.css'].map((f) => css.indexOf(`@import url('${f}')`));
   assert.ok(reihe.every((i) => i >= 0), 'every region CSS is imported');
   assert.deepEqual([...reihe].sort((a, b) => a - b), reihe, 'in the order of the binders');
 });

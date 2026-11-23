@@ -26,12 +26,11 @@ hand wins over its automation.
 
 ## At a glance
 
-**Five views on one clock**
+**Four views on one clock**
 
 | View | What you do there |
 |---|---|
-| DJ | Four places, each a track deck, the Strudel pattern channels, a loop deck or a SEQ pattern deck; mixer, beat FX, color FX and the Cypher Remix station |
-| LIVE | The three live-coded pattern channels side by side, each with automation lanes for fader, filter and cutoff |
+| DJ | Four places, each a track deck, the Strudel pattern channels, a loop deck or a SEQ pattern deck; mixer, beat FX, color FX and the Cypher Remix station. A loop deck opens as a pop-up grid over both loop decks, each track with HI MID LOW, COLOR, HALL, DLY and FX 1 2 3 like a mixer channel |
 | STUDIO | A loop workbench: up to eight instrument tracks, a step sequencer with a length, swing and direction per row, and a dock of device cards |
 | PRODUCTION | An arrangement with up to 32 tracks: audio and MIDI clips, piano roll, warp, automation, groups, returns, inserts, export and loudness per track |
 | TRACKER | The same production project as tracker rows: linked patterns, classic effect commands (arpeggio, slides, vibrato, retrigger and more), 8-bit devices, import of ProTracker modules |
@@ -131,14 +130,16 @@ Not planned for now: automation of plugin parameters, sidechain into plugins, CL
 
 ## Try it: we are looking for testers
 
-You would be a good fit if you run Linux with PipeWire, can build software from source (C++, Rust, Node.js, Python),
-and you DJ, produce, or want to see an AI agent make music with you. An MCP-capable agent is optional (we use Claude
-Code); without one, cypher-dj is a studio you play from the browser. Stems need an NVIDIA GPU, and the track
+You would be a good fit if you run Linux with PipeWire and you DJ, produce, or want to see an AI agent make music with you. An MCP-capable agent is optional (we use Claude
+Code); without one, cypher-dj is a studio you play from the browser. On Ubuntu 24.04 the package from the
+[latest release](../../releases/latest) installs it without a compiler; elsewhere you build it from source (C++, Rust,
+Node.js, Python). Stems need an NVIDIA GPU, and the track
 analysis workshop expects PyTorch with CUDA (see [INSTALL.md](INSTALL.md)).
 
 What helps us most, each as a [test report issue](../../issues/new?template=test-report.md):
 
-1. **Install it.** Follow [INSTALL.md](INSTALL.md) on your machine and tell us where it broke.
+1. **Install it.** Take the .deb from the [latest release](../../releases/latest) or follow [INSTALL.md](INSTALL.md) on
+   your machine, and tell us where it broke.
 2. **Use it for half an hour.** Mix two of your tracks into each other, or build eight bars in the arrangement. What
    felt wrong, what was missing, what did you look for and not find?
 3. **If you have an agent:** ask it for something in your own words, for example "put bass and pad in a group, add a
@@ -150,7 +151,7 @@ No music is included. djk-starter generates kits, loops and a demo on your machi
 
 The main ones; the full list is in [docs/features.md](docs/features.md#known-limits-of-the-beta).
 
-- Linux with PipeWire only, tested on Ubuntu 24.04: used on one machine, and installed from scratch on a fresh Ubuntu 24.04.5 (2026-11-22) up to the demo playing, without a real audio device.
+- Linux with PipeWire only, tested on Ubuntu 24.04: used on one machine, and installed from scratch on a fresh Ubuntu 24.04.5 (2026-11-22) up to the demo playing, from source and from the package, without a real audio device.
 - Third-party plugins (VST3, LV2) run in their own host processes through Carla, at most four effect hosts at a time; most commercial plugins have no Linux build and need yabridge and Wine.
 - Human and agent are told apart by a label on localhost. That is a convention, not a security boundary: do not
   expose the ports to a network.

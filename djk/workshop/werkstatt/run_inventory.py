@@ -5,7 +5,7 @@ Bestand steht: berichte/15-bestand.json und berichte/15-bestand.md.
 Aufruf (aus djk/workshop):
   nice -n 19 ionice -c3 .venv/bin/python -m werkstatt.run_inventory [--quelle ORDNER] [--bestand PFAD]
       [--nur name1,name2] [--bericht NAME] [--berichte ORDNER]
-Vorgabe fuer --bestand: $CYPHERDJ_BESTAND, sonst ~/cypher-dj/bestand.
+Default for --bestand: the storage table (kind bestand), $CYPHERDJ_BESTAND wins.
 --quelle ORDNER: statt samples/bestand (und ohne die Kontrolle mfbass) jede Audiodatei unter ORDNER, rekursiv;
 fehlt ORDNER oder ist er eine Datei, endet der Aufruf mit Endcode 2. Titel: 'Artist – Title' aus den Tags, sonst
 relativer Pfad ohne Endung (eindeutig gemacht, siehe `sammle`); --nur trifft Titel, relativen Pfad oder Dateinamen.

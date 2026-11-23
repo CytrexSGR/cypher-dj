@@ -4,7 +4,33 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-export interface LoopEintrag { name: string; beats: number; quelle: string; erstellt: string; ladbar: boolean; grund: string }
+export interface LoopEintrag { name: string; beats: number; quelle: string; erstellt: string; ladbar: boolean; grund: string; still: boolean }
+
+// A loop whose loop.f32 is digital silence (every sample below 1e-6) still loads, but plays nothing: 14 of 73 loops of the
+// studio library were silent on 2026-11-22 (takes of a stream that rec does not capture). Cached by path, size and mtime,
+// so a listing reads each file once; a sounding file stops at its first non-zero sample.
+const stilleCache = new Map<string, { groesse: number; mtime: number; still: boolean }>();
+export function istStill(datei: string): boolean {
+  let st: fs.Stats;
+  try { st = fs.statSync(datei); } catch { return false; }
+  const c = stilleCache.get(datei);
+  if (c && c.groesse === st.size && c.mtime === st.mtimeMs) return c.still;
+  let still = true;
+  const fd = fs.openSync(datei, 'r');
+  try {
+    const puffer = Buffer.alloc(1 << 20);
+    let pos = 0;
+    while (still) {
+      const n = fs.readSync(fd, puffer, 0, puffer.length, pos);
+      if (n <= 0) break;
+      const f = new Float32Array(puffer.buffer, puffer.byteOffset, n >> 2);
+      for (let i = 0; i < f.length; i++) if (f[i] > 1e-6 || f[i] < -1e-6) { still = false; break; }
+      pos += n;
+    }
+  } finally { fs.closeSync(fd); }
+  stilleCache.set(datei, { groesse: st.size, mtime: st.mtimeMs, still });
+  return still;
+}
 
 // Warum der Kern diesen Loop ablehnen würde (loop.cpp lade_loop: bpm 128, frames = beats · 22 500, loop.f32 mit
 // frames · 8 Bytes); '' = ladbar. Text englisch, er steht auf der Seite.
@@ -32,7 +58,8 @@ export function leseLoops(dir: string): LoopEintrag[] {
       const beats = j.beats !== undefined ? j.beats as number : [1, 2, 4, 8].includes(j.takte as number) ? 4 * (j.takte as number) : 0;
       if (j.schema !== 1 || ![1, 2, 4, 8, 16, 32].includes(beats)) continue;
       const grund = loopGrund(dir, name, j, beats);
-      aus.push({ name, beats, quelle: String(j.quelle ?? ''), erstellt: String(j.erstellt ?? ''), ladbar: grund === '', grund });
+      aus.push({ name, beats, quelle: String(j.quelle ?? ''), erstellt: String(j.erstellt ?? ''), ladbar: grund === '', grund,
+        still: grund === '' && istStill(path.join(dir, name, 'loop.f32')) });
     } catch { /* unlesbar: nicht in der Liste */ }
   }
   return aus;

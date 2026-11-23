@@ -1,0 +1,6 @@
+{
+  "bestand":    { "env": "CYPHERDJ_BESTAND",    "alt": "bestand",           "neu": "werke/bestand" },
+  "sammlungen": { "env": "CYPHERDJ_SAMMLUNGEN", "alt": "bibliothek/sets",   "neu": "werke/sets" },
+  "muster":     { "env": "CYPHERDJ_MUSTER",     "alt": "bibliothek/muster", "neu": "werke/muster" },
+  "journal":    { "env": "CYPHERDJ_JOURNAL",    "alt": "sets/djk",          "neu": "journal" }
+}

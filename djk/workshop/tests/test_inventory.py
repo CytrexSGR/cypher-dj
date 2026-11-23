@@ -68,14 +68,16 @@ def test_vorgaben_aus_tabelle(tmp_path, monkeypatch):
     """The analysis store default comes from the storage table; an empty CYPHERDJ_* value counts as unset."""
     from pathlib import Path
     from werkstatt.inventory import standard_ablage, standard_bestand
+    from werkstatt.table import ablage
     monkeypatch.setenv("HOME", str(tmp_path))
     for n in ("CYPHERDJ_BESTAND", "CYPHERDJ_ANALYSE", "CYPHERDJ_HEIM"):
         monkeypatch.delenv(n, raising=False)
-    assert standard_bestand() == tmp_path / "cypher-dj" / "bestand"
+    erwartet = ablage.ordner("bestand")      # {REPO}/bestand when it exists and is not empty, else {HEIM}/werke/bestand
+    assert standard_bestand() == erwartet
     assert standard_ablage() == tmp_path / "werkstatt" / "cypher-dj-analyse"
     monkeypatch.setenv("CYPHERDJ_BESTAND", "")
     monkeypatch.setenv("CYPHERDJ_ANALYSE", "")
-    assert standard_bestand() == tmp_path / "cypher-dj" / "bestand"
+    assert standard_bestand() == erwartet
     assert standard_ablage() == tmp_path / "werkstatt" / "cypher-dj-analyse"
     monkeypatch.setenv("CYPHERDJ_BESTAND", str(tmp_path / "b"))
     monkeypatch.setenv("CYPHERDJ_ANALYSE", str(tmp_path / "a"))

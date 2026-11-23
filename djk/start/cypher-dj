@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# cypher-dj: the one command of the package. Wraps djk-start, djk-stop and djk-starter; it replaces none of them.
+#
+#   cypher-dj start    real output on the default sink, Strudel, instruments, Baukasten streams
+#   cypher-dj stop     djk-stop
+#   cypher-dj status   djk-start --zustand
+#   cypher-dj demo     open the starter project "demo" and play it
+#   cypher-dj mcp      print the one JSON line that registers the agent tools in an MCP client
+#   cypher-dj help
+#
+# The root is the folder above djk/, taken from this script's resolved path, so it works as a symlink
+# (/usr/bin/cypher-dj -> /opt/cypher-dj/djk/start/cypher-dj).
+# Return: 0 ok, 2 usage or refused (root, unknown command), other values come from the wrapped command.
+# Test hooks: CYPHERDJ_UID (instead of id -u), CYPHERDJ_NODE (node binary for `mcp`).
+set -uo pipefail
+HIER=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+ROOT=$(cd "$HIER/../.." && pwd)
+PORT=47300
+URL="http://127.0.0.1:$PORT/"
+
+# node, Strudel and VST3 places resolve from the code's location (djk/start/orte.sh, package spec D4 to D6)
+DJK="$ROOT/djk"
+# shellcheck source=orte.sh
+. "$HIER/orte.sh"
+
+hilfe() {
+  cat <<'EOF'
+Usage: cypher-dj <command>
+  start    start the studio with real output on the default sink
+  stop     stop the studio
+  status   show what runs
+  demo     open the starter project "demo" and play it
+  mcp      print the line that registers the agent tools in an MCP client
+  help     this text
+EOF
+}
+
+# Surge check: the same file djk-instrumente looks for before it starts a Surge host.
+surge_da() { [ -f "$HOME/.local/lib/cypherdj/lv2/Surge XT.lv2/manifest.ttl" ]; }
+
+# post <path> <json body> <max seconds>: sets POST_CODE (HTTP status) and POST_BODY; returns curl's rc (28 = timeout).
+# Same kind of request a click on the local page sends.
+post() {
+  local out rc
+  out=$(curl -sS --max-time "$3" -w '\n%{http_code}' -X POST -H 'content-type: application/json' -H 'x-djk-quelle: andreas' \
+    -d "$2" "${URL}${1#/}"); rc=$?
+  POST_CODE=${out##*$'\n'}; POST_BODY=${out%$'\n'*}
+  return "$rc"
+}
+
+# json_ok <body> <key>: true when the body is a JSON object and has key == true.
+json_ok() { printf '%s' "$1" | python3 -I -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get(sys.argv[1]) is True else 1)' "$2" 2>/dev/null; }
+
+befehl_start() {
+  if [ "${CYPHERDJ_UID:-$(id -u)}" = 0 ]; then
+    echo "cypher-dj: do not run as root; start it as the user who will use the studio." >&2
+    return 2
+  fi
+  if "$HIER/djk-start" --zustand >/dev/null 2>&1; then
+    echo "cypher-dj: already running ($URL)"
+    return 0
+  fi
+  "$HIER/djk-starter" || echo "cypher-dj: djk-starter reported a problem, starting anyway" >&2
+  local sink args
+  sink=$(pactl get-default-sink 2>/dev/null) || sink=""
+  args=(--strudel --instrumente --bk-stroeme)
+  if [ -n "$sink" ]; then
+    args=(--master "$sink:playback_F" --ohne-cue --ton-frei "${args[@]}")
+  else
+    echo "cypher-dj: no default sink found, starting with the silent sink (no sound reaches your speakers)."
+  fi
+  surge_da || args+=(--melodie baukasten --bass rb338)
+  exec "$HIER/djk-start" "${args[@]}"
+}
+
+befehl_demo() {
+  local nicht="the studio does not answer at $URL (in time); run 'cypher-dj start' first."
+  post /proj/oeffnen '{"slug":"demo"}' 30 || { echo "cypher-dj: $nicht" >&2; return 1; }
+  if [ "$POST_CODE" = 409 ] && printf '%s' "$POST_BODY" | grep -q '"live_laeuft"'; then
+    echo "cypher-dj: a live set is playing; stop it or open the demo on the page ($URL)." >&2
+    return 1
+  fi
+  if [ "$POST_CODE" != 200 ]; then echo "cypher-dj: opening the demo failed (HTTP $POST_CODE): $POST_BODY" >&2; return 1; fi
+  post /proj/transport '{"aktion":"start"}' 10 || { echo "cypher-dj: $nicht" >&2; return 1; }
+  if [ "$POST_CODE" != 200 ] || ! json_ok "$POST_BODY" ok; then
+    echo "cypher-dj: the demo is open but did not start (HTTP $POST_CODE): $POST_BODY" >&2
+    return 1
+  fi
+  echo "cypher-dj: the demo plays. Open $URL"
+}
+
+befehl_mcp() {
+  python3 -I -c 'import json,sys; print(json.dumps({"cypher-dj": {"command": sys.argv[1], "args": [sys.argv[2] + "/djk/hand/hand.ts"]}}, separators=(",", ":")))' \
+    "$(orte_node)" "$ROOT"
+}
+
+case "${1:-}" in
+  start) befehl_start;;
+  stop) exec "$HIER/djk-stop";;
+  status) exec "$HIER/djk-start" --zustand;;
+  demo) befehl_demo;;
+  mcp) befehl_mcp;;
+  help|-h|--help) hilfe;;
+  *) hilfe >&2; exit 2;;
+esac

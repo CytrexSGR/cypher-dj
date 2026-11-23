@@ -51,6 +51,7 @@ export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
 export DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}
 HIER=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
 DJK=${DJK:-$(cd "$HIER/.." && pwd)}
+. "$HIER/orte.sh"   # VST3 folders from the code's own place (package 1.0)
 I=${CYPHERDJ_INSTANZ:-}; NUR_WIRTE=0; MELODIE=; BASS=; ARR1=0; ARR2=0
 START=0; POS=(); ARRSPEC_1=; ARRSPEC_2=
 while [ $# -gt 0 ]; do
@@ -109,9 +110,9 @@ case "$BASS" in ""|surge|rb338) ;; *) echo "djk-instrumente: --bass '$BASS' inva
 if [ "$ARR1$ARR2" != 00 ] && [ -n "$MELODIE$BASS" ]; then
   echo "djk-instrumente: --arr1/--arr2 are production slots only; --bass and --melodie belong to the DJ instruments (separate call)" >&2; exit 2
 fi
-RB338_VST3="$HOME/.local/lib/cypherdj/vst3/rb338.vst3"
+RB338_VST3=$(orte_bundle rb338.vst3); RB338_VST3=${RB338_VST3:-$HOME/.local/lib/cypherdj/vst3/rb338.vst3}   # first folder of the list that has it
 if [ "$BASS" = rb338 ] && [ ! -d "$RB338_VST3" ]; then echo "djk-instrumente: rb338 missing (djk/instruments/install.sh)" >&2; exit 2; fi
-BAUKASTEN_VST3="$HOME/.local/lib/cypherdj/vst3/baukasten.vst3"
+BAUKASTEN_VST3=$(orte_bundle baukasten.vst3); BAUKASTEN_VST3=${BAUKASTEN_VST3:-$HOME/.local/lib/cypherdj/vst3/baukasten.vst3}
 if [ "$MELODIE" = baukasten ] && [ ! -d "$BAUKASTEN_VST3" ]; then echo "djk-instrumente: baukasten missing (djk/instruments/install.sh baukasten)" >&2; exit 2; fi
 FLUEGEL_SFZ="$HOME/.config/cypherdj/instrumente/grand/grand.sfz"
 case "$I" in "") SFX="";; [a-i]) SFX="-$I";; *) echo "djk-instrumente: instance '$I' invalid, use a..i or empty" >&2; exit 2;; esac

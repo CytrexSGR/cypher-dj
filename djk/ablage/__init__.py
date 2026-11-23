@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 TABELLE_PFAD = Path(__file__).resolve().parents[1] / "config" / "ablage.json"
+REPO = Path(__file__).resolve().parents[2]   # {REPO}: the repo root (package: /opt/cypher-dj), read-only in the package
 _tabelle: dict | None = None
 _gewarnt: set[str] = set()
 
@@ -43,9 +44,9 @@ def heim(env=None) -> Path:
     return Path(t)
 
 
-def _fuelle(vorlage: str, env) -> str:
+def _fuelle(vorlage: str, env, repo=None) -> str:
     home = _home(env)
-    out = vorlage.replace("{HOME}", home).replace("{KONFIG}", f"{home}/.config/cypherdj")
+    out = vorlage.replace("{HOME}", home).replace("{KONFIG}", f"{home}/.config/cypherdj").replace("{REPO}", str(repo or REPO))
     if "{HEIM}" in out:
         out = out.replace("{HEIM}", str(heim(env)))
     return out
@@ -55,11 +56,11 @@ def arten(tabelle=None) -> list[str]:
     return list((tabelle or _lade())["arten"])
 
 
-def orte(art: str, env=None, tabelle=None) -> dict:
+def orte(art: str, env=None, tabelle=None, repo=None) -> dict:
     z = (tabelle or _lade())["arten"].get(art)
     if z is None:
         raise KeyError(f"unknown storage kind: {art}")
-    return {"alt": _fuelle(z["alt"], env), "neu": _fuelle(z["neu"], env), "env": z["env"], "kern": z["kern"]}
+    return {"alt": _fuelle(z["alt"], env, repo), "neu": _fuelle(z["neu"], env, repo), "env": z["env"], "kern": z["kern"]}
 
 
 def _echter_ordner(p: str) -> bool:
@@ -73,9 +74,9 @@ def _nicht_leer(p: str) -> bool:
         return False
 
 
-def ordner(art: str, env=None, tabelle=None) -> Path:
+def ordner(art: str, env=None, tabelle=None, repo=None) -> Path:
     t = tabelle or _lade()
-    o = orte(art, env, t)
+    o = orte(art, env, t, repo)
     e = _env(env).get(o["env"] or "", "") if o["env"] else ""
     if e != "":
         return Path(e)

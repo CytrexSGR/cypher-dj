@@ -99,8 +99,8 @@ export interface ServerOptionen {
   busRing?: string;  // GET /analyse/live: audio ring, default <shmOrdner>/bus
   wirtOrdner?: string;  // Studio S6: Ordner der Wirt-Sockets (Vorgabe /dev/shm/cypherdj[-i])
   baukastenOrdner?: string;  // Baukasten S2: Ordner der Graphen baukasten-<gruppe>.json (Vorgabe ~/.config/cypherdj[-i])
-  sammlungen?: string;   // Sets: Ordner, Vorgabe <REPO>/bibliothek/sets
-  musterBibliothek?: string;   // S2b: eigene Strudel-Muster, Vorgabe <REPO>/bibliothek/muster
+  sammlungen?: string;   // Sets: folder, default from the storage table (kind sammlungen)
+  musterBibliothek?: string;   // S2b: eigene Strudel-Muster, default from the storage table (kind muster)
   musterSets?: string;         // S2b: Muster-Quellen track.mjs und Dirigent-Blöcke, Vorgabe <REPO>/sets
   musterStarter?: string;      // Starter patterns (read-only), default <REPO>/djk/starter/muster; '' = none (tests)
   loopWerkzeug?: ImportOptionen['werkzeug'];   // Tests: Attrappen vor ffmpeg/rubberband des Loop-Imports (S6)

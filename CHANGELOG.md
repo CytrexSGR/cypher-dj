@@ -3,6 +3,36 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-23, nineteenth update (0.3.0 beta)
+
+**Package for Ubuntu 24.04**
+- cypher-dj comes as a `.deb` for Ubuntu 24.04 (x86_64), attached to the release. `sudo apt install ./cypher-dj_0.3.0_amd64.deb`
+  pulls the system packages it needs; no compiler, Rust or Node.js install is needed. It brings its own Node.js 22, a
+  trimmed Strudel tree (2.4 MB), the own VST3 instruments and effects prebuilt, and the two helpers the starter material
+  needs.
+- One command, `cypher-dj`: `start` (real output on the default sink, Strudel, instruments), `stop`, `status`, `demo`
+  (opens the starter project and plays it) and `mcp` (prints the one JSON line that registers the 100 agent tools in an
+  MCP client).
+- The program lives read-only in `/opt/cypher-dj`; everything the studio writes goes to the user's folders. Removing the
+  package leaves them untouched.
+- Checked on a fresh Ubuntu 24.04 machine with the compilers made unusable: install in under a minute, demo playing,
+  Cypher Modular instrument and RB-338 sounding, fourteen write paths through the agent tools without a write into the
+  program folder, 100 tools over MCP. The binaries are built for any x86-64 CPU with SSE4.2 (no AVX-512).
+- Surge XT is not in the package. Without it the melody channel plays the Cypher Modular instrument and the bass channel
+  the RB-338.
+
+**Places the studio writes to**
+- The track library, the collections, the pattern library and the arrangement journal now follow the storage table like
+  the other user folders, so they no longer need to live inside the source tree. Existing folders keep their place.
+- Node.js, Strudel and the VST3 folder are found from the environment if set, else from the program's own location.
+
+**Loop library**
+- Loops that hold only digital silence are marked "silent" in the library and in the hand tool `loops`.
+
+**Docs**
+- INSTALL.md has a section "From the package" and the NodeSource setup for building from source as one command.
+- README names four views and the loop lane strip.
+
 ## 2026-11-22, eighteenth update
 
 **Loop deck pop-up**

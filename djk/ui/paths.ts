@@ -7,15 +7,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { strudelOrdner } from '../contract/orte.ts';
 
 export const HIER = path.dirname(fileURLToPath(import.meta.url));
 export const OEFFENTLICH = path.join(HIER, 'public');
 export const REPO = path.resolve(HIER, '..', '..');
 export const PORT_BASIS = { http: 47300, kern: 47100, abo: 47150, leitstandWs: 47200 } as const;
 export const REPO_PFADE = {
-  bestand: path.join(REPO, 'bestand'),
-  sammlungen: path.join(REPO, 'bibliothek', 'sets'),
-  musterBibliothek: path.join(REPO, 'bibliothek', 'muster'),
   musterSets: path.join(REPO, 'sets'),
   musterStarter: path.join(REPO, 'djk', 'starter', 'muster'),
   werkstatt: path.join(REPO, 'djk', 'workshop'),
@@ -58,7 +56,7 @@ export function geraeteDatei(i: string = instanz()): string { return path.join(o
 // S19 (MIDI learn): the controller folder of the kern (~/.config/cypherdj[-<i>]/controller, core/src/config.cpp standard_konfig_pfad); lernen.json lives there.
 export function controllerOrdner(i: string = instanz()): string { return path.join(os.homedir(), '.config', i ? `cypherdj-${i}` : 'cypherdj', 'controller'); }
 export function eingangsKantenDatei(i: string = instanz()): string { return path.join(shmOrdner(i), 'eingaenge-kanten'); }
-export function strudelPakete(): string { return process.env.STRUDEL_PAKETE ?? path.join(os.homedir(), 'strudel', 'packages'); }
+export function strudelPakete(): string { return process.env.STRUDEL_PAKETE ?? path.join(strudelOrdner(), 'packages'); }
 // Bisher in loops.ts, wave_cache.ts, working_inventory.ts; dort bleiben sie als Re-Export (gleiche Signatur, gleiche Tests).
 export function loopOrdnerVorgabe(i: string): string { return i ? `/dev/shm/cypherdj-${i}/loops` : ablageOrdner('loops'); }
 // Cache je Instanz (S5-Review B4): Prüfinstanzen nie im Cache des Betriebs.
@@ -76,10 +74,10 @@ export function arbeitsbestandVorgabe(i: string): string {
 export function renderProgramm(): string { return process.env.CYPHERDJ_RENDER || path.join(REPO, 'djk', 'core', 'build', 'cypherdj-render'); }
 
 // ---- Storage table (djk/config/ablage.json), also read by the Python package djk/ablage; both must give the same paths. ----
-export type AblageArt = 'projekte' | 'module' | 'sampler' | 'presets' | 'klaenge' | 'kollektionen' | 'raster' | 'hotcues' | 'kits' | 'loops' | 'geraete' | 'loopsets';
+export type AblageArt = 'projekte' | 'module' | 'sampler' | 'presets' | 'klaenge' | 'kollektionen' | 'raster' | 'hotcues' | 'kits' | 'loops' | 'geraete' | 'loopsets' | 'bestand' | 'sammlungen' | 'muster' | 'journal';
 export type FestName = 'mediathek' | 'analyse' | 'bibliothek_konfig' | 'surge_werk' | 'plugin_index' | 'umgebung' | 'pruefen' | 'quellen' | 'referenzen';
 type AblageTabelle = { vorgabe: string; arten: Record<string, { alt: string; neu: string; env: string | null; kern: boolean }>; fest: Record<string, { pfad: string; env: string | null }> };
-export type AblageOptionen = { tabelle?: AblageTabelle; log?: (e: { typ: 'ablage_beide'; art: string; alt: string; neu: string }) => void; gewarnt?: Set<string> };
+export type AblageOptionen = { tabelle?: AblageTabelle; log?: (e: { typ: 'ablage_beide'; art: string; alt: string; neu: string }) => void; gewarnt?: Set<string>; repo?: string };
 let tabelleGelesen: AblageTabelle | null = null;
 const tabelle = (): AblageTabelle => (tabelleGelesen ??= JSON.parse(fs.readFileSync(path.join(REPO, 'djk', 'config', 'ablage.json'), 'utf8')) as AblageTabelle);
 const gewarntVorgabe = new Set<string>();
@@ -94,15 +92,15 @@ export function heimOrdner(): string {
   if (e === '' || !e.startsWith('/')) throw new Error('CYPHERDJ_HEIM must be an absolute path');
   return e;
 }
-const fuelle = (vorlage: string): string => {
+const fuelle = (vorlage: string, repo: string = REPO): string => {
   const home = os.homedir();
-  return vorlage.replace(/\{HOME\}/g, home).replace(/\{KONFIG\}/g, `${home}/.config/cypherdj`).replace(/\{HEIM\}/g, () => heimOrdner());
+  return vorlage.replace(/\{HOME\}/g, home).replace(/\{REPO\}/g, () => repo).replace(/\{KONFIG\}/g, `${home}/.config/cypherdj`).replace(/\{HEIM\}/g, () => heimOrdner());
 };
 export function ablageArten(): AblageArt[] { return Object.keys(tabelle().arten) as AblageArt[]; }
 export function ablageOrte(art: AblageArt, o: AblageOptionen = {}): { alt: string; neu: string; env: string | null; kern: boolean } {
   const z = (o.tabelle ?? tabelle()).arten[art];
   if (!z) throw new Error(`unknown storage kind: ${art}`);
-  return { alt: fuelle(z.alt), neu: fuelle(z.neu), env: z.env, kern: z.kern };
+  return { alt: fuelle(z.alt, o.repo), neu: fuelle(z.neu, o.repo), env: z.env, kern: z.kern };
 }
 const echterOrdner = (p: string): boolean => { try { return fs.lstatSync(p).isDirectory(); } catch { return false; } };
 const linkOhneZiel = (p: string): boolean => { try { return fs.lstatSync(p).isSymbolicLink() && !fs.existsSync(p); } catch { return false; } };

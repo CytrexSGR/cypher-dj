@@ -329,7 +329,7 @@ The lists above are the headline. Also in there:
 - **Extra pattern streams**: five more channels (erz/5 to erz/7 and the two loop box pads) can each carry a Cypher
   Modular graph, started with `djk-start --strudel --bk-stroeme`; they can be recorded onto production tracks. The
   graph knobs can be learned onto a MIDI controller, and a project remembers which graph sits on which channel
-- **The agent's side**: 96 tools in the MCP server. Besides playing it can measure a deck behind its
+- **The agent's side**: 100 tools in the MCP server. Besides playing it can measure a deck behind its
   closed fader, read the levels of the last seconds, wait on the master clock for a number of bars, run
   automation tracks and ramps over bars, and cancel everything it started. When it has an idea while the
   human plays, it proposes; the human accepts or rejects with one key

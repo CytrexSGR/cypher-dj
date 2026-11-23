@@ -27,12 +27,24 @@ VERSION = 1
 STANDARD_INDEX = "~/.local/state/cypherdj/plugins/index.json"
 STANDARD_PFADE = ["~/.vst3", "/usr/lib/vst3", "/usr/local/lib/vst3", "~/.lv2", "/usr/lib/lv2", "/usr/local/lib/lv2"]
 EIGENE_PFADE = ["~/.local/lib/cypherdj/vst3"]
+WURZEL = Path(__file__).resolve().parents[3]   # the folder above djk/ (a checkout, or /opt/cypher-dj)
 STILLE_ZEIT = 10.0   # seconds without a single output byte
 GESAMT_ZEIT = 180.0  # hard cap for one bundle
 SUCHTIEFE = 3
 MEHRKLASSEN_TEXT = ("Carla 2.5.8 loads only the first plugin of this bundle; "
                     "use the LV2 version if there is one")
 ENDE = "carla-discovery::end::"
+
+
+def eigene_pfade():
+    """The own VST3 folders (spec D6): ~/.local/lib/cypherdj/vst3, the elements of CYPHERDJ_VST3_PFADE (colon list, empty
+    elements ignored), <root>/lib/vst3 when it exists. Twin of djk/start/orte.sh and djk/contract/orte.ts."""
+    liste = [os.path.expanduser(EIGENE_PFADE[0])]
+    liste += [p for p in os.environ.get("CYPHERDJ_VST3_PFADE", "").split(":") if p]
+    paket = WURZEL / "lib" / "vst3"
+    if paket.is_dir():
+        liste.append(str(paket))
+    return liste
 
 
 def discovery_programm():
@@ -220,8 +232,8 @@ def art_von(block):
 
 def ist_eigen(block, buendel):
     """Own plugin: maker cypher-dj, or living in the own bundle folder. A third party named Cypher... is not."""
-    eigener = os.path.realpath(os.path.expanduser(EIGENE_PFADE[0])) + os.sep
-    return block.get("maker", "") == "cypher-dj" or os.path.realpath(buendel).startswith(eigener)
+    echt = os.path.realpath(buendel)
+    return block.get("maker", "") == "cypher-dj" or any(echt.startswith(os.path.realpath(p) + os.sep) for p in eigene_pfade())
 
 
 def eintrag_aus_block(format_, buendel, block, status="ok", grund=None, text=None):
@@ -355,7 +367,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     wurzeln = list(a.pfade or STANDARD_PFADE)
     if a.mit_eigenen:
-        wurzeln += EIGENE_PFADE
+        wurzeln += eigene_pfade()
     try:
         bericht = scanne(wurzeln, os.path.expanduser(a.index), a.mit_eigenen)
     except DiscoveryFehlt as exc:

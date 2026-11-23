@@ -14,7 +14,7 @@ const schreibe = (name: string, text: string) => { const p = path.join(tmp, name
 test('Vorgaben aus dem Schema von 02 sind die Werte aus §2.1', () => {
   assert.deepEqual(VORGABEN, {
     version: 1, ws_port: 47200, abo_port: 47110, set_basis_bpm: 128, autonomie_start: 1,
-    bestand: '~/cypher-dj/bestand', sets: '~/cypher-dj/sets/djk', rechner_socket: '$XDG_RUNTIME_DIR/cypherdj/rechner.sock',
+    bestand: '', sets: '', rechner_socket: '$XDG_RUNTIME_DIR/cypherdj/rechner.sock',
     zug_vorlauf_takte: 12, antwort_frist_takte: 4, nachrender_ruhe_takte: 16, grenzen_tief_verriegeln: false, journal: 'voll',
   });
 });
@@ -78,8 +78,8 @@ test('test instance with the default sets gets the shm path, an explicit sets st
   assert.equal(ladeKonfig({ pfad: eigen, env: { ...env, CYPHERDJ_INSTANZ: 'b' } }).sets_pfad, '/tmp/meine-sets');
   const tilde = schreibe('s-tilde.toml', 'version = 1\nsets = "~/andere/sets"\n');
   assert.equal(ladeKonfig({ pfad: tilde, env: { ...env, CYPHERDJ_INSTANZ: 'b' } }).sets_pfad, path.join(heim, 'andere/sets'));
-  // production (no instance): the default stays
-  assert.equal(ladeKonfig({ pfad: ohne, env }).sets_pfad, path.join(heim, 'cypher-dj/sets/djk'));
-  assert.equal(ladeKonfig({ pfad: TOML, env }).sets_pfad, path.join(heim, 'cypher-dj/sets/djk'));
+  // production (no instance): the default is empty, the leitstand fills it from the storage table (kind journal)
+  assert.equal(ladeKonfig({ pfad: ohne, env }).sets_pfad, '');
+  assert.equal(ladeKonfig({ pfad: TOML, env }).sets_pfad, '');
   assert.equal(ladeKonfig({ pfad: eigen, env }).sets_pfad, '/tmp/meine-sets');
 });

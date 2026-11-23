@@ -41,8 +41,7 @@ test('pfade: Instanz zur Laufzeit gelesen; ungültige Instanz wirft mit dem alte
 test('pfade: Repo-Pfade zeigen in dieses Repo (server.ts liegt in HIER)', () => {
   assert.equal(path.join(P.HIER, 'server.ts'), path.resolve(import.meta.dirname, '..', 'server.ts'));
   assert.equal(P.REPO, path.resolve(import.meta.dirname, '..', '..', '..'));
-  assert.deepEqual(P.REPO_PFADE, { bestand: path.join(P.REPO, 'bestand'), sammlungen: path.join(P.REPO, 'bibliothek', 'sets'),
-    musterBibliothek: path.join(P.REPO, 'bibliothek', 'muster'), musterSets: path.join(P.REPO, 'sets'), musterStarter: path.join(P.REPO, 'djk', 'starter', 'muster'),
+  assert.deepEqual(P.REPO_PFADE, { musterSets: path.join(P.REPO, 'sets'), musterStarter: path.join(P.REPO, 'djk', 'starter', 'muster'),
     werkstatt: path.join(P.REPO, 'djk', 'workshop'),
     djkMuster: path.join(P.REPO, 'djk', 'generator', 'djk-muster'), djkKlang: path.join(P.REPO, 'djk', 'hosts', 'carla', 'djk-klang'),
     surgeBereiche: path.join(P.REPO, 'djk', 'hosts', 'carla', 'surge_bereiche.json'), welleSkript: path.join(P.HIER, 'waveform.py') });
@@ -64,8 +63,9 @@ const mitEnv = (kv, f) => { const alt = {}; for (const k of Object.keys(kv)) { a
   try { return f(); } finally { for (const k of Object.keys(alt)) { if (alt[k] === undefined) delete process.env[k]; else process.env[k] = alt[k]; } } };
 const ALT = (H) => ({ projekte: `${H}/cypherdj-projekte`, module: `${H}/.config/cypherdj/module`, sampler: `${H}/.config/cypherdj/sampler`, presets: `${H}/.config/cypherdj/presets`,
   klaenge: `${H}/.config/cypherdj/klaenge`, kollektionen: `${H}/.config/cypherdj/kollektionen`, raster: `${H}/.config/cypherdj/raster`, hotcues: `${H}/.config/cypherdj/hotcues`,
-  kits: `${H}/.config/cypherdj/kits`, loops: `${H}/.config/cypherdj/loops`, geraete: `${H}/.config/cypherdj/baukasten`, loopsets: `${H}/.config/cypherdj/loopsets` });
-const ENVS = ['CYPHERDJ_HEIM', 'CYPHERDJ_MODULE', 'CYPHERDJ_SAMPLER', 'CYPHERDJ_KLAENGE', 'CYPHERDJ_KIT_ORDNER', 'CYPHERDJ_BK_ORDNER', 'CYPHERDJ_LOOPSETS'];
+  kits: `${H}/.config/cypherdj/kits`, loops: `${H}/.config/cypherdj/loops`, geraete: `${H}/.config/cypherdj/baukasten`, loopsets: `${H}/.config/cypherdj/loopsets`,
+  bestand: `${P.REPO}/bestand`, sammlungen: `${P.REPO}/bibliothek/sets`, muster: `${P.REPO}/bibliothek/muster`, journal: `${P.REPO}/sets/djk` });
+const ENVS = ['CYPHERDJ_HEIM', 'CYPHERDJ_MODULE', 'CYPHERDJ_SAMPLER', 'CYPHERDJ_KLAENGE', 'CYPHERDJ_KIT_ORDNER', 'CYPHERDJ_BK_ORDNER', 'CYPHERDJ_LOOPSETS', 'CYPHERDJ_BESTAND', 'CYPHERDJ_SAMMLUNGEN', 'CYPHERDJ_MUSTER', 'CYPHERDJ_JOURNAL'];
 const ohneEnv = Object.fromEntries(ENVS.map((k) => [k, undefined]));
 const tmpHome = () => fs.mkdtempSync(path.join(os.tmpdir(), 'ablage-home-'));
 const neuTabelle = () => ({ ...JSON.parse(fs.readFileSync(path.join(P.REPO, 'djk', 'config', 'ablage.json'), 'utf8')), vorgabe: 'neu' });
@@ -75,7 +75,7 @@ test('ablage: every kind resolves to its old place while vorgabe is alt', () => 
     const altTabelle = { ...neuTabelle(), vorgabe: 'alt' };
     const got = Object.fromEntries(P.ablageArten().map((a) => [a, P.ablageOrdner(a, { tabelle: altTabelle })]));
     assert.deepEqual(got, ALT(H));
-    assert.equal(P.ablageArten().length, 12);
+    assert.equal(P.ablageArten().length, 16);
   });
 });
 
@@ -208,9 +208,9 @@ test('ablage: vorgabe neu: production defaults are the new places, core kinds st
     const h = tmpHome();                                                                    // fresh install: nothing exists yet
     mitEnv({ HOME: h }, () => {
       for (const a of P.ablageArten()) {
-        const o = P.ablageOrte(a);
-        assert.equal(P.ablageOrdner(a), o.kern ? o.alt : o.neu, a);
-        assert.ok(o.neu.startsWith(path.join(h, 'cypherdj', 'werke') + '/'), a);
+        const o = P.ablageOrte(a, { repo: h });   // {REPO} points at the fresh home: the checkout's own folders are not part of this case
+        assert.equal(P.ablageOrdner(a, { repo: h }), o.kern ? o.alt : o.neu, a);
+        assert.ok(o.neu.startsWith(path.join(h, 'cypherdj', a === 'journal' ? 'journal' : 'werke')), a);
       }
       assert.equal(P.ablageOrdner('projekte'), path.join(h, 'cypherdj/werke/projekte'));
       assert.equal(P.ablageOrdner('raster'), path.join(h, 'cypherdj/werke/korrekturen/raster'));
@@ -225,13 +225,15 @@ test('ablage: an already moved home (old places are links) resolves every kind t
   mitEnv({ ...ohneEnv, CYPHERDJ_INSTANZ: undefined }, () => {
     const h = tmpHome();
     mitEnv({ HOME: h }, () => {
-      for (const a of P.ablageArten()) {                                                    // state after the move: neu is real, alt is a link
+      // The four kinds with a place inside the checkout are left out: their old place is the repo root, never written by a test (storage_inventory.test.mjs covers them).
+      const arten = P.ablageArten().filter((a) => !['bestand', 'sammlungen', 'muster', 'journal'].includes(a));
+      for (const a of arten) {                                                              // state after the move: neu is real, alt is a link
         const o = P.ablageOrte(a);
         fs.mkdirSync(o.neu, { recursive: true }); fs.writeFileSync(path.join(o.neu, 'marker'), a);
         fs.mkdirSync(path.dirname(o.alt), { recursive: true }); fs.symlinkSync(o.neu, o.alt);
       }
       const penv = { PATH: process.env.PATH, HOME: h, PYTHONPATH: path.join(P.REPO, 'djk'), PYTHONSAFEPATH: '1' };
-      for (const a of P.ablageArten()) {
+      for (const a of arten) {
         const o = P.ablageOrte(a);
         const vorher = fs.realpathSync(o.alt);                                              // what the old default reached
         assert.equal(fs.realpathSync(P.ablageOrdner(a)), vorher, `ts ${a}`);

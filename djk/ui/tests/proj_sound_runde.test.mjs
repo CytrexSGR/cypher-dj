@@ -9,6 +9,9 @@ import { stammbaumNachWahl } from '../project/sound_runde.ts';
 import { pruefeStammbaum, SKALA, MERKMALE, ZIELE, MAX_MESSUNGEN, MAX_MESSUNGEN_LEER, UEBERSCHUSS } from '../project/sound_runde_contract.ts';
 import { wirkung } from '../project/sound_runde.ts';
 import { aufbau } from './support/output_setup.mjs';
+import path from 'node:path';
+// Hermetic graphs: the shipped demo graphs of the repo, not the owner's ~/cypherdj/werke/geraete (the public export has no such folder).
+process.env.CYPHERDJ_BK_ORDNER = path.resolve(import.meta.dirname, '..', '..', 'instruments', 'modular_dsp', 'demos');
 
 const NULL = { hell: 0, sub: 0, hoehen: 0, bewegung: 0, fuelle: 0, breite: 0, punch: 0, pegel: 0 };
 const tabelle = (n) => Array.from({ length: n }, (_, i) => ({ name: `k${i + 1}`, label: ['Cutoff', 'Res', 'Env', 'Drive', 'Decay', 'Mix'][i] ?? `Knob ${i + 1}`,

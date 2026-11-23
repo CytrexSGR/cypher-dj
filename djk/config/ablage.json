@@ -12,7 +12,11 @@
     "kits":         { "alt": "{KONFIG}/kits", "neu": "{HEIM}/werke/kits", "env": "CYPHERDJ_KIT_ORDNER", "kern": true },
     "loops":        { "alt": "{KONFIG}/loops", "neu": "{HEIM}/werke/loops", "env": null, "kern": true },
     "geraete":      { "alt": "{KONFIG}/baukasten", "neu": "{HEIM}/werke/geraete", "env": "CYPHERDJ_BK_ORDNER", "kern": true },
-    "loopsets":     { "alt": "{KONFIG}/loopsets", "neu": "{HEIM}/werke/loopsets", "env": "CYPHERDJ_LOOPSETS", "kern": false }
+    "loopsets":     { "alt": "{KONFIG}/loopsets", "neu": "{HEIM}/werke/loopsets", "env": "CYPHERDJ_LOOPSETS", "kern": false },
+    "bestand":      { "alt": "{REPO}/bestand", "neu": "{HEIM}/werke/bestand", "env": "CYPHERDJ_BESTAND", "kern": false },
+    "sammlungen":   { "alt": "{REPO}/bibliothek/sets", "neu": "{HEIM}/werke/sets", "env": "CYPHERDJ_SAMMLUNGEN", "kern": false },
+    "muster":       { "alt": "{REPO}/bibliothek/muster", "neu": "{HEIM}/werke/muster", "env": "CYPHERDJ_MUSTER", "kern": false },
+    "journal":      { "alt": "{REPO}/sets/djk", "neu": "{HEIM}/journal", "env": "CYPHERDJ_JOURNAL", "kern": false }
   },
   "fest": {
     "mediathek":         { "pfad": "{HOME}/.local/share/cypherdj/mediathek/mediathek.sqlite", "env": "CYPHERDJ_MEDIATHEK" },

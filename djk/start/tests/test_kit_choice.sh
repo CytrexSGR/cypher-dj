@@ -82,7 +82,7 @@ done
 BLOCK=$(sed -n '/^    ZIEL=""$/,/^    UNITS+=("\$U")$/p' "$START/djk-start")
 [ -n "$BLOCK" ] || { echo "FEHL erzeuger block not found in djk-start"; exit 1; }
 erzeuger() {  # $1 HOME, $2 kit folder as djk-start would hold it (KIT_ORDNER, may be empty), $3 INSTR
-  env -i PATH="$PATH" HOME="$1" DJK=/D KIT_ORDNER="$2" INSTR="$3" SFX="" I="" P_KERN=47100 P_ERZ=47300 KIT=techno KIT2=battery KIT3=battery \
+  env -i PATH="$PATH" HOME="$1" DJK=/D NODE=/usr/bin/node STRUDEL_ORDNER="$1/strudel" KIT_ORDNER="$2" INSTR="$3" SFX="" I="" P_KERN=47100 P_ERZ=47300 KIT=techno KIT2=battery KIT3=battery \
     KITS="${2:-$1/.config/cypherdj/kits}" bash -c '
     systemd-run() { echo "RUN $*"; }; mkdir() { :; }; warte() { :; }; abbruch() { echo "ABBRUCH $1"; exit 5; }; w() { echo "$1"; }
     UNITS=()

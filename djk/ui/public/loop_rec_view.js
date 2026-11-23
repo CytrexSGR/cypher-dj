@@ -122,6 +122,10 @@ export async function ladeLoops() {
       const n = document.createElement('span'); n.className = 'name'; n.textContent = l.name;
       const g = document.createElement('span'); g.className = 'grund'; g.textContent = l.grund;
       z.append(n, g);
+    } else if (l.still) {   // loads, but the file is digital silence: say it before it lands in a cell
+      tr.classList.add('still'); tr.title = 'Silent: this loop holds no sound';
+      const g = document.createElement('span'); g.className = 'grund'; g.textContent = 'silent';
+      tr.cells[0].append(' ', g);
     }
     const td = document.createElement('td');
     td.className = 'aktion';

@@ -13,7 +13,9 @@ import { specProjekt } from './support/project.mjs';
 
 const quelle = (p) => fs.readFileSync(path.join(import.meta.dirname, '..', p), 'utf8');
 // the session code lives in session.ts and the files split from it (sitzung_*.ts): a fragment check reads them all
-const sitzungDateien = () => fs.readdirSync(path.join(import.meta.dirname, '..', 'areas/proj')).filter((n) => /^sitzung.*\.ts$/.test(n)).sort();
+// the stem of the session files taken from a path literal, so the public export's file renaming (sitzung -> session) reaches it
+const SITZUNG = path.basename('areas/proj/session.ts', '.ts');
+const sitzungDateien = () => fs.readdirSync(path.join(import.meta.dirname, '..', 'areas/proj')).filter((n) => n.startsWith(SITZUNG) && n.endsWith('.ts')).sort();
 const sitzungQuelle = () => sitzungDateien().map((n) => quelle(`areas/proj/${n}`)).join('\n');
 
 test('B5 mapping.ts: der Rückweg klemmt mit FADER_MIN/FADER_MAX, kein Literal; Kopfkommentar nennt das Spurfeld von', () => {
@@ -27,7 +29,7 @@ test('B5 mapping.ts: der Rückweg klemmt mit FADER_MIN/FADER_MAX, kein Literal; 
 
 test('B5 session.ts: ein schlaf, Kopfkommentar mit rev-Nachprüfung und kein_kern; core_path.ts: Quelle nur aus history.ts', () => {
   const s = quelle('areas/proj/session.ts');
-  assert.ok(sitzungDateien().includes('session.ts') && sitzungQuelle().includes('class ProjSitzung'), 'the session files are found');
+  assert.ok(sitzungDateien().includes(`${SITZUNG}.ts`) && sitzungQuelle().includes('class ProjSitzung'), 'the session files are found');
   assert.ok(!/schlafMs/.test(sitzungQuelle()), 'schlafMs neben schlaf');
   assert.ok(/rev noch\s*\n?\/\/ einmal prüfen/.test(s) && /kein_kern/.test(s.split('\nimport')[0]), 'Kopfkommentar: Reihenfolge einer Änderung nach Spec 6.30');
   assert.ok(!/export type Quelle =/.test(quelle('areas/proj/core_path.ts')), 'zweiter Typ Quelle in core_path.ts');

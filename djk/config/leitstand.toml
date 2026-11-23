@@ -6,8 +6,10 @@ ws_port = 47200
 abo_port = 47110
 set_basis_bpm = 128.0
 autonomie_start = 1
-bestand = "~/cypher-dj/bestand"
-sets = "~/cypher-dj/sets/djk"
+# bestand and sets come from the storage table (djk/config/ablage.json, kinds bestand and journal); djk-start passes them to the leitstand.
+# Set a path here only to override the table.
+bestand = ""
+sets = ""
 rechner_socket = "$XDG_RUNTIME_DIR/cypherdj/rechner.sock"
 zug_vorlauf_takte = 12
 antwort_frist_takte = 4

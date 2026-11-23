@@ -2,6 +2,7 @@
 // Scheibe 21: Annahme (Verriegelung, Autonomie, Vorschläge, Kopplung), Hörschein-Register, Tasten, Abgleich nach Neustart.
 // Aufruf: node src/conductor.ts [--konfig <pfad>] [--kern-port <n>] [--set-id JJJJ-MM-TT_hhmm]
 //                               [--ki-spur deck/1,pad/1] [--kern-konfig <kern.toml>] [--journal voll|schlank]
+//                               [--sets-ordner <dir>] [--bestand-ordner <dir>]
 // Umgebung: CYPHERDJ_INSTANZ (ROADMAP Z2), LEITSTAND_MUTATION (nur Prüfung: autonomie_aus, kopplung_aus,
 // wiederaufnahme_aus). Ohne --set-id setzt der Leitstand ein laufendes Set fort (src/resume.ts).
 // Erste Zeile auf stdout beginnt mit "leitstand:" (bereit).
@@ -18,6 +19,7 @@ import { Hub, RpcFehler, type Client, type Rolle } from './hub.ts';
 import { Journal, journalZeilen, setIdAus, type JournalZeile, type Von } from './journal.ts';
 import { KernAnbindung, type KernZustand } from './core.ts';
 import { ladeKonfig, type Laufzeit } from './config.ts';
+import { ablageOrdner } from '../../ui/paths.ts';
 import { Annahme } from './intake.ts';
 import { mitAutonomie } from './autonomy.ts';
 import type { Hoerschein } from './listening_slips.ts';
@@ -56,6 +58,8 @@ export interface LeitstandOptionen {
   env?: NodeJS.ProcessEnv;
   kiSpur?: string[];      // Scheibe 21: Kanäle der KI-Spur (§4.7 /k/ki/spur), Vorgabe keiner
   kernKonfig?: string;    // Scheibe 21: kern.toml für hoerbar_db, tief_offen_db, max_stretcher (§2.1)
+  setsOrdner?: string;    // journal folder (storage table kind journal): wins over the config key sets; djk-start passes it
+  bestandOrdner?: string; // track library folder (storage table kind bestand): wins over the config key bestand; djk-start passes it
   journal?: JournalModus; // lean operating journal: wins over the config key journal; absent in both = voll (ereignisse.ts journalWuerdig)
 }
 
@@ -90,7 +94,14 @@ export class Leitstand {
   private readonly wartendeQuittungen = new Map<string, { erfuellt: (f: Felder) => void; verworfen: (e: Error) => void }>();
 
   constructor(opt: LeitstandOptionen) {
-    this.lz = ladeKonfig({ pfad: opt.konfigPfad, kernPort: opt.kernPort, env: opt.env });
+    const geladen = ladeKonfig({ pfad: opt.konfigPfad, kernPort: opt.kernPort, env: opt.env });
+    // Folders: option, else the path written in the config, else the storage table. A test instance with the default sets keeps its shm
+    // folder (ladeKonfig), the table is only asked for the production instance.
+    this.lz = {
+      ...geladen,
+      sets_pfad: opt.setsOrdner ?? (geladen.sets_pfad === '' ? ablageOrdner('journal') : geladen.sets_pfad),
+      bestand_pfad: opt.bestandOrdner ?? (geladen.bestand_pfad === '' ? ablageOrdner('bestand') : geladen.bestand_pfad),
+    };
     // the config key journal arrives with its own task; until then absent = voll
     this.journalModus = journalModus(opt.journal, this.lz.konfig.journal);
     this.journal = new Journal(this.lz.sets_pfad, opt.setId ?? fortsetzbar(this.lz.sets_pfad) ?? setIdAus(new Date()));
@@ -424,8 +435,8 @@ export class Leitstand {
     });
   }
 
-  // rpc bestand (§10, §13.4): liest ~/cypher-dj/bestand/index.sqlite (Werkstatt-Ausgabe, Pfad aus leitstand.toml
-  // Schlüssel bestand) und liefert Einträge in der Form der Kiste (§6.5) als Kurz-Fingerabdruck je Material.
+  // rpc bestand (§10, §13.4): liest <bestand>/index.sqlite (Werkstatt-Ausgabe, Ordner aus --bestand-ordner, dem
+  // Schlüssel bestand oder der Ablagetabelle) und liefert Einträge in der Form der Kiste (§6.5) als Kurz-Fingerabdruck je Material.
   private bestand(p: Record<string, unknown>): Record<string, unknown> {
     const chk = pruefeBestand(p);
     if (!chk.ok) throw new RpcFehler('form', `bestand: ${chk.fehler}`);
@@ -576,7 +587,7 @@ async function main(): Promise<void> {
   const { values } = parseArgs({
     options: {
       konfig: { type: 'string' }, 'kern-port': { type: 'string' }, 'set-id': { type: 'string' },
-      'ki-spur': { type: 'string' }, 'kern-konfig': { type: 'string' }, journal: { type: 'string' },
+      'ki-spur': { type: 'string' }, 'kern-konfig': { type: 'string' }, journal: { type: 'string' }, 'sets-ordner': { type: 'string' }, 'bestand-ordner': { type: 'string' },
     },
   });
   const modus = values.journal === undefined ? undefined : journalModus(values.journal, undefined);
@@ -586,6 +597,8 @@ async function main(): Promise<void> {
     setId: values['set-id'],
     kiSpur: values['ki-spur'] ? values['ki-spur'].split(',').filter(Boolean) : [],
     kernKonfig: values['kern-konfig'],
+    setsOrdner: values['sets-ordner'],
+    bestandOrdner: values['bestand-ordner'],
     journal: modus,
   });
   await l.starte();

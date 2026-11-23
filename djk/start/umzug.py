@@ -759,7 +759,8 @@ def einrichten(env=None) -> list[dict]:
         elif z == "nur_neu":
             # A mirrored werke/ folder: the link keeps a later run from creating a real old folder next to it. An empty
             # new folder of a non-core kind is the state this command itself leaves on a fresh install: nothing to do.
-            if o["kern"] or _nicht_leer(neu):
+            # A link inside the repo root is never laid: in the package the root is read-only.
+            if (o["kern"] or _nicht_leer(neu)) and not os.path.realpath(alt).startswith(str(ablage.REPO) + os.sep):
                 _lege_link(alt, neu)
                 b["ergebnis"] = "ok"
         elif z == "beide":

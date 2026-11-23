@@ -509,7 +509,7 @@ const W: Werkzeug[] = [
       }
       return { code, j: { stroeme } };
     } },
-  { name: 'loops', description: 'Loop library: name, beats and source of every recorded loop. Use the names with box (laden) and loop_klang.',
+  { name: 'loops', description: 'Loop library: name, beats and source of every recorded loop. still true = the file is digital silence (it loads but plays nothing; do not build on it). Use the names with box (laden) and loop_klang.',
     inputSchema: { type: 'object', properties: {} }, lauf: () => http('GET', '/loops') },
   { name: 'rec', description: 'Record the Strudel generators before trim into the loop library: DRUMS (erz/1) alone, or with summe: true the sum DRUMS + BASS + MELODY (erz/1+2+3; not the master, no fader, no FX, the sum can exceed 0 dB: set gain_db of the loop deck cell). beats 1, 2, 4, 8, 16 or 32, name [a-z0-9_-]{1,32}. Starts on the next multiple of beats. Works at any steady tempo (the loop is stored at 128 BPM and plays back at the master tempo); refused with ausserhalb_bereich while a tempo ramp is running or queued, and by the core while Stop Cypher is set or when a recording overlaps.',
     inputSchema: { type: 'object', required: ['beats', 'name'], properties: { beats: { type: 'integer', enum: [1, 2, 4, 8, 16, 32] }, name: { type: 'string', pattern: '^[a-z0-9_-]{1,32}$' }, summe: { type: 'boolean', description: 'true: sum of erz/1+2+3 instead of erz/1' } } },

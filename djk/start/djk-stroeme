@@ -18,6 +18,7 @@ set -uo pipefail
 I=${CYPHERDJ_INSTANZ:-}; TROCKEN=0; KERN_PORT=""
 HIER=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
 DJK=${DJK:-$(cd "$HIER/.." && pwd)}
+. "$HIER/orte.sh"   # node binary and Strudel folder from the code's own place (package 1.0)
 while [ $# -gt 0 ]; do
   case "$1" in
     --instanz)
@@ -41,11 +42,16 @@ P_KERN=${KERN_PORT:-$(( 47100 + V ))}
 P=$(( 47160 + V + 5 ))   # P_ERZ + 5: the studio's erzeuger use P_ERZ .. P_ERZ + 2, 47170 is taken by tests/test_start.sh
 U=cypherdj-erzeuger-bk$SFX
 BASIS=/dev/shm/cypherdj$SFX/erzeuger
+STRUDEL_ORDNER=$(orte_strudel) || exit 2
+NODE=$(orte_node)
+# a unit does not inherit the caller's environment: always hand it the import path, so import and read grant name the same folder
+PAKETE_ENV=(--setenv=STRUDEL_PAKETE="${STRUDEL_PAKETE:-$STRUDEL_ORDNER/packages}")
 FS=()
 for s in "${STROEME[@]}"; do FS+=("--allow-fs-read=$BASIS$s" "--allow-fs-write=$BASIS$s"); done
 CMD=(systemd-run --user --quiet --collect --unit="$U" ${I:+--setenv=CYPHERDJ_INSTANZ=$I}
      -p Restart=always -p RestartSec=1 -p RestartPreventExitStatus=2 -p PartOf=cypherdj.target
-     /usr/bin/node --permission --allow-fs-read="$DJK" --allow-fs-read="$HOME/strudel" "${FS[@]}"
+     "${PAKETE_ENV[@]}"
+     "$NODE" --permission --allow-fs-read="$DJK" --allow-fs-read="$STRUDEL_ORDNER" "${FS[@]}"
      "$DJK/generator/generator_bk.mjs" --kern-port "$P_KERN" --abo-port "$P" --strom "$(IFS=,; echo "${STROEME[*]}")"
      --muster-basis "$BASIS" --name erzeuger-bk)
 if [ "$TROCKEN" = 1 ]; then echo "${CMD[*]}"; exit 0; fi

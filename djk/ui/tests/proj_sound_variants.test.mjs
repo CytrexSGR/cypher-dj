@@ -6,6 +6,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { aufbau } from './support/output_setup.mjs';
 import { alsAntwort } from '../areas/proj/output.ts';
+// Hermetic graphs: the shipped demo graphs of the repo, not the owner's ~/cypherdj/werke/geraete (the public export has no such folder).
+process.env.CYPHERDJ_BK_ORDNER = path.resolve(import.meta.dirname, '..', '..', 'instruments', 'modular_dsp', 'demos');
 
 const ruf = async (f) => { try { return { code: 200, body: await f() }; } catch (e) { return alsAntwort(e); } };
 const mitUmgebung = async (werte, f) => {

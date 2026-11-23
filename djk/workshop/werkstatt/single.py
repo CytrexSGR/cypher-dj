@@ -2,7 +2,7 @@
 
 Aufruf (aus djk/workshop):
   nice -n 19 ionice -c3 .venv/bin/python -m werkstatt.single --quelle DATEI [--titel T] [--bestand DIR] [--nur-analyse]
-Vorgabe fuer --bestand: $CYPHERDJ_BESTAND, sonst ~/cypher-dj/bestand.
+Default for --bestand: the storage table (kind bestand), $CYPHERDJ_BESTAND wins.
 --nur-analyse (Paket 1.13 Warp S3a): nur die Analyse in die Ablage (--bestand = Ablage), Status analysiert; keine Kopie,
 keine Fassung; Arbeitsordner a-<mid>.
 stdout: am Ende GENAU EINE JSON-Zeile {"status": "neu"|"vorhanden"|"analysiert"|"fehler", "material_id": "<16 hex>"|"",

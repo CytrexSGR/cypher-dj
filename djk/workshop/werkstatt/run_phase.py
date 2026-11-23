@@ -4,7 +4,7 @@ danach dieselbe Messung auf der neuen Fassung (am Ziel). Ohne --schreiben wird n
 
 Aufruf (aus djk/workshop):
   nice -n 19 ionice -c3 .venv/bin/python -m werkstatt.run_phase [--nur ID,ID] [--schreiben] [--bestand DIR]
-Vorgabe fuer --bestand: $CYPHERDJ_BESTAND, sonst ~/cypher-dj/bestand."""
+Default for --bestand: the storage table (kind bestand), $CYPHERDJ_BESTAND wins."""
 import argparse
 import datetime as dt
 import json

@@ -9,6 +9,8 @@ const W = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const lies = (d) => fs.readFileSync(path.join(W, d), 'utf8');
 // The folder name taken from a path that names an existing file, so the export's folder renaming rewrites it with the others (a lone 'projekt' literal escapes it).
 const PROJEKT = path.dirname('project/commands.ts');
+// the command files project/commands.ts and project/befehle_<x>.ts, built from a path literal so the public export's renaming reaches it (a regex literal escapes it)
+const BEFEHLSDATEI = new RegExp(`^${PROJEKT}/${path.basename('project/commands.ts', '.ts')}(_[a-z]+)?\\.ts$`);
 const BEREICHE = path.dirname(path.dirname('areas/proj/area.ts')) + '/';   // same for a folder prefix: a lone 'bereiche/' literal escapes the renaming
 const ts = (ordner) => fs.readdirSync(path.join(W, ordner)).filter((f) => f.endsWith('.ts')).map((f) => `${ordner}/${f}`);
 export const KLASSEN = 'BefehlFehler|AblageFehler|VerlaufFehler|DekodierFehler|PatchFehler|ProjFehler|KatalogFehler|WiedergabeFehler|WarpFehler|AusgabeFehler|FreezeFehler|StandFehler|GeraeteFehler|StemsFehler|MergeFehler|ResampleFehler';
@@ -17,7 +19,7 @@ export const S3_QUELLE = /^(AusgabeFehler|FreezeFehler|StandFehler|fehl|grund-Fe
 // Gründe einer Datei d mit Inhalt t (Muster je Ort); dazu(grund, fundstelle)
 export function gruendeAusDatei(d, t, dazu) {
   for (const m of t.matchAll(new RegExp(`new (${KLASSEN})\\(\\s*(?:\\d+\\s*,\\s*)?'([a-z_]+)'`, 'g'))) dazu(m[2], `${m[1]} ${d}`);
-  if (/^project\/befehle(_[a-z]+)?\.ts$/.test(d) || d === 'project/stems.ts' || d === 'project/merge.ts'
+  if (BEFEHLSDATEI.test(d) || d === 'project/stems.ts' || d === 'project/merge.ts'
     || d === 'project/bounce.ts' || d === 'project/resample.ts') for (const m of t.matchAll(/\bab\(\s*'([a-z_]+)'/g)) dazu(m[1], `ab ${d}`);
   // Gründe-Literale {fehler|grund: '…'} in bereiche/ und (V2 Fix F9) http/, auch als Zweige eines Ternärs (http/transport.ts:
   // { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' }); gezählt werden der ganze Wert und die Zweige nach ? und :
