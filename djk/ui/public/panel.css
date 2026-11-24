@@ -31,7 +31,7 @@
 /* a control that is not heard with the current settings (panel_wirkung.js): greyed, still movable; the tooltip says what makes it heard */
 .fp-zelle.fp-ruht { opacity: .3; transition: opacity .15s; }
 .fp-zelle.fp-ruht:hover { opacity: .6; }
-.fp-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9.5px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
+.fp-name { max-width: 100%; overflow: hidden; overflow-wrap: anywhere; white-space: normal; text-align: center; line-height: 1.1; font-size: 9.5px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
 .fp-wert { min-width: 7ch; text-align: center; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); white-space: nowrap; }
 .fp-text { font-size: 11px; color: var(--dim); text-align: center; }
 .fp-zelle[data-typ="value"] .fp-wert { font-size: 15px; font-weight: 700; color: var(--a); }
@@ -223,6 +223,10 @@ body.tablet .fp-xy { max-width: 260px; min-height: 160px; }
 
 /* Pair tablet (main page): the button in the header and the dialog with the QR code */
 .kopplung-knopf { font-size: 10px; letter-spacing: .12em; padding: 4px 9px; border-radius: 6px; color: var(--dim); background: none; border: 1px solid var(--line); align-self: center; }
+.mitschnitt-knopf { min-width: 74px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mitschnitt-knopf.laeuft { color: #ff5a5a; border-color: #ff5a5a; font-variant-numeric: tabular-nums; }
+.mitschnitt-knopf.meldung { color: var(--text, #e6e6e6); }
+.mitschnitt-knopf.fehler { color: #ffb347; border-color: #ffb347; }
 .kopplung { background: var(--bg, #0e0f12); color: var(--text, #e6e6e6); border: 1px solid var(--line); border-radius: 10px; padding: 16px 20px; max-width: 420px; }
 .kopplung::backdrop { background: rgba(0, 0, 0, .6); }
 .kopplung h2 { margin: 0 0 10px; font-size: 14px; letter-spacing: .12em; text-transform: uppercase; }

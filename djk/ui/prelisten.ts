@@ -110,10 +110,15 @@ export class Vorhoeren {
     return k;
   }
 
-  async spiele(e: Element): Promise<void> {
-    const nr = ++this.nr;
-    this.abbruch?.();                                    // F2: die Ladung der überholten Anfrage nicht abwarten
+  /** One click sequence for every caller (preset preview, slot audition, sample and kit preview, hand): a caller whose work takes time (a render) takes a number
+   *  when its request arrives and hands it to spiele(); if any newer click or stop came in meanwhile, spiele refuses it as ueberholt and nothing plays. */
+  neuerKlick(): number { return ++this.nr; }
+
+  async spiele(e: Element, klick?: number): Promise<void> {
     const ueberholt = (): VorhoerFehler => new VorhoerFehler(409, 'ueberholt');
+    if (klick !== undefined && klick !== this.nr) throw ueberholt();
+    const nr = klick ?? ++this.nr;
+    this.abbruch?.();                                    // F2: die Ladung der überholten Anfrage nicht abwarten
     if (!this.o.kernNurCue()) { try { await this.kantenWeg(); } catch { /* Sperre nicht zu bekommen: die 503 kommt trotzdem, stand() räumt später nach */ } await this.ende(); throw new VorhoerFehler(503, 'kern_ohne_vorhoerkanal'); }
     this.kopf.bis = 0;                                   // beim Start immer frisch prüfen
     if (!(await this.kopfhoerer())) throw new VorhoerFehler(409, 'kein_kopfhoerer');

@@ -256,7 +256,7 @@ test('wechselWahl and effektWahl', () => {
   const s = stand();
   const w = wechselWahl('erz/2', s);
   assert.deepEqual(w[w.length - 1], { gruppe: 'No graph', text: 'Surge XT', name: '' });
-  assert.deepEqual(w.slice(0, -1).map((x) => [x.gruppe, x.text, x.name]), [['Baukasten', 'bass-acid', 'bass-acid'], ['Baukasten', 'lead-saw', 'lead-saw']]);
+  assert.deepEqual(w.slice(0, -1).map((x) => [x.gruppe, x.text, x.name]), [['Cypher Modular', 'bass-acid', 'bass-acid'], ['Cypher Modular', 'lead-saw', 'lead-saw']]);
   assert.equal(wechselWahl('erz/5', s).at(-1).text, 'Off');
   assert.equal(wechselWahl('erz/2', stand({ hostNamen: { 'erz/2': 'Pianoteq' } })).at(-1).text, 'Pianoteq');
   const e = effektWahl('deck/1', stand({ geladen: { 'deck/1': 'echo-tape' } }));

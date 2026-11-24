@@ -20,6 +20,32 @@ pub const EPS: f64 = 1e-5;
 /// Länge der Trocken-Verzögerung (größte Latenz, die vorkommt).
 const TROCKEN_MAX: usize = LATENZ + 1;
 
+/// Corner of the DC blocker at the output of the wet path (Hz).
+pub const DC_ECKE_HZ: f64 = 5.0;
+/// A state below this magnitude becomes exactly 0 (denormal-safe even without the caller's FTZ).
+const DC_NULL_UNTER: f64 = 1e-30;
+
+/// First-order DC blocker, one channel: y[n] = x[n] - x[n-1] + r y[n-1]. No allocation; `r` comes from the sample rate
+/// (computed in `Saett::neu`, never in the block).
+#[derive(Clone, Copy, Debug, Default)]
+struct DcSperre {
+    xp: f64,
+    yp: f64,
+}
+
+impl DcSperre {
+    #[inline]
+    fn verarbeite(&mut self, x: f64, r: f64) -> f64 {
+        let mut y = x - self.xp + r * self.yp;
+        if y.abs() < DC_NULL_UNTER {
+            y = 0.0;
+        }
+        self.xp = x;
+        self.yp = y;
+        y
+    }
+}
+
 /// Stammfunktion von tanh: ln cosh x, ohne Überlauf für große |x|.
 pub fn f1(x: f64) -> f64 {
     let a = x.abs();
@@ -79,6 +105,10 @@ pub struct Saett {
     hoch: [Hoch; 2],
     runter: [Runter; 2],
     adaa: [Adaa1; 2],
+    // DC blocker at the end of the wet path (at high drive the curve turns sub-bass and input DC into an offset that
+    // stays); the dry path is untouched, so mix 0 stays bit-equal.
+    dc: [DcSperre; 2],
+    dc_r: f64,
     // Gleitende Regler (ein Pol, ~10 ms), damit Drive-Änderungen nicht knacken
     drive: f64,
     drive_ziel: f64,
@@ -98,6 +128,8 @@ impl Saett {
             hoch: [Hoch::neu(), Hoch::neu()],
             runter: [Runter::neu(), Runter::neu()],
             adaa: [Adaa1::default(); 2],
+            dc: [DcSperre::default(); 2],
+            dc_r: (-2.0 * std::f64::consts::PI * DC_ECKE_HZ / fs).exp(),
             drive: 1.0,
             drive_ziel: 1.0,
             ausgang: 1.0,
@@ -131,6 +163,7 @@ impl Saett {
             self.hoch[k].reset();
             self.runter[k].reset();
             self.adaa[k].reset();
+            self.dc[k] = DcSperre::default();
         }
         self.trocken = [[0.0; TROCKEN_MAX]; 2];
         self.tpos = 0;
@@ -165,6 +198,7 @@ impl Saett {
                 self.trocken[k][self.tpos] = x;
                 let t = self.trocken[k][lies];
                 let n = self.nass(k, x) * self.ausgang;
+                let n = self.dc[k].verarbeite(n, self.dc_r);
                 *s = (t + self.mix * (n - t)) as f32;
             }
         }

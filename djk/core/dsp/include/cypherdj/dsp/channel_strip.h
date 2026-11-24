@@ -32,11 +32,12 @@ struct KanalzugAusgang {
     float* haupt_r = nullptr;
     float* send_l[kAnzahlSends] = {};           // optional: += Haupt · Send-Gain; nullptr = kein Bus
     float* send_r[kAnzahlSends] = {};
-    // Loop lane strip K4 (additive, at the end): a second input pair that only takes the FADER of the strip, bit for bit the gain the main path gets in the same block (the diverted FX 3 share of the arrangement
-    // tracks). nullptr = nothing: the stage does not run and the main path is unchanged.
+    // Loop lane strip K4 (additive, at the end): a second input pair that gets the same TRIM and FADER gains as the main path in this block (the diverted FX 3 share of the arrangement tracks; without the trim a
+    // lane through FX 3 was off by the trim, acceptance measurement 2026-11-23). The two gains are applied as ONE product, so the result can differ from the main path's two separate multiplications in the last
+    // bit; EQ, kill, isolator and filter do not act on it. nullptr = nothing: the stage does not run and the main path is unchanged.
     const float* zus_ein_l = nullptr;
     const float* zus_ein_r = nullptr;
-    float* zus_aus_l = nullptr;                 // gets zus_ein * fader (overwritten)
+    float* zus_aus_l = nullptr;                 // gets zus_ein * trim * fader (overwritten)
     float* zus_aus_r = nullptr;
 };
 
@@ -119,6 +120,9 @@ private:
     float g_fader_[kMaxFrames] = {};
     float g_send_[kMaxFrames] = {};
     float abgriff_[2][kMaxFrames] = {};
+    // The trim gain of the last verarbeite_vor block (per sample in g_trim_ while the trim ramps, else the constant): the extra pair takes it too, as it is part of the level of the dry path.
+    bool trim_rampe_ = false;
+    float trim_konst_ = 1.0f;
 };
 
 }  // namespace cypherdj::dsp

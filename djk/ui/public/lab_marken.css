@@ -1,0 +1,9 @@
+/* R9: LAB mark (lab_marken.js). A small pill on the corner of the control: out of the flow, so it never makes a tab or button wider or taller. */
+:where([data-lab]) { position: relative; }
+.lab-marke {
+  position: absolute; top: -10px; right: 0; z-index: 2;   /* inside the host box on the right (no overflow, no wider scroll width) and above the text line */
+  font: 700 7px/1 system-ui, sans-serif; letter-spacing: .08em; text-transform: none;
+  padding: 2px 3px; border-radius: 6px;
+  color: var(--warn, #e0a030); background: var(--bg, #111); border: 1px solid var(--warn, #e0a030);
+  pointer-events: auto; cursor: help;
+}

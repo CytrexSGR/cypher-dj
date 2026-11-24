@@ -135,11 +135,12 @@ test('deny list: every golden POST route is classified, every entry names someth
   }
   for (const v of TABLET_VERBOTEN) {
     if (v.pfad === '/kopplung') continue;   // not a golden route, tested below
-    assert.ok(pfade.some((p) => p === v.pfad || p.startsWith(`${v.pfad}/`)) || GOLDEN.some((e) => e.p.split('?')[0].startsWith(v.pfad)) || ['/proj', '/analyse', '/plugins', '/presets', '/kollektionen', '/ansage'].includes(v.pfad), `deny entry ${v.pfad} matches a known route`);
+    assert.ok(pfade.some((p) => p === v.pfad || p.startsWith(`${v.pfad}/`)) || GOLDEN.some((e) => e.p.split('?')[0].startsWith(v.pfad)) || ['/proj', '/analyse', '/plugins', '/presets', '/kollektionen', '/ansage', '/import', '/dateisystem', '/bibliothek/bauen', '/bibliothek/quellen', '/bibliothek/midi', '/plugins/pfade', '/kits/export', '/kits/import', '/kits/umbenennen', '/kits/kopie', '/kits/loeschen', '/kits/aus_ordner', '/kits/vorhoeren', '/proj/export_zip', '/proj/import_zip', '/mitschnitt'].includes(v.pfad), `deny entry ${v.pfad} matches a known route`);
   }
   for (const e of GOLDEN.filter((x) => x.m === 'GET' && !x.p.startsWith('/kopplung') && !x.p.startsWith('/quellen'))) assert.equal(tabletVerboten('GET', e.p.split('?')[0]), false, `GET ${e.p}`);
   for (const m of ['GET', 'POST']) for (const p of ['/kopplung', '/kopplung/loeschen']) assert.equal(tabletVerboten(m, p), true);
   for (const p of ['/deck/start', '/deck/stopp', '/spur/stopp', '/abbruch', '/graph', '/geraete/eingang', '/geraete/midi', '/geraete/latenz', '/lernen', '/lernen/host', '/strudel', '/proj/stems', '/plugins/scan']) assert.equal(tabletVerboten('POST', p), true, p);
+  for (const m of ['GET', 'POST']) assert.equal(tabletVerboten(m, '/bibliothek/midi'), true, `${m} /bibliothek/midi`);
   assert.equal(tabletVerboten('POST', '/regler'), false);
   assert.equal(tabletVerboten('PUT', '/regler'), true);
   assert.equal(tabletVerboten('DELETE', '/lage'), true);
@@ -397,4 +398,97 @@ test('an event stream a client does not read is closed instead of growing the pa
   assert.deepEqual(await Promise.race([Promise.all(zu), new Promise((ok) => setTimeout(() => ok('offen'), 3000))]), ['zu', 'zu']);
   const frisch = await new Promise((ok) => { const q = http.get({ host: '127.0.0.1', port: 47300 + K, path: '/strom?x=1', headers: { host: `127.0.0.1:${47300 + K}` } }, (a) => { a.once('data', (d) => { ok(String(d).slice(0, 5)); q.destroy(); }); }); });
   assert.equal(frisch, 'data:', 'a new stream works again');
+});
+
+test('R7: the page error hook of a tablet is refused (403) without a tablet_verboten log line; another refused POST is still logged', async (t) => {
+  const { log } = await start(t, {});
+  const { kopf } = await koppeln();
+  const n = () => log.filter((z) => z.typ === 'tablet_verboten').length;
+  const r = await tablet('POST', '/seite/fehler', { kopf: { ...kopf, ...JSONK }, body: JSON.stringify({ meldung: 'x' }) });
+  assert.equal(r.code, 403);
+  assert.equal(n(), 0, 'no log line for the page error hook');
+  await tablet('POST', '/proj/neu', { kopf: { ...kopf, ...JSONK }, body: '{}' });
+  assert.equal(n(), 1, 'positive control: another refused POST is logged');
+});
+
+test('plan 6: the plugin folder list shows local paths, so even its GET is closed to the tablet; the plugin list itself stays readable', () => {
+  assert.equal(tabletVerboten('GET', '/plugins/pfade'), true);
+  assert.equal(tabletVerboten('POST', '/plugins/pfade/dazu'), true);
+  assert.equal(tabletVerboten('GET', '/plugins'), false);
+});
+
+// ---------- the dialog (page module) ----------
+async function dialogMit(antwort) {
+  const { installiere, El } = await import('./helpers/pages_mock.mjs');
+  installiere();
+  const { bindeKopplung } = await import('../public/coupling.js');
+  const dialog = new El('dialog'); dialog.innerHTML = '<h2>Pair tablet</h2><div data-kopplung-inhalt></div>';
+  dialog.open = false; dialog.showModal = () => { dialog.open = true; }; dialog.close = () => { dialog.open = false; };
+  const knopf = new El('button');
+  const aufrufe = [];
+  const ruf = async (methode, pfad, body) => { aufrufe.push(`${methode} ${pfad}`); return antwort(methode, pfad, body); };
+  const k = bindeKopplung({ knopf, dialog, ruf });
+  const warte = () => new Promise((r) => setImmediate(r));
+  return { k, dialog, aufrufe, warte, el: (sel) => dialog.querySelector(sel) };
+}
+
+test('dialog with tablet access off: the sentence, no QR block, NEW LINK disabled, no link requested; the list says none', async () => {
+  const d = await dialogMit((m, p) => (m === 'GET' ? { code: 200, j: { an: false, geraete: [] } } : { code: 409, j: { fehler: 'tablet_aus', text: 'x' } }));
+  d.k.oeffne(); await d.warte(); await d.warte();
+  assert.equal(d.el('.kopplung-qr'), null);
+  assert.equal(d.el('.kopplung-hinweis').textContent, 'Tablet access is off. Turn it on with {"an": true} in ~/.config/cypherdj/tablet.json, then restart the page server.');
+  assert.equal(d.el('[data-kopplung-neu]').disabled, true);
+  assert.equal(d.aufrufe.includes('POST /kopplung'), false);
+  assert.equal(d.el('[data-kopplung-liste]').textContent, 'none');
+  d.k.schliesse();
+});
+
+test('dialog: a paired device shows a readable name with the raw user agent in title, an empty name shows Tablet, dates come from datumText', async () => {
+  const ua = 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36';
+  const seit = new Date(2026, 10, 22, 23, 1).getTime();
+  const d = await dialogMit((m) => (m === 'GET' ? { code: 200, j: { an: true, geraete: [{ id: 'a', name: ua, seit, zuletzt: seit }, { id: 'b', name: '', seit, zuletzt: seit }] } }
+    : { code: 200, j: { link: 'http://x.test/p?t=1', bis: Date.now() + 120000 } }));
+  d.k.oeffne(); await d.warte(); await d.warte();
+  assert.ok(d.el('.kopplung-qr'), 'tablet access on: the QR block is there');
+  assert.equal(d.el('[data-kopplung-neu]').disabled, false);
+  const zeilen = d.dialog.querySelectorAll('[data-kopplung-liste] li');
+  assert.equal(zeilen.length, 2);
+  const name = zeilen[0].querySelector('span span');
+  assert.equal(name.textContent, 'Chrome on Android');
+  assert.equal(name.getAttribute('title'), ua);
+  assert.equal(zeilen[1].querySelector('span span').textContent, 'Tablet');
+  assert.match(zeilen[0].textContent, /paired 22 Nov 2026, 23:01, last seen 22 Nov 2026, 23:01/);
+  d.k.schliesse();
+});
+
+test('geraeteName: recognised browser and system, else Tablet', async () => {
+  const { geraeteName } = await import('../public/coupling.js');
+  const n = (name) => geraeteName({ name });
+  assert.equal(n('Mozilla/5.0 (iPad; CPU OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1'), 'Safari on iPad');
+  assert.equal(n('Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0'), 'Firefox on Linux');
+  assert.equal(n('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36 Edg/126.0'), 'Edge on Windows');
+  assert.equal(n('curl/8.0'), 'Tablet');
+  assert.equal(n(undefined), 'Tablet');
+  assert.equal(geraeteName({}), 'Tablet');
+});
+
+test('kopplungPfadVon: a test instance keeps its pairing file under /dev/shm, never in ~/.config; only the live studio uses the real file; the server uses it', async () => {
+  const { kopplungPfadVon } = await import('../server_kopf.ts');
+  const echt = path.join(os.homedir(), '.config', 'cypherdj', 'kopplung.json');
+  assert.equal(kopplungPfadVon(undefined, 'e'), '/dev/shm/cypherdj-e/kopplung.json');
+  assert.ok(!kopplungPfadVon(undefined, 'a').startsWith(path.join(os.homedir(), '.config')));
+  assert.equal(kopplungPfadVon(undefined, ''), echt, 'the live studio');
+  assert.equal(kopplungPfadVon('/x/k.json', 'e'), '/x/k.json', 'an explicit path wins');
+  assert.match(fs.readFileSync(new URL('../server.ts', import.meta.url), 'utf8'), /new Kopplung\(kopplungPfadVon\(opt\.tablet\?\.kopplungPfad, instanz\(\)\)\)/);
+});
+
+test('dialog: NEW LINK stays disabled until GET /kopplung has answered', async () => {
+  let antworte;
+  const d = await dialogMit((m) => (m === 'GET' ? new Promise((r) => { antworte = () => r({ code: 200, j: { an: true, geraete: [] } }); })
+    : { code: 200, j: { link: 'http://x.test/p?t=1', bis: Date.now() + 120000 } }));
+  d.k.oeffne(); await d.warte();
+  assert.equal(d.el('[data-kopplung-neu]').disabled, true, 'before the answer');
+  antworte(); await d.warte(); await d.warte();
+  assert.equal(d.el('[data-kopplung-neu]').disabled, false, 'after the answer, tablet access on');
+  d.k.schliesse();
 });

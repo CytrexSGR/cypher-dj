@@ -190,6 +190,39 @@ async function deckSpiel(n, b) {
   } finally { delete b.dataset.wartet; b.disabled = false; const k = knoten.get(n); if (k) k._laeuft = undefined; }
 }
 
+// The menu key of the SEQ deck head: the five secondary keys keep their data hooks and their handlers, the menu only holds them. It closes on Escape
+// (before the library's own Escape handler sees the key), on a click outside, and after a click on one of its items.
+const offeneMenues = new Set();
+let menueHaken = false;
+export function seqKopfMenue(k) {
+  if (k._menue) return k._menue;
+  const mehr = $('.sq-mehr', k), menue = $('.sq-menue', k);
+  const schliesse = () => { menue.hidden = true; mehr.setAttribute('aria-expanded', 'false'); offeneMenues.delete(k); };
+  const oeffne = () => {
+    for (const x of [...offeneMenues]) x._menue.schliesse();
+    const r = mehr.getBoundingClientRect();
+    menue.style.top = `${Math.round((r.bottom || 0) + 2)}px`;
+    menue.style.right = `${Math.max(4, Math.round((globalThis.innerWidth ?? 0) - (r.right || 0)))}px`;
+    menue.hidden = false; mehr.setAttribute('aria-expanded', 'true'); offeneMenues.add(k);
+  };
+  mehr.addEventListener('click', (e) => { e.stopPropagation?.(); if (menue.hidden) oeffne(); else schliesse(); });
+  menue.addEventListener('click', (e) => { if (e.target?.closest?.('button')) setTimeout(schliesse, 0); });   // the item's own handler reads its rect first
+  k._menue = { oeffne, schliesse, offen: () => !menue.hidden };
+  if (!menueHaken) {
+    menueHaken = true;
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !offeneMenues.size) return;
+      e.stopImmediatePropagation?.(); e.preventDefault?.();
+      for (const x of [...offeneMenues]) x._menue.schliesse();
+    }, true);
+    document.addEventListener('click', (e) => {
+      if (e.target?.closest?.('.sq-menue, .sq-mehr')) return;
+      for (const x of [...offeneMenues]) x._menue.schliesse();
+    });
+  }
+  return k._menue;
+}
+
 function bauePlatz(n) {
   const k = document.createElement('section');
   k.className = 'seqplatz deckflaeche';
@@ -221,7 +254,16 @@ function bauePlatz(n) {
   leerAus.title = 'Hide the lanes that are empty now; press again to show them'; leerAus.setAttribute('aria-pressed', 'false');
   const alleZu = knopf('sq-chip sq-alle-zu', 'collapse all', 'sqAlleZu');
   alleZu.title = 'Collapse or expand all patterns of this deck';
-  rechts.append(spiel, gross, breite, alleZu, leerAus, sprung, neu, modul, leeren);
+  // The primary row keeps PLAY, + pattern, the width chips (with their label) and the large view; everything else sits behind the menu key
+  const breiteWort = el('span', 'sq-breite-wort', 'bars');
+  breiteWort.title = 'Visible width in bars';
+  const mehr = knopf('sq-chip sq-mehr', '⋯', 'sqMehr');
+  mehr.title = 'More: load module, clear, hide empty, collapse all, open in PRODUCTION';
+  mehr.setAttribute('aria-haspopup', 'true'); mehr.setAttribute('aria-expanded', 'false');
+  const menue = el('div', 'sq-menue');
+  menue.hidden = true; menue.setAttribute('role', 'menu');
+  menue.append(modul, leeren, leerAus, alleZu, sprung);
+  rechts.append(spiel, neu, breiteWort, breite, gross, mehr, menue);
   kopf.append(el('span', 'buchstabe', BUCHSTABE[n]), el('span', 'decktitel', `SEQ ${n}`), el('span', 'sq-zahl'), el('span', 'sq-baukasten'), el('span', 'sq-stand'), rechts);
   const leer = el('div', 'sq-leer');
   const anlegen = el('button', 'sq-anlegen', 'CREATE');
@@ -233,6 +275,7 @@ function bauePlatz(n) {
   k.append(kopf, leer, feld);
   $('#pult').append(k);
   knoten.set(n, k);
+  seqKopfMenue(k);
   bindePlatz(k, n, feld, anlegen, leeren, neu, breite, sprung, modul);
   gross.addEventListener('click', () => { grossWahl = grossUmschalten(grossWahl, n); wendeGross(); });
   spiel.addEventListener('click', () => deckSpiel(n, spiel));
@@ -436,8 +479,8 @@ function zeichnePlatz(n) {
   la.classList.toggle('an', !!k._versteckt); la.setAttribute('aria-pressed', String(!!k._versteckt)); la.textContent = k._versteckt ? `show empty (${k._versteckt.size})` : 'hide empty';
   $('.sq-zahl', k).textContent = a.vorhanden ? `${a.folgen.length} pattern${a.folgen.length === 1 ? '' : 's'}` : '';   // the DJ view has it in the place head
   const bk = $('.sq-baukasten', k);
-  bk.textContent = a.baukasten ? `${a.baukasten} Baukasten` : '';
-  bk.title = a.baukasten ? 'Patterns that play a Baukasten instrument: each costs processing time while the transport runs' : '';
+  bk.textContent = a.baukasten ? `${a.baukasten} Cypher Modular` : '';
+  bk.title = a.baukasten ? 'Patterns that play a Cypher Modular instrument: each costs processing time while the transport runs' : '';
   if (!a.vorhanden) {
     const z = anlegenZustand(live.projekt), b = $('[data-seq-anlegen]', k);
     b.disabled = z.aus || k.dataset.beschaeftigt === '1';

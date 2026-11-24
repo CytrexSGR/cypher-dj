@@ -30,8 +30,8 @@ test('ladeModulInSeq posts {slug, platz}; a refusal is one line with the reason 
   const ok = await ladeModulInSeq('mod-a', 2, async (w, k) => { gesehen.push([w, k]); return { status: 200, j: { ok: true, bericht: BERICHT({ sends: 1 }), projekt: { live: true } } }; });
   assert.deepEqual(gesehen, [['/seq/modul', { slug: 'mod-a', platz: 2 }]]);
   assert.deepEqual([ok.ok, ok.text], [true, 'loaded 4 patterns into SEQ 2 · left out: 1 send']);
-  const nein = await ladeModulInSeq('mod-a', 2, async () => ({ status: 409, j: { fehler: 'projekt_ungueltig', text: 'the project is invalid', detail: 'spuren: at most 8 Baukasten tracks (bk)' } }));
-  assert.deepEqual([nein.ok, nein.text], [false, 'Load refused: the project is invalid (spuren: at most 8 Baukasten tracks (bk))']);
+  const nein = await ladeModulInSeq('mod-a', 2, async () => ({ status: 409, j: { fehler: 'projekt_ungueltig', text: 'the project is invalid', detail: 'spuren: at most 8 Cypher Modular tracks (bk)' } }));
+  assert.deepEqual([nein.ok, nein.text], [false, 'Load refused: the project is invalid (spuren: at most 8 Cypher Modular tracks (bk))']);
   const leer = await ladeModulInSeq('x', 1, async () => ({ status: 409, j: { fehler: 'modul_ohne_instrument', text: 'the module has no instrument track' } }));
   assert.match(leer.text, /no instrument track/);
 });
@@ -163,14 +163,14 @@ test('TO DJ in the tracker bar: place 1..4, off without a project; a click opens
 });
 
 test('TO DJ: a section over 64 beats and a server refusal are error lines, LIVE is not opened for the first, the view stays', async () => {
-  const a = djAufbau({ antworten: { '/seq/modul': { code: 409, j: { fehler: 'zu_viele_bk', text: 'the live project holds 15 Baukasten tracks and the section brings 2, at most 16 are possible' } } } });
+  const a = djAufbau({ antworten: { '/seq/modul': { code: 409, j: { fehler: 'zu_viele_bk', text: 'the live project holds 15 Cypher Modular tracks and the section brings 2, at most 16 are possible' } } } });
   a.offen(SONG, 'a3');
   a.$('zu-dj').dispatch('click'); await ruhe();
   assert.deepEqual(a.aufrufe, []);
   assert.deepEqual(a.meldungen, [{ t: 'Send refused: section 02 is 100 beats long, a SEQ deck takes at most 64', f: true }]);
   a.offen(SONG, 'a2');
   a.$('zu-dj').dispatch('click'); await ruhe();
-  assert.equal(a.meldungen[1].f, true); assert.match(a.meldungen[1].t, /Load refused: .*15 Baukasten tracks and the section brings 2/);
+  assert.equal(a.meldungen[1].f, true); assert.match(a.meldungen[1].t, /Load refused: .*15 Cypher Modular tracks and the section brings 2/);
   assert.equal(a.dj.length, 0);
 });
 

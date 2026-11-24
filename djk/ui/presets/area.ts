@@ -31,10 +31,15 @@ import { PRESET_ID } from './preset_id.ts';
 import { planeAnwendung, werteVonZiel, type Ziel } from './apply.ts';
 import { INSERT_ARTEN_AKTIV, type Projekt } from '../project/model.ts';
 import { listeGraphen, type GraphEintrag } from '../graphs.ts';
+import { austauschRouten } from './austausch_routes.ts';
+import type { PresetVorhoerer } from './prelisten.ts';
+import type { Element } from '../prelisten.ts';
 
 // register: the committed factory register checked by /presets/register/pruefen (default presets/register.json)
 // projekt: the open project (1.16 rest, apply plan and von_ziel; absent = no project); graphen: the Baukasten graphs (default graphs.ts)
 export interface PresetOptionen extends SpeicherOptionen {
+  port?: number | (() => number);   // the page server's port: the owner routes answer on a loopback Host only
+  vorhoerer?: PresetVorhoerer; spiele?: (e: Element, klick?: number) => Promise<void>; neuerKlick?: () => number;   // the preview service and the headphone previewer (austausch_routes.ts)
   speicher?: PresetSpeicher; register?: string; projekt?: () => Projekt | null; graphVon?: (kanal: string) => string | undefined; graphen?: () => readonly (KatalogGraph & { latenz?: number })[];
 }
 
@@ -53,7 +58,7 @@ export function katalog(graphen: readonly KatalogGraph[]): Record<string, unknow
     instrumente: [{ geraet: 'rb338', titel: 'RB-338', ziel: 'spur_neu' }, { geraet: 'surge', titel: 'Surge', ziel: 'spur_neu' },
       ...graphen.filter((g) => g.art === 'instrument').map((g) => ({ geraet: 'bk', titel: g.name, ziel: 'spur_neu', graph: g.name,
         ...(g.kategorie ? { kategorie: g.kategorie } : {}), ...(g.prinzip ? { prinzip: g.prinzip } : {}), ...(g.verborgen === true ? { verborgen: true } : {}) }))],
-    effekte: [effekt('komp', 'Compressor', 'not active yet'), effekt('eq', 'EQ', 'comes with slice 4b'), effekt('saett', 'Saett', 'comes with slice 4b'),
+    effekte: [effekt('komp', 'Compressor', 'not active yet'), effekt('eq', 'EQ', 'comes with slice 4b'), effekt('saett', 'Saturation', 'comes with slice 4b'),
       { geraet: 'hall', titel: 'Hall', ziel: 'insert', aktiv: false, grund: 'the return hall lives on returns' },
       // an effect graph is a bk stage (art bk in INSERT_ARTEN_AKTIV); its presets apply to such a stage (apply.ts bkStufenPlan)
       ...graphen.filter((g) => g.art === 'effekt').map((g) => ({ geraet: 'bk', titel: g.name, ziel: 'insert', graph: g.name, aktiv: aktiv('bk') }))],
@@ -185,5 +190,5 @@ export function presetsBereich(ctx: Ctx, opt: PresetOptionen = {}): Bereich & { 
   };
 
   const route: Route = { methode: '*', pfad: istPresetPfad, schutz: 'fremdePost', handler };
-  return { name: 'presets', routen: () => [route], speicher };
+  return { name: 'presets', routen: () => [...austauschRouten(ctx, { ...opt, speicher }), route], speicher };
 }

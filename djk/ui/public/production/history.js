@@ -19,10 +19,12 @@ export function zeitText(zeit) {
   const d = new Date(zeit ?? NaN);          // Millisekunden (Attrappe) oder ISO-Text (S2, history.ts); null nicht als Epoche lesen
   return Number.isNaN(d.getTime()) ? '–' : `${zwei(d.getHours())}:${zwei(d.getMinutes())}:${zwei(d.getSeconds())}`;
 }
+// History entries written before the rename keep the stored label; the page shows the public name (also behind "Undo: " and "Redo: ").
+export const labelText = (label) => String(label ?? '').replace(/(^|: )Baukasten:/, '$1Cypher Modular:');
 // Neueste zuerst, höchstens max Zeilen. Das Label zeigt die Seite unverändert: S2 schreibt „Undo: <label>“ und „Redo: <label>“ selbst
 // ins Label (history.ts protokolliere); ein Präfix der Seite machte daraus „Undo: Undo: Tempo 124“.
 export function verlaufZeilen(verlauf, max = 40) {
   return [...(verlauf ?? [])].sort((a, b) => b.rev - a.rev).slice(0, max).map((e) => ({
-    rev: e.rev, text: e.label, quelle: QUELLE_TEXT[e.quelle] ?? e.quelle, zeit: zeitText(e.zeit), art: e.art,
+    rev: e.rev, text: labelText(e.label), quelle: QUELLE_TEXT[e.quelle] ?? e.quelle, zeit: zeitText(e.zeit), art: e.art,
   }));
 }

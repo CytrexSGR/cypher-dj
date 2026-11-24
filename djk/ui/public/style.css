@@ -2,7 +2,7 @@
 :root {
   --bg: #0e0f12; --panel: #16181e; --panel2: #1c1f27; --line: #2a2d36; --text: #e8e8ec; --dim: #8a8d98;
   --d3: #7fb6ff; --a: #2fd6c3; --b: #e0a33e; --c: #b48cff; --c2: #8c9bff; --c3: #e08cff; --kill: #ff5a1f; --gut: #58d66b; --warn: #ffb020;
-  --kopf: 64px; --lib: 40px; --lib-auf: 60vh; --abstand: 12px;
+  color-scheme: dark; --kopf: 64px; --lib: 40px; --lib-auf: 60vh; --abstand: 12px;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
@@ -268,6 +268,8 @@ body.lib-zu { grid-template-rows: var(--kopf) minmax(0, 1fr) var(--lib-zu); }
 .zug .knopfzeile > .knopf { grid-area: k; width: 34px; height: 34px; }
 .zug .beschrift { grid-area: l; } .zug .beschrift label { font-size: 9px; letter-spacing: .1em; }
 .zug .beschrift output { display: none; }
+.zug .beschrift output.auto-trim { display: block; font-size: 8px; font-weight: 700; letter-spacing: .05em; color: var(--dim); }
+.zug .beschrift output.auto-trim.vorgabe, .zug .beschrift output.auto-trim:empty { display: none; }   /* unreported, or 0 dB (unloaded deck, track at the target loudness) */
 .zug .kill { grid-area: x; height: 22px; padding: 0; font-size: 8px; border-radius: 5px; }
 .zug .faderspalte { flex: 1; display: grid; grid-template-columns: 1fr 8px; grid-template-rows: auto auto minmax(60px, 1fr) auto auto; gap: 3px 3px; min-height: 0; }
 .zug .pfl { grid-row: 1; height: 22px; font-size: 9px; border-radius: 5px; }
@@ -481,10 +483,26 @@ body.bereich-effekte #bestand .reiter, body.bereich-effekte #bestand #suche, bod
 .stoebern { display: grid; grid-template-columns: minmax(140px, 220px) minmax(0, 1fr) minmax(220px, 340px); gap: 10px; height: 100%; min-height: 0; }
 .st-baum, .st-detail { overflow: auto; min-height: 0; font-size: 13px; border-right: 1px solid var(--line); padding-right: 6px; }
 .st-detail { border-right: 0; border-left: 1px solid var(--line); padding: 0 0 0 8px; }
-.st-mitte { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.st-mitte { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow-y: auto; }   /* UI check M6: scrolls (visible bar) in a low dock instead of squeezing the list to 0 */
 .st-kopf { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .st-typen button { font-weight: 600; } .st-typen button.an { background: var(--line); }
-.st-liste { flex: 1; overflow: auto; min-height: 0; }
+.st-liste { flex: 1 0 146px; overflow: auto; min-height: 0; }   /* 146 px = head row and 5 rows of 24 px (UI check M6) */
+/* Review (M6): in a low window the default dock leaves the middle column 87 px. The type tabs and the search field stay on ONE row (primary navigation, the focus after LIBRARY lands
+   there); key, BPM and energy collapse behind the FILTER key (`offen` unfolds them as a second row); the list keeps the table head and 2 compact rows (19 + 2 x 21 px). */
+.lib-mehr { display: none; }
+@media (max-height: 800px) {
+  .st-mitte > .st-kopf { gap: 6px; }
+  .st-kopf .lib-filter { flex: 1 1 16em; flex-wrap: wrap; margin: 0; align-items: center; }
+  .st-kopf .lib-filter #lib-suche { flex: 1 1 8em; min-width: 8em; }
+  .st-kopf .lib-filter .lib-mehr { display: inline-block; flex: none; }
+  .st-kopf .lib-filter .lib-mehr.an { border-color: var(--a, #7ad); }
+  .st-kopf .lib-filter:not(.offen) > :is(#lib-key, label.klein, #lib-bpm, #lib-energie) { display: none; }
+  .st-mitte > .st-liste { flex: 1 0 61px; }
+  .st-liste table { border-spacing: 0; }   /* the global table rule (td height 24 px, 2 px spacing) is 26 px per row */
+  .st-liste #st-kopfzeile th { padding-top: 2px; padding-bottom: 2px; }
+  .st-liste tbody td { height: 21px; padding-top: 0; padding-bottom: 0; }
+  .st-liste tbody button { padding-top: 1px; padding-bottom: 1px; min-height: 20px; line-height: 16px; vertical-align: middle; }
+}
 .st-seiten { display: flex; gap: 8px; align-items: center; justify-content: flex-end; color: var(--dim); font-size: 12px; padding-top: 4px; }
 #st-kopfzeile th.sortierbar { cursor: pointer; user-select: none; }
 #libliste tr.fehlt td { color: var(--dim); }
@@ -636,8 +654,8 @@ button.laden.in-box:disabled { opacity: .4; }
 /* DJ view places (plan 2026-11-13, task 14): four grid cells over the existing nodes. A place head sits over each cell; the nodes get their cell from
    data-platz (set by slots.js wendeAn), nodes that no place shows get .platz-aus. The Studio view keeps its own areas and ignores all of it. */
 body:not(.studio) #pult { grid-template-columns: minmax(0, 1fr) calc(3 * var(--zug) + 24px) minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr) auto minmax(0, 1fr) auto;
-  grid-template-areas: "h1 mo h2" "p1 mo p2" "h3 mu h4" "p3 mu p4" "s s s"; gap: 4px 8px; }
+  grid-template-rows: auto auto minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  grid-template-areas: "z z z" "h1 mo h2" "p1 mo p2" "h3 mu h4" "p3 mu p4" "s s s"; gap: 4px 8px; }
 body:not(.studio) #pult > [data-platz="1"] { grid-area: p1; } body:not(.studio) #pult > [data-platz="2"] { grid-area: p2; }
 body:not(.studio) #pult > [data-platz="3"] { grid-area: p3; } body:not(.studio) #pult > [data-platz="4"] { grid-area: p4; }
 .platzkopf[data-platz-kopf="1"] { grid-area: h1; } .platzkopf[data-platz-kopf="2"] { grid-area: h2; }
@@ -656,21 +674,21 @@ body:not(.studio) .platz-aus { display: none !important; }
    cells of the page grid: two rows of three columns in the middle, index.html carries data-mix-zeile and data-mix-spalte of every strip. The master
    and the crossfader sit under the second row. The Studio view keeps both panels as they were. */
 body:not(.studio) #pult { grid-template-columns: minmax(0, 1fr) var(--zug) var(--mitte) var(--zug) minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr) auto minmax(0, 1fr) auto; grid-template-areas: none; }
+  grid-template-rows: auto auto minmax(0, 1fr) auto minmax(0, 1fr) auto; grid-template-areas: none; }
 /* The middle column (master, beat FX, COLOR) is fixed. Container strips A..D sit in the cells of places 1..4: A and C left of it, B and D right of it. */
 :root { --mitte: 150px; }
 /* 2026-11-14: each side column is a flex column of its own (platz_mini.js moves head and node of the top and the bottom place into it), so a place
    can shrink (mini view) without moving the mixer strips beside it. The Studio view dissolves the columns (display: contents). */
 .seitenspalte { display: contents; }
 body:not(.studio) #pult > .seitenspalte { display: flex; flex-direction: column; gap: 4px; min-height: 0; min-width: 0; }
-body:not(.studio) #pult > .seitenspalte[data-seite="l"] { grid-area: 1 / 1 / 6 / 2; } body:not(.studio) #pult > .seitenspalte[data-seite="r"] { grid-area: 1 / -2 / 6 / -1; }
+body:not(.studio) #pult > .seitenspalte[data-seite="l"] { grid-area: 2 / 1 / 7 / 2; } body:not(.studio) #pult > .seitenspalte[data-seite="r"] { grid-area: 2 / -2 / 7 / -1; }
 body:not(.studio) .seitenspalte > .platzkopf { flex: 0 0 auto; }
 body:not(.studio) .seitenspalte > [data-platz] { flex: 1 1 0; min-height: 0; }
 body:not(.studio) .seitenspalte > [data-platz].mini { flex: 0 0 auto; }
 body:not(.studio) #mischer, body:not(.studio) #mischer-unten { display: contents; }
 body:not(.studio) #pult .zug, body:not(.studio) #pult .mitte, body:not(.studio) #pult .xfader { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
 body:not(.studio) #pult .zug { border-top: 2px solid var(--farbe); padding: 4px 4px 6px; }
-body:not(.studio) #pult [data-mix-zeile="1"] { grid-row: 1 / 3; } body:not(.studio) #pult [data-mix-zeile="2"] { grid-row: 3 / 5; }
+body:not(.studio) #pult [data-mix-zeile="1"] { grid-row: 2 / 4; } body:not(.studio) #pult [data-mix-zeile="2"] { grid-row: 4 / 6; }
 body:not(.studio) #pult [data-mix-spalte="2"] { grid-column: 2; } body:not(.studio) #pult [data-mix-spalte="3"] { grid-column: 3; }
 body:not(.studio) #pult [data-mix-spalte="4"] { grid-column: 4; } body:not(.studio) #pult [data-mix-spalte="5"] { grid-column: 5; }
 body:not(.studio) #pult [data-mix-spalte="6"] { grid-column: 6; }
@@ -727,7 +745,7 @@ body:not(.studio) #pult .fxmitte .colorfx.filter-art .colorparam::after { conten
 body:not(.studio) #pult .fxmitte .colorfx .colorparam > span { display: block; font-size: 9px; letter-spacing: .1em; color: var(--dim); }
 .colorhinweis { display: none; }
 .zug .beschrift label.color-an { color: var(--warn); }   /* the COLOR knob of a channel names the chosen COLOR type in its colour */
-body:not(.studio) #pult .xfader { grid-area: 5 / 2 / 6 / -2; padding: 4px 8px;   /* grid-column after grid-area reset the column and squeezed the crossfader into one strip column */ }
+body:not(.studio) #pult .xfader { grid-area: 6 / 2 / 7 / -2; padding: 4px 8px;   /* grid-column after grid-area reset the column and squeezed the crossfader into one strip column */ }
 
 body:not(.studio) .deck .lauf { min-height: 24px; }
 /* DJ view, short places (1920x1080: a top place is 219 px, the deck needs about 270): the rows of a deck never shrink below their text (they
@@ -737,8 +755,13 @@ body:not(.studio) #pult .deck:not(.mini) { container: deckplatz / size; }
 body:not(.studio) #pult .deck { overflow: hidden; }
 body:not(.studio) #pult .deck > * { flex-shrink: 0; }
 body:not(.studio) #pult .deck > .lauf { flex: .84 1 24px; min-height: 16px; }   /* 2026-11-14: about 85 % of the former height (Andreas: 15 % lower) */
+/* An empty deck says what to do inside its waveform area; the full deck head says it already, so the line only shows once the head is dropped. */
+.deck > .lauf-leer { display: none; color: var(--dim); }
+body:not(.studio) #pult .deck:not(.mini) > .lauf-leer { grid-row: 3; grid-column: 1 / -1; align-items: center; justify-content: center; text-align: center;
+  z-index: 1; font-size: 11px; pointer-events: none; min-width: 0; overflow: hidden; }
 @container deckplatz (max-height: 290px) {
   .deck > .titel, .deck > .meta, .deck > .deckkopf { display: none; }   /* deck letter, status and title are in the place head and the strip */
+  .deck.ohne-track > .lauf-leer { display: flex; }
   .deck > .deckkopf, .deck > .position, .deck > .bedienreihe, .deck > .tasten { margin-top: -2px; }
   .deck > .ueber { height: 16px; }   /* the overview gives its height to the waveform */
 }
@@ -747,7 +770,7 @@ body:not(.studio) #pult .deck > .lauf { flex: .84 1 24px; min-height: 16px; }   
 /* DJ view, final review: the fader gets the free room of the strip. The strip becomes one grid (.knoepfe and .faderspalte dissolve): the empty cell
    left of LO takes PFL and the FX 1/2 buttons, so they no longer cost two rows above the fader; the knobs are 28 px, the fader cap 18 px. The Studio view keeps its strip. */
 body:not(.studio) #pult .zug { display: grid; grid-template-columns: 1fr 1fr; column-gap: 4px; row-gap: 1px; padding-bottom: 4px;
-  grid-template-rows: auto repeat(3, auto) minmax(60px, 1fr) auto auto; align-content: stretch; }
+  grid-template-rows: auto repeat(3, auto) minmax(60px, 1fr) auto auto auto; align-content: stretch; }   /* row 8: the FX keys 1 2 3 and A THRU B each get a full-width row (task 5, hit area) */
 body:not(.studio) #pult .zug .knoepfe, body:not(.studio) #pult .zug .faderspalte { display: contents; }
 body:not(.studio) #pult .zug .zugname { grid-row: 1; grid-column: 1 / -1; }
 body:not(.studio) #pult .zug .knopfzeile { grid-template-columns: 38px; grid-template-rows: 11px 38px; }
@@ -757,13 +780,13 @@ body:not(.studio) #pult .zug .knopfzeile:nth-child(5) { grid-column: 1; grid-row
 body:not(.studio) #pult .zug .knopfzeile:nth-child(2) { grid-column: 2; grid-row: 2; }   /* HI */
 body:not(.studio) #pult .zug .knopfzeile:nth-child(3) { grid-column: 2; grid-row: 3; }   /* MID */
 body:not(.studio) #pult .zug .knopfzeile:nth-child(4) { grid-column: 2; grid-row: 4; }   /* LO */
-body:not(.studio) #pult .zug .pfl { grid-row: 4; grid-column: 1; align-self: start; height: 18px; }
-body:not(.studio) #pult .zug .fxzuweisung { grid-row: 4; grid-column: 1; align-self: end; }
+body:not(.studio) #pult .zug .pfl { grid-row: 4; grid-column: 1; align-self: start; height: 20px; }
+body:not(.studio) #pult .zug .fxzuweisung { grid-row: 7; grid-column: 1 / -1; align-self: end; }
 body:not(.studio) #pult .zug .fxzuweisung button { padding: 2px 0; }
 body:not(.studio) #pult .zug .regler.senkrecht { grid-row: 5; grid-column: 1 / -1; }
 body:not(.studio) #pult .zug .meter.senkrecht { grid-row: 5; grid-column: 2; justify-self: end; }
 body:not(.studio) #pult .zug .faderwert { grid-row: 6; grid-column: 1 / -1; }
-body:not(.studio) #pult .zug .xzuweisung { grid-row: 7; grid-column: 1 / -1; }
+body:not(.studio) #pult .zug .xzuweisung { grid-row: 8; grid-column: 1 / -1; }
 body:not(.studio) #pult .zug .regler.senkrecht .bahn { height: calc(100% - 14px); margin: 7px 0; }
 body:not(.studio) #pult .zug .regler.senkrecht .kappe { height: 14px; margin-bottom: -7px; }
 body:not(.studio) #pult .zug .regler.senkrecht { max-height: 260px; align-self: end; height: 100%; }
@@ -821,13 +844,13 @@ body:not(.studio):not(.produktion) #kopf > #fx { order: 4; }   /* DJ view: only 
 /* COLOR PARAMETER knob (mischer_mitte.js colorKnopf): the range input only carries the value. On FILTER the parameter does nothing (colorfx.cpp), so it is dimmed. */
 .colorfx .colorknopf { width: 30px; height: 30px; --farbe: var(--warn); }
 .colorfx #colorparam[hidden] { display: none; }
-.colorfx.filter-art .colorparam > span, .colorfx.filter-art .colorparam > output, .colorfx.filter-art .colorknopf { opacity: .4; }
+.colorfx.filter-art .colorknopf { opacity: .4; }  /* only the knob is dimmed; the labels stay at 4.5:1 and "no effect on FILTER" says why */
 
 /* REMIX unit in the mixer middle column (or the header in other views): the target and OPEN for the Remix window. */
 .remixeinheit .remixziel { font-size: 10px; font-weight: 800; letter-spacing: .08em; color: var(--dim); }
 .remixeinheit .remixziel.an { color: var(--l2); }
 body:not(.studio) #pult .fxmitte > .remixeinheit { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; }   /* one row: REMIX, target, OPEN */
-body:not(.studio) #pult .fxmitte > .remixeinheit .remixziel { grid-column: 2; justify-self: end; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+body:not(.studio) #pult .fxmitte > .remixeinheit .remixziel { grid-column: 2; justify-self: end; white-space: normal; text-align: right; max-width: 100%; letter-spacing: 0; font-size: 9px; line-height: 1.1; }   /* wraps to two lines instead of being cut */
 body:not(.studio) #pult .fxmitte > .remixeinheit [data-remix-oeffnen] { grid-column: 3; font-size: 10px; padding: 3px 8px; }
 /* short screens (1920x1080): the COLOR hint line goes, the FX column fits without scrolling */
 @media (max-height: 1150px) { body:not(.studio) #pult .fxmitte .colorfx .colorhinweis { display: none; }
@@ -861,6 +884,12 @@ body:not(.studio) #pult .deck.mini > .lauf { grid-area: 1 / 2; height: 46px; min
    display in the top right corner beside the deck head; the waveform is about 28 % lower than before 2026-11-14 (Andreas: twice 15 %; .63 of the free height). */
 body:not(.studio) #pult .deck:not(.mini) { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto;
   grid-template-rows: auto auto minmax(16px, .63fr) auto auto auto auto; gap: 6px 12px; align-content: start; }
+/* UI check M7 (1366 x 768, dock open: the top place is 221 px and the deck rows ended 24 px below it, the LOOP -> 1 2 3 4 row was cut at the panel edge):
+   on narrow windows the deck closes its row gaps (6 -> 2 px) and its vertical padding (8 -> 6 px), 24 px in all. 1920 stays as it is.
+   (A @container rule cannot style the container itself, hence a media query.) */
+@media (max-width: 1500px) {
+  body:not(.studio) #pult .deck:not(.mini) { row-gap: 2px; padding-top: 6px; padding-bottom: 6px; }
+}
 body:not(.studio) #pult .deck:not(.mini) > .deckkopf { grid-area: 1 / 1 / 2 / 4; }
 body:not(.studio) #pult .deck:not(.mini) > .position { grid-area: 1 / 4 / 2 / 5; gap: 18px; align-self: center; }
 body:not(.studio) #pult .deck:not(.mini) > .titel { grid-area: 2 / 1 / 3 / 2; min-width: 0; }
@@ -896,6 +925,11 @@ body:not(.studio) #pult .deck:not(.mini) > .lauf { grid-row: 3; height: 100%; }
 body:not(.studio) .seqplatz .sq-zahl { display: none; }   /* the DJ view has the pattern count in the place head */
 .sq-rechts { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .sq-breite { display: flex; gap: 2px; }
+.sq-breite-wort { color: var(--dim); font-size: 10px; letter-spacing: .1em; margin-right: -4px; white-space: nowrap; }
+.sq-menue { position: fixed; z-index: 40; display: flex; flex-direction: column; gap: 2px; padding: 4px; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 24px rgba(0, 0, 0, .55); }
+.sq-menue[hidden] { display: none; }
+.sq-menue .sq-chip { height: 24px; text-align: left; }
+.sq-mehr { font-size: 15px; line-height: 1; padding: 0 9px; }
 .sq-chip { height: 22px; padding: 0 8px; border-radius: 5px; font-size: 11px; font-weight: 600; letter-spacing: .04em; white-space: nowrap; color: var(--text); }
 span.sq-chip { display: inline-flex; align-items: center; background: var(--panel2); border: 1px solid var(--line); color: var(--dim); }
 .sq-chip.an { border-color: var(--text); }
@@ -1066,8 +1100,8 @@ body.controller-fenster #bestand .register { display: flex !important; font-size
 
 /* Studio (workbench) view: the DJ effect strip of the page head (ROUTING, FX1, FX2, COLOR, FX3) is folded away behind the DJ FX toggle; the status items stay. */
 #djfx-auf { display: none; order: 10; }
-body.werkbank #djfx-auf { display: inline-block; }
-body.werkbank:not(.djfx-auf) #kopf > #fx { display: none; }
+body.werkbank #djfx-auf, body.produktion #djfx-auf { display: inline-block; }
+body.werkbank:not(.djfx-auf) #kopf > #fx, body.produktion:not(.djfx-auf) #kopf > #fx { display: none; }
 
 /* SEQ scenes: a box of the page header (row 1, next to ROUTING, same frame as BAR/PHRASE/BPM and ROUTING). It wraps inside itself at a narrow window and is
    hidden with the beat FX strip in the STUDIO workbench view (body.werkbank without the DJ FX toggle). */
@@ -1077,7 +1111,10 @@ body.werkbank:not(.djfx-auf) #kopf > #fx { display: none; }
 /* Below about 2100 px the first header row has no room for the scene box: it takes a row of its own (order 8, behind the connection lights) instead of
    pushing them into the second row. Measured in the browser at 1920 and 2540 px. */
 @media (max-width: 2100px) { #kopf > #seq-szenen { order: 8; } }
-body.werkbank:not(.djfx-auf) #kopf > #seq-szenen { display: none; }
+body.werkbank:not(.djfx-auf) #kopf > #seq-szenen, body.produktion:not(.djfx-auf) #kopf > #seq-szenen { display: none; }
+/* PRODUCTION with the DJ FX folded: nothing sits below the forced line break any more but the DJ FX key and the headphone mix, so the break goes and they join the lights row (two header rows instead of three) */
+body.produktion:not(.djfx-auf) #kopf::before, body.werkbank:not(.djfx-auf) #kopf::before, body.tracker:not(.djfx-auf) #kopf::before { display: none; }
+body.produktion:not(.djfx-auf) #kopf, body.werkbank:not(.djfx-auf) #kopf, body.tracker:not(.djfx-auf) #kopf { row-gap: 2px; padding-top: 4px; padding-bottom: 4px; }
 #seq-szenen .szenen-titel { font-size: 11px; letter-spacing: .1em; font-weight: 700; color: var(--dim); margin-right: 2px; }
 #seq-szenen .szeneplatz { position: relative; display: inline-flex; }
 #seq-szenen .szene, #seq-szenen .szene-sichern { min-width: 32px; height: 28px; font-size: 11px; font-weight: 700; border: 1px solid var(--line); border-radius: 5px;
@@ -1179,3 +1216,101 @@ body:not(.studio) #deck-c .instanz-editor > .muster-feld { flex: 1 1 auto; min-h
 
 .sq-zu { min-width: 22px; padding: 0 6px; }
 .sq-unbenutzt.an { border-color: var(--text); }
+
+/* dark form controls: low specificity, so every rule of its own wins; the native selects, inputs and scrollbars no longer render white */
+input, select, textarea { background: var(--panel2); color: var(--text); border: 1px solid var(--line); }
+
+/* Closed live set (UI polish task 4): one banner row above the DJ desk, its own grid row (row 1), full width; the rows of the desk start at row 2.
+   While it is hidden its row has no height; the row gap it would still add is taken back by the negative top margin of the desk. */
+#live-zu { display: none; }
+body:not(.studio) #pult > #live-zu { grid-column: 1 / -1; grid-row: 1; display: flex; align-items: center; gap: 12px; padding: 4px 10px; min-height: 28px;
+  border: 1px solid var(--warn, #e0a040); border-radius: 6px; font-size: 12px; white-space: nowrap; overflow: visible; }
+body:not(.studio) #pult > #live-zu[hidden] { display: none; }
+body:not(.studio) #pult > #live-zu button { font-size: 11px; font-weight: 800; letter-spacing: .08em; padding: 4px 12px; border-radius: 5px; border: 1px solid var(--text); color: var(--text); }
+body:not(.studio) #pult { margin-top: -4px; }
+/* UI polish fix (closed live set at 1366x768): the banner no longer takes a row of its own, which squeezed the channel strips (255 px high, their content needs 275).
+   It sits in the empty middle of the left side column (a closed live set has no places in use; the place heads are at its top), so the strips keep the height they have with the set open. Row 1 stays empty. */
+body:not(.studio) #pult > #live-zu { grid-column: 1; grid-row: 3; align-self: center; z-index: 1; flex-wrap: wrap; white-space: normal; row-gap: 6px; max-width: 520px; }
+
+/* UI polish task 5: the DJ desk at 1366x768 and 1920x1080. */
+/* Nr. 3: the place head keeps its text (full text in the title, set in slots_view.js), the type keys give back room at compact width. */
+.platztext { min-width: 12ch; }
+.platzhinweis { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1500px) {
+  .platzkopf { gap: 6px; }
+  .platzwahl button { padding: 3px 6px; letter-spacing: .04em; }
+}
+/* Nr. 3: the STRUDEL head and the LOOP -> group wrap inside their place; the length keys, REC and every target group stay whole. */
+body:not(.studio) #pult .deckkopf { flex-wrap: wrap; row-gap: 4px; }
+.recreihe, .recziel { flex-wrap: wrap; row-gap: 4px; }
+.recdeck, .reclaenge, .recknopf { white-space: nowrap; flex: 0 0 auto; }
+body:not(.studio) #pult .cuewahl { flex-wrap: wrap; row-gap: 4px; }
+body:not(.studio) #pult .cuewahl .nachbox { margin-left: 6px; white-space: nowrap; }
+body:not(.studio) #pult .cuewahl button { white-space: nowrap; }
+/* Review (M7): with two loop decks the row LOOP -> LOOP 1, 1 2 3 4 needs 268 px in a 234 px place and 3 / 4 wrapped out of the deck: narrower keys (21 px wide) and a smaller indent bring it to 224 px */
+@media (max-width: 1500px) {
+  body:not(.studio) #pult .cuewahl .nachbox { margin-left: 2px; }
+  body:not(.studio) #pult .cuewahl .nachbox ~ button { padding: 0 5px; }
+}
+/* Nr. 23: small keys get a 20 x 20 px hit area by a transparent ::before; the look does not change. */
+body:not(.studio) #pult :is(.fxzuweisung, .xzuweisung) button { justify-self: stretch; }
+/* zero specificity: a key that is already positioned (the K keys are absolute in the strip) keeps its own rule, a static one becomes the anchor of the ::before */
+:where(#pult .kill.schalter, #pult .pfl.schalter, #pult .xzuweisung button, #pult .fxzuweisung button, #pult .fxbeat button, #pult .fxeinheit button, #pult .reclaenge button, #pult .recdeck button, #pult .recknopf, #pult .ld-gross, #kopf #fx-routing, #schublade) { position: relative; }
+body:not(.studio) #pult .zug .fxzuweisung { justify-self: stretch; width: 100%; }
+body:not(.studio) #pult :is(.pfl.schalter, .xzuweisung button, .fxzuweisung button, .fxbeat button, .fxeinheit button, .reclaenge button, .recdeck button, .recknopf, .ld-gross)::before,
+body:not(.studio) #kopf #fx-routing::before, #schublade::before { content: ''; position: absolute; inset: -3px -1px; }   /* about 20 px wide already: the hit area grows by 6 px in height, 2 px in width */
+#schublade::before { inset: -3px; }
+body:not(.studio) #pult .kill.schalter::before { content: ''; position: absolute; inset: -3px; }   /* 14 x 14 grows to 20 x 20 */
+/* Nr. 16: the big browser leaves the desk 112 px: only the place heads, the mini decks and the crossfader stay; strips, master, FX and the place bodies
+   come back when the mode closes. Without this the strips overlap at 768 and every cell is cut. */
+body.lib-gross:not(.studio) #pult :is(.zug, .mitte, .fxmitte, #live-zu, .seitenspalte > [data-platz]:not(.mini), #platz-loops, #platz-loops2, #platz-remix) { display: none; }
+
+/* UI polish task 6: a placeholder is read, not guessed: --dim on --panel2 is 4.98:1 in the dark theme (the browser default was 3.58:1). */
+input::placeholder, textarea::placeholder { color: var(--dim); opacity: 1; }
+
+/* UI polish fix: header of at most 70 px in a narrow window (1366 x 768 gives 66). The PHONES mix collapses into one PHONES key whose pop-over holds the same two knobs (STUDIO,
+   PRODUCTION and TRACKER share the header; in the DJ view the mix sits in the mixer and `#kopf >` does not match). The clock box and the connection dots lose height. */
+#phones-knopf { display: none; }
+@media (max-width: 1500px) {
+  #kopf > .uhr { min-height: 0; padding: 0 10px; }
+  #kopf .uhr .feld b, #kopf #bpm { font-size: 24px; line-height: 28px; }
+  #kopf .punkt { padding: 3px 10px 3px 24px; }
+  #kopf > .kopfmix { position: relative; min-height: 0; padding: 0; border: 0; background: none; }
+  #kopf > .kopfmix > .phones { display: none; }
+  #kopf > .kopfmix > #phones-knopf { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .1em; padding: 3px 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--dim); }
+  #kopf > .kopfmix.offen > #phones-knopf { color: var(--text); border-color: var(--text); }
+  #kopf > .kopfmix > .kopfhoerer { display: none; position: absolute; top: calc(100% + 4px); right: 0; z-index: 60; gap: 10px; padding: 8px 12px; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 4px 16px rgba(0, 0, 0, .5); }
+  #kopf > .kopfmix.offen > .kopfhoerer { display: flex; }
+  #kopf:has(> .kopfmix.offen) { position: relative; z-index: 50; overflow: visible; }   /* only while the pop-over is open: above the view below the header */
+}
+
+/* UI polish fix (DJ desk at 1366x768 with the library panel open): a channel strip has about 221 px, its content needed 275. At compact height the knobs are 24 px instead
+   of 34 (labels 10 px) and the fader travel may shrink to 20 px, so the strip fits and its A THRU B row no longer lies over the head of the strip below. */
+@media (max-height: 820px) {
+  body:not(.studio) #pult .zug { gap: 0; padding-top: 2px; }
+  body:not(.studio) #pult .zug .knopfzeile { grid-template-columns: 24px; grid-template-rows: 10px 24px; }
+  body:not(.studio) #pult .zug .knopfzeile > .knopf { width: 24px; height: 24px; }
+  body:not(.studio) #pult .zug .faderspalte { grid-template-rows: auto auto minmax(20px, 1fr) auto auto; gap: 2px 3px; }
+}
+
+/* UI polish fix 2 (DJ strudel place at 1366): the button row of the editor is wider than the editor column (about 145 px next to the sound card and the strip), so SAVE
+   lay under the PFL of the strip and the DRUMS card. At 1500 px or less the row wraps inside its column, so every key has its own place. */
+@media (max-width: 1500px) {
+  body:not(.studio) #deck-c .musterzeile { flex-wrap: wrap; row-gap: 4px; }
+  body:not(.studio) #deck-c .instanz-editor > .muster-feld { min-height: 44px; }
+}
+
+/* UI polish fix (DJ at compact height, library closed): the closed dock is 34 px high; its tab keys stay on one line (CONTROLLERS no longer wraps), the table info
+   (empty while closed) makes room, so the five tab keys, the filter keys and the search lie inside the window. */
+@media (max-height: 820px) {
+  .bereich button { white-space: nowrap; font-size: 11px; padding: 3px 8px; }
+  body.lib-zu #bestand .kopfzeile { flex-wrap: nowrap; align-items: center; padding-bottom: 0; }
+  body.lib-zu #bestand #bestand-info { display: none; }
+}
+
+/* UI polish fix (DJ at 1366x768, library open): the master column has 224 px, its content needed 247, so the PHONES keys lay under FX1. At compact height the
+   master knobs are 32 px and the level meter may shrink to 20 px (it takes the free height anyway), so the column fits. */
+@media (max-height: 820px) {
+  body:not(.studio) #pult .mitte { grid-template-rows: auto auto auto minmax(20px, 1fr) auto auto auto; }
+  body:not(.studio) #pult .mitte .knopf, body:not(.studio) #pult .mitte .summe.glue .knopf { width: 32px; height: 32px; }
+}

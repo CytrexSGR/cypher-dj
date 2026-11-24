@@ -107,7 +107,7 @@ export function markiereTyp() {
   for (const x of $$('[data-typ]')) x.classList.toggle('an', !stz.liste && x.dataset.typ === stz.typ);
   // Filterleiste je Typ (S3-Concern): nur die Felder des Typs, der Rest wird zurückgesetzt und verschwindet, nie unsichtbar wirksam.
   // In der Listenansicht gelten keine Filter: Leiste weg, Zustand bleibt für die Rückkehr.
-  $('.lib-filter').hidden = !!stz.liste;
+  $('#lib-suche').closest('.lib-filter').hidden = !!stz.liste;
   if (stz.liste) return;
   const ok = filterFuer(stz.typ);
   Object.assign(stz, filterBereinigt(stz.typ, stz));
@@ -115,6 +115,7 @@ export function markiereTyp() {
   $('#lib-bpm').hidden = !ok.includes('bpm'); $('#lib-energie').hidden = !ok.includes('energie');
   $('#lib-suche').value = stz.text ?? '';
   $('#lib-key').value = stz.camelot ?? ''; $('#lib-nachbarn').checked = !!stz.nachbarn; $('#lib-bpm').value = stz.bpm ?? ''; $('#lib-energie').value = stz.energie ?? '';
+  $('#lib-mehr').classList.toggle('an', !!(stz.camelot || stz.bpm || stz.energie || stz.nachbarn));   // FILTER mark follows the values after a type change
 }
 // Knoten: Name (kürzt bei Platzmangel, der volle Name steht im title), Zähler (kürzt nie). opt.vorn: Ellipse vorn, damit das
 // unterscheidende Ende eines Ordnerpfads sichtbar bleibt (<bdi> hält die Zeichenfolge dabei in Leserichtung).

@@ -35,7 +35,8 @@ test('liste: Slug, Name, geaendert (ISO aus der Änderungszeit); leere/fehlende 
   const q = new Projekte(w); q.lege('Beta'); q.lege('Alpha');
   fs.mkdirSync(path.join(w, KAPUTT)); fs.writeFileSync(path.join(w, KAPUTT, 'project.json'), '{nein');
   fs.mkdirSync(path.join(w, 'leer-ohne-datei'));
-  const l = q.liste();
+  // the list is ordered most recently used first (browser plan 2), so the test sorts by slug before comparing
+  const l = q.liste().sort((a, b) => (a.slug < b.slug ? -1 : 1));
   assert.deepEqual(l.map((x) => x.slug), ['alpha', 'beta', 'kaputt']);
   assert.deepEqual(l.map((x) => x.name), ['Alpha', 'Beta', 'kaputt']);
   assert.match(l[0].geaendert, /^\d{4}-\d\d-\d\dT/); assert.equal(l[2].fehler, 'json_kaputt');
@@ -50,7 +51,7 @@ test('speichere/lies: Rundlauf; geschrieben wird normalisiert (Schlüssel sortie
   assert.equal(kanonisch(JSON.parse(roh)), kanonisch(p));
   assert.ok(roh.indexOf('"farbe"') < roh.indexOf('"fader_db"') === ('farbe' < 'fader_db'), 'Schlüssel alphabetisch in der Datei');
   assert.equal(kanonisch(pr.lies(slug)), kanonisch(mitVon(p)), 'beim Laden gilt eine Spur ohne von als andreas (Spec 6.22)');
-  assert.deepEqual(fs.readdirSync(path.join(w, slug)).sort(), ['project.json', 'undo.jsonl']);
+  assert.deepEqual(fs.readdirSync(path.join(w, slug)).sort(), ['.versionen', 'project.json', 'undo.jsonl']);   // sorted; the first save makes an automatic copy in .versionen
   const kaputt = kopie(p); kaputt.tempo_bpm = 5;
   assert.throws(() => pr.speichere(slug, kaputt), (e) => e instanceof AblageFehler && e.fehler === 'projekt_ungueltig' && /tempo_bpm/.test(e.message));
   assert.equal(kanonisch(pr.lies(slug)), kanonisch(mitVon(p)), 'alter Stand liegt unverändert');

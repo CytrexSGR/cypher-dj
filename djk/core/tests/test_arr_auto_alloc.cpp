@@ -158,7 +158,7 @@ int main() {
   PRUEF(stapel_da && stapel_tief == 32);   // U9: the stacks were really loaded and play on all 32 tracks
   PRUEF(positiv >= 1);
   PRUEF(im_zyklus == 0);
-  PRUEF(tab.anzahl() == 5088);   // 16 bk slots (4576 with 8);   // container core K9: the console of four containers and four buses replaced the deck, erz and loop-box strips; 5076 rows before it, 500 fewer now (measured, the old sum stays in the git history)
+  PRUEF(tab.anzahl() == 5184);   // loop lane strip K1: +96 rows (spur/<n>/fx/1..3 of 32 tracks) on top of the 5088 before; 16 bk slots (4576 with 8);   // container core K9: the console of four containers and four buses replaced the deck, erz and loop-box strips; 5076 rows before it, 500 fewer now (measured, the old sum stays in the git history)
   PRUEF(voll == 0);
   PRUEF_ENDE();
 }

@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
 import * as WIEDERGABE from '../project/playback.ts';
 import * as BEFEHLE from '../project/commands.ts';
@@ -203,7 +204,11 @@ test('6.7 project.json: fsync auf die Temp-Datei, dann rename, dann fsync auf da
   fs.fsyncSync = (fd) => { ereignisse.push(fs.fstatSync(fd).isDirectory() ? 'fsync-verzeichnis' : 'fsync-datei'); return fsync(fd); };
   fs.renameSync = (a, b) => { ereignisse.push(`rename ${path.basename(String(b))}`); return rename(a, b); };
   try { pr.speichere(slug, specProjekt()); } finally { fs.fsyncSync = fsync; fs.renameSync = rename; }
-  assert.deepEqual(ereignisse, ['fsync-datei', 'rename project.json', 'fsync-verzeichnis']);
+  // the version store first keeps the replaced state (`<stamp>.json`, written the same safe way); project.json itself always ends the sequence
+  const sicher = ['fsync-datei', 'rename project.json', 'fsync-verzeichnis'];
+  assert.deepEqual(ereignisse.slice(-3), sicher);
+  const davor = ereignisse.slice(0, -3);
+  assert.ok(davor.length === 0 || (davor.length === 3 && davor[0] === 'fsync-datei' && /^rename \d{8}T\d{9}Z\.json$/.test(davor[1]) && davor[2] === 'fsync-verzeichnis'), davor.join(', '));
 });
 
 test('6.7 Schreiben scheitert nach 20 Bytes (ENOSPC): Speicher unverändert, Datei auf die alte Länge zurück, Projekt auf der Platte wieder alt, gleiche rev geht danach', (t) => {
@@ -572,10 +577,11 @@ test('Leistung: Tempo bei eingefrorener Spur nimmt den vollen Weg (Freeze fällt
 test('Lesbarkeit: keine Zeile in projekt/*.ts und areas/proj/*.ts ist länger als 160 Zeichen', () => {
   const lang = [];
   let dateien = 0;
-  for (const d of ['project/storage.ts', 'areas/proj/area.ts'].map((f) => path.dirname(f))) {   // dirname of existing files: the export renames the folders in these paths
+  const wurzel = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');   // independent of the working directory
+  for (const d of ['project/storage.ts', 'areas/proj/area.ts'].map((f) => path.dirname(path.join(wurzel, f)))) {   // dirname of existing files: the export renames the folders in these paths
     for (const n of fs.readdirSync(d).filter((x) => x.endsWith('.ts'))) {
       dateien++;
-      fs.readFileSync(path.join(d, n), 'utf8').split('\n').forEach((z, i) => { if ([...z].length > 160) lang.push(`${d}/${n}:${i + 1} (${[...z].length})`); });
+      fs.readFileSync(path.join(d, n), 'utf8').split('\n').forEach((z, i) => { if ([...z].length > 160) lang.push(`${path.relative(wurzel, d)}/${n}:${i + 1} (${[...z].length})`); });
     }
   }
   assert.ok(dateien >= 15, `${dateien} Dateien gelesen`);

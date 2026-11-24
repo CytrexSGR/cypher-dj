@@ -27,7 +27,7 @@ def test_gleiche_tabelle_wie_ts(tmp_path):
     r = subprocess.run(["node", "--input-type=module", "-e", js], cwd=REPO / "djk" / "ui", env=env, capture_output=True, text=True, timeout=60)
     assert r.returncode == 0, r.stderr
     assert json.loads(r.stdout) == {a: ablage.orte(a, env) for a in ablage.arten()}
-    assert len(ablage.arten()) == 16
+    assert len(ablage.arten()) == 18
 
 
 def test_env_leer_ist_ungesetzt():
@@ -99,3 +99,45 @@ def test_shell_ausgabe_quotiert(tmp_path):
     assert p.stdout.strip() == f"{heim}/quellen.toml"
     r2 = subprocess.run(["python3", "-m", "ablage", "pfad", "referenzen"], env=env, capture_output=True, text=True, timeout=60)
     assert r2.stdout.strip() == f"{heim}/werke/referenzen"
+
+
+def _ohne_cypherdj():
+    return {k: v for k, v in os.environ.items() if not k.startswith("CYPHERDJ_")}
+
+
+def test_pruefinstanz_gleiche_antworten_wie_ts(tmp_path):
+    """Instance e, no env override: every kind and fixed name resolves to the same path in Python and in paths.ts (own /dev/shm folder, core kinds and
+    the shm-null names stay at the real place)."""
+    env = _ohne_cypherdj()
+    env.update(HOME=str(tmp_path), CYPHERDJ_INSTANZ="e")
+    js = ("import * as P from './paths.ts'; const o={}; for (const a of P.ablageArten()) o[a]=P.ablageOrdner(a);"
+          " for (const n of ['mediathek','analyse','bibliothek_konfig','surge_werk','plugin_index','umgebung','pruefen','quellen','referenzen']) o[n]=P.festerPfad(n);"
+          " console.log(JSON.stringify(o));")
+    r = subprocess.run(["node", "--input-type=module", "-e", js], cwd=REPO / "djk" / "ui", env=env, capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr
+    py = {a: str(ablage.ordner(a, env)) for a in ablage.arten()}
+    py.update({n: str(ablage.fest(n, env)) for n in ablage.fest_namen()})
+    assert json.loads(r.stdout) == py
+    stay = {"kits", "loops", "surge_werk", "umgebung"}
+    for k, v in py.items():
+        if k not in stay:
+            assert v.startswith("/dev/shm/cypherdj-e/"), (k, v)
+
+
+def test_pruefinstanz_env_gewinnt_und_betrieb_bleibt():
+    e = {"HOME": "/tmp/h0", "CYPHERDJ_INSTANZ": "e", "CYPHERDJ_SAMPLER": "/tmp/s", "CYPHERDJ_MEDIATHEK": "/tmp/m.sqlite"}
+    assert ablage.ordner("sampler", e) == Path("/tmp/s")
+    assert ablage.fest("mediathek", e) == Path("/tmp/m.sqlite")
+    assert ablage.ordner("klaenge", {**e, "CYPHERDJ_KLAENGE": ""}) == Path("/dev/shm/cypherdj-e/klaenge")
+    live = {"HOME": "/tmp/h0", "CYPHERDJ_INSTANZ": ""}
+    assert ablage.ordner("sampler", live) == Path("/tmp/h0/cypherdj/werke/sampler")
+    assert ablage.fest("mediathek", live) == Path("/tmp/h0/.local/share/cypherdj/mediathek/mediathek.sqlite")
+    assert ablage.fest("surge_werk", e) == Path("/tmp/h0/.local/share/cypherdj/surge-daten/usr/share/surge-xt/patches_factory")
+
+
+def test_art_ohne_alt_liegt_immer_bei_neu():
+    """mitschnitte has no old place (alt is empty): neu under vorgabe neu and alt, and the env still wins."""
+    env = {"HOME": "/tmp/h0"}
+    assert ablage.ordner("mitschnitte", env, neu_tabelle()) == Path("/tmp/h0/cypherdj/werke/mitschnitte")
+    assert ablage.ordner("mitschnitte", env, {**neu_tabelle(), "vorgabe": "alt"}) == Path("/tmp/h0/cypherdj/werke/mitschnitte")
+    assert ablage.ordner("mitschnitte", {**env, "CYPHERDJ_MITSCHNITTE": "/tmp/m"}) == Path("/tmp/m")

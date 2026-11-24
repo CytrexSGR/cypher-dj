@@ -27,6 +27,7 @@
 //   schnittAktionen: [{ id, text, titel, aktiv(wahl) -> boolean, lauf(wahl) -> Promise }]   read on every draw; buttons after FIT, disabled while aktiv is false
 //   zeichneSchnitt()                      redraw (call it after changing schnittAktionen)
 import { leseWelle, spalten, zeichneSpalte } from '../wave.js';
+import { zaehlText } from '../format_text.js';
 
 export const SCHNITT_TEXT = {
   fit: 'FIT', fitTitel: 'Set SPEED so that the cut plays at the project tempo',
@@ -442,7 +443,7 @@ export function bindeSchnittStreifen(ctx, host) {
       return;
     }
     steuer.hidden = false;
-    titel.textContent = `${s.name} · ${s.grenzen.length - 1} slices · ${Number(Number(s.bpm).toFixed(2))} BPM`;
+    titel.textContent = `${s.name} · ${zaehlText(s.grenzen.length - 1, 'slice')} · ${Number(Number(s.bpm).toFixed(2))} BPM`;
     if (abgeglichen !== s) gleicheSteuerAb(s);
     zeichneSteuer();
     zeichneText(spur, sc, e);

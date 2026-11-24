@@ -209,7 +209,8 @@ export type WarpModus = (typeof WARP_MODI)[number];
 export const WARP_QUELLEN = ['werkstatt', 'traktor', 'mediathek', 'takte', 'hand'] as const;
 export type WarpQuelle = (typeof WARP_QUELLEN)[number];
 export const MAX_MARKER = 4096;                                // je Clip; der Kern prüft zusätzlich 262 144 in der ganzen Wiedergabe
-// Halbtöne; Bungee rechnet 2 Oktaven (third_party/bungee/src/Timing.cpp:22, Plan Slice 5 D1); die Spec sagte 48. Nach unten nur −12 (D1, Andreas 2026-10-28):
+// Halbtöne; Bungee rechnet 2 Oktaven (third_party/bungee/src/Timing.cpp:22, Plan Slice 5 D1); die Spec sagte 48. Nach unten nur
+// −12 (D1, Andreas 2026-10-28):
 // ab −13 st liegt der Anschlag im Arrangement über dem Lage-Gate (gemessen −13 st 26,9 Samples, −24 st 50,9, Gate 25). Der Kern nimmt weiter 0,25 bis 4.
 export const TRANSPOSE_MIN = -12;
 export const TRANSPOSE_MAX = 24;
@@ -459,12 +460,14 @@ export function zellFehler(z: Zelle): { grund: string; text: string } | null {
     }
     if (!loop || r.keylock === false) return ab('nur_keylock', 'transponieren needs a loop cell with keylock on');
   }
-  if ('keylock' in r && !loop && !('transponieren' in r)) return ab('argument_ungueltig', 'keylock: false applies to loop cells only (a one-shot plays unstretched)');
+  if ('keylock' in r && !loop && !('transponieren' in r)) return ab('argument_ungueltig',
+    'keylock: false applies to loop cells only (a one-shot plays unstretched)');
   const beats = typeof z.beats === 'number' ? z.beats : 0;
   if ('scheiben' in r) {
     const bad = (text: string) => ab('scheiben_ungueltig', text);
     const s = r.scheiben;
-    if (!istObjekt(s) || Object.keys(s).some((k) => k !== 'teilung' && k !== 'grenzen' && k !== 'folge') || !('grenzen' in s) || !('folge' in s) || !('teilung' in s)) {
+    if (!istObjekt(s) || Object.keys(s).some((k) => k !== 'teilung' && k !== 'grenzen' && k !== 'folge') || !('grenzen' in s) || !('folge' in s) ||
+      !('teilung' in s)) {
       return bad('scheiben: {teilung, grenzen, folge} expected');
     }
     if (!(ZELL_TEILUNGEN as readonly unknown[]).includes(s.teilung)) return bad(`scheiben.teilung: ${ZELL_TEILUNGEN.join(' | ')} expected`);
@@ -474,7 +477,8 @@ export function zellFehler(z: Zelle): { grund: string; text: string } | null {
     if (f.length !== g.length) return bad('scheiben.folge: as many entries as grenzen expected');
     for (let i = 0; i < g.length; i++) {
       if (!zahl(g[i])) return bad(`scheiben.grenzen[${i}]: number expected`);
-      if (i === 0 ? g[i] !== 0 : !(g[i] > g[i - 1])) return bad(i === 0 ? 'scheiben.grenzen: the first boundary is 0' : `scheiben.grenzen[${i}]: rising expected`);
+      if (i === 0 ? g[i] !== 0 : !(g[i] > g[i - 1])) return bad(i === 0 ?
+        'scheiben.grenzen: the first boundary is 0' : `scheiben.grenzen[${i}]: rising expected`);
       if (!(g[i] < beats)) return bad(`scheiben.grenzen[${i}]: below the cell length (${beats} beats) expected`);
       if (!Number.isInteger(f[i]) || f[i] < 1 || f[i] > g.length) return bad(`scheiben.folge[${i}]: integer 1..${g.length} expected`);
     }
@@ -488,7 +492,8 @@ export function zellFehler(z: Zelle): { grund: string; text: string } | null {
   if ('huellen' in r) {
     const bad = (text: string) => ab('huelle_ungueltig', text);
     const h = r.huellen;
-    if (!Array.isArray(h) || h.length < 1 || h.length > ZELL_HUELLEN_MAX) return bad(`huellen: 1..${ZELL_HUELLEN_MAX} envelopes expected (absent when there are none)`);
+    if (!Array.isArray(h) || h.length < 1 ||
+      h.length > ZELL_HUELLEN_MAX) return bad(`huellen: 1..${ZELL_HUELLEN_MAX} envelopes expected (absent when there are none)`);
     const gesehen = new Set<string>();
     for (let hi = 0; hi < h.length; hi++) {
       const e = h[hi] as unknown;
@@ -643,7 +648,9 @@ export interface Spur {
   filter?: number;             // loop deck: -1..+1, absent = 0; same tracks as `zellen`
   eq?: Partial<Record<EqBand, number>>;     // loop deck: -200..+6 dB per band, absent band = 0; same tracks as `zellen`
   kill?: Partial<Record<EqBand, true>>;     // loop deck: a band that is killed (absent = off, never stored as false); same tracks as `zellen`
-  fx?: Partial<Record<FxNr, boolean>>;      // loop deck: the FX 1 2 3 (Remix) assignment, like the 1 2 3 keys of a mixer channel (absent = all off; the commands store only true); same tracks as `zellen`
+  // loop deck: the FX 1 2 3 (Remix) assignment, like the 1 2 3 keys of a mixer channel (absent = all off; the commands store only true); same tracks as
+  // `zellen`
+  fx?: Partial<Record<FxNr, boolean>>;
 }
 export type FxNr = '1' | '2' | '3';
 export const FX_NUMMERN: readonly FxNr[] = ['1', '2', '3'];
@@ -1584,7 +1591,8 @@ function pruefeRack(x: unknown, wo: string): Rack {
 }
 
 function pruefeReturn(g: unknown, wo: string): Return {
-  const o = felder(g, wo, ['id', 'nr', 'name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'hall'], ['pre', 'inserts', 'rack', 'automation', 'loopdeck', 'strudel', 'gruppe']);
+  const o = felder(g, wo, ['id', 'nr', 'name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'hall'], ['pre', 'inserts', 'rack', 'automation', 'loopdeck',
+    'strudel', 'gruppe']);
   if ('strudel' in o) {
     const l = felder(o.strudel, `${wo}.strudel`, ['art']);
     if (l.art !== 'hall' && l.art !== 'delay') werfe(`${wo}.strudel.art`, 'hall or delay expected');
@@ -1690,7 +1698,8 @@ function pruefeSession(x: unknown): void {
 }
 // one cell of a loop deck track (the id is checked for uniqueness by pruefeAlles)
 function pruefeZelle(x: unknown, wo: string): void {
-  const o = felder(x, wo, ['id', 'name', 'farbe', 'art', 'sha256', 'gain_db'], ['beats', 'bpm', 'pfad_hinweis', 'raster', 'transponieren', 'rueckwaerts', 'blende', 'scheiben', 'keylock', 'huellen']);
+  const o = felder(x, wo, ['id', 'name', 'farbe', 'art', 'sha256', 'gain_db'], ['beats', 'bpm', 'pfad_hinweis', 'raster', 'transponieren', 'rueckwaerts',
+    'blende', 'scheiben', 'keylock', 'huellen']);
   if (typeof o.id !== 'string' || !ID.test(o.id)) werfe(`${wo}.id`, 'ID erwartet');
   text(o.name, `${wo}.name`, 64);
   if ((o.name as string).trim() === '') werfe(`${wo}.name`, 'a cell name of spaces only is not a name');
@@ -1864,7 +1873,8 @@ function pruefeGruppe(g: unknown, wo: string): Gruppe {
   if ('modul' in o) pruefeModul(o.modul, `${wo}.modul`);
   if ('strudel' in o) {
     felder(o.strudel, `${wo}.strudel`, []);
-    for (const k of ['modul', 'seq', 'loopdeck']) if (k in o) werfe(`${wo}.strudel`, 'a group holds a strudel marker, a loop deck, a module or a SEQ deck, not several');
+    for (const k of ['modul', 'seq', 'loopdeck']) if (k in o) werfe(`${wo}.strudel`,
+      'a group holds a strudel marker, a loop deck, a module or a SEQ deck, not several');
     if ('ausgang' in o) werfe(`${wo}.strudel`, 'the strudel module sits on a top group, not on a nested one');
   }
   if ('loopdeck' in o) {
@@ -1942,7 +1952,8 @@ export function hebeAufDrei(p: Projekt): void {
   for (const g of gruppen) {
     const e: { seq?: number; ort?: number; slot?: 'A' | 'B' } = {};
     if (istObjekt(g.seq)) { e.seq = (g.seq as { platz?: number }).platz; delete (g.seq as { platz?: number }).platz; }
-    if (istObjekt(g.loopdeck)) { e.ort = (g.loopdeck as { ausgang_platz?: number }).ausgang_platz; delete (g.loopdeck as { ausgang_platz?: number }).ausgang_platz; }
+    if (istObjekt(g.loopdeck)) { e.ort = (g.loopdeck as { ausgang_platz?: number }).ausgang_platz;
+      delete (g.loopdeck as { ausgang_platz?: number }).ausgang_platz; }
     if (istObjekt(g.modul)) { e.slot = (g.modul as { slot?: 'A' | 'B' }).slot; delete (g.modul as { slot?: string }).slot; }
     alt.set(g.id, e);
   }
@@ -2142,7 +2153,7 @@ function pruefeAlles(x: unknown): void {
     // 1.9 U7: the kit and bk limits count tracks plus rack members (the core counts every device it builds); racks have their own limit
     if (istRack(s) && ++racks > MAX_RACK_GERAETE) werfe('spuren', `at most ${MAX_RACK_GERAETE} rack devices`);
     for (const d of [s.geraet, ...glieder(s).map((m) => m.geraet)]) {
-      if (d?.art === 'intern' && d.name === 'bk' && ++bkSpuren > MAX_BK_SPUREN) werfe('spuren', `at most ${MAX_BK_SPUREN} Baukasten tracks (bk)`);
+      if (d?.art === 'intern' && d.name === 'bk' && ++bkSpuren > MAX_BK_SPUREN) werfe('spuren', `at most ${MAX_BK_SPUREN} Cypher Modular tracks (bk)`);
       if (d?.art === 'intern' && d.name === 'kit' && ++kitGeraete > MAX_KIT_GERAETE) werfe('spuren', `at most ${MAX_KIT_GERAETE} kit devices`);
     }
     const wirtAn = (slot: number, wo: string): void => {      // one slot, one Surge: over tracks and rack members
@@ -2176,12 +2187,15 @@ function pruefeAlles(x: unknown): void {
       if (gruppenNrs.has(g.nr)) werfe(`gruppen[${i}].nr`, `doppelt (${g.nr})`);
       gruppenIds.add(g.id); gruppenNrs.add(g.nr);
       laneZaehle(g, `gruppen[${i}]`);
-      if (g.seq && o.live !== true) werfe(`gruppen[${i}].seq`, 'a SEQ deck exists only in the live container');   // the patterns are the tracks that output into the group
+      // the patterns are the tracks that output into the group
+      if (g.seq && o.live !== true) werfe(`gruppen[${i}].seq`, 'a SEQ deck exists only in the live container');
       if (g.strudel && o.live !== true) werfe(`gruppen[${i}].strudel`, 'the strudel module exists only in the live container');
-      if (g.strudel && (o.gruppen as unknown[]).slice(0, i).some((m) => (m as Gruppe).strudel)) werfe(`gruppen[${i}].strudel`, 'strudel is unique: the project has one strudel group');
+      if (g.strudel && (o.gruppen as unknown[]).slice(0, i).some((m) => (m as Gruppe).strudel)) werfe(`gruppen[${i}].strudel`,
+        'strudel is unique: the project has one strudel group');
       if (g.loopdeck) {   // loop deck: live container only, one group per deck identity
         if (o.live !== true) werfe(`gruppen[${i}].loopdeck`, 'a loop deck exists only in the live container');
-        if (deckPlaetze.has(g.loopdeck.platz)) werfe(`gruppen[${i}].loopdeck.platz`, `duplicate (${g.loopdeck.platz}): the project already holds this loop deck`);
+        if (deckPlaetze.has(g.loopdeck.platz)) werfe(`gruppen[${i}].loopdeck.platz`,
+          `duplicate (${g.loopdeck.platz}): the project already holds this loop deck`);
         deckPlaetze.add(g.loopdeck.platz);
       }
     });
@@ -2225,7 +2239,8 @@ function pruefeAlles(x: unknown): void {
       }
     });
   } else {
-    (o.spuren as Spur[]).forEach((s, i) => { if (deckFeld(s) !== null && s.art !== 'strom') werfe(`spuren[${i}].zellen`, 'only on a track of a loop deck group'); });
+    (o.spuren as Spur[]).forEach((s, i) => { if (deckFeld(s) !== null && s.art !== 'strom') werfe(`spuren[${i}].zellen`,
+      'only on a track of a loop deck group'); });
   }
   const zellenIds = new Set<string>();
   (o.spuren as Spur[]).forEach((s, i) => (s.zellen ?? []).forEach((z, k) => {
@@ -2412,7 +2427,8 @@ const ohnePreset = (g: Geraet | undefined): Geraet | undefined => {
 };
 export function spurSicht(s: Spur, mitFreeze = true): unknown {
   return {
-    nr: s.nr, art: s.art, ...(s.strom !== undefined ? { strom: s.strom } : {}), geraet: ohnePreset(s.geraet) ?? null, ...(mitFreeze ? { freeze: s.freeze ?? null } : {}),
+    nr: s.nr, art: s.art, ...(s.strom !== undefined ? { strom: s.strom } : {}), geraet: ohnePreset(s.geraet) ?? null,
+      ...(mitFreeze ? { freeze: s.freeze ?? null } : {}),
     // 1.10: das Ziel gehört zur Wiedergabe, nicht zum Freeze (ein Ziel-Wechsel verwirft keinen Freeze)
     ...(mitFreeze && s.ausgang ? { ausgang: s.ausgang.id } : {}),
     // slice 4: the chain is playback structure (art and slot: `an`, the values and the row key `sc` are controls; slice 5: a structural `key` is part of it),
@@ -2429,7 +2445,8 @@ export function spurSicht(s: Spur, mitFreeze = true): unknown {
       ? { huellkurven: s.clips.flatMap((c) => (c.huellkurven ?? []).filter((h) => h.ziel !== 'transpose').map((h) => ({ clip: c.id, ...h }))) } : {}),
     // loop deck cells: only what the snapshot is built from (sha, kind, beats, gain, the slot); a rename or a recolour is no new playback. Absent adds no key.
     // `filter` is a control row (spur/<n>/filter), not playback
-    // S1b: the editor fields change the snapshot too (added only when present, so a cell without them keeps its view); bpm only where it stands in for a missing beats
+    // S1b: the editor fields change the snapshot too (added only when present, so a cell without them keeps its view); bpm only where it stands in for a
+    // missing beats
     ...(s.zellen ? { zellen: s.zellen.map((z) => (z && !istHalten(z)
       ? { sha256: z.sha256, art: z.art, beats: z.beats ?? null, gain_db: z.gain_db,
         ...(z.beats === undefined && z.bpm !== undefined && (z.scheiben || z.huellen) ? { bpm: z.bpm } : {}),
@@ -2461,7 +2478,8 @@ export const wiedergabeSicht = (p: Projekt): unknown => ({
       ...laneSicht(g) })) } : {}),
   // 1.10 slice 3: the return topology (id, nr) only when there are returns; sends and hall values are controls, not part of the view
   ...((p.returns ?? []).length ? { returns: [...(p.returns ?? [])].sort((a, b) => a.nr - b.nr).map((r) => ({ id: r.id, nr: r.nr,
-    ...(r.pre ? { pre: true } : {}), ...(r.gruppe !== undefined && platzVonGruppe(p, r.gruppe) !== null ? { dj: platzVonGruppe(p, r.gruppe) } : {}),   // the owner's place decides the DJ output
+    // the owner's place decides the DJ output
+    ...(r.pre ? { pre: true } : {}), ...(r.gruppe !== undefined && platzVonGruppe(p, r.gruppe) !== null ? { dj: platzVonGruppe(p, r.gruppe) } : {}),
     ...(r.inserts?.length ? { inserts: kettenSicht(r.inserts) } : {}), ...(r.rack ? { rack: rackSicht(r) } : {}),
     ...laneSicht(r) })) } : {}),
   // slice 4: only with a chain on the master

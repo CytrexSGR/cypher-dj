@@ -1,0 +1,95 @@
+{
+ "format": "cypherdj-projekt/2",
+ "gruppen": [],
+ "loop": {
+  "an": false,
+  "bis_beat": 32,
+  "von_beat": 0
+ },
+ "master": {
+  "fader_db": 0
+ },
+ "metronom": {
+  "an": false,
+  "pegel_db": -12,
+  "ziel": "master"
+ },
+ "naechste_id": {
+  "clip": 1,
+  "gruppe": 1,
+  "spur": 1
+ },
+ "naechste_noten_id": 1,
+ "name": "Golden version 2 production",
+ "returns": [
+  {
+   "fader_db": 0,
+   "farbe": "#3bb07a",
+   "hall": {
+    "an": true,
+    "decay": 0.5252,
+    "fahne": 0.66667,
+    "groesse": 0.282,
+    "highcut": 0.8039,
+    "pre": 0.04,
+    "tief": 0.5658
+   },
+   "id": "r1",
+   "mute": false,
+   "name": "Hall",
+   "nr": 1,
+   "pan": 0,
+   "solo": false
+  }
+ ],
+ "rev": 0,
+ "spuren": [
+  {
+   "art": "instrument",
+   "clips": [
+    {
+     "art": "midi",
+     "id": "c1",
+     "laenge_beats": 4,
+     "name": "Keys",
+     "noten": [
+      {
+       "beat": 0,
+       "id": "n1",
+       "laenge": 1,
+       "ton": 60,
+       "vel": 90
+      }
+     ],
+     "start_beat": 0
+    }
+   ],
+   "fader_db": 0,
+   "farbe": "#3b8de0",
+   "geraet": {
+    "art": "intern",
+    "name": "rb338",
+    "parameter": {}
+   },
+   "id": "s1",
+   "mute": false,
+   "name": "Keys",
+   "nr": 1,
+   "pan": 0,
+   "sends": [
+    {
+     "db": -8,
+     "id": "r1"
+    }
+   ],
+   "solo": false,
+   "von": "andreas"
+  }
+ ],
+ "taktart": [
+  4,
+  4
+ ],
+ "tempo_bpm": 110,
+ "wiedergabe_rev": 0
+}

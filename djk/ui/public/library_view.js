@@ -6,6 +6,7 @@ import { ladeBaum, markiereTyp, schliesseListenMenue, zeigeDetail } from './brow
 import { fmtZeit, ladeBestand, laden } from './deck_view.js';
 import { zeigePlaetzeSpaeter } from './slots_view.js';
 import { merkeBenutzt } from './usage.js';
+import { zaehlText } from './format_text.js';
 export function bindeLibrary() {
   for (const b of $$('[data-typ]')) b.addEventListener('click', () => {
     for (const x of $$('[data-typ]')) x.classList.toggle('an', x === b);
@@ -13,7 +14,10 @@ export function bindeLibrary() {
     markiereTyp(); stoebernLaden(); ladeBaum();
   });
   // Filterleiste (S3): Enter im Textfeld, sofort bei Haken und Auswahl; Fehler (400) zeigt stoebernLaden als „Library: …"
-  const filter = () => { Object.assign(stz, { text: $('#lib-suche').value, camelot: $('#lib-key').value, nachbarn: $('#lib-nachbarn').checked, bpm: $('#lib-bpm').value, energie: $('#lib-energie').value, seite: 0 }); stoebernLaden(); };
+  // low window: key, BPM and energy sit behind the FILTER key (CSS); the key is marked while one of them filters
+  const zeigeMehr = () => $('#lib-mehr').classList.toggle('an', !!($('#lib-key').value || $('#lib-bpm').value || $('#lib-energie').value || $('#lib-nachbarn').checked));
+  $('#lib-mehr').addEventListener('click', () => { const o = $('#lib-mehr').closest('.lib-filter').classList.toggle('offen'); $('#lib-mehr').setAttribute('aria-expanded', String(o)); });
+  const filter = () => { zeigeMehr(); Object.assign(stz, { text: $('#lib-suche').value, camelot: $('#lib-key').value, nachbarn: $('#lib-nachbarn').checked, bpm: $('#lib-bpm').value, energie: $('#lib-energie').value, seite: 0 }); stoebernLaden(); };
   for (const id of ['#lib-suche', '#lib-key', '#lib-bpm']) $(id).addEventListener('keydown', (e) => {
     e.stopPropagation();
     if (e.key === 'Enter') filter();
@@ -177,11 +181,22 @@ export async function ladeSetListe() {
   if (liste.some((s) => s.slug === a)) sel.value = a; else if (liste[0]) { sel.value = liste[0].slug; setzeAktivesSet(liste[0].slug); }
   await zeigeSet();
 }
+// No set: say it in one sentence and switch off what cannot work (PREPARE ALL, DELETE SET, the empty table with its column heads).
+export function setLeerZustand(sets) {
+  return sets > 0 ? { text: '', knoepfeAn: true } : { text: 'No set yet: type a name and press NEW SET', knoepfeAn: false };
+}
+function zeigeLeerZustand(sets) {
+  const z = setLeerZustand(sets);
+  for (const id of ['#set-alle', '#set-loeschen']) { const b = $(id); if (b) b.disabled = !z.knoepfeAn; }
+  const tabelle = $('[data-tabelle="sets"] table'); if (tabelle) tabelle.hidden = !z.knoepfeAn;
+  return z;
+}
 async function zeigeSet() {
   const slug = $('#set-wahl').value;
   const tb = $('#setliste');
   tb.textContent = '';
-  if (!slug) { $('#set-zusammenfassung').textContent = 'No set yet — name one and press NEW SET'; return; }
+  if (!slug) { $('#set-zusammenfassung').textContent = zeigeLeerZustand(0).text; return; }
+  zeigeLeerZustand(1);
   const r = await fetch(`/sammlungen/${encodeURIComponent(slug)}`);
   const j = await r.json();
   if (!r.ok) return melde(`Set: ${j.fehler}`, true);
@@ -191,7 +206,7 @@ async function zeigeSet() {
   const bpm = u.bpm ? (u.bpm.min === u.bpm.max ? `${u.bpm.min} BPM` : `${u.bpm.min}–${u.bpm.max} BPM`) : 'BPM –';
   const keys = Object.entries(u.camelot).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, n]) => `${k}×${n}`).join(' ');
   const st = Object.entries(u.status).map(([k, n]) => `${n} ${(SET_STATUS_TEXT[k] ?? k).toLowerCase()}`).join(', ');
-  $('#set-zusammenfassung').textContent = `${u.tracks} ${u.tracks === 1 ? 'track' : 'tracks'} · ${fmtZeit(u.dauer_s)} · ${bpm}${keys ? ` · ${keys}` : ''}${st ? ` · ${st}` : ''}`;
+  $('#set-zusammenfassung').textContent = `${zaehlText(u.tracks, 'track')} · ${fmtZeit(u.dauer_s)} · ${bpm}${keys ? ` · ${keys}` : ''}${st ? ` · ${st}` : ''}`;
   $('#set-zusammenfassung').title = Object.entries(u.genre).sort((a, b) => b[1] - a[1]).map(([g, n]) => `${g}: ${n}`).join('\n');
 }
 function setZeile(p) {
@@ -255,14 +270,14 @@ export function bindeSets() {
     if (!r.ok) return melde(`Import: ${r.j.fehler}`, true);
     setzeAktivesSet(r.j.slug);
     await ladeSetListe();
-    melde(`Imported ${r.j.posten} tracks`);
+    melde(`Imported ${zaehlText(r.j.posten, 'track')}`);
   });
   $('#set-alle').addEventListener('click', async () => {
     const slug = $('#set-wahl').value;
     if (!slug) return;
     const r = await postJson(`/sammlungen/${encodeURIComponent(slug)}/vorbereiten`, {});
     if (!r.ok) return melde(`Prepare all: ${r.j.fehler}`, true);
-    melde(`${r.j.eingereiht} ${r.j.eingereiht === 1 ? 'track' : 'tracks'} queued (about a minute each, two at a time)`);
+    melde(`${zaehlText(r.j.eingereiht, 'track')} queued (about a minute each, two at a time)`);
     beobachteSet();
   });
   $('#set-loeschen').addEventListener('click', async () => {

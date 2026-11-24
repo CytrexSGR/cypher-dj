@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="production/production.css">
 <link rel="stylesheet" href="werkbank/werkbank.css">
 <link rel="stylesheet" href="tracker/tracker.css">
+<link rel="stylesheet" href="browser/browser.css">
 <link rel="stylesheet" href="session/spalte.css">
 <link rel="stylesheet" href="loopdeck/loopdeck.css">
 <link rel="stylesheet" href="loopdeck/gross.css">
@@ -23,6 +24,9 @@
 <link rel="stylesheet" href="panel_curves.css">
 <link rel="stylesheet" href="live_dock/live_dock.css">
 <link rel="stylesheet" href="face/face.css">
+<script src="page_error.js"></script>
+<link rel="stylesheet" href="lab_marken.css">
+<script type="module" src="lab_marken.js"></script>
 <script type="module" src="app.js"></script>
 </head>
 <body>
@@ -34,15 +38,18 @@
     <button data-ansicht="produktion" aria-pressed="false" title="Production view: arrangement, tracks, mixer">PRODUCTION</button>
     <button data-ansicht="tracker" aria-pressed="false" title="Tracker view: the open project as rows, keyboard first">TRACKER</button>
   </div>
+  <button id="browser-knopf" class="kopplung-knopf" type="button" aria-pressed="false" title="Show or hide the browser (B)">BROWSER</button>
   <div class="uhr">
     <div class="feld"><label>BAR</label><b id="takt">–</b></div>
     <div class="schlaege" id="schlaege"><i></i><i></i><i></i><i></i></div>
     <div class="feld"><label>PHRASE</label><b id="phrase">–</b></div>
     <div class="feld tempo"><label for="bpm">BPM</label><button id="bpm-minus" title="1 BPM slower (Shift: 0.1)" aria-label="Master tempo down">−</button><input id="bpm" value="–" inputmode="decimal" autocomplete="off" spellcheck="false" title="Master tempo: type a value, Enter sets it from the next bar" aria-label="Master tempo in BPM"><button id="bpm-plus" title="1 BPM faster (Shift: 0.1)" aria-label="Master tempo up">+</button><button id="keylock" class="an" aria-pressed="true" title="Keylock for all sources (decks and loop decks): pitch stays put at any tempo. Off: pitch follows the tempo (varispeed)" aria-label="Keylock for all sources">KEY</button></div>
   </div>
+  <button id="mitschnitt-knopf" class="kopplung-knopf mitschnitt-knopf" type="button" aria-pressed="false" title="Record the master mix of the studio to a WAV file; click again to stop">REC MIX</button>
   <button id="kopplung-knopf" class="kopplung-knopf" type="button" title="Pair a tablet in the home network: shows a QR code with a one-time link">PAIR TABLET</button>
   <div class="kopfmix">
     <label class="phones">PHONES</label>
+    <button id="phones-knopf" type="button" aria-expanded="false" title="Headphone mix and level">PHONES</button>
       <div class="kopfhoerer">
         <div class="summe klein"><span>MIX</span><div class="knopf regler" data-griff="mix" data-pfad="cue/mix" role="slider" tabindex="0" aria-label="Headphone cue/master mix"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div><output data-wert="cue/mix">–</output></div>
         <div class="summe klein"><span>LEVEL</span><div class="knopf regler" data-griff="pegel" data-pfad="cue/pegel" role="slider" tabindex="0" aria-label="Headphone level"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div><output data-wert="cue/pegel">–</output></div>
@@ -109,6 +116,7 @@
 </header>
 
 <main id="pult">
+  <div id="live-zu" role="status" hidden><span data-live-text></span><button type="button" data-live-oeffnen>OPEN LIVE SET</button></div>
   <section class="deck" data-deck="1" data-platz-body="track" style="--farbe:var(--a)"></section>
   <section id="deck-c" class="deckflaeche" data-platz-body="strudel" style="--farbe:var(--c)">
     <div class="deckkopf"><span class="buchstabe">C</span><span class="decktitel">STRUDEL</span>
@@ -220,12 +228,11 @@
   <div class="kopfzeile">
     <button id="schublade" title="Show or hide the library (L)">▾</button>
     <button id="gross" title="Big browser (G)" aria-pressed="false">⤢</button>
-    <div class="bereich" role="tablist" aria-label="Bottom panel"><button data-bereich="library" class="an" role="tab" title="Library: tracks, loops, sets">LIBRARY</button><button data-bereich="effekte" role="tab" title="Effects: the effect stages of every channel, the send returns and the master">EFFECTS</button><button data-bereich="instrumente" role="tab" title="Instruments: front panel of each instrument channel">INSTRUMENTS</button><button data-bereich="presets" role="tab" title="Presets: saved settings of instruments and effects">PRESETS</button><button data-bereich="controller" role="tab" title="Controllers: every controller assignment in one list">CONTROLLERS</button></div>
-    <div class="reiter"><button data-reiter="tracks" class="an">TRACKS</button><button data-reiter="loops">LOOPS</button><button data-reiter="library">LIBRARY</button><button data-reiter="sets">SETS</button><button data-reiter="module" title="Saved live modules: place one into the open project">MODULES</button></div>
-    <input id="suche" type="search" placeholder="Search title or key" autocomplete="off">
+    <div class="bereich" role="tablist" aria-label="Bottom panel"><button data-bereich="library" class="an" role="tab" title="Library: tracks, loops, sets">LIBRARY</button><button data-bereich="effekte" role="tab" title="Effects: the effect stages of every channel, the send returns and the master">EFFECTS</button><button data-bereich="instrumente" role="tab" title="Instruments: front panel of each instrument channel">INSTRUMENTS</button><button data-bereich="presets" role="tab" title="Presets: saved settings of instruments and effects">PRESETS</button><button data-bereich="controller" role="tab" title="Opens the controller list in its own window">CONTROLLERS ↗</button></div>
+    <div class="reiter"><button data-reiter="tracks" class="an">TRACKS</button><button data-reiter="loops">LOOPS</button><button data-reiter="library" title="Browse the whole library by folder, artist and tag">BROWSE</button><button data-reiter="sets">SETS</button><button data-reiter="module" title="Saved live modules: place one into the open project">MODULES</button></div>
+    <input id="suche" type="search" placeholder="Search title or key" aria-label="Search title or key" autocomplete="off">
     <span id="bestand-info"></span>
     <span id="meldung" role="status"></span>
-    <div class="p-browserwahl" id="p-browserwahl" role="group" aria-label="Browser mode"></div>
   </div>
   <div class="effekte" id="effekte" hidden>
     <div class="w-pan w-dock live-dock" id="live-dock" data-w="dock-wurzel" aria-label="Device dock"></div>
@@ -265,8 +272,9 @@
           <div class="lib-filter">
             <input id="lib-suche" type="search" placeholder="Search: words, artist:, label:, genre:, release:, catalog:, isrc:, pack:, folder: … (Enter)" autocomplete="off" title="Words match as prefixes. field:value searches one field, quotes keep spaces: label:drumcode  artist:&quot;dj x&quot;  pack:battery kick. Patterns: words are substrings of name, code and role; only name: and rolle:.">
             <input id="lib-key" placeholder="Key" size="4" title="Camelot key, e.g. 8A"><label class="klein" title="Include ±1 and the relative key"><input type="checkbox" id="lib-nachbarn"> ±1</label>
-            <input id="lib-bpm" placeholder="BPM 124-130" size="9">
+            <input id="lib-bpm" placeholder="BPM 124-130" size="9" aria-label="BPM range, for example 124-130">
             <select id="lib-energie" title="Energy"><option value="">Energy</option><option value="0">low (1–5)</option><option value="1">mid (6–7)</option><option value="2">high (8–10)</option></select>
+            <button type="button" id="lib-mehr" class="lib-mehr" aria-expanded="false" title="Key, BPM and energy filters">FILTER</button>
           </div>
         </div>
         <div class="st-liste">
@@ -279,9 +287,9 @@
     <div id="listen-menue" class="listen-menue" role="menu" hidden></div>
   </div>
   <div class="tabelle" data-tabelle="sets" hidden>
-    <div class="set-kopf"><select id="set-wahl"></select>
-      <input id="set-name" placeholder="New set name" size="16"><button id="set-neu">NEW SET</button>
-      <span id="set-zusammenfassung"></span><select id="set-import"><option value="">Import Traktor playlist…</option></select><button id="set-alle" title="Run all tracks of this set through the workshop">PREPARE ALL</button><button id="set-loeschen" title="Move set to trash">DELETE SET</button></div>
+    <div class="set-kopf"><select id="set-wahl" aria-label="Set"></select>
+      <input id="set-name" placeholder="New set name" size="16" aria-label="New set name"><button id="set-neu">NEW SET</button>
+      <span id="set-zusammenfassung"></span><select id="set-import" aria-label="Import a Traktor playlist"><option value="">Import Traktor playlist…</option></select><button id="set-alle" title="Run all tracks of this set through the workshop">PREPARE ALL</button><button id="set-loeschen" title="Move set to trash">DELETE SET</button></div>
     <table>
       <thead><tr><th>Title</th><th>Artist</th><th>BPM</th><th>Key</th><th title="Energy 1–10: Mixed In Key where present, otherwise our own analysis">Energy</th><th>Genre</th><th>Length</th><th>Status</th><th></th></tr></thead>
       <tbody id="setliste"></tbody>
@@ -294,6 +302,7 @@
 <section id="werkbank" aria-label="Studio"></section>
 
 <section id="tracker" aria-label="Tracker"></section>
+<aside id="browser" aria-label="Browser" hidden></aside>
 
 <section id="geraet-fenster" aria-label="Device window" hidden></section>
 
@@ -310,6 +319,7 @@
     <div class="rest"><label>LEFT</label><b data-rest>–</b></div>
   </div>
   <canvas class="lauf" data-lauf></canvas>
+  <div class="lauf-leer dim" data-lauf-leer>No track loaded: pick one in the library and press LOAD</div>
   <canvas class="ueber" data-ueber></canvas>
   <div class="bedienreihe">
     <div class="raster" role="radiogroup" aria-label="Snap grid for jump, cue and loop">
@@ -336,7 +346,7 @@
 
 <template id="zug-vorlage">
   <div class="knoepfe">
-    <div class="knopfzeile"><div class="knopf regler" data-griff="trim" data-teil="trim"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div><div class="beschrift"><label>GAIN</label><output data-wert-teil="trim">–</output></div></div>
+    <div class="knopfzeile"><div class="knopf regler" data-griff="trim" data-teil="trim"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div><div class="beschrift"><label>GAIN</label><output data-wert-teil="trim">–</output><output class="auto-trim vorgabe" data-wert-teil="trim_auto" title="Automatic gain of the loaded track (read-only, adds to GAIN)"></output></div></div>
     <div class="knopfzeile"><div class="knopf regler" data-griff="eq" data-teil="eq/hoch"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div><div class="beschrift"><label>HIGH</label><output data-wert-teil="eq/hoch">–</output></div><button class="kill schalter" data-teil="kill/hoch" title="Kill (mute this band)">K</button></div>
     <div class="knopfzeile"><div class="knopf regler" data-griff="eq" data-teil="eq/mitte"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div><div class="beschrift"><label>MID</label><output data-wert-teil="eq/mitte">–</output></div><button class="kill schalter" data-teil="kill/mitte" title="Kill (mute this band)">K</button></div>
     <div class="knopfzeile"><div class="knopf regler" data-griff="eq" data-teil="eq/tief"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div><div class="beschrift"><label>LOW</label><output data-wert-teil="eq/tief">–</output></div><button class="kill schalter" data-teil="kill/tief" title="Kill (mute this band)">K</button></div>

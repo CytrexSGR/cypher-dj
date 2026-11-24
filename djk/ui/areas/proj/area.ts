@@ -45,6 +45,8 @@ export interface ProjZugang {
   aendern(d: Record<string, unknown>, quelle: 'andreas' | 'cypher'): Promise<Antwort>;
   stemsStand(s: Record<string, unknown> | null): void;   // Slice 6 (P6): letzter Stems-Stand
   beiSchliessen(f: (slug: string) => void): void;        // Slice 6 (T7): ruft f, sobald das offene Projekt geschlossen wird (Wechsel, Neuöffnen)
+  // B11: f(slug) after every successful open, f(null) after a close on purpose (the rescue of left run files hangs here)
+  beiOffen?(f: (slug: string | null) => void): void;
   beendeVorhoeren(): Promise<void>;   // 1.14: ends the audition and loads the main playback; called by a lock holder (recording, freeze) before it starts
   // 1.9 U5: brings the Surge hosts to the project's parameter map and resolves when they answered (never rejects); the freeze waits for it
   wirtSpiegel?(): Promise<string[] | void>;
@@ -140,7 +142,8 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
     sperreLaden: (fuer) => s.sperreLaden(fuer), ausgabeLauf: (l) => s.setzeAusgabeLauf(l),
     transport: (d, quelle) => s.transport(d, quelle),
     aendern: (d, quelle) => s.aendern(d, quelle), aufnahmeLauf: (l) => s.setzeAufnahmeLauf(l), aufnahmeAktiv: () => s.aufnahmeAktiv(),
-    stemsStand: (x) => s.setzeStemsStand(x), beiSchliessen: (f) => s.beiSchliessen(f), beendeVorhoeren: () => s.beendeVorhoeren(),
+    stemsStand: (x) => s.setzeStemsStand(x), beiSchliessen: (f) => s.beiSchliessen(f), beiOffen: (f) => s.beiOffen(f),
+      beendeVorhoeren: () => s.beendeVorhoeren(),
     beiStand: (f) => s.beiStand(f),
     wirtSpiegel: () => s.wirtSpiegel(),
     hostZustandSichern: (grund) => s.hostZustandSichern(grund),

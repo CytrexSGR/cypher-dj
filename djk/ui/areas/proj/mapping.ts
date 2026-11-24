@@ -73,7 +73,8 @@ export function alleGruppenRegler(p: Projekt): Soll[] {
   }
   return aus;
 }
-// 1.10 slice 3: the send controls spur|grp/<n>/send/<r> (dB, -200 = off) of all 32 tracks and the 16 groups (4 · 48 = 192) and the 11 controls of each of the 4
+// 1.10 slice 3: the send controls spur|grp/<n>/send/<r> (dB, -200 = off) of all 32 tracks and the 16 groups (4 · 48 = 192) and
+// the 11 controls of each of the 4
 // return strips (fader, pan, mute, solo, hall/an and the six Hall values; 44). Free slots carry the defaults.
 export function alleSendRegler(p: Projekt): Soll[] {
   const aus: Soll[] = [];
@@ -209,5 +210,6 @@ export function reglerZuBefehl(p: Projekt, pfad: string, wert: number): { befehl
   return { befehl: { befehl: 'spur_aendern', spur_id: s.id, [feld]: w }, label: `Mixer: ${s.name} ${k}` };
 }
 export const istSpurRegler = (pfad: string): boolean => REGLER_PFAD.test(pfad);
-export const istMixerRegler = (pfad: string): boolean => REGLER_PFAD.test(pfad) || EQ_PFAD.test(pfad) || FX_PFAD.test(pfad) || GRUPPEN_PFAD.test(pfad) || pfad === 'pm/fader'
+export const istMixerRegler = (pfad: string): boolean => REGLER_PFAD.test(pfad) || EQ_PFAD.test(pfad) || FX_PFAD.test(pfad) || GRUPPEN_PFAD.test(pfad) ||
+  pfad === 'pm/fader'
   || SEND_PFAD.test(pfad) || RET_PFAD.test(pfad) || HALL_PFAD.test(pfad);

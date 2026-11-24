@@ -104,7 +104,7 @@ export function bindeKollektionen(ctx, opt = {}) {
   const frage = opt.frage ?? ((t, v) => globalThis.prompt?.(t, v) ?? null);
   const bestaetige = opt.bestaetige ?? ((t) => globalThis.confirm?.(t) ?? false);
   const menue = opt.menue ?? oeffneMenue;
-  const wurzel = document.getElementById('kollektionen');
+  const wurzel = opt.wurzel ?? document.getElementById('kollektionen');   // opt.wurzel: the browser's COLLECTIONS section renders into its own element
   const z = { liste: [], offen: null };
   let katalog = null;
   const zeige = () => { if (wurzel) wurzel.innerHTML = kollektionenHtml(z); };
@@ -201,6 +201,7 @@ export function bindeKollektionen(ctx, opt = {}) {
       e.dataTransfer.setData(x.typ, JSON.stringify(x.nutzlast)); e.dataTransfer.effectAllowed = 'copy';
     });
   }
+  if (opt.wurzel) return { lade, oeffne };   // the section has its own right click menus (browser/kollektion_menue.js) and loads when it opens
   // right click in the three browser lists, PRODUCTION only (the DJ view keeps the browser's own menu)
   const rechts = (el, finde) => el?.addEventListener('contextmenu', (e) => {
     if (!ctx.st.sichtbar) return;
@@ -216,5 +217,5 @@ export function bindeKollektionen(ctx, opt = {}) {
   });
   rechts(document.getElementById('geraete-browser'), (e) => postenVonGeraet(geraeteZeilen(katalog, leseAchse())[Number(e.target?.closest?.('[data-geraet-i]')?.dataset.geraetI)]));   // data-geraet-i counts in display order (grouped by the page-wide axis)
   ctx.kollektionenZeigen = async () => { await holeKatalog(); return lade(); };
-  ctx.beimSichtwechsel.push((an) => { if (an) holeKatalog(); });
+  ctx.beimSichtwechsel.push((an) => { if (an && wurzel && wurzel.getClientRects?.().length !== 0) holeKatalog(); });   // hidden: the browser's COLLECTIONS section does its own reading
 }

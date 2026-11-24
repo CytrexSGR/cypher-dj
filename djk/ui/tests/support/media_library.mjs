@@ -157,6 +157,8 @@ export async function stapel(t, { mediathek, python, bestand, einleserModul, sam
   laufend = o;
   for (let i = 0; i < 100 && o.kern.zustand !== 'verbunden'; i++) await warte(20);
   assert.equal(o.kern.zustand, 'verbunden');
+  // the stand-in's first clock tick follows the connection: a POST /spur right after the start answered 409 keine_uhr under load (proj_fix_a5_spur, routing)
+  for (let i = 0; i < 100 && !o.kern.uhr; i++) await warte(20);
   // optionen: D1 S2 Fix4 J1, ein zweiter Server auf denselben Ordnern und derselben Attrappe (Server-Neustart im Test)
   return { o, log, url: `http://127.0.0.1:${47300 + K}`, bestandDir, att, optionen };   // att: Plan d1-s1 Task 5 (SSE-Meldung kern)
 }

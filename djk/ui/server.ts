@@ -35,6 +35,7 @@ import { KernAnbindung } from '../conductor/src/core.ts';
 import { KernWeg } from './areas/proj/core_path.ts';
 import type { KernLage } from './areas/proj/state.ts';
 import { json as sendeJson, koerper as leseKoerper, postAbgewiesen, quelleAusKopf } from './http/transport.ts';
+import { Seitenfehler } from './seitenfehler.ts';
 import { Kopplung, TABLET_PORT, baueTabletHandler, heimAdresse, type TabletHandler } from './http/coupling.ts';
 import { Router, type Route, type Bereich, type BereichKontext } from './http/router.ts';
 import { projBereich, alsAntwort, type ProjOptionen } from './areas/proj/area.ts';
@@ -49,25 +50,35 @@ import { hostlernenBereich } from './areas/hostlernen/area.ts';
 import { HostSpeicher } from './areas/hostlernen/store.ts';
 import { registerBereich, aktivesPult } from './areas/controller/register.ts';
 import { presetInhaltVon, presetsBereich, type PresetOptionen } from './presets/area.ts';
+import { PresetSpeicher } from './presets/store.ts';
+import { PresetVorhoerer } from './presets/prelisten.ts';
 import { kollektionenBereich, type KollektionBereichOptionen } from './collections/area.ts';
+import { tagsBereich } from './tags/area.ts';
+import { tagsHook } from './tags/hook.ts';
 import { KollektionSpeicher } from './collections/store.ts';
 import { rangVon } from './collections/feste.ts';
 import { sucheBereich } from './areas/suche/area.ts';   // media browser B4: GET /suche
 import { baueQuellen } from './suche.ts';
 import { listeInstrumente, zeileVon as instrumentZeile } from './sampler/instrument.ts';
-import { listeSchnitte } from './sampler/schnitt.ts';
+import { listeSchnitte, liesSchnitt } from './sampler/schnitt.ts';
 import { ausgabeBereich } from './areas/proj/output.ts';   // Paket S3
 import { aufnahmeBereich } from './areas/proj/recording.ts';   // 1.8 Slice 1
+import { versionenBereich } from './areas/proj/versionen.ts';   // B10
+import { rettungBereich, starteRettung, gerettetListe as gerettetListeVon } from './areas/proj/recording_rettung.ts';   // B11: recovered takes
 import { stemsBereich, type StemsOptionen } from './areas/proj/stems.ts';   // 1.13 Slice 6
 import { speichereModul, modulBasis } from './project/module_storage.ts';   // plan live-module task 3
 import { bibliothekBereich } from './areas/live/library.ts';   // plan live-module task 10
 import { sichereWerksProbenImStandardOrdner } from './sampler/werksproben.ts';
 import { raeumeWaisenImStandardOrdner } from './sampler/waisen.ts';
-import { projektWurzelVorgabe } from './project/storage.ts';
+import { projektWurzelVorgabe, Projekte } from './project/storage.ts';
+import { echteQuellen, liesProjektDatei } from './tags/bezuege.ts';
 import { samplerBereich, schnittKurz } from './areas/sampler/area.ts';   // sampler A1 task 4
 import { legeKitAusAudio } from './sampler/kit.ts';
 import { wavKopf } from './project/recording.ts';
 import { samplerKitBereich } from './areas/sampler/kit_routes.ts';   // sampler B task 2
+import { portabelBereich } from './areas/proj/portabel_routes.ts';
+import { kitsBereich } from './areas/kits/area.ts';   // browser plan 5
+import { mitschnittBereich } from './areas/mitschnitt/area.ts';   // journey tours task 2
 import { liveBereich, type DeckLoopAusschnitt } from './areas/live/export.ts';
 import { loopdeckBereich } from './areas/live/loopdeck.ts';
 import { sessionBereich } from './areas/live/session.ts';
@@ -89,7 +100,7 @@ import { beatsVon, importiereLoop, loopNameVon, findeImport, raeumeImportReste, 
 import { WelleCache, WelleFehler, loopQuelle, schnittQuelle, fassungQuelle, dateiQuelle } from './wave_cache.ts';
 import { OEFFENTLICH, REPO, REPO_PFADE, instanz, ports, shmOrdner, rasterOrdnerVorgabe, hotcueOrdnerVorgabe, huellenVorgabe, musterOrdnerVorgabe,
   wirtOrdnerVorgabe, baukastenOrdnerVorgabe, kitsOrdnerVorgabe, zusatzKit, strudelPakete, loopOrdnerVorgabe, welleCacheVorgabe, arbeitsbestandVorgabe,
-  analyseVorgabe, ablageOrdner } from './paths.ts';
+  analyseVorgabe, ablageOrdner, importeOrdnerVorgabe, mitschnittOrdnerVorgabe, setmitschnittProgramm, katalogUmgebung, vorhoerCacheVorgabe } from './paths.ts';
 import { WerkstattAnalyse } from './areas/proj/analysis.ts';
 import { tempoRampe, vorlaufBeats } from './tempo_ramp.ts';
 import { takteProLive } from './project/taktart_live.ts';
@@ -106,13 +117,18 @@ import { Katalog, KatalogFehler, KATALOG_TYPEN, SORT_VORGABE, SEITE_VORGABE, SEI
 import { Erreichbarkeit, ERREICHBAR_TTL_MS, quellenLage } from './erreichbar.ts';   // media browser slice 1
 import { Quellen } from './sources.ts';   // storage layout A4
 import { quellenBereich } from './areas/quellen/area.ts';
+import { importeBereich } from './areas/importe/area.ts';
+import { bibliothekBereich as katalogBereich } from './areas/bibliothek/area.ts';
+import { KatalogJob, katalogNachImport, pruefeKatalogBeiStart } from './catalog_job.ts';
+import { ImportDienst, erlaubteWurzeln } from './importe.ts';
 import { Einsammler } from './project/einsammeln.ts';   // storage layout A5
 import { baueNachExport } from './project/exporte.ts';
 import { einsammelnBereich } from './areas/proj/einsammeln.ts';
+import { dateienBereich } from './areas/proj/files.ts';   // browser plan 2
 import { leseWurzeln } from './sampler/file.ts';
 import { vorbereitQuelle } from './vorbereit_source.ts';
 import { Vorhoeren, VorhoerFehler, kernNurCueVorgabe, vorhoeerKlientVorgabe } from './prelisten.ts';
-import { Mediathek, Vorbereiter, MediathekFehler, KLANG_TYPEN, type KlangTreffer, MEDIATHEK_VORGABE, bestandIds, parseBpm, parseLimit } from './media_library.ts';
+import { Mediathek, Vorbereiter, MediathekFehler, KLANG_TYPEN, type KlangTreffer, mediathekVorgabe, bestandIds, parseBpm, parseLimit } from './media_library.ts';
 import { pruefeSpur, plane, oeffnetKanal, beatZuMono, wirtRuf, stromVonZiel, faelligeMuster, SPUR_NAME, type MusterPlan, type Fahrt } from './track.ts';
 import { planeDurchlauf, MAX_SCHLEIFE_TAKTE, type Spur } from './track.ts';   // 1.12 S7 (M13): track band loop
 import { leseAusgang } from './output.ts';
@@ -128,7 +144,7 @@ import { listeGraphen, graphenOrdner, findeGraph, graphHash, ladePanel, reglerVo
 import { bkDefVonId } from './project/modular.ts';   // t_e998388c: project channels are left to the project restore
 
 import { NEUSTART_PLAN_VERSPAETUNG_MS, NEUSTART_FRISCH_FRAMES } from './server_kopf.ts';
-import { KLANG_ERR_MAX, pythonVorgabe, ueberProjekt, ueberProjektText, modulBasisVon, STROM_MAX_BYTES, STRUDEL_ZEITLIMIT_MS, SPEKTRUM_QUELLEN, KLANG_GRUPPEN, KLANG_AUS_MAX, GRAPH_ABGELEHNT, DROSSEL_MS, INS_GR_FRIST_MS, DURCHREICHEN, leseBestand, TYPEN, VORLAUF_SCHLEIFE_BEATS, schleifeAusDatei, kompAbweichend, OFFENE_DECKS, istOffenesDeck, WERKZEUG_PFAD, werkzeugAbweichend, bkAbweichend, LAGE_KANALZUG, LAGE_SEND, LAGE_ABWEICHEND, leseNeustartStand, leseOffenesProjekt, NEUSTART_STAND_ADRESSEN, CONTAINER_ART, NEUSTART_STAND_TOLERANZ_MS, systemstartMs, type NeustartStand, type NeustartPlan } from './server_kopf.ts';
+import { KLANG_ERR_MAX, kopplungPfadVon, pythonVorgabe, ueberProjekt, ueberProjektText, modulBasisVon, STROM_MAX_BYTES, STRUDEL_ZEITLIMIT_MS, SPEKTRUM_QUELLEN, KLANG_GRUPPEN, KLANG_AUS_MAX, GRAPH_ABGELEHNT, DROSSEL_MS, INS_GR_FRIST_MS, DURCHREICHEN, leseBestand, TYPEN, VORLAUF_SCHLEIFE_BEATS, schleifeAusDatei, kompAbweichend, OFFENE_DECKS, istOffenesDeck, WERKZEUG_PFAD, werkzeugAbweichend, bkAbweichend, LAGE_KANALZUG, LAGE_SEND, LAGE_ABWEICHEND, leseNeustartStand, leseOffenesProjekt, NEUSTART_STAND_ADRESSEN, CONTAINER_ART, NEUSTART_STAND_TOLERANZ_MS, systemstartMs, type NeustartStand, type NeustartPlan } from './server_kopf.ts';
 import type { ServerOptionen, Pruefmodus, Eintrag, SpurLauf, SchleifenStand } from './server_kopf.ts';
 export { hauptCheckout, pythonVorgabe, INS_GR_FRIST_MS, leseBestand, istOffenesDeck } from './server_kopf.ts';
 export type { TabletOptionen, ServerOptionen, Pruefmodus } from './server_kopf.ts';
@@ -146,6 +162,7 @@ export class Oberflaeche {
   private tabletHandler: TabletHandler | null = null;
   private tablet: { adresse: string; port: number } | null = null;
   private readonly kopplung: Kopplung;
+  private readonly seitenfehler: Seitenfehler;
   private readonly stroeme = new Set<http.ServerResponse>();
   private readonly letzte = new Map<string, number>();
   private readonly pegelPuffer = new PegelPuffer();   // ungedrosselt, vor der SSE-Drossel gefüttert (GET /pegel)
@@ -414,8 +431,8 @@ export class Oberflaeche {
     const python = opt.python ?? pythonVorgabe();
     this.welle = new WelleCache(opt.welleCache ?? welleCacheVorgabe(instanz()),
       python, REPO_PFADE.welleSkript, opt.log, { ffmpeg: opt.welleFfmpeg, zeitlimit: opt.welleZeitlimit });
-    this.mediathek = new Mediathek(opt.mediathek ?? MEDIATHEK_VORGABE);
-    this.katalog = new Katalog(opt.katalog ?? katalogVorgabe(opt.mediathek ?? MEDIATHEK_VORGABE));
+    this.mediathek = new Mediathek(opt.mediathek ?? mediathekVorgabe());
+    this.katalog = new Katalog(opt.katalog ?? katalogVorgabe(opt.mediathek ?? mediathekVorgabe()));
     const inst = instanz();
     const shm = shmOrdner(inst);
     this.vorhoeren = opt.vorhoeren ?? new Vorhoeren({ kopfhoererDa: () => Vorhoeren.kopfhoererDaVorgabe(inst), kernNurCue: () => kernNurCueVorgabe(shm),
@@ -432,8 +449,9 @@ export class Oberflaeche {
       zustand: (neu) => this.verteile({ a: 'kern', f: { zustand: neu } }),
       unlesbar: (grund) => opt.log?.({ typ: 'unlesbar', grund }),
     });
+    this.seitenfehler = new Seitenfehler(this.hotcueOrdner());   // R7
     this.router.melde({ name: 'oberflaeche', routen: () => this.routenOberflaeche() });
-    this.kopplung = new Kopplung(opt.tablet?.kopplungPfad ?? path.join(os.homedir(), '.config', 'cypherdj', 'kopplung.json'));
+    this.kopplung = new Kopplung(kopplungPfadVon(opt.tablet?.kopplungPfad, instanz()));
     this.router.melde({ name: 'kopplung', routen: () => this.routenKopplung() });
     // D1 S2 (Spec 3.4): Audio-Quellen über denselben Katalog wie der Browser. Spec 6.30: die Meldung bleibt zweizeilig (erst this.proj, dann melden),
     // weil stoppe() den Bereich braucht; S3 zieht seinen Anker auf diese zwei Zeilen nach.
@@ -442,18 +460,41 @@ export class Oberflaeche {
     // A5: removable sources are collected into the project in the background, never while the transport runs or a deck plays
     this.quellen = new Quellen({ python, cwd: path.join(REPO, 'djk'), erreichbar: this.erreichbar, env: opt.samplerOrdner ? { CYPHERDJ_SAMPLER: opt.samplerOrdner } : undefined });
     this.router.melde(quellenBereich(this.bereichKontext(), this.quellen));   // A4: /quellen
+    // browser plan 1: raw file import into the storage kind importe (or the open project's audio folder)
+    // plan 7 task 12: the tags hook runs after the last good build, on the catalogue the tags area serves; a test instance only on its own /dev/shm catalogue
+    const hookKatalog = opt.katalog ?? katalogVorgabe(opt.mediathek ?? mediathekVorgabe());
+    const hookErlaubt = instanz() === '' || path.resolve(hookKatalog).startsWith(`/dev/shm/cypherdj-${instanz()}/`);
+    const katalogEnv = katalogUmgebung(instanz(), opt.samplerOrdner ? { CYPHERDJ_SAMPLER: opt.samplerOrdner } : undefined);
+    const hookEnv = { ...(katalogEnv ?? {}), ...(opt.katalog ? { CYPHERDJ_KATALOG: opt.katalog } : {}) };
+    const nachLetztemBau = hookErlaubt ? tagsHook({ python, cwd: path.join(REPO, 'djk'), env: hookEnv, katalog: hookKatalog,
+      tags: opt.tags?.pfad ?? path.join(path.dirname(hookKatalog), 'tags.sqlite'), log: (z) => opt.log?.(z) }) : undefined;
+    this.katalogJob = new KatalogJob({ python, cwd: path.join(REPO, 'djk'), env: katalogEnv, importeOrdner: () => importeOrdnerVorgabe(), ...(nachLetztemBau ? { nachLetztemBau } : {}) });
+    this.importDienst = new ImportDienst({ python, importeOrdner: () => importeOrdnerVorgabe(), projektAudioOrdner: () => { const o = this.proj.zugang.offen(); return o ? path.join(o.ordner, 'audio') : null; },
+      nachImport: katalogNachImport(this.katalogJob, () => importeOrdnerVorgabe()) });   // an accepted import registers the importe folder once and asks for one build
+    this.router.melde(importeBereich(this.bereichKontext(), this.importDienst, { port: () => this.opt.port }));   // /import/datei
+    this.router.melde(katalogBereich(this.bereichKontext(), this.katalogJob));   // /bibliothek/bauen, /bibliothek/stand, /bibliothek/midi
     this.einsammler = new Einsammler({ wechselplatte: (p) => this.quellen.wechselplatte(p), frei: () => this.proj.sitzung.lage.arr !== null && this.proj.sitzung.lage.arr.status === 0 && !this.proj.sitzung.lage.djLaeuft(),   // the page's own question: deck, loop box, stream
       log: (z) => opt.log?.(z) });
     const analyseOrdner = opt.analyse !== undefined ? opt.analyse : analyseVorgabe(inst);
     const analysierer = analyseOrdner ? new WerkstattAnalyse({ python, cwd: REPO_PFADE.werkstatt, ablage: analyseOrdner, modul: opt.einleserModul, log: opt.log }) : null;
-    const presets = presetsBereich(this.bereichKontext(), { ...(opt.presets ?? {}), projekt: () => this.proj.zugang.offen()?.projekt ?? null, graphVon: (kanal) => this.stand.graphen_geladen[kanal] });   // 1.9 (O28): built first, the project command preset_anwenden reads its store
+    // browser plan 6: the preset preview service (offline render, cache) and the headphone previewer; one store is shared with the PRESETS routes
+    const presetSpeicher = opt.presets?.speicher ?? new PresetSpeicher(opt.presets ?? {});
+    const presetVorhoerer = opt.presets?.vorhoerer ?? new PresetVorhoerer({ speicher: presetSpeicher, cacheOrdner: vorhoerCacheVorgabe(inst),
+      loopsDatei: path.join(REPO, 'djk', 'starter', 'loops.json'), starterWavOrdner: path.join(os.homedir(), '.local', 'share', 'cypherdj', 'starter', 'klaenge', 'loops'),
+      graphenOrdner: graphenOrdner(), kitOrdner: opt.kits ?? kitsOrdnerVorgabe(), log: (z) => opt.log?.({ typ: 'preset_vorhoeren', ...z }) });
+    const presets = presetsBereich(this.bereichKontext(), { ...(opt.presets ?? {}), speicher: presetSpeicher, port: () => this.opt.port, vorhoerer: presetVorhoerer, spiele: opt.presets?.spiele ?? ((e, klick) => this.vorhoeren.spiele(e, klick)), neuerKlick: opt.presets?.spiele ? undefined : () => this.vorhoeren.neuerKlick(), projekt: () => this.proj.zugang.offen()?.projekt ?? null, graphVon: (kanal) => this.stand.graphen_geladen[kanal] });   // 1.9 (O28): built first, the project command preset_anwenden reads its store
     const pluginIndex = new PluginIndex({ python, ...opt.plugins, log: opt.log, bei: (scan) => this.bereichKontext().verteile({ a: 'plugins', f: { scan } }) });
-    this.proj = projBereich(this.bereichKontext(), { pluginIndex: (id) => pluginIndex.finde(id), presetLies: (id) => presetInhaltVon(presets.speicher, id), katalog: opt.katalog ?? katalogVorgabe(opt.mediathek ?? MEDIATHEK_VORGABE), mediathek: opt.mediathek ?? MEDIATHEK_VORGABE,
+    this.proj = projBereich(this.bereichKontext(), { pluginIndex: (id) => pluginIndex.finde(id), presetLies: (id) => presetInhaltVon(presets.speicher, id), katalog: opt.katalog ?? katalogVorgabe(opt.mediathek ?? mediathekVorgabe()), mediathek: opt.mediathek ?? mediathekVorgabe(),
       wirtOrdner: () => this.wirtBasis(), analyse: analyseOrdner, analysierer, bestand: opt.korrekturen !== undefined ? opt.korrekturen : (inst === '' ? opt.bestand : null), kanalOffen: (k) => this.kanalGeoeffnet(k), einsammler: this.einsammler, samplerOrdner: () => opt.samplerOrdner, ...opt.proj });
     this.router.melde(this.proj);
     // A5: the route uses the collector of the session (a test may hand its own through opt.proj)
     this.router.melde(einsammelnBereich(this.bereichKontext(), this.proj.zugang, { einsammler: opt.proj?.einsammler ?? this.einsammler,
-      quellPfad: (sha, hinweis) => this.proj.sitzung.quellePfadVon(sha, hinweis) }));
+      quellPfad: (sha, hinweis) => this.proj.sitzung.quellePfadVon(sha, hinweis), kitsOrdner: opt.kits ?? kitsOrdnerVorgabe() }));
+    // browser plan 2: GET /proj/dateien and the project file actions. The recovered-take listing is plan 4's (areas/proj/recording_rettung.ts); a test may hand a stub through opt.proj.
+    this.router.melde(dateienBereich(this.bereichKontext(), this.proj.zugang, { quellPfad: (sha, hinweis) => this.proj.sitzung.quellePfadVon(sha, hinweis),
+      katalogName: (sha) => this.proj.sitzung.katalogQuelle(sha)?.name ?? null, katalogDa: () => fs.existsSync(opt.katalog ?? katalogVorgabe(opt.mediathek ?? mediathekVorgabe())), wurzel: () => opt.proj?.wurzel ?? projektWurzelVorgabe(inst),
+      arbeitLaeuft: (opt.proj as { arbeitLaeuft?: () => boolean } | undefined)?.arbeitLaeuft ?? (() => this.ausgabe.ausgabe.zustand().lauf !== null || this.stems.stems.laeuft()),   // a test may hand a stub
+      gerettetListe: (opt.proj as { gerettetListe?: (ordner: string) => Promise<{ datei: string; spur_id: string; gerettet: true }[]> } | undefined)?.gerettetListe ?? ((o) => gerettetListeVon(o, (z) => opt.log?.(z))) }));
     this.ausgabe = ausgabeBereich(this.bereichKontext(), this.proj.zugang, { wirtOrdner: () => this.wirtBasis(),
       katalogPfad: (sha) => this.proj.sitzung.katalogQuelle(sha),
       nachExport: baueNachExport({ einsammler: opt.proj?.einsammler ?? this.einsammler, offen: () => this.proj.zugang.offen(),
@@ -462,7 +503,11 @@ export class Oberflaeche {
     const tastenArm = neuerTastenArm();   // keys follow the focus (N1): session state shared by the controller area (decides) and the recording area (arms in the core)
     this.aufnahme = aufnahmeBereich(this.bereichKontext(), this.proj.zugang, { geraeteKonfig: opt.geraete?.konfigPfad, tasten: tastenArm });   // 1.8: /proj/aufnahme
     this.router.melde(this.aufnahme);
-    this.stems = stemsBereich(this.bereichKontext(), this.proj.zugang, { python, cwd: REPO_PFADE.werkstatt, ...opt.stems });   // 1.13 S6
+    let tagsB: ReturnType<typeof tagsBereich> | undefined;   // built further down; the stems hook reads it when a placement happens
+    this.router.melde(versionenBereich(this.bereichKontext(), this.proj.sitzung));   // B10: /proj/versionen, /proj/version_sichern, /proj/version_zurueck
+    this.router.melde(rettungBereich(this.bereichKontext(), this.proj.zugang));   // B11: POST /proj/gerettet_platzieren
+    starteRettung(this.proj.zugang, this.bereichKontext());                       // B11: rescue left run files when a project opens
+    this.stems = stemsBereich(this.bereichKontext(), this.proj.zugang, { python, cwd: REPO_PFADE.werkstatt, bezug: (a, v, n) => { tagsB?.speicher.meldeBezug(a, v, n); }, ...opt.stems });   // 1.13 S6
     this.router.melde(this.stems);
     this.router.melde(liveBereich(this.bereichKontext(), this.proj.zugang, this.stems.stems, {   // plan live-module task 2: /modul/export, /modul/stems, /modul/stand
       loopOrdner: () => this.loopOrdner(),   // task 10: POST /modul/loop reads the loop library
@@ -514,10 +559,27 @@ export class Oberflaeche {
     this.router.melde(samplerBereich(this.bereichKontext(), { sitzung: this.proj.sitzung, zugang: this.proj.zugang, katalog: this.katalog,
       get ordner() { return opt.samplerOrdner; }, get loops() { return opt.loops ?? loopOrdnerVorgabe(inst); }, get module() { return modulBasisVon(opt.modulOrdner, inst); } }));
     this.router.melde(samplerKitBereich(this.bereichKontext(), { get ordner() { return opt.samplerOrdner; } }));   // sampler B task 2: /sampler/kit/vorschlag, /sampler/kit
+    // browser plan 5: /kits (list, export, import; rename, copy, delete, preview and from-folder follow); the same kit folder as the sampler kit route
+    this.router.melde(kitsBereich(this.bereichKontext(), { kitsOrdner: opt.kits ?? kitsOrdnerVorgabe(), projektOrdner: () => this.proj.zugang.offen()?.ordner ?? null, port: () => this.opt.port,
+      projekteWurzel: () => this.opt.proj?.wurzel ?? projektWurzelVorgabe(instanz()),
+      vorhoeren: async (wavPfad, sha) => {   // like the slot audition: the previewer takes a file from the work folder; older kit previews are removed
+        const dir = path.join(this.proj.zugang.arbeitsordner(), 'vorhoer');
+        fs.mkdirSync(dir, { recursive: true });
+        for (const n of fs.readdirSync(dir)) if (n.startsWith('kit-')) fs.rmSync(path.join(dir, n), { force: true });
+        const pfad = path.join(dir, path.basename(wavPfad));
+        fs.copyFileSync(wavPfad, pfad);
+        await this.vorhoeren.spiele({ pfad, typ: 'oneshot', sha, bpm: null });
+      } }));
+    // journey tours task 2: /mitschnitt (REC MIX): the recorder runs in its own user unit and only reads the core's ring
+    this.router.melde(mitschnittBereich(this.bereichKontext(), { ordner: () => mitschnittOrdnerVorgabe(instanz()), zustandsDatei: path.join(shmOrdner(instanz()), 'mitschnitt.json'),
+      programm: setmitschnittProgramm, instanz: instanz(), kernDa: () => this.kern.zustand === 'verbunden' }));
+    // browser plan 5: /proj/export_zip and /proj/import_zip (a project as one zip)
+    this.router.melde(portabelBereich(this.bereichKontext(), this.proj.zugang, { projekteWurzel: () => this.opt.proj?.wurzel ?? projektWurzelVorgabe(instanz()),
+      quellPfad: (sha, hinweis) => this.proj.sitzung.quellePfadVon(sha, hinweis), kitsOrdner: opt.kits ?? kitsOrdnerVorgabe(), port: () => this.opt.port }));
     this.router.melde(pluginsBereich(this.bereichKontext(), pluginIndex, { insertParameter: (id) => this.proj.sitzung.insertParameter(id),
       insertFenster: (id, d, q) => this.proj.sitzung.insertFenster(id, d, q),
       geraetParameter: (id) => this.proj.sitzung.geraetParameter(id), geraetParam: (id, d, q) => this.proj.sitzung.geraetParam(id, d, q), geraetIst: (id, n) => this.proj.sitzung.geraetIst(id, n),
-      geraetFenster: (id, d, q) => this.proj.sitzung.geraetFenster(id, d, q) }));   // 1.11 task 10: /plugins, the parameter list and the window
+      geraetFenster: (id, d, q) => this.proj.sitzung.geraetFenster(id, d, q) }, { port: () => this.opt.port, erlaubt: () => erlaubteWurzeln() }));   // 1.11 task 10; plan 6: plugin folders (the roots of the folder picker): /plugins, the parameter list and the window
     let controllerAnstoss: () => void = () => {};   // set below: the devices file may change a place's follow flag or its device
     this.router.melde(geraeteBereich(this.bereichKontext(), { ...(opt.geraete ?? {}), beiAenderung: () => controllerAnstoss() }));   // I08: /geraete
     const lernBereich = lernenBereich(this.bereichKontext(), opt.lernen ?? {});
@@ -532,6 +594,12 @@ export class Oberflaeche {
     this.router.melde(registerBereich(this.bereichKontext(), { ordner: lernBereich.speicher.ordner, aktiv: () => aktivesPult(inst), midiPort: () => lernBereich.midiPort(), host: () => new HostSpeicher(lernBereich.speicher.ordner).lies().ziele }));   // controller register: /register
     this.router.melde(presets);   // 1.16: /presets (presets/area.ts), built above so that the project command preset_anwenden reads its store
     this.router.melde(kollektionenBereich(this.bereichKontext(), opt.kollektionen ?? {}));   // 1.16 rest: /kollektionen (collections/area.ts)
+    tagsB = tagsBereich(this.bereichKontext(), { katalog: opt.katalog ?? katalogVorgabe(opt.mediathek ?? mediathekVorgabe()),
+      quellen: echteQuellen({ presets: presets.speicher, projekte: (() => { const pr = new Projekte(opt.proj?.wurzel ?? projektWurzelVorgabe(instanz())); return { wurzelPfad: pr.wurzelPfad, liste: () => pr.liste(), lies: (sl: string) => pr.lies(sl), liesAsync: (sl: string) => liesProjektDatei(pr.wurzelPfad, sl) }; })(),
+        kitsOrdner: () => opt.kits ?? kitsOrdnerVorgabe(), loopOrdner: () => this.loopOrdner(), listeLoops: leseLoops,
+        katalogSha: (mid) => this.katalogEintrag(mid)?.sha ?? null, schnitt: (id) => liesSchnitt(id, { ordner: opt.samplerOrdner }) }), ...(opt.tags ?? {}) });
+    this.router.melde(tagsB);   // B19..B21: /tags, tags.sqlite next to the catalogue (tags/area.ts)
+    this.tagsStopp = () => { tagsB?.bezuege?.stopp(); tagsB?.speicher.schliesse(); };   // close(): no further slice, then the tag store handle is closed
     // media browser B4: GET /suche asks the sources the shelf already has (catalogue, graphs, sampler lists, presets, modules), each with its own search
     this.router.melde(sucheBereich(this.bereichKontext(), {
       projekt: () => this.proj.zugang.offen()?.projekt ?? null,
@@ -579,6 +647,7 @@ export class Oberflaeche {
       this.http!.listen(this.opt.port, '127.0.0.1', () => ok());
     });
     await this.starteTablet();
+    void pruefeKatalogBeiStart(this.katalogJob, instanz(), this.opt.log);   // the studio only: a changed music tree starts one build
     this.projektWieder = this.projektWiederOeffnen(gemerkt);
   }
 
@@ -663,7 +732,7 @@ export class Oberflaeche {
       { methode: 'GET', pfad: '/kopplung', schutz: O, handler: (q, a) => { if (nurAndreas(q, a)) this.json(a, 200, { an: this.tablet !== null, geraete: this.kopplung.liste() }); } },
       { methode: 'POST', pfad: '/kopplung', schutz: F, handler: (q, a) => {
         if (!nurAndreas(q, a)) return;
-        if (this.tablet === null) return this.json(a, 409, { fehler: 'tablet_aus', text: 'tablet access is off: set {"an": true} in ~/.config/cypherdj/tablet.json and restart the page server' });
+        if (this.tablet === null) return this.json(a, 409, { fehler: 'tablet_aus', text: 'Tablet access is off. Turn it on with {"an": true} in ~/.config/cypherdj/tablet.json, then restart the page server.' });
         const l = this.kopplung.neuerLink();
         this.json(a, 200, { link: `http://${this.tablet.adresse}:${this.tablet.port}/koppeln?t=${l.token}`, bis: l.bis, sekunden: Math.round((l.bis - Date.now()) / 1000) });
       } },
@@ -685,6 +754,7 @@ export class Oberflaeche {
     if (this.planTimer) { clearTimeout(this.planTimer); this.planTimer = null; this.sichereNeustartStand(); }   // what was changed in the last 300 ms
     this.aufnahme.aufnahme.schliesse();
     this.stems.stems.schliesse();
+    this.tagsStopp();   // a running tag scan takes no further slice
     await this.einsammler.schliesse();   // kills a running copy, at most 2 s
     this.ausgabe.ausgabe.schliesse();   // Fix-Runde S3 R7: ein wartender Freeze endet jetzt mit freeze_fehler, nicht erst nach Stille oder Frist
     await this.proj.sitzung.beende();   // plan 1.11 D8: the plugin states first (at most 3 s)
@@ -698,6 +768,7 @@ export class Oberflaeche {
     if (this.offenerPlanTimer) { clearTimeout(this.offenerPlanTimer); this.offenerPlanTimer = null; }   // the restore that waits for the guard time
     if (this.wiederTimer) { clearTimeout(this.wiederTimer); this.wiederTimer = null; }
     this.vorbereiter.stoppe();
+    await this.katalogJob.schliesse();   // browser plan 1: kills a running catalogue build, at most 2 s
     await this.vorhoeren.ende();
     // The awaits above take seconds while HTTP and the kern client run on: write what changed meanwhile (merkeNeustartStand holds since gestoppt).
     // Not while the restore of an accepted restart was pending: the file keeps the old kern's stand until that restore ran, and it never will
@@ -2468,10 +2539,13 @@ export class Oberflaeche {
     const q = d.quell_beat === undefined ? st.eins : d.quell_beat;
     if (typeof q !== 'number' || !Number.isFinite(q)) return this.json(a, 400, { fehler: 'quell_beat' });
     const basis = { id: Number(++this.id), quelle: this.quelle(), plan: this.planVon(), gruppe: '', hoerschein: '', deck: d.deck, ab_beat: this.abVon(ab) };
-    const felder = start ? { ...basis, quell_beat: q, politik: 0 } : { ...basis, politik: 1 };
+    // ab 'takt' on a 4-beat bar: politik 3 (SYNC), the core aligns the bar phase to the playing deck (it knows the exact positions); else 0
+    const takt = start && ab === 'takt' && this.proTakt() === 4;
+    const felder = start ? { ...basis, quell_beat: q, politik: takt ? 3 : 0 } : { ...basis, politik: 1 };
     this.kern.sende(start ? '/k/deck/start' : '/k/deck/stopp', felder);
     this.gesendet++;
-    if (start) this.startGeplant.set(Number(d.deck), felder.ab_beat); else this.startGeplant.delete(Number(d.deck));
+    // the core may shift a bar start by less than 4 beats; the +1 window of startSteht takes the rest
+    if (start) this.startGeplant.set(Number(d.deck), felder.ab_beat + (takt ? 3 : 0)); else this.startGeplant.delete(Number(d.deck));
     this.json(a, 200, { ok: true, felder, quittung: await this.warteQuittung(felder.id, felder.ab_beat) });
   }
 
@@ -2575,9 +2649,12 @@ export class Oberflaeche {
   private readonly qs = new AsyncLocalStorage<string>();
   private readonly proj: ReturnType<typeof projBereich>;   // D1 S2: Bereich proj (Sitzung schliesst beim Stoppen)
   readonly stems: ReturnType<typeof stemsBereich>;   // 1.13 Slice 6: Bereich proj-stems
+  private tagsStopp: () => void = () => {};
   private readonly aufnahme: ReturnType<typeof aufnahmeBereich>;   // 1.8: Bereich proj-aufnahme
   private readonly einsammler: Einsammler;   // A5
   private readonly quellen: Quellen;   // A4
+  private readonly importDienst: ImportDienst;   // browser plan 1
+  private readonly katalogJob: KatalogJob;   // browser plan 1: the catalogue build as a background job
   readonly ausgabe: ReturnType<typeof ausgabeBereich>;   // Paket S3: Bereich proj-ausgabe (schliesst beim Stoppen, Fix-Runde R7)
   private readonly router = new Router();   // Plan d1-s1 Task 9: Bereiche melden hier ihre Routen (oberflaeche zuerst, dann proj)
   meldeBereich(b: Bereich): void { this.router.melde(b); }
@@ -2637,6 +2714,7 @@ export class Oberflaeche {
   private routenOberflaeche(): Route[] {
     const F = 'fremdePost' as const, O = 'offen' as const;
     return [
+      ...this.seitenfehler.routen(),   // R7: POST /seite/fehler
       { methode: 'GET', pfad: '/strom', schutz: O, handler: (q, a) => this.strom(q, a) },
       { methode: 'GET', pfad: '/bestand', schutz: O, handler: (_q, a) => this.json(a, 200, leseBestand(this.opt.bestand)) },
       { methode: 'GET', pfad: '/mediathek/anschluss', schutz: O, handler: (_q, a, url) => this.anschlussAus(url, a) },

@@ -1,0 +1,45 @@
+343/400 Test #343: test_warp_werk_folgen .........................***Timeout 300.11 sec
+372/400 Test #372: test_warp_werk_folgen_dicht ...................***Timeout 300.11 sec
+375/400 Test #375: kosten_arr_hash ...............................***Failed  Required regular expression not found. Regex=[HASH lane=arr32ins pm=a4932c21b9166147 out=15ef6c8c7ce0120b blocks=5000
+]  8.02 sec
+        Start 376: kosten_arr_hash_pool
+376/400 Test #376: kosten_arr_hash_pool ..........................***Failed  Required regular expression not found. Regex=[HASH lane=arr32ins pm=a4932c21b9166147 out=15ef6c8c7ce0120b blocks=5000 pool_jobs=[1-9][0-9]* hall_jobs=[1-9][0-9]* pool_spaet=0 pool_zurueck=0 pool_an=1
+]  6.08 sec
+        Start 377: kosten_arr_hash_pool_unbenutzt
+377/400 Test #377: kosten_arr_hash_pool_unbenutzt ................***Failed  Required regular expression not found. Regex=[HASH lane=arr32ins pm=a4932c21b9166147 out=15ef6c8c7ce0120b blocks=5000 pool_jobs=0 hall_jobs=[1-9][0-9]*
+]  8.00 sec
+        Start 378: kosten_arr_hash_kontrolle
+378/400 Test #378: kosten_arr_hash_kontrolle .....................   Passed    8.13 sec
+        Start 379: kosten_arr_hash_128
+379/400 Test #379: kosten_arr_hash_128 ...........................***Failed  Required regular expression not found. Regex=[HASH lane=arr32ins pm=711a7411b09348ec out=61506b058f4a4833 blocks=5000
+]  4.23 sec
+        Start 380: kosten_arr_hash_128_kontrolle
+380/400 Test #380: kosten_arr_hash_128_kontrolle .................   Passed    4.04 sec
+        Start 381: kosten_arr_hash_spur
+381/400 Test #381: kosten_arr_hash_spur ..........................***Failed  Required regular expression not found. Regex=[HASH lane=arr32ins pm=a4932c21b9166147 out=15ef6c8c7ce0120b blocks=5000 [^
+]*spur_blocks_parallel=[1-9][0-9]* spur_einheiten_worker=[1-9][0-9]*
+]  4.98 sec
+        Start 382: kosten_arr_hash_spur_128
+382/400 Test #382: kosten_arr_hash_spur_128 ......................***Failed  Required regular expression not found. Regex=[HASH lane=arr32ins pm=711a7411b09348ec out=61506b058f4a4833 blocks=5000 [^
+]*spur_blocks_parallel=[1-9][0-9]* spur_einheiten_worker=[1-9][0-9]*
+]  2.51 sec
+        Start 400: test_latenz_eintragen
+400/400 Test #400: test_latenz_eintragen .........................   Passed    0.04 sec
+
+98% tests passed, 10 tests failed out of 400
+
+Total Test time (real) = 2783.22 sec
+
+The following tests FAILED:
+	343 - test_warp_werk_folgen (Timeout)
+	372 - test_warp_werk_folgen_dicht (Timeout)
+	375 - kosten_arr_hash (Failed)
+	376 - kosten_arr_hash_pool (Failed)
+	377 - kosten_arr_hash_pool_unbenutzt (Failed)
+	379 - kosten_arr_hash_128 (Failed)
+	381 - kosten_arr_hash_spur (Failed)
+	382 - kosten_arr_hash_spur_128 (Failed)
+	383 - kosten_arr_hash_spur_unbenutzt (Failed)
+	384 - kosten_arr_hash_spur_ohne_fifo (Failed)
+Errors while running CTest
+Output from these tests are in: /work/cypher-dj/djk/core/build/Testing/Temporary/LastTest.log

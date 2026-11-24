@@ -19,7 +19,9 @@ import { bewerte, type EnergieWunsch, type Merkmale } from './connection.ts';
 // Tonart-Quellen, deren Key einen Kandidaten ausschließen darf (Anschluss). Gemessen 2026-10-15 gegen eindeutige MIK-Keys:
 // analyse 88 % exakt (n=5.390), traktor 42 % (n=1.660); tag, beatport und der Rest ungemessen und damit unsicher.
 const KEY_SICHER = new Set(['andreas', 'werkstatt', 'mik_bestaetigt', 'tag_mik', 'analyse']);
-export const MEDIATHEK_VORGABE = festerPfad('mediathek');
+/** Read at every call, like the instance: a test instance (CYPHERDJ_INSTANZ) gets its own file in /dev/shm, never the owner's mediathek. */
+export const mediathekVorgabe = (): string => festerPfad('mediathek');
+export const MEDIATHEK_VORGABE = mediathekVorgabe();   // value at import time, kept for the tests that pin it
 export const LIMIT_VORGABE = 50, LIMIT_MAX = 200;
 const FELDER = ['titel', 'kuenstler', 'mix', 'bpm', 'camelot', 'energie', 'genre', 'typ'];
 const ALLE_MAX = 1500;       // bis hierhin werden alle Kandidaten-Werke zusammengeführt (gesamt exakt, nach Titel sortiert)

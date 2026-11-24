@@ -13,6 +13,7 @@ import path from 'node:path';
 import type { BereichKontext } from '../../http/router.ts';
 import { Katalog, type Zeile } from '../../catalog.ts';
 import { AblageFehler, Projekte, projektWurzelVorgabe, setzeVorgabenQuelle } from '../../project/storage.ts';
+import type { VersionEintrag } from '../../project/versionen.ts';
 import { kanalOffen } from '../../hand_operation.ts';
 import { istStromZeile } from '../../stream_alias.ts';
 import { modulAmPlatz, SLOTS, type Slot } from '../../project/live.ts';
@@ -50,7 +51,8 @@ import {
   WarpFehler, abHierStart, autoWarp, beatBeiQuelle, fensterTempo, handWarp, quantisiere, quellSekunde, segmentBpm, type TempoQuelle,
 } from '../../project/warp.ts';
 import { aendere, rueckgaengig, wiederholen, type Haken, type Meta, type Verlauf, type Wirkung } from '../../project/history.ts';
-import { WiedergabeFehler, WiedergabeZaehler, containerQuellen, schreibeWiedergabe, uebersetze, wiedergabeDatei, type Wiedergabe } from '../../project/playback.ts';
+import { WiedergabeFehler, WiedergabeZaehler, containerQuellen, schreibeWiedergabe, uebersetze, wiedergabeDatei,
+  type Wiedergabe } from '../../project/playback.ts';
 import { geraetFx } from '../../devices_parameter.ts';
 import { alleRegler, istMixerRegler, reglerZuBefehl, type Soll } from './mapping.ts';
 import { arrOrdner, zaehlerDateiVorgabe } from './config.ts';
@@ -153,7 +155,8 @@ type Koerper = Record<string, unknown>;
 interface Hinweis { index: number; hinweis: string; [feld: string]: unknown }                // Paket 1.13: z. B. kein_tempo (Auto-Warp fand kein Tempo)
 
 const LIVE_SLUG = 'live';
-const liveSlotAntwort = (p: Projekt): Record<Slot, string | null> => Object.fromEntries(SLOTS.map((s) => [s, modulAmPlatz(p, s) ?? null])) as Record<Slot, string | null>;
+const liveSlotAntwort = (p: Projekt): Record<Slot, string | null> => Object.fromEntries(SLOTS.map((s) => [s, modulAmPlatz(p, s) ?? null])) as Record<Slot,
+  string | null>;
 const schlaf = (ms: number): Promise<void> => new Promise((ok) => setTimeout(ok, ms));
 // Baukasten S20: lookup of a graph in the graph folder for the commands that set a bk device (null = no such graph)
 const graphArt = (name: string): 'instrument' | 'effekt' | null => findeGraph(name)?.art ?? null;
@@ -305,7 +308,8 @@ export class ProjSitzung {
   // mensch_bei: the holder stays `mensch` up to 32 beats without a grip). It waits here by regulator path and is sent when the holder is released.
   private readonly basisWartend = new Map<string, { spurId: string; ziel: AufnahmeZiel }>();
   readonly aufAuto: AutoAufnahme;   // 1.12 slice 3 (task 8): arm state and the take collector
-  private readonly rueckwegWartend = new Map<string, { wert: number; quelle: Quelle }>();     // Rückweg: letzter Wert je Pfad und wer ihn bewegt hat, noch nicht gespeichert
+  // Rückweg: letzter Wert je Pfad und wer ihn bewegt hat, noch nicht gespeichert
+  private readonly rueckwegWartend = new Map<string, { wert: number; quelle: Quelle }>();
   private rueckwegTimer: ReturnType<typeof setTimeout> | null = null;
   private wirtWache: ReturnType<typeof setInterval> | null = null;   // audit U07: asks for a Surge sync when a host got a new pid
   private readonly wirtWacheMs: number;
@@ -635,7 +639,7 @@ export class ProjSitzung {
     const o = this.brauchOffen();
     this.riegel(quelle);
     const { befehle, unbekannt, gemerkt } = this.bk.befehleZumMerken(o.projekt, d.kanaele);
-    const r = await this.aendern({ rev: d.rev ?? o.projekt.rev, befehle, label: 'Baukasten: save sound' }, quelle);
+    const r = await this.aendern({ rev: d.rev ?? o.projekt.rev, befehle, label: 'Cypher Modular: save sound' }, quelle);
     return r.code === 200 ? { code: 200, j: { ...(r.j as object), bk: { gemerkt, unbekannt } } } : r;
   }
   // POST /proj/bk/laden {kanaele?}: apply the saved sound now; an explicit load always sends the graph again
@@ -718,6 +722,39 @@ export class ProjSitzung {
       const fader = await this.liveFaderErgebnis();
       if (fader.angehoben.length === 0 && fader.gemeldet.length === 0) return r;
       return { code: 200, j: { ...r.j as object, ...(fader.angehoben.length ? { projekt: this.offen?.projekt } : {}), fader } };
+    });
+  }
+  // B10 versions (project/versionen.ts). The list of the open project; nothing open: empty.
+  versionen(): VersionEintrag[] { return this.offen ? this.projekte.versionen.liste(this.offen.slug) : []; }
+  // SAVE VERSION: a named copy of the current state. Pending hand values are written first (rueckwegSpeichern) so the copy is the current state.
+  versionSichern(name: string, quelle: string): Promise<{ id: string }> {
+    return this.seriell(async () => {
+      this.riegel(quelle as Quelle);                                     // Stop Cypher holds this write back like the others
+      const o = this.brauchOffen();
+      this.rueckwegSpeichern();
+      return { id: this.projekte.versionen.sichereBenannt(o.slug, name) };
+    });
+  }
+  // RESTORE: close the open project (flushes the write-back), restore at storage level (safety version first), reopen the same slug. Guarded exactly
+  // like opening another project (a recording, a running live transport or a foreign transport refuse it), entered once in the chain like oeffnen().
+  // Closing first is on purpose: the open path reloads the core (the restored file carries wiedergabe_rev 0, so istWiederanlauf cannot skip it), and
+  // the write-back of the close cannot overwrite the restored file. A failed restore reopens the project anyway and rethrows.
+  versionZurueck(id: string, quelle: string): Promise<{ gesichert_als: string }> {
+    const q = quelle as Quelle;
+    return this.seriell(async () => {
+      this.riegel(q); this.sperreOeffnen(); this.sperreLiveLaeuft(q, false); this.sperreFremderTransport(q);
+      const slug = this.brauchOffen().slug;
+      this.projekte.pruefeVersion(slug, id);   // unknown or invalid: refused before anything is closed (no transport stop, no core reload)
+      let ergebnis: { gesichert_als: string } | null = null, fehler: unknown = null;
+      await this.oeffnetGerade(async () => {
+        await this.schliesseOffen(q);
+        try { ergebnis = this.projekte.stelleWiederHer(slug, id, q); } catch (e) { fehler = e; }
+        await this.oeffneIntern(slug, q);
+        return { code: 200, j: {} };
+      });
+      if (fehler !== null) throw fehler;
+      this.ctx.log({ typ: 'proj_version_zurueck', slug, id, quelle: q });
+      return ergebnis as unknown as { gesichert_als: string };
     });
   }
   // POST /proj/schliessen: closes the open project on purpose (guarded like an open; a running transport is stopped as on a switch). Nothing open: a no-op.
@@ -850,7 +887,8 @@ export class ProjSitzung {
       this.sperreOeffnen(); this.sperreLiveLaeuft(quelle, bestaetigt); this.sperreFremderTransport(quelle);
       return this.oeffnetGerade(async () => {
         try {
-          // a project named `live` without the flag is somebody's project: opening it as the container would be opened as the container (nothing is sent before)
+          // a project named `live` without the flag is somebody's project: opening it as the container would be opened as the container (nothing is sent
+          // before)
           if (this.projekte.lies(LIVE_SLUG).live !== true) {
             throw new ProjFehler(409, 'kein_liveprojekt_flag', { text: 'a project named live exists without the live flag; rename it' });
           }
@@ -1058,7 +1096,8 @@ export class ProjSitzung {
   // core restart). Order (F5): a container that gets a module (art 2) is told AFTER the playback swap (the module exists), every other one BEFORE it (the
   // group is dropped last), so `welche` picks the half. A receipt of status 6 is a refusal and is returned; no receipt (no core) is not told, so the
   // next call sends it again. Production projects have no places: nothing is sent.
-  private async sendeContainer(p: Projekt, welche: 'vor' | 'nach' | 'beide', quelle: Quelle, alle = false): Promise<{ container: number; art: number; status: number; grund: string }[]> {
+  private async sendeContainer(p: Projekt, welche: 'vor' | 'nach' | 'beide', quelle: Quelle,
+    alle = false): Promise<{ container: number; art: number; status: number; grund: string }[]> {
     const soll = containerQuellen(p);
     if (!soll) return [];
     const abgelehnt: { container: number; art: number; status: number; grund: string }[] = [];
@@ -1409,8 +1448,10 @@ export class ProjSitzung {
           const parken = vor.typ === 'seq' || vor.typ === 'loops';
           if (parken && !(vor.typ === 'seq' && quelle === 'cypher')) continue;
           if (!this.kanalBelegtGesehen(kanal)) continue;
-          if (parken) throw new ProjFehler(409, 'kanal_offen', { platz, kanal, text: `the channel ${kanal} of place ${platz} is open; Cypher does not remove a SEQ deck that is playing` });
-          throw new ProjFehler(409, 'kanal_offen', { platz, kanal, text: `the channel ${kanal} of place ${platz} is open; close it (fader down, PFL off) before the place changes to ${nach.typ}` });
+          if (parken) throw new ProjFehler(409, 'kanal_offen', { platz, kanal,
+            text: `the channel ${kanal} of place ${platz} is open; Cypher does not remove a SEQ deck that is playing` });
+          throw new ProjFehler(409, 'kanal_offen', { platz, kanal,
+            text: `the channel ${kanal} of place ${platz} is open; close it (fader down, PFL off) before the place changes to ${nach.typ}` });
         }
       }
       // Spec 6.31 (Leistung): die Probe IST die Ausführung; aendere rechnet sie nicht noch einmal. Gültig, weil vollziehe nach dem Warten auf die
@@ -1419,7 +1460,8 @@ export class ProjSitzung {
       // task 8: the value before a page write of a gesture (not for the take's own write)
       if (erwartet === undefined && quelle === 'andreas') this.aufAuto.merkeBasen(projekt, probe.projekt);
       const antwort = await this.vollziehe(o, quelle, probe.regler_aenderungen,
-        (h) => aendere(o.verlauf, projekt, befehle as never, meta, h, { ergebnis: probe }), quellen, probe.betrifft_wiedergabe, probe.stift_aenderungen ?? [], probe.projekt);
+        (h) => aendere(o.verlauf, projekt, befehle as never, meta, h, { ergebnis: probe }), quellen, probe.betrifft_wiedergabe,
+          probe.stift_aenderungen ?? [], probe.projekt);
       if (antwort.code === 200) this.starteAnalysen(o, quelle, wuensche, alt);
       const alle = antwort.code === 200 ? [...hinweise, ...(probe.hinweise ?? []), ...this.einsRueckweg(o, d.befehle, quelle)] : hinweise;
       const mitMuster = (j: object): object => (musterBerichte.length ? { ...j, muster: musterBerichte } : j);   // strudel-clip: one report per generated clip
@@ -1608,7 +1650,8 @@ export class ProjSitzung {
         if (this.offen !== o) throw new ProjFehler(409, 'kein_projekt');
         throw new ProjFehler(409, 'rev_veraltet', { rev: o.projekt.rev });
       }
-      if (nein.length) { await zurueck(alt); throw new ProjFehler(409, 'kern_lehnt_ab', { container: nein[0].container, status: nein[0].status, kern: nein[0].grund }); }
+      if (nein.length) { await zurueck(alt); throw new ProjFehler(409, 'kern_lehnt_ab', { container: nein[0].container, status: nein[0].status,
+        kern: nein[0].grund }); }
     }
     // Haken-Vertrag mit history.ts (speichereDannProtokolliere, Spec 6.31 festgehalten): speichere wird genau einmal mit dem NEUEN Stand gerufen, vor
     // dem Log-Eintrag; nur wenn das Log scheitert, folgt ein zweiter Aufruf mit dem alten Stand (zurückschreiben). vollziehe hängt an genau dieser
@@ -1670,7 +1713,8 @@ export class ProjSitzung {
     this.ctx.verteile({ a: 'proj', f: { slug: o.slug, rev: neu.rev, label: w.eintrag.label, quelle } });
     if (nach.length) {
       // the core refused a container source after the swap: the change is taken back (one undo step), so a refusal never leaves the project changed
-      const grund = { fehler: 'kern_lehnt_ab', text: 'the core refused the container change; the project was set back', container: nach[0].container, status: nach[0].status, kern: nach[0].grund };
+      const grund = { fehler: 'kern_lehnt_ab', text: 'the core refused the container change; the project was set back', container: nach[0].container,
+        status: nach[0].status, kern: nach[0].grund };
       try {
         const zu = await this.umkehrVollzug(o, 'undo', quelle);
         return { code: 409, j: { ...grund, rev: o.projekt.rev, projekt: o.projekt, zurueckgenommen: zu.code === 200 } };
@@ -1931,7 +1975,7 @@ export class ProjSitzung {
     // the core has the rows spur/<slot>/bk/<k> for the first BK_LIVE_SLOTS bk tracks (= every bk track)
     if (slot > BK_LIVE_SLOTS) {
       throw new ProjFehler(409, 'param_nicht_live', {
-        text: `only the first ${BK_LIVE_SLOTS} Baukasten tracks have rows while a knob is dragged; change the track to hear the others`,
+        text: `only the first ${BK_LIVE_SLOTS} Cypher Modular tracks have rows while a knob is dragged; change the track to hear the others`,
       });
     }
     const soll: Soll[] = [];
@@ -2143,7 +2187,8 @@ export class ProjSitzung {
     const stromHalter = f.halter === 'cypher' || String(f.halter).startsWith('plan:');
     if (adresse === '/e/regler' && (f.halter === 'mensch' || (stromHalter && istStromZeile(this.offen?.projekt ?? null, String(f.pfad))))
       && istMixerRegler(String(f.pfad)) && !this.aufAuto.unterdrueckt(String(f.pfad))) {
-      this.rueckweg(String(f.pfad), Number(f.wert), f.halter === 'mensch' ? 'andreas' : 'cypher');   // the follow-up keeps the source of the move that caused it
+      // the follow-up keeps the source of the move that caused it
+      this.rueckweg(String(f.pfad), Number(f.wert), f.halter === 'mensch' ? 'andreas' : 'cypher');
     }
     // /zustand/arr status 0 setzt transportQuelle bewusst nicht zurück; ein neuer Start überschreibt die Quelle.
     // Spec 6.37 (REVIEW-5-opus M2): die Hand-Taste am Gerät führt der Kern selbst aus (core_arr.cpp arr_hand_start_stopp) und meldet danach
@@ -2239,7 +2284,8 @@ export class ProjSitzung {
         this.kern.loop(o.projekt, 'andreas'), this.kern.metronom(o.projekt, 'andreas'), this.leereKiMaske()]);
       // S17: the sound snapshot again (a new kern knows no graph); source andreas like the controls above (Spec 6.35 E-a)
       const baukasten = o.projekt.baukasten ? await this.bk.wiederherstellen(o.projekt, 'andreas', { schonGeladenUeberspringen: false }) : undefined;
-      this.ctx.log({ typ: 'proj_neustart', slug: o.slug, wiedergabe, ...(containerNein.length ? { container_abgelehnt: containerNein } : {}), ...reglerBefund(regler), loop, metronom, ki, ...(baukasten ? { baukasten } : {}) });
+      this.ctx.log({ typ: 'proj_neustart', slug: o.slug, wiedergabe, ...(containerNein.length ? { container_abgelehnt: containerNein } : {}),
+        ...reglerBefund(regler), loop, metronom, ki, ...(baukasten ? { baukasten } : {}) });
       this.meldeStand(o);                      // 1.8 S3 (D13): the new core gets arm, input, mode and monitor of every armed track
     }).catch((e) => this.ctx.log({ typ: 'proj_neustart_fehler', fehler: (e as Error).message }));
   }

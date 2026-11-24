@@ -48,6 +48,19 @@ test('the start reads /lage and the heads show the places of the live project', 
   assert.equal(knopf(1, 'track').classList.contains('an'), false);
 });
 
+test('the titles of the type keys say English words: "Show track here" on an empty place, never "leer"', async () => {
+  const { PLATZ_WORT } = await import('../public/slots.js');
+  assert.equal(PLATZ_WORT.leer, 'empty');
+  assert.deepEqual({ ...PLATZ_WORT }, { leer: 'empty', track: 'track', strudel: 'Strudel', seq: 'SEQ', loops: 'loops', stems: 'stems' });
+  zustand.regler = {};
+  lagePlaetze = STAND; await ansicht.holeLage();
+  assert.equal(text(3), 'EMPTY');
+  assert.match(knopf(3, 'track').title, /^Show track here$/);
+  assert.equal(knopf(3, 'leer').title, 'Place 3 shows empty');
+  assert.equal(knopf(1, 'leer').title, 'Show empty here');
+  for (const p of [1, 2, 3, 4]) for (const b of kopf(p).querySelectorAll('[data-platz-typ]')) assert.doesNotMatch(b.title, /\bleer\b/, `place ${p} ${b.dataset.platzTyp}`);
+});
+
 test('a click on a type button posts /plaetze with {platz, typ} once and writes nothing else', async () => {
   zustand.regler = {};   // everything closed
   frisch(); postAntwort = { code: 200, j: { ok: true, plaetze: STAND } };
@@ -120,7 +133,8 @@ test('no live project: all heads are disabled with the hint, a click posts nothi
   ansicht.zeigePlaetze();
   for (const p of [1, 2, 3, 4]) {
     for (const b of kopf(p).querySelectorAll('[data-platz-typ]')) assert.equal(b.disabled, true, `place ${p} ${b.dataset.platzTyp}`);
-    assert.match(hinweis(p), /open the live set/);
+    assert.equal(hinweis(p), '', 'the heads stay quiet: the banner above the desk says it');
+    assert.equal(document.querySelector('#live-zu').hidden, false, 'the banner shows instead');
   }
   frisch(); knopf(2, 'seq').click(); await warte();
   assert.equal(attrappe.anrufe.length, 0);

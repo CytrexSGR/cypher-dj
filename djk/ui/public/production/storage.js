@@ -9,6 +9,7 @@ import { spurIndexBeiTabelle } from './layout.js';
 import { PRESET_TYP, presetZiel } from './preset_target.js';
 import { wendePresetAn } from './preset_apply.js';   // 1.16 rest U7
 import { merkeBenutzt } from '../usage.js';
+import { legeNachImport, pruefeDatei, neueWarteschlange, echterSender, zusammenfassung } from '../browser/einwurf.js';
 
 export function bindeAblage(ctx) {
   const { st, $ } = ctx;
@@ -33,6 +34,7 @@ export function bindeAblage(ctx) {
   const ueber = $('ueber');
   ueber.addEventListener('dragover', (e) => {
     if (st.projekt && (e.dataTransfer.types.includes(GERAET_TYP) || e.dataTransfer.types.includes(PRESET_TYP))) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; return; }   // 1.16 rest: a device or a preset
+    if (st.projekt && e.dataTransfer.types.includes('Files')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; st.geist = { x: e.offsetX, spur: spurIndexBeiTabelle(ctx.zeilen(), e.offsetY) }; return; }
     if (!st.projekt || !e.dataTransfer.types.includes(ZIEH_TYP)) return;
     e.preventDefault(); e.dataTransfer.dropEffect = 'copy';
     st.geist = { x: e.offsetX, spur: spurIndexBeiTabelle(ctx.zeilen(), e.offsetY) };
@@ -42,10 +44,15 @@ export function bindeAblage(ctx) {
     st.geist = null;
     if (st.projekt && e.dataTransfer.types.includes(GERAET_TYP)) { e.preventDefault(); legeGeraet(e); return; }
     if (st.projekt && e.dataTransfer.types.includes(PRESET_TYP)) { e.preventDefault(); legePreset(e, { spurIndex: spurIndexBeiTabelle(ctx.zeilen(), e.offsetY) }); return; }
+    if (st.projekt && e.dataTransfer.types.includes('Files')) { e.preventDefault(); legeDatei(e); return; }
     if (!st.projekt || !e.dataTransfer.types.includes(ZIEH_TYP)) return;
     e.preventDefault();
     let n = null; try { n = JSON.parse(e.dataTransfer.getData(ZIEH_TYP)); } catch { return; }
-    const i = spurIndexBeiTabelle(ctx.zeilen(), e.offsetY), beat = xZuBeat(st.ansicht, e.offsetX), raster = rasterBeats(st.raster, beatsProTakt(st.projekt?.taktart));
+    ctx.legeSample(n, spurIndexBeiTabelle(ctx.zeilen(), e.offsetY), xZuBeat(st.ansicht, e.offsetX));
+  });
+  // the code that ran in the drop handler: one clip on the track at the index, at the beat (a refusal only shows its text)
+  ctx.legeSample = (n, i, beat) => {
+    const raster = rasterBeats(st.raster, beatsProTakt(st.projekt?.taktart));
     const r = ablageBefehl(st.projekt, n, i, beat, raster);
     if (r.fehler) { ctx.melde(ABLAGE_TEXT[r.fehler], true); return; }
     if (typeof n.sha === 'string' && ctx.holeJson) merkeBenutzt(ctx.holeJson, n.sha);   // recently used: the drop is the use (not the preview); never waited for
@@ -53,10 +60,28 @@ export function bindeAblage(ctx) {
     // Senden (ctx.aendereAus), nicht beim Ablegen: ein TEMPO davor, der noch unterwegs ist, zählt mit
     const spurId = r.befehl.spur_id;
     ctx.aendereAus((p) => {
-      const x = ablageBefehl(p, n, p.spuren.findIndex((s) => s.id === spurId), beat, raster);
+      const x = ablageBefehl(p, n, p.spuren.findIndex((sp) => sp.id === spurId), beat, raster);
       return x.befehl ? { label: 'Add clip', befehle: [x.befehl] } : null;
     });
-  });
+  };
+  // desktop files dropped on the arrangement (browser plan 2, task 9): the first audio file is imported and placed where it was dropped, the others
+  // are only imported (they appear in LIBRARY). An instrument track refuses before anything is uploaded.
+  let reste = null;
+  function legeDatei(e) {
+    const i = spurIndexBeiTabelle(ctx.zeilen(), e.offsetY), beat = xZuBeat(st.ansicht, e.offsetX);
+    const dateien = [...(e.dataTransfer.files ?? [])];
+    if (dateien.length === 0) return;
+    const spur = st.projekt?.spuren?.[i];
+    if (!spur) { ctx.melde(ABLAGE_TEXT.keine_spur, true); return; }
+    if (spur.art !== 'audio') { ctx.melde(ABLAGE_TEXT.keine_audiospur, true); return; }
+    const erste = dateien.find((d) => pruefeDatei(d).ok && !/\.(mid|midi|zip|json)$/i.test(d.name)) ?? dateien[0];
+    const rest = dateien.filter((d) => d !== erste);
+    if (rest.length) { reste ??= neueWarteschlange({ sende: echterSender(), beiAenderung: (x) => { if (!x.laeuft && x.fehler.length + x.nichtGesendet.length > 0) ctx.melde(zusammenfassung(x).text, true); } });  reste.fuegeHinzu(rest, 'bibliothek'); }
+    ctx.melde(`Adding ${erste.name}…`, false);
+    legeNachImport({ host: ctx, datei: erste, spurIndex: i, beat, sende: echterSender(), warte: (ms) => new Promise((ok) => setTimeout(ok, ms)), lege: ctx.legeSample })
+      .then((r) => { if (!r.ok) ctx.melde(r.text, !r.info); })
+      .catch((err) => ctx.melde(`The import failed: ${err?.message ?? err}`, true));
+  }
 
   // 1.16 rest (U6, S3): a device from the DEVICES list. An instrument anywhere on the arrangement makes a new track; an effect on a track row
   // appends a stage to that track's chain. A refusal (inactive kind, full chain, no free compressor) only shows its text; nothing is sent.

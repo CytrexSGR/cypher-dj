@@ -126,11 +126,13 @@ export function bindeTransport(ctx) {
     $('re-enable').disabled = !ueber; $('re-enable').classList.toggle('ueber', ueber);
   });
   let arrZeit = null, unbekannt = false;
+  // the text is cut to 16 characters in a narrow window (production.css): the title keeps all of it
+  const kernAnzeige = (t) => { setzeText($('kern'), t); $('kern').title = t; };   // title equals the text (layout audit)
   ctx.beimEreignis.push((a, f) => {
     if (a !== '/zustand/arr') return;
     st.arr = f; arrZeit = performance.now();
     kopf.melde(Number(f.projekt_beat), ctx.bpm(), arrZeit, f.status === 2);
-    setzeText($('kern'), kernText(f));
+    kernAnzeige(kernText(f));
     $('limiter').hidden = !limiterAn(f);
     $('play').classList.toggle('an', f.status === 1 || f.status === 2);
   });
@@ -139,8 +141,8 @@ export function bindeTransport(ctx) {
     st.kopfBeat = s.kopfBeat; st.arrUnbekannt = s.unbekannt;
     if (s.unbekannt !== unbekannt) {          // beim Wechsel: Anzeige „unbekannt“ setzen, bei der nächsten Meldung schreibt der Ereignis-Haken wieder
       unbekannt = s.unbekannt;
-      if (unbekannt) { setzeText($('kern'), KERN_UNBEKANNT); $('play').classList.remove('an'); $('limiter').hidden = true; }
-      else if (st.arr) setzeText($('kern'), kernText(st.arr));
+      if (unbekannt) { kernAnzeige(KERN_UNBEKANNT); $('play').classList.remove('an'); $('limiter').hidden = true; }
+      else if (st.arr) kernAnzeige(kernText(st.arr));
     }
     if (st.kopfBeat !== null && st.follow) { const b0 = folgeSeite(st.ansicht, st.kopfBeat, ctx.breite()); if (b0 !== null) st.ansicht = { ...st.ansicht, beat0: b0 }; }
     setzeText($('position'), positionText(st.kopfBeat ?? st.start, beatsProTakt(st.projekt?.taktart)));

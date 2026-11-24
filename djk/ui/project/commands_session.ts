@@ -1,7 +1,8 @@
 // Session view commands (index 1.1, plan session-view M2/M3): the global launch grid, the hold slot and the scenes.
 // The model rules (ranges, 8 scenes, ids) are checked by the model at the end of every command list; the handlers here check what a refusal
 // needs a reason for. Playback is not touched here; launches are runtime only.
-import { istHalten, neueId, istObjekt, zellFehler, ZELL_ZIELE, type ZellHuelle, type Zelle, sessionSzenen, LOOP_ZELLEN, LOOP_FARBEN, SZENEN_ZEILEN, SZENE_NAME_MAX, SZENE_TAKTE_MAX, TEMPO_MIN, TEMPO_MAX,
+import { istHalten, neueId, istObjekt, zellFehler, ZELL_ZIELE, type ZellHuelle, type Zelle, sessionSzenen, LOOP_ZELLEN, LOOP_FARBEN, SZENEN_ZEILEN,
+  SZENE_NAME_MAX, SZENE_TAKTE_MAX, TEMPO_MIN, TEMPO_MAX,
   type Projekt, type ZellSlot, type Spur, type SessionSzene } from './model.ts';
 import { ab, erlaube, flagge, idArg, spurVon, zahl, type Args, type Handler } from './commands_helpers.ts';
 import { rasterArg, setzeRaster, sessionAnlegen } from './commands_loopdeck.ts';
@@ -9,7 +10,8 @@ import { rasterArg, setzeRaster, sessionAnlegen } from './commands_loopdeck.ts';
 // The undo labels of the commands (the routes that send them use these texts). `szene_benennen` is the label of a rename (szene_aendern with a name only).
 export const SESSION_LABEL = {
   session_aendern: 'Set launch grid', zelle_halten: 'Hold slot', szene_benennen: 'Name scene',
-  szene_neu: 'Insert scene', szene_fangen: 'Capture scene', szene_doppeln: 'Duplicate scene', szene_loeschen: 'Delete scene', szene_aendern: 'Edit scene', zelle_huelle: 'Edit envelope',
+  szene_neu: 'Insert scene', szene_fangen: 'Capture scene', szene_doppeln: 'Duplicate scene', szene_loeschen: 'Delete scene', szene_aendern: 'Edit scene',
+    zelle_huelle: 'Edit envelope',
 } as const;
 
 const imLive = (p: Projekt): void => { if (!p.live) ab('kein_liveprojekt', 'the session settings belong to the live container'); };
@@ -57,7 +59,8 @@ function kopiere(p: Projekt, z: ZellSlot): ZellSlot {
 function folgeArg(x: unknown): SessionSzene['folge'] {
   if (x === 'loop' || x === 'weiter' || x === 'stopp') return x;
   const s = typeof x === 'object' && x !== null ? (x as { sprung?: unknown }) : {};
-  if (Object.keys(x as object ?? {}).length === 1 && typeof s.sprung === 'number' && Number.isInteger(s.sprung) && s.sprung >= 1 && s.sprung <= SZENEN_ZEILEN) return { sprung: s.sprung };
+  if (Object.keys(x as object ?? {}).length === 1 && typeof s.sprung === 'number' && Number.isInteger(s.sprung) && s.sprung >= 1 &&
+    s.sprung <= SZENEN_ZEILEN) return { sprung: s.sprung };
   return ab('argument_ungueltig', "folge: 'loop', 'weiter', 'stopp', { sprung: 1..8 } or null expected");
 }
 
@@ -113,7 +116,8 @@ export const SESSION = {
     erlaube(a, 'zeile', 'name', 'farbe', 'bpm', 'takte', 'folge');
     imLive(p);
     const z = zeileArg(a, 'zeile');
-    if (['name', 'farbe', 'bpm', 'takte', 'folge'].every((k) => a[k] === undefined)) ab('argument_ungueltig', 'nothing to change: name, farbe, bpm, takte or folge expected');
+    if (['name', 'farbe', 'bpm', 'takte', 'folge'].every((k) => a[k] === undefined)) ab('argument_ungueltig',
+      'nothing to change: name, farbe, bpm, takte or folge expected');
     const neu: Partial<SessionSzene> = {};
     if (a.name !== undefined) {
       if (typeof a.name !== 'string' || a.name.length > SZENE_NAME_MAX) ab('argument_ungueltig', `name: text with 0 to ${SZENE_NAME_MAX} characters expected`);

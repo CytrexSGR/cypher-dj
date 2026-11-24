@@ -1,7 +1,7 @@
 // Container core, lane U, U2: the pure place model reads the live project (lage.plaetze) and knows nothing about browser layouts.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PLATZ_TYPEN, EINMALIG, plaetzeAusLage, typVon, gruppeVon, erlaubt, still, wechselKoerper, zugKopf } from '../public/slots.js';
+import { PLATZ_TYPEN, EINMALIG, plaetzeAusLage, typVon, gruppeVon, erlaubt, still, wechselKoerper, zugKopf, liveZuText } from '../public/slots.js';
 
 const LAGE = [{ typ: 'track' }, { typ: 'seq', gruppe: 'g2' }, { typ: 'strudel', gruppe: 'g3' }, { typ: 'leer' }];
 
@@ -86,4 +86,12 @@ test('slots.js is pure: no storage, no fetch, no DOM, no channel literal', async
   const fs = await import('node:fs');
   const text = fs.readFileSync(new URL('../public/slots.js', import.meta.url), 'utf8').replace(/\/\/.*$/gm, '');
   assert.doesNotMatch(text, /localStorage|sessionStorage|fetch\(|document\.|loops2|'(pad|deck|erz)\//);
+});
+
+test('liveZuText: nothing while the live set is open, the closed-because sentence for another project, the plain one otherwise', () => {
+  assert.equal(liveZuText({ offen: true, anderesProjekt: false }), null);
+  assert.equal(liveZuText({ offen: true, anderesProjekt: true }), null, 'open wins');
+  assert.deepEqual(liveZuText({ offen: false, anderesProjekt: true }), { text: 'The live set is closed because another project is open.', knopf: 'OPEN LIVE SET' });
+  assert.deepEqual(liveZuText({ offen: false, anderesProjekt: false }), { text: 'The live set is not open.', knopf: 'OPEN LIVE SET' });
+  assert.doesNotMatch(liveZuText({ offen: false, anderesProjekt: true }).text, /module|place/i, 'no jargon');
 });

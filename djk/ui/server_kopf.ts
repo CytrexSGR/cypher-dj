@@ -1,5 +1,6 @@
 // Module-level code of server.ts (plan 2026-11-15-backlog-tech-release, task 9): constants, types and pure helpers, moved unchanged.
 import fs from 'node:fs';
+import type { TagsBereichOptionen } from './tags/area.ts';
 import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -56,15 +57,18 @@ export const ueberProjektText = (pfad: string): string => (pfad.startsWith('rack
   ? 'insert stages are changed through the project (/proj/aendern: insert_setzen, insert_param_setzen, insert_an, insert_entfernen, insert_ordnung)'
   : pfad.startsWith('ret/') || pfad.includes('/send/')
   ? 'sends, return strips and Hall values are changed through the project (/proj/aendern: send_setzen, return_aendern)'
-  : /^spur\/\d+\/bk\//.test(pfad) ? 'the knobs of a Baukasten track are changed through the project (/proj/aendern: geraet_param_setzen); a controller reaches them as a learn target'
+  : /^spur\/\d+\/bk\//.test(pfad) ? 'the knobs of a Cypher Modular track are changed through the project (/proj/aendern: geraet_param_setzen); a controller reaches them as a learn target'
   : pfad.startsWith('spur/') ? 'track faders are changed through the project (/proj/aendern, spur_aendern)'
     : 'group and master faders are changed through the project (/proj/aendern: gruppenspur_aendern, master_aendern)');
 // Plan live-module task 3: the module store folder; a test instance (a..i) keeps it in /dev/shm, never in the real config folder
 export const modulBasisVon = (vorgabe: string | undefined, inst: string): string => vorgabe ?? (inst === '' ? modulBasis() : `/dev/shm/cypherdj-${inst}/module`);
+// The pairing file (tablet access): only the live studio keeps it in the real config folder; a test instance (a..i) has its own under /dev/shm, so it never shows
+// or changes the owner's paired devices (POST /kopplung/loeschen would write it).
+export const kopplungPfadVon = (vorgabe: string | undefined, inst: string): string => vorgabe ?? (inst === '' ? path.join(os.homedir(), '.config', 'cypherdj', 'kopplung.json') : `/dev/shm/cypherdj-${inst}/kopplung.json`);
 export const STROM_MAX_BYTES = 4 * 1024 * 1024;   // unsent bytes per event stream before the stream is closed
 export const STRUDEL_ZEITLIMIT_MS = 2000;   // Plan-Review M3
 
-// Tablet access (task 10). Off unless ~/.config/cypherdj/tablet.json says {"an": true}; a test instance (a..i) never reads it. Tests give their own paths.
+// Tablet access (task 10). Off unless ~/.config/cypherdj/tablet.json says {"an": true}; a test instance (a..i) never reads it and keeps its pairing file in /dev/shm/cypherdj-<i>/ (kopplungPfadVon). Tests give their own paths.
 export interface TabletOptionen {
   konfigPfad?: string; kopplungPfad?: string; port?: number;
   schnittstellen?: () => NodeJS.Dict<os.NetworkInterfaceInfo[]>;   // default os.networkInterfaces
@@ -108,6 +112,7 @@ export interface ServerOptionen {
   stems?: Partial<StemsOptionen>;   // 1.13 Slice 6: Tests biegen zusatzArgs (Prüftrenner, P3) und killMs um
   geraete?: GeraeteOptionen;   // I08: Pfade und Erkennung (Tests geben eigene)
   lernen?: LernenOptionen;     // S19: controller folder (lernen.json) and the devices file (Tests give their own)
+  tags?: TagsBereichOptionen;   // B19..B21: tag store (default tags.sqlite next to the catalogue); tests give their own
   kollektionen?: KollektionBereichOptionen;   // 1.16 rest: collections folder (default ~/.config/cypherdj[-<i>]/kollektionen); tests give their own
   presets?: PresetOptionen;    // 1.16: preset folders (werk = factory presets/factory, nutzer = user ~/.config/cypherdj[-<i>]/presets), vocabulary and factory register; tests give their own
   proj?: ProjOptionen;   // D1 S2: Projektwurzel, Arbeitsordner (Vorgaben je Instanz, areas/proj/session.ts)

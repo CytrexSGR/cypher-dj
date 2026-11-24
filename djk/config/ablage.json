@@ -11,22 +11,25 @@
     "hotcues":      { "alt": "{KONFIG}/hotcues", "neu": "{HEIM}/werke/korrekturen/hotcues", "env": null, "kern": false },
     "kits":         { "alt": "{KONFIG}/kits", "neu": "{HEIM}/werke/kits", "env": "CYPHERDJ_KIT_ORDNER", "kern": true },
     "loops":        { "alt": "{KONFIG}/loops", "neu": "{HEIM}/werke/loops", "env": null, "kern": true },
-    "geraete":      { "alt": "{KONFIG}/baukasten", "neu": "{HEIM}/werke/geraete", "env": "CYPHERDJ_BK_ORDNER", "kern": true },
+    "geraete":      { "alt": "{KONFIG}/baukasten", "neu": "{HEIM}/werke/geraete", "env": "CYPHERDJ_BK_ORDNER", "kern": true,
+    "kern_env": true },
     "loopsets":     { "alt": "{KONFIG}/loopsets", "neu": "{HEIM}/werke/loopsets", "env": "CYPHERDJ_LOOPSETS", "kern": false },
     "bestand":      { "alt": "{REPO}/bestand", "neu": "{HEIM}/werke/bestand", "env": "CYPHERDJ_BESTAND", "kern": false },
     "sammlungen":   { "alt": "{REPO}/bibliothek/sets", "neu": "{HEIM}/werke/sets", "env": "CYPHERDJ_SAMMLUNGEN", "kern": false },
     "muster":       { "alt": "{REPO}/bibliothek/muster", "neu": "{HEIM}/werke/muster", "env": "CYPHERDJ_MUSTER", "kern": false },
-    "journal":      { "alt": "{REPO}/sets/djk", "neu": "{HEIM}/journal", "env": "CYPHERDJ_JOURNAL", "kern": false }
+    "journal":      { "alt": "{REPO}/sets/djk", "neu": "{HEIM}/journal", "env": "CYPHERDJ_JOURNAL", "kern": false },
+    "importe":      { "alt": "{KONFIG}/importe", "neu": "{HEIM}/werke/importe", "env": "CYPHERDJ_IMPORTE", "kern": false },
+    "mitschnitte":  { "alt": "", "grund_alt": "recordings from the page are new: there was no old place, an empty alt means neu under every vorgabe", "neu": "{HEIM}/werke/mitschnitte", "env": "CYPHERDJ_MITSCHNITTE", "kern": false }
   },
   "fest": {
-    "mediathek":         { "pfad": "{HOME}/.local/share/cypherdj/mediathek/mediathek.sqlite", "env": "CYPHERDJ_MEDIATHEK" },
-    "analyse":           { "pfad": "{HOME}/werkstatt/cypher-dj-analyse", "env": "CYPHERDJ_ANALYSE" },
-    "bibliothek_konfig": { "pfad": "{KONFIG}/bibliothek.json", "env": "CYPHERDJ_BIBLIOTHEK_KONFIG" },
-    "surge_werk":        { "pfad": "{HOME}/.local/share/cypherdj/surge-daten/usr/share/surge-xt/patches_factory", "env": "CYPHERDJ_SURGE_PATCHES" },
-    "plugin_index":      { "pfad": "{HOME}/.local/state/cypherdj/plugins/index.json", "env": "CYPHERDJ_PLUGIN_INDEX" },
-    "umgebung":          { "pfad": "{KONFIG}/umgebung.env", "env": "CYPHERDJ_UMGEBUNG" },
-    "pruefen":           { "pfad": "{HEIM}/pruefen", "env": null },
-    "quellen":           { "pfad": "{HEIM}/quellen.toml", "env": null },
-    "referenzen":        { "pfad": "{HEIM}/werke/referenzen", "env": "CYPHERDJ_REFERENZEN" }
+    "mediathek":         { "pfad": "{HOME}/.local/share/cypherdj/mediathek/mediathek.sqlite", "env": "CYPHERDJ_MEDIATHEK", "shm": "mediathek/mediathek.sqlite" },
+    "analyse":           { "pfad": "{HOME}/werkstatt/cypher-dj-analyse", "env": "CYPHERDJ_ANALYSE", "shm": "analyse" },
+    "bibliothek_konfig": { "pfad": "{KONFIG}/bibliothek.json", "env": "CYPHERDJ_BIBLIOTHEK_KONFIG", "shm": "bibliothek/bibliothek.json" },
+    "surge_werk":        { "pfad": "{HOME}/.local/share/cypherdj/surge-daten/usr/share/surge-xt/patches_factory", "env": "CYPHERDJ_SURGE_PATCHES", "shm": null },
+    "plugin_index":      { "pfad": "{HOME}/.local/state/cypherdj/plugins/index.json", "env": "CYPHERDJ_PLUGIN_INDEX", "shm": "plugins/index.json" },
+    "umgebung":          { "pfad": "{KONFIG}/umgebung.env", "env": "CYPHERDJ_UMGEBUNG", "shm": null },
+    "pruefen":           { "pfad": "{HEIM}/pruefen", "env": null, "shm": "bibliothek/heimat/pruefen" },
+    "quellen":           { "pfad": "{HEIM}/quellen.toml", "env": null, "shm": "bibliothek/heimat/quellen.toml" },
+    "referenzen":        { "pfad": "{HEIM}/werke/referenzen", "env": "CYPHERDJ_REFERENZEN", "shm": "referenzen" }
   }
 }

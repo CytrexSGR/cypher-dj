@@ -1,0 +1,23 @@
+{
+  "_zweck": "Preview material: instrument role to a starter loop (djk/starter/loops.json) plus a transposition in semitones; effect kind to the starter loop that runs through the effect. Every loop name must exist in loops.json (presets_prelisten_source.test.mjs pins that).",
+  "rollen": {
+    "bass": { "loop": "starter-neuro-bass", "transponiere": 0 },
+    "lead": { "loop": "starter-neuro-bass", "transponiere": 24 },
+    "pad": { "loop": "starter-poly-chords", "transponiere": 0 },
+    "keys": { "loop": "starter-poly-chords", "transponiere": 0 },
+    "pluck": { "loop": "starter-neuro-bass", "transponiere": 12 },
+    "drums": { "loop": "starter-909-groove", "transponiere": 0 },
+    "percussion": { "loop": "starter-909-groove", "transponiere": 0 },
+    "fx": { "loop": "starter-poly-chords", "transponiere": 12 }
+  },
+  "effekte": {
+    "reverb": "starter-poly-chords",
+    "delay": "starter-poly-chords",
+    "compressor": "starter-909-groove",
+    "eq": "starter-909-groove",
+    "saturation": "starter-909-groove",
+    "filter": "starter-909-groove",
+    "modulation": "starter-poly-chords",
+    "utility": "starter-909-groove"
+  }
+}

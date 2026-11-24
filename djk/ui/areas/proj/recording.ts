@@ -30,6 +30,7 @@ import { tastenSenke, type TastenArm } from '../controller/tasten.ts';
 import { geraeteDatei } from '../../paths.ts';
 import { GeraeteFehler, GeraeteSpeicher, type Konfig } from '../devices/store.ts';
 import { alsAntwort, leseKoerper, type ProjZugang } from './area.ts';
+import { entferneLaufDatei, laufDateiBleibt, LAUF_FORMAT, schreibeLaufDatei, type LaufDatei } from './recording_rettung.ts';
 import { ProjFehler, type Antwort } from './session.ts';
 
 type Quelle = 'andreas' | 'cypher';
@@ -38,6 +39,7 @@ interface Meldung { spur: number; kennung: number; status: number; frames: numbe
 // art 'instrument' marks a track armed with midi_ein_1 (1.8 T8); audio tracks carry no key, so the answers of slices 1 to 7 stay as they were
 interface LaufSpur { id: string; nr: number; name: string; versatz_samples: number; art?: 'instrument' }
 interface Lauf {
+  ordner: string;                           // B11: the project folder at REC time; the run file is removed there, whatever is open when the run ends
   kennung: number; recId: number; startBeat: number; bpm: number; quelle: Quelle; seit: number; spuren: LaufSpur[];
   nachlauf: number;                         // 1.8 S2b (D9): the one tail of the run = the largest offset of the armed tracks (0 with internal tracks only)
   laufend: boolean;                         // 1.8 S4b (D8): began inside a running transport; stopping ends the recording only
@@ -61,6 +63,8 @@ const MODUS_CODE = { stereo: 0, links: 1, rechts: 2, summe: 3 } as const;   // /
 const MONITOR_CODE = { aus: 0, auto: 1, ein: 2 } as const;                   // /k/rec/spur monitor; absent in the project means auto (D11)
 const monitorCode = (a: SpurAufnahme): number => (a.monitor === undefined ? MONITOR_CODE.auto : MONITOR_CODE[a.monitor]);
 const MIN_FREI_BYTES = 2 ** 30;                                               // D19: default minimum of free space to start a recording (1 GiB)
+// B11: the run file functions, replaceable by tests (a stub that throws proves the hook cannot hurt a recording)
+export interface LaufDateiOpt { schreibe?: (ordner: string, d: LaufDatei) => boolean; entferne?: (ordner: string, kennung: number) => void }
 interface Platz { minFreiBytes?: number; statfs?: (ordner: string) => { bavail: number; bsize: number } }
 const NACHLAUF_MAX = 480000;                                                  // osc.json /k/rec/start nachlauf_samples
 const MIDI_EINGANG = 30;                                                      // /k/rec/spur eingang of midi_ein_1 (an instrument track, T7a)
@@ -92,6 +96,8 @@ export class Aufnahme {
   private readonly geraete: GeraeteSpeicher;
   private readonly zustandMs: number;
   private readonly ladeMs: number;
+  private readonly schreibeLauf: (ordner: string, d: LaufDatei) => boolean;     // B11: replaceable for tests
+  private readonly entferneLauf: (ordner: string, kennung: number) => void;
   private readonly tasten: TastenArm | null;      // N1: the focus arm of the keys (null: the page server has none)
   private readonly minFreiBytes: number;           // 1.8 T9 (D19, AK28): less free space than this on a folder refuses the start (kein_platz)
   private readonly statfs: (ordner: string) => { bavail: number; bsize: number };
@@ -104,8 +110,10 @@ export class Aufnahme {
   private zustandWartend: (() => void)[] = [];
   constructor(
     ctx: BereichKontext, zugang: ProjZugang, fristMs = 30000, geraeteKonfig?: string, zustandMs = 1500, ladeMs = 5000, platz: Platz = {},
-    tasten: TastenArm | null = null,
+    tasten: TastenArm | null = null, laufDatei: LaufDateiOpt = {},
   ) {
+    this.schreibeLauf = laufDatei.schreibe ?? schreibeLaufDatei;
+    this.entferneLauf = laufDatei.entferne ?? entferneLaufDatei;
     this.tasten = tasten;
     this.ctx = ctx; this.zugang = zugang; this.fristMs = fristMs; this.zustandMs = zustandMs; this.ladeMs = ladeMs;
     this.minFreiBytes = platz.minFreiBytes ?? MIN_FREI_BYTES;
@@ -398,7 +406,8 @@ export class Aufnahme {
       }
       // D8: inside a running transport the take began where receipt 2 says (a project beat); after a stopped start it began at the transport start beat
       const startBeat = laufend ? (this.einsatzBeat ?? beat) : beat;
-      this.lauf = { kennung, recId, startBeat, bpm: o.projekt.tempo_bpm, quelle, seit: Date.now(), verworfen: null, abschluss: null, nachlauf, laufend, punch,
+      this.lauf = { ordner: o.ordner, kennung, recId, startBeat, bpm: o.projekt.tempo_bpm, quelle, seit: Date.now(), verworfen: null, abschluss: null,
+        nachlauf, laufend, punch,
         overdub: au.overdub,
         spuren: scharf.map((s) => ({ id: s.id, nr: s.nr, name: s.name, versatz_samples: versatz.get(s.nr) ?? 0,
           ...(s.art === 'instrument' ? { art: 'instrument' as const } : {}) })) };
@@ -406,6 +415,7 @@ export class Aufnahme {
       this.zugang.aufnahmeLauf(this.lauf);
       this.frei = freigabe;
       behalten = true;
+      this.schreibeLaufHaken(o.slug, this.lauf, scharf);   // B11: its own try/catch; a failing hook never stops, delays or blocks the recording
       return { code: 200, j: { aufnahme: 'laeuft', kennung, spuren: this.lauf.spuren, nachlauf_samples: nachlauf, start_beat: startBeat,
         ...(laufend ? { laufend: true } : {}), ...(hinweise.length > 0 ? { hinweise } : {}) } };
     } finally {
@@ -414,6 +424,25 @@ export class Aufnahme {
       this.einsatzBeat = null;
       if (!behalten) freigabe();
     }
+  }
+
+  // B11: the run file lets the next project open rescue the take when the page server dies during the run. A failure only loses that protection.
+  private schreibeLaufHaken(slug: string, l: Lauf, scharf: { id: string; nr: number; name: string; art: string }[]): void {
+    try {
+      const roh = (nr: number): string => path.join(this.zugang.arbeitsordner(), `aufnahme-${nr}-${l.kennung}.f32`);
+      const d: LaufDatei = { format: LAUF_FORMAT, projekt: slug, kennung: l.kennung, seit: new Date(l.seit).toISOString(), start_beat: l.startBeat,
+        tempo_bpm: l.bpm, nachlauf_samples: l.nachlauf,
+        spuren: l.spuren.filter((s) => s.art === undefined).map((s) => ({ id: s.id, nr: s.nr, name: s.name, versatz_samples: s.versatz_samples,
+          f32: roh(s.nr) })),
+        midi_spuren: l.spuren.filter((s) => s.art === 'instrument').map((s) => s.id) };
+      if (!this.schreibeLauf(l.ordner, d)) this.ctx.log({ typ: 'proj_lauf_datei_fehler', kennung: l.kennung, fehler: 'the run file could not be written' });
+    } catch (e) {
+      try { this.ctx.log({ typ: 'proj_lauf_datei_fehler', kennung: l.kennung,
+        fehler: (e as Error)?.message ?? String(e) }); } catch { /* the log must not hurt either */ }
+    }
+  }
+  private loescheLaufHaken(l: Lauf): void {
+    try { this.entferneLauf(l.ordner, l.kennung); } catch { /* never hurts */ }
   }
 
   private warteMeldung(nr: number, kennung: number): Promise<Meldung | null> { return this.warteSchluessel(`${nr}:${kennung}`); }
@@ -455,6 +484,7 @@ export class Aufnahme {
     try {
       // the MIDI take is ONE report for all instrument tracks of the run (spur 0, art 1): wait for it once
       const audio = l.spuren.filter((s) => s.art === undefined);
+      if (l.verworfen !== null) this.loescheLaufHaken(l);   // the user's own abort: the core discarded the take, nothing to rescue
       const antwort = l.verworfen !== null
         ? alsAntwort(new ProjFehler(409, 'aufnahme_abgebrochen', { grund: l.verworfen }), this.ctx)
         : await this.uebernehmen(l, await Promise.all(audio.map((s) => this.warteMeldung(s.nr, l.kennung))),
@@ -518,11 +548,22 @@ export class Aufnahme {
     });
     const instrumente = l.spuren.filter((s) => s.art === 'instrument');
     if (instrumente.length > 0) neu = this.uebernimmMidi(l, midi, instrumente, neu, ergebnis);
-    if (ergebnis.every((e) => e.fehler)) return { code: 200, j: { takes: ergebnis, rev: o.projekt.rev } };
+    if (ergebnis.every((e) => e.fehler)) { this.entscheideLaufDatei(l, ergebnis); return { code: 200, j: { takes: ergebnis, rev: o.projekt.rev } }; }
     // kein Clip gesetzt: die Dateien bleiben, der Stand ändert sich nicht
     const w = aendereStand(o.verlauf, o.projekt, neu, meta, this.zugang.haken());
     if (w.eintrag !== null) await this.zugang.uebernimm(w, meta);
+    this.entscheideLaufDatei(l, ergebnis);   // B11: only after the project was saved; a throw above leaves the run file for the rescue
     return { code: 200, j: { takes: ergebnis, rev: this.zugang.offen()?.projekt.rev ?? w.projekt.rev } };
+  }
+
+  // B11: keep the run file when a track failed for a rescuable reason, else remove it
+  private entscheideLaufDatei(l: Lauf, ergebnis: Record<string, unknown>[]): void {
+    try {
+      const audio = new Map(l.spuren.filter((x) => x.art === undefined).map((x) => [x.id, x.nr]));
+      const mitNr = ergebnis.map((e) => (audio.has(String(e.spur_id)) ? { ...e, spur_nr: audio.get(String(e.spur_id)) } : e));
+      if (!laufDateiBleibt(mitNr, (n) => path.join(this.zugang.arbeitsordner(), `aufnahme-${n}-${l.kennung}.f32`))) this.loescheLaufHaken(l);
+    } catch (e) { try { this.ctx.log({ typ: 'proj_lauf_datei_fehler', kennung: l.kennung,
+      fehler: (e as Error)?.message ?? String(e) }); } catch { /* the log must not hurt either */ } }
   }
 
   // 1.8 T8: the MIDI take (midi-<kennung>.bin of the work folder) becomes notes on every instrument track of the run; the pass ends where the audio pass would
@@ -625,9 +666,10 @@ export class Aufnahme {
 const eingangCode = (e: EingangIntern | EingangExtern): number => (e.art === 'extern' ? e.paar : eingangsCode(e.name));
 
 export function aufnahmeBereich(ctx: BereichKontext, zugang: ProjZugang,
-  opt: { fristMs?: number; geraeteKonfig?: string; zustandMs?: number; ladeMs?: number; tasten?: TastenArm } & Platz = {}): Bereich & { aufnahme: Aufnahme } {
+  opt: { fristMs?: number; geraeteKonfig?: string; zustandMs?: number;
+    ladeMs?: number; tasten?: TastenArm; laufDatei?: LaufDateiOpt } & Platz = {}): Bereich & { aufnahme: Aufnahme } {
   const a = new Aufnahme(ctx, zugang, opt.fristMs, opt.geraeteKonfig, opt.zustandMs, opt.ladeMs,
-    { minFreiBytes: opt.minFreiBytes, statfs: opt.statfs }, opt.tasten ?? null);
+    { minFreiBytes: opt.minFreiBytes, statfs: opt.statfs }, opt.tasten ?? null, opt.laufDatei ?? {});
   const antworte = async (r: http.ServerResponse, f: () => Antwort | Promise<Antwort>): Promise<void> => {
     let x: Antwort;
     try { x = await f(); } catch (e) { x = alsAntwort(e, ctx); }

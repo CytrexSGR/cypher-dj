@@ -56,7 +56,7 @@ test('the shelf strip shows the label, the tabs, the hint, module cards with a d
   assert.ok(t.includes('click = open the module · every change is saved at once · SAVE AS keeps a copy under a new name'));
   assert.deepEqual(regal().querySelectorAll('.w-tab').map((x) => x.textContent), ['MODULES', 'LOOPS', 'CUTS', 'SAMPLES', 'INSTRUMENTS']);
   assert.deepEqual(karten().map((k) => k.querySelector('b').textContent), ['Alpha', 'Beta', 'Techno 130 · Start', '+ empty module']);
-  assert.ok(karte('Alpha').textContent.includes('2026-11-15'));
+  assert.ok(karte('Alpha').textContent.includes('15 Nov 2026'));
   assert.ok(karte('Techno 130 · Start').textContent.includes('template'));
   assert.ok(karte('Techno 130 · Start').textContent.includes('Drums 909 and Bass Banddrive'));
   assert.ok(!t.includes('Plain Song'));

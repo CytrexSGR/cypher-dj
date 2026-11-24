@@ -88,7 +88,7 @@ test('focus: an instrument channel gives graph and base; a channel without bk ro
   assert.deepEqual((await x.fokus({})).j.fokus, null);
 });
 
-test('focus: a project track gives the slot of its Baukasten order as base; every bk slot up to BK_LIVE_SLOTS has rows; a track that is no Baukasten track or no track at all gives kein_bk', async (t) => {
+test('focus: a project track gives the slot of its Cypher Modular order as base; every bk slot up to BK_LIVE_SLOTS has rows; a track that is no Cypher Modular track or no track at all gives kein_bk', async (t) => {
   const spuren = [...Array.from({ length: 10 }, (_, i) => bk(`s${i + 1}`, i + 1)), { id: 'k1', nr: 20, name: 'Kit', art: 'instrument', geraet: { art: 'intern', name: 'kit', kit: 'k' } },
     { id: 'a1', nr: 21, name: 'Audio', art: 'audio', clips: [] }, bk('leer', 30, '')];
   const x = await aufbau(t, { stand: { projekt: { spuren } } });
@@ -308,7 +308,7 @@ test('keys: the switch is on by default; a project track with a sink becomes the
   assert.equal(x.tastenArm.spur(), null);
   assert.deepEqual((await x.fokus({ spur_id: 's1' })).j.tasten, { an: true, ziel: { spur_id: 's1' } });
   assert.equal(x.tastenArm.spur(), 's1');
-  assert.deepEqual((await x.fokus({ spur_id: 's2' })).j.tasten, { an: true, ziel: { spur_id: 's2' } }, 'a kit track takes the keys too, though it has no Baukasten knobs');
+  assert.deepEqual((await x.fokus({ spur_id: 's2' })).j.tasten, { an: true, ziel: { spur_id: 's2' } }, 'a kit track takes the keys too, though it has no Cypher Modular knobs');
   assert.equal(x.tastenArm.spur(), 's2');
   assert.deepEqual((await x.fokus({ spur_id: 's3' })).j.tasten, { an: true, ziel: null, grund: 'kein_instrument' });
   assert.equal(x.tastenArm.spur(), null, 'an audio track in front: the arm is taken back');

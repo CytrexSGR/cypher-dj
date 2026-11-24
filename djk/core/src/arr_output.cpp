@@ -931,6 +931,21 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
       }
       float* d3l = fx3 ? dj_fx3_l_[dj_k - 1] : nullptr;
       float* d3r = fx3 ? dj_fx3_r_[dj_k - 1] : nullptr;
+      // FX 3 is a post-fader send of the track's group (decision 2026-11-23): the diverted portion is multiplied by the fader gain and the mute/solo fade of the group and of every enclosing
+      // group, exactly the values the group loop applies to its own sum in this block (fader per sample as there, gsend = the product of the fades). No new smoothing; the group's inserts
+      // and balance do not act on the send. The chain of enclosing groups is walked on the stack, nothing is allocated.
+      const Wert* g3f[ARR_GRUPPEN];
+      float g3l[ARR_GRUPPEN];
+      int g3n = 0;
+      const float* g3b = nullptr;
+      if (fx3 && zg > 0) {
+        g3b = gsend[zg - 1];
+        for (int e = zg - 1; e >= 0 && g3n < ARR_GRUPPEN; e = gziel_[e] - 1) {
+          g3f[g3n] = &w_[ARR_SPUREN + e][0];
+          g3l[g3n] = db_lin(g3f[g3n]->w);
+          ++g3n;
+        }
+      }
       if (fx3) dj_fx3_da_[dj_k - 1] = true;
       for (int t = 0; t < m; ++t) {
         float nl = fxs_l_[t], nr = fxs_r_[t];
@@ -950,8 +965,16 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
           d3l[t] += nl * a;   // error case: the share stays on the normal path as well (copy, not insert)
           d3r[t] += nr * a;
 #else
-          d3l[t] += nl * a;
-          d3r[t] += nr * a;
+          float gk = 1.0f;   // the group gain of the send: fader of the group and its ancestors times the fade product
+          if (g3b) {
+            gk = g3b[t];
+            for (int q = 0; q < g3n; ++q) {
+              if (g3f[q]->vl) g3l[q] = db_lin(g3f[q]->vl[t]);
+              gk *= g3l[q];
+            }
+          }
+          d3l[t] += nl * a * gk;
+          d3r[t] += nr * a * gk;
           nl *= 1.0f - a;
           nr *= 1.0f - a;
 #endif

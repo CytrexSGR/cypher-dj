@@ -39,7 +39,8 @@ test('POST /proj/einsammeln answers the report', async (t) => {
   assert.equal(c.code, 200, JSON.stringify(c.j));
   const r = await ruf(x.url, 'POST', '/proj/einsammeln', {});
   assert.equal(r.code, 200, JSON.stringify(r.j));
-  assert.deepEqual(r.j, { kopiert: 1, schon_da: 0, fehlt: [], abweichend: [], bytes: 10, aufgeschoben: 0, fehlt_grund: {} });
+  assert.deepEqual(r.j, { kopiert: 1, schon_da: 0, fehlt: [], abweichend: [], bytes: 10, aufgeschoben: 0, fehlt_grund: {},
+    kits: { kopiert: [], schon_da: [], fehlt: [] } });   // browser plan 5: the kit report is added, every old field stays
   assert.equal(fs.readFileSync(path.join(x.projOrdner, 'audio', `kick-drum-${x.s.slice(0, 8)}.wav`), 'utf8'), 'kick-bytes');
   assert.deepEqual((await ruf(x.url, 'POST', '/proj/einsammeln', {})).j.schon_da, 1, 'a second press copies nothing');
   const feld = await ruf(x.url, 'POST', '/proj/einsammeln', { alles: true });

@@ -72,8 +72,18 @@ export const TABLET_VERBOTEN: readonly { pfad: string; warum: string }[] = [
   { pfad: '/laden', warum: 'loads material into a deck' }, { pfad: '/tempo', warum: 'master tempo' },
   { pfad: '/fx', warum: 'beat FX of the DJ view' },
   { pfad: '/deck', warum: 'deck transport and grid' }, { pfad: '/ansage', warum: 'announcements' },
-  { pfad: '/quellen', warum: 'local folder paths' },
+  { pfad: '/quellen', warum: 'local folder paths' }, { pfad: '/plugins/pfade', warum: 'local folder paths of the plugin search list' },
   { pfad: '/presets', warum: 'writes preset files' }, { pfad: '/kollektionen', warum: 'writes collections' },
+  { pfad: '/bibliothek/quellen', warum: 'lists and changes the music folders of this computer' },
+  { pfad: '/bibliothek/bauen', warum: 'starts a catalogue build' },
+  { pfad: '/bibliothek/midi', warum: 'lists MIDI files with absolute paths of this computer' },
+  { pfad: '/dateisystem', warum: 'lists the folders of this computer' },
+  { pfad: '/import', warum: 'uploads files into the studio (browser plan 1)' },
+  { pfad: '/kits/export', warum: 'downloads a kit as a zip (browser plan 5)' }, { pfad: '/kits/import', warum: 'uploads a kit zip (browser plan 5)' },
+  { pfad: '/kits/umbenennen', warum: 'renames a kit' }, { pfad: '/kits/kopie', warum: 'copies a kit' }, { pfad: '/kits/loeschen', warum: 'deletes a kit' },
+  { pfad: '/proj/export_zip', warum: 'downloads the open project as a zip (browser plan 5)' }, { pfad: '/proj/import_zip', warum: 'uploads a project zip (browser plan 5)' },
+  { pfad: '/kits/aus_ordner', warum: 'reads a folder of this computer' }, { pfad: '/kits/vorhoeren', warum: 'pre-listening player' },
+  { pfad: '/mitschnitt', warum: 'starts and stops a recording; the state names a folder of this computer' },
 ];
 // The POSTs a tablet may send at all: the knobs of the device page. Everything else is refused as well, so a route added later is closed until it is named here.
 export const TABLET_POST_ERLAUBT: readonly string[] = ['/regler', '/klang'];
@@ -84,7 +94,7 @@ const unter = (pfad: string, wurzel: string): boolean => pfad === wurzel || pfad
 
 /** true: the tablet listener refuses this (method, pathname) with 403. Reads stay open except under /kopplung and /quellen; a POST must be on the allowed list. */
 export function tabletVerboten(methode: string, pfad: string): boolean {
-  if (unter(pfad, '/kopplung') || unter(pfad, '/quellen')) return true;   // /quellen: even the read shows local folder paths
+  if (unter(pfad, '/kopplung') || unter(pfad, '/quellen') || unter(pfad, '/dateisystem') || unter(pfad, '/bibliothek/quellen') || unter(pfad, '/bibliothek/midi') || unter(pfad, '/plugins/pfade') || unter(pfad, '/kits/export') || unter(pfad, '/mitschnitt') || unter(pfad, '/proj/export_zip')) return true;   // /quellen, /dateisystem, /bibliothek/quellen, /bibliothek/midi, /plugins/pfade: even the read shows local folder paths; /kits/export: a download of files, /proj/export_zip: the whole project as one zip
   if (methode === 'GET') return false;
   if (methode === 'POST' && TABLET_POST_ERLAUBT.includes(pfad)) return false;
   return true;   // POST elsewhere, PUT, DELETE, ...: closed (the deny list above names the known ones with a reason, this keeps unknown ones closed too)
@@ -261,7 +271,7 @@ export function baueTabletHandler(o: TabletHandlerOptionen): TabletHandler {
     if (id === null) return abweisen(a, 401, 'nicht_gekoppelt', 'this device is not paired');
     const methode = q.method ?? '';
     if (tabletVerboten(methode, url.pathname)) {
-      o.log?.({ typ: 'tablet_verboten', id, methode, pfad: url.pathname });
+      if (!(methode === 'POST' && url.pathname === '/seite/fehler')) o.log?.({ typ: 'tablet_verboten', id, methode, pfad: url.pathname });   // R7: the page error hook of a tablet is refused quietly (no log line per report)
       return abweisen(a, 403, 'nicht_am_tablet', tabletVerbotenGrund(url.pathname) ?? 'this route is not available from the tablet');
     }
     merke(id, q);

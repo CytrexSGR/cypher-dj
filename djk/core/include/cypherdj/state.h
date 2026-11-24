@@ -147,7 +147,8 @@ typedef struct cdj_z_echtzeit { /* Echtzeit-Fach: alles, was der Callback besitz
   int32_t n_regler;
   int32_t n_hoerscheine;
   int32_t n_decks;
-  int32_t reserve[2];
+  int32_t trim_stand;  /* container core: 1 = der Streifen-Trim in dieser Datei ist der Hand-Anteil (Auto-Anteil der Lautheit kommt vom Player-Zweig); 0 in alten Dateien, dort war der Streifen-Trim der Auto-Wert und wird beim Wiederherstellen verworfen */
+  int32_t reserve[1];
   char ki_spur[128];   /* ab Scheibe 25 */
   cdj_z_segment segmente[CDJ_Z_SEGMENTE];
   cdj_z_segment grund[CDJ_Z_SEGMENTE];

@@ -19,8 +19,8 @@
     {"id": "dcblock_l", "art": "svf", "cutoff": 15, "reso": 0},
     {"id": "dcblock_r", "art": "svf", "cutoff": 15, "reso": 0},
     {"id": "aus", "art": "ausgang"},
-    {"id": "pegel_l", "art": "mul", "b": 5.8298},
-    {"id": "pegel_r", "art": "mul", "b": 5.8298}
+    {"id": "pegel_l", "art": "mul", "b": 4.55},
+    {"id": "pegel_r", "art": "mul", "b": 4.55}
   ],
   "kanten": [
     {"von": "noise.aus", "nach": "vor.a"},

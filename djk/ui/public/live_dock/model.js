@@ -206,7 +206,7 @@ export function wechselWahl(kanal, stand) {
   if (!o.length) return [];
   const leer = o.find((x) => x.wert === '');
   return [
-    ...o.filter((x) => x.wert !== '').map((x) => ({ gruppe: 'Baukasten', text: x.text, name: x.wert })),
+    ...o.filter((x) => x.wert !== '').map((x) => ({ gruppe: 'Cypher Modular', text: x.text, name: x.wert })),
     { gruppe: 'No graph', text: leer?.text ?? 'Off', name: '' },
   ];
 }

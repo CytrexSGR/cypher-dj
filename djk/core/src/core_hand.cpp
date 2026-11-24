@@ -273,6 +273,34 @@ DeckAktion* Kern::hand_aktion_neu(int d, int art, int64_t s, int64_t f) {
   return nullptr;  // 64 wartende Deck-Aktionen: die Taste bleibt ohne Wirkung
 }
 
+// SYNC (CDJ phase meter): the bar phase of deck d follows the deck that is playing, not the clock bar. Shared by the hand
+// path (quant takt) and /k/deck/start with takt. Reference = lowest running other deck that is neither stopping (ramp or
+// waiting stop) nor in cue preview; there is no master-deck concept in the core, the clock is the tempo source. Its track
+// beat advances 1:1 with the clock (keylock), so for a start from track beat q_start at clock sample s_ab the answer is
+// aus in [0, 4) beats: start at (clock beat of s_ab) + aus, where
+//   (q_start - eins_d) = (q_ref - eins_ref)  (mod 4),  q_ref = the reference's track beat at that clock beat.
+// false: no usable reference (the caller keeps the clock bar). O(1), no allocation.
+bool Kern::sync_takt_aus(int d, double q_start, int64_t s_ab, double* aus) const noexcept {
+  const DeckWerk& w = *decks_;
+  const Material* m = w.deck[d].material();
+  if (!m) return false;
+  const Deck* ref = nullptr;
+  for (int e = 0; e < DECKS && !ref; ++e) {
+    if (e == d || !w.deck[e].laeuft() || w.deck[e].stoppt() || w.vorschau[e] || !w.deck[e].material()) continue;
+    bool stoppt = false;
+    for (const DeckAktion& x : w.aktion)
+      if (x.belegt && x.deck == e + 1 && x.art == 2) stoppt = true;
+    if (!stoppt) ref = &w.deck[e];
+  }
+  if (!ref) return false;
+  const double ziel = q_start - m->erste_eins_quell_beat + ref->material()->erste_eins_quell_beat;
+  double v = std::fmod(ziel - ref->quell_beat_bei(s_ab), 4.0);
+  if (v < 0.0) v += 4.0;
+  if (v > 4.0 - 1e-9) v = 0.0;
+  *aus = v;
+  return true;
+}
+
 bool Kern::hand_deck_taste(int deck, bool play, int32_t wert, int64_t s) noexcept {
   // /test/hand (Plan 35 E5 a): Bezugssample max(sample, Zyklusanfang), quant beat (MVP.md: „Start auf dem Beat“)
   return hand_deck(deck, play ? hand::DeckAktion::play : hand::DeckAktion::cue, hand::Quant::beat, wert,
@@ -353,6 +381,11 @@ bool Kern::hand_deck(int deck, hand::DeckAktion aktion, hand::Quant quant, int32
   }
   const double schritt = quant == hand::Quant::takt ? 4.0 : 1.0;  // nächster erreichbarer Beat bzw. Takt-Eins des Masters
   double b = schritt * std::ceil(master / schritt - 1e-9);
+  if (quant == hand::Quant::takt) {
+    const double q_start = std::round(quell_beat_von(static_cast<double>(pos), dk.schlag0(), m->basis_bpm));
+    double aus = 0.0;
+    if (sync_takt_aus(d, q_start, s, &aus)) b = master + aus;  // else: the clock bar from above
+  }
   int64_t ss = std::llround(k.sample_at(b));
   while (ss < s) {
     b += schritt;

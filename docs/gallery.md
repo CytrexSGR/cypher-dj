@@ -7,7 +7,7 @@ owner's library; the folder tree of the library is scrolled away or collapsed.
 
 ![The LOOP 1 place: four tracks of eight cells, launch grid, STOP ALL, and the channel strip row opened with STRIP (EQ, HALL and DELAY sends, effect slot)](screens/loop-deck.png)
 
-![SEQ deck in its large view: a kit pattern and three Baukasten patterns with pitch, velocity and curve lanes; empty lanes hidden, PLAY per deck](screens/seq-deck.png)
+![SEQ deck in its large view: a kit pattern and three Cypher Modular patterns with pitch, velocity and curve lanes; empty lanes hidden, PLAY per deck](screens/seq-deck.png)
 
 ![TRACKER view: the live container as tracker rows, with the song order, linked patterns and the instrument list](screens/tracker.png)
 

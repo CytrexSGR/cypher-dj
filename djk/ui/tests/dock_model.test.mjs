@@ -95,7 +95,7 @@ test('sendKurz cuts to six characters', () => {
   assert.equal(sendKurz('Spring reverb'), 'Sprin…');
 });
 
-test('latenzVon: limiter chain in ms, only a Baukasten stage unknown, none empty', () => {
+test('latenzVon: limiter chain in ms, only a Cypher Modular stage unknown, none empty', () => {
   const p = projekt();
   p.spuren[0].inserts = [ins('a', 'lim')];
   p.spuren[1].inserts = [ins('b', 'bk', { graph: 'g' })];

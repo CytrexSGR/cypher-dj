@@ -5,6 +5,8 @@
 #   cypher-dj stop     djk-stop
 #   cypher-dj status   djk-start --zustand
 #   cypher-dj demo     open the starter project "demo" and play it
+#   cypher-dj doctor   check the system, one line per check (djk-doctor)
+#   cypher-dj report   write a scrubbed support file in the current folder (djk-bericht)
 #   cypher-dj mcp      print the one JSON line that registers the agent tools in an MCP client
 #   cypher-dj help
 #
@@ -30,6 +32,8 @@ Usage: cypher-dj <command>
   stop     stop the studio
   status   show what runs
   demo     open the starter project "demo" and play it
+  doctor   check the system, one line per check (--instanz a..i for a test instance)
+  report   write a scrubbed support file here (--mit-projekt, --ohne-journal, --instanz a..i)
   mcp      print the line that registers the agent tools in an MCP client
   help     this text
 EOF
@@ -99,6 +103,8 @@ case "${1:-}" in
   stop) exec "$HIER/djk-stop";;
   status) exec "$HIER/djk-start" --zustand;;
   demo) befehl_demo;;
+  doctor) shift; exec "$HIER/djk-doctor" "$@";;
+  report) shift; exec "$HIER/djk-bericht" "$@";;
   mcp) befehl_mcp;;
   help|-h|--help) hilfe;;
   *) hilfe >&2; exit 2;;

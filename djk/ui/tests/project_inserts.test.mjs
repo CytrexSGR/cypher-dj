@@ -740,7 +740,7 @@ test('bk: ranges (0..1), unknown names, no key; replace swaps the graph and keep
   for (const [strang, n] of [['s1', 3], ['s2', 3], ['s3', 2]]) for (let pos = 0; pos < n; pos++) q = mitGraph(q, [BK(strang, { pos })]).projekt;
   abGraph(q, [BK('master')], 'ins_voll', 'all 8 bk stages');
   assert.equal(ok(q, { befehl: 'insert_setzen', strang_id: 'master', pos: 0, art: 'komp' }).projekt.master.inserts.length, 1, 'a compressor next to full bk pool is fine');
-  assert.match(GRUND_TEXT.ins_voll, /eight Baukasten effects/);
+  assert.match(GRUND_TEXT.ins_voll, /eight Cypher Modular effects/);
 });
 
 test('bk: model validation - slot 8 passes, slot 9 is beyond the pool, a bk stage needs its graph, no other kind may carry one; a project without a bk stage sets its 264 rows', async () => {

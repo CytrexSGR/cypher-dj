@@ -1,0 +1,20 @@
+# Pinned output hashes of the arrangement lanes (kern_kosten_arr, KOSTEN_HASH=1), per host.
+# A host is recognised by a part of the CPU model name (/proc/cpuinfo); libm picks its code per CPU, so the bits differ between CPUs.
+#   host <key> <part of the model name, no blanks>
+#   pin  <key> <lane> <block> <pm> <out>
+# Measure a new pin on the host itself, from the same commit: KOSTEN_HASH=1 [KOSTEN_BLOCK=128] kern_kosten_arr 3000 <lane>
+# A host without an entry here is not an error: hash_pruefen.cmake then checks only that every variant gives the bits of the plain run.
+host ryzen-7800x3d 7800X3D
+host i9-13900hx i9-13900HX
+pin ryzen-7800x3d arr32ins 256 ade2dd87eea3d869 41548661fe8a40ae
+pin ryzen-7800x3d arr32ins 128 3a5b2b905b7600fb 9398708e98dcfa84
+pin ryzen-7800x3d arr32rack 256 0b489968030f994f 0808091c3dfefaab
+pin ryzen-7800x3d arr32rack 128 b5de7d51b09cdb6f 9560f5d1013aea27
+pin ryzen-7800x3d arr32bk 256 64a83e91cb5e1c8b 7aed26480ed80a5b
+pin ryzen-7800x3d arr32bk 128 b38ee0e39ce0778b 4d362897d4ca17b3
+pin i9-13900hx arr32ins 256 90f9d9b322d8e1c2 23d73f2875eb3ac7
+pin i9-13900hx arr32ins 128 a2b995ce4c8b02be 17958b47a5a90aac
+pin i9-13900hx arr32rack 256 0b489968030f994f 0808091c3dfefaab
+pin i9-13900hx arr32rack 128 b5de7d51b09cdb6f 9560f5d1013aea27
+pin i9-13900hx arr32bk 256 64a83e91cb5e1c8b 7aed26480ed80a5b
+pin i9-13900hx arr32bk 128 b38ee0e39ce0778b 4d362897d4ca17b3

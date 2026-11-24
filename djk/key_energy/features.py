@@ -28,7 +28,8 @@ import numpy as np
 
 from .camelot import aus_keyfinder, aus_name, zu_camelot
 
-VENV = Path.home() / "cypher-dj/cues/venv-mik"
+# CYPHERDJ_MIK points at another install of the same layout (the CI image has no home checkout)
+VENV = Path(os.environ.get("CYPHERDJ_MIK") or Path.home() / "cypher-dj/cues/venv-mik")
 KF_CLI = VENV / "bin/keyfinder-stdin"
 MODELLE = VENV / "modelle"
 CACHE = Path.home() / "cypher-dj/cues/merkmale"

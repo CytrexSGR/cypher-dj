@@ -42,8 +42,8 @@ test('the DJ view lets the strips take cells of the page grid around a fixed mid
   assert.match(css, /body:not\(\.studio\) #mischer, body:not\(\.studio\) #mischer-unten \{ display: contents; \}/);
   assert.match(css, /body:not\(\.studio\) #pult \{ grid-template-columns: minmax\(0, 1fr\) var\(--zug\) var\(--mitte\) var\(--zug\) minmax\(0, 1fr\);/);
   assert.doesNotMatch(css, /data-mix-aussen/, 'the outer strip columns are gone: the four strips always fit the five columns');
-  assert.match(css, /\[data-mix-zeile="1"\] \{ grid-row: 1 \/ 3; \}/);
-  assert.match(css, /\.xfader \{ grid-area: 5 \/ 2 \/ 6 \/ -2;/);
+  assert.match(css, /\[data-mix-zeile="1"\] \{ grid-row: 2 \/ 4; \}/);   // row 1 of the desk is the closed-set banner
+  assert.match(css, /\.xfader \{ grid-area: 6 \/ 2 \/ 7 \/ -2;/);
   assert.match(html, /<div class="fxmitte" id="fxmitte"/);
   assert.doesNotMatch(css, /body\.studio #pult/, 'the SESSION view and its rule that hid the desk are gone');
   assert.doesNotMatch(css, /body\.studio #mischer-unten/);

@@ -4,6 +4,7 @@
 //  (a) graph on fx/3 (a pass-through): the share arrives at fader 0 dB, at -6 dB it is exactly the fader's -6 dB, and with the fader closed nothing arrives
 //  (b) no graph on fx/3: the same three, audible at 0 dB (the fallback to the master sum), following the fader
 //  (c) the crossfader weight acts on the share: deck/1 on side A, crossfader at +0.5 gives half, fully cut gives nothing
+//  (d) the strip's TRIM acts on the share exactly as on the dry path (acceptance measurement 2026-11-23: a leftover trim of +18.5 dB from a track load made the dry lane 18.5 dB louder than its FX 3 share)
 // Mutations (CMakeLists.txt): ARR_FX3_OHNE_FADER (a, b), ARR_FX3_OHNE_XFADER (c).
 #include <algorithm>
 #include <cmath>
@@ -103,6 +104,20 @@ int main() {
     PRUEF(p[0] > 0.3f);
     PRUEF(std::fabs(p[1] / p[0] - 0.5f) < 1e-3f);
     PRUEF(p[2] < 1e-6f);
+  }
+  {  // (d) trim: dry path and share carry the same trim gain, so a lane through FX 3 stays level-neutral at any trim
+    const float trim[4] = {0.0f, 18.5f, 6.0f, -12.0f};
+    float p[4];
+    for (int i = 0; i < 4; ++i) {
+      Lauf l;
+      l.m->setze_send_graph(2, graph(DURCH));
+      l.setze("deck/1/fader", -6.0f);
+      l.setze("deck/1/trim", trim[i]);
+      p[i] = l.messen();
+    }
+    std::printf("(d) trim: 0 dB %.4f, +18.5 dB %.4f, +6 dB %.4f, -12 dB %.4f\n", p[0], p[1], p[2], p[3]);
+    PRUEF(p[0] > 0.1f);
+    for (int i = 1; i < 4; ++i) PRUEF(std::fabs(p[i] / p[0] - std::pow(10.0f, trim[i] / 20.0f)) < 5e-3f * std::pow(10.0f, trim[i] / 20.0f));
   }
   PRUEF_ENDE();
 }

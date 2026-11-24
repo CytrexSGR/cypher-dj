@@ -354,7 +354,7 @@ static int vorhoer_eingang(const char* ausgang, const char* inst) {
   return strcmp(ausgang, soll) == 0;
 }
 
-/* Review-Kern m1: der laufende Kern muss in kern-faehigkeiten.json {pid, nur_cue:"erz/8"} melden; PID lebt und ihr comm
+/* Review-Kern m1: der laufende Kern muss in kern-faehigkeiten.json {pid, nur_cue:"vorhoer"} (alt: "erz/8") melden; PID lebt und ihr comm
  * ist „cypherdj-kern“. Ein alter Kern ohne S7 schreibt die Datei nicht, ein toter hinterlässt eine tote PID. */
 static int kern_nur_cue(const char* pfad) {
   char buf[512];
@@ -371,7 +371,9 @@ static int kern_nur_cue(const char* pfad) {
   if (!q || !(q = strchr(q, ':'))) return 0;
   q++;
   while (*q == ' ') q++;
-  if (strncmp(q, "\"erz/8\"", 7) != 0) return 0;
+  /* "vorhoer": Kern ab container core K3 (Vorhörer = Dienst des Kerns, rueck_erz_8 in die PFL-Summe); "erz/8": Kern vor K3,
+   * der noch laufen kann, bis er neu startet. Beide meinen denselben Eingang, nie Master. */
+  if (strncmp(q, "\"vorhoer\"", 9) != 0 && strncmp(q, "\"erz/8\"", 7) != 0) return 0;
   char cp[64], comm[32] = "";
   snprintf(cp, sizeof cp, "/proc/%ld/comm", pid);
   FILE* c = fopen(cp, "r");

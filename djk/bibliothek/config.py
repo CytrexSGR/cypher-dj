@@ -44,6 +44,11 @@ def _quellen_pfad() -> Path:
     return ablage.fest("quellen")
 
 
+def quellen_datei() -> str:
+    """Which file owns the source list: quellen.toml when it exists (the rule of _quellen_lesen), else bibliothek.json."""
+    return "quellen.toml" if _quellen_pfad().is_file() else "bibliothek.json"
+
+
 def _quellen_lesen() -> tuple[_quellen.Quellen | None, str]:
     """The source list when quellen.toml exists (else None) and this machine's name."""
     p = _quellen_pfad()

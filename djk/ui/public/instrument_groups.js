@@ -75,7 +75,7 @@ export function merkeAchse(a) {
   if (a !== alt) for (const f of hoerer) f(a);
 }
 /** `f(achse)` runs after the axis changed: the pickers that are not focused redraw. Nothing is sent to the server. */
-export function beiAchse(f) { hoerer.push(f); }
+export function beiAchse(f) { hoerer.push(f); return () => { const i = hoerer.indexOf(f); if (i >= 0) hoerer.splice(i, 1); }; }   // returns the function that removes the listener again
 
 // ---------- the group remembered per channel and axis: { <kanal>: { prinzip?: id, rolle?: id } } (an old string value is the role) ----------
 /** Reads the stored text of `djk-instrument-kat` into `{kanal: {prinzip?, rolle?}}`; anything that does not fit is dropped. */
@@ -105,7 +105,7 @@ export function menuePunkte(wahl, graphen, achse, aktion, umschalten, behalte) {
   const a = achseVon(achse);
   const info = new Map((graphen ?? []).filter((g) => g && typeof g.name === 'string').map((g) => [g.name, g]));
   // hidden duplicates are not offered, except the graph the pattern or track plays now (`behalte`, its name)
-  const baukasten = sortiere(ohneVerborgene((wahl ?? []).filter((e) => e.gruppe === 'Baukasten').map((e) => ({ e, name: e.name, kategorie: info.get(e.name)?.kategorie, prinzip: info.get(e.name)?.prinzip, verborgen: info.get(e.name)?.verborgen })), behalte), a);
+  const baukasten = sortiere(ohneVerborgene((wahl ?? []).filter((e) => e.gruppe === 'Cypher Modular').map((e) => ({ e, name: e.name, kategorie: info.get(e.name)?.kategorie, prinzip: info.get(e.name)?.prinzip, verborgen: info.get(e.name)?.verborgen })), behalte), a);
   const punkte = [];
   const eintrag = (x) => ({ text: mitNeben(x.e.text, x, a), aktion: () => aktion(x.e) });
   for (const g of gruppenVon(a)) {
@@ -113,7 +113,7 @@ export function menuePunkte(wahl, graphen, achse, aktion, umschalten, behalte) {
     if (in_.length) punkte.push({ gruppe: true, text: g.name }, ...in_.map(eintrag));
   }
   let gruppe = null;
-  for (const e of (wahl ?? []).filter((x) => x.gruppe !== 'Baukasten')) {
+  for (const e of (wahl ?? []).filter((x) => x.gruppe !== 'Cypher Modular')) {
     if (e.gruppe !== gruppe) { gruppe = e.gruppe; punkte.push({ gruppe: true, text: gruppe }); }
     punkte.push({ text: e.text, aktion: () => aktion(e) });
   }

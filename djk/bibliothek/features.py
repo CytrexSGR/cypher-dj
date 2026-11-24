@@ -98,6 +98,34 @@ class MerkmalCache:
         except sqlite3.Error:
             pass
 
+    def ergaenze(self, pfad: str, groesse: int, mtime_ns: int, neu: dict[str, str]) -> bool:
+        """Merges `neu` into the cached tags of the row with exactly this key. False when the row is absent (or the file
+        changed meanwhile, which changes the key). No re-hash: the next build reads the new tags (bpm, camelot) from here."""
+        try:
+            r = self._db.execute("SELECT tags FROM merkmale WHERE pfad=? AND groesse=? AND mtime_ns=?",
+                                 (pfad, groesse, mtime_ns)).fetchone()
+            if not r:
+                return False
+            tags = json.loads(r[0])
+            if not isinstance(tags, dict):
+                return False
+            tags.update(neu)
+            self._db.execute("UPDATE merkmale SET tags=? WHERE pfad=? AND groesse=? AND mtime_ns=?",
+                             (json.dumps(tags, ensure_ascii=False), pfad, groesse, mtime_ns))
+            self._db.commit()
+            return True
+        except (sqlite3.Error, ValueError):
+            return False
+
+    def tags_von(self, pfad: str, groesse: int, mtime_ns: int) -> dict[str, str] | None:
+        """The cached tags of exactly this key, or None when the row is absent or unreadable."""
+        try:
+            r = self._db.execute("SELECT tags FROM merkmale WHERE pfad=? AND groesse=? AND mtime_ns=?", (pfad, groesse, mtime_ns)).fetchone()
+            tags = json.loads(r[0]) if r else None
+        except (sqlite3.Error, ValueError):
+            return None
+        return tags if isinstance(tags, dict) else None
+
     def schliessen(self) -> None:
         self._db.close()
 
@@ -305,9 +333,14 @@ def felder(d: Datei, typ: str, m: Merkmale) -> dict[str, object]:
     stamm = os.path.splitext(teile[-1])[0]
     tags = m.tags
     bpm: float | None = None
+    bpm_geschaetzt: float | None = None
     if "bpm" in tags and _bpm_ok(tags["bpm"]):  # old cache entries may hold values that are no longer accepted
-        bpm = float(tags["bpm"])
-    else:
+        # a tempo of the analysis (marker cypher_analyse) is a fact only with bpm_sicher=1; an old entry without the flag counts as a guess
+        if "cypher_analyse" in tags and tags.get("bpm_sicher") != "1":
+            bpm_geschaetzt = float(tags["bpm"])
+        else:
+            bpm = float(tags["bpm"])
+    if bpm is None:
         lose = typ == "track"  # tracks also carry the BPM bare at the end of the name; samples keep the strict rule
         bpm = bpm_aus_namen(stamm, lose) or (bpm_aus_namen(ordner_rel[-1]) if ordner_rel else None)
     nur_sample = typ in ("loop", "oneshot")
@@ -320,6 +353,7 @@ def felder(d: Datei, typ: str, m: Merkmale) -> dict[str, object]:
         "kategorie": "/".join(ordner_rel[1:]) or None if nur_sample else None,
         "instrument": _instrument(d.rel) if nur_sample else None,
         "bpm": bpm,
+        "bpm_geschaetzt": bpm_geschaetzt if bpm is None else None,   # the analysis' guess, never a fact: not used for matching, shown as "~"
         "takte": round(m.dauer_s * bpm / 240, 2) if typ == "loop" and bpm else None,
         "titel": tags.get("title") or stamm,
         "kuenstler": tags.get("artist"),

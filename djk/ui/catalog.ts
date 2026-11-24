@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { parseSuche } from './search_text.ts';
+import { katalogPfad } from './paths.ts';
 
 export type Typ = 'track' | 'loop' | 'oneshot';
 // Nicht „TYPEN": server.ts:127 hat schon eine MIME-Tabelle dieses Namens (Plan-Review B1, gemessen SyntaxError)
@@ -63,15 +64,7 @@ export class KatalogFehler extends Error {
 }
 
 // Vorgabe: neben der Mediathek (so baut cypher-mediathek); CYPHERDJ_KATALOG überschreibt
-export function katalogVorgabe(mediathek: string): string {
-  if (process.env.CYPHERDJ_KATALOG) return process.env.CYPHERDJ_KATALOG;
-  // The folder as the kernel sees it (realpath(3), '..' behind a link is resolved by the file system), like the builder's
-  // kanonisch(); path.join would collapse '..' textually and name another folder. A folder that does not exist stays as written.
-  const ordner = path.dirname(mediathek);
-  let echt = ordner;
-  try { echt = fs.realpathSync.native(ordner); } catch { /* absent: the written path */ }
-  return path.join(echt, 'katalog.sqlite');
-}
+export function katalogVorgabe(mediathek: string): string { return katalogPfad(mediathek); }
 
 const SHA = /^[0-9a-f]{64}$/;
 // Damage behind the stand table only shows up in a later query: SQLITE_CORRUPT (11) and SQLITE_NOTADB (26) become

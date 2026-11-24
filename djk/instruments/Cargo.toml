@@ -9,3 +9,26 @@ nih_plug_xtask = { git = "https://github.com/robbert-vdh/nih-plug.git", rev = "d
 [profile.release]
 lto = "thin"
 strip = "symbols"
+
+# The DSP crates and their tests run at opt-level 3 even in `cargo test` (debug assertions and overflow checks stay on): the example
+# convention tests render every example graph and took 47 minutes unoptimized (gate run 2026-11-23), the cost tests need optimized code.
+[profile.dev.package.baukasten_dsp]
+opt-level = 3
+[profile.dev.package.rb_dsp]
+opt-level = 3
+[profile.dev.package.saett_dsp]
+opt-level = 3
+[profile.dev.package.eq_dsp]
+opt-level = 3
+[profile.dev.package.hall_dsp]
+opt-level = 3
+[profile.dev.package.komp_dsp]
+opt-level = 3
+[profile.dev.package.labor_dsp]
+opt-level = 3
+[profile.dev.package.remix_dsp]
+opt-level = 3
+[profile.dev.package.realfft]
+opt-level = 3
+[profile.dev.package.rustfft]
+opt-level = 3

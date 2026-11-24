@@ -1,0 +1,27 @@
+# Timing-sensitive page tests (they assert wall time or a response window): not in the parallel run and not in a shard, but run alone, one at a time,
+# in the quiet stage (alles.sh suite ui-ruhig) after everything else has finished. Same idea as the ctest label ruhig of the core.
+sound_live.test.mjs        # live: wall time of one ring read plus measurement stays under 15 ms
+hostverwaltung.test.mjs    # health: a host that restarts EMPTY clears the flag within one poll
+pattern_run.test.mjs       # crash by memory: the loop beats, the answer is a plain cached refusal
+proj_fix_b4_performance.test.mjs  # B4/F6: 10,000 notes, fader median under 30 ms
+media_library.test.mjs         # Vorbereiten: at most 2 at a time, the third gets 429 ausgelastet
+# Found red under the load of the full gate in two or three runs on the CI laptop, green alone (waits and answer windows of real child processes and servers):
+catalog_instance.test.mjs         # an import registers, builds and stores everything in its shm folder
+catalog_job_sources.test.mjs     # the import hook starts one build for a batch of 5 uploads
+proj_analysis_flow.test.mjs     # a failing render answers render_fehler and frees the lock
+proj_stems.test.mjs              # S6 D10: the run state is read while the stem process works
+ins_level_stream.test.mjs         # inside 100 ms one stage is condensed to the last message
+ins_gr_stream.test.mjs            # same window for the gain reduction stream
+server.test.mjs                  # S5r /regler: the knob reaches the kernel, lage shows it
+stack.test.mjs                  # Befund 2: the page server fails at start, the leitstand child exits
+proj_s3_a17b_transport_window.test.mjs  # Stop Cypher must come after the acknowledgement (292 ms under load)
+safety_net.test.mjs              # S0 /spur: Stop Cypher state of the mock core
+page_tools.test.mjs         # dock helpers: the 500 ms reading window of the meters failed in 2 of 3 full runs, passes alone (13 s)
+project_routing_over_project.test.mjs  # 1.10: keine_uhr (the stand-in clock is not up yet) under load, passes alone
+lock.test.mjs                  # a route must answer under 50 ms while the foreign lock is held (54.9 ms for the first GET under load, passes alone)
+loop_import.test.mjs             # decoding limits: "aborts quickly" took 5760 ms under load, and the hung-tool timeout test lost its PID line; pass alone
+prelisten.test.mjs               # the preview player swaps the file: N1 and R1 read stand() before the swap under load; pass alone
+decks_vier.test.mjs              # /hoeren partner of deck 3 (6 s of decoding) failed once under load; passes alone
+wave.test.mjs                   # B2 "eight fast switches with abort": at most one decoder at a time failed once in the live CI run (load); passes alone
+proj_recording_auto_hand.test.mjs # the mouse time base across a tempo ramp against the stand-in /uhr failed once in the live CI run (load); passes alone
+instrument_track.test.mjs         # Surge host swap before the patch lade failed once in the live CI run (load); passes alone

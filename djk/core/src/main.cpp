@@ -68,6 +68,13 @@
 #include "cypherdj/watchdog.h"
 #include "hand/mapping.h"
 
+// Graph folder of the Baukasten: CYPHERDJ_BK_ORDNER when set and non-empty (a test instance gets its own folder from djk-start), else the owner's
+// $HOME/.config/cypherdj/baukasten, byte for byte what was hardcoded here. Read once at start-up, never in the callback.
+static std::string bk_ordner_vorgabe() {
+  const char* e = std::getenv("CYPHERDJ_BK_ORDNER");
+  if (e != nullptr && e[0] != '\0') return std::string(e);
+  return std::string(std::getenv("HOME") ? std::getenv("HOME") : "") + "/.config/cypherdj/baukasten";
+}
 static std::atomic<bool> g_stop{false};
 static char g_faehig_pfad[160] = "";  // S7: kern-faehigkeiten.json, beim sauberen Ende gelöscht (kein Rest mit toter PID)
 static jack_client_t* g_client = nullptr;
@@ -494,7 +501,7 @@ int main(int argc, char** argv) {
     return std::string(std::getenv("HOME") ? std::getenv("HOME") : "") + "/.config/cypherdj/kits";
   }();
   netz.setze_kit_ordner(kit_ordner);  // ADR 024
-  netz.setze_bk_ordner(std::string(std::getenv("HOME") ? std::getenv("HOME") : "") + "/.config/cypherdj/baukasten");  // Baukasten S3a
+  netz.setze_bk_ordner(bk_ordner_vorgabe());  // Baukasten S3a
   {  // MVP 2 (ADR 025, §4.9): Loops der Vorgabe-Instanz in ~/.config/cypherdj/loops, einer Prüfinstanz in /dev/shm
     char shm[64];
     cdj_shm_ordner(shm, sizeof shm, inst);
@@ -582,7 +589,7 @@ int main(int argc, char** argv) {
   }
   auto* aringe = new cdj::ArrLaderRinge();
   cdj::ArrLader arr_lader(arr_ordner, konto, (int64_t)konf.arr_budget_mib << 20, !ohne_sperre);
-  arr_lader.setze_bk_ordner(std::string(std::getenv("HOME") ? std::getenv("HOME") : "") + "/.config/cypherdj/baukasten");  // S20: graph folder of the kern, for bk project tracks
+  arr_lader.setze_bk_ordner(bk_ordner_vorgabe());  // S20: graph folder of the kern, for bk project tracks
   arr_lader.setze_bk_leser(g_kern->arr_bk_leser());  // S20: the loader frees a graph instance only when the sink no longer plays it (g_kern is never deleted)
   arr_lader.setze_kit_ordner(kit_ordner);  // 1.9: kit folder of the kern, for kit project tracks
   arr_lader.setze_kit_leser(g_kern->arr_kit_leser());  // 1.9: the loader frees a Kit only when the kit sink no longer plays it

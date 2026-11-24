@@ -159,7 +159,7 @@ def test_zeige_json_absent_then_own_with_counts(musik, capsys, ziel):
     rc, out, _ = lauf(capsys, "zeige", "--json")
     d = json.loads(out)
     assert rc == 0 and d["zustand"] == "absent" and d["ziel"] == str(ziel)
-    assert d["wurzeln"] == [{"pfad": str(musik), "typ": "auto"}]
+    assert d["wurzeln"] == [{"pfad": str(musik), "typ": "auto", "fehlt": False}]
     assert lauf(capsys, "bauen")[0] == 0
     rc, out, _ = lauf(capsys, "zeige", "--json")
     d = json.loads(out)
@@ -261,7 +261,7 @@ def test_bauen_on_a_file_system_without_hard_links_is_a_clear_message(musik, cap
     assert rc == 5
     assert "hard link" in err and str(ziel) in err and "CYPHERDJ_KATALOG" in err
     assert "Traceback" not in err
-    assert sorted(p.name for p in ziel.parent.iterdir()) == []  # part file removed
+    assert sorted(p.name for p in ziel.parent.iterdir() if p.name != ".katalog.sqlite.lock") == []  # part file removed (the lock file stays)
 
 
 def test_bauen_progress_every_1000_files_names_the_counts(tmp_path, capsys, ziel, monkeypatch):

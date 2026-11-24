@@ -10,12 +10,12 @@ const REF = JSON.parse(fs.readFileSync(new URL('../../core/tests/data/hall_abbil
 // the field of the project -> the name in the reference table
 const FELD_ZU_REF = { pre: 'pre', decay: 'decay', groesse: 'size', tief: 'low', highcut: 'highcut', fahne: 'tail' };
 
-test('slice 3 page: "+ Return: Hall" makes return_neu without arguments, locked at 4 returns with the text "All 4 returns are used"', () => {
+test('slice 3 page: "+ Return: Hall" makes return_neu without arguments, locked at MAX_RETURNS returns with the text "All <MAX_RETURNS> returns are used"', () => {
   assert.deepEqual(neuerReturnBefehl({ returns: [] }), { befehl: 'return_neu' });
   assert.deepEqual(neuerReturnBefehl({}), { befehl: 'return_neu' });
   assert.equal(neuerReturnBefehl(null), null);
-  assert.equal(neuerReturnBefehl({ returns: Array.from({ length: MAX_RETURNS }, (_, i) => r(i + 1)) }), null, 'four returns are the end');
-  assert.equal(RETURN_VOLL_TEXT, 'All 4 returns are used');
+  assert.equal(neuerReturnBefehl({ returns: Array.from({ length: MAX_RETURNS }, (_, i) => r(i + 1)) }), null, 'the maximum number of returns is the end');
+  assert.equal(RETURN_VOLL_TEXT, `All ${MAX_RETURNS} returns are used`);
 });
 
 test('slice 3 page: returns by number, the send value of a strand (-200 without an entry), the send command, the labels name the strand and the return', () => {

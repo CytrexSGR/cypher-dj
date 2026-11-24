@@ -257,16 +257,16 @@ test('INSTRUMENTS area: switching the axis keeps the loaded instrument selected 
 
 // ---- menus (SEQ and workbench) ----
 const WAHL = [
-  { gruppe: 'Baukasten', text: 'ms20-bass', name: 'ms20-bass', geraet: { art: 'intern', name: 'bk', graph: 'ms20-bass' } },
-  { gruppe: 'Baukasten', text: 'fm-bass', name: 'fm-bass', geraet: { art: 'intern', name: 'bk', graph: 'fm-bass' } },
-  { gruppe: 'Baukasten', text: 'eigen', name: 'eigen', geraet: { art: 'intern', name: 'bk', graph: 'eigen' } },
-  { gruppe: 'Baukasten', text: 'saite', name: 'saite', geraet: { art: 'intern', name: 'bk', graph: 'saite' } },
+  { gruppe: 'Cypher Modular', text: 'ms20-bass', name: 'ms20-bass', geraet: { art: 'intern', name: 'bk', graph: 'ms20-bass' } },
+  { gruppe: 'Cypher Modular', text: 'fm-bass', name: 'fm-bass', geraet: { art: 'intern', name: 'bk', graph: 'fm-bass' } },
+  { gruppe: 'Cypher Modular', text: 'eigen', name: 'eigen', geraet: { art: 'intern', name: 'bk', graph: 'eigen' } },
+  { gruppe: 'Cypher Modular', text: 'saite', name: 'saite', geraet: { art: 'intern', name: 'bk', graph: 'saite' } },
   { gruppe: 'Kit', text: '909 (12)', name: '909', geraet: { art: 'intern', name: 'kit', kit: '909' } },
   { gruppe: 'RB-338', text: 'RB-338', name: 'RB-338', geraet: { art: 'intern', name: 'rb338', parameter: {} } },
 ];
 const kopf = (punkte) => punkte.filter((p) => p.gruppe).map((p) => p.text);
 
-test('menu: the last entry switches the axis (Enter on a fresh menu still picks the first instrument); headers are the groups of the axis without "Baukasten ·"; kit and RB-338 stay in their own groups at the end', () => {
+test('menu: the last entry switches the axis (Enter on a fresh menu still picks the first instrument); headers are the groups of the axis without "Cypher Modular ·"; kit and RB-338 stay in their own groups at the end', () => {
   const p = menuePunkte(WAHL, G, 'prinzip', () => {}, () => {});
   assert.equal(p.at(-1).text, 'Group by role');
   assert.ok(!p.at(-1).gruppe);
@@ -284,7 +284,7 @@ test('menu: a click runs the action with the entry of the picker list (device un
   const gewaehlt = [];
   let umgeschaltet = 0;
   const p = menuePunkte(WAHL, [], 'prinzip', (e) => gewaehlt.push(e), () => { umgeschaltet++; });
-  assert.deepEqual(kopf(p), ['Other', 'Kit', 'RB-338', 'View'], 'no graph info: all four Baukasten entries under Other, none dropped');
+  assert.deepEqual(kopf(p), ['Other', 'Kit', 'RB-338', 'View'], 'no graph info: all four Cypher Modular entries under Other, none dropped');
   p.filter((x) => !x.gruppe).forEach((x) => x.aktion());
   assert.equal(umgeschaltet, 1);
   assert.deepEqual(gewaehlt.map((e) => e.text), ['eigen', 'fm-bass', 'ms20-bass', 'saite', '909 (12)', 'RB-338'], 'sorted by name inside Other, then kit and RB-338');
@@ -324,7 +324,7 @@ test('workbench instrument menu: the same grouping, the latency rule of geraetWa
   assert.deepEqual(kopf(mit), ['Drums', 'Bass', 'Lead', 'Keys & Plucks', 'Other', 'RB-338', 'View']);
   p.find((x) => x.text === 'drums-909').aktion();   // drums is a group on both axes: no " · Drums" behind an instrument that sits under Drum Synthesis
   assert.equal(gewaehlt[0].geraet.graph, 'drums-909');
-  assert.ok(!p.some((x) => x.text?.startsWith('Baukasten')), 'no "Baukasten ·" prefix any more');
+  assert.ok(!p.some((x) => x.text?.startsWith('Cypher Modular')), 'no "Cypher Modular ·" prefix any more');
 });
 
 test('SEQ and workbench code use the module: the menus carry the switch and read the axis when they open', () => {
@@ -429,7 +429,7 @@ test('single picker and INSTRUMENTS area: a hidden instrument is not offered, bu
 });
 
 test('menus: menuePunkte drops hidden instruments except the one the pattern or track plays (behalte)', () => {
-  const wahl = [...WAHL, { gruppe: 'Baukasten', text: 'dup-a', name: 'dup-a', geraet: { art: 'intern', name: 'bk', graph: 'dup-a' } }];
+  const wahl = [...WAHL, { gruppe: 'Cypher Modular', text: 'dup-a', name: 'dup-a', geraet: { art: 'intern', name: 'bk', graph: 'dup-a' } }];
   const texte = (p) => p.filter((x) => !x.gruppe).map((x) => x.text);
   assert.ok(!texte(menuePunkte(wahl, VG, 'prinzip', () => {}, () => {})).some((t) => t.startsWith('dup-a')));
   assert.ok(texte(menuePunkte(wahl, VG, 'prinzip', () => {}, () => {}, 'dup-a')).some((t) => t.startsWith('dup-a')));

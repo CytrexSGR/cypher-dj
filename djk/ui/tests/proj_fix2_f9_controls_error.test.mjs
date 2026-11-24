@@ -22,7 +22,7 @@ test('F9 Öffnen: Quittung null zählt als regler_ohne_kern, nicht als regler_fe
   const kern = r.j.kern;
   console.log(`F9 oeffnen ${JSON.stringify({ fehler: kern.regler_fehler.map((x) => x.pfad), ohne_kern: kern.regler_ohne_kern })}`);
   assert.deepEqual(kern.regler_fehler.map((x) => x.pfad), ['spur/2/fader']);
-  assert.equal(kern.regler_ohne_kern, 8, 'spur/1/fader, pan, mute, solo, filter, eq tief, mitte, hoch ohne Quittung');
+  assert.equal(kern.regler_ohne_kern, 11, 'spur/1/fader, pan, mute, solo, filter, eq tief, mitte, hoch, fx 1, 2, 3 ohne Quittung');
 });
 
 test('F9 Kern-Neustart: das Protokoll führt nur die echte Ablehnung als regler_fehler', async (t) => {
@@ -35,7 +35,7 @@ test('F9 Kern-Neustart: das Protokoll führt nur die echte Ablehnung als regler_
   assert.ok(await warteBis(() => k.protokoll.some((z) => z.typ === 'proj_neustart'), 2000));
   const z = k.protokoll.find((x) => x.typ === 'proj_neustart');
   assert.deepEqual(z.regler_fehler.map((x) => x.pfad), ['spur/2/fader']);
-  assert.equal(z.regler_ohne_kern, 8);
+  assert.equal(z.regler_ohne_kern, 11);
 });
 
 test('F9 uebernimm (S3): proj_uebernimm_regler nennt nur echte Ablehnungen; ohne Kern steht kein_kern im Protokoll', async (t) => {

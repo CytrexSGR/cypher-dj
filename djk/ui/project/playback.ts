@@ -90,7 +90,8 @@ type WSpurKern =
   | { nr: number; art: 'intern'; geraet: 'kit'; kit: string; noten: WNote[]; ausgang?: WZiel; auto?: WAuto[]; chain?: WInsert[]; rack?: WRack;
       chain_auto?: WKettenLane[] }
   // container core (/4): a strom track reads the source buffer of its stream; no clips, no device; the loader keys on `quelle.art`
-  | { nr: number; art: 'intern'; quelle: { art: 'strom'; strom: number }; ausgang?: WZiel; auto?: WAuto[]; chain?: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] }
+  | { nr: number; art: 'intern'; quelle: { art: 'strom'; strom: number }; ausgang?: WZiel;
+    auto?: WAuto[]; chain?: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] }
   | { nr: number; art: 'wirt'; slot: number; noten: WNote[]; ausgang?: WZiel; auto?: WAuto[]; chain?: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] }
   // 1.9 U7 (E9): an instrument rack; zones and gain_db are always written, explicit (the core's contract, arr_playback.cpp geraet_lesen / rack branch)
   | { nr: number; art: 'intern'; geraet: 'rack'; kette: number; glieder: WGlied[]; noten: WNote[]; ausgang?: WZiel; auto?: WAuto[]; chain?: WInsert[];
@@ -112,7 +113,8 @@ export interface WGruppe {
 // auto (only /3): the fader lane of the return, points [beat, dB, formcode] as on a track
 export interface WReturn extends Omit<WGruppe, 'ausgang'> { ausgang: { art: 'master' } | { art: 'dj'; nr: WDjNr }; pre?: true; auto?: WAuto[] }
 export interface Wiedergabe {
-  format: typeof WIEDERGABE_FORMAT | typeof WIEDERGABE_FORMAT_2 | typeof WIEDERGABE_FORMAT_3 | typeof WIEDERGABE_FORMAT_4; nr: number; spuren: WSpur[]; live?: true; gruppen?: WGruppe[];
+  format: typeof WIEDERGABE_FORMAT | typeof WIEDERGABE_FORMAT_2 | typeof WIEDERGABE_FORMAT_3 | typeof WIEDERGABE_FORMAT_4; nr: number; spuren: WSpur[];
+    live?: true; gruppen?: WGruppe[];
   // returns (slice 3) like the groups; pm = the production master's chain, the kern's key (slice 4)
   returns?: WReturn[]; pm?: { chain: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] } }
 // slice 4c: the rack of a strip: its pooled slot and the mapping table (`stufe` = position in the chain, `param` = parameter index of the kind, `makro` 0..3)
@@ -362,7 +364,8 @@ function zellErweiterung(p: Projekt, platz: 1 | 2 | undefined, z: Zelle, nr: num
   if (z.rueckwaerts) aus.rueckwaerts = 1;
   if (z.blende) aus.blende = 1;
   // the model check of the editor fields, per part (the model is the only guard of most loader rules otherwise): a part that fails drops alone
-  const teil = (extra: Record<string, unknown>) => zellFehler({ id: z.id, name: z.name, farbe: z.farbe, art: z.art, sha256: z.sha256, gain_db: z.gain_db, bpm: z.bpm, ...extra, beats } as unknown as Zelle);
+  const teil = (extra: Record<string, unknown>) => zellFehler({ id: z.id, name: z.name, farbe: z.farbe, art: z.art, sha256: z.sha256, gain_db: z.gain_db,
+    bpm: z.bpm, ...extra, beats } as unknown as Zelle);
   if (z.scheiben) {
     const { grenzen: g, folge: f } = z.scheiben;
     const n = g.length;
@@ -370,7 +373,8 @@ function zellErweiterung(p: Projekt, platz: 1 | 2 | undefined, z: Zelle, nr: num
     const grund = !(beats > 0) ? 'no cell length'
       : n < 1 || n > 64 || f.length !== n || f.some((x) => !Number.isInteger(x) || x < 1 || x > n) ? 'slice table out of range'
       : g.some((x, i) => (i === 0 ? x !== 0 : !(x > g[i - 1])) || !(x < beats)) ? 'slice starts not rising inside the cell'
-      : starts.some((x, i) => i < n && starts[i + 1] - x < ZELL_SLOT_MIN_FRAMES) ? `a slot is shorter than ${ZELL_SLOT_MIN_FRAMES} frames at ${frames} frames in ${beats} beats`
+      : starts.some((x, i) => i < n &&
+        starts[i + 1] - x < ZELL_SLOT_MIN_FRAMES) ? `a slot is shorter than ${ZELL_SLOT_MIN_FRAMES} frames at ${frames} frames in ${beats} beats`
       : null;
     const fehler = grund ? null : teil({ scheiben: z.scheiben });
     if (fehler) hinweis(`${wer}: scheiben not written (${fehler.text})`);
@@ -389,7 +393,9 @@ function zellErweiterung(p: Projekt, platz: 1 | 2 | undefined, z: Zelle, nr: num
     for (const h of z.huellen) {
       const fehler = teil({ huellen: [h] });
       if (fehler) { hinweis(`${wer}: ${String(h?.ziel)} envelope not written (${fehler.text})`); continue; }
-      if (gesehen.has(h.ziel) || huellen.length >= 4) { hinweis(`${wer}: ${h.ziel} envelope not written (${gesehen.has(h.ziel) ? 'one envelope per target' : 'at most 4 envelopes'})`); continue; }
+      if (gesehen.has(h.ziel) ||
+        huellen.length >= 4) { hinweis(`${wer}: ${h.ziel} envelope not written (${gesehen.has(h.ziel) ? 'one envelope per target' : 'at most 4 envelopes'})`);
+        continue; }
       gesehen.add(h.ziel);
       let ziel: { art: 'gain' } | { art: 'feld'; feld: number } | null;
       if (h.ziel === 'gain') ziel = { art: 'gain' };
@@ -400,7 +406,8 @@ function zellErweiterung(p: Projekt, platz: 1 | 2 | undefined, z: Zelle, nr: num
         ziel = r ? { art: 'feld', feld: arrFSend(r.nr - 1) } : null;
         if (!r) { hinweis(`${wer}: ${h.ziel} envelope not written (the deck has no ${art === 'hall' ? 'HALL' : 'DELAY'} return)`); continue; }
       }
-      if (!(beats > 0) || h.punkte.some((q) => !(q.beat < beats))) { hinweis(`${wer}: ${h.ziel} envelope not written (a point lies beyond the cell length)`); continue; }
+      if (!(beats > 0) || h.punkte.some((q) => !(q.beat < beats))) {
+        hinweis(`${wer}: ${h.ziel} envelope not written (a point lies beyond the cell length)`); continue; }
       huellen.push({ ...ziel!, punkte: tripel(h.punkte) } as WZellHuelle);
     }
     if (huellen.length > 0) aus.huellen = huellen;
@@ -742,7 +749,8 @@ export function pruefeLiveWiedergabe(w: Wiedergabe): void {
     return false;
   };
   for (const s of w.spuren) if (!imContainer(s.ausgang)) throw new WiedergabeFehler('live_ohne_container', `track ${s.nr} does not play into a container`);
-  for (const r of w.returns ?? []) if (!imContainer(r.ausgang)) throw new WiedergabeFehler('live_ohne_container', `return ${r.nr} does not play into a container`);
+  for (const r of w.returns ?? []) if (!imContainer(r.ausgang)) throw new WiedergabeFehler('live_ohne_container',
+    `return ${r.nr} does not play into a container`);
 }
 
 function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
@@ -845,7 +853,8 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
     return { nr: g.nr, ausgang, ...kette(g.inserts, g) };
   });
   // return automation slice 2: the fader lane of a return goes to the core as returns[].auto (the same conversion as on a track); only `fader` is legal there
-  const returnsW: WReturn[] = [...(p.returns ?? [])].filter((r) => !(live && returnEigner(p, r) !== undefined && geparkt(returnEigner(p, r)))).sort((a, b) => a.nr - b.nr).map((r) => {
+  const returnsW: WReturn[] = [...(p.returns ?? [])].filter((r) => !(live && returnEigner(p, r) !== undefined && geparkt(returnEigner(p, r)))).sort((a,
+    b) => a.nr - b.nr).map((r) => {
     const rl = (r.automation ?? []).filter((l) => l.ziel === 'fader');
     autoPunkte += rl.reduce((n, l) => n + l.punkte.length, 0);
     const auto = rl.map((l): WAuto => ({ ziel: 'fader', punkte: l.punkte.map((q) => [q.beat, q.wert, FORM_NR[q.form ?? 'linear']]) }));

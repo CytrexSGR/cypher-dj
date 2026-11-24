@@ -133,7 +133,7 @@ test('abbildung.alle_insert: all slots of all kinds (12 x 10 komp, 8 x 59 eq, 4 
   assert.equal(r.findLastIndex((x) => x.pfad.startsWith('ins/komp/1/')), r.findIndex((x) => x.pfad === 'ins/komp/1/an'), 'the switch is the last row of its slot');
   assert.equal(alleRegler(p).length, alleRegler(neuesProjekt('N')).length, 'the number does not depend on the stages in use: all 12 slots are always set');
   assert.deepEqual(alleInsertRegler(neuesProjekt('N')).filter((x) => /\/an$/.test(x.pfad) && !/\/b\d\/an$/.test(x.pfad)).map((x) => x.wert), Array(46).fill(0), 'negative control: no stage, every stage switch off (12 komp, 8 eq, 4 saett, 2 lim, 4 host, 8 utility)');
-  assert.equal(alleRegler(neuesProjekt('N')).length, 365 + 64 + 1178 + 48 + 4 * 32 + 236, 'the old 365 plus the 64 rows of groups 9 to 16 plus the 1178 pooled insert rows plus the 48 rack macro rows (slice 4c) plus filter and 3 eq rows for each of the 32 tracks (loop deck channel strip) plus 236 for eight returns instead of four (4 more send rows on each of the 32 tracks and 16 groups, 4 more returns of 11 rows)');
+  assert.equal(alleRegler(neuesProjekt('N')).length, 365 + 64 + 1178 + 48 + 4 * 32 + 236 + 3 * 32, 'the old 365 plus the 64 rows of groups 9 to 16 plus the 1178 pooled insert rows plus the 48 rack macro rows (slice 4c) plus filter and 3 eq rows for each of the 32 tracks (loop deck channel strip) plus 236 for eight returns instead of four (4 more send rows on each of the 32 tracks and 16 groups, 4 more returns of 11 rows) plus the 3 FX assign switches of each of the 32 tracks (loop lane strip)');
 });
 
 test('sitzung.setzt_alle_ins: opening a project with two inserts sets both (and the free slots at the defaults, 1178 rows) before the transport starts; the old controls are all there too', async (t) => {
@@ -172,7 +172,7 @@ test('sitzung.setzt_alle_ins negative control: opening a project without inserts
   assert.equal(k.teile(/^ins\//).length, 1178);
   assert.ok(k.teile(/^ins\/(komp|eq|saett|lim)\/\d+\/an$/).every((x) => x.felder.nach === 0), 'every switch off');
   assert.equal(k.teile(/^ins\/(komp|eq|saett|lim)\/\d+\/an$/).length, 26);
-  assert.equal(k.teile().length, 665 + 1178 + 48 + 4 * 32, 'the old 453 (389 plus the 64 rows of groups 9 to 16) minus the 24 erz/4 rows plus 236 rows for eight returns = 665, the 1178 insert rows, the 48 rack macro rows and filter plus 3 eq rows for each of the 32 tracks (loop deck channel strip)');
+  assert.equal(k.teile().length, 665 + 1178 + 48 + 4 * 32 + 3 * 32, 'the old 453 (389 plus the 64 rows of groups 9 to 16) minus the 24 erz/4 rows plus 236 rows for eight returns = 665, the 1178 insert rows, the 48 rack macro rows and filter plus 3 eq rows for each of the 32 tracks (loop deck channel strip) plus the 3 FX assign switches of each of the 32 tracks');
 });
 
 test('sitzung.stale_slot: project A leaves ratio 12 / schwelle -40 on slot 1; opening B and adding a default stage there gives ratio 4 at the core (review IMPORTANT)', async (t) => {

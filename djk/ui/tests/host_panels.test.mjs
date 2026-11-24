@@ -55,7 +55,7 @@ test('adapter: a refused or failed send forgets the value, tells the user and as
   assert.equal(meldungen.at(-1)[0], 'Knob not sent: down');
 });
 
-test('Baukasten in the host: k<n> <-> Knob n, 1..64 only; the reading maps back to panel names', () => {
+test('Cypher Modular in the host: k<n> <-> Knob n, 1..64 only; the reading maps back to panel names', () => {
   assert.equal(knobHostName('k1'), 'Knob 1'); assert.equal(knobHostName('k32'), 'Knob 32'); assert.equal(knobHostName('k64'), 'Knob 64');
   for (const f of ['k0', 'k65', 'k033', 'k01', 'cutoff', 'Knob 1']) assert.equal(knobHostName(f), null, f);
   assert.equal(hostKnobName('Knob 12'), 'k12');
@@ -66,7 +66,7 @@ test('Baukasten in the host: k<n> <-> Knob n, 1..64 only; the reading maps back 
   assert.deepEqual(istVonHost(null, hostKnobName), {});
 });
 
-test('Baukasten in the host: the graph is found by its knob names, only when exactly one instrument graph fits', () => {
+test('Cypher Modular in the host: the graph is found by its knob names, only when exactly one instrument graph fits', () => {
   const g = [{ name: 'a', art: 'instrument', regler_namen: { 1: 'Cutoff', 2: 'Res' } }, { name: 'b', art: 'instrument', regler_namen: { 1: 'Cutoff' } },
     { name: 'fx', art: 'effekt', regler_namen: { 1: 'Cutoff', 2: 'Res' } }];
   assert.equal(graphDesHosts({ 'Knob 1': 'Cutoff', 'Knob 2': 'Res' }, g), 'a');
@@ -76,7 +76,7 @@ test('Baukasten in the host: the graph is found by its knob names, only when exa
   assert.equal(graphDesHosts({ 'Knob 1': 'Cutoff', 'Knob 2': 'Res' }, [...g, { name: 'a2', art: 'instrument', regler_namen: { 1: 'Cutoff', 2: 'Res' } }]), null, 'two fit: ambiguous');
 });
 
-test('Baukasten in the host: the automatic panel has one knob per reported Knob, named from the graph, 8 per section', () => {
+test('Cypher Modular in the host: the automatic panel has one knob per reported Knob, named from the graph, 8 per section', () => {
   const params = { Volume: 0.5 }; for (let n = 1; n <= 10; n++) params[`Knob ${n}`] = 0.5;
   const p = baukastenAutoPanel(params, { 'Knob 2': 'Cutoff' });
   assert.equal(p.sections.length, 2);

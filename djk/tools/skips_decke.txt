@@ -1,0 +1,17 @@
+# Skip ceilings of the gate: <base suite> <most skipped tests allowed>. alles_report.py makes the run red when a base suite skips more,
+# and names it. Fewer is fine and noted. Pinned from the green full gate of 2026-11-24 (14130 passed, 255 skipped; the CI runs 25 to 27 on the runner reported the same 255).
+# The shards of a split suite count together (ui-seriell-a..h = ui-seriell, core-ruhig = core, ui-ruhig = ui-seite). A suite without a line has ceiling 0.
+# Raising a ceiling needs a reason in the commit message.
+core 1
+cues 3
+hand 1
+instruments 46
+py-carla 37
+py-generator 1
+py-key_energy 1
+py-sound 1
+py-structure_suggestion 1
+py-workshop 2
+start-sh 1
+ui-seite 157
+ui-seriell 3

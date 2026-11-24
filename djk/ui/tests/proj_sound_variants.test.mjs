@@ -113,7 +113,7 @@ test('refusals: unknown track, audio track, unknown knob, value out of range, ni
   const fehler = async (spur, v) => { const r = await lauf(a, spur, v); return [r.code, r.body.fehler]; };
   assert.deepEqual(await fehler('s9', [{}]), [400, 'spur_unbekannt']);
   assert.deepEqual(await fehler('s1', [{}]), [409, 'geraet_falsch']);
-  assert.deepEqual(await fehler('s2', [{}]), [409, 'geraet_falsch'], 'an RB-338 track is no Baukasten track');
+  assert.deepEqual(await fehler('s2', [{}]), [409, 'geraet_falsch'], 'an RB-338 track is no Cypher Modular track');
   assert.deepEqual(await fehler('s4', [{ k65: 0.5 }]), [400, 'argument_ungueltig']);
   assert.deepEqual(await fehler('s4', [{ k0: 0.5 }]), [400, 'argument_ungueltig']);
   assert.deepEqual(await fehler('s4', [{ gain: 0.5 }]), [400, 'argument_ungueltig']);

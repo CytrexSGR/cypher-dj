@@ -97,3 +97,23 @@ test('the menu is an overlay: Escape and a click beside it close it, a click on 
   assert.ok($t('neu-menue', 0).contains($t('neu-name', 0)), 'the name field stands in the menu');
   assert.equal($t('neu-name', 0).hidden, false);
 });
+
+// UI check M4: a menu whose right edge lies beyond the window aligns to the right edge of its button; one inside the window stays where it is.
+test('the menu stays inside the window: right-aligned when it would run out at the right edge', () => {
+  const m = $t('neu-menue', 0);
+  const alt = globalThis.innerWidth;
+  try {
+    globalThis.innerWidth = 1366;
+    m.getBoundingClientRect = () => ({ left: 1127, right: 1427, top: 40, bottom: 140, width: 300, height: 100 });
+    $t('neu', 0).dispatch('click');
+    assert.equal(m.hidden, false);
+    assert.equal(m.style.left, 'auto');
+    assert.equal(m.style.right, '0');
+    $t('neu', 0).dispatch('click');   // close
+    m.getBoundingClientRect = () => ({ left: 100, right: 400, top: 40, bottom: 140, width: 300, height: 100 });
+    m.style.left = 'auto'; m.style.right = '0';
+    $t('neu', 0).dispatch('click');   // open: a menu that fits is reset to the left edge
+    assert.notEqual(m.style.left, 'auto');
+    assert.notEqual(m.style.right, '0');
+  } finally { globalThis.innerWidth = alt; }
+});

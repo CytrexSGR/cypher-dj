@@ -1,0 +1,135 @@
+/* The browser component (browser plan 2). Docked as the left column of PRODUCTION (grid area bestand); the old #bestand is hidden there.
+   In DJ, STUDIO and TRACKER it is a drawer (task 5): fixed at the left under the header, z-index 15 (menus are 20 and up). */
+#browser { display: none; }
+body.produktion #bestand { display: none; }
+body.produktion #browser:not([hidden]) { display: flex; flex-direction: column; grid-area: bestand; min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden;
+  background: var(--panel); border-right: 1px solid var(--line); padding: 4px 0; font-size: 12px; }
+#browser .b-abschnitt { border-bottom: 1px solid var(--line); }
+#browser .b-kopf { display: block; width: 100%; text-align: left; background: transparent; border: 0; padding: 6px 10px; font-size: 11px; letter-spacing: .06em; cursor: pointer; }
+#browser .b-kopf::before { content: '▾ '; opacity: .6; }
+#browser .b-abschnitt.zu .b-kopf::before { content: '▸ '; }
+#browser .b-abschnitt.zu .b-zustand, #browser .b-abschnitt.zu .b-rumpf { display: none; }
+#browser .b-zustand { padding: 2px 10px 8px; opacity: .6; font-size: 11px; }
+#browser .b-zustand[hidden] { display: none; }
+#browser .b-abschnitt[data-zustand="fehler"] .b-zustand { opacity: 1; color: #e8806a; }
+#browser .b-rumpf { padding: 0 0 6px; }
+#browser .b-gruppe { padding: 6px 10px 2px; font-size: 10px; letter-spacing: .08em; opacity: .55; }
+#browser .b-zeile { display: flex; align-items: baseline; gap: 6px; padding: 2px 10px; min-width: 0; }
+#browser .b-zeile.klickbar { cursor: pointer; }
+#browser .b-zeile.klickbar:hover { background: rgba(255, 255, 255, .06); }
+#browser .b-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#browser .b-zusatz { flex: 0 0 auto; opacity: .55; font-size: 10px; }
+#browser .b-zeile.fehlt .b-text { color: #e8806a; }
+#browser .b-finden { flex: 0 0 auto; font-size: 10px; padding: 0 6px; }
+
+/* task 5: the drawer. --browser-oben and --browser-breite are set by browser.js (header height, drawerBreite). */
+body:not(.produktion) #browser:not([hidden]) { display: flex; flex-direction: column; position: fixed; left: 8px; top: var(--browser-oben, 64px); bottom: 8px;
+  width: var(--browser-breite, 360px); z-index: 15; overflow-y: auto; overflow-x: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .45); padding: 4px 0; font-size: 12px; }
+/* PRODUCTION: the key and the button fold the dock; the old library fold (lib-zu, key L) no longer moves this grid */
+html body.produktion.lib-zu:not(.browser-zu) { grid-template-columns: minmax(240px, 18vw) minmax(0, 1fr); }
+html body.produktion.browser-zu, html body.produktion.browser-zu.lib-zu { grid-template-columns: 0 minmax(0, 1fr); }
+#browser-knopf[aria-pressed="true"] { border-color: var(--akzent, #2fd6c0); }
+
+/* drop zone, upload status and folder picker (task 6) */
+body.produktion #browser { position: relative; }
+#browser.einwurf-an::after { content: 'Drop files to add them to your library'; position: absolute; inset: 4px; z-index: 5; display: flex; align-items: center; justify-content: center;
+  text-align: center; padding: 12px; font-size: 12px; background: rgba(14, 15, 18, .86); border: 2px dashed var(--a); border-radius: 6px; pointer-events: none; }
+#browser .b-einwurf-status { padding: 6px 10px; font-size: 11px; border-bottom: 1px solid var(--line); }
+#browser .b-einwurf-status[hidden] { display: none; }
+#browser .b-einwurf-status.fehler { color: #e8806a; }
+.b-dialog-huelle { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .55); }
+.b-dialog { width: min(480px, 92vw); max-height: 80vh; display: flex; flex-direction: column; gap: 6px; padding: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; font-size: 12px; }
+.b-dialog-titel { font-size: 11px; letter-spacing: .06em; }
+.b-dialog-krumen { display: flex; flex-wrap: wrap; gap: 2px; }
+.b-dialog .b-krume { background: transparent; border: 0; color: var(--dim); cursor: pointer; padding: 0 4px; }
+.b-dialog .b-krume::after { content: ' /'; opacity: .5; }
+.b-dialog-meldung { min-height: 14px; color: var(--dim); }
+.b-dialog-meldung.fehler { color: #e8806a; }
+.b-dialog-liste { flex: 1 1 auto; overflow-y: auto; min-height: 120px; border: 1px solid var(--line); }
+.b-dialog .b-dialog-zeile { display: block; width: 100%; text-align: left; background: transparent; border: 0; padding: 4px 8px; color: var(--text); cursor: pointer; }
+.b-dialog .b-dialog-zeile:hover { background: rgba(255, 255, 255, .06); }
+.b-dialog-leer { padding: 8px; color: var(--dim); }
+.b-dialog-fuss { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* THIS PROJECT actions (task 7) */
+#browser .b-taste { flex: 0 0 auto; font-size: 10px; padding: 0 6px; }
+#browser .b-taste:disabled { opacity: .45; cursor: default; }
+#browser .b-aktionen { flex-wrap: wrap; align-items: center; padding-top: 4px; padding-bottom: 4px; }
+#browser .b-name { flex: 1 1 80px; min-width: 0; font-size: 11px; }
+#browser .b-gruppe.fehlt { color: #e8806a; opacity: 1; }
+#browser .b-wahl { flex-wrap: wrap; padding-left: 20px; }
+#browser .b-wahlliste { flex: 1 1 100%; display: flex; flex-direction: column; gap: 2px; font-size: 11px; opacity: .8; }
+#browser .b-zeile.gerettet .b-zusatz { color: #e8c26a; opacity: 1; }
+
+/* LIBRARY (task 8) */
+#browser .b-bib-kopf { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 8px; }
+#browser .b-bib-stand { padding: 2px 8px; font-size: 11px; opacity: .8; }
+#browser .b-bib-hinweis { padding: 2px 8px; font-size: 11px; color: #e8c26a; }
+#browser .b-bib-balken { height: 3px; margin: 2px 8px; background: rgba(255, 255, 255, .08); }
+#browser .b-bib-fuell { height: 100%; background: var(--accent, #6ac); transition: width .3s; }
+#browser .b-bib-balken.unbestimmt .b-bib-fuell { opacity: .5; }
+#browser .b-bib-tabs { display: flex; flex-wrap: wrap; gap: 2px; padding: 4px 8px; }
+#browser .b-bib-tabs .b-taste.an { background: rgba(255, 255, 255, .14); }
+#browser .b-bib-liste { display: flex; flex-direction: column; }
+#browser .b-bib .b-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#browser .b-bib .b-zusatz { flex: 0 0 auto; font-size: 10px; opacity: .6; white-space: nowrap; }
+#browser .b-bib.aus { opacity: .5; }
+#browser .b-bib .b-vorschau { padding: 0 4px; }
+#browser .b-leer { opacity: .6; font-size: 11px; padding: 6px 8px; }
+#browser .b-karte { margin: 8px; padding: 10px; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+#browser .b-karte-titel { font-weight: 600; }
+#browser .b-karte-text, #browser .b-karte-zone { font-size: 11px; opacity: .7; }
+
+/* INSTRUMENTS AND EFFECTS (task 10) */
+#browser .b-geraete h4, #browser .b-untertitel { margin: 8px 8px 2px; font-size: 10px; letter-spacing: .08em; opacity: .65; font-weight: 600; }
+#browser .b-geraete .geraete-liste, #browser .plugin-liste { margin: 0; padding: 0 4px; list-style: none; }
+#browser .b-plugin-kopf { display: flex; gap: 4px; padding: 2px 8px; align-items: center; }
+#browser .b-plugin-kopf .plugin-format { font-size: 11px; }
+#browser .b-pfade { display: flex; flex-direction: column; }
+#browser .b-pfad .b-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#browser .plugin-zeile .b-zusatz { margin-left: 6px; font-size: 10px; opacity: .6; }
+#browser [hidden] { display: none !important; }
+
+/* PRESETS (task 11) */
+#browser .b-presets { font-size: 11px; }
+#browser .b-presets .preset-knoepfe { flex-wrap: wrap; }
+#browser .b-presets .preset-export { font-size: 11px; padding: 2px 8px; border-radius: 8px; border: 1px solid var(--line); color: var(--text); text-decoration: none; cursor: pointer; }
+#browser .b-presets .preset-export[aria-disabled="true"] { opacity: .45; cursor: default; }
+#browser .b-presets .geraete-stern { background: transparent; border: 0; cursor: pointer; font-size: 13px; padding: 0 4px; color: inherit; }
+#browser .b-presets .geraete-stern.an { color: #e8c26a; }
+/* the preset rows in the narrow column: one column, name and keys on one line, the device under the name */
+#browser .b-presets .preset-rumpf { grid-template-columns: minmax(0, 1fr); }
+#browser .b-presets .preset-liste { overflow: visible; border: 0; border-radius: 0; }
+#browser .b-presets .preset-zeile { grid-template-columns: minmax(0, 1fr) auto; gap: 2px 6px; padding: 3px 8px; }
+#browser .b-presets .preset-zeile .preset-beschreibung, #browser .b-presets .preset-zeile .preset-tags,
+#browser .b-presets .preset-zeile .preset-herkunft, #browser .b-presets .preset-zeile .preset-autor { display: none; }
+#browser .b-presets .preset-zeile .preset-knoepfe { grid-column: 2; grid-row: 1 / span 2; }
+#browser .b-presets .preset-geraet { grid-column: 1; font-size: 10px; }
+#browser .b-presets .preset-detail { border: 0; padding: 4px 8px; }
+
+/* KITS and VERSIONS (task 12): the name takes its own line, the keys wrap under it */
+#browser .b-kit, #browser .b-version { flex-wrap: wrap; row-gap: 3px; }
+#browser .b-kit .b-text, #browser .b-version .b-text { flex: 1 1 60%; min-width: 0; }
+#browser .b-kollektionen { padding: 0 6px; }
+
+/* task 13: the one search field, tag chips, selection, RELATED */
+#browser .b-suchleiste { padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; border-bottom: 1px solid rgba(255, 255, 255, .08); }
+#browser .b-suchreihe { display: flex; gap: 4px; align-items: center; }
+#browser .b-chips-aktiv { display: flex; flex-wrap: wrap; gap: 3px; }
+#browser .b-chips-aktiv:empty { display: none; }
+#browser .b-chip { font-size: 10px; padding: 1px 6px; border-radius: 9px; border: 1px solid rgba(255, 255, 255, .2); background: transparent; color: inherit; cursor: pointer; }
+#browser .b-chip.an, #browser .b-chip[aria-pressed="true"] { background: rgba(255, 255, 255, .18); }
+#browser .b-chips { display: flex; flex-direction: column; gap: 3px; max-height: 220px; overflow-y: auto; }
+#browser .b-chips-koerper { display: flex; flex-direction: column; gap: 2px; }
+#browser .b-chips-art { text-align: left; font-size: 10px; letter-spacing: .06em; background: transparent; border: 0; color: inherit; opacity: .7; cursor: pointer; padding: 2px 0; }
+#browser .b-chips-reihe { display: flex; flex-wrap: wrap; gap: 3px; padding-bottom: 3px; }
+#browser .b-gefiltert { display: none !important; }
+#browser .b-bib-wahl { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 3px 8px; font-size: 11px; }
+#browser .b-bib.gewaehlt { background: rgba(255, 255, 255, .14); }
+#browser .b-blitz { background: rgba(255, 255, 255, .22); }
+#browser .b-verwandt { position: absolute; left: 8px; right: 8px; z-index: 5; background: #17181d; border: 1px solid rgba(255, 255, 255, .25); border-radius: 4px; padding: 6px; max-height: 260px; overflow-y: auto; font-size: 11px; }
+#browser .b-verwandt-kopf { font-size: 10px; letter-spacing: .06em; opacity: .65; padding-top: 4px; }
+#browser .b-verwandt-zeile { display: block; width: 100%; text-align: left; background: transparent; border: 0; color: inherit; padding: 2px 4px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#browser .b-verwandt-zeile:hover { background: rgba(255, 255, 255, .1); }
+#browser .b-smart { padding: 4px 8px; }

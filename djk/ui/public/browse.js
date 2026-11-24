@@ -7,6 +7,8 @@ export const statusText = (t) => STATUS[live.get(t.material_id) ?? t.status] ?? 
 export const TYP_TEXT = { track: 'ALL TRACKS', loop: 'LOOPS', oneshot: 'SAMPLES', strudel: 'STRUDEL' };   // oben bleibt der Reiter TRACKS (vorbereitete Fassungen)
 const laenge = (s) => (s == null ? '–' : s < 10 ? `${s.toFixed(2)} s` : `${Math.floor(Math.round(s) / 60)}:${String(Math.round(s) % 60).padStart(2, '0')}`);
 const zahl = (x) => (x == null ? '–' : String(x));
+// A loop's tempo: the fact, else the analysis' guess marked with a tilde (never in the filters, which only see the fact), else a dash.
+const tempo = (t) => (t.bpm != null ? zahl(t.bpm) : t.bpm_geschaetzt != null ? `~${Math.round(t.bpm_geschaetzt)}` : '–');
 const text = (x) => (x == null || x === '' ? '–' : x);
 const STATUS = { ready: 'READY', prepare: 'PREPARE', missing: 'MISSING', laeuft: 'PREPARING…', fehler: 'FAILED' };
 const name = (t) => `${t.name ?? '–'}${t.nur_live ? ' · Live only' : ''}`;
@@ -24,7 +26,7 @@ export const SPALTEN = {
   loop: [
     { titel: 'Name', sort: 'name', wert: name, klasse: 'titelzelle' },
     { titel: 'Pack', sort: 'pack', wert: (t) => text(t.pack) },
-    { titel: 'BPM', sort: 'bpm', wert: (t) => zahl(t.bpm), klasse: 'zahl' },
+    { titel: 'BPM', sort: 'bpm', wert: tempo, klasse: 'zahl' },
     { titel: 'Bars', sort: 'takte', wert: (t) => zahl(t.takte), klasse: 'zahl' },
     { titel: 'Key', sort: 'camelot', wert: (t) => text(t.camelot), klasse: 'zahl' },
     { titel: 'Folder', sort: 'ordner', wert: (t) => text(t.ordner?.split('/').slice(-2).join('/')) },
@@ -74,7 +76,7 @@ export const LISTEN_SPALTEN = {
     { titel: 'Name', wert: name, klasse: 'titelzelle' },
     { titel: 'Type', wert: (t) => (t.typ === 'oneshot' ? 'SAMPLE' : 'LOOP') },
     { titel: 'Pack', wert: (t) => text(t.pack) },
-    { titel: 'BPM', wert: (t) => zahl(t.bpm), klasse: 'zahl' },
+    { titel: 'BPM', wert: tempo, klasse: 'zahl' },
     { titel: 'Bars', wert: (t) => zahl(t.takte), klasse: 'zahl' },
     { titel: 'Key', wert: (t) => text(t.camelot), klasse: 'zahl' },
     { titel: 'Length', wert: (t) => laenge(t.dauer_s), klasse: 'zahl' },

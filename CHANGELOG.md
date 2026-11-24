@@ -3,6 +3,112 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-24, twenty-first update (0.4.0~rc3 beta)
+
+Release candidate 3 of 0.4.0. It replaces rc2, whose package did not install on Ubuntu 26.04. The program itself is
+unchanged; everything listed under rc2 below applies.
+
+- One package for Ubuntu 24.04 and 26.04. The rc2 package depended on `librubberband2`, which 26.04 no longer ships
+  (it has `librubberband3`), so `apt install` refused it there. The time-stretch library is now linked into the two
+  programs that use it, and the package names no such dependency.
+- Before a release the package is installed and started in a fresh VM of each of the two Ubuntu versions: install,
+  start, demo, sound on three channels, the tour through the agent tools and stop. Both runs passed for this candidate.
+
+## 2026-11-23, twentieth update (0.4.0~rc2 beta)
+
+Release candidate 2 of 0.4.0, the candidate for 1.0. The update is mostly one browser for everything you bring in, safer
+projects, a SYNC that lands on the bar, and a pass over the interface at 1366×768.
+
+**One browser, import and your own material**
+- A browser drawer opens on the DJ, STUDIO and TRACKER places (key in the header, key B). Its sections: LIBRARY, KITS,
+  COLLECTIONS, PRESETS, INSTRUMENTS AND EFFECTS, and THIS PROJECT inside PRODUCTION.
+- Bring your own sounds: drop audio files, folders or zips on the drawer (upload queue that routes by file type), pick a
+  folder, or import by path. A desktop audio file can be dropped straight onto an audio track. Imported loops and
+  one-shots get a light tempo and root-note analysis, and the catalogue builds as a background job with progress and a
+  first-start card. A file whose real checksum differs from the claimed one is refused.
+- Kits: make a kit from a folder, rename, duplicate, delete, preview, export and import as a zip. Collect all also copies
+  the project's kits.
+- One tag system for every item (tracks, loops, kits, presets): one search field with tag chips, RELATED items, batch
+  tags and saved searches that act as smart collections. The hand tools `tags` and `verwandt` read the same data.
+- User plugin folders are scan roots; the plugin list shows the plugin version.
+- The library status line follows the build, and tag search no longer filters by file kind by accident.
+
+**Projects that survive**
+- Export a project as a portable zip (it carries its kits) and import it on another machine.
+- Automatic and named project versions with restore (browser and hand tools). Missing files can be found, relinked and
+  cleaned up from THIS PROJECT.
+- A take being recorded leaves a run file at record start. If the program is killed, the take is rescued when the project
+  opens and can be placed on a track (`proj_aufnahme`). Kill test on a test instance: four kills, no
+  recording lost, the orphaned take rescued.
+- Page errors are kept in a rotating file; `cypher-dj report` collects the state for a bug report and `cypher-dj doctor`
+  checks the machine (limits, PipeWire, CUDA, versions) before you start.
+
+**DJ**
+- SYNC aligns the bar phase to the playing deck, not only the beat. Measured on seven starts: at most 1.44 ms off, zero
+  beats. Before, two decks could start one beat apart on the bar. PLAY stays beat-quantised.
+- Loudness: the automatic trim of a loaded track now acts on the player in front of the container blend, so a loop that
+  left the player no longer leaves +18.5 dB on the channel strip. Your hand trim adds to the automatic one; the automatic
+  part is shown read-only as an AUTO label next to GAIN (hidden at 0 dB) and goes back to 0 when the deck is unloaded.
+  Old state files migrate.
+- REC MIX records the DJ mix and the live set from the page (and the hand tool `mix_aufnahme`).
+
+**Live and loop deck**
+- Showing LOOPS or SEQ again brings the parked deck back instead of creating a new one. Before, two park rounds ended in
+  "loop deck full" and the loaded loops were unreachable.
+- FX 3 of a loop lane is a post-fader send of its group: chain, fader and mute act on it, nested groups and moving group
+  faders included (exact group gain, no estimate). The FX 3 default scene is no longer 19 dB too quiet, and one starter
+  loop at 0 dB fader peaks at 2.36 dBTP below full scale.
+- COLOR of a loop lane lives only in the STRIP row, the duplicate knob in the lane foot is gone.
+- Measured: loop strip HI, MID, LOW, COLOR, HALL, DELAY, mute, solo and keys 1 to 3 each act as labelled; 12 of 12 SEQ
+  scene starts land on the bar (2.4 to 6.1 ms late).
+
+**Sounds and presets**
+- Factory check over all 213 presets (163 instruments, six phrases each): 18 presets reached 0 dBFS or more before, none
+  does now. 16 of them got a lower VOLUME, the shaker and lead-acid a lower fixed level (shaker 2.15 dB, lead-acid 1.8 dB
+  quieter). The 18 changes are pure level changes: a null test against the old render leaves -144 to -146 dB.
+- Cypher Saturation and the effect lab have a 5 Hz DC blocker at the output, so saturation no longer adds a DC offset.
+- Preset preview: hear an instrument or effect from the browser on the headphones (offline render with a cache, role
+  phrases per instrument, effects through a starter loop, level about -18 dB RMS, cut off after 20 s, last click wins).
+  Presets can be exported, imported and marked as favourites; the hand tool `preset_vorhoeren` plays the same preview.
+- Public names in every text of the interface: Cypher Modular, Cypher Comp, Cypher Saturation.
+- A built-in sanity check (`werkscheck`) renders every factory preset and device: 285 rows, 0 red, 1 skipped (Surge XT
+  is not part of the package).
+
+**Interface at 1366×768**
+- The DJ place, the loop deck, the pop-up, the tracker, PRODUCTION and STUDIO were checked in Chrome at 1366×768 and
+  1920×1080. Fixed: overlaps and cut-off labels on the DJ desk in both library states, a header that was 89 px high
+  (now 68 px), a transport bar of five to six lines (now two), loop deck rows that sank below the edge (visible scroll
+  cue, scene keys and go key back at base size), the NEW MODULE menu leaving the window, PRESETS and BROWSE in a low dock
+  (at least three data rows, the list comes first), an open SHELF covering instrument controls, a SAVE key hidden under
+  PFL in the Strudel place, the arrangement getting at least 300 px, loop names that keep their end (middle ellipsis,
+  full name as tooltip).
+- Library at 1366: type tabs and search on one row, the other filters behind a FILTER key.
+- Text contrast of at least 4.5:1 in tracker cells, song list cells and the COLOR PARAMETER label; name keys in the
+  preset list at least 20 px high. The tablet pairing dialog and the CONTROLLERS tab say plainly what they do.
+
+**Package, install and update**
+- The package is `cypher-dj_0.4.0~rc2_amd64.deb` for Ubuntu 24.04; the agent tools are now 112.
+- Update from 0.3.0 keeps your own work: in the check with the first candidate a user preset and a recorded take stayed
+  byte-identical and the services came back. Program-owned state may change on update (shipped graphs, the demo project
+  with a backup in `.versionen`, the catalogue); your presets belong under `nutzer/`, a hand-edited shipped graph is
+  replaced.
+- Checked on a fresh Ubuntu 24.04 machine: install, start in 17 s, ten services, demo playing, MCP with all tools, no
+  write into the program folder, sound smoke test (Strudel, RB-338, an acid bass, silence after stop).
+- Every test instance keeps all its stores in its own folder, so testing never writes into your library, plugin folder
+  list or sound-kit folder.
+
+**Reliability and tests**
+- The six user journeys (bring your own sounds, DJ, live set, production, sound design, agent) run as scripted tours
+  against a real instance and measure the recorded sound, with a handbook chapter for each.
+- A soak tool drives a long run and judges it per minute; its ten-minute dry run passed.
+- The full test gate runs in about 20 minutes on a dedicated machine, down from about 160 minutes. Affected files only run per
+  change.
+
+**For builders**
+- A self-hosted CI runner builds and tests every push; a tag starts the package workflow: clean build, smoke test in a
+  VM, upgrade check, then the release is created as a draft, verified and published in one step. `release.sh` sets the tag
+  only after the export check passed.
+
 ## 2026-11-23, nineteenth update (0.3.0 beta)
 
 **Package for Ubuntu 24.04**

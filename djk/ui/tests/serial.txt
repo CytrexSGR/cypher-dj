@@ -145,3 +145,11 @@ hand_container_latch.test.mjs
 slots_route.test.mjs
 controls_alias_route.test.mjs
 strudel_module_route.test.mjs
+kits_routes.test.mjs
+proj_portabel.test.mjs
+proj_recording_rettung_route.test.mjs
+proj_files_aktionen_route.test.mjs
+proj_files_route.test.mjs
+proj_umbenennen_route.test.mjs
+proj_versionen_route.test.mjs
+paths_instance2.test.mjs

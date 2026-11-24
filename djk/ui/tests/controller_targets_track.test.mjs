@@ -42,7 +42,7 @@ test('names: the knob name of the graph on the slot track plus the track name; n
   graphOrdner(t);
   const ctx = { projekt: () => PROJEKT };
   assert.equal(spurVonSlot(ctx, 1).id, 's1');
-  assert.equal(spurVonSlot(ctx, 3).id, 's4', 'slots count the Baukasten tracks by ascending nr, an audio track does not count');
+  assert.equal(spurVonSlot(ctx, 3).id, 's4', 'slots count the Cypher Modular tracks by ascending nr, an audio track does not count');
   assert.equal(spurVonSlot(ctx, 4), null);
   assert.equal(knopfName(ctx, 'spur/1/bk/4'), 'Cutoff (Lead)');
   assert.equal(beschriftung(ctx, 'spur/3/bk/4'), 'Pad Cutoff');

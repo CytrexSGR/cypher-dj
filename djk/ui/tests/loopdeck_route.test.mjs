@@ -406,7 +406,7 @@ test('POST /loopdeck/effekt: set, replace, switch off, remove; stand carries eff
   }
 });
 
-test('POST /loopdeck/effekt: a full Baukasten pool is 409 kein_platz; a track at a full chain too', async (t) => {
+test('POST /loopdeck/effekt: a full Cypher Modular pool is 409 kein_platz; a track at a full chain too', async (t) => {
   graphOrdner(t);
   const z = await aufbau(t);
   const r = effektRoute(z, '/loopdeck/effekt');
@@ -415,7 +415,7 @@ test('POST /loopdeck/effekt: a full Baukasten pool is 409 kein_platz; a track at
   await z.aendern(prod);
   await z.aendern(z.projekt().spuren.filter((s) => s.name.startsWith('P') && !s.zellen).map((s) => ({ befehl: 'insert_setzen', strang_id: s.id, pos: 0, art: 'bk', graph: 'fx-crunch' })));
   const a = await rufRoute(r, { deck: 1, spur: 1, graph: 'fx-crunch' });
-  assert.deepEqual([a.code, a.j.ok, a.j.grund, a.j.text], [409, false, 'kein_platz', 'All 8 Baukasten effect stages are in use.']);
+  assert.deepEqual([a.code, a.j.ok, a.j.grund, a.j.text], [409, false, 'kein_platz', 'All 8 Cypher Modular effect stages are in use.']);
   const id = z.spuren()[1].id;
   await z.aendern([0, 1, 2, 3, 4].map((i) => ({ befehl: 'insert_setzen', strang_id: id, pos: i, art: i < 3 ? 'komp' : 'eq' })));
   const b = await rufRoute(r, { deck: 1, spur: 2, graph: 'fx-crunch' });

@@ -73,7 +73,7 @@ const TEXTE: Record<string, string> = {
 };
 // model refusals that mean "a pool is full": 409 kein_platz, the text says which pool
 const KEIN_PLATZ: Record<string, string> = {
-  routing_grenze: 'All 4 returns of the live container are in use.', ins_voll: 'All 8 Baukasten effect stages are in use.', kette_voll: 'The chain of this track is full.',
+  routing_grenze: 'All 4 returns of the live container are in use.', ins_voll: 'All 8 Cypher Modular effect stages are in use.', kette_voll: 'The chain of this track is full.',
 };
 export class LoopFehler extends Error {
   readonly code: number;

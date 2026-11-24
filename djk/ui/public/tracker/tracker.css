@@ -14,6 +14,11 @@ body.tracker #tracker {
   grid-template-rows: auto minmax(0, 1fr) auto;
   grid-template-areas: "bar bar bar" "song grid ins" "stat stat stat";
 }
+/* the shelf row exists only while the shelf is open (no empty row, no extra gap) */
+body.tracker #tracker:has(> .t-regal:not([hidden])) {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-areas: "bar bar bar" "reg reg reg" "song grid ins" "stat stat stat";
+}
 #tracker .t-kopf { grid-area: bar; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; }
 #tracker .t-lied { grid-area: song; }
 #tracker .t-raster { grid-area: grid; }
@@ -25,7 +30,7 @@ body.tracker #tracker {
 #tracker [hidden] { display: none !important; }
 
 /* bar */
-#tracker .t-projektname { font-size: 17px; font-weight: 700; min-width: 8ch; }
+#tracker .t-projektname { font-size: 17px; font-weight: 700; min-width: 8ch; max-width: 30ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #tracker .t-gruppe { display: inline-flex; align-items: center; gap: 4px; }
 #tracker .t-rechts { margin-left: auto; }
 #tracker .t-knopf { white-space: nowrap; }
@@ -88,7 +93,7 @@ body.tracker #tracker {
 #tracker .t-knoepfe, #tracker .t-spaltenknoepfe { display: flex; gap: 4px; align-items: center; }
 #tracker .t-spaltenknoepfe { gap: 8px; font-size: 10px; color: var(--dim); justify-content: center; white-space: nowrap; }
 #tracker .t-spaltenknoepfe > span { display: inline-flex; gap: 3px; align-items: center; white-space: nowrap; }
-#tracker .t-kopf-spur button { padding: 0 5px; min-width: 18px; font-size: 10px; line-height: 14px; }
+#tracker .t-kopf-spur button { padding: 0 5px; min-width: 20px; font-size: 10px; line-height: 14px; }
 #tracker .t-kopf-spur button[aria-pressed="true"][data-a="mute"] { background: var(--warn); color: #0b0d12; border-color: var(--warn); }
 #tracker .t-kopf-spur button[aria-pressed="true"][data-a="solo"] { background: var(--d3); color: #0b0d12; border-color: var(--d3); }
 #tracker .t-kopf-spur .meter.waagrecht { height: 6px; }
@@ -103,7 +108,8 @@ body.tracker #tracker {
 #tracker .t-spur { flex: none; display: flex; align-items: center; padding-right: 1ch; margin-right: 1ch; border-right: 1px solid var(--line); box-sizing: content-box; align-self: stretch; white-space: pre; }
 #tracker .t-nsp { display: inline-flex; margin-right: 1ch; }
 #tracker .t-c { display: inline-block; margin-right: 1ch; box-sizing: content-box; text-align: left; cursor: default; overflow: hidden; }
-#tracker .t-c.leer { color: var(--dim); opacity: .55; }
+/* empty cell: kept quiet by a lighter grey than --dim, no opacity (text contrast 4.5:1 on the row and the beat stripe) */
+#tracker .t-c.leer { color: #9a9da8; }
 #tracker .t-c.ohne:not(.cursor) { opacity: .4; text-decoration: line-through; }
 #tracker .t-c.kurve { color: var(--d3); opacity: .75; }
 #tracker .t-c.schief { background: rgba(240, 160, 60, .28); border-radius: 2px; }
@@ -120,14 +126,15 @@ body.tracker #tracker {
 #tracker .t-lied-zeile { flex-wrap: wrap; }
 #tracker .t-lied-zeilen { opacity: .7; }
 #tracker .t-lied-zellen { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 2px; }
-#tracker .t-lied-zelle { flex: 1 1 0; min-width: 2.4ch; max-width: 9ch; min-height: 1.3em; padding: 0 3px; border-radius: 3px; font-size: 10px; line-height: 1.3em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: rgba(255, 255, 255, .08); color: var(--text); }
+#tracker .t-lied-zelle { flex: 1 1 40%; min-width: 2.4ch; min-height: 1.3em; padding: 0 3px; border-radius: 3px; font-size: 10px; line-height: 1.3em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: rgba(255, 255, 255, .08); color: var(--text); }
 #tracker .t-lied-zelle[data-verbund] { color: #fff; }
+#tracker .t-lied-zeile.an .t-lied-zelle { color: #0b0d12; }
 #tracker .t-lied-zelle[data-art="instrument"] { cursor: pointer; }
 #tracker .t-lied-knoepfe { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; align-items: center; }
 #tracker .t-lied-knoepfe .t-knopf { padding: 2px 6px; font-size: 10px; }
-#tracker .t-lied-feld { width: 100%; box-sizing: border-box; text-align: left; font-weight: 400; }
-#tracker .t-lied-knoepfe .t-feld { flex: 1 1 100%; display: flex; gap: 6px; }
-#tracker .t-lied-knoepfe .t-feld .t-lied-feld { flex: 1; width: auto; min-width: 0; }
+#tracker .t-lied-feld { width: 100%; min-width: 0; box-sizing: border-box; text-align: left; font-weight: 400; }
+#tracker .t-lied-knoepfe .t-feld { flex: 1 1 100%; display: flex; gap: 6px; min-width: 0; }
+#tracker .t-lied-knoepfe .t-feld .t-lied-feld { flex: 1 1 0; width: 100%; min-width: 0; }
 #tracker .t-lied-menue { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; padding: 6px; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; }
 #tracker .t-lied-muster { text-align: left; padding: 2px 6px; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -152,9 +159,8 @@ body.tracker:not(.djfx-auf) #kopf > #fx, body.tracker:not(.djfx-auf) #kopf > #se
 #tracker .t-neu-menue .t-eingabe { width: auto; text-align: left; font-weight: 400; margin-top: 2px; }
 #tracker .t-leer .t-neu { display: inline-block; }
 
-/* tracker module shelf (task 23): opens over the grid area from the MODULES button */
-#tracker .t-regal { grid-area: grid; z-index: 5; align-self: start; max-height: 100%; overflow: auto; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, .45); }
+/* tracker module shelf (task 23): a row of the page flow under the bar. It pushes the SONG column, the grid and INSTRUMENTS down instead of covering the column heads and row 00. */
+#tracker .t-regal { grid-area: reg; min-width: 0; max-height: 180px; overflow: auto; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
 #tracker .t-regal-kopf { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
 #tracker .t-regal-lbl { font-size: 10px; letter-spacing: .14em; color: var(--dim); }
 #tracker .t-regal-hinweis, #tracker .t-regal-leer { font-size: 11px; color: var(--dim); }
@@ -168,3 +174,15 @@ body.tracker:not(.djfx-auf) #kopf > #fx, body.tracker:not(.djfx-auf) #kopf > #se
 #tracker .t-status.mit-hinweis { white-space: normal; color: var(--warn); }
 #tracker .t-knopf.blitz { animation: t-blitz .35s 2; }
 @keyframes t-blitz { 50% { background: var(--warn); color: #0b0d12; border-color: var(--warn); } }
+
+/* the ⋯ key and the folded keys of the bar: wide, everything shows; compact width keeps one row of the keys that matter and folds the rest behind ⋯ */
+#tracker .t-mehr { display: none; min-width: 28px; }
+@media (max-width: 1500px) {
+  #tracker .t-mehr { display: inline-block; }
+  #tracker .t-kopf:not(.t-mehr-auf) .t-selten, #tracker .t-kopf:not(.t-mehr-auf) > .t-import { display: none; }
+  #tracker .t-kopf { gap: 6px; padding: 5px 10px; }
+}
+
+/* hit area: every key and field of the view is at least 20 px high (the audit minimum) */
+#tracker .t-knopf, #tracker .t-eingabe, #tracker .t-lied-muster, #tracker .t-kopf-spur button { min-height: 20px; box-sizing: border-box; }
+#tracker .t-slot { min-height: 20px; box-sizing: border-box; align-items: center; }

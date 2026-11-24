@@ -27,7 +27,7 @@ import numpy as np
 from .camelot import aus_keyfinder, aus_name, zu_camelot
 
 SR = 44100
-KF_CLI = Path.home() / "cypher-dj/cues/venv-mik/bin/keyfinder-stdin"
+KF_CLI = Path(os.environ.get("CYPHERDJ_MIK") or Path.home() / "cypher-dj/cues/venv-mik") / "bin/keyfinder-stdin"
 PARAMETER: dict = {}   # KeyExtractor-Standard; keine der 7 Varianten war über Artist-Hälften stabil besser (Bericht)
 DUR_SCHWELLE = 0.9
 # Dur-Weg je Modus (Schritt 3, Holdout): (Stimmen, die dieselbe Durtonart wie edma nennen müssen, Schwelle).

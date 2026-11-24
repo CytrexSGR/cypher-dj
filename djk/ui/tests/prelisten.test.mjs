@@ -420,3 +420,17 @@ test('503-Pfad: scheitert kantenWeg (Sperre nicht zu bekommen), kommt trotzdem 5
   try { await assert.rejects(v.spiele({ pfad: '/a.mp3', typ: 'track', sha: 'a' }), (e) => e.code === 503 && e.fehler === 'kern_ohne_vorhoerkanal'); }
   finally { fs.chmodSync(path.dirname(kd), 0o700); fs.chmodSync(kd, 0o600); }
 });
+
+test('plan 6: one click sequence for every caller: a click number taken earlier is refused ueberholt after any newer spiele or stop, and the newest one plays', async () => {
+  const { k, v } = neu();
+  const el = (pfad) => ({ pfad, typ: 'oneshot', sha: 'x', bpm: null });
+  const preset = v.neuerKlick();                       // a preset click whose render is still running
+  const spiele = v.spiele(el('/sample.wav'));          // a sample click on another route arrives meanwhile
+  await assert.rejects(v.spiele(el('/preset.wav'), preset), (e) => e.code === 409 && e.fehler === 'ueberholt');
+  await spiele.catch(() => {});
+  assert.ok(!k.befehle.some((b) => String(b).includes('/preset.wav')));
+  const n2 = v.neuerKlick(); v.stoppe();               // a stop is newer than a click as well
+  await assert.rejects(v.spiele(el('/late.wav'), n2), (e) => e.fehler === 'ueberholt');
+  const n3 = v.neuerKlick();                           // the newest click number is accepted (it goes on to load; a failing stand-in load is not the point)
+  await v.spiele(el('/ok.wav'), n3).catch((e) => assert.notEqual(e.fehler, 'ueberholt'));
+});

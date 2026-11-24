@@ -61,7 +61,7 @@ fn tabelle_entspricht_der_formel() {
 }
 
 #[test]
-fn dsp_im_beharrungszustand_folgt_der_tabelle() {
+fn dsp_im_beharrungszustand_gleichanteil_wird_gesperrt() {
     for r in tabelle() {
         let mut s = Saett::neu(48000.0);
         s.setze(&Einstellung { drive_db: r[0], ausgang_db: r[1], mix: r[2] });
@@ -70,7 +70,41 @@ fn dsp_im_beharrungszustand_folgt_der_tabelle() {
         let mut rr = l.clone();
         s.block(&mut l, &mut rr);
         let letzt = *l.last().unwrap() as f64;
-        assert!((letzt - r[4]).abs() < 0.01, "row {r:?}: DSP gives {letzt}");
+        // Since the DC blocker at the wet output (5 Hz) a constant input leaves only its dry share; the wet share of the
+        // table row (the curve itself, checked in `tabelle_entspricht_der_formel` and the sine tests) decays to 0.
+        let soll = (1.0 - r[2]) * r[3];
+        assert!((letzt - soll).abs() < 0.01, "row {r:?}: DSP gives {letzt}, expected the dry share {soll}");
         assert_eq!(l.last(), rr.last());
+    }
+}
+
+/// Amplitude of the fundamental (200 Hz, 240 samples per period at 48 kHz) of `v`, over whole periods.
+fn grundton(v: &[f64]) -> f64 {
+    let w = 2.0 * std::f64::consts::PI / 240.0;
+    let (c, s) = v.iter().enumerate().fold((0.0, 0.0), |(c, s), (i, x)| (c + x * (w * i as f64).cos(), s + x * (w * i as f64).sin()));
+    2.0 * (c * c + s * s).sqrt() / v.len() as f64
+}
+
+/// The wet curve of `Saett::block` against the formula, surviving the DC blocker: sines of 200 Hz (far above the 5 Hz corner) at amplitudes across the
+/// curve, mix 1, settled; the fundamental of the output equals the fundamental of out * tanh(drive * sine) within 0.1 dB (a 3 % gain error is 0.26 dB).
+#[test]
+fn dsp_sinus_grundton_folgt_der_kennlinie() {
+    let fs = 48000.0;
+    let w = 2.0 * std::f64::consts::PI * 200.0 / fs;
+    for &(drive, out) in &[(0.0, -6.0), (12.0, -6.0), (24.0, -12.0), (36.0, 0.0)] {
+        for &amp in &[0.01, 0.05, 0.2, 0.5, 0.9] {
+            let mut s = Saett::neu(fs);
+            s.setze(&Einstellung { drive_db: drive, ausgang_db: out, mix: 1.0 });
+            s.leeren();
+            let n = 48000usize;
+            let mut l: Vec<f32> = (0..n).map(|i| (amp * (w * i as f64).sin()) as f32).collect();
+            let mut r = l.clone();
+            s.block(&mut l, &mut r);
+            let ist = grundton(&l[n / 2..].iter().map(|v| *v as f64).collect::<Vec<_>>());
+            let ideal: Vec<f64> = (0..n / 2).map(|i| formel(amp * (w * i as f64).sin(), drive, out, 1.0)).collect();
+            let soll = grundton(&ideal);
+            let abw_db = 20.0 * (ist / soll).log10();
+            assert!(abw_db.abs() < 0.1, "drive {drive}, out {out}, amp {amp}: fundamental {ist}, curve {soll} ({abw_db:.3} dB)");
+        }
     }
 }

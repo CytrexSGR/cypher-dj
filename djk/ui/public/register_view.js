@@ -253,12 +253,24 @@ export function geraeteZeilen(register, geraete, lern, tablets = null) {
     zeilen.push({ art: 'platz', schluessel: `platz:${c.platz}`, platz: c.platz, name: k?.name ?? c.name, da: !!c.da, zustand, weg: `learn input ${c.platz}`, anzahl: z ? `${z.frei} of ${z.gesamt} free` : `${gelernt(c.platz)} learned`,
       rueckweg: k?.rueckweg ?? '', hinweis: c.port, entfernen: c.platz >= 2, wechsel, modell: k?.id ?? null, regler: k?.regler ?? null, baenke: k?.baenke ?? null, bedienung: k?.bedienung ?? '', daw });
   }
+  // a device that is known by name only (no `midi` match string, e.g. the desk bridge of the Traktor S8) is that catalogue device, not a second one
+  const katVonQuelle = (text) => katVon(text) ?? katalog.find((x) => !x.midi && x.name && text.includes(x.name));
+  const dawPort = (port) => /\b(DAW|DA)\b/.test(port.replace(/ \(capture\)$/, ''));
   for (const q of quellen) {
     if (SOFTWARE(q) || /\bDAW\b/.test(q.port) || plaetze.some((c) => c.port === q.port)) continue;   // a DAW port is the device's feedback side, not a second controller
-    const k = katVon(`${q.port} ${q.alias ?? ''}`);
+    const k = katVonQuelle(`${q.port} ${q.alias ?? ''}`);
     if (k && (k.weg === 'pult' || gesehen.has(k.id))) continue;   // the desk bridge owns it, or another port of it already sits on a place
     if (k) gesehen.add(k.id);
-    zeilen.push({ art: 'frei', schluessel: null, platz: null, name: k?.name ?? quelleName(q), da: true, zustand: 'connected, no place yet', weg: 'learn input', anzahl: '', rueckweg: k?.rueckweg ?? '', hinweis: q.port, port: q.port });
+    const name = k?.name ?? quelleName(q);
+    const gleich = k ? null : zeilen.find((z) => z.art === 'frei' && z.name === name && !z.modell);   // two ports of one unknown device (in and out, or MIDI and DAW): one row
+    if (gleich) {
+      gleich.ports += 1;
+      gleich.anzahl = `${gleich.ports} ports`;
+      gleich.hinweis = `${gleich.hinweis}, ${q.port}`;
+      if (dawPort(gleich.port) && !dawPort(q.port)) gleich.port = q.port;   // ADD takes the plain MIDI port
+      continue;
+    }
+    zeilen.push({ art: 'frei', schluessel: null, platz: null, name, da: true, zustand: 'connected, no place yet', weg: 'learn input', anzahl: '', rueckweg: k?.rueckweg ?? '', hinweis: q.port, port: q.port, ports: 1, modell: k?.id ?? null });
   }
   for (const k of katalog) {
     if (gesehen.has(k.id)) continue;
@@ -273,8 +285,8 @@ export function geraeteZeilen(register, geraete, lern, tablets = null) {
 // ---- follow and presets (the server side: docs/controller/README.md, routes /controller/fokus and /controller/presets*) ----
 const GRUND_FOLGEN = {
   kein_graph: (ort) => `${ort} has no graph loaded`,
-  kein_bk: (ort) => `${ort} is not a Baukasten synth`,
-  slot_ohne_zeile: (ort) => `${ort} has no controller row (its Baukasten slot is beyond the controller rows)`,
+  kein_bk: (ort) => `${ort} is not a Cypher Modular synth`,
+  slot_ohne_zeile: (ort) => `${ort} has no controller row (its Cypher Modular slot is beyond the controller rows)`,
 };
 const presetName = (id, liste) => (liste ?? []).find((p) => p.id === id)?.name ?? String(id).split('/').pop();
 /**
@@ -338,7 +350,7 @@ export function baueTasten(el, ansicht, opt = {}) {
 export function speicherAngebot(stand) {
   const f = stand?.fokus;
   if (f?.basis && f.graph) return { an: true, graph: f.graph, text: `SAVE FOR ${f.graph}`, titel: `Save the assignments that point at ${f.graph} as its preset for this device` };
-  return { an: false, graph: null, text: 'SAVE FOR SYNTH', titel: 'Needs a synth in front that has Baukasten knobs: pick one in INSTRUMENTS, the workbench, PRODUCTION or a SEQ deck' };
+  return { an: false, graph: null, text: 'SAVE FOR SYNTH', titel: 'Needs a synth in front that has Cypher Modular knobs: pick one in INSTRUMENTS, the workbench, PRODUCTION or a SEQ deck' };
 }
 /** The LOAD list of one device model: { id, name, text, art, herkunft, aktiv, aus, grund, loeschbar }. An instrument preset waits (aus) while no synth with
  *  a base is in front or while that synth runs another graph; usable presets come first. */
@@ -560,6 +572,7 @@ export function baueWaehler(el, kachel, opt) {
   const suche = document.createElement('input');
   suche.setAttribute('type', 'search');
   suche.setAttribute('placeholder', tasten ? 'Search the switches and actions of the module, or of all modules' : 'Search the targets of the module, or of all modules');
+  suche.setAttribute('aria-label', 'Search targets');
   suche.classList.add('reg-waehler-suche');
   suche.value = opt.suche ?? '';
   const liste = document.createElement('div');
@@ -679,6 +692,7 @@ export function baueLernen(el, lern, opt) {
   eingabe.setAttribute('type', 'text');
   eingabe.setAttribute('list', 'reg-ziele');
   eingabe.setAttribute('placeholder', 'New: target to learn, e.g. deck/1/filter');
+  eingabe.setAttribute('aria-label', 'Target to learn');
   eingabe.classList.add('reg-ziel');
   eingabe.value = opt?.wert ?? '';
   const liste = document.createElement('datalist');
@@ -932,6 +946,7 @@ export async function zeigeRegister(wurzel, lern, mehr = {}) {
     const eingabe = document.createElement('input');
     eingabe.setAttribute('type', 'search');
     eingabe.setAttribute('placeholder', 'Find: control, target or device');
+    eingabe.setAttribute('aria-label', 'Find a control, target or device');
     eingabe.classList.add('reg-filter');
     eingabe.addEventListener('input', () => { filter = eingabe.value; zeichne(true); });
     frei = zelle('button', 'FREE ONLY', 'reg-learn');

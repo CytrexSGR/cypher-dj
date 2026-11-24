@@ -272,6 +272,34 @@
    "art": "labor"
   },
   {
+   "id": "dc_l",
+   "art": "glatt",
+   "zeit": 0.031831
+  },
+  {
+   "id": "dcneg_l",
+   "art": "mul",
+   "b": -1
+  },
+  {
+   "id": "dcsum_l",
+   "art": "add"
+  },
+  {
+   "id": "dc_r",
+   "art": "glatt",
+   "zeit": 0.031831
+  },
+  {
+   "id": "dcneg_r",
+   "art": "mul",
+   "b": -1
+  },
+  {
+   "id": "dcsum_r",
+   "art": "add"
+  },
+  {
    "id": "aus",
    "art": "ausgang"
   }
@@ -403,10 +431,42 @@
   },
   {
    "von": "lab.l",
+   "nach": "dc_l.x"
+  },
+  {
+   "von": "dc_l.aus",
+   "nach": "dcneg_l.a"
+  },
+  {
+   "von": "lab.l",
+   "nach": "dcsum_l.a"
+  },
+  {
+   "von": "dcneg_l.aus",
+   "nach": "dcsum_l.b"
+  },
+  {
+   "von": "dcsum_l.aus",
    "nach": "aus.l"
   },
   {
    "von": "lab.r",
+   "nach": "dc_r.x"
+  },
+  {
+   "von": "dc_r.aus",
+   "nach": "dcneg_r.a"
+  },
+  {
+   "von": "lab.r",
+   "nach": "dcsum_r.a"
+  },
+  {
+   "von": "dcneg_r.aus",
+   "nach": "dcsum_r.b"
+  },
+  {
+   "von": "dcsum_r.aus",
    "nach": "aus.r"
   }
  ]

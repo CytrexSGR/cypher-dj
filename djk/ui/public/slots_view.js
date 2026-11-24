@@ -1,7 +1,7 @@
 // Places wiring (container core, lane U, U3): the four places come from GET /lage (`plaetze`, `container`) and change only with POST /plaetze.
 // The page keeps no layout: no browser storage, no channel report, no crossfader write, no deck output. A place switch asks still() first (an early
 // hint, the server judges again), posts, and renders from the next /lage. A refusal of the server is shown and never repeated.
-import { plaetzeAusLage, typVon, gruppeVon, erlaubt, still, wechselKoerper, zugKopf } from './slots.js';
+import { PLATZ_WORT, plaetzeAusLage, typVon, gruppeVon, erlaubt, still, wechselKoerper, zugKopf, liveZuText } from './slots.js';
 import { pfadVonPlatz } from './kanaele.js';
 import { ladeMini, speichereMini, ordneSpalten, wendeMiniAn, umschalten } from './platz_mini.js';
 import { DECKS } from './curves.js';
@@ -25,7 +25,7 @@ const typen = () => PLAETZE.map((n) => typVon(zustand.plaetze, n));
 export const aktuelleTypen = typen;
 
 // ---------- reading /lage ----------
-let lageNr = 0;
+let lageNr = 0, lageGelesen = false;   // lageGelesen: the banner of a closed live set waits for the first answer, so it never flashes while the page starts
 /** Reads GET /lage and shows its places. A stale answer (a newer read started meanwhile) is dropped. */
 export async function holeLage() {
   const nr = ++lageNr;
@@ -34,6 +34,7 @@ export async function holeLage() {
     if (nr !== lageNr) return;
     zustand.plaetze = plaetzeAusLage(j);
     zustand.container = Array.isArray(j.container) ? j.container : null;
+    lageGelesen = true;
     wendePlaetzeAn();
   } catch { /* the next event or the next click reads again */ }
 }
@@ -111,23 +112,37 @@ function kopfText(platz) {
 }
 // A place that holds a SEQ deck or a loop deck is parked by the server, not emptied: the still rule does not hold it (same exemption as POST /plaetze)
 const parkt = (platz) => ['seq', 'loops'].includes(typVon(zustand.plaetze, platz));
+// The key of the banner opens the live set through this hook (app.js wires the opener of live_view.js: it asks, reports its own result and re-reads); no import cycle
+let oeffnenHaken = null;
+export function setzeLiveOeffnen(f) { oeffnenHaken = typeof f === 'function' ? f : null; }
+function zeigeLiveZu(offen) {
+  const b = $('#live-zu');
+  if (!b) return;
+  const z = !lageGelesen ? null : live.gelesen ? liveZuText({ offen, anderesProjekt: live.anderes !== null }) : (live.lesefehler && !offen ? { text: 'The state of the live set could not be read.', knopf: 'OPEN LIVE SET' } : null);
+  b.hidden = !z;
+  if (!z) return;
+  $('[data-live-text]', b).textContent = z.text;
+  $('[data-live-oeffnen]', b).textContent = z.knopf;
+}
 export function zeigePlaetze() {
   zeigeLadeSperre();
   const offen = !!zustand.plaetze;
+  zeigeLiveZu(offen);
   for (const platz of PLAETZE) {
     const k = $(`.platzkopf[data-platz-kopf="${platz}"]`);
     if (!k) continue;
-    $('[data-platz-text]', k).textContent = kopfText(platz);
+    const kt = $('[data-platz-text]', k); kt.textContent = kopfText(platz); kt.title = kt.textContent;   // a cut head keeps its full text
     const s = still(zustand.plaetze, platz, zustand.regler), frei = s.still || parkt(platz);
-    $('[data-platz-hinweis]', k).textContent = !offen ? 'open the live set to place modules' : frei ? '' : `${s.text}: close it to switch`;
+    $('[data-platz-hinweis]', k).textContent = !offen ? '' : frei ? '' : `${s.text}: close it to switch`;
     const aktuell = typVon(zustand.plaetze, platz);
     for (const b of $$('[data-platz-typ]', k)) {
       const typ = b.dataset.platzTyp, an = offen && typ === aktuell;
       b.classList.toggle('an', an);
       b.setAttribute('aria-pressed', String(an));
       b.disabled = !offen || (!an && (!erlaubt(zustand.plaetze, platz, typ) || !frei));
-      b.title = !offen ? 'Open the live set first' : an ? `Place ${platz} shows ${typ}` : !erlaubt(zustand.plaetze, platz, typ) ? `${typ} is already shown in another place`
-        : !frei ? `Not silent: ${s.text}` : `Show ${typ} here`;
+      const wort = PLATZ_WORT[typ] ?? typ;
+      b.title = !offen ? 'Open the live set first' : an ? `Place ${platz} shows ${wort}` : !erlaubt(zustand.plaetze, platz, typ) ? `${wort} is already shown in another place`
+        : !frei ? `Not silent: ${s.text}` : `Show ${wort} here`;
     }
   }
 }
@@ -167,6 +182,12 @@ async function wechsle(platz, typ) {
   await holeLage();   // the head follows the next /lage, not the answer
 }
 export function bindePlaetze() {
+  const oeffnen = $('#live-zu [data-live-oeffnen]');
+  oeffnen?.addEventListener('click', async () => {
+    if (!oeffnenHaken || oeffnen.disabled) return;
+    oeffnen.disabled = true;
+    try { await oeffnenHaken(); } finally { oeffnen.disabled = false; }   // a refusal was reported by the opener; the banner stays and nothing is sent again
+  });
   for (const k of $$('.platzkopf')) {
     const platz = Number(k.dataset.platzKopf);
     for (const b of $$('[data-platz-typ]', k)) b.addEventListener('click', () => { if (!b.disabled) wechsle(platz, b.dataset.platzTyp); });

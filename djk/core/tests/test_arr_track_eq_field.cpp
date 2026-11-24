@@ -15,7 +15,9 @@ using namespace arrtest;
 int main() {
   static_assert(cdj::ARR_F_EQ0 == 10, "the three EQ fields are 10, 11, 12");
   static_assert(cdj::ARR_F_EQ0 > cdj::ARR_F_FILTER && cdj::ARR_F_EQ0 + 2 < cdj::ARR_FELDER, "the EQ fields exist and do not collide with the filter");
-  static_assert(cdj::ARR_FELDER == 21, "ARR_FELDER grew from 11 to 13 (KZ1), to 17 (K6, the sends to returns 5..8) and to 21 (K7, trim and kill)");
+  static_assert(cdj::ARR_FELDER == 24, "ARR_FELDER grew from 11 to 13 (KZ1), to 17 (K6), to 21 (K7) and to 24 (loop lane strip K1, the fx fields)");
+  static_assert(cdj::ARR_F_SEND4 == 13 && cdj::ARR_F_TRIM == 17 && cdj::ARR_F_KILL0 == 18 && cdj::ARR_F_FX0 == 21, "the real field map: sends 5..8 at 13..16, trim 17, kill 18..20, fx 21..23");
+  static_assert(cdj::ARR_F_EQ0 + 2 < cdj::ARR_F_SEND4 && cdj::ARR_F_FX0 + 2 == cdj::ARR_FELDER - 1, "the EQ fields sit below the sends, the fx fields are the last three");
   const char* baender[3] = {"tief", "mitte", "hoch"};
   for (const int n : {1, 2, 17, 32}) {
     for (int b = 0; b < 3; ++b) {

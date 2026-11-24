@@ -35,7 +35,7 @@ test('stage window: the ids the test relies on', () => {
   assert.deepEqual(p.spuren[0].inserts.map((i) => [i.id, i.art]), [['i1', 'bk'], ['i2', 'utility'], ['i3', 'host']]);
 });
 
-test('stage window of a Baukasten stage: full page, ON/earlier/later/remove, no close button, no drag layer', opt, async (t) => {
+test('stage window of a Cypher Modular stage: full page, ON/earlier/later/remove, no close button, no drag layer', opt, async (t) => {
   const s = await fenster(t, '#geraet=ins:i1');
   assert.equal(await zaehle(s, '#geraet-fenster .w-fenster.w-fenster-voll'), 1);
   assert.equal(await zaehle(s, '.w-fenster-zu'), 0, 'no close button');

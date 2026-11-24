@@ -64,7 +64,7 @@
 #   --instanz       Prüfinstanz (ROADMAP Z2): Units, JACK-Namen, Pfade mit -<i>, Ports +1000·k. Vorgabe
 #                   $CYPHERDJ_INSTANZ, sonst leer (Betrieb).
 #                   Graph folder (devices, recipes, panels, categories; steps 2b2 to 2d): a test instance installs only files that are absent and
-#                   never overwrites a differing one (note on stderr), because that folder is the production folder; the kern has no override.
+#                   never overwrites a differing one (note on stderr); the folder is the instance's own (kind geraete), handed to the kern as CYPHERDJ_BK_ORDNER.
 #   --journal       Journal mode of the leitstand (lean operating journal, INTERFACES §15): voll journals every message, schlank leaves out
 #                   what carries no news. Default: schlank for the production instance (no --instanz), voll for a test instance. The option
 #                   wins over the default AND over the key `journal` of leitstand.toml (it is passed as --journal to the leitstand). Another
@@ -80,15 +80,28 @@ NODE=$(orte_node)
 # Persönliche Pfade (Musik, Mediathek, Samples ...): Vorlage djk/config/umgebung.env.beispiel, Datei außerhalb des Repos.
 # Schon gesetzte CYPHERDJ_*-Variablen des Aufrufers gewinnen gegen die Datei (Tests, Prüfinstanzen).
 UMG=${CYPHERDJ_UMGEBUNG:-$HOME/.config/cypherdj/umgebung.env}   # CYPHERDJ_UMGEBUNG: andere Datei (Tests)
+# The instance is needed before anything is resolved (the storage table answers per instance): look at --instanz first, the option loop below parses it for real.
+I_VOR=${CYPHERDJ_INSTANZ:-}; _av=("$@")
+for ((_k = 0; _k < ${#_av[@]}; _k++)); do [ "${_av[_k]}" = --instanz ] && I_VOR=${_av[_k + 1]-}; done
+[[ "$I_VOR" =~ ^[a-i]$ ]] || I_VOR=""   # anything else is refused further down, with its message
+ABLAGE_PY() { PYTHONPATH="$DJK${PYTHONPATH:+:$PYTHONPATH}" PYTHONSAFEPATH=1 CYPHERDJ_INSTANZ=$I_VOR python3 -m ablage "$@"; }
 if [ -f "$UMG" ]; then
   _gesetzt=$(export -p | grep '^declare -x CYPHERDJ_')
   set -a; . "$UMG"; set +a
   [ -z "$_gesetzt" ] || eval "$_gesetzt"
+  # A test instance never takes a STORE variable (mediathek, catalogue, analysis, kit/graph folder ... every name the storage table lists) from the owner's
+  # umgebung.env: that would point it at the owner's data. A variable the caller set itself still wins (tests, tour runner). The owner (no instance) is unchanged.
+  if [ -n "$I_VOR" ]; then
+    _eigene=$(sed -n 's/^declare -x \(CYPHERDJ_[A-Za-z0-9_]*\)=.*/\1/p' <<<"$_gesetzt")
+    UMG_STORE=$(ABLAGE_PY envnamen) || { echo "djk-start: the storage table could not be read (python3 -m ablage envnamen). Nothing started." >&2; exit 2; }
+    UMG_STORE="$UMG_STORE CYPHERDJ_KATALOG CYPHERDJ_KORREKTUREN CYPHERDJ_BIBLIOTHEK_CACHE"   # read by this script / the page beside the table
+    for _n in $UMG_STORE; do grep -qx "$_n" <<<"$_eigene" || unset "$_n"; done
+  fi
 fi
 # The storage places come from the table djk/config/ablage.json (ABLAGE_<ART>=...). The umgebung.env line above stays literal: it is read
 # before the table can be asked, and CYPHERDJ_HEIM may be set inside it. PYTHONSAFEPATH keeps the working directory out of the module
 # path (djk/starter/storage.py must never answer for the package djk/ablage).
-ABLAGE_AUS=$(PYTHONPATH="$DJK${PYTHONPATH:+:$PYTHONPATH}" PYTHONSAFEPATH=1 python3 -m ablage shell) \
+ABLAGE_AUS=$(ABLAGE_PY shell) \
   || { echo "djk-start: the storage table could not be read (python3 -m ablage shell). Nothing started." >&2; exit 2; }
 eval "$ABLAGE_AUS"
 
@@ -332,6 +345,19 @@ echo "Cores: $KERN_TXT (CPUs $KERN_CPUS), stems CPUs $STEMS_CPUS" >&2
 VARS=(--var "MASTER=$KMASTER" --var "CUE_ARG=$CUE_ARG" --var "TON_FREI=$TF_ARG" --var "KERN_ARGS=$KERN_ARGS" --var "KERN_CPUS=$KERN_CPUS" --var "STEMS_CPUS=$STEMS_CPUS"
       --var "NODE=$NODE" --var "KERN_CLIENT=$KERN_CLIENT" --var "LEITSTAND_ARGS=$LS_ARGS" --var "OBERFLAECHE_ARGS=$OF_ARGS")
 
+# The page unit reads umgebung.env itself (EnvironmentFile of the template, which beats --setenv): a test instance gets a copy without the store variables,
+# so that its own folders win; the other lines (python, music, ...) stay. The owner's unit keeps the original file, byte for byte.
+UMG_UNIT=""
+if [ -n "$I" ] && [ "$MODUS" = start ]; then
+  UMG_UNIT=/dev/shm/cypherdj-$I/umgebung.env; mkdir -p "/dev/shm/cypherdj-$I"
+  if [ -f "$UMG" ]; then
+    _re=$(printf '%s\n' $UMG_STORE | paste -sd'|')
+    grep -Ev "^[[:space:]]*(export[[:space:]]+)?($_re)=" "$UMG" > "$UMG_UNIT" || : > "$UMG_UNIT"
+  else
+    : > "$UMG_UNIT"
+  fi
+fi
+
 if [ "$MODUS" = vorlagen ]; then
   mkdir -p "$VORLAGEN_NACH"
   for u in kern notbahn leitstand; do
@@ -354,29 +380,38 @@ if [ "$STRUDEL" = 1 ]; then
   # a unit does not inherit the caller's environment: always hand it the import path, so import and read grant name the same folder
   PAKETE_ENV=(--setenv=STRUDEL_PAKETE="${STRUDEL_PAKETE:-$STRUDEL_ORDNER/packages}")
 fi
-command -v pactl >/dev/null 2>&1 || { echo "djk-start: missing program pactl (Ubuntu package pulseaudio-utils; sudo apt install pulseaudio-utils)" >&2; exit 2; }
 for d in "$DJK/units/cypherdj-kern.service" "$DJK/units/cypherdj-notbahn.service" "$DJK/units/cypherdj-leitstand.service"; do
   [ -f "$d" ] || { echo "djk-start: missing unit $d" >&2; exit 2; }
 done
-pw-link -o >/dev/null 2>&1 || { echo "djk-start: PipeWire not reachable (pw-link failed)" >&2; exit 2; }
 
-# 2a0 Real-time limits as the user services will get them. The units run under the user manager, which keeps the limits it started with:
-# joining the group pipewire is not enough until the manager is restarted. A warning only, the studio still starts (without real-time priority).
-rt_probe() {
-  local out m r budget cfg
-  command -v systemd-run >/dev/null 2>&1 || return 0
-  out=$(timeout 15 systemd-run --user --pipe --quiet bash -c 'ulimit -l; ulimit -r' 2>/dev/null) || return 0
-  m=$(sed -n 1p <<<"$out"); r=$(sed -n 2p <<<"$out")
-  cfg=${KERN_KONFIG:-$DJK/config/kern.toml}
-  budget=$(sed -n 's/^speicher_budget_mib *= *\([0-9][0-9]*\).*/\1/p' "$cfg" 2>/dev/null | head -n 1)
-  budget=${budget:-3800}
-  [[ "$m" =~ ^([0-9]+|unlimited)$ && "$r" =~ ^([0-9]+|unlimited)$ ]] || return 0
-  if [ "$r" = 0 ] || { [ "$m" != unlimited ] && [ "$m" -lt $((budget * 1024)) ]; }; then
-    echo "djk-start: warning: the user services get memlock ${m} KiB and rtprio ${r}, but the core needs memlock of at least $((budget * 1024)) KiB (its budget of ${budget} MiB) and rtprio above 0; it will run without real-time priority and decks may refuse to load." >&2
-    echo "  Fix: sudo usermod -aG pipewire \"\$USER\", then sudo systemctl restart user@\$(id -u) (or reboot). Check: systemd-run --user --pipe --quiet bash -c 'ulimit -l; ulimit -r' (4194304 and 95)." >&2
+# 2a System checks, shared with djk-doctor (systemlage.sh prints one tab separated line per check: STATUS ID TEXT FIX). Fails closed: a missing or
+# broken script, a non-zero exit or fewer than the six expected lines stops the start with 2; the pactl, PipeWire and limit checks are never skipped silently.
+# pactl and PipeWire problems stop the start (2); a problem with the real-time limits is a warning only, the studio still starts (without real-time
+# priority). The user services keep the limits their manager started with: joining the group pipewire is not enough until it is restarted.
+# A problem with the systemd user session stays silent here, as the old limits probe did (the units then fail with their own message).
+systemlage_pruefen() {
+  local skript="$HIER/systemlage.sh" aus rc id status text fix
+  local -A ST=() TX=() FX=()
+  [ -f "$skript" ] || { echo "djk-start: system check unavailable: $skript is missing" >&2; return 2; }
+  aus=$(bash "$skript" --ohne-senke --kern-konfig "${KERN_KONFIG:-$DJK/config/kern.toml}" 2>/dev/null); rc=$?
+  [ "$rc" = 0 ] || { echo "djk-start: system check unavailable: $skript exited with $rc" >&2; return 2; }
+  while IFS=$'\t' read -r status id text fix; do
+    [ -n "$id" ] || continue
+    case "$status" in OK|NOTE|PROBLEM) ;; *) echo "djk-start: system check unavailable: $skript gave the unknown status '$status' for $id" >&2; return 2;; esac
+    ST[$id]=$status; TX[$id]=$text; FX[$id]=$fix
+  done <<<"$aus"
+  for id in systemd_sitzung echtzeit pactl pipewire jack senke; do
+    [ -n "${ST[$id]:-}" ] || { echo "djk-start: system check unavailable: $skript gave no answer for $id" >&2; return 2; }
+  done
+  [ "${ST[pactl]}" != PROBLEM ] || { echo "djk-start: missing program pactl (Ubuntu package pulseaudio-utils; sudo apt install pulseaudio-utils)" >&2; return 2; }
+  [ "${ST[pipewire]}" != PROBLEM ] || { echo "djk-start: PipeWire not reachable (pw-link failed)" >&2; return 2; }
+  if [ "${ST[echtzeit]}" = PROBLEM ]; then
+    echo "djk-start: warning: ${TX[echtzeit]}" >&2
+    echo "  Fix: ${FX[echtzeit]}" >&2
   fi
+  return 0
 }
-[ "$MODUS" = vorlagen ] || rt_probe
+systemlage_pruefen || exit 2
 
 # 2b Shipped graphs the product relies on (arr-bk: the page button "+ Fx" and the Hand text name fx-delay-sync): copy them into the graph folder
 # of the kern when missing. Never overwrites a file, and only this list, so a graph deleted on purpose from the folder stays deleted.
@@ -386,10 +421,11 @@ for g in fx-delay-sync; do
     mkdir -p "$BK_ORDNER" && cp -- "$DJK/instruments/modular_dsp/demos/$g.json" "$BK_ORDNER/$g.json" && echo "djk-start: installed the shipped graph $g into $BK_ORDNER"
   fi
 done
-# 2b2 to 2d install shipped files into the graph folder of the kern. That folder is the production folder whatever the instance (the kern has no
-# override, INTERFACES.md), and $DJK is the checkout this script runs from, possibly an older branch. So the production instance (I empty)
+# 2b2 to 2d install shipped files into the graph folder of the kern. That folder is the production folder for the production instance; a test instance
+# has its own (the storage table, kind geraete: /dev/shm/cypherdj-<i>/geraete or CYPHERDJ_BK_ORDNER), which the kern reads through CYPHERDJ_BK_ORDNER, set
+# on every unit of the instance below. $DJK is the checkout this script runs from, possibly an older branch. So the production instance (I empty)
 # copies a file when it is absent or differs (cmp -s), and a test instance (I set) copies only when it is absent and leaves a differing file alone,
-# with one note on stderr. A test start therefore never replaces what the live studio has installed.
+# with one note on stderr (a folder handed in by CYPHERDJ_BK_ORDNER may hold files of a studio). A test start therefore never replaces what a studio has installed.
 # installiere SOURCE TARGET TEXT: TEXT names what is announced on a copy ("installed the <TEXT>").
 installiere() {
   local quelle=$1 ziel=$2 text=$3
@@ -548,10 +584,10 @@ TOT=""
 w() { [ -n "$TOT" ] && echo "$TOT: $1" || echo "$1"; }
 starte() {  # $1 Unit, $2 Unit-Datei, $3 Drop-in (oder leer)
   local args
-  mapfile -t args < <(python3 "$HIER/unit.py" --unit "$2" ${3:+--dropin "$3"} --djk "$DJK" "${VARS[@]}") \
+  mapfile -t args < <(python3 "$HIER/unit.py" --unit "$2" ${3:+--dropin "$3"} --djk "$DJK" ${UMG_UNIT:+--umgebungsdatei "$UMG_UNIT"} "${VARS[@]}") \
     || abbruch "cannot build unit $1" ""
   [ ${#args[@]} -gt 2 ] || abbruch "cannot build unit $1" ""
-  systemd-run --user --quiet --collect --unit="$1" ${I:+--setenv=CYPHERDJ_INSTANZ=$I} ${KIT_ORDNER:+--setenv=CYPHERDJ_KIT_ORDNER=$KIT_ORDNER} "${args[@]}" 2>&1 \
+  systemd-run --user --quiet --collect --unit="$1" ${I:+--setenv=CYPHERDJ_INSTANZ=$I} ${KIT_ORDNER:+--setenv=CYPHERDJ_KIT_ORDNER=$KIT_ORDNER} ${I:+--setenv=CYPHERDJ_BK_ORDNER=$ABLAGE_GERAETE} "${args[@]}" 2>&1 \
     | sed 's/^/    /' >&2
   [ "${PIPESTATUS[0]}" = 0 ] || abbruch "unit $1 failed to start" "$1"
 }

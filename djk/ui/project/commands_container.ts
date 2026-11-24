@@ -42,11 +42,18 @@ function gruppeFuer(p: Projekt, platz: number, typ: 'strudel' | 'seq' | 'loops' 
   }
   if (typ === 'seq') {
     if (aktuell.typ === 'seq') ab('seq_belegt', `place ${platz} already holds a SEQ deck`);
-    return legeSeqGruppeAn(p, platz, ctx);
+    // a parked SEQ deck (no place holds it) comes back first, the earliest one first: parking is not deleting,
+    // so the patterns in it stay reachable and orphans do not pile up
+    const parkt = (p.gruppen ?? []).find((g) => g.seq !== undefined && !g.ausgang && platzVonGruppe(p, g.id) === null);
+    return parkt ?? legeSeqGruppeAn(p, platz, ctx);
   }
   // loops: deck identity 1, then 2; a place that already holds a deck, or both decks existing (placed or parked): refused
   if (aktuell.typ === 'loops') ab('platz_belegt', `place ${platz} already holds a loop deck`);
-  const deck = ([1, 2] as const).find((n) => loopDeckGruppe(p, n) === null) ?? ab('platz_belegt', 'both loop decks exist');
+  // a parked deck (no place holds it) comes back first, lowest identity first: parking is not deleting,
+  // so the loops in it stay reachable and the two decks never pile up
+  for (const n of [1, 2] as const) { const parkt = loopDeckGruppe(p, n); if (parkt && platzVonGruppe(p, parkt.id) === null) return parkt; }
+  const deck = ([1, 2] as const).find((n) => loopDeckGruppe(p, n) === null)
+    ?? ab('platz_belegt', 'both loop decks are shown in places; switch one of those places away first (it is parked, not deleted)');
   return legeLoopdeckAn(p, deck, 'takt', ctx);
 }
 

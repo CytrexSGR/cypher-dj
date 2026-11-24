@@ -51,11 +51,22 @@ def test_regler_listen_haben_die_gepinnte_groesse():
 
 
 # --- parser of the old strips in the archive tag (evidence for "zug and player cover the old deck strips")
+def _tag_holen():
+    """A CI checkout is `--depth 1` without tags: fetch the archive tag (one commit) from origin when it is not there yet.
+    The CI workflow fetches it itself with its token; this covers every other shallow clone that can reach origin."""
+    if subprocess.run(["git", "rev-parse", "-q", "--verify", f"refs/tags/{TAG}^{{commit}}"], cwd=WURZEL,
+                      capture_output=True).returncode == 0:
+        return
+    subprocess.run(["git", "fetch", "-q", "--depth", "1", "origin", f"refs/tags/{TAG}:refs/tags/{TAG}"], cwd=WURZEL,
+                   capture_output=True, timeout=120)
+
+
 def _alt(rel):
+    _tag_holen()
     try:
         return pruefe_namenslisten.Quelle(rev=TAG).lies(rel)
     except pruefe_namenslisten.ParserFehler as fehler:
-        pytest.fail(f"archive tag {TAG} missing ({fehler})")
+        pytest.fail(f"archive tag {TAG} missing and not fetchable from origin ({fehler})")
 
 
 def _alte_streifen():

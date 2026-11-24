@@ -1,6 +1,7 @@
 // SEQ deck v2 (spec 2026-11-14-seq-deck-design, sections 2 to 4): the deck marker of a group, the view descriptor of a MIDI clip, the reader
 // conversion of the v1 document and the helpers that list the patterns of a deck.
-// A SEQ deck is a top group of the live container (`Gruppe.seq = {schema: 2}`; its place is `Projekt.plaetze`); a pattern is an instrument track that plays into the group,
+// A SEQ deck is a top group of the live container (`Gruppe.seq = {schema: 2}`; its place is `Projekt.plaetze`); a pattern is an instrument track that plays
+// into the group,
 // with one MIDI clip; the lanes are a view on that clip's notes and envelopes, described by `MidiClip.seq` (`SeqSicht`). The descriptor holds
 // no music. This file holds the types and the pure checks of one marker and one descriptor (shape and limits, no project knowledge); the checks
 // that need the project (live flag, places, nesting) are in model.ts.

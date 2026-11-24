@@ -68,6 +68,7 @@ export function strom() {
   const q = new EventSource('/strom');
   q.onmessage = (m) => {
     const { a, f } = JSON.parse(m.data);
+    if (typeof window.dispatchEvent === 'function') window.dispatchEvent(new CustomEvent('djk:ereignis', { detail: { a, f } }));   // the browser component listens here (no second EventSource)
     try { produktion?.ereignis(a, f); } catch (e) { console.error('Production view:', e); }   // D1 V1: proj, /zustand/arr; ein Fehler dort hält die DJ-Anzeige nicht an
     try { werkbank?.ereignis(a, f); } catch (e) { console.error('Workbench view:', e); }   // like the line above: an error there does not stop the DJ display
     try { tracker?.ereignis(a, f); } catch (e) { console.error('Tracker view:', e); }   // like the lines above

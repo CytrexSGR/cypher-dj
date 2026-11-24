@@ -555,6 +555,8 @@ def spur_regler_listen(q: Quelle) -> tuple[int, dict[str, list[str]]]:
     cpp_text = q.lies("djk/core/signalbox/src/controls.cpp")
     if '"spur/%d/kill/%s"' in cpp_text:   # container core K7: the three kill rows come from one loop over {tief, mitte, hoch}
         felder += [f"kill/{b}" for b in re.findall(r'\{"(tief|mitte|hoch)", Rolle::spur_kill_', cpp_text)]
+    if '"spur/%d/fx/%d"' in cpp_text:   # loop lane strip K1: the three FX assign switches come from one loop over u = 0..2
+        felder += [f"fx/{u}" for u in re.findall(r"Rolle::spur_fx_(\d)\b", cpp_text)]
     if not felder:
         raise ParserFehler("controls.cpp: kein Pfad spur/%d/…, Parser blind oder Quelle umgebaut")
     spec = q.lies("docs/architecture/INTERFACES.md")

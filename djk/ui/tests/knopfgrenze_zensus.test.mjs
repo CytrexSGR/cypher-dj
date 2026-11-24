@@ -46,6 +46,7 @@ const ERLAUBT = [
   { datei: '', fragment: '1..32 characters', grund: 'name length of a graph, kit or group' },
   { datei: '', fragment: '_ -, 1..32)', grund: 'graph name length' },
   { datei: '', fragment: '[a-z0-9_-] 1..32', grund: 'kit name length (tool text)' },
+  { datei: 'hand/hand.ts', fragment: '_ and -, 1..32)', grund: 'kit name length (tool text of proj_kits)' },
   { datei: '', fragment: 'text 1..32', grund: 'group name length (tool text)' },
   // knob 32 as one row of a table that goes on to knob 64 (the tables are pinned to 64 by their own tests)
   { datei: 'ui/public/production/lanes.js', fragment: "'geraet.k32'", grund: 'row of the knob table k1..k64' },

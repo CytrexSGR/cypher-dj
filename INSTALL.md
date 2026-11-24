@@ -7,7 +7,8 @@ only run on the development machine. Please report what breaks.
 
 ## From the package
 
-On Ubuntu 24.04 (x86_64) the .deb is the short way. Download it from the [releases page](https://github.com/CytrexSGR/cypher-dj/releases), then:
+On Ubuntu 24.04 and 26.04 (x86_64) the .deb is the short way (the same package for both; on 26.04 the package
+install, start and demo were run in a fresh VM on 24 November 2026). Download it from the [releases page](https://github.com/CytrexSGR/cypher-dj/releases), then:
 
 ```sh
 sudo apt install ./cypher-dj_<version>_amd64.deb
@@ -59,7 +60,7 @@ systemd-run --user --pipe --quiet bash -c 'ulimit -l; ulimit -r'    # should pri
 
 Without it, decks refuse to load with `budget_speicher: mlock Cannot allocate memory`.
 
-**Rust.** The core links a Rust library (Cypher Hall, Cypher Komp, the RB-338 voice, the EQ and saturation inserts and the
+**Rust.** The core links a Rust library (Cypher Hall, Cypher Comp, the RB-338 voice, the EQ and saturation inserts and the
 Cypher Modular graph engine, all under `djk/instruments/`), so the build needs `cargo` and `rustc`: `djk/core/CMakeLists.txt`
 stops without `cargo`. Install it with rustup, then load it into the current shell:
 

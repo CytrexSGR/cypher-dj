@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 
 SKRIPT = Path(__file__).resolve().parents[3] / "start" / "djk-insert"
-INST = os.environ.get("CYPHERDJ_INSTANZ") or "b"
+from instance_choice import INST, busy_skip  # noqa: E402  (CYPHERDJ_TEST_INSTANZ or the first free letter, busy -> SKIP)
 KERN = f"cypherdj-kern-{INST}"
 
 
@@ -69,7 +69,7 @@ def _lauf(env, *args):
 
 def _shm():
     shm = Path(f"/dev/shm/cypherdj-{INST}")
-    assert not shm.exists(), f"Instanz {INST} ist belegt"
+    busy_skip()
     shm.mkdir()
     return shm
 

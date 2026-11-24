@@ -68,19 +68,19 @@ test('seqAnsicht: no deck on the place, no project, or a deck of another place i
   assert.deepEqual(a.folgen.map((f) => f.clip_id), ['c1', 'c2']);
 });
 
-test('deckAnsicht: a kit pattern and a Baukasten pattern are two blocks with their lanes; a 1/32 lane has 32 cells per bar', () => {
+test('deckAnsicht: a kit pattern and a Cypher Modular pattern are two blocks with their lanes; a 1/32 lane has 32 cells per bar', () => {
   const a = deckAnsicht(projekt(), 2, INFOS);
   assert.equal(a.folgen.length, 2);
   const [kit, bk] = a.folgen;
   assert.deepEqual([kit.name, kit.geraet_text, kit.stumm, kit.editierbar], ['Drums', 'Kit · 909', false, true]);
-  assert.deepEqual(bk.geraet_text, 'Baukasten · bassmusik');
+  assert.deepEqual(bk.geraet_text, 'Cypher Modular · bassmusik');
   assert.deepEqual(kit.sicht.zeilen.map((z) => [z.id, z.name, z.abgeleitet]), [['t36', 'Kick', true], ['t38', 'Snare', true], ['t42', 'F#1', true]],
     'three derived trigger lanes in pitch order, named by the kit sounds, else by the note');
   assert.ok(kit.sicht.zeilen.every((z) => z.zellen.length === 16), '1/16 of a 1-bar pattern: 16 cells');
   assert.deepEqual(bk.sicht.zeilen.map((z) => z.id), ['noten', 'vel', 'cutoff']);
   assert.equal(bk.sicht.zeilen[0].zellen.length, 32, 'a 1/32 lane of a 4-beat pattern: 32 cells (per bar)');
   assert.equal(bk.sicht.zeilen[0].zellen[0].an, true);
-  assert.equal(a.baukasten, 1, 'the deck head counts the Baukasten patterns');
+  assert.equal(a.baukasten, 1, 'the deck head counts the Cypher Modular patterns');
   assert.equal(a.laenge_beats, 4);
 });
 
@@ -324,9 +324,9 @@ test('ladeInfos asks GET /seq/geraet once per device, keeps the answer, and a fa
   leereInfoCache();
 });
 
-test('the instrument picker offers the Baukasten instruments, the kits and the RB-338', () => {
+test('the instrument picker offers the Cypher Modular instruments, the kits and the RB-338', () => {
   const w = geraetWahl([{ name: 'bassmusik', art: 'instrument' }, { name: 'hall', art: 'effect' }, { name: 'lead', art: 'instrument' }], [{ name: '909', klaenge: 12 }]);
-  assert.deepEqual(w.map((e) => [e.gruppe, e.text]), [['Baukasten', 'bassmusik'], ['Baukasten', 'lead'], ['Kit', '909 (12)'], ['RB-338', 'RB-338']]);   // own group name: the menu's type group "Other" must not clash with it
+  assert.deepEqual(w.map((e) => [e.gruppe, e.text]), [['Cypher Modular', 'bassmusik'], ['Cypher Modular', 'lead'], ['Kit', '909 (12)'], ['RB-338', 'RB-338']]);   // own group name: the menu's type group "Other" must not clash with it
   assert.deepEqual(w[0].geraet, { art: 'intern', name: 'bk', graph: 'bassmusik' });
   assert.deepEqual(w[2].geraet, { art: 'intern', name: 'kit', kit: '909' });
   assert.deepEqual(w[3].geraet, { art: 'intern', name: 'rb338', parameter: {} });
@@ -342,7 +342,7 @@ test('the instrument picker leaves out graphs with latency; a pattern that has o
 });
 
 // ---------- instrument exchange (review focus 4) ----------
-test('wechselBefehle: Baukasten to another Baukasten graph keeps the knob lanes: the plain spur_aendern, no question', () => {
+test('wechselBefehle: Cypher Modular to another Cypher Modular graph keeps the knob lanes: the plain spur_aendern, no question', () => {
   const bk = bkSpur(), neu = { art: 'intern', name: 'bk', graph: 'lead' };
   const w = wechselBefehle(bk, bk.clips[0], neu, INFO_BK);
   assert.deepEqual(w, { befehle: [{ befehl: 'spur_aendern', spur_id: 's2', geraet: neu }], frage: null, meldung: null });
@@ -367,7 +367,7 @@ test('wechselBefehle: without device envelopes the exchange is plain; the same i
   const bk = bkSpur(); bk.automation = [{ id: 'l1', ziel: 'geraet.k2', punkte: [] }];
   const m = wechselBefehle(bk, bk.clips[0], kit, INFO_BK);
   assert.deepEqual(m.befehle, []); assert.equal(m.meldung, 'This track has an automation lane on a device knob. Remove it in PRODUCTION first.');
-  assert.equal(wechselBefehle(bk, bk.clips[0], { art: 'intern', name: 'bk', graph: 'lead' }, INFO_BK).meldung, null, 'a Baukasten lane fits another graph');
+  assert.equal(wechselBefehle(bk, bk.clips[0], { art: 'intern', name: 'bk', graph: 'lead' }, INFO_BK).meldung, null, 'a Cypher Modular lane fits another graph');
   const rbSpur = { ...bkSpur(), geraet: rb };
   rbSpur.clips[0].huellkurven = [{ ziel: 'geraet.cutoff', punkte: [{ beat: 0, wert: 0 }] }];
   assert.equal(wechselBefehle(rbSpur, rbSpur.clips[0], rb, { art: 'rb338', regler: [], klaenge: [] }).befehle.length, 0);
@@ -456,9 +456,9 @@ test('the node of a place draws a block per pattern: head, ruler and lanes with 
   assert.equal(bloecke[1].querySelectorAll('.sq-zeile')[0].querySelectorAll('.sq-zelle').length, 32, 'a 1/32 lane: 32 cells in one bar');
   assert.equal(bloecke[1].querySelectorAll('.sq-zeile')[2].dataset.art, 'werte');
   assert.ok(bloecke[1].querySelector('.sq-lineal'), 'the ruler');
-  assert.match(k.querySelector('.sq-folgenkopf [data-sq-geraet]').textContent, /Baukasten|Kit/);
+  assert.match(k.querySelector('.sq-folgenkopf [data-sq-geraet]').textContent, /Cypher Modular|Kit/);
   assert.equal(k.querySelector('.sq-zahl').textContent, '2 patterns');
-  assert.match(k.querySelector('.sq-baukasten').textContent, /1 Baukasten/);
+  assert.match(k.querySelector('.sq-baukasten').textContent, /1 Cypher Modular/);
   assert.equal(k.querySelector('.sq-leer').hidden, true); assert.equal(k.querySelector('.sq-feld').hidden, false);
   await new Promise((r) => setTimeout(r, 20));
 });
@@ -1197,7 +1197,7 @@ test('the DOM: the button at the deck head makes the place large and small again
   k.hidden = false; seqAnsichtModul.ordneSeqStudio(['track', 'seq', 'track', 'track']);   // as slots.js wendeAn and the layout leave a SEQ place that shows
   assert.ok(knopfGross, 'the button'); assert.equal(knopfGross.textContent, '⤢'); assert.equal(knopfGross.title, 'Large view');
   const rechts = k.querySelector('.sq-rechts').elemente;
-  assert.ok(rechts.indexOf(knopfGross) < rechts.indexOf(k.querySelector('.sq-breite')), 'left of the width selector');
+  assert.ok(rechts.indexOf(knopfGross) > rechts.indexOf(k.querySelector('.sq-breite')), 'right of the width selector (the head row was rebuilt for 1366 px, 620bfa211)');
   assert.equal(k.classList.contains('gross'), false);
   knopfGross.dispatch('click', {});
   assert.equal(k.classList.contains('gross'), true); assert.equal(knopfGross.getAttribute('aria-pressed'), 'true');
@@ -1538,7 +1538,7 @@ test('the row is not a .seqplatz node and not moved by the place layout; it has 
   const css = lies('style.css');
   assert.doesNotMatch(css, /\n#seq-szenen \{|#kopf > #seq-szenen \{[^}]*position: (fixed|absolute);/, 'no fixed row on top of the panels');
   assert.match(css, /#kopf > #seq-szenen \{[^}]*flex-wrap: wrap;[^}]*max-width: 100%;/, 'header box, wraps inside itself, never wider than the window');
-  assert.match(css, /body\.werkbank:not\(\.djfx-auf\) #kopf > #seq-szenen \{ display: none; \}/, 'folded away with ROUTING in the STUDIO view');
+  assert.match(css, /body\.werkbank:not\(\.djfx-auf\) #kopf > #seq-szenen(, [^{]+)? \{ display: none; \}/, 'folded away with ROUTING in the STUDIO view');
   assert.match(css, /#seq-szenen \.szene, #seq-szenen \.szene-sichern \{[^}]*height: 28px;/, 'buttons at least 28 px high');
   assert.match(css, /#seq-szenen \.szene\.wartet \{[^}]*animation:/); assert.match(css, /#seq-szenen \.szene\.aktiv \{/);
   assert.match(css, /@keyframes szene-blink/);
@@ -1740,7 +1740,7 @@ test('per-project state: the state of project A survives a visit to B and back, 
 test('hide unused: only a kit pattern has the toggle; it hides the trigger lanes that hold no note and counts them in its label', async () => {
   await saubere();
   await zeige(kitProjekt());
-  assert.equal(folge(1).querySelector('[data-sq-unbenutzt]'), null, 'a Baukasten pattern has none');
+  assert.equal(folge(1).querySelector('[data-sq-unbenutzt]'), null, 'a Cypher Modular pattern has none');
   const u = unbenutztKnopf();
   assert.ok(u); assert.equal(u.textContent, 'hide unused');
   assert.deepEqual(zeilenIds(0), ['t36', 't38', 't42', 't46']);

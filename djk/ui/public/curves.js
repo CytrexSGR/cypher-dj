@@ -26,7 +26,7 @@ const DECK_TASTEN = ['play', 'cue'];
 const DECK_ZUWEISUNG = ['xseite'];  // Crossfader-Seite A/THRU/B, §1.5 „nur Hand“ (2026-09-27)
 export const SPUREN = Array.from({ length: 32 }, (_, i) => i + 1);   // D1 K1: Spur-Regler des Arrangements (§1.5 spur/<n>/*)
 const SPUR_REGLER = ['fader', 'pan', 'mute', 'solo'];
-const SPUR_ZIELE = [...SPUR_REGLER, 'filter', 'eq/tief', 'eq/mitte', 'eq/hoch', 'pfl', 'trim', 'kill/tief', 'kill/mitte', 'kill/hoch'];   // loop deck K7a: spur/<n>/filter exists for tracks only, groups have no filter row; container core K7: pfl, trim and kill rows of a track
+const SPUR_ZIELE = [...SPUR_REGLER, 'filter', 'eq/tief', 'eq/mitte', 'eq/hoch', 'pfl', 'trim', 'kill/tief', 'kill/mitte', 'kill/hoch', 'fx/1', 'fx/2', 'fx/3'];   // loop deck K7a: spur/<n>/filter exists for tracks only, groups have no filter row; container core K7: pfl, trim and kill rows of a track
 // S5r (§1.5): graph knobs <kanal>/bk/<1..64> auf den Kanälen, die einen Baukasten-Graphen annehmen (nicht erz/4, erz/8)
 export const BK_KANAELE = bkKanaele();
 export const BK_SEND_KANAELE = ['fx/3', 'fx/4'];   // S14: graph knobs of the send returns (global controls fx/<n>/bk/1..64)
@@ -185,6 +185,7 @@ export function vorgabe(pfad) {
 }
 
 export function formatiere(pfad, w) {
+  if (pfad.endsWith('/trim_auto')) return w === undefined || w === null || Number.isNaN(w) || Math.abs(w) < 0.05 ? '' : `AUTO ${w >= 0.05 ? '+' : ''}${w.toFixed(1).replace('-', '−')} dB`;   // read-only auto gain of the player branch
   const a = art(pfad);
   if (w === undefined || w === null || Number.isNaN(w)) return '–';
   if (a === 'kill') return w >= 0.5 ? 'KILL' : '';

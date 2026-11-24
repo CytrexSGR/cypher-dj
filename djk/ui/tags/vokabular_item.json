@@ -1,0 +1,7 @@
+{
+  "_zweck": "Additions of the item vocabulary to the preset vocabulary (presets/vokabular.json, read only, checksum-guarded). typ words = typ_katalog + the preset families; charakter, genre and einsatz are the preset lists.",
+  "version": 1,
+  "typ_katalog": ["bass", "chord", "clap", "crash", "cymbal", "fill", "fx", "hihat", "kick", "lead", "organ", "pad", "perc", "piano", "ride", "rim", "snare", "synth", "tom", "vocal"],
+  "charakter_gemessen": ["bright", "dark", "warm", "deep", "airy", "punchy", "tight", "wide", "mono"],
+  "tempo": { "min": 40, "max": 220 }
+}

@@ -27,7 +27,7 @@ export { folgeEditierbar };
 // The head text of the instrument of a pattern.
 export function geraetText(spur) {
   const g = spur?.geraet;
-  if (g?.art === 'intern') return g.name === 'bk' ? `Baukasten · ${g.graph}` : g.name === 'kit' ? `Kit · ${g.kit}` : 'RB-338';
+  if (g?.art === 'intern') return g.name === 'bk' ? `Cypher Modular · ${g.graph}` : g.name === 'kit' ? `Kit · ${g.kit}` : 'RB-338';
   if (g?.art === 'wirt') return g.plugin?.name ?? 'Surge';
   if (g?.art === 'rack') return 'Rack';
   return '–';
@@ -303,7 +303,7 @@ export async function ladeInfos(projekt, platz, holeGet, jetzt = Date.now()) {
 export function geraetWahl(graphen, kits, behalte) {
   const nach = (a, b) => a.text.localeCompare(b.text);
   const bk = (graphen ?? []).filter((g) => g && g.art === 'instrument' && typeof g.name === 'string' && (!(g.latenz > 0) || g.name === behalte))
-    .map((g) => ({ gruppe: 'Baukasten', text: g.name, name: g.name, geraet: { art: 'intern', name: 'bk', graph: g.name } })).sort(nach);
+    .map((g) => ({ gruppe: 'Cypher Modular', text: g.name, name: g.name, geraet: { art: 'intern', name: 'bk', graph: g.name } })).sort(nach);
   const kit = (kits ?? []).filter((k) => k && typeof k.name === 'string')
     .map((k) => ({ gruppe: 'Kit', text: `${k.name} (${k.klaenge})`, name: k.name, geraet: { art: 'intern', name: 'kit', kit: k.name } })).sort(nach);
   return [...bk, ...kit, { gruppe: 'RB-338', text: 'RB-338', name: 'RB-338', geraet: { art: 'intern', name: 'rb338', parameter: {} } }];

@@ -1,0 +1,237 @@
+{
+ "format": "cypherdj-projekt/3",
+ "gruppen": [
+  {
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g2"
+   },
+   "fader_db": 0,
+   "farbe": "#9b59d0",
+   "gefaltet": false,
+   "id": "g1",
+   "mute": false,
+   "name": "Drums bus",
+   "nr": 1,
+   "pan": 0,
+   "solo": false
+  },
+  {
+   "fader_db": 0,
+   "farbe": "#9b59d0",
+   "gefaltet": false,
+   "id": "g2",
+   "mute": false,
+   "name": "Rhythm",
+   "nr": 2,
+   "pan": 0,
+   "sends": [
+    {
+     "db": -12,
+     "id": "r2"
+    }
+   ],
+   "solo": false
+  }
+ ],
+ "loop": {
+  "an": false,
+  "bis_beat": 32,
+  "von_beat": 0
+ },
+ "master": {
+  "fader_db": -1.5
+ },
+ "metronom": {
+  "an": false,
+  "pegel_db": -12,
+  "ziel": "master"
+ },
+ "naechste_id": {
+  "clip": 1,
+  "gruppe": 1,
+  "spur": 1
+ },
+ "naechste_noten_id": 1,
+ "name": "Golden groups and returns",
+ "returns": [
+  {
+   "fader_db": 0,
+   "farbe": "#3bb07a",
+   "hall": {
+    "an": true,
+    "decay": 0.5252,
+    "fahne": 0.66667,
+    "groesse": 0.282,
+    "highcut": 0.8039,
+    "pre": 0.04,
+    "tief": 0.5658
+   },
+   "id": "r1",
+   "inserts": [
+    {
+     "an": true,
+     "art": "eq",
+     "id": "i1",
+     "slot": 1,
+     "werte": {
+      "b1/an": 0,
+      "b1/freq": 30,
+      "b1/gain": 0,
+      "b1/platz": 0,
+      "b1/q": 0.707,
+      "b1/steil": 0,
+      "b1/typ": 3,
+      "b2/an": 0,
+      "b2/freq": 100,
+      "b2/gain": 0,
+      "b2/platz": 0,
+      "b2/q": 0.707,
+      "b2/steil": 0,
+      "b2/typ": 1,
+      "b3/an": 0,
+      "b3/freq": 250,
+      "b3/gain": 0,
+      "b3/platz": 0,
+      "b3/q": 0.707,
+      "b3/steil": 0,
+      "b3/typ": 0,
+      "b4/an": 0,
+      "b4/freq": 800,
+      "b4/gain": 0,
+      "b4/platz": 0,
+      "b4/q": 0.707,
+      "b4/steil": 0,
+      "b4/typ": 0,
+      "b5/an": 0,
+      "b5/freq": 2500,
+      "b5/gain": 0,
+      "b5/platz": 0,
+      "b5/q": 0.707,
+      "b5/steil": 0,
+      "b5/typ": 0,
+      "b6/an": 0,
+      "b6/freq": 6000,
+      "b6/gain": 0,
+      "b6/platz": 0,
+      "b6/q": 0.707,
+      "b6/steil": 0,
+      "b6/typ": 0,
+      "b7/an": 0,
+      "b7/freq": 10000,
+      "b7/gain": 0,
+      "b7/platz": 0,
+      "b7/q": 0.707,
+      "b7/steil": 0,
+      "b7/typ": 2,
+      "b8/an": 0,
+      "b8/freq": 18000,
+      "b8/gain": 0,
+      "b8/platz": 0,
+      "b8/q": 0.707,
+      "b8/steil": 0,
+      "b8/typ": 4,
+      "out": 0,
+      "propq": 0
+     }
+    }
+   ],
+   "mute": false,
+   "name": "Hall",
+   "nr": 1,
+   "pan": 0,
+   "solo": false
+  },
+  {
+   "fader_db": 0,
+   "farbe": "#3bb07a",
+   "hall": {
+    "an": true,
+    "decay": 0.5252,
+    "fahne": 0.66667,
+    "groesse": 0.282,
+    "highcut": 0.8039,
+    "pre": 0.04,
+    "tief": 0.5658
+   },
+   "id": "r2",
+   "mute": false,
+   "name": "Space",
+   "nr": 2,
+   "pan": 0,
+   "solo": false
+  }
+ ],
+ "rev": 0,
+ "spuren": [
+  {
+   "art": "audio",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g1"
+   },
+   "clips": [],
+   "fader_db": 0,
+   "farbe": "#3b8de0",
+   "id": "s1",
+   "mute": false,
+   "name": "Kick",
+   "nr": 1,
+   "pan": 0,
+   "sends": [
+    {
+     "db": -9,
+     "id": "r1"
+    }
+   ],
+   "solo": false,
+   "von": "andreas"
+  },
+  {
+   "art": "audio",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g1"
+   },
+   "clips": [],
+   "fader_db": 0,
+   "farbe": "#3b8de0",
+   "id": "s2",
+   "mute": false,
+   "name": "Snare",
+   "nr": 2,
+   "pan": 0,
+   "solo": false,
+   "von": "andreas"
+  },
+  {
+   "art": "audio",
+   "ausgang": {
+    "art": "gruppe",
+    "id": "g2"
+   },
+   "clips": [],
+   "fader_db": 0,
+   "farbe": "#3b8de0",
+   "id": "s3",
+   "mute": false,
+   "name": "Lead",
+   "nr": 3,
+   "pan": 0,
+   "sends": [
+    {
+     "db": -6,
+     "id": "r2"
+    }
+   ],
+   "solo": false,
+   "von": "andreas"
+  }
+ ],
+ "taktart": [
+  4,
+  4
+ ],
+ "tempo_bpm": 120,
+ "wiedergabe_rev": 0
+}

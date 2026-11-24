@@ -49,7 +49,10 @@ int main() {
   PRUEF(hole(bef, b) && b.art == cdj::Befehl::DECK_ENTLADEN && b.deck == 4);
   { cdj::osc::Schreiber s(v::k_deck_start); s.h(3).s("cypher").s("p7").s("b_rein").s("h3").i(1).d(32.0).d(16.5).i(0); g.sende(s); }
   PRUEF(hole(bef, b) && b.art == cdj::Befehl::DECK_START && b.deck == 1 && b.ab_beat == 32.0 && b.quell_beat == 16.5 &&
-        b.politik == 0 && !std::strcmp(b.plan, "p7") && !std::strcmp(b.gruppe, "b_rein") && !std::strcmp(b.hoerschein, "h3"));
+        b.politik == 0 && b.takt == 0 && !std::strcmp(b.plan, "p7") && !std::strcmp(b.gruppe, "b_rein") && !std::strcmp(b.hoerschein, "h3"));
+  // politik 3 `takt` (SYNC): arrives as politik 0 with takt 1
+  { cdj::osc::Schreiber s(v::k_deck_start); s.h(40).s("andreas").s("").s("").s("").i(2).d(32.0).d(0.0).i(3); g.sende(s); }
+  PRUEF(hole(bef, b) && b.art == cdj::Befehl::DECK_START && b.deck == 2 && b.politik == 0 && b.takt == 1);
   { cdj::osc::Schreiber s(v::k_deck_stopp); s.h(4).s("andreas").s("").s("").s("").i(3).d(64.0).i(1); g.sende(s); }
   PRUEF(hole(bef, b) && b.art == cdj::Befehl::DECK_STOPP && b.deck == 3 && b.ab_beat == 64.0 && b.politik == 1);
 
@@ -71,6 +74,8 @@ int main() {
   abgelehnt(14, "ausserhalb_bereich");  // Politik 2 braucht raster_beats
   { cdj::osc::Schreiber s(v::k_deck_start); s.h(15).s("dj").s("").s("").s("").i(1).d(32.0).d(0.0).i(0); g.sende(s); }
   abgelehnt(15, "ausserhalb_bereich");  // §1.4: unbekannte Quelle
+  { cdj::osc::Schreiber s(v::k_deck_stopp); s.h(41).s("andreas").s("").s("").s("").i(1).d(32.0).i(3); g.sende(s); }
+  abgelehnt(41, "ausserhalb_bereich");  // politik 3 takt exists on a start only
   // Negativ-Kontrolle: Deck-Adressen späterer Scheiben (roll, Scheibe 38/52) bleiben unbekannt
   { cdj::osc::Schreiber s(v::k_deck_roll); s.h(16).s("andreas").s("").s("").s("").i(1).d(32.0).d(4.0).i(0).i(0).d(1.0); g.sende(s); }
   PRUEF(g.warte("/e/protokollfehler", 500) && !std::strcmp(g.s(0), "/k/deck/roll") &&

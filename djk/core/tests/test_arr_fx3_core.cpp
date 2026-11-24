@@ -2,6 +2,7 @@
 // diverts it into the fx/3 pair, the core weights it with the container weight and hands it to the mixer, the strip of deck/1 applies its fader, the graph halves it, the master sum carries it.
 // Cases: 1 the group alone at 0 dB: the run with fx/3 and the halving graph is half of the run without (peak within 1 percent of 0.5), 2 at -6 dB it is the fader's -6 dB (the container fader acts on the share), 3 with deck/1 closed
 // nothing reaches the master, 4 without a graph on fx/3 the track plays on its normal path: the run is the plain one (audible, bit-equal)
+// 5 (decision 2026-11-23: FX 3 is a post-fader send of the LOOP group) the group fader at -6 dB is on the share too, and a muted group lets nothing new into fx/3: the master is below -90 dB
 // Mutation (CMakeLists.txt): ARR_FX3_OHNE_FADER and ARR_FX3_KOPIE reach this test too (the first run of case 2/3, the sum of case 1).
 #include <algorithm>
 #include <cmath>
@@ -31,7 +32,7 @@ static std::string live_datei(arr35::Lauf& x, const std::string& audio, int64_t 
   return "{\"format\":\"cypherdj-arr/4\",\"nr\":1,\"spuren\":[" + spur + "],\"live\":true,\"gruppen\":[{\"nr\":1,\"ausgang\":{\"art\":\"dj\",\"nr\":1}}]}";
 }
 // one kernel run: deck/1 fader (dB), fx/3 row of track 1 on or off, a halving graph on fx/3 or none
-static std::vector<float> lauf(const std::string& ab, double fader_db, bool fx3, bool mit_graph) {
+static std::vector<float> lauf(const std::string& ab, double fader_db, bool fx3, bool mit_graph, double gruppe_db = 0.0, bool gruppe_stumm = false) {
   arr35::Lauf x(ab, "test_arr_fx3_kern");
   const int64_t FR = 400000;
   const std::string a = x.ordner.audio('a', FR, 0.25f);
@@ -60,6 +61,8 @@ static std::vector<float> lauf(const std::string& ab, double fader_db, bool fx3,
   b.arr_nr = 1;
   x.sende(b);
   if (fx3) x.teil("spur/1/fx/3", 1.0f, 0.0, 0.0, "andreas");
+  if (gruppe_db != 0.0) x.teil("grp/1/fader", static_cast<float>(gruppe_db), 0.0, 0.0, "andreas");
+  if (gruppe_stumm) x.teil("grp/1/mute", 1.0f, 0.0, 0.0, "andreas");
   x.start(0.0, 0);
   x.lauf(135000);
   return x.l;
@@ -79,6 +82,11 @@ int main() {
   PRUEF(std::fabs(spitze(g0, w0, w1) / spitze(plain, w0, w1) - 0.5) < 0.01);   // only the halved share reaches the master: insert, not copy
   PRUEF(std::fabs(spitze(g6, w0, w1) / spitze(g0, w0, w1) - std::pow(10.0, -6.0 / 20.0)) < 2e-3);
   PRUEF(spitze(gz, 0, SIZE_MAX) < 1e-6);
+  const std::vector<float> gf = lauf(ab.pfad, 0.0, true, true, -6.0, false);
+  const std::vector<float> gs = lauf(ab.pfad, 0.0, true, true, 0.0, true);
+  std::printf("kern: group fader -6 dB %.5f (ratio to 0 dB %.4f), group muted peak %.3g (limit %.3g)\n", spitze(gf, w0, w1), spitze(gf, w0, w1) / spitze(g0, w0, w1), spitze(gs, 0, SIZE_MAX), std::pow(10.0, -90.0 / 20.0));
+  PRUEF(std::fabs(spitze(gf, w0, w1) / spitze(g0, w0, w1) - std::pow(10.0, -6.0 / 20.0)) < 2e-3);   // the group fader acts on the share
+  PRUEF(spitze(gs, 0, SIZE_MAX) < std::pow(10.0, -90.0 / 20.0));                                      // the group mute: nothing reaches fx/3
   PRUEF(plain.size() == kein.size() && std::memcmp(plain.data(), kein.data(), plain.size() * sizeof(float)) == 0);
   PRUEF_ENDE();
 }

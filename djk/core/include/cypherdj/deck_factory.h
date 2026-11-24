@@ -136,6 +136,11 @@ struct DeckWerk {
   // Frist (§5.9 /e/frist bei 128, 64, 32, 16 Beats vor dem Ende eines hörbaren Decks): gemeldete Schwellen je Lauf
   uint8_t frist_gemeldet[DECKS] = {};
   bool leer_melden[DECKS] = {};       // nach dem Entladen einmal Status 0 melden
+  // The loudness trim a track load derives (trim_aus_lufs) calibrates the PLAYER: it is a gain on the player branch of the container, in front of the 480-sample blend, and ADDS to the
+  // strip trim (the hand's part, 0 dB after a load). A module or a loop that fades in behind the same strip never passes the player's calibration. A new load derives it again and
+  // leaves the strip trim alone. trim_auto_db: the dB the load derived (0 without material); auto_g: the same as a linear gain.
+  float trim_auto_db[DECKS] = {};
+  float auto_g[DECKS] = {1.0f, 1.0f, 1.0f, 1.0f};
   double hotcue[DECKS][8];            // Plan E9: Quell-Beat je Platz 1..8, NaN leer; Laden leert
   // Welle 3 (§4.4 /k/deck/basis_tausch): geladene Fassung, die bei ihrem Ziel-Beat (DeckAktion art 8) getauscht wird.
   // Höchstens eine je Deck; ein neuerer Tausch, Laden oder Entladen gibt sie zurück.

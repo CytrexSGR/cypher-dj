@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { Oberflaeche, leseBestand } from '../server.ts';
 import { baueBestand } from './support/inventory.mjs';
+import { innen } from './support/inside.mjs';
 import { midiRoh, vorgabe } from '../public/curves.js';
 import { KOPIE_TEXT, HAND_PRUEFMODUS_TEXT } from '../public/messages.js';
 import { kodiere } from '../../contract/mock_core/osc.mjs';
@@ -1712,7 +1713,7 @@ test('Hand T4/T5: GET /lage verdichtet; /deck/start synchron auf den Takt ab der
   const r = await postJson(url, '/deck/start', { deck: 1, ab: 'takt' }, CYPHER);
   assert.equal(r.code, 200, JSON.stringify(r.j));
   const f = r.j.felder;
-  assert.deepEqual([f.quelle, f.plan, f.deck, f.quell_beat, f.politik, f.ab_beat % 4], ['cypher', 'cypher', 1, e, 0, 0]);
+  assert.deepEqual([f.quelle, f.plan, f.deck, f.quell_beat, f.politik, f.ab_beat % 4], ['cypher', 'cypher', 1, e, 3, 0]);   // ab takt: politik 3, the core aligns the bar phase to a playing deck
   assert.ok([2, 5].includes(r.j.quittung.status), JSON.stringify(r.j.quittung));
   const z = await zustand(o, (x) => x.status === 2);
   assert.equal(z.status, 2);
@@ -2612,7 +2613,7 @@ test('Surge window /klang fenster: Andreas only (403 for Cypher), an must be boo
   assert.equal(m.code, 409); assert.equal(m.j.fehler, 'wirt');
 });
 
-test('Baukasten S2 /klang param: geht als Wirt-Befehl an den Socket, wert 0..1, AUTO-Riegel nur für Cypher, Wirt-Fehler → 409', async (t) => {
+test('Cypher Modular S2 /klang param: geht als Wirt-Befehl an den Socket, wert 0..1, AUTO-Riegel nur für Cypher, Wirt-Fehler → 409', async (t) => {
   const { url, wo } = await klangStapel(t);
   const mel = await fakeWirt(t, wo, 'melodie');
   const p = (d) => postJson(url, '/klang', d, CYPHER);
@@ -2662,14 +2663,14 @@ test('live host panels /klang param: the seven RB-338 names only on a vst3:rb338
   assert.equal((await p({ gruppe: 'bass', aktion: 'param', name: 'Cutoff', wert: 0.5 })).code, 400);
 });
 
-test('Baukasten S2 /klang param: lehnt der Wirt ab (Surge kennt param nicht), kommt sein Text als 409 zurück', async (t) => {
+test('Cypher Modular S2 /klang param: lehnt der Wirt ab (Surge kennt param nicht), kommt sein Text als 409 zurück', async (t) => {
   const { url, wo } = await klangStapel(t);
   await fakeWirt(t, wo, 'bass', { ok: false, fehler: "unbekannter Befehl 'param'" });
   const r = await postJson(url, '/klang', { gruppe: 'bass', aktion: 'param', name: 'Knob 1', wert: 0.5 }, CYPHER);
   assert.equal(r.code, 409); assert.equal(r.j.fehler, 'wirt'); assert.match(r.j.text, /param/);
 });
 
-test('Baukasten S2 /klang params: Ist-Werte vom Wirt, Namen aus baukasten-<gruppe>.json, lesend auch bei AUTO aus', async (t) => {
+test('Cypher Modular S2 /klang params: Ist-Werte vom Wirt, Namen aus baukasten-<gruppe>.json, lesend auch bei AUTO aus', async (t) => {
   const bk = fs.mkdtempSync(path.join(TMP, 'djk-baukasten-'));
   const { url, wo } = await klangStapel(t, { baukastenOrdner: bk });
   const mel = await fakeWirt(t, wo, 'melodie', { ok: true, params: { Volume: 0.75, 'Knob 1': 0.5 } });
@@ -2755,12 +2756,21 @@ test('Riegel 2026-09-30: /griff /taste /laden /loop ohne json 415, fremde Herkun
 test('Riegel 2026-09-30: Stop Cypher überlebt einen Server-Neustart über /zustand/kern (ki_gestoppt)', async (t) => {
   const { o, url } = await geladenesDeck(t);
   const fx1 = { einheit: 1, art: 1, beats: 1, wet: 0.5, param1: 0.5, param2: 0.5, param3: 0.5, an: true };
-  // frischer Server: nie ein /e/ki gesehen, der Kern meldet aber periodisch ki_gestoppt 1
-  o.vomKern({ adresse: '/zustand/kern', felder: { generation: 1, ki_gestoppt: 1 } });
-  assert.equal((await postJson(url, '/fx', fx1, CYPHER)).j.fehler, 'ki_gestoppt');
-  assert.equal((await (await fetch(`${url}/lage`)).json()).ki.gestoppt, true);
-  // Freigabe kommt ebenfalls über den Zustand an
-  o.vomKern({ adresse: '/zustand/kern', felder: { generation: 1, ki_gestoppt: 0 } });
+  // Stop Cypher is set in the kern stand-in (a separate process): from then on every one of its 50 ms /zustand/kern ticks reports ki_gestoppt 1,
+  // so no tick can take the state back. Then the server forgets it, as a restart does, and has to learn it again from /zustand/kern alone.
+  // (An earlier version injected the word into the server and retried up to 20 times; a lost or late state would have passed.)
+  const ki = innen(o);
+  await ki.kiStopp(true);
+  o.setzeKiGestoppt(false);
+  assert.equal(o.kiGestoppt, false, 'the restarted server knows nothing');
+  for (let i = 0; i < 150 && o.kiGestoppt !== true; i++) await warte(20);   // only the arrival of the next tick is awaited
+  assert.equal(o.kiGestoppt, true, 'the server took ki_gestoppt over from /zustand/kern');
+  const antwort = await postJson(url, '/fx', fx1, CYPHER);   // the FIRST request after the restart is refused
+  assert.equal(antwort.j.fehler, 'ki_gestoppt');
+  const lage = await (await fetch(`${url}/lage`)).json();
+  assert.equal(lage.ki.gestoppt, true);
+  // Freigabe kommt ebenfalls über den Zustand an (the stand-in lets go, the next tick reports 0)
+  await ki.kiStopp(false);
   assert.equal((await postJson(url, '/fx', fx1, CYPHER)).code, 200);
 });
 
@@ -3182,7 +3192,11 @@ test('Glanz 2.1 F22: /ausgang und /lage.ausgang zeigen den Stand der Wache, ohne
 // V2 Fix-Runde 2 H2 (Spec 6.33, wie tests/support/media_library.mjs F16): die Stapel-Hilfe dieser Datei legt Hüllen und alle Vorgabe-Ordner (loops, kits,
 // welle, muster, hc, raster, wirt) im eigenen tmp-Ordner an, den t.after wegräumt; ein ausdrücklich übergebener Ordner gehört dem Aufrufer und bleibt.
 // Vorher blieben je Stapel acht djk-*-Ordner unter TMPDIR liegen (ganzer Suite-Lauf: rund 1300 Einträge). Geprüft wird nur, was neu unter TMPDIR liegt.
-test('V2 Fix-Runde 2 H2: stapel() lässt unter TMPDIR nichts liegen, ein übergebener Ordner bleibt', async () => {
+test('V2 Fix-Runde 2 H2: stapel() lässt unter TMPDIR nichts liegen, ein übergebener Ordner bleibt', async (t) => {
+  // TMPDIR is private to this test: another process writing to /tmp meanwhile (parallel suites, other sessions) cannot show up in the listing
+  const echtesTmp = process.env.TMPDIR, basis = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-h2basis-'));
+  process.env.TMPDIR = basis;
+  t.after(() => { if (echtesTmp === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = echtesTmp; fs.rmSync(basis, { recursive: true, force: true }); });
   const eintraege = () => new Set(fs.readdirSync(os.tmpdir()));
   const eigen = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-h2eigen-'));
   fs.writeFileSync(path.join(eigen, 'bleibt.txt'), 'x');

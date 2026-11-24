@@ -30,6 +30,17 @@ export function spielAnteil(lauf, zelle, beat, bpm) {
 }
 
 const setzeText = (e, t) => { if (e.textContent !== t) e.textContent = t; };
+/** Loop name in a narrow cell: the head gives way with an ellipsis, the last 5 characters always stay ("star…oop3"); the full name is the tooltip. */
+const setzeName = (e, t) => {
+  if (e.title !== t) e.title = t;
+  if (e.dataset.name === t) return;
+  e.dataset.name = t;
+  const ende = t.length > 8 ? 5 : 0;
+  const kopf = document.createElement('span'), schwanz = document.createElement('span');
+  kopf.className = 'nm-kopf'; schwanz.className = 'nm-ende';
+  kopf.textContent = t.slice(0, t.length - ende); schwanz.textContent = t.slice(t.length - ende);
+  e.replaceChildren(kopf, schwanz);
+};
 const setzeKlasse = (e, k, an) => { if (e.classList.contains(k) !== an) e.classList.toggle(k, an); };
 const barsText = (beats) => { const b = beats / 4; return Number.isInteger(b) ? String(b) : b.toFixed(1); };
 const ZUSTAENDE = ['leer', 'halten', 'voll', 'spielt', 'wartet', 'stopp_wartet'];
@@ -122,7 +133,7 @@ export function baueSpalte(wurzel, opt = {}) {
       for (const n of ZUSTAENDE) setzeKlasse(c.k, n, n === zu || (n === 'voll' && (zu === 'spielt' || zu === 'wartet' || zu === 'stopp_wartet')));
       setzeKlasse(c.k, 'gewaehlt', wahl === i + 1);
       const gefuellt = istZelle(z);
-      setzeText(c.nm, gefuellt ? (z.name ?? '') : '');
+      setzeName(c.nm, gefuellt ? (z.name ?? '') : '');
       setzeText(c.art, gefuellt ? (z.art === 'einmal' ? '▪' : '↻') : '');
       c.griff.hidden = !gefuellt;
       setzeKlasse(c.k, 'laedt', gefuellt && z.frames === null);   // the stand says `frames: null` until the audio is decoded

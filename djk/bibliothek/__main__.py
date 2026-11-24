@@ -2,8 +2,10 @@
 
   djk-bibliothek dazu DIR [--typ auto|track|loop|oneshot]   add a folder
   djk-bibliothek weg DIR                                    remove a folder
-  djk-bibliothek zeige [--json]                             config, target, state, counts (read only)
+  djk-bibliothek zeige [--json [--marke]]                   config, target, state, counts (read only)
+  djk-bibliothek analysieren --unter DIR... [--max N] [--fortschritt-json]   tempo/root note into the cache
   djk-bibliothek bauen [--ohne-fehlende] [--leer-erlaubt]   scan and build the catalog
+                       [--fortschritt-json] [--midi-liste]  progress lines as JSON on stderr, MIDI list beside the catalog
 
 Return: 0 ok, 2 usage / config / no read tool, 3 foreign catalog at the target (left untouched), 4 a root is missing,
 5 the file system cannot take the finished catalog (no hard links, no permission),
@@ -21,7 +23,7 @@ from pathlib import Path
 
 from . import catalog_build as katalog_bau
 from .catalog_build import FremderKatalog, LeererBau, LueckenBau, WurzelFehlt, ZielNichtSchreibbar, eigener_katalog, kanonisch
-from .config import TYPEN, Konfig, KonfigFehler, Wurzel, katalog_ziel, konfig_pfad, lies_konfig, schreibe_konfig
+from .config import TYPEN, Konfig, KonfigFehler, Wurzel, katalog_ziel, konfig_pfad, lies_konfig, quellen_datei, schreibe_konfig
 from .features import MerkmalCache
 from starter.tools import WerkzeugFehlt
 
@@ -113,8 +115,13 @@ def cmd_zeige(a: argparse.Namespace) -> int:
     elif zustand == "foreign":
         zaehlung = _zaehle_fremd(ziel)
         hinweis = FREMD_HINWEIS
-    d = {"konfig": str(konfig_pfad()), "wurzeln": [{"pfad": str(w.pfad), "typ": w.typ} for w in k.wurzeln],
+    d = {"konfig": str(konfig_pfad()), "datei": quellen_datei(),
+         "wurzeln": [{"pfad": str(w.pfad), "typ": w.typ, "fehlt": not w.pfad.is_dir()} for w in k.wurzeln],
          "ziel": str(ziel), "zustand": zustand, "zaehlung": zaehlung, "hinweis": hinweis}
+    if a.marke:
+        gespeichert = (_lies_stand(ziel) or {}).get("baum_marke") if zustand == "own" else None
+        d["baum_marke_gespeichert"] = gespeichert
+        d["baum_marke_jetzt"] = katalog_bau.baum_marke(k)
     if a.json:
         print(json.dumps(d, ensure_ascii=False, indent=2))
         return 0
@@ -150,9 +157,17 @@ def cmd_bauen(a: argparse.Namespace) -> int:
         print(f"scanned {n} files ({zaehler.get('track', 0)} track, {zaehler.get('loop', 0)} loop, "
               f"{zaehler.get('oneshot', 0)} oneshot, {zaehler.get('skipped', 0)} skipped)", file=sys.stderr, flush=True)
 
+    tick = None
+    if a.fortschritt_json:
+        def tick(phase: str, fertig: int, gesamt: int | None) -> None:
+            print(json.dumps({"phase": phase, "fertig": fertig, "gesamt": gesamt}), file=sys.stderr, flush=True)
+
+    midi_ziel = ziel.with_name(ziel.name + ".midi.json") if a.midi_liste else None
     cache = MerkmalCache()
     try:
-        r = katalog_bau.baue(ziel, k, cache, a.ohne_fehlende, fortschritt, zaehler=zaehler, leer_erlaubt=a.leer_erlaubt)
+        with katalog_bau.bau_sperre(ziel):  # a second build (CLI or another page server) waits for the first
+            r = katalog_bau.baue(ziel, k, cache, a.ohne_fehlende, fortschritt, zaehler=zaehler, leer_erlaubt=a.leer_erlaubt,
+                                 tick=tick, midi_ziel=midi_ziel)
     except FremderKatalog as e:
         fehler(f"{e.ziel} was not built by {NAME} and is left untouched. "
                "Set CYPHERDJ_KATALOG to another file to build your own catalog.")
@@ -185,6 +200,32 @@ def cmd_bauen(a: argparse.Namespace) -> int:
     if r.ausgelassen:
         print("skipped: " + ", ".join(f"{g} {n}" for g, n in sorted(r.ausgelassen.items())))
     print(f"hashed {r.gehasht} files")
+    if a.fortschritt_json:
+        print(json.dumps({"ok": True, "zeilen": z, "dateien": sum(z.values())}))
+    return 0
+
+
+def cmd_analysieren(a: argparse.Namespace) -> int:
+    """Tempo of loops and root note of one-shots below the --unter folders, into the feature cache (never the catalogue file)."""
+    try:
+        import numpy  # noqa: F401
+        import scipy  # noqa: F401
+    except ImportError:
+        print(json.dumps({"ok": True, "uebersprungen": "numpy_fehlt"}))
+        return 0
+    from . import analysis as analyse
+    ziel = katalog_ziel(os.environ)
+    eigen, _ = eigener_katalog(ziel)
+    analysiert = mit_wert = 0
+    if eigen:
+        tick = katalog_bau._Tick((lambda phase, fertig, gesamt: print(json.dumps({"phase": phase, "fertig": fertig, "gesamt": gesamt}),
+                                                                     file=sys.stderr, flush=True)) if a.fortschritt_json else None)
+        cache = MerkmalCache()
+        try:
+            analysiert, mit_wert = analyse.analysiere(kanonisch(ziel), a.unter, cache, a.max, tick)
+        finally:
+            cache.schliessen()
+    print(json.dumps({"ok": True, "analysiert": analysiert, "mit_wert": mit_wert}))
     return 0
 
 
@@ -200,12 +241,21 @@ def main(argv: list[str] | None = None) -> int:
     w.set_defaults(fn=cmd_weg)
     z = sub.add_parser("zeige", help="show config, target, state and counts (read only)")
     z.add_argument("--json", action="store_true")
+    z.add_argument("--marke", action="store_true", help="with --json: add the stored and the current tree mark")
     z.set_defaults(fn=cmd_zeige)
     b = sub.add_parser("bauen", help="scan the folders and build the catalog")
     b.add_argument("--ohne-fehlende", action="store_true", help="build although a folder is missing (unplugged drive)")
     b.add_argument("--leer-erlaubt", action="store_true",
                    help="build although the scan finds nothing and the existing catalog has rows")
+    b.add_argument("--fortschritt-json", action="store_true",
+                   help="stderr gets one JSON object per progress line; the last stdout line is a JSON summary")
+    b.add_argument("--midi-liste", action="store_true", help="write the MIDI list next to the catalog (<file>.midi.json)")
     b.set_defaults(fn=cmd_bauen)
+    an = sub.add_parser("analysieren", help="light analysis: tempo of loops, root note of one-shots (into the feature cache)")
+    an.add_argument("--unter", action="append", required=True, metavar="DIR", help="only rows below this folder (repeatable)")
+    an.add_argument("--max", type=int, default=None, help="at most this many files")
+    an.add_argument("--fortschritt-json", action="store_true", help="stderr gets one JSON object per progress line")
+    an.set_defaults(fn=cmd_analysieren)
     try:
         a = p.parse_args(argv)
     except SystemExit as e:

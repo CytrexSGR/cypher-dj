@@ -46,17 +46,29 @@ hat "P2" "$B" "--allow-fs-write=/dev/shm/cypherdj/erzeuger5"
 nicht "P2" "$B" "-bk-f"
 nicht "P2" "$B" "CYPHERDJ_INSTANZ"
 
+# P3/P4 need a test instance whose /dev/shm folder does not exist (the point is that nothing creates it). A busy letter is
+# never a failure and never touched: CYPHERDJ_TEST_INSTANZ when set (busy -> SKIP of the two points), else the first free letter.
+LEER=""
+if [ -n "${CYPHERDJ_TEST_INSTANZ:-}" ]; then
+  [ ! -e "/dev/shm/cypherdj-$CYPHERDJ_TEST_INSTANZ" ] && LEER=$CYPHERDJ_TEST_INSTANZ
+else
+  for c in h g f e d c b a i; do [ ! -e "/dev/shm/cypherdj-$c" ] && { LEER=$c; break; }; done
+fi
+case "$LEER" in [a-i]) ;; *) LEER="" ;; esac
+
 # P3: --trocken creates nothing
-if [ -e /dev/shm/cypherdj-h ]; then fehl "P3 /dev/shm/cypherdj-h exists before the test, pick another instance"; else
-  "$START/djk-stroeme" --instanz h --trocken >/dev/null 2>&1
-  [ ! -e /dev/shm/cypherdj-h ] && ok "P3 --trocken created no folder" || { fehl "P3 --trocken created /dev/shm/cypherdj-h"; rm -rf /dev/shm/cypherdj-h; }
+if [ -z "$LEER" ]; then echo "SKIP P3 no free test instance (busy: /dev/shm/cypherdj-<i>)"; else
+  "$START/djk-stroeme" --instanz "$LEER" --trocken >/dev/null 2>&1
+  [ ! -e "/dev/shm/cypherdj-$LEER" ] && ok "P3 --trocken created no folder" || fehl "P3 --trocken created /dev/shm/cypherdj-$LEER (left in place)"
 fi
 
 # P4: needs --strudel (exit before any unit starts: the usage check comes right after option parsing)
-C=$("$START/djk-start" --bk-stroeme --instanz h 2>&1); RC=$?
+C=$("$START/djk-start" --bk-stroeme --instanz "${LEER:-h}" 2>&1); RC=$?
 [ "$RC" = 2 ] && ok "P4 --bk-stroeme without --strudel exits 2" || fehl "P4 exit $RC: $C"
 hat "P4" "$C" "--bk-stroeme needs --strudel"
-[ ! -e /dev/shm/cypherdj-h ] && ok "P4 nothing created" || { fehl "P4 created /dev/shm/cypherdj-h"; rm -rf /dev/shm/cypherdj-h; }
+if [ -z "$LEER" ]; then echo "SKIP P4 nothing-created check: no free test instance"; else
+  [ ! -e "/dev/shm/cypherdj-$LEER" ] && ok "P4 nothing created" || fehl "P4 created /dev/shm/cypherdj-$LEER (left in place)"
+fi
 
 # P5
 H=$("$START/djk-start" --help 2>&1); RC=$?

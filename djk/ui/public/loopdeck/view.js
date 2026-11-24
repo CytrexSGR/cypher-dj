@@ -164,10 +164,6 @@ function baueSpur(nr, s) {
   const fuss = el('div', 'ld-fuss');
   const mute = el('button', 'ld-mute', 'M'); mute.type = 'button'; mute.title = 'Mute'; mute.setAttribute('aria-pressed', 'false');
   const fader = el('input', 'live-regler ld-fader'); fader.type = 'range'; fader.setAttribute('type', 'range'); fader.min = '-60'; fader.max = '6'; fader.step = '0.5'; fader.value = '0'; fader.title = 'Track volume (dB)';
-  const filter = knopf(0, (v) => {
-    const sp = stand.decks[nr]?.spuren?.[s]; if (sp) sp.filter = v;
-    schickeLetzten(`filter/${nr}/${s}`, '/loopdeck/spur', { deck: nr, spur: s + 1, filter: v });
-  });
   mute.addEventListener('click', () => {
     const sp = stand.decks[nr]?.spuren?.[s];
     const alt = sp?.mute ?? false, neu = !alt;
@@ -180,11 +176,11 @@ function baueSpur(nr, s) {
     if (sp) sp.fader_db = v;
     schickeLetzten(`fader/${nr}/${s}`, '/loopdeck/spur', { deck: nr, spur: s + 1, fader_db: v });
   });
-  fuss.append(mute, fader, filter.knoten);
+  fuss.append(mute, fader);   // COLOR lives in the STRIP row only
   const kz = baueStrip(nr, s);
   spur.querySelector('.zug-slot').append(kz.strip);
   spur.append(fuss);
-  return { spur, spalte, mute, fader, filter, strip: kz };
+  return { spur, spalte, mute, fader, strip: kz };
 }
 
 function baueDeck(wurzel, nr) {
@@ -235,6 +231,21 @@ function baueDeck(wurzel, nr) {
   const spurenKnoten = el('div', 'ld-spuren');
   const spuren = Array.from({ length: SPUREN }, (_, s) => { const x = baueSpur(nr, s); spurenKnoten.append(x.spur); return x; });
   rumpf.append(szenen, spurenKnoten);
+  // cells are at least 20 px high: when the deck is lower, the rows scroll (all tracks and the scene column together) instead of lying under STOP
+  let gleiche = false;
+  rumpf.addEventListener('scroll', (e) => {
+    if (gleiche || !(e.target instanceof Element) || !e.target.matches('.zellen, .ld-szenenzeilen')) return;
+    gleiche = true;
+    for (const z of rumpf.querySelectorAll('.zellen, .ld-szenenzeilen')) if (z !== e.target) z.scrollTop = e.target.scrollTop;
+    gleiche = false;
+    markiereSchnitt();
+  }, true);
+  // cut hint (UI check M1): `ld-schnitt` on the body of the deck while rows lie below the visible area; the CSS fades the lower edge of the rows
+  const markiereSchnitt = () => {
+    const z = rumpf.querySelector('.zellen');
+    rumpf.classList.toggle('ld-schnitt', !!z && z.scrollHeight > z.clientHeight + 2 && z.scrollTop + z.clientHeight < z.scrollHeight - 2);
+  };
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(markiereSchnitt).observe(rumpf);
   const zellmenue = baueMenue((koerper) => { const m = zellmenue.ctx; if (m) zelleAendern(nr, m, koerper); });
   zellmenue.ctx = null;
   wurzel.append(kopf, menue, rumpf, zellmenue.knoten);
@@ -393,7 +404,13 @@ if (typeof document !== 'undefined') {   // a click outside closes the open menu
   });
 }
 
+// Asks the server which project is open right now (awaited, not the page's cached live.projekt: a `proj` event reads the stand before pruefeLive has
+// run, and creating a deck while another project is open is answered 409 projekt_offen). Anything but the live set, or no answer: false.
+async function liveJetztOffen() {
+  try { return (await (await fetch('/proj/aktuell?nur=rev')).json()).slug === 'live'; } catch { return false; }
+}
 async function anlegen(nr, automatisch = false) {
+  if (automatisch && !(await liveJetztOffen())) { const a = ansichten.get(nr); if (a) a.neuVersucht = false; return; }   // the try is not used up: the live set may open later
   const r = await senden('/loopdeck/neu', { deck: nr }, { ohneFrage: automatisch });
   if (r.ok) await ladeStand();
 }
@@ -426,7 +443,6 @@ export function zeichneDeck(nr) {
     x.spur.className = `ld-spur${s.spielt ? ' spielt' : ''}${s.verwaist ? ' verwaist' : ''}${s.mute ? ' stumm' : ''}`;
     x.mute.classList.toggle('an', s.mute); x.mute.setAttribute('aria-pressed', String(s.mute));
     if (document.activeElement !== x.fader) x.fader.value = String(s.faderDb);
-    if (!x.filter.gegriffen()) x.filter.setze(s.filter);   // a redraw does not take the knob out of the hand
     const roh = stand.decks[nr]?.spuren?.[k];
     for (const art of ['hall', 'delay']) if (!x.strip.sends[art].gegriffen()) x.strip.sends[art].setze(Number(roh?.send?.[art] ?? -200));
     if (!x.strip.color.gegriffen()) x.strip.color.setze(s.filter);

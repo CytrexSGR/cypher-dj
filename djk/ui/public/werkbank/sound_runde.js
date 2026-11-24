@@ -13,8 +13,8 @@ const SCHRITTE = [['fein', 'subtle'], ['normal', 'clear'], ['grob', 'strong']];
 const PLAETZE = ['A', 'B', 'C', 'D'];
 const PEGEL_ANZEIGE_DB = 0.5;
 const TEXT = {
-  knopf: 'FIND SOUND', knopfTitel: 'Find a sound by trying one-knob neighbours of the selected Baukasten track', titel: 'FIND SOUND',
-  keinBk: 'Select a track with a Baukasten instrument.', schritt: 'STEP', misst: 'measuring…', leer: '–', waehlen: 'PICK', neu: 'NEW NEIGHBOURS', zurueck: 'BACK',
+  knopf: 'FIND SOUND', knopfTitel: 'Find a sound by trying one-knob neighbours of the selected Cypher Modular track', titel: 'FIND SOUND',
+  keinBk: 'Select a track with a Cypher Modular instrument.', schritt: 'STEP', misst: 'measuring…', leer: '–', waehlen: 'PICK', neu: 'NEW NEIGHBOURS', zurueck: 'BACK',
   waehlenTitel: 'Write the chosen sound into the project (one undo step) and look for new neighbours', neuTitel: 'Look for other neighbours of the sound on A',
   zurueckTitel: 'Go back one step on the path (Undo also works)', keineNachbarn: 'no audible neighbour at this step size',
   schrittTitel: 'How clearly audible the neighbours must differ from A',

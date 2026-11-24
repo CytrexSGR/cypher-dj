@@ -1,0 +1,138 @@
+{
+ "format": "cypherdj-projekt/3",
+ "gruppen": [],
+ "loop": {
+  "an": false,
+  "bis_beat": 32,
+  "von_beat": 0
+ },
+ "master": {
+  "fader_db": 0
+ },
+ "metronom": {
+  "an": false,
+  "pegel_db": -12,
+  "ziel": "master"
+ },
+ "naechste_id": {
+  "clip": 1,
+  "gruppe": 1,
+  "spur": 1
+ },
+ "naechste_noten_id": 1,
+ "name": "Golden audio clips",
+ "rev": 0,
+ "spuren": [
+  {
+   "art": "audio",
+   "clips": [
+    {
+     "art": "audio",
+     "dekodiert": "fertig",
+     "fade_aus_beats": 0,
+     "fade_ein_beats": 0,
+     "gain_db": 0,
+     "id": "c1",
+     "laenge_beats": 16,
+     "name": "Warped loop",
+     "offset_s": 0,
+     "quelle": {
+      "pfad_hinweis": "sample.wav",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+     },
+     "start_beat": 0,
+     "warp": {
+      "an": true,
+      "beats": {
+       "huelle": 80,
+       "loop": "vor",
+       "raster": "1/8"
+      },
+      "detune_ct": 0,
+      "marker": [
+       [
+        0,
+        0
+       ],
+       [
+        4,
+        4
+       ],
+       [
+        8,
+        8.25
+       ]
+      ],
+      "modus": "beats",
+      "quelle": "hand",
+      "transpose_st": 0,
+      "versatz_beats": 0.5
+     }
+    },
+    {
+     "art": "audio",
+     "dekodiert": "fertig",
+     "fade_aus_beats": 2,
+     "fade_ein_beats": 1,
+     "gain_db": -6,
+     "id": "c2",
+     "laenge_beats": 8,
+     "name": "Faded",
+     "offset_s": 0.5,
+     "quelle": {
+      "pfad_hinweis": "vocal.flac",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+     },
+     "start_beat": 16
+    }
+   ],
+   "fader_db": 0,
+   "farbe": "#3b8de0",
+   "id": "s1",
+   "mute": false,
+   "name": "Drums",
+   "nr": 1,
+   "pan": 0,
+   "solo": false,
+   "von": "andreas"
+  },
+  {
+   "art": "audio",
+   "clips": [
+    {
+     "art": "audio",
+     "dekodiert": "fertig",
+     "fade_aus_beats": 0,
+     "fade_ein_beats": 0,
+     "gain_db": 0,
+     "id": "c3",
+     "laenge_beats": 12,
+     "loop_beats": 4,
+     "name": "Looped muted",
+     "offset_s": 0,
+     "quelle": {
+      "pfad_hinweis": "pad.wav",
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+     },
+     "start_beat": 0,
+     "stumm": true
+    }
+   ],
+   "fader_db": 0,
+   "farbe": "#3b8de0",
+   "id": "s2",
+   "mute": false,
+   "name": "Texture",
+   "nr": 2,
+   "pan": 0,
+   "solo": false,
+   "von": "andreas"
+  }
+ ],
+ "taktart": [
+  4,
+  4
+ ],
+ "tempo_bpm": 124,
+ "wiedergabe_rev": 0
+}

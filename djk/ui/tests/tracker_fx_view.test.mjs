@@ -133,7 +133,7 @@ test('an entry off the row line says so in the status line', () => {
   assert.ok(s.endsWith('; off the row line at beat 0.50, retyping puts it on the row line'), s);
 });
 
-test('dimmed cell and the extra status text on a track that is not a Baukasten graph', () => {
+test('dimmed cell and the extra status text on a track that is not a Cypher Modular graph', () => {
   const r = rast(projekt());
   const kit = r.spuren[1].fxspalten;
   assert.equal(kit[0][0].ohne, true, 'SLU on a kit track');

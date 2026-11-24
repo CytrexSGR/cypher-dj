@@ -5,8 +5,8 @@ import { ZIELE, DECKS, art, GRIFF, griffZuMidi, midiRoh, wertAusMidi, formatiere
 
 test('Ziel-Liste: container strips A..D (11 rows each), player keys of decks 1..4, stream alias strips (10 rows each), plus xfader, master/pegel, cue/mix, cue/pegel', () => {
   // 1646 before the container core; minus deck/3 and deck/4 strips and the erz/1..3 and pad strips of the old model, plus 4 x 11 containers, 4 x 2 keys, 8 streams x 10 alias rows (132 strip rows), 14 x 64 graph knobs (896)
-  // re-measured at the integration (X1), by prefix: deck 158 + pad 150 + erz 592 (8 streams x 74) + xfader 1 + master 67 + cue 2 + spur 672 (32 x (13 rows + 8 sends)) + grp 208 + pm 1 + ret 88 + fx 128 (graph knobs of fx/3 and fx/4), measured with the container-core ZIELE table
-  assert.equal(ZIELE.size, 2067);
+  // re-measured at the integration (X1), by prefix: deck 158 + pad 150 + erz 592 (8 streams x 74) + xfader 1 + master 67 + cue 2 + spur 768 (32 x (16 rows + 8 sends), the 16 rows with the FX 1 2 3 assign rows of the loop lane strip) + grp 208 + pm 1 + ret 88 + fx 128 (graph knobs of fx/3 and fx/4), measured with the container-core ZIELE table
+  assert.equal(ZIELE.size, 2163);
   for (const p of ['deck/1/fader', 'deck/2/eq/tief', 'deck/1/kill/hoch', 'deck/2/play', 'deck/1/cue', 'xfader',
     'deck/1/pfl', 'deck/2/pfl', 'master/pegel', 'master/kleber', 'cue/mix', 'cue/pegel', 'erz/1/fader']) assert.ok(ZIELE.has(p), p);
 });

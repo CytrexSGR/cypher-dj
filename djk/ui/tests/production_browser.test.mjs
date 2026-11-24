@@ -1,10 +1,10 @@
 // Package 1.16 rest U6 (S3, layout decision of the spec): the PRODUCTION browser mode switch (LIBRARY · DEVICES · PRESETS · COLLECTIONS),
 // the DEVICES list and the pure drop builders for a device. Node only: CSS text checks, a body/storage stand-in, pure functions.
-// The computed-style check and the real drags are the browser probe check/probe_b116_browser.mjs (not part of this file).
+// The computed-style check and the real drags were a browser probe that went with the old mode switch (removed in browser plan 2); the docked browser is checked in Chrome.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { BROWSER_MODI, BROWSER_SCHLUESSEL, MODUS_AKTIV, liesModus, merkeModus, setzeKlassen, wahlHtml, waehle } from '../public/production/browser_choice.js';
+
 import { geraeteHtml } from '../public/production/devices_browser.js';
 import { GERAET_TYP, geraetNutzlast, instrumentBefehl, effektBefehl, geraetAblage, GERAET_TEXT } from '../public/production/drag.js';
 import { katalog } from '../presets/area.ts';
@@ -16,77 +16,14 @@ const KATALOG = katalog([{ name: 'juno-pad', art: 'instrument' }, { name: 'fx', 
 const speicher = (start = {}) => { const m = new Map(Object.entries(start)); return { m, getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)) }; };
 const koerper = () => { const k = new Set(['produktion']); return { k, classList: { toggle: (n, an) => { if (an) k.add(n); else k.delete(n); }, contains: (n) => k.has(n) } }; };
 
-// ---- T6.1 mode switch ----
-test('mode switch: four modes, remembered per viewer under djk-prod-browser; default and unknown give LIBRARY; DJ key djk-bereich never written', () => {
-  assert.deepEqual(BROWSER_MODI, ['library', 'geraete', 'presets', 'kollektionen']);
-  assert.equal(BROWSER_SCHLUESSEL, 'djk-prod-browser');
-  assert.equal(liesModus(speicher()), 'library');
-  assert.equal(liesModus(speicher({ 'djk-prod-browser': 'geraete' })), 'geraete');
-  assert.equal(liesModus(speicher({ 'djk-prod-browser': 'quatsch' })), 'library');
-  assert.equal(liesModus({ getItem: () => { throw new Error('blocked'); } }), 'library', 'storage that throws');
-  assert.equal(liesModus(undefined), 'library');
-  for (const m of BROWSER_MODI) if (!MODUS_AKTIV[m]) assert.equal(liesModus(speicher({ 'djk-prod-browser': m })), 'library', `${m} disabled until U8`);
-  const s = speicher({ 'djk-bereich': 'effekte' });
-  merkeModus(s, 'geraete');
-  assert.deepEqual([...s.m], [['djk-bereich', 'effekte'], ['djk-prod-browser', 'geraete']]);
-  merkeModus({ setItem: () => { throw new Error('blocked'); } }, 'geraete');   // no throw
-});
-
-test('mode switch: exactly one b-<mode> class on body while PRODUCTION is visible, none when hidden; disabled modes are not taken', () => {
-  const b = koerper();
-  setzeKlassen(b, 'geraete', true);
-  assert.deepEqual([...b.k].sort(), ['b-geraete', 'produktion']);
-  setzeKlassen(b, 'library', true);
-  assert.deepEqual([...b.k].sort(), ['b-library', 'produktion']);
-  setzeKlassen(b, 'library', false);
-  assert.deepEqual([...b.k], ['produktion'], 'hidden: no mode class (the DJ view stays as it was)');
-  const s = speicher();
-  assert.equal(waehle(s, 'quatsch', 'library'), 'library', 'an unknown mode is not taken');
-  assert.equal(s.m.size, 0);
-  assert.equal(waehle(s, 'kollektionen', 'library'), 'kollektionen', 'COLLECTIONS is on since U8');
-  s.m.clear();
-  assert.equal(waehle(s, 'presets', 'library'), 'presets', 'PRESETS is on since U7');
-  assert.equal(s.m.get('djk-prod-browser'), 'presets');
-  s.m.clear();
-  assert.equal(waehle(s, 'geraete', 'library'), 'geraete');
-  assert.equal(s.m.get('djk-prod-browser'), 'geraete');
-  const h = wahlHtml('geraete');
-  assert.equal((h.match(/data-browser-modus=/g) ?? []).length, 4);
-  assert.match(h, /data-browser-modus="geraete"[^>]*aria-pressed="true"/);
-  assert.doesNotMatch(h, /disabled/, 'every mode can be clicked since U8');
-  assert.doesNotMatch(h, /data-browser-modus="presets"[^>]*disabled/, 'PRESETS can be clicked since U7');
-  assert.match(h, />LIBRARY<.*>DEVICES<.*>PRESETS<.*>COLLECTIONS</s);
-});
-
-test('CSS: the mode rules come after the PRODUCTION library block, with !important, and keep the DJ view untouched', () => {
-  const css = fs.readFileSync(new URL('../public/production/production.css', import.meta.url), 'utf8');
-  const block = css.indexOf('body.produktion #bestand .tabelle:not([data-tabelle="library"]) { display: none !important; }');
-  assert.ok(block > 0, 'the line-24 rule is there');
-  const regeln = [
-    'body.produktion:not(.b-library) #bestand .tabelle[data-tabelle="library"] { display: none !important; }',
-    'body.produktion.b-geraete #geraete-browser { display: block !important; }',
-    'body.produktion.b-presets #presets { display: block !important; }',
-    'body.produktion.b-kollektionen #kollektionen { display: block !important; }',
-    'body.produktion #geraete-browser, body.produktion #presets, body.produktion #kollektionen { display: none !important; }',
-    'body.produktion .p-browserwahl { display: flex; }',
-  ];
-  for (const r of regeln) { const i = css.indexOf(r); assert.ok(i > block, `after the library block: ${r}`); }
-  assert.ok(css.indexOf(regeln[4]) < css.indexOf(regeln[1]), 'the hide-all rule comes before the per-mode rules');
-  const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
-  assert.match(html, /<div class="kopfzeile">[\s\S]*?<div class="p-browserwahl" id="p-browserwahl"[^>]*><\/div>[\s\S]*?<\/div>\s*<div class="effekte"/);
-  assert.match(html, /<div class="geraete-browser" id="geraete-browser" hidden aria-label="Devices"><\/div>/);
-  const stil = fs.readFileSync(new URL('../public/style.css', import.meta.url), 'utf8') + css;
-  assert.match(stil, /\.p-browserwahl \{ display: none; \}/, 'outside PRODUCTION the switch is not shown');
-});
-
 // ---- T6.2 DEVICES list ----
 test('DEVICES list: two groups from GET /presets/katalog; disabled entries are greyed with their reason (a drop shows it, T6.5)', () => {
   const h = geraeteHtml(KATALOG);
-  assert.match(h, /INSTRUMENTS[\s\S]*RB-338[\s\S]*Surge[\s\S]*juno-pad[\s\S]*EFFECTS[\s\S]*Compressor[\s\S]*EQ[\s\S]*Saett[\s\S]*Hall/);
-  assert.equal((h.match(/draggable="true"/g) ?? []).length, 8, 'RB-338, Surge, juno-pad, Compressor, EQ, Saett, Hall and the effect graph fx');
+  assert.match(h, /INSTRUMENTS[\s\S]*RB-338[\s\S]*Surge[\s\S]*juno-pad[\s\S]*EFFECTS[\s\S]*Compressor[\s\S]*EQ[\s\S]*Saturation[\s\S]*Hall/);
+  assert.equal((h.match(/draggable="true"/g) ?? []).length, 8, 'RB-338, Surge, juno-pad, Compressor, EQ, Saturation, Hall and the effect graph fx');
   // integration with 1.10 slice 4b: eq and saett are active kinds (INSERT_ARTEN_AKTIV), only the return hall stays greyed
   assert.equal((h.match(/class="geraete-zeile aus"/g) ?? []).length, 1, 'only Hall greyed');
-  assert.doesNotMatch(h, /data-geraet-i="5"[^>]*class="[^"]*aus[^"]*"/, 'EQ is draggable');
+  assert.doesNotMatch(h, /data-geraet-i="4"[^>]*class="[^"]*aus[^"]*"/, 'EQ is draggable');
   assert.doesNotMatch(h, /comes with slice 4b/);
   assert.match(h, /title="the return hall lives on returns"/);
   assert.doesNotMatch(h.split('<h4>EFFECTS</h4>')[0], /fx<\/|>fx</, 'effect graphs are not instruments');
@@ -468,36 +405,7 @@ test('T7.3 speicherZiele: the tracks and stages that carry a device the panel ca
   assert.deepEqual(speicherZiele(neuesProjekt('E'), 'rb338'), [], 'negative control: a project without such a device has no target');
 });
 
-// ---- T7.3 wiring: the mode switch builds the PRESETS panel, the production host feeds it ----
-test('T7.3 browserwahl: choosing PRESETS (or opening PRODUCTION in that mode) asks app.js to build the panel; other modes and a hidden view do not', async () => {
-  const { bindeBrowserwahl } = await import('../public/production/browser_choice.js');
-  const wurzel = { innerHTML: '', h: {}, addEventListener(n, f) { this.h[n] = f; } };
-  const alt = globalThis.document;
-  const b = koerper();
-  globalThis.document = { getElementById: () => wurzel, body: b };
-  try {
-    let n = 0;
-    let k = 0;
-    const ctx = { st: { sichtbar: true }, beimSichtwechsel: [], presetsZeigen: () => { n++; }, kollektionenZeigen: () => { k++; } };
-    bindeBrowserwahl(ctx, speicher({ 'djk-prod-browser': 'geraete' }));
-    assert.equal(n, 0, 'DEVICES: no panel');
-    const klick = (m) => wurzel.h.click({ target: { closest: () => ({ dataset: { browserModus: m }, disabled: false }) } });
-    klick('presets');
-    assert.deepEqual([n, b.k.has('b-presets')], [1, true]);
-    klick('kollektionen');
-    assert.deepEqual([n, b.k.has('b-kollektionen'), k], [1, true, 1], 'U8: COLLECTIONS asks app.js-side binder to load the collections, not the presets panel');
-    klick('presets');
-    ctx.st.sichtbar = false; ctx.beimSichtwechsel[0](false);
-    assert.equal(n, 2, 'a hidden PRODUCTION builds nothing');
-    ctx.st.sichtbar = true; ctx.beimSichtwechsel[0](true);
-    assert.equal(n, 3, 'opening PRODUCTION in PRESETS mode builds the panel');
-    // the mode is kept: a reload in PRESETS mode comes back to it
-    const ctx2 = { st: { sichtbar: true }, beimSichtwechsel: [], presetsZeigen: () => { n++; } };
-    bindeBrowserwahl(ctx2, speicher({ 'djk-prod-browser': 'presets' }));
-    assert.equal(n, 4);
-  } finally { globalThis.document = alt; }
-});
-
+// ---- T7.3 wiring: the production host feeds the PRESETS panel ----
 test('T7.3 preset host: save targets follow the open project; the panel is redrawn only when they change', async () => {
   const { bindePresetHost } = await import('../public/production/preset_host.js');
   const { PresetPanel } = await import('../public/presets.js');
@@ -667,8 +575,6 @@ test('R1 panel: a successful save, rename or delete tells the host (geaendert); 
 
 // ---- U8 wiring: the COLLECTIONS mode is on, the panel element and its style exist, PRODUCTION binds the panel ----
 test('U8 wiring: COLLECTIONS enabled; #kollektionen in index.html with collections.css; production.js binds bindeKollektionen and hands over the preset rows', async () => {
-  assert.equal(MODUS_AKTIV.kollektionen, true);
-  assert.equal(liesModus(speicher({ 'djk-prod-browser': 'kollektionen' })), 'kollektionen', 'a reload in COLLECTIONS mode comes back to it');
   const seite = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
   assert.match(seite, /<div class="kollektionen" id="kollektionen" hidden aria-label="Collections"><\/div>/);
   assert.match(seite, /<link rel="stylesheet" href="collections.css">/);

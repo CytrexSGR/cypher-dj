@@ -23,6 +23,9 @@ export interface RenderAufruf {
   nurSchluessel?: string[];
   // 1.10 T10 (AK24): --trocken-aus, render-only. Tracks and groups write zero into the master, the sends stay live: the output is the returns' wet part.
   trockenAus?: boolean;
+  // Extra environment of the render process for this call only (the renderer reads CYPHERDJ_BK_ORDNER and
+  // CYPHERDJ_KIT_ORDNER). The instance letter always wins.
+  env?: Record<string, string>;
 }
 export type Abgriff = 'produktion' | 'set';
 export interface RenderAntwort {
@@ -303,7 +306,7 @@ export function rendere(a: RenderAufruf): Promise<RenderAntwort> {
   return new Promise((ok, fehl) => {
     if (a.abbruch?.aborted) { fehl(ABGEBROCHEN()); return; }
     const k = spawn('nice', ['-n', '19', ...a.programm, ...renderArgumente(a)], {
-      stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, CYPHERDJ_INSTANZ: a.instanz }, detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...a.env, CYPHERDJ_INSTANZ: a.instanz }, detached: true,
     });
     let aus = '', err = '', fertig = false;
     const ende = (f: () => void): void => {

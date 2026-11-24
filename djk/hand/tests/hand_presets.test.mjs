@@ -448,12 +448,11 @@ test('real routes: a bad beschreibung word is answered with erlaubt through the 
   assert.ok(j.details.some((d) => Array.isArray(d.erlaubt) && d.erlaubt.includes('compressor')), text(r).slice(0, 300));
 });
 
-test('AK-B16-8: tools/list length = N + 6 (N = 66 on the base) = the count of tool entries in hand.ts = the number in both AUFRUF.md files', async (t) => {
+test('AK-B16-8: tools/list length = the count of tool entries in hand.ts = the number in both AUFRUF.md files', async (t) => {
   const { c } = await aufbau(t, () => null);
   const laenge = (await c.listTools()).tools.length;
   const quelle = fs.readFileSync(HAND, 'utf8');
   const imCode = quelle.split('\n').filter((z) => z.startsWith("  { name: '")).length;
-  assert.equal(laenge, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import */ + 5 /* live-module task 4 */ + 1 /* live-module task 11: modul_tonart */ + 1 /* live-module task 8: modul_blend */ + 3 /* live-module task 10 */ + 1 /* oszilloskop */ + 1 /* SEQ deck slice 1 task 6: seq */ + 1 /* Sampler A1 task 9: sampler */ + 1 /* ANALYZE: proj_analyse */ + 2 /* ANALYZE slice 2: analyse_live, analyse_referenz */ + 1 /* FIND SOUND: klang_runde */ + 1 /* tracker (task 9) */ + 1 /* Kraken patch field task 5: steckfeld */ + 1 /* loop deck H1: loopdeck */ + 1 /* session view M7: session */);   // + plugins (1.11 T8) + ansage (demo overlay) + proj_kits (1.9 T2.5) + proj_routing (1.10 T1) + proj_resample (1.10 T6) + proj_muster (strudel-clip)
   assert.equal(imCode, laenge, 'grep -c "^  { name: \'" djk/hand/hand.ts');
   const wurzel = path.resolve(path.dirname(HAND), '..', '..');
   // the English edition lives under docs/veroeffentlichung in the working repo; the public repo carries only djk/hand/AUFRUF.md
@@ -462,6 +461,11 @@ test('AK-B16-8: tools/list length = N + 6 (N = 66 on the base) = the count of to
     assert.match(md, new RegExp(`^## (Werkzeuge|Tools) \\(${laenge}\\)$`, 'm'), `${datei} heading`);
     assert.ok(md.includes(`= ${laenge};`), `${datei} counting sentence`);
     assert.ok(!/\b(65|71)\b/.test(md), `${datei} has no stale 65 or 71`);
+  }
+  // the public texts name the same number (present in the working repo; the public repo carries them too)
+  for (const [datei, muster] of [['docs/veroeffentlichung/public/README.md', /\b(\d+) tools\b/], ['docs/veroeffentlichung/public/docs/features.md', /\b(\d+) tools in the MCP server/]]) {
+    if (!fs.existsSync(path.join(wurzel, datei))) continue;
+    assert.equal(Number(fs.readFileSync(path.join(wurzel, datei), 'utf8').match(muster)?.[1]), laenge, `${datei} names the real tool count`);
   }
   // negative control: the check does see a stale number
   assert.throws(() => assert.match('## Tools (65)', new RegExp(`^## (Werkzeuge|Tools) \\(${laenge}\\)$`, 'm')), assert.AssertionError);

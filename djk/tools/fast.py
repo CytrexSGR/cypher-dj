@@ -24,12 +24,30 @@ NODE_PAKETE = ["ui", "hand", "conductor", "cues", "loops", "player_cli", "genera
 
 
 def git(*a):
-    return subprocess.run(["git", "-C", str(REPO), *a], capture_output=True, text=True).stdout
+    """stdout of a git command; a git error ends the program with exit 2 (an empty answer must never pass for "nothing changed")."""
+    r = subprocess.run(["git", "-C", str(REPO), *a], capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit(f"git {' '.join(a)} failed ({r.returncode}): {r.stderr.strip()}")
+    return r.stdout
+
+
+def basis(gegen=None):
+    """The commit the change is measured against: the given ref (it must exist) or the merge base with origin/main (it must exist, too)."""
+    if gegen:
+        r = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--verify", "--quiet", gegen + "^{commit}"], capture_output=True, text=True)
+        if r.returncode != 0:
+            sys.exit(f"unknown ref '{gegen}': no change can be measured against it")
+        return r.stdout.strip()
+    r = subprocess.run(["git", "-C", str(REPO), "merge-base", "HEAD", "origin/main"], capture_output=True, text=True)
+    if r.returncode != 0 or not r.stdout.strip():
+        sys.exit("no merge base of HEAD with origin/main: the change cannot be measured (fetch main, or pass --gegen REF)")
+    return r.stdout.strip()
 
 
 def geaendert(ref):
-    namen = set(git("diff", "--name-only", ref).split()) | set(git("ls-files", "--others", "--exclude-standard").split())
-    return sorted(n for n in namen if (REPO / n).is_file())
+    """Every path the working tree changes against ref: added, modified, deleted (old path) and renamed (old and new path), plus untracked files."""
+    namen = set(git("diff", "--name-only", "--no-renames", ref).split()) | set(git("ls-files", "--others", "--exclude-standard").split())
+    return sorted(namen)
 
 
 def ist_test(p):
@@ -65,8 +83,71 @@ def bereich(rel):
     return None
 
 
-def auswahl(dateien):
-    node, py, kern = {}, {}, set()
+IMPORT_RX = re.compile(r"""(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\(\s*)['"](\.{1,2}/[^'"]+)['"]""")
+JS_ENDUNG = (".ts", ".mjs", ".js", ".cjs", ".mts")
+_importe = {}
+
+
+def _aufloesen(von, spez):
+    basispfad = os.path.normpath(os.path.join(os.path.dirname(von), spez))
+    for k in [basispfad] + [basispfad + e for e in JS_ENDUNG] + [os.path.join(basispfad, "index" + e) for e in JS_ENDUNG]:
+        if os.path.isfile(k):
+            return k
+    return basispfad          # a deleted file: its path is still what the importers name
+
+
+def direkte_importe(pfad):
+    if pfad not in _importe:
+        try:
+            text = Path(pfad).read_text(errors="ignore")
+        except OSError:
+            text = ""
+        _importe[pfad] = {_aufloesen(pfad, m) for m in IMPORT_RX.findall(text)}
+    return _importe[pfad]
+
+
+def importiert_transitiv(test):
+    """Every file a node test reaches through relative import / require / dynamic import."""
+    gesehen, stapel = set(), [str(test)]
+    while stapel:
+        for k in direkte_importe(stapel.pop()):
+            if k not in gesehen:
+                gesehen.add(k)
+                stapel.append(k)
+    return gesehen
+
+
+def node_tests_aller_pakete():
+    out = []
+    for p in NODE_PAKETE:
+        out += test_dateien(DJK / p, "*.test.mjs") + test_dateien(DJK / p, "*.test.ts")
+    return out
+
+
+def wurzel_von(pfad):
+    """Node package folder (DJK/<p>) a test file lives in."""
+    rel = Path(pfad).relative_to(REPO).as_posix()
+    for p in NODE_PAKETE:
+        if rel.startswith(f"djk/{p}/"):
+            return DJK / p
+    return None
+
+
+def importeure(rel_pfade):
+    """Node test files (of every package) that reach one of the given repo-relative files through their imports."""
+    ziele = {str(REPO / r) for r in rel_pfade}
+    return [t for t in node_tests_aller_pakete() if importiert_transitiv(t) & ziele]
+
+
+def nennt_pfad(dateien, stamm):
+    """Tests that name the file as an import-like path (`/stem`, `/stem.ext`, `'stem'`), also for stems the word match is too loose for."""
+    rx = re.compile(r"""[/'"`]""" + re.escape(stamm) + r"""(\.\w+)?['"`]""")
+    return [d for d in dateien if rx.search(d.read_text(errors="ignore"))]
+
+
+def auswahl_voll(dateien):
+    """-> (node, py, kern, luecken). luecken: changed non-test files of a node or pytest area that no test reaches (by name or by import)."""
+    node, py, kern, luecken = {}, {}, set(), []
     for rel in dateien:
         b = bereich(rel)
         if not b:
@@ -80,10 +161,23 @@ def auswahl(dateien):
         alle = test_dateien(wurzel, "*.test.mjs") + test_dateien(wurzel, "*.test.ts") if art == "node" else test_dateien(wurzel, "test_*.py")
         ziel = node if art == "node" else py
         if ist_test(p) and p.suffix in (".mjs", ".ts", ".py"):
-            ziel.setdefault(wurzel, set()).add(p)
-        elif len(stamm) >= 4:
-            for t in nennt(alle, stamm):
-                ziel.setdefault(wurzel, set()).add(t)
+            if p.is_file():
+                ziel.setdefault(wurzel, set()).add(p)
+            continue
+        treffer = set(nennt(alle, stamm)) if len(stamm) >= 4 else set()
+        treffer |= set(nennt_pfad(alle, stamm))
+        if art == "node":
+            treffer |= set(importeure([rel]))
+        if not treffer:
+            luecken.append(rel)
+        for t in treffer:
+            w = wurzel_von(t) if art == "node" else wurzel
+            ziel.setdefault(w or wurzel, set()).add(t)
+    return node, py, kern, luecken
+
+
+def auswahl(dateien):
+    node, py, kern, _ = auswahl_voll(dateien)
     return node, py, kern
 
 
@@ -103,7 +197,7 @@ def main(argv=None):
     ap.add_argument("--gegen", default=None)
     ap.add_argument("--zeige", action="store_true")
     a = ap.parse_args(argv)
-    ref = a.gegen or git("merge-base", "HEAD", "origin/main").strip() or "HEAD"
+    ref = basis(a.gegen)
     dateien = geaendert(ref)
     node, py, kern = auswahl(dateien)
     seriell = set()

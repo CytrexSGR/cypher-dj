@@ -410,3 +410,17 @@ test('baueKacheln: bank chips above the tiles pick a bank, the line about the ot
     assert.ok(wurzel.alle().some((x) => x.textContent === 'PROGRAM picks the bank'));
   } finally { globalThis.document = dok; }
 });
+
+test('geraeteZeilen: two ports of one device are one row with the note "2 ports"; a plugged-in desk device known by name only is not listed twice', async () => {
+  const { geraeteZeilen } = await import('../public/register_view.js');
+  const register = { katalog: [{ id: 's8', name: 'Traktor Kontrol S8', weg: 'pult', midi: null, da: true, eintraege: 49, rueckweg: 'LEDs, two screens', hinweis: '' }] };
+  const geraete = { controller: [], quellen: { midi: [
+    { port: 'Midi-Bridge:Launchpad Mini MK3: LPMiniMK3 DA (capture)', alias: 'Launchpad Mini MK3:Launchpad Mini MK3 LPMiniMK3 DA' },
+    { port: 'Midi-Bridge:Launchpad Mini MK3: LPMiniMK3 MI (capture)', alias: 'Launchpad Mini MK3:Launchpad Mini MK3 LPMiniMK3 MI' },
+    { port: 'Midi-Bridge:Traktor Kontrol S8: MIDI 1 (capture)', alias: 'Traktor Kontrol S8:Traktor Kontrol S8 MIDI 1' },
+  ] } };
+  const z = geraeteZeilen(register, geraete, { zuordnungen: [] }, null);
+  assert.deepEqual(z.map((x) => [x.art, x.name, x.anzahl]), [['frei', 'Launchpad Mini MK3', '2 ports'], ['katalog', 'Traktor Kontrol S8', '49 assigned']]);
+  assert.equal(z[0].port, 'Midi-Bridge:Launchpad Mini MK3: LPMiniMK3 MI (capture)', 'ADD takes the plain MIDI port, not the DAW one');
+  assert.match(z[0].hinweis, /LPMiniMK3 DA .*LPMiniMK3 MI/);
+});

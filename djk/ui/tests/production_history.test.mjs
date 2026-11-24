@@ -1,7 +1,7 @@
 // PRODUCTION V1: Undo-Stand und Verlaufsanzeige (reine Funktionen)
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { undoStand, verlaufZeilen, zeitText } from '../public/production/history.js';
+import { undoStand, verlaufZeilen, zeitText, labelText } from '../public/production/history.js';
 
 const e = (rev, art, label, quelle = 'andreas') => ({ rev, zeit: Date.UTC(2026, 9, 15, 12, 0, rev), quelle, label, art });
 
@@ -55,4 +55,60 @@ test('V1 Verlauf: Strg+Z greift mit der Hand am Regler, nicht im Textfeld', () =
   assert.equal(istTextFeld({ tagName: 'DIV', isContentEditable: false }), false);
   assert.equal(istTextFeld({ tagName: 'BUTTON' }), false);
   assert.equal(istTextFeld(null), false);
+});
+
+test('labelText: a stored "Baukasten:" label is shown as "Cypher Modular:", also behind Undo and Redo; other labels stay', () => {
+  assert.equal(labelText('Baukasten: save sound'), 'Cypher Modular: save sound');
+  assert.equal(labelText('Undo: Baukasten: save sound'), 'Undo: Cypher Modular: save sound');
+  assert.equal(labelText('Redo: Baukasten: save sound'), 'Redo: Cypher Modular: save sound');
+  assert.equal(labelText('Cypher Modular: save sound'), 'Cypher Modular: save sound');
+  assert.equal(labelText('Tempo 124'), 'Tempo 124');
+  assert.equal(labelText(undefined), '');
+  assert.equal(verlaufZeilen([e(1, 'aendern', 'Baukasten: save sound')])[0].text, 'Cypher Modular: save sound');
+});
+
+// UI polish T7 (Nr. 19): the HISTORY list closes on Escape, on a click outside, and when the project or the view changes; aria-expanded follows
+import { bindeVerlauf } from '../public/production/history_display.js';
+
+function popupUmgebung() {
+  const abh = { document: {}, window: {} }, alt = { document: globalThis.document, window: globalThis.window };
+  const knoepfe = {}, attr = {};
+  const mach = (id) => ({ id, hidden: true, disabled: false, title: '', textContent: '', children: [], setAttribute: (k, v) => { attr[`${id}.${k}`] = v; }, addEventListener(a, f) { (knoepfe[`${id}.${a}`] ??= []).push(f); }, append() {}, closest(s) { return s === `#${id}` ? this : null; } });
+  const els = { undo: mach('undo'), redo: mach('redo'), verlauf: mach('verlauf'), 'verlauf-liste': mach('verlauf-liste') };
+  globalThis.document = { body: { classList: { contains: () => false } }, addEventListener: (a, f) => { (abh.document[a] ??= []).push(f); }, createElement: () => ({ dataset: {} }) };
+  globalThis.window = { addEventListener: (a, f) => { (abh.window[a] ??= []).push(f); } };
+  const beimProjekt = [];
+  bindeVerlauf({ st: { projekt: null, slug: null }, $: (n) => els[n], nachLaden: [], beimProjekt, holeGet: async () => ({ status: 200, j: [] }), schreiber: {} });
+  return { els, abh, knoepfe, attr, beimProjekt, fertig: () => { globalThis.document = alt.document; globalThis.window = alt.window; } };
+}
+const klick = (u) => u.knoepfe['verlauf.click'][0]({ target: u.els.verlauf, stopPropagation() {} });
+
+test('HISTORY popup: Escape, a click outside, a project change and a view change close it; aria-expanded follows', () => {
+  const u = popupUmgebung();
+  try {
+    const liste = u.els['verlauf-liste'];
+    klick(u);
+    assert.equal(liste.hidden, false);
+    assert.equal(u.attr['verlauf.aria-expanded'], 'true');
+    u.abh.document.keydown[0]({ key: 'Escape' });
+    assert.equal(liste.hidden, true);
+    assert.equal(u.attr['verlauf.aria-expanded'], 'false');
+    klick(u);
+    u.abh.document.click[0]({ target: { closest: () => null } });
+    assert.equal(liste.hidden, true, 'a click on the body closes it');
+    klick(u);
+    u.abh.document.click[0]({ target: { closest: (s) => (s === '#verlauf-liste' ? {} : null) } });
+    assert.equal(liste.hidden, false, 'a click inside the list keeps it');
+    u.beimProjekt[0]({}, true);
+    assert.equal(liste.hidden, true, 'a project change closes it');
+    klick(u);
+    u.abh.window.hashchange[0]();
+    assert.equal(liste.hidden, true, 'a view change (hash) closes it');
+    klick(u);
+    klick(u);
+    assert.equal(liste.hidden, true, 'the key toggles');
+    klick(u);
+    u.abh.document.keydown[0]({ key: 'a' });
+    assert.equal(liste.hidden, false, 'other keys do nothing');
+  } finally { u.fertig(); }
 });

@@ -1,4 +1,5 @@
 // Sampler B task 4: the hand tool `sampler {aktion: 'kit'}` (slices to a drum kit). A stub page records every request.
+import { WERKZEUGE_IM_CODE } from './support/werkzeugzahl.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -40,7 +41,7 @@ test('schema: aktion has kit, nummern is an integer array, namen a string array,
   assert.equal(p.kit.type, 'string');
   assert.deepEqual(x.inputSchema.required, ['aktion']);
   const tools = (await c.listTools()).tools;
-  assert.equal(tools.length, 100, 'the tool count stays 100');
+  assert.equal(tools.length, WERKZEUGE_IM_CODE, 'the tool count is the number of entries in hand.ts');
 });
 
 test('description: proposed banks, per-bank numbers, 10 s, kit_vorhanden, the way to a track and to a Strudel text, the live stream', async (t) => {

@@ -29,7 +29,7 @@ export const ARTEN = {
   saett: { kurz: 'Sat', name: 'saturator', voll: 'No free saturator', neu: 'Add a saturator' },
   lim: { kurz: 'Lim', name: 'limiter', voll: 'No free limiter', neu: 'Add a limiter' },
   utility: { kurz: 'Util', name: 'utility', voll: 'No free utility', neu: 'Add a utility (width, bass mono, gain, balance)' },
-  bk: { kurz: 'Fx', name: 'effect', voll: 'No free effect stage', neu: 'Add a Baukasten effect (the tempo-synchronous delay; other graphs through the Hand)' },
+  bk: { kurz: 'Fx', name: 'effect', voll: 'No free effect stage', neu: 'Add a Cypher Modular effect (the tempo-synchronous delay; other graphs through the Hand)' },
 };
 // Plan 1.11 task 11: a plugin (host) stage. Not in ARTEN (those are the kinds with a button "+ ..." and a pool the page counts); added by the PLUGINS list.
 export const HOST_ART = { kurz: 'Plugin', name: 'plugin', voll: 'No free plugin host', neu: 'Add a plugin' };

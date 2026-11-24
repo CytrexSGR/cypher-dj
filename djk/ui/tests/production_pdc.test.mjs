@@ -67,7 +67,7 @@ test('pdc: texts - milliseconds at 48 kHz, the strip row and the header line', (
   assert.equal(streifenText({ kette: 0, versatz: 0 }), '');
 });
 
-test('pdc: a Baukasten stage has a latency the page does not know: it says "unknown" instead of showing a sum that looks complete (arr-bk)', () => {
+test('pdc: a Cypher Modular stage has a latency the page does not know: it says "unknown" instead of showing a sum that looks complete (arr-bk)', () => {
   const p = projekt('A');
   p.returns[0].inserts = [I('bk')];
   const r = pdcRechnen(p);
@@ -75,18 +75,18 @@ test('pdc: a Baukasten stage has a latency the page does not know: it says "unkn
   assert.equal(r.streifen.r1.bk, 1);
   assert.equal(r.streifen.s1.bk, 0);
   assert.equal(r.gesamt, pdcRechnen(projekt('A')).gesamt, 'the stage adds 0 to the numbers (the page does not get the graph latency)');
-  assert.equal(streifenText(r.streifen.r1), 'Baukasten latency unknown');
-  assert.match(latenzZeile(p), /latency of 1 Baukasten stage unknown/);
+  assert.equal(streifenText(r.streifen.r1), 'Cypher Modular latency unknown');
+  assert.match(latenzZeile(p), /latency of 1 Cypher Modular stage unknown/);
   p.spuren[1].inserts = [I('bk')];
-  assert.match(latenzZeile(p), /latency of 2 Baukasten stages unknown/);
+  assert.match(latenzZeile(p), /latency of 2 Cypher Modular stages unknown/);
   // negative control: a project without a Baukasten stage says nothing about it
-  assert.doesNotMatch(latenzZeile(projekt('A')), /Baukasten/);
+  assert.doesNotMatch(latenzZeile(projekt('A')), /Cypher Modular/);
   assert.equal(pdcRechnen(projekt('A')).bk, 0);
   assert.equal(latenzZeile(projekt('none')), '');
   // a project with only a Baukasten stage: the line is not empty (before, the sum 0 hid the stage)
   const q = projekt('none');
   q.master.inserts = [I('bk')];
-  assert.match(latenzZeile(q), /Baukasten/);
+  assert.match(latenzZeile(q), /Cypher Modular/);
 });
 
 // nested groups (plan task 5): the topologies E, F, G of test_arr_pdc case 10. Groups g3 in g2 in g1, track s1 directly in g1, track s2 in g3.

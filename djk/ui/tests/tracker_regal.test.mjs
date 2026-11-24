@@ -227,11 +227,16 @@ test('the shelf texts name only buttons that exist: MODULES, SAVE AS on a module
   w.zeige(); await ruhe();
   const knoepfe = new Set([...wurzel.querySelectorAll('button')].map((b) => b.textContent));
   assert.ok(knoepfe.has('SAVE AS') && knoepfe.has('MODULES') && knoepfe.has('NEW MODULE'));
-  assert.ok(!REGAL_TEXT.hinweis.includes('SAVE MODULE'), 'the hint does not name the button a module does not have');
-  for (const x of wort(REGAL_TEXT.hinweis)) assert.ok(knoepfe.has(x), `the hint names ${x}`);
+  const hinweis = wurzel.querySelector('.t-regal-hinweis').textContent;
+  assert.ok(!hinweis.includes('SAVE MODULE'), 'the hint does not name the button a module does not have');
+  for (const x of wort(hinweis)) assert.ok(knoepfe.has(x), `the hint names ${x}`);
+  assert.ok(hinweis.includes('SAVE AS'));
   aufbau();   // an unmarked project: the button reads SAVE MODULE
   w.zeige(); await ruhe();
   const ohne = new Set([...wurzel.querySelectorAll('button')].map((b) => b.textContent));
   for (const x of wort(REGAL_TEXT.leer)) assert.ok(ohne.has(x) || knoepfe.has(x), `the empty text names ${x}`);
+  const hinweisOhne = wurzel.querySelector('.t-regal-hinweis').textContent;
+  for (const x of wort(hinweisOhne)) assert.ok(ohne.has(x), `the hint names ${x}`);
+  assert.ok(!hinweisOhne.includes('SAVE AS') && hinweisOhne.includes('SAVE MODULE'));
   assert.ok(ohne.has('SAVE MODULE'));
 });

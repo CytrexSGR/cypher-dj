@@ -11,8 +11,8 @@ const spur = (nr) => ({ spur_id: `s${nr}`, nr, name: `L1.${nr}`, fader_db: 0, mu
 const deck1 = () => ({ gruppe_id: 'g1', platz: 1, raster: '1', spuren: [1, 2, 3, 4].map(spur) });
 
 async function start(stand = { decks: { 1: deck1(), 2: null }, beat: 16, bpm: 120 }, extra = {}) {
-  const a = installiere({ html: HTML, antworten: { 'GET /loopdeck/stand': () => ({ j: stand }), 'POST /loopdeck/neu': { j: { ok: true, gruppe_id: 'g2' } }, ...extra } });
-  const m = await import('../public/loopdeck/view.js');
+  const a = installiere({ html: HTML, antworten: { 'GET /loopdeck/stand': () => ({ j: stand }), 'POST /loopdeck/neu': { j: { ok: true, gruppe_id: 'g2' } }, 'GET /proj/aktuell': { j: { slug: 'live', rev: 1 } }, ...extra } });
+  const m =await import('../public/loopdeck/view.js');
   m.zuruecksetzen();
   m.zeigeLoopdecks();
   await ruhe();
@@ -111,7 +111,7 @@ test('the play head follows the beat clock', async () => {
   assert.ok(Math.abs(parseFloat(kopf.style.left) - 50) < 2, `head at ${kopf.style.left}`);
 });
 
-test('foot row: stop, mute, volume and filter post their bodies', async () => {
+test('foot row: stop, mute and volume post their bodies', async () => {
   const { a } = await start();
   const s = deck().querySelectorAll('.ld-spur')[1];
   s.querySelector('.stopp').click(); await ruhe();
@@ -122,11 +122,8 @@ test('foot row: stop, mute, volume and filter post their bodies', async () => {
   const f = s.querySelector('input.live-regler');
   f.value = '-6'; f.dispatch('input'); await ruhe();
   assert.deepEqual(posts(a).at(-1).koerper, { deck: 1, spur: 2, fader_db: -6 });
-  const k = s.querySelector('.knopf');
-  k.dispatch('pointerdown', { clientY: 150, pointerId: 1 }); k.dispatch('pointermove', { clientY: 0 }); k.dispatch('pointerup'); await ruhe();
-  assert.deepEqual(posts(a).at(-1).koerper, { deck: 1, spur: 2, filter: 1 });
-  k.dispatch('dblclick'); await ruhe();
-  assert.deepEqual(posts(a).at(-1), { url: '/loopdeck/spur', methode: 'POST', koerper: { deck: 1, spur: 2, filter: 0 } });
+  // COLOR is no longer in the foot (it lives in the STRIP row; its call is tested in seite_loopdeck_kanalzug)
+  assert.equal(s.querySelector('.ld-fuss').querySelectorAll('.knopf').length, 0);
 });
 
 test('head: STOP ALL and the grid selector post for the deck', async () => {

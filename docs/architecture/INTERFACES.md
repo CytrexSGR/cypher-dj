@@ -486,14 +486,15 @@ Unknown keys are a startup error (typos show up at once). Every file begins with
 | `leitstand.toml` | `ws_port`, `abo_port` | int | 47200, 47110 | §2 |
 | | `set_basis_bpm` | float | 128.0 | fixed set base until slice 5 |
 | | `autonomie_start` | int | 1 | §10 |
-| | `bestand`, `sets` | path | `~/cypher-dj/bestand`, `~/cypher-dj/sets/djk` | §13, §15; a test instance (`CYPHERDJ_INSTANZ` a to i) whose `sets` is the default writes its sets to `/dev/shm/cypherdj-<i>/sets`, an explicit other `sets` is used as written, the production instance keeps the default |
+| | `bestand` | path | `""` | §13; empty = the storage table (kind `bestand`, `config/ablage.json`), `djk-start` resolves it |
+| | `sets` | path | `""` | §15; empty = the storage table (kind `journal`, today `~/cypher-dj/sets/djk`); a test instance (`CYPHERDJ_INSTANZ` a to i) whose `sets` is the default writes its sets to `/dev/shm/cypherdj-<i>/sets`, an explicit other `sets` is used as written, the production instance keeps the default |
 | | `rechner_socket` | path | `$XDG_RUNTIME_DIR/cypherdj/rechner.sock` | §11 |
 | | `zug_vorlauf_takte`, `antwort_frist_takte` | int | 12, 4 | §3, ADR 013 (lead time since 2026-09-26 twelve bars: fallback after M15) |
 | | `nachrender_ruhe_takte` | int | 16 | ADR 020 |
 | | `grenzen_tief_verriegeln` | bool | false | §11: warning only; M20 (2026-09-25): rule §14.4 breaches the deep limit, safe 9/12, hard 11/12, therefore false |
 | | `journal` | str | `"voll"` | Journal mode of the leitstand (§15): `voll` or `schlank`, anything else is a start error naming file and key. The option `--journal voll\|schlank` of the leitstand and of `djk-start` wins over the key. `djk-start` passes `schlank` to the production instance (no `--instanz`) and nothing to a test instance (`voll`) |
 | `werkstatt.toml` | `comfy_musik_url` | str | (from skill `cypher-musik`) | §12.3 |
-| | `bestand` | path | `~/cypher-dj/bestand` | §13 |
+| | `bestand` | path | `""` | §13; empty = the storage table (kind `bestand`) |
 | | `threads` | int | 4 | per job; unit with `Nice=19`, `CPUSchedulingPolicy=batch` |
 | | `luft_db` | float | −12.0 | headroom before R3 (08 NP K5) |
 | | `tor_raster_ms`, `tor_klarheit`, `tor_streckfaktor`, `tor_headroom_dbtp` | float | 8.0, 0.1, 0.20, −1.0 | §12.3; `tor_streckfaktor` 0.20 from M19 (2026-09-25, 5-ms convention, at 30 ms 0.30), provisional until M18 |
@@ -529,7 +530,7 @@ All commands are single OSC messages (no bundles; exception: generator window §
 produce `/e/protokollfehler` (§5.9) and are discarded.
 
 **Policy codes** (`i politik`): 0 = `musik` (too late → discarded), 1 = `zustand` (too late → executed in the next
-cycle), 2 = `raster` (too late → next reachable grid point of size `raster_beats`). Details in §16.
+cycle), 2 = `raster` (too late → next reachable grid point of size `raster_beats`), 3 = `takt` (`/k/deck/start` only: like 0, too late → discarded, and the core aligns the bar phase of the deck to another playing deck, see §4.4). Details in §16.
 
 ### 4.1 Connection
 
@@ -648,7 +649,7 @@ new tempo. `vorlauf_ms` in `/zustand/deck` says how early deck commands must arr
 |---|---|---|---|
 | `/k/deck/laden` | `,hsisdii` | `id`, `quelle`, `deck` (1 to 4), `material_id`, `basis_bpm`, `fassung` (r ≥ 1), `mit_stems` (0/1) | only if the deck is not running at the same time and is open (otherwise `deck_hoerbar`; a standing deck loads even with the fader open, 2026-09-27). Loader fades in `/dev/shm/cypherdj/material/<id>/fassungen/<bpm·1000>_r<fassung>/` (`basis.f32` or the four stems, see above), checks against `fassung.json` (§13.2), hands the pointer into the callback; `deck/<n>/fader` → −200, `pfl` → 0, `trim` per §1.5; receipt `gestartet` at the swap, `fertig`; event `/e/geladen`. Errors: `abgelehnt`, reason `material_fehlt` \| `pruefung` \| `budget_speicher` |
 | `/k/deck/entladen` | `,hsi` | `id`, `quelle`, `deck` | only if not running at the same time and open (2026-09-27); releases memory after return from the callback |
-| `/k/deck/start` | `,hssssiddi` | `id`, `quelle`, `plan`, `gruppe`, `hoerschein`, `deck`, `ab_beat`, `quell_beat`, `politik` | at `ab_beat` `quell_beat` sounds (128-frame fade if the deck already runs; from standstill 48 frames fade-in, audit F10); the deck then follows the tempo map (factor = `bpm / basis_bpm`) |
+| `/k/deck/start` | `,hssssiddi` | `id`, `quelle`, `plan`, `gruppe`, `hoerschein`, `deck`, `ab_beat`, `quell_beat`, `politik` | at `ab_beat` `quell_beat` sounds (128-frame fade if the deck already runs; from standstill 48 frames fade-in, audit F10); the deck then follows the tempo map (factor = `bpm / basis_bpm`). `politik` 3 `takt` (SYNC, 2026-11-23): policy 0 plus bar phase. `ab_beat` is the earliest beat; if another deck is playing (the lowest one that is neither stopping nor in cue preview), the core moves the start back by 0 up to just under 4 beats until `quell_beat − erste_eins` of this deck is congruent mod 4 to `quell_beat − erste_eins` of the playing deck at that beat (the downbeats of both decks meet). A shift is acknowledged with status 5 like policy 2. If none is playing: start at `ab_beat` like policy 0 |
 | `/k/deck/stopp` | `,hssssidi` | `id`, `quelle`, `plan`, `gruppe`, `hoerschein`, `deck`, `ab_beat`, `politik` | stop with a 10-ms ramp. A stop from a plan waits as long as it would hit the last audible channel (I2). Only an **executed** stop with source `andreas` (or the play button) disables the deadline guard for this material |
 | `/k/deck/loop` | `,hssssiddid` | `id`, `quelle`, `plan`, `gruppe`, `hoerschein`, `deck`, `ab_beat`, `laenge_beats` (1/32 to 128; 0 = loop off), `politik`, `raster_beats` | loop from the source position at `ab_beat` (tape, 128-frame fade at the seam) |
 | `/k/deck/loop_laenge` | `,hssssidddid` | `id`, `quelle`, `plan`, `gruppe`, `hoerschein`, `deck`, `ab_beat`, `start_beat` (source beat of the loop start, which stays), `laenge_beats` (1/32 to 128, no 0), `politik`, `raster_beats` | loop with **fixed start** and new length (Traktor: change loop length while the loop runs, 2026-10-21). Unlike `/k/deck/loop`, the core does not place the loop at the head position but at `start_beat`; the head stays where it is. If it then lies beyond the new end (shortening), the loop's seam rule wraps it back (`start + (pos − start) mod länge`, 128-frame fade, same path as every pass); before the start it runs to the end and then wraps. Outside the material (`start_beat` + longest pass) or `start_beat` not finite: receipt 6 `ausserhalb_bereich`, the old loop stays. New address, version remains 1 |

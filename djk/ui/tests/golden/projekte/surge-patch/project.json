@@ -1,0 +1,81 @@
+{
+ "format": "cypherdj-projekt/3",
+ "gruppen": [],
+ "loop": {
+  "an": false,
+  "bis_beat": 32,
+  "von_beat": 0
+ },
+ "master": {
+  "fader_db": 0
+ },
+ "metronom": {
+  "an": false,
+  "pegel_db": -12,
+  "ziel": "master"
+ },
+ "naechste_id": {
+  "clip": 1,
+  "gruppe": 1,
+  "spur": 1
+ },
+ "naechste_noten_id": 1,
+ "name": "Golden surge patch",
+ "rev": 0,
+ "spuren": [
+  {
+   "art": "instrument",
+   "clips": [
+    {
+     "art": "midi",
+     "id": "c1",
+     "laenge_beats": 8,
+     "name": "Chords",
+     "noten": [
+      {
+       "beat": 0,
+       "id": "n1",
+       "laenge": 4,
+       "ton": 57,
+       "vel": 80
+      },
+      {
+       "beat": 4,
+       "id": "n2",
+       "laenge": 4,
+       "ton": 60,
+       "vel": 80
+      }
+     ],
+     "start_beat": 0
+    }
+   ],
+   "fader_db": 0,
+   "farbe": "#3b8de0",
+   "freeze": null,
+   "geraet": {
+    "art": "wirt",
+    "name": "surge",
+    "parameter": {
+     "filter_cutoff": 62.5,
+     "osc_level": -3
+    },
+    "patch": "Pads/Warm Pad",
+    "slot": 1
+   },
+   "id": "s1",
+   "mute": false,
+   "name": "Pad",
+   "nr": 1,
+   "pan": 0,
+   "solo": false,
+   "von": "andreas"
+  }
+ ],
+ "taktart": [
+  4,
+  4
+ ],
+ "tempo_bpm": 120,
+ "wiedergabe_rev": 0
+}

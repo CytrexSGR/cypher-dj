@@ -64,8 +64,8 @@ const mitEnv = (kv, f) => { const alt = {}; for (const k of Object.keys(kv)) { a
 const ALT = (H) => ({ projekte: `${H}/cypherdj-projekte`, module: `${H}/.config/cypherdj/module`, sampler: `${H}/.config/cypherdj/sampler`, presets: `${H}/.config/cypherdj/presets`,
   klaenge: `${H}/.config/cypherdj/klaenge`, kollektionen: `${H}/.config/cypherdj/kollektionen`, raster: `${H}/.config/cypherdj/raster`, hotcues: `${H}/.config/cypherdj/hotcues`,
   kits: `${H}/.config/cypherdj/kits`, loops: `${H}/.config/cypherdj/loops`, geraete: `${H}/.config/cypherdj/baukasten`, loopsets: `${H}/.config/cypherdj/loopsets`,
-  bestand: `${P.REPO}/bestand`, sammlungen: `${P.REPO}/bibliothek/sets`, muster: `${P.REPO}/bibliothek/muster`, journal: `${P.REPO}/sets/djk` });
-const ENVS = ['CYPHERDJ_HEIM', 'CYPHERDJ_MODULE', 'CYPHERDJ_SAMPLER', 'CYPHERDJ_KLAENGE', 'CYPHERDJ_KIT_ORDNER', 'CYPHERDJ_BK_ORDNER', 'CYPHERDJ_LOOPSETS', 'CYPHERDJ_BESTAND', 'CYPHERDJ_SAMMLUNGEN', 'CYPHERDJ_MUSTER', 'CYPHERDJ_JOURNAL'];
+  bestand: `${P.REPO}/bestand`, sammlungen: `${P.REPO}/bibliothek/sets`, muster: `${P.REPO}/bibliothek/muster`, journal: `${P.REPO}/sets/djk`, importe: `${H}/.config/cypherdj/importe`, mitschnitte: `${H}/cypherdj/werke/mitschnitte` });
+const ENVS = ['CYPHERDJ_HEIM', 'CYPHERDJ_MODULE', 'CYPHERDJ_SAMPLER', 'CYPHERDJ_KLAENGE', 'CYPHERDJ_KIT_ORDNER', 'CYPHERDJ_BK_ORDNER', 'CYPHERDJ_LOOPSETS', 'CYPHERDJ_BESTAND', 'CYPHERDJ_SAMMLUNGEN', 'CYPHERDJ_MUSTER', 'CYPHERDJ_JOURNAL', 'CYPHERDJ_IMPORTE', 'CYPHERDJ_MITSCHNITTE'];
 const ohneEnv = Object.fromEntries(ENVS.map((k) => [k, undefined]));
 const tmpHome = () => fs.mkdtempSync(path.join(os.tmpdir(), 'ablage-home-'));
 const neuTabelle = () => ({ ...JSON.parse(fs.readFileSync(path.join(P.REPO, 'djk', 'config', 'ablage.json'), 'utf8')), vorgabe: 'neu' });
@@ -75,8 +75,22 @@ test('ablage: every kind resolves to its old place while vorgabe is alt', () => 
     const altTabelle = { ...neuTabelle(), vorgabe: 'alt' };
     const got = Object.fromEntries(P.ablageArten().map((a) => [a, P.ablageOrdner(a, { tabelle: altTabelle })]));
     assert.deepEqual(got, ALT(H));
-    assert.equal(P.ablageArten().length, 16);
+    assert.equal(P.ablageArten().length, 18);
   });
+});
+
+test('ablage: mitschnitte has no old place: neu under both vorgaben, env wins, instance recorder lookup follows the env', () => {
+  mitEnv(ohneEnv, () => {
+    assert.equal(P.ablageOrte('mitschnitte').alt, '');
+    assert.equal(P.ablageOrte('mitschnitte').kern, false);
+    assert.equal(P.ablageOrdner('mitschnitte', { tabelle: neuTabelle() }), path.join(H, 'cypherdj/werke/mitschnitte'));
+    assert.equal(P.ablageOrdner('mitschnitte', { tabelle: { ...neuTabelle(), vorgabe: 'alt' } }), path.join(H, 'cypherdj/werke/mitschnitte'));
+  });
+  mitEnv({ ...ohneEnv, CYPHERDJ_MITSCHNITTE: '/tmp/m' }, () => assert.equal(P.ablageOrdner('mitschnitte'), '/tmp/m'));
+  assert.equal(P.mitschnittOrdnerVorgabe('c'), '/dev/shm/cypherdj-c/recordings');
+  mitEnv({ ...ohneEnv, CYPHERDJ_MITSCHNITTE: '/tmp/m' }, () => assert.equal(P.mitschnittOrdnerVorgabe(''), '/tmp/m'));
+  mitEnv({ CYPHERDJ_SETMITSCHNITT: undefined }, () => assert.equal(P.setmitschnittProgramm(), path.join(P.REPO, 'djk/core/build/cypherdj-setmitschnitt')));
+  mitEnv({ CYPHERDJ_SETMITSCHNITT: '/x/fake' }, () => assert.equal(P.setmitschnittProgramm(), '/x/fake'));
 });
 
 test('ablage: loopsets kind: neu place, alt place and env override', () => {
@@ -226,7 +240,8 @@ test('ablage: an already moved home (old places are links) resolves every kind t
     const h = tmpHome();
     mitEnv({ HOME: h }, () => {
       // The four kinds with a place inside the checkout are left out: their old place is the repo root, never written by a test (storage_inventory.test.mjs covers them).
-      const arten = P.ablageArten().filter((a) => !['bestand', 'sammlungen', 'muster', 'journal'].includes(a));
+      // mitschnitte has no old place (empty alt), so there is nothing to move.
+      const arten = P.ablageArten().filter((a) => !['bestand', 'sammlungen', 'muster', 'journal', 'mitschnitte'].includes(a));
       for (const a of arten) {                                                              // state after the move: neu is real, alt is a link
         const o = P.ablageOrte(a);
         fs.mkdirSync(o.neu, { recursive: true }); fs.writeFileSync(path.join(o.neu, 'marker'), a);

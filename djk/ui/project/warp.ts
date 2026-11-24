@@ -65,7 +65,8 @@ const gut = (x: number | null | undefined): x is number => typeof x === 'number'
 
 // Slice 2, D10 (Andreas 2026-10-25: „wir brauchen in jedem fall tonhöhen korrektur, sonst passen die tonlagen nicht mehr zusammen“):
 // Tracks und melodische Loops warpen mit COMPLEX (Tonhöhe bleibt). Drum-Loops bleiben RE-PITCH, bis die Hörprobe von Task 14 (Drums COMPLEX gegen RE-PITCH)
-// entscheidet. Drum-Loop heißt: Instrument aus DRUM_INSTRUMENTE oder eine Kategorie mit „drum“, „perc“, „top loop“ oder „hi loop“; ein Loop ohne beide
+// entscheidet. Drum-Loop heißt: Instrument aus DRUM_INSTRUMENTE oder eine Kategorie mit „drum“, „perc“, „top loop“ oder „hi
+// loop“; ein Loop ohne beide
 // Angaben gilt als melodisch (Tonhöhe halten ist dort der sichere Fehler: ein verschmierter Transient statt einer falschen Tonart).
 export const DRUM_INSTRUMENTE = new Set(['perc', 'hihat', 'kick', 'snare', 'clap', 'ride', 'crash', 'tom', 'cymbal', 'drums', 'drum', 'fill']);
 export function istDrumLoop(q: TempoQuelle): boolean {

@@ -12,6 +12,7 @@ import { kitsOrdnerVorgabe } from '../paths.ts';
 import { KIT_NAME } from '../project/model.ts';
 import { geraetName } from './device.ts';
 import { liesSchnitt, SchnittFehler, type Ordner, type Schnitt } from './schnitt.ts';
+import { pruefeBkSchreiben, pruefeKitSchreiben } from './bk_schutz.ts';
 
 /** The first note of a kit made from slices (as in the kit `starter`); the k-th selected slice gets `ERSTE_NOTE + k`. */
 export const ERSTE_NOTE = 36;
@@ -174,6 +175,7 @@ function mitSperre<T>(ordner: string, fn: () => T): T {
 }
 
 const dateiSchreiben = (datei: string, inhalt: Buffer | string): void => {
+  pruefeBkSchreiben(datei);
   const tmp = `${datei}.${process.pid}.${crypto.randomBytes(3).toString('hex')}.tmp`;
   try { fs.writeFileSync(tmp, inhalt); fs.renameSync(tmp, datei); } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
 };
@@ -224,6 +226,7 @@ export function legeKit(a: { id: string; scheiben: number[]; banken?: string[]; 
   const wurzel = kitsOrdner(o);
   const kit = a.kit ?? freierKitName(s.name, o);
   const ordner = path.join(wurzel, kit);
+  pruefeKitSchreiben(wurzel);
   fs.mkdirSync(wurzel, { recursive: true });
   try { fs.mkdirSync(ordner); } catch (e) {
     if ((e as NodeJS.ErrnoException).code === 'EEXIST') throw new SchnittFehler(409, 'kit_vorhanden', `a kit named ${kit} exists already; choose another name`);
@@ -248,7 +251,7 @@ export function legeKit(a: { id: string; scheiben: number[]; banken?: string[]; 
 /** A new kit from frame ranges of decoded audio (stereo float32 48 kHz), not from a stored cut: session view `→ SAMPLER INSTRUMENT` (B5). The k-th range
  *  becomes note `ERSTE_NOTE + k`, with the bank proposed from its band balance and the same 5 ms end fade as `legeKit`; `quelle` names where it came from
  *  (kit.json `quelle`: `<quelle>/<k+1>`). Every refusal comes before anything is written; a failed write removes the folder again. */
-export function legeKitAusAudio(a: { name: string; daten: Float32Array; scheiben: { von: number; bis: number }[]; quelle: string; kit?: string }, o: KitOrdner = {}): {
+export function legeKitAusAudio(a: { name: string; daten: Float32Array; scheiben: { von: number; bis: number }[]; quelle: string; kit?: string; banken?: string[] }, o: KitOrdner = {}): {
   kit: string; klaenge: { scheibe: number; note: number; name: string; datei: string; frames: number }[];
 } {
   const frames = Math.floor(a.daten.length / 2);
@@ -263,10 +266,16 @@ export function legeKitAusAudio(a: { name: string; daten: Float32Array; scheiben
   }
   const gesamt = a.scheiben.reduce((sum, r) => sum + (r.bis - r.von) * 8, 0);
   if (gesamt > KIT_MAX_BYTES) throw arg(`scheiben: the sounds are ${Math.ceil(gesamt / 1048576)} MiB, a kit holds at most 256 MiB`);
-  const namen = nummeriere(a.scheiben.map((r) => bankVorschlag(baender(a.daten, r.von, r.bis))));
+  // browser plan 5: `banken` (one bank per range, the bank only, no number) replaces the proposal; absent = today's behaviour
+  if (a.banken !== undefined) {
+    if (!Array.isArray(a.banken) || a.banken.length !== a.scheiben.length) throw arg('banken: one bank per slice expected');
+    for (const b of a.banken) if (typeof b !== 'string' || !BANK.test(b)) throw arg(`banken: ${JSON.stringify(b)} is not a bank name (a-z, 0-9 and _, starting with a letter, at most 16 characters)`);
+  }
+  const namen = nummeriere(a.banken ?? a.scheiben.map((r) => bankVorschlag(baender(a.daten, r.von, r.bis))));
   const wurzel = kitsOrdner(o);
   const kit = a.kit ?? freierKitName(a.name, o);
   const ordner = path.join(wurzel, kit);
+  pruefeKitSchreiben(wurzel);
   fs.mkdirSync(wurzel, { recursive: true });
   try { fs.mkdirSync(ordner); } catch (e) {
     if ((e as NodeJS.ErrnoException).code === 'EEXIST') throw new SchnittFehler(409, 'kit_vorhanden', `a kit named ${kit} exists already; choose another name`);
@@ -329,6 +338,7 @@ export function kitMitKlang(a: { kit: string; ton: number; daten: Float32Array; 
   if (frames < 1) throw arg('daten: no audio');
   if (frames > KLANG_MAX_FRAMES) throw new SchnittFehler(400, 'klang_zu_lang', `the sound is ${text(frames)} s long; a kit sound is at most ${text(KLANG_MAX_FRAMES)} s`);
   const wurzel = kitsOrdner(o);
+  pruefeKitSchreiben(wurzel);
   const alt = liesKitKlaenge(a.kit, wurzel);
   const ersetzt = alt.find((k) => k.note === a.ton);
   if (!ersetzt && alt.length >= KIT_MAX_KLAENGE) throw new SchnittFehler(409, 'kit_voll', `kit ${a.kit} holds ${alt.length} sounds, the most a kit takes; replace one instead`);
@@ -346,6 +356,7 @@ export function kitMitKlang(a: { kit: string; ton: number; daten: Float32Array; 
   if (bytes > KIT_MAX_BYTES) throw arg(`the kit would hold ${Math.ceil(bytes / 1048576)} MiB, a kit holds at most 256 MiB`);
   const neuName = freierKitName(a.kit, o);
   const ordner = path.join(wurzel, neuName);
+  pruefeKitSchreiben(wurzel);
   try { fs.mkdirSync(ordner); } catch (e) {
     if ((e as NodeJS.ErrnoException).code === 'EEXIST') throw new SchnittFehler(409, 'kit_vorhanden', `a kit named ${neuName} exists already; try again`);
     throw e;

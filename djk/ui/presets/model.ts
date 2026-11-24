@@ -47,7 +47,7 @@ export const DATEI_MAX = 256 * 1024;   // a preset of the biggest device (EQ, 58
 // model); tests/presets_store.test.mjs pins both equal.
 export const GRAPH_NAME = /^[a-z0-9_-]{1,32}$/;
 const STEUER = /[\u0000-\u001f\u007f-\u009f]/;
-const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
+export const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
 
 // details: for beschreibung_ungueltig and anfrage_ungueltig every single error with the admissible words (erlaubt), so the page
 // and an agent can show or correct them (DECISIONS.md P-V3)
@@ -74,7 +74,7 @@ export const PRESET_TEXT: Readonly<Record<string, string>> = {
   parameter_unbekannt: 'the device has no parameter of this name',
   wert_ungueltig: 'a parameter value has the wrong type or is out of range',
   stifte_ungueltig: 'the pins must be a sorted list of [satz 0..1, zeile 0..15, spalte 0..15, wert -1..1 but not 0], at most 512, no position twice',
-  stifte_verboten: 'only a Baukasten preset carries pins',
+  stifte_verboten: 'only a Cypher Modular preset carries pins',
   tags_ungueltig: `up to ${TAGS_MAX} tags, each 1 to 24 characters a-z, 0-9, space or dash`,
   notiz_ungueltig: `the note may have up to ${NOTIZ_MAX} characters`,
   beschreibung_ungueltig: 'the description is not valid: kind, sub-kind, character, genre, use, energy and one sentence, with words from the vocabulary',
@@ -90,14 +90,14 @@ export const PRESET_TEXT: Readonly<Record<string, string>> = {
   koerper_ungueltig: 'the request body must be a JSON object',
   nicht_gefunden: 'no such preset route',
   // package 1.16 rest
-  graph_fehlt: 'a Baukasten preset needs the name of its graph (graph)',
-  graph_verboten: 'only a Baukasten preset carries a graph name',
+  graph_fehlt: 'a Cypher Modular preset needs the name of its graph (graph)',
+  graph_verboten: 'only a Cypher Modular preset carries a graph name',
   graph_ungueltig: 'the graph name needs 1 to 32 characters a-z, 0-9, _ or -',
   nur_andreas_preset: 'Cypher may change only presets she saved herself; this one is Andreas\'',
   kein_ziel: 'this device has no running instance in PRODUCTION to apply the preset to (the return hall is the kern\'s own hall)',
   art_nicht_aktiv: 'this insert kind is not active yet (slice 4b); the preset cannot be applied to an insert stage',
   geraet_passt_nicht: 'the preset belongs to another device than the target',
-  graph_anders: 'the Baukasten preset belongs to another graph than the one loaded on the track or channel',
+  graph_anders: 'the Cypher Modular preset belongs to another graph than the one loaded on the track or channel',
   kein_graph: 'no graph is loaded on this channel',
   graph_latenz: 'the instrument of this preset delays its signal and cannot play a SEQ pattern; load it on a track outside the sequencer',
   kein_projekt: 'no project is open',

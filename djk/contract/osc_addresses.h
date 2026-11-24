@@ -741,7 +741,7 @@ namespace test_hand { inline constexpr double midi_roh_min = 0; inline constexpr
 
 namespace werte {
 inline constexpr std::array<std::string_view, 6> quelle{"andreas", "cypher", "leitstand", "erzeuger", "werkstatt", "pruefstand"};
-enum class Politik : std::int32_t { musik = 0, zustand = 1, raster = 2 };
+enum class Politik : std::int32_t { musik = 0, zustand = 1, raster = 2, takt = 3 };
 enum class PolitikTeil : std::int32_t { musik = 0, zustand = 1 };
 enum class Form : std::int32_t { linear = 0, s_kurve = 1 };
 inline constexpr std::array<double, 5> raster_beats{0.25, 1.0, 4.0, 16.0, 32.0};

@@ -1320,7 +1320,7 @@ export class Ausgabe {
     nimm: (r: { rev: number; slug: string; tempo_bpm: number;
       teile: ({ datei: string; spitze_db: number; frames: number } | { stumm: true })[] }) => Promise<T>): Promise<T> {
     const s0 = sucheSpur(this.offen().projekt, spurId) ?? fehl('spur_unbekannt', `there is no track ${spurId}`);
-    if (!(s0.geraet?.art === 'intern' && s0.geraet.name === 'bk')) fehl('geraet_falsch', `${spurId} is not a Baukasten track`);
+    if (!(s0.geraet?.art === 'intern' && s0.geraet.name === 'bk')) fehl('geraet_falsch', `${spurId} is not a Cypher Modular track`);
     if (varianten.length < 1 || varianten.length > MAX_KLANG_VARIANTEN) {
       fehl('argument_ungueltig', `varianten: 1 to ${MAX_KLANG_VARIANTEN} variants are required`);
     }

@@ -142,6 +142,7 @@ export function zeigeDeck(n) {
   $('[data-loopan]', d)?.classList.toggle('an', la);
   if (deckAnsicht[n] && deckAnsicht[n].loopWar !== la) { deckAnsicht[n].loopWar = la; if (la) holeLoop(n); else deckAnsicht[n].loop = null; }
   $('.taste.play', d).classList.toggle('an', status >= 2);
+  d.classList.toggle('ohne-track', !id);   // the empty line inside the waveform area shows with this (style.css, compact deck container)
   if (!id) return;
   const g = z ?? zustand.geladenFelder?.[n] ?? e;      // gespielte Fassung vor Bestands-Eintrag (Review F3)
   if (g?.basis_bpm && g?.fassung && deckAnsicht[n].id !== `${id}|${g.basis_bpm}|${g.fassung}`) {

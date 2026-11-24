@@ -208,7 +208,7 @@ test('loopdeck_send: -200 with no return creates nothing; bad arguments; outside
   assert.equal(fehler(p, { ...send(id, 'hall', -6), extra: 1 }).grund, 'argument_unbekannt');
 });
 
-test('a fifth return is routing_grenze; no Baukasten stage left for the delay is ins_voll', () => {
+test('a fifth return is routing_grenze; no Cypher Modular stage left for the delay is ins_voll', () => {
   let p = mitDeck(1);
   for (let i = 0; i < MAX_RETURNS; i++) p = lauf(p, { befehl: 'return_neu' });
   assert.equal(fehler(p, send(p.spuren[0].id, 'hall', -6)).grund, 'routing_grenze');
@@ -298,7 +298,7 @@ test('loopdeck_effekt an switches the slot; no slot, both fields, no field, a pl
   assert.equal(fehler(p, fx(id, { graph: 'x', extra: 1 })).grund, 'argument_unbekannt');
 });
 
-test('loopdeck_effekt: the ninth Baukasten stage of the project is ins_voll, a full chain is kette_voll', () => {
+test('loopdeck_effekt: the ninth Cypher Modular stage of the project is ins_voll, a full chain is kette_voll', () => {
   let q = lauf(mitDeck(1), { befehl: 'loopdeck_neu', platz: 2 });
   const ids = q.spuren.filter((s) => s.zellen).map((s) => s.id);
   for (let i = 0; i < 8; i++) q = lauf(q, fx(ids[i], { graph: 'fx-crunch' }));

@@ -162,7 +162,7 @@ test('duplicate names get a counter, several channels of one MIDI track get the 
   assert.deepEqual(b.spuren.map((s) => s.name), ['Strings ch1', 'Strings ch2', 'Strings', 'Violin']);
 });
 
-test('poly profile: chord parts get a Baukasten graph by GM family (only graphs that exist), mono parts stay on the RB-338', () => {
+test('poly profile: chord parts get a Cypher Modular graph by GM family (only graphs that exist), mono parts stay on the RB-338', () => {
   const akkord = [an(0, 60, 80), an(0, 64, 80), an(0, 67, 80), aus(0, 60, 96), aus(0, 64, 0), aus(0, 67, 0)];
   const f = smf([spur([programm(0, 0), ...akkord]), spur([programm(1, 24), ...note(1, 72, 80, 48)])]);
   const d = leseSmf(f);
@@ -175,7 +175,7 @@ test('poly profile: chord parts get a Baukasten graph by GM family (only graphs 
   assert.equal(graphFuerProgramm(46), 'saite-harfe'); assert.equal(graphFuerProgramm(null), 'juno-pad');
 });
 
-test('poly profile: a track on a Baukasten graph starts 6 dB down, an RB-338 track stays at 0 dB (the sum reached +1 dBTP at 0 dB)', () => {
+test('poly profile: a track on a Cypher Modular graph starts 6 dB down, an RB-338 track stays at 0 dB (the sum reached +1 dBTP at 0 dB)', () => {
   const akkord = [an(0, 60, 80), an(0, 64, 80), an(0, 67, 80), aus(0, 60, 96), aus(0, 64, 0), aus(0, 67, 0)];
   const d = leseSmf(smf([spur([programm(0, 0), ...akkord]), spur([programm(1, 24), ...note(1, 72, 80, 48)])]));
   const fader = (plan) => plan.befehle.filter((b) => b.befehl === 'spur_aendern' && b.fader_db !== undefined);
@@ -271,7 +271,7 @@ test('orchesterProgramm: GM 40..79 and 88..95', () => {
   }
 });
 
-test('poly profile: monophonic orchestral parts take the free Baukasten slots (ranked by notes), the rest stays on the soft RB-338', () => {
+test('poly profile: monophonic orchestral parts take the free Cypher Modular slots (ranked by notes), the rest stays on the soft RB-338', () => {
   // ten mono parts, programs 40 48 56 65 73 twice; the last two have one note, the others three
   const progs = [40, 48, 56, 65, 73, 40, 48, 56, 65, 73];
   const teile = progs.map((pr, i) => {
@@ -300,7 +300,7 @@ const mitBk = (n) => n === 0 ? neuesProjekt('t') : fuehreListeAus(neuesProjekt('
   geraet: { art: 'intern', name: 'bk', graph: 'juno-pad-hall' } })), { graphArt: ctxOrch.graphArt }).projekt;
 const bkNeu = (p0, p1) => p1.spuren.filter((s) => s.geraet.name === 'bk').length - p0.spuren.filter((s) => s.geraet.name === 'bk').length;
 
-test('poly profile into a project that already holds 4 Baukasten tracks hands out 4 more, with 8 existing none, with 12 existing none (the cap is on the import)', () => {
+test('poly profile into a project that already holds 4 Cypher Modular tracks hands out 4 more, with 8 existing none, with 12 existing none (the cap is on the import)', () => {
   const d = leseSmf(smf(polyTeile()));
   for (const [vorhanden, soll] of [[0, 8], [4, 4], [8, 0], [12, 0]]) {
     const p0 = mitBk(vorhanden);
@@ -322,7 +322,7 @@ test('poly profile: no graph on the instance means every part stays on the soft 
 
 test('the graphs of the orchestral families exist on this instance, are instruments and have latency 0 (a graph with latency is refused on a project track)', (t) => {
   const ordner = graphenOrdner();
-  if (!fs.existsSync(ordner)) { t.skip('no Baukasten folder'); return; }
+  if (!fs.existsSync(ordner)) { t.skip('no Cypher Modular folder'); return; }
   const namen = new Set();
   for (let p = 40; p <= 95; p++) if (orchesterProgramm(p)) namen.add(graphFuerProgramm(p));
   for (const n of namen) {

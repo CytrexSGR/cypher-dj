@@ -1,6 +1,7 @@
 // Package 1.16 rest U5, T5.6 end to end: the REAL hand (stdio) against the REAL page server (Oberflaeche in process, core stand-in, test
 // instance from CYPHERDJ_TEST_INSTANZ, e for this package: port 52300). The presets and collections live in private temp folders.
 // Run it inside both instance locks of the stream (see the stream's rules).
+import { WERKZEUGE_IM_CODE } from './support/werkzeugzahl.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -28,11 +29,11 @@ async function aufbau(t) {
   return { url, c, aufruf, log };
 }
 
-test('T5.6 echt: tools/list of the live hand has 100 tools = the grep count; presets_suchen {familie: instrument} returns the 10 rb338 factory presets, {art: [bass]} the 7 bass ones', async (t) => {
+test('T5.6 echt: tools/list of the live hand has as many tools as hand.ts has entries; presets_suchen {familie: instrument} returns the 10 rb338 factory presets, {art: [bass]} the 7 bass ones', async (t) => {
   const { c, aufruf } = await aufbau(t);
   const n = (await c.listTools()).tools.length;
   const imCode = fs.readFileSync(HAND, 'utf8').split('\n').filter((z) => z.startsWith("  { name: '")).length;
-  assert.deepEqual([n, imCode], [100, 100]);
+  assert.deepEqual([n, imCode], [WERKZEUGE_IM_CODE, WERKZEUGE_IM_CODE]);
   const alle = await aufruf('presets_suchen', { familie: 'instrument', geraet: ['rb338'] });
   assert.ok(!alle.r.isError, JSON.stringify(alle.j));
   assert.equal(alle.j.gesamt, 10);

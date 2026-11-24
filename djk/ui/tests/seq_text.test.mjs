@@ -326,7 +326,7 @@ test('review 2: a value lane whose envelope has no point at beat 0 reads cell 0 
   assert.deepEqual(plane(q, lies(q, 'b')), []);
 });
 
-test('review 3: an envelope on a knob the graph does not have is read back with the comment "no such knob" and written back; k1..k64 is a target on a Baukasten instrument, an unknown knob NAME is still refused', () => {
+test('review 3: an envelope on a knob the graph does not have is read back with the comment "no such knob" and written back; k1..k64 is a target on a Cypher Modular instrument, an unknown knob NAME is still refused', () => {
   let p = schreibe(mitDeck(), mitNote());
   const c = spur(p, 'b').clips[0];
   p = lauf(p, { befehl: 'huellkurve_setzen', clip_id: c.id, ziel: 'geraet.k2', punkte: [{ beat: 0.37, wert: 0.1 }, { beat: 2, wert: -0.2, form: 's' }] });

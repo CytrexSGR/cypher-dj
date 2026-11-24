@@ -257,7 +257,7 @@ int main() {
       PRUEF(tab.suche(p) < 0);
     const int r = tab.suche("spur/2/bk/5");
     PRUEF(tab.def(r).rolle == cypherdj::stellwerk::Rolle::spur_bk && tab.def(r).min == 0.0f && tab.def(r).max == 1.0f && tab.def(r).vorgabe == 0.5f);
-    PRUEF(tab.anzahl() == 5088);   // 16 bk slots (4576 with 8);   // container core K9: the console of four containers and four buses replaced the deck, erz and loop-box strips (5076 before, 500 fewer, measured)
+    PRUEF(tab.anzahl() == 5184);   // loop lane strip K1: +96 rows (spur/<n>/fx/1..3 of 32 tracks) on top of the 5088 before; 16 bk slots (4576 with 8);   // container core K9: the console of four containers and four buses replaced the deck, erz and loop-box strips (5076 before, 500 fewer, measured)
     PRUEF(cypherdj::stellwerk::MAX_REGLER - tab.anzahl() >= 44);   // reserve
     PRUEF(tab.suche("spur/1/bk/1") == 2516);   // container core K9: the strip rows before it are gone (3412 before); slot-major
   }

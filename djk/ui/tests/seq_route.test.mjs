@@ -433,7 +433,7 @@ test('geraetInfo of a smp graph names the slices and carries the cut', (t) => {
   const i = geraetInfo({ art: 'intern', name: 'bk', graph: `smp-${s.id}` });
   assert.deepEqual([i.klaenge.length, i.klaenge[0], i.schnitt.scheiben, i.schnitt.laengen_beats[0]], [16, { ton: 0, name: '1' }, 16, 0.25]);
   assert.deepEqual([i.art, i.schnitt.id, i.klaenge[15], i.schnitt.laengen_beats.length], ['bk', s.id, { ton: 15, name: '16' }, 16]);
-  assert.ok(i.regler.length >= 8, 'the knobs of the generated device are listed like those of any Baukasten graph');
+  assert.ok(i.regler.length >= 8, 'the knobs of the generated device are listed like those of any Cypher Modular graph');
   // an unknown cut and a plain graph carry no cut
   assert.equal(geraetInfo({ art: 'intern', name: 'bk', graph: 'smp-nope-0000' }).schnitt, undefined);
   assert.equal(geraetInfo({ art: 'intern', name: 'bk', graph: 'bass-banddrive' }).schnitt, undefined);

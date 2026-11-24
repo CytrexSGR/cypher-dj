@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { KIT_NAME } from '../../project/model.ts';
 import { kitsOrdnerVorgabe } from '../../paths.ts';
+import { kitSchreibGrund } from '../../sampler/bk_schutz.ts';
 
 export const GM_KIT_NAME = 'gm';
 export const GM_QUELLKIT = 'techno';
@@ -59,6 +60,7 @@ export function sorgeFuerGmKit(wurzel: string = kitsOrdnerVorgabe()): GmKit | nu
     if (!k || !/^[A-Za-z0-9_.-]{5,64}$/.test(k.datei) || !fs.existsSync(path.join(quelle, k.datei))) return null;   // an incomplete source: no half kit
     klaenge.push({ note, name: GM_BELEGUNG[note], datei: k.datei, frames: k.frames });
   }
+  if (kitSchreibGrund(wurzel) !== null) return null;   // a test instance without a kit folder of its own builds nothing in the owner's
   const ziel = path.join(wurzel, GM_KIT_NAME);
   const tmp = path.join(wurzel, `.${GM_KIT_NAME}.tmp-${process.pid}`);
   try {

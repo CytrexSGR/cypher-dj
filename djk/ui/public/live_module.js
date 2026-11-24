@@ -33,14 +33,14 @@ export function tonartAnsicht(st) {
 export const KANAL_OFFEN_DB = -26;
 export function kanalAnsicht(slot, regler) {
   const c = CONTAINER.find((x) => x.id === slot), pfad = c.pfad;
-  const offen = (regler?.[`${pfad}/trim`] ?? 0) + (regler?.[`${pfad}/fader`] ?? -200) > KANAL_OFFEN_DB;
+  const offen = (regler?.[`${pfad}/trim`] ?? 0) + (regler?.[`${pfad}/trim_auto`] ?? 0) + (regler?.[`${pfad}/fader`] ?? -200) > KANAL_OFFEN_DB;
   return { nr: c.platz, pfad, name: `Container ${slot}`, offen, text: `Container ${slot} · ${offen ? 'open' : 'closed'}`,
     titel: `The module in place ${slot} plays on the channel of container ${slot}: ${offen ? 'open, the module is on the master' : 'closed, listen on PFL; open the channel fader to bring it in'}` };
 }
 /** The open/closed state of every container channel as one string: the live view redraws when it changes. */
 export const kanalKennung = (regler) => SLOTS.map((s) => kanalAnsicht(s, regler).offen).join('');
 /** Whether a control path is the fader or trim of a container strip (the rows `kanalAnsicht` reads). */
-export const istKanalZustand = (pfad) => { const m = /^(.+)\/(fader|trim)$/.exec(pfad ?? ''); return !!m && CONTAINER.some((c) => c.pfad === m[1]); };
+export const istKanalZustand = (pfad) => { const m = /^(.+)\/(fader|trim|trim_auto)$/.exec(pfad ?? ''); return !!m && CONTAINER.some((c) => c.pfad === m[1]); };
 
 // projekt = the open project (or null), stand = GET /modul/stand, stems = the proj_stems state ({auftrag_id, zustand, prozent}) or null,
 // regler = the row table of the page (channel state of the container strips). One entry per place that holds `stems` (projekt.plaetze), in place order;

@@ -43,7 +43,7 @@
   },
   "werte": {
     "quelle": {"abschnitt": "1.4", "liste": ["andreas", "cypher", "leitstand", "erzeuger", "werkstatt", "pruefstand"]},
-    "politik": {"abschnitt": "4", "codes": {"0": "musik", "1": "zustand", "2": "raster"}},
+    "politik": {"abschnitt": "4", "codes": {"0": "musik", "1": "zustand", "2": "raster", "3": "takt"}},
     "politik_teil": {"abschnitt": "4.3", "codes": {"0": "musik", "1": "zustand"}},
     "form": {"abschnitt": "4.3", "codes": {"0": "linear", "1": "s_kurve"}},
     "raster_beats": {"abschnitt": "4.4", "zahlen": [0.25, 1, 4, 16, 32]},

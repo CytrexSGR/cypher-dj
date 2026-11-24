@@ -114,6 +114,14 @@ fn alle() -> Vec<(String, u64)> {
     let mut v = Vec::new();
     for name in ALTE_BEISPIELE {
         let json = std::fs::read_to_string(dir.join(format!("{name}.json"))).unwrap();
+        // Commit f8f57ce47 (audit, over-hot sounds) lowered the output trim of the wavetable-chor graph from 0.2 to 0.135 on
+        // purpose (-3.4 dB, a pure gain change: the new render scaled by 0.2/0.135 equals the old one to -135 dB, no sample
+        // equal otherwise). That edit is the graph's, not the engine's, so the pin restores the old trim and keeps proving
+        // that the engine renders the pre-hard-sync graph bit for bit.
+        let json = if name == "wavetable-chor" {
+            assert_eq!(json.matches(r#""b": 0.135"#).count(), 2, "wavetable-chor trim changed again: adjust the pin");
+            json.replace(r#""b": 0.135"#, r#""b": 0.2"#)
+        } else { json };
         let mut p = lade(name, &json);
         v.push((format!("{name}@0.5"), fingerabdruck(&spiele(&mut p))));
         let mut p = lade(name, &json);

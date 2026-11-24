@@ -24,7 +24,7 @@ const BK = (name, extra = {}) => ({ name, geraet: 'baukasten', graph: 'kraken', 
 const PINS = [[0, 1, 2, 0.5], [0, 3, 4, -0.25], [1, 0, 0, 1]];
 const grund = (f, code) => { try { f(); } catch (e) { assert.ok(e instanceof PresetFehler, String(e)); assert.equal(e.fehler, code); return e; } return assert.fail(`expected ${code}`); };
 
-test('a Baukasten preset with valid pins is saved and read back equal', (t) => {
+test('a Cypher Modular preset with valid pins is saved and read back equal', (t) => {
   const s = speicher(t);
   const r = s.speichere(BK('Pinned', { stifte: PINS }));
   assert.deepEqual(r.preset.stifte, PINS);

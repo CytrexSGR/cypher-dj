@@ -138,3 +138,27 @@ fn fx_labor_spring_reverb() {
     assert!((schwanz - SPRING_SCHWANZ_DB).abs() <= 1.0, "pinned {SPRING_SCHWANZ_DB}, measured {schwanz}");
     assert!((t - SPRING_T60).abs() <= 0.05 * SPRING_T60.max(0.01), "pinned T60 {SPRING_T60}, measured {t}");
 }
+
+/// DC at the output: a 200 Hz sine of 0.25 with a constant offset of +0.02 into the left and right input (the share below 1 Hz that a noise window carries) through the
+/// Spring Reverb preset; the mean of the last two seconds on both sides stays below 0.002 (the graph ends in a 5 Hz DC blocker; without it the mean is about 0.02).
+#[test]
+fn fx_labor_spring_reverb_ohne_gleichanteil() {
+    let j = preset("spring-reverb");
+    let mut p: Programm = uebersetze(GRAPH, SR).unwrap_or_else(|e| panic!("{e}"));
+    for n in 1..=KNOEPFE {
+        p.setze_regler(n, j["werte"][format!("knob{n}")].as_f64().unwrap() as f32);
+    }
+    let (mut sl, mut sr, mut z) = (0f64, 0f64, 0usize);
+    for i in 0..(4.0 * SR) as usize {
+        let x = 0.02 + 0.25 * (2.0 * std::f32::consts::PI * 200.0 * i as f32 / SR).sin();
+        p.setze_eingang(x, x);
+        let (l, r) = p.sample_stereo();
+        if i >= (2.0 * SR) as usize {
+            sl += l as f64;
+            sr += r as f64;
+            z += 1;
+        }
+    }
+    let (ml, mr) = (sl / z as f64, sr / z as f64);
+    assert!(ml.abs() < 0.002 && mr.abs() < 0.002, "mean L {ml:.5}, R {mr:.5}");
+}

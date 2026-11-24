@@ -72,8 +72,8 @@ test('T1 (c) limits count tracks plus members; the three constants equal the cor
   const bk15 = Array.from({ length: 15 }, () => bk());
   const b1 = () => rackG([{ id: 'g1', geraet: bk() }]), b2 = () => rackG([{ id: 'g1', geraet: bk() }, { id: 'g2', geraet: bk() }]);
   assert.equal(pruefeFehler(viele([...bk15, b1()])), null, '15 bk tracks plus a rack with 1 bk member are 16');
-  assert.match(pruefeFehler(viele([...bk15, b2()])) ?? '', /at most 16 Baukasten/);   // the 17th counts as a member
-  assert.match(pruefeFehler(viele([...bk15, bk(), b1()])) ?? '', /at most 16 Baukasten/);
+  assert.match(pruefeFehler(viele([...bk15, b2()])) ?? '', /at most 16 Cypher Modular/);   // the 17th counts as a member
+  assert.match(pruefeFehler(viele([...bk15, bk(), b1()])) ?? '', /at most 16 Cypher Modular/);
   const einzel = () => rackG([{ id: 'g1', geraet: kit('kit_rack') }]);
   assert.equal(pruefeFehler(viele(Array.from({ length: MAX_RACK_GERAETE }, einzel))), null);
   assert.match(pruefeFehler(viele(Array.from({ length: MAX_RACK_GERAETE + 1 }, einzel))) ?? '', /at most 8 rack devices/);

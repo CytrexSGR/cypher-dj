@@ -123,6 +123,66 @@ test('409 loopdeck_voll when both loop decks exist', T, async (t) => {
   assert.deepEqual([r.code, r.j.fehler], [409, 'loopdeck_voll'], JSON.stringify(r.j));
 });
 
+test('a parked loop deck comes back on the next LOOPS click: no new deck, never loopdeck_voll (the page sends no gruppe_id)', { timeout: 240000 }, async (t) => {
+  const { post, o, projekt } = await echterServer(t, 'pr8b');
+  await o.proj.sitzung.liveOeffnen('andreas');
+  assert.equal((await post('/plaetze', { platz: 1, typ: 'loops' })).code, 200);
+  const deckA = projekt().plaetze[0].gruppe;
+  const decks = () => projekt().gruppen.filter((g) => g.loopdeck).length;
+  for (let i = 0; i < 2; i++) {                                                       // park, show again: the same deck every time
+    assert.equal((await post('/plaetze', { platz: 1, typ: 'track' })).code, 200);
+    const r = await post('/plaetze', { platz: 1, typ: 'loops' });
+    assert.equal(r.code, 200, `round ${i}: ${JSON.stringify(r.j)}`);
+    assert.equal(projekt().plaetze[0].gruppe, deckA, `round ${i}: the parked deck, not a new one`);
+  }
+  assert.equal(decks(), 1, 'no second deck was created');
+  // deck A parked, deck B placed: a click on place 3 shows the parked deck A, and a third deck never appears
+  assert.equal((await post('/plaetze', { platz: 2, typ: 'loops' })).code, 200);
+  assert.equal((await post('/plaetze', { platz: 1, typ: 'track' })).code, 200);
+  const r = await post('/plaetze', { platz: 4, typ: 'loops' });
+  assert.equal(r.code, 200, JSON.stringify(r.j));
+  assert.equal(projekt().plaetze[3].gruppe, deckA);
+  assert.equal(decks(), 2);
+});
+
+test('a parked SEQ deck comes back on the next SEQ click: same group, its pattern intact, no orphan', { timeout: 240000 }, async (t) => {
+  const { post, o, projekt } = await echterServer(t, 'pr8c');
+  await o.proj.sitzung.liveOeffnen('andreas');
+  assert.equal((await post('/plaetze', { platz: 1, typ: 'seq' })).code, 200);
+  const deck = projekt().plaetze[0].gruppe;
+  const n = await o.proj.sitzung.aendern({ rev: projekt().rev, label: 'pattern', befehle: [{ befehl: 'seq_folge_neu', gruppe_id: deck, name: 'Bass', geraet: { art: 'intern', name: 'rb338' } }] }, 'andreas');
+  assert.equal(n.code, 200, JSON.stringify(n.j));
+  const seqGruppen = () => projekt().gruppen.filter((g) => g.seq);
+  const muster = () => projekt().spuren.filter((s) => s.ausgang?.id === deck).map((s) => s.name);
+  assert.deepEqual(muster(), ['Bass']);
+  for (let i = 0; i < 2; i++) {
+    assert.equal((await post('/plaetze', { platz: 1, typ: 'track' })).code, 200);
+    const r = await post('/plaetze', { platz: 1, typ: 'seq' });
+    assert.equal(r.code, 200, `round ${i}: ${JSON.stringify(r.j)}`);
+    assert.equal(projekt().plaetze[0].gruppe, deck, `round ${i}: the parked SEQ deck, not a new one`);
+    assert.deepEqual(muster(), ['Bass'], `round ${i}: pattern intact`);
+  }
+  assert.equal(seqGruppen().length, 1, 'no orphan group was created');
+});
+
+test('a project with several orphaned SEQ groups still works: the first one comes back on SEQ, nothing new is created', { timeout: 240000 }, async (t) => {
+  const { post, o, projekt } = await echterServer(t, 'pr8d');
+  await o.proj.sitzung.liveOeffnen('andreas');
+  const ids = [];
+  for (let i = 0; i < 3; i++) {                                                       // the old way: seq_anlegen on a place, then park it
+    const a = await o.proj.sitzung.aendern({ rev: projekt().rev, label: 'seq', befehle: [{ befehl: 'seq_anlegen', platz: 1 }] }, 'andreas');
+    assert.equal(a.code, 200, JSON.stringify(a.j));
+    ids.push(projekt().plaetze[0].gruppe);
+    assert.equal((await post('/plaetze', { platz: 1, typ: 'track' })).code, 200);
+  }
+  assert.equal(new Set(ids).size, 3);
+  assert.equal(projekt().gruppen.filter((g) => g.seq).length, 3);
+  const r = await post('/plaetze', { platz: 2, typ: 'seq' });
+  assert.equal(r.code, 200, JSON.stringify(r.j));
+  assert.equal(projekt().plaetze[1].gruppe, ids[0], 'the first orphan is reachable');
+  assert.equal(projekt().gruppen.filter((g) => g.seq).length, 3, 'still three, none added');
+});
+
 test('the same type again changes nothing and answers ok', T, async (t) => {
   const { post, o, projekt } = await echterServer(t, 'pr9');
   await o.proj.sitzung.liveOeffnen('andreas');

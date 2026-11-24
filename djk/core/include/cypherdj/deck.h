@@ -338,6 +338,7 @@ class Deck {
 #endif
 
   bool laeuft() const noexcept { return laeuft_; }
+  bool stoppt() const noexcept { return stopp_rest_ > 0; }  // in the 10-ms stop ramp
   bool geladen() const noexcept { return m_ != nullptr; }
   int64_t frame_bei(int64_t s) const noexcept;       // Lesekopf (läuft) bzw. Position (steht)
   double quell_beat_bei(int64_t s) const noexcept;   // §5.5 quell_beat (hörbare Position)

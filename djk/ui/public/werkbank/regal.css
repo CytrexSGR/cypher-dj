@@ -12,10 +12,10 @@
 #werkbank .w-regal .w-tab.on { border-color: var(--accent, currentColor); }
 #werkbank .w-regal .w-hinweis { color: var(--dim); margin-left: 10px; font-size: 11px; }
 #werkbank .w-karten { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; max-height: 120px; overflow: auto; }
-#werkbank .w-karte { position: relative; text-align: left; border: 1px solid var(--line); background: var(--panel2); border-radius: 6px; padding: 8px; min-width: 0; }
+#werkbank .w-karte { position: relative; display: flex; flex-direction: column; text-align: left; border: 1px solid var(--line); background: var(--panel2); border-radius: 6px; padding: 8px; min-width: 0; }
 #werkbank .w-karte b { display: block; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #werkbank .w-karte span { display: block; color: var(--dim); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#werkbank .w-karte .w-karte-marke { position: absolute; top: 6px; right: 8px; font-style: normal; font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; }
+#werkbank .w-karte .w-karte-marke { position: static; order: -1; margin-bottom: 2px; font-style: normal; font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; }
 #werkbank .w-karte.offen { border-color: var(--accent, currentColor); cursor: default; }
 #werkbank .w-karte.offen .w-karte-marke { color: var(--accent, currentColor); }
 #werkbank .w-karte.kaputt { opacity: .55; cursor: not-allowed; border-style: dashed; }
@@ -44,7 +44,6 @@
 #werkbank .w-karte-knopf { font-size: 10px; font-weight: 700; padding: 1px 6px; color: var(--dim); }
 #werkbank .w-karte-knopf:hover { color: inherit; }
 #werkbank .w-karte.offen:disabled { opacity: 1; }
-#werkbank .w-karte:has(.w-karte-marke) b { padding-right: 44px; }
 
 /* Tab SAMPLES (sample player stage 1): a folder browser inside the shelf. Everything here is prefixed w-smp- (w-karte* is styled by regal.css AND dock.css). */
 #werkbank .w-regal.w-smp-an { display: flex; flex-direction: column; height: 45%; overflow: hidden; }

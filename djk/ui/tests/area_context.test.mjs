@@ -176,7 +176,9 @@ test('Routentabelle: keine POST- oder *-Route ist offen', async (t) => {
   const { o } = await stapel(t);
   const liste = o.routen();
   assert.ok(liste.filter((e) => e.methode === 'POST').length >= 19, 'Kontrolle: die POST-Routen sind in der Liste');
-  assert.deepEqual(liste.filter((e) => (e.methode === 'POST' || e.methode === '*') && e.schutz === 'offen'), []);
+  // the deliberate exceptions: the raw upload routes of browser plans 1 and 5 carry their own protection (owner only, http/roh.ts, offenErlaubt)
+  assert.deepEqual(liste.filter((e) => (e.methode === 'POST' || e.methode === '*') && e.schutz === 'offen').map((e) => e.pfad).sort(),
+    ['/import/datei', '/kits/import', '/proj/import_zip']);
 });
 
 // Package 1.16 rest T1.4: through the real server path the header x-djk-quelle reaches ctx.quelle() of the presets Bereich and the

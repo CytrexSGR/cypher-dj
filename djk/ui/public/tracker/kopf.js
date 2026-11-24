@@ -12,14 +12,16 @@ export const KOPF_TEXT = {
   bpm: 'Tempo in BPM', lpb: 'Lines per beat: how many rows make one beat', ticks: 'Ticks per row for effect commands',
   okt: 'Octave of the lower keyboard row', schritt: 'Rows the cursor advances after a note', edit: 'Edit mode: typing writes into the grid',
   follow: 'FOLLOW: the grid scrolls with the play line and the section of the play head is selected',
-  zahlen: 'Row numbers and values in hex or decimal',
+  zahlen: 'Hexadecimal or decimal: row numbers and values',
+  mehr: 'More keys: FOLLOW, AUDIO, column switches, HEX/DEC, import',
   audio: 'Show or fold the audio tracks',
   speichern: 'Save the project as a tracker module', module: 'Open the shelf of the tracker modules', zuDj: 'Send the section to the DJ view: it becomes patterns of the SEQ deck of the chosen place',
   zuDjPlatz: 'SEQ place',
 };
 
-const SPALTEN = [['vol', 'VOL', 'Show the velocity sub-column'], ['dly', 'DLY', 'Show the delay sub-column'], ['chn', 'CHN', 'Show the chance sub-column'],
-  ['rpt', 'RPT', 'Show the repeat sub-column'], ['fx', 'FX', 'Show the effect columns']];
+const SPALTEN = [['vol', 'VOL', 'Velocity: show the velocity sub-column'], ['dly', 'DLY', 'Delay: show the delay sub-column'], ['chn', 'CHN', 'Chance: show the chance sub-column'],
+  ['rpt', 'RPT', 'Repeat: show the repeat sub-column'], ['fx', 'FX', 'Effect: show the effect columns']];
+const ABK = { LPB: 'Lines per beat' };   // a field label that is an abbreviation gets its long form as title
 
 export function bindeKopf(ctx) {
   const { st, $ } = ctx;
@@ -31,14 +33,14 @@ export function bindeKopf(ctx) {
     return b;
   };
   const feld = (t, beschriftung, titel, wert) => {
-    const l = el('label', 't-feld'); const s = document.createElement('span'); s.textContent = beschriftung;
+    const l = el('label', 't-feld'); const s = document.createElement('span'); s.textContent = beschriftung; if (ABK[beschriftung]) s.setAttribute('title', ABK[beschriftung]);
     const i = el('input', 't-eingabe', t); i.setAttribute('type', 'text'); i.setAttribute('title', titel); i.setAttribute('aria-label', beschriftung); i.value = wert; i.disabled = true;
     l.append(s, i);
     return l;
   };
 
   const wahlFeld = (t, beschriftung, titel, werte) => {
-    const l = el('label', 't-feld'); const sp = document.createElement('span'); sp.textContent = beschriftung;
+    const l = el('label', 't-feld'); const sp = document.createElement('span'); sp.textContent = beschriftung; if (ABK[beschriftung]) sp.setAttribute('title', ABK[beschriftung]);
     const s = el('select', 't-eingabe', t); s.setAttribute('title', titel); s.setAttribute('aria-label', beschriftung); s.disabled = true;
     for (const n of werte) { const o = document.createElement('option'); o.setAttribute('value', String(n)); o.textContent = String(n); s.append(o); }
     l.append(sp, s);
@@ -48,8 +50,9 @@ export function bindeKopf(ctx) {
   const name = el('span', 't-projektname', 'name');
   const transport = el('span', 't-gruppe');
   transport.append(knopf('play', 'PLAY', KOPF_TEXT.play, { aus: true }), knopf('stopp', 'STOP', KOPF_TEXT.stopp, { aus: true }), knopf('modus', 'PATTERN', KOPF_TEXT.modus, { aus: true }));
+  const ticksFeld = wahlFeld('ticks', 'TICKS', KOPF_TEXT.ticks, Array.from({ length: 24 }, (_, i) => i + 1));
   const werte = el('span', 't-gruppe');
-  werte.append(feld('bpm', 'BPM', KOPF_TEXT.bpm, ''), wahlFeld('lpb', 'LPB', KOPF_TEXT.lpb, LPB_WERTE), wahlFeld('ticks', 'TICKS', KOPF_TEXT.ticks, Array.from({ length: 24 }, (_, i) => i + 1)),
+  werte.append(feld('bpm', 'BPM', KOPF_TEXT.bpm, ''), wahlFeld('lpb', 'LPB', KOPF_TEXT.lpb, LPB_WERTE), ticksFeld,
     feld('okt', 'OCT', KOPF_TEXT.okt, '3'), feld('schritt', 'STEP', KOPF_TEXT.schritt, '1'));
   const edit = knopf('edit', 'EDIT', KOPF_TEXT.edit, { aus: true });
   const follow = knopf('follow', 'FOLLOW', KOPF_TEXT.follow);
@@ -66,12 +69,17 @@ export function bindeKopf(ctx) {
   djPlatz.setAttribute('title', KOPF_TEXT.zuDjPlatz); djPlatz.setAttribute('aria-label', KOPF_TEXT.zuDjPlatz); djPlatz.disabled = true;
   for (const n of PLAETZE) { const o = document.createElement('option'); o.setAttribute('value', String(n)); o.textContent = `SEQ ${n}`; djPlatz.append(o); }
   ziel.append(knopf('module', 'MODULES', KOPF_TEXT.module, { aus: true }), knopf('speichern', 'SAVE MODULE', KOPF_TEXT.speichern, { aus: true }), djPlatz, knopf('zu-dj', 'TO DJ', KOPF_TEXT.zuDj, { aus: true }));
-  k.append(name, transport, werte, edit, follow, spalten, zahlen, audio, ziel);
+  // compact width folds the rarely used keys (class t-selten) behind the ⋯ key; wide, the key is hidden and everything shows (tracker.css)
+  for (const e of [follow, spalten, zahlen, audio, ticksFeld]) e.classList.add('t-selten');
+  const mehr = knopf('mehr', '\u22ef', KOPF_TEXT.mehr);
+  mehr.classList.add('t-mehr'); mehr.removeAttribute('aria-pressed'); mehr.setAttribute('aria-expanded', 'false'); mehr.setAttribute('aria-label', 'More keys');
+  mehr.addEventListener('click', () => { const an = !k.classList.contains('t-mehr-auf'); k.classList.toggle('t-mehr-auf', an); mehr.setAttribute('aria-expanded', String(an)); });
+  k.append(name, transport, werte, edit, mehr, follow, spalten, zahlen, audio, ziel);
 
   const setze = (t, an) => { const b = $(t); if (b) { b.setAttribute('aria-pressed', String(an)); b.classList.toggle('an', an); } };
   ctx.beimZeichnen.push(() => {
     const p = st.projekt;
-    name.textContent = p?.name ?? '';
+    name.textContent = p?.name ?? ''; name.setAttribute('title', p?.name ?? '');   // a long name is cut by the CSS, the full text stays in the title
     if (p) {
       const e = trackerEinstellung(p);
       $('bpm').value = String(p.tempo_bpm ?? ''); $('lpb').value = String(e.lpb); $('ticks').value = String(e.ticks);

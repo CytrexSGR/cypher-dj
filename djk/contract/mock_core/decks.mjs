@@ -265,7 +265,7 @@ export default {
         return null;
       });
     },
-    '/k/deck/start': deckTeil('start', (a) => ({ quell_beat: a.quell_beat })),
+    '/k/deck/start': deckTeil('start', (a) => ({ quell_beat: a.quell_beat, ...(a.politik === 3 ? { politik: 0 } : {}) })),  // politik 3 takt: as 0; the mock does not shift the bar phase
     '/k/deck/stopp': deckTeil('stopp', () => ({})),
     '/k/deck/loop': deckTeil('loop', (a) => ({ laenge: a.laenge_beats })),
     '/k/deck/loop_laenge': deckTeil('loop_laenge', (a) => ({ start: a.start_beat, laenge: a.laenge_beats })),

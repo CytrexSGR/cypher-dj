@@ -222,7 +222,7 @@ export const INSERT = {
     const spur = spurVon(p, idArg(a, 'spur_id'));
     const param = a.param;
     if (typeof param !== 'string' || !BK_PARAMETER.includes(param)) ab('argument_unbekannt', `param: ${String(param)} (k1..k${BK_LIVE_KNOEPFE})`);
-    if (!(spur.geraet?.art === 'intern' && spur.geraet.name === 'bk')) ab('geraet_falsch', `${spur.id} is not a Baukasten track`);
+    if (!(spur.geraet?.art === 'intern' && spur.geraet.name === 'bk')) ab('geraet_falsch', `${spur.id} is not a Cypher Modular track`);
     if (Number((param as string).slice(1)) > BK_LIVE_KNOEPFE) {
       ab('param_nicht_live', `${String(param)}: only k1..k${BK_LIVE_KNOEPFE} are live, change the others with spur_aendern`);
     }
@@ -237,7 +237,7 @@ export const INSERT = {
   geraet_stift_setzen(p, a, ctx) {
     erlaube(a, 'spur_id', 'satz', 'zeile', 'spalte', 'wert');
     const spur = spurVon(p, idArg(a, 'spur_id'));
-    if (!(spur.geraet?.art === 'intern' && spur.geraet.name === 'bk')) ab('geraet_falsch', `${spur.id} is not a Baukasten track`);
+    if (!(spur.geraet?.art === 'intern' && spur.geraet.name === 'bk')) ab('geraet_falsch', `${spur.id} is not a Cypher Modular track`);
     const satz = zahl(a, 'satz', 0, STIFT_SAETZE - 1, { ganz: true })!, zeile = zahl(a, 'zeile', 0, 15, { ganz: true })!;
       const spalte = zahl(a, 'spalte', 0, 15, { ganz: true })!;
     if (!zahlOk(a.wert) || a.wert < -1 || a.wert > 1) ab('argument_ungueltig', 'wert: number -1..1 expected');
@@ -257,7 +257,7 @@ export const INSERT = {
   geraet_stifte_setzen(p, a, ctx) {
     erlaube(a, 'spur_id', 'satz', 'stifte');
     const spur = spurVon(p, idArg(a, 'spur_id'));
-    if (!(spur.geraet?.art === 'intern' && spur.geraet.name === 'bk')) ab('geraet_falsch', `${spur.id} is not a Baukasten track`);
+    if (!(spur.geraet?.art === 'intern' && spur.geraet.name === 'bk')) ab('geraet_falsch', `${spur.id} is not a Cypher Modular track`);
     const g = spur.geraet;
     if (!('stifte' in a)) ab('argument_ungueltig', 'stifte: list or null expected');
     const satz = a.satz === undefined ? undefined : zahl(a, 'satz', 0, STIFT_SAETZE - 1, { ganz: true });
@@ -286,7 +286,7 @@ export const INSERT = {
   stammbaum_setzen(p, a) {
     erlaube(a, 'spur_id', 'stammbaum');
     const spur = spurVon(p, idArg(a, 'spur_id'));
-    if (!(spur.geraet?.art === 'intern' && spur.geraet.name === 'bk')) ab('geraet_falsch', `${spur.id} is not a Baukasten track`);
+    if (!(spur.geraet?.art === 'intern' && spur.geraet.name === 'bk')) ab('geraet_falsch', `${spur.id} is not a Cypher Modular track`);
     if (a.stammbaum === null) { delete spur.stammbaum; return; }
     const f = pruefeStammbaum(a.stammbaum);
     if (f.length) ab('argument_ungueltig', f[0]);

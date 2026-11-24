@@ -165,7 +165,7 @@ export function setzeModulNachSeq(p0: Projekt, modul: Projekt, platz: number, o:
     const vorhanden = p0.spuren.filter(hatBk).length, neu = dabei.filter(hatBk).length;
     if (vorhanden + neu > MAX_BK_SPUREN) {
       throw new NachSeqFehler(409, 'zu_viele_bk', { vorhanden, neu, text:
-        `the live project holds ${vorhanden} Baukasten tracks and the section brings ${neu}, at most ${MAX_BK_SPUREN} are possible` });
+        `the live project holds ${vorhanden} Cypher Modular tracks and the section brings ${neu}, at most ${MAX_BK_SPUREN} are possible` });
     }
   }
   const kontext: BefehlsKontext = { ...(o.kontext ?? {}), quelle: o.quelle ?? 'andreas' };

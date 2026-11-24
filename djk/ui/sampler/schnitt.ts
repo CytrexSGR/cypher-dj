@@ -16,6 +16,7 @@ import { findeAnschlaege, type Anschlag } from '../project/transients.ts';
 import { geraetGraph, geraetName, geraetPanel } from './device.ts';
 import { ladeDatei, ladeDateiPfad } from './file.ts';
 import { leseWavF32 } from './wav.ts';
+import { pruefeBkSchreiben } from './bk_schutz.ts';
 
 /** `katalog`: `ref` is the 64 hex sha of a catalog row; made only by the routes `/sampler/datei/*`, which hand `Ordner.katalogPfad` in. */
 export type Quelle = { art: 'loop' | 'modul' | 'datei' | 'katalog'; ref: string; stem?: string };
@@ -200,6 +201,7 @@ export const SCHNITT_METHODEN: Record<string, Methode> = {
 };
 
 const einsFile = (datei: string, inhalt: Buffer | string): void => {
+  pruefeBkSchreiben(datei);
   fs.mkdirSync(path.dirname(datei), { recursive: true });
   const tmp = `${datei}.${process.pid}.${crypto.randomBytes(3).toString('hex')}.tmp`;
   try { fs.writeFileSync(tmp, inhalt); fs.renameSync(tmp, datei); } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }

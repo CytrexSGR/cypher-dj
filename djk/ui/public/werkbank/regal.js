@@ -6,6 +6,7 @@ import { SAMPLES_TEXT } from './regal_samples.js';
 import { bindeSamplesReiter } from './regal_samples_modus.js';
 import { bindeInstrumente, INSTRUMENTE_TEXT } from './regal_instruments.js';
 import { bindeSuche } from './regal_suche.js';
+import { datumText, zaehlText } from '../format_text.js';
 
 // liste: GET /proj/liste (an array); vorlagen: GET /proj/werkbank/vorlagen ({vorlagen: [...]}) or the array; slug: the open module.
 export function regalEintraege(liste, vorlagen, slug) {
@@ -34,13 +35,14 @@ const KEIN_MODUL = 'Open a module first.';
 const STUMM = 'This loop is silent: there is nothing to cut';
 const FIT_AUS = "Tempo is out of FIT's range: SPEED stays at 1.";
 const grossAnfang = (t) => `${t.charAt(0).toUpperCase()}${t.slice(1)}`;
-// date and time of day: two modules of one name (a template opened twice) differ by it
-const datum = (iso) => { const d = typeof iso === 'string' ? new Date(iso) : null; return d && !Number.isNaN(d.getTime()) ? `${iso.slice(0, 10)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : ''; };
 const el = (tag, klasse, text) => { const e = document.createElement(tag); if (klasse) e.className = klasse; if (text !== undefined) e.textContent = text; return e; };
 const karteBau = (klasse, name, zeile, marke) => {
   const k = el('button', `w-karte ${klasse}`);
-  k.append(el('b', '', name), el('span', '', zeile));
-  if (marke) k.append(el('i', 'w-karte-marke', marke));   // not w-marke: that is the marker of the cut strip (sound.css draws a line under it)
+  // the mark is the first line of the card, in normal flow (not w-marke: that is the marker of the cut strip, sound.css draws a line under it)
+  if (marke) k.append(el('i', 'w-karte-marke', marke));
+  const titel = el('b', '', name); titel.setAttribute('title', name);   // cut with an ellipsis: the full name stays readable
+  const z = el('span', '', zeile); if (zeile) z.setAttribute('title', zeile);   // cut with an ellipsis: the full line stays readable
+  k.append(titel, z);
   return k;
 };
 
@@ -96,7 +98,7 @@ export function bindeRegal(ctx) {
 
   // one card of a module (`m` as regalEintraege gives it); the search view draws the same card
   function karteModul(m) {
-    const k = karteBau(m.fehler ? 'kaputt' : m.offen ? 'offen' : 'modul', m.name, m.fehler ? 'unreadable' : datum(m.geaendert), m.offen ? 'open' : '');
+    const k = karteBau(m.fehler ? 'kaputt' : m.offen ? 'offen' : 'modul', m.name, m.fehler ? 'unreadable' : m.geaendert ? datumText(m.geaendert) : '', m.offen ? 'open' : '');
     if (m.offen || m.fehler) k.disabled = true;
     if (m.fehler) k.setAttribute('title', m.text);
     // the click re-checks the live state: a card drawn before a change must not reopen the open module
@@ -121,7 +123,7 @@ export function bindeRegal(ctx) {
   function zeichneKarten(e) {
     const karten = e.module.map(karteModul);
     const vorlagen = e.vorlagen.map((v) => {
-      const k = karteBau('vorlage', v.name, v.text ?? '', 'new from template');
+      const k = karteBau('vorlage', v.name, v.text ?? '', 'template');
       k.setAttribute('title', 'Makes a new module from this template');
       // a second module from one template gets " 2", " 3" ...: two cards of one name cannot be told apart
       const frei = () => { const da = new Set(e.module.map((m) => String(m.name).toLowerCase())); for (let n = 1; ; n++) { const z = n === 1 ? v.name : `${v.name} ${n}`; if (!da.has(z.toLowerCase())) return z; } };
@@ -248,7 +250,7 @@ export function bindeRegal(ctx) {
     const karte = (name, beats, quelle, stumm = false) => {
       const k = el('div', `w-karte schnitt${stumm ? ' stumm' : ''}`);
       k.append(el('b', '', name), el('span', '', typeof beats === 'number' ? `${beats} beats` : ''));
-      if (stumm) { k.append(el('i', 'w-karte-marke', 'silent')); k.setAttribute('title', STUMM); }
+      if (stumm) { k.prepend(el('i', 'w-karte-marke', 'silent')); k.setAttribute('title', STUMM); }
       const b = el('button', 'w-schnitt-knopf', 'SLICE TO TRACK'); b.type = 'button'; b.setAttribute('data-w', 'slice-spur');
       if (stumm) b.setAttribute('data-stumm', '');
       b.addEventListener('click', () => schneide(quelle));
@@ -307,7 +309,8 @@ export function bindeRegal(ctx) {
   // one card of a stored cut (`s` as GET /sampler/liste gives it); the search view draws the same card
   function karteSchnitt(s) {
     const k = el('div', 'w-karte schnitt');
-    k.append(el('b', '', s.name), el('span', '', `${s.scheiben} slices · ${s.beats} beats`));
+    const bt = el('b', '', s.name); bt.setAttribute('title', s.name);
+    k.append(bt, el('span', '', `${zaehlText(s.scheiben, 'slice')} · ${s.beats} beats`));
     k.setAttribute('title', s.id);
     const zeile = el('div', 'w-schnitt-zeile');
     const spur = el('button', 'w-schnitt-knopf', 'TO TRACK'); spur.type = 'button'; spur.setAttribute('data-w', 'schnitt-spur');
@@ -335,7 +338,7 @@ export function bindeRegal(ctx) {
     if (tab === 'cuts') zeichneSchnitte();
   }
   async function loesche(s) {
-    if (schneidet || !ctx.frage(`Delete the cut "${s.name}" (${s.scheiben} slices)? This cannot be undone.`)) return;
+    if (schneidet || !ctx.frage(`Delete the cut "${s.name}" (${zaehlText(s.scheiben, 'slice')})? This cannot be undone.`)) return;
     schneidet = true; zeigeKnoepfe();
     try {
       const r = await ctx.holeJson('/sampler/loeschen', { id: s.id });
@@ -422,8 +425,11 @@ export function bindeRegalSchublade(ctx) {
     if (!wb || !spuren || typeof spuren.getBoundingClientRect !== 'function') return;
     const ueber = regal.hidden ? 0 : Math.max(0, Math.round(spuren.getBoundingClientRect().bottom - regal.getBoundingClientRect().top));
     wb.style.setProperty('--regal-ueber', `${ueber}px`);
+    // Height of the open shelf; on low windows the grid makes room for it (werkbank.css), so the instrument controls stay reachable.
+    wb.style.setProperty('--regal-hoehe', regal.hidden ? '0px' : `${Math.round(regal.getBoundingClientRect().height)}px`);
   };
-  if (typeof ResizeObserver === 'function') { const ro = new ResizeObserver(messe); ro.observe(regal); if (spuren) ro.observe(spuren); }
+  // next frame: messe changes the grid, which must not resize an observed box in the same pass (else "ResizeObserver loop" errors)
+  if (typeof ResizeObserver === 'function') { const ro = new ResizeObserver(() => requestAnimationFrame(messe)); ro.observe(regal); if (spuren) ro.observe(spuren); }
   knopf.addEventListener('click', () => { ctx.merke('djk-wb-regal-auf', st.projekt && gemerkt() ? '0' : '1'); zeige(); });
   ctx.beimProjekt.push(() => zeige());
   zeige();

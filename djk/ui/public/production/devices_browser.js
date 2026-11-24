@@ -193,5 +193,6 @@ export function bindeGeraeteBrowser(ctx) {
     e.dataTransfer.setData(GERAET_TYP, JSON.stringify(n)); e.dataTransfer.effectAllowed = 'copy';
   });
   beiAchse((neu) => { if (geladen) { achse = neu; zeichne(); } });   // the page-wide grouping changed: redraw, send nothing
-  ctx.beimSichtwechsel.push((an) => { if (an && !geladen) lade(); if (an && !pluginsGeladen) ladePlugins(); });
+  // the list is hidden while the browser component is docked (browser.css); then its own section loads catalogue and plugins and this one stays still
+  ctx.beimSichtwechsel.push((an) => { if (!an || wurzel.getClientRects?.().length === 0) return; if (!geladen) lade(); if (!pluginsGeladen) ladePlugins(); });
 }

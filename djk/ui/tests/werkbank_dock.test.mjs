@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { installiere, attrappe } from './helpers/pages_mock.mjs';
+import { MAX_RETURNS } from '../public/production/limits.js';
 
 installiere();
 const { bindeWerkbank } = await import('../public/werkbank/werkbank.js');
@@ -128,7 +129,7 @@ test('a synth card shows the front knobs of its panel; a drag writes through the
   assert.equal(alle('karte-spur')[0].querySelectorAll('[data-w="karte-knopf"]')[0].getAttribute('aria-valuetext'), '0.90');
 });
 
-test('the effect card: Hall knobs write the Hall of the return, LEVEL writes the return fader, ON mutes, the stage knobs of a Baukasten effect write the stage', async () => {
+test('the effect card: Hall knobs write the Hall of the return, LEVEL writes the return fader, ON mutes, the stage knobs of a Cypher Modular effect write the stage', async () => {
   aufbau(modul());
   w.zeige(); await ruhe();
   const hall = alle('karte-fx')[1], echo = alle('karte-fx')[0];
@@ -186,7 +187,7 @@ test('+ LOAD EFFECT offers every effect graph and writes return_neu; + INSTRUMEN
 
 test('a full rack: the menu of + LOAD EFFECT refuses every entry', async () => {
   const r = (n) => ({ id: `r${n}`, nr: n, name: `R${n}`, farbe: '#fff', fader_db: 0, hall: { ...HALL }, inserts: [] });
-  aufbau(modul({ returns: [1, 2, 3, 4].map(r) }));
+  aufbau(modul({ returns: Array.from({ length: MAX_RETURNS }, (_, i) => r(i + 1)) }));
   w.zeige(); await ruhe();
   const menue = menues();
   $w('fx-laden').dispatch('click'); await ruhe();
@@ -241,7 +242,7 @@ test('the window drags by its title bar, stays inside the layer, remembers its p
   assert.equal(alle('fenster').length, 1);
 });
 
-test('a Baukasten stage opens in a window with ON/OFF, earlier, later and remove; a native stage opens its floating face; the Hall opens the Hall face', async () => {
+test('a Cypher Modular stage opens in a window with ON/OFF, earlier, later and remove; a native stage opens its floating face; the Hall opens the Hall face', async () => {
   const mit = (rev, inserts) => modul({ rev, spuren: [bk('s1', 1, 'Drums', 'drums-909', { inserts })] });
   aufbau(mit(3, [ins('i1', 'komp'), ins('i2', 'bk', { graph: 'fx-delay-sync' })]));
   w.zeige(); await ruhe();
@@ -280,7 +281,7 @@ test('a Baukasten stage opens in a window with ON/OFF, earlier, later and remove
   assert.equal($w('fenster-an').textContent, 'ON');
 });
 
-test('+ INSERT on a track writes insert_setzen and opens the new Baukasten stage', async () => {
+test('+ INSERT on a track writes insert_setzen and opens the new Cypher Modular stage', async () => {
   aufbau(modul());
   w.zeige(); await ruhe();
   const menue = menues();

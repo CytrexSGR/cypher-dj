@@ -21,7 +21,9 @@
 .spalte .zelle.leer .go, .spalte .zelle.halten .go { cursor: default; color: #3d414d; }
 .spalte .zelle.halten { border-style: dashed; }
 .spalte .zelle .mw { position: absolute; inset: 2px 2px 2px 22px; width: calc(100% - 24px); height: calc(100% - 4px); opacity: .3; pointer-events: none; }
-.spalte .zelle .nm { position: relative; flex: 1; min-width: 0; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.spalte .zelle .nm { position: relative; flex: 1; min-width: 0; font-size: 11px; white-space: nowrap; overflow: hidden; display: flex; cursor: pointer; }
+.spalte .zelle .nm-kopf { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }   /* UI check M2: middle ellipsis, the end of the name stays */
+.spalte .zelle .nm-ende { flex: none; }
 .spalte .zelle .kd { position: relative; flex: 0 0 auto; font-size: 9px; color: var(--dim, #8a90a0); }
 .spalte .zelle .prog { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: var(--gut); pointer-events: none; }
 .spalte .zelle.spielt, .spalte .zelle.stopp_wartet { border-color: var(--gut); box-shadow: inset 0 0 0 1px var(--gut); }

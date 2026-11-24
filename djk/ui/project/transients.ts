@@ -1,4 +1,5 @@
-// Slice 4 (D1): Transienten einer Quelle für BEATS und Quantize Audio. Eigenes Verfahren, nicht das Prüfgerät (check/w3a_measure.mjs anschlaege misst anders).
+// Slice 4 (D1): Transienten einer Quelle für BEATS und Quantize Audio. Eigenes Verfahren, nicht das Prüfgerät
+// (check/w3a_measure.mjs anschlaege misst anders).
 // Mono-Summe, erste Differenz (betont Anschläge), Energie je Block von 64 Frames in dB; ein Transient ist ein Block ≥ 5 dB über dem LAUTESTEN der
 // 8 Blöcke davor (rund 11 ms) und über −60 dB, frühestens 20 ms nach dem vorigen. Die Lage verfeinert der erste Frame im Block davor bis zwei Blöcke
 // danach, dessen Differenz die Hälfte des Höchstwerts dort erreicht. Nicht endliche Samples zählen als 0. Rückgabe: Frames, streng steigend.

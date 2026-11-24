@@ -87,7 +87,20 @@ export function platteBauen(liste, opt) {
   if (liste.closest('#instrumente') && !istGeraeteseite()) liste.querySelector('.fp-kopf')?.insertAdjacentHTML('beforeend', geraeteknopfHtml(false));   // opens; the closer sits in the tab strip
   return fp;
 }
+export const FENSTER_GESPERRT_TEXT = 'Your browser blocked the controller window; showing the list here.';
+function registerHinweis(text) {   // one line above the register while it stands in for the blocked window; every other call removes it
+  const reg = $('#register');
+  reg?.parentElement?.querySelector?.('[data-register-hinweis]')?.remove();
+  if (!text || !reg?.parentElement) return;
+  const p = document.createElement('p');
+  p.className = 'st-hinweis';
+  p.setAttribute('data-register-hinweis', '');
+  p.textContent = text;
+  reg.parentElement.insertBefore(p, reg);
+}
 export function setzeBereich(b) {
+  registerHinweis('');
+  let gesperrt = false;
   if (controllerFenster) {   // this page instance is the Controllers window: only the register, whatever area was stored
     document.body.classList.add('controller-fenster');
     document.title = 'djk Controllers';
@@ -99,6 +112,7 @@ export function setzeBereich(b) {
     const klick = navigator.userActivation?.isActive === true;
     if (!klick) b = 'library';                 // a restored area never opens a window
     else if (oeffneControllerFenster()) return;   // the panel stays on what it showed
+    else gesperrt = true;
   }
   setzeGeraeteseite(false, false);   // another area (or a restore) never keeps the layer; the rebuild below (INSTRUMENTS) or later (reopen) builds narrow
   if (b !== 'instrumente' && instrumenteSichtbar()) lernAbbrechenFuer(instrumenteAnsicht.gewaehlt());
@@ -114,7 +128,7 @@ export function setzeBereich(b) {
   if (b === 'instrumente') { instrumenteAnsicht?.baue(); if (instrumenteAnsicht) fokus.melde({ kanal: instrumenteAnsicht.gewaehlt() }, 'instrumente'); }   // entering the area (or the device page at load): its chosen channel is in front
   document.body.classList.toggle('bereich-controller', b === 'controller');   // CONTROLLERS area (read-only register)
   $('#register').hidden = b !== 'controller';
-  if (b === 'controller') zeigeRegister($('#register'), { stand: () => lernen, schicken: lernSchicken, hole: holeLernen }, { kanalName: instrumentLabel });
+  if (b === 'controller') { if (gesperrt) registerHinweis(FENSTER_GESPERRT_TEXT); zeigeRegister($('#register'), { stand: () => lernen, schicken: lernSchicken, hole: holeLernen }, { kanalName: instrumentLabel }); }
   try { localStorage.setItem('djk-bereich', b); } catch { /* ohne Speicher: nur jetzt */ }
 }
 export async function setzeKomp(pfad, nach) {

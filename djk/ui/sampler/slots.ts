@@ -8,6 +8,7 @@ import path from 'node:path';
 import { graphenOrdner } from '../graphs.ts';
 import { pfadeVon } from '../devices_parameter.ts';
 import { sichereWerksProben } from './werksproben.ts';
+import { pruefeBkSchreiben } from './bk_schutz.ts';
 
 export const PLATZ_MAX = 32;
 export const PLATZ_NAME_MAX = 22;
@@ -112,6 +113,7 @@ export function wandleAmiga(x: Float32Array, rate: number): { daten: Float32Arra
 // ---- the store ----
 
 const einsFile = (datei: string, inhalt: Buffer | string): void => {
+  pruefeBkSchreiben(datei);
   fs.mkdirSync(path.dirname(datei), { recursive: true });
   const tmp = `${datei}.${process.pid}.${crypto.randomBytes(3).toString('hex')}.tmp`;
   try { fs.writeFileSync(tmp, inhalt); fs.renameSync(tmp, datei); } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }

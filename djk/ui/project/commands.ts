@@ -247,14 +247,16 @@ function istLeicht(projekt: Projekt, b: unknown): boolean {
   if (!istObjekt(b) || typeof b.befehl !== 'string') return false;
   switch (b.befehl) {
     // ein Gerätewechsel berührt Freeze, Slots und Klang; gruppe kann neu entstehen, und leichterUnterschied sieht nur Schlüssel, die schon da sind
-    case 'spur_aendern': return b.geraet === undefined && b.gruppe === undefined && b.filter === undefined && b.eq === undefined && b.kill === undefined && b.fx === undefined
+    case 'spur_aendern': return b.geraet === undefined && b.gruppe === undefined && b.filter === undefined && b.eq === undefined && b.kill === undefined &&
+      b.fx === undefined
       && b.arm === undefined && b.eingang === undefined && b.monitor === undefined;
     case 'loop_setzen': case 'metronom_setzen': return true;
     case 'gruppenspur_aendern': case 'master_aendern': return true;
     // slice 4: knob and bypass of a stage are live only (the key `sc` may add or remove a field, and `key` is structure, so both take the general path)
     case 'insert_param_setzen': return b.param !== 'sc' && b.param !== 'key';
     case 'insert_an': return true;
-    // production plan task 9: a knob of a Baukasten track, live. Every bk track (BK_LIVE_SLOTS = MAX_BK_SPUREN) has a core row; a slot beyond it would take the general path
+    // production plan task 9: a knob of a Baukasten track, live. Every bk track (BK_LIVE_SLOTS = MAX_BK_SPUREN) has a core row; a slot beyond it would take
+    // the general path
     // (playback rebuild, no spur/ row). An unknown or non-bk id keeps this route: the handler raises the same error as before.
     case 'geraet_param_setzen': return typeof b.spur_id !== 'string' || bkSlot(projekt, b.spur_id) === null || bkLive(projekt, b.spur_id);
     // Kraken patch field: a pin is live only when the track is a bk track that already HAS a pin list and no freeze (the first pin takes the general

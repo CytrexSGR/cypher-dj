@@ -126,6 +126,45 @@ void Kern::container_player_schliessen(int c, double beat0, bool hand) noexcept 
   melde(x);
 }
 
+// The loudness trim a track load derives (trim_aus_lufs) calibrates the PLAYER, so it is a gain on the player branch of the container in front of the blend
+// (container_fuellen), not on the strip: a module or a loop that fades in behind the same strip would pass it too, a +18.5 dB burst with a step when it ended.
+// The strip trim is the hand's part and starts at 0 dB; the two ADD (the knob shows only the hand part, so turning it by 1 dB changes the deck by 1 dB).
+// A load derives the auto part again and leaves the hand's trim alone.
+void Kern::trim_auto_setzen(int d, const Material* m) noexcept {
+  DeckWerk& w = *decks_;
+  if (d < 0 || d >= DECKS) return;
+  const float db = m ? dsp::trim_aus_lufs(ziel_lufs_, static_cast<float>(m->lufs_integriert)) : 0.0f;
+  w.trim_auto_db[d] = db;
+  w.auto_g[d] = std::pow(10.0f, db / 20.0f);   // a load or a restore: the player is closed or not running yet, no ramp
+#ifdef CYPHERDJ_MUTATION_AUTO_TRIM_AM_STREIFEN
+  if (w.reg[d].trim >= 0) sw_->setze_direkt(w.reg[d].trim, db);   // mutation: the auto part on the strip, as it was
+  w.auto_g[d] = 1.0f;
+#endif
+  trim_auto_melden(d);
+}
+
+float Kern::trim_auto_db(int d) const noexcept {
+  if (d < 0 || d >= DECKS) return 0.0f;
+  return decks_->trim_auto_db[d];
+}
+
+void Kern::trim_auto_melden(int d) noexcept {
+  if (d < 0 || d >= DECKS) return;
+  const DeckWerk& w = *decks_;
+  if (w.reg[d].trim < 0) return;
+  Ereignis x{};
+  x.art = Ereignis::REGLER;
+  x.sample = sample_;
+  x.beat = plan_.karte().beat_at(static_cast<double>(sample_));
+  kopiere(x.pfad, sw_->tabelle().def(w.reg[d].trim).pfad, sizeof x.pfad);
+  const size_t n = std::strlen(x.pfad);   // "<strip>/trim" -> "<strip>/trim_auto"
+  if (n + 6 >= sizeof x.pfad) return;
+  std::memcpy(x.pfad + n, "_auto", 6);
+  x.wert = player_gehoert(d) ? w.trim_auto_db[d] : 0.0f;
+  kopiere(x.text, "frei", sizeof x.text);
+  melde(x);
+}
+
 void Kern::setze_keylock_maschine(DehnerMaschine m, bool fein) noexcept {
   decks_->maschine = m;
   decks_->bungee_fein = fein;
@@ -699,7 +738,7 @@ float Kern::effektiv_db(int d) const noexcept {
   const DeckWerk& w = *decks_;
   const DeckRegler& r = w.reg[d];
   auto wert = [&](int16_t i, float vorgabe) { return i >= 0 ? sw_->wert(i) : vorgabe; };
-  float p = dsp::kanalpegel_db(wert(r.trim, 0.0f), wert(r.fader, -200.0f));
+  float p = dsp::kanalpegel_db(wert(r.trim, 0.0f) + w.trim_auto_db[d], wert(r.fader, -200.0f));
   if (dsp::ist_stumm(p)) return dsp::kStummDb;
   const int ziel = static_cast<int>(std::lround(wert(r.ziel, 0.0f)));
   int seite;
@@ -717,7 +756,7 @@ float Kern::effektiv_db(int d) const noexcept {
 bool Kern::deck_offen(int n) const noexcept {
   if (!player_gehoert(n - 1)) return false;   // K8
   const DeckRegler& r = decks_->reg[n - 1];
-  const float trim = r.trim >= 0 ? sw_->wert(r.trim) : 0.0f;
+  const float trim = (r.trim >= 0 ? sw_->wert(r.trim) : 0.0f) + decks_->trim_auto_db[n - 1];
   const float fader = r.fader >= 0 ? sw_->wert(r.fader) : -200.0f;
   return dsp::kanalpegel_db(trim, fader) > hoerbar_db_;
 }
@@ -861,6 +900,13 @@ void Kern::einsortieren31(const Befehl& c) {
   if (!dk.geladen() && w.laden_offen[d] == 0) return ab("nicht_geladen");
   double ab_beat = c.ab_beat;
   int64_t s = std::llround(plan_.karte().sample_at(ab_beat));
+  if (c.art == Befehl::DECK_START && c.takt == 1) {  // bar start (SYNC): bar phase of the playing deck, never earlier than asked
+    double aus = 0.0;
+    if (sync_takt_aus(d, c.quell_beat, s, &aus) && aus > 0.0) {
+      ab_beat += aus;
+      s = std::llround(plan_.karte().sample_at(ab_beat));
+    }
+  }
   if (s < sample_ && c.politik == 2 && c.raster_beats > 0.0) {  // raster > 0 prüft schon das Netz; hier gegen Endlosschleife  // §16.1 raster (Plan E9): nächster erreichbarer Rasterpunkt der Größe raster_beats
     ab_beat = c.raster_beats * std::ceil(beat0 / c.raster_beats - 1e-9);
     while ((s = std::llround(plan_.karte().sample_at(ab_beat))) < sample_) ab_beat += c.raster_beats;
@@ -916,6 +962,7 @@ void Kern::entladen_ausfuehren(int d, int64_t id, const char* quelle) {
   w.entladen_id[d] = id;
   kopiere(w.entladen_quelle[d], quelle, sizeof w.entladen_quelle[d]);
   dk.entlade(sample_);
+  trim_auto_setzen(d, nullptr);  // no material, no auto gain: the deck reads 0, the event hides the page label (command path, not the callback)
   sw_->stems_geladen(d + 1, false);
   w.leer_melden[d] = true;
   quittung(id, quelle, 2, sample_, beat0);  // fertig, sobald das Material zurück ist (decks_uebernehmen)
@@ -1053,8 +1100,7 @@ void Kern::decks_uebernehmen() {
     if (streifen_frei && r.fader >= 0) sw_->cypher_fahrt_beenden(r.fader);   // seq-fader-frei: a running ramp of cypher must not reopen the fader after the load
     if (streifen_frei && r.fader >= 0) sw_->setze_direkt(r.fader, dsp::kStummDb);
     if (streifen_frei && r.pfl >= 0) sw_->setze_direkt(r.pfl, 0.0f);
-    if (streifen_frei && r.trim >= 0)
-      sw_->setze_direkt(r.trim, dsp::trim_aus_lufs(ziel_lufs_, static_cast<float>(e.material->lufs_integriert)));
+    trim_auto_setzen(d, e.material);   // the auto part of the new track (player branch); the strip trim is the hand's and stays
     // §5.7: die drei Werte nach dem Laden immer melden, auch wenn einer schon so stand (das Stellwerk meldet nur
     // Änderungen); so sieht jeder Abonnent Fader −200, PFL 0 und den Trim der neuen Fassung (Golden-Folge laden)
     for (int16_t rr : {r.fader, r.pfl, r.trim}) {

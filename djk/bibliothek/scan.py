@@ -9,6 +9,7 @@ from typing import Iterator
 from .config import Wurzel
 
 ENDUNGEN = (".wav", ".aif", ".aiff", ".aifc", ".flac", ".mp3", ".ogg", ".opus", ".m4a")
+MIDI_ENDUNGEN = (".mid", ".midi")
 
 
 @dataclass(frozen=True)
@@ -16,6 +17,14 @@ class Datei:
     pfad: Path
     rel: str
     wurzel: Wurzel
+    groesse: int
+    mtime_ns: int
+
+
+@dataclass(frozen=True)
+class MidiDatei:
+    """A MIDI file seen while walking (only yielded when scanne gets auch_midi=True); it never becomes a catalogue row."""
+    pfad: Path
     groesse: int
     mtime_ns: int
 
@@ -34,8 +43,9 @@ def _utf8(s: str) -> bool:
         return False
 
 
-def scanne(w: Wurzel) -> Iterator[Datei | Auslassung]:
-    """Raises FileNotFoundError when the root itself is missing; everything below it is skipped and reported."""
+def scanne(w: Wurzel, auch_midi: bool = False) -> Iterator[Datei | Auslassung | MidiDatei]:
+    """Raises FileNotFoundError when the root itself is missing; everything below it is skipped and reported.
+    With auch_midi, .mid/.midi files are yielded as MidiDatei (no other behaviour changes)."""
     wurzel = str(w.pfad)
     if not os.path.isdir(wurzel):
         raise FileNotFoundError(wurzel)
@@ -44,7 +54,18 @@ def scanne(w: Wurzel) -> Iterator[Datei | Auslassung]:
         yield from _auslassungen(fehler)
         dirs[:] = sorted(d for d in dirs if not d.startswith("."))
         for name in sorted(dateien):
-            if name.startswith(".") or not name.lower().endswith(ENDUNGEN):
+            if name.startswith("."):
+                continue
+            if auch_midi and name.lower().endswith(MIDI_ENDUNGEN):
+                voll = os.path.join(ordner, name)
+                try:
+                    st = os.stat(voll)
+                except OSError:
+                    continue
+                if _utf8(voll) and os.path.isfile(voll):
+                    yield MidiDatei(Path(voll), st.st_size, st.st_mtime_ns)
+                continue
+            if not name.lower().endswith(ENDUNGEN):
                 continue
             voll = os.path.join(ordner, name)
             if not _utf8(voll):

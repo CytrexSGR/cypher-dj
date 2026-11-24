@@ -67,6 +67,18 @@ test('leer shows the hint and no body, the strip stays', async () => {
   assert.ok(attrappe.body.querySelectorAll('.zug[data-kanalzug="deck/1"]')[0], 'the strip of an empty place is still there');
 });
 
+test('an empty track place says what to do inside its waveform area; the line shows only where the deck head is dropped (compact container)', async () => {
+  const css = fs.readFileSync(path.join(PUBLIC, 'style.css'), 'utf8');
+  await zeige([TRACK, TRACK, LEER, LEER], projekt());
+  const deck = knotenAm(1);
+  assert.ok(deck.classList.contains('ohne-track'), 'no track loaded');
+  const zeile = deck.querySelectorAll('[data-lauf-leer]')[0];
+  assert.ok(zeile, 'the line exists in the deck');
+  assert.equal(zeile.textContent, 'No track loaded: pick one in the library and press LOAD');
+  assert.match(css, /\.deck > \.lauf-leer \{ display: none;/, 'hidden while the full head is shown');
+  assert.match(css, /@container deckplatz \(max-height: 290px\) \{[\s\S]*?\n  \.deck\.ohne-track > \.lauf-leer \{ display: flex; \}/, 'shown in the compact container state');
+});
+
 test('track at place 3 shows deck 3, track at place 4 shows deck 4 (place N plays deck N)', async () => {
   await zeige([LEER, LEER, TRACK, TRACK], projekt());
   assert.deepEqual(sichtbar(), { 3: 'track', 4: 'track' });

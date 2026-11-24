@@ -18,7 +18,10 @@ export { setzeVorgabenQuelle };
 import { seqV1Wandeln } from './seq.ts';
 import { alleStraenge, kanonisch, hebeAufDrei, neuesProjekt, pruefeFehler, pruefeProjekt, sortiert, type Projekt } from './model.ts';
 import { Verlauf, zieheNach, type VerlaufOptionen } from './history.ts';
+import { aendereStand } from './state.ts';
 import { grundText } from '../http/reasons.ts';
+import { liesZuletzt } from './zuletzt.ts';
+import { Versionen, VERSIONEN_ORDNER } from './versionen.ts';
 
 export { kanonisch };
 
@@ -30,7 +33,9 @@ export class AblageFehler extends Error {
 }
 
 // text: englisch (6.34); werkbank: the project is a workbench module; tracker: it is a tracker module (marker `tracker`, never together with werkbank)
-export interface ProjektEintrag { slug: string; name: string; geaendert: string; fehler?: string; text?: string; werkbank?: true; tracker?: true }
+export interface ProjektEintrag {
+  slug: string; name: string; geaendert: string; zuletzt: string; fehler?: string; text?: string; werkbank?: true; tracker?: true;
+}
 
 // Slug wie bei den Sammlungen; ein Name ohne Buchstaben und Ziffern heißt „projekt" (nicht „set")
 export function projektSlug(name: string): string {
@@ -79,7 +84,8 @@ const OFFEN = new Set<string>();
 
 export class Projekte {
   private readonly wurzel: string;
-  constructor(wurzel: string) { this.wurzel = wurzel; }
+  versionen: Versionen;                                                // B10: copies under <project>/.versionen/ (project/versionen.ts)
+  constructor(wurzel: string) { this.wurzel = wurzel; this.versionen = new Versionen(wurzel); }
   get wurzelPfad(): string { return this.wurzel; }
 
   private ordner(slug: string): string {
@@ -112,6 +118,7 @@ export class Projekte {
   liste(): ProjektEintrag[] {
     if (!fs.existsSync(this.wurzel)) return [];
     const aus: ProjektEintrag[] = [];
+    const stempel = liesZuletzt(this.wurzel);   // browser plan 2: the stamp of the last open, read once per call
     const ordner = fs.readdirSync(this.wurzel, { withFileTypes: true }).filter((x) => x.isDirectory() && SLUG.test(x.name))
       .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
     for (const d of ordner) {
@@ -119,14 +126,16 @@ export class Projekte {
       let st: fs.Stats;
       try { st = fs.statSync(p); } catch { continue; }
       const geaendert = st.mtime.toISOString();
+      const zuletzt = stempel[d.name] ?? geaendert;
       try {
         const j = JSON.parse(fs.readFileSync(p, 'utf8')) as { name?: unknown; werkbank?: unknown; tracker?: unknown };
         if (typeof j?.name !== 'string') throw new Error('name');
-        aus.push({ slug: d.name, name: j.name, geaendert, ...(j.werkbank !== undefined ? { werkbank: true as const } : {}),
+        aus.push({ slug: d.name, name: j.name, geaendert, zuletzt, ...(j.werkbank !== undefined ? { werkbank: true as const } : {}),
           ...(j.tracker !== undefined ? { tracker: true as const } : {}) });
-      } catch { aus.push({ slug: d.name, name: d.name, geaendert, fehler: 'json_kaputt', text: grundText('json_kaputt') }); }
+      } catch { aus.push({ slug: d.name, name: d.name, geaendert, zuletzt, fehler: 'json_kaputt', text: grundText('json_kaputt') }); }
     }
-    return aus;
+    // most recently opened first; the stable sort keeps the slug order for equal times
+    return aus.sort((a, b) => Date.parse(b.zuletzt) - Date.parse(a.zuletzt));
   }
 
   lies(slug: string): Projekt {
@@ -154,7 +163,8 @@ export class Projekte {
       slug = `${basis.slice(0, 44)}-${i}`;
     }
     const projekt = neuesProjekt(n);
-    if (opt.live) { projekt.live = true; projekt.loop = { an: true, von_beat: 0, bis_beat: 64 }; hebeAufDrei(projekt); }   // the default layout track, track, strudel, track
+    // the default layout track, track, strudel, track
+    if (opt.live) { projekt.live = true; projekt.loop = { an: true, von_beat: 0, bis_beat: 64 }; hebeAufDrei(projekt); }
     // workbench module: marker, loop over 4 bars
     if (opt.werkbank) { projekt.werkbank = { schema: 1 }; projekt.loop = { an: true, von_beat: 0, bis_beat: 16 }; }
     if (opt.tracker) projekt.tracker = { schema: 1 };
@@ -180,7 +190,7 @@ export class Projekte {
       ziel = `${basis.slice(0, 44)}-${i}`;
     }
     const von = this.ordner(slug), nach = this.ordner(ziel);
-    const weg = new Set(['.sperre', '.lauf', 'undo.jsonl', 'project.json']);
+    const weg = new Set(['.sperre', '.lauf', 'undo.jsonl', 'project.json', VERSIONEN_ORDNER]);
     try {
       for (const e of fs.readdirSync(von)) {
         if (weg.has(e) || e.endsWith('.teil')) continue;
@@ -191,6 +201,42 @@ export class Projekte {
       fs.writeFileSync(path.join(nach, 'undo.jsonl'), '', { flag: 'wx' });
       fsyncVerzeichnis(nach); fsyncVerzeichnis(this.wurzel);
       return { slug: ziel, projekt };
+    } catch (e) {
+      fs.rmSync(nach, { recursive: true, force: true });
+      throw e;
+    }
+  }
+
+  // Browser plan 5 (import of a project zip): takes in an unpacked project folder that lies under the projects root (same filesystem). Reads and
+  // checks <ordner>/project.json as opening does (409 projekt_ungueltig), claims a free slug from the project's own name (as lege() and
+  // kopiere() do), MOVES the children of the folder (no second copy), writes the project as `umschreiben` returns it with wiedergabe_rev 0
+  // and an empty undo.jsonl. A failure removes the new folder; the unpacked folder stays the caller's to remove.
+  nimmAuf(ordner: string, umschreiben: (p: Projekt) => Projekt): { slug: string; projekt: Projekt } {
+    let j: unknown;
+    try { j = JSON.parse(fs.readFileSync(path.join(ordner, 'project.json'), 'utf8')); } catch { throw new AblageFehler(409, 'projekt_ungueltig',
+      'project.json is not readable JSON'); }
+    seqV1Wandeln(j);
+    const g = pruefeProjekt(j);
+    if ('fehler' in g) throw new AblageFehler(409, 'projekt_ungueltig', g.fehler);
+    const basis = projektSlug(g.projekt.name);
+    let slug = basis;
+    fs.mkdirSync(this.wurzel, { recursive: true });
+    for (let i = 2; ; i++) {
+      try { fs.mkdirSync(path.join(this.wurzel, slug)); break; } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
+      slug = `${basis.slice(0, 44)}-${i}`;
+    }
+    const nach = this.ordner(slug);
+    const weg = new Set(['.sperre', '.lauf', 'undo.jsonl', 'project.json', '.papierkorb', VERSIONEN_ORDNER]);
+    try {
+      for (const e of fs.readdirSync(ordner)) {
+        if (weg.has(e) || e.endsWith('.teil')) continue;
+        fs.renameSync(path.join(ordner, e), path.join(nach, e));
+      }
+      const projekt: Projekt = { ...umschreiben(structuredClone(g.projekt)), wiedergabe_rev: 0 };
+      this.schreibe(slug, projekt);
+      fs.writeFileSync(path.join(nach, 'undo.jsonl'), '', { flag: 'wx' });
+      fsyncVerzeichnis(nach); fsyncVerzeichnis(this.wurzel);
+      return { slug, projekt };
     } catch (e) {
       fs.rmSync(nach, { recursive: true, force: true });
       throw e;
@@ -221,7 +267,10 @@ export class Projekte {
     this.datei(slug);                                                  // Slug prüfen, bevor etwas angefasst wird
     const fehler = pruefeFehler(projekt);
     if (fehler !== null) throw new AblageFehler(400, 'projekt_ungueltig', fehler);
-    this.mitSperre(slug, () => this.schreibe(slug, projekt));
+    this.mitSperre(slug, () => {
+      this.versionen.sichereAuto(slug, 'speichern');                    // the state being replaced; swallows its own errors
+      this.schreibe(slug, projekt);
+    });
   }
 
   // Öffnet den Verlauf des Projekts und hält die Sperre `.lauf`, bis schliesse() gerufen wird (siehe Kopf der Datei). Wer ihn nicht
@@ -256,12 +305,46 @@ export class Projekte {
   oeffne(slug: string, optionen?: VerlaufOptionen): { projekt: Projekt; verlauf: Verlauf; nachgezogen: number } {
     const verlauf = this.verlaufRoh(slug, optionen);
     try {
+      let vorher: Buffer | undefined;
+      try { vorher = fs.readFileSync(this.datei(slug)); } catch { /* lies() below reports it */ }
       const z = zieheNach(verlauf, this.lies(slug));
+      this.versionen.sichereAuto(slug, 'oeffnen', vorher);               // the file as the user left it, before the write-back
       if (z.angewendet > 0) this.speichere(slug, z.projekt);
       return { projekt: z.projekt, verlauf, nachgezogen: z.angewendet };
     } catch (e) {
       try { verlauf.schliesse(); } catch { /* der erste Fehler zählt */ }
       throw e;
     }
+  }
+
+  // B10 RESTORE at storage level. Precondition: the project is not open in this process (the caller closed it; an open one is projekt_busy).
+  // Order: validate the chosen version (nothing is written when it is unknown or invalid; a newer format fails the model check) -> take the
+  // lock by opening -> save the CURRENT project.json as the named version `before restore` -> write the chosen content as ONE undoable entry with
+  // wiedergabe_rev 0 (the next open does a full load, and the close-time write-back cannot undo it). A version equal to the current state writes
+  // nothing (aendereStand returns eintrag null); the safety version is made anyway.
+  // Read-only check of a stored version: known id, JSON, v1 step document lifted like lies(), model check. The session calls it before it closes anything.
+  pruefeVersion(slug: string, id: string): { projekt: Projekt } {
+    this.ordner(slug);
+    const bekannt = typeof id === 'string' && this.versionen.liste(slug).some((v) => v.id === id);   // the id is only matched, never joined from the client
+    if (!bekannt) throw new AblageFehler(404, 'version_unbekannt');
+    let j: unknown;
+    try { j = JSON.parse(this.versionen.lies(slug, id).toString('utf8')); } catch { throw new AblageFehler(409, 'version_ungueltig', 'not JSON'); }
+    seqV1Wandeln(j);
+    const g = pruefeProjekt(j);
+    if ('fehler' in g) throw new AblageFehler(409, 'version_ungueltig', g.fehler);
+    return g;
+  }
+  stelleWiederHer(slug: string, id: string, quelle: string): { gesichert_als: string } {
+    this.ordner(slug);
+    const g = this.pruefeVersion(slug, id);
+    const o = this.oeffne(slug, { zeitgeber: false });
+    try {
+      const gesichert_als = this.versionen.sichereBenannt(slug, 'before restore', fs.readFileSync(this.datei(slug)));
+      const alt = o.projekt;
+      const neu: Projekt = { ...g.projekt, rev: alt.rev, wiedergabe_rev: alt.wiedergabe_rev };
+      aendereStand(o.verlauf, alt, neu, { quelle: quelle as 'andreas' | 'cypher', label: 'version zurueck' },
+        { speichere: (p) => this.speichere(slug, { ...p, wiedergabe_rev: 0 }) });
+      return { gesichert_als };
+    } finally { o.verlauf.schliesse(); }
   }
 }

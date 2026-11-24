@@ -70,7 +70,7 @@ export const GERAETE: readonly GeraetDef[] = [
     zahl('out', 'Output', -24, 24, 'dB'),
     schalter('propq', 'Proportional Q'),
   ] },
-  { id: 'komp', typ: 'effekt', titel: 'Cypher Komp', quelle: 'djk/instruments/comp/src/lib.rs', parameter: [
+  { id: 'komp', typ: 'effekt', titel: 'Cypher Comp', quelle: 'djk/instruments/comp/src/lib.rs', parameter: [
     zahl('thresh', 'Threshold', -60, 0, 'dB'),
     zahl('ratio', 'Ratio', 1, 20),
     zahl('knee', 'Knee', 0, 24, 'dB'),
@@ -99,7 +99,7 @@ export const GERAETE: readonly GeraetDef[] = [
     schalter('kill', 'Kill'),
     auswahl('fft', 'FFT Size', HALL_RAHMEN),
   ] },
-  { id: 'saett', typ: 'effekt', titel: 'Cypher Saett', quelle: 'djk/instruments/sat/src/lib.rs', parameter: [
+  { id: 'saett', typ: 'effekt', titel: 'Cypher Saturation', quelle: 'djk/instruments/sat/src/lib.rs', parameter: [
     zahl('drive', 'Drive', 0, 36, 'dB'),
     zahl('out', 'Output', -24, 12, 'dB'),
     zahl('mix', 'Mix', 0, 1),

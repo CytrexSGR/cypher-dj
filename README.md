@@ -18,7 +18,7 @@ Built in Germany by Andreas, a DJ, and Cypher, an AI agent (Claude models), sinc
 
 One real-time core in C++ and Rust keeps a single sample clock for everything: the decks, the pattern channels and
 the arrangement. The browser page and the agent sit on the same functions. The agent reaches them through an MCP
-server with 100 tools, so nearly everything you can click, it can do too (a few controls such as the crossfader stay
+server with 112 tools, so nearly everything you can click, it can do too (a few controls such as the crossfader stay
 in your hand), and anything it does shows up on your page. When it
 cannot do something it answers with a reason (for example `sidechain_zyklus` for a sidechain that would depend on
 itself) instead of guessing. When you grab a fader, your
@@ -44,7 +44,7 @@ factory presets)
 | Drums | Drums 909, Drums 808, Drum Synth (eight synthesised pads), Kick Synth, one-shot drum kits |
 | 8-bit | an Amiga-style sample voice, chip pulse, triangle and noise |
 | More sources | RB-338 (a 303-style bass, its own engine), a sampler and multisample instrument, two slots of Surge XT, third-party VST3 and LV2 instruments |
-| Effects | Cypher EQ, Cypher Hall, Cypher Komp, Cypher Saett (Rust, also as VST3), a limiter and utility stage, Filterbox, a tempo-synced delay, Cypher Remix, and more effect graphs |
+| Effects | Cypher EQ, Cypher Hall, Cypher Comp, Cypher Saturation (Rust, also as VST3), a limiter and utility stage, Filterbox, a tempo-synced delay, Cypher Remix, and more effect graphs |
 | Hardware | Traktor Kontrol S8 (both screens drawn by cypher-dj), Maschine MK2 (displays show the knobs), Akai APC20, Novation Launch Control 3, Akai LPD8, any class-compliant MIDI controller |
 
 Every device has a front panel with real units and MIDI learn, a device window for a second monitor, and controls
@@ -131,7 +131,7 @@ Not planned for now: automation of plugin parameters, sidechain into plugins, CL
 ## Try it: we are looking for testers
 
 You would be a good fit if you run Linux with PipeWire and you DJ, produce, or want to see an AI agent make music with you. An MCP-capable agent is optional (we use Claude
-Code); without one, cypher-dj is a studio you play from the browser. On Ubuntu 24.04 the package from the
+Code); without one, cypher-dj is a studio you play from the browser. On Ubuntu 24.04 and 26.04 the package from the
 [releases page](../../releases) installs it without a compiler; elsewhere you build it from source (C++, Rust,
 Node.js, Python). Stems need an NVIDIA GPU, and the track
 analysis workshop expects PyTorch with CUDA (see [INSTALL.md](INSTALL.md)).
@@ -187,3 +187,24 @@ Library (GPL) and the pattern channels load Strudel (AGPL). Third-party componen
 [THIRD_PARTY.md](THIRD_PARTY.md).
 
 Copyright (C) 2026 Infinimind Creations
+
+## Labs
+
+Some features are built but not yet proven, or are not offered as a finished part of 1.0. They are marked **LAB** (tooltip: "experimental, may change") wherever the page has a control for them. They can change or be removed without notice. Features with a control in the page: ANALYZE window (a view of the analysis), FIND SOUND: a variant round to improve a Cypher Modular sound, Tablet pairing (control from a tablet), Novation Launch Control 3 (its row in the CONTROLLERS list).
+
+Labs features without a control in the page (hardware, operations, or only reachable by name or through the agent tools):
+
+- Beat FX tuned for the XDJ control scheme
+- Scene follow actions (field `folge`)
+- Launchpad Mini MK3 as SEQ grid
+- Time signatures n/4 (2/4 to 12/4)
+- Time signatures 6/8, 7/8 and other eighths
+- Windows plugins through yabridge and Wine
+- Native Instruments (Kontakt) route
+- Structure and cue suggestion pipeline
+- Greif 2, the three Juno Pad variants and the sync lead example
+- Cypher Labor (experimental block)
+- Command-line player for the agent (`player_cli`)
+- Akai APC20: PRODUCTION functions with Shift
+- Maschine MK2 through the `cypherdj-pult` bridge
+- XDJ-XZ and Maschine Jam bindings

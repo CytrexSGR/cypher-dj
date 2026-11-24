@@ -5,7 +5,15 @@ import { ladeInDeck, ladeLoopInSpur } from './loopdeck/view.js';   // the LOOPS 
 import { quelleZiehbar } from './loopdeck/drag.js';
 import { $, $$, melde, zustand } from './page_state.js';
 import { filtere, zeigeReiterInfo } from './seitenrahmen.js';
+import { datumText } from './format_text.js';
 export let recBeats = 4, recLaeuft = false, recAktiv = '', recZiel = null;   // recZiel: { deck, spur } of a Strudel sum recording that goes into a loop deck  // MVP 2 Scheibe 2: REC-Knopf im Kopf von C; recAktiv = Name des eigenen REC
+
+// The stored source names of the loop library (`quelle`) are contract values; the page shows words.
+export const QUELLE_TEXT = Object.freeze({ mitschnitt: 'recording', erzeugt: 'generated', oneshot: 'one-shot', loop: 'loop', impuls: 'impulse', stimme: 'voice' });
+export function quelleText(q) {
+  if (q === undefined || q === null || q === '') return '–';
+  return QUELLE_TEXT[q] ?? q;
+}
 
 // ---------- Strom vom Seiten-Server (Kern) ----------
 export const uhrKopf = new Kopf();                               // Master-Beat, hochgerechnet (Spec E4)
@@ -114,7 +122,7 @@ export async function ladeLoops() {
     const tr = document.createElement('tr');
     if (l.ladbar === false) { tr.classList.add('defekt'); tr.title = `Cannot be loaded: ${l.grund}`; }
     else quelleZiehbar(tr, { loop: l.name });   // drop on a loop deck cell loads it there (the source form of the loop library)
-    for (const [t, k] of [[l.name, 'titelzelle'], [taktText(l.beats), 'zahl'], [l.quelle || '–', ''], [l.erstellt || '–', 'zahl']]) {
+    for (const [t, k] of [[l.name, 'titelzelle'], [taktText(l.beats), 'zahl'], [quelleText(l.quelle), ''], [datumText(l.erstellt), 'zahl']]) {
       const td = document.createElement('td'); td.textContent = t; td.className = k; tr.append(td);
     }
     if (l.ladbar === false) {   // Name durchgestrichen, der Grund lesbar daneben

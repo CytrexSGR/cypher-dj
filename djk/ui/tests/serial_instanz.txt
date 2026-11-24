@@ -1,0 +1,2 @@
+# Page test files pinned to one shard (test instance letter) of alles.sh, see djk/tools/alles_verteilen.py. Format: <letter> <file>  # reason
+e paths_instance2.test.mjs  # writes and removes the real folder /dev/shm/cypherdj-e/geraete: it must not run beside the server tests of letter e

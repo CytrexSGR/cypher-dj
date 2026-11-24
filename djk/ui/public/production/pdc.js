@@ -71,8 +71,8 @@ export const latenzZeile = (p, hostLage = null, graphen = null) => {
   const r = pdcRechnen(p, hostLage, graphen);
   const g = r.gesamt;
   return [g > 0 ? `Latency ${msText(g)} (${g} samples): the strips are delayed to stay in time; the export skips it` : '',
-    r.bk > 0 ? `latency of ${r.bk} Baukasten stage${r.bk > 1 ? 's' : ''} unknown here (the core delays for it; not in this sum)` : ''].filter(Boolean).join(' · ');
+    r.bk > 0 ? `latency of ${r.bk} Cypher Modular stage${r.bk > 1 ? 's' : ''} unknown here (the core delays for it; not in this sum)` : ''].filter(Boolean).join(' · ');
 };
 // the text of one strip row: its own chain and the delay the core adds to it; empty for a strip without either
 export const streifenText = (r) => (!r || (r.kette === 0 && r.versatz === 0 && !r.bk) ? ''
-  : [r.kette > 0 ? `chain ${msText(r.kette)}` : '', r.bk > 0 ? 'Baukasten latency unknown' : '', r.versatz > 0 ? `delayed ${msText(r.versatz)} to match` : ''].filter(Boolean).join(' · '));
+  : [r.kette > 0 ? `chain ${msText(r.kette)}` : '', r.bk > 0 ? 'Cypher Modular latency unknown' : '', r.versatz > 0 ? `delayed ${msText(r.versatz)} to match` : ''].filter(Boolean).join(' · '));

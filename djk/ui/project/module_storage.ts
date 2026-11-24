@@ -198,7 +198,8 @@ export interface EinsetzOptionen {
 }
 // Places the module tree as a top group into a copy of `p0`: new ids and numbers for every group, track and clip, the audio copied into the project
 // (a project backup then holds everything; the hint is an absolute path like the one of every other clip), a stored `modul.slot` dropped, and in the
-// live container the module placed in the first free place (whose module fader is closed, as after an export). One project value = one undo step for the caller.
+// live container the module placed in the first free place (whose module fader is closed, as after an export). One project value = one undo step for the
+// caller.
 export function setzeModulEin(p0: Projekt, j: ModulDateiInhalt, o: EinsetzOptionen): { projekt: Projekt; gruppeId: string; audio_fehlt: string[] } {
   const nicht = (text: string): EinsetzFehler => new EinsetzFehler(409, 'modul_nicht_einsetzbar', { text });
   // sends, inserts and racks hang on pools of the project (returns, stage slots) and are not carried; lanes only without chain targets (blend and plain)
@@ -215,7 +216,7 @@ export function setzeModulEin(p0: Projekt, j: ModulDateiInhalt, o: EinsetzOption
   const zuViele = (zaehle: (x: Spur) => boolean, max: number): boolean => p.spuren.filter(zaehle).length + j.spuren.filter(zaehle).length > max;
   if (p.spuren.length + j.spuren.length > MAX_SPUREN || p.gruppen.length + j.gruppen.length > MAX_GRUPPEN
     || zuViele(bk, MAX_BK_SPUREN) || zuViele(kit, MAX_KIT_GERAETE)) {
-    throw new EinsetzFehler(409, 'routing_grenze', { text: `the module needs ${j.spuren.length} free tracks (${j.spuren.filter(bk).length} Baukasten) and `
+    throw new EinsetzFehler(409, 'routing_grenze', { text: `the module needs ${j.spuren.length} free tracks (${j.spuren.filter(bk).length} Cypher Modular) and `
       + `${j.gruppen.length} free groups` });
   }
   const top = j.gruppen[0];

@@ -90,3 +90,8 @@
 .ldg-spalten .spalte .zelle { height: auto; min-height: 0; }
 .ldg-szenen { gap: 3px; padding: 82px 6px 186px; overflow: hidden; }
 .ldg-szenen .ld-szene { min-height: 0; }
+/* UI check M3 (1366 x 768: the pop-up is 691 px high, the 300 px bottom area left the eight cells 7.4 px each, the clips were cut): below 800 px of window height
+   the bottom area is 200 px (its panes scroll inside anyway), which gives the cells about 20 px each. */
+@media (max-height: 800px) {
+  #session-unten { flex-basis: 200px; height: 200px; }
+}

@@ -63,7 +63,7 @@ test('FIND SOUND sits in the top bar after ANALYZE and opens one window', async 
   assert.equal(fenster().length, 1);
 });
 
-test('opening starts a round for the selected Baukasten track with the remembered step size', async () => {
+test('opening starts a round for the selected Cypher Modular track with the remembered step size', async () => {
   await start({ speicher: { 'runde.schritt': 'grob' } });
   assert.deepEqual(RUNDEN().map((a) => a.koerper), [{ spur_id: 's1', schritt: 'grob' }]);
   assert.equal($w('runde-schritt').value, 'grob');
@@ -183,7 +183,7 @@ test('NEW NEIGHBOURS starts a round', async () => {
 test('another kind of track shows the hint and ends the round', async () => {
   await start();
   w.ctx.waehle('s2'); await ruhe();
-  assert.equal(text('runde-hinweis'), 'Select a track with a Baukasten instrument.');
+  assert.equal(text('runde-hinweis'), 'Select a track with a Cypher Modular instrument.');
   assert.equal(ANRUFE('POST', '/proj/klang/ende').length, 1);
   w.ctx.waehle('s2'); await ruhe();
   assert.equal(ANRUFE('POST', '/proj/klang/ende').length, 1, 'no round, nothing to end');

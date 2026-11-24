@@ -69,6 +69,11 @@ bool Netz::deck_paket(const v::Adresse* a, const osc::Nachricht& m) {
     b.ab_beat = m.werte[f::ab_beat].d;
     b.quell_beat = start ? m.werte[f::quell_beat].d : 0.0;
     b.politik = m.werte[start ? std::size_t(f::politik) : std::size_t(g::politik)].i;
+    // start only: politik 3 `takt` = politik 0 (late: dropped) plus the bar-phase alignment to the playing deck (SYNC)
+    if (start && b.politik == 3) {
+      b.politik = 0;
+      b.takt = 1;
+    }
     if (!quelle_ok(b.quelle)) return ab("ausserhalb_bereich");
     if (b.deck < 1 || b.deck > 4) return ab("unbekanntes_deck");
     // §16.1: start und stopp kennen Politik 0 und 1 (2 braucht raster_beats, das diese Adressen nicht tragen)

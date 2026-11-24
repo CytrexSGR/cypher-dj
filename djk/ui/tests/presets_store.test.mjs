@@ -482,7 +482,7 @@ test('a factory folder that still has the old German names lists nothing and doe
 
 test('description family: a baukasten preset may describe an effect graph (effect kind), other devices keep the family of their type', (t) => {
   const { s } = speicher(t);
-  const delay = { art: 'delay', unterart: 'ping_pong', charakter: ['wet'], genre: [], einsatz: ['build'], energie: 3, text: 'Effect graph on the Baukasten device.' };
+  const delay = { art: 'delay', unterart: 'ping_pong', charakter: ['wet'], genre: [], einsatz: ['build'], energie: 3, text: 'Effect graph on the Cypher Modular device.' };
   assert.equal(s.speichere({ name: 'Echo Graph', geraet: 'baukasten', graph: 'fx-labor', werte: { knob1: 0.5 }, beschreibung: delay }).neu, true);
   assert.equal(s.lies('nutzer', 'baukasten', 'echo-graph').beschreibung.art, 'delay');
   assert.equal(s.liste({ geraet: 'baukasten' }).find((e) => e.slug === 'echo-graph').familie, 'effekt');

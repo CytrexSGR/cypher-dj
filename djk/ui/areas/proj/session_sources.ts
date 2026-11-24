@@ -85,7 +85,8 @@ export class SitzungQuellen {
         if (marker === null) throw new ProjFehler(409, 'kein_tempo', { index, text: 'the auto warp has no marker behind that beat' });
         return { befehl: 'warp_setzen', clip_id: x.clip_id, warp: handWarp(g.clip.warp, marker) };
       }
-      // Slice 4 (D8): Quantize Audio. Je Transient im Bereich ein Hand-Marker auf dem Raster; die Grenzen (800 BPM, 4096 Marker) prüft warp_setzen und lehnt ab
+      // Slice 4 (D8): Quantize Audio. Je Transient im Bereich ein Hand-Marker auf dem Raster; die Grenzen (800 BPM, 4096 Marker)
+      // prüft warp_setzen und lehnt ab
       if (x && typeof x === 'object' && x.befehl === 'audio_quantisieren' && typeof x.clip_id === 'string') {
         const felder = ['befehl', 'clip_id', 'raster', 'staerke', 'von_beat', 'bis_beat'];
         const g = Object.keys(x).every((k) => felder.includes(k)) ? sucheClip(standVor(), x.clip_id) : undefined;

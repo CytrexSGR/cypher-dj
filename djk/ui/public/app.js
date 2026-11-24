@@ -9,11 +9,12 @@ import { bindeModule } from './module_library.js';   // plan live-module task 10
 import { ladeInDeck, setzeGrossHaken } from './loopdeck/view.js';   // the MODULES tab loads module sources into a loop deck cell
 import { bindeLoopdeckGross } from './loopdeck/gross.js';   // the loop deck pop-up
 import { bindeKopplung } from './coupling.js';   // task 10: pair a tablet (main page only)
+import { bindeMitschnitt } from './capture_button.js';   // journey tours task 2: REC MIX
 import { DECKS } from './curves.js';
 import { leitstand, strom, zeigeCypher } from './stream.js';
 import { baueDecks, ladeBestand, zeigeDeck } from './deck_view.js';
 import { baueRec, ladeLoops, letzterBeat } from './loop_rec_view.js';
-import { bindePlaetze } from './slots_view.js';
+import { bindePlaetze, setzeLiveOeffnen } from './slots_view.js';
 import { baueSeqPlaetze } from './seq_view.js';
 import { baueStemsPlaetze } from './stems_view.js';
 import { $, $$, jsonPost, melde, zustand } from './page_state.js';
@@ -38,6 +39,10 @@ import { bindeFx, bindeFxZuweisung } from './beat_fx_view.js';
 import { bindeKnoepfe, zeigeWert } from './controls_view.js';
 import { ausgang, bild } from './output_view.js';
 import { bindeLiveDock } from './live_dock/host.js';
+import { bindeBrowser } from './browser/browser.js';   // browser plan 2: the one browser component
+import { holeHost } from './browser/host.js';
+import { taktSichtbar } from './sichtbar_bar.js';
+import { bindePhonesKnopf } from './kopf_phones.js';
 
 // ---------- Aufbau: am Ende der Datei, nach allen Definitionen (dreimal am 2026-09-28 griff der Aufbau auf ein const,
 // das weiter unten stand: Temporal Dead Zone; hier unten gilt jedes const der Datei schon) ----------
@@ -45,6 +50,7 @@ zeigeCypher();
 baueDecks();
 baueSeqPlaetze();   // the four SEQ nodes exist before the layout is applied
 baueStemsPlaetze();   // and the four stems nodes
+setzeLiveOeffnen(liveOeffnen);
 bindePlaetze();
 baueRec();
 bindeReiter();
@@ -72,6 +78,7 @@ async function sessionAendere(label, befehle) {
   return ok;
 }
 function sessionSpurAendern(spurId, feld, wert, label) { return sessionAendere(label, [{ befehl: 'spur_aendern', spur_id: spurId, [feld]: wert }]); }
+try { bindeBrowser({ hole: holeHost }); } catch (e) { console.error('Browser:', e); }   // browser plan 2: watches the view class that bindeAnsicht sets next
 bindeAnsicht();
 bindeTablet();
 bindeRemixFenster();
@@ -87,6 +94,8 @@ if (!geraetFensterAn && !controllerFenster && !remixFenster) {   // the APC20 ba
 }
 if (!geraetFensterAn && !controllerFenster && !remixFenster) fetch('/controller/fokus').then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) zeigeCtlMarke(j); }, () => {});   // the CTL mark on the track the controllers drive, before the first event
 { const reiter = $('[data-reiter="module"]'), tabelle = $('#module-tabelle'); if (reiter && tabelle) bindeModule({ reiter, tabelle, melde: (t) => melde(t), laden: (n, q) => { ladeInDeck(n, q); } }); }   // task 10
+bindePhonesKnopf();   // header: the PHONES key of a narrow window
+{ const knopf = $('#mitschnitt-knopf'); if (knopf) bindeMitschnitt({ knopf }); }   // journey tours task 2: REC MIX
 { const knopf = $('#kopplung-knopf'), dialog = $('#kopplung'); if (knopf && dialog) bindeKopplung({ knopf, dialog }); }   // task 10: the QR code of a one-time pairing link
 bindeFx();
 bindeFxZuweisung();
@@ -101,5 +110,5 @@ ladeLoops();
 requestAnimationFrame(bild);
 strom();
 leitstand();
-ausgang(); setInterval(ausgang, 1000);
+ausgang(); taktSichtbar(ausgang, 1000);   // the OUT dot stays 1 s while visible; a hidden tab asks nothing
 

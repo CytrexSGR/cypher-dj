@@ -1,6 +1,6 @@
 // Package 1.16 rest U8 (K1, K2): the COLLECTIONS panel of the PRODUCTION browser and "Add to collection". Node only: pure functions, a stand-in
 // root element, a stub ctx; the server side is the real kollektionen Bereich behind a real HTTP server (tests/support style), so the page talks to
-// the routes of U4. The real drags are the browser probe check/probe_b116_browser.mjs (not part of this file).
+// the routes of U4. The real drags were a browser probe that was removed with the old mode switch (browser plan 2).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

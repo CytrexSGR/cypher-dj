@@ -119,7 +119,7 @@ test('CHANGE swaps the instrument of the selected track in one command, the note
   let punkte = null; w.ctx.oeffneMenue = (liste) => { punkte = liste; };
   $w('karte-wechsel').click(); await ruhe();
   const greif = punkte.find((p) => p.text === 'synth-greif \u00b7 Lead');   // grouped by type (the default); the text carries the role
-  assert.ok(greif, 'menu lists the Baukasten instruments');
+  assert.ok(greif, 'menu lists the Cypher Modular instruments');
   const kopf = punkte.filter((p) => p.gruppe).map((p) => p.text);
   assert.deepEqual(kopf, ['Other', 'RB-338', 'View'], 'no type in this data: both graphs under Other, then the RB-338, then the view switch');
   assert.equal(punkte.at(-1).text, 'Group by role', 'the last item switches the axis');

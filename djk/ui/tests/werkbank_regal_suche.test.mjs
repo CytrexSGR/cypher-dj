@@ -91,7 +91,7 @@ test('while the field has text the shelf shows the groups instead of the tab: he
   assert.equal(gruppe('samples').querySelectorAll('[data-w="katalog-datei"]').length, 2, 'catalogue rows are the rows of the SAMPLES tab');
   assert.equal(gruppe('loops').querySelectorAll('[data-w="katalog-datei"]').length, 1);
   assert.equal(gruppe('instrumente').querySelectorAll('[data-w="instrument-zeile"]').length, 1, 'a stored instrument has the row of the INSTRUMENTS tab');
-  assert.equal(gruppe('instrumente').querySelectorAll('[data-w="suche-info"]').length, 1, 'a Baukasten instrument has an info row');
+  assert.equal(gruppe('instrumente').querySelectorAll('[data-w="suche-info"]').length, 1, 'a Cypher Modular instrument has an info row');
   assert.equal(gruppe('geraete').querySelectorAll('[data-w="suche-info"]').length, 1);
   assert.equal(gruppe('presets').querySelectorAll('[data-w="suche-info"]').length, 1);
   assert.ok(gruppe('module').querySelector('.w-karte'), 'a module is the card of the MODULES tab');

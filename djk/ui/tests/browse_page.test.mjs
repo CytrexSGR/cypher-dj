@@ -274,3 +274,11 @@ test('m2: FAILED-Grund nach F5 aus den /stoebern-Daten (Grund + Stufe); Beobacht
   assert.equal(fehlerAnzeige(t, 'FAILED at decode: x'), 'FAILED at decode: x');
   assert.equal(fehlerAnzeige({ material_id: 'm-g', status: 'prepare' }, undefined), null, 'Negativ: kein Fehler, kein Text');
 });
+
+test('loop BPM column: the fact as is, the analysis guess with a tilde, otherwise a dash', () => {
+  const bpm = SPALTEN.loop.find((c) => c.titel === 'BPM');
+  assert.equal(bpm.wert({ bpm: 123.5, bpm_geschaetzt: 99 }), '123.5');
+  assert.equal(bpm.wert({ bpm: null, bpm_geschaetzt: 122.9 }), '~123');
+  assert.equal(bpm.wert({ bpm: null, bpm_geschaetzt: null }), '–');
+  assert.equal(bpm.wert({ bpm: null }), '–');
+});

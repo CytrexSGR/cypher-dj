@@ -308,7 +308,7 @@ export function baueFrontplatte(host, opt) {
       setze(o.nr, t.auf ?? k[o.nr] + t.schritt);
     });
   }
-  const beschrifte = (zelle, c) => { if (c.label) { const n = el('span', 'fp-name', c.label); namenVon.set(zelle, n); zelle.append(n); } };
+  const beschrifte = (zelle, c) => { if (c.label) { const n = el('span', 'fp-name', c.label); n.setAttribute('title', c.label); namenVon.set(zelle, n); zelle.append(n); } };
   const glyphe = (id, text) => {   // a waveform or filter glyph: stroke-only path in the 24 x 12 box of panel_glyphen.js
     const g = el('svg', 'fp-glyphe', undefined, true), p = el('path', null, undefined, true);
     g.setAttribute('viewBox', '0 0 24 12');

@@ -1,0 +1,2 @@
+# Timing-sensitive tests: run alone in the quiet stage (alles.sh suite generator-ruhig), not in the generator suite.
+pattern_ereignisse.test.mjs  # 26 a dense pattern handed over as an ARGUMENT is not expanded to look for a signal

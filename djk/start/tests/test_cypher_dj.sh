@@ -18,11 +18,12 @@ cp "$(dirname "$LAUNCHER")/orte.sh" "$ROOT/djk/start/orte.sh"   # the launcher s
 chmod +x "$ROOT/djk/start/cypher-dj" 2>/dev/null || true
 ln -s "$ROOT/djk/start/cypher-dj" "$T/bin/cypher-dj"
 LOG="$T/log"
-for s in djk-start djk-stop djk-starter; do
+for s in djk-start djk-stop djk-starter djk-doctor djk-bericht; do
   cat > "$ROOT/djk/start/$s" <<STUB
 #!/usr/bin/env bash
 echo "$s \$*" >> "$LOG"
 if [ "$s" = djk-start ] && [ "\${1:-}" = --zustand ]; then exit "\${STUB_ZUSTAND_RC:-1}"; fi
+if [ "$s" = djk-doctor ]; then exit "\${STUB_DOCTOR_RC:-0}"; fi
 exit 0
 STUB
   chmod +x "$ROOT/djk/start/$s"
@@ -144,10 +145,18 @@ assert d["cypher-dj"]["args"] == [sys.argv[2] + "/djk/hand/hand.ts"], d
 PY
 check $? "mcp: root with quote and backslash still parses as JSON and names the root"
 
+# doctor: arguments pass through, the stub's exit code is the launcher's
+run "$CJ" doctor --instanz i; [ "$RC" = 0 ] && grep -qx "djk-doctor --instanz i" "$LOG"; check $? "doctor: passes --instanz i through (rc $RC)"
+STUB_DOCTOR_RC=1 run "$CJ" doctor; [ "$RC" = 1 ]; check $? "doctor: returns the doctor's exit code 1 (rc $RC)"
+
+# report: arguments pass through
+run "$CJ" report --ohne-journal --instanz d; [ "$RC" = 0 ] && grep -qx "djk-bericht --ohne-journal --instanz d" "$LOG"; check $? "report: passes its flags through (rc $RC)"
+run "$CJ" help; grep -q "report" "$T/out"; check $? "help names report"
+
 # unknown / help
 run "$CJ" frobnicate; [ "$RC" = 2 ] && grep -q "start" "$T/out" "$T/err"; check $? "unknown command: help, rc 2 (rc $RC)"
 run "$CJ"; [ "$RC" = 2 ]; check $? "no command: rc 2 (rc $RC)"
-run "$CJ" help; [ "$RC" = 0 ] && grep -q "demo" "$T/out"; check $? "help: rc 0"
+run "$CJ" help; [ "$RC" = 0 ] && grep -q "demo" "$T/out" && grep -q "doctor" "$T/out"; check $? "help: rc 0"
 
 echo "$OK OK, $FAIL FAIL"
 [ "$FAIL" = 0 ]

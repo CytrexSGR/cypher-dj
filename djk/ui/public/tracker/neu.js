@@ -41,6 +41,17 @@ export function bindeNeu(ctx) {
     } finally { laeuft = false; }
   };
 
+  // UI check M4: the menu opens under its button, left-aligned; where the button sits at the right edge of the bar the menu ran out of the window
+  // (cut at 1366 and 1920). It then aligns to the right edge of its button, and a menu that still crosses the window edge is pulled back inside.
+  function imFenster(menue) {
+    menue.style.left = ''; menue.style.right = '';
+    const breite = globalThis.innerWidth;
+    if (typeof menue.getBoundingClientRect !== 'function' || !(breite > 0)) return;
+    let r = menue.getBoundingClientRect();
+    if (r.right > breite - 4) { menue.style.left = 'auto'; menue.style.right = '0'; r = menue.getBoundingClientRect(); }
+    if (r.left < 4) { menue.style.right = 'auto'; menue.style.left = `${Math.round(menue.offsetLeft + 4 - r.left)}px`; }
+  }
+
   // one menu with its button; `wo` is the element it is appended to (the bar or the empty pane)
   function baue(wo, kopfzeile) {
     const huelle = el('span', 't-gruppe t-neu');
@@ -69,7 +80,7 @@ export function bindeNeu(ctx) {
       zu();
       ctx.neuesTrackerModul(neuKoerper(NEU_EINTRAEGE[0], name));
     });
-    knopf.addEventListener('click', () => { menue.hidden = !menue.hidden; if (menue.hidden) feld.hidden = true; });
+    knopf.addEventListener('click', () => { menue.hidden = !menue.hidden; if (menue.hidden) feld.hidden = true; else imFenster(menue); });
     menue.append(feld);   // the name field stands in the menu, under the items
     huelle.append(knopf, menue);
     wo.append(huelle);

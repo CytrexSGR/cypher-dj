@@ -20,7 +20,7 @@ export const GERAET_TEXT = {
   titel: 'DEVICE',
   laedt: 'Loading the device panel…',
   keins: 'This device has no panel.',
-  istFehlt: 'The Surge values of the host could not be read; untouched knobs show defaults',
+  istFehlt: 'The Surge host does not answer yet. Knobs show default values until it does.',
   zuViele: `A Surge track holds at most ${SURGE_MAX} different parameters; this one is not stored`,
   fehler: 'The device panel could not be loaded',
 };
@@ -283,7 +283,7 @@ export async function surgeIstEinlesen(ctx, spur, parameter, namen) {
   let r = null;
   try { r = await ctx.holeGet(`/proj/spur/${encodeURIComponent(spur.id)}/geraet/ist?namen=${offen.join(',')}`); } catch { /* reported below */ }
   const werte = r?.status === 200 ? r.j?.werte : null;
-  if (!werte) { ctx.melde?.(GERAET_TEXT.istFehlt, true); return parameter; }
+  if (!werte) { ctx.melde?.(GERAET_TEXT.istFehlt, false); return parameter; }
   return parameter.map((p) => (typeof werte[p.name] === 'number' && Number.isFinite(werte[p.name]) ? { ...p, vorgabe: surgeNorm(p, werte[p.name]) } : p));
 }
 

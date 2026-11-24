@@ -23,7 +23,10 @@ const GPU_GRUENDE = new Set(['gpu_belegt', 'keine_gpu']);                       
 // Review MINOR 4: Zeitlimit je Lauf. RTF 0,27 (Probe) mit Faktor 3 Reserve plus Laden; mindestens 10 min (wie die Vorbereiter-Linie, analysis.ts:14)
 export const stemsZeitlimitMs = (n: number): number => Math.max(10 * 60_000, Math.round(n / 48000 * 3 * 1000) + 120_000);
 export interface StemsOptionen extends Partial<StemsLaufOptionen> { python: string; cwd: string; zeitlimitMs?: number;
-  schreibeWav?: (quelle: string, ziel: string) => Promise<{ frames: number; sha256: string }> }   // Test: den Schreiber verlangsamen
+  schreibeWav?: (quelle: string, ziel: string) => Promise<{ frames: number; sha256: string }>;   // Test: den Schreiber verlangsamen
+  // Provenance (tag store): called after the stems were placed, once per stem for made_from (stem file from the source file) and once for used_in
+  // (stem file in the project). A throwing hook is logged and ignored; it never fails the placement.
+  bezug?: (art: 'made_from' | 'used_in', von: string, nach: string) => void }
 type Zustand = 'laeuft' | 'fertig' | 'abgebrochen' | 'veraltet' | 'fehler';
 // What happens with the separated files (plan live-module decision 14): the stems runner only separates and writes the WAVs; the caller decides what
 // they become. `hinfaellig` judges the fresh project (null = still fine); `setze` takes the files and changes the project in ONE edit, with no await
@@ -113,11 +116,25 @@ export class Stems {
         const meta = { quelle: l.quelle, label: `Stems ${l.plan.clipName}` };
         const w = aendereStand(o.verlauf, o.projekt, neu.projekt, meta, this.zugang.haken());
         markiere();
+        this.meldeBezuege(l, dateien);
         if (w.eintrag !== null) await this.zugang.uebernimm(w, meta);
         return { spuren: neu.spuren, rev: this.zugang.offen()?.projekt.rev ?? w.projekt.rev,
           rest_db: e.rest_db ?? null, ...(neu.hinweis ? { hinweis: neu.hinweis } : {}), ...(neu.hinweisText ? { hinweis_text: neu.hinweisText } : {}) };
       },
     };
+  }
+
+  private meldeBezuege(l: Lauf, dateien: Partial<Record<Stem, { sha256: string }>>): void {
+    const hook = this.o.bezug;
+    if (!hook) return;
+    for (const s of STEMS) {   // one stem failing must not hide the others
+      const d = dateien[s];
+      if (!d) continue;
+      try {
+        hook('made_from', `datei:${d.sha256}`, `datei:${l.plan.sha256}`);
+        hook('used_in', `datei:${d.sha256}`, `projekt:${l.slug}`);
+      } catch (x) { this.ctx.log({ typ: 'stems_bezug_fehler', stem: s, fehler: (x as Error)?.message ?? String(x) }); }
+    }
   }
 
   private beginne(slug: string, plan: StemsPlan, quelle: 'andreas' | 'cypher', uebernahme: Uebernahme, ende?: EndeHaken): Antwort {
@@ -166,7 +183,8 @@ export class Stems {
     if (sse) this.ctx.verteile({ a: 'proj', f: { stems: this.aktuellerStand } });
   }
   private melde(stufe: string, prozent: number | null): void { this.stand({ stufe, prozent }, true); }
-  // Review M3: jedes Literal mit grund trägt seinen englischen text selbst (tests/proj_reasons_text.test.mjs:137, gruendeOhneText); grundText nur als Rückfall
+  // Review M3: jedes Literal mit grund trägt seinen englischen text selbst (tests/proj_reasons_text.test.mjs:137,
+  // gruendeOhneText); grundText nur als Rückfall
   private endStand(l: Lauf, e: { zustand: Zustand; grund?: string; text?: string; detail?: string } & Record<string, unknown>): void {
     this.stand({ ...e, ...(e.grund && !e.text ? { text: grundText(e.grund) } : {}) }, true);
     clearInterval(l.uhr); clearTimeout(l.frist);

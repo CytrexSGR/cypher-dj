@@ -133,6 +133,7 @@ struct Befehl {
   int32_t fassung;       // DECK_LADEN; HOERSCHEIN: aus inhalt
   int32_t mit_stems;     // DECK_LADEN
   double quell_beat;     // DECK_START
+  int32_t takt;          // DECK_START: 1 = bar start (/k/deck/start politik 3): the core aligns the bar phase to the playing deck
   char material_id[24];  // DECK_LADEN; HOERSCHEIN: aus inhalt
   // Plan E9 (§4.4, §16.1): DECK_LOOP laenge_beats bzw. DECK_SPRUNG delta_beats; raster_beats bei Politik 2.
   // DECK_HOTCUE_SETZEN trägt den Wert in quell_beat (NaN löscht), DECK_HOTCUE die Nummer in nr.
@@ -786,6 +787,7 @@ class Kern {
   // Scheibe 35 (core_hand.cpp)
   void hand_zyklus(int64_t n0, int n);
   bool hand_deck(int deck, hand::DeckAktion aktion, hand::Quant quant, int32_t wert, int64_t s);
+  bool sync_takt_aus(int d, double q_start, int64_t s_ab, double* aus) const noexcept;  // SYNC: bar-phase shift to the playing deck (core_hand.cpp)
   void hand_ausfuehren(DeckAktion& a, int64_t s);
   DeckAktion* hand_aktion_neu(int d, int art, int64_t s, int64_t f);
   int64_t cue_frame(int d) const noexcept;
@@ -878,6 +880,11 @@ class Kern {
   // (as the load does), so the hearing license (I3a) cannot be bypassed by a detour over art modul. Same rule as the load, neither stricter nor looser.
   // The hand (andreas) is the exception that §4.4 deck_hoerbar makes for a deck that runs and is open: a switch by the hand never silences what is audible.
   void container_player_schliessen(int c, double beat0, bool hand) noexcept;
+  void trim_auto_setzen(int d, const Material* m) noexcept;   // a load or a restore: derive the auto part of deck d (0-based) from the material and report it
+  void trim_auto_melden(int d) noexcept;              // /e/regler <strip>/trim_auto: the auto gain the container hears (0 while it hears a module or nothing); not a knob, writes to it are refused
+public:
+  float trim_auto_db(int d) const noexcept;           // the auto part of the deck's loudness trim in dB (0 without material); a gain on the player branch, the strip trim is the hand's and adds to it
+private:
   bool player_gehoert(int d) const noexcept;   // player d (0-based) is what its container hears (art player)
   // K4: the key sources handed to the arrangement each sub-block (index 0..3 containers A..D = player buffers until K8, 4..19 streams 1..16), bound once in the constructor
   const float* schl_l_[ARR_SCHLUESSEL] = {};

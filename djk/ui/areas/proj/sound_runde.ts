@@ -280,7 +280,7 @@ export class KlangRunde {
     this.a.pruefeSchreiben?.();
     const o = this.a.zugang.offen() ?? fehl('kein_projekt', 'no project is open');
     const s = sucheSpur(o.projekt, d.spur_id as string) ?? fehl('spur_unbekannt', `there is no track ${String(d.spur_id)}`);
-    if (!istBk(s)) fehl('geraet_falsch', `${s.id} is not a Baukasten track`);
+    if (!istBk(s)) fehl('geraet_falsch', `${s.id} is not a Cypher Modular track`);
     const graph = graphDer(s), tabelle = this.tabelleVon(graph);
     if (!tabelle.length) fehl('argument_ungueltig', `the graph ${graph} has no knobs`);
     // the old round goes first: its override is taken off, its background run stops at the next step

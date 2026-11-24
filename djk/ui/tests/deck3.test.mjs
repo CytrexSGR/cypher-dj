@@ -147,6 +147,24 @@ test('deck 3: load, start in sync, loop and stop send the same core commands as 
   assert.ok(z3.some((z) => z.adresse === '/k/deck/laden') && z3.some((z) => z.adresse === '/k/deck/start') && z3.some((z) => z.adresse === '/k/deck/loop_laenge'));
 });
 
+test('deck start: a bar start (ab takt, the default) sends politik 3 for the core bar-phase alignment, schlag and jetzt keep politik 0', async (t) => {
+  const { o, url, log } = await geladen(t, [2, 3, 4]);
+  const e = eins();
+  const start = (n) => log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/deck/start' && z.felder?.deck === n).map((z) => z.felder.politik);
+  assert.equal((await postJson(url, '/deck/start', { deck: 2, quell_beat: e })).code, 200);                    // default ab = takt
+  assert.equal((await postJson(url, '/deck/start', { deck: 3, quell_beat: e, ab: 'schlag' })).code, 200);
+  assert.equal((await postJson(url, '/deck/start', { deck: 4, quell_beat: e, ab: 'jetzt' })).code, 200);
+  assert.deepEqual([start(2), start(3), start(4)], [[3], [0], [0]]);
+});
+
+test('deck stop clears the planned start of the deck (startGeplant)', async (t) => {
+  const { o, url } = await geladen(t, [2]);
+  assert.equal((await postJson(url, '/deck/start', { deck: 2, quell_beat: eins() })).code, 200);
+  assert.ok(o.startGeplant.has(2), 'a start was planned');
+  assert.equal((await postJson(url, '/deck/stopp', { deck: 2 })).code, 200);
+  assert.equal(o.startGeplant.has(2), false);
+});
+
 test('deck 3: PFL goes through the mixer path like deck 2', async (t) => {
   const { url, log } = await geladen(t, []);
   assert.equal((await postJson(url, '/regler', { pfad: 'deck/3/pfl', nach: 1 })).code, 200);

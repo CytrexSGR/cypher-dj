@@ -71,7 +71,7 @@ export const nutzer = (t: Teil, graph: string): Fund[] => {
   for (const g of t.gruppen ?? []) strang(g.name, `group "${g.name}"`, g);
   for (const r of t.returns ?? []) strang(r.name, `return "${r.name}"`, r);
   if (t.master) strang('master', 'the master', t.master);
-  if ((t.baukasten ?? []).some((k) => k.graph === graph)) aus.push({ strang: 'sound snapshot', wo: 'a Baukasten stream channel' });
+  if ((t.baukasten ?? []).some((k) => k.graph === graph)) aus.push({ strang: 'sound snapshot', wo: 'a Cypher Modular stream channel' });
   return aus;
 };
 const bkSchnittId = (s: Spur): string | null => (s.geraet?.art === 'intern' && s.geraet.name === 'bk' && s.geraet.graph.startsWith('smp-') ? s.geraet.graph.slice(4) : null);

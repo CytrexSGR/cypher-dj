@@ -31,7 +31,7 @@ test('S17 T3.1 merken captures name, eight values and hash in ONE history entry'
   assert.deepEqual(baukasten({ s }), [{ id: 'erz2', graph: 'juno-pad-dyn', regler: [0.5, 0.5, 0.9, 0.5, 0.5, 0.5, 0.5, 0.5], sha256: HASH }]);
   const v = s.verlaufListe().j;
   assert.equal(v.length, n0 + 1, 'exactly one history entry');
-  assert.equal(v.at(-1).label, 'Baukasten: save sound');
+  assert.equal(v.at(-1).label, 'Cypher Modular: save sound');
   assert.deepEqual(r.j.bk.gemerkt, ['erz/2']);
 });
 

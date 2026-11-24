@@ -1,7 +1,7 @@
 // Workbench region TOP BAR (plan task 3): module name, PLAY, STOP, UNDO, REDO, BPM, LENGTH. Pure helpers first (tested), the binder below.
 // F1: the server always starts on the next master bar, and a tempo change before it adds a ramp; the page shows its own waiting state (R3).
 import { springtImLauf } from '../production/transport.js';
-import { undoStand } from '../production/history.js';
+import { undoStand, labelText } from '../production/history.js';
 import { nurJuengste } from '../production/load.js';
 import { fehlerText } from '../production/production.js';
 import { WERKBANK_TEXT } from './werkbank.js';
@@ -128,7 +128,7 @@ const KOPF = `
 <button data-w="stopp" title="Stop" disabled>■ STOP</button>
 <button data-w="undo" title="Undo (Ctrl+Z)" disabled>UNDO</button>
 <button data-w="redo" title="Redo (Ctrl+Shift+Z)" disabled>REDO</button>
-<span class="w-etikett">BPM</span><input data-w="bpm" class="w-bpm" inputmode="decimal" autocomplete="off" spellcheck="false" title="Tempo: type a value, Enter sets it" aria-label="Tempo in BPM" disabled>
+<span class="w-etikett">BPM</span><input data-w="bpm" class="w-bpm" inputmode="decimal" autocomplete="off" spellcheck="false" title="Tempo: type a value, Enter sets it" placeholder="–" aria-label="Tempo in BPM" disabled>
 <span class="w-etikett">Length</span>${LAENGEN.map((n) => `<button data-w="laenge-${n}" class="w-laenge" aria-pressed="false" title="Length of the module and of every pattern: ${n} bar${n === 1 ? '' : 's'}" disabled>${n}</button>`).join('')}<span class="w-etikett">bars</span>
 `;
 
@@ -198,8 +198,8 @@ export function bindeKopf(ctx) {
     const u = Array.isArray(verlauf) ? undoStand(verlauf) : null;
     $('undo').disabled = !st.projekt || (u !== null && !u.undo);
     $('redo').disabled = !st.projekt || (u !== null && !u.redo);
-    $('undo').title = u?.undo ? `Undo: ${u.undo.label} (Ctrl+Z)` : u ? 'Nothing to undo' : 'Undo (Ctrl+Z)';
-    $('redo').title = u?.redo ? `Redo: ${u.redo.label} (Ctrl+Shift+Z)` : u ? 'Nothing to redo' : 'Redo (Ctrl+Shift+Z)';
+    $('undo').title = u?.undo ? `Undo: ${labelText(u.undo.label)} (Ctrl+Z)` : u ? 'Nothing to undo' : 'Undo (Ctrl+Z)';
+    $('redo').title = u?.redo ? `Redo: ${labelText(u.redo.label)} (Ctrl+Shift+Z)` : u ? 'Nothing to redo' : 'Redo (Ctrl+Shift+Z)';
   };
   const holeVerlauf = nurJuengste(() => ctx.holeGet('/proj/verlauf'));
   async function ladeVerlauf() {

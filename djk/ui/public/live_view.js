@@ -14,7 +14,7 @@ import { beiExportAenderung, setzeLiveHaken, exportBusy, exportZiel, exportiereV
 import { szenenEreignis } from './seq_szenen.js';   // SEQ places (seq-deck-s1 task 7)
 
 // ---------- Live container: EXPORT at the deck loop, LIVE, the project read ----------
-export const live = { kanal: '', slug: null, projekt: null, rev: null, stand: {}, stems: null, greift: 0, neuZeichnen: false, pruefen: null, schreiben: new Map(), laeuft: false, seqLaeuft: 0 };   // seqLaeuft: SEQ writes in flight (seq_view.js)
+export const live = { kanal: '', slug: null, projekt: null, anderes: null, gelesen: false, lesefehler: false, rev: null, stand: {}, stems: null, greift: 0, neuZeichnen: false, pruefen: null, schreiben: new Map(), laeuft: false, seqLaeuft: 0 };   // seqLaeuft: SEQ writes in flight (seq_view.js)
 export async function holeJson(weg, daten) {
   try {
     const r = await fetch(weg, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(daten) });
@@ -85,15 +85,17 @@ export async function pruefeLive() {
   if (live.schreiben.size || live.laeuft || live.seqLaeuft) { pruefeLiveSpaeter(300); return; }
   try {
     const k = await (await fetch('/proj/aktuell?nur=rev')).json();
-    if (k.slug === null || k.slug === undefined) { live.projekt = null; live.rev = null; zeichneLive(); return; }
+    if (k.slug === null || k.slug === undefined) { live.projekt = null; live.rev = null; live.anderes = null; live.gelesen = true; live.lesefehler = false; zeichneLive(); return; }
     if (k.slug === (live.projekt ? live.slug : null) && k.rev === live.rev) return;
-    if (k.slug !== 'live' && !live.projekt?.live) { if (live.rev !== null) { live.rev = null; zeichneLive(); } return; }   // a production project is open
+    if (k.slug !== 'live' && !live.projekt?.live) { const neu = live.rev !== null || live.anderes !== k.slug; live.rev = null; live.anderes = k.slug; const erst = !live.gelesen; live.gelesen = true; live.lesefehler = false; if (neu || erst) zeichneLive(); return; }   // a production project is open: the banner names it
     const j = await (await fetch('/proj/aktuell')).json();
     live.slug = j.slug; live.projekt = j.projekt?.live ? j.projekt : null; live.rev = j.projekt?.rev ?? null;
+    live.anderes = live.projekt ? null : (j.slug ?? null);
+    live.gelesen = true; live.lesefehler = false;   // the banner of the closed live set waits for this: it is drawn once, with the project and `anderes` both known
     if (j.stems) live.stems = j.stems;
     if (live.projekt) live.stand = await (await fetch('/modul/stand')).json();
     zeichneLive();
-  } catch { /* the next event or reconnect tries again */ }
+  } catch { if (!live.gelesen && !live.lesefehler) { live.lesefehler = true; zeigePlaetzeSpaeter(); } /* never `gelesen` without a reading: the banner shows a neutral text; the next event or reconnect tries again */ }
 }
 // The loop deck pop-up takes the events it follows (`proj`, `session`) through this hook; app.js registers it. An error there never stops the LIVE read.
 let sessionHaken = null;

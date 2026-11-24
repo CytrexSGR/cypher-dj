@@ -6,6 +6,9 @@ import { containerName, pfadVonPlatz } from './kanaele.js';
 
 /** The place types in the order of F5. */
 export const PLATZ_TYPEN = Object.freeze(['leer', 'track', 'strudel', 'seq', 'loops', 'stems']);
+/** The words a person reads for a place type (titles of the type keys): the stored value `leer` is never shown. */
+export const PLATZ_WORT = Object.freeze({ leer: 'empty', track: 'track', strudel: 'Strudel', seq: 'SEQ', loops: 'loops', stems: 'stems' });
+
 /** The types that may sit in one place only (C1: loops may appear twice, one per loop deck). */
 export const EINMALIG = Object.freeze(['strudel']);
 /** Open when trim plus fader is above this level (dB). */
@@ -36,7 +39,7 @@ export function erlaubt(plaetze, platz, typ) {
 // Open when trim plus fader is above -26 dB; an unknown fader counts -200, an unknown trim 0.
 // slots_paritaet.test.mjs runs this and kanalOffen of hand_operation.ts over the same table of values.
 export function kanalOffen(regler, k) {
-  return (regler?.[`${k}/trim`] ?? 0) + (regler?.[`${k}/fader`] ?? -200) > KANAL_OFFEN_DB;
+  return (regler?.[`${k}/trim`] ?? 0) + (regler?.[`${k}/trim_auto`] ?? 0) + (regler?.[`${k}/fader`] ?? -200) > KANAL_OFFEN_DB;
 }
 export const pflAn = (regler, k) => (regler?.[`${k}/pfl`] ?? 0) >= 0.5;
 
@@ -58,6 +61,12 @@ export function wechselKoerper(platz, typ) {
   if (!platzGueltig(platz)) throw new RangeError(`platz ${platz}`);
   if (!PLATZ_TYPEN.includes(typ)) throw new RangeError(`typ ${typ}`);
   return { platz, typ };
+}
+
+/** The banner of a closed live set: `null` while it is open; otherwise the sentence and the key. `anderesProjekt` is true while a non-live project is open. */
+export function liveZuText({ offen, anderesProjekt }) {
+  if (offen) return null;
+  return { text: anderesProjekt ? 'The live set is closed because another project is open.' : 'The live set is not open.', knopf: 'OPEN LIVE SET' };
 }
 
 /** Head text of the strip of place n: the container letter and the type ('C strudel', 'A track', 'B empty'). */

@@ -3,6 +3,7 @@ import { stoebernUrl, SPALTEN, zelle, aktionenFuer, loopBoxStatus } from './brow
 import { $, $$, BUCHSTABE, LADE_DECKS, el, klasseLaden, melde, postJson, zustand } from './page_state.js';
 import { TYP_ART, behalteWahl, ladeListe, leereDetail, oeffneListenMenue, postenKoerper } from './browse_detail.js';
 import { zeigeReiterInfo } from './seitenrahmen.js';
+import { datumText } from './format_text.js';
 import { LOOPDECKS } from './curves.js';
 import { zeigePlaetzeSpaeter } from './slots_view.js';
 import { ladeInDeck } from './loopdeck/view.js';
@@ -38,7 +39,7 @@ export async function stoebernLaden() {
   $('#st-zurueck').disabled = j.seite === 0; $('#st-weiter').disabled = j.seite + 1 >= seiten;
   const art = TYP_ART[stz.typ];
   zustand.libraryInfo = stz.typ === 'strudel' ? `${j.gesamt.toLocaleString('en')} ${art}`
-    : `${j.gesamt.toLocaleString('en')} ${art} · catalog ${j.gebaut_am ? new Date(j.gebaut_am).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : '?'}`;
+    : `${j.gesamt.toLocaleString('en')} ${art} · catalog ${datumText(j.gebaut_am)}`;
   zeigeReiterInfo();
   behalteWahl();
 }

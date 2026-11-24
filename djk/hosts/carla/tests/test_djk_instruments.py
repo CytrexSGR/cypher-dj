@@ -1,5 +1,6 @@
 """djk-instrumente mit Attrappen für systemctl und pw-link (kein Studio, keine Units): Status-Datei sagt vst3:rb338, Bundle fehlt."""
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -8,9 +9,7 @@ from pathlib import Path
 import pytest
 
 SKRIPT = Path(__file__).resolve().parents[3] / "start" / "djk-instrumente"
-# Prüfinstanz (Review K2b F10): CYPHERDJ_INSTANZ wählt sie, Vorgabe b; die Ordner unter /dev/shm/cypherdj-<INST> legt
-# dieser Test an und räumt sie ab (belegt: der Test bricht ab, statt sie anzufassen)
-INST = os.environ.get("CYPHERDJ_INSTANZ") or "b"
+from instance_choice import INST, busy_skip  # noqa: E402  (CYPHERDJ_TEST_INSTANZ or the first free letter, busy -> SKIP)
 
 
 def test_status_sagt_rb338_bundle_fehlt_ist_sofort_eine_klare_meldung(tmp_path):
@@ -25,7 +24,7 @@ def test_status_sagt_rb338_bundle_fehlt_ist_sofort_eine_klare_meldung(tmp_path):
     (home / ".local/lib/cypherdj/lv2/Surge XT.lv2").mkdir(parents=True)
     (home / ".local/lib/cypherdj/lv2/Surge XT.lv2/manifest.ttl").write_text("")
     shm = Path(f"/dev/shm/cypherdj-{INST}")
-    assert not shm.exists(), f"Instanz {INST} ist belegt"
+    busy_skip()
     shm.mkdir()
     try:
         (shm / "wirt-bass.json").write_text('{"art": "vst3:rb338"}')
@@ -83,7 +82,7 @@ def _lauf(env, *args):
 
 def _shm():
     shm = Path(f"/dev/shm/cypherdj-{INST}")
-    assert not shm.exists(), f"Instanz {INST} ist belegt"
+    busy_skip()
     shm.mkdir()
     return shm
 
@@ -464,7 +463,9 @@ def test_djk_start_sieht_einen_liegengebliebenen_arr1_wirt_als_belegt(tmp_path):
                 # Negativ-Kontrolle: ohne Rest kommt der Start an der Belegt-Prüfung vorbei (und scheitert an der
                 # Attrappe von pactl beim Anlegen der stummen Senke, Rückgabe 2)
                 assert r.returncode == 2 and "silent sink" in r.stderr, (r.returncode, r.stdout, r.stderr)
-            assert not (log / "systemd-run").exists(), "nichts gestartet"
+            # the system check probes the user session with `systemd-run --user --pipe` (systemlage.sh): only a --unit= call starts something
+            started = [z for z in (log / "systemd-run").read_text().splitlines() if "--unit=" in z] if (log / "systemd-run").exists() else []
+            assert not started, ("nothing started", started)
         finally:
             shutil.rmtree(shm, ignore_errors=True)
 
@@ -529,7 +530,8 @@ def test_djk_start_sieht_einen_liegengebliebenen_arr2_wirt_als_belegt(tmp_path):
                 assert f"cypherdj-wirt-arr2-{INST}.service" in r.stderr and "--arr2" in r.stderr and "djk-stop" in r.stderr, r.stderr
             else:
                 assert r.returncode == 2 and "silent sink" in r.stderr, (r.returncode, r.stdout, r.stderr)
-            assert not (log / "systemd-run").exists(), "nichts gestartet"
+            started = [z for z in (log / "systemd-run").read_text().splitlines() if "--unit=" in z] if (log / "systemd-run").exists() else []
+            assert not started, ("nothing started", started)
         finally:
             shutil.rmtree(shm, ignore_errors=True)
 
@@ -691,7 +693,8 @@ def _golden_szenarien(tmp_root, skript=SKRIPT):
 
 
 def test_surge_startzeilen_sind_byte_gleich_wie_vor_task_16(tmp_path):
-    golden = json.loads(GOLDEN.read_text())
+    # the golden file was recorded on instance b: its instance letter follows the test instance
+    golden = json.loads(re.sub(r"(?<=-)b(?=[:/ ]|\\n)", INST, GOLDEN.read_text()))
     ist = _golden_szenarien(tmp_path)
     assert ist == golden
     assert all(v["rc"] == 0 for v in golden.values()) and "--lv2 https://surge-synthesizer" in golden["arr2"]["systemd-run"]

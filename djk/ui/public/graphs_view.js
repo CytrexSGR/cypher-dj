@@ -97,7 +97,7 @@ export async function baueHostBereich(liste, k) {
   catch (e) { if (gueltig()) hostZeile(liste, `The instrument host could not be read (${e.message}).`, neuLaden); return; }
   if (!gueltig()) return;
   const art = typeof wirt?.art === 'string' ? wirt.art : null;
-  if (art === null) { hostZeile(liste, 'No instrument host is running on this channel.', null); return; }
+  if (art === null) { hostZeile(liste, 'Surge XT is selected, but its host is not running on this channel.', null); return; }
   const meldeAbgelehnt = () => liste._fp?.aktualisiere(true);
   const hostPlatte = (platte, adapter) => { liste.innerHTML = ''; liste.classList.add('mit-platte'); liste._fpHostKanal = k; liste._fp = platteBauen(liste, { ...platte, adapter, ...hostLernOpt(k) }); };   // no header presets; LEARN through the slot rows (host learn)
   if (art === 'sfz:grand') { hostZeile(liste, 'Grand piano (samples), no controls', null); return; }

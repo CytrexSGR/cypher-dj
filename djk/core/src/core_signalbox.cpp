@@ -242,6 +242,7 @@ void Kern::einsortieren25(const Befehl& c) {
       }
       const int art_vorher = container_art_[c.nr - 1];
       container_art_[c.nr - 1] = c.an;   // the weights follow sample by sample in container_fuellen (blend over CONTAINER_BLENDE)
+      trim_auto_melden(PULT_CONTAINER_PLAYER[c.nr - 1] - 1);   // the auto gain the strip hears follows the art
       quittung(c.id, c.quelle, 1, sample_, beat0);
 #ifndef CYPHERDJ_MUTATION_PLAYER_WECHSEL_OFFEN
       if (c.an == CONTAINER_ART_PLAYER && art_vorher != CONTAINER_ART_PLAYER) container_player_schliessen(c.nr - 1, beat0, q == sw::Quelle::andreas);

@@ -4,7 +4,7 @@ body.bereich-presets #bestand .reiter, body.bereich-presets #bestand #suche, bod
 body.bereich-presets #bestand .tabelle { display: none !important; }
 body.lib-zu #bestand .presets { display: none; }
 .presets[hidden] { display: none; }
-.presets { padding-top: 8px; overflow: hidden; }
+.presets { padding-top: 8px; overflow: hidden auto; }   /* UI check M5: the panel scrolls (visible bar) when the dock is lower than its content */
 .presets { display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: 1; font-size: 12px; }
 .preset-kopf, .preset-fuss { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .preset-kopf select, .preset-kopf input, .preset-fuss input { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line);
@@ -16,14 +16,14 @@ body.lib-zu #bestand .presets { display: none; }
 .preset-tagleiste:empty { display: none; }
 .preset-tagleiste button { font-size: 11px; padding: 2px 8px; border-radius: 999px; color: var(--dim); }
 .preset-tagleiste button.an { color: var(--bg); background: var(--a); border-color: var(--a); }
-.preset-rumpf { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 280px); gap: 10px; min-height: 0; flex: 1; }
+.preset-rumpf { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 280px); gap: 10px; min-height: 0; flex: 1 0 58px; }   /* UI check M5 / review 3: 58 px = 2 rows of 29 px, the most the 1920 x 1080 dock leaves (the save fields stay inside it as at the base); in a lower dock the panel scrolls instead of squeezing the list to 0 */
 .preset-liste { list-style: none; margin: 0; padding: 0; overflow-y: auto; min-height: 0; border: 1px solid var(--line); border-radius: 10px; }
 .preset-zeile { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, .8fr) 7ch minmax(0, 1fr) auto; gap: 8px; align-items: center;
   padding: 4px 8px; border-bottom: 1px solid var(--line); }
 .preset-zeile:last-child { border-bottom: 0; }
 .preset-zeile.an { background: var(--panel2); }
 .preset-zeile.kaputt .preset-name { color: var(--dim); font-style: italic; }
-.preset-name { text-align: left; background: none; border: 0; padding: 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preset-name { text-align: left; background: none; border: 0; padding: 2px 0; min-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .preset-geraet { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .preset-herkunft { font-size: 10px; letter-spacing: .12em; font-weight: 700; color: var(--dim); }
 .preset-herkunft.nutzer { color: var(--a); }
@@ -49,7 +49,7 @@ body.lib-zu #bestand .presets { display: none; }
 }
 /* Description (package 1.16, DECISIONS.md P-V1): kind, character, energy in the list; filter row; the required save form */
 .preset-bfilter:empty { display: none; }
-.preset-bfilter select { max-width: 16ch; }
+.preset-bfilter select { min-width: 15ch; max-width: 24ch; }   /* "Any character" and its arrow fit; the title of each select is plan 2's presets.js */
 .preset-zeile { grid-template-columns: minmax(0, 1.2fr) minmax(0, .7fr) 7ch minmax(0, 1.4fr) minmax(0, .8fr) 15ch; }
 .preset-knoepfe { justify-content: flex-end; }
 .preset-beschreibung { display: flex; gap: 6px; align-items: center; overflow: hidden; white-space: nowrap; }
@@ -72,3 +72,12 @@ body.lib-zu #bestand .presets { display: none; }
   .preset-zeile { grid-template-columns: minmax(0, 1fr) auto; }
   .preset-beschreibung { display: none; }
 }
+
+/* UI check M5 (1366 x 768, default dock = about 100 px for the panel): the list comes first so 3 rows (3 x 29 px) are visible without scrolling;
+   the search, the filters and the save fields follow below it, reachable by scrolling the panel. */
+@media (max-height: 800px) {
+  .preset-rumpf { order: -1; flex: 0 0 92px; }
+}
+
+/* The panel scrolls instead of squeezing the rows above the list into it (the tag chips lay over the first row at 1920 x 1080). */
+.presets > :not(.preset-rumpf) { flex-shrink: 0; }

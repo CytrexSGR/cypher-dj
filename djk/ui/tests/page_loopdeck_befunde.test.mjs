@@ -18,7 +18,7 @@ const dk = (n = 1) => document.querySelector(`.loopdeck[data-deck="${n}"]`);
 const zk = (n, s, z) => dk(n).querySelectorAll('.ld-spur')[s - 1].querySelectorAll('.zelle')[z - 1];
 
 async function start({ stand = { decks: { 1: deck(1), 2: null }, beat: 16, bpm: 120 }, live = null, extra = {}, html = HTML, frage = () => true } = {}) {
-  const a = installiere({ html, antworten: { 'GET /loopdeck/stand': () => ({ j: typeof stand === 'function' ? stand() : stand }), 'POST /loopdeck/neu': { j: { ok: true } }, ...extra } });
+  const a = installiere({ html, antworten: { 'GET /loopdeck/stand': () => ({ j: typeof stand === 'function' ? stand() : stand }), 'POST /loopdeck/neu': { j: { ok: true } }, 'GET /proj/aktuell': { j: { slug: 'live', rev: 1 } }, ...extra } });
   const la = await import('../public/live_view.js');   // registers the live hooks of the loop deck view
   const m = await import('../public/loopdeck/view.js');
   globalThis.confirm = frage;   // installiere() put its own
@@ -37,6 +37,17 @@ test('C1: a visible loop place without an open live container sends no /loopdeck
   assert.match(dk(2).querySelector('.ld-hinweis').textContent, /live container/i);
   const p = await start({ live: { slug: 'p1' } });   // another project open: not the live container
   assert.equal(urls(p.a).filter((u) => u === '/loopdeck/neu').length, 0);
+});
+
+// UI polish task 3, verdict C: a `proj` event reads the stand (no decks in another project) while live.projekt still says live (pruefeLive runs 250 ms
+// later): the automatic create fired and the server answered 409 projekt_offen. The create now asks the server first and only goes on for `live`.
+test('C1 race: live.projekt still live but the server has another project open: no /loopdeck/neu; the deck is created once the answer is live', async () => {
+  const { a, m } = await start({ live: { live: true, slug: 'live' }, extra: { 'GET /proj/aktuell': { j: { slug: 'p1', rev: 3 } } } });
+  assert.equal(urls(a).filter((u) => u === '/loopdeck/neu').length, 0, 'stale live.projekt must not send the automatic create');
+  assert.ok(a.anrufe.some((c) => c.url.startsWith('/proj/aktuell') && c.url.includes('nur=rev')), 'it asked the server first');
+  a.antworten['GET /proj/aktuell'] = { j: { slug: 'live', rev: 4 } };
+  m.zeigeLoopdecks(); await ruhe();
+  assert.equal(urls(a).filter((u) => u === '/loopdeck/neu').length, 1, 'with the live set open the missing deck is created (a failed check does not use up the one try)');
 });
 
 test('C1: with the live container open a missing deck is created by exactly one request', async () => {
@@ -208,9 +219,9 @@ test('clock: beat or bpm null from the stand set no clock (no play head from Num
   assert.equal(dk(1).querySelectorAll('.kopf-ph')[0].hidden, true);
 });
 
-test('filter knob: a redraw during the drag does not reset it', async () => {
+test('COLOR knob (strip row): a redraw during the drag does not reset it', async () => {
   const { m } = await start({ stand: () => ({ decks: { 1: deck(1), 2: null }, beat: 1, bpm: 120 }), live: { live: true } });   // the server still says filter 0
-  const k = dk(1).querySelectorAll('.ld-spur')[0].querySelector('.knopf');
+  const k = dk(1).querySelectorAll('.ld-spur')[0].querySelector('.ld-color .ld-mini');
   k.dispatch('pointerdown', { clientY: 150, pointerId: 1 }); k.dispatch('pointermove', { clientY: 0 });
   assert.equal(k.getAttribute('aria-valuenow'), '1.00');
   m.loopdeckEreignis('proj', {}); await ruhe();
@@ -221,8 +232,8 @@ test('filter knob: a redraw during the drag does not reset it', async () => {
 test('scene column: it shares the row template of the tracks and has no fixed paddings', () => {
   const css = fs.readFileSync(new URL('../public/loopdeck/loopdeck.css', import.meta.url), 'utf8');
   assert.doesNotMatch(css, /\.ld-szenen \{[^}]*padding-(top|bottom): \d+px/);
-  assert.match(css, /\.ld-spur, \.ld-szenen \{[^}]*grid-template-rows: 14px 14px minmax\(0, 1fr\) 18px 26px/);
-  assert.match(css, /\.ld-spur \.zellen, \.ld-szenenzeilen \{[^}]*grid-template-rows: repeat\(8, minmax\(14px, 1fr\)\)/);
+  assert.match(css, /\.ld-spur, \.ld-szenen \{[^}]*grid-template-rows: 14px 14px minmax\(0, 1fr\) 20px 26px/);
+  assert.match(css, /\.ld-spur \.zellen, \.ld-szenenzeilen \{[^}]*grid-template-rows: repeat\(8, minmax\(22px, 1fr\)\)/);   // 14 px below 1500 px, see page_layout_1366.test.mjs
   assert.doesNotMatch(css, /\.ld-spur \.zelle \{[^}]*max-height/);
 });
 

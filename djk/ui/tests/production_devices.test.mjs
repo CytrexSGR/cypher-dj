@@ -152,7 +152,8 @@ test('bindeGeraete: Sichtwechsel lädt nur beim Sichtbarwerden', async () => {
 test('grid: #produktion has a fixed row for every child in the flow (a hidden child does not move INPUTS and the CLIP detail)', () => {
   const dir = new URL('../public/production/', import.meta.url);
   // the last rule of each kind wins, as in the page (routing.css is linked after production.css)
-  const css = fs.readFileSync(new URL('production.css', dir), 'utf8') + fs.readFileSync(new URL('../routing.css', dir), 'utf8');
+  // the compact-height @media block (UI polish T7: arrangement 300 px) is a second grid of its own and is checked in production_einklappen.test.mjs
+  const css = (fs.readFileSync(new URL('production.css', dir), 'utf8') + fs.readFileSync(new URL('../routing.css', dir), 'utf8')).replace(/@media[^{]*\{[\s\S]*?\n\}/g, '');
   const regel = [...css.matchAll(/body\.produktion #produktion \{[^}]*?grid-template-rows:\s*([^;]+);/g)].at(-1);
   assert.ok(regel, 'Raster-Regel von #produktion gefunden');
   const zeilen = []; let tiefe = 0, tok = '';

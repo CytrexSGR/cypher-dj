@@ -14,7 +14,7 @@ import { ablageOrdner, instanz, type AblageOptionen } from '../paths.ts';
 import { GERAET_IDS } from './devices.ts';
 import { ladeVokabular, kanonisch, sha256, type Vokabular } from './vocabulary.ts';
 import {
-  DATEI_MAX, DATEINAME, ENDUNG, PresetFehler, pruefeDatei, pruefeEingabe, pruefeGeraet, pruefeHerkunft, pruefeName, pruefeSlug, slugVon, passt,
+  DATEI_MAX, DATEINAME, ENDUNG, ISO, SCHEMA, SLUG, PresetFehler, pruefeDatei, pruefeEingabe, pruefeGeraet, pruefeHerkunft, pruefeName, pruefeSlug, slugVon, passt,
   sortiere, type Eintrag, type Filter, type Herkunft, type NeuEingabe, type Preset,
 } from './model.ts';
 
@@ -115,6 +115,45 @@ export class PresetSpeicher {
       const preset: Preset = { ...roh, ...(quelle === 'cypher' ? { autor: 'cypher' as const } : {}), angelegt: alt?.angelegt ?? jetzt, geaendert: jetzt };
       if (da) this.schreibe(p, preset); else this.legeAn(p, preset);
       return { slug, neu: !da, preset };
+    });
+  }
+
+  // Import of a preset file (browser plan 6): the strict check of a new preset, then the file is stored as a USER preset. Everything invalid is
+  // 400 `schema` (the text names the first offending field, `details` carries the store's list); a name that exists with other content is 409
+  // `name_vergeben`; an existing file with equal canonical content (timestamps included) writes nothing and answers schon_da.
+  // Not taken from the file: `autor` (an imported preset belongs to Andreas) and every unknown field. angelegt/geaendert are taken when both are valid.
+  importiere(j: unknown): { id: string; slug: string; schon_da: boolean } {
+    const schema = (text: string, e?: PresetFehler): PresetFehler => new PresetFehler(400, 'schema', text, e?.details);
+    if (j === null || typeof j !== 'object' || Array.isArray(j)) throw schema('the file is not a preset object');
+    const o = j as Record<string, unknown>;
+    if (o.schema !== SCHEMA) throw schema(`schema ${JSON.stringify(o.schema ?? null).slice(0, 20)}; this page reads schema ${SCHEMA}`);
+    let roh: ReturnType<typeof pruefeEingabe>, slug: string, p: string;
+    try {
+      roh = pruefeEingabe({ name: o.name, geraet: o.geraet, geraet_typ: o.geraet_typ, graph: o.graph, werte: o.werte, stifte: o.stifte,
+        beschreibung: o.beschreibung, tags: o.tags, notiz: o.notiz }, this.vok);
+      // the slug never carries a separator, but a file whose name already reads like a path is refused on import (the store itself would accept it)
+      if (/[/\\]|\.\./.test(roh.name)) throw new PresetFehler(400, 'name_ungueltig');
+      slug = slugVon(roh.name);
+      if (!SLUG.test(slug)) throw new PresetFehler(400, 'name_ungueltig');
+      p = this.pfad('nutzer', roh.geraet, slug);
+    } catch (e) {
+      if (e instanceof PresetFehler) throw schema(`not a valid preset file: ${e.fehler} (${e.text})`, e);
+      throw e;
+    }
+    const geraet = roh.geraet;
+    return this.mitSperre(geraet, () => {
+      const stempel = typeof o.angelegt === 'string' && ISO.test(o.angelegt) && typeof o.geaendert === 'string' && ISO.test(o.geaendert);
+      const jetzt = this.zeit();
+      const preset: Preset = { ...roh, angelegt: stempel ? (o.angelegt as string) : jetzt, geaendert: stempel ? (o.geaendert as string) : jetzt };
+      const id = `nutzer:${geraet}/${slug}`;
+      if (fs.existsSync(p)) {
+        let gleich = false;
+        try { gleich = this.lies('nutzer', geraet, slug).hash === sha256(kanonisch(preset)); } catch (x) { if (!(x instanceof PresetFehler)) throw x; }
+        if (gleich) return { id, slug, schon_da: true };
+        throw new PresetFehler(409, 'name_vergeben');
+      }
+      this.legeAn(p, preset);   // EEXIST (a race) → name_vergeben
+      return { id, slug, schon_da: false };
     });
   }
 

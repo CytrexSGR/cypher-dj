@@ -9,7 +9,7 @@ import { kitsOrdnerVorgabe } from '../../paths.ts';
 export interface KitEintrag { name: string; klaenge: number }
 
 // The shape lade_kit demands first: an object, schema 1, klaenge an array with at least one entry that has an integer note.
-function leseKit(ordner: string): number | null {
+export function leseKit(ordner: string): number | null {
   try {
     const j = JSON.parse(fs.readFileSync(path.join(ordner, 'kit.json'), 'utf8')) as { schema?: unknown; klaenge?: unknown };
     if (typeof j !== 'object' || j === null || j.schema !== 1 || !Array.isArray(j.klaenge) || j.klaenge.length === 0) return null;

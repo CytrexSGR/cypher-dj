@@ -235,7 +235,7 @@ export function montiereFenster(hostRoh) {
     const aktuell = () => { const s = strangVon(strang.id); return s?.inserts.find((i) => i.id === insert.id) ?? null; };
     const kopf = effektKachel(insert).text;
     return oeffne({
-      id: `stufe:${strang.id}:${insert.id}`, titel: `${strang.name} · ${kopf}`, untertitel: insert.art === 'bk' ? 'Baukasten' : String(insert.art).toUpperCase(), voll,
+      id: `stufe:${strang.id}:${insert.id}`, titel: `${strang.name} · ${kopf}`, untertitel: insert.art === 'bk' ? 'Cypher Modular' : String(insert.art).toUpperCase(), voll,
       art: insert.art === 'bk' ? `bk:${insert.graph}` : String(insert.art),
       pruefe: () => aktuell() !== null,
       bauen: (koerper, leiste, f) => {

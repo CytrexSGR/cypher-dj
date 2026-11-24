@@ -19,6 +19,8 @@ sleep 0.2
 tot=999999; while kill -0 $tot 2>/dev/null; do tot=$((tot+1)); done
 printf '{"pid": %d, "nur_cue": "erz/8"}\n' $KP > "$T/gut.json"
 printf '{"pid": %d}\n' $KP > "$T/ohne_nur_cue.json"
+printf '{"pid": %d, "nur_cue": "vorhoer"}\n' $KP > "$T/k3.json"
+printf '{"pid": %d, "nur_cue": "vorhoerx"}\n' $KP > "$T/k3_falsch.json"
 printf '{"pid": %d, "nur_cue": "erz/7"}\n' $KP > "$T/falscher_kanal.json"
 printf '{"pid": %d, "nur_cue": "erz/8"}\n' $tot > "$T/tot.json"
 printf '{"pid": %d, "nur_cue": "erz/8"}\n' $AP > "$T/falsches_comm.json"
@@ -36,6 +38,11 @@ nein CYPHERDJ_INSTANZ=i cypherdj-kern:rueck_erz_8_         # fremde Instanz (Pru
 nein CYPHERDJ_INSTANZ= cypherdj-kernel:rueck_erz_8_
 nein CYPHERDJ_INSTANZ= cypherdj-kern:master_
 nein CYPHERDJ_INSTANZ= alsa_output.usb-FIIO_FIIO_KA11-01.analog-stereo:playback_F
+# K3-Kern meldet "vorhoer": ok; ein anderer Wert bleibt zu
+env CYPHERDJ_INSTANZ= "$B" --riegel-pruefen --faehigkeiten "$T/k3.json" --ausgang cypherdj-kern:rueck_erz_8_ --port 1 2>/dev/null; r=$?
+[ $r -eq 0 ] || { echo "Faehigkeiten vorhoer: erwartet 0, bekam $r"; exit 1; }
+env CYPHERDJ_INSTANZ= "$B" --riegel-pruefen --faehigkeiten "$T/k3_falsch.json" --ausgang cypherdj-kern:rueck_erz_8_ --port 1 2>/dev/null; r=$?
+[ $r -eq 3 ] || { echo "Faehigkeiten vorhoerx: erwartet 3, bekam $r"; exit 1; }
 # Review-Kern m1: ohne passende Faehigkeiten-Datei bleibt der Riegel zu, auch mit --ton-frei
 for f in fehlt.json ohne_nur_cue.json falscher_kanal.json tot.json falsches_comm.json kaputt.json; do
   env CYPHERDJ_INSTANZ= "$B" --riegel-pruefen --faehigkeiten "$T/$f" --ausgang cypherdj-kern:rueck_erz_8_ --port 1 2>/dev/null; r=$?

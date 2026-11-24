@@ -143,7 +143,9 @@ fn kosten_je_stimme() {
     };
     let mess = |noten: &[u8], zweige: bool| mess_graph(GRAPH, noten, zweige);
     let alle_noten: Vec<u8> = PADS.iter().map(|p| p.1).collect();
-    let (leer, eins, alle) = (mess(&[], true), mess(&[36], true), mess(&alle_noten, true));
+    // The best of three runs: a busy machine only ever adds time, so the minimum is the cost of the code (the test profile is optimized, see Cargo.toml)
+    let beste = |noten: &[u8]| (0..3).map(|_| mess(noten, true)).fold(f64::MAX, f64::min);
+    let (leer, eins, alle) = (beste(&[]), mess(&[36], true), beste(&alle_noten));
     let ohne = mess(&alle_noten, false);
     let p909 = mess_graph(include_str!("../demos/drums-909.json"), &alle_noten, true);
     eprintln!("for comparison drums-909 with the same eight notes: {p909:.0} ns per sample");

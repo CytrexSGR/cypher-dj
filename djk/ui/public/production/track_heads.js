@@ -503,6 +503,8 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
     const fehlt = ih && ih.status === 'fehlt';
     q('.p-geraet').textContent = geraetText(s) + (pm ? ` · ${pm.text}` : '') + (s.freeze ? ' · FROZEN' : '') + (fehlt ? ' · MISSING' : '');
     const ge = q('.p-geraet');
+    // the narrow head shows the name over two columns and not the device label (style: .p-geraet is hidden); the title starts with the name and then names the device
+    q('.p-spurname').title = `${s.name}${ge.textContent ? ` · ${ge.textContent}` : ''} (double click, Enter or F2 to rename)`;
     el.classList.toggle('fehlt', !!fehlt);
     // device faces: a FACE button after the device label while the track carries a stage that has a face; created on demand, so a head without one stays as it was
     const fb = q('.p-face-auf');
@@ -527,7 +529,7 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
       }
     } else fo?.remove();
     if (fehlt) ge.title = `The plugin cannot be used: ${ih.grund ?? 'not loadable'}`;
-    else if (pm) ge.title = pm.titel; else if (ge.title) ge.removeAttribute('title');   // only touch the attribute when a mark put it there (golden: no title attribute appears)
+    else if (pm) ge.title = pm.titel; else ge.title = ge.textContent;   // UI polish T7: the device text is cut by the narrow head, so the full text is always the tooltip
     el.classList.toggle('auto', faderLane(s) !== null);          // AUTO in front of the fader value (CSS): a volume line controls this fader
     el.classList.toggle('auto-pan', laneFuer(s, 'pan') !== null);   // and in front of the pan value
     // 1.12 S3: the hand has the field, the lane waits (orange): the head (regulators) or the button (M, S)

@@ -48,7 +48,8 @@ export class ProjBk {
       const d = typeof k === 'string' ? bkKanalVon(k) : null;
       if (!d) {
         throw new ProjFehler(400, 'argument_ungueltig',
-          { text: 'kanaele: only channels of the sound snapshot table (deck/1, deck/2, pad/1, pad/2, fx/3, fx/4, master, erz/<n> of the stream channels) are allowed' });
+          { text: 'kanaele: only channels of the sound snapshot table (deck/1, deck/2, pad/1, pad/2, fx/3, fx/4, master, erz/<n> '
+            + 'of the stream channels) are allowed' });
       }
       if (!aus.includes(d)) aus.push(d);
     }

@@ -1,4 +1,5 @@
 // FIND SOUND, part 1: the hand tool klang_runde talks to the /proj/klang/* routes of a stub page server that records every request.
+import { WERKZEUGE_IM_CODE } from './support/werkzeugzahl.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -138,8 +139,8 @@ test('the schema and the description', async (t) => {
   }
 });
 
-test('the tool count is 100', async (t) => {
+test('the tool count is the number of entries in hand.ts', async (t) => {
   const { c } = await verbinde(t, () => [200, {}]);
-  assert.equal((await c.listTools()).tools.length, 100);
-  assert.equal(fs.readFileSync(HAND, 'utf8').split('\n').filter((z) => z.startsWith("  { name: '")).length, 100);
+  assert.equal((await c.listTools()).tools.length, WERKZEUGE_IM_CODE);
+  assert.equal(fs.readFileSync(HAND, 'utf8').split('\n').filter((z) => z.startsWith("  { name: '")).length, WERKZEUGE_IM_CODE);
 });

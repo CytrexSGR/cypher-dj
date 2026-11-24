@@ -63,7 +63,8 @@ for (const zahl of [10_000, 60_000]) {
       noten_zahl: Object.values(kurz.j.noten_zahl ?? {}).reduce((x, y) => x + y, 0) };
     console.log(`G6 GROESSE ${JSON.stringify(m)}`);
     assert.equal(m.noten_zahl, zahl);
-    assert.ok(m.oeffnen_kurz_bytes < 4000, JSON.stringify(m));
-    assert.ok(m.oeffnen_voll_bytes > 100 * m.oeffnen_kurz_bytes, 'voll trägt die Noten');
+    // the short answer grew with the kern messages of the rack (a new project alone is about 3 kB); it must stay far below the notes (0.6 MB at 10000)
+    assert.ok(m.oeffnen_kurz_bytes < 10_000, JSON.stringify(m));
+    assert.ok(m.oeffnen_voll_bytes > 50 * m.oeffnen_kurz_bytes, 'voll trägt die Noten');
   });
 }

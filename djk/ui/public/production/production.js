@@ -10,16 +10,15 @@ import { klickDaneben } from './choice_click.js';
 import { neuerSchreiber } from './writer.js';
 import { neuerLader, neuerNachlader, serverWeg, offlineNach } from './load.js';
 import { bindeZeitachse } from './timeline_operation.js';
-import { bindeProjektwahl } from './project_choice.js';
+import { bindeProjektwahl, mitBestaetigung } from './project_choice.js';
 import { bindeSpuren } from './track_heads.js';
 import { armStand } from './auto_recording.js';
 import { bindeInsertDienste } from './inserts.js';
 import { bindeDockProduktion } from './dock_host.js';   // the shared dock below the arrangement (dock/)
-import { bindeEinklappen } from './einklappen.js';   // folding the dock rows and CLIP like the <details> panels
+import { bindeEinklappen, bindeRecOptionen } from './einklappen.js';   // folding the dock rows and CLIP like the <details> panels
 import { bindeMatrix } from './matrix.js';   // 1.10 slice 6: routing matrix view
 import { MAX_SPUREN } from './limits.js';
 import { bindeAblage } from './storage.js';
-import { bindeBrowserwahl } from './browser_choice.js';      // 1.16 rest: browser mode switch
 import { bindeGeraeteBrowser } from './devices_browser.js';   // 1.16 rest: DEVICES list
 import { bindePresetMarken } from './preset_marker.js';   // 1.16 rest U7: origin mark of a stage / device
 import { bindePresetHost } from './preset_host.js';   // 1.16 rest U7: host of the PRESETS panel in PRODUCTION
@@ -39,16 +38,17 @@ import { bindeAufnahme } from './recording.js';
 import { AUSGABE_FEHLER, mehrdeutigText } from './output.js';
 import { nachladenNoetig, stemsEreignis, stemsFuerProjekt } from './stems.js';
 import { neuerClipWaehler } from './clip_waehlen.js';
+import { registriereHost } from '../browser/host.js';   // browser plan 2: what the docked browser needs from this view
 
 const BINDER = [bindeZeitachse, bindeProjektwahl, bindeSpuren, bindeMatrix, bindeInsertDienste, bindeDockProduktion, bindeAblage, bindeTransport, bindeVerlauf, bindeLanen, bindeComp, bindeClips, bindeEditWerkzeuge, bindeDetail, bindeAusgabe, bindeMidiImport, bindeVariantenReihen, bindeGeraete, bindeAufnahme,
-  bindeBrowserwahl, bindeGeraeteBrowser, bindePresetHost, bindePresetMarken, bindeKollektionen, bindeEinklappen];
+  bindeGeraeteBrowser, bindePresetHost, bindePresetMarken, bindeKollektionen, bindeEinklappen, bindeRecOptionen];
 
 const GERUEST = `
 <div class="p-transport" role="toolbar" aria-label="Transport">
   <div class="p-gruppe p-projekt">
     <span class="p-name" data-p="name">No project</span>
     <button data-p="neu" title="Start a new project">NEW</button>
-    <input data-p="neu-name" placeholder="Project name, Enter" maxlength="60" aria-label="New project name" hidden>
+    <input data-p="neu-name" placeholder="Project name, then Enter" maxlength="60" aria-label="New project name" hidden>
     <select data-p="oeffnen" title="Open a project" aria-label="Open project"><option value="">OPEN…</option></select>
   </div>
   <div class="p-gruppe">
@@ -57,7 +57,8 @@ const GERUEST = `
     <button data-p="rec" class="p-rec" aria-pressed="false" title="Open a project first" disabled>● REC</button><span data-p="rec-status" class="p-recstatus" role="status"></span>
     <output data-p="position" class="p-position" title="Position: bar.beat.sixteenth">1.1.1</output>
   </div>
-  <div class="p-gruppe p-aufnahme" role="group" aria-label="Recording settings">
+  <div class="p-gruppe"><button data-p="recopt" aria-pressed="false" aria-expanded="false" title="Recording options: count-in, punch, overdub and automation recording">REC OPTIONS ▾</button></div>
+  <div class="p-gruppe p-aufnahme p-recopt" role="group" aria-label="Recording settings">
     <label for="p-vorzaehler">COUNT-IN</label><select id="p-vorzaehler" data-p="vorzaehler" title="Count-in before a recording starts (bars)" disabled><option value="0">Off</option><option value="1">1 bar</option><option value="2">2 bars</option><option value="4">4 bars</option></select>
     <button data-p="punch-ein" aria-pressed="false" title="Punch in: the take is cut at the start of the punch range (the raw file is kept)" disabled>PUNCH IN</button>
     <button data-p="punch-aus" aria-pressed="false" title="Punch out: the take is cut at the end of the punch range (the raw file is kept)" disabled>PUNCH OUT</button>
@@ -65,15 +66,18 @@ const GERUEST = `
     <label for="p-punch-bis">TO</label><input id="p-punch-bis" data-p="punch-bis" class="p-takt" inputmode="numeric" size="3" autocomplete="off" title="Punch range: last bar (it is included)" aria-label="Punch to bar" disabled>
     <button data-p="overdub" aria-pressed="false" title="Overdub: a MIDI recording adds notes to the clip instead of replacing the range (audio always replaces the range)" disabled>OVERDUB</button>
   </div>
+  <div class="p-gruppe p-auto p-recopt" role="group" aria-label="Automation recording">
+    <span class="p-autotitel" title="Automation recording: arm tracks with AUTO ● in the track head, play, and move a fader, pan, M or S">AUTO</span><button data-p="auto-touch" class="p-automodus" aria-pressed="true">TOUCH</button><button data-p="auto-latch" class="p-automodus" aria-pressed="false">LATCH</button><button data-p="auto-write" class="p-automodus" aria-pressed="false">WRITE</button>
+    <button data-p="re-enable" class="p-reenable" title="Give every lane that you took over by hand back to its automation" disabled>RE-ENABLE AUTOMATION</button>
+  </div>
   <div class="p-gruppe">
-    <label for="p-tempo">TEMPO</label><input id="p-tempo" data-p="tempo" inputmode="decimal" size="6" autocomplete="off" title="Project tempo, 60 to 200 BPM: Enter sets it" disabled>
+    <label for="p-tempo" title="Tempo of this project, 60 to 200 BPM. The BPM in the header is the live master tempo.">PROJECT TEMPO</label><input id="p-tempo" data-p="tempo" inputmode="decimal" size="6" autocomplete="off" title="Tempo of this project, 60 to 200 BPM. The BPM in the header is the live master tempo. Enter sets it." disabled>
     <button data-p="loop" aria-pressed="false" title="Loop the bracket in the ruler" disabled>LOOP</button>
     <label for="p-loop-von">BAR</label><input id="p-loop-von" data-p="loop-von" class="p-takt" inputmode="numeric" size="3" autocomplete="off" title="Loop range: first bar (typing a range switches the loop on)" aria-label="Loop from bar" disabled>
     <label for="p-loop-bis">TO</label><input id="p-loop-bis" data-p="loop-bis" class="p-takt" inputmode="numeric" size="3" autocomplete="off" title="Loop range: last bar (it is included)" aria-label="Loop to bar" disabled>
     <button data-p="metronom" aria-pressed="false" title="Metronome" disabled>METRO</button>
-    <span class="p-autotitel" title="Automation recording: arm tracks with AUTO ● in the track head, play, and move a fader, pan, M or S">AUTO</span><button data-p="auto-touch" class="p-automodus" aria-pressed="true">TOUCH</button><button data-p="auto-latch" class="p-automodus" aria-pressed="false">LATCH</button><button data-p="auto-write" class="p-automodus" aria-pressed="false">WRITE</button>
-    <button data-p="re-enable" class="p-reenable" title="Give every lane that you took over by hand back to its automation" disabled>RE-ENABLE AUTOMATION</button>
   </div>
+  <span class="p-kern" data-p="kern" title="Arrangement in the core: loaded revision and transport state"></span>
   <div class="p-gruppe">
     <label for="p-raster">GRID</label><select id="p-raster" data-p="raster" title="Snap grid"></select>
     <button data-p="follow" aria-pressed="true" title="Follow the playhead (scrolling by hand turns it off)">FOLLOW</button>
@@ -90,7 +94,6 @@ const GERUEST = `
   <div class="p-gruppe p-varianten" data-p="varianten" role="group" aria-label="Variants" hidden></div>
   <span class="p-offline" data-p="offline" role="status" title="The project server does not answer: this is the last state it sent" hidden>OFFLINE</span>
   <span class="p-meldung" data-p="meldung" role="status"></span>
-  <span class="p-kern" data-p="kern" title="Arrangement in the core: loaded revision and transport state"></span>
   <span class="p-limiter" data-p="limiter" role="status" title="The set limiter is reducing the master: the room hears less than the production master and the export carry" hidden>SET LIMITER</span>
 </div>
 <ol class="p-verlauf" data-p="verlauf-liste" aria-label="History" hidden></ol>
@@ -125,6 +128,14 @@ export const ladeNachEreignis = (a, sichtbar) => !!sichtbar && LADE_EREIGNISSE.h
 // zeigt die Seite „Rejected: <code>“ (tests/production_root.test.mjs hält die Liste beisammen).
 export const FEHLER_TEXT = {
   ...MIDI_FEHLER,   // MIDI import (midi_import.js)
+  sha_stimmt_nicht: 'That file does not have the content the project expects',   // browser plan 2: project files (areas/proj/files.ts)
+  datei_unlesbar: 'That path is not a readable file',
+  aufraeumen_laeuft_arbeit: 'A bounce, resample or stems job is running; clean up when it is done',
+  name_vergeben: 'Another project already has that name',
+  nicht_gefunden: 'That file was not found in the library or the project',
+  zip_abgelehnt: 'The zip was refused: unsafe paths, too large, too many entries or not readable',   // browser plan 5
+  version_name_leer: 'A version needs a name with at least one usable character', version_unbekannt: 'That version does not exist in this project',   // browser plans 3 and 4
+  version_ungueltig: 'That version cannot be restored: its project file is invalid or written by a newer format', gerettet_unbekannt: 'That file is not a recovered take of the open project',
   stift_abgelehnt: 'The core refused a pin of the patch field: nothing was changed',
   kein_steckfeld: 'This device has no patch field',
   veraltet: 'The clip changed while separating: nothing was placed',
@@ -179,7 +190,7 @@ export const FEHLER_TEXT = {
   seq_fehlt: 'That group holds no SEQ deck', seq_belegt: 'That place already holds a SEQ deck',
   abschnitt_zu_lang: 'That section is longer than 64 beats: a SEQ deck takes at most 64', abschnitt_leer: 'That section holds nothing a SEQ deck can play',   // TO DJ
   keine_plaetze: 'This track plays no device with a slot bank (the Amiga device)', bank_platz_leer: 'That slot holds no sample',   // tracker slot banks
-  zu_viele_bk: 'The live project would hold too many Baukasten tracks (at most 16)',
+  zu_viele_bk: 'The live project would hold too many Cypher Modular tracks (at most 16)',
   seq_raster_ungleich: 'The notes do not fit the deck grid at 3, 6 or 12 rows per beat: set 2, 4, 8 or 16 first',
   seq_raster_belegt: 'The deck plays effects at another LPB or TICKS setting: clear it first',
   szene_leer_slot: 'That scene slot holds no scene; save one first', szene_leer: 'There is no SEQ deck, so there is no picture of patterns to save',
@@ -277,9 +288,9 @@ export const FEHLER_TEXT = {
   // http/transport.ts postAbgewiesen (V2 Fix F9, Spec 6.34: auch die Router-Gründe brauchen einen Text): 415 und 403
   nur_json: 'The server only takes JSON requests', fremde_herkunft: 'The server refused a request from another page',
   // Baukasten S17: sound snapshot of the project (areas/proj/modular.ts)
-  bk_nicht_geladen: 'No Baukasten graph is loaded on that channel: load one before saving the sound',
-  bk_nichts_geladen: 'No Baukasten graph is loaded on a default channel: load one or name the channels to save',
-  kein_baukasten: 'This server has no Baukasten graph bridge: the sound snapshot is not available',
+  bk_nicht_geladen: 'No Cypher Modular graph is loaded on that channel: load one before saving the sound',
+  bk_nichts_geladen: 'No Cypher Modular graph is loaded on a default channel: load one or name the channels to save',
+  kein_baukasten: 'This server has no Cypher Modular graph bridge: the sound snapshot is not available',
   // 1.14 Comping, take lanes (task 7: the reasons of rename, delete and audition; the comp reasons come with the gesture)
   comp_leer: 'The range is empty or outside the take lane: drag over a part of the take lane',
   take_unbekannt: 'That take lane no longer exists', takes_voll: 'A track holds at most 32 take lanes', take_nur_audio: 'Only audio tracks have take lanes',
@@ -425,6 +436,7 @@ export function bindeProduktion({ post, bpm, stoebern, bibliothek = null, preset
     if (slug !== null) ctx.schreiber.setze(slug, p.rev);
     $('leer').hidden = !!p;
     $('name').textContent = p ? p.name : 'No project';
+    $('name').title = p ? p.name : 'No project is open';   // the name can be longer than the cell: the full text stays in the title
     for (const h of ctx.beimProjekt) h(p, wechsel);
   }
   ctx.uebernimm = (slug, p) => { setzeProjekt(slug, p); for (const h of ctx.nachLaden) h(); };
@@ -536,5 +548,16 @@ export function bindeProduktion({ post, bpm, stoebern, bibliothek = null, preset
   setzeProjekt(null, null);
   // The jump of the SEQ place: unfolds the group of the clip and selects it once the project is loaded (clip_waehlen.js). Called after zeige().
   const waehleClip = neuerClipWaehler({ st, geladen: () => nachlader.fertig(), aendere: (l, b) => ctx.aendere(l, b), setzeAuswahl: (ids) => ctx.setzeAuswahl(ids), melde });
+  registriereHost('produktion', { holeGet, holeJson, melde, projekt: () => (st.projekt ? { slug: st.slug, projekt: st.projekt } : null),
+    waehleSpur: (id) => ctx.waehleSpur?.(id), waehleClip, antwortText,
+    aendere: (l, b) => ctx.aendere(l, b), fuegePluginEin: (n) => ctx.fuegePluginEin?.(n), spurWahl: () => st.spurWahl ?? new Set(), presetHost: ctx.presetHost,
+    neu: (name) => neuOeffne('/proj/neu', { name }), oeffne: (slug) => neuOeffne('/proj/oeffnen', { slug }) });
+  // NEW and OPEN of the browser: the same path as the title bar (the live container question included), the answer is taken over like there
+  async function neuOeffne(weg, koerper) {
+    const r = await mitBestaetigung(holeJson, weg, koerper, (t) => globalThis.confirm?.(t) ?? false);
+    if (r.abgelehnt) return { ok: false };
+    if (r.status === 200 && r.j?.projekt) { ctx.uebernimm(r.j.slug, r.j.projekt); return { ok: true }; }
+    return { ok: false, text: antwortText(r) };
+  }
   return { zeige, verberge, ereignis, waehleClip, presetHost: ctx.presetHost };
 }

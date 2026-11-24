@@ -1,5 +1,5 @@
 // Loop lane strip K2..K4: the lane strip of an arrangement track: COLOR (spur/<n>/filter with the colour art, ColorFx), FX 1 and FX 2 (spur/<n>/fx/1, /2: beat FX instances of the launcher tracks)
-// and FX 3 (spur/<n>/fx/3: the track's share goes into the fx/3 bus input instead of its DJ channel pair). The mixer half of FX 3 (the container fader) is test_mixer_fx3_lane.
+// and FX 3 (spur/<n>/fx/3: the share of the track, multiplied by the gain of its group's fader and mute, goes into the fx/3 bus input instead of its DJ channel pair; cases 4, 6, 7). The mixer half of FX 3 (the container fader) is test_mixer_fx3_lane.
 // 128 BPM: 22 500 samples per beat, blocks of 256.
 // Cases: 1 an idle lane is bit-equal: the colour art set with the knob in the dead zone, the beat FX units configured with the rows off, the fx/3 graph flag set with the row off (master, DJ pairs, fx/3 pairs)
 //        2 COLOR: every art 1..5 with the knob away from centre changes the signal against the DjFilter, the arts differ from each other, and a switch back to FILTER at k = 0 is bit-equal to a run that never
@@ -389,6 +389,224 @@ int main() {
     PRUEF(spitze(p.l, 60000, E) > 0.1);   // audible
     PRUEF(gleich(pr.l, p.l) && gleich(pr.r, p.r) && gleich(ref.l, t.l) && gleich(ref.r, t.r));
     PRUEF(spitze(p.fl, 0, E) == 0.0 && spitze(p.fr, 0, E) == 0.0);
+  }
+  // 6 FX 3 is a post-fader send of the LOOP group (decision 2026-11-23): the diverted share is multiplied by the group fader gain and the group mute fade, exactly the gains the group applies to
+  // its own sum. The group's inserts do not act on it. The reference is the same run with the group at 0 dB and no mute: with every lane assigned, its fx/3 pair is the ungrouped share.
+  {
+    const int64_t E = 200 * BLK, M0 = 80 * BLK, M1 = 140 * BLK;   // group mute from M0 to M1 (block starts), FX 3 on from the first block
+    const auto snap = [&](bool kette) {
+      Bau b(1);
+      b.spur(1, ArrArt::audio).clip(1, "c1", 0.0, 8.0, &s440->a).ausgang(1, 1);
+      if (kette) b.gruppen_kette(1, {cdj::ArrStufe{cdj::ArrInsArt::utility, 0, true}});
+      cdj::ArrSnapshot* sn = b.fertig();
+      sn->live = true;
+      sn->gruppe_dj[0] = 1;
+      return sn;
+    };
+    // FX 3 on; fader_db / mit_mute / kette: the group setting
+    const auto fahre = [&](Treiber& t, Paare& p, double fader_db, bool mit_mute, bool kette) {
+      const int rf = reg(t, "spur/1/fx/3");
+      const int gf = reg(t, "grp/1/fader");
+      const int gm = reg(t, "grp/1/mute");
+      t.arr.setze_fx3_graph(true);
+      if (kette) {
+        t.arr.setze_sofort(reg(t, "ins/utility/1/an"), 1.0f);
+        t.arr.setze_sofort(reg(t, "ins/utility/1/gain"), -6.0f);
+      }
+      t.arr.setze_sofort(gf, static_cast<float>(fader_db));
+      t.arr.setze_sofort(rf, 1.0f);
+      t.laden(snap(kette));
+      t.arr.start(0.0, 0, false, 0, V, 256, t.k);
+      lauf3(t, p, E, [&](int64_t st) {
+        if (mit_mute && st == M0) t.arr.setze_sofort(gm, 1.0f);
+        if (mit_mute && st == M1) t.arr.setze_sofort(gm, 0.0f);
+      });
+    };
+    const int64_t K = 480 + 8;   // the FX 3 assign blend (and the group mute fade) are over after this many samples
+    const double MINUS90 = std::pow(10.0, -90.0 / 20.0);
+    TR(ref)
+    Paare pr;
+    fahre(ref, pr, 0.0, false, false);
+    PRUEF(spitze(pr.fl, K, E) > 0.05);
+    const double g6 = std::pow(10.0, -6.0 / 20.0);
+    for (int fall = 0; fall < 3; ++fall) {   // 0: group fader -6 dB, 1: group utility insert (-6 dB), 2: group mute in the middle
+      TR(t)
+      Paare p;
+      fahre(t, p, fall == 0 ? -6.0 : 0.0, fall == 2, fall == 1);
+      const int64_t bis = fall == 2 ? M0 : E;
+      const double faktor = fall == 0 ? g6 : 1.0;
+      double d = 0.0;
+      for (int64_t i = K; i < bis; ++i) d = std::max(d, std::fabs(static_cast<double>(p.fl[static_cast<size_t>(i)]) - faktor * pr.fl[static_cast<size_t>(i)]));
+      std::printf("6.%d: fx/3 pair vs %.4f x the ungrouped share: largest deviation %.3g, DJ pair peak %.3g, fx/3 peak %.3g\n", fall, faktor, d, spitze(p.l, K, bis), spitze(p.fl, K, bis));
+      PRUEF(d < 1e-6);                  // fader: the exact gain; insert: no effect on the send
+      PRUEF(spitze(p.l, K, bis) < 1e-6);   // everything is assigned: the DJ pair is silent
+      if (fall == 0) PRUEF(std::fabs(spitze(p.fl, K, E) / spitze(pr.fl, K, E) - 0.5012) < 1e-3);
+      if (fall == 2) {
+        std::printf("6.2: group muted: fx/3 pair peak %.3g (limit %.3g), DJ pair %.3g\n", spitze(p.fl, M0 + K, M1), MINUS90, spitze(p.l, M0 + K, M1));
+        PRUEF(spitze(p.fl, M0 + K, M1) < MINUS90 && spitze(p.fr, M0 + K, M1) < MINUS90);   // nothing enters fx/3
+        PRUEF(spitze(p.l, M0 + K, M1) < MINUS90);
+        double d2 = 0.0;
+        for (int64_t i = M1 + K; i < E; ++i) d2 = std::max(d2, std::fabs(static_cast<double>(p.fl[static_cast<size_t>(i)]) - pr.fl[static_cast<size_t>(i)]));
+        PRUEF(d2 < 1e-6);                                                                  // unmuted: back, as without the mute
+        PRUEF(spitze(p.fl, M1 + K, E) > 0.05);
+      }
+    }
+  }
+  // 7 FX 3 on one of two lanes of the group, the lanes play different signals: the fx/3 pair is exactly that lane's signal times the group gain (float precision), the DJ pair is exactly the other
+  // lane's signal times the group gain
+  {
+    const int64_t E = 150 * BLK;
+    const auto s660 = Audio::sinus(16 * SPB, 660.0, 0.3f);
+    // which: bit 0 = lane 1 (440 Hz), bit 1 = lane 2 (660 Hz)
+    const auto snap2 = [&](int which) {
+      Bau b(1);
+      if (which & 1) b.spur(1, ArrArt::audio).clip(1, "c1", 0.0, 8.0, &s440->a).ausgang(1, 1);
+      else b.spur(1, ArrArt::audio);
+      if (which & 2) b.spur(2, ArrArt::audio).clip(2, "c2", 0.0, 8.0, &s660->a).ausgang(2, 1);
+      else b.spur(2, ArrArt::audio).ausgang(2, 1);
+      cdj::ArrSnapshot* sn = b.fertig();
+      sn->live = true;
+      sn->gruppe_dj[0] = 1;
+      return sn;
+    };
+    const auto fahre = [&](Treiber& t, Paare& p, int which, bool fx3, double fader_db) {
+      t.arr.setze_fx3_graph(true);
+      if (fx3) t.arr.setze_sofort(reg(t, "spur/1/fx/3"), 1.0f);
+      t.arr.setze_sofort(reg(t, "grp/1/fader"), static_cast<float>(fader_db));
+      t.laden(snap2(which));
+      t.arr.start(0.0, 0, false, 0, V, 256, t.k);
+      lauf3(t, p, E, nichts);
+    };
+    TR(r1)
+    Paare p1;
+    fahre(r1, p1, 1, false, 0.0);   // lane 1 alone, group at 0 dB: its signal as the DJ pair
+    TR(r2)
+    Paare p2;
+    fahre(r2, p2, 2, false, 0.0);   // lane 2 alone
+    TR(t)
+    Paare p;
+    fahre(t, p, 3, true, -6.0);
+    const double g6 = std::pow(10.0, -6.0 / 20.0);
+    double d_fx = 0.0, d_dj = 0.0;
+    for (int64_t i = 2000; i < E; ++i) {
+      const size_t k = static_cast<size_t>(i);
+      d_fx = std::max(d_fx, std::fabs(static_cast<double>(p.fl[k]) - g6 * p1.l[k]));
+      d_dj = std::max(d_dj, std::fabs(static_cast<double>(p.l[k]) - g6 * p2.l[k]));
+    }
+    std::printf("7: fx/3 pair vs lane 1 x group gain %.3g, DJ pair vs lane 2 x group gain %.3g (peaks %.3f / %.3f)\n", d_fx, d_dj, spitze(p.fl, 2000, E), spitze(p.l, 2000, E));
+    PRUEF(spitze(p1.l, 2000, E) > 0.1 && spitze(p2.l, 2000, E) > 0.1);
+    PRUEF(d_fx < 2e-6);
+    PRUEF(d_dj < 2e-6);
+  }
+  // 8 nested groups: track 1 in group 2, group 2 in group 1 (the LOOP group on DJ channel 1). The send is multiplied by the faders and mute fades of both groups.
+  {
+    const int64_t E = 200 * BLK, M0 = 80 * BLK, M1 = 140 * BLK;
+    const auto snap = [&]() {
+      Bau b(1);
+      b.spur(1, ArrArt::audio).clip(1, "c1", 0.0, 8.0, &s440->a).ausgang(1, 2);
+      b.gruppe_ausgang(2, 1);
+      cdj::ArrSnapshot* sn = b.fertig();
+      sn->live = true;
+      sn->gruppe_dj[0] = 1;
+      return sn;
+    };
+    // outer / inner fader in dB; mute_aussen / mute_innen: which group is muted between M0 and M1
+    const auto fahre = [&](Treiber& t, Paare& p, double aussen_db, double innen_db, const char* mute_reihe) {
+      t.arr.setze_fx3_graph(true);
+      t.arr.setze_sofort(reg(t, "spur/1/fx/3"), 1.0f);
+      t.arr.setze_sofort(reg(t, "grp/1/fader"), static_cast<float>(aussen_db));
+      t.arr.setze_sofort(reg(t, "grp/2/fader"), static_cast<float>(innen_db));
+      const int gm = mute_reihe ? reg(t, mute_reihe) : -1;
+      t.laden(snap());
+      t.arr.start(0.0, 0, false, 0, V, 256, t.k);
+      lauf3(t, p, E, [&](int64_t st) {
+        if (gm >= 0 && st == M0) t.arr.setze_sofort(gm, 1.0f);
+        if (gm >= 0 && st == M1) t.arr.setze_sofort(gm, 0.0f);
+      });
+    };
+    const int64_t K = 480 + 8;
+    TR(ref)
+    Paare pr;
+    fahre(ref, pr, 0.0, 0.0, nullptr);
+    PRUEF(spitze(pr.fl, K, E) > 0.05);   // the nested track reaches fx/3 at all
+    const double g6 = std::pow(10.0, -6.0 / 20.0);
+    {
+      TR(t)
+      Paare p;
+      fahre(t, p, -6.0, -6.0, nullptr);
+      double d = 0.0;
+      for (int64_t i = K; i < E; ++i) d = std::max(d, std::fabs(static_cast<double>(p.fl[static_cast<size_t>(i)]) - g6 * g6 * pr.fl[static_cast<size_t>(i)]));
+      std::printf("8: nested, both faders -6 dB: fx/3 pair vs %.4f x the ungrouped share: largest deviation %.3g, ratio of peaks %.4f, DJ pair peak %.3g\n", g6 * g6, d, spitze(p.fl, K, E) / spitze(pr.fl, K, E), spitze(p.l, K, E));
+      PRUEF(d < 1e-6);
+      PRUEF(std::fabs(spitze(p.fl, K, E) / spitze(pr.fl, K, E) - 0.2512) < 1e-3);
+      PRUEF(spitze(p.l, K, E) < 1e-6);
+    }
+    const double MINUS90 = std::pow(10.0, -90.0 / 20.0);
+    for (const char* mr : {"grp/1/mute", "grp/2/mute"}) {   // the outer mute and the inner mute both silence the send, and it is back after
+      TR(t)
+      Paare p;
+      fahre(t, p, 0.0, 0.0, mr);
+      double d = 0.0;
+      for (int64_t i = M1 + K; i < E; ++i) d = std::max(d, std::fabs(static_cast<double>(p.fl[static_cast<size_t>(i)]) - pr.fl[static_cast<size_t>(i)]));
+      std::printf("8: nested, %s: fx/3 peak while muted %.3g (limit %.3g), after unmute deviation %.3g\n", mr, spitze(p.fl, M0 + K, M1), MINUS90, d);
+      PRUEF(spitze(p.fl, M0 + K, M1) < MINUS90 && spitze(p.fr, M0 + K, M1) < MINUS90);
+      PRUEF(spitze(p.fl, K, M0) > 0.05);
+      PRUEF(d < 1e-6);
+    }
+  }
+  // 9 a group fader that moves inside every block (the verlauf path, a per-sample course): the send follows the same per-sample gain as the group sum. The reference is the same course with FX 3
+  // off: there the DJ pair is the lane signal times the group gain trace; with FX 3 on the fx/3 pair must be the same signal sample for sample.
+  {
+    const int64_t E = 150 * BLK;
+    const auto snap = [&]() {
+      Bau b(1);
+      b.spur(1, ArrArt::audio).clip(1, "c1", 0.0, 8.0, &s440->a).ausgang(1, 1);
+      cdj::ArrSnapshot* sn = b.fertig();
+      sn->live = true;
+      sn->gruppe_dj[0] = 1;
+      return sn;
+    };
+    const auto fahre = [&](Treiber& t, Paare& p, bool fx3) {
+      t.arr.setze_fx3_graph(true);
+      if (fx3) t.arr.setze_sofort(reg(t, "spur/1/fx/3"), 1.0f);
+      const int gf = reg(t, "grp/1/fader");
+      t.laden(snap());
+      t.arr.start(0.0, 0, false, 0, V, 256, t.k);
+      static float kurve[cdj::ARR_BLOCK];
+      lauf3(t, p, E, [&](int64_t st) {
+        for (int i = 0; i < t.n; ++i) kurve[i] = static_cast<float>(-3.0 - 12.0 * (0.5 + 0.5 * std::sin(0.013 * static_cast<double>(st + i))));   // -3 .. -15 dB, moves in every sample
+        t.arr.verlauf(gf, kurve);
+      });
+    };
+    TR(ref)
+    Paare pr;
+    fahre(ref, pr, false);
+    TR(t)
+    Paare p;
+    fahre(t, p, true);
+    const int64_t K = 480 + 8;
+    double d = 0.0, bewegt = 0.0;
+    for (int64_t i = K; i < E; ++i) {
+      const size_t k = static_cast<size_t>(i);
+      d = std::max(d, std::fabs(static_cast<double>(p.fl[k]) - pr.l[k]));
+      if (i > K) bewegt = std::max(bewegt, std::fabs(static_cast<double>(pr.l[k]) - pr.l[k - 1]));
+    }
+    std::printf("9: moving group fader: fx/3 pair vs the group's own sum, largest sample-wise deviation %.3g (peak %.3f, DJ pair with FX 3 on: %.3g)\n", d, spitze(pr.l, K, E), spitze(p.l, K, E));
+    PRUEF(spitze(pr.l, K, E) > 0.05);
+    PRUEF(d < 1e-6);
+    PRUEF(spitze(p.l, K, E) < 1e-6);
+    PRUEF(bewegt > 0.0);
+    {   // the course really acts: a static -3 dB fader (the course's maximum) gives a clearly different signal
+      TR(c)
+      Paare pc;
+      c.arr.setze_fx3_graph(true);
+      c.arr.setze_sofort(reg(c, "grp/1/fader"), -3.0f);
+      c.laden(snap());
+      c.arr.start(0.0, 0, false, 0, V, 256, c.k);
+      lauf3(c, pc, E, nichts);
+      std::printf("9: the same run with a static -3 dB fader differs from the moving one by up to %.3f\n", max_diff(pr.l, pc.l, K, E));
+      PRUEF(max_diff(pr.l, pc.l, K, E) > 0.05);
+    }
   }
   PRUEF_ENDE();
 }

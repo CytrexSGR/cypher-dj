@@ -1,0 +1,262 @@
+#!/usr/bin/env -S python3 -I
+"""djk-doctor: one line per check, so a stuck start can be diagnosed without reading logs.
+
+Usage: djk-doctor [--instanz a..i]
+Output: "[OK] text", "[NOTE] text  ->  fix" or "[PROBLEM] text  ->  fix", one line per check, in this order: the six checks of
+systemlage.sh (systemd_sitzung, echtzeit, pactl, pipewire, jack, senke), then ports, platte, surge, carla, cuda, katalog, version.
+Exit: 0 when no line is a PROBLEM, 1 otherwise, 2 for a bad argument. A broken check is a line for that check, never a crash.
+Run it as `python3 -I`: neither this folder nor the current folder is on sys.path, so the package path is added below.
+Test hooks: CYPHERDJ_DOCTOR_FREI_BYTES (free bytes instead of the real value), SYSTEMLAGE_* (see systemlage.sh).
+"""
+import os
+import shutil
+import socket
+import subprocess
+import sys
+
+HIER = os.path.dirname(os.path.realpath(__file__))
+DJK = os.path.dirname(HIER)
+sys.path.insert(0, DJK)
+
+MIN_FREI = 5 * 1024 ** 3
+HAENGT = 60  # seconds for the whole systemlage.sh run (its own probe is bounded by SYSTEMLAGE_FRIST, default 15)
+
+zeilen = []  # (status, text, fix)
+
+
+def melde(status, text, fix=""):
+    zeilen.append((status, " ".join(str(text).split()), " ".join(str(fix).split())))
+
+
+def pruefe(name, fn):
+    """Run one check; whatever it raises becomes a NOTE for that check only."""
+    try:
+        fn()
+    except Exception as e:  # noqa: BLE001 (the point is that no check can take the others down)
+        melde("NOTE", f"{name} could not be checked ({type(e).__name__}: {e})")
+
+
+def systemlage():
+    kern = os.environ.get("KERN_KONFIG") or os.path.join(DJK, "config", "kern.toml")
+    try:
+        r = subprocess.run(["bash", os.path.join(HIER, "systemlage.sh"), "--kern-konfig", kern], capture_output=True, text=True,
+                           timeout=HAENGT, check=False)
+        aus = r.stdout
+    except (subprocess.TimeoutExpired, OSError) as e:
+        melde("PROBLEM", f"the system check did not finish ({type(e).__name__})", "run: bash " + os.path.join(HIER, "systemlage.sh"))
+        return
+    gelesen = 0
+    for zeile in aus.splitlines():
+        teile = zeile.split("\t")
+        if len(teile) >= 3 and teile[0] in ("OK", "NOTE", "PROBLEM"):
+            melde(teile[0], teile[2], teile[3] if len(teile) > 3 else "")
+            gelesen += 1
+    if gelesen == 0:
+        melde("PROBLEM", "the system check printed nothing", "run: bash " + os.path.join(HIER, "systemlage.sh"))
+
+
+def belegt(art, port):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM if art == "tcp" else socket.SOCK_DGRAM)
+    try:
+        s.bind(("127.0.0.1", port))
+        return False
+    except OSError:
+        return True
+    finally:
+        s.close()
+
+
+def laeuft(einheit):
+    try:
+        r = subprocess.run(["systemctl", "--user", "is-active", "--quiet", einheit], timeout=5, check=False,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return r.returncode == 0
+    except (subprocess.TimeoutExpired, OSError):
+        return False
+
+
+def tabelle(sfx, v):
+    """The ports the studio instance will use: kern.toml and leitstand.toml like djk-start reads them, else the defaults, plus the instance offset.
+    CYPHERDJ_DOCTOR_PORTS ("tcp:PORT:what,udp:PORT:what", offsets not added) replaces the table (test hook)."""
+    roh = os.environ.get("CYPHERDJ_DOCTOR_PORTS")
+    if roh:
+        return [(e.split(":")[0], int(e.split(":")[1]), e.split(":", 2)[2]) for e in roh.split(",") if e]
+    import tomllib
+
+    def lies(env, datei):
+        pfad = os.environ.get(env) or os.path.join(os.path.expanduser("~"), ".config", "cypherdj" + sfx, datei)
+        try:
+            with open(pfad, "rb") as f:
+                return tomllib.load(f)
+        except (OSError, tomllib.TOMLDecodeError):
+            return {}
+
+    def zahl(d, k, vorgabe):
+        w = d.get(k, vorgabe)
+        return w if type(w) is int and 1024 <= w <= 56535 else vorgabe
+
+    kk, lk = lies("KERN_KONFIG", "kern.toml"), lies("LS_KONFIG", "leitstand.toml")
+    return [("udp", zahl(kk, "udp_port", 47100) + v, "core commands"), ("udp", zahl(lk, "abo_port", 47110) + v, "leitstand subscriber"),
+            ("tcp", zahl(lk, "ws_port", 47200) + v, "leitstand websocket"), ("udp", 47150 + v, "page subscriber"), ("tcp", 47300 + v, "page")]
+
+
+def ports(sfx, v):
+    wanted = tabelle(sfx, v)
+    if laeuft(f"cypherdj-kern{sfx}.service") or laeuft(f"cypherdj-oberflaeche{sfx}.service"):
+        melde("OK", f"ports not checked: the studio{' instance ' + sfx[1:] if sfx else ''} is running and holds its own ports")
+        return
+    schlecht = [f"{art} {p} ({wofuer})" for art, p, wofuer in wanted if belegt(art, p)]
+    if schlecht:
+        melde("PROBLEM", "port in use by another program: " + ", ".join(schlecht),
+              "find it with: ss -lntup, stop that program, then start the studio again")
+    else:
+        melde("OK", "the studio ports are free (" + ", ".join(str(p) for _, p, _ in wanted) + ")")
+
+
+def platte():
+    import ablage
+    ordner = str(ablage.heim())
+    while ordner and not os.path.exists(ordner):
+        ordner = os.path.dirname(ordner)
+    roh = os.environ.get("CYPHERDJ_DOCTOR_FREI_BYTES")
+    frei = int(roh) if roh else shutil.disk_usage(ordner or "/").free
+    gb = frei / 1024 ** 3
+    if frei < MIN_FREI:
+        melde("NOTE", f"only {gb:.1f} GB free on the disk of the studio home ({ordner}); renders and recordings may fail",
+              "free some space, at least 5 GB")
+    else:
+        melde("OK", f"{gb:.0f} GB free on the disk of the studio home")
+
+
+def surge():
+    p = os.path.join(os.path.expanduser("~"), ".local", "lib", "cypherdj", "lv2", "Surge XT.lv2", "manifest.ttl")
+    if os.path.isfile(p):
+        melde("OK", "Surge XT is installed")
+    else:
+        melde("NOTE", "Surge XT is not installed; bass and melody use the built-in instruments", "install it with djk/hosts/carla/install_surge.sh")
+
+
+def carla():
+    if os.path.exists("/usr/lib/carla/libcarla_standalone2.so") or os.path.exists("/usr/share/carla/carla_backend.py"):
+        melde("OK", "Carla is installed")
+    else:
+        melde("NOTE", "Carla is not installed; plugin hosts are unavailable", "sudo apt install carla")
+
+
+TORCH_FRAGE = "try:\n import torch\nexcept Exception:\n print('NOTORCH')\nelse:\n print('CUDA' if torch.cuda.is_available() else 'CPU')"
+
+
+def cuda():
+    py = os.environ.get("CYPHERDJ_DOCTOR_VENV_PYTHON") or os.path.join(DJK, "workshop", ".venv", "bin", "python")
+    gpu = ""
+    exe = shutil.which("nvidia-smi")
+    if exe:
+        try:
+            r = subprocess.run([exe, "-L"], capture_output=True, text=True, timeout=10, check=False)
+            if r.returncode == 0 and r.stdout.strip():
+                gpu = r.stdout.strip().splitlines()[0].split(" (UUID")[0]
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+    antwort = "NOVENV"
+    if os.access(py, os.X_OK):
+        try:
+            r = subprocess.run([py, "-c", TORCH_FRAGE], capture_output=True, text=True, timeout=60, check=False, cwd="/")  # no -I: the workshop tools see the user site too
+            antwort = (r.stdout.strip().splitlines() or ["NOTORCH"])[-1]
+        except (subprocess.TimeoutExpired, OSError):
+            antwort = "NOVENV"
+    if antwort == "CUDA":
+        melde("OK", "PyTorch sees the GPU" + (f" ({gpu})" if gpu else ""))
+    elif antwort == "CPU":
+        melde("NOTE", "PyTorch is installed but torch.cuda.is_available() is false; stem separation and analysis run on the CPU",
+              "check the NVIDIA driver, or install a CUDA build of PyTorch in the workshop venv" if gpu else "")
+    elif gpu:
+        melde("NOTE", f"GPU found ({gpu}) but PyTorch is missing in the workshop venv; stem separation and analysis run on the CPU",
+              "set up the workshop venv with a CUDA build of PyTorch")
+    else:
+        melde("NOTE", "no usable GPU (no NVIDIA driver and no CUDA PyTorch); stem separation and analysis run on the CPU")
+
+
+def katalog():
+    import sqlite3
+    import ablage
+    k = ablage.fest("mediathek").parent / "katalog.sqlite"
+    fix = "run: djk-bibliothek"
+    if not k.is_file():
+        melde("NOTE", "the browser catalog is not built yet; the browser shows no audio sources", fix)
+        return
+    try:
+        db = sqlite3.connect(f"file:{k}?mode=ro", uri=True, timeout=5)
+        try:
+            n = db.execute("SELECT count(*) FROM katalog").fetchone()[0]
+        finally:
+            db.close()
+    except sqlite3.Error as e:
+        melde("NOTE", f"the browser catalog cannot be read ({e})", fix)
+        return
+    if n == 0:
+        melde("NOTE", "the browser catalog is empty; the browser shows no audio sources", fix)
+    else:
+        melde("OK", f"the browser catalog holds {n} entries")
+
+
+def version():
+    import re
+    ver = ""
+    try:
+        r = subprocess.run(["dpkg-query", "-W", "-f", "${Version}", "cypher-dj"], capture_output=True, text=True, timeout=5, check=False)
+        if r.returncode == 0 and r.stdout.strip():
+            ver = r.stdout.strip()
+    except (subprocess.TimeoutExpired, OSError):
+        pass
+    if not ver:
+        try:
+            r = subprocess.run(["git", "describe", "--tags", "--always"], cwd=os.path.dirname(DJK), capture_output=True, text=True,
+                               timeout=5, check=False)
+            if r.returncode == 0 and r.stdout.strip():
+                ver = r.stdout.strip() + " (git)"
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+    if not ver:
+        import json
+        with open(os.path.join(DJK, "ui", "package.json"), encoding="utf-8") as f:
+            ver = str(json.load(f).get("version", "unknown")) + " (source tree)"
+    fmt = "unknown"
+    try:
+        with open(os.path.join(DJK, "ui", "project", "model.ts"), encoding="utf-8") as f:
+            m = re.search(r"export const FORMAT = '([^']+)'", f.read())
+        fmt = m.group(1) if m else fmt
+    except OSError:
+        pass
+    melde("OK", f"cypher-dj {ver}, project format {fmt}")
+
+
+def main(argv):
+    inst = ""
+    a = list(argv)
+    while a:
+        k = a.pop(0)
+        if k == "--instanz" and a:
+            inst = a.pop(0)
+        else:
+            print("Usage: djk-doctor [--instanz a..i]", file=sys.stderr)
+            return 2
+    if inst and not (len(inst) == 1 and "a" <= inst <= "i"):
+        print(f"djk-doctor: instance '{inst}' invalid, use a..i or leave it out", file=sys.stderr)
+        return 2
+    sfx = f"-{inst}" if inst else ""
+    v = 1000 * (ord(inst) - 96) if inst else 0
+    pruefe("system", systemlage)
+    pruefe("ports", lambda: ports(sfx, v))
+    pruefe("disk", platte)
+    pruefe("surge", surge)
+    pruefe("carla", carla)
+    pruefe("cuda", cuda)
+    pruefe("catalog", katalog)
+    pruefe("version", version)
+    for status, text, fix in zeilen:
+        print(f"[{status}] {text}" + (f"  ->  {fix}" if fix else ""))
+    return 1 if any(s == "PROBLEM" for s, _, _ in zeilen) else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

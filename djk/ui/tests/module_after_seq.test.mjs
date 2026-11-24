@@ -70,7 +70,7 @@ test('a clip of 32 bars: only the first 16 bars come along, the pattern is edita
   assert.deepEqual(bericht.weggelassen.gekuerzt, [{ name: 'Long', noten: 2, punkte: 1 }]);
 });
 
-test('the 16 Baukasten track limit is hit by the third of four tracks: a refusal that names it, the input project is untouched', () => {
+test('the 16 Cypher Modular track limit is hit by the third of four tracks: a refusal that names it, the input project is untouched', () => {
   let p = live();
   p = lauf(p, { befehl: 'seq_anlegen', platz: 1 });
   for (let i = 0; i < 14; i++) p = lauf(p, { befehl: 'seq_folge_neu', gruppe_id: p.gruppen[0].id, name: `P${i}`, geraet: bk() });
@@ -79,7 +79,7 @@ test('the 16 Baukasten track limit is hit by the third of four tracks: a refusal
   const vorher = JSON.stringify(p);
   const e = fehler(() => setzeModulNachSeq(p, m, 2));
   assert.ok(e.grund !== undefined, String(e));
-  assert.match(`${e.grund} ${e.detail}`, /at most 16 Baukasten/);
+  assert.match(`${e.grund} ${e.detail}`, /at most 16 Cypher Modular/);
   assert.equal(JSON.stringify(p), vorher, 'nothing is written');
 });
 
@@ -218,7 +218,7 @@ test('TO DJ: an empty section is refused; notes are cut at the section end, note
   assert.deepEqual(bass.clip.noten.map((n) => [n.beat, n.ton, n.laenge]), [[0, 36, 0.5], [15.5, 38, 0.5]]);
 });
 
-test('TO DJ: too many Baukasten tracks: the refusal names both counts, nothing partial', () => {
+test('TO DJ: too many Cypher Modular tracks: the refusal names both counts, nothing partial', () => {
   let l = live();
   l = lauf(l, { befehl: 'seq_anlegen', platz: 1 });
   for (let i = 0; i < 15; i++) l = lauf(l, { befehl: 'seq_folge_neu', gruppe_id: l.gruppen[0].id, name: `P${i}`, geraet: bk() });
@@ -226,7 +226,7 @@ test('TO DJ: too many Baukasten tracks: the refusal names both counts, nothing p
   const vorher = JSON.stringify(l);
   const e = fehler(() => setzeModulNachSeq(l, t, 2, { abschnitt_id: 'a2' }));
   assert.deepEqual([e.code, e.fehler], [409, 'zu_viele_bk']);
-  assert.equal(e.extra.text, 'the live project holds 15 Baukasten tracks and the section brings 2, at most 16 are possible');
+  assert.equal(e.extra.text, 'the live project holds 15 Cypher Modular tracks and the section brings 2, at most 16 are possible');
   assert.deepEqual([e.extra.vorhanden, e.extra.neu], [15, 2]);
   assert.equal(JSON.stringify(l), vorher);
 });

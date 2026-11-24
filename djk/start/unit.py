@@ -12,7 +12,7 @@ steht (@MASTER@), bleibt EIN Argument; in einer gerenderten Datei wird er bei Be
 Mehrwort-Platzhalter (ARG_VARS: @CUE_ARG@, @TON_FREI@, @KERN_ARGS@ ...) werden mit shlex zerlegt; ihr Aufrufer setzt
 Namen mit Leerzeichen darin in "...".
 
-Aufruf: unit.py --unit DATEI [--dropin DATEI] [--djk DIR] [--var NAME=WERT ...] [--env NAME=WERT ...]
+Aufruf: unit.py --unit DATEI [--dropin DATEI] [--djk DIR] [--var NAME=WERT ...] [--env NAME=WERT ...] [--umgebungsdatei DATEI]
         unit.py --rendern ZIEL --unit DATEI [--dropin DATEI] [--var ...]   (schreibt die gefüllte Datei, installiert nichts)
 Rückgabe 2: Datei fehlt, Platzhalter ungefüllt, kein ExecStart."""
 import argparse
@@ -74,7 +74,7 @@ def fuelle(text, var, djk, home):
     return re.sub(r"@([A-Z_]+)@", lambda m: var[m.group(1)], text)
 
 
-def baue(unit, dropin, var, djk, home):
+def baue(unit, dropin, var, djk, home, umgebungsdatei=None):
     service = []  # (schlüssel, wert) in Reihenfolge
     beschreibung = None
     unit_eig = []
@@ -104,6 +104,8 @@ def baue(unit, dropin, var, djk, home):
     if beschreibung:
         aus.append(f"--description={beschreibung}")
     for k, w in unit_eig + service:
+        if umgebungsdatei and k == "EnvironmentFile" and w.endswith("umgebung.env"):
+            w = "-" + umgebungsdatei   # a test instance: its own copy without the store variables (djk-start), not the owner's file
         aus += ["-p", f"{k}={fuelle(w, var, djk, home)}"]
     aus.append("--")
     aus += exec_args(exec_start, var, djk, home)
@@ -141,6 +143,7 @@ def main():
     p.add_argument("--djk", default=os.path.expanduser("~/cypher-dj/djk"))
     p.add_argument("--var", action="append", default=[])
     p.add_argument("--rendern")
+    p.add_argument("--umgebungsdatei", help="ersetzt die umgebung.env der EnvironmentFile-Zeile (Prüfinstanz: Kopie ohne Ablage-Variablen)")
     a = p.parse_args()
     var = dict(v.split("=", 1) for v in a.var)
     for d in (a.unit, a.dropin):
@@ -151,7 +154,7 @@ def main():
         rendern(a.rendern, a.dropin or a.unit, var)
         return 0
     try:
-        for x in baue(a.unit, a.dropin, var, a.djk, os.path.expanduser("~")):
+        for x in baue(a.unit, a.dropin, var, a.djk, os.path.expanduser("~"), a.umgebungsdatei):
             print(x)
     except SystemExit as e:
         print(e, file=sys.stderr)

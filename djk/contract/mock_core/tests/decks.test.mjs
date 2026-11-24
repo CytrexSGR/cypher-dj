@@ -133,6 +133,18 @@ test('politik_raster: zu spät mit Politik 2 -> nächster erreichbarer Rasterpun
   gruen(r);
 });
 
+test('start politik 3 (takt, SYNC): accepted like 0, runs at ab_beat (the mock has no bar-phase shift); politik 2 stays refused on a start', () => {
+  const r = fahre([
+    sende(1000, laden(1, 1)),
+    sende(2000, start(2, 'leitstand', 1, 4, 0, { politik: 3 })),
+    erwarte(S(4), q(2, 'leitstand', 2, S(4))),
+    wert(S(5), 'deck/1/quell_beat', 1),
+    sende(S(6), start(3, 'leitstand', 1, 12, 0, { politik: 2 })),
+    erwarte(S(7), q(3, 'leitstand', 6, null, 'ausserhalb_bereich')),
+  ], { cfg });
+  gruen(r);
+});
+
 test('hotcue_setzen meldet /e/hotcue; entladen und laden bei laufendem offenem Deck -> deck_hoerbar', () => {
   const r = fahre([
     sende(1000, laden(1, 1)),

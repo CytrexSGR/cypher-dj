@@ -76,7 +76,9 @@ test('1.15 A2: the table holds exactly the 201 tool paths of section 3 (containe
   // container core: 4048 rows of the 13-channel table - 432 deck/* rows - 688 erz/* rows + 224 deck/* rows (2 containers x 104 + 16 stem rows)
   // + 712 erz/* alias rows (8 streams x (25 suffixes + 64 bk)) + 1024 strom/1..16/bk/1..64 rows (+ 512 spur/9..16/bk/1..64 rows since 2026-11-21, the core slots 8 -> 16); pad/* (208) and bus/* (196) are unchanged
   // + 396 rows of the K7/K6 growth: spur/1..32/pfl, trim, kill/* (32 x 5 = 160), sends 5..8 of the 32 tracks (128), of the 16 groups (64) and the return strips ret/5..8 (4 x 11 = 44)
-  assert.equal(REGLER.size, 4048 + 512 - 432 - 688 + 224 + 712 + 1024 + 160 + 128 + 64 + 44);
+  // + 96 rows spur/1..32/fx/1..3 (loop deck lane strip K1/lane S: FX 1 2 3 assignment per track; controls_info.ts:93)
+  // Note: the 201 "tool paths" of this test are the gate/util/mb/lim control rows of section 3, not the hand (MCP) tools; the hand tool count is unrelated.
+  assert.equal(REGLER.size, 4048 + 512 - 432 - 688 + 224 + 712 + 1024 + 160 + 128 + 64 + 44 + 32 * 3);
   for (const p of soll) assert.equal(muster.test(p), true, `schema takes ${p}`);
 });
 

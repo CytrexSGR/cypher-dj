@@ -27,7 +27,7 @@ import { fokus } from '../controller_fokus.js';
 
 export const WERKBANK_TEXT = {
   keinModul: 'No module is open.',
-  keinWerkbank: 'The open project is not a module. Open a module or create one; the open project stays open until you do.',
+  keinWerkbank: 'This project is not a module. Open or create a module; your open project stays open until you do.',
   tempoBereich: 'Tempo: 60 to 200 BPM',
   neuerName: 'Module name, Enter',
   oeffnen: 'Open module…',

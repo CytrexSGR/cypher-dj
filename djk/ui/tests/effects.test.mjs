@@ -16,7 +16,7 @@ import { SC_KICK, kennlinie, kennlinienPfad, KOMP_PRESETS, AUTO_BEREICH, punktAu
 import { AUTO_BEREICH as SERVER_AUTO, pruefeAutomation } from '../loop_automation.ts';
 import { AUTO_VORLAGEN, vorlagePunkte, knobListe, KNOB_GRUPPE, htmlText, bkKnobListe, bkKnobHtml, graphWahlOptionen, graphWahlHtml, instrumentWahlHtml, instrumentKategorien, hostName, GRAPH_KATEGORIEN, sendRueckHtml, lernKnopfHtml, lernStand } from '../public/effects.js';
 
-test('Baukasten S2 knobListe: nur gemeldete Knobs, Namen aus dem Graphen, sonst „Knob n“; Surge ohne Knobs → leer', () => {
+test('Cypher Modular S2 knobListe: nur gemeldete Knobs, Namen aus dem Graphen, sonst „Knob n“; Surge ohne Knobs → leer', () => {
   const l = knobListe({ Volume: 0.75, 'Knob 1': 0.25, 'Knob 2': 1.5, 'Knob 8': 0 }, { 'Knob 1': 'Cutoff' });
   assert.deepEqual(l, [
     { nr: 1, param: 'Knob 1', name: 'Cutoff', wert: 0.25 },
@@ -93,7 +93,7 @@ test('Automations-Vorlagen: jede passt zu ihrem Ziel und besteht die Prüfung de
   assert.ok('fehler' in pruefeAutomation([{ pfad: 'send/2', punkte: vorlagePunkte({ punkte: [[0, -70]] }, 8) }], 8));
 });
 
-test('Baukasten S2 htmlText: Knob-Namen aus der Graphdatei gehen als Text, nicht als HTML auf die Seite (Review F2)', () => {
+test('Cypher Modular S2 htmlText: Knob-Namen aus der Graphdatei gehen als Text, nicht als HTML auf die Seite (Review F2)', () => {
   assert.equal(htmlText('<img src=x onerror=alert(1)>'), '&lt;img src=x onerror=alert(1)&gt;');
   assert.equal(htmlText(`a"b'c&d`), 'a&quot;b&#39;c&amp;d');
   assert.equal(htmlText('Cutoff'), 'Cutoff');
@@ -443,8 +443,8 @@ test('A8 a strip control sends /regler with ab "jetzt" like the compressor, a sw
 });
 
 test('A8 channel kind of a path and the kern device preset: one /regler per field, switches as 0/1, a wrong channel kind is refused', () => {
-  assert.deepEqual(['deck/1', 'erz/4', 'erz/7', 'pad/2', 'bus/3', 'master', 'fx/3', 'erz/8', 'erz/9', 'bus/5'].map(kanalArtVon),
-    ['quelle', 'quelle', 'quelle', 'quelle', 'bus', null, null, null, null, null], 'erz/8 is cue only and has no tool rows (D2)');
+  assert.deepEqual(['deck/1', 'erz/4', 'erz/7', 'pad/2', 'bus/3', 'master', 'fx/3', 'erz/8', 'erz/9', 'erz/11', 'bus/5'].map(kanalArtVon),
+    ['quelle', 'quelle', 'quelle', 'quelle', 'bus', null, null, null, 'quelle', null, null], 'erz/8 is cue only and has no tool rows (D2); erz/9 is a container source (container core K6)');
   const gate = GERAETE.find((g) => g.id === 'gate'), util = GERAETE.find((g) => g.id === 'utility');
   const mb = GERAETE.find((g) => g.id === 'multiband'), lim = GERAETE.find((g) => g.id === 'kanal-limiter');
   const r = kernGeraetAnfragen(gate, { an: true, schwelle: -35, sc: 5 }, 'erz/1');
@@ -641,7 +641,7 @@ test('category picker: erz/2 and erz/3 offer the host as an instrument (Surge XT
   assert.deepEqual(opts(h, 'graphkat').filter((o) => o.an).map((o) => o.wert), ['host'], 'nothing loaded: the host category');
   assert.deepEqual(opts(h, 'graphkat').map((o) => o.text), ['Drums', 'Bass', 'Host (Surge/plugins)', 'Other']);
   assert.deepEqual(opts(h, 'graphwahl'), [{ wert: '', text: 'Surge XT', an: true }]);
-  assert.match(h, /graphtext[^>]*>Surge XT plays this channel; no Baukasten graph is loaded\.</);
+  assert.match(h, /graphtext[^>]*>Surge XT plays this channel; no Cypher Modular graph is loaded\.</);
   const m = instrumentWahlHtml('erz/2', INST, '', 'Cypher Modular', null, 'rolle');
   assert.deepEqual(opts(m, 'graphwahl'), [{ wert: '', text: 'Cypher Modular', an: true }]);
   const bass = instrumentWahlHtml('erz/2', INST, '', 'Surge XT', 'bass', 'rolle');   // in another category the host is not listed: no Off there
@@ -691,4 +691,30 @@ test('U6 the stream rows are not channels of the effects panel: BK_KNOB_KANAELE 
 test('U6 the lists of effects.js are derived: no stream literal in the source outside the tables of kanaele.js', () => {
   const q = readFileSync(new URL('../public/effects.js', import.meta.url), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
   assert.doesNotMatch(q, /['"`](erz|pad)\/\d/);
+});
+
+test('CONTROLLERS tab with the pop-up blocked: the register shows in place and one line says why; another area removes the line', async () => {
+  const { installiere, attrappe, El } = await import('./helpers/pages_mock.mjs');
+  installiere();
+  const kopf = new El('div'); const reg = new El('div'); reg.setAttribute('id', 'register'); reg.setAttribute('hidden', '');
+  kopf.append(reg); kopf.parent = attrappe.body; attrappe.body.children.push(kopf);
+  globalThis.navigator.userActivation = { isActive: true };
+  const geoeffnet = [];
+  globalThis.open = (...a) => { geoeffnet.push(a[0]); return null; };   // blocked
+  const g = await import('../public/effects_gemeinsam.js');
+  g.setzeBereich('controller');
+  assert.deepEqual(geoeffnet, ['/#controller']);
+  assert.equal(reg.hidden, false, 'the register shows in the page');
+  const hinweis = () => kopf.querySelectorAll('[data-register-hinweis]');
+  assert.equal(hinweis().length, 1);
+  assert.equal(hinweis()[0].textContent, 'Your browser blocked the controller window; showing the list here.');
+  assert.equal(kopf.elemente.indexOf(hinweis()[0]) < kopf.elemente.indexOf(reg), true, 'the line sits above the register');
+  g.setzeBereich('controller');
+  assert.equal(hinweis().length, 1, 'no second line');
+  g.setzeBereich('library');
+  assert.equal(hinweis().length, 0);
+  assert.equal(reg.hidden, true);
+  globalThis.open = () => ({ focus() {} });   // not blocked: the window opens, the panel stays as it was and shows no line
+  g.setzeBereich('controller');
+  assert.equal(hinweis().length, 0);
 });

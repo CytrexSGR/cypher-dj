@@ -1,6 +1,7 @@
 """Storage places of cypher-dj: one table (djk/config/ablage.json), read here and by djk/ui/pfade.ts.
 
-Resolution (same as paths.ts): (1) the kind's env variable, non-empty; (2) core kinds and vorgabe "alt" give alt;
+Resolution (same as paths.ts): (1) the kind's env variable, non-empty; (1b) a test instance (CYPHERDJ_INSTANZ non-empty) with no env gets
+/dev/shm/cypherdj-<i>/<kind> for every non-core kind and /dev/shm/cypherdj-<i>/<shm leaf> for a fixed name whose "shm" is not null; (2) core kinds and vorgabe "alt" give alt;
 (3) vorgabe "neu": alt when it is a real directory, else neu; alt a link to a missing target (moved, disk absent) raises ValueError. A real alt next to a non-empty neu stays at alt
 and prints one warning per kind and process.
 """
@@ -33,6 +34,15 @@ def _home(env) -> str:
     return _env(env).get("HOME") or os.path.expanduser("~")
 
 
+def _instanz(env) -> str:
+    return _env(env).get("CYPHERDJ_INSTANZ", "") or ""
+
+
+def _shm(env) -> str:
+    i = _instanz(env)
+    return f"/dev/shm/cypherdj-{i}" if i else "/dev/shm/cypherdj"
+
+
 def heim(env=None) -> Path:
     e = _env(env)
     roh = e.get("CYPHERDJ_HEIM")
@@ -60,7 +70,7 @@ def orte(art: str, env=None, tabelle=None, repo=None) -> dict:
     z = (tabelle or _lade())["arten"].get(art)
     if z is None:
         raise KeyError(f"unknown storage kind: {art}")
-    return {"alt": _fuelle(z["alt"], env, repo), "neu": _fuelle(z["neu"], env, repo), "env": z["env"], "kern": z["kern"]}
+    return {"alt": _fuelle(z["alt"], env, repo), "neu": _fuelle(z["neu"], env, repo), "env": z["env"], "kern": z["kern"], "kern_env": bool(z.get("kern_env", False))}
 
 
 def _echter_ordner(p: str) -> bool:
@@ -80,6 +90,10 @@ def ordner(art: str, env=None, tabelle=None, repo=None) -> Path:
     e = _env(env).get(o["env"] or "", "") if o["env"] else ""
     if e != "":
         return Path(e)
+    if _instanz(env) != "" and (not o["kern"] or o["kern_env"]):
+        return Path(f"{_shm(env)}/{art}")
+    if o["alt"] == "":   # a kind without an old place (mitschnitte): neu under every vorgabe
+        return Path(o["neu"])
     if o["kern"] or t.get("vorgabe") != "neu":
         return Path(o["alt"])
     if os.path.islink(o["alt"]) and not os.path.exists(o["alt"]):
@@ -97,12 +111,24 @@ def fest_namen() -> list[str]:
     return list(_lade()["fest"])
 
 
+def fest_env(name: str) -> str | None:
+    """The environment variable of a fixed place that a test instance keeps in its own folder (None: it has none, or the place stays real)."""
+    z = _lade()["fest"].get(name)
+    if z is None:
+        raise KeyError(f"unknown fixed name: {name}")
+    return (z["env"] or None) if z.get("shm") else None
+
+
 def fest(name: str, env=None) -> Path:
     z = _lade()["fest"].get(name)
     if z is None:
         raise KeyError(f"unknown fixed name: {name}")
     e = _env(env).get(z["env"], "") if z["env"] else ""
-    return Path(e) if e != "" else Path(_fuelle(z["pfad"], env))
+    if e != "":
+        return Path(e)
+    if _instanz(env) != "" and z.get("shm"):
+        return Path(f"{_shm(env)}/{z['shm']}")
+    return Path(_fuelle(z["pfad"], env))
 
 
 def lesbarer_name(text: str, max: int = 40) -> str:  # noqa: A002 (name fixed by the interface)

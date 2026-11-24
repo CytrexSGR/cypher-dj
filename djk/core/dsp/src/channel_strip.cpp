@@ -86,8 +86,10 @@ void Kanalzug::verarbeite_vor(const float* in_l, const float* in_r, int n) {
     float* a_r = abgriff_[1];
 
     // 1. Trim
-    double k;
-    if (db_gains(Regler::trim, g_trim_, n, k)) {
+    double k = 1.0;
+    trim_rampe_ = db_gains(Regler::trim, g_trim_, n, k);
+    trim_konst_ = static_cast<float>(k);
+    if (trim_rampe_) {
         for (int i = 0; i < n; ++i) { a_l[i] = in_l[i] * g_trim_[i]; a_r[i] = in_r[i] * g_trim_[i]; }
     } else {
         const float g = static_cast<float>(k);
@@ -140,13 +142,14 @@ void Kanalzug::verarbeite_nach(int n, const KanalzugAusgang& aus) {
         for (int i = 0; i < n; ++i) { h_l[i] = a_l[i] * g; h_r[i] = a_r[i] * g; }
     }
 
-    // 5b. Loop lane strip K4: the extra pair takes the same fader gain (per sample or constant, as above)
+    // 5b. Loop lane strip K4: the extra pair takes the same trim and fader gain (per sample or constant, as above)
     if (aus.zus_ein_l && aus.zus_ein_r && aus.zus_aus_l && aus.zus_aus_r) {
-        if (zus_fader_ramp) {
-            for (int i = 0; i < n; ++i) { aus.zus_aus_l[i] = aus.zus_ein_l[i] * g_fader_[i]; aus.zus_aus_r[i] = aus.zus_ein_r[i] * g_fader_[i]; }
-        } else {
-            const float g = static_cast<float>(zus_fader_k);
-            for (int i = 0; i < n; ++i) { aus.zus_aus_l[i] = aus.zus_ein_l[i] * g; aus.zus_aus_r[i] = aus.zus_ein_r[i] * g; }
+        const float gt = trim_konst_;
+        const float gf = static_cast<float>(zus_fader_k);
+        for (int i = 0; i < n; ++i) {
+            const float g = (trim_rampe_ ? g_trim_[i] : gt) * (zus_fader_ramp ? g_fader_[i] : gf);
+            aus.zus_aus_l[i] = aus.zus_ein_l[i] * g;
+            aus.zus_aus_r[i] = aus.zus_ein_r[i] * g;
         }
     }
 

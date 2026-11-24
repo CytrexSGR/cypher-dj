@@ -244,7 +244,7 @@ export function panelHtml(z) {
       <span class="preset-tags">${(e.tags ?? []).map((t) => `<i>${htmlText(t)}</i>`).join('')}${e.fehler ? `<i class="preset-fehler">${htmlText(FEHLER_TEXT[e.fehler] ?? e.fehler)}</i>` : ''}</span>
       <span class="preset-knoepfe">
         ${ziehbar ? '' : `<button data-preset-aktion="anwenden" data-preset-id="${htmlText(id)}" ${e.fehler || !z.kannAnwenden?.(e.geraet) ? 'disabled' : ''} title="Apply to the selected channel">APPLY</button>`}
-        ${e.herkunft === 'nutzer' ? `<button data-preset-aktion="umbenennen" data-preset-id="${htmlText(id)}" ${e.fehler ? 'disabled' : ''} title="Rename">✎</button><button data-preset-aktion="loeschen" data-preset-id="${htmlText(id)}" title="Delete (moved to the trash folder)">✕</button>` : ''}
+        ${e.herkunft === 'nutzer' ? `<button data-preset-aktion="umbenennen" data-preset-id="${htmlText(id)}" ${e.fehler ? 'disabled' : ''} title="Rename">✎</button><button data-preset-aktion="loeschen" data-preset-id="${htmlText(id)}" title="Delete (moved to the trash folder)">✕</button>` : ''}${z.zeilenZusatz?.(e, id) ?? ''}
       </span></li>`;
   };
   const d = z.detail, db = d?.beschreibung;
@@ -273,16 +273,7 @@ export function panelHtml(z) {
   const fehlerListe = z.fehlerListe?.length
     ? `<ul class="preset-fehlerliste" role="alert">${z.fehlerListe.map((x) => `<li data-preset-fehler-feld="${htmlText(x.feld)}">${htmlText(beschreibungsFehlerText(x))}</li>`).join('')}</ul>` : '';
   const feld = (k, platz, extra = '') => `<input data-preset-entwurf="${k}" value="${htmlText(ent[k] ?? '')}" placeholder="${htmlText(platz)}" ${aus} ${extra}>`;
-  return `<div class="preset-kopf" role="search">
-    <select data-preset-feld="geraet" aria-label="Device"><option value="">All devices</option>${geraete.map((x) => `<option value="${htmlText(x.id)}"${x.id === z.filter.geraet ? ' selected' : ''}>${htmlText(x.titel)} · ${TYP_TEXT[x.typ]}</option>`).join('')}</select>
-    <select data-preset-feld="herkunft" aria-label="Origin"><option value="">Mine and factory</option><option value="nutzer"${z.filter.herkunft === 'nutzer' ? ' selected' : ''}>Mine</option><option value="werk"${z.filter.herkunft === 'werk' ? ' selected' : ''}>Factory</option></select>
-    <input type="search" data-preset-feld="q" placeholder="Search name, tag, device, description" value="${htmlText(z.filter.q ?? '')}" autocomplete="off">
-  </div>
-  <div class="preset-kopf preset-bfilter">${filterSelects}</div>
-  ${ziehbar ? '<p class="preset-ziehen-hinweis">Drag a preset onto a track row (instrument or effect) or onto an insert stage.</p>' : ''}
-  <div class="preset-tagleiste">${tags.map((t) => `<button data-preset-aktion="tag" data-preset-tag="${htmlText(t)}" class="${t === z.filter.tag ? 'an' : ''}" aria-pressed="${t === z.filter.tag}">${htmlText(t)}</button>`).join('')}</div>
-  <div class="preset-rumpf"><ul class="preset-liste" aria-label="Presets">${sichtbar.length ? sichtbar.map(zeile).join('') : `<li class="preset-leer">${z.laedt ? 'Loading…' : 'No presets match.'}</li>`}</ul>${detail}</div>
-  <div class="preset-fuss">
+  const formular = `  <div class="preset-fuss">
     ${Array.isArray(ziele) && ziele.length ? `<select data-preset-ziel aria-label="Save from">${ziele.map((x) => `<option value="${htmlText(x.wert)}"${x.wert === zielWahl ? ' selected' : ''}>${htmlText(x.text)}</option>`).join('')}</select>` : ''}
     ${feld('name', g ? `Name for the current ${g.titel} settings` : 'Pick a device to save its current settings', 'maxlength="64"')}
     ${feld('tags', 'tags, comma separated')}
@@ -300,6 +291,20 @@ export function panelHtml(z) {
     ${feld('text', 'One sentence that describes the sound.', 'maxlength="160"')}
     ${fehlerListe}
   </div>`;
+  // browser column (browser plan 2, task 11): the seven fields of the form stay folded behind SAVE AS PRESET until the user opens them
+  const speichern = !z.speichernFalten ? formular : z.speichernOffen
+    ? `<div class="preset-fuss"><button data-preset-aktion="speichern-zu" title="Fold the save form">CLOSE</button></div>${formular}`
+    : `<div class="preset-fuss"><button data-preset-aktion="speichern-auf" title="Save the current settings of a device as a preset">SAVE AS PRESET</button><span class="preset-meldung${z.meldung?.fehler ? ' fehler' : ''}" role="status">${htmlText(z.meldung?.text ?? '')}</span></div>`;
+  return `<div class="preset-kopf" role="search">
+    <select data-preset-feld="geraet" aria-label="Device"><option value="">All devices</option>${geraete.map((x) => `<option value="${htmlText(x.id)}"${x.id === z.filter.geraet ? ' selected' : ''}>${htmlText(x.titel)} · ${TYP_TEXT[x.typ]}</option>`).join('')}</select>
+    <select data-preset-feld="herkunft" aria-label="Origin"><option value="">Mine and factory</option><option value="nutzer"${z.filter.herkunft === 'nutzer' ? ' selected' : ''}>Mine</option><option value="werk"${z.filter.herkunft === 'werk' ? ' selected' : ''}>Factory</option></select>
+    <input type="search" data-preset-feld="q" placeholder="Search name, tag, device, description" value="${htmlText(z.filter.q ?? '')}" autocomplete="off">
+  </div>
+  <div class="preset-kopf preset-bfilter">${filterSelects}</div>
+  ${ziehbar ? '<p class="preset-ziehen-hinweis">Drag a preset onto a track row (instrument or effect) or onto an insert stage.</p>' : ''}
+  <div class="preset-tagleiste">${tags.map((t) => `<button data-preset-aktion="tag" data-preset-tag="${htmlText(t)}" class="${t === z.filter.tag ? 'an' : ''}" aria-pressed="${t === z.filter.tag}">${htmlText(t)}</button>`).join('')}</div>
+  <div class="preset-rumpf"><ul class="preset-liste" aria-label="Presets">${sichtbar.length ? sichtbar.map(zeile).join('') : `<li class="preset-leer">${z.laedt ? 'Loading…' : 'No presets match.'}</li>`}</ul>${detail}</div>
+  ${speichern}`;
 }
 
 const VORGABE_HOST = {
@@ -315,6 +320,8 @@ const VORGABE_HOST = {
   aktuell: () => null,                  // geraet → werte | null (null: this device has nothing to save here)
   anwenden: async () => ({ ok: false, text: 'nothing to apply to here' }),
   kannAnwenden: () => false,
+  zeilenZusatz: () => '',               // browser column: extra buttons inside the action group of a row (HTML)
+  speichernFalten: false,               // browser column: fold the save form behind SAVE AS PRESET
   geaendert: () => {},                  // U7 review R1: a preset was saved, renamed or deleted (PRODUCTION: the origin marks are asked again)
 };
 
@@ -327,7 +334,8 @@ export class PresetPanel {
       filter: { q: '', tag: '', geraet, herkunft: '', art: '', charakter: '', genre: '', einsatz: '', energie: '' },
       gewaehlt: null, detail: null, laedt: false, meldung: null, fehlerListe: [], entwurf: leererEntwurf(VORGABE_ART[geraet] ?? ''),
       kannAnwenden: (g) => this.host.kannAnwenden(g), kannSpeichern: (g) => { const zl = this.host.ziele(g); return Array.isArray(zl) ? zl.length > 0 : this.host.aktuell(g) !== null; },
-      ziehbar: () => this.host.ziehbar(), ziele: (g) => this.host.ziele(g), zielWahl: null };
+      ziehbar: () => this.host.ziehbar(), ziele: (g) => this.host.ziele(g), zielWahl: null,
+      zeilenZusatz: (e, id) => this.host.zeilenZusatz(e, id), speichernFalten: !!this.host.speichernFalten, speichernOffen: false };
     this.gebunden = false;
   }
 
@@ -428,6 +436,7 @@ export class PresetPanel {
     this.host.geaendert();
     await this.lade();
     if (this.z.gewaehlt) await this.waehle(this.z.gewaehlt);   // lade() drops a selection the list does not hold
+    if (this.z.speichernFalten) this.z.speichernOffen = false;   // the form folds again once the preset is saved
     this.melde(`Saved ${name.trim()}`);
     return r.j;
   }
@@ -481,6 +490,8 @@ export class PresetPanel {
       case 'loeschen': return this.loesche(id);
       case 'tag': this.setzeFilter({ tag: this.z.filter.tag === b.dataset.presetTag ? '' : b.dataset.presetTag }); return null;
       case 'speichern': return this.speichereAusFeldern();
+      case 'speichern-auf': this.z.speichernOffen = true; this.zeige(); return null;
+      case 'speichern-zu': this.z.speichernOffen = false; this.zeige(); return null;
       default: return null;
     }
   }

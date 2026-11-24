@@ -99,11 +99,11 @@ test('window: shows the track and tells the page server its track when it loads 
   await warte(20);
   assert.equal(a.f.lage().art, 'ok');
   assert.equal(a.wurzel.kinder[0].kinder[0].textContent, 'T-s1', 'the title line names the track');
-  assert.equal(a.wurzel.kinder[0].kinder[1].textContent, 'Baukasten · synth-mono', 'and the instrument');
+  assert.equal(a.wurzel.kinder[0].kinder[1].textContent, 'Cypher Modular · synth-mono', 'and the instrument');
   assert.equal(a.wurzel.classList.contains('gf-weg'), false);
   await warte(0);
   assert.deepEqual(a.gesendet.filter((x) => !Array.isArray(x)), [{ spur_id: 's1' }]);
-  assert.equal(DOK.title, 'T-s1 · Baukasten · synth-mono');
+  assert.equal(DOK.title, 'T-s1 · Cypher Modular · synth-mono');
   a.gesendet.length = 0;
   assert.equal(a.sender.erneut(), true, 'the browser focus: the window sends its track again, whatever the server has');
   await warte(0);

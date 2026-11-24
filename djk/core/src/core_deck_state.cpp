@@ -49,6 +49,7 @@ int Kern::decks_abbild(cdj_z_echtzeit& f, int n) const noexcept {
     }
   }
   f.n_decks = DECKS;
+  f.trim_stand = 1;   // the strip trims of this file are the hand's part (the auto part is derived from the material again); an old file has 0 here
   for (const DeckAktion& a : w.aktion) {
     if (!a.belegt || a.hand || n >= CDJ_Z_BEFEHLE) continue;  // Hand-Tasten (Scheibe 35) überleben keinen Neustart
     if (a.art != 1 && a.art != 2) continue;  // Plan E9: loop, sprung, hotcue auch nicht (der Zustand kennt nur start/stopp)
@@ -77,6 +78,14 @@ int Kern::decks_abbild(cdj_z_echtzeit& f, int n) const noexcept {
 void Kern::decks_wiederherstellen(const cdj_z_echtzeit& f) noexcept {
   DeckWerk& w = *decks_;
   const int nd = f.n_decks < 0 ? 0 : (f.n_decks > DECKS ? DECKS : f.n_decks);
+  if (f.trim_stand != 1) {   // an old state file: its strip trim WAS the loudness trim of the load (or a hand value on top of it, not told apart): discard it, the auto part is derived from the material again, so it never becomes auto + old value
+    for (int d = 0; d < DECKS; ++d) {
+      const int16_t t = w.reg[d].trim;
+      if (t < 0) continue;
+      sw_->setze_direkt(t, 0.0f);
+      mixer_->setze_sofort(t, 0.0f);
+    }
+  }
   for (int d = 0; d < nd; ++d) {
     const cdj_z_deck& z = f.decks[d];
     DeckWerk::Wieder& x = w.wieder[d];
@@ -147,6 +156,7 @@ int Kern::decks_nachladen(Lader& lader) {
     }
     Deck& dk = w.deck[d];
     dk.lade(m, sample_);
+    trim_auto_setzen(d, m);   // the auto part of the loudness trim (player branch), derived from the material again; the strip trim is the hand part
     const DeckRegler& r = w.reg[d];
     for (int s = 0; s < STEM_ANZAHL; ++s) dk.stem_db(s, r.stem[s] >= 0 ? sw_->wert(r.stem[s]) : 0.0f);
     sw_->stems_geladen(d + 1, m->mit_stems != 0);

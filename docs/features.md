@@ -193,9 +193,9 @@ references before they went in:
   off by several dB near the top
 - **Cypher Hall**: a spectral reverb (energy decay per frequency bin, early reflections, frequency-wise
   ducking, freeze). It is the reverb on the send, the REVERB beat FX and the Hall of the arrangement's returns
-- **Cypher Komp**: a feed-forward compressor after Giannoulis, Massberg and Reiss (2012) with soft knee,
+- **Cypher Comp**: a feed-forward compressor after Giannoulis, Massberg and Reiss (2012) with soft knee,
   parallel mix, external sidechain and a high-pass in the detector; six presets
-- **Cypher Saett**: a tanh saturator with first-order antiderivative antialiasing (Bilbao et al. 2017)
+- **Cypher Saturation**: a tanh saturator with first-order antiderivative antialiasing (Bilbao et al. 2017)
   at 2x oversampling; on a hard-driven sawtooth the aliasing stays below -60 dB, against -50 dB without
   oversampling. Available as a plugin and as an insert stage in the production core
 - **Cypher Modular**: a modular synthesizer. A patch is a JSON graph of building blocks (oscillators, filters,
@@ -329,7 +329,7 @@ The lists above are the headline. Also in there:
 - **Extra pattern streams**: five more channels (erz/5 to erz/7 and the two loop box pads) can each carry a Cypher
   Modular graph, started with `djk-start --strudel --bk-stroeme`; they can be recorded onto production tracks. The
   graph knobs can be learned onto a MIDI controller, and a project remembers which graph sits on which channel
-- **The agent's side**: 100 tools in the MCP server. Besides playing it can measure a deck behind its
+- **The agent's side**: 112 tools in the MCP server. Besides playing it can measure a deck behind its
   closed fader, read the levels of the last seconds, wait on the master clock for a number of bars, run
   automation tracks and ramps over bars, and cancel everything it started. When it has an idea while the
   human plays, it proposes; the human accepts or rejects with one key
@@ -460,3 +460,23 @@ mostly against a silent test sink. Not benchmarks.
 - The library search expects a catalog database that is not part of this repository.
 - Code comments are in German. The architecture docs and ADRs are written in German and published here as English translations; the export refuses to publish a translation whose German source has changed since. Field names and code words in the docs stay German (`regler`, `warp_setzen`). The interface is in English.
 
+## Labs
+
+Some features are built but not yet proven, or are not offered as a finished part of 1.0. They are marked **LAB** (tooltip: "experimental, may change") wherever the page has a control for them. They can change or be removed without notice. Features with a control in the page: ANALYZE window (a view of the analysis), FIND SOUND: a variant round to improve a Cypher Modular sound, Tablet pairing (control from a tablet), Novation Launch Control 3 (its row in the CONTROLLERS list).
+
+Labs features without a control in the page (hardware, operations, or only reachable by name or through the agent tools):
+
+- Beat FX tuned for the XDJ control scheme
+- Scene follow actions (field `folge`)
+- Launchpad Mini MK3 as SEQ grid
+- Time signatures n/4 (2/4 to 12/4)
+- Time signatures 6/8, 7/8 and other eighths
+- Windows plugins through yabridge and Wine
+- Native Instruments (Kontakt) route
+- Structure and cue suggestion pipeline
+- Greif 2, the three Juno Pad variants and the sync lead example
+- Cypher Labor (experimental block)
+- Command-line player for the agent (`player_cli`)
+- Akai APC20: PRODUCTION functions with Shift
+- Maschine MK2 through the `cypherdj-pult` bridge
+- XDJ-XZ and Maschine Jam bindings

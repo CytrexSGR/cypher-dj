@@ -2,6 +2,7 @@
 // (art 2) or nothing (art 0). The two sources have a weight each (0..CONTAINER_BLENDE) that steps one per sample toward its target, so a change blends linearly over 480 samples
 // and a change inside a blend continues from the weight reached. The sample is used first, then the weights step: the first sample of a change still has the old weights and the
 // new source is complete after exactly CONTAINER_BLENDE samples. Real-time safe: integers and float multiplies, no allocation.
+#include <cmath>
 #include <cstring>
 
 #include "cypherdj/core.h"
@@ -42,9 +43,10 @@ void Kern::container_fuellen(int m) noexcept {
 #endif
     constexpr float EINS = 1.0f / static_cast<float>(CONTAINER_BLENDE);
     const int gm0 = gm;
+    const float ag = decks_->auto_g[PULT_CONTAINER_PLAYER[c] - 1];   // the loudness calibration of the player: a constant gain between loads
     for (int i = 0; i < m; ++i) {
       if (gp > 0) {
-        const float w = static_cast<float>(gp) * EINS;
+        const float w = static_cast<float>(gp) * EINS * ag;   // the loudness calibration of the player belongs to the player branch: in front of the blend, never on the module
         l[i] += pl[i] * w;
         r[i] += pr[i] * w;
       }

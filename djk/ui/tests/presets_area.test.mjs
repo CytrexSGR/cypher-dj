@@ -49,7 +49,11 @@ async function post(basis, p, daten, kopf = {}) {
 
 test('routes: one Bereich named presets, one route under its own prefix, POST protected', async (t) => {
   const s = await stapel(t);
-  assert.deepEqual(s.router.liste(), [{ bereich: 'presets', methode: '*', pfad: '(muster)', schutz: 'fremdePost' }]);
+  // export and import (plan 6) come before the catch-all, all under the own prefix
+  assert.deepEqual(s.router.liste(), [
+    { bereich: 'presets', methode: 'GET', pfad: '/presets/export', schutz: 'offen' },
+    { bereich: 'presets', methode: 'POST', pfad: '/presets/import', schutz: 'fremdePost' },
+    { bereich: 'presets', methode: '*', pfad: '(muster)', schutz: 'fremdePost' }]);
   assert.equal(s.router.finde('GET', '/proj/presets'), null);
   assert.equal(s.router.finde('GET', '/presetsx'), null);
   pruefePrefix(istPresetPfad);

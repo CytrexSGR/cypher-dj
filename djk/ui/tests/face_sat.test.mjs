@@ -1,5 +1,5 @@
-// Device faces, saturator: the curve maths is pinned to saett_dsp by the golden table (the same CSV the Rust test sat_dsp/tests/kennlinie.rs recomputes from the
-// real DSP: constant input, 20000 samples, last output sample within 0.01), the drawing equals the curve, and a closed face costs nothing.
+// Device faces, saturator: the curve maths is pinned to saett_dsp by the golden table (the same CSV the Rust test sat_dsp/tests/kennlinie.rs recomputes: the table equals the formula, and the real DSP's wet curve
+// follows that formula (fundamental of 200 Hz sines at several drives and amplitudes within 0.1 dB; a constant input shows only the dry share since the 5 Hz DC blocker)), the drawing equals the curve, and a closed face costs nothing.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

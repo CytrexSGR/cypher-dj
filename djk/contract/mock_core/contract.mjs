@@ -214,6 +214,7 @@ for (let n = 1; n <= 32; n++) {   // D1 K1 (§1.5), E3: 32 Slots: Spur-Regler de
   REGLER.set(`spur/${n}/pfl`, { ...R(SCHALTER, 0, 1, 0), kanal: null });   // container core K7: track cue switch
   REGLER.set(`spur/${n}/trim`, { ...R(DB, -24, 24, 0), kanal: null });   // container core K7: gain before the strip
   for (const b of ['tief', 'mitte', 'hoch']) REGLER.set(`spur/${n}/kill/${b}`, { ...R(SCHALTER, 0, 1, 0), kanal: null });   // container core K7
+  for (const u of [1, 2, 3]) REGLER.set(`spur/${n}/fx/${u}`, { ...R(SCHALTER, 0, 1, 0), kanal: null });   // loop lane strip K1: FX 1 2 3 assignment of a track
   for (const b of ['tief', 'mitte', 'hoch']) REGLER.set(`spur/${n}/eq/${b}`, { ...R(DB, -200, 6, 0), kanal: null });   // loop deck channel strip KZ1: isolator band of a track, -200 = kill
 }
 for (let n = 1; n <= 16; n++) {   // 1.10 Slice 1 (§1.5): Gruppen-Regler, global, alle dürfen

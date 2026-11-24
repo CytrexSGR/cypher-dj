@@ -8,6 +8,7 @@ import json
 import pathlib
 
 HIER = pathlib.Path(__file__).parent
+DC_ZEIT_S = 0.0318310   # 1 / (2 pi 5 Hz)
 
 
 def regler(nr, kid, **w):
@@ -155,9 +156,16 @@ def effekt():
         ("Mod amount", "amount", dict(min=0, max=1)), ("Volume", "pegel", dict(min=-40, max=6, mitte=0)),
     ]
     nr = {name: i + 1 for i, (name, _, _) in enumerate(k)}
-    knoten = [{"id": "ein", "art": "eingang"}] + [regler(i + 1, f"k{i + 1}", **w) for i, (_, _, w) in enumerate(k)] + [{"id": "lab", "art": "labor"}, {"id": "aus", "art": "ausgang"}]
+    # DC blocker at the output, one per channel: y = x - glatt(x) with the one-pole smoother at 5 Hz (zeit = 1 / (2 pi 5) s).
+    # The block has no sub-Hz stop on its dry/wet sum: with the Spring Reverb recipe a sub-Hz share of the input left a mean of -0.02.
+    knoten = [{"id": "ein", "art": "eingang"}] + [regler(i + 1, f"k{i + 1}", **w) for i, (_, _, w) in enumerate(k)] + [{"id": "lab", "art": "labor"}]
+    for c in "lr":
+        knoten += [{"id": f"dc_{c}", "art": "glatt", "zeit": DC_ZEIT_S}, {"id": f"dcneg_{c}", "art": "mul", "b": -1}, {"id": f"dcsum_{c}", "art": "add"}]
+    knoten += [{"id": "aus", "art": "ausgang"}]
     kanten = [{"von": "ein.l", "nach": "lab.l"}, {"von": "ein.r", "nach": "lab.r"}] + [{"von": f"k{i + 1}.aus", "nach": f"lab.{ziel}"} for i, (_, ziel, _) in enumerate(k)]
-    kanten += [{"von": "lab.l", "nach": "aus.l"}, {"von": "lab.r", "nach": "aus.r"}]
+    for c in "lr":
+        kanten += [{"von": f"lab.{c}", "nach": f"dc_{c}.x"}, {"von": f"dc_{c}.aus", "nach": f"dcneg_{c}.a"}, {"von": f"lab.{c}", "nach": f"dcsum_{c}.a"},
+                   {"von": f"dcneg_{c}.aus", "nach": f"dcsum_{c}.b"}, {"von": f"dcsum_{c}.aus", "nach": f"aus.{c}"}]
     graph = {"format": "baukasten/2", "name": "fx-labor", "stimmen": 1, "regler_namen": {str(i + 1): n for i, (n, _, _) in enumerate(k)},
              "knoten": knoten, "kanten": kanten}
 

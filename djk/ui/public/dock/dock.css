@@ -24,7 +24,8 @@
   font-size: 9px; font-weight: 800; letter-spacing: .06em; border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; color: var(--dim); background: transparent; white-space: nowrap; cursor: pointer;
 }
 :is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-chip-teil:not(.aus):not(.w-chip-plus) { color: var(--text); background: var(--panel); }
-:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-chip-teil.aus { text-decoration: line-through; }
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-chip-teil.aus { opacity: .6; }   /* off is dimmed and says so, not struck through */
+:is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-chip-teil.aus::after { content: 'off'; margin-left: 4px; font-size: 7px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
 :is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-chip-teil[data-w="karte-von"] { cursor: default; }
 :is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-knopf.an { background: var(--d3); color: #0b0d12; border-color: var(--d3); }
 :is(#werkbank, #produktion, #effekte, #live-fenster, #geraet-fenster, #session-unten) .w-karte-knopf[data-w="karte-weg"]:hover { color: var(--kill); border-color: var(--kill); }

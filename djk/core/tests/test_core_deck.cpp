@@ -182,7 +182,8 @@ int main() {
   PRUEF(a.geladen.size() == 2 && a.geladen[0].deck == 1 && !std::strcmp(a.geladen[0].material_id, "c1c0000000000301"));
   PRUEF(a.kern->deck(1).geladen() && !a.kern->deck(1).laeuft());
   const auto& tab = a.kern->stellwerk().tabelle();
-  PRUEF_NAH(a.kern->stellwerk().wert(tab.suche("deck/2/trim")), -6.6, 1e-5);
+  PRUEF_NAH(a.kern->trim_auto_db(1), -6.6, 1e-5);   // the loudness trim of the load acts on the player branch of the container (core_container.cpp), not on the strip
+  PRUEF_NAH(a.kern->stellwerk().wert(tab.suche("deck/2/trim")), 0.0, 0.0);
   PRUEF_NAH(a.kern->stellwerk().wert(tab.suche("deck/1/trim")), 0.0, 0.0);
   PRUEF_NAH(a.kern->stellwerk().wert(tab.suche("deck/1/fader")), -200.0, 0.0);
 

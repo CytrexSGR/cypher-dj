@@ -2,7 +2,8 @@
 // The handlers reach each other through PRO_BEFEHL (commands_helpers.ts) at call time; commands.ts merges the tables.
 import {
   istGeraetZiel, passtGeraetZiel, FADER_MAX, FADER_MIN, MAX_ARM_AUDIO, MAX_BEAT, MAX_SPUREN, alleInserts, SPUR_FARBEN, MAX_TAKES_PRO_SPUR,
-  entferneLeereTakes, EQ_BAENDER, FX_NUMMERN, type FxNr, EQ_MIN, EQ_MAX, istObjekt, type EqBand, type Take, kanonisch, neueId, type AudioClip, type Clip, type Spur, wirtSlots,
+  entferneLeereTakes, EQ_BAENDER, FX_NUMMERN, type FxNr, EQ_MIN, EQ_MAX, istObjekt, type EqBand, type Take, kanonisch, neueId, type AudioClip, type Clip,
+    type Spur, wirtSlots,
   type SpurAufnahme,
 } from './model.ts';
 import {

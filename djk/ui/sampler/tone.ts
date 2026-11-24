@@ -12,6 +12,7 @@ import { GRAPH_NAME, graphenOrdner } from '../graphs.ts';
 import { geraetName } from './device.ts';
 import { SCHNITT_ID, SchnittFehler, liesSchnitt, samplerOrdner, type Ordner, type Schnitt } from './schnitt.ts';
 import { erkenneGrundton, grundVorschlag, type Erkannt } from './tone_hoehe.ts';
+import { pruefeBkSchreiben } from './bk_schutz.ts';
 
 /** A cut id of at most this many characters goes into the graph name as it is. */
 export const TON_KURZ_MAX = 25;
@@ -115,12 +116,14 @@ const json = (x: unknown): string => `${JSON.stringify(x, null, 2)}\n`;
 const tmpName = (datei: string): string => `${datei}.${process.pid}.${crypto.randomBytes(3).toString('hex')}.tmp`;
 
 const einsFile = (datei: string, inhalt: string): void => {
+  pruefeBkSchreiben(datei);
   fs.mkdirSync(path.dirname(datei), { recursive: true });
   const tmp = tmpName(datei);
   try { fs.writeFileSync(tmp, inhalt); fs.renameSync(tmp, datei); } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
 };
 /** Writes `datei` only when it does not exist (temp file plus hard link, which fails with EEXIST): false when the name is taken. */
 const neuFile = (datei: string, inhalt: string): boolean => {
+  pruefeBkSchreiben(datei);
   fs.mkdirSync(path.dirname(datei), { recursive: true });
   const tmp = tmpName(datei);
   try { fs.writeFileSync(tmp, inhalt); fs.linkSync(tmp, datei); return true; } catch (e) {

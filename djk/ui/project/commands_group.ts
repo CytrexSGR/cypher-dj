@@ -289,7 +289,8 @@ export const GRUPPE = {
     PRO_BEFEHL.gruppenspur_loeschen(p, { befehl: 'gruppenspur_loeschen', gruppe_id: g.id }, ctx);
   },
 
-  gruppenspur_loeschen(p, a, ctx) {   // tracks and child groups move to the deleted group's own target (its parent or master, same step), never orphaned targets
+  // tracks and child groups move to the deleted group's own target (its parent or master, same step), never orphaned targets
+  gruppenspur_loeschen(p, a, ctx) {
     erlaube(a, 'gruppe_id');
     const gl = (p.gruppen ??= []);
     const g = gruppeVon(p, idArg(a, 'gruppe_id'));

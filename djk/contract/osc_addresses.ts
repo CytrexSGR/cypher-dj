@@ -265,7 +265,7 @@ export interface Werte {
 }
 
 export const QUELLE = ['andreas', 'cypher', 'leitstand', 'erzeuger', 'werkstatt', 'pruefstand'] as const;
-export const POLITIK = { musik: 0, zustand: 1, raster: 2 } as const;
+export const POLITIK = { musik: 0, zustand: 1, raster: 2, takt: 3 } as const;
 export const POLITIK_TEIL = { musik: 0, zustand: 1 } as const;
 export const FORM = { linear: 0, s_kurve: 1 } as const;
 export const RASTER_BEATS = [0.25, 1, 4, 16, 32] as const;

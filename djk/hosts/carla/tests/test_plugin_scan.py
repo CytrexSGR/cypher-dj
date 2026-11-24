@@ -37,7 +37,7 @@ def lauf(pfade, index, zaehler=None, extra=(), programm=DISCOVERY, name="discove
 
 def eintraege(index):
     d = json.loads(Path(index).read_text())
-    assert d["version"] == 1
+    assert d["version"] == 2
     return d["eintraege"]
 
 

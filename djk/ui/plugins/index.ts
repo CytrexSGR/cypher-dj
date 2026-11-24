@@ -2,7 +2,7 @@
 // (cached by mtime and size) and starts the scan as a child process, one at a time. A blocked entry is unblocked by dropping it from the index: the next
 // scan then tries the bundle again. Nothing here blocks the event loop for longer than one JSON parse of the index.
 import fs from 'node:fs';
-import { festerPfad } from '../paths.ts';
+import { festerPfad, pluginPfadeDatei } from '../paths.ts';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -10,7 +10,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 export interface IndexEintrag {
   id: string; format: 'vst3' | 'lv2'; pfad: string; uid: string; name: string; hersteller?: string; art: 'effekt' | 'instrument' | 'sonst';
   audio_ein?: number; audio_aus?: number; parameter?: number; status: 'ok' | 'blockiert'; grund?: string; text?: string; buendel?: string;
-  mtime?: number; groesse?: number; gescannt?: string;
+  mtime?: number; groesse?: number; gescannt?: string; version?: string;
 }
 export interface PluginFilter { text?: string; art?: string; format?: string }
 export interface ScanStand { laeuft: boolean; seit: number | null; ende: number | null; ergebnis: Record<string, number> | null; fehler: string | null }
@@ -52,7 +52,7 @@ export class PluginIndex {
     let eintraege: IndexEintrag[] = [];
     try {
       const d = JSON.parse(fs.readFileSync(this.datei, 'utf8')) as { version?: number; eintraege?: IndexEintrag[] };
-      if (d.version === 1 && Array.isArray(d.eintraege)) eintraege = d.eintraege;
+      if ((d.version === 1 || d.version === 2) && Array.isArray(d.eintraege)) eintraege = d.eintraege;
     } catch { /* torn or foreign file: counts as empty until the next scan */ }
     this.cache = { mtime: st.mtimeMs, groesse: st.size, eintraege };
     return eintraege;
@@ -61,11 +61,19 @@ export class PluginIndex {
   finde(id: string): IndexEintrag | null { return this.eintraege().find((e) => e.id === id) ?? null; }
   scanStand(): ScanStand { return { ...this.stand }; }
 
+  private nachlauf = false;
+  /** queues one rescan to start when the running scan has ended; false when no scan runs (the caller starts one) */
+  merkeNachlauf(): boolean {
+    if (!this.kind && !this.stand.laeuft) return false;
+    this.nachlauf = true;
+    return true;
+  }
+
   /** starts one scan; false when one is already running (the caller answers scan_laeuft) */
   scanne(): boolean {
     if (this.kind || this.stand.laeuft) return false;
     if (!this.scanBefehl) throw new Error('scan_nicht_konfiguriert');
-    const k = spawn(this.scanBefehl.befehl, this.scanBefehl.args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const k = spawn(this.scanBefehl.befehl, this.scanBefehl.args, { stdio: ['ignore', 'pipe', 'pipe'], detached: true, env: { ...process.env, ...(pluginPfadeDatei() ? { CYPHERDJ_PLUGIN_PFADE_DATEI: pluginPfadeDatei()! } : {}) } });   // own process group: the time limit kills the scan and every plugin child it started
     this.kind = k;
     this.setze({ laeuft: true, seit: Date.now(), ende: null, ergebnis: null, fehler: null });
     let aus = '', fehler = '', fertig = false;
@@ -73,8 +81,9 @@ export class PluginIndex {
       if (fertig) return;
       fertig = true; clearTimeout(frist); this.kind = null;
       this.setze({ ...this.stand, laeuft: false, ende: Date.now(), ...s });
+      if (this.nachlauf) { this.nachlauf = false; try { this.scanne(); } catch { /* no scan command: nothing to queue */ } }
     };
-    const frist = setTimeout(() => { k.kill('SIGKILL'); ende({ fehler: 'scan_zeitlimit' }); }, SCAN_FRIST_MS);
+    const frist = setTimeout(() => { try { process.kill(-k.pid!, 'SIGKILL'); } catch { k.kill('SIGKILL'); } ende({ fehler: 'scan_zeitlimit' }); }, SCAN_FRIST_MS);
     frist.unref();
     k.stdout!.on('data', (d) => { aus += d; });
     k.stderr!.on('data', (d) => { fehler += d; });

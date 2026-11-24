@@ -209,7 +209,7 @@ test('POST /presets/anwenden: graph_laden on a channel gives the graph first; gr
   // the save path keeps its own meaning of graph_fehlt (400, the preset names no graph)
   const speicher = await ruf(s.url, 'POST', '/presets', { name: 'Ohne Graph', geraet: 'baukasten', werte: { knob1: 0.5 },
     beschreibung: { art: 'pad', unterart: 'analog', charakter: ['warm'], genre: [], einsatz: ['intro'], energie: 1, text: 'A pad that names no graph at all.' } });
-  assert.deepEqual([speicher.code, speicher.j.fehler, speicher.j.text], [400, 'graph_fehlt', 'a Baukasten preset needs the name of its graph (graph)']);
+  assert.deepEqual([speicher.code, speicher.j.fehler, speicher.j.text], [400, 'graph_fehlt', 'a Cypher Modular preset needs the name of its graph (graph)']);
 });
 
 test('POST /presets/anwenden: a latency graph on a SEQ pattern track is refused graph_latenz (409) through the route', async (t) => {

@@ -23,7 +23,7 @@ export function bindeModule({ reiter, tabelle, ruf, melde = () => {}, laden = nu
     const r = await fetch(pfad, { method: methode, headers: body === undefined ? {} : { 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
     return { code: r.status, j: await r.json().catch(() => ({})) };
   });
-  tabelle.innerHTML = '<div class="lib-filter"><input type="search" data-modul-suche placeholder="Search modules: title, artist, set, date, key" autocomplete="off"></div>'
+  tabelle.innerHTML = '<div class="lib-filter"><input type="search" data-modul-suche aria-label="Search modules" placeholder="Search modules: title, artist, set, date, key" autocomplete="off"></div>'
     + '<table><thead><tr><th>Title</th><th>Artist</th><th>Key</th><th>Date</th><th>Set</th><th></th></tr></thead><tbody data-modul-liste></tbody></table>';
   const suche = tabelle.querySelector('[data-modul-suche]'), liste = tabelle.querySelector('[data-modul-liste]');
   const lade = async () => {

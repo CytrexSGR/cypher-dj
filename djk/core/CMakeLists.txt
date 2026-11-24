@@ -30,6 +30,10 @@ option(CYPHERDJ_SANITIZE "ASan und UBSan (ADR 002)" OFF)
 # keine Wiedergabe mit diesen Modi (Grund warp_maschine_fehlt), statt sie still als RE-PITCH zu spielen.
 option(CYPHERDJ_BUNGEE "Bungee als Keylock-Maschine und Warp-Maschine (djk/third_party/bungee)" ON)
 option(CYPHERDJ_TSAN "ThreadSanitizer für den Befehlsring (Scheibe 08)" OFF)
+# The mutation programs (about 870, the failure cases of the acceptances; their tests are named *_mutation) are part of `all` by default. With
+# -DCYPHERDJ_MUTATIONEN=OFF they and the shared objects they link (kmg*) are left out of `all` (the end of this file): the test gate (djk/tools/alles.sh)
+# never runs them and builds without them. They stay buildable by name (ninja test_klick_mutation) and by ctest -R _mutation after a full build.
+option(CYPHERDJ_MUTATIONEN "Build the mutation programs as part of the default target" ON)
 option(CYPHERDJ_MUTATION_RING_RELAXED "Fehlerfall: Ring ohne Release/Acquire (nur mit CYPHERDJ_TSAN)" OFF)
 if(CYPHERDJ_SANITIZE)
   # UBSan must abort (not just print): a run that only prints "runtime error" ends green and nobody reads it (A3 review: the out-of-bounds gate_[] read)
@@ -59,6 +63,16 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(JACK REQUIRED IMPORTED_TARGET jack)
 pkg_check_modules(CRYPTO REQUIRED IMPORTED_TARGET libcrypto)  # Scheibe 31: sha256 im Lader (OpenSSL 3.0.13)
 pkg_check_modules(RUBBERBAND REQUIRED IMPORTED_TARGET rubberband)  # Keylock: R3 offline (loop_stretch.cpp, in kernbib seit Slice 3; aufgerufen nur aus dem Render-Faden des Netzes)
+# Package build only (-DCDJ_RUBBERBAND_STATIC=ON, set by docs/veroeffentlichung/paket/baue_deb.sh): link librubberband.a into the binaries, so the one
+# .deb needs no librubberband soname (Ubuntu 24.04 ships librubberband2, 26.04 only librubberband3). Its own dependencies, fftw3 and samplerate,
+# stay dynamic: both exist on both releases. Dev and test builds keep the shared library.
+option(CDJ_RUBBERBAND_STATIC "link librubberband statically (package build)" OFF)
+if(CDJ_RUBBERBAND_STATIC)
+  find_library(RUBBERBAND_STATIC_LIB NAMES librubberband.a REQUIRED)
+  pkg_check_modules(RUBBERBAND_DEPS REQUIRED IMPORTED_TARGET fftw3 samplerate)
+  set_property(TARGET PkgConfig::RUBBERBAND PROPERTY INTERFACE_LINK_LIBRARIES "${RUBBERBAND_STATIC_LIB};PkgConfig::RUBBERBAND_DEPS")
+  set_property(TARGET PkgConfig::RUBBERBAND PROPERTY INTERFACE_LINK_DIRECTORIES "")
+endif()
 find_package(Threads REQUIRED)
 set(DJK ${CMAKE_CURRENT_SOURCE_DIR}/..)
 # Scheibe 25: die beiden Bibliotheken, die im Callback zusammentreffen (ROADMAP §3 Bibliotheks-Nähte). Ihre Tests bauen
@@ -1168,11 +1182,12 @@ test_mutation(test_arr_live_invarianten_sendmaske_mutation test_arr_live_invaria
 # Container core K7: the strom sink reads one frame late (case 1 and 4 of test_arr_stream_sink red); the kill leaves -200 in the eq field for good (case 2 of test_arr_track_lines red)
 test_mutation(test_arr_strom_senke_ein_sample_mutation test_arr_stream_sink CYPHERDJ_MUTATION_STROM_SENKE_EIN_SAMPLE ${KERN_QUELLEN35} src/recording_thread.cpp src/take_writer.cpp src/arr_playback.cpp)
 test_mutation(test_arr_spur_zeilen_kill_ohne_rueckkehr_mutation test_arr_track_lines CYPHERDJ_MUTATION_SPUR_KILL_OHNE_RUECKKEHR ${ARR_QUELLEN} src/clock.cpp)
-# Container core K8: the input selection of the containers (test_core_container): a hard switch instead of the 480-sample blend (case 3); a deck load closes the strip in art modul too (case 10)
-test_mutation(test_kern_container_ohne_blende_mutation test_core_container CYPHERDJ_MUTATION_CONTAINER_OHNE_BLENDE ${KERN_QUELLEN35} src/recording_thread.cpp src/take_writer.cpp src/arr_playback.cpp)
-test_mutation(test_kern_container_ladenignoriert_art_mutation test_core_container CYPHERDJ_MUTATION_DECKLADEN_IGNORIERT_ART ${KERN_QUELLEN35} src/recording_thread.cpp src/take_writer.cpp src/arr_playback.cpp)
+# (the mutation builds of test_core_container carry the state sources: case 13 and 14 restore a deck state) Container core K8: the input selection of the containers (test_core_container): a hard switch instead of the 480-sample blend (case 3); a deck load closes the strip in art modul too (case 10)
+test_mutation(test_kern_container_ohne_blende_mutation test_core_container CYPHERDJ_MUTATION_CONTAINER_OHNE_BLENDE ${KERN_QUELLEN35_KG} src/recording_thread.cpp src/take_writer.cpp src/arr_playback.cpp)
+test_mutation(test_kern_container_ladenignoriert_art_mutation test_core_container CYPHERDJ_MUTATION_DECKLADEN_IGNORIERT_ART ${KERN_QUELLEN35_KG} src/recording_thread.cpp src/take_writer.cpp src/arr_playback.cpp)
 # Container core K8 review F-B: a switch of art to player does not close the strip of a loaded player (test_core_i3 case iii red: the hearing license is bypassed over art modul)
 test_mutation(test_kern_i3_player_wechsel_offen_mutation test_core_i3 CYPHERDJ_MUTATION_PLAYER_WECHSEL_OFFEN ${KERN_QUELLEN35} src/recording_thread.cpp src/take_writer.cpp src/arr_playback.cpp)
+test_mutation(test_kern_container_auto_trim_am_streifen_mutation test_core_container CYPHERDJ_MUTATION_AUTO_TRIM_AM_STREIFEN ${KERN_QUELLEN35_KG} src/recording_thread.cpp src/take_writer.cpp src/arr_playback.cpp)
 test_mutation(test_kern_container_alloc_mutation test_core_container_alloc CYPHERDJ_MUTATION_CONTAINER_ALLOK ${KERN_QUELLEN35} src/recording_thread.cpp src/take_writer.cpp src/arr_playback.cpp)
 # review follow-up I1: stage 1 (quellen_block) behind stage 2 (arr_->block) delays a stream track by one block
 test_mutation(test_kern_stufen_reihenfolge_mutation test_core_stages_order CYPHERDJ_MUTATION_QUELLEN_NACH_ARR ${KERN_QUELLEN35} src/recording_thread.cpp src/take_writer.cpp src/arr_playback.cpp)
@@ -1688,73 +1703,74 @@ target_link_libraries(kern_kosten_arr PRIVATE cypherdj_kernbib)
 # 1.8 T11 (AK32): cost of a cycle with armed recording tracks against the same arrangement without (gate +100 us at p99.9); not a ctest case, run by hand under the real-time lock (see the header of the file)
 add_executable(kern_kosten_rec tests/cost/cost_rec.cpp)
 target_link_libraries(kern_kosten_rec PRIVATE cypherdj_kernbib)
-# NOTE: the reference hash is bit-exact and bound to this host (DJ-Maschine, Ryzen 7800X3D, gcc and glibc as installed there): libm ifunc dispatch can differ on another CPU or glibc.
-# If kosten_arr_hash fails on another machine or after a toolchain change, measure the reference again before suspecting the code. PASS_REGULAR_EXPRESSION ignores the exit
-# code on purpose: the hash covers the audio, and the lane self-check may exit 2 in the control run.
+# The reference hashes live in tests/cost/hash_pins.txt, one set per host (recognised by its CPU model). tests/cost/hash_pruefen.cmake runs the lane and checks the bits against
+# the pin of this host; on a host without a pin it logs "no pin for this host" and checks only that the variant gives the bits of the plain run. LANE/BLOCK select the pin, ENV is
+# the variant (KOSTEN_HASH=1 and KOSTEN_BLOCK are added), NACH a regex for the rest of the HASH line after "blocks=5000 ", KONTROLLE a control that must NOT give the reference bits.
+# The plain run is the "serial" reference of every variant, so an unknown host still pins what these tests are about: pool, serial, unused and no fifo agree with each other.
+function(kosten_hash_test)
+  cmake_parse_arguments(A "KONTROLLE" "NAME;LANE;BLOCK;NACH" "ENV" ${ARGN})
+  string(REPLACE ";" "," envl "${A_ENV}")
+  set(kontr 0)
+  if(A_KONTROLLE)
+    set(kontr 1)
+  endif()
+  add_test(NAME ${A_NAME} COMMAND ${CMAKE_COMMAND} -DEXE=$<TARGET_FILE:kern_kosten_arr> -DLANE=${A_LANE} -DBLOCK=${A_BLOCK}
+           "-DENVV=${envl}" "-DNACH=${A_NACH}" -DKONTROLLE=${kontr} -DPINS=${CMAKE_CURRENT_SOURCE_DIR}/tests/cost/hash_pins.txt
+           -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cost/hash_pruefen.cmake)
+  set_tests_properties(${A_NAME} PROPERTIES TIMEOUT 300)
+endfunction()
+# NOTE: the reference hash is bit-exact and bound to the CPU (libm ifunc dispatch differs between CPUs and glibc): pins exist for DJ-Maschine (Ryzen 7800X3D) and the CI laptop (i9-13900HX), both
+# measured from the same commit. If a hash test fails on a pinned host or after a toolchain change, measure the pin again (hash_pins.txt) before suspecting the code. The exit code of the lane
+# is ignored on purpose: the hash covers the audio, and the lane self-check may exit 2 in the control run. The pins quoted in the history notes below are those of .107.
 # Re-measured 2026-11-10 (wirt-timing): the lead of a host slot is 2n instead of 2n + 25, so the start of the arrangement moves 25 samples earlier and every pinned hash below changed; the
 # variants (pool, serial, unused, no fifo, at 256 and 128) still agree with each other, which is what these tests pin. The previous values (main bccde012 and later): arr32ins 256 pm=dc9cc27c4c3f4649
 # out=dc14fb5e7fa2cd46, 128 pm=e1912e21c15a1803 out=aff09e7d1d21b7ea; arr32rack 256 pm=dc46d62c4d78220f out=c6368275c50516af, 128 pm=6eadcb3158850ccf out=fbfb37bf1999fc47.
 # Re-measured 2026-11-13 (production small fixes): the lim insert detects TRUE peaks (4x oversampling, 86 samples of latency instead of 74), so the limited output of arr32ins changed: 256 pm=a4932c21b9166147
 # out=15ef6c8c7ce0120b, 128 pm=711a7411b09348ec out=61506b058f4a4833 (the previous values, 256 e134482f0c43ea8b / 8962e4bdef0c6d5b and 128 002a476ac0d1b78f / 139fbb6f629b78eb, were those of the sample-peak limiter).
+# Re-measured 2026-11-23 (saett DC blocker, c54250ec4: 5 Hz high-pass per channel at the output of the wet path): arr32ins carries one saett at drive 12 dB, so its output
+# changed: 256 pm=ade2dd87eea3d869 out=41548661fe8a40ae, 128 pm=3a5b2b905b7600fb out=9398708e98dcfa84 (previous: the 2026-11-13 values above). The rack and bk lanes (no saett)
+# and the controls are unchanged, and every variant (pool, serial, unused, no fifo) still agrees with the others.
 # Output hash of the arrangement lane (KOSTEN_HASH=1): FNV-1a over the production master and the master out, 2000 warm-up + 3000 measured cycles (blocks=5000). The reference values
 # are those of the probe of 2026-11-06 on main bccde012 (Hall fork-join probe, unchanged Hall path). The control mutes track 3: it passes only if a hash line was printed (the lane
 # self-check may exit 2, ctest ignores the exit code with PASS_REGULAR_EXPRESSION) AND neither reference value appears, so a crash or a missing line cannot pass it.
-add_test(NAME kosten_arr_hash COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=a4932c21b9166147 out=15ef6c8c7ce0120b blocks=5000" TIMEOUT 120)
+kosten_hash_test(NAME kosten_arr_hash LANE arr32ins BLOCK 256)
 # mehrkern task 4: the same lane with the Halls on a HallPool of 3 workers must give exactly the same hash.
 # The deadline is 1 s: no take-back, no self switch-off from wake jitter (SCHED_OTHER). The single HASH line (stdout) carries everything, so no ordering of stdout and stderr is relied on:
 # the reference hash, pool_jobs > 0 (Hall blocks computed ON a worker: a pool that is merely attached cannot pass), no late and no taken-back job, the pool still on.
-add_test(NAME kosten_arr_hash_pool COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash_pool PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=a4932c21b9166147 out=15ef6c8c7ce0120b blocks=5000 pool_jobs=[1-9][0-9]* hall_jobs=[1-9][0-9]* pool_spaet=0 pool_zurueck=0 pool_an=1" TIMEOUT 120)
+kosten_hash_test(NAME kosten_arr_hash_pool LANE arr32ins BLOCK 256 ENV KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 NACH "pool_jobs=[1-9][0-9]* hall_jobs=[1-9][0-9]* pool_spaet=0 pool_zurueck=0 pool_an=1")
 # Control of the line above: the pool is built but never attached (KOSTEN_HALL_POOL_UNBENUTZT). The hash is the same and pool_jobs is 0, so kosten_arr_hash_pool would be red on it.
-add_test(NAME kosten_arr_hash_pool_unbenutzt COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 KOSTEN_HALL_POOL_UNBENUTZT=1 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash_pool_unbenutzt PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=a4932c21b9166147 out=15ef6c8c7ce0120b blocks=5000 pool_jobs=0 hall_jobs=[1-9][0-9]*" TIMEOUT 120)
-add_test(NAME kosten_arr_hash_kontrolle COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_ARR32_STUMM=3 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash_kontrolle PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=[0-9a-f]+ out=[0-9a-f]+ blocks=5000"
-                     FAIL_REGULAR_EXPRESSION "pm=a4932c21b9166147;out=15ef6c8c7ce0120b" TIMEOUT 120)
+kosten_hash_test(NAME kosten_arr_hash_pool_unbenutzt LANE arr32ins BLOCK 256 ENV KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 KOSTEN_HALL_POOL_UNBENUTZT=1 NACH "pool_jobs=0 hall_jobs=[1-9][0-9]*")
+kosten_hash_test(NAME kosten_arr_hash_kontrolle LANE arr32ins BLOCK 256 ENV KOSTEN_ARR32_STUMM=3 KONTROLLE)
 target_compile_definitions(kern_kosten_arr PRIVATE CYPHERDJ_DJK="${DJK}")   # 1.9: the lane arr32kit reads the repo test kits
 # mehrkern-s3 task 0: the same lane at 128 samples per block (KOSTEN_BLOCK=128), serial (no pool). blocks=5000 is still one hash step per cycle.
 # The reference pair was measured on f5db257d with the lane switch of this commit; it is not the 256 pair (a run that ignored KOSTEN_BLOCK would print that one).
-add_test(NAME kosten_arr_hash_128 COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_BLOCK=128 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash_128 PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=711a7411b09348ec out=61506b058f4a4833 blocks=5000" TIMEOUT 120)
+kosten_hash_test(NAME kosten_arr_hash_128 LANE arr32ins BLOCK 128)
 # Negative control of the line above: track 3 muted at 128. A hash line must be printed and neither reference value may appear.
-add_test(NAME kosten_arr_hash_128_kontrolle COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_BLOCK=128 KOSTEN_ARR32_STUMM=3 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash_128_kontrolle PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=[0-9a-f]+ out=[0-9a-f]+ blocks=5000"
-                     FAIL_REGULAR_EXPRESSION "pm=711a7411b09348ec;out=61506b058f4a4833" TIMEOUT 120)
+kosten_hash_test(NAME kosten_arr_hash_128_kontrolle LANE arr32ins BLOCK 128 ENV KOSTEN_ARR32_STUMM=3 KONTROLLE)
 # mehrkern slice 3.2 task 5: phase Q (the track sources) on the Hall pool, the same hashes. The positive counters are in the regex: a run that stayed serial cannot pass
 # (spur_blocks_parallel and spur_einheiten_worker > 0). FIFO_TEST lets the SCHED_OTHER test pool count as FIFO; without it the phase stays serial (the control below).
 # The existing four hash ctests above are unchanged.
-add_test(NAME kosten_arr_hash_spur COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_SPUR_POOL=1 KOSTEN_SPUR_FIFO_TEST=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash_spur PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=a4932c21b9166147 out=15ef6c8c7ce0120b blocks=5000 [^\n]*spur_blocks_parallel=[1-9][0-9]* spur_einheiten_worker=[1-9][0-9]*" TIMEOUT 120)
-add_test(NAME kosten_arr_hash_spur_128 COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_BLOCK=128 KOSTEN_SPUR_POOL=1 KOSTEN_SPUR_FIFO_TEST=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash_spur_128 PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=711a7411b09348ec out=61506b058f4a4833 blocks=5000 [^\n]*spur_blocks_parallel=[1-9][0-9]* spur_einheiten_worker=[1-9][0-9]*" TIMEOUT 120)
+kosten_hash_test(NAME kosten_arr_hash_spur LANE arr32ins BLOCK 256 ENV KOSTEN_SPUR_POOL=1 KOSTEN_SPUR_FIFO_TEST=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 NACH ".*spur_blocks_parallel=[1-9][0-9]* spur_einheiten_worker=[1-9][0-9]*")
+kosten_hash_test(NAME kosten_arr_hash_spur_128 LANE arr32ins BLOCK 128 ENV KOSTEN_SPUR_POOL=1 KOSTEN_SPUR_FIFO_TEST=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 NACH ".*spur_blocks_parallel=[1-9][0-9]* spur_einheiten_worker=[1-9][0-9]*")
 # control: the load threshold above the live load (24 live units x 256 samples = 6144): the pool exists, nothing forks, the hash is the same
-add_test(NAME kosten_arr_hash_spur_unbenutzt COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_SPUR_POOL=1 KOSTEN_SPUR_FIFO_TEST=1 KOSTEN_SPUR_MIN_LAST=1000000 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash_spur_unbenutzt PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=a4932c21b9166147 out=15ef6c8c7ce0120b blocks=5000 [^\n]*spur_blocks_parallel=0 spur_einheiten_worker=0 spur_einheiten_caller=0 spur_seriell_weg=[0-9]+ spur_seriell_wenig=[1-9][0-9]*" TIMEOUT 120)
+kosten_hash_test(NAME kosten_arr_hash_spur_unbenutzt LANE arr32ins BLOCK 256 ENV KOSTEN_SPUR_POOL=1 KOSTEN_SPUR_FIFO_TEST=1 KOSTEN_SPUR_MIN_LAST=1000000 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 NACH ".*spur_blocks_parallel=0 spur_einheiten_worker=0 spur_einheiten_caller=0 spur_seriell_weg=[0-9]+ spur_seriell_wenig=[1-9][0-9]*")
 # control: SPUR_POOL=1 without FIFO_TEST, SCHED_OTHER workers: the phase stays serial, the hash is the same (shows that the positive regex discriminates)
-add_test(NAME kosten_arr_hash_spur_ohne_fifo COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_SPUR_POOL=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash_spur_ohne_fifo PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=a4932c21b9166147 out=15ef6c8c7ce0120b blocks=5000 [^\n]*spur_blocks_parallel=0 spur_einheiten_worker=0 spur_einheiten_caller=0 spur_seriell_weg=[0-9]+ spur_seriell_wenig=0 spur_seriell_fifo=[1-9][0-9]*" TIMEOUT 120)
+kosten_hash_test(NAME kosten_arr_hash_spur_ohne_fifo LANE arr32ins BLOCK 256 ENV KOSTEN_SPUR_POOL=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 NACH ".*spur_blocks_parallel=0 spur_einheiten_worker=0 spur_einheiten_caller=0 spur_seriell_weg=[0-9]+ spur_seriell_wenig=0 spur_seriell_fifo=[1-9][0-9]*")
 # mehrkern slice 3 task 6b: the arr32rack lane (8 racks of 3 RB-338 and a Kit) equals itself serial against the pool; the pool run must compute rack units on workers
-add_test(NAME kosten_arr_hash_rack COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 $<TARGET_FILE:kern_kosten_arr> 3000 arr32rack)
-set_tests_properties(kosten_arr_hash_rack PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32rack pm=0b489968030f994f out=0808091c3dfefaab blocks=5000" TIMEOUT 120)
-add_test(NAME kosten_arr_hash_rack_spur COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_SPUR_POOL=1 KOSTEN_SPUR_FIFO_TEST=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 $<TARGET_FILE:kern_kosten_arr> 3000 arr32rack)
-set_tests_properties(kosten_arr_hash_rack_spur PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32rack pm=0b489968030f994f out=0808091c3dfefaab blocks=5000 [^\n]*spur_blocks_parallel=[1-9][0-9]* spur_einheiten_worker=[1-9][0-9]* [^\n]*spur_rack_worker=[1-9][0-9]*" TIMEOUT 120)
+kosten_hash_test(NAME kosten_arr_hash_rack LANE arr32rack BLOCK 256)
+kosten_hash_test(NAME kosten_arr_hash_rack_spur LANE arr32rack BLOCK 256 ENV KOSTEN_SPUR_POOL=1 KOSTEN_SPUR_FIFO_TEST=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 NACH ".*spur_blocks_parallel=[1-9][0-9]* spur_einheiten_worker=[1-9][0-9]* .*spur_rack_worker=[1-9][0-9]*")
 # SEQ deck v2 slice K: arr32bk (tracks 1..4 are Baukasten tracks) on the track pool: the pool run must give the bits of the serial run (the references below are those of the serial run,
 # measured before the bk sink said parallel_faehig, 2026-11-14, twice each: 256 pm=64a83e91cb5e1c8b out=7aed26480ed80a5b, 128 pm=b38ee0e39ce0778b out=1547f76e61e5fff3), and the units must
 # really run on the workers (spur_einheiten_worker > 0). KOSTEN_SPUR_WARTE_US / KOSTEN_SPUR_GRENZE_US lift the late-join threshold and the hard limit of the pool (product values stay in the
 # product): with units of about 1 ms the track account switches the phase off after a few late joins (measured: 6 of 5000 blocks parallel), and the hash would prove the bits over those only.
 # The two cases pin spur_blocks_parallel above 4900, so a run in which the pool dropped out turns the test red.
-add_test(NAME kosten_arr_hash_bk_spur COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_SPUR_POOL=1 KOSTEN_SPUR_FIFO_TEST=1 KOSTEN_SPUR_WARTE_US=10000000 KOSTEN_SPUR_GRENZE_US=10000000 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 $<TARGET_FILE:kern_kosten_arr> 3000 arr32bk)
-set_tests_properties(kosten_arr_hash_bk_spur PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32bk pm=64a83e91cb5e1c8b out=7aed26480ed80a5b blocks=5000 [^\n]*spur_blocks_parallel=(49[0-9][0-9]|5000) spur_einheiten_worker=[1-9][0-9]*" TIMEOUT 120)
-add_test(NAME kosten_arr_hash_bk_spur_128 COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_BLOCK=128 KOSTEN_SPUR_POOL=1 KOSTEN_SPUR_FIFO_TEST=1 KOSTEN_SPUR_WARTE_US=10000000 KOSTEN_SPUR_GRENZE_US=10000000 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 $<TARGET_FILE:kern_kosten_arr> 3000 arr32bk)
-set_tests_properties(kosten_arr_hash_bk_spur_128 PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32bk pm=b38ee0e39ce0778b out=4d362897d4ca17b3 blocks=5000 [^\n]*spur_blocks_parallel=(49[0-9][0-9]|5000) spur_einheiten_worker=[1-9][0-9]*" TIMEOUT 120)
+kosten_hash_test(NAME kosten_arr_hash_bk_spur LANE arr32bk BLOCK 256 ENV KOSTEN_SPUR_POOL=1 KOSTEN_SPUR_FIFO_TEST=1 KOSTEN_SPUR_WARTE_US=10000000 KOSTEN_SPUR_GRENZE_US=10000000 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 NACH ".*spur_blocks_parallel=(49[0-9][0-9]|5000) spur_einheiten_worker=[1-9][0-9]*")
+kosten_hash_test(NAME kosten_arr_hash_bk_spur_128 LANE arr32bk BLOCK 128 ENV KOSTEN_SPUR_POOL=1 KOSTEN_SPUR_FIFO_TEST=1 KOSTEN_SPUR_WARTE_US=10000000 KOSTEN_SPUR_GRENZE_US=10000000 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 NACH ".*spur_blocks_parallel=(49[0-9][0-9]|5000) spur_einheiten_worker=[1-9][0-9]*")
 # Re-measured 2026-11-21 (container core X1): at block 128 the master out of the rack and bk lanes changed (arr32rack out=59d80112d94209ff -> 9560f5d1013aea27, arr32bk 1547f76e61e5fff3 -> 4d362897d4ca17b3)
 # while the production master (pm) is the same bit for bit, arr32ins at 128 and all lanes at 256 still match their old pins, and the serial and pool variants agree with each other (deterministic over repeated runs).
 # The cause of the 128-only change is not isolated; the pinned property here is the agreement of the variants, the null render of X1 covers the audio against the old core.
-add_test(NAME kosten_arr_hash_rack_128 COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_BLOCK=128 $<TARGET_FILE:kern_kosten_arr> 3000 arr32rack)
-set_tests_properties(kosten_arr_hash_rack_128 PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32rack pm=b5de7d51b09cdb6f out=9560f5d1013aea27 blocks=5000" TIMEOUT 120)
-add_test(NAME kosten_arr_hash_rack_spur_128 COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_BLOCK=128 KOSTEN_SPUR_POOL=1 KOSTEN_SPUR_FIFO_TEST=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 $<TARGET_FILE:kern_kosten_arr> 3000 arr32rack)
-set_tests_properties(kosten_arr_hash_rack_spur_128 PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32rack pm=b5de7d51b09cdb6f out=9560f5d1013aea27 blocks=5000 [^\n]*spur_blocks_parallel=[1-9][0-9]* spur_einheiten_worker=[1-9][0-9]* [^\n]*spur_rack_worker=[1-9][0-9]*" TIMEOUT 120)
+kosten_hash_test(NAME kosten_arr_hash_rack_128 LANE arr32rack BLOCK 128)
+kosten_hash_test(NAME kosten_arr_hash_rack_spur_128 LANE arr32rack BLOCK 128 ENV KOSTEN_SPUR_POOL=1 KOSTEN_SPUR_FIFO_TEST=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 NACH ".*spur_blocks_parallel=[1-9][0-9]* spur_einheiten_worker=[1-9][0-9]* .*spur_rack_worker=[1-9][0-9]*")
 # KOSTEN_BLOCK is checked first thing in main(): an invalid value exits 4 before any file is created. The test needs exactly exit 4 plus the message (WILL_FAIL would also pass
 # on a crash) and counts the pid-named /dev/shm/kern_kosten_arr_* directories before and after: none may be left behind.
 add_test(NAME kosten_arr_block_ungueltig COMMAND sh -c "n0=$(ls -d /dev/shm/kern_kosten_arr_* 2>/dev/null | wc -l); KOSTEN_BLOCK=100 $<TARGET_FILE:kern_kosten_arr> 10 arr32ins; rc=$?; n1=$(ls -d /dev/shm/kern_kosten_arr_* 2>/dev/null | wc -l); echo \"rc=$rc dirs_before=$n0 dirs_after=$n1\"; [ $rc -eq 4 ] && [ $n1 -le $n0 ]")
@@ -2466,3 +2482,56 @@ test_mutation(test_arr_spur_lane_fx3_blende_mutation test_arr_track_lane CYPHERD
 test_mutation(test_arr_spur_lane_fx3_kopie_mutation test_arr_track_lane CYPHERDJ_MUTATION_ARR_FX3_KOPIE ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)           # case 4: the share is copied, not moved
 test_mutation(test_mixer_fx3_lane_ohne_fader_mutation test_mixer_fx3_lane CYPHERDJ_MUTATION_ARR_FX3_OHNE_FADER src/mixer.cpp src/beatfx.cpp)                         # the share skips the strip's fader
 test_mutation(test_mixer_fx3_lane_ohne_xfader_mutation test_mixer_fx3_lane CYPHERDJ_MUTATION_ARR_FX3_OHNE_XFADER src/mixer.cpp src/beatfx.cpp)                       # the share ignores the crossfader weight
+
+# Slow tests (measured 2026-11-23 on the gate machine, seconds alone: the three warp fuzz runs 1000 + 700 + 350 and test_deck_planned 291, test_warp_factory_arr 154,
+# test_deck_keylock 118, test_core_keylock_threads 114) carry the ctest label `langsam`: the default gate leaves them out (ctest -LE langsam), the slow stage
+# (alles.sh --langsam, ctest -L langsam) runs exactly these with a timeout that fits them (the gate's --timeout 300 would kill the fuzz runs).
+foreach(t test_warp_factory_sequences test_warp_werk_folgen_dicht test_warp_werk_folgen_transpose)
+  if(TEST ${t})
+    set_tests_properties(${t} PROPERTIES LABELS langsam TIMEOUT 3600)
+  endif()
+endforeach()
+foreach(t test_deck_planned test_warp_factory_arr test_deck_keylock test_core_keylock_threads)
+  if(TEST ${t})
+    set_tests_properties(${t} PROPERTIES LABELS langsam TIMEOUT 1800)
+  endif()
+endforeach()
+# Tests that assert real-time budgets or worker counts (a largest gap under 10 ms, a 99.9 % quantile under 1 ms, the number of parallel blocks) and
+# take 3 to 85 s: they failed in the full gate when the other suites loaded the machine (alles run 2026-11-23, passed alone). They carry the label `ruhig`;
+# alles.sh runs them as the last stage (core-ruhig), when nothing else of the gate is running.
+# Added after two more full runs (2026-11-24, each passed alone): test_generator_bk_factory and test_generator_key (late blocks of the worker pool), test_net_arr_freeze_clock
+# (largest gap while freezing under 2x normal), kosten_arr_hash_bk_spur and _128 (the spur pool must run 49xx of 5000 blocks in parallel; the hash itself matches the pin),
+# test_generator_bk_factory_mock (hit its 60 s timeout in the loaded stage; a worker-pool stand-in that spins), test_setmitschnitt_probe (failed once in the live CI run on
+# the loaded laptop, passes alone).
+foreach(t test_deck_geplant_pruef_platz test_deck_geplant_pruef_platz_reihum test_deck_geplant_pruef_fenster test_deck_geplant_pruef_fenster_reihum
+         test_stretcher test_stretcher_bungee test_arr_track_pool test_arr_launcher_warp test_net_arr_tap test_net_arr_swap_clock
+         test_generator_bk_factory test_net_arr_freeze_clock test_generator_key kosten_arr_hash_bk_spur kosten_arr_hash_bk_spur_128 test_generator_bk_factory_mock
+         test_setmitschnitt_probe)
+  if(TEST ${t})
+    set_tests_properties(${t} PROPERTIES LABELS ruhig)
+  endif()
+endforeach()
+# The tests that talk to the live PipeWire graph (client name cypherdj-latenz, under pw-jack) carry the label `pipewire`: alles.sh runs them
+# after the rest, under the lock it shares with the other PipeWire-bound suites. (RESOURCE_LOCK only orders tests inside one ctest process.)
+foreach(t test_latenz_verdrahtung test_latenz_verdrahtung_mutation)
+  if(TEST ${t})
+    set_tests_properties(${t} PROPERTIES LABELS pipewire)
+  endif()
+endforeach()
+
+# Last: leave the mutation programs out of `all` unless asked for (CYPHERDJ_MUTATIONEN).
+if(NOT CYPHERDJ_MUTATIONEN)
+  function(cdj_mutationen_aus verz)
+    get_property(ziele DIRECTORY ${verz} PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(z ${ziele})
+      if(z MATCHES "mutation" OR z MATCHES "^kmg")
+        set_target_properties(${z} PROPERTIES EXCLUDE_FROM_ALL TRUE)
+      endif()
+    endforeach()
+    get_property(unter DIRECTORY ${verz} PROPERTY SUBDIRECTORIES)
+    foreach(u ${unter})
+      cdj_mutationen_aus(${u})
+    endforeach()
+  endfunction()
+  cdj_mutationen_aus(${CMAKE_CURRENT_SOURCE_DIR})
+endif()

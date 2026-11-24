@@ -45,12 +45,14 @@ function kuerzeZelle(z: Zelle): void {
   if (z.scheiben) {
     const n = z.scheiben.grenzen.filter((g) => g < beats).length;
     if (n < z.scheiben.grenzen.length) {
-      z.scheiben = { teilung: z.scheiben.teilung, grenzen: z.scheiben.grenzen.slice(0, n), folge: z.scheiben.folge.slice(0, n).map((f, k) => (f <= n ? f : k + 1)) };
+      z.scheiben = { teilung: z.scheiben.teilung, grenzen: z.scheiben.grenzen.slice(0, n), folge: z.scheiben.folge.slice(0, n).map((f,
+        k) => (f <= n ? f : k + 1)) };
     }
   }
 }
 const RASTER = Object.keys(LOOP_RASTER_BEATS) as LoopRaster[];
-const ZELLE_FELDER = ['name', 'farbe', 'art', 'sha256', 'beats', 'bpm', 'gain_db', 'pfad_hinweis', 'transponieren', 'rueckwaerts', 'blende', 'scheiben', 'keylock', 'huellen'];
+const ZELLE_FELDER = ['name', 'farbe', 'art', 'sha256', 'beats', 'bpm', 'gain_db', 'pfad_hinweis', 'transponieren', 'rueckwaerts', 'blende', 'scheiben',
+  'keylock', 'huellen'];
 // the S1b editor fields of zelle_aendern (each null removes it; the rest is checked by zellFehler)
 const ZELLE_EDITOR = ['transponieren', 'rueckwaerts', 'blende', 'scheiben', 'keylock'] as const;
 const keineZellen = (): ZellSlot[] => Array.from({ length: LOOP_ZELLEN }, () => null);
@@ -141,10 +143,12 @@ export const LOOPDECK = {
   },
 
   zelle_aendern(p, a) {
-    erlaube(a, 'spur_id', 'index', 'name', 'farbe', 'art', 'gain_db', 'beats', 'raster', 'bpm', 'transponieren', 'rueckwaerts', 'blende', 'scheiben', 'keylock');
+    erlaube(a, 'spur_id', 'index', 'name', 'farbe', 'art', 'gain_db', 'beats', 'raster', 'bpm', 'transponieren', 'rueckwaerts', 'blende', 'scheiben',
+      'keylock');
     const s = deckSpur(p, idArg(a, 'spur_id'));
     const i = indexArg(a.index, 'index') - 1;
-    if (['name', 'farbe', 'art', 'gain_db', 'beats', 'raster', 'bpm', ...ZELLE_EDITOR].every((k) => a[k] === undefined)) ab('argument_ungueltig', 'no change given');
+    if (['name', 'farbe', 'art', 'gain_db', 'beats', 'raster', 'bpm', ...ZELLE_EDITOR].every((k) => a[k] === undefined)) ab('argument_ungueltig',
+      'no change given');
     const z = s.zellen[i];
     if (!z || istHalten(z)) ab('zelle_leer', `${s.id} cell ${i + 1} is empty`);
     const name = text(a, 'name', 64);
@@ -171,7 +175,8 @@ export const LOOPDECK = {
     for (const k of ZELLE_EDITOR) {
       const v = a[k];
       if (v === undefined) continue;
-      if (v === null || (k === 'transponieren' && v === 0) || (k === 'keylock' && v === true) || ((k === 'rueckwaerts' || k === 'blende') && v === false)) delete w[k];
+      if (v === null || (k === 'transponieren' && v === 0) || (k === 'keylock' && v === true) || ((k === 'rueckwaerts' || k === 'blende') &&
+        v === false)) delete w[k];
       else w[k] = structuredClone(v);
     }
     const f = zellFehler(n as Zelle);

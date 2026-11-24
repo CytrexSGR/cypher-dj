@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { installiere } from './helpers/pages_mock.mjs';
+import { MAX_RETURNS } from '../public/production/limits.js';
 
 installiere();
 const { mixZuege, fxMenue } = await import('../public/werkbank/mix.js');
@@ -36,7 +37,7 @@ test('helpers: strips by track number, the send taper, the rack menu and the sta
   assert.deepEqual(m.find((e) => e.text === 'fx-remix').befehl, { befehl: 'return_neu', name: 'Remix', effekt: { graph: 'fx-remix' } });
   assert.equal(m.some((e) => e.text === 'Phaser'), false, 'a quick entry whose graph is not installed is not offered');
   assert.equal(m.some((e) => e.text === 'bass-banddrive'), false, 'instruments are not effects');
-  const voll = fxMenue(modul({ returns: [1, 2, 3, 4].map((nr) => ({ id: `r${nr}`, nr })) }), GRAPHEN);
+  const voll = fxMenue(modul({ returns: Array.from({ length: MAX_RETURNS }, (_, i) => ({ id: `r${i + 1}`, nr: i + 1 })) }), GRAPHEN);
   assert.ok(voll.filter((e) => !e.gruppe).every((e) => e.befehl === null && e.grund));
   assert.deepEqual(rackTeile(modul().returns[0]).map((t) => [t.teil, t.text]), [['i1', 'fx-delay-sync']]);
   assert.deepEqual(rackTeile({ hall: HALL }).map((t) => t.teil), ['hall']);

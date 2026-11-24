@@ -7,6 +7,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { graphenOrdner } from '../graphs.ts';
 import { instanz } from '../paths.ts';
+import { pruefeBkSchreiben } from './bk_schutz.ts';
 
 const N_RAUSCHEN = 4096;
 
@@ -44,6 +45,7 @@ export function sichereWerksProben(ordner: string): string[] {
     const ziel = path.join(ordner, name);
     if (fs.existsSync(ziel)) continue;
     alle ??= werksProben();
+    pruefeBkSchreiben(ziel);
     fs.mkdirSync(ordner, { recursive: true });
     const tmp = `${ziel}.${process.pid}.${crypto.randomBytes(3).toString('hex')}.tmp`;
     try { fs.writeFileSync(tmp, alle[name]); fs.renameSync(tmp, ziel); } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }

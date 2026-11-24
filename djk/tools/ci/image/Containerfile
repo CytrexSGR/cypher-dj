@@ -1,0 +1,57 @@
+# The CI test image (localhost/cypherdj-test), built from Ubuntu 24.04 in one file. It carries what djk/tools/alles.sh needs:
+# the C++/Rust toolchain, node, the python test packages, the GPU torch stack, the key_energy interpreter with keyfinder-stdin.
+# Build it with djk/tools/ci/image/build.sh (hash tag, builds only when the tag is missing). Build contexts:
+#   the context folder     requirements.txt (a copy of djk/requirements.txt) and kf_cli.cpp
+#   --build-context cache  the local cache folder of the runner (large parts that are never downloaded: see README.md)
+FROM docker.io/library/ubuntu:24.04
+# pipefail for every RUN: a failing `curl ... | sh` must fail the build (a plain pipe only reports the last command).
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+ENV DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8
+# Every apt step goes through apt-sicher.sh: it stops when the download would be more than 1 GB.
+COPY apt-sicher.sh /usr/local/bin/apt-sicher.sh
+RUN apt-sicher.sh \
+      build-essential cmake ninja-build pkg-config libjack-jackd2-dev librubberband-dev libssl-dev libfftw3-dev \
+      libsamplerate0-dev git curl ca-certificates python3 python3-venv python3-pip dpkg-dev xz-utils rsync ccache procps util-linux
+RUN curl -fsSL --max-filesize 200000000 -o /tmp/n.tar.xz https://nodejs.org/dist/v22.23.5/node-v22.23.5-linux-x64.tar.xz \
+    && echo "cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8  /tmp/n.tar.xz" | sha256sum -c - \
+    && tar -xJf /tmp/n.tar.xz -C /usr/local --strip-components=1 && rm /tmp/n.tar.xz \
+    && ln -s /usr/local/bin/node /usr/bin/node
+# Non-root test user with uid/gid 1000 (run with --userns=keep-id, so it is the host user and the volumes stay writable).
+RUN userdel -r ubuntu 2>/dev/null; groupdel ubuntu 2>/dev/null; \
+    groupadd -g 1000 bau && useradd -m -u 1000 -g 1000 -s /bin/bash bau && \
+    install -d -o bau -g bau /home/bau/.cache /home/bau/.cargo /home/bau/.rustup /home/bau/.cache/ccache /home/bau/.cargo/registry /home/bau/.cargo/git /work && \
+    install -d -m 700 -o bau -g bau /tmp/xdg-bau
+ENV HOME=/home/bau CCACHE_DIR=/home/bau/.cache/ccache CCACHE_MAXSIZE=5G PATH=/home/bau/.cargo/bin:$PATH XDG_RUNTIME_DIR=/tmp/xdg-bau
+USER bau
+RUN curl --proto '=https' --tlsv1.2 --max-filesize 2000000 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+WORKDIR /work
+USER root
+RUN apt-sicher.sh libsndfile1 ffmpeg sox python3-dev \
+      fonts-dejavu-core fonts-dejavu-extra pipewire-jack rubberband-cli libfftw3-dev
+# Python test packages, installed OFFLINE from the wheel folder of the cache (--no-index): pip can never fetch anything, so an uncommented
+# torch in requirements.txt fails with "no matching distribution" instead of downloading several GB. No torch here: the GPU build comes
+# from the cache below, a CPU build would be thrown away. The second list is the pure-python dependencies torch imports (without sympy
+# `torch.optim` fails at import).
+COPY requirements.txt /tmp/requirements.txt
+RUN --mount=type=bind,from=cache,source=wheels,target=/tmp/wheels \
+    pip install --break-system-packages --no-cache-dir --no-index --find-links /tmp/wheels -r /tmp/requirements.txt six \
+    && pip install --break-system-packages --no-cache-dir --no-index --find-links /tmp/wheels \
+         sympy==1.14.0 mpmath==1.3.0 networkx==3.7 Jinja2==3.1.6 fsspec filelock typing_extensions \
+    && rm /tmp/requirements.txt
+# GPU torch stack (torch 2.10.0+cu128, torchvision, triton, nvidia-*, torchgen, functorch): installed trees from the cache, > 6 GB.
+COPY --from=cache torch-gpu/ /usr/local/lib/python3.12/dist-packages/
+# The werkstatt packages as a venv at /opt/werkstatt-venv (sees the system packages above).
+RUN python3 -m venv --system-site-packages /opt/werkstatt-venv
+COPY --from=cache werkstatt-venv-sp/ /opt/werkstatt-venv/lib/python3.12/site-packages/
+# The key_energy interpreter at /opt/mik: essentia-tensorflow and the models, next to libKeyFinder 2.2.8 and keyfinder-stdin.
+RUN python3 -m venv --system-site-packages /opt/mik
+COPY --from=cache mik-sp/ /opt/mik/lib/python3.12/site-packages/
+COPY --from=cache mik-modelle/ /opt/mik/modelle/
+COPY kf_cli.cpp /tmp/kf_cli.cpp
+RUN set -e; git clone -q --depth 1 --branch 2.2.8 https://github.com/mixxxdj/libkeyfinder /tmp/lkf; \
+    cmake -S /tmp/lkf -B /tmp/lkf/b -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/mik/kf -DBUILD_TESTING=OFF >/dev/null; \
+    cmake --build /tmp/lkf/b -j8 >/dev/null; cmake --install /tmp/lkf/b >/dev/null; \
+    mkdir -p /opt/mik/bin; g++ -O2 -std=c++17 -I/opt/mik/kf/include /tmp/kf_cli.cpp -L/opt/mik/kf/lib -Wl,-rpath,/opt/mik/kf/lib -lkeyfinder -lfftw3 -o /opt/mik/bin/keyfinder-stdin; \
+    rm -rf /tmp/lkf /tmp/kf_cli.cpp; chown -R bau:bau /opt/mik
+ENV CYPHERDJ_MIK=/opt/mik CYPHERDJ_PYTHON=/opt/werkstatt-venv/bin/python
+USER bau

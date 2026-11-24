@@ -466,7 +466,7 @@ export function pruefePanel(roh: unknown, graphName: string, regler: ReglerBerei
   if (matrizen.length > 1) f.push(`control "matrix": a panel holds at most one matrix control (${matrizen.length} found)`);
   for (const { wo, c, sektion } of matrizen) {
     if (c.bind !== undefined) f.push(`${wo}: a matrix control takes no bind (the pins are not knobs)`);
-    if (geraet?.art !== undefined && geraet.art !== 'bk') f.push(`${wo}: a matrix control belongs on a Baukasten device`);
+    if (geraet?.art !== undefined && geraet.art !== 'bk') f.push(`${wo}: a matrix control belongs on a Cypher Modular device`);
     else if (steckfeld === null) f.push(`${wo}: the graph "${graphName}" has no matrix node`);
     const seiteVon = (sek: unknown) => (istObjekt(sek) ? sek.page : undefined);
     if (seiteVon(sektion) !== 'patch') f.push(`${wo}: its section must be on the page "patch"`);

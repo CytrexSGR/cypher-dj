@@ -84,6 +84,16 @@ test('COLOR writes the lane filter and a double click goes back to the centre', 
   assert.deepEqual(posts(a).at(-1).koerper, { deck: 1, spur: 1, filter: 0 });
 });
 
+test('COLOR exists once per lane: the foot has no COLOR knob, the STRIP row keeps it', async () => {
+  await start();
+  for (let s = 1; s <= 4; s++) {
+    const fuss = deck().querySelectorAll('.ld-spur')[s - 1].querySelector('.ld-fuss');
+    assert.equal(fuss.querySelectorAll('.ld-mini, .knopf').length, 0, `lane ${s}: no knob in the foot`);
+    assert.ok(fuss.querySelector('.ld-mute') && fuss.querySelector('.ld-fader'), `lane ${s}: M and fader stay`);
+    assert.equal(deck().querySelectorAll('.ld-spur')[s - 1].querySelectorAll('.ld-color').length, 1, `lane ${s}: one COLOR`);
+  }
+});
+
 test('the COLOR label names the art of the main mixer and follows a change of color/art', async () => {
   await start();
   const { zustand } = await import('../public/page_state.js');

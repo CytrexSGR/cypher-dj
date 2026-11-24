@@ -23,6 +23,7 @@ import { analysiereDateien, baueZonenTabelle, MIN_NOTEN, noteVon, ordnerAlsInstr
 import { liesSchleife, schleifeImPack } from './schleifen.ts';
 import { SchnittFehler, samplerOrdner, type Ordner } from './schnitt.ts';
 import { erkenneGrundton, TON_SCHWELLE } from './tone_hoehe.ts';
+import { pruefeBkSchreiben } from './bk_schutz.ts';
 
 const SR = 48000;
 /** 2 GiB: `MAX_PACK_FRAMEN` of the engine (268 435 456 frames of 8 bytes). */
@@ -48,6 +49,7 @@ const arg = (text: string): SchnittFehler => new SchnittFehler(400, 'argument_un
 const json = (x: unknown): string => `${JSON.stringify(x, null, 2)}\n`;
 const tmpName = (datei: string): string => `${datei}.${process.pid}.${crypto.randomBytes(3).toString('hex')}.tmp`;
 const einsFile = (datei: string, inhalt: string): void => {
+  pruefeBkSchreiben(datei);
   fs.mkdirSync(path.dirname(datei), { recursive: true });
   const tmp = tmpName(datei);
   try { fs.writeFileSync(tmp, inhalt); fs.renameSync(tmp, datei); } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }

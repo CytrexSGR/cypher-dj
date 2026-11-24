@@ -206,7 +206,7 @@ export function graphWahlHtml(kanal, graphen, geladenName, host, achse = 'prinzi
       if (in_.length) inhalt += `<optgroup label="${htmlText(k.name)}">${in_.map((x) => optionHtml({ ...x, text: mitNeben(x.text, x, achse) })).join('')}</optgroup>`;
     }
   } else inhalt = o.map(optionHtml).join('');
-  return `<select class="graphwahl" data-graphwahl="${htmlText(kanal)}" aria-label="Graph on ${htmlText(kanal)}" title="Baukasten graph on this channel">${inhalt}</select>`;
+  return `<select class="graphwahl" data-graphwahl="${htmlText(kanal)}" aria-label="Graph on ${htmlText(kanal)}" title="Cypher Modular graph on this channel">${inhalt}</select>`;
 }
 /** The groups offered on a channel for the axis (those with a graph, plus host on erz/2 and erz/3) and the one shown: `kat` when valid, else the loaded graph's,
  *  else host (erz/2, erz/3 with the host playing), else the first. */
@@ -238,7 +238,7 @@ export function instrumentWahlHtml(kanal, graphen, geladenName, host, kat, achse
     + (aktiv ? '' : '<option value="" disabled selected hidden>Choose…</option>')
     + inKat.map(optionHtml).join('') + '</select>';
   let text = '';
-  if (aktiv?.wert === '') text = hostKanal ? `${aktiv.text} plays this channel; no Baukasten graph is loaded.` : 'No instrument loaded on this channel.';
+  if (aktiv?.wert === '') text = hostKanal ? `${aktiv.text} plays this channel; no Cypher Modular graph is loaded.` : 'No instrument loaded on this channel.';
   else if (aktiv) text = aktiv.beschreibung ?? '';
   return `${achsenKnoepfeHtml(kanal, achse)}${katSel}${instSel}<span class="graphtext" data-graphtext="${htmlText(kanal)}">${htmlText(text)}</span>`;
 }

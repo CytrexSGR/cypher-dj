@@ -103,7 +103,7 @@ export function bindeSong(ctx) {
         const c = deckendeClip(spur, a);
         const farbe = c?.verbund ? ` data-verbund="${esc(c.verbund)}" style="background:${verbundFarbe(c.verbund)}"` : '';
         return `<span class="t-lied-zelle${c ? '' : ' leer'}" data-t="song-zelle" data-abschnitt="${esc(a.id)}" data-spur="${esc(rs.spur_id)}" data-art="${esc(rs.art)}"`
-          + ` title="${esc(`${SONG_TEXT.zelle} (${rs.buchstabe} ${rs.name})`)}"${farbe}>${esc(c?.name ?? '')}</span>`;
+          + ` title="${esc(`${c?.name ? `${c.name}: ` : ''}${SONG_TEXT.zelle} (${rs.buchstabe} ${rs.name})`)}"${farbe}>${esc(c?.name ?? '')}</span>`;
       }).join('');
       return `<div class="t-lied-zeile${a.id === st.abschnitt_id ? ' an' : ''}" data-abschnitt="${esc(a.id)}" role="button" tabindex="0" title="${SONG_TEXT.zeile}">`
         + `<span class="t-lied-nr">${nummer(a.nr)}</span><span class="t-lied-name">${esc(a.name)}</span><span class="t-lied-zeilen">${Math.round(a.laenge_beats * lpb)}</span>`

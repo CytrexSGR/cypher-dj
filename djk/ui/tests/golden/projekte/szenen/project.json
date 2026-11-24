@@ -1,0 +1,169 @@
+{
+ "format": "cypherdj-projekt/3",
+ "gruppen": [
+  {
+   "fader_db": 0,
+   "farbe": "#8a8f98",
+   "gefaltet": false,
+   "id": "g1",
+   "mute": false,
+   "name": "STRUDEL",
+   "nr": 1,
+   "pan": 0,
+   "solo": false,
+   "strudel": {}
+  }
+ ],
+ "live": true,
+ "loop": {
+  "an": true,
+  "bis_beat": 64,
+  "von_beat": 0
+ },
+ "master": {
+  "fader_db": 0
+ },
+ "metronom": {
+  "an": false,
+  "pegel_db": -12,
+  "ziel": "master"
+ },
+ "naechste_id": {
+  "clip": 1,
+  "gruppe": 2,
+  "spur": 1
+ },
+ "naechste_noten_id": 1,
+ "name": "Golden scenes",
+ "plaetze": [
+  {
+   "typ": "track"
+  },
+  {
+   "typ": "track"
+  },
+  {
+   "gruppe": "g1",
+   "typ": "strudel"
+  },
+  {
+   "typ": "track"
+  }
+ ],
+ "rev": 0,
+ "session": {
+  "raster": "4takte",
+  "szenen": [
+   {
+    "farbe": 0,
+    "id": "sz1",
+    "name": "Intro"
+   },
+   {
+    "farbe": 1,
+    "id": "sz2",
+    "name": "Build"
+   },
+   {
+    "bpm": 128,
+    "farbe": 2,
+    "folge": "weiter",
+    "id": "sz3",
+    "name": "Drop",
+    "takte": 16
+   },
+   {
+    "farbe": 3,
+    "id": "sz4",
+    "name": ""
+   },
+   {
+    "farbe": 4,
+    "id": "sz5",
+    "name": ""
+   },
+   {
+    "farbe": 5,
+    "id": "sz6",
+    "name": ""
+   },
+   {
+    "farbe": 6,
+    "id": "sz7",
+    "name": ""
+   },
+   {
+    "farbe": 7,
+    "id": "sz8",
+    "name": "Outro"
+   }
+  ]
+ },
+ "spuren": [
+  {
+   "art": "instrument",
+   "clips": [],
+   "fader_db": 0,
+   "farbe": "#3b8de0",
+   "geraet": {
+    "art": "intern",
+    "name": "rb338",
+    "parameter": {}
+   },
+   "id": "s1",
+   "mute": false,
+   "name": "Pattern",
+   "nr": 1,
+   "pan": 0,
+   "solo": false,
+   "von": "andreas"
+  },
+  {
+   "art": "instrument",
+   "clips": [],
+   "fader_db": 0,
+   "farbe": "#3b8de0",
+   "geraet": {
+    "art": "intern",
+    "name": "rb338",
+    "parameter": {}
+   },
+   "id": "s2",
+   "mute": false,
+   "name": "Pattern 2",
+   "nr": 2,
+   "pan": 0,
+   "solo": false,
+   "von": "andreas"
+  }
+ ],
+ "szenen": [
+  {
+   "an": [
+    "s1"
+   ],
+   "aus": [
+    "s2"
+   ]
+  },
+  null,
+  {
+   "an": [
+    "s1",
+    "s2"
+   ],
+   "aus": []
+  },
+  null,
+  null,
+  null,
+  null,
+  null
+ ],
+ "taktart": [
+  4,
+  4
+ ],
+ "tempo_bpm": 120,
+ "wiedergabe_rev": 0
+}

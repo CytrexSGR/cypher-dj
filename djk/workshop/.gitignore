@@ -5,3 +5,4 @@ __pycache__/
 *.pyc
 pip_plan*.json
 pruef/
+.venv

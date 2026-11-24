@@ -13,7 +13,7 @@ body.produktion #kopf { grid-area: kopf; }
 body.produktion #pult { display: none; }
 body.produktion #bestand { grid-area: bestand; min-width: 0; }
 body.produktion #produktion { grid-area: prod; display: grid; min-width: 0; min-height: 0; gap: 6px;
-  grid-template-rows: auto minmax(140px, 1fr) auto auto auto var(--detail, 26vh); position: relative; }   /* rows in page order: transport, arrangement, dock, ROUTING MATRIX, INPUTS (closed: only the summary), CLIP; every child has a fixed grid-row below */
+  grid-template-rows: auto minmax(140px, 1fr) auto auto auto var(--detail, clamp(260px, 32vh, 360px)); position: relative; }   /* rows in page order: transport, arrangement, dock, ROUTING MATRIX, INPUTS (closed: only the summary), CLIP; every child has a fixed grid-row below */
 .p-transport { grid-row: 1; } .p-arr { grid-row: 2; } .p-dock { grid-row: 3; } .p-matrix { grid-row: 4; } .p-geraete { grid-row: 5; } .p-detail { grid-row: 6; }
 /* the dock (dock/dock.css has the cards): the panel look #werkbank gives .w-pan; the window layer covers the page and lets clicks through */
 .p-dock { min-width: 0; }
@@ -38,16 +38,6 @@ body.produktion #st-kopfzeile th:not(:first-child), body.produktion #libliste td
 body.produktion #libliste tr[data-prod-zieh] { cursor: grab; }
 body.produktion.lib-zu #bestand { padding: 6px 4px; }
 body.produktion.lib-zu #bestand > :not(.kopfzeile), body.produktion.lib-zu #bestand .kopfzeile > :not(#schublade) { display: none; }
-/* 1.16 rest (U6): the mode switch LIBRARY · DEVICES · PRESETS · COLLECTIONS (browser_choice.js). After the block above and with the same strength:
-   the library rule above shows LIBRARY with !important, body.bereich-effekte hides with !important. Outside PRODUCTION the switch is not shown. */
-.p-browserwahl { display: none; }
-body.produktion .p-browserwahl { display: flex; }
-body.produktion .p-browserwahl button { font-size: 10px; padding: 2px 6px; }
-body.produktion:not(.b-library) #bestand .tabelle[data-tabelle="library"] { display: none !important; }
-body.produktion #geraete-browser, body.produktion #presets, body.produktion #kollektionen { display: none !important; }
-body.produktion.b-geraete #geraete-browser { display: block !important; }
-body.produktion.b-presets #presets { display: block !important; }
-body.produktion.b-kollektionen #kollektionen { display: block !important; }
 #geraete-browser { overflow: auto; min-height: 0; }
 .geraete-liste { list-style: none; margin: 0 0 8px; padding: 0; }
 .geraete-zeile { padding: 3px 6px; border-radius: 4px; cursor: grab; }
@@ -154,7 +144,7 @@ body.produktion .preset-kopf select { max-width: 14ch; }
 .p-muster-code { flex: 1 1 28em; display: flex; gap: 6px; align-items: flex-start; }
 .p-muster-code textarea { flex: 1; min-height: 2.6em; resize: vertical; font: 11px/1.35 ui-monospace, monospace; padding: 3px 6px; border-radius: 5px; background: var(--panel2); color: var(--text); border: 1px solid var(--line); user-select: text; }
 .p-muster-rechts { display: flex; gap: 8px; align-items: center; }
-.p-muster-rechts input { width: 6ch; }
+.p-muster-rechts input { width: 8ch; }   /* UI polish T7: with the padding of .p-detail input 6ch cut the word "keep" */
 .p-muster-info { flex-basis: 100%; }
 .p-clip-audio { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; font-size: 11px; color: var(--dim); }
 .p-clip-audio input:not([type="range"]) { width: 8ch; font-variant-numeric: tabular-nums; user-select: text; }
@@ -170,7 +160,7 @@ body.produktion .preset-kopf select { max-width: 14ch; }
 .p-clip-audio input[data-f="name"] { width: 18ch; }
 .p-clip-midi { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
 .p-roll-leiste { display: flex; gap: 12px; align-items: center; font-size: 11px; color: var(--dim); }
-.p-roll-leiste input { width: 5ch; }
+.p-roll-leiste input { width: 7ch; }   /* UI polish T7: with the 6 px padding of .p-detail input 5ch left two characters ("10C", "keer") */
 .p-roll-hilfe { margin-left: auto; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .p-roll { flex: 1; min-height: 0; width: 100%; display: block; border-radius: 4px; touch-action: none; }
 .p-detail-knoepfe button.an { background: #2fd6c3; color: #0e0f12; border-color: #2fd6c3; }
@@ -434,7 +424,7 @@ body.produktion .preset-kopf select { max-width: 14ch; }
 
 /* INSTRUMENTS in the narrow production browser: nothing of the library modes shows beside it. Last, same strength as the b-* rules above. */
 body.produktion.bereich-instrumente #bestand .tabelle[data-tabelle], body.produktion.bereich-instrumente #geraete-browser, body.produktion.bereich-instrumente #presets,
-body.produktion.bereich-instrumente #kollektionen, body.produktion.bereich-instrumente #bestand .p-browserwahl { display: none !important; }
+body.produktion.bereich-instrumente #kollektionen { display: none !important; }
 
 /* Folding the dock rows and CLIP (einklappen.js): only the title stays, the arrangement takes the height (the dock row is auto). */
 .p-klapptitel { cursor: pointer; user-select: none; }
@@ -466,3 +456,41 @@ body.produktion #produktion:has(> .p-detail.p-zu) { --detail: auto; }
 /* newcomer probe 2026-11-20: the export result names the folder; the path wraps instead of being cut off */
 .p-ausgabe-pfad { font-size: 11px; color: var(--dim); flex-basis: 100%; overflow-wrap: anywhere; user-select: all; }
 .p-ausgabe-pfad[hidden] { display: none; }
+
+/* UI polish T7 (Nr. 2, 6, 17, 18): the transport wraps in tight rows, the fold of the DJ FX frees the header, the arrangement keeps 300 px at 1366x768 */
+.p-transport { row-gap: 4px; }
+.p-transport > .p-gruppe, .p-transport > label, .p-transport > button, .p-transport > select { flex: 0 0 auto; }
+.p-transport [data-p="neu-name"] { min-width: 18ch; flex: 1 1 18ch; }
+.p-roll-leiste label input { min-width: 7ch; }
+@media (max-height: 820px) {
+  body.produktion #produktion { grid-template-rows: auto minmax(300px, 1fr) auto auto auto auto; overflow-y: auto; overflow-x: hidden; }
+  body.produktion #produktion > .p-detail:not(.p-zu) { height: clamp(220px, 34vh, 360px); }   /* CLIP unfolded: its row is auto, the height is set here */
+  /* CLIP unfolded at compact height: nothing is hidden. The CLIP editor moves up under the arrangement (grid row 3), the device dock with the master fader, the routing
+     matrix and the inputs follow below it; #produktion scrolls to them (overflow-y auto above), the piano roll stays in the window. */
+  body.produktion #produktion:has(> .p-detail:not(.p-zu)) > .p-detail { grid-row: 3; }
+  body.produktion #produktion:has(> .p-detail:not(.p-zu)) > .p-dock { grid-row: 4; }
+  body.produktion #produktion:has(> .p-detail:not(.p-zu)) > .p-matrix { grid-row: 5; }
+  body.produktion #produktion:has(> .p-detail:not(.p-zu)) > .p-geraete { grid-row: 6; }
+}
+
+/* UI polish fix: the recording options (count-in, punch, overdub, automation recording) are folded behind REC OPTIONS (einklappen.js); open they take their own rows */
+.p-transport .p-recopt { display: none; }
+.p-transport.p-recopt-auf .p-recopt { display: flex; }
+
+/* UI polish fix: at most two toolbar rows at 1366 px. The groups sit closer, the keys lose 2 px of side padding, the status text (core revision) joins the last row at the right. */
+@media (max-width: 1500px) {
+  .p-transport { gap: 6px 8px; padding: 3px 8px; }
+  .p-transport button, .p-transport select, .p-transport input { padding: 3px 6px; }
+  .p-transport > .p-projekt { flex: 1 1 0; min-width: 160px; }   /* takes what row 1 leaves over: the name of a long project gets that room, its title carries the full text */
+  .p-name { flex: 1 1 auto; min-width: 0; max-width: 40ch; }
+  .p-kern { margin-left: auto; max-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .p-meldung:empty { display: none; }   /* an empty message would open a third, zero-height row */
+  .p-recstatus { min-width: 0; }   /* the status text of a running recording still widens it */
+  .p-position { font-size: 16px; min-width: 6ch; }
+  .p-transport button, .p-transport select { letter-spacing: .02em; }
+  .p-edit > .p-autotitel { display: none; }   /* the group is named by its role attribute and by the title of every key */
+}
+
+/* UI polish fix: track head name over two columns (at least 8 characters at 1366 px); the device text lives in the title of the name */
+.p-spurname { grid-column: 2 / 4; }
+.p-kopf > .p-geraet { display: none; }

@@ -145,7 +145,8 @@ test('Paket K3: kern.toml mit jedem Schlüssel des Schemas startet, arr_ordner t
     an('/k/arr/laden', 'hsi', [1n, 'andreas', 1]);
     await warte(200);
     an('/k/arr/freeze', 'hsiddi', [2n, 'andreas', 1, 0, 1, 7]);   // 3 Beats bei 128 BPM: 1,41 s
-    await warte(2500);
+    // 1.41 s of audio to freeze: wait for the answer (up to 20 s) instead of a fixed 2.5 s, which a loaded machine misses
+    for (let i = 0; i < 200 && !e.log.some((m) => m.adresse === '/e/freeze'); i++) await warte(100);
     const f = e.log.find((m) => m.adresse === '/e/freeze');
     assert.ok(f, `kein /e/freeze: ${e.log.filter((m) => m.adresse === '/q').map((m) => JSON.stringify(m.werte, (k, v) => (typeof v === 'bigint' ? Number(v) : v))).join(' ')}`);
     assert.deepEqual([f.werte[0], f.werte[1], f.werte[2]], [1, 7, 0]);
@@ -153,7 +154,8 @@ test('Paket K3: kern.toml mit jedem Schlüssel des Schemas startet, arr_ordner t
   } finally {
     p.kill('SIGTERM');
     e.s.close();
-    fs.rmSync(d, { recursive: true, force: true });
+    // the stand-in may still be writing the freeze file when SIGTERM arrives: retry the removal (ENOTEMPTY under load)
+    fs.rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 

@@ -19,6 +19,11 @@ const SR: f32 = 48_000.0;
 /// peak of the probe render in dBFS: every patch must land inside (target -6 dBFS)
 const PEGEL_FENSTER: (f32, f32) = (-7.5, -4.5);
 
+/// Patches whose loudest phrase sits well above their probe peak got a lower trim for headroom on every phrase (werkscheck, all six
+/// phrases at most -1 dBFS): the shaker (noise, +1.07 dBFS at the probe-level trim, trim -2.15 dB) and lead-acid (+0.82 dBFS, trim -1.9 dB).
+/// Their probe peak therefore lies below the window; the lower bound is relaxed for these names only.
+const PEGEL_AUSNAHMEN: [(&str, f32); 2] = [("percussion-shaker", -9.0), ("lead-acid", -9.0)];
+
 fn verzeichnis() -> PathBuf { Path::new(env!("CARGO_MANIFEST_DIR")).join("demos/recipes") }
 
 fn manifest() -> Value {
@@ -648,7 +653,8 @@ fn jeder_patch_laedt_spielt_endlich_und_pegelgleich() {
         if !y.iter().all(|(l, r)| l.is_finite() && r.is_finite()) { f.push(format!("{name}: not finite")); }
         if p.rettungen != 0 { f.push(format!("{name}: rescued {} times", p.rettungen)); }
         if spitze > 1.0 { f.push(format!("{name}: peak {pk:.2} dBFS above 0 dBFS")); }
-        if !(PEGEL_FENSTER.0..=PEGEL_FENSTER.1).contains(&pk) { f.push(format!("{name}: peak {pk:.2} dBFS outside {PEGEL_FENSTER:?}")); }
+        let unten = PEGEL_AUSNAHMEN.iter().find(|(n, _)| *n == name).map_or(PEGEL_FENSTER.0, |(_, u)| *u);
+        if !(unten..=PEGEL_FENSTER.1).contains(&pk) { f.push(format!("{name}: peak {pk:.2} dBFS outside {PEGEL_FENSTER:?}")); }
         // voices: within 16, mono = 1, a poly patch gives each chord note its own voice
         if p.stimmen > MAX_STIMMEN { f.push(format!("{name}: {} voices", p.stimmen)); }
         if p.stimmen as u64 != e["stimmen"].as_u64().unwrap() { f.push(format!("{name}: manifest voices differ")); }

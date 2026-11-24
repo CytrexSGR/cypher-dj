@@ -15,6 +15,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import select
 import shutil
 import signal
@@ -23,10 +24,11 @@ import sys
 import time
 from pathlib import Path
 
-VERSION = 1
+VERSION = 2   # 2: entries carry the plugin `version`; an index of version 1 is dropped and rescanned once
 STANDARD_INDEX = "~/.local/state/cypherdj/plugins/index.json"
 STANDARD_PFADE = ["~/.vst3", "/usr/lib/vst3", "/usr/local/lib/vst3", "~/.lv2", "/usr/lib/lv2", "/usr/local/lib/lv2"]
 EIGENE_PFADE = ["~/.local/lib/cypherdj/vst3"]
+PFADE_DATEI = "~/.config/cypherdj/plugin_pfade.txt"   # one absolute folder per line, machine-wide: ADDS scan roots for third-party plugins
 WURZEL = Path(__file__).resolve().parents[3]   # the folder above djk/ (a checkout, or /opt/cypher-dj)
 STILLE_ZEIT = 10.0   # seconds without a single output byte
 GESAMT_ZEIT = 180.0  # hard cap for one bundle
@@ -45,6 +47,60 @@ def eigene_pfade():
     if paket.is_dir():
         liste.append(str(paket))
     return liste
+
+
+def datei_pfade():
+    """The folders of plugin_pfade.txt in order. Blank lines, `#` lines and lines that are not absolute are ignored; a missing or unreadable
+    file is an empty list. These folders are search roots for THIRD-PARTY plugins only: they never reach eigene_pfade() (own bundles)."""
+    try:
+        # CYPHERDJ_PLUGIN_PFADE_DATEI: a test instance's own file (paths.ts pluginPfadeDatei), never the owner's
+        text = Path(os.environ.get("CYPHERDJ_PLUGIN_PFADE_DATEI") or os.path.expanduser(PFADE_DATEI)).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return []
+    liste = []
+    for zeile in text.splitlines():
+        zeile = zeile.strip()
+        if zeile and not zeile.startswith("#") and os.path.isabs(zeile):
+            liste.append(zeile)
+    return liste
+
+
+def suchwurzeln():
+    """Default scan roots: the standard folders, then the folders of plugin_pfade.txt (no duplicates)."""
+    wurzeln = []
+    for p in [os.path.expanduser(p) for p in STANDARD_PFADE] + datei_pfade():
+        if p not in wurzeln:
+            wurzeln.append(p)
+    return wurzeln
+
+
+def _ohne_kommentare(text):
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+    return re.sub(r"^\s*//.*$", "", text, flags=re.M)
+
+
+def version_von(buendel_pfad, format_):
+    """Plugin version from the bundle files (carla-discovery prints none). VST3: Contents/Resources/moduleinfo.json `Version`.
+    LV2: lv2:minorVersion and lv2:microVersion of the first plugin ttl as "<minor>.<micro>". Unreadable or absent: "" (never an error)."""
+    try:
+        if format_ == "vst3":
+            roh = (Path(buendel_pfad) / "Contents" / "Resources" / "moduleinfo.json").read_text(encoding="utf-8", errors="replace")
+            try:
+                d = json.loads(roh)
+            except ValueError:
+                d = json.loads(_ohne_kommentare(roh))
+            v = d.get("Version", "") if isinstance(d, dict) else ""
+            return v.strip() if isinstance(v, str) else ""
+        if format_ == "lv2":
+            for ttl in sorted(Path(buendel_pfad).glob("*.ttl")):
+                text = ttl.read_text(encoding="utf-8", errors="replace")
+                mi = re.search(r"lv2:minorVersion\s+(\d+)", text)
+                ma = re.search(r"lv2:microVersion\s+(\d+)", text)
+                if mi and ma:
+                    return f"{mi.group(1)}.{ma.group(1)}"
+    except (OSError, ValueError):
+        pass
+    return ""
 
 
 def discovery_programm():
@@ -344,8 +400,11 @@ def scanne(wurzeln, index_pfad, mit_eigenen=False):
             skips.append({"buendel": buendel, "grund": "eigen", "mtime": mtime, "groesse": groesse})
             continue
         jetzt = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+        version = version_von(buendel, format_)
         for e in es:
             e.update({"buendel": buendel, "mtime": mtime, "groesse": groesse, "gescannt": jetzt})
+            if version:
+                e["version"] = version
             if vorher:
                 geaendert_ids.add(e["id"])
         neue.extend(es)
@@ -361,11 +420,11 @@ def scanne(wurzeln, index_pfad, mit_eigenen=False):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--pfade", nargs="+", help="directories to search (default: the system and user plugin paths)")
+    ap.add_argument("--pfade", nargs="+", help="directories to search (default: the system and user plugin paths, then plugin_pfade.txt)")
     ap.add_argument("--index", default=STANDARD_INDEX)
     ap.add_argument("--mit-eigenen", action="store_true", help="also scan and list the Cypher-DJ own bundles")
     a = ap.parse_args(argv)
-    wurzeln = list(a.pfade or STANDARD_PFADE)
+    wurzeln = list(a.pfade or suchwurzeln())
     if a.mit_eigenen:
         wurzeln += eigene_pfade()
     try:

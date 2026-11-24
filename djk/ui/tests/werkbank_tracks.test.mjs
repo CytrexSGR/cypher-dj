@@ -115,7 +115,7 @@ test('the track list shows a row per instrument track with letter, name, chip an
   assert.equal(z.length, 2);
   assert.equal(z[0].querySelector('[data-w="spur-buchstabe"]').textContent, 'A');
   assert.equal(z[0].querySelector('[data-w="spur-name"]').textContent, 'T1');
-  assert.equal(z[0].querySelector('[data-w="spur-geraet"]').textContent, 'Baukasten · drums-909');
+  assert.equal(z[0].querySelector('[data-w="spur-geraet"]').textContent, 'Cypher Modular · drums-909');
   assert.ok(z[0].classList.contains('aktiv'));
   assert.ok(!z[1].classList.contains('aktiv'));
   assert.equal(w.ctx.st.wahl, 's1');
@@ -257,7 +257,7 @@ test('+ INSTRUMENT TRACK opens the instrument menu; a choice sends werkbank_spur
   assert.ok(!knopf.disabled);
   knopf.dispatch('click'); await ruhe();
   const eintrag = punkte.find((x) => x.text === 'bass-banddrive');
-  assert.ok(eintrag, 'the Baukasten graphs are listed');
+  assert.ok(eintrag, 'the Cypher Modular graphs are listed');
   assert.equal(posts().length, 0, 'opening the menu sends nothing');
   eintrag.aktion(); await ruhe();
   assert.deepEqual(posts().at(-1).koerper.befehle, [{ befehl: 'werkbank_spur_neu', name: 'bass-banddrive', geraet: { art: 'intern', name: 'bk', graph: 'bass-banddrive' }, loop_beats: 16 }]);

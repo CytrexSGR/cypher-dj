@@ -7,10 +7,13 @@ export const INSTRUMENTE_TEXT = {
   hint: 'TO TRACK puts an instrument on a new track · DELETE removes an instrument that nothing plays',
   leer: 'No instruments yet. Open a folder of note samples in SAMPLES and use INSTRUMENT TO TRACK.',
   liest: 'Reading…',
+  liestLang: 'Reading instruments… the first read can take a few seconds',
   keinModul: 'Open a module first.',
   spurTitel: 'Put this instrument on a new track',
   wegTitel: 'Delete this instrument with its samples',
 };
+// what the empty list says while the read runs: the short text first, the long one after 1 s, with the seconds once the read passes 3 s
+export const liestText = (ms) => (ms < 1000 ? INSTRUMENTE_TEXT.liest : ms < 3000 ? INSTRUMENTE_TEXT.liestLang : `${INSTRUMENTE_TEXT.liestLang} (${Math.floor(ms / 1000)} s)`);
 export const loeschFrage = (name) => `Delete the instrument "${name}"? This cannot be undone.`;
 
 // the rows of the answer of GET /sampler/instrumente: a broken entry (no id or name) is left out; newest first, then by name
@@ -30,7 +33,7 @@ const markiere = (e, name) => { e.setAttribute('data-w', name); return e; };
 // opt.host: the element the tab draws into; opt.setzeHinweis(text|null); opt.refusalText(r). Returns {zeige, verberge, lade}.
 export function bindeInstrumente(ctx, { host, setzeHinweis = () => {}, refusalText = (r) => ctx.antwortText(r) }) {
   const { st } = ctx;
-  let aktiv = false, daten = null, fehler = null, nr = 0, macht = false;
+  let aktiv = false, daten = null, fehler = null, nr = 0, macht = false, liestSeit = null, liestUhr = null;
   const wurzelEl = el('div', 'w-ins');
   const liste = el('div', 'w-ins-liste');
   wurzelEl.append(liste);
@@ -58,15 +61,22 @@ export function bindeInstrumente(ctx, { host, setzeHinweis = () => {}, refusalTe
     return r;
   }
   function zeichne() {
-    if (!daten) { liste.replaceChildren(el('div', 'w-ins-leer', fehler ?? INSTRUMENTE_TEXT.liest)); return; }
+    if (!daten) { liste.replaceChildren(el('div', 'w-ins-leer', fehler ?? liestText(liestSeit !== null ? Date.now() - liestSeit : 0))); return; }
     const zeilen = instrumentZeilen(daten).map(baueZeile);
     liste.replaceChildren(...(zeilen.length ? zeilen : [el('div', 'w-ins-leer', INSTRUMENTE_TEXT.leer)]));
     zeigeKnoepfe();
   }
   async function lade() {
     const mein = ++nr;
+    // while nothing is read yet, the text grows with the wait; the timer lives only as long as this request
+    if (!daten) {
+      liestSeit = Date.now(); clearTimeout(liestUhr);
+      const tick = () => { if (mein !== nr || daten || liestSeit === null) return; if (aktiv) zeichne(); liestUhr = setTimeout(tick, 1000); };
+      liestUhr = setTimeout(tick, 1000);
+    }
     const r = await ctx.holeGet('/sampler/instrumente');
     if (mein !== nr) return;   // a newer request is on its way
+    clearTimeout(liestUhr); liestSeit = null;
     const ok = r.status === 200 && Array.isArray(r.j?.instrumente);
     daten = ok ? r.j : daten;
     fehler = ok ? null : refusalText(r);

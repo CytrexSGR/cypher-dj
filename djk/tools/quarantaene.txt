@@ -1,0 +1,6 @@
+# Quarantine list of the test gate (djk/tools/alles.sh).
+# Format: <suite> <test name or file>  # reason
+# The entry is matched as a substring of the failing test's name or of its file (use the test file path, or the ctest test name). Quarantined tests still run and are
+# reported in SUMMARY.md, but they do not make alles.sh exit non-zero. At most ten entries for a release candidate;
+# every line needs a reason (what fails, under which load).
+# (empty) The three warp fuzz runs that were listed here left the gate: they carry the label langsam and run in the slow stage (alles.sh --langsam) with their own timeout.

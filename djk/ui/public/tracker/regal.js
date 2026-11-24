@@ -5,12 +5,14 @@
 // one with /proj/oeffnen through the confirmation of the live container (opening closes the live container's modules) and the view stays the TRACKER view.
 // The same file is an ordinary project in PRODUCTION: nothing is written there that PRODUCTION does not know.
 import { mitBestaetigung } from '../production/project_choice.js';
+import { datumText } from '../format_text.js';
 
 export const REGAL_TEXT = {
   gespeichert: 'Saved as a tracker module: it is on the shelf',
   kopiert: (name) => `Saved as ${name}.`,
   leer: 'No tracker module yet. NEW MODULE makes one; SAVE MODULE puts an open PRODUCTION project on this shelf.',
-  hinweis: 'click = open the module · every change is saved at once · SAVE AS (the button next to MODULES) keeps a copy under a new name',
+  // the key of the head carries its true name: SAVE MODULE on a project that is none yet, SAVE AS on a marked module
+  hinweis: (taste) => `click = open the module · every change is saved at once · ${taste} (in the head) keeps a copy under a new name`,
   speichern: 'SAVE MODULE', speichernUnter: 'SAVE AS',
   speichernTitel: 'Mark the open project as a tracker module: it appears on the MODULES shelf (one undo step)',
   speichernUnterTitel: 'Save a copy of this module under a new name (the module itself saves every change as you make it)',
@@ -25,8 +27,6 @@ export function regalEintraege(liste, slug) {
     .map((x) => ({ slug: x.slug, name: x.name, offen: x.slug === slug, ...(x.geaendert ? { geaendert: x.geaendert } : {}) }))
     .sort((a, b) => String(a.name).localeCompare(String(b.name), 'en', { sensitivity: 'base' }));
 }
-// date and time of day, as the workbench shelf shows them
-const datum = (iso) => { const d = typeof iso === 'string' ? new Date(iso) : null; return d && !Number.isNaN(d.getTime()) ? `${iso.slice(0, 10)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : ''; };
 
 export function bindeRegal(ctx) {
   const { st, $ } = ctx;
@@ -37,7 +37,7 @@ export function bindeRegal(ctx) {
   feld.setAttribute('type', 'text'); feld.setAttribute('maxlength', '80'); feld.setAttribute('title', REGAL_TEXT.nameTitel); feld.setAttribute('aria-label', REGAL_TEXT.nameTitel);
   feld.hidden = true;
   speichern.after(feld);
-  const kopf = el('div', 't-regal-kopf'); const hinweis = el('span', 't-regal-hinweis'); hinweis.textContent = REGAL_TEXT.hinweis;
+  const kopf = el('div', 't-regal-kopf'); const hinweis = el('span', 't-regal-hinweis'); hinweis.textContent = REGAL_TEXT.hinweis(REGAL_TEXT.speichern);
   const lbl = el('b', 't-regal-lbl'); lbl.textContent = 'MODULES';
   kopf.append(lbl, hinweis);
   const karten = el('div', 't-regal-karten', 'regal-karten');
@@ -49,6 +49,7 @@ export function bindeRegal(ctx) {
   const zeigeKnoepfe = () => {
     speichern.disabled = !geeignet(); modulKnopf.disabled = false;   // the shelf also opens when no project is open
     speichern.textContent = markiert() ? REGAL_TEXT.speichernUnter : REGAL_TEXT.speichern;
+    hinweis.textContent = REGAL_TEXT.hinweis(speichern.textContent);
     speichern.setAttribute('title', !st.projekt || geeignet() ? (markiert() ? REGAL_TEXT.speichernUnterTitel : REGAL_TEXT.speichernTitel) : REGAL_TEXT.weder);
     modulKnopf.setAttribute('aria-pressed', String(!host.hidden)); modulKnopf.classList.toggle('an', !host.hidden);
     if (!geeignet() || !markiert()) feld.hidden = true;
@@ -69,7 +70,7 @@ export function bindeRegal(ctx) {
       const k = el('button', `t-regal-karte${m.offen ? ' offen' : ''}`, 'regal-modul');
       k.setAttribute('type', 'button'); k.setAttribute('data-slug', m.slug);
       const n = document.createElement('b'); n.textContent = m.name;
-      const d = document.createElement('span'); d.textContent = m.offen ? 'open' : datum(m.geaendert);
+      const d = document.createElement('span'); d.textContent = m.offen ? 'open' : datumText(m.geaendert);
       k.append(n, d);
       if (m.offen) k.disabled = true;
       // the click re-checks the live state: a card drawn before a change must not reopen the open module
@@ -88,7 +89,7 @@ export function bindeRegal(ctx) {
       ctx.melde(ctx.antwortText(r), true);
     } finally { oeffnet = false; }
   }
-  // the shelf is an overlay under the bar: it closes on Escape and on a click beside it (the MODULES button toggles it itself)
+  // the shelf is a row of the page flow under the bar (it pushes the grid down): it closes on Escape and on a click beside it (the MODULES button toggles it itself)
   ctx.beiAussen?.([host, modulKnopf], () => !host.hidden, () => { host.hidden = true; zeigeKnoepfe(); });
   modulKnopf.addEventListener('click', () => {
     host.hidden = !host.hidden;

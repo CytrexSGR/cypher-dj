@@ -16,8 +16,9 @@ test('Vorgabe h (K 8000, Seite 55300), per Umgebung g (K 7000); Unsinn bricht ab
 // Review S2 B6, S3-B4, Re-Review N5: der Prüfstapel (stack.test.mjs) nimmt nie die Instanz der Server-Tests derselben Session, nie h (Vorgabe der
 // Server-Tests, die Schwester) und nie g (Abnahme). Dafür bleiben a bis f als Ziele für acht Quellen: Kollisionen sind unvermeidlich und stehen
 // hier offen, statt versteckt zu sein. CYPHERDJ_STAPEL_INSTANZ überschreibt das Mapping.
+// A shard of alles.sh sets CYPHERDJ_STAPEL_INSTANZ=i for the whole process: the mapping below is the one without it, so it is taken out of the inherited environment.
 const stapelMit = (env) => JSON.parse(execFileSync(process.execPath, ['-e', `import(${JSON.stringify(hilfe)}).then((m) => console.log(JSON.stringify(m.STAPEL_INSTANZ)))`],
-  { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] }).toString());
+  { env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'CYPHERDJ_STAPEL_INSTANZ')), ...env }, stdio: ['ignore', 'pipe', 'pipe'] }).toString());
 test('STAPEL_INSTANZ: nie die eigene Test-Instanz, nie h, g oder i; die Kollisionen sind genau die dokumentierten', () => {
   const bild = Object.fromEntries([...'abcdefgh'].map((b) => [b, stapelMit({ CYPHERDJ_TEST_INSTANZ: b })]));
   for (const [b, s] of Object.entries(bild)) assert.notEqual(s, b, `${b}: der Prüfstapel nimmt nicht die Instanz der Server-Tests`);

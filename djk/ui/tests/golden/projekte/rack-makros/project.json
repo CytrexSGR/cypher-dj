@@ -1,0 +1,184 @@
+{
+ "format": "cypherdj-projekt/3",
+ "gruppen": [],
+ "loop": {
+  "an": false,
+  "bis_beat": 32,
+  "von_beat": 0
+ },
+ "master": {
+  "fader_db": 0
+ },
+ "metronom": {
+  "an": false,
+  "pegel_db": -12,
+  "ziel": "master"
+ },
+ "naechste_id": {
+  "clip": 1,
+  "gruppe": 1,
+  "spur": 1
+ },
+ "naechste_noten_id": 1,
+ "name": "Golden rack macros",
+ "rev": 0,
+ "spuren": [
+  {
+   "art": "instrument",
+   "clips": [
+    {
+     "art": "midi",
+     "id": "c1",
+     "laenge_beats": 4,
+     "name": "Chord",
+     "noten": [
+      {
+       "beat": 0,
+       "id": "n1",
+       "laenge": 2,
+       "ton": 48,
+       "vel": 90
+      },
+      {
+       "beat": 0,
+       "id": "n2",
+       "laenge": 2,
+       "ton": 64,
+       "vel": 90
+      }
+     ],
+     "start_beat": 0
+    }
+   ],
+   "fader_db": 0,
+   "farbe": "#3b8de0",
+   "geraet": {
+    "art": "rack",
+    "glieder": [
+     {
+      "gain_db": -3,
+      "geraet": {
+       "art": "intern",
+       "name": "rb338",
+       "parameter": {
+        "cutoff": 0.5
+       }
+      },
+      "id": "g1",
+      "ton": [
+       0,
+       59
+      ]
+     },
+     {
+      "geraet": {
+       "art": "intern",
+       "graph": "demo",
+       "name": "bk",
+       "parameter": {
+        "k1": 0.2
+       }
+      },
+      "id": "g2",
+      "ton": [
+       60,
+       127
+      ],
+      "vel": [
+       1,
+       127
+      ]
+     }
+    ],
+    "kette": 0
+   },
+   "id": "s1",
+   "mute": false,
+   "name": "Rack",
+   "nr": 1,
+   "pan": 0,
+   "rack": {
+    "makros": [
+     {
+      "ziel": [
+       {
+        "bis": 1,
+        "glied": "g1",
+        "param": "cutoff",
+        "von": 0
+       },
+       {
+        "bis": 1,
+        "glied": "g2",
+        "param": "k1",
+        "von": 0
+       }
+      ]
+     },
+     {
+      "ziel": [
+       {
+        "bis": 1,
+        "glied": "g1",
+        "param": "resonanz",
+        "von": 0
+       }
+      ]
+     },
+     {
+      "ziel": [
+       {
+        "bis": 1,
+        "glied": "g1",
+        "param": "lautstaerke",
+        "von": 0
+       }
+      ]
+     },
+     {
+      "ziel": [
+       {
+        "bis": 1,
+        "glied": "g2",
+        "param": "k2",
+        "von": 0
+       }
+      ]
+     }
+    ],
+    "namen": [
+     "Open",
+     "Res",
+     "Level",
+     "Mix"
+    ],
+    "slot": 1,
+    "variationen": [
+     {
+      "name": "Bright",
+      "werte": [
+       0.9,
+       0.5,
+       0.5,
+       0.5
+      ]
+     }
+    ],
+    "werte": [
+     0.1,
+     0.2,
+     0.3,
+     0.4
+    ]
+   },
+   "solo": false,
+   "von": "andreas"
+  }
+ ],
+ "taktart": [
+  4,
+  4
+ ],
+ "tempo_bpm": 120,
+ "wiedergabe_rev": 0
+}

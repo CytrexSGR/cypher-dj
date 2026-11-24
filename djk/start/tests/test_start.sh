@@ -21,7 +21,7 @@
 #   P13 toter Satellit (Leitstand-Konfiguration mit unbekanntem Schlüssel, Rückgabe 2): Abbruch 5 in unter 5 s, 0 Units
 #   P17 Digital-Out-Wache (Glanz 2.1, F22): mit CYPHERDJ_DIGITALWACHE_PCI startet sie und schreibt den Stand, djk-stop räumt
 #       ab; kaputte PCI -> Warnung, Studio läuft; ohne Variable an der stummen Senke keine Wache
-# Rückgabe: 0 alle Punkte OK, 1 mindestens einer FEHL, 2 Aufbau (Last, Schloss).
+# Rückgabe: 0 alle Punkte OK, 1 mindestens einer FEHL, 2 Aufbau, 77 SKIP (Last, Schloss).
 . "$(dirname "$0")/../../config/realtime_lock.sh"   # CYPHERDJ_ECHTZEIT_SCHLOSS
 set -uo pipefail
 HIER=$(cd "$(dirname "$0")" && pwd)
@@ -30,9 +30,10 @@ START=$(cd "$HIER/.." && pwd)
 I=$(integration_instanz "${1:-}") || exit 2   # integration test: no default instance
 case "$I" in [a-i]) K=$(( $(printf '%d' "'$I") - 96 ));; *) echo "Instanz a bis i" >&2; exit 2;; esac
 LAST=$(cut -d' ' -f1 /proc/loadavg)
-python3 -c "import sys; sys.exit(0 if float('$LAST') <= 4 else 1)" || { echo "1-min-Last $LAST > 4, kein Start" >&2; exit 2; }
+# exit 77 = SKIP (alles.sh counts it as skipped and the gate is then not green): the test refuses under load, it did not fail
+python3 -c "import sys; sys.exit(0 if float('$LAST') <= 4 else 1)" || { echo "SKIP load: 1-min load $LAST > 4, nothing started"; exit 77; }
 exec 9>"$CYPHERDJ_ECHTZEIT_SCHLOSS"
-flock -w 900 9 || { echo "kein Echtzeit-Schloss" >&2; exit 2; }
+flock -w 900 9 || { echo "SKIP load: no realtime lock after 900 s, nothing started"; exit 77; }
 echo "Instanz $I, Last vorher $(cut -d' ' -f1-3 /proc/loadavg)"
 
 SENKE=cypherdj-pruef-$I-start

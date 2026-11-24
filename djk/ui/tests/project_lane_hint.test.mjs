@@ -55,7 +55,7 @@ test('B: a macro with a lane: rack_makro answers lane_treibt; without a lane on 
   assert.equal(ok(p, { befehl: 'rack_makro', strang_id: 's1', nr: 2, wert: 0.3 }).hinweise, undefined, 'macro 2 has no lane');
 });
 
-test('C: a Baukasten knob with a lane: a device write that changes the knob answers lane_treibt, another knob does not', () => {
+test('C: a Cypher Modular knob with a lane: a device write that changes the knob answers lane_treibt, another knob does not', () => {
   let p = basis();
   p = mitLane(p, { befehl: 'auto_neu', spur_id: 's2', ziel: 'geraet.k2' });
   const lane = p.spuren[1].automation[0];
