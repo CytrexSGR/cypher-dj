@@ -10,6 +10,8 @@ registration (`claude mcp add ... -- node <checkout>/djk/hand/hand.ts --seite <u
   j5.uebernahme     the human grabs a control the agent is ramping, through /griff: the ramp stops, the agent is refused for
                     the 32 beat hold and may write again after it; a fader and the tempo are taken over by the human as well
   j5.stopp_cypher   Stop Cypher: only the human may press it; the agent's writes are refused, the human's pass; release
+  j5.spur           automation track: the agent starts a four-bar ramp with `spur`, the value follows the bar grid (one reading per bar
+                    line), `spuren` lists it, `spur_stopp` ends a second ramp half way and the value stays where it was
 
 Run: `python3 djk/tools/tour/j5.py --instanz b [--kurz]`. The instance is started and stopped by the runner.
 """
@@ -28,6 +30,11 @@ except ImportError:  # run as a script
 REGISTRIERUNG = "djk/hand/hand.ts --seite"
 LIVE_URL = "http://127.0.0.1:47300"
 FADER, FILTER = "deck/1/fader", "deck/1/filter"      # the three controls of the takeover: a mixer fader, a filter knob, the tempo
+SPUR_ZIEL = "deck/2/filter"                          # target of the automation track: a control the human has not touched in this tour
+SPUR_TAKTE = 4                                       # bars of the ramp
+SPUR_VON, SPUR_NACH = 0.1, 0.9                       # the ramp goes up from the start value; the second one (stopped half way) comes back down
+SPUR_TOLERANZ = 0.08                                 # a reading of the ramp is this close to the straight line of its beat (range 0..1)
+SPUR_HALT_TOLERANZ = 0.03                            # after spur_stopp the value moves by less than this in the next bar
 MUSTER = 's("bd*4, ~ hh ~ hh")'                      # kit sounds every kit of the starter stage has
 TAKTE = 8
 
@@ -226,6 +233,14 @@ def _schritte(t, z, befehl, live_url, frist_s, tempo_frist_s, anlauf_s):
         if r.get("_fehler"):
             t.rot(f"the agent's write is still refused after the release: {r.get('fehler')}")
 
+    with t.schritt("j5.spur", f"an automation track: a {SPUR_TAKTE}-bar ramp follows the bar grid, spuren lists it, spur_stopp ends one") as w:
+        if not z["projekt"]:
+            t.skip("the tour built no project: nothing plays, no master clock", ursache="abhaengigkeit")
+        try:
+            _spur_schritt(t, hand, w, z, frist_s)
+        finally:
+            _spur_ende(t, hand, z)
+
 
 HALTE_BEATS = 32      # the hand keeps a control for this many beats after the last movement (INTERFACES.md 7.3 item 4)
 
@@ -290,6 +305,112 @@ def _filter_griff(t, hand, w, frist_s):
     w["halt_beats"] = round(gehalten, 1)
     if gehalten < HALTE_BEATS - 4:
         raise RuntimeError(f"the hold ended after {gehalten:.1f} beats, expected about {HALTE_BEATS}")
+
+
+def _spur_schritt(t, hand, w, z, frist_s):
+    """The agent's automation track. Part 1: a ramp over SPUR_TAKTE bars; at every bar line the control reads the straight line between
+    the start and the end value (the beat and the value come out of one /lage answer, so they belong together), `spuren` lists the track
+    with the target and no rejected part. Part 2: a second ramp back down is stopped half way with `spur_stopp`: the value stays where
+    it was (nothing moves in the next bar), the track is gone from `spuren`, and a second stop is refused with keine_spur."""
+    def lage():
+        a = _lage(t)
+        return (a.get("uhr") or {}).get("beat"), (a.get("regler") or {}).get(SPUR_ZIEL), (a.get("uhr") or {}).get("bpm") or z["bpm"]
+
+    def warte_beat(ziel_beat, bpm, text):
+        if not t.warte_bis(lambda: (lage()[0] or 0) >= ziel_beat, (ziel_beat - (lage()[0] or 0)) * 60.0 / bpm * 2 + 5, text):
+            raise RuntimeError(f"the master clock did not reach {text}")
+
+    def listet(name):
+        r = hand.rufe("spuren")
+        eintraege = r.get("wert") if isinstance(r.get("wert"), list) else []
+        return r, next((e for e in eintraege if isinstance(e, dict) and e.get("name") == name), None)
+
+    beat0, wert0, bpm = lage()
+    if beat0 is None:
+        raise RuntimeError("/lage has no master beat")
+    if not t.warte_bis(lambda: (lage()[0] or 0) > beat0 + 0.25, 3, "the master clock to run"):
+        t.skip("the master clock does not run: no transport", ursache="abhaengigkeit")
+    z["spur_filter_vorher"] = wert0
+    # a known start: the agent sets the control (not a ramp, takte 0)
+    _ok(hand.rufe("regler", {"pfad": SPUR_ZIEL, "nach": SPUR_VON, "takte": 0}), f"agent {SPUR_ZIEL}")
+    if not t.warte_bis(lambda: _nahe(lage()[1], SPUR_VON, 0.03), frist_s, f"{SPUR_ZIEL} to take the start value"):
+        raise RuntimeError(f"{SPUR_ZIEL} did not take the start value {SPUR_VON} (reads {lage()[1]})")
+
+    # part 1: the ramp
+    name = f"tour-j5-rampe-{int(time.time()) % 100000}"
+    z["spuren"] = z.get("spuren", []) + [name]
+    r = _ok(hand.rufe("spur", {"name": name, "fahrten": [
+        {"ziel": SPUR_ZIEL, "ab_takt": 1, "takte": SPUR_TAKTE, "nach": SPUR_NACH, "form": "linear"}]}), "spur")
+    anker, ende = r.get("anker_beat"), r.get("ende_beat")
+    w.update(spur=name, ziel=SPUR_ZIEL, anker_beat=anker, ende_beat=ende, anker_takt=r.get("anker_takt"))
+    if not isinstance(anker, (int, float)) or ende != anker + 4 * SPUR_TAKTE:
+        raise RuntimeError(f"the track does not start on a bar line and run {SPUR_TAKTE} bars: anker {anker}, ende {ende}")
+    if anker % 4 != 0:
+        raise RuntimeError(f"the track is not anchored on a bar line: beat {anker}")
+    if r.get("teile") != 1 or r.get("abgelehnt"):
+        raise RuntimeError(f"the core did not take the move: teile {r.get('teile')}, abgelehnt {r.get('abgelehnt')}")
+    b_ruf, v_ruf, _ = lage()
+    w["wert_vor_anker"] = v_ruf
+    if b_ruf is not None and b_ruf < anker - 0.5 and not _nahe(v_ruf, SPUR_VON, 0.03):
+        raise RuntimeError(f"the control moved before the bar line: {v_ruf} at beat {b_ruf}, anchor {anker}")
+    _, eintrag = listet(name)
+    w["spuren_listet"] = bool(eintrag)
+    if not eintrag:
+        raise RuntimeError(f"spuren does not list the running track {name}")
+    if eintrag.get("quelle") != "cypher" or [f.get("ziel") for f in eintrag.get("fahrten") or []] != [SPUR_ZIEL] or eintrag.get("abgelehnt"):
+        raise RuntimeError(f"spuren lists the track wrong: {eintrag}")
+    lesungen = []
+    for k in range(SPUR_TAKTE + 1):
+        warte_beat(anker + 4 * k, bpm, f"bar line {k + 1} of the ramp")
+        b, v, _ = lage()
+        soll = SPUR_VON + (SPUR_NACH - SPUR_VON) * min(1.0, max(0.0, (b - anker) / (4 * SPUR_TAKTE)))
+        lesungen.append({"takt": k, "beat": round(b, 2), "wert": v if v is None else round(v, 3), "soll": round(soll, 3)})
+    w["lesungen"] = lesungen
+    falsch = [x["takt"] for x in lesungen if not isinstance(x["wert"], (int, float)) or abs(x["wert"] - x["soll"]) > SPUR_TOLERANZ]
+    if falsch:
+        raise RuntimeError(f"the value does not follow the bar grid at bar line {falsch}: {lesungen}")
+    werte = [x["wert"] for x in lesungen]
+    # each step must rise as far as the ramp did between the two readings; a reading that lands late (a loaded machine)
+    # moves both the value and its target, so the last step before the end of the ramp can be short without being wrong
+    if any((b2["wert"] - a2["wert"]) < (b2["soll"] - a2["soll"]) - SPUR_TOLERANZ for a2, b2 in zip(lesungen, lesungen[1:])) \
+            or werte[-1] - werte[0] < 0.5 * (SPUR_NACH - SPUR_VON):
+        raise RuntimeError(f"the value does not rise bar by bar: {werte}")
+
+    # part 2: stop a ramp half way
+    name2 = f"tour-j5-halt-{int(time.time()) % 100000}"
+    z["spuren"].append(name2)
+    r = _ok(hand.rufe("spur", {"name": name2, "fahrten": [
+        {"ziel": SPUR_ZIEL, "ab_takt": 1, "takte": SPUR_TAKTE, "nach": SPUR_VON, "form": "linear"}]}), "spur (second)")
+    anker2 = r.get("anker_beat")
+    warte_beat(anker2 + 4 * SPUR_TAKTE / 2, bpm, "the middle of the second ramp")
+    s = _ok(hand.rufe("spur_stopp", {"name": name2}), "spur_stopp")
+    b_stopp, v_stopp, _ = lage()
+    warte_beat(b_stopp + 4, bpm, "one bar after the stop")
+    b_nach, v_nach, _ = lage()
+    _, noch = listet(name2)
+    zweiter = _verweigert(hand, "spur_stopp", {"name": name2})
+    w.update(stopp_beat=round(b_stopp, 2), wert_beim_stopp=v_stopp, wert_ein_takt_danach=v_nach, spur_stopp_antwort=s.get("ok"),
+             zweiter_stopp=zweiter.get("fehler") if zweiter.get("_fehler") else "accepted")
+    if v_stopp is None or v_nach is None:
+        raise RuntimeError("the control value could not be read")
+    mitte = SPUR_NACH + (SPUR_VON - SPUR_NACH) * min(1.0, max(0.0, (b_stopp - anker2) / (4 * SPUR_TAKTE)))
+    if abs(v_stopp - mitte) > SPUR_TOLERANZ or not (SPUR_VON + 0.15 < v_stopp < SPUR_NACH - 0.15):
+        raise RuntimeError(f"the ramp was not half way when it was stopped: {v_stopp}, expected about {round(mitte, 3)}")
+    if abs(v_nach - v_stopp) > SPUR_HALT_TOLERANZ:
+        raise RuntimeError(f"the value moved on after spur_stopp: {v_stopp} at the stop, {v_nach} one bar later")
+    if noch:
+        raise RuntimeError(f"spuren still lists {name2} after spur_stopp")
+    if not (zweiter.get("_fehler") and zweiter.get("fehler") == "keine_spur"):
+        raise RuntimeError(f"a second spur_stopp was not refused with keine_spur (answer: {zweiter})")
+
+
+def _spur_ende(t, hand, z):
+    """Leaves nothing behind: tracks of the step stopped (a no-op for one that ended), the control back where it was."""
+    for name in z.get("spuren", []):
+        _verweigert(hand, "spur_stopp", {"name": name})       # keine_spur is the normal answer for a track that has ended
+    vorher = z.get("spur_filter_vorher")
+    if isinstance(vorher, (int, float)):
+        _verweigert(hand, "regler", {"pfad": SPUR_ZIEL, "nach": vorher, "takte": 0})
 
 
 def _aufraeumen(t, z):

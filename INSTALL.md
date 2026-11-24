@@ -1,6 +1,6 @@
 # Installing cypher-dj (beta)
 
-Tested on Ubuntu 24.04 (x86_64). Steps marked **checked** were run on a fresh Ubuntu 24.04.5 VM on 22 November 2026
+The package is tested on Ubuntu 24.04 and 26.04 (x86_64); building from source on Ubuntu 24.04. Steps marked **checked** were run on a fresh Ubuntu 24.04.5 VM on 22 November 2026
 (sections 1, 2, 4, 5, 8 to 11 and part of 6), and the demo played (master peaks -10.9 / -6.4 dBFS). Section 3 (tests) and
 section 7 (workshop) were not part of that run, and the VM had no real audio device and no Surge. The other steps were
 only run on the development machine. Please report what breaks.
@@ -20,6 +20,9 @@ cypher-dj mcp                       # prints the one JSON line that registers th
 
 `cypher-dj stop` and `cypher-dj status` do what they say. Run `cypher-dj start` as your normal user, not as root.
 If the real-time limits are missing, the start prints the fix.
+
+`cypher-dj doctor` checks the machine before you start (real-time limits, audio device, PipeWire, versions) and says
+what is missing. `cypher-dj report` writes a scrubbed support file into the current folder that you can attach to an issue.
 
 Surge XT is not part of the package. Without it the melody channel plays the Cypher Modular instrument and the bass
 channel the RB-338, so the package sounds without it. If you want Surge, install its LV2 plugin by hand (section 6);

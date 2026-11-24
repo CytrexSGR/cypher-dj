@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <fstream>
 #include <memory>
 
@@ -353,14 +354,21 @@ bool lies_spur_regler(const std::string& pfad, std::vector<SpurRegler>& aus, std
       fehler = pfad + ": " + p + " ist keine Zahl";
       return false;
     }
-    const double v = it.value().get<double>();
+    const double vd = it.value().get<double>();
+    // The table bounds are floats, the JSON number a double: 0.1 as a double is below the float 0.1f, so a value that sits exactly on a bound
+    // (komp attack 0.1 ms) was refused. The value is rounded to the float the mixer gets, and that float is checked (as Kern::regler_setzen does).
+    if (!std::isfinite(vd) || std::fabs(vd) > static_cast<double>(std::numeric_limits<float>::max())) {
+      fehler = pfad + ": " + p + " = " + std::to_string(vd) + " ist keine endliche Zahl in Float-Grenzen";
+      return false;
+    }
+    const float v = static_cast<float>(vd);
     const cypherdj::stellwerk::ReglerDef& d = tab.def(r);
-    if (!std::isfinite(v) || v < d.min || v > d.max || (d.ganzzahlig && v != std::floor(v))) {
-      fehler = pfad + ": " + p + " = " + std::to_string(v) + " außerhalb " + std::to_string(d.min) + ".." +
+    if (v < d.min || v > d.max || (d.ganzzahlig && v != std::floor(v))) {
+      fehler = pfad + ": " + p + " = " + std::to_string(vd) + " außerhalb " + std::to_string(d.min) + ".." +
                std::to_string(d.max) + (d.ganzzahlig ? " (ganzzahlig)" : "");
       return false;
     }
-    aus.push_back({p, static_cast<float>(v)});
+    aus.push_back({p, v});
   }
   return true;
 }

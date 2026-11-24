@@ -32,7 +32,14 @@ KICK = 36
 SPITZE_MAX = 0.9                 # the fixtures are scaled down to this peak when the render is louder
 RENDER_FRIST_S = 900
 
-MARKER_PEGEL = 0.05              # amplitude of the low marker tone (peak, before the final scaling)
+# Amplitude of each marker tone (peak, before the final scaling). The key detection of the library hears the markers: with a marker in the file its
+# confidence falls from 0.91 to about 0.53, and at some levels it names another key. Measured with the library's own detection on the 48 bar (kurz) and
+# the 96 bar (lang) fixtures, level by level:
+#   track one (8A):  0.05 to 0.07 right, 0.075 and 0.08 5A (kurz), 0.09 to 0.12 right
+#   track two (9A):  0.05 to 0.075 right, 0.10 6A (both lengths)
+# Track one's marker (100 Hz) is what the drop of deck 1 is read from, against what the other deck's program leaves in that bin after the swap
+# (-61 dB): at 0.05 that is 12.2 dB, at 0.10 about 19. Track two's marker only has to stay below the level where its key breaks.
+MARKER_PEGEL = {"Tour Track One.wav": 0.10, "Tour Track Two.wav": 0.06}
 
 # name, tempo, semitones the melodic tracks are moved up, rendered key as Camelot, silence before the first kick in seconds, marker tone in Hz
 TRACKS = (
@@ -138,7 +145,7 @@ def erzeuge(ordner, kurz):
             wiederholt = np.vstack([a] * (takte // DEMO_TAKTE + 1))
             a = wiederholt[:int(round(je_takt * takte))]
             n = len(a)
-            ton = MARKER_PEGEL * np.sin(2 * np.pi * marker_hz * np.arange(n) / RATE)
+            ton = MARKER_PEGEL[name] * np.sin(2 * np.pi * marker_hz * np.arange(n) / RATE)
             a = a + ton[:, None]
             a = np.vstack([np.zeros((int(round(vorlauf_s * RATE)), 2)), a])
             spitze = float(np.abs(a).max())

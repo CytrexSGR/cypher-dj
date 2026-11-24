@@ -27,7 +27,7 @@ test('table and SCOPE-1.0.md list the same labs rows', (t) => {
   if (!fs.existsSync(SCOPE)) return t.skip('docs/masterplan is absent (public export)');
   const zeilen = fs.readFileSync(SCOPE, 'utf8').split('\n').filter((l) => l.startsWith('|'))
     .map((l) => l.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim())).filter((c) => c[1] === 'labs').map((c) => c[0]);
-  assert.equal(zeilen.length, 18);
+  assert.equal(zeilen.length, 57);
   assert.deepEqual([...LAB_ZEILEN.map((z) => z.zeile)].sort(), [...zeilen].sort());
 });
 
@@ -85,8 +85,12 @@ function quellen(dir) {
 test('every selector of the table occurs in the page sources', () => {
   const text = quellen(path.join(UI, 'public')).join('\n');
   for (const z of LAB_ZEILEN) for (const sel of z.seite ?? []) {
-    const wort = sel.replace(/^[.#]/, '');
-    assert.ok(text.includes(wort), `${z.zeile}: ${sel} is not in public/`);
+    // class and id names, attribute names and quoted attribute values of a selector; tag names are ignored
+    const worte = [...sel.matchAll(/[.#]([\w-]+)/g)].map((m) => m[1])
+      .concat([...sel.matchAll(/\[([\w-]+)/g)].map((m) => m[1]))
+      .concat([...sel.matchAll(/="([^"]*)"/g)].map((m) => m[1]));
+    assert.ok(worte.length > 0, `${z.zeile}: ${sel} has no class, id or attribute`);
+    for (const wort of worte) assert.ok(text.includes(wort), `${z.zeile}: ${sel} (${wort}) is not in public/`);
   }
 });
 

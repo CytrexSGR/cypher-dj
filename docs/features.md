@@ -460,23 +460,80 @@ mostly against a silent test sink. Not benchmarks.
 - The library search expects a catalog database that is not part of this repository.
 - Code comments are in German. The architecture docs and ADRs are written in German and published here as English translations; the export refuses to publish a translation whose German source has changed since. Field names and code words in the docs stay German (`regler`, `warp_setzen`). The interface is in English.
 
+## Journeys
+
+Six chapters walk through the features that make up 1.0. Each one is also run as an automated tour against the software, so the chapter and the program are held against each other.
+
+- [Journey 0: bring your own sounds](journeys/j0-own-sounds.md): from a folder of samples to a kick you hear in a drum track
+- [Journey 1: DJ](journeys/j1-dj.md): two files to a recorded mix
+- [Journey 2: play a live set](journeys/j2-live-set.md): loops, a Strudel pattern, a SEQ pattern and scenes without a dropout
+- [Journey 3: make a song in PRODUCTION](journeys/j3-production.md): an empty project to a WAV file
+- [Journey 4: design a sound](journeys/j4-sound-design.md): one sound from a fresh project to a saved preset and back into a second project
+- [Journey 5: let an agent play the studio](journeys/j5-agent.md): connect an agent, see what it can do, take a control back, Stop Cypher
+
 ## Labs
 
-Some features are built but not yet proven, or are not offered as a finished part of 1.0. They are marked **LAB** (tooltip: "experimental, may change") wherever the page has a control for them. They can change or be removed without notice. Features with a control in the page: ANALYZE window (a view of the analysis), FIND SOUND: a variant round to improve a Cypher Modular sound, Tablet pairing (control from a tablet), Novation Launch Control 3 (its row in the CONTROLLERS list).
+Some features are built but not yet proven, or are not offered as a finished part of 1.0. They are marked **LAB** (tooltip: "experimental, may change") wherever the page has a control for them. They can change or be removed without notice. A feature is part of 1.0 only if one of the journeys (see [the six journeys](journeys/j0-own-sounds.md)) checks it; everything else is labs.
+
+Features with a control in the page:
+
+- Prepared sets (free collections of tracks for a planned set)
+- Collections (named lists of samples, presets, devices)
+- FX unit 3: the remix graph as insert on any channel
+- Take a running deck loop into a loop cell
+- Loop sets (saved arrangements of cells)
+- Strudel pattern library
+- Export a deck loop as a live module, stems follow in the background
+- Module library: save a group, insert it into a project
+- Send a module into the SEQ deck
+- Tracker view: song as sections of rows over instrument tracks
+- Tracker: import of MOD files
+- Takes and comping (audition, comp lanes)
+- Rack with devices on a track, macros, member targets
+- Foreign plugins (VST3, LV2) hosted through Carla in their own processes
+- ANALYZE window (a view of the analysis)
+- FIND SOUND: a variant round to improve a Cypher Modular sound
+- Remix device (graph on the FX 3 insert)
+- Traktor S8 (HID, displays, LEDs, loop deck mode) (its row in the CONTROLLERS list)
+- Akai LPD8 (its row in the CONTROLLERS list)
+- Novation Launch Control 3 (its row in the CONTROLLERS list)
+- Maschine MK2 through the `cypherdj-pult` bridge (its row in the CONTROLLERS list)
+- Tablet pairing (control from a tablet)
+- XDJ-XZ and Maschine Jam bindings (its row in the CONTROLLERS list)
 
 Labs features without a control in the page (hardware, operations, or only reachable by name or through the agent tools):
 
+- What fits after this track (tempo, genre, Camelot move)
+- Never-silent fallback (emergency lane when a source fails)
+- Tags, RELATED items and saved searches in the browser (tools `tags` and `verwandt`)
 - Beat FX tuned for the XDJ control scheme
 - Scene follow actions (field `folge`)
+- Export a loop cell as a module or to the workshop
+- A loop as a Strudel sound (rec0, rec1, ...)
+- Blend a module stem between original and new instrument path
+- Adapt a module to the key of the master deck
+- Live dock with module cards
 - Launchpad Mini MK3 as SEQ grid
+- Tracker: keyboard entry, selection, sections, text view
+- Tracker: FX column and instruments shelf
 - Time signatures n/4 (2/4 to 12/4)
 - Time signatures 6/8, 7/8 and other eighths
+- Plugin parameter learning and panels
 - Windows plugins through yabridge and Wine
 - Native Instruments (Kontakt) route
+- Stem separation of an audio clip (drums, bass, other, vocals; BS-RoFormer on the GPU)
+- Merge selected tracks into one new track
+- Resample a strip to a new track
+- Loudness per track, offline on request
+- Analysis of a strip, comparison to a reference measurement
 - Structure and cue suggestion pipeline
-- Greif 2, the three Juno Pad variants and the sync lead example
+- Stream bounce: record a Cypher Modular instrument into a project in one call
+- Several channel inputs (audio interface profiles)
 - Cypher Labor (experimental block)
+- Device tool `geraete_lage` (audio and MIDI inputs)
+- Demo overlay on the page (`ansage`)
+- Agent skills shipped with the public package (`djk-live`, `track-analysis`)
 - Command-line player for the agent (`player_cli`)
+- Emergency guide
+- Fast test tier (`fast.py`: only the tests a change touches)
 - Akai APC20: PRODUCTION functions with Shift
-- Maschine MK2 through the `cypherdj-pult` bridge
-- XDJ-XZ and Maschine Jam bindings

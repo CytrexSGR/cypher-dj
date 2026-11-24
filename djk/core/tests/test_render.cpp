@@ -364,6 +364,13 @@ int main() {
     PRUEF(!regler_datei(p, "{\"spur/1/pan\":-1.5}", v, fehler));          // −1..+1
     PRUEF(!regler_datei(p, "{\"spur/1/mute\":0.5}", v, fehler));          // 0 oder 1
     PRUEF(!regler_datei(p, "{\"spur/1/fader\":\"0\"}", v, fehler));       // Zahl
+    // The JSON number is a double, the table bounds are floats: a bound that is no exact binary number (0.1) must still accept itself
+    // (project export, insert komp attack at its declared minimum 0.1 ms was refused as outside 0.100000..100.000, reason render_fehler).
+    PRUEF(regler_datei(p, "{\"ins/komp/1/attack\":0.1}", v, fehler) && v.size() == 1 && v[0].wert == 0.1f);
+    PRUEF(regler_datei(p, "{\"ins/komp/1/attack\":100,\"ins/komp/1/schwelle\":-60,\"ins/komp/1/ratio\":20}", v, fehler) && v.size() == 3);
+    PRUEF(!regler_datei(p, "{\"ins/komp/1/attack\":0.09}", v, fehler));  // clearly below the minimum stays refused
+    PRUEF(!regler_datei(p, "{\"ins/komp/1/attack\":100.01}", v, fehler));
+    PRUEF(!regler_datei(p, "{\"ins/komp/1/attack\":1e300}", v, fehler)); // beyond float range: refused, not wrapped
     PRUEF(!cdj::lies_spur_regler(o.pfad + "/gibtsnicht.json", v, fehler) && !fehler.empty());
     // 1.10: Gruppen-Regler und PM-Fader sind Mixer-Regler des Projekts; Grenzen der Tabelle gelten
     PRUEF(regler_datei(p, "{\"grp/1/fader\":-6,\"grp/8/pan\":0.5,\"grp/2/mute\":1,\"grp/3/solo\":0,\"grp/16/pan\":0.25,\"pm/fader\":-1.5}", v, fehler) && v.size() == 6);

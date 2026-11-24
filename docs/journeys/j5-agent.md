@@ -31,7 +31,7 @@ Replace `/path/to/cypher-dj` with your checkout. Restart the session; the tools 
 `--seite` is the address of the studio page. A second studio instance on another port gets its own entry with its own
 `--seite`. If the studio is not running, every tool answers that the page cannot be reached: start the studio, not the agent.
 
-The server lists about a hundred tools, and the tour below checks that it lists as many as the code has. The full list with
+The server lists more than a hundred tools, and the tour below checks that it lists as many as the code has. The full list with
 every argument is `djk/hand/AUFRUF.md`.
 
 ## 2. What the agent can do
@@ -88,7 +88,29 @@ The **Stop Cypher** button in the top bar is the brake. While it is pressed:
 
 While it is pressed the button turns into **Release**. Press that to let the agent act again; its next write call goes through.
 
-## 6. The tour that checks this page
+## 6. Ramps and automation tracks
+
+A single control moves as a ramp over several bars with `regler` (see above). For more than one move, or moves that start
+at different bars, the agent starts an **automation track**: a list of moves laid on the bar grid.
+
+- `spur` starts a track. It has a name and a list of moves; each move has a target (`deck/2/filter`), the bar it starts at
+  (`ab_takt`, 1 is the start of the track), its length in bars (`takte`), the end value (`nach`) and the shape (`s`, the
+  default, or `linear`). The track is anchored on the next bar line, and the answer tells the beat it starts at and the beat
+  it ends at.
+- `spuren` lists the running tracks with their owner, targets and start and end beat.
+- `spur_stopp` stops a track by its name. The control stays at the value it had at that moment.
+
+The same limits as everywhere apply: the agent cannot open a closed channel with a track, cannot touch a stream whose AUTO is
+off, and is refused while Stop Cypher is pressed. Grabbing a control with your hand ends the move on it. Mixer values of
+project tracks are not moved by a track at all: they change only through the project. A stop for a track that does not run
+is answered with `keine_spur`.
+
+The tour starts a four bar ramp from 0.1 to 0.9 on the filter of deck 2, reads the control at every bar line from the same
+`lage` answer as the beat (the value must sit within 0.08 of the straight line and rise at every bar), and checks that
+`spuren` lists the track. Then it starts a second ramp back down, stops it half way with `spur_stopp` and checks that the
+value stays put for the next bar, that the track is gone from `spuren` and that a second stop is refused.
+
+## 7. The tour that checks this page
 
 `djk/tools/tour/j5.py` walks this journey against a real test instance, with the registration command above, and checks:
 
@@ -99,7 +121,9 @@ While it is pressed the button turns into **Release**. Press that to let the age
 5. you grab a filter the agent is ramping: the ramp stops, the agent is refused for the hold and may write again after it;
    a fader and the tempo are taken over by your hand as well;
 6. Stop Cypher: the agent cannot press it, its control and tempo calls are refused afterwards, your own controls pass, and the
-   release clears it.
+   release clears it;
+7. an automation track: the agent starts a four bar ramp with `spur`, the value follows the bar grid, `spuren` lists the
+   track and `spur_stopp` ends a second ramp half way.
 
 Run it with `python3 djk/tools/tour/j5.py --instanz b`; it starts the instance, writes `bericht.md` and `bericht.json` and
 stops the instance again. It skips the sound step when the live studio is playing music.

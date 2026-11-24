@@ -465,7 +465,7 @@ def j4_lauf(tmp_path, fehler=()):
     seite = J4Seite(str(tmp_path), fehler)
     try:
         t = L.Tour("j4", J4Instanz(seite.url), tmp_path / "aus", kurz=True)
-        t.fuehre(j4.schritte)
+        t.fuehre(j4.grundschritte)
         return {s["kennung"]: s for s in t.bericht().schritte}, seite, t
     finally:
         seite.ende()
@@ -530,7 +530,7 @@ class TestJ4:
         seite.presets[("baukasten", "j4-tour-4242")] = {"graph": "bass-banddrive", "parameter": {}}
         try:
             t = L.Tour("j4", J4Instanz(seite.url), tmp_path / "aus", kurz=True)
-            t.fuehre(j4.schritte)
+            t.fuehre(j4.grundschritte)
             r = {x["kennung"]: x for x in t.bericht().schritte}
         finally:
             seite.ende()
@@ -587,8 +587,9 @@ def j3_wav(pfad, sek=16.0, amp=0.3, ton_sek=None):
 class J3Hand:
     """Fake hand server: canned answers per tool (a callable answers from the arguments), every call is logged."""
 
-    def __init__(self, export, wirt_laeuft=True, export_ohne=None, fehl=(), export_warp=None):
+    def __init__(self, export, wirt_laeuft=True, export_ohne=None, fehl=(), export_warp=None, audio_fehlt_zuerst=0):
         self.aufrufe = []
+        self.audio_fehlt_zuerst = audio_fehlt_zuerst   # that many proj_export calls answer audio_fehlt before the clip is ready (None: never ready)
         self.export = export
         self.export_ohne = export_ohne       # answer of an export before the warp is set (default: the same as after)
         self.fehl = set(fehl)
@@ -628,6 +629,10 @@ class J3Hand:
         }
         if name == "proj_lage":
             return self.lage()
+        if name == "proj_export" and (self.audio_fehlt_zuerst is None or self.audio_fehlt_zuerst > 0):
+            if self.audio_fehlt_zuerst is not None:
+                self.audio_fehlt_zuerst -= 1
+            return {"fehler": "audio_fehlt", "text": "audio clip c2 is still being prepared; try again in a moment", "_fehler": True}
         if name == "proj_export":
             if self.warp_gesetzt:
                 self.nach_warp += 1
@@ -836,7 +841,18 @@ def post(pfad, k):
         return {**json.load(e), "_fehler": True}
 
 
+def hole(pfad):
+    with urllib.request.urlopen(urllib.request.Request(SEITE + pfad, headers={"x-djk-quelle": "cypher"}), timeout=5) as r:
+        return json.load(r)
+
+
 def antwort(name, a):
+    if name == "spur":
+        return post("/spur", a)
+    if name == "spur_stopp":
+        return post("/spur/stopp", a)
+    if name == "spuren":
+        return hole("/spur")
     if name == "proj_neu":
         return {"slug": "tour-j5", "rev": 0}
     if name == "proj_kits":
@@ -868,7 +884,7 @@ for z in sys.stdin:
         r = {"tools": [{"name": f"werkzeug_{i}"} for i in range(N)]}
     elif m["method"] == "tools/call":
         j = antwort(m["params"]["name"], m["params"].get("arguments") or {})
-        fehler = bool(j.pop("_fehler", False))
+        fehler = bool(j.pop("_fehler", False)) if isinstance(j, dict) else False
         r = {"content": [{"type": "text", "text": json.dumps(j)}]}
         if fehler:
             r["isError"] = True
@@ -897,6 +913,8 @@ class SeiteJ5:
         self.gestoppt = False
         self.pruefmodus_aus = False
         self.regler_ignorieren = False       # /regler answers 200 but keeps the old value
+        self.spuren = {}                     # name -> {pfad, v0, v1, beat0, beats, quelle}: automation tracks (linear moves on the bar grid)
+        self.spur_modus = "gut"              # gut | sprung (the value jumps to the end at the anchor) | vor_anker (moves at once) | stopp_ignoriert | nicht_gelistet
         self.bpm = 120.0
         self.regler = {}
         self.rampe = None
@@ -923,10 +941,19 @@ class SeiteJ5:
                 self.wfile.write(roh)
 
             def do_GET(self):
+                if self.path.startswith("/spur"):
+                    seite.spur_fortschreiben()
+                    liste = [] if seite.spur_modus == "nicht_gelistet" else [
+                        {"name": n, "quelle": s["quelle"], "anker_beat": s["beat0"], "ende_beat": s["beat0"] + s["beats"],
+                         "fahrten": [{"ziel": s["pfad"], "ab_takt": 1}], "abgelehnt": []} for n, s in seite.spuren.items()]
+                    return self._senden(200, liste)
                 if self.path.startswith("/lage"):
+                    seite.spur_fortschreiben()
                     reg = dict(seite.regler)
                     if seite.rampe:
                         reg[seite.rampe["pfad"]] = round(seite.rampenwert(), 3)
+                    for s in seite.spuren.values():
+                        reg[s["pfad"]] = round(seite.spurwert(s), 3)
                     return self._senden(200, {"uhr": {"bpm": seite.bpm, "beat": seite.beat()}, "ki": {"gestoppt": seite.gestoppt}, "regler": reg})
                 if self.path.startswith("/pegel"):
                     sek = int(self.path.split("sek=")[1]) if "sek=" in self.path else 3
@@ -948,6 +975,10 @@ class SeiteJ5:
                     return self._senden(*seite.griff(k, quelle))
                 if self.path == "/regler":
                     return self._senden(200, seite.setze_regler(k, quelle, bool(self.headers.get("x-fake-nicht-ablehnen"))))
+                if self.path == "/spur":
+                    return self._senden(*seite.spur_start(k, quelle))
+                if self.path == "/spur/stopp":
+                    return self._senden(*seite.spur_stopp(k, quelle))
                 if self.path == "/tempo":
                     if quelle == "cypher" and seite.gestoppt and not self.headers.get("x-fake-nicht-ablehnen"):
                         return self._senden(409, {"fehler": "ki_gestoppt"})
@@ -992,6 +1023,44 @@ class SeiteJ5:
         r = self.rampe
         f = min(1.0, max(0.0, (self.beat() - r["beat0"]) / r["beats"]))
         return r["v0"] + (r["v1"] - r["v0"]) * f
+
+    def spurwert(self, s):
+        b = self.beat()
+        if self.spur_modus == "sprung":
+            return s["v1"] if b >= s["beat0"] else s["v0"]
+        beginn = s["beat0"] - 100 if self.spur_modus == "vor_anker" else s["beat0"]
+        f = min(1.0, max(0.0, (b - beginn) / (s["beat0"] + s["beats"] - beginn)))
+        return s["v0"] + (s["v1"] - s["v0"]) * f
+
+    def spur_fortschreiben(self):
+        """A finished track leaves its end value behind, like a finished move of the core."""
+        for n in [n for n, s in self.spuren.items() if self.beat() >= s["beat0"] + s["beats"]]:
+            s = self.spuren.pop(n)
+            self.regler[s["pfad"]] = s["v1"]
+
+    def spur_start(self, k, quelle):
+        if quelle == "cypher" and self.gestoppt:
+            return 409, {"fehler": "ki_gestoppt"}
+        self.spur_fortschreiben()
+        if k["name"] in self.spuren:
+            return 409, {"fehler": "laeuft"}
+        f = k["fahrten"][0]
+        anker = math.floor(self.beat() / 4) * 4 + 4          # the next bar line
+        aktuell = self.regler.get(f["ziel"], 0.0)
+        self.spuren[k["name"]] = {"pfad": f["ziel"], "v0": aktuell, "v1": f["nach"], "beat0": float(anker), "beats": 4.0 * f["takte"], "quelle": quelle}
+        return 200, {"ok": True, "name": k["name"], "anker_beat": anker, "anker_takt": anker // 4 + 1, "ende_beat": anker + 4 * f["takte"],
+                     "teile": 1, "wirt": 0, "muster": 0, "quittung": {"status": 2, "grund": ""}, "abgelehnt": []}
+
+    def spur_stopp(self, k, quelle):
+        self.spur_fortschreiben()
+        s = self.spuren.get(k["name"])
+        if s is None:
+            return 404, {"fehler": "keine_spur", "name": k["name"]}
+        if self.spur_modus == "stopp_ignoriert":
+            return 200, {"ok": True, "name": k["name"], "felder": 1, "wirt": 0}
+        self.regler[s["pfad"]] = self.spurwert(s)
+        del self.spuren[k["name"]]
+        return 200, {"ok": True, "name": k["name"], "felder": 1, "wirt": 0}
 
     def setze_regler(self, k, quelle, nicht_ablehnen):
         pfad, nach, takte = k["pfad"], k["nach"], k.get("takte", 0)
@@ -1052,7 +1121,7 @@ def j5env(tmp_path, monkeypatch):
 
 
 class TestJ5:
-    SCHRITTE = ["j5.registrieren", "j5.werkzeuge", "j5.acht_takte", "j5.spielt", "j5.uebernahme", "j5.stopp_cypher"]
+    SCHRITTE = ["j5.registrieren", "j5.werkzeuge", "j5.acht_takte", "j5.spielt", "j5.uebernahme", "j5.stopp_cypher", "j5.spur"]
 
     def test_code_count_is_the_count_of_the_tool_lines_in_hand_ts(self):
         from tour import j5
@@ -1336,7 +1405,7 @@ class TestJ2:
     def lauf(self, umgebung, xrun, kurz=True):
         j2, seite, tmp = umgebung
         t = L.Tour("j2", FalscheInstanz(seite.url), tmp / "bericht", kurz)
-        t.fuehre(lambda tt: j2.schritte(tt, xrun=xrun))
+        t.fuehre(lambda tt: j2.schritte(tt, xrun=xrun, popup=False))
         return {s["kennung"]: s for s in t.bericht().schritte}, t.bericht()
 
     def test_clean_run_is_green_except_the_apc20_skip(self, umgebung):
@@ -1731,10 +1800,22 @@ class TestJ1:
 P124 = 60.0 / 124
 
 
-def mix_signal(versatz_ms=0.0, halber_schlag=False, cent=0.0, bass_tausch=True, fx_wirkt=True, delle_beats=0.0, rate=48000):
+def wackelton(t, f):
+    """A sine at f as it comes out of the key lock stretcher: the carrier sits 0.25 Hz low (149.52 to 149.71 Hz measured for 149.83), wanders +-0.5 Hz
+    at 0.4 Hz and the level swells by 60 percent at 0.7 Hz."""
+    import numpy as np
+    phase = 2 * np.pi * (f - 0.25) * t - (0.5 / 0.4) * np.cos(2 * np.pi * 0.4 * t)
+    return np.sin(phase) * (1 + 0.6 * np.sin(2 * np.pi * 0.7 * t))
+
+
+def mix_signal(versatz_ms=0.0, halber_schlag=False, cent=0.0, bass_tausch=True, fx_wirkt=True, delle_beats=0.0, rate=48000, wackel=False, boden_db=None):
     """Two decks as pulse trains and tones, with the events of a J1 run (beats on the master clock):
     deck 1 plays from beat 100 to 188, deck 2 starts on beat 116 (`versatz_ms` / half a beat late), faders ramp over 16 bars from beat 124,
-    the bass swap is at beat 156 (`delle_beats`: both marker tones are cancelled for that many beats right before it), an echo (extra kicks half a beat later) runs from beat 212 to 228 when `fx_wirkt`. Returns (signal, Zustand)."""
+    the bass swap is at beat 156 (`delle_beats`: both marker tones are cancelled for that many beats right before it), an echo (extra kicks half a beat later) runs from beat 212 to 228 when `fx_wirkt`.
+    `wackel`: the marker of deck 2 comes out of the key lock stretcher as measured on instance b (a carrier that wanders about +-0.5 Hz at 0.4 Hz and
+    swells at 0.7 Hz, so a coherent line at the nominal pitch reads between 2 and 10 dB too low depending on where the window sits). `boden_db`: noise in
+    the 90 to 160 Hz band that does not follow the faders or the EQ (the other deck's program in the marker's bin), its power in a +-1 Hz band at that
+    level in dB. Returns (signal, Zustand)."""
     import numpy as np
     z = j1.Zustand()
     z.dateien = [Path("Tour Track One.wav"), Path("Tour Track Two.wav")]
@@ -1761,8 +1842,20 @@ def mix_signal(versatz_ms=0.0, halber_schlag=False, cent=0.0, bass_tausch=True, 
     if delle_beats:
         delle = 1.0 - ((beat >= z.swap_beat - delle_beats) & (beat < z.swap_beat))
         gain_a, gain_b = gain_a * delle, gain_b * delle
-    x = 0.05 * np.sin(2 * np.pi * musik.marker("Tour Track One.wav") * t) * gain_a
-    x += 0.05 * np.sin(2 * np.pi * musik.marker("Tour Track Two.wav") * 2 ** (cent / 1200) * t) * gain_b
+    x = musik.MARKER_PEGEL["Tour Track One.wav"] * np.sin(2 * np.pi * musik.marker("Tour Track One.wav") * t) * gain_a
+    f2 = musik.marker("Tour Track Two.wav") * 2 ** (cent / 1200)
+    if wackel:
+        x += musik.MARKER_PEGEL["Tour Track Two.wav"] * wackelton(t, f2) * gain_b
+    else:
+        x += musik.MARKER_PEGEL["Tour Track Two.wav"] * np.sin(2 * np.pi * f2 * t) * gain_b
+    if boden_db is not None:
+        spek = np.fft.rfft(np.random.default_rng(7).standard_normal(len(t)))
+        frq = np.fft.rfftfreq(len(t), 1 / rate)
+        spek[(frq < 90) | (frq > 160)] = 0
+        # white noise cut to the band: 0.111 of unit variance puts -58 dB into a +-1 Hz band (measured), scaled to the level asked for
+        # it follows the louder fader, as in the recordings: the floor in deck 2's bin falls 10 to 14 dB over the windows before the swap with deck 1's fader
+        hoeher = np.maximum(fader_a(beat), fader_b(beat))
+        x += np.fft.irfft(spek, len(t)) * 0.111 * 10 ** ((boden_db + 58 + hoeher + 20) / 20) * np.sqrt(rate * 120 / len(t))
 
     def kick(zeit_s, amp):
         i0 = int(zeit_s * rate)
@@ -1825,7 +1918,7 @@ class TestJ1Messung:
     def test_basstausch_ist_gruen(self, tmp_path):
         st = self._schritt(tmp_path, j1.schritt_eq)
         assert st["urteil"] == "OK", st
-        assert st["werte"]["deck1_abfall_db"] > 20 and st["werte"]["deck2_anstieg_db"] > 20
+        assert st["werte"]["deck1_abfall_db"] > 15 and st["werte"]["deck2_anstieg_db"] > 20      # deck 1 has the other deck's kicks in its band
 
     def test_basstausch_eine_ausloeschung_im_letzten_fenster_zaehlt_nicht(self, tmp_path):
         """Both markers vanish for the last 4 beats before the swap (a cancellation against program content): the last single window would read
@@ -1846,6 +1939,37 @@ class TestJ1Messung:
     def test_ohne_basstausch_ist_rot(self, tmp_path):
         st = self._schritt(tmp_path, j1.schritt_eq, bass_tausch=False)
         assert st["urteil"] == "FEHL" and "does not show" in st["grund"]
+
+    def test_marke_aus_dem_keylock_wird_im_band_gemessen(self):
+        """The marker of deck 2 as the stretcher delivers it is not a line: read as a line at the nominal pitch the same steady level moves by more than
+        6 dB with the window position, as band power it moves by less than 1.5 dB."""
+        import numpy as np
+        t = np.arange(40 * 48000) / 48000
+        x = 0.1 * wackelton(t, musik.marker("Tour Track Two.wav"))
+        f = musik.marker("Tour Track Two.wav")
+        zeilen = [j1.ton_db(x, f, s, s + 3.4) for s in np.arange(2.0, 30.0, 0.25)]
+        band = [j1.ton_band_db(x, f, s, s + 3.4) for s in np.arange(2.0, 30.0, 0.25)]
+        assert max(zeilen) - min(zeilen) > 6.0, (min(zeilen), max(zeilen))
+        assert max(band) - min(band) < 1.5, (min(band), max(band))
+
+    def test_band_misst_eine_reine_marke_wie_eine_linie(self):
+        import numpy as np
+        t = np.arange(8 * 48000) / 48000
+        x = 0.1 * np.sin(2 * np.pi * 100.0 * t)
+        assert abs(j1.ton_band_db(x, 100.0, 1.0, 4.4) - j1.ton_db(x, 100.0, 1.0, 4.4)) < 0.5
+
+    def test_basstausch_mit_wackelnder_marke_und_boden_ist_gruen(self, tmp_path):
+        """As recorded on instance b: deck 2's marker comes out of the key lock stretcher wandering and swelling, and the other deck's program puts a
+        floor into the marker bins that follows the louder fader (deck 1's, down 10 to 14 dB over the windows before the swap, -61 dB at 100 Hz after
+        it). The rise has to clear the 12 dB with room: read with the median of the compensated windows it is 12.7 dB here, as a low quartile 15.8."""
+        st = self._schritt(tmp_path, j1.schritt_eq, wackel=True, boden_db=-68.0)
+        assert st["urteil"] == "OK", st
+        assert st["werte"]["deck1_abfall_db"] > 12 + 1 and st["werte"]["deck2_anstieg_db"] > 12 + 2.5, st["werte"]
+
+    def test_ohne_basstausch_mit_wackelnder_marke_und_boden_ist_rot(self, tmp_path):
+        """The wider band must not make the step pass when the low kill is missing: deck 2's marker then stays at its faded level."""
+        st = self._schritt(tmp_path, j1.schritt_eq, bass_tausch=False, wackel=True, boden_db=-68.0)
+        assert st["urteil"] == "FEHL" and "does not show" in st["grund"], st
 
     def test_fx_mit_wirkung_ist_gruen(self, tmp_path):
         st = self._schritt(tmp_path, j1.schritt_fx)
@@ -1900,3 +2024,1849 @@ class TestSpitze:
         h[[480, 481, 482, 483, 0, 1, 2]] = [0.6, 0.8, 0.95, 1.0, 0.95, 0.8, 0.6]
         ms = j1.spitze_ms(h, 60 / 124)
         assert min(ms, 483.87 - ms) < 2.0
+
+
+# ---------------------------------------------------------------- J2 extension: pop-up, slices, warp, devices
+
+class InstanzX(FalscheInstanz):
+    """`Instanz` stand-in with the folder the test loop is written to."""
+
+    def __init__(self, url, shm):
+        super().__init__(url)
+        self.shm = str(shm)
+
+
+class UhrZeit:
+    """A virtual clock for `j2.time`: sleeping only advances it, so the steps run in no time and the recording offsets they compute stay true."""
+
+    def __init__(self):
+        self.jetzt = 1000.0
+
+    def sleep(self, s):
+        self.jetzt += s
+
+    def monotonic(self):
+        return self.jetzt
+
+    strftime = staticmethod(time.strftime)
+    time = staticmethod(time.time)
+
+
+def wav_aus(pfad, x, rate=48000):
+    import numpy as np
+    pcm = (np.clip(np.asarray(x, dtype="float64"), -1, 1) * 32767).astype("<i2")
+    with wave.open(str(pfad), "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(np.repeat(pcm[:, None], 2, axis=1).tobytes())
+
+
+def ton_folge(folge, scheibe_s, skala=1.0, pegel=0.5, rate=48000):
+    """The slices `folge` (1-based) one after the other, each `scheibe_s` long, as the synthetic cell sounds them (times the pitch factor `skala`)."""
+    import numpy as np
+    from tour import j2
+    n = int(scheibe_s * rate)
+    t = np.arange(n) / rate
+    return np.concatenate([pegel * np.sin(2 * np.pi * j2.SCHEIBEN_HZ[i - 1] * skala * t) for i in folge])
+
+
+def spiel(erste, sek, scheibe_s, skala=1.0, rueckwaerts=False):
+    """What the cell plays for `sek` seconds from slice `erste` on, wrapping round after slice 8 (or running down when `rueckwaerts`)."""
+    n = int(sek / scheibe_s) + 1
+    schritt = -1 if rueckwaerts else 1
+    folge = [(erste - 1 + schritt * k) % 8 + 1 for k in range(n)]
+    return ton_folge(folge, scheibe_s, skala)[:int(sek * 48000)]
+
+
+def luecke(sek=1.6):
+    import numpy as np
+    return np.zeros(int(sek * 48000))
+
+
+def scheiben_aufnahme(sprung3=3, sprung6=6, rueckwaerts_erste=8):
+    """A recording of the four pieces j2.scheiben plays: from the top, slice 3, slice 6, backwards from the top. The first slice of the middle two can be
+    wrong on purpose."""
+    import numpy as np
+    s = 0.5 * 60 / 128
+    return np.concatenate([luecke(), spiel(1, 2.2, s), luecke(), spiel(sprung3, 2.2, s), luecke(), spiel(sprung6, 2.2, s), luecke(),
+                           spiel(rueckwaerts_erste, 2.2, s, rueckwaerts=True), luecke()])
+
+
+def warp_aufnahme(bpm=112.0, laenge_s=None, tonhoehen=(1.0, 112 / 128, 2.0)):
+    """Three pieces of four cell lengths each, one per warp variant; the cell is `laenge_s` long (default: four beats at `bpm`)."""
+    import numpy as np
+    laenge = laenge_s or 4 * 60 / bpm
+    teile = [luecke()]
+    for skala in tonhoehen:
+        teile += [spiel(1, 4 * laenge, laenge / 8, skala), luecke()]
+    return np.concatenate(teile)
+
+
+def geraete_aufnahme(zuwachs=True, rate=48000):
+    """3.5 s of a clean steady tone, then 4.5 s of it, driven into a saturator when `zuwachs`."""
+    import numpy as np
+    from tour import j2
+    t = np.arange(int(8 * rate)) / rate
+    ton = 0.5 * np.sin(2 * np.pi * j2.SCHEIBEN_HZ[0] * t)
+    if zuwachs:
+        ton[int(3.5 * rate):] = 0.5 * np.tanh(8 * ton[int(3.5 * rate):] / 0.5)
+    return ton
+
+
+class J2ErweitertSeite:
+    """Fake page server for the J2 extension. It models what the steps measure: deck 1 is audible while its test cell plays, and its level follows the
+    strip fader, the strip mute and the cell's gain; the master tempo follows /tempo; a scene with a tempo sets it. The recordings (`aufnahmen`, WAV files)
+    are handed out one per recording in order."""
+
+    def __init__(self, tmp, aufnahmen=(), strip_wirkt=True, gain_wirkt=True, ansicht_merkt=True, szene_tempo=True, entfernen_wirkt=True):
+        self.tmp = Path(tmp)
+        self.entfernen_wirkt, self.insert_da = entfernen_wirkt, False
+        self.aufnahmen = list(aufnahmen)
+        self.strip_wirkt, self.gain_wirkt, self.ansicht_merkt, self.szene_tempo = strip_wirkt, gain_wirkt, ansicht_merkt, szene_tempo
+        self.spielt = False
+        self.fader_db, self.mute, self.gain_db = 0.0, False, 0.0
+        self.ansicht = "dj"
+        self.bpm = 120.0
+        self.name = "starter"
+        self.scheiben = None
+        self.felder = []
+        self.rufe = []
+        self.starts = 0
+        self.szenen = {}
+        self.loop_da = lambda: any((self.tmp / "shm" / "loops").glob("tour-j2-scheiben/loop.json"))
+        seite = self
+
+        class H(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def _senden(self, code, obj, roh=None):
+                roh = roh if roh is not None else json.dumps(obj).encode()
+                self.send_response(code)
+                self.send_header("content-type", "application/json" if roh[:1] in (b"{", b"[") else "text/javascript")
+                self.send_header("content-length", str(len(roh)))
+                self.end_headers()
+                self.wfile.write(roh)
+
+            def _pegel(self):
+                if not seite.spielt:
+                    db = -200.0
+                elif seite.mute and seite.strip_wirkt:
+                    db = -200.0
+                else:
+                    db = -6.0 + (seite.fader_db if seite.strip_wirkt else 0.0) + (seite.gain_db if seite.gain_wirkt else 0.0)
+                kan = {k: {"n": 20, "max_db": -200.0, "median_db": -200.0} for k in ("deck/2", "pad/1", "pad/2")}
+                kan["deck/1"] = {"n": 20, "max_db": db, "median_db": db}
+                kan["master"] = {"n": 20, "max_db": db, "median_db": db}
+                return {"sek": 1, "kanaele": kan}
+
+            def _antwort(self, methode, k):
+                pfad = self.path.split("?")[0]
+                seite.rufe.append((methode, pfad, k))
+                k = k if isinstance(k, dict) else {}
+                if pfad == "/pegel":
+                    return self._senden(200, self._pegel())
+                if pfad == "/lage":
+                    return self._senden(200, {"uhr": {"bpm": seite.bpm, "beat": 12.0}})
+                if pfad == "/tempo":
+                    seite.bpm = float(k["bpm"])
+                    return self._senden(200, {"ok": True})
+                if pfad == "/controller/ansicht":
+                    if seite.ansicht_merkt:
+                        seite.ansicht = k.get("ansicht")
+                    return self._senden(200, {"ok": True})
+                if pfad == "/controller/pult":
+                    return self._senden(200, {"produktion": False, "ansicht": seite.ansicht})
+                if pfad == "/loopdeck/gross.js":
+                    return self._senden(200, None, b"export function bindeLoopdeckGross() {}")
+                if pfad == "/session/unten.js":
+                    return self._senden(200, None, b"export const TABS = ['CLIP', 'DEVICES'];\nexport const x = 1;")
+                if pfad == "/loops":
+                    return self._senden(200, [{"name": "tour-j2-scheiben", "ladbar": True}] if seite.loop_da() else [])
+                if pfad == "/loopdeck/stand":
+                    zelle = {"name": seite.name, "frames": 90000, "scheiben": seite.scheiben}
+                    spuren = [{"spur_id": f"sp{i}", "zellen": [zelle if i == 4 else None] * 8, "lauf": {"zelle": 1 if seite.spielt and i == 4 else None}}
+                              for i in range(1, 5)]
+                    return self._senden(200, {"decks": {"1": {"spuren": spuren}, "2": {"spuren": spuren}}})
+                if pfad == "/loopdeck/start" or pfad == "/loopdeck/sprung":
+                    seite.spielt = True
+                if pfad == "/loopdeck/stopp":
+                    seite.spielt = False
+                if pfad == "/loopdeck/spur":
+                    seite.fader_db = float(k.get("fader_db", seite.fader_db))
+                    seite.mute = bool(k.get("mute", seite.mute))
+                if pfad == "/session/zelle":
+                    seite.felder.append(k)
+                    seite.gain_db = float(k.get("gain_db", seite.gain_db))
+                    seite.name = k.get("name", seite.name)
+                    if "scheiben" in k:
+                        seite.scheiben = k["scheiben"]
+                if pfad == "/session/scheiben":
+                    seite.scheiben = {"teilung": k["teilung"], "grenzen": [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5], "folge": list(range(1, 9))}
+                    return self._senden(200, {"ok": True, "grenzen": seite.scheiben["grenzen"]})
+                if pfad == "/session/szene_neu":
+                    return self._senden(200, {"ok": True, "zeile": 3})
+                if pfad == "/session/szene_aendern":
+                    seite.szenen[k["zeile"]] = k.get("bpm")
+                if pfad == "/session/szene":
+                    bpm = seite.szenen.get(k.get("zeile"))
+                    if bpm is not None and seite.szene_tempo:
+                        seite.bpm = float(bpm)
+                    seite.spielt = False
+                    return self._senden(200, {"ok": True, "gestartet": [], "gestoppt": [], **({"tempo": bpm} if bpm is not None and seite.szene_tempo else {})})
+                if pfad == "/proj/aktuell":
+                    return self._senden(200, {"rev": 5, "projekt": {"spuren": [{"id": "sp4", "inserts": [{"id": "ins-1"}] if seite.insert_da else []}]}})
+                if pfad == "/proj/aendern":
+                    befehl = (k.get("befehle") or [{}])[0].get("befehl")
+                    seite.insert_da = befehl == "insert_setzen" or (seite.insert_da and not seite.entfernen_wirkt)
+                    return self._senden(200, {"rev": 5, "projekt": {"spuren": [{"id": "sp4", "inserts": [{"id": "ins-1", "art": "saett"}]}]}})
+                if pfad == "/mitschnitt/start":
+                    seite.starts += 1
+                    datei = seite.aufnahmen[seite.starts - 1] if len(seite.aufnahmen) >= seite.starts else str(seite.tmp / "nichts.wav")
+                    return self._senden(200, {"ok": True, "datei": str(datei)})
+                if pfad == "/mitschnitt/stopp":
+                    datei = seite.aufnahmen[seite.starts - 1] if 0 < seite.starts <= len(seite.aufnahmen) else str(seite.tmp / "nichts.wav")
+                    return self._senden(200, {"ok": True, "datei": str(datei), "sekunden": 8.0, "luecken": 0, "spruenge": 0})
+                self._senden(200, {"ok": True})
+
+            def do_GET(self):
+                self._antwort("GET", None)
+
+            def do_POST(self):
+                n = int(self.headers.get("content-length") or 0)
+                roh = self.rfile.read(n)
+                try:
+                    k = json.loads(roh) if roh else None
+                except ValueError:
+                    k = None
+                self._antwort("POST", k)
+
+        self.srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        self.url = f"http://127.0.0.1:{self.srv.server_address[1]}"
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+
+    def pfade(self):
+        return [p for _, p, _ in self.rufe]
+
+    def stopp(self):
+        self.srv.shutdown()
+        self.srv.server_close()
+
+
+class TestJ2Erweitert:
+    """The pop-up, slice, warp and device steps of J2 against a fake page and prepared recordings (no studio, no instance)."""
+
+    @pytest.fixture
+    def umgebung(self, tmp_path, monkeypatch):
+        from tour import j2
+        monkeypatch.setattr(j2, "time", UhrZeit())
+        monkeypatch.setattr(j2, "plan", lambda kurz: dict(KLEIN))
+        echt = L.Tour.warte_bis
+        monkeypatch.setattr(L.Tour, "warte_bis", lambda self, f, frist_s, text="the condition": echt(self, f, min(frist_s, 1.0), text))   # a wait that cannot succeed fails after a second
+        seiten = []
+
+        def seite(aufnahmen=(), **kw):
+            dateien = []
+            for i, x in enumerate(aufnahmen):
+                d = tmp_path / f"aufnahme{i}.wav"
+                wav_aus(d, x)
+                dateien.append(d)
+            s = J2ErweitertSeite(tmp_path, dateien, **kw)
+            seiten.append(s)
+            return s
+        yield j2, seite, tmp_path
+        for s in seiten:
+            s.stopp()
+
+    def lauf(self, umgebung, seite, *namen):
+        j2, _, tmp = umgebung
+        t = L.Tour("j2", InstanzX(seite.url, tmp / "shm"), tmp / "bericht", True)
+        z = j2._Satz()
+
+        def schritte(tt):
+            try:
+                for n in namen:
+                    getattr(j2, f"_{n}")(tt, z, j2.plan(True))
+            finally:
+                if z.sc_ordner is not None:
+                    import shutil
+                    shutil.rmtree(z.sc_ordner, ignore_errors=True)
+        t.fuehre(schritte)
+        return {s["kennung"]: s for s in t.bericht().schritte}, t.bericht()
+
+    # -- the measuring functions
+
+    def test_loop_is_a_library_loop_the_core_accepts(self, tmp_path):
+        from tour import j2
+        d = j2.loop_schreiben(tmp_path)
+        meta = json.loads((d / "loop.json").read_text())
+        assert (meta["schema"], meta["beats"], meta["bpm"], meta["frames"], meta["datei"]) == (1, 4, 128, 90000, "loop.f32")
+        assert (d / "loop.f32").stat().st_size == 90000 * 8                    # loops.ts loopGrund: frames * 8 bytes of stereo float32
+        import numpy as np
+        x = np.frombuffer((d / "loop.f32").read_bytes(), dtype="<f4").reshape(-1, 2)
+        assert np.array_equal(x[:, 0], x[:, 1]) and abs(float(np.max(np.abs(x))) - j2.SCHEIBEN_PEGEL) < 1e-3
+
+    def test_every_slice_tone_has_whole_cycles_so_a_repeat_is_seamless(self):
+        from tour import j2
+        for f in j2.SCHEIBEN_HZ:
+            assert abs(f * 11250 / 48000 - round(f * 11250 / 48000)) < 1e-9
+        assert all(b / a > 1.2 for a, b in zip(j2.SCHEIBEN_HZ, j2.SCHEIBEN_HZ[1:]))     # neighbours far enough apart to tell by ear of the analysis
+
+    def test_runs_name_the_slices_in_the_order_they_played(self):
+        from tour import j2
+        x = spiel(3, 2.0, 0.234)
+        r = j2.scheiben_laeufe(j2.ton_spur(x))
+        assert j2.folge_von(r, 6) == [3, 4, 5, 6, 7, 8]
+        assert abs(j2.lauflaenge_s(r) - 0.234) < 0.02
+
+    def test_silence_splits_the_recording_into_pieces(self):
+        import numpy as np
+        from tour import j2
+        x = np.concatenate([luecke(), spiel(1, 1.0, 0.234), luecke(), spiel(5, 1.0, 0.234), luecke()])
+        teile = j2.hoerstuecke(j2.ton_spur(x))
+        assert [j2.folge_von(j2.scheiben_laeufe(t), 2) for t in teile] == [[1, 2], [5, 6]]
+
+    def test_period_and_pitch_of_a_stretched_and_pitched_cell(self):
+        from tour import j2
+        r = j2.scheiben_laeufe(j2.ton_spur(spiel(1, 9.0, 2.1429 / 8, 2.0)), skala=2.0)
+        assert abs(j2.periode_s(r) - 2.1429) < 0.03
+        assert abs(j2.tonhoehe_verhaeltnis(r) - 2.0) < 0.02
+
+    def test_the_expected_pitch_factor_keeps_the_slices_apart_after_an_octave(self):
+        from tour import j2
+        x = spiel(1, 2.0, 0.234, 2.0)                       # transposed up an octave: slice 1 sounds where slice 4 sits untransposed
+        assert j2.folge_von(j2.scheiben_laeufe(j2.ton_spur(x), skala=2.0), 5) == [1, 2, 3, 4, 5]
+        assert j2.folge_von(j2.scheiben_laeufe(j2.ton_spur(x), skala=1.0), 2)[0] != 1
+
+    def test_distortion_is_told_from_a_clean_tone(self):
+        from tour import j2
+        x = geraete_aufnahme()
+        assert j2.klirr_db(x, j2.SCHEIBEN_HZ[0], 1.0, 3.2) < -60
+        assert j2.klirr_db(x, j2.SCHEIBEN_HZ[0], 6.0, 7.7) > -20
+
+    # -- the steps
+
+    def test_pop_up_step_is_green_when_every_effect_is_measured(self, umgebung):
+        _, seite, _ = umgebung
+        s, b = self.lauf(umgebung, seite(), "popup")
+        a = s["j2.popup"]
+        assert a["urteil"] == "OK", b.markdown()
+        v = a["werte"]
+        assert v["ansicht_offen"] == "studio" and v["ansicht_zu"] == "dj"
+        assert abs(v["strip_fader_delta_db"] + 12) < 0.5 and abs(v["clip_gain_delta_db"] + 6) < 0.5
+        assert v["szene_bpm_gemessen"] == 116.0 and v["reiter"] == ["CLIP", "DEVICES"]
+
+    def test_pop_up_step_cleans_up_what_it_made(self, umgebung):
+        _, seite_, _ = umgebung
+        seite = seite_()
+        self.lauf(umgebung, seite, "popup")
+        pfade = seite.pfade()
+        assert "/session/szene_loeschen" in pfade, "the scene row it created must go again"
+        assert ("POST", "/controller/ansicht", {"ansicht": "dj"}) in seite.rufe
+        assert ("POST", "/tempo", {"bpm": 120.0}) in seite.rufe, "the master tempo before the step is put back"
+
+    def test_pop_up_strip_fader_that_changes_nothing_is_red(self, umgebung):
+        _, seite, _ = umgebung
+        s, _ = self.lauf(umgebung, seite(strip_wirkt=False), "popup")
+        assert s["j2.popup"]["urteil"] == "FEHL" and "strip fader" in s["j2.popup"]["grund"]
+
+    def test_pop_up_clip_gain_that_changes_nothing_is_red(self, umgebung):
+        _, seite, _ = umgebung
+        s, _ = self.lauf(umgebung, seite(gain_wirkt=False), "popup")
+        assert s["j2.popup"]["urteil"] == "FEHL" and "clip gain" in s["j2.popup"]["grund"]
+
+    def test_pop_up_view_that_is_not_reported_is_red(self, umgebung):
+        _, seite, _ = umgebung
+        s, _ = self.lauf(umgebung, seite(ansicht_merkt=False), "popup")
+        assert s["j2.popup"]["urteil"] == "FEHL" and "view" in s["j2.popup"]["grund"]
+
+    def test_scene_whose_tempo_never_shows_is_red(self, umgebung, monkeypatch):
+        j2, seite_, _ = umgebung
+        seite = seite_(szene_tempo=False)
+        s, _ = self.lauf(umgebung, seite, "popup")
+        assert s["j2.popup"]["urteil"] == "FEHL" and "scene" in s["j2.popup"]["grund"]
+
+    def test_slice_step_hears_launch_and_order(self, umgebung):
+        _, seite, _ = umgebung
+        s, b = self.lauf(umgebung, seite([scheiben_aufnahme()]), "scheiben")
+        a = s["j2.scheiben"]
+        assert a["urteil"] == "OK", b.markdown()
+        assert a["werte"]["folgen"] == [[1, 2, 3, 4, 5, 6], [3, 4, 5, 6, 7, 8], [6, 7, 8, 1, 2, 3], [8, 7, 6, 5, 4, 3]]
+        assert a["werte"]["grenzen"] == [0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5]
+
+    def test_a_slice_launch_that_plays_the_wrong_part_is_red(self, umgebung):
+        _, seite, _ = umgebung
+        s, _ = self.lauf(umgebung, seite([scheiben_aufnahme(sprung3=1)]), "scheiben")
+        assert s["j2.scheiben"]["urteil"] == "FEHL" and "slice 3" in s["j2.scheiben"]["grund"]
+
+    def test_a_slot_order_that_is_not_heard_is_red(self, umgebung):
+        _, seite, _ = umgebung
+        s, _ = self.lauf(umgebung, seite([scheiben_aufnahme(rueckwaerts_erste=1)]), "scheiben")
+        assert s["j2.scheiben"]["urteil"] == "FEHL" and "backwards" in s["j2.scheiben"]["grund"]
+
+    def test_slice_step_without_a_recording_is_red_not_green(self, umgebung):
+        _, seite, _ = umgebung
+        s, _ = self.lauf(umgebung, seite([]), "scheiben")
+        assert s["j2.scheiben"]["urteil"] == "FEHL"
+
+    def test_slice_step_puts_the_identity_order_back(self, umgebung):
+        _, seite_, _ = umgebung
+        seite = seite_([scheiben_aufnahme()])
+        self.lauf(umgebung, seite, "scheiben")
+        assert seite.scheiben["folge"] == [1, 2, 3, 4, 5, 6, 7, 8]
+
+    def test_warp_step_is_green_when_the_cell_keeps_the_grid(self, umgebung):
+        _, seite, _ = umgebung
+        s, b = self.lauf(umgebung, seite([warp_aufnahme()]), "warp")
+        a = s["j2.warp"]
+        assert a["urteil"] == "OK", b.markdown()
+        v = a["werte"]
+        assert abs(v["keylock on"]["laenge_s"] - 4 * 60 / 112) < 0.04 and abs(v["keylock on"]["tonhoehe"] - 1.0) < 0.02
+        assert abs(v["keylock off"]["tonhoehe"] - 112 / 128) < 0.02 and abs(v["transpose +12"]["tonhoehe"] - 2.0) < 0.02
+
+    def test_a_cell_that_ignores_the_master_tempo_is_red(self, umgebung):
+        _, seite, _ = umgebung
+        s, _ = self.lauf(umgebung, seite([warp_aufnahme(laenge_s=4 * 60 / 128)]), "warp")
+        assert s["j2.warp"]["urteil"] == "FEHL" and "lasts" in s["j2.warp"]["grund"]
+
+    def test_keylock_that_moves_the_pitch_is_red(self, umgebung):
+        _, seite, _ = umgebung
+        s, _ = self.lauf(umgebung, seite([warp_aufnahme(tonhoehen=(0.92, 112 / 128, 2.0))]), "warp")
+        assert s["j2.warp"]["urteil"] == "FEHL" and "pitch" in s["j2.warp"]["grund"]
+
+    def test_warp_step_restores_the_cell_and_the_base_tempo(self, umgebung):
+        _, seite_, _ = umgebung
+        seite = seite_([warp_aufnahme()])
+        self.lauf(umgebung, seite, "warp")
+        assert seite.felder[-1] == {"spur_id": "sp4", "zelle": 1, "keylock": None, "transponieren": None}
+        assert seite.bpm == 128.0
+
+    def test_device_step_is_green_when_the_saturator_adds_harmonics(self, umgebung):
+        _, seite, _ = umgebung
+        s, b = self.lauf(umgebung, seite([geraete_aufnahme()]), "geraete")
+        a = s["j2.geraete"]
+        assert a["urteil"] == "OK", b.markdown()
+        assert a["werte"]["klirr_vorher_db"] < -60 and a["werte"]["zuwachs_db"] > 30 and a["werte"]["insert_id"] == "ins-1"
+
+    def test_a_device_that_changes_nothing_is_red(self, umgebung):
+        _, seite, _ = umgebung
+        s, _ = self.lauf(umgebung, seite([geraete_aufnahme(zuwachs=False)]), "geraete")
+        assert s["j2.geraete"]["urteil"] == "FEHL" and "saturator" in s["j2.geraete"]["grund"]
+
+    def test_device_step_removes_the_device_again(self, umgebung):
+        _, seite_, _ = umgebung
+        seite = seite_([geraete_aufnahme()])
+        self.lauf(umgebung, seite, "geraete")
+        aendern = [k for m, p, k in seite.rufe if p == "/proj/aendern"]
+        assert aendern[0]["befehle"][0]["befehl"] == "insert_setzen" and aendern[0]["befehle"][0]["art"] == "saett"
+        assert aendern[-1]["befehle"] == [{"befehl": "insert_entfernen", "insert_id": "ins-1"}]
+
+    def test_a_device_that_stays_on_the_track_is_red(self, umgebung):
+        _, seite, _ = umgebung
+        s, _ = self.lauf(umgebung, seite([geraete_aufnahme()], entfernen_wirkt=False), "geraete")
+        assert s["j2.geraete"]["urteil"] == "FEHL" and "not removed" in s["j2.geraete"]["grund"]
+
+    def test_the_test_loop_leaves_the_instance_folder_when_the_steps_are_done(self, umgebung):
+        j2, seite_, tmp = umgebung
+        seite = seite_([geraete_aufnahme()])
+        s, _ = self.lauf(umgebung, seite, "geraete")
+        assert not (tmp / "shm" / "loops" / "tour-j2-scheiben").exists()
+
+    def test_the_four_steps_come_after_the_set_when_pop_up_is_on(self, umgebung):
+        j2, seite_, tmp = umgebung
+        wav = tmp / "set.wav"
+        sinus_wav(wav, 2.0)
+        seite = J2Seite(str(wav))
+        try:
+            t = L.Tour("j2", FalscheInstanz(seite.url), tmp / "bericht2", True)
+            t.fuehre(lambda tt: j2.schritte(tt, xrun=FalscheXrun(0), popup=True))
+            k = [s["kennung"] for s in t.bericht().schritte]
+        finally:
+            seite.stopp()
+        assert k[:8] == ["j2.aufbau", "j2.basis", "j2.set", "j2.szenen", "j2.container", "j2.apc20", "j2.mitschnitt", "j2.datei"]
+        assert k[8:] == ["j2.popup", "j2.scheiben", "j2.warp", "j2.geraete"]
+
+# ---------------------------------------------------------------- J3 extension (1.0 features): fakes, no running studio
+
+def fx_wav(pfad, x):
+    """Writes a float array of shape (frames, 2) as a 16 bit stereo file (clipped to full scale)."""
+    import numpy as np
+    pcm = (np.clip(x, -1.0, 1.0) * 32767).astype("<i2")
+    with wave.open(str(pfad), "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(48000)
+        w.writeframes(pcm.tobytes())
+
+
+def fx_render(proj, von, bis, ausklang, flags):
+    """A small model of the engine for the effect steps: sources are gated sines, the lane is a gain ramp in dB, an EQ cut, compressor,
+    saturator and limiter act on the track, the pan law splits it, a Hall return adds a noise tail. `flags` switch single effects off."""
+    import numpy as np
+    sr = 48000
+    n = int((bis - von + (ausklang or 0)) * 0.5 * sr)
+    aus = np.zeros((n, 2))
+    wet = np.zeros(n)
+    for tr in proj["spuren"]:
+        x = np.zeros(n)
+        for clip in tr["clips"]:
+            for no in clip["noten"]:
+                a = int(no["beat"] * 0.5 * sr)
+                b = min(n, a + int(no["laenge"] * 0.5 * sr))
+                tt = np.arange(b - a) / sr
+                if tr["parameter"].get("cutoff") == 0.0:
+                    x[a:b] += 0.02 * np.sin(2 * np.pi * 130 * tt)
+                else:
+                    x[a:b] += 0.15 * np.sin(2 * np.pi * 150 * tt) + 0.02 * np.sin(2 * np.pi * 3000 * tt)
+        if "lane_ignoriert" not in flags:
+            for ln in tr["lanes"]:
+                p = ln["punkte"]
+                db = np.interp(np.arange(n) / sr / 0.5, [q["beat"] for q in p], [q["wert"] for q in p])
+                x = x * 10 ** (db / 20)
+        for ins in sorted(tr["inserts"], key=lambda i: i["pos"]):
+            w, art = ins["werte"], ins["art"]
+            if art == "utility":
+                x = x * 10 ** (w["gain"] / 20)
+            elif art == "eq" and "eq_wirkt_nicht" not in flags and w.get("b1/gain", 0) < 0:
+                spek = np.fft.rfft(x)
+                f = np.fft.rfftfreq(n, 1 / sr)
+                spek[(f >= 120) & (f < 250)] *= 10 ** (w["b1/gain"] / 20)
+                x = np.fft.irfft(spek, n)
+            elif art == "komp" and "komp_wirkt_nicht" not in flags:
+                thr = 10 ** (w["schwelle"] / 20)
+                gross = np.abs(x) > thr
+                x = np.where(gross, np.sign(x) * (thr + (np.abs(x) - thr) / w["ratio"]), x)
+            elif art == "saett" and "saett_wirkt_nicht" not in flags:
+                x = np.tanh(10 ** (w["drive"] / 20) * x) * 10 ** (w["out"] / 20)
+            elif art == "lim" and "lim_wirkt_nicht" not in flags:
+                x = np.clip(x, -(10 ** (w["decke"] / 20)), 10 ** (w["decke"] / 20))
+        if "pdc_kaputt" in flags and tr["inserts"]:
+            x = np.concatenate([np.zeros(69), x[:-69]])
+        winkel = (tr["pan"] + 1) * math.pi / 4
+        aus[:, 0] += x * math.cos(winkel)
+        aus[:, 1] += x * math.sin(winkel)
+        for s in tr["sends"]:
+            ret = next((r for r in proj["returns"] if r["id"] == s["id"]), None)
+            if ret and ret["hall"]["an"] and "hall_wirkt_nicht" not in flags and s["db"] > -60:
+                wet += x * 10 ** (s["db"] / 20)
+    if wet.any():
+        ir = np.random.default_rng(1).normal(size=6 * sr) * np.exp(-np.arange(6 * sr) / sr / 1.5) * 0.004
+        lang = np.fft.irfft(np.fft.rfft(wet, 2 ** 21) * np.fft.rfft(ir, 2 ** 21), 2 ** 21)[:n]
+        aus += lang[:, None]
+    return aus
+
+
+class J3ErwSeite:
+    """Fake instance page for the extension: GET /pegel, POST /proj/export_midi, POST /proj/einsammeln, GET /proj/export_zip, POST /proj/import_zip."""
+
+    def __init__(self, tmp):
+        self.tmp = Path(tmp)
+        self.einsammeln = {"kopiert": 0, "schon_da": 1, "fehlt": [], "abweichend": [], "bytes": 0, "aufgeschoben": 0, "fehlt_grund": {}, "kits": {}}
+        self.einsammeln_codes = [200]           # the answers in turn: 409 first stands for a transport that has not stopped yet
+        self.midi_tausch = None                 # (old note, new note): the exported file holds another note than the project
+        self.import_slug = "tour-j3-2"
+        self.zip_ohne_audio = False
+        self.aufrufe = []
+        seite = self
+
+        class H(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def antwort(self, code, roh, typ="application/json"):
+                self.send_response(code)
+                self.send_header("content-type", typ)
+                self.send_header("content-length", str(len(roh)))
+                self.end_headers()
+                self.wfile.write(roh)
+
+            def do_GET(self):
+                seite.aufrufe.append(("GET", self.path, self.headers.get("x-djk-quelle")))
+                if self.path.startswith("/pegel"):
+                    return self.antwort(200, json.dumps({"sek": 1, "kanaele": {"master": {"n": 20, "max_db": -30.0, "median_db": -30.0}}}).encode())
+                if self.path.startswith("/proj/export_zip"):
+                    import io
+                    import zipfile
+                    puffer = io.BytesIO()
+                    with zipfile.ZipFile(puffer, "w") as zz:
+                        zz.writestr("project.json", "{}")
+                        if not seite.zip_ohne_audio:
+                            zz.writestr("audio/bounce-aaaaaaaa.wav", b"RIFF")
+                    return self.antwort(200, puffer.getvalue(), "application/zip")
+                self.antwort(404, b"{}")
+
+            def do_POST(self):
+                roh = self.rfile.read(int(self.headers.get("content-length") or 0))
+                seite.aufrufe.append(("POST", self.path, self.headers.get("x-djk-quelle")))
+                if self.path == "/proj/export_midi":
+                    ordner = seite.tmp / "midi"
+                    ordner.mkdir(parents=True, exist_ok=True)
+                    datei = Path(J3MOD.schreibe_midi(ordner / "alle.mid"))
+                    daten = datei.read_bytes()
+                    if seite.midi_tausch:
+                        alt, neu = seite.midi_tausch
+                        daten = daten.replace(bytes([0x90, alt]), bytes([0x90, neu])).replace(bytes([0x80, alt]), bytes([0x80, neu]))
+                    (ordner / "alle.mid").write_bytes(daten)
+                    (ordner / "01-track-1.mid").write_bytes(daten)
+                    return self.antwort(200, json.dumps({"ordner": str(ordner), "von_beat": 0, "bis_beat": 32, "dateien": [
+                        {"art": "alle", "name": "p", "datei": "alle.mid", "noten": 4},
+                        {"art": "spur", "spur_id": "s1", "name": "Track 1", "datei": "01-track-1.mid", "noten": 4}]}).encode())
+                if self.path == "/proj/einsammeln":
+                    code = seite.einsammeln_codes.pop(0) if len(seite.einsammeln_codes) > 1 else seite.einsammeln_codes[0]
+                    if code != 200:
+                        return self.antwort(code, json.dumps({"fehler": "transport_laeuft", "text": "music is playing"}).encode())
+                    return self.antwort(200, json.dumps(seite.einsammeln).encode())
+                if self.path == "/proj/import_zip":
+                    return self.antwort(200, json.dumps({"ok": True, "slug": seite.import_slug, "kits_umbenannt": []}).encode())
+                self.antwort(404, b"{}")
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def ende(self):
+        self.server.shutdown()
+        self.server.server_close()
+
+
+class J3FxHand(J3Hand):
+    """J3Hand plus a model of the project state the extension steps read: tracks, inserts, lanes, returns, history, files. `flags` switch single features
+    off or break them (see fx_render and the branches below); the base answers of J3Hand stay as they are."""
+
+    def __init__(self, tmp, export, flags=(), **kw):
+        super().__init__(export, **kw)
+        self.tmp = Path(tmp)
+        self.flags = set(flags)
+        self.fx = None
+        self.n = 0
+        self.fader = {"s2": -3.0}
+        self.undo, self.redo = [], []
+        self.geoeffnet = None
+        self.mute_s1 = True
+        bounce = self.tmp / "projekt" / "bounce" / "bounce-1.wav"
+        bounce.parent.mkdir(parents=True, exist_ok=True)
+        bounce.write_bytes(b"RIFF fake audio " * 100)
+        import hashlib
+        self.sha = hashlib.sha256(bounce.read_bytes()).hexdigest()
+        self.audio_pfad = bounce
+
+    # -- main project
+    def lage(self):
+        l = super().lage()
+        for s in l["projekt"]["spuren"]:
+            if s["id"] == "s1":
+                s["mute"] = self.mute_s1
+            if s["id"] == "s2":
+                s["fader_db"] = self.fader["s2"]
+        if self.geoeffnet and "spuren_anders" in self.flags:
+            l["projekt"]["spuren"] = l["projekt"]["spuren"][:2]
+        return l
+
+    def rufe(self, name, argumente=None, timeout=120, erwartet=None):
+        a = argumente or {}
+        if self.fx is not None or (name == "proj_neu" and a.get("name", "").split("-")[-1] in ("auto", "eq", "komp", "hall", "saett", "lim", "pdc")):
+            r = self.rufe_fx(name, a)
+            if r is not None:
+                self.aufrufe.append((name, a))
+                return r
+        r = self.rufe_haupt(name, a)
+        if r is not None:
+            self.aufrufe.append((name, a))
+            return r
+        return super().rufe(name, argumente, timeout)
+
+    def rufe_haupt(self, name, a):
+        import hashlib
+        if name == "proj_aendern":
+            for b in a.get("befehle", []):
+                if b.get("befehl") == "spur_aendern" and "fader_db" in b:
+                    self.undo.append(self.fader["s2"])
+                    self.redo = []
+                    self.fader["s2"] = b["fader_db"]
+                elif b.get("befehl") == "spur_aendern" and "mute" in b:
+                    self.mute_s1 = b["mute"]
+            if any(b.get("befehl") == "warp_setzen" for b in a.get("befehle", [])):
+                return None
+            return {"rev": 5, "noten_zahl": {}, "_fehler": False}
+        if name == "proj_undo":
+            if not self.undo:
+                return {"fehler": "nichts_zu_tun", "_fehler": True}
+            self.redo.append(self.fader["s2"])
+            self.fader["s2"] = self.undo.pop()
+            if "undo_zu_weit" in self.flags and self.undo:       # takes two edits back instead of one
+                self.fader["s2"] = self.undo.pop()
+            return {"rev": 6, "_fehler": False}
+        if name == "proj_redo":
+            if self.redo and "redo_wirkt_nicht" not in self.flags:
+                self.undo.append(self.fader["s2"])
+                self.fader["s2"] = self.redo.pop()
+            return {"rev": 7, "_fehler": False}
+        if name == "proj_oeffnen":
+            self.geoeffnet = a.get("slug")
+            return {"slug": a.get("slug"), "_fehler": False}
+        if name == "proj_dateien":
+            fehlt = not self.audio_pfad.is_file()
+            if not a.get("aktion"):
+                return {"audio": [{"sha256": self.sha, "name": "Bounce", "pfad": str(self.audio_pfad), "clips": 1, "fehlt": fehlt}],
+                        "fehlend": [self.sha] if fehlt or (self.geoeffnet and "audio_fehlt_nach_import" in self.flags) else [], "_fehler": False}
+            if a["aktion"] == "finden":
+                return {"fehler": "katalog_fehlt", "text": "no library catalogue", "_fehler": True}
+            if a["aktion"] == "relink":
+                if "relink_wirkt_nicht" not in self.flags:
+                    ziel = self.tmp / "projekt" / "audio" / f"bounce-{a['sha256'][:8]}.wav"
+                    ziel.parent.mkdir(parents=True, exist_ok=True)
+                    ziel.write_bytes(Path(a["pfad"]).read_bytes())
+                    if hashlib.sha256(ziel.read_bytes()).hexdigest() == a["sha256"]:
+                        self.audio_pfad = ziel
+                return {"ok": True, "_fehler": False}
+        return None
+
+    # -- the small projects of the effect steps
+    def rufe_fx(self, name, a):
+        if name == "proj_neu":
+            self.n += 1
+            self.fx = {"spuren": [], "returns": [], "tempo": 120.0, "z": 0}
+            return {"slug": f"fx{self.n}", "rev": 0, "_fehler": False}
+        p = self.fx
+
+        def neu(kind):
+            p["z"] += 1
+            return f"{kind}{p['z']}"
+        if name == "proj_aendern":
+            for b in a.get("befehle", []):
+                k = b["befehl"]
+                if k == "spur_neu":
+                    p["spuren"].append({"id": neu("s"), "name": b["name"], "art": "instrument", "parameter": b["geraet"]["parameter"], "pan": 0.0,
+                                        "clips": [], "inserts": [], "lanes": [], "sends": [], "fader_db": 0.0})
+                elif k == "spur_aendern":
+                    next(s for s in p["spuren"] if s["id"] == b["spur_id"])["pan"] = b["pan"]
+                elif k == "clip_neu":
+                    next(s for s in p["spuren"] if s["id"] == b["spur_id"])["clips"].append({"id": neu("c"), "noten": b["noten"], "laenge_beats": b["laenge_beats"]})
+                elif k == "auto_neu":
+                    next(s for s in p["spuren"] if s["id"] == b["spur_id"])["lanes"].append({"id": neu("a"), "ziel": b["ziel"], "punkte": b["punkte"]})
+                elif k == "insert_setzen":
+                    s = next(s for s in p["spuren"] if s["id"] == b["strang_id"])
+                    s["inserts"].append({"id": neu("i"), "art": b["art"], "an": True, "pos": b["pos"] + (0.5 if s["inserts"] else 0), "werte": b["werte"]})
+                elif k == "insert_entfernen":
+                    for s in p["spuren"]:
+                        s["inserts"] = [i for i in s["inserts"] if i["id"] != b["insert_id"]]
+                elif k == "return_neu":
+                    p["returns"].append({"id": neu("r"), "name": b["name"], "hall": {"an": b["hall"]["an"]}})
+                elif k == "send_setzen":
+                    next(s for s in p["spuren"] if s["id"] == b["strang_id"])["sends"].append({"id": b["return_id"], "db": b["db"]})
+            return {"rev": 3, "noten_zahl": {}, "_fehler": False}
+        if name == "proj_lage":
+            return {"slug": f"fx{self.n}", "projekt": {"tempo_bpm": p["tempo"], "returns": p["returns"], "spuren": [
+                {"id": s["id"], "name": s["name"], "art": s["art"], "fader_db": s["fader_db"], "sends": s["sends"],
+                 "clips": [{"id": c["id"], "art": "midi", "noten_zahl": len(c["noten"])} for c in s["clips"]],
+                 "inserts": [{"id": i["id"], "art": i["art"], "an": i["an"], "werte": i["werte"]} for i in sorted(s["inserts"], key=lambda i: i["pos"])],
+                 "lanes": [{"id": ln["id"], "ziel": ln["ziel"], "punkte_zahl": len(ln["punkte"])} for ln in s["lanes"]]} for s in p["spuren"]]}, "_fehler": False}
+        if name == "proj_auto":
+            ln = next(ln for s in p["spuren"] for ln in s["lanes"] if ln["id"] == a["lane_id"])
+            return {"punkte": [{**q, "form": "linear"} for q in ln["punkte"]], "_fehler": False}
+        if name == "proj_export":
+            self.n += 1
+            pfad = self.tmp / f"fx-{self.n}.wav"
+            x = fx_render(p, a["von_beat"], a["bis_beat"], a.get("ausklang_beats"), self.flags)
+            fx_wav(pfad, x)
+            return {"datei": str(pfad), "spitze_db": 0.0, "ueber_decke": False, "_fehler": False}
+        return None
+
+
+def j3_erw_lauf(tmp_path, schritt, flags=(), seite_kw=None, z=None, monkeypatch=None):
+    """Runs one extension step function against the fakes; the answer: (step as dict, hand, page, rc)."""
+    seite = J3ErwSeite(tmp_path)
+    for k, v in (seite_kw or {}).items():
+        setattr(seite, k, v)
+    try:
+        hand = J3FxHand(tmp_path, {"datei": "x"}, flags)
+        t = L.Tour("j3", J3Instanz(seite.url), tmp_path / "aus", kurz=True)
+        zustand = {"name": "tour-j3-000000", "slug": "tour-j3", "midi_spur": "s1", "audio_spur": "s2", "tempo": 120.0, **(z or {})}
+        rc = t.fuehre(lambda tt: schritt(tt, hand, zustand))
+        schritte = {s["kennung"]: s for s in t.bericht().schritte}
+        return next(iter(schritte.values())), hand, seite, rc
+    finally:
+        seite.ende()
+
+
+class TestJ3Erweitert:
+    @pytest.fixture(autouse=True)
+    def schnell(self, monkeypatch):
+        monkeypatch.setattr(J3MOD, "UNDO_PAUSE_S", 0.0)
+
+    def gruen(self, s):
+        assert s["urteil"] == "OK", (s["urteil"], s.get("grund"))
+
+    # ---- pure helpers
+    def test_lies_smf_round_trip_of_the_tours_file(self, tmp_path):
+        pfad = J3MOD.schreibe_midi(tmp_path / "t.mid")
+        smf = J3MOD.lies_smf(pfad)
+        assert smf["ppq"] == 480 and abs(smf["tempo_bpm"] - 120.0) < 1e-6
+        assert smf["noten"] == J3MOD.erwartete_noten()
+        assert J3MOD.vergleiche_noten(smf["noten"], J3MOD.erwartete_noten()) == []
+
+    def test_lies_smf_reads_running_status_and_skips_meta_and_controllers(self, tmp_path):
+        # one track: tempo 100 BPM, controller 7, a note on with running status for a second note, note off written as note on with velocity 0
+        ereignisse = (b"\x00\xff\x51\x03" + (600000).to_bytes(3, "big") + b"\x00\xb0\x07\x64" + b"\x00\x90\x3c\x50" + b"\x00\x3e\x60"
+                      + b"\x83\x60\x3c\x00" + b"\x00\x3e\x00" + b"\x00\xff\x2f\x00")
+        pfad = tmp_path / "r.mid"
+        pfad.write_bytes(b"MThd" + struct.pack(">IHHH", 6, 0, 1, 480) + b"MTrk" + struct.pack(">I", len(ereignisse)) + ereignisse)
+        smf = J3MOD.lies_smf(pfad)
+        assert abs(smf["tempo_bpm"] - 100.0) < 1e-6
+        assert smf["noten"] == [(60, 0.0, 1.0, 80), (62, 0.0, 1.0, 96)]
+
+    def test_vergleiche_noten_names_a_changed_note_and_a_missing_one(self):
+        soll = J3MOD.erwartete_noten()
+        assert J3MOD.vergleiche_noten(soll[:3], soll)
+        geaendert = [(soll[0][0] + 1,) + soll[0][1:]] + soll[1:]
+        assert J3MOD.vergleiche_noten(geaendert, soll)
+        spaeter = [(soll[0][0], soll[0][1] + 0.5) + soll[0][2:]] + soll[1:]
+        assert J3MOD.vergleiche_noten(spaeter, soll)
+
+    def test_versatz_samples_finds_the_shift_between_the_channels(self):
+        import numpy as np
+        rng = np.random.default_rng(3)
+        n = rng.normal(size=48000) * np.exp(-np.arange(48000) / 4000)
+        for lag in (0, 69, 86, -17):
+            x = np.stack([np.roll(n, lag), n], axis=1)
+            assert J3MOD.versatz_samples(x) == lag
+
+    def test_huelle_je_fenster_reads_a_level_ramp(self):
+        import numpy as np
+        t = np.arange(8 * 48000) / 48000
+        x = np.sin(2 * np.pi * 200 * t) * 10 ** ((-24 + 3 * t) / 20)
+        pegel = J3MOD.huelle_je_fenster(np.stack([x, x], axis=1), 1.0, 8)
+        assert [round(b - a, 1) for a, b in zip(pegel, pegel[1:])] == [3.0] * 7
+
+    def test_anteil_ueber_db_rises_when_a_sine_is_clipped(self):
+        import numpy as np
+        t = np.arange(48000) / 48000
+        sinus = np.sin(2 * np.pi * 130 * t) * 0.1
+        hart = np.tanh(sinus * 200)
+        a = J3MOD.anteil_ueber_db(np.stack([sinus, sinus], axis=1), 300)
+        b = J3MOD.anteil_ueber_db(np.stack([hart, hart], axis=1), 300)
+        assert b - a > 20
+
+    # ---- the steps against the fakes
+    def test_extension_is_off_with_a_fake_hand_and_on_when_asked(self, tmp_path):
+        seite = J3ErwSeite(tmp_path)
+        try:
+            w = tmp_path / "e.wav"
+            j3_wav(w, ton_sek=14.0)
+            for erweitert, erwartet in ((None, 0), (True, 12)):
+                hand = J3FxHand(tmp_path / f"h{erwartet}", {"datei": str(w), "frames": 768000, "spitze_db": -12.0, "ueber_decke": False, "limiter_db_max": 0})
+                t = L.Tour("j3", J3Instanz(seite.url), tmp_path / f"aus{erwartet}", kurz=True)
+                t.fuehre(lambda tt: J3MOD.schritte(tt, hand=hand, erweitert=erweitert))
+                neue = [s["kennung"] for s in t.bericht().schritte if s["kennung"] in J3_ERW_SCHRITTE]
+                assert len(neue) == erwartet
+                if erwartet:
+                    assert neue == list(J3_ERW_SCHRITTE)
+                    assert {s["kennung"]: s["urteil"] for s in t.bericht().schritte if s["kennung"] in J3_ERW_SCHRITTE} == {k: "OK" for k in J3_ERW_SCHRITTE}
+        finally:
+            seite.ende()
+
+    def test_auto_green_and_red_when_the_lane_does_not_reach_the_audio(self, tmp_path):
+        s, hand, _, _ = j3_erw_lauf(tmp_path, J3MOD._auto)
+        self.gruen(s)
+        assert abs(s["werte"]["steigung_db_je_fenster"] - 3.0) < 0.05
+        s, *_ = j3_erw_lauf(tmp_path / "b", J3MOD._auto, flags={"lane_ignoriert"})
+        assert s["urteil"] == "FEHL" and s["grund"] == "lane_nicht_im_audio"
+
+    def test_eq_green_and_red_when_the_cut_does_nothing(self, tmp_path):
+        s, *_ = j3_erw_lauf(tmp_path, J3MOD._eq)
+        self.gruen(s)
+        assert s["werte"]["band_senkung_db"] > 10 and abs(s["werte"]["oben_aenderung_db"]) < 0.5
+        s, *_ = j3_erw_lauf(tmp_path / "b", J3MOD._eq, flags={"eq_wirkt_nicht"})
+        assert s["urteil"] == "FEHL" and s["grund"] == "eq_senkt_nicht"
+
+    def test_komp_green_and_red_when_the_peak_stays(self, tmp_path):
+        s, hand, *_ = j3_erw_lauf(tmp_path, J3MOD._komp)
+        self.gruen(s)
+        assert s["werte"]["spitze_senkung_db"] > 5
+        insert = next(a for n, a in hand.aufrufe if n == "proj_aendern" and a["befehle"][0].get("art") == "komp")["befehle"][0]
+        assert insert["werte"]["attack"] >= 1       # the lower limit 0.1 ms is refused by the render
+        s, *_ = j3_erw_lauf(tmp_path / "b", J3MOD._komp, flags={"komp_wirkt_nicht"})
+        assert s["urteil"] == "FEHL" and s["grund"] == "komp_senkt_spitze_nicht"
+
+    def test_hall_green_and_red_when_the_tail_does_not_grow(self, tmp_path):
+        s, *_ = j3_erw_lauf(tmp_path, J3MOD._hall)
+        self.gruen(s)
+        assert s["werte"]["ende_ohne_hall_s"] < 1.0 and s["werte"]["verlaengerung_s"] > J3MOD.HALL_MIN_VERLAENGERUNG_S
+        s, *_ = j3_erw_lauf(tmp_path / "b", J3MOD._hall, flags={"hall_wirkt_nicht"})
+        assert s["urteil"] == "FEHL" and s["grund"] == "hall_verlaengert_nicht"
+
+    def test_saett_green_and_red_without_harmonics(self, tmp_path):
+        s, *_ = j3_erw_lauf(tmp_path, J3MOD._saett)
+        self.gruen(s)
+        assert s["werte"]["anstieg_db"] > 10
+        s, *_ = j3_erw_lauf(tmp_path / "b", J3MOD._saett, flags={"saett_wirkt_nicht"})
+        assert s["urteil"] == "FEHL" and s["grund"] == "saett_ohne_obertoene"
+
+    def test_limiter_green_and_red_when_the_ceiling_is_not_held(self, tmp_path):
+        s, *_ = j3_erw_lauf(tmp_path, J3MOD._limiter)
+        self.gruen(s)
+        assert abs(s["werte"]["unter_decke_db"] - 3.0) < 0.2        # the pan law puts the master 3 dB under the ceiling
+        s, *_ = j3_erw_lauf(tmp_path / "b", J3MOD._limiter, flags={"lim_wirkt_nicht"})
+        assert s["urteil"] == "FEHL" and s["grund"] == "limiter_haelt_decke_nicht"
+
+    def test_pdc_green_and_red_when_the_latent_track_is_late(self, tmp_path):
+        s, *_ = j3_erw_lauf(tmp_path, J3MOD._pdc)
+        self.gruen(s)
+        assert s["werte"]["versatz_samples"] == {"ohne": 0, "eq": 0, "lim": 0}
+        s, *_ = j3_erw_lauf(tmp_path / "b", J3MOD._pdc, flags={"pdc_kaputt"})
+        assert s["urteil"] == "FEHL" and s["grund"] == "pdc_versatz"
+        assert s["werte"]["versatz_samples"]["ohne"] == 0 and abs(s["werte"]["versatz_samples"]["eq"]) == 69 and abs(s["werte"]["versatz_samples"]["lim"]) == 69
+
+    def test_midi_export_reads_the_notes_back_and_mutes_the_track_again(self, tmp_path):
+        s, hand, seite, _ = j3_erw_lauf(tmp_path, J3MOD._midi_export)
+        self.gruen(s)
+        assert s["werte"]["noten_alle"] == 4 and s["werte"]["noten_spur"] == 4
+        assert hand.mute_s1 is True
+        muted = [b["mute"] for n, a in hand.aufrufe if n == "proj_aendern" for b in a["befehle"] if "mute" in b]
+        assert muted == [False, True]         # unmuted for the export, muted again after
+        assert ("POST", "/proj/export_midi", "cypher") in seite.aufrufe
+
+    def test_midi_export_red_when_a_note_differs(self, tmp_path):
+        s, *_ = j3_erw_lauf(tmp_path, J3MOD._midi_export, seite_kw={"midi_tausch": (40, 41)})
+        assert s["urteil"] == "FEHL" and s["grund"] == "noten_ungleich"
+
+    def test_einsammeln_waits_out_a_running_transport_and_checks_the_report(self, tmp_path):
+        s, _, seite, _ = j3_erw_lauf(tmp_path, J3MOD._einsammeln, seite_kw={"einsammeln_codes": [409, 200]})
+        self.gruen(s)
+        assert len([a for a in seite.aufrufe if a[1] == "/proj/einsammeln"]) == 2
+        assert s["werte"]["schon_da"] == 1 and s["werte"]["audio_dateien"] == 1
+
+    @pytest.mark.parametrize("antwort,grund", [
+        ({"fehlt": ["abc"]}, "datei_fehlt"),
+        ({"abweichend": ["abc"]}, "abweichend"),
+        ({"kopiert": 0, "schon_da": 0}, "zu_wenig_gesammelt"),
+    ])
+    def test_einsammeln_red_on_a_bad_report(self, tmp_path, antwort, grund):
+        s, *_ = j3_erw_lauf(tmp_path, J3MOD._einsammeln, seite_kw={"einsammeln": {"kopiert": 0, "schon_da": 1, "fehlt": [], "abweichend": [], **antwort}})
+        assert s["urteil"] == "FEHL" and s["grund"] == grund
+
+    def test_einsammeln_red_when_the_collect_never_answers_200(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(J3MOD, "EINSAMMELN_FRIST_S", 0.6)
+        s, *_ = j3_erw_lauf(tmp_path, J3MOD._einsammeln, seite_kw={"einsammeln_codes": [409]})
+        assert s["urteil"] == "FEHL" and s["grund"] in ("einsammeln_abgelehnt", "transport_laeuft")
+
+    def test_relink_moves_the_file_away_finds_it_missing_and_relinks_a_verified_copy(self, tmp_path):
+        s, hand, *_ = j3_erw_lauf(tmp_path, J3MOD._relink)
+        self.gruen(s)
+        assert s["werte"]["fehlt_nach_verlegen"] is True and s["werte"]["fehlt_nach_relink"] is False
+        assert s["werte"]["finden"] == "katalog_fehlt"
+        assert "/audio/" in str(hand.audio_pfad) and hand.audio_pfad.is_file()
+        assert (tmp_path / "aus" / "musik" / "tour-j3-verlegt.wav").is_file()
+
+    def test_relink_red_when_the_file_is_still_missing_afterwards(self, tmp_path):
+        s, *_ = j3_erw_lauf(tmp_path, J3MOD._relink, flags={"relink_wirkt_nicht"})
+        assert s["urteil"] == "FEHL" and s["grund"] == "noch_fehlend"
+
+    def test_undo_takes_one_edit_back_and_redo_restores_it(self, tmp_path):
+        s, hand, *_ = j3_erw_lauf(tmp_path, J3MOD._undo)
+        self.gruen(s)
+        assert s["werte"]["nach_undo_db"] == J3MOD.UNDO_FADER_A_DB and s["werte"]["nach_redo_db"] == J3MOD.UNDO_FADER_B_DB
+
+    def test_undo_red_when_it_takes_back_two_edits_or_redo_does_nothing(self, tmp_path):
+        s, *_ = j3_erw_lauf(tmp_path, J3MOD._undo, flags={"undo_zu_weit"})
+        assert s["urteil"] == "FEHL" and s["grund"] == "undo_falsch"
+        s, *_ = j3_erw_lauf(tmp_path / "b", J3MOD._undo, flags={"redo_wirkt_nicht"})
+        assert s["urteil"] == "FEHL" and s["grund"] == "redo_falsch"
+
+    def test_zip_round_trip_opens_the_import_with_the_same_tracks(self, tmp_path):
+        s, hand, seite, _ = j3_erw_lauf(tmp_path, J3MOD._zip)
+        self.gruen(s)
+        assert hand.geoeffnet == "tour-j3-2" and s["werte"]["neuer_slug"] == "tour-j3-2" and s["werte"]["audio_eintraege"] == 1
+        assert ("GET", "/proj/export_zip?slug=tour-j3", "andreas") in seite.aufrufe       # the zip routes are owner only
+        assert ("POST", "/proj/import_zip", "andreas") in seite.aufrufe
+        assert (tmp_path / "aus" / "musik" / "tour-j3.cypherdj.zip").is_file()
+
+    @pytest.mark.parametrize("flags,seite_kw,grund", [
+        ({"spuren_anders"}, {}, "spuren_ungleich"),
+        ({"audio_fehlt_nach_import"}, {}, "audio_fehlt_nach_import"),
+        (set(), {"zip_ohne_audio": True}, "audio_fehlt_im_zip"),
+        (set(), {"import_slug": "tour-j3"}, "kein_neues_projekt"),
+    ])
+    def test_zip_red_cases(self, tmp_path, flags, seite_kw, grund):
+        s, *_ = j3_erw_lauf(tmp_path, J3MOD._zip, flags=flags, seite_kw=seite_kw)
+        assert s["urteil"] == "FEHL" and s["grund"] == grund
+
+
+J3_ERW_SCHRITTE = ("j3.midi_export", "j3.einsammeln", "j3.relink", "j3.undo", "j3.zip", "j3.auto", "j3.eq", "j3.komp", "j3.hall", "j3.saett", "j3.limiter", "j3.pdc")
+
+
+
+# ---------------------------------------------------------------- J4 sound steps of the device families (fake page, synthesised exports)
+
+class J4KlangSeite(J4Seite):
+    """J4Seite for the sound steps: a project with the commands the steps send (spur_neu, spur_aendern, clip_neu, noten_neu / aendern / loeschen,
+    insert_setzen, geraet_stift_setzen), the patch field of Kraken, and an export that SYNTHESISES what the devices should sound like:
+    a kick for drums-909, a harmonic tone that follows the note for every other instrument, noise for the pins and pads, tanh for the
+    effect stage, one Drum Synth recipe per pad whose knob k1 is the kick's tune.
+
+    Faults (a name per device where it applies): stumm_<graph> (silence), tonhoehe_<graph> (the device ignores the note), uebersteuert_<graph>,
+    ohne_abklingen_<graph> (the note never ends), kein_graph_<graph> (not in the graph list), effekt_stumm, stift_stumm (the pin is stored, the
+    sound stays), stift_nicht_gespeichert, knopf_ohne_wirkung, knopf_wirkt_auf_alle, roll_loeschen_ignoriert.
+    """
+    GRAPHEN = ["bass-banddrive", "drums-909", "synth-mono", "juno-pad", "synth-greif2", "synth-kraken", "drum-synth", "fx-crunch"]
+    DRUM_NAMEN = {"1": "Kick Tune", "2": "Kick Pitch drop", "3": "Kick Decay", "12": "Snare Tune", "27": "Closed Hat Tune"}
+    KRAKEN_STIFTE = [[0, 2, 0, 0.0433], [0, 10, 8, 0.1]]       # two of the factory pins is enough for the fake
+
+    def __init__(self, ordner, fehler=()):
+        super().__init__(ordner, fehler)
+        self.befehle = []                           # every project command, in order
+        self.zaehler = 1
+
+    # -- reads
+    def get(self, pfad):
+        if pfad.startswith("/graphen"):
+            liste = [{"name": g, "art": "instrument", "regler_namen": ({"10": "Cutoff", "11": "Resonance"} if g == "bass-banddrive" else
+                                                                       self.DRUM_NAMEN if g == "drum-synth" else {})}
+                     for g in self.GRAPHEN if f"kein_graph_{g}" not in self.fehler]
+            return 200, {"graphen": liste, "geladen": self.geladen}
+        if pfad.startswith("/proj/steckfeld"):
+            spur = self._spur(pfad.split("spur_id=")[1])
+            if spur["geraet"]["graph"] != "synth-kraken":
+                return 409, {"fehler": "kein_steckfeld"}
+            eigene = "stifte" in spur["geraet"]
+            return 200, {"spur_id": spur["id"], "graph": "synth-kraken", "zeilen": ["VCO 1", "VCO 2", "VCO 3", "Noise", "Ring", "Key"] + [f"R{i}" for i in range(10)],
+                         "spalten": [f"C{i}" for i in range(14)] + ["Amp", "Out"], "eigene": eigene,
+                         "stifte": [list(s) for s in (spur["geraet"]["stifte"] if eigene else self.KRAKEN_STIFTE)], "rev": self.projekt["rev"]}
+        return super().get(pfad)
+
+    def _spur(self, spur_id):
+        return next(s for s in self.projekt["spuren"] if s["id"] == spur_id)
+
+    # -- writes
+    def post(self, pfad, d):
+        p = pfad.split("?")[0]
+        if p == "/proj/neu":
+            self.projekt = {"slug": d["name"], "rev": 0, "tempo_bpm": 120, "naechste_noten_id": 1, "spuren": []}
+            return 200, {"slug": d["name"], "rev": 0}
+        if p == "/proj/aendern":
+            return self.aendere(d)
+        if p == "/proj/export":
+            return self.export(d)
+        return super().post(pfad, d)
+
+    def _noten(self, clip, roh):
+        for r in roh:
+            nid = r.get("id")
+            if nid is None:
+                nid = f"n{self.projekt['naechste_noten_id']}"
+            if any(n["id"] == nid for n in clip["noten"]):
+                raise ValueError("id_belegt")
+            if re.fullmatch(r"n\d+", nid):
+                self.projekt["naechste_noten_id"] = max(self.projekt["naechste_noten_id"], int(nid[1:]) + 1)
+            clip["noten"].append({**r, "id": nid})
+
+    def aendere(self, d):
+        if d["rev"] != self.projekt["rev"]:
+            return 409, {"fehler": "veraltet"}
+        for b in d["befehle"]:
+            self.befehle.append(b)
+            c = b["befehl"]
+            if c == "spur_neu":
+                self.projekt["spuren"].append({"id": f"s{len(self.projekt['spuren']) + 1}", "geraet": b["geraet"], "clips": [], "inserts": []})
+                continue
+            spur = self._spur(b.get("spur_id") or b.get("strang_id")) if (b.get("spur_id") or b.get("strang_id")) else None
+            clip = next((k for s in self.projekt["spuren"] for k in s["clips"] if k["id"] == b.get("clip_id")), None)
+            if c == "spur_aendern":
+                spur["geraet"] = {**b["geraet"], **({"stifte": spur["geraet"]["stifte"]} if "stifte" in spur["geraet"] else {})}
+            elif c == "clip_neu":
+                k = {"id": f"c{sum(len(s['clips']) for s in self.projekt['spuren']) + 1}", "art": "midi", "start_beat": b["start_beat"],
+                     "laenge_beats": b["laenge_beats"], "noten": []}
+                self._noten(k, b.get("noten") or [])
+                spur["clips"].append(k)
+            elif c == "noten_neu":
+                try:
+                    self._noten(clip, b["noten"])
+                except ValueError as e:
+                    return 409, {"fehler": str(e)}
+            elif c == "noten_aendern":
+                for r in b["noten"]:
+                    next(n for n in clip["noten"] if n["id"] == r["id"]).update({k: v for k, v in r.items() if k != "id"})
+            elif c == "noten_loeschen":
+                if "roll_loeschen_ignoriert" not in self.fehler:
+                    clip["noten"] = [n for n in clip["noten"] if n["id"] not in b["ids"]]
+            elif c == "insert_setzen":
+                spur["inserts"].insert(b["pos"], {"art": b["art"], "graph": b["graph"]})
+            elif c == "geraet_stift_setzen":
+                if "stift_nicht_gespeichert" in self.fehler:
+                    continue
+                liste = [list(s) for s in spur["geraet"].get("stifte", self.KRAKEN_STIFTE)]
+                liste = [s for s in liste if s[:3] != [b["satz"], b["zeile"], b["spalte"]]] + [[b["satz"], b["zeile"], b["spalte"], b["wert"]]]
+                spur["geraet"]["stifte"] = liste
+        self.projekt["rev"] += 1
+        return 200, {"rev": self.projekt["rev"]}
+
+    # -- the export: what the devices should sound like
+    def export(self, d):
+        spur = self.projekt["spuren"][-1]
+        graph = spur["geraet"]["graph"]
+        import numpy as np
+        self.exporte += 1
+        tempo = self.projekt["tempo_bpm"]
+        beat_s = 60.0 / tempo
+        sek = (d["bis_beat"] - d["von_beat"]) * beat_s
+        n = int(sek * 48000)
+        out = np.zeros(n)
+        rng = np.random.default_rng(7)
+        for clip in spur["clips"]:
+            for note in clip["noten"]:
+                t0 = int((clip["start_beat"] + note["beat"]) * beat_s * 48000)
+                stimme = self.stimme(graph, spur, note, beat_s, rng)
+                m = min(len(stimme), n - t0)
+                if m > 0:
+                    out[t0:t0 + m] += stimme[:m]
+        if f"stumm_{graph}" in self.fehler:
+            out[:] = 0.0
+        if f"uebersteuert_{graph}" in self.fehler:
+            out = out * 8.0
+        if any(i["graph"] == "fx-crunch" for i in spur["inserts"]) and "effekt_stumm" not in self.fehler:
+            out = np.tanh(6 * out) * 0.5
+        out = np.clip(out, -1.0, 1.0)
+        pcm = np.clip(np.round(out * 32768), -32768, 32767).astype("<i2")
+        datei = os.path.join(self.ordner, f"export{self.exporte}.wav")
+        with wave.open(datei, "wb") as w:
+            w.setnchannels(2)
+            w.setsampwidth(2)
+            w.setframerate(48000)
+            w.writeframes(np.repeat(pcm, 2).tobytes())
+        spitze = float(np.abs(out).max())
+        return 200, {"datei": datei, "frames": n, "spitze_db": round(20 * math.log10(spitze), 1) if spitze else -200.0, "ueber_decke": spitze >= 1.0}
+
+    def stimme(self, graph, spur, note, beat_s, rng):
+        import numpy as np
+        sr = 48000
+        if graph == "drum-synth":
+            return self.drumsynth(spur, note, rng)
+        if graph == "drums-909":
+            t = np.arange(int(0.6 * sr)) / sr
+            return 0.6 * np.sin(2 * np.pi * np.cumsum(40 + 60 * np.exp(-t * 30)) / sr) * np.exp(-t * 6)
+        laenge = note["laenge"] * beat_s
+        ton = 48 if f"tonhoehe_{graph}" in self.fehler else note["ton"]
+        f = 440.0 * 2 ** ((ton - 69) / 12.0)
+        rest = 100.0 if f"ohne_abklingen_{graph}" in self.fehler else 0.05
+        t = np.arange(int((laenge + (1.5 if rest > 1 else 0.6)) * sr)) / sr
+        huelle = np.minimum(1.0, t / 0.005) * np.where(t < laenge, 1.0, np.exp(-(t - laenge) / rest))
+        x = sum(np.sin(2 * np.pi * f * h * t) / h for h in range(1, 7)) * 0.2 * huelle
+        stifte = spur["geraet"].get("stifte") or []
+        if graph == "synth-kraken" and any(s[1] == 3 and s[2] == 15 and s[3] > 0 for s in stifte) and "stift_stumm" not in self.fehler:
+            x = x + 0.12 * rng.standard_normal(len(t)) * huelle
+        return x
+
+    def drumsynth(self, spur, note, rng):
+        import numpy as np
+        sr = 48000
+        p = spur["geraet"]["parameter"]
+        k1 = p.get("k1", 0.5)
+        fremd = 1.0 + (k1 - 0.5) * 3 if "knopf_wirkt_auf_alle" in self.fehler else 1.0     # a knob that leaks into the other pads
+        wirkt = 0.0 if "knopf_ohne_wirkung" in self.fehler else k1
+        if note["ton"] == 36:
+            t = np.arange(int(0.4 * sr)) / sr
+            return 0.6 * np.sin(2 * np.pi * np.cumsum(30 + 40 * wirkt + 20 * np.exp(-t * 30)) / sr) * np.exp(-t * 14)
+        laenge = 0.25 if note["ton"] == 38 else 0.08
+        t = np.arange(int(laenge * sr)) / sr
+        rausch = rng.standard_normal(len(t))
+        sp = np.fft.rfft(rausch)
+        fr = np.fft.rfftfreq(len(t), 1 / sr)
+        if note["ton"] == 38:
+            rausch = np.fft.irfft(sp / (1 + (fr / 3000.0) ** 2), len(t))      # snare: low-passed noise, a few kHz
+            return 0.15 * fremd * (rausch / rausch.std() + 0.5 * np.sin(2 * np.pi * 200 * t)) * np.exp(-t * 12)
+        return 0.1 * fremd * np.diff(rausch, prepend=0.0) / np.sqrt(2) * np.exp(-t * 40)     # closed hat: high-passed noise
+
+
+def j4_klang_lauf(tmp_path, fehler=()):
+    from tour import j4
+    seite = J4KlangSeite(str(tmp_path), fehler)
+    try:
+        t = L.Tour("j4", J4Instanz(seite.url), tmp_path / "aus", kurz=True)
+        t.fuehre(j4.klangschritte)
+        return {s["kennung"]: s for s in t.bericht().schritte}, seite, t
+    finally:
+        seite.ende()
+
+
+KLANG_SCHRITTE = ["j4.familie_drums", "j4.familie_mono", "j4.familie_poly", "j4.familie_neuro", "j4.familie_fx", "j4.kraken",
+                  "j4.kraken_stift", "j4.drumsynth", "j4.drumsynth_knopf", "j4.klavierrolle"]
+
+
+@pytest.fixture(scope="module")
+def j4_klang_gruen(tmp_path_factory):
+    return j4_klang_lauf(tmp_path_factory.mktemp("j4klang"))
+
+
+class TestJ4Klang:
+    def test_every_step_is_green_on_the_fake(self, j4_klang_gruen):
+        s, seite, t = j4_klang_gruen
+        assert list(s) == KLANG_SCHRITTE
+        assert {k: v["urteil"] for k, v in s.items()} == {k: "OK" for k in KLANG_SCHRITTE}, {k: v["grund"] for k, v in s.items() if v["urteil"] != "OK"}
+        assert t.bericht().exitcode() == 0
+
+    def test_the_tour_is_the_first_eight_steps_then_the_sound_steps(self, monkeypatch):
+        from tour import j4
+        lauf = []
+        monkeypatch.setattr(j4, "grundschritte", lambda t: lauf.append("grund"))
+        monkeypatch.setattr(j4, "klangschritte", lambda t: lauf.append("klang"))
+        j4.schritte(None)
+        assert lauf == ["grund", "klang"]
+
+    def test_one_device_per_registered_family_is_played(self):
+        from tour import j4
+        reg = json.load(open(os.path.join(L.DJK, "instruments", "modular_dsp", "geraete.json"), encoding="utf-8"))
+        familien = {g["familie"] for g in reg}
+        assert {x["familie"] for x in j4.FAMILIEN} == familien, "a family without a sound step (or a step for a family that is gone)"
+        for x in j4.FAMILIEN:
+            assert {"name": x["graph"], "familie": x["familie"]}.items() <= next(g for g in reg if g["name"] == x["graph"]).items()
+        for graph in (j4.KRAKEN, j4.DRUMSYNTH, j4.FX_BASIS, j4.ROLL_GRAPH):
+            assert any(g["name"] == graph for g in reg)
+
+    def test_the_knob_of_the_drum_synth_step_exists_in_the_graph(self):
+        from tour import j4
+        g = json.load(open(os.path.join(L.DJK, "instruments", "modular_dsp", "demos", "drum-synth.json"), encoding="utf-8"))
+        assert j4.DRUMSYNTH_KNOPF[0] in g["regler_namen"].values()
+        for pad, _ in j4.DRUMSYNTH_KIT:
+            assert any(v.startswith(pad + " ") for v in g["regler_namen"].values()), pad
+
+    def test_the_report_carries_the_measured_values(self, j4_klang_gruen):
+        s, _, _ = j4_klang_gruen
+        w = s["j4.familie_mono"]["werte"]
+        assert w["geraet"] == "synth-mono" and w["familie"] == "mono"
+        assert len(w["halbtoene"]) == 3 and abs(w["halbtoene"][1] - 7) < 0.5 and abs(w["halbtoene"][2] - 12) < 0.5
+        assert all(p > -50 for p in w["pegel_db"])
+        assert s["j4.kraken_stift"]["werte"]["stifte_nachher"] == s["j4.kraken_stift"]["werte"]["stifte_vorher"] + 1
+        d = s["j4.drumsynth"]["werte"]
+        assert d["tiefer_anteil"][0] > 0.7 > 0.3 > d["tiefer_anteil"][1] and d["schwerpunkt_hz"][2] > 3000
+        assert s["j4.klavierrolle"]["werte"]["noten_im_clip"] == 3
+
+    def test_a_silent_device_is_red_and_the_others_still_run(self, tmp_path):
+        s, _, t = j4_klang_lauf(tmp_path, ["stumm_juno-pad"])
+        assert s["j4.familie_poly"]["urteil"] == "FEHL" and "silent" in s["j4.familie_poly"]["grund"]
+        assert s["j4.familie_neuro"]["urteil"] == "OK" and s["j4.klavierrolle"]["urteil"] == "OK"
+        assert t.bericht().exitcode() == 1
+
+    def test_a_device_that_ignores_the_note_is_red(self, tmp_path):
+        s, _, _ = j4_klang_lauf(tmp_path, ["tonhoehe_synth-greif2"])
+        assert s["j4.familie_neuro"]["urteil"] == "FEHL" and "pitch off" in s["j4.familie_neuro"]["grund"]
+        assert s["j4.familie_mono"]["urteil"] == "OK"
+
+    def test_a_clipping_export_is_red(self, tmp_path):
+        s, _, _ = j4_klang_lauf(tmp_path, ["uebersteuert_synth-mono"])
+        assert s["j4.familie_mono"]["urteil"] == "FEHL" and "clipping" in s["j4.familie_mono"]["grund"]
+
+    def test_a_note_that_never_ends_is_red(self, tmp_path):
+        s, _, _ = j4_klang_lauf(tmp_path, ["ohne_abklingen_juno-pad"])
+        assert s["j4.familie_poly"]["urteil"] == "FEHL" and "do not end" in s["j4.familie_poly"]["grund"]
+
+    def test_a_registered_device_missing_from_the_graph_list_is_red(self, tmp_path):
+        s, _, _ = j4_klang_lauf(tmp_path, ["kein_graph_synth-kraken"])
+        assert s["j4.kraken"]["urteil"] == "FEHL" and "synth-kraken" in s["j4.kraken"]["grund"]
+
+    def test_an_effect_that_changes_nothing_is_red(self, tmp_path):
+        s, _, _ = j4_klang_lauf(tmp_path, ["effekt_stumm"])
+        assert s["j4.familie_fx"]["urteil"] == "FEHL" and "does not change the sound" in s["j4.familie_fx"]["grund"]
+
+    def test_the_effect_goes_in_as_an_insert_of_the_track(self, j4_klang_gruen):
+        _, seite, _ = j4_klang_gruen
+        ins = [b for b in seite.befehle if b["befehl"] == "insert_setzen"]
+        assert [(b["art"], b["graph"]) for b in ins] == [("bk", "fx-crunch")]
+
+    def test_a_pin_that_does_not_change_the_sound_is_red(self, tmp_path):
+        s, _, _ = j4_klang_lauf(tmp_path, ["stift_stumm"])
+        assert s["j4.kraken_stift"]["urteil"] == "FEHL" and "sound did not change" in s["j4.kraken_stift"]["grund"]
+
+    def test_a_pin_that_is_not_stored_is_red(self, tmp_path):
+        s, _, _ = j4_klang_lauf(tmp_path, ["stift_nicht_gespeichert"])
+        assert s["j4.kraken_stift"]["urteil"] == "FEHL" and "not in the stored list" in s["j4.kraken_stift"]["grund"]
+
+    def test_the_pin_is_set_by_the_label_of_its_row_and_column(self, j4_klang_gruen):
+        _, seite, _ = j4_klang_gruen
+        pins = [b for b in seite.befehle if b["befehl"] == "geraet_stift_setzen"]
+        assert [(b["satz"], b["zeile"], b["spalte"], b["wert"]) for b in pins] == [(0, 3, 15, 0.8)]       # row Noise, column Out
+
+    def test_a_knob_without_effect_on_its_pad_is_red(self, tmp_path):
+        s, _, _ = j4_klang_lauf(tmp_path, ["knopf_ohne_wirkung"])
+        assert s["j4.drumsynth_knopf"]["urteil"] == "FEHL" and "did not change the sound of its pad" in s["j4.drumsynth_knopf"]["grund"]
+
+    def test_a_knob_that_also_changes_other_pads_is_red(self, tmp_path):
+        s, _, _ = j4_klang_lauf(tmp_path, ["knopf_wirkt_auf_alle"])
+        assert s["j4.drumsynth_knopf"]["urteil"] == "FEHL" and "other pads" in s["j4.drumsynth_knopf"]["grund"]
+
+    def test_only_the_kick_changes_when_its_knob_is_turned(self, j4_klang_gruen):
+        s, _, _ = j4_klang_gruen
+        w = s["j4.drumsynth_knopf"]["werte"]
+        assert w["knopf"] == "k1 Kick Tune"
+        assert w["schwerpunkt_aenderung"][0] > 0.1 and w["schwerpunkt_aenderung"][1] < 0.1 and w["schwerpunkt_aenderung"][2] < 0.1
+
+    def test_drawn_notes_go_in_with_noten_neu_and_the_ids_of_the_project_counter(self, j4_klang_gruen):
+        _, seite, _ = j4_klang_gruen
+        neu = [b for b in seite.befehle if b["befehl"] == "noten_neu"]
+        assert len(neu) == 1 and [n["id"] for n in neu[0]["noten"]] == ["n1", "n2", "n3"]
+        assert [b["befehl"] for b in seite.befehle if b["befehl"].startswith("noten_")] == ["noten_neu", "noten_loeschen", "noten_aendern"]
+
+    def test_a_deleted_note_that_still_sounds_is_red(self, tmp_path):
+        s, _, _ = j4_klang_lauf(tmp_path, ["roll_loeschen_ignoriert"])
+        assert s["j4.klavierrolle"]["urteil"] == "FEHL" and "deleted note still sounds" in s["j4.klavierrolle"]["grund"]
+
+
+class TestKlang:
+    """The signal measurements of tour/surge_sound.py on synthetic signals."""
+
+    @staticmethod
+    def _ton(f, sek=0.6, harmonische=6, sub=False):
+        import numpy as np
+        t = np.arange(int(sek * 48000)) / 48000
+        x = sum(np.sin(2 * np.pi * f * h * t) / h for h in range(1, harmonische + 1))
+        return x + (np.sin(2 * np.pi * f / 2 * t) if sub else 0.0)
+
+    def test_the_shift_of_a_note_in_semitones(self):
+        from tour import surge_sound as klang
+        c3 = self._ton(130.81)
+        for halb in (0, 7, 12, 17, -5):
+            assert abs(klang.verschiebung_halbtoene(c3, self._ton(130.81 * 2 ** (halb / 12.0))) - halb) < 0.2, halb
+
+    def test_a_sub_oscillator_does_not_make_the_shift_jump_an_octave(self):
+        from tour import surge_sound as klang
+        assert abs(klang.verschiebung_halbtoene(self._ton(130.81, sub=True), self._ton(196.0, sub=True)) - 7) < 0.2
+
+    def test_a_device_that_ignores_the_note_has_shift_zero_and_silence_has_none(self):
+        import numpy as np
+        from tour import surge_sound as klang
+        assert klang.verschiebung_halbtoene(self._ton(130.81), self._ton(130.81)) == 0.0
+        s = klang.verschiebung_halbtoene(self._ton(130.81), np.zeros(24000))
+        assert s != s            # nan
+
+    def test_energy_share_of_a_band(self):
+        import numpy as np
+        from tour import surge_sound as klang
+        t = np.arange(24000) / 48000
+        x = np.sin(2 * np.pi * 100 * t) + np.sin(2 * np.pi * 4000 * t)
+        assert abs(klang.anteil(x, 0, 400) - 0.5) < 0.01 and abs(klang.anteil(x, 400, 24000) - 0.5) < 0.01
+        assert klang.anteil(np.zeros(100), 0, 400) == 0.0
+
+    def test_centroid_of_a_band_ignores_the_rest(self):
+        import numpy as np
+        from tour import surge_sound as klang
+        t = np.arange(48000) / 48000
+        x = np.sin(2 * np.pi * 100 * t) + 3 * np.sin(2 * np.pi * 5000 * t)
+        assert abs(klang.schwerpunkt(x, 20, 500) - 100) < 5 and klang.schwerpunkt(x) > 3000
+
+    def test_fall_of_a_decaying_note_and_of_a_steady_one(self):
+        import numpy as np
+        from tour import surge_sound as klang
+        t = np.arange(48000) / 48000
+        fall, kopf, schluss = klang.abfall_db(np.sin(2 * np.pi * 100 * t) * np.exp(-t * 8), 0.3)
+        assert fall > 40 and kopf > schluss
+        assert klang.abfall_db(np.sin(2 * np.pi * 100 * t), 0.3)[0] < 1.0
+
+    def test_centroid_and_level(self):
+        import numpy as np
+        from tour import surge_sound as klang
+        t = np.arange(48000) / 48000
+        assert abs(klang.schwerpunkt(np.sin(2 * np.pi * 1000 * t)) - 1000) < 5
+        assert abs(klang.rms_db(0.5 * np.ones(100)) - (-6.02)) < 0.01
+        assert klang.rms_db(np.zeros(0)) == -240.0 and klang.spitze(0.7 * np.sin(2 * np.pi * 100 * t)) > 0.69
+
+
+# ---------------------------------------------------------------- J5 automation tracks (spur, spur_stopp, spuren)
+
+class TestJ5Spur:
+    def test_the_step_is_green_and_reads_the_value_on_every_bar_line(self, j5env):
+        rc, s = j5env.fahre()
+        assert s["j5.spur"]["urteil"] == "OK", s["j5.spur"]["grund"]
+        w = s["j5.spur"]["werte"]
+        assert w["anker_beat"] % 4 == 0 and w["ende_beat"] == w["anker_beat"] + 16 and w["spuren_listet"] is True
+        assert [x["takt"] for x in w["lesungen"]] == [0, 1, 2, 3, 4]
+        assert all(abs(x["wert"] - x["soll"]) <= 0.08 for x in w["lesungen"])
+        assert w["lesungen"][4]["wert"] > w["lesungen"][0]["wert"] + 0.5
+        assert rc == 0
+
+    def test_the_agent_sends_the_ramp_as_a_linear_move_of_four_bars(self, j5env):
+        j5env.fahre()
+        spur = [k for pfad, _, k in j5env.seite.aufrufe if pfad == "/spur"]
+        assert len(spur) == 2
+        assert spur[0]["fahrten"] == [{"ziel": "deck/2/filter", "ab_takt": 1, "takte": 4, "nach": 0.9, "form": "linear"}]
+        assert spur[1]["fahrten"][0]["nach"] == 0.1 and spur[0]["name"] != spur[1]["name"]
+
+    def test_a_stopped_ramp_stays_where_it_was_and_a_second_stop_is_refused(self, j5env):
+        rc, s = j5env.fahre()
+        w = s["j5.spur"]["werte"]
+        assert 0.25 < w["wert_beim_stopp"] < 0.75 and abs(w["wert_ein_takt_danach"] - w["wert_beim_stopp"]) <= 0.03
+        assert w["zweiter_stopp"] == "keine_spur"
+        stopps = [k["name"] for pfad, _, k in j5env.seite.aufrufe if pfad == "/spur/stopp"]
+        assert stopps[0] == w["spur"].replace("rampe", "halt") or stopps[0].startswith("tour-j5-halt")
+
+    def test_the_step_leaves_nothing_behind(self, j5env):
+        j5env.fahre()
+        assert j5env.seite.spuren == {}
+
+    def test_a_value_that_jumps_instead_of_following_the_grid_is_red(self, j5env):
+        j5env.seite.spur_modus = "sprung"
+        rc, s = j5env.fahre()
+        assert s["j5.spur"]["urteil"] == "FEHL" and "does not follow the bar grid" in s["j5.spur"]["grund"]
+        assert rc == 1
+
+    def test_a_ramp_that_moves_before_its_bar_line_is_red(self, j5env):
+        j5env.seite.spur_modus = "vor_anker"
+        rc, s = j5env.fahre()
+        assert s["j5.spur"]["urteil"] == "FEHL"
+        assert "before the bar line" in s["j5.spur"]["grund"] or "does not follow the bar grid" in s["j5.spur"]["grund"]
+
+    def test_a_track_that_spuren_does_not_list_is_red(self, j5env):
+        j5env.seite.spur_modus = "nicht_gelistet"
+        rc, s = j5env.fahre()
+        assert s["j5.spur"]["urteil"] == "FEHL" and "spuren does not list" in s["j5.spur"]["grund"]
+
+    def test_a_stop_that_does_not_stop_is_red(self, j5env):
+        j5env.seite.spur_modus = "stopp_ignoriert"
+        rc, s = j5env.fahre()
+        assert s["j5.spur"]["urteil"] == "FEHL"
+        assert "moved on after spur_stopp" in s["j5.spur"]["grund"] or "still lists" in s["j5.spur"]["grund"]
+
+    def test_the_other_steps_are_not_touched_by_a_red_spur_step(self, j5env):
+        j5env.seite.spur_modus = "sprung"
+        rc, s = j5env.fahre()
+        assert {k: v["urteil"] for k, v in s.items() if k != "j5.spur"} == {k: "OK" for k in TestJ5.SCHRITTE if k != "j5.spur"}
+
+
+
+# ---------------------------------------------------------------- J1 extension: hotcues, loops, jumps, scrub, pre-listen, compressor, hall, cue output
+
+class UhrV:
+    """Virtual time for the extension tests: `sleep` advances it at once, so a step that waits seconds runs in milliseconds. Everything else is the
+    real `time` module (the report writes a real timestamp)."""
+
+    def __init__(self):
+        self.t = 1000.0
+
+    def monotonic(self):
+        return self.t
+
+    def sleep(self, s):
+        self.t += max(0.0, s)
+
+    def __getattr__(self, name):
+        return getattr(time, name)
+
+
+class ErweiterungSeite:
+    """Fake page server for the J1 extension steps: one deck that follows a clock of 124 bpm (source beat = clock beat + offset), and the meters
+    that go with it. Each `fehler` entry switches one thing the real page does to something it does not (the red cases)."""
+
+    EINS = 0.77
+    BPM = 124.0
+
+    def __init__(self, uhr, fehler=()):
+        self.uhr, self.fehler = uhr, set(fehler)
+        self.versatz = 5.0 - self.beat0()          # source beat 5 now
+        self.status = 0
+        self.schleife = None                       # (start, laenge) while the deck loops
+        self.cues = {}
+        self.ereignisse = []                       # (clock beat, effect): jumps that land later
+        self.regler = {"deck/1/fader": -200.0, "cue/mix": -1.0, "cue/pegel": -12.0, "deck/1/pfl": 0.0, "deck/1/komp/an": 0.0}
+        self.fx = {"an": False, "art": 0}
+        self.fx_zu = {}
+        self.stopp_s = None
+        self.aufrufe = []
+        self.griff = 0.0
+        self.vorh = False                          # the pre-listen deck plays
+        seite = self
+
+        class H(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def _senden(self, code, obj):
+                roh = json.dumps(obj).encode()
+                self.send_response(code)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(roh)))
+                self.end_headers()
+                self.wfile.write(roh)
+
+            def do_GET(self):
+                seite.aufrufe.append(("GET", self.path, ""))
+                u = urllib.parse.urlparse(self.path)
+                if u.path == "/lage":
+                    return self._senden(200, seite.lage())
+                if u.path == "/pegel":
+                    return self._senden(200, {"sek": 1, "kanaele": seite.pegel()})
+                if u.path == "/deck/hotcues":
+                    return self._senden(200, {str(k): v for k, v in seite.cues.items()})
+                if u.path == "/deck/loop":
+                    s = seite.schleife
+                    return self._senden(200, {"start": s[0], "laenge": s[1]} if s else {})
+                if u.path == "/ausgang":
+                    return self._senden(200, {"zustand": "gut"})
+                if u.path == "/vorhoeren":
+                    return self._senden(200, {"spielt": seite.vorh})
+                self._senden(404, {"fehler": "keine_route"})
+
+            def do_POST(self):
+                n = int(self.headers.get("content-length") or 0)
+                d = json.loads(self.rfile.read(n) or b"{}")
+                q = self.headers.get("x-djk-quelle")
+                seite.aufrufe.append(("POST", self.path, q))
+                code, obj = seite.post(self.path, d, q)
+                self._senden(code, obj)
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def ende(self):
+        self.server.shutdown()
+        self.server.server_close()
+
+    # -- the clock and the deck
+    def beat0(self):
+        return 100.0 + (self.uhr.t - 1000.0) * self.BPM / 60.0
+
+    def lauf(self):
+        """Lets the jumps that are due land."""
+        c = self.beat0()
+        for e in sorted(self.ereignisse):
+            if e[0] <= c:
+                self.ereignisse.remove(e)
+                e[1]()
+
+    def quell(self):
+        q = self.beat0() + self.versatz
+        if self.schleife:
+            s, l = self.schleife
+            q = s + (q - s) % l if "loop_haelt_nicht" not in self.fehler else q
+        return q
+
+    def lage(self):
+        self.lauf()
+        decks = [{"deck": 1, "status": (3 if self.schleife and self.status else self.status), "quell_beat": self.quell()}] if self.status else \
+                [{"deck": 1, "status": 0, "quell_beat": 0.0}]
+        return {"uhr": {"beat": self.beat0(), "bpm": self.BPM}, "decks": decks, "regler": dict(self.regler), "hall_pool": {"an": False}, "fx": [None, None]}
+
+    def offen(self):
+        return self.regler["deck/1/fader"] > -100
+
+    def pegel(self):
+        self.lauf()
+        spielt = self.status in (2, 3)
+        deck = -6.0 if spielt and self.offen() else PEGEL_STUMM
+        if spielt and self.offen() and self.regler["deck/1/komp/an"] and "komp_wirkt_nicht" not in self.fehler:
+            deck -= 12.0
+        master = deck
+        if not spielt and self.stopp_s is not None and self.offen():
+            dt = self.uhr.t - self.stopp_s
+            lang = 2.0 if self.fx["an"] and "hall_wirkt_nicht" not in self.fehler else 0.05
+            master = -6.0 - 60.0 * dt / lang if dt < lang else PEGEL_STUMM
+            master = max(master, PEGEL_STUMM)
+        pfl = -6.0 if spielt and self.regler["deck/1/pfl"] >= 0.5 and "pfl_wirkt_nicht" not in self.fehler else PEGEL_STUMM
+        if "pfl_leckt" in self.fehler and pfl > PEGEL_STUMM:
+            master = -20.0
+        mix = self.regler["cue/mix"] if "cue_mix_wirkt_nicht" not in self.fehler else -1.0
+        teil_m = master + 20 * math.log10(max(1e-9, 0.5 * (1 + mix))) if master > PEGEL_STUMM else PEGEL_STUMM
+        vorh = -12.0 if self.vorh and "vorhoerdeck_stumm" not in self.fehler else PEGEL_STUMM
+        teile = [10 ** (x / 20.0) for x in (pfl, teil_m, vorh) if x > PEGEL_STUMM]
+        cue = 20 * math.log10(sum(teile)) + self.regler["cue/pegel"] if teile else PEGEL_STUMM
+        return {"deck/1": {"max_db": deck}, "master": {"max_db": master}, "cue": {"max_db": max(cue, PEGEL_STUMM)}}
+
+    def post(self, pfad, d, q):
+        self.lauf()
+        c = self.beat0()
+        ok = (200, {"ok": True})
+        if pfad == "/regler":
+            if d["pfad"] == "deck/1/fader" and d["nach"] > -100 and q == "cypher":
+                return 409, {"fehler": "kein_hoerschein"}
+            if (d["pfad"].endswith("/pfl") or d["pfad"].startswith("cue/")) and q == "cypher":
+                return 200, {"ok": True, "quittung": {"status": 6, "grund": "nur_hand"}}
+            self.regler[d["pfad"]] = d["nach"]
+            return ok
+        if pfad == "/deck/start":
+            self.status, self.versatz, self.schleife, self.stopp_s = 2, 5.0 + self.EINS - c - (5.0 + self.EINS - c) % 1 + 0.0, None, None
+            self.versatz = self.EINS - (c + 1.0)           # the first downbeat at the next beat grid line
+            return 200, {"ok": True, "felder": {"ab_beat": c + 1.0}}
+        if pfad == "/deck/stopp":
+            self.status, self.schleife, self.stopp_s = 0, None, self.uhr.t
+            return ok
+        if pfad == "/deck/hotcue":
+            if d["aktion"] == "setzen":
+                h = {"quell_beat": self.EINS + round(d["quell_beat"] - self.EINS), "art": d.get("art", "shot")}
+                if h["art"] == "loop":
+                    h["laenge"] = d["laenge"]
+                self.cues[d["nr"]] = h
+                return ok
+            if d["aktion"] == "loeschen":
+                self.cues.pop(d["nr"], None)
+                return ok
+            h, ab = self.cues[d["nr"]], c + 1.0
+
+            def lande():
+                if "hotcue_wirkt_nicht" not in self.fehler:
+                    self.versatz = h["quell_beat"] - ab + (0.0 if "hotcue_schief" not in self.fehler else 1.0)
+                if h["art"] == "loop":
+                    self.schleife = (h["quell_beat"], h["laenge"])
+            self.ereignisse.append((ab, lande))
+            return 200, {"ok": True, "felder": {"ab_beat": ab}}
+        if pfad == "/deck/sprung":
+            ab = c + 0.2
+
+            def spring():
+                self.versatz += d["delta"] if "sprung_zu_kurz" not in self.fehler else d["delta"] / 2
+            self.ereignisse.append((ab, spring))
+            return 200, {"ok": True, "felder": {"ab_beat": ab}}
+        if pfad == "/deck/loop":
+            if d["laenge"] == 0:
+                if self.schleife:
+                    self.versatz = self.quell() - c
+                self.schleife = None
+            elif self.schleife and d.get("behalte_start"):
+                self.schleife = (self.schleife[0], d["laenge"])
+            else:
+                self.schleife = (float(round(self.quell())), d["laenge"])
+            return 200, {"ok": True, "felder": {"ab_beat": c}}
+        if pfad == "/deck/scrub":
+            if d["phase"] == 1:
+                self.griff = 0.0
+            if d["phase"] == 0:
+                self.versatz += d["delta"] + (1.0 if "scrub_phase_verloren" in self.fehler else 0.0)
+            return ok
+        if pfad == "/vorhoeren":
+            if d.get("aktion") == "stopp":
+                self.vorh = False
+                return ok
+            if "kein_kopfhoerer" in self.fehler:
+                return 409, {"fehler": "kein_kopfhoerer"}
+            self.vorh = True
+            return 200, {"ok": True, "spielt": True}
+        if pfad == "/fx/zuweisung":
+            self.fx_zu[d["einheit"]] = d["kanal"]
+            return ok
+        if pfad == "/fx":
+            self.fx = {"an": bool(d.get("an")), "art": d["art"]}
+            return ok
+        return 404, {"fehler": "keine_route"}
+
+
+PEGEL_STUMM = -200.0
+
+
+@pytest.fixture
+def ext(monkeypatch):
+    uhr = UhrV()
+    monkeypatch.setattr(j1, "time", uhr)
+    monkeypatch.setattr(L, "time", uhr)
+    return uhr
+
+
+def ext_schritt(tmp_path, uhr, schritt, kennung, fehler=()):
+    seite = ErweiterungSeite(uhr, fehler)
+    try:
+        t = j1_tour(seite, tmp_path / "aus")
+        z = j1.Zustand()
+        z.mids = {"a.wav": "m1", "b.wav": "m2"}
+        t.fuehre(lambda t: schritt(t, z))
+        return j1_schritt(t, kennung), seite, z
+    finally:
+        seite.ende()
+
+
+class TestJ1Erweiterung:
+    # -- the measurement helpers on their own
+    def test_landung_abweichung_null_wenn_das_deck_dem_ziel_folgt(self):
+        p = {"uhr": 120.0, "quell": 40.0 + (120.0 - 110.0)}
+        assert j1.landung_abweichung(40.0, 110.0, p) == pytest.approx(0.0)
+        assert j1.landung_abweichung(40.0, 110.0, dict(p, quell=p["quell"] + 1.5)) == pytest.approx(1.5)
+
+    def test_versatz_ist_quelle_minus_uhr(self):
+        assert j1.versatz({"uhr": 100.0, "quell": 37.5}) == -62.5
+
+    def test_loop_drinnen_nennt_nur_was_ausserhalb_liegt(self):
+        assert j1.loop_drinnen([10.0, 11.9, 13.9, 14.2], 10.0, 4) == []
+        assert j1.loop_drinnen([10.0, 14.5, 9.5], 10.0, 4) == [14.5, 9.5]
+
+    def test_loop_runden_zaehlt_nur_echte_ruecksprung(self):
+        assert j1.loop_runden([10.0, 11.0, 12.0, 13.0, 10.2, 11.2, 12.2, 10.1]) == 2
+        assert j1.loop_runden([10.0, 10.2, 9.9, 10.1]) == 0       # jitter is not a wrap
+
+    # -- hotcues
+    def test_hotcues_gruen(self, tmp_path, ext):
+        st, seite, _ = ext_schritt(tmp_path, ext, j1.schritt_hotcues, "j1.hotcues")
+        assert st["urteil"] == "OK", st
+        assert sorted(st["werte"]["hotcues"]) == [str(n) for n in range(1, 9)]
+        assert st["werte"]["hotcues"]["2"]["art"] == "loop" and st["werte"]["hotcues"]["2"]["laenge"] == 4
+        assert abs(st["werte"]["schuss_abweichung_beats"]) <= j1.HOTCUE_TOLERANZ_BEATS
+        assert st["werte"]["loop_cue_status"] == 3
+
+    def test_hotcue_der_das_deck_nicht_bewegt_ist_rot(self, tmp_path, ext):
+        st, _, _ = ext_schritt(tmp_path, ext, j1.schritt_hotcues, "j1.hotcues", fehler=["hotcue_wirkt_nicht"])
+        assert st["urteil"] == "FEHL" and "beats from where it must be" in st["grund"]
+
+    def test_hotcue_der_um_einen_beat_daneben_landet_ist_rot(self, tmp_path, ext):
+        st, _, _ = ext_schritt(tmp_path, ext, j1.schritt_hotcues, "j1.hotcues", fehler=["hotcue_schief"])
+        assert st["urteil"] == "FEHL"
+        assert st["werte"]["schuss_abweichung_beats"] == pytest.approx(1.0, abs=0.1)
+
+    # -- jumps
+    def test_sprung_gruen(self, tmp_path, ext):
+        st, _, _ = ext_schritt(tmp_path, ext, j1.schritt_sprung, "j1.sprung")
+        assert st["urteil"] == "OK", st
+        assert [round(s["bewegt"]) for s in st["werte"]["spruenge"]] == [8, -8]
+
+    def test_zu_kurzer_sprung_ist_rot(self, tmp_path, ext):
+        st, _, _ = ext_schritt(tmp_path, ext, j1.schritt_sprung, "j1.sprung", fehler=["sprung_zu_kurz"])
+        assert st["urteil"] == "FEHL" and "does not move the deck" in st["grund"]
+
+    # -- the deck loop
+    def test_loop_gruen(self, tmp_path, ext):
+        st, seite, _ = ext_schritt(tmp_path, ext, j1.schritt_loop, "j1.loop")
+        assert st["urteil"] == "OK", st
+        assert st["werte"]["draussen"] == 0 and st["werte"]["runden"] >= 1
+        assert st["werte"]["laengen"] == {str(n): True for n in j1.LOOP_LAENGEN}
+        assert seite.schleife is None, "the loop is off again"
+
+    def test_loop_der_nicht_haelt_ist_rot(self, tmp_path, ext):
+        st, _, _ = ext_schritt(tmp_path, ext, j1.schritt_loop, "j1.loop", fehler=["loop_haelt_nicht"])
+        assert st["urteil"] == "FEHL" and "left the 4-beat loop" in st["grund"]
+
+    # -- scrub
+    def test_scrub_gruen(self, tmp_path, ext):
+        st, _, _ = ext_schritt(tmp_path, ext, j1.schritt_scrub, "j1.scrub")
+        assert st["urteil"] == "OK", st
+        assert abs(st["werte"]["abweichung_hin_zurueck"]) <= j1.SCRUB_TOLERANZ_BEATS
+        assert st["werte"]["zug_bewegt"] == pytest.approx(j1.SCRUB_BEATS, abs=0.1)
+
+    def test_scrub_der_die_phase_verliert_ist_rot(self, tmp_path, ext):
+        st, _, _ = ext_schritt(tmp_path, ext, j1.schritt_scrub, "j1.scrub", fehler=["scrub_phase_verloren"])
+        assert st["urteil"] == "FEHL" and "does not keep the phase" in st["grund"]
+
+    # -- pre-listen
+    def test_vorhoeren_gruen_und_pfl_wird_als_hand_gerufen(self, tmp_path, ext):
+        st, seite, z = ext_schritt(tmp_path, ext, j1.schritt_vorhoeren, "j1.vorhoeren")
+        assert st["urteil"] == "OK", st
+        assert st["werte"]["cue_mit_pfl_db"] > -60 and st["werte"]["master_db"] <= -60
+        assert ("POST", "/regler", "andreas") in seite.aufrufe
+        assert any("pfl" in n for n in z.als_andreas)
+        assert seite.regler["deck/1/pfl"] == 0.0, "PFL is off again"
+
+    def test_vorhoeren_ohne_cue_ist_rot(self, tmp_path, ext):
+        st, _, _ = ext_schritt(tmp_path, ext, j1.schritt_vorhoeren, "j1.vorhoeren", fehler=["pfl_wirkt_nicht"])
+        assert st["urteil"] == "FEHL" and "cue meter" in st["grund"]
+
+    def test_vorhoeren_das_in_den_master_leckt_ist_rot(self, tmp_path, ext):
+        st, _, _ = ext_schritt(tmp_path, ext, j1.schritt_vorhoeren, "j1.vorhoeren", fehler=["pfl_leckt"])
+        assert st["urteil"] == "FEHL" and "master" in st["grund"]
+
+    # -- pre-listen deck
+    def test_vorhoerdeck_gruen(self, tmp_path, ext):
+        st, seite, z = ext_schritt(tmp_path, ext, j1.schritt_vorhoerdeck, "j1.vorhoerdeck")
+        assert st["urteil"] == "OK", st
+        assert st["werte"]["cue_db"] > -60 and st["werte"]["master_db"] <= -60 and st["werte"]["cue_danach_db"] <= -60
+        assert "POST /vorhoeren" in z.als_andreas and seite.vorh is False
+
+    def test_vorhoerdeck_ohne_kopfhoerer_ist_ein_skip_und_kein_rot(self, tmp_path, ext):
+        st, _, _ = ext_schritt(tmp_path, ext, j1.schritt_vorhoerdeck, "j1.vorhoerdeck", fehler=["kein_kopfhoerer"])
+        assert st["urteil"] == "SKIP" and "409" in st["grund"], st
+
+    def test_vorhoerdeck_das_stumm_bleibt_ist_rot(self, tmp_path, ext):
+        st, _, _ = ext_schritt(tmp_path, ext, j1.schritt_vorhoerdeck, "j1.vorhoerdeck", fehler=["vorhoerdeck_stumm"])
+        assert st["urteil"] == "FEHL" and "cue meter" in st["grund"]
+
+    # -- compressor
+    def test_kompressor_gruen(self, tmp_path, ext):
+        st, seite, _ = ext_schritt(tmp_path, ext, j1.schritt_kompressor, "j1.kompressor")
+        assert st["urteil"] == "OK", st
+        assert st["werte"]["minderung_db"] >= j1.KOMP_MINDERUNG_DB
+        assert seite.regler["deck/1/komp/an"] == 0.0
+
+    def test_kompressor_der_nichts_tut_ist_rot(self, tmp_path, ext):
+        st, _, _ = ext_schritt(tmp_path, ext, j1.schritt_kompressor, "j1.kompressor", fehler=["komp_wirkt_nicht"])
+        assert st["urteil"] == "FEHL" and "less than" in st["grund"]
+
+    # -- cue output
+    def test_ausgang_gruen(self, tmp_path, ext):
+        st, seite, _ = ext_schritt(tmp_path, ext, j1.schritt_ausgang, "j1.ausgang")
+        assert st["urteil"] == "OK", st
+        assert abs(st["werte"]["cue_gegen_master_db"] - j1.CUE_MASTER_DB) <= j1.CUE_MASTER_TOLERANZ_DB
+        assert seite.regler["cue/mix"] == -1 and seite.regler["cue/pegel"] == j1.CUE_MASTER_DB
+
+    def test_ausgang_dessen_mix_nichts_aendert_ist_rot(self, tmp_path, ext):
+        st, _, _ = ext_schritt(tmp_path, ext, j1.schritt_ausgang, "j1.ausgang", fehler=["cue_mix_wirkt_nicht"])
+        assert st["urteil"] == "FEHL" and "cue" in st["grund"]
+
+    # -- hall
+    def test_hall_gruen(self, tmp_path, ext):
+        st, seite, _ = ext_schritt(tmp_path, ext, j1.schritt_hall, "j1.hall")
+        assert st["urteil"] == "OK", st
+        assert st["werte"]["verlaengert_s"] >= j1.HALL_VERLAENGERUNG_S
+        assert seite.fx_zu == {2: "master"} and seite.fx["art"] == j1.HALL_ART
+
+    def test_hall_der_den_schwanz_nicht_verlaengert_ist_rot(self, tmp_path, ext):
+        st, _, _ = ext_schritt(tmp_path, ext, j1.schritt_hall, "j1.hall", fehler=["hall_wirkt_nicht"])
+        assert st["urteil"] == "FEHL" and "longer" in st["grund"]
+
+    # -- the whole extension leaves the instance as it found it
+    def test_aufraeumen_stellt_alles_zurueck(self, tmp_path, ext):
+        seite = ErweiterungSeite(ext)
+        try:
+            t = j1_tour(seite, tmp_path / "aus")
+            z = j1.Zustand()
+            t.fuehre(lambda t: (j1.schritt_hotcues(t, z), j1.schritt_vorhoeren(t, z), j1.schritt_kompressor(t, z), j1.erweiterung_aufraeumen(t, z)))
+            assert seite.status == 0 and seite.regler["deck/1/fader"] == -200
+            assert seite.regler["deck/1/pfl"] == 0 and seite.regler["deck/1/komp/an"] == 0 and seite.cues == {}
+        finally:
+            seite.ende()
+
+
+class TestJ3ExportBereit:
+    """A proj_export that the product refuses with audio_fehlt (a clip is still being decoded) is asked again until the deadline."""
+
+    @pytest.fixture(autouse=True)
+    def schnell(self, monkeypatch):
+        monkeypatch.setattr(J3MOD, "EXPORT_BEREIT_FRIST_S", 0.8)
+
+    @pytest.fixture
+    def seite(self):
+        s = J3Seite()
+        yield s
+        s.ende()
+
+    def lauf(self, seite, tmp_path, **hand_kw):
+        ohne, nach = tmp_path / "ohne.wav", tmp_path / "nach.wav"
+        j3_wav(ohne)
+        j3_wav(nach, ton_sek=14.0)
+        basis = {"frames": 768000, "spitze_db": -12.0, "ueber_decke": False, "limiter_db_max": 0}
+        hand = J3Hand({**basis, "datei": str(nach)}, export_ohne={**basis, "datei": str(ohne)}, **hand_kw)
+        t = L.Tour("j3", J3Instanz(seite.url), tmp_path / "aus", kurz=True)
+        rc = t.fuehre(lambda tt: J3MOD.schritte(tt, hand=hand))
+        return rc, {s["kennung"]: s for s in t.bericht().schritte}, hand
+
+    def test_a_clip_that_is_ready_after_two_refusals_makes_warp_and_export_green(self, seite, tmp_path):
+        rc, s, hand = self.lauf(seite, tmp_path, audio_fehlt_zuerst=2)
+        assert s["j3.warp"]["urteil"] == "OK" and s["j3.export"]["urteil"] == "OK"
+        assert s["j3.warp"]["werte"]["export_versuche"] == 3        # two refusals, then the reference export
+        assert [n for n, _ in hand.aufrufe].count("proj_export") == 5   # 3 for the reference, one after the warp, one for the export step
+
+    def test_a_clip_that_never_gets_ready_is_red_with_the_products_reason_after_the_deadline(self, seite, tmp_path):
+        rc, s, hand = self.lauf(seite, tmp_path, audio_fehlt_zuerst=None)
+        assert s["j3.warp"]["urteil"] == "FEHL" and s["j3.warp"]["grund"] == "audio_fehlt"
+        assert s["j3.export"]["urteil"] == "FEHL" and s["j3.export"]["grund"] == "audio_fehlt"
+        assert [n for n, _ in hand.aufrufe].count("proj_export") >= 4   # asked more than once per step before giving up
+        assert rc == 1
+
+    def test_another_refusal_is_not_waited_for(self, seite, tmp_path):
+        t = L.Tour("j3", J3Instanz(seite.url), tmp_path / "aus", kurz=True)
+        hand = J3Hand({"fehler": "export_luecke", "text": "gap", "_fehler": True})
+        rc = t.fuehre(lambda tt: J3MOD.schritte(tt, hand=hand))
+        s = {x["kennung"]: x for x in t.bericht().schritte}
+        assert s["j3.export"]["grund"] == "export_luecke"
+        assert [n for n, _ in hand.aufrufe].count("proj_export") == 2   # the warp reference and the export step, no retries
+
+    def test_the_effect_step_export_waits_too(self, seite, tmp_path):
+        w = tmp_path / "fx.wav"
+        j3_wav(w)
+        hand = J3Hand({"datei": str(w), "frames": 768000, "spitze_db": -12.0, "_fehler": False}, audio_fehlt_zuerst=2)
+        t = L.Tour("j3", J3Instanz(seite.url), tmp_path / "aus", kurz=True)
+        with t.schritt("j3.fx", "probe"):
+            r, x = J3MOD._fx_export(t, hand, 0, 16)
+        assert r is not None and x is not None
+        assert [n for n, _ in hand.aufrufe].count("proj_export") == 3

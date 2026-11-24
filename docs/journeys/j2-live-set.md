@@ -69,3 +69,31 @@ one first. Both answers leave your sound untouched.
 
 An Akai APC20 can drive scenes and faders. The tour cannot check this: it needs the device in the room. The step is
 reported as skipped, never as passed, and it belongs to the owner session J2. [`j2.apc20`]
+
+## 7. The loop deck pop-up: strips, slices, warp, devices
+
+Open the pop-up from a loop deck place; **×** or Esc closes it. It shows the same cells as the place, plus a strip for
+each track (fader, mute), a column of scenes, and a bottom area with the tabs **CLIP** and **DEVICES**. The clip editor has
+a **SLICES** tab ("SLICE BY" 1/8 cuts the cell into eight parts, a pad launches one of them, the play order is yours) and a
+**WARP** tab (**KEYLOCK** ON stretches the cell to the master tempo and keeps its pitch, OFF follows the tempo as
+re-pitch; the transpose moves the pitch on top). **DEVICES** puts an effect on the track.
+
+The tour cannot click in a browser, so it drives the same routes the pop-up writes through and measures what you would
+hear. For this it loads one synthetic cell of four beats whose eight slices are eight different steady tones, so that a
+recording of the master shows which slice played when, and removes it again at the end.
+
+- **Strips, clip gain, scene.** A strip fader at -12 dB lowers the deck channel by 12 dB (within 1.5 dB), the strip mute
+  silences it, a clip gain of -6 dB lowers it by 6 dB, and a scene with its own tempo of 116 BPM brings the master clock to
+  116. The tour also checks that the view switches to the pop-up and back and that the files with the tabs are served.
+  [`j2.popup`]
+- **Slices.** SLICE BY 1/8 returns the eight boundaries on the beat grid. In a recording of four pieces the cell is
+  launched from the top (slices 1, 2, 3, 4 in order), at slice 3 (3, 4, 5, 6), at slice 6 (6, 7, 8, 1) and, after the play
+  order was reversed, from the top again (8, 7, 6, 5). A slice lasts half a beat within 10 percent. [`j2.scheiben`]
+- **Warp.** With the master at 112 BPM against a cell cut at 128 BPM the cell still lasts four beats of the master
+  (within 2 percent) and its repeats drift off the bar grid by less than 30 ms. The pitch follows the mode: unchanged with
+  KEYLOCK ON, 112/128 of it with KEYLOCK OFF, one octave up with transpose +12. [`j2.warp`]
+- **Devices.** A steady tone is recorded while a saturator is added on DEVICES: its harmonics rise by at least 20 dB, and
+  the tour removes the device again. [`j2.geraete`]
+
+A step that fails names what it measured. The tour does not loosen a limit to pass: if the slice you launched is not the
+slice you hear, that is a finding about the product.
