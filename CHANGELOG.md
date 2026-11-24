@@ -3,6 +3,17 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-24, twenty-second update (source only, no new package)
+
+- Labs: 57 features are marked experimental. The studio shows a small LAB mark on them (tooltip "experimental, may
+  change"), and the README and the features list name them in a Labs section. Everything else is what 1.0 promises.
+- The journey chapters (DJ, live set, production, sound design, agent) cover more of the studio: hotcues, deck loops,
+  scrub, pre-listen on headphones, channel compressor, hall and the cue output; the loop deck pop-up with slices, warp
+  and devices; automation, the insert effects, delay compensation, MIDI export, collect, project zip, relink and undo;
+  every device family, the drum synth, Kraken and the piano roll; the agent's ramps on the bar grid. Each step is
+  driven and measured by a tour script on a test instance.
+- Fix: an insert compressor with attack 0.1 ms, the lower end of its range, made the project export fail.
+
 ## 2026-11-24, twenty-first update (0.4.0~rc3 beta)
 
 Release candidate 3 of 0.4.0. It replaces rc2, whose package did not install on Ubuntu 26.04. The program itself is
