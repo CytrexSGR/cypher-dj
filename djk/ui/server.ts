@@ -37,6 +37,12 @@ import type { KernLage } from './areas/proj/state.ts';
 import { json as sendeJson, koerper as leseKoerper, postAbgewiesen, quelleAusKopf } from './http/transport.ts';
 import { Seitenfehler } from './seitenfehler.ts';
 import { Kopplung, TABLET_PORT, baueTabletHandler, heimAdresse, type TabletHandler } from './http/coupling.ts';
+import { bremsRegel, pruefeHand, type HandAnfrage, type HandRegel, type Stufe } from './http/hand_schutz.ts';
+import { stufenRegel, kopfWert } from './http/hand_stufe.ts';
+import { eimerRegel } from './http/hand_eimer.ts';
+import { spielRegel } from './http/hand_spielregel.ts';
+import { HandSchluessel } from './http/hand_key.ts';
+import { HandLog, handLogKopf } from './http/hand_log.ts';
 import { Router, type Route, type Bereich, type BereichKontext } from './http/router.ts';
 import { projBereich, alsAntwort, type ProjOptionen } from './areas/proj/area.ts';
 import { ProjFehler } from './areas/proj/session.ts';
@@ -66,6 +72,8 @@ import { aufnahmeBereich } from './areas/proj/recording.ts';   // 1.8 Slice 1
 import { versionenBereich } from './areas/proj/versionen.ts';   // B10
 import { rettungBereich, starteRettung, gerettetListe as gerettetListeVon } from './areas/proj/recording_rettung.ts';   // B11: recovered takes
 import { stemsBereich, type StemsOptionen } from './areas/proj/stems.ts';   // 1.13 Slice 6
+import { notenBereich } from './areas/proj/notes.ts';   // note editor (slice 1, B2)
+import { NotenRender } from './areas/proj/notes_render.ts';   // note editor (slice 1, B4)
 import { speichereModul, modulBasis } from './project/module_storage.ts';   // plan live-module task 3
 import { bibliothekBereich } from './areas/live/library.ts';   // plan live-module task 10
 import { sichereWerksProbenImStandardOrdner } from './sampler/werksproben.ts';
@@ -83,7 +91,8 @@ import { liveBereich, type DeckLoopAusschnitt } from './areas/live/export.ts';
 import { loopdeckBereich } from './areas/live/loopdeck.ts';
 import { sessionBereich } from './areas/live/session.ts';
 import { loopsetsBereich } from './areas/live/loopsets.ts';
-import { leseBusRing, messeLive } from './project/sound_live.ts';
+import { leseBusRing, leseBusRingSeit, messeLive } from './project/sound_live.ts';
+import { MasterPegel } from './project/master_level.ts';
 import { LIVE_VORLAUF_FRAMES, LIVE_LAUTHEIT_FRAMES } from './project/sound_contract.ts';
 import { tonartQuelle } from './areas/live/key.ts';
 import { renderPegelMesser } from './areas/live/level.ts';   // plan live-module task 2
@@ -98,9 +107,11 @@ import { HAND_PRUEFMODUS_TEXT } from './public/messages.js';
 import { leseLoops, LOOP_NAME, schreibeLoopAusFassung } from './loops.ts';
 import { beatsVon, importiereLoop, loopNameVon, findeImport, raeumeImportReste, LoopImportFehler, type ImportOptionen } from './loop_import.ts';
 import { WelleCache, WelleFehler, loopQuelle, schnittQuelle, fassungQuelle, dateiQuelle } from './wave_cache.ts';
+import { GRUND_TEXT } from './http/reasons.ts';
+import { kompiliereBogen } from './bogen.ts';
 import { OEFFENTLICH, REPO, REPO_PFADE, instanz, ports, shmOrdner, rasterOrdnerVorgabe, hotcueOrdnerVorgabe, huellenVorgabe, musterOrdnerVorgabe,
   wirtOrdnerVorgabe, baukastenOrdnerVorgabe, kitsOrdnerVorgabe, zusatzKit, strudelPakete, loopOrdnerVorgabe, welleCacheVorgabe, arbeitsbestandVorgabe,
-  analyseVorgabe, ablageOrdner, importeOrdnerVorgabe, mitschnittOrdnerVorgabe, setmitschnittProgramm, katalogUmgebung, vorhoerCacheVorgabe } from './paths.ts';
+  analyseVorgabe, ablageOrdner, importeOrdnerVorgabe, mitschnittOrdnerVorgabe, setmitschnittProgramm, notenProgramm, katalogUmgebung, vorhoerCacheVorgabe } from './paths.ts';
 import { WerkstattAnalyse } from './areas/proj/analysis.ts';
 import { tempoRampe, vorlaufBeats } from './tempo_ramp.ts';
 import { takteProLive } from './project/taktart_live.ts';
@@ -129,14 +140,18 @@ import { leseWurzeln } from './sampler/file.ts';
 import { vorbereitQuelle } from './vorbereit_source.ts';
 import { Vorhoeren, VorhoerFehler, kernNurCueVorgabe, vorhoeerKlientVorgabe } from './prelisten.ts';
 import { Mediathek, Vorbereiter, MediathekFehler, KLANG_TYPEN, type KlangTreffer, mediathekVorgabe, bestandIds, parseBpm, parseLimit } from './media_library.ts';
-import { pruefeSpur, plane, oeffnetKanal, beatZuMono, wirtRuf, stromVonZiel, faelligeMuster, SPUR_NAME, type MusterPlan, type Fahrt } from './track.ts';
+import { pruefeSpur, plane, oeffnetKanal, beatZuMono, wirtRuf, stromVonZiel, faelligeMuster, SPUR_NAME, STROM_ZIEL, MAX_TAKT, MAX_TEILE, type MusterPlan, type Fahrt } from './track.ts';
+import { SZENE_NAME, SZENE_MAX_TAKTE, AUTO_ROTIERT, istAutomatisch, reglerFuerSzene, schreibeSzene, schreibeAutomatisch, allesStill, leseSzene, szeneDa, loescheSzene, listeSzenen, planeLaden, planeGraphen, type Szene, type SzeneKlang, type SzeneSpur } from './szene.ts';   // strand 11 slice 5
+import { AUFBAU_NAME, aufbauBlock, aufbauWarnung, aufbauDa, schreibeAufbau, leseAufbau, listeAufbauten, loescheAufbau, aufbauZumLaden, type Aufbau } from './setup.ts';   // strand 11 slice 7 (7a)
+import { aufbauOrdnerVorgabe } from './paths.ts';
+import { reglerInfo } from '../conductor/src/controls_info.ts';
 import { planeDurchlauf, MAX_SCHLEIFE_TAKTE, type Spur } from './track.ts';   // 1.12 S7 (M13): track band loop
 import { leseAusgang } from './output.ts';
 import { OhrLeser, OSZI_KANAELE, oszi, hoerAntwort, hoerLage, partnerVon, sync as ohrSync, K as OHR_K, type DeckLage, Hoerscheinstelle, type Hoerschein, type DeckStand as OhrDeckStand } from './ear.ts';
 import { seqGruppe } from './project/seq.ts';
 // @ts-expect-error reines .mjs ohne Typen (djk/generator); muster_stand lädt Strudel NICHT (Plan-Review M3)
 import { PegelPuffer } from './level_buffer.ts';
-import { leseMusterStand, setzeAutonom, leseLebt } from '../generator/src/pattern_state.mjs';
+import { leseMusterStand, setzeAutonom, leseLebt, leseVersatz } from '../generator/src/pattern_state.mjs';
 import { ALLE_STROEME, istBkStrom, stromVonKanal } from '../contract/streams.ts';   // S18: stream <-> channel table
 import { PULT_ALIAS_STROEME, pultContainerPfad } from '../contract/pult.ts';
 import { geraetePanel, RB338_PARAM_NAMEN } from './devices_parameter.ts';
@@ -144,7 +159,7 @@ import { listeGraphen, graphenOrdner, findeGraph, graphHash, ladePanel, reglerVo
 import { bkDefVonId } from './project/modular.ts';   // t_e998388c: project channels are left to the project restore
 
 import { NEUSTART_PLAN_VERSPAETUNG_MS, NEUSTART_FRISCH_FRAMES } from './server_kopf.ts';
-import { KLANG_ERR_MAX, kopplungPfadVon, pythonVorgabe, ueberProjekt, ueberProjektText, modulBasisVon, STROM_MAX_BYTES, STRUDEL_ZEITLIMIT_MS, SPEKTRUM_QUELLEN, KLANG_GRUPPEN, KLANG_AUS_MAX, GRAPH_ABGELEHNT, DROSSEL_MS, INS_GR_FRIST_MS, DURCHREICHEN, leseBestand, TYPEN, VORLAUF_SCHLEIFE_BEATS, schleifeAusDatei, kompAbweichend, OFFENE_DECKS, istOffenesDeck, WERKZEUG_PFAD, werkzeugAbweichend, bkAbweichend, LAGE_KANALZUG, LAGE_SEND, LAGE_ABWEICHEND, leseNeustartStand, leseOffenesProjekt, NEUSTART_STAND_ADRESSEN, CONTAINER_ART, NEUSTART_STAND_TOLERANZ_MS, systemstartMs, type NeustartStand, type NeustartPlan } from './server_kopf.ts';
+import { KLANG_ERR_MAX, handOrdnerVon, handLogOrdnerVon, kopplungPfadVon, pythonVorgabe, ueberProjekt, ueberProjektText, modulBasisVon, STROM_MAX_BYTES, STRUDEL_ZEITLIMIT_MS, SPEKTRUM_QUELLEN, KLANG_GRUPPEN, KLANG_AUS_MAX, GRAPH_ABGELEHNT, DROSSEL_MS, INS_GR_FRIST_MS, DURCHREICHEN, leseBestand, TYPEN, VORLAUF_SCHLEIFE_BEATS, schleifeAusDatei, kompAbweichend, OFFENE_DECKS, istOffenesDeck, WERKZEUG_PFAD, werkzeugAbweichend, bkAbweichend, LAGE_KANALZUG, LAGE_SEND, LAGE_ABWEICHEND, leseNeustartStand, leseOffenesProjekt, NEUSTART_STAND_ADRESSEN, CONTAINER_ART, NEUSTART_STAND_TOLERANZ_MS, systemstartMs, type NeustartStand, type NeustartPlan } from './server_kopf.ts';
 import type { ServerOptionen, Pruefmodus, Eintrag, SpurLauf, SchleifenStand } from './server_kopf.ts';
 export { hauptCheckout, pythonVorgabe, INS_GR_FRIST_MS, leseBestand, istOffenesDeck } from './server_kopf.ts';
 export type { TabletOptionen, ServerOptionen, Pruefmodus } from './server_kopf.ts';
@@ -210,6 +225,9 @@ export class Oberflaeche {
   private rasterOrdner(): string { return this.opt.rasterOrdner ?? rasterOrdnerVorgabe(); }
   private huellenPfad(): string { return this.opt.huellen ?? huellenVorgabe(); }
   private liveLetzt: { w: number; t: number } | null = null;   // GET /analyse/live: ring counter and time of the previous call
+  private masterPegel = new MasterPegel();   // GET /analyse/pegel: streaming master meter, advances on every read
+  private masterPegelW: number | null = null;   // ring counter the meter has read up to
+  private masterPegelLetzt: { w: number; t: number } | null = null;   // ring counter and time of first sight, for steht
   // Gespeicherter Versatz der Fassung; fehlt ihre Datei, gilt die der nächstälteren Fassung (rasterErbe, Bericht grid-phase M7).
   private readonly einsGelesen = new Map<string, { eins: number; esf: number }>();
   private einsDerFassung(mid: string, bpm: number, fassung: number): { eins: number; esf: number } | null {
@@ -341,6 +359,24 @@ export class Oberflaeche {
     this.json(a, 200, { leer: false, w: x.w, steht, ...messeLive(x.daten) });
   }
 
+  // GET /analyse/pegel (and POST .../reset with reset = true): streaming master meter. Always 200; reads only the frames written since the previous read.
+  private analysePegelAus(a: http.ServerResponse, reset = false): void {
+    const pfad = this.opt.busRing ?? path.join(shmOrdner(), 'bus');
+    let x = leseBusRingSeit(pfad, this.masterPegelW, 48000);
+    if (x !== null && this.masterPegelW !== null && x.w < this.masterPegelW) {   // ring recreated, the counter went back
+      this.masterPegelW = null;
+      x = leseBusRingSeit(pfad, null, 48000);
+    }
+    if (x === null) { this.masterPegelW = null; return this.json(a, 200, { leer: true, grund: 'kein_ring' }); }
+    this.masterPegel.schiebe(x.daten, x.luecke);
+    this.masterPegelW = x.w;
+    if (reset) this.masterPegel.zuruecksetzen();
+    const jetzt = Date.now(), l = this.masterPegelLetzt;
+    const steht = l !== null && l.w === x.w && jetzt - l.t >= 150;
+    if (!(l !== null && l.w === x.w)) this.masterPegelLetzt = { w: x.w, t: jetzt };
+    this.json(a, 200, { leer: false, w: x.w, steht, ...this.masterPegel.stand() });
+  }
+
   // Ohr T10: je neuem Takt der Master-Uhr (Beat überschreitet ein Vielfaches von 4) Hörscheine ausstellen/zurückziehen.
   private hoerscheinTakt(): void {
     const u = this.kern.uhr;
@@ -452,7 +488,10 @@ export class Oberflaeche {
     this.seitenfehler = new Seitenfehler(this.hotcueOrdner());   // R7
     this.router.melde({ name: 'oberflaeche', routen: () => this.routenOberflaeche() });
     this.kopplung = new Kopplung(kopplungPfadVon(opt.tablet?.kopplungPfad, instanz()));
+    this.schluessel = new HandSchluessel(handOrdnerVon(opt.hand?.ordner, instanz()));
+    this.handLog = new HandLog(handLogOrdnerVon(opt.hand?.logOrdner, instanz()));
     this.router.melde({ name: 'kopplung', routen: () => this.routenKopplung() });
+    this.router.melde({ name: 'hand', routen: () => this.routenHand() });
     // D1 S2 (Spec 3.4): Audio-Quellen über denselben Katalog wie der Browser. Spec 6.30: die Meldung bleibt zweizeilig (erst this.proj, dann melden),
     // weil stoppe() den Bereich braucht; S3 zieht seinen Anker auf diese zwei Zeilen nach.
     // Slice 3a: die Analyse-Ablage (Karten) und der Auftragsgeber der Analyse auf Abruf. Betrieb: Vorgabe $CYPHERDJ_ANALYSE bzw. ~/werkstatt/cypher-dj-analyse; eine
@@ -493,7 +532,7 @@ export class Oberflaeche {
     // browser plan 2: GET /proj/dateien and the project file actions. The recovered-take listing is plan 4's (areas/proj/recording_rettung.ts); a test may hand a stub through opt.proj.
     this.router.melde(dateienBereich(this.bereichKontext(), this.proj.zugang, { quellPfad: (sha, hinweis) => this.proj.sitzung.quellePfadVon(sha, hinweis),
       katalogName: (sha) => this.proj.sitzung.katalogQuelle(sha)?.name ?? null, katalogDa: () => fs.existsSync(opt.katalog ?? katalogVorgabe(opt.mediathek ?? mediathekVorgabe())), wurzel: () => opt.proj?.wurzel ?? projektWurzelVorgabe(inst),
-      arbeitLaeuft: (opt.proj as { arbeitLaeuft?: () => boolean } | undefined)?.arbeitLaeuft ?? (() => this.ausgabe.ausgabe.zustand().lauf !== null || this.stems.stems.laeuft()),   // a test may hand a stub
+      arbeitLaeuft: (opt.proj as { arbeitLaeuft?: () => boolean } | undefined)?.arbeitLaeuft ?? (() => this.ausgabe.ausgabe.zustand().lauf !== null || this.stems.stems.laeuft() || this.noten.analyse.laeuft()),   // a test may hand a stub
       gerettetListe: (opt.proj as { gerettetListe?: (ordner: string) => Promise<{ datei: string; spur_id: string; gerettet: true }[]> } | undefined)?.gerettetListe ?? ((o) => gerettetListeVon(o, (z) => opt.log?.(z))) }));
     this.ausgabe = ausgabeBereich(this.bereichKontext(), this.proj.zugang, { wirtOrdner: () => this.wirtBasis(),
       katalogPfad: (sha) => this.proj.sitzung.katalogQuelle(sha),
@@ -509,6 +548,15 @@ export class Oberflaeche {
     starteRettung(this.proj.zugang, this.bereichKontext());                       // B11: rescue left run files when a project opens
     this.stems = stemsBereich(this.bereichKontext(), this.proj.zugang, { python, cwd: REPO_PFADE.werkstatt, bezug: (a, v, n) => { tagsB?.speicher.meldeBezug(a, v, n); }, ...opt.stems });   // 1.13 S6
     this.router.melde(this.stems);
+    const notenOpt = { programm: notenProgramm(), netz: [python, '-m', 'werkstatt.notes_net'] as string[] | null, cwd: REPO_PFADE.werkstatt,
+      stemsLaeuft: () => this.stems.stems.laeuft(), ...opt.noten };
+    // note editor B4: the render of a note edit is what a clip plays; the same program, environment and CPU mask as the detection. Wired in starte().
+    this.notenRender = new NotenRender(this.bereichKontext(), this.proj.zugang, { programm: notenOpt.programm, netz: notenOpt.netz, cwd: notenOpt.cwd,
+      neuLaden: () => this.proj.sitzung.ladeLiveNeuFrei(),
+      ...(notenOpt.env ? { env: notenOpt.env } : {}), ...(notenOpt.cpus !== undefined ? { cpus: notenOpt.cpus } : {}), ...(notenOpt.spawn ? { spawn: notenOpt.spawn } : {}),
+      ...(notenOpt.killMs !== undefined ? { killMs: notenOpt.killMs } : {}) });
+    this.noten = notenBereich(this.bereichKontext(), this.proj.zugang, { ...notenOpt, render: this.notenRender });   // note editor B2: /proj/noten/*
+    this.router.melde(this.noten);
     this.router.melde(liveBereich(this.bereichKontext(), this.proj.zugang, this.stems.stems, {   // plan live-module task 2: /modul/export, /modul/stems, /modul/stand
       loopOrdner: () => this.loopOrdner(),   // task 10: POST /modul/loop reads the loop library
       kanalOffen: (k) => this.kanalGeoeffnet(k),   // DJ view places task 7: an open channel refuses the export (PFL is no reason; a planned or running ramp counts)
@@ -584,6 +632,9 @@ export class Oberflaeche {
     this.router.melde(geraeteBereich(this.bereichKontext(), { ...(opt.geraete ?? {}), beiAenderung: () => controllerAnstoss() }));   // I08: /geraete
     const lernBereich = lernenBereich(this.bereichKontext(), opt.lernen ?? {});
     this.router.melde(lernBereich);   // S19: /lernen
+    this.proj.sitzung.reglerLernen = { pruefeBereit: () => lernBereich.pruefeBereit(), arme: (p) => lernBereich.arme(p), wartet: () => lernBereich.wartet(),
+      abbrechen: () => lernBereich.abbrechen(), loesche: (p) => lernBereich.loesche(p),
+      gelernt: () => new Set(lernBereich.speicher.lies().zuordnungen.map((z) => z.pfad)) };   // strand 2 task 2.4: the knob learn route of a plugin stage
     // controller presets and follow: /controller/*; re-resolves on the kern event /e/graph, on every change of the open project and on a change of the devices file
     const controller = controllerBereich(this.bereichKontext(), lernBereich, { geraeteKonfig: opt.lernen?.geraeteKonfig, werk: opt.lernen?.werkOrdner, nutzer: opt.lernen?.presetOrdner, zugang: this.proj.zugang, tasten: tastenArm });
     this.router.melde(controller);
@@ -619,6 +670,10 @@ export class Oberflaeche {
 
   async starte(): Promise<void> {
     const gemerkt = this.leseOffenesProjektDatei();   // read before anything can overwrite it
+    // note editor B4: the render service knows the engine version and the cache before the first project opens; every stand then goes through it
+    await this.notenRender.start();
+    this.proj.zugang.beiStand((p) => this.notenRender.beiStand(p));
+    this.proj.sitzung.setzeNotenRender(this.notenRender);
     this.proj.sitzung.beiOffen((slug) => this.merkeOffenesProjekt(slug));
     this.proj.zugang.beiStand(() => this.meldeTaktart());   // studio-taktart: also after undo; the meter follows the open project
     this.proj.sitzung.beiOffen(() => this.meldeTaktart());   // and after a close on purpose (no project: 4)
@@ -641,6 +696,7 @@ export class Oberflaeche {
     this.ohrTakt = setInterval(() => { this.ohr.lies(); this.hoerscheinTakt(); }, 100);  // Ohr T5/T10: Ring 100 ms nachlesen, je neuem Takt Hörscheine
     this.graphTakt = setInterval(() => { if (this.generation !== null) this.fragGraphen('takt'); }, Oberflaeche.GRAPH_FRAGE_MS);   // Baukasten S16
     this.graphTakt.unref();
+    this.schluessel.sichereLokal();   // the local hand's key file exists before anything can ask for it
     this.http = http.createServer((q, a) => { this.anfrage(q, a).catch((e: Error) => this.json(a, 500, { fehler: e.message })); });
     await new Promise<void>((ok, fehler) => {
       this.http!.once('error', fehler);
@@ -717,17 +773,71 @@ export class Oberflaeche {
     this.opt.log?.({ typ: 'tablet_an', adresse, port });
   }
 
+  // Andreas only, from the loopback page: not the tablet, not a rebinding host name, not source cypher.
+  private nurAndreasLoopback(q: http.IncomingMessage, a: http.ServerResponse, text: string): boolean {
+    const vomTablet = this.tablet !== null && q.socket.localPort === this.tablet.port;
+    if (vomTablet) { this.json(a, 403, { fehler: 'nicht_am_tablet' }); return false; }
+    const host = String(q.headers.host ?? '');   // only a loopback name: a rebinding page must not reach this
+    if (host !== `127.0.0.1:${this.opt.port}` && host !== `localhost:${this.opt.port}`) {
+      this.json(a, 421, { fehler: 'falscher_host', text: 'open the page as http://127.0.0.1:<port>/ to manage pairing' });
+      return false;
+    }
+    if (this.quelle() === 'cypher') { this.json(a, 403, { fehler: 'nur_andreas', text }); return false; }
+    return true;
+  }
+
+  // The agent brake (Stop Cypher in the page): GET reads the state, POST {an} sets it.
+  private routenHand(): Route[] {
+    const F = 'fremdePost' as const, O = 'offen' as const;
+    return [
+      { methode: 'GET', pfad: '/hand/bremse', schutz: O, handler: (_q, a) => this.json(a, 200, this.handStand()) },
+      { methode: 'POST', pfad: '/hand/bremse', schutz: F, handler: async (q, a) => {
+        if (!this.nurAndreasLoopback(q, a, 'the agent brake is Andreas\'s')) return;
+        const an = (await this.koerper(q)).an;
+        if (typeof an !== 'boolean') return this.json(a, 400, { fehler: 'an_fehlt' });
+        this.setzeHandBremse(an);
+        this.json(a, 200, this.handStand());
+      } },
+      { methode: 'GET', pfad: '/hand/log', schutz: O, handler: (q, a, url) => {
+        if (!this.nurAndreasLoopback(q, a, 'the agent log is Andreas\'s')) return;
+        const n = Math.min(200, Math.max(1, Math.floor(Number(url.searchParams.get('n') ?? 50)) || 50));
+        this.json(a, 200, { zeilen: this.handLog.letzte(n), datei: this.handLog.datei });
+      } },
+      { methode: 'GET', pfad: '/hand/ich', schutz: O, handler: (_q, a) => {
+        const w = this.wer.getStore() ?? null;
+        const gestoppt = this.kiGestoppt;
+        this.json(a, 200, this.quelle() === 'cypher' && w ? { id: w.id, name: w.name, stufe: w.stufe, gestoppt } : { id: null, stufe: null, gestoppt });
+      } },
+      { methode: 'GET', pfad: '/hand/schluessel', schutz: O, handler: (q, a) => {
+        if (!this.nurAndreasLoopback(q, a, 'managing agent keys is Andreas\'s')) return;
+        this.json(a, 200, { schluessel: this.schluessel.liste().map(({ id, name, stufe, zuletzt }) => ({ id, name, stufe, zuletzt })) });
+      } },
+      { methode: 'POST', pfad: '/hand/schluessel', schutz: F, handler: async (q, a) => {
+        if (!this.nurAndreasLoopback(q, a, 'managing agent keys is Andreas\'s')) return;
+        const k = await this.koerper(q);
+        const name = typeof k.name === 'string' ? k.name.trim() : '';
+        if (!/^[\x20-\x7e]{1,40}$/.test(name)) {
+          return this.json(a, 400, { fehler: 'name_ungueltig', text: 'the key name must be 1 to 40 printable ASCII characters' });
+        }
+        if (k.stufe !== 'lesen' && k.stufe !== 'schreiben' && k.stufe !== 'zerstoerend') {
+          return this.json(a, 400, { fehler: 'stufe_unbekannt', text: 'the level must be lesen, schreiben or zerstoerend' });
+        }
+        const neu = this.schluessel.neu(name, k.stufe);
+        this.json(a, 200, { id: neu.id, token: neu.token });
+      } },
+      { methode: 'POST', pfad: '/hand/schluessel/loeschen', schutz: F, handler: async (q, a) => {
+        if (!this.nurAndreasLoopback(q, a, 'managing agent keys is Andreas\'s')) return;
+        const id = (await this.koerper(q)).id;
+        if (typeof id !== 'string' || !this.schluessel.widerrufe(id)) return this.json(a, 404, { fehler: 'unbekannt' });
+        this.json(a, 200, { ok: true });
+      } },
+    ];
+  }
+
   // Pairing, from the loopback page only (the tablet handler also refuses /kopplung): a one-time link, the list of paired devices, revoking one.
   private routenKopplung(): Route[] {
     const F = 'fremdePost' as const, O = 'offen' as const;
-    const vomTablet = (q: http.IncomingMessage): boolean => this.tablet !== null && q.socket.localPort === this.tablet.port;
-    const nurAndreas = (q: http.IncomingMessage, a: http.ServerResponse): boolean => {
-      if (vomTablet(q)) { this.json(a, 403, { fehler: 'nicht_am_tablet' }); return false; }
-      const host = String(q.headers.host ?? '');   // only a loopback name: a page on another name that resolves to 127.0.0.1 (rebinding) must not read the device list
-      if (host !== `127.0.0.1:${this.opt.port}` && host !== `localhost:${this.opt.port}`) { this.json(a, 421, { fehler: 'falscher_host', text: 'open the page as http://127.0.0.1:<port>/ to manage pairing' }); return false; }
-      if (this.quelle() === 'cypher') { this.json(a, 403, { fehler: 'nur_andreas', text: 'pairing a device is Andreas\'s' }); return false; }
-      return true;
-    };
+    const nurAndreas = (q: http.IncomingMessage, a: http.ServerResponse): boolean => this.nurAndreasLoopback(q, a, 'pairing a device is Andreas\'s');
     return [
       { methode: 'GET', pfad: '/kopplung', schutz: O, handler: (q, a) => { if (nurAndreas(q, a)) this.json(a, 200, { an: this.tablet !== null, geraete: this.kopplung.liste() }); } },
       { methode: 'POST', pfad: '/kopplung', schutz: F, handler: (q, a) => {
@@ -754,6 +864,8 @@ export class Oberflaeche {
     if (this.planTimer) { clearTimeout(this.planTimer); this.planTimer = null; this.sichereNeustartStand(); }   // what was changed in the last 300 ms
     this.aufnahme.aufnahme.schliesse();
     this.stems.stems.schliesse();
+    this.noten.analyse.schliesse();
+    this.notenRender.schliesse();
     this.tagsStopp();   // a running tag scan takes no further slice
     await this.einsammler.schliesse();   // kills a running copy, at most 2 s
     this.ausgabe.ausgabe.schliesse();   // Fix-Runde S3 R7: ein wartender Freeze endet jetzt mit freeze_fehler, nicht erst nach Stille oder Frist
@@ -1619,16 +1731,20 @@ export class Oberflaeche {
   // --als-andreas: das Feld ist Andreas, der AUTO-Schalter gilt nur für Cypher.
   // Review F1: Muster nacheinander prüfen und schreiben, sonst gewinnt bei zwei schnellen PLAY das zuerst gesendete.
   private musterKette: Promise<void> = Promise.resolve();
-  private strudel(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
-    const lauf = this.musterKette.then(() => this.strudelEins(d, a));
+  // intern.versatz (live scene restore only, never from a request body): the phase offset in cycles, passed to djk-muster as --versatz
+  // A2: per stream the switch bar of the running pattern (absolute bar, 1-based) = time zero of its .rein/.raus; a live scene stores it as `anker`
+  private musterAnkerTakt = new Map<number, number>();
+  private strudel(d: Record<string, unknown>, a: http.ServerResponse, intern: { versatz?: number; abBeat?: number } = {}): Promise<void> {
+    const lauf = this.musterKette.then(() => this.strudelEins(d, a, intern));
     this.musterKette = lauf.catch(() => {});
     return lauf;
   }
 
-  private async strudelEins(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
+  private async strudelEins(d: Record<string, unknown>, a: http.ServerResponse, intern: { versatz?: number; abBeat?: number } = {}): Promise<void> {
     if (typeof d.text !== 'string') return this.json(a, 400, { fehler: 'kein_text' });
     const strom = Oberflaeche.strom(d.strom);
     if (strom === null) return this.json(a, 400, { fehler: 'strom' });
+    if (d.bezeichnung !== undefined && d.bezeichnung !== null && !(typeof d.bezeichnung === 'string' && d.bezeichnung.length >= 1 && d.bezeichnung.length <= 60 && !/[\u0000-\u001f\u007f]/.test(d.bezeichnung))) return this.json(a, 400, { fehler: 'bezeichnung', text: 'bezeichnung: string of 1..60 characters, no control characters' });
     // Plan Hand T7 (Review M4): Cypher schreibt als cypher und ohne --als-andreas; djk-muster hält AUTO ein (rc 4)
     const von = this.quelle();
     if (von === 'cypher' && this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt' });
@@ -1641,17 +1757,26 @@ export class Oberflaeche {
     fs.mkdirSync(ordner, { recursive: true });   // Review F4: im Kindprozess scheitert das Schreiben in einen neuen Ordner
     const strudel = path.dirname(strudelPakete());
     const r = await new Promise<{ code: number | null; fehler: string; zeitlimit: boolean }>((fertig) => {
-      const k = spawn(process.execPath, ['--max-old-space-size=512', '--permission', `--allow-fs-read=${path.join(REPO, 'djk')}`, `--allow-fs-read=${strudel}`,
+      let k: ReturnType<typeof spawn>;
+      try {
+      k = spawn(process.execPath, ['--max-old-space-size=512', '--permission', `--allow-fs-read=${path.join(REPO, 'djk')}`, `--allow-fs-read=${strudel}`,
         `--allow-fs-read=${ordner}`, `--allow-fs-write=${ordner}`, REPO_PFADE.djkMuster,
-        '--ziel', path.join(ordner, 'strom1.js'), ...(von === 'cypher' ? ['--von', 'cypher'] : ['--von', 'andreas', '--als-andreas']), '-'], { stdio: ['pipe', 'ignore', 'pipe'] });
+        '--ziel', path.join(ordner, 'strom1.js'), ...(von === 'cypher' ? ['--von', 'cypher'] : ['--von', 'andreas', '--als-andreas']),
+        ...(Number.isInteger(intern.versatz) && intern.versatz !== 0 ? [`--versatz=${intern.versatz}`] : []),
+        ...(typeof d.bezeichnung === 'string' ? [`--bezeichnung=${d.bezeichnung}`] : []), '-'], { stdio: ['pipe', 'ignore', 'pipe'] });
+      } catch (e) {   // a throwing spawn (bad argument) is a logged error, never an unhandled rejection
+        const m = e instanceof Error ? e.message : String(e);
+        this.opt.log?.({ typ: 'muster_spawn_fehler', text: m });
+        return fertig({ code: 1, fehler: `Error: ${m}`, zeitlimit: false });
+      }
       let fehler = '';
       let zeitlimit = false;
       const uhr = setTimeout(() => { zeitlimit = true; k.kill('SIGKILL'); }, STRUDEL_ZEITLIMIT_MS);
-      k.stderr.on('data', (b: Buffer) => { if (fehler.length < 4096) fehler += b.toString(); });
+      k.stderr!.on('data', (b: Buffer) => { if (fehler.length < 4096) fehler += b.toString(); });
       k.on('error', (e) => { fehler += e.message; });
       k.on('close', (code) => { clearTimeout(uhr); fertig({ code, fehler, zeitlimit }); });
-      k.stdin.on('error', () => {});
-      k.stdin.end(d.text as string);
+      k.stdin!.on('error', () => {});
+      k.stdin!.end(d.text as string);
     });
     if (r.zeitlimit) return this.json(a, 400, { fehler: `Zeile 1: Zeitlimit ${STRUDEL_ZEITLIMIT_MS / 1000} s überschritten` });
     if (r.code === 4 && von === 'cypher') return this.json(a, 409, { fehler: 'auto_aus', text: 'AUTO is off: Andreas holds the pattern' });
@@ -1665,6 +1790,8 @@ export class Oberflaeche {
       return this.json(a, 400, { fehler: `Zeile 1: Prüfung fehlgeschlagen (${grund.slice(0, 200)})` });
     }
     this.opt.log?.({ typ: 'muster', von, laenge: d.text.length });
+    // the switch bar: a track move knows its beat; a direct pattern takes effect at the next bar the erzeuger can still reach
+    this.musterAnkerTakt.set(strom, Math.floor((typeof intern.abBeat === 'number' ? intern.abBeat : this.abVon('takt')) / this.proTakt()) + 1);
     let spur: { id: string; neu: boolean };
     try { spur = await this.sorgeFuerStromSpur(strom, von); } catch (e) { const r = alsAntwort(e, this.bereichKontext()); return this.json(a, r.code, r.j); }
     this.json(a, 200, { ok: true, strom_spur: spur.id, ...(spur.neu ? { strom_spur_neu: true } : {}) });
@@ -1675,7 +1802,7 @@ export class Oberflaeche {
   private stromVonZielOffen(ziel: string): number | null {
     const st = stromVonZiel(ziel);
     if (st !== null) return st;
-    const m = /^spur\/([1-9][0-9]?)\//.exec(ziel);
+    const m = /^spur\/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])\//.exec(ziel);
     const o = m ? this.proj.zugang.offen() : null;
     const spur = m && o ? o.projekt.spuren.find((x) => x.nr === Number(m[1]) && x.art === 'strom') : undefined;
     return spur?.strom !== undefined && (ALLE_STROEME as readonly number[]).includes(spur.strom) ? spur.strom : null;
@@ -1742,7 +1869,9 @@ export class Oberflaeche {
 
   // Plan Hand D4: Quittungen je Befehls-id (Ring 200), damit eine Anfrage von Cypher ihr Ergebnis mitbekommt
   private readonly quittungen = new Map<number, Felder[]>();
-  private kiGestoppt = false;
+  private kernKiGestoppt = false;
+  private handBremse = false;
+  private get kiGestoppt(): boolean { return this.kernKiGestoppt || this.handBremse; }
   // Andreas 2026-10-05 (Hommage-Take): ein fester Wert fiel 0,19 Beat in die eigene laufende Fahrt, der Kern lehnte ab.
   // Je Pfad das Ende von Cyphers letzter Fahrt; ein neuer Cypher-Teil beginnt frühestens dort. Andreas' Teile nie.
   // Je Pfad ALLE offenen Cypher-Teile (id, ab, dauer). Gelöscht bei Quittung 4/6/7/8, nach ihrem Ende (nächster Aufruf),
@@ -1750,10 +1879,28 @@ export class Oberflaeche {
   private readonly fahrtEnde = new Map<string, { id: number; ab: number; dauer: number }[]>();
   private setzeKiGestoppt(an: boolean): void {
     const war = this.kiGestoppt;
-    this.kiGestoppt = an;
-    if (an && !war) this.fahrtEnde.clear();
-    if (an && !war) void this.cypherSpurenAbbrechen();   // Studio S6 F1: Stop Cypher hält auch Wirt und Muster
+    this.kernKiGestoppt = an;
+    this.nachKiWechsel(war);
   }
+  private setzeHandBremse(an: boolean): void {
+    const war = this.kiGestoppt;
+    this.handBremse = an;
+    this.nachKiWechsel(war);
+  }
+  private handStand(): { gestoppt: boolean; bremse: boolean; kern_ki: boolean } {
+    return { gestoppt: this.kiGestoppt, bremse: this.handBremse, kern_ki: this.kernKiGestoppt };
+  }
+  private nachKiWechsel(war: boolean): void {
+    if (this.kiGestoppt && !war) this.fahrtEnde.clear();
+    if (this.kiGestoppt && !war) void this.cypherSpurenAbbrechen();   // Studio S6 F1: Stop Cypher hält auch Wirt und Muster
+    this.verteile({ a: 'hand', f: this.handStand() });
+  }
+  /** Music plays: an open deck runs (same test as the ear) or the arrangement plays or counts in. */
+  private musikLaeuft(): boolean {
+    const st = this.proj.sitzung.lage.arr?.status;
+    return OFFENE_DECKS.some((n) => Number(this.deckStand(n)?.z.status) >= 2) || st === 1 || st === 2;
+  }
+  private handRegeln: HandRegel[] = [bremsRegel(() => this.kiGestoppt), stufenRegel(), spielRegel(() => this.musikLaeuft()), eimerRegel()];
   private readonly cypherQuittungen: Felder[] = [];   // die letzten 20 mit Quelle cypher, für /lage
   private merkeQuittung(f: Felder): void {
     if (f.quelle === 'cypher') { this.cypherQuittungen.push(f); if (this.cypherQuittungen.length > 20) this.cypherQuittungen.shift(); }
@@ -1820,6 +1967,23 @@ export class Oberflaeche {
   // Container core M8: `erz/<n>/...` is alias vocabulary: stream_alias.ts resolves it onto the strom track rows (the /k/teil carries the resolved row),
   // onto a project insert (komp, bk insert: a project edit, no ramp) or refuses it. The hearing guard runs on the four container strips only,
   // by the type of the place that feeds them (containerFrei, table D3); strom rows are never gated.
+  // Strand 11 (4.3) ramp rule for Cypher: a raise of master/pegel, a bus fader or a loops/stems container fader/trim by more than 6 dB must be a ramp of
+  // at least one bar. `von` = the start of a track move; else the level the page last saw (unknown level: no check, the core's own limits stay).
+  private rampePflicht(pfad: string, nach: number, takte: number, von?: number): boolean {
+    if (takte >= 1) return false;
+    const bus = /^bus\/\d+\/fader$/.test(pfad);
+    let streifen = false;
+    if (!bus && pfad !== 'master/pegel') {
+      const platz = /\/(fader|trim)$/.test(pfad) ? containerVonPfad(pfad) : null;
+      const projekt = this.proj.zugang.offen()?.projekt ?? null;
+      const typ = platz !== null && projekt?.live ? projekt.plaetze?.[platz - 1]?.typ : undefined;
+      streifen = typ === 'loops' || typ === 'stems';
+    }
+    if (!bus && !streifen && pfad !== 'master/pegel') return false;
+    const jetzt = von ?? this.stand.regler[pfad];
+    // unknown level (right after a page restart): treat it as quiet, so a set above -20 dB still needs a ramp
+    return typeof jetzt === 'number' ? nach - jetzt > 6 : nach > -20;
+  }
   private async regler(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
     const pfad = d.pfad, nach = d.nach, takte = d.takte ?? 0, ab = d.ab ?? 'takt', form = d.form ?? 's';
     if (typeof pfad !== 'string' || !PFAD.test(pfad)) return this.json(a, 400, { fehler: 'pfad' });
@@ -1836,6 +2000,7 @@ export class Oberflaeche {
       const st = this.stromVonZielOffen(pfad);   // the alias form first: erz/<n>/... still means stream n; a row spur/<nr>/... of a strom track too
       if (st !== null && !leseMusterStand(this.musterOrdner(st)).autonom) return this.json(a, 409, { fehler: 'auto_aus', strom: st, text: 'AUTO is off: Andreas holds this stream' });
     }
+    if (this.quelle() === 'cypher' && this.rampePflicht(pfad, nach, takte)) return this.json(a, 409, { fehler: 'nur_rampe', pfad, text: GRUND_TEXT.nur_rampe });
     let alias = loeseAlias(projekt, pfad, (k) => this.graphArt(k));
     const aliasStrom = Number(/^erz\/(\d+)\//.exec(pfad)?.[1]);
     if (alias.art === 'fehler' && alias.code === 'keine_strom_spur' && (PULT_ALIAS_STROEME as readonly number[]).includes(aliasStrom)) {
@@ -1857,14 +2022,14 @@ export class Oberflaeche {
       const riegel = containerFrei(typ, this.deckStand(platz) !== null);
       if (riegel === 'frei' && typ === 'seq') this.opt.log?.({ typ: 'seq_frei', pfad });
       if (riegel !== 'frei') {
-        // Ohr T10: a track container needs a valid hearing check of the player with its number (key deck/<N>, §4.5); loops and stems have none
+        // Ohr T10: a track container needs a valid hearing check of the player with its number (key deck/<N>, §4.5)
         const kanal = `deck/${platz}`;
         const st = this.deckStand(platz);
         const inhalt = st ? `${st.f.material_id}/${Math.round(st.f.basis_bpm * 1000)}_r${st.f.fassung}` : '';
         const beat = this.kern.uhr?.beat ?? 0;
-        const schein = riegel === 'gesperrt' ? null : this.hoerscheinstelle.gueltig(kanal, inhalt, beat);
+        const schein = this.hoerscheinstelle.gueltig(kanal, inhalt, beat);
         if (!schein) {
-          const letzterSchein = riegel === 'gesperrt' ? null : this.hoerscheinstelle.letzter(platz);
+          const letzterSchein = this.hoerscheinstelle.letzter(platz);
           // Plan seq-fader-frei D6 (2): a SEQ deck place that still holds a stopped track: eject it, the next call then opens (the first one still fails)
           // seq_geleert only when the core ACCEPTED the unload (receipt 1..3); a refusal (deck_hoerbar, nicht_geladen) or no receipt reports nothing, and the guard is lifted so a retry sends again
           let geleert = typ === 'seq' && /\/(fader|trim)$/.test(pfad) && this.seqDeckAufraeumen(platz, this.quelle(), true);
@@ -2029,7 +2194,7 @@ export class Oberflaeche {
   private spurenSichern(): void {
     const datei = path.join(this.wirtBasis(), 'spuren.json');
     const daten = [...this.spuren].map(([name, l]) => ({ name, quelle: l.quelle, anker: l.anker, ende: l.ende, fahrten: l.fahrten, gruppen: [...l.gruppen],
-      ids: l.ids, teile: l.teile, muster: l.offen, ...(l.schleife ? { schleife: l.schleife } : {}) }));
+      ids: l.ids, teile: l.teile, muster: l.offen, ...(l.schleife ? { schleife: l.schleife } : {}), ...(l.bogen ? { bogen: l.bogen } : {}) }));
     try {
       fs.mkdirSync(this.wirtBasis(), { recursive: true });
       const tmp = `${datei}.${process.pid}.neu`;
@@ -2050,6 +2215,8 @@ export class Oberflaeche {
         ids: Array.isArray(x.ids) ? x.ids.filter(Number.isFinite) : [], teile: Array.isArray(x.teile) ? x.teile : [] };
       const schleife = schleifeAusDatei(x.schleife);   // 1.12 S7: a loop resumes its watcher from the next unsent pass
       if (schleife) lauf.schleife = schleife;
+      const bg = x.bogen as SpurLauf['bogen'] | undefined;
+      if (bg && typeof bg.name === 'string' && Number.isFinite(bg.takte) && Array.isArray(bg.plan)) lauf.bogen = bg;
       this.spuren.set(x.name, lauf);
       if (lauf.offen.length) this.musterTimer(x.name, lauf);
       if (lauf.schleife) this.schleifenWaechter(x.name, lauf);
@@ -2059,9 +2226,17 @@ export class Oberflaeche {
 
   // POST /spur {spur, ab?='takt'} (Studio S6): Anker = nächste Takt- bzw. Phrasen-Eins; Kanalzug-Fahrten als /k/teil mit
   // Plan spur:<name> (ein Handgriff bricht sie im Kern ab, /spur/stopp über /k/abbruch). D8 gilt für Cyphers Spur ganz.
-  private async spurStart(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
+  // intern.versatz (live scene restore only): phase offset per stream for the strom: moves of this track
+  private async spurStart(d: Record<string, unknown>, a: http.ServerResponse, intern: { versatz?: Record<number, number>; bogen?: SpurLauf['bogen'] } = {}): Promise<void> {
     const ab = d.ab ?? 'takt';
     if (ab !== 'takt' && ab !== 'phrase') return this.json(a, 400, { fehler: 'ab', text: 'ab: takt or phrase' });
+    // 1.1 anchor: anker_takt = an absolute bar instead of ab; probe = every check, nothing sent, nothing entered
+    const ankerTakt = d.anker_takt, probe = d.probe === true;
+    if (d.probe !== undefined && typeof d.probe !== 'boolean') return this.json(a, 400, { fehler: 'probe', text: 'probe: boolean' });
+    if (ankerTakt !== undefined) {
+      if (d.ab !== undefined) return this.json(a, 400, { fehler: 'ab_und_anker', text: 'ab and anker_takt exclude each other' });
+      if (typeof ankerTakt !== 'number' || !Number.isInteger(ankerTakt) || ankerTakt < 1) return this.json(a, 400, { fehler: 'anker_takt', text: 'anker_takt: integer >= 1 (an absolute bar)' });
+    }
     const r = pruefeSpur(d.spur, this.fahrbar);
     if ('fehler' in r) return this.json(a, 400, { fehler: 'spur', text: r.fehler });
     // D1 S2-Integration (Spec 6.22, 6.30): Spur-Regler ändern sich nur über das Projekt, auch eine Automationsspur fährt sie nicht
@@ -2080,10 +2255,27 @@ export class Oberflaeche {
     if (this.spuren.has(name)) return this.json(a, 409, { fehler: 'laeuft', text: `track ${name} is running; stop it first` });
     const u = this.kern.uhr as unknown as { beat: number; bpm: number; mono_ns: number } | null;
     if (!u) return this.json(a, 409, { fehler: 'keine_uhr' });
-    const anker = this.abVon(ab);
+    const fruehest = this.abVon('takt'), proTaktA = this.proTakt();
+    let anker = this.abVon(ab);
+    if (typeof ankerTakt === 'number') {
+      anker = proTaktA * (ankerTakt - 1);
+      if (anker < fruehest) return this.json(a, 409, { fehler: 'anker_vorbei', fruehester_takt: Math.floor(fruehest / proTaktA) + 1, text: 'the requested anchor bar is no longer ahead; use fruehester_takt or later' });
+      if (anker - fruehest > proTaktA * MAX_TAKT) return this.json(a, 400, { fehler: 'anker_takt', text: `anker_takt: at most ${MAX_TAKT} bars ahead` });
+    }
+    // 1.1: a stream played by the multi-stream erzeuger needs its process, else the pattern would never sound
+    for (const f of r.spur.fahrten) {
+      const st = STROM_ZIEL.exec(f.ziel);
+      if (st && istBkStrom(Number(st[1])) && !this.erzeugerLebt(Number(st[1]))) {
+        return this.json(a, 409, { fehler: 'strom_ohne_erzeuger', strom: Number(st[1]), ziel: f.ziel, text: `no erzeuger process serves stream ${st[1]}; start djk-stroeme first` });
+      }
+    }
     const schleife = r.spur.schleife_takte !== undefined;   // 1.12 S7: pass 0 of a loop; its end is the start of pass 1
-    const g = schleife ? planeDurchlauf(r.spur, anker, 0, 0, this.proTakt()) : plane(r.spur, anker, this.proTakt());
+    const g = schleife ? planeDurchlauf(r.spur, anker, 0, 0, this.proTakt()) : plane(r.spur, anker, this.proTakt(), this.fahrbar);
+    // task 7.5: the spur of an arc ends with the arc, also when the last layer has no bis_takt (warte bis: spur_ende)
+    if (intern.bogen) g.ende_beat = Math.max(g.ende_beat, anker + proTaktA * intern.bogen.takte);
     if (quelle === 'cypher') {
+      const rampe = r.spur.fahrten.findIndex((f) => typeof f.nach === 'number' && this.rampePflicht(f.ziel, f.nach, f.takte ?? 0, f.von));
+      if (rampe >= 0) return this.json(a, 409, { fehler: 'nur_rampe', ziel: r.spur.fahrten[rampe].ziel, index: rampe, text: GRUND_TEXT.nur_rampe });
       // F4: AUTO aus auf einem Strom heißt, Andreas hält ihn; Cyphers Spur darf ihn nicht berühren (Kern, Wirt, Muster)
       for (const f of r.spur.fahrten) {
         const st = this.stromVonZielOffen(f.ziel);
@@ -2093,7 +2285,13 @@ export class Oberflaeche {
       const p = oeffnetKanal(this.stand.regler, schleife ? [...g.teile, ...planeDurchlauf(r.spur, g.ende_beat, 0, 0, this.proTakt()).teile] : g.teile);
       if (p) return this.json(a, 409, { fehler: 'kein_hoerschein', pfad: p, text: 'this track opens a closed channel; Cypher may not (Plan Hand D8)' });
     }
-    const lauf: SpurLauf = { quelle, anker, ende: g.ende_beat, fahrten: r.spur.fahrten, timer: [], offen: [...g.muster], gruppen: new Set(), ids: [], teile: [] };
+    if (probe) {
+      return this.json(a, 200, { ok: true, probe: true, anker_beat: anker, anker_takt: Math.floor(anker / proTaktA) + 1, ende_beat: g.ende_beat,
+        muster: g.muster.map((m) => ({ strom: m.strom, ab_takt_absolut: Math.floor(m.ab_beat / proTaktA) + 1 })) });
+    }
+    const offen = g.muster.map((m) => (intern.versatz?.[m.strom] ? { ...m, versatz: intern.versatz[m.strom] } : m));
+    const lauf: SpurLauf = { quelle, anker, ende: g.ende_beat, fahrten: r.spur.fahrten, timer: [], offen, gruppen: new Set(), ids: [], teile: [] };
+    if (intern.bogen) lauf.bogen = intern.bogen;
     if (schleife) {   // 1.12 S7: set before the track enters the table, so it never looks like a one-shot track (cleanup, GET /spur)
       lauf.schleife = { n: r.spur.schleife_takte as number, anker_naechster: g.ende_beat, durchlauf: 1, teilNr: g.teile.length, naechste: null,
         durchlaeufe: [{ k: 0, anfang: anker, ende: g.ende_beat, teile: g.teile.length, ...(this.proTakt() !== 4 ? { proTakt: this.proTakt() } : {}) }] };
@@ -2125,6 +2323,27 @@ export class Oberflaeche {
       this.opt.log?.({ typ: 'spur_wirt', name, gruppe: w.gruppe, parameter: w.name, ab_beat: w.ab_beat, ab: befehl.ab });
       if (Number(antwort.ersetzt) > 0) this.opt.log?.({ typ: 'spur_wirt_ersetzt', name, gruppe: w.gruppe, parameter: w.name, ersetzt: Number(antwort.ersetzt) });   // F8: eine andere wartende Fahrt ging verloren
     }
+    // Discrete Surge sets: one host `setze` per host and beat, same in-flight unit as fahre; the group is recorded, so spur_stopp and Stop Cypher halte it
+    for (const z of g.setzen ?? []) {
+      const befehl = { befehl: 'setze', werte: z.werte, ab: beatZuMono(u, z.ab_beat), spur: name };
+      const antwort = await this.wirtFlug(name, async () => {
+        const r = await wirtRuf(this.wirtSock(z.gruppe), befehl);
+        if (this.spuren.get(name) !== lauf && r.ok) await wirtRuf(this.wirtSock(z.gruppe), { befehl: 'halte', spur: name });
+        return r;
+      });
+      if (this.spuren.get(name) !== lauf) {
+        for (const gr of lauf.gruppen) await wirtRuf(this.wirtSock(gr), { befehl: 'halte', spur: name });
+        return this.json(a, 409, { fehler: 'gestoppt', name, text: `track ${name} was stopped while it started` });
+      }
+      if (!antwort.ok) {
+        for (const gr of lauf.gruppen) await wirtRuf(this.wirtSock(gr), { befehl: 'halte', spur: name });
+        this.spuren.delete(name);
+        this.spurenSichern();
+        return this.json(a, 409, { fehler: 'wirt', gruppe: z.gruppe, text: String(antwort.fehler ?? '') });
+      }
+      lauf.gruppen.add(z.gruppe);
+      this.opt.log?.({ typ: 'spur_wirt_setze', name, gruppe: z.gruppe, parameter: Object.keys(z.werte), ab_beat: z.ab_beat, ab: befehl.ab });
+    }
     for (const [i, t] of g.teile.entries()) {
       const kernPfad = this.kernPfadVon(t.pfad);
       if (kernPfad === null) { this.opt.log?.({ typ: 'spur_ziel_aufgeloest_nicht', name, pfad: t.pfad }); continue; }   // the strom track is gone since the start
@@ -2142,6 +2361,358 @@ export class Oberflaeche {
     const quittung = lauf.ids.length ? await this.warteQuittung(lauf.ids[0], g.teile[0].ab_beat) : null;
     this.json(a, 200, { ok: true, name, anker_beat: anker, anker_takt: Math.floor(anker / this.proTakt()) + 1, ende_beat: g.ende_beat,
       teile: g.teile.length, wirt: g.wirt.length, muster: g.muster.length, quittung, abgelehnt: this.spurAbgelehnt(lauf) });
+  }
+
+  // Strand 11 slice 5 (5.2): POST /szene, live scenes (files in <project folder>/szenen/, not the launcher scenes of project.json `szenen`).
+  // aktion sichern | ersetzen | laden | liste | zeige | loeschen. laden saves _vor_laden first, loads differing graphs at once, then runs ONE
+  // internal track szene-<name> as Cypher from the next bar: strom:<n> moves (with versatz), control sets or ramps, the Surge patch as host setze.
+  // A part a Cypher rule refuses goes into ausgelassen [{ziel, grund}]; nothing else stops.
+  private innenAntwort(): { code: number; text: string; writeHead(c: number): unknown; end(t: string): void; j(): Record<string, unknown> } {
+    return { code: 0, text: '', writeHead(c: number) { this.code = c; return this; }, end(t: string) { this.text = t; },
+      j() { try { return JSON.parse(this.text) as Record<string, unknown>; } catch { return {}; } } };
+  }
+  // B1: a POST route with reading aktionen (/szene, /klang) is classed by the x-djk-aktion header; a body aktion that differs from it is refused,
+  // so a call classed as reading (liste, zeige) cannot carry a writing aktion in its body.
+  private aktionPasst(q: http.IncomingMessage, d: Record<string, unknown>, a: http.ServerResponse): boolean {
+    const kopf = kopfWert(q.headers['x-djk-aktion']);
+    if (kopf === null || d.aktion === kopf) return true;
+    this.json(a, 403, { fehler: 'aktion_passt_nicht', kopf, aktion: typeof d.aktion === 'string' ? d.aktion : null, text: GRUND_TEXT.aktion_passt_nicht });
+    return false;
+  }
+  private async szeneSammeln(): Promise<Szene> {
+    const u = this.kern.uhr as unknown as { beat: number; bpm: number } | null;
+    const proTakt = this.proTakt();
+    const muster: Record<string, string> = {}, versatz: Record<string, number> = {};
+    for (const st of ALLE_STROEME) {
+      const t = leseMusterStand(this.musterOrdner(st)).text;
+      if (typeof t === 'string' && t.trim() !== '') muster[String(st)] = t;
+      const v = leseVersatz(this.musterOrdner(st));
+      if (v !== 0) versatz[String(st)] = v;
+    }
+    const anker: Record<string, number> = {}, bezeichnung: Record<string, string> = {};
+    for (const st of Object.keys(muster)) {
+      const t = this.musterAnkerTakt.get(Number(st)); if (t !== undefined) anker[st] = t;
+      const b = leseMusterStand(this.musterOrdner(Number(st))).bezeichnung; if (typeof b === 'string' && b !== '') bezeichnung[st] = b;
+    }
+    const klang: Record<string, SzeneKlang> = {};
+    // B2: both Surge hosts at once (a dead host costs its timeout once, not twice)
+    const zustaende = await Promise.all(KLANG_GRUPPEN.map((g) => wirtRuf(this.wirtSock(g), { befehl: 'zustand' }, 1500)));
+    KLANG_GRUPPEN.forEach((g, i) => { const r = zustaende[i]; if (r.ok && typeof r.patch_b64 === 'string') klang[g] = { art: 'surge', patch_b64: r.patch_b64 }; });
+    this.spurenAufraeumen();
+    const spuren: SzeneSpur[] = [...this.spuren].filter(([, l]) => l.quelle === 'cypher' && l.schleife)
+      .map(([name, l]) => ({ name, fahrten: l.fahrten, schleife_takte: (l.schleife as { n: number }).n }));
+    const lage = this.lage();
+    return { v: 1, geschrieben: new Date().toISOString(), takt: Math.floor((u?.beat ?? 0) / proTakt) + 1, bpm: u?.bpm ?? null, muster,
+      ...(Object.keys(versatz).length ? { versatz } : {}), ...(Object.keys(anker).length ? { anker } : {}), ...(Object.keys(bezeichnung).length ? { bezeichnung } : {}),
+      regler: reglerFuerSzene(this.stand.regler, ueberProjekt), graphen: Object.fromEntries(Object.entries(this.stand.graphen_geladen).filter(([, n]) => !!n)),
+      fx: structuredClone(this.stand.fx), fx_zuweisung: structuredClone(this.stand.fxZuweisung), fx_routing: this.stand.fxRouting, klang, spuren,
+      info: { plaetze: lage.plaetze ?? null, decks: lage.decks ?? null } };
+  }
+  private async szene(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
+    const aktion = d.aktion;
+    if (typeof aktion !== 'string' || !['sichern', 'ersetzen', 'laden', 'liste', 'zeige', 'loeschen'].includes(aktion)) {
+      return this.json(a, 400, { fehler: 'aktion', text: 'aktion: sichern, ersetzen, laden, liste, zeige or loeschen' });
+    }
+    const offen = this.proj.zugang.offen();
+    if (!offen || offen.projekt.live !== true) return this.json(a, 409, { fehler: 'kein_liveprojekt', text: 'live scenes belong to the open live project' });
+    const ordner = offen.ordner;
+    if (aktion === 'liste') return this.json(a, 200, { ok: true, szenen: listeSzenen(ordner) });
+    const name = d.name;
+    if (typeof name !== 'string' || !SZENE_NAME.test(name)) return this.json(a, 400, { fehler: 'name', text: 'name must match [a-z0-9_-]{1,32}' });
+    if (aktion === 'sichern' || aktion === 'ersetzen') {
+      if (aktion === 'sichern' && !istAutomatisch(name) && szeneDa(ordner, name)) return this.json(a, 409, { fehler: 'szene_vorhanden', name, text: GRUND_TEXT.szene_vorhanden });
+      const s = await this.szeneSammeln();
+      // A3: a silence over silence would replace the sound to come back to; automatic names keep three generations
+      if (name === '_vor_stille' && allesStill(s)) return this.json(a, 200, { ok: true, name, geschrieben: false, grund: 'schon_still' });
+      if (AUTO_ROTIERT.includes(name)) schreibeAutomatisch(ordner, name, s); else schreibeSzene(ordner, name, s);
+      this.opt.log?.({ typ: 'szene_sichern', name, quelle: this.quelle(), takt: s.takt });
+      return this.json(a, 200, { ok: true, name, takt: s.takt, muster: Object.keys(s.muster).map(Number), regler: Object.keys(s.regler).length,
+        graphen: Object.keys(s.graphen), klang: Object.keys(s.klang), spuren: s.spuren.map((x) => x.name) });
+    }
+    const s = leseSzene(ordner, name);
+    if (!s) return this.json(a, 404, { fehler: 'szene_unbekannt', name, text: GRUND_TEXT.szene_unbekannt });
+    if (aktion === 'zeige') {   // B8: the patch itself is not shown, only its length in bytes
+      const klang = Object.fromEntries(Object.entries(s.klang ?? {}).map(([g, k]) => {
+        const { patch_b64, ...rest } = k ?? { art: '' };
+        return [g, { ...rest, ...(typeof patch_b64 === 'string' ? { patch_bytes: Buffer.from(patch_b64, 'base64').length } : {}) }];
+      }));
+      return this.json(a, 200, { ok: true, name, szene: { ...s, klang } });
+    }
+    if (aktion === 'loeschen') {
+      loescheSzene(ordner, name);
+      this.opt.log?.({ typ: 'szene_loeschen', name, quelle: this.quelle() });
+      return this.json(a, 200, { ok: true, name });
+    }
+    const takte = d.takte ?? 0;
+    if (typeof takte !== 'number' || !Number.isInteger(takte) || takte < 0 || takte > SZENE_MAX_TAKTE) return this.json(a, 400, { fehler: 'takte', text: `takte: integer 0..${SZENE_MAX_TAKTE}` });
+    await this.qs.run('cypher', () => this.szeneLaden(name, s, takte, ordner, a));
+  }
+  // The FX part of szene laden: what differs from the live state is sent back, as Cypher. Answers the list of what was restored.
+  // nurPlan: nothing is sent, the answer lists what differs (the answer of laden; the parts go out at the anchor, B7)
+  private szeneFxLaden(s: Szene, ausgelassen: { ziel: string; grund: string }[], nurPlan = false): string[] {
+    const fertig: string[] = [];
+    const fang = (): { fang: ReturnType<Oberflaeche['innenAntwort']>; ok: () => boolean } => { const f = this.innenAntwort(); return { fang: f, ok: () => f.code === 200 }; };
+    const riegel = this.innenAntwort();
+    if (this.fxRiegel(riegel as unknown as http.ServerResponse)) {
+      const grund = String(riegel.j().fehler ?? 'fx_gesperrt');
+      if (s.fx_routing !== undefined && s.fx_routing !== this.stand.fxRouting) ausgelassen.push({ ziel: 'fx_routing', grund });
+      const hat = (Array.isArray(s.fx) && s.fx.some((f) => f !== null)) || (Array.isArray(s.fx_zuweisung) && s.fx_zuweisung.some((z) => Object.keys(z ?? {}).length > 0));
+      if (hat) ausgelassen.push({ ziel: 'fx', grund });
+      return fertig;
+    }
+    const routing = s.fx_routing;
+    if ((routing === 'insert' || routing === 'post_fader') && routing !== this.stand.fxRouting) {
+      if (!nurPlan) { this.fxRoutingSenden(routing, this.quelle()); this.fxRoutingWunsch = routing; }
+      fertig.push('routing');
+    }
+    const zu = Array.isArray(s.fx_zuweisung) ? (s.fx_zuweisung as Record<string, boolean>[]) : [];
+    for (let i = 0; i < 3; i++) {
+      const soll = zu[i] ?? {}, ist = this.stand.fxZuweisung[i] ?? {};
+      for (const kanal of new Set([...Object.keys(soll), ...Object.keys(ist)])) {
+        const an = soll[kanal] === true;
+        if (an === (ist[kanal] === true)) continue;
+        if (nurPlan) { fertig.push(`zuweisung:${i + 1}:${kanal}`); continue; }
+        const f = fang();
+        this.fxZuweisung({ einheit: i + 1, kanal, an }, f.fang as unknown as http.ServerResponse);
+        if (f.ok()) fertig.push(`zuweisung:${i + 1}:${kanal}`); else ausgelassen.push({ ziel: `fx_zuweisung:${i + 1}:${kanal}`, grund: String(f.fang.j().fehler ?? `http_${f.fang.code}`) });
+      }
+    }
+    const einheiten = Array.isArray(s.fx) ? (s.fx as (Record<string, unknown> | null)[]) : [];
+    for (let i = 0; i < 2; i++) {
+      const soll = einheiten[i] ?? null, ist = this.stand.fx[i] as Record<string, unknown> | null;
+      // a unit that was off or empty at save time is switched off with its current settings, if it runs now
+      const ziel = soll ?? (ist && ist.an === 1 ? { ...ist, an: 0 } : null);
+      if (!ziel) continue;
+      if (ist && (['art', 'beats', 'wet', 'param1', 'param2', 'param3', 'an'] as const).every((k) => ist[k] === ziel[k])) continue;
+      if (nurPlan) { fertig.push(`fx:${i + 1}`); continue; }
+      const f = fang();
+      this.fx({ einheit: i + 1, art: ziel.art, beats: ziel.beats, wet: ziel.wet, param1: ziel.param1, param2: ziel.param2, param3: ziel.param3, an: ziel.an === 1 }, f.fang as unknown as http.ServerResponse);
+      if (f.ok()) fertig.push(`fx:${i + 1}`); else ausgelassen.push({ ziel: `fx:${i + 1}`, grund: String(f.fang.j().fehler ?? `http_${f.fang.code}`) });
+    }
+    return fertig;
+  }
+  // A4: the anchor of a restore = the next bar with at least 1 beat of lead (else the bar after), never before the earliest bar a track may start at
+  private szeneAnkerTakt(): number {
+    const proTakt = this.proTakt(), beat = (this.kern.uhr as unknown as { beat: number } | null)?.beat ?? 0;
+    let takt = Math.ceil(beat / proTakt) + 1;   // absolute bar (1-based) that starts at the next bar line
+    if (proTakt * (takt - 1) - beat < 1) takt++;
+    return Math.max(takt, Math.floor(this.abVon('takt') / proTakt) + 1);
+  }
+  // A4 order: save _vor_laden; load differing graphs (vorgaben false: the knob values come from the scene); stop a running szene-<name>; THEN read the
+  // state fresh, choose the anchor and plan patterns and controls from that state; start the track (one retry on anker_vorbei); Surge setze and FX at the
+  // same anchor, each after a fresh Stop Cypher check.
+  private async szeneLaden(name: string, s: Szene, takte: number, ordner: string, a: http.ServerResponse): Promise<void> {
+    if (this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt' });
+    if (!this.kern.uhr) return this.json(a, 409, { fehler: 'keine_uhr' });
+    if (name !== '_vor_laden') schreibeAutomatisch(ordner, '_vor_laden', await this.szeneSammeln());
+    const ausgelassen: { ziel: string; grund: string }[] = [];
+    // graphs first, as Cypher (their own pre-checks: AUTO, kit mode, erzeuger), without graph defaults
+    const graphen: string[] = [];
+    for (const g of planeGraphen(s, { graphen: this.stand.graphen_geladen })) {
+      const r = await this.graphSetzen({ kanal: g.kanal, name: g.name, vorgaben: false }, 'cypher');
+      if (r.code === 200 && r.j.ok !== false) graphen.push(g.kanal); else ausgelassen.push({ ziel: `graph:${g.kanal}`, grund: String(r.j.fehler ?? r.j.grund ?? `http_${r.code}`) });
+    }
+    const spurName = `szene-${name}`.slice(0, 32);
+    const alt = this.spuren.get(spurName);
+    if (alt && alt.quelle === 'cypher') await this.spurAbbrechen(spurName, alt, 'cypher');   // a restore of the same scene still running
+    if (this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt', graphen, ausgelassen });
+    const proTakt = this.proTakt();
+    // the plan from the state as it is now (the graph loads may have taken seconds)
+    const planen = (ankerTakt: number) => {
+      const jetztMuster: Record<string, string> = {}, jetztVersatz: Record<string, number> = {}, jetztBez: Record<string, string | null> = {};
+      for (const st of ALLE_STROEME) {
+        const stand = leseMusterStand(this.musterOrdner(st)), t = stand.text;
+        if (typeof t === 'string') jetztMuster[String(st)] = t;
+        jetztBez[String(st)] = stand.bezeichnung;
+        const v = leseVersatz(this.musterOrdner(st));
+        if (v !== 0) jetztVersatz[String(st)] = v;
+      }
+      const plan = planeLaden(s, { muster: jetztMuster, regler: this.stand.regler, graphen: this.stand.graphen_geladen, versatz: jetztVersatz, bezeichnung: jetztBez }, takte,
+        (p) => { const e = reglerInfo(p)?.einheit; return e === 'schalter' || e === 'stufe'; }, ankerTakt);
+      const anker = proTakt * (ankerTakt - 1), weg: { ziel: string; grund: string }[] = [];
+      // every move checked on its own with Cypher's rules; a refused one is listed and left out
+      const fahrten: Fahrt[] = [], muster: number[] = [], regler: string[] = [], versatz: Record<number, number> = {};
+      for (const m of plan.muster) {
+        if (istBkStrom(m.strom) && !this.erzeugerLebt(m.strom)) { if (m.text !== 'silence') weg.push({ ziel: `strom:${m.strom}`, grund: 'strom_ohne_erzeuger' }); continue; }
+        if (!leseMusterStand(this.musterOrdner(m.strom)).autonom) { weg.push({ ziel: `strom:${m.strom}`, grund: 'auto_aus' }); continue; }
+        fahrten.push({ ziel: `strom:${m.strom}`, ab_takt: 1, muster: m.text, ...(m.bezeichnung !== undefined ? { bezeichnung: m.bezeichnung } : {}) });
+        if (m.versatz !== 0) versatz[m.strom] = m.versatz;
+        muster.push(m.strom);
+      }
+      let teile = 0;
+      for (const f of plan.regler) {
+        const nach = f.nach as number;
+        const grund = !PFAD.test(f.ziel) ? 'pfad'
+          : reglerInfo(f.ziel)?.nurHand ? 'nur_hand'
+          : ueberProjekt(f.ziel) && !istStromZeile(this.proj.zugang.offen()?.projekt ?? null, f.ziel) ? 'ueber_projekt'
+          : (this.spurAliasFehler([f])?.fehler as string | undefined)
+            ?? (((st) => (st !== null && !leseMusterStand(this.musterOrdner(st)).autonom ? 'auto_aus' : null))(this.stromVonZielOffen(f.ziel)))
+            ?? (this.rampePflicht(f.ziel, nach, f.takte ?? 0) ? 'nur_rampe' : null)
+            ?? (oeffnetKanal(this.stand.regler, plane({ name: 'x', fahrten: [f] }, anker, proTakt).teile) ? 'kein_hoerschein' : null)
+            ?? (teile >= MAX_TEILE ? 'zu_viele' : null);
+        if (grund) { weg.push({ ziel: f.ziel, grund }); continue; }
+        teile++;
+        fahrten.push(f);
+        regler.push(f.ziel);
+      }
+      return { ankerTakt, anker, fahrten, muster, regler, versatz, weg };
+    };
+    let p = planen(this.szeneAnkerTakt());
+    let lauf: SpurLauf | undefined;
+    if (p.fahrten.length) {
+      let fang = this.innenAntwort();
+      await this.spurStart({ spur: { name: spurName, fahrten: p.fahrten }, anker_takt: p.ankerTakt }, fang as unknown as http.ServerResponse, { versatz: p.versatz });
+      if (fang.code === 409 && fang.j().fehler === 'anker_vorbei') {   // the clock moved past the anchor while the track started: once more, fresh
+        p = planen(this.szeneAnkerTakt());
+        fang = this.innenAntwort();
+        await this.spurStart({ spur: { name: spurName, fahrten: p.fahrten }, anker_takt: p.ankerTakt }, fang as unknown as http.ServerResponse, { versatz: p.versatz });
+      }
+      const j = fang.j();
+      if (fang.code !== 200) {
+        ausgelassen.push({ ziel: `spur:${spurName}`, grund: String(j.fehler ?? `http_${fang.code}`) });
+        p.muster.length = 0; p.regler.length = 0;
+      } else {
+        lauf = this.spuren.get(spurName);
+        for (const x of (j.abgelehnt as { pfad: string; grund: string }[] | undefined) ?? []) ausgelassen.push({ ziel: x.pfad, grund: x.grund });
+      }
+    }
+    ausgelassen.push(...p.weg);
+    const { ankerTakt, anker } = p;
+    // B3: a restore without moves still gets its entry, so that Stop Cypher and spur_stopp halte its Surge group and clear its FX timer
+    if (!lauf && !this.spuren.has(spurName)) {
+      lauf = { quelle: 'cypher', anker, ende: anker + proTakt, fahrten: [], timer: [], offen: [], gruppen: new Set(), ids: [], teile: [] };
+      this.spuren.set(spurName, lauf);
+      this.spurenSichern();
+    }
+    // Surge: the stored patch as host setze at the anchor, only where it differs from the patch the host holds now
+    const klang: string[] = [];
+    for (const [g, k] of Object.entries(s.klang ?? {})) {
+      if (!KLANG_GRUPPEN.includes(g) || typeof k?.patch_b64 !== 'string') continue;
+      const st = stromVonZiel(`wirt:${g}/x`);
+      if (st !== null && !leseMusterStand(this.musterOrdner(st)).autonom) { ausgelassen.push({ ziel: `wirt:${g}`, grund: 'auto_aus' }); continue; }
+      const ist = await wirtRuf(this.wirtSock(g), { befehl: 'zustand' }, 1500);
+      if (ist.ok && ist.patch_b64 === k.patch_b64) continue;
+      if (this.kiGestoppt) { ausgelassen.push({ ziel: `wirt:${g}`, grund: 'ki_gestoppt' }); continue; }
+      const u = this.kern.uhr as unknown as { beat: number; bpm: number; mono_ns: number };
+      const r = await this.wirtFlug(spurName, () => wirtRuf(this.wirtSock(g), { befehl: 'setze', patch_b64: k.patch_b64, ab: beatZuMono(u, anker), spur: spurName }));
+      if (!r.ok) { ausgelassen.push({ ziel: `wirt:${g}`, grund: 'wirt' }); continue; }
+      if (lauf && this.spuren.get(spurName) === lauf) { lauf.gruppen.add(g); this.spurenSichern(); }
+      klang.push(g);
+    }
+    // B7: the FX at the anchor: a timer on the core beat like the pattern timer; Stop Cypher is checked again when it fires
+    const fx = this.szeneFxLaden(s, ausgelassen, true);
+    if (fx.length && lauf) {
+      const meiner = lauf;
+      const zeit = setInterval(() => {
+        if (this.spuren.has(spurName) && this.spuren.get(spurName) !== meiner) { clearInterval(zeit); return; }
+        const beat = (this.kern.uhr as unknown as { beat: number } | null)?.beat;
+        if (beat === undefined || beat < anker) return;
+        clearInterval(zeit);
+        if (this.kiGestoppt) { this.opt.log?.({ typ: 'szene_fx', name, fx: [], ausgelassen: [{ ziel: 'fx', grund: 'ki_gestoppt' }] }); return; }
+        const weg: { ziel: string; grund: string }[] = [];
+        const fertig = this.qs.run('cypher', () => this.szeneFxLaden(s, weg));
+        this.opt.log?.({ typ: 'szene_fx', name, fx: fertig, ausgelassen: weg });
+      }, 50);
+      zeit.unref();
+      meiner.timer.push(zeit);
+    }
+    // B5: Cypher loops that run now but are not in the scene stop (never Andreas'); then the stored Cypher loops, by name, from the same bar
+    const namen = new Set((s.spuren ?? []).map((x) => x.name));
+    for (const [n, l] of [...this.spuren]) if (l.quelle === 'cypher' && l.schleife && !namen.has(n)) await this.spurAbbrechen(n, l, 'cypher');
+    for (const sp of s.spuren ?? []) {
+      if (this.spuren.has(sp.name)) continue;
+      const fang = this.innenAntwort();
+      await this.spurStart({ spur: { name: sp.name, fahrten: sp.fahrten, schleife_takte: sp.schleife_takte }, anker_takt: ankerTakt }, fang as unknown as http.ServerResponse);
+      if (fang.code !== 200) ausgelassen.push({ ziel: `spur:${sp.name}`, grund: String(fang.j().fehler ?? `http_${fang.code}`) });
+    }
+    this.opt.log?.({ typ: 'szene_laden', name, anker_takt: ankerTakt, muster: p.muster, regler: p.regler.length, graphen, fx, klang, ausgelassen: ausgelassen.length });
+    this.json(a, 200, { ok: true, name, anker_takt: ankerTakt, muster: p.muster, regler: p.regler, graphen, fx, fx_ab_takt: fx.length ? ankerTakt : null, klang, ausgelassen });
+  }
+
+  // Strand 11 slice 7 (7a): POST /aufbau, stored session setups outside any project (setup.ts; folder aufbauOrdnerVorgabe, file mode 0600).
+  // aktion sichern | ersetzen | laden | liste | zeige | loeschen. sichern takes the running studio: szeneSammeln + the four container faders + tempo +
+  // the graphs of the Baukasten streams. laden, as Cypher: the live container is opened if it is not (its refusal live_laeuft is the answer), the tempo
+  // through the tempo path (a ramp from the next bar), then the scene restore of slice 5 (szeneLaden, takte 2: every continuous row ramps 2 bars, so
+  // nur_rampe never refuses; the setup's graphs written over the scene's). The four container faders go through the control path as 2-bar ramps, not
+  // through the scene's track: a track of Cypher may never open a closed strip (Plan Hand D8), the control path opens a free container (containerFrei)
+  // and asks a track place for its hearing check. That opens the strips that sit at -200 dB after a core restart. loeschen moves the file to papierkorb/.
+  private async aufbau(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
+    const aktion = d.aktion;
+    if (typeof aktion !== 'string' || !['sichern', 'ersetzen', 'laden', 'liste', 'zeige', 'loeschen'].includes(aktion)) {
+      return this.json(a, 400, { fehler: 'aktion', text: 'aktion: sichern, ersetzen, laden, liste, zeige or loeschen' });
+    }
+    const ordner = aufbauOrdnerVorgabe();
+    if (aktion === 'liste') return this.json(a, 200, { ok: true, aufbauten: listeAufbauten(ordner) });
+    const name = d.name;
+    if (typeof name !== 'string' || !AUFBAU_NAME.test(name)) return this.json(a, 400, { fehler: 'name', text: 'name must match [a-z0-9_-]{1,32}' });
+    if (aktion === 'sichern' || aktion === 'ersetzen') {
+      if (aktion === 'sichern' && aufbauDa(ordner, name)) return this.json(a, 409, { fehler: 'aufbau_vorhanden', name, text: GRUND_TEXT.aufbau_vorhanden });
+      const szene = await this.szeneSammeln();
+      const block = aufbauBlock(this.stand.regler, (this.kern.uhr as unknown as { bpm: number } | null)?.bpm, this.stand.graphen_geladen,
+        (k) => { const st = stromVonKanal(k); return st !== null && istBkStrom(st); });
+      schreibeAufbau(ordner, name, { v: 1, geschrieben: new Date().toISOString(), aufbau: block, szene });
+      this.opt.log?.({ typ: 'aufbau_sichern', name, quelle: this.quelle() });
+      const warnung = aufbauWarnung(this.stand.regler);
+      return this.json(a, 200, { ok: true, name, bpm: block.bpm, kanaele: block.kanaele, graphen: block.graphen, muster: Object.keys(szene.muster).map(Number), ...(warnung.length ? { warnung } : {}) });
+    }
+    const auf = leseAufbau(ordner, name);
+    if (!auf) return this.json(a, 404, { fehler: 'aufbau_unbekannt', name, text: GRUND_TEXT.aufbau_unbekannt });
+    if (aktion === 'zeige') {   // like szene zeige: the Surge patch is not shown, only its length in bytes
+      const klang = Object.fromEntries(Object.entries(auf.szene.klang ?? {}).map(([g, k]) => {
+        const { patch_b64, ...rest } = k ?? { art: '' };
+        return [g, { ...rest, ...(typeof patch_b64 === 'string' ? { patch_bytes: Buffer.from(patch_b64, 'base64').length } : {}) }];
+      }));
+      return this.json(a, 200, { ok: true, name, aufbau: { ...auf, szene: { ...auf.szene, klang } } });
+    }
+    if (aktion === 'loeschen') {
+      const ziel = loescheAufbau(ordner, name);
+      this.opt.log?.({ typ: 'aufbau_loeschen', name, quelle: this.quelle() });
+      return this.json(a, 200, { ok: true, name, papierkorb: ziel });
+    }
+    await this.qs.run('cypher', () => this.aufbauLaden(name, auf, a));
+  }
+  private async aufbauLaden(name: string, auf: Aufbau, a: http.ServerResponse): Promise<void> {
+    if (this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt', text: GRUND_TEXT.ki_gestoppt });
+    if (!this.kern.uhr) return this.json(a, 409, { fehler: 'keine_uhr' });
+    // 1. the live container (the live_oeffnen path, as Cypher: never over a running set of another project)
+    let live_geoeffnet = false;
+    if (this.proj.zugang.offen()?.projekt.live !== true) {
+      let r: { code: number; j: unknown };
+      try { r = await this.proj.sitzung.liveOeffnen('cypher'); } catch (e) { r = alsAntwort(e, this.bereichKontext()); }
+      if (r.code !== 200) return this.json(a, r.code, { ...(r.j as object), schritt: 'live_oeffnen' });
+      live_geoeffnet = true;
+    }
+    const offen = this.proj.zugang.offen();
+    if (!offen || offen.projekt.live !== true) return this.json(a, 409, { fehler: 'kein_liveprojekt', text: 'the live container did not open' });
+    const ausgelassen: { ziel: string; grund: string }[] = [];
+    // 2. the tempo through the tempo path (a ramp from the next bar), only when it differs
+    let bpm: number | null = null;
+    const jetztBpm = (this.kern.uhr as unknown as { bpm: number } | null)?.bpm;
+    if (typeof auf.aufbau.bpm === 'number' && Math.abs((jetztBpm ?? 0) - auf.aufbau.bpm) >= 0.005) {
+      const t = this.innenAntwort();
+      await this.tempo({ bpm: auf.aufbau.bpm }, t as unknown as http.ServerResponse);
+      if (t.code === 200) bpm = auf.aufbau.bpm; else ausgelassen.push({ ziel: 'tempo', grund: String(t.j().fehler ?? `http_${t.code}`) });
+    }
+    // 2b. Cypher's running arcs and scene restores (`szene-*`) stop before the restore: they would write their patterns over it (Cypher's tracks only)
+    for (const [n, l] of [...this.spuren]) if (l.quelle === 'cypher' && (l.bogen || n.startsWith('szene-'))) await this.spurAbbrechen(n, l, 'cypher');
+    // 3. the scene restore of slice 5 (graphs first, then one track szene-<name> from the anchor), every continuous row a 2-bar ramp
+    const { szene, kanaele } = aufbauZumLaden(auf);
+    const sz = this.innenAntwort();
+    await this.szeneLaden(name, szene, 2, offen.ordner, sz as unknown as http.ServerResponse);
+    const sj = sz.j();
+    if (sz.code !== 200) return this.json(a, sz.code, { ...sj, schritt: 'szene', live_geoeffnet, bpm, ausgelassen: [...ausgelassen, ...((sj.ausgelassen as typeof ausgelassen | undefined) ?? [])] });
+    // 4. the container faders as 2-bar ramps from the next bar through the control path (its Cypher rules: AUTO, hearing check of a track place)
+    const geschickt = await Promise.all(kanaele.map(async (k) => {
+      if (this.stand.regler[k.pfad] === k.nach) return { kanal: k.kanal, nach: k.nach, takte: 0, unveraendert: true };
+      const r = this.innenAntwort();
+      await this.regler({ pfad: k.pfad, nach: k.nach, takte: 2, ab: 'takt' }, r as unknown as http.ServerResponse);
+      const j = r.j();
+      if (r.code !== 200) { ausgelassen.push({ ziel: k.pfad, grund: String(j.fehler ?? `http_${r.code}`) }); return null; }
+      return { kanal: k.kanal, nach: k.nach, takte: 2, ab_beat: (j.felder as { ab_beat?: number } | undefined)?.ab_beat ?? null };
+    }));
+    this.opt.log?.({ typ: 'aufbau_laden', name, live_geoeffnet, bpm, kanaele: geschickt.filter((x) => x).length, ausgelassen: ausgelassen.length });
+    this.json(a, 200, { ...sj, ok: true, name, live_geoeffnet, bpm, kanaele: geschickt.filter((x) => x !== null),
+      ausgelassen: [...((sj.ausgelassen as typeof ausgelassen | undefined) ?? []), ...ausgelassen] });
   }
 
   // POST /spur/stopp {name} (Studio S6): wartende und laufende Fahrten der Spur enden am Ist-Wert (/k/abbruch, Wirt halte)
@@ -2213,7 +2784,7 @@ export class Oberflaeche {
       lauf.offen = lauf.offen.filter((m) => !faellig.includes(m));
       this.spurenSichern();
       if (!lauf.offen.length) clearInterval(zeit);
-      for (const m of faellig) void this.spurMuster(name, lauf, m);
+      for (const m of faellig) this.spurMuster(name, lauf, m).catch((e) => this.opt.log?.({ typ: 'spur_muster_fehler', name, text: e instanceof Error ? e.message : String(e) }));
     }, 50);
     zeit.unref();
     lauf.timer.push(zeit);
@@ -2224,7 +2795,8 @@ export class Oberflaeche {
     if (this.spuren.get(name) !== lauf) return;
     const beatVorher = this.kern.uhr?.beat ?? 0;
     const fang = { code: 0, text: '', writeHead(c: number) { this.code = c; return this; }, end(t: string) { this.text = t; } };
-    await this.qs.run(lauf.quelle, () => this.strudel({ text: m.text, strom: m.strom }, fang as unknown as http.ServerResponse));
+    await this.qs.run(lauf.quelle, () => this.strudel({ text: m.text, strom: m.strom, ...(m.bezeichnung !== undefined ? { bezeichnung: m.bezeichnung } : {}) }, fang as unknown as http.ServerResponse,
+      { abBeat: m.ab_beat, ...(Number.isInteger(m.versatz) ? { versatz: m.versatz } : {}) }));
     this.opt.log?.({ typ: 'spur_muster', name, strom: m.strom, ziel_beat: m.ab_beat, beat_vorher: beatVorher,
       beat_nachher: this.kern.uhr?.beat ?? 0, code: fang.code, antwort: fang.text });
   }
@@ -2268,6 +2840,22 @@ export class Oberflaeche {
         if (text(k) === null || k.includes('=')) return bad(`werte.${k}`);
         if (zahl(v) === null) return this.json(a, 400, { fehler: 'werte', text: `werte.${k} must be a number` });
         argv.push(`${k}=${v}`);
+      }
+      if (d.ab !== undefined || d.ab_beat !== undefined) {   // timed set: no djk-klang spawn; the host reloads its state at the beat (host `setze`, spur klang-<gruppe>)
+        const u = this.kern.uhr as unknown as { beat: number; bpm: number; mono_ns: number } | null;
+        if (!u) return this.json(a, 409, { fehler: 'keine_uhr' });
+        let abBeat: number;
+        if (d.ab_beat !== undefined) {
+          if (typeof d.ab_beat !== 'number' || !Number.isFinite(d.ab_beat)) return this.json(a, 400, { fehler: 'ab_beat', text: 'ab_beat: a core beat (number)' });
+          abBeat = d.ab_beat;
+        } else {
+          if (typeof d.ab !== 'string' || abRaster(d.ab, this.proTakt()) === undefined) return this.json(a, 400, { fehler: 'ab', text: 'ab: jetzt, schlag, takt or phrase' });
+          abBeat = this.abVon(d.ab);
+        }
+        if (this.quelle() === 'cypher') { const sperre = this.klangSperre(gruppe as string); if (sperre) return this.json(a, 409, sperre); }
+        const r = await wirtRuf(this.wirtSock(gruppe as string), { befehl: 'setze', werte: w, ab: beatZuMono(u, abBeat), spur: `klang-${gruppe}` });
+        if (!r.ok) return this.json(a, 409, { fehler: 'wirt', gruppe, text: String(r.fehler ?? 'wirt refused') });
+        return this.json(a, 200, { ok: true, ab_beat: abBeat, ab_takt: Math.floor(abBeat / this.proTakt()) + 1 });
       }
     } else if (aktion === 'zeige' || aktion === 'liste') {
       if (d.filter !== undefined) { const f = text(d.filter); if (f === null) return bad('filter'); argv.push(f); }
@@ -2374,7 +2962,34 @@ export class Oberflaeche {
   private spurListe(): Record<string, unknown>[] {
     this.spurenAufraeumen();
     return [...this.spuren].map(([name, l]) => ({ name, quelle: l.quelle, anker_beat: l.anker, ende_beat: l.ende, fahrten: l.fahrten,
-      abgelehnt: this.spurAbgelehnt(l), ...(l.schleife ? this.schleifenInfo(l.schleife) : {}) }));
+      abgelehnt: this.spurAbgelehnt(l), ...(l.schleife ? this.schleifenInfo(l.schleife) : {}), ...(l.bogen ? { bogen: this.bogenInfo(l) } : {}) }));
+  }
+
+  // Task 7.5: where the arc stands and what changes next, from the core beat (the page has no arc logic). takt_im_bogen 0 = not started yet.
+  private bogenInfo(l: SpurLauf): Record<string, unknown> {
+    const b = l.bogen as NonNullable<SpurLauf['bogen']>;
+    const beat = (this.kern.uhr as unknown as { beat: number } | null)?.beat ?? null;
+    const im = beat === null ? 0 : Math.max(0, Math.min(b.takte, Math.floor((beat - l.anker) / this.proTakt()) + 1));
+    const naechst = b.plan.filter((z) => z.takt > im).reduce<number | null>((m, z) => (m === null || z.takt < m ? z.takt : m), null);
+    const naechste = naechst === null ? null : { in_takten: naechst - im, text: b.plan.filter((z) => z.takt === naechst).map((z) => z.text).join('; ') };
+    return { name: b.name, takte: b.takte, takt_im_bogen: im, naechste };
+  }
+
+  // Task 7.5: POST /bogen. The flat body is the arc (name, takte, schichten, bruch?, fahrten?) plus ab, anker_takt, probe. It compiles to one spur body and
+  // goes through spurStart, so every spur rule holds. Answer: the spur answer plus kompiliert (the spur body) and plan.
+  private async bogenStart(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
+    if (d.schleife !== undefined || d.schleife_takte !== undefined) return this.json(a, 400, { fehler: 'bogen_schleife', text: GRUND_TEXT.bogen_schleife });
+    const { ab, anker_takt, probe, ...bogen } = d;
+    const k = kompiliereBogen(bogen, this.fahrbar);
+    if ('fehler' in k) return this.json(a, 400, { fehler: 'bogen', text: k.text });
+    const fang = this.innenAntwort();
+    const rein: Record<string, unknown> = { spur: k.spur };
+    if (ab !== undefined) rein.ab = ab;
+    if (anker_takt !== undefined) rein.anker_takt = anker_takt;
+    if (probe !== undefined) rein.probe = probe;
+    await this.spurStart(rein, fang as unknown as http.ServerResponse, { bogen: { name: k.spur.name, takte: (bogen as { takte: number }).takte, plan: k.plan } });
+    const j = fang.j();
+    this.json(a, fang.code, fang.code === 200 ? { ...j, kompiliert: k.spur, plan: k.plan } : j);
   }
 
   // Teile der Spur, deren letzte Kern-Quittung ein Fehlstatus ist (GET /spur und Antwort von POST /spur)
@@ -2563,7 +3178,7 @@ export class Oberflaeche {
     // S18: streams 1..3 always; a Baukasten stream (5, 6, 7, 9, 10) only while its erzeuger heartbeat is fresh
     const stroeme = ALLE_STROEME.filter((s) => !istBkStrom(s) || this.erzeugerLebt(s)).map((strom) => {
       const m = leseMusterStand(this.musterOrdner(strom));
-      return { strom, autonom: m.autonom, von: m.von, text_kurz: m.text.slice(0, 200) };
+      return { strom, autonom: m.autonom, von: m.von, bezeichnung: m.bezeichnung, text_kurz: m.text.slice(0, 200) };
     });
     const w = this.leseWirtMeldungen(), klang: Record<string, string | null> = {};
     for (const g of KLANG_GRUPPEN) klang[g] = (w[g] as { klang?: unknown } | null)?.klang as string | null ?? null;
@@ -2639,7 +3254,8 @@ export class Oberflaeche {
     const insGr = Object.fromEntries(Object.entries(this.insGr).filter(([, g]) => jetztMs - g.t < INS_GR_FRIST_MS).sort(([a], [b]) => a.localeCompare(b, 'en', { numeric: true }))
       .map(([k, g]) => [k, Math.round(g.db * 10) / 10]));
     const proTakt = this.proTakt();
-    return { uhr: { beat: Math.round(beat * 100) / 100, takt: Math.floor(beat / proTakt) + 1, schlag: Math.floor(((beat % proTakt) + proTakt) % proTakt) + 1,
+    return { uhr: { naechster_takt: Math.floor(this.abVon('takt') / proTakt) + 1, naechste_phrase_takt: Math.floor(this.abVon('phrase') / proTakt) + 1,
+      beat: Math.round(beat * 100) / 100, takt: Math.floor(beat / proTakt) + 1, schlag: Math.floor(((beat % proTakt) + proTakt) % proTakt) + 1,
       bpm: u?.bpm ?? null }, ...(proTakt !== 4 ? { taktart: [proTakt, 4] } : {}), ki: { gestoppt: this.kiGestoppt }, decks, regler, fx: this.stand.fx,
       fx_routing: this.stand.fxRouting, plaetze: this.plaetzeLage(), container: this.proj.sitzung.lage.container.map((art) => ({ art: CONTAINER_ART[art] })), ...(Object.keys(insGr).length ? { ins_gr: insGr } : {}), ...(this.stand.kanalLimiter ? { kanal_limiter: { ...this.stand.kanalLimiter } } : {}), ...(this.stand.hallPool ? { hall_pool: { ...this.stand.hallPool } } : {}), ...(this.stand.spurPool ? { spur_pool: { ...this.stand.spurPool } } : {}), quittungen: this.cypherQuittungen.slice(-10), studio: this.studioLage(), ausgang: leseAusgang(this.opt.digitalout) };
   }
@@ -2649,6 +3265,8 @@ export class Oberflaeche {
   private readonly qs = new AsyncLocalStorage<string>();
   private readonly proj: ReturnType<typeof projBereich>;   // D1 S2: Bereich proj (Sitzung schliesst beim Stoppen)
   readonly stems: ReturnType<typeof stemsBereich>;   // 1.13 Slice 6: Bereich proj-stems
+  readonly noten: ReturnType<typeof notenBereich>;   // note editor (slice 1, B2): Bereich proj-noten
+  private readonly notenRender: NotenRender;           // note editor (slice 1, B4): render cache and queue of the note edits
   private tagsStopp: () => void = () => {};
   private readonly aufnahme: ReturnType<typeof aufnahmeBereich>;   // 1.8: Bereich proj-aufnahme
   private readonly einsammler: Einsammler;   // A5
@@ -2694,11 +3312,68 @@ export class Oberflaeche {
     };
   }
   private quelle(): string { return this.qs.getStore() ?? 'andreas'; }
+  private readonly wer = new AsyncLocalStorage<{ id: string; name: string; stufe: Stufe } | null>();   // the key of the request (agents only)
+  private readonly schluessel: HandSchluessel;
+  private streng(): boolean { return this.opt.hand?.streng ?? instanz() === ''; }
+  // Host guard (DNS rebinding), then the key: a valid bearer token makes the request an agent request whatever x-djk-quelle says.
   private anfrage(q: http.IncomingMessage, a: http.ServerResponse): Promise<void> {
-    return this.qs.run(quelleAusKopf(q), () => this.anfrageInnen(q, a));
+    const host = String(q.headers.host ?? '');
+    if (host !== `127.0.0.1:${this.opt.port}` && host !== `localhost:${this.opt.port}`) {
+      this.json(a, 421, { fehler: 'falscher_host', text: 'open the page as http://127.0.0.1:<port>/' });
+      return Promise.resolve();
+    }
+    const auth = q.headers.authorization;
+    if (auth !== undefined) {
+      const w = this.schluessel.pruefe(auth);
+      if (w === null) {
+        this.json(a, 401, { fehler: 'schluessel_ungueltig',
+          text: 'the agent key is not valid (revoked or wrong); the hand re-reads ~/.config/cypherdj/hand.token' });
+        return Promise.resolve();
+      }
+      return this.wer.run(w, () => this.qs.run('cypher', () => this.anfrageInnen(q, a)));
+    }
+    if (quelleAusKopf(q) === 'cypher') {
+      if (this.streng()) {
+        this.json(a, 401, { fehler: 'schluessel_fehlt',
+          text: 'agents need the key from ~/.config/cypherdj/hand.token (djk-hand reads it by itself; restart the hand)' });
+        return Promise.resolve();
+      }
+      const w = { id: 'ohne_schluessel', name: 'header only (test instance)', stufe: 'zerstoerend' as const };
+      return this.wer.run(w, () => this.qs.run('cypher', () => this.anfrageInnen(q, a)));
+    }
+    return this.qs.run('andreas', () => this.anfrageInnen(q, a));
+  }
+  private readonly handLog: HandLog;
+  private readonly gesehenAufrufe = new Set<string>();
+  // true for the first request of one tool call (id + x-djk-aufruf); without an aufruf every non-GET counts as a call, GET polling does not
+  private neuerAufruf(id: string, aufruf: string | null, methode: string): boolean {
+    if (aufruf === null) return methode !== 'GET';
+    const k = `${id}\u0000${aufruf}`;
+    if (this.gesehenAufrufe.has(k)) return false;
+    this.gesehenAufrufe.add(k);
+    if (this.gesehenAufrufe.size > 2000) this.gesehenAufrufe.delete(this.gesehenAufrufe.values().next().value as string);
+    return true;
   }
   private async anfrageInnen(q: http.IncomingMessage, a: http.ServerResponse, herkunft?: string): Promise<void> {
     const url = new URL(q.url ?? '/', 'http://127.0.0.1');
+    if (this.quelle() === 'cypher') {
+      const anfrage: HandAnfrage = { methode: q.method ?? '', pfad: url.pathname, quelle: 'cypher', wer: this.wer.getStore() ?? null,
+        werkzeug: kopfWert(q.headers['x-djk-werkzeug']), aktion: kopfWert(q.headers['x-djk-aktion']), aufruf: kopfWert(q.headers['x-djk-aufruf'], true) };
+      const u = pruefeHand(this.handRegeln, anfrage);
+      const w = anfrage.wer;
+      if (w) {   // agent log: a refusal at once, an allowed call when its response is finished (first request of an aufruf only)
+        const lk = handLogKopf(q, anfrage);
+        const eintrag = { t: Date.now(), id: w.id, name: w.name, werkzeug: lk.werkzeug, aktion: lk.aktion, methode: anfrage.methode, pfad: anfrage.pfad };
+        if (!u.ok) this.handLog.schreibe({ ...eintrag, code: u.code, ok: false, fehler: u.fehler });
+        else if (this.neuerAufruf(w.id, lk.aufruf, anfrage.methode)) {
+          a.once('finish', () => this.handLog.schreibe({ ...eintrag, code: a.statusCode, ok: a.statusCode < 400 }));
+        }
+      }
+      if (!u.ok) {
+        this.opt.log?.({ typ: 'hand_abgewiesen', methode: anfrage.methode, pfad: anfrage.pfad, fehler: u.fehler });
+        return this.json(a, u.code, { fehler: u.fehler, text: u.text, ...u.mehr });
+      }
+    }
     const r = this.router.finde(q.method ?? '', url.pathname);
     if (r) {
       if (r.schutz === 'fremdePost' && q.method === 'POST' && postAbgewiesen(q, a, this.opt.port, herkunft)) return;
@@ -2756,10 +3431,13 @@ export class Oberflaeche {
         return this.json(a, 200, { sek, kanaele: this.pegelPuffer.lies(sek) });
       } },
       { methode: 'GET', pfad: '/spur', schutz: O, handler: (_q, a) => this.json(a, 200, this.spurListe()) },
+      { methode: 'POST', pfad: '/szene', schutz: F, handler: async (q, a) => { const d = await this.koerper(q); if (!this.aktionPasst(q, d, a)) return; await this.szene(d, a); } },   // strand 11 slice 5: live scenes
+      { methode: 'POST', pfad: '/aufbau', schutz: F, handler: async (q, a) => { const d = await this.koerper(q); if (!this.aktionPasst(q, d, a)) return; await this.aufbau(d, a); } },   // strand 11 slice 7: session setups
       { methode: 'POST', pfad: ['/spur', '/spur/stopp'], schutz: F, handler: async (q, a, url) => {   // Studio S6
         const d = await this.koerper(q);
         return url.pathname === '/spur' ? await this.spurStart(d, a) : await this.spurStopp(d, a);
       } },
+      { methode: 'POST', pfad: '/bogen', schutz: F, handler: async (q, a) => await this.bogenStart(await this.koerper(q), a) },   // strand 11 task 7.5
       { methode: 'POST', pfad: '/spur/aendern', schutz: F, handler: async (q, a) => await this.spurAendern(await this.koerper(q), a) },   // 1.12 S7
       { methode: 'POST', pfad: '/regler', schutz: F, handler: async (q, a) => await this.regler(await this.koerper(q), a) },   // Plan Hand
       { methode: 'POST', pfad: '/taste', schutz: F, handler: async (q, a) => this.taste(await this.koerper(q), a) },   // Riegel 2026-09-30
@@ -2781,6 +3459,8 @@ export class Oberflaeche {
       } },
       { methode: 'GET', pfad: '/hoeren', schutz: O, handler: (_q, a, url) => this.hoerenAus(url, a) },
       { methode: 'GET', pfad: '/analyse/live', schutz: O, handler: (_q, a) => this.analyseLiveAus(a) },
+      { methode: 'GET', pfad: '/analyse/pegel', schutz: O, handler: (_q, a) => this.analysePegelAus(a) },
+      { methode: 'POST', pfad: '/analyse/pegel/reset', schutz: F, handler: async (q, a) => { await this.koerper(q); this.analysePegelAus(a, true); } },
       { methode: 'GET', pfad: '/oszi', schutz: O, handler: (_q, a, url) => this.osziAus(url, a) },
       { methode: 'GET', pfad: '/fx', schutz: O, handler: (_q, a) => this.json(a, 200, this.stand.fx) },   // [FX1, FX2] oder null je Einheit
       { methode: 'GET', pfad: '/fx/zuweisung', schutz: O, handler: (_q, a) => this.json(a, 200, this.stand.fxZuweisung) },
@@ -2801,11 +3481,11 @@ export class Oberflaeche {
       } },
       { methode: 'POST', pfad: '/graph', schutz: F, handler: async (q, a) => this.graphLaden(await this.koerper(q), a) },
       { methode: 'GET', pfad: '/fx/routing', schutz: O, handler: (_q, a) => this.json(a, 200, { routing: this.stand.fxRouting }) },
-      { methode: 'POST', pfad: '/fx/routing', schutz: F, handler: async (q, a) => {   // Ohr T18: Andreas' Taste (Insert oder Post Fader), nie Cyphers
-        if (this.quelle() === 'cypher') return this.json(a, 403, { fehler: 'nur_andreas' });   // wie /strudel/autonom (Review M5)
+      { methode: 'POST', pfad: '/fx/routing', schutz: F, handler: async (q, a) => {   // Ohr T18: the Insert / Post Fader switch; strand 11: Cypher may switch it too (Stop Cypher still refuses)
+        if (this.quelle() === 'cypher' && this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt' });
         const d = await this.koerper(q);
         if (d.routing !== 'post_fader' && d.routing !== 'insert') return this.json(a, 400, { fehler: 'routing' });
-        const felder = this.fxRoutingSenden(d.routing, 'andreas');
+        const felder = this.fxRoutingSenden(d.routing, this.quelle());
         this.fxRoutingWunsch = d.routing;
         return this.json(a, 200, { ok: true, felder, quittung: await this.warteQuittung(felder.id) });
       } },
@@ -2827,7 +3507,10 @@ export class Oberflaeche {
         if (url.pathname === '/deck/loop') return this.deckLoop(d, a);
         if (url.pathname === '/deck/loop/sichern') return this.deckLoopSichern(d, a);
         if ((url.pathname === '/deck/raster' || url.pathname === '/deck/raster/fix') && this.quelle() === 'cypher') {
-          return this.json(a, 403, { fehler: 'nur_andreas' });   // das Grid ist sein Urteil (Review M5)
+          // strand 11: Cypher may move the grid; the old grid goes into the log line, so it is reversible
+          if (this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt' });
+          const st = istOffenesDeck(d.deck) ? this.deckStand(d.deck) : null;
+          this.opt.log?.({ typ: 'raster_cypher', deck: d.deck, vorher: st ? this.rasterWert(st.deck, st.f) : null });
         }
         if (url.pathname === '/deck/raster') return this.deckRaster(d, a);
         if (url.pathname === '/deck/raster/fix') return this.deckRasterFix(d, a);
@@ -2866,7 +3549,7 @@ export class Oberflaeche {
         return this.json(a, 200, { ok: true, ansage: this.ansageZeile });
       } },
       { methode: 'GET', pfad: '/klang', schutz: O, handler: (_q, a) => this.json(a, 200, this.leseWirtMeldungen()) },   // Task 3: was die Wirte gerade melden (wirt-<gruppe>.json), null ohne Datei
-      { methode: 'POST', pfad: '/klang', schutz: F, handler: async (q, a) => await this.klang(await this.koerper(q), a) },
+      { methode: 'POST', pfad: '/klang', schutz: F, handler: async (q, a) => { const d = await this.koerper(q); if (!this.aktionPasst(q, d, a)) return; await this.klang(d, a); } },
       { methode: 'GET', pfad: '/welle', schutz: O, handler: async (_q, a, url) => await this.welleAus(url, a) },
       { methode: 'GET', pfad: '/fassung', schutz: O, handler: (_q, a, url) => this.fassungAus(url, a) },
     ];
@@ -2876,6 +3559,7 @@ export class Oberflaeche {
     a.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
     a.write(`data: ${JSON.stringify({ a: 'stand', f: { ...this.stand, kern: this.kern.zustand, pruefmodus: this.pruefmodus } })}\n\n`);
     if (this.ansageZeile) a.write(`data: ${JSON.stringify({ a: 'ansage', f: this.ansageZeile })}\n\n`);   // demo overlay
+    a.write(`data: ${JSON.stringify({ a: 'hand', f: this.handStand() })}\n\n`);
     this.stroeme.add(a);
     q.on('close', () => this.stroeme.delete(a));
   }

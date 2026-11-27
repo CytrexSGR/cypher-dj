@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { neuesProjekt, pruefeProjekt, eqZeilenWert, EQ_BAENDER, EQ_MIN, EQ_MAX } from '../project/model.ts';
+import { neuesProjekt, pruefeProjekt, eqZeilenWert, EQ_BAENDER, EQ_MIN, EQ_MAX, FX_NUMMERN, MAX_SPUREN } from '../project/model.ts';
 import { fuehreListeAus, BefehlFehler } from '../project/commands.ts';
 import { Verlauf, aendere, rueckgaengig } from '../project/history.ts';
 import { alleSpurRegler, reglerZuBefehl, istMixerRegler } from '../areas/proj/mapping.ts';
@@ -109,7 +109,7 @@ test('alleSpurRegler carries the kill translation; free slots 0', () => {
   p = lauf(p, { befehl: 'spur_aendern', spur_id: p.spuren[1].id, eq: { mitte: -5, hoch: 2 } });
   p = lauf(p, { befehl: 'spur_aendern', spur_id: p.spuren[1].id, kill: { hoch: true } });
   const r = alleSpurRegler(p);
-  assert.equal(r.filter((x) => /\/eq\//.test(x.pfad)).length, 96);
+  assert.equal(r.filter((x) => /\/eq\//.test(x.pfad)).length, EQ_BAENDER.length * MAX_SPUREN);
   const w = (pfad) => r.find((x) => x.pfad === pfad).wert;
   assert.deepEqual([w('spur/2/eq/tief'), w('spur/2/eq/mitte'), w('spur/2/eq/hoch')], [0, -5, -200]);
   assert.equal(w('spur/9/eq/tief'), 0);
@@ -364,7 +364,7 @@ test('fx rows: 0/1 on spur/<n>/fx/<u>, only on change, a deleted deck track rese
   assert.deepEqual(an.regler_aenderungen.filter((x) => /\/fx\//.test(x.pfad)), [{ pfad: 'spur/2/fx/1', wert: 1 }, { pfad: 'spur/2/fx/3', wert: 1 }]);
   p = an.projekt;
   const w = (pfad) => alleSpurRegler(p).find((x) => x.pfad === pfad).wert;
-  assert.equal(alleSpurRegler(p).filter((x) => /\/fx\//.test(x.pfad)).length, 96);
+  assert.equal(alleSpurRegler(p).filter((x) => /\/fx\//.test(x.pfad)).length, FX_NUMMERN.length * MAX_SPUREN);
   assert.deepEqual([w('spur/2/fx/1'), w('spur/2/fx/2'), w('spur/2/fx/3'), w('spur/9/fx/1')], [1, 0, 1, 0]);
   const weg = fuehreListeAus(p, [...p.spuren.slice(0, 4).map((x) => ({ befehl: 'spur_loeschen', spur_id: x.id })), { befehl: 'gruppenspur_loeschen', gruppe_id: p.gruppen[0].id }]);
   assert.deepEqual(weg.regler_aenderungen.filter((x) => /\/fx\//.test(x.pfad)), [{ pfad: 'spur/2/fx/1', wert: 0 }, { pfad: 'spur/2/fx/3', wert: 0 }]);

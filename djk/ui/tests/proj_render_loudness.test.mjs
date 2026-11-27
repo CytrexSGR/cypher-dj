@@ -116,7 +116,7 @@ test('Render-Doppel wie render_main.cpp (K3 05a91adb): Rückgaben 2, 3, 8 und Sp
   const kaputt = path.join(d, 'kaputt.json');
   fs.writeFileSync(kaputt, JSON.stringify({ 'spur/32/fader': 0, 'spur/9/mute': 1, 'spur/20/pan': 0.5 }));   // E3: Slots über 8 gelten
   assert.equal(lauf(basis('s32.wav', ['--spur-regler', kaputt]))[0], 0, 'Positivfall: spur/32, spur/9 und spur/20 sind Spur-Regler');
-  fs.writeFileSync(kaputt, JSON.stringify({ 'spur/33/fader': 0 }));
+  fs.writeFileSync(kaputt, JSON.stringify({ 'spur/129/fader': 0 }));
   assert.deepEqual(lauf(basis('c.wav', ['--spur-regler', kaputt]))[0], 2, 'ungültige Spur-Regler-Datei: 2, auch wenn der Zustand gilt');
   fs.writeFileSync(kaputt, JSON.stringify({ 'spur/1/fader': 7 }));
   assert.equal(lauf(basis('c.wav', ['--spur-regler', kaputt]))[0], 2, 'fader über +6 dB');

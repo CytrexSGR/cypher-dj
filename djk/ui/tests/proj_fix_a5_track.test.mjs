@@ -24,11 +24,11 @@ test('A5 POST /spur mit Ziel spur/* → 409 ueber_projekt (jede Quelle, auch gem
   assert.deepEqual((await ruf(url, 'GET', '/spur')).j.laufend ?? [], [], 'keine Spur läuft');
 });
 
-test('A5 Negativ-Kontrolle: bus/* geht weiter durch (200, /k/teil an den Kern); spur/33 bleibt 400 spur', async (t) => {
+test('A5 Negativ-Kontrolle: bus/* geht weiter durch (200, /k/teil an den Kern); spur/129 bleibt 400 spur', async (t) => {
   const { url, log } = await stapel(t);
   const ok = await ruf(url, 'POST', '/spur', spur('erlaubt', 'bus/2/fader'), CYPHER);
   assert.deepEqual([ok.code, ok.j.ok], [200, true], JSON.stringify(ok.j));
   assert.deepEqual(anKern(log, '/k/teil').map((z) => z.felder.pfad), ['bus/2/fader']);
-  const neun = await ruf(url, 'POST', '/spur', spur('neun', 'spur/33/fader'));
+  const neun = await ruf(url, 'POST', '/spur', spur('neun', 'spur/129/fader'));
   assert.deepEqual([neun.code, neun.j.fehler], [400, 'spur']);
 });

@@ -15,13 +15,13 @@ import { K, TEST_INSTANZ, belegeTestInstanz } from './support/instance.mjs';
 belegeTestInstanz();
 const GOLDEN = path.join(import.meta.dirname, 'support', 'routen_golden.json');
 
-export const GET = ['/strom?x=1', '/bestand', '/mediathek/anschluss', '/mediathek', '/mediathek/vorbereiten', '/stoebern', '/stoebern?typ=strudel', '/stoebern/detail',
+export const GET = ['/strom?x=1', '/hand/bremse', '/hand/ich', '/hand/schluessel', '/hand/log', '/bestand', '/mediathek/anschluss', '/mediathek', '/mediathek/vorbereiten', '/stoebern', '/stoebern?typ=strudel', '/stoebern/detail',
   '/stoebern/baum', '/stoebern/baum?typ=strudel', '/vorhoeren', '/klaenge/karte', '/klaenge', '/mediathek/listen', '/sammlungen', '/sammlungen/x', '/sammlungen/x/posten',
   '/konfig', '/lage', '/ausgang', '/pegel', '/spur', '/loops', '/loop/automation', '/loop/raster', '/deck/hotcues', '/deck/loop', '/deck/raster', '/hoeren', '/fx',
   '/fx/zuweisung', '/fx/routing', '/graphen', '/strudel', '/klang', '/welle', '/fassung', '/geraete', '/lernen', '/lernen/host', '/register', '/register/ziele?q=fader', '/quellen', '/suche', '/suche?q=x', '/', '/nicht-da', '/app.js'];
-export const POST = ['/mediathek/vorbereiten', '/mediathek', '/muster', '/vorhoeren', '/sammlungen', '/sammlungen/import', '/sammlungen/x/posten',
+export const POST = ['/hand/bremse', '/hand/schluessel', '/hand/schluessel/loeschen', '/mediathek/vorbereiten', '/mediathek', '/muster', '/vorhoeren', '/sammlungen', '/sammlungen/import', '/sammlungen/x/posten',
   '/sammlungen/x/posten/entfernen', '/sammlungen/x/posten/verschieben', '/sammlungen/x/umbenennen', '/sammlungen/x/vorbereiten', '/sammlungen/x/loeschen',
-  '/sammlungen/x/unsinn', '/griff', '/deck/start', '/deck/stopp', '/abbruch', '/spur', '/spur/stopp', '/regler', '/taste', '/laden', '/tempo',
+  '/sammlungen/x/unsinn', '/griff', '/deck/start', '/deck/stopp', '/abbruch', '/spur', '/spur/stopp', '/bogen', '/szene', '/aufbau', '/regler', '/taste', '/laden', '/tempo',
   '/loops/aus-katalog', '/loop', '/loop/automation', '/fx/routing', '/graph', '/fx', '/fx/zuweisung', '/deck/sprung', '/deck/scrub', '/deck/hotcue', '/deck/loop',
   '/deck/loop/sichern', '/deck/raster', '/deck/raster/fix', '/strudel', '/strudel/autonom', '/klang', '/geraete/eingang', '/geraete/midi', '/geraete/latenz', '/lernen', '/lernen/setzen', '/lernen/loeschen', '/lernen/host', '/lernen/host/loeschen', '/quellen/dazu', '/quellen/weg', '/nicht-da', '/strom', '/lage'];
 export const ANDERE = [['PUT', '/lage'], ['PUT', '/mediathek/vorbereiten'], ['DELETE', '/sammlungen/x'], ['HEAD', '/lage'], ['HEAD', '/']];
@@ -44,7 +44,9 @@ export async function probe() {
   process.env.CYPHERDJ_INSTANZ = TEST_INSTANZ;   // nicht gelenkte Vorgaben (Vorhören, Klang) zeigen auf die Prüfinstanz, nie auf den Betrieb
   const o = new Oberflaeche({ port: 47300 + K, kernPort: 47100 + K, aboPort: 47150 + K, leitstandWs: 47200 + K, bestand: tmp('rg-bestand-'), arbeitsbestand: tmp('rg-ab-'),
     mutationen: [], loops: tmp('rg-loops-'), kits: tmp('rg-kits-'), welleCache: tmp('rg-welle-'), musterOrdner: tmp('rg-muster-'), hotcueOrdner: tmp('rg-hc-'),
-    rasterOrdner: tmp('rg-raster-'), huellen, wirtOrdner: tmp('rg-wirt-'), sammlungen: tmp('rg-sets-'), musterBibliothek: tmp('rg-mb-'), musterSets: tmp('rg-ms-'), musterStarter: '',
+    rasterOrdner: tmp('rg-raster-'), huellen,
+    hand: { ordner: tmp('rg-hand-'), logOrdner: tmp('rg-hlog-') },   // own folders: no log of another test
+    wirtOrdner: tmp('rg-wirt-'), sammlungen: tmp('rg-sets-'), musterBibliothek: tmp('rg-mb-'), musterSets: tmp('rg-ms-'), musterStarter: '',
     mediathek: path.join(tmp('rg-med-'), 'gibt-es-nicht.sqlite'), katalog: path.join(tmp('rg-kat-'), 'gibt-es-nicht.sqlite'),
     digitalout: path.join(tmp('rg-do-'), 'nix'), kernPruefmodus: true,
     geraete: { konfigPfad: path.join(tmp('rg-ger-'), 'geraete.json'), kantenPfad: path.join(tmp('rg-ger-'), 'eingaenge-kanten'), cacheMs: 0, erkenne: async () => ({ audio: [], midi: [] }) },
@@ -59,7 +61,7 @@ export async function probe() {
       const art = r.headers.get('content-type') ?? '';
       if (art.startsWith('text/event-stream')) {
         const { value } = await r.body.getReader().read(); ac.abort();
-        return { code: r.status, art, form: form(JSON.parse(new TextDecoder().decode(value).replace(/^data: /, ''))) };
+        return { code: r.status, art, form: form(JSON.parse(new TextDecoder().decode(value).split('\n\n')[0].replace(/^data: /, ''))) };
       }
       const text = await r.text();
       if (text === '') return { code: r.status, art, leer: true };

@@ -294,6 +294,11 @@ test('rights: negative controls — Cypher overwrites, renames and deletes her o
   assert.equal((await post(cy.url, '/presets/nutzer/komp/gone/loeschen', {})).code, 200);
 });
 
+test('katalog: effect rows carry the panel title, derived space copies are left out', () => {
+  const k = katalog([{ name: 'fx-drive', art: 'effekt', titel: 'Cypher Drive' }, { name: 'space-0a1b2c', art: 'effekt' }, { name: 'space-platte', art: 'effekt', titel: 'Cypher Space' }]);
+  assert.deepEqual(k.effekte.filter((e) => e.geraet === 'bk'), [{ geraet: 'bk', titel: 'Cypher Drive', ziel: 'insert', graph: 'fx-drive', aktiv: true }]);
+});
+
 test('save over HTTP carries graph for baukasten', async (t) => {
   const s = await stapel(t);
   const PAD = { art: 'pad', unterart: 'analog', charakter: ['warm'], genre: [], einsatz: ['intro'], energie: 1, text: 'Pad over HTTP.' };

@@ -16,7 +16,7 @@ import { warteBis } from './support/proj_context.mjs';
 const optionen = { quelle: 'andreas', pluginDa: () => true, pluginIndex: () => null };
 const lauf = (p, b) => fuehreListeAus(p, [b], optionen).projekt;
 
-function aufbauen(t) {
+function aufbauen(t, extra = {}) {
   const d = tmpOrdner(t, 'djk-tausch-');
   const ordner = path.join(d, 'project');
   fs.mkdirSync(ordner, { recursive: true });
@@ -27,6 +27,7 @@ function aufbauen(t) {
   let pid = 1000;
   const dep = {
     start: async (slot, art) => {
+      extra.gestartet?.push(art);
       stand.set(slot, { lebt: true, bereit: true, art: art === 'surge' ? 'lv2' : 'plugin', kennung: art.startsWith('plugin:') ? art.slice(7) : null, pid: ++pid });
       return { code: 0, fehler: '' };
     },
@@ -41,6 +42,7 @@ function aufbauen(t) {
     },
     ordner: () => ordner,
     log: () => {},
+    ...extra,
   };
   const verw = new InstrumentWirte(dep, { pollMs: 15, zustandRuheMs: 60, fensterMs: 100, endeMs: 300, sockMs: 600 });
   t.after(() => verw.halt());
@@ -119,4 +121,12 @@ test('the same plugin moved to another slot: the state file stays in place (noth
   assert.deepEqual(z.lage(), [['s1', 'bereit', null]]);
   assert.equal(fs.readFileSync(z.datei, 'utf8'), z.kennungen.A, 'the track keeps its state file at the path the project names');
   assert.deepEqual(fs.readdirSync(path.dirname(z.datei)).filter((f) => f.endsWith('.alt')), [], 'no file was put aside');
+});
+
+test('a later VST3 class starts its host with @<klasse>', async (t) => {
+  const gestartet = [];
+  const z = aufbauen(t, { klasse: () => 5, gestartet });
+  await z.start(z.geraetA);
+  assert.deepEqual(z.lage(), [['s1', 'bereit', null]]);
+  assert.deepEqual(gestartet, [`plugin:${hostSpec(z.geraetA.plugin)}@5`]);
 });

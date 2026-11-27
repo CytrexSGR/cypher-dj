@@ -1,6 +1,7 @@
 // Bereich proj (Spec D1 3.4, Paket S2): Projekt-API des Seiten-Servers. Dockt nur über den BereichKontext und den Haken ereignis an
 // (Spec 2.10), nie an Innereien der Oberflaeche. Schutz wie Bestand: POST nur JSON und eigene Herkunft (Router, fremdePost), Quelle aus
 // x-djk-quelle (ctx.quelle(), zu Beginn der Anfrage gelesen), KI-Stopp sperrt Cyphers Schreiben (Sitzung). Körperlimit 1 MiB.
+import type { AbMarkeZugang } from './master_ab_marker.ts';
 import type http from 'node:http';
 import type { Bereich, BereichKontext, Route } from '../../http/router.ts';
 import type { SicherGrund } from '../../plugins/state.ts';
@@ -44,6 +45,12 @@ export interface ProjZugang {
   // SEQ deck: the session's own POST /proj/aendern ({rev, label, befehle}); gates, lock, undo and core load apply
   aendern(d: Record<string, unknown>, quelle: 'andreas' | 'cypher'): Promise<Antwort>;
   stemsStand(s: Record<string, unknown> | null): void;   // Slice 6 (P6): letzter Stems-Stand
+  // note editor (slice 1, B4): true when every note edit of the open project is rendered; the export waits for it
+  notenBereit?(fristMs: number): Promise<boolean>;
+  notenExakt?(): boolean;   // B4: the last translation for a file view (export) gave every clip with note targets its exact render; asked right after it
+  // B4: the reason of a note render that will not come (noten_programm_fehlt, noten_render_fehler, noten_kurve_fehlt), else null
+  notenFehlerGrund?(): string | null;
+  notenStand(s: Record<string, unknown> | null): void;   // note editor (slice 1, B2): last state of the note detection, GET /proj/aktuell noten
   beiSchliessen(f: (slug: string) => void): void;        // Slice 6 (T7): ruft f, sobald das offene Projekt geschlossen wird (Wechsel, Neuöffnen)
   // B11: f(slug) after every successful open, f(null) after a close on purpose (the rescue of left run files hangs here)
   beiOffen?(f: (slug: string | null) => void): void;
@@ -55,6 +62,7 @@ export interface ProjZugang {
   // 1.8 S3 (D13): ruft f(projekt) synchron nach jeder Zuweisung des offenen Projekts (Öffnen, Ändern, Undo/Redo, Hand-Rückweg, Mixer nach Wiederanlauf,
   // Übernahme von Freeze und Aufnahme) und am Ende von nachNeustart. f darf nicht werfen; ein Fehler wird protokolliert.
   beiStand(f: (p: Projekt) => void): void;
+  beiNeustart?(f: () => void): void;   // f() at the start of the handling of a core restart (the core then gets the project's values anyway)
   hostZustandSichern?(grund: SicherGrund): Promise<void>;   // plan 1.11 D8: the plugin states are written (before an export), at most 3 s
   hostLage?(): { insert_id: string; status: string; grund?: string }[];   // plan 1.11 T13: the host manager's states
   hostGesundAlterMs?(nur?: ReadonlySet<string>): number;   // plan 1.11 T13: ms since the last health rise of those hosts (export waits for 1.1 s)
@@ -64,6 +72,9 @@ export interface ProjZugang {
   // effect when there is no core connection
   // faderDb (level match): the track fader row spur/<nr>/fader is written in the same batch; a refusal that touches only that row is ignored
   hoereBk?(spurId: string, werte: Readonly<Record<string, number>>, quelle: 'andreas' | 'cypher', faderDb?: number): Promise<void>;
+  // master A/B: sets the transient core rows pm/fader and the switches ins/<art>/<slot>/an of master insert stages, no project write
+  masterAbMarke?: AbMarkeZugang;   // the marker file of a running master A/B (a restart of the page server reads it)
+  hoereMaster?(zeilen: readonly { pfad: string; wert: number }[], quelle: 'andreas' | 'cypher'): Promise<void>;
 }
 export const KOERPER_MAX = 1024 * 1024;   // Spec 3.4: 1 MiB
 
@@ -142,14 +153,16 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
     sperreLaden: (fuer) => s.sperreLaden(fuer), ausgabeLauf: (l) => s.setzeAusgabeLauf(l),
     transport: (d, quelle) => s.transport(d, quelle),
     aendern: (d, quelle) => s.aendern(d, quelle), aufnahmeLauf: (l) => s.setzeAufnahmeLauf(l), aufnahmeAktiv: () => s.aufnahmeAktiv(),
-    stemsStand: (x) => s.setzeStemsStand(x), beiSchliessen: (f) => s.beiSchliessen(f), beiOffen: (f) => s.beiOffen(f),
+    stemsStand: (x) => s.setzeStemsStand(x), notenStand: (x) => s.setzeNotenStand(x), notenBereit: (f) => s.notenBereit(f), notenExakt: () => s.notenExakt(),
+      notenFehlerGrund: () => s.notenFehlerGrund(), beiSchliessen: (f) => s.beiSchliessen(f), beiOffen: (f) => s.beiOffen(f),
       beendeVorhoeren: () => s.beendeVorhoeren(),
-    beiStand: (f) => s.beiStand(f),
+    beiStand: (f) => s.beiStand(f), beiNeustart: (f) => s.beiNeustart(f),
     wirtSpiegel: () => s.wirtSpiegel(),
     hostZustandSichern: (grund) => s.hostZustandSichern(grund),
     hostLage: () => s.hostLage(), hostGesundAlterMs: (nur) => s.hostGesundAlterMs(nur),
     ladeEchtzeitSicht: (p) => s.ladeEchtzeitSicht(p), ladeLiveNeu: () => s.ladeLiveNeu(),
     hoereBk: (spurId, werte, quelle, faderDb) => s.hoereBk(spurId, werte, quelle, faderDb),
+    hoereMaster: (zeilen, quelle) => s.hoereMaster(zeilen, quelle), masterAbMarke: s.masterAbMarke,
   };
   const antworte = async (a: http.ServerResponse, f: () => Antwort | Promise<Antwort>): Promise<void> => {
     let r: Antwort;
@@ -268,6 +281,14 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
           await antworte(a, async () => s.insertParam(id, await leseKoerper(q), quelle));
         },
       },
+      // strand 2 task 2.4: MIDI learn for a plugin parameter (Andreas only, checked in the session)
+      ...(['lernen', 'lernen/loeschen'] as const).map((was): Route => ({
+        methode: 'POST', pfad: (pfad: string) => new RegExp(`^/proj/insert/[A-Za-z][A-Za-z0-9_-]{0,31}/${was}$`).test(pfad), schutz: 'fremdePost',
+        handler: async (q, a, url) => {
+          const quelle = ctx.quelle(), id = url.pathname.split('/')[3];
+          await antworte(a, async () => (was === 'lernen' ? s.insertLernen : s.insertLernenLoeschen).call(s, id, await leseKoerper(q), quelle));
+        },
+      })),
       // MIDI import (spec 2026-11-10-midi-import): the file as base64 or a path, preview or import in ONE history step; its own body limit for the file
       {
         methode: 'POST', pfad: '/proj/midi_import', schutz: 'fremdePost',

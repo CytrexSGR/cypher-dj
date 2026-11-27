@@ -6,7 +6,7 @@ import { ZIELE, DECKS, art, GRIFF, griffZuMidi, midiRoh, wertAusMidi, formatiere
 test('Ziel-Liste: container strips A..D (11 rows each), player keys of decks 1..4, stream alias strips (10 rows each), plus xfader, master/pegel, cue/mix, cue/pegel', () => {
   // 1646 before the container core; minus deck/3 and deck/4 strips and the erz/1..3 and pad strips of the old model, plus 4 x 11 containers, 4 x 2 keys, 8 streams x 10 alias rows (132 strip rows), 14 x 64 graph knobs (896)
   // re-measured at the integration (X1), by prefix: deck 158 + pad 150 + erz 592 (8 streams x 74) + xfader 1 + master 67 + cue 2 + spur 768 (32 x (16 rows + 8 sends), the 16 rows with the FX 1 2 3 assign rows of the loop lane strip) + grp 208 + pm 1 + ret 88 + fx 128 (graph knobs of fx/3 and fx/4), measured with the container-core ZIELE table
-  assert.equal(ZIELE.size, 2163);
+  assert.equal(ZIELE.size, 4467);
   for (const p of ['deck/1/fader', 'deck/2/eq/tief', 'deck/1/kill/hoch', 'deck/2/play', 'deck/1/cue', 'xfader',
     'deck/1/pfl', 'deck/2/pfl', 'master/pegel', 'master/kleber', 'cue/mix', 'cue/pegel', 'erz/1/fader']) assert.ok(ZIELE.has(p), p);
 });
@@ -133,12 +133,12 @@ test('K2 Kleber: linear 0..1 (u = Wert), Vorgabe 0 = aus, Anzeige OFF / Prozent'
   assert.equal(formatiere('master/kleber', 0.55), '55%');
 });
 
-test('D1 K1: Spur-Regler spur/1..32 in der Ziel-Liste, Kurven wie der Kern (fader K_FADER, pan linear −1..1, Schalter)', () => {
-  for (const n of [1, 8, 9, 20, 32]) for (const p of ['fader', 'pan', 'mute', 'solo']) assert.ok(ZIELE.has(`spur/${n}/${p}`), `spur/${n}/${p}`);   // spur/1/trim is a row of the K7 track mixer now, so the negative control uses a name no row has
-  assert.ok(!ZIELE.has('spur/33/fader') && !ZIELE.has('spur/0/fader') && !ZIELE.has('spur/1/bogus'));   // n+1 und 0 fehlen
-  assert.equal(art('spur/32/fader'), 'spur_fader');   // zweistellig: die Zahl ist keine Fangruppe, die Art liest das Feld
+test('D1 K1: Spur-Regler spur/1..128 in der Ziel-Liste, Kurven wie der Kern (fader K_FADER, pan linear −1..1, Schalter)', () => {
+  for (const n of [1, 8, 9, 20, 32, 33, 128]) for (const p of ['fader', 'pan', 'mute', 'solo']) assert.ok(ZIELE.has(`spur/${n}/${p}`), `spur/${n}/${p}`);   // spur/1/trim is a row of the K7 track mixer now, so the negative control uses a name no row has
+  assert.ok(!ZIELE.has('spur/129/fader') && !ZIELE.has('spur/0/fader') && !ZIELE.has('spur/1/bogus'));   // n+1 und 0 fehlen
+  assert.equal(art('spur/128/fader'), 'spur_fader');   // zweistellig: die Zahl ist keine Fangruppe, die Art liest das Feld
   assert.equal(art('spur/20/mute'), 'schalter');
-  assert.equal(art('spur/33/fader'), null);
+  assert.equal(art('spur/129/fader'), null);
   assert.equal(art('spur/3/fader'), 'spur_fader');   // eigene Art: Bereich −200..+6 (Spec 6.16)
   assert.equal(art('spur/3/pan'), 'pan');
   assert.equal(art('spur/3/mute'), 'schalter');

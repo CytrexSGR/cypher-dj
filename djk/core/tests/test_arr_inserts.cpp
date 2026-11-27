@@ -228,20 +228,36 @@ int main() {
 
   if (!ALLOC_ABFANG_VERFUEGBAR) {
     std::printf("6 skipped (sanitizer build): allocation watcher not available\n");
-  } else {  // 6 keine_allokation (AK-S4-6): 2000 blocks with the 12 stages of the pool in use, two swaps, no allocation; positive control: construction counts
+  } else {  // 6 keine_allokation (AK-S4-6): 2000 blocks with 22 compressors, an EQ and a utility of the pool in use, two swaps, no allocation; positive control: construction counts
+    // Strand 1 slice 3b: the pool holds 160 compressors and 160 EQs (376 slots since slice 4, six mask words), too many to place cheaply in this fixture. It places KOMP_GESETZT
+    // compressors instead, and chooses them so that claims, tails and the no-allocation check cross the word boundaries of the slot masks: slots 0..11 (word 0),
+    // the highest compressor slots 159..150 (global 150..159: word 2), the highest EQ (global 319: word 4) and the highest utility (global INS_G_UTIL0 + 7 = 339 since strand 1 slice 4: word 5).
+    constexpr int KOMP_GESETZT = 22;
+    constexpr int KOMP_PLATZ[KOMP_GESETZT] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 159, 158, 157, 156, 155, 154, 153, 152, 151, 150};   // 0-based compressor slots
+    static_assert(cdj::ARR_INS_KOMP == 160, "this fixture places the highest compressor slots 150..159 on groups 2 and 3");
+    constexpr int EQ_PLATZ = cdj::ARR_INS_EQ - 1, UTIL_PLATZ = cdj::ARR_INS_UTIL - 1;
+    const int g_eq = cdj::ins_global(ArrInsArt::eq, EQ_PLATZ), g_util = cdj::ins_global(ArrInsArt::utility, UTIL_PLATZ);
+    PRUEF(g_eq >= 256 && g_util >= 320 && KOMP_PLATZ[12] >= 128);   // the placed stages reach mask words 2, 4 and 5 (strand 1 slice 3b)
     TR(t)
-    for (int k = 1; k <= cdj::ARR_INS_KOMP; ++k) komp_ein(t, k);
+    for (int k : KOMP_PLATZ) komp_ein(t, k + 1);
+    setze(t, ("ins/eq/" + std::to_string(EQ_PLATZ + 1) + "/an").c_str(), 1.0f);
+    setze(t, ("ins/utility/" + std::to_string(UTIL_PLATZ + 1) + "/an").c_str(), 1.0f);
     setze(t, "ins/komp/1/sc", 2.0f);   // one stage takes the key of track 2: the key path (plan, copy, block_sc) is under the counting allocator too
     auto bau = [&](int64_t nr, int versatz) {
       Bau b(nr);
       for (int sp = 1; sp <= 8; ++sp) {
         const std::string id = "c" + std::to_string(sp);
         b.spur(sp, ArrArt::audio).clip(sp, id.c_str(), 0.0, 8.0, &sinus->a);
-        if (sp <= 2) b.ausgang(sp, 1);
-        b.kette(sp, {ArrStufe{ArrInsArt::komp, static_cast<uint8_t>((sp - 1 + versatz) % 8), true}});
+        if (sp <= 6) b.ausgang(sp, (sp + 1) / 2);   // tracks 1,2 -> group 1, 3,4 -> group 2, 5,6 -> group 3: every group chain gets signal
+        const ArrStufe k{ArrInsArt::komp, static_cast<uint8_t>((sp - 1 + versatz) % 8), true};
+        if (sp == 8) b.kette(sp, {k, ArrStufe{ArrInsArt::eq, static_cast<uint8_t>(EQ_PLATZ), true}, ArrStufe{ArrInsArt::utility, static_cast<uint8_t>(UTIL_PLATZ), true}});
+        else b.kette(sp, {k});
       }
-      b.gruppen_kette(1, {ArrStufe{ArrInsArt::komp, 8, true}, ArrStufe{ArrInsArt::komp, 9, true}, ArrStufe{ArrInsArt::komp, 10, true},
-                          ArrStufe{ArrInsArt::komp, 11, true}});
+      auto st = [&](int i) { return ArrStufe{ArrInsArt::komp, static_cast<uint8_t>(KOMP_PLATZ[i]), true}; };
+      b.gruppen_kette(1, {st(8), st(9), st(10), st(11)});
+      // pool raise to 22 compressors (strand 1 slice 1): ten more slots sit on two more group chains of five stages each; since slice 3b these are the slots 159..150 (95..86 in slice 3)
+      b.gruppen_kette(2, {st(12), st(13), st(14), st(15), st(16)});
+      b.gruppen_kette(3, {st(17), st(18), st(19), st(20), st(21)});
       return b.fertig();
     };
     cdj::ArrSnapshot* s0 = bau(1, 0);
@@ -263,12 +279,14 @@ int main() {
       for (auto& x : b) std::fill(x, x + 256, 0.0f);
       t.arr.block(t.k, s, 256, b[0], b[1], b[2], b[3], b[4], b[5]);
       s += 256;
-      for (int k = 0; k < cdj::ARR_INS_KOMP; ++k) gr_max = std::max(gr_max, t.arr.inserts().gr_db(k));
+      for (int k : KOMP_PLATZ) gr_max = std::max(gr_max, t.arr.inserts().gr_db(k));
     }
     im_fenster = abfang_aus();
     std::printf("6: allocations in 2000 blocks = %ld, largest gain reduction %.2f dB\n", im_fenster, gr_max);
     PRUEF(im_fenster == 0);
-    for (int k = 0; k < cdj::ARR_INS_KOMP; ++k) PRUEF(t.arr.inserts().lief(k));   // all 12 pool stages ran in the last block, not just one
+    for (int k : KOMP_PLATZ) PRUEF(t.arr.inserts().lief(k));   // all placed compressors ran in the last block, not just one
+    PRUEF(t.arr.inserts().lief(g_eq) && t.arr.inserts().lief(g_util));   // and the EQ and utility in mask words 4 and 5
+    PRUEF(!t.arr.inserts().lief(cdj::ins_global(ArrInsArt::komp, 50)));   // negative control: an unplaced compressor did not run
     PRUEF(gr_max > 3.0f);                       // the stages really ran (0 allocations of an empty run prove nothing)
     for (const cdj::ArrSnapshot* x : alt) delete x;
     abfang_an();
@@ -326,7 +344,7 @@ int main() {
     PRUEF(grund(72, ",\"chain\":[{\"art\":\"eq\",\"slot\":1},{\"art\":\"eq\",\"slot\":1}]") == "format");                // the same eq slot twice
     PRUEF(grund(73, ",\"chain\":[{\"art\":\"eq\",\"slot\":1},{\"art\":\"saett\",\"slot\":1}," + st + "1}," + st + "12}]") == "+snap");   // one slot 1 of each kind: three kinds do not collide
     PRUEF(grund(74, ",\"chain\":[{\"art\":\"saett\",\"slot\":0}]") == "format");
-    PRUEF(grund(63, ",\"chain\":[" + st + "13}]") == "format");
+    PRUEF(grund(63, ",\"chain\":[" + st + std::to_string(cdj::ARR_INS_KOMP + 1) + "}]") == "format");   // one beyond the compressor pool
     PRUEF(grund(64, ",\"chain\":[" + st + "0}]") == "format");
     PRUEF(grund(65, ",\"chain\":[" + st + "2}," + st + "2}]") == "format");                                           // one slot, two stages
     PRUEF(grund(66, ",\"chain\":[" + st + "12}]") == "+snap");                                                           // the last slot is fine

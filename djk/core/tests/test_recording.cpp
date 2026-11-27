@@ -1,7 +1,9 @@
 // 1.8 Task 22: Modul Aufnahme. Einsatz und Ende kommen aus der Arrangement-Lage; der Abgriff ist bitgleich; Lücken-Zähler; Ablehnungen.
 #include <cstring>
+#include <initializer_list>
 #include <vector>
 
+#include "cypherdj/arr_maske.h"
 #include "cypherdj/recording.h"
 #include "check.h"
 
@@ -11,6 +13,13 @@ using cdj::AufnahmeMeldung;
 using cdj::RecSpur;
 using cdj::RecMidi;
 using cdj::MidiEinEreignis;
+using SpurMaske = cdj::ArrMaske<cdj::ARR_SPUREN>;
+
+static SpurMaske spuren(std::initializer_list<int> nr) {   // the arm mask of these tracks (bit = nr - 1)
+  SpurMaske m;
+  for (int n : nr) m.setze(n - 1);
+  return m;
+}
 
 static float sig_l(int64_t s) { return 0.0001f * static_cast<float>(s % 9973 + 1); }
 static float sig_r(int64_t s) { return -sig_l(s) * 0.5f; }
@@ -384,17 +393,19 @@ int main() {
     Aufnahme b;
     RecMidi* m1 = RecMidi::neu();
     RecMidi* m2 = RecMidi::neu();
-    PRUEF(b.midi_scharf() == 0 && b.midi_maske() == 0u && b.midi_spur() == nullptr);
+    PRUEF(b.midi_scharf() == 0 && b.midi_maske().leer() && b.midi_spur() == nullptr);
     PRUEF(b.setze_midi(3, true, m1) == nullptr);
-    PRUEF(b.midi_scharf() == 1 && b.midi_maske() == (1u << 2) && b.midi_spur() == m1 && b.scharf() == 0);   // no RecSpur, the audio count stays 0
+    PRUEF(b.midi_scharf() == 1 && b.midi_maske() == spuren({3}) && b.midi_spur() == m1 && b.scharf() == 0);   // no RecSpur, the audio count stays 0
     PRUEF(b.setze_midi(5, true, m2) == m2);                       // not adopted: the caller frees it
-    PRUEF(b.midi_scharf() == 2 && b.midi_maske() == ((1u << 2) | (1u << 4)) && b.midi_spur() == m1);
+    PRUEF(b.midi_scharf() == 2 && b.midi_maske() == spuren({3, 5}) && b.midi_spur() == m1);
     PRUEF(b.setze_midi(3, false, nullptr) == nullptr);            // another bit is still set: the recorder stays
-    PRUEF(b.midi_scharf() == 1 && b.midi_maske() == (1u << 4) && b.midi_spur() == m1);
+    PRUEF(b.midi_scharf() == 1 && b.midi_maske() == spuren({5}) && b.midi_spur() == m1);
     PRUEF(b.setze_midi(5, false, nullptr) == m1);                 // last bit gone: the RecMidi comes back
-    PRUEF(b.midi_scharf() == 0 && b.midi_maske() == 0u && b.midi_spur() == nullptr);
+    PRUEF(b.midi_scharf() == 0 && b.midi_maske().leer() && b.midi_spur() == nullptr);
     PRUEF(b.setze_midi(0, true, m2) == m2 && b.setze_midi(cdj::ARR_SPUREN + 1, true, m2) == m2 && b.midi_scharf() == 0);   // out of range
-    PRUEF(b.setze_midi(cdj::ARR_SPUREN, true, m2) == nullptr && b.midi_maske() == (1u << (cdj::ARR_SPUREN - 1)));   // the last track is bit 31
+    PRUEF(b.setze_midi(cdj::ARR_SPUREN, true, m2) == nullptr && b.midi_maske().test(cdj::ARR_SPUREN - 1));   // the last track is bit ARR_SPUREN-1
+    PRUEF(b.setze_midi(1, true, nullptr) == nullptr && b.midi_scharf() == 2 && b.midi_maske() == spuren({1, cdj::ARR_SPUREN}));   // first and last track
+    PRUEF(b.setze_midi(1, false, nullptr) == nullptr && b.midi_scharf() == 1);
     PRUEF(b.setze_midi(cdj::ARR_SPUREN, false, nullptr) == m2);
     PRUEF(b.setze_midi(2, false, nullptr) == nullptr);            // clearing a bit that was never set changes nothing
     RecMidi::frei(m1);

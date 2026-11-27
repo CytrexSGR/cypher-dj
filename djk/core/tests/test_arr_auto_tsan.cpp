@@ -1,6 +1,6 @@
 // Automation slice 1 (task 8 step 3; slice 2 task 8 adds pan, mute, solo and geraet.* lanes): the lane swap over three threads as in operation. The net thread (Netz::laufen), the core thread (Kern::zyklus, the audio
 // callback) and the arrangement load thread (ArrLader::laufen) run at the same time; the plan goes over the SPSC rings only (loader -> net -> core). While the
-// transport plays in a loop, 40 playbacks with 8 fader lanes each (and a jump), pan, mute, solo and geraet.* lanes replace one another, so the lane snapshot is swapped under the running callback.
+// transport plays in a loop, 40 playbacks with 8 fader lanes each (and send.1/send.2 lanes into two returns) (and a jump), pan, mute, solo and geraet.* lanes replace one another, so the lane snapshot is swapped under the running callback.
 // Under ThreadSanitizer (own build with -DCYPHERDJ_TSAN=ON, target test_arr_auto_tsan) TSan reports nothing; the control is test_freeze_tsan_ohne_ring in the
 // same build (a deliberate data race IS reported there, so the instrument is not blind). Without TSan the test runs as a plain three-thread check.
 #include <cstdio>
@@ -30,6 +30,7 @@ int main() {
     c.insert(c.size() - 1, hk);
     return c;
   };
+  const std::string returns = "{\"nr\":1,\"ausgang\":{\"art\":\"master\"}},{\"nr\":2,\"ausgang\":{\"art\":\"master\"}}";   // the returns the send lanes feed
   auto spuren = [&](int variante) {
     std::string s;
     for (int nr = 1; nr <= 8; ++nr) {
@@ -43,6 +44,9 @@ int main() {
            // 1.12 slice 5 U9: the value stack, a relative fader lane on every track and a relative pan lane on the even ones (swapped with the rest)
            "," + arrdatei::Ordner::auto_lane_rel({{0.0, -3.0, 0}, {4.0, -6.0 - 0.5 * (variante % 4), 1}, {8.0, -1.0, 0}}) +
            (nr % 2 == 0 ? "," + arrdatei::Ordner::auto_lane_rel({{0.0, 0.2, 0}, {4.0, -0.3 + 0.1 * (variante % 3), 0}, {8.0, 0.4, 0}}, "pan") : std::string()) +
+           // send automation, task 1: a send.1 lane on every track (swapped with the rest while it plays, the loop jumps back over its ramp) and a send.2 lane on the odd ones
+           "," + arrdatei::Ordner::auto_lane({{0.0, -40.0 + variante % 7, 0}, {3.0, -6.0 - variante * 0.1, 0}, {5.0, -200.0, 0}, {8.0, 0.0, 0}}, "send.1") +
+           (nr % 2 == 1 ? "," + arrdatei::Ordner::auto_lane({{0.0, -12.0, 0}, {8.0 - (variante % 3), -30.0, 1}}, "send.2") : std::string()) +
            "]}";
     }
     // slice 2: an internal RB-338 track with geraet.* lanes (one block each over the device parameter path of the sink)
@@ -56,7 +60,7 @@ int main() {
          arrdatei::Ordner::auto_lane_rel({{0.0, 0.1, 0}, {8.0, -0.2, 0}}, "geraet.env_mod") + "]}";                           // ... and alone (the sink adds its base value)
     return s;
   };
-  x.ordner.wiedergabe2(1, spuren(0), "");
+  x.ordner.wiedergabe2_ret(1, spuren(0), "", returns);
   x.echtzeit.store(false);
   x.pause_us.store(200);
   auto werk = cdj::warp_werk_neu({2});
@@ -78,7 +82,7 @@ int main() {
   }
   int geladen = 0;
   for (int n = 2; n <= 41; ++n) {   // each swap goes the whole way: file, load thread, net thread, ring, core thread at a block boundary
-    x.ordner.wiedergabe2(n, spuren(n), "");
+    x.ordner.wiedergabe2_ret(n, spuren(n), "", returns);
     const int64_t q = x.laden(n);
     if (x.warte_q(q, 3, 20000) >= 0) ++geladen;
     x.sammeln(5);

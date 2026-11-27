@@ -5,7 +5,8 @@ import { installiere } from './helpers/pages_mock.mjs';
 
 installiere();
 const { plusEintraege, PLUS_VOLL_TEXT } = await import('../public/dock/plus.js');
-const { ARTEN, HOST_ART, MAX_PLAETZE } = await import('../public/production/inserts.js');
+const { ARTEN, HOST_ART, MAX_PLAETZE, MAX_KOMP, MAX_EQ, MAX_SAETT, MAX_LIM, MAX_UTIL, MAX_GATE, MAX_MB } = await import('../public/production/inserts.js');
+const { INSERT_ARTEN } = await import('../project/insert_key.ts');
 const { MAX_HOST } = await import('../public/production/limits.js');
 const { duckBefehl } = await import('../public/production/key_choice.js');
 
@@ -21,25 +22,41 @@ const PLUGINS = [
 
 test('plusEintraege with no options keeps the STUDIO list', () => {
   const e = plusEintraege(projekt([spur(1)]), 's1', GRAPHEN);
-  assert.deepEqual(e.map((x) => x.text), ['Compressor', 'EQ', 'Saturator', 'Limiter', 'fx-delay-sync', 'fx-plate']);
+  assert.deepEqual(e.map((x) => x.text), ['Compressor', 'EQ', 'Saturator', 'Limiter', 'Gate', 'Multiband', 'fx-delay-sync', 'fx-plate']);
   assert.deepEqual(e[1].befehl, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'eq' });
 });
 
 test('util and zaehler: Utility after Limiter and the used/max counts', () => {
   const p = projekt([spur(1, [ins('k1', 'komp', 1)])]);
   const e = plusEintraege(p, 's1', GRAPHEN, { util: true, zaehler: true });
-  assert.deepEqual(e.slice(0, 5).map((x) => x.text), ['Compressor 1/12', 'EQ 0/8', 'Saturator 0/4', 'Limiter 0/2', 'Utility 0/8']);
+  assert.deepEqual(e.slice(0, 5).map((x) => x.text), [`Compressor 1/${MAX_KOMP}`, `EQ 0/${MAX_EQ}`, `Saturator 0/${MAX_SAETT}`, `Limiter 0/${MAX_LIM}`, `Utility 0/${MAX_UTIL}`]);
   assert.deepEqual(e[4].befehl, { befehl: 'insert_setzen', strang_id: 's1', pos: 1, art: 'utility' });
+  assert.deepEqual(e.slice(5, 7).map((x) => x.text), [`Gate 0/${MAX_GATE}`, `Multiband 0/${MAX_MB}`], 'gate and multiband follow the utility');
+  assert.deepEqual(e[5].befehl, { befehl: 'insert_setzen', strang_id: 's1', pos: 1, art: 'gate' });
+  assert.deepEqual(e[6].befehl, { befehl: 'insert_setzen', strang_id: 's1', pos: 1, art: 'mb' });
+});
+
+test('the + menu lists Gate and Multiband with the contract pools, a full pool greys only its own entry', () => {
+  const e0 = plusEintraege(projekt([spur(1)]), 's1', [], { zaehler: true });
+  assert.deepEqual(e0.slice(4, 6).map((x) => x.text), [`Gate 0/${INSERT_ARTEN.gate.instanzen}`, `Multiband 0/${INSERT_ARTEN.mb.instanzen}`]);
+  const mbs = Array.from({ length: MAX_MB }, (_, i) => ins(`m${i}`, 'mb', i + 1));
+  const spuren = Array.from({ length: Math.ceil(MAX_MB / MAX_PLAETZE) }, (_, k) => spur(k + 1, mbs.slice(k * MAX_PLAETZE, (k + 1) * MAX_PLAETZE)));
+  const e = plusEintraege(projekt([...spuren, spur(spuren.length + 1)]), `s${spuren.length + 1}`, [], { zaehler: true });
+  const mb = e.find((x) => x.text === `Multiband ${MAX_MB}/${MAX_MB}`);
+  assert.equal(mb.befehl, null); assert.equal(mb.grund, ARTEN.mb.voll);
+  assert.notEqual(e.find((x) => x.text === `Gate 0/${MAX_GATE}`).befehl, null, 'negative control: the gate is still offered');
 });
 
 test('a full pool greys its entry with the pool text', () => {
-  const eqs = Array.from({ length: 8 }, (_, i) => ins(`e${i}`, 'eq', i + 1));
-  const p = projekt([spur(1, eqs.slice(0, 4)), spur(2, eqs.slice(4)), spur(3)]);
-  const e = plusEintraege(p, 's3', GRAPHEN, { zaehler: true });
-  const eq = e.find((x) => x.text === 'EQ 8/8');
+  const eqs = Array.from({ length: MAX_EQ }, (_, i) => ins(`e${i}`, 'eq', i + 1));
+  const kette = Array.from({ length: Math.ceil(MAX_EQ / MAX_PLAETZE) }, (_, k) => spur(k + 1, eqs.slice(k * MAX_PLAETZE, (k + 1) * MAX_PLAETZE)));
+  const frei = kette.length + 1;
+  const p = projekt([...kette, spur(frei)]);
+  const e = plusEintraege(p, `s${frei}`, GRAPHEN, { zaehler: true });
+  const eq = e.find((x) => x.text === `EQ ${MAX_EQ}/${MAX_EQ}`);
   assert.equal(eq.befehl, null);
   assert.equal(eq.grund, ARTEN.eq.voll);
-  assert.notEqual(e.find((x) => x.text === 'Compressor 0/12').befehl, null);
+  assert.notEqual(e.find((x) => x.text === `Compressor 0/${MAX_KOMP}`).befehl, null);
 });
 
 test('a strip with five stages greys every entry with the strip text', () => {

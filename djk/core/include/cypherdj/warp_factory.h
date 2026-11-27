@@ -34,7 +34,7 @@
 
 namespace cdj {
 
-constexpr int ARR_WARP_PLAETZE = 64;        // Stimmen im Pool (32 Spuren, an Nähten und Tauschen kurzzeitig zwei je Clip; reicht er nicht, gilt die Regel bei vollem Pool in werk_decken)
+constexpr int ARR_WARP_PLAETZE = 64;        // Stimmen im Pool (64 Plätze; bei mehr als 64 gleichzeitig warpenden Clips fällt der Rest auf RE-PITCH zurück, gezählt in warp_kein_platz_; an Nähten und Tauschen kurzzeitig zwei je Clip, die Regel bei vollem Pool steht in werk_decken)
 constexpr int ARR_WARP_FRIST = 2048;        // Samples, die ein Auftrag vor seinem Ziel-Sample im Werk liegen muss (43 ms)
 constexpr int ARR_WARP_VORLAUF = 8192;      // Frames, die der Ring dem Callback voraus ist (171 ms)
 constexpr int WARP_BLOCK = 256;             // Frames je Ringabschnitt

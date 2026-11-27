@@ -33,9 +33,13 @@ uint64_t ArrHostStufe::wachter_zaehler() const noexcept {
 }
 
 void ArrHostStufe::block(int h, const float* ein_l, const float* ein_r, float* aus_l, float* aus_r, int m, int latenz, bool an, bool gesund,
-                         float* trocken_l, float* trocken_r, bool drin) noexcept {
+                         float* trocken_l, float* trocken_r, bool drin, const float* sch_l, const float* sch_r) noexcept {
   if (h < 1 || h > ARR_INS_HOST || m <= 0) return;
   Wirt& w = h_[h - 1];
+  if (sch_l && sch_r && w.key_l && w.key_r) {   // strand 2 task 3.3: the key goes out unchanged; it never meets the strip signal
+    std::memcpy(w.key_l, sch_l, sizeof(float) * static_cast<size_t>(m));
+    std::memcpy(w.key_r, sch_r, sizeof(float) * static_cast<size_t>(m));
+  }
   constexpr int MASKE = ARR_HOST_LAT_MAX - 1;
   const int n = std::clamp(latenz, 0, ARR_HOST_LAT_MAX - 1);
   const bool rueck_da = w.rueck_l && w.rueck_r;

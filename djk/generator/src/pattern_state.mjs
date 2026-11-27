@@ -17,7 +17,15 @@ export function leseMusterStand(ordner) {
   const text = lies(path.join(ordner, 'strom1.js'));
   const von = liesJson(path.join(ordner, 'strom1.von.json'));
   return { text: text === null ? '' : text.replace(/\n$/, ''), von: von?.von ?? null, zeit: von?.zeit ?? null,
+    bezeichnung: typeof von?.bezeichnung === 'string' ? von.bezeichnung : null,
     status: liesJson(path.join(ordner, 'status.json')), autonom: autonomAn(ordner) };
+}
+
+// Phase offset of the pattern (task 5.1): top-level `versatz` (integer cycles, default 0) of strom1.von.json, which is written
+// together with the text. A pattern written without the field resets it to 0.
+export function leseVersatz(ordner) {
+  const v = liesJson(path.join(ordner, 'strom1.von.json'))?.versatz;
+  return Number.isInteger(v) ? v : 0;
 }
 
 export function schreibeStatus(ordner, stand, zeit = Date.now()) {

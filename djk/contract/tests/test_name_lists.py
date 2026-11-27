@@ -37,7 +37,7 @@ def kopie(tmp_path, quelldateien):
     return tmp_path
 
 
-ZWEIFACH = ('Rolle::snd_spur, -200, 6, -200,', '{"decay", Rolle::ret_hall_decay, 0.5252f}')   # controls.cpp builds returns 1..4 and 5..8 in two blocks (container core K6)
+ZWEIFACH = ('{"decay", Rolle::ret_hall_decay, 0.5252f}',)   # controls.cpp builds returns 1..4 and 5..8 in two blocks (container core K6); snd_spur is built once (a loop since 128 tracks)
 
 
 def mutiere(wurzel: Path, rel: str, alt: str, neu: str) -> None:
@@ -92,7 +92,7 @@ MUTATIONEN = [
     (SERVER_TS, VIER_TASTEN, VIER_TASTEN.replace("]", ", 'bogus']"), "T09 server.ts TASTEN steht ohne Vertrag: bogus"),
     (SERVER_TS, VIER_TASTEN, VIER_TASTEN.replace("]", ", 'autonomie']"),
      "Annahme-Weg: server.ts lässt Encoder-Taste autonomie zu, der Kern lehnt sie ab (hand_in.h)"),
-    ("djk/ui/public/stream.js", "'stopp', 'freigabe']) $(`#t-", "'stopp']) $(`#t-", "Annahme-Weg: server.ts ['annehmen', 'verwerfen', 'stopp', 'freigabe'] != app.js ['annehmen', 'verwerfen', 'stopp']"),
+    ("djk/ui/public/stream.js", "['stopp', true], ['freigabe', false]]) {", "['stopp', true]]) {", "Annahme-Weg: server.ts ['annehmen', 'verwerfen', 'stopp', 'freigabe'] != app.js ['annehmen', 'verwerfen', 'stopp']"),
     ("djk/tools/softcontroller/keyboard.h", "{'Z', \"taste/zuruf\", true, 16, 20, Wirkung::druecken, 0},", "",
      "Softcontroller-Tasten: T11 keyboard.h fehlt: zuruf"),
     # ---- Encoder und /test/hand-Tasten kommen aus hand_in.h, nicht aus einer Abschrift
@@ -128,7 +128,7 @@ MUTATIONEN = [
     (NAMEN_CPP, '{"slip", DeckAktion::slip}', '{"slip", DeckAktion::slip}, {"pfl", DeckAktion::slip}',
      "Ausnahme veraltet (tritt nicht mehr auf, streichen): ('A03 names.cpp', 'pfl')"),
     # ---- Regler-Teil (REGLER, ZIELE, PFAD, Regler-Ziele der Mappings)
-    (VERTRAG_MJS, "'master/kleber': R(LIN, 0, 1, 0, true), ", "",
+    (VERTRAG_MJS, "'master/kleber': R(LIN, 0, 1, 0), ", "",
      "Regler: R04 curves.js ZIELE enthält master/kleber, attrappe REGLER nicht"),
     (VERTRAG_MJS, "'cue/pegel': R(DB", "'cue/pegelx': R(DB",
      "Regler: attrappe REGLER kennt cue/pegelx, R06 hand_bedienung.PFAD lehnt es ab"),
@@ -154,10 +154,10 @@ MUTATIONEN += [
      "Spur-Regler=Kern: R02 INTERFACES §1.5 fehlt: spur/1/solo"),
     ("djk/core/signalbox/src/controls.cpp", '"spur/%d/pan"', '"spur/%d/balance"',
      "Spur-Regler=Kern: R03 Attrappe REGLER steht ohne Vertrag: spur/1/pan"),
-    ("djk/ui/hand_operation.ts", "|^spur\\/([1-9]|[12][0-9]|3[0-2])\\/(fader|pan|mute|solo|filter|", "|^spur\\/([1-9]|[12][0-9]|3[0-2])\\/(fader|mute|solo|filter|",
+    ("djk/ui/hand_operation.ts", "|^spur\\/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])\\/(fader|pan|mute|solo|filter|", "|^spur\\/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])\\/(fader|mute|solo|filter|",
      "Spur-Regler: R06 hand_bedienung.PFAD lehnt spur/1/pan ab"),
-    ("djk/contract/schemas/defs.schema.json", "|spur/([1-9]|[12][0-9]|3[0-2])/(fader|pan|mute|solo|filter|", "|spur/([1-9]|[12][0-9]|3[0-3])/(fader|pan|mute|solo|filter|",
-     "Spur-Regler: R07 defs.schema.json regler_pfad nimmt spur/33/fader an"),
+    ("djk/contract/schemas/defs.schema.json", "|spur/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])/(fader|pan|mute|solo|filter|",
+     "|spur/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-9])/(fader|pan|mute|solo|filter|", "Spur-Regler: R07 defs.schema.json regler_pfad nimmt spur/129/fader an"),
     (VERTRAG_MJS, "'spur_bereich', 'reserviert',", "'spur_bereich',",
      "Gründe: Attrappe GRUENDE fehlt: reserviert"),
     ("djk/core/src/core_arr.cpp", 'case LaunchGrund::nicht_geladen: return ab("nicht_geladen");', 'case LaunchGrund::nicht_geladen: return ab("nicht_geladenx");',
@@ -273,7 +273,8 @@ MUTATIONEN += [
      "for (let n = 2; n <= 16; n++) tabelle.set(`grp/${n}/send/${ret}`", "Return-Regler=Kern: R05 controls_info.ts fehlt: grp/1/send/1"),
     ("djk/ui/hand_operation.ts", "|^ret\\/[1-8]\\/(fader|pan|mute|solo|hall", "|^ret\\/[1-9]\\/(fader|pan|mute|solo|hall",
      "Return-Regler: R06 hand_bedienung.PFAD nimmt ret/9/fader an"),
-    ("djk/contract/schemas/defs.schema.json", "|(spur/([1-9]|[12][0-9]|3[0-2])|grp/([1-9]|1[0-6]))/send/[1-8]|", "|(spur/([1-9]|[12][0-9]|3[0-2])|grp/([1-9]|1[0-6]))/send/[1-9]|",
+    ("djk/contract/schemas/defs.schema.json", "|(spur/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])|grp/([1-9]|1[0-6]))/send/[1-8]|",
+     "|(spur/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])|grp/([1-9]|1[0-6]))/send/[1-9]|",
      "Return-Regler: R07 defs.schema.json regler_pfad nimmt spur/1/send/9 an"),
     ("djk/core/signalbox/src/controls.cpp", "Rolle::snd_spur, -200, 6, -200,", "Rolle::snd_spur, -200, 6, 0,",
      "Return-Bereich=Kern: R03 Attrappe REGLER spur/1/send/1 (min, max, vorgabe)"),
@@ -355,30 +356,30 @@ MUTATIONEN += [
     (SCHEMA, "|makeup|mix|schp|sc)|ins/eq/", "|makeup|mix|sc)|ins/eq/", "Insert-Regler: R07 defs.schema.json regler_pfad lehnt ins/komp/1/schp ab"),
     (INS_MJS, "  ['ins/komp/1/mix', 'lin', 0, 1, 1],\n", "", "Insert-Regler=Kern: R03 Attrappe REGLER fehlt: ins/komp/1/mix"),
     # too many: a 13th instance in a pattern or in a list, a sibling name
-    (HAND_BED, "ins\\/komp\\/([1-9]|1[0-2])\\/", "ins\\/komp\\/([1-9]|1[0-3])\\/", "Insert-Regler: R06 hand_bedienung.PFAD nimmt ins/komp/13/an an"),
-    (SCHEMA, "ins/komp/([1-9]|1[0-2])/", "ins/komp/([1-9]|1[0-3])/", "Insert-Regler: R07 defs.schema.json regler_pfad nimmt ins/komp/13/an an"),
+    (HAND_BED, "ins\\/komp\\/([1-9]|[1-9][0-9]|1[0-5][0-9]|160)\\/", "ins\\/komp\\/([1-9]|[1-9][0-9]|1[0-5][0-9]|161)\\/", "Insert-Regler: R06 hand_bedienung.PFAD nimmt ins/komp/161/an an"),
+    (SCHEMA, "ins/komp/([1-9]|[1-9][0-9]|1[0-5][0-9]|160)/", "ins/komp/([1-9]|[1-9][0-9]|1[0-5][0-9]|161)/", "Insert-Regler: R07 defs.schema.json regler_pfad nimmt ins/komp/161/an an"),
     (SCHEMA, "|makeup|mix|schp|sc)|ins/eq/", "|makeup|mix|schp|sc|zz)|ins/eq/", "Insert-Regler: R07 defs.schema.json regler_pfad nimmt ins/komp/1/zz an"),
-    (INS_MJS, "  ['ins/komp/12/sc', 'stufe', 0, 32, 0],\n", "  ['ins/komp/12/sc', 'stufe', 0, 32, 0],\n  ['ins/komp/13/an', 'schalter', 0, 1, 0],\n",
-     "Insert-Regler=Kern: R03 Attrappe REGLER steht ohne Vertrag: ins/komp/13/an"),
-    (INS_TS, "  ['ins/komp/12/an', 'schalter', 0, 1, 0],\n", "", "Insert-Regler=Kern: R05 controls_info.ts fehlt: ins/komp/12/an"),
+    (INS_MJS, "  ['ins/komp/160/sc', 'stufe', 0, 128, 0],\n", "  ['ins/komp/160/sc', 'stufe', 0, 128, 0],\n  ['ins/komp/161/an', 'schalter', 0, 1, 0],\n",
+     "Insert-Regler=Kern: R03 Attrappe REGLER steht ohne Vertrag: ins/komp/161/an"),
+    (INS_TS, "  ['ins/komp/160/an', 'schalter', 0, 1, 0],\n", "", "Insert-Regler=Kern: R05 controls_info.ts fehlt: ins/komp/160/an"),
     # the contract text and the table
     (SPEC, "| `ins/komp/<n>/knie` |", "| `ins/komp/<n>/knx` |", "Insert-Regler=Kern: R02 INTERFACES §1.5 fehlt: ins/komp/1/knie"),
-    (SPEC, "(n = 1 to 12; package 1.10 slice 4a", "(n = 1 to 11; package 1.10 slice 4a", "Insert-Regler=Kern: R02 INTERFACES §1.5 fehlt: ins/komp/12/an"),
+    (SPEC, "(n = 1 to 160; package 1.10 slice 4a", "(n = 1 to 159; package 1.10 slice 4a", "Insert-Regler=Kern: R02 INTERFACES §1.5 fehlt: ins/komp/160/an"),
     (SPEC, "| `ins/komp/<n>/schwelle` | dB | −60 to 0 | −18 |", "| `ins/komp/<n>/schwelle` | dB | −60 to 0 | −17 |",
      "Insert-Regler: R02 INTERFACES §1.5 Bereich oder Vorgabe von ins/komp/1/schwelle"),
     (INS_INC, '{"ins/komp/1/ratio", Rolle::ins_komp_ratio, 1.0f, 20.0f, 4.0f,', '{"ins/komp/1/ratio", Rolle::ins_komp_ratio, 1.0f, 21.0f, 4.0f,',
      "Insert-Regler: R03 Attrappe REGLER Bereich oder Vorgabe von ins/komp/1/ratio"),
-    (INS_INC, '{"ins/komp/12/sc", Rolle::ins_komp_sc, 0.0f, 32.0f, 0.0f, KurvenTyp::stufen, 0, true},\n',
-     '{"ins/komp/12/sc", Rolle::ins_komp_sc, 0.0f, 32.0f, 0.0f, KurvenTyp::stufen, 0, true},\n'
-     '    {"ins/komp/13/an", Rolle::ins_komp_an, 0.0f, 1.0f, 0.0f, KurvenTyp::schalter, 0, true},\n',
-     "Insert-Regler=Kern: R03 Attrappe REGLER fehlt: ins/komp/13/an"),
+    (INS_INC, '{"ins/komp/160/sc", Rolle::ins_komp_sc, 0.0f, 128.0f, 0.0f, KurvenTyp::stufen, 0, true},\n',
+     '{"ins/komp/160/sc", Rolle::ins_komp_sc, 0.0f, 128.0f, 0.0f, KurvenTyp::stufen, 0, true},\n'
+     '    {"ins/komp/161/an", Rolle::ins_komp_an, 0.0f, 1.0f, 0.0f, KurvenTyp::schalter, 0, true},\n',
+     "Insert-Regler=Kern: R03 Attrappe REGLER fehlt: ins/komp/161/an"),
     # slice 4b: the eq (59 rows per instance, the band rows b<m>/...) and the saturator
     (INS_TS, "  ['ins/eq/1/b8/platz', 'stufe', 0, 2, 0],\n", "", "Insert-Regler=Kern: R05 controls_info.ts fehlt: ins/eq/1/b8/platz"),
     (INS_MJS, "  ['ins/saett/1/drive', 'lin', 0, 36, 12],\n", "", "Insert-Regler=Kern: R03 Attrappe REGLER fehlt: ins/saett/1/drive"),
     (HAND_BED, "b[1-8]\\/(an|typ|freq|gain|q|steil|platz)", "b[1-7]\\/(an|typ|freq|gain|q|steil|platz)", "Insert-Regler: R06 hand_bedienung.PFAD lehnt ins/eq/1/b8/an ab"),
-    (HAND_BED, "ins\\/eq\\/[1-8]\\/", "ins\\/eq\\/[1-9]\\/", "Insert-Regler: R06 hand_bedienung.PFAD nimmt ins/eq/9/an an"),
+    (HAND_BED, "ins\\/eq\\/([1-9]|[1-9][0-9]|1[0-5][0-9]|160)\\/", "ins\\/eq\\/([1-9]|[1-9][0-9]|1[0-5][0-9]|161)\\/", "Insert-Regler: R06 hand_bedienung.PFAD nimmt ins/eq/161/an an"),
     (SCHEMA, "ins/saett/[1-4]/(an|drive|out|mix)", "ins/saett/[1-4]/(an|drive|out|mix|zz)", "Insert-Regler: R07 defs.schema.json regler_pfad nimmt ins/saett/1/zz an"),
-    (SCHEMA, "ins/eq/[1-8]/(an|out|propq|b[1-8]/", "ins/eq/[1-8]/(an|out|propq|b[0-8]/", "Insert-Regler: R07 defs.schema.json regler_pfad nimmt ins/eq/1/b0/an an"),
+    (SCHEMA, "ins/eq/([1-9]|[1-9][0-9]|1[0-5][0-9]|160)/(an|out|propq|b[1-8]/", "ins/eq/([1-9]|[1-9][0-9]|1[0-5][0-9]|160)/(an|out|propq|b[0-8]/", "Insert-Regler: R07 defs.schema.json regler_pfad nimmt ins/eq/1/b0/an an"),
     (SPEC, "| `ins/eq/<n>/b<m>/gain` |", "| `ins/eq/<n>/b<m>/gaen` |", "Insert-Regler=Kern: R02 INTERFACES §1.5 fehlt: ins/eq/1/b1/gain"),
     (SPEC, "| `ins/eq/<n>/b1/freq` | Hz | 10 to 22000 | 30 |", "| `ins/eq/<n>/b1/freq` | Hz | 10 to 22000 | 31 |",
      "Insert-Regler: R02 INTERFACES §1.5 Bereich oder Vorgabe von ins/eq/1/b1/freq"),
@@ -436,7 +437,8 @@ def test_parser_meldet_verworfenes_oder_fehlendes_als_parserfehler(kopie, datei,
 
 SERVER_TS_ALT = "const TASTEN = ['annehmen', 'verwerfen', 'stopp', 'freigabe'];"
 APP_JS = "djk/ui/public/stream.js"   # the page keys moved from app.js to stream.js (1868940b); the checker list keeps the name T10 app.js Tasten
-APP_JS_ALT = "for (const n of ['annehmen', 'verwerfen', 'stopp', 'freigabe']) $(`#t-"
+APP_JS_ALT = "for (const n of ['annehmen', 'verwerfen']) $(`#t-"
+APP_JS_PAARE = "for (const [n, an] of [['stopp', true], ['freigabe', false]]) {"   # strand 9: stop and release switch the brake first
 DECK_PFAD = "inline bool deck_taste_pfad(const char* p, int* deck, bool* play) {"
 IST_CUE = "  const bool ist_cue = r[0] == 'c' && r[1] == 'u' && r[2] == 'e' && r[3] == '\\0';\n"
 
@@ -452,7 +454,8 @@ PARSERFEHLER = [
      "test_taste_pfad"),
     (HAND_EIN_H, "test_taste_pfad", "test_taste_pfadx", "test_taste_pfad"),
     (SERVER_TS, SERVER_TS_ALT, "const TASTEN = [];", "server.ts"),
-    (APP_JS, APP_JS_ALT, APP_JS_ALT.replace("['annehmen', 'verwerfen', 'stopp', 'freigabe']", "[]"), "app.js"),   # the empty-list finding names the list (T10 app.js Tasten), not the file
+    (APP_JS, APP_JS_ALT, APP_JS_ALT.replace("['annehmen', 'verwerfen']", "[]"), "app.js"),
+    (APP_JS, APP_JS_PAARE, APP_JS_PAARE.replace("const [n, an]", "const [m, an]"), "stream.js"),   # the empty-list finding names the list (T10 app.js Tasten), not the file
     (KURVEN_JS, "const DECK_TASTEN = ['play', 'cue'];", "const DECK_TASTEN = [];", "curves.js"),
     (SOFTCONTROLLER, '"ziel":"deck/1/play"', '"zielx":"deck/1/play"', "ziel"),
     ("djk/contract/osc.json", '"abschnitt": "5.8", "liste"', '"abschnitt": "5.8", "listex"', "osc.json"),
@@ -483,7 +486,7 @@ PARSERFEHLER += [   # 1.10 slice 4a T6: the insert reader never turns a rebuilt 
      '{"ins/komp/1/ratio", Rolle::ins_komp_ratio, 1.0f, 20.0f, 4.0f, KurvenTyp::linear, 10, false},', "doppelt"),
     ("djk/core/signalbox/src/controls.cpp", '#include "insert_zeilen.inc"', '#include "andere_zeilen.inc"', "controls.cpp"),
     (SPEC, "| `ins/komp/<n>/mix` | 0 (dry) to 1 (wet) | 0 to 1 | 1 | 10 ms | all |", "| `ins/komp/<n>/mix` | 0 to 1 | 1 |", "Insert-Zeile nicht lesbar"),
-    (SPEC, "`ins/komp/<n>/*` (n = 1 to 12;", "`ins/komp/<n>/*` (n = twelve;", "INTERFACES"),
+    (SPEC, "`ins/komp/<n>/*` (n = 1 to 160;", "`ins/komp/<n>/*` (n = twelve;", "INTERFACES"),
 ]
 
 
@@ -506,10 +509,11 @@ def test_deck_taste_cue_weg_wird_beidseitig_gemeldet(kopie):
     assert "Deck-Tasten=curves.js: A07 hand_in.h /test/hand fehlt: cue" in pn.pruefe(pn.Quelle(kopie))
 
 
-@pytest.mark.parametrize("ersatz", ["['verwerfen', 'stopp', 'freigabe']", "['annehmen', 'verwerfen', 'stopp', 'freigabe', 'bogus']"])
-def test_annahme_weg_hat_festes_soll(kopie, ersatz):
+@pytest.mark.parametrize("ersatz,seite", [("['verwerfen', 'stopp', 'freigabe']", "['verwerfen']"),
+                                           ("['annehmen', 'verwerfen', 'stopp', 'freigabe', 'bogus']", "['annehmen', 'verwerfen', 'bogus']")])
+def test_annahme_weg_hat_festes_soll(kopie, ersatz, seite):
     mutiere(kopie, SERVER_TS, SERVER_TS_ALT, f"const TASTEN = {ersatz};")
-    mutiere(kopie, APP_JS, APP_JS_ALT, APP_JS_ALT.replace("['annehmen', 'verwerfen', 'stopp', 'freigabe']", ersatz))
+    mutiere(kopie, APP_JS, APP_JS_ALT, APP_JS_ALT.replace("['annehmen', 'verwerfen']", seite))
     f = pn.pruefe(pn.Quelle(kopie))
     assert any("Annahme-Weg: T09 server.ts TASTEN" in x and "weicht vom Soll" in x for x in f), f
     assert any("Annahme-Weg: T10 app.js Tasten" in x and "weicht vom Soll" in x for x in f), f

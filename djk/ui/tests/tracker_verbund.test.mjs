@@ -26,7 +26,7 @@ function verknuepft() {
 }
 
 test('constants and mitglieder', () => {
-  assert.deepEqual([...FAECHER_BEFEHLE], ['noten_neu', 'noten_aendern', 'noten_loeschen', 'zeile_setzen', 'huellkurve_setzen', 'huellkurve_loeschen', 'clip_aus_muster', 'fx_setzen']);
+  assert.deepEqual([...FAECHER_BEFEHLE], ['noten_neu', 'noten_aendern', 'noten_loeschen', 'noten_quantisieren', 'noten_humanisieren', 'zeile_setzen', 'huellkurve_setzen', 'huellkurve_loeschen', 'clip_aus_muster', 'fx_setzen']);
   const p = verknuepft();
   assert.deepEqual(mitglieder(p, 'c2').map((c) => c.id), ['c2', 'c1']);
   assert.deepEqual(mitglieder(p, 'c1').map((c) => c.id), ['c1', 'c2']);

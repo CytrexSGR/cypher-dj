@@ -19,6 +19,8 @@ const { values: opt, positionals } = parseArgs({ allowPositionals: true, options
   text: { type: 'string' },
   ziel: { type: 'string' },
   von: { type: 'string', default: 'cypher' },
+  versatz: { type: 'string', default: '0' },   // phase offset in whole cycles (scene restore), written to strom1.von.json
+  bezeichnung: { type: 'string' },   // stream label (1..60 characters), written to strom1.von.json; none clears it
   'als-andreas': { type: 'boolean', default: false },
   hilfe: { type: 'boolean', default: false },
 } });
@@ -36,7 +38,7 @@ const abweisen = () => {
   process.exit(4);
 };
 if (!opt['als-andreas'] && !autonomAn(ordner)) abweisen();   // früh: vor dem Kompilieren
-const r = schreibeMuster(ordner, text, opt.von, Date.now(), () => opt['als-andreas'] || autonomAn(ordner));
+const r = schreibeMuster(ordner, text, opt.von, Date.now(), () => opt['als-andreas'] || autonomAn(ordner), Number(opt.versatz), opt.bezeichnung ?? null);
 if (r.abgewiesen) abweisen();
 if (r.fehler) { process.stderr.write(`djk-muster: ${r.fehler}\n`); process.exit(2); }
 process.stdout.write(`djk-muster: gesetzt (${ziel}, von ${opt.von}); gilt ab dem nächsten Takt\n`);

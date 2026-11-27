@@ -17,7 +17,9 @@ def host(h):
 
 
 def _attrappen(tmp_path, host_modus="leer", kern_ports=True, h=1):
-    """host_modus: scheitert (systemd-run fails), engine (host exits before ready, JACK missing), leer (ready, empty rack), tot (host exits 2 with a reason), haengt (never writes a status file)."""
+    """host_modus: schluessel (ready, loaded, status.ports from tmp_path/status_ports.json),
+    scheitert (systemd-run fails), engine (host exits before ready, JACK missing), leer (ready, empty rack),
+    tot (host exits 2 with a reason), haengt (never writes a status file)."""
     bin_ = tmp_path / "bin"
     bin_.mkdir()
     log = tmp_path / "log"
@@ -49,6 +51,7 @@ def _attrappen(tmp_path, host_modus="leer", kern_ports=True, h=1):
              "engine": 'printf \'{"bereit": false, "fehler": ["engine_init: no audio"]}\' > "$ST"',
              "scheitert": "exit 1",
              "tot": 'printf \'{"bereit": false, "fehler": ["nicht_ladbar"], "grund": "engine_init: no audio"}\' > "$ST"',
+             "schluessel": f'touch "$A/$U"; printf 1234 > "$A/$U.pid"; printf 0 > "$A/$U.nr"; cp {tmp_path}/status_ports.json "$ST"',
              "haengt": ":"}[host_modus]
     (bin_ / "systemd-run").write_text(
         f'#!/bin/sh\nA={tmp_path}/aktiv\nprintf "%s\\n" "$*" >> {log}/systemd-run\nST=""\nU=""\n'
@@ -190,16 +193,16 @@ def test_fehlendes_plugin_exit_2_unit_wird_nicht_gestartet_keine_kanten(tmp_path
         shutil.rmtree(shm, ignore_errors=True)
 
 
-def test_start_5_ist_exit_3_und_startet_nichts(tmp_path):
+def test_start_9_ist_exit_3_und_startet_nichts(tmp_path):
     env, log, home = _attrappen(tmp_path)
     shm = _shm()
     try:
-        for h in ("5", "0", "x", "-1", ""):
+        for h in ("9", "0", "x", "-1", ""):
             r = _lauf(env, "start", h, _vst3(home), "--instanz", INST)
             assert r.returncode == 3, (h, r.returncode, r.stdout, r.stderr)
             assert "host_grenze" in r.stderr
-        assert _lauf(env, "stop", "5", "--instanz", INST).returncode == 3
-        assert _lauf(env, "status", "5", "--instanz", INST).returncode == 3
+        assert _lauf(env, "stop", "9", "--instanz", INST).returncode == 3
+        assert _lauf(env, "status", "9", "--instanz", INST).returncode == 3
         assert _aufrufe(log) == [] and not (log / "stop").exists() and not (shm / "kanten").exists()
     finally:
         shutil.rmtree(shm, ignore_errors=True)
@@ -332,5 +335,77 @@ def test_status_eines_toten_hosts_meldet_keinen_alten_bereit_zustand(tmp_path):
         (tmp_path / "aktiv" / host(1)).unlink()
         d = json.loads(_lauf(env, "status", "1", "--instanz", INST).stdout)
         assert d["laeuft"] is False and d["bereit"] is None and d["puls"] is None and d["pid"] is None, d
+    finally:
+        shutil.rmtree(shm, ignore_errors=True)
+
+
+def _schluessel_ports(tmp_path, h=1, mit_key=True, mit_ports=True):
+    """Status file of a loaded key-mode host: the plugin's port names hold spaces and a colon. Fake JACK lists get them too."""
+    pre = f"{host(h)}:LSP Sidechain Compressor Stereo"
+    ein = [f"{pre}:Input L", f"{pre}:Input R", f"{pre}:Sidechain Input L", f"{pre}:Sidechain Input R"]
+    aus = [f"{pre}:Output L", f"{pre}:Output R"]
+    d = {"bereit": True, "effekt": "geladen", "fehler": [], "pid": 1234}
+    if mit_ports:
+        d["ports"] = {"ein": ein, "aus": aus}
+    (tmp_path / "status_ports.json").write_text(json.dumps(d))
+    with open(tmp_path / "aus_ports", "a") as f:
+        f.write("".join(p + "\n" for p in aus))
+        f.write("".join(f"{KERN}:arr_inskey_{h}_{c}\n" for c in "LR") if mit_key else "")
+    with open(tmp_path / "ein_ports", "a") as f:
+        f.write("".join(p + "\n" for p in ein))
+    return ein, aus
+
+
+def test_schluessel_verbindet_sechs_kanten_mit_den_namen_aus_ports(tmp_path):
+    env, log, home = _attrappen(tmp_path, host_modus="schluessel")
+    ein, aus = _schluessel_ports(tmp_path)
+    shm = _shm()
+    try:
+        spec = _vst3(home)
+        r = _lauf(env, "start", "1", spec, "--schluessel", "--instanz", INST)
+        assert r.returncode == 0, (r.returncode, r.stdout, r.stderr)
+        assert " --schluessel " in _aufrufe(log)[0], _aufrufe(log)
+        soll = [f"{KERN}:arr_ins_1_L\t{ein[0]}", f"{KERN}:arr_inskey_1_L\t{ein[2]}", f"{aus[0]}\t{KERN}:arr_insret_1_L",
+                f"{KERN}:arr_ins_1_R\t{ein[1]}", f"{KERN}:arr_inskey_1_R\t{ein[3]}", f"{aus[1]}\t{KERN}:arr_insret_1_R"]
+        assert (log / "pw-link").read_text().splitlines() == soll
+        assert (shm / "kanten").read_text().splitlines() == soll
+        assert _lauf(env, "start", "1", spec, "--schluessel", "--instanz", INST).returncode == 0   # idempotent
+        assert (shm / "kanten").read_text().splitlines() == soll
+        _lauf(env, "stop", "1", "--instanz", INST)
+        assert (shm / "kanten").read_text() == "", "stop removes the key edges too"
+    finally:
+        shutil.rmtree(shm, ignore_errors=True)
+
+
+def test_schluessel_ohne_ports_vor_lade_verbindet_nichts_und_link_holt_es_nach(tmp_path):
+    env, log, home = _attrappen(tmp_path, host_modus="schluessel")
+    ein, aus = _schluessel_ports(tmp_path, mit_ports=False)
+    shm = _shm()
+    try:
+        r = _lauf(env, "start", "1", _vst3(home), "--schluessel", "--instanz", INST)
+        assert r.returncode == 0, (r.stdout, r.stderr)
+        assert not (log / "pw-link").exists() and not (shm / "kanten").exists()
+        assert "audio-in1" not in r.stdout + r.stderr, "no fixed port names in key mode"
+        r = _lauf(env, "link", "1", "--instanz", INST)
+        assert r.returncode == 5, (r.stdout, r.stderr)   # status still has no ports
+        _schluessel_ports(tmp_path)   # `lade` happened: the status file now carries the ports
+        shutil.copy(tmp_path / "status_ports.json", shm / "ins-1.json")
+        r = _lauf(env, "link", "1", "--instanz", INST)
+        assert r.returncode == 0, (r.stdout, r.stderr)
+        assert len((shm / "kanten").read_text().splitlines()) == 6
+    finally:
+        shutil.rmtree(shm, ignore_errors=True)
+
+
+def test_schluessel_aelterer_kern_ohne_inskey_ports_ueberspringt_nur_die_key_kanten(tmp_path):
+    env, log, home = _attrappen(tmp_path, host_modus="schluessel")
+    ein, aus = _schluessel_ports(tmp_path, mit_key=False)
+    shm = _shm()
+    try:
+        r = _lauf(env, "start", "1", _vst3(home), "--schluessel", "--instanz", INST)
+        assert r.returncode == 0, (r.stdout, r.stderr)
+        assert r.stdout.count("older core") == 2
+        k = (shm / "kanten").read_text().splitlines()
+        assert len(k) == 4 and not any("inskey" in z for z in k), k
     finally:
         shutil.rmtree(shm, ignore_errors=True)

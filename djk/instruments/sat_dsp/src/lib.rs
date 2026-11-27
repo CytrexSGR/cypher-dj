@@ -11,7 +11,7 @@
 //! Literatur entnommen; gilt für f64, nicht für f32.
 //! Ohne Allokation im Block.
 
-use eq_dsp::ueberabtastung::{Hoch, Runter, LATENZ};
+use eq_dsp::ueberabtastung::{Hoch, Pfad, Runter, LATENZ};
 
 /// Ab dieser Basisrate wird nicht mehr überabgetastet (wie `eq_dsp::OHNE_UEBERABTASTUNG_AB`).
 pub const OHNE_UEBERABTASTUNG_AB: f64 = 88000.0;
@@ -123,10 +123,15 @@ pub struct Saett {
 
 impl Saett {
     pub fn neu(fs: f64) -> Self {
+        Self::mit_pfad(fs, Pfad::erkannt())
+    }
+
+    /// Like `neu`, with the oversampler's FIR path forced (tests; `Pfad::Skalar` runs everywhere).
+    pub fn mit_pfad(fs: f64, pfad: Pfad) -> Self {
         let mut s = Saett {
             ueber: fs < OHNE_UEBERABTASTUNG_AB,
-            hoch: [Hoch::neu(), Hoch::neu()],
-            runter: [Runter::neu(), Runter::neu()],
+            hoch: [Hoch::mit_pfad(pfad), Hoch::mit_pfad(pfad)],
+            runter: [Runter::mit_pfad(pfad), Runter::mit_pfad(pfad)],
             adaa: [Adaa1::default(); 2],
             dc: [DcSperre::default(); 2],
             dc_r: (-2.0 * std::f64::consts::PI * DC_ECKE_HZ / fs).exp(),

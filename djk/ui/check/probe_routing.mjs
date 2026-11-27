@@ -107,7 +107,7 @@ try {
   // R2.5: Export-Zeile mit Decke (die Attrappe antwortet wie der Server beim Produktions-Abgriff, P10/P11), danach ein ruhiger Export ohne den Zusatz
   const ausgabeText = () => w(`document.querySelector('[data-p="ausgabe"]').textContent`);
   const ausgabeWarn = () => w(`document.querySelector('[data-p="ausgabe"]').classList.contains('warnung')`);
-  const exportiere = async () => { await b.klick('[data-p="export"]'); for (let i = 0; i < 60 && !/^Exported/.test(await ausgabeText()); i++) await warte(100); return ausgabeText(); };
+  const exportiere = async () => { await b.klick('[data-p="export"]'); await b.klick('[data-p="export-start"]'); for (let i = 0; i < 60 && !/^Exported/.test(await ausgabeText()); i++) await warte(100); return ausgabeText(); };
   await postA('/attrappe/ausgabe', { freezeMs: 50, renderMs: 50, spitze_db: 2.4, true_peak_dbtp: 2.6, ueber_decke: true, limiter_db_max: 3.4 });
   const laut = await exportiere(), lautWarn = await ausgabeWarn();
   // sichtbar heißt: nicht abgeschnitten (die Zeile hat sonst max-width 44ch mit Auslassung; der Hinweis stünde im Text, aber nicht auf dem Bildschirm)

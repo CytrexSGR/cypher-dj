@@ -4,6 +4,7 @@
 // Positive control: a malloc is counted. Controller protection: the table still holds 693 controllers (N0 of the baseline) and the stellwerk
 // counter bewegt_voll stays 0. Under ASan/TSan the interception is missing: "skipped", never "passed".
 #include <cstdlib>
+#include <memory>
 
 #include "arr_build.h"
 #include "arr_run.h"
@@ -148,9 +149,9 @@ int main() {
   void* p = std::malloc(16);
   const long positiv = abfang_aus();
   std::free(p);
-  cypherdj::stellwerk::ReglerTabelle tab;
+  const auto tab = std::make_unique<cypherdj::stellwerk::ReglerTabelle>();   // 24576 rows: heap, not stack
   const long voll = static_cast<long>(x.kern->stellwerk().zaehler().bewegt_voll);
-  std::printf("arr_auto_alloc: %ld allocations in 12800 cycles (3200 with lanes, 3200 with gain_hk, 3200 with gain_hk on RE-PITCH voices: %d voices, %d with a table, %d running, 3200 with value stacks: %d of 32 tracks play the stack), hk voices %d running %d, positive control %ld, controllers %d, bewegt_voll %ld\n", im_zyklus, warp_stimmen, warp_an, warp_lauf, stapel_tief, hk_an, hk_lauf, positiv, tab.anzahl(), voll);
+  std::printf("arr_auto_alloc: %ld allocations in 12800 cycles (3200 with lanes, 3200 with gain_hk, 3200 with gain_hk on RE-PITCH voices: %d voices, %d with a table, %d running, 3200 with value stacks: %d of 32 tracks play the stack), hk voices %d running %d, positive control %ld, controllers %d, bewegt_voll %ld\n", im_zyklus, warp_stimmen, warp_an, warp_lauf, stapel_tief, hk_an, hk_lauf, positiv, tab->anzahl(), voll);
   PRUEF(lanes_da);   // the lanes were really loaded: 0 allocations is not an empty run
   PRUEF(spielt == 32 && spielt_solo == 0);
   PRUEF(hk_an == 32 && hk_lauf == 32);
@@ -158,7 +159,13 @@ int main() {
   PRUEF(stapel_da && stapel_tief == 32);   // U9: the stacks were really loaded and play on all 32 tracks
   PRUEF(positiv >= 1);
   PRUEF(im_zyklus == 0);
-  PRUEF(tab.anzahl() == 5184);   // loop lane strip K1: +96 rows (spur/<n>/fx/1..3 of 32 tracks) on top of the 5088 before; 16 bk slots (4576 with 8);   // container core K9: the console of four containers and four buses replaced the deck, erz and loop-box strips; 5076 rows before it, 500 fewer now (measured, the old sum stays in the git history)
+  // strand 1 slice 4: + 338 rows (gate 16 x 8, multiband 8 x 24, limiters 2 -> 8 in the contract; the core stages follow in 4.2); strand 1 slices 1, 3
+  // and 3b: 5184 at komp 12 and eq 8, the pools add 10 rows per compressor and 59 per EQ (15632 at 160 + 160); loop lane strip K1: +96 rows
+  // (spur/<n>/fx/1..3 of 32 tracks) on top of the 5088 before; 16 bk slots (4576 with 8); container core K9: the console of four containers and four
+  // buses replaced the deck, erz and loop-box strips; 5076 rows before it, 500 fewer now (measured, the old sum stays in the git history)
+  PRUEF(tab->anzahl() == 5184 + (cdj::ARR_INS_KOMP - 12) * 10 + (cdj::ARR_INS_EQ - 8) * 59 + 16 * 8 + 8 * 24 + 6 * 3 + (cdj::ARR_INS_HOST - 4) +
+        (cypherdj::stellwerk::SPUR_REGLER_SPUREN - cypherdj::stellwerk::SPUR_REGLER_SPUREN_ALT) * 24 +
+        cypherdj::stellwerk::REGLER_PLUG_HOSTS * cypherdj::stellwerk::REGLER_PLUG_KNOEPFE);
   PRUEF(voll == 0);
   PRUEF_ENDE();
 }

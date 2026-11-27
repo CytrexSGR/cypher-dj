@@ -2,6 +2,7 @@
 Kein echter Schalter wird berührt; der echte Prüfstand ist tests/check_digital_watch.sh (Karte der PCI 0000:16:00.1, ungenutzt)."""
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -119,7 +120,7 @@ def test_ereignisweg_heilt_vor_dem_takt(karte):
         assert s["letzter"]["quelle"] == "ereignis" and dauer < 1.5, (dauer, s)
         assert (karte / "dw/schalter").read_text().strip() == "on"
     finally:
-        p.terminate(); p.wait()
+        p.terminate(); p.wait(timeout=10)
 
 
 def test_negativ_ereignisse_ohne_abfall_schalten_nichts(karte, monkeypatch):
@@ -130,7 +131,7 @@ def test_negativ_ereignisse_ohne_abfall_schalten_nichts(karte, monkeypatch):
         assert warte_auf(lambda: "lebenszeichen" in status(karte), 2)
         time.sleep(1.0)
     finally:
-        p.terminate(); p.wait()
+        p.terminate(); p.wait(timeout=10)
     assert status(karte)["faelle"] == 0
     assert (karte / "dw/aufrufe").read_text().count("cget") >= 5   # Gegenprobe: die Ereignisse kamen an und wurden gelesen
     assert "cset" not in (karte / "dw/aufrufe").read_text()
@@ -154,7 +155,7 @@ def test_rueckfall_wird_nachgeprueft(karte):
         assert warte_auf(lambda: status(karte).get("faelle") == 2, 2), status(karte)
         assert status(karte)["letzter"]["quelle"] == "nachpruefung"
     finally:
-        p.terminate(); p.wait()
+        p.terminate(); p.wait(timeout=10)
 
 
 def test_kampf(karte):
@@ -165,7 +166,7 @@ def test_kampf(karte):
         assert warte_auf(lambda: status(karte).get("zustand") == "kampf", 3), status(karte)
         assert status(karte)["faelle"] >= 4
     finally:
-        p.terminate(); p.wait()
+        p.terminate(); p.wait(timeout=10)
 
 
 def test_ereignisweg_stirbt_ohne_startschleife(karte):
@@ -178,7 +179,7 @@ def test_ereignisweg_stirbt_ohne_startschleife(karte):
         assert warte_auf(lambda: status(karte).get("faelle") == 1, 1.0), status(karte)   # der Takt trägt weiter
         assert status(karte)["letzter"]["quelle"] == "takt"
     finally:
-        p.terminate(); p.wait()
+        p.terminate(); p.wait(timeout=10)
     n = len((karte / "dw/spawns").read_text().splitlines())
     assert n <= 12, n        # höchstens ein Neustart je Takt; ohne Sperre im Review gemessen: 800
 
@@ -193,7 +194,7 @@ def test_stopp_raeumt_den_monitor_ab(karte):
     p = starte(karte, "--takt-ms", "5000")
     assert warte_auf(lambda: (karte / "dw/mon_pid").exists() and (karte / "dw/mon_pid").read_text().strip(), 3)
     pid = int((karte / "dw/mon_pid").read_text())
-    p.terminate(); p.wait()
+    p.terminate(); p.wait(timeout=10)
 
     def weg():
         try:
@@ -212,3 +213,23 @@ def test_karte_fehlt(karte):
 
 def test_aufruf_fehler():
     assert digitalwache.main(["--pci", "16:00.6", "--status", "/x"]) == 2
+
+
+def test_term_handler_never_raises():
+    # Python may run the handler inside a finaliser (Popen.__del__ of a finished monitor); an exception there is printed and dropped.
+    # A sys.exit() in the handler was lost that way now and then and the wache ran on: the CI gate hung an hour (2026-11-25).
+    try:
+        digitalwache.beenden(signal.SIGTERM, None)
+        assert digitalwache._STOPP["an"] is True
+    finally:
+        digitalwache._STOPP["an"] = False
+
+
+def test_term_ends_the_wache_while_the_monitor_keeps_dying(karte):
+    # the setting of the hang: a monitor that dies at once is restarted every beat, so finished Popen objects are collected all the time
+    (karte / "dw/stirbt").write_text("")
+    for runde in range(8):
+        p = starte(karte, "--takt-ms", "50")
+        time.sleep(0.15 + 0.05 * runde)
+        p.terminate()
+        assert p.wait(timeout=5) == 0, f"round {runde}"

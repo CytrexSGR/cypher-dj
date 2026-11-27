@@ -15,6 +15,7 @@ const LANEN = {
   pan: [{ beat: 0, wert: 0 }, { beat: 4, wert: 1 }, { beat: 4, wert: -0.5, form: 'sprung' }, { beat: 6, wert: 0.2 }, { beat: 12, wert: 0.4 }],
   'geraet.cutoff': [{ beat: 1, wert: 0.5 }, { beat: 3, wert: 0.9, form: 's' }, { beat: 9, wert: 0.1 }],
   mute: [{ beat: 0, wert: 0, form: 'sprung' }, { beat: 5, wert: 1, form: 'sprung' }],
+  'send.r1': [{ beat: 0, wert: -200 }, { beat: 4, wert: -30 }, { beat: 8, wert: 0 }, { beat: 10, wert: -150, form: 's' }, { beat: 40, wert: -20, form: 'sprung' }],
 };
 const BEREICHE = [[2, 8], [0, 4], [3.5, 9.25], [10, 20]];
 
@@ -86,4 +87,23 @@ test('U4 T4.7 entwurf: auto_dehnen, auto_neigen and auto_form drafts equal what 
   const leer = projektMit('fader', LANEN.fader);
   assert.deepEqual(entwurf(leer, [{ befehl: 'auto_dehnen', lane_id: 'a9', von_beat: 2, bis_beat: 8, neu_bis_beat: 14 }]).spuren[0].automation[0].punkte,
     leer.spuren[0].automation[0].punkte, 'an unknown lane changes nothing');
+});
+
+// --- send lanes: the tools of the page work in dB on the fader's taper (the fader and the send target share one rule) ------------
+test('send lane tools: shape, stretch and skew of a send lane stay in -200..6 dB; the send reads like the fader', () => {
+  const p = LANEN['send.r1'];
+  const { unten, oben } = seite.formBereich('send.r1');
+  assert.deepEqual({ unten, oben }, seite.formBereich('fader'), 'a shape on a send lane spans the fader range');
+  assert.deepEqual(server.formBereich('send.r1'), server.formBereich('fader'));
+  const alle = [];
+  for (const form of seite.FORMEN_EINFUEGEN) alle.push(seite.setzeForm(p, 4, 12, seite.formPunkte(form, 4, 12, 2, unten, oben), 'send.r1'));
+  alle.push(seite.dehne(p, 2, 8, 20, 'send.r1'), seite.neige(p, 2, 12, 1, 'send.r1'), seite.neige(p, 2, 12, -1, 'send.r1'));
+  for (const punkte of alle) {
+    assert.ok(punkte.length > 2);
+    assert.ok(punkte.every((q) => q.wert >= -200 && q.wert <= 6), 'every value is a dB value in -200..6');
+  }
+  const form = seite.setzeForm([{ beat: 0, wert: -10 }], 0, 8, seite.formPunkte('sinus', 0, 8, 1, unten, oben), 'send.r1');
+  assert.ok(form.some((q) => q.wert < -20), 'the shape is in dB (-60..0), not 0..1');
+  for (const beat of [0.5, 5, 9, 9.9, 20]) assert.equal(laneWert(p, beat, 'send.r1'), laneWert(p, beat, 'fader'), `server laneWert at ${beat}`);
+  assert.ok(laneWert(p, 1, 'send.r1') > -60, 'the ramp from -200 dB runs on the fader mute rule (from -60), not linearly through -150 dB');
 });

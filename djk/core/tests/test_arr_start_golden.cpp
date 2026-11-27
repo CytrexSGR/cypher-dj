@@ -76,7 +76,8 @@ int main(int argc, char** argv) {
     const bool mit_werk = z.u() < 0.5;
     const int64_t vorhalt = z.i(0, 20000);
     cdj::Karte k(bpm, 0);
-    cdj::Arrangement arr(tab, false);
+    auto arr_h = std::make_unique<cdj::Arrangement>(tab, false);   // on the heap: about 9 MB since 128 tracks (8 MB stack)
+    cdj::Arrangement& arr = *arr_h;
     if (mit_werk) arr.setze_warp_werk(&stumm);
     arr.tausche(mit_werk ? snap_werk.get() : snap_plain.get(), 0, k);
     if (loop) arr.loop(true, loop_von, loop_bis, s, k);

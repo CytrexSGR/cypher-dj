@@ -1,0 +1,41 @@
+{
+ "schema": 1,
+ "name": "Chorus / fast shallow",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "fx-chorus",
+ "werte": {
+  "knob1": 0.0,
+  "knob2": 0.8843,
+  "knob3": 0.2,
+  "knob4": 0.2143,
+  "knob5": 0.6,
+  "knob6": 0.4
+ },
+ "beschreibung": {
+  "art": "modulation",
+  "unterart": "chorus",
+  "charakter": [
+   "bright",
+   "thin",
+   "subtle"
+  ],
+  "genre": [
+   "disco",
+   "electro",
+   "garage"
+  ],
+  "einsatz": [
+   "intro",
+   "mixdown"
+  ],
+  "energie": 2,
+  "text": "Free 5 Hz, depth 0.8 ms around an 8 ms delay, width 60 %, mix 40 %; a quick shimmer close to vibrato, thin and light."
+ },
+ "tags": [
+  "fx-chorus"
+ ],
+ "notiz": "Set by the knob ranges of the graph, not yet heard (2026-11-26).",
+ "angelegt": "2026-11-26T00:00:00.000Z",
+ "geaendert": "2026-11-26T00:00:00.000Z"
+}

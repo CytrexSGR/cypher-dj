@@ -13,6 +13,7 @@ import type { LernenOptionen } from './areas/learn/area.ts';
 import type { PresetOptionen } from './presets/area.ts';
 import type { KollektionBereichOptionen } from './collections/area.ts';
 import type { StemsOptionen } from './areas/proj/stems.ts';
+import type { NotenOptionen } from './areas/proj/notes.ts';
 import { modulBasis } from './project/module_storage.ts';
 import type { ScanBefehl } from './plugins/index.ts';
 import type { ImportOptionen } from './loop_import.ts';
@@ -65,6 +66,11 @@ export const modulBasisVon = (vorgabe: string | undefined, inst: string): string
 // The pairing file (tablet access): only the live studio keeps it in the real config folder; a test instance (a..i) has its own under /dev/shm, so it never shows
 // or changes the owner's paired devices (POST /kopplung/loeschen would write it).
 export const kopplungPfadVon = (vorgabe: string | undefined, inst: string): string => vorgabe ?? (inst === '' ? path.join(os.homedir(), '.config', 'cypherdj', 'kopplung.json') : `/dev/shm/cypherdj-${inst}/kopplung.json`);
+// Agent keys and the agent log (strand 9): only the live studio uses the real config and state folders; a test instance (a..i) keeps both in /dev/shm.
+export const handOrdnerVon = (vorgabe: string | undefined, inst: string): string =>
+  vorgabe ?? (inst === '' ? path.join(os.homedir(), '.config', 'cypherdj') : `/dev/shm/cypherdj-${inst}`);
+export const handLogOrdnerVon = (vorgabe: string | undefined, inst: string): string =>
+  vorgabe ?? (inst === '' ? path.join(os.homedir(), '.local', 'state', 'cypherdj') : `/dev/shm/cypherdj-${inst}`);
 export const STROM_MAX_BYTES = 4 * 1024 * 1024;   // unsent bytes per event stream before the stream is closed
 export const STRUDEL_ZEITLIMIT_MS = 2000;   // Plan-Review M3
 
@@ -78,6 +84,7 @@ export interface TabletOptionen {
 
 export interface ServerOptionen {
   tablet?: TabletOptionen;
+  hand?: { ordner?: string; logOrdner?: string; streng?: boolean };   // agent keys (ordner), call log (logOrdner), strict = a bare cypher header is refused
   port: number; kernPort: number; aboPort: number; leitstandWs: number; bestand: string; arbeitsbestand: string;
   wiederOeffnenFristMs?: number;   // how long the start waits for the kern before it gives up reopening the remembered project (default 15000)
   systemstartMs?: number;   // boot time of the machine in epoch ms (tests; default /proc/stat btime), see systemstartMs()
@@ -110,6 +117,7 @@ export interface ServerOptionen {
   loopWerkzeug?: ImportOptionen['werkzeug'];   // Tests: Attrappen vor ffmpeg/rubberband des Loop-Imports (S6)
   katalog?: string;      // Browser (Plan 2026-10-10): katalog.sqlite, Vorgabe $CYPHERDJ_KATALOG bzw. neben der Mediathek
   stems?: Partial<StemsOptionen>;   // 1.13 Slice 6: Tests biegen zusatzArgs (Prüftrenner, P3) und killMs um
+  noten?: Partial<NotenOptionen>;   // note editor (slice 1, B2): tests bend the program, the network command and the times
   geraete?: GeraeteOptionen;   // I08: Pfade und Erkennung (Tests geben eigene)
   lernen?: LernenOptionen;     // S19: controller folder (lernen.json) and the devices file (Tests give their own)
   tags?: TagsBereichOptionen;   // B19..B21: tag store (default tags.sqlite next to the catalogue); tests give their own
@@ -200,7 +208,8 @@ export const TYPEN: Record<string, string> = {
 };
 
 export interface SpurLauf { quelle: string; anker: number; ende: number; fahrten: Fahrt[]; timer: NodeJS.Timeout[]; offen: MusterPlan[]; gruppen: Set<string>; ids: number[]; teile: { id: number; teil: number; pfad: string }[];
-  schleife?: SchleifenStand; planend?: number }   // 1.12 S7: only for a loop track; planend = end beat of the pass the watcher is sending (MAJOR 1)
+  schleife?: SchleifenStand; planend?: number;
+  bogen?: { name: string; takte: number; plan: { takt: number; strom: number | null; text: string }[] } }   // strand 11 task 7.5: set by POST /bogen   // 1.12 S7: only for a loop track; planend = end beat of the pass the watcher is sending (MAJOR 1)
 // 1.12 S7 (M13): state of a loop track. anker_naechster = start beat of the next pass not yet sent (MINOR 5: the one name for it),
 // durchlauf = its number k, teilNr = its first part number, n = its length in bars; durchlaeufe = the last two sent passes (MINOR 6).
 export interface SchleifenStand { n: number; anker_naechster: number; durchlauf: number; teilNr: number; naechste: Spur | null;

@@ -16,12 +16,12 @@ import { AUTO_ZIELE } from '../contract.mjs';
 import { arbeitsbestand, sende, erwarte, q } from './help.mjs';
 
 const gruen = (r) => assert.ok(r.ok, r.fehler.join('\n'));
-// a playback file with the lanes `lanen` = {spur: [ziele]}; the tracks 1..32 all exist
+// a playback file with the lanes `lanen` = {spur: [ziele]}; the tracks 1..128 all exist
 function datei(ordner, nr, lanen) {
   const spuren = Object.entries(lanen).map(([spur, ziele]) => ({ nr: Number(spur), auto: ziele.map((ziel) => ({ ziel, punkte: [[0, 0, 0], [16, -30, 0]] })) }));
   fs.writeFileSync(path.join(ordner, `wiedergabe-${nr}.json`), JSON.stringify({ format: 'cypherdj-arr/2', nr, spuren }));
 }
-const ALLE = Object.fromEntries(Array.from({ length: 32 }, (_, i) => [i + 1, AUTO_ZIELE]));   // every field of every track has a lane
+const ALLE = Object.fromEntries(Array.from({ length: 128 }, (_, i) => [i + 1, AUTO_ZIELE]));   // every field of every track has a lane
 const ordnerMit = (nr, lanen) => { const o = fs.mkdtempSync(path.join(os.tmpdir(), 'attrappe-auto-')); datei(o, nr, lanen); return o; };
 const cfg = { arbeitsbestand: arbeitsbestand(), arr_ordner: ordnerMit(1, ALLE) };
 const laden = (id, nr) => ['/k/arr/laden', 'hsi', id, 'andreas', nr];
@@ -69,7 +69,7 @@ test('arr_auto: spur 0 with an 1 releases every overridden field, one event each
 test('arr_auto: refusals format, auto_ziel_unbekannt, nur_andreas; cypher may re-enable', () => {
   const r = fahre([
     ...spielt,
-    sende(30000, auto(10, 33, 'fader', 0)),
+    sende(30000, auto(10, 129, 'fader', 0)),
     erwarte(32000, q(10, 'andreas', 6, null, 'format')),
     sende(32000, auto(11, 1, 'fader', 2)),
     erwarte(34000, q(11, 'andreas', 6, null, 'format')),
@@ -211,4 +211,22 @@ test('arr_auto: a relative lane is no absolute lane (the field of a relative-onl
   ], { cfg: { ...cfg, arr_ordner: ordner } });
   gruen(r);
   assert.deepEqual(ereignisse(r).map((m) => `${m.werte[0]}/${m.werte[1]}/${m.werte[2]}`), ['1/fader/1', '3/pan/1']);
+});
+
+// send automation (the mock reads lanes for the override only and validates no playback): a send lane is no override field, the override target
+// names stay the generated list of osc.json, and a send lane in the file does not disturb the fader lane next to it
+test('arr_auto: a send lane in a playback is no override field; an override of send.1 is refused like any unknown target', () => {
+  const ordner = ordnerMit(1, { 1: ['fader', 'send.1'] });
+  assert.equal(AUTO_ZIELE.some((z) => z.startsWith('send')), false, 'the override targets stay the four core fields');
+  const r = fahre([
+    sende(0, laden(1, 1)),
+    sende(512, start(2)),
+    erwarte(20000, q(2, 'andreas', 2)),
+    sende(30000, auto(10, 1, 'send.1', 0)),
+    erwarte(32000, q(10, 'andreas', 6, null, 'auto_ziel_unbekannt')),
+    sende(32000, auto(11, 1, 'fader', 0)),   // negative control: the fader lane next to it still overrides
+    erwarte(34000, ['/e/auto', 'isi', 1, 'fader', 1]),
+  ], { cfg: { ...cfg, arr_ordner: ordner } });
+  gruen(r);
+  assert.equal(ereignisse(r).length, 1);
 });

@@ -1,0 +1,42 @@
+{
+ "schema": 1,
+ "name": "Phaser / slow stereo",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "fx-phaser-sync",
+ "werte": {
+  "knob1": 1.0,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5,
+  "knob6": 0.5,
+  "knob7": 1.0
+ },
+ "beschreibung": {
+  "art": "modulation",
+  "unterart": "phaser",
+  "charakter": [
+   "wide",
+   "evolving",
+   "soft"
+  ],
+  "genre": [
+   "ambient",
+   "trance",
+   "progressive"
+  ],
+  "einsatz": [
+   "breakdown",
+   "build"
+  ],
+  "energie": 2,
+  "text": "Four bars per sweep from 300 Hz over 36 st, feedback 0.3, mix 50 %, Stereo Quarter so the sides sweep apart; slow wide wash."
+ },
+ "tags": [
+  "fx-phaser-sync"
+ ],
+ "notiz": "Set by the knob ranges of the graph, not yet heard (2026-11-26).",
+ "angelegt": "2026-11-26T00:00:00.000Z",
+ "geaendert": "2026-11-26T00:00:00.000Z"
+}

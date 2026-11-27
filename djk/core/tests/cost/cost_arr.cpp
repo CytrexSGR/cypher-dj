@@ -34,6 +34,14 @@
 //   arr32ins_ol  master limiter plan: arr32ins with only the lim bypassed; arr32ins - arr32ins_ol (same pass, interleaved) is the price of the limiter.
 //   arr32ins_k, arr32ins_ke, arr32ins_ks  slice 4b T12, the pool decision: the same file and rows as arr32ins, but the eq (_k, _ks) or the saett (_k, _ke) is switched off (`an` 0), so the lane
 //          shape of slice 4a (_k), plus the eq only (_ke), plus the saett only (_ks). Measure them interleaved with arr32ins in one pass and read the paired differences.
+//   arr64voll, arr128voll  strand 1 task 6.8: the full-load lane at 64 and 128 tracks (the first three quarters RB-338, the rest audio, all 16 groups, the 8 returns, the PM). Every strip (tracks + 25)
+//          has one komp and one eq (slot = chain index + 1), three more komp for the racks of arr32voll (track 5, track 25, group 1; the rack on track 6 maps the eq) and the limiter on the PM. The
+//          setup rows ride in at most 40 per cycle (the rest after the sends). Self-check (exit 2): the stage count in the snapshot chains, all of them computing in the last block, NaN 0, no
+//          rejected part, the racks as arr32voll. KOSTEN_VOLL_MAX=1 puts every free stage of the pools (ARR_INS_*) into the free places of the strips; KOSTEN_VOLL_HOST=<n> up to ARR_INS_HOST hosts.
+//          No hash reference, no ctest entry (like arr32bk16). KOSTEN_SPUR=1 lists the stages that did not compute.
+//   arr128real  strand 12 task B1: the realistic project: the arr128voll file (96 RB-338 + 32 audio tracks, 16 groups, 8 returns, PM) with 60 stages instead of 289: 40 eq (one each on the tracks 1..40, three bands on),
+//          12 komp (one each on the tracks 41..52), 4 saett (tracks 53..56), 3 lim (the PM and the groups 1 and 2), 1 utility (track 57). No rack, no macro row, no host. Self-check (exit 2) as arr128voll:
+//          exactly 60 placed stages (12 + 40 + 4 + 3 + 1) in the snapshot chains, all computing in the last block, NaN 0, no rejected part. No hash reference, no ctest entry, no gate.
 //   arr32grp3  nested groups task 9: arr32r (32 tracks, 4 returns with a Hall each, 128 sends) with 12 groups in three levels (tracks -> groups 1..6 -> groups 7..10 -> groups 11, 12 -> master), one komp
 //          stage per group (slots 1..12, the rows of arr32ins), the master limiter on the PM, no stage on a track or a return. Self-check as arr32ins_k: 13 stages in the chains, 13 computing, gain reduction > 0.
 //   arr32voll  1.10 slices 5 to 8, U0: the full-load lane. The arr32ins stages (12 komp, the eq, the saett: every pool full) plus four 4c racks with 16 mappings each (rack 1 on track 5: the two
@@ -170,14 +178,14 @@ static int kosten_block() {
   }();
   return n;
 }
-// Plan 1.11 T18 (gate G2): KOSTEN_VOLL_HOST=<1..4> adds that many effect-host stages to the lane arr32voll, on the tracks 9 to 8 + n (RB-338 tracks without a chain in the file), latenz 512 (the
+// Plan 1.11 T18 (gate G2): KOSTEN_VOLL_HOST=<1..ARR_INS_HOST> adds that many effect-host stages to the lane arr32voll, on the tracks 9 to 8 + n (RB-338 tracks without a chain in the file), latenz 512 (the
 // round trip of an empty rack in JACK, 2 x quantum 256). Self-check (exit 2): the stages are in the chains, healthy, their strips send audio out, the return guard never acted, the largest path latency is 512 + the group and PM stages.
 // KOSTEN_VOLL_HOST_KRANK=1 is the error case (no stage healthy: the self-check must turn red). The returns are synthetic: a fake host copies the send of cycle k to the return of cycle k + 2 (as test_core_arr_host.cpp). Without the variable the lane is unchanged.
 static int voll_host_n() {
   const char* v = std::getenv("KOSTEN_VOLL_HOST");
   if (!v) return 0;
   const int n = std::atoi(v);
-  return n < 1 ? 0 : std::min(n, 4);
+  return n < 1 ? 0 : std::min(n, cdj::ARR_INS_HOST);
 }
 
 // arr-fx slice 2: KOSTEN_VOLL_MAX=1 places the WHOLE insert pool on the lane arr32voll (every eq, saturator, limiter and utility of the pools
@@ -195,6 +203,11 @@ static int lane_eq_n(bool voll) { return voll && voll_max() ? cdj::ARR_INS_EQ : 
 static int lane_saett_n(bool voll) { return voll && voll_max() ? cdj::ARR_INS_SAETT : 1; }
 static int lane_lim_n(bool voll) { return voll && voll_max() ? cdj::ARR_INS_LIM : 1; }
 static int lane_util_n(bool voll) { return voll && voll_max() ? cdj::ARR_INS_UTIL : 0; }
+// the full-load lanes: arr32voll (32 tracks, the arr32ins layout), arr64voll and arr128voll (every strip one compressor and one EQ). The chain index of a strip: tracks 0..spuren - 1,
+// groups spuren.. (16), the PM at spuren + 16, the returns after it (8).
+static bool voll_lage(const std::string& l) { return l == "arr32voll" || l == "arr64voll" || l == "arr128voll" || l == "arr128real"; }
+static int voll_spuren(const std::string& l) { return l == "arr128voll" || l == "arr128real" ? 128 : l == "arr64voll" ? 64 : 32; }
+static int voll_arr_nr(int spuren) { return spuren == 128 ? 25 : spuren == 64 ? 24 : 18; }
 
 // True when KOSTEN_BLOCK is unset, 128 or 256. main() checks this first thing (before any file is created) and returns 4 otherwise.
 static bool kosten_block_gueltig() {
@@ -359,10 +372,7 @@ int warp_lage(const char* lage, int n, bool tor, const std::string& ordner, cdj:
     std::fprintf(stderr, "kosten_arr: %s: %s\n", lage, e.meldung.c_str());
     return 2;
   }
-  cdj::Befehl f = l.neu(cdj::Befehl::TEIL);   // erz/4 offen wie im Betrieb
-  std::snprintf(f.pfad, sizeof f.pfad, "erz/4/fader");
-  f.politik = 1;
-  l.bef->schiebe(f);
+  // No part opens erz/4 any more: container core K9 dropped every erz/* row, the arrangement plays into the hidden production strip, which has no row.
   cdj::Befehl b = l.neu(cdj::Befehl::ARR_LADEN);
   b.zeiger = e.snap.release();
   b.arr_nr = nr;
@@ -476,7 +486,7 @@ constexpr float VOLL_MAKRO[4] = {0.25f, 0.5f, 0.75f, 1.0f};   // the macro rows 
 struct VollZiel { int makro, stufe, param; float von, bis; };
 struct VollRack { int streifen, slot; std::vector<VollZiel> z; };   // streifen: chain index (tracks 0.., groups 32..), slot: 1-based rack pool slot
 // the four racks: 16 mappings each. A komp stage maps its parameters 1..8 (schwelle .. schp; 0 = an and 9 = sc cannot be mapped); the macro of parameter p is (p - 1) % 4.
-std::vector<VollRack> voll_racks(bool mit_eq) {
+std::vector<VollRack> voll_racks(bool mit_eq, int spuren = 32) {
   static const float KOMP_VB[8][2] = {{-40, -20}, {2, 8}, {0, 12}, {1, 30}, {60, 300}, {0, 6}, {0.7f, 1.0f}, {0, 120}};
   const auto zwei_komp = [](int streifen, int slot) {
     VollRack r{streifen, slot, {}};
@@ -495,8 +505,84 @@ std::vector<VollRack> voll_racks(bool mit_eq) {
     rs.push_back(e);
   }
   rs.push_back(zwei_komp(24, 3));   // track 25: komp 6 and 7
-  rs.push_back(zwei_komp(32, 4));   // group 1: komp 8 and 9 (then the saett)
+  rs.push_back(zwei_komp(spuren, 4));   // group 1 (chain index = number of tracks): komp 8 and 9 (then the saett)
   return rs;
+}
+
+// The chains of the full-load lanes, one list of stage codes per strip (codes: n = komp n, 1000 + n = eq n, 2000 + n = saett n, 3000 + n = lim n, 4000 + n = utility n, 5000 + n = host n).
+// arr32voll: the arr32ins layout (12 komp, eq 1 and 2, the saett on group 1, the limiter on the PM); arr64voll / arr128voll: every strip (spuren + 25) one komp and one eq, slot = strip + 1,
+// three extra komp for the racks (track 5, track 25, group 1), the limiter on the PM. KOSTEN_VOLL_MAX=1: every stage of the pools that is still free (eq, saett, lim, utility up to the pool
+// sizes ARR_INS_*) goes into the free places of the strips of the file (at most ARR_KETTE stages each, not on the PM, not on a host track); `fehlt` counts what did not fit.
+struct VollPlan {
+  std::vector<std::vector<int>> kette;
+  int komp = 0, eq = 0, saett = 0, lim = 0, util = 0, fehlt = 0;
+  bool luecke = false;   // a kind whose slots are not 1..n (the rows of the lane could not drive it)
+};
+VollPlan voll_plan(int spuren, bool mit_eq, int host_n, bool real = false) {
+  const int pm = spuren + 16, ret0 = spuren + 17, strips = spuren + 25;
+  VollPlan p;
+  p.kette.assign(static_cast<size_t>(strips), {});
+  auto& k = p.kette;
+  if (real) {   // arr128real: 40 eq (tracks 1..40), 12 komp (tracks 41..52), 4 saett (53..56), lim 2 and 3 on the groups 1 and 2, lim 1 on the PM, 1 utility (track 57)
+    for (int i = 0; i < 40; ++i) k[i] = {1001 + i};
+    for (int i = 0; i < 12; ++i) k[40 + i] = {1 + i};
+    for (int i = 0; i < 4; ++i) k[52 + i] = {2001 + i};
+    k[56] = {4001};
+    k[spuren] = {3002};
+    k[spuren + 1] = {3003};
+    k[pm] = {3001};
+  } else if (spuren == 32) {
+    k[0] = {2}; k[1] = {3}; k[2] = {1}; k[4] = {4, 5};
+    if (mit_eq) k[5] = {1001};
+    if (mit_eq && cdj::ARR_INS_EQ >= 2) k[7] = {1002};
+    k[24] = {6, 7}; k[32] = {8, 9, 2001};
+    k[pm] = {12, 3001}; k[ret0] = {10}; k[ret0 + 1] = {11};
+    if (voll_max()) {   // arr-fx slice 2 placement (eq 3..8, saett 2..4, lim 2, the utilities in pairs), the rest goes through the spill below
+      for (int s = 16; s <= 21; ++s) k[s].push_back(1003 + (s - 16));
+      for (int s = 22; s <= 23; ++s) k[s].push_back(2002 + (s - 22));
+      k[26].push_back(2004);
+      for (int s = 27; s <= 30; ++s) { k[s].push_back(4001 + 2 * (s - 27)); k[s].push_back(4002 + 2 * (s - 27)); }
+      k[33].push_back(3002);
+    }
+  } else {
+    for (int i = 0; i < strips; ++i) { k[i].push_back(i + 1); if (mit_eq) k[i].push_back(1001 + i); }
+    int extra = strips + 1;   // the racks on track 5, track 25 and group 1 own two komp stages (stage 0 and 1), the rack on track 6 maps the eq (stage 0)
+    for (int i : {4, 24, spuren}) k[i].insert(k[i].begin() + 1, extra++);
+    if (mit_eq) k[5] = {1006, 6};
+    k[pm].push_back(3001);
+  }
+  for (int h = 1; h <= host_n; ++h) k[static_cast<size_t>(7 + h)].push_back(5000 + h);
+  const auto vorhanden = [&](int i) { return spuren > 32 || i < 34 || i == pm || (i >= ret0 && i < ret0 + 4); };   // the strips the file has (arr32voll: 32 tracks, 2 groups, the PM, 4 returns)
+  std::vector<bool> da(6000, false);
+  for (const auto& c : k) for (int x : c) da[static_cast<size_t>(x)] = true;
+  if (voll_max()) {
+    std::vector<int> will;
+    for (int n = 1; n <= cdj::ARR_INS_SAETT; ++n) will.push_back(2000 + n);   // the small pools first: if the strips of the file run out of places, the eq pool is the one that stays short
+    for (int n = 1; n <= cdj::ARR_INS_LIM; ++n) will.push_back(3000 + n);
+    for (int n = 1; n <= cdj::ARR_INS_UTIL; ++n) will.push_back(4000 + n);
+    for (int n = 1; n <= cdj::ARR_INS_EQ; ++n) will.push_back(1000 + n);
+    for (int c : will) {
+      if (da[static_cast<size_t>(c)] || (!mit_eq && c < 2000)) continue;
+      bool ok = false;
+      for (int i = 0; i < strips && !ok; ++i)
+        if (vorhanden(i) && static_cast<int>(k[static_cast<size_t>(i)].size()) < cdj::ARR_KETTE) {
+          auto& ch = k[static_cast<size_t>(i)];
+          ch.insert(i == pm ? ch.end() - 1 : ch.end(), c);   // on the PM before the limiter: the master limiter stays last in the chain
+          ok = true;
+        }
+      if (!ok) ++p.fehlt;
+    }
+  }
+  int hoechst[5] = {};
+  for (const auto& c : k)
+    for (int x : c) {
+      if (x >= 5000) continue;
+      const int art = x / 1000;
+      ++(art == 0 ? p.komp : art == 1 ? p.eq : art == 2 ? p.saett : art == 3 ? p.lim : p.util);
+      hoechst[art] = std::max(hoechst[art], x % 1000);
+    }
+  p.luecke = hoechst[0] != p.komp || hoechst[1] != p.eq || hoechst[2] != p.saett || hoechst[3] != p.lim || hoechst[4] != p.util;
+  return p;
 }
 
 }  // namespace
@@ -513,7 +599,7 @@ int main(int argc, char** argv) {
     const std::string eine = lagen.substr(a + 1, b - a - 1);
     if (!eine.empty() && eine != "ohne" && eine != "arr3" && eine != "arr3rb" && eine != "hand" && eine != "arr32" && eine != "arr32g" && eine != "arr32au" && eine != "arr32warp" &&
         eine != "arr32fest" && eine != "arr32lane" && eine != "arr32lanet" && eine != "arr32auto" && eine != "arr32ueber" && eine != "arr32arm" && eine != "arr32armgriff" && eine != "arr32solo" && eine != "arr32pan" && eine != "arr32cut" && eine != "arr32rb" && eine != "arr32steil" && eine != "arr32hk" && eine != "arr32hk32" && eine != "arr32fest32" && eine != "arr32mod" &&
-        eine != "arr32r" && eine != "arr32r_setze" && eine != "arr32r_oeffnen" && eine != "arr32ins" && eine != "arr32ins_aus" && eine != "arr32ins_k" && eine != "arr32ins_ke" && eine != "arr32ins_ks" && eine != "arr32ins_ol" && eine != "arr32voll" && eine != "arr32grp3" && eine != "arr32kit" && eine != "arr32rack" && eine != "arr32bk" && eine != "arr32bk16") {
+        eine != "arr32r" && eine != "arr32r_setze" && eine != "arr32r_oeffnen" && eine != "arr32ins" && eine != "arr32ins_aus" && eine != "arr32ins_k" && eine != "arr32ins_ke" && eine != "arr32ins_ks" && eine != "arr32ins_ol" && eine != "arr32voll" && eine != "arr64voll" && eine != "arr128voll" && eine != "arr128real" && eine != "arr32grp3" && eine != "arr32kit" && eine != "arr32rack" && eine != "arr32bk" && eine != "arr32bk16") {
       std::fprintf(stderr, "kosten_arr: unbekannte Lage \"%s\"\n", eine.c_str());
       return 3;
     }
@@ -573,7 +659,7 @@ int main(int argc, char** argv) {
                       lagen.find(",arr32r,") != std::string::npos || lagen.find(",arr32r_setze,") != std::string::npos ||
                       lagen.find(",arr32r_oeffnen,") != std::string::npos || lagen.find(",arr32ins,") != std::string::npos || lagen.find(",arr32ins_aus,") != std::string::npos ||
                       lagen.find(",arr32ins_k,") != std::string::npos || lagen.find(",arr32ins_ke,") != std::string::npos || lagen.find(",arr32ins_ks,") != std::string::npos || lagen.find(",arr32ins_ol,") != std::string::npos ||
-                      lagen.find(",arr32voll,") != std::string::npos || lagen.find(",arr32grp3,") != std::string::npos ||
+                      lagen.find(",arr32voll,") != std::string::npos || lagen.find(",arr64voll,") != std::string::npos || lagen.find(",arr128voll,") != std::string::npos || lagen.find(",arr128real,") != std::string::npos || lagen.find(",arr32grp3,") != std::string::npos ||
                       lagen.find(",arr32kit,") != std::string::npos || lagen.find(",arr32rack,") != std::string::npos || lagen.find(",arr32bk,") != std::string::npos || lagen.find(",arr32bk16,") != std::string::npos;
   struct Aufraeumen {   // Ende 1, 2 oder 3 und Normalende räumen gleich auf (arr32 legt 8 x 5,8 MB in /dev/shm ab)
     std::string d;
@@ -624,12 +710,11 @@ int main(int argc, char** argv) {
           .write(reinterpret_cast<const char*>(ton.data()), (std::streamsize)(ton.size() * sizeof(float)));
     }
     // 1.10 slice 4a (T8): the insert chains of arr32ins as `,"chain":[...]` per strip (index as ARR_KETTEN: tracks 0..31, groups 32..47, PM 48, returns 49..); each slot 1..12 once
-    const auto ins_kette = [](int streifen, bool voll) -> std::string {
-      if (voll && streifen >= 8 && streifen < 8 + voll_host_n())   // plan 1.11 T18: the host stage of the track (slot = position), declared round trip 512 samples
-        return ",\"chain\":[{\"art\":\"host\",\"slot\":" + std::to_string(streifen - 7) + ",\"latenz\":512}]";
+    const auto ins_kette = [](int streifen, bool voll, int spn = 32, bool real = false) -> std::string {
       const bool ohne_eq = voll && std::getenv("KOSTEN_VOLL_OHNE_EQ") != nullptr, ohne_racks = voll && std::getenv("KOSTEN_VOLL_OHNE_RACKS") != nullptr;
       std::vector<int> sl;
-      switch (streifen) {
+      if (voll) sl = voll_plan(spn, !ohne_eq, voll_host_n(), real).kette[static_cast<size_t>(streifen)];   // plan 1.11 T18: the host stages (slot = position, round trip 512 samples) are in the plan
+      else switch (streifen) {
         case 0: sl = {2}; break;
         case 1: sl = {3}; break;
         case 2: sl = {1}; break;
@@ -646,17 +731,10 @@ int main(int argc, char** argv) {
         case cdj::ARR_KETTE_RET0 + 1: sl = {11}; break;  // return 2
         default: break;
       }
-      if (voll && voll_max()) {   // arr-fx slice 2: the rest of the pools (codes: 100 + n = eq n, 200 + n = saett n, 300 + n = lim n, 400 + n = utility n)
-        if (streifen >= 16 && streifen <= 21) sl.push_back(103 + (streifen - 16));
-        if (streifen == 22 || streifen == 23) sl.push_back(202 + (streifen - 22));
-        if (streifen == 26) sl.push_back(204);
-        if (streifen >= 27 && streifen <= 30) { sl.push_back(401 + 2 * (streifen - 27)); sl.push_back(402 + 2 * (streifen - 27)); }
-        if (streifen == 33) sl.push_back(302);
-      }
       if (sl.empty()) return "";
       // 1.10 slice 5 U2b: KOSTEN_VOLL_SCHLUESSEL=1 gives the stages of arr32voll a structural sidechain key of every kind that exists (the rows sc of the slots 1 and 4 of the arr32ins file stay: the row key).
       // The delay compensation of the file (eq on a track, saett on a group) makes the key rings run: every track strip starts 69 samples late, a deck or row key arrives at 0.
-      const bool mit_key = voll && std::getenv("KOSTEN_VOLL_SCHLUESSEL") != nullptr;
+      const bool mit_key = voll && spn == 32 && std::getenv("KOSTEN_VOLL_SCHLUESSEL") != nullptr;
       const auto key_von = [](int slot) -> std::string {
         switch (slot) {
           case 2: return "{\"q\":\"deck\",\"nr\":1}";                         // track 1: DJ deck
@@ -675,11 +753,13 @@ int main(int argc, char** argv) {
       std::string c = ",\"chain\":[";
       for (size_t k = 0; k < sl.size(); ++k) {
         const std::string key = mit_key && sl[k] < 100 ? key_von(sl[k]) : "";
-        c += (k ? "," : "") + std::string("{\"art\":\"") + (sl[k] >= 400 ? "utility" : sl[k] >= 300 ? "lim" : sl[k] >= 200 ? "saett" : sl[k] >= 100 ? "eq" : "komp") + "\",\"slot\":" + std::to_string(sl[k] % 100) + (key.empty() ? "" : ",\"key\":" + key) + "}";
+        const int art = voll ? sl[k] / 1000 : sl[k] / 100, slot = voll ? sl[k] % 1000 : sl[k] % 100;   // voll: plan codes (1000 + n eq .. 5000 + n host), the others: 100 + n
+        c += (k ? "," : "") + std::string("{\"art\":\"") + (art >= 5 ? "host" : art == 4 ? "utility" : art == 3 ? "lim" : art == 2 ? "saett" : art == 1 ? "eq" : "komp") + "\",\"slot\":" + std::to_string(slot) +
+             (voll && art >= 5 ? ",\"latenz\":512" : "") + (key.empty() ? "" : ",\"key\":" + key) + "}";
       }
       c += "]";
-      if (voll && !ohne_racks)   // 1.10 slices 5 to 8, U0: the 4c rack of the strip, if it owns one (arr32voll)
-        for (const VollRack& r : voll_racks(!ohne_eq)) {
+      if (voll && !real && !ohne_racks)   // 1.10 slices 5 to 8, U0: the 4c rack of the strip, if it owns one (arr32voll)
+        for (const VollRack& r : voll_racks(!ohne_eq, spn)) {
           if (r.streifen != streifen) continue;
           c += ",\"rack\":{\"slot\":" + std::to_string(r.slot) + ",\"ziele\":[";
           for (size_t k = 0; k < r.z.size(); ++k) {
@@ -698,7 +778,7 @@ int main(int argc, char** argv) {
           std::snprintf(z, sizeof z, "[[0,%.4f,0],[16,%.4f,0],[32,%.4f,0],[64,%.4f,0]]", lo, hi, lo, hi);
           return std::string(z);
         };
-        for (const VollRack& r : voll_racks(!ohne_eq))
+        for (const VollRack& r : voll_racks(!ohne_eq, spn))
           if (r.streifen == streifen)
             for (int m = 0; m < 4; ++m) la += (la.empty() ? "" : ",") + std::string("{\"makro\":") + std::to_string(m) + ",\"punkte\":" + dreieck(0.2, 0.8) + "}";
         if (streifen <= 2) la += (la.empty() ? "" : ",") + std::string("{\"stufe\":0,\"param\":2,\"punkte\":") + dreieck(2.0, 6.0) + "}";   // the ratio of the komp on tracks 1 to 3
@@ -706,17 +786,18 @@ int main(int argc, char** argv) {
       }
       return c;
     };
-    const auto bau32 = [&](int nr, bool mit_gruppen, bool mit_lane = false, int mit_ret = 0, int mit_auto = 0, bool mit_ins = false, bool voll = false, bool mit_kit = false, bool mit_rack = false, bool grp3 = false, bool mit_bk = false, int bk_n = 4) {   // mit_kit / mit_rack: 1.9 arr32kit / U6 arr32rack (merge 2026-11-07: numbers 19 and 20)   // mit_auto: 9 = arr32mod (arr32auto plus a relative fader lane on all 32 tracks), 6 = arr32hk (gain envelope on the 8 audio clips), 7 = arr32hk32 (32 audio tracks with the envelope), 8 = arr32fest32 (32 audio tracks, no envelope), 1 = slice 2 lanes (fader, pan, cutoff), 2 = plus solo lane, 3 = pan lane only, 4 = cutoff lane on tracks 1..8 only, 5 = steep fader and pan lanes on all tracks   // mit_ret: number of returns (1.10 slice 3, format /2)   // 1.10: nr 2 ohne Gruppen (/1), nr 3 mit 8 Gruppen zu je 4 Spuren (/2)
+    const auto bau32 = [&](int nr, bool mit_gruppen, bool mit_lane = false, int mit_ret = 0, int mit_auto = 0, bool mit_ins = false, bool voll = false, bool mit_kit = false, bool mit_rack = false, bool grp3 = false, bool mit_bk = false, int bk_n = 4, int spn = 32, bool real = false) {   // mit_kit / mit_rack: 1.9 arr32kit / U6 arr32rack (merge 2026-11-07: numbers 19 and 20)   // mit_auto: 9 = arr32mod (arr32auto plus a relative fader lane on all 32 tracks), 6 = arr32hk (gain envelope on the 8 audio clips), 7 = arr32hk32 (32 audio tracks with the envelope), 8 = arr32fest32 (32 audio tracks, no envelope), 1 = slice 2 lanes (fader, pan, cutoff), 2 = plus solo lane, 3 = pan lane only, 4 = cutoff lane on tracks 1..8 only, 5 = steep fader and pan lanes on all tracks   // mit_ret: number of returns (1.10 slice 3, format /2)   // 1.10: nr 2 ohne Gruppen (/1), nr 3 mit 8 Gruppen zu je 4 Spuren (/2)
     std::string j = std::string("{\"format\":\"") + (mit_gruppen || mit_lane || mit_ret || mit_auto || mit_ins || mit_rack || grp3 || mit_bk ? "cypherdj-arr/2" : "cypherdj-arr/1") + "\",\"nr\":" + std::to_string(nr) + ",\"spuren\":[";
     const int leer_ab = std::getenv("KOSTEN_ARR32_LEER") ? std::atoi(std::getenv("KOSTEN_ARR32_LEER")) : 0;   // KOSTEN_ARR32_LEER=<n>: the RB tracks above n are not in the playback at all (unloaded: no work), unlike KOSTEN_ARR32_LIVE, which only mutes
-    for (int sp = 1; sp <= 32; ++sp) {
+    for (int sp = 1; sp <= spn; ++sp) {   // spn: 32, or 64 / 128 for the lanes arr64voll / arr128voll (the first three quarters RB-338, the rest audio)
       if (leer_ab >= 1 && sp > leer_ab && sp <= 24) continue;
       j += (j.back() != '[' ? "," : "") + std::string("{\"nr\":") + std::to_string(sp);
       if (mit_gruppen) j += ",\"ausgang\":{\"art\":\"gruppe\",\"nr\":" + std::to_string((sp - 1) % 8 + 1) + "}";   // 8 Gruppen zu je 4 Spuren
       const bool a32spur = mit_auto == 7 || mit_auto == 8;
       if (grp3) j += ",\"ausgang\":{\"art\":\"gruppe\",\"nr\":" + std::to_string((sp - 1) % 6 + 1) + "}";   // nested groups task 9: the 32 tracks play into the six groups of level 1
-      if (mit_ins && sp <= 8) j += ",\"ausgang\":{\"art\":\"gruppe\",\"nr\":" + std::to_string((sp - 1) / 4 + 1) + "}";   // slice 4a: tracks 1..4 -> group 1, 5..8 -> group 2
-      if (mit_ins) j += ins_kette(sp - 1, voll);
+      if (mit_ins && spn > 32) j += ",\"ausgang\":{\"art\":\"gruppe\",\"nr\":" + std::to_string((sp - 1) % 16 + 1) + "}";   // arr64voll / arr128voll: the tracks play into the 16 groups in turn
+      else if (mit_ins && sp <= 8) j += ",\"ausgang\":{\"art\":\"gruppe\",\"nr\":" + std::to_string((sp - 1) / 4 + 1) + "}";   // slice 4a: tracks 1..4 -> group 1, 5..8 -> group 2
+      if (mit_ins) j += ins_kette(sp - 1, voll, spn, real);
       if (mit_rack && sp <= 8) {   // 1.9 U6 arr32rack: tracks 1..8 are racks of four internal members (three RB-338 on 36..47, 48..59, 60..71 and kit_zwei on 0..1; the playback allows at most 8 kit uses, so one kit member per rack); each sixteenth plays one note per member, so every member plays as dense as a plain track
         j += ",\"art\":\"intern\",\"geraet\":\"rack\",\"kette\":0,\"glieder\":["
              "{\"id\":\"a\",\"art\":\"intern\",\"geraet\":\"rb338\",\"ton\":[36,47]},"
@@ -744,7 +825,7 @@ int main(int argc, char** argv) {
           j += (i ? "," : "") + std::string("{\"id\":\"n/") + std::to_string(i) + "\",\"beat\":" + std::to_string(i * 0.25) +
                ",\"laenge\":0.2,\"ton\":" + std::to_string((i + sp) % 2) + ",\"vel\":100}";
         j += "]";
-      } else if (sp <= 24 && !a32spur) {
+      } else if (sp <= spn * 3 / 4 && !a32spur) {
         j += ",\"art\":\"intern\",\"geraet\":\"rb338\",\"noten\":[";
         for (int i = 0; i < 128; ++i)   // vier Sechzehntel je Beat, 32 Beats; Tonhöhe je Spur versetzt
           j += (i ? "," : "") + std::string("{\"id\":\"n/") + std::to_string(i) + "\",\"beat\":" + std::to_string(i * 0.25) +
@@ -756,7 +837,7 @@ int main(int argc, char** argv) {
                       ",\"art\":\"audio\",\"clips\":[{\"id\":\"d%d\",\"start_beat\":0.0,\"laenge_beats\":32.0,\"sha256\":\"%s\","
                       "\"datei\":\"%s/audio/%s.f32\",\"frames\":%d,\"offset_frames\":0,\"gain_db\":-6.0,\"ein_beats\":0.0,"
                       "\"aus_beats\":0.0}",
-                      sp, (a32spur ? sha32a(sp) : sha32_von(sp)).c_str(), ordner.c_str(), (a32spur ? sha32a(sp) : sha32_von(sp)).c_str(), FRAMES32);
+                      sp, (a32spur ? sha32a(sp) : sha32_von(25 + (sp - 25) % 8)).c_str(), ordner.c_str(), (a32spur ? sha32a(sp) : sha32_von(25 + (sp - 25) % 8)).c_str(), FRAMES32);
         std::string cs = c;
         if (mit_auto == 6 || mit_auto == 7) {   // a linear ramp per 2 beats: 17 points over the 32 beats, 12 dB and 3 dB down in turn (the phase differs by track so the ramps are not in step)
           std::string hk = ",\"gain_hk\":[";
@@ -827,8 +908,8 @@ int main(int argc, char** argv) {
     }
     if (mit_ins) {   // slice 4a: groups 1 and 2 with their chains, the PM chain
       j += ",\"gruppen\":[";
-      for (int g = 1; g <= 2; ++g) j += (g > 1 ? "," : "") + std::string("{\"nr\":") + std::to_string(g) + ",\"ausgang\":{\"art\":\"master\"}" + ins_kette(31 + g, voll) + "}";
-      j += "],\"pm\":{" + ins_kette(cdj::ARR_KETTE_PM, voll).substr(1) + "}";
+      for (int g = 1; g <= (spn > 32 ? 16 : 2); ++g) j += (g > 1 ? "," : "") + std::string("{\"nr\":") + std::to_string(g) + ",\"ausgang\":{\"art\":\"master\"}" + ins_kette(spn + g - 1, voll, spn, real) + "}";
+      j += "],\"pm\":{" + ins_kette(voll ? spn + 16 : cdj::ARR_KETTE_PM, voll, spn, real).substr(1) + "}";
     }
     if (grp3) {   // nested groups task 9: 12 groups in three levels, one komp each (slots 1..12), the PM keeps only the master limiter
       // level 1: groups 1..6 (tracks); level 2: 7 (1, 2), 8 (3, 4), 9 (5), 10 (6); level 3: 11 (7, 8), 12 (9, 10); 11 and 12 play into the master
@@ -842,7 +923,7 @@ int main(int argc, char** argv) {
     }
     if (mit_ret) {
       j += ",\"returns\":[";
-      for (int r = 1; r <= 4 && r <= mit_ret; ++r) j += (r > 1 ? "," : "") + std::string("{\"nr\":") + std::to_string(r) + ",\"ausgang\":{\"art\":\"master\"}" + (mit_ins ? ins_kette(cdj::ARR_KETTE_RET0 + r - 1, voll) : std::string()) + "}";
+      for (int r = 1; r <= (spn > 32 ? 8 : 4) && r <= mit_ret; ++r) j += (r > 1 ? "," : "") + std::string("{\"nr\":") + std::to_string(r) + ",\"ausgang\":{\"art\":\"master\"}" + (mit_ins ? ins_kette(voll ? spn + 17 + r - 1 : cdj::ARR_KETTE_RET0 + r - 1, voll, spn, real) : std::string()) + "}";
       j += "]";
     }
     j += "}";
@@ -855,6 +936,9 @@ int main(int argc, char** argv) {
       std::ofstream(ordner + "/wiedergabe-5.json") << bau32(5, false, false, 4);   // 1.10 slice 3: 32 tracks, 4 returns
       std::ofstream(ordner + "/wiedergabe-13.json") << bau32(13, false, false, 4, 0, true);   // 1.10 slice 4a: arr32r plus 12 komp stages (arr32ins and arr32ins_aus); slice 4b adds the eq and saett stage
       std::ofstream(ordner + "/wiedergabe-21.json") << bau32(21, false, false, 4, 0, false, false, false, false, true);   // nested groups task 9: arr32r plus 12 groups in three levels, one komp each (arr32grp3)
+      std::ofstream(ordner + "/wiedergabe-24.json") << bau32(24, false, false, 8, 0, true, true, false, false, false, false, 4, 64);   // strand 1 task 6.8: arr64voll
+      std::ofstream(ordner + "/wiedergabe-25.json") << bau32(25, false, false, 8, 0, true, true, false, false, false, false, 4, 128);   // arr128voll
+      std::ofstream(ordner + "/wiedergabe-26.json") << bau32(26, false, false, 8, 0, true, true, false, false, false, false, 4, 128, true);   // strand 12 B1: arr128real
       std::ofstream(ordner + "/wiedergabe-18.json") << bau32(18, false, false, 4, 0, true, true);   // 1.10 slices 5 to 8, U0: arr32voll = the arr32ins stages regrouped + 4 racks with 16 mappings each
       std::ofstream(ordner + "/wiedergabe-7.json") << bau32(7, false, false, 0, 1);   // slice 2: arr32auto
       std::ofstream(ordner + "/wiedergabe-8.json") << bau32(8, false, false, 0, 2);   // slice 2: arr32solo
@@ -904,7 +988,7 @@ int main(int argc, char** argv) {
     }
     if (rc) return rc;
   }
-  for (const char* lage : {"ohne", "arr3", "arr3rb", "hand", "arr32", "arr32g", "arr32fest", "arr32lane", "arr32lanet", "arr32auto", "arr32ueber", "arr32arm", "arr32armgriff", "arr32solo", "arr32pan", "arr32cut", "arr32rb", "arr32steil", "arr32hk", "arr32hk32", "arr32fest32", "arr32mod", "arr32r", "arr32r_setze", "arr32r_oeffnen", "arr32ins", "arr32ins_aus", "arr32ins_k", "arr32ins_ke", "arr32ins_ks", "arr32ins_ol", "arr32voll", "arr32grp3", "arr32kit", "arr32rack", "arr32bk", "arr32bk16"}) {
+  for (const char* lage : {"ohne", "arr3", "arr3rb", "hand", "arr32", "arr32g", "arr32fest", "arr32lane", "arr32lanet", "arr32auto", "arr32ueber", "arr32arm", "arr32armgriff", "arr32solo", "arr32pan", "arr32cut", "arr32rb", "arr32steil", "arr32hk", "arr32hk32", "arr32fest32", "arr32mod", "arr32r", "arr32r_setze", "arr32r_oeffnen", "arr32ins", "arr32ins_aus", "arr32ins_k", "arr32ins_ke", "arr32ins_ks", "arr32ins_ol", "arr32voll", "arr64voll", "arr128voll", "arr128real", "arr32grp3", "arr32kit", "arr32rack", "arr32bk", "arr32bk16"}) {
     if (!lagen.empty() && lagen.find(std::string(",") + lage + ",") == std::string::npos) continue;
     Lauf l;
     if (const char* sc = std::getenv("KOSTEN_SCHLAF"); sc && std::string(sc) == "0") {   // reference arm: sleep off, right after the kern is built, so schlaf_bloecke counts nothing
@@ -971,24 +1055,28 @@ int main(int argc, char** argv) {
     const bool r32 = std::string(lage) == "arr32r", r32s = std::string(lage) == "arr32r_setze", r32o = std::string(lage) == "arr32r_oeffnen";
     // slice 4b T12 variants for the pool decision: _k = the 12 komp stages only (the slice 4a lane shape: eq and saett present but off), _ke = plus the eq, _ks = plus the saett
     const std::string lage_s = lage;
-    const bool voll = lage_s == "arr32voll";   // 1.10 slices 5 to 8, U0: the full-load lane (all pools, 4 racks x 16 mappings, PDC on a track and a group)
+    const bool voll = voll_lage(lage_s);   // 1.10 slices 5 to 8, U0: the full-load lane (arr32voll; strand 1 task 6.8: arr64voll and arr128voll)
+    const int spn = voll_spuren(lage_s);   // tracks of the lane
+    const bool real = lage_s == "arr128real";   // strand 12 B1: the realistic project (60 stages, no racks)
+    const VollPlan vplan = voll ? voll_plan(spn, true, voll_host_n(), real) : VollPlan{};   // the expected counts: with the eq (KOSTEN_VOLL_OHNE_EQ is the error case, the file then misses it) (all pools, 4 racks x 16 mappings, PDC on a track and a group)
     const int host_n = voll ? voll_host_n() : 0;   // plan 1.11 T18: synthetic effect-host stages (KOSTEN_VOLL_HOST)
     struct HostAttrappe {
-      float aus_l[4][1024] = {}, aus_r[4][1024] = {}, rueck_l[4][1024] = {}, rueck_r[4][1024] = {}, v1[4][1024] = {}, v2[4][1024] = {};
-      float spitze[4] = {};
+      float aus_l[cdj::ARR_INS_HOST][1024] = {}, aus_r[cdj::ARR_INS_HOST][1024] = {}, rueck_l[cdj::ARR_INS_HOST][1024] = {}, rueck_r[cdj::ARR_INS_HOST][1024] = {};
+      float v1[cdj::ARR_INS_HOST][1024] = {}, v2[cdj::ARR_INS_HOST][1024] = {};
+      float spitze[cdj::ARR_INS_HOST] = {};
     } host_att;
     if (host_n > 0) {
       l.kern->setze_host_ports_da(true);
       const int bl = kosten_block();
-      for (int h = 1; h <= 4; ++h) {
+      for (int h = 1; h <= cdj::ARR_INS_HOST; ++h) {
         l.kern->ins_aus(h, host_att.aus_l[h - 1], host_att.aus_r[h - 1]);
         l.kern->ins_rueck(h, host_att.rueck_l[h - 1], host_att.rueck_r[h - 1]);
       }
       l.host_vor = [&host_att, bl]() {
-        for (int h = 0; h < 4; ++h) { std::memset(host_att.aus_l[h], 0, bl * sizeof(float)); std::memset(host_att.aus_r[h], 0, bl * sizeof(float)); }
+        for (int h = 0; h < cdj::ARR_INS_HOST; ++h) { std::memset(host_att.aus_l[h], 0, bl * sizeof(float)); std::memset(host_att.aus_r[h], 0, bl * sizeof(float)); }
       };
       l.host_nach = [&host_att, bl]() {   // return of the next cycle = send of the cycle before this one (round trip 2 x block = 512 at 256)
-        for (int h = 0; h < 4; ++h) {
+        for (int h = 0; h < cdj::ARR_INS_HOST; ++h) {
           for (int k = 0; k < bl; ++k) host_att.spitze[h] = std::max(host_att.spitze[h], std::fabs(host_att.aus_l[h][k]));
           std::memcpy(host_att.rueck_l[h], host_att.v1[h], bl * sizeof(float));
           std::memcpy(host_att.rueck_r[h], host_att.v2[h], bl * sizeof(float));
@@ -1039,17 +1127,19 @@ int main(int argc, char** argv) {
     // master limiter plan (2026-11-06): lim 1 on the PM computes in every lane that computes stages (an 1, ceiling -1 dB); arr32ins_aus bypasses it with the rest,
     // arr32ins_ol is arr32ins with only the lim bypassed (the paired price of the limiter: arr32ins - arr32ins_ol in one interleaved pass)
     const bool lim_an = ins_an && lage_s != "arr32ins_ol";
-    const int ins_erwartet = ins_an ? 12 + (eq_an ? lane_eq_n(voll) : 0) + (saett_an ? lane_saett_n(voll) : 0) + (lim_an ? lane_lim_n(voll) : 0) + lane_util_n(voll) : 0;
-    const int stufen_basis = grp3 ? 12 + lane_lim_n(voll) : 12 + lane_eq_n(voll) + lane_saett_n(voll) + lane_lim_n(voll) + lane_util_n(voll);   // the stages of the file in the snapshot chains (without the host stages)   // 1.10 slice 4a (T8)
+    const int komp_n = voll ? vplan.komp : 12;
+    const int eq_n = voll ? vplan.eq : lane_eq_n(false), saett_n = voll ? vplan.saett : lane_saett_n(false), lim_n = voll ? vplan.lim : lane_lim_n(false), util_n = voll ? vplan.util : lane_util_n(false);   // the komp stages of the lane (arr32voll: 12; arr64voll / arr128voll: one per strip and one more for each of three racks)
+    const int ins_erwartet = ins_an ? komp_n + (eq_an ? eq_n : 0) + (saett_an ? saett_n : 0) + (lim_an ? lim_n : 0) + util_n : 0;
+    const int stufen_basis = grp3 ? 12 + lane_lim_n(voll) : voll ? komp_n + eq_n + saett_n + lim_n + util_n : 12 + lane_eq_n(voll) + lane_saett_n(voll) + lane_lim_n(voll) + lane_util_n(voll);   // the stages of the file in the snapshot chains (without the host stages)   // 1.10 slice 4a (T8)
     const bool ret_lage = r32 || r32s || r32o || ins_lage;   // 1.10 slice 3: 32 tracks, 4 returns with a Hall each, 128 sends; _setze moves a Hall control every block, _oeffnen swaps the playback every 500 blocks
     const bool a32 = std::string(lage) == "arr32" || g32 || ohne_rampen || ret_lage || kitl || rackl || bkl;
-    const int arr_nr32 = bk16l ? 23 : bkl ? 22 : rackl ? 20 : kitl ? 19 : voll ? 18 : grp3 ? 21 : ins_lage ? 13 : ret_lage ? 5 : g32 ? 3 : (lane || lanet) ? 4 : aut ? 7 : aut_solo ? 8 : aut_pan ? 9 : aut_cut ? 10 : aut_rb ? 11 : aut_steil ? 12 : hk ? 14 : hk32 ? 15 : fest32 ? 16 : mod ? 17 : 2;
+    const int arr_nr32 = bk16l ? 23 : bkl ? 22 : rackl ? 20 : kitl ? 19 : real ? 26 : voll ? voll_arr_nr(spn) : grp3 ? 21 : ins_lage ? 13 : ret_lage ? 5 : g32 ? 3 : (lane || lanet) ? 4 : aut ? 7 : aut_solo ? 8 : aut_pan ? 9 : aut_cut ? 10 : aut_rb ? 11 : aut_steil ? 12 : hk ? 14 : hk32 ? 15 : fest32 ? 16 : mod ? 17 : 2;
     const int stumm_nr = std::getenv("KOSTEN_ARR32_STUMM") ? std::atoi(std::getenv("KOSTEN_ARR32_STUMM")) : 0;
     const int live_n = std::getenv("KOSTEN_ARR32_LIVE") ? std::atoi(std::getenv("KOSTEN_ARR32_LIVE")) : 0;   // 0: all tracks live
-    float spitze_db[33], zuletzt_db[33];   // arr32: höchste Spur-Spitze seit Zyklus 100 je Spur (dB)
+    float spitze_db[cdj::ARR_SPUREN + 1], zuletzt_db[cdj::ARR_SPUREN + 1];   // arr32: höchste Spur-Spitze seit Zyklus 100 je Spur (dB)
     for (float& x : spitze_db) x = -1000.0f;
     for (float& x : zuletzt_db) x = -1000.0f;
-    uint64_t meld_n[33] = {}, klang_n[33] = {};   // arr32: Pegel-Meldungen seit Zyklus 100 je Spur, davon klingende (> -120 dB)
+    uint64_t meld_n[cdj::ARR_SPUREN + 1] = {}, klang_n[cdj::ARR_SPUREN + 1] = {};   // arr32: Pegel-Meldungen seit Zyklus 100 je Spur, davon klingende (> -120 dB)
     int zyk = 0;
     uint64_t solo_schaltungen = 0;       // arr32: Blöcke, in denen sich der Solo-Wert von Spur 3 änderte (= Blöcke mit solo_vl)
     float solo_vorher = 0.0f;
@@ -1071,10 +1161,10 @@ int main(int argc, char** argv) {
           cdj::gib_wiedergabe(static_cast<cdj::ArrSnapshot*>(const_cast<void*>(e.zeiger)), cache);
         } else if (a32 && e.art == cdj::Ereignis::QUITTUNG) {
           if (e.status >= 0 && e.status < 8) ++quittung_status[e.status];
-          if (e.status == 6) std::fprintf(stderr, "arr32: abgelehntes Teil id %lld, Grund \"%s\" / \"%s\"\n", (long long)e.id, e.text, e.pfad);
+          if (e.status == 6) std::fprintf(stderr, "arr32: abgelehntes Teil id %lld, Grund \"%s\"\n", (long long)e.id, e.grund);
         } else if (a32 && e.art == cdj::Ereignis::PEGEL && zyk >= 100 && !std::strncmp(e.pfad, "spur/", 5)) {
           const int nr = std::atoi(e.pfad + 5);
-          if (nr >= 1 && nr <= 32) {
+          if (nr >= 1 && nr <= (voll ? spn : 32)) {
             spitze_db[nr] = std::max(spitze_db[nr], e.pegel[0]);
             zuletzt_db[nr] = e.pegel[0];
             ++meld_n[nr];
@@ -1097,10 +1187,7 @@ int main(int argc, char** argv) {
       l.kern->setze_arr_senke_intern(&intern);
       l.kern->setze_arr_senke_wirt(1, &wirt);
     }
-    cdj::Befehl f = l.neu(cdj::Befehl::TEIL);   // erz/4 offen wie im Betrieb (Spec 2.3)
-    std::snprintf(f.pfad, sizeof f.pfad, "erz/4/fader");
-    f.politik = 1;
-    l.bef->schiebe(f);
+    // No part opens erz/4 any more: container core K9 dropped every erz/* row, the arrangement plays into the hidden production strip, which has no row.
     if (kitl || rackl) {   // 1.9: the kit store of the cache loads the repo test kits through lade_kit; the reader is the kit sink of this run's core
       cache.setze_kit_ordner(std::string(CYPHERDJ_DJK) + "/core/tests/data/kits");
       cache.setze_kit_lader(&cdj::lade_kit);
@@ -1201,21 +1288,21 @@ int main(int argc, char** argv) {
           // slice 4a (T8): the rows of the 12 stages ride in the same cycles as the sends (one row per cycle next to the send), so the setup takes exactly as many cycles as in arr32r and
           // the solo window of the self-check is the same. The row an decides: 1 = running, 0 = bypassed in the row only (the chain flag in the file stays true).
           std::vector<std::pair<std::string, float>> ins_zeilen;
-          for (int n = 1; ins_lage && n <= 12; ++n) {
+          for (int n = 1; ins_lage && n <= komp_n; ++n) {
             const std::string kopf = "ins/komp/" + std::to_string(n) + "/";
             ins_zeilen.push_back({kopf + "schwelle", -30.0f});
             ins_zeilen.push_back({kopf + "ratio", 4.0f});
             ins_zeilen.push_back({kopf + "mix", 1.0f});
-            if (n == 1 || n == 4) ins_zeilen.push_back({kopf + "sc", n == 1 ? 1.0f : 2.0f});   // sidechain keys: slot 1 (bass, track 3) listens to track 1, slot 4 (track 5) to track 2
+            if (!real && (n == 1 || n == 4)) ins_zeilen.push_back({kopf + "sc", n == 1 ? 1.0f : 2.0f});   // sidechain keys: slot 1 (bass, track 3) listens to track 1, slot 4 (track 5) to track 2
             ins_zeilen.push_back({kopf + "an", ins_an ? 1.0f : 0.0f});
           }
           if (ins_lage) {   // slice 4b: the eq (the "eq_mix" setting of kosten_ins) and the saett of the whole pool
             using B = EqBand;
             const EqBand(&baender)[8] = EQ_MIX_BAENDER;
-            for (int e = 1; e <= lane_eq_n(voll); ++e) {   // every eq the lane places gets the same setting (2026-11-06: 2; arr-fx KOSTEN_VOLL_MAX: the whole pool)
-            for (int m = 1; m <= 8; ++m) {
+            for (int e = 1; e <= eq_n; ++e) {   // every eq the lane places gets the same setting (2026-11-06: 2; arr-fx KOSTEN_VOLL_MAX: the whole pool)
+            for (int m = 1; m <= (real ? 3 : 8); ++m) {   // arr128real: three bands on (low shelf, two bells: the bands 3, 5 and 6 of the eq_mix setting), the other five stay off (default)
               const std::string kopf = "ins/eq/" + std::to_string(e) + "/b" + std::to_string(m) + "/";
-              const B& b = baender[m - 1];
+              const B& b = baender[real ? (m == 1 ? 2 : m + 2) : m - 1];
               ins_zeilen.push_back({kopf + "typ", (float)b.typ});
               ins_zeilen.push_back({kopf + "freq", b.freq});
               ins_zeilen.push_back({kopf + "gain", b.gain});
@@ -1230,16 +1317,16 @@ int main(int argc, char** argv) {
             ins_zeilen.push_back({"ins/saett/1/an", saett_an ? 1.0f : 0.0f});
             ins_zeilen.push_back({"ins/lim/1/decke", -1.0f});   // master limiter plan: the default ceiling, the PM sum of this lane reaches it
             ins_zeilen.push_back({"ins/lim/1/an", lim_an ? 1.0f : 0.0f});
-            if (voll && voll_max()) {   // arr-fx slice 2: the other stages of the pools get the same kind of setting as the first one
-              for (int n = 2; n <= cdj::ARR_INS_SAETT; ++n) {
+            if (voll && (voll_max() || real)) {   // arr-fx slice 2: the other stages of the pools get the same kind of setting as the first one
+              for (int n = 2; n <= (real ? saett_n : cdj::ARR_INS_SAETT); ++n) {
                 ins_zeilen.push_back({"ins/saett/" + std::to_string(n) + "/drive", 12.0f});
                 ins_zeilen.push_back({"ins/saett/" + std::to_string(n) + "/an", 1.0f});
               }
-              for (int n = 2; n <= cdj::ARR_INS_LIM; ++n) {
+              for (int n = 2; n <= (real ? lim_n : cdj::ARR_INS_LIM); ++n) {
                 ins_zeilen.push_back({"ins/lim/" + std::to_string(n) + "/decke", -1.0f});
                 ins_zeilen.push_back({"ins/lim/" + std::to_string(n) + "/an", 1.0f});
               }
-              for (int n = 1; n <= cdj::ARR_INS_UTIL; ++n) {   // width 1.5, bass mono under 120 Hz: the whole module works (the measured price of the all-on setting)
+              for (int n = 1; n <= (real ? util_n : cdj::ARR_INS_UTIL); ++n) {   // width 1.5, bass mono under 120 Hz: the whole module works (the measured price of the all-on setting)
                 const std::string kopf = "ins/utility/" + std::to_string(n) + "/";
                 ins_zeilen.push_back({kopf + "breite", 1.5f});
                 ins_zeilen.push_back({kopf + "mono_unter", 120.0f});
@@ -1247,14 +1334,18 @@ int main(int argc, char** argv) {
               }
             }
           }
-          if (voll && !std::getenv("KOSTEN_VOLL_OHNE_RACKS") && !std::getenv("KOSTEN_VOLL_MAKRO_AUS"))   // 1.10 slices 5 to 8, U0: the 16 macro rows of the 4 racks (rack/<k>/m<n>)
+          if (voll && !real && !std::getenv("KOSTEN_VOLL_OHNE_RACKS") && !std::getenv("KOSTEN_VOLL_MAKRO_AUS"))   // 1.10 slices 5 to 8, U0: the 16 macro rows of the 4 racks (rack/<k>/m<n>)
             for (int k = 1; k <= 4; ++k)
               for (int nr = 1; nr <= 4; ++nr) ins_zeilen.push_back({"rack/" + std::to_string(k) + "/m" + std::to_string(nr), VOLL_MAKRO[nr - 1]});
           size_t ins_naechste = 0;
-          for (int sp = 1; sp <= 32; ++sp)
-            for (int r = 1; r <= 4; ++r) {
+          const int sende_spuren = voll ? spn : 32, sende_rets = spn > 32 ? 1 : 4;   // arr64voll / arr128voll: one send per track (return (sp - 1) % 8 + 1), 128 setup cycles as the 32 track lanes
+          for (int sp = 1; sp <= sende_spuren; ++sp)
+            for (int rr = 1; rr <= sende_rets; ++rr) {
+              const int r = spn > 32 ? (sp - 1) % 8 + 1 : rr;
               // rows per setup cycle: 1 while they fit next to the 128 sends, 2 with the second eq (2026-11-06); extra cycles would shift the solo phase
-              const size_t je_zyklus = (ins_zeilen.size() + 127) / 128;
+              const size_t zyklen_ges = static_cast<size_t>(sende_spuren * sende_rets), je_zyklus_roh = (ins_zeilen.size() + zyklen_ges - 1) / zyklen_ges;
+              // arr64voll / arr128voll: more than about 50 rows in a cycle next to the earlier setup commands are not all applied (komp stages stayed off in measurements), so at most 40 per cycle, the rest after the loop
+              const size_t je_zyklus = spn > 32 ? std::min<size_t>(je_zyklus_roh, 40) : je_zyklus_roh;
               for (size_t z = 0; z < je_zyklus && ins_naechste < ins_zeilen.size(); ++z) {
                 cdj::Befehl iz = l.neu(cdj::Befehl::TEIL);
                 std::snprintf(iz.pfad, sizeof iz.pfad, "%s", ins_zeilen[ins_naechste].first.c_str());
@@ -1270,6 +1361,16 @@ int main(int argc, char** argv) {
               l.bef->schiebe(sd);
               l.zyklus();   // one command per cycle keeps the ring from overflowing
             }
+          while (ins_naechste < ins_zeilen.size()) {   // the rows that did not fit the setup cycles (40 per cycle for arr64voll / arr128voll)
+            for (int z = 0; z < 40 && ins_naechste < ins_zeilen.size(); ++z, ++ins_naechste) {
+              cdj::Befehl iz = l.neu(cdj::Befehl::TEIL);
+              std::snprintf(iz.pfad, sizeof iz.pfad, "%s", ins_zeilen[ins_naechste].first.c_str());
+              iz.wert = ins_zeilen[ins_naechste].second;
+              iz.politik = 1;
+              l.bef->schiebe(iz);
+            }
+            l.zyklus();
+          }
         }
         if (live_n >= 1 && live_n < 32) {   // KOSTEN_ARR32_LIVE=<n> (the sweep of the track phase): only the first n tracks stay un-muted
           for (int sp = live_n + 1; sp <= 32; ++sp) {
@@ -1355,6 +1456,7 @@ int main(int argc, char** argv) {
     }
     std::vector<double> us;
     us.reserve(n);
+    const double fenster_beat = l.kern->karte().beat_at((double)l.kern->sample());   // the beat at the start of the measured window (the setup of arr64voll / arr128voll takes more cycles than the 32 track lanes)
     for (int i = 0; i < n; ++i) {
       if (armgriff && i % 16 == 0)   // one human grip per 16 cycles on each of 4 faders (a step of 0.004 as in test_kern_arr_arm)
         for (int k = 1; k <= 4; ++k) arm_griff(k, arm_griff_x[k] += 0.004f);
@@ -1468,6 +1570,22 @@ int main(int argc, char** argv) {
         gr_max = std::max(gr_max, l.kern->arrangement().inserts().gr_db(sl));
       }
       const uint64_t nan = l.kern->arrangement().inserts().nan_zaehler();
+      if (std::getenv("KOSTEN_SPUR")) std::fprintf(stderr, "%s: acknowledgements by status 1..7: %llu %llu %llu %llu %llu %llu %llu (6 = rejected)\n", lage, (unsigned long long)quittung_status[1], (unsigned long long)quittung_status[2], (unsigned long long)quittung_status[3], (unsigned long long)quittung_status[4], (unsigned long long)quittung_status[5], (unsigned long long)quittung_status[6], (unsigned long long)quittung_status[7]);
+      if (std::getenv("KOSTEN_SPUR") && sn)   // diagnosis: the stages of the snapshot chains that did not compute in the last block
+        for (int i = 0; i < cdj::ARR_KETTEN; ++i)
+          for (int q = 0; q < sn->kette[i].n; ++q) {
+            const int g = cdj::ins_global(sn->kette[i].st[q].art, sn->kette[i].st[q].slot);
+            if (g >= 0 && !l.kern->arrangement().inserts().lief(g)) std::fprintf(stderr, "  strip %d stage %d: slot %d (global %d) did not compute (track level %.1f dB, share %.2f)\n", i, q, sn->kette[i].st[q].slot, g, i < spn ? (double)zuletzt_db[i + 1] : 0.0, i < spn && meld_n[i + 1] ? (double)klang_n[i + 1] / (double)meld_n[i + 1] : 0.0);
+          }
+      if (voll) {   // the placement of the lane: what the pools hold and what the strips of the file took (KOSTEN_VOLL_MAX: the whole pools, minus what found no free place)
+        std::fprintf(stderr, "%s: placed komp %d, eq %d of %d, saett %d of %d, lim %d of %d, utility %d of %d (%d tracks, hosts %d of %d)%s\n", lage, vplan.komp, vplan.eq, cdj::ARR_INS_EQ,
+                     vplan.saett, cdj::ARR_INS_SAETT, vplan.lim, cdj::ARR_INS_LIM, vplan.util, cdj::ARR_INS_UTIL, spn, host_n, cdj::ARR_INS_HOST, vplan.luecke ? ", SLOT GAP" : "");
+        if (vplan.fehlt != 0) std::fprintf(stderr, "%s: %d stages of the pools found no free place in the strips of this file (the eq pool stays short; arr32voll with all hosts is that tight)\n", lage, vplan.fehlt);
+        if (vplan.luecke) {
+          std::fprintf(stderr, "kosten_arr: Lage %s: the stage slots of the placement have a gap, it does not measure what it should\n", lage);
+          return 2;
+        }
+      }
       std::fprintf(stderr, "%s: stages in the snapshot chains %d (expected %d), stages computing in the last block %d (expected %d), largest gain reduction %.2f dB, NaN %llu (expected 0), schlaf_bloecke=%llu\n", lage,
                    stufen, stufen_basis, lief_n, ins_erwartet, gr_max, (unsigned long long)nan, (unsigned long long)l.kern->mixer().schlaf_bloecke());
       std::fprintf(stderr, "%s: largest path latency of the delay compensation %d samples\n", lage, l.kern->arrangement().pdc_latenz());   // information for every insert lane (arr32voll asserts it below)
@@ -1506,7 +1624,18 @@ int main(int argc, char** argv) {
           return 2;
         }
       }
-      if (voll) {   // 1.10 slices 5 to 8, U0: four racks with 16 mappings, every mapped parameter driven by its macro, the compensation active over a track AND a group
+      if (real) {   // strand 12 B1: exactly 60 placed stages (12 komp, 40 eq, 4 saett, 3 lim, 1 utility), all in the snapshot chains, no rack in the file
+        int je_art[10] = {};   // by ArrInsArt: komp 1, eq 2, saett 3, lim 4, utility 6
+        for (int i = 0; sn && i < cdj::ARR_KETTEN; ++i)
+          for (int q = 0; q < sn->kette[i].n; ++q) ++je_art[static_cast<int>(sn->kette[i].st[q].art) % 10];
+        std::fprintf(stderr, "%s: placed %d stages (expected 60): komp %d, eq %d, saett %d, lim %d, utility %d (expected 12, 40, 4, 3, 1), snapshot chains %d (komp %d, eq %d, saett %d, lim %d, utility %d)\n", lage, vplan.komp + vplan.eq + vplan.saett + vplan.lim + vplan.util,
+                     vplan.komp, vplan.eq, vplan.saett, vplan.lim, vplan.util, stufen, je_art[1], je_art[2], je_art[3], je_art[4], je_art[6]);
+        if (vplan.komp != 12 || vplan.eq != 40 || vplan.saett != 4 || vplan.lim != 3 || vplan.util != 1 || stufen != 60 || stufen_basis != 60 || lief_n != 60 || je_art[1] != 12 || je_art[2] != 40 || je_art[3] != 4 || je_art[4] != 3 || je_art[6] != 1) {
+          std::fprintf(stderr, "kosten_arr: Lage %s: the placed stages are not exactly 60 as asserted, it does not measure what it should\n", lage);
+          return 2;
+        }
+      }
+      if (voll && !real) {   // 1.10 slices 5 to 8, U0: four racks with 16 mappings, every mapped parameter driven by its macro, the compensation active over a track AND a group
         const bool ohne_racks = std::getenv("KOSTEN_VOLL_OHNE_RACKS") != nullptr;
         int racks = 0, ziele = 0, getrieben = 0, wert_ok = 0, wert_soll = 0;
         for (int i = 0; sn && i < cdj::ARR_KETTEN; ++i)
@@ -1534,7 +1663,7 @@ int main(int argc, char** argv) {
         if (host_n > 0) std::fprintf(stderr, "%s: latencies eq %d saett %d lim %d\n", lage, l.kern->arrangement().inserts().latenz(cdj::ins_global(cdj::ArrInsArt::eq, 0)), l.kern->arrangement().inserts().latenz(cdj::ins_global(cdj::ArrInsArt::saett, 0)), l.kern->arrangement().inserts().latenz(cdj::ins_global(cdj::ArrInsArt::lim, 0)));
         std::fprintf(stderr, "%s: racks %d (expected 4), mappings in the snapshot %d (expected 64), parameters driven by a macro %d (expected 64), driven values equal von + m * (bis - von): %d of %d, "
                      "largest path latency %d samples (expected eq + saett + lim = %d, non-zero)\n", lage, racks, ziele, getrieben, wert_ok, wert_soll, pdc, pdc_soll);
-        if (racks != 4 || ziele != 64 || getrieben != 64 || wert_ok != 64 || pdc <= 0 || (!voll_max() && pdc != std::max(pdc_soll, host_n > 0 ? 512 + l.kern->arrangement().inserts().latenz(cdj::ins_global(cdj::ArrInsArt::saett, 0)) + l.kern->arrangement().inserts().latenz(cdj::ins_global(cdj::ArrInsArt::lim, 0)) : 0))) {   // (KOSTEN_VOLL_MAX: the path latency is reported, not asserted: the chains of the whole pool make longer paths than the default lane's) a host track: its 512, then the group stage (saett on group 1: every track strip is aligned to the group paths) and the limiter on the PM
+        if (racks != 4 || ziele != 64 || getrieben != 64 || wert_ok != 64 || pdc <= 0 || (spn == 32 && !voll_max() && pdc != std::max(pdc_soll, host_n > 0 ? 512 + l.kern->arrangement().inserts().latenz(cdj::ins_global(cdj::ArrInsArt::saett, 0)) + l.kern->arrangement().inserts().latenz(cdj::ins_global(cdj::ArrInsArt::lim, 0)) : 0))) {   // (KOSTEN_VOLL_MAX: the path latency is reported, not asserted: the chains of the whole pool make longer paths than the default lane's) a host track: its 512, then the group stage (saett on group 1: every track strip is aligned to the group paths) and the limiter on the PM
           std::fprintf(stderr, "kosten_arr: Lage %s: the racks, the mappings or the delay compensation are not as asserted%s, it does not measure what it should\n", lage, ohne_racks ? " (KOSTEN_VOLL_OHNE_RACKS)" : "");
           return 2;
         }
@@ -1542,12 +1671,13 @@ int main(int argc, char** argv) {
     }
     if (a32) {
       int klingen = 0;
-      for (int sp = 1; sp <= 32; ++sp) {
+      const int klang_spuren = voll ? spn : 32;   // the tracks the lane plays
+      for (int sp = 1; sp <= klang_spuren; ++sp) {
         if (spitze_db[sp] > -120.0f) ++klingen;
         else std::fprintf(stderr, "kosten_arr: arr32 Spur %d klingt nicht (Spitze %.1f dB)\n", sp, spitze_db[sp]);
       }
       int zuletzt = 0;
-      for (int sp = 1; sp <= 32; ++sp) zuletzt += zuletzt_db[sp] > -120.0f;
+      for (int sp = 1; sp <= klang_spuren; ++sp) zuletzt += zuletzt_db[sp] > -120.0f;
       std::fprintf(stderr, "arr32: Quittungen je Status 1..7: %llu %llu %llu %llu %llu %llu %llu (6 = abgelehnt)\n",
                    (unsigned long long)quittung_status[1], (unsigned long long)quittung_status[2],
                    (unsigned long long)quittung_status[3], (unsigned long long)quittung_status[4],
@@ -1635,7 +1765,7 @@ int main(int argc, char** argv) {
       double anteil_min = 1.0;
       int anteil_spur = 0;
       int kit_klingen = 0;
-      for (int sp = 1; sp <= 32; ++sp) {
+      for (int sp = 1; sp <= klang_spuren; ++sp) {
         if (bkl && sp <= bk_n) {   // drum hits and short synth notes: no dense level, but every bk track must sound in some level messages
           kit_klingen += klang_n[sp] > 0;
           continue;
@@ -1653,16 +1783,17 @@ int main(int argc, char** argv) {
                      100.0 * anteil_min, 100.0 * KLANG_ANTEIL_MIN);
       uint64_t solo_soll = 0;   // Schaltungen, die mit einem Beat Abstand zum Fensterende fällig waren; ein Paar sind zwei
       for (int k = 0; k < 57; ++k) {
-        if (24.0 + 4.0 * k <= ende_beat - 1.0 && (!solo_ein || k == 0)) ++solo_soll;
-        if (24.0 + 4.0 * k + 0.25 <= ende_beat - 1.0 && !solo_ein) ++solo_soll;
+        const double von_beat = spn > 32 ? fenster_beat + 0.05 : 0.0;   // arr64voll / arr128voll: only the switches inside the measured window count (the 32 track lanes expect them from beat 24 on)
+        if (24.0 + 4.0 * k <= ende_beat - 1.0 && 24.0 + 4.0 * k >= von_beat && (!solo_ein || k == 0)) ++solo_soll;
+        if (24.0 + 4.0 * k + 0.25 <= ende_beat - 1.0 && 24.0 + 4.0 * k + 0.25 >= von_beat && !solo_ein) ++solo_soll;
       }
       const double med_solo = us_solo.empty() ? 0.0 : (std::sort(us_solo.begin(), us_solo.end()), us_solo[us_solo.size() / 2]);
-      std::fprintf(stderr, "arr32: klingende Spuren %d von 32 (in der letzten Meldung %d, Spur 3: %.1f dB), Fader mit Verlauf %d von 32\n",
-                   klingen, zuletzt, zuletzt_db[3], fader_mit_verlauf);
+      std::fprintf(stderr, "arr32: klingende Spuren %d von %d (in der letzten Meldung %d, Spur 3: %.1f dB), Fader mit Verlauf %d von 32\n",
+                   klingen, klang_spuren, zuletzt, zuletzt_db[3], fader_mit_verlauf);
       std::fprintf(stderr, "arr32: kleinster Klang-Anteil der Pegel-Meldungen %.1f %% (Spur %d)\n", 100.0 * anteil_min, anteil_spur);
-      std::fprintf(stderr, "arr32: Solo-Schaltblöcke %llu von %d Zyklen (erwartet mindestens %llu), Median dieser Blöcke %.1f µs, Maximum %.1f µs\n",
+      std::fprintf(stderr, "arr32: Solo-Schaltblöcke %llu von %d Zyklen (erwartet mindestens %llu), Median dieser Blöcke %.1f µs, Maximum %.1f µs, Fensterende bei Beat %.2f\n",
                    (unsigned long long)solo_schaltungen, n, (unsigned long long)solo_soll, med_solo,
-                   us_solo.empty() ? 0.0 : us_solo.back());
+                   us_solo.empty() ? 0.0 : us_solo.back(), ende_beat);
       if (kitl) {   // self-check of arr32kit: 8 kit tracks sound, the kit sink really started their notes (4 per beat and track) and dropped none
         const double beats = static_cast<double>(l.kern->sample()) / 22500.0;
         const uint64_t soll = static_cast<uint64_t>(0.9 * 8.0 * 4.0 * (beats - 1.0));
@@ -1715,7 +1846,7 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "kosten_arr: arr32g: Gruppen-/PM-Rampe läuft nicht\n");   // Selbstprüfung 1.10: Gruppe 1 und PM müssen mitten in der Rampe stehen
         return 2;
       }
-      if (klingen != 32 || !dicht || fader_mit_verlauf != 32 || quittung_status[6] != 0 || solo_schaltungen < solo_soll || solo_schaltungen > (solo_ein ? 1u : 114u)) {
+      if (klingen != klang_spuren || !dicht || fader_mit_verlauf != 32 || quittung_status[6] != 0 || solo_schaltungen < solo_soll || solo_schaltungen > (solo_ein ? 1u : 114u)) {
         std::fprintf(stderr, "kosten_arr: Lage arr32 hat weniger als 32 klingende Spuren, nicht an allen Fadern eine laufende Rampe, zu dünne Noten, abgelehnte Teile oder zu wenige Solo-Schaltungen, sie misst nicht, was sie soll\n");
         return 2;
       }

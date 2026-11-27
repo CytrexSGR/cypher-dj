@@ -1,0 +1,41 @@
+{
+ "schema": 1,
+ "name": "Flanger / negative",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "fx-flanger-sync",
+ "werte": {
+  "knob1": 0.7143,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.1071,
+  "knob6": 0.5
+ },
+ "beschreibung": {
+  "art": "modulation",
+  "unterart": "flanger",
+  "charakter": [
+   "metallic",
+   "thin",
+   "dark"
+  ],
+  "genre": [
+   "dnb",
+   "breaks",
+   "electro"
+  ],
+  "einsatz": [
+   "drop",
+   "transition"
+  ],
+  "energie": 3,
+  "text": "One bar per sweep, depth 1.5 ms over 1 ms manual, feedback -0.6, mix 50 %; the hollow, inverted flange with a thin, dark core."
+ },
+ "tags": [
+  "fx-flanger-sync"
+ ],
+ "notiz": "Set by the knob ranges of the graph, not yet heard (2026-11-26).",
+ "angelegt": "2026-11-26T00:00:00.000Z",
+ "geaendert": "2026-11-26T00:00:00.000Z"
+}

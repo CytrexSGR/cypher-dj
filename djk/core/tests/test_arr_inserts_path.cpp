@@ -103,11 +103,11 @@ void signal(int st, int blk, float* l, float* r, bool nan = true) {
 
 struct Spur {
   std::vector<float> o[STR];
-  std::vector<uint64_t> maske;
+  std::vector<ArrStreifenMaske> maske;   // strand 1 task 2.1: the strip mask is multi-word
   uint64_t nan = 0;
   void init(int bl) {
     for (auto& v : o) v.assign(static_cast<size_t>(bl) * M * 2, 0.0f);
-    maske.assign(static_cast<size_t>(bl), 0);
+    maske.assign(static_cast<size_t>(bl), ArrStreifenMaske{});
   }
   void ablegen(int st, int blk, const float* l, const float* r) {
     std::memcpy(&o[st][static_cast<size_t>(blk) * M * 2], l, sizeof(float) * M);
@@ -275,7 +275,7 @@ bool spiegel_ok(const ArrInserts& ins) {
   for (int s = 0; s < ARR_INS_ALLE; ++s) {
     const int b = ArrInsertsPruefZugang::wert(ins, s);
     for (int st = 0; st < ARR_KETTEN; ++st) {
-      const bool bit = (ins.slot_eigen(st) >> s) & 1u;
+      const bool bit = ins.slot_eigen(st).test(s);
       if (bit != (b == st)) return false;
     }
   }
@@ -333,7 +333,7 @@ void fall3() {
     if (!s.rig->ins.hat(0) && !ende) {
       ende = true;
       PRUEF(p.rig->ins.hat(0));                       // the bit is still set before the join
-      PRUEF(lanes[1].maske_loeschen == 1u);           // reported, not applied
+      PRUEF(lanes[1].maske_loeschen == ArrStreifenMaske::eins(0));   // reported, not applied
     }
     p.rig->ins.nach_join(lanes.get(), ARR_ARBEIT_BAHNEN);
     PRUEF(s.rig->ins.maske() == p.rig->ins.maske());   // equal to the serial order after the join
@@ -383,11 +383,13 @@ void fall4() {
     for (int g = 0; g < ARR_INS_ALLE; ++g) vor[g] = ArrInsertsPruefZugang::wert(p.rig->ins, g);
     fork_block(i % 2 == 0);
     for (int g = 0; g < ARR_INS_ALLE; ++g) PRUEF(ArrInsertsPruefZugang::wert(p.rig->ins, g) == vor[g]);   // untouched during the fork
-    if (lanes[1].slot_frei != 0) {
+    if (!lanes[1].slot_frei.leer()) {
       ++ende_gesehen;
-      PRUEF(p.rig->ins.slot_eigen(0) == 0 || (p.rig->ins.slot_eigen(0) & lanes[1].slot_frei) == 0);   // the own mirror bit is gone
       for (int g = 0; g < ARR_INS_ALLE; ++g)
-        if ((lanes[1].slot_frei >> g) & 1u) PRUEF(ArrInsertsPruefZugang::wert(p.rig->ins, g) == 0);   // still owned by strip 0 until the join
+        if (lanes[1].slot_frei.test(g)) {
+          PRUEF(!p.rig->ins.slot_eigen(0).test(g));                        // the own mirror bit is gone
+          PRUEF(ArrInsertsPruefZugang::wert(p.rig->ins, g) == 0);   // still owned by strip 0 until the join
+        }
     }
     p.rig->ins.nach_join(lanes.get(), ARR_ARBEIT_BAHNEN);
     PRUEF(spiegel_ok(p.rig->ins));
@@ -397,7 +399,7 @@ void fall4() {
   }
   PRUEF(ende_gesehen >= 1);
   PRUEF(ArrInsertsPruefZugang::wert(p.rig->ins, 0) == -1 && ArrInsertsPruefZugang::wert(p.rig->ins, GLOBAL_SAETT0) == -1);
-  PRUEF(p.rig->ins.slot_eigen(0) == 0);
+  PRUEF(p.rig->ins.slot_eigen(0).leer());
   ArrKette kneu2;
   // tausche with a changed owner: komp 1 moves from strip 1 to strip 2
   {
@@ -407,7 +409,7 @@ void fall4() {
     kneu2 = k[2];
     p.rig->ins.tausche(k);
     PRUEF(spiegel_ok(p.rig->ins));
-    PRUEF(ArrInsertsPruefZugang::wert(p.rig->ins, 1) == 2 && ((p.rig->ins.slot_eigen(2) >> 1) & 1u));
+    PRUEF(ArrInsertsPruefZugang::wert(p.rig->ins, 1) == 2 && p.rig->ins.slot_eigen(2).test(1));
   }
   // schweige_bahn on a tail (strip 2 left its chain: komp 1 stays a tail while it has weight), then the serial wrapper's join
   {
@@ -419,7 +421,7 @@ void fall4() {
     PRUEF(spiegel_ok(p.rig->ins));
     p.rig->ins.schweige_bahn(2, lanes[3]);
     PRUEF(ArrInsertsPruefZugang::wert(p.rig->ins, 1) == 2);   // not yet: the join frees it
-    PRUEF(((p.rig->ins.slot_eigen(2) >> 1) & 1u) == 0);
+    PRUEF(!p.rig->ins.slot_eigen(2).test(1));
     PRUEF(p.rig->ins.hat(2));
     p.rig->ins.nach_join(lanes.get(), ARR_ARBEIT_BAHNEN);
     PRUEF(ArrInsertsPruefZugang::wert(p.rig->ins, 1) == -1 && !p.rig->ins.hat(2) && spiegel_ok(p.rig->ins));
@@ -429,7 +431,7 @@ void fall4() {
   PRUEF(spiegel_ok(p.rig->ins));
   p.rig->ins.ruhe();
   PRUEF(spiegel_ok(p.rig->ins));
-  for (int st = 0; st < ARR_KETTEN; ++st) PRUEF(p.rig->ins.slot_eigen(st) == 0);
+  for (int st = 0; st < ARR_KETTEN; ++st) PRUEF(p.rig->ins.slot_eigen(st).leer());
   std::printf("case 4 ketten_schwanz_und_spiegel: tail ends seen in the fork %d\n", ende_gesehen);
 }
 

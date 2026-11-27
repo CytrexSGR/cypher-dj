@@ -1,0 +1,48 @@
+{
+ "schema": 1,
+ "name": "Hard Clip Drums",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "fx-drive",
+ "werte": {
+  "knob1": 0.6,
+  "knob2": 0.625,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5,
+  "knob6": 1.0,
+  "knob7": 0.5,
+  "knob8": 0.5,
+  "knob9": 0.0,
+  "knob10": 0.5,
+  "knob11": 0.5,
+  "knob12": 0.5,
+  "knob13": 0.5
+ },
+ "beschreibung": {
+  "art": "saturation",
+  "unterart": "clipper",
+  "charakter": [
+   "punchy",
+   "tight",
+   "aggressive"
+  ],
+  "genre": [
+   "techno",
+   "dnb",
+   "breaks"
+  ],
+  "einsatz": [
+   "drop",
+   "build"
+  ],
+  "energie": 4,
+  "text": "Hard curve, Drive 18 dB, ceiling 0.5 (Character 0.5), Tone flat, Output -6 dB, Mix 100 %: flat-topped transients for drum buses."
+ },
+ "tags": [
+  "fx-drive"
+ ],
+ "notiz": "Set by the knob ranges of the graph, not yet heard (2026-11-26).",
+ "angelegt": "2026-11-26T00:00:00.000Z",
+ "geaendert": "2026-11-26T00:00:00.000Z"
+}

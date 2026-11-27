@@ -174,7 +174,7 @@ int main() {
   {  // (c) refusals
     Aufbau a("test_kern_arr_auto_c");
     const size_t e0 = a.x->ev.size();
-    const int64_t i_spur = a.cmd(33, 0, 0), i_neg = a.cmd(-1, 0, 0), i_ziel = a.cmd(1, 4, 0), i_ziel2 = a.cmd(1, -1, 0);
+    const int64_t i_spur = a.cmd(cdj::ARR_SPUREN + 1, 0, 0), i_neg = a.cmd(-1, 0, 0), i_ziel = a.cmd(1, 4, 0), i_ziel2 = a.cmd(1, -1, 0);
     const int64_t i_alle = a.cmd(0, 0, 0), i_an = a.cmd(1, 0, 2);
     const int64_t i_cy = a.cmd(1, 0, 0, "cypher");
     a.lauf();
@@ -374,9 +374,10 @@ int main() {
   }
   {  // (i) order of the refusals and the AI stop
     Aufbau a("test_kern_arr_auto_i");
-    const int64_t i1 = a.cmd(99, 4, 0), i2 = a.cmd(0, 4, 0), i3 = a.cmd(0, 0, 0), i4 = a.cmd(1, 4, 0, "cypher"), i5 = a.cmd(99, 0, 0, "cypher");
+    const int64_t i1 = a.cmd(cdj::ARR_SPUREN + 1, 4, 0), i2 = a.cmd(0, 4, 0), i3 = a.cmd(0, 0, 0),
+                  i4 = a.cmd(1, 4, 0, "cypher"), i5 = a.cmd(cdj::ARR_SPUREN + 1, 0, 0, "cypher");
     a.lauf();
-    PRUEF(a.refused(i1, "format"));                // spur outside 0..32 comes before the field
+    PRUEF(a.refused(i1, "format"));                // spur outside 0..ARR_SPUREN comes before the field
     PRUEF(a.refused(i2, "auto_ziel_unbekannt"));   // the field comes before spur 0 with an 0
     PRUEF(a.refused(i3, "format"));                // spur 0 with an 0
     PRUEF(a.refused(i4, "auto_ziel_unbekannt"));   // the field comes before nur_andreas

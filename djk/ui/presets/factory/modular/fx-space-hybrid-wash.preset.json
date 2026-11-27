@@ -1,0 +1,41 @@
+{
+ "schema": 1,
+ "name": "Space Hall Wash",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "fx-space",
+ "werte": {
+  "knob1": 0.6333,
+  "knob2": 0.5312,
+  "knob3": 0.5526,
+  "knob4": 0.6257,
+  "knob5": 0.65,
+  "knob6": 0.5
+ },
+ "beschreibung": {
+  "art": "reverb",
+  "unterart": "hall",
+  "charakter": [
+   "wet",
+   "evolving",
+   "airy"
+  ],
+  "genre": [
+   "ambient",
+   "progressive",
+   "idm"
+  ],
+  "einsatz": [
+   "breakdown",
+   "transition"
+  ],
+  "energie": 3,
+  "text": "Hall with 50 % algorithmic reverb, 45 % mix, 25 ms pre-delay, low cut 150 Hz, high cut 11 kHz, width 130 %: an airy wash."
+ },
+ "tags": [
+  "fx-space"
+ ],
+ "notiz": "Knobs 1..6 set by the knob ranges of the graph, not yet heard (2026-11-26). The room is the graph.",
+ "angelegt": "2026-11-26T00:00:00.000Z",
+ "geaendert": "2026-11-26T00:00:00.000Z"
+}

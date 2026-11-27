@@ -94,7 +94,7 @@ bool Netz::loop_paket(const v::Adresse* a, const osc::Nachricht& m) {
       quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "ausserhalb_bereich");
       return true;
     }
-    einreihen(b);   // ob die Quelle schalten darf (cypher: nur_hand), entscheidet der Kern
+    einreihen(b);   // whether the source may switch (cypher: not while Stop Cypher is set, ki_gestoppt) is decided by the kern
     return true;
   }
   if (a->pfad == v::k_container_quelle.pfad) {  // container core K8: /k/container/quelle ,hsii (container 1..4, art 0 leer, 1 player, 2 modul)

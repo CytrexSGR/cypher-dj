@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fuehreListeAus } from '../project/commands.ts';
-import { neuesProjekt } from '../project/model.ts';
+import { neuesProjekt, MAX_SPUREN } from '../project/model.ts';
 import { mergePlan, mergeRegler, mergeSicht, baueMergeProjekt, pruefeMergeNochGleich, MergeFehler } from '../project/merge.ts';
 import { routingRegler } from '../project/render.ts';
 
@@ -60,7 +60,7 @@ test('10b without returns the render file is exactly as before slice 3', () => {
   p = lauf(p, ['Kick', 'Bass'].map((name) => ({ befehl: 'spur_neu', art: 'audio', name })));
   const r = mergeRegler(p, ['s1', 's2']);
   assert.ok(!Object.keys(r).some((k) => /send|^ret\//.test(k)));
-  assert.equal(Object.keys(r).length, 32 * 2 + 2 * 2, 'mute and solo of 32 tracks plus fader and pan of the two sources');
+  assert.equal(Object.keys(r).length, MAX_SPUREN * 2 + 2 * 2, 'mute and solo of all tracks plus fader and pan of the two sources');
 });
 
 test('10b stale: a send of a source changed during the render makes the state stale; the same state stays null', () => {

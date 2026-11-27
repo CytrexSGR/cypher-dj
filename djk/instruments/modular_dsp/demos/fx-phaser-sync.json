@@ -1,0 +1,711 @@
+{
+ "format": "baukasten/2",
+ "name": "fx-phaser-sync",
+ "stimmen": 1,
+ "regler_namen": {
+  "1": "Rate mode",
+  "2": "Rate",
+  "3": "Low",
+  "4": "Range",
+  "5": "Feedback",
+  "6": "Mix",
+  "7": "Stereo"
+ },
+ "knoten": [
+  {
+   "id": "ein",
+   "art": "eingang"
+  },
+  {
+   "id": "modus",
+   "art": "regler",
+   "nr": 1,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "rate",
+   "art": "regler",
+   "nr": 2,
+   "min": 0.05,
+   "max": 10,
+   "log": 1,
+   "mitte": 0.5
+  },
+  {
+   "id": "low",
+   "art": "regler",
+   "nr": 3,
+   "min": 100,
+   "max": 2000,
+   "log": 1,
+   "mitte": 300
+  },
+  {
+   "id": "range",
+   "art": "regler",
+   "nr": 4,
+   "min": 0,
+   "max": 48,
+   "mitte": 36
+  },
+  {
+   "id": "feedback",
+   "art": "regler",
+   "nr": 5,
+   "min": 0,
+   "max": 0.85,
+   "mitte": 0.3
+  },
+  {
+   "id": "mix",
+   "art": "regler",
+   "nr": 6,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "stereo",
+   "art": "regler",
+   "nr": 7,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "aus",
+   "art": "ausgang"
+  },
+  {
+   "id": "rf",
+   "art": "lfo",
+   "form": 0
+  },
+  {
+   "id": "rs0",
+   "art": "lfo",
+   "form": 0,
+   "takt": 0.25
+  },
+  {
+   "id": "rs1",
+   "art": "lfo",
+   "form": 0,
+   "takt": 0.5
+  },
+  {
+   "id": "rs2",
+   "art": "lfo",
+   "form": 0,
+   "takt": 1
+  },
+  {
+   "id": "rs3",
+   "art": "lfo",
+   "form": 0,
+   "takt": 2
+  },
+  {
+   "id": "rs4",
+   "art": "lfo",
+   "form": 0,
+   "takt": 4
+  },
+  {
+   "id": "rs5",
+   "art": "lfo",
+   "form": 0,
+   "takt": 8
+  },
+  {
+   "id": "rs6",
+   "art": "lfo",
+   "form": 0,
+   "takt": 16
+  },
+  {
+   "id": "rw",
+   "art": "wahl",
+   "n": 8,
+   "blende": 50
+  },
+  {
+   "id": "qf",
+   "art": "lfo",
+   "form": 1
+  },
+  {
+   "id": "qs0",
+   "art": "lfo",
+   "form": 0,
+   "takt": 0.25,
+   "versatz": 0.0625
+  },
+  {
+   "id": "qs1",
+   "art": "lfo",
+   "form": 0,
+   "takt": 0.5,
+   "versatz": 0.125
+  },
+  {
+   "id": "qs2",
+   "art": "lfo",
+   "form": 0,
+   "takt": 1,
+   "versatz": 0.25
+  },
+  {
+   "id": "qs3",
+   "art": "lfo",
+   "form": 0,
+   "takt": 2,
+   "versatz": 0.5
+  },
+  {
+   "id": "qs4",
+   "art": "lfo",
+   "form": 0,
+   "takt": 4,
+   "versatz": 1.0
+  },
+  {
+   "id": "qs5",
+   "art": "lfo",
+   "form": 0,
+   "takt": 8,
+   "versatz": 2.0
+  },
+  {
+   "id": "qs6",
+   "art": "lfo",
+   "form": 0,
+   "takt": 16,
+   "versatz": 4.0
+  },
+  {
+   "id": "qw",
+   "art": "wahl",
+   "n": 8,
+   "blende": 50
+  },
+  {
+   "id": "wsr",
+   "art": "wahl",
+   "n": 2,
+   "blende": 20
+  },
+  {
+   "id": "hr",
+   "art": "mul",
+   "b": 0.5
+  },
+  {
+   "id": "fq",
+   "art": "mul"
+  },
+  {
+   "id": "nfq",
+   "art": "mul",
+   "b": -1
+  },
+  {
+   "id": "pg",
+   "art": "add",
+   "b": 1
+  },
+  {
+   "id": "sml",
+   "art": "mul"
+  },
+  {
+   "id": "stl",
+   "art": "add"
+  },
+  {
+   "id": "fl",
+   "art": "transponiere"
+  },
+  {
+   "id": "inl",
+   "art": "add"
+  },
+  {
+   "id": "fbl",
+   "art": "mul"
+  },
+  {
+   "id": "ap0l",
+   "art": "allpass",
+   "ordnung": 2
+  },
+  {
+   "id": "ap1l",
+   "art": "allpass",
+   "ordnung": 2
+  },
+  {
+   "id": "ap2l",
+   "art": "allpass",
+   "ordnung": 2
+  },
+  {
+   "id": "ap3l",
+   "art": "allpass",
+   "ordnung": 2
+  },
+  {
+   "id": "wtl",
+   "art": "mul"
+  },
+  {
+   "id": "smr",
+   "art": "mul"
+  },
+  {
+   "id": "str",
+   "art": "add"
+  },
+  {
+   "id": "fr",
+   "art": "transponiere"
+  },
+  {
+   "id": "inr",
+   "art": "add"
+  },
+  {
+   "id": "fbr",
+   "art": "mul"
+  },
+  {
+   "id": "ap0r",
+   "art": "allpass",
+   "ordnung": 2
+  },
+  {
+   "id": "ap1r",
+   "art": "allpass",
+   "ordnung": 2
+  },
+  {
+   "id": "ap2r",
+   "art": "allpass",
+   "ordnung": 2
+  },
+  {
+   "id": "ap3r",
+   "art": "allpass",
+   "ordnung": 2
+  },
+  {
+   "id": "wtr",
+   "art": "mul"
+  },
+  {
+   "id": "nmx",
+   "art": "mul",
+   "b": -1
+  },
+  {
+   "id": "imx",
+   "art": "add",
+   "b": 1
+  },
+  {
+   "id": "drl",
+   "art": "mul"
+  },
+  {
+   "id": "nwl",
+   "art": "mul"
+  },
+  {
+   "id": "ol",
+   "art": "add"
+  },
+  {
+   "id": "drr",
+   "art": "mul"
+  },
+  {
+   "id": "nwr",
+   "art": "mul"
+  },
+  {
+   "id": "or",
+   "art": "add"
+  }
+ ],
+ "kanten": [
+  {
+   "von": "rate.aus",
+   "nach": "rf.rate"
+  },
+  {
+   "von": "rf.aus",
+   "nach": "rw.e1"
+  },
+  {
+   "von": "rs0.aus",
+   "nach": "rw.e2"
+  },
+  {
+   "von": "rs1.aus",
+   "nach": "rw.e3"
+  },
+  {
+   "von": "rs2.aus",
+   "nach": "rw.e4"
+  },
+  {
+   "von": "rs3.aus",
+   "nach": "rw.e5"
+  },
+  {
+   "von": "rs4.aus",
+   "nach": "rw.e6"
+  },
+  {
+   "von": "rs5.aus",
+   "nach": "rw.e7"
+  },
+  {
+   "von": "rs6.aus",
+   "nach": "rw.e8"
+  },
+  {
+   "von": "modus.aus",
+   "nach": "rw.wahl"
+  },
+  {
+   "von": "rate.aus",
+   "nach": "qf.rate"
+  },
+  {
+   "von": "qf.aus",
+   "nach": "qw.e1"
+  },
+  {
+   "von": "qs0.aus",
+   "nach": "qw.e2"
+  },
+  {
+   "von": "qs1.aus",
+   "nach": "qw.e3"
+  },
+  {
+   "von": "qs2.aus",
+   "nach": "qw.e4"
+  },
+  {
+   "von": "qs3.aus",
+   "nach": "qw.e5"
+  },
+  {
+   "von": "qs4.aus",
+   "nach": "qw.e6"
+  },
+  {
+   "von": "qs5.aus",
+   "nach": "qw.e7"
+  },
+  {
+   "von": "qs6.aus",
+   "nach": "qw.e8"
+  },
+  {
+   "von": "modus.aus",
+   "nach": "qw.wahl"
+  },
+  {
+   "von": "rw.aus",
+   "nach": "wsr.e1"
+  },
+  {
+   "von": "qw.aus",
+   "nach": "wsr.e2"
+  },
+  {
+   "von": "stereo.aus",
+   "nach": "wsr.wahl"
+  },
+  {
+   "von": "range.aus",
+   "nach": "hr.a"
+  },
+  {
+   "von": "feedback.aus",
+   "nach": "fq.a"
+  },
+  {
+   "von": "feedback.aus",
+   "nach": "fq.b"
+  },
+  {
+   "von": "fq.aus",
+   "nach": "nfq.a"
+  },
+  {
+   "von": "nfq.aus",
+   "nach": "pg.a"
+  },
+  {
+   "von": "rw.aus",
+   "nach": "sml.a"
+  },
+  {
+   "von": "hr.aus",
+   "nach": "sml.b"
+  },
+  {
+   "von": "sml.aus",
+   "nach": "stl.a"
+  },
+  {
+   "von": "hr.aus",
+   "nach": "stl.b"
+  },
+  {
+   "von": "low.aus",
+   "nach": "fl.hz"
+  },
+  {
+   "von": "stl.aus",
+   "nach": "fl.st"
+  },
+  {
+   "von": "ein.l",
+   "nach": "inl.a"
+  },
+  {
+   "von": "inl.aus",
+   "nach": "ap0l.x"
+  },
+  {
+   "von": "fl.aus",
+   "nach": "ap0l.fc"
+  },
+  {
+   "von": "fl.aus",
+   "nach": "ap0l.fc2"
+  },
+  {
+   "von": "ap0l.aus",
+   "nach": "ap1l.x"
+  },
+  {
+   "von": "fl.aus",
+   "nach": "ap1l.fc"
+  },
+  {
+   "von": "fl.aus",
+   "nach": "ap1l.fc2"
+  },
+  {
+   "von": "ap1l.aus",
+   "nach": "ap2l.x"
+  },
+  {
+   "von": "fl.aus",
+   "nach": "ap2l.fc"
+  },
+  {
+   "von": "fl.aus",
+   "nach": "ap2l.fc2"
+  },
+  {
+   "von": "ap2l.aus",
+   "nach": "ap3l.x"
+  },
+  {
+   "von": "fl.aus",
+   "nach": "ap3l.fc"
+  },
+  {
+   "von": "fl.aus",
+   "nach": "ap3l.fc2"
+  },
+  {
+   "von": "ap3l.aus",
+   "nach": "fbl.a"
+  },
+  {
+   "von": "feedback.aus",
+   "nach": "fbl.b"
+  },
+  {
+   "von": "fbl.aus",
+   "nach": "inl.b",
+   "verzoegerung": 1
+  },
+  {
+   "von": "ap3l.aus",
+   "nach": "wtl.a"
+  },
+  {
+   "von": "pg.aus",
+   "nach": "wtl.b"
+  },
+  {
+   "von": "wsr.aus",
+   "nach": "smr.a"
+  },
+  {
+   "von": "hr.aus",
+   "nach": "smr.b"
+  },
+  {
+   "von": "smr.aus",
+   "nach": "str.a"
+  },
+  {
+   "von": "hr.aus",
+   "nach": "str.b"
+  },
+  {
+   "von": "low.aus",
+   "nach": "fr.hz"
+  },
+  {
+   "von": "str.aus",
+   "nach": "fr.st"
+  },
+  {
+   "von": "ein.r",
+   "nach": "inr.a"
+  },
+  {
+   "von": "inr.aus",
+   "nach": "ap0r.x"
+  },
+  {
+   "von": "fr.aus",
+   "nach": "ap0r.fc"
+  },
+  {
+   "von": "fr.aus",
+   "nach": "ap0r.fc2"
+  },
+  {
+   "von": "ap0r.aus",
+   "nach": "ap1r.x"
+  },
+  {
+   "von": "fr.aus",
+   "nach": "ap1r.fc"
+  },
+  {
+   "von": "fr.aus",
+   "nach": "ap1r.fc2"
+  },
+  {
+   "von": "ap1r.aus",
+   "nach": "ap2r.x"
+  },
+  {
+   "von": "fr.aus",
+   "nach": "ap2r.fc"
+  },
+  {
+   "von": "fr.aus",
+   "nach": "ap2r.fc2"
+  },
+  {
+   "von": "ap2r.aus",
+   "nach": "ap3r.x"
+  },
+  {
+   "von": "fr.aus",
+   "nach": "ap3r.fc"
+  },
+  {
+   "von": "fr.aus",
+   "nach": "ap3r.fc2"
+  },
+  {
+   "von": "ap3r.aus",
+   "nach": "fbr.a"
+  },
+  {
+   "von": "feedback.aus",
+   "nach": "fbr.b"
+  },
+  {
+   "von": "fbr.aus",
+   "nach": "inr.b",
+   "verzoegerung": 1
+  },
+  {
+   "von": "ap3r.aus",
+   "nach": "wtr.a"
+  },
+  {
+   "von": "pg.aus",
+   "nach": "wtr.b"
+  },
+  {
+   "von": "mix.aus",
+   "nach": "nmx.a"
+  },
+  {
+   "von": "nmx.aus",
+   "nach": "imx.a"
+  },
+  {
+   "von": "ein.l",
+   "nach": "drl.a"
+  },
+  {
+   "von": "imx.aus",
+   "nach": "drl.b"
+  },
+  {
+   "von": "wtl.aus",
+   "nach": "nwl.a"
+  },
+  {
+   "von": "mix.aus",
+   "nach": "nwl.b"
+  },
+  {
+   "von": "drl.aus",
+   "nach": "ol.a"
+  },
+  {
+   "von": "nwl.aus",
+   "nach": "ol.b"
+  },
+  {
+   "von": "ol.aus",
+   "nach": "aus.l"
+  },
+  {
+   "von": "ein.r",
+   "nach": "drr.a"
+  },
+  {
+   "von": "imx.aus",
+   "nach": "drr.b"
+  },
+  {
+   "von": "wtr.aus",
+   "nach": "nwr.a"
+  },
+  {
+   "von": "mix.aus",
+   "nach": "nwr.b"
+  },
+  {
+   "von": "drr.aus",
+   "nach": "or.a"
+  },
+  {
+   "von": "nwr.aus",
+   "nach": "or.b"
+  },
+  {
+   "von": "or.aus",
+   "nach": "aus.r"
+  }
+ ]
+}

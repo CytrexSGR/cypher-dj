@@ -8,6 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { BEATS_VORGABE, MAX_AUTO_PUNKTE, MAX_FX_PUNKTE, ZIEL_BEREICH, MAX_CLIPS, MAX_NOTEN, MAX_SPUREN, SAMPLERATE, insertParamIndex, istKettenZiel,
+  istPluginZiel, sendZielVon,
   istBlendZiel, blendFader, blendPfad, MAX_KETTEN_LANEN, makroVon, pitchFaktor, rackSicht, wirtSlots, zerlegeKettenZiel,
   type InsertPoolArt } from './model.ts';
 import { zellBeatsAusFrames } from './scheiben.ts';
@@ -57,7 +58,7 @@ export type WZiel = { art: 'gruppe'; nr: number };   // fehlt `ausgang`, zeigt d
 // Automation Slice 1 (nur /2): je Lane Ziel und Punkte [beat, wert dB, formcode], Formcode 0 linear, 1 s, 2 sprung; die Spur trägt `auto` nur mit Lane
 // Slice 2: `ziel` is the project string (Ziel: fader, pan, mute, solo, geraet.cutoff ...); mute and solo points always carry formcode 2
 // 1.12 slice 5 (D9): relativ marks the merged modulation lane of a track (stacked on the base value or the absolute lane of the same target)
-export interface WAuto { ziel: Ziel; punkte: [number, number, number][]; relativ?: true }
+export interface WAuto { ziel: Ziel | `send.${number}`; punkte: [number, number, number][]; relativ?: true }
 // 1.12 slice 6 (only /2): the lanes of a strip's insert stages and rack macros. `stufe` = position of the stage in the strip's chain, `param` = its parameter
 // index of the kind (as in the rack mapping table), `makro` = 0..3; points as in `auto`. The core takes at most 64 of them in a playback (ARR_KLANES_MAX).
 export type WKettenLane = { stufe: number; param: number; punkte: [number, number, number][] } | { makro: number; punkte: [number, number, number][] };
@@ -136,13 +137,14 @@ const kette = (liste0: readonly Insert[] | undefined, strang?: InsertTraeger, ei
   const ca = strang ? kettenAuto(strang, liste ?? [], rack) : [];
   // 1.9 U8 T7: a rack track without a chain still carries its member targets
   if (!liste?.length) return { ...(rack ? { rack } : {}), ...(ca.length ? { chain_auto: ca } : {}) };
+  const schl = (i: Insert): { key?: WInsert['key'] } => (i.key ? { key: { q: i.key.quelle, nr: i.key.nr, punkt: i.key.punkt } } : {});
   const stufe = (i: Insert): WInsert => {
     if (i.art === 'host') {
       const h = hostHaken.host?.(i.slot) ?? { an: false, latenz: 0 };
-      return { art: 'host', slot: i.slot, an: h.an, latenz: h.latenz };
+      return { art: 'host', slot: i.slot, an: h.an, latenz: h.latenz, ...schl(i) };   // strand 2 task 3.4: the key like komp
     }
     const graph = i.art === 'bk' ? { graph: i.graph! } : {};
-    return { art: i.art, slot: i.slot, an: true, ...graph, ...(i.key ? { key: { q: i.key.quelle, nr: i.key.nr, punkt: i.key.punkt } } : {}) };
+    return { art: i.art, slot: i.slot, an: true, ...graph, ...schl(i) };
   };
   return { chain: liste.map(stufe), ...(rack ? { rack } : {}), ...(ca.length ? { chain_auto: ca } : {}) };
 };
@@ -204,6 +206,10 @@ export interface UebersetzOptionen {
   // notes of the translation: what it left out of a loop deck cell because the core would refuse the whole snapshot or the deck cannot play it
   // (a send envelope without its return, a slice map that is too fine for the decoded length). Absent: nothing is collected.
   hinweise?: string[];
+  // note editor (slice 1, B4): the file an audio clip plays instead of its source (the render of its note edit), or null for the source. The one
+  // place that decides which file a clip plays (spec N1): sha256 (the render key) and datei of every loop copy are the render's; frames, offset,
+  // warp, fades and envelopes stay as they are because the render has exactly the frames of the source. Absent: every clip plays its source.
+  notenDatei?: (c: AudioClip) => { sha256: string; datei: string } | null;
 }
 export type GeraetFx = Pick<FxRahmen, 'stufig' | 'rollen'>;
 export type GeraetFxFn = (graph: string) => GeraetFx;
@@ -443,10 +449,12 @@ function audioClips(c: AudioClip, o: Required<Pick<UebersetzOptionen, 'frames'>>
   const marker = warpMarker(c);
   const offset = marker ? 0 : Math.round(c.offset_s * SAMPLERATE);   // gewarpt liest der Kern nicht über offset_frames
   if (offset >= frames) return [];                           // hinter dem Dateiende: nichts zu spielen
-  const datei = path.join(o.audioOrdner, `${c.quelle.sha256}.f32`);
+  const render = o.notenDatei?.(c) ?? null;
+  const sha256 = render ? render.sha256 : c.quelle.sha256;
+  const datei = render ? render.datei : path.join(o.audioOrdner, `${c.quelle.sha256}.f32`);
   const bf = marker ? beatsFeld(c, o, frames) : {};
   const hk = c.huellkurven?.find((h) => h.ziel === 'gain');
-  return audioKopien(c).map((k) => ({ id: k.id, start_beat: k.start_beat, laenge_beats: k.laenge_beats, sha256: c.quelle.sha256,
+  return audioKopien(c).map((k) => ({ id: k.id, start_beat: k.start_beat, laenge_beats: k.laenge_beats, sha256,
     datei, frames, offset_frames: offset, gain_db: c.gain_db, ein_beats: k.ein_beats, aus_beats: k.aus_beats,
     ...(marker ? { warp: { modus: WARP_MODUS_NR[c.warp!.modus], w: marker.map((m): [number, number] => [m[0], m[1]]),
       ...pitchFeld(c.warp!), ...bf } } : {}),
@@ -620,10 +628,21 @@ function fxLanen(panWert: number, lanen: WAuto[], fx: SpurFx): WAuto[] {
   return aus;
 }
 // The lanes the project itself holds for a track, as the playback writes them (mute and solo always jump)
-const eigeneLanen = (s: Spur): WAuto[] => (s.automation ?? []).filter((l) => !istKettenZiel(l.ziel)).map((l) => {
+// A send lane `send.<return id>` is written as the core's `send.<return number>`; `retNr` maps the ids of the returns the playback has to their number.
+// A lane whose return the playback does not have (a parked live return) is left out, and without the map (the counting pass) no send lane is written.
+// strand 2 slice 1: a plugin lane is never written (a server-side player drives the host)
+const eigeneLanen = (s: Spur, retNr?: ReadonlyMap<string, number>): WAuto[] => (s.automation ?? [])
+  .filter((l) => !istKettenZiel(l.ziel) && !istPluginZiel(l.ziel))
+  .flatMap((l): WAuto[] => {
+  const punkte = (form: (q: { form?: string }) => number): [number, number, number][] =>
+    l.punkte.map((q): [number, number, number] => [q.beat, q.wert, form(q)]);
+  const rid = sendZielVon(l.ziel);
+  if (rid !== null) {
+    const nr = retNr?.get(rid);
+    return nr === undefined ? [] : [{ ziel: `send.${nr}`, punkte: punkte((q) => FORM_NR[q.form ?? 'linear']) }];
+  }
   const sprung = ZIEL_BEREICH[l.ziel as Ziel].nurSprung;
-  const form = (q: { form?: string }): number => (sprung ? FORM_NR.sprung : FORM_NR[q.form ?? 'linear']);
-  return { ziel: l.ziel as Ziel, punkte: l.punkte.map((q): [number, number, number] => [q.beat, q.wert, form(q)]) };
+  return [{ ziel: l.ziel as Ziel, punkte: punkte((q) => (sprung ? FORM_NR.sprung : FORM_NR[q.form ?? 'linear'])) }];
 });
 /** The pitch and level events of one track's effect commands (absolute beats, as the playback writes them); null without any (or off the Baukasten). */
 export function fxEreignisse(p: Projekt, s: Spur, gf?: GeraetFxFn): { bend: [number, number, number][]; pegel: [number, number, number][] } | null {
@@ -803,6 +822,8 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
   const live = p.live === true;
   const spitzeVon = (id: string | undefined): string | undefined => spitze(p, id);
   const geparkt = (id: string | undefined): boolean => { const t = spitzeVon(id); return live && t !== undefined && platzVonGruppe(p, t) === null; };
+  const sichtbareReturns = (p.returns ?? []).filter((r) => !(live && returnEigner(p, r) !== undefined && geparkt(returnEigner(p, r))));
+  const retNr = new Map(sichtbareReturns.map((r) => [r.id, r.nr]));   // the returns this playback has: send lanes name them by number
   const spuren: WSpur[] = [...p.spuren].filter((s) => !geparkt(s.ausgang?.id)).sort((a, b) => a.nr - b.nr).map((s): WSpur => {
     const w0 = ohneZiel(s);
     let w: WSpur = w0;
@@ -826,7 +847,7 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
     }
     // Automation: `auto` only with a lane, else the file stays the previous one. Effect commands add pan and role lanes (task 14)
     const fxS = fxJe.get(s.id);
-    const absolut = fxS ? fxLanen(s.pan, eigeneLanen(s), fxS) : eigeneLanen(s);
+    const absolut = fxS ? fxLanen(s.pan, eigeneLanen(s, retNr), fxS) : eigeneLanen(s, retNr);
     if (absolut.length) {
       autoPunkte += absolut.reduce((n, l) => n + l.punkte.length, 0);
       w = { ...w, auto: [...(w.auto ?? []), ...absolut] };
@@ -853,8 +874,7 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
     return { nr: g.nr, ausgang, ...kette(g.inserts, g) };
   });
   // return automation slice 2: the fader lane of a return goes to the core as returns[].auto (the same conversion as on a track); only `fader` is legal there
-  const returnsW: WReturn[] = [...(p.returns ?? [])].filter((r) => !(live && returnEigner(p, r) !== undefined && geparkt(returnEigner(p, r)))).sort((a,
-    b) => a.nr - b.nr).map((r) => {
+  const returnsW: WReturn[] = [...sichtbareReturns].sort((a, b) => a.nr - b.nr).map((r) => {
     const rl = (r.automation ?? []).filter((l) => l.ziel === 'fader');
     autoPunkte += rl.reduce((n, l) => n + l.punkte.length, 0);
     const auto = rl.map((l): WAuto => ({ ziel: 'fader', punkte: l.punkte.map((q) => [q.beat, q.wert, FORM_NR[q.form ?? 'linear']]) }));

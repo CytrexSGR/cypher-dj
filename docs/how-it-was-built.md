@@ -16,7 +16,7 @@ written against them. Some of what he said, and what came of it:
 | "the conductor must never play in anything unheard" | the agent may not open a deck the core has not measured |
 | first turn the dominant element down with the EQ, usually the bass, then swap the elements | 3-band EQ with kill; planned agent moves that would open a second sub-bass channel are cancelled |
 | "I had Mixed In Key. Having the keys automatically was a quantum leap" | a key analysis of its own, without Mixed In Key (76.7 % agreement, see below) |
-| "keeping the pitch is a given for me" | every track is time-stretched once to the set tempo with Rubber Band, pitch kept, so a 124.8 BPM track plays at 128 in its own key. The loop boxes do the same when the master tempo changes |
+| "keeping the pitch is a given for me" | every track is time-stretched once to the set tempo with Rubber Band, pitch kept, so a 124.8 BPM track plays at 128 in its own key. The loop decks do the same when the master tempo changes |
 
 **Seeing where a track changes.** Describing how he prepares, Andreas said he mostly sets cues live,
 by looking at the waveform for where the changes are: "where the vocals or breaks start. You can see

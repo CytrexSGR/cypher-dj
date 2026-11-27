@@ -1,21 +1,23 @@
 // PRODUCTION (D1 V2): FREEZE im Spurkopf jeder Wirt-Spur und EXPORT in der Transportleiste (Spec 2.5, 3.4: POST /proj/freeze
-// {spur_id, an} → {rev, projekt}; POST /proj/export {} → {datei, frames, spitze_db, …}, default: loop bracket when on, else the whole song; Paket S3).
+// {spur_id, an} → {rev, projekt}; POST /proj/export {abgabe?, ziel?, ohne_meta?, ausklang_beats?} (the export dialog, export_dialog.js) → {datei, frames, spitze_db, …}; the dialog mode `spuren`: POST /proj/export_spuren {abgabe?} → {ordner, dateien, …}, default: loop bracket when on, else the whole song; Paket S3).
 // Beides sind lange Anfragen (ein Freeze ist ein Echtzeit-Durchlauf): währenddessen ist jeder weitere Lauf gesperrt, die
 // Transportleiste zeigt Phase, Takt (aus /zustand/arr status 3) und Sekunden, danach das Ergebnis oder den Grund.
 // Der Schalter wird in den vorhandenen Spurkopf (track_heads.js) eingesetzt, nicht in dessen Vorlage: V1 bleibt unverändert.
 import { resampleBefehl, strangName } from './resample.js';
 import { brauchtSlot } from './rack_device.js';
-import { freezeKnopf, laufText, ergebnisText, einsammelText, ausgabeFehler, echtzeitHinweis, echtzeitFortschritt } from './output.js';
+import { bindeExportDialog } from './export_dialog.js';
+import { freezeKnopf, laufText, exportErgebnisText, ergebnisOrdner, istExportAntwort, einsammelText, ausgabeFehler, echtzeitHinweis, echtzeitFortschritt } from './output.js';
 
 export function bindeAusgabe(ctx) {
   const { st, $ } = ctx;
   const gruppe = document.createElement('div');
   gruppe.className = 'p-gruppe p-ausgabe';
-  gruppe.innerHTML = '<button data-p="export" title="Export the loop bracket when it is on, otherwise the whole song, as a WAV file (48 kHz, 32 bit float); Surge tracks are frozen first" disabled>EXPORT</button>'
+  gruppe.innerHTML = '<button data-p="export" title="Export the loop bracket when it is on, otherwise the whole song" disabled>EXPORT</button>'
     + '<button data-p="einsammeln" title="Copy every audio source that lies outside this project into its audio folder (the originals stay)" disabled>COLLECT</button>'
     + '<progress data-p="ausgabe-fortschritt" class="p-ausgabe-balken" max="1" value="0" hidden></progress>'
     + '<output data-p="ausgabe" class="p-ausgabe-text" aria-live="polite"></output>'
-    + '<output data-p="ausgabe-pfad" class="p-ausgabe-pfad" hidden></output>';
+    + '<output data-p="ausgabe-pfad" class="p-ausgabe-pfad" hidden></output>'
+    + '<button type="button" data-p="ausgabe-ordner" class="p-ausgabe-ordner" title="Open the export folder in the file manager" hidden>SHOW FOLDER</button>';
   $('meldung').before(gruppe);
   st.lauf = null;            // { art: 'freeze'|'export', spur_id?, name?, an?, seit } während einer Anfrage (seit: Start dieser Seite, performance.now())
   // V2 Fix F14 (Spec 6.34): ein Lauf, den diese Seite nicht selbst gestartet hat (Reload mitten im Lauf, eine zweite Seite, Cypher), aus
@@ -105,11 +107,18 @@ export function bindeAusgabe(ctx) {
     if (j) { ctx.melde(`Resampled ${name}`); ctx.ladeAktuell(); }
     return j;
   };
-  $('export').addEventListener('click', async () => {
+  // EXPORT opens the dialog; its EXPORT button hands the request here (its EXPORT is disabled while a run is going)
+  async function exportiere(anfrage) {
     if (!st.projekt || laufJetzt()) return;
     const nurLoop = st.projekt.loop?.an === true;   // the loop bracket is what the export writes while it is on
-    const j = await lauf('export', '/proj/export', {}, {});
-    if (j && typeof j.datei === 'string') { st.exportErgebnis = j; ctx.melde(nurLoop ? 'Export finished: only the loop bracket, because LOOP is on' : 'Export finished'); }
+    const j = await lauf('export', anfrage.weg, anfrage.koerper, {});
+    // the per-track set answers {ordner, dateien} instead of {datei}: istExportAntwort checks the shape of the route that was asked
+    if (j && istExportAntwort(anfrage.weg, j)) { st.exportErgebnis = j; ctx.melde(nurLoop ? 'Export finished: only the loop bracket, because LOOP is on' : 'Export finished'); }
+  }
+  const exportDialog = bindeExportDialog(ctx, exportiere);
+  $('export').addEventListener('click', () => {
+    if (!st.projekt || laufJetzt()) return;
+    exportDialog.oeffne();
   });
 
   // COLLECT: not a long run of the frame (no freeze or export is locked by it); the button only waits for its own answer
@@ -126,10 +135,18 @@ export function bindeAusgabe(ctx) {
     ctx.melde('Collect finished');
   });
 
+  // SHOW FOLDER: the server opens it in the file manager; a refusal (no desktop session, folder in the bin) is shown, the path line stays
+  $('ausgabe-ordner')?.addEventListener('click', async () => {
+    const ordner = ergebnisOrdner(st.exportErgebnis);
+    if (!ordner) return;
+    const r = await ctx.holeJson('/proj/export_zeige', { ordner });
+    if (r.status !== 200) ctx.melde(ausgabeFehler(r, ctx.antwortText), true);
+  });
+
   let letzter = null;
   ctx.vorBild.push((t0) => {
     const l = laufJetzt();
-    const e = l ? { text: laufText(l, st.arr, t0), titel: '', warnung: false } : st.exportErgebnis ? ergebnisText(st.exportErgebnis)
+    const e = l ? { text: laufText(l, st.arr, t0), titel: '', warnung: false } : st.exportErgebnis ? exportErgebnisText(st.exportErgebnis)
       : st.einsammelErgebnis ? einsammelText(st.einsammelErgebnis) : { text: echtzeitHinweis(st.projekt), titel: '', warnung: false };
     const balken = $('ausgabe-fortschritt'), f = echtzeitFortschritt(l);
     if (balken) { balken.hidden = f === null; if (f !== null) balken.value = f; }
@@ -140,6 +157,8 @@ export function bindeAusgabe(ctx) {
     o.textContent = e.text; o.title = e.titel; o.classList.toggle('warnung', e.warnung);
     const pf = $('ausgabe-pfad');   // where the file is: visible, wraps, selectable
     if (pf) { pf.textContent = e.pfad ?? ''; pf.hidden = !e.pfad; }
+    const ob = $('ausgabe-ordner');   // SHOW FOLDER: only while the path line is shown and the result knows a folder
+    if (ob) ob.hidden = !(e.pfad && ergebnisOrdner(st.exportErgebnis));
   });
   ctx.beimProjekt.push((p, wechsel) => { if (wechsel) { st.exportErgebnis = null; st.einsammelErgebnis = null; } knoepfe(); });
 }

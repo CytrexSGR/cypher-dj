@@ -28,6 +28,6 @@ test('PFAD: ins/bk/<stage 1..8>/(an|k1..k64)', () => {
   for (const p of ['ins/bk/9/k1', 'ins/bk/0/k1', 'ins/bk/1/k0', 'ins/bk/1/k65', 'ins/bk/1/k01', 'ins/bk/1/k100', 'ins/bk/10/k1', 'ins/bk/1/k', 'ins/bk/1/k1x', 'ins/bk/1/k033']) SCHLECHT(p);
 });
 
-test('PFAD: the track patterns spur/1..32 are not widened by the knob limit', () => {
-  GUT('spur/32/fader'); SCHLECHT('spur/33/fader'); SCHLECHT('spur/64/fader');
+test('PFAD: the track patterns spur/1..128 are not widened by the knob limit', () => {
+  GUT('spur/128/fader'); GUT('spur/64/fader'); SCHLECHT('spur/129/fader'); SCHLECHT('spur/0/fader');
 });

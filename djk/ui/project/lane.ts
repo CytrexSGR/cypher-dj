@@ -10,7 +10,8 @@ const STUMM = -200, STUMM_GRENZE = -120, STUMM_RAMPE = -60;
 // Vor dem ersten Punkt gilt dessen Wert, nach dem letzten der letzte. Zwischen zwei Punkten gilt die Form des
 // rechten (linear | s: 3u²−2u³ | sprung: hält den linken Wert bis zum Beat des rechten). Bei gleichem Beat gilt ab diesem Beat der rechte Wert.
 // Stumm-Regel wie das Stellwerk (core.cpp:213): Rampen von/nach einem Punkt ≤ −120 dB laufen intern bis −60, der Punkt selbst liefert −200.
-// Slice 2: the dB rule is for `fader` only; every other target (pan, mute, solo, geraet.*) interpolates its raw values (ziel is required).
+// Slice 2: the dB rule is for `fader` and the send levels (`send.<return id>`);
+// every other target (pan, mute, solo, geraet.*) interpolates its raw values (ziel is required).
 export function laneWert(punkte: readonly Punkt[], beat: number, ziel: string): number {
   const n = punkte.length;
   if (n === 0) return 0;
@@ -29,7 +30,7 @@ export function laneWert(punkte: readonly Punkt[], beat: number, ziel: string): 
   const u = (beat - a.beat) / (b.beat - a.beat);
   const g = form === 's' ? u * u * (3 - 2 * u) : u;
   let va = a.wert, vb = b.wert;
-  if (ziel !== 'fader') return va + (vb - va) * g;
+  if (ziel !== 'fader' && !ziel.startsWith('send.')) return va + (vb - va) * g;   // the dB rule: the fader and the send levels
   if (va <= STUMM_GRENZE && vb > STUMM_GRENZE) va = Math.min(STUMM_RAMPE, vb);
   if (vb <= STUMM_GRENZE) vb = va <= STUMM_GRENZE ? STUMM : Math.min(STUMM_RAMPE, va);
   return va + (vb - va) * g;

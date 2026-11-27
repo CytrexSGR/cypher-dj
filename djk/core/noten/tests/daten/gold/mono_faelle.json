@@ -1,0 +1,46 @@
+[
+ {
+  "item": "stimme_vibrato",
+  "mehrstimmig": false
+ },
+ {
+  "item": "stimme_hoch",
+  "mehrstimmig": false
+ },
+ {
+  "item": "stimme_gleiten_konsonanten",
+  "mehrstimmig": false
+ },
+ {
+  "item": "bass_gehalten",
+  "mehrstimmig": false
+ },
+ {
+  "item": "bass_ende",
+  "mehrstimmig": false
+ },
+ {
+  "item": "saege_legato",
+  "mehrstimmig": false
+ },
+ {
+  "item": "stille",
+  "mehrstimmig": false
+ },
+ {
+  "item": "rauschen",
+  "mehrstimmig": false
+ },
+ {
+  "item": "kurz",
+  "mehrstimmig": false
+ },
+ {
+  "item": "akkord_terz",
+  "mehrstimmig": true
+ },
+ {
+  "item": "akkord_dreiklang",
+  "mehrstimmig": true
+ }
+]

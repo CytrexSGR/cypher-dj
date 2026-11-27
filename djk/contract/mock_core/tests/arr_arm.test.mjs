@@ -35,7 +35,7 @@ test('arr_arm: andreas arms and disarms (q 1, 3), the state is per track, spur 0
 
 test('arr_arm: refusals format and nur_andreas, nothing is armed by them; andreas works (negative control)', () => {
   const { K, log, bis, cmd } = kern();
-  const cases = [[10n, 33, 1, 0, 'andreas'], [11n, 1, 2, 0, 'andreas'], [12n, 1, 1, 3, 'andreas'], [13n, 0, 1, 1, 'andreas'], [14n, -1, 1, 1, 'andreas']];
+  const cases = [[10n, 129, 1, 0, 'andreas'], [11n, 1, 2, 0, 'andreas'], [12n, 1, 1, 3, 'andreas'], [13n, 0, 1, 1, 'andreas'], [14n, -1, 1, 1, 'andreas']];
   for (const [id, sp, an, mo, qu] of cases) cmd('/k/arr/arm', 'hsiii', [id, qu, sp, an, mo]);
   cmd('/k/arr/arm', 'hsiii', [20n, 'cypher', 1, 1, 1]);
   cmd('/k/arr/arm', 'hsiii', [21n, 'cypher', 1, 0, 1]);
@@ -191,9 +191,9 @@ test('arr_arm: a disarm drops the held point but keeps the window; a quick re-ar
   assert.equal(k.K.arrPunkt(2, 'fader', 3, -9), false);
 });
 
-test('arr_arm: the range is checked before the source (cypher with spur 99 gets format)', () => {
+test('arr_arm: the range is checked before the source (cypher with spur 999 gets format)', () => {
   const { log, bis, cmd } = kern();
-  cmd('/k/arr/arm', 'hsiii', [40n, 'cypher', 99, 1, 1]);
+  cmd('/k/arr/arm', 'hsiii', [40n, 'cypher', 999, 1, 1]);
   bis(3000);
   assert.deepEqual(grund(log, 40), ['6/format']);
 });

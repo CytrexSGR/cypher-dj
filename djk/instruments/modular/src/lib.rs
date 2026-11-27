@@ -677,6 +677,7 @@ mod tests {
         std::fs::write(w.join("orchester-schlag-schichten.f32"), baukasten_dsp::proben::bytes(&baukasten_dsp::proben::orchester_schlag_schichten(sr))).unwrap();
         std::fs::write(w.join("feder-ir.f32"), baukasten_dsp::proben::bytes(&baukasten_dsp::proben::feder_ir(sr))).unwrap();
         baukasten_dsp::proben::schreibe_amiga_werk(&w);
+        baukasten_dsp::proben::schreibe_space_werk(&w);   // fx-space and its three rooms read their impulse response
         w
     }
 

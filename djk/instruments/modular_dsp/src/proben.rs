@@ -274,3 +274,142 @@ pub fn schreibe_amiga_werk(wurzel: &std::path::Path) {
         std::fs::write(wurzel.join(name), bytes(&d)).expect("amiga factory sample not writable");
     }
 }
+
+// ---- Shipped impulse responses of `fx-space` (Cypher Space) ----------------------------------------------------------------
+// Synthetic, deterministic (xorshift32 with fixed seeds, f64 arithmetic), no third-party IR file. Interleaved 48 kHz stereo,
+// every IR normalised to the same energy so the four spaces play at similar loudness through the same graph.
+
+/// The four shipped spaces.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpaceArt {
+    Raum,
+    Platte,
+    Halle,
+    Kammer,
+}
+
+/// File names written by [`schreibe_space_werk`]: the four spaces and the empty user slot (32 frames of zeros).
+pub const SPACE_DATEIEN: [&str; 5] = ["space-raum.f32", "space-platte.f32", "space-halle.f32", "space-kammer.f32", "space-leer.f32"];
+/// Frames of the empty user slot `space-leer.f32`.
+pub const SPACE_LEER_FRAMES: usize = 32;
+/// Sum of squares per side of every shipped IR.
+pub const SPACE_ENERGIE: f64 = 0.5;
+
+struct SpaceParam {
+    sekunden: f64,
+    /// T60 of the low (< 500 Hz), mid and high (> 4 kHz) band in seconds.
+    t60: [f64; 3],
+    onset_ms: f64,
+    /// Gain of the high band (1.0 = unchanged).
+    hoch_gain: f64,
+    /// Early reflections (delay ms, gain) for the left and the right side; empty = none.
+    frueh_l: &'static [(f64, f64)],
+    frueh_r: &'static [(f64, f64)],
+    /// Raised-cosine fade at the end in ms.
+    ausblende_ms: f64,
+}
+
+fn space_param(art: SpaceArt) -> SpaceParam {
+    match art {
+        SpaceArt::Raum => SpaceParam {
+            sekunden: 0.8,
+            t60: [0.6, 0.5, 0.3],
+            onset_ms: 8.0,
+            hoch_gain: 1.0,
+            frueh_l: &[(1.3, 1.0), (2.1, 0.8), (3.4, 0.7), (4.2, 0.6), (5.1, 0.5), (5.9, 0.45), (6.8, 0.4), (7.6, 0.3)],
+            frueh_r: &[(1.7, 1.0), (2.6, 0.75), (3.1, 0.7), (4.6, 0.55), (5.4, 0.5), (6.3, 0.4), (7.1, 0.35), (7.8, 0.3)],
+            ausblende_ms: 20.0,
+        },
+        SpaceArt::Platte => SpaceParam {
+            sekunden: 1.8,
+            t60: [1.6, 1.5, 1.2],
+            onset_ms: 0.0,
+            hoch_gain: 1.4125,
+            frueh_l: &[],
+            frueh_r: &[],
+            ausblende_ms: 50.0,
+        },
+        SpaceArt::Halle => SpaceParam {
+            sekunden: 2.0,
+            t60: [2.2, 1.8, 1.0],
+            onset_ms: 20.0,
+            hoch_gain: 1.0,
+            frueh_l: &[(5.3, 1.0), (8.9, 0.85), (11.6, 0.8), (13.4, 0.7), (15.2, 0.6), (16.8, 0.5), (18.1, 0.45), (19.4, 0.4)],
+            frueh_r: &[(6.7, 1.0), (9.8, 0.8), (10.9, 0.75), (14.3, 0.65), (15.9, 0.55), (17.3, 0.5), (18.7, 0.4), (19.6, 0.35)],
+            ausblende_ms: 100.0,
+        },
+        SpaceArt::Kammer => SpaceParam {
+            sekunden: 1.2,
+            t60: [1.1, 0.9, 0.5],
+            onset_ms: 4.0,
+            hoch_gain: 1.0,
+            frueh_l: &[],
+            frueh_r: &[],
+            ausblende_ms: 50.0,
+        },
+    }
+}
+
+/// One side of a shipped IR (unnormalised): white noise split into three bands by one-pole filters, each band with its own
+/// exponential decay `exp(-6.91 t / T60)`, a 2 ms fade-in after the onset, early reflections, a fade-out at the end.
+fn space_seite(p: &SpaceParam, sr: f64, seed: u32, frueh: &[(f64, f64)]) -> Vec<f64> {
+    let n = (p.sekunden * sr).round() as usize;
+    let onset = (p.onset_ms * 1e-3 * sr).round() as usize;
+    let c = |f: f64| 1.0 - (-2.0 * std::f64::consts::PI * f / sr).exp();
+    let (c_tief, c_hoch) = (c(500.0), c(4000.0));
+    let (mut x, mut lp1, mut lp2) = (seed, 0.0f64, 0.0f64);
+    let fade_ein = (0.002 * sr).round().max(1.0);
+    let mut aus = vec![0.0f64; n];
+    for (i, o) in aus.iter_mut().enumerate() {
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        let w = x as f64 / u32::MAX as f64 * 2.0 - 1.0;
+        lp1 += c_tief * (w - lp1);
+        lp2 += c_hoch * (w - lp2);
+        if i < onset {
+            continue;
+        }
+        let t = (i - onset) as f64 / sr;
+        let (tief, mitte, hoch) = (lp1, lp2 - lp1, w - lp2);
+        let band = |v: f64, t60: f64, g: f64| v * g * (-6.91 * t / t60).exp();
+        let s = band(tief, p.t60[0], 1.0) + band(mitte, p.t60[1], 1.0) + band(hoch, p.t60[2], p.hoch_gain);
+        *o = s * (((i - onset) as f64 + 1.0) / fade_ein).min(1.0);
+    }
+    for &(ms, g) in frueh {
+        let k = (ms * 1e-3 * sr).round() as usize;
+        if k < n {
+            aus[k] += g * 6.0;
+        }
+    }
+    let fade = (p.ausblende_ms * 1e-3 * sr).round() as usize;
+    for j in 1..=fade.min(n - 1) {
+        aus[n - 1 - fade + j] *= 0.5 * (1.0 + (std::f64::consts::PI * j as f64 / fade as f64).cos());
+    }
+    aus
+}
+
+/// A shipped impulse response of `fx-space` (interleaved stereo). Left and right use xorshift32 noise with the seeds
+/// 0x5EED_0001 and 0x5EED_0002, so the sides are decorrelated. Lengths: Raum 0.8 s, Platte 1.8 s, Halle 2.0 s, Kammer 1.2 s.
+/// Every side is scaled to a sum of squares of [`SPACE_ENERGIE`]. Deterministic: same bytes on every call.
+pub fn space_ir(art: SpaceArt, sr: f32) -> Vec<f32> {
+    let sr = sr as f64;
+    let p = space_param(art);
+    let mut l = space_seite(&p, sr, 0x5EED_0001, p.frueh_l);
+    let mut r = space_seite(&p, sr, 0x5EED_0002, p.frueh_r);
+    for s in [&mut l, &mut r] {
+        let e: f64 = s.iter().map(|v| v * v).sum();
+        let k = (SPACE_ENERGIE / e.max(1e-30)).sqrt();
+        s.iter_mut().for_each(|v| *v *= k);
+    }
+    (0..l.len()).flat_map(|i| [l[i] as f32, r[i] as f32]).collect()
+}
+
+/// Writes the four shipped spaces and the empty user slot `space-leer.f32` into `wurzel` (a sample root).
+pub fn schreibe_space_werk(wurzel: &std::path::Path) {
+    let arten = [SpaceArt::Raum, SpaceArt::Platte, SpaceArt::Halle, SpaceArt::Kammer];
+    for (name, art) in SPACE_DATEIEN.iter().zip(arten) {
+        std::fs::write(wurzel.join(name), bytes(&space_ir(art, 48_000.0))).expect("space IR not writable");
+    }
+    std::fs::write(wurzel.join(SPACE_DATEIEN[4]), bytes(&vec![0.0f32; 2 * SPACE_LEER_FRAMES])).expect("space IR not writable");
+}

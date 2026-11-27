@@ -182,6 +182,8 @@ tr.auf-1 td.titelzelle { color: var(--a); } tr.auf-2 td.titelzelle { color: var(
 .taste-c.ja { border-color: var(--ok, #4caf50); color: var(--ok, #4caf50); font-weight: 600; }
 .taste-c.stopp { border-color: var(--warn); color: var(--warn); }
 .taste-c:disabled { opacity: .4; cursor: default; }
+.hand-gestoppt { color: var(--warn); font-weight: 700; letter-spacing: .05em; }
+.cypher.gebremst { outline: 2px solid var(--warn); border-radius: 6px; padding: 2px 6px; }
 
 /* Crossfader-Zuweisung je Deck (2026-09-27): A / THRU / B, die geltende Seite leuchtet in der Deckfarbe */
 .xzuweisung { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; grid-column: 1 / -1; }
@@ -863,8 +865,9 @@ body.remix-fenster #pult { display: flex; }
 body.remix-fenster #platz-remix { display: flex !important; flex-direction: column; flex: 1; min-width: 0; }
 
 /* DJ view: the Strudel place is one row per stream (editor, sound column, strip of the stream); the "+ STREAM" picker sits below the rows. */
-body:not(.studio) #deck-c { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; }
-body:not(.studio) #deck-c > .instanzen { grid-row: 2; }
+body:not(.studio) #deck-c { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; }
+body:not(.studio) #deck-c > .kanalband { grid-row: 2; }
+body:not(.studio) #deck-c > .instanzen { grid-row: 3; }
 body:not(.studio) #deck-c .instanz .zug { display: grid; grid-template-columns: 1fr 1fr; column-gap: 4px; row-gap: 1px; padding: 4px 4px 4px; width: var(--zug);
   grid-template-rows: auto repeat(3, auto) minmax(60px, 1fr) auto auto; align-content: stretch; background: var(--panel2); border: 1px solid var(--line); border-top: 2px solid var(--farbe); border-radius: 8px; }
 
@@ -1313,4 +1316,30 @@ input::placeholder, textarea::placeholder { color: var(--dim); opacity: 1; }
 @media (max-height: 820px) {
   body:not(.studio) #pult .mitte { grid-template-rows: auto auto auto minmax(20px, 1fr) auto auto auto; }
   body:not(.studio) #pult .mitte .knopf, body:not(.studio) #pult .mitte .summe.glue .knopf { width: 32px; height: 32px; }
+}
+.cypher { position: relative; }
+.hand-log { position: absolute; right: 0; top: 100%; z-index: 30; width: 460px; max-height: 360px; overflow: auto; background: #14161b; border: 1px solid #333; padding: 6px 8px; font-size: 11px; }
+.hand-log-tab { border-collapse: collapse; width: 100%; }
+.hand-log-tab td { padding: 1px 6px 1px 0; white-space: nowrap; }
+.hand-log-tab tr.refused { color: var(--warn); }
+.hand-log-leer { margin: 4px 0; opacity: .7; }
+
+/* Channel strip row (strand 11, task 8.2): big cells above the stream tabs, readable from two metres. */
+.kanalband { display: flex; flex-direction: column; gap: 8px; margin: 0 0 10px; }
+.kanalbogen { font-size: 22px; font-weight: 700; line-height: 1.2; padding: 6px 12px; border-radius: 8px; background: var(--panel2); border: 2px solid var(--c, var(--text)); color: var(--text); letter-spacing: .02em; }
+.kanalzellen { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.kanalzelle { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 12px; row-gap: 6px; align-items: center;
+  padding: 6px 12px; background: var(--panel); border: 2px solid var(--line); border-radius: 10px; min-width: 0; transition: border-color .12s, background .12s; }
+.kanalzelle.blinkt { border-color: var(--text); background: var(--panel2); }
+.kanalnr { font-size: 40px; font-weight: 800; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
+.kanalname { font-size: 22px; font-weight: 700; line-height: 1.15; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.kanalname.ohne-bezeichnung { font-weight: 400; font-size: 20px; color: var(--dim); }
+.kanalzelle .meter.waagrecht { grid-column: 1 / -1; height: 14px; }
+/* Tablet width: the Strudel place is about 390 px wide, so the strip shrinks to the minimum that still reads from two metres (number 30, label 20) */
+@media (max-width: 1300px) {
+  .kanalbogen { font-size: 20px; padding: 4px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kanalzellen { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px; }
+  .kanalzelle { grid-template-columns: 1fr; column-gap: 0; row-gap: 2px; padding: 4px 8px; }
+  .kanalnr { font-size: 30px; }
+  .kanalname, .kanalname.ohne-bezeichnung { font-size: 20px; }
 }

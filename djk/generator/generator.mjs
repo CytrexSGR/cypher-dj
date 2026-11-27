@@ -12,7 +12,7 @@ import { ablageOrdner } from '../ui/paths.ts';
 import { kompiliere } from './src/compile.mjs';
 import { ladeKits } from './src/kit.mjs';
 import { Planer, WECHSEL_ABSTAND } from './src/planner.mjs';
-import { schreibeStatus } from './src/pattern_state.mjs';
+import { schreibeStatus, leseVersatz } from './src/pattern_state.mjs';
 import { NeustartRegel } from './src/generation.mjs';
 import { leseTaktart, TAKTART_DATEI } from './src/taktart_file.mjs';
 
@@ -121,13 +121,16 @@ function musterLesen() {
   } catch {
     return;  // noch kein Muster: Stille
   }
-  const r = kompiliere(text);
+  const jetztB = uhr ? beatJetzt() : -Infinity;
+  const vorab = planer.abFuer(jetztB);
+  const versatz = leseVersatz(path.dirname(opt.muster));   // task 5.1; the anchor stays the switch bar (inner time + .late)
+  const r = kompiliere(text, { anker: (Number.isFinite(vorab) ? vorab / planer.proTakt : 0) - versatz });
   if (r.fehler) {
     log(`${opt.muster}: ${r.fehler} (das alte Muster bleibt)`);
     status(letzterStand = { ...letzterStand, nr: planer.nr, ab_beat: null, fehler: r.fehler });  // altes Muster bleibt: sein taub auch
     return;
   }
-  const ab = planer.setze(r.muster, uhr ? beatJetzt() : -Infinity);
+  const ab = planer.setze(r.muster, jetztB, versatz);
   log(`Muster ${planer.nr} gilt ab Beat ${ab}`);
   status(letzterStand = { nr: planer.nr, ab_beat: Number.isFinite(ab) ? ab : null, fehler: null, taub: [], taub_muster: null });
 }

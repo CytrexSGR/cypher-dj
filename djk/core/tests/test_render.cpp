@@ -18,6 +18,8 @@
 // RENDER_OHNE_OBERGRENZE (Fall 1 rot, Fix L3), RING_OHNE_MARGE (Fall 4 rot, Fix L6), WAV_ERSETZT (Fall 3 rot, Fix L9:
 // ein vorhandenes Ziel wird nie ersetzt), WAV_GANZE_KOPIE (Fall 8 rot, Fix 2/P4: verschränkte Kopie des ganzen Exports).
 // Von Hand geprüft (Task 19, nicht in CMake): `if (pm)` → `if (false)` in der Kopierschleife macht Fall 10 rot; CYPHERDJ_MUTATION_RENDER_OHNE_VORHALT ebenso (Isolator-Vergleich).
+#include <malloc.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -326,7 +328,7 @@ int main() {
     const cdj::RenderErgebnis eqs = cdj::rendere(r);
     std::printf("Fall 12: eq and saett rows: Fehler '%s', Regler %d\n", eqs.fehler.c_str(), eqs.regler);
     PRUEF(eqs.fehler.empty() && eqs.regler == 4);
-    for (const char* pfad : {"ins/komp/13/schwelle", "ins/komp/0/schwelle", "ins/eq/9/an", "ins/saett/5/an", "ins/lim/3/an", "ins/utility/9/an", "ins/utility/1/zz", "ins/eq/1/b9/gain", "ins/eq/1/b8/gain/x", "ins/komp/1/zz"}) {
+    for (const char* pfad : {"ins/komp/161/schwelle", "ins/komp/0/schwelle", "ins/eq/161/an", "ins/saett/5/an", "ins/lim/9/an", "ins/gate/17/an", "ins/mb/9/an", "ins/utility/9/an", "ins/utility/1/zz", "ins/eq/1/b9/gain", "ins/eq/1/b8/gain/x", "ins/komp/1/zz"}) {
       r.spur_regler = {{pfad, 0.0f}};
       const cdj::RenderErgebnis e = cdj::rendere(r);
       std::printf("Fall 12: %s: Fehler '%s'\n", pfad, e.fehler.c_str());
@@ -340,8 +342,8 @@ int main() {
     std::vector<cdj::SpurRegler> v;
     std::string fehler;
     PRUEF(regler_datei(p, "{\"ins/komp/1/schwelle\":-30,\"ins/komp/12/sc\":2,\"ins/komp/3/an\":1}", v, fehler) && v.size() == 3);
-    PRUEF(!regler_datei(p, "{\"ins/komp/13/schwelle\":-30}", v, fehler));
-    PRUEF(!regler_datei(p, "{\"ins/komp/1/sc\":33}", v, fehler));
+    PRUEF(!regler_datei(p, "{\"ins/komp/161/schwelle\":-30}", v, fehler));   // one beyond the pool of 160 (strand 1 slice 3b; 96 in slice 3)
+    PRUEF(!regler_datei(p, "{\"ins/komp/1/sc\":129}", v, fehler));   // one above the last track (sc 0..128, strand 1 slice 6)
     // negative control: the old families are untouched, an unknown family prefix is no mixer control
     r.spur_regler = {{"spur/3/fader", -6.0206f}};
     PRUEF(cdj::rendere(r).fehler.empty());
@@ -358,7 +360,7 @@ int main() {
     PRUEF(regler_datei(p, "{}", v, fehler) && v.empty());
     PRUEF(!regler_datei(p, "{\"spur/1/fader\":", v, fehler));             // kein JSON
     PRUEF(!regler_datei(p, "[1,2]", v, fehler));                          // kein Objekt
-    PRUEF(!regler_datei(p, ("{\"spur/" + std::to_string(cdj::ARR_SPUREN + 1) + "/fader\":0}").c_str(), v, fehler));   // n+1 (T09)
+    PRUEF(!regler_datei(p, ("{\"spur/" + std::to_string(cypherdj::stellwerk::SPUR_REGLER_SPUREN + 1) + "/fader\":0}").c_str(), v, fehler));   // n+1 (T09)
     PRUEF(!regler_datei(p, "{\"erz/4/fader\":0}", v, fehler));            // nur Spur-Regler
     PRUEF(!regler_datei(p, "{\"spur/1/fader\":6.5}", v, fehler));         // −200..+6
     PRUEF(!regler_datei(p, "{\"spur/1/pan\":-1.5}", v, fehler));          // −1..+1
@@ -397,6 +399,9 @@ int main() {
     }
     const std::string w = o.pfad + "/gross.wav";
     std::string fehler;
+    // strand 1 slice 6: the renders above (128 tracks) leave a large freed heap that stays resident and raises the mmap threshold of glibc; a copy would
+    // reuse those pages and not show in VmHWM. Hand the free pages back before each window so that the instrument sees a copy again.
+    malloc_trim(0);
     const long rss0 = status_kb("VmRSS");
     const bool zurueck = spitze_zuruecksetzen();
     const long hwm0 = status_kb("VmHWM");
@@ -413,6 +418,7 @@ int main() {
     PRUEF(cdj::lies_wav_f32(w, l2, r2, fehler) && l2 == l && r2 == r);
     std::filesystem::remove(w);
     // Positiv-Kontrolle des Instruments: eine Kopie von L im Fenster muss als Zuwachs um ihre Größe erscheinen
+    malloc_trim(0);
     spitze_zuruecksetzen();
     const long hwm2 = status_kb("VmHWM");
     std::vector<float> kopie(l);

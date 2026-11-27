@@ -115,8 +115,9 @@ const referenz = (c, args) => c.callTool({ name: 'analyse_referenz', arguments: 
 const ref120 = () => ({ hz: Array.from({ length: 120 }, (_, i) => i), mittel_db: Array.from({ length: 120 }, () => -30), max_db: Array.from({ length: 120 }, () => -20) });
 
 test('analyse_live: GET /analyse/live, the spectrum is reduced to 30 bands by the power sum of four', async (t) => {
-  const { c, gesehen } = await verbinde(t, () => [200, LIVE(Array.from({ length: 120 }, () => -30))]);
+  const { c, gesehen: alle } = await verbinde(t, (m, u) => [200, u === '/analyse/pegel' ? { leer: true } : LIVE(Array.from({ length: 120 }, () => -30))]);
   const a = antwort(await live(c));
+  const gesehen = alle.filter((g) => g.pfad === '/analyse/live');
   assert.equal(gesehen.length, 1);
   assert.equal(gesehen[0].methode, 'GET');
   assert.equal(gesehen[0].pfad, '/analyse/live');
@@ -130,7 +131,7 @@ test('analyse_live: GET /analyse/live, the spectrum is reduced to 30 bands by th
 
 test('analyse_live: fein keeps the 120 bands, leer passes through, a refusal is a tool error', async (t) => {
   let n = 0;
-  const { c } = await verbinde(t, () => (n++ === 0 ? [200, LIVE(Array.from({ length: 120 }, (_, i) => -i))]
+  const { c } = await verbinde(t, (m, u) => (u === '/analyse/pegel' ? [200, { leer: true }] : n++ === 0 ? [200, LIVE(Array.from({ length: 120 }, (_, i) => -i))]
     : n === 2 ? [200, { leer: true, grund: 'engine not running' }] : [503, { fehler: 'kern_aus', text: 'no core' }]));
   const a = antwort(await live(c, { fein: true }));
   assert.equal(a.spektrum.hz.length, 120);
@@ -145,11 +146,25 @@ test('analyse_live: schema and description', async (t) => {
   const { c } = await verbinde(t);
   const x = (await c.listTools()).tools.find((y) => y.name === 'analyse_live');
   assert.ok(x);
-  assert.deepEqual(Object.keys(x.inputSchema.properties), ['fein']);
+  assert.deepEqual(Object.keys(x.inputSchema.properties), ['fein', 'reset']);
   assert.equal(x.inputSchema.properties.fein.type, 'boolean');
-  for (const wort of ['0.34 s', 'leer', 'steht', 'stumm', 'lufs_m', 'true_peak_dbtp', 'spitze_db', 'rms_db', 'korrelation_min', 'pegel_db', 'erz/4', 'solo', '400 ms', 'only reads', 'fein']) {
+  for (const wort of ['0.34 s', 'leer', 'steht', 'stumm', 'lufs_m', 'true_peak_dbtp', 'spitze_db', 'rms_db', 'korrelation_min', 'pegel_db', 'erz/4', 'solo', '400 ms', 'changes nothing', 'lufs_i', 'luecke_s', 'reset', 'fein']) {
     assert.ok(x.description.includes(wort), `the description names ${wort}`);
   }
+});
+
+test('analyse_live: master meter in the answer without vektor; reset posts and does not get', async (t) => {
+  const meter = { leer: false, w: 1, steht: false, stumm: false, lufs_m: -12, lufs_s: -12.5, lufs_i: -11.2, tp_max_dbtp: -1.1, korrelation: 0.8, dauer_s: 30, luecke_s: 0.5 };
+  const { c, gesehen } = await verbinde(t, (m, u) => [200, u.startsWith('/analyse/pegel') ? meter : { ...LIVE(Array.from({ length: 120 }, () => -30)), vektor: 'AAAA' }]);
+  const a = antwort(await live(c));
+  assert.equal(a.master.lufs_i, -11.2);
+  assert.equal(a.master.luecke_s, 0.5);
+  assert.equal('vektor' in a, false);
+  assert.deepEqual(gesehen.map((g) => g.methode + ' ' + g.pfad), ['GET /analyse/pegel', 'GET /analyse/live']);
+  gesehen.length = 0;
+  const b = antwort(await live(c, { reset: true }));
+  assert.equal(b.master.lufs_i, -11.2);
+  assert.deepEqual(gesehen.map((g) => g.methode + ' ' + g.pfad), ['POST /analyse/pegel/reset', 'GET /analyse/live']);
 });
 
 test('analyse_referenz: every action sends the right method, path and body', async (t) => {

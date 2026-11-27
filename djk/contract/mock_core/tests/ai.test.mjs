@@ -177,7 +177,7 @@ test('E-a KI-Stopp: kein Fader wird gesenkt, Cyphers laufende Rampe hält am Ist
   gruen(r);
 });
 
-test('N2 /k/live/tasten: the hand sets 0 and the instrument streams; cypher gets 6 nur_hand; streams 1, 4, 8 and 11 get 6 ausserhalb_bereich', () => {
+test('N2 /k/live/tasten: the hand sets 0 and the instrument streams; cypher is accepted too; streams 1, 4, 8 and 11 get 6 ausserhalb_bereich', () => {
   const r = fahre([
     sende(1000, ['/k/live/tasten', 'hsi', 1, 'andreas', 2]),
     sende(1000, ['/k/live/tasten', 'hsi', 2, 'cypher', 2]),
@@ -186,11 +186,24 @@ test('N2 /k/live/tasten: the hand sets 0 and the instrument streams; cypher gets
     sende(1000, ['/k/live/tasten', 'hsi', 5, 'andreas', 1]),
     sende(1000, ['/k/live/tasten', 'hsi', 6, 'andreas', 0]),
     erwarte(1600, q(1, 'andreas', 3)),
-    erwarte(1600, q(2, 'cypher', 6, null, 'nur_hand')),
+    erwarte(1600, q(2, 'cypher', 3)),
     erwarte(1600, q(3, 'andreas', 6, null, 'ausserhalb_bereich')),
     erwarte(1600, q(4, 'andreas', 6, null, 'ausserhalb_bereich')),
     erwarte(1600, q(5, 'andreas', 6, null, 'ausserhalb_bereich')),
     erwarte(1600, q(6, 'andreas', 3)),
+  ], { cfg });
+  gruen(r);
+});
+
+test('N2 /k/live/tasten: Stop Cypher refuses cypher with ki_gestoppt (before the range check), andreas still sets it', () => {
+  const r = fahre([
+    sende(1000, ['/k/ki/stopp', 'hs', 9, 'leitstand']),
+    sende(2000, ['/k/live/tasten', 'hsi', 10, 'cypher', 2]),
+    sende(2000, ['/k/live/tasten', 'hsi', 11, 'cypher', 1]),
+    sende(2000, ['/k/live/tasten', 'hsi', 12, 'andreas', 2]),
+    erwarte(4000, q(10, 'cypher', 6, null, 'ki_gestoppt')),
+    erwarte(4000, q(11, 'cypher', 6, null, 'ki_gestoppt')),
+    erwarte(4000, q(12, 'andreas', 3)),
   ], { cfg });
   gruen(r);
 });

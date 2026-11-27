@@ -10,7 +10,7 @@ const lies = (d) => fs.readFileSync(path.join(W, d), 'utf8');
 // The folder name taken from a path that names an existing file, so the export's folder renaming rewrites it with the others (a lone 'projekt' literal escapes it).
 const PROJEKT = path.dirname('project/commands.ts');
 // the command files project/commands.ts and project/befehle_<x>.ts, built from a path literal so the public export's renaming reaches it (a regex literal escapes it)
-const BEFEHLSDATEI = new RegExp(`^${PROJEKT}/${path.basename('project/commands.ts', '.ts')}(_[a-z]+)?\\.ts$`);
+const BEFEHLSDATEI = new RegExp(`^${PROJEKT}/${path.basename('project/commands.ts', '.ts')}(_[a-z_]+)?\\.ts$`);
 const BEREICHE = path.dirname(path.dirname('areas/proj/area.ts')) + '/';   // same for a folder prefix: a lone 'bereiche/' literal escapes the renaming
 const ts = (ordner) => fs.readdirSync(path.join(W, ordner)).filter((f) => f.endsWith('.ts')).map((f) => `${ordner}/${f}`);
 export const KLASSEN = 'BefehlFehler|AblageFehler|VerlaufFehler|DekodierFehler|PatchFehler|ProjFehler|KatalogFehler|WiedergabeFehler|WarpFehler|AusgabeFehler|FreezeFehler|StandFehler|GeraeteFehler|StemsFehler|MergeFehler|ResampleFehler';

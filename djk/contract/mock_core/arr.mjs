@@ -171,14 +171,14 @@ const modul = {
   init(K) {
     K.arr = { nr: -1, status: 0, start_beat: 0, ursprung: 0, start_s: -1, b_start: null, cypher: false,
       loop: { an: false, von: 0, bis: 0 }, metro: { an: false, pegel_db: -12, ziel: 0 },
-      auto: new Set(),     // 1.12 Slice 3: overridden fields "spur/feld" (spur 1..32, feld 0..3)
+      auto: new Set(),     // 1.12 Slice 3: overridden fields "spur/feld" (spur 1..128, feld 0..3)
       export: { ungesund: 0, luecken: 0 },   // plan 1.11 T12: the numbers the stand-in reports for /k/arr/export_lauf
-      host: { gesund: [0, 0, 0, 0] },   // plan 1.11 T5: the server's health flag per effect host (the stand-in has no edge check: health = the flag)
+      host: { gesund: [0, 0, 0, 0, 0, 0, 0, 0] },   // plan 1.11 T5: the server's health flag per effect host (the stand-in has no edge check: health = the flag)
       noten: [],           // sampler plan A1 task 7: the notes /k/arr/note was asked to play, [{ spur, ton, vel }] in order (the stand-in has no sink, nothing sounds)
       stifte: [],          // Kraken patch field task 1: the pins /k/arr/stift was asked to set, [{ spur, satz, zeile, spalte, wert }] in order (the stand-in has no sink, nothing sounds)
       zellen: new Map(),   // loop deck V0: spur (project track id, string) -> { zelle, ab_beat, versatz_beats, wartend, wartend_ab }, the state /zustand/zelle reports; a track enters on its first launch or stop
       zellenWarten: new Map(),   // loop deck V0: spur -> the one pending launch { art: 'start' | 'stopp', zelle, versatz_beats, ab_beat, sample, spaet, b } (a newer command for the same track replaces it)
-      arm: new Map(),      // 1.12 Slice 3 (D11): armed tracks, spur 1..32 -> mode (0 touch, 1 latch, 2 write); a new core generation (a new stand-in) starts empty
+      arm: new Map(),      // 1.12 Slice 3 (D11): armed tracks, spur 1..128 -> mode (0 touch, 1 latch, 2 write); a new core generation (a new stand-in) starts empty
       punkte: new Map(),   // 1.12 Slice 3 (D12): "spur/ziel" -> { gemeldet: sample of the block end that sent the last point, halt: the held point or null }
       lanen: new Set() };  // the fields that have a lane in the loaded playback, same keys
     // 1.12 Slice 3 test hook: declares the lanes (pairs [spur, ziel]) as a load would; overridden fields without a lane go (D6) with /e/auto 0
@@ -286,7 +286,7 @@ const modul = {
     // an 1 clears also while stopped (D6); cypher may not override (D9); the state survives stop and start; without a lane for the field nothing happens (acknowledged).
     '/k/arr/auto': (K, a, b) => {
       const feld = AUTO_ZIELE.indexOf(a.ziel);
-      if (!(a.spur >= 0 && a.spur <= 32) || (a.an !== 0 && a.an !== 1)) return K.q(b, 6, 'format');
+      if (!(a.spur >= 0 && a.spur <= 128) || (a.an !== 0 && a.an !== 1)) return K.q(b, 6, 'format');
       if (feld < 0) return K.q(b, 6, 'auto_ziel_unbekannt');
       if (a.spur === 0 && a.an === 0) return K.q(b, 6, 'format');
       if (a.an === 0 && a.quelle === 'cypher' && !K.mutation.has('arr_auto_cypher_uebersteuert')) return K.q(b, 6, 'nur_andreas');
@@ -309,7 +309,7 @@ const modul = {
     },
     // 1.12 Slice 3 (§4.11, D11): arm a track for automation recording. Only andreas; spur 0 only disarms; the state lives in the stand-in like in the core.
     '/k/arr/arm': (K, a, b) => {
-      if (!(a.spur >= 0 && a.spur <= 32) || (a.an !== 0 && a.an !== 1) || !(a.modus >= 0 && a.modus <= 2) || (a.spur === 0 && a.an === 1)) return K.q(b, 6, 'format');
+      if (!(a.spur >= 0 && a.spur <= 128) || (a.an !== 0 && a.an !== 1) || !(a.modus >= 0 && a.modus <= 2) || (a.spur === 0 && a.an === 1)) return K.q(b, 6, 'format');
       if (a.quelle !== 'andreas' && !K.mutation.has('arr_arm_cypher')) return K.q(b, 6, 'nur_andreas');
       K.q(b, 1);
       K.sofortQ.push(() => {
@@ -327,7 +327,7 @@ const modul = {
     // sampler plan A1 task 7 (§4.11): one note on a project track. Like the core: the range of the track, then of ton and vel; acknowledged 1 then 3; no arm and no transport needed.
     // (cypher in the AI stop is refused by core.mjs before any handler, like the net thread.) The stand-in has no sink: it only records the note in K.arr.noten.
     '/k/arr/note': (K, a, b) => {
-      if (!(a.spur >= 1 && a.spur <= 32)) return K.q(b, 6, 'spur_bereich');
+      if (!(a.spur >= 1 && a.spur <= 128)) return K.q(b, 6, 'spur_bereich');
       if (!(a.ton >= 0 && a.ton <= 127) || !(a.vel >= 0 && a.vel <= 127)) return K.q(b, 6, 'ausserhalb_bereich');
       K.q(b, 1);
       K.sofortQ.push(() => { K.arr.noten.push({ spur: a.spur, ton: a.ton, vel: a.vel }); K.q(b, 3); });
@@ -335,7 +335,7 @@ const modul = {
     // Kraken patch field task 1 (§4.11): one pin of the matrix block of a project track. Like the core: spur, then satz/zeile/spalte/wert (a NaN or inf wert is out of range); acknowledged 1 then 3.
     // (cypher in the AI stop is refused by core.mjs before any handler.) The stand-in has no sink: it only records the pin in K.arr.stifte.
     '/k/arr/stift': (K, a, b) => {
-      if (!(a.spur >= 1 && a.spur <= 32)) return K.q(b, 6, 'spur_bereich');
+      if (!(a.spur >= 1 && a.spur <= 128)) return K.q(b, 6, 'spur_bereich');
       if (!(a.satz >= 0 && a.satz <= 1) || !(a.zeile >= 0 && a.zeile <= 15) || !(a.spalte >= 0 && a.spalte <= 15) || !(Number.isFinite(a.wert) && a.wert >= -1 && a.wert <= 1)) return K.q(b, 6, 'ausserhalb_bereich');
       K.q(b, 1);
       K.sofortQ.push(() => { K.arr.stifte.push({ spur: a.spur, satz: a.satz, zeile: a.zeile, spalte: a.spalte, wert: a.wert }); K.q(b, 3); });
@@ -354,14 +354,14 @@ const modul = {
     },
     // plan 1.11 T5 (§4.11): the server's health flag of an effect host. Answered by /e/ins_host (h, health). The stand-in has no JACK edges, so health is the flag alone.
     '/k/arr/ins_host': (K, a, b) => {
-      if (!(a.h >= 1 && a.h <= 4) || (a.gesund !== 0 && a.gesund !== 1)) return K.q(b, 6, 'ausserhalb_bereich');
+      if (!(a.h >= 1 && a.h <= 8) || (a.gesund !== 0 && a.gesund !== 1)) return K.q(b, 6, 'ausserhalb_bereich');
       K.arr.host.gesund[a.h - 1] = a.gesund;
       K.aus('/e/ins_host', [a.h, a.gesund]);
     },
     // plan 1.11 T5 (§4.11): the round trip of an effect host with an empty rack: refused `laeuft` while the transport is not stopped, `host_fehlt` while the host is not healthy,
     // else 2 x quantum (512, measured in T1). Answered by /e/ins_mess (h, rundweg, grund).
     '/k/arr/ins_mess': (K, a, b) => {
-      if (!(a.h >= 1 && a.h <= 4)) return K.q(b, 6, 'ausserhalb_bereich');
+      if (!(a.h >= 1 && a.h <= 8)) return K.q(b, 6, 'ausserhalb_bereich');
       if (K.arr.status !== 0) return K.aus('/e/ins_mess', [a.h, -1, 'laeuft']);
       if (!K.arr.host.gesund[a.h - 1]) return K.aus('/e/ins_mess', [a.h, -1, 'host_fehlt']);
       K.aus('/e/ins_mess', [a.h, 2 * N, '']);
@@ -386,7 +386,7 @@ const modul = {
       K.aus('/e/export_lauf', [BigInt(ok ? frames : 0), 0.0, z.luecken, z.ungesund, ok ? '' : 'datei_fehlt']);
     },
     '/k/arr/freeze': (K, a, b) => {   // Paket K3 (KI-Stopp für cypher prüft core.mjs vor allem anderen)
-      if (!(a.spur >= 1 && a.spur <= 32) || !(a.von_beat >= 0) || !(a.bis_beat - a.von_beat >= 1) ||
+      if (!(a.spur >= 1 && a.spur <= 128) || !(a.von_beat >= 0) || !(a.bis_beat - a.von_beat >= 1) ||
           !(a.bis_beat - a.von_beat <= 256) || !(a.kennung >= 0))
         return K.q(b, 6, 'ausserhalb_bereich');
       const A = K.arr;

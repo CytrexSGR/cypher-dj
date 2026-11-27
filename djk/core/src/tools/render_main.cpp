@@ -113,7 +113,7 @@ int main(int argc, char** argv) {
     } else if (!std::strcmp(argv[i], "--kit-ordner") && wert) {
       kit_ordner = argv[++i];
     } else if (!std::strcmp(argv[i], "--gegenprobe-spur") && wert) {
-      if (!cdj::lies_ganz(argv[++i], 0, cdj::ARR_SPUREN, g)) return falsch(i, "ganze Zahl 0..32");
+      if (!cdj::lies_ganz(argv[++i], 0, cdj::ARR_SPUREN, g)) return falsch(i, "ganze Zahl 0..128");
       a.gegenprobe_spur = static_cast<int>(g);
     } else if (!std::strcmp(argv[i], "--abgriff") && wert) {
       abgriff = argv[++i];

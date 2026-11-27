@@ -112,9 +112,13 @@ function grHaken(werk) {
   ereignisHaken.add(werk);
   let timer = null;
   const alle = () => { for (const bar of werk.host.dockEl?.querySelectorAll?.('.w-chip-gr') ?? []) bar._frisch?.(); };
+  // gain reduction events only mark the bars dirty; one animation frame refreshes them all once (no frames available: at once)
+  let schmutzig = false;
+  const imBild = () => { schmutzig = false; alle(); };
   werk.host.beimEreignis?.((a) => {
     if (a !== '/e/ins_gr') return;
-    alle();
+    if (typeof requestAnimationFrame !== 'function') alle();
+    else if (!schmutzig) { schmutzig = true; requestAnimationFrame(imBild); }
     clearTimeout(timer); timer = setTimeout(alle, 520);   // a stage that went quiet falls back to empty after the 500 ms rule (the INSERTS list does the same with insGrAblaufIn)
   });
 }
@@ -129,7 +133,7 @@ export function teilChip(werk, strangId, t) {
   const insert = () => werk.strangVon(strangId)?.inserts.find((x) => x.id === t.teil) ?? null;
   const i0 = insert();
   if (!i0) return b;
-  const hostStufe = i0.art === 'host', hatGr = i0.art === 'komp' || i0.art === 'lim';
+  const hostStufe = i0.art === 'host', hatGr = i0.art === 'komp' || i0.art === 'lim' || i0.art === 'gate' || i0.art === 'mb';
   const punkt = hostStufe ? mk('span', 'w-chip-punkt') : null;
   const marke = mk('span', 'w-chip-marke'); marke.hidden = true;
   const gr = hatGr ? mk('span', 'w-chip-gr') : null;

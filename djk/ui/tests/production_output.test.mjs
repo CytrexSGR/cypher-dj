@@ -1,7 +1,7 @@
 // PRODUCTION V2: Texte und Zustände von FREEZE und EXPORT (output.js)
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AUSGABE_FEHLER, ausgabeFehler, freezeKnopf, laufText, ergebnisText, dauerText, dbText } from '../public/production/output.js';
+import { AUSGABE_FEHLER, ausgabeFehler, freezeKnopf, laufText, ergebnisText, dauerText, dbText, spurenErgebnisText, istExportAntwort, ergebnisOrdner } from '../public/production/output.js';
 
 test('V2 Ausgabe: FREEZE-Schalter je Zustand', () => {
   const s = { id: 's3', name: 'Lead', freeze: null };
@@ -98,4 +98,93 @@ test('1.10 Slice 2: ergebnisText nennt, dass der Export über der Decke des Set-
   const still = ergebnisText({ ...j, spitze_db: -4, ueber_decke: false, limiter_db_max: 0 });
   assert.doesNotMatch(still.text, /SET LIMITER/); assert.equal(still.warnung, false);
   assert.doesNotMatch(ergebnisText({ datei: '/x.wav', frames: 48000, spitze_db: -6 }).text, /SET LIMITER/, 'alte Antwort ohne Felder: unverändert');
+});
+
+// Export delivery (task 5): deliveries, the target check and refusals with a detail
+const MASTER = '/p/export/song-20261126-101500.wav';
+const basis = { datei: MASTER, frames: 768000, spitze_db: -3.21, lufs_i: -12.0, lra: 5.1, true_peak_dbtp: -0.4 };
+const heute = 'Exported song-20261126-101500.wav · 16.0 s · peak −3.2 dBFS · −12.0 LUFS, true peak −0.4 dBTP';
+const ab16 = { format: 'wav', rate_hz: 44100, bits: 16, dither: 'tpdf', datei: '/p/export/song-20261126-101500.16bit-44k.wav', lufs_i: -12, lra: 5, true_peak_dbtp: -0.2 };
+const abMp3 = { format: 'mp3', rate_hz: 44100, kbps: 320, datei: '/p/export/song-20261126-101500.320kbps-44k.mp3', lufs_i: -12, lra: 5, true_peak_dbtp: 0.3 };
+
+test('ergebnisText: unchanged for an answer without abgaben or ziel', () => {
+  assert.deepEqual(ergebnisText(basis), { text: heute, titel: MASTER, pfad: `Saved to ${MASTER}`, warnung: false });
+  assert.deepEqual(ergebnisText({ ...basis, abgaben: [] }), ergebnisText(basis), 'an empty list changes nothing');
+});
+
+test('ergebnisText: deliveries, a failed one, the target lines and the warning flag', () => {
+  const zwei = ergebnisText({ ...basis, abgaben: [ab16, abMp3] });
+  assert.equal(zwei.text, `${heute} · 16bit-44k TP −0.2 · 320kbps-44k TP +0.3`);
+  assert.equal(zwei.titel, [MASTER, ab16.datei, abMp3.datei].join('\n'), 'every written file, one per line');
+  assert.equal(zwei.warnung, false);
+  assert.equal(zwei.pfad, `Saved to ${MASTER}`);
+  // a failed delivery
+  const kaputt = ergebnisText({ ...basis, abgaben: [ab16, { format: 'mp3', rate_hz: 44100, kbps: 320, datei: null, fehler: 'ffmpeg was not found' }] });
+  assert.equal(kaputt.text, `${heute} · 16bit-44k TP −0.2 · 320kbps-44k FAILED`);
+  assert.equal(kaputt.warnung, true);
+  assert.equal(kaputt.titel, [MASTER, ab16.datei, '320kbps-44k failed: ffmpeg was not found'].join('\n'), 'written files, then one line per failed delivery with its reason');
+  // target: louder than the target, quieter, within 0.5, true peak above the ceiling
+  const ziel = { lufs_i: -14, true_peak_dbtp: -1 };
+  const laut = ergebnisText({ ...basis, abgaben: [ab16], ziel, ziel_pruefung: { lufs_abstand: 4.7, tp_abstand: 0.6, tp_ueber: true }, ziel_ok: false });
+  assert.equal(laut.text, `${heute} · 16bit-44k TP −0.2 · +4.7 LU above target · TRUE PEAK ABOVE −1.0 dBTP`);
+  assert.equal(laut.warnung, true);
+  const leise = ergebnisText({ ...basis, ziel, ziel_pruefung: { lufs_abstand: -1.2, tp_abstand: -2, tp_ueber: false }, ziel_ok: true });
+  assert.equal(leise.text, `${heute} · 1.2 LU under target`);
+  assert.equal(leise.warnung, false);
+  assert.equal(ergebnisText({ ...basis, ziel, ziel_pruefung: { lufs_abstand: 0.4, tp_abstand: -2, tp_ueber: false }, ziel_ok: true }).text, heute, 'within 0.5 LU: nothing');
+  assert.equal(ergebnisText({ ...basis, ziel, ziel_pruefung: { lufs_abstand: -0.5, tp_abstand: -2, tp_ueber: false }, ziel_ok: true }).text, `${heute} · 0.5 LU under target`, '0.5 itself is shown');
+  // not measured: never TRUE PEAK ABOVE
+  const nicht = ergebnisText({ datei: MASTER, frames: 768000, spitze_db: -3.21, lufs_i: null, lra: null, true_peak_dbtp: null, loudness_fehler: 'ffmpeg_fehlt', ziel, ziel_pruefung: { lufs_abstand: null, tp_abstand: null, tp_ueber: null }, ziel_ok: null });
+  assert.equal(nicht.text, 'Exported song-20261126-101500.wav · 16.0 s · peak −3.2 dBFS · TARGET NOT MEASURED');
+  assert.doesNotMatch(nicht.text, /TRUE PEAK ABOVE/);
+  assert.equal(nicht.warnung, true);
+  // a target that is met without a true peak target has no extra text
+  assert.equal(ergebnisText({ ...basis, ziel: { lufs_i: -12 }, ziel_pruefung: { lufs_abstand: 0, tp_abstand: null, tp_ueber: false }, ziel_ok: true }).text, heute);
+});
+
+test('ausgabeFehler: a refusal with a detail shows text and detail', () => {
+  const x = () => 'Wurzel';
+  const r = { status: 400, j: { fehler: 'argument_ungueltig', text: 'abgabe: not a valid list of delivery formats', detail: 'abgabe[1].kbps applies to mp3 only' } };
+  assert.equal(ausgabeFehler(r, x), 'abgabe: not a valid list of delivery formats (abgabe[1].kbps applies to mp3 only)');
+  assert.equal(ausgabeFehler({ status: 400, j: { fehler: 'argument_ungueltig', text: 'ziel: not valid', detail: 'ziel.lufs_i: a number from -70 to 0 is required' } }, x), 'ziel: not valid (ziel.lufs_i: a number from -70 to 0 is required)');
+  assert.equal(ausgabeFehler({ status: 400, j: { fehler: 'argument_ungueltig' } }, x), 'Wurzel', 'without a detail the root text stays');
+  assert.equal(ausgabeFehler({ status: 400, j: { fehler: 'argument_ungueltig', detail: 'x' } }, x), 'Wurzel', 'a detail without text is not shown alone');
+  assert.equal(ausgabeFehler({ status: 502, j: { fehler: 'freeze_fehler', text: 'Kern: abbruch', detail: 'rc 4' } }, x), 'Freezing failed in the core', 'other reasons keep their text');
+});
+
+test('ergebnisText: the tooltip names the reason of every failed delivery, one line each, after the files', () => {
+  const f1 = { format: 'mp3', rate_hz: 44100, kbps: 320, datei: null, fehler: 'ffmpeg was not found' };
+  const f2 = { format: 'flac', rate_hz: 96000, bits: 24, datei: null, fehler: 'ffmpeg failed (exit 1): boom' };
+  const e = ergebnisText({ ...basis, abgaben: [f1, ab16, f2] });
+  assert.equal(e.titel, [MASTER, ab16.datei, '320kbps-44k failed: ffmpeg was not found', '24bit-96k failed: ffmpeg failed (exit 1): boom'].join('\n'));
+  assert.equal(ergebnisText({ ...basis, abgaben: [{ ...f1, fehler: undefined }] }).titel, `${MASTER}\n320kbps-44k failed`, 'no reason in the answer: the line still says it failed');
+  assert.equal(ergebnisText({ ...basis, abgaben: [ab16] }).titel, [MASTER, ab16.datei].join('\n'), 'nothing failed: no extra line');
+});
+
+// the per-track set (task 6)
+const SET = { ordner: '/p/export/song-20261126-101500', von_beat: 0, bis_beat: 8, dateien: [
+  { art: 'mix', name: 'Song', datei: 'mix.flac', spitze_db: -3, stumm: false }, { art: 'spur', spur_id: 's1', nr: 1, name: 'Kick', datei: '01-kick.flac', spitze_db: -6, stumm: false },
+  { art: 'spur', spur_id: 's2', nr: 2, name: 'Bass', datei: null, spitze_db: -200, stumm: true }, { art: 'return', return_id: 'r1', nr: 1, name: 'Hall', datei: 'fx1-hall.flac', spitze_db: -9, stumm: false }] };
+
+test('spurenErgebnisText: count of written files, folder name, path and the file names in the tooltip', () => {
+  assert.deepEqual(spurenErgebnisText(SET), { text: 'Exported 3 files to song-20261126-101500', titel: 'mix.flac\n01-kick.flac\nfx1-hall.flac',
+    pfad: 'Saved to /p/export/song-20261126-101500', warnung: false });
+  assert.equal(spurenErgebnisText({ ...SET, dateien: [SET.dateien[0]] }).text, 'Exported 1 file to song-20261126-101500');
+  assert.equal(spurenErgebnisText({ ...SET, ordner: '/p/export/song-20261126-101500/' }).text, 'Exported 3 files to song-20261126-101500', 'a trailing slash does not empty the name');
+});
+
+test('istExportAntwort: the answer of the set has ordner and dateien, the answer of the mix has datei', () => {
+  assert.equal(istExportAntwort('/proj/export_spuren', SET), true);
+  assert.equal(istExportAntwort('/proj/export_spuren', { datei: '/x.wav' }), false);
+  assert.equal(istExportAntwort('/proj/export_spuren', null), false);
+  assert.equal(istExportAntwort('/proj/export', { datei: '/x.wav' }), true);
+  assert.equal(istExportAntwort('/proj/export', SET), false);
+});
+
+test('ergebnisOrdner: the folder of a mix file, the folder of a track set, otherwise null', () => {
+  assert.equal(ergebnisOrdner({ datei: '/p/song/export/song-1.wav' }), '/p/song/export');
+  assert.equal(ergebnisOrdner({ ordner: '/p/song/export/song-1' }), '/p/song/export/song-1');
+  assert.equal(ergebnisOrdner({ ordner: '/p/song/export/song-1///' }), '/p/song/export/song-1', 'trailing slashes are dropped');
+  assert.equal(ergebnisOrdner({ datei: '/song-1.wav' }), '/', 'a file in the root');
+  for (const x of [null, undefined, {}, { datei: 'song.wav' }, { datei: '' }, { ordner: '' }, { ordner: 3 }]) assert.equal(ergebnisOrdner(x), null, JSON.stringify(x));
 });

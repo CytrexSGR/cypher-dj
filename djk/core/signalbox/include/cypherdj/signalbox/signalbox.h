@@ -232,6 +232,7 @@ class Stellwerk {
   int16_t starts_[MAX_TEILE];
   int n_starts_ = 0;
   int16_t griff_r_[MAX_REGLER];   // regulators with a grip in this cycle (reset list, no scan of all regulators)
+  static_assert(MAX_REGLER - 1 <= INT16_MAX, "griff_r_, ausstehend_regler_, ausstehend_hand_ and Rueck::r hold row indices as int16_t");
   int n_griff_ = 0;
   Griff hand_[MAX_HAND];
   int n_hand_ = 0;

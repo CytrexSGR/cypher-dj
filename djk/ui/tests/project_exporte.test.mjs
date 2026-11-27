@@ -5,8 +5,9 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { EXPORT_NAME, raeumeExporteAuf, genannteExporte, baueNachExport } from '../project/exporte.ts';
+import { BEGLEITER_REST, EXPORT_NAME, raeumeExporteAuf, genannteExporte, baueNachExport } from '../project/exporte.ts';
 import { Einsammler } from '../project/einsammeln.ts';
+import { abgabeName, leseAbgaben } from '../project/abgabe.ts';
 
 const tmp = (t) => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-exporte-')); t.after(() => fs.rmSync(d, { recursive: true, force: true })); return d; };
 const aufbau = (t, namen) => {
@@ -212,4 +213,94 @@ test('the CLI reads CYPHERDJ_EXPORT_GENANNT, --genannt-in wins, a missing folder
   assert.match(fehlt.stderr, /does not exist/);
   assert.equal(lauf({}, '--genannt-in', path.join(d, 'weg')).status, 2);
   assert.equal(ls(ex).length, 5, 'nothing moved');
+});
+
+// ---- delivery files (export delivery plan, task 2) ---------------------------------------------------------------------------------
+test('delivery files move to the bin with their master and never count', (t) => {
+  const a = aufbau(t, ['s-20261101-100000.wav', 's-20261102-100000.wav', 's-20261102-100000.16bit-44k.wav', 's-20261102-100000.320kbps-44k.mp3',
+    's-20261103-100000.wav', 's-20261104-100000.wav']);
+  const r = raeumeExporteAuf({ exportOrdner: a.ex, papierkorb: a.bin, behalte: 3 });
+  assert.deepEqual(r.verschoben, ['s-20261101-100000.wav']);
+  assert.equal(r.behalten, 3);
+  fs.writeFileSync(path.join(a.ex, 's-20261105-100000.wav'), 'x');
+  const r2 = raeumeExporteAuf({ exportOrdner: a.ex, papierkorb: a.bin, behalte: 3 });
+  assert.deepEqual(r2.verschoben, ['s-20261102-100000.wav', 's-20261102-100000.16bit-44k.wav', 's-20261102-100000.320kbps-44k.mp3']);
+  assert.equal(r2.behalten, 3);
+  assert.deepEqual(ls(a.bin), ['s-20261101-100000.wav', 's-20261102-100000.16bit-44k.wav', 's-20261102-100000.320kbps-44k.mp3', 's-20261102-100000.wav']);
+  assert.deepEqual(ls(a.ex), ['s-20261103-100000.wav', 's-20261104-100000.wav', 's-20261105-100000.wav']);
+});
+
+test('a master that stays keeps its companions (among the newest, genannt, neu)', (t) => {
+  const a = aufbau(t, ['s-20261101-100000.wav', 's-20261101-100000.16bit-44k.wav', 's-20261102-100000.wav', 's-20261103-100000.wav', 's-20261104-100000.wav',
+    's-20261105-100000.wav', 's-20261105-100000.320kbps-44k.mp3']);
+  const r = raeumeExporteAuf({ exportOrdner: a.ex, papierkorb: a.bin, behalte: 3, genannt: new Set(['s-20261101-100000.wav']) });
+  assert.deepEqual(r.verschoben, ['s-20261102-100000.wav']);
+  assert.ok(ls(a.ex).includes('s-20261101-100000.16bit-44k.wav'), 'a master named in genannt keeps its companions');
+  assert.ok(ls(a.ex).includes('s-20261105-100000.320kbps-44k.mp3'), 'the newest keeps its companions');
+  // neu: the export just written stays although it would be old by stamp
+  const b = aufbau(t, ['s-20261001-100000.wav', 's-20261001-100000.16bit-44k.wav', 's-20261102-100000.wav', 's-20261103-100000.wav', 's-20261104-100000.wav']);
+  const r2 = raeumeExporteAuf({ exportOrdner: b.ex, papierkorb: b.bin, behalte: 3, neu: 's-20261001-100000.wav' });
+  assert.deepEqual(r2.verschoben, []);
+  assert.ok(ls(b.ex).includes('s-20261001-100000.16bit-44k.wav'));
+});
+
+test('dry run lists the companions too and moves nothing', (t) => {
+  const a = aufbau(t, ['s-20261101-100000.wav', 's-20261101-100000.16bit-44k.wav', 's-20261102-100000.wav', 's-20261103-100000.wav', 's-20261104-100000.wav']);
+  const r = raeumeExporteAuf({ exportOrdner: a.ex, papierkorb: a.bin, behalte: 3, trocken: true });
+  assert.deepEqual(r.verschoben, ['s-20261101-100000.wav', 's-20261101-100000.16bit-44k.wav']);
+  assert.equal(r.behalten, 3);
+  assert.equal(ls(a.ex).length, 5);
+});
+
+test('genannteExporte: a delivery file named in a notes file names its master', (t) => {
+  const d = tmp(t);
+  fs.writeFileSync(path.join(d, 'notes.md'), 'sent s-20261102-100000.320kbps-44k.mp3 to the label, and `x-20261001-090000.16bit-48k.flac`.\n');
+  const g = genannteExporte([d]);
+  assert.ok(g.has('s-20261102-100000.wav'));
+  assert.ok(g.has('x-20261001-090000.wav'));
+  assert.ok(!g.has('s-20261102-100000.320kbps-44k.mp3'));
+});
+
+test('only names that abgabeName can produce are companions: notes, .asd and a leftover .teil stay when the master goes to the bin', (t) => {
+  const m = 's-20261101-100000';
+  const a = aufbau(t, [`${m}.wav`, `${m}.16bit-44k.wav`, `${m}.notes.txt`, `${m}.wav.asd`, `${m}.16bit-44k.wav.12345.teil`,
+    's-20261102-100000.wav', 's-20261103-100000.wav', 's-20261104-100000.wav']);
+  const r = raeumeExporteAuf({ exportOrdner: a.ex, papierkorb: a.bin, behalte: 3 });
+  assert.deepEqual(r.verschoben, [`${m}.wav`, `${m}.16bit-44k.wav`]);
+  assert.deepEqual(ls(a.ex), [`${m}.16bit-44k.wav.12345.teil`, `${m}.notes.txt`, `${m}.wav.asd`, 's-20261102-100000.wav', 's-20261103-100000.wav', 's-20261104-100000.wav']);
+  assert.deepEqual(ls(a.bin), [`${m}.16bit-44k.wav`, `${m}.wav`]);
+});
+
+test('every name abgabeName produces for a valid entry is recognised as a companion', (t) => {
+  const eintraege = [];
+  for (const rate_hz of [44100, 48000, 88200, 96000]) {
+    for (const bits of [16, 24, 32]) eintraege.push({ format: 'wav', bits, rate_hz, ...(bits === 16 ? { dither: 'aus' } : {}) });
+    for (const bits of [16, 24]) eintraege.push({ format: 'flac', bits, rate_hz, ...(bits === 16 ? { dither: 'aus' } : {}) });
+    if (rate_hz <= 48000) for (const kbps of [192, 256, 320]) eintraege.push({ format: 'mp3', kbps, rate_hz });
+  }
+  const m = 's-20261101-100000', namen = [];
+  for (const e of eintraege) {
+    const [gueltig] = leseAbgaben([e]);
+    const name = path.basename(abgabeName(`/x/${m}.wav`, gueltig));
+    assert.ok(name.startsWith(`${m}.`) && BEGLEITER_REST.test(name.slice(m.length + 1)), name);
+    namen.push(name);
+  }
+  assert.equal(new Set(namen).size, namen.length);
+  const a = aufbau(t, [`${m}.wav`, ...namen, 's-20261102-100000.wav', 's-20261103-100000.wav', 's-20261104-100000.wav']);
+  const r = raeumeExporteAuf({ exportOrdner: a.ex, papierkorb: a.bin, behalte: 3 });
+  assert.deepEqual(r.verschoben, [`${m}.wav`, ...[...namen].sort()]);
+  assert.equal(r.behalten, 3);
+});
+
+test('a per-track folder with mix.flac counts as an export in the clean-up', (t) => {
+  const a = aufbau(t, ['p-20261002-100000.wav', 'p-20261003-100000.wav', 'p-20261004-100000.wav']);
+  const f = path.join(a.ex, 'p-20261001-100000');
+  fs.mkdirSync(f); fs.writeFileSync(path.join(f, 'mix.flac'), 'x');
+  const r = raeumeExporteAuf({ exportOrdner: a.ex, papierkorb: a.bin });
+  assert.deepEqual(r.verschoben, ['p-20261001-100000'], 'the oldest export is the flac folder');
+  assert.deepEqual(ls(a.bin), ['p-20261001-100000']);
+  // a folder without mix.wav and mix.flac (MIDI export) still does not count
+  const m = path.join(a.ex, 'p-20260901-100000'); fs.mkdirSync(m); fs.writeFileSync(path.join(m, 'p.mid'), 'x');
+  assert.deepEqual(raeumeExporteAuf({ exportOrdner: a.ex, papierkorb: a.bin }).verschoben, []);
+  assert.ok(ls(a.ex).includes('p-20260901-100000'));
 });

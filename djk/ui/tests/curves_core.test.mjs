@@ -97,10 +97,10 @@ test('Negativ-Kontrolle: harmlose Regler sind unter beiden Kurven gleich (Trim 0
   }
   assert.equal(griffZuMidi('deck/1/kill/tief', 1), 1);
   assert.equal(griffZuMidi('deck/1/pfl', 0), 0);
-  // container core: strips 30 deck (2 container strips + 4 players x play/cue) + 22 pad + 80 stream alias (8 streams x 10); 6 singles; 384 spur; 144 grp; 1 pm; 44 ret; graph knobs 64 x (11 graph channels + 2 returns + master)
+  // container core: strips 30 deck (2 container strips + 4 players x play/cue) + 22 pad + 80 stream alias (8 streams x 10); 6 singles; 3072 spur (128 tracks x 24 rows); 208 grp; 1 pm; 88 ret; graph knobs 64 x (11 graph channels + 2 returns + master)
   // re-measured at the integration (X1): the table grew with the container strips (graph knobs on every container and stream alias strip), the 8 returns and the fx rows
-  // by prefix: deck 158 + pad 150 + erz 592 (8 streams x 74) + xfader 1 + master 67 + cue 2 + spur 768 (32 x (16 rows + 8 sends), the 16 rows with the FX 1 2 3 assign rows of the loop lane strip) + grp 208 + pm 1 + ret 88 + fx 128 (graph knobs of fx/3 and fx/4), measured with the container-core ZIELE table
-  assert.equal(ZIELE.size, 2163);
+  // by prefix: deck 158 + pad 150 + erz 592 (8 streams x 74) + xfader 1 + master 67 + cue 2 + spur 3072 (128 x (16 rows + 8 sends), the 16 rows with the FX 1 2 3 assign rows of the loop lane strip) + grp 208 + pm 1 + ret 88 + fx 128 (graph knobs of fx/3 and fx/4), measured with the container-core ZIELE table
+  assert.equal(ZIELE.size, 4467);
 });
 
 test('float32 wie der Kern: Schwelle 0,001 und Kill entscheiden auf fround(x)', () => {

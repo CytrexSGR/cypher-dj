@@ -113,7 +113,7 @@ const ziele = (art) => Object.entries(UEBER_ZIELE).filter(([, d]) => d.art === a
 // its value then takes over again. stream.js calls spurHandEcho for every /e/regler event; a head the mouse holds is left alone.
 const handEchoHaken = new Set();
 const HAND_RUHE_MS = 800;   // after the last echo the project's value (written back by then) shows again
-const HAND_ZEILE = /^spur\/([1-9][0-9]?)\/(fader|pan)$/;
+const HAND_ZEILE = /^spur\/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])\/(fader|pan)$/;
 export function spurHandEcho(pfad, wert) {
   if (!HAND_ZEILE.test(String(pfad)) || !Number.isFinite(wert)) return;
   for (const h of handEchoHaken) { try { h(pfad, wert); } catch { /* one view's error stops no other */ } }

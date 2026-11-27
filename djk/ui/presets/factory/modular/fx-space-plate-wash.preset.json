@@ -1,0 +1,41 @@
+{
+ "schema": 1,
+ "name": "Space Plate Wash",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "space-platte",
+ "werte": {
+  "knob1": 0.5667,
+  "knob2": 0.5104,
+  "knob3": 0.6205,
+  "knob4": 0.6801,
+  "knob5": 0.6,
+  "knob6": 0.3
+ },
+ "beschreibung": {
+  "art": "reverb",
+  "unterart": "plate",
+  "charakter": [
+   "wet",
+   "wide",
+   "bright"
+  ],
+  "genre": [
+   "house",
+   "deep_house",
+   "disco"
+  ],
+  "einsatz": [
+   "breakdown",
+   "transition"
+  ],
+  "energie": 2,
+  "text": "35 % mix, 15 ms pre-delay, low cut 200 Hz, high cut 12 kHz, width 120 %, 30 % algorithmic reverb: a wide bright plate wash."
+ },
+ "tags": [
+  "fx-space"
+ ],
+ "notiz": "Knobs 1..6 set by the knob ranges of the graph, not yet heard (2026-11-26). The room is the graph.",
+ "angelegt": "2026-11-26T00:00:00.000Z",
+ "geaendert": "2026-11-26T00:00:00.000Z"
+}

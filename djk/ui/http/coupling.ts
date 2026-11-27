@@ -53,9 +53,13 @@ export function heimAdresse(schnittstellen: NodeJS.Dict<os.NetworkInterfaceInfo[
 // Reason per entry: units and processes (start, stop, record, render), device and controller profiles, the project, code evaluation, files of the library.
 export const TABLET_VERBOTEN: readonly { pfad: string; warum: string }[] = [
   { pfad: '/kopplung', warum: 'pairing is managed from the loopback page only' },
+  { pfad: '/hand', warum: 'agent keys, the agent brake and the agent log are managed from the loopback page only' },
   { pfad: '/deck/start', warum: 'starts a deck' }, { pfad: '/deck/stopp', warum: 'stops a deck' },
   { pfad: '/spur', warum: 'starts and stops automation tracks and the take recorder' },
   { pfad: '/abbruch', warum: 'aborts running parts' },
+  { pfad: '/bogen', warum: 'plays an arc: writes patterns of several streams ahead of the beat' },
+  { pfad: '/szene', warum: 'saves, restores and deletes live scenes (patterns, knobs, graphs, tracks)' },
+  { pfad: '/aufbau', warum: 'saves and opens session setups (channel faders, graphs, live project)' },
   { pfad: '/strudel', warum: 'evaluates pattern code and switches the autonomous players' },
   { pfad: '/graph', warum: 'loads a graph into a channel (restarts its sound)' },
   { pfad: '/geraete', warum: 'device profiles: inputs, MIDI, latency' },
@@ -94,7 +98,7 @@ const unter = (pfad: string, wurzel: string): boolean => pfad === wurzel || pfad
 
 /** true: the tablet listener refuses this (method, pathname) with 403. Reads stay open except under /kopplung and /quellen; a POST must be on the allowed list. */
 export function tabletVerboten(methode: string, pfad: string): boolean {
-  if (unter(pfad, '/kopplung') || unter(pfad, '/quellen') || unter(pfad, '/dateisystem') || unter(pfad, '/bibliothek/quellen') || unter(pfad, '/bibliothek/midi') || unter(pfad, '/plugins/pfade') || unter(pfad, '/kits/export') || unter(pfad, '/mitschnitt') || unter(pfad, '/proj/export_zip')) return true;   // /quellen, /dateisystem, /bibliothek/quellen, /bibliothek/midi, /plugins/pfade: even the read shows local folder paths; /kits/export: a download of files, /proj/export_zip: the whole project as one zip
+  if (unter(pfad, '/kopplung') || unter(pfad, '/hand') || unter(pfad, '/quellen') || unter(pfad, '/dateisystem') || unter(pfad, '/bibliothek/quellen') || unter(pfad, '/bibliothek/midi') || unter(pfad, '/plugins/pfade') || unter(pfad, '/kits/export') || unter(pfad, '/mitschnitt') || unter(pfad, '/proj/export_zip')) return true;   // /quellen, /dateisystem, /bibliothek/quellen, /bibliothek/midi, /plugins/pfade: even the read shows local folder paths; /kits/export: a download of files, /proj/export_zip: the whole project as one zip
   if (methode === 'GET') return false;
   if (methode === 'POST' && TABLET_POST_ERLAUBT.includes(pfad)) return false;
   return true;   // POST elsewhere, PUT, DELETE, ...: closed (the deny list above names the known ones with a reason, this keeps unknown ones closed too)
@@ -106,8 +110,8 @@ export function tabletVerbotenGrund(pfad: string): string | null {
 
 // ---------- pairing ----------
 
-const sha = (s: string): Buffer => crypto.createHash('sha256').update(s).digest();
-const zufall = (): string => crypto.randomBytes(32).toString('base64url');
+export const sha = (s: string): Buffer => crypto.createHash('sha256').update(s).digest();
+export const zufall = (): string => crypto.randomBytes(32).toString('base64url');
 
 export interface Geraet { id: string; name: string; hash: string; seit: number; zuletzt: number }
 const gespeichert = new WeakMap<Geraet, number>();   // the last-seen time that is on disk

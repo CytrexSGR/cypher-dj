@@ -6,14 +6,14 @@
 # A host without an entry here is not an error: hash_pruefen.cmake then checks only that every variant gives the bits of the plain run.
 host ryzen-7800x3d 7800X3D
 host i9-13900hx i9-13900HX
-pin ryzen-7800x3d arr32ins 256 ade2dd87eea3d869 41548661fe8a40ae
-pin ryzen-7800x3d arr32ins 128 3a5b2b905b7600fb 9398708e98dcfa84
-pin ryzen-7800x3d arr32rack 256 0b489968030f994f 0808091c3dfefaab
-pin ryzen-7800x3d arr32rack 128 b5de7d51b09cdb6f 9560f5d1013aea27
-pin ryzen-7800x3d arr32bk 256 64a83e91cb5e1c8b 7aed26480ed80a5b
-pin ryzen-7800x3d arr32bk 128 b38ee0e39ce0778b 4d362897d4ca17b3
-pin i9-13900hx arr32ins 256 90f9d9b322d8e1c2 23d73f2875eb3ac7
-pin i9-13900hx arr32ins 128 a2b995ce4c8b02be 17958b47a5a90aac
+pin ryzen-7800x3d arr32ins 256 b1fadda67db04a79 0f9c34959d9167b6
+pin ryzen-7800x3d arr32ins 128 10a95e0124869362 2cf9cc5669d2adc3
+pin ryzen-7800x3d arr32rack 256 3a9ba50cc0b1e03b 8e3d8adb1adcbe03
+pin ryzen-7800x3d arr32rack 128 720006d2bc3611f3 3479cf6b3ef02d03
+pin ryzen-7800x3d arr32bk 256 305d3b08dd467b8b f9ae3d7ccd277223
+pin ryzen-7800x3d arr32bk 128 9a64e2baa1908553 692fc05b23c4e2e7
+pin i9-13900hx arr32ins 256 d0341e8f02b79ef6 771e48a34a35d15b
+pin i9-13900hx arr32ins 128 cb880258c58820e9 f41a6682b7dd21a4
 pin i9-13900hx arr32rack 256 0b489968030f994f 0808091c3dfefaab
 pin i9-13900hx arr32rack 128 b5de7d51b09cdb6f 9560f5d1013aea27
 pin i9-13900hx arr32bk 256 64a83e91cb5e1c8b 7aed26480ed80a5b

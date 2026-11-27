@@ -534,6 +534,7 @@ void Arrangement::spur_quelle(int64_t s0, int m) {
         if (weg_[w].spur == i && weg_[w].senke != se) weg_[w].senke->block(i, s0, m, bus_l_[i], bus_r_[i]);
       if (se) se->block(i, s0, m, bus_l_[i], bus_r_[i]);
     }
+    kette_einheit_.leeren();   // strand 12 B2: a fading block (or no playback) keeps every chain in mischen()
     spur_plan_gueltig_ = false;
     return;
   }
@@ -546,6 +547,7 @@ void Arrangement::spur_quelle(int64_t s0, int m) {
   if (!spur_plan_gueltig_) spur_plan_bauen();
   q_s0_ = s0;   // the block position of this phase: the remainder and the units read it (also the workers, after schicke)
   q_m_ = m;
+  kette_einheit_planen();   // strand 12 B2: which track chains run inside their unit; written here, before the fork, read-only for the lanes
   if (spur_seriell_weil(m)) {
     // the account is off: the serial phase is measured, a fallback slower than the pool's own limit switches the pool on again (ArrSpurLauf::seriell_gemessen)
     const bool messen = spur_konto_aus_;
@@ -610,6 +612,34 @@ bool Arrangement::spur_seriell_weil(int m) {
 
 void Arrangement::spur_einheit_ausfuehren(int spur, int64_t s0, int m, ArrArbeit& a) {
   if (ArrSenke* se = senke_fuer(snap_, spur)) se->block_bahn(spur, s0, m, bus_l_[spur], bus_r_[spur], a);
+  if (kette_einheit_.test(spur)) {   // strand 12 B2: trim and chain of the track on this lane, in the order mischen() uses (trim, then the chain); the shared effects go through `a`
+    trim_anwenden(spur, m);
+    ins_.kette_bahn(spur, &snap_->kette[spur], bus_l_[spur], bus_r_[spur], m, a);
+  }
+}
+
+// Strand 12 B2 (mehrkern 3.3): the tracks whose trim and chain run in their track unit. Caller, before the fork; schluessel_planen() ran in block() already, so the key relations of
+// this block are known. Everything a track needs between its unit and mischen() is checked: the freeze tap and the track-pre tap read the bus before the trim (and a freeze that ends
+// in this block moves the beat ins_.takt reads), a key consumer needs the key copies of mischen(), a key source must be copied before any chain, a track-post source is captured in
+// the fader loop of the old order. A rest track renders on the caller while the lanes run and keeps its chain in mischen(). A mutation that moves the chain or the key copies in
+// mischen() keeps every chain there, so that it still acts on the order it was written for.
+void Arrangement::kette_einheit_planen() {
+  kette_einheit_.leeren();
+#if defined(CYPHERDJ_MUTATION_INS_NACH_FADER) || defined(CYPHERDJ_MUTATION_INS_SC_NACH_KETTE) || defined(CYPHERDJ_MUTATION_MONITOR_VOR_KETTE)
+  return;
+#endif
+  if (kette_einheit_aus_ || !snap_ || n_weg_ > 0 || freeze_) return;
+  const int pre = abg_ && abg_->art == 0 && abg_->punkt == 0 ? abg_->nr - 1 : -1;   // the track whose input the pre tap takes (abgriff_block)
+  for (int b = 0; b < spur_plan_.bahnen(); ++b)
+    for (int k = 0; k < spur_plan_.n(b); ++k) {
+      const int i = spur_plan_.spur(b, k);
+      if (i < 0 || i >= ARR_SPUREN || i == pre || !ins_.hat(i) || ins_.schluessel_maske().test(i)) continue;
+#ifndef CYPHERDJ_MUTATION_KETTE_EINHEIT_MIT_SCHLUESSEL   // error case: a track whose stage listens to a key runs its chain in the unit, before mischen() copied the key
+      if (ins_.hoert_schluessel(i)) continue;
+#endif
+      kette_einheit_.setze(i);
+    }
+  ins_.je_post_quelle([&](int q) { kette_einheit_.loesche(q); });
 }
 
 void Arrangement::spur_einheit(void* ctx, int spur, ArrArbeit& a) {
@@ -642,6 +672,7 @@ void Arrangement::spur_rest_lauf() {
 // start of the next block. The question of a rack reads the state of ALL racks (cleanliness), so it is asked here, on the caller, when no unit runs, and only once the whole
 // remainder ran (a rack that waits behind a dirty one in the track order must not be judged before the dirty one cleaned up).
 void Arrangement::spur_nach_join() {
+  ins_.nach_join(spur_arbeit_.get(), ARR_ARBEIT_BAHNEN);   // strand 12 B2: the chain reports of the units (mask bits, finished tails, NaN counts) in lane order, before anything reads the insert mask
 #ifdef CYPHERDJ_MUTATION_SPUR_RACK_REST_EINZELN
   return;   // error case: only the per-track check inside spur_rest_lauf exists
 #endif
@@ -728,8 +759,22 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
   launch_block(k, s0, m);   // loop deck K2: the launcher voices add to the track buses, whether the transport plays or not
   bk_ueber_melden(m);   // production plan task 8: the written spur/<slot>/bk/<k> go to the bk sinks in every block, also with the transport stopped; a lane (auto_geraet, next) wins
   auto_geraet();   // Automation slice 2 (E9): the `geraet` lane values go to the sinks before their block()
+  auto_send(m);    // send automation: one gain ramp per block and send lane, read by sends_bereiten() in mischen()
   auto_kette();    // 1.12 slice 6: the insert-parameter and rack-macro lane values go to ArrInserts, read by makros_planen() and the chains in mischen()
   glied_makros_(s0, m);   // 1.9 U8 T9 (E12): the macro values of the member targets of the rack tracks, on the caller before phase Q (stopped transport included)
+  // Strand 12 B2: what the insert chains read is planned before phase Q, because a track chain may run inside its track unit (kette_einheit_). None of these reads what
+  // phase Q, freeze_abgriff, abgriff_block, monitor_planen or auto_block write: beat and tempo (the transport events of this block ran in segment), the macro rows and lanes
+  // (auto_kette above), the key rows and the DJ key pointers (handed in before block()). The one exception, a freeze that ends in this block moving start_beat_, keeps every chain
+  // in mischen() (kette_einheit_planen) and ins_.takt is set again below with the value mischen() always used.
+  ins_.takt(status_ == ArrStatus::spielt ? projekt_beat(k, static_cast<double>(s0)) : k.beat_at(static_cast<double>(s0)), k.bpm_at(static_cast<double>(s0)) / 60.0 / 48000.0);
+  ins_.makros_planen(snap_ ? snap_->kette : nullptr, snap_ ? snap_->rack : nullptr, m);   // 1.10 slice 4c: the macro values of the racks become parameter values, before any parameter is read
+  ins_.schluessel_planen(m);
+  // 1.10 slice 5 U2b (E6, E7): the key sources of this block (containers A..D, streams 1..16) go into the key buffers of the stages that listen to them. They are there before any strip runs, for every consumer. A nullptr
+  // input captures nothing: the buffer keeps the zero schluessel_planen() wrote, so a deck that stopped gives a silent key, never the samples of the block before.
+#ifndef CYPHERDJ_MUTATION_SC_DJ_NULL   // error case: the DJ pointers are ignored, the keys of deck and erz stay silent
+  for (int i = 0; i < ARR_SCHLUESSEL; ++i)   // K4: i 0..3 containers A..D, i 4..19 streams 1..16
+    if (dj_l_[i] && dj_r_[i]) ins_.kopiere(i < 4 ? ARR_SCHL_DECK : ARR_SCHL_ERZ, ARR_SCHL_POST, i < 4 ? i + 1 : i - 3, dj_l_[i], dj_r_[i], m);
+#endif
   spur_quelle(s0, m);
   n_weg_ = 0;
   freeze_abgriff(s0, m);   // Paket K3: Spur-Signal vor dem Fader

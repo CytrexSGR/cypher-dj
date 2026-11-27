@@ -376,6 +376,7 @@ fn neu_ist_fuer_alle_vorhandenen_beispiele_unveraendert() {
             std::fs::write(w.join("orchester-schlag-schichten.f32"), std::fs::read(w.join("d.f32")).unwrap()).unwrap();
             std::fs::write(w.join("feder-ir.f32"), baukasten_dsp::proben::bytes(&baukasten_dsp::proben::feder_ir(48_000.0))).unwrap();
             baukasten_dsp::proben::schreibe_amiga_werk(&w);
+            baukasten_dsp::proben::schreibe_space_werk(&w);   // fx-space and its three rooms read their impulse response
             let (h2, f) = neu_wurzel(&text, Some(&w));
             assert!(!h2.is_null(), "{p:?}: {f}");
             cypher_bk_frei(h2);

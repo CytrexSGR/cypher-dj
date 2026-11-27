@@ -25,6 +25,9 @@ for (const vorherCypher of [true, false]) {
       assert.equal(await status(), 2, 'Cyphers Lauf spielt');
       assert.equal(s.transportQuelle, 'cypher');
     }
+    // start just after a bar one: the window to the next bar is then most of a bar, whatever the setup before cost (128 tracks
+    // make /proj/neu slower, and a start late in the bar left a window of about 100 ms)
+    for (let i = 0; i < 300; i++) { const b = (await ruf(url, 'GET', '/lage')).j?.uhr?.beat; if (typeof b === 'number' && b % 4 < 0.5) break; await warte(10); }
     const quelleVorher = s.transportQuelle;
     const t0 = Date.now();
     const lauf = ruf(url, 'POST', '/proj/transport', { aktion: 'start' });

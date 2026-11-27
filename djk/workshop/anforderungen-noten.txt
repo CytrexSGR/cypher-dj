@@ -1,0 +1,4 @@
+# Network pitch path of the note editor (werkstatt.noten_netz): SwiftF0 (MIT, model inside the package) and its runtime.
+# Installed with --no-deps (numpy and scipy are already there). Versions as measured in the M21 bench.
+swift-f0==0.3.0
+onnxruntime==1.32.0

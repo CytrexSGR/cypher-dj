@@ -27,6 +27,7 @@ import type http from 'node:http';
 import type { Bereich, BereichKontext } from '../../http/router.ts';
 import { json, koerper } from '../../http/transport.ts';
 import { grundText } from '../../http/reasons.ts';
+import { ImportFehler, erlaubteWurzeln, istOrdner, loeseAuf, type Wurzel } from '../../importe.ts';
 import { instanz, referenzOrdnerVorgabe, renderProgramm, wirtOrdnerVorgabe } from '../../paths.ts';
 import { wirtStand } from './instrument_host.ts';
 import {
@@ -44,7 +45,10 @@ import {
   pfadVon, pfadVonGruppe, reglerAusProjekt, routingRegler, rendere, RenderFehler, schluesselPlan, schluesselReturns,
   type Abgriff, type Pfad, type RenderAntwort, type SchluesselPlan,
 } from '../../project/render.ts';
-import { messeLautheit, type Lautheit } from '../../project/loudness.ts';
+import { leseZiel, messeLautheit, pruefeZiel, type Lautheit, type LautheitZiel, type ZielPruefung } from '../../project/loudness.ts';
+import { AbgabeFehler, abgabeName, abgabeTags, legeAb, leseAbgaben, wandle, type Abgabe } from '../../project/abgabe.ts';
+import { abZeilen } from '../../project/master_ab.ts';
+import { MasterAB } from './master_ab.ts';
 import { ROLLEN, istRefQuelle, quellenSchluessel, type AnalyseQuelle, type RefQuelle } from '../../project/sound_contract.ts';
 import { KlangAnalyse } from './sound_analysis.ts';
 import { KlangRunde } from './sound_runde.ts';
@@ -81,15 +85,18 @@ export interface AusgabeOptionen {
   ffmpeg?: string[];              // ffmpeg für die Lautheit (Vorgabe ['ffmpeg'])
   wirtOrdner?: () => string;      // Ordner der Wirt-Status-Dateien (Vorgabe pfade.wirtOrdnerVorgabe(), der Server gibt seinen mit)
   zeitlimitMs?: number;           // Test-Haken: Zeitlimit des Merge-Renders (Vorgabe 4 · Dauer + 60 s)
-  nachExport?: (a: { slug: string; ordner: string; datei?: string }) => void;   // A5: after an export; a throwing hook is logged, never fails it
+  // A5: after an export; a throwing hook is logged, never fails it. ohneAufraeumen: the export went to a chosen folder, nothing is tidied
+  nachExport?: (a: { slug: string; ordner: string; datei?: string; ohneAufraeumen?: boolean }) => void;
   referenzOrdner?: () => string;  // ANALYZE slice 2: the folder of the stored references (Vorgabe pfade.referenzOrdnerVorgabe())
   katalogPfad?: (sha: string) => { pfad: string; name?: string } | null;   // ANALYZE slice 2: a catalogue sha to its file (the server hands the session's)
   referenz?: Partial<import('./sound_reference.ts').KlangReferenzOptionen>;   // test hook: injected measuring, programs
+  erlaubt?: () => Wurzel[];       // export to a chosen folder: the folders `ordner` may name (Vorgabe erlaubteWurzeln(): home and the mounts)
   gesundMs?: number;              // plan 1.11 T13: every host healthy this long before a real-time export starts (Vorgabe 1100: the core's 1 s hold-off)
 }
 
 const STATUS: Record<string, number> = {
-  argument_ungueltig: 400, export_bereich: 400, spur_unbekannt: 400, keine_wirtspur: 400, spur_leer: 400, zu_gross: 400,
+  argument_ungueltig: 400, pfad_fehlt: 404, pfad_ausserhalb: 403, pfad_nicht_lesbar: 403, ordner_nicht_schreibbar: 403,   // export to a chosen folder
+  export_bereich: 400, spur_unbekannt: 400, keine_wirtspur: 400, spur_leer: 400, zu_gross: 400,
   kein_projekt: 409, ki_gestoppt: 409, beschaeftigt: 409, transport_laeuft: 409, nicht_geladen: 409, kein_kernstand: 409, deck_laeuft: 409,
   audio_fehlt: 409, veraltet: 409, wirt_fehlt: 409, wirt_fehler: 409, wirt_spiegel_fehler: 409,
   merge_leer: 409, merge_gruppen: 409, merge_teil_solo: 409, merge_sends: 409, merge_inserts: 409, merge_freeze_noetig: 409, merge_andreas_spur: 409,
@@ -111,7 +118,7 @@ export class AusgabeFehler extends Error {
   constructor(grund: string, text = '', detail = '') { super(text ? `${grund}: ${text}` : grund); this.grund = grund; this.text = text; this.detail = detail; }
 }
 // Typangabe am Namen: nur so wertet TypeScript einen Aufruf als Ende des Pfads und verengt danach (this.arr, q, e ohne Non-Null-Assertion)
-const fehl: (grund: string, text?: string) => never = (grund, text = '') => { throw new AusgabeFehler(grund, text); };
+const fehl: (grund: string, text?: string, detail?: string) => never = (grund, text = '', detail = '') => { throw new AusgabeFehler(grund, text, detail); };
 
 const MAX_KLANG_VARIANTEN = 8;   // FIND SOUND: variants per rendereKlangVarianten call
 
@@ -298,12 +305,17 @@ export function exportZiel(ordner: string, slug: string, d: Date): string {
 }
 // File export of the workbench: a NEW folder <projektordner>/export/<slug>-<JJJJMMTT-hhmmss>/ (-2, -3 ... on a tie). mkdir without `recursive` on the
 // last level fails when the folder exists, so an existing folder is never reused (the loop only picks a free name, the mkdir is the claim).
-export function exportOrdnerZiel(ordner: string, slug: string, d: Date): string {
+// `ordnerAnlegen` false (a folder the user chose): the folder itself is never created, one that is gone is a refusal (pfad_fehlt).
+export function exportOrdnerZiel(ordner: string, slug: string, d: Date, ordnerAnlegen = true): string {
   const stempel = exportStempel(d);
-  fs.mkdirSync(ordner, { recursive: true });
+  if (ordnerAnlegen) fs.mkdirSync(ordner, { recursive: true });
   for (let n = 1; ; n++) {
     const ziel = path.join(ordner, n === 1 ? `${slug}-${stempel}` : `${slug}-${stempel}-${n}`);
-    try { fs.mkdirSync(ziel); return ziel; } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
+    try { fs.mkdirSync(ziel); return ziel; } catch (e) {
+      const c = (e as NodeJS.ErrnoException).code;
+      if (!ordnerAnlegen && c === 'ENOENT') fehl('pfad_fehlt', 'ordner: the folder is gone');
+      if (c !== 'EEXIST') throw e;
+    }
   }
 }
 
@@ -317,7 +329,13 @@ export function kurzeFreezeAntwort(r: { rev: number; projekt: Projekt }, spurId:
 // die Sample-Spitze des Exports liegt über der Limiter-Decke (P10), limiter_db_max = größte Absenkung des Set-Limiters während des Renders
 // (positive dB, 0 = griff nie ein).
 export type ExportAntwort = Pick<RenderAntwort, 'frames' | 'spitze_db' | 'regler_quelle'>
-  & { datei: string; abgriff: Abgriff; ueber_decke: boolean; limiter_db_max: number; dj_schluessel?: true; echtzeit?: true; dauer_s?: number } & Lautheit;
+  & { datei: string; abgriff: Abgriff; ueber_decke: boolean; limiter_db_max: number; dj_schluessel?: true; echtzeit?: true; dauer_s?: number } & Lautheit
+  & { abgaben?: AbgabeErgebnis[] }   // present exactly when the request carried `abgabe`, same order
+  // the three fields are present exactly when the request carried `ziel`; ziel_pruefung is the check of the master
+  & { ziel?: LautheitZiel; ziel_pruefung?: ZielPruefung; ziel_ok?: boolean | null };
+// One delivery file of an export (project/abgabe.ts): the request entry (defaults filled), the file and its loudness measured on that file;
+// a delivery that could not be written has datei null and fehler, the master is a complete export anyway
+export type AbgabeErgebnis = Abgabe & Lautheit & { datei: string | null; fehler?: string; ziel_pruefung?: ZielPruefung };
 // File export of the workbench (POST /proj/export_midi, /proj/export_spuren): `datei` is the file name inside `ordner`
 export interface ExportMidiAntwort {
   ordner: string; von_beat: number; bis_beat: number;
@@ -328,10 +346,25 @@ export interface ExportSpurenAntwort {
   ordner: string; von_beat: number; bis_beat: number;
   dateien: { art: 'mix' | 'spur' | 'return'; spur_id?: string; return_id?: string; nr?: number; name: string; datei: string | null; spitze_db: number;
     stumm: boolean }[];
+  abgabe?: Abgabe;   // the delivery format of the files (defaults filled), only when the request sent one: the folder then holds that format only
 }
 // 1.10 slice 5 (plan E7): a stage keyed by a DJ input (deck/1..4, erz/1) hears nothing in an export (no deck plays in the render): the answer says so,
 // only when it is true
 export const hatDjSchluessel = (p: Projekt): boolean => alleInserts(p).some((x) => x.insert.key?.quelle === 'deck' || x.insert.key?.quelle === 'erz');
+
+// Attaches the target check to an export answer: ziel, ziel_pruefung (the master), ziel_pruefung on every delivery entry and ziel_ok over the written files.
+// ziel_ok: false when any file has tp_ueber true, else null when a written file lacks the measurement its target needs (lufs_i for a lufs_i target,
+// true_peak_dbtp for a true peak target), else true. The loudness distance alone never changes it.
+export function pruefeAntwortZiel(a: ExportAntwort, z: LautheitZiel): void {
+  a.ziel = z;
+  a.ziel_pruefung = pruefeZiel(a, z);
+  for (const x of a.abgaben ?? []) x.ziel_pruefung = pruefeZiel(x, z);
+  const geschrieben = (a.abgaben ?? []).filter((x) => x.datei !== null);
+  const pruef = [a.ziel_pruefung, ...geschrieben.map((x) => x.ziel_pruefung!)];
+  const dateien: Lautheit[] = [a, ...geschrieben];
+  const fehlt = (l: Lautheit): boolean => (z.lufs_i !== undefined && l.lufs_i === null) || (z.true_peak_dbtp !== undefined && l.true_peak_dbtp === null);
+  a.ziel_ok = pruef.some((p) => p.tp_ueber === true) ? false : dateien.some(fehlt) ? null : true;
+}
 
 // Paket 1.18, E-b. Unter dieser Spitze (dBFS) gilt ein Render als Stille: die Lautheit ist null, nicht der Gate-Boden −70 von ffmpeg.
 export const STILLE_DB = -90;
@@ -508,6 +541,7 @@ export class Ausgabe {
   private eigenFreezeEnde = 0;
   private geschlossen = false;                                          // Server endet (R7): kein neuer Lauf
   private renderAbbruch: AbortController | null = null;                 // laufender Export-Render, den schliesse() beendet (F4)
+  private abgabeAbbruch: AbortController | null = null;                 // running delivery conversions of an export, which schliesse() stops
   private arr: { nr: number; status: number } | null = null;
   private generation: number | null = null;
   private letzteMeldungMs = Date.now();
@@ -526,6 +560,7 @@ export class Ausgabe {
   schliesse(): void {
     this.geschlossen = true;
     this.renderAbbruch?.abort();                                         // Fix-Runde 2 S3, F4: der Render ist eine eigene Gruppe, sonst lebt er weiter
+    this.abgabeAbbruch?.abort();                                         // the same for a delivery conversion (ffmpeg is killed)
     for (const [k, w] of [...this.wartend]) { this.wartend.delete(k); w({ art: 'geschlossen' }); }
   }
 
@@ -826,7 +861,56 @@ export class Ausgabe {
     const p = jetzt.projekt;
     const offen = p.spuren.filter(brauchtFreeze).map((s) => s.name);
     if (offen.length) fehl('veraltet', `new notes on ${offen.join(', ')} during the ${was}; nothing was written`);
-    return { jetzt, p, w: this.zugang.schreibeWiedergabe(exportSicht(p)) };
+    const w = this.zugang.schreibeWiedergabe(exportSicht(p));
+    // B4: checked in the same tick as the translation: every clip with note targets got its exact render, else the file holds the source or an older
+    // render (an edit came in after the wait)
+    if (was === 'export' && this.zugang.notenExakt && !this.zugang.notenExakt()) {
+      fs.rmSync(w.datei, { force: true });
+      throw this.notenRenderFehlt();
+    }
+    return { jetzt, p, w };
+  }
+
+  // B4: waits up to 60 s for the note renders of the open project. A render that cannot come (program missing, failed job) or does not come in time
+  // refuses with noten_render_fehlt; the text says which of the causes it is.
+  private async wartePaNoten(): Promise<void> {
+    if (this.zugang.notenBereit && !(await this.zugang.notenBereit(60_000))) throw this.notenRenderFehlt();
+  }
+  private notenRenderFehlt(): ProjFehler {
+    // the texts are literals (tests/proj_reasons_text.test.mjs): the same words as the states noten_programm_fehlt, noten_kurve_fehlt, noten_render_fehler
+    switch (this.zugang.notenFehlerGrund?.() ?? null) {
+      case null: return new ProjFehler(409, 'noten_render_fehlt');
+      case 'noten_programm_fehlt': return new ProjFehler(409, 'noten_render_fehlt', { text: 'cypherdj-noten is not built or not installed' });
+      case 'noten_kurve_fehlt':
+        return new ProjFehler(409, 'noten_render_fehlt',
+          { text: 'the pitch curve of this clip is gone and cannot be recomputed here; detect the notes again' });
+      default: return new ProjFehler(409, 'noten_render_fehlt', { text: 'the note edit could not be rendered; the clip plays without it' });
+    }
+  }
+
+  // `ordner` of an export: the folder the files are written to instead of <project>/export. Absent or null is null (the project folder, the tidy hook
+  // runs). It is resolved with the rule of the import's folder picker (the home folder and the mounts, nothing hidden) and must be writable; every
+  // refusal comes here, before anything is frozen or rendered.
+  private zielOrdner(d: Record<string, unknown>): string | null {
+    if (d.ordner === undefined || d.ordner === null) return null;
+    let real: string;
+    try { real = loeseAuf(d.ordner, (this.opt.erlaubt ?? erlaubteWurzeln)()); } catch (e) {
+      if (!(e instanceof ImportFehler)) throw e;
+      if (e.grund === 'pfad_fehlt') return fehl('pfad_fehlt', 'ordner: there is no such folder');
+      if (e.grund === 'pfad_ausserhalb') return fehl('pfad_ausserhalb', 'ordner: the folder is outside your home folder and the mounted drives, or hidden');
+      if (e.grund === 'pfad_nicht_lesbar') return fehl('pfad_nicht_lesbar', 'ordner: the folder cannot be read');
+      return fehl('argument_ungueltig', 'ordner: an absolute path of a folder is required');
+    }
+    if (!istOrdner(real)) return fehl('argument_ungueltig', 'ordner: the path is not a folder');
+    // the export folder of the open project is the default, not a choice (the tidy rule applies); the rest of the projects folder is refused
+    const o = this.offen(), echt = (x: string): string | null => { try { return fs.realpathSync(x); } catch { return null; } };
+    if (real === echt(path.join(o.ordner, 'export'))) return null;
+    const projekte = echt(path.dirname(o.ordner));
+    if (projekte !== null && (real === projekte || real.startsWith(projekte.endsWith(path.sep) ? projekte : projekte + path.sep))) {
+      return fehl('argument_ungueltig', 'ordner: a folder inside the projects folder cannot be chosen; leave it out to export into the project');
+    }
+    try { fs.accessSync(real, fs.constants.W_OK | fs.constants.X_OK); } catch { return fehl('ordner_nicht_schreibbar', 'ordner: the folder is not writable'); }
+    return real;
   }
 
   async exportiere(d: Record<string, unknown>): Promise<ExportAntwort> {
@@ -837,29 +921,56 @@ export class Ausgabe {
       fehl('argument_ungueltig', `ausklang_beats: a number from 0 to ${EXPORT_AUSKLANG_MAX} is required`);
     }
     const ausklang = (d.ausklang_beats as number | undefined) ?? 0;
-    const { von, bis: bisOhne } = this.pruefeBereich({ ...d, ausklang_beats: undefined }, ['von_beat', 'bis_beat', 'abgriff', 'ausklang_beats']);
+    if (d.abgriff !== undefined && d.abgriff !== 'produktion' && d.abgriff !== 'set') fehl('argument_ungueltig', 'abgriff: production or set expected');
+    // delivery files (project/abgabe.ts): refused here, before anything is frozen or rendered
+    let abgaben: Abgabe[] | undefined;
+    if (d.abgabe !== undefined) {
+      try { abgaben = leseAbgaben(d.abgabe); } catch (e) {
+        if (e instanceof AbgabeFehler) fehl('argument_ungueltig', 'abgabe: not a valid list of delivery formats', e.message);
+        throw e;
+      }
+    }
+    // ohne_meta: only true; it keeps the release tags of the project out of the delivery files
+    if (d.ohne_meta !== undefined && d.ohne_meta !== true) fehl('argument_ungueltig', 'ohne_meta: true expected (leave it out to write the tags)');
+    const ohneMeta = d.ohne_meta === true;
+    const gewaehlt = this.zielOrdner(d);                                 // null: <project>/export as before
+    // loudness target (project/loudness.ts): a check of the master and of every delivery, refused here when malformed
+    let lautZiel: LautheitZiel | undefined;
+    if (d.ziel !== undefined) {
+      try { lautZiel = leseZiel(d.ziel); } catch (e) { fehl('argument_ungueltig', 'ziel: not a valid loudness target', (e as Error).message); }
+    }
+    // note edits (B4): the renders of the open project are the playback. Wait for them first (60 s), so the range, the transport and the audio files
+    // below are read after the wait; a render that does not come refuses the export rather than writing the source sound
+    await this.wartePaNoten();
+    const felder = ['von_beat', 'bis_beat', 'abgriff', 'ausklang_beats', 'abgabe', 'ziel', 'ohne_meta', 'ordner'];
+    const { von, bis: bisOhne } = this.pruefeBereich({ ...d, ausklang_beats: undefined }, felder);
     const bis = bisOhne + ausklang;
     if (bis - von > EXPORT_MAX_BEATS) {
       fehl('export_bereich', `beat ${von} to ${bis} (with the tail of ${ausklang} beats): the export is 1 to ${EXPORT_MAX_BEATS} beats long`);
     }
-    if (d.abgriff !== undefined && d.abgriff !== 'produktion' && d.abgriff !== 'set') fehl('argument_ungueltig', 'abgriff: production or set expected');
     // 1.10: Vorgabe des Servers ist der Produktions-Abgriff (der Render selbst nimmt ohne Angabe den Ring, P11)
     const abgriff: Abgriff = d.abgriff === 'set' ? 'set' : 'produktion';
     this.belege({ art: 'export' });
     try {
       if (brauchtEchtzeit(this.offen().projekt)) {
         if (d.abgriff === 'set') fehl('argument_ungueltig', 'abgriff: the real-time export captures the production master only');
-        const echtzeit = await this.exportiereEchtzeit(von, bis);
-        this.nachExportLauf(echtzeit.datei);
+        const lebend = this.offen().projekt;                              // the tags read the project as it is at the start of the capture
+        const echtzeit = await this.exportiereEchtzeit(von, bis, gewaehlt);
+        // after the real-time path has returned: it held the loading lock until its finally, and a conversion must not hold it
+        if (abgaben) echtzeit.abgaben = await this.schreibeAbgaben(echtzeit.datei, abgaben, ohneMeta ? () => ({}) : (a) => abgabeTags(lebend, a.format));
+        if (lautZiel) pruefeAntwortZiel(echtzeit, lautZiel);
+        this.nachExportLauf(echtzeit.datei, gewaehlt !== null);     // a chosen folder is not tidied, the collector is told as always
         return echtzeit;
       }
       const { jetzt, p, w } = await this.friereEinUndSchreibe('export');
-      const ordner = path.join(jetzt.ordner, 'export');
+      const ordner = gewaehlt ?? path.join(jetzt.ordner, 'export');
       let r: RenderAntwort, ziel: string;
       try {
-        fs.mkdirSync(ordner, { recursive: true });
+        if (!gewaehlt) fs.mkdirSync(ordner, { recursive: true });         // a chosen folder is never created, a vanished one is a refusal
         ziel = exportZiel(ordner, jetzt.slug, (this.opt.jetzt ?? (() => new Date()))());
-        const teil = `${ziel}.${process.pid}.teil`, regler = path.join(ordner, `.regler-${process.pid}.json`);
+        if (gewaehlt && !istOrdner(gewaehlt)) fehl('pfad_fehlt', 'ordner: the folder is gone');
+        // the controls file is a helper of the render, never renamed into place: in the project's export folder or the temp folder, not in a chosen folder
+        const teil = `${ziel}.${process.pid}.teil`, regler = path.join(gewaehlt ? os.tmpdir() : ordner, `.regler-${process.pid}.json`);
         const dauerMs = (bis - von) * 60_000 / p.tempo_bpm;
         try {                                                             // R4: auch eine halb geschriebene Regler-Datei geht im finally weg
           fs.writeFileSync(regler, JSON.stringify(reglerAusProjekt(p))); // Spec 6.20: immer als Datei mit
@@ -868,7 +979,7 @@ export class Ausgabe {
           r = await rendere({ programm: (this.opt.render ?? (() => [renderProgramm()]))(), nr: w.nr, von_beat: von, bis_beat: bis, bpm: p.tempo_bpm,
             aus: teil, arbeitsordner: this.zugang.arbeitsordner(), spurRegler: regler, instanz: (this.opt.instanz ?? instanz)(),
             zeitlimitMs: Math.ceil(4 * dauerMs) + 60_000, abbruch: this.renderAbbruch.signal, abgriff });
-          fs.linkSync(teil, ziel);                                        // nie ersetzen (wie der Render, Spec 6.25): link schlägt fehl, wenn es ziel gibt
+          await legeAb(teil, ziel);                                    // nie ersetzen (Spec 6.25): Link oder Kopie schlagen fehl, wenn es ziel gibt
           this.datei = ziel;
         } finally {
           this.renderAbbruch = null;
@@ -882,16 +993,44 @@ export class Ausgabe {
       const antwort: ExportAntwort = { datei: ziel, frames: r.frames, spitze_db: r.spitze_db, regler_quelle: r.regler_quelle, abgriff,
         ueber_decke: r.ueber_decke ?? false, limiter_db_max: r.limiter_db_max ?? 0,
         ...(hatDjSchluessel(p) ? { dj_schluessel: true as const } : {}), ...lautheit };
+      if (abgaben) antwort.abgaben = await this.schreibeAbgaben(ziel, abgaben, ohneMeta ? () => ({}) : (a) => abgabeTags(p, a.format));
+      if (lautZiel) pruefeAntwortZiel(antwort, lautZiel);
       this.ctx.log({ typ: 'proj_export', slug: jetzt.slug, nr: w.nr, von_beat: von, bis_beat: bis, ...antwort });
-      this.nachExportLauf(ziel);
+      this.nachExportLauf(ziel, gewaehlt !== null);
       return antwort;
     } catch (e) { throw this.nachFehler(e); } finally { this.gib(); }
   }
 
+  // Delivery files of an export: one conversion per entry, serially, each measured on its own file. A failed delivery does not fail the export (its entry
+  // has datei null and fehler). schliesse() aborts the running conversion; the entry that ran and every later one then say the server is shutting down.
+  // `tags` gives the metadata of an entry (none yet).
+  private async schreibeAbgaben(master: string, abgaben: Abgabe[], tags: (a: Abgabe) => Record<string, string>): Promise<AbgabeErgebnis[]> {
+    const ac = this.abgabeAbbruch = new AbortController();
+    if (this.geschlossen) ac.abort();                                    // schliesse() came before this point
+    const aus: AbgabeErgebnis[] = [];
+    const nichts = (a: Abgabe, fehler: string): AbgabeErgebnis => ({ ...a, datei: null, fehler, lufs_i: null, lra: null, true_peak_dbtp: null });
+    try {
+      for (const a of abgaben) {
+        if (ac.signal.aborted) { aus.push(nichts(a, 'the server is shutting down')); continue; }
+        try {
+          const ziel = abgabeName(master, a);
+          await wandle({ quelle: master, ziel, abgabe: a, tags: tags(a), ffmpeg: this.opt.ffmpeg, abbruch: ac.signal });
+          aus.push({ ...a, datei: ziel, ...(await messeLautheit(ziel, this.opt.ffmpeg)) });
+        } catch (e) {
+          aus.push(nichts(a, ac.signal.aborted ? 'the server is shutting down' : (e as Error)?.message ?? String(e)));
+        }
+      }
+    } finally { this.abgabeAbbruch = null; }
+    return aus;
+  }
+
   // A5: the hook of the page (keep three exports, collect the sources) runs once per finished export; what it throws is logged and ignored
-  private nachExportLauf(datei?: string): void {
+  private nachExportLauf(datei?: string, gewaehlt = false): void {
     if (!this.opt.nachExport) return;
-    try { const o = this.offen(); this.opt.nachExport({ slug: o.slug, ordner: o.ordner, ...(datei ? { datei: path.basename(datei) } : {}) }); }
+    try {
+      const o = this.offen();
+      this.opt.nachExport({ slug: o.slug, ordner: o.ordner, ...(gewaehlt ? { ohneAufraeumen: true } : datei ? { datei: path.basename(datei) } : {}) });
+    }
     catch (e) { this.ctx.log({ typ: 'nach_export_fehler', fehler: (e as Error)?.message ?? String(e) }); }
   }
 
@@ -899,7 +1038,7 @@ export class Ausgabe {
   // writes the production master (post point, aligned like the tap) to a raw file: /k/arr/export_lauf. The hosts are checked first (all `bereit`, each
   // healthy for 1.1 s: the core's dry hold-off after a health rise is not counted in `ungesund`), the project is loaded as its own export view (host
   // tracks unfrozen and live), and the live view is loaded again in every outcome. Any unhealthy block or gap removes the file.
-  private async exportiereEchtzeit(von: number, bis: number): Promise<ExportAntwort> {
+  private async exportiereEchtzeit(von: number, bis: number, gewaehlt: string | null = null): Promise<ExportAntwort> {
     const z = this.zugang;
     const o0 = this.offen(), p0 = o0.projekt;
     await z.hostZustandSichern?.('export');                              // plan 1.11 D8: the plugin states of this project are on disk
@@ -933,11 +1072,12 @@ export class Ausgabe {
         fehl('render_fehler', 'the raw capture of the real-time export is missing or has the wrong size');
       }
       const jetzt = this.offen();
-      const ordner = path.join(jetzt.ordner, 'export');
-      fs.mkdirSync(ordner, { recursive: true });
+      const ordner = gewaehlt ?? path.join(jetzt.ordner, 'export');
+      if (!gewaehlt) fs.mkdirSync(ordner, { recursive: true });
       const ziel = exportZiel(ordner, jetzt.slug, (this.opt.jetzt ?? (() => new Date()))());
+      if (gewaehlt && !istOrdner(gewaehlt)) fehl('pfad_fehlt', 'ordner: the folder is gone');
       const spitze = await spitzeDbVonF32(roh);
-      const wav = await schreibeWavAusF32Stueckweise(roh, ziel);
+      const wav = await schreibeWavAusF32Stueckweise(roh, ziel, !gewaehlt);
       this.datei = ziel;
       const lautheit = await messeLautheit(ziel, this.opt.ffmpeg);
       const antwort: ExportAntwort = { datei: ziel, frames: wav.frames, spitze_db: spitze, regler_quelle: 'kern', abgriff: 'produktion', ueber_decke: false,
@@ -1082,7 +1222,17 @@ export class Ausgabe {
   // `.teil` inside the new folder and renamed; on any failure the whole new folder goes, so no half export stays.
   async exportiereSpuren(d: Record<string, unknown>): Promise<ExportSpurenAntwort> {
     await this.warteNachEigenemFreeze();
-    const { von, bis } = this.pruefeBereich(d, ['von_beat', 'bis_beat'], undefined, true);
+    await this.wartePaNoten();                                           // B4: before the range and the project are read
+    // abgabe: ONE delivery format (wav or flac) that replaces the float files; refused here, before anything is frozen or rendered
+    let abgabe: Abgabe | undefined;
+    if (d.abgabe !== undefined) {
+      try { abgabe = leseAbgaben([d.abgabe], ['wav', 'flac'])[0]; } catch (e) {
+        if (e instanceof AbgabeFehler) fehl('argument_ungueltig', 'abgabe: not a valid delivery format', e.message);
+        throw e;
+      }
+    }
+    const gewaehlt = this.zielOrdner(d);                                 // null: <project>/export as before
+    const { von, bis } = this.pruefeBereich(d, ['von_beat', 'bis_beat', 'abgabe', 'ordner'], undefined, true);
     if (brauchtEchtzeit(this.offen().projekt)) {
       fehl('host_insert_echtzeit',
         'a plugin stage is active; the per-track export renders offline and cannot capture it (export the mix instead, it is captured in real time)');
@@ -1093,22 +1243,35 @@ export class Ausgabe {
       const { jetzt, p, w } = await this.friereEinUndSchreibe('export');
       try {
         tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-export-'));
-        ziel = exportOrdnerZiel(path.join(jetzt.ordner, 'export'), jetzt.slug, (this.opt.jetzt ?? (() => new Date()))());
+        ziel = exportOrdnerZiel(gewaehlt ?? path.join(jetzt.ordner, 'export'), jetzt.slug, (this.opt.jetzt ?? (() => new Date()))(), !gewaehlt);
         const aus = ziel, dir = tmp;
         this.renderAbbruch = new AbortController();
         if (this.geschlossen) this.renderAbbruch.abort();
+        // `datei` is the float name (<stem>.wav); the entry's file name is returned: with abgabe the float file is converted (no tags) and removed
         const render = async (datei: string, regler: Record<string, number>, nrW = w.nr, nurSchluessel: string[] = [],
-          trockenAus = false): Promise<RenderAntwort> => {
+          trockenAus = false): Promise<RenderAntwort & { name: string }> => {
           const teil = path.join(aus, `${datei}.teil`);
           const r = await this.rendereTeil({ p, nr: nrW, von, bis, aus: teil, reglerDatei: path.join(dir, `${datei}.json`), regler, nurSchluessel,
             trockenAus });
-          fs.renameSync(teil, path.join(aus, datei));
-          this.datei = path.join(aus, datei);
-          return r;
+          if (!abgabe) {
+            fs.renameSync(teil, path.join(aus, datei));
+            this.datei = path.join(aus, datei);
+            return { ...r, name: datei };
+          }
+          const roh = path.join(aus, datei.replace(/\.wav$/, '.roh.wav')), name = datei.replace(/\.wav$/, `.${abgabe.format}`);
+          fs.renameSync(teil, roh);
+          try {
+            await wandle({ quelle: roh, ziel: path.join(aus, name), abgabe, ffmpeg: this.opt.ffmpeg, abbruch: this.renderAbbruch!.signal });
+          } catch (e) {
+            if (e instanceof AbgabeFehler) fehl('render_fehler', 'a file of the set could not be converted; nothing was exported', `${name}: ${e.message}`);
+            throw e;
+          } finally { fs.rmSync(roh, { force: true }); }
+          this.datei = path.join(aus, name);
+          return { ...r, name };
         };
         const dateien: ExportSpurenAntwort['dateien'] = [];
         const mix = await render('mix.wav', reglerAusProjekt(p));
-        dateien.push({ art: 'mix', name: p.name, datei: 'mix.wav', spitze_db: mix.spitze_db, stumm: mix.spitze_db <= STILLE_DB });
+        dateien.push({ art: 'mix', name: p.name, datei: mix.name, spitze_db: mix.spitze_db, stumm: mix.spitze_db <= STILLE_DB });
         for (const s of belegteSpuren(p, von, bis)) {
           const kopf = { art: 'spur' as const, spur_id: s.id, nr: s.nr, name: s.name };
           if (s.mute && !hatLane(s)) { dateien.push({ ...kopf, datei: null, spitze_db: -200, stumm: true }); continue; }   // a mute lane could un-mute it
@@ -1117,7 +1280,7 @@ export class Ausgabe {
           const datei = `${zwei2(s.nr)}-${sicherName(s.name)}.wav`;
           try { r = await render(datei, reglerEinzeln(s, p), einzel?.nr, schluesselPlan(p, s).ids); } finally { if (einzel) fs.rmSync(einzel.datei,
             { force: true }); }
-          dateien.push({ ...kopf, datei, spitze_db: r.spitze_db, stumm: r.spitze_db <= STILLE_DB });
+          dateien.push({ ...kopf, datei: r.name, spitze_db: r.spitze_db, stumm: r.spitze_db <= STILLE_DB });
         }
         for (const x of p.returns ?? []) {
           if (!returnGespeist(p, x)) continue;
@@ -1128,12 +1291,12 @@ export class Ausgabe {
           const regler = reglerReturn(x, p);
           for (const k of Object.keys(regler)) if (k.endsWith('/solo')) regler[k] = 0;
           const r = await render(datei, regler, w.nr, schluesselReturns(p, x).map((y) => `ret/${y.nr}`), true);
-          dateien.push({ ...kopf, datei, spitze_db: r.spitze_db, stumm: r.spitze_db <= STILLE_DB });
+          dateien.push({ ...kopf, datei: r.name, spitze_db: r.spitze_db, stumm: r.spitze_db <= STILLE_DB });
         }
         this.ctx.log({ typ: 'proj_export_spuren', slug: jetzt.slug, nr: w.nr, von_beat: von, bis_beat: bis, ordner: ziel, dateien: dateien.length });
         fertig = true;
-        this.nachExportLauf(ziel);
-        return { ordner: ziel, von_beat: von, bis_beat: bis, dateien };
+        this.nachExportLauf(ziel, gewaehlt !== null);
+        return { ordner: ziel, von_beat: von, bis_beat: bis, dateien, ...(abgabe ? { abgabe } : {}) };
       } finally {
         this.renderAbbruch = null;
         fs.rmSync(w.datei, { force: true });                             // die Export-Wiedergabe verdrängt sonst die geladene (BEHALTE 5)
@@ -1143,17 +1306,24 @@ export class Ausgabe {
     } catch (e) { throw this.nachFehler(e); } finally { this.gib(); }
   }
 
-  // POST /proj/export_zeige {ordner}: opens one export folder of the open project in the desktop file manager. Detached, never waited for.
+  // POST /proj/export_zeige {ordner}: opens the export folder of the open project or a folder in it in the file manager. Detached.
   zeigeExport(d: Record<string, unknown>): { ordner: string } {
     for (const k of Object.keys(d)) if (k !== 'ordner') fehl('argument_ungueltig', `unknown field ${k}`);
     if (typeof d.ordner !== 'string' || d.ordner === '') return fehl('argument_ungueltig', 'ordner: a folder path is required');
     const o = this.offen();
     const wurzel = path.join(o.ordner, 'export');
-    let echt: string, echtWurzel: string;
-    try { echt = fs.realpathSync(path.resolve(d.ordner)); echtWurzel = fs.realpathSync(wurzel); } catch { return fehl('argument_ungueltig',
-      'ordner: no such folder'); }
-    if (path.dirname(echt) !== echtWurzel || !fs.statSync(echt).isDirectory()) {
-      return fehl('argument_ungueltig', 'ordner: only a folder inside the export folder of the open project can be shown');
+    let echt: string, echtWurzel: string | null = null;
+    try { echt = fs.realpathSync(path.resolve(d.ordner)); } catch { return fehl('argument_ungueltig', 'ordner: no such folder'); }
+    try { echtWurzel = fs.realpathSync(wurzel); } catch { /* no export folder yet: only a chosen folder can be shown */ }
+    const imProjekt = echtWurzel !== null && (echt === echtWurzel || path.dirname(echt) === echtWurzel);
+    // a folder an export was written to (`ordner` of POST /proj/export): any folder that passes the rule of the folder picker, home and the mounts
+    let gewaehlt = false;
+    if (!imProjekt) {
+      try { gewaehlt = loeseAuf(d.ordner, (this.opt.erlaubt ?? erlaubteWurzeln)()) === echt; } catch (e) { if (!(e instanceof ImportFehler)) throw e; }
+    }
+    if (!(imProjekt || gewaehlt) || !fs.statSync(echt).isDirectory()) {
+      return fehl('argument_ungueltig',
+        'ordner: only the export folder of the open project or a folder inside it can be shown, or a folder in your home folder or on a mounted drive');
     }
     if (!process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) fehl('keine_arbeitsflaeche', 'the server has no desktop session to open a folder in');
     const k = spawn('xdg-open', [echt], { detached: true, stdio: 'ignore' });
@@ -1399,6 +1569,25 @@ export class Ausgabe {
     } catch (e) { throw this.nachFehler(e); } finally { this.gib(); }
   }
 
+  /** Loudness-matched A/B of the master chain: two offline renders of the range, A = the project's master as it is, B = every master insert stage
+   *  switched off (the rows abZeilen gives for side b). Returns the revision they were rendered from and both integrated loudnesses (a silent or
+   *  gate-floor part has `lufs_i` null). Like the analysis it takes the analysis lock, never freezes and writes nothing to the project. */
+  async rendereMasterAB(von: number, bis: number, ffmpeg?: string[]): Promise<{ rev: number; a: Lautheit; b: Lautheit }> {
+    return this.analyseLauf([{ art: 'master' }], true, true, async ({ p, w, render }) => {
+      const basis = reglerAusProjekt(p);
+      const ohneStufen = Object.fromEntries(abZeilen(p, 'b', { leiser: null, db: 0 }).filter((z) => z.pfad !== 'pm/fader').map((z) => [z.pfad, z.wert]));
+      const messe = async (x: { datei: string; spitze_db: number }): Promise<Lautheit> => {
+        if (x.spitze_db <= STILLE_DB) return OHNE_LAUTHEIT;
+        const l = await messeLautheit(x.datei, ffmpeg ?? this.opt.ffmpeg, 120_000);
+        if (l.loudness_fehler) throw new AusgabeFehler('render_fehler', `the loudness measurement failed: ${l.loudness_fehler}`);
+        return untermessgrenze(l).l;
+      };
+      const a = await render('master', basis, w!.nr);
+      const b = await render('master-b', { ...basis, ...ohneStufen }, w!.nr);
+      return { rev: p.rev, a: await messe(a), b: await messe(b) };
+    }, von, bis);
+  }
+
   /** Writes one line to the server log (the analysis route logs its runs through the output area). */
   protokolliere(z: Record<string, unknown>): void { this.ctx.log(z); }
 
@@ -1440,7 +1629,7 @@ export class Ausgabe {
       const o = this.offen();
       if (o.slug !== o0.slug) fehl('veraltet', 'the project was closed or replaced during the merge; nothing was saved');
       const alt = pruefeMergeNochGleich(o.projekt, z);
-      if (alt === 'merge_keine_spur_frei') fehl('merge_keine_spur_frei', 'all 32 tracks are used');
+      if (alt === 'merge_keine_spur_frei') fehl('merge_keine_spur_frei', `all ${MAX_SPUREN} tracks are used`);
       if (alt !== null) fehl('veraltet', 'the tracks changed during the merge; nothing was saved');
       if (quelle === 'cypher' && this.ctx.kiGestoppt()) fehl('ki_gestoppt', 'Stop Cypher is set; the result was discarded');
       const neu = baueMergeProjekt(o.projekt, z, { sha256, pfad: ziel }, quelle);
@@ -1577,7 +1766,7 @@ export class Ausgabe {
         const o = this.offen();
         if (o.slug !== o0.slug) fehl('veraltet', 'the project was closed or replaced during the resample; nothing was saved');
         const alt = pruefeResampleNochGleich(o.projekt, z);
-        if (alt === 'merge_keine_spur_frei') fehl('merge_keine_spur_frei', 'all 32 tracks are used');
+        if (alt === 'merge_keine_spur_frei') fehl('merge_keine_spur_frei', `all ${MAX_SPUREN} tracks are used`);
         if (alt !== null) fehl('veraltet', 'the tempo or the strip changed during the resample; nothing was saved');
         if (quelle === 'cypher' && this.ctx.kiGestoppt()) fehl('ki_gestoppt', 'Stop Cypher is set; the result was discarded');
         const neu = baueResampleProjekt(o.projekt, z, { sha256: w.sha256, pfad: ziel }, quelle);
@@ -1679,6 +1868,11 @@ export function ausgabeBereich(ctx: BereichKontext, zugang: ProjZugang, opt: Aus
   const runde = new KlangRunde({ ausgabe: a, zugang, quelle: () => ctx.quelle(), log: (z) => ctx.log(z), takt: baueTaktZugang(ctx, uhr, () => zugang.offen()),
     kiGestoppt: () => ctx.kiGestoppt(),
     pruefeSchreiben: () => { if (ctx.quelle() === 'cypher' && ctx.kiGestoppt()) fehl('ki_gestoppt', 'Stop Cypher is set'); } });
+  // master A/B: needs the output area for the two renders and the access for the transient rows (absent without a core connection: refused)
+  const ab = new MasterAB({ ausgabe: a, marke: zugang.masterAbMarke, quelle: () => ctx.quelle(), log: (z) => ctx.log(z),
+    zugang: { offen: () => zugang.offen(),
+      hoereMaster: zugang.hoereMaster ?? (async () => fehl('kein_kernstand', 'there is no connection to the core that could switch the sound')),
+      beiSchliessen: (f) => zugang.beiSchliessen(f), beiStand: (f) => zugang.beiStand(f), beiNeustart: (f) => zugang.beiNeustart?.(f) } });
   const sek = (x: number): string => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
   // POST /analyse/referenz/merken: the measurement of a file range, or of a strip of the open project, is stored under a name and a role
   const merken = async (d: Record<string, unknown>): Promise<unknown> => {
@@ -1722,6 +1916,10 @@ export function ausgabeBereich(ctx: BereichKontext, zugang: ProjZugang, opt: Aus
       { methode: 'POST', pfad: '/proj/export', schutz: 'fremdePost', handler: antworte((d) => a.exportiere(d)) },
       { methode: 'POST', pfad: '/proj/lautheit', schutz: 'fremdePost', handler: antworte((d) => a.lautheit(d)) },
       { methode: 'POST', pfad: '/proj/analyse', schutz: 'fremdePost', handler: antworte((d) => k.analysiere(d)) },
+      { methode: 'POST', pfad: '/proj/master_ab', schutz: 'fremdePost', handler: antworte((d) => ab.steuere(d)) },
+      { methode: 'GET', pfad: '/proj/master_ab', schutz: 'offen', handler: async (_q, r) => {
+        try { json(r, 200, ab.lage()); } catch (e) { const x = alsAntwort(e); json(r, x.code, x.body); }
+      } },
       { methode: 'POST', pfad: '/proj/klang/runde', schutz: 'fremdePost', handler: antworte(async (d) => runde.starte(d)) },
       { methode: 'GET', pfad: '/proj/klang/runde', schutz: 'offen', handler: async (_q, r) => {
         try { json(r, 200, runde.lage()); } catch (e) { const x = alsAntwort(e); json(r, x.code, x.body); }

@@ -36,7 +36,7 @@ test('rec: eine ganze Aufnahme, Datei mit dem Prüfmuster, /e/aufnahme', () => {
   assert.ok(fs.existsSync(path.join(ordner, 'aufnahme-3-7.json')));
 });
 
-test('rec: Ablehnungen: ohne scharfe Spur kein_eingang, scharf ohne Eingang, Spur 33, wartender Transport ueberlappung', () => {
+test('rec: Ablehnungen: ohne scharfe Spur kein_eingang, scharf ohne Eingang, Spur 129, wartender Transport ueberlappung', () => {
   const cfg = { arbeitsbestand: arbeitsbestand(), arr_ordner: fs.mkdtempSync(path.join(os.tmpdir(), 'attrappe-rec2-')) };
   gruen(fahre([
     sende(0, laden(1, 1)),
@@ -44,7 +44,7 @@ test('rec: Ablehnungen: ohne scharfe Spur kein_eingang, scharf ohne Eingang, Spu
     erwarte(2000, q(2, 'andreas', 6, null, 'kein_eingang')),
     sende(2100, spur(3, 1, 1, 0)),
     erwarte(3000, q(3, 'andreas', 6, null, 'kein_eingang')),
-    sende(3100, spur(4, 33, 1, 11)),
+    sende(3100, spur(4, 129, 1, 11)),
     erwarte(4000, q(4, 'andreas', 6, null, 'ausserhalb_bereich')),
     sende(4100, spur(5, 1, 1, 11)),
     erwarte(5000, q(5, 'andreas', 3)),

@@ -24,7 +24,7 @@ export const STROM_KANAELE = STROEME.map(stromKanal);   // alias bases of the St
 const KANALZUG = ['fader', 'trim', 'eq/hoch', 'eq/mitte', 'eq/tief', 'kill/hoch', 'kill/mitte', 'kill/tief', 'filter', 'pfl'];
 const DECK_TASTEN = ['play', 'cue'];
 const DECK_ZUWEISUNG = ['xseite'];  // Crossfader-Seite A/THRU/B, §1.5 „nur Hand“ (2026-09-27)
-export const SPUREN = Array.from({ length: 32 }, (_, i) => i + 1);   // D1 K1: Spur-Regler des Arrangements (§1.5 spur/<n>/*)
+export const SPUREN = Array.from({ length: 128 }, (_, i) => i + 1);   // D1 K1: Spur-Regler des Arrangements (§1.5 spur/<n>/*)
 const SPUR_REGLER = ['fader', 'pan', 'mute', 'solo'];
 const SPUR_ZIELE = [...SPUR_REGLER, 'filter', 'eq/tief', 'eq/mitte', 'eq/hoch', 'pfl', 'trim', 'kill/tief', 'kill/mitte', 'kill/hoch', 'fx/1', 'fx/2', 'fx/3'];   // loop deck K7a: spur/<n>/filter exists for tracks only, groups have no filter row; container core K7: pfl, trim and kill rows of a track
 // S5r (§1.5): graph knobs <kanal>/bk/<1..64> auf den Kanälen, die einen Baukasten-Graphen annehmen (nicht erz/4, erz/8)
@@ -73,14 +73,14 @@ export function art(pfad) {
   if (pfad === 'cue/mix') return 'mix';
   if (pfad === 'master/kleber') return 'kleber';
   if (pfad === 'master/pfl') return 'pfl';
-  if (/^spur\/(?:[1-9]|[12][0-9]|3[0-2])\/eq\/(?:tief|mitte|hoch)$/.test(pfad)) return 'eq';   // loop deck channel strip KZ1: isolator band of a track, KERN.eq applies
-  if (/^spur\/(?:[1-9]|[12][0-9]|3[0-2])\/filter$/.test(pfad)) return 'filter';   // loop deck K7a: DJ filter of a track, -1..+1, centre neutral
-  const sp = /^spur\/(?:[1-9]|[12][0-9]|3[0-2])\/(fader|pan|mute|solo)$/.exec(pfad);   // D1 K1
+  if (/^spur\/(?:[1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])\/eq\/(?:tief|mitte|hoch)$/.test(pfad)) return 'eq';   // loop deck channel strip KZ1: isolator band of a track, KERN.eq applies
+  if (/^spur\/(?:[1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])\/filter$/.test(pfad)) return 'filter';   // loop deck K7a: DJ filter of a track, -1..+1, centre neutral
+  const sp = /^spur\/(?:[1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])\/(fader|pan|mute|solo)$/.exec(pfad);   // D1 K1
   if (sp) return sp[1] === 'fader' ? 'spur_fader' : sp[1] === 'pan' ? 'pan' : 'schalter';
   const gp = /^grp\/([1-9]|1[0-6])\/(fader|pan|mute|solo|cue)$/.exec(pfad);   // 1.10: wie die Spur-Regler
   if (gp) return gp[1] === 'fader' ? 'spur_fader' : gp[1] === 'pan' ? 'pan' : 'schalter';
   if (pfad === 'pm/fader') return 'spur_fader';
-  if (/^(?:spur\/(?:[1-9]|[12][0-9]|3[0-2])|grp\/([1-9]|1[0-6]))\/send\/[1-4]$/.test(pfad)) return 'send';   // 1.10 Slice 3
+  if (/^(?:spur\/(?:[1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])|grp\/([1-9]|1[0-6]))\/send\/[1-4]$/.test(pfad)) return 'send';   // 1.10 Slice 3
   const rt = /^ret\/[1-4]\/(fader|pan|mute|solo|hall\/(an|pre|decay|groesse|tief|highcut|fahne))$/.exec(pfad);   // 1.10 Slice 3
   if (rt) return rt[1] === 'fader' ? 'spur_fader' : rt[1] === 'pan' ? 'pan' : rt[1] === 'mute' || rt[1] === 'solo' || rt[2] === 'an' ? 'schalter' : 'hall';
   if (BK_ART.test(pfad)) return 'bk';   // S5r: linear 0..1, Vorgabe 0,5

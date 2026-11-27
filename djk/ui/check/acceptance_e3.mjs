@@ -245,7 +245,7 @@ async function lauf() {
   const vor = await pegel(sek);
   const namen = Object.keys(vor);
   const spurNamen = namen.filter((x) => x.startsWith('spur/'));
-  const schlecht = spurNamen.filter((x) => !/^spur\/[1-9][0-9]?$/.test(x) || Number(x.slice(5)) > N);
+  const schlecht = spurNamen.filter((x) => !/^spur\/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$/.test(x) || Number(x.slice(5)) > N);
   const zN = vor[`spur/${N}`];
   const kN = zN ? `spur/${N}` : 'spur/:';                                              // Fehlerbild vor Task 2: der Pegel von Spur 10 heißt "spur/:"
   const vN = vor[kN];

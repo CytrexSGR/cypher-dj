@@ -223,6 +223,9 @@ let zeileHaken = null;
 // The track bands of a stream row poll and follow the beat only while a view shows them: the STRUDEL tab of SESSION sets this (task V6).
 // No view shows them yet, so nothing polls (the poll used to run while the old LIVE view was open).
 let bandSichtbar = () => false;
+// Other views of the GET /spur list (the channel strip row): fn(liste) per answer; `sichtbar()` keeps the poll running while that view is shown.
+const listenHorcher = [];
+export function beiSpurListe(fn, sichtbar = () => false) { listenHorcher.push({ fn, sichtbar }); }
 export function setzeBandSichtbar(f) { bandSichtbar = typeof f === 'function' ? f : () => false; }
 /** Lanes for a stream row built after the page start (a no-op before bindeSpurbaender ran: it covers the rows that exist). */
 export function bindeSpurbandZeile(w) { zeileHaken?.(w); }
@@ -264,12 +267,13 @@ export function bindeSpurbaender(post, beatVon = () => null) {
   for (const w of document.querySelectorAll('#deck-c .instanz')) bindeZeile(w);
   zeileHaken = bindeZeile;   // rows of the Strudel module built later (strudel_module.js) get their lanes through bindeSpurbandZeile
   const hole = async () => {
-    if (!bandSichtbar() || document.hidden || offen) return;   // Bänder nicht sichtbar und verdeckter Tab: nicht pollen; keine zweite Anfrage, solange eine offen ist
+    if (!(bandSichtbar() || listenHorcher.some((h) => h.sichtbar())) || document.hidden || offen) return;   // Bänder nicht sichtbar und verdeckter Tab: nicht pollen; keine zweite Anfrage, solange eine offen ist
     offen = true;
     const meine = ++nummer, ac = new AbortController(), zeit = setTimeout(() => ac.abort(), 2000);
     let liste;
     try { const r = await fetch('/spur', { signal: ac.signal }); if (!r.ok) return; liste = await r.json(); } catch { return; } finally { clearTimeout(zeit); offen = false; }
     if (!Array.isArray(liste) || meine < gueltigAb) return;
+    for (const h of listenHorcher) { try { h.fn(liste); } catch (e) { console.error('spur list listener:', e); } }
     const beat = beatVon();
     for (const i of instanzen) {
       i.laeuft.clear();

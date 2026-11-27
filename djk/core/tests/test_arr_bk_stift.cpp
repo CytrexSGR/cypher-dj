@@ -16,6 +16,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -90,7 +91,8 @@ cdj::ArrSnapshot* snap(CypherBk* h, uint64_t gen, uint64_t folge, bool da, std::
 // drives the sink of track 2 (slot index 1) in blocks of 256
 struct Rig {
   Treiber t;
-  cdj::ArrBkSenke se{t.arr};
+  std::unique_ptr<cdj::ArrBkSenke> se_h{std::make_unique<cdj::ArrBkSenke>(t.arr)};   // on the heap: about 3.5 MB since 128 tracks (8 MB stack)
+  cdj::ArrBkSenke& se{*se_h};
   int64_t s0 = 0;
   std::vector<float> block() {
     std::vector<float> l(256, 0.0f), r(256, 0.0f);

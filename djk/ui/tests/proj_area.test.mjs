@@ -62,7 +62,7 @@ test('POST /regler mit Pfad spur/* → 409 ueber_projekt (jede Quelle), nichts a
     }
   }
   assert.equal(o.gesendet, gesendet0, 'nichts ging an den Kern');
-  assert.equal((await ruf(url, 'POST', '/regler', { pfad: 'spur/33/fader', nach: 0 })).j.fehler, 'pfad', 'spur/33 gibt es nicht: weiter 400 pfad');
+  assert.equal((await ruf(url, 'POST', '/regler', { pfad: 'spur/129/fader', nach: 0 })).j.fehler, 'pfad', 'spur/129 gibt es nicht: weiter 400 pfad');
   const ok = await ruf(url, 'POST', '/regler', { pfad: 'bus/1/fader', nach: -3 });
   assert.deepEqual([ok.code, ok.j.ok], [200, true], 'Negativ-Kontrolle: ein erlaubter Pfad geht weiter durch');
   assert.equal(o.gesendet, gesendet0 + 1);

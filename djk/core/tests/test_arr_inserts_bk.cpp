@@ -1,6 +1,6 @@
 // arr-bk slice 3: the insert kind `bk` of the arrangement mixer, a Baukasten effect graph as a stage (pool of 8, knobs k1..k8, latency from the graph).
 // Cases (blocks of 256 samples, the mixer's own harness for the arrangement; direct ArrInserts for the structure cases):
-//  1 bk_pool_zeilen     pool constant = the contract (8), global order (between utility and host), at most 64 global slots, the 72 rows ins/bk/<n>/{an,k1..k8} exist with the roles in order
+//  1 bk_pool_zeilen     pool constant = the contract (8), global order (between utility and gate), at most 64 global slots, the 72 rows ins/bk/<n>/{an,k1..k8} exist with the roles in order
 //  2 bk_echo_takt       the eighth-note echo of fx-echo-achtel comes one eighth note later at 128 BPM (11250 samples) on a track, left, then right at 2T (ping-pong)
 //  3 bk_knopf_zeile     the knob row reaches the graph (gain graph, k1 0.25 -> gain 0.5), a knob lane (`insert.<stage>.k1`, a chain lane of the stage) drives the same knob over time
 //  4 bk_sprung          switch off and on (row an), swap of the graph (one block crossfade), removal and entry of the stage (tail and fade in): the biggest sample step stays near the one of the
@@ -192,10 +192,10 @@ int main() {
 
   {  // 1 bk_pool_zeilen
     PRUEF(cdj::ARR_INS_BK == 8);
-    PRUEF(cdj::INS_G_BK0 == cdj::INS_G_UTIL0 + cdj::ARR_INS_UTIL && cdj::INS_G_HOST0 == cdj::INS_G_BK0 + cdj::ARR_INS_BK);
-    PRUEF(cdj::ARR_INS_ALLE <= 64);
-    PRUEF(cdj::ins_global(ArrInsArt::bk, 0) == cdj::INS_G_BK0 && cdj::ins_global(ArrInsArt::bk, 7) == cdj::INS_G_HOST0 - 1 && cdj::ins_global(ArrInsArt::bk, 8) == -1);
-    PRUEF(cdj::ins_art(cdj::INS_G_BK0) == ArrInsArt::bk && cdj::ins_art(cdj::INS_G_HOST0 - 1) == ArrInsArt::bk && cdj::ins_art(cdj::INS_G_HOST0) == ArrInsArt::host);
+    PRUEF(cdj::INS_G_BK0 == cdj::INS_G_UTIL0 + cdj::ARR_INS_UTIL && cdj::INS_G_GATE0 == cdj::INS_G_BK0 + cdj::ARR_INS_BK);   // strand 1 slice 4: the gate range follows bk (host after gate and mb)
+    // strand 1 task 2.1: ARR_INS_ALLE <= 64 is no longer a rule (the slot masks are multi-word ArrSlotMaske)
+    PRUEF(cdj::ins_global(ArrInsArt::bk, 0) == cdj::INS_G_BK0 && cdj::ins_global(ArrInsArt::bk, 7) == cdj::INS_G_GATE0 - 1 && cdj::ins_global(ArrInsArt::bk, 8) == -1);
+    PRUEF(cdj::ins_art(cdj::INS_G_BK0) == ArrInsArt::bk && cdj::ins_art(cdj::INS_G_GATE0 - 1) == ArrInsArt::bk && cdj::ins_art(cdj::INS_G_GATE0) == ArrInsArt::gate);
     PRUEF(cdj::INS_BK_PARAM == 65);   // an, k1..k64
     PRUEF(cdj::INS_PARAM_MAX >= cdj::INS_BK_PARAM);   // the stage arrays hold every parameter of the widest stage
     cypherdj::stellwerk::ReglerTabelle tab;
@@ -431,7 +431,7 @@ int main() {
     d.tausche();
     PRUEF(d.ins.nutzt(b.h));
     d.block(0, st, 0, 2048);   // the tail has run out (480 samples)
-    PRUEF(!d.ins.nutzt(b.h) && d.ins.bk_instanz(d.g) == nullptr && d.ins.slot_eigen(0) == 0);
+    PRUEF(!d.ins.nutzt(b.h) && d.ins.bk_instanz(d.g) == nullptr && d.ins.slot_eigen(0).leer());
     d.kette(0, {a.stufe(0)});   // a later entry starts on a published, reset instance
     d.tausche();
     PRUEF(d.ins.nutzt(a.h) && d.ins.bk_instanz(d.g) == a.h);

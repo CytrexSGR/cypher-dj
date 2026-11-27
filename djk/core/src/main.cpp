@@ -115,6 +115,7 @@ static jack_port_t* g_arr_rueck[cdj::ARR_WIRT_SLOTS][2] = {};
 // Plan 1.11 T3: effect hosts h = 1..ARR_INS_HOST, send arr_ins_<h>_L/R (out), return arr_insret_<h>_L/R (in)
 static jack_port_t* g_ins_aus[cdj::ARR_INS_HOST][2] = {};
 static jack_port_t* g_ins_rueck[cdj::ARR_INS_HOST][2] = {};
+static jack_port_t* g_ins_key[cdj::ARR_INS_HOST][2] = {};   // strand 2 task 3.3: sidechain key arr_inskey_<h>_L/R (out), the plugin's third and fourth input
 static cdj::AllAusPlan g_arr_allaus_plan[cdj::ARR_WIRT_SLOTS];
 static std::atomic<uint64_t> g_arr_allaus_gesendet[cdj::ARR_WIRT_SLOTS] = {};
 static std::atomic<uint64_t> g_arr_allaus_luecken[cdj::ARR_WIRT_SLOTS] = {};
@@ -221,6 +222,11 @@ static int process(jack_nframes_t n, void*) {
     g_kern->ins_aus(h + 1, al, ar);
     g_kern->ins_rueck(h + 1, g_ins_rueck[h][0] ? (const float*)jack_port_get_buffer(g_ins_rueck[h][0], n) : nullptr,
                       g_ins_rueck[h][1] ? (const float*)jack_port_get_buffer(g_ins_rueck[h][1], n) : nullptr);
+    float* kl = g_ins_key[h][0] ? (float*)jack_port_get_buffer(g_ins_key[h][0], n) : nullptr;   // strand 2 task 3.3: the key ports, zeroed like the sends (a stage without key leaves them silent)
+    float* kr = g_ins_key[h][1] ? (float*)jack_port_get_buffer(g_ins_key[h][1], n) : nullptr;
+    if (kl) std::memset(kl, 0, n * sizeof(float));
+    if (kr) std::memset(kr, 0, n * sizeof(float));
+    g_kern->ins_schluessel(h + 1, kl, kr);
   }
   g_kern->zyklus((int)n, (int64_t)cu * 1000);                // cu: Blockanfang in µs (CLOCK_MONOTONIC)
   if (g_hand_led) {  // slice 35 B3: only changed LEDs (and a full refresh after a new connection), at most 16 per cycle
@@ -787,7 +793,7 @@ int main(int argc, char** argv) {
     if (!g_arr_midi[a] || !g_arr_rueck[a][0] || !g_arr_rueck[a][1])
       std::fprintf(stderr, "Wirt-Slot %d des Arrangements: Ports nicht vollständig angelegt\n", a + 1);
   }
-  {  // plan 1.11 T3/T4: effect-host ports; one source of truth: either all 16 are registered (host_ports_da true) or none is (every pointer null, flag false)
+  {  // plan 1.11 T3/T4: effect-host ports; one source of truth: either all 32 (8 hosts x 4) are registered (host_ports_da true) or none is (every pointer null, flag false)
     bool alle = true;
     for (int h = 0; h < cdj::ARR_INS_HOST && alle; ++h)
       for (int s = 0; s < 2 && alle; ++s) {
@@ -811,6 +817,24 @@ int main(int argc, char** argv) {
     }
     g_kern->setze_host_ports_da(alle);
     arr_lader.setze_host_da(alle);   // the loader refuses a playback with a host stage as host_fehlt when the ports are not there
+    // strand 2 task 3.3: the 16 key ports arr_inskey_<h>_L/R, their own all-or-none set beside the host ports: if JACK refuses any of them none is kept and the host stages run without key
+    bool keys = alle;
+    for (int h = 0; h < cdj::ARR_INS_HOST && keys; ++h)
+      for (int s = 0; s < 2 && keys; ++s) {
+        char name[32];
+        std::snprintf(name, sizeof name, "arr_inskey_%d_%c", h + 1, s ? 'R' : 'L');
+        g_ins_key[h][s] = jack_port_register(g_client, name, JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
+        if (!g_ins_key[h][s]) keys = false;
+      }
+    if (!keys) {
+      for (int h = 0; h < cdj::ARR_INS_HOST; ++h)
+        for (int s = 0; s < 2; ++s) {
+          if (g_ins_key[h][s]) jack_port_unregister(g_client, g_ins_key[h][s]);
+          g_ins_key[h][s] = nullptr;
+        }
+      if (alle) std::fprintf(stderr, "Effect-host key ports (arr_inskey_*) not fully registered: none kept, host stages run without sidechain key\n");
+    }
+    g_kern->setze_schluessel_ports_da(keys);   // fix B1: /zustand/ins_host schluessel_da
   }
   g_ring = ring;
   // Scheibe 18: Neustart-Zustand lesen und übernehmen (INTERFACES §6.3), gespeicherte Abonnenten ans Netz
@@ -1013,9 +1037,12 @@ int main(int argc, char** argv) {
     }
     std::fclose(f);
     const std::vector<cdj::Kante> alle = cdj::lies_kanten(text);
-    size_t doppelt_oder_ueber = 0, reserviert = 0;
+    size_t doppelt_oder_ueber = 0, reserviert = 0, ueber = 0;
     const std::vector<cdj::Kante> ok = cdj::entdoppeln_begrenzen(cdj::filtere_kanten(alle, kern_praefix, &reserviert),
-                                                                 cdj::KANTEN_MAX, &doppelt_oder_ueber);
+                                                                 cdj::KANTEN_MAX, &doppelt_oder_ueber, &ueber);
+    if (ueber)  // fix B2: an edge over the limit is never healed; say so on its own line, not only inside the sum below
+      std::fprintf(stderr, "Edge file %s: %zu edges over the limit of %zu dropped, they are not connected or healed (mono_ns %lld)\n", kanten_pfad.c_str(), ueber,
+                   cdj::KANTEN_MAX, (long long)mono_ns());
     if (reserviert)  // D1 K1 (Spec 2.3): Grund reserviert, erz/4 gehört der Produktion
       std::fprintf(stderr, "Kanten-Datei %s: %zu Kanten auf rueck_erz_4 abgelehnt (reserviert)\n", kanten_pfad.c_str(), reserviert);
     soll_datei = ok;
@@ -1064,7 +1091,10 @@ int main(int argc, char** argv) {
     std::fclose(f);
     const std::vector<cdj::Kante> alle = cdj::lies_eingangs_kanten(text, kern_praefix);
     size_t doppelt = 0;
-    ein_setzen(cdj::entdoppeln_begrenzen(alle, cdj::KANTEN_MAX, &doppelt));
+    size_t ein_ueber = 0;
+    ein_setzen(cdj::entdoppeln_begrenzen(alle, cdj::KANTEN_MAX, &doppelt, &ein_ueber));
+    if (ein_ueber)
+      std::fprintf(stderr, "Input edges %s: %zu edges over the limit of %zu dropped (mono_ns %lld)\n", ein_pfad.c_str(), ein_ueber, cdj::KANTEN_MAX, (long long)mono_ns());
     std::fprintf(stderr, "Eingangs-Kanten %s: %zu angenommen (mono_ns %lld)\n", ein_pfad.c_str(), soll_ein.size(), (long long)mono_ns());
   };
   cdj::KantenIst ist_jack{[](void*, const char* p) { return jack_port_by_name(g_client, p) != nullptr; },

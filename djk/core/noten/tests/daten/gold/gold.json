@@ -1,0 +1,208 @@
+{
+ "format": "s16le mono 48000 Hz",
+ "index": "cdj-noten-gold/1",
+ "skalierung": 3.0517578125e-05,
+ "skalierung_text": "float sample = s16 / 32768 (exact in float32); the files were made as round(x * 32768), clipped",
+ "quelle": "0 x 64 in every sidecar: a golden excerpt has no source file",
+ "sr": 48000,
+ "hop": 256,
+ "kurve": "pyin-1.noten_hmm-1",
+ "kurz_quelle_frames": 9600,
+ "teile": [
+  "detektor",
+  "segment",
+  "mono",
+  "analyse",
+  "render"
+ ],
+ "skript_sha256": "858a3731fdd47e2d7c3c1ed9801ea4beda46a2ba5fec293ff909a10a470fc553",
+ "prototyp_sha256": "31943ee2b12fcad4c67441cc286786c97003785ef5e788fe55789854a17af76b",
+ "items": [
+  {
+   "name": "stimme_vibrato",
+   "bench_name": "stimme_vibrato",
+   "frames": 96000,
+   "start_sample": 5632,
+   "start_s": 0.117333,
+   "s16_sha256": "a6a1308821b2c81bda93841669b49f4ac4413914f533a09f908a5ee98f9dd077"
+  },
+  {
+   "name": "stimme_hoch",
+   "bench_name": "stimme_hoch",
+   "frames": 96000,
+   "start_sample": 108032,
+   "start_s": 2.250667,
+   "s16_sha256": "d7f6a01b779f1a8765a5de860f943eeb5fe05b5fb595943ee271f97b793c4e86"
+  },
+  {
+   "name": "stimme_gleiten_konsonanten",
+   "bench_name": "stimme_gleiten_konsonanten",
+   "frames": 96000,
+   "start_sample": 5632,
+   "start_s": 0.117333,
+   "s16_sha256": "086aa1239f9c1496f601fdaa2acd79bfc8060d71c4df2eb099bf9d000a213cc1"
+  },
+  {
+   "name": "bass_gehalten",
+   "bench_name": "own generator: m21_material.bass(laenge_s=8.0, seed=11, lo=E1, hi=B1, art=gehalten, dmin=0.6, dmax=1.8)",
+   "frames": 96000,
+   "start_sample": 5632,
+   "start_s": 0.117333,
+   "s16_sha256": "f167770264b4cf675f96df530af7d7943a0b2af3492fd529fb2b08d310562209"
+  },
+  {
+   "name": "bass_ende",
+   "bench_name": "bass_gehalten (satz())",
+   "frames": 96000,
+   "start_sample": 24576,
+   "start_s": 0.512,
+   "s16_sha256": "98952d8593525ede96d70e9b3befadbce32df3091f0e6c84ae98bb3da51d969e",
+   "hinweis": "last frame voiced; the prototype analysiere raises IndexError here (window of the refined pitch past the cut), so the analysis part (mono) is computed on the padded path (4096 zero samples each side); curve and notes come from the detector and the segmenter only"
+  },
+  {
+   "name": "saege_legato",
+   "bench_name": "saege_legato",
+   "frames": 96000,
+   "start_sample": 5632,
+   "start_s": 0.117333,
+   "s16_sha256": "75bcc8816013c299a15618004f0a99511235b9018e47578682911ac74878aad8"
+  },
+  {
+   "name": "stille",
+   "bench_name": "synthetic: zeros",
+   "frames": 96000,
+   "start_sample": 0,
+   "start_s": 0.0,
+   "s16_sha256": "ea0787f65f73b0013d03b359490e3125211b28ad5c1502ffb1544c0ded4192f5"
+  },
+  {
+   "name": "rauschen",
+   "bench_name": "synthetic: white noise, seed 7, rms -20 dBFS",
+   "frames": 96000,
+   "start_sample": 0,
+   "start_s": 0.0,
+   "s16_sha256": "ea54fd0dd6daa8ad58688fe4c6cd2e29a980fe48e1cad831943b1d838f2b029c"
+  },
+  {
+   "name": "kurz",
+   "bench_name": "stimme_schlicht (first 0.15 s of the excerpt)",
+   "frames": 7200,
+   "start_sample": 5632,
+   "start_s": 0.117333,
+   "s16_sha256": "4b6643b4d93d1aee7d7b68d0be01e08c93a090a6e593cc461f5555372fe786c8",
+   "hinweis": "shorter than 200 ms: the commands answer as in kurz.erwartet.json; kurz.kurve.json is the prototype output"
+  },
+  {
+   "name": "akkord_terz",
+   "bench_name": "akkord_terz",
+   "frames": 96000,
+   "start_sample": 5632,
+   "start_s": 0.117333,
+   "s16_sha256": "4a07fdc5b7fc0a4a1f62789c16284048bbeaafc873ae824293d450109d2eec98"
+  },
+  {
+   "name": "akkord_dreiklang",
+   "bench_name": "akkord_dreiklang_5",
+   "frames": 96000,
+   "start_sample": 5632,
+   "start_s": 0.117333,
+   "s16_sha256": "6778da6602a713f3559d6468f3c284dc25313a7013ad31e694584ca669831631"
+  }
+ ],
+ "mono": {
+  "hrr_db": 9.5,
+  "periode": 0.5,
+  "unstimmhaft_regel": false,
+  "anteil_max": 0.3
+ },
+ "erwartet": [
+  "kurz.erwartet.json"
+ ],
+ "bank": {
+  "einzel_max": 0.1758,
+  "anteile": {
+   "einzel": {
+    "stimme_schlicht": 0.0046,
+    "stimme_vibrato": 0.0394,
+    "stimme_gleiten_konsonanten": 0.0,
+    "stimme_tief": 0.0021,
+    "stimme_hoch": 0.1758,
+    "stimme_melisma": 0.0029,
+    "bass_gehalten": 0.0058,
+    "bass_staccato": 0.003,
+    "saege_legato": 0.0093,
+    "saege_staccato": 0.0
+   },
+   "echt": {
+    "echt_stimme": 0.0618,
+    "echt_bass": 0.0128,
+    "echt_synth": 0.0554
+   },
+   "akkord": {
+    "akkord_paar_schlicht_saege": 0.5032,
+    "akkord_paar_tief_bass": 0.0706,
+    "akkord_paar_hoch_vibrato": 0.2562,
+    "akkord_terz": 0.8739,
+    "akkord_dreiklang": 0.1429,
+    "akkord_dreiklang_2": 0.1161,
+    "akkord_dreiklang_3": 0.4358,
+    "akkord_dreiklang_4": 0.3618,
+    "akkord_dreiklang_5": 0.5872,
+    "akkord_dreiklang_6": 0.4699
+   },
+   "mix": {
+    "mix_stimme_schlagzeug": 0.0032,
+    "mix_refrain": 0.0224
+   }
+  },
+  "verweigert": [
+   "akkord_dreiklang_3",
+   "akkord_dreiklang_4",
+   "akkord_dreiklang_5",
+   "akkord_dreiklang_6",
+   "akkord_paar_schlicht_saege",
+   "akkord_terz"
+  ],
+  "entkommen": [
+   "akkord_dreiklang",
+   "akkord_dreiklang_2",
+   "akkord_paar_hoch_vibrato",
+   "akkord_paar_tief_bass",
+   "mix_refrain",
+   "mix_stimme_schlagzeug"
+  ]
+ },
+ "analyse": {
+  "items": [
+   "stimme_vibrato",
+   "stimme_hoch",
+   "stimme_gleiten_konsonanten",
+   "bass_gehalten",
+   "bass_ende",
+   "saege_legato",
+   "kurz",
+   "akkord_terz",
+   "akkord_dreiklang"
+  ],
+  "pfad": "padded: the prototype `analysiere` ran on the item and its curve with m21_einstimmig.PAD = 4096 zero samples on both sides (it raises IndexError in _fenster on bass_ende otherwise); the port reads zeros outside the buffer and sizes the window from the refined pitch",
+  "hrr": "per voiced frame the HRR in dB of the 20 ms block [c - 480, c + 480), see teil_analyse",
+  "tabelle": "20 frames in the middle of the longest note, amplitudes of partials 1..8"
+ },
+ "render": {
+  "items": [
+   "stimme_vibrato",
+   "bass_gehalten",
+   "saege_legato"
+  ],
+  "faelle": [
+   "plus2",
+   "minus3",
+   "plus12",
+   "minus12",
+   "beruehrend"
+  ],
+  "pfad": "padded: the prototype `teilton` ran on the item and its curve with m21_einstimmig.PAD = 4096 zero samples on both sides; the region and the s16 are shifted back by the padding",
+  "mischung": "the envelope mixing `_index_mischung` estimated on the padded item (the port estimates it as well)",
+  "s16": "prototype output over the region only, mono, round(y * 32768) clipped"
+ }
+}

@@ -15,6 +15,10 @@
 // shifts the path); the sum of the stage latencies of a chain is what the delay compensation of the mixer (arr_pdc.h) accounts for.
 // Utility stages (arr-fx slice 1): a sixth kind, `utility` (ins/utility/1..ARR_INS_UTIL, rows an, breite, mono_unter, gain, balance), sits between lim and host in the global order. Its module is the 1.15
 // Utility (width in M/S, bass mono, gain, balance), 0 samples of latency, so it needs no dry ring and adds nothing to the delay compensation; the stage life is the generic one.
+// Gate and multiband stages (strand 1 slice 4): the kinds `gate` (ins/gate/1..ARR_INS_GATE: an, schwelle, hysterese, ratio, bereich, attack, hold, release) and `mb` (ins/mb/1..ARR_INS_MB: an, grenze_tief,
+// grenze_hoch, then b1..b3 with schwelle, ratio, attack, release, knie, makeup, umgehen) sit between bk and host. Modules: the 1.15 Gate (no sidechain here) and MultibandKompressor, 0 samples of latency each.
+// A multiband slot owns two objects: a crossover change under a running stage goes to the resting one (empty filters, new crossovers, the dynamics of the active one) and the output
+// crosses linearly from the active to the resting one over that block, which then becomes the active one (the mixer's way, without its warm-up). Gain reduction: gate -gain_db, mb the deepest band.
 // Host stages (plan 1.11 T4): a fifth kind, `host` (ins/host/1..ARR_INS_HOST, one row an), sits at the end of the global slot order. Its module is ArrHostStufe (arr_host_stufe.h, owned here):
 // the strip input goes out to the effect host, the guarded return comes back, and a missing, bypassed or unhealthy host passes the input delayed by the stage latency. The latency is
 // the stage's own (ArrStufe::latenz from the playback file, D4): lat_[s] of a host slot is set in tausche() when a snapshot is taken over, never in the callback; its dry ring is the host stage's
@@ -41,15 +45,17 @@
 
 #include "cypherdj/arr_host_stufe.h"
 #include "cypherdj/arr_inserts_util.h"
+#include "cypherdj/arr_maske.h"
 #include "cypherdj/arr_playback.h"
 #include "cypherdj/eq.h"
 #include "cypherdj/ins_lim.h"
 #include "cypherdj/comp.h"
 #include "cypherdj/sat.h"
 
-namespace cdj {
+#include <cypherdj/dsp/gate.h>
+#include <cypherdj/dsp/multiband.h>
 
-static_assert(ARR_KETTEN <= 64, "strip masks (maske_loeschen, slot_eigen_ bits per strip) are uint64_t: one bit per strip");
+namespace cdj {
 
 struct ArrArbeit;   // arr_arbeit.h: the per-lane work struct (includes this header)
 
@@ -60,14 +66,18 @@ constexpr int INS_EQ_BAND_PARAM = 7;      // per band: an, typ, freq, gain, q, s
 constexpr int INS_EQ_PARAM = 3 + 8 * INS_EQ_BAND_PARAM;   // an, out, propq, then b1..b8: 59 (ins/eq/<n>/b<m>/<parameter> is index 3 + (m - 1) * 7 + parameter)
 constexpr int INS_SAETT_PARAM = 4;        // an, drive, out, mix
 constexpr int INS_LIM_PARAM = 3;          // an, decke, abklingen (the order of the roles ins_lim_*)
+constexpr int INS_GATE_PARAM = 8;         // strand 1 slice 4: an, schwelle, hysterese, ratio, bereich, attack, hold, release (the order of the roles ins_gate_*)
+constexpr int INS_MB_BAND_PARAM = 7;      // per band: schwelle, ratio, attack, release, knie, makeup, umgehen (the order of the roles ins_mb_b_*)
+constexpr int INS_MB_PARAM = 3 + 3 * INS_MB_BAND_PARAM;   // an, grenze_tief, grenze_hoch, then b1..b3: 24 (ins/mb/<n>/b<m>/<parameter> is index 3 + (m - 1) * 7 + parameter)
 constexpr int INS_PARAM_MAX_EQ = INS_EQ_PARAM;   // see INS_PARAM_MAX below (the maximum over all stage kinds, defined after INS_BK_PARAM)
 constexpr int INS_HOST_PARAM = 1;         // plan 1.11: an (host stages have no mapped parameter rows)
 constexpr int INS_BK_PARAM = 65;          // arr-bk slice 3: an, k1..k64 (the knobs of the Baukasten graph, 0..1; parameter index of kn = n; 9 = an, k1..k8 before the 32-knob widening, 33 before the 64-knob widening)
-// The width of every per-stage parameter array: the maximum of all stage parameter counts (komp 10, eq 59, saett 4, lim 3, utility 5, bk 65, host 1). Since the 64-knob widening the Baukasten stage is the widest;
+// The width of every per-stage parameter array: the maximum of all stage parameter counts (komp 10, eq 59, saett 4, lim 3, utility 5, bk 65, gate 8, mb 24, host 1). Since the 64-knob widening the Baukasten stage is the widest;
 // the static_asserts keep a later widening of any kind from overflowing the arrays silently.
 constexpr int INS_PARAM_MAX = INS_BK_PARAM > INS_PARAM_MAX_EQ ? INS_BK_PARAM : INS_PARAM_MAX_EQ;
 static_assert(INS_PARAM_MAX >= INS_BK_PARAM, "the stage arrays must hold every parameter of a Baukasten stage (an, k1..k64)");
-static_assert(INS_PARAM_MAX >= INS_EQ_PARAM && INS_PARAM_MAX >= INS_KOMP_PARAM && INS_PARAM_MAX >= INS_SAETT_PARAM && INS_PARAM_MAX >= INS_LIM_PARAM && INS_PARAM_MAX >= INS_HOST_PARAM,
+static_assert(INS_PARAM_MAX >= INS_EQ_PARAM && INS_PARAM_MAX >= INS_KOMP_PARAM && INS_PARAM_MAX >= INS_SAETT_PARAM && INS_PARAM_MAX >= INS_LIM_PARAM && INS_PARAM_MAX >= INS_HOST_PARAM &&
+                  INS_PARAM_MAX >= INS_GATE_PARAM && INS_PARAM_MAX >= INS_MB_PARAM,
               "INS_PARAM_MAX is the maximum over all stage kinds");
 constexpr float INS_BK_AUS_MAX = 8.0f;    // |sample| guard of a Baukasten stage output (as the host return guard, HOST_RUECK_MAX)
 // first global slot index of each kind (the order of ins_global())
@@ -76,8 +86,15 @@ constexpr int INS_G_SAETT0 = INS_G_EQ0 + ARR_INS_EQ;
 constexpr int INS_G_LIM0 = INS_G_SAETT0 + ARR_INS_SAETT;
 constexpr int INS_G_UTIL0 = INS_G_LIM0 + ARR_INS_LIM;      // arr-fx slice 1: the utility range sits between lim and host, so host stays last
 constexpr int INS_G_BK0 = INS_G_UTIL0 + ARR_INS_UTIL;     // arr-bk slice 3: the Baukasten range sits between utility and host
-constexpr int INS_G_HOST0 = INS_G_BK0 + ARR_INS_BK;
+constexpr int INS_G_GATE0 = INS_G_BK0 + ARR_INS_BK;     // strand 1 slice 4: the gate range and the multiband range sit between bk and host
+constexpr int INS_G_MB0 = INS_G_GATE0 + ARR_INS_GATE;
+constexpr int INS_G_HOST0 = INS_G_MB0 + ARR_INS_MB;
 static_assert(INS_G_HOST0 + ARR_INS_HOST == ARR_INS_ALLE, "the host range closes the global slot order");
+// Strand 2 task 3.3: the slots that can carry a structural key, the komp slots and the host slots. Key index k: komp slot k for k < ARR_INS_KOMP, host slot k - ARR_INS_KOMP after.
+// The size of every structural-key array of ArrInserts, and of the target arrays a capture point hands to ziele().
+constexpr int ARR_INS_SCHL = ARR_INS_KOMP + ARR_INS_HOST;
+constexpr int ins_schl_index(int g) { return g >= 0 && g < ARR_INS_KOMP ? g : g >= INS_G_HOST0 && g < ARR_INS_ALLE ? ARR_INS_KOMP + g - INS_G_HOST0 : -1; }   // global slot -> key index, -1 none
+constexpr int ins_schl_slot(int k) { return k < ARR_INS_KOMP ? k : INS_G_HOST0 + k - ARR_INS_KOMP; }                                                                // key index -> global slot
 constexpr int INS_LAT_MAX = 128;          // longest stage latency the dry ring holds (the constructor refuses a module that reports more)
 
 // global slot index of (kind, 0-based slot); -1 for a kind without a pool or a slot out of range
@@ -90,11 +107,13 @@ inline int ins_global(ArrInsArt art, int slot) {
     case ArrInsArt::host: return slot >= 0 && slot < ARR_INS_HOST ? INS_G_HOST0 + slot : -1;
     case ArrInsArt::utility: return slot >= 0 && slot < ARR_INS_UTIL ? INS_G_UTIL0 + slot : -1;
     case ArrInsArt::bk: return slot >= 0 && slot < ARR_INS_BK ? INS_G_BK0 + slot : -1;
+    case ArrInsArt::gate: return slot >= 0 && slot < ARR_INS_GATE ? INS_G_GATE0 + slot : -1;
+    case ArrInsArt::mb: return slot >= 0 && slot < ARR_INS_MB ? INS_G_MB0 + slot : -1;
     default: return -1;
   }
 }
 inline ArrInsArt ins_art(int g) {
-  return g < ARR_INS_KOMP ? ArrInsArt::komp : g < INS_G_SAETT0 ? ArrInsArt::eq : g < INS_G_LIM0 ? ArrInsArt::saett : g < INS_G_UTIL0 ? ArrInsArt::lim : g < INS_G_BK0 ? ArrInsArt::utility : g < INS_G_HOST0 ? ArrInsArt::bk : ArrInsArt::host;
+  return g < ARR_INS_KOMP ? ArrInsArt::komp : g < INS_G_SAETT0 ? ArrInsArt::eq : g < INS_G_LIM0 ? ArrInsArt::saett : g < INS_G_UTIL0 ? ArrInsArt::lim : g < INS_G_BK0 ? ArrInsArt::utility : g < INS_G_GATE0 ? ArrInsArt::bk : g < INS_G_MB0 ? ArrInsArt::gate : g < INS_G_HOST0 ? ArrInsArt::mb : ArrInsArt::host;
 }
 
 class ArrInserts final : public ArrBkLeser {
@@ -143,7 +162,7 @@ class ArrInserts final : public ArrBkLeser {
     takt_beat0_ = beat0;
     takt_bps_ = bps;
   }
-  const CypherBk* bk_instanz(int slot) const { return slot >= INS_G_BK0 && slot < INS_G_HOST0 ? bk_[slot - INS_G_BK0].h : nullptr; }   // test seam: the instance the slot runs (nullptr: none)
+  const CypherBk* bk_instanz(int slot) const { return slot >= INS_G_BK0 && slot < INS_G_GATE0 ? bk_[slot - INS_G_BK0].h : nullptr; }   // test seam: the instance the slot runs (nullptr: none)
 
   // ---- structure
   // swap: ARR_KETTEN chains or nullptr (no playback).
@@ -151,20 +170,21 @@ class ArrInserts final : public ArrBkLeser {
   // another strip, the swap treats it as a removal only: the old owner exits with its normal tail and the new owner's stage stays out (undelayed input) until a later swap claims the slot after the tail
   // has ended. Rule for the consumer (the server, T7): express a strip change of a host slot as removal in one load and entry in a later load, at least latenz + HOST_BLENDE samples apart.
   void tausche(const ArrKette* ketten);
-  void ruhe();                                                   // nothing plays: every stage is cleared
+  void ruhe();                                                   // nothing plays: every stage is cleared (once per quiet stretch: a ruhe() with no tausche() since it costs nothing)
 
   // ---- sidechain key (spec 2.3, D11): stage row sc = n (1..32) listens to the input of track n, taken before ANY chain of the block runs.
   // The mixer calls schluessel_planen() first, then schluessel_sichern() for every track in schluessel_maske(), then kette() per strip.
   void schluessel_planen(int m);                                 // reads the sc rows of the owned stages (value at the end of the block)
-  uint64_t schluessel_maske() const { return schl_maske_; }      // tracks (bit = index) some stage names as its key
+  const ArrMaske<ARR_SPUREN>& schluessel_maske() const { return schl_maske_; }      // tracks (bit = index) some stage names as its key
   void schluessel_sichern(int spur, const float* l, const float* r, int m);
 
   // ---- structural key (slice 5, plan 3.2): a komp stage whose chain entry carries a key {spur | grp | ret, nr, pre | post} listens to a key buffer of its own slot
-  // (ARR_INS_KOMP x INS_BLOCK x 2 floats, built in the constructor). schluessel_planen() zeroes the first m samples of the buffer of every listening slot at block start; the
+  // (ARR_INS_SCHL x INS_BLOCK x 2 floats, built in the constructor). Strand 2 task 3.3: a host stage takes a structural key the same way (its own buffer and delay ring, key index
+  // ins_schl_index()); rechne() hands the aligned key to ArrHostStufe::block, which copies it into the key port. The row key (sc) stays komp only. schluessel_planen() zeroes the first m samples of the buffer of every listening slot at block start; the
   // capture point overwrites them. A source whose capture point does not run in a block therefore gives a silent key, never the samples of the block before.
   // The mixer asks ziele(quelle, punkt, nr) at a capture point, writes the samples into the returned buffers and calls fertig() once after the loop (non-finite guard);
   // kopiere() is the same for a point where the whole block is there at once (group pre, return pre). The 1.10 U1 names post_ziele()/post_fertig() are the track post case.
-  int ziele(uint8_t quelle, uint8_t punkt, int nr, float** l, float** r);   // nr 1-based; the key buffers of the slots listening to this source (0 for most strips)
+  int ziele(uint8_t quelle, uint8_t punkt, int nr, float** l, float** r);   // nr 1-based; the key buffers of the slots listening to this source (0 for most strips); l, r: ARR_INS_SCHL entries
   void fertig(uint8_t quelle, uint8_t punkt, int nr, int m);               // non-finite guard over what was captured, like schluessel_sichern
   void kopiere(uint8_t quelle, uint8_t punkt, int nr, const float* l, const float* r, int m);   // ziele + copy of m samples + fertig
   int post_ziele(int spur, float** l, float** r) { return ziele(ARR_SCHL_SPUR, ARR_SCHL_POST, spur + 1, l, r); }
@@ -176,25 +196,46 @@ class ArrInserts final : public ArrBkLeser {
   // slice 5 U2b: the delay (samples) the key of the slot goes through in this block: the structural one when the stage has one, the row one when sc > 0, else 0. Test seam and display.
   int schluessel_verzug(int slot) const { return slot >= 0 && slot < ARR_INS_KOMP ? (strukt_[slot] ? verz_s_[slot] : sc_[slot] > 0 ? verz_z_[slot] : 0) : 0; }
   int schluessel_spaet(int slot) const { return slot >= 0 && slot < ARR_INS_KOMP && strukt_[slot] ? spaet_[slot] : 0; }   // the lag of a late structural key, samples
+  // strand 2 task 3.3, test seams of host h (1..ARR_INS_HOST): the stage listens to its structural key in this block; the delay of that key, samples
+  bool host_strukturell(int h) const { return h >= 1 && h <= ARR_INS_HOST && strukt_[ARR_INS_KOMP + h - 1]; }
+  int host_schluessel_verzug(int h) const { return host_strukturell(h) ? verz_s_[ARR_INS_KOMP + h - 1] : 0; }
 
   // ---- per block
-  bool hat(int streifen) const { return (maske_ >> streifen) & 1u; }   // the strip has a stage or a tail to run
+  bool hat(int streifen) const { return maske_.test(streifen); }   // the strip has a stage or a tail to run
   void schweige(int streifen);                                   // the strip has no signal this block (a group without members): its stages are cleared, they report nothing
-  void kette(int streifen, const ArrKette* k, float* l, float* r, int m);   // in place over m samples; k may be nullptr (tails only)
+  void kette(int streifen, const ArrKette* k, float* l, float* r, int m);   // in place over m samples; k may be nullptr (tails only). Serial (mischen): key consumers and sources, rest tracks, groups, returns, PM (strand 12 B2)
   // Mehrkern slice 3.1 task 2: the lane forms. kette()/schweige() are `*_bahn` on lane 0 followed by nach_join(). A `*_bahn` call touches only
   // state of its own strip (stages it owns per the mirror slot_eigen_), the scratch of `a`, and reports shared effects through `a`:
   // a cleared strip bit in a.maske_loeschen, a finished tail in a.slot_frei, NaNs in a.nan_zaehler. It never reads or writes besitzer_ or maske_.
+  // Mehrkern 3.3 is built (strand 12 B2): Arrangement::spur_einheit_ausfuehren calls kette_bahn() for a track inside its own track unit, on the lane that renders it, and
+  // Arrangement::spur_nach_join calls nach_join() over all lanes after the join. Only a track without any key relation runs there (hoert_schluessel() false, not in schluessel_maske(),
+  // not a track-post source of je_post_quelle()), with no freeze or track-pre tap and outside the serial remainder; key consumers and sources, rest tracks, groups, returns and the PM
+  // stay in mischen() (kette(), serial). schluessel_planen() and makros_planen() run in Arrangement::block() before phase Q, so a lane reads only what they wrote.
+  // Caller only, after schluessel_planen(): a stage the strip owns listens to a key (structural or row sc) in this block.
+  bool hoert_schluessel(int streifen) const {
+    if (streifen < 0 || streifen >= ARR_KETTEN) return false;
+    bool ja = false;
+    slot_eigen_[streifen].je_bit([&](int s) { ja = ja || (s < ARR_INS_KOMP && (strukt_[s] || sc_[s] > 0)); });
+    return ja;
+  }
+  // Caller only, after schluessel_planen(): f(spur) for every track (0-based) whose post some stage takes as its structural key in this block (repeats possible).
+  template <class F>
+  void je_post_quelle(F&& f) const {
+    if (strukt_n_ == 0) return;
+    for (int s = 0; s < ARR_INS_KOMP; ++s)
+      if (strukt_[s] && skey_[s].quelle == ARR_SCHL_SPUR && skey_[s].punkt == ARR_SCHL_POST && skey_[s].nr >= 1 && skey_[s].nr <= ARR_SPUREN) f(skey_[s].nr - 1);
+  }
   void kette_bahn(int streifen, const ArrKette* k, float* l, float* r, int m, ArrArbeit& a);
   void schweige_bahn(int streifen, ArrArbeit& a);
   // serial, after the join: merges the lane reports (mask bits, slot owners, NaN counts in lane order) and resets the lane fields
   void nach_join(ArrArbeit* lanes, int n);
-  uint64_t slot_eigen(int streifen) const { return streifen >= 0 && streifen < ARR_KETTEN ? slot_eigen_[streifen] : 0; }   // test seam
-  uint64_t maske() const { return maske_; }                                                                  // test seam
+  ArrSlotMaske slot_eigen(int streifen) const { return streifen >= 0 && streifen < ARR_KETTEN ? slot_eigen_[streifen] : ArrSlotMaske{}; }   // test seam
+  ArrStreifenMaske maske() const { return maske_; }                                                            // test seam
 
   // ---- readings
   float gr_db(int slot) const { return gr_[slot]; }              // gain reduction >= 0 of the last block the stage ran in
   bool lief(int slot) const { return lief_[slot]; }              // the stage computed in the last block it was asked for
-  // T9 (device faces): the input and output peak of a komp or lim stage since the last reading, in dBFS (-200 for silence), read AND RESET. Same lane discipline as gr_: the stage
+  // T9 (device faces): the input and output peak of a komp, lim, gate or mb stage since the last reading, in dBFS (-200 for silence), read AND RESET. Same lane discipline as gr_: the stage
   // writes its own slot while it runs, the callback reads after the lanes joined. A stage of another kind never accumulates, so it reads -200.
   float pegel_ein_db(int slot) { return spitze_db(pk_ein_, slot); }
   float pegel_aus_db(int slot) { return spitze_db(pk_aus_, slot); }
@@ -233,10 +274,11 @@ class ArrInserts final : public ArrBkLeser {
   // the module's block call (komp: with the key when the stage has one). A host slot goes to ArrHostStufe (never to lim_[]): ziel_an is the stage's target switch, tl/tr (optional) receive the
   // delayed dry signal the on/off blend needs.
   void rechne(int s, float* l, float* r, int m, bool ziel_an = true, float* tl = nullptr, float* tr = nullptr, ArrArbeit* a = nullptr);
-  void rechne_bk(int s, float* l, float* r, int m, ArrArbeit& a);   // arr-bk slice 3: the effect graph of the slot over the block, with the crossfade to a changed instance
+  void rechne_bk(int s, float* l, float* r, int m, ArrArbeit& a);
+  void rechne_mb(int i, float* l, float* r, int m, ArrArbeit* a);   // strand 1 slice 4: multiband slot i (0-based) with the crossover crossfade   // arr-bk slice 3: the effect graph of the slot over the block, with the crossfade to a changed instance
   void bk_besitz_frei(int s);                                      // a slot of a Baukasten stage lost its owner: the instance is no longer ours (unpublished)
   int n_param(int s) const {
-    return s < ARR_INS_KOMP ? INS_KOMP_PARAM : s < INS_G_SAETT0 ? INS_EQ_PARAM : s < INS_G_LIM0 ? INS_SAETT_PARAM : s < INS_G_UTIL0 ? INS_LIM_PARAM : s < INS_G_BK0 ? INS_UTIL_PARAM : s < INS_G_HOST0 ? INS_BK_PARAM : INS_HOST_PARAM;
+    return s < ARR_INS_KOMP ? INS_KOMP_PARAM : s < INS_G_SAETT0 ? INS_EQ_PARAM : s < INS_G_LIM0 ? INS_SAETT_PARAM : s < INS_G_UTIL0 ? INS_LIM_PARAM : s < INS_G_BK0 ? INS_UTIL_PARAM : s < INS_G_GATE0 ? INS_BK_PARAM : s < INS_G_MB0 ? INS_GATE_PARAM : s < INS_G_HOST0 ? INS_MB_PARAM : INS_HOST_PARAM;
   }
 
   std::unique_ptr<Komp> komp_[ARR_INS_KOMP];
@@ -244,6 +286,30 @@ class ArrInserts final : public ArrBkLeser {
   std::unique_ptr<SaettNativ> saett_[ARR_INS_SAETT];
   std::unique_ptr<cypherdj::dsp::KanalLimiter> lim_[ARR_INS_LIM];
   std::unique_ptr<cypherdj::dsp::Utility> util_[ARR_INS_UTIL];   // arr-fx slice 1
+  std::unique_ptr<cypherdj::dsp::Gate> gate_[ARR_INS_GATE];      // strand 1 slice 4
+  std::unique_ptr<cypherdj::dsp::MultibandKompressor> mb_[ARR_INS_MB][2];   // strand 1 slice 4: two objects per slot for the crossover crossfade
+  bool mb_b_[ARR_INS_MB] = {};              // index of the active object of each multiband slot
+  // The crossover change follows the mixer's channel multiband (Mixer::mb_block): the resting object is emptied, takes the new crossovers and warms up on the live input unheard, then takes over
+  // the dynamics of the active one and the output crosses over (S-curve over INS_MB_BLENDE samples). The constants are the mixer's (mixer.h MB_WARM_*, MB_BLENDE_SAMPLES).
+  static constexpr int INS_MB_BLENDE = 480;            // 10 ms crossover crossfade
+  static constexpr int INS_MB_WARM = 960;              // 20 ms warm-up at 100 Hz and above
+  static constexpr int INS_MB_WARM_REST = 240;         // least warm-up left after a small new target during the warm-up
+  static constexpr int INS_MB_WARM_VERLAENGERUNG = 240;   // how far small targets may extend a warm-up beyond its base length (scaled like the warm-up)
+  static constexpr int INS_MB_WARM_MAX = 4800;         // cap of the base warm-up for deep crossovers
+  static constexpr float INS_MB_WARM_SPRUNG = 0.10f;   // a new target within this relative step of the anchor goes into the warming-up object in place
+  static constexpr float INS_MB_WARM_HZ = 100.0f;      // below this the warm-up grows as 1 / f
+  static int mb_warm(float gt, float gh, int basis);
+  bool mb_lief_[ARR_INS_MB] = {};           // the active object ran since the last reset (false: the crossovers go in at once, nothing to cross over from)
+  float mb_gt_[ARR_INS_MB] = {}, mb_gh_[ARR_INS_MB] = {};     // effective crossovers of the object that is (or becomes) the active one
+  bool mb_gb_an_[ARR_INS_MB] = {};          // a crossover change is running (warm-up or crossfade)
+  int mb_gpos_[ARR_INS_MB] = {};            // its crossfade position, 0..INS_MB_BLENDE
+  int mb_gwarm_[ARR_INS_MB] = {};           // samples left of the warm-up
+  int mb_gbasis_[ARR_INS_MB] = {};          // base length of the current warm-up
+  int mb_gwarm_ges_[ARR_INS_MB] = {};       // samples the current warm-up has run since the resting object was emptied
+  float mb_gat_[ARR_INS_MB] = {}, mb_gah_[ARR_INS_MB] = {};   // the anchor: the crossovers at that emptying
+  bool mb_gdyn_[ARR_INS_MB] = {};           // the dynamics of the active object went over (at the start of the crossfade)
+  void mb_leere(int i);
+  bool gate_lief_[ARR_INS_GATE] = {};       // the gate ran since the last reset (false: it starts open, like the mixer's gate)
   struct BkSlot {   // arr-bk slice 3: the instance of a Baukasten stage
     CypherBk* h = nullptr;                   // the instance the slot runs (owned by the graph store of the loader); null: none
     uint64_t gen = 0;
@@ -255,6 +321,7 @@ class ArrInserts final : public ArrBkLeser {
   double takt_beat0_ = 0.0, takt_bps_ = 0.0;
   ArrHostStufe host_;                       // plan 1.11: the host stages, fixed storage (4 x 2 x ARR_HOST_LAT_MAX floats), part of the object
   Wert p_[ARR_INS_ALLE][INS_PARAM_MAX];
+  ArrSlotMaske vl_maske_;                   // slots with a parameter course from verlauf() since the last nachfuehren() (the only writer of a non-null p_[][].vl); caller thread only
   Wert mk_[ARR_RACKS][ARR_MAKROS];          // the macro rows rack/<k>/m<n>
 #ifdef CYPHERDJ_MUTATION_MAKRO_SPAET
   float mk_alt_[ARR_RACKS][ARR_MAKROS] = {};   // error case: the macro value of the block before
@@ -272,7 +339,7 @@ class ArrInserts final : public ArrBkLeser {
   float angewandt_[ARR_INS_ALLE][INS_PARAM_MAX] = {};   // the values last given to the module (komp: schwelle .. schp = 1..8; eq: out .. b8/platz = 1..58; saett: drive .. mix = 1..3; lim: decke, abklingen = 1..2)
   bool gesetzt_[ARR_INS_ALLE] = {};
   int besitzer_[ARR_INS_ALLE];              // strip that owns the slot, -1 none. Four writers, all serial: tausche, ruhe, nach_join and the serial schweige/kette wrappers (through nach_join)
-  uint64_t slot_eigen_[ARR_KETTEN] = {};    // per-strip mirror of besitzer_: bit s of entry st = slot s belongs to strip st. Written by the same writers, plus a finished tail clears its own bit in a *_bahn call
+  ArrSlotMaske slot_eigen_[ARR_KETTEN] = {};   // per-strip mirror of besitzer_: bit s of entry st = slot s belongs to strip st. Written by the same writers, plus a finished tail clears its own bit in a *_bahn call
   bool in_kette_[ARR_INS_ALLE] = {};        // the owner's chain in the current snapshot lists the slot
   int pos_[ARR_INS_ALLE] = {};              // blend position 0..INS_BLENDE (weight = pos / INS_BLENDE)
   bool lief_[ARR_INS_ALLE] = {};
@@ -282,32 +349,34 @@ class ArrInserts final : public ArrBkLeser {
     feld[slot] = 0.0f;
     return v > 1e-10f ? 20.0f * std::log10(v) : -200.0f;
   }
-  float pk_ein_[ARR_INS_ALLE] = {};         // T9: linear input peak of a komp/lim stage since the last reading (max of |l|, |r|)
+  float pk_ein_[ARR_INS_ALLE] = {};         // T9: linear input peak of a komp, lim, gate or mb stage since the last reading (max of |l|, |r|)
   float pk_aus_[ARR_INS_ALLE] = {};         // T9: the same for the output after the bypass blend
-  float gr_[ARR_INS_ALLE] = {};             // gain reduction (komp and lim; eq and saett report 0)
-  int sc_[ARR_INS_KOMP] = {};               // key track of the stage in this block, 1..32, 0 = own signal
+  float gr_[ARR_INS_ALLE] = {};             // gain reduction (komp, lim, gate, mb; the other kinds report 0)
+  int sc_[ARR_INS_KOMP] = {};               // key track of the stage in this block, 1..ARR_SPUREN (128), 0 = own signal
   int lat_[ARR_INS_ALLE] = {};              // latency of each slot, samples: the kind's for the native kinds (constructor), the stage's for a host slot (tausche)
   float tl_[ARR_INS_ALLE][INS_LAT_MAX] = {};   // dry ring of a stage with latency: the last lat_ input samples, L and R
   float tr_[ARR_INS_ALLE][INS_LAT_MAX] = {};
   int tp_[ARR_INS_ALLE] = {};
-  uint64_t schl_maske_ = 0;
-  ArrSchluessel skey_[ARR_INS_KOMP] = {};   // the structural key of the stage in the slot (from the chain entry at the last swap); a tail keeps the key it had
-  bool strukt_[ARR_INS_KOMP] = {};          // this block: the slot listens to its structural key
+  ArrMaske<ARR_SPUREN> schl_maske_;
+  ArrSchluessel skey_[ARR_INS_SCHL] = {};   // the structural key of the stage in the slot (from the chain entry at the last swap); a tail keeps the key it had
+  bool strukt_[ARR_INS_SCHL] = {};          // this block: the slot listens to its structural key
   int strukt_n_ = 0;                        // this block: how many slots listen (0 = the capture points have nothing to do)
-  std::vector<float> key_l_, key_r_;        // ARR_INS_KOMP x INS_BLOCK, built in the constructor
-  std::vector<float> ring_l_, ring_r_;      // slice 5 U2b: the key delay rings, ARR_INS_KOMP x ARR_SCHL_VERZ_MAX, built in the constructor
-  std::vector<float> verz_l_, verz_r_;      // slice 5 U2b: the delayed key of the block, ARR_INS_KOMP x INS_BLOCK
-  int ring_p_[ARR_INS_KOMP] = {};           // write position in the ring of the slot
-  bool ring_voll_[ARR_INS_KOMP] = {};       // the ring of the slot holds samples (it is cleared when the key changes, the stage is cleared or the stage runs on its own signal)
-  int verz_s_[ARR_INS_KOMP] = {}, verz_z_[ARR_INS_KOMP] = {}, spaet_[ARR_INS_KOMP] = {};   // delay of the structural key, of the row key, lag of a late structural key (from the chain entry at the last swap)
+  std::vector<float> key_l_, key_r_;        // ARR_INS_SCHL x INS_BLOCK, built in the constructor
+  std::vector<float> ring_l_, ring_r_;      // slice 5 U2b: the key delay rings, ARR_INS_SCHL x ARR_SCHL_VERZ_MAX, built in the constructor
+  std::vector<float> verz_l_, verz_r_;      // slice 5 U2b: the delayed key of the block, ARR_INS_SCHL x INS_BLOCK
+  int ring_p_[ARR_INS_SCHL] = {};           // write position in the ring of the slot
+  bool ring_voll_[ARR_INS_SCHL] = {};       // the ring of the slot holds samples (it is cleared when the key changes, the stage is cleared or the stage runs on its own signal)
+  int verz_s_[ARR_INS_SCHL] = {}, verz_z_[ARR_INS_SCHL] = {}, spaet_[ARR_INS_SCHL] = {};   // delay of the structural key, of the row key, lag of a late structural key (from the chain entry at the last swap)
   void ring_leere(int s);
+  // the structural key of key index k after its delay ring (verz_s_), m samples; *l, *r point into key_ or verz_ (callback, no allocation)
+  void schluessel_ausrichten(int k, int verz, const float* kl, const float* kr, int m, const float** l, const float** r);
   std::vector<float> schl_l_, schl_r_;      // ARR_SPUREN x INS_BLOCK, built in the constructor
-  uint64_t maske_ = 0;                      // strips with a stage or a tail
+  ArrStreifenMaske maske_;                  // strips with a stage or a tail
+  bool ruhig_ = false;                      // ruhe() ran and no tausche() since: the state ruhe() resets is still reset, the next ruhe() returns at once
   uint64_t nan_ = 0;
   std::unique_ptr<ArrArbeit> arbeit0_;      // lane 0 struct of the serial wrappers (built in the constructor)
 };
 
 static_assert(INS_PARAM_MAX >= INS_UTIL_PARAM, "INS_PARAM_MAX is the maximum over all stage kinds (utility)");
-static_assert(ARR_INS_ALLE <= 64, "slot_eigen_ is a 64-bit mask per strip (32 bits until arr-fx slice 2)");
 
 }  // namespace cdj

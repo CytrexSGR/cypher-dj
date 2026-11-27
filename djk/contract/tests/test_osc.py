@@ -88,7 +88,7 @@ def test_rec_felder_18():
     aufnahme = _zeile("/e/aufnahme")
     assert aufnahme["typen"] == ",iiihhii"
     assert [f["name"] for f in aufnahme["felder"]][-2:] == ["luecken", "art"]
-    assert _feld("/e/aufnahme", "spur")["bereich"] == [0, 32]
+    assert _feld("/e/aufnahme", "spur")["bereich"] == [0, 128]   # strand 1 slice 6: 128 tracks
     assert _feld("/e/aufnahme", "art")["bereich"] == [0, 1]
 # T1 (1.15 closure): the English copy of the contract has other anchors in its prose (section 19 list item, policy code
 # paragraph, key names). pruefe_osc raised StopIteration on it before.

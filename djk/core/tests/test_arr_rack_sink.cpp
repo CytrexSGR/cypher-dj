@@ -68,6 +68,8 @@ using cdj::ArrArt;
 
 namespace {
 
+constexpr int G0 = cdj::ARR_SPUREN;   // the first member slot (32 before strand 1 slice 6); the comments name the slots of 32 tracks: 32 = G0, 33 = G0 + 1
+
 constexpr int64_t E0 = 537 + 256;   // the first sample of the run (start at 0 with lead 537 and block 256)
 
 // ---- kits: every key plays the same one-frame impulse (amp) or a constant (dc) -------------------------------------------------------------
@@ -404,7 +406,7 @@ int main() {
       bool an;
       int64_t ziel;
     };
-    const Soll soll[] = {{32, 60, true, E0}, {33, 62, true, E0 + 5 * SPB}, {32, 60, false, E0 + 6 * SPB}, {33, 62, false, E0 + 6 * SPB}};
+    const Soll soll[] = {{G0, 60, true, E0}, {G0 + 1, 62, true, E0 + 5 * SPB}, {G0, 60, false, E0 + 6 * SPB}, {G0 + 1, 62, false, E0 + 6 * SPB}};
     int gefunden = 0;
     for (const auto& e : stub.ev)
       for (const Soll& s : soll) gefunden += e.spur == s.platz && e.ton == s.ton && e.an == s.an && e.ziel == s.ziel ? 1 : 0;
@@ -591,7 +593,7 @@ int main() {
         // slot 33, key 40: the old owner's on, its off, then the new owner's on and off (in this order, whatever the swap time was)
         std::vector<int> folge;
         for (const auto& e : stub.ev)
-          if (e.spur == 33 && e.ton == 40) folge.push_back(e.an ? 1 : 0);
+          if (e.spur == G0 + 1 && e.ton == 40) folge.push_back(e.an ? 1 : 0);
         const bool gut = folge == std::vector<int>{1, 0, 1, 0};
         bool unter = false;
         const int haengt = bilanz(stub.ev, unter);
@@ -763,11 +765,11 @@ int main() {
       t.lauf(E0 + 4 * SPB);
       int an33 = 0, aus33 = 0;
       for (const auto& e : stub.ev)
-        if (e.spur == 33 && e.ziel >= tausch && e.ziel < tausch + 256) ++(e.an ? an33 : aus33);
+        if (e.spur == G0 + 1 && e.ziel >= tausch && e.ziel < tausch + 256) ++(e.an ? an33 : aus33);
       int auf_33 = 0, auf_andere = 0;
       bool im_block = true;
       for (const auto& e : stub.alle_aus_ev) {
-        (e.first == 33 ? auf_33 : auf_andere) += 1;
+        (e.first == G0 + 1 ? auf_33 : auf_andere) += 1;
         im_block = im_block && e.second >= tausch && e.second < tausch + 256;
       }
       std::printf("R13 stub (%s leaver): offs to slot 33 at the swap block %d, all-offs on slot 33 %d, on other slots %d\n", rb_abgang ? "RB-338" : "kit", aus33, auf_33,
@@ -838,7 +840,7 @@ int main() {
       t.arr.live_note(0, t.s + 10, 40, 100, true);
       t.lauf(t.s + 4 * 256);
       PRUEF(t.arr.live_offene_noten() == 1);
-      PRUEF(netto(stub.ev, 32, 40) == 1 && netto(stub.ev, 33, 40) == 1);   // both members got the note on
+      PRUEF(netto(stub.ev, G0, 40) == 1 && netto(stub.ev, G0 + 1, 40) == 1);   // both members got the note on
       const int64_t tausch = t.s;
       if (fall == 0) {
         t.arr.live_note(0, t.s + 10, 40, 0, false);   // the player lets go
@@ -855,11 +857,11 @@ int main() {
       bool unter = false;
       const int haengt = bilanz(stub.ev, unter);
       int alle_33 = 0;
-      for (const auto& e : stub.alle_aus_ev) alle_33 += e.first == 33 && e.second >= tausch ? 1 : 0;
+      for (const auto& e : stub.alle_aus_ev) alle_33 += e.first == G0 + 1 && e.second >= tausch ? 1 : 0;
       std::printf("R15 case %d: %zu events, hanging pairs %d, offs before an on %d, all-offs on slot 33 %d, live table %d\n", fall, stub.ev.size(), haengt, unter ? 1 : 0, alle_33,
                   t.arr.live_offene_noten());
       if (fall == 2 || fall == 4) {
-        PRUEF(netto(stub.ev, 33, 40) == 0 && netto(stub.ev, 32, 40) == 1 && haengt == 1);   // the leaver ended, a0 still holds the key
+        PRUEF(netto(stub.ev, G0 + 1, 40) == 0 && netto(stub.ev, G0, 40) == 1 && haengt == 1);   // the leaver ended, a0 still holds the key
         PRUEF(fall == 4 ? alle_33 >= 1 : alle_33 == 0);                                       // a kit leaver also gets its all-off
         t.arr.live_note(0, t.s + 10, 40, 0, false);
         t.lauf(t.s + 4 * 256);

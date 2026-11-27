@@ -145,7 +145,7 @@ export class KernWeg {
     const id = this.ctx.sende('/k/arr/stopp', { quelle, quant: 0 });
     return this.ctx.warteQuittung(id);
   }
-  // 1.12 slice 3 (§4.11): the lane override. spur = track number 1..32, 0 = all (only with an 1; ziel is then validated but ignored). an 0 = the hand
+  // 1.12 slice 3 (§4.11): the lane override. spur = track number 1..128, 0 = all (only with an 1; ziel is then validated but ignored). an 0 = the hand
   // overrides (never from cypher), an 1 = the lane plays again. The state comes back as /e/auto, not in the acknowledgement.
   async auto(spur: number, ziel: string, an: 0 | 1, quelle: Quelle): Promise<Quittung> {
     const id = this.ctx.sende('/k/arr/auto', { quelle, spur, ziel, an });

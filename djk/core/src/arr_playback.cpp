@@ -135,8 +135,17 @@ constexpr AutoZiel AUTO_ZIELE[] = {
     {"geraet.k62", ARR_AUTO_GERAET, 61, 0.0, 1.0, false, -1.0, 1.0, 2},
     {"geraet.k63", ARR_AUTO_GERAET, 62, 0.0, 1.0, false, -1.0, 1.0, 2},
     {"geraet.k64", ARR_AUTO_GERAET, 63, 0.0, 1.0, false, -1.0, 1.0, 2},
+    // send automation: the send of the track into return 1..8 (param = return - 1), dB like send_setzen (-200..6); absolute only (the reader refuses a relative lane), appended last
+    {"send.1", ARR_AUTO_SEND, 0, -200.0, 6.0, false, 0.0, 0.0, 0},
+    {"send.2", ARR_AUTO_SEND, 1, -200.0, 6.0, false, 0.0, 0.0, 0},
+    {"send.3", ARR_AUTO_SEND, 2, -200.0, 6.0, false, 0.0, 0.0, 0},
+    {"send.4", ARR_AUTO_SEND, 3, -200.0, 6.0, false, 0.0, 0.0, 0},
+    {"send.5", ARR_AUTO_SEND, 4, -200.0, 6.0, false, 0.0, 0.0, 0},
+    {"send.6", ARR_AUTO_SEND, 5, -200.0, 6.0, false, 0.0, 0.0, 0},
+    {"send.7", ARR_AUTO_SEND, 6, -200.0, 6.0, false, 0.0, 0.0, 0},
+    {"send.8", ARR_AUTO_SEND, 7, -200.0, 6.0, false, 0.0, 0.0, 0},
 };
-static_assert(2 * sizeof(AUTO_ZIELE) / sizeof(AUTO_ZIELE[0]) == ARR_AUTO_LANES_JE_SPUR, "one absolute and one relative lane per target and track: 2 x 72");
+static_assert(2 * sizeof(AUTO_ZIELE) / sizeof(AUTO_ZIELE[0]) == ARR_AUTO_LANES_JE_SPUR, "one absolute and one relative lane per target and track: 2 x 80");
 
 constexpr bool gleich(const char* a, const char* b) {
   while (*a && *a == *b) ++a, ++b;
@@ -309,7 +318,7 @@ int64_t erstes_unendliches(const float* x, int64_t n) {
   return -1;
 }
 
-// 1.10 slice 4a/4b: the insert chain of a strip, `chain: [{art: "komp" | "eq" | "saett" | "lim" | "utility" | "host", slot: 1..pool of the kind, an: bool, latenz: samples (host only)}, ...]` (at most ARR_KETTE stages,
+// 1.10 slice 4a/4b: the insert chain of a strip, `chain: [{art: "komp" | "eq" | "saett" | "lim" | "utility" | "bk" | "gate" | "mb" | "host", slot: 1..pool of the kind, an: bool, latenz: samples (host only)}, ...]` (at most ARR_KETTE stages,
 // optional; an defaults to true). A slot belongs to one stage of the whole playback (the pool is shared): slot_belegt (ARR_INS_ALLE entries, global index) marks the used ones.
 bool bk_name_ok(const std::string& n);   // defined below with the graph rules
 void lese_kette(const json& o, const std::string& wo, ArrKette& k, bool* slot_belegt, ArrAudioCache& cache, ArrSnapshot& snap) {
@@ -330,8 +339,10 @@ void lese_kette(const json& o, const std::string& wo, ArrKette& k, bool* slot_be
     else if (art == "lim") { a = ArrInsArt::lim; pool = ARR_INS_LIM; versatz = INS_G_LIM0; }
     else if (art == "utility") { a = ArrInsArt::utility; pool = ARR_INS_UTIL; versatz = INS_G_UTIL0; }   // arr-fx slice 1
     else if (art == "bk") { a = ArrInsArt::bk; pool = ARR_INS_BK; versatz = INS_G_BK0; }   // arr-bk slice 3
+    else if (art == "gate") { a = ArrInsArt::gate; pool = ARR_INS_GATE; versatz = INS_G_GATE0; }   // strand 1 slice 4
+    else if (art == "mb") { a = ArrInsArt::mb; pool = ARR_INS_MB; versatz = INS_G_MB0; }
     else if (art == "host") { a = ArrInsArt::host; pool = ARR_INS_HOST; versatz = INS_G_HOST0; }   // plan 1.11 T4
-    else format(wx + "art " + art + " unbekannt (art_unbekannt; komp, eq, saett, lim, utility, bk, host)");
+    else format(wx + "art " + art + " unbekannt (art_unbekannt; komp, eq, saett, lim, utility, bk, gate, mb, host)");
     const int64_t sl = ganz(x, "slot", wx);
     if (sl < 1 || sl > pool) format(wx + "slot außerhalb 1 bis " + std::to_string(pool) + " (" + art + (a == ArrInsArt::host ? "; ungueltig: host h is pool instance ins/host/h)" : ")"));
     if (slot_belegt[versatz + sl - 1]) format(wx + "slot " + art + "/" + std::to_string(sl) + " doppelt");
@@ -342,11 +353,11 @@ void lese_kette(const json& o, const std::string& wo, ArrKette& k, bool* slot_be
       an = x.at("an").get<bool>();
     }
     ArrSchluessel key;
-    if (x.contains("key")) {   // 1.10 slice 5: the structural sidechain key {q: "spur" | "grp" | "ret" | "pm", nr, punkt: "pre" | "post"}; only a compressor has a key
+    if (x.contains("key")) {   // 1.10 slice 5: the structural sidechain key {q: "spur" | "grp" | "ret" | "pm", nr, punkt: "pre" | "post"}; a compressor and (strand 2 task 3.3) a host stage have a key
       const json& kj = x.at("key");                       // which strip may listen to which source is the table of arr_schluessel_pruefe(), called once all strips are read
       const std::string wk = wx + "key.";
       if (!kj.is_object()) format(wk + "key ist kein Objekt");
-      if (a != ArrInsArt::komp) format(wk + "only a komp stage has a sidechain key (" + art + ")");
+      if (a != ArrInsArt::komp && a != ArrInsArt::host) format(wk + "only a komp or host stage has a sidechain key (" + art + ")");
       const std::string q = text(kj, "q", wk);
       int nmax = 0;
       bool dj = false, strom = false;
@@ -421,7 +432,7 @@ void lese_kette(const json& o, const std::string& wo, ArrKette& k, bool* slot_be
 // (optional; only on a strip with a chain; at most ARR_MAKRO_ZIELE targets). A rack slot belongs to one strip of the whole playback; a target (stufe, param) is driven by one macro only
 // (one writer per parameter, spec D13). The stage switch (index 0) and the compressor key cannot be mapped. Every refusal names the field and the rule (reason `format`).
 int ins_param_zahl(ArrInsArt a) {
-  return a == ArrInsArt::komp ? INS_KOMP_PARAM : a == ArrInsArt::eq ? INS_EQ_PARAM : a == ArrInsArt::lim ? INS_LIM_PARAM : a == ArrInsArt::host ? INS_HOST_PARAM : a == ArrInsArt::utility ? INS_UTIL_PARAM : a == ArrInsArt::bk ? INS_BK_PARAM : INS_SAETT_PARAM;
+  return a == ArrInsArt::komp ? INS_KOMP_PARAM : a == ArrInsArt::eq ? INS_EQ_PARAM : a == ArrInsArt::lim ? INS_LIM_PARAM : a == ArrInsArt::host ? INS_HOST_PARAM : a == ArrInsArt::utility ? INS_UTIL_PARAM : a == ArrInsArt::bk ? INS_BK_PARAM : a == ArrInsArt::gate ? INS_GATE_PARAM : a == ArrInsArt::mb ? INS_MB_PARAM : INS_SAETT_PARAM;
 }
 // 1.9 U8 T9 (spec E12): an entry with `glied` (a member index) instead of `stufe` is a macro target on a member of an instrument rack. It exists only on a rack track strip
 // (`roh` != nullptr): there lese_rack only remembers the position of such an entry in `roh`, because the members of the track are parsed after it (lese_glied_ziele fills
@@ -2008,6 +2019,10 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
             relativ = l.at("relativ").get<bool>();
           }
           if (relativ && az->nur_sprung) format(wl + "ziel " + zname + " takes no relative lane");
+          if (az->ziel == ARR_AUTO_SEND) {   // a send lane automates an existing return of the playback, absolute only
+            if (relativ) format(wl + "ziel " + zname + " takes no relative lane");
+            if (!snap->ret_da[az->param]) format(wl + "ziel " + zname + ": the playback has no return " + std::to_string(az->param + 1));
+          }
           for (size_t k = l0; k < snap->auto_lane_liste.size(); ++k)
 #ifdef CYPHERDJ_MUTATION_ARR_REL_OHNE_EINDEUTIG   // error case: the uniqueness check ignores the flag, an absolute and a relative lane of one target count as "twice"
             if (snap->auto_lane_liste[k].ziel == az->ziel && snap->auto_lane_liste[k].param == az->param)

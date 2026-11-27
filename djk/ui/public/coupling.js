@@ -17,6 +17,17 @@ export function geraeteName(g) {
   return browser && system ? `${browser} on ${system}` : 'Tablet';
 }
 
+const STUFEN = { lesen: 'read only', schreiben: 'write', zerstoerend: 'full' };
+/** Level of an agent key as shown in the page: lesen "read only", schreiben "write", zerstoerend "full". Unknown values are shown as they are. */
+export const stufeText = (stufe) => STUFEN[stufe] ?? String(stufe ?? '');
+export const SCHLUESSEL_HINWEIS = 'Copy it now; it is not shown again. Give it to the agent as its key file.';
+
+/** One row of the agent key list: name, level and last use as text (the cells of the row, not markup). */
+export function schluesselZeile(s) {
+  const zuletzt = s?.zuletzt ? datumText(s.zuletzt) : 'never';
+  return { id: String(s?.id ?? ''), name: String(s?.name ?? '') || 'Agent', stufe: stufeText(s?.stufe), zuletzt: `last used ${zuletzt}` };
+}
+
 /** Binds the button and the dialog. ruf(methode, pfad, body?) -> {code, j}; defaults to fetch. Returns { oeffne, schliesse }. */
 export function bindeKopplung({ knopf, dialog, ruf, jetzt = () => Date.now() }) {
   const http = ruf ?? (async (methode, pfad, body) => {
@@ -25,17 +36,66 @@ export function bindeKopplung({ knopf, dialog, ruf, jetzt = () => Date.now() }) 
   });
   const koerper = dialog.querySelector('[data-kopplung-inhalt]');
   let bis = 0, uhr = null, liste = null, aus = false, bereit = false;
+  // schluessel: null loading, false route not there (section hidden), else the rows
+  let currentLink = null, schluessel = null, neuerToken = null, schluesselFehler = '';
+  const schluesselHtml = (name, stufe) => schluessel === false ? '' : `<h3>Agent keys</h3>
+      ${neuerToken ? `<p class="kopplung-hinweis">${esc(SCHLUESSEL_HINWEIS)}</p>
+        <input class="kopplung-link" readonly value="${esc(neuerToken)}" aria-label="New agent key" data-schluessel-token onfocus="this.select()">` : ''}
+      ${schluesselFehler ? `<p class="kopplung-hinweis">${esc(schluesselFehler)}</p>` : ''}
+      <div class="kopplung-reihe"><input data-schluessel-name placeholder="Name" aria-label="Agent key name" maxlength="60" value="${esc(name)}">
+        <select data-schluessel-stufe aria-label="Agent key level">
+          ${Object.keys(STUFEN).map((k) => `<option value="${k}"${k === stufe ? ' selected' : ''}>${esc(STUFEN[k])}</option>`).join('')}</select>
+        <button type="button" data-schluessel-neu>NEW KEY</button></div>
+      <ul class="kopplung-geraete" data-schluessel-liste></ul>`;
   const zeichne = (link, text) => {
+    currentLink = link;
+    const name = koerper.querySelector('[data-schluessel-name]')?.value ?? '', stufe = koerper.querySelector('[data-schluessel-stufe]')?.value ?? 'schreiben';
     koerper.innerHTML = `${link ? `<div class="kopplung-qr">${qrSvg(link)}</div>
       <p class="kopplung-text">Scan with the tablet camera, or type the address. Valid for <b data-kopplung-rest>2:00</b> and only once.</p>
       <input class="kopplung-link" readonly value="${esc(link)}" aria-label="Pairing link" onfocus="this.select()">` : ''}
       ${text ? `<p class="kopplung-hinweis">${esc(text)}</p>` : ''}
       <div class="kopplung-reihe"><button type="button" data-kopplung-neu${aus || !bereit ? ' disabled' : ''}>NEW LINK</button><button type="button" data-kopplung-zu>CLOSE</button></div>
-      <h3>Paired devices</h3><ul class="kopplung-geraete" data-kopplung-liste></ul>`;
+      <h3>Paired devices</h3><ul class="kopplung-geraete" data-kopplung-liste></ul>${schluesselHtml(name, stufe)}`;
     koerper.querySelector('[data-kopplung-neu]').addEventListener('click', neu);
     koerper.querySelector('[data-kopplung-zu]').addEventListener('click', schliesse);
+    koerper.querySelector('[data-schluessel-neu]')?.addEventListener('click', neuerSchluessel);
     zeigeListe();
+    zeigeSchluessel();
   };
+  const zeigeSchluessel = () => {
+    const ul = koerper.querySelector('[data-schluessel-liste]');
+    if (!ul) return;
+    if (schluessel === null) { ul.innerHTML = '<li class="kopplung-leer">…</li>'; return; }
+    ul.innerHTML = schluessel.length ? schluessel.map((k) => { const z = schluesselZeile(k);
+      return `<li><span>${esc(z.name)} <small>${esc(z.stufe)}, ${esc(z.zuletzt)}</small></span>
+        <button type="button" data-schluessel-weg="${esc(z.id)}" title="The agent loses access with this key">REVOKE</button></li>`; }).join('')
+      : '<li class="kopplung-leer">none</li>';
+    for (const b of ul.querySelectorAll('[data-schluessel-weg]')) b.addEventListener('click', async () => {
+      try { await http('POST', '/hand/schluessel/loeschen', { id: b.dataset.schluesselWeg }); } catch { /* the list below shows the truth */ }
+      await ladeSchluessel();
+    });
+  };
+  // GET /hand/schluessel: an array or {schluessel: [...]}. Anything but 200 (404 on a server without the route) hides the section.
+  const ladeSchluessel = async () => {
+    const vorher = schluessel;
+    try {
+      const r = await http('GET', '/hand/schluessel');
+      const rows = Array.isArray(r.j) ? r.j : r.j?.schluessel;
+      schluessel = r.code === 200 && Array.isArray(rows) ? rows : false;
+    } catch { schluessel = false; }
+    if ((vorher === false) !== (schluessel === false)) zeichne(null, ''); else zeigeSchluessel();
+  };
+  async function neuerSchluessel() {
+    const name = koerper.querySelector('[data-schluessel-name]')?.value.trim() ?? '';
+    const stufe = koerper.querySelector('[data-schluessel-stufe]')?.value ?? 'schreiben';
+    if (!name) { schluesselFehler = 'Give the key a name.'; zeichne(bis > 0 ? currentLink : null, ''); return; }
+    let r;
+    try { r = await http('POST', '/hand/schluessel', { name, stufe }); } catch (e) { r = { code: 0, j: { text: `Page server unreachable: ${e.message}` } }; }
+    schluesselFehler = r.code === 200 && r.j?.token ? '' : (r.j?.text ?? `Refused (${r.code}).`);
+    neuerToken = r.code === 200 ? (r.j?.token ?? null) : null;
+    zeichne(bis > 0 ? currentLink : null, '');
+    await ladeSchluessel();
+  }
   const zeigeListe = () => {
     const ul = koerper.querySelector('[data-kopplung-liste]');
     if (!ul) return;
@@ -73,15 +133,16 @@ export function bindeKopplung({ knopf, dialog, ruf, jetzt = () => Date.now() }) 
   }
   function oeffne() {
     if (!dialog.open) dialog.showModal?.();
-    liste = null;
+    liste = null; schluessel = null; neuerToken = null; schluesselFehler = '';
     clearInterval(uhr);
     uhr = setInterval(() => { tick(); laden(); }, 1000);
     aus = false; bereit = false;
     zeichne(null, '');
+    ladeSchluessel();
     laden().then(() => { if (!aus) neu(); });   // the answer of GET says whether a link can be made at all
   }
-  function schliesse() { clearInterval(uhr); uhr = null; bis = 0; if (dialog.open) dialog.close?.(); koerper.innerHTML = ''; }
+  function schliesse() { clearInterval(uhr); uhr = null; bis = 0; neuerToken = null; if (dialog.open) dialog.close?.(); koerper.innerHTML = ''; }
   knopf.addEventListener('click', oeffne);
-  dialog.addEventListener('close', () => { clearInterval(uhr); uhr = null; bis = 0; });
+  dialog.addEventListener('close', () => { clearInterval(uhr); uhr = null; bis = 0; neuerToken = null; });
   return { oeffne, schliesse };
 }

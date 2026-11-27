@@ -1,0 +1,41 @@
+{
+ "schema": 1,
+ "name": "Space Warm Chamber",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "space-kammer",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5104,
+  "knob3": 0.5,
+  "knob4": 0.4732,
+  "knob5": 0.5,
+  "knob6": 0.2
+ },
+ "beschreibung": {
+  "art": "reverb",
+  "unterart": "chamber",
+  "charakter": [
+   "warm",
+   "soft",
+   "smooth"
+  ],
+  "genre": [
+   "downtempo",
+   "deep_house",
+   "idm"
+  ],
+  "einsatz": [
+   "intro",
+   "breakdown"
+  ],
+  "energie": 2,
+  "text": "25 % mix, 15 ms pre-delay, low cut 120 Hz, high cut 8 kHz, 20 % algorithmic reverb: a warm chamber that sits behind the source."
+ },
+ "tags": [
+  "fx-space"
+ ],
+ "notiz": "Knobs 1..6 set by the knob ranges of the graph, not yet heard (2026-11-26). The room is the graph.",
+ "angelegt": "2026-11-26T00:00:00.000Z",
+ "geaendert": "2026-11-26T00:00:00.000Z"
+}

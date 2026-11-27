@@ -6,6 +6,9 @@
 #
 # Aufruf: djk-start [--master PRÄFIX] [--cue PRÄFIX | --ohne-cue] [--ton-frei] [--strudel [--strudel-kit NAME] [--strudel-kit2 NAME] [--strudel-kit3 NAME] [--instrumente [--melodie surge|fluegel|baukasten] [--bass surge|rb338]]] [--arr1] [--arr2] [--bk-stroeme] [--instanz a..i]
 #   CYPHERDJ_KATALOG=<absoluter Pfad>  (Umgebung, keine Option) andere katalog.sqlite für die Oberfläche der Prüfinstanz; ohne: neben der Mediathek.
+#   CYPHERDJ_ECHTE_GERAETE=1  (Umgebung, keine Option) a test instance may connect the real MIDI controllers of the desk (APC20, Launch Control 3, LPD8 ...) for a controller
+#                   test. Without it a test instance lists them as present, not connected, wires none to the kern and refuses to put one on a place.
+#                   Asked for per start: the owner's umgebung.env does not grant it. The production instance does not need it.
 #   CYPHERDJ_ANALYSE=<absoluter Pfad>  (Umgebung, keine Option) Analyse-Ablage der Oberfläche (Karten der Nachtanalyse, Aufträge „nur Analyse“). Eine Prüfinstanz nimmt nur /tmp oder /dev/shm.
 #   CYPHERDJ_KORREKTUREN=<absoluter Pfad>  (Umgebung, keine Option) Bestand des Decks, in den Set 1.1.1 Here die Eins-Korrektur schreibt. Eine Prüfinstanz nimmt nur /tmp oder /dev/shm.
 #   CYPHERDJ_KERN_KERNE=<n>            (environment, no option) physical cores (with SMT siblings) for the kern process, default 4; the first n cores by lowest CPU number
@@ -94,7 +97,7 @@ if [ -f "$UMG" ]; then
   if [ -n "$I_VOR" ]; then
     _eigene=$(sed -n 's/^declare -x \(CYPHERDJ_[A-Za-z0-9_]*\)=.*/\1/p' <<<"$_gesetzt")
     UMG_STORE=$(ABLAGE_PY envnamen) || { echo "djk-start: the storage table could not be read (python3 -m ablage envnamen). Nothing started." >&2; exit 2; }
-    UMG_STORE="$UMG_STORE CYPHERDJ_KATALOG CYPHERDJ_KORREKTUREN CYPHERDJ_BIBLIOTHEK_CACHE"   # read by this script / the page beside the table
+    UMG_STORE="$UMG_STORE CYPHERDJ_KATALOG CYPHERDJ_KORREKTUREN CYPHERDJ_BIBLIOTHEK_CACHE CYPHERDJ_ECHTE_GERAETE"   # read by this script / the page beside the table; the last one is no store, but the right to the real controllers is asked for per start
     for _n in $UMG_STORE; do grep -qx "$_n" <<<"$_eigene" || unset "$_n"; done
   fi
 fi
@@ -582,12 +585,14 @@ warte() {  # $1 Sekunden, $2 Unit, Rest: Bedingung. Bricht früh ab, sobald die 
 }
 TOT=""
 w() { [ -n "$TOT" ] && echo "$TOT: $1" || echo "$1"; }
+# The right to the real controllers: a test instance only, and only when the caller asked (the transient units do not inherit the environment).
+ECHTE_G=""; [ -n "$I" ] && [ "${CYPHERDJ_ECHTE_GERAETE:-}" = 1 ] && ECHTE_G=1
 starte() {  # $1 Unit, $2 Unit-Datei, $3 Drop-in (oder leer)
   local args
   mapfile -t args < <(python3 "$HIER/unit.py" --unit "$2" ${3:+--dropin "$3"} --djk "$DJK" ${UMG_UNIT:+--umgebungsdatei "$UMG_UNIT"} "${VARS[@]}") \
     || abbruch "cannot build unit $1" ""
   [ ${#args[@]} -gt 2 ] || abbruch "cannot build unit $1" ""
-  systemd-run --user --quiet --collect --unit="$1" ${I:+--setenv=CYPHERDJ_INSTANZ=$I} ${KIT_ORDNER:+--setenv=CYPHERDJ_KIT_ORDNER=$KIT_ORDNER} ${I:+--setenv=CYPHERDJ_BK_ORDNER=$ABLAGE_GERAETE} "${args[@]}" 2>&1 \
+  systemd-run --user --quiet --collect --unit="$1" ${I:+--setenv=CYPHERDJ_INSTANZ=$I} ${KIT_ORDNER:+--setenv=CYPHERDJ_KIT_ORDNER=$KIT_ORDNER} ${I:+--setenv=CYPHERDJ_BK_ORDNER=$ABLAGE_GERAETE} ${ECHTE_G:+--setenv=CYPHERDJ_ECHTE_GERAETE=1} "${args[@]}" 2>&1 \
     | sed 's/^/    /' >&2
   [ "${PIPESTATUS[0]}" = 0 ] || abbruch "unit $1 failed to start" "$1"
 }

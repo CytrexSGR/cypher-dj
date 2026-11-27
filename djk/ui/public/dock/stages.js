@@ -1,6 +1,6 @@
 // The tile text of an insert stage and the stage lists of a rack strip and the master strip (pure).
 
-const KACHEL_TEXT = { komp: 'COMPRESSOR', eq: 'EQ', saett: 'SATURATION', lim: 'LIMITER', utility: 'UTILITY' };
+const KACHEL_TEXT = { komp: 'COMPRESSOR', eq: 'EQ', saett: 'SATURATION', lim: 'LIMITER', utility: 'UTILITY', gate: 'GATE', mb: 'MULTIBAND' };
 /** The tile of one insert stage: { titel: 'EFFECT', text, an }. */
 export function effektKachel(insert) {
   const text = insert.art === 'bk' ? String(insert.graph ?? 'EFFECT') : insert.art === 'host' ? String(insert.plugin?.name ?? 'PLUGIN') : KACHEL_TEXT[insert.art] ?? String(insert.art).toUpperCase();

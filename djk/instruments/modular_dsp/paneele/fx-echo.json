@@ -1,0 +1,33 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "fx-echo"},
+  "title": "Cypher Echo",
+  "akzent": "tuerkis",
+  "layout": {"rows": [
+    ["time", "feedback", "character"],
+    ["duck", "out"]
+  ]},
+  "sections": [
+    { "id": "time", "title": "TIME", "cols": 2, "controls": [
+      {"id": "time", "type": "selector", "label": "Time", "bind": {"param": "k1"}, "options": ["1/16", "1/8", "1/8 dot", "1/4", "1/4 dot", "1/2", "1 bar", "Free"], "default": 2, "span": 2},
+      {"id": "free", "type": "knob", "label": "Free time", "bind": {"param": "k2"}, "format": "ms", "default": 0.5, "span": 2, "wirkt": {"ist": ["time", [7]]}, "wirkt_text": "Only with Time on Free"}
+    ]},
+    { "id": "feedback", "title": "FEEDBACK", "cols": 2, "controls": [
+      {"id": "fb", "type": "knob", "label": "Feedback", "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
+      {"id": "drive", "type": "knob", "label": "Drive", "bind": {"param": "k6"}, "format": "db", "default": 0.5},
+      {"id": "low", "type": "knob", "label": "Low cut", "bind": {"param": "k4"}, "format": "hz", "default": 0.5},
+      {"id": "high", "type": "knob", "label": "High cut", "bind": {"param": "k5"}, "format": "hz", "default": 0.5}
+    ]},
+    { "id": "character", "title": "CHARACTER", "cols": 1, "controls": [
+      {"id": "wow", "type": "knob", "label": "Wow", "bind": {"param": "k8"}, "format": "percent", "default": 0.5},
+      {"id": "pp", "type": "selector", "label": "Ping-pong", "bind": {"param": "k7"}, "options": ["Off", "On"], "default": 0}
+    ]},
+    { "id": "duck", "title": "DUCK", "cols": 2, "controls": [
+      {"id": "duckamt", "type": "knob", "label": "Duck", "bind": {"param": "k9"}, "format": "percent", "default": 0.5},
+      {"id": "rel", "type": "knob", "label": "Duck release", "bind": {"param": "k10"}, "format": "ms", "default": 0.5, "wirkt": {"ueber": ["duckamt", 0.52]}, "wirkt_text": "No ducking: turn up Duck"}
+    ]},
+    { "id": "out", "title": "OUT", "cols": 1, "controls": [
+      {"id": "mix", "type": "knob", "label": "Mix", "bind": {"param": "k11"}, "format": "percent", "default": 0.5}
+    ]}
+  ]
+}

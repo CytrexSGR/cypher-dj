@@ -1,0 +1,66 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cypherdj.invalid/vertrag/1/noten_kurve.schema.json",
+ "title": "Pitch curve sidecar <arbeitsordner>/noten/<sha>.<kurve>.json (notes.md, note editor spec N4): pitch and confidence per frame of one source, the detected notes, the monophonic check",
+ "description": "Frame i is centred at sample i*hop; the arrays have frameZahl(frames) = floor(frames / 256) + 1 entries (checked by notes_contract.ts and the core, not expressible here). f0_ct has two decimals, konf three. The notes follow the ordering rules of audio_noten.schema.json (ordered by qa, qe[i] <= qa[i+1], qe > qa + 0.01) and carry no id. The curve id starts with the detector version that matches `detektor`. Rules over `mono` (checked by notes_contract.ts and the core): mehrstimmig is true exactly when anteil is greater than 0.30, and geprueft_frames 0 means anteil 0 and mehrstimmig false. Each note ends at most one hop after the last sample of the source (qe <= (frames + hop) / sr). `mono` is written by the command pruefe only.",
+ "type": "object",
+ "additionalProperties": false,
+ "required": ["format", "quelle", "frames", "sr", "hop", "detektor", "kurve", "f0_ct", "konf", "noten", "stimmhaft_anteil"],
+ "properties": {
+  "format": {"const": "cdj-noten-kurve/1"},
+  "quelle": {"$ref": "#/$defs/sha256"},
+  "frames": {"description": "Stereo frames of the source", "type": "integer", "minimum": 0},
+  "sr": {"const": 48000},
+  "hop": {"const": 256},
+  "detektor": {"enum": ["pyin", "netz"]},
+  "kurve": {"$ref": "audio_noten.schema.json#/$defs/kurve_id"},
+  "f0_ct": {"$ref": "#/$defs/f0_ct"},
+  "konf": {"$ref": "#/$defs/konf"},
+  "noten": {"type": "array", "maxItems": 4096, "items": {"$ref": "#/$defs/erkannte_note"}},
+  "stimmhaft_anteil": {"type": "number", "minimum": 0, "maximum": 1},
+  "mono": {"$ref": "#/$defs/mono"}
+ },
+ "allOf": [
+  {"if": {"required": ["detektor"], "properties": {"detektor": {"const": "pyin"}}},
+   "then": {"properties": {"kurve": {"pattern": "^pyin-[0-9]+\\."}}}},
+  {"if": {"required": ["detektor"], "properties": {"detektor": {"const": "netz"}}},
+   "then": {"properties": {"kurve": {"pattern": "^netz-[0-9]+\\."}}}}
+ ],
+ "$defs": {
+  "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+  "f0_ct": {
+   "description": "Pitch per frame in cents, MIDI times 100 (A4 = 6900.0); 0 = unvoiced, otherwise 1500..11000",
+   "type": "array",
+   "items": {"oneOf": [{"const": 0}, {"type": "number", "minimum": 1500, "maximum": 11000}]}
+  },
+  "konf": {
+   "description": "Confidence per frame, 0..1",
+   "type": "array",
+   "items": {"type": "number", "minimum": 0, "maximum": 1}
+  },
+  "erkannte_note": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["qa", "qe", "qton", "p"],
+   "properties": {
+    "qa": {"type": "number", "minimum": 0},
+    "qe": {"type": "number", "exclusiveMinimum": 0},
+    "qton": {"type": "number", "minimum": 0, "maximum": 127},
+    "p": {"type": "number", "minimum": 0, "maximum": 1}
+   }
+  },
+  "mono": {
+   "description": "Result of the monophonic check (spec N12): the share of polyphonic frames among the frames that are loud and periodic, and the two thresholds that were used",
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["geprueft_frames", "anteil", "mehrstimmig", "hrr_db_schwelle", "periode_schwelle"],
+   "properties": {
+    "geprueft_frames": {"type": "integer", "minimum": 0},
+    "anteil": {"type": "number", "minimum": 0, "maximum": 1},
+    "mehrstimmig": {"type": "boolean"},
+    "hrr_db_schwelle": {"type": "number"},
+    "periode_schwelle": {"type": "number"}
+   }
+  }
+ }
+}

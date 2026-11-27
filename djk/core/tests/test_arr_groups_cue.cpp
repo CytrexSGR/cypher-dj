@@ -187,7 +187,7 @@ int main() {
     t.lauf(102400);
     PRUEF(gleich(t.l, ref.l) && gleich(t.r, ref.r));
   }
-  {  // 9 zeile: the row of every group, a switch, the hand only (like pfl)
+  {  // 9 zeile: the row of every group, a switch, everybody may (like pfl, strand 11)
     TR(t)
     for (int n = 1; n <= cdj::ARR_GRUPPEN; ++n) {
       const std::string p = "grp/" + std::to_string(n) + "/cue";
@@ -195,7 +195,7 @@ int main() {
       if (r < 0) continue;
       const auto& d = t.tab.def(r);
       PRUEF(d.kanal == -1 && d.rolle == cypherdj::stellwerk::Rolle::grp_cue && d.min == 0.0f && d.max == 1.0f && d.vorgabe == 0.0f);
-      PRUEF(d.nur_hand && d.ganzzahlig && d.keine_rampe && d.schalt_samples == 0);
+      PRUEF(!d.nur_hand && d.ganzzahlig && d.keine_rampe && d.schalt_samples == 0);
     }
     PRUEF(t.tab.suche("grp/1/cue") >= 1258);   // appended at the table end: the first 1258 rows stay as they are
   }

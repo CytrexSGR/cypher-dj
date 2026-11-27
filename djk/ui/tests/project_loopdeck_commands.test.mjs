@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { neuesProjekt, pruefeProjekt, loopDeckGruppe, loopDeckSpuren } from '../project/model.ts';
+import { neuesProjekt, pruefeProjekt, loopDeckGruppe, loopDeckSpuren, MAX_SPUREN } from '../project/model.ts';
 import { fuehreListeAus, BefehlFehler } from '../project/commands.ts';
 import { Verlauf, aendere, rueckgaengig } from '../project/history.ts';
 import { baueModul, modulAmPlatz } from '../project/live.ts';
@@ -160,7 +160,7 @@ test('abbildung maps filter to spur/<nr>/filter, both ways', () => {
   let p = mitDeck(1);
   p = lauf(p, { befehl: 'spur_aendern', spur_id: p.spuren[1].id, filter: 0.4 });
   const regler = alleSpurRegler(p);
-  assert.equal(regler.filter((x) => /\/filter$/.test(x.pfad)).length, 32);
+  assert.equal(regler.filter((x) => /\/filter$/.test(x.pfad)).length, MAX_SPUREN);
   assert.deepEqual(regler.find((x) => x.pfad === 'spur/2/filter'), { pfad: 'spur/2/filter', wert: 0.4 });
   assert.equal(regler.find((x) => x.pfad === 'spur/3/filter').wert, 0);
   const r = reglerZuBefehl(p, 'spur/3/filter', -0.6);

@@ -295,8 +295,11 @@ int zufalls_modus(Zufall& z) {
 
 // Einsatz-Sample eines Transport-Starts (wie Arrangement::start, mit dem Inhalt am Anfang)
 int64_t einsatz(const Inhalt& z, double beat, int quant) {
-  cypherdj::stellwerk::ReglerTabelle tab;
-  cdj::Arrangement arr(tab, false);   // no return strips here: the Halls (about 1.5 ms each) would cost most of the run time (2026-11-01)
+  auto tab_heap = std::make_unique<cypherdj::stellwerk::ReglerTabelle>();   // heap: table and Arrangement together pass the 8 MiB stack at 128 tracks
+  cypherdj::stellwerk::ReglerTabelle& tab = *tab_heap;
+  // no return strips here: the Halls (about 1.5 ms each) would cost most of the run time (2026-11-01)
+  auto arr_heap = std::make_unique<cdj::Arrangement>(tab, false);
+  cdj::Arrangement& arr = *arr_heap;
   Attrappe w(64);
   uint32_t gen = 1;
   arr.setze_warp_werk(&w);
@@ -523,10 +526,13 @@ Aufz fahre(const Folge& f, int zustand) {
   const size_t nf = static_cast<size_t>(f.T / W);
   a.L.assign(static_cast<size_t>(f.spuren), std::vector<double>(nf, 0.0));
   a.R.assign(static_cast<size_t>(f.spuren), std::vector<double>(nf, 0.0));
-  cypherdj::stellwerk::ReglerTabelle tab;
+  auto tab_heap = std::make_unique<cypherdj::stellwerk::ReglerTabelle>();   // heap: table and Arrangement together pass the 8 MiB stack at 128 tracks
+  cypherdj::stellwerk::ReglerTabelle& tab = *tab_heap;
   std::vector<cdj::ArrSnapshot*> snaps;
   {
-    cdj::Arrangement arr(tab, false);   // no return strips here: the Halls (about 1.5 ms each) would cost most of the run time (2026-11-01)
+    // no return strips here: the Halls (about 1.5 ms each) would cost most of the run time (2026-11-01)
+    auto arr_heap = std::make_unique<cdj::Arrangement>(tab, false);
+    cdj::Arrangement& arr = *arr_heap;
     Attrappe w(f.plaetze);
     uint32_t gen = 1;
     arr.setze_warp_werk(&w);

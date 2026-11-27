@@ -8,13 +8,26 @@ const gruen = (r) => assert.ok(r.ok, r.fehler.join('\n'));
 const cfg = { arbeitsbestand: arbeitsbestand() };
 const routing = (id, quelle, w) => ['/k/fx/routing', 'hsi', id, quelle, w];
 
-test('fx_routing: Quelle cypher bekommt 6 nur_hand, der Zustand bleibt Post Fader', () => {
+test('fx_routing: Quelle cypher darf schalten (kein nur_hand mehr), /e/fx/routing folgt', () => {
   const r = fahre([
     sende(1000, routing(1, 'cypher', 1)),
-    erwarte(3000, q(1, 'cypher', 6, null, 'nur_hand')),
+    erwarte(3000, q(1, 'cypher', 1)),
+    erwarte(3000, q(1, 'cypher', 2)),
+    erwarte(3000, q(1, 'cypher', 3)),
+    erwarte(3000, ['/e/fx/routing', 'i', 1]),
   ], { cfg });
   gruen(r);
-  assert.equal(r.log.filter((m) => m.adresse === '/e/fx/routing').length, 0);
+});
+
+test('fx_routing: Stop Cypher refuses cypher with ki_gestoppt, andreas still switches', () => {
+  const r = fahre([
+    sende(1000, ['/k/ki/stopp', 'hs', 9, 'leitstand']),
+    sende(2000, routing(10, 'cypher', 1)),
+    sende(2000, routing(11, 'andreas', 1)),
+    erwarte(4000, q(10, 'cypher', 6, null, 'ki_gestoppt')),
+    erwarte(4000, q(11, 'andreas', 3)),
+  ], { cfg });
+  gruen(r);
 });
 
 test('fx_routing: andreas schaltet, Quittungen 1/2/3 und /e/fx/routing folgt', () => {

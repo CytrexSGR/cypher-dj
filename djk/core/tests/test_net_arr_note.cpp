@@ -1,6 +1,6 @@
 // Sampler plan A1 task 7: /k/arr/note ,hsiii in the net thread (INTERFACES 4.11).
-//   (a) good commands become Befehl ARR_NOTE: nr = spur (1..32), politik = ton, fassung = vel; vel 0 (the off) and the edges pass; every source of the list passes
-//   (b) refusals as /q 6 with nothing in the ring: spur 0, 33, -1 -> spur_bereich; ton or vel outside 0..127 -> ausserhalb_bereich; a source that is none of the list -> ausserhalb_bereich
+//   (a) good commands become Befehl ARR_NOTE: nr = spur (1..128), politik = ton, fassung = vel; vel 0 (the off) and the edges pass; every source of the list passes
+//   (b) refusals as /q 6 with nothing in the ring: spur 0, 129, -1 -> spur_bereich; ton or vel outside 0..127 -> ausserhalb_bereich; a source that is none of the list -> ausserhalb_bereich
 //   (c) in the AI stop cypher is refused with ki_gestoppt before any range check, andreas is not
 #include <cstdio>
 #include <cstring>
@@ -36,8 +36,8 @@ int main() {
     // (a) good commands
     sende(801, "andreas", 1, 60, 100);
     PRUEF(bef->hole(b) && b.art == cdj::Befehl::ARR_NOTE && b.id == 801 && b.nr == 1 && b.politik == 60 && b.fassung == 100 && !std::strcmp(b.quelle, "andreas"));
-    sende(802, "andreas", 32, 127, 127);
-    PRUEF(bef->hole(b) && b.nr == 32 && b.politik == 127 && b.fassung == 127);
+    sende(802, "andreas", 128, 127, 127);
+    PRUEF(bef->hole(b) && b.nr == 128 && b.politik == 127 && b.fassung == 127);
     sende(803, "andreas", 5, 0, 0);   // the off, the lowest note
     PRUEF(bef->hole(b) && b.nr == 5 && b.politik == 0 && b.fassung == 0);
     sende(804, "cypher", 2, 62, 90);   // not in the AI stop: cypher plays
@@ -45,7 +45,7 @@ int main() {
     // (b) refusals
     sende(811, "andreas", 0, 60, 100);
     PRUEF(abgelehnt(811, "spur_bereich"));
-    sende(812, "andreas", 33, 60, 100);
+    sende(812, "andreas", 129, 60, 100);
     PRUEF(abgelehnt(812, "spur_bereich"));
     sende(813, "andreas", -1, 60, 100);
     PRUEF(abgelehnt(813, "spur_bereich"));

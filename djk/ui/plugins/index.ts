@@ -10,7 +10,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 export interface IndexEintrag {
   id: string; format: 'vst3' | 'lv2'; pfad: string; uid: string; name: string; hersteller?: string; art: 'effekt' | 'instrument' | 'sonst';
   audio_ein?: number; audio_aus?: number; parameter?: number; status: 'ok' | 'blockiert'; grund?: string; text?: string; buendel?: string;
-  mtime?: number; groesse?: number; gescannt?: string; version?: string;
+  mtime?: number; groesse?: number; gescannt?: string; version?: string; klasse?: number;
 }
 export interface PluginFilter { text?: string; art?: string; format?: string }
 export interface ScanStand { laeuft: boolean; seit: number | null; ende: number | null; ergebnis: Record<string, number> | null; fehler: string | null }
@@ -52,7 +52,7 @@ export class PluginIndex {
     let eintraege: IndexEintrag[] = [];
     try {
       const d = JSON.parse(fs.readFileSync(this.datei, 'utf8')) as { version?: number; eintraege?: IndexEintrag[] };
-      if ((d.version === 1 || d.version === 2) && Array.isArray(d.eintraege)) eintraege = d.eintraege;
+      if ((d.version === 1 || d.version === 2 || d.version === 3) && Array.isArray(d.eintraege)) eintraege = d.eintraege;
     } catch { /* torn or foreign file: counts as empty until the next scan */ }
     this.cache = { mtime: st.mtimeMs, groesse: st.size, eintraege };
     return eintraege;

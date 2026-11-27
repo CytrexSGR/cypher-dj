@@ -171,9 +171,9 @@ def test_device_manifest_from_fixture(tmp_path):
 
 def test_real_repo_counts():
     m = wc.manifest_modular(os.path.join(REPO, "djk/ui/presets/factory/modular"), os.path.join(REPO, "djk/instruments/modular_dsp/demos"))
-    assert len(m) == 165 and all(e["graph_datei"] for e in m)
+    assert len(m) == 200 and all(e["graph_datei"] for e in m)
     g = wc.manifest_geraete(os.path.join(REPO, "djk/instruments/modular_dsp/geraete.json"), os.path.join(REPO, "djk/instruments/modular_dsp/demos"))
-    assert len(g) == 72
+    assert len(g) == 82
     assert sum(e["weg"] == "skip" for e in g) == 1
 
 

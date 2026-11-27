@@ -123,7 +123,7 @@ int main() {
     PRUEF(mm->starte(1, false, false) == G::host_fehlt);
     PRUEF(!mm->aktiv(1));
     PRUEF(mm->starte(0, false, true) == G::host_fehlt);   // no such host
-    PRUEF(mm->starte(5, false, true) == G::host_fehlt);
+    PRUEF(mm->starte(cdj::ARR_INS_HOST + 1, false, true) == G::host_fehlt);   // one past the last host
     PRUEF(mm->starte(1, false, true) == G::ok);
     float al[64] = {}, ar[64] = {}, rl[64] = {}, rr[64] = {};
     PRUEF(!mm->block(1, al, ar, rl, rr, 64, false, true));

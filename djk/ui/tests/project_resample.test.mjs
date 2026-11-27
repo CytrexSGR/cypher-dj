@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fuehreListeAus } from '../project/commands.ts';
-import { neuesProjekt, sucheSpur } from '../project/model.ts';
+import { neuesProjekt, sucheSpur, MAX_SPUREN } from '../project/model.ts';
 import { PAN_MITTE_DB } from '../project/merge.ts';
 import { resamplePlan, baueResampleProjekt, ResampleFehler, RESAMPLE_MAX_BEATS } from '../project/resample.ts';
 
@@ -30,7 +30,7 @@ test('6.1 plan: the four strip kinds map to the tap kind and number, point post 
   assert.equal(RESAMPLE_MAX_BEATS, 256);
 });
 
-test('6.2 plan refusals (error cases): unknown strip, bad arguments, range of 257 beats, a short or negative range, 32 tracks full', () => {
+test('6.2 plan refusals (error cases): unknown strip, bad arguments, range of 257 beats, a short or negative range, all tracks full', () => {
   const p = projekt();
   const g = (d) => grund(() => resamplePlan(p, d, VORGABE));
   assert.equal(g({ strang_id: 's9' }), 'spur_unbekannt');
@@ -45,8 +45,8 @@ test('6.2 plan refusals (error cases): unknown strip, bad arguments, range of 25
   assert.equal(grund(() => resamplePlan(p, { strang_id: 's1' }, { von: 0, bis: 0 })), 'export_bereich', 'an empty song has no default range');
   assert.equal(g({ strang_id: 's1', von_beat: 0, bis_beat: 256 }), null, 'negative control: exactly 256 beats pass');
   let voll = p;
-  for (let n = 0; n < 29; n++) voll = lauf(voll, [{ befehl: 'spur_neu', art: 'audio', name: `T${n}` }]);
-  assert.equal(voll.spuren.length, 32);
+  for (let n = 0; n < MAX_SPUREN - 3; n++) voll = lauf(voll, [{ befehl: 'spur_neu', art: 'audio', name: `T${n}` }]);
+  assert.equal(voll.spuren.length, MAX_SPUREN);
   assert.equal(grund(() => resamplePlan(voll, { strang_id: 's1' }, VORGABE)), 'merge_keine_spur_frei');
 });
 

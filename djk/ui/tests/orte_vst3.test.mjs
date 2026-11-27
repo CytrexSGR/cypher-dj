@@ -26,7 +26,7 @@ function heim(t, { mitDatei }) {
 function wurzelMit(t, h, mitPaket) {
   const w = fs.mkdtempSync(path.join(h, 'wurzel-'));
   fs.mkdirSync(path.join(w, 'djk/hosts/carla'), { recursive: true });
-  fs.copyFileSync(path.join(CARLA, 'plugin_scan.py'), path.join(w, 'djk/hosts/carla/plugin_scan.py'));
+  for (const f of ['plugin_scan.py', 'vst3_klasse.py']) fs.copyFileSync(path.join(CARLA, f), path.join(w, 'djk/hosts/carla', f));   // plugin_scan imports vst3_klasse
   if (mitPaket) fs.mkdirSync(path.join(w, 'lib/vst3'), { recursive: true });
   return w;
 }

@@ -42,7 +42,8 @@ static const char* ECHO =
 
 // One mixer with a feed mask: bit i = deck/(i+1) gets its sine. Both sines run on their own phase of the global sample count.
 struct Lauf {
-  sw::ReglerTabelle tab;
+  std::unique_ptr<sw::ReglerTabelle> tab_ = std::make_unique<sw::ReglerTabelle>();   // heap: the 24 576-row table fits only once or twice on an 8 MiB stack
+  sw::ReglerTabelle& tab = *tab_;
   std::unique_ptr<cdj::Mixer> m;
   unsigned maske;
   float ml[N], mr[N], cl[N], cr[N];

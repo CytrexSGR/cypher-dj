@@ -261,12 +261,12 @@ FALL(geladenes_deck_bleibt_gesperrt) {
   PRUEFE(lauf(reg, deck, true, "h1", Quelle::cypher, "deck/2/trim", "deck/2/fader", -10.0f) == Grund::kein);
 }
 
-// The exemption is for deck channels only. Confirmed on the first run: there is no other channel gated by I3a (erz/* and pad/* are exempt, bus/1..4
-// faders are hand-only: refused as nur_hand before I3a looks at them). So the empty deck table must not change that refusal for bus/1/fader.
+// The exemption is for deck channels only. There is no other channel gated by I3a: erz/* and pad/* are exempt, and since strand 11 bus/1..4 too
+// (a bus carries no track, its fader is no longer hand only). So the empty deck table must not refuse bus/1/fader.
 FALL(leeres_deck_nur_deck_kanaele) {
   HoerscheinRegister reg;
   TestDeck deck;   // empty
-  PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "bus/1/fader") == Grund::nur_hand);
+  PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "bus/1/fader") == Grund::kein);
   // andreas stays free everywhere, an empty deck changes nothing for him
   PRUEFE(lauf(reg, deck, true, "", Quelle::andreas, "deck/2/fader") == Grund::kein);
   // a part that does not open stays free (not an assertion about the exemption)

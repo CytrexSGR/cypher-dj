@@ -10,15 +10,20 @@ nur note/halte am Socket, keinen Aktiv-Klang; eine nicht ladbare SFZ (instrument
 --vst3 (RB-338 W1): ein VST3-Bundle der eigenen Instrumente (djk/instruments), Socket-Befehle note/halte/param/params
 (ParamSteuerung, Regler normiert 0..1); ein fehlendes Bundle oder eine nicht lesbare Parameterliste ist ein Startfehler
 (Rückgabe 2, Eintrag im Status).
---effekt <vst3|lv2>:<pfad>#<uid> (Plan 1.11 task 2): a foreign effect, host starts with an EMPTY rack (status `leer`), the
+--effekt <vst3|lv2>:<pfad>#<uid>[@<class index>] (Plan 1.11 task 2): a foreign effect, host starts with an EMPTY rack (status `leer`), the
 socket command `lade` adds the plugin (EffektSteuerung). A plugin that cannot be loaded (`nicht_ladbar`) or has no audio
 input (`kein_effekt`) answers the reason at `lade`, writes it to the status file and exits 2 (no restart loop). Heartbeat:
 `<status>.puls`, a counter rewritten every 20 ms. Command `fenster {an}` (task 15) shows or hides the plugin's own window
-(Carla show_custom_ui); the main loop's engine_idle() services it (clicks in the window reach the plugin parameters)."""
+(Carla show_custom_ui); the main loop's engine_idle() services it (clicks in the window reach the plugin parameters).
+--schluessel (only with --effekt, strang 2 task 3.1): Carla's single-client engine mode instead of the rack, so a plugin's
+inputs 3 and 4 (the key pair) appear at JACK (probe results in the EffektSteuerung docstring). The client has no ports
+before `lade`; after it the status file carries `ports: {ein: [4 names], aus: [2 names]}`, the client's JACK audio ports
+in plugin order. A plugin with fewer than 4 audio inputs answers `kein_schluessel` and the host exits 2."""
 import argparse
 import ctypes
 import json
 import os
+import re
 import select
 import signal
 import socket
@@ -30,11 +35,47 @@ sys.path.insert(0, "/usr/share/carla")
 from carla_backend import (BINARY_NATIVE, PLUGIN_SFZ, ENGINE_OPTION_OSC_ENABLED, ENGINE_OPTION_PATH_BINARIES,  # noqa: E402
                            ENGINE_OPTION_PATH_RESOURCES, ENGINE_OPTION_PLUGIN_PATH, ENGINE_OPTION_PREFER_PLUGIN_BRIDGES,
                            ENGINE_OPTION_PROCESS_MODE, ENGINE_OPTION_TRANSPORT_MODE, ENGINE_PROCESS_MODE_CONTINUOUS_RACK,
+                           ENGINE_PROCESS_MODE_SINGLE_CLIENT,
                            ENGINE_TRANSPORT_MODE_INTERNAL, PLUGIN_LV2, PLUGIN_OPTION_SEND_ALL_SOUND_OFF, PLUGIN_VST3, CarlaHostDLL)
 
 import instrument_build as instrument_bauen  # noqa: E402
+import vst3_klasse  # noqa: E402
 from host_control import EffektSteuerung, InstrumentSteuerung, NotenSteuerung, ParamSteuerung, Steuerung, Zeilenserver  # noqa: E402
 from host_watch import JackVerbindungen, Wache  # noqa: E402
+
+
+def jack_audio_ports(client: str) -> tuple:
+    """(inputs, outputs): full JACK names of `client`'s audio ports in registration order (= plugin order), read through
+    a short-lived second JACK client (no ports, no activation)."""
+    lib = ctypes.CDLL("libjack.so.0")
+    lib.jack_client_open.restype = ctypes.c_void_p
+    lib.jack_client_open.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_void_p]
+    lib.jack_get_ports.restype = ctypes.POINTER(ctypes.c_char_p)
+    lib.jack_get_ports.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_ulong]
+    lib.jack_free.argtypes = [ctypes.c_void_p]
+    lib.jack_client_close.argtypes = [ctypes.c_void_p]
+    c = lib.jack_client_open(f"{client}-ports".encode(), 0x01, None)  # JackNoStartServer
+    if not c:
+        raise OSError("jack_client_open failed")
+    try:
+        aus = []
+        for flag in (0x1, 0x2):  # JackPortIsInput, JackPortIsOutput
+            arr, namen = lib.jack_get_ports(c, None, b"32 bit float mono audio", flag), []
+            if arr:
+                i = 0
+                while arr[i]:
+                    namen.append(arr[i].decode())
+                    i += 1
+                lib.jack_free(ctypes.cast(arr, ctypes.c_void_p))
+            aus.append([n for n in namen if n.startswith(client + ":")])
+        return tuple(aus)
+    finally:
+        lib.jack_client_close(c)
+
+
+def _buendel_id(pfad, uid):
+    """File-system safe id of a one-class shim bundle: the real bundle's name plus the class label."""
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", f"{Path(pfad.rstrip('/')).stem}-{uid}").lstrip(".")
 
 
 def main(argv=None) -> int:
@@ -49,12 +90,23 @@ def main(argv=None) -> int:
     ap.add_argument("--lv2-pfad", default=os.path.expanduser("~/.local/lib/cypherdj/lv2"))
     ap.add_argument("--status", required=True)
     ap.add_argument("--sock", default="", help="Unix-Socket für lade/zustand/note (leer = keiner)")
+    ap.add_argument("--shim", default="", help="klasse.so of the one-class shim (default: the installed one), for `@<index>` specs")
+    ap.add_argument("--klassen-wurzel", default="", help="folder for the generated one-class bundles (default: the plugin state folder)")
     ap.add_argument("--aktiv", default="", help="Klang-Datei .fxp: beim Start laden, bei jedem lade überschreiben")
+    ap.add_argument("--schluessel", action="store_true", help="only with --effekt: single-client mode, the key inputs 3/4 at JACK")
     a = ap.parse_args(argv)
+    if a.schluessel and not a.effekt:
+        ap.error("--schluessel needs --effekt")
     fremd = a.effekt or a.instrument
     if fremd:
         fmt, _, rest = fremd.partition(":")
         pfad, _, uid = rest.rpartition("#") if "#" in rest else (rest, "", "")
+        klasse_nr = None
+        if "@" in uid:  # optional class index of a multi-class VST3 bundle: <pfad>#<uid>@<index>
+            uid, _, nr = uid.rpartition("@")
+            if not nr.isdigit():
+                ap.error("--effekt/--instrument: the class index after @ must be a number")
+            klasse_nr = int(nr)
         if fmt not in ("vst3", "lv2") or not pfad or not a.sock:
             ap.error("--effekt/--instrument <vst3|lv2>:<pfad>#<uid> needs a known format, a path and --sock")
     status = {"name": a.name, "pid": os.getpid(), "bereit": False, "fehler": [], "sock": a.sock, "klang": None,
@@ -83,7 +135,8 @@ def main(argv=None) -> int:
     host = CarlaHostDLL("/usr/lib/carla/libcarla_standalone2.so", False)
     host.set_engine_option(ENGINE_OPTION_PATH_BINARIES, 0, "/usr/lib/carla")
     host.set_engine_option(ENGINE_OPTION_PATH_RESOURCES, 0, "/usr/share/carla/resources")
-    host.set_engine_option(ENGINE_OPTION_PROCESS_MODE, ENGINE_PROCESS_MODE_CONTINUOUS_RACK, "")
+    host.set_engine_option(ENGINE_OPTION_PROCESS_MODE,
+                           ENGINE_PROCESS_MODE_SINGLE_CLIENT if a.schluessel else ENGINE_PROCESS_MODE_CONTINUOUS_RACK, "")
     host.set_engine_option(ENGINE_OPTION_PREFER_PLUGIN_BRIDGES, 0, "")
     host.set_engine_option(ENGINE_OPTION_TRANSPORT_MODE, ENGINE_TRANSPORT_MODE_INTERNAL, "")
     host.set_engine_option(ENGINE_OPTION_OSC_ENABLED, 0, "")  # ADR 009: Carlas OSC aus
@@ -128,9 +181,14 @@ def main(argv=None) -> int:
             schreibe()
 
         klasse = InstrumentSteuerung if a.instrument else EffektSteuerung
+        schl = {"schluessel": True, "ports_fn": lambda: jack_audio_ports(a.name)} if a.schluessel else {}
         st, bereiche = klasse(host, fmt, pfad, uid, lambda: lib.carla_get_plugin_latency(host.handle, 0),
-                              a.status + ".puls", melde), {}
+                              a.status + ".puls", melde, **schl), {}
         status["effekt"] = "leer"
+        if klasse_nr is not None and not a.instrument:
+            st.klasse = klasse_nr
+            st.buendel_fn = lambda p, i, u: vst3_klasse.buendel(p, i, _buendel_id(p, u), **{
+                k: v for k, v in (("wurzel", a.klassen_wurzel), ("shim", a.shim)) if v})
         if a.instrument:  # an instrument is loaded at start; a plugin that is none (no MIDI input) or does not load ends the host
             r = st.lade()
             status["effekt"] = st.status
@@ -213,6 +271,8 @@ def main(argv=None) -> int:
                 rc[0], laeuft[0] = st.ende, False
             elif st.status == "geladen":
                 status["plugin"] = st.host.get_plugin_info(0)["name"]
+                if getattr(st, "ports", None) is not None:
+                    status["ports"] = st.ports
             schreibe()
         elif antwort.get("ok") and "name" in antwort:
             status["klang"] = antwort["name"]

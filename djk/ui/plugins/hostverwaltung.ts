@@ -1,4 +1,4 @@
-// Plan 1.11 task 7: the manager of the foreign effect hosts (one host process per host stage, h = 1..4 = pool ins/host/<h>).
+// Plan 1.11 task 7: the manager of the foreign effect hosts (one host process per host stage, h = 1..8 = pool ins/host/<h>).
 // It never blocks the caller: abgleich() only records what the project wants and starts the work in the background. Per host the life cycle is the
 // variant-B sequence (D17): `ins_host h 1` -> `ins_mess h` on the EMPTY rack (transport stopped) -> `lade` -> `zustand_setzen` (a state file exists) -> the
 // stage is written `an: true` with its latency and the playback is reloaded. A watchdog polls `djk-insert status` and clears the server flag at once
@@ -8,7 +8,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
-import { alleInserts, type HostPlugin, type Projekt } from '../project/model.ts';
+import { createHash } from 'node:crypto';
+import { alleInserts, MAX_HOST, type HostPlugin, type Projekt } from '../project/model.ts';
 import { ZustandPlan, zustandDa, zustandDatei, zustandNeu, zustandOrdner, zustandUebernehmen, zustandVerwerfen, type SicherGrund } from './state.ts';
 
 export type HostLageStatus = 'startet' | 'bereit' | 'fehlt' | 'ausfall';
@@ -22,7 +23,7 @@ export interface InsertStatus {
   puls: number | null; pid: number | null; starts: number | null;
 }
 export interface HostAbhaengig {
-  /** runs `djk-insert <args>` (start, stop, status) */
+  /** runs `djk-insert <args>` (start, stop, status, link) */
   insert(args: string[]): Promise<InsertAntwort>;
   /** one JSON line to the host socket, the answer line; rejects on a connection error or after timeoutMs (Error 'sock_timeout') */
   sock(pfad: string, befehl: Record<string, unknown>, timeoutMs: number): Promise<Record<string, unknown>>;
@@ -31,7 +32,10 @@ export interface HostAbhaengig {
   ordner(): string | null;          // the folder of the open project
   transportSteht(): boolean;        // the core's transport is stopped (a round trip can only be measured then)
   neuLaden(): void;                 // the playback must be written and loaded again
+  onBereit?(insertId: string): void;   // strand 2 task 2.3: a host stage turned `bereit` (its knob rows are set to the plugin's values)
   log(zeile: Record<string, unknown>): void;
+  /** the class position of the plugin in its VST3 bundle (index entry `klasse`); absent or 0 = the first class, loaded directly */
+  klasse?(plugin: HostPlugin): number;
 }
 export interface HostZeiten {
   pollMs: number; pulsMs: number; toleranzMs: number; zustandRuheMs: number; fensterMs: number; endeMs: number; messMs: number; ladeMs: number;
@@ -47,13 +51,19 @@ export const HOST_LAT_MAX = 8192;
 const MESS_WIEDER = 6, MESS_PAUSE_MS = 250;   // a measurement refused with host_fehlt is repeated this often (1.5 s: three edge checks of the core)
 const MAX_RECYCLE = 2;   // measurements repeated by a restart of the host per start (a host that never answers must not restart at every stop)
 
-/** the command-line form of a plugin identity: `<format>:<path>#<uid>`, ALWAYS with the trailing '#' (an LV2 URI may hold '#' itself) */
-export const hostSpec = (pl: { format: string; pfad: string; uid: string }): string => `${pl.format}:${pl.pfad}#${pl.uid}`;
+/** the command-line form of a plugin identity: `<format>:<path>#<uid>`, ALWAYS with the trailing '#' (an LV2 URI may hold '#' itself).
+ *  A VST3 class behind the first one of its bundle (index entry `klasse` > 0) gets `@<klasse>`: the host loads it through the one-class shim.
+ *  The identity itself never holds the class: comparisons and the index id use the form without it. */
+export const hostSpec = (pl: { format: string; pfad: string; uid: string }, klasse = 0): string =>
+  `${pl.format}:${pl.pfad}#${pl.uid}${pl.format === 'vst3' && Number.isInteger(klasse) && klasse > 0 ? `@${klasse}` : ''}`;
+/** the plugin index id of an identity (plugin_scan.py plugin_id: sha1 of `<format>:<pfad>#<uid>`, 12 hex digits) */
+export const pluginIdVon = (pl: { format: string; pfad: string; uid: string }): string =>
+  createHash('sha1').update(hostSpec(pl)).digest('hex').slice(0, 12);
 
-/** the core's `/zustand/ins_host` (12 integers: h, gesund, rundweg per host) as the list the page server adds to its `/zustand/arr` JSON */
+/** the core's `/zustand/ins_host` (24 integers: h, gesund, rundweg per host, 8 hosts) as the list the page server adds to its `/zustand/arr` JSON */
 export function insHostListe(f: Record<string, unknown>): { h: number; gesund: boolean; rundweg: number }[] {
   const aus: { h: number; gesund: boolean; rundweg: number }[] = [];
-  for (let n = 1; n <= 4; n++) aus.push({ h: Number(f[`h_${n}`] ?? n), gesund: Number(f[`gesund_${n}`]) === 1, rundweg: Number(f[`rundweg_${n}`] ?? -1) });
+  for (let n = 1; n <= MAX_HOST; n++) aus.push({ h: Number(f[`h_${n}`] ?? n), gesund: Number(f[`gesund_${n}`]) === 1, rundweg: Number(f[`rundweg_${n}`] ?? -1) });
   return aus;
 }
 
@@ -76,7 +86,13 @@ interface Host {
   weg: boolean; recycle: number; sichert: Promise<void> | null; latenzFrage: boolean;
   fenster: boolean; fensterUhr: ReturnType<typeof setInterval> | null; anzeige: boolean | null;
   an: boolean; laeufe: number[]; sperre: 'absturz_schleife' | 'zustand_fehler' | 'latenz_zu_gross' | null; fertig: boolean; zuGross: boolean;
+  schluessel: boolean;   // strand 2 task 3.4: the stage has a key; the host runs in key mode (djk-insert --schluessel) and is linked after `lade`
 }
+type HostSoll = { insertId: string; strang: string; plugin: HostPlugin; zustand: string; extra: number; an: boolean; schluessel: boolean };
+/** the `lade` refusals that are a property of the plugin (the stage stays `fehlt`, nothing is retried); kein_schluessel: fewer than 4 inputs in key mode */
+const PLUGIN_GRUENDE: ReadonlySet<string> = new Set(['nicht_ladbar', 'kein_effekt', 'kein_schluessel']);
+const pluginGrund = (g: unknown): string => (g === 'kein_schluessel' ? 'kein_schluessel' : 'plugin_nicht_ladbar');
+const LINK_WIEDER = 10, LINK_PAUSE_MS = 100;   // `djk-insert link` exits 5 while the status has no ports yet: asked again for about 1 s
 
 export class HostVerwaltung {
   private readonly dep: HostAbhaengig;
@@ -89,6 +105,8 @@ export class HostVerwaltung {
   private tickLaeuft = false;
   private neuAusstehend = false;
   private transportStatus: number | null = null;
+  // lane playback (plan strand 2, slice 1): per host stage at most one automation command in flight, the newest values wait (latest wins per index)
+  private readonly lauf = new Map<string, { laeuft: boolean; wartet: Record<string, number>; skip: Set<string> }>();
 
   constructor(dep: HostAbhaengig, zeiten: Partial<HostZeiten> = {}) {
     this.dep = dep; this.z = { ...HOST_ZEITEN, ...zeiten };
@@ -98,18 +116,20 @@ export class HostVerwaltung {
   // --- what the project wants -------------------------------------------------------------------------------------------------------
   /** Sets the hosts to the host inserts of the project (null = none). Returns at once; starting, stopping and loading run in the background. */
   abgleich(p: Projekt | null): void {
-    const soll = new Map<number, { insertId: string; strang: string; plugin: HostPlugin; zustand: string; extra: number; an: boolean }>();
+    for (const l of this.lauf.values()) l.skip.clear();   // an unknown lane index is tried again after the next project sync
+    const soll = new Map<number, HostSoll>();
     if (p) {
       for (const x of alleInserts(p)) {
         if (x.insert.art === 'host' && x.insert.plugin) {
           soll.set(x.insert.slot, { insertId: x.insert.id, strang: x.strangId, plugin: x.insert.plugin, zustand: x.insert.zustand!,
-            extra: x.insert.latenz_extra ?? 0, an: x.insert.an });
+            extra: x.insert.latenz_extra ?? 0, an: x.insert.an, schluessel: x.insert.key !== undefined });
         }
       }
     }
     for (const [h, host] of [...this.hosts]) {
       const s = soll.get(h);
-      if (!s || s.insertId !== host.insertId || hostSpec(s.plugin) !== hostSpec(host.plugin)) this.entferne(host, p !== null);
+      // a change of "has a key" is like another plugin: the host restarts in the other engine mode (task 3.4)
+      if (!s || s.insertId !== host.insertId || hostSpec(s.plugin) !== hostSpec(host.plugin) || s.schluessel !== host.schluessel) this.entferne(host, p !== null);
     }
     for (const [h, s] of soll) {
       const host = this.hosts.get(h);
@@ -165,11 +185,11 @@ export class HostVerwaltung {
   private latenzVon(x: Host): number { return (x.rundweg ?? 2 * this.z.quantum) + x.infoLatenz + x.extra; }
 
   // --- life cycle ---------------------------------------------------------------------------------------------------------------------
-  private lege(h: number, s: { insertId: string; strang: string; plugin: HostPlugin; zustand: string; extra: number; an: boolean }): void {
+  private lege(h: number, s: HostSoll): void {
     const host: Host = { h, insertId: s.insertId, strang: s.strang, plugin: s.plugin, zustandRel: s.zustand, extra: s.extra, status: 'startet',
       name: s.plugin.name, rundweg: null, gemessen: false, infoLatenz: 0, flag: null, gesundSeit: null, sockPfad: null, ladePid: null, ladeStarts: null, offen: 0,
       sequenz: false, pulsWert: null, pulsSeit: Date.now(), gesperrt: false, weg: false, recycle: 0, sichert: null, latenzFrage: false,
-      fenster: false, fensterUhr: null, anzeige: null, an: s.an, laeufe: [], sperre: null, fertig: false, zuGross: false };
+      fenster: false, fensterUhr: null, anzeige: null, an: s.an, laeufe: [], sperre: null, fertig: false, zuGross: false, schluessel: s.schluessel };
     this.hosts.set(h, host);
     if (s.plugin.format === 'vst3' && !fs.existsSync(s.plugin.pfad)) {   // a missing plugin file is known at once: nothing is started
       host.status = 'fehlt'; host.grund = 'plugin_nicht_ladbar';
@@ -198,14 +218,27 @@ export class HostVerwaltung {
 
   private async starte(host: Host): Promise<void> {
     if (host.weg) return;
-    const spec = hostSpec(host.plugin);
-    let r = await this.dep.insert(['start', String(host.h), spec]);
-    if (r.code === 4) { await this.dep.insert(['stop', String(host.h)]); r = await this.dep.insert(['start', String(host.h), spec]); }
+    const spec = hostSpec(host.plugin, this.dep.klasse?.(host.plugin) ?? 0);
+    const args = ['start', String(host.h), spec, ...(host.schluessel ? ['--schluessel'] : [])];
+    let r = await this.dep.insert(args);
+    if (r.code === 4) { await this.dep.insert(['stop', String(host.h)]); r = await this.dep.insert(args); }
     if (host.weg) return;
     if (r.code === 2) { host.status = 'fehlt'; host.grund = 'plugin_nicht_ladbar'; this.neuLadenAnfordern(); return; }
     if (r.code === 3) { host.status = 'ausfall'; host.grund = 'host_grenze'; return; }
     if (r.code !== 0) { host.status = 'ausfall'; host.grund = 'start_fehlgeschlagen'; this.dep.log({ typ: 'host_start_fehler', h: host.h, code: r.code, fehler: r.fehler }); return; }
     await this.sequenz(host);
+  }
+
+  /** key mode (task 3.4): `djk-insert link <h>` links the six edges by the port names of the host status; exit 5 = no ports yet, asked again */
+  private async verbinde(host: Host): Promise<boolean> {
+    for (let versuch = 0; versuch < LINK_WIEDER && !host.weg; versuch++) {
+      const r = await this.dep.insert(['link', String(host.h)]);
+      if (r.code === 0) return true;
+      if (r.code !== 5) break;
+      await pause(LINK_PAUSE_MS);
+    }
+    this.dep.log({ typ: 'host_link_fehler', h: host.h, insert: host.insertId });
+    return false;
   }
 
   private async status(h: number): Promise<InsertStatus | null> {
@@ -288,21 +321,26 @@ export class HostVerwaltung {
       const adoptiert = st.bereit === 'geladen';   // a host that kept its plugin over a restart of the server: nothing to measure on, nothing to restore
       let messung: number | null = null;
       if (!adoptiert) {
-        if (this.dep.transportSteht()) {
+        if (this.dep.transportSteht() && !host.schluessel) {   // key mode: the client has no ports before `lade`, the empty rack cannot be measured
           await this.flag(host, 1);                 // the core measures only a healthy host (the stage is still `an: false`: dry)
           messung = await this.messen(host);
         }
         const l = await this.rufe(host, 'lade', {}, this.z.ladeMs);
         if (host.weg) return;
         if (!l.ok && l.fehler !== 'schon_geladen') {
-          const ladbar = l.fehler !== 'nicht_ladbar' && l.fehler !== 'kein_effekt';
-          host.status = ladbar ? 'ausfall' : 'fehlt'; host.grund = ladbar ? String(l.fehler) : 'plugin_nicht_ladbar';
+          const ladbar = !PLUGIN_GRUENDE.has(String(l.fehler));
+          host.status = ladbar ? 'ausfall' : 'fehlt'; host.grund = ladbar ? String(l.fehler) : pluginGrund(l.fehler);
           await this.flag(host, 0);
           this.neuLadenAnfordern();
           return;
         }
         host.ladePid = st.pid; host.ladeStarts = st.starts; host.pulsWert = st.puls; host.pulsSeit = Date.now();   // the load is confirmed: the watchdog knows this run
       }
+      if (host.schluessel && !(await this.verbinde(host))) {   // key mode: the ports exist only now (also after every restart: the sequence runs again)
+        if (host.weg) return;
+        host.status = 'ausfall'; host.grund = 'host_fehlt'; await this.flag(host, 0); this.neuLadenAnfordern(); return;
+      }
+      if (host.weg) return;
       if (messung !== null) { host.rundweg = messung; host.gemessen = true; } else if (host.rundweg === null) { host.rundweg = 2 * this.z.quantum; host.gemessen = false; }
       const info = await this.rufe(host, 'info');
       if (info.ok) {
@@ -333,6 +371,7 @@ export class HostVerwaltung {
       host.fertig = true;
       host.status = 'bereit';
       await this.flag(host, 1, true);
+      if (host.insertId) this.dep.onBereit?.(host.insertId);
       this.neuLadenAnfordern();
     } catch (e) {
       host.status = 'ausfall'; host.grund = (e as Error).message === 'sock_timeout' ? 'haengt' : 'host_fehlt';
@@ -363,9 +402,9 @@ export class HostVerwaltung {
     const jetzt = Date.now();
     if (!st || !st.laeuft) { if (host.status === 'bereit' || host.flag === 1) await this.ausfall(host, 'host_tot'); else { host.status = 'ausfall'; host.grund = 'host_tot'; } return; }
     if (st.bereit === 'fehler') {
-      const ladbar = st.grund !== 'nicht_ladbar' && st.grund !== 'kein_effekt';
+      const ladbar = !PLUGIN_GRUENDE.has(String(st.grund));
       if (host.status !== 'fehlt' && (ladbar ? host.grund !== st.grund : true)) {
-        await this.flag(host, 0); host.status = ladbar ? 'ausfall' : 'fehlt'; host.grund = ladbar ? (st.grund ?? 'host_fehlt') : 'plugin_nicht_ladbar'; this.neuLadenAnfordern();
+        await this.flag(host, 0); host.status = ladbar ? 'ausfall' : 'fehlt'; host.grund = ladbar ? (st.grund ?? 'host_fehlt') : pluginGrund(st.grund); this.neuLadenAnfordern();
       }
       return;
     }
@@ -406,7 +445,7 @@ export class HostVerwaltung {
     this.transportStatus = status;
     if (status !== 0 || vor === null || vor === 0) return;
     for (const host of this.hosts.values()) {   // transport stopped: a host that started on an estimate gets its measurement through a clean restart (empty rack)
-      if (host.status === 'bereit' && !host.gemessen && host.recycle < MAX_RECYCLE && host.offen === 0 && !host.fenster) this.neuStart(host);   // an open plugin window would vanish: measure at the next stop edge
+      if (host.status === 'bereit' && !host.gemessen && !host.schluessel && host.recycle < MAX_RECYCLE && host.offen === 0 && !host.fenster) this.neuStart(host);   // an open plugin window would vanish: measure at the next stop edge
     }
   }
 
@@ -447,6 +486,34 @@ export class HostVerwaltung {
     this.plan.param();
     void this.latenzPruefen(host);
     return { ok: true, werte: klemmt };
+  }
+
+  /** Lane values for a host stage (task 1.2): clamped to 0..1, ONE `params_setzen` in flight per host (200 ms), newer values replace waiting ones per
+   *  index. No state save and no latency read per call (the lane player calls this at 50 Hz). An unknown index is logged once and skipped until the next abgleich. */
+  automation(insertId: string, werte: Record<string, number>): void {
+    const host = [...this.hosts.values()].find((x) => x.insertId === insertId);
+    if (!host || host.status !== 'bereit') return;
+    let l = this.lauf.get(insertId);
+    if (!l) { l = { laeuft: false, wartet: {}, skip: new Set() }; this.lauf.set(insertId, l); }
+    for (const [k, v] of Object.entries(werte)) if (!l.skip.has(k) && Number.isFinite(v)) l.wartet[k] = Math.min(1, Math.max(0, v));
+    if (!l.laeuft) void this.automationSenden(host, l);
+  }
+
+  private async automationSenden(host: Host, l: { laeuft: boolean; wartet: Record<string, number>; skip: Set<string> }): Promise<void> {
+    l.laeuft = true;
+    try {
+      while (Object.keys(l.wartet).length > 0 && host.status === 'bereit') {
+        const batch = l.wartet; l.wartet = {};
+        let r: Record<string, unknown> | null = null;
+        try { r = await this.rufe(host, 'params_setzen', { werte: batch }, 200); } catch { r = null; }
+        if (r && !r.ok && r.fehler === 'param_unbekannt') {
+          const k = String(r.index);
+          l.skip.add(k);
+          this.dep.log({ typ: 'plugin_lane_param_unbekannt', insert: host.insertId, index: k });
+          for (const [i, v] of Object.entries(batch)) if (i !== k && !(i in l.wartet)) l.wartet[i] = v;   // a rejected batch changed nothing: the rest goes again
+        }
+      }
+    } finally { l.laeuft = false; }
   }
 
   /** a parameter can change the plugin's latency (a linear-phase mode): read it again; a new number is a new playback load (D4), once */

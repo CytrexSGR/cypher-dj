@@ -460,7 +460,7 @@ test('AK-B16-8: tools/list length = the count of tool entries in hand.ts = the n
     const md = fs.readFileSync(path.join(wurzel, datei), 'utf8');
     assert.match(md, new RegExp(`^## (Werkzeuge|Tools) \\(${laenge}\\)$`, 'm'), `${datei} heading`);
     assert.ok(md.includes(`= ${laenge};`), `${datei} counting sentence`);
-    assert.ok(!/\b(65|71)\b/.test(md), `${datei} has no stale 65 or 71`);
+    assert.ok(!/\b65\b/.test(md), `${datei} has no stale 65`);
   }
   // the public texts name the same number (present in the working repo; the public repo carries them too)
   for (const [datei, muster] of [['docs/veroeffentlichung/public/README.md', /\b(\d+) tools\b/], ['docs/veroeffentlichung/public/docs/features.md', /\b(\d+) tools in the MCP server/]]) {

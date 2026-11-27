@@ -3,16 +3,17 @@
 #
 # Source of the mode, the bank and the tracks: GET /controller/pult (djk/ui/areas/controller/pult_production.ts), polled four times a second.
 # Columns 1..8 are the tracks of the bank in front (8 tracks per bank, in track order). What a control does in PRODUCTION:
-#   fader n          -> channel 16 CC <track nr>        kern row spur/<nr>/fader (pult.json; soft takeover in the kern: the first value only primes)
+#   (layout for 128 tracks, decision D13: track t uses index t - 1 = 0..127, the controls are spread over channels 14..16)
+#   fader n          -> channel 16 CC <track nr - 1>    kern row spur/<nr>/fader (pult.json; soft takeover in the kern: the first value only primes)
 #                       The fader position is read with the taper of the page (ANKER, the same anchors as djk/ui/public/production/fader_curve.js;
 #                       tests/test_apc_production.py compares them) and sent as dB on a linear -60..+6 dB scale (pult.json kurve linear, kill_unter_min):
 #                       a fader at half travel is where the head's fader is at half travel (Andreas 2026-11-18: "kanal 1 fader mittig, anzeige 90%"; the
 #                       kern's own fader_db curve put 0 dB at half travel, the page at 85 %).
-#   master fader     -> channel 16 CC 100               pm/fader (project master)
-#   activator n      -> channel 16 note <track nr>      spur/<nr>/mute (a press toggles)
-#   solo/cue n       -> channel 16 note 64 + <nr>       spur/<nr>/solo
+#   master fader     -> channel 15 CC 100               pm/fader (project master)
+#   activator n      -> channel 16 note <track nr - 1>  spur/<nr>/mute (a press toggles)
+#   solo/cue n       -> channel 15 note <track nr - 1>  spur/<nr>/solo
 #   record arm n     -> POST /controller/pult/arm {nr}  the arm of the track (a project command; the kern has no row for it)
-#   Shift + PLAY / STOP -> channel 16 note 120          arr/start_stopp (the kern's own hand start/stop of the arrangement), only when it changes something
+#   Shift + PLAY / STOP -> channel 14 note 120          arr/start_stopp (the kern's own hand start/stop of the arrangement), only when it changes something
 #   Shift + LEFT / RIGHT -> POST /controller/pult/bank {schritt}
 #   Shift + UP / DOWN    -> POST /controller/fokus {spur_id} of the previous / next track: the track in front, the synths and the window follow
 #   clip grid, clip stop, scene launch, cue level: nothing for now (dropped, so they do not play decks)
@@ -26,8 +27,9 @@ import urllib.request
 
 SEITE = "http://127.0.0.1:47300"
 KANAL16 = 0x0F
+KANAL15 = 0x0E
+KANAL14 = 0x0D
 MASTER_CC = 100
-SOLO_AB = 64
 START_STOPP_NOTE = 120
 ARM, SOLO, AKTIVATOR = 48, 49, 50
 CLIP_NOTEN = (52, 53, 54, 55, 56, 57)       # clip stop + the five clip rows, per column
@@ -74,9 +76,9 @@ def uebersetze(data, lage):
     spur = spalten[ch] if ch < len(spalten) else None
     if typ == 0xB0:
         if nr == 7 and ch < 8:
-            return [("kern", bytes([0xB0 | KANAL16, spur["nr"], fader_cc(wert)]))] if spur else []
+            return [("kern", bytes([0xB0 | KANAL16, spur["nr"] - 1, fader_cc(wert)]))] if spur else []
         if nr == 14 and ch == 0:
-            return [("kern", bytes([0xB0 | KANAL16, MASTER_CC, fader_cc(wert)]))]
+            return [("kern", bytes([0xB0 | KANAL15, MASTER_CC, fader_cc(wert)]))]
         if nr == 16 and wert == 0 and ch in FUNKTION:
             f = FUNKTION[ch]
             laeuft = bool(lage.get("laeuft"))
@@ -91,16 +93,16 @@ def uebersetze(data, lage):
     if typ in (0x80, 0x90) and ch < 8 and spur:
         an = typ == 0x90 and wert > 0
         if nr == AKTIVATOR:
-            return [("kern", bytes([(0x90 if an else 0x80) | KANAL16, spur["nr"], 127 if an else 0]))]
+            return [("kern", bytes([(0x90 if an else 0x80) | KANAL16, spur["nr"] - 1, 127 if an else 0]))]
         if nr == SOLO:
-            return [("kern", bytes([(0x90 if an else 0x80) | KANAL16, SOLO_AB + spur["nr"], 127 if an else 0]))]
+            return [("kern", bytes([(0x90 if an else 0x80) | KANAL15, spur["nr"] - 1, 127 if an else 0]))]
         if nr == ARM and an:
             return [("http", "/controller/pult/arm", {"nr": spur["nr"]})]
     return []
 
 
 def _start_stopp():
-    return [("kern", bytes([0x90 | KANAL16, START_STOPP_NOTE, 127])), ("kern", bytes([0x80 | KANAL16, START_STOPP_NOTE, 0]))]
+    return [("kern", bytes([0x90 | KANAL14, START_STOPP_NOTE, 127])), ("kern", bytes([0x80 | KANAL14, START_STOPP_NOTE, 0]))]
 
 
 def leds(lage):

@@ -38,7 +38,8 @@ constexpr int B = 200;
 static float schwelle(float a) { return 6.0f - 36.0f * a; }
 
 struct Lauf {
-  sw::ReglerTabelle tab;
+  std::unique_ptr<sw::ReglerTabelle> tab_ = std::make_unique<sw::ReglerTabelle>();   // heap: the 24 576-row table fits only once or twice on an 8 MiB stack
+  sw::ReglerTabelle& tab = *tab_;
   std::unique_ptr<cdj::Mixer> m;
   float ml[N], mr[N], cl[N], cr[N];
   std::vector<float> sl, sr;   // Ohr-Abgriff master_summe_l/r (vor dem Kleber)

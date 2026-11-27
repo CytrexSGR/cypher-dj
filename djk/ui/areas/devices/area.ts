@@ -13,9 +13,11 @@ import { baueKantenText, schreibeAtomar } from './edges.ts';
 import { PROFILE, profil } from './profile.ts';
 import { pwDumpErkenne, LEER, type Erkennung } from './pwdump.ts';
 import { GeraeteFehler, GeraeteSpeicher, controllerPlaetze, type Konfig } from './store.ts';
+import { echteGeraeteErlaubt, istEchtesGeraet } from './lock.ts';
 
 // beiAenderung: called after every written change of the devices file (the controller follow re-resolves when a place starts following or its device changes)
-export interface GeraeteOptionen { beiAenderung?: () => void; konfigPfad?: string; kantenPfad?: string; erkenne?: () => Promise<Erkennung>; cacheMs?: number; jetzt?: () => number; kernFristMs?: number }
+export interface GeraeteOptionen { beiAenderung?: () => void; konfigPfad?: string; kantenPfad?: string; erkenne?: () => Promise<Erkennung>; cacheMs?: number; jetzt?: () => number; kernFristMs?: number;
+  echteGeraete?: boolean }   // real MIDI devices may be wired; default: the production instance yes, a test instance only with CYPHERDJ_ECHTE_GERAETE=1 (lock.ts)
 
 const num = (x: unknown): number => Number(x ?? 0);
 
@@ -24,6 +26,8 @@ export function geraeteBereich(ctx: BereichKontext, opt: GeraeteOptionen = {}): 
   const kantenPfad = opt.kantenPfad ?? eingangsKantenDatei();
   const erkenneRoh = opt.erkenne ?? pwDumpErkenne;
   const uhr = opt.jetzt ?? Date.now, kernFrist = opt.kernFristMs ?? 2000;
+  const echte = opt.echteGeraete ?? echteGeraeteErlaubt();
+  const gesperrt = (port: string | null): boolean => !echte && port !== null && istEchtesGeraet(port);   // a real device this instance does not wire
   let kern: Record<string, number> | null = null;       // letzter /zustand/ein
   let kernZeit = 0;                                     // Gesamtreview m4: wann er kam; der Kern meldet im Takt der Pegel (50 ms), 2 s Schweigen heißt: unbekannt
   const pegel = new Map<string, number>();              // letzter /pegel je ein/<k>
@@ -33,9 +37,9 @@ export function geraeteBereich(ctx: BereichKontext, opt: GeraeteOptionen = {}): 
     if (!cache || cache.bis <= jetzt) cache = { bis: jetzt + (opt.cacheMs ?? 1000), p: erkenneRoh() };
     return cache.p;
   };
-  const schreibeAlles = (k: Konfig): void => { speicher.schreibe(k); schreibeAtomar(kantenPfad, baueKantenText(k)); };
+  const schreibeAlles = (k: Konfig): void => { speicher.schreibe(k); schreibeAtomar(kantenPfad, baueKantenText(k, echte)); };
   // Beim Start die Kanten-Datei zur vorhandenen Konfiguration herstellen (der Kern liest sie bei seinem Start). Ohne Konfigurationsdatei: nichts anfassen.
-  try { if (speicher.existiert()) schreibeAtomar(kantenPfad, baueKantenText(speicher.lies())); } catch (e) { ctx.log({ typ: 'geraete_start_fehler', fehler: (e as Error).message }); }
+  try { if (speicher.existiert()) schreibeAtomar(kantenPfad, baueKantenText(speicher.lies(), echte)); } catch (e) { ctx.log({ typ: 'geraete_start_fehler', fehler: (e as Error).message }); }
 
   async function lage(): Promise<Record<string, unknown>> {
     let erk = LEER, erkennung = 'ok';
@@ -53,10 +57,11 @@ export function geraeteBereich(ctx: BereichKontext, opt: GeraeteOptionen = {}): 
         pegel_db: pegel.get(`ein/${e.k}`) ?? null,
         audio_hinweis: e.profil ? (profil(e.profil)?.audio?.hinweis ?? '') : '',
       })),
-      midi: { ...k.midi, da: !!k.midi.port && erk.midi.some((m) => m.port === k.midi.port), verbunden: vb(256) },
+      echte_geraete: echte,   // false: a test instance, real devices are listed as present and never connected
+      midi: { ...k.midi, da: !!k.midi.port && erk.midi.some((m) => m.port === k.midi.port), gesperrt: gesperrt(k.midi.port), verbunden: gesperrt(k.midi.port) ? false : vb(256) },
       // every controller place (1 = the MIDI input above): bit 7 + platz of the kern's mask says whether its raw input midi_ein_<platz> is linked
-      controller: controllerPlaetze(k).map((c) => ({ ...c, da: erk.midi.some((m) => m.port === c.port), verbunden: vb(1 << (7 + c.platz)) })),
-      quellen: erk,
+      controller: controllerPlaetze(k).map((c) => ({ ...c, da: erk.midi.some((m) => m.port === c.port), gesperrt: gesperrt(c.port), verbunden: gesperrt(c.port) ? false : vb(1 << (7 + c.platz)) })),
+      quellen: { ...erk, midi: erk.midi.map((m) => ({ ...m, gesperrt: gesperrt(m.port) })) },
       profile: PROFILE.map((p) => ({ id: p.id, name: p.name, audio: p.audio !== null, midi: p.midi !== null, audio_hinweis: p.audio?.hinweis ?? '' })),
       kern: { ein: lebt ? kern : null },
     };
@@ -77,7 +82,10 @@ export function geraeteBereich(ctx: BereichKontext, opt: GeraeteOptionen = {}): 
         const d = await leseKoerper(q);
         let erk = LEER;
         try { erk = await erkenne(); } catch { /* ohne Erkennung nur mit ausdrücklichen Ports */ }
-        const neu = f(speicher.lies(), d, quelle, erk);
+        const alt = speicher.lies();
+        const neu = f(alt, d, quelle, erk);
+        const neuePorts = [neu.midi.port, ...(neu.controller ?? []).map((c) => c.port)].filter((p): p is string => p !== null && ![alt.midi.port, ...(alt.controller ?? []).map((c) => c.port)].includes(p));
+        if (neuePorts.some(gesperrt)) throw new GeraeteFehler('echte_geraete_gesperrt', 409);   // nothing is written: the real devices stay with the production instance
         schreibeAlles(neu);
         cache = null;
         try { opt.beiAenderung?.(); } catch (e) { ctx.log({ typ: 'geraete_haken_fehler', fehler: (e as Error).message }); }

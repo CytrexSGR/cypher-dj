@@ -175,16 +175,36 @@ export function zeigeDeck(n) {
   for (const tr of $$('#liste tr')) tr.classList.toggle(`auf-${n}`, tr.dataset.material === id);
 }
 
-export function zeigePegel(kanal, db) {
-  const anteil = db <= -60 ? 0 : Math.min(1, (db + 60) / 60);
-  for (const m of $$(`.meter[data-kanal="${CSS.escape(kanal)}"] i`)) {
-    if (m.parentElement.classList.contains('senkrecht')) m.style.height = `${anteil * 100}%`;
-    else m.style.width = `${anteil * 100}%`;
+// Level events are stored (latest value per channel) and applied once per animation frame with ONE search over the document.
+const pegelOffen = new Map();
+let pegelFrameGeplant = false;
+const pegelText = (db) => (db <= -199 ? '−∞' : db.toFixed(1).replace('-', '−'));
+/** Test seam: applies the pending levels now (the frame callback does the same). */
+export function zeigePegelJetzt() {
+  pegelFrameGeplant = false;
+  if (!pegelOffen.size) return;
+  const offen = new Map(pegelOffen);
+  pegelOffen.clear();
+  for (const el of $$('.meter[data-kanal] i, [data-fxpegel], [data-pegelzahl]')) {
+    const zahl = el.dataset.fxpegel ?? el.dataset.pegelzahl;
+    const db = offen.get(zahl ?? el.parentElement?.dataset?.kanal);
+    if (db === undefined) continue;
+    if (zahl !== undefined) { el.textContent = pegelText(db); continue; }
+    const anteil = db <= -60 ? 0 : Math.min(1, (db + 60) / 60);
+    if (el.parentElement.classList.contains('senkrecht')) el.style.height = `${anteil * 100}%`;
+    else el.style.width = `${anteil * 100}%`;
   }
-  const fz = $(`[data-fxpegel="${CSS.escape(kanal)}"]`);   // Effekt-Sektion: Pegel je Streifen
-  if (fz) fz.textContent = db <= -199 ? '−∞' : db.toFixed(1).replace('-', '−');
-  const z = $(`[data-pegelzahl="${CSS.escape(kanal)}"]`);
-  if (z) z.textContent = db <= -199 ? '−∞' : db.toFixed(1).replace('-', '−');
+}
+const pegelHorcher = [];
+/** Listeners that get every raw level event (kanal, db), e.g. the channel strip's activity blink. */
+export function beiPegel(fn) { pegelHorcher.push(fn); }
+export function zeigePegel(kanal, db) {
+  for (const f of pegelHorcher) { try { f(kanal, db); } catch (e) { console.error('level listener:', e); } }
+  pegelOffen.set(kanal, db);
+  if (typeof requestAnimationFrame !== 'function') { zeigePegelJetzt(); return; }
+  if (pegelFrameGeplant) return;
+  pegelFrameGeplant = true;
+  requestAnimationFrame(zeigePegelJetzt);
 }
 
 // ---------- Uhr (Kopf) ----------

@@ -105,8 +105,11 @@
     <span id="vorschlag" class="vorschlag" hidden></span>
     <button id="t-annehmen" class="taste-c ja" hidden title="Accept Cypher's proposal (only you can start it)">Accept</button>
     <button id="t-verwerfen" class="taste-c" hidden title="Reject Cypher's proposal">Reject</button>
+    <span id="hand-gestoppt" class="hand-gestoppt" hidden title="Every agent write is refused until you press Release">AGENTS STOPPED</span>
     <button id="t-stopp" class="taste-c stopp" title="Stop Cypher: no more proposals, loads or plans until released">Stop Cypher</button>
     <button id="t-freigabe" class="taste-c" hidden title="Let Cypher act again">Release</button>
+    <button id="t-agentlog" class="taste-c" aria-expanded="false" title="What the agent called, newest first">AGENT LOG</button>
+    <div id="agentlog" class="hand-log" hidden></div>
   </div>
   <div class="verbindungen">
     <span class="punkt" id="v-kern" title="Audio core (via page server)">CORE</span>
@@ -133,6 +136,7 @@
         <span class="recdeck">LOOP 2 <button data-recziel="2:1">1</button><button data-recziel="2:2">2</button><button data-recziel="2:3">3</button><button data-recziel="2:4">4</button></span>
       </div>
     </div>
+    <div id="kanalband" class="kanalband" aria-label="Channel strips"></div>
     <div class="instanzen" id="strudel-zeilen"></div>
   </section>
   <section id="mischer" class="mix-oben">

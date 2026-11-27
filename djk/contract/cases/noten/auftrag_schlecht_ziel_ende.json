@@ -1,0 +1,14 @@
+{
+ "format": "cdj-noten-auftrag/1",
+ "kurve": "pyin-1.noten_hmm-1",
+ "liste": [
+  {
+   "id": "t1",
+   "qa": 0.5,
+   "qe": 1.0,
+   "qton": 60.0,
+   "p": 0.9,
+   "a": 1.2
+  }
+ ]
+}

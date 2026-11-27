@@ -1,0 +1,42 @@
+{
+ "schema": 1,
+ "name": "Phaser / resonant drone",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "fx-phaser-sync",
+ "werte": {
+  "knob1": 0.0,
+  "knob2": 0.2386,
+  "knob3": 0.083,
+  "knob4": 1.0,
+  "knob5": 0.9545,
+  "knob6": 0.7,
+  "knob7": 1.0
+ },
+ "beschreibung": {
+  "art": "modulation",
+  "unterart": "phaser",
+  "charakter": [
+   "dark",
+   "deep",
+   "aggressive"
+  ],
+  "genre": [
+   "ambient",
+   "idm",
+   "dubstep"
+  ],
+  "einsatz": [
+   "breakdown",
+   "transition"
+  ],
+  "energie": 4,
+  "text": "Free 0.15 Hz from 120 Hz over 48 st, feedback 0.8, mix 70 %, Stereo Quarter; extreme slow whistling sweep through the whole spectrum."
+ },
+ "tags": [
+  "fx-phaser-sync"
+ ],
+ "notiz": "Set by the knob ranges of the graph, not yet heard (2026-11-26).",
+ "angelegt": "2026-11-26T00:00:00.000Z",
+ "geaendert": "2026-11-26T00:00:00.000Z"
+}

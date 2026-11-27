@@ -1,0 +1,41 @@
+{
+ "schema": 1,
+ "name": "Tremolo / eighth pan gate",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "fx-tremolo",
+ "werte": {
+  "knob1": 0.2857,
+  "knob2": 0.5,
+  "knob3": 1.0,
+  "knob4": 0.8333,
+  "knob5": 1.0,
+  "knob6": 1.0
+ },
+ "beschreibung": {
+  "art": "modulation",
+  "unterart": "tremolo",
+  "charakter": [
+   "aggressive",
+   "wide",
+   "tight"
+  ],
+  "genre": [
+   "techno",
+   "dubstep",
+   "electro"
+  ],
+  "einsatz": [
+   "drop",
+   "transition"
+  ],
+  "energie": 5,
+  "text": "Fast ping-pong gate: 1/8 sync, depth 100 %, shape 18 dB, Pan mode, mix 100 %; hard-gated hand-off between left and right."
+ },
+ "tags": [
+  "fx-tremolo"
+ ],
+ "notiz": "Set by the knob ranges of the graph, not yet heard (2026-11-26).",
+ "angelegt": "2026-11-26T00:00:00.000Z",
+ "geaendert": "2026-11-26T00:00:00.000Z"
+}

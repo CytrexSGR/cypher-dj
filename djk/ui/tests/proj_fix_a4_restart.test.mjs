@@ -94,7 +94,7 @@ test('A4 unbekannter Ist-Wert: Kern liefert nur spur/1, Projekt hat spur/1 und s
   assert.equal(z.k.teile(/^spur\/1\/(fader|pan|mute|solo)$/).length, 0, 'spur/1 bekannt: nichts gesendet');
   assert.deepEqual(z.k.teile(/^spur\/2\/(fader|pan|mute|solo)$/).map((x) => [x.felder.pfad, x.felder.nach]),
     [['spur/2/fader', 0], ['spur/2/pan', 0], ['spur/2/mute', 0], ['spur/2/solo', 0]], 'spur/2 unbekannt: Projektwerte gesendet');
-  assert.equal(z.k.teile(/^spur\/([3-9]|[1-9][0-9])\/(fader|pan|mute|solo)$/).length, 4 * (MAX_SPUREN - 2), 'freie Slots unbekannt: Vorgabe gesendet');
+  assert.equal(z.k.teile(/^spur\/([3-9]|[1-9][0-9]{1,2})\/(fader|pan|mute|solo)$/).length, 4 * (MAX_SPUREN - 2), 'freie Slots unbekannt: Vorgabe gesendet');
   const sp = r.j.projekt.spuren;
   assert.deepEqual([sp[0].fader_db, sp[0].pan, sp[0].mute, sp[1].fader_db], [-12, 0.5, true, 0], 'spur/1 übernommen, spur/2 bleibt');
 });

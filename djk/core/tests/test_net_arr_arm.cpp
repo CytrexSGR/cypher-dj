@@ -1,6 +1,6 @@
 // 1.12 Automation slice 3, task 7: /k/arr/arm ,hsiii in the net thread (INTERFACES 4.11) and /e/auto_punkt ,sdf (5.13).
-//   (a) good commands become Befehl ARR_ARM: nr = spur (0..32), an, politik = modus (0 touch, 1 latch, 2 write); spur 0 with an 0 passes
-//   (b) refusals as /q 6 with nothing in the ring: spur outside 0..32, an outside 0/1, modus outside 0..2, spur 0 with an 1 -> format;
+//   (a) good commands become Befehl ARR_ARM: nr = spur (0..128), an, politik = modus (0 touch, 1 latch, 2 write); spur 0 with an 0 passes
+//   (b) refusals as /q 6 with nothing in the ring: spur outside 0..128, an outside 0/1, modus outside 0..2, spur 0 with an 1 -> format;
 //       cypher and every other source than andreas -> nur_andreas (for an 1 and an 0); andreas passes (negative control)
 //   (c) in the AI stop cypher is refused with ki_gestoppt before any range check, andreas is not
 //   (d) the kern event AUTO_PUNKT leaves as /e/auto_punkt with pfad, projekt_beat and wert
@@ -39,14 +39,14 @@ int main() {
     // (a) good commands
     sende(701, "andreas", 3, 1, 2);
     PRUEF(bef->hole(b) && b.art == cdj::Befehl::ARR_ARM && b.id == 701 && b.nr == 3 && b.an == 1 && b.politik == 2 && !std::strcmp(b.quelle, "andreas"));
-    sende(702, "andreas", 32, 1, 0);
-    PRUEF(bef->hole(b) && b.nr == 32 && b.an == 1 && b.politik == 0);
+    sende(702, "andreas", 128, 1, 0);
+    PRUEF(bef->hole(b) && b.nr == 128 && b.an == 1 && b.politik == 0);
     sende(703, "andreas", 1, 0, 1);
     PRUEF(bef->hole(b) && b.nr == 1 && b.an == 0 && b.politik == 1);
     sende(704, "andreas", 0, 0, 0);   // disarm everything
     PRUEF(bef->hole(b) && b.nr == 0 && b.an == 0);
     // (b) refusals
-    sende(711, "andreas", 33, 1, 0);
+    sende(711, "andreas", 129, 1, 0);
     PRUEF(abgelehnt(711, "format"));
     sende(712, "andreas", -1, 1, 0);
     PRUEF(abgelehnt(712, "format"));
@@ -66,7 +66,7 @@ int main() {
     PRUEF(abgelehnt(719, "nur_andreas"));
     sende(720, "gibtsnicht", 1, 1, 1);
     PRUEF(abgelehnt(720, "ausserhalb_bereich"));
-    sende(721, "cypher", 99, 1, 1);   // the range is checked before the source
+    sende(721, "cypher", 999, 1, 1);   // the range is checked before the source
     PRUEF(abgelehnt(721, "format"));
     // (c) AI stop
     {

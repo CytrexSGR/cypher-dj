@@ -1,5 +1,6 @@
 // Folder picker of the browser (browser plan 2, task 6): a modal over GET /dateisystem/ordner. The page cannot read a folder path from the desktop,
-// so a folder is chosen here (spec B7). Top level = the roots the server offers; a refused path (403) shows the server's own text in the dialog.
+// so a folder is chosen here (spec B7). `a.in` (optional element, default document.body) is where the overlay is appended: a caller that sits in a modal
+// <dialog> (top layer) passes that dialog, because an overlay on the body would lie behind it and be inert. Top level = the roots the server offers; a refused path (403) shows the server's own text in the dialog.
 export function waehleOrdner(a) {
   return new Promise((fertig) => {
     const huelle = document.createElement('div');
@@ -47,7 +48,7 @@ export function waehleOrdner(a) {
     waehle.addEventListener('click', () => zu(aktuell));
     huelle.addEventListener('click', (e) => { if (e.target === huelle) zu(null); });
     document.addEventListener('keydown', taste, true);
-    document.body.append(huelle);
+    (a.in ?? document.body).append(huelle);
     lade(a.start ?? '');
   });
 }

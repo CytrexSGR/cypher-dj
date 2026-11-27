@@ -3,7 +3,7 @@
 //! float32, see `baukasten_dsp::proben`; the second is the hit of `sampler-fairlight` with its three detune layers as
 //! separate slices, S22; the third is the synthetic spring-tank impulse response of `fx-federhall`, S21). Use the directory as the
 //! sample root of `render --wurzel DIR` or copy the file to `~/.config/cypherdj/baukasten/samples/` (S10, C1).
-use baukasten_dsp::proben::{bytes, feder_ir, orchester_schlag, orchester_schlag_schichten};
+use baukasten_dsp::proben::{bytes, feder_ir, orchester_schlag, orchester_schlag_schichten, schreibe_space_werk};
 
 fn main() {
     let Some(dir) = std::env::args().nth(1) else {
@@ -23,4 +23,6 @@ fn main() {
     let d = feder_ir(48_000.0);
     std::fs::write(&pfad, bytes(&d)).expect("file not writable");
     println!("{}: {} frames, {} bytes", pfad.display(), d.len() / 2, d.len() * 4);
+    schreibe_space_werk(std::path::Path::new(&dir));
+    println!("{}: space-raum, space-platte, space-halle, space-kammer, space-leer (Cypher Space IRs)", dir);
 }

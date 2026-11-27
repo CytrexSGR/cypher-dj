@@ -9,8 +9,8 @@
 //   Fall 2 (d): Umschalten bei laufendem Deck und offenem Fader (Träger 200 Hz, Echo Wet 1): der größte Sample-Sprung im
 //     Umschaltfenster höchstens 1,5 mal der im Fenster gleicher Länge davor, in beide Richtungen. Die Mutation
 //     CYPHERDJ_MUTATION_FX_ROUTING_HART (Weg ohne Gleiten tauschen, Leitung sofort leer) macht diesen Fall rot.
-//   Fall 3 (e): Quelle cypher bekommt 6 nur_hand, Wert 2 bekommt 6 ausserhalb_bereich; andreas bekommt 1, 2, 3 und das
-//     Ereignis. (Die Vorgabe 0 nach /e/neustart meldet das Netz: test_netz_neustart.)
+//   Fall 3 (e): source cypher gets 1, 2, 3 and the event (strand 11: no nur_hand), value 2 gets 6 ausserhalb_bereich;
+//     after Stop Cypher (KI_STOPP) cypher gets 6 ki_gestoppt and nothing changes; andreas still gets 1, 2, 3 and the event. (Die Vorgabe 0 nach /e/neustart meldet das Netz: test_netz_neustart.)
 #include <unistd.h>
 
 #include <cmath>
@@ -333,22 +333,30 @@ int main() {
     const int64_t c2 = a.fx_routing(2, "andreas");
     const int64_t c3 = a.fx_routing(-1, "leitstand");
     a.zyklen(20 * N);
-    const Q* q1 = a.quittung(c1, 6);
-    PRUEF(q1 && q1->grund == "nur_hand");                                         // (e)
-    PRUEF(!a.quittung(c1, 1) && !a.quittung(c1, 2) && !a.quittung(c1, 3));
+    PRUEF(a.quittung(c1, 1) && a.quittung(c1, 2) && a.quittung(c1, 3));          // (e) strand 11: cypher may switch
+    PRUEF(!a.quittung(c1, 6));
     const Q* q2 = a.quittung(c2, 6);
     PRUEF(q2 && q2->grund == "ausserhalb_bereich");
     const Q* q3 = a.quittung(c3, 6);
     PRUEF(q3 && q3->grund == "ausserhalb_bereich");
-    PRUEF(a.routing.empty());                                                     // nichts gemeldet, nichts geändert
-    PRUEF(a.kern->mixer().fx_routing() == 0);
-    const int64_t c4 = a.fx_routing(1, "andreas");                                // Negativ-Kontrolle: Andreas darf
+    PRUEF(a.routing.size() == 1 && a.routing[0].status == 1);                     // only cypher's switch is reported
+    PRUEF(a.kern->mixer().fx_routing() == 1);
+    cdj::Befehl stopp = a.neu(cdj::Befehl::KI_STOPP, "andreas");                  // Stop Cypher still stops the switch
+    a.sende(stopp);
+    a.zyklen(25 * N);
+    const int64_t c5 = a.fx_routing(0, "cypher");
     a.zyklen(30 * N);
+    const Q* q5 = a.quittung(c5, 6);
+    PRUEF(q5 && q5->grund == "ki_gestoppt");
+    PRUEF(!a.quittung(c5, 1) && !a.quittung(c5, 2) && !a.quittung(c5, 3));
+    PRUEF(a.routing.size() == 1 && a.kern->mixer().fx_routing() == 1);           // nothing reported, nothing changed
+    const int64_t c4 = a.fx_routing(0, "andreas");                                // the hand still may
+    a.zyklen(35 * N);
     PRUEF(a.quittung(c4, 1) && a.quittung(c4, 2) && a.quittung(c4, 3));
-    PRUEF(a.routing.size() == 1 && a.routing[0].status == 1);
-    a.fx_routing(1, "andreas");                                                   // derselbe Wert noch einmal: wieder gemeldet
+    PRUEF(a.routing.size() == 2 && a.routing[1].status == 0);
+    a.fx_routing(0, "andreas");                                                   // derselbe Wert noch einmal: wieder gemeldet
     a.zyklen(40 * N);
-    PRUEF(a.routing.size() == 2 && a.routing[1].status == 1);
+    PRUEF(a.routing.size() == 3 && a.routing[2].status == 0);
   }
   fs::remove_all(AB);
   PRUEF_ENDE();

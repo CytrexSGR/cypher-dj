@@ -128,6 +128,11 @@ test('rueckAlias is the inverse of loeseAlias for every row class', () => {
   assert.equal(rueckAlias(p, `ins/komp/${komp.slot}/schwelle`), 'erz/2/komp/schwelle');
   const bk = p.spuren.find((s) => s.strom === 5).inserts.find((i) => i.art === 'bk');
   assert.equal(rueckAlias(p, `ins/bk/${bk.slot}/k4`), 'erz/5/bk/4');
+  // three-digit pool slots (pool of 160): the same stage at slot 100 and at slot 160 maps back to its stream
+  for (const slot of [100, 160]) {
+    const q = structuredClone(p); q.spuren.find((x) => x.strom === 2).inserts.find((i) => i.art === 'komp').slot = slot;
+    assert.equal(rueckAlias(q, `ins/komp/${slot}/schwelle`), 'erz/2/komp/schwelle', `slot ${slot}`);
+  }
   // kill, pfl and trim have their own rows now and map back to themselves
   for (const z of ['kill/tief', 'pfl', 'trim']) assert.equal(rueckAlias(p, gib(p, `erz/2/${z}`).pfad), `erz/2/${z}`, z);
 });

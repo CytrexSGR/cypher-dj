@@ -49,9 +49,10 @@ bool Netz::arr_host_ereignis(const Ereignis& e) {
     an_alle(s);
     return true;
   }
-  if (e.art == Ereignis::INS_HOST_ZUSTAND) {   // /zustand/ins_host: (h, gesund, rundweg) for hosts 1 to 4
+  if (e.art == Ereignis::INS_HOST_ZUSTAND) {   // /zustand/ins_host: (h, gesund, rundweg) for hosts 1 to 8, then schluessel_da (strand 2 task 3.3 fix B1)
     osc::Schreiber s(v::zustand_ins_host);
     for (int h = 0; h < ARR_INS_HOST; ++h) s.i(h + 1).i(e.host_gesund[h]).i(e.host_rundweg[h]);
+    s.i(e.host_schluessel_da);
     an_alle(s);
     return true;
   }

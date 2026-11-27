@@ -59,3 +59,15 @@ export function schluesselLabel(wert, projekt) {
   const [quelle, nr, punkt] = wert.split(':');
   return label(quelle, Number(nr), punkt, projekt);
 }
+
+// strand 2 task 3.5: a host stage takes a key when its plugin has 4 or more audio inputs (inputs 3 and 4 are the key). `liste` is the GET /plugins answer's
+// `plugins`; the entry is matched by format, path and uid (the index id is a hash the page does not compute). null = unknown plugin.
+export const HOST_SCHLUESSEL_EIN = 4;
+export function hostAudioEin(liste, plugin) {
+  const e = (liste ?? []).find((x) => x.format === plugin?.format && x.pfad === plugin?.pfad && x.uid === plugin?.uid);
+  return typeof e?.audio_ein === 'number' ? e.audio_ein : null;
+}
+export const hostHatSchluessel = (liste, plugin) => (hostAudioEin(liste, plugin) ?? 0) >= HOST_SCHLUESSEL_EIN;
+
+// a host stage has no row key, so the track `pre` source (the compressor's row key `sc`) is not offered
+export const ohneSpurPre = (gruppen) => gruppen.map((g) => ({ ...g, eintraege: g.eintraege.filter((x) => !/^spur:\d+:pre$/.test(x.wert)) }));

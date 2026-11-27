@@ -1,0 +1,41 @@
+{
+ "schema": 1,
+ "name": "Flanger / slow resonant",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "fx-flanger-sync",
+ "werte": {
+  "knob1": 0.0,
+  "knob2": 0.1505,
+  "knob3": 1.0,
+  "knob4": 0.1875,
+  "knob5": 0.9375,
+  "knob6": 0.6
+ },
+ "beschreibung": {
+  "art": "modulation",
+  "unterart": "flanger",
+  "charakter": [
+   "metallic",
+   "aggressive",
+   "deep"
+  ],
+  "genre": [
+   "ambient",
+   "idm",
+   "dubstep"
+  ],
+  "einsatz": [
+   "breakdown",
+   "transition"
+  ],
+  "energie": 4,
+  "text": "Free 0.1 Hz, depth 4 ms over 0.5 ms manual, feedback +0.85, mix 60 %; an extreme slow ringing sweep; feedback is level-compensated."
+ },
+ "tags": [
+  "fx-flanger-sync"
+ ],
+ "notiz": "Set by the knob ranges of the graph, not yet heard (2026-11-26).",
+ "angelegt": "2026-11-26T00:00:00.000Z",
+ "geaendert": "2026-11-26T00:00:00.000Z"
+}

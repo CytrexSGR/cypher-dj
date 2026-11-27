@@ -3,8 +3,9 @@
 import {
   istRbGeraet, FADER_MAX, FADER_MIN, MAX_RETURNS, HALL_VORGABE, INSERT_ARTEN_AKTIV, insertWertParameter, type InsertPoolArt, MAX_INSERTS_PRO_STRANG,
   MAX_INS, alleInserts, insertVorgabe, sucheStrang, makroVon, BK_GRAPH_NAME, BK_PARAMETER, SPUR_FARBEN, SURGE_PARAMETER_MAX, istObjekt, neueId,
-  sucheSpur, type Gruppe, type Insert, type Projekt, type Return, type Send, type Spur, MAX_LATENZ_EXTRA,
+  sucheSpur, type Gruppe, type Insert, type Projekt, type Return, type Send, type Spur, MAX_LATENZ_EXTRA, pluginZielVon, type InsertTraeger,
 } from './model.ts';
+import { MAX_PLUGIN_REGLER, MAX_PLUGIN_INDEX } from './model.ts';   // strand 2 task 2.2
 import { bkSetzen } from './modular.ts';
 import { normaleStifte, stiftFehler, stiftEinzelFehler, STIFT_SAETZE, type Stift } from '../steckfeld.ts';
 import { wendeAn as richtungAnwenden } from './direction.ts';
@@ -12,11 +13,21 @@ import { pruefeStammbaum, type Stammbaum } from './sound_runde_contract.ts';   /
 import { presetZuParameter } from './rb_mapping.ts';
 import {
   ab, erlaube, zahlOk, zahl, flagge, text, hallArg, idArg, gruppeVon, spurVon, returnVon, strangKennung, rackBereinigen, hostSetzen, insertVon,
-  DUCK_DURCH_KICK_WERTE, schluesselArg, schluesselDef, FARBE_OK, presetArg, PRO_BEFEHL, type Args, type Kontext, type Handler,
+  hostSchluesselDef, DUCK_DURCH_KICK_WERTE, schluesselArg, schluesselDef, FARBE_OK, presetArg, PRO_BEFEHL, type Args, type Kontext, type Handler,
 } from './commands_helpers.ts';
 
 // refusal detail of an unknown werte key; `an` is a parameter of the table but a new stage is on and switches with insert_an
 const werteName = (k: string): string => (k === 'an' ? 'werte.an (a new stage is on; switch it with insert_an)' : `werte.${k}`);
+
+// strand 2 slice 1: the plugin lanes of a strip go with their host stage. A removed stage takes them, and so does a replaced one (a replacement gets
+// a new id: another plugin has other parameter indices). Called after every chain change of this file, next to rackBereinigen.
+function pluginLanenBereinigen(strang: InsertTraeger): void {
+  if (!strang.automation) return;
+  const hosts = new Set((strang.inserts ?? []).filter((x) => x.art === 'host').map((x) => x.id));
+  const rest = strang.automation.filter((l) => { const z = pluginZielVon(l.ziel); return !z || hosts.has(z.insert); });
+  if (rest.length === strang.automation.length) return;
+  if (rest.length > 0) strang.automation = rest; else delete strang.automation;
+}
 
 // preset ids of the RB-338 as the register prints them: <herkunft>:rb338/<slug> (presets/model.ts SLUG)
 const RB_PRESET_ID = /^(?:werk|nutzer):rb338\/[a-z0-9][a-z0-9-]{0,47}$/;
@@ -111,6 +122,11 @@ export const INSERT = {
   return_loeschen(p, a) {   // every send to it goes in the same step, never an orphan; the stellwerk slots go back to the defaults (reglerAenderungen)
     erlaube(a, 'return_id');
     const r = returnVon(p, idArg(a, 'return_id'));
+    for (const st of p.spuren) {   // a send lane into it goes with it, in the same undo step
+      if (!st.automation?.some((l) => l.ziel === `send.${r.id}`)) continue;
+      st.automation = st.automation.filter((l) => l.ziel !== `send.${r.id}`);
+      if (st.automation.length === 0) delete st.automation;
+    }
     for (const st of [...p.spuren, ...(p.gruppen ?? [])]) {
       if (!st.sends) continue;
       st.sends = st.sends.filter((x) => x.id !== r.id);
@@ -128,6 +144,9 @@ export const INSERT = {
     const strang: Spur | Gruppe = sucheSpur(p, id) ?? (p.gruppen ?? []).find((g) => g.id === id) ?? ab('spur_unbekannt', id);
     const r = returnVon(p, idArg(a, 'return_id'));
     const db = zahl(a, 'db', FADER_MIN, FADER_MAX)!;
+    if (db <= FADER_MIN && (strang.automation ?? []).some((l) => l.ziel === `send.${r.id}`)) {
+      ab('send_hat_lane', `${id} has an automation lane on its send into ${r.id}: remove the send lane first`);
+    }
     const rest = (strang.sends ?? []).filter((x) => x.id !== r.id);
     if (db > FADER_MIN) rest.push({ id: r.id, db });
     const nr = (x: Send): number => (p.returns ?? []).find((y) => y.id === x.id)?.nr ?? 0;
@@ -138,7 +157,11 @@ export const INSERT = {
   // 1.10 slice 4: the insert chain of a strip (track, group, return, 'master'). Stages carry a pooled slot (lowest free of the kind, project-wide).
   // Default `insert_setzen` INSERTS at `pos` (later stages move back; a chain of five refuses with kette_voll); `ersetzen: true` replaces the stage at `pos`.
   insert_setzen(p, a, ctx) {
-    if (a.art === 'host') return hostSetzen(p, a, ctx);
+    if (a.art === 'host') {
+      hostSetzen(p, a, ctx);
+      pluginLanenBereinigen(sucheStrang(p, idArg(a, 'strang_id'))!);
+      return;
+    }
     erlaube(a, 'strang_id', 'pos', 'art', 'werte', 'sc', 'key', 'ersetzen', 'preset', 'graph');
     const preset = presetArg(a.preset, 'preset');
     const art = a.art;
@@ -181,12 +204,19 @@ export const INSERT = {
     liste.splice(pos, 0, insert);
     strang.inserts = liste;
     rackBereinigen(strang);   // a replaced stage takes its mappings with it
+    pluginLanenBereinigen(strang);   // and a replaced host stage its plugin lanes
   },
 
-  insert_param_setzen(p, a) {
+  insert_param_setzen(p, a, ctx) {
     erlaube(a, 'insert_id', 'param', 'wert');
     const { strang, insert } = insertVon(p, idArg(a, 'insert_id'));
     const param = a.param;
+    if (param === 'key' && insert.art === 'host') {   // strand 2 task 3.4: a host stage whose plugin has a key pair; null removes the key
+      if (a.wert === undefined) ab('argument_ungueltig', 'wert: fehlt');
+      const key = hostSchluesselDef(p, strangKennung(p, strang), insert.plugin!, a.wert, ctx, insert);
+      if (key) insert.key = key; else delete insert.key;
+      return;
+    }
     if (param === 'sc') {
       if (insert.art !== 'komp') ab('argument_unbekannt', `param: sc (only the compressor has a key; ${insert.art})`);
       if (a.wert === undefined) ab('argument_ungueltig', 'wert: fehlt');
@@ -302,6 +332,24 @@ export const INSERT = {
     if (n === 0) delete insert.latenz_extra; else insert.latenz_extra = n;
   },
 
+  // strand 2 task 2.2: knob `knopf` (1..MAX_PLUGIN_REGLER, core row plug/<slot>/k<knopf>) of a host stage drives plugin parameter `index`; null frees
+  // the knob. One index has one knob at most (index_doppelt). Trailing free knobs are trimmed, an empty list removes the field. Project data only.
+  plugin_regler_setzen(p, a) {
+    erlaube(a, 'insert_id', 'knopf', 'index');
+    const { insert } = insertVon(p, idArg(a, 'insert_id'));
+    if (insert.art !== 'host') ab('argument_ungueltig', `insert_id: ${insert.id} is not a host stage (${insert.art})`);
+    const knopf = zahl(a, 'knopf', 1, MAX_PLUGIN_REGLER, { ganz: true })!;
+    if (a.index === undefined) ab('argument_ungueltig', 'index: integer 0..99999 or null expected');
+    const index = a.index === null ? null : zahl(a, 'index', 0, MAX_PLUGIN_INDEX, { ganz: true })!;
+    const liste = [...(insert.regler ?? [])];
+    const anderer = index === null ? -1 : liste.findIndex((v, i) => v === index && i !== knopf - 1);
+    if (anderer >= 0) ab('index_doppelt', `parameter ${String(index)} of ${insert.id} already has knob ${anderer + 1}: free that knob first`);
+    while (liste.length < knopf) liste.push(null);
+    liste[knopf - 1] = index;
+    while (liste.length && liste[liste.length - 1] === null) liste.pop();
+    if (liste.length) insert.regler = liste; else delete insert.regler;
+  },
+
   insert_an(p, a) {
     erlaube(a, 'insert_id', 'an');
     const { insert } = insertVon(p, idArg(a, 'insert_id'));
@@ -328,6 +376,7 @@ export const INSERT = {
     const rest = (strang.inserts ?? []).filter((x) => x !== insert);
     if (rest.length) strang.inserts = rest; else delete strang.inserts;   // the slot goes back to the pool; the rows reset through reglerAenderungen
     rackBereinigen(strang);
+    pluginLanenBereinigen(strang);
   },
 
   insert_ordnung(p, a) {

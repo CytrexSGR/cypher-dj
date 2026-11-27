@@ -700,7 +700,7 @@ void Kern::einsortieren_rec(const Befehl& c, double beat0) {
         RecMidi* neu_m = static_cast<RecMidi*>(const_cast<void*>(c.zeiger));
         if (ist_cypher(c.quelle) && sw_->ki_gestoppt()) { rec_midi_alt_melden(neu_m); return ab("ki_gestoppt"); }
         if (c.nr < 1 || c.nr > ARR_SPUREN || !neu_m) { rec_midi_alt_melden(neu_m); return ab(c.nr < 1 || c.nr > ARR_SPUREN ? "spur_bereich" : "datei_fehlt"); }
-        const bool schon = (aufnahme_.midi_maske() >> (c.nr - 1)) & 1u;
+        const bool schon = aufnahme_.midi_maske().test(c.nr - 1);
         if (!schon && !aufnahme_.aendern_erlaubt()) { rec_midi_alt_melden(neu_m); return ab("aufnahme_laeuft"); }
         if (!schon) {   // a track has ONE input: an audio arm of this track goes (handed back), the MIDI bit is set
           rec_alt_melden(aufnahme_.setze(c.nr, nullptr));
@@ -864,13 +864,13 @@ void Kern::ins_mess_block(int off, int m) {
   }
 }
 
-// /zustand/ins_host: health and last round trip of the four hosts, on change and at 2 Hz, only while the core has the host ports (a core without them has nothing to report).
+// /zustand/ins_host: health and last round trip of the eight hosts, then whether the key ports are there (strand 2 task 3.3 fix B1), on change and at 2 Hz, only while the core has the host ports (a core without them has nothing to report).
 void Kern::ins_host_zustand(int64_t n0, int n) {
   if (!host_ports_da()) return;
-  int32_t v[8];
+  int32_t v[2 * ARR_INS_HOST];
   for (int h = 1; h <= ARR_INS_HOST; ++h) {
     v[h - 1] = arr_->host_stufe().gesund(h) ? 1 : 0;
-    v[4 + h - 1] = host_mess_.rundweg(h);
+    v[ARR_INS_HOST + h - 1] = host_mess_.rundweg(h);
   }
   const bool geaendert = std::memcmp(v, host_gemeldet_, sizeof v) != 0;
   const bool takt = (n0 + 24000 - 1) / 24000 * 24000 < n0 + n;
@@ -881,8 +881,9 @@ void Kern::ins_host_zustand(int64_t n0, int n) {
   e.sample = n0;
   for (int h = 0; h < ARR_INS_HOST; ++h) {
     e.host_gesund[h] = v[h];
-    e.host_rundweg[h] = v[4 + h];
+    e.host_rundweg[h] = v[ARR_INS_HOST + h];
   }
+  e.host_schluessel_da = schluessel_ports_da() ? 1 : 0;   // set once before the audio starts, so it never changes between two reports: it rides along
   melde(e);
 }
 

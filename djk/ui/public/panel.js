@@ -807,7 +807,12 @@ export function baueFrontplatte(host, opt) {
     },
     matrix(c, zelle) {   // the patch field of a Kraken-like graph: 16 x 16 pins in two sets A/B (opt.steckfeld = labels and graph defaults; styles .fp-m-* in panel.css)
       const sf = opt.steckfeld;
-      if (!(Array.isArray(sf?.zeilen) && sf.zeilen.length === STIFT_N && Array.isArray(sf?.spalten) && sf.spalten.length === STIFT_N)) { zelle.append(el('span', 'fp-text', 'This device has no patch field')); return; }
+      if (!(Array.isArray(sf?.zeilen) && sf.zeilen.length === STIFT_N && Array.isArray(sf?.spalten) && sf.spalten.length === STIFT_N)) {
+        // a host that cannot set pins (a Strudel stream, the INSTRUMENTS tab) has no labels for it: say where the patch field lives
+        zelle.append(el('span', 'fp-text', typeof adapter.stiftSetzen === 'function' ? 'This device has no patch field'
+          : 'Patch field and cables: open this device on an instrument track in PRODUCTION'));
+        return;
+      }
       // the adapter of a track device holds the pins and sends them (stifte, stiftSetzen, stiftEnde, stifteSetzen); any other host shows the graph defaults, greyed
       const kannSetzen = typeof adapter.stiftSetzen === 'function', kannSaetze = typeof adapter.stifteSetzen === 'function';
       const morphZelle = alle.find((x) => x.id === c.of?.morph), morphNr = morphZelle ? parameterVon(morphZelle)[0] : undefined;

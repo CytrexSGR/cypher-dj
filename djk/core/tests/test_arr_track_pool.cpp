@@ -39,6 +39,12 @@
 //  32 q_bitgleich_ueber_neu:        switch-off, serial back-off and retry in one run with ten RB tracks: every bus and the master equal the serial arrangement in every block
 //  31 g/h: a healthy run of 65536 blocks forgets the switch-offs (the next wait is 4096 again); a shorter one does not
 //  20 q_live:                       the load threshold counts units the sink computes: muted tracks and solo of one track still count live and fork, an empty unit does not
+//  34 q_ketten_bitgleich:           strand 12 B2: 24 rb tracks with eq + komp chains (saett on four, the pool size), trim on two, 3 workers, 3000 blocks: every bus and the master equal the
+//                                   reference with every chain in mischen() (the old order); every chain ran in its track unit, every lane 1..3 computed units; a swap mid-run (stage added,
+//                                   stage removed: a tail, saett moved) and its way back stay equal
+//  35 q_ketten_ausnahmen:           a key consumer (row sc), its key source and a freeze-tapped track keep their chain in mischen() (mask bit clear), every other chain runs in its unit;
+//                                   output equal to the old order before, during and after the freeze
+// Mutations: KETTE_EINHEIT_MIT_SCHLUESSEL (a key consumer runs its chain in its unit, before the key copy) must turn case 35 red.
 // Mutations: SPUR_GRENZE_AB_LAUF (limit from the entry) must turn case 21 red; SPUR_WARTE_AB_LAUF (join wait from the entry) must turn case 22 red.
 // Mutations: SPUR_WARTE_OHNE_KOSTEN (the join-wait rule ignores the cost estimate) must turn case 24 red.
 // Mutations: SPUR_KOSTEN_WANDZEIT (the unit is measured on the wall clock) must turn case 28 red.
@@ -161,8 +167,11 @@ cdj::ArrSnapshot* snap(int64_t nr, int n_rb, int n_bk, CypherBk* const* hs, int 
 
 struct Welt {
   Treiber t;
-  cdj::ArrRbSenke rb{t.arr};
-  cdj::ArrBkSenke bk{t.arr};
+  // on the heap: at 128 tracks (160 sink slots) the Baukasten sink is about 3.5 MB and the RB-338 sink about 1 MB, and the cases keep two worlds in one frame
+  std::unique_ptr<cdj::ArrRbSenke> rb_heap{std::make_unique<cdj::ArrRbSenke>(t.arr)};
+  std::unique_ptr<cdj::ArrBkSenke> bk_heap{std::make_unique<cdj::ArrBkSenke>(t.arr)};
+  cdj::ArrRbSenke& rb{*rb_heap};
+  cdj::ArrBkSenke& bk{*bk_heap};
   cdj::ArrInternSenke intern{t.arr, &rb, &bk, nullptr};
   PruefSenke host;
   float out[6][cdj::ARR_BLOCK] = {};
@@ -1988,11 +1997,177 @@ void fall33() {
   std::printf("case 33 q_seriell_teuer: ok\n");
 }
 
+// ---- strand 12 B2: track chains in the track unit
+// The rb tracks of snap() with chains: eq slot i and komp slot i on every track, saett on tracks 0..3 (ARR_INS_SAETT is 4). Variant 1: track 1 loses its komp (a tail), track 0 its
+// saett, track 6 takes that saett slot (moved in one swap: cut and cleared) and track 7 gains a utility stage.
+cdj::ArrSnapshot* snap_ketten(int64_t nr, int n_rb, int variante) {
+  cdj::ArrSnapshot* s = snap(nr, n_rb, 0, nullptr, 0, 0);
+  for (int i = 0; i < n_rb; ++i) {
+    cdj::ArrKette& k = s->kette[i];
+    k.n = 0;
+    auto st = [&](cdj::ArrInsArt art, int slot) {
+      cdj::ArrStufe x;
+      x.art = art;
+      x.slot = static_cast<uint8_t>(slot);
+      k.st[k.n++] = x;
+    };
+    st(cdj::ArrInsArt::eq, i);
+    if (!(variante == 1 && i == 1)) st(cdj::ArrInsArt::komp, i);
+    if (i < cdj::ARR_INS_SAETT && !(variante == 1 && i == 0)) st(cdj::ArrInsArt::saett, i);
+    if (variante == 1 && i == 6) st(cdj::ArrInsArt::saett, 0);
+    if (variante == 1 && i == 7) st(cdj::ArrInsArt::utility, 0);
+  }
+  return s;
+}
+
+void ketten_regler(Welt& w, int n_rb) {
+  auto setze = [&](const char* pfad, float v) {
+    const int r = w.t.tab.suche(pfad);
+    PRUEF(r >= 0);
+    w.t.arr.setze_sofort(r, v);
+  };
+  char pfad[64];
+  for (int i = 0; i < n_rb; ++i) {
+    std::snprintf(pfad, sizeof pfad, "ins/komp/%d/schwelle", i + 1);
+    setze(pfad, -36.0f);
+    std::snprintf(pfad, sizeof pfad, "ins/eq/%d/b1/an", i + 1);
+    setze(pfad, 1.0f);
+    std::snprintf(pfad, sizeof pfad, "ins/eq/%d/b1/gain", i + 1);
+    setze(pfad, 6.0f);
+  }
+  for (int i = 0; i < cdj::ARR_INS_SAETT; ++i) {
+    std::snprintf(pfad, sizeof pfad, "ins/saett/%d/drive", i + 1);
+    setze(pfad, 12.0f);
+  }
+  setze("spur/3/trim", -6.0f);   // the trim runs in the unit in front of the chain
+  setze("spur/9/trim", 4.5f);
+}
+
+// 34: chains in the track units are bit-equal with the old order
+void fall34() {
+  Pool pool(3);
+  Welt a, ref;
+  a.t.arr.setze_hall_pool(&pool.p);
+  a.t.arr.setze_spur_pool(1);
+  a.t.arr.setze_spur_test(kein_tor());
+  cdj::SpurHaken hk;
+  hk.warte_worker = 3;
+  a.t.arr.setze_spur_haken(&hk);
+  ref.t.arr.setze_kette_einheit_aus(true);   // the reference: no pool, every chain in mischen()
+  constexpr int N = 24;
+  a.laden(snap_ketten(1, N, 0), 0);
+  ref.laden(snap_ketten(1, N, 0), 0);
+  ketten_regler(a, N);
+  ketten_regler(ref, N);
+  int b = 0, ungleich = 0, maske_fehlt = 0, ref_maske = 0;
+  double e = 0.0;
+  auto lauf = [&](int n) {
+    for (int k = 0; k < n; ++k, ++b) {
+      const int64_t s0 = static_cast<int64_t>(b) * M;
+      for (int i = 0; i < N; ++i) {
+        speise(a.intern, i, b, s0);
+        speise(ref.intern, i, b, s0);
+      }
+      a.block(s0);
+      ref.block(s0);
+      ungleich += vergleiche(a, ref);
+      for (int i = 0; i < N; ++i) {
+        maske_fehlt += a.t.arr.kette_einheit().test(i) ? 0 : 1;
+        ref_maske += ref.t.arr.kette_einheit().test(i) ? 1 : 0;
+      }
+      e += energie(a.out[0], M);
+    }
+  };
+  lauf(1000);
+  a.laden(snap_ketten(2, N, 1), static_cast<int64_t>(b) * M);   // stage added, removed (tail), moved
+  ref.laden(snap_ketten(2, N, 1), static_cast<int64_t>(b) * M);
+  lauf(1000);
+  a.laden(snap_ketten(3, N, 0), static_cast<int64_t>(b) * M);   // and back
+  ref.laden(snap_ketten(3, N, 0), static_cast<int64_t>(b) * M);
+  lauf(1000);
+  const cdj::ArrSpurLauf& sl = a.t.arr.spur_lauf();
+  PRUEF(ungleich == 0);
+  PRUEF(e > 0.0);
+  PRUEF(maske_fehlt == 0);   // every track chain ran in its unit in every block
+  PRUEF(ref_maske == 0);     // the reference kept every chain in mischen()
+  PRUEF(sl.z.blocks_parallel == 3000);
+  for (int l = 1; l < 4; ++l) PRUEF(sl.einheiten_bahn(l) >= 1 && a.t.arr.spur_arbeit(l).einheiten >= 1);
+  PRUEF(a.t.arr.inserts().nan_zaehler() == 0);
+  std::printf("case 34 q_ketten_bitgleich: ungleich=%d maske_fehlt=%d parallel=%llu lanes=%llu,%llu,%llu,%llu\n", ungleich, maske_fehlt, (unsigned long long)sl.z.blocks_parallel,
+              (unsigned long long)sl.einheiten_bahn(0), (unsigned long long)sl.einheiten_bahn(1), (unsigned long long)sl.einheiten_bahn(2), (unsigned long long)sl.einheiten_bahn(3));
+}
+
+// 35: key consumer, key source and a freeze-tapped track keep their chain in mischen()
+void fall35() {
+  Pool pool(3);
+  Welt a, ref;
+  a.t.arr.setze_hall_pool(&pool.p);
+  a.t.arr.setze_spur_pool(1);
+  a.t.arr.setze_spur_test(kein_tor());
+  cdj::SpurHaken hk;
+  hk.warte_worker = 3;
+  a.t.arr.setze_spur_haken(&hk);
+  ref.t.arr.setze_kette_einheit_aus(true);
+  constexpr int N = 24;
+  a.laden(snap_ketten(1, N, 0), 0);
+  ref.laden(snap_ketten(1, N, 0), 0);
+  for (Welt* w : {&a, &ref}) {
+    ketten_regler(*w, N);
+    w->t.arr.setze_sofort(w->t.tab.suche("ins/komp/1/sc"), 6.0f);   // the stage of track 1 (index 0) listens to the input of track 6 (index 5)
+  }
+  const int VERBRAUCHER = 0, QUELLE = 5, EINGEFROREN = 10;
+  int b = 0, ungleich = 0, falsch = 0;
+  auto lauf = [&](int n, bool frost) {
+    for (int k = 0; k < n; ++k, ++b) {
+      const int64_t s0 = static_cast<int64_t>(b) * M;
+      for (int i = 0; i < N; ++i) {
+        speise(a.intern, i, b, s0);
+        speise(ref.intern, i, b, s0);
+      }
+      const bool lief = a.t.arr.freeze_laeuft();
+      a.block(s0);
+      ref.block(s0);
+      ungleich += vergleiche(a, ref);
+      const cdj::ArrStreifenMaske& mk = a.t.arr.kette_einheit();
+      falsch += mk.test(VERBRAUCHER) || mk.test(QUELLE) ? 1 : 0;
+      if (frost && lief) falsch += mk.test(EINGEFROREN) ? 1 : 0;
+      if (!frost) falsch += mk.test(EINGEFROREN) && mk.test(1) && mk.test(23) ? 0 : 1;   // without a freeze the other chains run in their units
+    }
+  };
+  lauf(300, false);
+  PRUEF(ungleich == 0 && falsch == 0);
+  const int ungleich_vor = ungleich;
+  // a freeze of track 11 (index 10): its tap reads the bus before the trim and the chain
+  auto auftrag = [](int spur) {
+    cdj::ArrFreeze f;
+    f.spur = spur;
+    f.kennung = 7;
+    f.von_beat = 0.0;
+    f.bis_beat = 2.0;
+    f.kap = static_cast<int64_t>(8.0 * 48000.0);
+    f.daten.assign(static_cast<size_t>(f.kap) * 2, 0.0f);
+    return f;
+  };
+  cdj::ArrFreeze fa = auftrag(EINGEFROREN + 1), fr = auftrag(EINGEFROREN + 1);
+  const char* grund = "";
+  PRUEF(a.t.arr.freeze(&fa, 0, false, static_cast<int64_t>(b) * M, 0, M, a.t.k, grund));
+  PRUEF(ref.t.arr.freeze(&fr, 0, false, static_cast<int64_t>(b) * M, 0, M, ref.t.k, grund));
+  int frost_bloecke = 0;
+  for (int k = 0; k < 2000 && (a.t.arr.freeze_laeuft() || ref.t.arr.freeze_laeuft()); ++k, ++frost_bloecke) lauf(1, true);
+  PRUEF(!a.t.arr.freeze_laeuft() && !ref.t.arr.freeze_laeuft() && frost_bloecke > 100);
+  PRUEF(a.t.arr.hole_freeze_fertig() == &fa && ref.t.arr.hole_freeze_fertig() == &fr);
+  PRUEF(fa.daten == fr.daten);   // the tap took the same signal
+  lauf(300, false);   // after the freeze the track's chain goes back into its unit
+  PRUEF(ungleich == ungleich_vor && ungleich == 0);
+  PRUEF(falsch == 0);
+  std::printf("case 35 q_ketten_ausnahmen: ungleich=%d falsch=%d frost_bloecke=%d\n", ungleich, falsch, frost_bloecke);
+}
+
 int main(int argc, char** argv) {
-  void (*falle[])() = {fall1, fall2, fall3, fall4, fall5, fall6, fall7, fall8, fall9, fall10, fall11, fall12, fall13, fall14, fall15, fall16, fall17, fall18, fall19, fall20, fall21, fall22, fall23, fall24, fall25, fall26, fall27, fall28, fall29, fall30, fall31, fall32, fall33};
-  if (argc > 1) {   // a single case for debugging: test_arr_spur_pool <1..33>
+  void (*falle[])() = {fall1, fall2, fall3, fall4, fall5, fall6, fall7, fall8, fall9, fall10, fall11, fall12, fall13, fall14, fall15, fall16, fall17, fall18, fall19, fall20, fall21, fall22, fall23, fall24, fall25, fall26, fall27, fall28, fall29, fall30, fall31, fall32, fall33, fall34, fall35};
+  if (argc > 1) {   // a single case for debugging: test_arr_spur_pool <1..35>
     const int n = std::atoi(argv[1]);
-    if (n >= 1 && n <= 33) falle[n - 1]();
+    if (n >= 1 && n <= 35) falle[n - 1]();
   } else {
     for (auto f : falle) {
       f();

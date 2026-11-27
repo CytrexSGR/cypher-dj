@@ -1,0 +1,41 @@
+{
+ "schema": 1,
+ "name": "Space Big Hall",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "fx-space",
+ "werte": {
+  "knob1": 0.5333,
+  "knob2": 0.5208,
+  "knob3": 0.4491,
+  "knob4": 0.4732,
+  "knob5": 0.7,
+  "knob6": 0
+ },
+ "beschreibung": {
+  "art": "reverb",
+  "unterart": "hall",
+  "charakter": [
+   "wet",
+   "wide",
+   "deep"
+  ],
+  "genre": [
+   "ambient",
+   "progressive",
+   "trance"
+  ],
+  "einsatz": [
+   "breakdown",
+   "build"
+  ],
+  "energie": 3,
+  "text": "30 % mix, 20 ms pre-delay, low cut 100 Hz, high cut 8 kHz, width 140 %: a wide deep tail."
+ },
+ "tags": [
+  "fx-space"
+ ],
+ "notiz": "Knobs 1..6 set by the knob ranges of the graph, not yet heard (2026-11-26). The room is the graph.",
+ "angelegt": "2026-11-26T00:00:00.000Z",
+ "geaendert": "2026-11-26T00:00:00.000Z"
+}

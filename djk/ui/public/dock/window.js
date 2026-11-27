@@ -6,7 +6,7 @@
 //     window of the selected track, and without such a window it is hidden in the workbench root (never under the title of another track);
 //   - the Hall of a return: the Hall face (baueHallFace) with its ON/OFF;
 //   - a Baukasten stage of a track, a return or the master: its panel (baueFrontplatte, breit: true) with ON/OFF, move earlier/later and remove;
-//   - a utility or a plugin stage where the host has stufenPopover (PRODUCTION): its parameter popover at the chip, no window; elsewhere a short text.
+//   - a utility, gate, multiband or plugin stage where the host has stufenPopover (PRODUCTION): its parameter popover at the chip, no window; elsewhere a short text.
 //   - any other stage: a short text. The native inserts (comp, saturation, limiter, EQ) keep their floating faces: oeffneStufe opens those instead.
 // Entry points: montiereFenster(host) returns { fenster: {oeffne(def), schliesse(id), schliesseAlle(), offen()}, oeffneGeraet(spurId), oeffneStufe(strangId, teil) }.
 // It talks to its view only through the host object (see dock.js); the cut/kit host of STUDIO hangs on host.spurFensterHaken.
@@ -22,6 +22,8 @@ import { returnQuelleHall } from '../production/return_face.js';
 import { returnListe } from '../production/routing.js';
 import { baueHallFace } from '../face/reverb.js';
 import { baueFrontplatte } from '../panel.js';
+import { istSpace } from '../panel_kopf.js';
+import { baueSpaceKopf } from './space_kopf.js';
 import { baueStufenPopover } from '../production/insert_popover.js';
 import { geraetText } from '../seq_field.js';
 import { effektKachel } from './stages.js';
@@ -29,6 +31,9 @@ import { ersatzPanel } from './panel_source.js';
 import { hostMitVorgaben } from './dock.js';
 import { fokus } from '../controller_fokus.js';
 import { kannGeraetFenster, oeffneGeraetFenster, GERAET_FENSTER_TEXT } from '../device_open.js';
+
+// the stage kinds whose parameters are the rows of the popover (no device face, no panel window)
+const PARAMETER_ARTEN = ['utility', 'gate', 'mb', 'host'];
 
 export const FENSTER_TEXT = {
   zu: 'Close this window',
@@ -243,14 +248,14 @@ export function montiereFenster(hostRoh) {
         f.frisch.push(frisch); frisch();
         const platz = el('div', 'w-fenster-geraet', 'fenster-geraet');
         koerper.append(platz);
-        if (voll && (insert.art === 'utility' || insert.art === 'host')) return parameterFenster(platz, leiste, strang, insert);   // the window page of a util or plugin stage
+        if (voll && PARAMETER_ARTEN.includes(insert.art)) return parameterFenster(platz, leiste, strang, insert);   // the window page of a util or plugin stage
         if (insert.art !== 'bk') { platz.append(el('p', '', null, FENSTER_TEXT.keinFenster)); return null; }
         // PRODUCTION (host.stufenPopover is its hook): a title-bar switch swaps the front panel for the K rows; a graph without a panel file shows the rows and no switch.
         // STUDIO has no such hook and keeps the plain panel window.
         const mitListe = typeof host.stufenPopover === 'function';
-        let panel = null, liste = null, weg = false, zeigtListe = false, schalter = null, info = null;
+        let panel = null, liste = null, weg = false, zeigtListe = false, schalter = null, info = null, kopfWeg = null;
         const strangKopf = { id: strang.id, name: strang.name };
-        const raeume = () => { panel?.zerstoere?.(); panel = null; liste?.zerstoere(); liste = null; platz.textContent = ''; };
+        const raeume = () => { kopfWeg?.(); kopfWeg = null; panel?.zerstoere?.(); panel = null; liste?.zerstoere(); liste = null; platz.textContent = ''; };
         const baueListe = () => {
           raeume(); zeigtListe = true;
           const ins = aktuell();
@@ -258,7 +263,9 @@ export function montiereFenster(hostRoh) {
         };
         const baueTafel = (i) => {
           raeume(); zeigtListe = false;
-          panel = baueFrontplatte(platz, { panel: i.panel, regler: i.regler, breit: true, adapter: baueInsertAdapter(host.adapterCtx, strangKopf, insert.id) });
+          // Cypher Space: the room selector and LOAD IR swap this stage to another graph; the stage then has a new id, so its window opens again on the new one
+          const raumKopf = istSpace(insert.graph) ? (kz) => { kopfWeg = baueSpaceKopf(host, kz, { strangId: strang.id, insertId: insert.id, panel: i.panel, beiGetauscht: (neu) => { oeffneStufe(strang.id, neu.id); } }).zerstoere; } : undefined;
+          panel = baueFrontplatte(platz, { panel: i.panel, regler: i.regler, breit: true, adapter: baueInsertAdapter(host.adapterCtx, strangKopf, insert.id), ...(raumKopf ? { kopf: raumKopf } : {}) });
         };
         const schalterText = () => {
           schalter.textContent = zeigtListe ? 'Panel' : 'List';
@@ -279,7 +286,7 @@ export function montiereFenster(hostRoh) {
           baueTafel(i);
           if (schalter) { schalter.hidden = false; schalterText(); }
         });
-        return { aktualisiere: () => { panel?.aktualisiere?.(); liste?.aktualisiere(host.projekt()); }, zerstoere: () => { weg = true; panel?.zerstoere?.(); liste?.zerstoere(); } };
+        return { aktualisiere: () => { panel?.aktualisiere?.(); liste?.aktualisiere(host.projekt()); }, zerstoere: () => { weg = true; kopfWeg?.(); panel?.zerstoere?.(); liste?.zerstoere(); } };
       },
     });
   }
@@ -294,7 +301,7 @@ export function montiereFenster(hostRoh) {
     const insert = strang.inserts.find((i) => i.id === teil);
     if (!insert) return null;
     if (FACE_ARTEN.includes(insert.art)) return host.insertFaceOeffnen?.(strang, insert) ?? null;
-    if ((insert.art === 'utility' || insert.art === 'host') && typeof host.stufenPopover === 'function') return host.stufenPopover(strang, insert, anker) ?? null;   // PRODUCTION: the parameter popover at the chip
+    if (PARAMETER_ARTEN.includes(insert.art) && typeof host.stufenPopover === 'function') return host.stufenPopover(strang, insert, anker) ?? null;   // PRODUCTION: the parameter popover at the chip
     return stufenFenster(strang, insert);
   };
   // The window page of a stage (target_window.js): the same content as the floating window or popover, filling the page. The native faces are drawn there by the face builder.

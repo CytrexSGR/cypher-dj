@@ -70,7 +70,7 @@ if (a['spur-regler'] !== undefined) {
       if (typeof v !== 'number' || !Number.isFinite(v)) ende(2, `Spur-Regler: ${p} ist keine Zahl`);
       continue;
     }
-    const m = /^spur\/([1-9]|[12][0-9]|3[0-2])\/(fader|pan|mute|solo)$/.exec(p) ?? /^grp\/([1-9]|1[0-6])\/(fader|pan|mute|solo)$/.exec(p) ?? (p === 'pm/fader' ? [p, '0', 'fader'] : null);
+    const m = /^spur\/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])\/(fader|pan|mute|solo)$/.exec(p) ?? /^grp\/([1-9]|1[0-6])\/(fader|pan|mute|solo)$/.exec(p) ?? (p === 'pm/fader' ? [p, '0', 'fader'] : null);
     if (!m) ende(2, `Spur-Regler: ${p} ist kein Mixer-Regler (spur/<1..32>, grp/<1..8>/{fader,pan,mute,solo}, pm/fader)`);
     if (typeof v !== 'number') ende(2, `Spur-Regler: ${p} ist keine Zahl`);
     const [lo, hi, ganz] = GRENZE[m[2]];

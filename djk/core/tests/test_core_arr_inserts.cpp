@@ -45,7 +45,8 @@ int main() {
   PRUEF(w > 3.0f);      // a constant 0.5 against -30 dB, ratio 8
   lauf(false, n, w);
   PRUEF(n == 0);        // negative control: the stage is off, nothing is published
-  for (int slot : {1, 9, 10, 11, 12}) {   // the path is written by hand in the callback: one and two digits
+  // the path is written by hand in the callback: one, two and (strand 1 slice 3b, pool 160) three digits; 100 is the first three-digit slot, 160 the last
+  for (int slot : {1, 9, 10, 11, 12, 99, 100, 160}) {
     lauf(true, n, w, slot);
     PRUEF(n >= 5 && w > 3.0f);
   }

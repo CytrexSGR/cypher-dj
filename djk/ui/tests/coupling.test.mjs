@@ -137,7 +137,7 @@ test('deny list: every golden POST route is classified, every entry names someth
     if (v.pfad === '/kopplung') continue;   // not a golden route, tested below
     assert.ok(pfade.some((p) => p === v.pfad || p.startsWith(`${v.pfad}/`)) || GOLDEN.some((e) => e.p.split('?')[0].startsWith(v.pfad)) || ['/proj', '/analyse', '/plugins', '/presets', '/kollektionen', '/ansage', '/import', '/dateisystem', '/bibliothek/bauen', '/bibliothek/quellen', '/bibliothek/midi', '/plugins/pfade', '/kits/export', '/kits/import', '/kits/umbenennen', '/kits/kopie', '/kits/loeschen', '/kits/aus_ordner', '/kits/vorhoeren', '/proj/export_zip', '/proj/import_zip', '/mitschnitt'].includes(v.pfad), `deny entry ${v.pfad} matches a known route`);
   }
-  for (const e of GOLDEN.filter((x) => x.m === 'GET' && !x.p.startsWith('/kopplung') && !x.p.startsWith('/quellen'))) assert.equal(tabletVerboten('GET', e.p.split('?')[0]), false, `GET ${e.p}`);
+  for (const e of GOLDEN.filter((x) => x.m === 'GET' && !x.p.startsWith('/kopplung') && !x.p.startsWith('/quellen') && !x.p.startsWith('/hand'))) assert.equal(tabletVerboten('GET', e.p.split('?')[0]), false, `GET ${e.p}`);
   for (const m of ['GET', 'POST']) for (const p of ['/kopplung', '/kopplung/loeschen']) assert.equal(tabletVerboten(m, p), true);
   for (const p of ['/deck/start', '/deck/stopp', '/spur/stopp', '/abbruch', '/graph', '/geraete/eingang', '/geraete/midi', '/geraete/latenz', '/lernen', '/lernen/host', '/strudel', '/proj/stems', '/plugins/scan']) assert.equal(tabletVerboten('POST', p), true, p);
   for (const m of ['GET', 'POST']) assert.equal(tabletVerboten(m, '/bibliothek/midi'), true, `${m} /bibliothek/midi`);
@@ -308,7 +308,7 @@ test('expired link: 401; a link works once; revoking a device cuts its cookie an
 test('through the tablet a request counts as Andreas, whatever x-djk-quelle says; the tablet origin passes the POST guard, a foreign one does not', async (t) => {
   const { log } = await start(t, {});
   const { kopf } = await koppeln();
-  const body = JSON.stringify({ pfad: 'bus/2/fader', nach: -6, ab: 'jetzt' });
+  const body = JSON.stringify({ pfad: 'xfader', nach: 0.5, ab: 'jetzt' });
   const quellen = () => log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/teil').map((z) => z.felder.quelle);
   // the request is cut after 400 ms: without a kern the answer would wait for the receipt; what the server sent to the kern is in the log at once
   await lokal('POST', '/regler', { kopf: { ...JSONK, 'x-djk-quelle': 'cypher' }, body, zeit: 400 });

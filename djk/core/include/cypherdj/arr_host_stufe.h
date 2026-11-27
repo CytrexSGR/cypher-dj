@@ -13,6 +13,8 @@
 //    The two states are one weight that ramps over HOST_BLENDE samples (integer counter, reaches its ends exactly) in both directions: the fade between return and delayed dry is the only health fade
 //    (D7: the flag alone switches, no exact-zero rule here). A frame is therefore always a convex combination of the return and the delayed dry signal: two switches at once never open a gap.
 // The stage starts on the dry path (weight 0) and fades the return in. A host that has no return pointer (port missing) stays on the dry path.
+// Sidechain key (strand 2 task 3.3): a host stage whose chain entry carries a structural key gets the aligned key from ArrInserts and copies it into its key port arr_inskey_<h>_L/R (the plugin's
+// third and fourth input). The key leaves in the same cycle as the send and rides the same round trip: no extra latency, no PDC change.
 //
 // Threads. Everything except the setters of setze_zeiger() (callback thread, before the block) and setze_gesund() (any thread, an atomic) runs in the callback. A host belongs to exactly one strip of
 // a playback, so two lanes never call block() for the same h; the state of one host is its own. Counters are relaxed atomics so that a reader thread may sum them.
@@ -37,13 +39,16 @@ class ArrHostStufe {
 
   // The port buffers of this sub-block, already offset to its first sample (the core hands them from Kern::audio before every arr_->block()); nullptr = port missing. The pointers stay valid for
   // the calls of this block only. aus_*: the writable send buffers, rueck_*: the return. Callback thread only.
-  void setze_zeiger(int h, float* aus_l, float* aus_r, const float* rueck_l, const float* rueck_r) noexcept {
+  // key_*: the writable key port arr_inskey_<h>_L/R (strand 2 task 3.3; zeroed by main.cpp like the send), nullptr = port missing.
+  void setze_zeiger(int h, float* aus_l, float* aus_r, const float* rueck_l, const float* rueck_r, float* key_l = nullptr, float* key_r = nullptr) noexcept {
     if (h < 1 || h > ARR_INS_HOST) return;
     Wirt& w = h_[h - 1];
     w.aus_l = aus_l;
     w.aus_r = aus_r;
     w.rueck_l = rueck_l;
     w.rueck_r = rueck_r;
+    w.key_l = key_l;
+    w.key_r = key_r;
   }
   // The health of host h (plan 1.11 T5, D7): ONE atomic per host with two sources, bit 0 = the core's own edge check (setze_kante, main thread, every 500 ms), bit 1 = the server's flag
   // (setze_server, /k/arr/ins_host). gesund = both set. Default 0: a host nobody has declared healthy plays the dry path. Any thread, lock free. A setter that clears a bit also leaves a
@@ -68,8 +73,10 @@ class ArrHostStufe {
   // out = x + c (y - x), c = 0..HOST_BLENDE. A stage that enters (trocken_leere(h, latenz): its dry ring is empty and its return carries nothing yet) holds c = 0 for `latenz` samples, until its own output has
   // history, then c rises to the end over HOST_BLENDE samples; a stage that leaves (drin = false) lets c fall back to 0 over HOST_BLENDE samples. Live material is never cut: the strip may repeat or skip
   // `latenz` samples in time at the edit, it never goes silent. A fresh object has c at the end (steady), so a stage that was never "entered" (a direct call) has no blend.
+  // sch_*: the aligned sidechain key of this block (strand 2 task 3.3, ArrInserts: the structural key of the host slot after its delay ring), nullptr = no key this block. When both the key and the
+  // key port are there the m key samples are copied into the port unchanged; else the port is not written (it keeps the zeros of main.cpp). The key never touches the strip signal.
   void block(int h, const float* ein_l, const float* ein_r, float* aus_l, float* aus_r, int m, int latenz, bool an, bool gesund,
-             float* trocken_l = nullptr, float* trocken_r = nullptr, bool drin = true) noexcept;
+             float* trocken_l = nullptr, float* trocken_r = nullptr, bool drin = true, const float* sch_l = nullptr, const float* sch_r = nullptr) noexcept;
 
   // The two halves of "cleared", as the native stages have them (ArrInserts::leere / trocken_leere): leere() takes the stage state, weight 0 (the return fades in again); trocken_leere() empties the
   // dry ring. A stage that is switched off is leere()d but keeps its ring, so that the strip does not lose `latenz` samples on the way to the bypass; a stage that enters gets both.
@@ -117,6 +124,8 @@ class ArrHostStufe {
     float* aus_r = nullptr;
     const float* rueck_l = nullptr;
     const float* rueck_r = nullptr;
+    float* key_l = nullptr;               // strand 2 task 3.3: the key port of this block, nullptr = missing
+    float* key_r = nullptr;
     std::atomic<uint8_t> quellen{0};      // bit 0 edge check, bit 1 server flag
     std::atomic<bool> fehl{false};        // a source was cleared since the last block
     std::atomic<bool> messung{false};

@@ -210,9 +210,9 @@ void Kern::einsortieren25(const Befehl& c) {
       quittung(c.id, c.quelle, 3, sample_, beat0);
       break;
     }
-    case Befehl::FX_ROUTING: {  // Ohr T17 (§4.10): Post Fader oder Insert, am Blockanfang; die Taste ist Andreas' Hand
-      if (q == sw::Quelle::cypher) {
-        quittung(c.id, c.quelle, 6, sample_, beat0, "nur_hand");
+    case Befehl::FX_ROUTING: {  // Ohr T17 (§4.10): post fader or insert, at the block start; every source may switch it (strand 11)
+      if (q == sw::Quelle::cypher && sw_->ki_gestoppt()) {   // §4.7 stop key: Stop Cypher still stops this switch
+        quittung(c.id, c.quelle, 6, sample_, beat0, "ki_gestoppt");
         break;
       }
       if (c.an != 0 && c.an != 1) {  // das Netz hat schon geprüft, hier auch am Netz vorbei
@@ -362,9 +362,13 @@ void Kern::einsortieren25(const Befehl& c) {
       quittung(c.id, c.quelle, 1, sample_, beat0);
       quittung(c.id, c.quelle, 3, sample_, beat0);
       break;
-    case Befehl::TASTEN_ZIEL:  // Task N2 (§4.7 /k/live/tasten): the net thread checked source and range; this is the backstop (the kern never leaves a wrong stream as target)
-      if (!(c.nr == 0 || (c.nr >= 2 && c.nr <= 10 && c.nr != 4 && c.nr != 8)) || !std::strcmp(c.quelle, "cypher")) {
-        quittung(c.id, c.quelle, 6, sample_, beat0, !std::strcmp(c.quelle, "cypher") ? "nur_hand" : "ausserhalb_bereich");
+    case Befehl::TASTEN_ZIEL:  // Task N2 (§4.7 /k/live/tasten): the net thread checked the range; this is the backstop (the kern never leaves a wrong stream as target). Every source may (strand 11)
+      if (q == sw::Quelle::cypher && sw_->ki_gestoppt()) {   // §4.7 stop key: Stop Cypher still stops this switch
+        quittung(c.id, c.quelle, 6, sample_, beat0, "ki_gestoppt");
+        break;
+      }
+      if (!(c.nr == 0 || (c.nr >= 2 && c.nr <= 10 && c.nr != 4 && c.nr != 8))) {
+        quittung(c.id, c.quelle, 6, sample_, beat0, "ausserhalb_bereich");
         break;
       }
       erz_->tasten_ziel(c.nr);   // a changed target closes the keys held on the old stream
@@ -540,11 +544,16 @@ void Kern::pegel_melden(int64_t n0, int n) {
     Ereignis e{};
     e.art = Ereignis::INS_GR;
     e.sample = n0;
+    // strand 1 slice 3b: 1 to 3 digits (pools up to 999, static_assert in arr_playback.h), right to left into d, then copied out in order
+    static_assert(sizeof(Ereignis::pfad) >= sizeof "ins/komp/" + 3, "ins/komp/<n> with three digits and the terminator fits into Ereignis::pfad");
+    if (kopf_n + 3 + 1 > sizeof e.pfad) return;
     std::memcpy(e.pfad, kopf, kopf_n);
     char* z = e.pfad + kopf_n;
-    const int n = k + 1;
-    if (n >= 10) *z++ = static_cast<char>('0' + n / 10);
-    *z++ = static_cast<char>('0' + n % 10);
+    int n = k + 1;
+    char d[3];
+    int m = 0;
+    do { d[m++] = static_cast<char>('0' + n % 10); n /= 10; } while (n > 0 && m < 3);
+    while (m > 0) *z++ = d[--m];
     *z = '\0';
     e.wert = arr_->inserts().gr_db(g);
     melde(e);
@@ -558,6 +567,8 @@ void Kern::pegel_melden(int64_t n0, int n) {
   };
   for (int k = 0; k < ARR_INS_KOMP; ++k) ins_gr_melden(ArrInsArt::komp, k, "ins/komp/", sizeof "ins/komp/" - 1);
   for (int k = 0; k < ARR_INS_LIM; ++k) ins_gr_melden(ArrInsArt::lim, k, "ins/lim/", sizeof "ins/lim/" - 1);
+  for (int k = 0; k < ARR_INS_GATE; ++k) ins_gr_melden(ArrInsArt::gate, k, "ins/gate/", sizeof "ins/gate/" - 1);   // strand 1 slice 4
+  for (int k = 0; k < ARR_INS_MB; ++k) ins_gr_melden(ArrInsArt::mb, k, "ins/mb/", sizeof "ins/mb/" - 1);
   for (int k = 0; k < MIX_QUELLEN; ++k) {   // T9: komp/<channel>, the input and output peak of the channel compressor of every source channel that ran it in the last block
     if (!mixer_->komp_aktiv(k)) {           // not running: drop the peaks (the stage clears them itself when switched off)
       mixer_->komp_ein_db(k);
@@ -602,7 +613,8 @@ void Kern::pegel_melden(int64_t n0, int n) {
 
 // 1.12 slice 3, D1: a grip is every hand step the Stellwerk applied to a track regulator in the sub-block just processed (value or touch; the holder does not matter).
 // It overrides the lane of that track and field from the grip sample on. Order in audio(): hand, prozess, aenderungen, arr_->verlauf, HERE, arr_->block.
-// Only spur/1..32/{fader,pan,mute,solo} and ret/1..4/fader count; the reverse table of the Arrangement has exactly these 132 entries. Not a grip: the touches teile_nachreichen replays
+// Only spur/1..128/{fader,pan,mute,solo} and ret/1..8/fader count; the reverse table of the Arrangement (ARR_AUTO_SLOTS x 4 = 544 entries) holds these 520.
+// Not a grip: the touches teile_nachreichen replays
 // after a restart (nachreichen_sperre_, cleared after the first sub-block of that cycle). Allocation-free.
 void Kern::arr_griffe_pruefen(int64_t s0, int m) {
   if (nachreichen_sperre_) {
@@ -812,7 +824,8 @@ void Kern::audio(int64_t n0, int n) {
     arr_->dj_schluessel(schl_l_, schl_r_);   // 1.10 slice 5 U2b (E6, E7), K4: containers A..D and the streams 1..16 for the sidechain keys; always handed, live and in a render (a render's inputs are silent)
     for (int h = 1; h <= ARR_INS_HOST; ++h)   // plan 1.11 T4: the effect-host ports of this cycle, offset to this sub-block (pointer stores; a port that is not there stays nullptr: the stage plays dry)
       arr_->host_stufe().setze_zeiger(h, ins_aus_[h - 1][0] ? ins_aus_[h - 1][0] + off : nullptr, ins_aus_[h - 1][1] ? ins_aus_[h - 1][1] + off : nullptr,
-                                      ins_rueck_[h - 1][0] ? ins_rueck_[h - 1][0] + off : nullptr, ins_rueck_[h - 1][1] ? ins_rueck_[h - 1][1] + off : nullptr);
+                                      ins_rueck_[h - 1][0] ? ins_rueck_[h - 1][0] + off : nullptr, ins_rueck_[h - 1][1] ? ins_rueck_[h - 1][1] + off : nullptr,
+                                      ins_key_[h - 1][0] ? ins_key_[h - 1][0] + off : nullptr, ins_key_[h - 1][1] ? ins_key_[h - 1][1] + off : nullptr);   // strand 2 task 3.3: the key ports
     arr_->setze_zyklus_start(zyklus_ns_ != 0 ? zyklus_ns_ + static_cast<int64_t>(off) * 1000000000LL / 48000 : 0);   // mehrkern 3.2: the nominal start of this sub-block, for the time gates of phase Q
     std::memset(prod_l_, 0, sizeof(float) * static_cast<size_t>(m));   // Arrangement::block ADDS into its output: a zeroed scratch, then the production service of the mixer
     std::memset(prod_r_, 0, sizeof(float) * static_cast<size_t>(m));

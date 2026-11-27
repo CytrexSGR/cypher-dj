@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fuehreAus, fuehreListeAus, BefehlFehler } from '../project/commands.ts';
 import {
-  neuesProjekt, pruefeProjekt, kanonisch, wiedergabeSicht, MAX_INSERTS_PRO_STRANG, MAX_INS_KOMP, MAX_INS_EQ, MAX_INS_SAETT, MAX_INS_LIM, MAX_INS_UTIL, MAX_INS_BK, MAX_RACK,
+  neuesProjekt, pruefeProjekt, kanonisch, wiedergabeSicht, MAX_INSERTS_PRO_STRANG, MAX_SPUREN, MAX_INS_KOMP, MAX_INS_EQ, MAX_INS_SAETT, MAX_INS_LIM, MAX_INS_UTIL, MAX_INS_BK, MAX_INS_GATE, MAX_INS_MB, MAX_RACK,
 } from '../project/model.ts';
 import { INSERT_ARTEN } from '../project/insert_key.ts';
 import { wende } from '../project/patch.ts';
@@ -16,7 +16,7 @@ import { uebersetze } from '../project/playback.ts';
 import { mergePlan, MergeFehler } from '../project/merge.ts';
 import { GRUND_TEXT } from '../http/reasons.ts';
 import { ohneAbgeleitetes, tmpOrdner } from './support/project.mjs';
-import { basisProjekt, szenarioOhneInserts } from './support/inserts_scenario.mjs';
+import { basisProjekt, szenarioOhneInserts, poolVoll } from './support/inserts_scenario.mjs';
 
 const ok = (p, b) => fuehreAus(p, b);
 const lehntAb = (p, b, grund) => assert.throws(() => fuehreAus(p, b), (e) => e instanceof BefehlFehler && e.grund === grund,
@@ -73,7 +73,7 @@ test('insert_setzen: a stage on every kind of strip, lowest free slot, defaults 
 test('insert_setzen: refusals (AK-S4-11) and the negative controls next to each', () => {
   const p = mitAllem();
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'hall' }, 'art_unbekannt');
-  lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'gate' }, 'art_unbekannt');   // arr-bk: bk is a kind since slice 3
+  lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'flanger' }, 'art_unbekannt');   // arr-bk: bk is a kind since slice 3; gate and mb since strand 1 slice 4
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'rack' }, 'art_unbekannt');   // the rack comes in 4c; eq and saett are kinds since 4b
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0 }, 'art_unbekannt');
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's9', pos: 0, art: 'komp' }, 'spur_unbekannt');
@@ -81,7 +81,7 @@ test('insert_setzen: refusals (AK-S4-11) and the negative controls next to each'
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 5, art: 'komp' }, 'argument_ungueltig');
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'komp', werte: { schwelle: 3 } }, 'argument_ungueltig');
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'komp', werte: { gain: 3 } }, 'argument_unbekannt');
-  lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'komp', sc: 33 }, 'argument_ungueltig');
+  lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'komp', sc: MAX_SPUREN + 1 }, 'argument_ungueltig');
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'komp', sc: 9 }, 'spur_unbekannt');
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'komp', farbe: 'x' }, 'argument_unbekannt');
   // the 6th stage on one strand: kette_voll; the fifth is fine
@@ -90,21 +90,18 @@ test('insert_setzen: refusals (AK-S4-11) and the negative controls next to each'
   assert.equal(q.spuren[0].inserts.length, 5, 'negative control: five stages are accepted');
   lehntAb(q, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'komp' }, 'kette_voll');
   lehntAb(q, { befehl: 'insert_setzen', strang_id: 's1', pos: 4, art: 'komp' }, 'kette_voll');
-  // the 13th komp: ins_voll; the twelfth is fine
-  let r = mit(12);
-  for (let i = 1; i <= MAX_INS_KOMP; i++) r = ok(r, { befehl: 'insert_setzen', strang_id: `s${i}`, pos: 0, art: 'komp' }).projekt;
-  assert.equal(r.spuren.length, 12, 'negative control: twelve stages are accepted');
-  r = ok(r, { befehl: 'spur_neu', art: 'audio' }).projekt;
-  lehntAb(r, { befehl: 'insert_setzen', strang_id: 's13', pos: 0, art: 'komp' }, 'ins_voll');
+  // one komp beyond the pool: ins_voll; the last one of the pool is fine
+  const v = poolVoll('komp', MAX_INS_KOMP);
+  assert.equal(v.projekt.spuren.flatMap((s) => s.inserts ?? []).length, MAX_INS_KOMP, 'negative control: every stage of the pool is accepted');
+  lehntAb(v.projekt, { befehl: 'insert_setzen', strang_id: v.leer, pos: 0, art: 'komp' }, 'ins_voll');
 });
 
-test('slot_eindeutig: twelve stages on twelve strips take twelve distinct slots; a freed slot is the next one taken', () => {
-  let r = mit(12);
-  for (let i = 1; i <= MAX_INS_KOMP; i++) r = ok(r, { befehl: 'insert_setzen', strang_id: `s${i}`, pos: 0, art: 'komp' }).projekt;
-  assert.deepEqual(r.spuren.map((s) => s.inserts[0].slot), Array.from({ length: 12 }, (_, i) => i + 1));
+test('slot_eindeutig: a full pool of stages takes every slot once; a freed slot is the next one taken', () => {
+  const { projekt: r, leer } = poolVoll('komp', MAX_INS_KOMP);
+  assert.deepEqual(r.spuren.flatMap((s) => (s.inserts ?? []).map((i) => i.slot)), Array.from({ length: MAX_INS_KOMP }, (_, i) => i + 1));
   assert.equal(pruefeProjekt(r).fehler, undefined);
   const frei = ok(r, { befehl: 'insert_entfernen', insert_id: 'i5' }).projekt;
-  assert.equal(setze(ok(frei, { befehl: 'spur_neu', art: 'audio' }).projekt, 's13').spuren[12].inserts[0].slot, 5);
+  assert.equal(setze(frei, leer).master.inserts[0].slot, 5);
 });
 
 test('insert_setzen with ersetzen: replaces the stage at pos, frees its slot; ersetzen on an empty position is refused', () => {
@@ -257,9 +254,9 @@ test('model validation is closed: unknown field, duplicate slot or id, range, 6 
   assert.match(fehler((x) => { x.spuren[0].inserts[0].werte.schwelle = 5; }), /schwelle/);
   assert.match(fehler((x) => { delete x.spuren[0].inserts[0].werte.mix; }), /mix/);
   assert.match(fehler((x) => { x.spuren[0].inserts[0].werte.zzz = 1; }), /zzz/);
-  assert.match(fehler((x) => { x.spuren[0].inserts[0].art = 'gate'; }), /art/);
+  assert.match(fehler((x) => { x.spuren[0].inserts[0].art = 'flanger'; }), /art/);
   assert.match(fehler((x) => { x.spuren[0].inserts[0].an = 1; }), /an/);
-  assert.match(fehler((x) => { x.spuren[0].inserts[0].slot = 13; }), /slot/);
+  assert.match(fehler((x) => { x.spuren[0].inserts[0].slot = MAX_INS_KOMP + 1; }), /slot/);
   assert.match(fehler((x) => { x.spuren[0].inserts[0].sc = 33; }), /sc/);
   assert.match(fehler((x) => { x.spuren[0].inserts = []; }), /inserts/);
   assert.match(fehler((x) => { x.returns[0].pre = false; }), /pre/);
@@ -348,8 +345,8 @@ test('loader: a sidechain key on a track number that does not exist is refused, 
 // ---- 1.10 slice 4b T12: the eq and saett stages ------------------------------------------------------------------------------------------------
 const EQ_ZEILEN = INSERT_ARTEN.eq.parameter.filter((q) => q.name !== 'an');
 test('4b: limits - the eq and saett pools are the measured sizes (T11), the project accepts both kinds', () => {
-  assert.equal(MAX_INS_EQ, 8, 'eq pool 8 (arr-fx slice 2; 2 on 2026-11-06)');
-  assert.equal(MAX_INS_SAETT, 4, 'saett pool 4 (arr-fx slice 2)');
+  assert.equal(MAX_INS_EQ, INSERT_ARTEN.eq.instanzen, 'the eq pool is the generated size');
+  assert.equal(MAX_INS_SAETT, INSERT_ARTEN.saett.instanzen, 'the saett pool is the generated size');
   assert.equal(EQ_ZEILEN.length, 58, 'out, propq and 8 x 7 band rows');
 });
 
@@ -381,12 +378,11 @@ test('4b: refusals - range, integer steps, unknown name, key on a non-compressor
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'saett', werte: { drive: 37 } }, 'argument_ungueltig');
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'saett', sc: 2 }, 'argument_unbekannt');
   assert.equal(ok(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'eq', werte: { 'b1/gain': 24, 'b1/typ': 6 } }).projekt.spuren[0].inserts.length, 1, 'negative control: the edges are accepted');
-  // the pool of eight (arr-fx slice 2): a second eq is accepted and takes slot 2, the ninth anywhere is ins_voll, a saett next to it is not (the kinds count separately)
+  // a second eq is accepted and takes slot 2, one beyond the pool is ins_voll anywhere, a saett next to it is not (the kinds count separately)
   const q = ok(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'eq' }).projekt;
   const q2 = ok(q, { befehl: 'insert_setzen', strang_id: 's2', pos: 0, art: 'eq' });
   assert.ok(q2.regler_aenderungen.some((c) => c.pfad === 'ins/eq/2/an' && c.wert === 1), 'the second eq takes slot 2');
-  let voll = q2.projekt;
-  for (let n = 2; n < MAX_INS_EQ; n++) voll = setze(voll, n % 2 ? 's1' : 's2', 'eq', { pos: Math.floor(n / 2) });   // eqs 3..8, four per strip at most
+  const { projekt: voll } = poolVoll('eq', MAX_INS_EQ);
   lehntAb(voll, { befehl: 'insert_setzen', strang_id: 'master', pos: 0, art: 'eq' }, 'ins_voll');
   assert.equal(ok(voll, { befehl: 'insert_setzen', strang_id: 'master', pos: 0, art: 'saett' }).projekt.master.inserts.length, 1);
   // insert_param_setzen: eq band parameter ok, sc on an eq refused, unknown refused
@@ -428,8 +424,8 @@ test('4b: model validation - eq values are closed to the kind (a compressor name
   assert.ok(mut((i) => { delete i.werte['b8/platz']; }), 'a missing band row');
   assert.ok(mut((i) => { i.werte['b1/typ'] = 9; }), 'out of range');
   assert.ok(mut((i) => { i.sc = 2; }), 'a key on an eq');
-  assert.equal(mut((i) => { i.slot = 8; }), undefined, 'slot 8 is inside the pool of eight');
-  assert.ok(mut((i) => { i.slot = 9; }), 'slot beyond the pool of eight');
+  assert.equal(mut((i) => { i.slot = MAX_INS_EQ; }), undefined, 'the last slot is inside the pool');
+  assert.ok(mut((i) => { i.slot = MAX_INS_EQ + 1; }), 'slot beyond the pool');
   assert.ok(mut((i) => { i.art = 'saett'; }), 'saett with eq values');
 });
 
@@ -555,8 +551,8 @@ test('integration: a change of an eq band row (name with a slash) round-trips th
 });
 
 // ---- limiter kind (master limiter, task 2): lim, pool 1, no key, no preset -----------------------------------------------------------------------
-test('lim: the pool is 2 (arr-fx slice 2) and the kind is accepted', () => {
-  assert.equal(MAX_INS_LIM, 2);
+test('lim: the pool is the contract pool (2 since arr-fx slice 2, 8 since strand 1 slice 4) and the kind is accepted', () => {
+  assert.equal(MAX_INS_LIM, INSERT_ARTEN.lim.instanzen);
 });
 
 test('lim: insert_setzen on the master without values gives only the switch; with decke the value row comes first, `an` last', () => {
@@ -581,28 +577,28 @@ test('lim: ranges (decke -60..0, abklingen 1..2000), unknown names and no key; t
   }
 });
 
-test('lim: the pool of two counts over the whole project; a compressor next to it is fine', () => {
-  let p = ok(mit(3), { befehl: 'insert_setzen', strang_id: 'master', pos: 0, art: 'lim' }).projekt;
+test('lim: the pool counts over the whole project; a compressor next to it is fine', () => {
+  let p = ok(mit(MAX_INS_LIM), { befehl: 'insert_setzen', strang_id: 'master', pos: 0, art: 'lim' }).projekt;
   p = ok(p, { befehl: 'insert_setzen', strang_id: 's2', pos: 0, art: 'lim' }).projekt;   // the second limiter takes slot 2
   assert.equal(p.spuren[1].inserts[0].slot, 2);
+  for (let i = 3; i <= MAX_INS_LIM; i++) p = ok(p, { befehl: 'insert_setzen', strang_id: `s${i}`, pos: 0, art: 'lim' }).projekt;   // fill the rest of the pool
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'lim' }, 'ins_voll');
   assert.equal(ok(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'komp' }).projekt.spuren[0].inserts.length, 1);
 });
 
-test('lim: model validation - slot 2 passes, slot 3 is beyond the pool', () => {
+test('lim: model validation - the last slot of the pool passes, the one beyond it does not', () => {
   const p = ok(mit(1), { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'lim' }).projekt;
   assert.equal(pruefeProjekt(p).fehler, undefined);
-  const c = JSON.parse(JSON.stringify(p)); c.spuren[0].inserts[0].slot = 2;
-  assert.equal(pruefeProjekt(c).fehler, undefined, 'slot 2 of a pool of two');
-  c.spuren[0].inserts[0].slot = 3;
-  assert.ok(pruefeProjekt(c).fehler, 'slot 3 of a pool of two');
+  const c = JSON.parse(JSON.stringify(p)); c.spuren[0].inserts[0].slot = MAX_INS_LIM;
+  assert.equal(pruefeProjekt(c).fehler, undefined, 'the last slot of the pool');
+  c.spuren[0].inserts[0].slot = MAX_INS_LIM + 1;
+  assert.ok(pruefeProjekt(c).fehler, 'one slot beyond the pool');
 });
 
-test('lim: a project without a limiter still sets the six lim rows (two limiters) at the defaults with the switch off', async () => {
+test('lim: a project without a limiter still sets the lim rows of every pool slot at the defaults with the switch off', async () => {
   const { alleInsertRegler } = await import('../areas/proj/mapping.ts');
   const rows = alleInsertRegler(neuesProjekt('N')).filter((r) => r.pfad.startsWith('ins/lim/'));
-  assert.deepEqual(rows, [{ pfad: 'ins/lim/1/decke', wert: -1 }, { pfad: 'ins/lim/1/abklingen', wert: 80 }, { pfad: 'ins/lim/1/an', wert: 0 },
-    { pfad: 'ins/lim/2/decke', wert: -1 }, { pfad: 'ins/lim/2/abklingen', wert: 80 }, { pfad: 'ins/lim/2/an', wert: 0 }]);
+  assert.deepEqual(rows, Array.from({ length: MAX_INS_LIM }, (_, i) => [{ pfad: `ins/lim/${i + 1}/decke`, wert: -1 }, { pfad: `ins/lim/${i + 1}/abklingen`, wert: 80 }, { pfad: `ins/lim/${i + 1}/an`, wert: 0 }]).flat());
 });
 
 // ---- utility kind (arr-fx slice 1): width, mono below, gain, balance; pool 8, no key, no preset, latency 0 -----------------------------------------
@@ -787,4 +783,99 @@ test('bk: an effect return (arr-bk slice 4) has the Hall off and one bk stage; w
   abGraph(p, [{ befehl: 'return_neu', effekt: { graph: 'juno-pad' } }], 'argument_ungueltig', 'instrument graph');
   abGraph(p, [{ befehl: 'return_neu', effekt: { graph: 'fx-delay-sync', tempo: 1 } }], 'argument_unbekannt', 'effekt.tempo');
   assert.equal(mitGraph(p, [{ befehl: 'return_neu', effekt: { graph: 'fx-delay-sync', werte: { k1: 0.7 } } }]).projekt.returns[0].inserts[0].werte.k1, 0.7);
+});
+
+// ---- project open leaves out free pool rows the core already holds (plan strand 1, task 3.3) ----------------------------------------------------
+test('alleInsertRegler(p, bekannt): a free slot row the core holds at the default is left out; used slots and unknown or different values stay', async () => {
+  const { alleInsertRegler } = await import('../areas/proj/mapping.ts');
+  const { MAX_INS } = await import('../project/model.ts');
+  const p = setze(mit(1), 's1', 'komp');
+  p.spuren[0].inserts[0].slot = 3;
+  const full = alleInsertRegler(p);
+  const ROWS = { komp: 10, eq: 59, saett: 4, lim: 3, host: 1, utility: 5, bk: 9 };
+  const proArt = (liste, art) => liste.filter((r) => r.pfad.startsWith(`ins/${art}/`));
+  for (const art of Object.keys(ROWS)) {
+    assert.ok(proArt(full, art).length > 0, art);
+  }
+  assert.equal(proArt(full, 'komp').length, MAX_INS.komp * ROWS.komp, 'without bekannt: the whole komp list');
+  assert.deepEqual(alleInsertRegler(p, undefined), full, 'bekannt undefined = today\'s list');
+  const vorgabe = new Map(full.map((r) => [r.pfad, r.wert]));
+  const eqBekannt = (pfad) => (pfad.startsWith('ins/eq/') ? vorgabe.get(pfad) : null);
+  const l = alleInsertRegler(p, eqBekannt);
+  assert.equal(proArt(l, 'eq').length, 0, 'no free eq row');
+  assert.equal(proArt(l, 'komp').length, MAX_INS.komp * ROWS.komp, 'komp: used slot 3 and unknown free rows all stay');
+  assert.equal(l.filter((r) => r.pfad.startsWith('ins/komp/3/')).length, ROWS.komp);
+  assert.equal(l.filter((r) => r.pfad.startsWith('ins/komp/1/')).length, ROWS.komp, 'free slot with unknown value stays');
+  const abw = (pfad) => (pfad === 'ins/eq/5/an' ? vorgabe.get(pfad) + 1 : eqBekannt(pfad));
+  const m = alleInsertRegler(p, abw);
+  assert.deepEqual(proArt(m, 'eq'), [{ pfad: 'ins/eq/5/an', wert: vorgabe.get('ins/eq/5/an') }], 'only the row whose known value differs');
+  const alles = alleInsertRegler(p, (pfad) => vorgabe.get(pfad));
+  assert.ok(alles.every((r) => r.pfad.startsWith('ins/komp/3/')), 'a used slot is sent even if the core holds the same value');
+  assert.equal(alles.length, ROWS.komp);
+});
+
+// ---- gate and mb kinds (strand 1 slice 4): noise gate (16 x 8 rows) and three-band compressor (8 x 24 rows); no key, no preset, latency 0 --------------
+const vorgabeVon = (art) => Object.fromEntries(INSERT_ARTEN[art].parameter.filter((q) => q.name !== 'an').map((q) => [q.name, q.vorgabe]));
+test('gate and mb: the pools and the row counts are the contract ones, the kinds are accepted', () => {
+  assert.equal(MAX_INS_GATE, INSERT_ARTEN.gate.instanzen);
+  assert.equal(MAX_INS_MB, INSERT_ARTEN.mb.instanzen);
+  assert.equal(INSERT_ARTEN.gate.latenz, 0);
+  assert.equal(INSERT_ARTEN.mb.latenz, 0);
+});
+
+test('gate and mb: insert_setzen gives the contract defaults and `an` last; a given value travels first', () => {
+  const p = mit(1);
+  for (const art of ['gate', 'mb']) {
+    const r = ok(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art }); pruefe(p, r);
+    assert.deepEqual(r.projekt.spuren[0].inserts, [{ id: 'i1', art, slot: 1, an: true, werte: vorgabeVon(art) }], art);
+    assert.deepEqual(r.regler_aenderungen, [{ pfad: `ins/${art}/1/an`, wert: 1 }], `${art}: only the switch differs from the pool defaults`);
+    assert.equal(r.betrifft_wiedergabe, true);
+  }
+  const g = ok(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'gate', werte: { schwelle: -55 } });
+  assert.deepEqual(g.regler_aenderungen, [{ pfad: 'ins/gate/1/schwelle', wert: -55 }, { pfad: 'ins/gate/1/an', wert: 1 }]);
+});
+
+test('gate and mb: ranges from the contract, no key, no graph; a band parameter of the mb is stored and travels as ins/mb/1/b2/ratio', () => {
+  const p = mit(1);
+  const s = (art, extra) => ({ befehl: 'insert_setzen', strang_id: 's1', pos: 0, art, ...extra });
+  lehntAb(p, s('gate', { werte: { schwelle: 1 } }), 'argument_ungueltig');
+  lehntAb(p, s('gate', { werte: { ratio: 0.5 } }), 'argument_ungueltig');
+  lehntAb(p, s('gate', { werte: { decke: 0 } }), 'argument_unbekannt');
+  lehntAb(p, s('gate', { sc: 2 }), 'argument_unbekannt');
+  lehntAb(p, s('mb', { werte: { 'b2/ratio': 21 } }), 'argument_ungueltig');
+  lehntAb(p, s('mb', { werte: { 'b4/ratio': 2 } }), 'argument_unbekannt');
+  lehntAb(p, s('mb', { graph: 'x' }), 'argument_unbekannt');
+  assert.equal(ok(p, s('gate', { werte: { schwelle: -90, ratio: 100 } })).projekt.spuren[0].inserts.length, 1, 'negative control: the edges are accepted');
+  const k = setze(p, 's1', 'mb');
+  const r = ok(k, { befehl: 'insert_param_setzen', insert_id: 'i1', param: 'b2/ratio', wert: 4 });
+  assert.equal(r.projekt.spuren[0].inserts[0].werte['b2/ratio'], 4);
+  assert.deepEqual(r.regler_aenderungen, [{ pfad: 'ins/mb/1/b2/ratio', wert: 4 }]);
+  assert.equal(pruefeProjekt(r.projekt).fehler, undefined);
+  gleichLeichtVoll(k, { befehl: 'insert_param_setzen', insert_id: 'i1', param: 'b2/ratio', wert: 4 });
+});
+
+test('gate and mb: the pool counts over the whole project; one beyond it is ins_voll, a compressor next to it is fine', () => {
+  for (const art of ['gate', 'mb']) {
+    const max = INSERT_ARTEN[art].instanzen;
+    const { projekt: p } = poolVoll(art, max);
+    lehntAb(p, { befehl: 'insert_setzen', strang_id: 'master', pos: 0, art }, 'ins_voll');
+    assert.equal(ok(p, { befehl: 'insert_setzen', strang_id: 'master', pos: 0, art: 'komp' }).projekt.master.inserts.length, 1, art);
+  }
+});
+
+test('gate and mb: the playback chain entry is {art, slot, an: true}', () => {
+  let p = setze(setze(mit(1), 's1', 'gate'), 's1', 'mb', { pos: 1 });
+  const w = uebersetze(p, { nr: 1, audioOrdner: '/x', frames: () => 1 });
+  assert.deepEqual(w.spuren[0].chain, [{ art: 'gate', slot: 1, an: true }, { art: 'mb', slot: 1, an: true }]);
+});
+
+test('gate and mb: alleInsertRegler emits every pool row of both kinds, free slots at the defaults with the switch off', async () => {
+  const { alleInsertRegler } = await import('../areas/proj/mapping.ts');
+  const rows = alleInsertRegler(neuesProjekt('N'));
+  for (const art of ['gate', 'mb']) {
+    const n = INSERT_ARTEN[art].parameter.length;
+    const r = rows.filter((x) => x.pfad.startsWith(`ins/${art}/`));
+    assert.equal(r.length, INSERT_ARTEN[art].instanzen * n, art);
+    assert.deepEqual(r.slice(-1), [{ pfad: `ins/${art}/${INSERT_ARTEN[art].instanzen}/an`, wert: 0 }]);
+  }
 });

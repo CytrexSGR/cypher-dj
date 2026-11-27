@@ -14,7 +14,8 @@ Two audio files in one folder, and a studio instance started. If the folder is n
 
 ## 1. Find the tracks
 
-Open the DJ view. The library is the panel at the bottom of the page (the BROWSER button in the top bar shows or hides it):
+Open the DJ view. The library is the panel at the bottom of the page (the arrow button or the key L shows or hides it; the
+BROWSER button in the top bar opens the browser drawer instead, where a track that needs preparing is only marked PREPARE):
 open LIBRARY, then BROWSE, then the ALL TRACKS tab. It lists every audio file of the added folders. A track that
 was never analysed shows PREPARE in the Status column. Click it: the status turns to PREPARING... and then READY. Preparation finds the
 tempo, the beat grid and the key. The tour checks the tempo and the key it finds against the ones the tracks were

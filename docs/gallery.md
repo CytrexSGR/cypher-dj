@@ -15,8 +15,6 @@ owner's library; the folder tree of the library is scrolled away or collapsed.
 
 ![STUDIO, the loop workbench: a drum pattern whose rows have their own length, swing and direction, four tracks with send knobs, and the dock with one card per instrument and per effect](screens/studio-workbench.png)
 
-![LIVE view: three Strudel channels with multi-line patterns and their automation lanes, the channel strips, a SEQ deck and the master meter](screens/studio-view.png)
-
 ![PRODUCTION view: four stems under the muted original, the warp editor in COMPLEX mode](screens/production-warp-stems.png)
 
 ![PRODUCTION view: an arrangement with MIDI clips, a resampled audio track, DRUMS and MUSIC groups and a return; the bass clip open in the piano roll](screens/production-view.png)

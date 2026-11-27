@@ -40,6 +40,7 @@ sudo apt install build-essential cmake ninja-build pkg-config \
 ```
 
 `rubberband-cli` is the `rubberband` program that the workshop's warp calls (the core links the library `librubberband-dev`).
+The export's delivery formats (WAV, FLAC, MP3) need an `ffmpeg` with libsoxr and libmp3lame; the Ubuntu package has both.
 `pulseaudio-utils` provides `pactl`, which `djk-start` calls to create the silent output.
 
 **Real-time limits.** The core locks its audio material in RAM (up to about 4 GiB) and runs with
@@ -178,6 +179,11 @@ for stem separation in PRODUCTION. The model code itself is in `djk/third_party/
 
 Stem separation runs on the GPU only. It needs a CUDA GPU with about 4.5 GB of free video memory (the threshold is
 `CYPHERDJ_STEMS_GPU_FREI_MB`, default 4500); without one, Separate Stems is refused and there is no CPU fallback.
+
+The workshop also installs SwiftF0 and onnxruntime (`anforderungen-noten.txt`). SwiftF0 is MIT licensed, by Lars Nieradzik; its
+model (about 135 kB) is inside the pip package. The repository has no separate third-party file, so this paragraph is the
+notice. With them the note detection uses the network for voices above 60 Hz; without them it uses the built-in detector,
+which ships in the package.
 
 ## 8. Your paths
 
@@ -373,8 +379,8 @@ comments at the top of `djk/start/djk-start`. `djk/start/djk-stop` stops everyth
 If the kit `techno` is missing, `--strudel` uses the starter kit from section 9 and says so, as long as its `kit.json`
 is valid. A kit you name yourself with `--strudel-kit` and that is missing stops the start with a message.
 
-`djk/start/djk-start --strudel --bk-stroeme` adds five more pattern streams for Cypher Modular graphs (erz/5 to erz/7 and
-the two loop box pads).
+`djk/start/djk-start --strudel --bk-stroeme` adds five more pattern streams for Cypher Modular graphs (erz/5 to erz/7,
+erz/9 and erz/10).
 
 **Cores.** `djk-start` gives the core four physical cores (with their SMT siblings) by default and every other CPU to
 stem separation; `CYPHERDJ_KERN_KERNE=<n>` changes the number (a value outside 1 to cores minus 1 is clamped, with a

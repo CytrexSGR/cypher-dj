@@ -45,8 +45,13 @@ export class Planer {
     }
   }
 
-  setze(muster, jetzt) {
-    const ab = this.plan.length && Number.isFinite(jetzt) ? this.naechsterTakt(jetzt) : -Infinity;
+  // The beat setze() would pick for a pattern sent at `jetzt` (-Infinity: it applies at once).
+  abFuer(jetzt) { return this.plan.length && Number.isFinite(jetzt) ? this.naechsterTakt(jetzt) : -Infinity; }
+
+  // versatz: phase offset in cycles (task 5.1); the pattern plays as muster.late(versatz), its text is untouched.
+  setze(muster, jetzt, versatz = 0) {
+    if (versatz) muster = muster.late(versatz);
+    const ab = this.abFuer(jetzt);
     this.plan = this.plan.filter((p) => p.ab < ab);
     this.plan.push({ ab, muster, nr: ++this.nr, proTakt: this.proTakt });
     this.felder = new Set();   // neues Muster: Felder des verdrängten gelten nicht mehr

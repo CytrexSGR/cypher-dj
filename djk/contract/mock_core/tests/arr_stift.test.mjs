@@ -1,5 +1,5 @@
 // node --test tests/arr_stift.test.mjs: /k/arr/stift in the stand-in (INTERFACES 4.11; Kraken patch field task 1).
-// Like the core: spur 1..32 (spur_bereich), satz 0..1, zeile 0..15, spalte 0..15, wert finite in -1..1 (ausserhalb_bereich), acknowledged 1 and 3;
+// Like the core: spur 1..128 (spur_bereich), satz 0..1, zeile 0..15, spalte 0..15, wert finite in -1..1 (ausserhalb_bereich), acknowledged 1 and 3;
 // cypher in the AI stop is refused ki_gestoppt before any range check; a refused pin is not recorded.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -22,22 +22,22 @@ const grund = (log, id) => log.filter((m) => m.adresse === '/q' && m.werte[0] ==
 test('arr_stift: a valid pin is acknowledged 1, 3 and recorded; the edges of every range are accepted', () => {
   const { K, log, bis, stift } = kern();
   stift(1, 'andreas', 1, 0, 0, 0, 0.5);
-  stift(2, 'andreas', 32, 1, 15, 15, -1);
+  stift(2, 'andreas', 128, 1, 15, 15, -1);
   stift(3, 'cypher', 5, 1, 3, 7, 0);
   bis(4000);
   for (const id of [1, 2, 3]) assert.deepEqual(grund(log, id), ['1', '3'], `command ${id}`);
   assert.deepEqual(K.arr.stifte, [
     { spur: 1, satz: 0, zeile: 0, spalte: 0, wert: 0.5 },
-    { spur: 32, satz: 1, zeile: 15, spalte: 15, wert: -1 },
+    { spur: 128, satz: 1, zeile: 15, spalte: 15, wert: -1 },
     { spur: 5, satz: 1, zeile: 3, spalte: 7, wert: 0 },
   ]);
   assert.equal(K.arr.status, 0, 'the transport stood');
 });
 
-test('arr_stift: spur outside 1..32 is spur_bereich', () => {
+test('arr_stift: spur outside 1..128 is spur_bereich', () => {
   const { K, log, bis, stift } = kern();
   stift(10, 'andreas', 0, 0, 0, 0, 0.5);
-  stift(11, 'andreas', 33, 0, 0, 0, 0.5);
+  stift(11, 'andreas', 129, 0, 0, 0, 0.5);
   stift(12, 'andreas', -1, 0, 0, 0, 0.5);
   bis(4000);
   for (const id of [10, 11, 12]) assert.deepEqual(grund(log, id), ['6/spur_bereich'], `command ${id}`);

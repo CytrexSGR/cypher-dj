@@ -143,6 +143,8 @@
    }
   },
   "lage_uhr": {
+   "naechster_takt": 4,
+   "naechste_phrase_takt": 9,
    "beat": 10.3,
    "takt": 3,
    "schlag": 3,
@@ -165,6 +167,8 @@
   ],
   "lage": {
    "uhr": {
+    "naechster_takt": 4,
+    "naechste_phrase_takt": 9,
     "beat": 10.3,
     "takt": 3,
     "schlag": 3,
@@ -236,18 +240,21 @@
       "strom": 1,
       "autonom": true,
       "von": null,
+      "bezeichnung": null,
       "text_kurz": ""
      },
      {
       "strom": 2,
       "autonom": true,
       "von": null,
+      "bezeichnung": null,
       "text_kurz": ""
      },
      {
       "strom": 3,
       "autonom": true,
       "von": null,
+      "bezeichnung": null,
       "text_kurz": ""
      }
     ],
@@ -516,6 +523,8 @@
    }
   },
   "lage_uhr": {
+   "naechster_takt": 4,
+   "naechste_phrase_takt": 9,
    "beat": 10.3,
    "takt": 3,
    "schlag": 3,
@@ -538,6 +547,8 @@
   ],
   "lage": {
    "uhr": {
+    "naechster_takt": 4,
+    "naechste_phrase_takt": 9,
     "beat": 10.3,
     "takt": 3,
     "schlag": 3,
@@ -609,18 +620,21 @@
       "strom": 1,
       "autonom": true,
       "von": null,
+      "bezeichnung": null,
       "text_kurz": ""
      },
      {
       "strom": 2,
       "autonom": true,
       "von": null,
+      "bezeichnung": null,
       "text_kurz": ""
      },
      {
       "strom": 3,
       "autonom": true,
       "von": null,
+      "bezeichnung": null,
       "text_kurz": ""
      }
     ],

@@ -162,7 +162,7 @@ test('SAVE VERSION respects Stop Cypher: cypher is refused with ki_gestoppt, and
   const a = await aufbau(t);
   await innen(a.o).kiStopp(true);
   const x = await ruf(a.url, 'POST', '/proj/version_sichern', { name: 'K' }, CYPHER);
-  assert.deepEqual([x.code, x.j.ok, x.j.grund], [409, false, 'ki_gestoppt']);
+  assert.deepEqual([x.code, x.j.fehler], [409, 'ki_gestoppt']);   // strand 9: the page server's agent gate answers before the route
   assert.equal((await ruf(a.url, 'GET', '/proj/versionen')).j.versionen.some((v) => v.name === 'K'), false);
   assert.equal((await ruf(a.url, 'POST', '/proj/version_sichern', { name: 'K' })).code, 200);
 });

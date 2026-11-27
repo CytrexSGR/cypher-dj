@@ -7,7 +7,7 @@ import { fuehreListeAus } from '../project/commands.ts';
 import { neuesProjekt } from '../project/model.ts';
 import { routingMatrix } from '../project/routing_matrix.ts';
 import { starteSeite, warte } from '../check/page_mock.mjs';
-import { matrixZeilen, zellenBefehl, sendZahl, NICHT_DA_TEXT } from '../public/production/matrix.js';
+import { matrixZeilen, zellenBefehl, sendZahl, NICHT_DA_TEXT, AUTO_SEND_TEXT } from '../public/production/matrix.js';
 
 const CHROME = fs.existsSync('/usr/bin/google-chrome');
 const lauf = (p, b) => fuehreListeAus(p, b, { quelle: 'andreas' }).projekt;
@@ -253,4 +253,20 @@ test('page: a slow double click (400 ms between the clicks) sends no toggle and 
   const n2 = (await zeit(s)).length;
   await klick(s, k); await warte(1200);
   assert.equal((await anfragen(s, n2)).length, 1, 'a single click: exactly one request');
+});
+
+test('matrixZeilen: a send cell whose track has a lane for it is marked; without the project or the lane no cell is', () => {
+  const p = lauf(projekt(), [{ befehl: 'auto_neu', spur_id: 's1', ziel: 'send.r1' }]);
+  const m = routingMatrix(p);
+  const kick = matrixZeilen(m, p)[0];
+  assert.deepEqual(kick.sends.map((c) => [c.return_id, c.auto === true]), [['r1', true], ['r2', false]], 'only the send with a lane is marked');
+  assert.ok(matrixZeilen(m, p).slice(1).every((r) => r.sends.every((c) => c.auto === undefined)), 'other tracks are not marked');
+  assert.ok(matrixZeilen(m)[0].sends.every((c) => c.auto === undefined), 'without a project nothing is marked');
+  assert.ok(matrixZeilen(routingMatrix(projekt()), projekt())[0].sends.every((c) => c.auto === undefined), 'a send without a lane is not marked');
+  assert.equal(AUTO_SEND_TEXT, 'Automated: the lane sets this send');
+});
+test('a send with a lane cannot be switched off: the server refuses with the text the page shows', () => {
+  const p = lauf(projekt(), [{ befehl: 'auto_neu', spur_id: 's1', ziel: 'send.r1' }]);
+  assert.throws(() => fuehreListeAus(p, [{ befehl: 'send_setzen', strang_id: 's1', return_id: 'r1', db: -200 }], { quelle: 'andreas' }), /^Error: send_hat_lane\b|send_hat_lane/, 'the refusal carries the reason code');
+  assert.match(fs.readFileSync(new URL('../public/production/production.js', import.meta.url), 'utf8'), /send_hat_lane: 'That send has a lane: delete the send lane first/);
 });

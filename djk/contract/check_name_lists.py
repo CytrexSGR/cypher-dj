@@ -287,8 +287,12 @@ def tasten_listen(q: Quelle) -> dict[str, list[str]]:
     listen["T09 server.ts TASTEN"] = _namen(_such(r"const TASTEN = \[([^\]]*)\]", server_ts, "server.ts").group(1))
     # the page keys moved from app.js to stream.js (1868940b); the list keeps its name, the other checks refer to it
     strom_js = q.lies("djk/ui/public/stream.js")
-    listen["T10 app.js Tasten"] = _namen(
-        _such(r"for \(const n of \[([^\]]*)\]\) \$\(`#t-", strom_js, "stream.js").group(1))
+    # strand 9: stop and release first switch the page server's brake, so they sit in a second loop of [name, on] pairs
+    paare = _such(r"for \(const \[n, an\] of \[((?:\['[a-z_]+', (?:true|false)\],? ?)+)\]\) \{", strom_js, "stream.js").group(1)
+    einfach = _namen(_such(r"for \(const n of \[([^\]]*)\]\) \$\(`#t-", strom_js, "stream.js").group(1))
+    if not einfach:
+        raise ParserFehler("T10 app.js Tasten: the plain key loop in stream.js is empty, parser blind or source rebuilt")
+    listen["T10 app.js Tasten"] = einfach + re.findall(r"\['([a-z_]+)'", paare)
     tastatur_h = q.lies("djk/tools/softcontroller/keyboard.h")
     listen["T11 keyboard.h"] = sorted(set(re.findall(r'"taste/([a-z_]+)"', tastatur_h)))
     soft = _mapping_json(q, "djk/config/controller/softcontroller.json")
@@ -820,7 +824,7 @@ def _pruefe_return_regler(q: Quelle, befunde: list[str]) -> None:
             befunde.append(f"Return-Regler: R06 hand_bedienung.PFAD lehnt {name} ab")
         if not re.fullmatch(schema, name):
             befunde.append(f"Return-Regler: R07 defs.schema.json regler_pfad lehnt {name} ab")
-    for falsch in ("spur/33/send/1", "spur/1/send/9", "spur/1/send/0", "grp/17/send/1", "ret/9/fader", "ret/0/fader", "ret/1/hall/mix",
+    for falsch in ("spur/129/send/1", "spur/1/send/9", "spur/1/send/0", "grp/17/send/1", "ret/9/fader", "ret/0/fader", "ret/1/hall/mix",
                    "ret/1/send/1", "ret/1/trim"):   # Gegenprobe: kein Muster zu weit
         if pfad_re.search(falsch):
             befunde.append(f"Return-Regler: R06 hand_bedienung.PFAD nimmt {falsch} an")
@@ -1249,7 +1253,7 @@ def _ins_vertrag(q: Quelle) -> dict[str, tuple[float, float, float]]:
     spec = q.lies("docs/architecture/INTERFACES.md")
     teil = spec[_index(spec, "### 1.5 Kanäle und Regler-Pfade", "§1.5"):_index(spec, "### 1.6", "§1.5")]
     n = {art: int(_such(r"`ins/" + art + r"/<n>/\*` \(n = 1 to (\d+);", teil, f"INTERFACES §1.5 ins/{art}/<n>/*").group(1))
-         for art in ("komp", "eq", "saett", "lim", "host", "utility", "bk")}
+         for art in ("komp", "eq", "saett", "lim", "host", "utility", "bk", "gate", "mb")}
     racks = int(_such(r"`rack/<k>/m<n>` \(k = 1 to (\d+);", teil, "INTERFACES §1.5 rack/<k>/m<n>").group(1))
     aus: dict[str, tuple[float, float, float]] = {}
     for zeile in teil.split("\n"):
@@ -1269,7 +1273,7 @@ def _ins_vertrag(q: Quelle) -> dict[str, tuple[float, float, float]]:
         if not zeile.startswith("| `ins/"):
             continue
         z = [c.strip() for c in zeile.strip().strip("|").split("|")]
-        m = re.match(r"^`ins/(komp|eq|saett|lim|host|utility|bk)/<n>/((?:b(?:<m>|[1-8])/)?[a-z0-9_]+)`$", z[0]) if len(z) == 6 else None
+        m = re.match(r"^`ins/(komp|eq|saett|lim|host|utility|bk|gate|mb)/<n>/((?:b(?:<m>|[1-8])/)?[a-z0-9_]+)`$", z[0]) if len(z) == 6 else None
         if not m:
             raise ParserFehler(f"INTERFACES §1.5: Insert-Zeile nicht lesbar: {zeile[:80]!r}")
         b = re.fullmatch(r"(?:(\S+) to (\S+)|0/1)", z[2].replace("−", "-"))
@@ -1277,7 +1281,7 @@ def _ins_vertrag(q: Quelle) -> dict[str, tuple[float, float, float]]:
             raise ParserFehler(f"INTERFACES §1.5: Bereich der Zeile {m.group(1)} nicht lesbar: {z[2]!r}")
         lo, hi = (float(b.group(1)), float(b.group(2))) if b.group(1) else (0.0, 1.0)
         werte = (lo, hi, float(z[3].replace("−", "-")))
-        namen = [m.group(2).replace("<m>", str(b)) for b in range(1, 9)] if "<m>" in m.group(2) else [m.group(2)]   # b<m>: the 8 EQ bands
+        namen = [m.group(2).replace("<m>", str(b)) for b in range(1, 4 if m.group(1) == "mb" else 9)] if "<m>" in m.group(2) else [m.group(2)]   # b<m>: the 8 EQ bands, the 3 multiband bands
         for i in range(1, n[m.group(1)] + 1):
             for name in namen:
                 if f"ins/{m.group(1)}/{i}/{name}" in aus:
@@ -1313,13 +1317,14 @@ def _ins_universum(kern: dict[str, tuple[float, float, float]]) -> list[str]:
     """What a pattern must refuse: instance numbers just outside, sibling names, a suffix, a kind that has no table rows, the
     rack family just outside its numbers."""
     u: set[str] = set()
-    for art in ("komp", "eq", "saett", "lim", "host", "utility", "bk"):
+    for art in ("komp", "eq", "saett", "lim", "host", "utility", "bk", "gate", "mb"):
         namen = sorted({p.split("/", 3)[3] for p in kern if p.split("/")[1] == art})
         n = max(int(p.split("/")[2]) for p in kern if p.split("/")[1] == art)
         u |= {f"ins/{art}/{i}/{x}" for i in (0, n + 1) for x in namen}
         u |= {f"ins/{art}/1/{x}" for x in ("zz", "an/x", "sc2", "schwelle/x", "")}
         u |= {f"ins/{art}/1", f"ins/{art}", f"ins/{art}/01/an"}
     u |= {f"ins/eq/1/b{b}/{x}" for b in (0, 9) for x in ("an", "freq")}   # band numbers just outside
+    u |= {f"ins/mb/1/b{b}/{x}" for b in (0, 4) for x in ("schwelle", "umgehen")} | {"ins/mb/1/b1", "ins/mb/1/b1/zz", "ins/gate/1/b1/an", "ins/gate/1/sc", "ins/mb/1/sc"}
     u |= {"ins/eq/1/b1", "ins/eq/1/b1/zz", "ins/eq/1/b11/an", "ins/saett/1/b1/an", "ins/komp/1/b1/an", "ins/rack/1/an", "komp/1/an"}
     # the rack macro family: instance numbers and macro numbers just outside, a sibling name, a suffix
     u |= {"rack/0/m1", "rack/13/m1", "rack/01/m1", "rack/1/m0", "rack/1/m5", "rack/1/m11", "rack/1/m1/x", "rack/1/m", "rack/1", "rack", "rack/1/zz", "rack/1/m1x"}

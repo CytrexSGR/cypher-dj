@@ -50,6 +50,12 @@ const ArrAutoLane* feld_rel(const ArrSpur& sp, int feld) {
     if (sp.auto_lanes[k].ziel == feld && sp.auto_lanes[k].relativ) return &sp.auto_lanes[k];
   return nullptr;
 }
+// The send lane of a track for return r (0-based), or nullptr. Absolute only (the reader refuses a relative one).
+const ArrAutoLane* send_lane(const ArrSpur& sp, int r) {
+  for (int k = 0; k < sp.n_auto; ++k)
+    if (sp.auto_lanes[k].ziel == ARR_AUTO_SEND && sp.auto_lanes[k].param == r) return &sp.auto_lanes[k];
+  return nullptr;
+}
 // The relative lane of a device parameter, or nullptr.
 const ArrAutoLane* geraet_rel(const ArrSpur& sp, int param) {
   for (int k = 0; k < sp.n_auto; ++k)
@@ -166,6 +172,12 @@ void Arrangement::auto_tausch(const ArrSnapshot* neu, int64_t s) {
     }
   for (int k = 0; k < ARR_KLANES_MAX; ++k)   // 1.12 slice 6: the insert and rack lanes: only the table (auto_kette searches the cursor once per block)
     auto_k_[k] = neu && k < neu->n_klanes ? AutoLane(neu->klane[k].p, neu->klane[k].n) : AutoLane();
+  for (int i = 0; i < ARR_SPUREN; ++i)   // send lanes: the cursor of the new table, searched from the start; the held gain and the "lane drove it" flag stay, so the swap ramps from what was heard
+    for (int r = 0; r < ARR_RETURNS; ++r) {
+      const ArrAutoLane* sl = neu ? send_lane(neu->spur[i], r) : nullptr;
+      auto_s_[i][r] = sl ? AutoLane(sl->p, sl->n) : AutoLane();
+      if (sl) auto_s_[i][r].neu_suchen(0.0);
+    }
   for (int i = 0; i < ARR_SPUREN; ++i)   // device lanes: only the cursor, the sink sees the lane value per block and handles a change itself
     for (int g = 0; g < ARR_GERAET_LANE_PARAMS; ++g) {
       const ArrAutoLane* gl = neu ? geraet_lane(neu->spur[i], g) : nullptr;
@@ -200,6 +212,85 @@ void Arrangement::auto_geraet() {
       se->auto_parameter(i, g, v);
     }
   }
+}
+
+// Send automation: per track and return ONE gain ramp per block (Arrangement::SendPlan), read by sends_bereiten() in mischen(). Like auto_geraet the lane is read once per block, at the project
+// beat of the last running sample; the gain runs there from the gain at the end of the last block (a0 = send_lin_), so the first sample of a block is the lane value of the block before and
+// a step in a lane is smoothed over one block. A hard start (the lane value at the first running sample instead of a ramp) at a transport start (the last block did not run), a jump back
+// (the first project beat is below the last one) and, inside a block, at a loop seam: the ramp breaks there into two parts. While the transport stands the gain is held. A lane that is new
+// while playing (swap) ramps from the knob, a lane that is gone (swap) ramps back to the knob over one block, then the knob rules (send_da_ false). The ramp is in the LINEAR gain, so
+// -200 dB is exactly 0 (db_lin) and there is no logarithm per sample. A cell envelope is not looked at here: sends_bereiten gives it the precedence. No allocation, no lock.
+void Arrangement::auto_send(int m) {
+  const bool lanes = snap_ && snap_->n_auto_lanes > 0;
+  if (!lanes && !send_aktiv_) {   // nothing to play, but keep the transport memory current for a lane that arrives with a swap
+    send_lief_ = snap_ && auto_bis_ > auto_von_;
+    if (send_lief_) send_p_ende_ = ap_[auto_bis_ - 1];
+    send_spielte_ = status_ == ArrStatus::spielt;
+    return;
+  }
+  const bool laeuft = snap_ && auto_bis_ > auto_von_;
+  double p0 = 0.0, p1 = 0.0;
+  int abfall = m;   // first running sample whose project beat is below the one before it (a loop seam), else m
+  if (laeuft) {
+    p0 = ap_[auto_von_];
+    p1 = ap_[auto_bis_ - 1];
+    for (int k = auto_von_ + 1; k < auto_bis_; ++k)
+      if (ap_[k] < ap_[k - 1]) {
+        abfall = k;
+        break;
+      }
+  }
+  const bool stetig = laeuft && send_lief_ && p0 >= send_p_ende_ - 1e-9;   // this block goes on where the last one ended
+  const auto wert = [](AutoLane& al, double p) {
+    al.neu_suchen(p);
+    return db_lin(al.wert_bei(p));
+  };
+  bool aktiv = false;
+  for (int i = 0; i < ARR_SPUREN; ++i)
+    for (int r = 0; r < ARR_RETURNS; ++r) {
+      SendPlan& pl = send_plan_[i][r];
+      pl = SendPlan();
+      const ArrAutoLane* l = lanes ? send_lane(snap_->spur[i], r) : nullptr;
+      float& lin = send_lin_[i][r];
+      if (l) {
+        if (laeuft) {
+          AutoLane& al = auto_s_[i][r];
+          const float ende = wert(al, p1);
+          float a;
+          if (send_da_[i][r] && stetig) a = lin;
+          else if (!send_da_[i][r] && send_spielte_) a = db_lin(w_[i][arr_f_send(r)].w);   // a lane that is new while playing (swap): from the knob that was heard
+          else a = wert(al, p0);                                                      // transport start or jump back: the lane value
+          pl.da = true;
+          pl.a0 = a;
+          if (abfall < m) {   // a loop seam inside the block: up to it the old course, from it the lane at the loop start
+            pl.b0 = wert(al, ap_[abfall - 1]);
+            pl.a1 = wert(al, ap_[abfall]);
+            pl.b1 = ende;
+            pl.ts = abfall;
+          } else {
+            pl.b0 = ende;
+            pl.ts = m;
+          }
+          lin = ende;
+          send_da_[i][r] = true;
+        } else if (send_da_[i][r]) {   // the transport stands: the gain is held
+          pl.da = true;
+          pl.a0 = pl.b0 = lin;
+          pl.ts = m;
+        }
+      } else if (send_da_[i][r]) {   // the lane is gone: back to the knob over this block
+        pl.da = true;
+        pl.a0 = lin;
+        pl.b0 = db_lin(w_[i][arr_f_send(r)].w);
+        pl.ts = m;
+        send_da_[i][r] = false;
+      }
+      aktiv = aktiv || pl.da || send_da_[i][r];
+    }
+  send_aktiv_ = aktiv;
+  send_lief_ = laeuft;
+  if (laeuft) send_p_ende_ = p1;
+  send_spielte_ = status_ == ArrStatus::spielt;
 }
 
 // sampler A2: one device lane value at an arbitrary project beat, on fresh cursors (the Arrangement's own cursors keep their place).
@@ -307,7 +398,7 @@ void Arrangement::auto_ueber_setzen(int i, int f, bool an, int64_t sample) {
 }
 
 // From here on `spur` of the override calls is an automation SLOT (slot_lane): a track index, or ARR_SPUREN + r for the fader lane of return r (the hand overrides a
-// return fader lane like a track fader lane). The OSC side (/k/arr/auto, /e/auto) stays at tracks 1..32: it never names a slot above ARR_SPUREN - 1.
+// return fader lane like a track fader lane). The OSC side (/k/arr/auto, /e/auto) stays at tracks 1..ARR_SPUREN: it never names a slot above ARR_SPUREN - 1.
 bool Arrangement::auto_lane_da(int spur, int feld) const {
   return spur >= 0 && spur < ARR_AUTO_SLOTS && feld >= 0 && feld < AUTO_FELDER && snap_ && slot_lane(*snap_, spur, feld);
 }
@@ -356,7 +447,9 @@ bool Arrangement::auto_lane_wert(int regler, float& wert) {
   if (status_ != ArrStatus::spielt || !snap_ || regler < 0 || regler >= cypherdj::stellwerk::MAX_REGLER) return false;
   const int streifen = regler_spur_[regler], fe = regler_feld_[regler];
   const int sp = streifen >= ARR_RET0 && streifen < ARR_RET0 + ARR_RETURNS ? ARR_SPUREN + (streifen - ARR_RET0) : streifen;   // strip index -> automation slot
-  if (sp < 0 || sp >= ARR_AUTO_SLOTS || (sp >= ARR_SPUREN && streifen < ARR_RET0) || fe < 0 || fe >= AUTO_FELDER || spur_regler_[sp][fe] != regler) return false;   // only spur/1..32/{fader,pan,mute,solo} and ret/<r>/fader
+  // only spur/1..128/{fader,pan,mute,solo} and ret/<r>/fader
+  if (sp < 0 || sp >= ARR_AUTO_SLOTS || (sp >= ARR_SPUREN && streifen < ARR_RET0) || fe < 0 || fe >= AUTO_FELDER || spur_regler_[sp][fe] != regler)
+    return false;
   if (!slot_lane(*snap_, sp, fe)) return false;
 #ifndef CYPHERDJ_MUTATION_ARR_AUTO_UEBER_PICKUP_IMMER
   if (auto_ueber_[sp][fe] || auto_pickup_[sp][fe] || !auto_war_[sp][fe]) return false;   // overridden, already picked up, or the lane has not played yet

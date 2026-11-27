@@ -1,0 +1,351 @@
+{
+ "format": "baukasten/2",
+ "name": "fx-tremolo",
+ "stimmen": 1,
+ "regler_namen": {
+  "1": "Rate mode",
+  "2": "Rate",
+  "3": "Depth",
+  "4": "Shape",
+  "5": "Mode",
+  "6": "Mix"
+ },
+ "knoten": [
+  {
+   "id": "ein",
+   "art": "eingang"
+  },
+  {
+   "id": "modus",
+   "art": "regler",
+   "nr": 1,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "rate",
+   "art": "regler",
+   "nr": 2,
+   "min": 0.05,
+   "max": 10,
+   "log": 1,
+   "mitte": 0.5
+  },
+  {
+   "id": "depth",
+   "art": "regler",
+   "nr": 3,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "shape",
+   "art": "regler",
+   "nr": 4,
+   "min": 0,
+   "max": 24,
+   "mitte": 6
+  },
+  {
+   "id": "mode",
+   "art": "regler",
+   "nr": 5,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "mix",
+   "art": "regler",
+   "nr": 6,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "aus",
+   "art": "ausgang"
+  },
+  {
+   "id": "rf",
+   "art": "lfo",
+   "form": 0
+  },
+  {
+   "id": "rs0",
+   "art": "lfo",
+   "form": 0,
+   "takt": 0.25
+  },
+  {
+   "id": "rs1",
+   "art": "lfo",
+   "form": 0,
+   "takt": 0.5
+  },
+  {
+   "id": "rs2",
+   "art": "lfo",
+   "form": 0,
+   "takt": 1
+  },
+  {
+   "id": "rs3",
+   "art": "lfo",
+   "form": 0,
+   "takt": 2
+  },
+  {
+   "id": "rs4",
+   "art": "lfo",
+   "form": 0,
+   "takt": 4
+  },
+  {
+   "id": "rs5",
+   "art": "lfo",
+   "form": 0,
+   "takt": 8
+  },
+  {
+   "id": "rs6",
+   "art": "lfo",
+   "form": 0,
+   "takt": 16
+  },
+  {
+   "id": "rw",
+   "art": "wahl",
+   "n": 8,
+   "blende": 50
+  },
+  {
+   "id": "minv",
+   "art": "mul",
+   "b": -1
+  },
+  {
+   "id": "wr",
+   "art": "wahl",
+   "n": 2,
+   "blende": 20
+  },
+  {
+   "id": "dm",
+   "art": "mul"
+  },
+  {
+   "id": "h",
+   "art": "mul",
+   "b": 0.5
+  },
+  {
+   "id": "nh",
+   "art": "mul",
+   "b": -1
+  },
+  {
+   "id": "eins",
+   "art": "add",
+   "b": 1
+  },
+  {
+   "id": "vl",
+   "art": "mul",
+   "b": 1.3
+  },
+  {
+   "id": "sal",
+   "art": "saett"
+  },
+  {
+   "id": "hml",
+   "art": "mul"
+  },
+  {
+   "id": "gl",
+   "art": "add"
+  },
+  {
+   "id": "ol",
+   "art": "mul"
+  },
+  {
+   "id": "vr",
+   "art": "mul",
+   "b": 1.3
+  },
+  {
+   "id": "sar",
+   "art": "saett"
+  },
+  {
+   "id": "hmr",
+   "art": "mul"
+  },
+  {
+   "id": "gr",
+   "art": "add"
+  },
+  {
+   "id": "or",
+   "art": "mul"
+  }
+ ],
+ "kanten": [
+  {
+   "von": "rate.aus",
+   "nach": "rf.rate"
+  },
+  {
+   "von": "rf.aus",
+   "nach": "rw.e1"
+  },
+  {
+   "von": "rs0.aus",
+   "nach": "rw.e2"
+  },
+  {
+   "von": "rs1.aus",
+   "nach": "rw.e3"
+  },
+  {
+   "von": "rs2.aus",
+   "nach": "rw.e4"
+  },
+  {
+   "von": "rs3.aus",
+   "nach": "rw.e5"
+  },
+  {
+   "von": "rs4.aus",
+   "nach": "rw.e6"
+  },
+  {
+   "von": "rs5.aus",
+   "nach": "rw.e7"
+  },
+  {
+   "von": "rs6.aus",
+   "nach": "rw.e8"
+  },
+  {
+   "von": "modus.aus",
+   "nach": "rw.wahl"
+  },
+  {
+   "von": "rw.aus",
+   "nach": "minv.a"
+  },
+  {
+   "von": "rw.aus",
+   "nach": "wr.e1"
+  },
+  {
+   "von": "minv.aus",
+   "nach": "wr.e2"
+  },
+  {
+   "von": "mode.aus",
+   "nach": "wr.wahl"
+  },
+  {
+   "von": "depth.aus",
+   "nach": "dm.a"
+  },
+  {
+   "von": "mix.aus",
+   "nach": "dm.b"
+  },
+  {
+   "von": "dm.aus",
+   "nach": "h.a"
+  },
+  {
+   "von": "h.aus",
+   "nach": "nh.a"
+  },
+  {
+   "von": "nh.aus",
+   "nach": "eins.a"
+  },
+  {
+   "von": "rw.aus",
+   "nach": "vl.a"
+  },
+  {
+   "von": "vl.aus",
+   "nach": "sal.x"
+  },
+  {
+   "von": "shape.aus",
+   "nach": "sal.antrieb"
+  },
+  {
+   "von": "sal.aus",
+   "nach": "hml.a"
+  },
+  {
+   "von": "h.aus",
+   "nach": "hml.b"
+  },
+  {
+   "von": "hml.aus",
+   "nach": "gl.a"
+  },
+  {
+   "von": "eins.aus",
+   "nach": "gl.b"
+  },
+  {
+   "von": "ein.l",
+   "nach": "ol.a"
+  },
+  {
+   "von": "gl.aus",
+   "nach": "ol.b"
+  },
+  {
+   "von": "ol.aus",
+   "nach": "aus.l"
+  },
+  {
+   "von": "wr.aus",
+   "nach": "vr.a"
+  },
+  {
+   "von": "vr.aus",
+   "nach": "sar.x"
+  },
+  {
+   "von": "shape.aus",
+   "nach": "sar.antrieb"
+  },
+  {
+   "von": "sar.aus",
+   "nach": "hmr.a"
+  },
+  {
+   "von": "h.aus",
+   "nach": "hmr.b"
+  },
+  {
+   "von": "hmr.aus",
+   "nach": "gr.a"
+  },
+  {
+   "von": "eins.aus",
+   "nach": "gr.b"
+  },
+  {
+   "von": "ein.r",
+   "nach": "or.a"
+  },
+  {
+   "von": "gr.aus",
+   "nach": "or.b"
+  },
+  {
+   "von": "or.aus",
+   "nach": "aus.r"
+  }
+ ]
+}

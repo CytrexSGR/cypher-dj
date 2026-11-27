@@ -8,7 +8,7 @@ import { nachkommen, schluesselErlaubt, type SchluesselFrage } from './routing_r
 export interface ZielZelle { ziel: string; aktiv: boolean; erlaubt: boolean; grund?: string; text?: string }
 export interface Option { quelle: string; nr: number; punkt: 'pre' | 'post'; erlaubt: boolean; grund?: string; text?: string }
 export interface Stufe {
-  insert_id: string; art: 'komp' | 'eq' | 'saett' | 'lim' | 'utility' | 'bk'; slot: number; an: boolean;
+  insert_id: string; art: 'komp' | 'eq' | 'saett' | 'lim' | 'utility' | 'bk' | 'gate' | 'mb' | 'host'; slot: number; an: boolean;
   schluessel: null | { quelle: 'spur' | 'grp' | 'ret' | 'deck' | 'erz'; nr: number; punkt: 'pre' | 'post' }; optionen?: Option[];
 }
 export interface Strang {
@@ -55,7 +55,9 @@ export function routingMatrix(p: Projekt, optionenFuer?: string): RoutingMatrix 
   if (optionenFuer !== undefined) {
     wahl = alle.find((x) => x.insert.id === optionenFuer);
     if (!wahl) throw new BefehlFehler('argument_ungueltig', `optionen: no stage ${optionenFuer}`);
-    if (wahl.insert.art !== 'komp') throw new BefehlFehler('argument_ungueltig', `optionen: only a compressor stage has a key (${wahl.insert.art})`);
+    if (wahl.insert.art !== 'komp' && wahl.insert.art !== 'host') {
+      throw new BefehlFehler('argument_ungueltig', `optionen: only a compressor or host stage has a key (${wahl.insert.art})`);
+    }
   }
   const mitStufen = (strangId: string, st: InsertTraeger): Stufe[] => stufen(st).map((i) => {
     const s = stufe(i);

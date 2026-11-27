@@ -8,12 +8,12 @@ plays the arrangement, on the same sample clock.
 
 ## Tracks, groups, returns, master
 
-Up to 32 tracks, 16 group tracks and 4 returns. Every track goes to the production master or into one group, and a group can go into another group: a DRUMS group can hold a KICK, a PERC and a HATS group, each with its own inserts, fader and sends. Audio tracks
+Up to 128 tracks, 16 group tracks and 8 returns. Every track goes to the production master or into one group, and a group can go into another group: a DRUMS group can hold a KICK, a PERC and a HATS group, each with its own inserts, fader and sends. Audio tracks
 take samples and tracks dragged from the library; instrument tracks play the RB-338, a Cypher Modular graph (up to 16 such
 tracks) or a hosted instrument plugin (Surge XT or a third-party plugin, two such slots). To add an instrument track, double click an entry in the INSTRUMENTS list of the browser on the left (or drag it onto the arrangement): RB-338, Surge or a Cypher Modular graph. The graphs are listed under their file names, for example `synth-kraken` for Kraken and `synth-mono` for the Mono Synth. In a project without tracks the arrangement says so. Per track: volume, pan, mute, solo, a meter. Every change is one undo step, and the undo
 history survives a restart.
 
-A return takes sends from every track and group (four sends per strip, taken after the fader and pan) and can carry
+A return takes sends from every track and group (one send per return, taken after the fader and pan) and can carry
 Cypher Hall: pre-delay, decay, size, low factor, high cut, tail. A return can also take its sends before the fader of
 their source (the PRE and POST switch on the return).
 
@@ -65,7 +65,7 @@ Limits:
 ## Inserts, sidechain, macros
 
 Each track, group, return and the production master has an insert chain of up to five stages. A stage is one of our own
-devices from a pool that the whole project shares: 12 compressors, 8 EQs, 4 saturators, 2 limiters and 8 utilities (stereo width and bass mono), plus a Cypher Modular effect graph as a stage. The chain of a
+devices from a pool that the whole project shares: 160 compressors and 160 EQs (one of each for every track, group, return and the master), 4 saturators, 8 limiters, 8 utilities (stereo width and bass mono), 16 noise gates and 8 multiband compressors (three bands: Low, Mid, High), plus a Cypher Modular effect graph as a stage. The chain of a
 return sits after its Hall, the chain of the master before the master fader (so the export carries it). A bypass is a
 10 ms blend; every stage shows its gain reduction. Stages that add latency (EQ and saturator 69 samples, limiter 86
 samples at 48 kHz) are compensated across tracks and groups, up to 1024 samples per place. The limiter looks ahead 1.5 ms
@@ -97,6 +97,13 @@ gesture is written), Latch (after the release the last value holds until stop) o
 is overwritten). Clips carry envelopes of their own: gain on audio clips, transpose on MIDI clips, and relative track
 volume and pan on any clip. Lanes for the parameters of insert stages, the rack macros and the knobs of a Cypher Modular track exist as well, drawn or recorded from the hand.
 
+The level of a send can be automated too: the lane menu of a track offers `Send <return name>` for every send the track has
+and that has no lane yet (tracks only, not groups). The lane is drawn and edited on the dB scale of the fader. It needs an
+existing send: a send with a lane cannot be switched off until you delete its lane, and deleting a return removes its send
+lanes. The lane is evaluated once per audio block, so a step is smoothed over up to 21 ms. In the routing matrix a send cell
+with a lane carries a mark, and the tooltip reads "Automated: the lane sets this send". Nothing grabs a send lane by hand: the
+send knob is stored but not heard while the lane exists.
+
 ## Takes, comping, bounce, merge
 
 Recording keeps every pass as a take lane under the track, and what it overwrote goes to a lane named Original. Drag a
@@ -111,7 +118,7 @@ track at a beat, overwriting that track's main lane there. All of them are an of
 ## Presets
 
 A browser for presets of our own devices (EQ, Hall, compressor, saturator, RB-338, Cypher Modular): 213 factory presets,
-your own, and collections of samples, presets and devices. Presets are described with words from one closed vocabulary,
+your own, and collections of samples, presets and devices. The Hall presets cannot be applied yet: applying one is refused, because the Hall of a return is another device. Presets are described with words from one closed vocabulary,
 and the agent can search them by those words. Drag a preset onto a track, a stage or a strip row, or save the current
 state of a target as a new preset.
 
@@ -131,10 +138,39 @@ a note track. The generated track starts at 0 dB; its pan law leaves it about 3 
 
 **First notes:** double click in the row of an instrument track to add a MIDI clip; the selected clip opens in the
 piano roll below, where a double click adds a note. PLAY starts at the start marker, and a click into the empty
-arrangement moves that marker, so after a stray click PLAY may start behind the clip. EXPORT writes the WAV into the
-`export` folder of the project (`~/cypherdj/werke/projekte/<project>/export/` on a fresh install).
+arrangement moves that marker, so after a stray click PLAY may start behind the clip. EXPORT writes the master, a WAV
+at 48 kHz and 32 bit float, into the `export` folder of the project (`~/cypherdj/werke/projekte/<project>/export/` on a
+fresh install); the export dialog adds delivery files next to it (see below). When the export is done, SHOW FOLDER next to the
+saved path opens that folder in the file manager.
 
-Notes are drawn in a piano roll with velocity and 1/16 quantize. Tracks can share a variant group (bass A, B, C) where
+**Export to.** The export dialog has a row "Export to". By default the files go to the `export` folder of the project. CHOOSE…
+opens a folder picker above the dialog; pick any folder below your home folder or on a mounted disk (a folder with a hidden
+name in its path is not offered) and the master, the delivery files or the per-track set are written there. Nothing is
+replaced, and no copy stays in the project. PROJECT FOLDER goes back to the default. The dialog remembers the folder for all
+projects; if it is gone at the next start (an unplugged disk), the row says so and that export goes to the project folder.
+The rule that keeps the last three exports tidy applies to the project folder only: in your own folder nothing is ever moved.
+SHOW FOLDER opens the chosen folder. On a disk without hard links (FAT, exFAT) the delivery files are copied.
+
+**Piano roll tools:**
+- **SNAP** sets the grid for drawing, moving and stretching notes: 1/32, 1/16, 1/8 and 1/4, the triplets 1/16T, 1/8T and
+  1/4T, one bar (BAR), or no snapping (OFF). The grid lines follow it, also the fine ones, as long as they are at least
+  6 pixels apart.
+- **QUANTIZE** (or the Q key) moves the selected notes, or all notes when none is selected, onto the SNAP grid. With
+  BAR or OFF it uses 1/16. **STR** is the strength in percent (100 moves a note all the way, 50 half way), **SWING** is
+  the swing in percent from 50 (straight) to 75, about 67 gives a triplet feel; it works on the straight grids only.
+  Swing changes the stored note positions, it is not the playback swing of the step sequencer rows. A note never
+  leaves the clip or its loop. If every note is on the grid already, a message says so and nothing is written.
+- **HUMANIZE** shifts the start of the selected notes (or all) by a random amount up to **TIME** percent of a sixteenth
+  and their velocity by up to **±VEL** steps. Every click draws a new random shift and acts on the notes as they are now, so clicking twice shifts twice; one undo step takes a click back.
+- **SCALE** keeps new notes, vertical moves and the up and down arrow keys in the key of the project (set with KEY or
+  FIND): a new note lands on the nearest note of the key, an arrow key moves one step of the key. It is remembered, and
+  it does nothing while the project has no key.
+
+A pattern (Strudel) clip that was quantised or humanised counts as hand work afterwards: generating it again from the pattern then asks for `ueberschreiben`.
+
+The agent does the same with the commands `noten_quantisieren` and `noten_humanisieren` of `proj_aendern`.
+
+Notes are drawn in a piano roll with velocity. Tracks can share a variant group (bass A, B, C) where
 one click makes one of them audible. Recording takes one of the studio's own channels, including the extra pattern
 streams, onto an armed audio track, bit-identical. The WAV export is an offline render by the same core; hosted instruments are frozen first, so the file is
 sample-identical to what was heard (residual -200 dBFS, measured 17 October 2026). An offline render measures LUFS, LRA
@@ -143,6 +179,52 @@ and true peak per track as it sits in the mix.
 The agent has the same projects through its tools: create tracks, write clips and notes, warp, separate stems, automate,
 insert and key, comp, bounce, merge, apply presets, mix, start the transport, export. Without a loop bracket the export
 takes the whole song.
+
+**Markers.** A strip above the ruler holds named markers: Intro, Drop, Break, whatever the song needs. A click on a
+marker puts the start marker there (and jumps there when the transport runs). Shift click makes the stretch from that
+marker to the next one the loop and switches it on; for the last marker the stretch ends with the last clip. The export
+range follows the loop, so a Shift click on a marker also chooses the export range. A double click on a marker renames
+it (Enter keeps the name, Escape leaves it), a drag moves it on the GRID, Delete or the right-click menu removes it.
+A double click on the empty strip, or + MARKER in the transport bar (at the start marker), adds one and opens its name.
+A project holds up to 64 markers, one per beat. Markers move with inserted and removed time and with the section moves
+of the tracker view, and one undo takes the move back. They are labels only: they change nothing in the sound, and the
+live container has none. The agent reads them with the project and writes them with `marker_setzen` and `marker_loeschen`.
+
+**Delivery files.** EXPORT opens a dialog. The master (WAV, 48 kHz, 32 bit float) is always written and never changed;
+up to four delivery files are made from it with ffmpeg and named like the master with a tag before the extension, for
+example `<master>.16bit-44k.wav` or `<master>.320kbps-44k.mp3`. Formats: WAV with 16 bit, 24 bit or 32 bit float, FLAC with
+16 or 24 bit, MP3 with 192, 256 or 320 kbit/s constant bit rate. Sample rates are 44.1, 48, 88.2 and 96 kHz (MP3: 44.1 or
+48 kHz). The conversion uses libsoxr; a 16 bit file gets TPDF dither, which can be switched off, and there is none at 24
+bit. The presets are Master only, Release (WAV 16 bit 44.1 kHz), Promo (MP3 320), Release and promo, and Custom. If one
+file cannot be written (ffmpeg missing, built without libmp3lame or libsoxr), the master and the other files stay and the
+page names the one that failed.
+
+**Loudness target.** The target is either streaming (-14 LUFS and -1 dBTP) or a true peak ceiling of -1 dBTP. It is a
+check, not a processor: the master and every delivery file are measured on the file itself, and the page shows the
+distance in LU. A true peak above the ceiling is a warning, and a target that could not be measured is marked as not
+measured. Nothing is normalised and the mix is never limited to the target.
+
+**Metadata.** The release data of the project (title, artist, album, year, genre, ISRC) is written into the delivery
+files and never into the master. The title is the project name unless you set one. WAV carries title, artist, album,
+date, genre and ISRC plus a BWF `bext` chunk. FLAC adds BPM and INITIALKEY, MP3 is ID3v2.3 with TSRC, TBPM and TKEY.
+Tempo and key appear only where the format has a place for them, and the key only when the project key is a major or
+minor scale. The switch "Write metadata into the delivery files" turns the release tags off; ffmpeg still writes its own
+encoder tag.
+
+**One file per track.** The second mode of the dialog writes the mix, every unmuted track alone and every fed return
+(wet only) as one file each into a new folder of the export folder. With a delivery format (WAV or FLAC, one format, no
+MP3) the files of the set are written in that format instead of the float WAV, without tags. It renders offline, so it is
+not available while a plugin stage is on. When old exports are tidied, delivery files move to the bin together with their
+master and never count as exports.
+
+The agent exports through `proj_export` (with `abgabe`, `ziel` and `ohne_meta`) and `proj_export_spuren`; the release data is
+set with `abgabe_meta_setzen` in `proj_aendern`.
+
+Limits:
+- Delivery files are WAV, FLAC and MP3. No cover art, and no OGG, Opus or AAC.
+- No loudness normalisation: a target only reports.
+- Dither exists at 16 bit only.
+- The files of a per-track set do not add up exactly to the mix: each one passes the master chain alone.
 
 ## Tracker
 

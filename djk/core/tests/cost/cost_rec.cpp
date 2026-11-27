@@ -101,7 +101,6 @@ static Messung messe_lage(const Lage& lg, int n, int Q, const std::string& ordne
   Kostensenke intern(0), wirt(2 * 256 + 25);   // stand-in sink with an explicit lead (537); the cost lanes do not use the kernel constant for it
   l.kern->setze_arr_senke_intern(&intern);
   l.kern->setze_arr_senke_wirt(1, &wirt);
-  cdj::Befehl f = l.neu(cdj::Befehl::TEIL); std::snprintf(f.pfad, sizeof f.pfad, "erz/4/fader"); f.politik = 1; l.bef->schiebe(f);
   cdj::ArrLadeErgebnis e = cdj::lade_wiedergabe(ordner, 1, cache);
   if (!e.snap) { std::fprintf(stderr, "kosten_rec: %s\n", e.meldung.c_str()); std::exit(1); }
   cdj::Befehl b = l.neu(cdj::Befehl::ARR_LADEN); b.zeiger = e.snap.release(); b.arr_nr = 1; l.bef->schiebe(b);

@@ -40,7 +40,8 @@ constexpr int N = 256;
 constexpr double PI = 3.14159265358979323846;
 
 struct Lauf {
-  sw::ReglerTabelle tab;
+  std::unique_ptr<sw::ReglerTabelle> tab_ = std::make_unique<sw::ReglerTabelle>();   // heap: the 24 576-row table fits only once or twice on an 8 MiB stack
+  sw::ReglerTabelle& tab = *tab_;
   std::unique_ptr<cdj::Mixer> m;
   float ml[1024], mr[1024], cl[1024], cr[1024];
   std::vector<float> ausgabe;   // everything a test can read, per block

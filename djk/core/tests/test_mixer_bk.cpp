@@ -68,7 +68,8 @@ static const char* GROSS =
     R"({"format":"baukasten/2","name":"gross","stimmen":1,"knoten":[{"id":"e","art":"eingang"},{"id":"a","art":"mul","b":100},{"id":"b","art":"mul","b":100},{"id":"o","art":"ausgang"}],"kanten":[{"von":"e.l","nach":"a.a"},{"von":"e.r","nach":"b.a"},{"von":"a.aus","nach":"o.l"},{"von":"b.aus","nach":"o.r"}]})";
 
 struct Lauf {
-  sw::ReglerTabelle tab;
+  std::unique_ptr<sw::ReglerTabelle> tab_ = std::make_unique<sw::ReglerTabelle>();   // heap: the 24 576-row table fits only once or twice on an 8 MiB stack
+  sw::ReglerTabelle& tab = *tab_;
   std::unique_ptr<cdj::Mixer> m;
   float ml[N], mr[N], cl[N], cr[N];
   long t = 0;
@@ -104,7 +105,8 @@ static const char* ECHO10 =
 
 // S6: DC on deck/1, fader 0 dB, send 3 at 0 dB and send 4 off by default. block() returns a copy of the master sum.
 struct SLauf {
-  sw::ReglerTabelle tab;
+  std::unique_ptr<sw::ReglerTabelle> tab_ = std::make_unique<sw::ReglerTabelle>();   // heap: the 24 576-row table fits only once or twice on an 8 MiB stack
+  sw::ReglerTabelle& tab = *tab_;
   std::unique_ptr<cdj::Mixer> m;
   float ml[N], mr[N], cl[N], cr[N];
   float aus_l[N], aus_r[N];

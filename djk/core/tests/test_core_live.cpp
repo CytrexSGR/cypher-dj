@@ -6,7 +6,7 @@
 //   K3 disarm  K4 end of the run (the transport keeps playing; a key played after it sounds again)  K5 transport stop  K6 swap (two variants)  K7 midi_ein disconnect
 //   K9 planned (quantized) transport stop inside a cycle, the live On stamped after the stop sample in the same cycle: the note sounds from its onset, stays held, the player's off ends it
 //   K8 quantum 2048: a note at offset 1500 (second sub-block) is not lost (the stamp is clamped into the first sub-block), and the sink counts nothing lost
-//   K10 /k/arr/note (sampler plan A1 task 7): one note on a project track with the transport standing and no arm: on, off (vel 0), spur 0 and 33 refused spur_bereich with
+//   K10 /k/arr/note (sampler plan A1 task 7): one note on a project track with the transport standing and no arm: on, off (vel 0), spur 0 and ARR_SPUREN + 1 refused spur_bereich with
 //       nothing reaching the sink, cypher after the AI stop refused ki_gestoppt (andreas still plays)
 //   K11 /k/arr/stift (kraken patch field): a held note on a bk track whose graph has a matrix is silent until a pin arrives, with the transport standing; the pin sounds at once (receipts 1 and 3),
 //       a refused pin (spur 0) changes nothing; the pin waits behind a queued ARR_LADEN exactly as ARR_NOTE (full event ring: the load waits for the return, the pin and the note behind it)
@@ -18,12 +18,19 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
 #include <string>
 
 #include "arr_run.h"
+#include "cypherdj/arr_maske.h"
 
 bool g_waechter = false;
 using k35::N;
+static cdj::ArrMaske<cdj::ARR_SPUREN> spur_maske(std::initializer_list<int> nr) {   // the MIDI arm mask of these tracks (bit = nr - 1)
+  cdj::ArrMaske<cdj::ARR_SPUREN> m;
+  for (int n : nr) m.setze(n - 1);
+  return m;
+}
 
 namespace {
 
@@ -49,7 +56,7 @@ struct Rig {
     b.nr = 2; b.an = 1; b.deck = 30; b.zeiger = m;
     const int64_t id = x.sende(b);
     x.lauf(x.kern->sample() + 3 * N);
-    PRUEF(x.quittung(id, 3) != nullptr && x.kern->aufnahme().midi_maske() == (1u << 1));
+    PRUEF(x.quittung(id, 3) != nullptr && x.kern->aufnahme().midi_maske() == spur_maske({2}));
     adoptiert = true;
   }
   int64_t disarm() {
@@ -135,7 +142,7 @@ int main() {
     const int64_t t = r.x.kern->sample();
     const int64_t id = r.disarm();
     still(r, t, "K3 disarm");
-    PRUEF(r.x.quittung(id, 3) != nullptr && r.x.kern->aufnahme().midi_maske() == 0u);
+    PRUEF(r.x.quittung(id, 3) != nullptr && r.x.kern->aufnahme().midi_maske().leer());
     r.adoptiert = false;   // the recorder went back through REC_ALT (fassung 1): ende() only frees it
     r.x.lauf(r.x.kern->sample() + 3 * N);
     r.ende();
@@ -262,7 +269,7 @@ int main() {
     arr35::Lauf x(ab.pfad, "test_kern_live_k10");
     x.laden(5, RB1);
     x.lauf(12 * N);
-    PRUEF(x.kern->arrangement().status() == cdj::ArrStatus::steht && x.kern->aufnahme().midi_maske() == 0u);   // transport stands, nothing armed
+    PRUEF(x.kern->arrangement().status() == cdj::ArrStatus::steht && x.kern->aufnahme().midi_maske().leer());   // transport stands, nothing armed
     const auto live = [&] { return x.kern->arrangement().live_offene_noten(); };
     const auto note = [&](int spur, int ton, int vel, const char* quelle) {   // /k/arr/note: nr = spur, politik = ton, fassung = vel
       cdj::Befehl b = x.neu(cdj::Befehl::ARR_NOTE, quelle);
@@ -285,12 +292,12 @@ int main() {
     const float aus = spitze(x.pm_l, t1 + 4800, t1 + 4800 + 2400);
     std::printf("K10 off: ack 3 %d, live table %d, peak in [t + 100 ms, t + 150 ms) %.3g\n", x.quittung(id2, 3) != nullptr, live(), aus);
     PRUEF(x.quittung(id2, 3) != nullptr && live() == 0 && aus < 1e-4f);
-    // spur outside 1..32: refused spur_bereich, no note reaches the sink (silent bus, empty table, nothing lost)
+    // spur outside 1..ARR_SPUREN: refused spur_bereich, no note reaches the sink (silent bus, empty table, nothing lost)
     const int64_t t2 = x.kern->sample();
-    const int64_t id0 = note(0, 60, 100, "andreas"), id33 = note(33, 60, 100, "andreas");
+    const int64_t id0 = note(0, 60, 100, "andreas"), id33 = note(cdj::ARR_SPUREN + 1, 60, 100, "andreas");   // one above the last track
     x.lauf(t2 + 8 * N);
     const float still_ = spitze(x.pm_l, t2, t2 + 8 * N);
-    std::printf("K10 spur 0 / 33: refused %d / %d, live table %d, peak %.3g\n", x.quittung(id0, 6) != nullptr, x.quittung(id33, 6) != nullptr, live(), still_);
+    std::printf("K10 spur 0 / ARR_SPUREN + 1: refused %d / %d, live table %d, peak %.3g\n", x.quittung(id0, 6) != nullptr, x.quittung(id33, 6) != nullptr, live(), still_);
     PRUEF(x.quittung(id0, 6) && x.quittung(id0, 6)->grund == "spur_bereich");
     PRUEF(x.quittung(id33, 6) && x.quittung(id33, 6)->grund == "spur_bereich");
     PRUEF(!x.quittung(id0, 1) && !x.quittung(id33, 1) && live() == 0 && still_ < 1e-4f && x.kern->arr_rb().verloren() == 0);
@@ -351,7 +358,7 @@ int main() {
     note(1, 57, 100);
     x.lauf(t0 + 8 * N);
     const float still0 = spitze(x.pm_l, t0, t0 + 8 * N);
-    // a pin of a spur outside 1..32 is refused and changes nothing
+    // a pin of a spur outside 1..ARR_SPUREN is refused and changes nothing
     const int64_t t1 = x.kern->sample();
     const int64_t id0 = stift(0, 0, 0, 0, 1.0f);
     x.lauf(t1 + 8 * N);

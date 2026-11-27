@@ -17,6 +17,7 @@
 
 #include "arr_file.h"
 #include "cypherdj/arr_playback.h"
+#include "cypherdj/render.h"
 #include "check.h"
 
 using cdj::ArrArt;
@@ -538,6 +539,77 @@ int main() {
       if (e.snap) cdj::gib_wiedergabe(e.snap.release(), cache);
       PRUEF(cache.eintraege() == 0 && konto.gesperrt() == 0);
     }
+  }
+  {  // strand 1 task 6.3: 128 tracks. A playback with 128 tracks loads and track 128 plays into the master through group 1 (group fader down: gone);
+     // a compressor on track 1 keyed by track 128 (row sc = 128) reduces the quiet bass of track 1 while track 128 is loud;
+     // track 129 and 129 tracks are refused with spur_bereich
+    arrdatei::Ordner o2("test_arr_wiedergabe_128");
+    const std::string bass = o2.sinus('a', 400000, 220.0, 0.01f), laut = o2.sinus('b', 400000, 1000.0, 0.5f);
+    const auto clip_spur = [&](int nr, const std::string& sha, const std::string& extra) {
+      return "{\"nr\":" + std::to_string(nr) + ",\"art\":\"audio\"" + extra + ",\"clips\":[" +
+             o2.clip(("c" + std::to_string(nr)).c_str(), 0.0, 16.0, sha, 400000) + "]}";
+    };
+    std::string spuren = clip_spur(1, bass, ",\"chain\":[{\"art\":\"komp\",\"slot\":1}]");
+    for (int i = 2; i < 128; ++i) spuren += ",{\"nr\":" + std::to_string(i) + ",\"art\":\"audio\",\"clips\":[]}";
+    spuren += "," + clip_spur(128, laut, ",\"ausgang\":{\"art\":\"gruppe\",\"nr\":1}");
+    o2.roh(1, "{\"format\":\"cypherdj-arr/2\",\"nr\":1,\"spuren\":[" + spuren + "],\"gruppen\":[{\"nr\":1,\"ausgang\":{\"art\":\"master\"}}]}");
+    {
+      cdj::SpeicherKonto konto(100LL << 20);
+      cdj::ArrAudioCache cache(&konto, 50LL << 20, false);
+      cdj::ArrLadeErgebnis e = cdj::lade_wiedergabe(o2.pfad, 1, cache);
+      if (!e.snap) std::fprintf(stderr, "128 tracks: grund=%s meldung=%s\n", e.grund.c_str(), e.meldung.c_str());
+      PRUEF(e.snap && e.grund.empty());
+      if (e.snap) {
+        PRUEF(e.snap->spur[127].nr == 128 && e.snap->spur[127].n_clips == 1 && e.snap->spur[127].ausgang == 1);
+        cdj::gib_wiedergabe(e.snap.release(), cache);
+      }
+      o2.wiedergabe(2, "{\"nr\":129,\"art\":\"audio\",\"clips\":[]}");
+      e = cdj::lade_wiedergabe(o2.pfad, 2, cache);
+      PRUEF(!e.snap && e.grund == "spur_bereich");   // track 129
+      if (e.snap) cdj::gib_wiedergabe(e.snap.release(), cache);
+      PRUEF(cache.eintraege() == 0 && konto.gesperrt() == 0);
+    }
+    const auto rms_db = [](const cdj::RenderErgebnis& r) {
+      double q = 0.0;
+      for (size_t i = 0; i < r.l.size(); ++i) q += static_cast<double>(r.l[i]) * r.l[i] + static_cast<double>(r.r[i]) * r.r[i];
+      return 10.0 * std::log10(q / static_cast<double>(2 * (r.l.size() + 1)) + 1e-20);
+    };
+    const auto render = [&](float grp_fader, float sc) {
+      cdj::RenderAuftrag r;
+      r.arr_ordner = o2.pfad;
+      r.nr = 1;
+      r.von_beat = 0.0;
+      r.bis_beat = 8.0;
+      r.bpm = 128.0;
+      r.regler_projekt = true;
+      for (const std::string p : {"spur/1/", "spur/128/", "grp/1/"}) {
+        r.spur_regler.push_back({p + "fader", p == "grp/1/" ? grp_fader : 0.0f});
+        r.spur_regler.push_back({p + "pan", 0.0f});
+        r.spur_regler.push_back({p + "mute", 0.0f});
+        r.spur_regler.push_back({p + "solo", 0.0f});
+      }
+      const std::pair<const char*, float> zeilen[] = {{"schwelle", -30.0f}, {"ratio", 8.0f}, {"knie", 0.0f}, {"attack", 1.0f}, {"release", 50.0f},
+                                                     {"makeup", 0.0f}, {"mix", 1.0f}, {"schp", 0.0f}, {"sc", sc}, {"an", 1.0f}};
+      for (const auto& z : zeilen) r.spur_regler.push_back({std::string("ins/komp/1/") + z.first, z.second});
+      r.abgriff = cdj::RenderAbgriff::produktion;
+      return cdj::rendere(r);
+    };
+    const cdj::RenderErgebnis offen = render(0.0f, 0.0f), zu = render(-200.0f, 0.0f), geduckt = render(-200.0f, 128.0f);
+    std::printf("128 tracks: group open %s %.2f dBFS, group closed %s %.2f dBFS, keyed by track 128 %s %.2f dBFS\n", offen.fehler.c_str(), rms_db(offen),
+                zu.fehler.c_str(),
+                rms_db(zu), geduckt.fehler.c_str(), rms_db(geduckt));
+    PRUEF(offen.fehler.empty() && zu.fehler.empty() && geduckt.fehler.empty());
+    PRUEF(offen.frames > 0 && rms_db(offen) > -20.0);           // track 128 reaches the master through group 1
+    PRUEF(rms_db(zu) < -35.0 && rms_db(zu) > -60.0);            // group 1 closed: only the bass of track 1 is left
+    PRUEF(rms_db(zu) - rms_db(geduckt) >= 3.0);                  // the key of track 128 ducks track 1
+    std::string viele;   // 129 tracks numbered 1..129
+    for (int i = 1; i <= 129; ++i) viele += (i > 1 ? "," : "") + std::string("{\"nr\":") + std::to_string(i) + ",\"art\":\"audio\",\"clips\":[]}";
+    o2.wiedergabe(3, viele);
+    cdj::SpeicherKonto konto(100LL << 20);
+    cdj::ArrAudioCache cache(&konto, 50LL << 20, false);
+    cdj::ArrLadeErgebnis e = cdj::lade_wiedergabe(o2.pfad, 3, cache);
+    PRUEF(!e.snap && e.grund == "spur_bereich");
+    if (e.snap) cdj::gib_wiedergabe(e.snap.release(), cache);
   }
   PRUEF_ENDE();
 }

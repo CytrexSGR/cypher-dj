@@ -1,0 +1,42 @@
+{
+ "schema": 1,
+ "name": "Space Vocal Plate",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "space-platte",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5417,
+  "knob3": 0.6205,
+  "knob4": 0.6801,
+  "knob5": 0.5,
+  "knob6": 0
+ },
+ "beschreibung": {
+  "art": "reverb",
+  "unterart": "plate",
+  "charakter": [
+   "bright",
+   "smooth",
+   "clean"
+  ],
+  "genre": [
+   "house",
+   "deep_house",
+   "disco"
+  ],
+  "einsatz": [
+   "intro",
+   "breakdown",
+   "mixdown"
+  ],
+  "energie": 2,
+  "text": "25 % mix, 30 ms pre-delay, low cut 200 Hz, high cut 12 kHz: a bright smooth tail."
+ },
+ "tags": [
+  "fx-space"
+ ],
+ "notiz": "Knobs 1..6 set by the knob ranges of the graph, not yet heard (2026-11-26). The room is the graph.",
+ "angelegt": "2026-11-26T00:00:00.000Z",
+ "geaendert": "2026-11-26T00:00:00.000Z"
+}

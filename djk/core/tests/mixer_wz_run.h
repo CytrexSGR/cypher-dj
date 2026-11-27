@@ -24,7 +24,8 @@ constexpr int DECK1 = 0, DECK2 = 1, PAD1 = 2, PAD2 = 3, BUS1 = 4, BUS2 = 5, BUS3
 inline const char* kname(int k) { return cdj::Mixer::kanal_name(k); }
 
 struct Lauf {
-  sw::ReglerTabelle tab;
+  std::unique_ptr<sw::ReglerTabelle> tab_ = std::make_unique<sw::ReglerTabelle>();   // heap: the 24 576-row table fits only once or twice on an 8 MiB stack
+  sw::ReglerTabelle& tab = *tab_;
   std::unique_ptr<cdj::Mixer> m;
   float ml[cdj::MIX_BLOCK] = {}, mr[cdj::MIX_BLOCK] = {}, cl[cdj::MIX_BLOCK] = {}, cr[cdj::MIX_BLOCK] = {};
   long t = 0;

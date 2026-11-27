@@ -139,7 +139,7 @@ export const AUSGABEN = {
   '/e/ins_host': f('ii', 'h gesund'),                                                                      // plan 1.11 T5 (§5.13)
   '/e/export_lauf': f('hfiis', 'frames spitze luecken ungesund grund'),                                    // plan 1.11 T12 (§5.13)
   '/e/ins_mess': f('iis', 'h rundweg grund'),                                                              // plan 1.11 T5 (§5.13)
-  '/zustand/ins_host': f('iiiiiiiiiiii', 'h_1 gesund_1 rundweg_1 h_2 gesund_2 rundweg_2 h_3 gesund_3 rundweg_3 h_4 gesund_4 rundweg_4'),   // plan 1.11 T5 (§5.13), type entry only: the sender is the real core                                                // 1.10 slice 7 (T5)
+  '/zustand/ins_host': f('iiiiiiiiiiiiiiiiiiiiiiiii', 'h_1 gesund_1 rundweg_1 h_2 gesund_2 rundweg_2 h_3 gesund_3 rundweg_3 h_4 gesund_4 rundweg_4 h_5 gesund_5 rundweg_5 h_6 gesund_6 rundweg_6 h_7 gesund_7 rundweg_7 h_8 gesund_8 rundweg_8 schluessel_da'),   // plan 1.11 T5 (§5.13), type entry only: the sender is the real core                                                // 1.10 slice 7 (T5)
 };
 
 export const STATUS = { angenommen: 1, gestartet: 2, fertig: 3, verspaetet_verworfen: 4, verspaetet_ausgefuehrt: 5, abgelehnt: 6, abgebrochen: 7, storniert: 8 };
@@ -177,14 +177,14 @@ const R = (einheit, min, max, vorgabe, nurHand = false) => ({ einheit, min, max,
 function kanalzug(k) {
   const bus = k.startsWith('bus/');
   const m = {
-    fader: R(DB, -200, 0, -200, bus), trim: R(DB, -24, 24, 0),
+    fader: R(DB, -200, 0, -200), trim: R(DB, -24, 24, 0),
     'eq/tief': R(DB, -200, 6, 0), 'eq/mitte': R(DB, -200, 6, 0), 'eq/hoch': R(DB, -200, 6, 0),
     'kill/tief': R(SCHALTER, 0, 1, 0), 'kill/mitte': R(SCHALTER, 0, 1, 0), 'kill/hoch': R(SCHALTER, 0, 1, 0),
     filter: R(LIN, -1, 1, 0),
     'send/1': R(DB, -200, 0, -200), 'send/2': R(DB, -200, 0, -200), 'send/3': R(DB, -200, 0, -200), 'send/4': R(DB, -200, 0, -200),
-    xseite: R(STUFE, 0, 2, 1, true), pfl: R(SCHALTER, 0, 1, 0, true),
+    xseite: R(STUFE, 0, 2, 1), pfl: R(SCHALTER, 0, 1, 0),
   };
-  if (!bus) m.ziel = R(STUFE, 0, 4, 0, true);
+  if (!bus) m.ziel = R(STUFE, 0, 4, 0);
   if (!bus) Object.assign(m, {   // Kompressor je Quellkanal (2026-10-11), alle dürfen
     'komp/an': R(SCHALTER, 0, 1, 0), 'komp/schwelle': R(LIN, -60, 0, -18), 'komp/ratio': R(LIN, 1, 20, 4), 'komp/attack': R(LIN, 0.1, 100, 10),
     'komp/release': R(LIN, 10, 1000, 120), 'komp/makeup': R(LIN, 0, 24, 0), 'komp/mix': R(LIN, 0, 1, 1), 'komp/sc': R(STUFE, 0, 4, 0),
@@ -196,8 +196,8 @@ export const REGLER = new Map();
 for (let n = 1; n <= 4; n++) for (const s of ['drums', 'bass', 'vocals', 'other']) REGLER.set(`deck/${n}/stem/${s}`, { ...R(DB, -200, 6, 0), kanal: containerVonPlayer(n) });
 for (const k of KANALZUG_KANAELE) for (const [p, info] of Object.entries(kanalzug(k))) REGLER.set(`${k}/${p}`, { ...info, kanal: k });
 for (const [p, info] of Object.entries({
-  xfader: R(LIN, -1, 1, 0, true), 'master/pegel': R(DB, -200, 0, 0, true), 'master/kleber': R(LIN, 0, 1, 0, true), 'cue/mix': R(LIN, -1, 1, -1, true),
-  'cue/pegel': R(DB, -200, 0, -12, true), 'cue/split': R(SCHALTER, 0, 1, 0, true), 'master/pfl': R(SCHALTER, 0, 1, 0, true),
+  xfader: R(LIN, -1, 1, 0), 'master/pegel': R(DB, -200, 0, 0), 'master/kleber': R(LIN, 0, 1, 0), 'cue/mix': R(LIN, -1, 1, -1),
+  'cue/pegel': R(DB, -200, 0, -12, true), 'cue/split': R(SCHALTER, 0, 1, 0), 'master/pfl': R(SCHALTER, 0, 1, 0),
   'fx/1/notenwert': R(LIN, 1 / 32, 4, 0.75), 'fx/2/notenwert': R(LIN, 1 / 32, 4, 0.75),
   'fx/1/rueckkopplung': R(LIN, 0, 0.95, 0.5), 'fx/2/rueckkopplung': R(LIN, 0, 0.95, 0.5),
   'fx/1/rueckweg': R(DB, -200, 0, 0), 'fx/2/rueckweg': R(DB, -200, 0, 0), 'fx/3/rueckweg': R(DB, -200, 0, 0), 'fx/4/rueckweg': R(DB, -200, 0, 0),
@@ -205,7 +205,7 @@ for (const [p, info] of Object.entries({
   'color/art': R(STUFE, 0, 5, 0), 'color/param': R(LIN, 0, 1, 0.5),   // SOUND COLOR FX, alle dürfen
   keylock: R(SCHALTER, 0, 1, 1),   // Keylock Task 3 (Fassung 4): EIN Knopf für alle Quellen, alle dürfen
 })) REGLER.set(p, { ...info, kanal: null });
-for (let n = 1; n <= 32; n++) {   // D1 K1 (§1.5), E3: 32 Slots: Spur-Regler des Arrangements, global, alle dürfen; Fader bis +6 dB (Spec 6.16)
+for (let n = 1; n <= 128; n++) {   // D1 K1 (§1.5), E3: 128 Slots: Spur-Regler des Arrangements, global, alle dürfen; Fader bis +6 dB (Spec 6.16)
   REGLER.set(`spur/${n}/fader`, { ...R(DB, -200, 6, 0), kanal: null });
   REGLER.set(`spur/${n}/pan`, { ...R(LIN, -1, 1, 0), kanal: null });
   REGLER.set(`spur/${n}/mute`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
@@ -222,14 +222,14 @@ for (let n = 1; n <= 16; n++) {   // 1.10 Slice 1 (§1.5): Gruppen-Regler, globa
   REGLER.set(`grp/${n}/pan`, { ...R(LIN, -1, 1, 0), kanal: null });
   REGLER.set(`grp/${n}/mute`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
   REGLER.set(`grp/${n}/solo`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
-  REGLER.set(`grp/${n}/cue`, { ...R(SCHALTER, 0, 1, 0), kanal: null });   // live modules task 6: headphone cue of the group, hand only
+  REGLER.set(`grp/${n}/cue`, { ...R(SCHALTER, 0, 1, 0), kanal: null });   // live modules task 6: headphone cue of the group, everybody may
 }
 REGLER.set('pm/fader', { ...R(DB, -200, 6, 0), kanal: null });
 // 1.10 Slice 3 (§1.5): sends (post fader) from tracks and groups to the 4 returns, return strips and Cypher Hall values; global, everybody may.
 // Sends default to -200 (off). Hall values are normalised 0..1 (the unit mapping lives in the kernel, arr_returns.cpp); hall/an is a switch.
 const HALL_VORGABE = { pre: 0.04, decay: 0.5252, groesse: 0.282, tief: 0.5658, highcut: 0.8039, fahne: 0.66667 };
 for (let r = 1; r <= 8; r++) {   // container core K6: returns 1..8
-  for (let n = 1; n <= 32; n++) REGLER.set(`spur/${n}/send/${r}`, { ...R(DB, -200, 6, -200), kanal: null });
+  for (let n = 1; n <= 128; n++) REGLER.set(`spur/${n}/send/${r}`, { ...R(DB, -200, 6, -200), kanal: null });
   for (let n = 1; n <= 16; n++) REGLER.set(`grp/${n}/send/${r}`, { ...R(DB, -200, 6, -200), kanal: null });
   REGLER.set(`ret/${r}/fader`, { ...R(DB, -200, 6, 0), kanal: null });
   REGLER.set(`ret/${r}/pan`, { ...R(LIN, -1, 1, 0), kanal: null });
@@ -270,6 +270,11 @@ const WZ_REIHEN = [
 ];
 for (const [kanaele, zeilen] of WZ_REIHEN) for (const k of kanaele) for (const [f, e, lo, hi, v] of zeilen) REGLER.set(`${k}/${f}`, { ...R(e, lo, hi, v), kanal: k });
 REGLER.set('spektrum/kanal', { ...R(STUFE, 0, 9, 0), kanal: null });   // 0 off, 1..8 = mixer index + 1 (containers, then buses), 9 = master sum
+// strand 2 slice 2 (§1.5): plug/<h>/k<m>, knob m (1..16) of effect host h (1..8), appended last as in the core table; global, everybody may,
+// 0..1, default 0. No consumer in the core: the page server forwards /e/hand moves of these rows to the plugin.
+export const PLUG_HOSTS = 8;
+export const PLUG_KNOEPFE = 16;
+for (let h = 1; h <= PLUG_HOSTS; h++) for (let m = 1; m <= PLUG_KNOEPFE; m++) REGLER.set(`plug/${h}/k${m}`, { ...R(LIN, 0, 1, 0), kanal: null });
 
 export const kanalVon = (pfad) => REGLER.get(pfad)?.kanal ?? null;
 export const istDeck = (k) => typeof k === 'string' && /^deck\/[1-4]$/.test(k);

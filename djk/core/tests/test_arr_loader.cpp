@@ -129,7 +129,7 @@ int main() {
       PRUEF(konto.gesperrt() == 0);
     }
   }
-  {  // 4: K1-Fix 6: zwei Lade-Fäden, ein Konto. Das Arrangement (Lade-Faden, gesperrt) hält 11 MiB von 16 MiB; dann lädt
+  {  // 4: K1-Fix 6: zwei Lade-Fäden, ein Konto. Das Arrangement (Lade-Faden, gesperrt) hält 17 MiB (11 MiB Audio + the 128-track snapshot) von 24 MiB; dann lädt
      // ein Deck (11 MiB, eigener Faden, sperren und Prüfsumme an: das Abbild bliebe für die sha256 gesperrt). Gebucht vor
      // dem Einblenden scheitert es mit budget_speicher, ohne zu sperren: VmLck bleibt ≤ Konto. Gegenprobe mit einem
      // Konto für beide: der Beobachter sieht beide gesperrt (das Instrument trifft).
@@ -147,7 +147,7 @@ int main() {
     o.wiedergabe(41, "{\"nr\":1,\"art\":\"audio\",\"clips\":[" + o.clip("c1", 0.0, 1.0, gross, FA) + "]}");
     for (int beide = 0; beide < 2; ++beide) {
       const long basis = vm_lck();
-      cdj::SpeicherKonto konto(beide ? (40LL << 20) : (16LL << 20));
+      cdj::SpeicherKonto konto(beide ? (40LL << 20) : (24LL << 20));
       cdj::Lader deck(ab.pfad, 3800LL << 20);
       deck.verbinde_konto(&konto);
       cdj::ArrLader lader(o.pfad, &konto, 50LL << 20, true);
@@ -182,7 +182,7 @@ int main() {
 #endif
       if (beide) {
         PRUEF(mat && g == cdj::LadeGrund::ok);
-        if (vmlck_sichtbar) PRUEF(spitze > (16L << 20));   // Gegenprobe: der Beobachter sieht Arrangement und Deck gesperrt
+        if (vmlck_sichtbar) PRUEF(spitze > (24L << 20));   // Gegenprobe: der Beobachter sieht Arrangement und Deck gesperrt
       } else {
         PRUEF(!mat && g == cdj::LadeGrund::budget_speicher);
         PRUEF(spitze <= konto.budget());

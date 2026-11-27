@@ -54,8 +54,11 @@ import { aendere, rueckgaengig, wiederholen, type Haken, type Meta, type Verlauf
 import { WiedergabeFehler, WiedergabeZaehler, containerQuellen, schreibeWiedergabe, uebersetze, wiedergabeDatei,
   type Wiedergabe } from '../../project/playback.ts';
 import { geraetFx } from '../../devices_parameter.ts';
+import type { NotenRenderQuelle } from './notes_render.ts';
 import { alleRegler, istMixerRegler, reglerZuBefehl, type Soll } from './mapping.ts';
 import { arrOrdner, zaehlerDateiVorgabe } from './config.ts';
+import { MasterAbMarke } from './master_ab_marker.ts';
+import { abNachLauf } from '../../project/master_ab.ts';
 import { grundText } from '../../http/reasons.ts';
 import { KernLage } from './state.ts';
 import { leseKarte, leseTraktor, schreibeEinsKorrektur } from './sources.ts';
@@ -67,7 +70,7 @@ import {
   type ReglerErgebnis } from './core_path.ts';
 import { ProjBk } from './modular.ts';   // S17: sound snapshot
 import { GESTE_RUHE_MS } from './times.ts';
-import { SitzungGeraet } from './session_device.ts';
+import { SitzungGeraet, type ReglerLernen } from './session_device.ts';
 import { SitzungQuellen } from './session_sources.ts';
 import { SitzungVorhoeren } from './session_prelisten.ts';
 import { SitzungAuto } from './session_auto.ts';
@@ -75,7 +78,9 @@ import { SitzungAuto } from './session_auto.ts';
 import { AUFNAHME_ZIELE, AutoAufnahme, modusVon, type AufnahmeZiel, type AutoOptionen, type Modus } from './recording_auto.ts';
 import { bkDefVonId } from '../../project/modular.ts';
 // plan 1.11 task 7: foreign effect plugins (host manager)
-import { HostVerwaltung, insertAusfuehren, sockAnfrage, type HostAbhaengig, type HostZeiten } from '../../plugins/hostverwaltung.ts';
+import { PluginLanenSpieler } from '../../plugins/lanes_player.ts';
+import { ReglerWeiterleitung } from '../../plugins/controls_weiterleitung.ts';
+import { HostVerwaltung, insertAusfuehren, pluginIdVon, sockAnfrage, type HostAbhaengig, type HostZeiten } from '../../plugins/hostverwaltung.ts';
 import type { SicherGrund } from '../../plugins/state.ts';
 import {
   InstrumentWirte, instrumenteStart, wirtSockAnfrage, wirtStandLesen, type InstrumentAbhaengig, type InstrumentZeiten,
@@ -270,6 +275,7 @@ const VORZAEHL_BEATS: readonly number[] = [0, 4, 8, 16];   // 1.8 S4b.1a: count-
 export class ProjSitzung {
   readonly lage = new KernLage();
   readonly arbeitsordner: string;
+  readonly masterAbMarke: MasterAbMarke;   // a running master A/B: the rows it touched, read by the restart path of a project open
   private readonly transientenLager: TransientenLager;     // Slice 4: Transienten je Quelle (Quellsekunden), für BEATS und proj_warp
   private readonly transienten = (sha: string): number[] | null => this.transientenLager.fuer(sha);
   private readonly ctx: BereichKontext;
@@ -320,6 +326,8 @@ export class ProjSitzung {
   private aufnahmeLauf: unknown = null;   // 1.8: laufende Aufnahme (sperrt Tempo-Änderungen)
   private oeffnet = 0;          // Spec 6.32: laufende /proj/oeffnen und /proj/neu (in der Kette); solange > 0 lehnt sperreLaden() ab
   private stemsStand: Record<string, unknown> | null = null;   // Slice 6 (P6): letzter Stems-Stand, GET /proj/aktuell stems
+  private notenRender: NotenRenderQuelle | null = null;   // note editor (slice 1, B4): the render service; a clip with note targets plays its render
+  private notenStand: Record<string, unknown> | null = null;   // note editor (slice 1, B2): last state of the note detection, GET /proj/aktuell noten
   private ausgabeLauf: AusgabeLauf | null = null;   // Spec 6.34: laufender Freeze oder Export (Paket S3), GET /proj/aktuell ausgabe_lauf
 
   private readonly presetLies: ProjOptionen['presetLies'];   // 1.9 (O28)
@@ -331,6 +339,8 @@ export class ProjSitzung {
   private readonly liveFaderGemeldet = new Set<string>();   // groups whose refused raise was logged (one entry each)
   private liveFaderLauf: Promise<{ angehoben: string[]; gemeldet: string[] }> | null = null;   // the run that the last open of the live project started
   readonly instrumente: InstrumentWirte;                         // plan 1.11 task 17: the foreign instrument hosts (plugin tracks)
+  private readonly laneSpieler: PluginLanenSpieler;               // plan strand 2 slice 1: plugin parameter lanes to the hosts
+  private readonly reglerWeiter: ReglerWeiterleitung;             // plan strand 2 slice 2: knob rows plug/<h>/k<m> to the plugin parameters
   readonly hosts: HostVerwaltung;                                // plan 1.11 task 7: the foreign effect hosts
   // a host slot never changes strips inside one playback load (kern contract, task 4): what the last written playback holds per slot, when a slot was
   // released, and what the next load has to do first (key: the number of the playback file)
@@ -361,8 +371,23 @@ export class ProjSitzung {
       transportSteht: () => this.lage.arr !== null && this.lage.arr.status === 0,
       neuLaden: () => this.hostNeuLaden(),
       log: (z) => ctx.log(z),
+      onBereit: (id) => { void this.reglerWeiter.pickup(id).catch(() => undefined); },
+      klasse: (pl) => this.pluginIndex?.(pluginIdVon(pl))?.klasse ?? 0,   // a later class of a VST3 bundle starts through the shim (`@<klasse>`)
       ...opt.host?.abhaengig,
     }, opt.host?.zeiten);
+    this.laneSpieler = new PluginLanenSpieler({
+      projekt: () => this.offen?.projekt ?? null,
+      beatsProSekunde: () => (this.lage.uhr?.bpm ?? this.offen?.projekt.tempo_bpm ?? 128) / 60,
+      senden: (id, w) => this.hosts.automation(id, w),
+    });
+    this.reglerWeiter = new ReglerWeiterleitung({
+      projekt: () => this.offen?.projekt ?? null,
+      param: (id, w) => this.hosts.param(id, w),
+      parameter: (id) => this.hosts.parameter(id),
+      setzeRegler: (pfad, wert) => this.kern.setzeRegler([{ pfad, wert }], 'andreas'),
+      spielt: () => this.laneSpieler.spielt(),
+      log: (z) => ctx.log(z),
+    });
     // without a status folder (a session that was not given one) no instrument host is ever started
     const wo = opt.wirtOrdner;
     this.instrumente = new InstrumentWirte({
@@ -372,6 +397,7 @@ export class ProjSitzung {
       ordner: () => (this.offen ? path.resolve(this.projekte.wurzelPfad, this.offen.slug) : null),
       log: (z) => ctx.log(z),
       surgeNeu: (slot) => this.surge.vergiss(slot),
+      klasse: (pl) => this.pluginIndex?.(pluginIdVon(pl))?.klasse ?? 0,   // a later class of a VST3 bundle starts through the shim (`@<klasse>`)
       ...opt.instrument?.abhaengig,
     }, opt.instrument?.zeiten);
     this.kern = new KernWeg(ctx, this.lage, { proTakt: () => takteProLive(this.offen?.projekt?.taktart), ...opt.kernWeg });
@@ -379,6 +405,7 @@ export class ProjSitzung {
     setzeVorgabenQuelle((name) => vorgabenVon(name));   // the graph's `vorgabe` list: fill and trim of the knob rows of a project use the same one
     this.projekte = new Projekte(opt.wurzel ?? projektWurzelVorgabe(instanz));
     this.arbeitsordner = opt.arbeitsordner ?? arrOrdner(instanz);
+    this.masterAbMarke = new MasterAbMarke(path.join(this.arbeitsordner, 'master_ab.json'));
     const zaehlerDatei = opt.zaehlerDatei
       ?? (opt.arbeitsordner ? `${path.resolve(opt.arbeitsordner)}.zaehler` : zaehlerDateiVorgabe(instanz));
     this.zaehler = new WiedergabeZaehler(this.arbeitsordner, zaehlerDatei);
@@ -412,7 +439,8 @@ export class ProjSitzung {
       verteile: (f) => this.ctx.verteile(f), log: (z) => this.ctx.log(z),
     }, opt.autoAufnahme);
     this.geraet = new SitzungGeraet({ brauchOffen: () => this.brauchOffen(), riegel: (q) => this.riegel(q),
-      hosts: this.hosts, instrumente: this.instrumente, surge: this.surge });
+      hosts: this.hosts, instrumente: this.instrumente, surge: this.surge,
+      aendere: (d, q) => this.aendern(d, q), pickup: (id) => this.reglerWeiter.pickup(id), lernen: () => this.reglerLernen });
     this.quellen = new SitzungQuellen({ analyse: this.analyse, analyseGescheitert: this.analyseGescheitert, analysen: this.analysen,
       bestand: this.bestand, katalog: this.katalog, mediathekPfad: this.mediathekPfad, presetLies: this.presetLies,
       quellPfad: (sha, hinweis) => this.quellPfad(sha, hinweis), transienten: this.transienten });
@@ -507,12 +535,16 @@ export class ProjSitzung {
       ...(this.hosts.lage().length ? { plugins: this.hosts.lage(), hosts: this.hosts.lage() } : {}),
       ...(this.instrumente.lage().length ? { instrumente: this.instrumente.lage() } : {}),
       ...(ueber.length ? { auto_uebersteuert: ueber } : {}), ...(this.aufAuto.istArm() ? { auto_arm: this.aufAuto.ansicht() } : {}),
-      ...(this.stemsStand && this.stemsStand.slug === o.slug ? { stems: this.stemsStand } : {}) } };
+      ...(this.stemsStand && this.stemsStand.slug === o.slug ? { stems: this.stemsStand } : {}),
+      ...(this.notenStand && this.notenStand.slug === o.slug ? { noten: this.notenStand } : {}) } };
   }
   // plugin and device parameter calls: see session_device.ts
   insertParam(insertId: string, d: Koerper, quelle: Quelle): Promise<Antwort> { return this.geraet.insertParam(insertId, d, quelle); }
   insertParameter(insertId: string): Promise<Antwort> { return this.geraet.insertParameter(insertId); }
   insertFenster(insertId: string, d: Koerper, quelle: Quelle): Promise<Antwort> { return this.geraet.insertFenster(insertId, d, quelle); }
+  insertLernen(insertId: string, d: Koerper, quelle: Quelle): Promise<Antwort> { return this.geraet.insertLernen(insertId, d, quelle); }
+  insertLernenLoeschen(insertId: string, d: Koerper, quelle: Quelle): Promise<Antwort> { return this.geraet.insertLernenLoeschen(insertId, d, quelle); }
+  reglerLernen: ReglerLernen | null = null;   // strand 2 task 2.4: set by the server once the learn Bereich exists
   geraetParam(spurId: string, d: Koerper, quelle: Quelle): Promise<Antwort> { return this.geraet.geraetParam(spurId, d, quelle); }
   geraetIst(spurId: string, namenText: string): Promise<Antwort> { return this.geraet.geraetIst(spurId, namenText); }
   geraetParameter(spurId: string): Promise<Antwort> { return this.geraet.geraetParameter(spurId); }
@@ -969,7 +1001,10 @@ export class ProjSitzung {
     // source andreas like nachNeustart: server housekeeping, Stop Cypher does not hold it back
     const autoFrei = Promise.all([this.autoFreiMitLog(), this.armFreiMitLog()]);
     // Spec 6.21: die Wiedergabe-Nummer entscheidet, wer beim Mixer gewinnt (gleiche Nummer: Wiederanlauf, die Spur-Regler des Kerns gewinnen)
+    const abMarke = this.masterAbMarke.lies();   // a master A/B the page server died in
     const wieder = await this.istWiederanlauf(projekt);
+    const abPfade = wieder && abMarke?.slug === slug ? new Set(abMarke.pfade) : null;
+    if (abMarke && !abPfade) this.masterAbMarke.loesche();   // not the playback the core still plays: this open sends every row anyway
     // S17: the saved sound goes back while the controls are synchronised (not after a page server restart in front of a running kern: it kept everything)
     const [kern, bk] = await Promise.all([this.synchronisiere(quelle, wieder),
       wieder || !projekt.baukasten ? Promise.resolve(null) : this.bk.wiederherstellen(projekt, quelle, { schonGeladenUeberspringen: true }), autoFrei]);
@@ -979,8 +1014,9 @@ export class ProjSitzung {
       if (abgelehnt.length) { kern.container_abgelehnt = abgelehnt; this.ctx.log({ typ: 'proj_container_abgelehnt', abgelehnt }); }
     }
     if (wieder) {
-      const n = this.uebernimmMixer(this.offen);
+      const n = this.uebernimmMixer(this.offen, abPfade ?? undefined);   // the rows A/B touched are not the core's to win
       kern.wiederanlauf = true; kern.mixer_uebernommen = n;
+      if (abPfade) await this.stelleMasterAbHer(this.offen.projekt, abPfade, quelle);
     }
     const offenes = this.offen;
     this.ctx.log({ typ: 'proj_offen', slug, nachgezogen: o.nachgezogen, quelle, wiederanlauf: wieder });
@@ -1029,7 +1065,7 @@ export class ProjSitzung {
   private async synchronisiere(quelle: Quelle, wiederanlauf = false): Promise<Record<string, unknown>> {
     const o = this.brauchOffen();
     const soll: Soll[] = wiederanlauf ? this.unbekannteSpurRegler(o.projekt)
-      : alleRegler(o.projekt);
+      : alleRegler(o.projekt, (pfad) => this.lage.reglerWert(pfad));   // free pool rows the core already holds at the default are left out
     // A switch is a fresh start (Andreas, 2026-11-02): the hand holder of the regulators written below ends first, in the same order as the writes.
     // Not on a restart of the page server in front of a running core (wiederanlauf): there the core wins. Only Andreas's own switch breaks his hand (D9):
     // when Cypher opens or creates, nothing is sent and the core's refusal stays visible in kern.regler_fehler.
@@ -1060,7 +1096,14 @@ export class ProjSitzung {
   }
   // Ist-Werte der Spur-Regler, die der Kern gemeldet hat, als EINE Änderung ins Projekt (Quelle andreas, undo-fähig). Unbekannte Werte
   // bleiben. Entscheidung E-a: der KI-Stopp senkt keinen Fader, jeder Ist-Wert ist eine Handbewegung oder der Projektstand.
-  private uebernimmMixer(o: Offen): number {
+  private async stelleMasterAbHer(p: Projekt, pfade: ReadonlySet<string>, quelle: Quelle): Promise<void> {
+    try {
+      const abgelehnt = (await this.kern.setzeRegler(abNachLauf(p, [...pfade]), quelle)).filter((r) => quittungAbgelehnt(r.quittung));
+      if (abgelehnt.length) { this.ctx.log({ typ: 'proj_master_ab_neustart_abgelehnt', regler: abgelehnt }); return; }   // the marker stays: tried again
+      this.masterAbMarke.loesche();
+    } catch (e) { this.ctx.log({ typ: 'proj_master_ab_neustart_fehler', fehler: (e as Error).message }); }
+  }
+  private uebernimmMixer(o: Offen, ausnahmen?: ReadonlySet<string>): number {
     const befehle: Record<string, unknown>[] = [];
     const pfade = [
       ...o.projekt.spuren.flatMap((s) => (['fader', 'pan', 'mute', 'solo'] as const).map((k) => `spur/${s.nr}/${k}`)),
@@ -1072,6 +1115,7 @@ export class ProjSitzung {
       ...(o.projekt.returns ?? []).flatMap((r) => [...(['fader', 'pan', 'mute', 'solo'] as const).map((k) => `ret/${r.nr}/${k}`),
         ...['an', ...HALL_FELDER].map((k) => `ret/${r.nr}/hall/${k}`)])];
     for (const pfad of pfade) {
+      if (ausnahmen?.has(pfad)) continue;
       const wert = this.lage.reglerWert(pfad);
       const b = wert === null ? null : reglerZuBefehl(o.projekt, pfad, wert);
       if (b) befehle.push(b.befehl);
@@ -1145,10 +1189,14 @@ export class ProjSitzung {
   // `live`: the playback goes to the core (the host stages are written from the host manager); the export paths write no host stage as ready
   private uebersetzeFuer(p: Projekt, nr: number, vorhoeren?: ReadonlyMap<string, string>, live = true, ohneHost?: ReadonlySet<number>): Wiedergabe {
     const ohne = new Set([...(ohneHost ?? []), ...this.hosts.ausgelassen()]);   // plus the stages whose latency the core would refuse (latenz_zu_gross)
+    // note editor B4: a translation for the live playback starts a new record of the files its clips were given (an audition is not that playback)
+    const notenLive = live && !vorhoeren;
+    this.notenRender?.beginne?.(notenLive);
     return uebersetze(p, {
       geraetFx, nr, audioOrdner: path.join(this.arbeitsordner, 'audio'), frames: (sha) => this.cache.frames(sha),
       transienten: this.transienten,
       arbeitsordner: this.arbeitsordner, ...(vorhoeren ? { vorhoeren } : {}),
+      ...(this.notenRender ? { notenDatei: (c: AudioClip) => this.notenRender!.datei(c, notenLive) } : {}),
       ...(live && this.offen?.merk.stummStart.length ? { stummStart: new Set(this.offen.merk.stummStart) } : {}),
       ...(live ? { host: (slot: number) => this.hosts.stufe(slot), ...(ohne.size ? { ohneHost: ohne } : {}) } : {}) });
   }
@@ -1999,10 +2047,38 @@ export class ProjSitzung {
     if (alle.length > abgelehnt.length) this.ctx.log({ typ: 'proj_klang_runde_pegel_abgelehnt', pfad: faderPfad });
     if (abgelehnt.length) throw new ProjFehler(409, 'regler_abgelehnt', { regler: abgelehnt });
   }
+  // Master A/B (POST /proj/master_ab): sets the transient core rows pm/fader and ins/<art>/<slot>/an of stages that sit on the master of the open
+  // project, without changing the project: no revision, no undo step, no file. A project load or a core restart sends every row of the project again.
+  // Without a core (no receipt) it resolves without effect; any refused row is a 409 regler_abgelehnt (A/B must not run half set).
+  async hoereMaster(zeilen: readonly { pfad: string; wert: number }[], quelle: Quelle): Promise<void> {
+    const o = this.offen;
+    if (!o) throw new ProjFehler(409, 'kein_projekt');
+    const stufen = new Set((o.projekt.master?.inserts ?? []).map((i) => `ins/${i.art}/${i.slot}/an`));
+    const soll: Soll[] = [];
+    for (const z of zeilen) {
+      if (z.pfad !== 'pm/fader' && !stufen.has(z.pfad)) {
+        throw new ProjFehler(400, 'argument_ungueltig', { text: `row ${z.pfad}: only pm/fader and the switches of master insert stages can be set` });
+      }
+      const imBereich = z.pfad === 'pm/fader' ? z.wert >= FADER_MIN && z.wert <= FADER_MAX : z.wert === 0 || z.wert === 1;
+      if (typeof z.wert !== 'number' || !Number.isFinite(z.wert) || !imBereich) {
+        throw new ProjFehler(400, 'argument_ungueltig', { text: `row ${z.pfad}: the value is out of range` });
+      }
+      soll.push({ pfad: z.pfad, wert: z.wert });
+    }
+    if (!soll.length) return;
+    const abgelehnt = (await this.kern.setzeRegler(soll, quelle)).filter((r) => quittungAbgelehnt(r.quittung));
+    if (abgelehnt.length) throw new ProjFehler(409, 'regler_abgelehnt', { regler: abgelehnt });
+  }
   // Spec 6.34: S3 meldet Beginn (art, beim Freeze spur_id) und Ende (null) jedes Laufs; nur diese Form geht an die Seite
   setzeAufnahmeLauf(l: unknown): void { this.aufnahmeLauf = l; }
   aufnahmeAktiv(): boolean { return this.aufnahmeLauf !== null || this.sperrenAufnahme > 0; }
   setzeStemsStand(x: Record<string, unknown> | null): void { this.stemsStand = x; }
+  setzeNotenStand(x: Record<string, unknown> | null): void { this.notenStand = x; }
+  setzeNotenRender(n: NotenRenderQuelle | null): void { this.notenRender = n; }
+  // the export waits for the renders of the open project (true at once without a render service)
+  notenBereit(fristMs: number): Promise<boolean> { return this.notenRender?.bereit?.(fristMs) ?? Promise.resolve(true); }
+  notenExakt(): boolean { return this.notenRender?.exakt?.() ?? true; }            // the last export translation gave every clip with targets its exact render
+  notenFehlerGrund(): string | null { return this.notenRender?.fehlerGrund?.() ?? null; }
   private readonly schliessHaken: ((slug: string) => void)[] = [];   // Slice 6 (T7): Läufe, die zum offenen Projekt gehören
   beiSchliessen(f: (slug: string) => void): void { this.schliessHaken.push(f); }
   // The page server remembers the open project across its own restart: f(slug) after every successful open, f(null) after a close on purpose
@@ -2011,6 +2087,9 @@ export class ProjSitzung {
   // 1.8 S3 (D13): listeners that follow the open project (the recording area keeps the core in sync with arm, input, mode and monitor)
   private readonly standHaken: ((p: Projekt) => void)[] = [];
   beiStand(f: (p: Projekt) => void): void { this.standHaken.push(f); }
+  // f() at the start of every core restart handling (nachNeustart), before any row is sent: the core is fresh and holds the project's values
+  private readonly neustartHaken: (() => void)[] = [];
+  beiNeustart(f: () => void): void { this.neustartHaken.push(f); }
   private meldeStand(o: Offen): void {
     for (const h of this.standHaken) try { h(o.projekt); } catch (e) { this.ctx.log({ typ: 'proj_stand_haken_fehler', fehler: (e as Error).message }); }
   }
@@ -2157,6 +2236,8 @@ export class ProjSitzung {
     // 1.12 slice 3 (D6/D8): a new core generation clears the mirror (the new core overrides nothing); the first /k/willkommen since this server
     // started ends any override of a core that kept running (AK34, own start). A re-hello of the same generation changes nothing.
     if (adresse === '/e/ins_mess' || adresse === '/zustand/arr') this.hosts.ereignis(adresse, f);   // plan 1.11 task 7
+    if (adresse === '/zustand/arr') this.laneSpieler.zustand(f);
+    if (adresse === '/e/hand') this.reglerWeiter.ereignis(adresse, f);
     if (adresse === '/e/auto') this.nimmAuto(f);
     // a channel closed under a module at -200
     const padRegler = adresse === '/e/regler' && /^pad\/[12]\/(fader|trim)$/.test(String(f.pfad));
@@ -2266,6 +2347,7 @@ export class ProjSitzung {
   // Spec 6.35 (E-a): nachNeustart setzt alle Spur-Regler aus dem Projekt, auch im KI-Stopp; Cyphers Spuren sind nicht ausgenommen.
   private nachNeustart(): void {
     void this.seriell(async () => {
+      for (const h of this.neustartHaken) try { h(); } catch (e) { this.ctx.log({ typ: 'proj_neustart_haken_fehler', fehler: (e as Error).message }); }
       const o = this.offen;
       if (!o) return;
       this.leereVorhoeren(o);                      // 1.14: the new core plays the main lane; wiedergabe_rev already holds every comp made during an audition

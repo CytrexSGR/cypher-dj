@@ -29,6 +29,8 @@
 
 using namespace arrtest;
 using cdj::ArrArt;
+// strand 2 slice 2: the knob rows plug/<h>/k<m> exist once per effect host (the signalbox library cannot see ARR_INS_HOST)
+static_assert(cypherdj::stellwerk::REGLER_PLUG_HOSTS == cdj::ARR_INS_HOST, "plug/<h>/k<m> rows per effect host");
 
 namespace {
 
@@ -251,15 +253,21 @@ int main() {
     PRUEF(c.kern->stellwerk().wert(r) == c.kern->stellwerk().tabelle().def(r).vorgabe);
   }
   {  // 8: the table
-    cypherdj::stellwerk::ReglerTabelle tab;
-    PRUEF(tab.suche("spur/1/bk/1") >= 0 && tab.suche("spur/16/bk/64") >= 0 && tab.suche("spur/16/bk/33") >= 0 && tab.suche("spur/9/bk/1") >= 0 && tab.suche("spur/5/bk/17") >= 0);
+    const auto tab = std::make_unique<cypherdj::stellwerk::ReglerTabelle>();   // 24576 rows: heap, not stack
+    PRUEF(tab->suche("spur/1/bk/1") >= 0 && tab->suche("spur/16/bk/64") >= 0 && tab->suche("spur/16/bk/33") >= 0 && tab->suche("spur/9/bk/1") >= 0 && tab->suche("spur/5/bk/17") >= 0);
     for (const char* p : {"spur/17/bk/1", "spur/1/bk/65", "spur/1/bk/0", "spur/0/bk/1", "spur/1/bk/01", "spur/32/bk/1", "spur/1/bk/", "spur/1/bk/100"})
-      PRUEF(tab.suche(p) < 0);
-    const int r = tab.suche("spur/2/bk/5");
-    PRUEF(tab.def(r).rolle == cypherdj::stellwerk::Rolle::spur_bk && tab.def(r).min == 0.0f && tab.def(r).max == 1.0f && tab.def(r).vorgabe == 0.5f);
-    PRUEF(tab.anzahl() == 5184);   // loop lane strip K1: +96 rows (spur/<n>/fx/1..3 of 32 tracks) on top of the 5088 before; 16 bk slots (4576 with 8);   // container core K9: the console of four containers and four buses replaced the deck, erz and loop-box strips (5076 before, 500 fewer, measured)
-    PRUEF(cypherdj::stellwerk::MAX_REGLER - tab.anzahl() >= 44);   // reserve
-    PRUEF(tab.suche("spur/1/bk/1") == 2516);   // container core K9: the strip rows before it are gone (3412 before); slot-major
+      PRUEF(tab->suche(p) < 0);
+    const int r = tab->suche("spur/2/bk/5");
+    PRUEF(tab->def(r).rolle == cypherdj::stellwerk::Rolle::spur_bk && tab->def(r).min == 0.0f && tab->def(r).max == 1.0f && tab->def(r).vorgabe == 0.5f);
+    // strand 1 slice 4: + 338 rows (gate 16 x 8, multiband 8 x 24, limiters 2 -> 8 in the contract; the core stages follow in 4.2); strand 1 slices 1, 3
+    // and 3b: 5184 at komp 12 and eq 8, the pools add 10 rows per compressor and 59 per EQ (15632 at 160 + 160); loop lane strip K1: +96 rows
+    // (spur/<n>/fx/1..3 of 32 tracks) on top of the 5088 before; 16 bk slots (4576 with 8); container core K9: the console of four containers and four
+    // buses replaced the deck, erz and loop-box strips (5076 before, 500 fewer, measured)
+    PRUEF(tab->anzahl() == 5184 + (cdj::ARR_INS_KOMP - 12) * 10 + (cdj::ARR_INS_EQ - 8) * 59 + 16 * 8 + 8 * 24 + 6 * 3 + (cdj::ARR_INS_HOST - 4) +
+          (cypherdj::stellwerk::SPUR_REGLER_SPUREN - cypherdj::stellwerk::SPUR_REGLER_SPUREN_ALT) * 24 +
+          cypherdj::stellwerk::REGLER_PLUG_HOSTS * cypherdj::stellwerk::REGLER_PLUG_KNOEPFE);
+    PRUEF(cypherdj::stellwerk::MAX_REGLER - tab->anzahl() >= 44);   // reserve
+    PRUEF(tab->suche("spur/1/bk/1") == 2516 + (cdj::ARR_INS_KOMP - 12) * 10 + (cdj::ARR_INS_EQ - 8) * 59 + 16 * 8 + 8 * 24 + 6 * 3 + (cdj::ARR_INS_HOST - 4));   // strand 1 slice 4: + 338 rows; strand 1 slices 1, 3 and 3b: the row sits behind the insert block, which grows with the pools; container core K9: the strip rows before it are gone (3412 before); slot-major
   }
   {  // 9: the pointer form takes the last sample of the block
     Rig g;

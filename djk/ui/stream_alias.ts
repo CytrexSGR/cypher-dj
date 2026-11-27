@@ -17,7 +17,7 @@ export const ALIAS_SUFFIXE: readonly string[] = PULT_ALIAS_SUFFIXE;
 /** The core has the rows spur/<nr>/pfl, trim and kill/* since K7, so the three suffixes resolve onto them (R4). */
 export const ALIAS_ZEILEN_K = true;
 /** The rows of a strom track that take direct writes and ramps (the carve-out of `ueber_projekt`, D-M1). Whether the track is a strom track is a project question: istStromZeile. */
-export const STROM_LIVE_ZEILEN = /^spur\/([1-9][0-9]?)\/(fader|pan|mute|solo|filter|pfl|trim|eq\/(tief|mitte|hoch)|kill\/(tief|mitte|hoch)|send\/[1-8]|bk\/([1-9]|[1-5][0-9]|6[0-4]))$/;
+export const STROM_LIVE_ZEILEN = /^spur\/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])\/(fader|pan|mute|solo|filter|pfl|trim|eq\/(tief|mitte|hoch)|kill\/(tief|mitte|hoch)|send\/[1-8]|bk\/([1-9]|[1-5][0-9]|6[0-4]))$/;
 
 const ALIAS = /^erz\/([1-9]|1[0-6])\/(.+)$/;
 const BAND = /^(tief|mitte|hoch)$/;
@@ -73,7 +73,7 @@ const stromSpurNr = (p: Projekt, nr: number): Spur | undefined => p.spuren.find(
 /** The alias of a core or project row of a strom track (`spur/<nr>/<suffix>`, `strom/<n>/bk/<k>`, `ins/komp|bk/<slot>/...`), null for any other row. */
 export function rueckAlias(p: Projekt | null, pfad: string): string | null {
   if (!p || !p.live) return null;
-  const sm = /^spur\/([1-9][0-9]?)\/(.+)$/.exec(pfad);
+  const sm = /^spur\/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])\/(.+)$/.exec(pfad);
   if (sm) {
     const s = stromSpurNr(p, Number(sm[1]));
     if (!s || s.strom === undefined) return null;
@@ -91,7 +91,7 @@ export function rueckAlias(p: Projekt | null, pfad: string): string | null {
   }
   const bm = /^strom\/([1-9]|1[0-6])\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.exec(pfad);
   if (bm) return `erz/${bm[1]}/bk/${bm[2]}`;
-  const im = /^ins\/(komp|bk)\/([1-9][0-9]?)\/(\w+)$/.exec(pfad);
+  const im = /^ins\/(komp|bk)\/([1-9][0-9]{0,2})\/(\w+)$/.exec(pfad);
   if (im) {
     const slot = Number(im[2]);
     const s = p.spuren.find((x) => x.art === 'strom' && (x.inserts ?? []).some((i) => i.art === im[1] && i.slot === slot));

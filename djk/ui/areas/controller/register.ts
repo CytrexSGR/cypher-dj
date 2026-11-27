@@ -11,6 +11,7 @@ import { kernToml } from '../proj/config.ts';
 import { REGLER, reglerInfo } from '../../../conductor/src/controls_info.ts';
 import type { HostZiel } from '../hostlernen/store.ts';
 import { KATALOG, usbGeraete, usbPasst } from './catalog.ts';
+import { echteGeraeteErlaubt } from '../devices/lock.ts';
 import { knopfName } from '../learn/beschriftung.ts';
 import { AKTIONS_PFADE, zielArt } from '../learn/targets.ts';
 
@@ -20,6 +21,7 @@ export interface RegisterOptionen {
   midiPort: () => string | null;               // the MIDI input assigned to learning (controller place 1)
   usb?: () => string[];                        // USB ids of everything plugged in (default: sysfs)
   host: () => Record<string, HostZiel>;        // host_ziele.json
+  echte?: boolean;                             // real devices may be connected (default: the production instance yes, a test instance only with CYPHERDJ_ECHTE_GERAETE=1)
 }
 type Rolle = 'basis' | 'lernen' | 'bruecke' | 'inaktiv';
 interface Geraet { id: string; datei: string; rolle: Rolle; eintraege: number; leds: number; fehler: 'json' | 'form' | null }
@@ -84,10 +86,11 @@ export function registerBereich(ctx: BereichKontext, opt: RegisterOptionen): Ber
     }
     geraete.sort((a, b) => REIHENFOLGE[a.rolle] - REIHENFOLGE[b.rolle] || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     const usb = (opt.usb ?? usbGeraete)();
-    // the known devices, plugged in or not; the bridge path counts the entries of its assignment file
-    const katalog = KATALOG.map((k) => ({ id: k.id, name: k.name, weg: k.weg, midi: k.midi, da: usbPasst(k.usb, usb), belegung: k.belegung,
+    const echte = opt.echte ?? echteGeraeteErlaubt();
+    // the known devices, plugged in or not (`da`); `verbunden` is what this instance holds: a test instance holds none of the real devices. The bridge path counts the entries of its assignment file
+    const katalog = KATALOG.map((k) => ({ id: k.id, name: k.name, weg: k.weg, midi: k.midi, da: usbPasst(k.usb, usb), verbunden: echte && usbPasst(k.usb, usb), belegung: k.belegung,
       eintraege: (k.belegung ? kanten.get(k.belegung) ?? [] : []).filter((e) => !k.kanaele || ('kanal' in e.quelle && e.quelle.kanal >= k.kanaele[0] && e.quelle.kanal <= k.kanaele[1])).length, rueckweg: k.rueckweg, rueckweg_port: k.rueckweg_port, hinweis: k.hinweis, ...(k.regler ? { regler: k.regler } : {}), ...(k.baenke ? { baenke: k.baenke } : {}), ...(k.bedienung ? { bedienung: k.bedienung } : {}) }));
-    return { aktiv: opt.aktiv(), midi_port: opt.midiPort(), katalog, geraete, kanten: geraete.flatMap((g) => kanten.get(g.id) ?? []), leds: geraete.flatMap((g) => leds.filter((l) => l.geraet === g.id)), host: opt.host(), ziele_gesamt: REGLER.size };
+    return { echte_geraete: echte, aktiv: opt.aktiv(), midi_port: opt.midiPort(), katalog, geraete, kanten: geraete.flatMap((g) => kanten.get(g.id) ?? []), leds: geraete.flatMap((g) => leds.filter((l) => l.geraet === g.id)), host: opt.host(), ziele_gesamt: REGLER.size };
   };
   return {
     name: 'register',

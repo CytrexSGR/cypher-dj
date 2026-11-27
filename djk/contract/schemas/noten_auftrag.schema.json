@@ -1,0 +1,14 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cypherdj.invalid/vertrag/1/noten_auftrag.schema.json",
+ "title": "Render order, input of the command render (notes.md): the notes of the clip, all of them, untouched ones included",
+ "description": "kurve must equal the curve id of the sidecar (checked where the sidecar is known, reason kurve_passt_nicht, like a curve whose frames differ from the source). liste is exactly the clip's liste and follows the rules of audio_noten.schema.json.",
+ "type": "object",
+ "additionalProperties": false,
+ "required": ["format", "kurve", "liste"],
+ "properties": {
+  "format": {"const": "cdj-noten-auftrag/1"},
+  "kurve": {"$ref": "audio_noten.schema.json#/$defs/kurve_id"},
+  "liste": {"$ref": "audio_noten.schema.json#/$defs/liste"}
+ }
+}

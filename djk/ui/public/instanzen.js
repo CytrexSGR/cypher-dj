@@ -4,6 +4,7 @@ import { stoebernLaden, stz } from './browse_table.js';
 import { ladeBaum } from './browse_detail.js';
 import { proTaktJetzt } from './bar_live.js';
 import { stromName } from './kanaele.js';
+import { meldeStrom } from './kanalband.js';
 
 // ---------- Strudel-Instanzen (Plan 2 Spec E5/E6; je Strom ein Zustand) ----------
 // AUTO-Schalter je Instanz (Andreas 2026-09-28): an = Cypher spielt selbst, das Feld folgt. Aus = das laufende Muster
@@ -29,6 +30,7 @@ export function neueInstanz(w) {
     i.angewandt = n;
     const neu = !i.server || s.text !== i.server.text;
     i.server = s;
+    meldeStrom(i.strom, s.bezeichnung ?? null, s.text);
     zeigeAuto(s.autonom !== false);
     q('.muster-stand').textContent = musterStandText(s);
     if (s.status?.fehler && !i.schmutzig) { zeigeFehler(s.status.fehler); i.statusFehler = true; }

@@ -1,6 +1,6 @@
 ---
 name: djk-live
-description: Use when a human wants to make music live with you in the cypher-dj studio: "play something", "build it up", "give me drums", "now a piano", "quieter", "more reverb", "acid", "keep going on your own", "stop everything". Also when they redirect or take over while you play and then hand the controls back, and when something sounds off-beat, inaudible, stressful or on the wrong channel. Not for building new studio features, and not for producing finished songs.
+description: 'Use when a human wants to make music live with you in the cypher-dj studio: "play something", "build it up", "give me drums", "now a piano", "quieter", "more reverb", "acid", "keep going on your own", "stop everything". Also when they redirect or take over while you play and then hand the controls back, and when something sounds off-beat, inaudible, stressful or on the wrong channel. Not for building new studio features, and not for producing finished songs.'
 ---
 
 # djk live: playing with a human
@@ -25,7 +25,7 @@ which port (instance a: 48300) and with which flags.
   everywhere). It needs a restart with the flags, which interrupts sound: ask first.
 - After a start the faders are down. The pattern channels `erz/1..3` may be opened by you (`regler … nach:-6
   takte:0`). Faders are in dB (−200 to 0); a value 0..1 comes back as `ausserhalb_bereich`. Deck faders need a hearing
-  check first; loop-box faders you may move only while the box holds your own recording.
+  check first; the faders of a loop deck's place (`pad/*`) you may open freely only while it plays your own recordings.
 - A test pattern loops until it is replaced. Announce a steady tone before you start one ("you will hear X").
 
 ## Before every move: think about what it does
@@ -75,9 +75,11 @@ its AUTO flag, pattern and loaded sound. **AUTO off means the human holds that c
 | Sets | `sets` · `set_zeige` · `set_lege` · `set_vorbereiten` |
 | Levels | `pegel {sek 1..10}`: per channel `max_db`, `median_db` |
 | Silence everything | `stille`, wait ~12 s, then `pegel` |
-| Loops | `loops` · `box {box 1\|2, aktion laden\|start\|stopp, name}` · `loop_nach_box` |
-| Record the master | `rec {beats 1..32, name}`, at any fixed tempo; refused while a tempo ramp runs in the window |
+| Loops | `loops` · `loopdeck {aktion stand\|laden, deck, spur?, zelle?, quelle}` · `box {box 1\|2, aktion laden\|start\|stopp, name}` (box 1/2 = loop deck 1/2) · `loop_nach_box` (the running deck loop into a cell) |
+| Record the Strudel channels | `rec {beats 1..32, name, summe?}`: DRUMS (`erz/1`) alone, or with `summe: true` DRUMS + BASS + MELODY, before trim and not the master; at any fixed tempo, refused while a tempo ramp runs or is queued |
 | Loop becomes a drum sound | `loop_klang {name}` → `s("rec0")` on DRUMS (reloads the kit: do it between phrases; up to 10 s) |
+| A chopped break | `smp-sr-brk-c-3b2c`: 33 slices, note n-1 = slice n, on a Baukasten stream; `sampler liste` shows the cuts, `graphen` does not |
+| Fade a pattern layer in or out | `.rein(n)` / `.raus(n)` on the layer: n bars from the bar this pattern starts, applied per note onset (a held pad note does not fade: use a fader ramp for that); send the next pattern without the `.raus` layers |
 | Automation over bars | `spur {name, fahrten:[…], ab}` · `spuren` · `spur_stopp` |
 | Beat FX | `fx_zuweisung {einheit, kanal, an}`, then `fx {einheit, art, beats, wet, an}`; `beats` only 0.25 · 0.5 · 1 · 2 · 4 · 8 · 16. Never switch wet hard on or off: step it, one `fx` per quarter bar |
 | Tempo | `tempo {bpm 60..200}`: a 4-beat ramp from the next bar |
@@ -132,9 +134,9 @@ zero silenced the whole first beat. Write 16 values.
   drive ≤ 18, cutoff ≤ +12 (at 0.92 / 30 / +27: "ouch"); take highs down with `erz/<n>/eq/hoch` −3 to −6 instead. Change
   an acid pattern softly: filter closed over 2 bars, swap at the bottom, open over 4. Let the acid play a 4-bar phrase
   over the chords, and walk the bass through the same chords, or they rub.
-- **Loop tower** (the human's technique): a Strudel groove → `rec` → start a box with its EQ at −200 → swap mids, then
-  bass and highs from Strudel to the box → Strudel is free for the next layer → `rec` again → next box. Flanger, phaser
-  or filter on a box give variety from the same material.
+- **Loop tower** (the human's technique): a Strudel groove → `rec` → start it in a loop deck cell with its EQ at −200 → swap mids,
+  then bass and highs from Strudel to the loop deck → Strudel is free for the next layer → `rec` again → next cell.
+  Flanger, phaser or filter on a loop deck track give variety from the same material.
 - **Loops only in their own tempo and on the phrase.** Recorded at 140 and played at 165, with own hats against live
   hats, they "lose the groove". Finished kits at their original tempo sounded clean at once.
 - "Quieter", "too loud", "the new element" means the last thing you changed. If two candidates fit, do one and say in
@@ -152,9 +154,22 @@ Thinking pauses between single moves kill the flow; longer takes are better play
 - A random script is composing, not playing: it does not hear that an element has been the same for minutes.
 - **"Off" means silence as the first move**, without repairing anything first: faders to −200 (or over 2 bars),
   `silence` on all three channels, then measure.
-- **Avoid stalls while playing:** no patch loading, no box loading, no recording through PipeWire. To measure a channel
+- **Avoid stalls while playing:** no patch loading, no loading into a loop deck, no recording through PipeWire. To measure a channel
   before opening it, record it inside the core (`djk/loops/djk-loop rec 8 <name>`), not by patching into the audio graph
   with `pw-record` or `pw-link`: that caused a rumble on the running instrument.
+
+## The routine in few calls
+
+For a longer take, build an arc instead of single moves. Always name what you play (`bezeichnung` on `strudel`, `name` on
+every layer of an arc): the name is what the human reads on the channel strip, from two metres away.
+1. `aufbau laden {name}` brings the stored session back (tempo, graphs, scene, the four container faders as 2-bar ramps).
+2. `bogen {..., probe: true}` checks the arc and answers the plan; fix what it names, nothing is scheduled yet.
+3. `bogen {name, takte, schichten, bruch?}` plays it (layers with `rein`/`raus` fades, one break and drop); `spuren` shows
+   `bogen.naechste`, what changes in how many bars.
+4. `warte {bis: "spur_ende", name, vorher_takte: 4}` returns four bars before the arc ends; then the next `bogen`
+   (an arc never loops: `bogen_schleife`).
+5. `mischung {takte: 4, ziel}` checks the master once in a while (sub to air against the genre curve, key match, peak); it
+   changes nothing, and the curves are rough.
 
 ## Keep the channels honest
 
@@ -182,13 +197,17 @@ duration is computed in seconds at the start).
 
 ## Locks (held by the server, do not work around them)
 
-AUTO off → `auto_aus` · Stop Cypher → `ki_gestoppt` · crossfader, master, headphone cue, AUTO switch, FX routing, grid
-→ human only (`nur_hand`, or 403 `nur_andreas` for page actions) · opening a closed deck without a hearing check →
-`kein_hoerschein` (call `hoeren`; at a verdict of `zu_laut`/`zu_leise`, correct `deck/<n>/trim` by the measured
-`pegel_diff_db` and listen again).
-Loop-box fader and trim (`pad/*`) are free for your own recordings; a foreign loop stays `kein_hoerschein`. Foreign
-material: `box laden`/`start` on an OPEN box → `ziel_ungehoert`; while your own fader/trim ramp on the box runs →
-`box_offen_oder_faehrt`; `loop_nach_box` on an open box or during such a ramp → `box_offen_oder_faehrt`.
+AUTO off → `auto_aus` · Stop Cypher → `ki_gestoppt` (it also stops FX routing, the live keys and the deck grid) ·
+human only (`nur_hand`, or 403 `nur_andreas` for page actions): the headphone level `cue/pegel`, `deck/<n>/transport`, the
+AUTO switch, releasing Stop Cypher and accepting or dropping proposals, the hand grip, MIDI learn and arming, pairing, the
+plugin scan and windows · everything else on the mixer you may turn: crossfader and its sides, master level and
+compressor, channel targets, PFL and cue mix, bus faders, FX routing, live keys, the deck grid · a raise of the master
+level, a bus fader or a loops or stems container fader or trim by more than 6 dB must be a ramp of at least 1 bar, else
+`nur_rampe` (an unknown current level counts as quiet: a set above −20 dB needs a ramp) · opening a closed deck without a
+hearing check → `kein_hoerschein` (call `hoeren`; at a verdict of `zu_laut`/`zu_leise`, correct `deck/<n>/trim` by the
+measured `pegel_diff_db` and listen again). Bus channels and the loops and stems strips need no hearing check.
+Foreign material: `box laden`/`start` on an OPEN loop deck → `ziel_ungehoert`; while your own fader/trim ramp on that
+place runs → `box_offen_oder_faehrt`; `loop_nach_box` on an open loop deck or during such a ramp → `box_offen_oder_faehrt`.
 - **HTTP 200 means nothing:** read `quittung.status` (6 = rejected) and `grund`.
 - A new ramp that overlaps your own open ramp on the same path is queued behind it (`verschoben_auf` in the reply); a
   rejection exactly at the start beat then shows only in `lage` (`quittungen`).
@@ -199,11 +218,17 @@ material: `box laden`/`start` on an OPEN box → `ziel_ungehoert`; while your ow
 A restart interrupts their sound: only with their yes, at a moment they choose. A different tempo needs no restart.
 Save instrument sounds first (`klang speichere`), note the faders (`lage.regler`), and tell them afterwards what they need
 to switch back on. Restarting only the page server costs no sound.
+After a core restart the four container channel faders (`deck/1`, `deck/2`, `pad/1`, `pad/2`) start closed at -200 dB:
+a stream on a live place measures at its track and group but is silent at `pm` and `master` until its container fader
+is raised again (as a ramp of at least 1 bar). `aufbau laden` raises them: it opens the four faders as 2-bar ramps; a fader on a track place needs a hearing check and then comes back under `ausgelassen` with `kein_hoerschein`. A restart also creates a new agent key; an MCP server started before it
+must be reconnected.
 
 ## Without the MCP server
 
-Only if `djk-hand` is missing. The page server takes the same requests over HTTP; always send `x-djk-quelle: cypher`
-and `content-type: application/json`, and read the replies (`status` 1 or 2 = ok, 6 = rejected). `<PORT>` is the page
+Only if `djk-hand` is missing, and for your own scripts. The page server takes the same requests over HTTP; always send
+`x-djk-quelle: cypher`, `authorization: Bearer <contents of ~/.config/cypherdj/hand.token>` (without it: 401
+`schluessel_fehlt`), `x-djk-werkzeug: <tool name>` (without it a call counts as writing in the rate limit) and
+`content-type: application/json`, and read the replies (`status` 1 or 2 = ok, 6 = rejected). `<PORT>` is the page
 port from `djk-start --zustand`.
 
 | What | Route and body |

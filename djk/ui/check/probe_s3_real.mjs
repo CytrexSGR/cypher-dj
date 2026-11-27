@@ -157,7 +157,7 @@ try {
   notiere('C6.3 Unfreeze', (await aktuell()).projekt.spuren[3].freeze === null && !(await w(`document.querySelector('.p-freeze').classList.contains('an')`)), `freeze ${JSON.stringify((await aktuell()).projekt.spuren[3].freeze)}`);
   await geladen();
   {
-    await b.klick('[data-p="export"]');
+    await b.klick('[data-p="export"]'); await b.klick('[data-p="export-start"]');
     const texte = new Set();
     for (let i = 0; i < 300; i++) { const t = (await ausgabe()).text; texte.add(t); if (/^Exported /.test(t)) break; await warte(60); }
     const erg = await ausgabe();
@@ -172,7 +172,7 @@ try {
     const k0 = fehlerKonsole().length;
     await b.klick('[data-p="play"]');
     for (let i = 0; i < 40 && (await aktuell()).kern.status !== 2; i++) await warte(50);
-    await b.klick('[data-p="export"]'); await warte(600);
+    await b.klick('[data-p="export"]'); await b.klick('[data-p="export-start"]'); await warte(600);
     const m1 = await w(`document.querySelector('[data-p="meldung"]').textContent`);
     await b.klick('[data-p="stopp"]'); await warte(600);
     const neuK = fehlerKonsole().slice(k0);

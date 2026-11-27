@@ -4,8 +4,8 @@
 import { istObjekt, kanonisch, notenZaehler, type MidiClip, type Projekt, type Spur } from './model.ts';
 
 // The content commands that reach every member (D13). `clip_aendern` joins them when it names only the fields of FAECHER_CLIP_AENDERN.
-export const FAECHER_BEFEHLE: readonly string[] = ['noten_neu', 'noten_aendern', 'noten_loeschen', 'zeile_setzen', 'huellkurve_setzen', 'huellkurve_loeschen',
-  'clip_aus_muster', 'fx_setzen'];
+export const FAECHER_BEFEHLE: readonly string[] = ['noten_neu', 'noten_aendern', 'noten_loeschen', 'noten_quantisieren', 'noten_humanisieren',
+  'zeile_setzen', 'huellkurve_setzen', 'huellkurve_loeschen', 'clip_aus_muster', 'fx_setzen'];
 export const FAECHER_CLIP_AENDERN: readonly string[] = ['name', 'laenge_beats', 'loop_beats', 'seq'];
 
 /** Does this command reach every member of a pattern? (content commands, and `clip_aendern` naming only name, laenge_beats, loop_beats, seq) */

@@ -4,7 +4,8 @@
 // 2 eq_baender (every one of the 8 bands is addressable through its rows), 3 eq_bypass (row an = 0 is bit-equal to no insert; the stage with the bands off is transparent in level),
 // 4 saett_wirkt (drive 18 dB makes harmonics, the output stays below full scale; out gain; mix 0 is clean), 5 pool_pin (the pool constants equal the table rows),
 // 6 keine_allokation (EQ and saturator in the chains, 2000 blocks, two swaps; positive control), 7 komp_unveraendert (a komp-only chain is bit-equal to the run without the 4b code path: the pooled
-// komp rows still reach the stage after the global slot numbering changed), 8 nan (a NaN burst on a track with an EQ is silenced and counted).
+// komp rows still reach the stage after the global slot numbering changed), 8 nan (a NaN burst on a track with an EQ is silenced and counted),
+// 9 ruhe_einmal (play, quiet path for 300 blocks, three times: the second and the third run are bit-equal, aligned at their entry).
 // Mutations (CMakeLists.txt): INS_EQ_BAND_VERTAUSCHT (2), INS_SAETT_AUS_NACH_DRIVE (4), INS_POOL_PLUS_EINS (5), INS_NAN_DURCHLASS (8).
 #include <algorithm>
 #include <cmath>
@@ -327,6 +328,50 @@ int main() {
     bool alle_endlich = true;
     for (int64_t i = 0; i < 150000; ++i) alle_endlich = alle_endlich && std::isfinite(boese.pml[i]);
     PRUEF(alle_endlich);
+  }
+
+  {  // 9 ruhe_einmal: an eq + saett + komp chain plays, stops, the quiet path runs for 300 blocks, three times over. The second and the third run (each after a quiet stretch) are bit-equal,
+     // aligned at their first sounding sample: the quiet path resets the pool once per quiet stretch (ArrInserts::ruhe), so a stale dry ring, owner or blend position left by the run before shows here.
+     // (Not against a fresh arrangement: the eq keeps the parameter set it was given last across a quiet stretch, gesetzt_ stays, and differs from a fresh one by about 1e-7.)
+    TR(x)
+    auto kette3 = [&](int64_t nr) {
+      Bau b(nr);
+      b.spur(1, ArrArt::audio).clip(1, "c1", 0.0, 8.0, &s1k->a);
+      b.kette(1, {ArrStufe{ArrInsArt::eq, 0, true}, ArrStufe{ArrInsArt::saett, 0, true}, ArrStufe{ArrInsArt::komp, 0, true}});
+      return b.fertig();
+    };
+    setze(x, eqp(1, "an"), 1.0f);
+    band(x, 1, 1000.0, 6.0, 1.0);
+    setze(x, "ins/saett/1/an", 1.0f);
+    setze(x, "ins/saett/1/drive", 12.0f);
+    setze(x, "ins/komp/1/an", 1.0f);
+    setze(x, "ins/komp/1/schwelle", -30.0f);
+    setze(x, "ins/komp/1/ratio", 8.0f);
+    constexpr int64_t SPIEL = 150000, RUHE = 300 * 256, LANG = 40000;
+    int64_t ein[4] = {-1, -1, -1, -1};
+    bool ruhe_lief = true;
+    for (int lauf = 1; lauf <= 3; ++lauf) {
+      const int64_t s0 = x.s;
+      x.laden(kette3(lauf));
+      x.arr.start(0.0, 2, false, x.s, V, 256, x.k);
+      x.lauf(x.s + SPIEL);
+      for (int64_t i = s0; i < x.s && ein[lauf] < 0; ++i)
+        if (x.pml[i] != 0.0f) ein[lauf] = i;
+      x.arr.stopp(0, x.s, x.k);
+      x.lauf(x.s + 2560);
+      x.laden(nullptr);
+      const uint64_t r0 = x.arr.ruhe_zaehler();
+      x.lauf(x.s + RUHE);
+      ruhe_lief = ruhe_lief && x.arr.ruhe_zaehler() - r0 >= 290;   // the quiet path really ran for the stretch (a few blocks of fade may come first)
+    }
+    std::printf("9: quiet blocks %llu, entries %lld %lld %lld, peak %.3f\n", static_cast<unsigned long long>(x.arr.ruhe_zaehler()), static_cast<long long>(ein[1]),
+                static_cast<long long>(ein[2]), static_cast<long long>(ein[3]), spitze(x.pml, ein[3], ein[3] + LANG));
+    PRUEF(ruhe_lief);
+    PRUEF(ein[2] > 0 && ein[3] > ein[2]);
+    PRUEF(spitze(x.pml, ein[3], ein[3] + LANG) > 0.1);   // the third run sounds
+    PRUEF(gleich_bits_versetzt(x.pml, x.pml, ein[2], ein[2] + LANG, ein[3] - ein[2]));
+    PRUEF(gleich_bits_versetzt(x.l, x.l, ein[2], ein[2] + LANG, ein[3] - ein[2]));
+    PRUEF(gleich_bits_versetzt(x.r, x.r, ein[2], ein[2] + LANG, ein[3] - ein[2]));
   }
 
   PRUEF_ENDE();

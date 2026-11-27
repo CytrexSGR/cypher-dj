@@ -588,14 +588,14 @@ static void lader() {
   }
   PRUEF(grund(81, "", true) == "+snap");   // a project without a host stage loads with or without ports (neutral)
   PRUEF(grund(82, "", false) == "+snap");
-  PRUEF(grund(83, ",\"chain\":[" + stufe(5) + "]", true) == "format");   // slot 5: outside the pool
+  PRUEF(grund(83, ",\"chain\":[" + stufe(9) + "]", true) == "format");   // slot 9: outside the pool (8 since strand 1 slice 5)
   PRUEF(grund(84, ",\"chain\":[" + stufe(0) + "]", true) == "format");
   PRUEF(grund(85, ",\"chain\":[" + stufe(1) + "," + stufe(1) + "]", true) == "format");   // the same host twice
-  PRUEF(grund(86, ",\"chain\":[" + stufe(4) + "," + stufe(1) + "]", true) == "+snap");     // the pool ends at 4
+  PRUEF(grund(86, ",\"chain\":[" + stufe(8) + "," + stufe(1) + "]", true) == "+snap");     // the pool ends at 8
   {
     std::string m;
-    grund(87, ",\"chain\":[" + stufe(5) + "]", true, &m);
-    std::printf("8: slot 5: %s\n", m.c_str());
+    grund(87, ",\"chain\":[" + stufe(9) + "]", true, &m);
+    std::printf("8: slot 9: %s\n", m.c_str());
     PRUEF(m.find("ungueltig") != std::string::npos && m.find("slot") != std::string::npos);
   }
   {  // a core without the host ports (JACK refused): the playback with a host stage is refused, named host_fehlt; the same file with ports loads (negative control)
@@ -705,8 +705,102 @@ static void allokation() {
   PRUEF(bau_zaehlt > 0);   // positive control: the guard counts
 }
 
+// ---------------------------------------------------------------- 10: the sidechain key of a host stage (strand 2 task 3.3)
+static void schluessel() {
+  constexpr int N = 256, BLOECKE = 300;   // 300 blocks: past the health hold-off (HOST_GESUND_HALTE), so the return path runs too
+  std::vector<float> ein(N * BLOECKE), key(N * BLOECKE);
+  for (size_t i = 0; i < ein.size(); ++i) {
+    ein[i] = signal_von(static_cast<int64_t>(i));
+    key[i] = -0.7f * signal_von(static_cast<int64_t>(i) * 3 + 11);
+  }
+  // four stages that see the same input and the same return: A with key and key port, B without key (port there), C with key but no port, D without either
+  cdj::ArrHostStufe st;
+  std::vector<float> aus[4];
+  for (auto& a : aus) a.assign(ein.size(), 0.0f);
+  std::vector<float> port_a_l(ein.size()), port_a_r(ein.size());
+  float send[4][N], ret[N], port_l[N], port_r[N], port_b_l[N], port_b_r[N];
+  bool b_unberuehrt = true;
+  for (int b = 0; b < BLOECKE; ++b) {
+    const size_t o = static_cast<size_t>(b) * N;
+    for (int i = 0; i < N; ++i) {
+      const int64_t q = static_cast<int64_t>(o) + i - LAT;
+      ret[i] = q >= 0 ? 0.5f * ein[static_cast<size_t>(q)] : 0.0f;
+    }
+    std::fill(port_l, port_l + N, 0.0f);   // main.cpp zeroes the key port every cycle
+    std::fill(port_r, port_r + N, 0.0f);
+    std::fill(port_b_l, port_b_l + N, 7.0f);   // a mark: a stage without key must not write its port at all
+    std::fill(port_b_r, port_b_r + N, 7.0f);
+    st.setze_zeiger(1, send[0], send[0], ret, ret, port_l, port_r);
+    st.setze_zeiger(2, send[1], send[1], ret, ret, port_b_l, port_b_r);
+    st.setze_zeiger(3, send[2], send[2], ret, ret, nullptr, nullptr);
+    st.setze_zeiger(4, send[3], send[3], ret, ret);
+    for (int h = 1; h <= 4; ++h) st.setze_gesund(h, true);
+    const float* kl = &key[o];
+    const float* kr = &ein[o];   // R carries another signal, so a swapped channel shows
+    st.block(1, &ein[o], &ein[o], &aus[0][o], &aus[0][o], N, LAT, true, true, nullptr, nullptr, true, kl, kr);
+    st.block(2, &ein[o], &ein[o], &aus[1][o], &aus[1][o], N, LAT, true, true, nullptr, nullptr, true, nullptr, nullptr);
+    st.block(3, &ein[o], &ein[o], &aus[2][o], &aus[2][o], N, LAT, true, true, nullptr, nullptr, true, kl, kr);
+    st.block(4, &ein[o], &ein[o], &aus[3][o], &aus[3][o], N, LAT, true, true);
+    std::copy(port_l, port_l + N, &port_a_l[o]);
+    std::copy(port_r, port_r + N, &port_a_r[o]);
+    for (int i = 0; i < N; ++i) b_unberuehrt = b_unberuehrt && port_b_l[i] == 7.0f && port_b_r[i] == 7.0f;
+  }
+  const bool port_gleich = std::memcmp(port_a_l.data(), key.data(), sizeof(float) * key.size()) == 0 && std::memcmp(port_a_r.data(), ein.data(), sizeof(float) * ein.size()) == 0;
+  bool strip_gleich = true;
+  for (int k = 1; k < 4; ++k) strip_gleich = strip_gleich && std::memcmp(aus[0].data(), aus[k].data(), sizeof(float) * ein.size()) == 0;
+  std::printf("10: host key: the key port carries the key unchanged: %s; a stage without key leaves its port untouched: %s; the strip output with and without key / port is bit-identical: %s "
+              "(return weight %d)\n", port_gleich ? "yes" : "no", b_unberuehrt ? "yes" : "no", strip_gleich ? "yes" : "no", st.gewicht(1));
+  PRUEF(port_gleich);
+  PRUEF(b_unberuehrt);
+  PRUEF(strip_gleich);
+  PRUEF(st.gewicht(1) == cdj::HOST_BLENDE);   // positive control: the comparison covered the return path, not only the dry one
+
+  // the loader: a host stage takes a structural key like a compressor; its delay is the path in front of it; track pre stays the row's (one writer)
+  arrdatei::Ordner o("test_arr_host_stufe_key");
+  const std::string a = o.audio('a', 48000);
+  cdj::SpeicherKonto konto(100LL << 20);
+  cdj::ArrAudioCache cache(&konto, 50LL << 20, false);
+  cache.setze_host_da(true);
+  const auto laden = [&](int64_t nr, const std::string& chain, std::string* meldung = nullptr) {
+    o.wiedergabe2_ret(nr, "{\"nr\":1,\"art\":\"audio\",\"chain\":[" + chain + "],\"clips\":[" + o.clip("c1", 0.0, 1.0, a, 48000) + "]},{\"nr\":2,\"art\":\"audio\",\"clips\":[" +
+                              o.clip("c2", 0.0, 1.0, a, 48000) + "]}", "", "");
+    return cdj::lade_wiedergabe(o.pfad, nr, cache);
+  };
+  {
+    cdj::ArrLadeErgebnis e = laden(90, "{\"art\":\"saett\",\"slot\":1,\"an\":false},{\"art\":\"host\",\"slot\":1,\"latenz\":600,\"key\":{\"q\":\"spur\",\"nr\":2,\"punkt\":\"post\"}}");
+    PRUEF(e.snap && e.grund.empty());
+    if (!e.snap) std::printf("10: loader: %s %s\n", e.grund.c_str(), e.meldung.c_str());
+    if (e.snap) {
+      const cdj::ArrStufe& h = e.snap->kette[0].st[1];
+      std::printf("10: loader: host key q %d nr %d punkt %d behind a saturator (%d samples) on the track: key delay %d, lag %d (the tracks are aligned to the stage's own round trip)\n", h.key.quelle, h.key.nr, h.key.punkt,
+                  cdj::ins_latenz(ArrInsArt::saett), h.schl_verz, h.schl_spaet);
+      PRUEF(h.art == ArrInsArt::host && h.key.quelle == cdj::ARR_SCHL_SPUR && h.key.nr == 2 && h.key.punkt == cdj::ARR_SCHL_POST && h.latenz == 600);
+      PRUEF(h.schl_verz == 0 && h.schl_spaet == 600);   // the tracks are aligned to the round trip of this very stage: the post key of track 2 arrives that much after its input (reported as lag)
+    }
+    cdj::gib_wiedergabe(e.snap.release(), cache);
+  }
+  {
+    cdj::ArrLadeErgebnis e = laden(91, "{\"art\":\"host\",\"slot\":1,\"key\":{\"q\":\"spur\",\"nr\":2,\"punkt\":\"post\"}}");
+    PRUEF(e.snap && e.grund.empty());
+    if (e.snap) PRUEF(e.snap->kette[0].st[0].key.quelle == cdj::ARR_SCHL_SPUR && e.snap->kette[0].st[0].key.nr == 2 && e.snap->kette[0].st[0].key.punkt == cdj::ARR_SCHL_POST);
+    cdj::gib_wiedergabe(e.snap.release(), cache);
+  }
+  {
+    cdj::ArrLadeErgebnis e = laden(92, "{\"art\":\"host\",\"slot\":1,\"key\":{\"q\":\"spur\",\"nr\":2,\"punkt\":\"pre\"}}");
+    std::printf("10: loader: host key spur/2 pre: %s (%s)\n", e.grund.c_str(), e.meldung.c_str());
+    PRUEF(!e.snap && e.grund == "format" && e.meldung.find("row sc") != std::string::npos);   // track pre is the row sc of a compressor, not a structural key, for host stages too
+    cdj::gib_wiedergabe(e.snap.release(), cache);
+  }
+  {
+    cdj::ArrLadeErgebnis e = laden(93, "{\"art\":\"eq\",\"slot\":1,\"key\":{\"q\":\"spur\",\"nr\":2,\"punkt\":\"post\"}}");
+    PRUEF(!e.snap && e.grund == "format");   // negative control: the other kinds still take no key
+    cdj::gib_wiedergabe(e.snap.release(), cache);
+  }
+}
+
 int main() {
   direkt();
+  schluessel();
   mixer_zugleich();
   ausrichtung();
   latenzwechsel_faelle();

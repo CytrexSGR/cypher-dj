@@ -1,15 +1,16 @@
 // PRODUCTION: the parameter popover of one insert stage as a function (extracted from inserts.js, behaviour unchanged), and the floating popover the dock opens
-// at a chip. baueStufenPopover(ctx, strang, insert, { liste }) -> { el, aktualisiere(p), zerstoere() } builds the rows of a utility, a plugin (its generic parameter
+// at a chip. baueStufenPopover(ctx, strang, insert, { liste }) -> { el, aktualisiere(p), zerstoere() } builds the rows of a utility, a gate, a multiband (grouped by band), a plugin (its generic parameter
 // list), a compressor (with the key select), a saturator, a limiter, an EQ, or the K rows of a Baukasten stage (liste: true; a Baukasten panel is the window's or
 // the old row's business, see inserts.js and dock/window.js). bindeStufenPopover(ctx) sets ctx.oeffneStufenPopover(strang, insert, anker) -> { schliesse }:
 // one floating popover at a time, position: fixed at the bottom left of the anchor, closed by its X, Escape, a click outside, a project switch or when its stage is gone.
 // Every change goes through ctx.aendere (insert_param_setzen, coalesced per parameter), like the old rows did.
 import {
-  ARTEN, KOPF, BK_PARAMETER, EQ_BAENDER, EQ_BAND_PARAMETER, POS_MAX, bkZahl, eqBandName, freqVonPos, posVonFreq, parameterVon, wertText, paramBefehl, straenge,
+  ARTEN, KOPF, BK_PARAMETER, EQ_BAENDER, EQ_BAND_PARAMETER, MB_BAENDER, MB_BAND_PARAMETER, bandText, mbBandName, POS_MAX, bkZahl, eqBandName, freqVonPos, posVonFreq, parameterVon, wertText, paramBefehl, straenge,
   gemapptVon, rackWerte, makroWert,
 } from './inserts.js';
 import { baueParameterListe } from './plugin_parameter.js';
-import { SC_EIGEN, schluesselGruppen, schluesselBefehl, schluesselWert, schluesselLabel } from './key_choice.js';
+import { PLUGIN_ZIEL } from './lanes.js';
+import { SC_EIGEN, schluesselGruppen, schluesselBefehl, schluesselWert, schluesselLabel, hostHatSchluessel, ohneSpurPre } from './key_choice.js';
 
 const zeileHtml = (art, q, name, beschriftung) => {
   const wahl = q.typ === 'wahl', schalter = q.typ === 'schalter';
@@ -60,8 +61,64 @@ export function baueStufenPopover(ctx, strang, i0, { liste = false } = {}) {
   const zerstoere = () => { weg = true; el.remove(); };
   if (i.art === 'host') {   // the generic parameter list of a plugin: its own module, the values live in the plugin
     const pfad = `/proj/insert/${encodeURIComponent(i.id)}`;
-    baueParameterListe(el, { holeListe: () => ctx.holeGet(`${pfad}/parameter`), sende: (w) => ctx.holeJson(`${pfad}/param`, { werte: w }), fehler: (r) => ctx.melde(ctx.antwortText(r), true) });
-    el.aktualisiere = () => {};
+    // "Lane" button per row: creates the lane `plugin.<stage id>.<index>` on this strip with the current value as its first point, then shows it
+    const anlegen = async (index, wert) => {
+      const ziel = `plugin.${i.id}.${index}`;
+      const punkte = [{ beat: 0, wert: Number(wert) || 0, form: 'linear' }];
+      const ok = await ctx.aendere(`Lane ${ziel} on ${s.name}`, [{ befehl: 'auto_neu', strang_id: s.id, ziel, punkte }]);
+      if (ok !== false) ctx.waehle?.(s.id, ziel);
+      return ok;
+    };
+    const pl = baueParameterListe(el, { holeListe: () => ctx.holeGet(`${pfad}/parameter`), sende: (w) => ctx.holeJson(`${pfad}/param`, { werte: w }),
+      fehler: (r) => ctx.melde(ctx.antwortText(r), true), lane: { insertId: i.id, anlegen },
+      midi: { lernen: (index) => ctx.holeJson(`${pfad}/lernen`, { index }), loeschen: (index) => ctx.holeJson(`${pfad}/lernen/loeschen`, { index }) } });
+    // strand 2 task 3.5: the key row of a host stage; the plugin's index entry (GET /plugins) says whether it has a key input (4 or more audio inputs)
+    const zeile = document.createElement('label'); zeile.className = 'p-ins-zeile p-ins-hostkey';
+    zeile.append('Key');
+    const sel = document.createElement('select'); sel.className = 'p-ins-sc'; sel.setAttribute('aria-label', `Sidechain key of the plugin on ${s.name}`);
+    const aus = document.createElement('output'); zeile.append(sel, aus); el.prepend(zeile);
+    let hk = { zustand: 'laedt', gruppen: [] };
+    const zeichneKey = (p) => {
+      const ins = straenge(p).flatMap((x) => x.inserts).find((x) => x.id === i.id);
+      sel.hidden = hk.zustand !== 'ja';
+      if (hk.zustand !== 'ja') { aus.textContent = hk.zustand === 'laedt' ? '' : hk.zustand === 'nein' ? 'No key input' : hk.zustand; return; }
+      const jetzt = schluesselWert(ins);
+      let gr = hk.gruppen;
+      if (!gr.some((g) => g.eintraege.some((x) => x.wert === jetzt))) gr = [...gr, { titel: 'Current', eintraege: [{ label: schluesselLabel(jetzt, p), wert: jetzt, gesperrt: false }] }];
+      const sig = JSON.stringify(gr);
+      if (sel.dataset.sig !== sig) {
+        sel.dataset.sig = sig; sel.textContent = '';
+        for (const g of gr) {
+          const og = document.createElement('optgroup'); og.label = g.titel;
+          for (const x of g.eintraege) {
+            const o = document.createElement('option'); o.value = x.wert; o.textContent = x.label; o.disabled = x.gesperrt; if (x.text) o.title = x.text;
+            og.append(o);
+          }
+          sel.append(og);
+        }
+      }
+      sel.value = jetzt; aus.textContent = '';
+    };
+    sel.addEventListener('change', (e) => ctx.aendere(`Key plugin on ${s.name}`, [schluesselBefehl(i.id, e.target.value)]));
+    (async () => {
+      const pr = await ctx.holeGet(`/plugins?${new URLSearchParams({ text: '', art: '', format: i.plugin?.format ?? '' })}`);
+      const liste = Array.isArray(pr.j) ? pr.j : pr.j?.plugins;
+      if (weg) return;
+      if (pr.status !== 200 || !Array.isArray(liste)) hk = { zustand: 'Key input not known' };
+      else if (!hostHatSchluessel(liste, i.plugin)) hk = { zustand: 'nein' };
+      else {
+        const r = await ctx.holeGet(`/proj/routing?optionen=${encodeURIComponent(i.id)}`);
+        const o = r.status === 200 ? r.j?.straenge?.flatMap((x) => x.stufen).find((x) => x.insert_id === i.id)?.optionen : null;
+        hk = o ? { zustand: 'ja', gruppen: ohneSpurPre(schluesselGruppen(o, ctx.st.projekt)) } : { zustand: `Key options not available: ${ctx.fehlerText(r)}` };
+      }
+      if (!weg && el.isConnected) zeichneKey(ctx.st.projekt);
+    })();
+    // the project says which parameters of this stage have a lane
+    el.aktualisiere = (p) => {
+      zeichneKey(p);
+      const st = [...(p?.spuren ?? []), ...(p?.gruppen ?? []), ...(p?.returns ?? []), ...(p?.master ? [p.master] : [])].find((x) => x.id === s.id);
+      pl.setzeLanen((st?.automation ?? []).flatMap((l) => { const m = PLUGIN_ZIEL.exec(l.ziel ?? ''); return m && m[1] === i.id ? [Number(m[2])] : []; }));
+    };
     return { el, aktualisiere: el.aktualisiere, zerstoere };
   }
 
@@ -75,19 +132,25 @@ export function baueStufenPopover(ctx, strang, i0, { liste = false } = {}) {
           + EQ_BAND_PARAMETER.map((q) => { const n = eqBandName(m, q.name); return zeileHtml('eq', parameterVon('eq', n), n, q.label); }).join('') + '</div>';
       }
     }
+    if (i.art === 'mb') {   // the three bands as groups: b1 Low, b2 Mid, b3 High
+      for (let m = 1; m <= MB_BAENDER; m++) {
+        html += `<div class="p-ins-band" data-band="${m}"><span class="p-ins-band-kopf">${bandText('mb', m)}</span>`
+          + MB_BAND_PARAMETER.map((q) => { const n = mbBandName(m, q.name); return zeileHtml('mb', parameterVon('mb', n), n, q.label); }).join('') + '</div>';
+      }
+    }
     const zu = el.querySelector(':scope > .p-ins-zu'), umschalter = el.querySelector(':scope > .p-ins-liste');   // what a caller put in front survives a rebuild
     el.innerHTML = html;
     if (umschalter) el.prepend(umschalter);
     if (zu) el.prepend(zu);
     for (const r of el.querySelectorAll('.p-ins-param')) {
       const name = r.dataset.param, k = `${i.id}:${name}`, q = parameterVon(i.art, name);
-      const m = /^b([1-8])\//.exec(name);
+      const m = /^b([1-8])\//.exec(name), bt = m ? bandText(i.art, Number(m[1])) : '';
       r.closest('.p-ins-zeile').dataset.name = name;
-      r.setAttribute('aria-label', `${m ? `Band ${m[1]} ` : ''}${q.label} of the ${ARTEN[i.art].name} on ${s.name}`);
+      r.setAttribute('aria-label', `${bt ? `${bt} ` : ''}${q.label} of the ${ARTEN[i.art].name} on ${s.name}`);
       const sende = () => {
         const v = lies(r, q);
         el.querySelector(`.p-ins-wert[data-param="${name}"]`).textContent = wertText(i.art, name, v);
-        ctx.aendere(`${m ? `Band ${m[1]} ` : ''}${q.label} ${ARTEN[i.art].name} on ${s.name}`, [paramBefehl(i.id, name, v)], k);
+        ctx.aendere(`${bt ? `${bt} ` : ''}${q.label} ${ARTEN[i.art].name} on ${s.name}`, [paramBefehl(i.id, name, v)], k);
       };
       const stetig = r.type === 'range';
       r.addEventListener(stetig ? 'input' : 'change', sende);

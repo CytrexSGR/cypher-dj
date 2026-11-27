@@ -13,27 +13,29 @@ namespace cdj {
 namespace {
 
 // Takeover of older files. arr-bk: version 3 -> 4 widened the table of controls (2048 -> 4096 rows); container core K2: version 4 -> 5 widened it again
-// (4096 -> 8192). The rows of a table keep their place (new rows are appended at the end, and a row carries its path anyway), so everything in front
+// (4096 -> 8192); strand 1 slice 3: version 5 -> 6 widened it to 16384 (an EQ and a compressor per strip); strand 1 slice 3b: the version 6 table holds
+// 24576 rows; a 16384-row version 6 image of a development build is recreated. The rows of a table keep their place (new rows are appended at the end, and a row carries its path anyway), so everything in front
 // of the table has the same offsets and the sections behind it move. The layout of an old file is spelled out here with literal sizes (not derived from
 // the current header), so the takeover does not follow a later change of the header by accident: head 64, two subjects of
 // 208 + 2 x 64 x 48 + 256 x 256 + rows x 96 + 32 x 144 + 4 x 168 bytes, two subscriber subjects of 32 + 8 x 64.
-constexpr std::size_t Z_VOR_REGLER = 208 + 2 * 64 * 48 + 256 * 256;                  // the offset of `regler` inside a subject (the same in versions 3, 4 and 5)
+constexpr std::size_t Z_VOR_REGLER = 208 + 2 * 64 * 48 + 256 * 256;                  // the offset of `regler` inside a subject (the same in versions 3 to 6)
 constexpr std::size_t Z_HINTER_REGLER = 32 * 144 + 4 * 168;                           // hoerscheine and decks, behind the table
 constexpr std::size_t Z_ABOS = 32 + 8 * 64;
 constexpr std::size_t z_echtzeit(std::size_t zeilen) { return Z_VOR_REGLER + zeilen * 96 + Z_HINTER_REGLER; }
 constexpr std::size_t z_datei(std::size_t zeilen) { return 64 + 2 * z_echtzeit(zeilen) + 2 * Z_ABOS; }
 constexpr std::size_t Z3_REGLER = 2048;
 constexpr std::size_t Z4_REGLER = 4096;
+constexpr std::size_t Z5_REGLER = 8192;
 static_assert(offsetof(cdj_z_echtzeit, regler) == Z_VOR_REGLER, "the sections in front of the table did not move");
 static_assert(offsetof(cdj_z_datei, echtzeit) == 64 && sizeof(cdj_z_abos) == Z_ABOS, "head and subscriber subject as in version 3");
 static_assert(sizeof(cdj_z_hoerschein) * CDJ_Z_HOERSCHEINE + sizeof(cdj_z_deck) * CDJ_Z_DECKS == Z_HINTER_REGLER, "sections behind the table as in version 3");
-static_assert(CDJ_Z_REGLER >= Z4_REGLER && Z4_REGLER >= Z3_REGLER, "the table only grew");
+static_assert(CDJ_Z_REGLER >= Z5_REGLER && Z5_REGLER >= Z4_REGLER && Z4_REGLER >= Z3_REGLER, "the table only grew");
 static_assert(z_datei(CDJ_Z_REGLER) == sizeof(cdj_z_datei), "the literal layout agrees with the current header");
 
 // The old format a file of this size and head stands for: its version and table size, or 0 when it is none of them (not trusted).
 struct AltFormat { uint32_t version; std::size_t zeilen; };
 AltFormat alt_format(const unsigned char* roh, std::size_t n) {
-  for (const AltFormat f : {AltFormat{3u, Z3_REGLER}, AltFormat{4u, Z4_REGLER}}) {
+  for (const AltFormat f : {AltFormat{3u, Z3_REGLER}, AltFormat{4u, Z4_REGLER}, AltFormat{5u, Z5_REGLER}}) {
     if (n != z_datei(f.zeilen)) continue;
     uint32_t v, g;
     std::memcpy(&v, roh + 4, 4);
@@ -110,9 +112,10 @@ bool ZustandDatei::oeffne(const std::string& pfad) {
   fstat(fd, &st);
   const off_t soll = static_cast<off_t>(sizeof(cdj_z_datei));
   neu_ = false;
-  std::vector<unsigned char> alt;   // an intact file of version 3 or 4 is taken over instead of being recreated
+  std::vector<unsigned char> alt;   // an intact file of version 3, 4 or 5 is taken over instead of being recreated
   AltFormat alt_f{0u, 0};
-  if (st.st_size == static_cast<off_t>(z_datei(Z3_REGLER)) || st.st_size == static_cast<off_t>(z_datei(Z4_REGLER))) {
+  if (st.st_size == static_cast<off_t>(z_datei(Z3_REGLER)) || st.st_size == static_cast<off_t>(z_datei(Z4_REGLER)) ||
+      st.st_size == static_cast<off_t>(z_datei(Z5_REGLER))) {
     alt.resize(static_cast<std::size_t>(st.st_size));
     if (pread(fd, alt.data(), alt.size(), 0) != static_cast<ssize_t>(alt.size()) || !(alt_f = alt_format(alt.data(), alt.size())).version) alt.clear();
   }

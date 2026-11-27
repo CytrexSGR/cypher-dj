@@ -114,10 +114,11 @@ double ton(const std::vector<float>& x, const std::vector<float>& y, int64_t a, 
 
 struct Sinken {
   cdj::ArrRbSenke rb;
-  cdj::ArrBkSenke bk;
+  std::unique_ptr<cdj::ArrBkSenke> bk_h;   // on the heap: ArrBkSenke is about 3.5 MB since 128 tracks (8 MB stack)
+  cdj::ArrBkSenke& bk;
   cdj::ArrKitSenke kit;
   cdj::ArrInternSenke intern;
-  explicit Sinken(cdj::Arrangement& a) : rb(a), bk(a), kit(a), intern(a, &rb, &bk, &kit) { a.setze_senke_intern(&intern); }
+  explicit Sinken(cdj::Arrangement& a) : rb(a), bk_h(std::make_unique<cdj::ArrBkSenke>(a)), bk(*bk_h), kit(a), intern(a, &rb, &bk, &kit) { a.setze_senke_intern(&intern); }
 };
 
 // one bk track with a note per beat (tone 57, 0.9 beat), the bend and pegel lists, the knob k1

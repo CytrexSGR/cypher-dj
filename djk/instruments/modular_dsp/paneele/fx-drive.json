@@ -1,0 +1,33 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "fx-drive"},
+  "title": "Cypher Drive",
+  "akzent": "tuerkis",
+  "layout": {"rows": [
+    ["curve", "drive", "out"],
+    ["bands"]
+  ]},
+  "sections": [
+    { "id": "curve", "title": "CURVE", "cols": 1, "controls": [
+      {"id": "curve", "type": "selector", "label": "Curve", "bind": {"param": "k1"}, "options": ["Tape", "Tube", "Soft", "Hard", "Fold", "Crush"], "default": 0, "wirkt": {"ueber": ["mix", 0.02]}, "wirkt_text": "Dry only: turn up Mix"}
+    ]},
+    { "id": "drive", "title": "DRIVE", "cols": 2, "controls": [
+      {"id": "input", "type": "knob", "label": "Input", "bind": {"param": "k8"}, "format": "db", "default": 0.5, "wirkt": {"ueber": ["mix", 0.02]}, "wirkt_text": "Dry only: turn up Mix"},
+      {"id": "drive", "type": "knob", "label": "Drive", "bind": {"param": "k2"}, "format": "db", "default": 0.5, "wirkt": {"ueber": ["mix", 0.02]}, "wirkt_text": "Dry only: turn up Mix"},
+      {"id": "char", "type": "knob", "label": "Character", "bind": {"param": "k3"}, "format": "percent", "default": 0.5, "wirkt": {"ueber": ["mix", 0.02]}, "wirkt_text": "Dry only: turn up Mix"},
+      {"id": "rate", "type": "knob", "label": "Crush rate", "bind": {"param": "k7"}, "format": "hz", "default": 0.5, "wirkt": {"alle": [{"ueber": ["mix", 0.02]}, {"ist": ["curve", [5]]}]}, "wirkt_text": "Crush only: pick the Crush curve"}
+    ]},
+    { "id": "out", "title": "OUT", "cols": 1, "controls": [
+      {"id": "tone", "type": "knob", "label": "Tone", "bind": {"param": "k4"}, "format": "percent", "default": 0.5, "wirkt": {"ueber": ["mix", 0.02]}, "wirkt_text": "Dry only: turn up Mix"},
+      {"id": "output", "type": "knob", "label": "Output", "bind": {"param": "k5"}, "format": "db", "default": 0.5, "wirkt": {"ueber": ["mix", 0.02]}, "wirkt_text": "Dry only: turn up Mix"},
+      {"id": "mix", "type": "knob", "label": "Mix", "bind": {"param": "k6"}, "format": "percent", "default": 1}
+    ]},
+    { "id": "bands", "title": "BANDS", "cols": 5, "controls": [
+      {"id": "bands", "type": "selector", "label": "Bands", "span": 5, "bind": {"param": "k9"}, "options": ["Full", "Three bands"], "default": 0, "wirkt": {"ueber": ["mix", 0.02]}, "wirkt_text": "Dry only: turn up Mix"},
+      {"id": "lomid", "type": "knob", "label": "Low/Mid", "bind": {"param": "k10"}, "format": "hz", "default": 0.5, "wirkt": {"alle": [{"ueber": ["mix", 0.02]}, {"ist": ["bands", [1]]}]}, "wirkt_text": "Bands is Full: switch to Three bands"},
+      {"id": "midhi", "type": "knob", "label": "Mid/High", "bind": {"param": "k11"}, "format": "hz", "default": 0.5, "wirkt": {"alle": [{"ueber": ["mix", 0.02]}, {"ist": ["bands", [1]]}]}, "wirkt_text": "Bands is Full: switch to Three bands"},
+      {"id": "lodrive", "type": "knob", "label": "Low drive", "bind": {"param": "k12"}, "format": "db", "default": 0.5, "wirkt": {"alle": [{"ueber": ["mix", 0.02]}, {"ist": ["bands", [1]]}]}, "wirkt_text": "Bands is Full: switch to Three bands"},
+      {"id": "hidrive", "type": "knob", "label": "High drive", "bind": {"param": "k13"}, "format": "db", "default": 0.5, "wirkt": {"alle": [{"ueber": ["mix", 0.02]}, {"ist": ["bands", [1]]}]}, "wirkt_text": "Bands is Full: switch to Three bands"}
+    ]}
+  ]
+}

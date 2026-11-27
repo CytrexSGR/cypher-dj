@@ -20,6 +20,8 @@ bool ist_erzeuger_kanal(const char* kanal_name) { return kanal_name && std::strn
 
 bool ist_pad_kanal(const char* kanal_name) { return kanal_name && std::strncmp(kanal_name, "pad/", 4) == 0; }
 
+bool ist_bus_kanal(const char* kanal_name) { return kanal_name && std::strncmp(kanal_name, "bus/", 4) == 0; }
+
 }  // namespace
 
 void HoerscheinRegister::setze(const Schein& s, double beat_jetzt) {
@@ -106,6 +108,9 @@ Grund PrueferI3::vor_teilstart(const Sicht& s, const TeilSicht& t) {
   // für Cyphers /spur und /regler auf erz/<n>, Studio S6 F4), Stop Cypher dort inkl. Wirt und Muster. Deck-Kanäle bleiben gesperrt.
   const char* kanal_name = s.tabelle().kanal_name(d.kanal);
   if (ist_erzeuger_kanal(kanal_name)) return Grund::kein;
+  // Strand 11 (Andreas 2026-11-26, "du solltest alles drehen können"): a bus carries no track of its own, only the sum of strips that are each
+  // gated here already; its fader is free for Cypher like the master level. The page server holds the ramp rule (nur_rampe) for big raises.
+  if (ist_bus_kanal(kanal_name)) return Grund::kein;
 
   // Andreas 2026-11-18 (SEQ deck): a channel that carries NO track sounds only what the SEQ deck of that place plays into the strip (ADR 038), Cyphers own patterns.
   // Container core K8 (D-V6): "carries a track" is asked of the player behind the strip: the container input must be `player` (art modul and leer are free,

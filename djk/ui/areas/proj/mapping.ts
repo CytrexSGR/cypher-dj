@@ -13,7 +13,8 @@ const C400 = new Set(['argument_ungueltig', 'argument_unbekannt', 'befehl_unbeka
   'label_ungueltig', 'quelle_ungueltig', 'json', 'koerper_kein_objekt', 'beat_ungueltig', 'aktion_unbekannt',
   'take_name_ungueltig', 'comp_leer', 'sidechain_spaet', 'sidechain_zyklus', 'sidechain_quelle',
   'bereich_leer', 'form_ungueltig', 'huellkurve_ziel', 'geraet_huellkurven',   // 1.12 slices 4 and 5 (lane editor tools, envelopes)
-  'muster_fehler', 'klang_unbekannt', 'muster_zeitlimit', 'muster_zu_gross']);   // strudel-clip: a pattern that does not run, a sound the kit lacks
+  'muster_fehler', 'klang_unbekannt', 'muster_zeitlimit', 'muster_zu_gross',   // strudel-clip: a pattern that does not run, a sound the kit lacks
+  'noten_ton_grenze']);   // note editor: a target pitch beyond 24 semitones or outside MIDI 0..127
 const C404 = new Set(['unbekannt', 'spur_unbekannt', 'clip_unbekannt', 'noten_unbekannt', 'sha_unbekannt', 'gruppe_unbekannt', 'ziel_unbekannt',
   'lane_unbekannt', 'return_unbekannt', 'insert_unbekannt', 'param_unbekannt', 'take_unbekannt', 'huellkurve_unbekannt',
   'kit_unbekannt', 'plugin_unbekannt', 'patch_unbekannt', 'richtung_unbekannt', 'preset_unbekannt', 'glied_unbekannt', 'variation_unbekannt']);
@@ -22,7 +23,7 @@ export function grundCode(grund: string): number {
   if (C400.has(grund)) return 400;
   if (C404.has(grund)) return 404;
   if (grund === 'koerper_zu_gross') return 413;
-  if (grund === 'katalog_fehlt' || grund === 'muster_nicht_verfuegbar') return 503;
+  if (grund === 'katalog_fehlt' || grund === 'muster_nicht_verfuegbar' || grund === 'noten_programm_fehlt') return 503;
   return 409;
 }
 // Gründe, die nur der Bereich vergibt (zusätzlich zu commands.ts, history.ts, storage.ts): Liste für die Seite (V1/V2) und AUFRUF.md
@@ -39,7 +40,9 @@ export const BEREICH_GRUENDE: readonly string[] = ['kein_projekt', 'rev_veraltet
   'rampe_laeuft', 'kein_neuer_pfad', 'kein_deck', 'tonart_unbekannt',   // plan live-module tasks 2, 3, 8 and 11
   'modul_unbekannt', 'modul_nicht_einsetzbar',   // task 10
   'kein_liveprojekt_flag',   // review fix
-  'kanal_offen'];   // DJ view places task 7
+  'kanal_offen',   // DJ view places task 7
+  'noten_laeuft', 'noten_vorhanden', 'noten_mehrstimmig', 'noten_fehler', 'noten_zeitlimit', 'noten_programm_fehlt',   // note editor B2: the detection job
+  'noten_render_fehlt', 'noten_render_fehler', 'noten_kurve_fehlt'];   // note editor B4: the render of a note edit
 
 // --- Regler -----------------------------------------------------------------------------------------------------------
 export interface Soll { pfad: string; wert: number }
@@ -73,7 +76,7 @@ export function alleGruppenRegler(p: Projekt): Soll[] {
   }
   return aus;
 }
-// 1.10 slice 3: the send controls spur|grp/<n>/send/<r> (dB, -200 = off) of all 32 tracks and the 16 groups (4 · 48 = 192) and
+// 1.10 slice 3: the send controls spur|grp/<n>/send/<r> (dB, -200 = off) of all 128 tracks and the 16 groups (4 · 48 = 192) and
 // the 11 controls of each of the 4
 // return strips (fader, pan, mute, solo, hall/an and the six Hall values; 44). Free slots carry the defaults.
 export function alleSendRegler(p: Projekt): Soll[] {
@@ -103,17 +106,24 @@ export function alleRetRegler(p: Projekt): Soll[] {
   }
   return aus;
 }
-// 1.10 slice 4a/4b: ALL pooled rows ins/<art>/<slot>/* of every kind (komp 10 per slot, eq 59, saett 4, lim 3, host 1, utility 5, bk 9; the switch last).
+// 1.10 slice 4a/4b: ALL pooled rows ins/<art>/<slot>/* of every kind
+// (komp 10 per slot, eq 59, saett 4, lim 3, host 1, utility 5, bk 9, gate 8, mb 24; the switch last).
 // A used slot gets the values of its stage, a free slot the pool defaults with the switch off: the core keeps the rows of the
 // previously opened project, and a stage added later sends
 // only the rows that differ from the defaults (commands.ts insertReglerAenderungen), so a stale free slot would sound through it.
-export function alleInsertRegler(p: Projekt): Soll[] {
+// bekannt (optional): the core's last reported value of a row (null = unknown). A row of a slot that NO stage uses is left out when
+// bekannt(pfad) equals the value it would get (the pool default): the core already holds it. A used slot's rows are always sent.
+export function alleInsertRegler(p: Projekt, bekannt?: (pfad: string) => number | null): Soll[] {
   const aus: Soll[] = [];
-  for (const art of ['komp', 'eq', 'saett', 'lim', 'host', 'utility', 'bk'] as const) {
+  for (const art of ['komp', 'eq', 'saett', 'lim', 'host', 'utility', 'bk', 'gate', 'mb'] as const) {
     const benutzt = new Map(alleInserts(p).filter((x) => x.insert.art === art).map((x) => [x.insert.slot, x.insert] as const));
     for (let slot = 1; slot <= MAX_INS[art]; slot++) {
-      const i = benutzt.get(slot) ?? { id: '', art, slot, an: false, werte: insertVorgabe(art) } as const;
-      for (const [pfad, wert] of Object.entries(insertZeilen(i))) aus.push({ pfad, wert });
+      const belegt = benutzt.get(slot);
+      const i = belegt ?? { id: '', art, slot, an: false, werte: insertVorgabe(art) } as const;
+      for (const [pfad, wert] of Object.entries(insertZeilen(i))) {
+        if (!belegt && bekannt && bekannt(pfad) === wert) continue;
+        aus.push({ pfad, wert });
+      }
     }
   }
   return aus;
@@ -129,15 +139,16 @@ export function alleRackRegler(p: Projekt): Soll[] {
   }
   return aus;
 }
-export const alleRegler = (p: Projekt): Soll[] => [...alleSpurRegler(p), ...alleGruppenRegler(p), { pfad: 'pm/fader', wert: p.master?.fader_db ?? 0 },
-  ...alleSendRegler(p), ...alleRetRegler(p), ...alleInsertRegler(p), ...alleRackRegler(p)];
+export const alleRegler = (p: Projekt, bekannt?: (pfad: string) => number | null): Soll[] => [
+  ...alleSpurRegler(p), ...alleGruppenRegler(p), { pfad: 'pm/fader', wert: p.master?.fader_db ?? 0 },
+  ...alleSendRegler(p), ...alleRetRegler(p), ...alleInsertRegler(p, bekannt), ...alleRackRegler(p)];
 
 // Rückweg (Spec 3.4): /e/regler spur/<n>/<feld> mit Halter mensch → Befehl spur_aendern, oder null (keine Spur auf n, Wert schon da)
-const REGLER_PFAD = /^spur\/([1-9][0-9]?)\/(fader|pan|mute|solo|filter)$/;
-const FX_PFAD = /^spur\/([1-9]|[12][0-9]|3[0-2])\/fx\/([123])$/;
-const EQ_PFAD = /^spur\/([1-9]|[12][0-9]|3[0-2])\/eq\/(tief|mitte|hoch)$/;
+const REGLER_PFAD = /^spur\/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])\/(fader|pan|mute|solo|filter)$/;
+const FX_PFAD = /^spur\/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])\/fx\/([123])$/;
+const EQ_PFAD = /^spur\/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])\/eq\/(tief|mitte|hoch)$/;
 const GRUPPEN_PFAD = /^grp\/([1-9]|1[0-6])\/(fader|pan|mute|solo)$/;
-const SEND_PFAD = /^(?:(spur)\/([1-9]|[12][0-9]|3[0-2])|(grp)\/([1-9]|1[0-6]))\/send\/([1-4])$/;
+const SEND_PFAD = /^(?:(spur)\/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])|(grp)\/([1-9]|1[0-6]))\/send\/([1-4])$/;
 const RET_PFAD = /^ret\/([1-4])\/(fader|pan|mute|solo)$/;
 const HALL_PFAD = new RegExp(`^ret/([1-4])/hall/(an|${HALL_FELDER.join('|')})$`);
 const klemme = (k: keyof typeof FELD, wert: number): number | boolean => (k === 'mute' || k === 'solo' ? wert >= 0.5

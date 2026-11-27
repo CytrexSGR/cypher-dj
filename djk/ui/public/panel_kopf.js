@@ -122,3 +122,53 @@ export function baueKopf(host, o) {
   zeichne();
   return { neu: zeichne };
 }
+
+// ---- Cypher Space: room selector and LOAD IR (the header of a stage panel whose graph is `fx-space` or a `space-*` graph) ----
+
+/** The four shipped rooms of Cypher Space: each is a graph of its own (they differ only in the impulse response file of the node `raum`). */
+export const SPACE_RAEUME = [
+  { text: 'Hall', graph: 'fx-space' }, { text: 'Room', graph: 'space-raum' }, { text: 'Plate', graph: 'space-platte' }, { text: 'Chamber', graph: 'space-kammer' },
+];
+/** The six knobs every Space graph has with the same meaning: their values carry over when the room (the graph) of a stage is swapped. */
+export const SPACE_KNOEPFE = ['k1', 'k2', 'k3', 'k4', 'k5', 'k6'];
+const SPACE_KOPIE = /^space-[0-9a-f]{6}$/;
+
+/** Does the graph belong to Cypher Space: `fx-space` or any `space-*` graph (a room, or a copy with the user's impulse response). */
+export const istSpace = (graph) => graph === 'fx-space' || (typeof graph === 'string' && graph.startsWith('space-'));
+
+/** The text after "Room: " of the first text label of a Space panel (the file title of a copy); '' when the panel has none. */
+export function raumNameAusPanel(panel) {
+  for (const s of panel?.sections ?? []) for (const c of s.controls ?? []) {
+    if (c.type === 'label' && typeof c.text === 'string') return c.text.replace(/^Room:\s*/, '').replace(/\.\s*Other rooms:.*$/, '').trim();
+  }
+  return '';
+}
+
+/** The entries of the room selector for the graph a stage runs: the four rooms, and for a copy `space-<6 hex>` a fifth entry (value = the copy, text = `kopieName`,
+ *  "Loaded IR" without a name) that is the selected one. For a shipped room that room is selected. [] for a graph that is no Space graph. */
+export function raumEintraege(graph, kopieName = '') {
+  if (!istSpace(graph)) return [];
+  const liste = SPACE_RAEUME.map((r) => ({ wert: r.graph, text: r.text, gewaehlt: r.graph === graph }));
+  if (SPACE_KOPIE.test(graph)) liste.push({ wert: graph, text: String(kopieName ?? '').trim() || 'Loaded IR', gewaehlt: true });
+  return liste;
+}
+
+/** The header row of a Space stage: room selector and LOAD IR. '' for a graph that is no Space graph. Names are escaped. */
+export function raumKopfHtml(graph, kopieName = '') {
+  const eintraege = raumEintraege(graph, kopieName);
+  if (!eintraege.length) return '';
+  const opts = eintraege.map((e) => `<option value="${esc(e.wert)}"${e.gewaehlt ? ' selected' : ''}>${esc(e.text)}</option>`).join('');
+  return '<div class="fp-presetzeile fp-raumzeile" aria-label="Room of Cypher Space">'
+    + '<span class="fp-etikett">ROOM</span>'
+    + `<select class="fp-preset fp-raum" aria-label="Room">${opts}</select>`
+    + '<button type="button" class="fp-knopf-klein" data-fp-ir title="Load your own impulse response (a file of a sample folder, up to 2 s)">LOAD IR</button></div>';
+}
+
+/** The command list that swaps the graph of the stage at `pos` of a strip: ONE `insert_setzen` that replaces the stage (`ersetzen`) and carries the six knob values
+ *  of the old stage, so one undo step brings back room and values. Values that are no numbers are left out (the new stage starts there at the graph's default).
+ *  A replacement starts on: a bypassed stage is switched off again by the caller (its new id is not known before). */
+export function raumTauschBefehle({ strangId, pos, graph, werte = {} }) {
+  const w = {};
+  for (const k of SPACE_KNOEPFE) if (typeof werte[k] === 'number' && Number.isFinite(werte[k])) w[k] = werte[k];
+  return [{ befehl: 'insert_setzen', strang_id: strangId, pos, art: 'bk', graph, ersetzen: true, ...(Object.keys(w).length ? { werte: w } : {}) }];
+}

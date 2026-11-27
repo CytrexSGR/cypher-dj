@@ -19,6 +19,9 @@ ArrInserts::ArrInserts() : arbeit0_(std::make_unique<ArrArbeit>()) {
   for (int s = 0; s < ARR_INS_SAETT; ++s) saett_[s] = std::make_unique<SaettNativ>();
   for (int s = 0; s < ARR_INS_LIM; ++s) lim_[s] = std::make_unique<cypherdj::dsp::KanalLimiter>(INS_LIM_FS, ins_lim_einstellung());
   for (int s = 0; s < ARR_INS_UTIL; ++s) util_[s] = std::make_unique<cypherdj::dsp::Utility>(INS_LIM_FS);
+  for (int s = 0; s < ARR_INS_GATE; ++s) gate_[s] = std::make_unique<cypherdj::dsp::Gate>(INS_LIM_FS);   // strand 1 slice 4
+  for (int s = 0; s < ARR_INS_MB; ++s)
+    for (auto& o : mb_[s]) o = std::make_unique<cypherdj::dsp::MultibandKompressor>(INS_LIM_FS);
   for (int& b : besitzer_) b = -1;
   for (int s = 0; s < INS_G_HOST0; ++s) {   // the native kinds; a host slot takes the latency of its stage at the swap (tausche)
     lat_[s] = ins_latenz(ins_art(s));
@@ -26,12 +29,12 @@ ArrInserts::ArrInserts() : arbeit0_(std::make_unique<ArrArbeit>()) {
   }
   schl_l_.assign(static_cast<size_t>(ARR_SPUREN) * INS_BLOCK, 0.0f);
   schl_r_.assign(static_cast<size_t>(ARR_SPUREN) * INS_BLOCK, 0.0f);
-  key_l_.assign(static_cast<size_t>(ARR_INS_KOMP) * INS_BLOCK, 0.0f);   // slice 5 U1: one key buffer per komp slot
-  key_r_.assign(static_cast<size_t>(ARR_INS_KOMP) * INS_BLOCK, 0.0f);
-  ring_l_.assign(static_cast<size_t>(ARR_INS_KOMP) * ARR_SCHL_VERZ_MAX, 0.0f);   // slice 5 U2b: the key delay rings and the delayed key
-  ring_r_.assign(static_cast<size_t>(ARR_INS_KOMP) * ARR_SCHL_VERZ_MAX, 0.0f);
-  verz_l_.assign(static_cast<size_t>(ARR_INS_KOMP) * INS_BLOCK, 0.0f);
-  verz_r_.assign(static_cast<size_t>(ARR_INS_KOMP) * INS_BLOCK, 0.0f);
+  key_l_.assign(static_cast<size_t>(ARR_INS_SCHL) * INS_BLOCK, 0.0f);   // slice 5 U1: one key buffer per komp slot (strand 2 task 3.3: and per host slot)
+  key_r_.assign(static_cast<size_t>(ARR_INS_SCHL) * INS_BLOCK, 0.0f);
+  ring_l_.assign(static_cast<size_t>(ARR_INS_SCHL) * ARR_SCHL_VERZ_MAX, 0.0f);   // slice 5 U2b: the key delay rings and the delayed key
+  ring_r_.assign(static_cast<size_t>(ARR_INS_SCHL) * ARR_SCHL_VERZ_MAX, 0.0f);
+  verz_l_.assign(static_cast<size_t>(ARR_INS_SCHL) * INS_BLOCK, 0.0f);
+  verz_r_.assign(static_cast<size_t>(ARR_INS_SCHL) * INS_BLOCK, 0.0f);
 }
 ArrInserts::~ArrInserts() = default;
 
@@ -71,6 +74,7 @@ void ArrInserts::setze_sofort(int slot, int param, float w) {
 void ArrInserts::verlauf(int slot, int param, const float* werte) {
   if (slot < 0 || slot >= ARR_INS_ALLE || param < 0 || param >= n_param(slot) || !werte) return;
   p_[slot][param].vl = werte;
+  vl_maske_.setze(slot);
 }
 void ArrInserts::nachfuehren(int m) {
   for (int k = 0; k < ARR_RACKS; ++k)
@@ -81,7 +85,8 @@ void ArrInserts::nachfuehren(int m) {
         w.vl = nullptr;
       }
     }
-  for (int s = 0; s < ARR_INS_ALLE; ++s)
+  // only the slots verlauf() gave a course since the last call (every other entry has vl == nullptr and would be left as it is): a few slots instead of about 11 600 entries
+  vl_maske_.je_bit([&](int s) {
     for (int k = 0; k < n_param(s); ++k) {
       Wert& w = p_[s][k];
       if (w.vl) {
@@ -89,6 +94,8 @@ void ArrInserts::nachfuehren(int m) {
         w.vl = nullptr;
       }
     }
+  });
+  vl_maske_.leeren();
 }
 
 // ---- rack macros (slice 4c T15, spec D13)
@@ -172,27 +179,29 @@ static bool struktureller_schluessel(const ArrSchluessel& k) {
 }
 
 void ArrInserts::schluessel_planen(int m) {
-  schl_maske_ = 0;
+  schl_maske_.leeren();
   strukt_n_ = 0;
-  for (int s = 0; s < ARR_INS_KOMP; ++s) {
-    sc_[s] = 0;
-    strukt_[s] = false;
+  for (int k = 0; k < ARR_INS_SCHL; ++k) {   // strand 2 task 3.3: the komp slots, then the host slots (key index k)
+    const int s = ins_schl_slot(k);
+    if (k < ARR_INS_KOMP) sc_[k] = 0;
+    strukt_[k] = false;
     if (besitzer_[s] < 0) continue;
 #ifndef CYPHERDJ_MUTATION_SC_STRUKTUR_IGNORIERT   // error case: a structural key is ignored, the row path (sc = 0: the stage's own signal) is used
-    if (struktureller_schluessel(skey_[s])) {
-      strukt_[s] = true;   // a structural key wins over the row sc (plan E8: a stage carries at most one of the two; the server keeps the row at 0)
+    if (struktureller_schluessel(skey_[k])) {
+      strukt_[k] = true;   // a structural key wins over the row sc (plan E8: a stage carries at most one of the two; the server keeps the row at 0)
       ++strukt_n_;
 #ifndef CYPHERDJ_MUTATION_SC_KEIN_NULLEN   // error case: the buffer keeps the samples of the block before when the capture point does not run
-      std::memset(&key_l_[static_cast<size_t>(s) * INS_BLOCK], 0, sizeof(float) * static_cast<size_t>(m));
-      std::memset(&key_r_[static_cast<size_t>(s) * INS_BLOCK], 0, sizeof(float) * static_cast<size_t>(m));
+      std::memset(&key_l_[static_cast<size_t>(k) * INS_BLOCK], 0, sizeof(float) * static_cast<size_t>(m));
+      std::memset(&key_r_[static_cast<size_t>(k) * INS_BLOCK], 0, sizeof(float) * static_cast<size_t>(m));
 #endif
       continue;
     }
 #endif
+    if (k >= ARR_INS_KOMP) continue;   // the row key (sc) is komp only
     const long n = std::lround(eff(s, 9, m));
     if (n >= 1 && n <= ARR_SPUREN) {
       sc_[s] = static_cast<int>(n);
-      schl_maske_ |= uint64_t{1} << (n - 1);
+      schl_maske_.setze(static_cast<int>(n - 1));
     }
   }
 }
@@ -217,7 +226,7 @@ void ArrInserts::schluessel_sichern(int spur, const float* l, const float* r, in
 int ArrInserts::ziele(uint8_t quelle, uint8_t punkt, int nr, float** l, float** r) {
   int n = 0;
   if (strukt_n_ == 0) return 0;
-  for (int s = 0; s < ARR_INS_KOMP; ++s)
+  for (int s = 0; s < ARR_INS_SCHL; ++s)   // s: key index
     if (strukt_[s] && skey_[s].quelle == quelle && skey_[s].punkt == punkt && skey_[s].nr == nr) {
       l[n] = &key_l_[static_cast<size_t>(s) * INS_BLOCK];
       r[n] = &key_r_[static_cast<size_t>(s) * INS_BLOCK];
@@ -228,7 +237,7 @@ int ArrInserts::ziele(uint8_t quelle, uint8_t punkt, int nr, float** l, float** 
 void ArrInserts::fertig(uint8_t quelle, uint8_t punkt, int nr, int m) {
   if (strukt_n_ == 0) return;
   bool unrein = false;
-  for (int s = 0; s < ARR_INS_KOMP; ++s) {
+  for (int s = 0; s < ARR_INS_SCHL; ++s) {   // s: key index
     if (!strukt_[s] || skey_[s].quelle != quelle || skey_[s].punkt != punkt || skey_[s].nr != nr) continue;
     float* kl = &key_l_[static_cast<size_t>(s) * INS_BLOCK];
     float* kr = &key_r_[static_cast<size_t>(s) * INS_BLOCK];
@@ -240,8 +249,8 @@ void ArrInserts::fertig(uint8_t quelle, uint8_t punkt, int nr, int m) {
   if (unrein) ++nan_;
 }
 void ArrInserts::kopiere(uint8_t quelle, uint8_t punkt, int nr, const float* l, const float* r, int m) {
-  float* zl[ARR_INS_KOMP];
-  float* zr[ARR_INS_KOMP];
+  float* zl[ARR_INS_SCHL];
+  float* zr[ARR_INS_SCHL];
   const int n = ziele(quelle, punkt, nr, zl, zr);
   if (n == 0) return;
   for (int q = 0; q < n; ++q) {
@@ -251,12 +260,42 @@ void ArrInserts::kopiere(uint8_t quelle, uint8_t punkt, int nr, const float* l, 
   fertig(quelle, punkt, nr, m);
 }
 
-void ArrInserts::ring_leere(int s) {
-  if (s >= ARR_INS_KOMP || !ring_voll_[s]) return;
-  std::memset(&ring_l_[static_cast<size_t>(s) * ARR_SCHL_VERZ_MAX], 0, sizeof(float) * ARR_SCHL_VERZ_MAX);
-  std::memset(&ring_r_[static_cast<size_t>(s) * ARR_SCHL_VERZ_MAX], 0, sizeof(float) * ARR_SCHL_VERZ_MAX);
-  ring_p_[s] = 0;
-  ring_voll_[s] = false;
+void ArrInserts::ring_leere(int s) {   // s: global slot
+  const int k = ins_schl_index(s);
+  if (k < 0 || !ring_voll_[k]) return;
+  std::memset(&ring_l_[static_cast<size_t>(k) * ARR_SCHL_VERZ_MAX], 0, sizeof(float) * ARR_SCHL_VERZ_MAX);
+  std::memset(&ring_r_[static_cast<size_t>(k) * ARR_SCHL_VERZ_MAX], 0, sizeof(float) * ARR_SCHL_VERZ_MAX);
+  ring_p_[k] = 0;
+  ring_voll_[k] = false;
+}
+
+void ArrInserts::schluessel_ausrichten(int k, int verz, const float* kl, const float* kr, int m, const float** l, const float** r) {
+  *l = kl;
+  *r = kr;
+#ifdef CYPHERDJ_MUTATION_SC_KEIN_VERSATZ
+  verz = 0;   // error case: no key ring, the key meets the stage input as the capture point left it
+#endif
+  if (verz <= 0) return;
+  // slice 5 U2b (E9): the key is earlier than the stage input; it goes through the ring of the slot and comes out `verz` samples later
+  const size_t ro = static_cast<size_t>(k) * ARR_SCHL_VERZ_MAX;
+  float* rl = &ring_l_[ro];
+  float* rr = &ring_r_[ro];
+  float* dl = &verz_l_[static_cast<size_t>(k) * INS_BLOCK];
+  float* dr = &verz_r_[static_cast<size_t>(k) * INS_BLOCK];
+  constexpr int MASKE = ARR_SCHL_VERZ_MAX - 1;
+  int p = ring_p_[k];
+  for (int t = 0; t < m; ++t) {
+    rl[p] = kl[t];
+    rr[p] = kr[t];
+    const int q = (p - verz) & MASKE;
+    dl[t] = rl[q];
+    dr[t] = rr[q];
+    p = (p + 1) & MASKE;
+  }
+  ring_p_[k] = p;
+  ring_voll_[k] = true;
+  *l = dl;
+  *r = dr;
 }
 
 void ArrInserts::leere(int s) {
@@ -266,11 +305,42 @@ void ArrInserts::leere(int s) {
   else if (s < INS_G_LIM0) saett_[s - INS_G_SAETT0]->leeren();
   else if (s < INS_G_UTIL0) lim_[s - INS_G_LIM0]->leeren();
   else if (s < INS_G_BK0) util_[s - INS_G_UTIL0]->leeren();
-  else if (s < INS_G_HOST0) {   // arr-bk slice 3: the instance starts from the beginning (phases, envelopes, delay lines); the knobs stay
+  else if (s < INS_G_GATE0) {   // arr-bk slice 3: the instance starts from the beginning (phases, envelopes, delay lines); the knobs stay
     if (CypherBk* h = bk_[s - INS_G_BK0].h) cypher_bk_zuruecksetzen(h);
-  } else host_.leere(s - INS_G_HOST0 + 1);
+  } else if (s < INS_G_MB0) {   // strand 1 slice 4: detector empty, the settings stay; the next block it runs starts OPEN (rechne), as the mixer's gate does
+    gate_[s - INS_G_GATE0]->leeren();
+    gate_lief_[s - INS_G_GATE0] = false;
+  } else if (s < INS_G_HOST0) mb_leere(s - INS_G_MB0);
+  else host_.leere(s - INS_G_HOST0 + 1);
   gr_[s] = 0.0f;
   lief_[s] = false;
+}
+
+// strand 1 slice 4: both objects of a multiband slot start empty (filters, detectors; the settings stay), a running crossover change is dropped, and the next block the slot runs gives the
+// newest crossovers to the active object at once (mb_lief_ = false; the stage's own lief_ may be set again by the NaN guard right after this reset).
+void ArrInserts::mb_leere(int i) {
+  mb_[i][0]->leeren();
+  mb_[i][1]->leeren();
+  mb_lief_[i] = false;
+  mb_gb_an_[i] = false;
+  mb_gpos_[i] = 0;
+  mb_gwarm_[i] = 0;
+}
+
+// Warm-up length for the crossovers (as Mixer::mb_warm): `basis` samples at 100 Hz and above; an empty Linkwitz-Riley 8 settles in time proportional to 1 / f, so below 100 Hz it grows in
+// proportion, at most INS_MB_WARM_MAX.
+int ArrInserts::mb_warm(float gt, float gh, int basis) {
+  const float f = std::fmin(gt, gh);
+  const float faktor = f < INS_MB_WARM_HZ ? INS_MB_WARM_HZ / std::fmax(f, 1.0f) : 1.0f;
+  return std::min(INS_MB_WARM_MAX, static_cast<int>(static_cast<float>(basis) * faktor));
+}
+
+// The crossovers as the module applies them (MultibandKompressor::setze_grenzen: tief in [20 Hz, 0.45 fs], hoch in [tief, 0.45 fs]); a NaN keeps the one before. A move of a row that the
+// clamp hides (hoch under tief) is no change.
+static void mb_wirksam(float tief, float hoch, float alt_t, float alt_h, float& t, float& h) {
+  const float hi = static_cast<float>(0.45 * INS_LIM_FS);
+  t = std::isnan(tief) ? alt_t : std::clamp(tief, static_cast<float>(cypherdj::dsp::kMbGrenzeMinHz), hi);
+  h = std::isnan(hoch) ? alt_h : std::clamp(hoch, t, hi);
 }
 
 // The dry ring of a stage with latency holds the last lat_ input samples. Every block the stage is asked for pushes its input; the output of a bypassed stage, a
@@ -303,9 +373,10 @@ void ArrInserts::trocken_leere(int s) {
 }
 
 void ArrInserts::tausche(const ArrKette* ketten) {
+  ruhig_ = false;   // the swap gives owners, keys and latencies: the next quiet block resets again
   int anspruch[ARR_INS_ALLE];
-  ArrSchluessel neu_key[ARR_INS_KOMP];
-  int neu_vs[ARR_INS_KOMP] = {}, neu_vz[ARR_INS_KOMP] = {}, neu_sp[ARR_INS_KOMP] = {};
+  ArrSchluessel neu_key[ARR_INS_SCHL];   // by key index
+  int neu_vs[ARR_INS_SCHL] = {}, neu_vz[ARR_INS_SCHL] = {}, neu_sp[ARR_INS_SCHL] = {};
   int neu_lat[ARR_INS_ALLE] = {};   // plan 1.11: the latency of the host stages of the new snapshot (arr-bk: and of the Baukasten stages)
   CypherBk* neu_bk[ARR_INS_BK] = {};   // arr-bk slice 3: the instance of each Baukasten stage of the new snapshot
   uint64_t neu_bk_gen[ARR_INS_BK] = {};
@@ -317,16 +388,16 @@ void ArrInserts::tausche(const ArrKette* ketten) {
         const int g = ins_global(x.art, x.slot);
         if (g >= 0) anspruch[g] = st;
         if (g >= INS_G_HOST0) neu_lat[g] = x.latenz;
-        if (g >= INS_G_BK0 && g < INS_G_HOST0) {
+        if (g >= INS_G_BK0 && g < INS_G_GATE0) {
           neu_lat[g] = x.latenz;
           neu_bk[g - INS_G_BK0] = x.bk;
           neu_bk_gen[g - INS_G_BK0] = x.bk_gen;
         }
-        if (g >= 0 && g < ARR_INS_KOMP) {
-          neu_key[g] = x.key;
-          neu_vs[g] = x.schl_verz;
-          neu_vz[g] = x.schl_verz_zeile;
-          neu_sp[g] = x.schl_spaet;
+        if (const int k = ins_schl_index(g); k >= 0) {   // strand 2 task 3.3: komp and host stages carry a structural key
+          neu_key[k] = x.key;
+          neu_vs[k] = x.schl_verz;
+          neu_vz[k] = x.schl_verz_zeile;
+          neu_sp[k] = x.schl_spaet;
         }
       }
   // plan 1.11 (fix round 3): ONE host process serves one strip at a time. A host slot whose owner strip is another one in the new snapshot, while the slot is still active or in its tail, is a removal
@@ -336,19 +407,19 @@ void ArrInserts::tausche(const ArrKette* ketten) {
   for (int s = INS_G_HOST0; s < ARR_INS_ALLE; ++s)
     if (anspruch[s] >= 0 && besitzer_[s] >= 0 && besitzer_[s] != anspruch[s]) anspruch[s] = -1;
 #endif
-  maske_ = 0;
+  maske_.leeren();
   for (int s = 0; s < ARR_INS_ALLE; ++s) {
     if (anspruch[s] >= 0) {
-      if (s < ARR_INS_KOMP) {
-        const bool gleich = skey_[s].quelle == neu_key[s].quelle && skey_[s].nr == neu_key[s].nr && skey_[s].punkt == neu_key[s].punkt && verz_s_[s] == neu_vs[s] && verz_z_[s] == neu_vz[s];
+      if (const int k = ins_schl_index(s); k >= 0) {
+        const bool gleich = skey_[k].quelle == neu_key[k].quelle && skey_[k].nr == neu_key[k].nr && skey_[k].punkt == neu_key[k].punkt && verz_s_[k] == neu_vs[k] && verz_z_[k] == neu_vz[k];
         if (!gleich) ring_leere(s);   // another key or another delay: the history of the old one does not belong to the new
-        skey_[s] = neu_key[s];
-        verz_s_[s] = neu_vs[s];
-        verz_z_[s] = neu_vz[s];
-        spaet_[s] = neu_sp[s];
+        skey_[k] = neu_key[k];
+        verz_s_[k] = neu_vs[k];
+        verz_z_[k] = neu_vz[k];
+        spaet_[k] = neu_sp[k];
       }
       if (s >= INS_G_HOST0) lat_[s] = std::min<int>(neu_lat[s], ARR_HOST_LAT_MAX - 1);   // a host stage's latency is structure: taken over with the snapshot (a tail keeps the one it had)
-      if (s >= INS_G_BK0 && s < INS_G_HOST0) {   // arr-bk slice 3: the instance and its latency are structure of the snapshot (the loader measured it, at most INS_LAT_MAX)
+      if (s >= INS_G_BK0 && s < INS_G_GATE0) {   // arr-bk slice 3: the instance and its latency are structure of the snapshot (the loader measured it, at most INS_LAT_MAX)
         const int nl = std::min<int>(neu_lat[s], INS_LAT_MAX);
         const bool neuer = besitzer_[s] != anspruch[s];
         BkSlot& b = bk_[s - INS_G_BK0];
@@ -381,11 +452,11 @@ void ArrInserts::tausche(const ArrKette* ketten) {
       else leere(s);   // error case: the state is cleared on every swap
 #endif
       in_kette_[s] = true;
-      maske_ |= uint64_t{1} << anspruch[s];
+      maske_.setze(anspruch[s]);
     } else {
       in_kette_[s] = false;
       if (besitzer_[s] >= 0 && pos_[s] > 0) {   // leaves the chain: a tail on its former strip
-        maske_ |= uint64_t{1} << besitzer_[s];
+        maske_.setze(besitzer_[s]);
       } else {
         if (lief_[s]) leere(s);
         besitzer_[s] = -1;
@@ -398,11 +469,15 @@ void ArrInserts::tausche(const ArrKette* ketten) {
 }
 
 void ArrInserts::ruhe() {
-  lanen_loeschen();   // 1.12 slice 6: nothing plays, no lane drives a parameter
+  lanen_loeschen();   // 1.12 slice 6: nothing plays, no lane drives a parameter (outside the guard: lane_makro() needs no owner; O(1) when no lane is set)
+  // Strand 1 (376 slots since slice 4): the reset below is about 350 KB of stores (the dry rings) and a walk over every slot. It is idempotent, and after it no slot has an owner, so nothing but
+  // tausche() can write the state it resets (every other writer runs on an owned slot: stufe, kette_bahn, schweige_bahn through slot_eigen_; lane_stufe, makros_planen and
+  // schluessel_planen through besitzer_). tausche() clears ruhig_, so the quiet path resets once per quiet stretch and costs nothing on the blocks after.
+  if (ruhig_) return;
   for (ArrSchluessel& k : skey_) k = ArrSchluessel{};
-  for (int s = 0; s < ARR_INS_KOMP; ++s) {
-    ring_leere(s);
-    verz_s_[s] = verz_z_[s] = spaet_[s] = 0;
+  for (int k = 0; k < ARR_INS_SCHL; ++k) {
+    ring_leere(ins_schl_slot(k));
+    verz_s_[k] = verz_z_[k] = spaet_[k] = 0;
   }
   for (int s = 0; s < ARR_INS_ALLE; ++s) {
     if (lief_[s]) leere(s);
@@ -412,13 +487,14 @@ void ArrInserts::ruhe() {
     pos_[s] = 0;
     bk_besitz_frei(s);
   }
-  maske_ = 0;
+  maske_.leeren();
   spiegel_neu();
+  ruhig_ = true;
 }
 
 // arr-bk slice 3: the slot has no owner any more (tail ended, stage removed, rest): the instance is not ours any more, so it is unpublished and the loader may free it.
 void ArrInserts::bk_besitz_frei(int s) {
-  if (s < INS_G_BK0 || s >= INS_G_HOST0) return;
+  if (s < INS_G_BK0 || s >= INS_G_GATE0) return;
   BkSlot& b = bk_[s - INS_G_BK0];
   b.h = nullptr;
   b.gen = 0;
@@ -463,6 +539,35 @@ void ArrInserts::setze_dsp(int s, int m) {
 #endif
   } else if (s >= INS_G_HOST0) {
     // plan 1.11: a host stage has no setting to give (the row an is read by the chain); it must never fall into the limiter branch below
+  } else if (s >= INS_G_MB0) {   // strand 1 slice 4: the bands go to the active object (and to the resting one while a crossover change runs); the crossovers are read by rechne_mb every block
+    const int i = s - INS_G_MB0;
+    cypherdj::dsp::MultibandKompressor& A = *mb_[i][mb_b_[i] ? 1 : 0];
+    cypherdj::dsp::MultibandKompressor& B = *mb_[i][mb_b_[i] ? 0 : 1];
+    const float* alt = angewandt_[s];
+    for (int b = 0; b < cypherdj::dsp::MultibandKompressor::kBaender; ++b) {
+      const int o = 3 + b * INS_MB_BAND_PARAM;
+      if (!neu && std::memcmp(e + o, alt + o, sizeof(float) * INS_MB_BAND_PARAM) == 0) continue;   // setze_band only for a band that changed
+      cypherdj::dsp::MbBandEinstellung be;   // aufholen_auto stays on (the module default and the mixer's): compressing a band makes it denser, not quieter
+      be.schwelle_db = e[o];
+      be.verhaeltnis = e[o + 1];
+      be.anstieg_ms = e[o + 2];
+      be.abklingen_ms = e[o + 3];
+      be.knie_db = e[o + 4];
+      be.aufholen_db = e[o + 5];
+      be.umgehen = e[o + 6] >= 0.5f;
+      A.setze_band(static_cast<cypherdj::dsp::Band>(b), be);
+      if (mb_gb_an_[i]) B.setze_band(static_cast<cypherdj::dsp::Band>(b), be);
+    }
+  } else if (s >= INS_G_GATE0) {   // strand 1 slice 4
+    cypherdj::dsp::GateParameter g;
+    g.schwelle_db = e[1];
+    g.hysterese_db = e[2];
+    g.ratio = e[3];
+    g.bereich_db = e[4];
+    g.attack_ms = e[5];
+    g.hold_ms = e[6];
+    g.release_ms = e[7];
+    gate_[s - INS_G_GATE0]->setze(g);
   } else if (s >= INS_G_BK0) {   // arr-bk slice 3: the knobs k1..k64 (rows 1..64) go to the instance; the first application (also after a take-over) jumps, later changes are smoothed over 20 ms by the instance
     if (CypherBk* h = bk_[s - INS_G_BK0].h)
       for (int k = 1; k <= BK_KNOEPFE; ++k) {
@@ -493,7 +598,16 @@ void ArrInserts::setze_dsp(int s, int m) {
 void ArrInserts::rechne(int s, float* l, float* r, int m, bool ziel_an, float* tl, float* tr, ArrArbeit* a) {
   if (s >= INS_G_HOST0) {   // plan 1.11: the host stage (its own latency, its own dry ring)
     const int h = s - INS_G_HOST0 + 1;
-    host_.block(h, l, r, l, r, m, lat_[s], ziel_an, host_.gesund(h), tl, tr, in_kette_[s]);
+    const int k = ins_schl_index(s);
+    const float* kl = nullptr;
+    const float* kr = nullptr;
+    if (strukt_[k]) {   // strand 2 task 3.3: the structural key of the host slot, aligned to the stage input like a compressor's; ArrHostStufe copies it into the key port
+      const size_t o = static_cast<size_t>(k) * INS_BLOCK;
+      schluessel_ausrichten(k, verz_s_[k], &key_l_[o], &key_r_[o], m, &kl, &kr);
+    } else {
+      ring_leere(s);   // no key this block: no key history
+    }
+    host_.block(h, l, r, l, r, m, lat_[s], ziel_an, host_.gesund(h), tl, tr, in_kette_[s], kl, kr);
     return;
   }
   if (s < ARR_INS_KOMP) {
@@ -519,30 +633,7 @@ void ArrInserts::rechne(int s, float* l, float* r, int m, bool ziel_an, float* t
       komp_[s]->block(l, r, m);
       return;
     }
-#ifdef CYPHERDJ_MUTATION_SC_KEIN_VERSATZ
-    verz = 0;   // error case: no key ring, the key meets the stage input as the capture point left it
-#endif
-    if (verz > 0) {   // slice 5 U2b (E9): the key is earlier than the stage input; it goes through the ring of the slot and comes out `verz` samples later
-      const size_t ro = static_cast<size_t>(s) * ARR_SCHL_VERZ_MAX;
-      float* rl = &ring_l_[ro];
-      float* rr = &ring_r_[ro];
-      float* dl = &verz_l_[static_cast<size_t>(s) * INS_BLOCK];
-      float* dr = &verz_r_[static_cast<size_t>(s) * INS_BLOCK];
-      constexpr int MASKE = ARR_SCHL_VERZ_MAX - 1;
-      int p = ring_p_[s];
-      for (int t = 0; t < m; ++t) {
-        rl[p] = kl[t];
-        rr[p] = kr[t];
-        const int q = (p - verz) & MASKE;
-        dl[t] = rl[q];
-        dr[t] = rr[q];
-        p = (p + 1) & MASKE;
-      }
-      ring_p_[s] = p;
-      ring_voll_[s] = true;
-      kl = dl;
-      kr = dr;
-    }
+    schluessel_ausrichten(s, verz, kl, kr, m, &kl, &kr);   // komp: key index = slot
     komp_[s]->block_sc(l, r, kl, kr, m);
   } else if (s < INS_G_SAETT0) {
     eq_[s - ARR_INS_KOMP]->block(l, r, m);
@@ -554,8 +645,97 @@ void ArrInserts::rechne(int s, float* l, float* r, int m, bool ziel_an, float* t
   } else if (s < INS_G_BK0) {
     static_assert(INS_BLOCK <= cypherdj::dsp::kMaxFrames, "the utility takes a whole block in one call");
     util_[s - INS_G_UTIL0]->verarbeite(l, r, l, r, m);   // in place
-  } else if (a) {
-    rechne_bk(s, l, r, m, *a);
+  } else if (s < INS_G_GATE0) {
+    if (a) rechne_bk(s, l, r, m, *a);
+  } else if (s < INS_G_MB0) {
+    static_assert(INS_BLOCK <= cypherdj::dsp::kMaxFrames, "the gate takes a whole block in one call");
+    const int i = s - INS_G_GATE0;
+    // switched on or reset: starts OPEN, so a running signal sees no step and the gate closes the regular way (Mixer::gate_block). After setze_dsp: leeren_offen() starts the hold with
+    // the hold time the gate holds now.
+    if (!gate_lief_[i]) gate_[i]->leeren_offen();
+    gate_[i]->verarbeite(l, r, l, r, m);   // in place, detection on its own input (no sidechain)
+    gate_lief_[i] = true;
+  } else {
+    rechne_mb(s - INS_G_MB0, l, r, m, a);
+  }
+}
+
+// strand 1 slice 4: one block of the multiband slot i in place. The crossovers (the effective ones of the rows, angewandt_ 1 and 2) are compared every block with those of the object that is or
+// becomes the active one; a move under a running stage goes the mixer's way (Mixer::mb_block): the resting object is emptied, takes the new crossovers and runs on the live input UNHEARD until it
+// has settled (an empty Linkwitz-Riley 8 overshoots, a cold object crossed in at once dipped a block by 9 dB), then it takes over the dynamics of the active one and the output crosses over
+// (S-curve, INS_MB_BLENDE samples, over as many blocks as it needs). A newer target during the warm-up goes in place when it is small (within INS_MB_WARM_SPRUNG of the anchor), else it waits,
+// like one that arrives during the crossfade: it is read again when the change is over. At most one extra module call per block (the resting object), no allocation.
+// A non-finite input sample passes untouched (the module would count it as 0 and so hide a NaN that a stage before holds), so the guard in stufe() sees it; its reset (mb_leere) makes the next
+// block give the newest crossovers to the active object at once, so a change in that block is not lost.
+void ArrInserts::rechne_mb(int i, float* l, float* r, int m, ArrArbeit* a) {
+  for (int t = 0; t < m; ++t)
+    if (!std::isfinite(l[t]) || !std::isfinite(r[t])) return;
+  cypherdj::dsp::MultibandKompressor& A = *mb_[i][mb_b_[i] ? 1 : 0];
+  cypherdj::dsp::MultibandKompressor& B = *mb_[i][mb_b_[i] ? 0 : 1];
+  const float* const w = angewandt_[INS_G_MB0 + i];
+  float gt, gh;
+  mb_wirksam(w[1], w[2], mb_gt_[i], mb_gh_[i], gt, gh);
+  const bool anders = gt != mb_gt_[i] || gh != mb_gh_[i];
+  if (!mb_lief_[i] || !a) {   // starting from a reset: the crossovers go in at once, there is nothing running to cross over from (no scratch is not reached: stufe() always hands its lane)
+    if (!mb_lief_[i] || anders) A.setze_grenzen(gt, gh);
+    mb_gt_[i] = gt;
+    mb_gh_[i] = gh;
+    mb_gb_an_[i] = false;
+    mb_gpos_[i] = 0;
+    mb_gwarm_[i] = 0;
+  } else if (!mb_gb_an_[i] && anders) {   // a crossover moved under a running signal: a new change starts with an empty resting object
+    B.leeren();
+    B.setze_grenzen(gt, gh);
+    mb_gb_an_[i] = true;
+    mb_gpos_[i] = 0;
+    mb_gwarm_[i] = mb_gbasis_[i] = mb_warm(gt, gh, INS_MB_WARM);
+    mb_gwarm_ges_[i] = 0;
+    mb_gat_[i] = gt;
+    mb_gah_[i] = gh;
+    mb_gdyn_[i] = false;
+    mb_gt_[i] = gt;
+    mb_gh_[i] = gh;
+  } else if (mb_gb_an_[i] && mb_gwarm_[i] > 0 && anders) {   // still warming up: a small newer target goes in place (the warm-up is extended a little, never restarted); a big one waits
+    const float gs = INS_MB_WARM_SPRUNG;
+    if (std::fabs(gt - mb_gat_[i]) <= gs * mb_gat_[i] && std::fabs(gh - mb_gah_[i]) <= gs * mb_gah_[i]) {
+      B.setze_grenzen(gt, gh);
+      const int platz = std::max(mb_gbasis_[i] + mb_warm(gt, gh, INS_MB_WARM_VERLAENGERUNG) - mb_gwarm_ges_[i], 0);
+      mb_gwarm_[i] = std::max(mb_gwarm_[i], std::min(mb_warm(gt, gh, INS_MB_WARM_REST), platz));
+      mb_gt_[i] = gt;
+      mb_gh_[i] = gh;
+    }
+  }
+  mb_lief_[i] = true;
+  if (!mb_gb_an_[i]) {
+    A.verarbeite(l, r, l, r, m);
+    return;
+  }
+  if (mb_gwarm_[i] == 0 && !mb_gdyn_[i]) {   // the crossfade starts with this block: now the dynamics of the active object go over (settings, detector states, gain ramps)
+    B.uebernehme_dynamik(A);
+    mb_gdyn_[i] = true;
+  }
+  float* const bl = a->bke_l[0];
+  float* const br = a->bke_r[0];
+  B.verarbeite(l, r, bl, br, m);   // first: it reads the input that A overwrites
+  A.verarbeite(l, r, l, r, m);
+  if (mb_gwarm_[i] > 0) {   // warming up: B runs but is not heard
+    mb_gwarm_[i] = mb_gwarm_[i] > m ? mb_gwarm_[i] - m : 0;
+    mb_gwarm_ges_[i] += m;
+    return;
+  }
+  int gp = mb_gpos_[i];
+  for (int t = 0; t < m; ++t) {
+    if (gp < INS_MB_BLENDE) ++gp;
+    const float u = static_cast<float>(gp) * (1.0f / static_cast<float>(INS_MB_BLENDE));
+    const float gw = gp == INS_MB_BLENDE ? 1.0f : u * u * (3.0f - 2.0f * u);
+    l[t] += gw * (bl[t] - l[t]);
+    r[t] += gw * (br[t] - r[t]);
+  }
+  mb_gpos_[i] = gp;
+  if (gp >= INS_MB_BLENDE) {   // the crossfade is over: the second object is the active one from the next block on
+    mb_b_[i] = !mb_b_[i];
+    mb_gb_an_[i] = false;
+    mb_gpos_[i] = 0;
   }
 }
 
@@ -595,9 +775,9 @@ void ArrInserts::rechne_bk(int s, float* l, float* r, int m, ArrArbeit& a) {
 }
 
 void ArrInserts::spiegel_neu() {
-  for (uint64_t& e : slot_eigen_) e = 0;
+  for (ArrSlotMaske& e : slot_eigen_) e.leeren();
   for (int s = 0; s < ARR_INS_ALLE; ++s)
-    if (besitzer_[s] >= 0 && besitzer_[s] < ARR_KETTEN) slot_eigen_[besitzer_[s]] |= uint64_t{1} << s;
+    if (besitzer_[s] >= 0 && besitzer_[s] < ARR_KETTEN) slot_eigen_[besitzer_[s]].setze(s);
 }
 
 // One stage over m samples in place. ziel_an: the stage should run (project flag and row an). Scratch and NaN count come from the lane `a`.
@@ -634,7 +814,7 @@ void ArrInserts::stufe(int s, bool ziel_an, float* l, float* r, int m, ArrArbeit
   }
   if (pos_[s] == 0 && ziel == 0) {   // fully off: not computed, state cleared; the signal still passes the latency of the stage
     if (lief_[s]) leere(s);
-    if (s >= INS_G_BK0 && s < INS_G_HOST0) {   // audit U34: an instance swap while the stage is off has nothing to crossfade (rechne_bk, which clears `alt`, does not run): let the old one go now
+    if (s >= INS_G_BK0 && s < INS_G_GATE0) {   // audit U34: an instance swap while the stage is off has nothing to crossfade (rechne_bk, which clears `alt`, does not run): let the old one go now
       BkSlot& b = bk_[s - INS_G_BK0];
       if (b.alt) {
         cypher_bk_zuruecksetzen(b.alt);   // a later take-over of the same instance starts clean
@@ -652,7 +832,7 @@ void ArrInserts::stufe(int s, bool ziel_an, float* l, float* r, int m, ArrArbeit
   if (in_kette_[s]) pos_[s] = ziel;   // error case: no blend on the bypass of a stage in the chain, the weight jumps (the tail of a removed stage still fades)
 #endif
   const bool fest = pos_[s] == INS_BLENDE && ziel == INS_BLENDE;
-  const bool pegelt = s < ARR_INS_KOMP || (s >= INS_G_LIM0 && s < INS_G_UTIL0);   // T9: the kinds with a level reading, komp and lim
+  const bool pegelt = s < ARR_INS_KOMP || (s >= INS_G_LIM0 && s < INS_G_UTIL0) || (s >= INS_G_GATE0 && s < INS_G_HOST0);   // T9: the kinds with a level reading, komp, lim, gate and mb
   if (pegelt) pk_ein_[s] = spitze_stereo(pk_ein_[s], l, r, m);   // the input of the stage, before it computes
   {
     if (lat) {
@@ -706,6 +886,17 @@ void ArrInserts::stufe(int s, bool ziel_an, float* l, float* r, int m, ArrArbeit
 #endif
   } else if (s >= INS_G_LIM0 && s < INS_G_UTIL0) {
     gr_[s] = std::max(0.0f, -lim_[s - INS_G_LIM0]->groesste_absenkung_db());   // the deepest reduction of the block, >= 0
+  } else if (s >= INS_G_GATE0 && s < INS_G_MB0) {
+    // strand 1 slice 4: the gate's attenuation at the end of the block, >= 0, at most the range (bereich -120 closes fully: gain 0 reads -200 dB, the reduction is the range)
+    const float b = angewandt_[s][4];
+    const float boden = std::isfinite(b) ? std::clamp(b, cypherdj::dsp::kGateBereichStummDb, 0.0f) : cypherdj::dsp::kGateBereichStummDb;
+    gr_[s] = std::min(std::max(0.0f, -gate_[s - INS_G_GATE0]->gain_db()), -boden);
+  } else if (s >= INS_G_MB0 && s < INS_G_HOST0) {
+    const int i = s - INS_G_MB0;
+    const cypherdj::dsp::MultibandKompressor& A = *mb_[i][mb_b_[i] ? 1 : 0];
+    float g = 0.0f;
+    for (int b = 0; b < cypherdj::dsp::MultibandKompressor::kBaender; ++b) g = std::max(g, -A.aktuelle_absenkung_db(static_cast<cypherdj::dsp::Band>(b)));
+    gr_[s] = g;   // the deepest band, >= 0
   } else {
     gr_[s] = 0.0f;
   }
@@ -718,24 +909,24 @@ void ArrInserts::schweige(int streifen) {
 
 void ArrInserts::schweige_bahn(int streifen, ArrArbeit& a) {
   bool noch = false;
-  uint64_t eigen = slot_eigen_[streifen];
-  for (int s = 0; s < ARR_INS_ALLE; ++s) {
-    if (!((eigen >> s) & 1u)) continue;
+  ArrSlotMaske eigen = slot_eigen_[streifen];
+  const ArrSlotMaske eigen_kopie = eigen;   // the walk reads the bits as they were; the loop clears only the bit it is on, so this equals the old bit-by-bit walk
+  eigen_kopie.je_bit([&](int s) {
     if (lief_[s]) leere(s);
     trocken_leere(s);
     pos_[s] = s >= INS_G_HOST0 && in_kette_[s] ? INS_BLENDE : 0;   // when the signal comes back the stage fades in again; a host stage has no outer blend (its entry blend is armed by trocken_leere), pos_ > 0 keeps its exit tail
     if (!in_kette_[s]) {   // a tail has nothing left to fade
-      eigen &= ~(uint64_t{1} << s);
-      a.slot_frei |= uint64_t{1} << s;
+      eigen.loesche(s);
+      a.slot_frei.setze(s);
 #ifdef CYPHERDJ_MUTATION_SPUR_BESITZER_GEMEINSAM
       besitzer_[s] = -1;   // error case: the shared owner table is written during the fork
 #endif
     } else {
       noch = true;
     }
-  }
+  });
   slot_eigen_[streifen] = eigen;
-  if (!noch) a.maske_loeschen |= uint64_t{1} << streifen;
+  if (!noch) a.maske_loeschen.setze(streifen);
 }
 
 void ArrInserts::kette(int streifen, const ArrKette* k, float* l, float* r, int m) {
@@ -745,52 +936,51 @@ void ArrInserts::kette(int streifen, const ArrKette* k, float* l, float* r, int 
 
 void ArrInserts::kette_bahn(int streifen, const ArrKette* k, float* l, float* r, int m, ArrArbeit& a) {
 #ifdef CYPHERDJ_MUTATION_SPUR_BESITZER_GELESEN
-  uint64_t eigen = 0;   // error case: the lane form reads the shared owner table instead of its own mirror entry
+  ArrSlotMaske eigen;   // error case: the lane form reads the shared owner table instead of its own mirror entry
   for (int s = 0; s < ARR_INS_ALLE; ++s)
-    if (besitzer_[s] == streifen) eigen |= uint64_t{1} << s;
+    if (besitzer_[s] == streifen) eigen.setze(s);
 #else
-  uint64_t eigen = slot_eigen_[streifen];
+  ArrSlotMaske eigen = slot_eigen_[streifen];
 #endif
   if (k)
     for (int j = 0; j < k->n && j < ARR_KETTE; ++j) {
       const ArrStufe& x = k->st[j];
       const int g = ins_global(x.art, x.slot);
-      if (g < 0 || !((eigen >> g) & 1u)) continue;
+      if (g < 0 || !eigen.test(g)) continue;
       stufe(g, x.an && eff(g, 0, m) >= 0.5f, l, r, m, a);
     }
   bool noch = false;
-  for (int s = 0; s < ARR_INS_ALLE; ++s) {
-    if (!((eigen >> s) & 1u)) continue;
+  const ArrSlotMaske eigen_kopie = eigen;   // the tail walk reads the bits as the chain pass left them (it writes none); the walk clears only the bit it is on
+  eigen_kopie.je_bit([&](int s) {
     if (!in_kette_[s]) {   // a tail: the stage left the chain and fades out on its strip
       stufe(s, false, l, r, m, a);
       if (pos_[s] == 0) {
         if (lief_[s]) leere(s);
-        eigen &= ~(uint64_t{1} << s);   // own mirror bit now; the shared owner entry is cleared by nach_join
-        a.slot_frei |= uint64_t{1} << s;
+        eigen.loesche(s);   // own mirror bit now; the shared owner entry is cleared by nach_join
+        a.slot_frei.setze(s);
 #ifdef CYPHERDJ_MUTATION_SPUR_BESITZER_GEMEINSAM
         besitzer_[s] = -1;   // error case: the shared owner table is written during the fork
 #endif
-        continue;
+        return;
       }
     }
     noch = true;
-  }
+  });
   slot_eigen_[streifen] = eigen;
-  if (!noch) a.maske_loeschen |= uint64_t{1} << streifen;
+  if (!noch) a.maske_loeschen.setze(streifen);
 }
 
 void ArrInserts::nach_join(ArrArbeit* lanes, int n) {
   for (int i = 0; i < n; ++i) {
     ArrArbeit& a = lanes[i];
-    for (int s = 0; s < ARR_INS_ALLE; ++s)
-      if ((a.slot_frei >> s) & 1u) {
-        besitzer_[s] = -1;
-        bk_besitz_frei(s);
-      }
-    maske_ &= ~a.maske_loeschen;
+    a.slot_frei.je_bit([&](int s) {
+      besitzer_[s] = -1;
+      bk_besitz_frei(s);
+    });
+    maske_.ohne(a.maske_loeschen);
     nan_ += a.nan_zaehler;
-    a.slot_frei = 0;
-    a.maske_loeschen = 0;
+    a.slot_frei.leeren();
+    a.maske_loeschen.leeren();
     a.nan_zaehler = 0;
   }
 }

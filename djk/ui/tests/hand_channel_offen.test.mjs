@@ -20,15 +20,17 @@ test('pure rule: PFL is not part of kanalOffen; only trim + fader above -26 dB o
   assert.equal(kanalOffen({ 'pad/1/trim': 0, 'pad/1/fader': -25.9 }, 'pad/1'), true);
 });
 
-test('a module (stems) in container D keeps pad/2/fader at kein_hoerschein for Cypher; container C with a strudel module still opens', async (t) => {
+test('a module (stems) in container D opens pad/2/fader for Cypher (strand 11); container C with a strudel module still opens', async (t) => {
   const s = await echterServer(t, 'ko', 0);
   assert.equal((await s.post('/live/oeffnen', {})).code, 200);
   assert.equal(s.projekt().plaetze[2].typ, 'strudel');
   s.projekt().plaetze[3] = { typ: 'stems', gruppe: 'g-test' };
   const n0 = teile(s, 'pad/2/fader').length;
-  const r = await s.post('/regler', { pfad: 'pad/2/fader', nach: -6, takte: 0 }, CYPHER);
-  assert.deepEqual([r.code, r.j.fehler], [409, 'kein_hoerschein'], JSON.stringify(r.j));
-  assert.equal(teile(s, 'pad/2/fader').length, n0, 'nothing was sent to the core');
+  const r = s.post('/regler', { pfad: 'pad/2/fader', nach: -6, takte: 1 }, CYPHER);
+  assert.ok(await bis(() => teile(s, 'pad/2/fader').length === n0 + 1), 'the stems strip is free');
+  assert.equal(teile(s, 'pad/2/fader').length, n0 + 1, 'the stems strip is free: the part went to the core');
+  ack(s.o, teile(s, 'pad/2/fader').at(-1).felder);
+  assert.equal((await r).code, 200);
   const p = s.post('/regler', { pfad: 'pad/1/fader', nach: -6, takte: 0 }, CYPHER);
   assert.ok(await bis(() => teile(s, 'pad/1/fader').length === 1), 'container C (strudel) opens for Cypher');
   ack(s.o, teile(s, 'pad/1/fader')[0].felder);

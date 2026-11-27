@@ -41,7 +41,7 @@ GATE = ("djk/tools/alles", "djk/tools/quarantaene.txt", "djk/tools/skips_decke.t
         "djk/tools/betroffen", "djk/tools/schnell", "djk/tools/ci/", "third_party/", "djk/third_party/")
 # the CI workflow folder of the git host, whatever the host is called (.<host>/workflows/...)
 CI_ORDNER_RX = re.compile(r"\.[a-z]+/workflows/")
-RENDER_RX = re.compile(r"cypherdj-render|CYPHERDJ_RENDER")
+RENDER_RX = re.compile(r"cypherdj-render|CYPHERDJ_RENDER|cypherdj-noten|CYPHERDJ_NOTEN")
 
 
 def render_tests():

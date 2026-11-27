@@ -1,0 +1,41 @@
+{
+ "schema": 1,
+ "name": "Chorus / wide ensemble",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "fx-chorus",
+ "werte": {
+  "knob1": 0.0,
+  "knob2": 0.5304,
+  "knob3": 0.5833,
+  "knob4": 0.5833,
+  "knob5": 1.0,
+  "knob6": 0.5
+ },
+ "beschreibung": {
+  "art": "modulation",
+  "unterart": "ensemble",
+  "charakter": [
+   "wide",
+   "warm",
+   "smooth"
+  ],
+  "genre": [
+   "house",
+   "deep_house",
+   "ambient"
+  ],
+  "einsatz": [
+   "intro",
+   "breakdown"
+  ],
+  "energie": 2,
+  "text": "Free 0.6 Hz, depth 3 ms around a 15 ms delay, width 100 %, mix 50 %; a broad, slow ensemble spread for pads and strings."
+ },
+ "tags": [
+  "fx-chorus"
+ ],
+ "notiz": "Set by the knob ranges of the graph, not yet heard (2026-11-26).",
+ "angelegt": "2026-11-26T00:00:00.000Z",
+ "geaendert": "2026-11-26T00:00:00.000Z"
+}

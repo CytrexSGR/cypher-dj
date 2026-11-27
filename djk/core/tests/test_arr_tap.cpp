@@ -276,7 +276,7 @@ int main() {
     const Ab abs[] = {{0, 3, 1, "spur_bereich"},     // track 3 is empty
                       {1, 5, 1, "spur_bereich"},     // group 5 has no member
                       {2, 4, 1, "spur_bereich"},     // return 4 is not in the playback
-                      {0, 33, 1, "spur_bereich"},    // beyond the slots
+                      {0, cdj::ARR_SPUREN + 1, 1, "spur_bereich"},    // beyond the slots
                       {0, 0, 1, "spur_bereich"},
                       {3, 2, 1, "spur_bereich"},     // the PM is strip 1 only
                       {4, 1, 1, "ausserhalb_bereich"},

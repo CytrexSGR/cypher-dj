@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { REGLER, imBereich, kanalVon, machtLeiser, reglerInfo, SPUR_BK_SLOTS } from '../src/controls_info.ts';
+import { PLUG_HOSTS, PLUG_KNOEPFE, REGLER, imBereich, kanalVon, machtLeiser, reglerInfo, SPUR_BK_SLOTS } from '../src/controls_info.ts';
 import { SCHEMA_ORDNER } from '../src/contract.ts';
 
 const muster = new RegExp(JSON.parse(fs.readFileSync(path.join(SCHEMA_ORDNER, 'defs.schema.json'), 'utf8'))
@@ -66,10 +66,12 @@ test('1.15 A2: the table holds exactly the 201 tool paths of section 3 (containe
   assert.deepEqual(werkzeug.sort(), [...soll].sort());
   // 909 listed rows before A2 (measured at b257b17c; the controller table has 4 more unlisted ones), + 120 insert rows ins/komp/1..12/* (slice 4a T6) + 59 ins/eq/1/* + 4 ins/saett/1/* (slice 4b T12) + 59 ins/eq/2/* (eq pool 2, 2026-11-06) + 3 ins/lim/1/* (master limiter kind; the tool-row filter below skips ins/ because bus lim rows share the segment)
   // 730 = 120 komp + 8 x 59 eq + 4 x 4 saett + 2 x 3 lim + 4 host + 8 x 5 utility (arr-fx) + 8 x 65 bk (arr-bk, an + k1..k64 since the 64-knob widening; 8 x 33 at 32 knobs, 8 x 9 before); the pin said 245 and ignored the 4 host rows, so it was already red on main (249 rows)
-  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/')).length, 1178);
-  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/eq/')).length, 8 * 59);
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/')).length, 1750 + 138 * 10 + 144 * 59 + 16 * 8 + 8 * 24 + 6 * 3 + 4);   // + 4 (strand 1 slice 5: ins/host/5..8/an); + 338 (strand 1 slice 4: gate 16 x 8, multiband 8 x 24, limiters 2 -> 8: + 6 x 3); 1178 + 572 (strand 1 slice 1: komp 12 -> 22, eq 8 -> 16) + 9876 (strand 1 slice 3b: komp 22 -> 160, eq 16 -> 160; 5460 for 96 + 96 in slice 3)
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/eq/')).length, 160 * 59);   // strand 1 slice 3b: 96 -> 160 (slice 3: 16 -> 96, slice 1: 8 -> 16)
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/saett/')).length, 4 * 4);
-  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/lim/')).length, 2 * 3);
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/lim/')).length, 8 * 3);   // strand 1 slice 4: 2 -> 8
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/gate/')).length, 16 * 8);   // strand 1 slice 4
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/mb/')).length, 8 * 24);   // strand 1 slice 4: an, grenze_tief, grenze_hoch + 3 bands x 7
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/utility/')).length, 8 * 5);   // arr-fx slice 1
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/bk/')).length, 8 * 65);   // arr-bk slice 3 + 64-knob widening: an and k1..k64 per instance
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('rack/')).length, 48);   // slice 4c: 12 racks x 4 macro rows
@@ -78,7 +80,11 @@ test('1.15 A2: the table holds exactly the 201 tool paths of section 3 (containe
   // + 396 rows of the K7/K6 growth: spur/1..32/pfl, trim, kill/* (32 x 5 = 160), sends 5..8 of the 32 tracks (128), of the 16 groups (64) and the return strips ret/5..8 (4 x 11 = 44)
   // + 96 rows spur/1..32/fx/1..3 (loop deck lane strip K1/lane S: FX 1 2 3 assignment per track; controls_info.ts:93)
   // Note: the 201 "tool paths" of this test are the gate/util/mb/lim control rows of section 3, not the hand (MCP) tools; the hand tool count is unrelated.
-  assert.equal(REGLER.size, 4048 + 512 - 432 - 688 + 224 + 712 + 1024 + 160 + 128 + 64 + 44 + 32 * 3);
+  // + 338 rows: strand 1 slice 4 (gate, multiband, limiters 2 -> 8); + 572 rows: strand 1 slice 1, 10 more compressors (10 rows each) and 8 more EQs
+  // (59 rows each); + 9876 rows: strand 1 slice 3b, 138 more compressors and 144 more EQs (slice 3: 74 and 80); + 2304 rows: strand 1 slice 6.1,
+  // tracks 33..128 (96 x 24); + 128 rows: strand 2 slice 2, plug/<h>/k<m> (8 x 16)
+  assert.equal(REGLER.size, 4048 + 512 - 432 - 688 + 224 + 712 + 1024 + 160 + 128 + 64 + 44 + 32 * 3 + 10 * 10 + 8 * 59 + 138 * 10 + 144 * 59 + 16 * 8 +
+        8 * 24 + 6 * 3 + 4 + 96 * 24 + 8 * 16);
   for (const p of soll) assert.equal(muster.test(p), true, `schema takes ${p}`);
 });
 
@@ -182,15 +188,18 @@ test('spur/<slot>/bk/<k>: slots 1..16 x knobs 1..64, linear 0..1, default 0.5, n
 
 test('§1.5: Bereiche, Vorgaben, nur Hand', () => {
   assert.equal(reglerInfo('deck/2/fader')?.vorgabe, -200);
-  assert.equal(reglerInfo('bus/1/fader')?.nurHand, true);
+  assert.equal(reglerInfo('bus/1/fader')?.nurHand, false);
   assert.equal(reglerInfo('deck/1/fader')?.nurHand, false);
-  assert.equal(reglerInfo('xfader')?.nurHand, true);
-  assert.equal(reglerInfo('deck/1/ziel')?.nurHand, true);
+  assert.equal(reglerInfo('xfader')?.nurHand, false);
+  assert.equal(reglerInfo('deck/1/ziel')?.nurHand, false);
   assert.equal(reglerInfo('cue/pegel')?.vorgabe, -12);
+  assert.equal(reglerInfo('cue/pegel')?.nurHand, true);   // kept lock: headphone level at Andreas' ears
+  assert.equal(reglerInfo('master/pegel')?.nurHand, false);
+  assert.equal(reglerInfo('cue/mix')?.nurHand, false);
   assert.equal(reglerInfo('duck/tiefe')?.vorgabe, 0);
   assert.equal(reglerInfo('duck/release')?.vorgabe, 200);
   assert.equal(reglerInfo('master/kleber')?.vorgabe, 0);
-  assert.equal(reglerInfo('master/kleber')?.nurHand, true);
+  assert.equal(reglerInfo('master/kleber')?.nurHand, false);
   // Keylock 3 (Fassung 4): EIN Knopf für alle Quellen, Schalter 0..1, Vorgabe 1, nicht nur Hand, kein Kanal
   assert.deepEqual([reglerInfo('keylock')?.vorgabe, reglerInfo('keylock')?.nurHand, reglerInfo('keylock')?.kanal], [1, false, null]);
   assert.equal(imBereich(reglerInfo('keylock')!, 0, 0), true);
@@ -213,4 +222,20 @@ test('§10: leiser heißt Fader oder Send nach unten, Kill an; alles andere nich
   assert.equal(machtLeiser('pad/1/eq/tief', 0, -30), false); // EQ steht nicht auf der Liste
   assert.equal(machtLeiser('pad/1/trim', 0, -10), false);    // Trim auch nicht
   assert.equal(machtLeiser('fx/1/rueckweg', 0, -20), false);  // kein Kanal
+});
+
+test('strand 2 slice 2: plug/<h>/k<m>, hosts 1..8 x knobs 1..16, linear 0..1, default 0, no channel, everybody may (as the core rows)', () => {
+  assert.equal(PLUG_HOSTS, 8);
+  assert.equal(PLUG_KNOEPFE, 16);
+  const plug = [...REGLER.keys()].filter((p) => p.startsWith('plug/'));
+  assert.equal(plug.length, 128);
+  for (let h = 1; h <= 8; h++) for (let m = 1; m <= 16; m++) {
+    assert.deepEqual(reglerInfo(`plug/${h}/k${m}`), { pfad: `plug/${h}/k${m}`, kanal: null, einheit: 'linear', min: 0, max: 1, vorgabe: 0, nurHand: false });
+  }
+  assert.equal(reglerInfo('plug/3/k7')?.einheit, 'linear');
+  for (const p of ['plug/0/k1', 'plug/9/k1', 'plug/1/k0', 'plug/1/k17', 'plug/1/k01', 'plug/01/k1', 'plug/1/1', 'plug/1']) assert.equal(reglerInfo(p), null, p);
+  assert.equal(kanalVon('plug/1/k1'), null);
+  assert.equal(machtLeiser('plug/1/k1', 0.9, 0.1), false);
+  assert.equal(imBereich(reglerInfo('plug/1/k1')!, 0.5, 100), true);
+  assert.equal(imBereich(reglerInfo('plug/1/k1')!, 1.5, 0), false);
 });

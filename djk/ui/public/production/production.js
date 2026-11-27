@@ -24,6 +24,7 @@ import { bindePresetMarken } from './preset_marker.js';   // 1.16 rest U7: origi
 import { bindePresetHost } from './preset_host.js';   // 1.16 rest U7: host of the PRESETS panel in PRODUCTION
 import { bindeKollektionen } from '../collections.js';   // 1.16 rest U8: the COLLECTIONS panel and "Add to collection"
 import { bindeTransport } from './transport.js';
+import { bindeMarker } from './marker_operation.js';
 import { bindeVerlauf } from './history_display.js';
 import { bindeClips } from './clip_operation.js';
 import { bindeEditWerkzeuge } from './edit_tools.js';
@@ -38,10 +39,11 @@ import { bindeAufnahme } from './recording.js';
 import { AUSGABE_FEHLER, mehrdeutigText } from './output.js';
 import { nachladenNoetig, stemsEreignis, stemsFuerProjekt } from './stems.js';
 import { neuerClipWaehler } from './clip_waehlen.js';
+import { bindeMasterMeter } from './master_meter.js';   // permanent master meter at the end of the transport bar
 import { registriereHost } from '../browser/host.js';   // browser plan 2: what the docked browser needs from this view
 
-const BINDER = [bindeZeitachse, bindeProjektwahl, bindeSpuren, bindeMatrix, bindeInsertDienste, bindeDockProduktion, bindeAblage, bindeTransport, bindeVerlauf, bindeLanen, bindeComp, bindeClips, bindeEditWerkzeuge, bindeDetail, bindeAusgabe, bindeMidiImport, bindeVariantenReihen, bindeGeraete, bindeAufnahme,
-  bindeGeraeteBrowser, bindePresetHost, bindePresetMarken, bindeKollektionen, bindeEinklappen, bindeRecOptionen];
+const BINDER = [bindeZeitachse, bindeProjektwahl, bindeSpuren, bindeMatrix, bindeInsertDienste, bindeDockProduktion, bindeAblage, bindeTransport, bindeMarker, bindeVerlauf, bindeLanen, bindeComp, bindeClips, bindeEditWerkzeuge, bindeDetail, bindeAusgabe, bindeMidiImport, bindeVariantenReihen, bindeGeraete, bindeAufnahme,
+  bindeGeraeteBrowser, bindePresetHost, bindePresetMarken, bindeKollektionen, bindeEinklappen, bindeRecOptionen, bindeMasterMeter];
 
 const GERUEST = `
 <div class="p-transport" role="toolbar" aria-label="Transport">
@@ -76,6 +78,7 @@ const GERUEST = `
     <label for="p-loop-von">BAR</label><input id="p-loop-von" data-p="loop-von" class="p-takt" inputmode="numeric" size="3" autocomplete="off" title="Loop range: first bar (typing a range switches the loop on)" aria-label="Loop from bar" disabled>
     <label for="p-loop-bis">TO</label><input id="p-loop-bis" data-p="loop-bis" class="p-takt" inputmode="numeric" size="3" autocomplete="off" title="Loop range: last bar (it is included)" aria-label="Loop to bar" disabled>
     <button data-p="metronom" aria-pressed="false" title="Metronome" disabled>METRO</button>
+    <button data-p="marker-neu" title="Add a marker at the start marker" disabled>+ MARKER</button>
   </div>
   <span class="p-kern" data-p="kern" title="Arrangement in the core: loaded revision and transport state"></span>
   <div class="p-gruppe">
@@ -95,12 +98,26 @@ const GERUEST = `
   <span class="p-offline" data-p="offline" role="status" title="The project server does not answer: this is the last state it sent" hidden>OFFLINE</span>
   <span class="p-meldung" data-p="meldung" role="status"></span>
   <span class="p-limiter" data-p="limiter" role="status" title="The set limiter is reducing the master: the room hears less than the production master and the export carry" hidden>SET LIMITER</span>
+  <div class="p-gruppe p-mastermeter" data-p="mastermeter" role="group" aria-label="Master meter" title="Master output as heard (after the master fader and the set limiter; equals the production master when no deck plays and SET LIMITER is off). Updated 10 times a second.">
+    <span class="p-mm-wert" data-mm="m" title="Momentary loudness, 400 ms">M <b>–</b></span>
+    <span class="p-mm-wert" data-mm="s" title="Short-term loudness, 3 s">S <b>–</b></span>
+    <span class="p-mm-wert" data-mm="i" title="Integrated loudness since RESET or since PLAY">I <b>–</b><small data-mm="abstand"></small></span>
+    <span class="p-mm-balken" data-mm="balken" aria-hidden="true"><i></i><u data-mm="ziel" hidden></u></span>
+    <span class="p-mm-wert" data-mm="tp" title="True peak, highest since RESET">TP <b>–</b></span>
+    <span class="p-mm-ueber" data-mm="ueber" hidden title="The true peak went above the ceiling since RESET (click to clear)">OVER</span>
+    <span class="p-mm-wert p-mm-knopf" data-mm="korr" role="button" tabindex="0" aria-expanded="false" title="Correlation of the output. Click: vectorscope">CORR <b>–</b></span>
+    <div class="p-mm-vektor" data-mm="vektor" hidden role="dialog" aria-label="Vectorscope of the output"><canvas data-mm="vektorbild" width="160" height="160" title="Vectorscope of the output: up = mid (mono), sideways = side; a vertical line is mono, a circle is wide, a horizontal line cancels in mono"></canvas></div>
+    <button data-mm="ab" aria-pressed="false" title="Fair A/B of the master stages: measures the loop range once with and without them and turns the louder side down so both play at the same loudness. A project change ends it.">A/B</button>
+    <span class="p-mm-ab" data-mm="abseite" hidden><button data-mm="a" aria-pressed="false">A</button><button data-mm="b" aria-pressed="false">B</button></span>
+    <button data-mm="reset" title="Clear the held true peak (and the integrated loudness)">RESET</button>
+  </div>
 </div>
 <ol class="p-verlauf" data-p="verlauf-liste" aria-label="History" hidden></ol>
 <div class="p-arr">
   <div class="p-ecke">
     <button data-p="neu-audio" title="Add an audio track" disabled>+ AUDIO</button><button data-p="neu-rb" title="Add an instrument track with the RB-338" disabled>+ RB-338</button><button data-p="neu-surge" title="Add an instrument track with Surge (host slot 1 or 2)" disabled>+ SURGE</button><button data-p="neu-rack" title="Add an instrument track with a rack: up to 4 devices side by side, each with key, velocity and chain zones" disabled>+ RACK</button><button data-p="neu-kit" title="Add an instrument track that plays a kit from the kit folder (pick the kit)" disabled>+ KIT</button><button data-p="gruppieren" class="p-gruppieren" title="Group the selected tracks (Ctrl+G). Select tracks with Ctrl+click or Shift+click on their heads">GROUP</button>
   </div>
+  <div class="p-marker-leiste" data-p="marker-leiste"></div>
   <canvas class="p-lineal" data-p="lineal" title="Top strip: drag the loop bracket · bottom strip: click sets the start marker"></canvas>
   <div class="p-koerper" data-p="koerper">
     <div class="p-koepfe" data-p="koepfe"></div>
@@ -130,6 +147,10 @@ export const FEHLER_TEXT = {
   ...MIDI_FEHLER,   // MIDI import (midi_import.js)
   sha_stimmt_nicht: 'That file does not have the content the project expects',   // browser plan 2: project files (areas/proj/files.ts)
   datei_unlesbar: 'That path is not a readable file',
+  kein_lernen: 'This server has no controller learning',   // strand 2 task 2.4
+  keine_zuordnung: 'That knob has no learned assignment',
+  plugin_regler_voll: 'All 16 knobs of this plugin stage are in use: free one first',   // strand 2 task 2.4
+  index_doppelt: 'That plugin parameter already has a knob of this stage: free that knob first',   // strand 2 task 2.2
   aufraeumen_laeuft_arbeit: 'A bounce, resample or stems job is running; clean up when it is done',
   name_vergeben: 'Another project already has that name',
   nicht_gefunden: 'That file was not found in the library or the project',
@@ -159,6 +180,10 @@ export const FEHLER_TEXT = {
   mehrere_clips: 'Exactly one audio clip must lie in the range',
   zu_viele_spuren: 'Separating stems needs four free tracks',
   merge_leer: 'The tracks play nothing in this range',
+  keine_stufe: 'The master has no insert stage: there is nothing to compare',
+  master_lane: 'The master fader has an automation lane: A/B would fight it',
+  ab_veraltet: 'The project changed since the measurement: press A/B again',
+  ab_nicht_an: 'A/B is not on: press A/B first',
   merge_gruppen: 'The tracks feed different groups: merge or bounce tracks of one group',
   merge_teil_solo: 'Some of the tracks are solo: solo all of them or none',
   merge_sends: 'The tracks have different sends: give them identical sends or none',
@@ -177,7 +202,8 @@ export const FEHLER_TEXT = {
   projekt_gewechselt: 'The project was switched meanwhile: the action was dropped',
   projekt_offen: 'The open module cannot be deleted: open another one first',
   nichts_zu_tun: 'Nothing to undo or redo', kein_projekt: 'No project open', unbekannt: 'No such project', name_ungueltig: 'A project name needs 1 to 80 characters',
-  ki_gestoppt: 'Stop Cypher is set', ki_stopp: 'Stop Cypher was pressed: the start was dropped', deck_laeuft: 'A deck is playing: the tempo stays until it stops', nicht_geladen: 'The core has no arrangement loaded yet',
+  ki_gestoppt: 'Stop Cypher is set', musik_laeuft: 'Music is playing: deleting, overwriting and exporting wait until it stops',
+  zu_schnell: 'Too many agent writes in a row: wait a moment', stufe_zu_niedrig: 'This agent key may not do that: its level is too low', ki_stopp: 'Stop Cypher was pressed: the start was dropped', deck_laeuft: 'A deck is playing: the tempo stays until it stops', nicht_geladen: 'The core has no arrangement loaded yet',
   live_laeuft: 'The live container is playing while a deck plays: opening another project would stop it',
   kein_loop: 'The deck has no active loop to export', kein_bibliothekstrack: 'The deck track is not a library track', kein_liveprojekt: 'The live container is not open',
   kein_liveprojekt_flag: 'A project named live exists without the live flag: rename it',
@@ -200,24 +226,24 @@ export const FEHLER_TEXT = {
   kein_deck: 'No deck is playing on the master, so there is no key to adapt to', tonart_unbekannt: 'The key of the module or of the deck is unknown',
   kanal_offen: 'The channel of that live slot is open: close its fader first (PFL does not matter)',   // DJ view places task 7
   zu_gross: AUSGABE_FEHLER.zu_gross, server_fehler: 'The project server did not answer: showing the last state', netz: 'Page server unreachable', keine_antwort: 'No answer from the core',
-  routing_zyklus: 'A group cannot feed itself or one of its own members', routing_grenze: 'There are at most 16 groups and 4 returns',
+  routing_zyklus: 'A group cannot feed itself or one of its own members', routing_grenze: 'There are at most 16 groups and 8 returns',
   ziel_unbekannt: 'That output or target does not exist for this track', gruppe_unbekannt: 'That group no longer exists', return_unbekannt: 'That return no longer exists',
-  insert_unbekannt: 'That insert stage no longer exists', art_unbekannt: 'That insert kind is not available (compressor, EQ, saturator, limiter, utility and effect graph exist in this version)',
+  insert_unbekannt: 'That insert stage no longer exists', art_unbekannt: 'That insert kind is not available (compressor, EQ, saturator, limiter, utility, gate, multiband and effect graph exist in this version)',
   sidechain_spaet: 'That key source is computed after this stage: tracks can listen to tracks and DJ inputs, groups also to the pre of other groups',
   sidechain_zyklus: 'That key would depend on the stage itself: its own strip, its own group, the master, or two tracks keying each other',
   sidechain_quelle: 'That key source is not available in the arrangement (erz/2, erz/3, erz/5 to erz/8 and pad/1, pad/2 come after the mixer)',
-  kette_voll: 'The insert chain of that strip is full (five stages at most)', ins_voll: 'All stages of that kind are in use (twelve compressors, eight EQs, four saturators, two limiters, eight utilities and eight effect graphs at most)',
+  kette_voll: 'The insert chain of that strip is full (five stages at most)', ins_voll: 'All stages of that kind are in use (160 compressors, 160 EQs, four saturators, eight limiters, eight utilities, 16 gates, eight multibands and eight effect graphs at most)',
   kein_loopdeck: 'That group or track does not belong to a loop deck', platz_belegt: 'That place already holds a loop deck',
   zelle_leer: 'That loop deck cell is empty', modul_nicht_umwandelbar: 'That module cannot become a loop deck cell; it is left untouched',
   zelle_voll: 'That slot holds a cell: empty it first', zeilen_voll: 'All 8 rows are in use; 16 rows come with the next slice',
   huelle_ungueltig: 'That envelope is not valid: a known target, at most 4 envelopes per cell, at most 64 points, beats rising inside the cell, values inside the range of the target',
-  host_grenze: 'All four plugin hosts are in use: remove a plugin stage before adding another', host_fehlt: 'The plugin host is not running or not ready yet',
+  host_grenze: 'All eight plugin hosts are in use: remove a plugin stage before adding another', host_fehlt: 'The plugin host is not running or not ready yet',
   plugin_nicht_ladbar: 'That plugin cannot be loaded', zustand_passt_nicht: 'The saved plugin state belongs to another plugin and was not applied',
   param_unbekannt: 'That plugin has no such parameter',
   plugin_unbekannt: 'That plugin is not in the index: scan first', plugin_blockiert: 'That plugin failed its scan and is blocked',
   absturz_schleife: 'The plugin keeps crashing: switch the stage off and on to try again', zustand_fehler: 'The saved plugin state could not be restored: the stage stays off',
   latenz_zu_gross: 'The plugin latency is too large: the stage is left out',
-  kein_effekt: 'That plugin is not an effect', kein_instrument: 'That plugin is not an instrument', scan_laeuft: 'A plugin scan is already running',
+  kein_effekt: 'That plugin is not an effect', kein_schluessel: 'That plugin has no sidechain input', kein_instrument: 'That plugin is not an instrument', scan_laeuft: 'A plugin scan is already running',
   kein_fenster: 'That plugin cannot show a window here', keine_anzeige: 'That plugin has no user interface', host_insert_echtzeit: 'A strip with an active plugin stage cannot be rendered offline: use Resample',
   export_host_ausfall: 'A plugin host failed during the real-time export: nothing was exported, try again',
   export_luecke: 'The real-time export dropped audio: nothing was exported, try again',
@@ -225,7 +251,8 @@ export const FEHLER_TEXT = {
   variation_unbekannt: 'That variation no longer exists', rack_voll: 'All twelve racks are in use', makro_voll: 'A strip can have at most 16 macro mappings',
   ziel_doppelt: 'A parameter can be driven by one macro only', param_nicht_stetig: 'A macro drives continuous parameters only, not switches or step lists', glied_ohne_rack: 'A member target needs a track with an instrument rack', makro_ziel_wirt: 'A Surge member takes no macro target',
   param_gemappt: 'That parameter is driven by a macro: remove the mapping first, or automate the macro instead',
-  param_hat_lane: 'That parameter has an automation line: delete the line first, or automate the macro instead', lane_unbekannt: 'That automation line no longer exists', lane_doppelt: 'This track already has a lane for that target', lane_gesperrt: 'That line is locked: unlock it first', bereich_leer: 'Select a range on the line first (it must not be empty)', huellkurve_ziel: 'That envelope does not fit this clip', huellkurve_unbekannt: 'That clip has no such envelope', geraet_huellkurven: 'Delete the device envelopes of this track\'s clips before switching to a host instrument', form_ungueltig: 'That shape is not available on this line (mute and solo take Square only)', geraet_lanes: 'Delete the device lines of this track before switching to a host instrument', punkte_ungueltig: 'The line points are not valid (mute and solo points must be jumps)',
+  param_hat_lane: 'That parameter has an automation line: delete the line first, or automate the macro instead', lane_unbekannt: 'That automation line no longer exists', lane_doppelt: 'This track already has a lane for that target', send_hat_lane: 'That send has a lane: delete the send lane first, then switch the send off', lane_gesperrt: 'That line is locked: unlock it first', bereich_leer: 'Select a range on the line first (it must not be empty)', huellkurve_ziel: 'That envelope does not fit this clip', huellkurve_unbekannt: 'That clip has no such envelope', geraet_huellkurven: 'Delete the device envelopes of this track\'s clips before switching to a host instrument', form_ungueltig: 'That shape is not available on this line (mute and solo take Square only)', geraet_lanes: 'Delete the device lines of this track before switching to a host instrument', punkte_ungueltig: 'The line points are not valid (mute and solo points must be jumps)',
+  plugin_lanen_voll: 'That plugin already has 16 automation lines, the limit: delete one first',   // strand 2 slice 1
   kit_unbekannt: 'That kit is not in the kit folder',
   keine_rackspur: 'That track has no instrument rack', rack_voll_glieder: 'A rack holds at most 4 members', glied_unbekannt: 'That rack member no longer exists',
   rack_letztes_glied: 'The last member of a rack cannot be removed: convert the track to a plain device instead',
@@ -252,12 +279,24 @@ export const FEHLER_TEXT = {
   muster_nicht_verfuegbar: 'This server cannot translate patterns', klang_unbekannt: 'A sound of the pattern is not in the kit of this track',
   warp_marker: 'The warp markers are not valid', warp_faktor: 'A warp segment has a tempo outside 15 to 800 BPM',
   transienten_fehlen: 'The audio is not decoded yet, so its transients are unknown', keine_transienten: 'There is no transient in that range',
- marker_unbekannt: 'There is no warp marker at that beat any more', warp_modus: 'That warp mode does not exist yet',
+ marker_unbekannt: 'There is no warp marker at that beat any more', songmarker_unbekannt: 'That marker does not exist any more', marker_beat_belegt: 'Another marker already sits on that beat', marker_zu_viele: 'A project holds at most 64 markers', warp_modus: 'That warp mode does not exist yet',
   beats_einheiten: 'Too many BEATS units in this clip: choose a coarser grid', quantisieren_konflikt: 'Quantizing would put two markers in the wrong order: choose a smaller range or a finer grid',
   transpose_repitch: 'RE-PITCH follows the tempo: no transpose here', kein_warp: 'That clip has no warp yet', offset_bei_warp: 'The clip is warped: use its offset in beats',
   kein_tempo: 'No tempo found for this sample (no analysis, no Traktor grid, no bars, no library BPM): it stays unwarped', warp_auto_neuer_clip: 'Auto-warp a new clip with its own clip_neu',
   fade_zu_lang: 'The fades are longer than the clip', feld_nur_audio: 'That setting only exists on audio clips', beat_ausserhalb: 'That position is outside the clip',
-  noten_unbekannt: 'That note no longer exists', id_belegt: 'That id is taken', projekt_ungueltig: 'The change would make the project invalid',
+  noten_unbekannt: 'That note no longer exists', id_belegt: 'That id is taken',
+  keine_audio_noten: 'This clip has no notes yet: detect notes first',
+  noten_ton_grenze: 'A note can move at most 24 semitones from its detected pitch and must stay inside MIDI 0 to 127',
+  noten_laeuft: 'A note detection is already running',
+  noten_vorhanden: 'This clip already has notes: detect them again only if you accept losing your edits',
+  noten_mehrstimmig: 'More than one note at a time. Separate stems first, then detect notes on a stem.',
+  noten_fehler: 'The note detection failed: nothing was changed',
+  noten_zeitlimit: 'The note detection took too long and was cancelled',
+  noten_programm_fehlt: 'The note program (cypherdj-noten) is not built or not installed',
+  noten_render_fehlt: 'A note edit is still being rendered. Try the export again in a moment.',
+  noten_render_fehler: 'The note edit could not be rendered. The clip plays without it.',
+  noten_kurve_fehlt: 'The pitch curve of this clip is gone and cannot be recomputed here. Detect the notes again.',
+  projekt_ungueltig: 'The change would make the project invalid',
   // history.ts und storage.ts (S2): Verlauf und Ablage des Projekts
   verlauf_inkonsistent: 'The change history does not fit the project: nothing was changed', verlauf_kaputt: 'The change history file is damaged',
   label_ungueltig: 'The change needs a description of 1 to 200 characters', projekt_busy: 'Another process has this project open',

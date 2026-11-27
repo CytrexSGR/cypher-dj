@@ -15,11 +15,11 @@ import type http from 'node:http';
 import type { Bereich, BereichKontext, Route } from '../../http/router.ts';
 import { json } from '../../http/transport.ts';
 import { leseKoerper } from '../proj/area.ts';
-import type { Projekt } from '../../project/model.ts';
+import { MAX_SPUREN, type Projekt } from '../../project/model.ts';
 import type { ZurueckZugang } from './zurueck.ts';
 
 export const BANK_BREITE = 8;
-export const SPUR_ZEILEN = 32;   // the kern has spur/<n>/* rows for n = 1..32 (SPUR_REGLER_SPUREN): tracks beyond have no APC column
+export const SPUR_ZEILEN = MAX_SPUREN;   // the kern has spur/<n>/* rows for n = 1..128 (D13: the APC20 reaches every track)
 const ANSICHT = /^(dj|studio|produktion|werkbank|tracker)$/;
 
 export interface PultSpalte { nr: number; id: string; name: string; mute: boolean; solo: boolean; arm: boolean }

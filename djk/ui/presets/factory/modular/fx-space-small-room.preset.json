@@ -1,0 +1,41 @@
+{
+ "schema": 1,
+ "name": "Space Small Room",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "space-raum",
+ "werte": {
+  "knob1": 0.4,
+  "knob2": 0.25,
+  "knob3": 0.5526,
+  "knob4": 0.5,
+  "knob5": 0.5,
+  "knob6": 0
+ },
+ "beschreibung": {
+  "art": "reverb",
+  "unterart": "room",
+  "charakter": [
+   "dry",
+   "tight",
+   "clean"
+  ],
+  "genre": [
+   "house",
+   "techno",
+   "tech_house"
+  ],
+  "einsatz": [
+   "drop",
+   "mixdown"
+  ],
+  "energie": 2,
+  "text": "20 % mix, 5 ms pre-delay, low cut 150 Hz, high cut 9 kHz: a short tight tail."
+ },
+ "tags": [
+  "fx-space"
+ ],
+ "notiz": "Knobs 1..6 set by the knob ranges of the graph, not yet heard (2026-11-26). The room is the graph.",
+ "angelegt": "2026-11-26T00:00:00.000Z",
+ "geaendert": "2026-11-26T00:00:00.000Z"
+}

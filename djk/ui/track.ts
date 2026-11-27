@@ -3,26 +3,28 @@
 // Startzeit ab) und das Muster eines Stroms. Reine Funktionen bis auf wirtRuf (Unix-Socket, eine JSON-Zeile hin und zurück).
 import net from 'node:net';
 import { PFAD, OFFEN_DB, oeffnet } from './hand_operation.ts';
-import { stromVonKanal } from '../contract/streams.ts';   // S18: the shared stream <-> channel table
+import { ALLE_STROEME, stromVonKanal } from '../contract/streams.ts';   // S18: the shared stream <-> channel table
 
 export const SPUR_NAME = /^[a-z0-9_-]{1,32}$/;
 export const WIRT_ZIEL = /^wirt:(bass|melodie)\/([a-z][a-z0-9_]*)$/;
-export const STROM_ZIEL = /^strom:([123])$/;
+export const STROM_ZIEL = new RegExp(`^strom:(${ALLE_STROEME.join('|')})$`);   // derived from the stream table (contract/streams.ts)
 export const MAX_TAKT = 256;             // ab_takt höchstens 256: bei 128 BPM rund 8 Minuten ab Anker
 export const MAX_TEILE = 200;            // Stellwerk hält 256 offene Teile (signalbox/types.h MAX_TEILE), Rest für Hand und Leitstand
 export const MUSTER_VORLAUF_BEATS = 2;   // Muster so weit vor ihrer Takt-Eins schreiben (Planer: Wechsel ab dem nächsten Takt ≥ 0,25 Beat)
 export const MAX_SCHLEIFE_TAKTE = 64;    // 1.12 S7: a loop pass is 1..64 bars
 
-export interface Fahrt { ziel: string; ab_takt: number; takte?: number; nach?: number; von?: number; form?: string; muster?: string }
+export interface Fahrt { ziel: string; ab_takt: number; takte?: number; nach?: number; von?: number; form?: string; muster?: string; bezeichnung?: string }
 export interface Spur { name: string; fahrten: Fahrt[]; schleife_takte?: number }
 export interface TeilPlan { pfad: string; ab_beat: number; dauer_beats: number; nach: number; form: 0 | 1; politik: 0 | 1 }
 export interface WirtPlan { gruppe: string; name: string; ab_beat: number; dauer_beats: number; bis: number; von?: number; form: 'linear' | 's' }
-export interface MusterPlan { strom: number; text: string; ab_beat: number }
-export interface Geplant { teile: TeilPlan[]; wirt: WirtPlan[]; muster: MusterPlan[]; ende_beat: number }
+export interface MusterPlan { strom: number; text: string; ab_beat: number; versatz?: number; bezeichnung?: string }   // versatz: phase offset in cycles (live scene restore, 5.1)
+// A set of discrete Surge parameters (not in `fahrbar`): the host reloads its state at ab_beat; sets of one host at one beat travel together
+export interface SetzPlan { gruppe: string; ab_beat: number; werte: Record<string, number> }
+export interface Geplant { teile: TeilPlan[]; wirt: WirtPlan[]; muster: MusterPlan[]; ende_beat: number; setzen?: SetzPlan[] }
 
 // Stream whose AUTO switch holds a target: the channel strips erz/<n>/* and pad/<n>/* through the shared table (erz/1..3, 5..7 =
 // streams 1..3, 5..7; pad/1, pad/2 = streams 9, 10; erz/4 and erz/8 are no stream), wirt:bass (stream 2), wirt:melodie (stream 3),
-// strom:<n> (1..3); otherwise null. `erz/<n>/...` is the alias form the page server resolves onto the strom tracks (stream_alias.ts); this reader works on that
+// strom:<n> (every stream of ALLE_STROEME); otherwise null. `erz/<n>/...` is the alias form the page server resolves onto the strom tracks (stream_alias.ts); this reader works on that
 // form BEFORE the resolution, so AUTO keeps holding stream n whatever row the alias lands on.
 export function stromVonZiel(ziel: string): number | null {
   const e = /^((?:erz|pad)\/[0-9]+)\//.exec(ziel);
@@ -67,15 +69,23 @@ export function pruefeSpur(x: unknown, fahrbar: Set<string>): { spur: Spur } | {
     if (strom) {
       if (typeof f.muster !== 'string' || !f.muster.trim()) return { fehler: `${wo}.muster: pattern text expected` };
       if (f.takte !== undefined || f.nach !== undefined) return { fehler: `${wo}: a pattern entry has no takte/nach` };
+      if (f.bezeichnung !== undefined && !(typeof f.bezeichnung === 'string' && f.bezeichnung.length >= 1 && f.bezeichnung.length <= 60 && !/[\u0000-\u001f\u007f]/.test(f.bezeichnung))) return { fehler: `${wo}.bezeichnung: string of 1..60 characters, no control characters` };
     } else {
-      if (!wirt && !PFAD.test(f.ziel)) return { fehler: `${wo}.ziel: channel path, wirt:<bass|melodie>/<parameter> or strom:<1-3>` };
-      if (wirt && !fahrbar.has(wirt[2])) return { fehler: `${wo}.ziel: ${wirt[2]} is not a continuous Surge parameter` };
+      if (!wirt && !PFAD.test(f.ziel)) return { fehler: `${wo}.ziel: channel path, wirt:<bass|melodie>/<parameter> or strom:<n> (n one of ${ALLE_STROEME.join(', ')})` };
+      // a discrete Surge parameter takes a set only (one reload at the beat): no ramp, no von, no form, and not inside a loop
+      const diskret = !!wirt && !fahrbar.has(wirt[2]);
+      if (diskret) {
+        if (!(f.takte === undefined || f.takte === 0) || f.von !== undefined || f.form !== undefined || n !== undefined) {
+          return { fehler: `${wo}.ziel: ${wirt[2]} is not a continuous Surge parameter` };
+        }
+      }
       takte = f.takte ?? 0;
       if (!zahl(takte) || takte < 0 || takte > 64) return { fehler: `${wo}.takte: 0..64` };
       if (!zahl(f.nach)) return { fehler: `${wo}.nach: number expected` };
       if (f.von !== undefined && (!wirt || !zahl(f.von))) return { fehler: `${wo}.von: number, only for wirt targets` };
       if (f.form !== undefined && f.form !== 's' && f.form !== 'linear') return { fehler: `${wo}.form: s or linear` };
       if (f.muster !== undefined) return { fehler: `${wo}.muster: only for strom targets` };
+      if (f.bezeichnung !== undefined) return { fehler: `${wo}.bezeichnung: only for strom targets` };
       if (!wirt && ++teile > MAX_TEILE) return { fehler: `fahrten: at most ${MAX_TEILE} channel moves` };
     }
     // Loop rule: a pass is bars 1..n. A set on bar n+1 would fall on the same beat as the start set of the next pass (two sets
@@ -108,18 +118,23 @@ export function faelligeMuster(muster: MusterPlan[], beat: number): MusterPlan[]
 }
 
 // proTakt = beats per bar of the open project (studio-taktart); 4 = the old behaviour
-export function plane(spur: Spur, ankerBeat: number, proTakt = 4): Geplant {
-  const g: Geplant = { teile: [], wirt: [], muster: [], ende_beat: ankerBeat };
+// fahrbar (optional): the continuous Surge parameters; a wirt target outside it is a discrete set and goes into g.setzen
+export function plane(spur: Spur, ankerBeat: number, proTakt = 4, fahrbar?: Set<string>): Geplant {
+  const g: Geplant = { teile: [], wirt: [], muster: [], ende_beat: ankerBeat, ...(fahrbar ? { setzen: [] } : {}) };
   for (const f of spur.fahrten) {
     const ab = ankerBeat + proTakt * (f.ab_takt - 1), dauer = proTakt * (f.takte ?? 0);
     g.ende_beat = Math.max(g.ende_beat, ab + dauer);
     const strom = STROM_ZIEL.exec(f.ziel), wirt = WIRT_ZIEL.exec(f.ziel);
-    if (strom) g.muster.push({ strom: Number(strom[1]), text: f.muster as string, ab_beat: ab });
+    if (strom) g.muster.push({ strom: Number(strom[1]), text: f.muster as string, ab_beat: ab, ...(f.bezeichnung !== undefined ? { bezeichnung: f.bezeichnung } : {}) });
+    else if (wirt && fahrbar && !fahrbar.has(wirt[2])) {
+      const z = g.setzen!.find((x) => x.gruppe === wirt[1] && x.ab_beat === ab);
+      if (z) z.werte[wirt[2]] = f.nach as number; else g.setzen!.push({ gruppe: wirt[1], ab_beat: ab, werte: { [wirt[2]]: f.nach as number } });
+    }
     else if (wirt) g.wirt.push({ gruppe: wirt[1], name: wirt[2], ab_beat: ab, dauer_beats: dauer, bis: f.nach as number, form: f.form === 's' ? 's' : 'linear', ...(f.von !== undefined ? { von: f.von } : {}) });
     else g.teile.push({ pfad: f.ziel, ab_beat: ab, dauer_beats: dauer, nach: f.nach as number, form: f.form === 'linear' ? 0 : 1, politik: politikVon(f.ziel, f.nach as number) });
   }
   const frueh = (x: { ab_beat: number }, y: { ab_beat: number }) => x.ab_beat - y.ab_beat;
-  g.teile.sort(frueh); g.wirt.sort(frueh); g.muster.sort(frueh);
+  g.teile.sort(frueh); g.wirt.sort(frueh); g.setzen?.sort(frueh); g.muster.sort(frueh);
   return g;
 }
 

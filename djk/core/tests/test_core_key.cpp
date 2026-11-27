@@ -1,9 +1,10 @@
-// Task N2 (/k/live/tasten) at the kern: the keys of midi_ein reach the target stream through Kern::midi_ein -> Erzeuger::taste, the command TASTEN_ZIEL sets the target (hand only).
+// Task N2 (/k/live/tasten) at the kern: the keys of midi_ein reach the target stream through Kern::midi_ein -> Erzeuger::taste, the command TASTEN_ZIEL sets the target (every source, strand 11).
 //   1) host stream midi:1:1 on erz/2: a key (note 60, velocity 100) is a note on in midi_aus(1) in its cycle with the velocity of the key, the release a note off; no target: nothing
 //   2) a held key closes when the target changes (note off in the next cycle, no CC 123)
 //   3) graph stream (bk) on erz/1: the key sounds (level of erz/1), the release and the target change silence it
 //   4) the same pitch: a pattern note of the stream and a key on the same pitch; the release of the key does not cut the pattern note (one off, at the pattern end)
-//   5) receipts: andreas is accepted (status 1 and 3), cypher is refused (6, nur_hand), strom 4, 8 and 11 are refused (6, ausserhalb_bereich); a refused command leaves the target alone
+//   5) receipts: andreas and cypher are accepted (status 1 and 3); after Stop Cypher cypher is refused (6, ki_gestoppt); strom 4, 8 and 11 are refused (6, ausserhalb_bereich);
+//      a refused command leaves the target alone
 //   7) a note the learn table of its place maps (a button) triggers its action (/e/taste) and does not play the stream; a note without an entry plays it
 //   6) a lost midi_ein port closes the held key; no allocation in the cycle with keys
 #include <new>
@@ -187,7 +188,12 @@ int main() {
     const int64_t ok = (ziel(x, 2), x.id);
     x.zyklen(2 * N);
     PRUEF(x.quittung(ok, 1) != nullptr && x.quittung(ok, 3) != nullptr);
-    const char* grund[] = {"nur_hand", "ausserhalb_bereich", "ausserhalb_bereich", "ausserhalb_bereich"};
+    const int64_t ok_c = (ziel(x, 2, "cypher"), x.id);   // strand 11: cypher may set the target
+    x.zyklen(x.kern->sample() + 2 * N);
+    PRUEF(x.quittung(ok_c, 1) != nullptr && x.quittung(ok_c, 3) != nullptr && x.quittung(ok_c, 6) == nullptr);
+    x.sende(x.neu(cdj::Befehl::KI_STOPP, "andreas"));   // Stop Cypher still stops it
+    x.zyklen(x.kern->sample() + 2 * N);
+    const char* grund[] = {"ki_gestoppt", "ausserhalb_bereich", "ausserhalb_bereich", "ausserhalb_bereich"};
     int i = 0;
     for (auto [str, q] : {std::pair<int, const char*>{3, "cypher"}, {4, "andreas"}, {8, "andreas"}, {11, "andreas"}}) {
       ziel(x, str, q);

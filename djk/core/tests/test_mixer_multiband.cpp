@@ -15,6 +15,7 @@
 //  (N)   a NaN: the F01 guard resets the multiband (envelope and fade), and it comes back without a long fade or a click
 //  (Z)   guard of the index ranges: the sources never touch a multiband slot
 #include <cmath>
+#include <memory>
 #include <cstring>
 #include <vector>
 
@@ -54,8 +55,10 @@ void band(Lauf& l, int k, const char* b, float schwelle, float ratio, float atta
 int main() {
   // (M8) exactly 4 objects, created in the constructor (before any row is set or any block runs), on the buses only
   {
-    sw::ReglerTabelle tab;
-    cdj::Mixer m(tab);
+    auto tab_ = std::make_unique<sw::ReglerTabelle>();   // heap: the 24 576-row table and the mixer do not fit on the stack
+    sw::ReglerTabelle& tab = *tab_;
+    auto m_ = std::make_unique<cdj::Mixer>(tab);
+    cdj::Mixer& m = *m_;
     int n = 0;
     bool nur_busse = true;
     for (int k = 0; k < cdj::MIX_KANAELE; ++k) {

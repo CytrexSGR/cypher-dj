@@ -48,6 +48,9 @@ export function bindeZeitachse(ctx) {
   };
   $('ueber').addEventListener('wheel', rad, { passive: false });
   $('lineal').addEventListener('wheel', rad, { passive: false });
+  // the marker strip scrolls and zooms like the ruler under it; offsetX is relative to the target (a flag), so the pointer x comes from clientX
+  $('marker-leiste').addEventListener('wheel', (e) => rad({ ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, deltaX: e.deltaX, deltaY: e.deltaY,
+    offsetX: e.clientX - $('marker-leiste').getBoundingClientRect().left, preventDefault: () => e.preventDefault() }), { passive: false });
   // Automation S1: the open lane rows live in the page state (a Set of track ids), not in the project: they survive a reload from the server
   st.laneOffen = new Set();
   st.laneZiel = new Map();   // Automation S2: spur_id → the target the open row shows (page state like laneOffen)

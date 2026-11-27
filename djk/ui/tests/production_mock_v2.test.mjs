@@ -244,3 +244,19 @@ test('V2 Attrappe F14: /proj/aktuell trägt ausgabe_lauf während Freeze und Exp
     assert.equal(Object.hasOwn(await (await fetch(at.url + 'proj/aktuell')).json(), 'ausgabe_lauf'), true, 'das Feld steht immer da');
   } finally { await at.stoppe(); await o.stoppe(); }
 });
+
+test('V2 Attrappe: noten_quantisieren and noten_humanisieren run through the real core (probe_clips 5.6 sends them from the page)', async () => {
+  const o = await oben(), at = await starteProjAttrappe({ oben: o.url });
+  try {
+    const { p, rev } = await mitProjekt(at);
+    const c = p.spuren[0].clips[0];
+    const n = await post(at.url, '/proj/aendern', { rev, label: 'Add notes', befehle: [{ befehl: 'noten_neu', clip_id: c.id, noten: [{ id: 'n2', beat: 0.1, laenge: 0.5, ton: 36, vel: 100 }, { id: 'n3', beat: 2.1, laenge: 1, ton: 38, vel: 90 }] }] });
+    const q = await post(at.url, '/proj/aendern', { rev: n.j.rev, label: 'Quantize', befehle: [{ befehl: 'noten_quantisieren', clip_id: c.id, raster: '1/16' }] });
+    assert.equal(q.status, 200);
+    assert.deepEqual(q.j.projekt.spuren[0].clips[0].noten.filter((x) => x.id !== 'n1').map((x) => x.beat), [0, 2]);
+    const h = await post(at.url, '/proj/aendern', { rev: q.j.rev, label: 'Humanize', befehle: [{ befehl: 'noten_humanisieren', clip_id: c.id, saat: 7, vel: 10 }] });
+    assert.equal(h.status, 200);
+    assert.notDeepEqual(h.j.projekt.spuren[0].clips[0].noten.map((x) => x.vel), q.j.projekt.spuren[0].clips[0].noten.map((x) => x.vel));
+    assert.equal((await post(at.url, '/proj/aendern', { rev: h.j.rev, label: 'x', befehle: [{ befehl: 'noten_quantisieren', clip_id: c.id, raster: 'bar' }] })).j.fehler, 'argument_ungueltig');
+  } finally { await at.stoppe(); await o.stoppe(); }
+});

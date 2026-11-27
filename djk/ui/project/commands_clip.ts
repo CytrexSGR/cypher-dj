@@ -7,6 +7,10 @@ import {
 import { seqSichtPruefung, type SeqSicht } from './seq.ts';
 import { wendeMusterAn, musterAbdruck, type KitKlang } from './pattern_clip.ts';
 import { entknuepfe, kopiereInhalt } from './verbund.ts';
+import { rasteEin } from '../public/harmonie.js';
+import {
+  ROLL_RASTER, rasterBeatsRolle, quantisiereNoten, humanisiereNoten,
+} from '../public/production/notes_tools.js';
 import { huellkurvePruefung, teileHuellkurve } from './envelope.ts';
 import { abHierGerade, einsHier, handWarp, markerAendern, tempoSkalieren, type MarkerSetze, type MarkerVerschiebe } from './warp.ts';
 import {
@@ -20,6 +24,22 @@ function seqSichtArg(x: unknown): SeqSicht {
   if (f) ab(f.grund, f.text);
   return structuredClone(x) as SeqSicht;
 }
+
+// The notes a piano roll tool works on: `noten_ids` absent = all notes of the clip; an id that is not in the clip refuses
+// (noten_unbekannt) before anything changes.
+// The end of the clip content is the limit of every moved note: the loop end, else the clip length (loop_beats never exceeds laenge_beats).
+function werkzeugNoten(a: Args, clip: MidiClip): { noten: Note[]; grenze: number } {
+  const grenze = clip.loop_beats ?? clip.laenge_beats;
+  if (a.noten_ids === undefined) return { noten: clip.noten, grenze };
+  const da = new Set(clip.noten.map((n) => n.id)), ids = new Set<string>();
+  for (const i of listeArg(a, 'noten_ids')) { if (typeof i !== 'string' || !da.has(i)) ab('noten_unbekannt', String(i)); ids.add(i); }
+  return { noten: clip.noten.filter((n) => ids.has(n.id)), grenze };
+}
+// Writes new note objects (the old ones stay untouched: the fast note path shares them with the state before).
+function werkzeugSchreibe(clip: MidiClip, aender: Map<string, Partial<Note>>): void {
+  clip.noten = clip.noten.map((n) => { const f = aender.get(n.id); return f === undefined ? n : { ...n, ...f }; });
+}
+const STRAIGHT_RASTER = ['1/32', '1/16', '1/8', '1/4'];
 
 export const CLIP = {
   clip_neu(p, a) {
@@ -497,6 +517,51 @@ export const CLIP = {
       for (const w of weg) delete neu[w];
       clip.noten[k] = neu;
     }
+  },
+
+  // Piano roll tool: quantise the notes of a clip to a grid (also 1/32 and triplets) with strength and swing; tonart: true also moves the pitches to the key
+  // of the project. The calculation is public/production/notes_tools.js (the page uses the same). A command that changes no note succeeds without a patch.
+  noten_quantisieren(p, a) {
+    erlaube(a, 'clip_id', 'raster', 'staerke', 'swing', 'tonart', 'noten_ids');
+    const id = idArg(a, 'clip_id');
+    const clip = midiVon(clipVon(p, id).clip, id);
+    const rasterIds = ROLL_RASTER.filter((r) => r.beats !== null).map((r) => r.id).join(', ');
+    const raster = rasterBeatsRolle(a.raster) ?? ab('argument_ungueltig', `raster: one of ${rasterIds} expected`);
+    const staerke = zahl(a, 'staerke', 0, 1, { opt: true }), swing = zahl(a, 'swing', 50, 75, { opt: true });
+    if (swing !== undefined && swing !== 50 && !STRAIGHT_RASTER.includes(a.raster as string)) {
+      ab('argument_ungueltig', 'swing: only on the straight grids 1/32, 1/16, 1/8, 1/4');
+    }
+    const tonart = flagge(a, 'tonart', true) === true;
+    if (tonart && p.tonart === undefined) ab('argument_ungueltig', 'tonart: the project has no key (set one with tonart_setzen)');
+    const { noten, grenze } = werkzeugNoten(a, clip);
+    const aender = new Map<string, Partial<Note>>();
+    const neu = quantisiereNoten(noten, { raster_beats: raster, staerke, swing, grenze }) as { id: string; beat: number }[];
+    for (const x of neu) aender.set(x.id, { beat: x.beat });
+    if (tonart) {
+      for (const n of noten) {
+        if (n.beat < 0 || n.beat >= grenze) continue;   // a note outside the clip content stays untouched, its pitch too
+        const ton = rasteEin(n.ton, p.tonart) as number;
+        if (ton !== n.ton) aender.set(n.id, { ...aender.get(n.id), ton });
+      }
+    }
+    werkzeugSchreibe(clip, aender);
+  },
+
+  // Piano roll tool: humanise the notes of a clip. zeit 0..50 = up to that many percent of a sixteenth earlier or later, vel 0..40 = up to that many velocity
+  // steps; the offset of a note depends on saat and the note id only (linked clips stay equal). At least one of zeit and vel above 0.
+  noten_humanisieren(p, a) {
+    erlaube(a, 'clip_id', 'saat', 'zeit', 'vel', 'noten_ids');
+    const id = idArg(a, 'clip_id');
+    const clip = midiVon(clipVon(p, id).clip, id);
+    const saat = zahl(a, 'saat', 0, 4294967295, { ganz: true })!;
+    const zeit = zahl(a, 'zeit', 0, 50, { opt: true }), vel = zahl(a, 'vel', 0, 40, { opt: true });
+    if (!(zeit! > 0) && !(vel! > 0)) ab('argument_ungueltig', 'zeit or vel: at least one above 0 expected');
+    const { noten, grenze } = werkzeugNoten(a, clip);
+    const aender = new Map<string, Partial<Note>>();
+    for (const x of humanisiereNoten(noten, { saat, zeit, vel, grenze }) as { id: string; beat?: number; vel?: number }[]) {
+      aender.set(x.id, { ...(x.beat !== undefined ? { beat: x.beat } : {}), ...(x.vel !== undefined ? { vel: x.vel } : {}) });
+    }
+    werkzeugSchreibe(clip, aender);
   },
 
   noten_loeschen(p, a) {

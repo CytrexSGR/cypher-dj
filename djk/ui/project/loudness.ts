@@ -71,3 +71,36 @@ export function messeLautheit(datei: string, ffmpeg: string[] = ['ffmpeg'], zeit
     });
   });
 }
+
+// Loudness target of an export (export delivery plan, task 3): a check, never a change of the mix. Loudness is information, the true peak ceiling
+// is a warning.
+export interface LautheitZiel { lufs_i?: number; true_peak_dbtp?: number }             // at least one field; lufs_i -40..0, true_peak_dbtp -20..0
+export interface ZielPruefung { lufs_abstand: number | null; tp_abstand: number | null; tp_ueber: boolean | null }
+
+// Reads the request field `ziel`; throws an Error with an English text naming the field.
+export function leseZiel(v: unknown): LautheitZiel {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) throw new Error('ziel must be an object');
+  const e = v as Record<string, unknown>;
+  for (const k of Object.keys(e)) if (k !== 'lufs_i' && k !== 'true_peak_dbtp') throw new Error(`ziel.${k} is not a known field`);
+  const z: LautheitZiel = {};
+  for (const [k, min] of [['lufs_i', -40], ['true_peak_dbtp', -20]] as const) {
+    const w = e[k];
+    if (w === undefined) continue;
+    if (typeof w !== 'number' || !Number.isFinite(w) || w < min || w > 0) throw new Error(`ziel.${k} must be a number from ${min} to 0`);
+    z[k] = w;
+  }
+  if (z.lufs_i === undefined && z.true_peak_dbtp === undefined) throw new Error('ziel needs lufs_i or true_peak_dbtp');
+  return z;
+}
+
+const rund1 = (x: number): number => Math.round(x * 10) / 10 + 0;   // + 0 turns -0 into 0
+
+// Measured minus target (positive = louder than the target), rounded to 0.1. tp_ueber: false without a true peak target, null when a target is set
+// and nothing was measured.
+export function pruefeZiel(l: Lautheit, z: LautheitZiel): ZielPruefung {
+  const abstand = (gemessen: number | null, ziel: number | undefined): number | null =>
+    (ziel === undefined || gemessen === null ? null : rund1(gemessen - ziel));
+  const tp = z.true_peak_dbtp;
+  return { lufs_abstand: abstand(l.lufs_i, z.lufs_i), tp_abstand: abstand(l.true_peak_dbtp, tp),
+    tp_ueber: tp === undefined ? false : l.true_peak_dbtp === null ? null : l.true_peak_dbtp > tp };
+}

@@ -209,6 +209,25 @@ def test_lade_uid_passt_nicht_zur_geladenen_klasse():
     assert st.ende == 2 and host.removed == 1
 
 
+def test_lade_zweite_klasse_ueber_shim():
+    host, st = steuerung(label="other")
+    st.klasse, st.buendel_fn = 5, lambda pfad, i, uid: f"/shim/{i}-{uid}.vst3"
+    r = st.bearbeite({"befehl": "lade"}, 0.0)
+    assert r["ok"] is False and st.ende == 2 and "the shim did not help" in st.detail  # fake still reports "other"
+    assert [a[1] for a in host.added] == ["/x/Fake.vst3", "/shim/5-uid1.vst3"] and host.removed == 2
+
+
+def test_lade_zweite_klasse_shim_fehlt():
+    host, st = steuerung(label="other")
+    st.klasse = 5
+
+    def fehlt(*a):
+        raise FileNotFoundError("shim not built")
+    st.buendel_fn = fehlt
+    r = st.bearbeite({"befehl": "lade"}, 0.0)
+    assert r["fehler"] == "nicht_ladbar" and "shim is unavailable" in st.detail and host.removed == 1
+
+
 def test_lade_kein_effekt_beendet_und_entfernt():
     host, st = steuerung(ins=0)
     r = st.bearbeite({"befehl": "lade"}, 0.0)

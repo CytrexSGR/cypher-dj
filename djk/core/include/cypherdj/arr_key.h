@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <string>
 
+#include "cypherdj/arr_maske.h"
 #include "cypherdj/arr_pdc.h"
 #include "cypherdj/arr_playback.h"
 
@@ -37,7 +38,8 @@ inline uint8_t arr_schluessel_dj_urteil(const std::string& quelle, int64_t nr) {
   return SCHL_QUELLE;
 }
 
-// The answer (SCHL_JA, SCHL_SPAET, SCHL_ZYKLUS) for the stage `stufe` of the strip with chain index `streifen` (tracks 0..31, groups 32..47, PM 48, returns 49..52) keyed by `k`.
+// The answer (SCHL_JA, SCHL_SPAET, SCHL_ZYKLUS) for the stage `stufe` of the strip with chain index `streifen` (tracks 0..127, groups 128..143, PM 144,
+// returns 145..152) keyed by `k`.
 // The table says what the block order allows; two rules need the project and sit here: a strip keyed by its own output or input is a cycle, and so is a member track keyed by
 // its own group (the group sums the member). A source number outside its range or a source kind the loader does not know is not a cell: the loader has refused it before.
 inline uint8_t arr_schluessel_urteil(const ArrSnapshot& s, int streifen, const ArrSchluessel& k) {
@@ -96,7 +98,8 @@ inline bool arr_schluessel_pruefe(const ArrSnapshot& s, std::string* meldung = n
 // Fills s.spur_ordnung. Returns false and names the reason in *meldung (when given) if a track depends on itself or on a cycle; s.spur_ordnung is then the identity.
 inline bool arr_schluessel_rechnen(ArrSnapshot& s, std::string* meldung = nullptr) {
   for (int i = 0; i < ARR_SPUREN; ++i) s.spur_ordnung[i] = static_cast<uint8_t>(i);
-  uint32_t vor[ARR_SPUREN] = {};   // vor[c] = tracks that must run before track c (bit = index)
+  // vor[c] = tracks that must run before track c (bit = index); strand 1 slice 6: a mask, 128 tracks do not fit 32 bits
+  ArrMaske<ARR_SPUREN> vor[ARR_SPUREN] = {};
   for (int c = 0; c < ARR_SPUREN; ++c) {
     const ArrKette& k = s.kette[c];
     for (int j = 0; j < k.n && j < ARR_KETTE; ++j) {
@@ -107,39 +110,44 @@ inline bool arr_schluessel_rechnen(ArrSnapshot& s, std::string* meldung = nullpt
         if (meldung) *meldung = "track " + std::to_string(c + 1) + " is keyed by its own post (sidechain_zyklus)";
         return false;
       }
-      vor[c] |= uint32_t{1} << (key.nr - 1);
+      vor[c].setze(key.nr - 1);
     }
   }
 #ifdef CYPHERDJ_MUTATION_SC_ORDNUNG_FEST
-  uint32_t egal = 0;   // error case: the edges are checked but the order stays the identity
+  ArrMaske<ARR_SPUREN> egal;   // error case: the edges are checked but the order stays the identity
   for (int c = 0; c < ARR_SPUREN; ++c) egal |= vor[c];
   (void)egal;
   return true;
 #endif
-  uint32_t fertig = 0;
+  ArrMaske<ARR_SPUREN> fertig;
   for (int n = 0; n < ARR_SPUREN; ++n) {
     int w = -1;
-    for (int c = 0; c < ARR_SPUREN && w < 0; ++c)
-      if (!((fertig >> c) & 1u) && (vor[c] & ~fertig) == 0) w = c;
+    for (int c = 0; c < ARR_SPUREN && w < 0; ++c) {
+      if (fertig.test(c)) continue;
+      ArrMaske<ARR_SPUREN> offen = vor[c];
+      offen.ohne(fertig);
+      if (offen.leer()) w = c;
+    }
     if (w < 0) {
       if (meldung) {
         std::string t;
         for (int c = 0; c < ARR_SPUREN; ++c)
-          if (!((fertig >> c) & 1u)) t += (t.empty() ? "" : ", ") + std::to_string(c + 1);
+          if (!fertig.test(c)) t += (t.empty() ? "" : ", ") + std::to_string(c + 1);
         *meldung = "tracks " + t + " key each other in a cycle through their post (sidechain_zyklus)";
       }
       for (int i = 0; i < ARR_SPUREN; ++i) s.spur_ordnung[i] = static_cast<uint8_t>(i);
       return false;
     }
     s.spur_ordnung[n] = static_cast<uint8_t>(w);
-    fertig |= uint32_t{1} << w;
+    fertig.setze(w);
   }
   return true;
 }
 
 // ---- key alignment (slice 5 U2b, plan E9)
 
-// Arrival (samples after the raw input of a track) of the input of the strip `streifen` (tracks 0..31, groups 32..47, PM 48, returns 49..52) in front of its chain.
+// Arrival (samples after the raw input of a track) of the input of the strip `streifen` (tracks 0..127, groups 128..143, PM 144, returns 145..152) in front
+// of its chain.
 inline int arr_schluessel_streifen_ankunft(const ArrSnapshot& s, int streifen) {
   if (streifen < ARR_SPUREN) return s.spur[streifen].bk_latenz;   // a track: the latency of its instrument graph (0 for every other device)
   if (streifen < ARR_KETTE_PM) return s.pdc.ein_g[streifen - ARR_SPUREN];   // a group: its sum waits for the direct tracks and the child outputs (ein(g), arr_pdc.h)
@@ -170,7 +178,7 @@ inline int arr_schluessel_quelle_ankunft(const ArrSnapshot& s, const ArrSchluess
   }
 }
 
-// Fills schl_verz, schl_verz_zeile and schl_spaet of every compressor stage (call after arr_pdc_rechnen(); the PDC table must be current). Returns false and names the needed and the
+// Fills schl_verz, schl_verz_zeile and schl_spaet of every compressor stage (schl_verz and schl_spaet of every host stage too, strand 2 task 3.3) (call after arr_pdc_rechnen(); the PDC table must be current). Returns false and names the needed and the
 // maximal delay in *meldung when a structural key would need a delay of `grenze` samples or more (the loader refuses it with `format`). `grenze` is the ring length; a test passes a
 // smaller one because the pools hold at most two latency stages, which never reach the real bound.
 inline bool arr_schluessel_versatz(ArrSnapshot& s, std::string* meldung = nullptr, int grenze = ARR_SCHL_VERZ_MAX) {
@@ -179,7 +187,7 @@ inline bool arr_schluessel_versatz(ArrSnapshot& s, std::string* meldung = nullpt
     for (int j = 0; j < kt.n && j < ARR_KETTE; ++j) {
       ArrStufe& st = kt.st[j];
       st.schl_verz = st.schl_verz_zeile = st.schl_spaet = 0;
-      if (st.art != ArrInsArt::komp) continue;
+      if (st.art != ArrInsArt::komp && st.art != ArrInsArt::host) continue;   // strand 2 task 3.3: a host stage's structural key is aligned like a compressor's
       const int ein = arr_schluessel_stufe_ankunft(s, c, j);
 #ifdef CYPHERDJ_MUTATION_SC_VERSATZ_EINE_STUFE
       const int nah = j > 0 ? ins_latenz(kt.st[j - 1]) : 0;   // error case: the delay is the latency of the nearest stage in front, not the path sum
@@ -187,7 +195,7 @@ inline bool arr_schluessel_versatz(ArrSnapshot& s, std::string* meldung = nullpt
 #else
       const int zeile = ein;
 #endif
-      st.schl_verz_zeile = static_cast<uint16_t>(std::min(zeile, grenze - 1));   // the row key is dynamic: it cannot be refused, the delay is clamped to the ring
+      if (st.art == ArrInsArt::komp) st.schl_verz_zeile = static_cast<uint16_t>(std::min(zeile, grenze - 1));   // the row key (komp only) is dynamic: it cannot be refused, the delay is clamped to the ring
       if (st.key.quelle == ARR_SCHL_KEINE) continue;
       const int quelle = arr_schluessel_quelle_ankunft(s, st.key);
       if (quelle >= ein) {

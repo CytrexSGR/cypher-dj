@@ -142,8 +142,8 @@ test('GET /proj/spur/<id>/geraet/ist passes the names to the project session; wi
   assert.equal((await b.ruf('GET', '/proj/spur/s7/geraet/ist?namen=a_x')).code, 404);
 });
 
-// Browser plan 6, task 10: the plugin version travels in the list; index versions 1 and 2 are read, 3 counts as empty.
-test('index: version field is carried; version 1 and 2 files are read, version 3 is empty', async (t) => {
+// Browser plan 6, task 10: the plugin version travels in the list; index versions 1 to 3 are read (3: VST3 class `klasse`), 4 counts as empty.
+test('index: version field is carried; version 1 to 3 files are read, version 4 is empty', async (t) => {
   const s = await stapel(t);
   const mitVersion = EINTRAEGE.map((e) => (e.id === 'a1' ? { ...e, version: '1.4.2' } : e));
   // the cache key is mtime + size: every write gets its own mtime (a fixed offset from Date.now() collided within one millisecond and served the cache of the previous write)
@@ -156,5 +156,7 @@ test('index: version field is carried; version 1 and 2 files are read, version 3
   schreibe(1);
   assert.equal((await s.ruf('GET', '/plugins')).j.plugins.length, 4);
   schreibe(3);
+  assert.equal((await s.ruf('GET', '/plugins')).j.plugins.length, 4);
+  schreibe(4);
   assert.deepEqual((await s.ruf('GET', '/plugins')).j.plugins, []);
 });

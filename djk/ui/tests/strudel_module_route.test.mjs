@@ -74,6 +74,6 @@ test('GET /strudel is unchanged: it reads the stream folder and needs no project
   const { url } = await echterServer(t, 'sm6', 10);
   const r = await hol(`${url}/strudel`);
   assert.equal(r.status, 200);
-  assert.deepEqual(await r.json(), { text: '', von: null, zeit: null, status: null, autonom: true });
+  assert.deepEqual(await r.json(), { text: '', von: null, zeit: null, bezeichnung: null, status: null, autonom: true });
   assert.equal((await hol(`${url}/strudel?strom=4`)).status, 400);
 });

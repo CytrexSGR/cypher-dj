@@ -1,6 +1,6 @@
 ---
 name: track-analysis
-description: Use when a finished recording should become playable parts in cypher-dj: loops for a set, an acapella, drums without vocals, cue points for a deck, or a beat grid you can trust. Also when a cut loop does not close cleanly, drifts against another track, stays silent in the player or suddenly sounds an octave too high, and when you need to know whether a grid really sits on the beat. Not for generating new music.
+description: 'Use when a finished recording should become playable parts in cypher-dj: loops for a set, an acapella, drums without vocals, cue points for a deck, or a beat grid you can trust. Also when a cut loop does not close cleanly, drifts against another track, stays silent in the player or suddenly sounds an octave too high, and when you need to know whether a grid really sits on the beat. Not for generating new music.'
 ---
 
 # Measuring and cutting a track

@@ -4,7 +4,9 @@ eine zurück. Befehle: {"befehl":"lade","pfad":"/abs/klang.fxp"} → {"ok","name
 {"befehl":"fahre","name","bis","dauer"[,"von"][,"ab"][,"spur"][,"form"]} → {"ok"} (Studio S6: ab = Start in time.monotonic()
 Sekunden, höchstens 1 s zurück und 1 h voraus; ohne von gilt der Ist-Wert beim Start; Studio S7: form linear (Vorgabe) oder s
 wie im Kern, 3u²−2u³) · {"befehl":"ist","namen":[…]} → {"ok","werte":{name: Anzeigewert}} (1.9 U5: Ist-Werte lesen, lädt nichts) · {"befehl":"halte"[,"spur"]} →
-{"ok","gehalten"} (verwirft wartende und laufende Fahrten, mit spur nur deren). Fehler → {"ok": false, "fehler": "…"},
+{"ok","gehalten"} (verwirft wartende und laufende Fahrten und wartende setze, mit spur nur deren) ·
+{"befehl":"setze","werte":{name: Zahl} | "patch_b64":"…"[,"ab"][,"spur"]} → {"ok"} (strand 11: loads the changed state at ab,
+same window as fahre; names must exist in the current patch; the prepared file is written SETZE_VORLAUF s before ab). Fehler → {"ok": false, "fehler": "…"},
 der Wirt läuft weiter. Getrennt von instrument_host.py, damit ohne Carla testbar."""
 import base64
 import html
@@ -25,6 +27,11 @@ from carla_backend import BINARY_NATIVE, PLUGIN_HAS_CUSTOM_UI, PLUGIN_LV2, PLUGI
 
 
 SICHERN_NACH = 0.3  # s nach Rampen-Ende, bevor der Zustand gelesen und als Aktiv-Klang gesichert wird
+# Strand 11: a timed `setze` reads the state, patches it and writes its file this many seconds before `ab`, so the tick at
+# `ab` only calls load_plugin_state. It must exceed one loop pass (instrument_host.py: engine_idle + takt + 20 ms sleep or select,
+# about 20 to 40 ms) plus the preparation itself (save_plugin_state, regex, base64, file write). A larger lead widens the
+# window in which a change made directly on the plugin (its window) is read too early and lost by the reload.
+SETZE_VORLAUF = 0.3
 
 
 def anzeige_erreichbar() -> bool:
@@ -75,6 +82,9 @@ class Steuerung:
         self.ist = {}  # Name → zuletzt gesetzter Wert (Startwert der nächsten Fahrt ohne von)
         self.sichern_ab = None  # Zeitpunkt, ab dem der gefahrene Stand als Aktiv-Klang gesichert wird
         self.name = "cypher"
+        self.ordner = arbeitsordner
+        self.setzen = []  # timed setze, sorted by ab: {ab, spur, werte | patch, nr, vorbereitet: (patch, datei) | None}
+        self.setzen_nr = 0
         if not host.save_plugin_state(0, self.vorlage):
             raise RuntimeError("save_plugin_state (Vorlage) fehlgeschlagen")
         with open(self.vorlage) as f:
@@ -90,6 +100,7 @@ class Steuerung:
         if not self.host.load_plugin_state(0, self.laden):
             raise RuntimeError("load_plugin_state: " + str(self.host.get_last_error()))
         self.ist.clear()  # der neue Klang bringt eigene Werte mit; sonst startet die nächste Fahrt am alten
+        self._vorbereitung_verwerfen(self.setzen)  # a prepared setze was built on the old sound
         if self.aktiv and os.path.abspath(pfad) != os.path.abspath(self.aktiv):
             tmp = self.aktiv + ".neu"
             with open(tmp, "wb") as f:
@@ -145,6 +156,8 @@ class Steuerung:
                 if dauer == 0 and ab <= jetzt:
                     self.takt(jetzt)
                 return {"ok": True, "ersetzt": ersetzt} if ersetzt else {"ok": True}
+            if art == "setze":
+                return self.setze_annehmen(befehl, jetzt)
             if art == "ist":  # 1.9 U5: current display values (the driven value if there is one, else the plugin state); loads nothing
                 namen = befehl.get("namen")
                 if not isinstance(namen, list) or not namen or len(namen) > 64 or not all(isinstance(n, str) for n in namen):
@@ -164,10 +177,114 @@ class Steuerung:
                         self.rampen[name] = bleibt
                     else:
                         del self.rampen[name]
+                weg = [e for e in self.setzen if spur is None or e["spur"] == spur]
+                if weg:
+                    self.setzen = [e for e in self.setzen if e not in weg]
+                    self._vorbereitung_verwerfen(weg + self.setzen)  # the rest may have been built on a dropped one
+                    gehalten += len(weg)
                 return {"ok": True, "gehalten": gehalten}
             return {"ok": False, "fehler": f"unbekannter Befehl {art!r}"}
         except Exception as e:  # jeder Fehler geht als Antwort zurück, der Wirt läuft weiter
             return {"ok": False, "fehler": f"{type(e).__name__}: {e}"}
+
+    def setze_annehmen(self, befehl: dict, jetzt: float) -> dict:
+        """Check a timed setze at receipt (everything that can be checked now) and queue it; takt() runs it."""
+        ab = float(befehl["ab"]) if "ab" in befehl else jetzt
+        if not jetzt - 1.0 <= ab <= jetzt + 3600.0:
+            raise ValueError("ab: time.monotonic() seconds, at most 1 s back and 1 h ahead")
+        werte, b64 = befehl.get("werte"), befehl.get("patch_b64")
+        if (werte is None) == (b64 is None):
+            raise ValueError("setze: werte or patch_b64, exactly one")
+        eintrag = {"ab": ab, "spur": befehl.get("spur"), "vorbereitet": None}
+        if b64 is not None:
+            if not isinstance(b64, str):
+                raise ValueError("patch_b64: a base64 string")
+            patch = base64.b64decode(b64, validate=True)
+            klang.xml_aus_patch(patch)  # raises on a patch without a Surge header
+            eintrag["patch"] = patch
+        else:
+            if not isinstance(werte, dict) or not werte or len(werte) > 64:
+                raise ValueError("werte: an object {name: number} with 1..64 names")
+            vorhanden = dict(klang.werte(klang.xml_aus_patch(self.zustand())))
+            texte = {}
+            for name, wert in werte.items():
+                if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z_]\w*", name) or name not in vorhanden:
+                    raise ValueError(f"unbekannter Parameter {name!r}")
+                if isinstance(wert, bool) or not isinstance(wert, (int, float)) or not math.isfinite(wert):
+                    raise ValueError(f"{name}: value must be a finite number")
+                if re.search(r'\btype="0"', vorhanden[name]):  # an integer parameter (switch, type, mode)
+                    if float(wert) != int(wert):
+                        raise ValueError(f"{name}: integer parameter, got {wert}")
+                    texte[name] = str(int(wert))
+                else:
+                    texte[name] = repr(float(wert))
+            eintrag["werte"] = texte
+        self.setzen_nr += 1
+        eintrag["nr"] = self.setzen_nr
+        # one inserted earlier than prepared ones invalidates them (they were built without it)
+        self._vorbereitung_verwerfen([e for e in self.setzen if e["ab"] >= ab])
+        self.setzen.append(eintrag)
+        self.setzen.sort(key=lambda e: (e["ab"], e["nr"]))
+        return {"ok": True}
+
+    def _vorbereitung_verwerfen(self, eintraege) -> None:
+        for e in eintraege:
+            if e["vorbereitet"]:
+                try:
+                    os.remove(e["vorbereitet"][1])
+                except OSError:
+                    pass
+                e["vorbereitet"] = None
+
+    def _vorbereiten(self, e) -> None:
+        """Build the patch of e on the state it will meet at ab: the latest prepared, not yet loaded setze before it, else
+        the plugin state now. Writes its own file (laden.carxs is overwritten by every zustand() read meanwhile)."""
+        if "patch" in e:
+            patch = e["patch"]
+        else:
+            vor = [x for x in self.setzen[:self.setzen.index(e)] if x["vorbereitet"]]
+            basis = vor[-1]["vorbereitet"][0] if vor else self.zustand()
+            patch = klang.patch_mit_xml(basis, klang.setze(klang.xml_aus_patch(basis), e["werte"]))
+        datei = os.path.join(self.ordner, f"setze-{e['nr']}.carxs")
+        with open(datei, "w") as f:
+            f.write(klang.carxs_mit_patch(self.vorlage_text, patch))
+        e["vorbereitet"] = (patch, datei)
+
+    def _setzen_takt(self, jetzt: float) -> None:
+        """Prepare every setze within SETZE_VORLAUF of its ab, load the due ones. Runs unprotected from instrument_host.py: a failing
+        setze is dropped with a log line, the host lives on."""
+        for e in list(self.setzen):
+            if jetzt < e["ab"] - SETZE_VORLAUF:
+                break
+            try:
+                if not e["vorbereitet"]:
+                    self._vorbereiten(e)
+                if jetzt < e["ab"]:
+                    continue
+                print(f"setze start soll {e['ab']:.3f} ist {jetzt:.3f}", file=sys.stderr, flush=True)
+                ok = self.host.load_plugin_state(0, e["vorbereitet"][1])
+                if not ok:
+                    raise RuntimeError("load_plugin_state: " + str(self.host.get_last_error()))
+            except Exception as ex:
+                print(f"setze verworfen {e.get('spur')}: {type(ex).__name__}: {ex}", file=sys.stderr, flush=True)
+                self.setzen.remove(e)
+                self._vorbereitung_verwerfen([e] + self.setzen)
+                continue
+            self.setzen.remove(e)
+            self._vorbereitung_verwerfen([e])
+            for name, text in e.get("werte", {}).items():
+                if name in self.bereiche:
+                    self.ist[name] = float(text)  # the set value is the start of the next ramp without von
+            if "patch" in e:
+                self.ist.clear()  # a whole patch brings its own values
+            # the reloaded state carries the continuous values of the lead time (and Surge's lagging state): set the
+            # driven ones again; a running ramp then moves on from here in the same tick
+            for name, wert in self.ist.items():
+                b = self.bereiche.get(name)
+                if b:
+                    self.host.set_parameter_value(0, b["index"], klang.normiert(b["punkte"], wert))
+            if self.aktiv:
+                self.sichern_ab = jetzt + SICHERN_NACH
 
     def istwert(self, name: str) -> float:
         if name in self.ist:
@@ -180,6 +297,8 @@ class Steuerung:
         self.offen = [(t, n) for t, n in self.offen if t > jetzt]
         for n in faellig:
             self.host.send_midi_note(0, 0, n, 0)
+        if self.setzen:
+            self._setzen_takt(jetzt)  # before the ramps: a ramp running across the reload sets its value after it
         fertig = False
         for name in list(self.rampen):
             liste = self.rampen[name]
@@ -331,22 +450,36 @@ class EffektSteuerung:
     linearly onto [min, max], VST3 values pass as they are (Carla reports normalized VST3 parameters).
     A plugin that cannot be loaded or is not an effect sets `ende = 2` and `grund`; instrument_host.py then writes the reason to the
     status file and exits 2, so a supervisor does not restart-loop. `latenz_fn` returns the declared latency in samples,
-    `puls` is the heartbeat file (a counter rewritten every 20 ms from takt)."""
+    `puls` is the heartbeat file (a counter rewritten every 20 ms from takt).
+    Key inputs (strang 2 task 3.1, `schluessel=True`, instrument_host.py --schluessel): probe 2026-11-26 with the LSP LV2
+    sc_compressor_stereo (4 audio inputs, 2 outputs in Carla). CONTINUOUS_RACK: add_plugin succeeds, the plugin reports
+    4 inputs, but the JACK client shows only audio-in1/2 (the key pair is unreachable). SINGLE_CLIENT: add_plugin succeeds
+    and the host's own client shows 4 audio inputs and 2 outputs, named `<client>:<plugin name>:<port name>`; before
+    `lade` the client has no ports at all. MULTIPLE_CLIENTS: add_plugin succeeds with 4 in / 2 out, but in a new JACK
+    client named after the plugin, not after --name. Choice: SINGLE_CLIENT, the first mode that meets the rule. With a
+    key, a plugin with fewer than 4 audio inputs answers `kein_schluessel` at `lade` (exit 2 like `kein_effekt`), and
+    `ports_fn()` (instrument_host.py: the client's JACK audio ports) fills `ports = {"ein": [...], "aus": [...]}` after a load."""
 
     PULS_ABSTAND = 0.02
     LATENZ_WARTEN = True
 
     def _art_fehlt(self, h):
         """None if the plugin is the right kind (an effect: it has an audio input), else (grund, detail)."""
-        if h.get_audio_port_count_info(0)["ins"] == 0:
+        ins = h.get_audio_port_count_info(0)["ins"]
+        if ins == 0:
             return "kein_effekt", "plugin has no audio input (an instrument?)"
+        if self.schluessel and ins < 4:
+            return "kein_schluessel", f"plugin has {ins} audio inputs, a key needs inputs 3 and 4"
         return None
 
-    def __init__(self, host, format: str, pfad: str, uid: str, latenz_fn, puls=None, melde=None):
+    def __init__(self, host, format: str, pfad: str, uid: str, latenz_fn, puls=None, melde=None, schluessel=False, ports_fn=None):
         self.host, self.format, self.pfad, self.uid = host, format, pfad, uid
+        self.schluessel, self.ports_fn, self.ports = schluessel, ports_fn, None
         self.latenz_fn, self.puls, self.melde = latenz_fn, puls, melde  # melde(zustand, **extra): status marker for the supervisor
         self.aktiv_an = True
         self.status = "leer"
+        self.klasse = None  # class index inside a multi-class VST3 bundle (discovery order), set by instrument_host.py from `@<index>`
+        self.buendel_fn = None  # (pfad, index, uid) -> path of the one-class shim bundle (vst3_klasse.buendel), set by instrument_host.py
         self.ende = None
         self.grund = None
         self.zaehler = 0
@@ -386,7 +519,18 @@ class EffektSteuerung:
         if self.format == "vst3" and self.uid and geladen != self.uid:
             # Carla ignores an unknown VST3 label and loads the bundle's first class (D18): refuse instead of misreport
             h.remove_plugin(0)
-            return self._scheitern("nicht_ladbar", f"class {self.uid!r} not found in the bundle (Carla loaded {geladen!r})")
+            if self.klasse is None or self.buendel_fn is None:
+                return self._scheitern("nicht_ladbar", f"class {self.uid!r} not found in the bundle (Carla loaded {geladen!r})")
+            try:
+                shim = os.path.abspath(self.buendel_fn(self.pfad, self.klasse, self.uid))
+            except (OSError, ValueError) as e:
+                return self._scheitern("nicht_ladbar", f"class {self.uid!r} is not the first class and the shim is unavailable: {e}")
+            if not h.add_plugin(BINARY_NATIVE, PLUGIN_VST3, shim, "", self.uid, 0, None, 0):
+                return self._scheitern("nicht_ladbar", f"class {self.uid!r}: the shim bundle did not load: {h.get_last_error()}")
+            geladen = h.get_plugin_info(0).get("label", "")
+            if geladen != self.uid:
+                h.remove_plugin(0)
+                return self._scheitern("nicht_ladbar", f"class {self.uid!r} (index {self.klasse}): the shim did not help (Carla loaded {geladen!r})")
         fehlt = self._art_fehlt(h)
         if fehlt:
             h.remove_plugin(0)
@@ -405,9 +549,22 @@ class EffektSteuerung:
                 h.engine_idle()
             self.takt(time.monotonic())  # the heartbeat must not stall while we wait
             time.sleep(0.02)
+        if self.ports_fn is not None:
+            self.ports = self._lies_ports(h)
         self.aktiv_an = True
         self.status = "geladen"
         return {"ok": True}
+
+    def _lies_ports(self, h) -> dict:
+        """The client's audio ports in plugin order; the JACK graph may show them a few cycles late, so wait up to 1 s."""
+        n = h.get_audio_port_count_info(0)
+        ende = time.monotonic() + 1.0
+        while True:
+            ein, aus = self.ports_fn()
+            if (len(ein) >= n["ins"] and len(aus) >= n["outs"]) or time.monotonic() >= ende:
+                return {"ein": ein, "aus": aus}
+            self.takt(time.monotonic())
+            time.sleep(0.02)
 
     def fenster(self, an) -> dict:
         """Task 15: see fenster_zeigen."""

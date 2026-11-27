@@ -280,7 +280,7 @@ test('kern restart clears geladen (generation 1, load, generation 2) and pushes 
   const ac = new AbortController();
   const r = await hol(`${url}/strom`, { signal: ac.signal });
   const { value } = await r.body.getReader().read(); ac.abort();
-  const start = JSON.parse(new TextDecoder().decode(value).replace(/^data: /, ''));
+  const start = JSON.parse(new TextDecoder().decode(value).split('\n')[0].replace(/^data: /, ''));
   assert.deepEqual(start.f.graphen_geladen, { 'erz/3': 'inst' });
   // events pushed live
   const ac2 = new AbortController();

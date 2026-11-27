@@ -58,8 +58,8 @@ test('i4_ueberlappung: zweite Rampe im selben Zeitraum abgelehnt; nacheinander u
 
 test('nur_hand, unbekannter_regler, ausserhalb_bereich beim Einsortieren', () => {
   const r = fahre([
-    sende(1000, teil(1, 'cypher', '', 0, 'xfader', 16, 0, 0.5)),
-    sende(1000, teil(2, 'andreas', '', 0, 'xfader', 16, 0, 0.5)),
+    sende(1000, teil(1, 'cypher', '', 0, 'cue/pegel', 16, 0, -12)),
+    sende(1000, teil(2, 'andreas', '', 0, 'cue/pegel', 16, 0, -12)),
     sende(1000, teil(3, 'cypher', '', 0, 'deck/9/fader', 16, 0, 0)),
     sende(1000, teil(4, 'cypher', '', 0, 'deck/1/eq/tief', 16, 0, 7)),
     sende(1000, teil(5, 'cypher', '', 0, 'deck/1/kill/tief', 16, 4, 1)),

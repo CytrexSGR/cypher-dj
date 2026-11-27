@@ -1,7 +1,8 @@
 // D1 K1 (Spec D1 2.2, 2.3, 2.6): Modul Arrangement im Kern. Spielt einen Wiedergabe-Schnappschuss (arr_playback.h)
 // sample-genau auf der einen Uhr. Projekt-Beat p = Kern-Beat − ursprung + start_beat; ein Ereignis auf Projekt-Beat p
 // liegt auf llround(sample_at(p + ursprung − start_beat)) (Konvention des Kerns). Teile: Transport mit Start-Regel,
-// Quantisierung und Loop-Klammer (arrangement.cpp), Audio-Clip-Stimmen (arr_voices.cpp), Spur-Mixer spur/1..32, Gruppen grp/1..16 (die auch in Gruppen münden können) und Produktions-Master (1.10)
+// Quantisierung und Loop-Klammer (arrangement.cpp), Audio-Clip-Stimmen (arr_voices.cpp), Spur-Mixer spur/1..128, Gruppen grp/1..16 (die auch in Gruppen
+// münden können) und Produktions-Master (1.10)
 // (arr_output.cpp), Noten an Senken (arr_notes.cpp), Metronom (arr_metronom.cpp). Die Summe geht in den Eingang
 // von erz/4. Echtzeit: außer Konstruktor und setze_*/sperre_* (vor dem Start) läuft alles im Callback: keine
 // Allokation, keine Sperre, kein I/O.
@@ -44,10 +45,11 @@ constexpr int ARR_STUMM_BLENDE = 480;   // Mute und Solo: 10 ms
 constexpr int ARR_OFFEN = 32 * ARR_SPUREN;     // offene Noten (Off ausstehend), Liste fester Größe, je Spur wie bei 8 Spuren (E3)
 constexpr int ARR_KLICK_LAENGE = 96;    // Metronom-Klick, Form wie der Prüfklick (click.h)
 constexpr int ARR_ZIEL_BLENDE = 480;    // 1.10: Ziel-Wechsel einer Spur (master ↔ Gruppe) blendet über 10 ms
-constexpr int ARR_PM = ARR_SPUREN + ARR_GRUPPEN;   // Streifen-Index des Produktions-Masters: 0..31 Spuren, 32..47 Gruppen, 48 PM
+constexpr int ARR_PM = ARR_SPUREN + ARR_GRUPPEN;   // strip index of the production master: 0..127 tracks, 128..143 groups, 144 PM (returns 145..152)
 constexpr int ARR_RET0 = ARR_PM + 1;              // 1.10 Slice 3 (P2): the return strips follow the PM, no existing index moves
 constexpr int ARR_STREIFEN = ARR_PM + 1 + ARR_RETURNS;
-// Automation slots: the lane machinery (auto_block and its state arrays) runs over the 32 tracks (slot = track) and the 4 returns (slot ARR_SPUREN + r, field 0 = fader only).
+// Automation slots: the lane machinery (auto_block and its state arrays) runs over the ARR_SPUREN tracks (slot = track) and the ARR_RETURNS returns (slot
+// ARR_SPUREN + r, field 0 = fader only).
 // Groups and the PM have no slot: the master takes no volume curve.
 constexpr int ARR_AUTO_SLOTS = ARR_SPUREN + ARR_RETURNS;
 // Fields per strip: 0 fader (dB), 1 pan, 2 mute, 3 solo. Tracks and groups: 4..7 send to return 1..4 (dB), 13..16 send to return 5..8. Returns: 4 hall on, 5..10 hall pre, decay, size, low, highcut, tail.
@@ -184,7 +186,7 @@ enum class ArrStatus : int32_t { steht = 0, wartet = 1, spielt = 2, freeze = 3 }
 constexpr double ARR_FREEZE_NACHLAUF = 2.0;      // Beats nach bis_beat (Spec 3.1)
 constexpr double ARR_FREEZE_MAX_BEATS = 256.0;   // bis − von höchstens: Puffer für 60 BPM rund 99 MB
 struct ArrFreeze {
-  int spur = 0;                    // 1..32 (ARR_SPUREN)
+  int spur = 0;                    // 1..128 (ARR_SPUREN)
   int32_t kennung = 0;             // Datei <arr_ordner>/freeze-<spur>-<kennung>.f32
   double von_beat = 0.0, bis_beat = 0.0;
   std::vector<float> daten;        // 2 · kap Werte, L und R verschränkt
@@ -239,7 +241,8 @@ struct ArrAutoEreignis {
   int64_t sample;
 };
 
-// 1.12 S3 (§4.11 /k/arr/auto, §5.13 /e/auto): OSC counts the tracks 1..32 (0 = all), the Arrangement 0..31. The ONE place of that conversion; the field names live in the
+// 1.12 S3 (§4.11 /k/arr/auto, §5.13 /e/auto): OSC counts the tracks 1..128 (0 = all), the Arrangement 0..127. The ONE place of that conversion; the field
+// names live in the
 // generated list v::werte::auto_ziel (index = field 0..3, see AUTO_FELDER), nowhere else in C++.
 inline constexpr int auto_spur_index(int osc_spur) { return osc_spur - 1; }
 inline constexpr int auto_spur_osc(int index) { return index + 1; }
@@ -505,6 +508,8 @@ class Arrangement {
   const ArrSpurLauf& spur_lauf() const { return spur_lauf_; }                 // counters of the scheduler
   const ArrArbeit& spur_arbeit(int b) const { return spur_arbeit_[b < 0 ? 0 : (b >= ARR_ARBEIT_BAHNEN ? ARR_ARBEIT_BAHNEN - 1 : b)]; }   // test seam: the lane struct (einheiten)
   const ArrSpurPlan& spur_plan() const { return spur_plan_; }                 // test seam: the plan as built
+  const ArrStreifenMaske& kette_einheit() const { return kette_einheit_; }   // test seam (strand 12 B2): the tracks whose chain ran in their track unit in the last block
+  void setze_kette_einheit_aus(bool aus) { kette_einheit_aus_ = aus; }        // test seam, before the block: true keeps every chain in mischen() (the old order, a reference)
   const float* spur_bus_l(int i) const { return i >= 0 && i < ARR_SPUREN ? bus_l_[i] : nullptr; }                  // test seam: the raw track signal of the last block (before chains, if any)
   const float* spur_bus_r(int i) const { return i >= 0 && i < ARR_SPUREN ? bus_r_[i] : nullptr; }
   bool spur_plan_gueltig() const { return spur_plan_gueltig_; }               // test seam: false = it is rebuilt at the start of the next block
@@ -756,6 +761,7 @@ class Arrangement {
   void auto_tausch(const ArrSnapshot* neu, int64_t s);                    // in tausche(): lanes appear, change or go; blend from the last played value
   void auto_stopp(int64_t s);                                             // in beende(): the lane stops, the fader blends back to the base value
   void auto_geraet();                                                     // before the sinks' block(): hands the `geraet` lane values to the sink (E9)
+  void auto_send(int m);                                                     // send automation: before mischen(): one gain ramp per block and send lane, read by sends_bereiten()
   void auto_kette();                                                      // 1.12 slice 6: before mischen(): hands the insert-parameter and rack-macro lane values to ArrInserts, one per block
   void glied_makros_(int64_t s0, int m);                                  // 1.9 U8 T9 (E12): the macro values of the member targets of the rack tracks go to their rack sink; caller thread, before phase Q, every block
   void auto_ueber_abschluss(int64_t s_ende);                              // 1.12 S3: after a block, an override change inside it has passed
@@ -935,9 +941,11 @@ class Arrangement {
   float zell_buf_[ZELL_ZEILEN][ARR_BLOCK] = {};   // 320 KiB (80 rows * ARR_BLOCK * 4 B), a member: no allocation in the callback
   bool zell_zeile_[ZELL_ZEILEN] = {};             // row taken
   bool zell_an_ = false;                                     // some zell_ueber_ is set (the release scan can be skipped otherwise)
-  // Automation: 8 KiB of project beats per block (ap_); the lane buffers auto_buf_ below are 32 tracks * 4 fields * 1024 * 4 B = 512 KiB (slice 1 had one field: 128 KiB)
+  // Automation: 8 KiB of project beats per block (ap_); the lane buffers auto_buf_ below are ARR_AUTO_SLOTS (136) * 4 fields * 1024 * 4 B = 2176 KiB at 128
+  // tracks
   double ap_[ARR_BLOCK] = {};                      // project beat per sample of the block (only filled while a lane plays)
-  // Automation slice 2: the fields 0..3 of a track (fader dB, pan, mute 0/1, solo 0/1) can each play a lane. One buffer per track and field (E7, 512 KiB, members: no allocation).
+  // Automation slice 2: the fields 0..3 of a track (fader dB, pan, mute 0/1, solo 0/1) can each play a lane. One buffer per track and field (E7, members: no
+  // allocation).
   static constexpr int AUTO_BLENDE_FELDER = 2;   // the fields 0 (fader) and 1 (pan) have a source blend; mute and solo (2, 3) have none
   float auto_buf_[ARR_AUTO_SLOTS][AUTO_FELDER][ARR_BLOCK] = {};   // the lane value or the blend per sample; Wert::vl points here for a block
   int auto_von_ = 0, auto_bis_ = 0;                // block-relative range [von, bis) in which the lane plays (transport running)
@@ -947,6 +955,21 @@ class Arrangement {
   AutoLane auto_r_[ARR_AUTO_SLOTS][AUTO_BLENDE_FELDER];
   AutoLane auto_gr_[ARR_SPUREN][ARR_GERAET_LANE_PARAMS];
   AutoLane auto_k_[ARR_KLANES_MAX];                // 1.12 slice 6: cursor per insert / rack lane of the current snapshot (index = ArrSnapshot::klane)
+  // Send automation (ARR_AUTO_SEND, arr_auto.cpp auto_send): per track and return ONE gain ramp per block, fixed-size members, no buffer per sample. The plan is what sends_bereiten reads.
+  // The gain runs a0 -> b0 over the samples [0, ts) and, when a loop seam lies inside the block, a1 -> b1 over [ts, m); without a seam ts = m and the second part is unused.
+  struct SendPlan {
+    float a0 = 0.0f, b0 = 0.0f, a1 = 0.0f, b1 = 0.0f;   // linear gains at the start and end of the two ramp parts
+    int ts = 0;                                          // first sample of the second part (the loop seam), m: none
+    bool da = false;                                     // the lane (or its ramp back to the knob) rules this send in this block
+  };
+  SendPlan send_plan_[ARR_SPUREN][ARR_RETURNS];
+  AutoLane auto_s_[ARR_SPUREN][ARR_RETURNS];           // cursor per track and send lane of the current snapshot (reset in auto_tausch, searched anew per block)
+  float send_lin_[ARR_SPUREN][ARR_RETURNS] = {};       // the lane gain at the end of the last block (held while the transport stands)
+  bool send_da_[ARR_SPUREN][ARR_RETURNS] = {};         // the lane drove this send in the last block (the knob was not heard)
+  bool send_aktiv_ = false;                            // some send_plan_ entry or send_da_ flag is set (the quick exit of auto_send needs it)
+  bool send_spielte_ = false;                          // the transport played in the last block (also without any lane in the snapshot, unlike send_lief_)
+  bool send_lief_ = false;                             // the last block had running samples (project beats known)
+  double send_p_ende_ = 0.0;                           // project beat of the last running sample of the last running block (a start or a jump back breaks the ramp)
   float auto_zuletzt_[ARR_AUTO_SLOTS][AUTO_FELDER] = {};   // last value written to auto_buf_ (dB for the fader, pan units for pan)
   bool auto_war_[ARR_AUTO_SLOTS][AUTO_FELDER] = {};        // the field wrote auto_buf_ in the last block
   // Step hold (task 8 fallback): the lane value is taken over for up to auto_schritt_ samples, so the mixer computes the gain (std::pow, cos/sin) only when the
@@ -982,7 +1005,8 @@ class Arrangement {
   const uint32_t* karte_gen_ = nullptr;
   uint32_t karte_gen_gesehen_ = 0;
   cypherdj::dsp::DjFilter filt_[ARR_SPUREN];   // loop deck K7b: DJ filter of every track (field ARR_F_FILTER), run in mischen() behind the chain and the delay compensation
-  // Loop lane strip K2: one ColorFx per track (heap, constructor; about 0.78 MB each, 25 MB for all 32), run in place of the DjFilter while the colour art is not FILTER
+  // Loop lane strip K2: one ColorFx per track (heap, constructor; about 0.78 MB each, about 100 MB for all 128), run in place of the DjFilter while the
+  // colour art is not FILTER
   std::unique_ptr<cypherdj::dsp::ColorFx[]> col_;
   int col_art_ = 0;                  // the art handed by the core (0 FILTER)
   float col_param_ = 0.5f;
@@ -1086,6 +1110,7 @@ class Arrangement {
   void bk_ueber_melden(int m);    // before auto_geraet(): every written value goes to the bk sink of its track, every block
   void bk_ueber_loeschen();       // tausche(): the new snapshot is the project value again; also computes bk_slot_ for the snapshot installed
   int16_t regler_ins_[cypherdj::stellwerk::MAX_REGLER];   // 1.10 slice 4a: controller -> global slot * INS_PARAM_MAX + parameter of ins/<art>/<n>/*, -1: none
+  static_assert(ARR_INS_ALLE * INS_PARAM_MAX - 1 <= INT16_MAX, "regler_ins_ packs slot * INS_PARAM_MAX + parameter into int16_t");
   int16_t regler_rack_[cypherdj::stellwerk::MAX_REGLER];   // 1.10 slice 4c: controller -> rack slot * ARR_MAKROS + macro of rack/<k>/m<n>, -1: none
   float ziel_w_[ARR_SPUREN];                    // Anteil des neuen Ziels 0..1, 1 = Blende fertig (regler_binden setzt 1)
   bool grp_belegt_[ARR_GRUPPEN] = {};
@@ -1107,7 +1132,15 @@ class Arrangement {
   void spur_rest_lauf();
   void spur_nach_join();   // on the caller after the join (or after the serial path): a rest track that has become lane-capable drops the plan
   void spur_einheit_ausfuehren(int spur, int64_t s0, int m, ArrArbeit& a);
-  int64_t q_s0_ = 0;                            // position of the running phase Q, written before schicke
+  // Strand 12 B2 (mehrkern 3.3): the tracks whose trim and insert chain run inside their own track unit, on the lane that renders them, instead of in mischen().
+  // Written on the caller only, in spur_quelle() before the fork (kette_einheit_planen); the units and mischen() read it. A track qualifies iff it has a chain or tail (ins_.hat),
+  // it is a lane unit of spur_plan_ (not a rest track), no sink fades a track out (n_weg_ == 0), no stage it owns listens to a key (row sc or structural), it is no key source
+  // (ins_.schluessel_maske(), a track-post capture), and neither the freeze tap nor the track-pre tap reads its bus between phase Q and mischen(). Everything else keeps the old order.
+  ArrStreifenMaske kette_einheit_;
+  bool kette_einheit_aus_ = false;              // test seam: true = every chain stays in mischen() (the reference of the old order)
+  void kette_einheit_planen();
+  void trim_anwenden(int i, int m);             // container core K7: the track trim in front of everything the strip does (the unit for a qualified track, mischen() for the others)
+  int64_t q_s0_ = 0;                          // position of the running phase Q, written before schicke
   int q_m_ = 0;
   static constexpr int SPUR_MIN_LAST = 512;     // live units times block length below which the phase stays serial; task 9 sweep: 4 units already win (-60 us at 256, -25 us at 128), fewer were not measured
   bool spur_seriell_weil(int m);

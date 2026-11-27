@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # djk-insert: start, stop and inspect the host of a foreign effect plugin (plan 1.11 task 6). One host per insert slot
-# h = 1..4 (pool ins/host/<h>, playback slot h-1), a Carla rack in its own transient unit cypherdj-ins<h>[-<i>].
+# h = 1..8 (pool ins/host/<h>, playback slot h-1), a Carla rack in its own transient unit cypherdj-ins<h>[-<i>].
 #
 # Usage: djk-insert start <h> <format>:<path>#<uid> [--instanz a..i]
 #        djk-insert stop <h> [--instanz a..i]
 #        djk-insert status <h> [--instanz a..i]
+#        djk-insert start <h> <spec> --schluessel     (key mode, below)   djk-insert link <h> [--instanz a..i]
 #   <format> is vst3 or lv2 (LV2: path = URI, uid may be empty: lv2:<uri>#).
 #   start: pre-checks that the plugin exists (VST3 bundle / LV2 URI on the LV2 path, otherwise exit 2, nothing is started),
 #     starts the host with an EMPTY rack (status "leer"; it does NOT send `lade`, the server owns measure-then-lade), waits at
@@ -19,7 +20,12 @@
 #     "geladen", "fehler" or null), puls = heartbeat counter or null, pid = MainPID of the unit, starts = NRestarts of the unit.
 #     A status file written by another pid than the unit's MainPID (systemd restarted the host with an EMPTY rack) is stale: bereit
 #     null, grund "neustart", puls null, until the new process writes its own file. A host that never ran answers laeuft false, exit 0.
-# Exit: 0 ok, 2 plugin not loadable / usage (reason on stderr), 3 host_grenze (h outside 1..4), 4 belegt (slot h already runs a
+#   --schluessel (strang 2 task 3.2): passes the flag to instrument_host.py (single-client mode, the plugin's inputs 3/4 are the key pair). The
+#     client has NO ports before `lade`, so nothing is linked at start unless the status file already has `ports` (a start that finds
+#     the host loaded). `link <h>` (the server calls it after `lade`) links by the names in status.ports, verbatim: ein[0..1] from
+#     arr_ins_<h>_L/R, ein[2..3] from arr_inskey_<h>_L/R, aus[0..1] to arr_insret_<h>_L/R, and records the six edges. A missing
+#     arr_inskey port (older core) logs one line, that edge is neither linked nor recorded. Without --schluessel nothing changes.
+# Exit: 0 ok, 2 plugin not loadable / usage (reason on stderr), 3 host_grenze (h outside 1..8), 4 belegt (slot h already runs a
 #   different plugin: stop it first), 5 host did not come up (engine error, timeout, systemd-run failed; reason on stderr).
 set -uo pipefail
 export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
@@ -28,16 +34,18 @@ HIER=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
 DJK=${DJK:-$(cd "$HIER/.." && pwd)}
 I=${CYPHERDJ_INSTANZ:-}
 POS=()
+KEY=0
 while [ $# -gt 0 ]; do
   case "$1" in
+    --schluessel) KEY=1; shift;;
     --instanz) [ $# -ge 2 ] || { echo "djk-insert: --instanz needs a value" >&2; exit 2; }; I=$2; shift 2;;
     -h|--help) sed -n '2,/^set -uo/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0;;
     *) POS+=("$1"); shift;;
   esac
 done
 CMD=${POS[0]:-}; H=${POS[1]-}; SPEC=${POS[2]:-}
-case "$CMD" in start|stop|status) ;; *) echo "djk-insert: usage: djk-insert start|stop|status <h> ... (see --help)" >&2; exit 2;; esac
-case "$H" in [1-4]) ;; *) echo "djk-insert: host_grenze: host '$H' outside 1..4" >&2; exit 3;; esac
+case "$CMD" in start|stop|status|link) ;; *) echo "djk-insert: usage: djk-insert start|stop|status|link <h> ... (see --help)" >&2; exit 2;; esac
+case "$H" in [1-8]) ;; *) echo "djk-insert: host_grenze: host '$H' outside 1..8" >&2; exit 3;; esac
 case "$I" in "") SFX="";; [a-i]) SFX="-$I";; *) echo "djk-insert: instance '$I' invalid, use a..i or empty" >&2; exit 2;; esac
 U="cypherdj-ins$H$SFX"; KERN="cypherdj-kern$SFX"
 RT="/dev/shm/cypherdj$SFX"; ST="$RT/ins-$H.json"; SPECDATEI="$RT/ins-$H.spec"; SOCK="$RT/ins-$H.sock"; KANTEN="$RT/kanten"
@@ -58,8 +66,46 @@ port_warte() { local _; for _ in $(seq 20); do port_da "$1" "$2" && return 0; sl
 # remove this host's edge lines (not the other hosts', not the instruments'); rename under the same directory lock
 kanten_weg() {
   [ -f "$KANTEN" ] || return 0
-  flock -x -w 5 "$RT" sh -c 'T=$(mktemp "$1.XXXXXX") && { grep -vF -e "$2:arr_ins_$3_" -e "$2:arr_insret_$3_" "$1" > "$T"; chmod --reference="$1" "$T"; mv -f "$T" "$1"; }' \
+  flock -x -w 5 "$RT" sh -c 'T=$(mktemp "$1.XXXXXX") && { grep -vF -e "$2:arr_ins_$3_" -e "$2:arr_insret_$3_" -e "$2:arr_inskey_$3_" "$1" > "$T"
+    chmod --reference="$1" "$T"; mv -f "$T" "$1"; }' \
     sh "$KANTEN" "$KERN" "$H"
+}
+# one edge: link it when both ports exist and it is not linked yet, record it in the edge file (a missing kern port: recorded only)
+kante_setzen() {
+  local Q=$1 Z=$2
+  if port_da -o "$Q" && port_da -i "$Z"; then
+    pw-link -l | grep -F -A8 -x "$Q" | grep -q -- "|-> *$Z\$" || pw-link "$Q" "$Z" \
+      || { weg "$U"; kanten_weg; aufraeumen_dateien; fehler "host $H: link $Q -> $Z failed"; }
+  else
+    echo "  host $H    $Q -> $Z: recorded, not linked (port missing, the kern links it)"
+  fi
+  flock -x -w 5 "$RT" sh -c 'grep -qxF -- "$2" "$1" 2>/dev/null || printf "%s\n" "$2" >> "$1"' sh "$KANTEN" "$Q"$'\t'"$Z" \
+    || { weg "$U"; kanten_weg; aufraeumen_dateien; fehler "host $H: kanten lock failed"; }
+}
+# key mode: link the six edges by the names in status.ports (verbatim, they hold spaces and colons); 1 = no ports in the status yet
+schluessel_verbinden() {
+  local P=() i n
+  mapfile -t P < <(python3 -c 'import json,sys
+try:
+    p = json.load(open(sys.argv[1])).get("ports") or {}
+except (OSError, ValueError):
+    p = {}
+e, a = p.get("ein") or [], p.get("aus") or []
+if len(e) == 4 and len(a) == 2:
+    print(*e, *a, sep="\n")' "$ST" 2>/dev/null)
+  [ "${#P[@]}" = 6 ] || return 1
+  for i in 0 1; do port_warte -i "${P[i]}" || { weg "$U"; kanten_weg; aufraeumen_dateien; fehler "host $H: own port ${P[i]} missing after ready"; }; done
+  for i in 4 5; do port_warte -o "${P[i]}" || { weg "$U"; kanten_weg; aufraeumen_dateien; fehler "host $H: own port ${P[i]} missing after ready"; }; done
+  [ -f "$KANTEN" ] || : > "$KANTEN"
+  n=0
+  for c in L R; do
+    kante_setzen "$KERN:arr_ins_${H}_$c" "${P[n]}"
+    if port_da -o "$KERN:arr_inskey_${H}_$c"; then kante_setzen "$KERN:arr_inskey_${H}_$c" "${P[n + 2]}"
+    else echo "  host $H    $KERN:arr_inskey_${H}_$c missing (older core), key edge skipped"; fi
+    kante_setzen "${P[n + 4]}" "$KERN:arr_insret_${H}_$c"
+    n=$((n + 1))
+  done
+  echo "insert host $H key pair ready: ${P[0]}, ${P[2]} -> $U -> arr_insret_${H}_L/R (edges in $KANTEN)"
 }
 aufraeumen_dateien() { rm -f "$ST" "$ST.puls" "$SOCK" "$SPECDATEI"; rm -rf "$ST.arbeit"; }
 
@@ -110,6 +156,13 @@ stop)
   exit 0;;
 esac
 
+if [ "$CMD" = link ]; then
+  aktiv "$U" || { echo "djk-insert: host $H does not run" >&2; exit 5; }
+  fehler() { echo "djk-insert: $1" >&2; exit 5; }
+  schluessel_verbinden || { echo "djk-insert: host $H has no ports in its status yet (no \`lade\`, or not key mode)" >&2; exit 5; }
+  exit 0
+fi
+
 # ---- start
 [ -n "$SPEC" ] || { echo "djk-insert: start needs <format>:<path>#<uid>" >&2; exit 2; }
 FMT=${SPEC%%:*}; REST=${SPEC#*:}
@@ -154,7 +207,7 @@ else
   aufraeumen_dateien
   printf '%s' "$SPEC" > "$SPECDATEI"
   # the unit's environment is fixed at creation: DISPLAY and XAUTHORITY of the user's session (D16), taken from here or the user manager
-  ENVS=()
+  ENVS=(); KEYARG=(); [ "$KEY" = 1 ] && KEYARG=(--schluessel)
   for v in DISPLAY XAUTHORITY; do
     w=${!v:-}
     [ -n "$w" ] || w=$(systemctl --user show-environment 2>/dev/null | sed -n "s/^$v=//p" | head -1)
@@ -163,7 +216,7 @@ else
   systemd-run --user --quiet --collect --unit="$U" -p Restart=always -p RestartSec=2 -p RestartPreventExitStatus=2 \
     -p PartOf=cypherdj.target "${ENVS[@]}" \
     --setenv=PIPEWIRE_PROPS="{ node.async = true node.group = cypherdj$SFX node.lock-quantum = true }" \
-    /usr/bin/pw-jack -p 256 /usr/bin/python3 "$DJK/hosts/carla/instrument_host.py" --name "$U" --effekt "$SPEC" --sock "$SOCK" --status "$ST" \
+    /usr/bin/pw-jack -p 256 /usr/bin/python3 "$DJK/hosts/carla/instrument_host.py" --name "$U" --effekt "$SPEC" "${KEYARG[@]}" --sock "$SOCK" --status "$ST" \
     || { weg "$U"; kanten_weg; aufraeumen_dateien; fehler "host $H: systemd-run failed"; }
   t0=$SECONDS
   while :; do
@@ -182,19 +235,18 @@ else
   echo "  host $H    started ($SPEC), rack empty"
 fi
 
+if [ "$KEY" = 1 ]; then   # key mode: no ports before `lade`, so link only if the status already has them (else `link` after `lade`)
+  schluessel_verbinden && exit 0
+  echo "insert host $H ready (key mode): no ports before lade, run: djk-insert link $H"
+  exit 0
+fi
 # own ports of the host must exist after the status file; the kern side may be missing (then only recorded, the kern links)
 for p in "-i $U:audio-in1" "-i $U:audio-in2" "-o $U:audio-out1" "-o $U:audio-out2"; do
   port_warte ${p%% *} "${p#* }" || { weg "$U"; kanten_weg; aufraeumen_dateien; fehler "host $H: own port ${p#* } missing after ready"; }
 done
 [ -f "$KANTEN" ] || : > "$KANTEN"
 while IFS=$'\t' read -r Q Z; do
-  if port_da -o "$Q" && port_da -i "$Z"; then
-    pw-link -l | grep -A8 -x "$Q" | grep -q -- "|-> *$Z\$" || pw-link "$Q" "$Z" || { weg "$U"; kanten_weg; aufraeumen_dateien; fehler "host $H: link $Q -> $Z failed"; }
-  else
-    echo "  host $H    $Q -> $Z: recorded, not linked (port missing, the kern links it)"
-  fi
-  flock -x -w 5 "$RT" sh -c 'grep -qxF -- "$2" "$1" 2>/dev/null || printf "%s\n" "$2" >> "$1"' sh "$KANTEN" "$Q"$'\t'"$Z" \
-    || { weg "$U"; kanten_weg; aufraeumen_dateien; fehler "host $H: kanten lock failed"; }
+  kante_setzen "$Q" "$Z"
 done < <(kanten_zeilen)
 echo "insert host $H ready: $KERN:arr_ins_${H}_L/R -> $U -> arr_insret_${H}_L/R (edges in $KANTEN)"
 exit 0

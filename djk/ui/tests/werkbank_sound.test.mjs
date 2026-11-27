@@ -59,17 +59,20 @@ test('effektKachel: the tile text per kind', () => {
 });
 
 test('plusEintraege: pools and the five places', () => {
-  // 12 compressors are spread over strips of at most five: use three strips
-  const verteilt = projektMit([1, 2, 3].map((n) => ({ ...bk(n, 'bass-banddrive'), inserts: Array.from({ length: n === 3 ? 2 : 5 }, (_, i) => ins(`k${n}${i}`, 'komp', (n - 1) * 5 + i + 1)) })));
-  const e = plusEintraege(verteilt, 's3', GRAPHEN);
-  assert.deepEqual(e.map((x) => x.text), ['Compressor', 'EQ', 'Saturator', 'Limiter', 'fx-delay-sync', 'fx-plate']);
+  // the whole pool of compressors is spread over strips of at most five, plus one empty strip: the pool is used up, the strip is not
+  const voll = Math.ceil(MAX_KOMP / MAX_PLAETZE), ziel = `s${voll + 1}`;
+  const verteilt = projektMit(Array.from({ length: voll + 1 }, (_, k) => ({ ...bk(k + 1, 'bass-banddrive'),
+    inserts: Array.from({ length: k === voll ? 0 : Math.min(MAX_PLAETZE, MAX_KOMP - k * MAX_PLAETZE) }, (_, i) => ins(`k${k}${i}`, 'komp', k * MAX_PLAETZE + i + 1)) })));
+  const e = plusEintraege(verteilt, ziel, GRAPHEN);
+  assert.deepEqual(e.map((x) => x.text), ['Compressor', 'EQ', 'Saturator', 'Limiter', 'Gate', 'Multiband', 'fx-delay-sync', 'fx-plate']);
   assert.equal(e[0].befehl, null); assert.equal(e[0].grund, 'No free compressor');
-  assert.deepEqual(e[1].befehl, { befehl: 'insert_setzen', strang_id: 's3', pos: 2, art: 'eq' });
-  assert.deepEqual(e[4].befehl, { befehl: 'insert_setzen', strang_id: 's3', pos: 2, art: 'bk', graph: 'fx-delay-sync' });
+  assert.deepEqual(e[1].befehl, { befehl: 'insert_setzen', strang_id: ziel, pos: 0, art: 'eq' });
+  assert.deepEqual(e[6].befehl, { befehl: 'insert_setzen', strang_id: ziel, pos: 0, art: 'bk', graph: 'fx-delay-sync' });
+  assert.deepEqual(e[4].befehl, { befehl: 'insert_setzen', strang_id: ziel, pos: 0, art: 'gate' });
   // a strip with five stages: every entry is refused
   const fuenf = projektMit([{ ...bk(1, 'bass-banddrive'), inserts: Array.from({ length: MAX_PLAETZE }, (_, i) => ins(`e${i}`, 'eq', i + 1)) }]);
   const f = plusEintraege(fuenf, 's1', GRAPHEN);
-  assert.equal(f.length, 6);
+  assert.equal(f.length, 8);
   assert.ok(f.every((x) => x.befehl === null && typeof x.grund === 'string' && x.grund.length > 0));
 });
 
@@ -96,7 +99,7 @@ test('a full pool or strip refuses in the menu and sends nothing', async () => {
   w.zeige(); await ruhe();
   let punkte = null; w.ctx.oeffneMenue = (l) => { punkte = l; };
   $w('karte-plus').dispatch('click'); await ruhe();
-  assert.equal(punkte.length, 6);
+  assert.equal(punkte.length, 8);
   assert.ok(punkte.every((x) => x.aus === true && typeof x.titel === 'string'));
   assert.equal(SENDUNGEN().length, 0);
 });

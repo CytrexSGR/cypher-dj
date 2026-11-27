@@ -7,6 +7,7 @@ import path from 'node:path';
 import { stapel } from './support/media_library.mjs';
 import { ruf, CYPHER } from './support/proj_stack.mjs';
 import { tmpOrdner } from './support/project.mjs';
+import { MAX_SPUREN } from '../project/model.ts';
 import { GM_BELEGUNG } from '../areas/proj/gm_kit.ts';
 import { smf, spur, nameMeta, tempoMeta, taktMeta, programm, note } from './helpers/smf_build.mjs';
 
@@ -106,10 +107,10 @@ test('refusals name their cause and change nothing', async (t) => {
   assert.deepEqual(await f({ daten_b64: b64(datei()), zuordnung: { '1.1': 'tuba' } }), [400, 'argument_ungueltig']);
   assert.deepEqual(await f({ daten_b64: b64(datei()), zuordnung: { '1.1': { art: 'wirt', name: 'surge', slot: 3 } } }), [400, 'argument_ungueltig']);
   assert.deepEqual(await f({ daten_b64: b64(datei()), rev: 7 }), [409, 'rev_veraltet']);
-  const viele = smf(Array.from({ length: 33 }, (_, i) => spur([...note(i % 9, 60, 80, 48)])));
+  const viele = smf(Array.from({ length: MAX_SPUREN + 1 }, (_, i) => spur([...note(i % 9, 60, 80, 48)])));
   const z = await post({ daten_b64: b64(viele) });
-  assert.deepEqual([z.code, z.j.fehler], [409, 'midi_zu_viele_spuren']); assert.match(z.j.detail, /33 tracks needed but only 32/);
-  assert.equal(typeof z.j.text, 'string'); assert.ok(z.j.bericht.spuren.length === 0 || z.j.bericht.spuren.length === 33);
+  assert.deepEqual([z.code, z.j.fehler], [409, 'midi_zu_viele_spuren']); assert.match(z.j.detail, new RegExp(`${MAX_SPUREN + 1} tracks needed but only ${MAX_SPUREN}`));
+  assert.equal(typeof z.j.text, 'string'); assert.ok(z.j.bericht.spuren.length === 0 || z.j.bericht.spuren.length === MAX_SPUREN + 1);
   const akt = await ruf(url, 'GET', '/proj/aktuell');
   assert.deepEqual([akt.j.projekt.rev, akt.j.projekt.spuren.length, akt.j.projekt.tempo_bpm], [0, 0, 120]);
 });
@@ -142,7 +143,7 @@ test('a refused import builds no GM kit folder: too many tracks, stale rev, refu
   await ruf(url, 'POST', '/proj/neu', { name: 'Kit bleibt weg' });
   const post = (k) => ruf(url, 'POST', '/proj/midi_import', k);
   const gm = () => fs.existsSync(path.join(wurzel, 'gm'));
-  const viele = smf(Array.from({ length: 33 }, (_, i) => spur([...note(i === 0 ? 9 : 0, 60, 80, 48)])));
+  const viele = smf(Array.from({ length: MAX_SPUREN + 1 }, (_, i) => spur([...note(i === 0 ? 9 : 0, 60, 80, 48)])));
   assert.equal((await post({ daten_b64: b64(viele) })).j.fehler, 'midi_zu_viele_spuren');
   assert.equal(gm(), false, 'after midi_zu_viele_spuren');
   assert.equal((await post({ daten_b64: b64(datei()), rev: 99 })).j.fehler, 'rev_veraltet');

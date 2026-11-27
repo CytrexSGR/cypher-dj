@@ -11,6 +11,7 @@ import { stapel, post } from './support/media_library.mjs';
 import { innen } from './support/inside.mjs';
 import { alsAntwort, sha256Datei } from '../areas/proj/output.ts';
 import { wavKopf } from '../project/recording.ts';
+import { MAX_SPUREN } from '../project/model.ts';
 import { PAN_MITTE_DB } from '../project/merge.ts';
 
 async function ruf(f) {
@@ -95,7 +96,7 @@ test('Resample of a group, a return and the master: tap kinds 1, 2 and 3, point 
   assert.deepEqual(a.s.verlaufListe().j.slice(-3).map((x) => x.label), ['Resample Drums', 'Resample Hall', 'Resample Master']);
 });
 
-test('Resample refusals before the core: nothing is sent or written (transport, a running freeze, range, strip, arguments, 32 tracks, Stop Cypher)', async (t) => {
+test('Resample refusals before the core: nothing is sent or written (transport, a running freeze, range, strip, arguments, full tracks, Stop Cypher)', async (t) => {
   const a = await aufbau(t, { tempo: 120 });
   const v = vorher(a);
   const grund = async (d, wie) => { const r = await resample(a, d); await nichtsGeschrieben(a, v, wie); assert.equal(gesendet(a), 0, `${wie}: nothing sent`); return [r.code, r.body.fehler]; };
@@ -124,15 +125,15 @@ test('Resample refusals before the core: nothing is sent or written (transport, 
   assert.equal((await freeze).code, 502);
 });
 
-test('Resample with 32 tracks: merge_keine_spur_frei, nothing written; negative control with 31 passes', async (t) => {
+test('Resample with all tracks full: merge_keine_spur_frei, nothing written; negative control with one free track passes', async (t) => {
   const a = await aufbau(t, { tempo: 120 });
-  await a.aendern(Array.from({ length: 28 }, (_, n) => ({ befehl: 'spur_neu', art: 'audio', name: `T${n}` })));
+  await a.aendern(Array.from({ length: MAX_SPUREN - 4 }, (_, n) => ({ befehl: 'spur_neu', art: 'audio', name: `T${n}` })));
   await geladen(a);
-  assert.equal(a.projekt().spuren.length, 31);
+  assert.equal(a.projekt().spuren.length, MAX_SPUREN - 1);
   const ok = await resample(a, { strang_id: 's2', von_beat: 0, bis_beat: 4 });
   assert.equal(ok.code, 200, JSON.stringify(ok.body));
   await geladen(a);
-  assert.equal(a.projekt().spuren.length, 32);
+  assert.equal(a.projekt().spuren.length, MAX_SPUREN);
   const v = vorher(a), n = gesendet(a);
   const r = await resample(a, { strang_id: 's2', von_beat: 0, bis_beat: 4 });
   assert.deepEqual([r.code, r.body.fehler, gesendet(a)], [409, 'merge_keine_spur_frei', n]);

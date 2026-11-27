@@ -51,7 +51,8 @@ cypher-dj demo > /tmp/demo.log 2>&1; k demo_rc $?
 k master_max_db "$(demo_pegel)"
 
 echo "== sounds on the null sink, measured with parec (live project: the strudel module sits in container C = pad/1)"
-H1=(-H content-type:application/json -H x-djk-quelle:cypher)
+T=$(cat "$HOME/.config/cypherdj/hand.token" 2>/dev/null)
+H1=(-H content-type:application/json -H x-djk-quelle:cypher ${T:+-H "authorization: Bearer $T"})
 SINKMON="$(pactl get-default-sink).monitor"
 mess() {   # mess <label>: 3 s of the sink monitor through parec, prints "peak rms" in dBFS (FL and FR together)
   local f=/tmp/m-$1.raw; timeout 6 parec -d "$SINKMON" --rate=48000 --format=s16le --channels=2 --channel-map=front-left,front-right > $f 2>/dev/null &
@@ -99,6 +100,7 @@ echo "== cypher-dj mcp + probe"
 cypher-dj mcp | tee /tmp/mcp.json; node=$(python3 -I -c 'import json;print(json.load(open("/tmp/mcp.json"))["cypher-dj"]["command"])'); hand=$(python3 -I -c 'import json;print(json.load(open("/tmp/mcp.json"))["cypher-dj"]["args"][0])')
 $node ~/mcp_probe.mjs "$node" "$hand" > /tmp/probe.log 2>&1; k mcp_rc $?; cat /tmp/probe.log
 k mcp_tools "$(sed -n 's/^tools: //p' /tmp/probe.log)"
+k mcp_skills "$(sed -n 's/^skills: //p' /tmp/probe.log)"
 k opt_newer_after_mcp "$(find /opt/cypher-dj -newer /tmp/stamp | wc -l)"
 
 echo "== stop"

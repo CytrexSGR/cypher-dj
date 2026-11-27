@@ -1,7 +1,7 @@
 // Panel header (public/panel_kopf.js): preset list for a graph, stepping, header markup.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { presetsFuer, naechstes, kopfHtml } from '../public/panel_kopf.js';
+import { presetsFuer, naechstes, kopfHtml, istSpace, raumEintraege, raumKopfHtml, raumNameAusPanel, raumTauschBefehle, SPACE_RAEUME } from '../public/panel_kopf.js';
 
 const eintrag = (herkunft, geraet, slug, name, tags) => ({ herkunft, geraet, slug, name, tags, id: `${herkunft}:${geraet}/${slug}` });
 const REGISTER = {
@@ -164,4 +164,52 @@ test('presetsFuer: an rb338 device gets every rb338 entry (no graph tag), factor
   const l = presetsFuer(mit, { art: 'rb338' });
   assert.deepEqual(l.map((x) => x.id), ['werk:rb338/acid', 'werk:rb338/dark-dub', 'nutzer:rb338/mein']);
   assert.deepEqual(presetsFuer(REGISTER, { art: 'rb338' }).map((x) => x.name), ['Dark Dub']);
+});
+
+test('istSpace: fx-space and every space-* graph, nothing else', () => {
+  for (const g of ['fx-space', 'space-raum', 'space-platte', 'space-kammer', 'space-0a1b2c']) assert.equal(istSpace(g), true, g);
+  for (const g of ['fx-hall', 'space', 'myspace-raum', 'fx-space2', '', null, undefined, 42]) assert.equal(istSpace(g), false, String(g));
+});
+
+test('raumEintraege: the four rooms with the stage graph selected; a copy adds a fifth selected entry', () => {
+  assert.deepEqual(SPACE_RAEUME.map((r) => [r.text, r.graph]), [['Hall', 'fx-space'], ['Room', 'space-raum'], ['Plate', 'space-platte'], ['Chamber', 'space-kammer']]);
+  const ist = (l) => l.filter((e) => e.gewaehlt).map((e) => e.text);
+  for (const [graph, name] of [['fx-space', 'Hall'], ['space-raum', 'Room'], ['space-platte', 'Plate'], ['space-kammer', 'Chamber']]) {
+    const l = raumEintraege(graph);
+    assert.deepEqual(l.map((e) => e.text), ['Hall', 'Room', 'Plate', 'Chamber']);
+    assert.deepEqual(ist(l), [name]);
+  }
+  const k = raumEintraege('space-0a1b2c', 'Church Hall');
+  assert.deepEqual(k.map((e) => e.text), ['Hall', 'Room', 'Plate', 'Chamber', 'Church Hall']);
+  assert.deepEqual(k.map((e) => e.gewaehlt), [false, false, false, false, true]);
+  assert.equal(k[4].wert, 'space-0a1b2c');
+  assert.equal(raumEintraege('space-0a1b2c')[4].text, 'Loaded IR');
+  assert.deepEqual(raumEintraege('fx-hall'), []);
+});
+
+test('raumKopfHtml: selector and LOAD IR for Space graphs only, names escaped', () => {
+  const h = raumKopfHtml('fx-space');
+  assert.match(h, /LOAD IR/);
+  assert.equal((h.match(/<option /g) ?? []).length, 4);
+  assert.match(h, /<option value="fx-space" selected>Hall<\/option>/);
+  const k = raumKopfHtml('space-0a1b2c', '<b>x</b>');
+  assert.equal((k.match(/<option /g) ?? []).length, 5);
+  assert.match(k, /<option value="space-0a1b2c" selected>&lt;b&gt;x&lt;\/b&gt;<\/option>/);
+  assert.equal(raumKopfHtml('fx-hall'), '');
+  assert.ok(!kopfHtml({ titel: 'x', presets: [] }).includes('LOAD IR'));
+});
+
+test('raumNameAusPanel: the file title of a copy, the room name of a shipped panel', () => {
+  const p = (text) => ({ sections: [{ controls: [{ type: 'knob' }, { type: 'label', text }] }] });
+  assert.equal(raumNameAusPanel(p('Room: Church Hall')), 'Church Hall');
+  assert.equal(raumNameAusPanel(p('Room: Plate. Other rooms: presets, or LOAD IR')), 'Plate');
+  assert.equal(raumNameAusPanel({}), '');
+});
+
+test('raumTauschBefehle: ONE insert_setzen that replaces the stage and carries the six knob values', () => {
+  const werte = { k1: 0.3, k2: 0.2, k3: 0.4, k4: 0.6, k5: 0.7, k6: 0.1, k7: 0.9, an: 0, k3x: 'a' };
+  assert.deepEqual(raumTauschBefehle({ strangId: 's1', pos: 2, graph: 'space-raum', werte }),
+    [{ befehl: 'insert_setzen', strang_id: 's1', pos: 2, art: 'bk', graph: 'space-raum', ersetzen: true, werte: { k1: 0.3, k2: 0.2, k3: 0.4, k4: 0.6, k5: 0.7, k6: 0.1 } }]);
+  assert.deepEqual(raumTauschBefehle({ strangId: 'master', pos: 0, graph: 'fx-space', werte: { k1: 'x', k2: NaN } }),
+    [{ befehl: 'insert_setzen', strang_id: 'master', pos: 0, art: 'bk', graph: 'fx-space', ersetzen: true }]);
 });

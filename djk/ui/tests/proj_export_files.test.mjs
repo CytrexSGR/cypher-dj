@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { alsAntwort } from '../areas/proj/output.ts';
 import { Einsammler } from '../project/einsammeln.ts';
 import { baueNachExport } from '../project/exporte.ts';
@@ -77,16 +78,102 @@ test('export_spuren: a failing render removes the new folder', async (t) => {
   assert.equal(a.ausgabe.zustand().lauf, null);
 });
 
-test('export_zeige: only a folder directly inside export/ of the open project; no desktop session is a refusal', async (t) => {
+const sonde = (datei) => JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_name,sample_rate,bits_per_raw_sample,bits_per_sample', '-of', 'json', datei]).toString()).streams[0];
+const protokollDatei = (a) => path.join(a.tmp, 'render.jsonl');
+
+test('export_spuren with abgabe flac 24: every file is FLAC, no float file stays, the answer names the new files', async (t) => {
+  const a = await aufbau(t);
+  await a.aendern([{ befehl: 'return_neu', name: 'Hall Room' }, { befehl: 'send_setzen', strang_id: 's1', return_id: 'r1', db: -6 }]);
+  const r = await rufe(a, 'exportiereSpuren', { von_beat: 0, bis_beat: 8, abgabe: { format: 'flac', bits: 24, rate_hz: 44100 } });
+  assert.equal(r.code, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.dateien.map((x) => x.datei), ['mix.flac', '01-kick.flac', '02-bass.flac', 'fx1-hall-room.flac']);
+  assert.deepEqual(r.body.abgabe, { format: 'flac', rate_hz: 44100, bits: 24 });
+  assert.deepEqual(dateien(r.body.ordner), ['01-kick.flac', '02-bass.flac', 'fx1-hall-room.flac', 'mix.flac'], 'one format only, no .wav, no .teil');
+  const s = sonde(path.join(r.body.ordner, 'mix.flac'));
+  assert.deepEqual([s.codec_name, s.sample_rate, s.bits_per_raw_sample], ['flac', '44100', '24']);
+  assert.ok(r.body.dateien.every((x) => Number.isFinite(x.spitze_db) && x.spitze_db > -90));
+  assert.deepEqual(fs.readdirSync(a.tmp).filter((x) => x.startsWith('djk-export-')), []);
+});
+
+test('export_spuren with abgabe wav (even 32 float 48000 is converted): the folder holds the delivery files only, without tags', async (t) => {
+  const a = await aufbau(t);
+  const r = await rufe(a, 'exportiereSpuren', { von_beat: 0, bis_beat: 8, abgabe: { format: 'wav', bits: 16, rate_hz: 44100 } });
+  assert.equal(r.code, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.abgabe, { format: 'wav', rate_hz: 44100, bits: 16, dither: 'tpdf' });
+  assert.deepEqual(dateien(r.body.ordner), ['01-kick.wav', '02-bass.wav', 'mix.wav']);
+  const s = sonde(path.join(r.body.ordner, 'mix.wav'));
+  assert.deepEqual([s.codec_name, s.sample_rate], ['pcm_s16le', '44100']);
+  const tags = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format_tags', '-of', 'json', path.join(r.body.ordner, 'mix.wav')]).toString());
+  assert.deepEqual(Object.keys(tags.format?.tags ?? {}).filter((k) => k !== 'encoder'), [], 'the files of the set carry no tags (ffmpeg\'s own encoder note aside)');
+  const f = await rufe(a, 'exportiereSpuren', { von_beat: 0, bis_beat: 8, abgabe: { format: 'wav', bits: 32, rate_hz: 48000 } });
+  assert.equal(f.code, 200, JSON.stringify(f.body));
+  assert.equal(sonde(path.join(f.body.ordner, 'mix.wav')).codec_name, 'pcm_f32le');
+  assert.deepEqual(dateien(f.body.ordner), ['01-kick.wav', '02-bass.wav', 'mix.wav']);
+});
+
+test('export_spuren with abgabe: a muted track keeps datei null', async (t) => {
+  const a = await aufbau(t);
+  await a.aendern([{ befehl: 'spur_aendern', spur_id: 's2', mute: true }]);
+  const r = await rufe(a, 'exportiereSpuren', { von_beat: 0, bis_beat: 8, abgabe: { format: 'flac', bits: 16 } });
+  assert.equal(r.code, 200, JSON.stringify(r.body));
+  const bass = r.body.dateien.find((x) => x.spur_id === 's2');
+  assert.deepEqual([bass.datei, bass.stumm, bass.spitze_db], [null, true, -200]);
+  assert.deepEqual(dateien(r.body.ordner), ['01-kick.flac', 'mix.flac']);
+});
+
+test('export_spuren refuses mp3, an array and a malformed entry before the render starts', async (t) => {
+  const a = await aufbau(t);
+  const faelle = [['mp3', 'abgabe[0].format', { format: 'mp3' }], ['an array', 'abgabe[0] must be an object', [{ format: 'wav' }]], ['unknown format', 'abgabe[0].format', { format: 'ogg' }],
+    ['a string', 'abgabe[0] must be an object', 'flac'], ['kbps on flac', 'abgabe[0].kbps', { format: 'flac', kbps: 320 }],
+    ['dither at 24 bit', 'abgabe[0].dither', { format: 'flac', bits: 24, dither: 'tpdf' }], ['bits 32 on flac', 'abgabe[0].bits', { format: 'flac', bits: 32 }]];
+  for (const [was, feld, abgabe] of faelle) {
+    const r = await rufe(a, 'exportiereSpuren', { von_beat: 0, bis_beat: 8, abgabe });
+    assert.equal(r.code, 400, `${was}: ${JSON.stringify(r.body)}`);
+    assert.equal(r.body.fehler, 'argument_ungueltig', was);
+    assert.equal(r.body.text, 'abgabe: not a valid delivery format', was);
+    assert.ok(String(r.body.detail).includes(feld), `${was}: ${r.body.detail}`);
+  }
+  assert.equal(fs.existsSync(protokollDatei(a)), false, 'the render stand-in was never started');
+  assert.equal(fs.existsSync(path.join(a.offen().ordner, 'export')), false, 'nothing was exported');
+});
+
+test('export_spuren: a failing conversion removes the new folder and answers render_fehler', async (t) => {
+  const a = await aufbau(t, { opt: { ffmpeg: ['/does/not/exist'] } });
+  const r = await rufe(a, 'exportiereSpuren', { von_beat: 0, bis_beat: 8, abgabe: { format: 'flac', bits: 24 } });
+  assert.equal(r.code >= 400, true, JSON.stringify(r.body));
+  assert.equal(r.body.fehler, 'render_fehler');
+  assert.ok(r.body.text.startsWith('a file of the set could not be converted; nothing was exported'), r.body.text);
+  assert.match(String(r.body.detail), /ffmpeg/);
+  const ex = path.join(a.offen().ordner, 'export');
+  assert.deepEqual(fs.existsSync(ex) ? fs.readdirSync(ex) : [], [], 'no half set, no .teil');
+  assert.deepEqual(fs.readdirSync(a.tmp).filter((x) => x.startsWith('djk-export-')), []);
+  assert.equal(a.ausgabe.zustand().lauf, null);
+});
+
+test('export_spuren without abgabe: the answer has no abgabe field', async (t) => {
+  const a = await aufbau(t);
+  const r = await rufe(a, 'exportiereSpuren', { von_beat: 0, bis_beat: 8 });
+  assert.equal(r.code, 200);
+  assert.deepEqual(Object.keys(r.body).sort(), ['bis_beat', 'dateien', 'ordner', 'von_beat']);
+});
+
+test('export_zeige: the export folder of the open project or a folder directly inside it; no desktop session is a refusal', async (t) => {
   const a = await aufbau(t);
   const m = await rufe(a, 'exportiereMidi', {});
   const zeige = (d) => { try { return { code: 200, body: a.ausgabe.zeigeExport(d) }; } catch (e) { return alsAntwort(e); } };
   assert.equal(zeige({ ordner: a.tmp }).body.fehler, 'argument_ungueltig', 'a folder outside the export folder');
-  assert.equal(zeige({ ordner: path.join(m.body.ordner, '..') }).body.fehler, 'argument_ungueltig', 'the export folder itself');
+  const tief = path.join(m.body.ordner, 'tief'); fs.mkdirSync(tief);
+  assert.equal(zeige({ ordner: tief }).body.fehler, 'argument_ungueltig', 'nested deeper than one level');
+  assert.equal(zeige({ ordner: path.dirname(path.dirname(m.body.ordner)) }).body.fehler, 'argument_ungueltig', 'the project folder above export/');
+  assert.equal(zeige({ ordner: path.join(m.body.ordner, m.body.dateien[0].datei) }).body.fehler, 'argument_ungueltig', 'a file, not a folder');
+  assert.match(zeige({ ordner: tief }).body.text, /only the export folder of the open project or a folder inside it can be shown/);
   assert.equal(zeige({}).body.fehler, 'argument_ungueltig');
   const alt = { d: process.env.DISPLAY, w: process.env.WAYLAND_DISPLAY };
   delete process.env.DISPLAY; delete process.env.WAYLAND_DISPLAY;
-  try { assert.equal(zeige({ ordner: m.body.ordner }).body.fehler, 'keine_arbeitsflaeche'); }
+  try {
+    assert.equal(zeige({ ordner: m.body.ordner }).body.fehler, 'keine_arbeitsflaeche');
+    assert.equal(zeige({ ordner: path.join(m.body.ordner, '..') }).body.fehler, 'keine_arbeitsflaeche', 'the export folder itself passes the check');
+  }
   finally { if (alt.d !== undefined) process.env.DISPLAY = alt.d; if (alt.w !== undefined) process.env.WAYLAND_DISPLAY = alt.w; }
 });
 

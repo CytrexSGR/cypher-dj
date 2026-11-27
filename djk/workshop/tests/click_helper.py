@@ -10,6 +10,11 @@ import soundfile as sf
 # (beat map of the second tool), tests that run the stem separator need torch. Without them these tests are skipped.
 braucht_essentia = pytest.mark.skipif(importlib.util.find_spec("essentia") is None, reason="needs essentia (not installed)")
 braucht_torch = pytest.mark.skipif(importlib.util.find_spec("torch") is None, reason="needs torch (not installed)")
+# The note editor's network path (werkstatt.noten_netz) needs SwiftF0 and onnxruntime, installed by setup.sh with
+# anforderungen-noten.txt. Without them the test that runs the real network is skipped; the others use a stand-in network.
+braucht_swift_f0 = pytest.mark.skipif(
+    importlib.util.find_spec("swift_f0") is None or importlib.util.find_spec("onnxruntime") is None,
+    reason="needs swift_f0 and onnxruntime (not installed)")
 
 SR = 48000
 

@@ -6,15 +6,22 @@
 #include <cstring>
 #include <fstream>
 #include <functional>
+#include <initializer_list>
 #include <iterator>
 #include <string>
 
 #include "arr_run.h"
+#include "cypherdj/arr_maske.h"
 #include "cypherdj/recording_thread.h"
 #include "cypherdj/eq.h"
 
 bool g_waechter = false;
 using k35::N;
+static cdj::ArrMaske<cdj::ARR_SPUREN> spur_maske(std::initializer_list<int> nr) {   // the MIDI arm mask of these tracks (bit = nr - 1)
+  cdj::ArrMaske<cdj::ARR_SPUREN> m;
+  for (int n : nr) m.setze(n - 1);
+  return m;
+}
 
 static std::string lies(const std::string& p) { std::ifstream f(p, std::ios::binary); return std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>()); }
 static float sig(int64_t s) { return 0.0001f * static_cast<float>(s % 9973 + 1); }   // nie 0
@@ -798,7 +805,7 @@ int main() {
     const int64_t ra = midi_arm(2, 1, m), rb = midi_arm(5, 1, m2);
     x.lauf(x.kern->sample() + 3 * N);
     PRUEF(x.quittung(ra, 3) != nullptr && x.quittung(rb, 3) != nullptr);
-    PRUEF(x.kern->aufnahme().midi_maske() == ((1u << 1) | (1u << 4)) && x.kern->aufnahme().midi_spur() == m);
+    PRUEF(x.kern->aufnahme().midi_maske() == spur_maske({2, 5}) && x.kern->aufnahme().midi_spur() == m);
     PRUEF(midi_alt(z0, m2) == 1 && midi_alt(z0, m) == 0);   // the second RecMidi comes straight back, the first is adopted; no new event number (fassung 1 tags REC_ALT)
     x.lauf(x.kern->sample() + 30000);   // /zustand/rec at 2 Hz
     int gemeldet_z = 0;
@@ -807,7 +814,7 @@ int main() {
     PRUEF(gemeldet_z >= 1);
     const int64_t rb2 = midi_arm(5, 0, nullptr);   // disarm track 5: bit gone, track 2 keeps the recorder
     x.lauf(x.kern->sample() + 3 * N);
-    PRUEF(x.quittung(rb2, 3) != nullptr && x.kern->aufnahme().midi_maske() == (1u << 1) && x.kern->aufnahme().midi_spur() == m && midi_alt(z0, m) == 0);
+    PRUEF(x.quittung(rb2, 3) != nullptr && x.kern->aufnahme().midi_maske() == spur_maske({2}) && x.kern->aufnahme().midi_spur() == m && midi_alt(z0, m) == 0);
     faden.anmelden(p);   // already registered: harmless
     cdj::RecMidi::frei(m2);
     // mixed run: audio track 3 plus MIDI track 2; 16 notes at known cycle offsets (the first at offset 0, the second at the last sample of its cycle)
@@ -904,7 +911,7 @@ int main() {
     const size_t z2 = x.ev.size();
     const int64_t rx = midi_arm(2, 0, nullptr);
     x.lauf(x.kern->sample() + 3 * N);
-    PRUEF(x.quittung(rx, 3) != nullptr && x.kern->aufnahme().midi_maske() == 0u && x.kern->aufnahme().midi_spur() == nullptr && midi_alt(z2, m) == 1);
+    PRUEF(x.quittung(rx, 3) != nullptr && x.kern->aufnahme().midi_maske().leer() && x.kern->aufnahme().midi_spur() == nullptr && midi_alt(z2, m) == 1);
     faden.abmelden_midi(m);
     cdj::RecMidi::frei(m);
     // nothing armed at all: kein_eingang again (the first check of this file, now after the MIDI runs)

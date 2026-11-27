@@ -113,8 +113,8 @@ int main() {
       }
     }
   }
-  {  // 9: Pool-Grenze (E3: 32 Audio-Spuren mit je 8 gleichzeitig klingenden Clips = ARR_STIMMEN = 256, nichts geht verloren).
-     // Gegenprobe: mehr Clips als der Pool -> 256 Stimmen, genau so viele gezählt verloren wie überzählig (1 und 3: ein
+  {  // 9: Pool-Grenze (E3: ARR_SPUREN audio tracks with 8 simultaneous clips each = ARR_STIMMEN, 1024 at 128 tracks, nothing is lost).
+     // Gegenprobe: mehr Clips als der Pool -> ARR_STIMMEN Stimmen, genau so viele gezählt verloren wie überzählig (1 und 3: ein
      // Zähler, der bei jedem Verlust auf 1 setzt statt zu zählen, fiele bei 3 auf).
     for (const int mehr : {0, 1, 3}) {
       Treiber t;
@@ -129,7 +129,7 @@ int main() {
       t.arr.start(0.0, 0, false, 0, V, 256, t.k);
       t.lauf(1024);
       PRUEF(cdj::ARR_STIMMEN == 8 * cdj::ARR_SPUREN);
-      PRUEF(t.arr.stimmen() == 256);
+      PRUEF(t.arr.stimmen() == cdj::ARR_STIMMEN);
       PRUEF(t.arr.stimmen_verloren() == static_cast<uint64_t>(mehr));
     }
   }

@@ -82,6 +82,8 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/dsp dsp)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/signalbox stellwerk)
 # Scheibe 35: Hand-Bibliothek (Scheibe 19, djk/core/hand): Mapping, MIDI-Übersetzer, Naht zum Stellwerk. Ohne ihre Tests.
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/hand hand)
+# Note editor (djk/core/noten, contract djk/contract/notes.md): library cdj_noten and the program cypherdj-noten, built into this folder.
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/noten noten)
 # Befund B12 (Scheibe 25): djk/core/dsp/meters legt cypherdj_ebur128 selbst an, djk/third_party ebenso; beide zusammen
 # brechen die Konfiguration ab („another target with the same name already exists“). Solange messer keinen Wächter
 # `if(NOT TARGET cypherdj_ebur128)` trägt (fremdes Territorium), holt der Kern aus third_party nur die beiden
@@ -212,7 +214,7 @@ foreach(pfad ${KERN_TESTS})
   # 1.8 T3: the recording threads (callback, net thread swapping RecSpur, AufnahmeFaden) and the monitor of the external inputs run under TSan too; only names in this list
   # start through setarch -R and carry the failure pattern, any other test would run plain and could abort with "unexpected memory mapping" or hide TSan lines
   # mehrkern plan: the HallPool and its callers run under TSan too (test_reverb_pool, test_arr_returns, test_reverb_state)
-  if(CYPHERDJ_TSAN AND (t STREQUAL "test_freeze_tsan" OR t STREQUAL "test_arr_tap" OR t STREQUAL "test_arr_tap_pool" OR t STREQUAL "test_core_arr_tap" OR t STREQUAL "test_net_arr_tap" OR t STREQUAL "test_arr_auto_tsan" OR t STREQUAL "test_reverb_pool" OR t STREQUAL "test_arr_returns" OR t STREQUAL "test_reverb_state" OR t STREQUAL "test_arr_track_path" OR t STREQUAL "test_arr_inserts_path" OR t STREQUAL "test_arr_host_stufe" OR t STREQUAL "test_arr_host_ausfall" OR t STREQUAL "test_arr_host_measurement" OR t STREQUAL "test_arr_track_phase" OR t STREQUAL "test_arr_track_pool" OR t STREQUAL "test_arr_rack_path" OR t STREQUAL "test_arr_rack_macro" OR t STREQUAL "test_arr_auto_chain" OR t STREQUAL "test_arr_auto_return" OR t STREQUAL "test_arr_auto_bk_button" OR t STREQUAL "test_arr_bk_sink" OR t STREQUAL "test_core_track_time" OR t STREQUAL "test_track_state" OR t STREQUAL "test_recording_tsan" OR t STREQUAL "test_recording_thread" OR t STREQUAL "test_core_rec" OR t STREQUAL "test_arr_monitor" OR t STREQUAL "test_render_nur_key" OR t STREQUAL "test_arr_export_run" OR t STREQUAL "test_net_arr_export_run"))
+  if(CYPHERDJ_TSAN AND (t STREQUAL "test_freeze_tsan" OR t STREQUAL "test_arr_tap" OR t STREQUAL "test_arr_tap_pool" OR t STREQUAL "test_core_arr_tap" OR t STREQUAL "test_net_arr_tap" OR t STREQUAL "test_arr_auto_tsan" OR t STREQUAL "test_reverb_pool" OR t STREQUAL "test_arr_returns" OR t STREQUAL "test_reverb_state" OR t STREQUAL "test_arr_track_path" OR t STREQUAL "test_arr_inserts_path" OR t STREQUAL "test_arr_host_stufe" OR t STREQUAL "test_arr_host_ausfall" OR t STREQUAL "test_arr_host_measurement" OR t STREQUAL "test_arr_track_phase" OR t STREQUAL "test_arr_track_pool" OR t STREQUAL "test_arr_rack_path" OR t STREQUAL "test_arr_rack_macro" OR t STREQUAL "test_arr_auto_chain" OR t STREQUAL "test_arr_auto_send" OR t STREQUAL "test_arr_auto_return" OR t STREQUAL "test_arr_auto_bk_button" OR t STREQUAL "test_arr_bk_sink" OR t STREQUAL "test_core_track_time" OR t STREQUAL "test_track_state" OR t STREQUAL "test_recording_tsan" OR t STREQUAL "test_recording_thread" OR t STREQUAL "test_core_rec" OR t STREQUAL "test_arr_monitor" OR t STREQUAL "test_render_nur_key" OR t STREQUAL "test_arr_export_run" OR t STREQUAL "test_net_arr_export_run"))
     add_test(NAME ${t} COMMAND ${TSAN_START} $<TARGET_FILE:${t}>)
     set_tests_properties(${t} PROPERTIES FAIL_REGULAR_EXPRESSION "ThreadSanitizer")   # jede TSan-Zeile ist ein Befund
   else()
@@ -1730,6 +1732,10 @@ endfunction()
 # Re-measured 2026-11-23 (saett DC blocker, c54250ec4: 5 Hz high-pass per channel at the output of the wet path): arr32ins carries one saett at drive 12 dB, so its output
 # changed: 256 pm=ade2dd87eea3d869 out=41548661fe8a40ae, 128 pm=3a5b2b905b7600fb out=9398708e98dcfa84 (previous: the 2026-11-13 values above). The rack and bk lanes (no saett)
 # and the controls are unchanged, and every variant (pool, serial, unused, no fifo) still agrees with the others.
+# Re-measured 2026-11-26 (strand 12 A: folded SIMD halfband FIR with runtime dispatch, EQ bypass when all bands are neutral, band caching): the DJ-Maschine pins of arr32ins, arr32rack and arr32bk changed at both
+# blocks. arr32ins 256 pm=b1fadda67db04a79 out=0f9c34959d9167b6, 128 pm=10a95e0124869362 out=2cf9cc5669d2adc3; arr32rack 256 pm=3a9ba50cc0b1e03b out=8e3d8adb1adcbe03, 128 pm=720006d2bc3611f3
+# out=3479cf6b3ef02d03; arr32bk 256 pm=305d3b08dd467b8b out=f9ae3d7ccd277223, 128 pm=9a64e2baa1908553 out=692fc05b23c4e2e7 (previous: the values above and in hash_pins.txt of the parent commit).
+# Only the DJ-Maschine pairs are moved; the CI laptop pins are measured on the runner at the merge gate.
 # Output hash of the arrangement lane (KOSTEN_HASH=1): FNV-1a over the production master and the master out, 2000 warm-up + 3000 measured cycles (blocks=5000). The reference values
 # are those of the probe of 2026-11-06 on main bccde012 (Hall fork-join probe, unchanged Hall path). The control mutes track 3: it passes only if a hash line was printed (the lane
 # self-check may exit 2, ctest ignores the exit code with PASS_REGULAR_EXPRESSION) AND neither reference value appears, so a crash or a missing line cannot pass it.
@@ -1784,6 +1790,10 @@ set_tests_properties(kosten_arr_frist_128 PROPERTIES PASS_REGULAR_EXPRESSION "Ha
 # Control of the pair: an explicit KOSTEN_HALL_FRIST_US still wins at 128.
 add_test(NAME kosten_arr_frist_128_fest COMMAND ${CMAKE_COMMAND} -E env KOSTEN_BLOCK=128 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=4321 $<TARGET_FILE:kern_kosten_arr> 300 arr32ins)
 set_tests_properties(kosten_arr_frist_128_fest PROPERTIES PASS_REGULAR_EXPRESSION "HallPool on, 3 workers[^\n]*frist_us 4321\n" TIMEOUT 120)
+# The self-check of the lane arr32 (32 sounding tracks, a ramp on every fader, no part refused, enough solo switches; exit 2 otherwise), 2000 cycles, no cost gate.
+# It went red unnoticed when container core K9 dropped the erz/* rows and the lane still sent a part to erz/4/fader (refused as unbekannter_regler).
+add_test(NAME kosten_arr_selbst_arr32 COMMAND ${CMAKE_COMMAND} -E env KOSTEN_BLOCK=256 $<TARGET_FILE:kern_kosten_arr> 2000 arr32)
+set_tests_properties(kosten_arr_selbst_arr32 PROPERTIES TIMEOUT 120)
 # 1.10 Slice 3 Task 1: cost of Cypher Hall as a return effect (no ctest test, the numbers go into the report)
 add_executable(kern_kosten_hall tests/cost/cost_reverb.cpp)
 target_include_directories(kern_kosten_hall PRIVATE tests)
@@ -2358,6 +2368,10 @@ unset(TM_FALL)
 set(TM_FALL 28)  # detector case
 # the unit is measured on the wall clock (WILL_FAIL), must turn test_arr_track_pool case 28 red (a stall inside the unit raises its own allowance: late=1)
 test_mutation(spur_kosten_wandzeit_mutation test_arr_track_pool CYPHERDJ_MUTATION_SPUR_KOSTEN_WANDZEIT ${ARR_QUELLEN} src/clock.cpp)
+unset(TM_FALL)
+set(TM_FALL 35)  # detector case
+# strand 12 B2 (WILL_FAIL): a key consumer runs its chain in its track unit, before mischen() copied the key (test_arr_track_pool case 35: mask bit set, output differs from the old order)
+test_mutation(spur_kette_einheit_mit_schluessel_mutation test_arr_track_pool CYPHERDJ_MUTATION_KETTE_EINHEIT_MIT_SCHLUESSEL ${ARR_QUELLEN} src/clock.cpp)
 unset(TM_FALL)
 test_mutation(test_kern_arr_bk_mutation test_core_arr_bk CYPHERDJ_MUTATION_ARR_OHNE_RB_SENKE ${KERN_QUELLEN35} src/arr_playback.cpp)
 

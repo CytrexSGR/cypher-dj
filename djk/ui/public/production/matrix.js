@@ -11,7 +11,10 @@ const KLICK_WARTE_MS = 500;  // a single click on a send waits this long (the us
 
 /** The rows of the matrix: [{id, art, name, pre?, ziele: [cell], sends: [cell], stufen: [cell]}]. A cell carries `typ`, the ids its command needs and
  *  what the server said (`erlaubt`, `text`). Returns and master have no target and no send cells. */
-export function matrixZeilen(m) {
+export const AUTO_SEND_TEXT = 'Automated: the lane sets this send';
+// does the track have a lane for its send into this return? (`stand`, the project, is optional: without it no cell is marked)
+const sendHatLane = (stand, strangId, returnId) => (stand?.spuren ?? []).some((x) => x.id === strangId && (x.automation ?? []).some((l) => l.ziel === `send.${returnId}`));
+export function matrixZeilen(m, stand) {
   const ist = (art) => m.straenge.filter((s) => s.art === art);
   const projekt = { spuren: ist('spur'), gruppen: ist('gruppe'), returns: ist('return') };
   return m.straenge.map((s) => ({
@@ -19,7 +22,8 @@ export function matrixZeilen(m) {
     ziele: s.ziel_zellen.map((c) => ({ typ: 'ziel', strang_id: s.id, ziel: c.ziel, name: m.ziele.find((z) => z.wert === c.ziel)?.name ?? c.ziel,
       aktiv: c.aktiv, erlaubt: c.erlaubt, ...(c.erlaubt ? {} : { text: c.text ?? c.grund ?? 'Not available' }) })),
     sends: s.art === 'spur' || s.art === 'gruppe'
-      ? m.returns.map((r) => ({ typ: 'send', strang_id: s.id, return_id: r.id, db: s.sends.find((x) => x.return_id === r.id)?.db ?? FADER_AUS })) : [],
+      ? m.returns.map((r) => ({ typ: 'send', strang_id: s.id, return_id: r.id, db: s.sends.find((x) => x.return_id === r.id)?.db ?? FADER_AUS,
+        ...(sendHatLane(stand, s.id, r.id) ? { auto: true } : {}) })) : [],
     stufen: s.stufen.filter((x) => x.art === 'komp').map((x) => {
       const wert = x.schluessel ? wertVon(x.schluessel.quelle, x.schluessel.nr, x.schluessel.punkt) : 'own';
       return { typ: 'schluessel', insert_id: x.insert_id, wert, label: `Comp ${x.slot}: ${schluesselLabel(wert, projekt)}` };
@@ -68,7 +72,7 @@ export function bindeMatrix(ctx) {
     if (offenesFeld) return;   // an open field keeps its place; it draws again when it closes
     tabelle.textContent = '';
     if (!daten) return;
-    const m = daten, zeilen = matrixZeilen(m);
+    const m = daten, zeilen = matrixZeilen(m, ctx.st.projekt);
     const t = el('table', 'p-mx');
     const kopf = el('tr');
     kopf.append(el('th', 'p-mx-kopf-strang', 'Strip'));
@@ -124,9 +128,10 @@ export function bindeMatrix(ctx) {
   }
 
   function sendZelle(c, strangName, ret) {
-    const td = el('td'), b = el('button', `p-mx-send${c.db > FADER_MIN ? ' an' : ''}`, sendText(c.db));
+    const td = el('td'), b = el('button', `p-mx-send${c.db > FADER_MIN ? ' an' : ''}${c.auto ? ' auto' : ''}`, sendText(c.db));
     b.dataset.strang = c.strang_id; b.dataset.ret = c.return_id;
     b.title = 'Click: 0 dB or off (after a moment). Double click: type a level';
+    if (c.auto) { b.dataset.auto = '1'; b.title = AUTO_SEND_TEXT; }
     const label = `Send ${strangName} to ${ret?.name ?? c.return_id}`;
     let warte = 0;
     b.addEventListener('click', () => {

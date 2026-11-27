@@ -1,7 +1,7 @@
 // 1.12 Automation slice 3, task 7: the command Befehl::ARR_ARM (/k/arr/arm) and the event AUTO_PUNKT (/e/auto_punkt) in the whole core
 // (the net thread is test_netz_arr_arm). Grips come in through /test/hand (Befehl HAND) at exact samples; the hand loop, the Stellwerk and the Arrangement are real.
 //   (a) command -> state: arm a track with a mode, arm another, spur 0 with an 0 disarms every track, the same arm again changes nothing; q 1 and 3
-//   (b) refusals: spur outside 0..32, an outside 0/1, modus outside 0..2 and spur 0 with an 1 give format; cypher and every source but andreas give nur_andreas
+//   (b) refusals: spur outside 0..128, an outside 0/1, modus outside 0..2 and spur 0 with an 1 give format; cypher and every source but andreas give nur_andreas
 //       (the state stays); andreas works (negative control); in the AI stop cypher gets ki_gestoppt first
 //   (c) gates: nothing without an arm, nothing for an unarmed track (while the armed track reports), nothing while the transport stands; pan and fader of one track
 //       report independently (the rate is per regulator); the same grips report once the gate opens (negative control for every "nothing")
@@ -131,13 +131,13 @@ int main() {
     a.spiele(2);
     PRUEF(a.x->quittung(i3, 1) && a.x->quittung(i3, 3));
     PRUEF(a.x->kern->auto_arm(1) == -1 && a.x->kern->auto_arm(2) == -1);
-    PRUEF(a.x->kern->auto_arm(0) == -1 && a.x->kern->auto_arm(33) == -1);
+    PRUEF(a.x->kern->auto_arm(0) == -1 && a.x->kern->auto_arm(129) == -1);
     std::printf("a: arm 1 -> %d, arm 2 -> %d after the disarm of all\n", a.x->kern->auto_arm(1), a.x->kern->auto_arm(2));
   }
   {  // (b) refusals
     Aufbau a("test_kern_arr_arm_b");
     a.start_und_lauf();
-    const int64_t i_hoch = a.arm(33, 1), i_neg = a.arm(-1, 1), i_an = a.arm(1, 2), i_m = a.arm(1, 1, 3), i_m2 = a.arm(1, 1, -1);
+    const int64_t i_hoch = a.arm(129, 1), i_neg = a.arm(-1, 1), i_an = a.arm(1, 2), i_m = a.arm(1, 1, 3), i_m2 = a.arm(1, 1, -1);
     const int64_t i_alle = a.arm(0, 1, 1);
     a.spiele(2);
     for (int64_t id : {i_hoch, i_neg, i_an, i_m, i_m2, i_alle}) PRUEF(a.abgelehnt(id, "format"));
@@ -152,7 +152,7 @@ int main() {
     a.spiele(2);
     PRUEF(a.abgelehnt(i_cy2, "nur_andreas") && a.x->kern->auto_arm(1) == 1);
     // the order: range first, then the source; in the AI stop cypher gets ki_gestoppt first
-    const int64_t i_o = a.arm(99, 1, 1, "cypher");
+    const int64_t i_o = a.arm(999, 1, 1, "cypher");
     a.spiele(2);
     PRUEF(a.abgelehnt(i_o, "format"));
     cdj::Befehl ki = a.x->neu(cdj::Befehl::KI_STOPP, "andreas");

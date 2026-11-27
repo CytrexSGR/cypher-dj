@@ -1,11 +1,11 @@
 {
  "vertrag": "insert_module/1",
- "hinweis": "Single source of the insert vocabulary (package 1.10 slice 4). Generated from this file by djk/contract/generate_insert.py: djk/core/signalbox/src/insert_zeilen.inc and djk/ui/project/insert_schluessel.ts. Never edit those by hand. Paths are '<praefix>/<n>/<gruppe><m>/<name>' or '<praefix>/<n>/<name>', at most 31 characters. 'tabelle' says whether the kind has rows in the controller table yet (komp from 4a, eq/saett from 4b, rack from 4c, lim from the master limiter, host from plan 1.11 T4, utility from arr-fx: width, bass mono, gain and balance, 0 samples of latency, the 1.15 Utility module, bk from arr-bk: a Baukasten effect graph with the knobs k1..k64 (k9..k32 since the 32-knob widening, k33..k64 since the 64-knob widening; a graph defines the ones it uses), 0..1, default 0.5; the instance smooths a changed knob over 20 ms itself, so rampe_ms is 0). 'latenz' is the latency in samples a stage of the kind adds at 48 kHz (the delay compensation of the arrangement, slice 4b T13; pinned to cypher_*_latenz() by test_arr_pdc; host: 0 here because the latency of a foreign plugin is a property of the stage, ArrStufe::latenz from the playback file, plan 1.11 D4; bk: 0 here because the latency of a graph is a property of the stage too, measured from the instance by the loader (cypher_bk_latenz), at most 128 samples; lim: 74 samples, pinned to KanalLimiter(48000, {vorhalt 1.5 ms, sample peak}).latenz_samples()); 'instanzen' is the pool size; for eq and saett it was decided by the cost measurement (slice 4b T11, docs/architecture/stand/routing-1-10.md), not guessed; the other kinds only contribute their paths to the vocabulary. 'geraet' is the plugin parameter id in djk/ui/presets/devices.ts ('<n>' is the band number); null where the plugin has no such parameter. Units and ranges are the plugin's. Curve 'schalter' = switch, 'stufen' = integer steps, 'linear' = continuous (kurven as in controls.h KurvenTyp).",
+ "hinweis": "Single source of the insert vocabulary (package 1.10 slice 4). Generated from this file by djk/contract/generate_insert.py: djk/core/signalbox/src/insert_zeilen.inc and djk/ui/project/insert_schluessel.ts. Never edit those by hand. Paths are '<praefix>/<n>/<gruppe><m>/<name>' or '<praefix>/<n>/<name>', at most 31 characters. 'tabelle' says whether the kind has rows in the controller table yet (komp from 4a, eq/saett from 4b, rack from 4c, lim from the master limiter, host from plan 1.11 T4, utility from arr-fx: width, bass mono, gain and balance, 0 samples of latency, the 1.15 Utility module, bk from arr-bk: a Baukasten effect graph with the knobs k1..k64 (k9..k32 since the 32-knob widening, k33..k64 since the 64-knob widening; a graph defines the ones it uses), 0..1, default 0.5; the instance smooths a changed knob over 20 ms itself, so rampe_ms is 0). 'latenz' is the latency in samples a stage of the kind adds at 48 kHz (the delay compensation of the arrangement, slice 4b T13; pinned to cypher_*_latenz() by test_arr_pdc; host: 0 here because the latency of a foreign plugin is a property of the stage, ArrStufe::latenz from the playback file, plan 1.11 D4; bk: 0 here because the latency of a graph is a property of the stage too, measured from the instance by the loader (cypher_bk_latenz), at most 128 samples; lim: 74 samples, pinned to KanalLimiter(48000, {vorhalt 1.5 ms, sample peak}).latenz_samples()); 'instanzen' is the pool size; for eq and saett it was decided by the cost measurement (slice 4b T11, docs/architecture/stand/routing-1-10.md), not guessed; the other kinds only contribute their paths to the vocabulary. 'geraet' is the plugin parameter id in djk/ui/presets/devices.ts ('<n>' is the band number); null where the plugin has no such parameter. Units and ranges are the plugin's. Curve 'schalter' = switch, 'stufen' = integer steps, 'linear' = continuous (kurven as in controls.h KurvenTyp). gate and mb (pool kinds of plan 1.17 slice 4): source modules (Gate and MultibandCompressor of the mix tools), 0 samples of latency; the paths ins/gate/<n>/<name> and ins/mb/<n>/b<1..3>/<name>; the lim pool is 8.",
  "arten": [
   {
    "art": "komp",
    "praefix": "ins/komp",
-   "instanzen": 12,
+   "instanzen": 160,
    "latenz": 0,
    "tabelle": true,
    "geraet": "komp",
@@ -122,7 +122,7 @@
      "name": "sc",
      "einheit": "",
      "min": 0,
-     "max": 32,
+     "max": 128,
      "vorgabe": 0,
      "kurve": "stufen",
      "ganz": true,
@@ -135,7 +135,7 @@
   {
    "art": "eq",
    "praefix": "ins/eq",
-   "instanzen": 8,
+   "instanzen": 160,
    "latenz": 69,
    "tabelle": true,
    "geraet": "eq",
@@ -411,7 +411,7 @@
   {
    "art": "lim",
    "praefix": "ins/lim",
-   "instanzen": 2,
+   "instanzen": 8,
    "latenz": 86,
    "tabelle": true,
    "geraet": null,
@@ -457,7 +457,7 @@
   {
    "art": "host",
    "praefix": "ins/host",
-   "instanzen": 4,
+   "instanzen": 8,
    "latenz": 0,
    "tabelle": true,
    "geraet": null,
@@ -1333,6 +1333,250 @@
      "rampe_ms": 0,
      "geraet": null,
      "rolle": "ins_bk_k64"
+    }
+   ]
+  },
+  {
+   "art": "gate",
+   "praefix": "ins/gate",
+   "instanzen": 16,
+   "latenz": 0,
+   "tabelle": true,
+   "geraet": null,
+   "parameter": [
+    {
+     "name": "an",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0,
+     "kurve": "schalter",
+     "ganz": true,
+     "rampe_ms": 0,
+     "geraet": null,
+     "rolle": "ins_gate_an"
+    },
+    {
+     "name": "schwelle",
+     "einheit": "dB",
+     "min": -90,
+     "max": 0,
+     "vorgabe": -40,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": null,
+     "rolle": "ins_gate_schwelle"
+    },
+    {
+     "name": "hysterese",
+     "einheit": "dB",
+     "min": 0,
+     "max": 24,
+     "vorgabe": 4,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": null,
+     "rolle": "ins_gate_hysterese"
+    },
+    {
+     "name": "ratio",
+     "einheit": "",
+     "min": 1,
+     "max": 100,
+     "vorgabe": 100,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": null,
+     "rolle": "ins_gate_ratio"
+    },
+    {
+     "name": "bereich",
+     "einheit": "dB",
+     "min": -120,
+     "max": 0,
+     "vorgabe": -80,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": null,
+     "rolle": "ins_gate_bereich"
+    },
+    {
+     "name": "attack",
+     "einheit": "ms",
+     "min": 0.1,
+     "max": 500,
+     "vorgabe": 1,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": null,
+     "rolle": "ins_gate_attack"
+    },
+    {
+     "name": "hold",
+     "einheit": "ms",
+     "min": 0,
+     "max": 2000,
+     "vorgabe": 20,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": null,
+     "rolle": "ins_gate_hold"
+    },
+    {
+     "name": "release",
+     "einheit": "ms",
+     "min": 1,
+     "max": 5000,
+     "vorgabe": 100,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": null,
+     "rolle": "ins_gate_release"
+    }
+   ]
+  },
+  {
+   "art": "mb",
+   "praefix": "ins/mb",
+   "instanzen": 8,
+   "latenz": 0,
+   "tabelle": true,
+   "geraet": null,
+   "parameter": [
+    {
+     "name": "an",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0,
+     "kurve": "schalter",
+     "ganz": true,
+     "rampe_ms": 0,
+     "geraet": null,
+     "rolle": "ins_mb_an"
+    },
+    {
+     "name": "grenze_tief",
+     "einheit": "Hz",
+     "min": 20,
+     "max": 20000,
+     "vorgabe": 200,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": null,
+     "rolle": "ins_mb_grenze_tief"
+    },
+    {
+     "name": "grenze_hoch",
+     "einheit": "Hz",
+     "min": 20,
+     "max": 20000,
+     "vorgabe": 2000,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": null,
+     "rolle": "ins_mb_grenze_hoch"
+    }
+   ],
+   "gruppen": [
+    {
+     "name": "b",
+     "anzahl": 3,
+     "parameter": [
+      {
+       "name": "schwelle",
+       "einheit": "dB",
+       "min": -60,
+       "max": 0,
+       "vorgabe": 0,
+       "kurve": "linear",
+       "ganz": false,
+       "rampe_ms": 10,
+       "geraet": null,
+       "rolle": "ins_mb_b_schwelle"
+      },
+      {
+       "name": "ratio",
+       "einheit": "",
+       "min": 1,
+       "max": 20,
+       "vorgabe": 1,
+       "kurve": "linear",
+       "ganz": false,
+       "rampe_ms": 10,
+       "geraet": null,
+       "rolle": "ins_mb_b_ratio"
+      },
+      {
+       "name": "attack",
+       "einheit": "ms",
+       "min": 0.1,
+       "max": 500,
+       "vorgabe": 10,
+       "kurve": "linear",
+       "ganz": false,
+       "rampe_ms": 10,
+       "geraet": null,
+       "rolle": "ins_mb_b_attack"
+      },
+      {
+       "name": "release",
+       "einheit": "ms",
+       "min": 1,
+       "max": 5000,
+       "vorgabe": 100,
+       "kurve": "linear",
+       "ganz": false,
+       "rampe_ms": 10,
+       "geraet": null,
+       "rolle": "ins_mb_b_release"
+      },
+      {
+       "name": "knie",
+       "einheit": "dB",
+       "min": 0,
+       "max": 24,
+       "vorgabe": 0,
+       "kurve": "linear",
+       "ganz": false,
+       "rampe_ms": 10,
+       "geraet": null,
+       "rolle": "ins_mb_b_knie"
+      },
+      {
+       "name": "makeup",
+       "einheit": "dB",
+       "min": -24,
+       "max": 24,
+       "vorgabe": 0,
+       "kurve": "linear",
+       "ganz": false,
+       "rampe_ms": 10,
+       "geraet": null,
+       "rolle": "ins_mb_b_makeup"
+      },
+      {
+       "name": "umgehen",
+       "einheit": "",
+       "min": 0,
+       "max": 1,
+       "vorgabe": 0,
+       "kurve": "schalter",
+       "ganz": true,
+       "rampe_ms": 0,
+       "geraet": null,
+       "rolle": "ins_mb_b_umgehen"
+      }
+     ]
     }
    ]
   }

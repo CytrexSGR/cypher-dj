@@ -302,3 +302,9 @@ body.tablet .fp-m-leiste .fp-option { min-height: 44px; min-width: 52px; }
 .fp-kabel-hell { opacity: 1; stroke-width: 7; }
 .fp-kabel-griff { cursor: pointer; }
 .fp-m-leiste .fp-knopf-klein.an { color: var(--bg); background: var(--fp-akzent, var(--a)); border-color: var(--fp-akzent, var(--a)); }
+/* Cypher Space: the file picker under the room row (dock/space_kopf.js) */
+.fp-ir-wahl { margin: -4px 0 10px; max-height: 220px; overflow: auto; border: 1px solid var(--line, #444); border-radius: 6px; padding: 4px; font-size: 12px; }
+.fp-ir-kopf { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 2px 4px 6px; color: var(--dim); }
+.fp-ir-zeile { display: flex; gap: 6px; padding: 2px 6px; border-radius: 4px; cursor: pointer; }
+.fp-ir-zeile:hover { background: var(--panel, rgba(255, 255, 255, .08)); }
+.fp-ir-zeile span { color: var(--dim); }

@@ -1,0 +1,96 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cypherdj.invalid/vertrag/1/noten_zeile.schema.json",
+ "title": "The one JSON line cypherdj-noten writes to stdout (notes.md), and the payload of a progress line on stderr",
+ "description": "The root validates a stdout line: an ok line of one of the commands (version; analyse and segment; pruefe; render) or a failure line. $defs.fortschritt is the JSON after the prefix @@fortschritt on stderr.",
+ "oneOf": [
+  {"$ref": "#/$defs/ok_version"},
+  {"$ref": "#/$defs/ok_kurve"},
+  {"$ref": "#/$defs/ok_pruefe"},
+  {"$ref": "#/$defs/ok_render"},
+  {"$ref": "#/$defs/fehler"}
+ ],
+ "$defs": {
+  "fehler_code": {
+   "description": "Error codes of the command line; the table in notes.md carries the same list in the same order",
+   "enum": ["argument", "datei_fehlt", "datei_kaputt", "format", "kurve_passt_nicht", "noten_ungueltig", "nicht_unterstuetzt",
+            "vorher_passt_nicht", "schreiben", "nicht_gebaut"]
+  },
+  "sekunden": {"description": "CPU seconds of the process (getrusage), never a wall clock", "type": "number", "minimum": 0},
+  "ok_version": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["status", "programm", "vertrag", "detektor", "segmentierer", "maschine"],
+   "properties": {
+    "status": {"const": "ok"},
+    "programm": {"const": "cypherdj-noten"},
+    "vertrag": {"const": 1},
+    "detektor": {"type": "string", "pattern": "^pyin-[0-9]+$"},
+    "segmentierer": {"type": "string", "pattern": "^noten_hmm-[0-9]+$"},
+    "maschine": {"type": "string", "pattern": "^teilton-[0-9]+$"}
+   }
+  },
+  "ok_kurve": {
+   "description": "analyse and segment",
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["status", "datei", "noten", "stimmhaft", "sekunden"],
+   "properties": {
+    "status": {"const": "ok"},
+    "datei": {"type": "string", "minLength": 1},
+    "noten": {"description": "Count of detected notes", "type": "integer", "minimum": 0, "maximum": 4096},
+    "stimmhaft": {"type": "number", "minimum": 0, "maximum": 1},
+    "sekunden": {"$ref": "#/$defs/sekunden"}
+   }
+  },
+  "ok_pruefe": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["status", "mehrstimmig", "anteil", "sekunden"],
+   "properties": {
+    "status": {"const": "ok"},
+    "mehrstimmig": {"type": "boolean"},
+    "anteil": {"type": "number", "minimum": 0, "maximum": 1},
+    "sekunden": {"$ref": "#/$defs/sekunden"}
+   }
+  },
+  "ok_render": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["status", "datei", "bereiche", "sekunden"],
+   "properties": {
+    "status": {"const": "ok"},
+    "datei": {"type": "string", "minLength": 1},
+    "bereiche": {
+     "description": "Rewritten sample ranges [s0, s1), half open, s0 < s1 (checked by notes_contract.ts)",
+     "type": "array",
+     "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "integer", "minimum": 0}}
+    },
+    "sekunden": {"$ref": "#/$defs/sekunden"}
+   }
+  },
+  "fehler": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["status", "fehler", "text"],
+   "properties": {
+    "status": {"const": "fehler"},
+    "fehler": {"$ref": "#/$defs/fehler_code"},
+    "text": {"description": "English", "type": "string", "minLength": 1}
+   }
+  },
+  "fortschritt": {
+   "description": "Payload of a progress line on stderr: @@fortschritt {...}; stufe <= von (checked by notes_contract.ts, as liesFortschrittsZeichen does)",
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["stufe", "von", "name", "prozent"],
+   "properties": {
+    "teil": {"description": "Optional text that liesFortschrittsZeichen passes on", "type": "string"},
+    "stufe": {"type": "integer", "minimum": 1},
+    "von": {"type": "integer", "minimum": 1},
+    "name": {"enum": ["laden", "tonhoehe", "noten", "pruefen", "rendern", "schreiben"]},
+    "prozent": {"type": "number", "minimum": 0, "maximum": 100}
+   }
+  }
+ }
+}

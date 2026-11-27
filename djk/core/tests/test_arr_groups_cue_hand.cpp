@@ -1,5 +1,5 @@
-// Live modules task 6: the headphone cue of a group through the real hand path. A /k/teil on grp/<n>/cue with the source "andreas" goes through the Stellwerk, the Arrangement and the
-// mixer PFL to the cue output of the whole kern and is audible there; any other source is refused (the row is hand only, nur_hand) and the cue bus stays silent. The block-level
+// Live modules task 6: the headphone cue of a group through the real hand path. A /k/teil on grp/<n>/cue (source "cypher" here) goes through the Stellwerk, the Arrangement and the
+// mixer PFL to the cue output of the whole kern and is audible there; since strand 11 the source "cypher" may set it too (no nur_hand); before any set the cue bus stays silent. The block-level
 // cases are in test_arr_groups_cue.cpp (its mutation builds link only the Arrangement, so this kern-level case lives in its own file).
 #include <cmath>
 #include <string>
@@ -20,12 +20,11 @@ int main() {
     x.laden2(1, "{\"nr\":1,\"art\":\"audio\",\"ausgang\":{\"art\":\"gruppe\",\"nr\":1},\"clips\":[" + clip + "]}", "{\"nr\":1,\"ausgang\":{\"art\":\"master\"}}");
     x.lauf(8 * k35::N);
     x.start(0.0, 0);
-    x.teil("grp/1/cue", 1.0f, 0.0, 0.0, "pruefstand");   // refused: the row is hand only
     x.lauf(60 * k35::N);
     PRUEF(x.wert("grp/1/cue") == 0.0);
     PRUEF(arr35::Lauf::erster(x.l, 0, 60 * k35::N) >= 0);                 // the group sounds on the master (positive control)
     PRUEF(arr35::Lauf::erster(x.cue_l, 0, 60 * k35::N) == -1);            // and the cue bus is silent
-    x.teil("grp/1/cue", 1.0f, 0.0, 0.0, "andreas");
+    x.teil("grp/1/cue", 1.0f, 0.0, 0.0, "cypher");   // strand 11: cypher may set the group cue
     x.lauf(120 * k35::N);
     PRUEF(x.wert("grp/1/cue") == 1.0);
     const int64_t ec = arr35::Lauf::erster(x.cue_l, 60 * k35::N, 120 * k35::N);

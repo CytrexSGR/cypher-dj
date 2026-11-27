@@ -48,3 +48,31 @@ test('analyse live route: no ring gives leer, a ring with a sine gives the value
   assert.equal(c.j.steht, false);
   assert.equal(c.j.w, w + 4800);
 });
+
+test('analyse pegel route: streaming meter reads only new frames, reset clears the held values, no ring gives leer', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'analyse-pegel-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const bus = path.join(dir, 'bus');
+  const { url, o } = await stapel(t);
+  o.opt.busRing = bus;
+  const holP = async () => (await (await fetch(`${url}/analyse/pegel`)).json());
+  const reset = async () => (await (await fetch(`${url}/analyse/pegel/reset`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).json());
+  const sinus = (i) => 0.1 * Math.sin(2 * Math.PI * 997 * i / 48000);   // -20 dBFS
+
+  assert.deepEqual(await holP(), { leer: true, grund: 'kein_ring' });
+
+  schreibe(bus, 48000, sinus);
+  const a = await holP();
+  assert.equal(a.leer, false);
+  assert.ok(Math.abs(a.lufs_m - -20) <= 0.5, String(a.lufs_m));
+  assert.equal(a.dauer_s, 1);
+
+  schreibe(bus, 52800, sinus);
+  const b = await holP();
+  assert.equal(b.dauer_s, 1.1);
+
+  const r = await reset();
+  assert.equal(r.tp_max_dbtp, r.tp_dbtp);
+  assert.equal(r.dauer_s, 0);
+  assert.equal((await holP()).dauer_s, 0, 'nothing new since the reset read');
+});

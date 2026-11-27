@@ -163,3 +163,14 @@ test('Task 2 loopText: bars and length', () => {
   assert.equal(loopText({ von_beat: 560, bis_beat: 592 }), 'Bar 141 to 148 · 8 bars');
   assert.equal(loopText({ von_beat: 0, bis_beat: 4 }), 'Bar 1 to 1 · 1 bar');
 });
+
+test('marker strip: the ruler keeps its 28 px and its zones, the strip above it adds its own 16 px (the stylesheet has the same numbers)', async () => {
+  const { LINEAL_HOEHE, LOOP_ZONE } = await import('../public/production/layout.js');
+  const { MARKER_LEISTE_HOEHE } = await import('../public/production/marker.js');
+  const { readFileSync } = await import('node:fs');
+  assert.equal(LINEAL_HOEHE, 28); assert.equal(LOOP_ZONE, 12);
+  assert.equal(MARKER_LEISTE_HOEHE, 16);
+  const css = readFileSync(new URL('../public/production/production.css', import.meta.url), 'utf8');
+  assert.match(css, /\.p-arr \{[^}]*grid-template-rows: 16px 28px minmax\(0, 1fr\) 14px/);
+  assert.match(css, /\.p-lineal \{[^}]*height: 28px/);
+});

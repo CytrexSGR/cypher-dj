@@ -26,55 +26,72 @@ struct CypherBk;   // cypher_bk_ffi.h (global, extern "C" functions): a Baukaste
 
 namespace cdj {
 
-constexpr int ARR_SPUREN = 32;           // Spur-Slots spur/1..32 (Spec 2.3, E3); = SPUR_REGLER_SPUREN (static_assert)
+constexpr int ARR_SPUREN = 128;          // track slots spur/1..128 (strand 1 slice 6; 32 before, Spec 2.3, E3); = SPUR_REGLER_SPUREN (static_assert)
 constexpr int ARR_CLIPS_MAX = 4096;     // je Wiedergabe (Spec 3.2)
 constexpr int ARR_NOTEN_MAX = 65536;    // je Wiedergabe (Spec 3.2)
 constexpr int ARR_FX_PUNKTE_MAX = 65536;   // tracker task 16: bend and pegel events of all bk tracks together, per playback; = MAX_FX_PUNKTE in model.ts (pinned by tests/project_bk_device.test.mjs)
 constexpr int ARR_BK_INSTR_LAT_MAX = 4096;  // longest latency of an instrument graph on a project track in samples; more is refused by the loader (format)
 constexpr int ARR_HOST_LAT_MAX = 8192;  // plan 1.11 (D5): longest host-stage latency in samples (the dry ring of a host stage and, with the PDC ring, the bound of the loader): a latency of this value or more is refused (pdc_zu_lang)
-constexpr int ARR_INS_HOST = 4;         // plan 1.11 (D1): effect hosts, one Carla process per plugin; host h = pool instance ins/host/<h> = playback slot h - 1; ports arr_ins_<h>_L/R out, arr_insret_<h>_L/R in
+constexpr int ARR_INS_HOST = 8;         // plan 1.11 (D1), strand 1 slice 5: 4 -> 8; effect hosts, one Carla process per plugin; host h = pool instance ins/host/<h> = playback slot h - 1; ports arr_ins_<h>_L/R out, arr_insret_<h>_L/R in
 constexpr int ARR_WIRT_SLOTS = 2;       // arr_midi_<s>, s = 1..2 (Spec 2.4)
-constexpr int ARR_GRUPPEN = 16;         // Gruppen-Spuren grp/1..16 (1.10, F1; 16 since nested groups task 1: eigene Plätze neben den 32 Spuren); = GRP_REGLER_GRUPPEN_ALLE (static_assert in arr_output.cpp)
-constexpr int ARR_RETURNS = 8;          // 1.10 Slice 3: return strips ret/1..8 (4 until container core K6; own places next to the 32 tracks and 16 groups); = RET_REGLER_RETURNS (static_assert in arr_returns.cpp)
+// Gruppen-Spuren grp/1..16 (1.10, F1; 16 since nested groups task 1: eigene Plätze neben den Spuren); = GRP_REGLER_GRUPPEN_ALLE (static_assert in
+// arr_output.cpp)
+constexpr int ARR_GRUPPEN = 16;
+// 1.10 Slice 3: return strips ret/1..8 (4 until container core K6; own places next to the tracks and 16 groups); = RET_REGLER_RETURNS (static_assert in
+// arr_returns.cpp)
+constexpr int ARR_RETURNS = 8;
 constexpr int ARR_KETTE = 5;            // 1.10 slice 4a: stages per insert chain (4 until the dress rehearsal 2: EQ, comp, sat, util, lim need five)
 constexpr int ARR_KETTE_PM = ARR_SPUREN + ARR_GRUPPEN;     // chain index of the PM (= ARR_PM, static_assert in arrangement.h)
 constexpr int ARR_KETTE_RET0 = ARR_KETTE_PM + 1;           // chain index of return 1 (= ARR_RET0)
-constexpr int ARR_KETTEN = ARR_KETTE_RET0 + ARR_RETURNS;   // strips with a chain, indexed like the strips: tracks 0..31, groups 32..47, PM 48, returns 49..56
-constexpr int ARR_INS_KOMP = 12;        // 1.10 slice 4a: pooled compressors ins/komp/1..12
+// strips with a chain, indexed like the strips: tracks 0..127, groups 128..143, PM 144, returns 145..152 (153 at 128 tracks)
+constexpr int ARR_KETTEN = ARR_KETTE_RET0 + ARR_RETURNS;
+static_assert(ARR_KETTEN <= 255, "ArrKettenLane::strip is uint8_t");
+static_assert(ARR_SPUREN <= 255, "spur_ordnung (0-based) and ArrSchluessel::nr (1-based) are uint8_t");
+constexpr int ARR_INS_KOMP = 160;       // 1.10 slice 4a: pooled compressors ins/komp/1..160 (strand 1 slice 1: 12 -> 22, slice 3: 22 -> 96, slice 3b: 96 -> 160, one for every strip at 128 tracks)
 // 1.10 slice 4b: pooled EQs ins/eq/1..ARR_INS_EQ and saturators ins/saett/1..ARR_INS_SAETT. The sizes were decided by the cost measurement (T11, routing-1-10.md)
 // and equal "instanzen" of docs/interfaces/insert_module.json (pinned by test_arr_inserts_vertrag and by the contract test in the stellwerk project).
 #ifdef CYPHERDJ_MUTATION_INS_POOL_PLUS_EINS   // error case: a pool constant one above the rows of the table (the pool pin in test_arr_inserts_4b must go red)
-constexpr int ARR_INS_EQ = 9;
+constexpr int ARR_INS_EQ = 161;
 constexpr int ARR_INS_SAETT = 5;
-constexpr int ARR_INS_LIM = 3;
+constexpr int ARR_INS_LIM = 9;
 #else
-constexpr int ARR_INS_EQ = 8;             // arr-fx slice 2: 2 -> 8 on the order of 2026-11-10 (was 2 on Andreas' decision of 2026-11-05, lane gate median 1650 us); cost: see the arr-fx report
+constexpr int ARR_INS_EQ = 160;           // strand 1 slice 3b: 96 -> 160, one for every strip at 128 tracks; strand 1 slice 3: 16 -> 96; strand 1 slice 1: 8 -> 16; arr-fx slice 2: 2 -> 8 on the order of 2026-11-10 (was 2 on Andreas' decision of 2026-11-05, lane gate median 1650 us); cost: see the arr-fx report
 constexpr int ARR_INS_SAETT = 4;          // arr-fx slice 2: 1 -> 4
-constexpr int ARR_INS_LIM = 2;            // arr-fx slice 2: 1 -> 2 (the pool is shared over the whole project)
+constexpr int ARR_INS_LIM = 8;            // strand 1 slice 4: 2 -> 8; arr-fx slice 2: 1 -> 2 (the pool is shared over the whole project)
 #endif
-// one global slot index: komp first, then eq, saett, lim, and since plan 1.11 the host stages ins/host/1..ARR_INS_HOST at the end (INS_G_HOST0 in arr_inserts.h)
+// one global slot index, in this order: komp, eq, saett, lim, utility, bk, gate, mb, host (INS_G_*0 in arr_inserts.h). Since plan 1.11 the host stages ins/host/1..ARR_INS_HOST at the end (INS_G_HOST0 in arr_inserts.h)
 // arr-fx slice 1: the utility stages ins/utility/1..ARR_INS_UTIL (Utility of package 1.15: width, bass mono, gain, balance) sit between lim and host (INS_G_UTIL0), so host stays last.
 constexpr int ARR_INS_UTIL = 8;           // "instanzen" of the kind utility in docs/interfaces/insert_module.json (pinned by test_arr_inserts_util)
 // arr-bk slice 3: the Baukasten effect stages ins/bk/1..ARR_INS_BK (a Baukasten effect graph with the knobs k1..k64) sit between utility and host (INS_G_BK0), so host stays last.
 // Pool size: "instanzen" of the kind bk in docs/interfaces/insert_module.json (pinned by test_arr_inserts_bk); the row table (MAX_REGLER) was raised for the 9 rows per slot (33 since the 32-knob widening, 65 since the 64-knob widening).
 constexpr int ARR_INS_BK = 8;
-constexpr int ARR_INS_ALLE = ARR_INS_KOMP + ARR_INS_EQ + ARR_INS_SAETT + ARR_INS_LIM + ARR_INS_UTIL + ARR_INS_BK + ARR_INS_HOST;
+// strand 1 slice 4: the noise gates ins/gate/1..ARR_INS_GATE and the three-band multiband compressors ins/mb/1..ARR_INS_MB (the 1.15 mix tool modules, 0 samples of latency) sit between bk and host
+// (INS_G_GATE0, INS_G_MB0), so host stays last. Pool sizes: "instanzen" of the kinds gate and mb in docs/interfaces/insert_module.json (pinned by test_arr_inserts_dyn).
+constexpr int ARR_INS_GATE = 16;
+constexpr int ARR_INS_MB = 8;
+constexpr int ARR_INS_ALLE = ARR_INS_KOMP + ARR_INS_EQ + ARR_INS_SAETT + ARR_INS_LIM + ARR_INS_UTIL + ARR_INS_BK + ARR_INS_GATE + ARR_INS_MB + ARR_INS_HOST;
+// strand 1 slice 3 (decision 3): 96 + 96 so that every strip (tracks, groups, PM, returns; 89 at 64 tracks) can hold its own compressor and EQ;
+// slice 3b: 160 + 160 for 153 strips at 128 tracks.
+static_assert(ARR_INS_KOMP >= ARR_KETTEN && ARR_INS_EQ >= ARR_KETTEN, "every strip can hold its own compressor and EQ");
+static_assert(ARR_INS_KOMP <= 999 && ARR_INS_LIM <= 999 && ARR_INS_GATE <= 999 && ARR_INS_MB <= 999, "the gain reduction path ins/<art>/<n> is written with at most three digits (core_signalbox.cpp)");
+static_assert(ARR_INS_KOMP <= 256 && ARR_INS_EQ <= 256, "ArrStufe::slot is uint8_t");
 constexpr int BK_KNOEPFE = cypherdj::stellwerk::BK_REGLER_N;   // knobs k1..k64 of a Baukasten graph (track device parameters, insert stages, channel rows)
 constexpr int ARR_PARAMETER = BK_KNOEPFE;   // device parameters per internal track: the four RB-338 ones and the Baukasten knobs k1..k64 (was 8 before the 32-knob widening, 32 before the 64-knob one)
 constexpr int ARR_BK_MAX = 16;          // S20: Baukasten tracks per playback (8 until 2026-11-18); = MAX_BK_SPUREN in model.ts (pinned by tests/project_bk_device.test.mjs)
 // Every bk track has live override rows spur/<slot>/bk/<k> (since 2026-11-21 SPUR_BK_SLOTS == ARR_BK_MAX; Arrangement::bk_slot_ is -1 only for non-bk tracks).
 static_assert(cypherdj::stellwerk::SPUR_BK_SLOTS == ARR_BK_MAX, "every bk track has live override rows: SPUR_BK_SLOTS must equal ARR_BK_MAX");
-constexpr int ARR_BK_INSERT_NR = 1000;  // arr-bk slice 3: the track number an insert stage uses in the key of the graph store (tracks and members are below 100)
+// arr-bk slice 3: the track number an insert stage uses in the key of the graph store (tracks and members are below 1000)
+constexpr int ARR_BK_INSERT_NR = 1000;
 constexpr int ARR_KIT_MAX = 8;          // 1.9: kit tracks per playback (spec E15); counted over tracks AND rack members
 // 1.9 U6 (spec E10, E15): instrument racks. A rack track holds up to ARR_RACK_GLIEDER members; every member of every rack takes one member slot
 // of the internal sinks (ARR_GLIED_PLAETZE in all). The sinks (RB-338, Baukasten, kit) index their per-slot arrays with ARR_SENKEN_PLAETZE: slots
-// 0..31 are the tracks, 32..63 the members, so a sink plays a member exactly like a track. The device of a member sits in
+// 0..127 are the tracks, 128..159 the members, so a sink plays a member exactly like a track. The device of a member sits in
 // ArrSnapshot::glied_spur[slot - ARR_SPUREN] (an ArrSpur holding only the device fields) and is read through ArrSnapshot::platz().
 constexpr int ARR_RACK_GLIEDER = 4;      // members per rack
 constexpr int ARR_RACK_MAX = 8;          // rack tracks per playback
 constexpr int ARR_GLIED_PLAETZE = 32;    // member slots in total (= ARR_RACK_MAX * ARR_RACK_GLIEDER)
 #ifdef CYPHERDJ_MUTATION_ARR_PLAETZE_NUR_SPUREN
-constexpr int ARR_SENKEN_PLAETZE = ARR_SPUREN;   // error case: the sinks know no member slots, a member at slot >= 32 is dropped
+constexpr int ARR_SENKEN_PLAETZE = ARR_SPUREN;   // error case: the sinks know no member slots, a member at slot >= ARR_SPUREN is dropped
 #else
 constexpr int ARR_SENKEN_PLAETZE = ARR_SPUREN + ARR_GLIED_PLAETZE;
 #endif
@@ -93,11 +110,12 @@ constexpr uint8_t ARR_AUTO_PAN = 1;              // pan -1..1
 constexpr uint8_t ARR_AUTO_MUTE = 2;             // mute 0 or 1, jump points only
 constexpr uint8_t ARR_AUTO_SOLO = 3;             // solo 0 or 1, jump points only
 constexpr uint8_t ARR_AUTO_GERAET = 4;           // a parameter of the internal device (RB-338), ArrAutoLane::param tells which, 0..1
+constexpr uint8_t ARR_AUTO_SEND = 5;             // the send of the track into return param + 1 (param 0..ARR_RETURNS - 1), dB -200..6, absolute only, block rate (Arrangement::auto_send)
 // Device parameter names by ArrAutoLane::param: own 0..3 numbering, not the rb_dsp ID order; task 4 maps it to the ID string via this table.
 constexpr int ARR_GERAET_PARAMS = 4;             // device lane parameters; every table and array of them is sized by this
 constexpr const char* ARR_GERAET_PARAM_NAME[ARR_GERAET_PARAMS] = {"lautstaerke", "cutoff", "resonanz", "env_mod"};
 constexpr int ARR_GERAET_LANE_PARAMS = BK_KNOEPFE;   // 1.12 slice 7: device lane parameters of the largest device (the Baukasten knobs k1..k64, 8 before the widening); the RB-338 uses the first ARR_GERAET_PARAMS
-constexpr int ARR_AUTO_LANES_JE_SPUR = 144;      // at most one absolute and one relative lane per (ziel, param): 72 targets x 2 slots (fader, pan, mute, solo, 4 RB-338 parameters, 64 Baukasten knobs)
+constexpr int ARR_AUTO_LANES_JE_SPUR = 160;      // at most one absolute and one relative lane per (ziel, param): 80 targets x 2 slots (fader, pan, mute, solo, 4 RB-338 parameters, 64 Baukasten knobs, 8 sends)
 constexpr double ARR_BLENDE_TOLERANZ = 1e-9;  // ein_beats + aus_beats <= laenge_beats + Toleranz (wie S2, model.ts)
 
 // FNV-1a 64 über den ID-Text (Clip-ID, Noten-ID "<clip_id>/<noten_id>"); der Lader prüft Eindeutigkeit je Spur.
@@ -113,15 +131,15 @@ inline uint64_t arr_id(const std::string& t) { return arr_id(t.data(), t.size())
 
 
 // Automation (ADR 032): one point of a lane. beat = project beat, wert = unit of the target (fader dB -200..6, pan -1..1,
-// mute/solo 0 or 1, device 0..1), form = segment INTO this point (0 linear, 1 s-curve, 2 jump). 16 bytes.
+// mute/solo 0 or 1, device 0..1, send dB -200..6), form = segment INTO this point (0 linear, 1 s-curve, 2 jump). 16 bytes.
 struct ArrAutoPunkt {
   double beat;
   float wert;
   uint8_t form;
 };
 struct ArrAutoLane {
-  uint8_t ziel;                     // ARR_AUTO_FADER, _PAN, _MUTE, _SOLO or _GERAET
-  uint8_t param;                    // ARR_AUTO_GERAET: RB-338: index into ARR_GERAET_PARAM_NAME (0..3); bk: knob index 0..63 (k1..k64); else 0
+  uint8_t ziel;                     // ARR_AUTO_FADER, _PAN, _MUTE, _SOLO, _GERAET or _SEND
+  uint8_t param;                    // ARR_AUTO_GERAET: RB-338: index into ARR_GERAET_PARAM_NAME (0..3); bk: knob index 0..63 (k1..k64); ARR_AUTO_SEND: return number - 1 (0..7); else 0
   bool relativ;                     // 1.12 slice 5: a summand lane (modulation), added to the base value or the absolute lane of the same target, then clamped; fader (dB), pan, geraet.* only
   int n;                            // points, at least 1, beats not falling (two at one beat are a jump)
   const ArrAutoPunkt* p;            // into ArrSnapshot::auto_punkte
@@ -227,7 +245,7 @@ struct ArrZelle {
 };
 
 struct ArrSpur {
-  int nr = 0;                        // 1..ARR_SPUREN (32); 0 = leer
+  int nr = 0;                        // 1..ARR_SPUREN (128); 0 = leer
   ArrArt art = ArrArt::leer;
   int8_t ausgang = 0;                // 1.10: 0 master, 1..ARR_GRUPPEN Gruppe (Wiedergabe /2)
   bool stumm_start = false;          // initial state: the track starts this playback muted (mute row 1, mute fade at 0 in the block of the swap; Wiedergabe /2 `stumm_start`)
@@ -330,7 +348,7 @@ struct ArrSeiten {
 
 // 1.10 slice 4a/4b: one stage of an insert chain. slot is the 0-based index into the pool of its kind (ins/<art>/<slot + 1>); an is the project's on flag
 // (a stage runs when this AND its row ins/<art>/<n>/an are on).
-enum class ArrInsArt : uint8_t { leer = 0, komp = 1, eq = 2, saett = 3, lim = 4, host = 5, utility = 6, bk = 7 };   // host: plan 1.11, a foreign plugin in an effect host process (arr_host_stufe.h)
+enum class ArrInsArt : uint8_t { leer = 0, komp = 1, eq = 2, saett = 3, lim = 4, host = 5, utility = 6, bk = 7, gate = 8, mb = 9 };   // host: plan 1.11, a foreign plugin in an effect host process (arr_host_stufe.h)
 // 1.10 slice 5 U1: the structural sidechain key of a compressor stage (spec 5.5, plan E8). quelle 0 = none (the stage listens to the row sc, the 4a path); this unit knows the
 // source kind ARR_SCHL_SPUR with the point ARR_SCHL_POST (the output of track `nr` after fader, pan and mute/solo fade). The pair (spur, pre) has exactly one writer, the row sc.
 constexpr uint8_t ARR_SCHL_KEINE = 0;
@@ -422,6 +440,7 @@ struct ArrRack {
 // playback. d[key] is the delay in samples of the place `key` (the keys are PDC_* of arr_pdc.h); 0 = no ring. gesamt is the largest path latency (the sum the
 // whole production adds to the transport), what the export skips and what the page shows.
 constexpr int ARR_PDC_SCHLUESSEL = ARR_SPUREN + ARR_GRUPPEN + ARR_RETURNS + 2 + ARR_RETURNS + 2 * ARR_GRUPPEN;   // tracks, groups, track sends per return, PM tracks, PM groups, PM returns, then the nested-group places: group input (direct-track sum) and group sends
+static_assert(ARR_PDC_SCHLUESSEL <= 255, "ArrPdcTabelle::ringe is uint8_t");   // 194 at 128 tracks
 struct ArrPdcTabelle {
   uint16_t d[ARR_PDC_SCHLUESSEL] = {};
   uint16_t gesamt = 0;
@@ -470,7 +489,7 @@ struct ArrSnapshot {
   // (slot); leer = slot unused. Only the device fields are used.
   ArrSpur glied_spur[ARR_GLIED_PLAETZE];
   int rack_wirt = 0;                 // 1.9 U6: Surge members in all racks (the rack sink adds the host lead time when it is above 0)
-  // The device of a sink slot: a track (0..31) or a rack member (32..63). One place, so the sinks stay unchanged apart from this lookup.
+  // The device of a sink slot: a track (0..127) or a rack member (128..159). One place, so the sinks stay unchanged apart from this lookup.
   const ArrSpur& platz(int p) const noexcept { return p < ARR_SPUREN ? spur[p] : glied_spur[p - ARR_SPUREN]; }
   bool ret_da[ARR_RETURNS] = {};     // 1.10 Slice 3: which returns the playback knows (index nr − 1); the sends themselves are controls, not data
   // Return fader lane (cypherdj-arr/3, `returns[].auto`): the fader lane of return nr - 1, absolute, at most one per return. The master takes no volume curve, a group none here.

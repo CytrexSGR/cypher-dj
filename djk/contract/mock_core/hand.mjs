@@ -71,7 +71,7 @@ function handAmRegler(K, e, s) {
   melde();
   meldeRegler(K, pfad, s);
   // 1.12 Slice 3 task 8 (D12): a grip on spur/<n>/<field> is a point of a take. The project beat at the grip sample, as the core computes it (wrapped at the loop end); K.arrPunkt applies the arm, the playing state and the 50 Hz window
-  const sp = /^spur\/([1-9][0-9]?)\/(fader|pan|mute|solo)$/.exec(pfad);
+  const sp = /^spur\/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])\/(fader|pan|mute|solo)$/.exec(pfad);
   if (sp && K.arrPunkt && K.arr.status === 2) K.arrPunkt(Number(sp[1]), sp[2], K.arrProjektBeat(s), w);
 }
 

@@ -18,7 +18,7 @@ namespace cdj {
 
 namespace sw = cypherdj::stellwerk;
 
-static_assert(ARR_SPUREN == sw::SPUR_REGLER_SPUREN, "Spur-Slots und Spur-Regler müssen gleich viele sein (E3)");
+static_assert(ARR_SPUREN == sw::SPUR_REGLER_SPUREN, "track slots and track rows must be the same number (E3; strand 1 slice 6: 128)");
 static_assert(ARR_GRUPPEN == sw::GRP_REGLER_GRUPPEN_ALLE, "Gruppen-Slots und Gruppen-Regler müssen gleich viele sein (1.10)");
 static_assert(ARR_RETURNS == sw::RET_REGLER_RETURNS, "return slots and return controls must be the same number (1.10 slice 3)");
 static_assert(ARR_RETURNS == sw::SND_REGLER, "send controls per source must match the return slots (1.10 slice 3)");
@@ -111,6 +111,25 @@ bool ins_zeile(const sw::ReglerDef& d, int* slot, int* param) {
     *param = static_cast<int>(r) - static_cast<int>(sw::Rolle::ins_bk_an);
     return true;
   }
+  if (r >= sw::Rolle::ins_gate_an && r <= sw::Rolle::ins_gate_release) {   // strand 1 slice 4: ins/gate/<n>/<parameter>, parameter 0..7 in the order of the roles
+    const int n = ins_nr(d.pfad, "ins/gate/", ARR_INS_GATE, &rest);
+    if (n < 1) return false;
+    *slot = ins_global(ArrInsArt::gate, n - 1);
+    *param = static_cast<int>(r) - static_cast<int>(sw::Rolle::ins_gate_an);
+    return true;
+  }
+  if (r >= sw::Rolle::ins_mb_an && r <= sw::Rolle::ins_mb_b_umgehen) {   // strand 1 slice 4: ins/mb/<n>/{an,grenze_tief,grenze_hoch} and ins/mb/<n>/b<m>/<parameter>, m = 1..3
+    const int n = ins_nr(d.pfad, "ins/mb/", ARR_INS_MB, &rest);
+    if (n < 1) return false;
+    *slot = ins_global(ArrInsArt::mb, n - 1);
+    if (r <= sw::Rolle::ins_mb_grenze_hoch) {
+      *param = static_cast<int>(r) - static_cast<int>(sw::Rolle::ins_mb_an);
+    } else {   // "b<m>/<name>"
+      if (rest[0] != 'b' || rest[1] < '1' || rest[1] > '3' || rest[2] != '/') return false;
+      *param = 3 + (rest[1] - '1') * INS_MB_BAND_PARAM + (static_cast<int>(r) - static_cast<int>(sw::Rolle::ins_mb_b_schwelle));
+    }
+    return true;
+  }
   if (r == sw::Rolle::ins_host_an) {   // plan 1.11 T4: ins/host/<n>/an, the only row of an effect-host stage
     const int n = ins_nr(d.pfad, "ins/host/", ARR_INS_HOST, &rest);
     if (n < 1) return false;
@@ -127,7 +146,7 @@ void Arrangement::regler_binden(const sw::ReglerTabelle& tab) {
   for (auto& je_spur : feld_regler_)
     for (int16_t& r : je_spur) r = -1;
   for (int r = 0; r < sw::MAX_REGLER; ++r) {
-    regler_spur_[r] = -1;   // strip index (track 0..31, group 32..47, PM 48, returns 49..52), name from D1 K1
+    regler_spur_[r] = -1;   // strip index (track 0..127, group 128..143, PM 144, returns 145..152), name from D1 K1
     regler_feld_[r] = -1;
     regler_ins_[r] = -1;
     regler_rack_[r] = -1;
@@ -158,7 +177,8 @@ void Arrangement::regler_binden(const sw::ReglerTabelle& tab) {
       continue;
     }
     if ((d.rolle >= sw::Rolle::ins_komp_an && d.rolle <= sw::Rolle::ins_saett_mix) ||
-        (d.rolle >= sw::Rolle::ins_lim_an && d.rolle <= sw::Rolle::ins_bk_k64)) {   // 1.10 slice 4a/4b + limiter + plan 1.11 host + arr-fx utility: the pooled insert rows (komp, eq, saett, lim, host, utility)
+        (d.rolle >= sw::Rolle::ins_lim_an && d.rolle <= sw::Rolle::ins_bk_k64) ||
+        (d.rolle >= sw::Rolle::ins_gate_an && d.rolle <= sw::Rolle::ins_mb_b_umgehen)) {   // strand 1 slice 4: gate and mb   // 1.10 slice 4a/4b + limiter + plan 1.11 host + arr-fx utility: the pooled insert rows (komp, eq, saett, lim, host, utility)
       int slot = 0, param = 0;
       if (ins_zeile(d, &slot, &param)) {
         regler_ins_[r] = static_cast<int16_t>(slot * INS_PARAM_MAX + param);
@@ -225,7 +245,7 @@ void Arrangement::regler_binden(const sw::ReglerTabelle& tab) {
     if (streifen < ARR_SPUREN && feld >= 0 && feld < ARR_FELDER) feld_regler_[streifen][feld] = static_cast<int16_t>(r);
     if (streifen < ARR_SPUREN && feld < 4 &&
         (d.rolle == sw::Rolle::spur_fader || d.rolle == sw::Rolle::spur_pan || d.rolle == sw::Rolle::spur_mute || d.rolle == sw::Rolle::spur_solo))
-      spur_regler_[streifen][feld] = static_cast<int16_t>(r);   // 1.12 S3: only spur/1..32/{fader,pan,mute,solo} can be grabbed (D1)
+      spur_regler_[streifen][feld] = static_cast<int16_t>(r);   // 1.12 S3: only spur/1..128/{fader,pan,mute,solo} can be grabbed (D1)
     if (d.rolle == sw::Rolle::ret_fader && streifen >= ARR_RET0 && streifen < ARR_RET0 + ARR_RETURNS && feld == ARR_AUTO_FADER)
       spur_regler_[ARR_SPUREN + (streifen - ARR_RET0)][ARR_AUTO_FADER] = static_cast<int16_t>(r);   // the hand overrides a return fader lane like a track fader lane
     w_[streifen][feld].w = d.vorgabe;
@@ -340,6 +360,19 @@ void Arrangement::ziele_pruefen() {
     } else if (gziel_w_[g] < 1.0f && gziel_alt_[g] > 0 && snap_->gruppen_ebene[gziel_alt_[g] - 1] <= snap_->gruppen_ebene[g]) {
       gziel_w_[g] = 1.0f;
     }
+  }
+}
+
+// Container core K7: the track trim of track i over m samples, in place (strand 12 B2: one function for the unit and for mischen())
+void Arrangement::trim_anwenden(int i, int m) {
+  const Wert& tr = w_[i][ARR_F_TRIM];
+  if (!tr.vl && (tr.w == 0.0f || tr.w != tr.w)) return;
+  auto klemm = [](float v) { return v != v ? 0.0f : std::min(24.0f, std::max(-24.0f, v)); };
+  float g = db_lin(klemm(tr.w));
+  for (int t = 0; t < m; ++t) {
+    if (tr.vl && (t == 0 || tr.vl[t] != tr.vl[t - 1])) g = db_lin(klemm(tr.vl[t]));
+    bus_l_[i][t] *= g;
+    bus_r_[i][t] *= g;
   }
 }
 
@@ -487,6 +520,11 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
     bool aktiv = false;
     const float* vl = nullptr;
     float lin = 0.0f;
+    // send automation: a lane ramp of this block (auto_send), the gain in closed form per sample so a skipped sample cannot drift it. Part one runs a0 -> b0 over [0, ts), part two
+    // (a loop seam inside the block, ts < m) a1 -> b1 over [ts, m). Unused (rampe false) for a cell envelope, a knob and every group.
+    bool rampe = false;
+    float a0 = 0.0f, b0 = 0.0f, a1 = 0.0f, b1 = 0.0f;
+    int ts = 0, m = 0;
   };
   // K5 (D-K3): the structural send mask of a live cypherdj-arr/4 snapshot. A strip whose top group leads into DJ output N reaches only the returns with ret_dj N; the weight of any other send is
   // ignored, whatever a row write set. dj = the DJ output of the strip's top group (0 = none: nothing is masked).
@@ -501,14 +539,27 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
     int n = 0;
     for (int r = 0; r < ARR_RETURNS; ++r) {
       const Wert sw_ = wert_ueber(streifen, arr_f_send(r));   // S1b K5: a cell envelope wins over the knob
+      // send automation: cell envelope > lane > knob. A track only (a group has no lane); the lane plan holds the gain ramp of this block
+      const bool zelle_da = streifen >= 0 && streifen < ARR_SPUREN && zell_ueber_[streifen][arr_f_send(r)].da && zell_ueber_[streifen][arr_f_send(r)].zeile >= 0;
+      const SendPlan* sl = streifen >= 0 && streifen < ARR_SPUREN && !zelle_da && send_plan_[streifen][r].da ? &send_plan_[streifen][r] : nullptr;
 #ifdef CYPHERDJ_MUTATION_ARR_SENDMASKE_AUS
       const bool fremd = false;   // error case: the mask is off, a row write crosses modules
 #else
       const bool fremd = snap_ && snap_->send_maske && snap_->ret_da[r] && snap_->ret_dj[r] != dj;
 #endif
+      if (sl) {   // the lane: exact 0 at -200 dB (db_lin), such a send does not feed the return at all
+        const bool zwei = sl->ts < m;
+        sd[r].aktiv = !fremd && ret_.rechnet(r, da(r)) && (sl->a0 > 0.0f || sl->b0 > 0.0f || (zwei && (sl->a1 > 0.0f || sl->b1 > 0.0f)));
+        sd[r].vl = nullptr;
+        sd[r].rampe = sl->a0 != sl->b0 || zwei;
+        sd[r].a0 = sl->a0, sd[r].b0 = sl->b0, sd[r].a1 = sl->a1, sd[r].b1 = sl->b1;
+        sd[r].ts = sl->ts, sd[r].m = m;
+        sd[r].lin = sl->a0;
+      } else {
       sd[r].aktiv = !fremd && ret_.rechnet(r, da(r)) && (sw_.vl || sw_.w > -120.0f);
       sd[r].vl = sw_.vl;
       sd[r].lin = db_lin(sw_.w);
+      }
       if (!sd[r].aktiv) continue;
       ++n;
       if (!ret_.benutzt(r)) {
@@ -539,30 +590,14 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
   // chain (or tail) takes no pass and no copy: its output stays bit-equal to the build before this slice (AK1).
   // Sidechain keys (T4, spec 2.3): the input of a track that some stage names as its key is copied BEFORE any chain runs, so the key is never a
   // chain output and does not depend on the order of the strips. A track without signal has a silent bus (memset above): a silent key.
-  ins_.makros_planen(snap_ ? snap_->kette : nullptr, snap_ ? snap_->rack : nullptr, m);   // 1.10 slice 4c: the macro values of the racks become parameter values, before any parameter is read
-  ins_.schluessel_planen(m);
-  // 1.10 slice 5 U2b (E6, E7): the key sources of this block (containers A..D, streams 1..16) go into the key buffers of the stages that listen to them. They are there before any strip runs, for every consumer. A nullptr
-  // input captures nothing: the buffer keeps the zero schluessel_planen() wrote, so a deck that stopped gives a silent key, never the samples of the block before.
-#ifndef CYPHERDJ_MUTATION_SC_DJ_NULL   // error case: the DJ pointers are ignored, the keys of deck and erz stay silent
-  for (int i = 0; i < ARR_SCHLUESSEL; ++i)   // K4: i 0..3 containers A..D, i 4..19 streams 1..16
-    if (dj_l_[i] && dj_r_[i]) ins_.kopiere(i < 4 ? ARR_SCHL_DECK : ARR_SCHL_ERZ, ARR_SCHL_POST, i < 4 ? i + 1 : i - 3, dj_l_[i], dj_r_[i], m);
-#endif
+  // Strand 12 B2: makros_planen(), schluessel_planen() and the DJ key copies run in block() before phase Q (a track chain may run inside its unit); kette_einheit_ marks the tracks
+  // whose trim and chain ran there. Their trim, key copy and chain are skipped below; PDC, filter, the fader loop, sends and the post capture are unchanged.
   // Container core K7: the track trim (spur/<n>/trim, dB, -24..+24) in front of everything the strip does, also in front of the key copy below: the strip, the sidechain keys and the sends all see the
   // trimmed signal, like the trim of a container strip. A base value of 0 and no course is skipped (bit-equal). The gain is computed again only where the value changes. No allocation.
-  for (int i = 0; i < ARR_SPUREN; ++i) {
-    const Wert& tr = w_[i][ARR_F_TRIM];
-    if (!tr.vl && (tr.w == 0.0f || tr.w != tr.w)) continue;
-    auto klemm = [](float v) { return v != v ? 0.0f : std::min(24.0f, std::max(-24.0f, v)); };
-    float g = db_lin(klemm(tr.w));
-    for (int t = 0; t < m; ++t) {
-      if (tr.vl && (t == 0 || tr.vl[t] != tr.vl[t - 1])) g = db_lin(klemm(tr.vl[t]));
-      bus_l_[i][t] *= g;
-      bus_r_[i][t] *= g;
-    }
-  }
+  for (int i = 0; i < ARR_SPUREN; ++i)
+    if (!kette_einheit_.test(i)) trim_anwenden(i, m);
 #ifndef CYPHERDJ_MUTATION_INS_SC_NACH_KETTE
-  for (int t = 0; t < ARR_SPUREN; ++t)
-    if ((ins_.schluessel_maske() >> t) & 1u) ins_.schluessel_sichern(t, bus_l_[t], bus_r_[t], m);
+  ins_.schluessel_maske().je_bit([&](int t) { ins_.schluessel_sichern(t, bus_l_[t], bus_r_[t], m); });   // ascending, as the loop before
 #endif
   // 1.10 slice 5 U1: one pass per track in snap_->spur_ordnung: the chain, the delay compensation, then the fader loop of the track below. A track whose stage listens to the
   // post of another track runs after it (arr_key.h); the order is the identity without such keys, so the sums are formed in the order of the build before this slice.
@@ -572,7 +607,7 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
 #else
     const int i = snap_ ? static_cast<int>(snap_->spur_ordnung[ii]) : ii;
 #endif
-    if (ins_.hat(i)) {
+    if (ins_.hat(i) && !kette_einheit_.test(i)) {   // strand 12 B2: a track of kette_einheit_ ran its chain in its unit
 #ifdef CYPHERDJ_MUTATION_INS_NACH_FADER
       {   // error case: the chain sits after the fader (the base value of the fader is applied first, the loop below then multiplies by 1)
         const float f0 = db_lin(w_[i][0].w);
@@ -734,7 +769,7 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
     if (mon_[i].klingt) monitor_spur_addieren(i, m, bus_l_[i], bus_r_[i]);
 #endif
 #ifdef CYPHERDJ_MUTATION_INS_SC_NACH_KETTE
-    if ((ins_.schluessel_maske() >> i) & 1u) ins_.schluessel_sichern(i, bus_l_[i], bus_r_[i], m);
+    if (ins_.schluessel_maske().test(i)) ins_.schluessel_sichern(i, bus_l_[i], bus_r_[i], m);
 #endif
     // Container core K7: the track pfl (spur/<n>/pfl, rides on the cue field) puts the track signal as it stands here (behind trim, chain, filter, EQ and kill, in front of fader, pan and the mute fade, like the
     // group cue and the PFL of a container strip) into the cue sum; the master path is not touched. With the row at 0 nothing is written: the cue bus stays bit-identical.
@@ -826,8 +861,8 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
     const bool fx3 = fx3_kann && (fx3_zuw_[i] || fx3_gew_[i] > 0.0f || fx3_rest_[i] > 0);
     const bool puffer = fx_weg || fx3;   // what goes into the target is held back for the second pass after this loop
     const float* gbl = zg > 0 ? gsend[zg - 1] : nullptr;   // fade of the target group and of its ancestors: a muted group silences the sends of its members too
-    float* kpl[ARR_INS_KOMP];   // structural post keys (slice 5 U1): the key buffers of the stages listening to the post of this track, mostly none
-    float* kpr[ARR_INS_KOMP];
+    float* kpl[ARR_INS_SCHL];   // structural post keys (slice 5 U1): the key buffers of the stages listening to the post of this track, mostly none
+    float* kpr[ARR_INS_SCHL];
     const int nk = ins_.post_ziele(i, kpl, kpr);
     // 1.10 T9: render-only key mask. Live nur_schl_ is false: one branch per strip and block, the gains stay 1.0f (x * 1.0f is bit-equal)
     const float gz = nur_schl_ && (nur_ziel_aus_[i] || (trocken_aus_ && zg == 0)) ? 0.0f : 1.0f, gs = nur_schl_ && nur_sends_aus_[i] ? 0.0f : 1.0f;   // T10: dry-out too
@@ -914,7 +949,13 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
 #endif
         for (int q = 0; q < ARR_RETURNS; ++q) {
           if (!sd[q].aktiv) continue;
-          if (sd[q].vl && (t == 0 || sd[q].vl[t] != sd[q].vl[t - 1])) sd[q].lin = db_lin(sd[q].vl[t]);
+          if (sd[q].rampe) {   // send lane: part one over [0, ts), after a loop seam part two
+            const Send& z = sd[q];
+            sd[q].lin = t < z.ts ? z.a0 + (z.b0 - z.a0) * static_cast<float>(t + 1) / static_cast<float>(z.ts)
+                                 : z.a1 + (z.b1 - z.a1) * static_cast<float>(t - z.ts) / static_cast<float>(std::max(1, z.m - 1 - z.ts));
+          } else if (sd[q].vl && (t == 0 || sd[q].vl[t] != sd[q].vl[t - 1])) {
+            sd[q].lin = db_lin(sd[q].vl[t]);
+          }
           const float k = sd[q].lin * gb * gs;
           ret_.ein_l(q)[t] += pre_post(sl, pl, ret_pre_t_[q][t]) * k;
           ret_.ein_r(q)[t] += pre_post(sr, pr, ret_pre_t_[q][t]) * k;
@@ -1152,8 +1193,8 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
       const float* ganc = zg > 0 ? gsend[zg - 1] : nullptr;
       Send sd[ARR_RETURNS];
       const int n_sends = sends_bereiten(s, sd, snap_ ? top_dj(g + 1) : 0);
-      float* kpl[ARR_INS_KOMP];   // structural post keys of this group (slice 5 U2a): the key buffers of the stages listening to it, mostly none
-      float* kpr[ARR_INS_KOMP];
+      float* kpl[ARR_INS_SCHL];   // structural post keys of this group (slice 5 U2a): the key buffers of the stages listening to it, mostly none
+      float* kpr[ARR_INS_SCHL];
       const int nk = ins_.ziele(ARR_SCHL_GRP, ARR_SCHL_POST, g + 1, kpl, kpr);
       // 1.10 T9, T10: render-only key mask and dry-out (live: both 1.0f). The dry-out zeroes a group only when it goes to the master, as it does a track (zg == 0)
       const float gz = nur_schl_ && (nur_ziel_aus_[s] || (trocken_aus_ && zg == 0)) ? 0.0f : 1.0f, gs = nur_schl_ && nur_sends_aus_[s] ? 0.0f : 1.0f;
@@ -1328,10 +1369,10 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
     // written over the input buffer, then the chain runs in place, and the strip loop below reads the result. A return without a chain (or tail) takes
     // no pass and keeps its output bit-equal to the build before this slice. The wet/dry weight ag advances here on a copy; the loop below advances the real one.
     bool vorgemischt = false;
-    float* kpl[ARR_INS_KOMP];   // structural keys of this return (slice 5 U2a): pre = the Hall blend before the chain, post = after fader, fades and presence; mostly none
-    float* kpr[ARR_INS_KOMP];
-    float* kql[ARR_INS_KOMP];
-    float* kqr[ARR_INS_KOMP];
+    float* kpl[ARR_INS_SCHL];   // structural keys of this return (slice 5 U2a): pre = the Hall blend before the chain, post = after fader, fades and presence; mostly none
+    float* kpr[ARR_INS_SCHL];
+    float* kql[ARR_INS_SCHL];
+    float* kqr[ARR_INS_SCHL];
     const int nkp = ins_.ziele(ARR_SCHL_RET, ARR_SCHL_PRE, r + 1, kpl, kpr);
     const int nkq = ins_.ziele(ARR_SCHL_RET, ARR_SCHL_POST, r + 1, kql, kqr);
     const float gz = nur_schl_ && nur_ziel_aus_[s] ? 0.0f : 1.0f;   // 1.10 T9: render-only key mask (live: 1.0f)

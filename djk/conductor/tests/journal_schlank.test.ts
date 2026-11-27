@@ -115,7 +115,7 @@ test('mode schlank: status lines only when the data differ from the last journal
   assert.equal(w('schlank', 'kern', '/zustand/hall_pool', hall, m), true);
   assert.equal(w('schlank', 'kern', '/zustand/hall_pool', { ...hall }, m), false);
   assert.equal(w('schlank', 'kern', '/zustand/hall_pool', { ...hall, zurueck: 4 }, m), true, 'zurueck of hall_pool is compared');
-  const ins = { h_1: 1, gesund_1: 1, rundweg_1: 5, h_2: 2, gesund_2: 1, rundweg_2: 5, h_3: 3, gesund_3: 1, rundweg_3: 5, h_4: 4, gesund_4: 1, rundweg_4: 5 };
+  const ins = { h_1: 1, gesund_1: 1, rundweg_1: 5, h_2: 2, gesund_2: 1, rundweg_2: 5, h_3: 3, gesund_3: 1, rundweg_3: 5, h_4: 4, gesund_4: 1, rundweg_4: 5, h_5: 5, gesund_5: 1, rundweg_5: 5, h_6: 6, gesund_6: 1, rundweg_6: 5, h_7: 7, gesund_7: 1, rundweg_7: 5, h_8: 8, gesund_8: 1, rundweg_8: 5 };
   assert.equal(w('schlank', 'kern', '/zustand/ins_host', ins, m), true);
   assert.equal(w('schlank', 'kern', '/zustand/ins_host', { ...ins }, m), false);
   assert.equal(w('schlank', 'kern', '/zustand/ins_host', { ...ins, gesund_3: 0 }, m), true);

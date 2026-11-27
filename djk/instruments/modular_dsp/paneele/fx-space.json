@@ -1,0 +1,21 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "fx-space"},
+  "title": "Cypher Space",
+  "akzent": "tuerkis",
+  "sections": [
+    { "id": "space", "title": "SPACE", "cols": 2, "controls": [
+      {"id": "l1", "type": "label", "span": 2, "text": "Room: Hall. Other rooms: ROOM in the header, presets, or LOAD IR"},
+      {"id": "mix", "type": "knob", "label": "Mix", "bind": {"param": "k1"}, "format": "percent", "default": 0.5},
+      {"id": "pre", "type": "knob", "label": "Pre-delay", "bind": {"param": "k2"}, "format": "ms", "default": 0.5, "wirkt": {"ueber": ["mix", 0.02]}, "wirkt_text": "Dry only: turn up Mix"}
+    ]},
+    { "id": "ton", "title": "TONE", "cols": 3, "controls": [
+      {"id": "lc", "type": "knob", "label": "Low cut", "bind": {"param": "k3"}, "format": "hz", "default": 0.5, "wirkt": {"ueber": ["mix", 0.02]}, "wirkt_text": "Dry only: turn up Mix"},
+      {"id": "hc", "type": "knob", "label": "High cut", "bind": {"param": "k4"}, "format": "hz", "default": 0.5, "wirkt": {"ueber": ["mix", 0.02]}, "wirkt_text": "Dry only: turn up Mix"},
+      {"id": "breite", "type": "knob", "label": "Width", "bind": {"param": "k5"}, "format": "percent", "default": 0.5, "wirkt": {"ueber": ["mix", 0.02]}, "wirkt_text": "Dry only: turn up Mix"}
+    ]},
+    { "id": "blend", "title": "BLEND", "cols": 1, "controls": [
+      {"id": "algo", "type": "knob", "label": "Algo blend", "bind": {"param": "k6"}, "format": "percent", "default": 0, "wirkt": {"ueber": ["mix", 0.02]}, "wirkt_text": "Dry only: turn up Mix"}
+    ]}
+  ]
+}

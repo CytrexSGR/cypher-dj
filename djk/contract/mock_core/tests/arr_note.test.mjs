@@ -1,5 +1,5 @@
 // node --test tests/arr_note.test.mjs: /k/arr/note in the stand-in (INTERFACES 4.11; sampler plan A1 task 7).
-// Like the core: spur 1..32 (spur_bereich), ton and vel 0..127 (ausserhalb_bereich), acknowledged 1 and 3, no arm and no running transport needed; cypher in the AI stop is
+// Like the core: spur 1..128 (spur_bereich), ton and vel 0..127 (ausserhalb_bereich), acknowledged 1 and 3, no arm and no running transport needed; cypher in the AI stop is
 // refused ki_gestoppt before any range check; a refused note is not recorded.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,17 +23,17 @@ test('arr_note: a note with the transport standing and no arm is acknowledged 1,
   const { K, log, bis, note } = kern();
   note(1, 'andreas', 1, 60, 100);
   note(2, 'andreas', 1, 60, 0);
-  note(3, 'cypher', 32, 127, 127);
+  note(3, 'cypher', 128, 127, 127);
   bis(4000);
   for (const id of [1, 2, 3]) assert.deepEqual(grund(log, id), ['1', '3'], `command ${id}`);
-  assert.deepEqual(K.arr.noten, [{ spur: 1, ton: 60, vel: 100 }, { spur: 1, ton: 60, vel: 0 }, { spur: 32, ton: 127, vel: 127 }]);
+  assert.deepEqual(K.arr.noten, [{ spur: 1, ton: 60, vel: 100 }, { spur: 1, ton: 60, vel: 0 }, { spur: 128, ton: 127, vel: 127 }]);
   assert.equal(K.arr.status, 0, 'the transport stood');
 });
 
-test('arr_note: spur outside 1..32 is spur_bereich, ton or vel outside 0..127 is ausserhalb_bereich; nothing is recorded', () => {
+test('arr_note: spur outside 1..128 is spur_bereich, ton or vel outside 0..127 is ausserhalb_bereich; nothing is recorded', () => {
   const { K, log, bis, note } = kern();
   note(10, 'andreas', 0, 60, 100);
-  note(11, 'andreas', 33, 60, 100);
+  note(11, 'andreas', 129, 60, 100);
   note(12, 'andreas', -1, 60, 100);
   note(13, 'andreas', 1, 128, 100);
   note(14, 'andreas', 1, -1, 100);

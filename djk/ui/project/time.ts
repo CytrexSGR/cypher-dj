@@ -6,6 +6,7 @@ import { laneWert } from './lane.ts';
 import { ABSCHNITT_BEATS_MAX, ABSCHNITTE_MAX, type TrackerAbschnitt } from './tracker.ts';
 import { ab, runde9 } from './commands_helpers.ts';
 import { mitglieder } from './verbund.ts';
+import { bewegeMarker, ordneMarker } from './marker.ts';
 
 const EPS = 1e-9;
 /** The length of a default section in beats (the page shows a project without `abschnitte` in sections of this length). */
@@ -47,6 +48,12 @@ export function zeitEinfuegen(p: Projekt, beat: number, beats: number): void {
   for (const { strang } of alleStraenge(p)) {
     for (const l of strang.automation ?? []) for (const q of l.punkte) if (q.beat >= beat - EPS) q.beat = runde9(q.beat + beats);
   }
+  const markerId = new Map((p.marker ?? []).map((m) => [m.beat, m.id]));
+  bewegeMarker(p, (b) => {          // markers move like lane points: at or behind the insert point later
+    const n = b >= beat - EPS ? runde9(b + beats) : b;
+    if (n > MAX_BEAT) ab('zu_gross', `marker ${markerId.get(b)} would end past beat ${MAX_BEAT}`);
+    return n;
+  });
   // the loop and the punch range: a start at or after the beat moves, an end behind it moves (an end exactly at the beat is the end of what lies before)
   for (const [r, was] of bereiche(p)) {
     if (r.von_beat >= beat - EPS) r.von_beat = runde9(r.von_beat + beats);
@@ -85,6 +92,8 @@ export function zeitEntfernen(p: Projekt, beat: number, beats: number): void {
   }
   for (const o of alleClips(p)) if (o.clip.start_beat >= e - EPS) o.clip.start_beat = runde9(o.clip.start_beat - beats);
   for (const { strang } of alleStraenge(p)) for (const l of strang.automation ?? []) entferneAusLane(l, beat, e, beats);
+  // markers follow the lane points: [beat, end) goes (also a marker on `beat`), a marker on the end lands on `beat`, later ones move earlier
+  bewegeMarker(p, (b) => (b < beat - EPS ? b : b < e - EPS ? null : runde9(b - beats)));
   const hin = (x: number): number => (x <= beat + EPS ? x : x >= e - EPS ? runde9(x - beats) : beat);
   const von = hin(p.loop.von_beat), bis = hin(p.loop.bis_beat);
   if (bis - von < 1) {        // the loop lay inside the removed time: it has no place any more, so it is switched off (a loop is at least 1 beat)
@@ -230,6 +239,8 @@ export function abschnittVerschieben(p: Projekt, id: string, richtung: number): 
       lane.punkte.sort((x, y) => x.beat - y.beat);
     }
   }
+  for (const m of p.marker ?? []) { const d = lage(m.beat); if (d !== null) m.beat = runde9(m.beat + d); }
+  ordneMarker(p);
   [l[k], l[k + 1]] = [l[k + 1], l[k]];
 }
 

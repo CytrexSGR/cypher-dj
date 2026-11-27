@@ -66,9 +66,8 @@ export default {
       if (!(a.an === 0 || a.an === 1)) return K.q(b, 6, 'ausserhalb_bereich');
       K.sofort(b, () => { K.lernen = a.an === 1 ? a.id : null; return null; });
     },
-    '/k/live/tasten': (K, a, b) => {  // N2: the stream that plays the keys of the midi_ein places; hand work, range first as in the core
+    '/k/live/tasten': (K, a, b) => {  // N2: the stream that plays the keys of the midi_ein places; every source may, range check only
       if (!(a.strom === 0 || (a.strom >= 2 && a.strom <= 10 && a.strom !== 4 && a.strom !== 8))) return K.q(b, 6, 'ausserhalb_bereich');
-      if (a.quelle === 'cypher') return K.q(b, 6, 'nur_hand');
       K.sofort(b, () => { K.tastenZiel = a.strom; return null; });
     },
     '/k/latenz': (K, a, b) => {

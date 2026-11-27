@@ -62,8 +62,9 @@ Named versions are never removed.
 
 ## 8. Export
 
-Click `EXPORT`. With `LOOP` on, only the loop bracket is exported, otherwise the whole song. The export is a WAV file (48 kHz,
-32 bit float) in the export folder of the project, never overwriting an older one, and the page says `Export finished`. For a
+Click `EXPORT`: it opens the export dialog. With `LOOP` on, only the loop bracket is exported, otherwise the whole song. Leave the
+format on `Master only` and click `EXPORT` in the dialog. The export is a WAV file (48 kHz, 32 bit float) in the export folder of
+the project, never overwriting an older one, and the page says `Export finished`. For a
 test export of the chapter's song, set the loop bracket to bars 1 to 8 first (`LOOP`, `BAR 1 TO 8`).
 
 The first export is quiet: its loudest point is about -28 dB, and the sound does not clip. This is not a fault. The sound

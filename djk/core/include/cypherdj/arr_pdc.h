@@ -53,7 +53,7 @@ constexpr int PDC_GRPEIN0 = PDC_PM_RET0 + ARR_RETURNS;     // nested groups: the
 constexpr int PDC_GRPSEND0 = PDC_GRPEIN0 + ARR_GRUPPEN;    // nested groups: the sends of group g (one place per group, not per return)
 static_assert(PDC_GRPSEND0 + ARR_GRUPPEN == ARR_PDC_SCHLUESSEL, "the key list and the table size must agree");
 // longest delay of one place; the loader refuses a playback that needs more (pdc_zu_lang). Plan 1.11 (D5): 1024 -> 8192, so that a host stage of up to ARR_HOST_LAT_MAX - 1 samples fits and every
-// other place can still be delayed by it. Memory: ARR_PDC_SCHLUESSEL places x 2 channels x ARR_PDC_RING floats in ArrPdc (3.1 MiB), 32 KiB shift scratch per lane (ArrArbeit), all preallocated.
+// other place can still be delayed by it. Memory: ARR_PDC_SCHLUESSEL places x 2 channels x ARR_PDC_RING floats in ArrPdc (12.1 MiB at 128 tracks: 194 places), 32 KiB shift scratch per lane (ArrArbeit), all preallocated.
 constexpr int ARR_PDC_RING = 8192;
 static_assert(ARR_HOST_LAT_MAX <= ARR_PDC_RING, "the longest host latency must fit one PDC place");
 constexpr int PDC_BLENDE = 480;         // plan 1.11: a changed delay (reload with another host latency) crosses over to the new one in this many samples of the block of the change
@@ -73,6 +73,8 @@ inline int ins_latenz(ArrInsArt art) {
     case ArrInsArt::saett: return saett;
     case ArrInsArt::lim: return ins_lim_latenz();   // from a KanalLimiter with the fixed settings of ins_lim.h (86 samples, true-peak mode)
     case ArrInsArt::utility: return 0;              // arr-fx: the Utility module is IIR only, the impulse comes out at sample 0 (dsp/tests/test_utility.cpp, pinned in test_arr_inserts_util)
+    case ArrInsArt::gate: return 0;                 // strand 1 slice 4: the Gate has no look-ahead (gate.h)
+    case ArrInsArt::mb: return 0;                   // strand 1 slice 4: MultibandKompressor::latenz_samples() is 0 (no lookahead)
     default: return 0;
   }
 }

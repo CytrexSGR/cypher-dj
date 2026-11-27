@@ -2,7 +2,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TASTEN_BREITE, TON_HOEHE, VEL_HOEHE, tonName, istSchwarz, neueRollAnsicht, beatZuRx, rxZuBeat, yZuTon, trefferNote, trefferVel, velZuY, yZuVel,
-  naechsteNotenIds, neueNote, verschiebeNoten, dehneNoten, velocityNoten, quantisiere, rechteckAuswahl, bereichAuswahl, tastenSchritt, auswahlVel, zoomRoll, scrolleTon, notenLabel } from '../public/production/pianoroll.js';
+  naechsteNotenIds, neueNote, verschiebeNoten, dehneNoten, velocityNoten, quantisiere, rechteckAuswahl, bereichAuswahl, tastenSchritt, auswahlVel, zoomRoll, scrolleTon, notenLabel,
+  rollRasterId, rasterRolle } from '../public/production/pianoroll.js';
+import { linien } from '../public/production/timeline.js';
+import { quantisiereNoten } from '../public/production/notes_tools.js';
 
 const A = { beat0: 0, pxProBeat: 20, tonOben: 60 };
 const clip = () => ({ id: 'c3', art: 'midi', start_beat: 4, laenge_beats: 4, noten: [
@@ -75,4 +78,58 @@ test('Shift+click: the range between two notes takes every note in their span of
   assert.deepEqual(bereichAuswahl(clip, 'c', 'a'), ['a', 'b', 'c']);
   assert.deepEqual(bereichAuswahl(clip, 'weg', 'b'), ['b']);
   assert.deepEqual(bereichAuswahl(clip, 'a', 'weg'), []);
+});
+
+// ---- grid values of the roll, triplets, scale lock, grid lines (piano roll tools) ----
+test('roll grid: ids, legacy stored values map to the new ids, only unknown falls back to 1/16', () => {
+  for (const id of ['1/32', '1/16T', '1/16', '1/8T', '1/8', '1/4T', '1/4', 'bar', 'off']) assert.equal(rollRasterId(id), id);
+  assert.deepEqual(['sechzehntel', 'achtel', 'beat', 'takt', 'aus'].map(rollRasterId), ['1/16', '1/8', '1/4', 'bar', 'off'], 'the ids of the old table');
+  for (const w of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) assert.equal(rollRasterId(w), '1/16', w);
+  assert.equal(rollRasterId('quatsch'), '1/16'); assert.equal(rollRasterId(null), '1/16'); assert.equal(rollRasterId(undefined), '1/16');
+  assert.equal(rasterRolle('1/32', 4), 0.125); assert.equal(rasterRolle('1/8T', 4), 1 / 3);
+  assert.equal(rasterRolle('bar', 3), 3, 'BAR follows the meter'); assert.equal(rasterRolle('bar', 4), 4); assert.equal(rasterRolle('off', 4), 0);
+  assert.equal(rasterRolle('takt', 4), 4, 'a legacy value works too');
+});
+
+test('roll grid: a drawn, moved and stretched triplet note lies exactly on the grid (second quantise changes nothing)', () => {
+  const p = { spuren: [{ clips: [clip()] }] }, r = 1 / 3;
+  const n = neueNote(p, 0.4, 62, r, r);
+  assert.equal(n.beat, 0.333333333, 'rounded to 1e-9');
+  const c = { noten: [n, { id: 'n9', beat: 0, laenge: 1, ton: 60, vel: 100 }] };
+  assert.deepEqual(quantisiereNoten(c.noten, { raster_beats: r, grenze: 4 }), [], 'already on the 1/8T grid');
+  const v = verschiebeNoten(c, ['n9'], 'n9', 1.1, 0, r);
+  assert.deepEqual(v, [{ id: 'n9', beat: 1 }]);
+  const v2 = verschiebeNoten(c, ['n9'], 'n9', 0.7, 0, r);
+  assert.deepEqual(v2, [{ id: 'n9', beat: 0.666666667 }]);
+  const d = dehneNoten(c, ['n9'], 'n9', 0.4, r);
+  assert.deepEqual(d, [{ id: 'n9', laenge: 1.333333333 }]);
+  assert.deepEqual(quantisiereNoten([{ ...c.noten[1], beat: v2[0].beat }], { raster_beats: r, grenze: 4 }), []);
+});
+
+test('scale lock: new note, drag and degree steps stay in the key (ties go down as rasteEin does)', () => {
+  const am = { grundton: 9, skala: 'minor' };
+  const p = { spuren: [{ clips: [clip()] }] };
+  assert.equal(neueNote(p, 0, 73, 0.25, 0.5, 100, am).ton, 72, 'C#4 -> C4');
+  assert.equal(neueNote(p, 0, 73, 0.25, 0.5).ton, 73, 'without a key the pitch stays');
+  const c = { noten: [{ id: 'a', beat: 0, laenge: 1, ton: 69, vel: 90 }, { id: 'b', beat: 1, laenge: 1, ton: 64, vel: 90 }] };
+  assert.deepEqual(verschiebeNoten(c, ['a'], 'a', 0, 2, 0, am), [{ id: 'a', ton: 71 }], 'A + 2 semitones = B, in the key');
+  assert.deepEqual(verschiebeNoten(c, ['a'], 'a', 0, 1, 0, am), [], 'A + 1 = A#, not in the key, the nearest is A again (tie down): nothing changes');
+  assert.deepEqual(verschiebeNoten(c, ['a'], 'a', 0, 4, 0, am), [{ id: 'a', ton: 72 }], 'A + 4 = C#, the nearest key pitch is C');
+  assert.deepEqual(verschiebeNoten(c, ['a'], 'a', 0, 1, 0), [{ id: 'a', ton: 70 }], 'no key: a semitone');
+  assert.deepEqual(verschiebeNoten(c, ['a', 'b'], 'a', 0, 0, 0, am, 1), [{ id: 'a', ton: 71 }, { id: 'b', ton: 65 }], 'one degree up: A -> B, E -> F');
+  assert.deepEqual(verschiebeNoten(c, ['a'], 'a', 0, 0, 0, am, -1), [{ id: 'a', ton: 67 }], 'one degree down: A -> G');
+  assert.deepEqual(verschiebeNoten(c, ['a'], 'a', 1, 0, 0.25, am), [{ id: 'a', beat: 1 }], 'a horizontal move leaves the pitch alone');
+  assert.deepEqual(verschiebeNoten({ noten: [{ id: 'z', beat: 0, laenge: 1, ton: 127, vel: 90 }] }, ['z'], 'z', 0, 0, 0, am, 3), [], 'a step that leaves 0..127 changes nothing');
+});
+
+test('roll grid lines: the chosen grid, also finer than a sixteenth and triplets, only when the lines are at least 6 px apart', () => {
+  const xs = (px, raster) => linien({ beat0: 0, pxProBeat: px }, 120, 4, raster).map((l) => l.beat).filter((b) => b < 1.01);
+  assert.deepEqual(xs(80, 0.125), [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1], '1/32 at 10 px');
+  assert.ok(!xs(20, 0.125).includes(0.125), '1/32 at 2.5 px: not drawn');
+  assert.deepEqual(xs(60, 1 / 3), [0, 0.333333333, 0.666666667, 1], '1/8T at 20 px');
+  assert.ok(xs(20, 1 / 3).includes(0.333333333), '1/8T at 6.7 px');
+  assert.ok(!xs(15, 1 / 3).includes(0.333333333), '1/8T at 5 px: not drawn');
+  const eins = (px, r) => linien({ beat0: 0, pxProBeat: px }, 120, 4, r), alt = (px) => linien({ beat0: 0, pxProBeat: px }, 120, 4);
+  assert.deepEqual(eins(20, 0), alt(20), 'raster 0 (OFF) and no raster: the default lines');
+  assert.deepEqual(eins(20, null), alt(20));
 });

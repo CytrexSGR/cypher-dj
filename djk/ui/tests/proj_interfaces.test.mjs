@@ -33,7 +33,7 @@ test('K1 /k/arr/laden trägt nr (Spec 6.1), /zustand/arr meldet nr; Spur-Fader b
   assert.deepEqual(await ctx.warteQuittung(teil(6.5)), { status: 6, grund: 'ausserhalb_bereich' });
 });
 
-test('K1 KI-Spur-Listen (Spec 6.15, 6.22; E-a): E3 P1: nur spur/0 angenommen, spur/1, spur/33 und spur/135 abgelehnt; der KI-Stopp senkt keinen Fader', async (t) => {
+test('K1 KI-Spur-Listen (Spec 6.15, 6.22; E-a): E3 P1: nur spur/0 angenommen, spur/1, spur/129 und spur/135 abgelehnt; der KI-Stopp senkt keinen Fader', async (t) => {
   const { o } = await stapel(t);
   const ctx = o.bereichKontext();
   const regler = [];
@@ -53,7 +53,7 @@ test('K1 KI-Spur-Listen (Spec 6.15, 6.22; E-a): E3 P1: nur spur/0 angenommen, sp
   await q('/k/ki/stopp', { quelle: 'andreas' });
   await warte(3000);                                    // länger als die frühere Ausblende (4 Beats bei 128 BPM: 1,9 s)
   assert.deepEqual(regler.map((f) => [f.pfad, f.wert]), [], 'E-a: kein Fader in einer KI-Spur bewegt sich (vorher beide auf −200)');
-  assert.equal((await q('/k/ki/spur', { quelle: 'andreas', kanaele: 'spur/33' })).status, 6, 'Spur 33 gibt es nicht');
+  assert.equal((await q('/k/ki/spur', { quelle: 'andreas', kanaele: 'spur/129' })).status, 6, 'Spur 129 gibt es nicht');
   assert.equal((await q('/k/ki/spur', { quelle: 'andreas', kanaele: 'spur/135' })).status, 6, 'E3 P1: keine Spur-Maske');
   assert.ok(ok(await q('/k/ki/spur', { quelle: 'andreas', kanaele: 'spur/0' })), 'spur/0 angenommen');
   // Negativ-Kontrolle: Andreas' Hand wirkt im Stopp weiter (die Freigabe ist nicht nötig, um einen Fader zu setzen)

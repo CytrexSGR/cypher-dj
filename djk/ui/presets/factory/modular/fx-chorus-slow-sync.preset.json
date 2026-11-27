@@ -1,0 +1,41 @@
+{
+ "schema": 1,
+ "name": "Chorus / slow sync",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "fx-chorus",
+ "werte": {
+  "knob1": 0.8571,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.8,
+  "knob6": 0.5
+ },
+ "beschreibung": {
+  "art": "modulation",
+  "unterart": "chorus",
+  "charakter": [
+   "wide",
+   "soft",
+   "smooth"
+  ],
+  "genre": [
+   "house",
+   "progressive",
+   "trance"
+  ],
+  "einsatz": [
+   "build",
+   "breakdown"
+  ],
+  "energie": 2,
+  "text": "Two bars per cycle, depth 2 ms around a 12 ms delay, width 80 %, mix 50 %; the movement lands on the bar, not on the beat."
+ },
+ "tags": [
+  "fx-chorus"
+ ],
+ "notiz": "Set by the knob ranges of the graph, not yet heard (2026-11-26).",
+ "angelegt": "2026-11-26T00:00:00.000Z",
+ "geaendert": "2026-11-26T00:00:00.000Z"
+}

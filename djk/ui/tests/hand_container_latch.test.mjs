@@ -1,6 +1,6 @@
 // Container core M8: the hearing guard of /regler by container type (table D3 of the M plan), one test row per cell.
 // Cypher opens a closed container strip: track needs a Hörschein of the player with the container's number, SEQ is free only while no track is
-// loaded (F10 R2), strudel and leer are free, loops and stems are refused. Andreas's hand is never gated.
+// loaded (F10 R2), strudel and leer are free, loops and stems are free (strand 11; the ramp rule guards them). Andreas's hand is never gated.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { echterServer } from './support/echter_server.mjs';
@@ -34,7 +34,7 @@ const schein = (deck) => ({
 const CONTAINER = ['deck/1', 'deck/2', 'pad/1', 'pad/2'];
 
 test('pure table: containerFrei by place type and loaded track; containerVonPfad; seqDeckFrei on container paths; oeffnet knows container strips only', () => {
-  assert.deepEqual(['track', 'seq', 'strudel', 'leer', 'loops', 'stems'].map((t) => containerFrei(t, false)), ['hoerschein', 'frei', 'frei', 'frei', 'gesperrt', 'gesperrt']);
+  assert.deepEqual(['track', 'seq', 'strudel', 'leer', 'loops', 'stems'].map((t) => containerFrei(t, false)), ['hoerschein', 'frei', 'frei', 'frei', 'frei', 'frei']);
   assert.equal(containerFrei('seq', true), 'hoerschein', 'F10 R2: a SEQ deck is free only while no track is loaded');
   assert.equal(containerFrei('strudel', true), 'frei');
   assert.equal(containerFrei(undefined, false), 'hoerschein', 'no project places: the old deck rule');
@@ -61,10 +61,10 @@ const ZEILEN = [
   ['strudel', 'deck/2/fader', 2, 'frei'],
   ['leer', 'deck/1/fader', 1, 'frei'],
   ['leer', 'pad/2/fader', 4, 'frei'],
-  ['loops', 'deck/2/fader', 2, 'kein_hoerschein'],
-  ['loops', 'pad/1/trim', 3, 'kein_hoerschein'],
-  ['stems', 'pad/2/fader', 4, 'kein_hoerschein'],
-  ['stems', 'deck/1/fader', 1, 'kein_hoerschein'],
+  ['loops', 'deck/2/fader', 2, 'nur_rampe'],   // strand 11: loops and stems are free, but an unknown (closed) fader to -6 dB is a jump: ramp
+  ['loops', 'pad/1/trim', 3, 'nur_rampe'],   // trim -30 -> -6 dB in one step is a raise of 24 dB: it needs a ramp
+  ['stems', 'pad/2/fader', 4, 'nur_rampe'],
+  ['stems', 'deck/1/fader', 1, 'nur_rampe'],
 ];
 test('D3 table: container type x Cypher opening a closed strip without a hearing check', async (t) => {
   const s = await echterServer(t, 'hr', 0);

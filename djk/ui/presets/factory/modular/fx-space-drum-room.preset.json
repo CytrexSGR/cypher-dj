@@ -1,0 +1,41 @@
+{
+ "schema": 1,
+ "name": "Space Drum Room",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "space-raum",
+ "werte": {
+  "knob1": 0.3,
+  "knob2": 0.15,
+  "knob3": 0.5526,
+  "knob4": 0.4732,
+  "knob5": 0.4,
+  "knob6": 0
+ },
+ "beschreibung": {
+  "art": "reverb",
+  "unterart": "room",
+  "charakter": [
+   "dry",
+   "tight",
+   "warm"
+  ],
+  "genre": [
+   "house",
+   "techno",
+   "tech_house"
+  ],
+  "einsatz": [
+   "drop",
+   "build"
+  ],
+  "energie": 2,
+  "text": "15 % mix, 3 ms pre-delay, low cut 150 Hz, high cut 8 kHz, width 80 %: a short close room for drums."
+ },
+ "tags": [
+  "fx-space"
+ ],
+ "notiz": "Knobs 1..6 set by the knob ranges of the graph, not yet heard (2026-11-26). The room is the graph.",
+ "angelegt": "2026-11-26T00:00:00.000Z",
+ "geaendert": "2026-11-26T00:00:00.000Z"
+}

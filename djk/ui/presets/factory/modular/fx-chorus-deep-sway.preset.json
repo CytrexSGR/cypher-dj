@@ -1,0 +1,41 @@
+{
+ "schema": 1,
+ "name": "Chorus / deep sway",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "fx-chorus",
+ "werte": {
+  "knob1": 0.0,
+  "knob2": 0.3891,
+  "knob3": 0.8333,
+  "knob4": 0.7222,
+  "knob5": 1.0,
+  "knob6": 0.6
+ },
+ "beschreibung": {
+  "art": "modulation",
+  "unterart": "chorus",
+  "charakter": [
+   "wide",
+   "evolving",
+   "dirty"
+  ],
+  "genre": [
+   "ambient",
+   "idm",
+   "downtempo"
+  ],
+  "einsatz": [
+   "breakdown",
+   "transition"
+  ],
+  "energie": 3,
+  "text": "Free 0.3 Hz, depth 6 ms around a 20 ms delay (depth stays below delay), width 100 %, mix 60 %; seasick detune sway."
+ },
+ "tags": [
+  "fx-chorus"
+ ],
+ "notiz": "Set by the knob ranges of the graph, not yet heard (2026-11-26).",
+ "angelegt": "2026-11-26T00:00:00.000Z",
+ "geaendert": "2026-11-26T00:00:00.000Z"
+}

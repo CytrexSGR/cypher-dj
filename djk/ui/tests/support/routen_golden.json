@@ -1,5 +1,5 @@
 {
- "n": 212,
+ "n": 234,
  "ergebnis": [
   {
    "m": "GET",
@@ -26,6 +26,54 @@
      "regler": {},
      "spurPool": "null"
     }
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/hand/bremse",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "bremse": "boolean",
+    "gestoppt": "boolean",
+    "kern_ki": "boolean"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/hand/ich",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "gestoppt": "boolean",
+    "id": "null",
+    "stufe": "null"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/hand/schluessel",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "schluessel": [
+     {
+      "id": "string",
+      "name": "string",
+      "stufe": "string",
+      "zuletzt": "number"
+     }
+    ]
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/hand/log",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "datei": "string",
+    "zeilen": "[]"
    }
   },
   {
@@ -294,6 +342,8 @@
     "uhr": {
      "beat": "number",
      "bpm": "null",
+     "naechste_phrase_takt": "number",
+     "naechster_takt": "number",
      "schlag": "number",
      "takt": "number"
     }
@@ -436,6 +486,7 @@
    "art": "application/json; charset=utf-8",
    "form": {
     "autonom": "boolean",
+    "bezeichnung": "null",
     "status": "null",
     "text": "string",
     "von": "null",
@@ -479,6 +530,7 @@
    "art": "application/json; charset=utf-8",
    "form": {
     "controller": "[]",
+    "echte_geraete": "boolean",
     "eingaenge": [
      {
       "audio": "null",
@@ -500,6 +552,7 @@
     "midi": {
      "da": "boolean",
      "frei_fuer_cypher": "boolean",
+     "gesperrt": "boolean",
      "port": "null",
      "profil": "null",
      "verbunden": "null"
@@ -552,6 +605,7 @@
    "art": "application/json; charset=utf-8",
    "form": {
     "aktiv": "null",
+    "echte_geraete": "boolean",
     "geraete": "[]",
     "host": {},
     "kanten": "[]",
@@ -566,6 +620,7 @@
       "name": "string",
       "rueckweg": "string",
       "rueckweg_port": "null",
+      "verbunden": "boolean",
       "weg": "string"
      }
     ],
@@ -653,6 +708,112 @@
    "p": "/app.js",
    "code": 200,
    "art": "text/javascript; charset=utf-8"
+  },
+  {
+   "m": "POST",
+   "p": "/hand/bremse",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "an_fehlt",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/hand/bremse",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/hand/bremse",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/hand/schluessel",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "name_ungueltig",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/hand/schluessel",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/hand/schluessel",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/hand/schluessel/loeschen",
+   "kopf": "json",
+   "code": 404,
+   "art": "application/json; charset=utf-8",
+   "fehler": "unbekannt",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/hand/schluessel/loeschen",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/hand/schluessel/loeschen",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
   },
   {
    "m": "POST",
@@ -1310,6 +1471,114 @@
   {
    "m": "POST",
    "p": "/spur/stopp",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/bogen",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "bogen",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/bogen",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/bogen",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/szene",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "aktion",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/szene",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/szene",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/aufbau",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "aktion",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/aufbau",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/aufbau",
    "kopf": "fremd",
    "code": 403,
    "art": "application/json; charset=utf-8",
@@ -2097,6 +2366,7 @@
    "art": "application/json; charset=utf-8",
    "form": {
     "controller": "[]",
+    "echte_geraete": "boolean",
     "eingaenge": [
      {
       "audio": "null",
@@ -2118,6 +2388,7 @@
     "midi": {
      "da": "boolean",
      "frei_fuer_cypher": "boolean",
+     "gesperrt": "boolean",
      "port": "null",
      "profil": "null",
      "verbunden": "null"

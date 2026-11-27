@@ -10,6 +10,8 @@ import { GERAET_TYP, geraetNutzlast, instrumentBefehl, effektBefehl, geraetAblag
 import { katalog } from '../presets/area.ts';
 import { neuesProjekt } from '../project/model.ts';
 import { fuehreListeAus } from '../project/commands.ts';
+import { MAX_INS_KOMP } from '../project/model.ts';
+import { poolVoll } from './support/inserts_scenario.mjs';
 const importVon = (datei, vor = './') => new RegExp(`from '${(vor + datei).replace(/[.]/g, '\\.')}'`);   // the file name stays a plain literal so the export's file renaming rewrites it too (a regex literal escapes the dot and escapes the rewrite)
 
 const KATALOG = katalog([{ name: 'juno-pad', art: 'instrument' }, { name: 'fx', art: 'effekt' }]);
@@ -68,10 +70,12 @@ test('drop builders: full chain and empty pool refuse with text; an instrument a
   let p = projekt();
   for (let i = 0; i < 5; i++) p = fuehreListeAus(p, [{ befehl: 'insert_setzen', strang_id: 's1', pos: i, art: 'komp' }]).projekt;
   assert.deepEqual(effektBefehl(p, 's1', geraetNutzlast(E('komp'))), { fehler: 'kette_voll', text: GERAET_TEXT.kette_voll });
-  for (const [s, n] of [['s2', 5], ['master', 2]]) for (let i = 0; i < n; i++) p = fuehreListeAus(p, [{ befehl: 'insert_setzen', strang_id: s, pos: i, art: 'komp' }]).projekt;
-  let q = fuehreListeAus(p, [{ befehl: 'spur_neu', art: 'audio' }]).projekt;
-  assert.deepEqual(effektBefehl(q, 's3', geraetNutzlast(E('komp'))), { fehler: 'ins_voll', text: GERAET_TEXT.ins_voll });
-  q = projekt();
+  // the pool used up (MAX_INS_KOMP stages on the tracks): one more compressor is refused on the master, whose chain is empty; one stage fewer is offered
+  const voll = JSON.parse(JSON.stringify(poolVoll('komp', MAX_INS_KOMP).projekt));
+  assert.deepEqual(effektBefehl(voll, 'master', geraetNutzlast(E('komp'))), { fehler: 'ins_voll', text: GERAET_TEXT.ins_voll });
+  const fast = JSON.parse(JSON.stringify(poolVoll('komp', MAX_INS_KOMP - 1).projekt));
+  assert.equal(effektBefehl(fast, 'master', geraetNutzlast(E('komp'))).befehl.befehl, 'insert_setzen', 'negative control: one free compressor is offered');
+  let q = projekt();
   assert.deepEqual(geraetAblage(q, geraetNutzlast(E('rb338')), -1).befehle[0].befehl, 'spur_neu', 'an instrument dropped outside the rows: new track');
   assert.deepEqual(geraetAblage(q, geraetNutzlast(E('rb338')), 1).befehle[0].befehl, 'spur_neu', 'on a track row: still a new track (S3)');
   assert.deepEqual(geraetAblage(q, geraetNutzlast(E('komp')), 0), { label: 'Add Compressor to Drums', befehle: [{ befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'komp' }] });
@@ -166,10 +170,10 @@ test('T7.1 presetZiel: a full chain or an empty pool refuse a NEW stage with tex
   assert.deepEqual(presetZiel(p, { spurIndex: 1 }, n), { fehler: 'kette_voll', text: PRESET_ZIEL_TEXT.kette_voll });
   p.spuren[1].inserts = [1, 2, 3, 4, 5].map((i) => ({ id: `k${i}`, art: 'komp', an: true, werte: {} }));
   assert.deepEqual(presetZiel(p, { spurIndex: 1 }, n), { ziel: { art: 'insert', insert_id: 'k1' } }, 'four compressors: the preset goes to the first one');
-  // 12 compressors in the project, none on the Lead track: no new one
+  // the whole pool of compressors is in the project (the page only counts: the surplus sits on the master), none on the Lead track: no new one
   p.spuren[1].inserts = [1, 2, 3, 4].map((i) => ({ id: `a${i}`, art: 'komp', an: true, werte: {} }));
   p.spuren[0].inserts = [1, 2, 3, 4].map((i) => ({ id: `b${i}`, art: 'komp', an: true, werte: {} }));
-  p.master.inserts = [1, 2, 3, 4].map((i) => ({ id: `c${i}`, art: 'komp', an: true, werte: {} }));
+  p.master.inserts = Array.from({ length: MAX_INS_KOMP - 8 }, (_, i) => ({ id: `c${i}`, art: 'komp', an: true, werte: {} }));
   assert.deepEqual(presetZiel(p, { spurIndex: 2 }, n), { fehler: 'ins_voll', text: PRESET_ZIEL_TEXT.ins_voll });
   assert.deepEqual(presetZiel(p, { spurIndex: 1 }, n), { ziel: { art: 'insert', insert_id: 'a1' } }, 'a track that has a compressor still takes the preset');
 });

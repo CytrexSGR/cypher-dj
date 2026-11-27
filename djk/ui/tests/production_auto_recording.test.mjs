@@ -313,3 +313,11 @@ test('heads: a fader gesture at a mid position sends a dB value from the taper, 
     assert.equal(gesendet.find((b) => b.wert !== undefined).wert, db, `position ${pos}`);
   }
 });
+
+test('note detection and render events do not trigger a project reload (the state is in the event)', () => {
+  const o = { sichtbar: true, slug: 'p1', rev: 5, eigene: () => false };
+  assert.equal(nachladenNoetig('proj', { noten: { slug: 'p1', clip_id: 'c1', zustand: 'laeuft', fortschritt: 40 } }, o), false);
+  assert.equal(nachladenNoetig('proj', { noten_render: { slug: 'p1', clip_id: 'c1', zustand: 'rechnet' } }, o), false);
+  assert.equal(nachladenNoetig('proj', { slug: 'p1', rev: 6 }, o), true, 'negative control: a real revision still reloads');
+  assert.equal(nachladenNoetig('proj', { stems: { slug: 'p1', zustand: 'fertig' } }, o), true, 'stems end unchanged');
+});

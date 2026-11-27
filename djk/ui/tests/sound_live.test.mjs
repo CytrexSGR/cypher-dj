@@ -47,6 +47,18 @@ test('live: silence is stumm, lufs null, bands at the floor, true peak -200', ()
   assert.ok(m.spektrum.db.every((v) => v === -200));
 });
 
+test('live: vectorscope points, mono sits on the mid axis, L = -R on the side axis, silence is empty', () => {
+  const dek = (v) => new Int8Array(Buffer.from(v, 'base64'));
+  const mono = dek(messeLive(signal(sinus(997, db(-6)))).vektor);
+  assert.equal(mono.length, 2048);
+  for (let k = 0; k < 1024; k++) assert.ok(Math.abs(mono[2 * k]) <= 1, `x ${mono[2 * k]}`);
+  assert.ok(mono.some((v, i) => i % 2 === 1 && Math.abs(v) > 50));
+  const gegen = dek(messeLive(signal((i) => { const v = db(-6) * Math.sin(2 * Math.PI * 997 * i / 48000); return [v, -v]; })).vektor);
+  assert.equal(gegen.length, 2048);
+  for (let k = 0; k < 1024; k++) assert.ok(Math.abs(gegen[2 * k + 1]) <= 1, `y ${gegen[2 * k + 1]}`);
+  assert.equal(messeLive(new Float32Array(2 * N)).vektor, '');
+});
+
 // ---- ring reader ----
 const KOPF = 64, CAP = 65536;
 function ring(w, { magic = 'CDJB', groesse = KOPF + CAP * 16, wert = (f) => [f, -f, 0, 0] } = {}) {

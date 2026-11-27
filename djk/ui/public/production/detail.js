@@ -9,6 +9,7 @@ import { positionText } from './timeline.js';
 import { bindeRolle } from './pianoroll_operation.js';
 import { warpAnzeige, transposeBefehl, modusBefehl, BEATS_FELDER, beatsFeldAnsicht, beatsAenderung, tonErlaubt, tempoBefehl, projektTempoBefehl, EINS_HINWEIS } from './warp.js';
 import { bindeWarpEditor } from './warp_editor_operation.js';
+import { bindeNoten } from './notes_block.js';
 import { bindeHuellkurven } from './envelopes_operation.js';
 import { HkWahl, HK_TEXT } from './envelopes.js';
 import { bindeRackPanel } from './rack_device_operation.js';
@@ -44,9 +45,14 @@ const GERUEST = `<div class="p-detail-kopf"><span data-d="titel">CLIP</span><spa
     <label class="p-warp-ton">TRANSPOSE <input data-d="transpose" inputmode="numeric" autocomplete="off" title="Semitones, whole numbers from -12 to 24. Takes effect after a moment (the clip is re-rendered ahead of time)" disabled> st</label><label class="p-warp-ton">DETUNE <input data-d="detune" inputmode="decimal" autocomplete="off" title="Cents" disabled> ct</label><span class="p-warp-info" data-d="warpinfo"></span>
     <span class="p-warp-tempo"><button data-d="tempo2" title="Double the tempo of the whole warp: the same piece of the track takes twice as many beats, so the clip gets twice as long" disabled>×2</button><button data-d="tempohalb" title="Halve the tempo of the whole warp: the clip gets half as long" disabled>:2</button><button data-d="projekttempo" title="Set the project tempo to the tempo of this clip, so the clip plays at its own speed" disabled>SET PROJECT TEMPO</button></span>
   </div>
+  <div class="p-noten-aktion" data-d="notenaktion"><button data-d="notenknopf" title="Detect the notes of this clip">DETECT NOTES</button><progress class="p-noten-balken" data-d="notenbalken" max="100" value="0" hidden></progress><button data-d="notenabbruch" title="Cancel the note detection" hidden>CANCEL</button></div>
   <div class="p-warp-editor" data-d="editor" hidden>
     <div class="p-warp-editor-leiste"><span class="p-warp-info" data-d="segment"></span><span class="p-roll-hilfe">Double click: add or delete a marker · drag: move it (Shift: move its beat) · right click: menu · wheel: scroll · Ctrl+wheel: zoom</span></div>
     <canvas class="p-warp-canvas" data-d="editorcanvas" tabindex="0" aria-label="Warp editor"></canvas>
+  </div>
+  <div class="p-noten" data-d="noten" hidden>
+    <div class="p-noten-leiste"><span>NOTES</span><span class="p-noten-stand" data-d="notenstand"></span><span class="p-noten-analyse" data-d="notenanalyse"></span><span class="p-roll-hilfe">Drag a note: pitch (Alt: free, Shift: key) · double click: reset · right click: menu · wheel: scroll · Shift+wheel: pitch · Ctrl+wheel: zoom</span></div>
+    <canvas class="p-noten-canvas" data-d="notencanvas" tabindex="0" aria-label="Note editor"></canvas>
   </div>
 </div>
 <div class="p-clip-midi" data-d="midi" hidden></div>
@@ -77,6 +83,7 @@ export function bindeDetail(ctx) {
   d('fenster').addEventListener('click', () => { const id = st.rackSpur ?? st.geraetSpur; if (id) oeffneGeraetFenster(id, ctx.melde); });
   ctx.geraetOeffnen = (id) => { st.geraetSpur = id; st.rackSpur = null; geraetTeil.wiederhole(); zeige(); };
   const editor = bindeWarpEditor(ctx, d('editorcanvas'), d('segment'));
+  const notenTeil = bindeNoten(ctx, d('noten'), d('notenaktion'));   // note editor (slice 1, B7): DETECT NOTES, render state and the note surface of an audio clip
   // 1.12 slice 5 (U10): the tab row CLIP (NOTES on a MIDI clip) / ENVELOPES; the open tab and the target per clip are page state (HkWahl)
   const hkWahl = new HkWahl(), hkTeil = bindeHuellkurven(ctx, d('hk'), hkWahl);
   for (const [knopf, reiter] of [['reiterclip', 'clip'], ['reiterhk', 'huellkurven']]) d(knopf).addEventListener('click', () => { hkWahl.setzeReiter(reiter); zeige(); });
@@ -176,7 +183,7 @@ export function bindeDetail(ctx) {
       for (const k of ['leer', 'audio', 'midi', 'reiter', 'hk', 'muster', 'geraet']) d(k).hidden = true;
       d('fenster').hidden = false;
       geraetTeil.zeige(null); d('rack').hidden = false; d('titel').textContent = RACK_TEXT.titel; d('info').textContent = `${rs.name} · ${RACK_TEXT.info}`;
-      rolle.zeige(null); editor.zeige(null); hkTeil.zeige(null); musterTeil.zeige(null); rackTeil.zeige(rs);
+      rolle.zeige(null); editor.zeige(null); notenTeil.zeige(null); hkTeil.zeige(null); musterTeil.zeige(null); rackTeil.zeige(rs);
       return;
     }
     st.rackSpur = null; d('rack').hidden = true; rackTeil.zeige(null); d('fenster').hidden = true;
@@ -186,7 +193,7 @@ export function bindeDetail(ctx) {
       for (const k of ['leer', 'audio', 'midi', 'reiter', 'hk', 'muster']) d(k).hidden = true;
       d('fenster').hidden = false;
       d('geraet').hidden = false; d('titel').textContent = GERAET_TEXT.titel; d('info').textContent = `${gs.name} · ${geraetText(gs)}`;
-      rolle.zeige(null); editor.zeige(null); hkTeil.zeige(null); musterTeil.zeige(null); geraetTeil.zeige(gs);
+      rolle.zeige(null); editor.zeige(null); notenTeil.zeige(null); hkTeil.zeige(null); musterTeil.zeige(null); geraetTeil.zeige(gs);
       return;
     }
     st.geraetSpur = null; d('geraet').hidden = true; geraetTeil.zeige(null);
@@ -198,7 +205,7 @@ export function bindeDetail(ctx) {
     d('audio').hidden = t?.clip.art !== 'audio';
     d('midi').hidden = t?.clip.art !== 'midi';
     d('reiter').hidden = !t; d('hk').hidden = true;
-    if (!t) { d('titel').textContent = 'CLIP'; d('info').textContent = ''; rolle.zeige(null); editor.zeige(null); hkTeil.zeige(null); musterTeil.zeige(null); return; }
+    if (!t) { d('titel').textContent = 'CLIP'; d('info').textContent = ''; rolle.zeige(null); editor.zeige(null); notenTeil.zeige(null); hkTeil.zeige(null); musterTeil.zeige(null); return; }
     const c = t.clip, frozen = t.spur.freeze ? ' · FROZEN: changing notes unfreezes the track' : '';
     d('titel').textContent = c.art === 'audio' ? 'AUDIO CLIP' : 'MIDI CLIP';
     d('info').textContent = `${c.name} · ${t.spur.name} · bar ${positionText(c.start_beat)} · ${zahlText(c.laenge_beats)} beats${c.loop_beats != null ? ` · loop ${zahlText(c.loop_beats)} beats` : ''}${st.auswahl.length > 1 ? ` · ${st.auswahl.length} selected` : ''}${frozen}`;
@@ -206,9 +213,9 @@ export function bindeDetail(ctx) {
     d('reiterclip').textContent = c.art === 'midi' ? HK_TEXT.reiter_noten : HK_TEXT.reiter_clip;
     d('reiterclip').setAttribute('aria-selected', String(!hkAn)); d('reiterhk').setAttribute('aria-selected', String(hkAn));
     d('reiterclip').classList.toggle('an', !hkAn); d('reiterhk').classList.toggle('an', hkAn);
-    if (hkAn) { d('audio').hidden = true; d('midi').hidden = true; d('hk').hidden = false; rolle.zeige(null); editor.zeige(null); hkTeil.zeige(t); musterTeil.zeige(null); return; }
+    if (hkAn) { d('audio').hidden = true; d('midi').hidden = true; d('hk').hidden = false; rolle.zeige(null); editor.zeige(null); notenTeil.zeige(null); hkTeil.zeige(t); musterTeil.zeige(null); return; }
     hkTeil.zeige(null);
-    if (c.art === 'midi') { rolle.zeige(c.id); editor.zeige(null); musterTeil.zeige(t, erzwungen); return; }
+    if (c.art === 'midi') { rolle.zeige(c.id); editor.zeige(null); notenTeil.zeige(null); musterTeil.zeige(t, erzwungen); return; }
     rolle.zeige(null); musterTeil.zeige(null);
     for (const f of felder) {
       if (!erzwungen && document.activeElement === f) continue;
@@ -239,6 +246,7 @@ export function bindeDetail(ctx) {
     d('warpinfo').title = wa.downbeatFrage ? EINS_HINWEIS : '';
     for (const k of ['tempo2', 'tempohalb', 'projekttempo']) d(k).disabled = !wa.vorhanden;
     d('editor').hidden = !wa.vorhanden; editor.zeige(c);
+    try { notenTeil.zeige(c); } catch (e) { console.error('note editor block threw', e); }   // never in the way of the fields below
     d('offsetl').hidden = wa.an; d('versatzl').hidden = !wa.an;                 // gewarpt zählt der Versatz in Beats, nicht offset_s
     if (!bedient) regler.value = String(c.gain_db);                 // H6: nur während der Bedienung nicht
     d('startpos').textContent = `bar ${positionText(c.start_beat)}`;

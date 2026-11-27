@@ -19,6 +19,7 @@ import { CONTAINER, STROEME, containerName, stromKanal, stromName } from './kana
 const FEHLER_TEXT = { json: 'does not parse', form: 'not a mapping file (version 1 with eintraege)' };
 const SOFTWARE = (q) => /^bluez_midi\./.test(q.port) || /Midi Through/i.test(`${q.port} ${q.alias ?? ''}`);
 const quelleName = (q) => String(q.alias || '').split(':')[0].trim() || q.port;
+const PRUEF_TEXT = 'present, not connected (test instance)';   // a test instance lists the real devices at the desk but never takes them (CYPHERDJ_ECHTE_GERAETE=1 opts in)
 const WEG_TEXT = { pult: 'desk bridge', lernen: 'learn input', offen: 'not bound yet' };
 const TYP_TEXT = { cc: 'CC', note: 'Note' };
 const ART_TEXT = { absolut: 'knob', relativ: 'encoder', taste: 'button', beruehrung: 'touch', umschalten: 'toggle' };
@@ -237,7 +238,7 @@ export function geraeteZeilen(register, geraete, lern, tablets = null) {
   for (const c of plaetze) {
     const k = katVon(c.port);
     if (k) gesehen.add(k.id);
-    const zustand = !c.da ? 'not connected' : c.verbunden === false ? 'found, not linked yet' : c.verbunden === null ? 'connected (core not reporting)' : 'connected';
+    const zustand = !c.da ? 'not connected' : c.gesperrt ? PRUEF_TEXT : c.verbunden === false ? 'found, not linked yet' : c.verbunden === null ? 'connected (core not reporting)' : 'connected';
     // a device whose feedback runs over a second port (Launch Control 3: its DAW port): the place can change between the plain port and that one
     let wechsel = null;
     if (k?.rueckweg_port && c.platz >= 2) {
@@ -250,7 +251,7 @@ export function geraeteZeilen(register, geraete, lern, tablets = null) {
     const daw = !!(k?.rueckweg_port && c.port.includes(k.rueckweg_port));
     const z = !k?.regler ? null : (k.baenke ?? [null]).map((_, i) => kachelZaehler(kacheln(k.regler, lern?.zuordnungen, { platz: c.platz, daw, baenke: k.baenke, bank: i })))
       .reduce((s, x) => ({ frei: s.frei + x.frei, gesamt: s.gesamt + x.gesamt }), { frei: 0, gesamt: 0 });
-    zeilen.push({ art: 'platz', schluessel: `platz:${c.platz}`, platz: c.platz, name: k?.name ?? c.name, da: !!c.da, zustand, weg: `learn input ${c.platz}`, anzahl: z ? `${z.frei} of ${z.gesamt} free` : `${gelernt(c.platz)} learned`,
+    zeilen.push({ art: 'platz', schluessel: `platz:${c.platz}`, platz: c.platz, name: k?.name ?? c.name, da: !!c.da && !c.gesperrt, zustand, weg: `learn input ${c.platz}`, anzahl: z ? `${z.frei} of ${z.gesamt} free` : `${gelernt(c.platz)} learned`,
       rueckweg: k?.rueckweg ?? '', hinweis: c.port, entfernen: c.platz >= 2, wechsel, modell: k?.id ?? null, regler: k?.regler ?? null, baenke: k?.baenke ?? null, bedienung: k?.bedienung ?? '', daw });
   }
   // a device that is known by name only (no `midi` match string, e.g. the desk bridge of the Traktor S8) is that catalogue device, not a second one
@@ -270,12 +271,13 @@ export function geraeteZeilen(register, geraete, lern, tablets = null) {
       if (dawPort(gleich.port) && !dawPort(q.port)) gleich.port = q.port;   // ADD takes the plain MIDI port
       continue;
     }
-    zeilen.push({ art: 'frei', schluessel: null, platz: null, name, da: true, zustand: 'connected, no place yet', weg: 'learn input', anzahl: '', rueckweg: k?.rueckweg ?? '', hinweis: q.port, port: q.port, ports: 1, modell: k?.id ?? null });
+    zeilen.push({ art: 'frei', schluessel: null, platz: null, name, da: !q.gesperrt, gesperrt: !!q.gesperrt, zustand: q.gesperrt ? PRUEF_TEXT : 'connected, no place yet', weg: 'learn input', anzahl: '', rueckweg: k?.rueckweg ?? '', hinweis: q.port, port: q.port, ports: 1, modell: k?.id ?? null });
   }
   for (const k of katalog) {
     if (gesehen.has(k.id)) continue;
     const n = register?.kanten ? belegt(k.id) : (k.eintraege ?? 0);
-    zeilen.push({ art: 'katalog', schluessel: k.id, platz: null, name: k.name, da: !!k.da, zustand: k.da ? 'connected' : 'not connected', weg: WEG_TEXT[k.weg] ?? k.weg,
+    const gesperrt = !!k.da && k.verbunden === false;   // plugged in, but this instance (a test instance) does not hold it
+    zeilen.push({ art: 'katalog', schluessel: k.id, platz: null, name: k.name, da: !!k.da && !gesperrt, zustand: gesperrt ? PRUEF_TEXT : k.da ? 'connected' : 'not connected', weg: WEG_TEXT[k.weg] ?? k.weg,
       anzahl: n ? `${n} assigned` : '', rueckweg: k.rueckweg, hinweis: k.hinweis });
   }
   if (tablets !== null) zeilen.push({ art: 'tablet', schluessel: null, platz: null, name: 'Tablet', da: tablets > 0, zustand: tablets > 0 ? `${tablets} paired` : 'none paired', weg: 'page on the home network', anzahl: '', rueckweg: 'the page itself', hinweis: 'instruments and effects as touch panels' });
@@ -439,7 +441,7 @@ export function baueGeraete(el, zeilen, opt) {
       tat.append(f);
     }
     if (z.wechsel) tat.append(knopf(z.wechsel.text, z.wechsel.titel, () => opt?.schicken({ platz: z.platz, port: z.wechsel.port })));
-    if (z.art === 'frei') tat.append(knopf('ADD', 'Give this controller a place: it can then be learned, and its CC numbers stay its own', () => opt?.schicken({ port: z.port })));
+    if (z.art === 'frei' && !z.gesperrt) tat.append(knopf('ADD', 'Give this controller a place: it can then be learned, and its CC numbers stay its own', () => opt?.schicken({ port: z.port })));
     if (z.entfernen) tat.append(knopf('REMOVE', 'Free this place (what it has learned is kept for the next device on it)', () => opt?.schicken({ platz: z.platz, port: null })));
     zeile.append(punkt, text, tat);
     if (z.schluessel) zeile.addEventListener('click', () => opt?.waehle?.(z.schluessel));

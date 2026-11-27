@@ -11,8 +11,9 @@ sys.path.insert(0, str(HIER))
 import schema_loader as sl  # noqa: E402
 import contract_text as vertragstext  # noqa: E402  (Scheibe 02)
 
-ERWARTET = ["aufnahme", "auftrag", "auftrag_status", "baender", "defs", "fassung", "hoerschein", "journal_zeile",
-            "kandidat", "kiste", "korrektur", "material", "material_fertig", "mcp", "passung", "plan", "rechner",
+ERWARTET = ["audio_noten", "aufnahme", "auftrag", "auftrag_status", "baender", "defs", "fassung", "hoerschein", "journal_zeile",
+            "kandidat", "kiste", "korrektur", "material", "material_fertig", "mcp", "noten_auftrag", "noten_kurve", "noten_kurve_roh",
+            "noten_zeile", "passung", "plan", "rechner",
             "spielart", "takt_bericht", "takt_zustand", "urteil", "vorschlag", "wahl", "ws_daten", "ws_nachricht",
             "ws_umschlag"]
 
@@ -67,5 +68,5 @@ def test_gruende_wie_16_2_plus_neustart():
     """defs.schema.json: die Codes aus §16.2 am Text gelesen (seit 2026-09-25 mit neustart und grenze_sub; das
     „| {"neustart"}" bleibt für den Fall, dass er dort wieder fehlt)."""
     enum = sl.alle_schemas()["defs.schema.json"]["$defs"]["grund"]["enum"]
-    assert len(enum) == len(set(enum)) == 67   # D1 K1 (§4.11): sechs Gründe des Arrangements; Paket K3: tempo_rampe (6.33); 1.8: + 5 (kein_eingang, aufnahme_laeuft, zu_viele_scharf, eingang_fehlt, kein_platz); 1.13 Slice 2: + warp_maschine_fehlt; 1.12 Slice 3: + nur_andreas, auto_ziel_unbekannt; loop deck: + zelle_leer (a deck cell holds no loop, §16.2); session view S1b: + zellen_ungueltig (the core refuses the cells of a snapshot)
+    assert len(enum) == len(set(enum)) == 68   # D1 K1 (§4.11): sechs Gründe des Arrangements; Paket K3: tempo_rampe (6.33); 1.8: + 5 (kein_eingang, aufnahme_laeuft, zu_viele_scharf, eingang_fehlt, kein_platz); 1.13 Slice 2: + warp_maschine_fehlt; 1.12 Slice 3: + nur_andreas, auto_ziel_unbekannt; loop deck: + zelle_leer (a deck cell holds no loop, §16.2); session view S1b: + zellen_ungueltig (the core refuses the cells of a snapshot)
     assert set(enum) == set(vertragstext.gruende(vertragstext.lies())) | {"neustart"}

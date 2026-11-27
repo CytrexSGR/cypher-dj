@@ -14,6 +14,7 @@ import { SESSION } from '../project/commands_session.ts';
 import { TRACKER } from '../project/commands_tracker.ts';
 import { LOOPDECK } from '../project/commands_loopdeck.ts';
 import { CONTAINER } from '../project/commands_container.ts';
+import { AUDIO_NOTEN } from '../project/commands_audio_notes.ts';
 import { neuesProjekt } from '../project/model.ts';
 import { mergeTabellen, PRO_BEFEHL as REGISTER } from '../project/commands_helpers.ts';
 
@@ -70,16 +71,27 @@ const NAMEN_CONTAINER = ['platz_setzen', 'strom_send', 'strom_spur_neu'];
 // the session view commands (family SESSION): the launch grid, the hold slot and the scene rows (szene_loeschen stays in SZENEN and takes slot or zeile)
 const NAMEN_SESSION = ['session_aendern', 'szene_aendern', 'szene_doppeln', 'szene_fangen', 'szene_neu', 'zelle_halten', 'zelle_huelle'];
 const NAMEN_STECKFELD = ['geraet_stift_setzen', 'geraet_stifte_setzen'];
-const NAMEN_ALLE = [...NAMEN_MAIN, ...NAMEN_SZENEN, ...NAMEN_TRACKER, ...NAMEN_ABSCHNITTE, ...NAMEN_VERBUND, ...NAMEN_FX, ...NAMEN_LOOPDECK, ...NAMEN_CONTAINER, ...NAMEN_SESSION, ...NAMEN_STECKFELD];
+// the note editor commands (family AUDIO_NOTEN): pitch targets of the detected notes of an audio clip
+const NAMEN_AUDIO_NOTEN = ['audio_noten_aendern', 'audio_noten_entfernen', 'audio_noten_zuruecksetzen'];
+// the release metadata command (family TRANSPORT, export delivery plan task 4)
+const NAMEN_ABGABE = ['abgabe_meta_setzen'];
+// the piano roll tool commands (family CLIP): quantise with grid, strength and swing; humanise
+const NAMEN_ROLLE = ['noten_humanisieren', 'noten_quantisieren'];
+// the arrangement marker commands (family TRANSPORT)
+const NAMEN_MARKER = ['marker_loeschen', 'marker_setzen'];
+// the plugin knob command (family INSERT, strand 2 task 2.2)
+const NAMEN_PLUGIN = ['plugin_regler_setzen'];
+const NAMEN_ALLE = [...NAMEN_MAIN, ...NAMEN_SZENEN, ...NAMEN_TRACKER, ...NAMEN_ABSCHNITTE, ...NAMEN_VERBUND, ...NAMEN_FX, ...NAMEN_LOOPDECK,
+  ...NAMEN_CONTAINER, ...NAMEN_SESSION, ...NAMEN_STECKFELD, ...NAMEN_AUDIO_NOTEN, ...NAMEN_ABGABE, ...NAMEN_ROLLE, ...NAMEN_MARKER, ...NAMEN_PLUGIN];
 
-test('PRO_BEFEHL holds the 82 commands of the table before the split plus the 3 scene commands, the tracker command, the 8 time and section commands the 2 linked-clip commands and the effect command, the 8 loop deck commands, the 3 container commands and the 7 session commands', () => {
+test('PRO_BEFEHL holds the 82 commands of the table before the split plus the 3 scene commands, the tracker command, the 8 time and section commands the 2 linked-clip commands and the effect command, the 8 loop deck commands, the 3 container commands, the 7 session commands, the 3 note editor commands, the release metadata command, the 2 piano roll tool commands and the 2 marker commands', () => {
   assert.equal(NAMEN_MAIN.length, 82);
-  assert.equal(NAMEN_ALLE.length, 117);
+  assert.equal(NAMEN_ALLE.length, 126);   // + the plugin knob command
   assert.deepEqual(Object.keys(PRO_BEFEHL).sort(), [...NAMEN_ALLE].sort());
 });
 
 test('every command is defined in exactly one family table; BEFEHL_NAMEN is the key list of the registry', () => {
-  const familien = { SPUR, CLIP, GRUPPE, INSERT, AUTO, TRANSPORT, SZENEN, TRACKER, LOOPDECK, CONTAINER, SESSION };
+  const familien = { SPUR, CLIP, GRUPPE, INSERT, AUTO, TRANSPORT, SZENEN, TRACKER, LOOPDECK, CONTAINER, SESSION, AUDIO_NOTEN };
   for (const [name, t] of Object.entries(familien)) assert.ok(Object.keys(t).length > 0, `${name} is not empty`);
   const alle = Object.values(familien).flatMap((t) => Object.keys(t));
   assert.equal(new Set(alle).size, alle.length, 'no command twice');

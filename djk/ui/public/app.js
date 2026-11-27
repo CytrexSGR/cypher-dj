@@ -2,12 +2,14 @@
 // Öffnen sendet nichts an den Kern: gesendet wird nur auf einen Griff (Zeiger, Rad, Klick) oder LOAD.
 // Lesen: /strom (Kern über den Seiten-Server), Leitstand-WS als Rolle "anzeige" (takt, ansage, ereignis).
 import { bindeSpurbaender } from './track_tape_view.js';
+import { bindeKanalband } from './kanalband.js';
 import { bindeProduktion } from './production/production.js';
 import { bindeWerkbank } from './werkbank/werkbank.js';
 import { bindeTracker } from './tracker/tracker.js';
 import { bindeModule } from './module_library.js';   // plan live-module task 10: the MODULES tab
 import { ladeInDeck, setzeGrossHaken } from './loopdeck/view.js';   // the MODULES tab loads module sources into a loop deck cell
 import { bindeLoopdeckGross } from './loopdeck/gross.js';   // the loop deck pop-up
+import { bindeHandLog } from './hand_log.js';
 import { bindeKopplung } from './coupling.js';   // task 10: pair a tablet (main page only)
 import { bindeMitschnitt } from './capture_button.js';   // journey tours task 2: REC MIX
 import { DECKS } from './curves.js';
@@ -63,6 +65,7 @@ bindeColor();
 bindeEffekte();
 try { bindeLiveDock(); } catch (e) { console.error('Live dock:', e); }   // the EFFECTS tab of DJ and LIVE shows the dock (live_dock/host.js)
 bindeMusterFeld();
+try { bindeKanalband(); } catch (e) { console.error('Channel strip row:', e); }
 try { bindeSpurbaender(jsonPost, () => letzterBeat); } catch (e) { console.error('Studio S7 lanes:', e); }   // Studio S7
 if (!geraetFensterAn) try { setzeProduktion(bindeProduktion({ presetsZeigen: () => zeigePresets(), presetsNeu: () => presetPanel?.aktualisiereZiele(), presetListe: () => presetPanel?.z.liste ?? [], post: jsonPost, bpm: () => zustand.bpm ?? 128, stoebern: () => zustand.stoebern, bibliothek: () => { if (!stz.treffer.length) { stoebernLaden(); ladeBaum(); } } })); } catch (e) { console.error('Production view:', e); }   // D1 V1
 if (!geraetFensterAn) try { setzeWerkbank(bindeWerkbank({ post: jsonPost, zeigeDj: () => { setzeAnsicht('dj'); pruefeLiveSpaeter(0); } })); } catch (e) { console.error('Workbench view:', e); }   // the fourth view, STUDIO; TO SEQ DECK: the DJ view then reads the changed live container
@@ -96,6 +99,7 @@ if (!geraetFensterAn && !controllerFenster && !remixFenster) fetch('/controller/
 { const reiter = $('[data-reiter="module"]'), tabelle = $('#module-tabelle'); if (reiter && tabelle) bindeModule({ reiter, tabelle, melde: (t) => melde(t), laden: (n, q) => { ladeInDeck(n, q); } }); }   // task 10
 bindePhonesKnopf();   // header: the PHONES key of a narrow window
 { const knopf = $('#mitschnitt-knopf'); if (knopf) bindeMitschnitt({ knopf }); }   // journey tours task 2: REC MIX
+{ const knopf = $('#t-agentlog'), fenster = $('#agentlog'); if (knopf && fenster) bindeHandLog({ knopf, fenster }); }   // agent log popover
 { const knopf = $('#kopplung-knopf'), dialog = $('#kopplung'); if (knopf && dialog) bindeKopplung({ knopf, dialog }); }   // task 10: the QR code of a one-time pairing link
 bindeFx();
 bindeFxZuweisung();

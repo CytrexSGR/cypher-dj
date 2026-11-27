@@ -2,27 +2,40 @@
 // Ziehen verschiebt (Beat und Ton), der rechte Rand zieht die Länge, Ziehen im Leeren wählt per Rechteck, unten die Velocity-Spur.
 // Shift+click selects the range from the note selected last, Ctrl+click adds a note to the selection or takes it out (2026-11-17).
 // Tasten bei Fokus auf der Roll: Pfeile (Raster bzw. Halbton, Umschalt: Oktave),
-// Entf, Strg+A, Q (auf 1/16 quantisieren), Esc. Ein Zug ist EINE Änderung (noten_aendern), Pfeiltasten fasst strip.js zusammen.
+// Entf, Strg+A, Q (auf das SNAP-Raster quantisieren), Esc. Ein Zug ist EINE Änderung (noten_aendern), Pfeiltasten fasst strip.js zusammen.
 // Die Roll zeigt den Clip aus st.projektEntwurf ?? st.projekt; ein Zug rechnet aus dem bestätigten Stand beim Zeigen bzw. Senden (Spec 6.34).
 // V2 Fix-Runde 2 H1: ebenso Tasten, Quantisieren, VEL, Löschen der Auswahl und neue Noten (ctx.aendereAus): gerechnet, wenn die Anfrage an der
 // Reihe ist, aus genau dem Stand, dessen rev mitgeht; vorher rechneten sie beim Tastendruck, und ein Zug davor, der noch unterwegs war, ging verloren.
-import { rasterBeats, beatsProTakt, RASTER, linien } from './timeline.js';
+import { beatsProTakt, linien } from './timeline.js';
+import { ROLL_RASTER, quantisiereNoten } from './notes_tools.js';
 import { findeClip } from './draft.js';
 import { istZug } from './clips.js';
 import { neuerSammler } from './strip.js';
 import {
   TASTEN_BREITE, TON_HOEHE, VEL_HOEHE, LAENGEN, QUANT, tonName, istSchwarz, zeilen, beatZuRx, rxZuBeat, yZuTon, imRaster, inVelSpur,
   neueRollAnsicht, scrolleTon, scrolleBeat, zoomRoll, notenKasten, trefferNote, trefferVel, velZuY, yZuVel, neueNote, verschiebeNoten,
-  dehneNoten, velocityNoten, quantisiere, rechteckAuswahl, bereichAuswahl, tastenSchritt, auswahlVel, notenLabel,
+  dehneNoten, velocityNoten, rechteckAuswahl, bereichAuswahl, tastenSchritt, auswahlVel, notenLabel, rollRasterId, rasterRolle,
 } from './pianoroll.js';
-import { TON_NAMEN, SKALEN, SKALA_TEXT, tonartOk, tonartText, inSkala, istGrundton, akkord, inTonart, umkehrung, arpeggio, passendeTonarten } from '../harmonie.js';
+import { TON_NAMEN, SKALEN, SKALA_TEXT, rasteEin, tonartOk, tonartText, inSkala, istGrundton, akkord, inTonart, umkehrung, arpeggio, passendeTonarten } from '../harmonie.js';
 
 const LEISTE = `<div class="p-roll-leiste">
   <label>SNAP <select data-r="raster" title="Snap grid of the piano roll"></select></label>
   <label>NOTE <select data-r="laenge" title="Length of new notes"></select></label>
   <label>VEL <input data-r="vel" inputmode="numeric" size="4" autocomplete="off" title="Velocity of the selected notes, 1 to 127: Enter sets it"></label>
-  <button data-r="quant" title="Quantize the selected notes (or all) to 1/16 (Q)">QUANTIZE 1/16</button>
-  <label>KEY <select data-r="grundton" title="Root of the project key: its pitches are marked in the roll"></select><select data-r="skala" title="Scale of the project key"></select></label>
+  <span class="p-roll-gruppe">
+    <button data-r="quant" title="Quantize the selected notes (or all) to the snap grid, BAR and OFF use 1/16 (Q)">QUANTIZE 1/16</button>
+    <label>SWING <input class="p-roll-zahl" data-r="swing" inputmode="numeric" size="3" autocomplete="off" value="50" title="Swing in percent, 50 to 75: 50 is straight, about 67 is a triplet feel (not on triplet grids)"></label>
+    <label>STR <input class="p-roll-zahl" data-r="staerke" inputmode="numeric" size="3" autocomplete="off" value="100" title="Strength of QUANTIZE in percent, 0 to 100: how far the notes move to the grid"></label>
+  </span>
+  <span class="p-roll-gruppe">
+    <button data-r="human" title="Humanize the selected notes (or all): a new random shift of start and velocity on every click">HUMANIZE</button>
+    <label>TIME <input class="p-roll-zahl" data-r="human-zeit" inputmode="numeric" size="3" autocomplete="off" value="20" title="Largest shift of the start in percent of a sixteenth, 0 to 50"></label>
+    <label>±VEL <input class="p-roll-zahl" data-r="human-vel" inputmode="numeric" size="3" autocomplete="off" value="10" title="Largest change of the velocity in steps, 0 to 40"></label>
+  </span>
+  <span class="p-roll-gruppe">
+    <button data-r="skala" aria-pressed="false" title="Keep new notes, vertical moves and the arrow keys in the key of the project">SCALE</button>
+  </span>
+  <label>KEY <select data-r="grundton" title="Root of the project key: its pitches are marked in the roll"></select><select data-r="tonart-skala" title="Scale of the project key"></select></label>
   <button data-r="finde" title="Find the key that fits the notes of this clip and set it">FIND</button>
   <button data-r="fit" title="Move the selected notes (or all) that lie outside the key to the nearest pitch of the key">FIT</button>
   <button data-r="inv-ab" title="Inversion: the highest note of every chord an octave down (selection or all)">INV▼</button>
@@ -38,15 +51,15 @@ export function bindeRolle(ctx, behaelter) {
   const r = (n) => behaelter.querySelector(`[data-r="${n}"]`);
   const cv = r('roll'), g = cv.getContext('2d');
   st.rolle = { clipId: null, ansicht: null, auswahl: [], rechteck: null,
-    raster: ctx.lies('djk-prod-rollraster', 'sechzehntel'), laenge: Number(ctx.lies('djk-prod-notenlaenge', '0.25')) || 0.25 };
-  for (const x of RASTER) r('raster').append(new Option(x.text, x.wert));
+    raster: rollRasterId(ctx.lies('djk-prod-rollraster', '1/16')), skala: ctx.lies('djk-prod-rollskala', '0') === '1', laenge: Number(ctx.lies('djk-prod-notenlaenge', '0.25')) || 0.25 };
+  for (const x of ROLL_RASTER) r('raster').append(new Option(x.text, x.id));
   for (const x of LAENGEN) r('laenge').append(new Option(x.text, String(x.wert)));
   r('raster').value = st.rolle.raster; r('laenge').value = String(st.rolle.laenge);
   // the key of the project (public/harmonie.js): "–" as the root means no key
   r('grundton').append(new Option('–', ''));
   TON_NAMEN.forEach((x, i) => r('grundton').append(new Option(x, String(i))));
-  for (const k of Object.keys(SKALEN)) r('skala').append(new Option(SKALA_TEXT[k], k));
-  r('skala').value = 'minor';
+  for (const k of Object.keys(SKALEN)) r('tonart-skala').append(new Option(SKALA_TEXT[k], k));
+  r('tonart-skala').value = 'minor';
   const tonart = () => { const t = (st.projektEntwurf ?? st.projekt)?.tonart; return tonartOk(t) ? t : null; };
   let gezeigteTonart = '';
   function zeigeTonart() {
@@ -54,22 +67,61 @@ export function bindeRolle(ctx, behaelter) {
     if (k === gezeigteTonart) return;
     gezeigteTonart = k;
     r('grundton').value = t ? String(t.grundton) : '';
-    if (t) r('skala').value = t.skala;
+    if (t) r('tonart-skala').value = t.skala;
+    zeigeSkala();
   }
   const setzeTonart = () => {
     const g = r('grundton').value;
     if (g === '') { if (tonart()) ctx.aendere('Key off', [{ befehl: 'tonart_setzen', aus: true }]); return; }
-    ctx.aendere('Key', [{ befehl: 'tonart_setzen', grundton: Number(g), skala: r('skala').value }]);
+    ctx.aendere('Key', [{ befehl: 'tonart_setzen', grundton: Number(g), skala: r('tonart-skala').value }]);
   };
   r('grundton').addEventListener('change', setzeTonart);
-  r('skala').addEventListener('change', setzeTonart);
-  r('raster').addEventListener('change', () => { st.rolle.raster = r('raster').value; ctx.merke('djk-prod-rollraster', st.rolle.raster); });
+  r('tonart-skala').addEventListener('change', setzeTonart);
+  r('raster').addEventListener('change', () => { st.rolle.raster = rollRasterId(r('raster').value); ctx.merke('djk-prod-rollraster', st.rolle.raster); zeigeWerkzeuge(); });
   r('laenge').addEventListener('change', () => { st.rolle.laenge = Number(r('laenge').value); ctx.merke('djk-prod-notenlaenge', r('laenge').value); });
 
   const gezeigt = () => { const f = findeClip(st.projektEntwurf ?? st.projekt, st.rolle.clipId); return f?.clip.art === 'midi' ? f : null; };
   const bestaetigt = () => { const f = findeClip(st.projekt, st.rolle.clipId); return f?.clip.art === 'midi' ? f : null; };
   const takt = () => beatsProTakt((st.projektEntwurf ?? st.projekt)?.taktart);   // the meter of the project: BAR snap and the bar lines follow it
-  const raster = () => rasterBeats(st.rolle.raster, takt());
+  const rasterId = () => rollRasterId(st.rolle.raster);
+  const raster = () => rasterRolle(rasterId(), takt());
+  // QUANTIZE follows SNAP; with BAR or OFF it takes 1/16. Triplet grids refuse a swing.
+  const quantId = () => (rasterId() === 'bar' || rasterId() === 'off' ? '1/16' : rasterId());
+  const rasterText = (id) => ROLL_RASTER.find((x) => x.id === id).text;
+  const istTriole = () => quantId().endsWith('T');
+  // number fields of the toolbar: empty or nonsense is the default, the value is clamped; norm rewrites the field
+  const zahlFeld = (n, lo, hi, vorgabe, ganz, norm = true) => {
+    const t = String(r(n).value).trim();
+    let v = t === '' ? vorgabe : Number(t.replace(',', '.'));   // a decimal comma is fine ("66,7")
+    if (!Number.isFinite(v)) v = vorgabe;
+    v = Math.min(hi, Math.max(lo, ganz ? Math.round(v) : v));
+    if (norm) r(n).value = String(v);
+    return v;
+  };
+  const humanWerte = (norm = true) => ({ zeit: zahlFeld('human-zeit', 0, 50, 20, true, norm), vel: zahlFeld('human-vel', 0, 40, 10, true, norm) });
+  // SCALE: the toggle is remembered; the lock acts only while the project has a key
+  const skalaTonart = () => (st.rolle.skala ? tonart() : null);
+  function zeigeSkala() {
+    r('skala').setAttribute('aria-pressed', st.rolle.skala ? 'true' : 'false');
+    r('skala').classList.toggle('an', st.rolle.skala);
+    r('skala').setAttribute('title', tonart() ? 'Keep new notes, vertical moves and the arrow keys in the key of the project' : 'Set a key first');
+  }
+  function zeigeWerkzeuge() {
+    r('quant').textContent = `QUANTIZE ${rasterText(quantId())}`;
+    r('swing').disabled = istTriole();
+    const h = humanWerte(false);
+    r('human').disabled = h.zeit <= 0 && h.vel <= 0;
+  }
+  r('skala').addEventListener('click', () => {
+    st.rolle.skala = !st.rolle.skala; ctx.merke('djk-prod-rollskala', st.rolle.skala ? '1' : '0'); zeigeSkala();
+    if (st.rolle.skala && !tonart()) ctx.melde('Set a key first (KEY)', true);
+  });
+  for (const n of ['swing', 'staerke', 'human-zeit', 'human-vel']) {
+    r(n).addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') r(n).blur(); });   // typing here is not a roll shortcut
+    r(n).addEventListener('input', zeigeWerkzeuge);
+    r(n).addEventListener('change', () => { zahlFeld('swing', 50, 75, 50, false); zahlFeld('staerke', 0, 100, 100, true); humanWerte(); zeigeWerkzeuge(); });
+  }
+  zeigeWerkzeuge(); zeigeSkala();
   // noten_aendern am Clip clipId, rechne(clip) → Notenänderungen aus dem Stand beim Senden (H1); keine Änderung: nichts senden
   const notenMit = (was, clipId, rechne) => ctx.aendereAus((p) => {
     const f = findeClip(p, clipId), noten = f?.clip.art === 'midi' ? rechne(f.clip) : [];
@@ -130,7 +182,7 @@ export function bindeRolle(ctx, behaelter) {
       gezogen = true;
       const dBeat = (m.offsetX - x0) / a.pxProBeat, dTon = Math.round((y0 - m.offsetY) / TON_HOEHE), r = raster();
       zug.bewege((p) => imStand(p, clip.id, (c) => (t.zone === 'rand' ? notenBefehle('Length of', c, dehneNoten(c, ids, t.note.id, dBeat, r))
-        : notenBefehle('Move', c, verschiebeNoten(c, ids, t.note.id, dBeat, dTon, r)))));
+        : notenBefehle('Move', c, verschiebeNoten(c, ids, t.note.id, dBeat, dTon, r, skalaTonart())))));
     }, () => {
       if (!gezogen) { zug.verwirf(); if (warGewaehlt) waehle([t.note.id]); return; }
       zug.lass();
@@ -166,13 +218,14 @@ export function bindeRolle(ctx, behaelter) {
     if (!f || !imRaster(e.offsetX, e.offsetY, cv.height)) return;
     const a = st.rolle.ansicht, t = trefferNote(f.clip, a, e.offsetX, e.offsetY);
     if (t) return;   // a note stays on a double click (2026-11-17: the right mouse button deletes)
-    const beat = rxZuBeat(a, e.offsetX), ton = yZuTon(a, e.offsetY), r = raster(), laenge = st.rolle.laenge, clipId = f.clip.id;
+    const sk = skalaTonart(), r = raster();
+    const beat = rxZuBeat(a, e.offsetX), ton = sk ? rasteEin(yZuTon(a, e.offsetY), sk) : yZuTon(a, e.offsetY), laenge = st.rolle.laenge, clipId = f.clip.id;
     let id = null;   // ID aus dem S2-Projekt-Zähler (6.28) des Stands beim Senden (H1): zwei schnelle Doppelklicks bekommen zwei IDs
     let ids = [];
     const toene = e.altKey ? akkord(ton, tonart()) : [ton];   // Alt: the chord of the key on this pitch (a minor triad without a key)
     const ok = await ctx.aendereAus((p) => {
       if (!findeClip(p, clipId)) return null;
-      const n = neueNote(p, beat, ton, r, laenge);
+      const n = neueNote(p, beat, ton, r, laenge, undefined, sk);
       const nr = Number(n.id.slice(1));
       const noten = toene.map((t, i) => ({ ...n, id: `n${nr + i}`, ton: t }));
       id = n.id; ids = noten.map((x) => x.id);
@@ -192,7 +245,7 @@ export function bindeRolle(ctx, behaelter) {
   // --- Tasten und Werkzeugleiste ---
   // Pfeiltasten: die Summe der gestauten Schritte (strip.js) wird erst gerechnet, wenn sie im Schreiber an der Reihe ist (H1), und zwar für die Noten,
   // die beim Drücken gewählt waren (D1 S3 Auftrag 16 c: wer zwischen Drücken und Senden anders wählt, verschiebt nicht die neue Auswahl)
-  const sammler = neuerSammler((d, mit) => notenMit('Move', mit.clipId, (c) => verschiebeNoten(c, mit.ids, mit.ids.at(-1), d.dBeat ?? 0, d.dTon ?? 0, 0)));
+  const sammler = neuerSammler((d, mit) => notenMit('Move', mit.clipId, (c) => verschiebeNoten(c, mit.ids, mit.ids.at(-1), d.dBeat ?? 0, d.dTon ?? 0, 0, mit.skala ?? null, d.dStufe ?? 0)));
   function loescheAuswahl(clip) {
     const ids = st.rolle.auswahl.filter((id) => clip.noten.some((n) => n.id === id));
     if (ids.length === 0) return;
@@ -202,13 +255,43 @@ export function bindeRolle(ctx, behaelter) {
       return da.length ? { label: notenLabel('Delete', da.length), befehle: [{ befehl: 'noten_loeschen', clip_id: clip.id, ids: da }] } : null;
     });
   }
-  // Quantisieren: die Auswahl beim Drücken, die Lagen aus dem Stand beim Senden (H1); liegt dort schon alles auf dem Raster, nur die Meldung
+  // The notes a tool works on: the selection at the press that still exists in the clip at sending time, else all notes; null = nothing to do
+  const werkzeugNoten = (c, ids) => {
+    const da = ids.filter((id) => c.noten.some((n) => n.id === id));
+    if (ids.length && !da.length) return null;
+    return { ids: ids.length ? da : null, noten: ids.length ? c.noten.filter((n) => da.includes(n.id)) : c.noten };
+  };
+  // Quantize: the command noten_quantisieren (one calculation for page and hand, one undo step) on the grid of SNAP. The calculation is made here first with
+  // the same arguments, only to tell "already on the grid" (the command itself succeeds without a change and writes no undo entry).
   function quant(clip) {
-    const ids = [...st.rolle.auswahl];
-    notenMit('Quantize', clip.id, (c) => {
-      const noten = quantisiere(c, ids, QUANT);
-      if (noten.length === 0) ctx.melde('Already on the 1/16 grid');
-      return noten;
+    const ids = [...st.rolle.auswahl], id = quantId(), triole = istTriole();
+    const staerke = zahlFeld('staerke', 0, 100, 100, true) / 100, swing = zahlFeld('swing', 50, 75, 50, false);
+    ctx.aendereAus((p) => {
+      const f = findeClip(p, clip.id), w = f?.clip.art === 'midi' ? werkzeugNoten(f.clip, ids) : null;
+      if (!w) return null;
+      const o = { raster_beats: rasterRolle(id, takt()), grenze: f.clip.loop_beats ?? f.clip.laenge_beats };
+      if (staerke < 1) o.staerke = staerke;
+      if (swing !== 50 && !triole) o.swing = swing;
+      const neu = quantisiereNoten(w.noten, o);
+      if (neu.length === 0) { ctx.melde(`Already on the ${rasterText(id)} grid`); return null; }
+      const b = { befehl: 'noten_quantisieren', clip_id: f.clip.id, raster: id };
+      if (o.staerke !== undefined) b.staerke = o.staerke;
+      if (o.swing !== undefined) b.swing = o.swing;
+      if (w.ids) b.noten_ids = w.ids;
+      return { label: notenLabel('Quantize', neu.length), befehle: [b] };
+    });
+  }
+  // Humanize: noten_humanisieren with a new seed on every click (same seed = same result, so the seed is drawn here, not in the command)
+  function humanisiere(clip) {
+    const ids = [...st.rolle.auswahl], { zeit, vel } = humanWerte();
+    if (zeit <= 0 && vel <= 0) return;
+    const saat = Math.floor(Math.random() * 4294967296);
+    ctx.aendereAus((p) => {
+      const f = findeClip(p, clip.id), w = f?.clip.art === 'midi' ? werkzeugNoten(f.clip, ids) : null;
+      if (!w || w.noten.length === 0) return null;
+      const b = { befehl: 'noten_humanisieren', clip_id: f.clip.id, saat, zeit, vel };
+      if (w.ids) b.noten_ids = w.ids;
+      return { label: notenLabel('Humanize', w.noten.length), befehle: [b] };
     });
   }
   cv.addEventListener('keydown', (e) => {
@@ -216,8 +299,10 @@ export function bindeRolle(ctx, behaelter) {
     const f = bestaetigt();
     if (!f || e.altKey) return;
     const strg = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
-    const schritt = strg ? null : tastenSchritt(e.key, e.shiftKey, raster());
-    if (schritt) { if (st.rolle.auswahl.length) sammler.schritt(schritt, { clipId: st.rolle.clipId, ids: [...st.rolle.auswahl] }); }
+    let schritt = strg ? null : tastenSchritt(e.key, e.shiftKey, raster());
+    const sk = skalaTonart();
+    if (schritt && sk && schritt.dTon !== 0 && Math.abs(schritt.dTon) === 1) schritt = { dBeat: 0, dTon: 0, dStufe: schritt.dTon };   // SCALE: up and down are one degree of the key
+    if (schritt) { if (st.rolle.auswahl.length) sammler.schritt(schritt, { clipId: st.rolle.clipId, ids: [...st.rolle.auswahl], skala: sk }); }
     else if ((e.key === 'Delete' || e.key === 'Backspace') && !strg) loescheAuswahl(f.clip);
     else if (strg && k === 'a') waehle(f.clip.noten.map((n) => n.id));
     else if (!strg && k === 'q') quant(f.clip);
@@ -226,6 +311,7 @@ export function bindeRolle(ctx, behaelter) {
     e.preventDefault(); e.stopPropagation();
   });
   r('quant').addEventListener('click', () => { const f = bestaetigt(); if (f) quant(f.clip); });
+  r('human').addEventListener('click', () => { const f = bestaetigt(); if (f) humanisiere(f.clip); });
   // Harmony tools: on the selected notes, or on all notes of the clip when none is selected
   const wirk = (c, ids) => (ids.length ? c.noten.filter((n) => ids.includes(n.id)) : c.noten);
   r('finde').addEventListener('click', () => {
@@ -287,7 +373,7 @@ export function bindeRolle(ctx, behaelter) {
       if (key && inSkala(t, key)) { g.fillStyle = istGrundton(t, key) ? '#ffb020' : '#5b8cff'; g.fillRect(TASTEN_BREITE - 6, y + 1, 4, TON_HOEHE - 3); }
       if (t % 12 === 0) { g.fillStyle = '#0e0f12'; g.font = '8px system-ui, sans-serif'; g.fillText(tonName(t), 2, y + TON_HOEHE - 1); }
     }
-    for (const l of linien({ beat0: a.beat0, pxProBeat: a.pxProBeat }, w - TASTEN_BREITE, takt())) {
+    for (const l of linien({ beat0: a.beat0, pxProBeat: a.pxProBeat }, w - TASTEN_BREITE, takt(), rasterId() === 'bar' || rasterId() === 'off' ? null : raster())) {
       g.strokeStyle = l.takt ? 'rgba(255,255,255,0.18)' : l.haupt ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.04)';
       const x = Math.round(TASTEN_BREITE + l.x) + 0.5;
       g.beginPath(); g.moveTo(x, 0); g.lineTo(x, unten); g.stroke();

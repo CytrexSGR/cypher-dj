@@ -14,7 +14,8 @@ from . import storage as ablage, tools as werkzeuge
 from .tools import WerkzeugFehlt
 
 GRAPH_NAME = re.compile(r"^[a-z0-9_-]{1,32}$")  # same rule as the page server (graphs.ts:18) and the core
-PROBEN = ("orchester-schlag.f32", "orchester-schlag-schichten.f32", "feder-ir.f32")
+PROBEN = ("orchester-schlag.f32", "orchester-schlag-schichten.f32", "feder-ir.f32",
+          "space-raum.f32", "space-platte.f32", "space-halle.f32", "space-kammer.f32", "space-leer.f32")
 
 
 def graphen_ordner() -> Path:

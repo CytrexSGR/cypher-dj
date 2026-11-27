@@ -1054,7 +1054,11 @@ test('matrix DOM: a host without pin methods shows the graph defaults greyed and
   const kein = new K('div');
   baueFrontplatte(kein, { panel: FELD_PANEL(), regler: BEREICHE, adapter: { get: () => 0.5, set() {} }, dokument: DOK });
   assert.equal(kein.finde('fp-m-z').length, 0);
-  assert.equal(kein.finde('fp-text')[0].textContent, 'This device has no patch field');
+  // a host that cannot set pins (a Strudel stream, the INSTRUMENTS tab) points to the place where the patch field lives
+  assert.equal(kein.finde('fp-text')[0].textContent, 'Patch field and cables: open this device on an instrument track in PRODUCTION');
+  const keinSpur = new K('div');
+  baueFrontplatte(keinSpur, { panel: FELD_PANEL(), regler: BEREICHE, adapter: { get: () => 0.5, set() {}, stifte: () => [], stiftSetzen() {}, stifteSetzen() {} }, dokument: DOK });
+  assert.equal(keinSpur.finde('fp-text')[0].textContent, 'This device has no patch field', 'a track device whose labels are missing');
   // learn mode: a click does not set a pin
   const l = feldBau({ lernPfad: true, opt: { lernen: { an: true, gelernt: new Set() }, beiLernen() {} } });
   l.z(7, 7).feuere('pointerdown', { clientY: 10 }); l.z(7, 7).feuere('pointerup', { clientY: 10 });

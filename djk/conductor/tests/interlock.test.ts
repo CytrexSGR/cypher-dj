@@ -51,7 +51,7 @@ test('Keylock 3: Teil keylock 0 (cypher) wird angenommen, deck/1/keylock nicht; 
 
 test('Form an Teilen: unbekannter Regler, nur Hand, außerhalb des Bereichs', () => {
   assert.deepEqual(codes(plan([{ regler: 'deck/9/fader', art: 'setze', ab_takt: 9, nach: -6 }]), umgebung()), ['unbekannter_regler']);
-  assert.deepEqual(codes(plan([{ regler: 'xfader', art: 'setze', ab_takt: 9, nach: 0.5 }]), umgebung()), ['nur_hand']);
+  assert.deepEqual(codes(plan([{ regler: 'cue/pegel', art: 'setze', ab_takt: 9, nach: -6 }]), umgebung()), ['nur_hand']);
   assert.deepEqual(codes(plan([{ regler: 'deck/1/eq/tief', art: 'setze', ab_takt: 9, nach: 9 }]), umgebung()), ['ausserhalb_bereich']);
 });
 

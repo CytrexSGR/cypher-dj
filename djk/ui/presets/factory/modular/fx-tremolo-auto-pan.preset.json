@@ -1,0 +1,41 @@
+{
+ "schema": 1,
+ "name": "Tremolo / auto pan",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "fx-tremolo",
+ "werte": {
+  "knob1": 0.7143,
+  "knob2": 0.5,
+  "knob3": 0.8,
+  "knob4": 0.5,
+  "knob5": 1.0,
+  "knob6": 1.0
+ },
+ "beschreibung": {
+  "art": "modulation",
+  "unterart": "tremolo",
+  "charakter": [
+   "wide",
+   "smooth",
+   "soft"
+  ],
+  "genre": [
+   "ambient",
+   "downtempo",
+   "progressive"
+  ],
+  "einsatz": [
+   "breakdown",
+   "intro"
+  ],
+  "energie": 2,
+  "text": "Auto-pan: one bar per sweep, depth 80 %, shape 6 dB, Pan mode so the right side runs in antiphase, mix 100 %; slow left to right drift."
+ },
+ "tags": [
+  "fx-tremolo"
+ ],
+ "notiz": "Set by the knob ranges of the graph, not yet heard (2026-11-26).",
+ "angelegt": "2026-11-26T00:00:00.000Z",
+ "geaendert": "2026-11-26T00:00:00.000Z"
+}

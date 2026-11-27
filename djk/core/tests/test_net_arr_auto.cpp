@@ -1,6 +1,6 @@
 // 1.12 Automation slice 3, task 3: /k/arr/auto ,hsisi in the net thread (INTERFACES 4.11) and /e/auto ,isi (5.13).
-//   (a) good commands become Befehl ARR_AUTO: nr = spur (0..32), politik = field (fader 0, pan 1, mute 2, solo 3), an
-//   (b) refusals as /q 6 with nothing in the ring: spur outside 0..32 -> format, an outside 0/1 -> format, spur 0 with an 0 -> format,
+//   (a) good commands become Befehl ARR_AUTO: nr = spur (0..128), politik = field (fader 0, pan 1, mute 2, solo 3), an
+//   (b) refusals as /q 6 with nothing in the ring: spur outside 0..128 -> format, an outside 0/1 -> format, spur 0 with an 0 -> format,
 //       unknown ziel -> auto_ziel_unbekannt, cypher with an 0 -> nur_andreas; cypher with an 1 passes (negative control), andreas with an 0 passes
 //   (c) in the AI stop cypher is refused with ki_gestoppt before any range check (like every /k/arr command but stopp), andreas is not
 //   (d) the kern event AUTO_ZUSTAND leaves as /e/auto with spur, the ziel name and zustand
@@ -40,8 +40,8 @@ int main() {
     // (a) good commands
     sende(601, "andreas", 3, "pan", 0);
     PRUEF(bef->hole(b) && b.art == cdj::Befehl::ARR_AUTO && b.id == 601 && b.nr == 3 && b.politik == 1 && b.an == 0 && !std::strcmp(b.quelle, "andreas"));
-    sende(602, "andreas", 32, "solo", 1);
-    PRUEF(bef->hole(b) && b.art == cdj::Befehl::ARR_AUTO && b.nr == 32 && b.politik == 3 && b.an == 1);
+    sende(602, "andreas", 128, "solo", 1);
+    PRUEF(bef->hole(b) && b.art == cdj::Befehl::ARR_AUTO && b.nr == 128 && b.politik == 3 && b.an == 1);
     sende(603, "andreas", 1, "fader", 0);
     PRUEF(bef->hole(b) && b.nr == 1 && b.politik == 0 && b.an == 0);
     sende(604, "andreas", 7, "mute", 1);
@@ -52,7 +52,7 @@ int main() {
     sende(606, "cypher", 2, "fader", 1);
     PRUEF(bef->hole(b) && b.id == 606 && b.an == 1 && !std::strcmp(b.quelle, "cypher"));
     // (b) refusals
-    sende(611, "andreas", 33, "fader", 0);
+    sende(611, "andreas", 129, "fader", 0);
     PRUEF(abgelehnt(611, "format"));
     sende(612, "andreas", -1, "fader", 0);
     PRUEF(abgelehnt(612, "format"));
@@ -69,7 +69,7 @@ int main() {
     sende(618, "gibtsnicht", 1, "fader", 0);
     PRUEF(abgelehnt(618, "ausserhalb_bereich"));
     // order of the refusals: range of spur/an, then ziel, then spur 0 with an 0, then nur_andreas
-    sende(631, "andreas", 99, "x", 0);
+    sende(631, "andreas", 999, "x", 0);
     PRUEF(abgelehnt(631, "format"));
     sende(632, "andreas", 0, "x", 0);
     PRUEF(abgelehnt(632, "auto_ziel_unbekannt"));
@@ -96,7 +96,7 @@ int main() {
       // an event that is no field of the contract is dropped, never mapped to another field (deck 3 with field 4 must not come out as 3/fader)
       cdj::Ereignis bad{};
       bad.art = cdj::Ereignis::AUTO_ZUSTAND;
-      for (const auto& p : {std::pair<int, int>{3, 4}, {3, -1}, {0, 0}, {33, 0}}) {
+      for (const auto& p : {std::pair<int, int>{3, 4}, {3, -1}, {0, 0}, {129, 0}}) {
         bad.deck = p.first;
         bad.fassung = p.second;
         bad.status = 1;

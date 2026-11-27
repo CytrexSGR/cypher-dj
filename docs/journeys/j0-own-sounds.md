@@ -34,7 +34,7 @@ the disk is not mounted.
 
 ## 3. Add one more file
 
-**IMPORT** (next to ADD FOLDER) takes audio and MIDI files from this computer, or drop them on the panel. Imported
+**IMPORT** (next to ADD FOLDER) takes audio and MIDI files from this computer, or drop them on the panel. Drop files, not a folder: a dropped folder is refused with "use ADD FOLDER for a folder". Imported
 files are copied into the instance's import folder and are in the catalogue after the next short build. [`j0.import`]
 
 If the file does not turn up, check that it is a normal audio file; the import names every refused file with its

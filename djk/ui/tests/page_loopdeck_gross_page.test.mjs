@@ -170,11 +170,24 @@ test('V4 solo shows the stand; the meter listens to spur/<nr> of the stand; a pr
   const z = zug('a1');
   assert.ok(z.querySelector('.zug-s').classList.contains('an'));
   assert.equal(z.querySelector('.meter').dataset.kanal, 'spur/6');
-  const { zeigePegel } = await import('../public/deck_view.js');
-  zeigePegel('spur/6', -30); assert.equal(z.querySelector('.meter i').style.height, '50%');
+  const { zeigePegel, zeigePegelJetzt } = await import('../public/deck_view.js');
+  zeigePegel('spur/6', -30); zeigePegelJetzt(); assert.equal(z.querySelector('.meter i').style.height, '50%');
   assert.ok(!zug('a2').querySelector('.zug-s').classList.contains('an'));
   await stoss();
   assert.ok(z.querySelector('.zug-s').classList.contains('an'), 'still on after the refetch');
+});
+
+test('V4 level events are applied once per frame, the last value of each channel wins', async () => {
+  await projektMit([]);
+  await oeffneSession(standMit({ nr: 6, solo: true, arm: true })); await ruhe();
+  const z = zug('a1');
+  const { zeigePegel, zeigePegelJetzt } = await import('../public/deck_view.js');
+  for (let i = 0; i < 200; i++) { zeigePegel('spur/6', -60 + (i % 50)); zeigePegel('spur/7', -10); }
+  zeigePegel('spur/6', -15); zeigePegel('spur/7', -45);
+  zeigePegelJetzt();
+  assert.equal(z.querySelector('.meter i').style.height, '75%');
+  zeigePegelJetzt();   // nothing pending: untouched
+  assert.equal(z.querySelector('.meter i').style.height, '75%');
 });
 
 test('V4 a refused solo rolls the button back', async () => {

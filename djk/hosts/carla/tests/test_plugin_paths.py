@@ -80,7 +80,7 @@ def test_plugin_aus_dateiordner_ist_nicht_eigen(tmp_path, monkeypatch):
 def test_pfade_option_ersetzt_die_wurzeln(tmp_path, monkeypatch, capsys):
     heim_mit_datei(tmp_path, monkeypatch, "/opt/plugins-a\n")
     gesehen = []
-    monkeypatch.setattr(plugin_scan, "scanne", lambda wurzeln, index, mit: gesehen.append(list(wurzeln)) or {"neu": 0, "entfernt": 0, "geaendert": 0, "blockiert": 0})
+    monkeypatch.setattr(plugin_scan, "scanne", lambda wurzeln, index, mit, shim=None: gesehen.append(list(wurzeln)) or {"neu": 0, "entfernt": 0, "geaendert": 0, "blockiert": 0})
     assert plugin_scan.main(["--index", str(tmp_path / "i.json"), "--pfade", "/only/here"]) == 0
     assert plugin_scan.main(["--index", str(tmp_path / "i.json")]) == 0
     assert gesehen[0] == ["/only/here"]

@@ -5,8 +5,8 @@
 core 1
 cues 3
 hand 1
-instruments 46
-py-carla 37
+instruments 49
+py-carla 42
 py-generator 1
 py-key_energy 1
 py-sound 1

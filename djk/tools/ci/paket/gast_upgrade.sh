@@ -4,7 +4,8 @@ set -uo pipefail
 OLD=$(ls $HOME/cypher-dj_*.deb | sort -V | head -1); NEW=$(ls $HOME/cypher-dj_*.deb | sort -V | tail -1)
 URL=http://127.0.0.1:47300
 k() { echo "K $1=$2"; }
-H1=(-H content-type:application/json -H x-djk-quelle:cypher)
+T=$(cat "$HOME/.config/cypherdj/hand.token" 2>/dev/null)
+H1=(-H content-type:application/json -H x-djk-quelle:cypher ${T:+-H "authorization: Bearer $T"})
 units() { k "$1_units_active" "$(systemctl --user list-units 'cypherdj-*' --no-legend --state=active | wc -l)"; k "$1_units_failed" "$(systemctl --user list-units 'cypherdj-*' --no-legend --state=failed | wc -l)"; }
 up() { cypher-dj start > /tmp/start-$1.log 2>&1; k "$1_start_rc" $?; for i in $(seq 1 60); do curl -s --max-time 3 -o /dev/null $URL/lage && break; sleep 2; done; }
 

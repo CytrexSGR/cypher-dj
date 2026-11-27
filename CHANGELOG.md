@@ -3,6 +3,163 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-27, twenty-third update (source only, no new package)
+
+**The agent and the live hand**
+- Agent keys and rules for the hand. Every call of the agent's MCP server now carries a key, a level and the tool it
+  comes from. Nothing is configured: the page server creates a key file in your user config folder at start and the hand
+  reads it. The level is read, write or destructive, and every tool belongs to one class (a table in the code; the
+  hand's call reference gives the counts). The key of the local hand may do everything. Further keys with a chosen level (read, write,
+  full) are made, listed and revoked under "Agent keys" in the pairing dialog and shown once. The Stop Cypher button
+  refuses every agent write (409 `ki_gestoppt`) and shows AGENTS STOPPED until Release. Writes are rate limited per key
+  (20 at once, then 2 per second; destructive calls 3 at once, then 1 per 20 seconds; the answer is 429
+  `zu_schnell` with the wait). Destructive calls are refused while music plays (409 `musik_laeuft`), except tools whose
+  destructive part is stopping the sound. Every call, and every refusal after the caller is identified, goes into a log file, and
+  the last 50 show in the new AGENT LOG panel. Your own browser, controllers and tablet are never limited. A request whose Host header is not the
+  local address of the page is refused (421). The key separates agents from each other, not from other programs of the
+  same user, who can read the key file.
+- The agent may now turn nearly every mixer control: crossfader and its sides, master level and compressor, channel
+  targets, PFL and cue mix, bus faders, FX routing, the live keys and the deck grid. On the mixer only the headphone level
+  and the deck transport stay human only; on the page, among others, AUTO, releasing Stop Cypher, proposals, MIDI
+  learn, pairing, the plugin scan and plugin windows stay yours. A raise of the master level, a bus fader or a loops or stems container fader or trim by more than 6 dB must be a
+  ramp of at least one bar, else the server answers `nur_rampe`. Stop Cypher also holds FX routing, the live keys and
+  the deck grid.
+- Timed pattern moves. A `spur` can switch the pattern of any pattern stream (1, 2, 3, 5, 6, 7, 9, 10; a stream without
+  a generator is refused with `strom_ohne_erzeuger`) at a bar of the track. A track starts at `ab` (`takt`, `phrase`) or
+  at an absolute bar with `anker_takt` (`anker_vorbei` when that bar has passed), and `probe: true` checks everything
+  and answers with the plan without scheduling anything. `lage` names the bars that `takt` and `phrase` would pick now.
+- Timed Surge changes. `klang setze` takes `ab` (`jetzt`, `schlag`, `takt`, `phrase`) or `ab_beat`, and a `spur` move on
+  `wirt:bass/<parameter>` or `wirt:melodie/<parameter>` sets a discrete Surge parameter (a switch, a type, a mode) at its
+  beat. The host reloads its state at that beat, so put it on a quiet beat: it cuts sounding notes.
+- Pattern fades. Strudel patterns know `.rein(n)` and `.raus(n)`: the level of every hit follows a fade in or out over
+  n bars counted from the bar the pattern takes effect. A second argument (`.rein(n, schon)`) says how many bars of
+  the fade have already run, so a fade carries across the next pattern change. A held pad note does not fade; use a
+  fader ramp for that.
+- Live scenes, tool `szene`. `sichern`, `ersetzen`, `laden`, `liste`, `zeige` and `loeschen` store and restore a
+  snapshot of the live sound in the open live project: patterns with their phase, stream labels, control values,
+  graphs, FX and FX routing, the Surge states and the running loop tracks of the agent. `laden` brings back only what
+  differs, from the next bar, continues fades that were running and lists what a rule refused under `ausgelassen`.
+  It first saves the live state as the automatic scene `_vor_laden`, so a restore is undone with `laden _vor_laden`;
+  `stille` saves `_vor_stille` before it silences everything. These scenes are not the launcher scenes of the loop decks.
+- Stored setups, tool `aufbau`. A setup holds a scene, the tempo, the four container faders and the graphs of the
+  Cypher Modular streams, outside any project. `laden` opens the live project when none is open and ramps the faders
+  over 2 bars, including the container faders that sit closed after a core restart; a fader on a track place without
+  a hearing check is left out (`kein_hoerschein`). A fader that is closed when saved is not stored, and the answer
+  warns about it. `loeschen` moves the file into a bin folder. Loading stops the agent's own running arcs and scene
+  tracks first, so they cannot write over the restore.
+- Arcs, tool `bogen`. An arc is layers of Strudel patterns with an entry bar, an optional exit bar and fades, plus one
+  break with a drop, over 1 to 128 bars. The server compiles it into one `spur` and starts it through the same rules
+  (AUTO, Stop Cypher, anchor, `probe`); the answer carries the compiled body and the plan (`+ layer`, `- layer`,
+  `break`, `drop`). Layers on one stream are stacked, a stream the arc has no layer on is never touched. `spuren`
+  shows a running arc with its bar and the next change. An arc does not loop; repeat it with `warte` and a new `bogen`.
+- `warte {bis: "spur_ende", name}` waits until a track is `vorher_takte` bars before its end (0 to 64, default 4) and
+  says whether it was `vorher`, `gestoppt` or `beendet`. The wait has a fixed deadline (`frist`) and ends with
+  `uhr_steht` when the master clock stops. `lage` and `warte` take `kurz` (only what changed since the last `lage`
+  or `warte` answer) and `felder` (only the fields you name); `pegel` takes `nur_hoerbar`.
+- Mix check, tool `mischung`. It listens to the master for 1 to 16 bars (default 4) and compares the spectrum in third
+  octaves with a rough curve for a genre (techno, house, deep_house, dub, techstep, minimal; the curves are set by hand
+  and marked `ziel_grob`). The answer carries the bands, the chroma and the key (from the argument or a playing deck),
+  short-term loudness, the highest peak seen in the window (not a true peak), the stereo correlation and a verdict. It
+  reads only.
+- Voice material, tool `stimme`. It turns phrase WAV files (one per phrase, no speech synthesis) into one loop with a
+  slot per phrase, `stil` roh or fluester, and puts the loop on a channel (`erz/5` to `erz/7`, `pad/1`, `pad/2`). The
+  answer says which note plays which phrase. The same step runs on the command line as `stimme_bauen`.
+- Stream labels. Every stream can carry a short label (1 to 60 characters) that says what it plays. `strudel`, a `spur`
+  move and the layer names of `bogen` set it, every pattern write replaces it, and a write without a label clears it.
+  `lage` and the studio read show it. The Strudel place gets a channel strip row above the stream rows: one large cell
+  per stream with its number, its label (else the start of the pattern, dimmed), a level meter, a blink when a hit
+  rises above the running level, and a line for the running arc with its bar and the next change.
+- The hand speaks the MCP revision 2026-07-28 and serves the two skills of the package (`djk-live`, `track-analysis`)
+  as MCP skills, so a client can load them from the server. Clients of the earlier revision keep working, and a
+  missing skills folder leaves the tools unaffected.
+
+**Production**
+- Noise gate and multiband compressor as insert stages in PRODUCTION. The "+" menu of a strip offers Gate (16 per project) and Multiband (8 per project, three bands Low, Mid and High with two crossovers); the limiter pool grows from 2 to 8.
+- Larger insert pool in PRODUCTION. A project now holds 160 compressors and 160 EQs (one of each for every track, group, return and the master) for its insert stages (was 12 and 8).
+- Send automation. The level of an existing send of a track into a return can be drawn as an automation lane: the lane
+  menu of a track offers "Send <return name>" for every send without a lane, and the lane is drawn and edited on the dB
+  scale of the fader. It plays live and in the export. Tracks only, not groups. The lane is evaluated once per audio
+  block, so a step is smoothed over up to 21 ms. A send with a lane cannot be switched off until its lane is deleted
+  (deleting a return removes its send lanes), and nothing grabs a send lane by hand. In the routing matrix a send cell
+  with a lane is marked ("Automated: the lane sets this send"). The agent writes it with `proj_aendern` `auto_neu` and the
+  target `send.<returnId>`; no new tool.
+- Markers in the PRODUCTION view. A strip above the ruler holds named markers (Intro, Drop, Break). A click moves the
+  start marker to a marker, Shift click loops from it to the next marker, which also sets the export range, a double
+  click renames, a drag moves it on the grid, Delete or the context menu removes it, + MARKER adds one at the start
+  marker. Markers move with inserted and removed time and are one undo step with it. Projects without markers are
+  unchanged. The agent reads them with the project and writes them with the new commands `marker_setzen` and
+  `marker_loeschen`.
+- Piano roll tools. SNAP now offers 1/32 and the triplets 1/16T, 1/8T and 1/4T next to 1/16, 1/8, 1/4, BAR and OFF,
+  and the grid lines follow it. QUANTIZE follows SNAP and has a strength (STR) and a swing (SWING, 50 to 75 percent).
+  HUMANIZE shifts start and velocity by a random amount (TIME, ±VEL) with a new draw on every click. SCALE keeps new
+  notes, vertical moves and the arrow keys in the key of the project. The agent's `proj_aendern` takes the commands
+  `noten_quantisieren` and `noten_humanisieren`. A snap value saved by an older version is kept (1/4 stays 1/4).
+- Export delivery formats. Next to the float master (WAV, 48 kHz, 32 bit float, as before) the export now writes
+  delivery files made from it: WAV at 16, 24 or 32 bit float, FLAC at 16 or 24 bit, MP3 at 192, 256 or 320 kbit/s, at
+  44.1, 48, 88.2 or 96 kHz (MP3 at 44.1 or 48 kHz). Sample rate conversion is libsoxr, a 16 bit file gets TPDF dither.
+  The new export dialog has presets (Master only, Release, Promo, Release and promo, Custom). Without a choice the
+  export is exactly what it was.
+- A loudness target (-14 LUFS and -1 dBTP, or a true peak ceiling) checks the master and every delivery file, each
+  measured on the file itself. It reports, it never normalises the mix: a true peak above the ceiling is a warning.
+- Release metadata (title, artist, album, year, genre, ISRC) goes into the delivery files: WAV tags with a BWF chunk,
+  FLAC with BPM and key, MP3 as ID3v2.3. The master stays untagged, a switch leaves the tags out, and ffmpeg still
+  writes its own encoder tag. No cover art, no OGG, Opus or AAC.
+- The per-track export can write its set in WAV or FLAC at the chosen depth and rate. The agent's `proj_export` takes
+  `abgabe`, `ziel` and `ohne_meta`, and the new `proj_export_spuren` writes the per-track set. The delivery formats need
+  an ffmpeg with libsoxr and libmp3lame; the Ubuntu package has both.
+- The export dialog chooses where the files go: "Export to" picks any folder below your home folder or on a mounted disk
+  (the agent's `ordner`), and SHOW FOLDER opens the folder of the last export.
+- Note editor on audio clips (slice 1): "Detect notes" finds the notes of a single-voice clip (a vocal, a lead, a bass
+  line), shows them over the clip, and you can change the pitch of a note by up to 24 semitones and reset it. Each
+  step is one undo step, and the clip plays the edit as soon as it is rendered; untouched parts stay bit-identical.
+- A project with edited notes carries a new optional clip field `audio_noten`. An older build refuses such a project
+  with "unknown field audio_noten" instead of dropping the edits silently. Projects without note edits are written
+  exactly as before.
+- Note editor: the timbre of a shifted note stays closer to the original (the spectral envelope is read with a smooth
+  curve between the partials). Renders made before are computed again by themselves.
+- 128 tracks in PRODUCTION (was 32). The agent's paths `spur/1..128/*` and the level readings follow, the APC20 project
+  mixer reaches every track in banks of eight, and the controller table gets the rows for tracks 33 to 128 appended.
+- Master meter in the PRODUCTION transport bar: momentary and short-term loudness, integrated loudness since RESET or
+  PLAY with its distance to the export target, true peak and stereo correlation, measured from the output as heard. A
+  click on the correlation value opens a vectorscope, which the ANALYZE window shows for LIVE OUTPUT as well. The A/B
+  buttons switch all master stages off and on at matched loudness. The agent's `analyse_live` returns `lufs_i` and
+  `luecke_s` and takes `reset` to clear the held values.
+
+**Devices and plugins**
+- Cypher Drive (`fx-drive`), an insert device with six curves (Tape, Tube, Soft, Hard, Fold, Crush), drive, character,
+  tone, output and mix, and a three-band mode with its own drive per band; six factory presets.
+- Cypher Echo (`fx-echo`), a character delay with seven synced divisions and a free time, low and high cut and drive
+  inside the feedback, tape wow, ping-pong and ducking by the input; five factory presets.
+- Cypher Space (`fx-space`), a convolution reverb with zero reported latency and four synthetic rooms (Hall, Room,
+  Plate, Chamber), pre-delay, cuts, width and a blend with the algorithmic reverb; eight factory presets. On the panel
+  of a stage a ROOM selector swaps the room and keeps the knob values (one undo step), and LOAD IR makes a copy with
+  your own impulse response from a file of a sample folder (cut to 2 s). It was measured on probe signals and has not
+  been judged by a listener yet.
+- Cypher Chorus, Flanger, Phaser and Tremolo, four modulation insert devices with free rate or tempo sync from 1/16
+  note to 4 bars (the tremolo doubles as an auto-pan); sixteen factory presets.
+- Plugin parameters on lanes and knobs. Any parameter of a plugin stage can be drawn as an automation lane (target
+  `plugin.<stage>.<index>`, up to 16 per stage, sent to the plugin at 50 Hz). Up to 16 parameters sit on controller
+  knobs: the MIDI button on a parameter row arms the learn flow, and the agent assigns one with `plugin_regler_setzen`.
+- Sidechain key for plugins. A plugin stage whose plugin has four or more audio inputs takes a key (Key selector on the
+  stage, `insert_setzen` `key` for the agent); otherwise the answer is `kein_schluessel`. A change of the key restarts
+  that plugin's host.
+- A VST3 bundle with several plugins lists each plugin as its own entry; the later ones load through a small shim
+  module that the install builds (until then they are listed as blocked with the reason `mehrklassen`).
+- Eight effect hosts instead of four: a project can run up to eight plugin effect hosts at once.
+
+**Performance**
+- Cheaper EQ and saturator oversampling. The halfband filter of the 2x oversampler is folded (35 multiplications per
+  sample instead of 70) and uses an AVX2 and FMA path when the CPU has both, else a portable one. EQ bands skip work
+  that cannot change the result. An EQ stage with all bands neutral is bypassed with the same latency, and leaving the
+  bypass matches the always-on path within -120 dB. Where the oversampler runs, the output differs from before by less than -120 dB against the peak (test bound), so
+  such an export is not bit-identical to one from the previous update; at 96 kHz the bands are unchanged.
+- Track insert chains in parallel. A track whose chain needs nothing outside its own strip now runs trim and chain on the
+  worker that renders the track. Groups, returns and the master stay serial, and so does a track that listens to a sidechain
+  key or is a key source; no chain moves into a track unit while a freeze runs. The result is bit-identical to the serial path (a test compares every bus and the
+  master over 3000 blocks).
+- Meter and gain reduction bars in the page refresh once per frame, and with no arrangement playing the idle reset of
+  the insert pool runs once per quiet stretch instead of on every audio block.
+
 ## 2026-11-24, twenty-second update (source only, no new package)
 
 - Labs: 57 features are marked experimental. The studio shows a small LAB mark on them (tooltip "experimental, may

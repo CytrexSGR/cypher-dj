@@ -468,8 +468,14 @@ int main() {
     x.bis(9 * SPB);
     v = cdj::ArrPruefZugang::stimme_z(x.t.arr, ID);
     PRUEF(v && v->karte.n == 3 && v->n_huellen == 0);
-    const size_t vorher = 2553024;   // sizeof(Arrangement) before K2 (measured at the commit this task started from)
+    // strand 2 task 3.3: 9144640, the structural key covers the host slots (+256; measured 2026-11-26); 9144384 in strand 1 slice 6: 128 tracks (the per-track
+    // arrays of the Arrangement; measured 2026-11-26); 5502016 in slice 5: eight effect hosts (ArrHostStufe 8 x
+    // 2 x 8192 floats; measured 2026-11-26); 5225472 in slice 4: insert pool 376 slots (gate 16, mb 8, lim 8); 5119360 in slice 3b at 346 slots and table
+    // 24576 (4590912 in slice 3, insert pool 218 slots (the per-slot arrays of ArrInserts are members; 4043584 at 64 slots); 2553024 before K2 (measured at
+    // the commit that task started from)
+    const size_t vorher = 9144640;
     std::printf("sizeof(Arrangement) before %zu, after %zu, growth %zu\n", vorher, sizeof(cdj::Arrangement), sizeof(cdj::Arrangement) - vorher);
+    std::printf("sizeof(ArrSnapshot) %zu, sizeof(ArrSpur) %zu\n", sizeof(cdj::ArrSnapshot), sizeof(cdj::ArrSpur));
     PRUEF(sizeof(cdj::Arrangement) < vorher + (2u << 20));
   }
   PRUEF_ENDE();

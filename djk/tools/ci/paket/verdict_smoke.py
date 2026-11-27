@@ -9,6 +9,7 @@ def num(k):
     try: return float(kv[k])
     except Exception: return None
 tools = num("mcp_tools")
+skills = num("mcp_skills")
 checks = [
     ("deb copied unchanged (sha256 host = guest)", kv.get("deb_sha256") == hostsha),
     ("apt install rc 0", kv.get("install_rc") == "0"),
@@ -28,6 +29,7 @@ checks = [
     ("no file in /opt/cypher-dj owned by a user", num("opt_not_root") == 0),
     ("no EACCES/EROFS in the user journal", num("journal_eacces") == 0),
     ("mcp probe rc 0 with at least 100 tools", kv.get("mcp_rc") == "0" and tools is not None and tools >= 100),
+    ("mcp probe lists the shipped skills (2026-07-28)", skills is not None and skills >= 2),
     ("no file in /opt/cypher-dj newer than the install (after mcp)", num("opt_newer_after_mcp") == 0),
     ("cypher-dj stop rc 0", kv.get("stop_rc") == "0"),
 ]
@@ -36,5 +38,5 @@ out = {"version": version, "checks": [{"name": n, "pass": bool(p)} for n, p in c
 json.dump(out, open(f"{res}/smoke.json", "w"), indent=2)
 for n, p in checks: print(("PASS  " if p else "FAIL  ") + n)
 print("RESULT " + ("PASS" if out["pass"] else "FAIL"))
-for k in ("strudel_peak_db", "strudel_rms_db", "rb338_peak_db", "rb338_rms_db", "baukasten_peak_db", "baukasten_rms_db", "modular_melodie_peak_db", "install_s", "install_download_mib", "start_s", "master_max_db", "tour_steps", "tour_2xx", "tour_failed_steps", "mcp_tools", "opt_files", "opt_mb", "rt_probe"):
+for k in ("strudel_peak_db", "strudel_rms_db", "rb338_peak_db", "rb338_rms_db", "baukasten_peak_db", "baukasten_rms_db", "modular_melodie_peak_db", "install_s", "install_download_mib", "start_s", "master_max_db", "tour_steps", "tour_2xx", "tour_failed_steps", "mcp_tools", "mcp_skills", "opt_files", "opt_mb", "rt_probe"):
     print(f"  {k} = {kv.get(k)}")

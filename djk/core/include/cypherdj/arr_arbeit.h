@@ -52,12 +52,10 @@ struct alignas(64) ArrArbeit {
   float bke_l[2][INS_BLOCK] = {}, bke_r[2][INS_BLOCK] = {};   // ArrInserts Baukasten stage output (arr-bk slice 3): [0] the instance, [1] the one that fades out
   float pdc_tmp[ARR_PDC_RING] = {};               // ArrPdc shift scratch (task 2)
   uint32_t nan_zaehler = 0;                       // ArrInserts NaN count of this lane, summed after the join (task 2)
-  uint64_t maske_loeschen = 0;                    // strip bits (ArrInserts::maske_ is uint64_t over 45 strips) whose tail ended (task 2)
-  uint64_t slot_frei = 0;                         // slot bits (ARR_INS_ALLE <= 64, 64-bit since arr-fx slice 2) whose tail ended (task 2)
+  ArrStreifenMaske maske_loeschen;                // strip bits whose tail ended (task 2; multi-word since strand 1 task 2.1)
+  ArrSlotMaske slot_frei;                         // slot bits whose tail ended (task 2; multi-word since strand 1 task 2.1)
   uint32_t einheiten = 0;                         // units computed on this lane (counters, tests)
   uint32_t rack_einheiten = 0;                    // rack tracks (with all their members) computed on this lane (counters, tests, the cost lane)
 };
-
-static_assert(ARR_INS_ALLE <= 64, "slot_frei is a 64-bit mask");
 
 }  // namespace cdj

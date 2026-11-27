@@ -48,6 +48,8 @@ export function mitschnittOrdnerVorgabe(i: string = instanz()): string { return 
 export function huellenVorgabe(i: string = instanz()): string { return `${shmOrdner(i)}/huellen`; }
 export function musterOrdnerVorgabe(i: string = instanz()): string { return `${shmOrdner(i)}/erzeuger`; }
 export function wirtOrdnerVorgabe(i: string = instanz()): string { return shmOrdner(i); }
+// Strand 11 slice 7 (7a): stored session setups (POST /aufbau), outside any project. A test instance writes into its shm folder, never into the real home.
+export function aufbauOrdnerVorgabe(i: string = instanz()): string { return i ? `${shmOrdner(i)}/aufbau` : path.join(os.homedir(), '.config', 'cypherdj', 'aufbau'); }
 // Kit folder: CYPHERDJ_KIT_ORDNER (test instances, djk-start --kit-ordner) wins over the configured folder; empty counts as unset.
 export function kitsOrdnerVorgabe(o: AblageOptionen = {}): string { return ablageOrdner('kits', o); }
 export function zusatzKit(i: string = instanz()): string { return i ? `rec-${i}` : 'rec'; }
@@ -108,6 +110,9 @@ export function arbeitsbestandVorgabe(i: string): string {
 // (Tests: tests/support/render_mock.mjs). Bei jedem Aufruf gelesen, wie die Instanz.
 export function setmitschnittProgramm(): string { return process.env.CYPHERDJ_SETMITSCHNITT || path.join(REPO, 'djk', 'core', 'build', 'cypherdj-setmitschnitt'); }
 export function renderProgramm(): string { return process.env.CYPHERDJ_RENDER || path.join(REPO, 'djk', 'core', 'build', 'cypherdj-render'); }
+// Note editor (slice 1): the note detection and render program cypherdj-noten (djk/contract/notes.md), next to the others in the core build folder. CYPHERDJ_NOTEN
+// points elsewhere (tests: tests/support/notes_mock.mjs). Read at each call, like the instance.
+export function notenProgramm(): string { return process.env.CYPHERDJ_NOTEN || path.join(REPO, 'djk', 'core', 'build', 'cypherdj-noten'); }
 
 // ---- Storage table (djk/config/ablage.json), also read by the Python package djk/ablage; both must give the same paths. ----
 export type AblageArt = 'projekte' | 'module' | 'sampler' | 'presets' | 'klaenge' | 'kollektionen' | 'raster' | 'hotcues' | 'kits' | 'loops' | 'geraete' | 'loopsets' | 'bestand' | 'sammlungen' | 'muster' | 'journal' | 'importe' | 'mitschnitte';

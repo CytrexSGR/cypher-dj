@@ -107,7 +107,7 @@ void Kern::midi_ein_stempeln(int n) noexcept {
       if (t == 0x80 || t == 0x90) {
         const int64_t z = Arrangement::live_ziel(sample_, m.versatz, n);
         const bool an = t == 0x90 && m.d[2] != 0;
-        for (uint32_t bits = aufnahme_.midi_maske(); bits != 0; bits &= bits - 1) arr_->live_note(__builtin_ctz(bits), z, m.d[1], m.d[2], an);
+        aufnahme_.midi_maske().je_bit([&](int b) { arr_->live_note(b, z, m.d[1], m.d[2], an); });   // ascending track order
         // Task N2: the stream of /k/live/tasten (one test of the target when none is set). A note that the learn table of its place maps is a button, not a key: it only triggers its action.
         // (The armed-track path above does not make this distinction and is left as it was.)
         const hand::Mapping* lm = m.port < MIDI_EIN_PORTS ? lern_mapping_[m.port] : nullptr;

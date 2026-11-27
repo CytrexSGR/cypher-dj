@@ -1,0 +1,143 @@
+{
+ "format": "cypherdj-panel/2",
+ "geraet": {
+  "art": "bk",
+  "graph": "fx-phaser-sync"
+ },
+ "title": "Cypher Phaser",
+ "akzent": "tuerkis",
+ "layout": {
+  "rows": [
+   [
+    "ratesec",
+    "sweep",
+    "tone",
+    "outsec"
+   ]
+  ]
+ },
+ "sections": [
+  {
+   "id": "ratesec",
+   "title": "RATE",
+   "cols": 2,
+   "controls": [
+    {
+     "id": "rmode",
+     "type": "selector",
+     "label": "Rate mode",
+     "bind": {
+      "param": "k1"
+     },
+     "options": [
+      "Free",
+      "1/16",
+      "1/8",
+      "1/4",
+      "1/2",
+      "1 bar",
+      "2 bars",
+      "4 bars"
+     ],
+     "default": 3,
+     "span": 2
+    },
+    {
+     "id": "rate",
+     "type": "knob",
+     "label": "Rate",
+     "bind": {
+      "param": "k2"
+     },
+     "format": "hz",
+     "default": 0.5,
+     "wirkt": {
+      "ist": [
+       "rmode",
+       [
+        0
+       ]
+      ]
+     },
+     "wirkt_text": "Rate mode is synced to the beat: pick Free",
+     "span": 2
+    }
+   ]
+  },
+  {
+   "id": "sweep",
+   "title": "SWEEP",
+   "cols": 2,
+   "controls": [
+    {
+     "id": "low",
+     "type": "knob",
+     "label": "Low",
+     "bind": {
+      "param": "k3"
+     },
+     "format": "hz",
+     "default": 0.5
+    },
+    {
+     "id": "range",
+     "type": "knob",
+     "label": "Range",
+     "bind": {
+      "param": "k4"
+     },
+     "format": "raw",
+     "default": 0.5,
+     "unit": "st"
+    },
+    {
+     "id": "stereo",
+     "type": "selector",
+     "label": "Stereo",
+     "bind": {
+      "param": "k7"
+     },
+     "options": [
+      "Same",
+      "Quarter"
+     ],
+     "span": 2
+    }
+   ]
+  },
+  {
+   "id": "tone",
+   "title": "TONE",
+   "cols": 1,
+   "controls": [
+    {
+     "id": "feedback",
+     "type": "knob",
+     "label": "Feedback",
+     "bind": {
+      "param": "k5"
+     },
+     "format": "percent",
+     "default": 0.5
+    }
+   ]
+  },
+  {
+   "id": "outsec",
+   "title": "OUT",
+   "cols": 1,
+   "controls": [
+    {
+     "id": "mix",
+     "type": "knob",
+     "label": "Mix",
+     "bind": {
+      "param": "k6"
+     },
+     "format": "percent",
+     "default": 0.5
+    }
+   ]
+  }
+ ]
+}

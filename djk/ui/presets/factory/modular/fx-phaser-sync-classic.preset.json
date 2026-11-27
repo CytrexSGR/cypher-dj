@@ -1,0 +1,42 @@
+{
+ "schema": 1,
+ "name": "Phaser / classic",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "fx-phaser-sync",
+ "werte": {
+  "knob1": 0.5714,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5909,
+  "knob6": 0.5,
+  "knob7": 1.0
+ },
+ "beschreibung": {
+  "art": "modulation",
+  "unterart": "phaser",
+  "charakter": [
+   "warm",
+   "smooth",
+   "wide"
+  ],
+  "genre": [
+   "house",
+   "disco",
+   "progressive"
+  ],
+  "einsatz": [
+   "intro",
+   "build"
+  ],
+  "energie": 3,
+  "text": "Half-note sweep from 300 Hz over 36 st, feedback 0.4, mix 50 %, Stereo Quarter; the familiar eight-pole swirl on chords."
+ },
+ "tags": [
+  "fx-phaser-sync"
+ ],
+ "notiz": "Set by the knob ranges of the graph, not yet heard (2026-11-26).",
+ "angelegt": "2026-11-26T00:00:00.000Z",
+ "geaendert": "2026-11-26T00:00:00.000Z"
+}

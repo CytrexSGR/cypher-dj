@@ -113,8 +113,8 @@ class FakeKern:
 class AttrapInstanz:
     """What Tour needs of an Instanz: url, kern_port, env."""
 
-    def __init__(self, url, kern_port=0):
-        self.url, self.kern_port, self.env, self.buchstabe = url, kern_port, {}, "b"
+    def __init__(self, url, kern_port=0, shm="/nonexistent/cypherdj-b"):
+        self.url, self.kern_port, self.env, self.buchstabe, self.shm = url, kern_port, {}, "b", shm
 
 
 @pytest.fixture
@@ -139,6 +139,16 @@ def test_ruf_on_a_dead_page_is_code_0_not_an_exception(tmp_path):
     t = L.Tour("jx", AttrapInstanz("http://127.0.0.1:1"), tmp_path / "aus", kurz=True)
     a = t.ruf("GET", "/lage")
     assert a.code == 0 and a.grund
+
+
+def test_ruf_sends_the_agent_key_only_as_cypher(seite, tmp_path):
+    (tmp_path / "hand.token").write_text("k" * 43 + "\n")
+    t = L.Tour("jx", AttrapInstanz(seite.url, shm=str(tmp_path)), tmp_path / "aus", kurz=True)
+    t.ruf("POST", "/x", {"a": 1})
+    t.ruf("POST", "/y", {"a": 1}, quelle="andreas")
+    kopf = [{k.lower(): v for k, v in h[1].items()} for h in seite.hinweise]
+    assert kopf[0]["authorization"] == "Bearer " + "k" * 43
+    assert "authorization" not in kopf[1]
 
 
 def test_ruf_sends_the_source_header(tour, seite):

@@ -349,17 +349,19 @@ test('S7 loop T12.3: a loop is never cleaned up as expired (the end of its last 
 
 test('S7 loop T12.3 AK31 (3): a hand grip on a target ends Cypher\'s loop; another path or Andreas\' loop is untouched', async (t) => {
   const { o, url, log } = await stapel(t);
-  assert.equal((await postJson(url, '/spur', { spur: fader('c2') }, CYPHER)).code, 200);
+  // Cypher's loop moves a filter: a bus fader raise of Cypher above 6 dB without a ramp is nur_rampe since slice 4
+  const cyp = { ...fader('c2'), fahrten: [{ ziel: 'bus/2/filter', ab_takt: 1, nach: 0 }, { ziel: 'bus/2/filter', ab_takt: 1, takte: 1, nach: -0.6, form: 'linear' }] };
+  assert.equal((await postJson(url, '/spur', { spur: cyp }, CYPHER)).code, 200);
   const andreas = { ...fader('a3'), fahrten: fader('a3').fahrten.map((f) => ({ ...f, ziel: 'bus/3/fader' })) };
   assert.equal((await postJson(url, '/spur', { spur: andreas })).code, 200);
   const griff = (pfad) => o.vomKern({ adresse: '/e/halter', felder: { pfad, halter: 'mensch', sample: 0, beat: o.kern.uhr.beat } });
-  griff('bus/1/fader');   // negative control: a path no loop moves
-  griff('bus/2/fader');
+  griff('bus/1/filter');   // negative control: a path no loop moves
+  griff('bus/2/filter');
   griff('bus/3/fader');   // Andreas' own loop: his hand on his own lane does not end it
   await bis(() => log.some((x) => x.typ === 'spur_schleife_ende'));
   assert.deepEqual((await liste(url)).map((x) => x.name), ['a3']);
   const z = log.find((x) => x.typ === 'spur_schleife_ende');
-  assert.deepEqual([z.name, z.grund, z.pfad], ['c2', 'hand', 'bus/2/fader']);
+  assert.deepEqual([z.name, z.grund, z.pfad], ['c2', 'hand', 'bus/2/filter']);
   await postJson(url, '/spur/stopp', { name: 'a3' });
 });
 

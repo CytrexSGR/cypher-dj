@@ -1,6 +1,7 @@
 // Paket 1.18, S3-Fix W1: während einer Lautheitsmessung von Cypher (ausgabe_lauf {art: 'lautheit'} aus GET /proj/aktuell) zeigt die Seite
 // "Measuring loudness" und sperrt EXPORT und FREEZE wie bei einem fremden Export. Test über den echten Weg: das Ereignis ctx.ausgabeLauf, den die
 // Seite beim Laden von /proj/aktuell auslöst, bis zum Zustand der Tasten und der Anzeige (freeze_export.js mit DOM-Attrappe).
+import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { bindeAusgabe } from '../public/production/freeze_export.js';
@@ -9,7 +10,7 @@ import { element, installiereDom } from './support/dom_mock.mjs';
 function seite(t) {
   const zurueck = installiereDom();
   t.after(zurueck);
-  const el = { export: element('button'), einsammeln: element('button'), ausgabe: element('output'), 'ausgabe-pfad': element('output'), koepfe: element('div'), meldung: element('div') };
+  const el = { export: element('button'), einsammeln: element('button'), ausgabe: element('output'), 'ausgabe-pfad': element('output'), 'ausgabe-ordner': element('button'), koepfe: element('div'), meldung: element('div') };
   const kopf = element('div'); kopf.className = 'p-kopf'; kopf.klassen.add('p-kopf'); kopf.dataset.spur = 's3';
   el.koepfe.append(kopf);
   const nachfragen = [];
@@ -71,4 +72,45 @@ test('export result: the full path is in visible text next to the status line, a
   s.ctx.st.exportErgebnis = null;
   s.bild();
   assert.equal(s.el['ausgabe-pfad'].hidden, true);
+});
+
+test('SHOW FOLDER: visible exactly while the path line knows a folder; the click asks the server for that folder', async (t) => {
+  const s = seite(t);
+  const ruf = [];
+  s.ctx.holeJson = async (weg, k) => { ruf.push([weg, k]); return { status: 200, j: { ordner: k.ordner } }; };
+  const knopf = s.el['ausgabe-ordner'];
+  s.bild();
+  assert.equal(knopf.hidden, true, 'no result: hidden');
+  assert.match(fs.readFileSync(new URL('../public/production/freeze_export.js', import.meta.url), 'utf8'),
+    /data-p="ausgabe-ordner"[^>]*title="Open the export folder in the file manager"[^>]*hidden>SHOW FOLDER</, 'the page template carries the tooltip');
+  s.ctx.st.exportErgebnis = { datei: '/p/song/export/song-1.wav', frames: 48000, spitze_db: -3 };
+  s.bild();
+  assert.equal(knopf.hidden, false, 'mix export: visible');
+  assert.equal(s.el['ausgabe-pfad'].textContent, 'Saved to /p/song/export/song-1.wav', 'the path line still names the file');
+  await knopf.ereignisse.click[0]();
+  assert.deepEqual(ruf, [['/proj/export_zeige', { ordner: '/p/song/export' }]]);
+  s.ctx.st.exportErgebnis = { ordner: '/p/song/export/song-2/', dateien: [] };
+  s.bild();
+  assert.equal(knopf.hidden, false, 'track set: visible');
+  await knopf.ereignisse.click[0]();
+  assert.deepEqual(ruf.at(-1), ['/proj/export_zeige', { ordner: '/p/song/export/song-2' }]);
+  s.ctx.st.exportErgebnis = null;
+  s.bild();
+  assert.equal(knopf.hidden, true, 'gone with the result');
+});
+
+test('SHOW FOLDER: a refusal shows its reason and leaves the path readable; a project change hides the button', async (t) => {
+  const s = seite(t);
+  const meldungen = [];
+  s.ctx.melde = (x, fehler) => meldungen.push([x, fehler]);
+  s.ctx.holeJson = async () => ({ status: 409, j: { fehler: 'keine_arbeitsflaeche' } });
+  s.ctx.st.exportErgebnis = { datei: '/p/song/export/song-1.wav', frames: 48000, spitze_db: -3 };
+  s.bild();
+  await s.el['ausgabe-ordner'].ereignisse.click[0]();
+  assert.deepEqual(meldungen, [['The server has no desktop session to open a folder in', true]]);
+  assert.equal(s.el['ausgabe-pfad'].hidden, false, 'the path stays');
+  s.ctx.beimProjekt.forEach((f) => f(s.ctx.st.projekt, true));
+  s.ctx.st.exportErgebnis = null;
+  s.bild();
+  assert.equal(s.el['ausgabe-ordner'].hidden, true);
 });

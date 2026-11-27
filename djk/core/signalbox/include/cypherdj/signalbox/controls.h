@@ -7,7 +7,7 @@
 
 namespace cypherdj::stellwerk {
 
-constexpr int MAX_REGLER = 8192;   // 2026-10-11: 384 → 512 für komp/* je Quellkanal (98 Regler); 2026-10-20 (E1): 512 → 1024, Deckel
+constexpr int MAX_REGLER = 24576;   // 2026-10-11: 384 → 512 für komp/* je Quellkanal (98 Regler); 2026-10-20 (E1): 512 → 1024, Deckel
                                    // für 32 Spuren (564 Regler), gemessen: Median und p99,9 des Zyklus unverändert
                                    // (~/messungen/2026-10-20-e1-deckel/BERICHT.md). CDJ_Z_REGLER (state.h) muss mit.
                                    // 2026-11-03 (1.15 A1a): 1024 -> 2048, room for the 96 insert controls of slice 4 plus margin; cost measured (A0).
@@ -15,6 +15,11 @@ constexpr int MAX_REGLER = 8192;   // 2026-10-11: 384 → 512 für komp/* je Que
                                    // CDJ_Z_REGLER and the state file version move with it (state.h). Memory and cycle cost: ~/messungen/2026-11-10-kanban-vor-welle1/arr-bk.md.
                                    // 2026-11-20 (container core K2): 4096 -> 8192. 1024 rows strom/1..16/bk/1..64 arrive before the old strips leave (K9), so the table
                                    // holds 5076 rows in between and 4576 at the end; CDJ_Z_REGLER and CDJ_ZUSTAND_VERSION 4 -> 5 move with it.
+                                   // strand 1 slice 3: 8192 -> 16384 for an EQ and a compressor per strip (96 + 96 pool slots); CDJ_Z_REGLER and
+                                   // CDJ_ZUSTAND_VERSION 5 -> 6 move with it. Row indices stay below 32767, so the int16_t index arrays still hold them.
+                                   // strand 1 slice 3b: 16384 -> 24576 for 128 tracks (18 278 rows with pools 160 + 160, gate, mb, 8 hosts and the rows of
+                                   // tracks 33..128); CDJ_Z_REGLER moves with it, the state file version stays 6 (16384 was never shipped).
+                                   // strand 2 slice 2: + 128 rows plug/<h>/k<m> at the end (18 406 rows); the ceiling, CDJ_Z_REGLER and the version stay.
 constexpr int MAX_KANAELE = 20;     // deck/1..4, erz/1..8, pad/1..2, bus/1..4, master, cue
 
 enum class Rolle : uint8_t {
@@ -86,15 +91,30 @@ enum class Rolle : uint8_t {
   // Loop lane strip K1 (appended behind spur_kill_hoch, now the last role: the order stays). spur/<n>/fx/{1,2,3} (0/1): the track enters beat FX unit 1 / unit 2 / the FX 3 bus, n = 1..32.
   spur_fx_1,
   spur_fx_2,
-  spur_fx_3
+  spur_fx_3,
+  // Pool slice 4 (appended after spur_fx_3, now the last role: the order stays). The gate insert ins/gate/<n>/{an,schwelle,hysterese,ratio,bereich,attack,hold,release}
+  // and the multiband insert ins/mb/<n>/{an,grenze_tief,grenze_hoch} and ins/mb/<n>/b<1..3>/{schwelle,ratio,attack,release,knie,makeup,umgehen} (one role per parameter NAME;
+  // the band number is read from the path). The rows exist from task 4.1, the stages bind them from task 4.2.
+  ins_gate_an, ins_gate_schwelle, ins_gate_hysterese, ins_gate_ratio, ins_gate_bereich, ins_gate_attack, ins_gate_hold, ins_gate_release,
+  ins_mb_an, ins_mb_grenze_tief, ins_mb_grenze_hoch,
+  ins_mb_b_schwelle, ins_mb_b_ratio, ins_mb_b_attack, ins_mb_b_release, ins_mb_b_knie, ins_mb_b_makeup, ins_mb_b_umgehen,
+  // Strand 2 slice 2 (appended after ins_mb_b_umgehen, now the last role: the order stays). plug/<h>/k<m>, h = 1..8, m = 1..16: knob m of effect host h.
+  // No consumer in the core: the page server forwards /e/hand moves of these rows to the plugin (the hostlernen pattern).
+  plug_regler
 };
+// strand 2 slice 2: plug/<h>/k<m>. The hosts are ARR_INS_HOST of arr_playback.h (8), which this library cannot include; the knob count is
+// MAX_PLUGIN_REGLER of djk/ui/project/model.ts (16).
+constexpr int REGLER_PLUG_HOSTS = 8;
+constexpr int REGLER_PLUG_KNOEPFE = 16;
 constexpr int STROM_BK_STROEME = 16;   // container core K2: strom/<n>/bk/<k>, n = 1..16 (ERZ_STROEME of generator.h), appended behind spur/32/eq/hoch, n outer, k inner
 constexpr int SPUR_BK_SLOTS = 16;     // Baukasten slots of spur/<slot>/bk/<k>: one per bk track (8 until 2026-11-21, then = ARR_BK_MAX; static_assert in arr_playback.h)
 constexpr int SPUR_BK_KNOEPFE = 64;   // knobs of a slot reachable as a live override: spur/<slot>/bk/1..64 (32 until 2026-11-16; production plan task 8)
-constexpr int SPUR_EQ_N = 32;        // loop deck channel strip KZ1: spur/1..32/eq/{tief,mitte,hoch} rows (96), appended behind spur/32/filter: the table holds 4052 of 4096
-constexpr int SPUR_FILTER_N = 32;     // loop deck K7a: spur/1..32/filter rows (one per track), appended behind the last spur/<slot>/bk/<k> row
+// strand 1 slice 6: the tracks whose rows sit in the in-place blocks; tracks 33..SPUR_REGLER_SPUREN are in the trailing block
+constexpr int SPUR_REGLER_SPUREN_ALT = 32;
+constexpr int SPUR_EQ_N = SPUR_REGLER_SPUREN_ALT;       // the in-place block; tracks 33..128 are in the trailing block
+constexpr int SPUR_FILTER_N = SPUR_REGLER_SPUREN_ALT;   // the in-place block; tracks 33..128 are in the trailing block
 constexpr int BK_REGLER_N = 64;   // knobs of a Baukasten graph reachable through the table: <kanal>/bk/1..64, ins/bk/<n>/k1..k64 (engine: baukasten_dsp::REGLER)
-constexpr int SPUR_REGLER_SPUREN = 32;   // D1 K1 (Spec 2.3): spur/<n>/{fader,pan,mute,solo}, n = 1..32 (E3)
+constexpr int SPUR_REGLER_SPUREN = 128;   // all tracks: spur/<n>/..., n = 1..128 (strand 1 slice 6; was 32)
 constexpr int GRP_REGLER_GRUPPEN = 8;    // 1.10 (F1: eigene Plätze neben den 32 Spuren): grp/<n>/{fader,pan,mute,solo}, n = 1..8 (the rows inside the first 1258 hashed rows: this stays 8)
 constexpr int GRP_REGLER_GRUPPEN_NEU = 8;   // nested groups, task 1: groups 9..16 are appended at the end of the table (no index moves)
 constexpr int GRP_REGLER_GRUPPEN_ALLE = GRP_REGLER_GRUPPEN + GRP_REGLER_GRUPPEN_NEU;   // 16 = ARR_GRUPPEN
@@ -157,5 +177,6 @@ class ReglerTabelle {
   char kanal_[MAX_KANAELE][12];
   int n_kanal_ = 0;
 };
+static_assert(MAX_REGLER - 1 <= INT16_MAX, "sortiert_ and the other row index arrays are int16_t");
 
 }  // namespace cypherdj::stellwerk

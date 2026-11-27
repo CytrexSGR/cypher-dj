@@ -3,6 +3,7 @@
 import ctypes
 import ctypes.util
 import errno
+import os
 
 _lib = ctypes.CDLL(ctypes.util.find_library("asound") or "libasound.so.2")
 
@@ -33,8 +34,23 @@ _lib.snd_midi_event_decode.restype = ctypes.c_long
 _lib.snd_midi_event_reset_encode.argtypes = [_vp]
 
 
+class GeraeteGesperrt(OSError):
+    """A test instance asked for the sequencer without the opt-in."""
+
+
+def echte_geraete_erlaubt(env=None):
+    """The production instance (no CYPHERDJ_INSTANZ) may use the real controllers; a test instance a..i only with CYPHERDJ_ECHTE_GERAETE=1."""
+    env = os.environ if env is None else env
+    return not env.get("CYPHERDJ_INSTANZ") or env.get("CYPHERDJ_ECHTE_GERAETE") == "1"
+
+
 class Client:
     def __init__(self, name):
+        # Every client of the bridge family subscribes to the real devices by name (APC20, LC3, Launchpad) and writes their LEDs. A test instance
+        # that opened one would take them from the production instance, so it opens nothing unless it was told to.
+        if not echte_geraete_erlaubt():
+            raise GeraeteGesperrt(f"{name}: CYPHERDJ_INSTANZ={os.environ.get('CYPHERDJ_INSTANZ')} is a test instance, the real controllers stay with "
+                                  "the production instance (opt in with CYPHERDJ_ECHTE_GERAETE=1)")
         self.h = _vp()
         if _lib.snd_seq_open(ctypes.byref(self.h), b"default", OPEN_DUPLEX, NONBLOCK) < 0:
             raise OSError("snd_seq_open failed")

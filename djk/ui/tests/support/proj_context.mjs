@@ -14,14 +14,14 @@ import { Projekte } from '../../project/storage.ts';
 // pending promise) and aufrufe (every setzeGraph call, with nach_id = the highest command id sent before the call). Without the option nothing changes.
 export function pruefKontext({ quittung = () => ({ status: 3, grund: '' }), teileMax = 0, baukasten = false } = {}) {
   const k = {
-    id: 0, gesendet: [], verteilt: [], protokoll: [], ki: false, regel: quittung, offen: new Set(), teileVoll: 0, voll: new Set(), mitModell: teileMax > 0,
+    id: 0, gesendet: [], porId: new Map(), verteilt: [], protokoll: [], ki: false, regel: quittung, offen: new Set(), teileVoll: 0, voll: new Set(), mitModell: teileMax > 0,
     sende(adresse, felder) {
-      const id = ++k.id; k.gesendet.push({ id, adresse, felder });
+      const id = ++k.id; const g = { id, adresse, felder }; k.gesendet.push(g); k.porId.set(id, g);   // porId: O(1) lookup, a full open sends ~12.5k rows
       if (k.mitModell && adresse === '/k/teil') { if (k.offen.size >= teileMax) { k.voll.add(id); k.teileVoll++; } else k.offen.add(id); }
       return id;
     },
     async warteQuittung(id, _ab, bisEnde = false) {
-      const g = k.gesendet.find((x) => x.id === id);
+      const g = k.porId.get(id);
       if (k.mitModell && g.adresse === '/k/teil') {
         if (k.voll.has(id)) return { status: 6, grund: 'teile_voll' };
         const q = k.regel(g.adresse, g.felder);
@@ -38,7 +38,7 @@ export function pruefKontext({ quittung = () => ({ status: 3, grund: '' }), teil
     log(z) { k.protokoll.push(z); },
     an: (adresse) => k.gesendet.filter((x) => x.adresse === adresse),
     teile: (re = /./) => k.gesendet.filter((x) => x.adresse === '/k/teil' && re.test(x.felder.pfad)),
-    leere() { k.gesendet.length = 0; k.verteilt.length = 0; },
+    leere() { k.gesendet.length = 0; k.porId.clear(); k.verteilt.length = 0; },
   };
   if (baukasten) {
     k.bk = { geladen: {}, auto: {}, hash: {}, antwort: () => ({ code: 200, j: { ok: true, quittung: { status: 3, grund: '' } } }), aufrufe: [] };

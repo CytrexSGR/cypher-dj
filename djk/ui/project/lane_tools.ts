@@ -10,7 +10,7 @@ export const FORMEN_EINFUEGEN = ['rampe_auf', 'rampe_ab', 'sinus', 'dreieck', 'r
 export type FormEinfuegen = (typeof FORMEN_EINFUEGEN)[number];
 // D5: the default value range of an inserted shape (the lane's display range)
 export function formBereich(ziel: string): { unten: number; oben: number } {
-  if (ziel === 'fader') return { unten: -60, oben: 0 };
+  if (ziel === 'fader' || ziel.startsWith('send.')) return { unten: -60, oben: 0 };   // the fader and the send levels
   if (ziel === 'pan') return { unten: -1, oben: 1 };
   return { unten: 0, oben: 1 };
 }

@@ -2,6 +2,7 @@
 // (tests/support/output_setup.mjs). Der Render ist das Doppel render_mock.mjs im Modus RENDER_ATTRAPPE_MISCHUNG. Kein Netz, kein Kern, kein Ton.
 // Der Null-Test gegen den echten cypherdj-render folgt am Ziel (check/acceptance_w7.mjs, Task 4).
 import test from 'node:test';
+import { MAX_SPUREN } from '../project/model.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -280,31 +281,31 @@ test('Merge T3-8: Stop Cypher MITTEN im Render → ki_gestoppt, WAV und merge/ w
 
 const fuelle = (a, n) => a.vorbei(Array.from({ length: n }, (_, k) => ({ befehl: 'spur_neu', art: 'audio', name: `X${k}` })));
 
-test('Merge T3-9: 32 Spuren belegt → merge_keine_spur_frei beim Start; 31 laufen durch', async (t) => {
+test('Merge T3-9: all tracks used → merge_keine_spur_frei at the start; one track fewer runs through', async (t) => {
   const a = await aufbau(t, { tempo: 120 });
-  await fuelle(a, 29);
-  assert.equal(a.projekt().spuren.length, 32);
+  await fuelle(a, MAX_SPUREN - 3);
+  assert.equal(a.projekt().spuren.length, MAX_SPUREN);
   const r = await merge(a, S12);
   assert.deepEqual([r.code, r.body.fehler], [409, 'merge_keine_spur_frei']);
   keinRender(a);
   const b = await aufbau(t, { tempo: 120 });
-  await fuelle(b, 28);
-  assert.equal(b.projekt().spuren.length, 31);
-  assert.equal((await merge(b, S12)).code, 200, 'Negativ-Kontrolle: 31 Spuren');
+  await fuelle(b, MAX_SPUREN - 4);
+  assert.equal(b.projekt().spuren.length, MAX_SPUREN - 1);
+  assert.equal((await merge(b, S12)).code, 200, 'negative control: one track free');
 });
 
 test('Merge T3-10: Platz geht im Render verloren → merge_keine_spur_frei, WAV weg; bleibt Platz, läuft der Merge', async (t) => {
   const a = await aufbau(t, { tempo: 120 });
-  await fuelle(a, 27);                                                       // 30 Spuren
+  await fuelle(a, MAX_SPUREN - 5);                                           // two free
   const lauf = merge(a, S12, SCHLAF(300));
-  await warte(150); await fuelle(a, 2);                                       // 32
+  await warte(150); await fuelle(a, 2);                                       // full
   const r = await lauf;
   assert.deepEqual([r.code, r.body.fehler], [409, 'merge_keine_spur_frei']);
   assert.ok(!fs.existsSync(mergeOrdner(a)), 'WAV weg');
   const b = await aufbau(t, { tempo: 120 });
-  await fuelle(b, 27);
+  await fuelle(b, MAX_SPUREN - 5);
   const l2 = merge(b, S12, SCHLAF(300));
-  await warte(150); await fuelle(b, 1);                                       // 31
+  await warte(150); await fuelle(b, 1);                                       // one free
   assert.equal((await l2).code, 200, 'Negativ-Kontrolle: bleibt Platz');
 });
 

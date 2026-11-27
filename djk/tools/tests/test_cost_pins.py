@@ -37,15 +37,26 @@ LAPTOP = "13th Gen Intel(R) Core(TM) i9-13900HX"
 PC = "AMD Ryzen 7 7800X3D 8-Core Processor"
 
 
+def pin(host, block):
+    """pm/out of a host's arr32ins pin, read from hash_pins.txt (the pins move whenever the DSP changes on purpose)."""
+    for z in PINS.read_text().splitlines():
+        f = z.split()
+        if f[:4] == ["pin", host, "arr32ins", block]:
+            return f[4], f[5]
+    raise AssertionError(f"no pin for {host} {block}")
+
+
 def test_known_host_with_its_pin_passes(tmp_path):
-    exe = attrappe(tmp_path, '256) pm=90f9d9b322d8e1c2; out=23d73f2875eb3ac7;; *) pm=a2b995ce4c8b02be; out=17958b47a5a90aac;;')
+    (p2, o2), (p1, o1) = pin("i9-13900hx", "256"), pin("i9-13900hx", "128")
+    exe = attrappe(tmp_path, f'256) pm={p2}; out={o2};; *) pm={p1}; out={o1};;')
     rc, out = lauf(exe, LAPTOP)
     assert rc == 0, out
     assert "pin of host i9-13900hx" in out
 
 
 def test_known_host_with_the_other_hosts_bits_fails(tmp_path):
-    exe = attrappe(tmp_path, '256) pm=ade2dd87eea3d869; out=41548661fe8a40ae;; *) pm=1; out=2;;')
+    p2, o2 = pin("ryzen-7800x3d", "256")
+    exe = attrappe(tmp_path, f'256) pm={p2}; out={o2};; *) pm=1; out=2;;')
     rc, out = lauf(exe, LAPTOP)
     assert rc != 0 and "hash differs from the reference" in out
     rc, out = lauf(exe, PC)

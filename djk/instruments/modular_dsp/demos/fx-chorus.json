@@ -1,0 +1,645 @@
+{
+ "format": "baukasten/2",
+ "name": "fx-chorus",
+ "stimmen": 1,
+ "regler_namen": {
+  "1": "Rate mode",
+  "2": "Rate",
+  "3": "Depth",
+  "4": "Delay",
+  "5": "Width",
+  "6": "Mix"
+ },
+ "knoten": [
+  {
+   "id": "ein",
+   "art": "eingang"
+  },
+  {
+   "id": "modus",
+   "art": "regler",
+   "nr": 1,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "rate",
+   "art": "regler",
+   "nr": 2,
+   "min": 0.05,
+   "max": 10,
+   "log": 1,
+   "mitte": 0.5
+  },
+  {
+   "id": "depth",
+   "art": "regler",
+   "nr": 3,
+   "min": 0,
+   "max": 8,
+   "mitte": 2
+  },
+  {
+   "id": "delay",
+   "art": "regler",
+   "nr": 4,
+   "min": 5,
+   "max": 30,
+   "mitte": 12
+  },
+  {
+   "id": "width",
+   "art": "regler",
+   "nr": 5,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "mix",
+   "art": "regler",
+   "nr": 6,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "aus",
+   "art": "ausgang"
+  },
+  {
+   "id": "rf",
+   "art": "lfo",
+   "form": 0
+  },
+  {
+   "id": "rs0",
+   "art": "lfo",
+   "form": 0,
+   "takt": 0.25
+  },
+  {
+   "id": "rs1",
+   "art": "lfo",
+   "form": 0,
+   "takt": 0.5
+  },
+  {
+   "id": "rs2",
+   "art": "lfo",
+   "form": 0,
+   "takt": 1
+  },
+  {
+   "id": "rs3",
+   "art": "lfo",
+   "form": 0,
+   "takt": 2
+  },
+  {
+   "id": "rs4",
+   "art": "lfo",
+   "form": 0,
+   "takt": 4
+  },
+  {
+   "id": "rs5",
+   "art": "lfo",
+   "form": 0,
+   "takt": 8
+  },
+  {
+   "id": "rs6",
+   "art": "lfo",
+   "form": 0,
+   "takt": 16
+  },
+  {
+   "id": "rw",
+   "art": "wahl",
+   "n": 8,
+   "blende": 50
+  },
+  {
+   "id": "qf",
+   "art": "lfo",
+   "form": 1
+  },
+  {
+   "id": "qs0",
+   "art": "lfo",
+   "form": 0,
+   "takt": 0.25,
+   "versatz": 0.0625
+  },
+  {
+   "id": "qs1",
+   "art": "lfo",
+   "form": 0,
+   "takt": 0.5,
+   "versatz": 0.125
+  },
+  {
+   "id": "qs2",
+   "art": "lfo",
+   "form": 0,
+   "takt": 1,
+   "versatz": 0.25
+  },
+  {
+   "id": "qs3",
+   "art": "lfo",
+   "form": 0,
+   "takt": 2,
+   "versatz": 0.5
+  },
+  {
+   "id": "qs4",
+   "art": "lfo",
+   "form": 0,
+   "takt": 4,
+   "versatz": 1.0
+  },
+  {
+   "id": "qs5",
+   "art": "lfo",
+   "form": 0,
+   "takt": 8,
+   "versatz": 2.0
+  },
+  {
+   "id": "qs6",
+   "art": "lfo",
+   "form": 0,
+   "takt": 16,
+   "versatz": 4.0
+  },
+  {
+   "id": "qw",
+   "art": "wahl",
+   "n": 8,
+   "blende": 50
+  },
+  {
+   "id": "dml",
+   "art": "mul"
+  },
+  {
+   "id": "ndl",
+   "art": "mul",
+   "b": -1
+  },
+  {
+   "id": "zal",
+   "art": "add"
+  },
+  {
+   "id": "zbl",
+   "art": "add"
+  },
+  {
+   "id": "tal",
+   "art": "leitung",
+   "max": 40
+  },
+  {
+   "id": "tbl",
+   "art": "leitung",
+   "max": 40
+  },
+  {
+   "id": "sul",
+   "art": "add"
+  },
+  {
+   "id": "wel",
+   "art": "mul",
+   "b": 0.5
+  },
+  {
+   "id": "dmr",
+   "art": "mul"
+  },
+  {
+   "id": "ndr",
+   "art": "mul",
+   "b": -1
+  },
+  {
+   "id": "zar",
+   "art": "add"
+  },
+  {
+   "id": "zbr",
+   "art": "add"
+  },
+  {
+   "id": "tar",
+   "art": "leitung",
+   "max": 40
+  },
+  {
+   "id": "tbr",
+   "art": "leitung",
+   "max": 40
+  },
+  {
+   "id": "sur",
+   "art": "add"
+  },
+  {
+   "id": "wer",
+   "art": "mul",
+   "b": 0.5
+  },
+  {
+   "id": "mo",
+   "art": "add"
+  },
+  {
+   "id": "mo5",
+   "art": "mul",
+   "b": 0.5
+  },
+  {
+   "id": "nbr",
+   "art": "mul",
+   "b": -1
+  },
+  {
+   "id": "ibr",
+   "art": "add",
+   "b": 1
+  },
+  {
+   "id": "mob",
+   "art": "mul"
+  },
+  {
+   "id": "wbl",
+   "art": "mul"
+  },
+  {
+   "id": "wcl",
+   "art": "add"
+  },
+  {
+   "id": "wbr",
+   "art": "mul"
+  },
+  {
+   "id": "wcr",
+   "art": "add"
+  },
+  {
+   "id": "nmx",
+   "art": "mul",
+   "b": -1
+  },
+  {
+   "id": "imx",
+   "art": "add",
+   "b": 1
+  },
+  {
+   "id": "drl",
+   "art": "mul"
+  },
+  {
+   "id": "nwl",
+   "art": "mul"
+  },
+  {
+   "id": "ol",
+   "art": "add"
+  },
+  {
+   "id": "drr",
+   "art": "mul"
+  },
+  {
+   "id": "nwr",
+   "art": "mul"
+  },
+  {
+   "id": "or",
+   "art": "add"
+  }
+ ],
+ "kanten": [
+  {
+   "von": "rate.aus",
+   "nach": "rf.rate"
+  },
+  {
+   "von": "rf.aus",
+   "nach": "rw.e1"
+  },
+  {
+   "von": "rs0.aus",
+   "nach": "rw.e2"
+  },
+  {
+   "von": "rs1.aus",
+   "nach": "rw.e3"
+  },
+  {
+   "von": "rs2.aus",
+   "nach": "rw.e4"
+  },
+  {
+   "von": "rs3.aus",
+   "nach": "rw.e5"
+  },
+  {
+   "von": "rs4.aus",
+   "nach": "rw.e6"
+  },
+  {
+   "von": "rs5.aus",
+   "nach": "rw.e7"
+  },
+  {
+   "von": "rs6.aus",
+   "nach": "rw.e8"
+  },
+  {
+   "von": "modus.aus",
+   "nach": "rw.wahl"
+  },
+  {
+   "von": "rate.aus",
+   "nach": "qf.rate"
+  },
+  {
+   "von": "qf.aus",
+   "nach": "qw.e1"
+  },
+  {
+   "von": "qs0.aus",
+   "nach": "qw.e2"
+  },
+  {
+   "von": "qs1.aus",
+   "nach": "qw.e3"
+  },
+  {
+   "von": "qs2.aus",
+   "nach": "qw.e4"
+  },
+  {
+   "von": "qs3.aus",
+   "nach": "qw.e5"
+  },
+  {
+   "von": "qs4.aus",
+   "nach": "qw.e6"
+  },
+  {
+   "von": "qs5.aus",
+   "nach": "qw.e7"
+  },
+  {
+   "von": "qs6.aus",
+   "nach": "qw.e8"
+  },
+  {
+   "von": "modus.aus",
+   "nach": "qw.wahl"
+  },
+  {
+   "von": "rw.aus",
+   "nach": "dml.a"
+  },
+  {
+   "von": "depth.aus",
+   "nach": "dml.b"
+  },
+  {
+   "von": "dml.aus",
+   "nach": "ndl.a"
+  },
+  {
+   "von": "delay.aus",
+   "nach": "zal.a"
+  },
+  {
+   "von": "dml.aus",
+   "nach": "zal.b"
+  },
+  {
+   "von": "delay.aus",
+   "nach": "zbl.a"
+  },
+  {
+   "von": "ndl.aus",
+   "nach": "zbl.b"
+  },
+  {
+   "von": "ein.l",
+   "nach": "tal.x"
+  },
+  {
+   "von": "zal.aus",
+   "nach": "tal.zeit"
+  },
+  {
+   "von": "ein.l",
+   "nach": "tbl.x"
+  },
+  {
+   "von": "zbl.aus",
+   "nach": "tbl.zeit"
+  },
+  {
+   "von": "tal.aus",
+   "nach": "sul.a"
+  },
+  {
+   "von": "tbl.aus",
+   "nach": "sul.b"
+  },
+  {
+   "von": "sul.aus",
+   "nach": "wel.a"
+  },
+  {
+   "von": "qw.aus",
+   "nach": "dmr.a"
+  },
+  {
+   "von": "depth.aus",
+   "nach": "dmr.b"
+  },
+  {
+   "von": "dmr.aus",
+   "nach": "ndr.a"
+  },
+  {
+   "von": "delay.aus",
+   "nach": "zar.a"
+  },
+  {
+   "von": "dmr.aus",
+   "nach": "zar.b"
+  },
+  {
+   "von": "delay.aus",
+   "nach": "zbr.a"
+  },
+  {
+   "von": "ndr.aus",
+   "nach": "zbr.b"
+  },
+  {
+   "von": "ein.r",
+   "nach": "tar.x"
+  },
+  {
+   "von": "zar.aus",
+   "nach": "tar.zeit"
+  },
+  {
+   "von": "ein.r",
+   "nach": "tbr.x"
+  },
+  {
+   "von": "zbr.aus",
+   "nach": "tbr.zeit"
+  },
+  {
+   "von": "tar.aus",
+   "nach": "sur.a"
+  },
+  {
+   "von": "tbr.aus",
+   "nach": "sur.b"
+  },
+  {
+   "von": "sur.aus",
+   "nach": "wer.a"
+  },
+  {
+   "von": "wel.aus",
+   "nach": "mo.a"
+  },
+  {
+   "von": "wer.aus",
+   "nach": "mo.b"
+  },
+  {
+   "von": "mo.aus",
+   "nach": "mo5.a"
+  },
+  {
+   "von": "width.aus",
+   "nach": "nbr.a"
+  },
+  {
+   "von": "nbr.aus",
+   "nach": "ibr.a"
+  },
+  {
+   "von": "mo5.aus",
+   "nach": "mob.a"
+  },
+  {
+   "von": "ibr.aus",
+   "nach": "mob.b"
+  },
+  {
+   "von": "wel.aus",
+   "nach": "wbl.a"
+  },
+  {
+   "von": "width.aus",
+   "nach": "wbl.b"
+  },
+  {
+   "von": "mob.aus",
+   "nach": "wcl.a"
+  },
+  {
+   "von": "wbl.aus",
+   "nach": "wcl.b"
+  },
+  {
+   "von": "wer.aus",
+   "nach": "wbr.a"
+  },
+  {
+   "von": "width.aus",
+   "nach": "wbr.b"
+  },
+  {
+   "von": "mob.aus",
+   "nach": "wcr.a"
+  },
+  {
+   "von": "wbr.aus",
+   "nach": "wcr.b"
+  },
+  {
+   "von": "mix.aus",
+   "nach": "nmx.a"
+  },
+  {
+   "von": "nmx.aus",
+   "nach": "imx.a"
+  },
+  {
+   "von": "ein.l",
+   "nach": "drl.a"
+  },
+  {
+   "von": "imx.aus",
+   "nach": "drl.b"
+  },
+  {
+   "von": "wcl.aus",
+   "nach": "nwl.a"
+  },
+  {
+   "von": "mix.aus",
+   "nach": "nwl.b"
+  },
+  {
+   "von": "drl.aus",
+   "nach": "ol.a"
+  },
+  {
+   "von": "nwl.aus",
+   "nach": "ol.b"
+  },
+  {
+   "von": "ol.aus",
+   "nach": "aus.l"
+  },
+  {
+   "von": "ein.r",
+   "nach": "drr.a"
+  },
+  {
+   "von": "imx.aus",
+   "nach": "drr.b"
+  },
+  {
+   "von": "wcr.aus",
+   "nach": "nwr.a"
+  },
+  {
+   "von": "mix.aus",
+   "nach": "nwr.b"
+  },
+  {
+   "von": "drr.aus",
+   "nach": "or.a"
+  },
+  {
+   "von": "nwr.aus",
+   "nach": "or.b"
+  },
+  {
+   "von": "or.aus",
+   "nach": "aus.r"
+  }
+ ]
+}

@@ -24,7 +24,7 @@ import { aendereStand } from '../../project/state.ts';
 import {
   eingangsCode, leseMidiDatei, midiTakeNoten, nehmeMidiAuf, nehmeTakeAuf, schreibeWavAusF32, TakeFehler, type MidiTakeAngabe,
 } from '../../project/recording.ts';
-import { aufnahmeVon, MAX_BEAT, type EingangExtern, type EingangIntern, type Projekt, type SpurAufnahme } from '../../project/model.ts';
+import { aufnahmeVon, MAX_BEAT, MAX_SPUREN, type EingangExtern, type EingangIntern, type Projekt, type SpurAufnahme } from '../../project/model.ts';
 import { quittungsFristMs } from './recording_deadline.ts';
 import { tastenSenke, type TastenArm } from '../controller/tasten.ts';
 import { geraeteDatei } from '../../paths.ts';
@@ -353,8 +353,8 @@ export class Aufnahme {
       await this.kette;
       // the same project state as `scharf` above; N1: without the focus arm, so it is taken back before the take and is never part of it
       const soll = this.soll(o.projekt, false);
-      const alle = this.kernBereinigt ? this.unterschiede(soll) : Array.from({ length: 32 }, (_, i) => i + 1);
-      // alle Nachrichten zugleich senden, dann alle Quittungen abwarten (32 mal einzeln wären rund eine Sekunde)
+      const alle = this.kernBereinigt ? this.unterschiede(soll) : Array.from({ length: MAX_SPUREN }, (_, i) => i + 1);
+      // alle Nachrichten zugleich senden, dann alle Quittungen abwarten (128 mal einzeln wären rund eine Sekunde)
       for (const x of await this.sendeSpuren(alle, soll)) {
         if (!x.q) throw new ProjFehler(409, 'kein_kern');
         // also aufnahme_laeuft, while the thread still closes the file of the last take (m1)

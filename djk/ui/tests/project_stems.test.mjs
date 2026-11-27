@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fuehreListeAus } from '../project/commands.ts';
-import { neuesProjekt, MAX_GRUPPEN } from '../project/model.ts';
+import { neuesProjekt, MAX_GRUPPEN, MAX_SPUREN } from '../project/model.ts';
 import { quellSekunde } from '../project/warp.ts';
 import { stemsPlan, stemWarp, baueStemsProjekt, pruefeNochGleich, STEMS, StemsFehler } from '../project/stems.ts';
 
@@ -53,8 +53,8 @@ test('S6 Ziel: genau ein Audio-Clip (D14), Loop (D14), Bereich im Clip, Grenze 6
   const lang = lauf(projekt({ warp: false }), [{ befehl: 'clip_aendern', clip_id: 'c1', laenge_beats: 1300 }]);
   assert.equal(fehler(() => stemsPlan(lang, { clip_id: 'c1' })), 'stems_zu_gross');
   let voll = p;
-  for (let i = voll.spuren.length; i < 27; i++) voll = lauf(voll, [{ befehl: 'spur_neu', art: 'audio' }]);
-  assert.equal(fehler(() => stemsPlan(voll, { clip_id: 'c1' })), 'zu_viele_spuren');            // 27 + 6 > 32: the plan counts all six (D5)
+  for (let i = voll.spuren.length; i < MAX_SPUREN - 5; i++) voll = lauf(voll, [{ befehl: 'spur_neu', art: 'audio' }]);
+  assert.equal(fehler(() => stemsPlan(voll, { clip_id: 'c1' })), 'zu_viele_spuren');            // MAX - 5 + 6 > MAX: the plan counts all six (D5)
   assert.equal(fehler(() => stemsPlan(lauf(voll, [{ befehl: 'spur_loeschen', spur_id: 's2' }]), { clip_id: 'c1' })), null);
 });
 
@@ -134,8 +134,8 @@ test('S6 Veraltet (D16): Start, Länge, sha, Marker, Loop, weg; Gain ist egal (N
   assert.equal(pruefeNochGleich(p, z), null);
   assert.equal(pruefeNochGleich(lauf(p, [{ befehl: 'clip_aendern', clip_id: 'c1', gain_db: -6 }]), z), null);
   let eng = p;                                                                   // D5: after the run the placed count decides
-  for (let i = eng.spuren.length; i < 28; i++) eng = lauf(eng, [{ befehl: 'spur_neu', art: 'audio' }]);
-  assert.equal(pruefeNochGleich(eng, z, 4), null);                              // 28 + 4 = 32
+  for (let i = eng.spuren.length; i < MAX_SPUREN - 4; i++) eng = lauf(eng, [{ befehl: 'spur_neu', art: 'audio' }]);
+  assert.equal(pruefeNochGleich(eng, z, 4), null);                              // MAX - 4 + 4 = MAX
   assert.equal(pruefeNochGleich(eng, z, 5), 'zu_viele_spuren');
   assert.equal(pruefeNochGleich(eng, z), 'zu_viele_spuren');                    // default: all six
   for (const b of [{ befehl: 'clip_aendern', clip_id: 'c1', start_beat: 9 }, { befehl: 'clip_aendern', clip_id: 'c1', laenge_beats: 9 },

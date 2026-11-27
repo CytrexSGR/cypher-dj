@@ -27,10 +27,10 @@ test('schreibeMuster: Fehler mit Zeile, nichts geschrieben', () => {
 
 test('leseMusterStand: Text, von, Status; fehlende Dateien → leer statt Wurf', () => {
   const d = ordner();
-  assert.deepEqual(leseMusterStand(d), { text: '', von: null, zeit: null, status: null, autonom: true });
+  assert.deepEqual(leseMusterStand(d), { text: '', von: null, zeit: null, bezeichnung: null, status: null, autonom: true });
   schreibeMuster(d, 's("hh*8")', 'cypher', 5);
   schreibeStatus(d, { nr: 3, ab_beat: 64, fehler: null }, 6);
-  assert.deepEqual(leseMusterStand(d), { text: 's("hh*8")', von: 'cypher', zeit: 5, status: { nr: 3, ab_beat: 64, fehler: null, zeit: 6 }, autonom: true });
+  assert.deepEqual(leseMusterStand(d), { text: 's("hh*8")', von: 'cypher', zeit: 5, bezeichnung: null, status: { nr: 3, ab_beat: 64, fehler: null, zeit: 6 }, autonom: true });
 });
 
 test('AUTO (Andreas 2026-09-28): ohne Datei an, Schalter hält, bis er umgelegt wird', () => {

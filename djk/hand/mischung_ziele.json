@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "grob": true,
+  "quelle": "rough club tilt, not measured",
+  "hinweis": "ROUGH: hand-set genre target curves in dB relative to 1 kHz, not measured from reference tracks. Use them as a direction, not as a verdict.",
+  "anker_hz": [30, 60, 125, 250, 1000, 4000, 10000, 16000],
+  "ziele": {
+    "techno": [10, 12, 8, 4, 0, -4, -9, -14],
+    "house": [8, 11, 8, 4, 0, -3, -8, -13],
+    "deep_house": [9, 12, 9, 5, 0, -5, -11, -16],
+    "dub": [12, 13, 9, 4, 0, -6, -12, -18],
+    "techstep": [9, 11, 7, 3, 0, -2, -6, -11],
+    "minimal": [9, 11, 7, 3, 0, -4, -9, -14]
+  }
+}

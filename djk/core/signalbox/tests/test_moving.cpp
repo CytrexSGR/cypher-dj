@@ -47,7 +47,7 @@ std::vector<Soll> projekt_oeffnen() {
                       "erz/4/kill/mitte", "erz/4/kill/hoch", "erz/4/filter", "erz/4/komp/an", "erz/4/send/1", "erz/4/send/2",
                       "erz/4/send/3", "erz/4/send/4", "erz/4/ziel", "erz/4/xseite"};
   for (const char* p : e4) soll.push_back({p, std::strstr(p, "send") ? -200.0f : (std::strstr(p, "xseite") ? 1.0f : 0.0f)});
-  for (int n = 1; n <= SPUR_REGLER_SPUREN; ++n) {
+  for (int n = 1; n <= SPUR_REGLER_SPUREN_ALT; ++n) {
     char p[32];
     std::snprintf(p, sizeof p, "spur/%d/fader", n); soll.push_back({p, -6.0f});
     std::snprintf(p, sizeof p, "spur/%d/pan", n); soll.push_back({p, 0.25f});
@@ -177,7 +177,7 @@ std::vector<Soll> maximalprojekt_oeffnen() {
   soll.push_back({"pm/fader", -1.5f});
   for (int r = 1; r <= RET_REGLER_RETURNS; ++r) {
     char p[40];
-    for (int n = 1; n <= SPUR_REGLER_SPUREN; ++n) { std::snprintf(p, sizeof p, "spur/%d/send/%d", n, r); soll.push_back({p, -12.0f}); }
+    for (int n = 1; n <= SPUR_REGLER_SPUREN_ALT; ++n) { std::snprintf(p, sizeof p, "spur/%d/send/%d", n, r); soll.push_back({p, -12.0f}); }
     for (int n = 1; n <= GRP_REGLER_GRUPPEN; ++n) { std::snprintf(p, sizeof p, "grp/%d/send/%d", n, r); soll.push_back({p, -9.0f}); }
     std::snprintf(p, sizeof p, "ret/%d/fader", r); soll.push_back({p, -2.0f});
     std::snprintf(p, sizeof p, "ret/%d/pan", r); soll.push_back({p, 0.25f});
@@ -279,7 +279,7 @@ FALL(teil_haelt_seinen_platz_ueber_status_2_bis_3) {
   std::string extra;
   for (int r = 0; r < t.anzahl(); ++r) {
     const ReglerDef& d = t.def(r);
-    if (d.transport || d.nur_hand || d.deck || d.keine_rampe) continue;   // only controls with a ramp
+    if (d.transport || d.nur_hand || d.deck || d.keine_rampe || d.schalt_samples < 480) continue;   // only controls whose ramp holds its place for two blocks (a 0 or 5 ms ramp is over before the 257th Teil arrives)
     if (static_cast<int>(soll.size()) < MAX_TEILE) soll.push_back({d.pfad, d.max != d.vorgabe ? d.max : d.min});
     else if (extra.empty()) extra = d.pfad;
   }
@@ -293,7 +293,7 @@ FALL(teil_haelt_seinen_platz_ueber_status_2_bis_3) {
   PRUEFE_GLEICH(sw.zaehler().teile_voll, 0);
   // one more control right now: the 256 places are still held (ramp not at its end)
   std::vector<Soll> mehr = eins;
-  mehr[0].wert = t.def(t.suche(extra.c_str())).max;
+  { const ReglerDef& d = t.def(t.suche(extra.c_str())); mehr[0].wert = d.max != d.vorgabe ? d.max : d.min; }   // a target that differs from the default (master/pegel, since strand 11 no longer nur_hand, has max == default)
   paket_senden(sw, uhr, mehr, 0, 1, id, false);
   PRUEFE_GLEICH(sw.zaehler().teile_voll, 1);
   // wait until the first 256 are at their end, then the same control is accepted

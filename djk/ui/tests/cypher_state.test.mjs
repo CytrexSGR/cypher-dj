@@ -1,7 +1,7 @@
 // Plan M-1 Annahme-Weg: was die Seite aus den Leitstand-Ereignissen über Cyphers Vorschlag und Stopp anzeigt (reine Funktion, ohne Browser)
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cypherStand } from '../public/messages.js';
+import { cypherStand, handAnzeige } from '../public/messages.js';
 
 const leer = { vorschlag: null, gestoppt: false };
 const vorgeschlagen = { art: 'plan_vorgeschlagen', plan_id: 'p1', vorschlag: { id: 'v1', plan_id: 'p1', text: 'T 113: Nightshift rein', start_beat: 452, verfaellt_beat: 448, kanal: 'k' } };
@@ -28,4 +28,11 @@ test('ki_stopp setzt und löst den Stopp, der Vorschlag bleibt', () => {
 });
 test('fremde Ereignisse ändern nichts', () => {
   for (const art of ['geladen', 'takt', 'neustart', 'hand', 'teil_gestartet']) assert.equal(cypherStand(leer, { art }), null, art);
+});
+
+test('handAnzeige: stopped, released, missing field', () => {
+  assert.deepEqual(handAnzeige({ gestoppt: true, bremse: true, kern_ki: false }), { gestoppt: true, text: 'AGENTS STOPPED' });
+  assert.deepEqual(handAnzeige({ gestoppt: false }), { gestoppt: false, text: '' });
+  assert.deepEqual(handAnzeige({}), { gestoppt: false, text: '' });
+  assert.deepEqual(handAnzeige(undefined), { gestoppt: false, text: '' });
 });

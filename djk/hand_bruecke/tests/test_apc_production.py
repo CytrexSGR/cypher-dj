@@ -11,20 +11,42 @@ LAGE = {"produktion": True, "bank": 0, "laeuft": False, "spalten": SP + [None] *
 
 
 def test_faders_go_to_the_track_rows_on_channel_16():
-    assert A.uebersetze(bytes([0xB0, 7, 100]), LAGE) == [("kern", bytes([0xBF, 3, A.fader_cc(100)]))], "column 1 = track nr 3"
-    assert A.uebersetze(bytes([0xB1, 7, 5]), LAGE) == [("kern", bytes([0xBF, 4, A.fader_cc(5)]))]
+    assert A.uebersetze(bytes([0xB0, 7, 100]), LAGE) == [("kern", bytes([0xBF, 2, A.fader_cc(100)]))], "column 1 = track nr 3"
+    assert A.uebersetze(bytes([0xB1, 7, 5]), LAGE) == [("kern", bytes([0xBF, 3, A.fader_cc(5)]))]
     assert A.uebersetze(bytes([0xB2, 7, 5]), LAGE) == [], "a column without a track"
-    assert A.uebersetze(bytes([0xB0, 14, 90]), LAGE) == [("kern", bytes([0xBF, 100, A.fader_cc(90)]))], "master fader = pm/fader"
+    assert A.uebersetze(bytes([0xB0, 14, 90]), LAGE) == [("kern", bytes([0xBE, 100, A.fader_cc(90)]))], "master fader = pm/fader"
 
 
 def test_buttons_mute_solo_arm():
-    assert A.uebersetze(bytes([0x90, 50, 127]), LAGE) == [("kern", bytes([0x9F, 3, 127]))], "activator = mute of track 3"
-    assert A.uebersetze(bytes([0x80, 50, 127]), LAGE) == [("kern", bytes([0x8F, 3, 0]))]
-    assert A.uebersetze(bytes([0x91, 49, 127]), LAGE) == [("kern", bytes([0x9F, 68, 127]))], "solo = 64 + nr"
+    assert A.uebersetze(bytes([0x90, 50, 127]), LAGE) == [("kern", bytes([0x9F, 2, 127]))], "activator = mute of track 3"
+    assert A.uebersetze(bytes([0x80, 50, 127]), LAGE) == [("kern", bytes([0x8F, 2, 0]))]
+    assert A.uebersetze(bytes([0x91, 49, 127]), LAGE) == [("kern", bytes([0x9E, 3, 127]))], "solo = channel 15 note nr - 1"
     assert A.uebersetze(bytes([0x91, 48, 127]), LAGE) == [("http", "/controller/pult/arm", {"nr": 4})]
     assert A.uebersetze(bytes([0x81, 48, 127]), LAGE) == [], "arm acts on the press only"
     assert A.uebersetze(bytes([0x90, 53, 127]), LAGE) == [], "the clip grid does nothing in PRODUCTION"
     assert A.uebersetze(bytes([0x90, 82, 127]), LAGE) == []
+
+
+def test_start_stop_is_channel_14_note_120():
+    assert A._start_stopp() == [("kern", bytes([0x9D, 120, 127])), ("kern", bytes([0x8D, 120, 0]))]
+
+
+def test_pult_json_maps_all_128_tracks_without_clashes():
+    import json
+    d = json.loads((Path(__file__).resolve().parents[2] / "config" / "controller" / "pult.json").read_text())
+    es = d["eintraege"]
+    assert len(es) <= 512
+    schluessel = [(e["nachricht"]["typ"], e["nachricht"]["kanal"], e["nachricht"]["nr"]) for e in es]
+    assert len(schluessel) == len(set(schluessel)), "no two entries share (typ, kanal, nr)"
+    nach = {}
+    for e in es:
+        nach.setdefault(e["ziel"], []).append((e["nachricht"]["typ"], e["nachricht"]["kanal"], e["nachricht"]["nr"]))
+    for nr in range(1, 129):
+        assert nach.get(f"spur/{nr}/fader") == [("cc", 16, nr - 1)], nr
+        assert nach.get(f"spur/{nr}/mute") == [("note", 16, nr - 1)], nr
+        assert nach.get(f"spur/{nr}/solo") == [("note", 15, nr - 1)], nr
+    assert nach.get("pm/fader") == [("cc", 15, 100)]
+    assert nach.get("arr/start_stopp") == [("note", 14, 120)]
 
 
 def test_shift_functions_from_the_cc16_burst():

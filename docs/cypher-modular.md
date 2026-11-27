@@ -80,7 +80,7 @@ A `regler` node can also carry `rastet` 1. That knob does not glide: it takes it
 track a lane or envelope on it is read at the beat of each note, so every hit gets the value of its own step. The slice
 device uses it for SPEED and PITCH.
 
-That makes 61 block types. The graph is checked when it loads and runs in a fixed order. Feedback is only allowed through
+That makes 62 block types. The graph is checked when it loads and runs in a fixed order. Feedback is only allowed through
 a wire marked `"verzoegerung": 1` or through `leitung`. Up to 16 voices run side by side; the audio callback does not
 allocate.
 
@@ -140,7 +140,7 @@ automatic panel. The plate opens enlarged on a device page, with a live spectrum
   rolls the input or plays four synthesized drum voices, with an overdub pattern) and RELEASE (a lever that ends the
   sound with a brake, an echo or a back spin and returns to the original when let go). It loads neutral: with every
   section off it passes its input bit for bit, adds no latency and costs about 38 microseconds per block of 128
-  samples. The DJ view has a REMIX place for it with a lever and a touch field. New: tested on synthetic signals and
+  samples. The FX3 unit of the mixer opens a Remix window with a lever and a touch field. New: tested on synthetic signals and
   in one demonstration session, the curves are the model's own choices.
 
 The new controls of the three synthesizers were added without changing any old sound: with every new knob at its start
@@ -151,7 +151,7 @@ been judged by a listener yet. The three wavetable synths (`wavetable-reese`, `w
 
 - the melody channel, as before, and the bass channel (the graph replaces that channel's sound, the pattern keeps
   playing through it);
-- erz/5 to erz/7 and the two loop box pads, each as an instrument on its own pattern stream (start the studio with
+- erz/5 to erz/7, erz/9 and erz/10, each as an instrument on its own pattern stream (start the studio with
   `djk/start/djk-start --strudel --bk-stroeme`); these streams can be recorded onto production tracks;
 - a production instrument track (the device is the graph and its knob values; up to 16 such tracks), played from the
   project's notes live and in the offline render;

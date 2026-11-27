@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstring>
 
+#include "cypherdj/arr_maske.h"
 #include "cypherdj/arr_playback.h"
 #include "cypherdj/recording_ring.h"
 #include "cypherdj/input.h"
@@ -75,21 +76,20 @@ class Aufnahme {
   // Callers check aendern_erlaubt() first (the take of a run in progress is not touched).
   RecMidi* setze_midi(int spur, bool an, RecMidi* neu) noexcept {
     if (spur < 1 || spur > ARR_SPUREN) return neu;
-    const uint32_t bit = 1u << (spur - 1);
     if (an) {
       RecMidi* zurueck = neu;
       if (!midi_ && neu) { midi_ = neu; zurueck = nullptr; }
-      if (midi_) midi_scharf_ |= bit;
+      if (midi_) midi_scharf_.setze(spur - 1);
       return zurueck;
     }
-    midi_scharf_ &= ~bit;
-    if (midi_scharf_ != 0 || !midi_) return nullptr;
+    midi_scharf_.loesche(spur - 1);
+    if (!midi_scharf_.leer() || !midi_) return nullptr;
     RecMidi* alt = midi_;
     midi_ = nullptr;
     return alt;
   }
-  uint32_t midi_maske() const noexcept { return midi_scharf_; }
-  int midi_scharf() const noexcept { return __builtin_popcount(midi_scharf_); }
+  const ArrMaske<ARR_SPUREN>& midi_maske() const noexcept { return midi_scharf_; }
+  int midi_scharf() const noexcept { return midi_scharf_.anzahl(); }
   const RecMidi* midi_spur() const noexcept { return midi_; }
   int scharf_ohne(int spur) const noexcept { int n = 0; for (int i = 0; i < ARR_SPUREN; ++i) n += (spur_[i] && i != spur - 1) ? 1 : 0; return n; }
   int status() const noexcept { return status_; }
@@ -124,7 +124,7 @@ class Aufnahme {
   const char* starte(int64_t id, int32_t kennung, int32_t nachlauf, bool von_cypher, int64_t jetzt, const ArrLage& arr, int64_t frist = 0, int64_t ab_sample = -1,
                      int vorzaehler_takte = 0) noexcept {
     if (!aendern_erlaubt()) return "aufnahme_laeuft";
-    if (scharf() == 0 && midi_scharf_ == 0) return "kein_eingang";   // 1.8 T7a: a MIDI arm alone is a run (instrument-only), nothing armed at all is not
+    if (scharf() == 0 && midi_scharf_.leer()) return "kein_eingang";   // 1.8 T7a: a MIDI arm alone is a run (instrument-only), nothing armed at all is not
     const bool laufend = arr.status == 2 && ab_sample >= 0;
     if (arr.status != 0 && !laufend) return "ueberlappung";
     if (laufend && arr.stopp >= 0 && ab_sample >= arr.stopp) return "ueberlappung";   // the transport is planned to stop before the take could begin
@@ -373,8 +373,8 @@ class Aufnahme {
   }
   RecSpur* spur_[ARR_SPUREN] = {};
   static constexpr int MIDI_VOR = 256;   // events of ONE cycle (Kern::MAX_MIDI), a take can only use what the cycle brought
-  RecMidi* midi_ = nullptr;              // 1.8 T7a: set iff midi_scharf_ != 0
-  uint32_t midi_scharf_ = 0;             // bit = track nr - 1 (eingang 30)
+  RecMidi* midi_ = nullptr;              // 1.8 T7a: set iff midi_scharf_ is not empty
+  ArrMaske<ARR_SPUREN> midi_scharf_{};  // bit = track nr - 1 (eingang 30); strand 1 task 6.2: one bit per track for any track count
   MidiEinEreignis vor_[MIDI_VOR] = {};
   int vor_n_ = 0;
   int status_ = 0;

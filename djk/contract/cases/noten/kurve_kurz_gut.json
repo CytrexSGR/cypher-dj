@@ -1,0 +1,13 @@
+{
+ "format": "cdj-noten-kurve/1",
+ "quelle": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+ "frames": 100,
+ "sr": 48000,
+ "hop": 256,
+ "detektor": "pyin",
+ "kurve": "pyin-1.noten_hmm-1",
+ "f0_ct": [0],
+ "konf": [0.0],
+ "noten": [],
+ "stimmhaft_anteil": 0
+}

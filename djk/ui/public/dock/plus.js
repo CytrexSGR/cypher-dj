@@ -6,10 +6,11 @@ import { duckKicks, duckBefehl } from '../production/key_choice.js';
 import { knopfEl } from './blocks.js';
 
 const PLUS_ARTEN = [['komp', 'Compressor'], ['eq', 'EQ'], ['saett', 'Saturator'], ['lim', 'Limiter']];
+const PLUS_MISCH = [['gate', 'Gate'], ['mb', 'Multiband']];   // after the Utility when the list has one
 export const PLUS_VOLL_TEXT = `The strip holds ${MAX_PLAETZE} stages`;
 /**
  * The entries of the "+" menu: [{text, befehl | null, grund?, label?} | {gruppe: true, text}]; befehl is null (with the reason) when the strip is full, the
- * pool of that kind is empty or a plugin is blocked. `opt` (all optional, `{}` is the STUDIO list): util adds Utility after Limiter; zaehler appends
+ * pool of that kind is empty or a plugin is blocked. `opt` (all optional, `{}` is the STUDIO list): util adds Utility after Limiter (Gate and Multiband follow in both lists); zaehler appends
  * " used/max" to the kinds and plugins; plugins is the GET /plugins list (effects only); duck is the kick list of `duckKicks` (the caller checks that the
  * strip is a track with a free compressor).
  */
@@ -23,7 +24,7 @@ export function plusEintraege(p, strangId, graphen, opt = {}) {
     if (!b) return { text: t, befehl: null, grund: voll ? PLUS_VOLL_TEXT : ARTEN[art].voll };
     return { text: t, befehl: art === 'bk' ? { ...b, graph } : b };
   };
-  const arten = opt.util ? [...PLUS_ARTEN, ['utility', 'Utility']] : PLUS_ARTEN;
+  const arten = opt.util ? [...PLUS_ARTEN, ['utility', 'Utility'], ...PLUS_MISCH] : [...PLUS_ARTEN, ...PLUS_MISCH];
   const aus = [
     ...arten.map(([art, text]) => eintrag(text, art)),
     ...(graphen ?? []).filter((g) => g?.art === 'effekt' && typeof g.name === 'string').map((g) => eintrag(g.name, 'bk', g.name)),

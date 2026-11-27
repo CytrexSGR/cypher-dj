@@ -187,3 +187,9 @@ def test_a_deleted_gate_or_source_file_is_judged_by_its_path():
     assert g
     g, suites, *_ = plan("djk/core/src/geloescht_weg.cpp")
     assert not g and "core" in suites
+
+
+def test_core_change_in_the_note_program_selects_the_page_test_that_starts_it():
+    g, suites, dateien, _ = plan("djk/core/noten/src/render.cpp")
+    gewaehlt = {f for fs in dateien.values() for f in fs}
+    assert not g and "tests/proj_notes_real.test.mjs" in gewaehlt, sorted(gewaehlt)

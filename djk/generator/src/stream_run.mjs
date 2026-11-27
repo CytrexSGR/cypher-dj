@@ -7,7 +7,7 @@ import path from 'node:path';
 import { kodiere } from '../../contract/mock_core/osc.mjs';
 import { kompiliere } from './compile.mjs';
 import { Planer } from './planner.mjs';
-import { schreibeStatus, schreibeLebt } from './pattern_state.mjs';
+import { schreibeStatus, schreibeLebt, leseVersatz } from './pattern_state.mjs';
 import { leseTaktart, TAKTART_DATEI } from './taktart_file.mjs';
 
 export class StromLauf {
@@ -54,14 +54,18 @@ export class StromLauf {
     } catch {
       return;   // no pattern yet: silence
     }
-    const r = kompiliere(text);
+    const jetzt = this.beatJetzt();
+    const jetztB = jetzt === null ? -Infinity : jetzt;
+    const vorab = this.planer.abFuer(jetztB);
+    const versatz = leseVersatz(this.ordner);
+    // the anchor (.rein/.raus, ANKER) stays the switch bar: compile in inner time, .late(versatz) moves it back to the switch bar
+    const r = kompiliere(text, { anker: (Number.isFinite(vorab) ? vorab / this.planer.proTakt : 0) - versatz });
     if (r.fehler) {
       this.log(`${this.muster}: ${r.fehler} (the old pattern stays)`);
       this.status(this.letzterStand = { ...this.letzterStand, nr: this.planer.nr, ab_beat: null, fehler: r.fehler });
       return;
     }
-    const jetzt = this.beatJetzt();
-    const ab = this.planer.setze(r.muster, jetzt === null ? -Infinity : jetzt);
+    const ab = this.planer.setze(r.muster, jetztB, versatz);
     this.log(`pattern ${this.planer.nr} applies from beat ${ab}`);
     this.status(this.letzterStand = { nr: this.planer.nr, ab_beat: Number.isFinite(ab) ? ab : null, fehler: null, taub: [], taub_muster: null });
   }

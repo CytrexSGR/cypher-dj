@@ -790,7 +790,7 @@ const postJson = (url, pfad, daten, kopf = {}) => fetch(url + pfad, { method: 'P
 test('/strudel (Plan 2): lesen, schreiben mit von andreas, Fehler mit Zeile, AUTO-Schalter', { skip: OHNE_STRUDEL }, async (t) => {
   const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
   const { url } = await stapel(t, [], { musterOrdner: d, live: true });
-  assert.deepEqual(await (await fetch(`${url}/strudel`)).json(), { text: '', von: null, zeit: null, status: null, autonom: true });
+  assert.deepEqual(await (await fetch(`${url}/strudel`)).json(), { text: '', von: null, zeit: null, bezeichnung: null, status: null, autonom: true });
   const ok = await postJson(url, '/strudel', { text: 's("bd*4")' });
   assert.equal(ok.code, 200, JSON.stringify(ok.j));
   const st = await (await fetch(`${url}/strudel`)).json();
@@ -1646,7 +1646,7 @@ test('Hand T2: /regler → /k/teil (Rampe über Takte, Start auf Takt), Quittung
   for (let i = 0; i < 200 && o.stand.regler['deck/1/eq/tief'] !== -12; i++) await warte(20);
   assert.equal(o.stand.regler['deck/1/eq/tief'], -12);
   // nur Hand: Kern lehnt ab, Server meldet es
-  const x = await postJson(url, '/regler', { pfad: 'xfader', nach: 0.5 }, CYPHER);
+  const x = await postJson(url, '/regler', { pfad: 'cue/pegel', nach: -6 }, CYPHER);
   assert.equal(x.code, 200); assert.equal(x.j.quittung.status, 6); assert.equal(x.j.quittung.grund, 'nur_hand');
   // D8: geschlossenen Kanal öffnen → 409 vom Server, nichts an den Kern
   const n0 = teile().length;
@@ -1759,12 +1759,14 @@ test('Hand T7: cypher darf FX/Strudel nur bei AUTO an und ohne Stop Cypher; Andr
   assert.equal((await postJson(url, '/taste', { name: 'stopp' })).code, 200);
   for (let i = 0; i < 100 && !o.kiGestoppt; i++) await warte(10);
   assert.equal((await postJson(url, '/fx', fx1, CYPHER)).j.fehler, 'ki_gestoppt');
+  // Slice 4: the grid is a control Cypher may set, but not while Stop Cypher holds
+  for (const [p, d] of [['/deck/raster', { deck: 1, schritt_ms: 5 }], ['/deck/raster/fix', { deck: 1 }]]) {
+    assert.equal((await postJson(url, p, d, CYPHER)).j.fehler, 'ki_gestoppt', p);
+  }
   assert.equal((await postJson(url, '/taste', { name: 'freigabe' })).code, 200);
   for (let i = 0; i < 100 && o.kiGestoppt; i++) await warte(10);
   // Andreas' Schalter
-  for (const [p, d] of [['/strudel/autonom', { an: true }], ['/deck/raster', { deck: 1, schritt_ms: 5 }], ['/deck/raster/fix', { deck: 1 }]]) {
-    assert.equal((await postJson(url, p, d, CYPHER)).code, 403, p);
-  }
+  assert.equal((await postJson(url, '/strudel/autonom', { an: true }, CYPHER)).code, 403, '/strudel/autonom');
 });
 
 test('Hand T8: /abbruch bricht Cyphers eigene Teile ab (Quittung 7 abbruch), nur mit Kopf cypher', async (t) => {
@@ -1974,21 +1976,21 @@ test('Ohr T18 /fx/routing: Andreas schaltet, Antwort mit Quittung, GET und /lage
   assert.equal((await (await fetch(`${url}/lage`)).json()).fx_routing, 'post_fader');
 });
 
-test('Ohr T18 /fx/routing: Quelle cypher bekommt 403 nur_andreas und der Kern nichts; falsche Werte 400', async (t) => {
+test('Ohr T18 /fx/routing: Quelle cypher darf schalten (Strang 11), der Kern bekommt quelle cypher; falsche Werte 400', async (t) => {
   const { url, log } = await stapel(t);
   const r = await postJson(url, '/fx/routing', { routing: 'insert' }, { 'x-djk-quelle': 'cypher' });
-  assert.equal(r.code, 403);
-  assert.equal(r.j.fehler, 'nur_andreas');
-  assert.equal(routingSendungen(log).length, 0, 'Cyphers Anfrage geht nicht an den Kern');
+  assert.equal(r.code, 200, JSON.stringify(r.j));
+  assert.equal(routingSendungen(log).length, 1, 'Cyphers Anfrage geht an den Kern');
+  assert.equal(routingSendungen(log)[0].felder.quelle, 'cypher');
+  assert.equal((await postJson(url, '/fx/routing', { routing: 'post_fader' })).code, 200);
+  const vorher = routingSendungen(log).length;
   for (const falsch of [{ routing: 'pre' }, { routing: 1 }, {}, { routing: null }]) {
     const x = await postJson(url, '/fx/routing', falsch);
     assert.equal(x.code, 400, JSON.stringify(falsch));
   }
-  assert.equal(routingSendungen(log).length, 0, 'Abweisungen senden nichts');
-  assert.deepEqual(await (await fetch(`${url}/fx/routing`)).json(), { routing: 'post_fader' }, 'der Stand blieb');
-  // Negativ-Kontrolle: Andreas' Anfrage danach geht durch
+  assert.equal(routingSendungen(log).length, vorher, 'Abweisungen senden nichts');
   assert.equal((await postJson(url, '/fx/routing', { routing: 'insert' })).code, 200);
-  assert.equal(routingSendungen(log).length, 1);
+  assert.equal(routingSendungen(log).length, vorher + 1);
 });
 
 test('Ohr T18 /fx/routing: der Wunsch überlebt den Kern-Neustart (insert wird nach /e/neustart erneut gesendet, post_fader nicht)', async (t) => {
@@ -2097,12 +2099,12 @@ test('Studio S6 Review: Ablehnung eines Spurteils sichtbar in GET /spur (abgeleh
   await postJson(url, '/spur/stopp', { name: 'gut' }, CYPHER);
   const schlecht = { name: 'schlecht', fahrten: [
     { ziel: 'erz/2/filter', ab_takt: 1, takte: 1, nach: -0.6 },
-    { ziel: 'xfader', ab_takt: 1, takte: 1, nach: 0.5 },
+    { ziel: 'cue/pegel', ab_takt: 1, takte: 1, nach: -6 },
   ] };
   const s = await postJson(url, '/spur', { spur: schlecht }, CYPHER);
   assert.equal(s.code, 200, JSON.stringify(s.j));
   const l = (await (await fetch(`${url}/spur`)).json()).find((x) => x.name === 'schlecht');
-  assert.deepEqual(l.abgelehnt.map((x) => [x.teil, x.pfad, x.status, x.grund]), [[1, 'xfader', 6, 'nur_hand']], JSON.stringify(l));
+  assert.deepEqual(l.abgelehnt.map((x) => [x.teil, x.pfad, x.status, x.grund]), [[1, 'cue/pegel', 6, 'nur_hand']], JSON.stringify(l));
 });
 
 test('Studio S6 Review: kurze Spur verschwindet nach ihrem Ende im Kern-Beat, nicht nach Wanduhr', async (t) => {
@@ -2165,9 +2167,9 @@ test('Studio S6 T6: Surge-Fahrten gehen mit Startzeit aus der Kern-Uhr an den Wi
   const x = await postJson(url, '/spur', { spur: { name: 'mel', fahrten: [{ ziel: 'wirt:melodie/a_filter1_cutoff', ab_takt: 1, takte: 1, nach: 0 }] } }, CYPHER);
   assert.equal(x.code, 409); assert.equal(x.j.fehler, 'wirt'); assert.equal(x.j.gruppe, 'melodie');
   assert.deepEqual(await (await fetch(`${url}/spur`)).json(), []);
-  // Negativ-Kontrolle: nicht fahrbarer Parameter wird beim Prüfen abgewiesen, der Wirt sieht nichts
+  // Negativ-Kontrolle: a RAMP on a discrete parameter is refused when checking (a set without takte is a discrete set since strand 11), the host sees nothing
   const n = bass.length;
-  assert.equal((await postJson(url, '/spur', { spur: { name: 'b2', fahrten: [{ ziel: 'wirt:bass/a_filter1_type', ab_takt: 1, nach: 2 }] } }, CYPHER)).code, 400);
+  assert.equal((await postJson(url, '/spur', { spur: { name: 'b2', fahrten: [{ ziel: 'wirt:bass/a_filter1_type', ab_takt: 1, takte: 2, nach: 2 }] } }, CYPHER)).code, 400);
   assert.equal(bass.length, n);
 });
 
@@ -2262,9 +2264,9 @@ test('Studio S6 Final-Review F4: AUTO aus hält Cyphers Spuren und /regler auf d
 test('Studio S6 Final-Review F3: POST /spur meldet abgelehnte Teile wie GET /spur, Negativ-Kontrolle leer', async (t) => {
   const { o, url } = await stapel(t, [], { live: true });
   await stromSpuren(o, 1, 2, 3, 5);   // the alias paths erz/<n> need the strom tracks of the live project
-  const s = await postJson(url, '/spur', { spur: { name: 'nurx', fahrten: [{ ziel: 'xfader', ab_takt: 1, takte: 1, nach: 0.5 }] } }, CYPHER);
+  const s = await postJson(url, '/spur', { spur: { name: 'nurx', fahrten: [{ ziel: 'cue/pegel', ab_takt: 1, takte: 1, nach: -6 }] } }, CYPHER);
   assert.equal(s.code, 200, JSON.stringify(s.j));
-  assert.deepEqual(s.j.abgelehnt.map((x) => [x.teil, x.pfad, x.status, x.grund]), [[0, 'xfader', 6, 'nur_hand']], JSON.stringify(s.j));
+  assert.deepEqual(s.j.abgelehnt.map((x) => [x.teil, x.pfad, x.status, x.grund]), [[0, 'cue/pegel', 6, 'nur_hand']], JSON.stringify(s.j));
   assert.deepEqual(s.j.abgelehnt, (await (await fetch(`${url}/spur`)).json()).find((x) => x.name === 'nurx').abgelehnt);
   const g = await postJson(url, '/spur', { spur: { name: 'gut', fahrten: [{ ziel: 'erz/2/filter', ab_takt: 1, takte: 1, nach: -0.6 }] } }, CYPHER);
   assert.deepEqual(g.j.abgelehnt, []);

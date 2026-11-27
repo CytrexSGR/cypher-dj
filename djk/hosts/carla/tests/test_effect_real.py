@@ -16,14 +16,16 @@ VST3 = Path.home() / ".local/lib/cypherdj/vst3"
 EQ = f"vst3:{VST3 / 'Cypher EQ.vst3'}#"
 LSP = "lv2:http://lsp-plug.in/plugins/lv2/limiter_stereo#"
 A_EQ = "lv2:urn:ardour:a-eq#"
+LSP_SC = "lv2:http://lsp-plug.in/plugins/lv2/sc_compressor_stereo#"
+LSP_KOMP = "lv2:http://lsp-plug.in/plugins/lv2/compressor_stereo#"
 pytestmark = pytest.mark.skipif(os.environ.get("EFFEKT_ECHT") != "1", reason="real run starts JACK clients: only with EFFEKT_ECHT=1")
 
 
 class Wirt:
-    def __init__(self, tmp_path, spec, name):
+    def __init__(self, tmp_path, spec, name, *extra):
         self.status, self.sock = tmp_path / "w.json", str(tmp_path / "w.sock")
         self.p = subprocess.Popen(["pw-jack", sys.executable, str(WIRT), "--name", name, "--effekt", spec, "--sock", self.sock,
-                                   "--status", str(self.status)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                                   "--status", str(self.status), *extra], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
     def warte_bereit(self):
         for _ in range(80):
@@ -50,8 +52,8 @@ class Wirt:
 def wirt(tmp_path):
     gestartet = []
 
-    def start(spec, name):
-        w = Wirt(tmp_path, spec, name)
+    def start(spec, name, *extra):
+        w = Wirt(tmp_path, spec, name, *extra)
         gestartet.append(w)
         return w
 
@@ -170,3 +172,50 @@ def test_zustand_rundweg_echt_und_fremdes_label(wirt, tmp_path):
     assert sende(w.sock, {"befehl": "zustand_setzen", "pfad": z}, timeout=30)["ok"]
     Path(z).write_text(Path(z).read_text().replace("<Label>Cypher EQ</Label>", "<Label>Other</Label>"))
     assert sende(w.sock, {"befehl": "zustand_setzen", "pfad": z})["fehler"] == "zustand_passt_nicht"
+
+
+def test_schluessel_sidechain_kompressor_hat_vier_eingaenge(wirt):
+    # plan strang 2 task 3.1: single-client mode exposes the key inputs 3 and 4 at JACK; the status names the ports
+    w = wirt(LSP_SC, "t31-sc", "--schluessel")
+    info = lade_und_info(w)
+    assert info["ok"] and info["audio_ein"] == 4 and info["audio_aus"] == 2, info
+    s = json.loads(w.status.read_text())
+    assert s["effekt"] == "geladen", s
+    ein, aus = s["ports"]["ein"], s["ports"]["aus"]
+    assert len(ein) == 4 and len(aus) == 2, s["ports"]
+    assert all(n.startswith("t31-sc:") for n in ein + aus), s["ports"]
+    assert "Sidechain" in ein[2] and "Sidechain" in ein[3], ein  # plugin order: main pair first, key pair second
+
+
+def test_schluessel_ohne_schluesseleingang_abgelehnt(wirt):
+    w = wirt(LSP_KOMP, "t31-komp", "--schluessel")
+    w.warte_bereit()
+    assert w.lade()["fehler"] == "kein_schluessel"
+    assert w.p.wait(30) == 2
+    assert json.loads(w.status.read_text())["fehler"] == ["kein_schluessel"]
+
+
+LSP_VST3 = Path("/usr/lib/vst3/lsp-plugins.vst3")
+DISCOVERY = Path("/usr/lib/carla/carla-discovery-native")
+KLASSE = 5
+
+
+@pytest.mark.skipif(not LSP_VST3.exists() or not DISCOVERY.exists(), reason="LSP VST3 bundle or carla-discovery-native missing")
+def test_klasse_nicht_erste_ueber_shim(tmp_path, monkeypatch):
+    """Plan 4.2: class 5 of the LSP VST3 bundle (Carla alone would load class 0) reaches `geladen` through the shim."""
+    import plugin_scan
+    monkeypatch.setenv("DJK_CARLA_DISCOVERY", str(DISCOVERY))
+    echt, ausgang = plugin_scan.entdecke("vst3", str(LSP_VST3))
+    assert ausgang == "ok" and echt[KLASSE]["label"] != echt[0]["label"]
+    ziel = tmp_path / "bau"
+    baue = Path(__file__).resolve().parent.parent / "vst3_klasse" / "build.sh"
+    assert subprocess.run(["bash", str(baue), str(ziel)], capture_output=True, timeout=120).returncode == 0
+    spec = f"vst3:{LSP_VST3}#{echt[KLASSE]['label']}@{KLASSE}"
+    w = Wirt(tmp_path, spec, "t42-klasse", "--shim", str(ziel / "klasse.so"), "--klassen-wurzel", str(tmp_path / "kl"))
+    try:
+        assert w.warte_bereit()["effekt"] == "leer"
+        assert w.lade()["ok"]
+        info = sende(w.sock, {"befehl": "info"})
+        assert info["ok"] and info["name"] == echt[KLASSE]["name"].replace("/", "."), info  # Carla shows "A/B" as "A.B"
+    finally:
+        w.ende()

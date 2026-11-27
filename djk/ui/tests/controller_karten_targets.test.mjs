@@ -44,5 +44,5 @@ test('the maps address four containers by their contract paths', () => {
 
 test('the number of entries per map is pinned so a silent edit shows', () => {
   assert.deepEqual(Object.fromEntries(KARTEN.map((n) => [n, lade(n).length])),
-    { 'apc20.json': 39, 'pult.json': 174, 'softcontroller.json': 44, 'lernen-lpd8-remix.json': 8 });
+    { 'apc20.json': 39, 'pult.json': 462, 'softcontroller.json': 44, 'lernen-lpd8-remix.json': 8 });
 });

@@ -665,7 +665,7 @@ try {
     await b.klick('.p-kopf[data-spur="s4"] .p-freeze'); await warte(500);
     notiere('6.3 Unfreeze', (await projekt()).spuren[3].freeze === null && !(await w(`document.querySelector('.p-freeze').classList.contains('an')`)), `freeze ${JSON.stringify((await projekt()).spuren[3].freeze)}`);
     n0 = log().length;
-    await b.klick('[data-p="export"]');
+    await b.klick('[data-p="export"]'); await b.klick('[data-p="export-start"]');
     const texte = new Set();
     for (let i = 0; i < 60; i++) { texte.add(await w(`document.querySelector('[data-p="ausgabe"]').textContent`)); if (log().slice(n0).some((e) => e.weg === '/proj/export') && !(await w('window.djkProd.lauf'))) break; await warte(60); }
     await warte(200);
@@ -675,15 +675,15 @@ try {
       `Phasen ${JSON.stringify([...new Set(phasen)])}; Ergebnis „${erg.text}“ (Titel ${erg.titel}); Lead danach eingefroren ${!!(await projekt()).spuren[3].freeze}`);
     const k0 = fehlerKonsole().length;
     await b.klick('[data-p="play"]'); await warte(400);
-    await b.klick('[data-p="export"]'); await warte(400);
+    await b.klick('[data-p="export"]'); await b.klick('[data-p="export-start"]'); await warte(400);
     const m1 = await w(`document.querySelector('[data-p="meldung"]').textContent`);
     await b.klick('[data-p="stopp"]'); await warte(400);
     await postA('/attrappe/ausgabe', { fehler: 'render_fehler' });
-    await b.klick('[data-p="export"]'); await warte(1200);
+    await b.klick('[data-p="export"]'); await b.klick('[data-p="export-start"]'); await warte(1200);
     const m2 = await w(`document.querySelector('[data-p="meldung"]').textContent`);
     const offline2 = await w('window.djkProd.getrennt');   // 502 mit Grund (S3) ist eine Antwort, kein Ausfall (Nachzug 7b)
     await postA('/attrappe/ausgabe', { fehler: null, spitze_db: 0.4 });
-    await b.klick('[data-p="export"]'); await warte(1200);
+    await b.klick('[data-p="export"]'); await b.klick('[data-p="export-start"]'); await warte(1200);
     const warn = await w(`({ t: document.querySelector('[data-p="ausgabe"]').textContent, w: document.querySelector('[data-p="ausgabe"]').classList.contains('warnung') })`);
     const neuK = fehlerKonsole().slice(k0);
     for (const k of neuK) gewollt.add(k);
@@ -754,7 +754,7 @@ try {
       ['/proj/freeze', 503, null, '.p-kopf[data-spur="s4"] .p-freeze'], ['/proj/freeze', 502, { text: 'bad gateway' }, '.p-kopf[data-spur="s4"] .p-freeze']]) {
       await postA('/attrappe/rohantwort', { weg, code, koerper });
       await w(`document.querySelector('[data-p="meldung"]').textContent = ''`);
-      await b.klick(knopf); await warte(500);
+      await b.klick(knopf); if (knopf === '[data-p="export"]') await b.klick('[data-p="export-start"]'); await warte(500);
       faelle.push({ weg, code, meldung: await w(`document.querySelector('[data-p="meldung"]').textContent`), offline: await w('window.djkProd.getrennt') });
     }
     const neu8 = fehlerKonsole().slice(k8);

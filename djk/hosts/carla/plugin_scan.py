@@ -9,6 +9,10 @@ Anything that fails is a `blockiert` entry and is not started again until the bu
 
 Plugin identity is {format, pfad, uid}. uid is the label carla-discovery prints for a VST3 class; for LV2 pfad is
 the plugin URI and uid is empty. A blocked bundle is one entry with the bundle path as pfad and an empty uid.
+A VST3 entry carries `klasse`, its 0-based position among the blocks of the bundle's discovery output. Carla 2.5.8 loads
+only the first class of a bundle; classes 1..n-1 load through the one-class shim (vst3_klasse.py) and are `ok` only while
+the shim module klasse.so is built, else `blockiert/mehrklassen`. That status is derived again on every scan, so building
+or removing the shim needs no new discovery run.
 The last stdout line is {neu, entfernt, geaendert, blockiert}, counted in entries.
 """
 import argparse
@@ -24,7 +28,10 @@ import sys
 import time
 from pathlib import Path
 
-VERSION = 2   # 2: entries carry the plugin `version`; an index of version 1 is dropped and rescanned once
+import vst3_klasse
+
+# 2: entries carry the plugin `version`; 3: VST3 entries carry `klasse`. An index of an older version is dropped and rescanned once.
+VERSION = 3
 STANDARD_INDEX = "~/.local/state/cypherdj/plugins/index.json"
 STANDARD_PFADE = ["~/.vst3", "/usr/lib/vst3", "/usr/local/lib/vst3", "~/.lv2", "/usr/lib/lv2", "/usr/local/lib/lv2"]
 EIGENE_PFADE = ["~/.local/lib/cypherdj/vst3"]
@@ -33,8 +40,8 @@ WURZEL = Path(__file__).resolve().parents[3]   # the folder above djk/ (a checko
 STILLE_ZEIT = 10.0   # seconds without a single output byte
 GESAMT_ZEIT = 180.0  # hard cap for one bundle
 SUCHTIEFE = 3
-MEHRKLASSEN_TEXT = ("Carla 2.5.8 loads only the first plugin of this bundle; "
-                    "use the LV2 version if there is one")
+MEHRKLASSEN_TEXT = ("Carla 2.5.8 loads only the first plugin of this bundle; build the one-class shim "
+                    "(djk/hosts/carla/vst3_klasse/build.sh) or use the LV2 version if there is one")
 ENDE = "carla-discovery::end::"
 
 
@@ -292,7 +299,7 @@ def ist_eigen(block, buendel):
     return block.get("maker", "") == "cypher-dj" or any(echt.startswith(os.path.realpath(p) + os.sep) for p in eigene_pfade())
 
 
-def eintrag_aus_block(format_, buendel, block, status="ok", grund=None, text=None):
+def eintrag_aus_block(format_, buendel, block, status="ok", grund=None, text=None, klasse=0):
     label = block.get("label", "")
     if format_ == "lv2":
         pfad, uid = (label.split("/", 1)[1] if "/" in label else label), ""
@@ -302,6 +309,8 @@ def eintrag_aus_block(format_, buendel, block, status="ok", grund=None, text=Non
          "name": block.get("name", ""), "hersteller": block.get("maker", ""), "art": art_von(block),
          "audio_ein": zahl(block, "audio.ins"), "audio_aus": zahl(block, "audio.outs"),
          "parameter": zahl(block, "parameters.ins"), "status": status}
+    if format_ == "vst3":
+        e["klasse"] = klasse
     if grund:
         e["grund"] = grund
     if text:
@@ -318,19 +327,36 @@ def blockiert_eintrag(format_, buendel, grund):
             "status": "blockiert", "grund": grund}
 
 
-def scanne_buendel(format_, buendel):
+def shim_da(shim=None):
+    """The one-class shim module is built (default: the installed path of vst3_klasse.py)."""
+    return Path(shim if shim is not None else vst3_klasse.SHIM).is_file()
+
+
+def setze_klassen_status(e, shim_vorhanden):
+    """Status of a VST3 class behind the first one: ok with the shim, blockiert/mehrklassen without. Other entries untouched."""
+    if e.get("format") != "vst3" or not isinstance(e.get("klasse"), int) or e["klasse"] <= 0:
+        return
+    if e.get("status") == "ok" or e.get("grund") == "mehrklassen":
+        if shim_vorhanden:
+            e["status"] = "ok"
+            e.pop("grund", None)
+            e.pop("text", None)
+        else:
+            e.update({"status": "blockiert", "grund": "mehrklassen", "text": MEHRKLASSEN_TEXT})
+
+
+def scanne_buendel(format_, buendel, shim_vorhanden=False):
     """Entries for one bundle, plus whether it is 'leer' (no plugins, nothing to list)."""
     bloecke, ausgang = entdecke(format_, buendel)
     if ausgang == "leer":
         return [], True
     if ausgang != "ok":
         return [blockiert_eintrag(format_, buendel, ausgang)], False
-    if format_ == "vst3" and len(bloecke) > 1:
-        es = [eintrag_aus_block(format_, buendel, bloecke[0])]
-        for b in bloecke[1:]:
-            es.append(eintrag_aus_block(format_, buendel, b, "blockiert", "mehrklassen", MEHRKLASSEN_TEXT))
-        return es, False
-    return [eintrag_aus_block(format_, buendel, b) for b in bloecke], False
+    # klasse is the position in THIS discovery output (discovery may skip a class it cannot instantiate; the shim counts the same way)
+    es = [eintrag_aus_block(format_, buendel, b, klasse=k) for k, b in enumerate(bloecke)]
+    for e in es:
+        setze_klassen_status(e, shim_vorhanden)
+    return es, False
 
 
 def lade_index(pfad):
@@ -358,8 +384,9 @@ def schreibe_index(pfad, daten):
             tmp.unlink()
 
 
-def scanne(wurzeln, index_pfad, mit_eigenen=False):
+def scanne(wurzeln, index_pfad, mit_eigenen=False, shim=None):
     discovery = pruefe_discovery()
+    shim_vorhanden = shim_da(shim)
     alt = lade_index(index_pfad)
     wechsel = alt.get("discovery") != discovery  # new program: blocked bundles get one more chance
     # state per bundle path: entries, or a skip record (empty bundle / own bundle)
@@ -378,6 +405,8 @@ def scanne(wurzeln, index_pfad, mit_eigenen=False):
         if vorher and vorher[0]["mtime"] == mtime and vorher[0]["groesse"] == groesse \
                 and not (wechsel and any(e["status"] == "blockiert" for e in vorher)):
             if mit_eigenen or not any(e.get("eigen") for e in vorher):
+                for e in vorher:
+                    setze_klassen_status(e, shim_vorhanden)
                 neue.extend(vorher)
                 continue
             skips.append({"buendel": buendel, "grund": "eigen", "mtime": mtime, "groesse": groesse})
@@ -387,7 +416,7 @@ def scanne(wurzeln, index_pfad, mit_eigenen=False):
             skips.append(skip)
             continue
         try:
-            es, leer = scanne_buendel(format_, buendel)
+            es, leer = scanne_buendel(format_, buendel, shim_vorhanden)
         except DiscoveryFehlt:
             raise
         except Exception as exc:  # one broken bundle must not end the scan
@@ -423,12 +452,13 @@ def main(argv=None):
     ap.add_argument("--pfade", nargs="+", help="directories to search (default: the system and user plugin paths, then plugin_pfade.txt)")
     ap.add_argument("--index", default=STANDARD_INDEX)
     ap.add_argument("--mit-eigenen", action="store_true", help="also scan and list the Cypher-DJ own bundles")
+    ap.add_argument("--shim", default=None, help=f"path of the one-class shim module (default {vst3_klasse.SHIM})")
     a = ap.parse_args(argv)
     wurzeln = list(a.pfade or suchwurzeln())
     if a.mit_eigenen:
         wurzeln += eigene_pfade()
     try:
-        bericht = scanne(wurzeln, os.path.expanduser(a.index), a.mit_eigenen)
+        bericht = scanne(wurzeln, os.path.expanduser(a.index), a.mit_eigenen, a.shim)
     except DiscoveryFehlt as exc:
         print(f"discovery_fehlt: {exc}", file=sys.stderr)
         return 3

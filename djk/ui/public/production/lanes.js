@@ -2,7 +2,7 @@
 // formula as the core arr_auto.h and the server project/lane.ts, bound by core/tests/data/lane_ref.json), the drawing path, hit testing, and the limits
 // of a drag. The gestures live in lanes_operation.js.
 import { posVonDb, dbVonPos } from './fader_curve.js';
-import { ARTEN, parameterNamen, parameterVon, parameterLabel, makroFaehig, gemapptVon } from './inserts.js';
+import { ARTEN, parameterNamen, parameterVon, parameterLabel, makroFaehig, gemapptVon, hostName } from './inserts.js';
 export const LANE_HOEHE = 48;
 export const WERT_MIN = -200, WERT_MAX = 6;          // project limits of the fader (dB); -200 is mute
 export const ANZEIGE_MIN = -60;                      // the fader row runs from off (bottom edge) to +6 dB on the fader taper (fader_curve.js); -60 dB sits at 5 % of the height
@@ -106,11 +106,49 @@ export function kettenZieleVon(strang) {
   if (strang?.rack) for (let m = 1; m <= 4; m++) aus.set(`rack.m${m}`, kettenAnzeige({ min: 0, max: 1, einheit: '' }, `Macro ${m}`));
   return aus;
 }
+// Send lanes: the target `send.<return id>` of a track (dB like the fader, -200 is off). Same pattern as SEND_ZIEL in project/modell.ts. The label carries the
+// name of the return, so the table is filled from the project like the chain targets (setzeKettenZiele) and a renamed return renames the label.
+export const SEND_ZIEL = /^send\.([A-Za-z][A-Za-z0-9_-]{0,31})$/;
+export const istSendZiel = (ziel) => typeof ziel === 'string' && SEND_ZIEL.test(ziel);
+// the targets that follow the dB rule of the fader: the taper of the row and the mute ramp (the fader itself and the send levels)
+export const istDbZiel = (ziel) => ziel === 'fader' || istSendZiel(ziel);
+const sendAnzeige = (name) => ({ min: WERT_MIN, max: WERT_MAX, anzeigeMin: ANZEIGE_MIN, label: `Send ${name}`, nurSprung: false, mittellinie: 0, einheit: 'dB' });
+// the send targets a track has now (one per entry of `sends`, in the order of the sends)
+export const sendZieleVon = (spur) => (spur?.sends ?? []).map((x) => `send.${x.id}`).filter(istSendZiel);
+// Plugin lanes: the target `plugin.<host stage id>.<parameter index>` (0..1, linear). The values live in the plugin host; the server player sends them there.
+export const PLUGIN_ZIEL = /^plugin\.([A-Za-z][A-Za-z0-9_-]{0,31})\.(0|[1-9][0-9]{0,4})$/;   // = PLUGIN_ZIEL in project/model.ts
+export const istPluginZiel = (ziel) => typeof ziel === 'string' && PLUGIN_ZIEL.test(ziel);
+export const MAX_PLUGIN_LANEN = 16;                  // = MAX_PLUGIN_LANEN in project/model.ts: per host stage
+// parameter names the list of a host stage reported: insert id -> (index -> name); filled by plugin_parameter.js, read for the label of a plugin lane
+const pluginNamen = new Map();
+export function merkePluginParameter(insertId, liste) {
+  const m = new Map();
+  for (const q of Array.isArray(liste) ? liste : []) if (Number.isInteger(q?.index) && typeof q.name === 'string') m.set(q.index, q.name);
+  pluginNamen.set(String(insertId), m);
+}
+// prozent: shown as 0 to 100 %
+const pluginAnzeige = (label) => ({ min: 0, max: 1, anzeigeMin: 0, label, nurSprung: false, mittellinie: null, einheit: '', prozent: true });
+// the plugin targets of the lanes this strip holds (one per lane on a host stage of the strip), as a table ziel -> display
+function pluginZieleVon(strang) {
+  const aus = new Map();
+  for (const l of strang?.automation ?? []) {
+    const m = istPluginZiel(l.ziel) ? PLUGIN_ZIEL.exec(l.ziel) : null;
+    const st = m ? (strang.inserts ?? []).find((x) => x.id === m[1] && x.art === 'host') : null;
+    if (!st) continue;
+    const name = pluginNamen.get(st.id)?.get(Number(m[2])) ?? `#${m[2]}`;
+    aus.set(l.ziel, { ...pluginAnzeige(`${hostName(st)} · ${name}`), insert: st.id, index: Number(m[2]) });
+  }
+  return aus;
+}
 let kettenZiele = new Map();
 export function setzeKettenZiele(projekt) {
   const neu = new Map();
   const straenge = [...(projekt?.spuren ?? []), ...(projekt?.gruppen ?? []), ...(projekt?.returns ?? []), ...(projekt?.master ? [projekt.master] : [])];
   for (const st of straenge) for (const [z, d] of kettenZieleVon(st)) if (!neu.has(z)) neu.set(z, d);
+  for (const st of straenge) for (const [z, d] of pluginZieleVon(st)) if (!neu.has(z)) neu.set(z, d);
+  for (const sp of projekt?.spuren ?? []) {
+    for (const z of sendZieleVon(sp)) if (!neu.has(z)) neu.set(z, sendAnzeige((projekt.returns ?? []).find((r) => `send.${r.id}` === z)?.name ?? z.slice(5)));
+  }
   kettenZiele = neu;
 }
 // The range of a target. The target is a REQUIRED argument of every geometry function (a forgotten one throws instead of silently applying the dB rule).
@@ -160,7 +198,7 @@ export function laneWert(punkte, beat, ziel) {
   const u = (beat - a.beat) / (b.beat - a.beat);
   const g = form === 's' ? u * u * (3 - 2 * u) : u;
   let va = a.wert, vb = b.wert;
-  if (ziel !== 'fader') return va + (vb - va) * g;
+  if (!istDbZiel(ziel)) return va + (vb - va) * g;
   if (va <= STUMM_GRENZE && vb > STUMM_GRENZE) va = Math.min(STUMM_RAMPE, vb);
   if (vb <= STUMM_GRENZE) vb = va <= STUMM_GRENZE ? STUMM : Math.min(STUMM_RAMPE, va);
   return va + (vb - va) * g;
@@ -170,8 +208,8 @@ export function laneWert(punkte, beat, ziel) {
 const LUFT = 3;
 export const wertZuY = (zeile, wert, ziel) => {
   const { min, max, anzeigeMin } = bereich(ziel);
-  // the fader row uses the fader taper (the same as the slider of the track head); every other target is linear
-  const t = ziel === 'fader' ? posVonDb(Math.min(max, Math.max(min, wert))) : (Math.min(max, Math.max(anzeigeMin, wert)) - anzeigeMin) / (max - anzeigeMin);
+  // the fader and send rows use the fader taper (the same as the slider of the track head); every other target is linear
+  const t = istDbZiel(ziel) ? posVonDb(Math.min(max, Math.max(min, wert))) : (Math.min(max, Math.max(anzeigeMin, wert)) - anzeigeMin) / (max - anzeigeMin);
   return zeile.y + LUFT + (1 - t) * (zeile.h - 2 * LUFT);
 };
 // a switch (mute, solo) has two levels: the upper half of the row is 1, the lower half 0
@@ -179,8 +217,8 @@ export const yZuWert = (zeile, y, ziel) => {
   const { min, max, anzeigeMin, nurSprung } = bereich(ziel);
   const t = 1 - (y - zeile.y - LUFT) / (zeile.h - 2 * LUFT);
   // the fader: back through the taper. On the lane the axis ends at -60 dB: the bottom 5 % band is -60, never off; off (-200) only at or below the very bottom edge (t <= 0)
-  const w = ziel === 'fader' ? (t <= 0 ? STUMM_WERT : Math.max(ANZEIGE_MIN, dbVonPos(Math.min(1, t)))) : Math.min(max, Math.max(min, anzeigeMin + t * (max - anzeigeMin)));
-  if (ziel === 'fader') return w;
+  const w = istDbZiel(ziel) ? (t <= 0 ? STUMM_WERT : Math.max(ANZEIGE_MIN, dbVonPos(Math.min(1, t)))) : Math.min(max, Math.max(min, anzeigeMin + t * (max - anzeigeMin)));
+  if (istDbZiel(ziel)) return w;
   return nurSprung ? (w >= 0.5 ? 1 : 0) : w;
 };
 
@@ -281,6 +319,7 @@ const freieKettenZiele = (strang) => [...kettenZieleVon(strang)].filter(([z, d])
 export const freieZiele = (spur) => [
   ...ZIELE.filter((z) => !laneFuer(spur, z) && (!istGeraetZiel(z) || passtGeraetZiel(z, spur))),
   ...freieKettenZiele(spur),
+  ...sendZieleVon(spur).filter((z) => !laneFuer(spur, z)),   // one per existing send that has no lane yet (a lane needs the send, the server refuses it otherwise)
 ];
 // Task 7 (D4): a group offers only the chain targets (the model refuses fader, pan, mute and solo lanes on a group)
 export const freieZieleGruppe = (gruppe) => (gruppe ? freieKettenZiele(gruppe) : []);

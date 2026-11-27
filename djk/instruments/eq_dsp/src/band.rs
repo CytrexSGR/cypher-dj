@@ -157,10 +157,8 @@ struct SvfZustand {
 
 impl SvfZustand {
     #[inline]
-    fn tick(&mut self, c: &SvfKoeff, x: f64) -> f64 {
-        let a1 = 1.0 / (1.0 + c.g * (c.g + c.k));
-        let a2 = c.g * a1;
-        let a3 = c.g * a2;
+    fn tick(&mut self, c: &SvfKoeff, a: &Abgeleitet, x: f64) -> f64 {
+        let (a1, a2, a3) = (a.a1, a.a2, a.a3);
         let v3 = x - self.ic2;
         let v1 = a1 * self.ic1 + a2 * v3;
         let v2 = self.ic2 + a2 * self.ic1 + a3 * v3;
@@ -177,6 +175,22 @@ impl SvfZustand {
             self.ic2 = 0.0;
         }
     }
+}
+
+/// Per-section values derived from `g` and `k`; recomputed only when `ist` changes.
+#[derive(Clone, Copy, Default)]
+struct Abgeleitet {
+    a1: f64,
+    a2: f64,
+    a3: f64,
+}
+
+/// Exactly the expressions the per-sample tick used to evaluate.
+fn vorbereite(c: &SvfKoeff) -> Abgeleitet {
+    let a1 = 1.0 / (1.0 + c.g * (c.g + c.k));
+    let a2 = c.g * a1;
+    let a3 = c.g * a2;
+    Abgeleitet { a1, a2, a3 }
 }
 
 fn plus(a: &SvfKoeff, b: &SvfKoeff) -> SvfKoeff {
@@ -202,6 +216,10 @@ pub struct Band {
     alpha: f64,
     n: usize,
     ist: [SvfKoeff; MAX_SEKTIONEN],
+    abg: [Abgeleitet; MAX_SEKTIONEN],
+    /// Cached from `ziel` in `setze()`.
+    ziel_p: [f64; 3],
+    ziel_struktur: Struktur,
     delta: [SvfKoeff; MAX_SEKTIONEN],
     takt: usize,
     nass: f64,
@@ -226,6 +244,9 @@ impl Band {
             alpha: 1.0 - (-(NACHFUEHR_TAKT as f64) / (GLAETT_ZEIT * fs)).exp(),
             n: 1,
             ist: [SvfKoeff::durchlass(); MAX_SEKTIONEN],
+            abg: [Abgeleitet::default(); MAX_SEKTIONEN],
+            ziel_p: [0.0; 3],
+            ziel_struktur: Struktur::von(&e),
             delta: [SvfKoeff::default(); MAX_SEKTIONEN],
             takt: 0,
             nass: 0.0,
@@ -237,6 +258,7 @@ impl Band {
             ramp_ende: None,
             raster: Raster::neu(fs),
         };
+        b.ziel_p = b.ziel_param();
         b.springe();
         b
     }
@@ -256,19 +278,28 @@ impl Band {
 
     /// Parameter sofort übernehmen, ohne Glättung (Start, Reset).
     fn springe(&mut self) {
-        self.struktur = Struktur::von(&self.ziel);
-        self.glatt = self.ziel_param();
+        self.struktur = self.ziel_struktur;
+        self.glatt = self.ziel_p;
         let (n, k) = self.entwurf_jetzt();
         self.n = n;
         self.ist = k;
+        self.alle_vorbereiten();
         self.delta = [SvfKoeff::default(); MAX_SEKTIONEN];
         self.ramp_ende = None;
         self.nass = if self.ziel.an { 1.0 } else { 0.0 };
         self.zustand = [[SvfZustand::default(); MAX_SEKTIONEN]; 2];
     }
 
+    fn alle_vorbereiten(&mut self) {
+        for i in 0..MAX_SEKTIONEN {
+            self.abg[i] = vorbereite(&self.ist[i]);
+        }
+    }
+
     pub fn setze(&mut self, e: BandEinstellung, prop_q: bool) {
         self.ziel = e;
+        self.ziel_p = self.ziel_param();
+        self.ziel_struktur = Struktur::von(&e);
         if prop_q != self.prop_q {
             self.prop_q = prop_q;
             self.neu_entwerfen = true;
@@ -292,20 +323,43 @@ impl Band {
         self.nass > 0.0 || self.ziel.an
     }
 
+    /// After a bypass in which this band was not run: catch the design up to the target in one step (what the
+    /// smoothing would have reached). Only a silent band (`nass == 0`) is touched; it fades in from there. The
+    /// filter state is not touched: it is reset when the fade starts.
+    pub fn aufholen(&mut self) {
+        let offen = self.struktur != self.ziel_struktur
+            || self.glatt != self.ziel_p
+            || self.ramp_ende.is_some()
+            || self.neu_entwerfen;
+        if self.nass != 0.0 || !offen {
+            return;
+        }
+        self.struktur = self.ziel_struktur;
+        self.glatt = self.ziel_p;
+        let (n, k) = self.entwurf_jetzt();
+        self.n = n;
+        self.ist = k;
+        self.alle_vorbereiten();
+        self.delta = [SvfKoeff::default(); MAX_SEKTIONEN];
+        self.ramp_ende = None;
+        self.neu_entwerfen = false;
+    }
+
     fn nachfuehren(&mut self) {
         // Umschalten der Struktur nur bei nass == 0 (vorher ausgeblendet).
-        if self.nass == 0.0 && Struktur::von(&self.ziel) != self.struktur {
-            self.struktur = Struktur::von(&self.ziel);
-            self.glatt = self.ziel_param();
+        if self.nass == 0.0 && self.ziel_struktur != self.struktur {
+            self.struktur = self.ziel_struktur;
+            self.glatt = self.ziel_p;
             let (n, k) = self.entwurf_jetzt();
             self.n = n;
             self.ist = k;
+            self.alle_vorbereiten();
             self.delta = [SvfKoeff::default(); MAX_SEKTIONEN];
             self.ramp_ende = None;
             self.zustand = [[SvfZustand::default(); MAX_SEKTIONEN]; 2];
             return;
         }
-        let ziel = self.ziel_param();
+        let ziel = self.ziel_p;
         let mut bewegt = false;
         for i in 0..3 {
             let d = ziel[i] - self.glatt[i];
@@ -326,6 +380,7 @@ impl Band {
         } else if let Some(k) = self.ramp_ende.take() {
             // Rampe ist durch: exakt auf das Ziel setzen, Rundungsdrift verwerfen.
             self.ist = k;
+            self.alle_vorbereiten();
             self.delta = [SvfKoeff::default(); MAX_SEKTIONEN];
         }
         for z in self.zustand.iter_mut().flatten() {
@@ -333,16 +388,33 @@ impl Band {
         }
     }
 
+    /// One ramp step: `ist += delta`, derived values refreshed.
+    #[inline]
+    fn ramp_weiter(&mut self) {
+        for i in 0..self.n {
+            self.ist[i] = plus(&self.ist[i], &self.delta[i]);
+            self.abg[i] = vorbereite(&self.ist[i]);
+        }
+    }
+
     /// Ein internes Sample; `stereo == false` → nur Kanal 0 wird gerechnet.
     #[inline]
     pub fn verarbeite(&mut self, l: f64, r: f64, stereo: bool) -> (f64, f64) {
+        // Fast exit: silent band, nothing to blend. `ist` still follows a running ramp.
+        if self.takt != 0 && self.nass == 0.0 && !self.ziel.an {
+            self.takt = (self.takt + 1) % NACHFUEHR_TAKT;
+            if self.ramp_ende.is_some() {
+                self.ramp_weiter();
+            }
+            return (l, r);
+        }
         if self.takt == 0 {
             self.nachfuehren();
         }
         self.takt = (self.takt + 1) % NACHFUEHR_TAKT;
 
         // Nass-Anteil: zum Umschalten erst auf 0, sonst Richtung an/aus.
-        let struktur_wechsel = Struktur::von(&self.ziel) != self.struktur;
+        let struktur_wechsel = self.ziel_struktur != self.struktur;
         let nass_ziel = if self.ziel.an && !struktur_wechsel { 1.0 } else { 0.0 };
         if self.nass < nass_ziel {
             if self.nass == 0.0 {
@@ -353,8 +425,8 @@ impl Band {
             self.nass = (self.nass - self.blend_schritt).max(0.0);
         }
 
-        for i in 0..self.n {
-            self.ist[i] = plus(&self.ist[i], &self.delta[i]);
+        if self.ramp_ende.is_some() {
+            self.ramp_weiter();
         }
         if self.nass == 0.0 {
             return (l, r);
@@ -362,9 +434,10 @@ impl Band {
 
         let n = self.n;
         let ist = &self.ist;
+        let abg = &self.abg;
         let kette = |z: &mut [SvfZustand; MAX_SEKTIONEN], mut x: f64| {
             for i in 0..n {
-                x = z[i].tick(&ist[i], x);
+                x = z[i].tick(&ist[i], &abg[i], x);
             }
             x
         };

@@ -60,6 +60,8 @@ using cdj::ArrGliedZiel;
 
 namespace {
 
+constexpr int G0 = cdj::ARR_SPUREN;   // the first member slot (32 before strand 1 slice 6); the comments name the slots of 32 tracks: 32 = G0
+
 #define TR(x) auto x##_p = std::make_unique<Treiber>(); Treiber& x = *x##_p;
 constexpr int64_t V = 537;
 
@@ -232,23 +234,23 @@ int main() {
     t.arr.start(0.0, 0, false, t.s, V, 256, t.k);
     std::vector<float> bus;
     bus_lauf(t, 1024, bus);
-    const float c0 = rb_letzter(sk.rb, 33, "cutoff");
+    const float c0 = rb_letzter(sk.rb, G0 + 1, "cutoff");
     makro(t, 1, 1.0f);
     bus_lauf(t, t.s + 256, bus);
-    const float c1 = rb_letzter(sk.rb, 33, "cutoff");
+    const float c1 = rb_letzter(sk.rb, G0 + 1, "cutoff");
     makro(t, 1, 0.5f);
     bus_lauf(t, t.s + 256, bus);
-    const float cm = rb_letzter(sk.rb, 33, "cutoff");
+    const float cm = rb_letzter(sk.rb, G0 + 1, "cutoff");
     // a swap to a snapshot whose own cutoff is 0.9: the macro still wins
     t.laden(rack_snap(2, {kit(k_klein.get()), rb({{"cutoff", 0.9f}})}, {zg(0, 1, 1, 0.2f, 0.8f)}));
     bus_lauf(t, t.s + 512, bus);
-    const float cs = rb_letzter(sk.rb, 33, "cutoff");
+    const float cs = rb_letzter(sk.rb, G0 + 1, "cutoff");
     std::printf("M1: cutoff on member 1: macro 0 -> %.4f, macro 1 -> %.4f, macro .5 -> %.4f, after a swap (own value 0.9) -> %.4f\n", c0, c1, cm, cs);
     PRUEF_NAH(c0, 0.2, 1e-6);   // m = 0 gives von, whatever the member's own value says
     PRUEF_NAH(c1, 0.8, 1e-6);   // m = 1 gives bis, in the block after the row was written
     PRUEF_NAH(cm, 0.5, 1e-6);
     PRUEF_NAH(cs, 0.5, 1e-6);
-    PRUEF(std::isnan(rb_letzter(sk.rb, 32, "cutoff")));   // negative control: the kit member (slot 32) got no RB parameter
+    PRUEF(std::isnan(rb_letzter(sk.rb, G0, "cutoff")));   // negative control: the kit member (slot 32) got no RB parameter
     PRUEF(sk.rb.parameter_gemeldet() > 0);
   }
 
@@ -334,13 +336,13 @@ int main() {
     std::vector<float> bus;
     bus_lauf(t, 1024, bus);
     PRUEF(t.arr.status() == cdj::ArrStatus::steht);
-    const float c0 = rb_letzter(sk.rb, 32, "cutoff");
+    const float c0 = rb_letzter(sk.rb, G0, "cutoff");
     makro(t, 1, 1.0f);
     bus_lauf(t, t.s + 256, bus);
-    const float c1 = rb_letzter(sk.rb, 32, "cutoff");
+    const float c1 = rb_letzter(sk.rb, G0, "cutoff");
     makro(t, 1, 0.25f);
     bus_lauf(t, t.s + 256, bus);
-    const float c2 = rb_letzter(sk.rb, 32, "cutoff");
+    const float c2 = rb_letzter(sk.rb, G0, "cutoff");
     std::printf("M4: transport stopped: cutoff macro 0 -> %.4f, 1 -> %.4f, .25 -> %.4f\n", c0, c1, c2);
     PRUEF_NAH(c0, 0.2, 1e-6);
     PRUEF_NAH(c1, 0.8, 1e-6);
@@ -357,10 +359,10 @@ int main() {
       t.arr.start(0.0, 0, false, t.s, V, 256, t.k);
       std::vector<float> bus;
       bus_lauf(t, 2048, bus);
-      const float mit = rb_letzter(sk.rb, 32, "cutoff");
+      const float mit = rb_letzter(sk.rb, G0, "cutoff");
       t.laden(rack_snap(2, {rb({{"cutoff", 0.5f}})}, {}));   // the targets are gone, the rack row stays
       bus_lauf(t, t.s + 512, bus);
-      const float ohne = rb_letzter(sk.rb, 32, "cutoff");
+      const float ohne = rb_letzter(sk.rb, G0, "cutoff");
       std::printf("M5: with the target %.4f, after the swap without it %.4f (own value 0.5)\n", mit, ohne);
       PRUEF_NAH(mit, 0.8, 1e-6);
       PRUEF_NAH(ohne, 0.5, 1e-6);   // the member's own value is back
@@ -396,7 +398,7 @@ int main() {
     t.arr.start(0.0, 0, false, t.s, V, 256, t.k);
     std::vector<float> bus;
     bus_lauf(t, 2048, bus);
-    const float c = rb_letzter(sk.rb, 34, "cutoff");
+    const float c = rb_letzter(sk.rb, G0 + 2, "cutoff");
     std::printf("M6: bad targets: cutoff of the RB member %.4f (own value 0.5), reported values %llu\n", c, static_cast<unsigned long long>(sk.rb.parameter_gemeldet()));
     PRUEF_NAH(c, 0.5, 1e-6);
     PRUEF(sk.rb.parameter_gemeldet() == 0);

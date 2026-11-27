@@ -85,7 +85,8 @@ int main() {
       const cdj::ArrSpur& r = s.spur[1];
       PRUEF(r.art == ArrArt::rack && std::string(r.geraet) == "rack" && r.nr == 2 && r.kette == 5 && r.n_glieder == 3);
       PRUEF(r.n_noten == 1 && r.noten[0].ton == 60);
-      PRUEF(r.glied[0].platz == 32 && r.glied[1].platz == 33 && r.glied[2].platz == 34);
+      // the member slots follow the tracks
+      PRUEF(r.glied[0].platz == cdj::ARR_SPUREN && r.glied[1].platz == cdj::ARR_SPUREN + 1 && r.glied[2].platz == cdj::ARR_SPUREN + 2);
       PRUEF(r.glied[0].art == ArrArt::intern && r.glied[0].ton_lo == 0 && r.glied[0].ton_hi == 59);
       PRUEF(r.glied[0].vel_lo == 1 && r.glied[0].vel_hi == 127 && r.glied[0].kette_lo == 0 && r.glied[0].kette_hi == 127);   // absent: the whole range
       PRUEF_NAH(r.glied[0].gain, 0.50118723, 1e-6);
@@ -98,7 +99,7 @@ int main() {
       PRUEF(s.glied_spur[2].art == ArrArt::wirt && s.glied_spur[2].slot == 1);
       PRUEF(s.glied_spur[3].art == ArrArt::leer);   // an unused member slot
       PRUEF(s.kit_refs.size() == 1 && cache->kit_eintraege() == 1);
-      PRUEF(s.platz(33).kit_ptr == d1.kit_ptr && &s.platz(2) == &s.spur[2]);
+      PRUEF(s.platz(cdj::ARR_SPUREN + 1).kit_ptr == d1.kit_ptr && &s.platz(2) == &s.spur[2]);
     }
     cdj::gib_wiedergabe(e.snap.release(), *cache);
     PRUEF(cache->kit_eintraege() == 0);
@@ -194,7 +195,8 @@ int main() {
           PRUEF(e.snap->glied_spur[p - cdj::ARR_SPUREN].art == ArrArt::intern);
         }
       }
-      PRUEF(platz.size() == 32 && *platz.begin() == 32 && *platz.rbegin() == 63 && geordnet);
+      PRUEF(platz.size() == static_cast<size_t>(cdj::ARR_GLIED_PLAETZE) && *platz.begin() == cdj::ARR_SPUREN &&
+            *platz.rbegin() == cdj::ARR_SENKEN_PLAETZE - 1 && geordnet);
       PRUEF(e.snap->kit_refs.size() == 8 && cache->kit_eintraege() == 1);   // eight references on one shared Kit
       cdj::gib_wiedergabe(e.snap.release(), *cache);
     }
@@ -329,7 +331,7 @@ int main() {
     std::ofstream(o.pfad + "/wiedergabe-" + std::to_string(nr) + ".json")
         << "{\"format\":\"cypherdj-arr/2\",\"nr\":" << nr << ",\"spuren\":[" << track_ok << "],\"gruppen\":[{\"nr\":1," << grp_kette << "," << rack(ins_ziel) << "}]}";
     cdj::ArrLadeErgebnis e = cdj::lade_wiedergabe(o.pfad, nr, *cache);
-    PRUEF(e.snap && e.snap->rack[32].n == 1 && e.snap->rack[32].ng == 0);
+    PRUEF(e.snap && e.snap->rack[cdj::ARR_SPUREN].n == 1 && e.snap->rack[cdj::ARR_SPUREN].ng == 0);   // group 1 is the strip after the tracks
     if (e.snap) cdj::gib_wiedergabe(e.snap.release(), *cache);
   }
   PRUEF_ENDE();

@@ -36,7 +36,7 @@ export class SitzungAuto {
     if (!p || !this.h.uebersteuert.size) return;
     for (const [id, e] of this.h.uebersteuert) if (p.spuren.some((x) => x.nr === e.nr && x.id !== id)) this.h.uebersteuert.delete(id);
   }
-  // /e/auto spur(1..32 = track number nr), ziel, zustand: idempotent (the core repeats the full state after an event overflow)
+  // /e/auto spur(1..128 = track number nr), ziel, zustand: idempotent (the core repeats the full state after an event overflow)
   nimmAuto(f: Record<string, unknown>): void {
     const nr = Number(f.spur), ziel = String(f.ziel), an = Number(f.zustand) === 1;
     if (!istKernAutoZiel(ziel)) return;

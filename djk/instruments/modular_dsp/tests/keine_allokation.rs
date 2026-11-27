@@ -288,6 +288,7 @@ fn echtzeitpfad_allokiert_nicht() {
     let pack: Vec<f32> = (0..24_000).flat_map(|i| { let v = (0.4 * (2.0 * std::f32::consts::PI * (100.0 + 50.0 * (i / 6000) as f32) * i as f32 / 48_000.0).sin()) as f32; [v, v] }).collect();
     std::fs::write(wurzel.join("zonen.f32"), baukasten_dsp::proben::bytes(&pack)).unwrap();
     std::fs::write(wurzel.join("ir.f32"), baukasten_dsp::proben::bytes(&ir)).unwrap();
+    baukasten_dsp::proben::schreibe_space_werk(&wurzel);
     std::fs::write(wurzel.join("feder-ir.f32"), baukasten_dsp::proben::bytes(&baukasten_dsp::proben::feder_ir(48_000.0))).unwrap();
     for g in GRAPHEN {
         let vor = ANFORDERUNGEN.load(Ordering::SeqCst);

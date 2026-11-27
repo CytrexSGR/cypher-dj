@@ -2,23 +2,24 @@
 // (tests/support/host_mock.mjs), at a small time scale. The session wiring (open, undo, route, split loads) is in the second half of this file.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
-import { HostVerwaltung, hostSpec, insHostListe, ladeAblehnung, sockAnfrage, insertAusfuehren } from '../plugins/hostverwaltung.ts';
+import { HostVerwaltung, hostSpec, pluginIdVon, insHostListe, ladeAblehnung, sockAnfrage, insertAusfuehren } from '../plugins/hostverwaltung.ts';
 import { zustandDatei } from '../plugins/state.ts';
 import { fuehreListeAus } from '../project/commands.ts';
 import { basisProjekt } from './support/inserts_scenario.mjs';
 import { tmpOrdner } from './support/project.mjs';
 import { hostAttrappe, ZEITEN, warteBis, schlaf } from './support/host_mock.mjs';
 
-function aufbau(t, { vst3 = true, zeiten = {}, hosts = 1 } = {}) {
+function aufbau(t, { vst3 = true, zeiten = {}, hosts = 1, abhaengig = {} } = {}) {
   const d = tmpOrdner(t, 'djk-host-');
   const pfad = path.join(d, 'Fake EQ.vst3');
   if (vst3) fs.mkdirSync(pfad);
   const A = hostAttrappe({ ordner: path.join(d, 'project') });
   fs.mkdirSync(A.ordner, { recursive: true });
-  const verw = new HostVerwaltung(A.abhaengig(), { ...ZEITEN, ...zeiten });
+  const verw = new HostVerwaltung(A.abhaengig(abhaengig), { ...ZEITEN, ...zeiten });
   A.verw = verw;
   t.after(() => verw.halt());
   const plugin = { format: 'vst3', pfad, uid: 'ABCDEF0123456789ABCDEF0123456789' };
@@ -34,6 +35,24 @@ test('spec string: always with the trailing # (an LV2 URI with # inside included
   assert.equal(hostSpec({ format: 'vst3', pfad: '/a/B.vst3', uid: 'AB12' }), 'vst3:/a/B.vst3#AB12');
   assert.equal(hostSpec({ format: 'lv2', pfad: 'http://x.org/p#comp', uid: '' }), 'lv2:http://x.org/p#comp#');
   assert.equal(hostSpec({ format: 'lv2', pfad: 'http://lsp-plug.in/plugins/lv2/comp_stereo', uid: '' }).endsWith('#'), true);
+});
+
+test('spec string: a later VST3 class gets @<klasse>; class 0, LV2 and the index id never do', () => {
+  const pl = { format: 'vst3', pfad: '/a/B.vst3', uid: 'AB12' };
+  assert.equal(hostSpec(pl, 5), 'vst3:/a/B.vst3#AB12@5');
+  assert.equal(hostSpec(pl, 0), 'vst3:/a/B.vst3#AB12');
+  assert.equal(hostSpec({ format: 'lv2', pfad: 'http://x.org/p', uid: '' }, 3), 'lv2:http://x.org/p#');
+  assert.equal(pluginIdVon(pl), crypto.createHash('sha1').update('vst3:/a/B.vst3#AB12').digest('hex').slice(0, 12));
+});
+
+test('a host stage of class 5 of its bundle starts with spec @5, the project identity stays without it', async (t) => {
+  const gefragt = [];
+  const e = aufbau(t, { abhaengig: { klasse: (pl) => { gefragt.push(pluginIdVon(pl)); return 5; } } });
+  e.verw.abgleich(e.projekt);
+  assert.ok(await warteBis(() => bereit(e.verw)), JSON.stringify(e.verw.lage()));
+  assert.equal(e.A.aufrufe('insert', 'start')[0].spec, `${e.spec}@5`);
+  assert.equal(gefragt[0], pluginIdVon(e.plugin));
+  assert.equal(hostSpec(e.inserts()[0].plugin), e.spec);
 });
 
 test('abgleich returns at once; a host start that sleeps 5 s does not hold it, lage says startet', async (t) => {
@@ -353,9 +372,10 @@ test('insertAusfuehren runs a command and reports code, output and error', async
 });
 
 test('pure helpers: ins_host list from the core state, loader tokens searched as substrings', () => {
-  const l = insHostListe({ h_1: 1, gesund_1: 1, rundweg_1: 512, h_2: 2, gesund_2: 0, rundweg_2: -1, h_3: 3, gesund_3: 0, rundweg_3: -1, h_4: 4, gesund_4: 0, rundweg_4: -1 });
+  const l = insHostListe({ h_1: 1, gesund_1: 1, rundweg_1: 512, h_2: 2, gesund_2: 0, rundweg_2: -1, h_3: 3, gesund_3: 0, rundweg_3: -1, h_4: 4, gesund_4: 0, rundweg_4: -1, h_5: 5, gesund_5: 0, rundweg_5: -1, h_6: 6, gesund_6: 0, rundweg_6: -1, h_7: 7, gesund_7: 0, rundweg_7: -1, h_8: 8, gesund_8: 1, rundweg_8: 300 });
   assert.deepEqual(l[0], { h: 1, gesund: true, rundweg: 512 });
-  assert.equal(l.length, 4);
+  assert.equal(l.length, 8);
+  assert.deepEqual(l[7], { h: 8, gesund: true, rundweg: 300 });
   assert.equal(ladeAblehnung('format', 'spuren[0].chain[0].host_fehlt: the effect-host ports'), 'host_fehlt');
   assert.equal(ladeAblehnung('zu_gross', 'x pdc_zu_lang (9000 samples)'), 'pdc_zu_lang');
   assert.equal(ladeAblehnung('format', 'slot ungueltig: host h is pool instance'), 'host_ungueltig');
@@ -454,12 +474,12 @@ test('session: undo of insert_setzen stops the host and keeps the state file; re
   assert.equal(e.A.aufrufe('sock', 'zustand_setzen').length, 1, 'the sound comes back from the state file');
 });
 
-test('session: the 5th host insert is host_grenze and nothing is half applied', async (t) => {
+test('session: the 9th host insert is host_grenze and nothing is half applied', async (t) => {
   const e = await sitzungMitHost(t);
-  await e.s.aendern({ rev: e.rev(), label: 'more', befehle: [{ befehl: 'spur_neu', art: 'audio' }, { befehl: 'spur_neu', art: 'audio' }, { befehl: 'spur_neu', art: 'audio' }] }, 'andreas');
-  for (const sp of ['s1', 's2', 's3', 's4']) assert.equal((await e.setze(sp)).code, 200);
+  await e.s.aendern({ rev: e.rev(), label: 'more', befehle: Array.from({ length: 7 }, () => ({ befehl: 'spur_neu', art: 'audio' })) }, 'andreas');   // strand 1 slice 5: MAX_HOST = 8
+  for (const sp of ['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8']) assert.equal((await e.setze(sp)).code, 200);
   const rev = e.rev(), laden = e.k.an('/k/arr/laden').length;
-  await assert.rejects(e.setze('s5'), (x) => x.grund === 'host_grenze' || x.fehler === 'host_grenze');
+  await assert.rejects(e.setze('s9'), (x) => x.grund === 'host_grenze' || x.fehler === 'host_grenze');
   assert.deepEqual([e.rev(), e.k.an('/k/arr/laden').length], [rev, laden]);
 });
 

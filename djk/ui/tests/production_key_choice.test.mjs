@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import { fuehreListeAus } from '../project/commands.ts';
 import { neuesProjekt } from '../project/model.ts';
 import { routingMatrix } from '../project/routing_matrix.ts';
-import { schluesselGruppen, schluesselBefehl, schluesselWert, duckBefehl, duckKicks } from '../public/production/key_choice.js';
+import { schluesselGruppen, schluesselBefehl, schluesselWert, duckBefehl, duckKicks, hostHatSchluessel, ohneSpurPre } from '../public/production/key_choice.js';
 
 const lauf = (p, b) => fuehreListeAus(p, b, { quelle: 'andreas' }).projekt;
 
@@ -67,4 +67,14 @@ test('duck_menue_sendet_befehl: kick choice lists the other tracks, one duck_dur
 test('every visible string is English', () => {
   const t = fs.readFileSync(new URL('../public/production/key_choice.js', import.meta.url), 'utf8');
   assert.doesNotMatch(t, /\b(Eigen|Spur|Gruppe|Schl[uü]ssel|Wahl)\b/);
+});
+
+test('strand 2 task 3.5: a host stage has a key input with 4 or more audio inputs, and never offers track pre', () => {
+  const pl = { format: 'vst3', pfad: '/p/a.vst3', uid: 'u1' };
+  const liste = [{ ...pl, audio_ein: 4 }, { format: 'lv2', pfad: '/p/b', uid: 'u2', audio_ein: 2 }];
+  assert.equal(hostHatSchluessel(liste, pl), true);
+  assert.equal(hostHatSchluessel(liste, { format: 'lv2', pfad: '/p/b', uid: 'u2' }), false, 'two inputs: no key');
+  assert.equal(hostHatSchluessel(liste, { format: 'lv2', pfad: '/p/zz', uid: 'x' }), false, 'unknown: no key');
+  const gr = ohneSpurPre([{ titel: 'Tracks', eintraege: [{ wert: 'own' }, { wert: 'spur:1:pre' }, { wert: 'spur:1:post' }, { wert: 'grp:1:pre' }] }]);
+  assert.deepEqual(gr[0].eintraege.map((x) => x.wert), ['own', 'spur:1:post', 'grp:1:pre']);
 });

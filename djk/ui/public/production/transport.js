@@ -35,7 +35,8 @@ export const springtImLauf = (arr, unbekannt) => !unbekannt && (arr?.status === 
 export function bindeTransport(ctx) {
   const { st, $ } = ctx;
   const kopf = new Kopf();
-  const setzeStart = (beat) => { st.start = Math.max(0, rasten(beat, rasterBeats(st.raster, beatsProTakt(st.projekt?.taktart)))); if (st.slug) ctx.merke(`djk-prod-start-${st.slug}`, String(st.start)); };
+  // exakt: a marker click keeps its own beat (a marker may sit off the grid); the ruler click snaps to the grid
+  const setzeStart = (beat, exakt = false) => { st.start = Math.max(0, exakt ? beat : rasten(beat, rasterBeats(st.raster, beatsProTakt(st.projekt?.taktart)))); if (st.slug) ctx.merke(`djk-prod-start-${st.slug}`, String(st.start)); };
   async function transport(aktion) {
     const r = await ctx.holeJson('/proj/transport', aktion === 'start' ? { aktion, beat: st.start } : { aktion });
     const q = r.j?.quittung;
@@ -79,7 +80,9 @@ export function bindeTransport(ctx) {
   $('loop-von').addEventListener('change', sendeLoopFelder);
   $('loop-bis').addEventListener('change', sendeLoopFelder);
   $('metronom').addEventListener('click', () => ctx.aendereAus((p) => ({ label: p.metronom.an ? 'Metronome off' : 'Metronome on', befehle: [{ befehl: 'metronom_setzen', an: !p.metronom.an }] })));
-  const klickStart = (x) => { setzeStart(xZuBeat(st.ansicht, x)); if (springtImLauf(st.arr, st.arrUnbekannt)) transport('start'); };
+  // The one way to put the start marker somewhere by a click: the ruler (x -> beat) and the marker strip (beat) both end here
+  ctx.springeZu = (beat, optionen = {}) => { setzeStart(beat, optionen.exakt === true); if (springtImLauf(st.arr, st.arrUnbekannt)) transport('start'); };
+  const klickStart = (x) => ctx.springeZu(xZuBeat(st.ansicht, x));
   $('ueber').addEventListener('pointerdown', (e) => { if (e.button === 0 && st.projekt && !e.defaultPrevented) klickStart(e.offsetX); });
   const lineal = $('lineal');
   lineal.addEventListener('pointerdown', (e) => {

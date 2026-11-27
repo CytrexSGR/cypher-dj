@@ -51,7 +51,7 @@ test('arr: Stopp, Bereichsfehler (auch freeze), cypher bei KI-Stopp abgelehnt', 
     erwarte(6000, q(8, 'andreas', 6, null, 'ausserhalb_bereich')),
     sende(6144, ['/k/arr/freeze', 'hsiddi', 9, 'andreas', 1, 0.0, 0.5, 1]),
     erwarte(8000, q(9, 'andreas', 6, null, 'ausserhalb_bereich')),
-    sende(8000, ['/k/arr/freeze', 'hsiddi', 12, 'andreas', 33, 0.0, 4.0, 1]),   // E3: ARR_SPUREN = 32, Spur 33 gibt es nicht
+    sende(8000, ['/k/arr/freeze', 'hsiddi', 12, 'andreas', 129, 0.0, 4.0, 1]),   // ARR_SPUREN = 128 (strand 1 slice 6), Spur 129 gibt es nicht
     erwarte(9000, q(12, 'andreas', 6, null, 'ausserhalb_bereich')),
     sende(9200, ['/k/ki/stopp', 'hs', 10, 'andreas']),
     sende(10000, laden(11, 2, 'cypher')),
@@ -80,19 +80,19 @@ test('arr: freeze läuft mit Status 3, endet nach bis − von + 2 Beats mit /e/f
   fs.rmSync(ordner, { recursive: true, force: true });
 });
 
-// E3 (Review-Nachzug): die obere Kante des Slot-Bereichs. Spur 32 wird angenommen (Gegenprobe zu Spur 33 oben).
-test('arr: freeze auf Spur 32 (E3: 32 Slots) läuft wie auf Spur 1', () => {
+// E3 (Review-Nachzug): die obere Kante des Slot-Bereichs. Spur 128 wird angenommen (Gegenprobe zu Spur 129 oben).
+test('arr: freeze auf Spur 128 (128 Slots) läuft wie auf Spur 1', () => {
   const ordner = fs.mkdtempSync(path.join(os.tmpdir(), 'attrappe-arr-'));
   const r = fahre([
     sende(4000, laden(21, 1)),
-    sende(8000, freeze(22, 32, 0.0, 4.0, 7)),
+    sende(8000, freeze(22, 128, 0.0, 4.0, 7)),
     erwarte(9000, q(22, 'andreas', 1)),
     erwarte(10000, q(22, 'andreas', 2)),
     erwarte(150000, q(22, 'andreas', 3)),
-    erwarte(150000, ['/e/freeze', 'iiih', 32, 7, 0, 135000]),
+    erwarte(150000, ['/e/freeze', 'iiih', 128, 7, 0, 135000]),
   ], { cfg: { ...cfg, arr_ordner: ordner } });
   gruen(r);
-  assert.equal(fs.statSync(path.join(ordner, 'freeze-32-7.f32')).size, 135000 * 8);
+  assert.equal(fs.statSync(path.join(ordner, 'freeze-128-7.f32')).size, 135000 * 8);
   fs.rmSync(ordner, { recursive: true, force: true });
 });
 

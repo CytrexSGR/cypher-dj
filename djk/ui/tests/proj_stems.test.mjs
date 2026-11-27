@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { aufbau } from './support/output_setup.mjs';
 import { warteBis } from './support/proj_context.mjs';
+import { MAX_SPUREN } from '../project/model.ts';
 import { Stems } from '../areas/proj/stems.ts';
 import { pythonVorgabe } from '../server.ts';
 import { REPO_PFADE } from '../paths.ts';
@@ -382,7 +383,7 @@ test('S6 D16: Clip im Lauf verschoben → veraltet, nichts gesetzt, WAVs nicht g
 test('S6 D16, D14: zu_viele_spuren schon beim Start, mehrere_clips über spur_id', async (t) => {
   const z = await mitStems(t);
   assert.throws(() => z.stems.starte({ spur_id: 's2' }, 'andreas'), (e) => e.grund === 'mehrere_clips');
-  await z.aendern(Array.from({ length: 26 }, () => ({ befehl: 'spur_neu', art: 'audio' })), 'Voll');
+  await z.aendern(Array.from({ length: MAX_SPUREN - 6 }, () => ({ befehl: 'spur_neu', art: 'audio' })), 'Voll');
   assert.throws(() => z.stems.starte({ clip_id: 'c1' }, 'andreas'), (e) => e.grund === 'zu_viele_spuren');
 });
 
@@ -446,7 +447,7 @@ test('S6 T8-NB MINOR 3: nur_andreas_spur auch über spur_id; Abbruch tötet das 
   assert.equal((await z.ende(5000)).grund, 'abbruch');
   const y = await mitStems(t, { trenner: 'langsam' });
   assert.equal(y.stems.starte({ clip_id: 'c1' }, 'andreas').code, 200);
-  await y.aendern(Array.from({ length: 26 }, () => ({ befehl: 'spur_neu', art: 'audio' })), 'Voll');
+  await y.aendern(Array.from({ length: MAX_SPUREN - 6 }, () => ({ befehl: 'spur_neu', art: 'audio' })), 'Voll');
   const e = await y.ende();
   assert.deepEqual([e.zustand, e.grund], ['veraltet', 'zu_viele_spuren'], JSON.stringify(e));
 });

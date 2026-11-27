@@ -299,7 +299,7 @@ int main() {
     PRUEF(grund(komp(1, key("spur", 2, "post")), komp(2, key("spur", 3, "post"))) == "+snap");           // a chain of edges is fine (3 before 2 before 1)
     PRUEF(grund(komp(1, key("grp", 1, "post")), komp(2, "")) == "format");                               // other source kinds come in a later unit
     PRUEF(grund(komp(1, key("spur", 0, "post")), komp(2, "")) == "format");                              // number out of range
-    PRUEF(grund(komp(1, key("spur", 33, "post")), komp(2, "")) == "format");
+    PRUEF(grund(komp(1, key("spur", cdj::ARR_SPUREN + 1, "post")), komp(2, "")) == "format");   // one above the last track
     PRUEF(grund(komp(1, key("spur", 2, "pre")), komp(2, "")) == "format");                               // (spur, pre) has one writer: the row sc
     PRUEF(grund(komp(1, key("spur", 2, "mitte")), komp(2, "")) == "format");
     PRUEF(grund(komp(1, "[1]"), komp(2, "")) == "format");                                               // not an object
@@ -1060,6 +1060,73 @@ int main() {
     PRUEF(enthaelt(lade(spur(1, 3, komp("grp", 2, "post")), kette3), "sidechain_zyklus"));
     PRUEF(enthaelt(lade(spur(1, 3, komp("grp", 3, "pre")), kette3), "sidechain_zyklus"));   // the group it sits in (as before)
     PRUEF(!enthaelt(lade(spur(1, 3, komp("grp", 4, "pre")), kette3), "sidechain_zyklus"));
+  }
+
+  {  // 23 host_schluessel (strand 2 task 3.3): a host stage in the chain of group 1 listens to the post of track 2. Its key port arr_inskey_1_L/R carries track 2's post samples: in the project without
+     // anything in front of the stage they equal, sample for sample, the key buffer of a compressor on track 1 keyed by the same source; with a latency stage (the bypassed saturator) in front of the
+     // host stage in the group chain the key is delayed by exactly that latency (the path sum, like a compressor's key). The strip itself never hears the key.
+    const int LAT_S = cdj::ins_latenz(ArrInsArt::saett);
+    struct Erg {
+      std::vector<float> kl, kr, komp_l;   // the key port of host 1 and the key buffer of komp slot 0, per sample
+      int verzug = -1;
+      bool strukturell = false;
+    };
+    const auto fahre_host = [&](bool mit_saett) {
+      Erg e;
+      Bau b(1);
+      b.spur(1, ArrArt::audio).clip(1, "c1", 0.0, 8.0, &bass->a).ausgang(1, 1);
+      b.kette(1, {ArrStufe{ArrInsArt::komp, 0, true, post_von(2)}});
+      b.spur(2, ArrArt::audio).clip(2, "c2", 0.0, 8.0, &klicks->a);
+      const ArrStufe host{ArrInsArt::host, 0, true, post_von(2)};
+      if (mit_saett) b.gruppen_kette(1, {ArrStufe{ArrInsArt::saett, 0, false}, host});
+      else b.gruppen_kette(1, {host});
+      auto tp = std::make_unique<Treiber>();
+      Treiber& t = *tp;
+      std::vector<float> send_l(cdj::ARR_BLOCK), send_r(cdj::ARR_BLOCK), ret(cdj::ARR_BLOCK, 0.0f), key_l(cdj::ARR_BLOCK), key_r(cdj::ARR_BLOCK);
+      bool erster = true;
+      const auto sammeln = [&]() {
+        e.kl.insert(e.kl.end(), key_l.begin(), key_l.begin() + t.n);
+        e.kr.insert(e.kr.end(), key_r.begin(), key_r.begin() + t.n);
+        const float* kp = t.arr.inserts().schluessel_puffer(0, false);
+        e.komp_l.insert(e.komp_l.end(), kp, kp + t.n);
+      };
+      t.vor_block = [&](int64_t) {
+        if (!erster) sammeln();
+        erster = false;
+        std::fill(key_l.begin(), key_l.end(), 0.0f);   // main.cpp zeroes the key port every cycle
+        std::fill(key_r.begin(), key_r.end(), 0.0f);
+        t.arr.host_stufe().setze_zeiger(1, send_l.data(), send_r.data(), ret.data(), ret.data(), key_l.data(), key_r.data());
+        t.arr.host_stufe().setze_gesund(1, true);
+      };
+      t.laden(b.fertig());
+      t.arr.start(0.0, 2, false, 0, V, 256, t.k);
+      t.lauf(120000);
+      sammeln();
+      e.verzug = t.arr.inserts().host_schluessel_verzug(1);
+      e.strukturell = t.arr.inserts().host_strukturell(1);
+      return e;
+    };
+    const Erg ohne = fahre_host(false), mit = fahre_host(true);
+    size_t n_klick = 0;
+    bool gleich_komp = ohne.kl.size() == ohne.komp_l.size(), gleich_lr = true;
+    for (size_t i = 0; i < ohne.kl.size() && gleich_komp; ++i) {
+      gleich_komp = ohne.kl[i] == ohne.komp_l[i];
+      gleich_lr = gleich_lr && ohne.kl[i] == ohne.kr[i];
+      if (std::fabs(ohne.kl[i]) > 0.1f) ++n_klick;
+    }
+    bool verschoben = mit.kl.size() == ohne.kl.size();
+    for (size_t i = 0; i < mit.kl.size() && verschoben; ++i) {
+      const float soll = i >= static_cast<size_t>(LAT_S) ? ohne.kl[i - static_cast<size_t>(LAT_S)] : 0.0f;
+      verschoben = mit.kl[i] == soll && mit.kr[i] == (i >= static_cast<size_t>(LAT_S) ? ohne.kr[i - static_cast<size_t>(LAT_S)] : 0.0f);
+    }
+    std::printf("23: host key: %zu samples of the key port, %zu click samples; equal to the compressor's key buffer: %s; with the saturator (%d samples) in front: key delay %d (without: %d), "
+                "the port is the key without saturator delayed by %d: %s\n",
+                ohne.kl.size(), n_klick, gleich_komp ? "yes" : "no", LAT_S, mit.verzug, ohne.verzug, LAT_S, verschoben ? "yes" : "no");
+    PRUEF(ohne.strukturell && mit.strukturell);
+    PRUEF(n_klick >= 2);            // positive control: the clicks of track 2 (two in the run) reach the port
+    PRUEF(gleich_komp && gleich_lr);  // track 2's post samples, as a compressor keyed by the same source receives them
+    PRUEF(ohne.verzug == 0 && mit.verzug == LAT_S);
+    PRUEF(verschoben);
   }
 
   PRUEF_ENDE();

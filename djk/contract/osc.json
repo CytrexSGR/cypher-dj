@@ -67,7 +67,7 @@
     "invariante_art": {"abschnitt": "5.9", "liste": ["sub_doppelt", "master_leer", "hoerschein"]},
     "protokollfehler_grund": {"abschnitt": "16.2", "liste": ["unbekannte_adresse", "falsche_typen", "protokoll"]},
     "nb_zustand": {"abschnitt": "5.10", "codes": {"0": "durchreichen", "1": "schleife", "2": "ausgeblendet", "3": "rueckgabe"}},
-    "gruende": {"abschnitt": "16.2", "liste": ["zu_spaet", "regler_beim_menschen", "regler_verplant", "ueberlappung", "nur_hand", "unbekannter_regler", "unbekanntes_deck", "ausserhalb_bereich", "kein_hoerschein", "hoerschein_anderer_kanal", "hoerschein_anderer_inhalt", "hoerschein_anderes_tempo", "hoerschein_abgelaufen", "hoerschein_anderer_abschnitt", "ziel_ungehoert", "keine_stems", "hoerschein_nicht_sync", "hoerschein_pegel", "invariante_sub_doppelt", "invariante_master_leer", "deck_beruehrt", "deck_hoerbar", "deck_laeuft", "nicht_geladen", "material_fehlt", "pruefung", "budget_speicher", "budget_stretcher", "karte_voll", "tempo_rampe", "ki_gestoppt", "rechner_fehlt", "kein_stretcher", "autonomie", "form", "hand", "abbruch", "ki_stopp", "unbekannte_adresse", "falsche_typen", "protokoll", "grenze_sub", "neustart", "datei_fehlt", "format", "audio_fehlt", "zu_gross", "spur_bereich", "reserviert", "kein_eingang", "aufnahme_laeuft", "zu_viele_scharf", "eingang_fehlt", "kein_platz", "warp_maschine_fehlt", "nur_andreas", "auto_ziel_unbekannt", "laeuft", "host_fehlt", "kein_rueckweg", "belegt", "schreiber_ueberlauf", "zelle_leer", "live_ohne_container", "dj_doppelt", "send_ausser_modul", "zellen_ungueltig"]}
+    "gruende": {"abschnitt": "16.2", "liste": ["zu_spaet", "regler_beim_menschen", "regler_verplant", "ueberlappung", "nur_hand", "nur_rampe", "unbekannter_regler", "unbekanntes_deck", "ausserhalb_bereich", "kein_hoerschein", "hoerschein_anderer_kanal", "hoerschein_anderer_inhalt", "hoerschein_anderes_tempo", "hoerschein_abgelaufen", "hoerschein_anderer_abschnitt", "ziel_ungehoert", "keine_stems", "hoerschein_nicht_sync", "hoerschein_pegel", "invariante_sub_doppelt", "invariante_master_leer", "deck_beruehrt", "deck_hoerbar", "deck_laeuft", "nicht_geladen", "material_fehlt", "pruefung", "budget_speicher", "budget_stretcher", "karte_voll", "tempo_rampe", "ki_gestoppt", "rechner_fehlt", "kein_stretcher", "autonomie", "form", "hand", "abbruch", "ki_stopp", "unbekannte_adresse", "falsche_typen", "protokoll", "grenze_sub", "neustart", "datei_fehlt", "format", "audio_fehlt", "zu_gross", "spur_bereich", "reserviert", "kein_eingang", "aufnahme_laeuft", "zu_viele_scharf", "eingang_fehlt", "kein_platz", "warp_maschine_fehlt", "nur_andreas", "auto_ziel_unbekannt", "laeuft", "host_fehlt", "kein_rueckweg", "belegt", "schreiber_ueberlauf", "zelle_leer", "live_ohne_container", "dj_doppelt", "send_ausser_modul", "zellen_ungueltig"]}
   },
   "adressen": [
     {"adresse": "/k/hallo", "typen": ",sii", "abschnitt": "4.1", "richtung": "an_kern", "felder": [
@@ -405,7 +405,7 @@
     {"adresse": "/k/arr/freeze", "typen": ",hsiddi", "abschnitt": "4.11", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
-      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 32]},
+      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 128]},
       {"name": "von_beat", "typ": "d", "einheit": "beat", "bereich": [0.0, null]},
       {"name": "bis_beat", "typ": "d", "einheit": "beat"},
       {"name": "kennung", "typ": "i", "einheit": "nummer", "bereich": [0, null], "notiz": "Datei <arr_ordner>/freeze-<spur>-<kennung>.f32 (Paket K3)"}]},
@@ -413,7 +413,7 @@
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
       {"name": "art", "typ": "i", "einheit": "code", "bereich": [0, 3], "notiz": "strip kind: 0 track, 1 group, 2 return, 3 production master"},
-      {"name": "nr", "typ": "i", "einheit": "nummer", "bereich": [1, 32], "notiz": "1 to 32 track, 1 to 16 group, 1 to 4 return, 1 for the master (checked per kind)"},
+      {"name": "nr", "typ": "i", "einheit": "nummer", "bereich": [1, 128], "notiz": "1 to 128 track, 1 to 16 group, 1 to 8 return, 1 for the master (checked per kind)"},
       {"name": "punkt", "typ": "i", "einheit": "code", "bereich": [0, 1], "notiz": "0 pre (strip input, before its chain), 1 post (what the strip sends on to its target)"},
       {"name": "von_beat", "typ": "d", "einheit": "beat", "bereich": [0.0, null]},
       {"name": "bis_beat", "typ": "d", "einheit": "beat", "notiz": "bis - von at least 1 and at most 256 (zu_gross above)"},
@@ -427,34 +427,34 @@
     {"adresse": "/k/arr/ins_host", "typen": ",hsii", "abschnitt": "4.11", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
-      {"name": "h", "typ": "i", "einheit": "nummer", "bereich": [1, 4], "notiz": "effect host h = pool ins/host/h = playback slot h - 1"},
+      {"name": "h", "typ": "i", "einheit": "nummer", "bereich": [1, 8], "notiz": "effect host h = pool ins/host/h = playback slot h - 1"},
       {"name": "gesund", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "the server's health flag of the host (its heartbeat file is fresh); the stage plays the return only while this AND the core's own edge check say 1; 0 after core start"}]},
     {"adresse": "/k/arr/ins_mess", "typen": ",hsi", "abschnitt": "4.11", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
-      {"name": "h", "typ": "i", "einheit": "nummer", "bereich": [1, 4], "notiz": "measure the round trip of this effect host (transport stopped, host healthy, rack empty); the answer is /e/ins_mess"}]},
+      {"name": "h", "typ": "i", "einheit": "nummer", "bereich": [1, 8], "notiz": "measure the round trip of this effect host (transport stopped, host healthy, rack empty); the answer is /e/ins_mess"}]},
     {"adresse": "/k/arr/auto", "typen": ",hsisi", "abschnitt": "4.11", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
-      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [0, 32], "notiz": "1 to 32 one track, 0 = all tracks (only with an 1, ziel is then still checked but ignored)"},
+      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [0, 128], "notiz": "1 to 128 one track, 0 = all tracks (only with an 1, ziel is then still checked but ignored)"},
       {"name": "ziel", "typ": "s", "einheit": "text", "werte": "auto_ziel"},
       {"name": "an", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "1 = the lane plays (re-enable), 0 = the hand overrides the lane; an 0 never from cypher (nur_andreas), never with spur 0 (format)"}]},
     {"adresse": "/k/arr/arm", "typen": ",hsiii", "abschnitt": "4.11", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
-      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [0, 32], "notiz": "1 to 32 one track, 0 = all tracks (only with an 0: disarms everything)"},
+      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [0, 128], "notiz": "1 to 128 one track, 0 = all tracks (only with an 0: disarms everything)"},
       {"name": "an", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "1 = the track is armed for automation recording, 0 = disarmed. Separate from the audio arm (/k/rec/spur). Only from andreas, any other source gets nur_andreas"},
       {"name": "modus", "typ": "i", "einheit": "code", "bereich": [0, 2], "notiz": "0 touch, 1 latch, 2 write. Kept with the arm; the core reports points the same way in every mode, the server writes the take"}]},
     {"adresse": "/k/arr/note", "typen": ",hsiii", "abschnitt": "4.11", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
-      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 32], "notiz": "the project track (its nr) that plays the note"},
+      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 128], "notiz": "the project track (its nr) that plays the note"},
       {"name": "ton", "typ": "i", "einheit": "note", "bereich": [0, 127], "notiz": "MIDI note number; a sampler cut plays slice i on note i"},
       {"name": "vel", "typ": "i", "einheit": "code", "bereich": [0, 127], "notiz": "velocity; 0 is the off of that note"}]},
     {"adresse": "/k/arr/stift", "typen": ",hsiiiif", "abschnitt": "4.11", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
-      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 32], "notiz": "the project track (its nr) whose matrix block gets the pin"},
+      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 128], "notiz": "the project track (its nr) whose matrix block gets the pin"},
       {"name": "satz", "typ": "i", "einheit": "code", "bereich": [0, 1], "notiz": "pin set: 0 = A, 1 = B"},
       {"name": "zeile", "typ": "i", "einheit": "nummer", "bereich": [0, 15], "notiz": "matrix row = source"},
       {"name": "spalte", "typ": "i", "einheit": "nummer", "bereich": [0, 15], "notiz": "matrix column = destination"},
@@ -474,7 +474,7 @@
     {"adresse": "/k/rec/spur", "typen": ",hsiiiii", "abschnitt": "4.12", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
-      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 32]},
+      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 128]},
       {"name": "scharf", "typ": "i", "einheit": "schalter", "bereich": [0, 1]},
       {"name": "eingang", "typ": "i", "einheit": "code", "bereich": [0, 30], "notiz": "0 none; 1..4 external pair ein_k (slice 2); 11..13 and 15..17 stream buffers of streams 1..3 and 5..7 (taps before any strip); 21 and 22 container inputs C and D (before the strip); 23 and 24 container inputs A and B (before the strip); 20 master before the fader (later); 30 midi_ein_1 on instrument tracks (slice 5, armed since T7a: a bit per track, not a tap, it does not count against the audio arm limit); 14 and 18 stay refused. 1..4 are taps since slice 2; until its slice 20 is refused eingang_fehlt"},
       {"name": "modus", "typ": "i", "einheit": "code", "bereich": [0, 3], "notiz": "0 stereo, 1 links, 2 rechts, 3 summe; only for 1..4 (slice 2); a value other than 0 on an internal code (11..13, 15..17, 21..24) is refused ausserhalb_bereich"},
@@ -562,10 +562,10 @@
       {"name": "mb_hoch_db", "typ": "f", "einheit": "db", "notiz": "Absenkung des Multiband-Kompressors, Band hoch (≥ 0)"},
       {"name": "lim_db", "typ": "f", "einheit": "db", "notiz": "Absenkung des Kanal-Limiters (≥ 0); 0, solange kanal_limiter_vorhalt_ms 0 ist (kein Limiter gebaut)"}]},
     {"adresse": "/e/ins_gr", "typen": ",sf", "abschnitt": "5.5f", "richtung": "vom_kern", "felder": [
-      {"name": "kanal", "typ": "s", "einheit": "pfad", "notiz": "pooled compressor insert stage, ins/komp/<n> with n = 1 to 12 (the project's insert slot)"},
+      {"name": "kanal", "typ": "s", "einheit": "pfad", "notiz": "pooled insert stage with a gain reduction: ins/komp/<n> (n = 1 to 160), ins/lim/<n> (n = 1 to 8), ins/gate/<n> (n = 1 to 16) or ins/mb/<n> (n = 1 to 8, the deepest band), the project's insert slot"},
       {"name": "gr_db", "typ": "f", "einheit": "db", "notiz": "gain reduction (>= 0) at the end of the last block; 20 Hz with the levels, only for stages that ran in the last block"}]},
     {"adresse": "/e/stufe_pegel", "typen": ",sff", "abschnitt": "5.5g", "richtung": "vom_kern", "felder": [
-      {"name": "kanal", "typ": "s", "einheit": "pfad", "notiz": "compressor or limiter stage: ins/komp/<n> (n = 1 to 12), ins/lim/<n> (n = 1 to 2) or komp/<channel> (the channel compressor of deck/1, deck/2, pad/1, pad/2)"},
+      {"name": "kanal", "typ": "s", "einheit": "pfad", "notiz": "pooled insert stage: ins/komp/<n> (n = 1 to 160), ins/lim/<n> (n = 1 to 8), ins/gate/<n> (n = 1 to 16), ins/mb/<n> (n = 1 to 8), or komp/<channel> (the channel compressor of deck/1, deck/2, pad/1, pad/2)"},
       {"name": "ein_db", "typ": "f", "einheit": "db", "notiz": "peak of max(|l|, |r|) at the input of the stage since the last report, dBFS; -200 for silence"},
       {"name": "aus_db", "typ": "f", "einheit": "db", "notiz": "the same at the output of the stage (after its bypass blend); -200 for silence"}]},
     {"adresse": "/zustand/spektrum", "typen": ",sis", "abschnitt": "5.5e", "richtung": "vom_kern", "felder": [
@@ -725,7 +725,7 @@
       {"name": "versatz_beats", "typ": "d", "einheit": "beat"},
       {"name": "wartend", "typ": "i", "einheit": "nummer", "bereich": [-1, 8], "notiz": "-1 nothing pending, 0 a pending stop, 1..8 a pending start"},
       {"name": "wartend_ab", "typ": "d", "einheit": "beat", "notiz": "core beat of the pending launch, 0 when none"}]},
-    {"adresse": "/zustand/ins_host", "typen": ",iiiiiiiiiiii", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [
+    {"adresse": "/zustand/ins_host", "typen": ",iiiiiiiiiiiiiiiiiiiiiiiii", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [
       {"name": "h_1", "typ": "i", "einheit": "nummer", "bereich": [1, 1]},
       {"name": "gesund_1", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "host 1: edge check AND server flag"},
       {"name": "rundweg_1", "typ": "i", "einheit": "frames", "bereich": [-1, 16383], "notiz": "host 1: last measured round trip, -1 without one"},
@@ -737,7 +737,20 @@
       {"name": "rundweg_3", "typ": "i", "einheit": "frames", "bereich": [-1, 16383], "notiz": "host 3: last measured round trip, -1 without one"},
       {"name": "h_4", "typ": "i", "einheit": "nummer", "bereich": [4, 4]},
       {"name": "gesund_4", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "host 4: edge check AND server flag"},
-      {"name": "rundweg_4", "typ": "i", "einheit": "frames", "bereich": [-1, 16383], "notiz": "host 4: last measured round trip, -1 without one"}]},
+      {"name": "rundweg_4", "typ": "i", "einheit": "frames", "bereich": [-1, 16383], "notiz": "host 4: last measured round trip, -1 without one"},
+      {"name": "h_5", "typ": "i", "einheit": "nummer", "bereich": [5, 5]},
+      {"name": "gesund_5", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "host 5: edge check AND server flag"},
+      {"name": "rundweg_5", "typ": "i", "einheit": "frames", "bereich": [-1, 16383], "notiz": "host 5: last measured round trip, -1 without one"},
+      {"name": "h_6", "typ": "i", "einheit": "nummer", "bereich": [6, 6]},
+      {"name": "gesund_6", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "host 6: edge check AND server flag"},
+      {"name": "rundweg_6", "typ": "i", "einheit": "frames", "bereich": [-1, 16383], "notiz": "host 6: last measured round trip, -1 without one"},
+      {"name": "h_7", "typ": "i", "einheit": "nummer", "bereich": [7, 7]},
+      {"name": "gesund_7", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "host 7: edge check AND server flag"},
+      {"name": "rundweg_7", "typ": "i", "einheit": "frames", "bereich": [-1, 16383], "notiz": "host 7: last measured round trip, -1 without one"},
+      {"name": "h_8", "typ": "i", "einheit": "nummer", "bereich": [8, 8]},
+      {"name": "gesund_8", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "host 8: edge check AND server flag"},
+      {"name": "rundweg_8", "typ": "i", "einheit": "frames", "bereich": [-1, 16383], "notiz": "host 8: last measured round trip, -1 without one"},
+      {"name": "schluessel_da", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "1 the core registered the 16 key ports arr_inskey_<h>_L/R, 0 JACK refused them (none kept, host stages run without sidechain key)"}]},
     {"adresse": "/zustand/hall_pool", "typen": ",iiii", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [
       {"name": "an", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "1 the pool accepts work, 0 off (hall_faeden 0 or switched off for good after more than 4 late events in 64 blocks)"},
       {"name": "faeden", "typ": "i", "einheit": "anzahl", "notiz": "worker threads running (kern.toml hall_faeden, fewer when threads or physical cores were missing)"},
@@ -769,7 +782,7 @@
       {"name": "quantum", "typ": "i", "einheit": "samples", "notiz": "cycle size of the audio callback, 0 before the first cycle"},
       {"name": "rec_midi_scharf", "typ": "i", "einheit": "anzahl", "notiz": "tracks armed on midi_ein_1 (eingang 30, 1.8 T7a); scharf counts the audio arms only. A run with only MIDI armed is a run (status 2, 3, 0 without any audio take)"}]},
     {"adresse": "/e/aufnahme", "typen": ",iiihhii", "abschnitt": "5.14", "richtung": "vom_kern", "felder": [
-      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [0, 32], "notiz": "0 for a MIDI take (one per run, slice 5)"},
+      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [0, 128], "notiz": "0 for a MIDI take (one per run, slice 5)"},
       {"name": "kennung", "typ": "i", "einheit": "nummer"},
       {"name": "status", "typ": "i", "einheit": "code", "bereich": [0, 3], "notiz": "0 ok, 1 mit Lücken, 2 abgebrochen (reserviert: der Kern sendet es in Slice 1 nie; ein Abbruch beim Kern-Ende schreibt nur die Begleitdatei), 3 kein_platz (Platte voll, das bis dahin Geschriebene bleibt)"},
       {"name": "frames", "typ": "h", "einheit": "frames"},
@@ -777,13 +790,13 @@
       {"name": "luecken", "typ": "i", "einheit": "anzahl", "notiz": "Sprungstellen in der Datei, mit Stille gefüllt"},
       {"name": "art", "typ": "i", "einheit": "code", "bereich": [0, 1], "notiz": "0 audio, 1 midi"}]},
     {"adresse": "/e/freeze", "typen": ",iiih", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [
-      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 32]},
+      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 128]},
       {"name": "kennung", "typ": "i", "einheit": "nummer"},
       {"name": "status", "typ": "i", "einheit": "code", "bereich": [0, 2], "notiz": "0 fertig, 1 abgebrochen, 2 Datei nicht geschrieben oder schon vorhanden (Paket K3)"},
       {"name": "frames", "typ": "h", "einheit": "frames"}]},
     {"adresse": "/e/abgriff", "typen": ",iiiih", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [
       {"name": "art", "typ": "i", "einheit": "code", "bereich": [0, 3]},
-      {"name": "nr", "typ": "i", "einheit": "nummer", "bereich": [1, 32]},
+      {"name": "nr", "typ": "i", "einheit": "nummer", "bereich": [1, 128]},
       {"name": "kennung", "typ": "i", "einheit": "nummer"},
       {"name": "status", "typ": "i", "einheit": "code", "bereich": [0, 2], "notiz": "0 done, 1 aborted, 2 file not written or already there (slice 7)"},
       {"name": "frames", "typ": "h", "einheit": "frames"}]},
@@ -794,14 +807,14 @@
       {"name": "ungesund", "typ": "i", "einheit": "anzahl", "notiz": "blocks in which an active host stage was on the dry path"},
       {"name": "grund", "typ": "s", "einheit": "text", "werte": "gruende", "notiz": "empty when the file is complete; else belegt, nicht_geladen, ki_gestoppt, tempo_rampe, zu_gross, abbruch, ki_stopp, schreiber_ueberlauf, datei_fehlt, kein_platz, zu_spaet: no file is left"}]},
     {"adresse": "/e/ins_host", "typen": ",ii", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [
-      {"name": "h", "typ": "i", "einheit": "nummer", "bereich": [1, 4]},
+      {"name": "h", "typ": "i", "einheit": "nummer", "bereich": [1, 8]},
       {"name": "gesund", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "the health of the stage after the command: edge check AND the server's flag"}]},
     {"adresse": "/e/ins_mess", "typen": ",iis", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [
-      {"name": "h", "typ": "i", "einheit": "nummer", "bereich": [1, 4]},
+      {"name": "h", "typ": "i", "einheit": "nummer", "bereich": [1, 8]},
       {"name": "rundweg", "typ": "i", "einheit": "frames", "bereich": [-1, 16383], "notiz": "round trip in samples (impulse to the first return sample above 0.05), -1 when there is none"},
       {"name": "grund", "typ": "s", "einheit": "text", "werte": "gruende", "notiz": "empty when rundweg is a number; else laeuft (transport not stopped), host_fehlt (host not healthy), kein_rueckweg (no return within 16384 samples)"}]},
     {"adresse": "/e/auto", "typen": ",isi", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [
-      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 32]},
+      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 128]},
       {"name": "ziel", "typ": "s", "einheit": "text", "werte": "auto_ziel"},
       {"name": "zustand", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "1 = overridden (the hand plays), 0 = the lane plays (re-enabled, or the lane is gone). Polarity differs from /k/arr/auto an. Sent on every change; after the core lost events it re-reports every field of a lane and every field reported as 1"}]},
     {"adresse": "/e/auto_punkt", "typen": ",sdf", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [

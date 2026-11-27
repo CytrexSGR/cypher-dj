@@ -20,10 +20,11 @@ const e = (log, adr) => log.filter((m) => m.adresse === adr).map((m) => m.werte)
 test('ins_host: the flag is answered with /e/ins_host, a range error is /q 6 ausserhalb_bereich', () => {
   const { log, bis, cmd } = kern();
   cmd('/k/arr/ins_host', 'hsii', [1n, 'leitstand', 2, 1]);
-  cmd('/k/arr/ins_host', 'hsii', [2n, 'leitstand', 5, 1]);
+  cmd('/k/arr/ins_host', 'hsii', [2n, 'leitstand', 9, 1]);
   cmd('/k/arr/ins_host', 'hsii', [3n, 'leitstand', 1, 2]);
+  cmd('/k/arr/ins_host', 'hsii', [4n, 'leitstand', 8, 1]);   // strand 1 slice 5: eight hosts
   bis(2000);
-  assert.deepEqual(e(log, '/e/ins_host'), [[2, 1]]);
+  assert.deepEqual(e(log, '/e/ins_host'), [[2, 1], [8, 1]]);
   const q6 = log.filter((m) => m.adresse === '/q' && m.werte[2] === 6).map((m) => m.werte[5]);
   assert.deepEqual(q6, ['ausserhalb_bereich', 'ausserhalb_bereich']);
 });

@@ -157,7 +157,8 @@ test('S0 /klang: Stop Cypher lehnt schreibende Aktion von Cypher mit 409 ki_gest
   const r = await postJson(url, '/klang', lade, CYPHER);
   assert.deepEqual([r.code, r.j.fehler], [409, 'ki_gestoppt'], JSON.stringify(r));
   assert.equal((await postJson(url, '/klang', lade)).code, 200, 'Andreas ist von Stop Cypher nicht betroffen');
-  assert.equal((await postJson(url, '/klang', { gruppe: 'bass', aktion: 'zeige' }, CYPHER)).code, 200, 'lesend bleibt frei');
+  assert.equal((await postJson(url, '/klang', { gruppe: 'bass', aktion: 'zeige' }, { ...CYPHER, 'x-djk-werkzeug': 'klang', 'x-djk-aktion': 'zeige' })).code, 200,
+    'lesend bleibt frei (the hand names tool and action in its headers)');
   await stoppCypher(i, false);
   assert.equal((await postJson(url, '/klang', lade, CYPHER)).code, 200, 'nach der Freigabe geht Cypher wieder');
 });

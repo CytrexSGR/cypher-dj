@@ -9,11 +9,12 @@ if [ ! -f djk/core/build/CMakeCache.txt ]; then
   cmake -S djk/core -B djk/core/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DHALL_FFI_TARGET_DIR="$REPO/djk/core/build/cargo" > /dev/null
   echo "vorbereiten: core build folder configured"
 fi
-# Page tests render with djk/core/build/cypherdj-render. The core suite builds it too, but the page suites start at the same time as the
-# core suite in a fresh checkout and would find it missing: build it here, once (ccache and the cargo volume make a repeat cheap).
-ninja -C djk/core/build -j"$(( $(nproc) / 2 ))" cypherdj-render > djk/core/build/vorbereiten-render.log 2>&1 \
+# Page tests render with djk/core/build/cypherdj-render and detect notes with djk/core/build/cypherdj-noten. The core suite builds them too,
+# but the page suites start at the same time as the core suite in a fresh checkout and would find them missing: build both here, once
+# (ccache and the cargo volume make a repeat cheap).
+ninja -C djk/core/build -j"$(( $(nproc) / 2 ))" cypherdj-render cypherdj-noten > djk/core/build/vorbereiten-render.log 2>&1 \
   || { tail -20 djk/core/build/vorbereiten-render.log; exit 1; }
-echo "vorbereiten: cypherdj-render built"
+echo "vorbereiten: cypherdj-render and cypherdj-noten built"
 # node_modules is reinstalled when it is missing or when the lockfile it was installed from has changed (a reused workdir keeps old packages).
 for p in conductor contract hand; do
   if [ -f "djk/$p/package-lock.json" ]; then

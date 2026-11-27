@@ -459,3 +459,131 @@ def test_anzeige_erreichbar_ist_schnell_und_falsch_fuer_eine_tote_anzeige(monkey
     assert time.monotonic() - t < 0.1
     monkeypatch.delenv("DISPLAY")
     assert wirtsteuerung.anzeige_erreichbar() is False
+
+
+# ---------------------------------------------------------------- strand 11 task 2.1: `setze` with a start time (a discrete Surge parameter on a beat)
+from host_control import SETZE_VORLAUF, SICHERN_NACH  # noqa: E402
+
+
+def geladener_wert(text, name):
+    return dict(klang.werte(klang.xml_aus_patch(klang.carxs_patch(text)), f"^{name}$"))[name]
+
+
+def test_setze_laedt_erst_bei_ab_und_bereitet_vorher_vor(tmp_path, capsys):
+    h = FahrHost()
+    s = Steuerung(h, str(tmp_path), None, BEREICHE)
+    assert s.bearbeite({"befehl": "setze", "werte": {"a_ws_type": 3}, "ab": 101.0, "spur": "s1"}, 100.0) == {"ok": True}
+    s.takt(100.0)
+    assert h.geladen == [] and not list(tmp_path.glob("setze-*.carxs"))  # nothing prepared before ab - lead
+    s.takt(101.0 - SETZE_VORLAUF)
+    vorbereitet = list(tmp_path.glob("setze-*.carxs"))
+    assert len(vorbereitet) == 1 and 'value="3"' in geladener_wert(vorbereitet[0].read_text(), "a_ws_type")
+    assert h.geladen == []  # prepared, not loaded
+    s.takt(100.99)
+    assert h.geladen == []
+    s.takt(101.01)
+    assert len(h.geladen) == 1 and 'value="3"' in geladener_wert(h.geladen[0], "a_ws_type")
+    assert not list(tmp_path.glob("setze-*.carxs")) and s.setzen == []
+    assert "setze start soll 101.000 ist 101.010" in capsys.readouterr().err
+    s.takt(102.0)
+    assert len(h.geladen) == 1  # once
+
+
+def test_setze_spaeter_takt_bereitet_vor_und_laedt_in_einem(tmp_path):
+    h = FahrHost()
+    s = Steuerung(h, str(tmp_path), None, BEREICHE)
+    s.bearbeite({"befehl": "setze", "werte": {"a_ws_type": 2, "a_filter1_cutoff": -12.5}, "ab": 101.0}, 100.0)
+    s.takt(101.5)  # the loop missed the lead window: prepare and load in the same tick
+    assert len(h.geladen) == 1
+    assert 'value="2"' in geladener_wert(h.geladen[0], "a_ws_type")
+    assert 'value="-12.5"' in geladener_wert(h.geladen[0], "a_filter1_cutoff")
+    assert s.ist["a_filter1_cutoff"] == -12.5  # a continuous name set by setze is the new start value of a ramp
+
+
+def test_setze_unbekannter_name_und_ungueltiges_abgewiesen(tmp_path):
+    s = Steuerung(FahrHost(), str(tmp_path), None, BEREICHE)
+    r = s.bearbeite({"befehl": "setze", "werte": {"a_gibtsnicht": 1}, "ab": 101.0}, 100.0)
+    assert r["ok"] is False and "unbekannter Parameter" in r["fehler"] and "a_gibtsnicht" in r["fehler"]
+    for falsch in ({"werte": {}}, {"werte": {"a_ws_type": "drei"}}, {"werte": {"a_ws_type": True}},
+                   {"werte": {"a_ws_type": 1}, "ab": 98.0}, {"werte": {"a_ws_type": 1}, "ab": 3800.0},
+                   {"werte": {"a_ws_type": 1}, "patch_b64": "AAAA"}, {"patch_b64": "kein base64"}, {}):
+        r = s.bearbeite({"befehl": "setze", **falsch}, 100.0)
+        assert r["ok"] is False, falsch
+    assert s.setzen == []
+    # negative control: a valid one is taken right after the refusals
+    assert s.bearbeite({"befehl": "setze", "werte": {"a_ws_type": 1}, "ab": 99.5}, 100.0) == {"ok": True}
+
+
+def test_setze_halte_verwirft_nur_die_eigene_spur(tmp_path):
+    h = FahrHost()
+    s = Steuerung(h, str(tmp_path), None, BEREICHE)
+    s.bearbeite({"befehl": "setze", "werte": {"a_ws_type": 3}, "ab": 101.0, "spur": "a"}, 100.0)
+    s.takt(101.0 - SETZE_VORLAUF)  # prepared
+    assert s.bearbeite({"befehl": "halte", "spur": "b"}, 100.8) == {"ok": True, "gehalten": 0}
+    assert s.bearbeite({"befehl": "halte", "spur": "a"}, 100.8) == {"ok": True, "gehalten": 1}
+    s.takt(101.0)
+    assert h.geladen == [] and not list(tmp_path.glob("setze-*.carxs"))
+    s.bearbeite({"befehl": "setze", "werte": {"a_ws_type": 3}, "ab": 101.5, "spur": "c"}, 101.0)
+    assert s.bearbeite({"befehl": "halte"}, 101.0) == {"ok": True, "gehalten": 1}  # without spur: all
+
+
+def test_setze_laufende_fahrt_ueberlebt_das_neuladen(tmp_path):
+    h = FahrHost()
+    s = Steuerung(h, str(tmp_path), None, BEREICHE)
+    P = BEREICHE["a_filter1_cutoff"]
+    s.bearbeite({"befehl": "fahre", "name": "a_filter1_cutoff", "von": -60.0, "bis": 70.0, "dauer": 4.0}, 100.0)
+    s.bearbeite({"befehl": "setze", "werte": {"a_ws_type": 3}, "ab": 102.0}, 100.0)
+    s.takt(100.0)
+    s.takt(102.0 - SETZE_VORLAUF)
+    h.parameter.clear()
+    s.takt(102.0)
+    assert len(h.geladen) == 1
+    # after the reload (state from the lead time, cutoff 3.0 in the file) the ramp's value is set again: 50 % of -60..70 = 5.0
+    assert h.parameter and h.parameter[-1] == (25, round(klang.normiert(P["punkte"], 5.0), 6))
+    assert s.ist["a_filter1_cutoff"] == 5.0
+
+
+def test_setze_gestoppte_fahrt_wird_nach_dem_neuladen_wieder_gesetzt(tmp_path):
+    h = FahrHost()
+    s = Steuerung(h, str(tmp_path), None, BEREICHE)
+    s.bearbeite({"befehl": "fahre", "name": "a_filter1_cutoff", "bis": -40.0, "dauer": 0}, 100.0)
+    h.parameter.clear()
+    s.bearbeite({"befehl": "setze", "werte": {"a_ws_type": 1}, "ab": 101.0}, 100.0)
+    s.takt(101.0)
+    assert h.parameter == [(25, round(klang.normiert(BEREICHE["a_filter1_cutoff"]["punkte"], -40.0), 6))]
+
+
+def test_setze_zwei_kurz_hintereinander_bauen_aufeinander_auf(tmp_path):
+    h = FahrHost()
+    s = Steuerung(h, str(tmp_path), None, BEREICHE)
+    s.bearbeite({"befehl": "setze", "werte": {"a_ws_type": 3}, "ab": 101.0}, 100.0)
+    s.bearbeite({"befehl": "setze", "werte": {"a_filter1_type": 2}, "ab": 101.1}, 100.0)
+    for t in (100.75, 100.85, 101.0, 101.1):
+        s.takt(t)
+    assert len(h.geladen) == 2
+    # the second was prepared before the first was loaded: it must still carry the first change (the fake host state never changes)
+    assert 'value="3"' in geladener_wert(h.geladen[1], "a_ws_type")
+    assert 'value="2"' in geladener_wert(h.geladen[1], "a_filter1_type")
+
+
+def test_setze_mit_patch_b64_laedt_den_patch(tmp_path):
+    h = FahrHost()
+    aktiv = tmp_path / "klang-bass.fxp"
+    s = Steuerung(h, str(tmp_path), str(aktiv), BEREICHE)
+    patch = klang.carxs_patch(INIT)
+    neu = klang.patch_mit_xml(patch, klang.setze(klang.xml_aus_patch(patch), {"a_ws_type": "4"}))
+    b64 = base64.b64encode(neu).decode()
+    assert s.bearbeite({"befehl": "setze", "patch_b64": b64, "ab": 101.0, "spur": "szene-x"}, 100.0) == {"ok": True}
+    s.takt(101.0)
+    assert klang.carxs_patch(h.geladen[0]) == neu
+    s.takt(101.0 + SICHERN_NACH)  # the active sound is saved afterwards, as after a ramp
+    assert aktiv.exists()
+
+
+def test_setze_fehler_im_takt_verwirft_und_der_wirt_lebt(tmp_path, capsys):
+    h = FahrHost()
+    s = Steuerung(h, str(tmp_path), None, BEREICHE)
+    s.bearbeite({"befehl": "setze", "werte": {"a_ws_type": 3}, "ab": 101.0}, 100.0)
+    h.laden_ok = False
+    s.takt(101.0)  # must not raise: instrument_host.py calls takt unprotected
+    assert s.setzen == [] and "setze verworfen" in capsys.readouterr().err

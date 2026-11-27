@@ -49,14 +49,14 @@ def test_fehlende_oder_kaputte_dateien_geben_leer(tmp_path):
     assert plugin_scan.version_von(str(tmp_path), "other") == ""
 
 
-def test_index_version_ist_2_und_ein_alter_index_wird_verworfen(tmp_path):
-    assert plugin_scan.VERSION == 2
+def test_index_version_ist_3_und_ein_alter_index_wird_verworfen(tmp_path):
+    assert plugin_scan.VERSION == 3
     alt = tmp_path / "index.json"
     alt.write_text(json.dumps({"version": 1, "eintraege": [{"id": "x", "buendel": "/a"}], "uebersprungen": []}))
     d = plugin_scan.lade_index(str(alt))
-    assert d["version"] == 2 and d["eintraege"] == []
+    assert d["version"] == 3 and d["eintraege"] == []
     neu = tmp_path / "neu.json"
-    neu.write_text(json.dumps({"version": 2, "eintraege": [{"id": "x"}], "uebersprungen": []}))
+    neu.write_text(json.dumps({"version": 3, "eintraege": [{"id": "x"}], "uebersprungen": []}))
     assert plugin_scan.lade_index(str(neu))["eintraege"] == [{"id": "x"}]
 
 

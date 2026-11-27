@@ -33,11 +33,12 @@ import { TRACKER } from './commands_tracker.ts';
 import { LOOPDECK } from './commands_loopdeck.ts';
 import { SESSION } from './commands_session.ts';
 import { CONTAINER } from './commands_container.ts';
+import { AUDIO_NOTEN } from './commands_audio_notes.ts';
 export { BefehlFehler, bereinigeGliedZiele, DUCK_DURCH_KICK_WERTE, laneStart, COMP_FADE_S, teileClipsAn, compFade } from './commands_helpers.ts';
 export type { ReglerAenderung, StiftAenderung, BefehlErgebnis, LaneHinweis, Befehl, PresetInhalt, MusterMeldung, PluginEintrag } from './commands_helpers.ts';
 export { PRO_BEFEHL } from './commands_helpers.ts';
 
-mergeTabellen(PRO_BEFEHL, SPUR, CLIP, GRUPPE, INSERT, AUTO, TRANSPORT, SZENEN, TRACKER, LOOPDECK, CONTAINER, SESSION);
+mergeTabellen(PRO_BEFEHL, SPUR, CLIP, GRUPPE, INSERT, AUTO, TRANSPORT, SZENEN, TRACKER, LOOPDECK, CONTAINER, SESSION, AUDIO_NOTEN);
 export const BEFEHL_NAMEN: readonly string[] = Object.keys(PRO_BEFEHL);
 
 // Ein eingefrorener Wirt-Spur-Klang gilt nur zu genau den Noten, dem Gerät und dem Tempo, mit denen er entstanden ist
@@ -132,8 +133,8 @@ function returnReglerAenderungen(alt: Projekt, neu: Projekt, aus: ReglerAenderun
 // 1.10 slice 4: the pooled rows ins/<art>/<slot>/* follow the stages by SLOT, not by strip: a slot that is free (or whose stage left) is at the
 // defaults (an 0, the pool defaults, sc 0). Values first, `an` last when a stage turns on; `an` first when it turns off, so nothing sounds with stale values.
 // Slice 4b: the same for eq, saett and lim (the contract names every row of the kind, the EQ band rows as 'b<m>/<parameter>').
-// utility and bk last, as in the contract (arr-fx, arr-bk)
-const INS_POOL: readonly InsertPoolArt[] = ['komp', 'eq', 'saett', 'lim', 'host', 'utility', 'bk'];
+// utility, bk, gate and mb last, as in the contract (arr-fx, arr-bk, pool slice 4)
+const INS_POOL: readonly InsertPoolArt[] = ['komp', 'eq', 'saett', 'lim', 'host', 'utility', 'bk', 'gate', 'mb'];
 const INS_NAMEN = Object.fromEntries(INS_POOL.map((art) => [art, INSERT_ARTEN[art].parameter.map((q) => q.name)])) as Record<InsertPoolArt, string[]>;
 const INS_VORGABE: Record<InsertPoolArt, Record<string, number>> = Object.fromEntries(
   INS_POOL.map((art) => [art, Object.fromEntries(INSERT_ARTEN[art].parameter.map((q) => [q.name, q.vorgabe]))])
@@ -427,11 +428,13 @@ function fuehreLeichtAus(projekt: Projekt, befehle: unknown[]): BefehlErgebnis {
 }
 
 // --- Notenweg (Spec 6.31, Leistung) ----------------------------------------------------------------------------------
-// Eine Liste nur aus noten_neu, noten_aendern und noten_loeschen berührt nur die genannten Clips. Statt das ganze Projekt tief zu kopieren,
+// Eine Liste nur aus den Notenbefehlen (NOTEN_BEFEHLE) berührt nur die genannten Clips. Statt das ganze Projekt tief zu kopieren,
 // bekommen nur ihre Spuren und Clips eine flache Kopie samt eigener Notenliste; alle anderen Spuren, Clips und Noten werden geteilt. Die Befehle
 // verändern dabei keine geteilte Note (noten_aendern setzt ein neues Objekt, noten_neu hängt an die eigene Liste, noten_loeschen filtert), und
 // unterschied/vergleiche sehen Geteiltes über die Identität. Ergebnis wie der volle Weg (Test: beide Wege, das Ausgangsprojekt bleibt gleich).
-const NOTEN_BEFEHLE: ReadonlySet<unknown> = new Set(['noten_neu', 'noten_aendern', 'noten_loeschen']);
+const NOTEN_BEFEHLE: ReadonlySet<unknown> = new Set([
+  'noten_neu', 'noten_aendern', 'noten_loeschen', 'noten_quantisieren', 'noten_humanisieren',
+]);
 function notenEntwurf(projekt: Projekt, befehle: unknown[]): Projekt | null {
   const clips = new Set<string>();
   for (const b of befehle) {

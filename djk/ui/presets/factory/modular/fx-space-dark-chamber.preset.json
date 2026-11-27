@@ -1,0 +1,41 @@
+{
+ "schema": 1,
+ "name": "Space Dark Chamber",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "space-kammer",
+ "werte": {
+  "knob1": 0.5333,
+  "knob2": 0.5,
+  "knob3": 0.3869,
+  "knob4": 0.3155,
+  "knob5": 0.5,
+  "knob6": 0
+ },
+ "beschreibung": {
+  "art": "reverb",
+  "unterart": "chamber",
+  "charakter": [
+   "dark",
+   "warm",
+   "soft"
+  ],
+  "genre": [
+   "downtempo",
+   "deep_house",
+   "idm"
+  ],
+  "einsatz": [
+   "intro",
+   "breakdown"
+  ],
+  "energie": 2,
+  "text": "30 % mix, 10 ms pre-delay, low cut 80 Hz, high cut 4 kHz: a dark warm tail."
+ },
+ "tags": [
+  "fx-space"
+ ],
+ "notiz": "Knobs 1..6 set by the knob ranges of the graph, not yet heard (2026-11-26). The room is the graph.",
+ "angelegt": "2026-11-26T00:00:00.000Z",
+ "geaendert": "2026-11-26T00:00:00.000Z"
+}

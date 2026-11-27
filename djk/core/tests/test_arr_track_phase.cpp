@@ -58,8 +58,11 @@ cdj::ArrSnapshot* snap(int64_t nr, int n_rb, int variante, bool mit_bk, CypherBk
 
 struct Welt {
   Treiber t;
-  cdj::ArrRbSenke rb{t.arr};
-  cdj::ArrBkSenke bk{t.arr};
+  // on the heap: at 128 tracks (160 sink slots) the Baukasten sink is about 3.5 MB and the RB-338 sink about 1 MB, and the cases keep two worlds in one frame
+  std::unique_ptr<cdj::ArrRbSenke> rb_heap{std::make_unique<cdj::ArrRbSenke>(t.arr)};
+  std::unique_ptr<cdj::ArrBkSenke> bk_heap{std::make_unique<cdj::ArrBkSenke>(t.arr)};
+  cdj::ArrRbSenke& rb{*rb_heap};
+  cdj::ArrBkSenke& bk{*bk_heap};
   cdj::ArrInternSenke intern{t.arr, &rb, &bk, nullptr};
   PruefSenke host;
   Welt() {

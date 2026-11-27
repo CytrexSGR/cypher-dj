@@ -118,8 +118,8 @@ int main() {
     PRUEF(w.offs().size() == 1 && w.offs()[0].ziel == 90000);
     PRUEF(t.arr.status() == ArrStatus::steht);
   }
-  {  // 6: Liste voll (E3: 32 RB-Spuren mit je 32 gleichzeitig gehaltenen Noten = ARR_OFFEN = 1024, nichts geht verloren).
-     // Gegenprobe: mehr Noten als Plätze -> 1024 offen, genau so viele gezählt verloren wie überzählig (1 und 3: ein
+  {  // 6: Liste voll (E3: ARR_SPUREN RB tracks with 32 held notes each = ARR_OFFEN, 4096 at 128 tracks, nothing is lost).
+     // Gegenprobe: mehr Noten als Plätze -> ARR_OFFEN offen, genau so viele gezählt verloren wie überzählig (1 und 3: ein
      // Zähler, der nur „irgendwas verloren“ merkt, fiele bei 3 auf), keine hängende Note.
     for (const int mehr : {0, 1, 3}) {
       Treiber t;
@@ -136,10 +136,10 @@ int main() {
       t.arr.start(0.0, 2, false, 0, V, 256, t.k);
       t.lauf(90112);
       PRUEF(cdj::ARR_OFFEN == 32 * cdj::ARR_SPUREN);
-      PRUEF(t.arr.offene_noten() == 1024);
+      PRUEF(t.arr.offene_noten() == cdj::ARR_OFFEN);
       PRUEF(t.arr.noten_verloren() == static_cast<uint64_t>(mehr));
       t.lauf(113000);
-      PRUEF(rb.ons().size() == 1024 && rb.offs().size() == 1024);
+      PRUEF(rb.ons().size() == static_cast<size_t>(cdj::ARR_OFFEN) && rb.offs().size() == static_cast<size_t>(cdj::ARR_OFFEN));
     }
   }
   {  // 7: K1-Fix 2 (Spec 2.2, §4.11): Vorausblick über die Naht. Loop 0..4 ab Takt (Einsatz 90 000, Nähte 180 000 und

@@ -407,19 +407,24 @@ int main() {
     PRUEF(f.good());
     nlohmann::json j = nlohmann::json::parse(f, nullptr, false);
     PRUEF(!j.is_discarded());
-    int eq = -1, sa = -1, ko = -1, li = -1;
+    int eq = -1, sa = -1, ko = -1, li = -1, ga = -1, mb = -1;
     if (!j.is_discarded())
       for (const auto& a : j.at("arten")) {
         if (a.at("art") == "eq") eq = a.at("latenz").get<int>();
         if (a.at("art") == "saett") sa = a.at("latenz").get<int>();
         if (a.at("art") == "komp") ko = a.at("latenz").get<int>();
         if (a.at("art") == "lim") li = a.at("latenz").get<int>();   // master limiter plan: pinned against the KanalLimiter of ins_lim.h
+        if (a.at("art") == "gate") ga = a.at("latenz").get<int>();  // strand 1 slice 4: gate and mb, 0 samples
+        if (a.at("art") == "mb") mb = a.at("latenz").get<int>();
       }
     std::printf("8: contract latencies: komp %d, eq %d, saett %d, lim %d (module %d)\n", ko, eq, sa, li, cdj::ins_lim_latenz());
     PRUEF((eq) == (L_EQ));
     PRUEF((sa) == (L_SA));
     PRUEF((ko) == (0));
     PRUEF((li) == (cdj::ins_lim_latenz()));
+    PRUEF((ga) == (cdj::ins_latenz(cdj::ArrInsArt::gate)));
+    PRUEF((mb) == (cdj::ins_latenz(cdj::ArrInsArt::mb)));
+    PRUEF((ga) == (0) && (mb) == (0));
   }
 
   if (!ALLOC_ABFANG_VERFUEGBAR) {

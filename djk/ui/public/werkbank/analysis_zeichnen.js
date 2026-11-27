@@ -52,6 +52,25 @@ export function zeitbildBytes(b64) {
   return aus;
 }
 
+// Vectorscope points of the live answer: base64 of an Int8Array of (x, y) pairs; '' or invalid -> empty.
+export function vektorPunkte(b64) {
+  try { return new Int8Array(zeitbildBytes(b64).buffer); } catch { return new Int8Array(0); }
+}
+
+// Clears and draws the vectorscope: a faint cross, the 45 degree lines for L and R, then one small dot per point (mid up, side right).
+export function zeichneVektor(g, punkte, breite, hoehe, farbe = '#5cd0ff') {
+  g.fillStyle = '#0b0d11'; g.fillRect(0, 0, breite, hoehe);
+  g.strokeStyle = 'rgba(255,255,255,.09)'; g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(breite / 2, 0); g.lineTo(breite / 2, hoehe); g.moveTo(0, hoehe / 2); g.lineTo(breite, hoehe / 2);
+  g.moveTo(0, 0); g.lineTo(breite, hoehe); g.moveTo(breite, 0); g.lineTo(0, hoehe);
+  g.stroke();
+  g.fillStyle = farbe;
+  for (let i = 0; i + 1 < punkte.length; i += 2) {
+    g.fillRect(breite / 2 + (punkte[i] / 127) * (breite / 2) - 0.75, hoehe / 2 - (punkte[i + 1] / 127) * (hoehe / 2) - 0.75, 1.5, 1.5);
+  }
+}
+
 // The dB values of one column (spalten x zeilen bytes, column after column); `messung` is the measurement the bytes belong to.
 const entpackt = new WeakMap();   // zeitbild object -> bytes: decoded once per answer
 export function spalteDb(antwort, messung, spalte) {

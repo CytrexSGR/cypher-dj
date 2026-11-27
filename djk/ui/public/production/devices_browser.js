@@ -60,7 +60,7 @@ export function filterHtml(koll, filter) {
 // its drop and click come with a later task. The head (search, format, RESCAN) stays; only the list under it is redrawn.
 export const PLUGIN_GRUND_TEXT = {
   abgestuerzt: 'The plugin crashed while it was scanned', zeit: 'The plugin took too long while it was scanned', ungueltig: 'The plugin file is not a valid plugin',
-  mehrklassen: 'The file holds several plugins: not supported yet',
+  mehrklassen: 'The file holds several plugins; the shim that loads them one by one is not built (run vst3_klasse/build.sh)',
 };
 export const pluginGrund = (e) => (e.status === 'blockiert' ? (e.text ?? PLUGIN_GRUND_TEXT[e.grund] ?? 'Blocked') : '');
 export const pluginNutzlast = (e) => {

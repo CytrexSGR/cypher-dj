@@ -33,8 +33,9 @@ std::vector<Kante> lies_kanten(const std::string& text);
 // The core's master and cue outputs can never be wired by the file (bolt); edges whose other end is not a core port are dropped.
 // D1 K1 (Spec 2.3): edges onto `<kern>rueck_erz_4_*` are dropped (erz/4 belongs to the production); their count goes to *reserviert.
 // D1 K2b (Spec 2.4): plus the host slots of the arrangement, `<kern>arr_midi_S -> *` and `* -> <kern>arr_rueck_S_{L,R}`.
-// Plan 1.11 T3/T4: plus the effect hosts, `<kern>arr_ins_H_{L,R} -> *` (audio send, an output) and `* -> <kern>arr_insret_H_{L,R}`, H = 1..ARR_INS_HOST (4).
-// These two families only connect to foreign clients: a port of any core instance (cypherdj-kern, cypherdj-kern-<i>) as the far end is dropped.
+// Plan 1.11 T3/T4: plus the effect hosts, `<kern>arr_ins_H_{L,R} -> *` (audio send, an output) and `* -> <kern>arr_insret_H_{L,R}`, H = 1..ARR_INS_HOST (8).
+// Strand 2 task 3.3: plus the sidechain key of a host, `<kern>arr_inskey_H_{L,R} -> *` (an output, the plugin's third and fourth input).
+// These three families only connect to foreign clients: a port of any core instance (cypherdj-kern, cypherdj-kern-<i>) as the far end is dropped.
 std::vector<Kante> filtere_kanten(const std::vector<Kante>& kanten, const std::string& kern_praefix,
                                   size_t* reserviert = nullptr);
 
@@ -48,10 +49,11 @@ std::vector<Kante> lies_eingangs_kanten(const std::string& text, const std::stri
 std::vector<Kante> wegfallende_kanten(const std::vector<Kante>& alt, const std::vector<Kante>& soll);
 
 // MINOR-5: Obergrenzen der Kanten-Datei; Duplikate (Quelle und Ziel gleich) entfallen, der Überschuss wird verworfen und
-// gezählt (verworfen darf nullptr sein).
+// gezählt (verworfen darf nullptr sein). Fix B2: *ueber (may be nullptr) counts only the edges dropped for the limit, so the caller can name them in
+// their own stderr line. KANTEN_MAX 64 -> 128: the worst case with one edge per port is 72 at 8 hosts with key (static_assert in edges.cpp).
 constexpr size_t KANTEN_DATEI_MAX = 64 * 1024;
-constexpr size_t KANTEN_MAX = 64;
-std::vector<Kante> entdoppeln_begrenzen(const std::vector<Kante>& kanten, size_t max, size_t* verworfen);
+constexpr size_t KANTEN_MAX = 128;
+std::vector<Kante> entdoppeln_begrenzen(const std::vector<Kante>& kanten, size_t max, size_t* verworfen, size_t* ueber = nullptr);
 
 // MINOR-2/6: Buchführung der Journal-Zeilen je Kante. "Verlust" wird einmal je Verlust gemeldet, ein Scheitern höchstens alle
 // 10 s; ist die Kante verbunden (auch von jemand anderem geheilt), beginnt beides von vorn.
@@ -68,9 +70,10 @@ class VerlustBuch {
   std::map<std::string, int64_t> fehl_;
 };
 
-// Plan 1.11 T5 (D7): the edge check of the effect hosts, the core's own source of host health. Bit h - 1 of the result is set when host h (1..4) is wired completely and the wiring holds right now:
+// Plan 1.11 T5 (D7): the edge check of the effect hosts, the core's own source of host health. Bit h - 1 of the result is set when host h (1..8) is wired completely and the wiring holds right now:
 // the edge list has at least one edge on each of the four ports arr_ins_<h>_L/R (send) and arr_insret_<h>_L/R (return) of this instance (kern_praefix = client name plus ":"), and every edge that
-// touches one of them has both its ports in JACK and is connected. A host client that vanished, a port that is gone, an edge that cannot be held and a half wired host all clear the bit; a host
+// touches one of them has both its ports in JACK and is connected. Strand 2 task 3.3: the key arr_inskey_<h>_L/R is optional (a plugin with two inputs has none); when the list has a key edge
+// of host h it must have one on both sides and each must hold the same way, or the host is not healthy (a lost key would silence a ducking compressor or close a keyed gate). A host client that vanished, a port that is gone, an edge that cannot be held and a half wired host all clear the bit; a host
 // without edges has none. Pure logic (ist answers the questions), run by main.cpp every 500 ms after the connect pass, so a vanished host is seen within one supervision period.
 uint32_t host_kanten_gesund(const std::vector<Kante>& soll, const std::string& kern_praefix, const KantenIst& ist);
 

@@ -48,6 +48,8 @@
 .p-mx-ziel.gesperrt { opacity: .3; cursor: not-allowed; }
 .p-mx-send { color: var(--dim); }
 .p-mx-send.an { color: inherit; background: #26303a; }
+.p-mx-send.auto { box-shadow: inset 0 0 0 1px var(--ueber, #ff8a1f); }
+.p-mx-send.auto::after { content: ' A'; font-size: 9px; color: var(--ueber, #ff8a1f); }
 .p-mx-sendfeld { width: 56px; font-size: 11px; }
 .p-mx-schl { text-align: left; }
 .p-mx-key { font-size: 10px; padding: 0 6px; height: 22px; border-radius: 4px; margin-right: 4px; }

@@ -16,9 +16,10 @@ FALL(angenommen_mit_quittung_1_am_jetzt) {
 FALL(unbekannt_nur_hand_bereich_stems) {
   Lauf l;
   PRUEFE(l.grund(l.teil("deck/9/fader", 8, 0, 0), Status::abgelehnt) == Grund::unbekannter_regler);
-  PRUEFE(l.grund(l.teil("xfader", 8, 4, 0.5f), Status::abgelehnt) == Grund::nur_hand);
-  PRUEFE(l.grund(l.teil("bus/1/fader", 8, 4, -6), Status::abgelehnt) == Grund::nur_hand);
-  PRUEFE(l.bei(l.teil("bus/1/fader", 8, 4, -6, "", 0, "", Quelle::andreas), Status::angenommen) == 0);   // die Hand darf
+  PRUEFE(l.grund(l.teil("cue/pegel", 8, 4, -6), Status::abgelehnt) == Grund::nur_hand);   // strand 11: the one hand-only level
+  PRUEFE(l.bei(l.teil("cue/pegel", 8, 4, -6, "", 0, "", Quelle::andreas), Status::angenommen) == 0);   // die Hand darf
+  PRUEFE(l.bei(l.teil("xfader", 8, 4, 0.5f), Status::angenommen) == 0);       // strand 11: cypher may write the crossfader
+  PRUEFE(l.bei(l.teil("bus/1/fader", 8, 4, -6), Status::angenommen) == 0);    // and the bus faders
   PRUEFE(l.grund(l.teil("deck/1/fader", 8, 4, 3.0f), Status::abgelehnt) == Grund::ausserhalb_bereich);
   PRUEFE(l.grund(l.teil("deck/1/kill/tief", 8, 4, 1), Status::abgelehnt) == Grund::ausserhalb_bereich);   // Schalter ohne Rampe
   PRUEFE(l.grund(l.teil("deck/1/kill/tief", 8, 0, 0.5f), Status::abgelehnt) == Grund::ausserhalb_bereich);

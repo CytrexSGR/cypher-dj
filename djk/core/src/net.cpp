@@ -546,20 +546,16 @@ void Netz::paket(const char* p, size_t n, int64_t jetzt_ns) {
       return;
     }
     einreihen(b);
-  } else if (a->pfad == v::k_live_tasten.pfad) {  // Task N2, §4.7: the stream that plays the keys of all midi_ein places; hand work like /k/lernen
+  } else if (a->pfad == v::k_live_tasten.pfad) {  // Task N2, §4.7: the stream that plays the keys of all midi_ein places; every source may (strand 11)
     namespace f = v::feld::k_live_tasten;
     Befehl b{};
     b.art = Befehl::TASTEN_ZIEL;
     b.id = m.werte[f::id].h;
     kopiere(b.quelle, m.werte[f::quelle].s, sizeof b.quelle);
     b.nr = m.werte[f::strom].i;
-    // Order of the refusals: unknown source or a stream that is none of 0, 2, 3, 5, 6, 7, 9, 10 (ausserhalb_bereich), then cypher (nur_hand)
+    // The one refusal: unknown source or a stream that is none of 0, 2, 3, 5, 6, 7, 9, 10 (ausserhalb_bereich)
     if (!quelle_bekannt(b.quelle) || !(b.nr == 0 || (b.nr >= 2 && b.nr <= 10 && b.nr != 4 && b.nr != 8))) {
       quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "ausserhalb_bereich");
-      return;
-    }
-    if (std::strcmp(b.quelle, "cypher") == 0) {
-      quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "nur_hand");
       return;
     }
     einreihen(b);

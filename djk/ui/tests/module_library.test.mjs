@@ -11,7 +11,7 @@ import { listeModule, modulId, speichereModul } from '../project/module_storage.
 import os from 'node:os';
 import { baueModul, baueNeuePfade, modulAmPlatz } from '../project/live.ts';
 import { fuehreListeAus } from '../project/commands.ts';
-import { neuesProjekt } from '../project/model.ts';
+import { neuesProjekt, MAX_SPUREN } from '../project/model.ts';
 import { liesModul, modulOrdner, setzeModulEin } from '../project/module_storage.ts';
 import { uebersetze } from '../project/playback.ts';
 import { modulZeilen, bindeModule } from '../public/module_library.js';
@@ -123,7 +123,7 @@ test('search by origin: the source title finds all modules of that track; set, d
 test('placing into a project with too few free tracks or groups is refused routing_grenze and changes nothing', async (t) => {
   const z = await mitModul(t);
   await z.s.neu('Full tracks', 'andreas');
-  await z.aendern(Array.from({ length: 32 }, () => ({ befehl: 'spur_neu', art: 'audio' })));
+  await z.aendern(Array.from({ length: MAX_SPUREN }, () => ({ befehl: 'spur_neu', art: 'audio' })));
   let rev = z.projekt().rev;
   assert.deepEqual(await fehl(async () => { const a = await z.bib.einsetzen({ modul_id: z.id }, 'andreas'); throw Object.assign(new Error(), { code: a.code, ...a.j }); }),
     { code: 409, fehler: 'routing_grenze' });
@@ -137,8 +137,8 @@ test('placing into a project with too few free tracks or groups is refused routi
   assert.equal(z.projekt().spuren.length, 0, 'nothing placed');
   const n = z.projekt().spuren.length;
   await z.s.neu('One short', 'andreas');
-  await z.aendern(Array.from({ length: 31 }, () => ({ befehl: 'spur_neu', art: 'audio' })));
-  assert.equal((await z.bib.einsetzen({ modul_id: z.id }, 'andreas')).code, 200, '31 tracks used: the one track still fits');
+  await z.aendern(Array.from({ length: MAX_SPUREN - 1 }, () => ({ befehl: 'spur_neu', art: 'audio' })));
+  assert.equal((await z.bib.einsetzen({ modul_id: z.id }, 'andreas')).code, 200, 'one track free: the one track still fits');
   assert.equal(n, 0);
 });
 

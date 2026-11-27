@@ -117,7 +117,9 @@ bool tap(Welt& w, int& b, cdj::ArrAbgriff& a) {
 
 int main() {
   Pool pool(3);
-  Welt a, ref;
+  auto wa = std::make_unique<Welt>(), wref = std::make_unique<Welt>();   // on the heap: a Welt is about 4.5 MB since 128 tracks (8 MB stack)
+  Welt& a = *wa;
+  Welt& ref = *wref;
   a.t.arr.setze_hall_pool(&pool.p);
   a.t.arr.setze_spur_pool(1);
   a.t.arr.setze_spur_test(kein_tor());

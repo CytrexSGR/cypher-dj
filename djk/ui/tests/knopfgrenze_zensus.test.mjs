@@ -19,20 +19,15 @@ const MUSTER = [/3\[0-2\]/, /nr > 32\b/, /<= 32\b/, /[^<>=-]> 32\b/, /< 33\b/, /
 // { datei: path suffix, fragment: literal text removed from the line, grund }
 const ERLAUBT = [
   // there are 32 tracks (the knob limit does not move them)
-  { datei: 'ui/hand_operation.ts', fragment: 'spur\\/([1-9]|[12][0-9]|3[0-2])', grund: 'track mixer paths spur/1..32/*: 32 tracks' },
-  { datei: 'ui/areas/proj/mapping.ts', fragment: 'spur\\/([1-9]|[12][0-9]|3[0-2])\\/eq', grund: 'EQ_PFAD counts tracks: the EQ row of a loop deck track' },
-  { datei: 'ui/areas/proj/mapping.ts', fragment: '(spur)\\/([1-9]|[12][0-9]|3[0-2])', grund: 'SEND_PFAD counts tracks: 32 tracks' },
-  { datei: 'ui/areas/proj/mapping.ts', fragment: 'spur\\/([1-9]|[12][0-9]|3[0-2])\\/fx', grund: 'FX_PFAD counts tracks: the FX 1 2 3 key of a loop deck track' },
-  { datei: 'ui/public/curves.js', fragment: 'spur\\/(?:[1-9]|[12][0-9]|3[0-2])', grund: 'track patterns spur/1..32 (curves.js:67, :72): 32 tracks' },
-  { datei: 'ui/areas/proj/core_path.ts', fragment: 'track number 1..32', grund: 'comment: lane override per track' },
-  { datei: 'ui/areas/proj/session_auto.ts', fragment: 'spur(1..32 = track number nr)', grund: 'comment: /e/auto per track' },
-  { datei: 'conductor/src/controls_info.ts', fragment: 'n <= 32', grund: 'one row per track slot (spur/1..32/*), not knobs' },
-  { datei: 'hand/hand.ts', fragment: 'spur/1..32', grund: 'tool text: track paths' },
+  { datei: 'ui/hand_operation.ts', fragment: 'spur\\/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])', grund: 'track mixer paths spur/1..128/*: 128 tracks' },
+  { datei: 'ui/areas/proj/mapping.ts', fragment: 'spur\\/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])\\/eq', grund: 'EQ_PFAD counts tracks: the EQ row of a loop deck track' },
+  { datei: 'ui/areas/proj/mapping.ts', fragment: '(spur)\\/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])', grund: 'SEND_PFAD counts tracks: 128 tracks' },
+  { datei: 'ui/areas/proj/mapping.ts', fragment: 'spur\\/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])\\/fx', grund: 'FX_PFAD counts tracks: the FX 1 2 3 key of a loop deck track' },
+  { datei: 'ui/public/curves.js', fragment: 'spur\\/(?:[1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])', grund: 'track patterns spur/1..32 (curves.js): 128 tracks' },
   { datei: 'ui/check/acceptance_r3.mjs', fragment: 'i <= 32', grund: 'probe: one command per track' },
   { datei: 'ui/check/acceptance_r8.mjs', fragment: 'i <= 32', grund: 'probe: one command per track' },
   { datei: 'ui/check/acceptance_e3.mjs', fragment: '<1..32,', grund: 'probe usage text: number of tracks' },
   // 32 sampler slots (a bank holds 1..32 slots, INS / platz address one); the slot count is not the knob count
-  { datei: 'ui/areas/controller/pult_production.ts', fragment: 'for n = 1..32', grund: 'comment: the kern has spur/<n>/* rows per track' },
   { datei: 'ui/project/model.ts', fragment: 'platz (1..32,', grund: 'comment: sampler slot number' },
   { datei: 'ui/project/tracker_text.ts', fragment: '01..32', grund: 'sampler slot digits of the INS column' },
   { datei: 'ui/project/tracker_text.ts', fragment: 'Number(i) <= 32', grund: 'INS column: slot number bound' },
@@ -48,6 +43,8 @@ const ERLAUBT = [
   { datei: '', fragment: '[a-z0-9_-] 1..32', grund: 'kit name length (tool text)' },
   { datei: 'hand/hand.ts', fragment: '_ and -, 1..32)', grund: 'kit name length (tool text of proj_kits)' },
   { datei: '', fragment: 'text 1..32', grund: 'group name length (tool text)' },
+  // arc fade lengths are bar counts (strand 11 slice 7: rein/raus 1..32 bars), not knobs
+  { datei: 'hand/hand.ts', fragment: 'over n bars (1..32)', grund: 'tool text of bogen: fade-in length in bars' },
   // knob 32 as one row of a table that goes on to knob 64 (the tables are pinned to 64 by their own tests)
   { datei: 'ui/public/production/lanes.js', fragment: "'geraet.k32'", grund: 'row of the knob table k1..k64' },
   { datei: 'ui/public/production/envelopes.js', fragment: "'geraet.k32'", grund: 'row of the knob table k1..k64' },

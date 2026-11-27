@@ -11,7 +11,7 @@
 import { beatsProTakt } from '../production/timeline.js';
 import { ZIEH_TYP } from '../production/drag.js';
 import { abgleich as rechneAbgleich, abweichungText } from '../sound_match.js';
-import { ANALYSE_TEXT, HZ_LINIEN, hzZuX, xZuHz, dbZuY, linienText, notenName, bandBei, spalteBei, spalteDb, quellenListe, zahlText, taktLinien, breiteText, zeitbildBytes, zeitbildRgba, bildAnteil, minSekText, ballistik, maxHalten, neuesRollbild, rollbildSchiebe, vergleichOptionen, liveHinweise, haltHinweise } from './analysis_zeichnen.js';
+import { ANALYSE_TEXT, HZ_LINIEN, hzZuX, xZuHz, dbZuY, linienText, notenName, bandBei, spalteBei, spalteDb, quellenListe, zahlText, taktLinien, breiteText, zeitbildBytes, vektorPunkte, zeichneVektor, zeitbildRgba, bildAnteil, minSekText, ballistik, maxHalten, neuesRollbild, rollbildSchiebe, vergleichOptionen, liveHinweise, haltHinweise } from './analysis_zeichnen.js';
 
 const ENTPRELL_MS = 800;
 const PEGEL_MIN_DB = -60;   // a stereo band shows its correlation only above this level
@@ -296,6 +296,7 @@ export function bindeAnalyse(ctx) {
       if (istLive()) { liveNeu(); starteLive(); holeLiveRef(); setzeStand(TEXT.misst); }
       else { stoppeLive(); messe(); }
     } else messe();
+    ui.vektor.hidden = !istLive();
     aktualisiereKopf();
   }
 
@@ -362,11 +363,18 @@ export function bindeAnalyse(ctx) {
     tabelle([TEXT.live, ...(ref ? [ref.name] : [])], LIVE_ZAHLEN.map(([name, k]) => [name, wert[k], ...(ref ? [refWert[k] ?? null] : [])]));
     zeigeStereo(j.stereo, ohne);
     zeigeHinweise(live.hinweise);
+    zeigeVektor(j);
+  }
+  function zeigeVektor(j) {
+    ui.vektor.hidden = !istLive();
+    if (!istLive()) return;
+    const m = messeLeinwand('vektor');
+    if (m) zeichneVektor(m.g, vektorPunkte(j.vektor), m.W, m.H, FARBE.quelle);
   }
 
   // ---- canvas -----------------------------------------------------------------------------------------------------------------------------------
   // The size of a canvas is remembered (reset by a ResizeObserver) and read once per drawing; without an observer it is read on every drawing.
-  const groesse = { spektrum: null, zeitbild: null };
+  const groesse = { spektrum: null, zeitbild: null, vektor: null };
   function messeLeinwand(name) {
     const c = ui[name];
     if (!groesse[name]) {
@@ -519,13 +527,15 @@ export function bindeAnalyse(ctx) {
     balken.append(korrelationWert, korrelationMin, korrelationText);
     const breite = el('div', 'w-analyse-breite', 'analyse-breite');
     const baender = [0, 1, 2, 3].map((i) => el('div', 'w-analyse-band', `analyse-band-${i}`));
-    stereo.append(balken, breite, ...baender);
+    const vektor = el('canvas', 'w-analyse-vektor', 'analyse-vektor'); vektor.hidden = true;
+    vektor.title = 'Vectorscope of the live output: up = mid (mono), sideways = side; a vertical line is mono, a circle is wide, a horizontal line cancels in mono';
+    stereo.append(balken, breite, ...baender, vektor);
     const zahlen = el('table', 'w-analyse-zahlen', 'analyse-zahlen'), hinweise = el('ul', 'w-analyse-hinweise', 'analyse-hinweise');
     const abschnitt = (t, ...k) => { const s = el('section', 'w-analyse-abschnitt'); s.append(el('h4', undefined, undefined, t), ...k); return s; };
     const abgleichInhalt = el('div', 'w-analyse-ref');
     const abgleich = abschnitt(TEXT.abgleich, abgleichInhalt); abgleich.setAttribute('data-w', 'analyse-abgleich'); abgleich.hidden = true;
     koerper.append(kopf, reihe, abschnitt(TEXT.spektrum, spektrum, lesung), abgleich, abschnitt(TEXT.zeitbild, zeitbild), abschnitt(TEXT.stereo, stereo), abschnitt(TEXT.zahlen, zahlen), abschnitt(TEXT.hinweise, hinweise));
-    ui = { neu, merkenKnopf, quelle, vergleich, stand, spektrum, lesung, zeitbild, korrelationWert, korrelationMin, korrelationText, breite, baender, zahlen, hinweise,
+    ui = { vektor, neu, merkenKnopf, quelle, vergleich, stand, spektrum, lesung, zeitbild, korrelationWert, korrelationMin, korrelationText, breite, baender, zahlen, hinweise,
       refWeg, abgleichAn, abgleichEtikett, reihe, name, rolle, abgleich, abgleichInhalt };
     baueRollen();
     quelle.addEventListener('change', () => { const vorher = istLive(); wahlQuelle = quelle.value; pruefeWahl(); quelleGeaendert(vorher); });
@@ -575,7 +585,7 @@ export function bindeAnalyse(ctx) {
     spektrum.addEventListener('pointermove', lies);
     spektrum.addEventListener('pointerleave', () => { zeichnung.hover = null; ui.lesung.textContent = TEXT.hoverLeer; });
     if (typeof ResizeObserver === 'function') {
-      beobachter = new ResizeObserver(() => { groesse.spektrum = null; groesse.zeitbild = null; zeichnung.spektrum = ''; zeichnung.zeitbild = ''; });
+      beobachter = new ResizeObserver(() => { groesse.spektrum = null; groesse.zeitbild = null; groesse.vektor = null; zeichnung.spektrum = ''; zeichnung.zeitbild = ''; });
       beobachter.observe(spektrum); beobachter.observe(zeitbild);
     }
     pruefeWahl();

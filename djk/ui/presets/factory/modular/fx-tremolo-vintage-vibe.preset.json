@@ -1,0 +1,41 @@
+{
+ "schema": 1,
+ "name": "Tremolo / vintage vibe",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "fx-tremolo",
+ "werte": {
+  "knob1": 0.0,
+  "knob2": 0.8843,
+  "knob3": 0.5,
+  "knob4": 0.0,
+  "knob5": 0.0,
+  "knob6": 1.0
+ },
+ "beschreibung": {
+  "art": "modulation",
+  "unterart": "tremolo",
+  "charakter": [
+   "warm",
+   "soft",
+   "smooth"
+  ],
+  "genre": [
+   "disco",
+   "downtempo",
+   "garage"
+  ],
+  "einsatz": [
+   "intro",
+   "breakdown"
+  ],
+  "energie": 2,
+  "text": "Amp-style tremolo: Free rate 5 Hz, depth 50 %, shape sine (0 dB), Tremolo mode, mix 100 %; gentle round pulse on keys and guitar-like sounds."
+ },
+ "tags": [
+  "fx-tremolo"
+ ],
+ "notiz": "Set by the knob ranges of the graph, not yet heard (2026-11-26).",
+ "angelegt": "2026-11-26T00:00:00.000Z",
+ "geaendert": "2026-11-26T00:00:00.000Z"
+}

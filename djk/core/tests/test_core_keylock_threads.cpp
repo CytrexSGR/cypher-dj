@@ -360,9 +360,7 @@ void rampe_befehle(Lauf& k, int master, int cue) {
   std::snprintf(p, sizeof p, "%s/fader", strip(master).c_str());
   k.teil(p, 0.0f, 6.0);  // nach dem Laden (das setzt Fader −200 und PFL 0)
   std::snprintf(p, sizeof p, "%s/pfl", strip(cue).c_str());
-  // PFL ist nur_hand (signalbox/src/controls.cpp:83, nur_hand = true) und das Stellwerk lehnt jede andere Quelle ab
-  // (signalbox/src/sort_in.cpp:38 `if (d.nur_hand && b.quelle != Quelle::andreas) return ablehnen(Grund::nur_hand)`);
-  // einen Hörschein-Weg wie für Fader und Trim (I3a) gibt es dafür nicht. Darum hier, und nur hier, Quelle andreas.
+  // PFL is free for every source since strand 11 (it was nur_hand before); the test keeps source andreas as it was written.
   k.teil(p, 1.0f, 6.0, "andreas");
   for (int d = 1; d <= 4; ++d) k.start(d, START_BEAT, 0.0);
   k.rampe(RAMPE_AB, 132.0, RAMPE_BEATS);

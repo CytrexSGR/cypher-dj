@@ -589,6 +589,9 @@ def main():
         except ValueError as e:
             ap.error(str(e))
         sys.exit(s8_led.probe_lauf(log, bericht, offsets, a.wert, a.sekunden))
+    if not alsa_seq.echte_geraete_erlaubt():  # a test instance never owns the desk (the unit is production only: page 47300, kern cypherdj-kern)
+        log("CYPHERDJ_INSTANZ is a test instance: the desk bridge stays with the production instance (opt in with CYPHERDJ_ECHTE_GERAETE=1)")
+        sys.exit(3)
     belegung.schreibe(belegung.DATEI)  # the register lists these controls (they are in no mapping file)
     b = Bruecke(monitor=a.monitor)
     log("cypherdj-pult up, ALSA client", b.seq.id)

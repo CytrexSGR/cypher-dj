@@ -13,6 +13,8 @@ import { grundCode } from '../areas/proj/mapping.ts';
 import { tmpOrdner } from './support/project.mjs';
 import { basisProjekt } from './support/inserts_scenario.mjs';
 import { szenarioMitInserts } from './support/host_scenario.mjs';
+import { HostVerwaltung, hostSpec, pluginIdVon } from '../plugins/hostverwaltung.ts';
+import { hostAttrappe, ZEITEN, warteBis, schlaf } from './support/host_mock.mjs';
 
 const W = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PLUGIN = { format: 'vst3', pfad: '/opt/plugins/Fake EQ.vst3', uid: 'ABCDEF0123456789ABCDEF0123456789' };
@@ -57,18 +59,19 @@ test('insert_setzen host: argument checks name the field', () => {
   assert.equal(stufenVon(lv2.projekt)[0].insert.plugin.name, 'comp_stereo');
 });
 
-test('the fifth host insert is host_grenze and nothing is half applied; a freed slot is used again', () => {
+test('the ninth host insert is host_grenze and nothing is half applied; a freed slot is used again', () => {
   let p = basisProjekt();
-  p = fuehreListeAus(p, [setzeHost('s1'), setzeHost('s2'), setzeHost('s3'), setzeHost('master')]).projekt;
-  assert.equal(stufenVon(p).length, 4);
+  p = fuehreListeAus(p, [setzeHost('s1'), setzeHost('s2'), setzeHost('s3'), setzeHost('master'),
+    setzeHost('s1', { pos: 1 }), setzeHost('s2', { pos: 1 }), setzeHost('s3', { pos: 1 }), setzeHost('master', { pos: 1 })]).projekt;   // strand 1 slice 5: MAX_HOST = 8
+  assert.equal(stufenVon(p).length, 8);
   const vor = kanonisch(p);
-  lehntAb(p, setzeHost('s1', { pos: 1 }), 'host_grenze');
+  lehntAb(p, setzeHost('s1', { pos: 2 }), 'host_grenze');
   assert.equal(kanonisch(p), vor, 'the input project is untouched');
-  assert.throws(() => fuehreListeAus(p, [{ befehl: 'insert_setzen', strang_id: 's1', pos: 1, art: 'komp' }, setzeHost('s1', { pos: 1 })]),
+  assert.throws(() => fuehreListeAus(p, [{ befehl: 'insert_setzen', strang_id: 's1', pos: 2, art: 'komp' }, setzeHost('s1', { pos: 2 })]),
     (e) => e.grund === 'host_grenze' && e.index === 1);
   const id = stufenVon(p)[1].insert.id;
-  const frei = fuehreListeAus(p, [{ befehl: 'insert_entfernen', insert_id: id }, setzeHost('s3', { pos: 1 })]).projekt;
-  assert.deepEqual(stufenVon(frei).map((y) => y.insert.slot).sort(), [1, 2, 3, 4]);
+  const frei = fuehreListeAus(p, [{ befehl: 'insert_entfernen', insert_id: id }, setzeHost('s3', { pos: 2 })]).projekt;
+  assert.deepEqual(stufenVon(frei).map((y) => y.insert.slot).sort((a, b) => a - b), [1, 2, 3, 4, 5, 6, 7, 8]);
   assert.ok(GRUND_TEXT.host_grenze && grundCode('host_grenze') === 409);
 });
 
@@ -168,4 +171,106 @@ test('reasons: every new reason has an English text and a code', () => {
     assert.ok(typeof GRUND_TEXT[g] === 'string' && GRUND_TEXT[g].length > 8, g);
   }
   assert.equal(grundCode('param_unbekannt'), 404);
+});
+
+// strand 2 task 3.4: a sidechain key on a host stage. Allowed when the index entry of the plugin has at least 4 audio inputs (inputs 3 and 4 are the
+// key pair); the playback carries `key` on the host entry like on komp; a change of "has a key" restarts the host in key mode (djk-insert --schluessel).
+const KEY_PLUGIN = { format: 'lv2', pfad: 'http://lsp-plug.in/plugins/lv2/sc_compressor_stereo', uid: '' };
+const STEREO_PLUGIN = { format: 'lv2', pfad: 'http://lsp-plug.in/plugins/lv2/compressor_stereo', uid: '' };
+const indexEintrag = (pl, audio_ein) => ({ id: pluginIdVon(pl), ...pl, name: pl.pfad.split('/').pop(), art: 'effekt', status: 'ok', audio_ein, audio_aus: 2 });
+const INDEX = new Map([indexEintrag(KEY_PLUGIN, 4), indexEintrag(STEREO_PLUGIN, 2)].map((e) => [e.id, e]));
+const MIT_INDEX = { pluginIndex: (id) => INDEX.get(id) ?? null };
+const DECK2 = { quelle: 'deck', nr: 2 };
+const hostMit = (pl, extra = {}) => setzeHost('s1', { plugin: undefined, plugin_id: pluginIdVon(pl), ...extra });
+const keyAuf = (id, wert) => ({ befehl: 'insert_param_setzen', insert_id: id, param: 'key', wert });
+
+test('key on a host stage: accepted with 4 inputs (insert_setzen and insert_param_setzen), refused kein_schluessel with 2, removed with null', () => {
+  const p = basisProjekt();
+  const a = fuehreListeAus(p, [hostMit(KEY_PLUGIN, { key: DECK2 })], MIT_INDEX).projekt;
+  assert.deepEqual(stufenVon(a)[0].insert.key, { quelle: 'deck', nr: 2, punkt: 'post' });
+  assert.equal(pruefeProjekt(a).fehler, undefined);
+  const b0 = fuehreListeAus(p, [hostMit(KEY_PLUGIN)], MIT_INDEX).projekt;
+  const id = stufenVon(b0)[0].insert.id;
+  const b = fuehreListeAus(b0, [keyAuf(id, { quelle: 'spur', nr: 2, punkt: 'post' })], MIT_INDEX);
+  assert.deepEqual(stufenVon(b.projekt)[0].insert.key, { quelle: 'spur', nr: 2, punkt: 'post' });
+  assert.equal(b.betrifft_wiedergabe, true, 'the key is playback structure');
+  assert.equal(pruefeProjekt(b.projekt).fehler, undefined);
+  const weg = fuehreListeAus(b.projekt, [keyAuf(id, null)], MIT_INDEX).projekt;
+  assert.equal(stufenVon(weg)[0].insert.key, undefined);
+  assert.throws(() => fuehreListeAus(b0, [keyAuf(id, { quelle: 'spur', nr: 2, punkt: 'pre' })], MIT_INDEX),
+    (e) => e.grund === 'argument_ungueltig', 'track pre is the komp row sc: a host stage has no row');
+  const s0 = fuehreListeAus(p, [hostMit(STEREO_PLUGIN)], MIT_INDEX).projekt;
+  const sid = stufenVon(s0)[0].insert.id;
+  assert.throws(() => fuehreListeAus(s0, [keyAuf(sid, DECK2)], MIT_INDEX), (e) => e instanceof BefehlFehler && e.grund === 'kein_schluessel');
+  assert.throws(() => fuehreListeAus(p, [hostMit(STEREO_PLUGIN, { key: DECK2 })], MIT_INDEX), (e) => e.grund === 'kein_schluessel');
+  assert.throws(() => fuehreListeAus(b0, [keyAuf(id, DECK2)]), (e) => e.grund === 'kein_schluessel', 'no index: the inputs are unknown');
+  lehntAb(b0, { befehl: 'insert_param_setzen', insert_id: id, param: 'sc', wert: 2 }, 'argument_unbekannt');
+  const m = JSON.parse(JSON.stringify(a)); m.spuren[0].inserts[0].sc = 2;
+  assert.ok(pruefeProjekt(m).fehler, 'sc stays komp only');
+});
+
+test('translator: the host entry carries key {q, nr, punkt} like komp', () => {
+  const p = fuehreListeAus(basisProjekt(), [hostMit(KEY_PLUGIN, { key: DECK2 })], MIT_INDEX).projekt;
+  const aus = uebersetze(p, { nr: 1, audioOrdner: '/x/audio', frames: () => 96000, host: () => ({ an: true, latenz: 600 }) });
+  assert.deepEqual(aus.spuren.find((s) => s.nr === 1).chain[0], { art: 'host', slot: 1, an: true, latenz: 600, key: { q: 'deck', nr: 2, punkt: 'post' } });
+});
+
+test('host manager: a key starts the host with --schluessel and links after lade; toggling the key restarts the host', async (t) => {
+  const A = hostAttrappe({ ordner: tmpOrdner(t, 'djk-hostkey-') });
+  const linkAntwort = [];   // queued exit codes of `link` (5 = no ports in the status yet); empty = 0
+  let rufe = [];            // every djk-insert call but status, with its arguments
+  const verw = new HostVerwaltung(A.abhaengig({ insert: async (args) => {
+    if (args[0] !== 'status') rufe.push({ args, geladen: A.hosts.get(Number(args[1]))?.bereit === 'geladen' });
+    if (args[0] !== 'link') return A.insert(args);
+    const code = linkAntwort.shift() ?? 0;
+    return { code, aus: '', fehler: code ? 'no ports in the status yet' : '' };
+  } }), ZEITEN);
+  A.verw = verw;
+  t.after(() => verw.halt());
+  const ohne = fuehreListeAus(basisProjekt(), [hostMit(KEY_PLUGIN)], MIT_INDEX).projekt;
+  const id = stufenVon(ohne)[0].insert.id;
+  const mit = fuehreListeAus(ohne, [keyAuf(id, DECK2)], MIT_INDEX).projekt;
+  const bereit = () => verw.lage()[0]?.status === 'bereit';
+  const befehle = () => rufe.map((z) => z.args[0]);
+  const start = () => rufe.find((z) => z.args[0] === 'start').args;
+  linkAntwort.push(5);   // the first link finds no ports yet: asked again
+  verw.abgleich(mit);
+  assert.ok(await warteBis(() => bereit()), JSON.stringify(verw.lage()));
+  assert.deepEqual(befehle(), ['start', 'link', 'link']);
+  assert.ok(rufe.filter((z) => z.args[0] === 'link').every((z) => z.geladen), 'link runs after lade');
+  assert.deepEqual(start(), ['start', '1', hostSpec(KEY_PLUGIN), '--schluessel']);
+  rufe = [];
+  verw.abgleich(ohne);   // the key goes: stop, then start without the flag, no link
+  assert.ok(await warteBis(() => befehle().includes('start') && bereit()), JSON.stringify(verw.lage()));
+  assert.deepEqual(befehle(), ['stop', 'start']);
+  assert.deepEqual(start(), ['start', '1', hostSpec(KEY_PLUGIN)]);
+  rufe = [];
+  verw.abgleich(mit);   // and back
+  assert.ok(await warteBis(() => befehle().includes('link') && bereit()), JSON.stringify(verw.lage()));
+  assert.deepEqual(befehle(), ['stop', 'start', 'link']);
+  rufe = [];
+  A.abstuerzen(1);   // the unit restarts empty: the sequence loads again and links again
+  assert.ok(await warteBis(() => befehle().includes('link') && bereit()), JSON.stringify(verw.lage()));
+  assert.deepEqual(befehle(), ['link']);
+  rufe = [];
+  verw.abgleich(mit);   // the same key: nothing restarts
+  await schlaf(60);
+  assert.deepEqual(befehle(), []);
+});
+
+test('host manager: lade refused kein_schluessel is a plugin reason (fehlt), no link', async (t) => {
+  const A = hostAttrappe({ ordner: tmpOrdner(t, 'djk-hostkey-') });
+  const verw = new HostVerwaltung(A.abhaengig({ insert: async (args) => (args[0] === 'link' ? { code: 9, aus: '', fehler: '' } : A.insert(args)),
+    sock: async (pfad, b, ms) => (b.befehl === 'lade' ? { ok: false, fehler: 'kein_schluessel' } : A.sock(pfad, b, ms)) }), ZEITEN);
+  A.verw = verw;
+  t.after(() => verw.halt());
+  const p = fuehreListeAus(basisProjekt(), [hostMit(KEY_PLUGIN, { key: DECK2 })], MIT_INDEX).projekt;
+  verw.abgleich(p);
+  assert.ok(await warteBis(() => verw.lage()[0]?.status === 'fehlt'), JSON.stringify(verw.lage()));
+  assert.equal(verw.lage()[0].grund, 'kein_schluessel');
+});
+
+test('reasons: kein_schluessel has an English text and is 409', () => {
+  assert.ok(typeof GRUND_TEXT.kein_schluessel === 'string' && GRUND_TEXT.kein_schluessel.length > 8);
+  assert.equal(grundCode('kein_schluessel'), 409);
 });

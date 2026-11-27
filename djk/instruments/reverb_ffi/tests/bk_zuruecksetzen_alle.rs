@@ -50,6 +50,7 @@ fn wurzel() -> std::path::PathBuf {
     std::fs::write(w.join("feder-ir.f32"), baukasten_dsp::proben::bytes(&baukasten_dsp::proben::feder_ir(48_000.0))).unwrap();
     // the amiga device (paula) reads its four 8-bit slot files
     baukasten_dsp::proben::schreibe_amiga_werk(&w);
+    baukasten_dsp::proben::schreibe_space_werk(&w);   // fx-space and its three rooms read their impulse response
     w
 }
 

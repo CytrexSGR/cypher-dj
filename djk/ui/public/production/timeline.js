@@ -77,12 +77,17 @@ export function linealText(beat, haupt, beatsProTakt = 4) {
 }
 
 // Linien im sichtbaren Bereich [0, breite): { beat, x, haupt, takt, text }
-export function linien(a, breite, beatsProTakt = 4) {
-  const { haupt, neben } = linealStufen(a.pxProBeat, beatsProTakt);
+// raster (optional, the piano roll): the minor lines follow this step in beats, also finer than a sixteenth and triplets, when they are at least 6 px apart;
+// otherwise (no raster, 0, or too fine) the lines are the default ones. Beats are rounded to 1e-9 then (1/3 steps).
+export const LINIEN_MIN_PX = 6;
+export function linien(a, breite, beatsProTakt = 4, raster = null) {
+  const stufen = linealStufen(a.pxProBeat, beatsProTakt), haupt = stufen.haupt;
+  const eigen = raster > 0 && raster * a.pxProBeat >= LINIEN_MIN_PX - 1e-9;
+  const neben = eigen ? Math.min(raster, haupt) : stufen.neben;
   const ende = xZuBeat(a, breite);
   const aus = [];
   for (let k = Math.max(0, Math.ceil(a.beat0 / neben - 1e-9)); k * neben <= ende; k++) {   // max: nie -0 (Test 5)
-    const beat = k * neben, h = vielfaches(beat, haupt);
+    const beat = eigen ? Math.round(k * neben * 1e9) / 1e9 : k * neben, h = vielfaches(beat, haupt);
     aus.push({ beat, x: beatZuX(a, beat), haupt: h, takt: vielfaches(beat, beatsProTakt), text: h ? linealText(beat, haupt, beatsProTakt) : null });
   }
   return aus;

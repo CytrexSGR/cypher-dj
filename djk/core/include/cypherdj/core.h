@@ -93,20 +93,20 @@ struct Befehl {
     REC_SPUR = 45, REC_START = 46, REC_STOPP = 47,  // 1.8 (§4.12): REC_SPUR nr = spur, an = scharf, deck = eingang, form = modus (0 stereo, 1 links, 2 rechts, 3 summe), politik = monitor (0 aus, 1 auto, 2 ein), zeiger = RecSpur*; REC_START nr = kennung, fassung = nachlauf_samples, versatz_f = frist_samples (0: Vorgabe), politik = vorzaehler_takte (0..4)
     KANAL_GRAPH = 48,  // Baukasten S3c (§4.10 /k/kanal/graph): pfad = kanal (deck/1..4), zeiger = CypherBk* oder null (entfernen)
     LERNEN = 49,       // S19 (§4.7 /k/lernen): an 1 arm / 0 disarm the MIDI learn capture, id is reported back in GELERNT
-    ARR_AUTO = 50,     // 1.12 S3 (§4.11 /k/arr/auto): nr = spur (1..32, 0 = all), politik = field (0 fader, 1 pan, 2 mute, 3 solo), an (1 lane plays, 0 the hand overrides)
+    ARR_AUTO = 50,     // 1.12 S3 (§4.11 /k/arr/auto): nr = spur (1..128, 0 = all), politik = field (0 fader, 1 pan, 2 mute, 3 solo), an (1 lane plays, 0 the hand overrides)
     HAND_FREI = 52,    // §4.3 /k/hand/frei: liste = pfade (Komma-Liste, Präfix auf /, *); only andreas; releases the human holder
-    ARR_ARM = 51,      // 1.12 S3 (§4.11 /k/arr/arm): nr = spur (1..32, 0 = all, only with an 0), an (1 arm, 0 disarm), politik = modus (0 touch, 1 latch, 2 write)
+    ARR_ARM = 51,      // 1.12 S3 (§4.11 /k/arr/arm): nr = spur (1..128, 0 = all, only with an 0), an (1 arm, 0 disarm), politik = modus (0 touch, 1 latch, 2 write)
     ARR_ABGRIFF = 53,  // 1.10 slice 7 (§4.11 /k/arr/abgriff): zeiger = ArrAbgriff* (job with buffer, allocated in the load thread), nr = the strip number
     ARR_INS_HOST = 54, // plan 1.11 T5 (§4.11 /k/arr/ins_host): nr = host h (1..4), an = the server's health flag (0/1); applied at once, answered by event INS_HOST
     ARR_INS_MESS = 55, // plan 1.11 T5 (§4.11 /k/arr/ins_mess): nr = host h (1..4); starts the round-trip measurement, answered by event INS_MESS
     LED = 57,          // slice 35 B3 (§4.7 /k/led): pfad = led name, an = state 0 to 3; stored for hand_led (not derived by the kern)
     ARR_EXPORT_LAUF = 56,  // plan 1.11 T12 (§4.11 /k/arr/export_lauf): zeiger = ArrExportLauf* (job with its ring, owned by a writer thread of the net layer); von/bis in the job; no event comes back, the job reports through its own phase
     TASTEN_ZIEL = 59,      // Task N2 (§4.7 /k/live/tasten): nr = the stream (0 none, 2, 3, 5, 6, 7, 9, 10) that plays the keys of all midi_ein places; plain integers, applied at once in the cycle (Erzeuger::tasten_ziel)
-    ARR_STIFT = 60,        // kraken patch field (§4.11 /k/arr/stift): nr = spur (1..32), form = satz (0 A, 1 B), politik = zeile (0..15), fassung = spalte (0..15), wert = pin value (-1..1); sets one pin of the matrix of a bk track through Arrangement::live_stift (callback thread, stamped with the snapshot generation), no pointer, no allocation
+    ARR_STIFT = 60,        // kraken patch field (§4.11 /k/arr/stift): nr = spur (1..128), form = satz (0 A, 1 B), politik = zeile (0..15), fassung = spalte (0..15), wert = pin value (-1..1); sets one pin of the matrix of a bk track through Arrangement::live_stift (callback thread, stamped with the snapshot generation), no pointer, no allocation
     ARR_ZELLE_START = 61,  // loop deck K6 (§4.11 /k/arr/zelle_start): pfad = track id text (hashed with arr_id in the kern), nr = zelle (1..8), ab_beat = core beat of the effect, wert_beats = versatz_beats (position inside the cell at ab_beat), id, quelle; Arrangement::launch_start (callback thread), plain values, no pointer, no allocation
     ARR_ZELLE_STOPP = 62,  // loop deck K6 (§4.11 /k/arr/zelle_stopp): pfad = track id text, ab_beat = core beat at which the track falls silent, id, quelle; Arrangement::launch_stopp
     CONTAINER_QUELLE = 63, // container core K1 (the former place-channel command, value kept): the input selection of a container (/k/container/quelle); K8 fills it, nothing handles it before
-    ARR_NOTE = 58,         // sampler plan A1 task 7 (§4.11 /k/arr/note): nr = spur (1..32), politik = ton (0..127), fassung = vel (0..127, 0 = off); plays one note on a project track through Arrangement::live_note (callback thread, stamp = cycle start), no pointer, no allocation
+    ARR_NOTE = 58,         // sampler plan A1 task 7 (§4.11 /k/arr/note): nr = spur (1..128), politik = ton (0..127), fassung = vel (0..127, 0 = off); plays one note on a project track through Arrangement::live_note (callback thread, stamp = cycle start), no pointer, no allocation
   };
   int32_t art;
   int32_t an;          // KLICK: 0 oder 1; KI_STUFE: Stufe 0 bis 3
@@ -186,7 +186,7 @@ struct Ereignis {
     WARP_ZUSTAND = 37,               // 1.13 Slice 2, §5.13b /zustand/warp: warp_stimmen, warp_unterlauf, warp_kein_platz, warp_spaet, warp_faeden
     ERZ_BK_ALT = 38,                 // Baukasten S3a: abgelöster Baukasten-Graph zur Freigabe im Netz-Faden (zeiger = CypherBk*)
     GELERNT = 39,                    // S19 (§5.8 /e/gelernt): id, deck = quelle (0 hand_in, 1..8 midi_ein_1..8), fassung = kanal, teil = nr, neu = wert, status = belegt
-    AUTO_ZUSTAND = 40,               // 1.12 S3 (§5.13 /e/auto): deck = spur (1..32), fassung = field (0 fader .. 3 solo), status = 1 overridden / 0 the lane plays
+    AUTO_ZUSTAND = 40,               // 1.12 S3 (§5.13 /e/auto): deck = spur (1..128), fassung = field (0 fader .. 3 solo), status = 1 overridden / 0 the lane plays
     AUTO_PUNKT = 41,                 // 1.12 S3 (§5.13 /e/auto_punkt): pfad = spur/<n>/<field>, beat = project beat at the grip sample, wert = hand value, sample = end of the block that sent it
     MIX_ZUSTAND = 42,                // 1.15 A6 (§5.5d /zustand/mix): pfad = channel, pegel[0..4] = gate, multiband low/mid/high, limiter reduction in dB (>= 0), 10 Hz, only where a tool runs
     HALL_ZUSTAND = 44,               // mehrkern Task 5 (§5.13 /zustand/hall_pool): hall_an, hall_faeden, hall_spaet, hall_zurueck; on change and at 2 Hz; without a HallPool an 0, faeden 0
@@ -255,7 +255,8 @@ struct Ereignis {
   // mehrkern slice 3.2 task 7, SPUR_ZUSTAND (§5.13): spur_blocks_parallel, spur_einheiten_*, spur_seriell are the low 31 bits of the kern's 64-bit counters (wrap, never negative);
   // spur_haengt, spur_spaet, spur_zurueck saturate at INT32_MAX like the Hall pool's
   int32_t spur_an, spur_modus, spur_blocks_parallel, spur_einheiten_worker, spur_einheiten_caller, spur_seriell, spur_haengt, spur_spaet, spur_zurueck;
-  int32_t host_gesund[4], host_rundweg[4];   // plan 1.11 T5, INS_HOST_ZUSTAND (ARR_INS_HOST = 4 hosts)
+  int32_t host_gesund[ARR_INS_HOST], host_rundweg[ARR_INS_HOST];   // plan 1.11 T5, INS_HOST_ZUSTAND (8 hosts since strand 1 slice 5)
+  int32_t host_schluessel_da;   // strand 2 task 3.3 fix B1, INS_HOST_ZUSTAND: 1 the key ports arr_inskey_<h>_L/R are registered, 0 JACK refused them
   int32_t rec_scharf;   // 1.8, REC_ZUSTAND: Zahl der scharfen Spuren (Audio)
   int32_t rec_midi_scharf;   // 1.8 T7a, REC_ZUSTAND: Zahl der MIDI-scharfen Spuren (eingang 30)
   int64_t rec_luecken;  // 1.8, REC_ZUSTAND: Lücken des laufenden Takes
@@ -372,7 +373,7 @@ class Kern {
   // set to the value the lane played last (D2), then the override starts, so the value stays there until the next /k/teil. false: the lane plays again (blend).
   // Callback thread, at the start of a cycle. Returns what Arrangement::auto_uebersteuern returns.
   bool auto_uebersteuern(int spur, int feld, bool uebersteuern);
-  // 1.12 S3 (D11): the arm of the track (OSC number 1..32): -1 not armed, else the mode (0 touch, 1 latch, 2 write). Callback thread (tests).
+  // 1.12 S3 (D11): the arm of the track (OSC number 1..128): -1 not armed, else the mode (0 touch, 1 latch, 2 write). Callback thread (tests).
   int auto_arm(int spur_osc) const { return spur_osc >= 1 && spur_osc <= ARR_SPUREN ? auto_arm_[spur_osc - 1] - 1 : -1; }
   const Aufnahme& aufnahme() const { return aufnahme_; }   // tests (1.8 S3)
   const Arrangement& arrangement() const { return *arr_; }   // Tests, Diagnose (nur aus dem Callback-Faden lesen)
@@ -503,10 +504,19 @@ class Kern {
   float* ins_aus_zeiger(int h, int seite) const noexcept {
     return h >= 1 && h <= ARR_INS_HOST && (seite == 0 || seite == 1) ? ins_aus_[h - 1][seite] : nullptr;
   }
-  // All 4 x 4 host ports registered? Set once by main before the audio starts; false (JACK refused any of them, none is kept): the host kind is unavailable and
+  // Strand 2 task 3.3: the writable key ports arr_inskey_<h>_L/R of this cycle (main.cpp has zeroed them), nullptr = not registered (their own all-or-none set: a core without them
+  // runs its host stages without key). Callback thread only, a pointer store.
+  void ins_schluessel(int h, float* l, float* r) noexcept {
+    if (h >= 1 && h <= ARR_INS_HOST) { ins_key_[h - 1][0] = l; ins_key_[h - 1][1] = r; }
+  }
+  // All 8 x 4 host ports registered? Set once by main before the audio starts; false (JACK refused any of them, none is kept): the host kind is unavailable and
   // the loader refuses a playback with a host stage as host_fehlt (plan 1.11 T4). Readable from any thread.
   void setze_host_ports_da(bool da) noexcept { host_ports_da_.store(da, std::memory_order_release); }
   bool host_ports_da() const noexcept { return host_ports_da_.load(std::memory_order_acquire); }
+  // Strand 2 task 3.3 fix B1: all 16 key ports arr_inskey_<h>_L/R registered? Set once by main before the audio starts (their own all-or-none set, false whenever the host ports
+  // are missing); reported in /zustand/ins_host as schluessel_da, so the page server can tell a key that JACK refused from one that is just not wired. Readable from any thread.
+  void setze_schluessel_ports_da(bool da) noexcept { schluessel_ports_da_.store(da, std::memory_order_release); }
+  bool schluessel_ports_da() const noexcept { return schluessel_ports_da_.load(std::memory_order_acquire); }
   // plan 1.11 T5 (D7): the edge check's verdict on host h (main thread, every 500 ms); one of the two sources of the stage's health. A core without the host ports never sets it.
   void setze_host_kante(int h, bool ok) noexcept {
     if (host_ports_da()) arr_->host_stufe().setze_kante(h, ok);
@@ -637,7 +647,8 @@ class Kern {
   void ins_host_zustand(int64_t n0, int n);
   void ins_mess_melden(int h, int rundweg, ArrHostMessung::Grund g);
   ArrHostMessung host_mess_;
-  int32_t host_gemeldet_[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
+  int32_t host_gemeldet_[2 * ARR_INS_HOST] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};   // gesund[ARR_INS_HOST], then rundweg[ARR_INS_HOST]; strand 1 slice 5: 8 hosts
+  static_assert(ARR_INS_HOST == 8, "host_gemeldet_ initialiser lists 2 x ARR_INS_HOST values");
   // 1.12 S3 (§5.13 /e/auto): callback thread, at the end of the cycle. Drains the Arrangement ring into the event ring; when events were lost (the ring dropped one, or
   // the event ring was full) the queue is discarded and the full state is re-reported (every field with a lane, every field last reported as 1).
   void auto_melden(int64_t n0);
@@ -861,7 +872,9 @@ class Kern {
   const float* rueck_r_[8] = {};
   const float* ins_rueck_[ARR_INS_HOST][2] = {};   // plan 1.11 T3
   float* ins_aus_[ARR_INS_HOST][2] = {};
+  float* ins_key_[ARR_INS_HOST][2] = {};   // strand 2 task 3.3
   std::atomic<bool> host_ports_da_{false};
+  std::atomic<bool> schluessel_ports_da_{false};   // strand 2 task 3.3 fix B1
   EingangsBank ein_bank_;
   MidiEin midi_ein_;
   std::atomic<uint32_t> ein_verbunden_{0};

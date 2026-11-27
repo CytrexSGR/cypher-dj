@@ -17,6 +17,7 @@ DISCOVERY = "/usr/lib/carla/carla-discovery-native"
 LSP_VST3 = Path("/usr/lib/vst3/lsp-plugins.vst3")
 LSP_LV2 = Path("/usr/lib/lv2/lsp-plugins.lv2")
 DFL_LV2 = Path("/usr/lib/lv2/DragonflyHallReverb.lv2")
+BAUE = HIER.parent / "vst3_klasse" / "build.sh"
 
 pytestmark = pytest.mark.skipif(not Path(DISCOVERY).exists(), reason="carla-discovery-native missing")
 
@@ -37,7 +38,7 @@ def lauf(pfade, index, zaehler=None, extra=(), programm=DISCOVERY, name="discove
 
 def eintraege(index):
     d = json.loads(Path(index).read_text())
-    assert d["version"] == 2
+    assert d["version"] == 3
     return d["eintraege"]
 
 
@@ -186,24 +187,76 @@ def test_lsp_lv2_ein_ok_eintrag_je_uri(arbeit):
     assert len({e["id"] for e in es}) == 178 == len({e["pfad"] for e in es})
 
 
-def test_lsp_vst3_mehrklassen(arbeit):
+@pytest.fixture(scope="module")
+def shim(tmp_path_factory):
+    """klasse.so built into a tmp dir (never the installed one)."""
+    ziel = tmp_path_factory.mktemp("shim")
+    p = subprocess.run(["bash", str(BAUE), str(ziel)], capture_output=True, text=True, timeout=120)
+    assert p.returncode == 0, p.stderr
+    return ziel / "klasse.so"
+
+
+def test_lsp_vst3_mehrklassen(arbeit, shim):
     if not LSP_VST3.exists():
         pytest.skip("LSP VST3 not installed")
     wurzel = arbeit / "w"
     wurzel.mkdir()
     (wurzel / "lsp-plugins.vst3").symlink_to(LSP_VST3)
-    idx = arbeit / "index.json"
+    idx, z = arbeit / "index.json", arbeit / "spawns.log"
     t0 = time.monotonic()
-    r = lauf([wurzel], idx)
+    r = lauf([wurzel], idx, z, extra=["--shim", str(arbeit / "fehlt" / "klasse.so")])
     assert time.monotonic() - t0 > 10  # the whole bundle takes longer than the per-silence timeout; that must not kill it
     es = eintraege(idx)
     assert len(es) == 178
     assert len({e["uid"] for e in es}) == 178 and len({e["id"] for e in es}) == 178
+    assert [e["klasse"] for e in es] == list(range(178))  # the position in the discovery output
     assert es[0]["status"] == "ok"
     rest = es[1:]
     assert len(rest) == 177 and all(e["status"] == "blockiert" and e["grund"] == "mehrklassen" for e in rest)
-    assert "LV2 version" in rest[0]["text"]
+    assert "build.sh" in rest[0]["text"]
     assert r["blockiert"] == 177
+    # the shim gets built: every class is ok, without a second discovery run of the unchanged bundle
+    r = lauf([wurzel], idx, z, extra=["--shim", str(shim)])
+    assert spawns(z) == 1
+    es = eintraege(idx)
+    assert [e["klasse"] for e in es] == list(range(178))
+    assert all(e["status"] == "ok" and "grund" not in e and "text" not in e for e in es)
+    assert r == {"neu": 0, "entfernt": 0, "geaendert": 0, "blockiert": 0}
+    # and removed again: blocked again
+    r = lauf([wurzel], idx, z, extra=["--shim", str(arbeit / "fehlt" / "klasse.so")])
+    assert spawns(z) == 1 and r["blockiert"] == 177
+
+
+def test_mehrklassen_fake_bundle_klasse_und_shim(arbeit, shim):
+    wurzel = arbeit / "w"
+    (wurzel / "x.vst3").mkdir(parents=True)
+    d = fake(arbeit, "d.sh", block("Eins", label="eins") + block("Zwei", label="zwei") + block("Drei", label="drei"))
+    idx = arbeit / "index.json"
+    p = lauf_roh([wurzel], idx, d, extra=["--shim", str(shim)])
+    assert p.returncode == 0, p.stderr
+    es = eintraege(idx)
+    assert [(e["uid"], e["klasse"], e["status"]) for e in es] == [("eins", 0, "ok"), ("zwei", 1, "ok"), ("drei", 2, "ok")]
+    # identity unchanged: the id still hashes format, path and uid only
+    assert es[1]["id"] == hashlib.sha1(f"vst3:{wurzel / 'x.vst3'}#zwei".encode()).hexdigest()[:12]
+
+
+def test_index_version_2_wird_verworfen_und_neu_gescannt(arbeit):
+    wurzel = arbeit / "w"
+    (wurzel / "x.vst3").mkdir(parents=True)
+    idx = arbeit / "index.json"
+    d = fake(arbeit, "d.sh", block())
+    assert lauf_roh([wurzel], idx, d).returncode == 0
+    alt = json.loads(idx.read_text())
+    alt["version"] = 2
+    for e in alt["eintraege"]:
+        del e["klasse"]
+    idx.write_text(json.dumps(alt))
+    zaehler = arbeit / "z.log"
+    d2 = fake(arbeit, "d2.sh", f'echo "$2" >> "{zaehler}"\n' + block())
+    assert lauf_roh([wurzel], idx, d2).returncode == 0
+    assert spawns(zaehler) == 1
+    (e,) = eintraege(idx)
+    assert e["klasse"] == 0 and e["status"] == "ok"
 
 
 # ---- fix round 1 ----

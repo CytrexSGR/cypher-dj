@@ -2,7 +2,7 @@
 import { DECKS, setzeZielKurve } from './curves.js';
 import { mixAufnehmen, gateAufnehmen } from './effects.js';
 import { kanalKennung, istKanalZustand } from './live_module.js';   // live modules task 4
-import { cypherStand } from './messages.js';
+import { cypherStand, handAnzeige } from './messages.js';
 import { loopdeckEreignis } from './loopdeck/view.js';
 import { live, liveEreignis, liveOffen, merkeArr, pruefeLiveSpaeter, zeichneLive } from './live_view.js';
 import { produktion, werkbank, tracker } from './seitenrahmen.js';
@@ -96,6 +96,7 @@ export function strom() {
         holeTaktart();   // the page may load after a meter change: /lage carries `taktart` only when it is not 4/4
         break;
       case 'taktart': uebernimmTaktart(f.proTakt); break;   // studio-taktart: the open project's meter changed (only sent when it is not 4/4 or leaves it)
+      case 'hand': handLage = handAnzeige(f); zeigeCypher(); break;   // agent stop switch of the page server
       case 'ansage': zeigeAnsage(f); break;   // demo overlay (POST /ansage)
       case 'graphen': setzeGraphenGeladen(f.geladen); break;   // S12
       case 'lernen': lernEreignis(f); break;   // S19
@@ -210,18 +211,32 @@ function englisch(e) {
 let leitstandDa = false;
 // Cyphers Vorschlag und Stopp-Taste (Plan M-1 Annahme-Weg): die Seite zeigt den offenen Vorschlag und schickt Andreas' Taste an den Kern
 let cypherLage = { vorschlag: null, gestoppt: false };
+let handLage = { gestoppt: false, text: '' };   // the page server's own stop switch (/hand/bremse)
 export function zeigeCypher() {
   const v = cypherLage.vorschlag;
   $('#vorschlag').hidden = !v;
   if (v) $('#vorschlag').textContent = `Cypher proposes (bar ${Math.floor(v.start_beat / proTaktJetzt()) + 1}): ${v.text}`;
   $('#t-annehmen').hidden = !v; $('#t-verwerfen').hidden = !v;
-  $('#t-stopp').hidden = cypherLage.gestoppt; $('#t-freigabe').hidden = !cypherLage.gestoppt;
+  const aus = cypherLage.gestoppt || handLage.gestoppt;
+  $('#t-stopp').hidden = aus; $('#t-freigabe').hidden = !aus;
+  $('#cypher').classList.toggle('gebremst', aus);
+  $('#hand-gestoppt').textContent = handLage.text; $('#hand-gestoppt').hidden = !handLage.text;
 }
-async function sendeTaste(name) {
+async function sendeTaste(name, still) {
   const r = await fetch('/taste', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
-  if (!r.ok) { const j = await r.json().catch(() => ({})); melde(`Key “${name}” not sent: ${j.text ?? j.fehler ?? r.status}`, true); }
+  if (r.ok) return;
+  const j = await r.json().catch(() => ({}));
+  if (!(still && j.fehler === 'pruefmodus_aus')) melde(`Key “${name}” not sent: ${j.text ?? j.fehler ?? r.status}`, true);
 }
-for (const n of ['annehmen', 'verwerfen', 'stopp', 'freigabe']) $(`#t-${n}`).addEventListener('click', () => sendeTaste(n));
+// Stop and Release first switch the page server's brake (every agent write), then the old core path; its 409 pruefmodus_aus is expected without test mode
+async function setzeBremse(an) {
+  const r = await fetch('/hand/bremse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ an }) });
+  if (!r.ok) { const j = await r.json().catch(() => ({})); melde(`Agent brake not switched: ${j.text ?? j.fehler ?? r.status}`, true); }
+}
+for (const n of ['annehmen', 'verwerfen']) $(`#t-${n}`).addEventListener('click', () => sendeTaste(n));
+for (const [n, an] of [['stopp', true], ['freigabe', false]]) {
+  $(`#t-${n}`).addEventListener('click', async () => { await setzeBremse(an); await sendeTaste(n, true); });
+}
 function cypherEreignis(e) {
   const neu = cypherStand(cypherLage, e);
   if (neu) { cypherLage = neu; zeigeCypher(); }

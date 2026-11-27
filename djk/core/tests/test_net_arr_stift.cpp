@@ -1,6 +1,6 @@
 // Kraken patch field: /k/arr/stift ,hsiiiif in the net thread (INTERFACES 4.11).
-//   (a) good commands become Befehl ARR_STIFT: nr = spur (1..32), form = satz, politik = zeile, fassung = spalte, wert = wert; the edges (satz 1, zeile 15, spalte 15, wert -1 and 1, 0) pass
-//   (b) refusals as /q 6 with nothing in the ring, in this order: spur outside 1..32 -> spur_bereich (before the others); satz, zeile, spalte or wert outside the range, NaN and inf
+//   (a) good commands become Befehl ARR_STIFT: nr = spur (1..128), form = satz, politik = zeile, fassung = spalte, wert = wert; the edges (satz 1, zeile 15, spalte 15, wert -1 and 1, 0) pass
+//   (b) refusals as /q 6 with nothing in the ring, in this order: spur outside 1..128 -> spur_bereich (before the others); satz, zeile, spalte or wert outside the range, NaN and inf
 //       -> ausserhalb_bereich; a source that is none of the list -> ausserhalb_bereich
 //   (c) in the AI stop cypher is refused with ki_gestoppt before any range check, andreas is not
 #include <cmath>
@@ -40,8 +40,8 @@ int main() {
     // (a) good commands
     sende(901, "andreas", 1, 0, 0, 0, 0.5f);
     PRUEF(bef->hole(b) && b.art == cdj::Befehl::ARR_STIFT && b.id == 901 && b.nr == 1 && b.form == 0 && b.politik == 0 && b.fassung == 0 && b.wert == 0.5f && !std::strcmp(b.quelle, "andreas"));
-    sende(902, "andreas", 32, 1, 15, 15, -1.0f);
-    PRUEF(bef->hole(b) && b.nr == 32 && b.form == 1 && b.politik == 15 && b.fassung == 15 && b.wert == -1.0f);
+    sende(902, "andreas", 128, 1, 15, 15, -1.0f);
+    PRUEF(bef->hole(b) && b.nr == 128 && b.form == 1 && b.politik == 15 && b.fassung == 15 && b.wert == -1.0f);
     sende(903, "andreas", 5, 0, 7, 9, 1.0f);
     PRUEF(bef->hole(b) && b.nr == 5 && b.politik == 7 && b.fassung == 9 && b.wert == 1.0f);
     sende(904, "cypher", 2, 1, 3, 4, 0.0f);   // 0 is a valid value (the pin is cleared); not in the AI stop: cypher plays
@@ -49,7 +49,7 @@ int main() {
     // (b) refusals
     sende(911, "andreas", 0, 0, 0, 0, 0.5f);
     PRUEF(abgelehnt(911, "spur_bereich"));
-    sende(912, "andreas", 33, 0, 0, 0, 0.5f);
+    sende(912, "andreas", 129, 0, 0, 0, 0.5f);
     PRUEF(abgelehnt(912, "spur_bereich"));
     sende(913, "andreas", -1, 0, 0, 0, 0.5f);
     PRUEF(abgelehnt(913, "spur_bereich"));

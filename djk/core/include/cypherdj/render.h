@@ -26,7 +26,7 @@ namespace cdj {
 // 1 585 064 kB. Darüber lehnt rendere() mit fehler "aufruf" ab (cypherdj-render: Rückgabe 2 mit Text).
 constexpr double RENDER_MAX_BEATS = 2048.0;
 
-// Spec 6.20/6.25: ein Mixer-Regler des Projekts, Pfad spur/<1..ARR_SPUREN = 32>/{fader,pan,mute,solo}, grp/<1..ARR_GRUPPEN = 16>/{fader,pan,mute,solo}
+// Spec 6.20/6.25: ein Mixer-Regler des Projekts, Pfad spur/<1..ARR_SPUREN = 128>/{fader,pan,mute,solo}, grp/<1..ARR_GRUPPEN = 16>/{fader,pan,mute,solo}
 // oder pm/fader (1.10), spur|grp/<n>/send/<1..4> und ret/<1..4>/{fader,pan,mute,solo,hall/…} (1.10 slice 3), Wert in Kern-Einheiten
 struct SpurRegler {
   std::string pfad;
@@ -108,7 +108,7 @@ struct RenderErgebnis {
 
 RenderErgebnis rendere(const RenderAuftrag& a);
 
-// Spec 6.20/6.25: --spur-regler <datei.json>, EIN JSON-Objekt Pfad -> Zahl. Nur spur/<1..ARR_SPUREN = 32>/{fader,pan,mute,solo,send/<r>}, grp/<1..8>/… (also send), ret/<1..4>/… und pm/fader, Werte
+// Spec 6.20/6.25: --spur-regler <datei.json>, EIN JSON-Objekt Pfad -> Zahl. Nur spur/<1..ARR_SPUREN = 128>/{fader,pan,mute,solo,send/<r>}, grp/<1..16>/… (also send), ret/<1..8>/… und pm/fader, Werte
 // in den Grenzen der Regler-Tabelle (fader −200..+6 dB, pan −1..+1, mute und solo 0 oder 1). false mit fehler bei fehlender
 // oder unlesbarer Datei, kein JSON, kein Objekt, fremdem Pfad, keiner Zahl, Wert außerhalb.
 bool lies_spur_regler(const std::string& pfad, std::vector<SpurRegler>& aus, std::string& fehler);

@@ -5,6 +5,8 @@
 // notenZaehler: EIN Zähler je Projekt, Spec 6.28 Nachsatz zu 6.26), damit eine neue Note sofort gewählt und weitergezogen werden kann;
 // eine ID unter dem Zähler lehnte S2 mit id_belegt ab (Spec 6.30).
 import { rasten } from './timeline.js';
+import { ROLL_RASTER, rasterBeatsRolle } from './notes_tools.js';
+import { rasteEin, stufenSchritt } from '../harmonie.js';
 
 export const TASTEN_BREITE = 40;
 export const TON_HOEHE = 9;
@@ -13,6 +15,14 @@ export const NOTE_GRIFF = 5;          // rechter Rand einer Note: Länge ziehen
 export const VEL_VORGABE = 100;
 export const QUANT = 0.25;            // Spec A3: auf 1/16 quantisieren
 export const MIN_NOTE = 1 / 64;       // kürzeste Note bei SNAP OFF
+// Grid of the roll (ids of ROLL_RASTER in notes_tools.js). A value stored by the old table (sechzehntel, achtel, beat, takt, aus) maps to its new id; anything else is 1/16.
+const ALTE_RASTER = { sechzehntel: '1/16', achtel: '1/8', beat: '1/4', takt: 'bar', aus: 'off' };
+export const rollRasterId = (wert) => (ROLL_RASTER.some((r) => r.id === wert) ? wert : (Object.hasOwn(ALTE_RASTER, wert) ? ALTE_RASTER[wert] : '1/16'));
+// Step in beats of a grid id: BAR is one bar of the meter (beatsProTakt), OFF is 0 (no snapping).
+export const rasterRolle = (wert, beatsProTakt = 4) => {
+  const id = rollRasterId(wert);
+  return id === 'bar' ? beatsProTakt : id === 'off' ? 0 : rasterBeatsRolle(id);
+};
 export const LAENGEN = [
   { wert: 0.25, text: '1/16' }, { wert: 0.5, text: '1/8' }, { wert: 1, text: '1/4' }, { wert: 2, text: '1/2' }, { wert: 4, text: '1 BAR' },
 ];
@@ -83,24 +93,36 @@ export function naechsteNotenIds(projekt, anzahl) {
 }
 
 // Note setzen: Anfang auf den Rasterschritt, in den geklickt wurde (abgerundet); Ton der Zeile; Länge aus der Werkzeugleiste; ID aus dem Projekt
-export function neueNote(projekt, beat, ton, raster, laenge, vel = VEL_VORGABE) {
-  const start = raster > 0 ? Math.floor(beat / raster + 1e-9) * raster : beat;
-  return { id: naechsteNotenIds(projekt, 1)[0], beat: runde(Math.max(0, start)), laenge, ton: klemme(Math.round(ton), 0, 127), vel };
+// tonart (scale lock): the pitch goes to the nearest pitch of the key
+export function neueNote(projekt, beat, ton, raster, laenge, vel = VEL_VORGABE, tonart = null) {
+  const start = raster > 0 ? Math.floor(beat / raster + 1e-9) * raster : beat, t = klemme(Math.round(ton), 0, 127);
+  return { id: naechsteNotenIds(projekt, 1)[0], beat: runde(Math.max(0, start)), laenge, ton: tonart ? rasteEin(t, tonart) : t, vel };
 }
 
 // Verschieben: der gegriffene Note (anker) rastet, alle gewählten folgen; keine vor Beat 0, keine aus 0..127
-export function verschiebeNoten(clip, ids, ankerId, dBeat, dTon, raster) {
+// tonart (scale lock): a change of pitch ends on pitches of the key (dTon semitones, then the nearest key pitch); dStufe steps of the key (arrow keys). A horizontal move
+// leaves the pitches alone. A step that would leave 0..127 changes nothing.
+export function verschiebeNoten(clip, ids, ankerId, dBeat, dTon, raster, tonart = null, dStufe = 0) {
   const ns = clip.noten.filter((n) => ids.includes(n.id)), anker = ns.find((n) => n.id === ankerId);
   if (!anker) return [];
   let d = rasten(anker.beat + dBeat, raster) - anker.beat;
   d = Math.max(d, -Math.min(...ns.map((n) => n.beat)));
   const t = klemme(Math.round(dTon), -Math.min(...ns.map((n) => n.ton)), 127 - Math.max(...ns.map((n) => n.ton)));
-  return ns.map((n) => {
+  let stufenFehler = false;
+  const aus = ns.map((n) => {
     const x = { id: n.id };
     if (runde(n.beat + d) !== n.beat) x.beat = runde(n.beat + d);
-    if (t !== 0) x.ton = n.ton + t;
+    if (t !== 0 || dStufe !== 0) {
+      let z = n.ton;
+      if (dStufe !== 0) z = stufenSchritt(z, tonart, dStufe);
+      if (z !== null) z = klemme(z + t, 0, 127);
+      if (z !== null && tonart) z = rasteEin(z, tonart);
+      if (z === null) { stufenFehler = true; return x; }
+      if (z !== n.ton) x.ton = z;
+    }
     return x;
   }).filter((x) => Object.keys(x).length > 1);
+  return stufenFehler ? [] : aus;
 }
 // Länge ziehen: das Ende der Anker-Note rastet, alle gewählten ändern ihre Länge um denselben Betrag, keine unter einen Schritt
 export function dehneNoten(clip, ids, ankerId, dBeat, raster) {

@@ -289,3 +289,55 @@ test('Task 7 targets of a group: none without inserts, the chain targets of an E
 test('Task 7 text: a group without an insert says what to do', () => {
   assert.equal(LANEN_TEXT.keine_ziele, 'This group has no insert yet: add an effect in INSERTS first');
 });
+
+// ---------------------------------------------------------------- send lanes: target send.<returnId> of a track
+import { setzeKettenZiele, zielLabel, istSendZiel, istKettenZiel } from '../public/production/lanes.js';
+const sendProjekt = (namen = { r1: 'Hall', r2: 'Delay' }) => ({
+  returns: Object.entries(namen).map(([id, name], i) => ({ id, nr: i + 1, name })),
+  spuren: [{ id: 's1', art: 'audio', sends: [{ id: 'r1', db: -6 }, { id: 'r2', db: 0 }], automation: [] }],
+});
+test('send lanes: freieZiele lists one send target per send of the track, none with a lane, none for a missing send', () => {
+  const audio = { id: 's1', art: 'audio', sends: [{ id: 'r1', db: -6 }, { id: 'r2', db: 0 }] };
+  assert.deepEqual(freieZiele(audio), ['fader', 'pan', 'mute', 'solo', 'send.r1', 'send.r2']);
+  const mit = { ...audio, automation: [{ id: 'a1', ziel: 'send.r1', punkte: [{ beat: 0, wert: -6 }] }] };
+  assert.deepEqual(freieZiele(mit), ['fader', 'pan', 'mute', 'solo', 'send.r2'], 'a send that has a lane is not offered again');
+  assert.deepEqual(freieZiele({ id: 's1', art: 'audio', sends: [] }), ['fader', 'pan', 'mute', 'solo'], 'no send, no send target');
+  assert.deepEqual(freieZiele({ id: 's1', art: 'audio' }), ['fader', 'pan', 'mute', 'solo'], 'a track without a sends field');
+  const nurLane = { id: 's1', art: 'audio', sends: [{ id: 'r2', db: 0 }], automation: [{ id: 'a1', ziel: 'send.r1', punkte: [] }] };
+  assert.ok(!freieZiele(nurLane).includes('send.r1'), 'no target for a send the track does not have');
+  assert.deepEqual(freieZieleGruppe({ id: 'g1', sends: [{ id: 'r1', db: 0 }], automation: [] }), [], 'a group offers no send target');
+});
+test('send lanes: the display entry carries the return name, unit dB and the range; a renamed return changes the label', () => {
+  setzeKettenZiele(sendProjekt());
+  const b = bereich('send.r1');
+  assert.equal(b.label, 'Send Hall');
+  assert.equal(b.einheit, 'dB');
+  assert.equal(b.min, -200); assert.equal(b.max, 6); assert.equal(b.anzeigeMin, -60);
+  assert.equal(b.nurSprung, false); assert.equal(b.mittellinie, 0);
+  assert.equal(zielLabel('send.r2'), 'Send Delay');
+  assert.equal(unbekanntesZiel({ ziel: 'send.r1' }), false, 'a known send target is editable');
+  assert.equal(laneSchutz({ ziel: 'send.r1' }), null);
+  assert.equal(unbekanntesZiel({ ziel: 'send.r9' }), true, 'a send the project does not have is shown locked');
+  setzeKettenZiele(sendProjekt({ r1: 'Plate', r2: 'Delay' }));
+  assert.equal(zielLabel('send.r1'), 'Send Plate', 'a renamed return renames the lane label');
+  assert.ok(istSendZiel('send.r1') && !istSendZiel('send.') && !istSendZiel('fader') && !istKettenZiel('send.r1'));
+  setzeKettenZiele({});
+});
+test('send lanes: the taper maps a send value like a fader value (y, back, path, interpolation)', () => {
+  setzeKettenZiele(sendProjekt());
+  for (const db of [-200, -60, -30, -6, 0, 6]) {
+    assert.equal(wertZuY(zeile, db, 'send.r1'), wertZuY(zeile, db, 'fader'), `y at ${db} dB`);
+    assert.equal(yZuWert(zeile, wertZuY(zeile, db, 'send.r1'), 'send.r1'), yZuWert(zeile, wertZuY(zeile, db, 'fader'), 'fader'), `back at ${db} dB`);
+  }
+  assert.equal(wertZuY(zeile, -30, 'send.r1'), zeile.y + 3 + (1 - posVonDb(-30)) * 42, 'the fader taper over the row');
+  assert.equal(yZuWert(zeile, 1000, 'send.r1'), -200, 'below the row clamps to off');
+  assert.equal(yZuWert(zeile, 0, 'send.r1'), WERT_MAX, 'above the row clamps to +6');
+  const punkte = [{ beat: 0, wert: -200 }, { beat: 8, wert: -10 }, { beat: 8, wert: -150 }, { beat: 16, wert: 0 }];
+  for (const b of [0, 3, 7.9, 8, 12, 16, 20]) assert.equal(laneWert(punkte, b, 'send.r1'), laneWert(punkte, b, 'fader'), `value at ${b}`);
+  assert.ok(laneWert(punkte, 4, 'send.r1') < laneWert(punkte, 8 - 1e-9, 'send.r1'), 'the mute rule: the ramp from off runs up from -60');
+  const bx = (b) => b * 10, xb = (x) => x / 10;
+  assert.deepEqual(lanePfad(punkte, zeile, bx, xb, 200, 'send.r1'), lanePfad(punkte, zeile, bx, xb, 200, 'fader'), 'the path is the fader path');
+  assert.equal(ziehePunkt(punkte, 0, 0, 40, 0, 'send.r1').wert, 6, 'a drag clamps to +6 dB');
+  assert.equal(setzePunkt(punkte, 4, -500, 0, 'send.r1').punkte[1].wert, -200, 'a new point clamps to off');
+  setzeKettenZiele({});
+});

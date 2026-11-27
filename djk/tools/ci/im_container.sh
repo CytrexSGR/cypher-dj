@@ -29,11 +29,17 @@ S=${CI_STRUDEL:-$HOME/strudel}
 NAME="cdjci-$$"
 halt() { podman stop -t 5 "$NAME" >/dev/null 2>&1; exit 143; }
 trap halt TERM INT HUP
+# A trap does not run on KILL, and the runner of a cancelled job may kill the whole process group of the step: this shell dies, the container
+# (under conmon, outside the group) runs on (t_41c45344). A guard in its own session outlives that and stops the container once this shell is gone.
+setsid bash -c 'while kill -0 "$1" 2>/dev/null; do sleep 2; done; podman stop -t 5 "$2" >/dev/null 2>&1' im-container-waechter "$$" "$NAME" \
+  </dev/null >/dev/null 2>&1 &
+WAECHTER=$!
 podman run --rm --init --userns=keep-id --memory "$MEM" --memory-swap "$MEM" --shm-size "${CI_SHM:-12g}" "${GPU[@]}" "${GEW[@]}" "${STR[@]}" \
   --name "$NAME" --ulimit nofile=65536:65536 \
   -v cdjci-ccache:/home/bau/.cache/ccache -v cdjci-cargo-reg:/home/bau/.cargo/registry -v cdjci-cargo-git:/home/bau/.cargo/git \
   -v "$REPO:$REPO" -w "$REPO" "$IMAGE" "$@" &
-wait $!   # a trap only runs between commands, so wait in the foreground of a background child
-rc=$?
+rc=0
+wait $! || rc=$?   # a trap only runs between commands, so wait in the foreground of a background child; || keeps set -e from leaving before the cleanup
 trap - TERM INT HUP
+kill "$WAECHTER" 2>/dev/null   # the container ended by itself (--rm): nothing left to stop
 exit $rc

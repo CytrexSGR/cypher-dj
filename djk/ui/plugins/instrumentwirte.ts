@@ -20,6 +20,8 @@ export interface InstrumentAbhaengig {
   /** `djk-instrumente start arr<slot> <plugin:spec|surge>`; code 0 = the host is ready, 2 = refused (stderr holds the reason) */
   start(slot: number, art: string): Promise<{ code: number; fehler: string }>;
   stand(slot: number): WirtStand;
+  /** the class position of the plugin in its VST3 bundle (index entry `klasse`); absent or 0 = the first class, loaded directly */
+  klasse?(plugin: HostPlugin): number;
   sock(slot: number, befehl: Record<string, unknown>, timeoutMs: number): Promise<Record<string, unknown>>;
   ordner(): string | null;      // the folder of the open project
   /** a new Surge host took the slot over from a plugin host: whoever mirrors state into the Surge host must forget what it knew (audit U07) */
@@ -142,9 +144,12 @@ export class InstrumentWirte {
     } catch (e) { this.dep.log({ typ: 'instrument_zustand_beiseite_fehler', slot: w.slot, fehler: (e as Error).message }); }
   }
 
+  /** the host spec of the plugin; a later VST3 class carries `@<klasse>` (the same rule as the effect hosts) */
+  private specVon(w: Wirt): string { return hostSpec(w.plugin, this.dep.klasse?.(w.plugin) ?? 0); }
+
   private async starte(w: Wirt): Promise<void> {
     if (w.weg) return;
-    const spec = hostSpec(w.plugin);
+    const spec = this.specVon(w);
     const st = this.dep.stand(w.slot);
     if (!(st.lebt && st.bereit && st.art === 'plugin' && st.kennung === spec)) {   // a host that already runs this plugin is adopted (server restart)
       const r = await this.dep.start(w.slot, `plugin:${spec}`);
@@ -208,7 +213,7 @@ export class InstrumentWirte {
       if (!st.lebt) { w.status = 'ausfall'; w.grund = 'host_tot'; this.fensterStopp(w); return; }
       if (st.pid !== w.pid) { w.status = 'ausfall'; w.grund = 'neustart'; this.fensterStopp(w); }   // restarted by systemd: empty plugin, state is restored below
     }
-    if (w.status === 'ausfall' && st.lebt && st.bereit && st.art === 'plugin' && st.kennung === hostSpec(w.plugin) && (w.pid !== st.pid || w.grund === 'haengt')) {
+    if (w.status === 'ausfall' && st.lebt && st.bereit && st.art === 'plugin' && st.kennung === this.specVon(w) && (w.pid !== st.pid || w.grund === 'haengt')) {
       this.inKette(w.slot, () => this.herstellen(w));
     }
   }

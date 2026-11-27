@@ -60,8 +60,19 @@ int main() {
     // 1.10 Slice 3: dazu 204 Send-, Return- und Hall-Regler (spur|grp/<n>/send/<r>, ret/<r>/*), ebenfalls Modul Arrangement
     // S14: fx/3, fx/4 x 8 bk/<n>, global, the Mixer ignores them (the kern ctor carries the values to the send graphs)
     // 1.10 slice 4a T1: plus the 120 ins/komp/<n>/* rows, global, owned by the Arrangement module (the Mixer ignores them)
-    PRUEF(n[static_cast<int>(cdj::MixRolle::spaeter)] == 16 + 4 + 1 + 4 * cdj::ARR_SPUREN + 4 * sw::GRP_REGLER_GRUPPEN_ALLE + 1 + 4 * 8 + 204 + 4 * sw::GRP_REGLER_GRUPPEN_NEU + 2 * 8 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 6 * 56 + sw::GRP_REGLER_GRUPPEN_ALLE + sw::BK_REGLER_N + sw::SPUR_BK_SLOTS * sw::SPUR_BK_KNOEPFE + sw::SPUR_FILTER_N + 3 * sw::SPUR_EQ_N + sw::STROM_BK_STROEME * sw::BK_REGLER_N +
-                                                                       5 * cdj::ARR_SPUREN + 3 * cdj::ARR_SPUREN + (sw::RET_REGLER_RETURNS - sw::RET_REGLER_RETURNS_ALT) * (sw::SPUR_REGLER_SPUREN + sw::GRP_REGLER_GRUPPEN_ALLE + 11));   // + container core K6/K7 rows (ret/5..8, spur pfl/trim/kill);   // loop deck channel strip KZ1: + 96 spur/<n>/eq/<band> rows   // production plan task 8: + the 256 spur/<slot>/bk/<k> rows (role spur_bk, class spaeter); live modules task 6: + the 16 grp/<n>/cue rows (role class spaeter);   // arr-bk: + 8 bk instances x 9 rows; arr-fx: pools 8 eq, 4 saett, 2 lim and 8 utilities x 5 rows; master limiter: + 3 ins/lim rows (role class spaeter); 1.10 slice 4b: + 59 eq and 4 saett insert rows (eq pool 2 since 2026-11-06: 2 x 59); slice 4c T15: + 48 rack macro rows rack/<k>/m<n>   // loop lane strip K1: + 96 spur/<n>/fx/1..3 rows
+    // strand 1 slices 4 and 5: lim 3 rows x 8, host 1 row x 8, gate 8 rows x 16, mb 24 rows x 8, written from the constants
+    // strand 1 slices 1, 3 and 3b: the komp and eq rows follow the pool sizes (10 per compressor, 59 per EQ; 160 + 160 since slice 3b), so they are written from the constants
+    // slice 6.1: + 24 rows for tracks 33..128 (the in-place blocks count
+    // SPUR_REGLER_SPUREN_ALT tracks, slice 6.3)
+    PRUEF(n[static_cast<int>(cdj::MixRolle::spaeter)] == 16 + 4 + 1 + 4 * sw::SPUR_REGLER_SPUREN_ALT + 4 * sw::GRP_REGLER_GRUPPEN_ALLE + 1 + 4 * 8 +
+          204 + 4 * sw::GRP_REGLER_GRUPPEN_NEU + 2 * 8 + 10 * cdj::ARR_INS_KOMP + 59 * cdj::ARR_INS_EQ + 4 * 4 + 48 + 3 * cdj::ARR_INS_LIM +
+          cdj::ARR_INS_HOST + 8 * 5 + 8 * 65 + 8 * cdj::ARR_INS_GATE + 24 * cdj::ARR_INS_MB + 6 * 56 + sw::GRP_REGLER_GRUPPEN_ALLE +
+          sw::BK_REGLER_N + sw::SPUR_BK_SLOTS * sw::SPUR_BK_KNOEPFE + sw::SPUR_FILTER_N + 3 * sw::SPUR_EQ_N +
+          sw::STROM_BK_STROEME * sw::BK_REGLER_N + 5 * sw::SPUR_REGLER_SPUREN_ALT + 3 * sw::SPUR_REGLER_SPUREN_ALT +
+          (sw::RET_REGLER_RETURNS - sw::RET_REGLER_RETURNS_ALT) * (sw::SPUR_REGLER_SPUREN_ALT + sw::GRP_REGLER_GRUPPEN_ALLE + 11) +
+          (sw::SPUR_REGLER_SPUREN - sw::SPUR_REGLER_SPUREN_ALT) * 24 +
+          sw::REGLER_PLUG_HOSTS * sw::REGLER_PLUG_KNOEPFE);   // strand 2 slice 2: plug/<h>/k<m>, global, no consumer in the core
+    // + container core K6/K7 rows (ret/5..8, spur pfl/trim/kill);   // loop deck channel strip KZ1: + 96 spur/<n>/eq/<band> rows   // production plan task 8: + the 256 spur/<slot>/bk/<k> rows (role spur_bk, class spaeter); live modules task 6: + the 16 grp/<n>/cue rows (role class spaeter);   // arr-bk: + 8 bk instances x 9 rows; arr-fx: pools 8 eq, 4 saett, 2 lim and 8 utilities x 5 rows; master limiter: + 3 ins/lim rows (role class spaeter); 1.10 slice 4b: + 59 eq and 4 saett insert rows (eq pool 2 since 2026-11-06: 2 x 59); slice 4c T15: + 48 rack macro rows rack/<k>/m<n>   // loop lane strip K1: + 96 spur/<n>/fx/1..3 rows
     PRUEF(n[static_cast<int>(cdj::MixRolle::fx_rueckweg)] == 4);                     // fx/1..4/rueckweg (K2 Slice 2)
     int abweichend = 0;
     for (int r = 0; r < p.tab.anzahl(); ++r) {
@@ -259,7 +270,7 @@ int main() {
   {
     Pruefling p;
     PRUEF(p.r("master/pfl") >= 0);
-    PRUEF(p.tab.def(p.r("master/pfl")).nur_hand);
+    PRUEF(!p.tab.def(p.r("master/pfl")).nur_hand);   // strand 11: everybody may
     p.setze("deck/2/fader", 0.0f);
     p.block(1, x);
     const float g_cue = static_cast<float>(dsp::db_zu_linear(-12.0));

@@ -2,13 +2,14 @@
 // The handlers reach each other through PRO_BEFEHL (commands_helpers.ts) at call time; commands.ts merges the tables.
 import {
   AUTO_ZIELE, MAX_LANES_PRO_SPUR, MAX_KETTEN_LANEN, istGeraetZiel, passtGeraetZiel, normalisiereLane, punktePruefung, istKettenZiel, istBlendZiel,
+  istSendZiel, sendZielVon, sendZielBereich, istPluginZiel, pluginZielVon, pluginZielBereich, pluginLanen, MAX_PLUGIN_LANEN,
   blendPfad, zerlegeKettenZiel, kettenZielBereich, zielBereichVon, alleStraenge, type Lane, type Punkt, MAX_BEAT, insertWertParameter,
   type InsertPoolArt, sucheStrang, makroFaehig, makroVon, istObjekt, neueId, sucheSpur, type InsertTraeger, type Return, type Spur,
 } from './model.ts';
 import { huellkurvePruefung, type Huellkurve } from './envelope.ts';
 import { FORMEN_EINFUEGEN, bereichVereinfacht, dehne, formBereich, formPunkte, neige, setzeForm, type FormEinfuegen } from './lane_tools.ts';
 import {
-  ab, erlaube, zahl, idArg, spurVon, strangKennung, laneVon, laneBereichVon, laneBereich, laneSchreibe, laneStart, clipVon, type Args, type Handler,
+  ab, erlaube, zahl, idArg, spurVon, strangKennung, laneVon, laneBereichVon, laneBereich, laneSchreibe, laneStart, clipVon, returnVon, type Args, type Handler,
 } from './commands_helpers.ts';
 
 export const AUTO = {
@@ -24,24 +25,37 @@ export const AUTO = {
     const kennung = strangKennung(p, strang);
     if (a.ziel === undefined) ab('argument_ungueltig', 'ziel: fehlt');
     const kettig = istKettenZiel(a.ziel);
-    if (istBlendZiel(a.ziel)) {   // live modules decision 7: the blend lane lives on the stem group it names, nowhere else
+    const pluginZiel = istPluginZiel(a.ziel);
+    if (pluginZiel) {   // strand 2 slice 1: a parameter of a host stage on this strip (track, group, return, master, like chain lanes)
+      const z = pluginZielVon(a.ziel as string)!;
+      if (!pluginZielBereich(strang, a.ziel as string)) ab('ziel_unbekannt', `${String(a.ziel)} (no host stage ${z.insert} on ${kennung})`);
+      if (!(strang.automation ?? []).some((l) => l.ziel === a.ziel) && pluginLanen(strang, z.insert).length >= MAX_PLUGIN_LANEN) {
+        ab('plugin_lanen_voll', `${z.insert} on ${kennung} has ${MAX_PLUGIN_LANEN} plugin lanes`);
+      }
+    } else if (istBlendZiel(a.ziel)) {   // live modules decision 7: the blend lane lives on the stem group it names, nowhere else
       const g = (p.gruppen ?? []).find((x) => x.id === (strang as { id?: string }).id);
       if (!g || a.ziel !== `blend:${g.id}` || blendPfad(p, g.id) === null) {
         ab('ziel_unbekannt', `${a.ziel} (only on a stem group with a new path, as blend:<its id>)`);
       }
+    } else if (istSendZiel(a.ziel)) {   // send automation: the level of an existing send of a TRACK into a return (not of a group, return or master)
+      if (sucheSpur(p, kennung) !== strang) ab('ziel_unbekannt', `${a.ziel} (a send lane belongs to a track; ${kennung} is not one)`);
+      const rid = returnVon(p, sendZielVon(a.ziel)!).id;
+      if (!sendZielBereich(strang, a.ziel)) ab('ziel_unbekannt', `${a.ziel} (no send into the return ${rid} on ${kennung}: set the send first)`);
     } else if (!kettig && !(AUTO_ZIELE as readonly unknown[]).includes(a.ziel)) {
-      ab('ziel_unbekannt', `${String(a.ziel)} (${AUTO_ZIELE.join(' | ')} | insert.<stage id>.<param> | rack.m1..m4)`);
+      ab('ziel_unbekannt',
+        `${String(a.ziel)} (${AUTO_ZIELE.join(' | ')} | insert.<stage id>.<param> | rack.m1..m4 | send.<return id> | plugin.<host stage id>.<index>)`);
     }
     const s = strang as Spur;
     // return fader lane: a return also takes `fader` (the volume of the return strip); the master and groups take no volume curve, and no
     // other device target belongs to a return
     const istReturn = (p.returns ?? []).includes(strang as Return);
-    if (!kettig && !istBlendZiel(a.ziel) && !(a.ziel === 'fader' && istReturn) && (strang === p.master || sucheSpur(p, kennung) !== strang)) {
+    const geraetig = !kettig && !pluginZiel && !istBlendZiel(a.ziel) && !istSendZiel(a.ziel);   // a device lane: fader, pan, mute, solo, geraet.*
+    if (geraetig && !(a.ziel === 'fader' && istReturn) && (strang === p.master || sucheSpur(p, kennung) !== strang)) {
       ab('ziel_unbekannt', a.ziel === 'fader'
         ? `fader (the master and groups take no volume curve: a fader lane belongs to a track or a return; ${kennung} is neither)`
         : `${String(a.ziel)} (a device lane belongs to a track${istReturn ? ' (a return takes a fader lane only)' : ''}; ${kennung} is not one)`);
     }
-    if (!kettig && !istBlendZiel(a.ziel) && istGeraetZiel(a.ziel as string) && !(s.art === 'instrument' && passtGeraetZiel(a.ziel as string, s.geraet))) {
+    if (geraetig && istGeraetZiel(a.ziel as string) && !(s.art === 'instrument' && passtGeraetZiel(a.ziel as string, s.geraet))) {
       ab('ziel_unbekannt', `${String(a.ziel)} (only on a track whose device has that parameter: RB-338 lautstaerke, cutoff, resonanz, env_mod; bk k1 to k64)`);
     }
     if (kettig) {
@@ -66,13 +80,17 @@ export const AUTO = {
       if (!kettenZielBereich(strang, a.ziel as string)) ab('ziel_unbekannt', String(a.ziel));
     }
     if ((strang.automation ?? []).some((l) => l.ziel === a.ziel)) ab('lane_doppelt', `${kennung} ${a.ziel}`);
-    if ((strang.automation ?? []).length >= MAX_LANES_PRO_SPUR) ab('zu_gross', `at most ${MAX_LANES_PRO_SPUR} lanes per strip`);
+    // plugin lanes have their own limit (MAX_PLUGIN_LANEN per host stage, above) and do not count against the strip's
+    if (!pluginZiel && (strang.automation ?? []).filter((l) => !istPluginZiel(l.ziel)).length >= MAX_LANES_PRO_SPUR) {
+      ab('zu_gross', `at most ${MAX_LANES_PRO_SPUR} lanes per strip`);
+    }
     if (kettig && alleStraenge(p).reduce((n, x) => n + (x.strang.automation ?? []).filter((l) => istKettenZiel(l.ziel)).length, 0) >= MAX_KETTEN_LANEN) {
       ab('zu_gross', `at most ${MAX_KETTEN_LANEN} insert and rack lanes in the project`);
     }
     // eine Lane mit leerer Punktliste ist verboten: zwei Punkte an der Loop-Klammer mit dem Grundwert der Spur
     // slice 3 (D16): optional `punkte` bring the lane and its points in one command (a recorded take), checked like any lane
-    const ziel = a.ziel as string, wert = laneStart(strang, ziel);
+    // a plugin lane starts at 0.5: the plugin's current value lives in the host process and is not known synchronously here
+    const ziel = a.ziel as string, wert = pluginZiel ? 0.5 : laneStart(strang, ziel);
     let start: Punkt[] = [{ beat: p.loop.von_beat, wert }, { beat: p.loop.bis_beat, wert }];
     if (a.punkte !== undefined) {
       const f = punktePruefung(a.punkte, ziel, zielBereichVon(ziel, strang)!);
@@ -137,7 +155,7 @@ export const AUTO = {
     const tol = zahl(a, 'toleranz', 0, 1000, { opt: true });
     const br = laneBereichVon(traeger, lane);
     // a chain lane's default tolerance is 0.4 % of the parameter's range (the rule of pan and the device lanes, D15)
-    const toleranz = tol ?? (istKettenZiel(lane.ziel) ? 0.004 * (br.max - br.min) : undefined);
+    const toleranz = tol ?? (istKettenZiel(lane.ziel) || istPluginZiel(lane.ziel) ? 0.004 * (br.max - br.min) : undefined);
     laneSchreibe(traeger, lane, bereichVereinfacht(lane.punkte, von, bis, lane.ziel, toleranz));
   },
 
@@ -165,7 +183,8 @@ export const AUTO = {
     if (!(FORMEN_EINFUEGEN as readonly unknown[]).includes(a.form)) ab('form_ungueltig', `${String(a.form)} (${FORMEN_EINFUEGEN.join(' | ')})`);
     const { min, max, nurSprung } = laneBereichVon(traeger, lane);
     if (nurSprung && a.form !== 'rechteck') ab('form_ungueltig', `${lane.ziel} lanes take rechteck only`);
-    const vorgabe = istKettenZiel(lane.ziel) ? { unten: min, oben: max } : formBereich(lane.ziel);   // a chain lane's shape spans the parameter's own range
+    const eigen = istKettenZiel(lane.ziel) || istPluginZiel(lane.ziel);
+    const vorgabe = eigen ? { unten: min, oben: max } : formBereich(lane.ziel);   // a chain lane's shape spans the parameter's own range
     const perioden = zahl(a, 'perioden', 1, 64, { opt: true, ganz: true }) ?? 1;
     const unten = zahl(a, 'unten', min, max, { opt: true }) ?? vorgabe.unten, oben = zahl(a, 'oben', min, max, { opt: true }) ?? vorgabe.oben;
     if (unten > oben) ab('argument_ungueltig', `unten ${unten} must not lie above oben ${oben}`);

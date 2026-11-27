@@ -25,16 +25,28 @@ function freierName(bin: string, name: string): string {
   return ziel;
 }
 const isLink = (p: string): boolean => { try { fs.lstatSync(p); return true; } catch { return false; } };
-// Three kinds share the name scheme: WAV files, per-track folders (they hold mix.wav) and MIDI folders (no mix.wav). MIDI exports are not counted
+// Three kinds share the name scheme: WAV files, per-track folders (they hold mix.wav or mix.flac) and MIDI folders (no mix.wav). MIDI exports are not counted
 // and never move.
 function zaehltAlsExport(ordner: string, e: fs.Dirent): boolean {
   if (!EXPORT_NAME.test(e.name)) return false;
-  if (e.isDirectory()) return fs.existsSync(path.join(ordner, e.name, 'mix.wav'));
+  if (e.isDirectory()) return ['mix.wav', 'mix.flac'].some((m) => fs.existsSync(path.join(ordner, e.name, m)));
   return e.isFile() && e.name.endsWith('.wav');   // the folder form has no extension; a plain file without it is something else
 }
 
+// Delivery files (export delivery plan) are companions of their master `<stem>.wav`: plain files `<stem>.<rest>` where <rest> is exactly a name that
+// abgabeName (project/abgabe.ts) can produce. Anything else next to a master (notes, `.asd`, a leftover `.teil`) is not ours and stays untouched, as
+// before. Companions never count, move with their master and stay with it.
+export const BEGLEITER_REST = /^(?:(?:16bit|24bit|32float)-(?:44k|48k|88k|96k)\.(?:wav|flac)|(?:192|256|320)kbps-(?:44k|48k)\.mp3)$/;
+function begleiter(eintraege: fs.Dirent[], master: string): string[] {
+  if (!master.endsWith('.wav')) return [];
+  const stamm = `${master.slice(0, -4)}.`;
+  return eintraege.filter((e) => e.isFile() && e.name.startsWith(stamm) && BEGLEITER_REST.test(e.name.slice(stamm.length)))
+    .map((e) => e.name).sort();
+}
+
 /** Moves every export but the newest `behalte` (default 3) to `papierkorb`. A name in `genannt` stays and does not count; `neu` (the export just
- *  written) always stays. With `trocken` nothing moves and `verschoben` lists what would. A failing move leaves the entry, logs once and stops. */
+ *  written) always stays. With `trocken` nothing moves and `verschoben` lists what would. A failing move leaves the entry, logs once and stops.
+ *  A master's delivery files move after it (name order) and never count; `behalten` counts the exports that stay, no companions. */
 export function raeumeExporteAuf(a: { exportOrdner: string; papierkorb: string; behalte?: number; genannt?: ReadonlySet<string>; neu?: string;
   trocken?: boolean; umbenenne?: (von: string, nach: string) => void; log?: (z: Record<string, unknown>) => void }):
   { verschoben: string[]; behalten: number } {
@@ -44,19 +56,27 @@ export function raeumeExporteAuf(a: { exportOrdner: string; papierkorb: string; 
   const weg = zaehlt.slice(a.behalte ?? 3).filter((n) => n !== a.neu), verschoben: string[] = [];
   const rename = a.umbenenne ?? fs.renameSync;
   const binDa = fs.existsSync(a.papierkorb);
+  const master = eintraege.filter((e) => e.isFile() && EXPORT_NAME.test(e.name) && e.name.endsWith('.wav'));
+  const alleBegleiter = new Set(master.flatMap((e) => begleiter(eintraege, e.name)));
+  let mastersVerschoben = 0;
   for (const n of weg) {
-    if (a.trocken) { verschoben.push(n); continue; }
+    const gruppe = [n, ...begleiter(eintraege, n)];
+    if (a.trocken) { verschoben.push(...gruppe); mastersVerschoben++; continue; }
+    let name = n;
     try {
       fs.mkdirSync(a.papierkorb, { recursive: true });
-      rename(path.join(a.exportOrdner, n), freierName(a.papierkorb, n));
-      verschoben.push(n);
+      for (name of gruppe) {
+        rename(path.join(a.exportOrdner, name), freierName(a.papierkorb, name));
+        verschoben.push(name);
+        if (name === n) mastersVerschoben++;
+      }
     } catch (e) {
-      a.log?.({ typ: 'export_aufraeumen_fehler', name: n, fehler: (e as Error).message });   // stays where it is, never removed
+      a.log?.({ typ: 'export_aufraeumen_fehler', name, fehler: (e as Error).message });   // stays where it is, never removed
       break;
     }
   }
   if (!binDa && !a.trocken) { try { fs.rmdirSync(a.papierkorb); } catch { /* has content or is gone */ } }
-  return { verschoben, behalten: eintraege.length - verschoben.length };
+  return { verschoben, behalten: eintraege.length - alleBegleiter.size - mastersVerschoben };
 }
 
 /** Every token that matches EXPORT_NAME in a `*.md` below the folders (recursively, links not followed). A path token counts by its last element. */
@@ -73,7 +93,10 @@ export function genannteExporte(ordner: string[]): Set<string> {
         try { text = fs.readFileSync(p, 'utf8'); } catch { continue; }
         for (const roh of text.split(/[\s`'"()[\]<>,;*|]+/)) {
           const t = roh.replace(/[.:!?]+$/, '').split(/[\\/]/).pop() ?? '';
-          if (EXPORT_NAME.test(t)) aus.add(t);
+          if (EXPORT_NAME.test(t)) { aus.add(t); continue; }
+          // a delivery file names its master: the part before the first dot plus .wav
+          const punkt = t.indexOf('.');
+          if (punkt > 0 && BEGLEITER_REST.test(t.slice(punkt + 1)) && EXPORT_NAME.test(`${t.slice(0, punkt)}.wav`)) aus.add(`${t.slice(0, punkt)}.wav`);
         }
       }
     }
@@ -92,14 +115,14 @@ export function genanntOrdnerAusUmgebung(): string[] { return (process.env.CYPHE
  *  A named folder that does not exist means the protection cannot be checked: nothing is tidied (logged once per folder and start). */
 export function baueNachExport(a: { einsammler: Einsammler; offen: () => { projekt: Projekt; ordner: string } | null;
   quellPfad: (sha: string, hinweis: string) => string | null; log?: (z: Record<string, unknown>) => void;
-  umbenenne?: (von: string, nach: string) => void }): (e: { slug: string; ordner: string; datei?: string }) => void {
+  umbenenne?: (von: string, nach: string) => void }): (e: { slug: string; ordner: string; datei?: string; ohneAufraeumen?: boolean }) => void {
   const gemeldet = new Set<string>();
   return (e) => {
     try {
       const ordner = genanntOrdnerAusUmgebung();
       const fehlt = ordner.filter((o) => { try { return !fs.statSync(o).isDirectory(); } catch { return true; } });
       for (const o of fehlt) if (!gemeldet.has(o)) { gemeldet.add(o); a.log?.({ typ: 'export_genannt_ordner_fehlt', ordner: o }); }
-      if (fehlt.length === 0) {
+      if (fehlt.length === 0 && !e.ohneAufraeumen) {
         raeumeExporteAuf({ exportOrdner: path.join(e.ordner, 'export'), papierkorb: papierkorbVon(path.dirname(e.ordner), e.slug),
           genannt: genannteExporte(ordner), neu: e.datei, umbenenne: a.umbenenne, log: a.log });
       }

@@ -141,12 +141,15 @@ class Wache:
 
     def lauf(self):
         mon, runden, mon_ab = None, self.a.runden, 0.0   # mon_ab: Monitor frühestens dann neu starten
+        weck_r, weck_w = os.pipe()   # the TERM handler writes here, so the wait below ends at once
+        os.set_blocking(weck_w, False)
+        _STOPP["weck"] = weck_w
         self.pruefe("start")
         self.schreibe()
         self.sag(f"wache an: pci={self.a.pci} karte={self.karte} zustand={self.zustand}")
         naechster = time.monotonic() + self.a.takt_ms / 1000
         try:
-            while runden is None or runden > 0:
+            while (runden is None or runden > 0) and not _STOPP["an"]:
                 if runden is not None:
                     runden -= 1
                 if mon is not None and (mon.poll() is not None or getattr(self, "_mon_karte", None) != self.karte):
@@ -158,8 +161,10 @@ class Wache:
                     self._mon_karte = self.karte
                 ziel = min(naechster, self.nachpruefung or naechster)
                 warte = max(0.0, ziel - time.monotonic())
-                bereit = select.select([mon.stdout], [], [], warte)[0] if mon else (time.sleep(warte) or [])
-                if bereit:
+                bereit = select.select([weck_r] + ([mon.stdout] if mon else []), [], [], warte)[0]
+                if _STOPP["an"]:
+                    break
+                if mon is not None and mon.stdout in bereit:
                     if not os.read(mon.stdout.fileno(), 65536):   # Monitor beendet: bis zum nächsten Takt nur Takt
                         mon.wait(); mon = None
                         mon_ab = time.monotonic() + self.a.takt_ms / 1000
@@ -173,8 +178,24 @@ class Wache:
                     naechster = time.monotonic() + self.a.takt_ms / 1000
                 self.schreibe()
         finally:
+            _STOPP["weck"] = None
+            os.close(weck_r); os.close(weck_w)
             if mon is not None:
                 mon.kill()
+
+
+_STOPP = {"an": False, "weck": None}   # set by the TERM handler; weck: write end of the wake pipe of a running lauf()
+
+
+def beenden(_sig=None, _frame=None):
+    """TERM handler: ask lauf() to end. It must not raise: Python may run it inside a finaliser (Popen.__del__ of a finished
+    monitor), where an exception is printed and dropped. A sys.exit() here was lost that way now and then and the wache ran on."""
+    _STOPP["an"] = True
+    if _STOPP["weck"] is not None:
+        try:
+            os.write(_STOPP["weck"], b"x")
+        except OSError:
+            pass
 
 
 def main(argv=None):
@@ -201,7 +222,7 @@ def main(argv=None):
     if not a.pci or not PCI_RE.match(a.pci) or not a.status or not 50 <= a.takt_ms <= 10000 or a.versuche < 1:
         print("digitalwache: need --pci 0000:00:00.0, --status FILE, --takt-ms 50..10000, --versuche >= 1", file=sys.stderr)
         return 2
-    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))   # finally in lauf() räumt den Monitor ab
+    signal.signal(signal.SIGTERM, beenden)   # lauf() ends at once, its finally clears the monitor away
     Wache(a).lauf()
     return 0
 

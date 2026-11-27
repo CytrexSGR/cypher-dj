@@ -1,6 +1,6 @@
 // Task N2: /k/live/tasten ,hsi in the net thread (INTERFACES 4.7).
-//   (a) good commands become Befehl TASTEN_ZIEL: nr = strom for 0 (off), 2, 3, 5, 6, 7, 9, 10 from andreas and from the other sources that are no cypher
-//   (b) refusals as /q 6 with nothing in the ring: strom 1, 4, 8, 11, -1 -> ausserhalb_bereich; unknown source -> ausserhalb_bereich; cypher -> nur_hand (also for strom 0), the range first
+//   (a) good commands become Befehl TASTEN_ZIEL: nr = strom for 0 (off), 2, 3, 5, 6, 7, 9, 10 from andreas and from every other known source, cypher included (strand 11)
+//   (b) refusals as /q 6 with nothing in the ring: strom 1, 4, 8, 11, -1 -> ausserhalb_bereich; unknown source -> ausserhalb_bereich; cypher only gets the range check
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -45,10 +45,10 @@ int main() {
     }
     sende(++id, "gibtsnicht", 2);
     PRUEF(abgelehnt(id, "ausserhalb_bereich"));
-    sende(++id, "cypher", 2);
-    PRUEF(abgelehnt(id, "nur_hand"));
+    sende(++id, "cypher", 2);   // strand 11: cypher may set the key target
+    PRUEF(bef->hole(b) && b.art == cdj::Befehl::TASTEN_ZIEL && b.id == id && b.nr == 2 && !std::strcmp(b.quelle, "cypher"));
     sende(++id, "cypher", 0);
-    PRUEF(abgelehnt(id, "nur_hand"));
+    PRUEF(bef->hole(b) && b.art == cdj::Befehl::TASTEN_ZIEL && b.id == id && b.nr == 0 && !std::strcmp(b.quelle, "cypher"));
     sende(++id, "cypher", 4);
     PRUEF(abgelehnt(id, "ausserhalb_bereich"));
     PRUEF(!bef->hole(b));

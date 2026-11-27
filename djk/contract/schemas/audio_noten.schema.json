@@ -1,0 +1,45 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cypherdj.invalid/vertrag/1/audio_noten.schema.json",
+ "title": "Note list of an audio clip, the clip field `audio_noten` (notes.md, note editor spec N3): the id of the curve the notes were cut from and the notes",
+ "description": "Rules that compare values of the instance cannot be written in JSON Schema and are checked by notes_contract.ts (audioNotenPruefung) and the core: ids are unique; the list is ordered by qa and qe[i] <= qa[i+1] (touching notes are allowed); qe > qa + 0.01; ton differs from qton and lies within qton +-24, with 1e-4 of tolerance because targets are rounded to 1e-4 (24 itself is inside); a differs from qa and e from qe; the effective end (e, else qe) is greater than the effective start (a, else qa). Stored form is canonical: a target that equals its detected value (or the default 1, 1, 0, 0) is absent.",
+ "type": "object",
+ "additionalProperties": false,
+ "required": ["kurve", "liste"],
+ "properties": {
+  "kurve": {"$ref": "#/$defs/kurve_id"},
+  "liste": {"$ref": "#/$defs/liste"}
+ },
+ "$defs": {
+  "kurve_id": {
+   "description": "Curve id: <detector version>.<segmenter version>, for example pyin-1.noten_hmm-1; the same string as the middle part of the sidecar name",
+   "type": "string",
+   "pattern": "^[a-z0-9_]+-[0-9]+\\.[a-z0-9_]+-[0-9]+$"
+  },
+  "liste": {
+   "type": "array",
+   "maxItems": 4096,
+   "items": {"$ref": "#/$defs/note"}
+  },
+  "note": {
+   "description": "qa, qe, a, e are source seconds; qton and ton are float MIDI pitch (A4 = 69); p is the level 0..1; vib and drift are factors (1 = unchanged); formant is in semitones; gain_db in dB",
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["id", "qa", "qe", "qton", "p"],
+   "properties": {
+    "id": {"type": "string", "pattern": "^t[1-9][0-9]{0,5}$"},
+    "qa": {"type": "number", "minimum": 0},
+    "qe": {"type": "number", "exclusiveMinimum": 0},
+    "qton": {"type": "number", "minimum": 0, "maximum": 127},
+    "p": {"type": "number", "minimum": 0, "maximum": 1},
+    "a": {"type": "number", "minimum": 0},
+    "e": {"type": "number", "exclusiveMinimum": 0},
+    "ton": {"type": "number", "minimum": 0, "maximum": 127},
+    "vib": {"type": "number", "minimum": 0, "maximum": 4, "not": {"const": 1}},
+    "drift": {"type": "number", "minimum": 0, "maximum": 4, "not": {"const": 1}},
+    "formant": {"type": "number", "minimum": -12, "maximum": 12, "not": {"const": 0}},
+    "gain_db": {"type": "number", "minimum": -48, "maximum": 12, "not": {"const": 0}}
+   }
+  }
+ }
+}

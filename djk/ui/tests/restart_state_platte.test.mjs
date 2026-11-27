@@ -61,6 +61,10 @@ async function ersterLauf(u, generation = 3, sample = 1000) {
   e.o.graphBesitzer.master = 'andreas';
   e.o.merkeNeustartStand();
   await warte(450);   // the write is coalesced
+  // under the load of the full gate the coalesced write can come later than 450 ms: wait until the file holds this run (owner included), at most 5 s
+  for (const ende = Date.now() + 5000; Date.now() < ende; await warte(50)) {
+    try { if (JSON.parse(fs.readFileSync(u.datei, 'utf8')).graphBesitzer?.master === 'andreas') break; } catch { /* not written yet */ }
+  }
   return e;
 }
 

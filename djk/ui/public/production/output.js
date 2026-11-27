@@ -40,6 +40,10 @@ export const AUSGABE_FEHLER = {
   export_bereich: 'The export range must be 1 to 1024 beats long',
   export_leer: 'No unmuted instrument track has a note in this range',
   keine_arbeitsflaeche: 'The server has no desktop session to open a folder in',
+  pfad_fehlt: 'There is no such folder',
+  pfad_ausserhalb: 'That folder is outside your home folder and the mounted drives, or hidden',
+  pfad_nicht_lesbar: 'That folder cannot be read',
+  ordner_nicht_schreibbar: 'That folder is not writable',
 };
 export const MEHRDEUTIG = new Set(['beschaeftigt', 'zu_gross']);
 const satz = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -48,8 +52,14 @@ export function mehrdeutigText(r) {
   const code = r?.j?.fehler ?? r?.j?.grund, text = typeof r?.j?.text === 'string' ? r.j.text.trim() : '';
   return MEHRDEUTIG.has(code) && text ? satz(text) : null;
 }
+// argument_ungueltig of an export carries the entry at fault as `detail` next to its English `text` (abgabe, ziel): the message shows both
+function detailText(r) {
+  const j = r?.j;
+  return j?.fehler === 'argument_ungueltig' && typeof j.text === 'string' && j.text.trim() && typeof j.detail === 'string' && j.detail.trim()
+    ? `${j.text.trim()} (${j.detail.trim()})` : null;
+}
 export function ausgabeFehler(r, sonst) {
-  return mehrdeutigText(r) ?? AUSGABE_FEHLER[r?.j?.fehler ?? r?.j?.grund] ?? sonst(r);
+  return mehrdeutigText(r) ?? detailText(r) ?? AUSGABE_FEHLER[r?.j?.fehler ?? r?.j?.grund] ?? sonst(r);
 }
 
 // Zustand des FREEZE-Schalters einer Spur: an (eingefroren), laeuft (dieser Lauf), gesperrt (ein anderer Lauf oder kein Projekt)
@@ -114,13 +124,65 @@ export function einsammelText(j) {
   if (n(j.abweichend)) teile.push(`${n(j.abweichend)} copied wrongly and removed`);
   return { text: teile.join(' · '), titel: '', warnung: n(j.fehlt) + n(j.abweichend) > 0 };
 }
+// Delivery files of an export (answer key abgaben): the tag is the part of the file name between the master name and the extension
+// (`16bit-44k`); a failed entry (datei null) has no file, its tag is built like the server builds it (djk/ui/project/abgabe.ts abgabeName)
+function abgabeTag(a, masterName) {
+  if (typeof a.datei === 'string') {
+    const n = dateiName(a.datei), basis = masterName.replace(/\.wav$/i, '');
+    if (n.startsWith(`${basis}.`) && n.lastIndexOf('.') > basis.length) return n.slice(basis.length + 1, n.lastIndexOf('.'));
+  }
+  const k = zahl(a.rate_hz) ? `${Math.floor(a.rate_hz / 1000)}k` : '';
+  const t = a.format === 'mp3' ? `${a.kbps}kbps` : a.bits === 32 ? '32float' : `${a.bits}bit`;
+  return k ? `${t}-${k}` : String(a.format ?? 'file');
+}
+function abgabenText(j) {
+  const liste = Array.isArray(j.abgaben) ? j.abgaben : [], master = dateiName(j.datei);
+  let text = '', fehlgeschlagen = false;
+  for (const a of liste) {
+    const tag = abgabeTag(a, master);
+    if (typeof a.datei === 'string') text += ` · ${tag} TP ${zahl(a.true_peak_dbtp) ? dbText(a.true_peak_dbtp) : 'not measured'}`;
+    else { text += ` · ${tag} FAILED`; fehlgeschlagen = true; }
+  }
+  // the reason of a failed delivery is shown nowhere else: one tooltip line each (`<tag> failed: <fehler>`)
+  const gescheitert = liste.filter((a) => typeof a.datei !== 'string')
+    .map((a) => `${abgabeTag(a, master)} failed${typeof a.fehler === 'string' && a.fehler.trim() ? `: ${a.fehler.trim()}` : ''}`);
+  return { text, fehlgeschlagen, dateien: liste.filter((a) => typeof a.datei === 'string').map((a) => a.datei), gescheitert };
+}
+// the target check: how far the master is from the target loudness, and whether a true peak is above the ceiling (ziel_ok false) or was not measured (null)
+function zielText(j) {
+  let text = '';
+  const d = j.ziel_pruefung?.lufs_abstand;
+  if (zahl(d) && Math.abs(d) >= 0.5) text += d > 0 ? ` · +${d.toFixed(1)} LU above target` : ` · ${(-d).toFixed(1)} LU under target`;
+  if (j.ziel_ok === false) text += ` · TRUE PEAK ABOVE ${zahl(j.ziel?.true_peak_dbtp) ? `${dbText(j.ziel.true_peak_dbtp)} dBTP` : 'the target'}`;
+  if (j.ziel_ok === null) text += ' · TARGET NOT MEASURED';
+  return text;
+}
 export function ergebnisText(j) {
   const ueber = j.spitze_db > 0, decke = j.ueber_decke === true;   // 1.10 Slice 2: ueber_decke nur vom Produktions-Abgriff (Server, P10); ältere Antworten haben das Feld nicht
   const limiter = decke && zahl(j.limiter_db_max) && j.limiter_db_max > 0 ? ` (set limiter would take ${j.limiter_db_max.toFixed(1)} dB)` : '';
+  const ab = abgabenText(j);
   return {
-    text: `Exported ${dateiName(j.datei)} · ${dauerText(j.frames)} · peak ${dbText(j.spitze_db)} dBFS${lautheitText(j)}${ueber ? ' · CLIPPING' : ''}${decke ? ` · ABOVE SET LIMITER CEILING${limiter}` : ''}`,
-    titel: j.datei,
+    text: `Exported ${dateiName(j.datei)} · ${dauerText(j.frames)} · peak ${dbText(j.spitze_db)} dBFS${lautheitText(j)}${ueber ? ' · CLIPPING' : ''}${decke ? ` · ABOVE SET LIMITER CEILING${limiter}` : ''}${ab.text}${zielText(j)}`,
+    titel: [j.datei, ...ab.dateien, ...ab.gescheitert].join('\n'),
     pfad: `Saved to ${j.datei}`,   // the full path in visible text (the server answers with the absolute file path)
-    warnung: ueber || decke,
+    warnung: ueber || decke || ab.fehlgeschlagen || j.ziel_ok === false || j.ziel_ok === null,
   };
 }
+
+// Answer of POST /proj/export_spuren {ordner, dateien: [{art, name, datei, spitze_db, stumm}], abgabe?}: the files of the set. A muted entry (datei null)
+// has no file and is not counted. The tooltip lists the file names, the visible path line is the folder.
+export function spurenErgebnisText(j) {
+  const namen = (Array.isArray(j.dateien) ? j.dateien : []).filter((x) => typeof x.datei === 'string').map((x) => x.datei);
+  const ordner = String(j.ordner).replace(/\/+$/, '');
+  return { text: `Exported ${namen.length} file${namen.length === 1 ? '' : 's'} to ${ordner.split('/').pop()}`, titel: namen.join('\n'), pfad: `Saved to ${j.ordner}`, warnung: false };
+}
+// the answer a request of the export dialog must carry: the mix has `datei`, the per-track set has `ordner` and `dateien`
+export const istExportAntwort = (weg, j) => (weg === '/proj/export_spuren' ? typeof j?.ordner === 'string' && Array.isArray(j.dateien) : typeof j?.datei === 'string');
+// the folder the last export answer lives in (what SHOW FOLDER opens): the mix file's directory, or the track set's own folder; null when unknown
+export function ergebnisOrdner(j) {
+  if (typeof j?.datei === 'string') { const i = j.datei.lastIndexOf('/'); return i < 0 ? null : i === 0 ? '/' : j.datei.slice(0, i); }
+  if (typeof j?.ordner === 'string') return j.ordner.replace(/\/+$/, '') || null;
+  return null;
+}
+// the text line of the last export answer, whichever route it came from
+export const exportErgebnisText = (j) => (typeof j.datei === 'string' ? ergebnisText(j) : spurenErgebnisText(j));

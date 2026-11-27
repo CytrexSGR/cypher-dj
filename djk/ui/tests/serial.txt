@@ -153,3 +153,14 @@ proj_files_route.test.mjs
 proj_umbenennen_route.test.mjs
 proj_versionen_route.test.mjs
 paths_instance2.test.mjs
+space_ir.test.mjs
+track_anchor.test.mjs
+track_instrument_host_setze.test.mjs
+hand_latch_offen.test.mjs
+hand_brake_route.test.mjs
+hand_key_route.test.mjs
+hand_log_route.test.mjs
+szene.test.mjs
+bezeichnung.test.mjs
+bogen_route.test.mjs
+setup.test.mjs

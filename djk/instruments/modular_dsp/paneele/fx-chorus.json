@@ -1,0 +1,122 @@
+{
+ "format": "cypherdj-panel/2",
+ "geraet": {
+  "art": "bk",
+  "graph": "fx-chorus"
+ },
+ "title": "Cypher Chorus",
+ "akzent": "tuerkis",
+ "layout": {
+  "rows": [
+   [
+    "ratesec",
+    "voice",
+    "outsec"
+   ]
+  ]
+ },
+ "sections": [
+  {
+   "id": "ratesec",
+   "title": "RATE",
+   "cols": 2,
+   "controls": [
+    {
+     "id": "rmode",
+     "type": "selector",
+     "label": "Rate mode",
+     "bind": {
+      "param": "k1"
+     },
+     "options": [
+      "Free",
+      "1/16",
+      "1/8",
+      "1/4",
+      "1/2",
+      "1 bar",
+      "2 bars",
+      "4 bars"
+     ],
+     "default": 3,
+     "span": 2
+    },
+    {
+     "id": "rate",
+     "type": "knob",
+     "label": "Rate",
+     "bind": {
+      "param": "k2"
+     },
+     "format": "hz",
+     "default": 0.5,
+     "wirkt": {
+      "ist": [
+       "rmode",
+       [
+        0
+       ]
+      ]
+     },
+     "wirkt_text": "Rate mode is synced to the beat: pick Free",
+     "span": 2
+    }
+   ]
+  },
+  {
+   "id": "voice",
+   "title": "VOICE",
+   "cols": 2,
+   "controls": [
+    {
+     "id": "depth",
+     "type": "knob",
+     "label": "Depth",
+     "bind": {
+      "param": "k3"
+     },
+     "format": "ms",
+     "default": 0.5
+    },
+    {
+     "id": "delay",
+     "type": "knob",
+     "label": "Delay",
+     "bind": {
+      "param": "k4"
+     },
+     "format": "ms",
+     "default": 0.5
+    },
+    {
+     "id": "width",
+     "type": "knob",
+     "label": "Width",
+     "bind": {
+      "param": "k5"
+     },
+     "format": "percent",
+     "default": 1,
+     "span": 2
+    }
+   ]
+  },
+  {
+   "id": "outsec",
+   "title": "OUT",
+   "cols": 1,
+   "controls": [
+    {
+     "id": "mix",
+     "type": "knob",
+     "label": "Mix",
+     "bind": {
+      "param": "k6"
+     },
+     "format": "percent",
+     "default": 0.5
+    }
+   ]
+  }
+ ]
+}

@@ -28,7 +28,7 @@ test('pruefeSpur: Formfehler mit Ort', () => {
   assert.match(pruefeSpur({ name: 'a', fahrten: [] }, FAHRBAR).fehler, /^fahrten/);
   assert.match(ok([{ ziel: 'erz/2/filter', ab_takt: 0, nach: 0 }]).fehler, /fahrten\[0\]\.ab_takt/);
   assert.match(ok([{ ziel: 'erz/17/filter', ab_takt: 1, nach: 0 }]).fehler, /fahrten\[0\]\.ziel/);
-  assert.match(ok([{ ziel: 'wirt:bass/a_filter1_type', ab_takt: 1, nach: 2 }]).fehler, /not a continuous Surge parameter/);
+  assert.match(ok([{ ziel: 'wirt:bass/a_filter1_type', ab_takt: 1, takte: 2, nach: 2 }]).fehler, /not a continuous Surge parameter/);   // a discrete parameter takes a set, not a ramp (track_instrument_host_setze.test.mjs)
   assert.match(ok([{ ziel: 'erz/2/filter', ab_takt: 1, takte: 65, nach: 0 }]).fehler, /takte/);
   assert.match(ok([{ ziel: 'erz/2/filter', ab_takt: 1 }]).fehler, /nach/);
   assert.match(ok([{ ziel: 'erz/2/filter', ab_takt: 1, nach: 0, von: 1 }]).fehler, /von/);
@@ -36,6 +36,11 @@ test('pruefeSpur: Formfehler mit Ort', () => {
   assert.match(ok([{ ziel: 'strom:2', ab_takt: 1, muster: 'silence', takte: 2 }]).fehler, /no takte\/nach/);
   assert.match(ok([{ ziel: 'strom:4', ab_takt: 1, muster: 'silence' }]).fehler, /ziel/);
   assert.match(ok([{ ziel: 'erz/2/filter', ab_takt: 1, nach: 0, muster: 'x' }]).fehler, /muster/);
+});
+
+test('pruefeSpur: strom targets come from the stream table', () => {
+  for (const n of [1, 2, 3, 5, 6, 7, 9, 10]) assert.ok('spur' in ok([{ ziel: `strom:${n}`, ab_takt: 1, muster: 'silence' }]), `strom:${n}`);
+  for (const n of [4, 8, 11]) assert.match(ok([{ ziel: `strom:${n}`, ab_takt: 1, muster: 'silence' }]).fehler, /fahrten\[0\]\.ziel/);
 });
 
 test('pruefeSpur: Überlappung je Ziel abgewiesen, Folge und fremde Ziele erlaubt', () => {

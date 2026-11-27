@@ -26,7 +26,12 @@ const SPITZE_GRENZE: f32 = 0.9;
 /// Graphs whose delay/hall mix is deliberately not a knob, each with its reason.
 const MIX_OHNE_KNOB: &[(&str, &str)] = &[
     ("fx-bandecho", "wet-only send return for fx/3, fx/4: the wet level is the send level, and those channels have no kern knobs yet"),
+    ("fx-space", "wet-only algorithmic tail; the blend and the dry/wet are knobs 6 and 1 after it"),
+    ("space-raum", "wet-only algorithmic tail; the blend and the dry/wet are knobs 6 and 1 after it"),
+    ("space-platte", "wet-only algorithmic tail; the blend and the dry/wet are knobs 6 and 1 after it"),
+    ("space-kammer", "wet-only algorithmic tail; the blend and the dry/wet are knobs 6 and 1 after it"),
     ("fx-delay-sync", "wet-only effect return (arr-bk slice 4): the delay's own mix stays at 1 and the dry is subtracted; the wet level is the Level knob and the send level"),
+    ("fx-echo", "wet-only delay lines inside an external feedback loop; the dry/wet is the Mix knob after the loop"),
 ];
 
 fn beispiele_dir() -> PathBuf {
@@ -77,6 +82,8 @@ fn probe_wurzel() -> PathBuf {
         std::fs::write(w.join("orchester-schlag-schichten.f32"), baukasten_dsp::proben::bytes(&baukasten_dsp::proben::orchester_schlag_schichten(48_000.0))).unwrap();
         // the factory bank of the `amiga` device (tracker stage 4)
         baukasten_dsp::proben::schreibe_amiga_werk(&w);
+        // fx-space reads its shipped IRs from the graph folder
+        baukasten_dsp::proben::schreibe_space_werk(&w);
         // S21 fx-federhall reads its spring IR from the graph folder (merge S13 + S21).
         std::fs::write(w.join("feder-ir.f32"), baukasten_dsp::proben::bytes(&baukasten_dsp::proben::feder_ir(48_000.0))).unwrap();
         w
@@ -340,7 +347,22 @@ const REGLER_OHNE_WIRKUNG_AUF_DER_PROBE: &[(&str, usize, &str)] = &[
     ("drum-synth", 34, DRUMSYNTH_PAD),
     ("synth-kraken", 52, KRAKEN_GREZO),
     ("synth-poly", 54, "glide runs from the pitch a voice had last; the probe's notes all land on voices that have not played yet (the first note of a voice sets the glide to its pitch), so there is nothing to glide from. tests/synth_poly.rs `glide_auf_der_stimme` plays two chords on the same voices"),
+    // slice 1: Cypher Drive
+    ("fx-drive", 7, DRIVE_CRUSH_RATE),
+    ("fx-drive", 10, DRIVE_BAENDER_VOLL),
+    ("fx-drive", 11, DRIVE_BAENDER_VOLL),
+    ("fx-drive", 12, DRIVE_BAENDER_VOLL),
+    ("fx-drive", 13, DRIVE_BAENDER_VOLL),
+    // slice 4: echo
+    ("fx-echo", 2, "Free time acts only while Time (knob 1) stands on its last position, Free; the probe leaves Time at 0.5 = 1/4 dotted, where the Free delay line has weight 0. tests/fx_echo.rs `die_freie_zeit_folgt_dem_knopf` plays it on Free"),
+    // slice 3: modulation
+    ("fx-tremolo", 2, MODULATION_FREI_RATE),
+    ("fx-chorus", 2, MODULATION_FREI_RATE),
+    ("fx-flanger-sync", 2, MODULATION_FREI_RATE),
+    ("fx-phaser-sync", 2, MODULATION_FREI_RATE),
 ];
+
+const MODULATION_FREI_RATE: &str = "the free Rate (Hz) acts only in Rate mode Free (selector position 0); the 0.5 fill puts the selector on position 4 (1/2 note, locked to the host beat), where the Rate knob is not read. tests/fx_modulation.rs sets Rate mode Free and measures the rate";
 
 const DRUMSYNTH_PAD: &str = "a pad knob: the probe plays A2 C#3 E3 A3, which the note map sends to the closed hat and the cymbal only, so the knobs of the other pads cannot be heard on it. tests/drum_synth.rs `jeder_knopf_aendert_seinen_platz` sweeps every knob on the note of its own pad";
 const GREIF_GLIDE: &str = "glide runs from the pitch a voice had last; the probe's four notes land on voices that have not played yet (the first note of a voice sets the glide to its pitch), and the chord that follows plays the same four notes on the same voices, so there is nothing to glide from. tests/greif.rs `glide_gleitet_auf_der_stimme` plays three chords with other pitches on the voices of the first";
@@ -382,6 +404,8 @@ const WT_CHAOS_AUS: &str = "the chaos rate acts only through Chaos to position (
 const WT_SUB_AUS: &str = "the sub octave acts only through Clean sub (knob 15); the probe leaves it at 0 (off by design). `wavetable_freie_regler_wirken_ueber_ihr_tor` sweeps it with the level open";
 const WT_CHORUS_AUS: &str = "the chorus mode acts only through the chorus amount; the probe leaves it at 0 (off by design). `wavetable_freie_regler_wirken_ueber_ihr_tor` sweeps it with the amount open";
 
+const DRIVE_CRUSH_RATE: &str = "the Crush rate is read by the Crush curve only; the 0.5 fill of the curve selector is Hard. tests/fx_drive.rs sweeps it with the Crush curve selected";
+const DRIVE_BAENDER_VOLL: &str = "the crossovers and the band drive offsets act in three-band mode only; the 0.5 fill of Bands is Full (mitte 0.2). tests/fx_drive.rs sweeps them with Bands on Three bands";
 const WAVE_HUELLE_AUS: &str = "the wave envelope times only act while Wave env amount (knob 7) is away from its centre; the probe leaves it at 0.5 = amount 0 (off by design, so old presets keep their sound)";
 
 fn probe_mit_regler(name: &str, json: &str, nr: usize, wert: f32) -> Vec<(f32, f32)> {

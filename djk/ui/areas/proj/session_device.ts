@@ -1,7 +1,8 @@
 import type { Antwort, Koerper, Offen } from './session.ts';
 import { ProjFehler } from './session.ts';
 import type { Quelle } from './core_path.ts';
-import { alleInserts, sucheSpur } from '../../project/model.ts';
+import { alleInserts, sucheSpur, MAX_PLUGIN_REGLER, MAX_PLUGIN_INDEX, type Insert } from '../../project/model.ts';
+import { LernFehler } from '../learn/store.ts';
 import type { HostVerwaltung } from '../../plugins/hostverwaltung.ts';
 import type { InstrumentWirte } from '../../plugins/instrumentwirte.ts';
 import { surgeBereich, type SurgeSpiegel } from './surge.ts';
@@ -13,7 +14,27 @@ export interface GeraetHost {
   readonly hosts: HostVerwaltung;
   readonly instrumente: InstrumentWirte;
   readonly surge: SurgeSpiegel;
+  /** a project command list as one history step (`ProjSitzung.aendern`) */
+  aendere(d: Koerper, quelle: Quelle): Promise<Antwort>;
+  /** strand 2 task 2.4: sets the assigned knob rows of a stage to the plugin's current values */
+  pickup(insertId: string): Promise<void>;
+  /** the learn Bereich (set after the session is built; null before) */
+  lernen(): ReglerLernen | null;
 }
+
+/** What the knob learn route borrows from the learn Bereich (areas/learn/area.ts `LernenBereich`). */
+export interface ReglerLernen {
+  pruefeBereit(): void;
+  arme(pfad: string): void;
+  wartet(): string | null;
+  abbrechen(): void;
+  loesche(pfad: string): Promise<void>;
+  /** the paths that have a learned CC assignment */
+  gelernt(): Set<string>;
+}
+
+const knopfPfad = (insert: Insert, knopf: number): string => `plug/${String(insert.slot)}/k${String(knopf)}`;
+const alsProjFehler = (e: unknown): unknown => (e instanceof LernFehler ? new ProjFehler(e.code, e.grund) : e);   // the reason's own text comes from reasons.ts
 
 export class SitzungGeraet {
   private readonly h: GeraetHost;
@@ -50,7 +71,70 @@ export class SitzungGeraet {
     if (!t || t.insert.art !== 'host') throw new ProjFehler(404, 'insert_unbekannt');
     const r = await this.h.hosts.parameter(insertId);
     if (!r.ok) throw new ProjFehler(409, r.fehler);
-    return { code: 200, j: { insert_id: insertId, parameter: r.parameter } };
+    // strand 2 task 2.4: per parameter the knob (1..16) that drives it and whether a CC is learned onto that knob
+    const regler = t.insert.regler ?? [];
+    const gelernt = this.h.lernen()?.gelernt() ?? new Set<string>();
+    const parameter = r.parameter.map((q) => {
+      const m = regler.indexOf(Number(q.index));
+      return m < 0 ? q : { ...q, knopf: m + 1, gelernt: gelernt.has(knopfPfad(t.insert, m + 1)) };
+    });
+    return { code: 200, j: { insert_id: insertId, parameter } };
+  }
+  // POST /proj/insert/<insert_id>/lernen {index} (strand 2 task 2.4): the parameter gets the knob it already has or the lowest free one (one history
+  // step "Controller"), the knob row takes the plugin's current value, then the learn flow waits for a controller. Andreas' hand only.
+  async insertLernen(insertId: string, d: Koerper, quelle: Quelle): Promise<Antwort> {
+    if (quelle !== 'andreas') throw new ProjFehler(403, 'nur_andreas');
+    const lernen = this.h.lernen();
+    if (!lernen) throw new ProjFehler(409, 'kein_lernen');
+    const index = this.indexArg(d);
+    const o = this.h.brauchOffen();
+    const t = alleInserts(o.projekt).find((x) => x.insert.id === insertId);
+    if (!t || t.insert.art !== 'host') throw new ProjFehler(404, 'insert_unbekannt');
+    try { lernen.pruefeBereit(); } catch (e) { throw alsProjFehler(e); }
+    const liste = t.insert.regler ?? [];
+    let m = liste.indexOf(index);
+    if (m < 0) {
+      m = liste.findIndex((v) => v === null);
+      if (m < 0) m = liste.length;
+      if (m >= MAX_PLUGIN_REGLER) throw new ProjFehler(409, 'plugin_regler_voll');
+      const r = await this.knopfSetzen(o.projekt.rev, insertId, m + 1, index, quelle);
+      if (r.code !== 200) return r;
+    }
+    const pfad = knopfPfad(t.insert, m + 1);
+    await this.h.pickup(insertId);
+    try { lernen.arme(pfad); } catch (e) { throw alsProjFehler(e); }
+    return { code: 200, j: { ok: true, pfad, knopf: m + 1 } };
+  }
+  // POST /proj/insert/<insert_id>/lernen/loeschen {index}: frees the knob of that parameter and removes the learned CC. Andreas' hand only.
+  async insertLernenLoeschen(insertId: string, d: Koerper, quelle: Quelle): Promise<Antwort> {
+    if (quelle !== 'andreas') throw new ProjFehler(403, 'nur_andreas');
+    const lernen = this.h.lernen();
+    if (!lernen) throw new ProjFehler(409, 'kein_lernen');
+    const index = this.indexArg(d);
+    const o = this.h.brauchOffen();
+    const t = alleInserts(o.projekt).find((x) => x.insert.id === insertId);
+    if (!t || t.insert.art !== 'host') throw new ProjFehler(404, 'insert_unbekannt');
+    const m = (t.insert.regler ?? []).indexOf(index);
+    if (m < 0) throw new ProjFehler(404, 'keine_zuordnung');
+    const pfad = knopfPfad(t.insert, m + 1);
+    const r = await this.knopfSetzen(o.projekt.rev, insertId, m + 1, null, quelle);
+    if (r.code !== 200) return r;
+    if (lernen.wartet() === pfad) lernen.abbrechen();
+    try { await lernen.loesche(pfad); } catch (e) {   // armed but never learned: nothing to remove
+      if (!(e instanceof LernFehler && e.grund === 'keine_zuordnung')) throw alsProjFehler(e);
+    }
+    return { code: 200, j: { ok: true, pfad, knopf: m + 1 } };
+  }
+  private knopfSetzen(rev: unknown, insertId: string, knopf: number, index: number | null, quelle: Quelle): Promise<Antwort> {
+    const befehle = [{ befehl: 'plugin_regler_setzen', insert_id: insertId, knopf, index }];
+    return this.h.aendere({ rev, label: 'Controller', befehle }, quelle);
+  }
+  private indexArg(d: Koerper): number {
+    const i = d.index;
+    if (typeof i !== 'number' || !Number.isInteger(i) || i < 0 || i > MAX_PLUGIN_INDEX) {
+      throw new ProjFehler(400, 'argument_ungueltig', { text: `index: an integer 0..${String(MAX_PLUGIN_INDEX)} (the plugin parameter) is required` });
+    }
+    return i;
   }
   // POST /proj/insert/<insert_id>/fenster {an} (plan 1.11 T15, D4/D8): the plugin's own window; Andreas' hand only
   async insertFenster(insertId: string, d: Koerper, quelle: Quelle): Promise<Antwort> {

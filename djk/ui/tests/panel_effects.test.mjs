@@ -10,10 +10,11 @@ import { werksgraphPfad } from './werksgraph_path.mjs';
 
 const PANEELE = new URL('../../instruments/modular_dsp/paneele/', import.meta.url);
 
-const NAMEN = ['fx-bandecho', 'fx-crunch', 'fx-delay-sync', 'fx-diode-acid', 'fx-echo-achtel', 'fx-federhall', 'fx-filter-fahrt', 'fx-filter-regler',
-  'fx-filter-wobble', 'fx-filterbox', 'fx-flanger', 'fx-folger-filter', 'fx-formant-sprech', 'fx-kamm-metall', 'fx-labor', 'fx-lofi-sp1200',
-  'fx-ms20-schrei', 'fx-phaser', 'fx-polaritaet', 'fx-remix', 'fx-resonator', 'fx-roehre', 'fx-sem-fahrt', 'fx-sh-filter', 'fx-takt-pump',
-  'fx-vocoder-robot', 'fx-wahl-filter'];
+const NAMEN = ['fx-bandecho', 'fx-chorus', 'fx-crunch', 'fx-delay-sync', 'fx-diode-acid', 'fx-drive', 'fx-echo', 'fx-echo-achtel', 'fx-federhall',
+  'fx-filter-fahrt', 'fx-filter-regler', 'fx-filter-wobble', 'fx-filterbox', 'fx-flanger', 'fx-flanger-sync', 'fx-folger-filter',
+  'fx-formant-sprech', 'fx-kamm-metall', 'fx-labor', 'fx-lofi-sp1200', 'fx-ms20-schrei', 'fx-phaser', 'fx-phaser-sync', 'fx-polaritaet', 'fx-remix',
+  'fx-resonator', 'fx-roehre', 'fx-sem-fahrt', 'fx-sh-filter', 'fx-space', 'fx-takt-pump', 'fx-tremolo', 'fx-vocoder-robot', 'fx-wahl-filter',
+  'space-kammer', 'space-platte', 'space-raum'];
 
 const lies = (name) => JSON.parse(fs.readFileSync(new URL(`${name}.json`, PANEELE), 'utf8'));
 const graph = (name) => JSON.parse(fs.readFileSync(werksgraphPfad(name), 'utf8'));

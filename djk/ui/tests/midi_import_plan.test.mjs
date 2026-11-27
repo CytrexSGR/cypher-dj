@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { rbNorm, rbPlain } from '../project/rb_mapping.ts';
 import { fuehreListeAus } from '../project/commands.ts';
-import { neuesProjekt } from '../project/model.ts';
+import { neuesProjekt, MAX_SPUREN } from '../project/model.ts';
 import { smf, spur, nameMeta, tempoMeta, taktMeta, programm, an, aus, note } from './helpers/smf_build.mjs';
 
 const GM = { name: 'gm', noten: new Set([36, 38, 40, 42, 46]) };
@@ -132,15 +132,15 @@ test('selection and assignment: by key; unknown keys are refused; null leaves th
 });
 
 test('more parts than free tracks: nothing is planned, the reason names the numbers; with a selection it fits', () => {
-  const spuren = Array.from({ length: 33 }, (_, i) => spur([...note(i % 9, 60, 80, 48)]));
+  const spuren = Array.from({ length: MAX_SPUREN + 1 }, (_, i) => spur([...note(i % 9, 60, 80, 48)]));
   const d = leseSmf(smf(spuren));
   const plan = planeImport(d, neuesProjekt('t'), {}, ctx);
   assert.equal(plan.bericht.anlegbar, false);
-  assert.equal(plan.bericht.grund, 'midi_zu_viele_spuren'); assert.match(plan.bericht.grund_text, /33 tracks needed but only 32/);
+  assert.equal(plan.bericht.grund, 'midi_zu_viele_spuren'); assert.match(plan.bericht.grund_text, new RegExp(`${MAX_SPUREN + 1} tracks needed but only ${MAX_SPUREN}`));
   assert.deepEqual(plan.befehle, []);
-  const ok = planeImport(d, neuesProjekt('t'), { auswahl: d.teile.slice(0, 32).map((t) => `${t.spur}.${t.kanal + 1}`) }, ctx);
+  const ok = planeImport(d, neuesProjekt('t'), { auswahl: d.teile.slice(0, MAX_SPUREN).map((t) => `${t.spur}.${t.kanal + 1}`) }, ctx);
   assert.equal(ok.bericht.anlegbar, true);
-  assert.equal(lauf(neuesProjekt('t'), ok).spuren.length, 32);
+  assert.equal(lauf(neuesProjekt('t'), ok).spuren.length, MAX_SPUREN);
 });
 
 test('track ids are predicted right on a project that already has tracks and clips', () => {

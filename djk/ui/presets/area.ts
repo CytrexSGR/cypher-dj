@@ -30,7 +30,7 @@ import { bauen, frage, frageSchema, liesRegister, pruefe, pruefeAnfrage, FrageFe
 import { PRESET_ID } from './preset_id.ts';
 import { planeAnwendung, werteVonZiel, type Ziel } from './apply.ts';
 import { INSERT_ARTEN_AKTIV, type Projekt } from '../project/model.ts';
-import { listeGraphen, type GraphEintrag } from '../graphs.ts';
+import { listeGraphen, ladePanel, type GraphEintrag } from '../graphs.ts';
 import { austauschRouten } from './austausch_routes.ts';
 import type { PresetVorhoerer } from './prelisten.ts';
 import type { Element } from '../prelisten.ts';
@@ -45,7 +45,18 @@ export interface PresetOptionen extends SpeicherOptionen {
 
 // What the catalogue needs of a graph: name and art, plus the role (`kategorie`) and the synthesis type (`prinzip`) when the graph has them. The type is
 // optional on read: an older install without it lists its instruments under "Other" in the page.
-export type KatalogGraph = Pick<GraphEintrag, 'name' | 'art' | 'kategorie'> & { prinzip?: string; verborgen?: boolean };
+export type KatalogGraph = Pick<GraphEintrag, 'name' | 'art' | 'kategorie'> & { prinzip?: string; verborgen?: boolean; titel?: string };
+// User IR copies of the Space device (space-<6 hex>) are derived graphs: reached from the Space panel, not listed in the browser.
+const ABGELEITET = /^space-/;   // room variants of Cypher Space (space-raum, space-platte, space-kammer) and copies with a user impulse response (space-<hex>)
+
+/** The graphs of the folder; effect graphs carry the title of their front panel (non-empty string, cut to 40 characters) as `titel`. */
+function graphenMitTitel(): KatalogGraph[] {
+  return listeGraphen().graphen.map((g) => {
+    if (g.art !== 'effekt') return g;
+    const t = ladePanel(g.name)?.panel?.title;
+    return typeof t === 'string' && t.trim() ? { ...g, titel: t.trim().slice(0, 40) } : g;
+  });
+}
 
 // 1.16 rest (S3): the device catalogue of the PRODUCTION browser. Instruments always make a new track (spur_neu); effects become a
 // stage at the end of a chain (insert), `aktiv` from INSERT_ARTEN_AKTIV. No grand piano device exists in the code; none is listed.
@@ -61,7 +72,7 @@ export function katalog(graphen: readonly KatalogGraph[]): Record<string, unknow
     effekte: [effekt('komp', 'Compressor', 'not active yet'), effekt('eq', 'EQ', 'comes with slice 4b'), effekt('saett', 'Saturation', 'comes with slice 4b'),
       { geraet: 'hall', titel: 'Hall', ziel: 'insert', aktiv: false, grund: 'the return hall lives on returns' },
       // an effect graph is a bk stage (art bk in INSERT_ARTEN_AKTIV); its presets apply to such a stage (apply.ts bkStufenPlan)
-      ...graphen.filter((g) => g.art === 'effekt').map((g) => ({ geraet: 'bk', titel: g.name, ziel: 'insert', graph: g.name, aktiv: aktiv('bk') }))],
+      ...graphen.filter((g) => g.art === 'effekt' && !ABGELEITET.test(g.name)).map((g) => ({ geraet: 'bk', titel: g.titel ?? g.name, ziel: 'insert', graph: g.name, aktiv: aktiv('bk') }))],
   };
 }
 type Ctx = Pick<BereichKontext, 'log' | 'quelle'>;
@@ -140,7 +151,7 @@ export function presetsBereich(ctx: Ctx, opt: PresetOptionen = {}): Bereich & { 
       if (p === '/presets/suche/schema' && q.method === 'GET') return json(a, 200, frageSchema(speicher.vok));
       if (p === '/presets/register' && q.method === 'GET') return json(a, 200, bauen(speicher));
       if (p === '/presets/register/pruefen' && q.method === 'GET') return json(a, 200, pruefe(liesRegister(registerDatei), speicher, ['werk']));
-      if (p === '/presets/katalog' && q.method === 'GET') return json(a, 200, katalog(opt.graphen?.() ?? listeGraphen().graphen));
+      if (p === '/presets/katalog' && q.method === 'GET') return json(a, 200, katalog(opt.graphen?.() ?? graphenMitTitel()));
       if (p === '/presets/anwenden' && q.method === 'POST') {
         const d = await lesen(q);
         if (typeof d.id !== 'string' || !PRESET_ID.test(d.id)) throw new PresetFehler(400, 'preset_id_ungueltig');

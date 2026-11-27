@@ -1,7 +1,8 @@
 // Helpers of the project commands (commands.ts): argument checks, lookups, device builders, the command context and the registry of the handlers.
 // Moved out of commands.ts unchanged (pure move); commands.ts re-exports the names that other files import from it.
 import {
-  GERAET_PRAEFIX, BK_KNOPF_VORGABE, RB_VORGABE_NORM, normalisiereLane, punktePruefung, istKettenZiel, istBlendZiel, zerlegeKettenZiel,
+  GERAET_PRAEFIX, FADER_MIN, istSendZiel, sendZielVon,
+  BK_KNOPF_VORGABE, RB_VORGABE_NORM, normalisiereLane, punktePruefung, istKettenZiel, istBlendZiel, zerlegeKettenZiel,
   kettenZielBereich, zielBereichVon, alleStraenge, type Lane, type Punkt, GRUPPE_MAX, INTERNE_EINGAENGE, MAX_BEAT, MAX_GRUPPEN, MAX_RETURNS,
   MAX_SPUREN, HALL_FELDER, MAX_INSERTS_PRO_STRANG, MAX_INS, alleInserts, sucheStrang, gliedMakroParam, glieder, istGliedZiel, istInsertZiel, makroVon,
   VARIATION_NAME_MAX, type Rack, type RackZiel, BK_GRAPH_NAME, BK_PARAMETER, KIT_NAME, RB_PARAMETER, WIRT_SLOTS, SURGE_NAME, SURGE_PARAMETER_MAX,
@@ -11,6 +12,7 @@ import {
   type EingangIntern, type EingangMidi,
 } from './model.ts';
 import { type KitKlang, type MusterErgebnis, type MusterFehlschlag } from './pattern_clip.ts';
+import { createHash } from 'node:crypto';
 import { pruefeSchluessel, type SchluesselFrage } from './routing_rules.ts';
 import { PRESET_ID } from '../presets/preset_id.ts';
 import { stiftFehler, type Steckfeld, type Stift } from '../steckfeld.ts';
@@ -227,7 +229,7 @@ export function pluginIdentitaet(a: Args, ctx: Kontext, art: 'effekt' | 'instrum
 // plan 1.11 T7: a host stage. `plugin` {format, pfad, uid} is the identity, the display name comes from the path; the host number is the lowest free slot
 // (host_grenze when all MAX_HOST are used), the state file path is fixed here. `stufe` is accepted as another name of `pos`.
 export function hostSetzen(p: Projekt, a: Args, ctx: Kontext): void {
-  erlaube(a, 'strang_id', 'pos', 'stufe', 'art', 'plugin', 'plugin_id', 'ersetzen');
+  erlaube(a, 'strang_id', 'pos', 'stufe', 'art', 'plugin', 'plugin_id', 'ersetzen', 'key');
   const id = idArg(a, 'strang_id');
   const strang = sucheStrang(p, id) ?? ab('spur_unbekannt', id);
   if (a.pos !== undefined && a.stufe !== undefined) ab('argument_ungueltig', 'pos and stufe name the same position');
@@ -245,13 +247,35 @@ export function hostSetzen(p: Projekt, a: Args, ctx: Kontext): void {
   const belegt = new Set(alleInserts(p).filter((x) => x.insert.art === 'host' && !(ersetzen && x.insert === strang.inserts![pos])).map((x) => x.insert.slot));
   const slot = Array.from({ length: MAX_INS.host }, (_, i) => i + 1).find((n) => !belegt.has(n))
     ?? ab('host_grenze', `all ${MAX_INS.host} effect hosts are used`);
+  const key = hostSchluesselDef(p, id, identitaet, a.key, ctx, ersetzen ? strang.inserts![pos] : undefined);
   const iid = neueId(p, 'insert');
   const name = indexName || pfad.replace(/\/+$/, '').split('/').pop()!.replace(/\.(vst3|lv2)$/i, '') || pfad;
   const insert: Insert = { id: iid, art: 'host', slot, an: true, werte: {}, plugin: { ...identitaet, name: name.slice(0, 128) },
-    zustand: `plugins/${iid}.carxs` };
+    zustand: `plugins/${iid}.carxs`, ...(key ? { key } : {}) };
   liste.splice(pos, 0, insert);
   strang.inserts = liste;
   rackBereinigen(strang);
+}
+// strand 2 task 3.4: the structural key of a host stage. Its plugin needs a key pair: the index entry (looked up by the id plugin_scan.py gives the
+// identity, sha1 of `<format>:<pfad>#<uid>`) has at least HOST_SCHLUESSEL_EIN audio inputs, inputs 3 and 4 being the key; no entry or fewer inputs
+// is kein_schluessel. The sources and rules are those of the compressor, but a host stage has no row key: track pre (the komp row sc) is refused.
+// null = no key (always allowed, also without an index).
+export const HOST_SCHLUESSEL_EIN = 4;
+export const pluginIndexId = (pl: { format: string; pfad: string; uid: string }): string =>
+  createHash('sha1').update(`${pl.format}:${pl.pfad}#${pl.uid}`).digest('hex').slice(0, 12);
+export function hostSchluesselDef(p: Projekt, strangId: string, plugin: { format: string; pfad: string; uid: string }, x: unknown, ctx: Kontext,
+  ausser?: Insert): InsertSchluessel | null {
+  if (x === undefined || x === null) return null;
+  const e = ctx.pluginIndex?.(pluginIndexId(plugin)) ?? null;
+  if (!e || !(typeof e.audio_ein === 'number' && e.audio_ein >= HOST_SCHLUESSEL_EIN)) {
+    const hat = e ? `${e.audio_ein ?? 0} audio inputs` : 'not in the plugin index';
+    ab('kein_schluessel', `${e?.name ?? plugin.pfad}: ${hat}, a key needs ${HOST_SCHLUESSEL_EIN}`);
+  }
+  if (istObjekt(x) && x.quelle === 'spur' && x.punkt === 'pre') {
+    ab('argument_ungueltig', 'key: track pre is the row key of the compressor; a host stage takes track post or another source');
+  }
+  const def = schluesselDef(p, strangId, x, ausser);
+  return def && 'key' in def ? def.key : null;
 }
 // slice 4: a stage by its ID, with the strip that carries it
 export const insertVon = (p: Projekt, id: string): { strang: InsertTraeger; insert: Insert } => {
@@ -350,6 +374,7 @@ export function rackGeraetVon(p: Projekt, a: Args): RackGeraet {
 // start value of a new lane: what the track has now, so the new line changes nothing audible until a point is moved
 export function laneStart(strang: Spur | InsertTraeger, ziel: string): number {
   if (istBlendZiel(ziel)) return (strang as { blend?: number }).blend ?? 0;
+  if (istSendZiel(ziel)) return ((strang as Spur).sends ?? []).find((x) => x.id === sendZielVon(ziel))?.db ?? FADER_MIN;   // the level of the send now
   const k = zerlegeKettenZiel(ziel);
   if (k) {   // 1.12 slice 6: a chain lane starts at the row value of its parameter (the macro value for a macro lane)
     if ('makro' in k) return strang.rack?.werte[k.makro - 1] ?? 0;
@@ -715,7 +740,10 @@ export interface MusterMeldung {
   clip_id: string; spur_id: string; noten_zahl: number; takte: number; loop_beats: number | null;
   huellkurven: string[]; ohne_ziel: string[]; hinweise: string[];
 }
-export interface PluginEintrag { format: 'vst3' | 'lv2'; pfad: string; uid: string; name: string; art: string; status: string; grund?: string }
+export interface PluginEintrag {
+  format: 'vst3' | 'lv2'; pfad: string; uid: string; name: string; art: string; status: string; grund?: string; klasse?: number;
+  audio_ein?: number;   // strand 2 task 3.4: a host stage takes a key with 4 or more
+}
 
 export { laneHinweise };   // declared above without the modifier: the line would pass 160 characters
 

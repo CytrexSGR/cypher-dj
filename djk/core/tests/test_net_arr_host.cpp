@@ -1,8 +1,8 @@
 // Plan 1.11 T5: /k/arr/ins_host ,hsii and /k/arr/ins_mess ,hsi in the net thread (INTERFACES 4.11) and the answers /e/ins_host ,ii, /e/ins_mess ,iis, /zustand/ins_host (5.13).
 //   (a) good commands become Befehl ARR_INS_HOST (nr = h, an = gesund) and ARR_INS_MESS (nr = h)
-//   (b) refusals as /q 6 ausserhalb_bereich with nothing in the ring: h outside 1..4, gesund outside 0/1, an unknown source; leitstand and andreas pass (negative control)
+//   (b) refusals as /q 6 ausserhalb_bereich with nothing in the ring: h outside 1..8, gesund outside 0/1, an unknown source; leitstand and andreas pass (negative control)
 //   (c) in the AI stop cypher is refused with ki_gestoppt before any range check, leitstand is not
-//   (d) the kern events leave as /e/ins_host (h, gesund), /e/ins_mess (h, rundweg, grund) and /zustand/ins_host (12 integers)
+//   (d) the kern events leave as /e/ins_host (h, gesund), /e/ins_mess (h, rundweg, grund) and /zustand/ins_host (24 integers)
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -44,12 +44,16 @@ int main() {
     PRUEF(bef->hole(b) && b.art == cdj::Befehl::ARR_INS_HOST && b.id == 801 && b.nr == 2 && b.an == 1 && !std::strcmp(b.quelle, "leitstand"));
     host(802, "andreas", 4, 0);
     PRUEF(bef->hole(b) && b.art == cdj::Befehl::ARR_INS_HOST && b.nr == 4 && b.an == 0);
+    host(804, "andreas", 8, 1);   // strand 1 slice 5: eight hosts
+    PRUEF(bef->hole(b) && b.art == cdj::Befehl::ARR_INS_HOST && b.id == 804 && b.nr == 8 && b.an == 1);
+    mess(805, "leitstand", 8);
+    PRUEF(bef->hole(b) && b.art == cdj::Befehl::ARR_INS_MESS && b.id == 805 && b.nr == 8);
     mess(803, "leitstand", 1);
     PRUEF(bef->hole(b) && b.art == cdj::Befehl::ARR_INS_MESS && b.id == 803 && b.nr == 1);
     // (b)
     host(811, "leitstand", 0, 1);
     PRUEF(abgelehnt(811, "ausserhalb_bereich"));
-    host(812, "leitstand", 5, 1);
+    host(812, "leitstand", 9, 1);
     PRUEF(abgelehnt(812, "ausserhalb_bereich"));
     host(813, "leitstand", 1, 2);
     PRUEF(abgelehnt(813, "ausserhalb_bereich"));
@@ -59,7 +63,7 @@ int main() {
     PRUEF(abgelehnt(815, "ausserhalb_bereich"));
     mess(816, "leitstand", 0);
     PRUEF(abgelehnt(816, "ausserhalb_bereich"));
-    mess(817, "leitstand", 5);
+    mess(817, "leitstand", 9);
     PRUEF(abgelehnt(817, "ausserhalb_bereich"));
     mess(818, "gibtsnicht", 1);
     PRUEF(abgelehnt(818, "ausserhalb_bereich"));
@@ -107,15 +111,22 @@ int main() {
       PRUEF(g.warte("/e/ins_mess", 300) && g.m.werte[0].i == 4 && g.m.werte[1].i == -1 && !std::strcmp(g.s(2), "kein_rueckweg"));
       cdj::Ereignis z{};
       z.art = cdj::Ereignis::INS_HOST_ZUSTAND;
-      for (int h = 0; h < 4; ++h) {
+      for (int h = 0; h < 8; ++h) {
         z.host_gesund[h] = h % 2;
         z.host_rundweg[h] = 500 + h;
       }
+      z.host_schluessel_da = 1;
       PRUEF(ere->schiebe(z));
       netz.ereignisse_senden();
-      PRUEF(g.warte("/zustand/ins_host", 300) && !std::strcmp(g.m.typen, "iiiiiiiiiiii"));
-      for (int h = 0; h < 4; ++h)
+      // 25 integers: 8 hosts x (h, gesund, rundweg), then schluessel_da (strand 2 task 3.3 fix B1)
+      PRUEF(g.warte("/zustand/ins_host", 300) && !std::strcmp(g.m.typen, "iiiiiiiiiiiiiiiiiiiiiiiii"));
+      for (int h = 0; h < 8; ++h)
         PRUEF(g.m.werte[3 * h].i == h + 1 && g.m.werte[3 * h + 1].i == h % 2 && g.m.werte[3 * h + 2].i == 500 + h);
+      PRUEF(g.m.werte[24].i == 1);
+      z.host_schluessel_da = 0;   // JACK refused the key ports
+      PRUEF(ere->schiebe(z));
+      netz.ereignisse_senden();
+      PRUEF(g.warte("/zustand/ins_host", 300) && g.m.werte[24].i == 0 && g.m.werte[3].i == 2);
     }
   }
   PRUEF_ENDE();

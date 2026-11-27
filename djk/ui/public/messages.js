@@ -13,6 +13,10 @@ export const HAND_PRUEFMODUS_TEXT = 'hand input needs test mode until slice 35';
 
 // Cyphers Vorschlag und Stopp aus den Leitstand-Ereignissen (Plan M-1 Annahme-Weg). Rein, damit ohne Browser prüfbar.
 // stand = { vorschlag: {id, text, start_beat} | null, gestoppt: bool }; Rückgabe: neuer Stand, oder null wenn das Ereignis nichts ändert.
+// The agent stop switch of the page server (/strom event `hand`): pure, no browser.
+export function handAnzeige(f) {
+  return { gestoppt: !!f?.gestoppt, text: f?.gestoppt ? 'AGENTS STOPPED' : '' };
+}
 export function cypherStand(stand, e) {
   switch (e.art) {
     case 'plan_vorgeschlagen':

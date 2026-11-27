@@ -40,9 +40,9 @@ const ZUG: Record<string, Eintrag> = {
   'kill/tief': r('schalter', 0, 1, 0), 'kill/mitte': r('schalter', 0, 1, 0), 'kill/hoch': r('schalter', 0, 1, 0),
   filter: r('linear', -1, 1, 0),
   'send/1': r('db', -200, 0, -200), 'send/2': r('db', -200, 0, -200), 'send/3': r('db', -200, 0, -200), 'send/4': r('db', -200, 0, -200),
-  xseite: r('stufe', 0, 2, 1, true),
-  pfl: r('schalter', 0, 1, 0, true),
-  ziel: r('stufe', 0, 4, 0, true),
+  xseite: r('stufe', 0, 2, 1),
+  pfl: r('schalter', 0, 1, 0),
+  ziel: r('stufe', 0, 4, 0),
   'komp/an': r('schalter', 0, 1, 0), 'komp/schwelle': r('linear', -60, 0, -18), 'komp/ratio': r('linear', 1, 20, 4),
   'komp/attack': r('linear', 0.1, 100, 10), 'komp/release': r('linear', 10, 1000, 120), 'komp/makeup': r('linear', 0, 24, 0),
   'komp/mix': r('linear', 0, 1, 1), 'komp/sc': r('stufe', 0, 4, 0),
@@ -59,7 +59,7 @@ for (const k of CONTAINER) {
   for (const s of pultReglerZug) if (s in ZUG) setze(`${k}/${s}`, k, ZUG[s]);
 }
 for (const k of BUSSE) {
-  for (const s of pultReglerBus) if (s in ZUG) setze(`${k}/${s}`, k, s === 'fader' ? r('db', -200, 0, -200, true) : ZUG[s]);   // bus/<n>/fader only by hand (§1.5)
+  for (const s of pultReglerBus) if (s in ZUG) setze(`${k}/${s}`, k, ZUG[s]);
 }
 for (let n = 1; n <= DECKS.length; n++) {
   for (const s of pultReglerPlayer) if (s.startsWith('stem/')) setze(`deck/${n}/${s}`, `deck/${n}`, r('db', -200, 6, 0));
@@ -70,8 +70,8 @@ for (const n of PULT_ALIAS_STROEME) {
 }
 
 for (const [p, e] of Object.entries({
-  xfader: r('linear', -1, 1, 0, true), 'master/pegel': r('db', -200, 0, 0, true), 'master/kleber': r('linear', 0, 1, 0, true), 'cue/mix': r('linear', -1, 1, -1, true),
-  'cue/pegel': r('db', -200, 0, -12, true), 'cue/split': r('schalter', 0, 1, 0, true), 'master/pfl': r('schalter', 0, 1, 0, true),
+  xfader: r('linear', -1, 1, 0), 'master/pegel': r('db', -200, 0, 0), 'master/kleber': r('linear', 0, 1, 0), 'cue/mix': r('linear', -1, 1, -1),
+  'cue/pegel': r('db', -200, 0, -12, true), 'cue/split': r('schalter', 0, 1, 0), 'master/pfl': r('schalter', 0, 1, 0),
   'fx/1/notenwert': r('linear', 1 / 32, 4, 0.75), 'fx/2/notenwert': r('linear', 1 / 32, 4, 0.75),
   'fx/1/rueckkopplung': r('linear', 0, 0.95, 0.5), 'fx/2/rueckkopplung': r('linear', 0, 0.95, 0.5),
   'fx/1/rueckweg': r('db', -200, 0, 0), 'fx/2/rueckweg': r('db', -200, 0, 0),
@@ -80,7 +80,7 @@ for (const [p, e] of Object.entries({
   'color/art': r('stufe', 0, 5, 0), 'color/param': r('linear', 0, 1, 0.5),   // SOUND COLOR FX, alle dürfen
   keylock: r('schalter', 0, 1, 1),   // Keylock 3 (Fassung 4): EIN Knopf für alle Quellen, alle dürfen
 })) tabelle.set(p, { pfad: p, kanal: null, ...e });
-for (let n = 1; n <= 32; n++) {   // D1 K1 (§1.5), E3: 32 Slots: Spur-Regler des Arrangements, global, alle dürfen; Fader bis +6 dB (Spec 6.16)
+for (let n = 1; n <= 128; n++) {   // D1 K1 (§1.5), E3: 128 Slots: Spur-Regler des Arrangements, global, alle dürfen; Fader bis +6 dB (Spec 6.16)
   tabelle.set(`spur/${n}/fader`, { pfad: `spur/${n}/fader`, kanal: null, ...r('db', -200, 6, 0) });
   tabelle.set(`spur/${n}/pan`, { pfad: `spur/${n}/pan`, kanal: null, ...r('linear', -1, 1, 0) });
   tabelle.set(`spur/${n}/mute`, { pfad: `spur/${n}/mute`, kanal: null, ...r('schalter', 0, 1, 0) });
@@ -104,7 +104,7 @@ tabelle.set('pm/fader', { pfad: 'pm/fader', kanal: null, ...r('db', -200, 6, 0) 
 // Sends default to -200 (off). Hall values are normalised 0..1 (unit mapping in the kernel); hall/an is a switch.
 const HALL_VORGABE: Record<string, number> = { pre: 0.04, decay: 0.5252, groesse: 0.282, tief: 0.5658, highcut: 0.8039, fahne: 0.66667 };
 for (let ret = 1; ret <= 8; ret++) {   // container core K6: returns 1..8
-  for (let n = 1; n <= 32; n++) tabelle.set(`spur/${n}/send/${ret}`, { pfad: `spur/${n}/send/${ret}`, kanal: null, ...r('db', -200, 6, -200) });
+  for (let n = 1; n <= 128; n++) tabelle.set(`spur/${n}/send/${ret}`, { pfad: `spur/${n}/send/${ret}`, kanal: null, ...r('db', -200, 6, -200) });
   for (let n = 1; n <= 16; n++) tabelle.set(`grp/${n}/send/${ret}`, { pfad: `grp/${n}/send/${ret}`, kanal: null, ...r('db', -200, 6, -200) });
   tabelle.set(`ret/${ret}/fader`, { pfad: `ret/${ret}/fader`, kanal: null, ...r('db', -200, 6, 0) });
   tabelle.set(`ret/${ret}/pan`, { pfad: `ret/${ret}/pan`, kanal: null, ...r('linear', -1, 1, 0) });
@@ -174,6 +174,15 @@ tabelle.set('spektrum/kanal', { pfad: 'spektrum/kanal', kanal: null, ...r('stufe
 // 1.10 slice 4a/4b (§1.5): the insert controls ins/komp|eq|saett|lim/<n>/*, global rows, everybody may, project-only (the server refuses POST /regler on them).
 // The rows are generated from docs/interfaces/insert_module.json (insert_controls.ts); the namenslisten checker compares them with insert_zeilen.inc.
 for (const [pfad, e, lo, hi, v] of INSERT_REGLER_ZEILEN) tabelle.set(pfad, { pfad, kanal: null, ...r(e, lo, hi, v) });
+
+// Strand 2 slice 2 (§1.5): plug/<h>/k<m>, knob m (1..16) of effect host h (1..8), the last rows of the core table (core/signalbox/src/controls.cpp,
+// REGLER_PLUG_HOSTS x REGLER_PLUG_KNOEPFE). Global (no channel), linear 0..1, default 0, everybody may and not project-only: the page server writes
+// them with /k/teil to pick up the plugin's current value and forwards /e/hand moves of them to the plugin. Never "leiser machen".
+export const PLUG_HOSTS = 8;
+export const PLUG_KNOEPFE = 16;
+for (let h = 1; h <= PLUG_HOSTS; h++) {
+  for (let m = 1; m <= PLUG_KNOEPFE; m++) tabelle.set(`plug/${h}/k${m}`, { pfad: `plug/${h}/k${m}`, kanal: null, ...r('linear', 0, 1, 0) });
+}
 
 export const REGLER: ReadonlyMap<string, ReglerInfo> = tabelle;
 

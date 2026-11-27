@@ -92,7 +92,7 @@ def expandiere(p):
         return [f'{k}/{rest}' for k in KANAELE if not (k.startswith('bus/') and (rest == 'ziel' or rest.startswith('komp/')))]
     if p.startswith('deck/<n>/'):
         return [f'deck/{i}/{p[9:]}' for i in range(1, 5)]
-    if p.startswith('spur/<n>/'):                       # D1 K1: Spur-Regler des Arrangements, n = 1..32
+    if p.startswith('spur/<n>/'):                       # D1 K1: Spur-Regler des Arrangements, n = 1..128
         return [q for i in range(1, SPUREN[0] + 1) for q in expandiere_r(f'spur/{i}/{p[9:]}')]
     if p.startswith('grp/<n>/'):                        # 1.10 Slice 1: Gruppen-Regler des Arrangements, n = 1..16 (9..16 since nested groups)
         return [q for i in range(1, GRUPPEN[0] + 1) for q in expandiere_r(f'grp/{i}/{p[8:]}')]
@@ -229,7 +229,7 @@ def vertrag(text):
         nur_hand_alle = z[5].startswith('nur Hand')
         for p in pfade(z[0]):
             for q in (bk_pfade(p, z) or werkzeug_pfade(p, z) or expandiere(p)):
-                nh = nur_hand_alle or (q.startswith('bus/') and q.endswith('/fader') and 'bus/<n>/fader` nur Hand' in z[5])
+                nh = nur_hand_alle   # strand 11: only whole rows are nur_hand (cue/pegel); the bus fader is free
                 erg[q] = (lo, hi, vorgabe, ms(z[4]), 1 if nh else 0)
     return erg
 
@@ -268,23 +268,28 @@ def main():
     text = open(pfad, encoding='utf-8').read()
     bib = bibliothek(programm)
     falsch = text.replace('| 5 ms, zweite Ordnung |', '| 8 ms, zweite Ordnung |').replace(
-        '| 10 ms | alle; `bus/<n>/fader` nur Hand |', '| 10 ms | nur Hand |')
+        '| 10 ms | alle; Cypher: Anhebung über 6 dB nur als Rampe ab 1 Takt (`nur_rampe`, §16.2) |', '| 10 ms | nur Hand |')
     assert falsch != text, 'Selbsttest: Zeilen im Vertrag nicht gefunden'
     f_falsch = abgleich(bib, vertrag(falsch))
-    soll = {p for p in bib if '/kill/' in p} | {p for p in bib if p.endswith('/fader') and not p.startswith(('bus/', 'spur/', 'grp/', 'pm/', 'ret/'))}
+    soll = {p for p in bib if '/kill/' in p} | {p for p in bib if p.endswith('/fader') and not p.startswith(('spur/', 'grp/', 'pm/', 'ret/'))}
     ist = {f.split(':')[0] for f in f_falsch}
-    print(f'Selbsttest verfälschter Vertrag: {len(f_falsch)} Abweichungen, erwartet {len(soll)} (alle Kills, Fader außer Bus)')
+    print(f'Selbsttest verfälschter Vertrag: {len(f_falsch)} Abweichungen, erwartet {len(soll)} (alle Kills, alle Container- und Bus-Fader)')
     if ist != soll or len(f_falsch) != len(soll):
         print('FEHLER: der Abgleich sieht den verfälschten Vertrag nicht wie erwartet', sorted(ist ^ soll)[:5])
         return 1
-    # Selbsttest 2 (E3 Review-Nachzug): sagt der Vertragstext „n = 1 bis 8“, muss der Abgleich die Pfade der Slots 9 bis 32 melden (24 mal 4 Regler plus 24 mal 4 Sends)
-    spur_satz = '`spur/<n>/*` (D1, ADR 030, n = 1 bis 32)'   # only this sentence: the Baukasten row `<k>/bk/<n>` also says n = 1 bis 64 (since 2026-11-11) and is read by its own code
-    acht = text.replace(spur_satz, spur_satz.replace('n = 1 bis 32', 'n = 1 bis 8'))
-    assert acht != text, 'Selbsttest: Satz "n = 1 bis 32" der Spur-Regler im Vertrag nicht gefunden'
+    # Selbsttest 2 (E3 Review-Nachzug): sagt der Vertragstext „n = 1 bis 8“, muss der Abgleich die Pfade der Slots 9 bis 128 melden (strand 1 slice 6: 120
+    # tracks)
+    # only this sentence: the Baukasten row `<k>/bk/<n>` also says n = 1 bis 64 (since 2026-11-11) and is read by its own code
+    spur_satz = '`spur/<n>/*` (D1, ADR 030, n = 1 bis 128)'
+    acht = text.replace(spur_satz, spur_satz.replace('n = 1 bis 128', 'n = 1 bis 8'))
+    assert acht != text, 'Selbsttest: Satz "n = 1 bis 128" der Spur-Regler im Vertrag nicht gefunden'
     f_acht = abgleich(bib, vertrag(acht))
-    # slots 9..32 (24) x (fader, pan, mute, solo, filter, eq tief|mitte|hoch + one send per return); the sends of slice 3 are keyed to the same n, so 96 was stale
-    erwartet_acht = 24 * (16 + RETURNS[0])   # loop deck K7a: + the filter row; loop deck channel strip KZ1: + the three eq rows; container core K7: + pfl, trim and the three kill rows; loop lane strip K1: + the three fx rows
-    print(f'Selbsttest Vertragstext n = 1 bis 8: {len(f_acht)} Abweichungen, erwartet {erwartet_acht} (Slots 9 bis 32 mal 13 Regler plus {RETURNS[0]} Sends)')
+    # slots 9..128 (120) x (fader, pan, mute, solo, filter, eq tief|mitte|hoch + one send per return); the sends of slice 3 are keyed to the same n, so 96
+    # was stale
+    # loop deck K7a: + the filter row; loop deck channel strip KZ1: + the three eq rows; container core K7: + pfl, trim and the three kill rows; loop lane
+    # strip K1: + the three fx rows
+    erwartet_acht = 120 * (16 + RETURNS[0])
+    print(f'Selbsttest Vertragstext n = 1 bis 8: {len(f_acht)} Abweichungen, erwartet {erwartet_acht} (Slots 9 bis 128 mal 16 Regler plus {RETURNS[0]} Sends)')
     if len(f_acht) != erwartet_acht:
         print('FEHLER: der Abgleich liest den Bereich nicht aus dem Vertragstext')
         return 1

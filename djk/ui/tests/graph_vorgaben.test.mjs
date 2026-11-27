@@ -168,18 +168,28 @@ const PANEL_ERLAUBT = [
   ['fx-filterbox', 1], ['fx-filterbox', 2], ['fx-filterbox', 3], ['fx-filterbox', 5], ['fx-filterbox', 7], ['fx-filterbox', 8],
   ['granular-drone', 4],
   ['fx-wahl-filter', 1],   // the filter type selector starts on LP 12 (index 0 of 4); the graph keeps 0.5 so a project saved before the panel plays as it did
+  ['fx-drive', 1], ['fx-drive', 6], ['fx-drive', 9],   // fx-drive: Tape on load, Mix 100 % on load, Bands = Full on load (position 0; the 0.5 fill also reads Full through mitte 0.2, the selector default is the 0 end)
   ['fx-crunch', 8], ['fx-polaritaet', 1],   // Mix 100 % on load; the polarity selector's Off stop (index 2 of 4 = 2/3) while the 0.5 fill is Off too (zone 2)
   // fx-labor: the switches Delay 1, Delay 2 and Cycle start on and the filter selectors start on LP; the 0.5 fill reads the same (on, on, on, LP, LP)
   ['fx-labor', 3], ['fx-labor', 7], ['fx-labor', 15], ['fx-labor', 19], ['fx-labor', 25],
   // fx-remix: the switches 12..18 and 23 start off (default 0) and 24, 25 start on (default 1; the graph reads 0.5 as on through `mitte` 0.99); the Isolate type
   // selector 6 starts on index 2 of 4 (2/3; the graph reads 0.5 as the same type through `mitte` 2.6); the pad's touch parameter 11 starts at 0 (not touched)
   ...[12, 13, 14, 15, 16, 17, 18, 23, 24, 25, 6, 11].map((k) => ['fx-remix', k]),
+  // fx-echo: the Time selector starts on 1/8 dotted (index 2 of 8; the 0.5 fill reads 1/4 dotted) and Ping-pong starts Off (the 0.5 fill reads On)
+  ['fx-echo', 1], ['fx-echo', 7],
+  // slice 3: modulation. Rate mode starts on 1/4 (index 3 of 8; the 0.5 fill is 1/2), the tremolo Mode on Tremolo (index 0 of 2; the 0.5 fill is Pan) and its Mix on 100 %
+  ['fx-tremolo', 1], ['fx-tremolo', 5], ['fx-tremolo', 6],
+  ['fx-chorus', 1], ['fx-chorus', 5],   // Rate mode 1/4; Width 100 %
+  ['fx-flanger-sync', 1], ['fx-phaser-sync', 1],
+  // fx-space: Algo blend starts at 0 (a pure convolution; the graph keeps 0.5 because a blend of exactly 0 at the knob centre would need a `mitte` of 0, which the translator
+  // refuses); knob 6 of each of the four Space graphs
+  ...['fx-space', 'space-raum', 'space-platte', 'space-kammer'].flatMap((n) => [[n, 6]]),
 ];
 // where the plan's own knobs start: from this number on (and the Drift knob) the panel default must EQUAL the graph's vorgabe
 const ERWEITERT = { 'synth-mono': { ab: 33, extra: [32] }, 'synth-poly': { ab: 29, extra: [28] }, 'synth-neuro': { ab: 25, extra: [] } };
 
-test('panel defaults: every shipped panel control bound to a knob equals the graph vorgabe, except the 29 listed pairs of knobs that keep 0.5', () => {
-  assert.equal(PANEL_ERLAUBT.length, 29);
+test('panel defaults: every shipped panel control bound to a knob equals the graph vorgabe, except the 45 listed pairs of knobs that keep 0.5', () => {
+  assert.equal(PANEL_ERLAUBT.length, 45);
   const benutzt = new Set();
   let geprueft = 0;
   for (const f of fs.readdirSync(path.join(BK, 'paneele')).filter((x) => x.endsWith('.json'))) {

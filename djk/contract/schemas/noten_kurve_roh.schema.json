@@ -1,0 +1,19 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cypherdj.invalid/vertrag/1/noten_kurve_roh.schema.json",
+ "title": "External pitch curve, input of the command segment (notes.md): the network path writes it, the segmenter cuts the notes",
+ "description": "Same frame rules as the sidecar (noten_kurve.schema.json): arrays of frameZahl(frames) entries, f0_ct with two decimals, konf with three. The curve id of the resulting sidecar is <detektor_version>.noten_hmm-1.",
+ "type": "object",
+ "additionalProperties": false,
+ "required": ["format", "frames", "sr", "hop", "detektor", "detektor_version", "f0_ct", "konf"],
+ "properties": {
+  "format": {"const": "cdj-noten-kurve-roh/1"},
+  "frames": {"description": "Stereo frames of the source", "type": "integer", "minimum": 0},
+  "sr": {"const": 48000},
+  "hop": {"const": 256},
+  "detektor": {"const": "netz"},
+  "detektor_version": {"type": "string", "pattern": "^netz-[0-9]+$"},
+  "f0_ct": {"$ref": "noten_kurve.schema.json#/$defs/f0_ct"},
+  "konf": {"$ref": "noten_kurve.schema.json#/$defs/konf"}
+ }
+}

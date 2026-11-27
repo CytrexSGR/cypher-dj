@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { projBereich } from '../areas/proj/area.ts';
+import { MAX_SPUREN } from '../project/model.ts';
 import { aufnahmeBereich } from '../areas/proj/recording.ts';
 import { pruefKontext, warteBis } from './support/proj_context.mjs';
 import { tmpOrdner } from './support/project.mjs';
@@ -202,7 +203,7 @@ test('start sends the full state once per core generation and only differences a
   e.k.leere();
   const r = await e.a.start({ von_beat: 0 }, 'andreas');
   assert.equal(r.code, 200, JSON.stringify(r));
-  assert.equal(e.msgs().length, 32, 'first start of this generation: all 32 tracks, armed or not');
+  assert.equal(e.msgs().length, MAX_SPUREN, 'first start of this generation: all tracks, armed or not');
   const kennung = r.j.kennung;
   rohdatei(e, kennung, 1, 4800);
   e.kern('/e/aufnahme', { spur: 1, kennung, status: 0, frames: 4800, start_sample: 0n, luecken: 0 });

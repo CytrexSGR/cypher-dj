@@ -51,7 +51,7 @@ test('Arten: Send wie Fader mit Vorgabe aus, Return wie Gruppe, Hall-Werte eigen
 });
 
 test('Negativ-Kontrolle: Pfade ausserhalb sind weder Ziel noch Art', () => {
-  for (const p of ['spur/33/send/1', 'spur/1/send/9', 'spur/1/send/0', 'grp/17/send/1', 'ret/9/fader', 'ret/0/fader', 'ret/1/hall/mix', 'ret/1/send/1',
+  for (const p of ['spur/129/send/1', 'spur/1/send/9', 'spur/1/send/0', 'grp/17/send/1', 'ret/9/fader', 'ret/0/fader', 'ret/1/hall/mix', 'ret/1/send/1',
     'ret/1/hall', 'ret/1/hall/an/x', 'spur/1/send/01']) {
     assert.ok(!ZIELE.has(p), p);
     assert.equal(art(p), null, p);

@@ -4,7 +4,9 @@ import { fuehreListeAus } from './commands.ts';
 import { gruppenKette, routingRegler } from './render.ts';
 import { nachkommen } from './routing_rules.ts';
 import { brauchtFreeze, istWirt } from './freeze.ts';
-import { MAX_SPUREN, SAMPLERATE, herkunft, kanonisch, spurSicht, sucheSpur, type Gruppe, type Herkunft, type Projekt, type Spur } from './model.ts';
+import {
+  MAX_SPUREN, istSendZiel, SAMPLERATE, herkunft, kanonisch, spurSicht, sucheSpur, type Gruppe, type Herkunft, type Projekt, type Spur,
+} from './model.ts';
 
 // Das Pan-Gesetz der Spur (cos/sin über (pan+1)·π/4, arr_output.cpp:2, :26-33) senkt jeden Kanal bei Pan 0 um 20·log10(√2).
 // Der Render enthält das Gesetz der Quellen schon; die neue Spur wendet es mit Pan 0 ein zweites Mal an.
@@ -146,6 +148,12 @@ export function mergeRegler(p: Projekt, ids: string[], unter?: string): Record<s
 export function mergeWiedergabe(p: Projekt, ids: string[]): Projekt {
   const q = structuredClone(p);
   q.spuren = q.spuren.filter((s) => ids.includes(s.id) && !(istWirt(s) && !s.freeze));
+  // the render is dry (mergeRegler writes the send rows at -200) and a send lane would win over that row in the core: the snapshot has none
+  for (const s of q.spuren) {
+    if (!s.automation?.some((l) => istSendZiel(l.ziel))) continue;
+    s.automation = s.automation.filter((l) => !istSendZiel(l.ziel));
+    if (s.automation.length === 0) delete s.automation;
+  }
   return q;
 }
 

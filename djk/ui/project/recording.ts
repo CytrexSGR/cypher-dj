@@ -60,10 +60,10 @@ export function schreibeWavAusF32(quelle: string, ziel: string): { frames: numbe
 }
 
 // Review MINOR 5 (Slice 6): dasselbe in Stücken von 1 MiB über fs.promises, die Ereignisschleife bleibt frei (bei 600 s sind es 4 x 230 MB)
-export async function schreibeWavAusF32Stueckweise(quelle: string, ziel: string): Promise<{ frames: number; sha256: string }> {
+export async function schreibeWavAusF32Stueckweise(quelle: string, ziel: string, ordnerAnlegen = true): Promise<{ frames: number; sha256: string }> {
   const frames = Math.floor(fs.statSync(quelle).size / 8);
   if (50 + frames * 8 > 0xFFFFFFFF) throw new TakeFehler('take_zu_lang', `${frames} Frames`);
-  fs.mkdirSync(path.dirname(ziel), { recursive: true });
+  if (ordnerAnlegen) fs.mkdirSync(path.dirname(ziel), { recursive: true });
   const aus = await fs.promises.open(ziel, 'wx');
   try {
     const ein = await fs.promises.open(quelle, 'r');

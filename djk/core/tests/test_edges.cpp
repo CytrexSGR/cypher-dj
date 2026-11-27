@@ -133,7 +133,7 @@ int main() {
     PRUEF(cdj::filtere_kanten({{"w:out_L", kern + "rueck_erz_4_L"}, {kern + "midi_aus_1", "w:in"}}, kern, &res4).size() == 1 &&
           res4 == 1);
   }
-  {  // plan 1.11 T3: effect-host ports arr_ins_<h>_{L,R} (out) and arr_insret_<h>_{L,R} (in), h = 1..4
+  {  // plan 1.11 T3: effect-host ports arr_ins_<h>_{L,R} (out) and arr_insret_<h>_{L,R} (in), h = 1..8
     const std::string kern = "cypherdj-kern-d:";
     const std::vector<cdj::Kante> gut = {{kern + "arr_ins_2_L", "x:audio-in1"},
                                          {kern + "arr_ins_2_R", "x:audio-in2"},
@@ -141,14 +141,17 @@ int main() {
                                          {"x:audio-out2", kern + "arr_insret_2_R"},
                                          {kern + "arr_ins_1_L", "x:audio-in1"},
                                          {kern + "arr_ins_4_R", "x:audio-in2"},
-                                         {"x:audio-out1", kern + "arr_insret_4_L"}};
+                                         {"x:audio-out1", kern + "arr_insret_4_L"},
+                                         {kern + "arr_ins_5_L", "x:audio-in1"},         // hosts 5 to 8 since strand 1 slice 5
+                                         {kern + "arr_ins_8_R", "x:audio-in2"},
+                                         {"x:audio-out2", kern + "arr_insret_8_R"}};
     size_t res = 99;
     PRUEF(cdj::filtere_kanten(gut, kern, &res) == gut && res == 0);
     // error case: families not allowed (mutation CYPHERDJ_MUTATION_HOST_KANTEN_ZU) -> the accepted set above fails here
-    const std::vector<cdj::Kante> schlecht = {{kern + "arr_ins_5_L", "x:audio-in1"},        // h out of range
+    const std::vector<cdj::Kante> schlecht = {{kern + "arr_ins_9_L", "x:audio-in1"},        // h out of range
                                               {kern + "arr_ins_0_L", "x:audio-in1"},
                                               {kern + "arr_ins_10_L", "x:audio-in1"},
-                                              {"x:audio-out1", kern + "arr_insret_5_L"},
+                                              {"x:audio-out1", kern + "arr_insret_9_L"},
                                               {"x:audio-out1", kern + "arr_insret_0_R"},
                                               {kern + "arr_ins_1_X", "x:audio-in1"},         // wrong form
                                               {kern + "arr_ins_1", "x:audio-in1"},
@@ -179,6 +182,64 @@ int main() {
     PRUEF(cdj::filtere_kanten({{kern + "arr_midi_1", "w:in"}, {"w:out", kern + "arr_rueck_2_R"},
                                {"w:out", kern + "rueck_erz_4_L"}, {kern + "arr_ins_1_L", "x:in"}}, kern, &res4).size() == 3 &&
           res4 == 1);
+  }
+  {  // strand 2 task 3.3 fix A1: sidechain key arr_inskey_<h>_{L,R} (out) -> the plugin's third and fourth input, the same owner rules as arr_ins_<h>
+    const std::string kern = "cypherdj-kern-d:";
+    const std::vector<cdj::Kante> gut = {{kern + "arr_inskey_1_L", "x:audio-in3"},
+                                         {kern + "arr_inskey_1_R", "x:audio-in4"},
+                                         {kern + "arr_inskey_8_R", "y:audio-in4"}};
+    PRUEF(cdj::filtere_kanten(gut, kern) == gut);
+    const std::vector<cdj::Kante> schlecht = {{kern + "arr_inskey_9_L", "x:audio-in3"},             // h out of range
+                                              {kern + "arr_inskey_0_L", "x:audio-in3"},
+                                              {kern + "arr_inskey_1_X", "x:audio-in3"},             // wrong form
+                                              {kern + "arr_inskey_1_Lx", "x:audio-in3"},
+                                              {"x:audio-out1", kern + "arr_inskey_1_L"},            // output as target
+                                              {kern + "arr_inskey_1_L", kern + "arr_insret_1_L"},   // self loop
+                                              {kern + "arr_inskey_1_L", "cypherdj-kern-e:arr_insret_1_L"},   // another core instance
+                                              {kern + "arr_inskey_2_R", "cypherdj-kern:hand_in"},
+                                              {"cypherdj-kern-e:arr_inskey_1_L", "x:audio-in3"}};   // the key port of another instance
+    PRUEF(cdj::filtere_kanten(schlecht, kern).empty());
+    // the healing pass: after a core restart only the four audio edges stand, the two key edges come back in the list of missing edges
+    const std::vector<cdj::Kante> satz = {{kern + "arr_ins_1_L", "x:audio-in1"},     {kern + "arr_inskey_1_L", "x:audio-in3"},
+                                          {"x:audio-out1", kern + "arr_insret_1_L"}, {kern + "arr_ins_1_R", "x:audio-in2"},
+                                          {kern + "arr_inskey_1_R", "x:audio-in4"},  {"x:audio-out2", kern + "arr_insret_1_R"}};
+    const std::vector<cdj::Kante> soll_h = cdj::filtere_kanten(satz, kern);
+    PRUEF(soll_h == satz);
+    Welt w;
+    for (const auto& k : satz) w.ports.insert({k.quelle, k.ziel});
+    for (const auto& k : satz)
+      if (k.quelle.find("inskey") == std::string::npos) w.kanten.insert({k.quelle, k.ziel});
+    const auto f = cdj::fehlende_kanten(soll_h, {ex, vb, &w});
+    PRUEF(f.size() == 2 && f[0] == satz[1] && f[1] == satz[4]);
+    // the health check: with the key edges in the record a lost key edge clears the host; held, the host is healthy
+    PRUEF(cdj::host_kanten_gesund(soll_h, kern, {ex, vb, &w}) == 0u);
+    for (const auto& k : satz) w.kanten.insert({k.quelle, k.ziel});
+    PRUEF(cdj::host_kanten_gesund(soll_h, kern, {ex, vb, &w}) == 1u);
+    w.ports.erase("x:audio-in4");   // the plugin's fourth input vanished
+    PRUEF(cdj::host_kanten_gesund(soll_h, kern, {ex, vb, &w}) == 0u);
+    w.ports.insert("x:audio-in4");
+    // a half key (only L in the record) is not a complete host
+    std::vector<cdj::Kante> halb = soll_h;
+    halb.erase(halb.begin() + 4);
+    PRUEF(cdj::host_kanten_gesund(halb, kern, {ex, vb, &w}) == 0u);
+    // negative control: a record without key edges (plugin with two inputs, older core) is healthy with its four audio edges
+    std::vector<cdj::Kante> ohne;
+    for (const auto& k : satz)
+      if (k.quelle.find("inskey") == std::string::npos) ohne.push_back(k);
+    PRUEF(cdj::host_kanten_gesund(ohne, kern, {ex, vb, &w}) == 1u);
+    // the key port of another core instance is not this host's key
+    std::vector<cdj::Kante> fremd = ohne;
+    fremd.push_back({"cypherdj-kern-e:arr_inskey_1_L", "x:audio-in3"});
+    PRUEF(cdj::host_kanten_gesund(fremd, kern, {ex, vb, &w}) == 1u);
+  }
+  {  // fix B2: the worst case of the edge file fits (one edge per kept core port: 4 midi_aus, 7 x 2 rueck_erz, 2 wirt slots x 3, 8 hosts x 6)
+    PRUEF(cdj::KANTEN_MAX >= 4 + 14 + 6 + 48);
+    std::vector<cdj::Kante> v;
+    for (int i = 0; i < 5; ++i) v.push_back({"q" + std::to_string(i), "z"});
+    v.push_back({"q0", "z"});
+    size_t weg = 99, ueber = 99;
+    PRUEF(cdj::entdoppeln_begrenzen(v, 3, &weg, &ueber).size() == 3 && weg == 3 && ueber == 2);   // one duplicate, two over the limit
+    PRUEF(cdj::entdoppeln_begrenzen(v, 8, &weg, &ueber).size() == 5 && weg == 1 && ueber == 0);
   }
   {  // MINOR-5: Duplikate und Obergrenze
     std::vector<cdj::Kante> v;

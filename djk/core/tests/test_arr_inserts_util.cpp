@@ -5,7 +5,7 @@
 //   the 60 Hz side stays gone while the 1 kHz side still doubles, the 60 Hz mid keeps its level), 3 util_neutral_und_bypass (default rows: the input bit-equal; row an 0: bit-equal),
 // 4 util_gain_balance (+6 dB and balance +0.5 against the reference), 5 util_gruppe_pm_return (the same width on a group, on the master and on a return gives the same Side/Mid gain),
 // 6 util_pdc_pool (latency 0 pinned, a chain with an eq and a utility compensates the eq only, pool constant, global order, table rows), 7 util_lader (slot 8 loads, slot 9 and a latency field are refused),
-// 8 util_zeilen_pin (rows and roles of the table), 9 util_hohe_slots (utility 7 and 8 are the global slots 32 and 33: they run audibly, alone and in series, and are freed; the 64-bit slot masks). The offline export is test_render_utility.cpp.
+// 8 util_zeilen_pin (rows and roles of the table), 9 util_hohe_slots (utility 7 and 8 are the global slots 338 and 339 since strand 1 slice 4 (32 and 33 at first): they run audibly, alone and in series, and are freed; the 64-bit slot masks). The offline export is test_render_utility.cpp.
 // Mutation (CMakeLists.txt): INS_UTIL_BREITE_FEST (the stage ignores the breite row and keeps 1.0: the width assertions of case 1 go red).
 #include <algorithm>
 #include <cmath>
@@ -327,10 +327,12 @@ int main() {
     PRUEF(grund(87, ",\"chain\":[{\"art\":\"utility\",\"slot\":1},{\"art\":\"utility\",\"slot\":2},{\"art\":\"utility\",\"slot\":3},{\"art\":\"utility\",\"slot\":4}]") == "+snap");   // four stages fill a chain
   }
 
-  {  // 9 util_hohe_slots: utility 7 and 8 are the global slots 32 and 33, beyond a 32-bit mask. They run audibly, alone and together, and are freed again.
+  {  // 9 util_hohe_slots: utility 7 and 8 are the global slots 338 and 339 since strand 1 slice 4 (160 + 160 + 4 + 8 + 6 and + 7, limiter pool 8; 332 and 333 after slice 3b, 204 and 205 after slice 3, 50 and 51 after slice 1, 32 and 33 before it),
+     // in the sixth word of the six-word slot mask (ArrSlotMaske, strand 1 task 2.1). The case exists to prove that slots beyond one mask word run audibly, alone and together, and are freed again.
     const int g7 = cdj::ins_global(ArrInsArt::utility, 6), g8 = cdj::ins_global(ArrInsArt::utility, 7);
-    PRUEF(g7 == 32 && g8 == 33);                         // the pin of why this case exists: a 32-bit mask would lose both
-    PRUEF(cdj::ARR_INS_ALLE > 32 && cdj::ARR_INS_ALLE <= 64);
+    PRUEF(g7 == 160 + 160 + 4 + 8 + 6 && g8 == g7 + 1);   // from the pool sizes: komp 160, eq 160, saett 4, lim 8 come first
+    PRUEF(g7 >= 5 * 64 && g8 < 6 * 64);                 // the pin of why this case exists: both sit in mask word 5, a one-word (64-bit) mask would lose them
+    PRUEF(cdj::ARR_INS_ALLE == 380 && cdj::ARR_INS_ALLE == cdj::ARR_INS_KOMP + cdj::ARR_INS_EQ + cdj::ARR_INS_SAETT + cdj::ARR_INS_LIM + cdj::ARR_INS_UTIL + cdj::ARR_INS_BK + cdj::ARR_INS_GATE + cdj::ARR_INS_MB + cdj::ARR_INS_HOST);   // strand 1 slice 5: 380 slots with eight hosts, six mask words (376 in slice 4, 346 in slice 3b, 218 and four in slice 3) (ARR_INS_ALLE <= 64 is no longer a rule since task 2.1)
     TR(ref)
     spiele(ref, spur1(&q->a, false), 120000);
     const double sm0 = sm_db(ref, 1000.0);
@@ -355,21 +357,23 @@ int main() {
     PRUEF(std::fabs(sm_db(t8, 1000.0) - sm0 - 6.0206) < 0.05);
     PRUEF(std::fabs(sm_db(t78, 1000.0) - sm0 - 12.0412) < 0.05);   // both in series: side x2 x2
     PRUEF(std::fabs(sm_db(t_fremd, 1000.0) - sm0) < 0.05);
-    PRUEF(t7.arr.inserts().slot_eigen(0) == (uint64_t{1} << g7));
-    PRUEF(t8.arr.inserts().slot_eigen(0) == (uint64_t{1} << g8));
-    PRUEF(t78.arr.inserts().slot_eigen(0) == ((uint64_t{1} << g7) | (uint64_t{1} << g8)));
+    PRUEF(t7.arr.inserts().slot_eigen(0) == cdj::ArrSlotMaske::eins(g7));   // strand 1 task 2.1: the slot masks are multi-word (ArrSlotMaske)
+    PRUEF(t8.arr.inserts().slot_eigen(0) == cdj::ArrSlotMaske::eins(g8));
+    cdj::ArrSlotMaske g78 = cdj::ArrSlotMaske::eins(g7);
+    g78 |= cdj::ArrSlotMaske::eins(g8);
+    PRUEF(t78.arr.inserts().slot_eigen(0) == g78);
     // freed again: the same strip without a chain, run past the tail; then slot 8 on another strip
     Bau b2(2);
     b2.spur(1, ArrArt::audio).clip(1, "c1", 0.0, 8.0, &q->a);
     t78.laden(b2.fertig());
     t78.lauf(120000 + 8192);
-    PRUEF(t78.arr.inserts().slot_eigen(0) == 0);
-    PRUEF(t78.arr.inserts().maske() == 0);
+    PRUEF(t78.arr.inserts().slot_eigen(0).leer());
+    PRUEF(t78.arr.inserts().maske().leer());
     Bau b3(3);
     b3.spur(1, ArrArt::audio).clip(1, "c1", 0.0, 8.0, &q->a).spur(2, ArrArt::audio).kette(2, {ArrStufe{ArrInsArt::utility, static_cast<uint8_t>(cdj::ARR_INS_UTIL - 1), true}});
     t78.laden(b3.fertig());
     t78.lauf(120000 + 8192 + 4096);
-    PRUEF(t78.arr.inserts().slot_eigen(1) == (uint64_t{1} << g8) && t78.arr.inserts().slot_eigen(0) == 0);   // the freed slot is usable on the other strip
+    PRUEF(t78.arr.inserts().slot_eigen(1) == cdj::ArrSlotMaske::eins(g8) && t78.arr.inserts().slot_eigen(0).leer());   // the freed slot is usable on the other strip
   }
 
   {  // 8 util_zeilen_pin: the rows of the table equal the contract (5 per slot), the order of the parameters is the order of the roles

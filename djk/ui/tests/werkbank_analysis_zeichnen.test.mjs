@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { hzZuX, xZuHz, dbZuY, notenName, bandBei, spalteBei, zeitbildBytes, spalteDb, quellenListe, zahlText, abfrageSchluessel, linienText, taktLinien, breiteText, zeitbildRgba, bildAnteil, bildFarbe, HZ_LINIEN, ANALYSE_TEXT }
+import { hzZuX, xZuHz, dbZuY, notenName, bandBei, spalteBei, zeitbildBytes, vektorPunkte, zeichneVektor, spalteDb, quellenListe, zahlText, abfrageSchluessel, linienText, taktLinien, breiteText, zeitbildRgba, bildAnteil, bildFarbe, HZ_LINIEN, ANALYSE_TEXT }
   from '../public/werkbank/analysis_zeichnen.js';
 import { tonName } from '../public/production/pianoroll.js';
 
@@ -199,4 +199,16 @@ test('hints are held for 2 s', () => {
   assert.deepEqual(r.liste, [], 'gone after 2 s');
   r = haltHinweise(r.gehalten, h, 4000); r = haltHinweise(r.gehalten, h, 5500);
   assert.deepEqual(r.liste, ['tp'], 'seen again: the hold starts anew');
+});
+
+test('vectorscope points decode from base64 and draw a dot per pair', () => {
+  assert.equal(vektorPunkte('').length, 0);
+  assert.equal(vektorPunkte(undefined).length, 0);
+  assert.deepEqual([...vektorPunkte(Buffer.from(new Int8Array([127, 0, -127, 0]).buffer).toString('base64'))], [127, 0, -127, 0]);
+  const dots = [];
+  const g = { fillRect: (...a) => dots.push(a), beginPath() {}, moveTo() {}, lineTo() {}, stroke() {} };
+  zeichneVektor(g, new Int8Array([127, 0, 0, 127]), 100, 100);
+  assert.equal(dots.length, 3);   // background + two dots
+  near(dots[1][0] + 0.75, 100, 1e-9); near(dots[1][1] + 0.75, 50, 1e-9);
+  near(dots[2][0] + 0.75, 50, 1e-9); near(dots[2][1] + 0.75, 0, 1e-9);
 });

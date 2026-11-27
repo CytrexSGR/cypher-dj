@@ -18,7 +18,7 @@ Built in Germany by Andreas, a DJ, and Cypher, an AI agent (Claude models), sinc
 
 One real-time core in C++ and Rust keeps a single sample clock for everything: the decks, the pattern channels and
 the arrangement. The browser page and the agent sit on the same functions. The agent reaches them through an MCP
-server with 112 tools, so nearly everything you can click, it can do too (a few controls such as the crossfader stay
+server with 119 tools, so nearly everything you can click, it can do too (a few controls such as the headphone level stay
 in your hand), and anything it does shows up on your page. When it
 cannot do something it answers with a reason (for example `sidechain_zyklus` for a sidechain that would depend on
 itself) instead of guessing. When you grab a fader, your
@@ -30,9 +30,9 @@ hand wins over its automation.
 
 | View | What you do there |
 |---|---|
-| DJ | Four places, each a track deck, the Strudel pattern channels, a loop deck or a SEQ pattern deck; mixer, beat FX, color FX and the Cypher Remix station. A loop deck opens as a pop-up grid over both loop decks, each track with HI MID LOW, COLOR, HALL, DLY and FX 1 2 3 like a mixer channel |
+| DJ | Four places, each empty or a track deck, the Strudel pattern channels, a loop deck, a SEQ pattern deck or the stems of a module; mixer, beat FX, color FX and the Cypher Remix station. A loop deck opens as a pop-up grid over both loop decks, each track with HI MID LOW, COLOR, HALL, DLY and FX 1 2 3 like a mixer channel |
 | STUDIO | A loop workbench: up to eight instrument tracks, a step sequencer with a length, swing and direction per row, and a dock of device cards |
-| PRODUCTION | An arrangement with up to 32 tracks: audio and MIDI clips, piano roll, warp, automation, groups, returns, inserts, export and loudness per track |
+| PRODUCTION | An arrangement with up to 128 tracks: audio and MIDI clips, piano roll, warp, automation, groups, returns, inserts, export and loudness per track |
 | TRACKER | The same production project as tracker rows: linked patterns, classic effect commands (arpeggio, slides, vibrato, retrigger and more), 8-bit devices, import of ProTracker modules |
 
 **Instruments, effects and hardware** (our own devices built as [Cypher Modular](docs/cypher-modular.md) graphs unless noted; 213
@@ -43,7 +43,7 @@ factory presets)
 | Synthesizers | Mono Synth, Poly Synth, Neuro Bass, Kraken (semi-modular, with a 16 by 16 patch field), Greif (hybrid wavetable), Band Drive Bass, three wavetable synths (reese, supersaw, choir), Cypher Labor |
 | Drums | Drums 909, Drums 808, Drum Synth (eight synthesised pads), Kick Synth, one-shot drum kits |
 | 8-bit | an Amiga-style sample voice, chip pulse, triangle and noise |
-| More sources | RB-338 (a 303-style bass, its own engine), a sampler and multisample instrument, two slots of Surge XT, third-party VST3 and LV2 instruments |
+| More sources | RB-338 (a 303-style bass, its own engine), a sampler and multisample instrument, two slots of Surge XT, third-party VST3 and LV2 instruments and effects (parameter lanes, MIDI learn, sidechain) |
 | Effects | Cypher EQ, Cypher Hall, Cypher Comp, Cypher Saturation (Rust, also as VST3), a limiter and utility stage, Filterbox, a tempo-synced delay, Cypher Remix, and more effect graphs |
 | Hardware | Traktor Kontrol S8 (both screens drawn by cypher-dj), Maschine MK2 (displays show the knobs), Akai APC20, Novation Launch Control 3, Akai LPD8, any class-compliant MIDI controller |
 
@@ -52,14 +52,14 @@ that are not heard with the current settings are greyed.
 
 ## What it can do
 
-**Produce.** An arrangement with up to 32 tracks: audio and MIDI clips, a piano roll, warp with four modes,
+**Produce.** An arrangement with up to 128 tracks: audio and MIDI clips, a piano roll, warp with four modes,
 automation lanes, freeze, export and loudness per track. Stems of an audio clip on an NVIDIA GPU.
 
 **Record.** Audio from an external input or from the studio's own channels, MIDI from a keyboard. Count-in, punch in
 and out, overdub for MIDI, takes with comping for audio, latency compensated. Measured with a software loop and a
 test client, not yet with a real audio interface and keyboard.
 
-**Instruments.** A 303-style bass (RB-338), Cypher Modular (a modular synthesizer with 61 block types, with a mono
+**Instruments.** A 303-style bass (RB-338), Cypher Modular (a modular synthesizer with 62 block types, with a mono
 synth, a poly synth, a neuro bass, two drum machines and a filter effect built from it), one-shot drum
 kits and two slots of Surge XT whose patch choice is saved with the project. Every instrument has a front panel with
 real units and MIDI learn (Cypher Modular plates also pick and save presets), which opens enlarged on a device page; a tablet in your home network can show it as a
@@ -77,15 +77,15 @@ first, and a sample can be dragged onto the track list or onto a row of a drum k
 
 ![STUDIO: the step sequencer with rows of different length, the tracks with their sends and the dock of instruments and effects](docs/screens/studio-workbench.png)
 
-**Mix and route.** Inserts of our own (compressor, EQ, saturator, limiter), up to 16 group tracks and 4 returns with
+**Mix and route.** Inserts of our own (compressor, EQ, saturator, limiter), up to 16 group tracks and 8 returns with
 our own reverb, sends before or after the fader, sidechain from other tracks (and on group, return and master stages
 also from groups and returns), Duck by Kick in one step, a routing matrix, and resampling of any track, group,
 return or the master into a new audio track.
 
 **DJ.** Up to four decks with beat grid, hot cues, loops and key lock at any tempo, beat FX and color FX, three live-coded
 pattern channels ([Strudel](https://strudel.cc)) and two loop decks, all on the same clock. The DJ view has four
-places, each showing a track deck, the Strudel channels, a loop deck or a SEQ deck; the main mixer has four
-channels and each fader belongs to its place (1 is A, 2 is B, 3 is L1, 4 is L2), whatever the place shows. A loop deck has
+places, each empty or showing a track deck, the Strudel channels, a loop deck, a SEQ deck or the stems of a module; the main mixer has four
+channels and each fader belongs to its place (A to D), whatever the place shows. A loop deck has
 four tracks of eight cells that launch on a grid, scenes, slices and a channel strip per track (three-band EQ, COLOR, HALL and DELAY
 sends, keys for the FX units 1 to 3); the Strudel sum can be recorded into a loop track as a cell. The SEQ deck is a pattern sequencer:
 a pattern plays one instrument, you add lanes of notes, of values per step or of drawn curves on any knob of that
@@ -106,7 +106,8 @@ the devices and what is not is listed in [docs/features.md](docs/features.md#har
 
 **The agent's side.** Besides playing, the agent can measure: levels of the last seconds, a 29-band spectrum,
 loudness per track, group and return, and how a closed deck sits against the running master per frequency band. It can wait on the master clock,
-ride a parameter over bars, and propose an idea while you play, which you take or drop with one key.
+ride a parameter over bars. Proposals go another way: the MCP tools do not submit them, but the conductor takes a plan from the
+command-line player (`djk-spiel plan`) and offers it to you as a proposal, which you take or drop with one key (Accept and Reject on the page).
 
 ![Production with a group, a reverb return and the routing matrix: outputs, sends, sidechain keys and resampling per strip](docs/screens/production-routing.png)
 
@@ -126,7 +127,7 @@ In this order, without dates:
    by injecting MIDI (see [Hardware controllers](docs/features.md#hardware-controllers)).
 3. **Live.** Follow actions for scenes, recording into cells, swapping motifs live, MIDI effects.
 
-Not planned for now: automation of plugin parameters, sidechain into plugins, CLAP plugins.
+Not planned for now: CLAP plugins.
 
 ## Try it: we are looking for testers
 
@@ -152,7 +153,7 @@ No music is included. djk-starter generates kits, loops and a demo on your machi
 The main ones; the full list is in [docs/features.md](docs/features.md#known-limits-of-the-beta).
 
 - Linux with PipeWire only, tested on Ubuntu 24.04 and 26.04: used on one machine; installed from scratch on a fresh Ubuntu 24.04.5 (2026-11-22, from source and from the package) and with the package on fresh Ubuntu 24.04.5 and 26.04.1 (2026-11-24), each up to the demo playing, without a real audio device.
-- Third-party plugins (VST3, LV2) run in their own host processes through Carla, at most four effect hosts at a time; most commercial plugins have no Linux build and need yabridge and Wine.
+- Third-party plugins (VST3, LV2) run in their own host processes through Carla, at most eight effect hosts at a time, with parameter lanes, controller knobs and a sidechain key; most commercial plugins have no Linux build and need yabridge and Wine.
 - Human and agent are told apart by a label on localhost. That is a convention, not a security boundary: do not
   expose the ports to a network.
 - Bar one (the downbeat) detection is unreliable; set it by hand where it is wrong.
@@ -219,6 +220,7 @@ Features with a control in the page:
 - Takes and comping (audition, comp lanes)
 - Rack with devices on a track, macros, member targets
 - Foreign plugins (VST3, LV2) hosted through Carla in their own processes
+- Plugin parameter learning and panels
 - ANALYZE window (a view of the analysis)
 - FIND SOUND: a variant round to improve a Cypher Modular sound
 - Remix device (graph on the FX 3 insert)
@@ -245,8 +247,8 @@ Labs features without a control in the page (hardware, operations, or only reach
 - Tracker: keyboard entry, selection, sections, text view
 - Tracker: FX column and instruments shelf
 - Time signatures n/4 (2/4 to 12/4)
-- Time signatures 6/8, 7/8 and other eighths
-- Plugin parameter learning and panels
+- Time signatures 6/8, 7/8 and other eighths (not built: the denominator is fixed at 4)
+- Own panels for plugins (instead of the generic parameter list)
 - Windows plugins through yabridge and Wine
 - Native Instruments (Kontakt) route
 - Stem separation of an audio clip (drums, bass, other, vocals; BS-RoFormer on the GPU)

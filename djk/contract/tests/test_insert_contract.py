@@ -31,25 +31,28 @@ def test_veraltete_datei_wird_erkannt():
 
 
 def test_zaehlung_und_tabellenzeilen():
-    """The count follows the contract: rows per instance times instances. komp 12 x 10 = 120, eq 8 x 59 = 472 (pool 8 since arr-fx slice 2, 2 before),
-    saett 4 x 4 = 16 (1 x 4 before), the rack 12 x 4 = 48 (slice 4c), the limiters 2 x 3 = 6 (1 x 3 before), the effect hosts 4 x 1 (plan 1.11 T4)
-    the utilities 8 x 5 = 40 (arr-fx slice 1) and the Baukasten effects bk 8 x 65 = 520 (arr-bk slice 3: an and k1..k8, k9..k32 since the 32-knob widening, k33..k64 since the 64-knob widening): 1226 rows, every one a table row."""
+    """The count follows the contract: rows per instance times instances (the instances come from the contract, the rows per instance are pinned: komp 10,
+    eq 59, saett 4, rack 4 macro rows (slice 4c), lim 3, host 1 (plan 1.11 T4), utility 5 (arr-fx slice 1), bk 65 (an and k1..k64, arr-bk slice 3 and the widenings), gate 8, mb 24 (strand 1 slice 4)); every one a table row."""
     z = erzeuge_insert.ausfalten(vertrag())
-    soll = 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65
-    assert len(z) == soll == 1226
+    je_instanz = {"komp": 10, "eq": 59, "saett": 4, "rack": 4, "lim": 3, "host": 1, "utility": 5, "bk": 65, "gate": 8, "mb": 24}   # rows per instance (pinned here)
+    n = {a["art"]: a["instanzen"] for a in vertrag()["arten"]}                                               # instances (the pool sizes, from the contract)
+    erwartet = {art: n[art] * je_instanz[art] for art in je_instanz}
+    soll = sum(erwartet.values())
+    assert len(z) == soll
     assert sum(1 for r in z if r["tabelle"]) == soll
     assert all(r["tabelle"] for r in z if r["art"] == "rack"), "every macro row is a table row (slice 4c)"
-    assert {r["art"]: sum(1 for q in z if q["art"] == r["art"]) for r in z} == {"komp": 120, "eq": 472, "saett": 16, "rack": 48, "lim": 6, "host": 4, "utility": 40, "bk": 520}
-    assert max(len(r["pfad"]) for r in z) == 24   # ins/utility/8/mono_unter (20 before the utility kind)
+    assert {r["art"]: sum(1 for q in z if q["art"] == r["art"]) for r in z} == erwartet
+    assert max(len(r["pfad"]) for r in z) == 24   # ins/utility/8/mono_unter (20 before the utility kind); the three-digit slots ins/eq/160/b8/platz (19) stay shorter
 
 
 def test_poolgroessen_sind_die_gemessenen():
     """The pool sizes of eq and saett come from the cost table of slice 4b T11 (docs/architecture/stand/routing-1-10.md), not from the spec's starting
     values 4 and 8. A change of either number is a decision with a new measurement: this pin goes red first.
     2026-11-06: eq 2 on Andreas' decision (lane gate 1650 us, measured quiet, routing-1-10.md section "EQ pool 2").
-    2026-11-10 (arr-fx slice 2): eq 8, saett 4, lim 2 on the order of the generalprobe; the cost of the full pool is measured and reported with the change."""
+    2026-11-10 (arr-fx slice 2): eq 8, saett 4, lim 2 on the order of the generalprobe; the cost of the full pool is measured and reported with the change.
+    2026-11-26 (pool 160): komp and eq 160 each, one of each for every channel strip at 128 tracks (the core change this pin followed)."""
     n = {a["art"]: a["instanzen"] for a in vertrag()["arten"]}
-    assert n == {"komp": 12, "eq": 8, "saett": 4, "rack": 12, "lim": 2, "host": 4, "utility": 8, "bk": 8}
+    assert n == {"komp": 160, "eq": 160, "saett": 4, "rack": 12, "lim": 8, "host": 8, "utility": 8, "bk": 8, "gate": 16, "mb": 8}
     assert all(a["tabelle"] for a in vertrag()["arten"] if a["art"] in ("komp", "eq", "saett"))
 
 

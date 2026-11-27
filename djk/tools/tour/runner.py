@@ -523,6 +523,15 @@ class Tour:
         self._tls.letzter = wert
 
     # -- calls
+    def _schluessel(self):
+        """The agent key of the instance this tour drives (test instance: its /dev/shm folder), or "" when there is no key file."""
+        shm = getattr(self.instanz, "shm", None)
+        datei = Path(shm) / "hand.token" if shm is not None else Path.home() / ".config" / "cypherdj" / "hand.token"
+        try:
+            return datei.read_text().strip()
+        except OSError:
+            return ""
+
     def ruf(self, methode, pfad, koerper=None, quelle="cypher", timeout=60, erwartet=None):
         """The call is recorded for the current step in the calling thread only: a call from a worker thread does not show in the step's
         `ruf`/`code`; hand its answer to `notiere()` from the step's own thread.
@@ -530,6 +539,8 @@ class Tour:
         step declares) marks the step red with route, code and reason; the body may go on. A poll (`warte_bis`) never marks."""
         daten = json.dumps(koerper).encode() if koerper is not None else None
         kopf = {"x-djk-quelle": quelle}
+        if quelle == "cypher" and (k := self._schluessel()):
+            kopf["authorization"] = f"Bearer {k}"
         if daten is not None:
             kopf["content-type"] = "application/json"
         a = _http(self.instanz.url + pfad, methode, daten, kopf, timeout)
