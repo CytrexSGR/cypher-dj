@@ -206,3 +206,12 @@ def test_arr4_prosa_nennt_format_und_quelle_strom():
         assert "1 to 4" in absatz and "1 to 6" not in absatz and "`dj_doppelt`" in absatz, text
         rets = next(a for a in t.split("\n") if a.startswith("**Returns in the playback"))
         assert "1 to 8" in rets and "1 to 6" not in rets, text
+
+
+def test_midi_stufe_zaehler_im_vertrag():
+    """Strand 7 task 3.3: /zustand/arr/midi ,iiiii carries the MIDI stage counters per track, in this field order."""
+    e = _adr("/zustand/arr/midi")
+    assert e["typen"] == ",iiiii" and e["richtung"] == "vom_kern" and e["abschnitt"] == "5.13"
+    assert [f["name"] for f in e["felder"]] == ["spur", "gehalten", "ein", "aus", "verloren"]
+    assert e["felder"][0]["bereich"] == [1, 128]
+    assert "/zustand/arr/midi" in (HIER / "osc_addresses.ts").read_text(encoding="utf-8")

@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let fs: f64 = a[1].parse().unwrap();
-    let e = Einstellung { drive_db: a[2].parse().unwrap(), ausgang_db: a[3].parse().unwrap(), mix: a[4].parse().unwrap() };
+    let e = Einstellung { drive_db: a[2].parse().unwrap(), ausgang_db: a[3].parse().unwrap(), mix: a[4].parse().unwrap(), ..Einstellung::default() };
     let art = a.get(5).map(String::as_str).unwrap_or("saett");
     let mut roh = Vec::new();
     std::io::stdin().read_to_end(&mut roh).unwrap();

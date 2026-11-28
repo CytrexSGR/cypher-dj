@@ -231,6 +231,11 @@ pub struct Band {
     neu_entwerfen: bool,
     ramp_ende: Option<[SvfKoeff; MAX_SEKTIONEN]>,
     raster: Raster,
+    /// Dynamic gain change in dB, set by the detector (base rate). Applied on top of the smoothed gain at every
+    /// re-design, not smoothed again: the detector's attack/release already shape it.
+    dyn_zusatz: f64,
+    /// The `dyn_zusatz` the current design used.
+    dyn_zusatz_ist: f64,
 }
 
 impl Band {
@@ -257,6 +262,8 @@ impl Band {
             neu_entwerfen: false,
             ramp_ende: None,
             raster: Raster::neu(fs),
+            dyn_zusatz: 0.0,
+            dyn_zusatz_ist: 0.0,
         };
         b.ziel_p = b.ziel_param();
         b.springe();
@@ -271,9 +278,16 @@ impl Band {
         ]
     }
 
-    fn entwurf_jetzt(&self) -> (usize, [SvfKoeff; MAX_SEKTIONEN]) {
+    fn entwurf_jetzt(&mut self) -> (usize, [SvfKoeff; MAX_SEKTIONEN]) {
+        self.dyn_zusatz_ist = self.dyn_zusatz;
         let s = &self.struktur;
-        entwirf(s.art, s.steilheit, self.glatt[0].exp2(), self.glatt[1], self.glatt[2].exp(), self.prop_q, self.fs, &self.raster)
+        entwirf(s.art, s.steilheit, self.glatt[0].exp2(), self.glatt[1] + self.dyn_zusatz, self.glatt[2].exp(), self.prop_q, self.fs, &self.raster)
+    }
+
+    /// Dynamic gain change in dB for the next re-designs (0 = static band).
+    #[inline]
+    pub fn setze_dyn_zusatz(&mut self, db: f64) {
+        self.dyn_zusatz = db;
     }
 
     /// Parameter sofort übernehmen, ohne Glättung (Start, Reset).
@@ -330,7 +344,8 @@ impl Band {
         let offen = self.struktur != self.ziel_struktur
             || self.glatt != self.ziel_p
             || self.ramp_ende.is_some()
-            || self.neu_entwerfen;
+            || self.neu_entwerfen
+            || self.dyn_zusatz != self.dyn_zusatz_ist;
         if self.nass != 0.0 || !offen {
             return;
         }
@@ -369,6 +384,9 @@ impl Band {
             } else {
                 self.glatt[i] = ziel[i];
             }
+        }
+        if self.dyn_zusatz != self.dyn_zusatz_ist {
+            bewegt = true;
         }
         if bewegt || self.neu_entwerfen {
             self.neu_entwerfen = false;

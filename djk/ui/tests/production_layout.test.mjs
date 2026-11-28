@@ -171,6 +171,8 @@ test('marker strip: the ruler keeps its 28 px and its zones, the strip above it 
   assert.equal(LINEAL_HOEHE, 28); assert.equal(LOOP_ZONE, 12);
   assert.equal(MARKER_LEISTE_HOEHE, 16);
   const css = readFileSync(new URL('../public/production/production.css', import.meta.url), 'utf8');
-  assert.match(css, /\.p-arr \{[^}]*grid-template-rows: 16px 28px minmax\(0, 1fr\) 14px/);
+  assert.match(css, /\.p-arr \{[^}]*grid-template-rows: 16px auto 28px minmax\(0, 1fr\) 14px/);   // row 2 is the chord lane row (hidden = no height)
+  const { HARMONIE_ZEILE_HOEHE } = await import('../public/production/harmonie_line.js');
+  assert.match(css, new RegExp(`\\.p-harmonie-zeile \\{[^}]*height: ${HARMONIE_ZEILE_HOEHE}px`));
   assert.match(css, /\.p-lineal \{[^}]*height: 28px/);
 });

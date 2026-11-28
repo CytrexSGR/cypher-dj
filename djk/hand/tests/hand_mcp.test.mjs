@@ -15,7 +15,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 
 const HAND = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'hand.ts');
 const NAMEN = ['lage', 'bestand', 'laden', 'deck_start', 'deck_stopp', 'sprung', 'loop', 'pad', 'loop_nach_box', 'box',
-  'regler', 'fx', 'fx_zuweisung', 'strudel', 'abbrechen', 'warte', 'hoeren',
+  'regler', 'fx', 'fx_zuweisung', 'strudel', 'harmonie', 'abbrechen', 'warte', 'hoeren',
   'studio', 'loops', 'rec', 'loop_klang', 'spur', 'bogen', 'spur_stopp', 'spuren', 'stille', 'szene', 'aufbau', 'mischung', 'stimme', 'pegel', 'graphen', 'graph', 'klang', 'instrumente', 'bibliothek', 'anschluss', 'stoebern', 'klaenge', 'bestand_karte', 'vorbereiten',
   'sets', 'set_zeige', 'set_lege', 'set_vorbereiten', 'tempo', 'ansage',
   'proj_liste', 'proj_neu', 'proj_oeffnen', 'proj_lage', 'proj_auto_zustand', 'proj_aendern', 'proj_undo', 'proj_redo', 'proj_verlauf', 'proj_transport', 'proj_freeze', 'proj_export', 'proj_export_spuren', 'proj_lautheit', 'geraete_lage', 'proj_aufnahme', 'proj_warp', 'proj_auto', 'proj_bk', 'proj_stems', 'proj_stems_abbrechen', 'proj_zusammenfuehren', 'proj_bounce', 'proj_strom_aufnehmen',
@@ -578,7 +578,7 @@ test('djk-hand proj_aendern names the sidechain key, duck_durch_kick and the thr
   const { c } = await aufbau(t, () => [200, {}]);
   const werkzeuge = (await c.listTools()).tools;
   const d = werkzeuge.find((x) => x.name === 'proj_aendern').description;
-  assert.match(d, /key\? \(compressor only, every other sidechain source: \{quelle: spur \| grp \| ret \| deck \| erz, nr, punkt: pre \| post\}/);
+  assert.match(d, /key\? \(compressor and EQ only, every other sidechain source: \{quelle: spur \| grp \| ret \| deck \| erz, nr, punkt: pre \| post\}/);
   assert.match(d, /param \(one of werte, or sc on a compressor, or key on a compressor/);
   assert.match(d, /duck_durch_kick \{spur_id, kick_id, pos\?\}/);
   for (const grund of ['sidechain_spaet', 'sidechain_zyklus', 'sidechain_quelle']) assert.match(d, new RegExp(`${grund} \\(`), grund);
@@ -1370,7 +1370,7 @@ test('djk-hand AK15: no tool arms or overrides, proj_auto_zustand drops smuggled
     return null;
   });
   const werkzeuge = (await c.listTools()).tools;
-  assert.deepEqual(werkzeuge.map((x) => x.name).filter((n) => /arm|geste|uebersteuer/.test(n)), [], 'no tool name carries arm, gesture or override');
+  assert.deepEqual(werkzeuge.map((x) => x.name).filter((n) => /(^|_)arm|geste|uebersteuer/.test(n)), [], 'no tool name carries arm, gesture or override');
   for (const a of [{ re_enable: true, an: false, arm: true, modus: 'write' }, { spur_id: 's1', ziel: 'fader', arm: true, modus: 'latch', uebersteuern: true }]) {
     const r = await c.callTool({ name: 'proj_auto_zustand', arguments: a });
     assert.ok(!r.isError, r.content[0].text);

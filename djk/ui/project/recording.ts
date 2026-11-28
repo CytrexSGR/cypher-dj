@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { BefehlFehler, compFade, fuehreListeAus, pruefeGrenzen, teileClipsAn } from './commands.ts';
 import { MAX_CLIPS, MAX_TAKES_PRO_SPUR, neueId, sucheSpur, type AudioClip, type Clip, type MidiClip, type Projekt } from './model.ts';
-import { istTakeKopie, klingtGleich, TAKE_KOPIE_EPS } from './takes.ts';
+import { istMidiTakeKopie, istTakeKopie, klingtGleich, TAKE_KOPIE_EPS } from './takes.ts';
 import { REC_EINGANG } from '../../contract/streams.ts';
 
 export class TakeFehler extends Error {
@@ -213,6 +213,8 @@ export interface MidiTakeAngabe {
   endeBeat: number;                                    // end of the take (the pass without the tail); a note still open there ends there
   punch?: { von_beat: number; bis_beat: number };      // the range after the ein/aus resolution of the caller, as for audio
   name?: string;
+  // 4.2: the loop of the run (project.loop at the start, only when on); replace mode keeps every pass as a take
+  loop?: { von_beat: number; bis_beat: number };
 }
 interface MidiNote { start: number; ende: number; ton: number; vel: number }
 const runde9 = (x: number): number => Math.round(x * 1e9) / 1e9;
@@ -257,6 +259,8 @@ export function nehmeMidiAuf(projekt: Projekt, a: MidiTakeAngabe): Projekt {
     if (!s) throw new TakeFehler('veraltet_spur', id);
     if (s.art !== 'instrument') throw new TakeFehler('art_passt_nicht', `${id} is not an instrument track`);
   }
+  const durch = durchlaeufe(a);
+  if (durch !== null) return nehmeDurchlaeufe(projekt, a, durch);
   const { von, bis, noten } = fasseNoten(a);
   let p = structuredClone(projekt);
   try { for (const id of a.spurIds) p = a.overdub ? ueberspiele(p, id, noten, von, bis, a.name) : ersetze(p, id, noten, von, bis, a.name); } catch (e) {
@@ -267,7 +271,112 @@ export function nehmeMidiAuf(projekt: Projekt, a: MidiTakeAngabe): Projekt {
   return p;
 }
 // The number of notes the take places per track (for the answer); throws what nehmeMidiAuf throws about the take itself (leer, punch_leer, keine_noten)
-export const midiTakeNoten = (a: MidiTakeAngabe): number => fasseNoten(a).noten.length;
+export const midiTakeNoten = (a: MidiTakeAngabe): number => {
+  const d = durchlaeufe(a);
+  return d === null ? fasseNoten(a).noten.length : d.reduce((n, x) => n + x.noten.length, 0);
+};
+// 4.2: the passes of a replace-mode run over a loop. null = the old path without takes (overdub or punch). No loop or a start outside it is one pass.
+export interface Durchlauf { k: number; von: number; bis: number; noten: MidiNote[]; voll: boolean }   // von/bis and the notes in PROJECT beats
+function durchlaeufe(a: MidiTakeAngabe): Durchlauf[] | null {
+  if (a.overdub || a.punch) return null;
+  if (!(a.endeBeat - a.startBeat > EPS)) throw new TakeFehler('leer', `range ${a.startBeat}..${a.endeBeat}`);
+  let l = a.loop;
+  // no loop, a degenerate one, or a start outside it: one pass over the whole take (the loop is the pass length only when the run starts inside it)
+  if (!l || !(l.bis_beat - l.von_beat > EPS) || a.startBeat < l.von_beat - EPS ||
+    a.startBeat >= l.bis_beat - EPS) l = { von_beat: a.startBeat, bis_beat: a.endeBeat };
+  const L = l.bis_beat - l.von_beat;
+  const rohe = paareNoten(a);
+  const grenze = (k: number): { von: number; bis: number } => ({ von: k === 0 ? a.startBeat : l.von_beat, bis: Math.min(l.bis_beat, a.endeBeat - k * L) });
+  const aus: Durchlauf[] = [];
+  for (let k = 0; ; k++) {
+    const g = grenze(k);
+    if (!(g.bis - g.von > EPS)) break;
+    aus.push({ k, von: g.von, bis: g.bis, noten: [], voll: g.von <= l.von_beat + EPS && g.bis >= l.bis_beat - EPS });
+  }
+  for (const n of rohe) {   // a note belongs to the pass of its onset and ends at the end of that pass
+    const k = Math.min(aus.length - 1, Math.max(0, n.start < l.bis_beat ? 0 : 1 + Math.floor((n.start - l.bis_beat) / L + EPS)));
+    const d = aus[k];
+    const start = runde9(Math.max(n.start - k * L, d.von)), ende = runde9(Math.min(n.ende - k * L, d.bis));
+    if (ende - start > EPS && start < d.bis - EPS) d.noten.push({ start, ende, ton: n.ton, vel: n.vel });
+  }
+  for (const d of aus) d.noten.sort((x, y) => x.start - y.start || x.ton - y.ton);
+  if (aus.every((d) => d.noten.length === 0)) throw new TakeFehler('keine_noten', 'the take holds no complete note inside the range');
+  return aus;
+}
+// Per track: how many take lanes the run adds and how many passes with notes did not get one (takes_verworfen). Same arithmetic as nehmeDurchlaeufe.
+export function midiDurchlaufZahlen(projekt: Projekt, a: MidiTakeAngabe, spurId: string): { takes: number; verworfen: number } | null {
+  const d = durchlaeufe(a);
+  const s = sucheSpur(projekt, spurId);
+  if (d === null || !s) return null;
+  const mit = d.filter((x) => x.noten.length > 0);
+  const platz = takePlatz(s, d);
+  return { takes: Math.min(mit.length, platz), verworfen: Math.max(0, mit.length - platz) };
+}
+// how many take lanes fit next to the existing ones (the Original lane is reserved when the main pass overwrites something)
+function takePlatz(spur: { takes?: { art?: string }[]; clips: { start_beat: number; laenge_beats: number }[] }, d: Durchlauf[]): number {
+  const h = hauptDurchlauf(d);
+  const vorhanden = (spur.takes ?? []).length;
+  const braucht = !(spur.takes ?? []).some((t) => t.art === 'original') && spur.clips.some((c) => imBereich(c, h.von, h.bis));
+  return Math.max(0, MAX_TAKES_PRO_SPUR - vorhanden - (braucht ? 1 : 0));
+}
+function hauptDurchlauf(d: Durchlauf[]): Durchlauf {
+  const mit = d.filter((x) => x.noten.length > 0);
+  return mit.filter((x) => x.voll).at(-1) ?? mit.at(-1)!;
+}
+// 4.2: every pass with notes becomes a take lane "Take <n>" (newest last) with one MIDI clip over its pass range; the main lane gets the last complete
+// pass (else the last pass with notes); what the main pass overwrites moves into the Original lane. All or nothing.
+function nehmeDurchlaeufe(projekt: Projekt, a: MidiTakeAngabe, d: Durchlauf[]): Projekt {
+  let p = structuredClone(projekt);
+  const haupt = hauptDurchlauf(d);
+  const name = a.name ?? 'MIDI take';
+  try {
+    for (const id of a.spurIds) {
+      const platz = takePlatz(sucheSpur(p, id)!, d);
+      const mit = d.filter((x) => x.noten.length > 0);
+      const behalten = mit.slice(Math.max(0, mit.length - platz));   // the oldest passes drop out when the lanes run out
+      // the main pass first: loop clips cannot be cut, and what it overwrites goes to the Original lane
+      const spur = sucheSpur(p, id)!;
+      for (const c of spur.clips) {
+        const schneidet = (t: number): boolean => c.start_beat < t - EPS && c.start_beat + c.laenge_beats > t + EPS;
+        if (c.loop_beats != null && (schneidet(haupt.von) || schneidet(haupt.bis))) throw new TakeFehler('ersetzen_loop', c.id);
+      }
+      teileClipsAn(p, spur, [haupt.von, haupt.bis]);
+      const alle = (spur.takes ?? []).flatMap((t) => t.clips as MidiClip[]);
+      const drin = spur.clips.filter((c) => imBereich(c, haupt.von, haupt.bis));
+      const kopie = (c: Clip): boolean => c.art === 'midi' && alle.some((t) => t.start_beat <= c.start_beat + EPS
+        && t.start_beat + t.laenge_beats >= c.start_beat + c.laenge_beats - EPS && istMidiTakeKopie(c, t));
+      const retten = drin.filter((c) => !kopie(c)) as MidiClip[];
+      spur.clips = spur.clips.filter((c) => !drin.includes(c));
+      if (retten.length > 0) {
+        if (!(spur.takes ?? []).some((t) => t.art === 'original')) {
+          p = lauf(p, { befehl: 'take_neu', spur_id: id, name: ORIGINAL_NAME });
+          sucheSpur(p, id)!.takes!.at(-1)!.art = 'original';
+        }
+        const o = sucheSpur(p, id)!.takes!.find((t) => t.art === 'original')!;
+        (o.clips as MidiClip[]).push(...retten);
+        o.clips.sort((x, y) => x.start_beat - y.start_beat);
+      }
+      // the main clip first: its note ids are the ones a run without takes would have given
+      p = lauf(p, { befehl: 'clip_neu', spur_id: id, art: 'midi', start_beat: haupt.von, laenge_beats: runde9(haupt.bis - haupt.von), name,
+        noten: alsNoten(haupt.noten, haupt.von, haupt.bis) });
+      for (const x of behalten) {
+        p = lauf(p, { befehl: 'take_neu', spur_id: id });
+        const vorher = new Set(sucheSpur(p, id)!.clips.map((c) => c.id));
+        p = lauf(p, { befehl: 'clip_neu', spur_id: id, art: 'midi',
+          start_beat: x.von, laenge_beats: runde9(x.bis - x.von), name, noten: alsNoten(x.noten, x.von, x.bis) });
+        const s2 = sucheSpur(p, id)!;
+        const neu = s2.clips.find((c) => !vorher.has(c.id)) as MidiClip;
+        s2.clips = s2.clips.filter((c) => c !== neu);   // the take clip lives in its lane only
+        (s2.takes!.filter((t) => t.art === undefined).at(-1)!.clips as MidiClip[]).push(neu);
+      }
+    }
+  } catch (e) {
+    if (e instanceof BefehlFehler && e.grund === 'zu_gross') throw new TakeFehler('zu_gross', e.detail);
+    throw e;
+  }
+  pruefeGrenzen(p);
+  return p;
+}
 // The range [von, bis) the take covers and its notes cut to it; one that begins before the range (the offset) or ends after it keeps its part inside
 function fasseNoten(a: MidiTakeAngabe): { von: number; bis: number; noten: MidiNote[] } {
   const von = a.punch ? Math.max(a.startBeat, a.punch.von_beat) : a.startBeat, bis = a.punch ? Math.min(a.endeBeat, a.punch.bis_beat) : a.endeBeat;

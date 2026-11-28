@@ -31,6 +31,7 @@ class ArrInternSenke final : public ArrSenke {
   void auto_parameter(int spur, int param, float wert) noexcept override;   // `geraet` lane values: to the sink of the device (the RB-338 parameters, the Baukasten knobs k1..k64)
   void auto_parameter_summand(int spur, int param, float delta) noexcept override;   // 1.12 slice 5: a relative device lane without an absolute one, same dispatch
   void stift(int spur, int satz, int zeile, int spalte, float wert, uint64_t gen) noexcept override;   // kraken patch field: a pin goes to the sink of the track's device (only bk takes it)
+  void mod_summand(int spur, int param, float delta) noexcept override;   // strand 6: a modulator offset on a device parameter, to the sink that gets the notes (like note_regler)
   void note_regler(int spur, int64_t ziel, int param, float wert, bool relativ) noexcept override;   // sampler A2: the per-note value of a latched knob, to the sink that gets the note
   void fx(int spur, int64_t ziel, bool pegel, float wert, int64_t gleit_samples) noexcept override;   // tracker task 16: a bend or pegel event, to the sink that gets the notes of the track
   bool spur_weg(int spur, int64_t s, bool andere_spur) noexcept override;

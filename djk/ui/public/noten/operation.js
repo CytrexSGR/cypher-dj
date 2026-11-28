@@ -2,24 +2,34 @@
 // (contract.js) and draws with zeichnen.js; nothing here knows cypher-dj. One gesture is at most ONE op: a pitch drag shows its preview until the release
 // and sends `ton` then, computed from the stand of that moment (a note that is gone by then sends nothing).
 //   pointer down on a note selects it (Ctrl or Meta toggles), in empty space it clears the selection
-//   a move of more than 3 px starts a pitch drag; release sends the op (Alt: free 0.01 steps, Shift: tones of the key, else whole semitones); Escape cancels
+//   a move of more than 3 px starts a drag; the axis is chosen once: vertical-dominant = pitch (Alt: free 0.01 steps, Shift: tones of the key, else whole
+//   semitones), horizontal-dominant = time move of the selection, or stretch of the edge when the press was within TREFFER_PX of a bar edge (time snaps to
+//   1/16 of the clip grid, Alt: free 0.001 s); release sends the op; Escape cancels
 //   double click on a note: reset it; right click: Reset note, Reset all notes, Remove notes from clip
 //   wheel: time, Shift+wheel: pitch, Ctrl or Meta+wheel: zoom
 import { pruefeAdapter } from './contract.js';
-import { TON_HOEHE, neueAnsicht, zoom, scrolle, scrolleTon, trefferNote, zugOp } from './view.js';
+import { TON_HOEHE, neueAnsicht, zoom, scrolle, scrolleTon, trefferNote, trefferKante, zugOp, zeitZugOp, zeitVorschau } from './view.js';
 import { zeichne } from './zeichnen.js';
 
 export const ZUG_START_PX = 3;
 const WHEEL_ZOOM = 1.25;               // per 100 wheel units
 const WHEEL_TON = 40;                  // wheel units per row
 
-export function bindeNotenEditor(canvas, adapter, { menue } = {}) {
+export function bindeNotenEditor(canvas, adapter, { menue, beiAuswahl } = {}) {
   const fehlt = pruefeAdapter(adapter);
   if (fehlt.length) throw new TypeError(`note editor adapter lacks: ${fehlt.join(', ')}`);
   if (typeof menue !== 'function') throw new TypeError('note editor needs a menue(punkte, x, y) function');
   const g = canvas.getContext('2d');
   let a = null, quelleS = null, tonBewegt = false, notenZahl = 0, auswahl = [], zug = null, geplant = false, beendet = false;
-  let breite = 0, hoehe = 0;
+  let breite = 0, hoehe = 0, gemeldet = null;
+  // the selection is told to the host (`beiAuswahl(ids, ankerId)`; anchor = the note selected last) whenever it differs from the last one told
+  function meldeAuswahl() {
+    if (typeof beiAuswahl !== 'function') return;
+    const schluessel = auswahl.join('|');
+    if (schluessel === gemeldet) return;
+    gemeldet = schluessel;
+    try { beiAuswahl([...auswahl], auswahl.length ? auswahl[auswahl.length - 1] : null); } catch (e) { console.error('note editor: beiAuswahl threw', e); }
+  }
 
   const modus = (e) => (e.altKey ? 'frei' : e.shiftKey ? 'tonart' : 'halbton');
   const sende = (op) => Promise.resolve().then(() => adapter.schreibe(op)).catch(() => ({ ok: false, grund: 'fehler', text: '' }));
@@ -43,11 +53,16 @@ export function bindeNotenEditor(canvas, adapter, { menue } = {}) {
     if (!messe(sicht)) return;
     const da = ids(sicht);
     auswahl = auswahl.filter((id) => da.has(id));
-    const vorschau = zug?.begonnen ? zugOp(sicht.noten, zug.ids, zug.anker, zug.dy, zug.modus, sicht.rasteTonart) : null;
-    zeichne(g, a, sicht, { auswahl, zug: vorschau ? { ids: vorschau.ids, um: vorschau.um } : null, breite, hoehe });
+    meldeAuswahl();
+    const ton = zug?.begonnen && zug.achse === 'ton';
+    const vorschau = ton ? zugOp(sicht.noten, zug.ids, zug.anker, zug.dy, zug.modus, sicht.rasteTonart) : null;
+    const zeit = zug?.begonnen && zug.achse === 'zeit' ? zeitVorschau(sicht.noten, zeitOp(sicht, zug, zug.alt)) : null;
+    zeichne(g, a, sicht, { auswahl, zug: vorschau ? { ids: vorschau.ids, um: vorschau.um } : null, zeit, breite, hoehe });
   }
+  const zeitOp = (sicht, z, alt) => zeitZugOp(sicht.noten, z.kante ? [z.anker] : z.ids, z.anker, z.dxS, z.kante, alt ? 'frei' : 'raster', sicht.raster);
   function neu() {
     if (beendet) return;
+    meldeAuswahl();
     const raf = globalThis.requestAnimationFrame;
     if (typeof raf !== 'function') { zeichneJetzt(); return; }
     if (geplant) return;
@@ -65,28 +80,45 @@ export function bindeNotenEditor(canvas, adapter, { menue } = {}) {
     if (!k) return;
     const { treffer } = k;
     if (!treffer) { if (!mit(e)) auswahl = []; neu(); return; }
-    e.preventDefault?.(); canvas.setPointerCapture?.(e.pointerId); canvas.focus?.({ preventScroll: true });
+    e.preventDefault?.();
+    try { canvas.setPointerCapture?.(e.pointerId); } catch { /* the pointer may be gone already; the drag still works inside the canvas */ }
+    canvas.focus?.({ preventScroll: true });
     if (mit(e)) {
       if (auswahl.includes(treffer)) { auswahl = auswahl.filter((id) => id !== treffer); neu(); return; }
       auswahl = [...auswahl, treffer];
     } else if (!auswahl.includes(treffer)) auswahl = [treffer];
-    zug = { anker: treffer, ids: [...auswahl], x0: x(e), y0: y(e), dy: 0, modus: modus(e), begonnen: false };
+    const kante = trefferKante(k.sicht.noten, a, x(e), y(e));
+    zug = { anker: treffer, ids: [...auswahl], x0: x(e), y0: y(e), dy: 0, dxS: 0, modus: modus(e), alt: e.altKey, achse: null, kante: kante?.id === treffer ? kante.kante : null, begonnen: false };
     neu();
   };
+  // cursor: ew-resize near a bar edge, grab over a body (only when the host's canvas has a style)
+  function zeiger(e) {
+    if (!canvas.style) return;
+    const sicht = adapter.lies();
+    if (!messe(sicht)) return;
+    canvas.style.cursor = trefferKante(sicht.noten, a, x(e), y(e)) ? 'ew-resize' : trefferNote(sicht.noten, a, x(e), y(e)) ? 'grab' : '';
+  }
   const bewegt = (e) => {
-    if (!zug) return;
+    if (!zug) { zeiger(e); return; }
     const dx = x(e) - zug.x0, dyPx = y(e) - zug.y0;
     if (!zug.begonnen && Math.hypot(dx, dyPx) <= ZUG_START_PX) return;
-    zug.begonnen = true; zug.dy = -dyPx / TON_HOEHE; zug.modus = modus(e);
+    if (!zug.begonnen) { zug.begonnen = true; zug.achse = Math.abs(dx) > Math.abs(dyPx) ? 'zeit' : 'ton'; }
+    if (zug.achse === 'zeit') { zug.dxS = dx / a.pxProS; zug.alt = e.altKey; }
+    else { zug.dy = -dyPx / TON_HOEHE; zug.modus = modus(e); }
     neu();
   };
   const los = (e) => {
     if (!zug) return;
     const z = zug; zug = null;
-    canvas.releasePointerCapture?.(e.pointerId);
+    try { canvas.releasePointerCapture?.(e.pointerId); } catch { /* already released */ }
     neu();
     if (e.type === 'pointercancel' || !z.begonnen) return;
     const sicht = adapter.lies();
+    if (z.achse === 'zeit') {
+      const op = zeitOp(sicht, { ...z, dxS: (x(e) - z.x0) / a.pxProS }, e.altKey);
+      if (op) sende(op);
+      return;
+    }
     const op = zugOp(sicht.noten, z.ids, z.anker, -(y(e) - z.y0) / TON_HOEHE, modus(e), sicht.rasteTonart);
     if (op) sende(op);
   };
@@ -100,7 +132,18 @@ export function bindeNotenEditor(canvas, adapter, { menue } = {}) {
     if (!k) return;
     if (k.treffer && !auswahl.includes(k.treffer)) { auswahl = [k.treffer]; neu(); }
     const ziel = [...auswahl], leer = k.sicht.noten.length === 0;
+    const staerke = k.sicht.staerke ?? 1, rasterAn = (ton) => {
+      const op = { art: 'raster', ...(ziel.length ? { ids: ziel } : {}), staerke };
+      if (ton) op.ton = ton; else op.zeit = '1/16';
+      if (!leer) sende(op);
+    };
+    const formAn = (f) => { if (!leer) sende({ art: 'form', ...(ziel.length ? { ids: ziel } : { ids: k.sicht.noten.map((n) => n.id) }), ...f }); };
     menue([
+      { text: 'Quantise starts to 1/16', aus: leer, aktion: () => rasterAn(null) },
+      { text: 'Snap to key', aus: leer || !k.sicht.rasteTonart, titel: !k.sicht.rasteTonart ? 'Set a project key first' : undefined, aktion: () => { if (k.sicht.rasteTonart) rasterAn('tonart'); } },
+      { text: 'Snap to semitones', aus: leer, aktion: () => rasterAn('halbton') },
+      { text: 'Flatten vibrato', aus: leer, aktion: () => formAn({ vib: 0 }) },
+      { text: 'Flatten drift', aus: leer, aktion: () => formAn({ drift: 0 }) },
       { text: 'Reset note', aus: ziel.length === 0, aktion: () => { if (ziel.length) sende({ art: 'zuruecksetzen', ids: ziel }); } },
       { text: 'Reset all notes', aus: leer, aktion: () => { if (!leer) sende({ art: 'zuruecksetzen' }); } },
       { text: 'Remove notes from clip', aus: leer, aktion: () => { if (!leer) sende({ art: 'entfernen' }); } },

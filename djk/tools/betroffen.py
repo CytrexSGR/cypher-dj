@@ -11,7 +11,9 @@ file selection by name it reuses. Prints one line per decision:
     NICHTS <path>              a changed path no suite covers (reported, runs nothing)
 Escalation: CMake files, C/C++ headers, anything under djk/contract (except its tests and mock_core), lockfiles and manifests of the
 dependencies, the gate itself (djk/tools/alles*, fast.py, betroffen.py, skips_decke.txt, quarantaene.txt, the page test lists, djk/tools/ci/**,
-the CI workflow folder .<host>/workflows/**) and third_party/**. A changed core source (.cpp, .c, a test script) runs the core suite whole, plus every page test that starts
+the CI workflow folder .<host>/workflows/**) and third_party/**. Exception: a change to a test list (serial.txt, serial_zeiten.txt,
+serial_instanz.txt, ruhig.txt of the page or generator tests) that only adds or removes entries runs the test files those entries name, in their new
+place; a changed comment line costs nothing; a line that cannot be read as an entry escalates as before. A changed core source (.cpp, .c, a test script) runs the core suite whole, plus every page test that starts
 cypherdj-render (found by grep) and the hand suite; a changed .rs or Cargo.toml runs the instruments suite whole, a changed file under djk/start
 runs the start-sh suite (and py-start for .py). Node and pytest suites run the test files that are changed, that name the changed source, or that
 reach it through their imports (transitively, also across packages: a mock_core change selects the page tests that import it).
@@ -41,6 +43,11 @@ GATE = ("djk/tools/alles", "djk/tools/quarantaene.txt", "djk/tools/skips_decke.t
         "djk/tools/betroffen", "djk/tools/schnell", "djk/tools/ci/", "third_party/", "djk/third_party/")
 # the CI workflow folder of the git host, whatever the host is called (.<host>/workflows/...)
 CI_ORDNER_RX = re.compile(r"\.[a-z]+/workflows/")
+# test lists that only distribute test files: list -> (folder of the named files, index of the file name in a line split on whitespace)
+TEST_LISTEN = {"djk/ui/tests/serial.txt": ("djk/ui/tests", 0), "djk/ui/tests/ruhig.txt": ("djk/ui/tests", 0),
+               "djk/ui/tests/serial_zeiten.txt": ("djk/ui/tests", 1), "djk/ui/tests/serial_instanz.txt": ("djk/ui/tests", 1),
+               "djk/generator/tests/ruhig.txt": ("djk/generator/tests", 0)}
+TEST_DATEI_RX = re.compile(r"^[A-Za-z0-9_.-]+\.test\.(mjs|js|ts)$")
 RENDER_RX = re.compile(r"cypherdj-render|CYPHERDJ_RENDER|cypherdj-noten|CYPHERDJ_NOTEN")
 
 
@@ -78,6 +85,31 @@ def harmlos(rel, geloescht):
     return bool(geloescht and schnell.ist_test(Path(rel)))
 
 
+def git_zeilen(ref):
+    """-> fn(rel) -> list of the added and removed lines of rel against ref (the +/- lines of a zero-context diff)."""
+    def zeilen(rel):
+        aus = schnell.git("diff", "-U0", "--no-renames", ref, "--", rel)
+        return [z[1:] for z in aus.splitlines() if z[:1] in "+-" and not z.startswith(("+++", "---"))]
+    return zeilen
+
+
+def listen_eintraege(rel, zeilen):
+    """Test files named by the changed lines of a test list, or None when a changed line is not a plain entry (then the list escalates).
+    Comment and blank lines name nothing."""
+    ordner, feld = TEST_LISTEN[rel]
+    namen = set()
+    for z in zeilen:
+        kern = z.split("#")[0].split()
+        if not kern:
+            if z.strip() and not z.lstrip().startswith("#"):
+                return None
+            continue
+        if len(kern) <= feld or not TEST_DATEI_RX.match(kern[feld]):
+            return None
+        namen.add(f"{ordner}/{kern[feld]}")
+    return namen
+
+
 def eskalation(rel):
     """Reason to run the whole gate for this changed path, or None."""
     n = Path(rel).name
@@ -109,8 +141,19 @@ def suite_von(rel):
     return None
 
 
-def plane(dateien, ui_shards=None, auswahl_fn=schnell.auswahl_voll):
-    """-> (eskalation, suites, dateien, nichts). eskalation: list of reasons; suites: set; dateien: {suite: set of paths relative to the suite folder}."""
+def plane(dateien, ui_shards=None, auswahl_fn=schnell.auswahl_voll, zeilen_fn=None):
+    """-> (eskalation, suites, dateien, nichts). eskalation: list of reasons; suites: set; dateien: {suite: set of paths relative to the suite folder}.
+    zeilen_fn(rel) gives the changed lines of a test list (see git_zeilen); without it a changed test list escalates."""
+    if zeilen_fn:
+        neu = []
+        for rel in dateien:
+            namen = listen_eintraege(rel, zeilen_fn(rel)) if rel in TEST_LISTEN else None
+            if namen is None:
+                neu.append(rel)
+            else:
+                # a removed entry whose file is gone names nothing to run
+                neu.extend(n for n in sorted(namen) if (REPO / n).exists())
+        dateien = sorted(set(neu))
     gruende = [g for g in (eskalation(r) for r in dateien) if g]
     if gruende:
         return gruende, set(), {}, []
@@ -192,7 +235,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     ref = schnell.basis(a.gegen)
     dateien = schnell.geaendert(ref)
-    gruende, suites, datei, nichts = plane(dateien)
+    gruende, suites, datei, nichts = plane(dateien, zeilen_fn=git_zeilen(ref))
     if gruende:
         print("ESKALATION " + "; ".join(gruende[:3]) + (f" (+{len(gruende) - 3} more)" if len(gruende) > 3 else ""))
         return 0

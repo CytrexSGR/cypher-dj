@@ -53,9 +53,11 @@ test('take_neu: default number counts only takes without art (the Original lane 
   assert.equal(r.projekt.spuren[0].takes.at(-1).id, 't3');
 });
 
-test('take_neu: instrument track, unknown track, bad names, extra fields', () => {
+test('take_neu: stream track, unknown track, bad names, extra fields', () => {
   const p = projekt();
-  lehntAb(p, { befehl: 'take_neu', spur_id: 's2' }, 'take_nur_audio');
+  const q = structuredClone(p);                       // strand 7 (D10): instrument tracks have take lanes now, stream tracks do not
+  q.spuren.push({ ...structuredClone(q.spuren[1]), id: 's3', nr: 9, art: 'strom', strom: 2 });
+  lehntAb(q, { befehl: 'take_neu', spur_id: 's3' }, 'take_nur_audio');
   lehntAb(p, { befehl: 'take_neu', spur_id: 's9' }, 'spur_unbekannt');
   lehntAb(p, { befehl: 'take_neu', spur_id: 's1', name: '' }, 'take_name_ungueltig');
   lehntAb(p, { befehl: 'take_neu', spur_id: 's1', name: '   ' }, 'take_name_ungueltig');

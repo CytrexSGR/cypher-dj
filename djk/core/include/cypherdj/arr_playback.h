@@ -19,6 +19,7 @@
 #include "cypherdj/kit.h"             // 1.9: the Kit struct (header-only destructor; kit.cpp stays out of the link of the standalone targets)
 #include "cypherdj/store_account.h"
 #include "cypherdj/signalbox/controls.h"   // BK_REGLER_N: the knob count of a Baukasten graph (header-only constants)
+#include "cypherdj/midi_stufe.h"    // strand 7: ArrMidiParam (header-only struct; midi_stufe.cpp is not needed by the loader)
 #include "cypherdj/warp_mapping.h"
 #include "cypherdj/zell_map.h"      // session view S1b K2: ZellKarte and the limits of a cell (slots, envelopes, points)
 
@@ -52,14 +53,20 @@ constexpr int ARR_INS_KOMP = 160;       // 1.10 slice 4a: pooled compressors ins
 // and equal "instanzen" of docs/interfaces/insert_module.json (pinned by test_arr_inserts_vertrag and by the contract test in the stellwerk project).
 #ifdef CYPHERDJ_MUTATION_INS_POOL_PLUS_EINS   // error case: a pool constant one above the rows of the table (the pool pin in test_arr_inserts_4b must go red)
 constexpr int ARR_INS_EQ = 161;
-constexpr int ARR_INS_SAETT = 5;
+constexpr int ARR_INS_SAETT = 33;
 constexpr int ARR_INS_LIM = 9;
+constexpr int ARR_INS_TRANS = 33;
+constexpr int ARR_INS_BILD = 17;
 #else
 constexpr int ARR_INS_EQ = 160;           // strand 1 slice 3b: 96 -> 160, one for every strip at 128 tracks; strand 1 slice 3: 16 -> 96; strand 1 slice 1: 8 -> 16; arr-fx slice 2: 2 -> 8 on the order of 2026-11-10 (was 2 on Andreas' decision of 2026-11-05, lane gate median 1650 us); cost: see the arr-fx report
-constexpr int ARR_INS_SAETT = 4;          // arr-fx slice 2: 1 -> 4
+constexpr int ARR_INS_SAETT = 32;         // strand 5 slice 3: 4 -> 32; arr-fx slice 2: 1 -> 4
 constexpr int ARR_INS_LIM = 8;            // strand 1 slice 4: 2 -> 8; arr-fx slice 2: 1 -> 2 (the pool is shared over the whole project)
+// strand 5 slice 3: the transient shapers ins/trans/1..ARR_INS_TRANS (dsp/transient.h) and the three-band imagers ins/bild/1..ARR_INS_BILD (dsp/imager.h), 0 samples of latency each,
+// sit between mb and host (INS_G_TRANS0, INS_G_BILD0), so host stays last. Pool sizes: "instanzen" of the kinds trans and bild in docs/interfaces/insert_module.json (pinned by test_arr_inserts_trans_bild).
+constexpr int ARR_INS_TRANS = 32;
+constexpr int ARR_INS_BILD = 16;
 #endif
-// one global slot index, in this order: komp, eq, saett, lim, utility, bk, gate, mb, host (INS_G_*0 in arr_inserts.h). Since plan 1.11 the host stages ins/host/1..ARR_INS_HOST at the end (INS_G_HOST0 in arr_inserts.h)
+// one global slot index, in this order: komp, eq, saett, lim, utility, bk, gate, mb, trans, bild, host (INS_G_*0 in arr_inserts.h). Since plan 1.11 the host stages ins/host/1..ARR_INS_HOST at the end (INS_G_HOST0 in arr_inserts.h)
 // arr-fx slice 1: the utility stages ins/utility/1..ARR_INS_UTIL (Utility of package 1.15: width, bass mono, gain, balance) sit between lim and host (INS_G_UTIL0), so host stays last.
 constexpr int ARR_INS_UTIL = 8;           // "instanzen" of the kind utility in docs/interfaces/insert_module.json (pinned by test_arr_inserts_util)
 // arr-bk slice 3: the Baukasten effect stages ins/bk/1..ARR_INS_BK (a Baukasten effect graph with the knobs k1..k64) sit between utility and host (INS_G_BK0), so host stays last.
@@ -69,12 +76,12 @@ constexpr int ARR_INS_BK = 8;
 // (INS_G_GATE0, INS_G_MB0), so host stays last. Pool sizes: "instanzen" of the kinds gate and mb in docs/interfaces/insert_module.json (pinned by test_arr_inserts_dyn).
 constexpr int ARR_INS_GATE = 16;
 constexpr int ARR_INS_MB = 8;
-constexpr int ARR_INS_ALLE = ARR_INS_KOMP + ARR_INS_EQ + ARR_INS_SAETT + ARR_INS_LIM + ARR_INS_UTIL + ARR_INS_BK + ARR_INS_GATE + ARR_INS_MB + ARR_INS_HOST;
+constexpr int ARR_INS_ALLE = ARR_INS_KOMP + ARR_INS_EQ + ARR_INS_SAETT + ARR_INS_LIM + ARR_INS_UTIL + ARR_INS_BK + ARR_INS_GATE + ARR_INS_MB + ARR_INS_TRANS + ARR_INS_BILD + ARR_INS_HOST;   // 456 since strand 5 slice 3 (380 before)
 // strand 1 slice 3 (decision 3): 96 + 96 so that every strip (tracks, groups, PM, returns; 89 at 64 tracks) can hold its own compressor and EQ;
 // slice 3b: 160 + 160 for 153 strips at 128 tracks.
 static_assert(ARR_INS_KOMP >= ARR_KETTEN && ARR_INS_EQ >= ARR_KETTEN, "every strip can hold its own compressor and EQ");
-static_assert(ARR_INS_KOMP <= 999 && ARR_INS_LIM <= 999 && ARR_INS_GATE <= 999 && ARR_INS_MB <= 999, "the gain reduction path ins/<art>/<n> is written with at most three digits (core_signalbox.cpp)");
-static_assert(ARR_INS_KOMP <= 256 && ARR_INS_EQ <= 256, "ArrStufe::slot is uint8_t");
+static_assert(ARR_INS_KOMP <= 999 && ARR_INS_LIM <= 999 && ARR_INS_GATE <= 999 && ARR_INS_MB <= 999 && ARR_INS_SAETT <= 999 && ARR_INS_TRANS <= 999, "the gain reduction path ins/<art>/<n> is written with at most three digits (core_signalbox.cpp)");
+static_assert(ARR_INS_KOMP <= 256 && ARR_INS_EQ <= 256 && ARR_INS_SAETT <= 256 && ARR_INS_TRANS <= 256 && ARR_INS_BILD <= 256, "ArrStufe::slot is uint8_t");
 constexpr int BK_KNOEPFE = cypherdj::stellwerk::BK_REGLER_N;   // knobs k1..k64 of a Baukasten graph (track device parameters, insert stages, channel rows)
 constexpr int ARR_PARAMETER = BK_KNOEPFE;   // device parameters per internal track: the four RB-338 ones and the Baukasten knobs k1..k64 (was 8 before the 32-knob widening, 32 before the 64-knob one)
 constexpr int ARR_BK_MAX = 16;          // S20: Baukasten tracks per playback (8 until 2026-11-18); = MAX_BK_SPUREN in model.ts (pinned by tests/project_bk_device.test.mjs)
@@ -158,6 +165,50 @@ struct ArrKettenLane {
   uint8_t param = 0;                // parameter index of the stage kind (stage lanes)
   int n = 0;                        // points, at least 1
   const ArrAutoPunkt* p = nullptr;  // into ArrSnapshot::auto_punkte
+};
+
+// Strand 6 (plan 2026-11-27, D1..D11): project modulators, the playback key `mod` (cypherdj-arr/3 and /4). A modulator is a source that is not a drawn curve (slice 1: an LFO);
+// each of its targets adds an OFFSET on top of the whole existing value stack (D3): result = clamp(base stack + sum of offsets, target range). Fader and pan per sample
+// (Arrangement::mod_block), every other target once per block. Fixed size in the head of the snapshot, no pages. Slices append fields at the end, never reorder.
+constexpr int ARR_MODS = 16;         // modulators per project (nr 1..16) = MAX_MODULATOREN in model.ts
+constexpr int ARR_MOD_ZIELE = 8;     // targets per modulator = MAX_MOD_ZIELE
+constexpr int ARR_MOD_FELDER = 32;   // distinct fader/pan targets (slot, field) in all modulators = MAX_MOD_FELDER
+struct ArrModZiel {
+  uint8_t art = 0;      // 0 fader/pan of an automation slot, 1 geraet (device parameter of a track), 2 send, 3 stage, 4 macro (slice 4)
+  int16_t slot = 0;     // art 0: automation slot (track index 0..127, return r: ARR_SPUREN + r, as slot_lane); art 1: track index
+  uint8_t feld = 0;     // art 0: 0 fader, 1 pan
+  uint8_t param = 0;    // art 1: device parameter index (RB-338 0..3, bk knob 0..63), as ArrAutoLane::param
+  float tiefe = 0.0f;   // depth in the unit of the target (D6): fader dB, pan units, device fraction of 0..1
+  bool uni = false;     // unipolar: offset = tiefe * (out + 1) / 2, else tiefe * out
+  int8_t puffer = -1;   // art 0: index 0..ARR_MOD_FELDER - 1 of the distinct (slot, feld) pair (ArrSnapshot::mod_feld), -1 otherwise
+  // Slice 4 (task 4.1), block rate like their lanes. art 2 send: slot = track index, param = return - 1, tiefe in dB (-24..24), added to the send before db_lin (Arrangement::auto_send).
+  // art 3 stage: slot = chain index (ARR_KETTEN), stufe = position in that chain, param = parameter index of the stage kind (as ArrKettenLane), tiefe a fraction of the row range (-1..1).
+  // art 4 macro: slot = chain index, param = macro 0..ARR_MAKROS - 1 of the strip's rack, tiefe in macro units (-1..1). Both go to ArrInserts (mod_stufe, mod_makro).
+  uint8_t stufe = 0;
+};
+static_assert(sizeof(ArrModZiel) == 16, "the stage index sits in the padding: the modulator table keeps its size");
+struct ArrMod {
+  uint8_t nr = 0;        // 1..ARR_MODS, the stable state slot (D11)
+  uint8_t art = 0;       // 0 lfo, 1 folger (envelope follower, slice 3)
+  uint8_t form = 0;      // 0 sinus, 1 dreieck, 2 saege, 3 rechteck, 4 zufall (D5)
+  bool frei = false;     // free rate (hz) instead of beat sync (takt)
+  double takt = 4.0;     // beats per period (synced)
+  double hz = 0.0;       // periods per second (free)
+  double phase = 0.0;    // 0..1, added to the beat phase; the start phase of the free rate
+  float glatt_ms = 1.0f; // one-pole smoothing of the per-sample offsets (D7)
+  uint32_t saat = 0;     // random seed (FNV-1a 32 of the modulator id, written by the translator)
+  int n = 0;             // targets 0..ARR_MOD_ZIELE (0: only plugin.* targets, played by the page server from /zustand/mod; the modulator runs and reports, it applies nothing here)
+  ArrModZiel z[ARR_MOD_ZIELE];
+  // Slice 3 (D12), art 1 only: the source track and the peak follower. The follower's output 0..1 (clamp((dBFS(env) + 60 + empfindlich_db) / 60, 0, 1)) runs in the core as
+  // 2 * out - 1 (-1..1, the range of an LFO), and every target of a follower is unipolar (the reader sets uni), so the offset is tiefe * out and the report keeps one formula.
+  int16_t quelle = -1;          // track index 0..127 whose raw track signal (before trim, chain and fader) the follower hears
+  float angriff_ms = 5.0f;      // attack 0.1..500 ms
+  float abfall_ms = 150.0f;     // release 1..5000 ms
+  float empfindlich_db = 0.0f;  // sensitivity -24..24 dB
+};
+struct ArrModFeld {      // one distinct fader/pan target of all modulators: the automation slot and the field (0 fader, 1 pan)
+  int16_t slot = 0;
+  uint8_t feld = 0;
 };
 
 class WarpWerk;
@@ -262,6 +313,7 @@ struct ArrSpur {
   uint64_t bk_gen = 0;
   int bk_latenz = 0;   // latency of the instrument graph in samples (loader, cypher_bk_latenz); the delay compensation counts it at the head of the strip's chain (arr_pdc.h)
   uint64_t bk_rastet = 0;   // sampler A2: the latched knobs of the graph (cypher_bk_rastende, bit nr-1), set beside bk by the loader; 0 = no latched knob, the notes of the track take no per-note knob values
+  ArrMidiParam midi{};   // strand 7: the MIDI stage of an instrument track (playback key `midi`, /2../4, art intern, rack or wirt); midi.an false = no stage (key absent)
   // 1.9, device kit: the kit name (folder name in the kit folder) and the shared Kit of the cache's kit store (reference counted by the
   // snapshots, ArrSnapshot::kit_refs); the callback reads it only. kit_gen is unique per loaded Kit (never reused).
   char kit[33] = {};
@@ -348,7 +400,7 @@ struct ArrSeiten {
 
 // 1.10 slice 4a/4b: one stage of an insert chain. slot is the 0-based index into the pool of its kind (ins/<art>/<slot + 1>); an is the project's on flag
 // (a stage runs when this AND its row ins/<art>/<n>/an are on).
-enum class ArrInsArt : uint8_t { leer = 0, komp = 1, eq = 2, saett = 3, lim = 4, host = 5, utility = 6, bk = 7, gate = 8, mb = 9 };   // host: plan 1.11, a foreign plugin in an effect host process (arr_host_stufe.h)
+enum class ArrInsArt : uint8_t { leer = 0, komp = 1, eq = 2, saett = 3, lim = 4, host = 5, utility = 6, bk = 7, gate = 8, mb = 9, trans = 10, bild = 11 };   // host: plan 1.11, a foreign plugin in an effect host process (arr_host_stufe.h); strand 5 slice 3: trans, bild appended (the values are stored in snapshots: never renumber)
 // 1.10 slice 5 U1: the structural sidechain key of a compressor stage (spec 5.5, plan E8). quelle 0 = none (the stage listens to the row sc, the 4a path); this unit knows the
 // source kind ARR_SCHL_SPUR with the point ARR_SCHL_POST (the output of track `nr` after fader, pan and mute/solo fade). The pair (spur, pre) has exactly one writer, the row sc.
 constexpr uint8_t ARR_SCHL_KEINE = 0;
@@ -455,6 +507,8 @@ struct ArrPdcTabelle {
   uint16_t ank_g[ARR_GRUPPEN] = {};
 };
 
+constexpr int ARR_HARMONIE_MAX = 512;   // strand 7 task 5.2: entries of the playback head key `harmonie`
+
 struct ArrSnapshot {
   ArrSnapshot() {
     for (int i = 0; i < ARR_SPUREN; ++i) spur_ordnung[i] = static_cast<uint8_t>(i);
@@ -480,6 +534,11 @@ struct ArrSnapshot {
   uint8_t gruppen_ebene[ARR_GRUPPEN];   // height: a group with no child group 0, a parent 1 + its highest child; the mixer runs the levels lowest first
   uint8_t gruppen_ordnung[ARR_GRUPPEN]; // the groups sorted by level, then index (the identity for a flat project)
   uint8_t ebenen = 1;                   // number of levels (highest level + 1)
+  // Strand 7 task 5.2: the production harmony lane, head key `harmonie: [[beat, maske], ...]` (/2..): n_harmonie entries, beats strictly ascending, masks 1..4095.
+  // A MIDI stage with skala_lane takes the mask in force at the project beat of each event (before the first entry its own skala_maske). 0 entries = no lane.
+  int n_harmonie = 0;
+  double harmonie_beat[ARR_HARMONIE_MAX] = {};
+  uint16_t harmonie_maske[ARR_HARMONIE_MAX] = {};
   ArrKette kette[ARR_KETTEN];        // 1.10 slice 4a: insert chain per strip (index as ARR_KETTEN); a chain with n = 0 costs nothing
   ArrRack rack[ARR_KETTEN];           // 1.10 slice 4c: rack macros per strip (index as kette); a strip with slot -1 or n = 0 has no mapping pass
   ArrPdcTabelle pdc;                 // 1.10 slice 4b T13: delays that align every path at the sums; set by arr_pdc_rechnen() (loader, test harness)
@@ -511,6 +570,12 @@ struct ArrSnapshot {
   // 1.12 slice 6: the insert and rack lanes (head of the snapshot, fixed size); their points are in auto_punkte too
   int n_klanes = 0;
   ArrKettenLane klane[ARR_KLANES_MAX];
+  // Strand 6: the modulators (head of the snapshot, fixed size, booked and locked with the head: sizeof(ArrSnapshot) grows by about 3 KiB: 16 x 192 + 32 x 4 + 8 bytes). n_mod 0: no modulator, the
+  // Arrangement skips every modulator pass. mod_feld[b] is the (slot, field) of fader/pan buffer b, n_mod_felder of them (ArrModZiel::puffer indexes it).
+  int n_mod = 0;
+  ArrMod mod[ARR_MODS];
+  int n_mod_felder = 0;
+  ArrModFeld mod_feld[ARR_MOD_FELDER];
   std::vector<ArrAutoLane, ArrSeiten<ArrAutoLane>> auto_lane_liste;
   std::vector<ArrAutoPunkt, ArrSeiten<ArrAutoPunkt>> auto_punkte;
   // 1.12 slice 5 (D8): the gain envelope points of all clips, hintereinander. Own vector, reserved in the prescan before any push_back: ArrClip::hk points into it,

@@ -14,7 +14,7 @@
   "fehler_code": {
    "description": "Error codes of the command line; the table in notes.md carries the same list in the same order",
    "enum": ["argument", "datei_fehlt", "datei_kaputt", "format", "kurve_passt_nicht", "noten_ungueltig", "nicht_unterstuetzt",
-            "vorher_passt_nicht", "schreiben", "nicht_gebaut"]
+            "vorher_passt_nicht", "schreiben", "nicht_gebaut", "noten_ueberlappen", "noten_dehnung_grenze"]
   },
   "sekunden": {"description": "CPU seconds of the process (getrusage), never a wall clock", "type": "number", "minimum": 0},
   "ok_version": {
@@ -65,6 +65,20 @@
      "description": "Rewritten sample ranges [s0, s1), half open, s0 < s1 (checked by notes_contract.ts)",
      "type": "array",
      "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "integer", "minimum": 0}}
+    },
+    "messung": {
+     "description": "Measured pitch of the output per edited note: the median of the voiced detector frames over the middle of the new interval (ton_ist, float MIDI, 0.001) and its error against ton ?? qton (fehler_ct, cents, 0.1). Always written by the core; a note whose middle is too short or unvoiced has no entry",
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "ton_ist", "fehler_ct"],
+      "properties": {
+       "id": {"type": "string", "minLength": 1},
+       "ton_ist": {"type": "number", "minimum": 0, "maximum": 140},
+       "fehler_ct": {"type": "number"}
+      }
+     }
     },
     "sekunden": {"$ref": "#/$defs/sekunden"}
    }

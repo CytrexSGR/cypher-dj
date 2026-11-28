@@ -83,11 +83,37 @@ bool ins_zeile(const sw::ReglerDef& d, int* slot, int* param) {
     }
     return true;
   }
+  if (r == sw::Rolle::ins_eq_sc) {   // strand 5 slice 4: ins/eq/<n>/sc, the key row of the stage (parameter 85), the last role
+    const int n = ins_nr(d.pfad, "ins/eq/", ARR_INS_EQ, &rest);
+    if (n < 1) return false;
+    *slot = ins_global(ArrInsArt::eq, n - 1);
+    *param = INS_EQ_SC;
+    return true;
+  }
+  if (r >= sw::Rolle::ins_eq_d_dyn && r <= sw::Rolle::ins_eq_dyn_release) {   // strand 5 slice 2: the dynamic EQ rows (parameters 59..84) come after ins_saett_decke
+    const int n = ins_nr(d.pfad, "ins/eq/", ARR_INS_EQ, &rest);
+    if (n < 1) return false;
+    *slot = ins_global(ArrInsArt::eq, n - 1);
+    if (r == sw::Rolle::ins_eq_dyn_attack || r == sw::Rolle::ins_eq_dyn_release) {
+      *param = r == sw::Rolle::ins_eq_dyn_attack ? INS_EQ_DYN_ATTACK : INS_EQ_DYN_RELEASE;
+    } else {   // "d<m>/<name>", m = 1..8
+      if (rest[0] != 'd' || rest[1] < '1' || rest[1] > '8' || rest[2] != '/') return false;
+      *param = INS_EQ_DYN0 + (rest[1] - '1') * INS_EQ_DYN_PARAM + (static_cast<int>(r) - static_cast<int>(sw::Rolle::ins_eq_d_dyn));
+    }
+    return true;
+  }
   if (r >= sw::Rolle::ins_saett_an && r <= sw::Rolle::ins_saett_mix) {
     const int n = ins_nr(d.pfad, "ins/saett/", ARR_INS_SAETT, &rest);
     if (n < 1) return false;
     *slot = ins_global(ArrInsArt::saett, n - 1);
     *param = static_cast<int>(r) - static_cast<int>(sw::Rolle::ins_saett_an);
+    return true;
+  }
+  if (r == sw::Rolle::ins_saett_kurve || r == sw::Rolle::ins_saett_decke) {   // strand 5 slice 1: the clip curve and ceiling (parameters 4 and 5) come after plug_regler
+    const int n = ins_nr(d.pfad, "ins/saett/", ARR_INS_SAETT, &rest);
+    if (n < 1) return false;
+    *slot = ins_global(ArrInsArt::saett, n - 1);
+    *param = r == sw::Rolle::ins_saett_kurve ? 4 : 5;
     return true;
   }
   if (r >= sw::Rolle::ins_lim_an && r <= sw::Rolle::ins_lim_abklingen) {   // the limiter roles come after rack_m4, so they need their own branch
@@ -128,6 +154,20 @@ bool ins_zeile(const sw::ReglerDef& d, int* slot, int* param) {
       if (rest[0] != 'b' || rest[1] < '1' || rest[1] > '3' || rest[2] != '/') return false;
       *param = 3 + (rest[1] - '1') * INS_MB_BAND_PARAM + (static_cast<int>(r) - static_cast<int>(sw::Rolle::ins_mb_b_schwelle));
     }
+    return true;
+  }
+  if (r >= sw::Rolle::ins_trans_an && r <= sw::Rolle::ins_trans_mix) {   // strand 5 slice 3: ins/trans/<n>/<parameter>, parameter 0..5 in the order of the roles
+    const int n = ins_nr(d.pfad, "ins/trans/", ARR_INS_TRANS, &rest);
+    if (n < 1) return false;
+    *slot = ins_global(ArrInsArt::trans, n - 1);
+    *param = static_cast<int>(r) - static_cast<int>(sw::Rolle::ins_trans_an);
+    return true;
+  }
+  if (r >= sw::Rolle::ins_bild_an && r <= sw::Rolle::ins_bild_mono_unter) {   // strand 5 slice 3: ins/bild/<n>/<parameter>, parameter 0..6 in the order of the roles
+    const int n = ins_nr(d.pfad, "ins/bild/", ARR_INS_BILD, &rest);
+    if (n < 1) return false;
+    *slot = ins_global(ArrInsArt::bild, n - 1);
+    *param = static_cast<int>(r) - static_cast<int>(sw::Rolle::ins_bild_an);
     return true;
   }
   if (r == sw::Rolle::ins_host_an) {   // plan 1.11 T4: ins/host/<n>/an, the only row of an effect-host stage
@@ -178,10 +218,13 @@ void Arrangement::regler_binden(const sw::ReglerTabelle& tab) {
     }
     if ((d.rolle >= sw::Rolle::ins_komp_an && d.rolle <= sw::Rolle::ins_saett_mix) ||
         (d.rolle >= sw::Rolle::ins_lim_an && d.rolle <= sw::Rolle::ins_bk_k64) ||
-        (d.rolle >= sw::Rolle::ins_gate_an && d.rolle <= sw::Rolle::ins_mb_b_umgehen)) {   // strand 1 slice 4: gate and mb   // 1.10 slice 4a/4b + limiter + plan 1.11 host + arr-fx utility: the pooled insert rows (komp, eq, saett, lim, host, utility)
+        (d.rolle >= sw::Rolle::ins_gate_an && d.rolle <= sw::Rolle::ins_mb_b_umgehen) ||
+        d.rolle == sw::Rolle::ins_saett_kurve || d.rolle == sw::Rolle::ins_saett_decke ||
+        (d.rolle >= sw::Rolle::ins_eq_d_dyn && d.rolle <= sw::Rolle::ins_eq_dyn_release) ||
+        (d.rolle >= sw::Rolle::ins_trans_an && d.rolle <= sw::Rolle::ins_bild_mono_unter) || d.rolle == sw::Rolle::ins_eq_sc) {   // strand 5 slice 4: the eq key row   // strand 5 slice 3: trans and bild   // strand 5 slice 2: the dynamic EQ rows   // strand 5 slice 1: saett kurve and decke   // strand 1 slice 4: gate and mb   // 1.10 slice 4a/4b + limiter + plan 1.11 host + arr-fx utility: the pooled insert rows (komp, eq, saett, lim, host, utility)
       int slot = 0, param = 0;
       if (ins_zeile(d, &slot, &param)) {
-        regler_ins_[r] = static_cast<int16_t>(slot * INS_PARAM_MAX + param);
+        regler_ins_[r] = static_cast<int32_t>(slot * INS_PARAM_MAX + param);
         ins_.binde(slot, param, d.vorgabe, d.min, d.max);   // 1.12 slice 6: the range clamps a lane value
       }
       continue;

@@ -222,14 +222,14 @@ int main() {
     PRUEF(tab.suche(("ins/saett/" + std::to_string(cdj::ARR_INS_SAETT + 1) + "/an").c_str()) < 0);
     PRUEF(tab.suche(("ins/komp/" + std::to_string(cdj::ARR_INS_KOMP) + "/an").c_str()) >= 0);
     PRUEF(tab.suche(("ins/komp/" + std::to_string(cdj::ARR_INS_KOMP + 1) + "/an").c_str()) < 0);
-    // the eq rows: 3 + 8 x 7 = 59 per instance, the saturator 4
+    // the eq rows: 3 + 8 x 7 = 59 per instance, 85 with the dynamic rows since strand 5 slice 2 (d1..d8 x 3, dyn_attack, dyn_release); the saturator 4, 6 since strand 5 slice 1
     int eq = 0, sa = 0;
     for (int r = 0; r < tab.anzahl(); ++r) {
       if (std::strncmp(tab.def(r).pfad, "ins/eq/", 7) == 0) ++eq;
       if (std::strncmp(tab.def(r).pfad, "ins/saett/", 10) == 0) ++sa;
     }
-    PRUEF((eq) == (59 * cdj::ARR_INS_EQ));
-    PRUEF((sa) == (4 * cdj::ARR_INS_SAETT));
+    PRUEF((eq) == (cdj::INS_EQ_PARAM * cdj::ARR_INS_EQ));
+    PRUEF((sa) == (cdj::INS_SAETT_PARAM * cdj::ARR_INS_SAETT));
     std::printf("5: pools komp %d, eq %d, saett %d; rows eq %d, saett %d\n", cdj::ARR_INS_KOMP, cdj::ARR_INS_EQ, cdj::ARR_INS_SAETT, eq, sa);
   }
 

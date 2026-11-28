@@ -6,7 +6,7 @@
 //     window of the selected track, and without such a window it is hidden in the workbench root (never under the title of another track);
 //   - the Hall of a return: the Hall face (baueHallFace) with its ON/OFF;
 //   - a Baukasten stage of a track, a return or the master: its panel (baueFrontplatte, breit: true) with ON/OFF, move earlier/later and remove;
-//   - a utility, gate, multiband or plugin stage where the host has stufenPopover (PRODUCTION): its parameter popover at the chip, no window; elsewhere a short text.
+//   - a utility, gate, multiband, transient shaper, imager or plugin stage where the host has stufenPopover (PRODUCTION): its parameter popover at the chip, no window; elsewhere a short text.
 //   - any other stage: a short text. The native inserts (comp, saturation, limiter, EQ) keep their floating faces: oeffneStufe opens those instead.
 // Entry points: montiereFenster(host) returns { fenster: {oeffne(def), schliesse(id), schliesseAlle(), offen()}, oeffneGeraet(spurId), oeffneStufe(strangId, teil) }.
 // It talks to its view only through the host object (see dock.js); the cut/kit host of STUDIO hangs on host.spurFensterHaken.
@@ -33,7 +33,7 @@ import { fokus } from '../controller_fokus.js';
 import { kannGeraetFenster, oeffneGeraetFenster, GERAET_FENSTER_TEXT } from '../device_open.js';
 
 // the stage kinds whose parameters are the rows of the popover (no device face, no panel window)
-const PARAMETER_ARTEN = ['utility', 'gate', 'mb', 'host'];
+const PARAMETER_ARTEN = ['utility', 'gate', 'mb', 'trans', 'bild', 'host'];
 
 export const FENSTER_TEXT = {
   zu: 'Close this window',

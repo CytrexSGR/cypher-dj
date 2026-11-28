@@ -23,8 +23,11 @@ export const TON_SPANNE = 24;   // semitones around qton
 export const TON_TOLERANZ = 1e-4;   // targets are rounded to 1e-4 while qton has no decimals rule, so 24 itself is inside
 export const MAX_AUDIO_NOTEN = 4096;
 export const MONO_ANTEIL_MAX = 0.30;
+export const DEHNUNG_MIN = 0.25;   // a note can be compressed to a quarter and stretched to four times its detected length
+export const DEHNUNG_MAX = 4;
+export const DEHNUNG_TOLERANZ = 1e-9;
 export const NOTEN_FEHLER = ['argument', 'datei_fehlt', 'datei_kaputt', 'format', 'kurve_passt_nicht', 'noten_ungueltig',
-  'nicht_unterstuetzt', 'vorher_passt_nicht', 'schreiben', 'nicht_gebaut'] as const;
+  'nicht_unterstuetzt', 'vorher_passt_nicht', 'schreiben', 'nicht_gebaut', 'noten_ueberlappen', 'noten_dehnung_grenze'] as const;
 export const FORTSCHRITT_NAMEN = ['laden', 'tonhoehe', 'noten', 'pruefen', 'rendern', 'schreiben'] as const;
 
 export type NotenFehler = (typeof NOTEN_FEHLER)[number];
@@ -93,11 +96,13 @@ export function renderSchluessel(quelleSha: string, kurve: string, maschine: str
 
 // form: the schema refuses it; bereich: `ton` outside 0..127 (also refused by the schema, but the clip field names it noten_ton_grenze);
 // regel: a rule that compares values; grenze: `ton` beyond the span of 24 semitones (a rule)
-type Fehler = { art: 'form' | 'bereich' | 'regel' | 'grenze'; text: string };
+type Fehler = { art: 'form' | 'bereich' | 'regel' | 'grenze' | 'ueberlappen' | 'dehnung'; text: string };
 const form = (text: string): Fehler => ({ art: 'form', text });
 const regel = (text: string): Fehler => ({ art: 'regel', text });
 const bereich = (text: string): Fehler => ({ art: 'bereich', text });
 const grenze = (text: string): Fehler => ({ art: 'grenze', text });
+const ueberlappen = (text: string): Fehler => ({ art: 'ueberlappen', text });
+const dehnung = (text: string): Fehler => ({ art: 'dehnung', text });
 
 function nurFelder(o: Record<string, unknown>, erlaubt: readonly string[], pflicht: readonly string[], wo: string): string | null {
   for (const k of pflicht) if (!(k in o)) return `${wo}: missing field ${k}`;
@@ -132,8 +137,11 @@ function noteForm(n: unknown, wo: string, mitZiel: boolean): Fehler | null {
   return null;
 }
 
+const rundeFaktor = (f: number): number => Math.round(f * 1e3) / 1e3;
+
 /** Rules that compare values, shape already checked. Fixed order, each rule across the whole list before the next one: duplicate ids,
- *  duration, targets against detected values (per note: ton equal, ton span, a equal, e equal, effective end), order, overlap, and
+ *  duration, targets against detected values (per note: ton equal, ton span, a equal, e equal, effective end, stretch), order, overlap, overlap of the
+ *  effective intervals (clip field only), and
  *  (sidecar only) the end of the last note inside the source. */
 function noteRegeln(liste: Record<string, number | string | undefined>[], wo: string, mitZiel: boolean, endeMax?: number): Fehler | null {
   const num = liste as Record<string, number>[];
@@ -157,6 +165,10 @@ function noteRegeln(liste: Record<string, number | string | undefined>[], wo: st
       if (n.a !== undefined && n.a === n.qa) return regel(`${w}.a: equals qa, a target that equals the detected value is not stored`);
       if (n.e !== undefined && n.e === n.qe) return regel(`${w}.e: equals qe, a target that equals the detected value is not stored`);
       if ((n.e ?? n.qe) <= (n.a ?? n.qa)) return regel(`${w}: e must be greater than a (qe and qa count where a target is absent)`);
+      const f = ((n.e ?? n.qe) - (n.a ?? n.qa)) / (n.qe - n.qa);
+      if (f < DEHNUNG_MIN - DEHNUNG_TOLERANZ || f > DEHNUNG_MAX + DEHNUNG_TOLERANZ) {
+        return dehnung(`${w}: a note can be stretched to at most 4 times and compressed to a quarter of its detected length (factor ${rundeFaktor(f)})`);
+      }
     }
   }
   for (let i = 1; i < num.length; i++) {
@@ -164,6 +176,12 @@ function noteRegeln(liste: Record<string, number | string | undefined>[], wo: st
   }
   for (let i = 1; i < num.length; i++) {
     if (num[i - 1].qe > num[i].qa) return regel(`${wo}[${i}]: notes overlap (qe ${num[i - 1].qe} is after the next qa ${num[i].qa})`);
+  }
+  if (mitZiel) {
+    for (let i = 1; i < num.length; i++) {
+      const e = num[i - 1].e ?? num[i - 1].qe; const a = num[i].a ?? num[i].qa;
+      if (e > a) return ueberlappen(`${wo}[${i}]: notes overlap after the edit (end ${e} of ${liste[i - 1].id} is after the start ${a} of ${liste[i].id})`);
+    }
   }
   if (endeMax !== undefined) {
     for (const [i, n] of num.entries()) {
@@ -187,7 +205,8 @@ function listeFehler(liste: unknown, wo: string, mitZiel: boolean, endeMax?: num
 const kurveFormFehler = (x: unknown, wo: string): string | null =>
   (typeof x === 'string' && KURVE_MUSTER.test(x) ? null : `${wo}: kurve must be <detector version>.<segmenter version>, for example pyin-1.noten_hmm-1`);
 
-/** Shape and range check of the clip field `audio_noten`; grund is `noten_ton_grenze` (ton outside 0..127 or beyond the span) or `argument_ungueltig` */
+/** Shape and range check of the clip field `audio_noten`; grund is `noten_ton_grenze` (ton outside 0..127 or beyond the span), `noten_ueberlappen`,
+ *  `noten_dehnung_grenze` or `argument_ungueltig` */
 export function audioNotenPruefung(x: unknown): Befund | null {
   if (!istObjekt(x)) return { grund: 'argument_ungueltig', text: 'audio_noten must be an object { kurve, liste }' };
   const f = nurFelder(x, ['kurve', 'liste'], ['kurve', 'liste'], 'audio_noten');
@@ -196,7 +215,9 @@ export function audioNotenPruefung(x: unknown): Befund | null {
   if (k) return { grund: 'argument_ungueltig', text: k };
   const l = listeFehler(x.liste, 'liste', true);
   if (!l) return null;
-  return { grund: l.art === 'grenze' || l.art === 'bereich' ? 'noten_ton_grenze' : 'argument_ungueltig', text: l.text };
+  const grund = l.art === 'grenze' || l.art === 'bereich' ? 'noten_ton_grenze' : l.art === 'ueberlappen' ? 'noten_ueberlappen'
+    : l.art === 'dehnung' ? 'noten_dehnung_grenze' : 'argument_ungueltig';
+  return { grund, text: l.text };
 }
 
 /**
@@ -323,7 +344,7 @@ function zeilenFehler(o: Record<string, unknown>): string | null {
     return ok ? null : 'detektor, segmentierer or maschine: not a version string';
   }
   if ('bereiche' in o) {
-    const f = nurFelder(o, ['status', 'datei', 'bereiche', 'sekunden'], ['status', 'datei', 'bereiche', 'sekunden'], 'line');
+    const f = nurFelder(o, ['status', 'datei', 'bereiche', 'messung', 'sekunden'], ['status', 'datei', 'bereiche', 'sekunden'], 'line');
     if (f) return f;
     if (typeof o.datei !== 'string' || o.datei.length === 0) return 'datei: must be a non-empty string';
     if (!Array.isArray(o.bereiche)) return 'bereiche: must be an array';
@@ -331,6 +352,17 @@ function zeilenFehler(o: Record<string, unknown>): string | null {
       if (!Array.isArray(b) || b.length !== 2 || !istGanz(b[0]) || !istGanz(b[1])
         || b[0] < 0) return 'bereiche: each entry must be [s0, s1] with integers >= 0';
       if (b[0] >= b[1]) return 'bereiche: s0 must be less than s1 (half open range)';
+    }
+    if ('messung' in o) {
+      if (!Array.isArray(o.messung)) return 'messung: must be an array';
+      for (const m of o.messung) {
+        if (!istObjekt(m)) return 'messung: each entry must be an object';
+        const g = nurFelder(m, ['id', 'ton_ist', 'fehler_ct'], ['id', 'ton_ist', 'fehler_ct'], 'messung');
+        if (g) return g;
+        if (typeof m.id !== 'string' || m.id.length === 0) return 'messung: id must be a non-empty string';
+        if (!istZahl(m.ton_ist) || !imBereich(m.ton_ist, 0, 140)) return 'messung: ton_ist must be a number in 0..140';
+        if (!istZahl(m.fehler_ct)) return 'messung: fehler_ct must be a number';
+      }
     }
     return sekundenFehler(o);
   }

@@ -39,6 +39,8 @@ ECHTZEIT = [
     "src/arr_output.cpp",
     "src/arr_monitor.cpp",   # 1.8 S3: the monitor of the external inputs runs in the callback
     "src/arr_notes.cpp",
+    "src/midi_stufe.cpp",           # strand 7 task 1.3: the MIDI stage runs in the callback, in front of every ArrSenke::note
+    "include/cypherdj/midi_stufe.h",
     "src/arr_metronom.cpp",
     "src/arr_freeze.cpp",
     "src/arr_tap.cpp",   # 1.10 slice 7: the real-time tap

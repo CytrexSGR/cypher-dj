@@ -21,6 +21,16 @@ class EqNativ {
   }
   void setze_band(int i, const CypherEqBand& b) { cypher_eq_setze_band(h_, static_cast<uint32_t>(i), b); }
   void setze_global(bool prop_q, double ausgang_db) { cypher_eq_setze_global(h_, prop_q ? 1 : 0, ausgang_db); }
+  void block_schluessel(float* l, float* r, const float* kl, const float* kr, int n) {
+    cypherdj::dsp::DenormalSchutz schutz;
+    cypher_eq_block_schluessel(h_, l, r, kl, kr, static_cast<size_t>(n));
+  }
+  void setze_dyn(int i, int modus, double schwelle_db, double bereich_db) {
+    cypher_eq_setze_dyn(h_, static_cast<uint32_t>(i), static_cast<uint8_t>(modus), schwelle_db, bereich_db);
+  }
+  void setze_dyn_zeiten(double attack_ms, double release_ms) { cypher_eq_setze_dyn_zeiten(h_, attack_ms, release_ms); }
+  float dyn_db(int i) const { return cypher_eq_dyn_db(h_, static_cast<uint32_t>(i)); }
+  float dyn_max_db() { return cypher_eq_dyn_max_db(h_); }
   void leeren() { cypher_eq_leeren(h_); }
   int latenz() const { return static_cast<int>(cypher_eq_latenz(h_)); }
  private:

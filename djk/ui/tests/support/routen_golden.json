@@ -1,5 +1,5 @@
 {
- "n": 234,
+ "n": 238,
  "ergebnis": [
   {
    "m": "GET",
@@ -491,6 +491,23 @@
     "text": "string",
     "von": "null",
     "zeit": "null"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/harmonie",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "ab_takt": "null",
+    "folge": "[]",
+    "jetzt": {
+     "akkord": "null",
+     "takt": "number"
+    },
+    "naechster_wechsel_takt": "null",
+    "takte_je_akkord": "null",
+    "tonart": "null"
    }
   },
   {
@@ -2243,6 +2260,42 @@
   {
    "m": "POST",
    "p": "/strudel",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/harmonie",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "argument_ungueltig",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/harmonie",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/harmonie",
    "kopf": "fremd",
    "code": 403,
    "art": "application/json; charset=utf-8",

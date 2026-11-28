@@ -38,18 +38,22 @@ export function paramFilter(liste, text) {
 }
 const laneHtml = (q, z) => `<button type="button" class="p-hp-lane${z.aktiv ? ' an' : ''}" data-index="${q.index}" title="${html(z.titel)}"`
   + ` aria-pressed="${z.aktiv}"${z.gesperrt ? ' disabled' : ''} aria-label="Lane for ${html(q.name)}">Lane</button>`;
+// the Mod button of a row (strand 6 task 4.4): z = modKnopfZustand of mod_line.js ({aktiv, gesperrt, titel})
+const modHtml = (q, z) => `<button type="button" class="p-hp-mod${z.aktiv ? ' an' : ''}" data-index="${q.index}" title="${html(z.titel)}"`
+  + ` aria-pressed="${z.aktiv}"${z.gesperrt ? ' disabled' : ''} aria-label="Modulate ${html(q.name)}">Mod</button>`;
 const midiHtml = (q, zustand) => {
   const z = midiKnopfZustand(q, zustand);
   return `<button type="button" class="p-hp-midi${z.klasse}" data-index="${q.index}" title="${html(z.titel)}" aria-label="MIDI controller for ${html(q.name)}">${html(z.text)}</button>`;
 };
 // lanen: the Set of parameter indices that have a lane (null: this list offers no lane button); max: lanes per stage
-const zeileHtml = (q, lanen, max, midi) => `<label class="p-hp-zeile${lanen ? ' p-hp-mit-lane' : ''}" data-index="${q.index}">`
+const zeileHtml = (q, lanen, max, midi, mods) => `<label class="p-hp-zeile${lanen ? ' p-hp-mit-lane' : ''}" data-index="${q.index}">`
   + `<span class="p-hp-name" title="${html(q.name)}">${html(q.name)}</span>`
   + `<input type="range" class="p-hp-regler" min="0" max="1" step="0.001" value="${Number(q.wert) || 0}" data-index="${q.index}" aria-label="${html(q.name)}">`
   + `<output class="p-hp-wert">${html(paramWertText(q, q.wert))}</output>${lanen ? laneHtml(q, laneKnopfZustand(q.index, lanen, max)) : ''}`
-  + `${midi ? midiHtml(q, midi.get(q.index)) : ''}</label>`;
+  + `${mods ? modHtml(q, mods(q.index)) : ''}${midi ? midiHtml(q, midi.get(q.index)) : ''}</label>`;
 // midi: Map index -> 'wartet' | 'frage' (null: this list offers no MIDI button)
-export const paramListeHtml = (liste, lanen = null, max = 16, midi = null) => liste.map((q) => zeileHtml(q, lanen, max, midi)).join('');
+// mods (optional): index -> {aktiv, gesperrt, titel}, the state of the row's Mod button (null: this list offers no Mod button)
+export const paramListeHtml = (liste, lanen = null, max = 16, midi = null, mods = null) => liste.map((q) => zeileHtml(q, lanen, max, midi, mods)).join('');
 
 // Builds the popover content into `el`. holeListe(): Promise<{status, j}> of GET .../parameter; sende(werte): Promise of the POST. Returns {zeige, neu}.
 /** The parameter routes answer {..., parameter: [...]}; a bare array is accepted too. Returns the answer with `j` as the array when it is one. */
@@ -57,18 +61,19 @@ export const alsListe = (r) => (r && r.status === 200 && !Array.isArray(r.j) && 
 // lane (optional, effect stages only): {insertId, anlegen(index, wert): Promise<boolean>}; the rows then carry a "Lane" button.
 // midi (optional, effect stages only): {lernen(index): Promise<{status}>, loeschen(index): Promise<{status}>}; a click on a row's "MIDI" button arms the learn
 // flow (the row waits until the parameter list reports `gelernt`), a click on an assigned row asks "Forget Kn" and a second click forgets it.
+// mod (optional, strand 6): {zustand(index, hat) -> {aktiv, gesperrt, titel}, knopf(index)}; the rows then carry a "Mod" button; setzeMods(indices) tells which parameters have a modulator.
 // The returned setzeLanen(indices) tells the list which parameters have a lane (the page takes it from the project).
 export const MIDI_WARTEN_MS = 1000, MIDI_FRIST_MS = 60000;   // poll interval while a row waits, and when it gives up (the learn flow times out)
-export function baueParameterListe(el, { holeListe, sende, fehler, lane = null, midi = null }) {
+export function baueParameterListe(el, { holeListe, sende, fehler, lane = null, midi = null, mod = null }) {
   el.innerHTML = '<input type="search" class="p-hp-filter" placeholder="Filter parameters" aria-label="Filter parameters">'
     + '<span class="p-hp-zahl"></span><div class="p-hp-liste" role="group" aria-label="Plugin parameters"></div>';
   const feld = el.querySelector('.p-hp-filter'), liste = el.querySelector('.p-hp-liste'), zahl = el.querySelector('.p-hp-zahl');
-  let alle = [], offen = {}, timer = null, lanen = new Set();
+  let alle = [], offen = {}, timer = null, lanen = new Set(), mods = new Set();
   const midiZustand = new Map();   // index -> 'wartet' | 'frage'
   let midiTimer = null, midiBis = 0;
   const zeige = () => {
     const t = paramFilter(alle, feld.value);
-    liste.innerHTML = paramListeHtml(t.map((q) => ({ ...q, wert: offen[q.index] ?? q.wert })), lane ? lanen : null, MAX_PLUGIN_LANEN, midi ? midiZustand : null);
+    liste.innerHTML = paramListeHtml(t.map((q) => ({ ...q, wert: offen[q.index] ?? q.wert })), lane ? lanen : null, MAX_PLUGIN_LANEN, midi ? midiZustand : null, mod ? (i) => mod.zustand(i, mods.has(i)) : null);
     zahl.textContent = t.length === alle.length ? `${alle.length} parameters` : `${t.length} of ${alle.length}`;
   };
   const schicke = async () => {
@@ -86,6 +91,12 @@ export function baueParameterListe(el, { holeListe, sende, fehler, lane = null, 
     if (!q || lanen.has(idx) || lanen.size >= MAX_PLUGIN_LANEN) return;   // an existing lane: the button is active and does nothing
     lanen.add(idx); zeige();                                              // at once, so a second click cannot create the lane twice
     Promise.resolve(lane.anlegen(idx, offen[idx] ?? q.wert)).then((ok) => { if (ok === false) { lanen.delete(idx); zeige(); } });
+  });
+  // strand 6 task 4.4: the Mod button of a row; the page decides what it does (creates the modulator or shows it)
+  liste.addEventListener('click', (e) => {
+    const b = e.target.closest?.('.p-hp-mod');
+    if (!b || !mod || b.disabled) return;
+    Promise.resolve(mod.knopf(Number(b.dataset.index))).then(() => zeige());
   });
   // while a row waits for its controller the list is asked again (knopf/gelernt only: a slider under the hand keeps its value)
   const midiFrage = async () => {
@@ -147,7 +158,11 @@ export function baueParameterListe(el, { holeListe, sende, fehler, lane = null, 
     } else { alle = []; liste.textContent = ''; zahl.textContent = ''; fehler?.(r); }
   };
   neu();
-  return { zeige, neu, setze: (l) => { alle = l; zeige(); }, setzeLanen: (indizes) => {
+  return { zeige, neu, setze: (l) => { alle = l; zeige(); }, setzeMods: (indizes) => {
+    const n = new Set(indizes);
+    if (n.size === mods.size && [...n].every((x) => mods.has(x))) return;   // unchanged: no redraw under the hand
+    mods = n; zeige();
+  }, setzeLanen: (indizes) => {
     const neu = new Set(indizes);
     if (neu.size === lanen.size && [...neu].every((x) => lanen.has(x))) return;   // unchanged: no redraw under the hand
     lanen = neu; zeige();

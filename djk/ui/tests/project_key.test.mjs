@@ -78,7 +78,7 @@ test('model: key validation (closed fields, one key per stage, never {spur, pre}
   kaputt((i) => { i.key = { quelle: 'erz', nr: 2, punkt: 'post' }; });           // erz/2 is not on the DJ list
   kaputt((i) => { i.key = { quelle: 'deck', nr: 5, punkt: 'post' }; });
   kaputt((i) => { i.key = { quelle: 'deck', nr: 1, punkt: 'pre' }; });           // a DJ input has the point post only
-  kaputt((i) => { i.art = 'eq'; i.werte = insertVorgabe('eq'); });               // only a compressor has a key
+  kaputt((i) => { i.art = 'saett'; i.werte = insertVorgabe('saett'); });         // only a compressor and an EQ have a key (EQ since strand 5 slice 4)
   // negative control: the legal forms pass
   for (const key of [{ quelle: 'grp', nr: 1, punkt: 'pre' }, { quelle: 'grp', nr: 2, punkt: 'post' }, { quelle: 'ret', nr: 2, punkt: 'post' },
     { quelle: 'deck', nr: 4, punkt: 'post' }, { quelle: 'erz', nr: 1, punkt: 'post' }, { quelle: 'spur', nr: 4, punkt: 'post' }]) {
@@ -239,7 +239,7 @@ test('commands: every kind of refusal has a case with the named reason; allowed 
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'komp', key: { quelle: 'spur', nr: 2 } }, 'argument_ungueltig');
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'komp', key: { quelle: 'bass', nr: 2, punkt: 'post' } }, 'argument_ungueltig');
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'komp', key: { quelle: 'spur', nr: 2, punkt: 'post', x: 1 } }, 'argument_unbekannt');
-  lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'eq', key: { quelle: 'spur', nr: 2, punkt: 'post' } }, 'argument_unbekannt');
+  lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'saett', key: { quelle: 'spur', nr: 2, punkt: 'post' } }, 'argument_unbekannt');
 });
 
 test('commands: two tracks keying each other through their post is refused on the second edge, a chain of edges is not (cycle by command)', () => {
@@ -296,8 +296,8 @@ test('commands: key and sc exclude each other; {spur, pre} is normalised to sc; 
   // rules apply to a rewrite too
   lehntAb(p, { befehl: 'insert_param_setzen', insert_id: 'i1', param: 'key', wert: { quelle: 'grp', nr: 1, punkt: 'post' } }, 'sidechain_spaet');
   lehntAb(p, { befehl: 'insert_param_setzen', insert_id: 'i1', param: 'key', wert: { quelle: 'erz', nr: 2 } }, 'sidechain_quelle');
-  // only a compressor has a key
-  const q = ok(p, { befehl: 'insert_setzen', strang_id: 's2', pos: 0, art: 'eq' }).projekt;
+  // only a compressor and an EQ have a key
+  const q = ok(p, { befehl: 'insert_setzen', strang_id: 's2', pos: 0, art: 'saett' }).projekt;
   lehntAb(q, { befehl: 'insert_param_setzen', insert_id: 'i2', param: 'key', wert: { quelle: 'deck', nr: 1 } }, 'argument_unbekannt');
 });
 

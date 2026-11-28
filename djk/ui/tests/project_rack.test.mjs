@@ -144,6 +144,7 @@ test('rack commands: refusals (AK-S4-16 limit) and the negative control next to 
   lehntAb(p, { befehl: 'rack_setzen', strang_id: 's1', makros: [{ ziel: [ziel('i1', 'an', 0, 1)] }] }, 'argument_unbekannt');        // the stage switch
   lehntAb(p, { befehl: 'rack_setzen', strang_id: 's1', makros: [{ ziel: [ziel('i1', 'sc', 0, 2)] }] }, 'argument_unbekannt');        // the key
   lehntAb(p, { befehl: 'rack_setzen', strang_id: 's1', makros: [{ ziel: [ziel('i2', 'b1/typ', 0, 3)] }] }, 'param_nicht_stetig');    // a step list
+  lehntAb(p, { befehl: 'rack_setzen', strang_id: 's1', makros: [{ ziel: [ziel('i2', 'd3/dyn', 0, 4)] }] }, 'param_nicht_stetig');    // strand 5: the dynamic mode of an EQ band is a step list too
   lehntAb(p, { befehl: 'rack_setzen', strang_id: 's1', makros: [{ ziel: [ziel('i1', 'schwelle', -61, 0)] }] }, 'argument_ungueltig');   // below the range
   lehntAb(p, { befehl: 'rack_setzen', strang_id: 's1', makros: [{ ziel: [ziel('i1', 'schwelle', -60, Number.NaN)] }] }, 'argument_ungueltig');
   lehntAb(p, { befehl: 'rack_setzen', strang_id: 's1', makros: [{ ziel: [ziel('i1', 'schwelle', -60, 0)], farbe: 1 }] }, 'argument_unbekannt');
@@ -151,6 +152,10 @@ test('rack commands: refusals (AK-S4-16 limit) and the negative control next to 
   lehntAb(p, { befehl: 'rack_setzen', strang_id: 's1', makros: [{ ziel: [ziel('i1', 'schwelle', -60, 0)] }, { ziel: [ziel('i1', 'schwelle', -30, 0)] }] }, 'ziel_doppelt');   // one writer per parameter
   lehntAb(p, { befehl: 'rack_setzen', strang_id: 's1', makros: [{ ziel: [ziel('i1', 'schwelle', -60, 0), ziel('i1', 'schwelle', -30, 0)] }] }, 'ziel_doppelt');
   // the limit: sixteen mappings are fine, the 17th is refused (komp 8 + eq out and the 8 bands x freq/gain/q = 8 + 25)
+  for (const n of ['d3/schwelle', 'd3/bereich', 'dyn_attack', 'dyn_release']) {   // strand 5: the linear dynamic rows are macro targets
+    const q = INSERT_ARTEN.eq.parameter.find((x) => x.name === n);
+    pruefe(p, ok(p, { befehl: 'rack_setzen', strang_id: 's1', makros: [{ ziel: [ziel('i2', n, q.min, q.max)] }] }));
+  }
   const alle = [];
   for (const q of INSERT_ARTEN.komp.parameter) if (q.kurve === 'linear' && q.name !== 'an') alle.push(ziel('i1', q.name, q.min, q.max));
   for (const q of INSERT_ARTEN.eq.parameter) if (q.kurve === 'linear' && q.name !== 'an') alle.push(ziel('i2', q.name, q.min, q.max));

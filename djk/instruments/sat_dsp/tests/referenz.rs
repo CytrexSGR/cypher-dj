@@ -92,7 +92,7 @@ fn blockweise(l: &[f32], r: &[f32], mut f: impl FnMut(&mut [f32], &mut [f32])) -
 }
 
 fn drive12() -> Einstellung {
-    Einstellung { drive_db: 12.0, ausgang_db: -6.0, mix: 1.0 }
+    Einstellung { drive_db: 12.0, ausgang_db: -6.0, mix: 1.0, ..Einstellung::default() }
 }
 
 fn fir_fall(pfad: Pfad, l: &[f32], r: &[f32], was: &str) {

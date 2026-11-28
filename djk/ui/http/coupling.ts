@@ -61,6 +61,7 @@ export const TABLET_VERBOTEN: readonly { pfad: string; warum: string }[] = [
   { pfad: '/szene', warum: 'saves, restores and deletes live scenes (patterns, knobs, graphs, tracks)' },
   { pfad: '/aufbau', warum: 'saves and opens session setups (channel faders, graphs, live project)' },
   { pfad: '/strudel', warum: 'evaluates pattern code and switches the autonomous players' },
+  { pfad: '/harmonie', warum: 'sets the live harmony lane: every autonomous stream follows it from the anchor bar' },
   { pfad: '/graph', warum: 'loads a graph into a channel (restarts its sound)' },
   { pfad: '/geraete', warum: 'device profiles: inputs, MIDI, latency' },
   { pfad: '/lernen', warum: 'controller profiles (MIDI learn), also the host learn table' },

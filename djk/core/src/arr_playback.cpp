@@ -26,6 +26,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
 #include <iterator>
 #include <new>
 #include <set>
@@ -318,7 +319,7 @@ int64_t erstes_unendliches(const float* x, int64_t n) {
   return -1;
 }
 
-// 1.10 slice 4a/4b: the insert chain of a strip, `chain: [{art: "komp" | "eq" | "saett" | "lim" | "utility" | "bk" | "gate" | "mb" | "host", slot: 1..pool of the kind, an: bool, latenz: samples (host only)}, ...]` (at most ARR_KETTE stages,
+// 1.10 slice 4a/4b: the insert chain of a strip, `chain: [{art: "komp" | "eq" | "saett" | "lim" | "utility" | "bk" | "gate" | "mb" | "trans" | "bild" | "host", slot: 1..pool of the kind, an: bool, latenz: samples (host only)}, ...]` (at most ARR_KETTE stages,
 // optional; an defaults to true). A slot belongs to one stage of the whole playback (the pool is shared): slot_belegt (ARR_INS_ALLE entries, global index) marks the used ones.
 bool bk_name_ok(const std::string& n);   // defined below with the graph rules
 void lese_kette(const json& o, const std::string& wo, ArrKette& k, bool* slot_belegt, ArrAudioCache& cache, ArrSnapshot& snap) {
@@ -341,8 +342,10 @@ void lese_kette(const json& o, const std::string& wo, ArrKette& k, bool* slot_be
     else if (art == "bk") { a = ArrInsArt::bk; pool = ARR_INS_BK; versatz = INS_G_BK0; }   // arr-bk slice 3
     else if (art == "gate") { a = ArrInsArt::gate; pool = ARR_INS_GATE; versatz = INS_G_GATE0; }   // strand 1 slice 4
     else if (art == "mb") { a = ArrInsArt::mb; pool = ARR_INS_MB; versatz = INS_G_MB0; }
+    else if (art == "trans") { a = ArrInsArt::trans; pool = ARR_INS_TRANS; versatz = INS_G_TRANS0; }   // strand 5 slice 3
+    else if (art == "bild") { a = ArrInsArt::bild; pool = ARR_INS_BILD; versatz = INS_G_BILD0; }
     else if (art == "host") { a = ArrInsArt::host; pool = ARR_INS_HOST; versatz = INS_G_HOST0; }   // plan 1.11 T4
-    else format(wx + "art " + art + " unbekannt (art_unbekannt; komp, eq, saett, lim, utility, bk, gate, mb, host)");
+    else format(wx + "art " + art + " unbekannt (art_unbekannt; komp, eq, saett, lim, utility, bk, gate, mb, trans, bild, host)");
     const int64_t sl = ganz(x, "slot", wx);
     if (sl < 1 || sl > pool) format(wx + "slot außerhalb 1 bis " + std::to_string(pool) + " (" + art + (a == ArrInsArt::host ? "; ungueltig: host h is pool instance ins/host/h)" : ")"));
     if (slot_belegt[versatz + sl - 1]) format(wx + "slot " + art + "/" + std::to_string(sl) + " doppelt");
@@ -353,11 +356,11 @@ void lese_kette(const json& o, const std::string& wo, ArrKette& k, bool* slot_be
       an = x.at("an").get<bool>();
     }
     ArrSchluessel key;
-    if (x.contains("key")) {   // 1.10 slice 5: the structural sidechain key {q: "spur" | "grp" | "ret" | "pm", nr, punkt: "pre" | "post"}; a compressor and (strand 2 task 3.3) a host stage have a key
+    if (x.contains("key")) {   // 1.10 slice 5: the structural sidechain key {q: "spur" | "grp" | "ret" | "pm", nr, punkt: "pre" | "post"}; a compressor, (strand 2 task 3.3) a host stage and (strand 5 slice 4) an EQ stage have a key
       const json& kj = x.at("key");                       // which strip may listen to which source is the table of arr_schluessel_pruefe(), called once all strips are read
       const std::string wk = wx + "key.";
       if (!kj.is_object()) format(wk + "key ist kein Objekt");
-      if (a != ArrInsArt::komp && a != ArrInsArt::host) format(wk + "only a komp or host stage has a sidechain key (" + art + ")");
+      if (a != ArrInsArt::komp && a != ArrInsArt::host && a != ArrInsArt::eq) format(wk + "only a komp, eq or host stage has a sidechain key (" + art + ")");
       const std::string q = text(kj, "q", wk);
       int nmax = 0;
       bool dj = false, strom = false;
@@ -432,7 +435,7 @@ void lese_kette(const json& o, const std::string& wo, ArrKette& k, bool* slot_be
 // (optional; only on a strip with a chain; at most ARR_MAKRO_ZIELE targets). A rack slot belongs to one strip of the whole playback; a target (stufe, param) is driven by one macro only
 // (one writer per parameter, spec D13). The stage switch (index 0) and the compressor key cannot be mapped. Every refusal names the field and the rule (reason `format`).
 int ins_param_zahl(ArrInsArt a) {
-  return a == ArrInsArt::komp ? INS_KOMP_PARAM : a == ArrInsArt::eq ? INS_EQ_PARAM : a == ArrInsArt::lim ? INS_LIM_PARAM : a == ArrInsArt::host ? INS_HOST_PARAM : a == ArrInsArt::utility ? INS_UTIL_PARAM : a == ArrInsArt::bk ? INS_BK_PARAM : a == ArrInsArt::gate ? INS_GATE_PARAM : a == ArrInsArt::mb ? INS_MB_PARAM : INS_SAETT_PARAM;
+  return a == ArrInsArt::komp ? INS_KOMP_PARAM : a == ArrInsArt::eq ? INS_EQ_PARAM : a == ArrInsArt::lim ? INS_LIM_PARAM : a == ArrInsArt::host ? INS_HOST_PARAM : a == ArrInsArt::utility ? INS_UTIL_PARAM : a == ArrInsArt::bk ? INS_BK_PARAM : a == ArrInsArt::gate ? INS_GATE_PARAM : a == ArrInsArt::mb ? INS_MB_PARAM : a == ArrInsArt::trans ? INS_TRANS_PARAM : a == ArrInsArt::bild ? INS_BILD_PARAM : INS_SAETT_PARAM;
 }
 // 1.9 U8 T9 (spec E12): an entry with `glied` (a member index) instead of `stufe` is a macro target on a member of an instrument rack. It exists only on a rack track strip
 // (`roh` != nullptr): there lese_rack only remembers the position of such an entry in `roh`, because the members of the track are parsed after it (lese_glied_ziele fills
@@ -479,7 +482,8 @@ void lese_rack(const json& o, const std::string& wo, const ArrKette& k, ArrRack&
     const ArrInsArt art = k.st[st].art;
     if (pa < 0 || pa >= ins_param_zahl(art)) format(wx + "param " + std::to_string(pa) + " außerhalb der Parameter der Stufe");
     if (pa == 0) format(wx + "param 0 (an) kann nicht gemappt werden");
-    if (art == ArrInsArt::komp && pa == 9) format(wx + "param 9 (sc, der Schlüssel) kann nicht gemappt werden");
+    if (art == ArrInsArt::komp && pa == INS_KOMP_SC) format(wx + "param 9 (sc, der Schlüssel) kann nicht gemappt werden");
+    if (art == ArrInsArt::eq && pa == INS_EQ_SC) format(wx + "param 85 (sc, der Schlüssel) kann nicht gemappt werden");   // strand 5 slice 4
     if (belegt[st][pa]) format(wx + "ziel (stufe " + std::to_string(st) + ", param " + std::to_string(pa) + ") doppelt (ein Parameter hat eine Quelle)");
     belegt[st][pa] = true;
     ArrMakroZiel z;
@@ -625,7 +629,8 @@ void lese_kette_auto(const json& o, const std::string& wo, int strip, ArrSnapsho
       if (art == ArrInsArt::host) format(wl + "a host stage has no lane parameter (the plugin keeps its parameters)");
       if (pa < 0 || pa >= ins_param_zahl(art)) format(wl + "param " + std::to_string(pa) + " outside the parameters of the stage");
       if (pa == 0) format(wl + "param 0 (an) cannot be automated");
-      if (art == ArrInsArt::komp && pa == 9) format(wl + "param 9 (sc, the key) cannot be automated");
+      if (art == ArrInsArt::komp && pa == INS_KOMP_SC) format(wl + "param 9 (sc, the key) cannot be automated");
+      if (art == ArrInsArt::eq && pa == INS_EQ_SC) format(wl + "param 85 (sc, the key) cannot be automated");   // strand 5 slice 4
       for (size_t q = l0; q < static_cast<size_t>(snap.n_klanes); ++q)
         if (snap.klane[q].strip == strip && snap.klane[q].makro < 0 && snap.klane[q].stufe == st && snap.klane[q].param == pa)
           format(wl + "ziel (stufe " + std::to_string(st) + ", param " + std::to_string(pa) + ") twice on one strip");
@@ -664,6 +669,205 @@ void lese_kette_auto(const json& o, const std::string& wo, int strip, ArrSnapsho
   }
 }
 
+// Strand 6 (plan 2026-11-27, formats of section 2): the top-level `mod` list, only /3 and /4. [{nr, art, form, takt | hz, phase?, glatt_ms?, saat, ziele: [{spur | ret, ziel, tiefe, uni?}]}].
+// nr 1..ARR_MODS unique; art lfo or folger (slice 3: quelle 1..128 of a track in the playback, angriff_ms 0.1..500, abfall_ms 1..5000, empfindlich_db -24..24, the LFO fields refused);
+// lfo: form 0..4; exactly one of takt [1/64, 256] and hz [0.01, 40]; phase [0, 1) (default 0); glatt_ms [0, 500] (default 1); saat a u32. 1..ARR_MOD_ZIELE
+// targets: `spur` 1..128 of a track in the playback with ziel fader (depth -24..24 dB), pan (-1..1) or a geraet.* name of AUTO_ZIELE that the track's device carries (-1..1); `ret` 1..8 of an
+// existing return, ziel fader only (-24..24 dB). The same target twice in one modulator is refused; several modulators on one target add up (D9). The distinct fader/pan targets of all
+// modulators get the buffer indices 0..ARR_MOD_FELDER - 1 in snap.mod_feld (more: zu_gross). Fader slot = track index, a return = ARR_SPUREN + r (the slots of slot_lane in arr_auto.cpp).
+// Slice 4 (task 4.1): `spur` also takes send.<r> (r a return in the playback, -24..24 dB); a chain target {kette: spur|grp|ret|pm, nr, stufe, param} or {kette, nr, makro} (pm: nr 1)
+// follows the rules of lese_kette_auto: the stage in the strip's chain, not a host stage, not param 0, not the compressor key, not a parameter a rack macro maps; a macro needs the rack.
+// Depth -1..1 (a stage: fraction of the row range; a macro: macro units).
+// `ziele` may be empty (0..ARR_MOD_ZIELE): a modulator whose targets are all plugin.* still runs and reports (Kern::mod_zustand), the server plays its targets.
+void lese_mod(const json& j, ArrSnapshot& snap) {
+  const json& ml = j.at("mod");
+  if (!ml.is_array()) format("mod is not a list");
+  if (ml.size() > static_cast<size_t>(ARR_MODS)) throw Abbruch("zu_gross", "mod: more than " + std::to_string(ARR_MODS) + " modulators");
+  bool nr_da[ARR_MODS] = {};
+  for (size_t mi = 0; mi < ml.size(); ++mi) {
+    const json& o = ml[mi];
+    const std::string wm = "mod[" + std::to_string(mi) + "].";
+    if (!o.is_object()) format(wm + "not an object");
+    ArrMod md{};
+    const int64_t nr = ganz(o, "nr", wm);
+    if (nr < 1 || nr > ARR_MODS) format(wm + "nr outside 1 to " + std::to_string(ARR_MODS));
+    if (nr_da[nr - 1]) format(wm + "nr " + std::to_string(nr) + " twice");
+    nr_da[nr - 1] = true;
+    md.nr = static_cast<uint8_t>(nr);
+    const std::string art = text(o, "art", wm);
+    if (art != "lfo" && art != "folger") format(wm + "art " + art + " unknown (lfo, folger)");
+    md.art = art == "lfo" ? 0 : 1;
+    // the fields of the other kind are refused, as the project model refuses them (MOD_FELDER_NUR in model.ts)
+    static const char* const NUR_FOLGER[] = {"quelle", "angriff_ms", "abfall_ms", "empfindlich_db"};
+    static const char* const NUR_LFO[] = {"form", "takt", "hz", "phase", "saat"};
+    for (const char* k : NUR_FOLGER)
+      if (md.art == 0 && o.contains(k)) format(wm + k + " belongs to art folger");
+    for (const char* k : NUR_LFO)
+      if (md.art == 1 && o.contains(k)) format(wm + k + " belongs to art lfo");
+    if (md.art == 1) {   // slice 3 (D12): the envelope follower, source = a track of the playback
+      const int64_t q = ganz(o, "quelle", wm);
+      if (q < 1 || q > ARR_SPUREN) format(wm + "quelle outside 1 to " + std::to_string(ARR_SPUREN));
+      if (snap.spur[q - 1].nr == 0) format(wm + "quelle " + std::to_string(q) + " is not in the playback");
+      md.quelle = static_cast<int16_t>(q - 1);
+      const auto bereich = [&](const char* k, double lo, double hi, float& ziel) {
+        if (!o.contains(k)) return;   // absent: the default of the formats section
+        const double v = zahl(o, k, wm);
+        if (!(v >= lo && v <= hi)) format(wm + k + " outside " + nlohmann::json(lo).dump() + " to " + nlohmann::json(hi).dump());
+        ziel = static_cast<float>(v);
+      };
+      bereich("angriff_ms", 0.1, 500.0, md.angriff_ms);
+      bereich("abfall_ms", 1.0, 5000.0, md.abfall_ms);
+      bereich("empfindlich_db", -24.0, 24.0, md.empfindlich_db);
+    } else {
+      const int64_t form = ganz(o, "form", wm);
+      if (form < 0 || form > 4) format(wm + "form outside 0 to 4");
+      md.form = static_cast<uint8_t>(form);
+      const bool mit_takt = o.contains("takt"), mit_hz = o.contains("hz");
+      if (mit_takt == mit_hz) format(wm + "takt or hz: exactly one of them");
+      if (mit_takt) {
+        md.takt = zahl(o, "takt", wm);
+        if (!(md.takt >= 1.0 / 64.0 && md.takt <= 256.0)) format(wm + "takt outside 1/64 to 256");
+      } else {
+        md.frei = true;
+        md.hz = zahl(o, "hz", wm);
+        if (!(md.hz >= 0.01 && md.hz <= 40.0)) format(wm + "hz outside 0.01 to 40");
+      }
+      if (o.contains("phase")) {
+        md.phase = zahl(o, "phase", wm);
+        if (!(md.phase >= 0.0 && md.phase < 1.0)) format(wm + "phase outside [0, 1)");
+      }
+      const int64_t saat = ganz(o, "saat", wm);
+      if (saat < 0 || saat > 0xffffffffLL) format(wm + "saat is not an unsigned 32-bit integer");
+      md.saat = static_cast<uint32_t>(saat);
+    }
+    if (o.contains("glatt_ms")) {
+      const double g = zahl(o, "glatt_ms", wm);
+      if (!(g >= 0.0 && g <= 500.0)) format(wm + "glatt_ms outside 0 to 500");
+      md.glatt_ms = static_cast<float>(g);
+    }
+    const json& zl = feld(o, "ziele", wm);
+    // an empty list: every target of the modulator is a plugin.* (played by the page server from /zustand/mod); it runs and reports, it applies nothing in the core
+    if (!zl.is_array() || zl.size() > static_cast<size_t>(ARR_MOD_ZIELE)) format(wm + "ziele is not a list of 0 to " + std::to_string(ARR_MOD_ZIELE) + " targets");
+    for (size_t zi = 0; zi < zl.size(); ++zi) {
+      const json& zo = zl[zi];
+      const std::string wz = wm + "ziele[" + std::to_string(zi) + "].";
+      if (!zo.is_object()) format(wz + "not an object");
+      const bool mit_kette = zo.contains("kette");
+      const bool mit_spur = zo.contains("spur"), mit_ret = zo.contains("ret");
+      if (mit_kette ? (mit_spur || mit_ret || zo.contains("ziel")) : mit_spur == mit_ret)
+        format(wz + "spur, ret or kette: exactly one of them (a chain target names no ziel)");
+      const std::string zname = mit_kette ? std::string("kette") : text(zo, "ziel", wz);
+      const double tiefe = zahl(zo, "tiefe", wz);
+      ArrModZiel z{};
+      if (zo.contains("uni")) {
+        if (!zo.at("uni").is_boolean()) format(wz + "uni is not a boolean");
+        z.uni = zo.at("uni").get<bool>();
+      }
+      if (md.art == 1) z.uni = true;   // D6: a follower is unipolar on every target (its course runs as 2 * out - 1, so the offset is tiefe * out)
+      double t_min = -1.0, t_max = 1.0;
+      if (mit_kette) {   // slice 4: a stage parameter or a rack macro of a strip's chain, the rules of lese_kette_auto (the chains and racks are read already)
+        const std::string ka = text(zo, "kette", wz);
+        const int64_t kn = ganz(zo, "nr", wz);
+        int strip = -1;
+        if (ka == "spur") {
+          if (kn < 1 || kn > ARR_SPUREN || snap.spur[kn - 1].nr == 0) format(wz + "kette spur " + std::to_string(kn) + " is not in the playback");
+          strip = static_cast<int>(kn) - 1;
+        } else if (ka == "grp") {
+          if (kn < 1 || kn > ARR_GRUPPEN) format(wz + "kette grp nr outside 1 to " + std::to_string(ARR_GRUPPEN));
+          strip = ARR_SPUREN + static_cast<int>(kn) - 1;
+        } else if (ka == "ret") {
+          if (kn < 1 || kn > ARR_RETURNS || !snap.ret_da[kn - 1]) format(wz + "kette ret " + std::to_string(kn) + " is not in the playback");
+          strip = ARR_KETTE_RET0 + static_cast<int>(kn) - 1;
+        } else if (ka == "pm") {
+          if (kn != 1) format(wz + "kette pm takes nr 1");
+          strip = ARR_KETTE_PM;
+        } else {
+          format(wz + "kette " + ka + " unknown (spur, grp, ret, pm)");
+        }
+        const ArrKette& k = snap.kette[strip];
+        const ArrRack& rk = snap.rack[strip];
+        z.slot = static_cast<int16_t>(strip);
+        if (zo.contains("makro")) {
+          if (zo.contains("stufe") || zo.contains("param")) format(wz + "makro and stufe/param in one target");
+          const int64_t mk = ganz(zo, "makro", wz);
+          if (mk < 0 || mk >= ARR_MAKROS) format(wz + "makro outside 0 to " + std::to_string(ARR_MAKROS - 1));
+          if (rk.slot < 0) format(wz + "makro: the strip has no rack");
+          z.art = 4;
+          z.param = static_cast<uint8_t>(mk);
+        } else {
+          const int64_t st = ganz(zo, "stufe", wz), pa = ganz(zo, "param", wz);
+          if (st < 0 || st >= k.n) format(wz + "stufe " + std::to_string(st) + " is not in the chain (" + std::to_string(k.n) + " stages)");
+          const ArrInsArt art = k.st[st].art;
+          if (art == ArrInsArt::host) format(wz + "a host stage takes no modulator in the core (a plugin target is played by the server)");
+          if (pa < 0 || pa >= ins_param_zahl(art)) format(wz + "param " + std::to_string(pa) + " outside the parameters of the stage");
+          if (pa == 0) format(wz + "param 0 (an) cannot be modulated");
+          if (art == ArrInsArt::komp && pa == 9) format(wz + "param 9 (sc, the key) cannot be modulated");
+          if (art == ArrInsArt::eq && pa == INS_EQ_SC) format(wz + "param 85 (sc, the key) cannot be modulated");   // strand 5 slice 4
+          for (int q = 0; q < rk.n; ++q)
+            if (rk.z[q].stufe == st && rk.z[q].param == pa)
+              format(wz + "(stufe " + std::to_string(st) + ", param " + std::to_string(pa) + ") is mapped by a rack macro (modulate the macro)");
+          z.art = 3;
+          z.stufe = static_cast<uint8_t>(st);
+          z.param = static_cast<uint8_t>(pa);
+        }
+      } else if (mit_spur) {
+        const int64_t sn = ganz(zo, "spur", wz);
+        if (sn < 1 || sn > ARR_SPUREN) format(wz + "spur outside 1 to " + std::to_string(ARR_SPUREN));
+        const ArrSpur& sp = snap.spur[sn - 1];
+        if (sp.nr == 0) format(wz + "spur " + std::to_string(sn) + " is not in the playback");
+        const AutoZiel* az = nullptr;
+        for (const AutoZiel& a : AUTO_ZIELE)
+          if (zname == a.name) az = &a;
+        if (!az || !(az->ziel == ARR_AUTO_FADER || az->ziel == ARR_AUTO_PAN || az->ziel == ARR_AUTO_GERAET || az->ziel == ARR_AUTO_SEND))
+          format(wz + "ziel " + zname + " is no modulator target (fader, pan, send.*, geraet.*)");
+        if (az->geraet == 1 && !(sp.art == ArrArt::intern && std::strcmp(sp.geraet, "rb338") == 0)) format(wz + "ziel " + zname + " only on an RB-338 track");
+        if (az->geraet == 2 && !(sp.art == ArrArt::intern && std::strcmp(sp.geraet, "bk") == 0)) format(wz + "ziel " + zname + " only on a Baukasten (bk) track");
+        z.slot = static_cast<int16_t>(sn - 1);
+        if (az->ziel == ARR_AUTO_GERAET) {
+          z.art = 1;
+          z.param = az->param;
+        } else if (az->ziel == ARR_AUTO_SEND) {   // slice 4: send.<r>, r a return in the playback, depth in dB
+          if (!snap.ret_da[az->param]) format(wz + "ziel " + zname + ": return " + std::to_string(az->param + 1) + " is not in the playback");
+          z.art = 2;
+          z.param = az->param;
+          t_min = -24.0, t_max = 24.0;
+        } else {
+          z.art = 0;
+          z.feld = az->ziel;   // ARR_AUTO_FADER 0, ARR_AUTO_PAN 1 (= the mixer field)
+          if (az->ziel == ARR_AUTO_FADER) t_min = -24.0, t_max = 24.0;
+        }
+      } else {
+        const int64_t rn = ganz(zo, "ret", wz);
+        if (rn < 1 || rn > ARR_RETURNS) format(wz + "ret outside 1 to " + std::to_string(ARR_RETURNS));
+        if (!snap.ret_da[rn - 1]) format(wz + "ret " + std::to_string(rn) + " is not in the playback");
+        if (zname != "fader") format(wz + "ziel " + zname + ": a return takes a fader modulator only");
+        z.art = 0;
+        z.slot = static_cast<int16_t>(ARR_SPUREN + rn - 1);
+        z.feld = ARR_AUTO_FADER;
+        t_min = -24.0, t_max = 24.0;
+      }
+      if (!(tiefe >= t_min && tiefe <= t_max)) format(wz + "tiefe outside the range of " + zname);
+      z.tiefe = static_cast<float>(tiefe);
+      for (int q = 0; q < md.n; ++q)
+        if (md.z[q].art == z.art && md.z[q].slot == z.slot && (z.art == 0 ? md.z[q].feld == z.feld : md.z[q].param == z.param) && (z.art != 3 || md.z[q].stufe == z.stufe))
+          format(wz + "ziel " + zname + " twice in one modulator");
+      if (z.art == 0) {   // the buffer of the (slot, field) pair, shared by every modulator on it
+        int b = 0;
+        while (b < snap.n_mod_felder && !(snap.mod_feld[b].slot == z.slot && snap.mod_feld[b].feld == z.feld)) ++b;
+        if (b == snap.n_mod_felder) {
+          if (b >= ARR_MOD_FELDER) throw Abbruch("zu_gross", wz + "more than " + std::to_string(ARR_MOD_FELDER) + " distinct fader and pan targets in all modulators");
+          snap.mod_feld[b].slot = z.slot;
+          snap.mod_feld[b].feld = z.feld;
+          ++snap.n_mod_felder;
+        }
+        z.puffer = static_cast<int8_t>(b);
+      }
+      md.z[md.n++] = z;
+    }
+    snap.mod[snap.n_mod++] = md;
+  }
+}
+
 // S20: the graph name rule = GRAPH_NAME in ui/graphs.ts = BK_GRAPH_NAME in model.ts = kit_name_ok in net_erz.cpp
 bool bk_name_ok(const std::string& n) {
   if (n.empty() || n.size() > 32) return false;
@@ -686,6 +890,115 @@ bool hex64(const std::string& s) {
   for (char c : s)
     if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
   return true;
+}
+
+// Strand 7 task 1.2 (plan 2026-11-27 strang7-midi, section 3.2): the playback key `midi` of an instrument track into ArrMidiParam. wm is the field path
+// of the object ("spuren[3].midi"); every refusal is `format` and names the field. Every member is optional, at least one stage (akkord, skala, arp,
+// velocity, chance) must be there; unknown members are refused, inside a stage too.
+void midi_nur(const json& o, const std::string& wm, std::initializer_list<const char*> erlaubt) {
+  for (auto it = o.begin(); it != o.end(); ++it) {
+    bool ok = false;
+    for (const char* e : erlaubt) ok = ok || it.key() == e;
+    if (!ok) format(wm + "." + it.key() + ": unknown member");
+  }
+}
+const json& midi_objekt(const json& o, const char* name, const std::string& wm) {
+  const json& x = o.at(name);
+  if (!x.is_object()) format(wm + "." + name + ": not an object");
+  return x;
+}
+int64_t midi_ganz(const json& o, const char* name, const std::string& wm, int64_t lo, int64_t hi) {
+  const json& w = o.at(name);
+  if (!w.is_number_integer()) format(wm + "." + name + ": not an integer");
+  if (w.is_number_unsigned() && w.get<uint64_t>() > static_cast<uint64_t>(hi)) format(wm + "." + name + ": outside " + std::to_string(lo) + " to " + std::to_string(hi));
+  const int64_t v = w.get<int64_t>();
+  if (v < lo || v > hi) format(wm + "." + name + ": outside " + std::to_string(lo) + " to " + std::to_string(hi));
+  return v;
+}
+double midi_zahl(const json& o, const char* name, const std::string& wm, double lo, double hi, const char* bereich) {
+  const json& w = o.at(name);
+  if (!w.is_number()) format(wm + "." + name + ": not a number");
+  const double v = w.get<double>();
+  if (!(v >= lo && v <= hi)) format(wm + "." + name + ": outside " + bereich);
+  return v;
+}
+void lese_midi(const json& m, const std::string& wm, ArrMidiParam& p) {
+  if (!m.is_object()) format(wm + ": not an object");
+  midi_nur(m, wm, {"akkord", "skala", "arp", "velocity", "chance", "saat"});
+  if (!m.contains("akkord") && !m.contains("skala") && !m.contains("arp") && !m.contains("velocity") && !m.contains("chance"))
+    format(wm + ": no stage (akkord, skala, arp, velocity or chance)");
+  ArrMidiParam q{};
+  if (m.contains("akkord")) {
+    const std::string wa = wm + ".akkord";
+    const json& a = m.at("akkord");
+    if (!a.is_array()) format(wa + ": not a list");
+    if (a.empty() || a.size() > static_cast<size_t>(MIDI_AKKORD_MAX)) format(wa + ": needs 1 to " + std::to_string(MIDI_AKKORD_MAX) + " intervals");
+    for (size_t i = 0; i < a.size(); ++i) {
+      const std::string wi = wa + "[" + std::to_string(i) + "]";
+      if (!a[i].is_number_integer()) format(wi + ": not an integer");
+      const int64_t v = a[i].get<int64_t>();
+      if (v < -24 || v > 24 || v == 0) format(wi + ": must be -24 to 24 and not 0");
+      for (int k = 0; k < q.akkord_n; ++k)
+        if (q.akkord[k] == v) format(wi + ": interval " + std::to_string(v) + " twice");
+      q.akkord[q.akkord_n++] = static_cast<int8_t>(v);
+    }
+  }
+  if (m.contains("skala")) {
+    const std::string ws = wm + ".skala";
+    const json& s = midi_objekt(m, "skala", wm);
+    midi_nur(s, ws, {"maske", "lane"});
+    if (!s.contains("maske")) format(ws + ".maske: missing");
+    q.skala_maske = static_cast<uint16_t>(midi_ganz(s, "maske", ws, 1, 4095));
+    if (s.contains("lane")) {
+      if (!s.at("lane").is_boolean()) format(ws + ".lane: not a boolean");
+      q.skala_lane = s.at("lane").get<bool>();
+    }
+  }
+  if (m.contains("arp")) {
+    const std::string wa = wm + ".arp";
+    const json& a = midi_objekt(m, "arp", wm);
+    midi_nur(a, wa, {"muster", "rate", "hz", "oktaven", "gate"});
+    q.arp = true;
+    if (!a.contains("muster") || !a.at("muster").is_string()) format(wa + ".muster: missing or not a text");
+    static const char* const MUSTER[] = {"up", "down", "updown", "downup", "played", "random", "chord"};
+    const std::string mu = a.at("muster").get<std::string>();
+    int mi = -1;
+    for (int i = 0; i < 7; ++i)
+      if (mu == MUSTER[i]) mi = i;
+    if (mi < 0) format(wa + ".muster " + mu + " unknown (up, down, updown, downup, played, random, chord)");
+    q.muster = static_cast<ArpMuster>(mi);
+    if (a.contains("rate") == a.contains("hz")) format(wa + ": needs exactly one of rate (beats) and hz");
+    if (a.contains("rate")) {
+      // the sync rates 1/2, 1/4, 1/4T, 1/8, 1/8T, 1/16, 1/16T, 1/32 in beats; the value is snapped to the exact one (the page writes 2/3 as a decimal)
+      static const double RATEN[] = {2.0, 1.0, 2.0 / 3.0, 0.5, 1.0 / 3.0, 0.25, 1.0 / 6.0, 0.125};
+      if (!a.at("rate").is_number()) format(wa + ".rate: not a number");
+      const double r = a.at("rate").get<double>();
+      int ri = -1;
+      for (int i = 0; i < 8; ++i)
+        if (std::fabs(r - RATEN[i]) <= 1e-6) ri = i;
+      if (ri < 0) format(wa + ".rate: must be one of 2, 1, 2/3, 0.5, 1/3, 0.25, 1/6, 0.125 beats");
+      q.sync = true;
+      q.rate_beats = RATEN[ri];
+    } else {
+      q.sync = false;
+      q.rate_hz = midi_zahl(a, "hz", wa, 0.5, 40.0, "0.5 to 40");
+    }
+    if (a.contains("oktaven")) q.oktaven = static_cast<uint8_t>(midi_ganz(a, "oktaven", wa, 1, 4));
+    if (a.contains("gate")) q.gate = static_cast<float>(midi_zahl(a, "gate", wa, 0.05, 1.0, "0.05 to 1"));
+  }
+  if (m.contains("velocity")) {
+    const std::string wv = wm + ".velocity";
+    const json& v = midi_objekt(m, "velocity", wm);
+    midi_nur(v, wv, {"kurve", "zufall", "fest"});
+    q.vel = true;
+    if (v.contains("kurve")) q.vel_kurve = static_cast<float>(midi_zahl(v, "kurve", wv, -1.0, 1.0, "-1 to 1"));
+    if (v.contains("zufall")) q.vel_zufall = static_cast<uint8_t>(midi_ganz(v, "zufall", wv, 0, 64));
+    if (v.contains("fest")) q.vel_fest = static_cast<uint8_t>(midi_ganz(v, "fest", wv, 0, 127));
+  }
+  if (m.contains("chance")) q.chance = static_cast<uint8_t>(midi_ganz(m, "chance", wm, 0, 100));
+  if (m.contains("saat")) q.saat = static_cast<uint32_t>(midi_ganz(m, "saat", wm, 0, 4294967295LL));
+  q.an = true;
+  p = q;
 }
 
 }  // namespace
@@ -1330,6 +1643,30 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
       lese_kette(j.at("pm"), "pm.", snap->kette[ARR_KETTE_PM], ins_belegt, cache, *snap);
       lese_rack(j.at("pm"), "pm.", snap->kette[ARR_KETTE_PM], snap->rack[ARR_KETTE_PM], rack_belegt);
     }
+    // Strand 7 task 5.2: the production harmony lane, `harmonie: [[beat, maske], ...]` (only /2..): beats finite, >= 0, strictly ascending; masks integers 1..4095;
+    // 1..ARR_HARMONIE_MAX entries. Every refusal is `format` and names the entry.
+    if (j.contains("harmonie")) {
+      if (!v2) format("harmonie exists only in cypherdj-arr/2");
+      const json& hl = j.at("harmonie");
+      if (!hl.is_array()) format("harmonie: not a list");
+      if (hl.empty()) format("harmonie: empty list (the key is absent without a lane)");
+      if (hl.size() > static_cast<size_t>(ARR_HARMONIE_MAX)) format("harmonie: more than " + std::to_string(ARR_HARMONIE_MAX) + " entries");
+      for (size_t hi = 0; hi < hl.size(); ++hi) {
+        const json& e = hl[hi];
+        const std::string wh = "harmonie[" + std::to_string(hi) + "]";
+        if (!e.is_array() || e.size() != 2) format(wh + ": [beat, maske] expected");
+        if (!e[0].is_number()) format(wh + ".beat: not a number");
+        const double b = e[0].get<double>();
+        if (!std::isfinite(b) || b < 0.0) format(wh + ".beat: finite and >= 0 expected");
+        if (hi > 0 && !(b > snap->harmonie_beat[hi - 1])) format(wh + ".beat: beats strictly ascending expected");
+        if (!e[1].is_number_integer()) format(wh + ".maske: not an integer");
+        if (e[1].is_number_unsigned() ? (e[1].get<uint64_t>() < 1u || e[1].get<uint64_t>() > 4095u) : (e[1].get<int64_t>() < 1 || e[1].get<int64_t>() > 4095))
+          format(wh + ".maske: outside 1 to 4095");
+        snap->harmonie_beat[hi] = b;
+        snap->harmonie_maske[hi] = static_cast<uint16_t>(e[1].get<int64_t>());
+      }
+      snap->n_harmonie = static_cast<int>(hl.size());
+    }
     // 1.10 Slice 3: returns (only /2). The core needs only WHICH returns exist; the sends are controls, not data (spec 5.1).
     // nr 1..ARR_RETURNS at most once, the output is master or (live container only) dj with nr 1..6 (returns do not feed returns or groups).
     if (j.contains("returns")) {
@@ -1663,6 +2000,11 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
         lese_glied_ziele(s, wo, *snap, sp, glied_roh, snap->rack[nr - 1]);   // 1.9 U8 T9: needs the members above
       } else {
         geraet_lesen(s, wo, sp, static_cast<int>(nr), false);   // intern or wirt, or the refusal of an unknown art
+      }
+      if (s.contains("midi")) {   // strand 7: the MIDI stage (plan 2026-11-27 strang7-midi 3.2); only instrument tracks (D9), only /2../4 (D8)
+        if (!v2) format(wo + "midi exists only in cypherdj-arr/2");
+        if (sp.art != ArrArt::intern && sp.art != ArrArt::rack && sp.art != ArrArt::wirt) format(wo + "midi exists only on an instrument track (intern, rack or wirt)");
+        lese_midi(s.at("midi"), wo + "midi", sp.midi);
       }
       if ((s.contains("id") || s.contains("zellen")) && sp.art != ArrArt::audio) format(wo + "id and zellen exist only on an audio track");
       if (s.contains("id") || s.contains("zellen")) {   // loop deck K1: the track id and the cells
@@ -2049,6 +2391,10 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
       for (const json& r : j.at("returns")) lese_ret_auto(r, "returns[nr " + std::to_string(r.at("nr").get<int64_t>()) + "].", static_cast<int>(r.at("nr").get<int64_t>()) - 1, *snap);
     if (j.contains("returns"))
       for (const json& r : j.at("returns")) lese_kette_auto(r, "returns[nr " + std::to_string(r.at("nr").get<int64_t>()) + "].", ARR_KETTE_RET0 + static_cast<int>(r.at("nr").get<int64_t>()) - 1, *snap);
+    if (j.contains("mod")) {   // strand 6: the modulators (the tracks and returns are known now)
+      if (!v3) format("mod exists only in cypherdj-arr/3");
+      lese_mod(j, *snap);
+    }
     // nested groups: the level and the order of every group, a cycle is refused (the server refuses it at the command too). Before the key check: the key rules read the levels.
     if (std::string m; !arr_gruppen_rechnen(*snap, &m)) format(m);
     snap->send_maske = v4 && live;

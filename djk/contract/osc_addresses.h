@@ -339,9 +339,15 @@ static_assert(e_graph.typen.size() - 1 == e_graph.felder);
 // §5.13 /zustand/arr ,iiidhdif
 inline constexpr Adresse zustand_arr{"/zustand/arr", ",iiidhdif", Richtung::vom_kern, false, 8};
 static_assert(zustand_arr.typen.size() - 1 == zustand_arr.felder);
+// §5.13 /zustand/arr/midi ,iiiii
+inline constexpr Adresse zustand_arr_midi{"/zustand/arr/midi", ",iiiii", Richtung::vom_kern, false, 5};
+static_assert(zustand_arr_midi.typen.size() - 1 == zustand_arr_midi.felder);
 // §5.13 /zustand/warp ,iiiii
 inline constexpr Adresse zustand_warp{"/zustand/warp", ",iiiii", Richtung::vom_kern, false, 5};
 static_assert(zustand_warp.typen.size() - 1 == zustand_warp.felder);
+// §5.13 /zustand/mod ,if
+inline constexpr Adresse zustand_mod{"/zustand/mod", ",if", Richtung::vom_kern, false, 2};
+static_assert(zustand_mod.typen.size() - 1 == zustand_mod.felder);
 // §5.13 /zustand/zelle ,siiddid
 inline constexpr Adresse zustand_zelle{"/zustand/zelle", ",siiddid", Richtung::vom_kern, false, 7};
 static_assert(zustand_zelle.typen.size() - 1 == zustand_zelle.felder);
@@ -394,7 +400,7 @@ static_assert(test_hand.typen.size() - 1 == test_hand.felder);
 inline constexpr Adresse test_klick{"/test/klick", ",hssi", Richtung::an_kern, true, 4};
 static_assert(test_klick.typen.size() - 1 == test_klick.felder);
 
-inline constexpr std::array<Adresse, 124> alle{
+inline constexpr std::array<Adresse, 126> alle{
     k_hallo,
     k_tschuess,
     k_willkommen,
@@ -501,7 +507,9 @@ inline constexpr std::array<Adresse, 124> alle{
     e_container_quelle,
     e_graph,
     zustand_arr,
+    zustand_arr_midi,
     zustand_warp,
+    zustand_mod,
     zustand_zelle,
     zustand_ins_host,
     zustand_hall_pool,
@@ -636,7 +644,9 @@ namespace e_fx_routing { enum : std::size_t { routing = 0 }; }
 namespace e_container_quelle { enum : std::size_t { container = 0, art = 1 }; }
 namespace e_graph { enum : std::size_t { kanal = 0, name = 1 }; }
 namespace zustand_arr { enum : std::size_t { nr = 0, status = 1, loop_an = 2, projekt_beat = 3, ursprung_sample = 4, start_beat = 5, metronom_an = 6, limiter_db = 7 }; }
+namespace zustand_arr_midi { enum : std::size_t { spur = 0, gehalten = 1, ein = 2, aus = 3, verloren = 4 }; }
 namespace zustand_warp { enum : std::size_t { stimmen = 0, unterlauf = 1, kein_platz = 2, spaet = 3, faeden = 4 }; }
+namespace zustand_mod { enum : std::size_t { nr = 0, wert = 1 }; }
 namespace zustand_zelle { enum : std::size_t { spur = 0, zelle = 1, verwaist = 2, ab_beat = 3, versatz_beats = 4, wartend = 5, wartend_ab = 6 }; }
 namespace zustand_ins_host { enum : std::size_t { h_1 = 0, gesund_1 = 1, rundweg_1 = 2, h_2 = 3, gesund_2 = 4, rundweg_2 = 5, h_3 = 6, gesund_3 = 7, rundweg_3 = 8, h_4 = 9, gesund_4 = 10, rundweg_4 = 11, h_5 = 12, gesund_5 = 13, rundweg_5 = 14, h_6 = 15, gesund_6 = 16, rundweg_6 = 17, h_7 = 18, gesund_7 = 19, rundweg_7 = 20, h_8 = 21, gesund_8 = 22, rundweg_8 = 23, schluessel_da = 24 }; }
 namespace zustand_hall_pool { enum : std::size_t { an = 0, faeden = 1, spaet = 2, zurueck = 3 }; }
@@ -724,6 +734,8 @@ namespace e_fx_zuweisung { inline constexpr double einheit_min = 1; inline const
 namespace e_fx_routing { inline constexpr double routing_min = 0; inline constexpr double routing_max = 1; }
 namespace e_container_quelle { inline constexpr double container_min = 1; inline constexpr double container_max = 4; inline constexpr double art_min = 0; inline constexpr double art_max = 2; }
 namespace zustand_arr { inline constexpr double status_min = 0; inline constexpr double status_max = 3; inline constexpr double loop_an_min = 0; inline constexpr double loop_an_max = 1; inline constexpr double metronom_an_min = 0; inline constexpr double metronom_an_max = 1; inline constexpr double limiter_db_min = -200; inline constexpr double limiter_db_max = 0; }
+namespace zustand_arr_midi { inline constexpr double spur_min = 1; inline constexpr double spur_max = 128; }
+namespace zustand_mod { inline constexpr double nr_min = 1; inline constexpr double nr_max = 16; inline constexpr double wert_min = -1; inline constexpr double wert_max = 1; }
 namespace zustand_zelle { inline constexpr double zelle_min = 0; inline constexpr double zelle_max = 8; inline constexpr double verwaist_min = 0; inline constexpr double verwaist_max = 1; inline constexpr double wartend_min = -1; inline constexpr double wartend_max = 8; }
 namespace zustand_ins_host { inline constexpr double h_1_min = 1; inline constexpr double h_1_max = 1; inline constexpr double gesund_1_min = 0; inline constexpr double gesund_1_max = 1; inline constexpr double rundweg_1_min = -1; inline constexpr double rundweg_1_max = 16383; inline constexpr double h_2_min = 2; inline constexpr double h_2_max = 2; inline constexpr double gesund_2_min = 0; inline constexpr double gesund_2_max = 1; inline constexpr double rundweg_2_min = -1; inline constexpr double rundweg_2_max = 16383; inline constexpr double h_3_min = 3; inline constexpr double h_3_max = 3; inline constexpr double gesund_3_min = 0; inline constexpr double gesund_3_max = 1; inline constexpr double rundweg_3_min = -1; inline constexpr double rundweg_3_max = 16383; inline constexpr double h_4_min = 4; inline constexpr double h_4_max = 4; inline constexpr double gesund_4_min = 0; inline constexpr double gesund_4_max = 1; inline constexpr double rundweg_4_min = -1; inline constexpr double rundweg_4_max = 16383; inline constexpr double h_5_min = 5; inline constexpr double h_5_max = 5; inline constexpr double gesund_5_min = 0; inline constexpr double gesund_5_max = 1; inline constexpr double rundweg_5_min = -1; inline constexpr double rundweg_5_max = 16383; inline constexpr double h_6_min = 6; inline constexpr double h_6_max = 6; inline constexpr double gesund_6_min = 0; inline constexpr double gesund_6_max = 1; inline constexpr double rundweg_6_min = -1; inline constexpr double rundweg_6_max = 16383; inline constexpr double h_7_min = 7; inline constexpr double h_7_max = 7; inline constexpr double gesund_7_min = 0; inline constexpr double gesund_7_max = 1; inline constexpr double rundweg_7_min = -1; inline constexpr double rundweg_7_max = 16383; inline constexpr double h_8_min = 8; inline constexpr double h_8_max = 8; inline constexpr double gesund_8_min = 0; inline constexpr double gesund_8_max = 1; inline constexpr double rundweg_8_min = -1; inline constexpr double rundweg_8_max = 16383; inline constexpr double schluessel_da_min = 0; inline constexpr double schluessel_da_max = 1; }
 namespace zustand_hall_pool { inline constexpr double an_min = 0; inline constexpr double an_max = 1; }

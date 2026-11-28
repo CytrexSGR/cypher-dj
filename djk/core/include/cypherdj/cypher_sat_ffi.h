@@ -16,6 +16,11 @@ CypherSaett* cypher_saett_neu(double fs);
 void cypher_saett_frei(CypherSaett* h);
 // drive_db / ausgang_db limited to +-60 dB, mix 0..1; a non-finite value ignores the whole call
 void cypher_saett_setze(CypherSaett* h, double drive_db, double ausgang_db, double mix);
+// curve 0 tanh, 1 soft clip, 2 hard clip; ceiling dBFS clamped -24..0; non-finite ceiling or curve > 2 ignores the call.
+// Defaults tanh / 0 dB are bit-equal to the plain saturation. A new curve cross-fades over 10 ms. Keeps drive, output, mix.
+void cypher_saett_setze_form(CypherSaett* h, uint8_t kurve, double decke_db);
+// dB the driven signal went over the ceiling since the last call (0 if never); reads and resets
+float cypher_saett_clip_db(CypherSaett* h);
 void cypher_saett_leeren(CypherSaett* h);
 uint32_t cypher_saett_latenz(const CypherSaett* h);
 void cypher_saett_block(CypherSaett* h, float* l, float* r, size_t n);

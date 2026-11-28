@@ -567,8 +567,21 @@ void Kern::pegel_melden(int64_t n0, int n) {
   };
   for (int k = 0; k < ARR_INS_KOMP; ++k) ins_gr_melden(ArrInsArt::komp, k, "ins/komp/", sizeof "ins/komp/" - 1);
   for (int k = 0; k < ARR_INS_LIM; ++k) ins_gr_melden(ArrInsArt::lim, k, "ins/lim/", sizeof "ins/lim/" - 1);
+  for (int k = 0; k < ARR_INS_EQ; ++k) {   // strand 5 slice 2: ins/eq/<n>, the deepest dynamic change (a cut positive), only for a stage with a dynamic band: 160 static EQs report nothing
+    const int g = ins_global(ArrInsArt::eq, k);
+    bool dyn = false;
+    for (int b = 0; b < 8 && !dyn; ++b) dyn = arr_->inserts().wirksam(g, INS_EQ_DYN0 + b * INS_EQ_DYN_PARAM) >= 0.5f;
+    if (dyn) {
+      ins_gr_melden(ArrInsArt::eq, k, "ins/eq/", sizeof "ins/eq/" - 1);
+    } else if (g >= 0) {   // drop the peaks of a static stage, so that a band switched to dynamic later does not report a stale one first
+      arr_->inserts_pegel().pegel_ein_db(g);
+      arr_->inserts_pegel().pegel_aus_db(g);
+    }
+  }
+  for (int k = 0; k < ARR_INS_SAETT; ++k) ins_gr_melden(ArrInsArt::saett, k, "ins/saett/", sizeof "ins/saett/" - 1);   // strand 5 slice 1: how far the stage clips over its ceiling, dB
   for (int k = 0; k < ARR_INS_GATE; ++k) ins_gr_melden(ArrInsArt::gate, k, "ins/gate/", sizeof "ins/gate/" - 1);   // strand 1 slice 4
   for (int k = 0; k < ARR_INS_MB; ++k) ins_gr_melden(ArrInsArt::mb, k, "ins/mb/", sizeof "ins/mb/" - 1);
+  for (int k = 0; k < ARR_INS_TRANS; ++k) ins_gr_melden(ArrInsArt::trans, k, "ins/trans/", sizeof "ins/trans/" - 1);   // strand 5 slice 3: the largest gain change of the shaper, dB
   for (int k = 0; k < MIX_QUELLEN; ++k) {   // T9: komp/<channel>, the input and output peak of the channel compressor of every source channel that ran it in the last block
     if (!mixer_->komp_aktiv(k)) {           // not running: drop the peaks (the stage clears them itself when switched off)
       mixer_->komp_ein_db(k);

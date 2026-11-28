@@ -4,6 +4,7 @@ import {
   MAX_BEAT, neueId, TEMPO_MAX, TEMPO_MIN, TAKTART_ZAEHLER_MAX, TAKTART_ZAEHLER_MIN, taktartOk, istObjekt, AUFNAHME_VORGABE, VORZAEHLER_WERTE,
   type ProjektAufnahme,
 } from './model.ts';
+import { harmonieFehler } from './model.ts';
 import { tonartFehler } from '../public/harmonie.js';
 import { META_FELDER, metaWertFehler } from './abgabe_meta.ts';
 import { ab, erlaube, zahlOk, zahl, flagge, idArg, type Args, type Handler } from './commands_helpers.ts';
@@ -77,6 +78,20 @@ export const TRANSPORT = {
     const f = tonartFehler({ grundton: a.grundton, skala: a.skala });
     if (f) ab('argument_ungueltig', f);
     p.tonart = { grundton: a.grundton as number, skala: a.skala as string };
+  },
+
+  // Production harmony lane (project field `harmonie`, plan strand 7, 5.1): {eintraege: [{beat, grundton, skala, akkord?}]} replaces the whole lane
+  // (sorted by beat here, so a gesture may send them in any order), null removes it. Not part of the playback unless a track's scale follows the project.
+  harmonie_setzen(p, a) {
+    erlaube(a, 'eintraege');
+    if (p.live) ab('tracker_live', 'the live container has no harmony lane');
+    if (a.eintraege === null) { delete p.harmonie; return; }
+    if (!Array.isArray(a.eintraege)) ab('argument_ungueltig', 'eintraege: list or null expected');
+    const liste = (a.eintraege as unknown[]).map((e) => (e !== null && typeof e === 'object' ? { ...(e as object) } : e) as { beat?: unknown });
+    liste.sort((x, y) => (typeof x?.beat === 'number' && typeof y?.beat === 'number' ? x.beat - y.beat : 0));
+    const f = harmonieFehler({ eintraege: liste });
+    if (f) ab('argument_ungueltig', f);
+    p.harmonie = { eintraege: liste as never };
   },
 
   // Release metadata of the project (abgabe_meta) for the tags of delivery files: a given field is set, null removes it, {aus: true} alone removes all.

@@ -114,7 +114,9 @@ export const ADRESSEN = {
   '/e/container/quelle': { typen: ',ii', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['container', 'art'], bereiche: { container: [1, 4], art: [0, 2] } },
   '/e/graph': { typen: ',ss', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['kanal', 'name'], bereiche: {} },
   '/zustand/arr': { typen: ',iiidhdif', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['nr', 'status', 'loop_an', 'projekt_beat', 'ursprung_sample', 'start_beat', 'metronom_an', 'limiter_db'], bereiche: { status: [0, 3], loop_an: [0, 1], metronom_an: [0, 1], limiter_db: [-200, 0] } },
+  '/zustand/arr/midi': { typen: ',iiiii', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['spur', 'gehalten', 'ein', 'aus', 'verloren'], bereiche: { spur: [1, 128] } },
   '/zustand/warp': { typen: ',iiiii', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['stimmen', 'unterlauf', 'kein_platz', 'spaet', 'faeden'], bereiche: {} },
+  '/zustand/mod': { typen: ',if', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['nr', 'wert'], bereiche: { nr: [1, 16], wert: [-1, 1] } },
   '/zustand/zelle': { typen: ',siiddid', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['spur', 'zelle', 'verwaist', 'ab_beat', 'versatz_beats', 'wartend', 'wartend_ab'], bereiche: { zelle: [0, 8], verwaist: [0, 1], wartend: [-1, 8] } },
   '/zustand/ins_host': { typen: ',iiiiiiiiiiiiiiiiiiiiiiiii', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['h_1', 'gesund_1', 'rundweg_1', 'h_2', 'gesund_2', 'rundweg_2', 'h_3', 'gesund_3', 'rundweg_3', 'h_4', 'gesund_4', 'rundweg_4', 'h_5', 'gesund_5', 'rundweg_5', 'h_6', 'gesund_6', 'rundweg_6', 'h_7', 'gesund_7', 'rundweg_7', 'h_8', 'gesund_8', 'rundweg_8', 'schluessel_da'], bereiche: { h_1: [1, 1], gesund_1: [0, 1], rundweg_1: [-1, 16383], h_2: [2, 2], gesund_2: [0, 1], rundweg_2: [-1, 16383], h_3: [3, 3], gesund_3: [0, 1], rundweg_3: [-1, 16383], h_4: [4, 4], gesund_4: [0, 1], rundweg_4: [-1, 16383], h_5: [5, 5], gesund_5: [0, 1], rundweg_5: [-1, 16383], h_6: [6, 6], gesund_6: [0, 1], rundweg_6: [-1, 16383], h_7: [7, 7], gesund_7: [0, 1], rundweg_7: [-1, 16383], h_8: [8, 8], gesund_8: [0, 1], rundweg_8: [-1, 16383], schluessel_da: [0, 1] } },
   '/zustand/hall_pool': { typen: ',iiii', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['an', 'faeden', 'spaet', 'zurueck'], bereiche: { an: [0, 1] } },
@@ -244,7 +246,9 @@ export interface Werte {
   '/e/container/quelle': [container: number, art: number];
   '/e/graph': [kanal: string, name: string];
   '/zustand/arr': [nr: number, status: number, loop_an: number, projekt_beat: number, ursprung_sample: bigint, start_beat: number, metronom_an: number, limiter_db: number];
+  '/zustand/arr/midi': [spur: number, gehalten: number, ein: number, aus: number, verloren: number];
   '/zustand/warp': [stimmen: number, unterlauf: number, kein_platz: number, spaet: number, faeden: number];
+  '/zustand/mod': [nr: number, wert: number];
   '/zustand/zelle': [spur: string, zelle: number, verwaist: number, ab_beat: number, versatz_beats: number, wartend: number, wartend_ab: number];
   '/zustand/ins_host': [h_1: number, gesund_1: number, rundweg_1: number, h_2: number, gesund_2: number, rundweg_2: number, h_3: number, gesund_3: number, rundweg_3: number, h_4: number, gesund_4: number, rundweg_4: number, h_5: number, gesund_5: number, rundweg_5: number, h_6: number, gesund_6: number, rundweg_6: number, h_7: number, gesund_7: number, rundweg_7: number, h_8: number, gesund_8: number, rundweg_8: number, schluessel_da: number];
   '/zustand/hall_pool': [an: number, faeden: number, spaet: number, zurueck: number];

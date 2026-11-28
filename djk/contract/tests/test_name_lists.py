@@ -378,7 +378,7 @@ MUTATIONEN += [
     (INS_MJS, "  ['ins/saett/1/drive', 'lin', 0, 36, 12],\n", "", "Insert-Regler=Kern: R03 Attrappe REGLER fehlt: ins/saett/1/drive"),
     (HAND_BED, "b[1-8]\\/(an|typ|freq|gain|q|steil|platz)", "b[1-7]\\/(an|typ|freq|gain|q|steil|platz)", "Insert-Regler: R06 hand_bedienung.PFAD lehnt ins/eq/1/b8/an ab"),
     (HAND_BED, "ins\\/eq\\/([1-9]|[1-9][0-9]|1[0-5][0-9]|160)\\/", "ins\\/eq\\/([1-9]|[1-9][0-9]|1[0-5][0-9]|161)\\/", "Insert-Regler: R06 hand_bedienung.PFAD nimmt ins/eq/161/an an"),
-    (SCHEMA, "ins/saett/[1-4]/(an|drive|out|mix)", "ins/saett/[1-4]/(an|drive|out|mix|zz)", "Insert-Regler: R07 defs.schema.json regler_pfad nimmt ins/saett/1/zz an"),
+    (SCHEMA, "ins/saett/([1-9]|[12][0-9]|3[0-2])/(an|drive|out|mix|kurve|decke)", "ins/saett/([1-9]|[12][0-9]|3[0-2])/(an|drive|out|mix|kurve|decke|zz)", "Insert-Regler: R07 defs.schema.json regler_pfad nimmt ins/saett/1/zz an"),
     (SCHEMA, "ins/eq/([1-9]|[1-9][0-9]|1[0-5][0-9]|160)/(an|out|propq|b[1-8]/", "ins/eq/([1-9]|[1-9][0-9]|1[0-5][0-9]|160)/(an|out|propq|b[0-8]/", "Insert-Regler: R07 defs.schema.json regler_pfad nimmt ins/eq/1/b0/an an"),
     (SPEC, "| `ins/eq/<n>/b<m>/gain` |", "| `ins/eq/<n>/b<m>/gaen` |", "Insert-Regler=Kern: R02 INTERFACES §1.5 fehlt: ins/eq/1/b1/gain"),
     (SPEC, "| `ins/eq/<n>/b1/freq` | Hz | 10 to 22000 | 30 |", "| `ins/eq/<n>/b1/freq` | Hz | 10 to 22000 | 31 |",

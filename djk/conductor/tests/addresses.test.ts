@@ -52,6 +52,18 @@ test('A6: /zustand/mix (10 Hz x channels) and /zustand/spektrum (25 Hz) are in t
   assert.ok(GENUTZT.includes('/zustand/mix') && GENUTZT.includes('/zustand/spektrum'));
 });
 
+test('strand 6: /zustand/mod (25 Hz per modulator) is in the table and stays out of the journal', () => {
+  assert.deepEqual(ADRESSEN['/zustand/mod'], { typen: 'if', felder: ['nr', 'wert'] });
+  assert.ok(NICHT_INS_JOURNAL.has('/zustand/mod'));
+  assert.ok(GENUTZT.includes('/zustand/mod'));
+});
+
+test('strand 7 task 3.3: /zustand/arr/midi (2 Hz per track with a MIDI stage) is in the table and stays out of the journal', () => {
+  assert.deepEqual(ADRESSEN['/zustand/arr/midi'], { typen: 'iiiii', felder: ['spur', 'gehalten', 'ein', 'aus', 'verloren'] });
+  assert.ok(NICHT_INS_JOURNAL.has('/zustand/arr/midi'));
+  assert.ok(GENUTZT.includes('/zustand/arr/midi'));
+});
+
 test('device faces T9: /e/stufe_pegel (stage levels, 20 Hz) is in the table and stays out of the journal', () => {
   assert.deepEqual(ADRESSEN['/e/stufe_pegel'], { typen: 'sff', felder: ['kanal', 'ein_db', 'aus_db'] });
   assert.ok(NICHT_INS_JOURNAL.has('/e/stufe_pegel'));

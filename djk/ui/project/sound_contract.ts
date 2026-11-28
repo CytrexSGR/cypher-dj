@@ -40,7 +40,10 @@ export interface LiveMessung { leer: false; w: number; steht: boolean; stumm: bo
 export const LIVE_FRAMES = 16384, LIVE_LAUTHEIT_FRAMES = 19200, LIVE_VORLAUF_FRAMES = 4800;
 
 export interface AnalyseAntwort { rev: number; von_beat: number; bis_beat: number; dauer_s: number; tempo_bpm: number;
-  quelle: Messung; vergleich?: Messung | RefMessung; ueberdeckung?: Ueberdeckung; abgleich?: Abgleich; hinweise: Hinweis[] }
+  quelle: Messung; vergleich?: Messung | RefMessung; ueberdeckung?: Ueberdeckung; abgleich?: Abgleich; hinweise: Hinweis[];
+  /** Strand 5 slice 5: only with resonances in a sounding source. `befehle` is ready for proj_aendern, null when nothing fits (chain full, no free band). */
+  vorschlaege?: { resonanz: {
+    baender: { hz: number; q: number; schwelle_db: number; bereich_db: number }[]; strang_id: string | null; befehle: unknown[] | null } } }
 export type HandMessung = Omit<Messung, 'zeitbild'> | RefMessung;
 export type HandAntwort = Omit<AnalyseAntwort, 'quelle' | 'vergleich'> & { quelle: HandMessung; vergleich?: HandMessung };
 

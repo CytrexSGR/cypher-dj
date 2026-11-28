@@ -114,6 +114,13 @@ void ArrBkSenke::auto_parameter_summand(int spur, int param, float delta) noexce
   p.delta_da[param] = true;
 }
 
+void ArrBkSenke::mod_summand(int spur, int param, float delta) noexcept {
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE || param < 0 || param >= BK_KNOEPFE || !(delta == delta)) return;
+  Spur& p = sp_[spur];
+  p.mod_delta[param] = delta;
+  p.mod_da[param] = true;
+}
+
 void ArrBkSenke::note_regler(int spur, int64_t ziel, int param, float wert, bool relativ) noexcept {
   if (spur < 0 || spur >= ARR_SENKEN_PLAETZE || param < 0 || param >= BK_KNOEPFE || !(wert == wert)) return;
   Spur& p = sp_[spur];
@@ -169,7 +176,9 @@ void ArrBkSenke::block_bahn(int spur, int64_t s0, int m, float* l, float* r, Arr
   ++a.einheiten;
   if (spur < 0 || spur >= ARR_SENKEN_PLAETZE || m <= 0 || m > ARR_BLOCK) return;
   Spur& p = sp_[spur];
-  float k_gemeldet[BK_KNOEPFE], k_delta[BK_KNOEPFE];   // the knobs and summands reported for this block (auto_parameter, auto_parameter_summand): taken and cleared at once, so a block that returns early leaves nothing for a later one
+  // the knobs, summands and modulator offsets reported for this block (auto_parameter, auto_parameter_summand, mod_summand): taken and cleared at once, so a block that returns early
+  // leaves nothing for a later one
+  float k_gemeldet[BK_KNOEPFE], k_delta[BK_KNOEPFE], k_mod[BK_KNOEPFE];
   bool k_da[BK_KNOEPFE], d_da[BK_KNOEPFE];
   for (int i = 0; i < BK_KNOEPFE; ++i) {
     k_gemeldet[i] = p.knopf_wert[i];
@@ -178,6 +187,8 @@ void ArrBkSenke::block_bahn(int spur, int64_t s0, int m, float* l, float* r, Arr
     k_delta[i] = p.knopf_delta[i];
     d_da[i] = p.delta_da[i];
     p.delta_da[i] = false;
+    k_mod[i] = p.mod_da[i] ? p.mod_delta[i] : 0.0f;   // no report: no offset in this block
+    p.mod_da[i] = false;
   }
   const ArrSnapshot* snap = arr_.snapshot();
   const ArrSpur* q = nullptr;   // the track of the current snapshot when it is a bk track with an instance
@@ -307,6 +318,10 @@ void ArrBkSenke::block_bahn(int spur, int64_t s0, int m, float* l, float* r, Arr
       w += k_delta[k - 1];
       w = w < 0.0f ? 0.0f : (w > 1.0f ? 1.0f : w);
     }
+    if (k_mod[k - 1] != 0.0f) {   // strand 6 (D3): the modulator offset on top of the whole stack, one clamp at the end
+      w += k_mod[k - 1];
+      w = w < 0.0f ? 0.0f : (w > 1.0f ? 1.0f : w);
+    }
     if (sofort)
       cypher_bk_regler_sofort(h, static_cast<uint32_t>(k), w);
     else
@@ -359,6 +374,10 @@ void ArrBkSenke::block_bahn(int spur, int64_t s0, int m, float* l, float* r, Arr
         w += knopf_wert(*q, k, p.knopf_vorgabe);
         w = w < 0.0f ? 0.0f : (w > 1.0f ? 1.0f : w);
       }
+    }
+    if (k_mod[k - 1] != 0.0f) {   // strand 6: the block's modulator offset on the per-note value too, as in the knob loop
+      w += k_mod[k - 1];
+      w = w < 0.0f ? 0.0f : (w > 1.0f ? 1.0f : w);
     }
     if (cypher_bk_regler_bei(h, versatz(e.ziel), static_cast<uint32_t>(k), w) == -1) verloren_.fetch_add(1, std::memory_order_relaxed);
   }

@@ -73,7 +73,7 @@ test('T8 beats: 16 notes land at startBeat + (sample - startSample - versatz) * 
     assert.deepEqual([x.ton, x.vel], [erwartet[k].ton, erwartet[k].vel]);
     assert.equal(x.id, `n${k + 1}`, 'ids n1.. from the counter of a fresh project');
   });
-  assert.equal(n.naechste_noten_id, 17, 'the counter moved past the 16 notes');
+  assert.equal(n.naechste_noten_id, 33, 'the counter moved past the 16 notes of the main clip and the 16 of its take (4.2)');
   assert.equal(p.naechste_noten_id, 1, 'the input is never touched');
   assert.equal(pruefeFehler(n), null);
 });
@@ -181,9 +181,12 @@ test('T8 two instrument tracks get identical notes, every note with its own id f
   const [a, b] = ids.map((id) => absolut(n, id));
   assert.deepEqual(a, b);
   assert.equal(a.length, 2);
-  const alle = ids.flatMap((id) => clipsVon(n, id).flatMap((c) => c.noten.map((x) => x.id)));
-  assert.deepEqual(alle, ['n1', 'n2', 'n3', 'n4'], 'four notes, four ids, none twice');
-  assert.equal(new Set(ids.flatMap((id) => clipsVon(n, id).map((c) => c.id))).size, 2, 'two clips, two ids');
+  // 4.2: every track also keeps the pass as a take, so each note exists twice (main lane and take lane) with its own id
+  const clips = ids.flatMap((id) => [...clipsVon(n, id), ...sucheSpur(n, id).takes.flatMap((t) => t.clips)]);
+  const alle = clips.flatMap((c) => c.noten.map((x) => x.id));
+  assert.equal(alle.length, 8);
+  assert.equal(new Set(alle).size, 8, 'eight notes, eight ids, none twice');
+  assert.equal(new Set(clips.map((c) => c.id)).size, 4, 'four clips, four ids');
 });
 
 test('T8 loop clips: a clip that crosses a range edge gives ersetzen_loop and changes nothing; a loop clip wholly inside is replaced; overdub into a loop clip is refused', () => {

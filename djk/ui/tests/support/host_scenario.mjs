@@ -2,7 +2,7 @@
 // tests/support/inserts_mit_golden.json was recorded from this scenario BEFORE the host stage existed (base commit of task 7); the test
 // project_host_insert.test.mjs checks that today's translator reproduces it byte for byte: a project without host stages keeps its playback file.
 import { fuehreListeAus } from '../../project/commands.ts';
-import { kanonisch } from '../../project/model.ts';
+import { normalisiere } from '../../project/storage.ts';
 import { uebersetze } from '../../project/playback.ts';
 import { szenarioOhneInserts } from './inserts_scenario.mjs';
 
@@ -19,5 +19,6 @@ export function szenarioMitInserts() {
   ]);
   p.rev = 9; p.wiedergabe_rev = 9;
   const w = uebersetze(p, { nr: 1, audioOrdner: '/x/audio', frames: () => 96000 });
-  return { projekt: p, kanonisch: kanonisch(p), wiedergabe: JSON.stringify(w) };
+  return { projekt: p, kanonisch: JSON.stringify(normalisiere(p)),   // the bytes a save writes (late parameters at their default are left out)
+    wiedergabe: JSON.stringify(w) };
 }

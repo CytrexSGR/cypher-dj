@@ -103,7 +103,7 @@ test('audio_noten_aendern ton_um +2 sets ton = qton + 2; a second +2 gives qton 
   assert.equal('ton' in note(e6.projekt, 't2'), false);
 });
 
-test('audio_noten_aendern ton absolute on two ids; beyond 24 semitones -> noten_ton_grenze; vib -> argument_unbekannt', () => {
+test('audio_noten_aendern ton absolute on two ids; beyond 24 semitones -> noten_ton_grenze; formant -> argument_unbekannt', () => {
   const p0 = aufbau();
   const e = fuehreAus(p0, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t1', 't3'), ton: 65.5 });
   assert.equal(note(e.projekt, 't1').ton, 65.5);
@@ -126,7 +126,7 @@ test('audio_noten_aendern ton absolute on two ids; beyond 24 semitones -> noten_
   const hoch = aufbau(); note(hoch, 't1').qton = 120;
   lehntAb(hoch, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t1'), ton: 128 }, 'noten_ton_grenze');
   lehntAb(hoch, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t1'), ton_um: 8 }, 'noten_ton_grenze');
-  for (const feld of ['vib', 'drift', 'formant', 'gain_db', 'a', 'e']) {
+  for (const feld of ['formant', 'gain_db']) {
     lehntAb(p0, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t1'), ton: 61, [feld]: 1.5 }, 'argument_unbekannt');
   }
   lehntAb(p0, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t1'), ton: 61, quatsch: 1 }, 'argument_unbekannt');
@@ -298,4 +298,117 @@ test('a project with audio_noten in a format that does not allow it (/1) is refu
     const r = pruefeProjekt(kopie(q));
     assert.ok(r.projekt || !/audio_noten/.test(r.fehler), `${format}: ${r.fehler}`);
   }
+});
+
+// ---- slice 2, task T3: time fields (a, e, zeit_um, mit_nachbarn) ----------------------------------------------------------------
+// aufbau(): t1 0.5..1.0, t2 1.0..1.5 (touches t1, has ton 64.5), t3 2.0..2.6 (gap of 0.5 s to t2)
+const zeit = (p, b) => fuehreAus(p, { befehl: 'audio_noten_aendern', clip_id: 'c1', ...b }).projekt;
+const eff = (p, id) => { const n = note(p, id); return [n.a ?? n.qa, n.e ?? n.qe]; };
+
+test('zeit_um moves both edges, keeps ton, ids in any order, 0 is no change', () => {
+  const p0 = aufbau();
+  const p1 = zeit(p0, { ids: ids('t3'), zeit_um: 0.1 });
+  assert.deepEqual(eff(p1, 't3'), [2.1, 2.7]);
+  assert.deepEqual(eff(p1, 't2'), [1.0, 1.5], 'the gap gives: t2 stays');
+  const p2 = zeit(p0, { ids: ids('t2'), zeit_um: 0.1, mit_nachbarn: false });
+  assert.equal(note(p2, 't2').ton, 64.5, 'ton kept when moved');
+  assert.deepEqual(eff(p2, 't2'), [1.1, 1.6]);
+  const p3 = zeit(p0, { ids: ids('t2', 't1'), zeit_um: 0.05 });   // order of ids does not matter
+  assert.deepEqual(eff(p3, 't1'), [0.55, 1.05]);
+  assert.deepEqual(eff(p3, 't2'), [1.05, 1.55]);
+  assert.deepEqual(eff(p3, 't3'), [2.0, 2.6], 'the gap after t2 gives');
+  // a moved note that touches an unmoved one in the middle of the selection overlaps it: refused
+  lehntAb(p0, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t1', 't3'), zeit_um: 0.05 }, 'noten_ueberlappen');
+  const p4 = zeit(p0, { ids: ids('t1'), zeit_um: 0 });
+  assert.deepEqual(p4.spuren, p0.spuren);
+  assert.equal('a' in note(p1, 't2'), false);
+});
+
+test('absolute a and e; a value equal to qa/qe removes the field; one id only', () => {
+  const p0 = aufbau();
+  const p1 = zeit(p0, { ids: ids('t3'), a: 1.9, e: 2.8 });
+  assert.deepEqual(eff(p1, 't3'), [1.9, 2.8]);
+  const p2 = zeit(p1, { ids: ids('t3'), a: 2.0000004, e: 2.6 });
+  assert.equal('a' in note(p2, 't3'), false);
+  assert.equal('e' in note(p2, 't3'), false);
+  const p3 = zeit(p0, { ids: ids('t3'), e: 2.9 });
+  assert.deepEqual(eff(p3, 't3'), [2.0, 2.9]);
+  assert.equal(note(p3, 't3').e, 2.9);
+  lehntAb(p0, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t1', 't3'), a: 0.4 }, 'argument_ungueltig');
+  lehntAb(p0, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t3'), a: 1.9, zeit_um: 0.1 }, 'argument_ungueltig');
+  lehntAb(p0, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t3'), zeit_um: 'x' }, 'argument_ungueltig');
+  lehntAb(p0, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t3'), zeit_um: 0.1, mit_nachbarn: 'ja' }, 'argument_ungueltig');
+  lehntAb(p0, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t3') }, 'argument_ungueltig');
+});
+
+test('neighbour follows when touching (gap < 40 ms), gap gives otherwise, mit_nachbarn false leaves it', () => {
+  const p0 = aufbau();
+  // t2 start moved to 1.2 (shorter): t1 touched it, so t1.e follows to 1.2
+  const p1 = zeit(p0, { ids: ids('t2'), a: 1.2 });
+  assert.deepEqual(eff(p1, 't1'), [0.5, 1.2]);
+  assert.equal(note(p1, 't1').e, 1.2);
+  // end of t2 extended to 1.9: t3 starts 0.5 s later, the gap gives, t3 stays
+  const p2 = zeit(p0, { ids: ids('t2'), e: 1.9 });
+  assert.deepEqual(eff(p2, 't3'), [2.0, 2.6]);
+  // without neighbours the touching note overlaps
+  lehntAb(p0, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t2'), a: 0.9, mit_nachbarn: false }, 'noten_ueberlappen');
+  // with neighbours the same edit shortens t1
+  assert.deepEqual(eff(zeit(p0, { ids: ids('t2'), a: 0.9 }), 't1'), [0.5, 0.9]);
+  // a gap of 30 ms counts as touching, 50 ms does not
+  const q = aufbau(); note(q, 't2').qa = 1.03; note(q, 't2').qe = 1.5;
+  assert.deepEqual(eff(zeit(q, { ids: ids('t2'), a: 1.3 }), 't1'), [0.5, 1.3]);
+  const r = aufbau(); note(r, 't2').qa = 1.05; note(r, 't2').qe = 1.5;
+  assert.deepEqual(eff(zeit(r, { ids: ids('t2'), a: 1.3 }), 't1'), [0.5, 1.0]);
+});
+
+test('refusals: start before 0, overlap, stretch beyond 0.25..4; nothing is written', () => {
+  const p0 = aufbau();
+  const vorher = JSON.stringify(p0);
+  lehntAb(p0, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t1'), zeit_um: -0.6 }, 'argument_ungueltig');
+  lehntAb(p0, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t3'), zeit_um: -0.7 }, 'noten_ueberlappen');   // t3.a 1.3 into t2 (1.0..1.5)
+  lehntAb(p0, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t3'), a: 1.0 }, 'noten_ueberlappen');
+  lehntAb(p0, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t3'), e: 2.0 + 0.6 * 4.2 }, 'noten_dehnung_grenze');   // factor 4.2
+  lehntAb(p0, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t3'), e: 2.0 + 0.6 * 0.2 }, 'noten_dehnung_grenze');   // factor 0.2
+  const ok = zeit(p0, { ids: ids('t3'), e: 2.0 + 0.6 * 4 });
+  assert.equal(eff(ok, 't3')[1], 4.4, 'factor exactly 4 is allowed');
+  // a neighbour dragged along is checked too: t1 shortened to 0.03 s of a 0.5 s note would be below a quarter
+  lehntAb(p0, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t2'), a: 0.55 }, 'noten_dehnung_grenze');
+  // both pitch and time: a refused time part writes nothing of the pitch part
+  lehntAb(p0, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t3'), ton: 61, a: 1.0 }, 'noten_ueberlappen');
+  assert.equal(JSON.stringify(p0), vorher);
+});
+
+test('pitch and time in one command are one undo step; undo restores', (t) => {
+  const p = aufbau();
+  const v = new Verlauf(path.join(tmpOrdner(t), 'undo.jsonl'), { zeitgeber: false });
+  const meta = { quelle: 'andreas', label: 'Note time' };
+  const r = aendere(v, p, [{ befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t3'), ton_um: 2, zeit_um: 0.1 }], meta);
+  const p1 = r.projekt;
+  assert.deepEqual(eff(p1, 't3'), [2.1, 2.7]);
+  assert.equal(note(p1, 't3').ton, rundeTon(59.7 + 2));
+  const z = rueckgaengig(v, p1, { quelle: 'andreas' }).projekt;
+  assert.deepEqual(clip(z).audio_noten, clip(p).audio_noten);
+});
+
+test('audio_noten_aendern vib and drift: absolute 0..4 or a delta, rounded to 1e-3, 1 not stored, only the factor written, one undo step', () => {
+  const p0 = aufbau();
+  const e = fuehreAus(p0, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t1', 't2'), vib: 0 });
+  assert.equal(note(e.projekt, 't1').vib, 0);
+  assert.equal(note(e.projekt, 't2').vib, 0);
+  assert.equal(note(e.projekt, 't1').ton, undefined, 'only the factor is written');
+  const e2 = fuehreAus(e.projekt, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t1'), vib_um: 0.5, drift: 2.00049 });
+  assert.equal(note(e2.projekt, 't1').vib, 0.5);
+  assert.equal(note(e2.projekt, 't1').drift, 2, 'rounded to 1e-3');
+  const e3 = fuehreAus(e2.projekt, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t1'), vib_um: 0.5, drift_um: -1 });
+  assert.equal('vib' in note(e3.projekt, 't1'), false, 'back at 1: not stored');
+  assert.equal('drift' in note(e3.projekt, 't1'), false);
+  const e4 = fuehreAus(p0, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t1'), ton: 61, vib: 1.5 });
+  assert.equal(note(e4.projekt, 't1').ton, 61);
+  assert.equal(note(e4.projekt, 't1').vib, 1.5, 'pitch and factor in one command');
+  const un = (b) => lehntAb(p0, { befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ids('t1'), ...b }, 'argument_ungueltig');
+  un({ vib: 4.5 });
+  un({ drift: -0.1 });
+  un({ vib: 1, vib_um: 0.2 });
+  un({ vib_um: 4 });
+  un({ drift: 'viel' });
 });

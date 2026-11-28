@@ -27,7 +27,7 @@ SCHEMA_ZU_PRAEFIX = {
     "roh": "noten_kurve_roh.schema.json",
     "auftrag": "noten_auftrag.schema.json",
 }
-GUT = ["audio_noten_gut", "audio_noten_leer_gut", "audio_noten_ton_24_gut", "kurve_gut", "kurve_kurz_gut", "kurve_mono_gut",
+GUT = ["audio_noten_gut", "audio_noten_leer_gut", "audio_noten_ton_24_gut", "audio_noten_zeit_gut", "kurve_gut", "kurve_kurz_gut", "kurve_mono_gut",
        "kurve_mono_mehrstimmig_gut", "roh_gut", "auftrag_gut"]
 # bad case -> ("regel", [reasons of regel_gruende in rule order]) or ("schema", token in the path or keyword of a schema error)
 SCHLECHT = {
@@ -44,6 +44,9 @@ SCHLECHT = {
     "audio_noten_schlecht_ton_bereich": ("schema", "ton"),
     "audio_noten_schlecht_form_vor_regel": ("schema", "id"),
     "audio_noten_schlecht_regelfolge": ("regel", ["id", "ueberlappung"]),
+    "audio_noten_schlecht_ziel_ueberlappen": ("regel", ["ziel_ueberlappen"]),
+    "audio_noten_schlecht_dehnung_gross": ("regel", ["dehnung"]),
+    "audio_noten_schlecht_dehnung_klein": ("regel", ["dehnung"]),
     "kurve_schlecht_laenge": ("regel", ["laenge"]),
     "kurve_schlecht_f0": ("schema", "f0_ct"),
     "kurve_schlecht_praefix": ("schema", "kurve"),
@@ -64,6 +67,7 @@ SCHLECHT = {
 }
 MONO_ANTEIL_MAX = 0.30
 TON_SPANNE = 24
+DEHNUNG_MIN, DEHNUNG_MAX, DEHNUNG_TOLERANZ = 0.25, 4, 1e-9
 TON_TOLERANZ = 1e-4   # targets are rounded to 1e-4, qton has no decimals rule
 # reasons that are format errors of a file (the schema or the self-consistency of a curve), not rule errors of the notes
 FORMAT_GRUENDE = {"laenge", "f0_stellen", "konf_stellen", "mono_anteil", "mono_leer"}
@@ -121,10 +125,14 @@ def liste_gruende(liste, mit_ziel, ende_max=None):
                     g.append("ziel_gleich")
             if n.get("e", n["qe"]) <= n.get("a", n["qa"]):
                 g.append("ziel_ende")
+            elif not (DEHNUNG_MIN - DEHNUNG_TOLERANZ <= (n.get("e", n["qe"]) - n.get("a", n["qa"])) / (n["qe"] - n["qa"]) <= DEHNUNG_MAX + DEHNUNG_TOLERANZ):
+                g.append("dehnung")
     if any(b["qa"] < a["qa"] for a, b in zip(liste, liste[1:])):
         g.append("reihenfolge")
     elif any(a["qe"] > b["qa"] for a, b in zip(liste, liste[1:])):
         g.append("ueberlappung")
+    elif mit_ziel and any(a.get("e", a["qe"]) > b.get("a", b["qa"]) for a, b in zip(liste, liste[1:])):
+        g.append("ziel_ueberlappen")
     if ende_max is not None and any(n["qe"] > ende_max for n in liste):
         g.append("ausserhalb")
     return list(dict.fromkeys(g))
@@ -181,7 +189,7 @@ def befund_code(datei, obj):
     if g[0] in FORMAT_GRUENDE:
         return "format"
     if clip:
-        return "noten_ton_grenze" if g[0] == "ton_grenze" else "argument_ungueltig"
+        return {"ton_grenze": "noten_ton_grenze", "ziel_ueberlappen": "noten_ueberlappen", "dehnung": "noten_dehnung_grenze"}.get(g[0], "argument_ungueltig")
     return "noten_ungueltig"
 
 
@@ -214,7 +222,7 @@ def test_reason_table_gruende_json_covers_every_bad_file():
     tabelle = json.loads((CASES / "gruende.json").read_text(encoding="utf-8"))
     schlecht = {p.name for p in CASES.glob("*_schlecht_*.json")}
     assert set(tabelle) == schlecht
-    erlaubt = {"argument_ungueltig", "noten_ton_grenze", "format", "noten_ungueltig"}
+    erlaubt = {"argument_ungueltig", "noten_ton_grenze", "format", "noten_ungueltig", "noten_ueberlappen", "noten_dehnung_grenze"}
     for name, code in tabelle.items():
         assert code in erlaubt, name
         stem = name.removesuffix(".json")
@@ -254,6 +262,29 @@ def test_rule_order_and_shape_before_rules():
     assert liste_gruende(k, True) == ["dauer"]
     k[0]["qe"] = 0.0100001
     assert liste_gruende(k, True) == []
+
+
+def test_time_target_rules_and_their_boundaries():
+    def neu(t1=None, t2=None):
+        return [{"id": "t1", "qa": 0.0, "qe": 0.5, "qton": 60, "p": 1, **(t1 or {})},
+                {"id": "t2", "qa": 1.0, "qe": 1.5, "qton": 62, "p": 1, **(t2 or {})}]
+    one = lambda **z: [{"id": "t1", "qa": 0.0, "qe": 0.5, "qton": 60, "p": 1, **z}]  # noqa: E731
+    assert liste_gruende(neu(t1={"e": 1.0}), True) == []                      # touching: e_eff == a_eff
+    assert liste_gruende(neu(t1={"e": 1.0 + 1e-6}), True) == ["ziel_ueberlappen"]
+    assert liste_gruende(neu(t2={"a": 0.5}), True) == []                      # only a, touching the detected end of t1
+    assert liste_gruende(neu(t2={"a": 0.25}), True) == ["ziel_ueberlappen"]
+    assert liste_gruende(one(e=2.0), True) == []                              # exactly 4
+    assert liste_gruende(one(e=2.001), True) == ["dehnung"]
+    assert liste_gruende(one(e=0.125), True) == []                            # exactly 0.25
+    assert liste_gruende(one(e=0.124), True) == ["dehnung"]
+    # the stretch rule runs with the per-note rules, before the overlap rules
+    k = neu(t1={"e": 3.0})
+    k[1]["qa"], k[1]["qe"] = 0.2, 0.4
+    assert liste_gruende(k, True) == ["dehnung", "ueberlappung"]
+    # the detected-overlap rule stays and comes first; the sidecar never runs the target rules
+    k = [{"id": "t1", "qa": 0, "qe": 1, "qton": 60, "p": 1}, {"id": "t2", "qa": 0.5, "qe": 2, "qton": 60, "p": 1, "a": 1.5}]
+    assert liste_gruende(k, True) == ["ueberlappung"]
+    assert liste_gruende(neu(t1={"e": 1.2}), False) == []
 
 
 def test_mono_rules():

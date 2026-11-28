@@ -314,3 +314,45 @@ test('the real surface of public/noten/ drags a note through this adapter: one c
   e.los();
   assert.equal(handler.has('pointerdown'), false, 'los releases the canvas');
 });
+
+test('schreibe zeit and kante send audio_noten_aendern with zeit_um or one edge; mit_nachbarn stays at its default', async () => {
+  const t = aufbau();
+  await t.a.schreibe({ art: 'zeit', ids: ['t1', 't2'], um_s: 0.25 });
+  assert.deepEqual(t.gesendet(0), { label: 'Note time', befehle: [{ befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ['t1', 't2'], zeit_um: 0.25 }] });
+  await t.a.schreibe({ art: 'kante', id: 't2', e: 2.5 });
+  assert.deepEqual(t.gesendet(1), { label: 'Note edge', befehle: [{ befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ['t2'], e: 2.5 }] });
+  await t.a.schreibe({ art: 'kante', id: 't1', a: 0.75 });
+  assert.deepEqual(t.gesendet(2).befehle, [{ befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ['t1'], a: 0.75 }]);
+  assert.equal(t.gesendet(0, projekt(clip({ audio_noten: { kurve: 'k', liste: [liste()[0]] } }))), null, 'a note of the op is gone: nothing is sent');
+});
+
+test('schreibe raster sends audio_noten_raster with the strength; the selection is optional; a gone note sends nothing; setzeStaerke shows in Sicht', async () => {
+  const t = aufbau();
+  assert.equal(t.a.lies().staerke, 1);
+  await t.a.schreibe({ art: 'raster', ids: ['t1'], zeit: '1/16', staerke: 0.5 });
+  assert.deepEqual(t.gesendet(0), { label: 'Quantise notes', befehle: [{ befehl: 'audio_noten_raster', clip_id: 'c1', ids: ['t1'], zeit: '1/16', staerke: 0.5 }] });
+  await t.a.schreibe({ art: 'raster', ton: 'tonart', staerke: 1 });
+  assert.deepEqual(t.gesendet(1), { label: 'Snap notes', befehle: [{ befehl: 'audio_noten_raster', clip_id: 'c1', ton: 'tonart', staerke: 1 }] });
+  await t.a.schreibe({ art: 'raster', ids: ['t9'], ton: 'halbton', staerke: 1 });
+  assert.equal(t.gesendet(2), null);
+  t.a.setzeStaerke(0.25); t.a.setzeStaerke(7); t.a.setzeStaerke('x');
+  assert.equal(t.a.lies().staerke, 1, 'clamped to 1, a non-number is ignored');
+  t.a.setzeStaerke(0.25);
+  assert.equal(t.a.lies().staerke, 0.25);
+});
+
+test('schreibe form sends audio_noten_aendern with vib and/or drift for the listed notes; a gone note or empty fields send nothing', async () => {
+  const t = aufbau();
+  assert.equal((await t.a.schreibe({ art: 'form', ids: ['t1', 't2'], vib: 0 })).ok, true);
+  assert.deepEqual(t.gesendet(0), { label: 'Note vibrato', befehle: [{ befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ['t1', 't2'], vib: 0 }] });
+  await t.a.schreibe({ art: 'form', ids: ['t1'], drift: 2.5 });
+  assert.deepEqual(t.gesendet(1), { label: 'Note drift', befehle: [{ befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ['t1'], drift: 2.5 }] });
+  await t.a.schreibe({ art: 'form', ids: ['t1'], vib: 0.5, drift: 0 });
+  assert.deepEqual(t.gesendet(2).befehle, [{ befehl: 'audio_noten_aendern', clip_id: 'c1', ids: ['t1'], vib: 0.5, drift: 0 }]);
+  const n = t.aufgerufen.length;
+  assert.equal((await t.a.schreibe({ art: 'form', ids: ['t1'] })).ok, false, 'no factor: nothing sent');
+  assert.equal((await t.a.schreibe({ art: 'form', ids: [], vib: 0 })).ok, false, 'no note: nothing sent');
+  assert.equal(t.aufgerufen.length, n);
+  await t.a.schreibe({ art: 'form', ids: ['t9'], vib: 0 });
+  assert.equal(t.gesendet(n), null, 'a note that is gone sends nothing');
+});

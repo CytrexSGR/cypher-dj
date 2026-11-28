@@ -25,6 +25,8 @@ export const ART_JE_ADRESSE: Record<string, string> = {
 // rest together. Neither carries a decision, both are meters.
 export const NICHT_INS_JOURNAL = new Set([
   '/uhr', '/zustand/kern', '/zustand/deck', '/zustand/komp', '/zustand/ein', '/pegel', '/zustand/mix', '/zustand/spektrum',
+  '/zustand/mod',   // strand 6: 25 Hz per modulator (up to 16 = 400 lines per second), a meter, no decision
+  '/zustand/arr/midi',   // strand 7 task 3.3: MIDI stage counters, 2 Hz per track with a stage (up to 128 = 256 lines per second), a reading, no decision
   '/e/ins_gr',   // 1.10 slice 4a: gain reduction of up to 12 insert stages at 20 Hz = 240 lines per second, a meter, no decision
   '/e/stufe_pegel',   // device faces T9: input and output peak of up to 14 compressor and limiter stages plus the channel compressors at 20 Hz, a meter, no decision
 ]);
@@ -40,6 +42,8 @@ export const GENUTZT = [
   '/k/vorschlag_kanal', '/e/regler', '/e/taste', '/zustand/deck', '/zustand/kern', '/test/hand',
   '/zustand/komp',  // Effekt-Sektion 2026-10-11: ebenso
   '/zustand/mix', '/zustand/spektrum',  // A6: ebenso
+  '/zustand/mod',  // strand 6: ebenso
+  '/zustand/arr/midi',  // strand 7 task 3.3: ebenso
   '/e/ins_gr',  // 1.10 slice 4a: read only to keep it out of the journal
   '/e/stufe_pegel',  // device faces T9: ebenso
 ];

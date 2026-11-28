@@ -84,7 +84,7 @@ test('AK15 (real hand, real server): Cypher arm, gesture and override are 403 nu
   await c.connect(new StdioClientTransport({ command: process.execPath, args: [HAND, '--seite', seite] }));
   t.after(() => c.close());
   const namen = (await c.listTools()).tools.map((x) => x.name);
-  assert.deepEqual(namen.filter((n) => /arm|geste|uebersteuer/.test(n)), []);
+  assert.deepEqual(namen.filter((n) => /(^|_)arm|geste|uebersteuer/.test(n)), []);
   const wirkt = async (name, arguments_, erwartet) => {
     const n = px.gesehen.length;
     const r = await c.callTool({ name, arguments: arguments_ });

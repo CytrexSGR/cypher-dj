@@ -11,7 +11,7 @@ import { warteBis } from './support/proj_context.mjs';
 import { notenBereich, CURVE_ID } from '../areas/proj/notes.ts';
 import { NotenRender } from '../areas/proj/notes_render.ts';
 import { alsAntwort } from '../areas/proj/output.ts';
-import { kurveDatei, MASCHINE_VERSION, NOTEN_SR, renderSchluessel } from '../project/notes_contract.ts';
+import { kurveDatei, MASCHINE_VERSION, NOTEN_SR, renderSchluessel, zeilePruefung } from '../project/notes_contract.ts';
 
 const ATTRAPPE = path.join(import.meta.dirname, 'support', 'notes_mock.mjs');
 const SHA = 'a'.repeat(64);
@@ -146,7 +146,14 @@ test('a fast second edit of the same clip replaces the queued job; while renderi
 });
 
 test('the second render of a clip passes --vorher and --nur with the changed ids (protocol of the stand-in)', async (t) => {
-  const z = await mitRender(t);
+  // the content of --vorher-liste at the spawn (the file lives in the job's temp folder)
+  const listen = [];
+  const spawn = (cmd, args, o) => {
+    const i = args.indexOf('--vorher-liste');
+    listen.push(i >= 0 ? JSON.parse(fs.readFileSync(args[i + 1], 'utf8')) : null);
+    return echtSpawn(cmd, args, o);
+  };
+  const z = await mitRender(t, { opt: { spawn } });
   await z.erkenne();
   await z.ton('c1', ['t2'], 2);
   assert.ok(await z.nr.bereit(10000));
@@ -162,6 +169,14 @@ test('the second render of a clip passes --vorher and --nur with the changed ids
   const arg = (x, n) => x.argv[x.argv.indexOf(n) + 1];
   assert.equal(arg(r[1], '--vorher'), z.renderDatei(a));
   assert.equal(arg(r[1], '--nur'), 't3');
+  // --vorher-liste: the order the earlier render was made from (t2 +2, no t3 target), so the engine can clear a moved note
+  assert.equal(path.dirname(arg(r[1], '--vorher-liste')), path.dirname(r[1].argv[3]), 'beside the order');
+  const vl = listen.filter((x) => x !== null);
+  assert.equal(vl.length, 1);
+  assert.equal(vl[0].kurve, z.clip().audio_noten.kurve);
+  assert.equal(vl[0].liste.find((n) => n.id === 't2').ton, z.clip().audio_noten.liste.find((n) => n.id === 't2').ton);
+  assert.equal(vl[0].liste.find((n) => n.id === 't3').ton, undefined);
+  assert.equal(r[0].argv.includes('--vorher-liste'), false, 'the first render has no earlier list');
   assert.deepEqual(z.inhalt(b, ['t2', 't3']), { falsch: [], draussen: 0, laenge: true });
   // a reset of t2: the engine recomputes t2 from the source
   await aendereReset(z, ['t2']);
@@ -530,4 +545,32 @@ test('export: a render that cannot come refuses with the text of the cause, not 
   try { f = { code: 200, body: await p.ausgabe.exportiere({}) }; } catch (x) { f = alsAntwort(x); }
   assert.equal(f.body.fehler, 'noten_render_fehlt');
   assert.equal(f.body.text, 'cypherdj-noten is not built or not installed');
+});
+
+test('the measured pitch of the render line (messung) is kept with the render state (the GET field `render` is that state); a bad entry fails the job', async (t) => {
+  const z = await mitRender(t, { env: { NOTEN_ATTRAPPE_MESSUNG: '1' } });
+  await z.erkenne();
+  await z.ton('c1', ['t2'], 2);
+  assert.ok(await z.nr.bereit(10000));
+  const zu = z.nr.zustand('c1');
+  assert.equal(zu.zustand, 'bereit');
+  assert.deepEqual(zu.messung.map((m) => [m.id, m.fehler_ct]), [['t2', -0.5]]);
+  assert.equal(typeof zu.messung[0].ton_ist, 'number');
+  // the second translation finds the exact file: the state still carries it
+  z.nr.datei(z.clip());
+  assert.deepEqual(z.nr.zustand('c1').messung, zu.messung);
+});
+
+test('zeilePruefung: the render line accepts messung (optional) and refuses a malformed one', () => {
+  const basis = { status: 'ok', datei: 'x.f32', bereiche: [[0, 10]], sekunden: 0.1 };
+  const gut = [{ id: 't1', ton_ist: 74.04, fehler_ct: 4.5 }];
+  assert.equal(zeilePruefung(basis), null, 'without messung');
+  assert.equal(zeilePruefung({ ...basis, messung: [] }), null);
+  assert.equal(zeilePruefung({ ...basis, messung: gut }), null);
+  assert.equal(zeilePruefung(JSON.stringify({ ...basis, messung: gut }) + '\n'), null);
+  for (const schlecht of [{}, 'x', [{ id: 't1', ton_ist: 70 }], [{ id: '', ton_ist: 70, fehler_ct: 0 }], [{ id: 't1', ton_ist: '70', fehler_ct: 0 }],
+    [{ id: 't1', ton_ist: 70, fehler_ct: 0, extra: 1 }], [{ id: 't1', ton_ist: 200, fehler_ct: 0 }], [null]]) {
+    assert.equal(zeilePruefung({ ...basis, messung: schlecht })?.grund, 'format', JSON.stringify(schlecht));
+  }
+  assert.equal(zeilePruefung({ status: 'ok', programm: 'cypherdj-noten', vertrag: 1, messung: gut })?.grund, 'format', 'messung belongs to render only');
 });

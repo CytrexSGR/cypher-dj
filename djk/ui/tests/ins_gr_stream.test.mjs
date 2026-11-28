@@ -49,3 +49,10 @@ test('lage: ins_gr holds the fresh readings per stage, is absent without any, an
   await warte(600);
   assert.equal('ins_gr' in await lage(), false, 'everything expired');
 });
+
+test('lage: ins_gr keeps a negative reading (an EQ boost, a transient attack), it is not clamped to 0', async (t) => {
+  const { i, lage } = await oeffneStrom(t);
+  i.vomKern('/e/ins_gr', { kanal: 'ins/eq/2', gr_db: -3.04 });
+  i.vomKern('/e/ins_gr', { kanal: 'ins/komp/1', gr_db: 2 });
+  assert.deepEqual((await lage()).ins_gr, { 'ins/eq/2': -3, 'ins/komp/1': 2 });
+});

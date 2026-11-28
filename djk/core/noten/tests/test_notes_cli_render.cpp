@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -193,7 +194,24 @@ int main() {
     const json z = eineZeile(l);
     PRUEF(z.value("status", "") == "ok");
     PRUEF(z.value("datei", "") == voll.string());
-    PRUEF(z.contains("bereiche") && z["bereiche"].is_array() && z.contains("sekunden") && z["sekunden"].is_number() && z.size() == 4);
+    PRUEF(z.contains("bereiche") && z["bereiche"].is_array() && z.contains("sekunden") && z["sekunden"].is_number() && z.size() == 5);
+    // T13: the measured pitch of the output, one entry per edited note with a long enough middle, in list order
+    PRUEF(z.contains("messung") && z["messung"].is_array() && z["messung"].size() == 1);   // t2 is 72 ms long: no middle of 4096 samples, no entry
+    std::vector<std::string> ids;
+    for (const json& m : z["messung"]) {
+      PRUEF(m.is_object() && m.size() == 3 && m.contains("id") && m.contains("ton_ist") && m.contains("fehler_ct"));
+      if (!m.is_object() || m.size() != 3) continue;
+      ids.push_back(m["id"].get<std::string>());
+      // ton_ist and fehler_ct belong together: the error is the measured pitch against the target of the note in cents (0.1, ton_ist 0.001)
+      for (const json& n : beide["liste"]) {
+        if (n["id"] != m["id"]) continue;
+        const double soll = n["ton"].get<double>();
+        PRUEF(std::fabs((m["ton_ist"].get<double>() - soll) * 100.0 - m["fehler_ct"].get<double>()) < 0.2);
+        std::fprintf(stderr, "messung %s: ton_ist %.3f soll %.3f fehler_ct %.1f\n", ids.back().c_str(), m["ton_ist"].get<double>(), soll, m["fehler_ct"].get<double>());
+        PRUEF(std::fabs(m["fehler_ct"].get<double>()) < 20.0);
+      }
+    }
+    PRUEF(ids == std::vector<std::string>({"t1"}));
     PRUEF(!fs::exists(voll.string() + ".tmp"));
     Stereo ref;
     auto r = rendere(quelle, sd.k, liste(beide), nullptr, nullptr, ref, nullptr);
@@ -260,6 +278,7 @@ int main() {
     PRUEF(l.code == 0);
     const json z = eineZeile(l);
     PRUEF(z.contains("bereiche") && z["bereiche"].is_array() && z["bereiche"].empty());
+    PRUEF(z.contains("messung") && z["messung"].is_array() && z["messung"].empty());
     PRUEF(dateiGleich(aus, q));
   }
 

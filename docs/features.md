@@ -93,6 +93,9 @@ of the beta. The short version is the [README](../README.md).
 - Named markers on the timeline of the PRODUCTION view (up to 64 per project): a click jumps the start marker there, Shift
   click loops from the marker to the next one (and so chooses the export range), double click renames, drag moves on
   the grid. The agent reads and writes them with the project
+- A chord lane row under the ruler of the PRODUCTION view (CHORDS next to + MARKER, up to 512 entries): chord symbols or keys
+  from a beat on, edited by double click, drag and Delete. A track whose MIDI FX Scale is Project key follows it, for clip notes
+  and played keys. The lane is stored, sent with the playback and read by the engine. The agent writes it with the project
 - Up to 128 tracks, 16 group tracks and 8 returns; every track goes to the production master or into a group, and groups
   can sit inside groups (a DRUMS group holding KICK, PERC and HATS groups, each with its own inserts, fader and sends)
 - Audio tracks: drag a sample from the library onto a track; clips snap to the grid and can be moved, trimmed, split,
@@ -109,6 +112,16 @@ of the beta. The short version is the [README](../README.md).
   plus guitar and piano when they carry signal (an empty stem is folded into other). Four to six tracks appear under the
   clip in a group, beat-exact, and the original is muted; one undo step takes it all back. The run shows its progress
   and can be cancelled. It needs a CUDA GPU, there is no CPU path
+- **Note editor** for single-voice audio clips (a vocal, a lead, a bass line): Detect Notes finds the notes and shows
+  them over the clip. Drag a note up or down to change its pitch (up to 24 semitones), drag it sideways to move it in
+  time, or drag an edge to stretch it; time snaps to 1/16 of the clip grid, Alt frees it. A neighbour that touched the
+  moved edge follows it, and a stretch beyond 0.25 to 4 times is refused. The context menu quantises the starts to
+  1/16 and snaps the pitch to the project key or to semitones, both with a strength from 0 to 100 percent. Vibrato and
+  drift of a note can be set from 0 to 400 percent of what was sung (100 leaves it as sung), and "Flatten vibrato" and
+  "Flatten drift" set them to 0. Every gesture is one undo step, the clip plays the edit once it is rendered, and
+  untouched parts stay bit-identical. The render measures each edited note in the result (a note too short or unvoiced has no entry) and reports how far it lands
+  from its target pitch in cents; the agent reads this and the time and pitch offsets of each note with `proj_noten`
+  and edits with `audio_noten_aendern` and `audio_noten_raster`
 - Instrument tracks with the built-in RB-338, a Cypher Modular graph (up to 16 such tracks), a one-shot kit or Surge XT
   (two hosted slots; the patch is chosen from the Surge library and stored in the project); notes are drawn in a
   piano roll with velocity
@@ -121,7 +134,8 @@ of the beta. The short version is the [README](../README.md).
   MIDI in. Count-in, punch in and out, overdub, input monitoring, and takes placed with the latency compensated.
   Every pass is kept as a take
 - **Takes and comping**: each take is its own lane under the track; drag a range on a take lane to comp it into the
-  track with seam fades, and audition a single take. Audio tracks only
+  track with seam fades, and audition a single take. Instrument tracks have takes too: a MIDI recording with the loop on
+  keeps every loop pass as a take lane
 - **Routing**: group tracks that fold in the arrangement (Ctrl+G groups the selected tracks), a routing matrix
   for outputs, sends and sidechain keys, and resampling of any track, group, return or the master into a new audio
   track
@@ -132,6 +146,20 @@ of the beta. The short version is the [README](../README.md).
   and pan). Groups, returns and the master have rows of their own for the parameters of their insert stages, and a
   return also for its fader. A track can automate the level of an existing send into a return as well (dB, tracks only,
   not groups; evaluated once per audio block, so a step is smoothed over up to 21 ms); a send lane is not grabbed by hand
+- **Modulators**: an LFO with five shapes (sine, triangle, saw, square, random), tempo synced in bars and beats or free in
+  Hz, or an envelope follower that follows the level of another track (attack, release and sensitivity; the pad ducks with
+  each kick), that swings a target around its base value: a track fader, a track pan, a return fader, a knob of a Cypher
+  Modular track, a send level, a parameter of an insert stage, a rack macro or a parameter of a plugin. Depth is set in the unit of the target (dB, pan units, a fraction of the knob), bipolar or unipolar, with a phase
+  and a smoothing time so square and random steps do not click. The offset is added on top of whatever the target plays
+  (value, lane, your hand), so turning the knob moves the centre while the sweep keeps running. Modulators run while the
+  transport stands and are rendered the same way in the export; the faces of the compressor, saturator and limiter draw a
+  ring on a modulated knob. Up to 16 modulators with 8 targets each per project; set them with "+ Mod" in the lane row of a
+  track head, with "Mod" in an insert's popover and in the parameter rows of a plugin, or by the agent. The live value shows as a ring around the knob and a second marker on the fader and pan, and the agent reads it with `proj_auto` and a `mod_id`
+- **MIDI FX**: a chain on an instrument track between notes and instrument, in a strip above the front panel of the device
+  view: arpeggiator (seven patterns, rates 1/2 to 1/32 with triplets on the project grid or free in Hz, 1 to 4 octaves, gate),
+  and chord, scale, velocity (curve, fixed, random) and chance, in the order chord, scale, arp, velocity, chance, with a seed
+  that makes the random parts repeat. Clip notes, played keys and the agent's notes all go through it, the export renders it
+  like the playback, and a recording keeps what you played. The agent reads per track how many notes went in and out
 - **Inserts**: up to five stages per strip on a track, a group, a return and the production master, taken from a pool
   of our own devices: compressors, EQs, a saturator, a limiter, a utility (stereo width 0 to 4 and bass mono) and a
   Cypher Modular effect graph as a stage, with a tempo-synced delay return shipped as an example. Pre or post fader sends, a gain reduction readout
@@ -162,7 +190,7 @@ of the beta. The short version is the [README](../README.md).
   loop range, and the louder one is turned down by the difference, so the comparison is at the same loudness. It is
   matched for that range, bypasses all master stages together, and is refused with a plugin stage or a fader lane on
   the master
-- **Sidechain**: a compressor stage can be keyed by another track, and through the agent's tools also by a group, a
+- **Sidechain**: a compressor stage or an EQ stage with dynamic bands can be keyed (KEY button on the stage, or the agent's tools) by another track, a group, a
   return or a DJ deck; keys that would form a cycle or arrive too late are refused with a reason. One command sets up
   Duck by Kick
 - **Sends and returns**: eight returns, each with one send per track or group and an optional Cypher Hall
@@ -227,6 +255,10 @@ of the beta. The short version is the [README](../README.md).
   Surge states, running loop tracks) that comes back from the next bar, with the state before saved as `_vor_laden` so a
   restore can be undone. Stored setups (`aufbau`) add the tempo, the four container faders and the graphs of the Cypher
   Modular streams, live outside any project and rebuild the studio over 2 bars, also after a core restart
+- A live harmony lane (`harmonie`): one repeating chord sequence such as `Am7 Dm7 G7 Cmaj7` that the Strudel streams follow.
+  In a pattern, `.harm(octave)` plays scale degrees of the lane key and `.akkordton(octave)` the tones of the lane chord, so
+  bass, pad and melody stay in one key. A change is one call and every stream lands on the same downbeat; the studio status
+  counts the planned notes that lie outside the lane per stream
 - Timed moves and arcs: a `spur` switches patterns of any pattern stream at a bar, and Strudel patterns fade with
   `.rein(n)` and `.raus(n)`. `bogen` compiles layers with entry and exit bars, fades and one break and drop into one such
   track, and `warte` can wait until a track is a number of bars before its end
@@ -250,6 +282,10 @@ references before they went in:
 - **Cypher EQ**: a parametric 8-band EQ (a filter bank of state-variable filters, 2x oversampled) whose
   curves follow the analog target curve up to 20 kHz within 0.27 dB, where a plain bilinear design is
   off by several dB near the top
+  In the production core the EQ stage is also EQ Pro: a bell or shelf band can be dynamic (it cuts or boosts only above or
+  below a threshold, up to a range, with attack and release per stage; in a key mode it listens to another track, a group,
+  a return or a DJ input through the KEY button, so a bass shelf can duck only while the kick plays), the stage reports its deepest change, and a
+  De-esser entry in the insert menu puts up the same stage as a dynamic high shelf for vocals
 - **Cypher Hall**: a spectral reverb (energy decay per frequency bin, early reflections, frequency-wise
   ducking, freeze). It is the reverb on the send, the REVERB beat FX and the Hall of the arrangement's returns
 - **Cypher Space** (`fx-space`): a convolution reverb with zero added latency and four rooms (hall, room, plate, chamber), your own
@@ -258,11 +294,18 @@ references before they went in:
   It was measured on probe signals and has not been judged by a listener yet
 - **Cypher Comp**: a feed-forward compressor after Giannoulis, Massberg and Reiss (2012) with soft knee,
   parallel mix, external sidechain and a high-pass in the detector; six presets
+- **Cypher Transient**: a transient shaper as an insert stage on any strip: one gain for the onset of a sound and one for the
+  tail after it (each from -24 to +24 dB), a detector time of 1 to 100 ms, output level and dry/wet mix; no latency
+- **Cypher Imager**: a three-band stereo imager as an insert stage: the width of the low, mid and high band is set apart
+  (the low band can only be narrowed), both crossovers move, and everything below a chosen frequency can be made mono; no latency
 - **Cypher Echo** (`fx-echo`): a character delay with seven synced divisions and a free time, high and low cut and drive
   inside the feedback, tape wow and flutter, ping-pong and ducking by the input; five factory presets
 - **Cypher Saturation**: a tanh saturator with first-order antiderivative antialiasing (Bilbao et al. 2017)
   at 2x oversampling; on a hard-driven sawtooth the aliasing stays below -60 dB, against -50 dB without
-  oversampling. Available as a plugin and as an insert stage in the production core
+  oversampling. Available as a plugin and as an insert stage in the production core.
+  In the production core the stage also has soft and hard clip curves with a ceiling (-24 to 0 dBFS), so it works
+  as the Cypher Clipper: the Clipper entry in the insert menu, and a CLIP button on the master strip that puts a
+  clipper in front of the master limiter. The stage reports how far it goes over its ceiling
 - **Cypher Drive** (`fx-drive`): an insert device with six curves (tape, tube, soft clip, hard clip, wavefolder,
   bit crush), drive, character, tone, output and mix, and a three-band mode with its own drive per band; six
   factory presets
@@ -369,6 +412,10 @@ The lists above are the headline. Also in there:
   second strip: a track or sample dragged from the shelf, or a reference curve stored by role (SAVE REF); the
   reference is level-matched and the largest differences in tonal balance are named. The source LIVE OUTPUT shows the
   master output as it plays (spectrum with held maximum, rolling picture, stereo with a vectorscope, momentary loudness, true peak).
+  FIND MASKING renders every sounding track once, compares all pairs and lists the worst conflicts, each with a proposed
+  EQ cut on the quieter strip and an APPLY button (one undo step).
+  Where a source has narrow resonances, TAME RESONANCES puts up to three dynamic EQ bands on them (they cut only while the peak
+  sounds), also in one undo step.
   The agent reads the same numbers with the tools `proj_analyse`, `analyse_referenz` and `analyse_live`
 - **FIND SOUND window (STUDIO)**: finds a sound together with you instead of handing you a preset. For the Cypher
   Modular instrument of the selected track it measures neighbours of the current sound that differ in exactly one
@@ -397,7 +444,7 @@ The lists above are the headline. Also in there:
 - **Extra pattern streams**: five more channels (erz/5 to erz/7, erz/9 and erz/10) can each carry a Cypher
   Modular graph, started with `djk-start --strudel --bk-stroeme`; they can be recorded onto production tracks. The
   graph knobs can be learned onto a MIDI controller, and a project remembers which graph sits on which channel
-- **The agent's side**: 119 tools in the MCP server. Besides playing it can measure a deck behind its
+- **The agent's side**: 120 tools in the MCP server. Besides playing it can measure a deck behind its
   closed fader, read the levels of the last seconds, wait on the master clock for a number of bars, run
   automation tracks and ramps over bars, and cancel everything it started. The MCP tools have no proposal call: a plan
   is offered as a proposal through the conductor (`djk-spiel plan`), and the human accepts or rejects it with one key.
@@ -514,8 +561,8 @@ mostly against a silent test sink. Not benchmarks.
   change in steps of 20 ms, not sample-accurate), a sidechain key only for plugins with four audio inputs, no CLAP, a
   multi-plugin VST3 bundle needs the shim module from the install (without it only its first plugin loads), and a
   project with an active plugin stage takes as long to export as the song lasts. The limiter stage detects true peaks (4x oversampled), and on the master chain it sits before the production master fader. Automation lanes cover fader, pan, mute,
-  solo, four RB-338 parameters, insert stage parameters, the rack macros and Cypher Modular knobs. Takes and comping are for audio
-  tracks; bounce and merge refuse a track that has insert stages. Export
+  solo, four RB-338 parameters, insert stage parameters, the rack macros and Cypher Modular knobs. Takes and comping work on audio and instrument tracks; MIDI takes
+  come from a recording over a loop (one take per pass); bounce and merge refuse a track that has insert stages. Export
   is refused while the transport is running. The live track meters show sample peaks; loudness per track is measured offline.
   The master meter measures the master output as heard, so a playing deck or the set limiter is included; its
   integrated value counts only what was measured while the page or the agent read it. A/B on the master is matched
@@ -570,7 +617,6 @@ Features with a control in the page:
 - Tracker view: song as sections of rows over instrument tracks
 - Tracker: import of MOD files
 - Takes and comping (audition, comp lanes)
-- Rack with devices on a track, macros, member targets
 - Foreign plugins (VST3, LV2) hosted through Carla in their own processes
 - Plugin parameter learning and panels
 - ANALYZE window (a view of the analysis)
@@ -604,8 +650,6 @@ Labs features without a control in the page (hardware, operations, or only reach
 - Windows plugins through yabridge and Wine
 - Native Instruments (Kontakt) route
 - Stem separation of an audio clip (drums, bass, other, vocals; BS-RoFormer on the GPU)
-- Merge selected tracks into one new track
-- Resample a strip to a new track
 - Loudness per track, offline on request
 - Analysis of a strip, comparison to a reference measurement
 - Structure and cue suggestion pipeline

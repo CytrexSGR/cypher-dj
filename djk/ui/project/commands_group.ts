@@ -3,7 +3,8 @@
 import {
   blendFader, blendPfad, NEU_TRIM_MIN, NEU_TRIM_MAX, FADER_MAX, FADER_MIN, MAX_BEAT, MAX_GRUPPEN, MAX_SPUREN, insertWertParameter, type InsertPoolArt,
   alleInserts, sucheStrang, alleRacks, gliedMakroParam, makroFaehig, MAKRO_NAME_MAX, MAX_MAKROS, MAX_MAKRO_ZIELE, MAX_RACK, MAX_VARIATIONEN,
-  type RackZiel, SPUR_FARBEN, istObjekt, neueId, pruefeModulFehler, sucheSpur, type RackGeraet, MAX_GLIEDER, type Gruppe, type Projekt, type Spur,
+  modulatorenBereinigen, type RackZiel, SPUR_FARBEN, istObjekt, neueId, pruefeModulFehler, sucheSpur,
+  type RackGeraet, MAX_GLIEDER, type Gruppe, type Projekt, type Spur,
 } from './model.ts';
 import { LPB_VORGABE, TICKS_VORGABE } from '../public/tracker/grid_model.js';
 import { LPB_WERTE, TICKS_MAX, TICKS_MIN } from './tracker.ts';
@@ -299,6 +300,7 @@ export const GRUPPE = {
     if (p.plaetze) p.plaetze = p.plaetze.map((e) => ('gruppe' in e && e.gruppe === g.id ? { typ: 'track' } : e)) as typeof p.plaetze;
     for (const r of (p.returns ?? []).filter((x) => x.gruppe === g.id)) PRO_BEFEHL.return_loeschen(p, { befehl: 'return_loeschen', return_id: r.id }, ctx);
     gl.splice(gl.indexOf(g), 1);
+    modulatorenBereinigen(p);   // strand 6: a modulator target on the group's strip goes with it
     // slice 5: a key on this group would dangle
     for (const x of alleInserts(p)) if (x.insert.key?.quelle === 'grp' && x.insert.key.nr === g.nr) delete x.insert.key;
     pruefeAlleSchluessel(p);   // the children moved up: levels changed, a remaining key may now be late

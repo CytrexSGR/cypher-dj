@@ -9,12 +9,16 @@ import {
   rackMakroBefehl, rackVariationen, variationBefehl,
 } from './inserts.js';
 import { stufenZustand } from './insert_popover.js';
+import { baueModFeld, rackModZiel, modKnopfZustand } from './mod_line.js';
 
 // ---- the rack panel of a strip (slice 4c) ---------------------------------------------------------------------------------------------------
 const rackAendere = (ctx, s, label, makros) => { if (makros) ctx.aendere(label, [rackSetzenBefehl(s.id, makros)]); };
 function rackPanel(ctx, greift, s) {
   const el = document.createElement('div');
   el.className = 'p-ins-popover p-rack'; el.dataset.strang = s.id;
+  // strand 6: a Mod button per macro (target rack.m<nr>); the controls of the target the last button chose sit at the top, like in the insert popover
+  const modFeld = baueModFeld({ aendere: (...a) => ctx.aendere(...a), projekt: () => ctx.st.projekt, strangId: s.id, art: s.art });
+  el.append(modFeld.el);
   const L = rackLabels(s.name), makros = rackMakros(s), frei = freieZiele(s), freiGlied = freieGliedZiele(s), voll = rackZiele(s) >= MAX_MAKRO_ZIELE;
   for (let nr = 1; nr <= MAX_MAKROS; nr++) {
     const m = makros[nr - 1], b = document.createElement('div');
@@ -30,6 +34,11 @@ function rackPanel(ctx, greift, s) {
       q('.p-makro-wert').textContent = `${Math.round(Number(regler.value) * 100)} %`;
       ctx.aendere(`${m.name || `Macro ${nr}`} on ${s.name}`, [rackMakroBefehl(s.id, nr, Number(regler.value))], kk);
     };
+    const mb = document.createElement('button');
+    mb.type = 'button'; mb.className = 'p-ins-mod'; mb.textContent = 'Mod'; mb.dataset.ziel = rackModZiel(nr);
+    mb.setAttribute('aria-label', `Modulate macro ${nr} on ${s.name}`);
+    mb.addEventListener('click', () => { modFeld.knopf(mb.dataset.ziel).then(() => el.modAktualisiere?.(s)); });
+    q('.p-makro-kopf').append(mb);
     regler.addEventListener('input', sende);
     regler.addEventListener('pointerdown', () => greift.add(kk));
     regler.addEventListener('change', () => greift.delete(kk));
@@ -94,6 +103,16 @@ function rackPanel(ctx, greift, s) {
   info.className = 'p-rack-info';
   info.textContent = `${rackZiele(s)} of ${MAX_MAKRO_ZIELE} mappings. A mapped parameter is driven by its macro; its own control is greyed.`;
   el.append(info);
+  // the state of the Mod buttons from the project (active = the macro has a modulator); a strip without a rack has no macro to modulate
+  el.modAktualisiere = (st) => {
+    modFeld.zeige();
+    for (const b of el.querySelectorAll('.p-ins-mod')) {
+      const z = modKnopfZustand(ctx.st.projekt, s.id, b.dataset.ziel), rack = !!(st ?? s).rack;
+      b.classList.toggle('an', z.aktiv); b.setAttribute('aria-pressed', String(z.aktiv)); b.disabled = z.gesperrt || !rack;
+      b.title = rack ? z.titel : 'Map a parameter first: a macro exists once the rack has a mapping';
+    }
+  };
+  el.modAktualisiere(s);
   return el;
 }
 // the variations of the rack (1.9 U8 T11, E13): named snapshots of the four macro values; save under a name (an existing name is replaced), load, delete
@@ -143,7 +162,7 @@ function rackWerteZeigen(greift, el, s) {
 export function baueRackPanel(ctx, strang) {
   const { greift } = stufenZustand(ctx);
   const el = rackPanel(ctx, greift, strang);
-  const aktualisiere = (s) => rackWerteZeigen(greift, el, s ?? strang);
+  const aktualisiere = (s) => { rackWerteZeigen(greift, el, s ?? strang); el.modAktualisiere?.(s ?? strang); };
   el.aktualisiere = aktualisiere;
   return { el, aktualisiere };
 }

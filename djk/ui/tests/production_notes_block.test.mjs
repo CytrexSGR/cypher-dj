@@ -23,7 +23,7 @@ function behaelter(namen) {
 function aufbau({ p = projekt(clip()), antworten = {}, bestaetigt = true } = {}) {
   const post = [], melden = [], fragen = [], gebunden = [];
   const oben = behaelter(['notencanvas', 'notenstand', 'notenanalyse']);
-  const knopf = behaelter(['notenknopf', 'notenbalken', 'notenabbruch']);
+  const knopf = behaelter(['notenknopf', 'notenbalken', 'notenabbruch', 'notenstaerke']);
   const ctx = { st: { slug: 'proj', projekt: p, stems: null }, fehlerText, beimEreignis: [], beimBild: [],
     holeGet: async (weg) => antworten[weg.split('?')[0]] ?? { status: 404, j: { fehler: 'noten_unbekannt' } },
     holeJson: async (weg, koerper) => { post.push([weg, koerper]); return antworten[weg] ?? { status: 200, j: { auftrag_id: 9 } }; },
@@ -34,7 +34,7 @@ function aufbau({ p = projekt(clip()), antworten = {}, bestaetigt = true } = {})
   const zu = { n: 0 };
   const block = bindeNoten(ctx, oben, knopf, { wellen, bindeEditor, menue: () => {}, schliesse: () => { zu.n++; }, frage: (t) => { fragen.push(t); return bestaetigt; } });
   const k = { canvas: oben.kinder2.notencanvas, stand: oben.kinder2.notenstand, analyse: oben.kinder2.notenanalyse, knopf: knopf.kinder2.notenknopf,
-    balken: knopf.kinder2.notenbalken, abbruch: knopf.kinder2.notenabbruch };
+    balken: knopf.kinder2.notenbalken, staerke: knopf.kinder2.notenstaerke, abbruch: knopf.kinder2.notenabbruch };
   const sse = (f, a = 'proj') => { for (const h of ctx.beimEreignis) h(a, f); };
   const bild = () => { for (const h of ctx.beimBild) h(); };
   const klick = (el) => { for (const f of el.ereignisse.click ?? []) f({ type: 'click' }); };
@@ -289,4 +289,74 @@ test('the markup of the clip detail: the block, the canvas with tabindex and no 
   // every call of the block in the detail view: the audio branch shows the clip, every other branch hides it
   assert.ok((detail.match(/notenTeil\.zeige\(/g) ?? []).length >= 6);
   assert.match(detail, /notenTeil\.zeige\(c\)/);
+});
+
+test('the strength field: default 100, remembered in localStorage, handed to the adapter; a broken storage does not matter', () => {
+  const alt = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  const speicher = new Map();
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: (k) => speicher.get(k) ?? null, setItem: (k, v) => speicher.set(k, v) } });
+  try {
+    const t = aufbau();
+    assert.equal(t.k.staerke.value, '100');
+    t.block.zeige(t.ctx.st.projekt.spuren[0].clips[0]);
+    t.k.staerke.value = '40';
+    for (const f of t.k.staerke.ereignisse.input ?? []) f({ type: 'input' });
+    assert.equal(t.gebunden[0].adapter.lies().staerke, 0.4);
+    assert.equal(speicher.get('djk.noten.staerke'), '40');
+    const t2 = aufbau();
+    assert.equal(t2.k.staerke.value, '40', 'remembered');
+    t2.block.zeige(t2.ctx.st.projekt.spuren[0].clips[0]);
+    assert.equal(t2.gebunden[0].adapter.lies().staerke, 0.4);
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, get() { throw new Error('blocked'); } });
+    const t3 = aufbau();
+    assert.equal(t3.k.staerke.value, '100');
+    t3.k.staerke.value = '10';
+    for (const f of t3.k.staerke.ereignisse.input ?? []) f({ type: 'input' });
+  } finally { if (alt) Object.defineProperty(globalThis, 'localStorage', alt); else delete globalThis.localStorage; }
+});
+
+test('hatZiele reads every target field: DETECT asks before it drops a note that only has vib/drift/formant/gain_db', async () => {
+  const { ZIEL_FELDER } = await import('../public/production/notes_block.js');
+  assert.deepEqual(ZIEL_FELDER, ['a', 'e', 'ton', 'vib', 'drift', 'formant', 'gain_db']);
+  for (const f of ['vib', 'drift', 'formant', 'gain_db']) {
+    const c = clip({ audio_noten: { kurve: 'k', liste: [{ id: 't1', qa: 0, qe: 1, qton: 60, p: 1, [f]: 0.5 }] } });
+    const t = aufbau({ p: projekt(c) });
+    t.block.zeige(c);
+    t.klick(t.k.knopf);
+    await t.warte();
+    assert.equal(t.fragen.length, 1, `${f} counts as an edit`);
+  }
+});
+
+test('vibrato and drift sliders: hidden without a selection, show the anchor factor, one op at the release, stay in range', async () => {
+  const c = clip({ audio_noten: { kurve: 'k', liste: [{ id: 't1', qa: 0, qe: 1, qton: 60, p: 1, vib: 0.5 }, { id: 't2', qa: 1, qe: 2, qton: 62, p: 1, drift: 3 }] } });
+  const t2 = (() => {
+    const oben = behaelter(['notencanvas', 'notenstand', 'notenanalyse']);
+    const knopf = behaelter(['notenknopf', 'notenbalken', 'notenabbruch', 'notenstaerke', 'notenvib', 'notendrift']);
+    const geschrieben = [], ctx = { st: { slug: 'proj', projekt: projekt(c), stems: null }, fehlerText, beimEreignis: [], beimBild: [], holeGet: async () => ({ status: 404, j: {} }),
+      holeJson: async () => ({ status: 200, j: {} }), melde: () => {}, aendereAus: () => Promise.resolve(true) };
+    let o = null;
+    const bindeEditor = (cv, adapter, opt) => { o = opt; adapter.schreibe = async (op) => { geschrieben.push(op); return { ok: true }; }; return { zeige() {}, los() {} }; };
+    const block = bindeNoten(ctx, oben, knopf, { wellen: { hole: () => ({ welle: null, fehler: null }) }, bindeEditor, menue: () => {}, schliesse: () => {}, frage: () => true });
+    return { block, knopf, ctx, geschrieben, auswahl: (ids, anker) => o.beiAuswahl(ids, anker) };
+  })();
+  t2.block.zeige(c);
+  const vib = t2.knopf.kinder2.notenvib, drift = t2.knopf.kinder2.notendrift;
+  assert.equal(vib.hidden, true, 'no selection: hidden');
+  t2.auswahl(['t1', 't2'], 't1');
+  assert.equal(vib.hidden, false); assert.equal(drift.hidden, false);
+  assert.equal(vib.value, '50', 'the anchor note has vib 0.5'); assert.equal(drift.value, '100', 'absent = as sung');
+  t2.auswahl(['t2'], 't2');
+  assert.equal(drift.value, '300');
+  t2.auswahl(['t1', 't2'], 't2');
+  vib.value = '0';
+  for (const f of vib.ereignisse.change) await f({ type: 'change' });
+  drift.value = '999';
+  for (const f of drift.ereignisse.change) await f({ type: 'change' });
+  assert.deepEqual(t2.geschrieben, [{ art: 'form', ids: ['t1', 't2'], vib: 0 }, { art: 'form', ids: ['t1', 't2'], drift: 4 }]);
+  t2.auswahl([], null);
+  assert.equal(vib.hidden, true);
+  vib.value = '10';
+  for (const f of vib.ereignisse.change) await f({ type: 'change' });
+  assert.equal(t2.geschrieben.length, 2, 'no selection: nothing is sent');
 });

@@ -100,3 +100,19 @@ test('POST /regler on the real server: spur/<slot>/bk/<k> is 409 ueber_projekt a
   assert.deepEqual([r.code, r.j.fehler], [409, 'ueber_projekt']);
   assert.equal(anKern(log, '/k/teil').length, 0);
 });
+
+test('ins/saett/<n>/kurve and decke are controller paths for slots 1..32 (strand 5 slice 3); unknown rows and slot 33 are not', () => {
+  for (const p of ['ins/saett/1/kurve', 'ins/saett/4/decke', 'ins/saett/2/drive', 'ins/saett/5/kurve', 'ins/saett/32/decke']) assert.equal(PFAD.test(p), true, p);
+  for (const p of ['ins/saett/1/foo', 'ins/saett/33/kurve', 'ins/saett/0/decke', 'ins/saett/05/an']) assert.equal(PFAD.test(p), false, p);
+});
+
+test('ins/trans/<n>/* (1..32) and ins/bild/<n>/* (1..16) are controller paths; unknown rows and the next slot are not', () => {
+  for (const p of ['ins/trans/1/an', 'ins/trans/32/angriff', 'ins/trans/7/halten', 'ins/trans/1/tempo', 'ins/trans/20/out', 'ins/trans/1/mix',
+    'ins/bild/1/an', 'ins/bild/16/grenze_tief', 'ins/bild/3/grenze_hoch', 'ins/bild/1/breite_tief', 'ins/bild/1/breite_mitte', 'ins/bild/16/breite_hoch', 'ins/bild/1/mono_unter']) assert.equal(PFAD.test(p), true, p);
+  for (const p of ['ins/trans/33/an', 'ins/trans/0/an', 'ins/trans/1/drive', 'ins/trans/1/b1/an', 'ins/bild/17/an', 'ins/bild/0/an', 'ins/bild/1/breite', 'ins/bild/1/b1/breite', 'ins/bild/1/sc']) assert.equal(PFAD.test(p), false, p);
+});
+
+test('ins/eq/<n>/d<m>/{dyn,schwelle,bereich}, dyn_attack and dyn_release are controller paths; band 0 and 9, unknown names and slot 161 are not', () => {
+  for (const p of ['ins/eq/1/d1/dyn', 'ins/eq/160/d8/bereich', 'ins/eq/42/d3/schwelle', 'ins/eq/1/dyn_attack', 'ins/eq/160/dyn_release', 'ins/eq/1/b8/platz']) assert.equal(PFAD.test(p), true, p);
+  for (const p of ['ins/eq/1/d0/dyn', 'ins/eq/1/d9/bereich', 'ins/eq/1/d1/an', 'ins/eq/1/b1/dyn', 'ins/eq/1/d1/dyn_attack', 'ins/eq/161/dyn_release', 'ins/eq/1/dyn']) assert.equal(PFAD.test(p), false, p);
+});

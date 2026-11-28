@@ -1,15 +1,55 @@
+// Strand 7 (D10): comp on an instrument track. The main lane is cut at von and bis (clip_teilen: a note across the seam is cut in two), main
+// clips inside go, and every take clip part inside joins as a fresh clip: notes with onset in [von, bis), length cut at bis, fresh ids, no seam
+// fades. A take clip that lies wholly inside the range and is no loop keeps its envelopes and effect commands, a cut one does not.
+function compMidi(p: Projekt, spur: Spur, take: Take, von: number, bis: number): void {
+  const ende = (c: Clip): number => c.start_beat + c.laenge_beats;
+  const drin = (c: Clip): boolean => c.start_beat < bis - COMP_EPS && ende(c) > von + COMP_EPS;
+  const hauptDrin = spur.clips.filter((c): c is MidiClip => c.art === 'midi' && drin(c));
+  for (const c of hauptDrin) {
+    const schnitt = (t: number): boolean => c.start_beat < t - COMP_EPS && ende(c) > t + COMP_EPS;
+    if (c.loop_beats != null && (schnitt(von) || schnitt(bis))) ab('ersetzen_loop', c.id);
+  }
+  const quellen = (take.clips as MidiClip[]).filter(drin);
+  if (notenGleich(notenImBereich(hauptDrin, von, bis), notenImBereich(quellen, von, bis))) return;      // no-op: nothing spent, nothing changed
+  teileClipsAn(p, spur, [von, bis]);
+  spur.clips = spur.clips.filter((c) => !drin(c));
+  const neu: MidiClip[] = [];
+  for (const q of quellen) {
+    const ganz = q.loop_beats == null && q.start_beat >= von - COMP_EPS && ende(q) <= bis + COMP_EPS;
+    const start = Math.max(q.start_beat, von), end = Math.min(ende(q), bis);
+    const k: MidiClip = ganz ? structuredClone(q) : { ...structuredClone(q), start_beat: start, laenge_beats: runde9(end - start), loop_beats: null };
+    if (!ganz) {
+      for (const f of ['huellkurven', 'fx', 'muster', 'verbund', 'seq'] as const) delete k[f];
+      if (q.loop_beats == null) delete k.loop_beats;
+    }
+    k.id = neueId(p, 'clip');
+    const rel = notenImBereich([q], start, end);
+    k.noten = rel.map(([b, ton, vel, laenge]) => {
+      const alt = q.loop_beats == null ? q.noten.find((n) => n.ton === ton && n.vel === vel && Math.abs(q.start_beat + n.beat - b) <= COMP_EPS) : undefined;
+      return { ...(alt ? structuredClone(alt) : { ton, vel }), id: neueNotenId(p), beat: runde9(b - start), laenge: runde9(laenge) } as Note;
+    });
+    neu.push(k);
+  }
+  for (const k of neu) {
+    const i = spur.clips.findIndex((c) => c.start_beat >= k.start_beat - COMP_EPS);
+    spur.clips.splice(i < 0 ? spur.clips.length : i, 0, k);
+  }
+}
+
 // Track commands: create, change, delete and move a track, takes and the comp choice of the project API (handler table of commands.ts, moved unchanged).
 // The handlers reach each other through PRO_BEFEHL (commands_helpers.ts) at call time; commands.ts merges the tables.
 import {
   istGeraetZiel, passtGeraetZiel, FADER_MAX, FADER_MIN, MAX_ARM_AUDIO, MAX_BEAT, MAX_SPUREN, alleInserts, SPUR_FARBEN, MAX_TAKES_PRO_SPUR,
-  entferneLeereTakes, EQ_BAENDER, FX_NUMMERN, type FxNr, EQ_MIN, EQ_MAX, istObjekt, type EqBand, type Take, kanonisch, neueId, type AudioClip, type Clip,
-    type Spur, wirtSlots,
-  type SpurAufnahme,
+  entferneLeereTakes, EQ_BAENDER, FX_NUMMERN, type FxNr, EQ_MIN, EQ_MAX, istObjekt, type EqBand, type Take,
+  kanonisch, neueId, neueNotenId, type AudioClip, type MidiClip, type Clip, type Note, type Projekt,
+    type Spur, wirtSlots, midiStufeFehler,
+  type SpurAufnahme, modulatorenBereinigen,
 } from './model.ts';
 import {
   ab, erlaube, zahlOk, zahl, flagge, eingangVon, text, gruppeArg, idArg, spurVon, freezeFeld, bereinigeGliedZiele, takeName, takeVon, COMP_FADE_S,
-  COMP_EPS, teileClipsAn, compGleich, compFade, baueGeraet, type Handler,
+  COMP_EPS, teileClipsAn, compGleich, compFade, baueGeraet, runde9, type Handler,
 } from './commands_helpers.ts';
+import { notenImBereich, notenGleich } from './takes.ts';
 
 // eq: {band: dB} and kill: {band: boolean}; only the three bands, at least one key, nothing else
 function baenderArg(x: unknown, k: string): Record<string, unknown> {
@@ -142,7 +182,7 @@ export const SPUR = {
   take_neu(p, a) {
     erlaube(a, 'spur_id', 'name');
     const s = spurVon(p, idArg(a, 'spur_id'));
-    if (s.art !== 'audio') ab('take_nur_audio', s.id);
+    if (s.art === 'strom') ab('take_nur_audio', s.id);   // D10: audio and instrument tracks have take lanes
     if (s.zellen !== undefined) ab('argument_ungueltig', `${s.id} is a loop deck track: it holds cells, not take lanes`);
     if ((s.takes ?? []).length >= MAX_TAKES_PRO_SPUR) ab('takes_voll', `at most ${MAX_TAKES_PRO_SPUR} take lanes per track`);
     const nummer = (s.takes ?? []).filter((t) => t.art === undefined).length + 1;   // the Original lane does not count
@@ -176,7 +216,9 @@ export const SPUR = {
     const ende = (c: Clip): number => c.start_beat + c.laenge_beats;
     const drin = (c: Clip): boolean => c.start_beat < bis - COMP_EPS && ende(c) > von + COMP_EPS;          // overlaps [von, bis)
     const schneidet = (c: Clip, t: number): boolean => c.start_beat < t - COMP_EPS && ende(c) > t + COMP_EPS;   // t lies strictly inside
-    const quellen = take.clips.filter(drin);
+    if (spur.art !== 'audio') { compMidi(p, spur, take, von, bis); return; }
+    const takeClips = take.clips as AudioClip[];
+    const quellen = takeClips.filter(drin);
     for (const c of [...spur.clips, ...quellen]) {
       if (c.loop_beats != null && (schneidet(c, von) || schneidet(c, bis))) ab('ersetzen_loop', c.id);
     }
@@ -210,6 +252,7 @@ export const SPUR = {
       if (x.insert.sc === s.nr) delete x.insert.sc;
       if (x.insert.key?.quelle === 'spur' && x.insert.key.nr === s.nr) delete x.insert.key;   // slice 5: the same for a post key
     }
+    modulatorenBereinigen(p);   // strand 6: modulator targets on the track go with it (a follower on it as source turns off)
   },
 
   spur_verschieben(p, a) {
@@ -219,5 +262,16 @@ export const SPUR = {
     if (a.index < 0 || a.index >= p.spuren.length) ab('index_bereich', `${a.index} (0..${p.spuren.length - 1})`);
     p.spuren.splice(p.spuren.indexOf(s), 1);
     p.spuren.splice(a.index, 0, s);
+  },
+  // MIDI stage chain of an instrument track (plan strand 7, 1.4): replaces the whole object, null removes it
+  midi_stufe_setzen(p, a) {
+    erlaube(a, 'spur_id', 'midi');
+    const s = spurVon(p, idArg(a, 'spur_id'));
+    if (s.art !== 'instrument') ab('art_passt_nicht', `${s.id} is not an instrument track`);
+    if (a.midi === null) { delete s.midi; return; }
+    if (a.midi === undefined) ab('argument_ungueltig', 'midi: object or null expected');
+    const f = midiStufeFehler(a.midi);
+    if (f) ab('argument_ungueltig', f);
+    s.midi = structuredClone(a.midi);
   },
 } satisfies Record<string, Handler>;

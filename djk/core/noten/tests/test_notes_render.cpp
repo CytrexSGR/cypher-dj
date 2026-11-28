@@ -254,14 +254,9 @@ int main() {
     std::vector<AudioNote> l = mitZielen(m.liste, {{2, 2.0}});
     l[0].gain_db = 3.0;
     PRUEF(fehlerCode(rendere(m.x, m.k, l, nullptr, nullptr, aus, nullptr)) == "nicht_unterstuetzt");
-    for (int w = 0; w < 5; ++w) {
+    {   // a, e (test_noten_render_zeit), vib and drift (test_noten_render_vib) are rendered; formant is not
       std::vector<AudioNote> l2 = mitZielen(m.liste, {{2, 2.0}});
-      AudioNote& n = l2[2];
-      if (w == 0) n.a = n.qa + 0.1;
-      if (w == 1) n.e = n.qe - 0.1;
-      if (w == 2) n.vib = 2.0;
-      if (w == 3) n.drift = 2.0;
-      if (w == 4) n.formant = 3.0;
+      l2[2].formant = 3.0;
       PRUEF(fehlerCode(rendere(m.x, m.k, l2, nullptr, nullptr, aus, nullptr)) == "nicht_unterstuetzt");
     }
     const std::vector<AudioNote> ok = mitZielen(m.liste, {{2, 2.0}});

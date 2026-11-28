@@ -3,7 +3,9 @@
 Steps: j3.neu, j3.midi, j3.midi_live (SKIP), j3.instrument, j3.surge, j3.audio, j3.eingang (SKIP), j3.warp, j3.mix, j3.version,
 j3.export, j3.datei. Then the extension (1.0 features, each measured in an exported file or read back from the project):
 j3.midi_export, j3.einsammeln, j3.relink, j3.undo, j3.zip work on the project made above; j3.auto, j3.eq, j3.komp, j3.hall, j3.saett,
-j3.limiter, j3.pdc each build a small project of their own with a controlled source.
+j3.limiter, j3.pdc, j3.take, j3.rack, j3.plugin, j3.zusammen, j3.resample each build a small project of their own with a controlled source (j3.take SKIPs while no sound source
+exists that a production project can record, see `j3_take`; j3.plugin SKIPs without Carla or the LSP limiter plugin). `CYPHERDJ_TOUR_J3_SCHRITTE` (comma list of extension step ids, absent = all) runs only
+the named extension steps after the base steps.
 Two shortenings are named on purpose (they are SKIP steps or noted in the step values and in the manual chapter): audio comes from an offline bounce of the MIDI track instead of an input recording, MIDI comes from a file the tour writes
 instead of live MIDI. `schritte(t, hand=None, erweitert=None)`: the tests pass a fake hand, the tour CLI lets the tour start the real one
 (which also runs the extension).
@@ -21,6 +23,7 @@ import zipfile
 from pathlib import Path
 
 from . import runner as laeufer
+from . import j3_plugin, j3_rack, j3_take
 
 # `djk-start --arr1` starts the production host that Surge tracks need; Surge itself must be installed. Off unless asked for.
 OPTIONEN = ["--arr1"] if os.environ.get("CYPHERDJ_TOUR_ARR1") == "1" else []
@@ -977,11 +980,32 @@ def _pdc(t, hand, z):
             t.rot("pdc_versatz", text=f"left and right are {versatz} samples apart, the latent insert is not compensated")
 
 
+def _mixdown():
+    from . import j3_mixdown
+    return j3_mixdown
+
+
+ERWEITERUNG = (("j3.midi_export", _midi_export), ("j3.einsammeln", _einsammeln), ("j3.relink", _relink), ("j3.undo", _undo), ("j3.zip", _zip),
+               ("j3.auto", _auto), ("j3.eq", _eq), ("j3.komp", _komp), ("j3.hall", _hall), ("j3.saett", _saett), ("j3.limiter", _limiter),
+               ("j3.pdc", _pdc), ("j3.take", lambda t, h, z: j3_take.take(t, h, z)),   # late binding: j3_take imports this module
+               ("j3.rack", lambda t, h, z: j3_rack.rack(t, h, z)),
+               ("j3.plugin", lambda t, h, z: j3_plugin.plugin(t, h, z)),
+               ("j3.zusammen", lambda t, h, z: _mixdown().zusammen(t, h, z)),   # imported on first use: j3_mixdown reads J3.STILLE_DB at import
+               ("j3.resample", lambda t, h, z: _mixdown().resample(t, h, z)))
+
+
+def gewaehlte_schritte():
+    """The extension step ids named in CYPHERDJ_TOUR_J3_SCHRITTE (comma list), or None for all."""
+    roh = os.environ.get("CYPHERDJ_TOUR_J3_SCHRITTE", "").strip()
+    return {x.strip() for x in roh.split(",") if x.strip()} if roh else None
+
+
 def schritte(t, hand=None, erweitert=None):
     """The steps of the tour. `erweitert` adds the extension steps (1.0 features, see the module text); by default the real tour runs them
     (it starts its own hand) and a test with a fake hand does not."""
     z = {"name": f"tour-j3-{time.strftime('%H%M%S')}", "audio_frames": 0, "tempo": 120.0}
     eigene = hand is None
+    gewaehlt = gewaehlte_schritte()
     if erweitert is None:
         erweitert = eigene
     if eigene:
@@ -1000,8 +1024,9 @@ def schritte(t, hand=None, erweitert=None):
         _export(t, hand, z)
         _datei(t, hand, z)
         if erweitert:
-            for schritt in (_midi_export, _einsammeln, _relink, _undo, _zip, _auto, _eq, _komp, _hall, _saett, _limiter, _pdc):
-                schritt(t, hand, z)
+            for kennung, schritt in ERWEITERUNG:
+                if gewaehlt is None or kennung in gewaehlt:
+                    schritt(t, hand, z)
     finally:
         if eigene:
             hand.ende()

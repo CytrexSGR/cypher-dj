@@ -18,7 +18,7 @@ import {
   DETEKTOR_VERSION, NOTEN_HOP, NOTEN_SR, SEGMENTIERER_VERSION, kurveDatei, kurvePasstZurQuelle, kurvePruefung, rohPruefung, zeilePruefung,
   type NotenKurve, type NotenKurveRoh,
 } from '../../project/notes_contract.ts';
-import { NotenAudioFehler, baueNotenFeld, baueNotenProjekt, fertigHinweis, netzPasst, notenNochGleich, notenZeitlimitMs,
+import { NotenAudioFehler, baueNotenFeld, baueNotenProjekt, fertigHinweis, netzPasst, notenMass, notenNochGleich, notenZeitlimitMs,
   type NotenPlan } from '../../project/notes_audio.ts';
 import { alsAntwort, leseKoerper, type ProjZugang } from './area.ts';
 import { ProjFehler, type Antwort } from './session.ts';
@@ -402,7 +402,7 @@ export function notenBereich(ctx: BereichKontext, zugang: ProjZugang, o: NotenOp
       const sd = kurveDes(clip);
       return { code: 200, j: { clip_id: clip.id, quelle_sha: clip.quelle.sha256,
         kurve: sd ? { id: sd.kurve, detektor: sd.detektor, stimmhaft_anteil: sd.stimmhaft_anteil, mono: sd.mono ?? null } : null,
-        noten: clip.audio_noten ? clip.audio_noten.liste : null, analyse: an.standFuer(offen.slug, clip.id), render: o.render
+        noten: clip.audio_noten ? notenMass(clip.audio_noten.liste, sd) : null, analyse: an.standFuer(offen.slug, clip.id), render: o.render
           ? o.render.zustand(clip.id) : null } };
     }) },
     { methode: 'GET', pfad: '/proj/noten/kurve', schutz: 'offen', handler: (_q, r, url) => antworte(r, () => {

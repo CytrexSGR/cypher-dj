@@ -85,7 +85,7 @@ const DRIVE: f64 = 10.0;
 #[test]
 fn adaa1_mit_2x_unter_minus_60_db() {
     let mut s = Saett::neu(FS);
-    s.setze(&Einstellung { drive_db: 20.0, ausgang_db: 0.0, mix: 1.0 });
+    s.setze(&Einstellung { drive_db: 20.0, ausgang_db: 0.0, mix: 1.0, ..Einstellung::default() });
     s.leeren();
     let y = lauf(|v| {
         let (mut l, mut r) = ([v as f32], [v as f32]);
@@ -117,7 +117,7 @@ fn negativ_kontrolle_adaa1_1x_und_naiv_2x_reissen() {
 fn hoehen_bleiben_bei_kleinem_pegel() {
     // 10 kHz, Amplitude 1e-3, Drive 10: lineare Zone; Pegel gegen Drive·Eingang nach der Latenz
     let mut s = Saett::neu(FS);
-    s.setze(&Einstellung { drive_db: 20.0, ausgang_db: 0.0, mix: 1.0 });
+    s.setze(&Einstellung { drive_db: 20.0, ausgang_db: 0.0, mix: 1.0, ..Einstellung::default() });
     s.leeren();
     let n = 44100;
     let mut aus = Vec::with_capacity(n);
@@ -137,7 +137,7 @@ fn hoehen_bleiben_bei_kleinem_pegel() {
 #[test]
 fn mix_null_ist_verzoegert_bitgleich() {
     let mut s = Saett::neu(FS);
-    s.setze(&Einstellung { drive_db: 20.0, ausgang_db: 0.0, mix: 0.0 });
+    s.setze(&Einstellung { drive_db: 20.0, ausgang_db: 0.0, mix: 0.0, ..Einstellung::default() });
     s.leeren();
     let x: Vec<f32> = (0..2000).map(|i| ((i as f32) * 0.37).sin() * 0.9).collect();
     let (mut l, mut r) = (x.clone(), x.clone());

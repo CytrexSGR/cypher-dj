@@ -1,6 +1,11 @@
-// `render <quelle.f32> <kurve.json> <auftrag.json> <aus.f32> [--vorher <f32> --nur <id,id,...>]`: the pitch render (notes.md).
+// `render <quelle.f32> <kurve.json> <auftrag.json> <aus.f32> [--vorher <f32> --nur <id,id,...> [--vorher-liste <auftrag.json>]]`: the render
+// (notes.md). --vorher-liste is the order `vorher` was rendered from (same format); it lets an incremental render clear a moved note.
 #include <set>
 
+#include <algorithm>
+#include <cmath>
+
+#include "detector.h"
 #include "intern.h"
 #include "render.h"
 
@@ -36,10 +41,17 @@ int cliRender(const Argumente& a) {
     }
     if (nur.empty()) return endeFehler(Fehler{"argument", "--nur names no note id"});
   }
+  std::vector<AudioNote> vorherListe;
+  const bool mitListe = a.hat("vorher-liste");
+  if (mitListe) {
+    auto v = liesAuftrag(a.wert("vorher-liste"), s.k.kurve);
+    if (auto* f = std::get_if<Fehler>(&v)) return endeFehler(*f);
+    vorherListe = std::move(std::get<std::vector<AudioNote>>(v));
+  }
   fortschritt.stufe(1, "laden", 100);
 
   Stereo aus;
-  auto r = rendere(stereo, s.k, liste, teil ? &vorher : nullptr, teil ? &nur : nullptr, aus, &fortschritt);
+  auto r = rendere(stereo, s.k, liste, teil ? &vorher : nullptr, teil ? &nur : nullptr, aus, &fortschritt, mitListe ? &vorherListe : nullptr);
   if (auto* f = std::get_if<Fehler>(&r)) return endeFehler(*f);
   if (abbruchAngefordert()) return endeFehler(Fehler{"abbruch", "interrupted"});
   fortschritt.stufe(2, "rendern", 100);
@@ -54,6 +66,25 @@ int cliRender(const Argumente& a) {
   nlohmann::ordered_json b = nlohmann::ordered_json::array();
   for (const auto& r0 : std::get<RenderErgebnis>(r).bereiche) b.push_back(nlohmann::ordered_json::array({r0.first, r0.second}));
   z["bereiche"] = b;
+  // measured pitch of the output over the middle of every edited note (median of the voiced detector frames) against its target
+  nlohmann::ordered_json m = nlohmann::ordered_json::array();
+  for (const auto& mi : std::get<RenderErgebnis>(r).mitten) {
+    std::vector<float> mono(static_cast<size_t>(mi.s1 - mi.s0));
+    for (size_t i = 0; i < mono.size(); ++i) mono[i] = 0.5f * (aus.l[static_cast<size_t>(mi.s0) + i] + aus.r[static_cast<size_t>(mi.s0) + i]);
+    const Kurve mk = erkenne(mono, SR, nullptr);
+    std::vector<double> v;
+    const size_t rand = mk.f0_ct.size() > 8 ? 2 : 0;   // the frames at the edges of the cut reach outside it
+    for (size_t j = rand; j + rand < mk.f0_ct.size(); ++j) if (mk.f0_ct[j] > 0.0) v.push_back(mk.f0_ct[j]);
+    if (v.empty()) continue;
+    std::sort(v.begin(), v.end());
+    const double med = v.size() % 2 ? v[v.size() / 2] : 0.5 * (v[v.size() / 2 - 1] + v[v.size() / 2]);
+    nlohmann::ordered_json e;
+    e["id"] = mi.id;
+    e["ton_ist"] = std::round(med * 10.0) / 1000.0;
+    e["fehler_ct"] = std::round((med - mi.ziel * 100.0) * 10.0) / 10.0;
+    m.push_back(e);
+  }
+  z["messung"] = m;
   z["sekunden"] = cpuSekunden();
   return endeOk(z);
 }

@@ -190,3 +190,71 @@ export function passendeTonarten(noten, anzahl = 5) {
   aus.sort((a, b) => b.anteil - a.anteil || b.wurzel - a.wurzel || SUCH_SKALEN.indexOf(a.skala) - SUCH_SKALEN.indexOf(b.skala));
   return aus.slice(0, anzahl).map(({ grundton, skala, anteil }) => ({ grundton, skala, anteil }));
 }
+
+// ---------- chord symbols and the live harmony lane (strand 7) ----------
+const WURZEL = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+const QUALITAETEN = {
+  '': [0, 4, 7], m: [0, 3, 7], min: [0, 3, 7], dim: [0, 3, 6], aug: [0, 4, 8], sus2: [0, 2, 7], sus4: [0, 5, 7], 5: [0, 7], 6: [0, 4, 7, 9], m6: [0, 3, 7, 9],
+  7: [0, 4, 7, 10], maj7: [0, 4, 7, 11], m7: [0, 3, 7, 10], m7b5: [0, 3, 6, 10], dim7: [0, 3, 6, 9], 9: [0, 4, 7, 10, 14], add9: [0, 4, 7, 14],
+  m9: [0, 3, 7, 10, 14], maj9: [0, 4, 7, 11, 14],
+};
+// 'F#m7b5' -> { name, grundton: 0..11, intervalle: semitones above the root }. No slash chords.
+export function akkordSymbol(text) {
+  const t = typeof text === 'string' ? text.trim() : '';
+  const m = /^([A-G])([#b]?)(.*)$/.exec(t);
+  if (!m) throw new Error(`akkord: '${t}' has no root (C D E F G A B)`);
+  const [, buchstabe, vz, qualitaet] = m;
+  if (!Object.hasOwn(QUALITAETEN, qualitaet)) throw new Error(`akkord: '${t}' has an unknown quality '${qualitaet}'`);
+  const grundton = pk(WURZEL[buchstabe] + (vz === '#' ? 1 : vz === 'b' ? -1 : 0));
+  return { name: t, grundton, intervalle: [...QUALITAETEN[qualitaet]] };
+}
+// 'Am7 | Fmaj7 G' -> list of chord symbols; separators '|' and whitespace; at most 64.
+export function folgeLesen(text) {
+  const teile = String(text ?? '').split(/[|\s]+/).filter(Boolean);
+  if (teile.length > 64) throw new Error(`akkord: at most 64 chords, got ${teile.length}`);
+  return teile.map(akkordSymbol);
+}
+// The key whose scale holds the most chord tones; ties: root of the first chord, then the order of the key search (minor first), then the root.
+export function laneTonart(akkorde) {
+  if (!akkorde.length) throw new Error('akkord: no chords');
+  let beste = null;
+  for (const skala of SUCH_SKALEN) {
+    for (let grundton = 0; grundton < 12; grundton++) {
+      const k = klassen({ grundton, skala });
+      let punkte = 0;
+      for (const a of akkorde) for (const i of a.intervalle) if (k.has(pk(a.grundton + i))) punkte++;
+      const wurzel = akkorde[0].grundton === grundton ? 1 : 0;
+      if (!beste || punkte > beste.punkte || (punkte === beste.punkte && wurzel > beste.wurzel)) beste = { grundton, skala, punkte, wurzel };
+    }
+  }
+  return { grundton: beste.grundton, skala: beste.skala };
+}
+// The entry of harmonie.json. `tonart` given: used as is (checked); else derived from the chords. An empty `folge` is the 'no lane' entry.
+export function laneEintrag({ folge, takte_je_akkord, tonart, ab_zyklus }) {
+  const akkorde = folge ?? [];
+  if (!Number.isInteger(takte_je_akkord) || takte_je_akkord < 1) throw new Error('akkord: takte_je_akkord must be an integer >= 1');
+  if (!Number.isInteger(ab_zyklus) || ab_zyklus < 0) throw new Error('akkord: ab_zyklus must be an integer >= 0');
+  if (tonart != null) { const f = tonartFehler(tonart); if (f) throw new Error(`akkord: ${f}`); }
+  const t = tonart ?? (akkorde.length ? laneTonart(akkorde) : null);
+  return {
+    ab_zyklus, takte_je_akkord,
+    tonart: t ? { grundton: t.grundton, stufen: [...SKALEN[t.skala]] } : null,
+    folge: akkorde.map((a) => ({ name: a.name, grundton: a.grundton, toene: a.intervalle.map((i) => pk(a.grundton + i)) })),
+  };
+}
+// The lane at a cycle: the last entry with ab_zyklus <= zyklus; the chord by position. Empty folge or no entry: null.
+export function akkordBei(eintraege, zyklus) {
+  let e = null;
+  for (const x of eintraege ?? []) if (x.ab_zyklus <= zyklus && (!e || x.ab_zyklus >= e.ab_zyklus)) e = x;
+  if (!e || !e.folge.length) return null;
+  const i = Math.floor((zyklus - e.ab_zyklus) / e.takte_je_akkord) % e.folge.length;
+  return { tonart: e.tonart, akkord: e.folge[i] };
+}
+
+// The 12-bit pitch class mask of a key (bit pc set = in the scale, bit 0 = C), the form the core's MIDI stage takes. Not a key: 0.
+export function skalaMaske(grundton, skala) {
+  if (tonartFehler({ grundton, skala })) return 0;
+  let m = 0;
+  for (const c of klassen({ grundton, skala })) m |= 1 << c;
+  return m;
+}

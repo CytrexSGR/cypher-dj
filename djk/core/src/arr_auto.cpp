@@ -119,7 +119,7 @@ inline bool geraet_stapel(const ArrAutoLane* ab, AutoLane* al, const ArrAutoLane
 }  // namespace
 
 void Arrangement::auto_segment(const Karte& k, int64_t a, int64_t b, int64_t s0) {
-  if (!snap_ || (snap_->n_auto_lanes == 0 && snap_->n_klanes == 0) || b <= a) return;   // 1.12 slice 6: an insert or rack lane needs the project beat too
+  if (!snap_ || (snap_->n_auto_lanes == 0 && snap_->n_klanes == 0 && snap_->n_mod == 0) || b <= a) return;   // 1.12 slice 6: an insert or rack lane needs the project beat too; strand 6: a modulator too (D4)
   const int von = static_cast<int>(a - s0), bis = static_cast<int>(b - s0);
 #ifdef CYPHERDJ_MUTATION_ARR_AUTO_BEAT_LINEAR
   {   // error case: the project beat is linear between the two ends of the sub-block (wrong inside a tempo ramp)
@@ -222,7 +222,7 @@ void Arrangement::auto_geraet() {
 // -200 dB is exactly 0 (db_lin) and there is no logarithm per sample. A cell envelope is not looked at here: sends_bereiten gives it the precedence. No allocation, no lock.
 void Arrangement::auto_send(int m) {
   const bool lanes = snap_ && snap_->n_auto_lanes > 0;
-  if (!lanes && !send_aktiv_) {   // nothing to play, but keep the transport memory current for a lane that arrives with a swap
+  if (!lanes && !send_aktiv_ && mod_send_n_ == 0) {   // nothing to play, but keep the transport memory current for a lane that arrives with a swap
     send_lief_ = snap_ && auto_bis_ > auto_von_;
     if (send_lief_) send_p_ende_ = ap_[auto_bis_ - 1];
     send_spielte_ = status_ == ArrStatus::spielt;
@@ -241,9 +241,20 @@ void Arrangement::auto_send(int m) {
       }
   }
   const bool stetig = laeuft && send_lief_ && p0 >= send_p_ende_ - 1e-9;   // this block goes on where the last one ended
-  const auto wert = [](AutoLane& al, double p) {
+  // Strand 6 task 4.1: a modulator on the send adds its offset in dB to the lane value (or the knob) before db_lin, clamped to the send range; a base at -200 dB (off) stays off.
+  // Without a modulator the gains are the ones of the lane alone, bit for bit. With one, the plan runs also without a lane (from the knob) and while the transport stands (from the
+  // lane value held at the end of the last running block, send_db_), and the gain ramps over the block from the gain heard at its start (lin).
+  bool md = false;
+  float off = 0.0f;
+  const auto lin_von = [&md, &off](float db) {
+    if (!md) return db_lin(db);
+    if (!(db > -200.0f)) return 0.0f;
+    const float x = db + off;
+    return db_lin(x < -200.0f ? -200.0f : (x > 6.0f ? 6.0f : x));
+  };
+  const auto wert_db = [](AutoLane& al, double p) {
     al.neu_suchen(p);
-    return db_lin(al.wert_bei(p));
+    return al.wert_bei(p);
   };
   bool aktiv = false;
   for (int i = 0; i < ARR_SPUREN; ++i)
@@ -251,39 +262,54 @@ void Arrangement::auto_send(int m) {
       SendPlan& pl = send_plan_[i][r];
       pl = SendPlan();
       const ArrAutoLane* l = lanes ? send_lane(snap_->spur[i], r) : nullptr;
+      md = mod_send_an_[i][r];
+      off = mod_send_db_[i][r];
       float& lin = send_lin_[i][r];
-      if (l) {
-        if (laeuft) {
-          AutoLane& al = auto_s_[i][r];
-          const float ende = wert(al, p1);
-          float a;
-          if (send_da_[i][r] && stetig) a = lin;
-          else if (!send_da_[i][r] && send_spielte_) a = db_lin(w_[i][arr_f_send(r)].w);   // a lane that is new while playing (swap): from the knob that was heard
-          else a = wert(al, p0);                                                      // transport start or jump back: the lane value
-          pl.da = true;
-          pl.a0 = a;
-          if (abfall < m) {   // a loop seam inside the block: up to it the old course, from it the lane at the loop start
-            pl.b0 = wert(al, ap_[abfall - 1]);
-            pl.a1 = wert(al, ap_[abfall]);
-            pl.b1 = ende;
-            pl.ts = abfall;
-          } else {
-            pl.b0 = ende;
-            pl.ts = m;
-          }
-          lin = ende;
-          send_da_[i][r] = true;
-        } else if (send_da_[i][r]) {   // the transport stands: the gain is held
-          pl.da = true;
-          pl.a0 = pl.b0 = lin;
+      if (l && laeuft) {
+        AutoLane& al = auto_s_[i][r];
+        const float ende_db = wert_db(al, p1);
+        const float ende = lin_von(ende_db);
+        float a;
+        if (send_da_[i][r] && stetig) a = lin;
+        else if (!send_da_[i][r] && send_spielte_) a = db_lin(w_[i][arr_f_send(r)].w);   // a lane that is new while playing (swap): from the knob that was heard
+        else a = lin_von(wert_db(al, p0));                                          // transport start or jump back: the lane value
+        pl.da = true;
+        pl.a0 = a;
+        if (abfall < m) {   // a loop seam inside the block: up to it the old course, from it the lane at the loop start
+          pl.b0 = lin_von(wert_db(al, ap_[abfall - 1]));
+          pl.a1 = lin_von(wert_db(al, ap_[abfall]));
+          pl.b1 = ende;
+          pl.ts = abfall;
+        } else {
+          pl.b0 = ende;
           pl.ts = m;
         }
-      } else if (send_da_[i][r]) {   // the lane is gone: back to the knob over this block
+        lin = ende;
+        send_db_[i][r] = ende_db;
+        send_da_[i][r] = true;
+        send_ld_[i][r] = true;
+      } else if (l && send_da_[i][r] && send_ld_[i][r]) {   // the transport stands: the lane gain is held (a modulator swings around the held lane value)
+        pl.da = true;
+        pl.a0 = lin;
+        pl.b0 = md ? lin_von(send_db_[i][r]) : lin;
+        pl.ts = m;
+        lin = pl.b0;
+      } else if (md) {   // task 4.1: a modulator on the knob (no lane, or a lane that has not run yet): from the gain heard to knob + offset over this block
+        const float k = w_[i][arr_f_send(r)].w;
+        pl.da = true;
+        pl.a0 = send_da_[i][r] ? lin : db_lin(k);
+        pl.b0 = lin_von(k);
+        pl.ts = m;
+        lin = pl.b0;
+        send_da_[i][r] = true;
+        send_ld_[i][r] = false;
+      } else if (send_da_[i][r]) {   // the lane (or the modulator) is gone: back to the knob over this block
         pl.da = true;
         pl.a0 = lin;
         pl.b0 = db_lin(w_[i][arr_f_send(r)].w);
         pl.ts = m;
         send_da_[i][r] = false;
+        send_ld_[i][r] = false;
       }
       aktiv = aktiv || pl.da || send_da_[i][r];
     }

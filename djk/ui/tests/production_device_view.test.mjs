@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BK_LIVE_SLOTS, spurAdapter, bindeGeraetAnsicht, geraetSchluessel, kannGeraetAnsicht, reglerBereiche, surgeIstEinlesen } from '../public/production/device_view.js';
+import { BK_LIVE_SLOTS, bkModKnopf, spurAdapter, bindeGeraetAnsicht, geraetSchluessel, kannGeraetAnsicht, reglerBereiche, surgeIstEinlesen } from '../public/production/device_view.js';
 import { baueFrontplatte } from '../public/panel.js';
 import { presetsFuer, spurBeschreibung } from '../public/panel_kopf.js';
 import { anzeigeWert, anzeigeText, parameterNachName } from '../public/panel_display.js';
@@ -856,4 +856,34 @@ test('pins: only a bk track has the pin methods; the device changing under the a
   u.vor(100);
   await warte();
   assert.equal(gesendet.length, 0);
+});
+
+// ---- strand 6 task 2.2 rest: the ring of a modulated Baukasten knob (target geraet.k<n> of the track)
+test('bkModKnopf: undefined without a modulator, null while silent, else base + offset clamped to 0..1; names that are no bk knob have none', async () => {
+  const { MOD_STAND } = await import('../public/mod_display.js');
+  const projekt = { modulatoren: [{ nr: 3, art: 'lfo', an: true, ziele: [{ strang_id: 's1', ziel: 'geraet.k5', tiefe: 0.5 }] }] };
+  MOD_STAND.clear();
+  assert.equal(bkModKnopf(projekt, 's1', 'k6', 0.4, 1000), undefined, 'k6 is not targeted');
+  assert.equal(bkModKnopf(projekt, 's2', 'k5', 0.4, 1000), undefined, 'another track');
+  assert.equal(bkModKnopf(projekt, 's1', 'cutoff', 0.4, 1000), undefined, 'not a bk knob name');
+  assert.equal(bkModKnopf(projekt, 's1', 'k5', 0.4, 1000), null, 'no event yet');
+  MOD_STAND.set(3, { out: 0.5, t: 900 });
+  assert.ok(Math.abs(bkModKnopf(projekt, 's1', 'k5', 0.4, 1000) - 0.65) < 1e-9);
+  MOD_STAND.set(3, { out: 1, t: 900 });
+  assert.equal(bkModKnopf(projekt, 's1', 'k5', 0.8, 1000), 1, 'clamped once at 1');
+  assert.equal(bkModKnopf(projekt, 's1', 'k5', 0.4, 2000), null, 'silent for more than 500 ms');
+  assert.equal(bkModKnopf({ modulatoren: [{ ...projekt.modulatoren[0], an: false }] }, 's1', 'k5', 0.4, 1000), undefined, 'a modulator that is off draws no ring');
+  MOD_STAND.clear();
+});
+
+test('a bk panel gets the ring paths (fp-mod) on its knobs: the track ring is wired to the front plate', async () => {
+  const alt = [globalThis.requestAnimationFrame, globalThis.cancelAnimationFrame];
+  globalThis.requestAnimationFrame = () => 1; globalThis.cancelAnimationFrame = () => {};   // a targeted knob starts the ring loop; no frames in node
+  try {
+  const a = aufbau(BK({ k5: 0.5 }));
+  a.ctx.st.projekt = { spuren: [a.spur], modulatoren: [{ nr: 1, art: 'lfo', an: true, ziele: [{ strang_id: 's1', ziel: 'geraet.k5', tiefe: 0.3 }] }] };
+  a.ansicht.zeige(a.spur);
+  await warte();
+  assert.ok(a.wurzel.alles().some((e) => e.klassen.has('fp-mod')), 'ring paths exist');
+  } finally { [globalThis.requestAnimationFrame, globalThis.cancelAnimationFrame] = alt; }
 });

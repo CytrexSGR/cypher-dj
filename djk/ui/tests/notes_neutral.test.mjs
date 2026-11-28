@@ -11,8 +11,8 @@ const dateien = readdirSync(ORDNER).filter((f) => f.endsWith('.js'));
 const ohneKommentare = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
 const spezifizierer = (code) => [...code.matchAll(/(?:\bimport\s*(?:[\w*{}\s,]+\sfrom\s*)?|\bexport\s*(?:\*|\{[^}]*\})\s*from\s*|\bimport\s*\(\s*)['"]([^'"]+)['"]/g)].map((m) => m[1]);
 
-test('the four modules exist', () => {
-  assert.deepEqual(dateien.sort(), ['view.js', 'operation.js', 'contract.js', 'zeichnen.js']);
+test('the five modules exist', () => {
+  assert.deepEqual(dateien.sort(), ['view.js', 'operation.js', 'contract.js', 'zeichnen.js', 'time.js']);
 });
 
 test('no module under public/noten imports anything outside public/noten', () => {

@@ -40,9 +40,9 @@ import { TransientenLager } from '../../project/transients.ts';
 import { DekodierCache, type DekodierEreignis } from '../../project/decode.ts';
 import { deckleDekodiert } from '../../project/cache_deckel.ts';
 import {
-  alleInserts, alleStraenge, alleZellen, platzVonGruppe, BK_LIVE_SLOTS, BK_PARAMETER, bkSlot, FADER_MAX, FADER_MIN,
+  ARP_RATEN, alleInserts, alleStraenge, alleZellen, platzVonGruppe, BK_LIVE_SLOTS, BK_PARAMETER, bkSlot, FADER_MAX, FADER_MIN,
   HALL_FELDER, MAX_BEAT, TEMPO_MIN, TEMPO_MAX, kanonisch, sucheClip, sucheSpur, sucheStrang, wertImBereich,
-  type AudioClip, type Clip, type DekodiertZustand, type Lane, type Projekt, type Spur, type Warp, type Ziel,
+  type AudioClip, type Clip, type DekodiertZustand, type Lane, type MidiStufe, type Projekt, type Spur, type Warp, type Ziel,
 } from '../../project/model.ts';
 import { laneWert } from '../../project/lane.ts';
 import { HK_ZIELE, hkWert, type Huellkurve } from '../../project/envelope.ts';
@@ -60,7 +60,7 @@ import { arrOrdner, zaehlerDateiVorgabe } from './config.ts';
 import { MasterAbMarke } from './master_ab_marker.ts';
 import { abNachLauf } from '../../project/master_ab.ts';
 import { grundText } from '../../http/reasons.ts';
-import { KernLage } from './state.ts';
+import { KernLage, modulatorenLage, modAutoAntwort, type MidiZaehler } from './state.ts';
 import { leseKarte, leseTraktor, schreibeEinsKorrektur } from './sources.ts';
 import { AnalyseListe, type AnalyseEintrag, type AnalyseEnde, type AnalyseStarter, type Anforderung, type Wunsch } from './analysis.ts';
 import { ankunftBefehle, brauchtAnalyse, klingtGerade } from '../../project/warp_analysis.ts';
@@ -209,12 +209,31 @@ export const hkKurz = <T extends { huellkurven?: Huellkurve[] }>(c: T): Omit<T, 
       ...(h.verknuepft === false ? { verknuepft: false } : {}), ...(h.loop_beats !== undefined ? { loop_beats: h.loop_beats } : {}) })) }
     : rest;
 };
-const ohneNoten = (p: Projekt, ueber?: UeberFrage): unknown => ({ ...p, ...bkKurz(p),
+// Strand 7 task 1.6: the MIDI stage of an instrument track in real units (step and gate in ms, steps per bar), as proj_lage shows it
+const rund1 = (x: number): number => Math.round(x * 10) / 10;
+// zaehler (strand 7 task 3.3): the core's counters of that track (/zustand/arr/midi), null while none came; absent: the member is left out
+export function midiLage(m: MidiStufe, bpm: number, taktart: [number, number], zaehler?: MidiZaehler | null): Record<string, unknown> {
+  const kette = (['akkord', 'skala', 'arp', 'velocity', 'chance'] as const).filter((k) => m[k] !== undefined);
+  const aus: Record<string, unknown> = { ...(m.aus ? { aus: true } : {}), kette };
+  if (m.arp) {
+    const a = m.arp;
+    const rate = a.sync ? a.rate : null;
+    const beats = a.sync ? ARP_RATEN[a.rate] : null;
+    const schritt = a.sync ? (beats as number) * 60000 / bpm : 1000 / a.hz;
+    aus.arp = { muster: a.muster, rate: a.sync ? rate : `${a.hz} Hz`, schritt_ms: rund1(schritt),
+      schritte_je_takt: a.sync ? Math.round(taktart[0] / (beats as number) * 100) / 100 : null,
+      oktaven: a.oktaven, gate_ms: rund1(a.gate * schritt) };
+  }
+  if (zaehler !== undefined) aus.zaehler = zaehler;
+  return aus;
+}
+const ohneNoten = (p: Projekt, ueber?: UeberFrage, zaehler?: (nr: number) => MidiZaehler | null): unknown => ({ ...p, ...bkKurz(p),
   ...(p.gruppen?.some((g) => g.automation) ? { gruppen: p.gruppen.map((g) => ohneLanePunkte(g, g.id, ueber)) } : {}),
   ...(p.returns?.some((r) => r.automation) ? { returns: p.returns.map((r) => ohneLanePunkte(r, r.id, ueber)) } : {}),
   ...(p.master?.automation ? { master: ohneLanePunkte(p.master, 'master', ueber) } : {}),
   spuren: p.spuren.map((s) => ({
-  ...ohneTakes(ohneLanePunkte(s, s.id, ueber)), clips: s.clips.map((c) => {
+  ...ohneTakes(ohneLanePunkte(s, s.id, ueber)),
+  ...(s.midi ? { midi: midiLage(s.midi, p.tempo_bpm, p.taktart, zaehler ? zaehler(s.nr) : undefined) } : {}), clips: s.clips.map((c) => {
   if (c.art === 'audio') return c.warp ? { ...hkKurz(c), warp: warpKurz(c.warp) } : hkKurz(c);
   const { noten, ...rest } = hkKurz(c);
   return { ...rest, noten_zahl: noten.length };
@@ -379,10 +398,15 @@ export class ProjSitzung {
       projekt: () => this.offen?.projekt ?? null,
       beatsProSekunde: () => (this.lage.uhr?.bpm ?? this.offen?.projekt.tempo_bpm ?? 128) / 60,
       senden: (id, w) => this.hosts.automation(id, w),
+      parameterWert: async (id, index) => {   // strand 6 task 4.3: the base of a modulated parameter that has no lane
+        const r = await this.hosts.parameter(id);
+        const q = r.ok ? r.parameter.find((x) => Number(x.index) === index) : undefined;
+        return typeof q?.wert === 'number' ? q.wert : undefined;
+      },
     });
     this.reglerWeiter = new ReglerWeiterleitung({
       projekt: () => this.offen?.projekt ?? null,
-      param: (id, w) => this.hosts.param(id, w),
+      param: (id, w) => { this.laneSpieler.basisSetzen(id, w); return this.hosts.param(id, w); },   // a knob move is the new centre of the modulation
       parameter: (id) => this.hosts.parameter(id),
       setzeRegler: (pfad, wert) => this.kern.setzeRegler([{ pfad, wert }], 'andreas'),
       spielt: () => this.laneSpieler.spielt(),
@@ -522,14 +546,16 @@ export class ProjSitzung {
     if (!o) return { code: 200, j: { slug: null, projekt: null, kern: null, ...lauf } };
     const a = this.lage.arr;
     this.raeumeNummern(o.projekt);
-    const projekt = ansicht === 'noten_zahl' ? ohneNoten(o.projekt, (sid, ziel) => this.istUebersteuert(sid, ziel)) : o.projekt;
+    const projekt = ansicht === 'noten_zahl'
+      ? ohneNoten(o.projekt, (sid, ziel) => this.istUebersteuert(sid, ziel), (nr) => this.lage.midiZaehler(nr)) : o.projekt;
     // Slice 3a (T8): laufende Analysen dieses Projekts, flüchtig (nie im Projekt); nur wenn welche laufen, damit sich sonst nichts an der Antwort ändert
     const an = this.analysen?.stand(o.slug) ?? [];
     const limiter = a && Number.isFinite(a.limiter_db) ? { limiter_db: a.limiter_db } : {};   // D12: absent without core state or from an older core
     const kern = { rev_geladen: a ? a.nr : null, status: a ? a.status : null, ...limiter, ...(this.lage.insHost ? { ins_host: this.lage.insHost } : {}) };
     // the page (full view) learns the overridden fields from here after a reload (D8); only present when something is overridden
     const ueber = ansicht === 'voll' ? this.uebersteuertListe(o.projekt) : [];
-    return { code: 200, j: { slug: o.slug, projekt, kern, ...lauf, ...(an.length ? { analyse: an } : {}),
+    const mods = ansicht === 'noten_zahl' ? modulatorenLage(o.projekt, this.lage) : undefined;   // proj_lage lists the modulators in readable form (strand 6)
+    return { code: 200, j: { slug: o.slug, projekt, kern, ...lauf, ...(mods ? { modulatoren: mods } : {}), ...(an.length ? { analyse: an } : {}),
       ...(o.vorhoeren.size ? { vorhoeren: Object.fromEntries(o.vorhoeren) } : {}),
       // plugins: the T7 name; hosts: the name the plan, the page and proj_lage use
       ...(this.hosts.lage().length ? { plugins: this.hosts.lage(), hosts: this.hosts.lage() } : {}),
@@ -622,6 +648,14 @@ export class ProjSitzung {
         ...(passend.length > grenze ? { weiter_ab_projekt_beat: passend[grenze].projekt_beat } : {}),
         tempo: tempoUebersicht(m), erster_marker: { quell_s: m[0][0], beat: m[0][1] }, marker },
       ...(bei === null ? {} : { bei: gegenprobe(c, bei) }) } };
+  }
+
+  // strand 6 task 2.1: proj_auto {mod_id}: the live offsets of one modulator
+  modAutoLage(modId: string): Antwort {
+    const o = this.brauchOffen();
+    const a = modAutoAntwort(o.projekt, modId, this.lage);
+    if (!a) throw new ProjFehler(404, 'mod_unbekannt', { text: `no modulator ${modId}` });
+    return { code: 200, j: a };
   }
 
   // Automation Slice 1 (proj_auto): the points of one lane (lane_id) or of all lanes of a track (spur_id), plus the lane value at bei_beat
@@ -1047,6 +1081,7 @@ export class ProjSitzung {
   // plan 1.11 D8: the server ends: the plugin states are written first (at most 3 s), then schliesse()
   async beende(): Promise<void> { await Promise.all([this.hosts.beende(), this.instrumente.beende()]); }
   schliesse(): void {
+    this.laneSpieler.halt();
     this.hosts.halt();
     this.instrumente.halt();
     this.aufAuto.beende();
@@ -2237,6 +2272,7 @@ export class ProjSitzung {
     // started ends any override of a core that kept running (AK34, own start). A re-hello of the same generation changes nothing.
     if (adresse === '/e/ins_mess' || adresse === '/zustand/arr') this.hosts.ereignis(adresse, f);   // plan 1.11 task 7
     if (adresse === '/zustand/arr') this.laneSpieler.zustand(f);
+    if (adresse === '/zustand/mod') this.laneSpieler.mod(f);   // strand 6 task 4.3: plugin targets of the modulators are played from here (D2)
     if (adresse === '/e/hand') this.reglerWeiter.ereignis(adresse, f);
     if (adresse === '/e/auto') this.nimmAuto(f);
     // a channel closed under a module at -200

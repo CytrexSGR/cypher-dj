@@ -273,19 +273,19 @@ int main() {
     PRUEF((cdj::ins_latenz(ArrInsArt::mb)) == (0));
     PRUEF((cdj::INS_G_GATE0) == (cdj::INS_G_BK0 + cdj::ARR_INS_BK));
     PRUEF((cdj::INS_G_MB0) == (cdj::INS_G_GATE0 + cdj::ARR_INS_GATE));
-    PRUEF((cdj::INS_G_HOST0) == (cdj::INS_G_MB0 + cdj::ARR_INS_MB));
+    PRUEF((cdj::INS_G_TRANS0) == (cdj::INS_G_MB0 + cdj::ARR_INS_MB));   // strand 5 slice 3: trans and bild sit between mb and host
     PRUEF((g_gate) == (cdj::INS_G_GATE0));
     PRUEF((g_mb) == (cdj::INS_G_MB0));
     PRUEF((cdj::ins_global(ArrInsArt::gate, cdj::ARR_INS_GATE)) == (-1));
     PRUEF((cdj::ins_global(ArrInsArt::mb, cdj::ARR_INS_MB)) == (-1));
-    PRUEF((cdj::ins_global(ArrInsArt::mb, cdj::ARR_INS_MB - 1)) == (cdj::INS_G_HOST0 - 1));
+    PRUEF((cdj::ins_global(ArrInsArt::mb, cdj::ARR_INS_MB - 1)) == (cdj::INS_G_TRANS0 - 1));
     PRUEF((cdj::ins_art(cdj::INS_G_GATE0)) == (ArrInsArt::gate));
     PRUEF((cdj::ins_art(cdj::INS_G_MB0 - 1)) == (ArrInsArt::gate));
     PRUEF((cdj::ins_art(cdj::INS_G_MB0)) == (ArrInsArt::mb));
-    PRUEF((cdj::ins_art(cdj::INS_G_HOST0 - 1)) == (ArrInsArt::mb));
+    PRUEF((cdj::ins_art(cdj::INS_G_TRANS0 - 1)) == (ArrInsArt::mb));
     PRUEF((cdj::ins_art(cdj::INS_G_GATE0 - 1)) == (ArrInsArt::bk));      // negative controls: the neighbours are other kinds
     PRUEF((cdj::ins_art(cdj::INS_G_HOST0)) == (ArrInsArt::host));
-    PRUEF((cdj::ARR_INS_ALLE) == (380));                 // 160 + 160 + 4 + 8 + 8 + 8 + 16 + 8 + 8 (eight hosts since strand 1 slice 5)
+    PRUEF((cdj::ARR_INS_ALLE) == (456));                 // 160 + 160 + 32 + 8 + 8 + 8 + 16 + 8 + 32 + 16 + 8 (strand 5 slice 3; 380 with saett 4 and no trans/bild)
     // a chain with an eq, a gate and an mb: the delay compensation counts the eq only
     auto q = Audio::sinus(1000, 100.0, 0.1f);
     Bau b(1);

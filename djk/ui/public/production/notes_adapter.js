@@ -33,7 +33,7 @@ export function neuerNotenAdapter(ctx, clipId, { wellen, kurven = new Map(), lag
   const { st } = ctx;
   const hoerer = new Set(), ich = Symbol('adapter'), wartet = new Set();
   const weg = `clip_id=${encodeURIComponent(clipId)}`;
-  let beendet = false, render = { zustand: 'quelle' }, analyse = null, renderEreignis = false, analyseEreignis = false;
+  let beendet = false, staerke = 1, render = { zustand: 'quelle' }, analyse = null, renderEreignis = false, analyseEreignis = false;
 
   const melde = () => { if (beendet) return; for (const f of [...hoerer]) { try { f(); } catch (e) { console.error('note editor adapter: subscriber threw', e); } } };
   const clipJetzt = (p = st.projekt) => { const f = p ? findeClip(p, clipId) : null; return f?.clip.art === 'audio' ? f.clip : null; };
@@ -84,7 +84,7 @@ export function neuerNotenAdapter(ctx, clipId, { wellen, kurven = new Map(), lag
     if (raster) raster.beatsProTakt = beatsProTakt(p?.taktart);
     const tonart = p?.tonart;
     return {
-      quelleS, hoerbarS, noten: clip?.audio_noten?.liste ?? [], kurve, raster,
+      staerke, quelleS, hoerbarS, noten: clip?.audio_noten?.liste ?? [], kurve, raster,
       welle: w.welle ? { hole: (s0, s1, n) => welleSpalten(w.welle, s0, s1, n) } : null,
       rasteTonart: tonartOk(tonart) ? (t) => rasteEin(t, tonart) : null,
       render: { zustand: render.zustand, text: renderText(render) },
@@ -153,6 +153,24 @@ export function neuerNotenAdapter(ctx, clipId, { wellen, kurven = new Map(), lag
     switch (op?.art) {
       case 'ton':
         return aendere('Note pitch', (clip) => (alleDa(clip, op.ids) ? [{ befehl: 'audio_noten_aendern', clip_id: clipId, ids: op.ids, ton_um: op.um }] : 'noten_unbekannt'));
+      case 'zeit':
+        return aendere('Note time', (clip) => (alleDa(clip, op.ids) ? [{ befehl: 'audio_noten_aendern', clip_id: clipId, ids: op.ids, zeit_um: op.um_s }] : 'noten_unbekannt'));
+      case 'kante':
+        return aendere('Note edge', (clip) => (alleDa(clip, [op.id])
+          ? [{ befehl: 'audio_noten_aendern', clip_id: clipId, ids: [op.id], ...(op.a !== undefined ? { a: op.a } : { e: op.e }) }] : 'noten_unbekannt'));
+      case 'raster': {
+        const stufe = op.staerke === undefined ? 1 : op.staerke;
+        const felder = { ...(op.zeit !== undefined ? { zeit: op.zeit } : {}), ...(op.ton !== undefined ? { ton: op.ton } : {}), staerke: stufe };
+        return aendere(op.ton === undefined ? 'Quantise notes' : op.zeit === undefined ? 'Snap notes' : 'Quantise and snap notes',
+          (clip) => (op.ids && !alleDa(clip, op.ids) ? 'noten_unbekannt'
+            : [{ befehl: 'audio_noten_raster', clip_id: clipId, ...(op.ids ? { ids: op.ids } : {}), ...felder }]));
+      }
+      case 'form': {
+        const f = { ...(zahl(op.vib) ? { vib: op.vib } : {}), ...(zahl(op.drift) ? { drift: op.drift } : {}) };
+        if (!op.ids?.length || Object.keys(f).length === 0) return Promise.resolve({ ok: false, grund: 'argument_ungueltig', text: '' });
+        return aendere(op.drift === undefined ? 'Note vibrato' : op.vib === undefined ? 'Note drift' : 'Note vibrato and drift',
+          (clip) => (alleDa(clip, op.ids) ? [{ befehl: 'audio_noten_aendern', clip_id: clipId, ids: op.ids, ...f }] : 'noten_unbekannt'));
+      }
       case 'zuruecksetzen':
         return aendere(op.ids?.length === 1 ? 'Reset note' : 'Reset notes',
           (clip) => (op.ids && !alleDa(clip, op.ids) ? 'noten_unbekannt' : [{ befehl: 'audio_noten_zuruecksetzen', clip_id: clipId, ...(op.ids ? { ids: op.ids } : {}) }]));
@@ -189,6 +207,8 @@ export function neuerNotenAdapter(ctx, clipId, { wellen, kurven = new Map(), lag
 
   return {
     lies, schreibe,
+    /** the strength of quantise and snap in 0..1 (the field of the block), read back as `Sicht.staerke` */
+    setzeStaerke(x) { if (zahl(x)) staerke = Math.min(1, Math.max(0, x)); },
     abonniere(f) { hoerer.add(f); return () => { hoerer.delete(f); }; },
     ladeZustand, ereignis, projektNeu: melde,
     ende() { beendet = true; hoerer.clear(); },

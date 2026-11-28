@@ -75,6 +75,8 @@ inline int ins_latenz(ArrInsArt art) {
     case ArrInsArt::utility: return 0;              // arr-fx: the Utility module is IIR only, the impulse comes out at sample 0 (dsp/tests/test_utility.cpp, pinned in test_arr_inserts_util)
     case ArrInsArt::gate: return 0;                 // strand 1 slice 4: the Gate has no look-ahead (gate.h)
     case ArrInsArt::mb: return 0;                   // strand 1 slice 4: MultibandKompressor::latenz_samples() is 0 (no lookahead)
+    case ArrInsArt::trans: return 0;                // strand 5 slice 3: the transient shaper has no look-ahead (transient.h)
+    case ArrInsArt::bild: return 0;                 // strand 5 slice 3: the imager is IIR only (imager.h)
     default: return 0;
   }
 }

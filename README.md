@@ -18,7 +18,7 @@ Built in Germany by Andreas, a DJ, and Cypher, an AI agent (Claude models), sinc
 
 One real-time core in C++ and Rust keeps a single sample clock for everything: the decks, the pattern channels and
 the arrangement. The browser page and the agent sit on the same functions. The agent reaches them through an MCP
-server with 119 tools, so nearly everything you can click, it can do too (a few controls such as the headphone level stay
+server with 120 tools, so nearly everything you can click, it can do too (a few controls such as the headphone level stay
 in your hand), and anything it does shows up on your page. When it
 cannot do something it answers with a reason (for example `sidechain_zyklus` for a sidechain that would depend on
 itself) instead of guessing. When you grab a fader, your
@@ -53,10 +53,11 @@ that are not heard with the current settings are greyed.
 ## What it can do
 
 **Produce.** An arrangement with up to 128 tracks: audio and MIDI clips, a piano roll, warp with four modes,
-automation lanes, freeze, export and loudness per track. Stems of an audio clip on an NVIDIA GPU.
+automation lanes, modulators (LFO, envelope follower), MIDI FX (arpeggiator, chord, scale), a chord lane, a note editor
+for sung audio, freeze, export and loudness per track. Stems of an audio clip on an NVIDIA GPU.
 
 **Record.** Audio from an external input or from the studio's own channels, MIDI from a keyboard. Count-in, punch in
-and out, overdub for MIDI, takes with comping for audio, latency compensated. Measured with a software loop and a
+and out, overdub for MIDI, takes with comping for audio and for MIDI loop passes, latency compensated. Measured with a software loop and a
 test client, not yet with a real audio interface and keyboard.
 
 **Instruments.** A 303-style bass (RB-338), Cypher Modular (a modular synthesizer with 62 block types, with a mono
@@ -77,7 +78,7 @@ first, and a sample can be dragged onto the track list or onto a row of a drum k
 
 ![STUDIO: the step sequencer with rows of different length, the tracks with their sends and the dock of instruments and effects](docs/screens/studio-workbench.png)
 
-**Mix and route.** Inserts of our own (compressor, EQ, saturator, limiter), up to 16 group tracks and 8 returns with
+**Mix and route.** Inserts of our own (compressor, EQ with dynamic bands, saturator and clipper, limiter, transient shaper, imager, de-esser), up to 16 group tracks and 8 returns with
 our own reverb, sends before or after the fader, sidechain from other tracks (and on group, return and master stages
 also from groups and returns), Duck by Kick in one step, a routing matrix, and resampling of any track, group,
 return or the master into a new audio track.
@@ -218,7 +219,6 @@ Features with a control in the page:
 - Tracker view: song as sections of rows over instrument tracks
 - Tracker: import of MOD files
 - Takes and comping (audition, comp lanes)
-- Rack with devices on a track, macros, member targets
 - Foreign plugins (VST3, LV2) hosted through Carla in their own processes
 - Plugin parameter learning and panels
 - ANALYZE window (a view of the analysis)
@@ -252,8 +252,6 @@ Labs features without a control in the page (hardware, operations, or only reach
 - Windows plugins through yabridge and Wine
 - Native Instruments (Kontakt) route
 - Stem separation of an audio clip (drums, bass, other, vocals; BS-RoFormer on the GPU)
-- Merge selected tracks into one new track
-- Resample a strip to a new track
 - Loudness per track, offline on request
 - Analysis of a strip, comparison to a reference measurement
 - Structure and cue suggestion pipeline

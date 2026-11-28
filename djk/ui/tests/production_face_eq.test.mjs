@@ -6,6 +6,9 @@ import fs from 'node:fs';
 import { fuehreListeAus } from '../project/commands.ts';
 import { neuesProjekt } from '../project/model.ts';
 import { starteSeite, warte } from '../check/page_mock.mjs';
+import { eqDynDelta, eqDynText, eqSummeDb, eqBandWerte } from '../public/face/eq.js';
+import { eqTitel, parameterVon, EQ_DYN_PARAMETER, EQ_DYN_KOPF } from '../public/production/inserts.js';
+import { INSERT_ARTEN } from '../project/insert_key.ts';
 
 const CHROME = fs.existsSync('/usr/bin/google-chrome');
 const lauf = (p, b) => fuehreListeAus(p, b, { quelle: 'andreas' }).projekt;
@@ -53,7 +56,7 @@ test('face opens from the EQ chip (a real click) and lies inside the window with
   assert.equal(await s.w(`document.querySelector('.p-face .p-face-titel').textContent`), 'EQ');
   assert.equal(await s.w(`document.querySelectorAll('.p-face .fa-griff').length`), 8, 'a handle per band');
   assert.match(await s.w(`document.querySelector('.p-face .fa-eq-hinweis').textContent`), /TARGET RESPONSE \(the filter follows it within 0\.5 dB\)/);
-  assert.deepEqual(await s.w(`[...document.querySelectorAll('.p-face .fp-name')].map((e) => e.textContent)`), ['Frequency', 'Gain', 'Q', 'Band 1 on', 'Type', 'Slope dB/oct', 'Placement', 'Output', 'Prop. Q']);
+  assert.deepEqual(await s.w(`[...document.querySelectorAll('.p-face .fp-name')].map((e) => e.textContent)`), ['Frequency', 'Gain', 'Q', 'Band 1 on', 'Type', 'Slope dB/oct', 'Placement', 'Output', 'Prop. Q', 'Mode', 'Threshold', 'Range', 'Attack', 'Release']);
   assert.equal(await s.w(`document.querySelector('.p-face [data-id="c-r1-b1_freq"] .fp-wert').textContent`), '60.0 Hz', 'the plate shows band 1');
   assert.equal(await s.w(`document.querySelector('.p-face .fa-eq-seite').classList.contains('fa-eq-leer')`), false, 'band 5 is on Side: the second curve is drawn');
   for (const [b, h] of [[1280, 900], [1920, 1080]]) {
@@ -184,4 +187,68 @@ test('window smaller than the face (600x480): the face scrolls inside itself, is
   const zu = await s.w(`(() => { const r = document.querySelector('.p-face .p-face-zu').getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; })()`);
   assert.ok(zu.l >= 0 && zu.t >= 0 && zu.r <= 600 && zu.b <= 480, JSON.stringify(zu));
   assert.equal(await s.w(`document.documentElement.scrollWidth <= innerWidth`), true);
+});
+
+// ---- strand 5 slice 2: EQ Pro, the dynamic row, the header readout, the moving curve ----------------------------------------------------------------
+test('EQ Pro: the page lists of the dynamic rows equal the generated contract rows', () => {
+  const eq = Object.fromEntries(INSERT_ARTEN.eq.parameter.map((q) => [q.name, q]));
+  for (let m = 1; m <= 8; m++) for (const q of EQ_DYN_PARAMETER) {
+    const v = eq[`d${m}/${q.name}`], l = parameterVon('eq', `d${m}/${q.name}`);
+    assert.deepEqual([l.min, l.max, l.vorgabe, l.einheit], [v.min, v.max, v.vorgabe, v.einheit], `d${m}/${q.name}`);
+  }
+  for (const q of EQ_DYN_KOPF) assert.deepEqual([q.min, q.max, q.vorgabe, q.einheit], [eq[q.name].min, eq[q.name].max, eq[q.name].vorgabe, eq[q.name].einheit], q.name);
+  assert.equal(eqTitel({ 'd2/dyn': 2 }), 'Cypher EQ Pro'); assert.equal(eqTitel({}), 'Cypher EQ');
+});
+
+test('EQ Pro: the moving curve follows the stage reading; a cut range follows a cut only, a boost range a boost only', () => {
+  assert.equal(eqDynDelta(5, -8), -5); assert.equal(eqDynDelta(12, -8), -8, 'limited by the range'); assert.equal(eqDynDelta(-4, 6), 4); assert.equal(eqDynDelta(5, 6), 0); assert.equal(eqDynDelta(null, -8), 0);
+  assert.equal(eqDynText(3.24), 'dyn -3.2 dB'); assert.equal(eqDynText(-2), 'dyn 2.0 dB'); assert.equal(eqDynText(null), 'dyn -');
+  const w = { 'b3/an': 1, 'b3/typ': 0, 'b3/freq': 1000, 'b3/gain': 0, 'b3/q': 1, 'd3/dyn': 1, 'd3/schwelle': -24, 'd3/bereich': -12 };
+  assert.ok(Math.abs(eqSummeDb(w, 1000)) < 1e-9, 'static curve: flat');
+  assert.ok(Math.abs(eqSummeDb(w, 1000, 'mitte', 6) + 6) < 1e-6, 'moving curve at a reading of 6 dB: -6 dB at the centre');
+  assert.equal(eqSummeDb({ ...w, 'd3/dyn': 0 }, 1000, 'mitte', 6), 0, 'a band without dynamics does not move');
+  assert.equal(eqSummeDb({ ...w, 'b3/typ': 5 }, 1000, 'mitte', 6) < -6, true, 'a notch is static (its own depth), the reading does not touch it');
+  assert.equal(eqBandWerte(w, 3).dyn, 1);
+});
+
+test('EQ Pro face: the DYNAMIC row shows for Bell and shelves only, the mode writes d<m>/dyn, the title turns into Cypher EQ Pro, Attack and Release sit with the dynamic row', { skip: !CHROME && 'no google-chrome' }, async (t) => {
+  const s = await seite(t, projekt([...BAENDER, ['b3/an', 1], ['b3/typ', 0], ['b3/gain', -3]]));
+  await oeffneKlick(s);
+  const sichtbar = () => s.w(`(() => { const e = document.querySelector('.p-face .fa-eq-dyn'); return !!e && !e.hidden && getComputedStyle(e).display !== 'none'; })()`);
+  const tab = (m) => s.w(`document.querySelectorAll('.p-face .fa-eq-tab')[${m - 1}].click()`);
+  assert.equal(await sichtbar(), false, 'band 1 is a Low cut: no dynamic row');
+  assert.equal(await s.w(`document.querySelector('.p-face .fa-eq-titel').textContent`), 'Cypher EQ');
+  await tab(3);
+  assert.equal(await sichtbar(), true, 'band 3 is a Bell');
+  await tab(4);
+  assert.equal(await sichtbar(), true, 'band 4 is a High shelf');
+  await tab(3);
+  const modus = (k) => s.w(`[...document.querySelectorAll('.p-face .fa-eq-dyn .fp-option')][${k}].click()`);
+  await modus(1);   // Above
+  assert.ok(await s.bis(async () => (await werteVon(s))['d3/dyn'] === 1), `project: ${JSON.stringify(await werteVon(s))}`);
+  assert.ok(await s.bis(async () => (await s.w(`document.querySelector('.p-face .fa-eq-titel').textContent`)) === 'Cypher EQ Pro'));
+  assert.equal(await s.w(`document.querySelector('.p-face .fa-eq-dyn-notiz').hidden`), true, 'no key note for Above');
+  await modus(3);   // Above (key)
+  assert.ok(await s.bis(async () => (await werteVon(s))['d3/dyn'] === 3));
+  assert.equal(await s.w(`document.querySelector('.p-face .fa-eq-dyn-notiz').hidden`), false);
+  assert.match(await s.w(`document.querySelector('.p-face .fa-eq-dyn-notiz').textContent`), /until a key is chosen/);
+  assert.equal(await s.w(`document.querySelector('.p-face .fa-eq-dyn-gr').textContent`), 'dyn -', 'no fresh reading yet');
+  const namen = await s.w(`[...document.querySelectorAll('.p-face .fa-eq-stufe .fp-name')].map((e) => e.textContent)`);
+  assert.deepEqual(namen, ['Output', 'Prop. Q']);
+  assert.deepEqual(await s.w(`[...document.querySelectorAll('.p-face .fa-eq-dyn .fp-name')].map((e) => e.textContent)`), ['Mode', 'Threshold', 'Range', 'Attack', 'Release'], 'Attack and Release of the stage sit with the dynamic row');
+  await tab(5);   // band 5 is a Bell on Side
+  assert.equal(await sichtbar(), true);
+  assert.equal(await s.w(`(() => { const f = document.querySelector('.p-face'); return f.scrollHeight <= f.clientHeight + 1; })()`), true, 'still no inner scroll');
+});
+
+test('De-esser entry: one insert_setzen with band 6 as a dynamic High shelf; the page command reaches the project with the contract values', async () => {
+  const { deesserBefehl, DEESSER_WERTE } = await import('../public/dock/plus.js');
+  let p = neuesProjekt('De-esser');
+  p = lauf(p, [{ befehl: 'spur_neu', art: 'audio', name: 'Vox' }]);
+  const b = deesserBefehl(JSON.parse(JSON.stringify(p)), 's1');
+  assert.deepEqual(b, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'eq', werte: DEESSER_WERTE });
+  const w = lauf(p, [b]).spuren[0].inserts[0].werte;
+  assert.deepEqual([w['b6/an'], w['b6/typ'], w['b6/freq'], w['b6/q'], w['d6/dyn'], w['d6/schwelle'], w['d6/bereich'], w['dyn_attack'], w['dyn_release']], [1, 2, 6000, 0.707, 1, -30, -8, 1, 60]);
+  assert.equal(w['b1/an'], 0, 'the other bands stay off'); assert.equal(w['d1/dyn'], 0);
+  assert.equal(eqTitel(w), 'Cypher EQ Pro');
 });

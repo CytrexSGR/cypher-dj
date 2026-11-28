@@ -52,6 +52,9 @@ class ArrRbSenke final : public ArrSenke {
   int64_t vorhalt() const noexcept override { return 0; }
   void auto_parameter(int spur, int param, float wert) noexcept override;
   void auto_parameter_summand(int spur, int param, float delta) noexcept override;   // 1.12 slice 5: base value (playback value, else RB default) + delta, clamped to 0..1
+  // strand 6 task 1.4: a modulator offset for the next block(), added to the value the parameter plays (the lane value, base + summand, or the plain base value), clamped to 0..1 and then
+  // applied on the path of a lane value (a modulator that goes away puts the base value back once, like a lane that falls away)
+  void mod_summand(int spur, int param, float delta) noexcept override;
   void note(int spur, int64_t ziel, uint8_t ton, uint8_t vel, bool an) noexcept override;
   void alle_aus(int spur, int64_t ziel) noexcept override;
   void transport_start(int spur, int64_t ziel) noexcept override;
@@ -91,6 +94,8 @@ class ArrRbSenke final : public ArrSenke {
     float lane_wert[ARR_GERAET_PARAMS] = {};
     bool lane_da[ARR_GERAET_PARAMS] = {};    // reported in this block
     bool lane_war[ARR_GERAET_PARAMS] = {};   // reported in the block before
+    float mod_delta[ARR_GERAET_PARAMS] = {};   // strand 6: modulator offset reported for the next block (mod_summand)
+    bool mod_da[ARR_GERAET_PARAMS] = {};
     static_assert(ARR_GERAET_PARAMS == 4, "the initialiser below lists four values");
     float angewendet[ARR_GERAET_PARAMS] = {NAN_WERT, NAN_WERT, NAN_WERT, NAN_WERT};
   };

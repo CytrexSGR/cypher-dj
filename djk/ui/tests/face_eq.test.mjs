@@ -225,3 +225,13 @@ test('face/eq.js: through the frame: opening schedules no frame callback, closin
   assert.equal(dok.hoerer.length, 0, 'no listener left on the document');
   assert.equal(dok.zaehler.remove.keydown, dok.zaehler.add.keydown, 'every listener added was removed');
 });
+
+test('face/eq.js: a source with modKnopf gives the knobs a ring path (fp-mod), one without gives none', () => {
+  const mit = neuesDokument(), h1 = mit.createElement('div'), q = quelleDouble();
+  q.modKnopf = () => undefined;
+  baueEqFace(h1, q);
+  assert.ok(h1.finde('fp-mod').length > 0, 'ring paths exist');
+  const ohne = neuesDokument(), h2 = ohne.createElement('div');
+  baueEqFace(h2, quelleDouble());
+  assert.equal(h2.finde('fp-mod').length, 0);
+});

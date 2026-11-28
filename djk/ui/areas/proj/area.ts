@@ -248,6 +248,13 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
       // Automation Slice 1: proj_auto (lane_id or spur_id, von_beat, bis_beat, bei_beat as project beats, punkte_max); 1.12 slice 5: clip_id (+ ziel) reads
       // a clip's envelopes, the beats are then CLIP beats
       lies('/proj/auto', (url) => {
+        const modId = url.searchParams.get('mod_id');   // strand 6: the live offsets of one modulator, alone (not with lane_id, spur_id or clip_id)
+        if (modId) {
+          if (['lane_id', 'spur_id', 'clip_id'].some((k) => url.searchParams.get(k))) {
+            throw new ProjFehler(400, 'argument_ungueltig', { text: 'mod_id comes alone: not together with lane_id, spur_id or clip_id' });
+          }
+          return s.modAutoLage(modId);
+        }
         const zahlArg = (k: string): number | null => {
           const t = url.searchParams.get(k);
           if (t === null || t === '') return null;

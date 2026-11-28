@@ -43,9 +43,9 @@ test('T7 rows: closed T gives no take rows, and a project without takes gives th
   }
   assert.equal(takeZeilenVon({ projekt: null, takeOffen: new Set(['s1']) }).size, 0, 'no project');
   assert.equal(takeZeilenVon({ projekt: ohne }).size, 0, 'no state at all');
-  // the open rows follow the spur id and count the takes of that track only; a non-audio track never shows rows
+  // the open rows follow the spur id and count the takes of that track only; audio and instrument tracks show rows
   const gemischt = projektMit([mitTakes('s1', 2), mitTakes('s2', 3), { ...mitTakes('s3', 1), art: 'instrument' }]);
-  assert.deepEqual([...takeZeilenVon({ projekt: gemischt, takeOffen: new Set(['s2', 's3']) })], [[1, 3]]);
+  assert.deepEqual([...takeZeilenVon({ projekt: gemischt, takeOffen: new Set(['s2', 's3']) })], [[1, 3], [2, 1]]);
   assert.equal(hatTakes(mitTakes('s1', 1)), true);
   assert.equal(hatTakes(audioSpur('s1')), false);
 });
@@ -89,7 +89,27 @@ test('T7 copy rule: the page istTakeKopie gives the verdict of every fixture (th
   assert.ok(TAKE_KOPIE_FIXTURES.length >= 12);
   assert.ok(TAKE_KOPIE_FIXTURES.some((f) => f.erwartet) && TAKE_KOPIE_FIXTURES.some((f) => !f.erwartet), 'both verdicts are present');
   for (const f of TAKE_KOPIE_FIXTURES) assert.equal(istTakeKopie(f.haupt, f.take, f.bpm), f.erwartet, f.name);
-  assert.equal(istTakeKopie({ art: 'midi', id: 'x' }, audio('c1', 'A', 0, 8, 0), 120), false, 'a MIDI clip is no copy');
+  assert.equal(istTakeKopie({ art: 'midi', id: 'x' }, audio('c1', 'A', 0, 8, 0), 120), false, 'a MIDI clip is no copy of an audio clip');
+});
+
+const midi = (id, start, laenge, noten, extra = {}) => ({ id, art: 'midi', name: id, start_beat: start, laenge_beats: laenge, noten, ...extra });
+const N = (beat, ton, laenge = 1, vel = 100) => ({ beat, ton, vel, laenge });
+
+test('S7 4.3: MIDI take rows and highlight: instrument track with takes has rows; the comped range is where the main notes equal the take notes', () => {
+  const take = midi('c1', 0, 8, [N(0, 60), N(2, 62), N(4, 64), N(6, 65)]);
+  const spur = { ...audioSpur('s9'), art: 'instrument', takes: [{ id: 't1', name: 'Take 1', clips: [take] }, { id: 't2', name: 'Take 2', clips: [midi('c2', 0, 8, [N(0, 70)])] }],
+    clips: [midi('m1', 2, 4, [N(0, 62), N(2, 64)])] };   // a cut [2,6) of take 1, notes re-based to the clip start
+  assert.equal(hatTakes(spur), true);
+  assert.equal(hatTakes({ ...spur, art: 'strom' }), false);
+  assert.deepEqual([...takeZeilenVon({ projekt: { spuren: [spur] }, takeOffen: new Set(['s9']) })], [[0, 2]]);
+  assert.equal(istTakeKopie(spur.clips[0], take, 120), true);
+  assert.equal(istTakeKopie(spur.clips[0], spur.takes[1].clips[0], 120), false);
+  assert.deepEqual(genutzteBereiche(spur, 120), [{ take_id: 't1', von: 2, bis: 6 }]);
+  // a changed note or a moved clip stops matching; a note at the clip end belongs to the next clip
+  assert.equal(istTakeKopie(midi('m2', 2, 4, [N(0, 63), N(2, 64)]), take, 120), false);
+  assert.equal(istTakeKopie(midi('m3', 3, 4, [N(0, 62), N(2, 64)]), take, 120), false);
+  // lengths are cut at the end of the main clip
+  assert.equal(istTakeKopie(midi('m4', 2, 4, [N(0, 62), N(2, 64, 2)]), midi('c3', 0, 8, [N(2, 62), N(4, 64, 3)]), 120), true);
 });
 
 test('T7 audition: the body toggles the lit take off and any other on', () => {
@@ -191,7 +211,7 @@ const koepfeAufbau = (st) => {
 };
 const klasse = (e) => (e.klassen.has('p-kopf') ? 'spur' : e.klassen.has('p-takekopf') ? `take:${e.dataset.take}` : e.klassen.has('p-lanenkopf') ? 'lane' : '?');
 
-test('T7 heads: column order equals the row table (track, takes, automation lane); the T button shows only on audio tracks with takes', () => {
+test('T7 heads: column order equals the row table (track, takes, automation lane); the T button shows on audio and instrument tracks with takes', () => {
   const projekt = projektMit([mitTakes('s1', 3), audioSpur('s2'), { ...mitTakes('s3', 1), art: 'instrument' }]);
   const st = { laneOffen: new Set(['s1']), takeOffen: new Set(['s1']) };
   const { k, behaelter, umgeschaltet } = koepfeAufbau(st);
@@ -204,7 +224,7 @@ test('T7 heads: column order equals the row table (track, takes, automation lane
   assert.equal(t('s1').hidden, false);
   assert.equal(t('s1').getAttribute('aria-pressed'), 'true');
   assert.equal(t('s2').hidden, true, 'audio track without takes');
-  assert.equal(t('s3').hidden, true, 'instrument track');
+  assert.equal(t('s3').hidden, false, 'instrument track with takes (D10)');
   assert.ok(k.element('s1').classList.contains('hat-takes'));
   t('s1').click();
   assert.deepEqual(umgeschaltet, ['s1']);

@@ -31,11 +31,12 @@ import { ImportFehler, erlaubteWurzeln, istOrdner, loeseAuf, type Wurzel } from 
 import { instanz, referenzOrdnerVorgabe, renderProgramm, wirtOrdnerVorgabe } from '../../paths.ts';
 import { wirtStand } from './instrument_host.ts';
 import {
-  BK_PARAMETER, KENNUNG_MAX, alleInserts, MAX_SPUREN, SAMPLERATE, kanonisch, spurSicht, sucheSpur,
+  BK_PARAMETER, KENNUNG_MAX, alleInserts, MAX_SPUREN, SAMPLERATE, kanonisch, spurSicht, sucheSpur, sucheStrang,
   wirtSlots, type Clip, type Freeze, type Gruppe, type Projekt, type Return, type Spur } from '../../project/model.ts';
 import { istModulation } from '../../project/envelope.ts';
 import { nachkommen, vorfahren } from '../../project/routing_rules.ts';
 import type { Meta } from '../../project/history.ts';
+import type { ResonanzStrang } from '../../project/sound_measurement.ts';
 import { aendereStand, StandFehler } from '../../project/state.ts';
 import {
   brauchtFreeze, freezeBereich, freezeDateiName, FreezeFehler, FREEZE_MAX_BEATS, FREEZE_NACHLAUF_BEATS, istWirt, klingendeNoten,
@@ -1441,6 +1442,28 @@ export class Ausgabe {
       if (x.art === 'return' && !(p.returns ?? []).some((r) => r.id === x.id)) fehl('return_unbekannt', `there is no return ${x.id}`);
     }
     return { slug: o.slug, rev: p.rev, von, bis, tempo_bpm: p.tempo_bpm };
+  }
+
+  /** Strand 5 slice 6 (masking over all pairs): the tracks that sound in the range with the length of their insert chain. The same selection as
+   *  rendereStreifen applies to a track (something plays in the range); a track the mix mutes is still listed and comes back as a silent part. */
+  klingendeSpuren(von: number, bis: number): { id: string; name: string; kette: number }[] {
+    return belegteSpuren(this.offen().projekt, von, bis).map((s) => ({ id: s.id, name: s.name, kette: (s.inserts ?? []).length }));
+  }
+
+  /** Strand 5 slice 5 (tame resonances): where `n` new EQ bands of the strip `q` can go: the length of its chain and the EQ stage (switched on) that takes
+   *  them: the first with at least `n` free bands, else the one with the most free bands (at least one); null = no EQ stage with a free band. */
+  resonanzZiel(q: AnalyseQuelle, n: number): ResonanzStrang | null {
+    const strang = sucheStrang(this.offen().projekt, q.art === 'master' ? 'master' : q.id ?? '');
+    if (!strang) return null;
+    const kette = strang.inserts ?? [];
+    let beste: { insert_id: string; frei: number[] } | null = null;
+    for (const i of kette) {
+      if (i.art !== 'eq' || !i.an) continue;
+      const frei = [1, 2, 3, 4, 5, 6, 7, 8].filter((b) => !i.werte[`b${b}/an`]);
+      if (frei.length >= n) { beste = { insert_id: i.id, frei }; break; }
+      if (frei.length && (!beste || frei.length > beste.frei.length)) beste = { insert_id: i.id, frei };
+    }
+    return { id: q.art === 'master' ? 'master' : q.id ?? '', kette: kette.length, eq: beste };
   }
 
   /** ANALYZE slice 1: renders the strips `quellen` (one render each, as lautheit() renders that kind) under the output lock `{art: 'analyse'}` and hands the

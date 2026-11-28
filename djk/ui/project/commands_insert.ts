@@ -4,6 +4,7 @@ import {
   istRbGeraet, FADER_MAX, FADER_MIN, MAX_RETURNS, HALL_VORGABE, INSERT_ARTEN_AKTIV, insertWertParameter, type InsertPoolArt, MAX_INSERTS_PRO_STRANG,
   MAX_INS, alleInserts, insertVorgabe, sucheStrang, makroVon, BK_GRAPH_NAME, BK_PARAMETER, SPUR_FARBEN, SURGE_PARAMETER_MAX, istObjekt, neueId,
   sucheSpur, type Gruppe, type Insert, type Projekt, type Return, type Send, type Spur, MAX_LATENZ_EXTRA, pluginZielVon, type InsertTraeger,
+  modulatorenBereinigen,
 } from './model.ts';
 import { MAX_PLUGIN_REGLER, MAX_PLUGIN_INDEX } from './model.ts';   // strand 2 task 2.2
 import { bkSetzen } from './modular.ts';
@@ -133,6 +134,7 @@ export const INSERT = {
       if (st.sends.length === 0) delete st.sends;
     }
     p.returns = (p.returns ?? []).filter((x) => x.id !== r.id);
+    modulatorenBereinigen(p);   // strand 6: modulator targets on the return and on sends into it go with it
     if (p.returns.length === 0) delete p.returns;
     // slice 5: a key on this return would dangle
     for (const x of alleInserts(p)) if (x.insert.key?.quelle === 'ret' && x.insert.key.nr === r.nr) delete x.insert.key;
@@ -160,6 +162,7 @@ export const INSERT = {
     if (a.art === 'host') {
       hostSetzen(p, a, ctx);
       pluginLanenBereinigen(sucheStrang(p, idArg(a, 'strang_id'))!);
+      modulatorenBereinigen(p);   // strand 6: a replaced host stage takes the modulator targets on it
       return;
     }
     erlaube(a, 'strang_id', 'pos', 'art', 'werte', 'sc', 'key', 'ersetzen', 'preset', 'graph');
@@ -182,8 +185,8 @@ export const INSERT = {
     }
     const graph = pool === 'bk' ? bkEffektGraph(a.graph, ctx) : undefined;
     if (pool !== 'bk' && a.graph !== undefined) ab('argument_unbekannt', `graph: only a bk stage has a graph (${art})`);
-    if (pool !== 'komp' && a.sc !== undefined) ab('argument_unbekannt', `sc: only the compressor has a key (${art})`);
-    if (pool !== 'komp' && a.key !== undefined) ab('argument_unbekannt', `key: only the compressor has a key (${art})`);
+    if (pool !== 'komp' && pool !== 'eq' && a.sc !== undefined) ab('argument_unbekannt', `sc: only the compressor and the EQ have a key (${art})`);
+    if (pool !== 'komp' && pool !== 'eq' && a.key !== undefined) ab('argument_unbekannt', `key: only the compressor and the EQ have a key (${art})`);
     if (a.sc !== undefined && a.key !== undefined && a.key !== null) ab('argument_ungueltig', 'sc and key exclude each other: a stage has one key at most');
     const liste = [...(strang.inserts ?? [])];
     if (ersetzen) {
@@ -205,6 +208,7 @@ export const INSERT = {
     strang.inserts = liste;
     rackBereinigen(strang);   // a replaced stage takes its mappings with it
     pluginLanenBereinigen(strang);   // and a replaced host stage its plugin lanes
+    modulatorenBereinigen(p);   // strand 6: and the modulator targets on a replaced stage
   },
 
   insert_param_setzen(p, a, ctx) {
@@ -218,7 +222,7 @@ export const INSERT = {
       return;
     }
     if (param === 'sc') {
-      if (insert.art !== 'komp') ab('argument_unbekannt', `param: sc (only the compressor has a key; ${insert.art})`);
+      if (insert.art !== 'komp' && insert.art !== 'eq') ab('argument_unbekannt', `param: sc (only the compressor and the EQ have a key; ${insert.art})`);
       if (a.wert === undefined) ab('argument_ungueltig', 'wert: fehlt');
       const sc = schluesselArg(p, a.wert, strangKennung(p, strang), insert);
       if (sc > 0) insert.sc = sc; else delete insert.sc;
@@ -226,7 +230,7 @@ export const INSERT = {
       return;
     }
     if (param === 'key') {   // slice 5: every other source; null removes the structural key
-      if (insert.art !== 'komp') ab('argument_unbekannt', `param: key (only the compressor has a key; ${insert.art})`);
+      if (insert.art !== 'komp' && insert.art !== 'eq') ab('argument_unbekannt', `param: key (only the compressor and the EQ have a key; ${insert.art})`);
       if (a.wert === undefined) ab('argument_ungueltig', 'wert: fehlt');
       const def = schluesselDef(p, strangKennung(p, strang), a.wert, insert);
       if (def === null) delete insert.key;
@@ -377,6 +381,7 @@ export const INSERT = {
     if (rest.length) strang.inserts = rest; else delete strang.inserts;   // the slot goes back to the pool; the rows reset through reglerAenderungen
     rackBereinigen(strang);
     pluginLanenBereinigen(strang);
+    modulatorenBereinigen(p);   // strand 6: modulator targets on the stage (and on a rack that went with it) go too
   },
 
   insert_ordnung(p, a) {

@@ -7,6 +7,7 @@ import { SEGMENT_BPM_MAX, SEGMENT_BPM_MIN } from './warp.ts';
 import type { Punkt } from './lane.ts';
 import { BK_INSERT_OPTIONAL, BK_REGLER_MIN, BK_REGLER_ZAHL, bkInsertAuffuellen, pruefeBkListe, type BkKanal } from './modular.ts';
 import { INSERT_ARTEN } from './insert_key.ts';
+import { insertSpaeterAuffuellen, insertSpaeterNamen } from './insert_spaeter.ts';
 import { SCHLUESSEL_DJ, SCHLUESSEL_NUR_ZEILE } from './key_table.ts';
 import { ersterUngueltigerSchluessel } from './routing_verdict.ts';
 import { huellkurvenPruefung, type Huellkurve } from './envelope.ts';
@@ -14,7 +15,7 @@ import { seqPruefung, seqSichtPruefung, type SeqDeck, type SeqSicht } from './se
 import { verbundPruefungSpur } from './verbund.ts';   // verbund.ts uses model.ts values only inside functions: the cycle is harmless at load
 import { trackerPruefung, type TrackerMarke } from './tracker.ts';   // tracker.ts imports only a type from this file: no runtime cycle
 import { werkbankPruefung, type WerkbankMarke } from './werkbank.ts';   // werkbank.ts imports only a type from this file: no runtime cycle
-import { tonartFehler } from '../public/harmonie.js';
+import { tonartFehler, SKALEN, akkordSymbol } from '../public/harmonie.js';
 import { metaFehler } from './abgabe_meta.ts';
 import { markerFehler } from './marker.ts';
 import { audioNotenPruefung, type AudioNotenFeld } from './notes_contract.ts';   // note editor contract (plan A1): imports only node:crypto, no cycle
@@ -44,6 +45,8 @@ export const MAX_INS_UTIL = INSERT_ARTEN.utility.instanzen;   // arr-fx slice 1
 export const MAX_INS_BK = INSERT_ARTEN.bk.instanzen;   // arr-bk slice 3: Baukasten effect stages
 export const MAX_INS_GATE = INSERT_ARTEN.gate.instanzen;   // pool slice 4: noise gate stages
 export const MAX_INS_MB = INSERT_ARTEN.mb.instanzen;   // pool slice 4: three-band compressor stages
+export const MAX_INS_TRANS = INSERT_ARTEN.trans.instanzen;   // strand 5 slice 3: transient shaper stages
+export const MAX_INS_BILD = INSERT_ARTEN.bild.instanzen;   // strand 5 slice 3: three-band imager stages
 export const MAX_RACK = INSERT_ARTEN.rack.instanzen;
 // 1.10 slice 4c: rack macros. Four macros per rack, at most MAX_MAKRO_ZIELE mappings per strip (= ARR_MAKRO_ZIELE of the core, checked by
 // tests/project_rack.test.mjs).
@@ -193,6 +196,48 @@ export type SendZiel = `send.${string}`;
 // Strand 2 slice 1: `plugin.<stage id>.<index>` is parameter <index> of the plugin in a host stage of the same strip (value 0..1, normalized). The lane
 // is project data only: the translator never writes it (it matches no chain target) and a server-side player sends it to the host.
 export type PluginZiel = `plugin.${string}.${number}`;
+// Strand 6: project-level modulators (LFO; envelope follower from slice 3). A modulator adds an offset to the value a target plays today (base value,
+// controller, hand, lanes); the core evaluates it (D1, D3). Top-level key `modulatoren` of /3, absent when empty (old projects stay byte for byte).
+// `ziel` is a lane target string valid on the strip `strang_id`; `tiefe` is in the unit of the target (MOD_TIEFE). The check is modulatorenPruefung.
+export interface ModZiel { strang_id: string; ziel: string; tiefe: number; polaritaet?: 'uni' }
+export interface Modulator {
+  id: string;                 // neueId(p, 'mod'): 'm1', 'm2', ...
+  nr: number;                 // 1..MAX_MODULATOREN, stable core slot (D11): the lowest free number at creation
+  name?: string;              // 1..MOD_NAME_MAX chars
+  art: 'lfo' | 'folger';
+  form?: ModForm;             // lfo, default 'sinus'
+  takt?: number;              // lfo, beats per period, 1/64..256 (exclusive with hz; default 4)
+  hz?: number;                // lfo, free rate 0.01..40
+  phase?: number;             // 0 <= phase < 1 (the core reads [0, 1)), default 0
+  quelle?: string;            // folger: a track id (slice 3)
+  angriff_ms?: number;        // folger 0.1..500, default 5
+  abfall_ms?: number;         // folger 1..5000, default 150
+  empfindlich_db?: number;    // folger -24..24, default 0
+  glatt_ms?: number;          // 0..500, default 1
+  an?: false;                 // only false is written
+  ziele: ModZiel[];           // 1..MAX_MOD_ZIELE
+}
+export const MAX_MODULATOREN = 16, MAX_MOD_ZIELE = 8, MAX_MOD_FELDER = 32;   // = ARR_MODS, ARR_MOD_ZIELE, ARR_MOD_FELDER in arr_playback.h
+export const MOD_FORMEN = ['sinus', 'dreieck', 'saege', 'rechteck', 'zufall'] as const;   // = lfo.rs shapes 0..4
+export type ModForm = typeof MOD_FORMEN[number];
+export const MOD_NAME_MAX = 32;
+export const MOD_TAKT_MIN = 1 / 64, MOD_TAKT_MAX = 256, MOD_HZ_MIN = 0.01, MOD_HZ_MAX = 40, MOD_GLATT_MAX = 500;
+export const MOD_TAKT_VORGABE = 4;
+// envelope follower (slice 3, D12): attack and release in ms, sensitivity in dB; absent = the default, the translator writes it
+export const MOD_ANGRIFF_MIN = 0.1, MOD_ANGRIFF_MAX = 500, MOD_ABFALL_MIN = 1, MOD_ABFALL_MAX = 5000, MOD_EMPFINDLICH_MAX = 24;
+export const MOD_ANGRIFF_VORGABE = 5, MOD_ABFALL_VORGABE = 150, MOD_EMPFINDLICH_VORGABE = 0;
+/** the fields only one kind of modulator carries (the other kind refuses them; mod_aendern drops them when the kind changes) */
+export const MOD_FELDER_NUR = { lfo: ['form', 'takt', 'hz', 'phase'], folger: ['quelle', 'angriff_ms', 'abfall_ms', 'empfindlich_db'] } as const;
+// depth range per target kind (D6): fader and send in dB, pan in pan units, every other kind a signed fraction of the target's range
+export const MOD_TIEFE = {
+  fader: [-24, 24], pan: [-1, 1], geraet: [-1, 1], send: [-24, 24], insert: [-1, 1], rack: [-1, 1], plugin: [-1, 1],
+} as const satisfies Record<string, readonly [number, number]>;
+/** the depth range of a modulation target, null = no modulation target kind */
+export function modTiefeBereich(ziel: string): readonly [number, number] | null {
+  if (ziel === 'fader' || ziel === 'pan') return MOD_TIEFE[ziel];
+  const art = /^(geraet|send|insert|rack|plugin)\./.exec(ziel)?.[1] as keyof typeof MOD_TIEFE | undefined;
+  return art ? MOD_TIEFE[art] : null;
+}
 export interface Lane { id: string; ziel: Ziel | KettenZiel | BlendZiel | SendZiel | PluginZiel; punkte: Punkt[]; gesperrt?: true }
 export interface ZielBereich { min: number; max: number; nurSprung: boolean }
 // 1.8 Slice 1: optional; fehlt es, ist die Spur nicht scharf und ohne Eingang.
@@ -333,7 +378,8 @@ export function musterPruefung(x: unknown): { grund: string; text: string } | nu
 export type Clip = AudioClip | MidiClip;
 // 1.14 comping: a take is a named lane of audio clips below its track; it is never played itself (the comp copies clips into the track).
 // art 'original' marks the lane that holds the clips the track had before the first take (the only value). Id t<n>, project wide.
-export interface Take { id: string; name: string; art?: 'original'; clips: AudioClip[] }
+// D10 (strand 7): clips are AudioClip on an audio track, MidiClip on an instrument track (pruefeTake checks them against the track art)
+export interface Take { id: string; name: string; art?: 'original'; clips: AudioClip[] | MidiClip[] }
 // preset (1.16 rest, F8): the register id of the preset last applied (presets/preset_id.ts); not playback (spurSicht strips it), absent in older files
 export interface InternGeraet { art: 'intern'; name: 'rb338'; parameter: Record<string, number>; preset?: string }
 // Baukasten S20: an instrument graph of the kern's graph folder as the device; parameter holds the knobs k1..k64 that were set (absent = 0.5)
@@ -575,10 +621,10 @@ export const HALL_VORGABE: Readonly<ReturnHall> = { an: true, pre: 0.04, decay: 
 export const HALL_FELDER = ['pre', 'decay', 'groesse', 'tief', 'highcut', 'fahne'] as const;
 // 1.10 slice 4: one stage of the insert chain. `slot` = the pooled instance (ins/<art>/<slot>/*), unique per kind in the whole project and chosen by the
 // project (lowest free). `werte` holds every parameter of the kind except the stage switch `an` and `sc` (real units, plugin ranges; the EQ band parameters are
-// 'b1/freq' ... 'b8/platz', the band switch is 'b<m>/an'); `sc` (komp only): 0 or absent = own signal, n = input of track number n.
+// 'b1/freq' ... 'b8/platz', the band switch is 'b<m>/an'); `sc` (komp and eq only): 0 or absent = own signal, n = input of track number n.
 // `bk` (arr-bk slice 3): a Baukasten effect graph as a stage; `graph` is its file name in the graph folder (an effect graph, one with an
 // `eingang` node), `werte` the knobs k1..k64 (0..1).
-export type InsertSorte = 'komp' | 'eq' | 'saett' | 'lim' | 'utility' | 'bk' | 'gate' | 'mb' | 'host';
+export type InsertSorte = 'komp' | 'eq' | 'saett' | 'lim' | 'utility' | 'bk' | 'gate' | 'mb' | 'trans' | 'bild' | 'host';
 // 1.10 slice 5 (plan E8): the sidechain key of a `komp` stage has two writers. A track `pre` key stays the field `sc` (4a, row `ins/komp/<slot>/sc`, a
 // control).
 // Every other source is structure: `key` {quelle, nr, punkt} (playback `chain[j].key`). A stage carries at most one of the two; `key` is never {spur, pre}.
@@ -598,12 +644,12 @@ export interface Insert {
   plugin?: HostPlugin; zustand?: string; latenz_extra?: number;
   regler?: (number | null)[];   // strand 2 task 2.2: host stages only, see MAX_PLUGIN_REGLER
 }
-export const INSERT_ARTEN_AKTIV: readonly InsertSorte[] = ['komp', 'eq', 'saett', 'lim', 'utility', 'bk', 'gate', 'mb'];
+export const INSERT_ARTEN_AKTIV: readonly InsertSorte[] = ['komp', 'eq', 'saett', 'lim', 'utility', 'bk', 'gate', 'mb', 'trans', 'bild'];
 export const MAX_INS: Readonly<Record<string, number>> = {
   komp: MAX_INS_KOMP, eq: MAX_INS_EQ, saett: MAX_INS_SAETT, lim: MAX_INS_LIM, utility: MAX_INS_UTIL, bk: MAX_INS_BK,
-  gate: MAX_INS_GATE, mb: MAX_INS_MB, host: MAX_HOST,
+  gate: MAX_INS_GATE, mb: MAX_INS_MB, trans: MAX_INS_TRANS, bild: MAX_INS_BILD, host: MAX_HOST,
 };
-export type InsertPoolArt = 'komp' | 'eq' | 'saett' | 'lim' | 'utility' | 'bk' | 'gate' | 'mb' | 'host';
+export type InsertPoolArt = 'komp' | 'eq' | 'saett' | 'lim' | 'utility' | 'bk' | 'gate' | 'mb' | 'trans' | 'bild' | 'host';
 const insertParameter = (art: InsertPoolArt) => INSERT_ARTEN[art].parameter;
 /** the contract parameters of a kind that `Insert.werte` holds: all except the stage switch `an` (and the key `sc`, which has its own field) */
 export const insertWertParameter = (art: InsertPoolArt) => insertParameter(art).filter((q) => q.name !== 'an' && q.name !== 'sc');
@@ -657,6 +703,7 @@ export interface Spur {
   id: string; von?: Herkunft; gruppe?: string; nr: number; name: string; farbe: string; art: 'audio' | 'instrument' | 'strom';
   strom?: number;   // 'strom' tracks: the stream 1..MAX_STROEME the track reads; unique, only inside the strudel group
   geraet?: Geraet; freeze?: Freeze | null; aufnahme?: SpurAufnahme; ausgang?: AusgangGruppe; automation?: Lane[]; takes?: Take[];
+  midi?: MidiStufe;   // MIDI stage chain (instrument tracks, /2 only): written to the playback key `midi` while it has a stage and is not `aus`
   stammbaum?: Stammbaum;   // find sound: the family tree of a Baukasten track (instrument tracks only); project data, not playback (spurSicht omits it)
   fader_db: number; pan: number; mute: boolean; solo: boolean; clips: Clip[]; sends?: Send[]; inserts?: Insert[]; rack?: Rack;
   zellen?: ZellSlot[];   // loop deck: exactly LOOP_ZELLEN entries (a cell, null, or the slot { halten: true }); only on the audio tracks of a loopdeck group
@@ -681,13 +728,34 @@ export const eqZeilenWert = (s: { eq?: Partial<Record<EqBand, number>>; kill?: P
 // Alle steigen nur und stehen in keinem Patch, Undo und Redo setzen sie nicht zurück.
 // The key of a project: the root as a pitch class (C = 0) and a scale name of public/harmonie.js SKALEN. View and editing help only, playback never reads it.
 export interface Tonart { grundton: number; skala: string }
+export const ARP_MUSTER = ['up', 'down', 'updown', 'downup', 'played', 'random', 'chord'] as const;
+export type ArpMuster = typeof ARP_MUSTER[number];
+/** Arp rate names of the project (note lengths), and their length in beats. */
+export const ARP_RATEN = { '1/2': 2, '1/4': 1, '1/4t': 2 / 3, '1/8': 0.5, '1/8t': 1 / 3, '1/16': 0.25, '1/16t': 1 / 6, '1/32': 0.125 } as const;
+export type ArpRate = keyof typeof ARP_RATEN;
+/** The MIDI stage chain of an instrument track (Chord, Scale, Arp, Velocity, Chance in this order); every stage optional, `aus` bypasses the whole chain. */
+export interface MidiStufe {
+  aus?: true;
+  akkord?: { intervalle: number[] };
+  skala?: { quelle: 'projekt' } | { grundton: number; skala: string };
+  arp?: { muster: ArpMuster; sync: true; rate: ArpRate; oktaven: 1 | 2 | 3 | 4; gate: number }
+    | { muster: ArpMuster; sync: false; hz: number; oktaven: 1 | 2 | 3 | 4; gate: number };
+  velocity?: { kurve: number; zufall: number; fest?: number };
+  chance?: number;
+  saat?: number;
+}
+/** One entry of the production harmony lane: from `beat` on the key is grundton + skala; `akkord` is the chord symbol shown on the lane (display only). */
+export interface HarmonieEintrag { beat: number; grundton: number; skala: string; akkord?: string }
+export interface Harmonie { eintraege: HarmonieEintrag[] }
+export const HARMONIE_MAX = 512;
+
 /** A named point on the arrangement timeline (project/marker.ts): stored sorted by beat, one per beat, ids m<n>. */
 export interface Marker { id: string; beat: number; name: string; farbe?: number }
 export interface AbgabeMeta { titel?: string; kuenstler?: string; album?: string; jahr?: number; genre?: string; isrc?: string }
 export interface Projekt {
   format: typeof FORMAT; name: string; rev: number; wiedergabe_rev: number; tempo_bpm: number; taktart: [number, number];
   naechste_id?: { spur?: number; clip?: number; gruppe?: number; lane?: number; return?: number; insert?: number; take?: number; verbund?: number;
-    zelle?: number; szene?: number; marker?: number };
+    zelle?: number; szene?: number; marker?: number; mod?: number };
   naechste_noten_id?: number;
   loop: { an: boolean; von_beat: number; bis_beat: number };
   metronom: { an: boolean; pegel_db: number; ziel: 'master' | 'cue' };
@@ -701,11 +769,15 @@ export interface Projekt {
   live?: true;             // the live container (plan live-module): the one project that runs during a DJ set; never written when absent
   tracker?: TrackerMarke;   // tracker view marker (project/tracker.ts): only in /2, never together with live or werkbank; never written when absent
   werkbank?: WerkbankMarke;   // loop workbench module (project/werkbank.ts): only in /2, never together with live; never written when absent
+  // production harmony lane (plan strand 7, 5.1): only in /2, never empty, absent without a lane;
+  // playback reads it only for tracks whose stage follows the project
+  harmonie?: Harmonie;
   tonart?: Tonart;          // key of the project (public/harmonie.js): the note editors mark and fold by it; only in /2, absent without a key
   abgabe_meta?: AbgabeMeta;   // release metadata for the tags of delivery files (project/abgabe.ts): only in /2, never empty, absent when no field is set
   session?: SessionEinstellung;   // session view: global grid and the 8 scenes; only in a live project, written with the first session command
   marker?: Marker[];        // arrangement markers (project/marker.ts): current format /3, not in the live container, never empty; no part of the playback
   szenen?: (Szene | null)[];   // SEQ scenes (project/commands_szenen.ts): exactly SZENEN_SLOTS entries when present, absent until the first save; only in /2
+  modulatoren?: Modulator[];   // strand 6: project-level modulators (commands_auto.ts mod_*), current format /3 only, never empty
 }
 
 // A SEQ scene: the pattern tracks (ids) that are ON and those that are OFF at the moment of saving. A pattern in neither list is left alone by a launch.
@@ -818,9 +890,11 @@ export function hoechste(ids: Iterable<string>, praefix: string): number {
 // Byte für Byte gleich bleiben und ein älterer Stand sie weiter liest; setzeFehlendeZaehler fasst ihn nicht an.
 // Return-IDs r<n> (slice 3): like the lane counter, naechste_id.return arises with the first return. Insert IDs i<n> (slice 4): the same, with the first stage.
 // Take ids t<n> (1.14): like the lane counter, naechste_id.take arises with the first use. Clip ids are project wide over main AND take clips.
-export function neueId(p: Projekt, art: 'spur' | 'clip' | 'gruppe' | 'lane' | 'return' | 'insert' | 'take' | 'verbund' | 'zelle' | 'szene' | 'marker'): string {
+export function neueId(p: Projekt,
+  art: 'spur' | 'clip' | 'gruppe' | 'lane' | 'return' | 'insert' | 'take' | 'verbund' | 'zelle' | 'szene' | 'marker' | 'mod'): string {
   if (art === 'szene') return neueSzenenId(p);
   if (art === 'marker') return neueMarkerId(p);
+  if (art === 'mod') return neueModId(p);
   const praefix = art === 'spur' ? 's' : art === 'clip' ? 'c' : art === 'lane' ? 'a' : art === 'return' ? 'r'
     : art === 'insert' ? 'i' : art === 'take' ? 't' : art === 'verbund' ? 'v' : art === 'zelle' ? 'z' : 'g';
   const ids = art === 'spur' ? p.spuren.map((s) => s.id)
@@ -850,6 +924,13 @@ function neueMarkerId(p: Projekt): string {
   const lebend = hoechste((p.marker ?? []).map((m) => m.id), 'm');
   const n = Math.max(p.naechste_id?.marker ?? 1, lebend + 1);
   p.naechste_id = { ...p.naechste_id, marker: n + 1 };
+  return `m${n}`;
+}
+// Strand 6: modulator ids m<n>, the same rule with their own counter naechste_id.mod (it arises with the first modulator and never falls)
+function neueModId(p: Projekt): string {
+  const lebend = hoechste((p.modulatoren ?? []).map((m) => m.id), 'm');
+  const n = Math.max(p.naechste_id?.mod ?? 1, lebend + 1);
+  p.naechste_id = { ...p.naechste_id, mod: n + 1 };
   return `m${n}`;
 }
 // Stand des Noten-Zählers: der Projekt-Zähler, sonst das Maximum aller Noten-IDs und alter Clip-Zähler (Spec 6.28) plus 1
@@ -896,6 +977,7 @@ export function setzeFehlendeZaehler(p: Projekt): void {
     ...(z?.zelle !== undefined ? { zelle: z.zelle } : {}),         // loop deck: same, it arises with the first cell
     ...(z?.szene !== undefined ? { szene: z.szene } : {}),         // session view: same, it arises with the first scene command
     ...(z?.marker !== undefined ? { marker: z.marker } : {}),      // arrangement markers: same, it arises with the first marker
+    ...(z?.mod !== undefined ? { mod: z.mod } : {}),               // strand 6 modulators: same, it arises with the first modulator
   };
   if (p.naechste_noten_id === undefined) p.naechste_noten_id = notenZaehler(p);
 }
@@ -949,14 +1031,14 @@ export function alleInserts(p: Projekt): { strang: InsertTraeger; strangId: stri
   if (p.master) von(p.master, 'master');
   return aus;
 }
-/** the pooled rows ins/<art>/<slot>/* of a stage with its values (komp 10, eq 59, saett 4, lim 3, utility 5): values first, the key (komp),
+/** the pooled rows ins/<art>/<slot>/* of a stage with its values (komp 10, eq 86, saett 6, lim 3, utility 5): values first, the key (komp, eq),
  * the switch `an` LAST
  *  (a stage never sounds half set) */
 export function insertZeilen(i: Insert): Record<string, number> {
   const r: Record<string, number> = {};
   const art = i.art as InsertPoolArt;
   for (const k of insertWertNamen(art)) r[`ins/${i.art}/${i.slot}/${k}`] = i.werte[k];
-  if (art === 'komp') r[`ins/${i.art}/${i.slot}/sc`] = i.sc ?? 0;
+  if (art === 'komp' || art === 'eq') r[`ins/${i.art}/${i.slot}/sc`] = i.sc ?? 0;
   r[`ins/${i.art}/${i.slot}/an`] = i.an ? 1 : 0;
   return r;
 }
@@ -1019,9 +1101,9 @@ export function sucheClip(p: Projekt, id: string): { spur: Spur; clip: Clip } | 
   return undefined;
 }
 
-export function sucheTakeClip(p: Projekt, clipId: string): { spur: Spur; take: Take; clip: AudioClip } | null {
+export function sucheTakeClip(p: Projekt, clipId: string): { spur: Spur; take: Take; clip: Clip } | null {
   for (const spur of p.spuren) {
-    for (const take of spur.takes ?? []) { const clip = take.clips.find((c) => c.id === clipId); if (clip) return { spur, take, clip }; }
+    for (const take of spur.takes ?? []) { const clip = (take.clips as Clip[]).find((c) => c.id === clipId); if (clip) return { spur, take, clip }; }
   }
   return null;
 }
@@ -1549,7 +1631,7 @@ function pruefeSends(x: unknown, wo: string, erlaubt: boolean): Send[] {
 // the rules (zyklus, spaet, quelle)
 // by the commands (project/routing_rules.ts).
 function pruefeSchluessel(x: unknown, wo: string, art: InsertPoolArt, hatSc: boolean): void {
-  if (art !== 'komp' && art !== 'host') werfe(wo, 'unknown field (only the compressor and a host stage have a key)');
+  if (art !== 'komp' && art !== 'eq' && art !== 'host') werfe(wo, 'unknown field (only the compressor, the EQ and a host stage have a key)');
   if (hatSc) werfe(wo, 'sc and key exclude each other (a stage has one key at most)');
   const k = felder(x, wo, ['quelle', 'nr', 'punkt']);
   if (!(SCHLUESSEL_QUELLEN as readonly unknown[]).includes(k.quelle)) werfe(`${wo}.quelle`, `${SCHLUESSEL_QUELLEN.join(' | ')} expected`);
@@ -1631,11 +1713,11 @@ function pruefeInserts(x: unknown, wo: string, erlaubt: boolean): Insert[] {
     const art = o.art as InsertPoolArt;
     if (art === 'host') { felder(o.werte, `${w}.werte`, []); return; }
     // a bk stage: k9..k64 are optional (an older project stores k1..k8 only, see modular.ts)
-    const opt = art === 'bk' ? BK_INSERT_OPTIONAL : [];
+    const opt = art === 'bk' ? BK_INSERT_OPTIONAL : insertSpaeterNamen(art);   // bk k9..k64; eq dynamic bands and saett kurve/decke (insert_spaeter.ts)
     const ws = felder(o.werte, `${w}.werte`, insertWertNamen(art).filter((n) => !opt.includes(n)), [...opt]);
     for (const q of insertWertParameter(art)) if (q.name in ws) zahlIn(ws[q.name], `${w}.werte.${q.name}`, q.min, q.max, q.ganz);
     if ('sc' in o) {
-      if (art !== 'komp') werfe(`${w}.sc`, 'unbekanntes Feld (nur der Kompressor hat einen Schlüssel)');
+      if (art !== 'komp' && art !== 'eq') werfe(`${w}.sc`, 'unbekanntes Feld (nur Kompressor und EQ haben einen Schlüssel)');
       zahlIn(o.sc, `${w}.sc`, 1, MAX_SPUREN, true);   // 0 is stored as an absent key
     }
     if ('key' in o) pruefeSchluessel(o.key, `${w}.key`, art, 'sc' in o);
@@ -1718,13 +1800,13 @@ function pruefeReturn(g: unknown, wo: string): Return {
   return o as unknown as Return;
 }
 
-function pruefeTake(t: unknown, wo: string, warpErlaubt: boolean): Take {
+function pruefeTake(t: unknown, wo: string, warpErlaubt: boolean, spurArt = 'audio'): Take {
   const o = felder(t, wo, ['id', 'name', 'clips'], ['art']);
   if (typeof o.id !== 'string' || !TAKE_ID.test(o.id)) werfe(`${wo}.id`, 't<n> expected');
   text(o.name, `${wo}.name`, TAKE_NAME_MAX);
   if ('art' in o && o.art !== 'original') werfe(`${wo}.art`, "'original' expected");
   if (!Array.isArray(o.clips)) werfe(`${wo}.clips`, 'list expected');
-  (o.clips as unknown[]).forEach((c, i) => pruefeClip(c, `${wo}.clips[${i}]`, 'audio', warpErlaubt));
+  (o.clips as unknown[]).forEach((c, i) => pruefeClip(c, `${wo}.clips[${i}]`, spurArt, warpErlaubt));
   return o as unknown as Take;
 }
 
@@ -1846,6 +1928,78 @@ function pruefeZellen(x: unknown, wo: string): void {
 // the first field of a track that only a loop deck track may carry, or null
 const deckFeld = (s: Spur): string | null => (['zellen', 'filter', 'eq', 'kill', 'fx'] as const).find((k) => s[k] !== undefined) ?? null;
 
+// MIDI stage of a track (plan strand 7, 3.3): every rule names its field
+export function pruefeMidiStufe(x: unknown, wo: string): MidiStufe {
+  const o = felder(x, wo, [], ['aus', 'akkord', 'skala', 'arp', 'velocity', 'chance', 'saat']);
+  if ('aus' in o && o.aus !== true) werfe(`${wo}.aus`, 'true expected (absent when the chain is on)');
+  if ('akkord' in o) {
+    const a = felder(o.akkord, `${wo}.akkord`, ['intervalle']);
+    const iv = a.intervalle;
+    if (!Array.isArray(iv) || iv.length < 1 || iv.length > 6) werfe(`${wo}.akkord.intervalle`, '1..6 entries expected');
+    (iv as unknown[]).forEach((v, i) => { zahlIn(v, `${wo}.akkord.intervalle[${i}]`, -24, 24, true);
+      if (v === 0) werfe(`${wo}.akkord.intervalle[${i}]`, 'not 0 expected'); });
+    if (new Set(iv as unknown[]).size !== (iv as unknown[]).length) werfe(`${wo}.akkord.intervalle`, 'distinct entries expected');
+  }
+  if ('skala' in o) {
+    if (istObjekt(o.skala) && 'quelle' in o.skala) {
+      const k = felder(o.skala, `${wo}.skala`, ['quelle']);
+      if (k.quelle !== 'projekt') werfe(`${wo}.skala.quelle`, "'projekt' expected");
+    } else {
+      const k = felder(o.skala, `${wo}.skala`, ['grundton', 'skala']);
+      zahlIn(k.grundton, `${wo}.skala.grundton`, 0, 11, true);
+      if (typeof k.skala !== 'string' || !Object.hasOwn(SKALEN, k.skala)) werfe(`${wo}.skala.skala`, `one of ${Object.keys(SKALEN).join(', ')} expected`);
+    }
+  }
+  if ('arp' in o) {
+    const a0 = istObjekt(o.arp) ? o.arp : werfe(`${wo}.arp`, 'Objekt erwartet');
+    if (a0.sync !== true && a0.sync !== false) werfe(`${wo}.arp.sync`, 'true/false expected');
+    const a = felder(a0, `${wo}.arp`, ['muster', 'sync', 'oktaven', 'gate', a0.sync ? 'rate' : 'hz']);
+    if (!(ARP_MUSTER as readonly unknown[]).includes(a.muster)) werfe(`${wo}.arp.muster`, `one of ${ARP_MUSTER.join(', ')} expected`);
+    if (a.sync) { if (typeof a.rate !== 'string' || !Object.hasOwn(ARP_RATEN, a.rate))
+      werfe(`${wo}.arp.rate`, `one of ${Object.keys(ARP_RATEN).join(', ')} expected`); }
+    else zahlIn(a.hz, `${wo}.arp.hz`, 0.5, 40);
+    zahlIn(a.oktaven, `${wo}.arp.oktaven`, 1, 4, true);
+    zahlIn(a.gate, `${wo}.arp.gate`, 0.05, 1);
+  }
+  if ('velocity' in o) {
+    const v = felder(o.velocity, `${wo}.velocity`, ['kurve', 'zufall'], ['fest']);
+    zahlIn(v.kurve, `${wo}.velocity.kurve`, -1, 1); zahlIn(v.zufall, `${wo}.velocity.zufall`, 0, 64, true);
+    if ('fest' in v) zahlIn(v.fest, `${wo}.velocity.fest`, 1, 127, true);
+  }
+  if ('chance' in o) zahlIn(o.chance, `${wo}.chance`, 0, 100, true);
+  if ('saat' in o) zahlIn(o.saat, `${wo}.saat`, 0, 4294967295, true);
+  return o as MidiStufe;
+}
+export function midiStufeFehler(x: unknown): string | null {
+  try { pruefeMidiStufe(x, 'midi'); return null; } catch (e) { if (e instanceof Fehl) return e.message; throw e; }
+}
+
+// Production harmony lane (plan strand 7, 5.1): {eintraege: [{beat, grundton, skala, akkord?}]}, sorted by beat, one entry per beat, 1..HARMONIE_MAX.
+export function harmonieFehler(x: unknown): string | null {
+  if (!istObjekt(x)) return 'harmonie: object {eintraege} expected';
+  for (const k of Object.keys(x)) if (k !== 'eintraege') return `harmonie.${k}: unknown field`;
+  const e = x.eintraege;
+  if (!Array.isArray(e)) return 'harmonie.eintraege: list expected';
+  if (e.length < 1) return 'harmonie.eintraege: not empty expected (absent when there is no lane)';
+  if (e.length > HARMONIE_MAX) return `harmonie.eintraege: at most ${HARMONIE_MAX} entries`;
+  let vorher = -Infinity;
+  for (let i = 0; i < e.length; i += 1) {
+    const wo = `harmonie.eintraege[${i}]`, z: unknown = e[i];
+    if (!istObjekt(z)) return `${wo}: object expected`;
+    for (const k of Object.keys(z)) if (!['beat', 'grundton', 'skala', 'akkord'].includes(k)) return `${wo}.${k}: unknown field`;
+    if (typeof z.beat !== 'number' || !Number.isFinite(z.beat) || z.beat < 0 || z.beat > MAX_BEAT) return `${wo}.beat: number 0..${MAX_BEAT} expected`;
+    if (z.beat <= vorher) return `${wo}.beat: ascending beats, one entry per beat expected`;
+    vorher = z.beat;
+    const f = tonartFehler({ grundton: z.grundton, skala: z.skala });
+    if (f) return `${wo}.${f.replace(/^tonart\.?/, '')}`;
+    if ('akkord' in z) {
+      if (typeof z.akkord !== 'string') return `${wo}.akkord: chord symbol text expected`;
+      try { akkordSymbol(z.akkord); } catch (err) { return `${wo}.akkord: ${(err as Error).message.replace(/^akkord:\s*/, '')}`; }
+    }
+  }
+  return null;
+}
+
 function pruefeSpur(s: unknown, wo: string, warpErlaubt: boolean): Spur {
   if (!istObjekt(s)) return werfe(wo, 'Objekt erwartet');
   const basis = ['id', 'nr', 'name', 'farbe', 'art', 'fader_db', 'pan', 'mute', 'solo', 'clips'];
@@ -1854,7 +2008,8 @@ function pruefeSpur(s: unknown, wo: string, warpErlaubt: boolean): Spur {
     ? felder(s, wo, [...basis, 'strom'], ['von', 'gruppe', 'ausgang', 'automation', 'sends', 'inserts', 'rack', 'filter', 'eq', 'kill', 'fx'])
     : s.art === 'audio'
     ? felder(s, wo, basis, ['von', 'gruppe', 'aufnahme', 'ausgang', 'automation', 'sends', 'inserts', 'rack', 'takes', 'zellen', 'filter', 'eq', 'kill', 'fx'])
-    : felder(s, wo, [...basis, 'geraet'], ['freeze', 'von', 'gruppe', 'ausgang', 'automation', 'sends', 'inserts', 'rack', 'aufnahme', 'stammbaum']);
+    : felder(s, wo, [...basis, 'geraet'], ['freeze', 'von', 'gruppe', 'ausgang', 'automation', 'sends', 'inserts', 'rack',
+      'aufnahme', 'stammbaum', 'takes', 'midi']);
   if (s.art === 'strom') {
     zahlIn(o.strom, `${wo}.strom`, 1, MAX_STROEME, true);
     if (!Array.isArray(o.clips) || o.clips.length > 0) werfe(`${wo}.clips`, 'a strom track has no clips');
@@ -1883,6 +2038,7 @@ function pruefeSpur(s: unknown, wo: string, warpErlaubt: boolean): Spur {
       boolean(e[k], `${wo}.fx.${k}`);
     }
   }
+  if ('midi' in o) { if (!warpErlaubt) werfe(`${wo}.midi`, `unknown field (midi stages exist only from ${FORMAT} on)`); pruefeMidiStufe(o.midi, `${wo}.midi`); }
   if ('stammbaum' in o) { const f = pruefeStammbaum(o.stammbaum, `${wo}.stammbaum`); if (f.length) werfe(`${wo}.stammbaum`, f[0]); }
   if ('sends' in o) pruefeSends(o.sends, `${wo}.sends`, warpErlaubt);
   if ('inserts' in o) pruefeInserts(o.inserts, `${wo}.inserts`, warpErlaubt);
@@ -1942,7 +2098,7 @@ function pruefeSpur(s: unknown, wo: string, warpErlaubt: boolean): Spur {
     if (!warpErlaubt) werfe(`${wo}.takes`, `unknown field (takes exist only from ${FORMAT} on)`);
     if (!Array.isArray(o.takes)) werfe(`${wo}.takes`, 'list expected');
     if ((o.takes as unknown[]).length > MAX_TAKES_PRO_SPUR) werfe(`${wo}.takes`, `at most ${MAX_TAKES_PRO_SPUR} takes per track`);
-    (o.takes as unknown[]).forEach((t, i) => pruefeTake(t, `${wo}.takes[${i}]`, warpErlaubt));
+    (o.takes as unknown[]).forEach((t, i) => pruefeTake(t, `${wo}.takes[${i}]`, warpErlaubt, o.art as string));
   }
   return o as unknown as Spur;
 }
@@ -2032,7 +2188,11 @@ export function pruefeFehler(x: unknown): string | null {
 
 // every insert stage of the project (tracks, groups, returns, master) that is a bk stage gets k9..k64 = 0.5 where the file had none
 function bkInsertWerteAuffuellen(p: Projekt): void {
-  for (const { strang } of alleStraenge(p)) for (const i of strang.inserts ?? []) if (i.art === 'bk') bkInsertAuffuellen(i.werte);
+  for (const { strang } of alleStraenge(p)) {
+    for (const i of strang.inserts ?? []) {
+      if (i.art === 'bk') bkInsertAuffuellen(i.werte); else if (i.art !== 'host') insertSpaeterAuffuellen(i.art, i.werte);   // eq d1..d8, saett kurve/decke
+    }
+  }
 }
 // --- Upgrade /2 -> /3 -----------------------------------------------------------------------------------------------
 const STANDARD_PLAETZE: readonly PlatzTyp[] = ['track', 'track', 'strudel', 'loops'];
@@ -2186,7 +2346,9 @@ function pruefeAlles(x: unknown): void {
   const neu2 = istObjekt(x) && x.format === FORMAT;   // /2 verlangt gruppen und master, /1 hat sie nicht
   const pflicht = ['format', 'name', 'rev', 'wiedergabe_rev', 'tempo_bpm', 'taktart', 'loop', 'metronom', 'spuren', ...(neu2 ? ['gruppen', 'master'] : [])];
   // returns, baukasten in /1: unknown field
-  const nur2 = ['returns', 'baukasten', 'aufnahme', 'live', 'werkbank', 'tracker', 'tonart', 'abgabe_meta', 'marker', 'szenen', 'plaetze', 'session'];
+  const nur2 = ['returns', 'baukasten', 'aufnahme', 'live', 'werkbank', 'tracker', 'tonart',
+    'harmonie', 'abgabe_meta', 'marker', 'szenen', 'plaetze', 'session',
+    'modulatoren'];
   const o = felder(x, 'projekt', pflicht, ['naechste_id', 'naechste_noten_id', ...(neu2 ? nur2 : [])]);
   if ('szenen' in o) pruefeSzenen(o.szenen);
   if ('session' in o) {
@@ -2195,6 +2357,8 @@ function pruefeAlles(x: unknown): void {
   }
   const tf = 'tonart' in o ? tonartFehler(o.tonart) : null;
   if (tf) werfe('tonart', tf.replace(/^tonart[.:]?\s*/, ''));
+  const hf = 'harmonie' in o ? harmonieFehler(o.harmonie) : null;
+  if (hf) throw new Fehl(hf);
   const mf = 'abgabe_meta' in o ? metaFehler(o.abgabe_meta) : null;
   if (mf) throw new Fehl(mf);
   if ('marker' in o) {
@@ -2218,8 +2382,9 @@ function pruefeAlles(x: unknown): void {
   }
   if ('naechste_noten_id' in o) zahlIn(o.naechste_noten_id, 'naechste_noten_id', 1, Number.MAX_SAFE_INTEGER, true);
   if ('naechste_id' in o) {
-    const z = felder(o.naechste_id, 'naechste_id', [], ['spur', 'clip', 'gruppe', 'lane', 'return', 'insert', 'take', 'verbund', 'zelle', 'szene', 'marker']);
-    for (const k of ['spur', 'clip', 'gruppe', 'lane', 'return', 'insert', 'take', 'verbund', 'zelle', 'szene', 'marker']) {
+    const zaehler = ['spur', 'clip', 'gruppe', 'lane', 'return', 'insert', 'take', 'verbund', 'zelle', 'szene', 'marker', 'mod'];
+    const z = felder(o.naechste_id, 'naechste_id', [], zaehler);
+    for (const k of zaehler) {
       if (k in z) zahlIn(z[k], `naechste_id.${k}`, 1, Number.MAX_SAFE_INTEGER, true);
     }
   }
@@ -2516,6 +2681,10 @@ function pruefeAlles(x: unknown): void {
   const kettenLanen = alleStraenge(o as unknown as Projekt).reduce((n, x) => n + kettenLanen_(x.strang), 0);
   if (kettenLanen > MAX_KETTEN_LANEN) werfe('automation', `at most ${MAX_KETTEN_LANEN} insert and rack lanes in the project (zu_gross)`);
   if (autoPunkte > MAX_AUTO_PUNKTE) werfe('automation', `höchstens ${MAX_AUTO_PUNKTE} Punkte im Projekt`);
+  if ('modulatoren' in o) {   // strand 6: last, every strip and stage is checked by now
+    const f = modulatorenPruefung(o.modulatoren, o as unknown as Projekt);
+    if (f) werfe('modulatoren', `${f.text} (${f.grund})`);
+  }
 }
 
 // --- Wiedergabe-Sicht -----------------------------------------------------------------------------------------------
@@ -2540,6 +2709,8 @@ const ohnePreset = (g: Geraet | undefined): Geraet | undefined => {
 export function spurSicht(s: Spur, mitFreeze = true): unknown {
   return {
     nr: s.nr, art: s.art, ...(s.strom !== undefined ? { strom: s.strom } : {}), geraet: ohnePreset(s.geraet) ?? null,
+    // MIDI stage: changes the notes the device plays (so it also drops a freeze); absent adds no key
+    ...(s.midi ? { midi: s.midi } : {}),
       ...(mitFreeze ? { freeze: s.freeze ?? null } : {}),
     // 1.10: das Ziel gehört zur Wiedergabe, nicht zum Freeze (ein Ziel-Wechsel verwirft keinen Freeze)
     ...(mitFreeze && s.ausgang ? { ausgang: s.ausgang.id } : {}),
@@ -2581,6 +2752,11 @@ const laneSicht = (st: { automation?: Lane[] }): { automation?: unknown } => st.
   ? { automation: st.automation.map((l) => ({ ziel: l.ziel, punkte: l.punkte.map((q) => [q.beat, q.wert, q.form ?? 'linear']) })) } : {};
 export const wiedergabeSicht = (p: Projekt): unknown => ({
   spuren: [...p.spuren].sort((a, b) => a.nr - b.nr).map((s) => spurSicht(s)),
+  // a scale stage that follows the project key reads it: a key change is a new playback (only then; absent adds no key)
+  ...(p.tonart && p.spuren.some((s) => s.midi?.skala && 'quelle' in s.midi.skala) ? { midi_tonart: p.tonart } : {}),
+  // the production lane reaches the playback only through tracks whose scale follows the project (plan strand 7, 5.1): a lane edit is then a new playback
+  ...(p.harmonie && p.spuren.some((s) => s.midi?.skala && 'quelle' in s.midi.skala) ?
+    { midi_harmonie: p.harmonie.eintraege.map((e) => [e.beat, e.grundton, e.skala]) } : {}),
   // 1.10: die Topologie nur, wenn es welche gibt (neutral: wie vorher)
   ...((p.gruppen ?? []).length ? { gruppen: [...p.gruppen].sort((a, b) => a.nr - b.nr)
     .map((g) => ({ id: g.id, nr: g.nr, ...(g.ausgang ? { ausgang: g.ausgang.id } : {}),
@@ -2598,4 +2774,146 @@ export const wiedergabeSicht = (p: Projekt): unknown => ({
   ...(p.master?.inserts?.length
     ? { master: { inserts: kettenSicht(p.master.inserts), ...(p.master.rack ? { rack: rackSicht(p.master) } : {}), ...laneSicht(p.master) } }
     : {}),
+  // strand 6: the switched-on modulators change the playback (the name does not); none: no key, the view stays byte for byte the same
+  ...((p.modulatoren ?? []).some((m) => m.an !== false)
+    ? { modulatoren: p.modulatoren!.filter((m) => m.an !== false).map(({ name: _n, ...m }) => m) } : {}),
 });
+
+// --- Strand 6: modulators (check, cleanup) -----------------------------------------------------------------------------
+type ModAblehnung = { grund: string; text: string };
+const MOD_FELDER_GEMEINSAM = ['id', 'nr', 'name', 'art', 'glatt_ms', 'an', 'ziele'];
+const MOD_ZIEL_FELDER = ['strang_id', 'ziel', 'tiefe', 'polaritaet'];
+// is `ziel` a target a modulator takes on the strip `strangId` (null = yes): fader and pan of a track, the fader of a return, a geraet.* parameter that
+// the track's device carries, send.<return id> of a send the track has (the core takes send targets on tracks only), insert.<stage id>.<param> of a
+// continuous parameter of a built-in stage and rack.m1..m4 on any strip that carries the stage or rack, plugin.<host stage id>.<index> of a host stage
+// of the strip (task 4.2). A stage parameter a rack macro drives is refused (param_gemappt): the core refuses it, the macro is its one writer.
+function modZielFehler(p: Projekt, strangId: string, ziel: string): ModAblehnung | null {
+  const nein = (text: string): ModAblehnung => ({ grund: 'mod_ziel_unbekannt', text });
+  const strang = sucheStrang(p, strangId);
+  if (!strang) return nein(`${strangId} is no track, group, return or master of this project`);
+  const spur = sucheSpur(p, strangId), ret = (p.returns ?? []).find((r) => r.id === strangId);
+  if (!zielBereichVon(ziel, strang)) return nein(`${ziel} is no target of ${strangId}`);
+  if (istPluginZiel(ziel)) return null;
+  const k = istKettenZiel(ziel) ? zerlegeKettenZiel(ziel) : null;
+  if (k && 'insert' in k) {
+    const m = makroVon(strang, k.insert, k.param);
+    return m ? { grund: 'param_gemappt', text: `${ziel} on ${strangId} is driven by macro ${m.nr} of the rack; modulate the macro (rack.m${m.nr})` } : null;
+  }
+  if (k) return null;
+  if (istSendZiel(ziel)) return spur ? null : nein(`${ziel} on ${strangId}: only the send of a track is modulated`);
+  if (ret) return ziel === 'fader' ? null : nein(`${ziel} on ${strangId}: a return takes fader, insert.* and rack.* only`);
+  if (!spur) return nein(`${ziel} on ${strangId}: a group or the master takes insert.*, rack.* and plugin.* only`);
+  if (ziel === 'fader' || ziel === 'pan') return null;
+  if (istGeraetZiel(ziel)) {
+    return spur.art === 'instrument' && passtGeraetZiel(ziel, spur.geraet) ? null
+      : nein(`${ziel} on ${strangId}: only on a track whose device has that parameter (RB-338 lautstaerke, cutoff, resonanz, env_mod; bk k1 to k64)`);
+  }
+  return nein(`${ziel} on ${strangId}: a modulator takes fader, pan, geraet.*, send.*, insert.*, rack.* or plugin.*`);
+}
+/** check of one modulator against the project it sits in (model and commands share it): null = valid */
+export function modulatorPruefung(x: unknown, p: Projekt): ModAblehnung | null {
+  const ab = (grund: string, text: string): ModAblehnung => ({ grund, text });
+  const ug = (text: string): ModAblehnung => ab('argument_ungueltig', text);
+  const istZahl = (v: unknown, min: number, max: number): boolean => zahl(v) && v >= min && v <= max;
+  if (!istObjekt(x)) return ug('modulator: object expected');
+  if (x.art !== 'lfo' && x.art !== 'folger') return ug(`art: lfo | folger expected (got ${JSON.stringify(x.art)})`);
+  const eigene: readonly string[] = MOD_FELDER_NUR[x.art];
+  for (const k of Object.keys(x)) {
+    if (!MOD_FELDER_GEMEINSAM.includes(k) && !eigene.includes(k)) return ab('argument_unbekannt', `modulator.${k} (not a field of ${x.art})`);
+  }
+  for (const k of ['id', 'nr', 'art', 'ziele']) if (!(k in x)) return ug(`modulator.${k}: missing`);
+  if (typeof x.id !== 'string' || !ID.test(x.id)) return ug('id: id expected');
+  if (!ganz(x.nr) || x.nr < 1 || x.nr > MAX_MODULATOREN) return ug(`nr: whole number 1..${MAX_MODULATOREN} expected`);
+  if ('name' in x && !(typeof x.name === 'string' && x.name.trim().length >= 1 && x.name.length <= MOD_NAME_MAX)) {
+    return ug(`name: text of 1 to ${MOD_NAME_MAX} characters expected`);
+  }
+  if ('form' in x && !(MOD_FORMEN as readonly unknown[]).includes(x.form)) return ug(`form: ${MOD_FORMEN.join(' | ')} expected`);
+  if ('takt' in x && 'hz' in x) return ug('takt and hz: give one of them (beats per period or a free rate)');
+  if ('takt' in x && !istZahl(x.takt, MOD_TAKT_MIN, MOD_TAKT_MAX)) return ug(`takt: beats per period 1/64..${MOD_TAKT_MAX} expected`);
+  if ('hz' in x && !istZahl(x.hz, MOD_HZ_MIN, MOD_HZ_MAX)) return ug(`hz: ${MOD_HZ_MIN}..${MOD_HZ_MAX} expected`);
+  // the core reads phase in [0, 1) (arr_playback.cpp): 1 is the position of 0, so it is refused rather than written twice
+  if ('phase' in x && !(istZahl(x.phase, 0, 1) && (x.phase as number) < 1)) return ug('phase: 0 up to below 1 expected');
+  if ('glatt_ms' in x && !istZahl(x.glatt_ms, 0, MOD_GLATT_MAX)) return ug(`glatt_ms: 0..${MOD_GLATT_MAX} expected`);
+  if ('an' in x && x.an !== false) return ug('an: only false is written (absent = on)');
+  if (x.art === 'folger') {
+    // the source is a track id; a switched-off follower keeps the id of a deleted track (modulatorenBereinigen)
+    if (typeof x.quelle !== 'string' || x.quelle === '') return ug('quelle: the id of the source track expected');
+    if (x.an !== false && !sucheSpur(p, x.quelle)) return ab('spur_unbekannt', `quelle: ${x.quelle} is no track of this project`);
+    if ('angriff_ms' in x && !istZahl(x.angriff_ms, MOD_ANGRIFF_MIN, MOD_ANGRIFF_MAX)) return ug(`angriff_ms: ${MOD_ANGRIFF_MIN}..${MOD_ANGRIFF_MAX} expected`);
+    if ('abfall_ms' in x && !istZahl(x.abfall_ms, MOD_ABFALL_MIN, MOD_ABFALL_MAX)) return ug(`abfall_ms: ${MOD_ABFALL_MIN}..${MOD_ABFALL_MAX} expected`);
+    if ('empfindlich_db' in x && !istZahl(x.empfindlich_db, -MOD_EMPFINDLICH_MAX, MOD_EMPFINDLICH_MAX)) {
+      return ug(`empfindlich_db: -${MOD_EMPFINDLICH_MAX}..${MOD_EMPFINDLICH_MAX} expected`);
+    }
+  }
+  if (!Array.isArray(x.ziele) || x.ziele.length < 1 || x.ziele.length > MAX_MOD_ZIELE) return ug(`ziele: list of 1 to ${MAX_MOD_ZIELE} targets expected`);
+  const gesehen = new Set<string>();
+  for (const [i, z] of (x.ziele as unknown[]).entries()) {
+    const wo = `ziele[${i}]`;
+    if (!istObjekt(z)) return ug(`${wo}: object expected`);
+    for (const k of Object.keys(z)) if (!MOD_ZIEL_FELDER.includes(k)) return ab('argument_unbekannt', `${wo}.${k}`);
+    if (typeof z.strang_id !== 'string' || z.strang_id === '') return ug(`${wo}.strang_id: id expected`);
+    if (typeof z.ziel !== 'string' || z.ziel === '') return ug(`${wo}.ziel: target expected`);
+    const f = modZielFehler(p, z.strang_id, z.ziel);
+    if (f) return ab(f.grund, `${wo}: ${f.text}`);
+    const [mn, mx] = modTiefeBereich(z.ziel)!;
+    if (!istZahl(z.tiefe, mn, mx)) return ug(`${wo}.tiefe: ${mn}..${mx} expected for ${z.ziel}`);
+    if ('polaritaet' in z && z.polaritaet !== 'uni') return ug(`${wo}.polaritaet: uni expected (absent = bipolar)`);
+    const k = `${z.strang_id}/${z.ziel}`;
+    if (gesehen.has(k)) return ug(`${wo}: ${z.strang_id} ${z.ziel} twice in one modulator`);
+    // a follower does not move its own source track (fader, pan or device): another modulator may
+    if (x.art === 'folger' && z.strang_id === x.quelle) return ug(`${wo}: ${z.strang_id} is the source track of this follower`);
+    gesehen.add(k);
+  }
+  return null;
+}
+/** check of the whole list `modulatoren` (model and commands share it): null = valid */
+export function modulatorenPruefung(x: unknown, p: Projekt): ModAblehnung | null {
+  if (!Array.isArray(x) || x.length < 1) return { grund: 'argument_ungueltig', text: 'non-empty list expected (absent when there is no modulator)' };
+  if (x.length > MAX_MODULATOREN) return { grund: 'mod_voll', text: `at most ${MAX_MODULATOREN} modulators per project` };
+  const ids = new Set<string>(), nrs = new Set<number>(), felder = new Set<string>();
+  for (const [i, m] of (x as unknown[]).entries()) {
+    const f = modulatorPruefung(m, p);
+    if (f) return { grund: f.grund, text: `[${i}] ${f.text}` };
+    const mod = m as Modulator;
+    if (ids.has(mod.id)) return { grund: 'argument_ungueltig', text: `[${i}].id: duplicate (${mod.id})` };
+    if (nrs.has(mod.nr)) return { grund: 'argument_ungueltig', text: `[${i}].nr: duplicate (${mod.nr})` };
+    ids.add(mod.id); nrs.add(mod.nr);
+    for (const z of mod.ziele) if (z.ziel === 'fader' || z.ziel === 'pan') felder.add(`${z.strang_id}/${z.ziel}`);
+  }
+  if (felder.size > MAX_MOD_FELDER) {
+    return { grund: 'zu_gross', text: `${felder.size} distinct fader and pan targets under modulation (at most ${MAX_MOD_FELDER} in the project)` };
+  }
+  return null;
+}
+// does the strip and the stage, host stage, return or rack a target names still exist (the target may be invalid for other reasons: the check says so)
+function modZielLebt(p: Projekt, z: ModZiel): boolean {
+  const strang = sucheStrang(p, z.strang_id);
+  if (!strang) return false;
+  const plugin = pluginZielVon(z.ziel);
+  if (plugin) return (strang.inserts ?? []).some((x) => x.id === plugin.insert && x.art === 'host');
+  if (istSendZiel(z.ziel)) return (p.returns ?? []).some((r) => r.id === sendZielVon(z.ziel));
+  const k = istKettenZiel(z.ziel) ? zerlegeKettenZiel(z.ziel) : null;
+  if (k && 'makro' in k) return strang.rack !== undefined;
+  if (k) return (strang.inserts ?? []).some((x) => x.id === k.insert);
+  return true;
+}
+/** Strand 6 cleanup after a strip or stage went: drop the targets on it, drop a modulator without targets, turn off a follower whose source track
+ *  went (it is kept). Changes `p` itself (a command draft); new objects for every changed modulator. */
+export function modulatorenBereinigen(p: Projekt): void {
+  if (!p.modulatoren) return;
+  const rest: Modulator[] = [];
+  for (const m of p.modulatoren) {
+    const ziele = m.ziele.filter((z) => modZielLebt(p, z));
+    if (ziele.length === 0) continue;
+    let n = ziele.length === m.ziele.length ? m : { ...m, ziele };
+    if (n.quelle !== undefined && n.an !== false && !sucheSpur(p, n.quelle)) n = { ...n, an: false };
+    rest.push(n);
+  }
+  if (rest.length) p.modulatoren = rest; else delete p.modulatoren;
+}
+/** the modulator `nachher` has and `vorher` has not (the answer of mod_neu: handlers return nothing, the caller compares) */
+export function neuerModulator(vorher: Projekt, nachher: Projekt): { mod_id: string; nr: number } | null {
+  const alt = new Set((vorher.modulatoren ?? []).map((m) => m.id));
+  const m = (nachher.modulatoren ?? []).find((x) => !alt.has(x.id));
+  return m ? { mod_id: m.id, nr: m.nr } : null;
+}

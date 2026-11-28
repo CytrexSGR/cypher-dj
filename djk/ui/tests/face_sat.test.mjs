@@ -31,8 +31,8 @@ test('face/sat.js: named values, mix 0, odd symmetry, defaults', () => {
   assert.ok(Math.abs(saettAusgang(0.5, { drive: 12, out: -6, mix: 0.5 }) - 0.49141) < 1e-4);
   for (const x of [-1, -0.3, 0, 0.7, 1]) assert.equal(saettAusgang(x, { drive: 24, out: 3, mix: 0 }), x, 'mix 0 gives x');
   for (const x of [0.05, 0.4, 1]) assert.ok(Math.abs(saettAusgang(-x, a) + saettAusgang(x, a)) < 1e-12, `odd at ${x}`);
-  assert.deepEqual(saettEinstellung({}), { drive: 12, out: -6, mix: 1 });
-  assert.deepEqual(saettEinstellung({ drive: NaN, out: 99, mix: -1 }), { drive: 12, out: 12, mix: 0 });
+  assert.deepEqual(saettEinstellung({}), { drive: 12, out: -6, mix: 1, kurve: 0, decke: 0 });
+  assert.deepEqual(saettEinstellung({ drive: NaN, out: 99, mix: -1, kurve: 7, decke: 5 }), { drive: 12, out: 12, mix: 0, kurve: 2, decke: 0 });
   assert.equal(saettAusgang(0.5, {}), saettAusgang(0.5, a), 'a missing value is the default');
 });
 
@@ -65,11 +65,11 @@ const quelleDouble = (stand) => {
   return { parameter: saettParameterTabelle(SAETT_PARAMETER), get: (n) => werte[n], set: (n, v) => { stand.gesetzt.push([n, v]); return stand.antwort; }, werte, an: { get: () => stand.an, set() {} } };
 };
 
-test('face/sat.js: three knobs in one row, a face built writes nothing, and it costs nothing: no frame callback while open, no listener left after close', () => {
+test('face/sat.js: four knobs in one row, a face built writes nothing, and it costs nothing: no frame callback while open, no listener left after close', () => {
   const dok = neuesDokument(), { t, takt } = zaehlTakt(), stand = { an: true, gesetzt: [], antwort: true };
   const q = quelleDouble(stand);
   const f = oeffneFace({ id: 's', titel: 'SATURATOR', wurzel: dok, takt, an: q.an, bauen: (inhalt) => baueSaettFace(inhalt, q) });
-  assert.deepEqual(f.el.alles().filter((e) => e.klassen.has('fp-name')).map((e) => e.textContent), ['Drive', 'Output', 'Mix']);
+  assert.deepEqual(f.el.alles().filter((e) => e.klassen.has('fp-name')).map((e) => e.textContent), ['Drive', 'Output', 'Mix', 'Ceiling']);
   assert.equal(stand.gesetzt.length, 0);
   assert.equal(t.an.length, 0, 'no frame loop: the saturator has no live value');
   stand.an = false; f.aktualisiere();

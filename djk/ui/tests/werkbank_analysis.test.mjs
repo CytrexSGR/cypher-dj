@@ -636,3 +636,50 @@ test('a failed measurement shows the server text and a shortened detail', async 
   assert.ok(t.length < 200 && t.endsWith('\u2026'), String(t.length));
   zu();
 });
+
+// strand 5 slice 6: masking over all strip pairs, on request only; APPLY writes the proposal as one change
+const MASK = { rev: 3, von_beat: 0, bis_beat: 16, tempo_bpm: 130, anzahl: 2, begrenzt: false, maskierung: [
+  { a: 's1', b: 's2', hz_von: 80, hz_bis: 125, anteil: 0.8, breite_okt: 0.64, score: 0.51, leiser: 's2',
+    vorschlag: { strang_id: 's2', hz: 100, q: 2.2, gain_db: -3, befehle: [{ befehl: 'insert_setzen', strang_id: 's2', pos: 0, art: 'eq',
+      werte: { 'b4/an': 1, 'b4/typ': 0, 'b4/freq': 100, 'b4/q': 2.2, 'b4/gain': -3 } }] } },
+  { a: 's1', b: 's2', hz_von: 2000, hz_bis: 3150, anteil: 0.6, breite_okt: 0.65, score: 0.39, leiser: 's2', vorschlag: null }] };
+
+test('FIND MASKING asks for all pairs once, lists the conflicts and APPLY writes the proposal', async () => {
+  aufbau(modul(), { antworten: { 'POST /proj/analyse': (k) => ({ j: k.alle_paare ? MASK : FIXTURE }), 'POST /proj/aendern': { j: { ok: true } } } });
+  w.zeige(); await ruhe(); await oeffne();
+  const vorher = POSTS().length;
+  assert.ok(POSTS().every((a) => a.koerper.alle_paare === undefined), 'the window never asks for all pairs by itself');
+  $w('analyse-maskierung-suchen').dispatch('click'); await ruhe();
+  assert.deepEqual(POSTS().slice(vorher).map((a) => a.koerper), [{ alle_paare: true, ohne_freeze: true }]);
+  const t0 = $w('analyse-maskierung-0').textContent;
+  assert.ok(t0.includes('Bass under Drums') && t0.includes('80 % of the time') && t0.includes('Bell -3 dB'), t0);
+  assert.ok($w('analyse-maskierung-1').textContent.includes('five stages'), 'a full chain has no proposal');
+  assert.ok(!$w('analyse-maskierung-an-1'), 'and no APPLY button');
+  const n = attrappe.anrufe.length;
+  $w('analyse-maskierung-an-0').dispatch('click'); await ruhe();
+  const schreib = attrappe.anrufe.slice(n).filter((a) => a.methode === 'POST' && a.url === '/proj/aendern');
+  assert.equal(schreib.length, 1, JSON.stringify(attrappe.anrufe.slice(n).map((a) => a.url)));
+  assert.deepEqual(schreib[0].koerper.befehle ?? schreib[0].koerper, MASK.maskierung[0].vorschlag.befehle);
+});
+
+// strand 5 slice 5: TAME RESONANCES next to the hints; the click writes the ready command list as one change
+const BEFEHLE = [{ befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'eq', werte: { 'b1/an': 1, 'b1/typ': 0, 'b1/freq': 3000, 'b1/gain': 0, 'b1/q': 8, 'd1/dyn': 1, 'd1/schwelle': -30.5, 'd1/bereich': -6 } }];
+const MIT_RES = (befehle) => kopie(3, (a) => { a.vorschlaege = { resonanz: { baender: [{ hz: 3000, q: 8, schwelle_db: -30.5, bereich_db: -6 }], strang_id: 's1', befehle } }; });
+
+test('TAME RESONANCES: the button appears with a proposal, writes the command list once; a full chain shows the text and no button; none without a proposal', async () => {
+  aufbau(modul(), { antworten: { 'POST /proj/analyse': { j: MIT_RES(BEFEHLE) }, 'POST /proj/aendern': { j: { ok: true } } } });
+  w.zeige(); await ruhe(); await oeffne();
+  assert.ok($w('analyse-zaehmen').textContent.includes('3000') || $w('analyse-zaehmen').textContent.includes('3.0'), $w('analyse-zaehmen').textContent);
+  assert.equal($w('analyse-zaehmen-an').textContent, 'TAME RESONANCES');
+  const n = attrappe.anrufe.length;
+  $w('analyse-zaehmen-an').dispatch('click'); await ruhe();
+  const schreib = attrappe.anrufe.slice(n).filter((a) => a.methode === 'POST' && a.url === '/proj/aendern');
+  assert.equal(schreib.length, 1, JSON.stringify(attrappe.anrufe.slice(n).map((a) => a.url)));
+  assert.deepEqual(schreib[0].koerper.befehle ?? schreib[0].koerper, BEFEHLE);
+  aufbau(modul(), { antworten: { 'POST /proj/analyse': { j: MIT_RES(null) } } });
+  w.zeige(); await ruhe(); await oeffne();
+  assert.ok($w('analyse-zaehmen').textContent.includes('five stages'));
+  assert.ok(!$w('analyse-zaehmen-an'), 'no button');
+  aufbau(); w.zeige(); await ruhe(); await oeffne();
+  assert.ok(!$w('analyse-zaehmen'), 'the plain answer has no proposal line');
+});

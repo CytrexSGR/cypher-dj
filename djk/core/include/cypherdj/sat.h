@@ -20,6 +20,8 @@ class SaettNativ {
     cypher_saett_block(h_, l, r, static_cast<size_t>(n));
   }
   void setze(double drive_db, double ausgang_db, double mix) { cypher_saett_setze(h_, drive_db, ausgang_db, mix); }
+  void setze_form(int kurve, double decke_db) { cypher_saett_setze_form(h_, static_cast<uint8_t>(kurve < 0 ? 255 : kurve), decke_db); }
+  float clip_db() { return cypher_saett_clip_db(h_); }
   void leeren() { cypher_saett_leeren(h_); }
   int latenz() const { return static_cast<int>(cypher_saett_latenz(h_)); }
  private:

@@ -19,7 +19,7 @@ export function chipMenuePunkte(strang, insert, { lage = null, schluessel = true
     { text: 'Move earlier', aus: !verschoben(ids, pos, -1), aktion: 'links' },
     { text: 'Move later', aus: !verschoben(ids, pos, 1), aktion: 'rechts' },
   ];
-  if (insert.art === 'komp' && schluessel) punkte.push({ text: 'Key source…', aktion: 'schluessel' });
+  if ((insert.art === 'komp' || insert.art === 'eq') && schluessel) punkte.push({ text: 'Key source…', aktion: 'schluessel' });
   if (insert.art === 'host') punkte.push({ text: lage?.fenster ? 'Close native window' : 'NATIVE WINDOW', aktion: 'fenster' });
   if (fenster) punkte.push({ text: 'WINDOW ↗', titel: 'Open this stage in its own window', aktion: 'zielfenster' });
   punkte.push({ text: 'Remove', aktion: 'weg' });
@@ -63,7 +63,7 @@ export function stufenBefehle(strang, insert) {
 }
 
 const fehlerVon = (r) => r?.j?.text ?? r?.j?.fehler ?? `HTTP ${r?.status ?? 'none'}`;
-/** The key source menu of a compressor stage at (x, y): the options come from the server (GET /proj/routing?optionen=<id>); a failed fetch is reported through
+/** The key source menu of a compressor or EQ stage at (x, y): the options come from the server (GET /proj/routing?optionen=<id>); a failed fetch is reported through
  *  melde. `zu`: { holeGet, aendere, melde, oeffneMenue, projekt() }. */
 export async function schluesselMenue(zu, strang, insert, x, y) {
   const r = await zu.holeGet(`/proj/routing?optionen=${encodeURIComponent(insert.id)}`);
@@ -71,7 +71,7 @@ export async function schluesselMenue(zu, strang, insert, x, y) {
   if (!o) { zu.melde(`Key options not available: ${(zu.fehlerText ?? fehlerVon)(r)}`, true); return; }
   const jetzt = schluesselWert(insert);
   zu.oeffneMenue(schluesselPunkte(schluesselGruppen(o, zu.projekt()), jetzt).map((p) => (p.gruppe ? p
-    : { text: p.text, aus: p.aus, titel: p.titel, aktion: () => zu.aendere(`Key compressor on ${strang.name}`, [schluesselBefehl(insert.id, p.wert)]) })), x, y);
+    : { text: p.text, aus: p.aus, titel: p.titel, aktion: () => zu.aendere(`Key ${insert.art === 'eq' ? 'EQ' : 'compressor'} on ${strang.name}`, [schluesselBefehl(insert.id, p.wert)]) })), x, y);
 }
 
 // ---- DOM --------------------------------------------------------------------------------------------------------------------------------------------
@@ -133,7 +133,7 @@ export function teilChip(werk, strangId, t) {
   const insert = () => werk.strangVon(strangId)?.inserts.find((x) => x.id === t.teil) ?? null;
   const i0 = insert();
   if (!i0) return b;
-  const hostStufe = i0.art === 'host', hatGr = i0.art === 'komp' || i0.art === 'lim' || i0.art === 'gate' || i0.art === 'mb';
+  const hostStufe = i0.art === 'host', hatGr = i0.art === 'komp' || i0.art === 'lim' || i0.art === 'gate' || i0.art === 'mb' || i0.art === 'trans';
   const punkt = hostStufe ? mk('span', 'w-chip-punkt') : null;
   const marke = mk('span', 'w-chip-marke'); marke.hidden = true;
   const gr = hatGr ? mk('span', 'w-chip-gr') : null;

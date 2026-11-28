@@ -10,6 +10,7 @@ import { baueKopf, spurBeschreibung, tagVonGraph } from '../panel_kopf.js';
 import { parameterNachName } from '../panel_display.js';
 import { wendePresetAn } from './preset_apply.js';
 import { surgeAnzeige, surgeNorm } from '../surge_adapter.js';
+import { hatMod, lebendWert, modAnzeigeAnschluss } from '../mod_display.js';
 
 export const BK_LIVE_MAX = 64;   // knobs k1..k64 have a core row spur/<slot>/bk/<k> (SPUR_BK_KNOEPFE; 32 until 2026-11-16); a page file cannot import the .ts, tests/production_device_view.test.mjs pins it
 export const BK_LIVE_SLOTS = 16; // every bk track has those rows (SPUR_BK_SLOTS = ARR_BK_MAX = 16 since 2026-11-21, 8 before); = BK_LIVE_SLOTS of project/model.ts, pinned by the same test
@@ -61,6 +62,17 @@ export function bkZeilenPfad(spuren, spurId, param) {
   const slot = bkSlotNr(spuren, spurId);
   return slot === null || slot > BK_LIVE_SLOTS ? null : `spur/${slot}/bk/${m[1]}`;
 }
+
+/** strand 6 task 2.2: the modulated position 0..1 of a Baukasten knob `k<n>` (target `geraet.k<n>` of the track, range 0..1): undefined when no modulator targets it (no ring),
+ *  null while the modulator is silent, else base + the summed offset clamped once. `basis` = the stored position of the knob, `jetzt` in ms (performance.now). */
+export function bkModKnopf(projekt, spurId, param, basis, jetzt) {
+  if (!/^k([1-9][0-9]?)$/.test(param ?? '')) return undefined;
+  const ziel = `geraet.${param}`;
+  if (!hatMod(projekt, spurId, ziel)) return undefined;
+  if (!Number.isFinite(basis)) return null;
+  return lebendWert(projekt, spurId, ziel, basis, [0, 1], jetzt);
+}
+const modVerdrahtet = new WeakSet();   // the contexts whose event feed already fills MOD_STAND
 
 /** Echo of a core row spur/<slot>/bk/<k> (stream.js, /e/regler): zeilenEcho(pfad) tells the open device panels, zeilenAbo(h) subscribes (returns the remover). */
 const zeilenAbos = new Set();
@@ -301,6 +313,7 @@ export function reglerBereiche(parameter) {
 export function bindeGeraetAnsicht(ctx, wurzel, opt = {}) {
   const d = opt.dokument ?? globalThis.document;
   const kopfBauer = opt.kopfBauer ?? baueKopf;
+  if (Array.isArray(ctx.beimEreignis) && !modVerdrahtet.has(ctx)) { modVerdrahtet.add(ctx); modAnzeigeAnschluss(ctx); }   // /zustand/mod -> MOD_STAND (also in a window without track heads)
   const zuletzt = new Map();   // spur id -> id of the last applied preset
   let register = null;         // GET /presets/register, fetched by the view itself and again after a save
   let jetzt = null;            // { spurId, schluessel, fp, adapter, nr }
@@ -374,7 +387,9 @@ export function bindeGeraetAnsicht(ctx, wurzel, opt = {}) {
       if (!register) holeRegister().then(() => kopfHandle?.neu());
     };
     jetzt.adapter = adapter;
-    jetzt.fp = baueFrontplatte(wurzel, { panel: j.panel, steckfeld: j.steckfeld, regler: reglerBereiche(j.parameter), parameter: g.name === 'bk' ? undefined : parameterNachName(j.parameter), adapter, dokument: d, kopf: istSurge(g) ? undefined : kopf, breit: opt.breit === true,
+    const jetztMs = () => globalThis.performance?.now?.() ?? Date.now();
+    jetzt.fp = baueFrontplatte(wurzel, { panel: j.panel, steckfeld: j.steckfeld,
+      ...(g.name === 'bk' ? { modKnopf: (pn) => bkModKnopf(ctx.st?.projekt, spur.id, pn, adapter.get(pn) ?? 0.5, jetztMs()) } : {}), regler: reglerBereiche(j.parameter), parameter: g.name === 'bk' ? undefined : parameterNachName(j.parameter), adapter, dokument: d, kopf: istSurge(g) ? undefined : kopf, breit: opt.breit === true,
       ...(lernen ? { lernen: lernen.stand(), beiLernen: (pfad) => lernen.lerne(pfad), beiVergessen: (pfad) => lernen.vergiss(pfad) } : {}),
       ...(typeof opt.beiSeite === 'function' ? { beiSeite: (id) => opt.beiSeite(spur.id, id) } : {}) });
     jetzt.kopfNeu = () => kopfHandle?.neu();   // Surge has no preset header

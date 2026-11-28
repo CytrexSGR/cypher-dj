@@ -48,7 +48,10 @@ export function bindeAnalyse(ctx) {
     vergleichTitel: 'Compare with a strip or a reference. Drop a track or sample from the shelf here.', abgleich: 'VS REFERENCE', nah: 'Close to the reference (within 3 dB)',
     merken: 'SAVE REF', merkenTitel: 'Store the shown range as a reference', ok: 'SAVE', abbruch: 'CANCEL', weg: '×', wegFrage: 'REMOVE?', wegTitel: 'Remove this reference',
     abgleichTitel: 'On: the reference is drawn shifted to the level of the source (tonal balance). Off: as measured.', namePlatz: 'name', nameFehlt: 'Give the reference a name',
-    liveStand: 'live', liveStumm: 'no signal', liveLeer: 'engine not running', liveSteht: 'stopped', gemerkt: 'saved' };
+    liveStand: 'live', liveStumm: 'no signal', liveLeer: 'engine not running', liveSteht: 'stopped', gemerkt: 'saved',
+    maskierung: 'MASKING', maskierungSuche: 'FIND MASKING', maskierungTitel: 'Render every sounding track, compare all pairs and list the worst conflicts with a proposed EQ cut',
+    maskierungLeer: 'No conflicts found.', maskierungAn: 'APPLY', maskierungAnTitel: 'Insert the proposed EQ stage (one undo step)', maskierungVoll: 'The chain has five stages',
+    zaehme: 'TAME RESONANCES', zaehmeTitel: 'Put dynamic EQ bands (Bell, Q 8, above threshold, range -6 dB) on the resonances found (one undo step)' };
   const { st, $ } = ctx;
   const knopf = el('button', 'w-export w-analyse-auf', 'analyse-auf', TEXT.knopf);
   knopf.type = 'button'; knopf.title = TEXT.knopfTitel; knopf.disabled = true;
@@ -141,6 +144,34 @@ export function bindeAnalyse(ctx) {
     } else {
       setzeStand(r.status === 200 ? 'The answer is not a measurement' : fehlerText(ctx.antwortText, r));   // the last drawing stays
     }
+  }
+  // ---- masking over all strip pairs (strand 5 slice 6): on request only, it renders every sounding track ---------------------------------------------
+  let maskierungLaeuft = false;
+  const streifenName = (id) => st.projekt?.spuren?.find((x) => x.id === id)?.name ?? id;
+  const maskierungText = (m) => `${streifenName(m.b)} under ${streifenName(m.a)}: ${zahlText(m.hz_von)} to ${zahlText(m.hz_bis)} Hz, ${Math.round(m.anteil * 100)} % of the time`
+    + (m.vorschlag ? ` \u2192 Bell ${m.vorschlag.gain_db} dB at ${zahlText(m.vorschlag.hz)} Hz, Q ${m.vorschlag.q}` : ` \u2192 ${TEXT.maskierungVoll}`);
+  function zeigeMaskierung(j) {
+    const zeilen = (j.maskierung ?? []).map((m, i) => {
+      const li = el('li', 'w-analyse-hinweis', `analyse-maskierung-${i}`, maskierungText(m));
+      if (m.vorschlag) {
+        const an = el('button', 'w-effekt-knopf', `analyse-maskierung-an-${i}`, TEXT.maskierungAn); an.type = 'button'; an.title = TEXT.maskierungAnTitel;
+        an.addEventListener('click', async () => { an.disabled = true; await ctx.aendere(`Masking: cut ${streifenName(m.vorschlag.strang_id)} at ${zahlText(m.vorschlag.hz)} Hz`, m.vorschlag.befehle); });
+        li.append(' ', an);
+      }
+      return li;
+    });
+    const kopf = j.begrenzt ? [el('li', 'w-analyse-leer', undefined, `${j.anzahl} loudest strips analysed`)] : [];
+    ui.maskierung.replaceChildren(...kopf, ...(zeilen.length ? zeilen : [el('li', 'w-analyse-leer', undefined, TEXT.maskierungLeer)]));
+  }
+  async function sucheMaskierung() {
+    if (maskierungLaeuft) return;
+    maskierungLaeuft = true; ui.maskierungKnopf.disabled = true; setzeStand(TEXT.misst);
+    let r;
+    try { r = await ctx.holeJson('/proj/analyse', { alle_paare: true, ohne_freeze: true }); } catch (e) { r = { status: 0, j: { fehler: 'netz', text: String(e?.message ?? e) } }; }
+    maskierungLaeuft = false;
+    if (!offen || !ui) return;
+    ui.maskierungKnopf.disabled = false;
+    if (r.status === 200 && Array.isArray(r.j?.maskierung)) { setzeStand(`rev ${r.j.rev}`); zeigeMaskierung(r.j); } else setzeStand(fehlerText(ctx.antwortText, r));
   }
   function planeNeu() {
     clearTimeout(uhr);
@@ -321,6 +352,19 @@ export function bindeAnalyse(ctx) {
     });
   }
   const zeigeHinweise = (texte) => ui.hinweise.replaceChildren(...(texte.length ? texte.map((t) => el('li', 'w-analyse-hinweis', undefined, t)) : [el('li', 'w-analyse-leer', undefined, TEXT.keineHinweise)]));
+  // strand 5 slice 5: the resonances of the source as dynamic EQ bands, one proj_aendern (the server sends the ready command list, null = chain full)
+  function zeigeZaehmen(a) {
+    const r = a.vorschlaege?.resonanz;
+    if (!r?.baender?.length) return;
+    const bis = r.baender.map((b) => zahlText(b.hz)).join(', ');
+    const li = el('li', 'w-analyse-hinweis', 'analyse-zaehmen', `${a.quelle.name}: dynamic cut at ${bis} Hz (Bell, Q ${r.baender[0].q}, ${r.baender[0].bereich_db} dB)`);
+    if (r.befehle) {
+      const an = el('button', 'w-effekt-knopf', 'analyse-zaehmen-an', TEXT.zaehme); an.type = 'button'; an.title = TEXT.zaehmeTitel;
+      an.addEventListener('click', async () => { an.disabled = true; await ctx.aendere(`Tame resonances of ${a.quelle.name} at ${bis} Hz`, r.befehle); });
+      li.append(' ', an);
+    } else li.append(` \u2192 ${TEXT.maskierungVoll}`);
+    ui.hinweise.append(li);
+  }
   function leereAnzeige() {
     if (!ui) return;
     ui.zahlen.replaceChildren(); zeigeStereo(null, true); zeigeHinweise([]);
@@ -351,6 +395,7 @@ export function bindeAnalyse(ctx) {
       ZAHLEN.map(([feld, name, einheit]) => [`${name} (${einheit})`, nur(q, feld), ...(v ? [nur(v, feld)] : [])]));
     zeigeStereo(q.stereo, q.stumm || !q.stereo);
     zeigeHinweise(a.hinweise?.length ? a.hinweise.map((h) => h.text) : []);
+    zeigeZaehmen(a);
     aktualisiereKopf();
     zeichne();
   }
@@ -532,16 +577,19 @@ export function bindeAnalyse(ctx) {
     stereo.append(balken, breite, ...baender, vektor);
     const zahlen = el('table', 'w-analyse-zahlen', 'analyse-zahlen'), hinweise = el('ul', 'w-analyse-hinweise', 'analyse-hinweise');
     const abschnitt = (t, ...k) => { const s = el('section', 'w-analyse-abschnitt'); s.append(el('h4', undefined, undefined, t), ...k); return s; };
+    const maskierung = el('ul', 'w-analyse-hinweise', 'analyse-maskierung'), maskierungKnopf = el('button', 'w-effekt-knopf', 'analyse-maskierung-suchen', TEXT.maskierungSuche);
+    maskierungKnopf.type = 'button'; maskierungKnopf.title = TEXT.maskierungTitel;
     const abgleichInhalt = el('div', 'w-analyse-ref');
     const abgleich = abschnitt(TEXT.abgleich, abgleichInhalt); abgleich.setAttribute('data-w', 'analyse-abgleich'); abgleich.hidden = true;
-    koerper.append(kopf, reihe, abschnitt(TEXT.spektrum, spektrum, lesung), abgleich, abschnitt(TEXT.zeitbild, zeitbild), abschnitt(TEXT.stereo, stereo), abschnitt(TEXT.zahlen, zahlen), abschnitt(TEXT.hinweise, hinweise));
-    ui = { vektor, neu, merkenKnopf, quelle, vergleich, stand, spektrum, lesung, zeitbild, korrelationWert, korrelationMin, korrelationText, breite, baender, zahlen, hinweise,
+    koerper.append(kopf, reihe, abschnitt(TEXT.spektrum, spektrum, lesung), abgleich, abschnitt(TEXT.zeitbild, zeitbild), abschnitt(TEXT.stereo, stereo), abschnitt(TEXT.zahlen, zahlen), abschnitt(TEXT.hinweise, hinweise), abschnitt(TEXT.maskierung, maskierungKnopf, maskierung));
+    ui = { maskierung, maskierungKnopf, vektor, neu, merkenKnopf, quelle, vergleich, stand, spektrum, lesung, zeitbild, korrelationWert, korrelationMin, korrelationText, breite, baender, zahlen, hinweise,
       refWeg, abgleichAn, abgleichEtikett, reihe, name, rolle, abgleich, abgleichInhalt };
     baueRollen();
     quelle.addEventListener('change', () => { const vorher = istLive(); wahlQuelle = quelle.value; pruefeWahl(); quelleGeaendert(vorher); });
     vergleich.addEventListener('change', () => { wahlVergleich = vergleich.value; vergleichGeaendert(); });
     abgleichAn.addEventListener('change', () => { zeichnung.spektrum = ''; zeichne(); });
     refWeg.addEventListener('click', () => { entferne(); });
+    maskierungKnopf.addEventListener('click', () => { sucheMaskierung(); });
     ok.addEventListener('click', () => { merke(); });
     abbruch.addEventListener('click', () => { reihe.hidden = true; });
     // drop target: a track or sample dragged from the shelf becomes the comparison

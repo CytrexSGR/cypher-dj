@@ -27,7 +27,7 @@ test('table and SCOPE-1.0.md list the same labs rows', (t) => {
   if (!fs.existsSync(SCOPE)) return t.skip('docs/masterplan is absent (public export)');
   const zeilen = fs.readFileSync(SCOPE, 'utf8').split('\n').filter((l) => l.startsWith('|'))
     .map((l) => l.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim())).filter((c) => c[1] === 'labs').map((c) => c[0]);
-  assert.equal(zeilen.length, 57);
+  assert.equal(zeilen.length, 54);
   assert.deepEqual([...LAB_ZEILEN.map((z) => z.zeile)].sort(), [...zeilen].sort());
 });
 

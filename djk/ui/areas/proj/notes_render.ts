@@ -22,7 +22,10 @@ import { NotenLauf, type NotenErgebnis } from './notes_run.ts';
 import { notenZeitlimitMs } from '../../project/notes_audio.ts';
 
 export type RenderZustand = { zustand: 'quelle' | 'rechnet' | 'bereit' | 'alt' | 'fehler'; schluessel?: string; grund?: string; text?: string;
-  sekunden?: number };
+  sekunden?: number;
+  /** measured pitch of the output per edited note (the `messung` of the result line of `render`), when the engine gave it */
+  messung?: NotenMessung[] };
+export type NotenMessung = { id: string; ton_ist: number; fehler_ct: number };
 /** What the translation (and the export) asks: the file a clip plays instead of its source, or null for the source. `live`: the answer goes to the live
  *  playback (the service remembers it to see later whether the file of a clip changed). */
 export type NotenRenderQuelle = {
@@ -87,6 +90,7 @@ export class NotenRender implements NotenRenderQuelle {
   private letzteExakt = true;                                     // pruefeClip: the clip got what it needs (its exact file, or it needs none)
   private exportLuecke = false;                                   // the last non-live translation gave a clip with targets less than its exact file
   private readonly rechenzeit = new Map<string, number>();       // seconds of the last job of a key (state bereit)
+  private readonly messungen = new Map<string, NotenMessung[]>();  // the `messung` of the last job of a key (state bereit)
   private readonly queue = new Map<string, Auftrag>();           // at most one per clip, a newer request replaces it
   private laufend: Auftrag | null = null;
   private prozess: NotenLauf | null = null;
@@ -197,7 +201,8 @@ export class NotenRender implements NotenRenderQuelle {
       this.letzteExakt = true;
       this.zuletzt.set(ck, key);
       const sekunden = this.rechenzeit.get(key);
-      this.setze(slug, c.id, { zustand: 'bereit', schluessel: key, ...(sekunden !== undefined ? { sekunden } : {}) });
+      const messung = this.messungen.get(key);
+      this.setze(slug, c.id, { zustand: 'bereit', schluessel: key, ...(sekunden !== undefined ? { sekunden } : {}), ...(messung ? { messung } : {}) });
       return { sha256: key, datei: this.renderDatei(key) };
     }
     const fehl = this.gescheitert.get(key);
@@ -319,9 +324,10 @@ export class NotenRender implements NotenRenderQuelle {
   private async fuehreAus(a: Auftrag): Promise<void> {
     const tmp = path.join(this.zugang.arbeitsordner(), `noten-${this.naechsterOrdner++}`);
     try {
-      const sekunden = await this.rechne(a, tmp);
+      const { sekunden, messung } = await this.rechne(a, tmp);
       if (this.geschlossen) return;
       this.rechenzeit.set(a.schluessel, sekunden);
+      if (messung) this.messungen.set(a.schluessel, messung); else this.messungen.delete(a.schluessel);
       this.gescheitert.delete(a.schluessel);
       this.raeume();
       const c = this.frischerClip(a);
@@ -377,8 +383,8 @@ export class NotenRender implements NotenRenderQuelle {
     return pfad;
   }
 
-  // returns the CPU seconds of the `render` call
-  private async rechne(a: Auftrag, tmp: string): Promise<number> {
+  // returns the CPU seconds of the `render` call and its `messung` (null when the engine gave none)
+  private async rechne(a: Auftrag, tmp: string): Promise<{ sekunden: number; messung: NotenMessung[] | null }> {
     const quelle = this.quellDatei(a.sha);
     const bytes = groesse(quelle);
     if (bytes === null) throw new RenderFehler('noten_render_fehler', 'the note edit could not be rendered; the clip plays without it',
@@ -392,10 +398,14 @@ export class NotenRender implements NotenRenderQuelle {
     const l = this.letzte.get(NotenRender.ck(a.slug, a.clipId));
     const nur = l && l.quelle === a.sha && l.kurve === a.kurve && l.maschine === this.maschine && this.dateiOk(l.schluessel, bytes) ? geaenderteIds(l.liste,
       a.liste) : null;
-    const zusatz = l && nur && nur.length > 0 ? ['--vorher', this.renderDatei(l.schluessel), '--nur', nur.join(',')] : [];
+    // --vorher-liste: the list the earlier render was made from, so the engine also clears where a moved note was before
+    const vorherListe = path.join(tmp, 'vorher_auftrag.json');
+    if (l && nur && nur.length > 0) fs.writeFileSync(vorherListe, `${JSON.stringify({ format: AUFTRAG_FORMAT, kurve: l.kurve, liste: l.liste })}\n`);
+    const zusatz = l && nur && nur.length > 0 ? ['--vorher', this.renderDatei(l.schluessel), '--nur', nur.join(','), '--vorher-liste', vorherListe] : [];
     const e = await this.kind([this.o.programm, 'render', quelle, kurve, auftrag, aus, ...zusatz], 1, this.o.renderFristMs ?? Math.max(30_000,
       4 * Math.round(bytes / 8 / NOTEN_SR * 1000)));
     const sekunden = this.zeile(e, 'the render');
+    const messung = Array.isArray(e.zeile?.messung) ? (e.zeile.messung as NotenMessung[]) : null;   // the line passed zeilePruefung in zeile()
     if (groesse(aus) !== bytes) throw new RenderFehler('noten_render_fehler', 'the note edit could not be rendered; the clip plays without it',
       'the render wrote a file of another size than the source');
     fs.mkdirSync(this.notenOrdner(), { recursive: true });
@@ -407,7 +417,7 @@ export class NotenRender implements NotenRenderQuelle {
     fs.renameSync(`${json}.tmp`, json);
     this.index.set(a.schluessel, eintrag);
     this.letzte.set(NotenRender.ck(a.slug, a.clipId), eintrag);
-    return sekunden;
+    return { sekunden, messung };
   }
 
   // ---- cleanup ------------------------------------------------------------------------------------------------------------------

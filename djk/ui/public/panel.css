@@ -42,6 +42,7 @@
 .fp-spur, .fp-bogen { fill: none; stroke-width: 4; stroke-linecap: round; }
 .fp-spur { stroke: var(--line); }
 .fp-bogen { stroke: var(--a); filter: drop-shadow(0 0 3px rgba(47, 214, 195, .45)); }
+.fp-mod { fill: none; stroke: var(--warn, #f0a030); stroke-width: 2.5; stroke-linecap: round; pointer-events: none; }   /* strand 6 task 2.2: base to modulated value, radius 29 */
 .fp-kappe { fill: #0e0f12; stroke: #3c404c; stroke-width: 1.5; }
 .fp-knopf:hover .fp-kappe { stroke: #5a6070; }
 .fp-strich { stroke: var(--text); stroke-width: 2.5; stroke-linecap: round; }

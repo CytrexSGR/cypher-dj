@@ -178,7 +178,7 @@ inline int arr_schluessel_quelle_ankunft(const ArrSnapshot& s, const ArrSchluess
   }
 }
 
-// Fills schl_verz, schl_verz_zeile and schl_spaet of every compressor stage (schl_verz and schl_spaet of every host stage too, strand 2 task 3.3) (call after arr_pdc_rechnen(); the PDC table must be current). Returns false and names the needed and the
+// Fills schl_verz, schl_verz_zeile and schl_spaet of every compressor and (strand 5 slice 4) EQ stage (schl_verz and schl_spaet of every host stage too, strand 2 task 3.3) (call after arr_pdc_rechnen(); the PDC table must be current). Returns false and names the needed and the
 // maximal delay in *meldung when a structural key would need a delay of `grenze` samples or more (the loader refuses it with `format`). `grenze` is the ring length; a test passes a
 // smaller one because the pools hold at most two latency stages, which never reach the real bound.
 inline bool arr_schluessel_versatz(ArrSnapshot& s, std::string* meldung = nullptr, int grenze = ARR_SCHL_VERZ_MAX) {
@@ -187,7 +187,7 @@ inline bool arr_schluessel_versatz(ArrSnapshot& s, std::string* meldung = nullpt
     for (int j = 0; j < kt.n && j < ARR_KETTE; ++j) {
       ArrStufe& st = kt.st[j];
       st.schl_verz = st.schl_verz_zeile = st.schl_spaet = 0;
-      if (st.art != ArrInsArt::komp && st.art != ArrInsArt::host) continue;   // strand 2 task 3.3: a host stage's structural key is aligned like a compressor's
+      if (st.art != ArrInsArt::komp && st.art != ArrInsArt::host && st.art != ArrInsArt::eq) continue;   // strand 2 task 3.3: a host stage's structural key is aligned like a compressor's; strand 5 slice 4: an EQ's too
       const int ein = arr_schluessel_stufe_ankunft(s, c, j);
 #ifdef CYPHERDJ_MUTATION_SC_VERSATZ_EINE_STUFE
       const int nah = j > 0 ? ins_latenz(kt.st[j - 1]) : 0;   // error case: the delay is the latency of the nearest stage in front, not the path sum
@@ -195,7 +195,7 @@ inline bool arr_schluessel_versatz(ArrSnapshot& s, std::string* meldung = nullpt
 #else
       const int zeile = ein;
 #endif
-      if (st.art == ArrInsArt::komp) st.schl_verz_zeile = static_cast<uint16_t>(std::min(zeile, grenze - 1));   // the row key (komp only) is dynamic: it cannot be refused, the delay is clamped to the ring
+      if (st.art == ArrInsArt::komp || st.art == ArrInsArt::eq) st.schl_verz_zeile = static_cast<uint16_t>(std::min(zeile, grenze - 1));   // the row key (komp and eq) is dynamic: it cannot be refused, the delay is clamped to the ring
       if (st.key.quelle == ARR_SCHL_KEINE) continue;
       const int quelle = arr_schluessel_quelle_ankunft(s, st.key);
       if (quelle >= ein) {

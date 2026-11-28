@@ -145,7 +145,7 @@ export function schluesselPlan(p: Projekt, nur: Spur | Pfad): SchluesselPlan {
   const strang = (st: InsertTraeger): void => {
     for (const i of st.inserts ?? []) {
       const k = i.key;
-      if (!k || i.art !== 'komp') continue;
+      if (!k || (i.art !== 'komp' && i.art !== 'eq')) continue;
       if (k.quelle === 'spur' && k.punkt === 'post') { const t = p.spuren.find((x) => x.nr === k.nr); if (t) spurQuelle(t, ''); }
       else if (k.quelle === 'grp') { const gg = gruppen.find((x) => x.nr === k.nr); if (gg) gruppeQuelle(gg, '', k.punkt === 'post'); }
       else if (k.quelle === 'ret') { const r = returns.find((x) => x.nr === k.nr); if (r) returnQuelle(r, k.punkt === 'post'); }
@@ -178,7 +178,7 @@ export function schluesselReturns(p: Projekt, x: Return): Return[] {
   for (let i = 0; i < warte.length; i++) {
     for (const ins of warte[i].inserts ?? []) {
       const k = ins.key;
-      if (!k || ins.art !== 'komp' || k.quelle !== 'ret') continue;
+      if (!k || (ins.art !== 'komp' && ins.art !== 'eq') || k.quelle !== 'ret') continue;
       const r = returns.find((y) => y.nr === k.nr);
       if (!r || r === x) continue;
       aus.set(r.nr, r);

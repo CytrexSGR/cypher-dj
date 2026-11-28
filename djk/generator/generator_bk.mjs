@@ -91,6 +91,7 @@ sock.bind(Number(opt['abo-port']), '127.0.0.1', () => {
   setInterval(hallo, 1000);
   for (const l of laeufe.values()) {
     fs.watchFile(l.muster, { interval: 100 }, () => l.musterLesen());
+    fs.watchFile(l.harmoniePfad, { interval: 100 }, () => l.harmonieLesen());
     fs.watchFile(l.taktartPfad, { interval: 100 }, () => { if (l.taktartLesen() && uhr) wecke(); });
   }
   log(`ready: kern udp ${KERN}, subscription udp ${abo}, streams ${streams.join(',')}, pattern folders ${opt['muster-basis']}N`);

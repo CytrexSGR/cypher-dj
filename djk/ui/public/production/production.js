@@ -25,6 +25,7 @@ import { bindePresetHost } from './preset_host.js';   // 1.16 rest U7: host of t
 import { bindeKollektionen } from '../collections.js';   // 1.16 rest U8: the COLLECTIONS panel and "Add to collection"
 import { bindeTransport } from './transport.js';
 import { bindeMarker } from './marker_operation.js';
+import { bindeHarmonie } from './harmonie_line_operation.js';
 import { bindeVerlauf } from './history_display.js';
 import { bindeClips } from './clip_operation.js';
 import { bindeEditWerkzeuge } from './edit_tools.js';
@@ -42,7 +43,7 @@ import { neuerClipWaehler } from './clip_waehlen.js';
 import { bindeMasterMeter } from './master_meter.js';   // permanent master meter at the end of the transport bar
 import { registriereHost } from '../browser/host.js';   // browser plan 2: what the docked browser needs from this view
 
-const BINDER = [bindeZeitachse, bindeProjektwahl, bindeSpuren, bindeMatrix, bindeInsertDienste, bindeDockProduktion, bindeAblage, bindeTransport, bindeMarker, bindeVerlauf, bindeLanen, bindeComp, bindeClips, bindeEditWerkzeuge, bindeDetail, bindeAusgabe, bindeMidiImport, bindeVariantenReihen, bindeGeraete, bindeAufnahme,
+const BINDER = [bindeZeitachse, bindeProjektwahl, bindeSpuren, bindeMatrix, bindeInsertDienste, bindeDockProduktion, bindeAblage, bindeTransport, bindeMarker, bindeHarmonie, bindeVerlauf, bindeLanen, bindeComp, bindeClips, bindeEditWerkzeuge, bindeDetail, bindeAusgabe, bindeMidiImport, bindeVariantenReihen, bindeGeraete, bindeAufnahme,
   bindeGeraeteBrowser, bindePresetHost, bindePresetMarken, bindeKollektionen, bindeEinklappen, bindeRecOptionen, bindeMasterMeter];
 
 const GERUEST = `
@@ -79,6 +80,7 @@ const GERUEST = `
     <label for="p-loop-bis">TO</label><input id="p-loop-bis" data-p="loop-bis" class="p-takt" inputmode="numeric" size="3" autocomplete="off" title="Loop range: last bar (it is included)" aria-label="Loop to bar" disabled>
     <button data-p="metronom" aria-pressed="false" title="Metronome" disabled>METRO</button>
     <button data-p="marker-neu" title="Add a marker at the start marker" disabled>+ MARKER</button>
+    <button data-p="harmonie-an" aria-pressed="false" title="Show or hide the chord lane under the ruler" disabled>CHORDS</button>
   </div>
   <span class="p-kern" data-p="kern" title="Arrangement in the core: loaded revision and transport state"></span>
   <div class="p-gruppe">
@@ -118,6 +120,7 @@ const GERUEST = `
     <button data-p="neu-audio" title="Add an audio track" disabled>+ AUDIO</button><button data-p="neu-rb" title="Add an instrument track with the RB-338" disabled>+ RB-338</button><button data-p="neu-surge" title="Add an instrument track with Surge (host slot 1 or 2)" disabled>+ SURGE</button><button data-p="neu-rack" title="Add an instrument track with a rack: up to 4 devices side by side, each with key, velocity and chain zones" disabled>+ RACK</button><button data-p="neu-kit" title="Add an instrument track that plays a kit from the kit folder (pick the kit)" disabled>+ KIT</button><button data-p="gruppieren" class="p-gruppieren" title="Group the selected tracks (Ctrl+G). Select tracks with Ctrl+click or Shift+click on their heads">GROUP</button>
   </div>
   <div class="p-marker-leiste" data-p="marker-leiste"></div>
+  <div class="p-harmonie-zeile" data-p="harmonie-zeile" hidden></div>
   <canvas class="p-lineal" data-p="lineal" title="Top strip: drag the loop bracket · bottom strip: click sets the start marker"></canvas>
   <div class="p-koerper" data-p="koerper">
     <div class="p-koepfe" data-p="koepfe"></div>
@@ -228,11 +231,12 @@ export const FEHLER_TEXT = {
   zu_gross: AUSGABE_FEHLER.zu_gross, server_fehler: 'The project server did not answer: showing the last state', netz: 'Page server unreachable', keine_antwort: 'No answer from the core',
   routing_zyklus: 'A group cannot feed itself or one of its own members', routing_grenze: 'There are at most 16 groups and 8 returns',
   ziel_unbekannt: 'That output or target does not exist for this track', gruppe_unbekannt: 'That group no longer exists', return_unbekannt: 'That return no longer exists',
-  insert_unbekannt: 'That insert stage no longer exists', art_unbekannt: 'That insert kind is not available (compressor, EQ, saturator, limiter, utility, gate, multiband and effect graph exist in this version)',
+  insert_unbekannt: 'That insert stage no longer exists', art_unbekannt: 'That insert kind is not available (compressor, EQ, saturator, limiter, utility, gate, multiband, transient shaper, imager and effect graph exist in this version)',
+  mod_voll: 'The project already has 16 modulators: delete one first', mod_unbekannt: 'That modulator no longer exists',   // strand 6
   sidechain_spaet: 'That key source is computed after this stage: tracks can listen to tracks and DJ inputs, groups also to the pre of other groups',
   sidechain_zyklus: 'That key would depend on the stage itself: its own strip, its own group, the master, or two tracks keying each other',
   sidechain_quelle: 'That key source is not available in the arrangement (erz/2, erz/3, erz/5 to erz/8 and pad/1, pad/2 come after the mixer)',
-  kette_voll: 'The insert chain of that strip is full (five stages at most)', ins_voll: 'All stages of that kind are in use (160 compressors, 160 EQs, four saturators, eight limiters, eight utilities, 16 gates, eight multibands and eight effect graphs at most)',
+  kette_voll: 'The insert chain of that strip is full (five stages at most)', ins_voll: 'All stages of that kind are in use (160 compressors, 160 EQs, 32 saturators, eight limiters, eight utilities, 16 gates, eight multibands, 32 transient shapers, 16 imagers and eight effect graphs at most)',
   kein_loopdeck: 'That group or track does not belong to a loop deck', platz_belegt: 'That place already holds a loop deck',
   zelle_leer: 'That loop deck cell is empty', modul_nicht_umwandelbar: 'That module cannot become a loop deck cell; it is left untouched',
   zelle_voll: 'That slot holds a cell: empty it first', zeilen_voll: 'All 8 rows are in use; 16 rows come with the next slice',
@@ -287,6 +291,8 @@ export const FEHLER_TEXT = {
   noten_unbekannt: 'That note no longer exists', id_belegt: 'That id is taken',
   keine_audio_noten: 'This clip has no notes yet: detect notes first',
   noten_ton_grenze: 'A note can move at most 24 semitones from its detected pitch and must stay inside MIDI 0 to 127',
+  noten_ueberlappen: 'Notes cannot overlap: move the neighbour first or let it follow',
+  noten_dehnung_grenze: 'A note can be stretched to at most 4 times and compressed to a quarter of its length',
   noten_laeuft: 'A note detection is already running',
   noten_vorhanden: 'This clip already has notes: detect them again only if you accept losing your edits',
   noten_mehrstimmig: 'More than one note at a time. Separate stems first, then detect notes on a stem.',
@@ -332,7 +338,7 @@ export const FEHLER_TEXT = {
   kein_baukasten: 'This server has no Cypher Modular graph bridge: the sound snapshot is not available',
   // 1.14 Comping, take lanes (task 7: the reasons of rename, delete and audition; the comp reasons come with the gesture)
   comp_leer: 'The range is empty or outside the take lane: drag over a part of the take lane',
-  take_unbekannt: 'That take lane no longer exists', takes_voll: 'A track holds at most 32 take lanes', take_nur_audio: 'Only audio tracks have take lanes',
+  take_unbekannt: 'That take lane no longer exists', takes_voll: 'A track holds at most 32 take lanes', take_nur_audio: 'Stream tracks have no take lanes',
   take_name_ungueltig: 'A take lane name has 1 to 64 characters, not only spaces',
   // tracker sections and linked clips (project/commands_tracker.ts, time.ts, verbund.ts, commands_clip.ts); the server detail with clip and track name follows
   mod_ungueltig: 'That file is not a ProTracker module', mod_zu_gross: 'The module file is larger than 4 MiB',

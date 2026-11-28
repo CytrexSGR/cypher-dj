@@ -37,6 +37,17 @@ constexpr int LIM8_ZEILEN = 6 * 3;
 constexpr int HOST8_ZEILEN = 4;
 constexpr int GATE_MB_ZEILEN = 16 * 8 + 8 * 24;
 constexpr int S4_ZEILEN = 16 * 8 + 8 * 24 + 6 * 3 + HOST8_ZEILEN;   // + the 4 host rows of slice 5
+// strand 5 slice 1: the saett rows grow 4 -> 6 per instance (kurve, decke after mix), 4 instances: every row behind ins/saett/1/mix moves, up to 8 rows
+// strand 5 slice 2: the eq rows grow 59 -> 85 per instance (d1..d8 x {dyn, schwelle, bereich}, dyn_attack, dyn_release after b8/platz), 160 instances:
+// eq instance n starts 26 (n - 1) rows later, and every row behind the eq block (saett and all after it) moves by S5_EQ_ZEILEN
+// strand 5 slice 4: + 1 row per eq instance (sc, the key, after dyn_release): 86 per instance, instance n starts 27 (n - 1) rows later
+constexpr int S5_EQ_ZEILEN = 160 * 27;
+// strand 5 slice 3: the saett pool grows 4 -> 32 (+ 28 x 6 rows in front of rack: rack, lim, host, utility, bk, gate and mb move by S5_SAETT32_ZEILEN),
+// the kinds trans (32 x 6) and bild (16 x 7) are appended behind the mb block (everything behind the insert block moves by S5_TB_ZEILEN more)
+constexpr int S5_SAETT32_ZEILEN = 28 * 6;
+constexpr int S5_TB_ZEILEN = 32 * 6 + 16 * 7;
+constexpr int S5_VOR_TB_ZEILEN = 4 * 2 + S5_EQ_ZEILEN + S5_SAETT32_ZEILEN;   // everything behind the saett block up to the end of the mb block
+constexpr int S5_ZEILEN = S5_VOR_TB_ZEILEN + S5_TB_ZEILEN;   // everything behind the insert block
 constexpr int MASTER_BK_ZEILEN = BK_REGLER_N;   // master insert graph: master/bk/1..64 at the very end (behind grp/<n>/cue)
 const ReglerTabelle& tab() {
   static ReglerTabelle t;
@@ -62,73 +73,81 @@ FALL(zahl_der_regler_und_kanaele) {
   // 1.10 slice 4b T12: plus the eq rows (59 per instance, 1 instance) and the saett rows (4 per instance, 1 instance): 1378 + 63 = 1441.
   // The pool sizes are the measured ones (T11): a change of either is a decision with a new measurement, and this pin goes red first.
   // 2026-11-06: the eq pool has 2 instances (Andreas' decision of 2026-11-05, lane measured quiet): 59 more rows.
-  PRUEFE_GLEICH(tab().anzahl(), 357 + 4 * 8 + 204 + 2 * 8 + WERKZEUG_REGLER + 1600 + 160 * 59 + 4 * 4 + 48 + 8 * 3 + 8 + 8 * 5 + 8 * 65 + GATE_MB_ZEILEN + 6 * 56 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN + SPUR_FILTER_ZEILEN + SPUR_EQ_ZEILEN + STROM_BK_ZEILEN + RETURNS_ACHT_ZEILEN + SPUR_ZEILEN_HINTEN);   // + the 48 rack rows (slice 4c), + the 3 ins/lim rows per limiter, + the 4 ins/host rows (plan 1.11), + the 5 ins/utility rows per instance (arr-fx)
+  PRUEFE_GLEICH(tab().anzahl(), 357 + 4 * 8 + 204 + 2 * 8 + WERKZEUG_REGLER + 1600 + 160 * 86 + 32 * 6 + 48 + 8 * 3 + 8 + 8 * 5 + 8 * 65 + GATE_MB_ZEILEN + S5_TB_ZEILEN + 6 * 56 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN + SPUR_FILTER_ZEILEN + SPUR_EQ_ZEILEN + STROM_BK_ZEILEN + RETURNS_ACHT_ZEILEN + SPUR_ZEILEN_HINTEN);   // + the 48 rack rows (slice 4c), + the 3 ins/lim rows per limiter, + the 4 ins/host rows (plan 1.11), + the 5 ins/utility rows per instance (arr-fx)
   // 1.10 slice 4c T15: plus the 48 rack macro rows rack/<1..12>/m1..m4: 1500 + 48 = 1548.
   // Master limiter: plus the 3 rows ins/lim/1/{an,decke,abklingen}: 1548 + 3 = 1551.
   // Plan 1.11 T4: plus the 4 rows ins/host/1..4/an: 1551 + 4 = 1555.
   // arr-fx slice 1: plus the utility kind, 8 instances x 5 rows (an, breite, mono_unter, gain, balance), appended last: 1555 + 40 = 1595.
   // arr-fx slice 2: the pools grow to 8 EQs (+6 x 59), 4 saturators (+3 x 4) and 2 limiters (+3): 1595 + 354 + 12 + 3 = 1964; rack, lim, host and utility rows move up.
   // arr-bk slice 3: plus the bk kind, 8 instances x 9 rows (an, k1..k8), appended last: 1964 + 72 = 2036 (2608 since strand 1 slice 1, 8068 since slice 3) of the ceiling 4096.
-  PRUEFE_GLEICH(tab().anzahl(), 609 + 201 + 1600 + 160 * 59 + 4 * 4 + 48 + 8 * 3 + 8 + 8 * 5 + 8 * 65 + GATE_MB_ZEILEN + 6 * 56 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN + SPUR_FILTER_ZEILEN + SPUR_EQ_ZEILEN + STROM_BK_ZEILEN + RETURNS_ACHT_ZEILEN + SPUR_ZEILEN_HINTEN);
-  PRUEFE_GLEICH(tab().anzahl(), 2944 + S3_ZEILEN + S4_ZEILEN + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN + SPUR_FILTER_ZEILEN + SPUR_EQ_ZEILEN + STROM_BK_ZEILEN + RETURNS_ACHT_ZEILEN + SPUR_ZEILEN_HINTEN);   // nested groups task 1: + 64 rows of groups 9..16 at the end; 64-knob widening: 2564 + 8 x 32 (ins/bk/<n>/k33..k64) + 14 x 32 (<kanal>/bk/33..64 of 12 channels, fx/3, fx/4) of the ceiling 4096
+  PRUEFE_GLEICH(tab().anzahl(), 609 + 201 + 1600 + 160 * 86 + 32 * 6 + 48 + 8 * 3 + 8 + 8 * 5 + 8 * 65 + GATE_MB_ZEILEN + S5_TB_ZEILEN + 6 * 56 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN + SPUR_FILTER_ZEILEN + SPUR_EQ_ZEILEN + STROM_BK_ZEILEN + RETURNS_ACHT_ZEILEN + SPUR_ZEILEN_HINTEN);
+  PRUEFE_GLEICH(tab().anzahl(), 2944 + S3_ZEILEN + S4_ZEILEN + S5_ZEILEN + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN + SPUR_FILTER_ZEILEN + SPUR_EQ_ZEILEN + STROM_BK_ZEILEN + RETURNS_ACHT_ZEILEN + SPUR_ZEILEN_HINTEN);   // nested groups task 1: + 64 rows of groups 9..16 at the end; 64-knob widening: 2564 + 8 x 32 (ins/bk/<n>/k33..k64) + 14 x 32 (<kanal>/bk/33..64 of 12 channels, fx/3, fx/4) of the ceiling 4096
   // the contract (INTERFACES 1.5) says indices 1258 to 1377: the table counts the 4 deck/<n>/transport rows, the dump of stellwerk_regler_liste does not (1374 lines)
   PRUEFE_GLEICH(tab().suche("ins/komp/1/an"), 810);
   PRUEFE_GLEICH(tab().suche("ins/komp/100/an"), 810 + 99 * 10);   // the first three-digit row (strand 1 slice 3b)
   PRUEFE_GLEICH(tab().suche("ins/komp/160/sc"), 2409);   // strand 1 slice 3b: 160 compressors x 10 rows, 810..2409 (96 x 10, 810..1769 in slice 3)
   PRUEFE(tab().suche("ins/komp/161/an") < 0);
-  // strand 1 slice 3b: the eq block starts at 2410 (+1380: 138 more compressors than in slice 1) and holds 160 x 59 rows (2410..11849; 1770..7433 in slice 3). slice 4b: the eq block follows the komp block (indices 1378 to 1849, eight instances of 59 since arr-fx slice 2), then the saett block (1850 to 1865, four of 4)
+  // strand 1 slice 3b: the eq block starts at 2410 (+1380: 138 more compressors than in slice 1) and holds 160 x 59 rows (2410..11849; 1770..7433 in slice 3; 160 x 85 rows, 2410..16009, since strand 5 slice 2). slice 4b: the eq block follows the komp block (indices 1378 to 1849, eight instances of 59 since arr-fx slice 2), then the saett block (1850 to 1865, four of 4)
   PRUEFE_GLEICH(tab().suche("ins/eq/1/an"), 2410);
   PRUEFE_GLEICH(tab().suche("ins/eq/1/b8/platz"), 2468);
-  PRUEFE_GLEICH(tab().suche("ins/eq/2/an"), 2469);
-  PRUEFE_GLEICH(tab().suche("ins/eq/160/b8/platz"), 11849);
+  PRUEFE_GLEICH(tab().suche("ins/eq/1/d1/dyn"), 2469);   // strand 5 slice 2: the dynamic rows follow b8/platz of the same instance
+  PRUEFE_GLEICH(tab().suche("ins/eq/1/dyn_release"), 2494);
+  PRUEFE_GLEICH(tab().suche("ins/eq/1/sc"), 2495);   // strand 5 slice 4: the key row closes the instance
+  PRUEFE_GLEICH(tab().suche("ins/eq/2/an"), 2496);
+  PRUEFE_GLEICH(tab().suche("ins/eq/160/b8/platz"), 2410 + 159 * 86 + 58);   // 86 rows per instance since strand 5 slice 4 (85 since slice 2, 11849 with 59)
+  PRUEFE_GLEICH(tab().suche("ins/eq/160/dyn_release"), 2410 + 160 * 86 - 2);
+  PRUEFE_GLEICH(tab().suche("ins/eq/160/sc"), 2410 + 160 * 86 - 1);
   PRUEFE(tab().suche("ins/eq/161/an") < 0);   // pool 160 (strand 1 slice 3b; 96 in slice 3)
-  PRUEFE_GLEICH(tab().suche("ins/saett/1/an"), 1974 + S3_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("ins/saett/4/mix"), 1989 + S3_ZEILEN);
-  PRUEFE(tab().suche("ins/saett/5/an") < 0);   // pool 4
+  PRUEFE_GLEICH(tab().suche("ins/saett/1/an"), 1974 + S3_ZEILEN + S5_EQ_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("ins/saett/4/mix"), 1989 + S3_ZEILEN + S5_EQ_ZEILEN + 3 * 2);   // 6 rows per instance since strand 5 slice 1
+  PRUEFE_GLEICH(tab().suche("ins/saett/1/kurve"), 1974 + S3_ZEILEN + S5_EQ_ZEILEN + 4);   // strand 5 slice 1: kurve and decke follow mix
+  PRUEFE_GLEICH(tab().suche("ins/saett/4/decke"), 1974 + S3_ZEILEN + S5_EQ_ZEILEN + 3 * 6 + 5);
+  PRUEFE_GLEICH(tab().suche("ins/saett/32/decke"), 1974 + S3_ZEILEN + S5_EQ_ZEILEN + 32 * 6 - 1);   // pool 32 since strand 5 slice 3 (4 until then)
+  PRUEFE(tab().suche("ins/saett/33/an") < 0);
   // slice 4c: the rack block follows the saett block (1866 to 1913)
-  PRUEFE_GLEICH(tab().suche("rack/1/m1"), 1990 + S3_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("rack/12/m4"), 2037 + S3_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("rack/1/m1"), 1990 + S3_ZEILEN + S5_VOR_TB_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("rack/12/m4"), 2037 + S3_ZEILEN + S5_VOR_TB_ZEILEN);
   // master limiter: the lim block is appended after the rack block (1914 to 1919, two instances of 3)
-  PRUEFE_GLEICH(tab().suche("ins/lim/1/an"), 2038 + S3_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("ins/lim/1/decke"), 2039 + S3_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("ins/lim/1/abklingen"), 2040 + S3_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("ins/lim/2/abklingen"), 2043 + S3_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("ins/lim/8/abklingen"), 2038 + S3_ZEILEN + 7 * 3 + 2);   // pool 8 (strand 1 slice 4; 2 until then)
+  PRUEFE_GLEICH(tab().suche("ins/lim/1/an"), 2038 + S3_ZEILEN + S5_VOR_TB_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("ins/lim/1/decke"), 2039 + S3_ZEILEN + S5_VOR_TB_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("ins/lim/1/abklingen"), 2040 + S3_ZEILEN + S5_VOR_TB_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("ins/lim/2/abklingen"), 2043 + S3_ZEILEN + S5_VOR_TB_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("ins/lim/8/abklingen"), 2038 + S3_ZEILEN + S5_VOR_TB_ZEILEN + 7 * 3 + 2);   // pool 8 (strand 1 slice 4; 2 until then)
   PRUEFE(tab().suche("ins/lim/9/an") < 0);
   // plan 1.11 T4: the host block is appended after the lim block (1920 to 1923)
-  PRUEFE_GLEICH(tab().suche("ins/host/1/an"), 2044 + S3_ZEILEN + LIM8_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("ins/host/4/an"), 2047 + S3_ZEILEN + LIM8_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("ins/host/5/an"), 2048 + S3_ZEILEN + LIM8_ZEILEN);   // pool 8 since strand 1 slice 5 (4 until then)
-  PRUEFE_GLEICH(tab().suche("ins/host/8/an"), 2051 + S3_ZEILEN + LIM8_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("ins/host/1/an"), 2044 + S3_ZEILEN + S5_VOR_TB_ZEILEN + LIM8_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("ins/host/4/an"), 2047 + S3_ZEILEN + S5_VOR_TB_ZEILEN + LIM8_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("ins/host/5/an"), 2048 + S3_ZEILEN + S5_VOR_TB_ZEILEN + LIM8_ZEILEN);   // pool 8 since strand 1 slice 5 (4 until then)
+  PRUEFE_GLEICH(tab().suche("ins/host/8/an"), 2051 + S3_ZEILEN + S5_VOR_TB_ZEILEN + LIM8_ZEILEN);
   PRUEFE(tab().suche("ins/host/9/an") < 0);
   // arr-fx slice 1: the utility block is the last kind of the contract (1924 to 1963, eight instances of 5)
-  PRUEFE_GLEICH(tab().suche("ins/utility/1/an"), 2048 + S3_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("ins/utility/8/balance"), 2087 + S3_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("ins/utility/1/an"), 2048 + S3_ZEILEN + S5_VOR_TB_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("ins/utility/8/balance"), 2087 + S3_ZEILEN + S5_VOR_TB_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
   PRUEFE(tab().suche("ins/utility/9/an") < 0);   // pool 8
   // arr-bk slice 3: the bk block follows the utility block (eight instances, stage by stage: an, k1..k8 = 9 rows until the 32-knob widening, 1964 to 2035);
   // 32-knob widening: an, k1..k32 = 33 rows per instance, 1964 to 2227; 64-knob widening: an, k1..k64 = 65 rows per instance, 1964 to 2483.
   // Stage 1 keeps its rows k1..k8 at 1965..1972; the stages 2..8 start later (stage-major order, stage s starts at 1964 + 65 (s - 1)).
-  PRUEFE_GLEICH(tab().suche("ins/bk/1/an"), 2088 + S3_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("ins/bk/1/k1"), 2089 + S3_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("ins/bk/1/k8"), 2096 + S3_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("ins/bk/1/k9"), 2097 + S3_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("ins/bk/1/k32"), 2120 + S3_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("ins/bk/1/k33"), 2121 + S3_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("ins/bk/1/k64"), 2152 + S3_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("ins/bk/2/an"), 2153 + S3_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("ins/bk/1/an"), 2088 + S3_ZEILEN + S5_VOR_TB_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("ins/bk/1/k1"), 2089 + S3_ZEILEN + S5_VOR_TB_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("ins/bk/1/k8"), 2096 + S3_ZEILEN + S5_VOR_TB_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("ins/bk/1/k9"), 2097 + S3_ZEILEN + S5_VOR_TB_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("ins/bk/1/k32"), 2120 + S3_ZEILEN + S5_VOR_TB_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("ins/bk/1/k33"), 2121 + S3_ZEILEN + S5_VOR_TB_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("ins/bk/1/k64"), 2152 + S3_ZEILEN + S5_VOR_TB_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("ins/bk/2/an"), 2153 + S3_ZEILEN + S5_VOR_TB_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
   for (int st = 1; st <= 8; st++) {   // generated block, stage-major: an, k1..k64 per stage
     char q[40];
     std::snprintf(q, sizeof q, "ins/bk/%d/an", st);
-    PRUEFE_GLEICH(tab().suche(q), 2088 + S3_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN + 65 * (st - 1));
+    PRUEFE_GLEICH(tab().suche(q), 2088 + S3_ZEILEN + S5_VOR_TB_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN + 65 * (st - 1));
     std::snprintf(q, sizeof q, "ins/bk/%d/k64", st);
-    PRUEFE_GLEICH(tab().suche(q), 2088 + S3_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN + 65 * (st - 1) + 64);
+    PRUEFE_GLEICH(tab().suche(q), 2088 + S3_ZEILEN + S5_VOR_TB_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN + 65 * (st - 1) + 64);
   }
-  PRUEFE_GLEICH(tab().suche("ins/bk/8/k8"), 2551 + S3_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("ins/bk/8/k32"), 2575 + S3_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("ins/bk/8/k64"), 2607 + S3_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("ins/bk/8/k8"), 2551 + S3_ZEILEN + S5_VOR_TB_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("ins/bk/8/k32"), 2575 + S3_ZEILEN + S5_VOR_TB_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("ins/bk/8/k64"), 2607 + S3_ZEILEN + S5_VOR_TB_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN);
   PRUEFE(tab().suche("ins/bk/9/an") < 0);   // pool 8
   // strand 1 slice 4: the gate block (16 x 8) and the multiband block (8 x 24: an, grenze_tief, grenze_hoch, then b1..b3 x 7) follow the bk block
-  const int gate0 = 2088 + S3_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN + 8 * 65;
+  const int gate0 = 2088 + S3_ZEILEN + S5_VOR_TB_ZEILEN + LIM8_ZEILEN + HOST8_ZEILEN + 8 * 65;
   PRUEFE_GLEICH(tab().suche("ins/gate/1/an"), gate0);
   PRUEFE_GLEICH(tab().suche("ins/gate/1/release"), gate0 + 7);
   PRUEFE_GLEICH(tab().suche("ins/gate/16/release"), gate0 + 16 * 8 - 1);
@@ -143,6 +162,21 @@ FALL(zahl_der_regler_und_kanaele) {
   PRUEFE(tab().suche("ins/mb/9/an") < 0);   // pool 8
   PRUEFE_GLEICH(gate0 + GATE_MB_ZEILEN, mb0 + 8 * 24);   // the insert block ends where the S4 rows end
   PRUEFE_GLEICH(static_cast<int>(std::strlen("ins/mb/8/b3/schwelle")), 20);
+  // strand 5 slice 3: the trans block (32 x 6: an, angriff, halten, tempo, out, mix) and the bild block (16 x 7: an, grenze_tief, grenze_hoch,
+  // breite_tief, breite_mitte, breite_hoch, mono_unter) follow the mb block
+  const int trans0 = mb0 + 8 * 24;
+  PRUEFE_GLEICH(tab().suche("ins/trans/1/an"), trans0);
+  PRUEFE_GLEICH(tab().suche("ins/trans/1/mix"), trans0 + 5);
+  PRUEFE_GLEICH(tab().suche("ins/trans/32/mix"), trans0 + 32 * 6 - 1);
+  PRUEFE(tab().suche("ins/trans/33/an") < 0);   // pool 32
+  const int bild0 = trans0 + 32 * 6;
+  PRUEFE_GLEICH(tab().suche("ins/bild/1/an"), bild0);
+  PRUEFE_GLEICH(tab().suche("ins/bild/1/mono_unter"), bild0 + 6);
+  PRUEFE_GLEICH(tab().suche("ins/bild/16/mono_unter"), bild0 + 16 * 7 - 1);
+  PRUEFE(tab().suche("ins/bild/17/an") < 0);   // pool 16
+  PRUEFE_GLEICH(bild0 + 16 * 7, mb0 + 8 * 24 + S5_TB_ZEILEN);
+  PRUEFE(d("ins/trans/1/tempo").min == 1.0f && d("ins/trans/1/tempo").max == 100.0f && d("ins/trans/1/tempo").vorgabe == 15.0f);
+  PRUEFE(d("ins/bild/1/breite_tief").max == 1.0f && d("ins/bild/1/breite_mitte").max == 2.0f && d("ins/bild/1/grenze_hoch").vorgabe == 4000.0f);
   PRUEFE(tab().suche("ins/bk/1/k65") < 0 && tab().suche("ins/bk/1/k0") < 0 && tab().suche("ins/bk/1/k01") < 0 && tab().suche("ins/bk/1/k033") < 0 && tab().suche("ins/bk/1/k640") < 0);
   PRUEFE(tab().suche("ins/utility/1/decke") < 0);
   PRUEFE(tab().suche("ins/host/0/an") < 0);
@@ -559,7 +593,7 @@ FALL(werkzeug_zeilen_201_und_ihre_zaehlung) {
   PRUEFE_GLEICH(spektrum, 1);
   PRUEFE_GLEICH(gesamt, 201);
   PRUEFE_GLEICH(WERKZEUG_REGLER, 201);
-  PRUEFE_GLEICH(tab().anzahl(), 810 + 1600 + 160 * 59 + 4 * 4 + 48 + 8 * 3 + 8 + 8 * 5 + 8 * 65 + GATE_MB_ZEILEN + 6 * 56 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN + SPUR_FILTER_ZEILEN + SPUR_EQ_ZEILEN + STROM_BK_ZEILEN + RETURNS_ACHT_ZEILEN + SPUR_ZEILEN_HINTEN);   // arr-bk: + 8 x 9 bk rows;   // 1.10 slice 4a/4b/4c + limiter + arr-fx: the 706 insert rows (120 komp, 8 x 59 eq, 4 x 4 saett, 48 rack, 2 x 3 lim, 4 host, 8 x 5 utility) follow the tool block
+  PRUEFE_GLEICH(tab().anzahl(), 810 + 1600 + 160 * 86 + 32 * 6 + 48 + 8 * 3 + 8 + 8 * 5 + 8 * 65 + GATE_MB_ZEILEN + S5_TB_ZEILEN + 6 * 56 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN + SPUR_FILTER_ZEILEN + SPUR_EQ_ZEILEN + STROM_BK_ZEILEN + RETURNS_ACHT_ZEILEN + SPUR_ZEILEN_HINTEN);   // arr-bk: + 8 x 9 bk rows;   // 1.10 slice 4a/4b/4c + limiter + arr-fx: the 706 insert rows (120 komp, 8 x 59 eq, 4 x 4 saett, 48 rack, 2 x 3 lim, 4 host, 8 x 5 utility) follow the tool block
   // and the table holds no other row of this kind: the count by role is 201 as well
   int rollen = 0;
   for (int r = 0; r < tab().anzahl(); r++)
@@ -716,7 +750,7 @@ FALL(container_zeilen_wie_vorher) {
   PRUEFE_GLEICH(tab().suche("deck/3/fader"), -1);
   PRUEFE_GLEICH(tab().suche("deck/4/pfl"), -1);
   // strand 1 slice 3b: + 9876 rows of the 160 + 160 pools (5460 for 96 + 96 in slice 3); 16 bk slots x 64 knobs (was 8: 4576)
-  PRUEFE_GLEICH(tab().anzahl(), 5660 + SPUR_FX_ZEILEN + SPUR_ZEILEN_NEU + PLUG_ZEILEN + S3_ZEILEN + S4_ZEILEN);
+  PRUEFE_GLEICH(tab().anzahl(), 5660 + SPUR_FX_ZEILEN + SPUR_ZEILEN_NEU + PLUG_ZEILEN + S3_ZEILEN + S4_ZEILEN + S5_ZEILEN);
   PRUEFE_GLEICH(std::strcmp(tab().def(609 + 200).pfad, "spektrum/kanal"), 0);
   PRUEFE_GLEICH(std::strcmp(tab().def(810).pfad, "ins/komp/1/an"), 0);   // the insert block starts right behind the tool block
   PRUEFE_GLEICH(std::strcmp(tab().def(2409).pfad, "ins/komp/160/sc"), 0);   // strand 1 slice 3b: the last compressor row (pool 160)
@@ -727,28 +761,28 @@ FALL(container_zeilen_wie_vorher) {
 // the send returns), the rows 9..32 moved by 256 (2228 -> 2484) because the insert block before them grew to 65 rows per stage; the restart state is keyed by path, so nothing reads them by index; two-digit numbers are their own rows and never alias bk/1..bk/8.
 FALL(bk_regler_9_bis_64_haengen_am_tabellenende) {
   const int n = tab().anzahl();
-  PRUEFE_GLEICH(n, 2944 + S3_ZEILEN + S4_ZEILEN + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN + SPUR_FILTER_ZEILEN + SPUR_EQ_ZEILEN + STROM_BK_ZEILEN + RETURNS_ACHT_ZEILEN + SPUR_ZEILEN_HINTEN);
+  PRUEFE_GLEICH(n, 2944 + S3_ZEILEN + S4_ZEILEN + S5_ZEILEN + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN + SPUR_FILTER_ZEILEN + SPUR_EQ_ZEILEN + STROM_BK_ZEILEN + RETURNS_ACHT_ZEILEN + SPUR_ZEILEN_HINTEN);
   PRUEFE(n < cypherdj::stellwerk::MAX_REGLER);
   PRUEFE_GLEICH(cypherdj::stellwerk::BK_REGLER_N, 64);
   // strand 1 slice 3b: the ceiling is 24576 (16384 since task 3.1) and the pools 160 + 160 take 9876 more rows than in slice 1: reserve 8944 (5168 in slice
   // 3); live override for all 16 bk slots: 1024 spur/<slot>/bk/<k> rows (512 with 8 slots: 4576; 3924 of 4096 before the table moved to 8192), 428 with 32
   // knobs; production plan task 8: 256 rows, 684 before ("Regler 3412 von 4096, Reserve 684"); "Regler 3412 von 4096, Reserve 684" (master insert graph: 64
   // master/bk rows; 748 and 3348 before) (live modules task 6: 16 grp/<n>/cue rows; 764 before, 3268 and 828 before nested groups task 1)
-  PRUEFE_GLEICH(cypherdj::stellwerk::MAX_REGLER - n, 24576 - 5660 - SPUR_FX_ZEILEN - SPUR_ZEILEN_NEU - PLUG_ZEILEN - S3_ZEILEN - S4_ZEILEN);
+  PRUEFE_GLEICH(cypherdj::stellwerk::MAX_REGLER - n, 24576 - 5660 - SPUR_FX_ZEILEN - SPUR_ZEILEN_NEU - PLUG_ZEILEN - S3_ZEILEN - S4_ZEILEN - S5_ZEILEN);
   // rows 9..32: 4 channels x 24 knobs, then fx/3 and fx/4 x 24, at 2036..2179
-  PRUEFE_GLEICH(tab().suche("deck/1/bk/9"), 2608 + S3_ZEILEN + S4_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("deck/1/bk/32"), 2608 + S3_ZEILEN + S4_ZEILEN + 23);
-  PRUEFE_GLEICH(tab().suche("deck/2/bk/9"), 2608 + S3_ZEILEN + S4_ZEILEN + 24);
-  PRUEFE_GLEICH(tab().suche("pad/2/bk/32"), 2608 + S3_ZEILEN + S4_ZEILEN + 4 * 24 - 1);
-  PRUEFE_GLEICH(tab().suche("fx/3/bk/9"), 2608 + S3_ZEILEN + S4_ZEILEN + 4 * 24);
-  PRUEFE_GLEICH(tab().suche("fx/4/bk/32"), 2751 + S3_ZEILEN + S4_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("deck/1/bk/9"), 2608 + S3_ZEILEN + S4_ZEILEN + S5_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("deck/1/bk/32"), 2608 + S3_ZEILEN + S4_ZEILEN + S5_ZEILEN + 23);
+  PRUEFE_GLEICH(tab().suche("deck/2/bk/9"), 2608 + S3_ZEILEN + S4_ZEILEN + S5_ZEILEN + 24);
+  PRUEFE_GLEICH(tab().suche("pad/2/bk/32"), 2608 + S3_ZEILEN + S4_ZEILEN + S5_ZEILEN + 4 * 24 - 1);
+  PRUEFE_GLEICH(tab().suche("fx/3/bk/9"), 2608 + S3_ZEILEN + S4_ZEILEN + S5_ZEILEN + 4 * 24);
+  PRUEFE_GLEICH(tab().suche("fx/4/bk/32"), 2751 + S3_ZEILEN + S4_ZEILEN + S5_ZEILEN);
   // rows 33..64: the same order, behind them: 4 channels x 32 knobs, then fx/3 and fx/4 x 32
-  PRUEFE_GLEICH(tab().suche("deck/1/bk/33"), 2752 + S3_ZEILEN + S4_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("deck/1/bk/64"), 2752 + S3_ZEILEN + S4_ZEILEN + 31);
-  PRUEFE_GLEICH(tab().suche("deck/2/bk/33"), 2752 + S3_ZEILEN + S4_ZEILEN + 32);
-  PRUEFE_GLEICH(tab().suche("pad/2/bk/64"), 2944 + S3_ZEILEN + S4_ZEILEN - 2 * 32 - 1);
-  PRUEFE_GLEICH(tab().suche("fx/3/bk/33"), 2944 + S3_ZEILEN + S4_ZEILEN - 2 * 32);
-  PRUEFE_GLEICH(tab().suche("fx/4/bk/64"), 2944 + S3_ZEILEN + S4_ZEILEN - 1);
+  PRUEFE_GLEICH(tab().suche("deck/1/bk/33"), 2752 + S3_ZEILEN + S4_ZEILEN + S5_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("deck/1/bk/64"), 2752 + S3_ZEILEN + S4_ZEILEN + S5_ZEILEN + 31);
+  PRUEFE_GLEICH(tab().suche("deck/2/bk/33"), 2752 + S3_ZEILEN + S4_ZEILEN + S5_ZEILEN + 32);
+  PRUEFE_GLEICH(tab().suche("pad/2/bk/64"), 2944 + S3_ZEILEN + S4_ZEILEN + S5_ZEILEN - 2 * 32 - 1);
+  PRUEFE_GLEICH(tab().suche("fx/3/bk/33"), 2944 + S3_ZEILEN + S4_ZEILEN + S5_ZEILEN - 2 * 32);
+  PRUEFE_GLEICH(tab().suche("fx/4/bk/64"), 2944 + S3_ZEILEN + S4_ZEILEN + S5_ZEILEN - 1);
   // master insert graph: master/bk/1..64 are the very last rows (behind grp/16/cue), global, everybody may (not nur_hand)
   PRUEFE_GLEICH(tab().suche("master/bk/1"), tab().anzahl() - STROM_BK_ZEILEN - RETURNS_ACHT_ZEILEN - SPUR_ZEILEN_HINTEN - 64 - SPUR_BK_ZEILEN - SPUR_FILTER_ZEILEN - SPUR_EQ_ZEILEN);   // production plan task 8: the 1024 spur/<slot>/bk/<k> rows follow them
   PRUEFE_GLEICH(tab().suche("master/bk/64"), tab().anzahl() - STROM_BK_ZEILEN - RETURNS_ACHT_ZEILEN - SPUR_ZEILEN_HINTEN - 1 - SPUR_BK_ZEILEN - SPUR_FILTER_ZEILEN - SPUR_EQ_ZEILEN);
@@ -837,9 +871,9 @@ FALL(spur_filter_zeilen_haengen_hinter_spur_bk) {
 FALL(spur_eq_zeilen_haengen_hinter_spur_filter) {
   PRUEFE_GLEICH(SPUR_EQ_N, 32);
   const int n = tab().anzahl() - STROM_BK_ZEILEN - RETURNS_ACHT_ZEILEN - SPUR_ZEILEN_HINTEN;   // the strom/<n>/bk/<k> rows follow (container core K2)
-  PRUEFE_GLEICH(n, 4240 + S3_ZEILEN + S4_ZEILEN);   // strand 1 slice 3: + 5460 pool rows;   // 3156 with 8 bk slots (512 rows fewer)
+  PRUEFE_GLEICH(n, 4240 + S3_ZEILEN + S4_ZEILEN + S5_ZEILEN);   // strand 1 slice 3: + 5460 pool rows;   // 3156 with 8 bk slots (512 rows fewer)
   // the ceiling is 24576 rows since strand 1 slice 3b (16384 since task 3.1), the pools 160 + 160 take 9876 of them (5460 for 96 + 96)
-  PRUEFE_GLEICH(cypherdj::stellwerk::MAX_REGLER - tab().anzahl(), 24576 - 5660 - SPUR_FX_ZEILEN - SPUR_ZEILEN_NEU - PLUG_ZEILEN - S3_ZEILEN - S4_ZEILEN);
+  PRUEFE_GLEICH(cypherdj::stellwerk::MAX_REGLER - tab().anzahl(), 24576 - 5660 - SPUR_FX_ZEILEN - SPUR_ZEILEN_NEU - PLUG_ZEILEN - S3_ZEILEN - S4_ZEILEN - S5_ZEILEN);
   PRUEFE_GLEICH(tab().suche("spur/1/eq/tief"), tab().suche("spur/32/filter") + 1);   // the first sits right after the last filter row
   PRUEFE_GLEICH(tab().suche("spur/1/eq/tief"), n - SPUR_EQ_ZEILEN);
   PRUEFE_GLEICH(tab().suche("spur/1/eq/mitte"), n - SPUR_EQ_ZEILEN + 1);
@@ -862,13 +896,13 @@ FALL(spur_eq_zeilen_haengen_hinter_spur_filter) {
 FALL(gruppen_9_bis_16_haengen_am_tabellenende) {
   PRUEFE_GLEICH(GRUPPEN_NEU_ZEILEN, 64);
   PRUEFE_GLEICH(GRP_REGLER_GRUPPEN_ALLE, 16);
-  PRUEFE_GLEICH(tab().suche("grp/9/fader"), 2944 + S3_ZEILEN + S4_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("grp/16/solo"), 2944 + S3_ZEILEN + S4_ZEILEN + 31);
-  PRUEFE_GLEICH(tab().suche("grp/9/send/1"), 2976 + S3_ZEILEN + S4_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("grp/16/send/1"), 2983 + S3_ZEILEN + S4_ZEILEN);
-  PRUEFE_GLEICH(tab().suche("grp/16/send/4"), 3007 + S3_ZEILEN + S4_ZEILEN);
-  PRUEFE(tab().suche("grp/8/send/4") < 2944 + S3_ZEILEN + S4_ZEILEN && tab().suche("grp/1/fader") == 324);   // the old group rows keep their place
-  PRUEFE_GLEICH(std::strcmp(tab().def(2943 + S3_ZEILEN + S4_ZEILEN).pfad, "fx/4/bk/64"), 0);   // the last old row
+  PRUEFE_GLEICH(tab().suche("grp/9/fader"), 2944 + S3_ZEILEN + S4_ZEILEN + S5_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("grp/16/solo"), 2944 + S3_ZEILEN + S4_ZEILEN + S5_ZEILEN + 31);
+  PRUEFE_GLEICH(tab().suche("grp/9/send/1"), 2976 + S3_ZEILEN + S4_ZEILEN + S5_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("grp/16/send/1"), 2983 + S3_ZEILEN + S4_ZEILEN + S5_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("grp/16/send/4"), 3007 + S3_ZEILEN + S4_ZEILEN + S5_ZEILEN);
+  PRUEFE(tab().suche("grp/8/send/4") < 2944 + S3_ZEILEN + S4_ZEILEN + S5_ZEILEN && tab().suche("grp/1/fader") == 324);   // the old group rows keep their place
+  PRUEFE_GLEICH(std::strcmp(tab().def(2943 + S3_ZEILEN + S4_ZEILEN + S5_ZEILEN).pfad, "fx/4/bk/64"), 0);   // the last old row
   for (int n = 9; n <= 16; n++) {
     char p[32];
     std::snprintf(p, sizeof p, "grp/%d/fader", n);
@@ -993,7 +1027,7 @@ FALL(spur_zeilen_33_bis_128) {
 // the core. Values as ins/bk/<n>/k<m> (linear 0..1, no ramp, everybody may), default 0.
 FALL(plug_zeilen_am_tabellenende) {
   PRUEFE_GLEICH(PLUG_ZEILEN, 128);
-  PRUEFE_GLEICH(tab().anzahl(), 18278 + 128);
+  PRUEFE_GLEICH(tab().anzahl(), 18278 + 128 + S5_ZEILEN);
   const int ende = tab().anzahl();
   PRUEFE_GLEICH(tab().suche("plug/1/k1"), ende - PLUG_ZEILEN);
   PRUEFE_GLEICH(tab().suche("spur/128/fx/3"), ende - PLUG_ZEILEN - 1);   // plug/1/k1 sits right behind the previous last row

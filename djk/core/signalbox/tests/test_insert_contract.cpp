@@ -30,7 +30,7 @@ float d_max(const char* pfad) {
 
 FALL(pfade_des_vertrags_sind_hoechstens_31_zeichen_und_eindeutig) {
   const int n = insert_vertrag_anzahl();
-  PRUEFE_GLEICH(n, 160 * 10 + 160 * 59 + 4 * 4 + 12 * 4 + 8 * 3 + 8 * 1 + 8 * 5 + 8 * 65 + 16 * 8 + 8 * 24);   // strand 1 slice 4: lim pool 8 (8 x 3), gate 16 (16 x 8 rows) and mb 8 (8 x 24 rows); strand 1 slice 3b: komp and eq pools 160 each (one per strip at 128 tracks; 96 in slice 3); 778 (arr-bk: + bk, 8 instances x 9 rows); 706 before: komp, eq (pool 8 since arr-fx slice 2), saett (4), rack, lim (2), host (plan 1.11 T4: 4 instances, one row `an`), utility (arr-fx slice 1: 8 x 5)
+  PRUEFE_GLEICH(n, 160 * 10 + 160 * 86 + 32 * 6 + 12 * 4 + 8 * 3 + 8 * 1 + 8 * 5 + 8 * 65 + 16 * 8 + 8 * 24 + 32 * 6 + 16 * 7);   // strand 5 slice 4: eq 86 rows (sc); strand 5 slice 3: saett pool 32 (32 x 6), trans 32 x 6, bild 16 x 7; strand 5 slice 2: eq 85 rows (d1..d8 x 3, dyn_attack, dyn_release); strand 5 slice 1: saett 6 rows (kurve, decke); strand 1 slice 4: lim pool 8 (8 x 3), gate 16 (16 x 8 rows) and mb 8 (8 x 24 rows); strand 1 slice 3b: komp and eq pools 160 each (one per strip at 128 tracks; 96 in slice 3); 778 (arr-bk: + bk, 8 instances x 9 rows); 706 before: komp, eq (pool 8 since arr-fx slice 2), saett (4), rack, lim (2), host (plan 1.11 T4: 4 instances, one row `an`), utility (arr-fx slice 1: 8 x 5)
   std::set<std::string> gesehen;
   int zu_lang = 0, doppelt = 0, laengster = 0;
   for (int i = 0; i < n; i++) {
@@ -93,7 +93,7 @@ FALL(komp_zeilen_neue_felder_und_form) {
     PRUEFE(!d.nur_hand);
     PRUEFE_GLEICH(d.keine_rampe, d.ganzzahlig);
   }
-  PRUEFE_GLEICH(ins, 1600 + 160 * 59 + 4 * 4 + 8 * 3 + 8 + 8 * 5 + 8 * 65 + 16 * 8 + 8 * 24);   // strand 1 slice 4: lim 8 x 3, gate 16 x 8, mb 8 x 24;   // strand 1 slice 3b: 160 komp x 10, 160 eq x 59 (96 each in slice 3);   // arr-bk: + bk (8 x 9);   // slice 4b: komp, eq (8 instances since arr-fx slice 2) and saett (4) have table rows; lim (2 instances, 3 rows); plan 1.11 T4: host (4 instances, 1 row); arr-fx: utility (8 instances, 5 rows)
+  PRUEFE_GLEICH(ins, 1600 + 160 * 86 + 32 * 6 + 8 * 3 + 8 + 8 * 5 + 8 * 65 + 16 * 8 + 8 * 24 + 32 * 6 + 16 * 7);   // strand 5 slice 4: eq 160 x 86;   // strand 5 slice 3: saett 32 x 6, trans 32 x 6, bild 16 x 7;   // strand 5 slice 2: eq 160 x 85;   // strand 5 slice 1: saett 4 x 6;   // strand 1 slice 4: lim 8 x 3, gate 16 x 8, mb 8 x 24;   // strand 1 slice 3b: 160 komp x 10, 160 eq x 59 (96 each in slice 3);   // arr-bk: + bk (8 x 9);   // slice 4b: komp, eq (8 instances since arr-fx slice 2) and saett (4) have table rows; lim (2 instances, 3 rows); plan 1.11 T4: host (4 instances, 1 row); arr-fx: utility (8 instances, 5 rows)
   PRUEFE_GLEICH(d_min("ins/komp/3/knie"), 0.0f);
   PRUEFE_GLEICH(d_max("ins/komp/3/knie"), 24.0f);
   PRUEFE_GLEICH(d_max("ins/komp/12/schp"), 300.0f);
@@ -107,7 +107,18 @@ FALL(komp_zeilen_neue_felder_und_form) {
   PRUEFE(tab().suche("ins/eq/161/an") < 0);
   PRUEFE(tab().suche("ins/saett/1/an") >= 0);
   PRUEFE(tab().suche("ins/saett/4/an") >= 0);
-  PRUEFE(tab().suche("ins/saett/5/an") < 0);
+  PRUEFE(tab().suche("ins/saett/32/an") >= 0);   // strand 5 slice 3: pool 32 (4 before)
+  PRUEFE(tab().suche("ins/saett/33/an") < 0);
+  PRUEFE(tab().suche("ins/trans/32/mix") >= 0);   // strand 5 slice 3: transient shaper, 32 instances, six rows each
+  PRUEFE(tab().suche("ins/trans/33/an") < 0);
+  PRUEFE(tab().suche("ins/bild/16/mono_unter") >= 0);   // strand 5 slice 3: imager, 16 instances, seven rows each
+  PRUEFE(tab().suche("ins/bild/17/an") < 0);
+  PRUEFE_GLEICH(d_min("ins/trans/1/angriff"), -24.0f);
+  PRUEFE_GLEICH(d_max("ins/trans/1/out"), 12.0f);
+  PRUEFE_GLEICH(d_max("ins/bild/1/breite_tief"), 1.0f);   // the low band can only narrow
+  PRUEFE_GLEICH(d_max("ins/bild/1/breite_hoch"), 2.0f);
+  PRUEFE_GLEICH(d_min("ins/bild/1/grenze_hoch"), 1000.0f);
+  PRUEFE_GLEICH(d_max("ins/bild/1/mono_unter"), 300.0f);
   PRUEFE(tab().suche("ins/lim/1/an") >= 0);
   PRUEFE(tab().suche("ins/lim/2/an") >= 0);
   PRUEFE(tab().suche("ins/lim/8/an") >= 0);   // strand 1 slice 4: eight limiters (two before)
@@ -131,6 +142,15 @@ FALL(komp_zeilen_neue_felder_und_form) {
   PRUEFE_GLEICH(d_min("ins/eq/1/b3/gain"), -24.0f);
   PRUEFE_GLEICH(d_max("ins/eq/1/b8/q"), 18.0f);
   PRUEFE_GLEICH(d_max("ins/eq/1/b5/typ"), 6.0f);
+  // strand 5 slice 2: the dynamic rows of the bands and the detector times
+  PRUEFE(tab().suche("ins/eq/1/d0/dyn") < 0);
+  PRUEFE(tab().suche("ins/eq/1/d9/dyn") < 0);
+  PRUEFE_GLEICH(d_max("ins/eq/1/d1/dyn"), 4.0f);
+  PRUEFE_GLEICH(d_min("ins/eq/160/d8/schwelle"), -60.0f);
+  PRUEFE_GLEICH(d_min("ins/eq/2/d4/bereich"), -24.0f);
+  PRUEFE_GLEICH(d_max("ins/eq/2/d4/bereich"), 24.0f);
+  PRUEFE_GLEICH(d_max("ins/eq/1/dyn_attack"), 100.0f);
+  PRUEFE_GLEICH(d_min("ins/eq/160/dyn_release"), 5.0f);
   PRUEFE_GLEICH(d_max("ins/saett/1/drive"), 36.0f);
   PRUEFE_GLEICH(d_min("ins/saett/1/out"), -24.0f);
   // slice 4c (T15): the rack macros rack/<k>/m<n> (k = 1..12, n = 1..4) have rows 0..1; nothing outside that grid

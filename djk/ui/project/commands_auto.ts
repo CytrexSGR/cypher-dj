@@ -5,6 +5,7 @@ import {
   istSendZiel, sendZielVon, sendZielBereich, istPluginZiel, pluginZielVon, pluginZielBereich, pluginLanen, MAX_PLUGIN_LANEN,
   blendPfad, zerlegeKettenZiel, kettenZielBereich, zielBereichVon, alleStraenge, type Lane, type Punkt, MAX_BEAT, insertWertParameter,
   type InsertPoolArt, sucheStrang, makroFaehig, makroVon, istObjekt, neueId, sucheSpur, type InsertTraeger, type Return, type Spur,
+  MAX_MODULATOREN, MOD_FELDER_NUR, MOD_TAKT_VORGABE, modulatorenPruefung, type Modulator,
 } from './model.ts';
 import { huellkurvePruefung, type Huellkurve } from './envelope.ts';
 import { FORMEN_EINFUEGEN, bereichVereinfacht, dehne, formBereich, formPunkte, neige, setzeForm, type FormEinfuegen } from './lane_tools.ts';
@@ -211,4 +212,73 @@ export const AUTO = {
     const rest = (clip.huellkurven ?? []).filter((h) => h.ziel !== a.ziel);
     if (rest.length) clip.huellkurven = rest; else delete clip.huellkurven;       // an empty list is never written
   },
+
+  // --- Strand 6: project-level modulators (LFO, envelope follower). One undo step each; the whole list is checked after the change (modulatorenPruefung) ---
+  // mod_neu takes the lowest free core slot `nr` (D11); the new modulator is the one the caller does not know yet (model.ts neuerModulator)
+  mod_neu(p, a) {
+    erlaube(a, 'art', 'form', 'takt', 'hz', 'phase', 'glatt_ms', 'name', 'ziele', 'quelle', 'angriff_ms', 'abfall_ms', 'empfindlich_db');
+    const liste = p.modulatoren ?? [];
+    if (liste.length >= MAX_MODULATOREN) ab('mod_voll', `all ${MAX_MODULATOREN} modulators of the project are used`);
+    const belegt = new Set(liste.map((m) => m.nr));
+    const nr = Array.from({ length: MAX_MODULATOREN }, (_, i) => i + 1).find((n) => !belegt.has(n))!;
+    // a refused command drops the whole draft, the drawn id with it
+    const m = modFelder({ id: neueId(p, 'mod'), nr, art: 'lfo', ziele: [] }, a);
+    modLfoVorgaben(m);
+    modSchreibe(p, [...liste, m]);
+  },
+
+  // any field of mod_neu, `an` (false switches off, true removes the key) and `ziele` (replaces the whole list); takt and hz replace each other.
+  // A new `art` drops the fields of the old kind (an LFO gets form sinus and takt 4 again; a follower needs `quelle`)
+  mod_aendern(p, a) {
+    erlaube(a, 'mod_id', 'art', 'form', 'takt', 'hz', 'phase', 'glatt_ms', 'name', 'an', 'ziele', 'quelle', 'angriff_ms', 'abfall_ms', 'empfindlich_db');
+    const alt = modVon(p, a);
+    if (a.an !== undefined && typeof a.an !== 'boolean') ab('argument_ungueltig', 'an: true or false expected');
+    if (a.takt !== undefined && a.hz !== undefined) ab('argument_ungueltig', 'takt and hz: give one of them');
+    const basis = { ...alt, ziele: [...alt.ziele] } as unknown as Record<string, unknown>;
+    if (a.art !== undefined && a.art !== alt.art && (alt.art === 'lfo' || alt.art === 'folger')) {
+      for (const k of MOD_FELDER_NUR[alt.art]) delete basis[k];
+    }
+    const m = modFelder(basis as unknown as Modulator, a);
+    if (a.takt !== undefined) delete m.hz;
+    if (a.hz !== undefined) delete m.takt;
+    if (a.art !== undefined && a.art !== alt.art) modLfoVorgaben(m);
+    if (a.an === false) m.an = false; else if (a.an === true) delete m.an;
+    modSchreibe(p, (p.modulatoren ?? []).map((x) => (x === alt ? m : x)));
+  },
+
+  mod_loeschen(p, a) {
+    erlaube(a, 'mod_id');
+    const alt = modVon(p, a);
+    const rest = (p.modulatoren ?? []).filter((x) => x !== alt);
+    if (rest.length) p.modulatoren = rest; else delete p.modulatoren;   // an empty list is never written
+  },
 } satisfies Record<string, Handler>;
+
+// the core slot `nr` and the id are never arguments of the mod_* commands
+function modVon(p: Parameters<Handler>[0], a: Args): Modulator {
+  const id = idArg(a, 'mod_id');
+  return (p.modulatoren ?? []).find((m) => m.id === id) ?? ab('mod_unbekannt', id);
+}
+// copies the given arguments onto `m` (values are checked with the whole list afterwards); `ziele` entries are copied, never shared with the arguments
+function modFelder(m: Modulator, a: Args): Modulator {
+  const z = m as unknown as Record<string, unknown>;
+  for (const k of ['art', 'form', 'takt', 'hz', 'phase', 'glatt_ms', 'name', 'quelle', 'angriff_ms', 'abfall_ms', 'empfindlich_db'] as const) {
+    if (a[k] !== undefined) z[k] = a[k];
+  }
+  if (a.ziele !== undefined) {
+    if (!Array.isArray(a.ziele)) ab('argument_ungueltig', 'ziele: list expected');
+    m.ziele = (a.ziele as unknown[]).map((x) => (istObjekt(x) ? { ...x } : x)) as Modulator['ziele'];
+  }
+  return m;
+}
+// an LFO without shape or rate gets the written defaults (form sinus, takt 4); a follower writes none (absent = default, the translator fills in)
+function modLfoVorgaben(m: Modulator): void {
+  if (m.art !== 'lfo') return;
+  if (m.form === undefined) m.form = 'sinus';
+  if (m.takt === undefined && m.hz === undefined) m.takt = MOD_TAKT_VORGABE;
+}
+function modSchreibe(p: Parameters<Handler>[0], liste: Modulator[]): void {
+  const f = modulatorenPruefung(liste, p);
+  if (f) ab(f.grund, f.text.replace(/^\[\d+\] /, ''));
+  p.modulatoren = liste;
+}

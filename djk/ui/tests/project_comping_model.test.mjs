@@ -63,10 +63,9 @@ test('takes validate: valid take loads, empty list loads without the key, each r
     ['midi clip', (p) => { p.spuren[0].takes[0].clips = [{ id: 'c1', art: 'midi', name: 'm', start_beat: 0, laenge_beats: 4, noten: [] }]; }, /takes\[0\]\.clips\[0\]\.art: passt nicht/],
     ['broken audio clip', (p) => { p.spuren[0].takes[0].clips[0].gain_db = 99; }, /gain_db/],
     ['take id twice', (p) => { p.spuren[0].takes.push(take('t1')); }, /takes\[1\]\.id: duplicate \(t1\)/],
-    ['take on instrument track', (p) => {
+    ['audio clip in a take of an instrument track', (p) => {   // strand 7 (D10): instrument tracks have take lanes, holding MIDI clips
       Object.assign(p.spuren[0], { art: 'instrument', geraet: { art: 'intern', name: 'rb338', parameter: {} }, clips: [] });
-      p.spuren[0].takes[0].clips = [];
-    }, /spuren\[0\]\.takes: unbekanntes Feld/],
+    }, /takes\[0\]\.clips\[0\]\.art: passt nicht/],
     [`${MAX_TAKES_PRO_SPUR + 1} takes`, (p) => {
       p.spuren[0].takes = Array.from({ length: MAX_TAKES_PRO_SPUR + 1 }, (_, i) => take(`t${i + 1}`));
     }, /at most 32 takes per track/],

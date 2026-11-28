@@ -173,6 +173,9 @@ if(NOT CYPHERDJ_DSP_SANITIZE)  # allocation watcher for gate and utility (not wi
   target_link_libraries(test_mix_guard PRIVATE ${CMAKE_DL_LIBS})
 endif()
 
+# --- Strand 5, slice 3: transient shaper (transient.h) ---
+dsp_test(test_transient)
+
 # --- Paket 1.15: Multiband-Kompressor (multiband.h) ---
 # Test, header compiles on its own, two mutation builds (each MUST turn its named check red), real-time watcher.
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/kopf_multiband.cpp "#include <cypherdj/dsp/multiband.h>\n")
@@ -362,3 +365,6 @@ endif()
 add_test(NAME test_haertung_master_limiter_befund_einstellung COMMAND test_hardening_master_limiter befund_limiter_einstellung)
 # former known bug B6 (fixed), now a normal test
 add_test(NAME test_haertung_master_limiter_befund_riesig COMMAND test_hardening_master_limiter befund_limiter_riesig)
+
+# --- Strand 5, slice 3: stereo imager (imager.h) ---
+dsp_test(test_imager)

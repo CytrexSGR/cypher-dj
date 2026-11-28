@@ -15,6 +15,7 @@ import { Planer, WECHSEL_ABSTAND } from './src/planner.mjs';
 import { schreibeStatus, leseVersatz } from './src/pattern_state.mjs';
 import { NeustartRegel } from './src/generation.mjs';
 import { leseTaktart, TAKTART_DATEI } from './src/taktart_file.mjs';
+import { leseHarmonie, HARMONIE_DATEI } from './src/harmonie_file.mjs';
 
 const I = process.env.CYPHERDJ_INSTANZ ?? '';
 const V = I ? 1000 * (I.charCodeAt(0) - 96) : 0;
@@ -57,7 +58,8 @@ const msBisBeat = (b) => ((b - beatJetzt()) * 60000) / uhr.bpm;
 // Plan studio-taktart: beats per bar from the file `taktart` beside the pattern (absent = 4; the page server writes it only while the meter is not 4)
 const TAKTART_PFAD = path.join(path.dirname(opt.muster), TAKTART_DATEI);
 const planer = new Planer({ strom: STROM, kit, sende, jetztUs: () => Number(process.hrtime.bigint() / 1000n),
-  taktart: leseTaktart(path.dirname(opt.muster), 4) });
+  taktart: leseTaktart(path.dirname(opt.muster), 4), lane: leseHarmonie(path.dirname(opt.muster), []) });
+const HARMONIE_PFAD = path.join(path.dirname(opt.muster), HARMONIE_DATEI);   // strand 7: harmony lane of this stream folder
 const neustartRegel = new NeustartRegel();   // S17: announce once per kern generation, not on the heartbeat repeat
 let id = BigInt(Date.now()) * 1000n;
 const stromMelden = () => sende(kodiere('/erz/strom', 'hsis', [++id, 'erzeuger', STROM, KIT_ZIEL]));
@@ -84,6 +86,7 @@ function wecke() {  // kurz vor dem Taktanfang: die nächsten zwei Takte ersetze
   }
   if (unbekannt.size) log(`im Kit ${opt.kit} unbekannt: ${[...unbekannt].join(', ')}`);
   felderMelden();
+  harmonieMelden();
   clearTimeout(wecker);
   wecker = setTimeout(wecke, Math.max(5, msBisBeat(planer.proTakt * (n + 1) - WECHSEL_ABSTAND)));
 }
@@ -112,6 +115,22 @@ function taktartLesen() {
   log(`Meter ${planer.proTakt} -> ${neu} beats per bar`);
   planer.setzeTaktart(neu, uhr ? beatJetzt() : -Infinity);
   if (uhr) { clearTimeout(wecker); wecke(); }
+}
+
+// Strand 7: the clash count of the latest window goes into status.json when it changed (absent without a lane).
+function harmonieMelden() {
+  const h = planer.harmonie ?? undefined;
+  if (JSON.stringify(h) === JSON.stringify(letzterStand.harmonie)) return;
+  const { harmonie, ...rest } = letzterStand;
+  status(letzterStand = h ? { ...rest, harmonie: h } : rest);
+}
+
+// The harmony lane file changed: from the first changed cycle the window already sent is replaced; a broken file keeps the last lane.
+function harmonieLesen() {
+  const neu = leseHarmonie(path.dirname(opt.muster), planer.lane);
+  if (JSON.stringify(neu) === JSON.stringify(planer.lane)) return;
+  log(`harmony lane changed (${neu.length} entries)`);
+  planer.setzeLane(neu, uhr ? beatJetzt() : -Infinity);
 }
 
 function musterLesen() {
@@ -177,6 +196,7 @@ sock.bind(Number(opt['abo-port']), '127.0.0.1', () => {
   setInterval(hallo, 1000);
   fs.watchFile(opt.muster, { interval: 100 }, () => musterLesen());
   fs.watchFile(TAKTART_PFAD, { interval: 100 }, () => taktartLesen());
+  fs.watchFile(HARMONIE_PFAD, { interval: 100 }, () => harmonieLesen());
   status(letzterStand);   // S15: report the note mode at once, a restarted process must not leave the previous process's file
   log(`bereit: Kern udp ${KERN}, Abo udp ${abo}, Kit ${opt.kit} (${kit.note?.size ?? 'midi'} Klänge), Muster ${opt.muster}`);
 });

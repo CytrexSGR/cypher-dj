@@ -1,6 +1,10 @@
 // Kleine DOM-Attrappe für Seitenmodule ohne Browser (Paket 1.18, S3-Fix W1): gerade genug für public/production/freeze_export.js
 // (createElement, classList.toggle, querySelector auf .p-kopf/.p-freeze, append, before, addEventListener, dataset, CSS.escape).
 // Kein HTML-Parser: innerHTML wird gemerkt, die Elemente, die ctx.$ liefert, legt der Test vorher an.
+// Since the modulator markers (strand 6) the head list starts an animation frame loop (mod_display.js neueSchleife) as soon as a head has a marker element;
+// this stand-in finds an element for every selection, so every importer needs frames. Node has none: no frame ever runs here.
+globalThis.requestAnimationFrame ??= () => 1;
+globalThis.cancelAnimationFrame ??= () => {};
 export function element(tag = 'div') {
   const e = {
     tag, className: '', textContent: '', title: '', disabled: false, innerHTML: '', dataset: {}, attribute: {}, kinder: [], klassen: new Set(), ereignisse: {},

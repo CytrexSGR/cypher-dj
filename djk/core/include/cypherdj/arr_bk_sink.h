@@ -63,6 +63,9 @@ class ArrBkSenke final : public ArrSenke, public ArrBkLeser {
   // 1.12 slice 7: a knob with a RELATIVE lane (a clip envelope) and no absolute one: `delta` is added to the knob of the snapshot (clamped 0..1) for the next block, under the same rules
   // as auto_parameter (a value reported in a block wins; no report: the snapshot knob alone).
   void auto_parameter_summand(int spur, int param, float delta) noexcept override;
+  // strand 6 task 1.4: the modulator offset of knob `param` (0..63) for the next block(): added after the whole stack (reported value or snapshot knob, plus a relative summand), also to
+  // the per-note values of a latched knob (note_regler), clamped 0..1. Taken and cleared by that block like the summand.
+  void mod_summand(int spur, int param, float delta) noexcept override;
   // sampler A2: the value of a latched knob (param 0..63) for the note-on at sample `ziel`, handed by the core right before that note. Kept in a queue of its own, separate from the notes: the
   // notes go to the instance first, the knob values after them, so a block with more events than the FFI takes loses knob values and never a note (a lost value counts in verloren()).
   // `relativ`: wert is a summand on the knob of the snapshot (clamped 0..1), as in the block loop; otherwise the final value. The instance sets it at the offset of the note, before the note.
@@ -126,6 +129,8 @@ class ArrBkSenke final : public ArrSenke, public ArrBkLeser {
     bool knopf_da[BK_KNOEPFE] = {};
     float knopf_delta[BK_KNOEPFE] = {};          // summands reported for the next block (auto_parameter_summand)
     bool delta_da[BK_KNOEPFE] = {};
+    float mod_delta[BK_KNOEPFE] = {};            // modulator offsets reported for the next block (mod_summand, strand 6)
+    bool mod_da[BK_KNOEPFE] = {};
     float knopf_vorgabe[BK_KNOEPFE];             // the start position of every knob in the graph the slot plays (`vorgabe`, 0.5 where the graph has none); read at the take-over (cypher_bk_regler_vorgabe)
     std::atomic<const CypherBk*> aktiv{nullptr};    // published with release order: the instance this slot plays
     std::atomic<const CypherBk*> blende{nullptr};   // the instance this slot fades out in the current block

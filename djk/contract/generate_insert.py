@@ -59,6 +59,8 @@ def ausfalten(daten: dict) -> list[dict]:
                         if par["name"] in g.get("vorgabe_je_band", {}):
                             p["vorgabe"] = g["vorgabe_je_band"][par["name"]][m - 1]
                         einheiten.append((f"{g['name']}{m}/", m, p))
+            # strand 5 slice 2: optional rows after the groups (eq: dyn_attack, dyn_release), so the indices of every earlier row stay
+            einheiten += [("", None, par) for par in art.get("parameter_nach", [])]
             for gruppe, m, par in einheiten:
                 ergebnis.append({
                     "art": art["art"], "tabelle": art["tabelle"], "n": n,
@@ -203,7 +205,7 @@ def pruefe_geraete(daten: dict, ts: str) -> list[str]:
         if not art["geraet"]:
             continue
         plugin = _ts_parameter(ts, art["geraet"])
-        vertrag = list(art["parameter"]) + [q for g in art.get("gruppen", []) for q in g["parameter"]]
+        vertrag = list(art["parameter"]) + [q for g in art.get("gruppen", []) for q in g["parameter"]] + list(art.get("parameter_nach", []))
         for par in vertrag:
             if par["geraet"] is None:
                 continue

@@ -17,6 +17,8 @@
  {"zeile": "{\"status\":\"fehler\",\"fehler\":\"vorher_passt_nicht\",\"text\":\"The --vorher file has a different length than the source.\"}", "gut": true},
  {"zeile": "{\"status\":\"fehler\",\"fehler\":\"schreiben\",\"text\":\"Cannot write the output file.\"}", "gut": true},
  {"zeile": "{\"status\":\"fehler\",\"fehler\":\"nicht_gebaut\",\"text\":\"The command render is not built yet.\"}", "gut": true},
+ {"zeile": "{\"status\":\"fehler\",\"fehler\":\"noten_ueberlappen\",\"text\":\"Notes overlap after the edit: t1 ends after t2 starts.\"}", "gut": true},
+ {"zeile": "{\"status\":\"fehler\",\"fehler\":\"noten_dehnung_grenze\",\"text\":\"Note t1 is stretched beyond 4 times.\"}", "gut": true},
  {"zeile": "{\"status\":\"ok\",\"datei\":\"/work/noten/0123.pyin-1.noten_hmm-1.json\",\"noten\":42,\"stimmh", "gut": false},
  {"zeile": "cypherdj-noten: segmentation fault", "gut": false},
  {"zeile": "{\"status\":\"ok\",\"mehrstimmig\":false,\"anteil\":0.04,\"sekunden\":0.52}{\"status\":\"ok\",\"mehrstimmig\":true,\"anteil\":0.61,\"sekunden\":0.47}", "gut": false},

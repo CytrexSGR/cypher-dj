@@ -37,7 +37,7 @@ export const HAND_KLASSEN: Readonly<Record<string, Eintrag>> = {
   analyse_live: { ...L, lesendePost: ['/analyse/pegel/reset'] },
   // write
   laden: S, deck_start: S, sprung: S, loop: S, loop_nach_box: S, live_oeffnen: S, modul_export: S, modul_stems: S,
-  modul_tonart: S, regler: S, fx: S, fx_zuweisung: S, graph: S, strudel: S, abbrechen: S, tempo: S, ansage: S, rec: S,
+  modul_tonart: S, regler: S, fx: S, fx_zuweisung: S, graph: S, strudel: S, harmonie: S, abbrechen: S, tempo: S, ansage: S, rec: S,
   loop_klang: S, spur: S, bogen: S, spur_stopp: S, vorbereiten: S, set_lege: S, set_vorbereiten: S, instrumente: S, stimme: S,
   proj_umbenennen: S, modul_einsetzen: S, modul_speichern: S, proj_muster: S, proj_midi_import: S, proj_neu: S,
   proj_oeffnen: S, proj_aendern: S, proj_undo: S, proj_redo: S, proj_version_sichern: S, proj_freeze: S,

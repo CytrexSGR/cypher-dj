@@ -7,7 +7,7 @@
 //! unchanged. Latency is fixed by the sample rate chosen in `neu` (69 samples below 88 kHz, else 0) and does NOT depend
 //! on any band setting: the crate always runs the oversampler, so "all bands off" keeps the delay (spec D10).
 
-use eq_dsp::{BandArt, BandEinstellung, Eq, Kanal, Steilheit, BAENDER};
+use eq_dsp::{BandArt, BandEinstellung, DynModus, Dynamik, Eq, Kanal, Steilheit, BAENDER};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 /// One band over the C boundary. Enums are u8 codes in the order of the crate (art: Glocke, LowShelf, HighShelf, LowCut,
@@ -104,6 +104,76 @@ pub unsafe extern "C" fn cypher_eq_setze_band(h: *mut CypherEq, i: u32, b: Cyphe
             h.e.setze_band(i as usize, e)
         }));
     }
+}
+
+/// Dynamics of band `i` (0..8): `modus` 0 off, 1 above threshold, 2 below, 3 above with key, 4 below with key (a code beyond 4
+/// is clamped to 4); `schwelle` in dB (detector level), `bereich` in dB (signed range). Out of range `i` or a non-finite
+/// number is ignored. Only Bell, Low shelf and High shelf bands act on it.
+/// # Safety
+/// `h` valid or null, not concurrent with `cypher_eq_block`.
+#[no_mangle]
+pub unsafe extern "C" fn cypher_eq_setze_dyn(h: *mut CypherEq, i: u32, modus: u8, schwelle: f64, bereich: f64) {
+    if i as usize >= BAENDER || !(schwelle.is_finite() && bereich.is_finite()) {
+        return;
+    }
+    const MODI: [DynModus; 5] = [DynModus::Aus, DynModus::Ueber, DynModus::Unter, DynModus::UeberSchluessel, DynModus::UnterSchluessel];
+    if let Some(h) = h.as_mut() {
+        let _ = catch_unwind(AssertUnwindSafe(|| {
+            h.e.setze_dyn(i as usize, Dynamik { modus: MODI[(modus as usize).min(MODI.len() - 1)], schwelle_db: schwelle, bereich_db: bereich })
+        }));
+    }
+}
+
+/// Detector attack (0.1..100 ms) and release (5..1000 ms) of the stage; clamped, non-finite ignored.
+/// # Safety
+/// `h` valid or null, not concurrent with `cypher_eq_block`.
+#[no_mangle]
+pub unsafe extern "C" fn cypher_eq_setze_dyn_zeiten(h: *mut CypherEq, attack_ms: f64, release_ms: f64) {
+    if !(attack_ms.is_finite() && release_ms.is_finite()) {
+        return;
+    }
+    if let Some(h) = h.as_mut() {
+        let _ = catch_unwind(AssertUnwindSafe(|| h.e.setze_dyn_zeiten(attack_ms, release_ms)));
+    }
+}
+
+/// Like `cypher_eq_block`, with a key for bands in key mode (3/4). `kl`/`kr` may be null (no key; a null `kr` reuses `kl`);
+/// each non-null key must be valid for `n` f32.
+/// # Safety
+/// `l`, `r` valid for `n` f32 and not overlapping; `kl`, `kr` null or valid for `n` f32 (may alias neither `l` nor `r`).
+#[no_mangle]
+pub unsafe extern "C" fn cypher_eq_block_schluessel(h: *mut CypherEq, l: *mut f32, r: *mut f32, kl: *const f32, kr: *const f32, n: usize) {
+    if l.is_null() || r.is_null() || n == 0 {
+        return;
+    }
+    let (l, r) = (std::slice::from_raw_parts_mut(l, n), std::slice::from_raw_parts_mut(r, n));
+    let kl = if kl.is_null() { None } else { Some(std::slice::from_raw_parts(kl, n)) };
+    let kr = if kr.is_null() { None } else { Some(std::slice::from_raw_parts(kr, n)) };
+    if let Some(h) = h.as_mut() {
+        let _ = catch_unwind(AssertUnwindSafe(|| {
+            #[cfg(feature = "fehlerinjektion")]
+            if h.gift {
+                panic!("fehlerinjektion");
+            }
+            h.e.verarbeite_stereo_mit_schluessel(l, r, kl, kr)
+        }));
+    }
+}
+
+/// Current dynamic gain change of band `i` in dB (0 for null or out of range).
+/// # Safety
+/// `h` valid or null.
+#[no_mangle]
+pub unsafe extern "C" fn cypher_eq_dyn_db(h: *const CypherEq, i: u32) -> f32 {
+    h.as_ref().and_then(|h| catch_unwind(AssertUnwindSafe(|| h.e.dyn_db(i as usize))).ok()).unwrap_or(0.0)
+}
+
+/// Signed largest |change| of any band since the last call (negative = cut), then reset. 0 for null.
+/// # Safety
+/// `h` valid or null, not concurrent with `cypher_eq_block`.
+#[no_mangle]
+pub unsafe extern "C" fn cypher_eq_dyn_max_db(h: *mut CypherEq) -> f32 {
+    h.as_mut().and_then(|h| catch_unwind(AssertUnwindSafe(|| h.e.dyn_max_db())).ok()).unwrap_or(0.0)
 }
 
 /// Global settings: proportional Q on/off and the output level in dB (the crate clamps to +-24). A non-finite level is ignored.

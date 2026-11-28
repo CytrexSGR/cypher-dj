@@ -26,7 +26,7 @@ const std::vector<Befehl>& befehle() {
       {"analyse", 2, {"sha"}, cliAnalyse},
       {"segment", 3, {"sha"}, cliSegment},
       {"pruefe", 2, {}, cliPruefe},
-      {"render", 4, {"vorher", "nur"}, cliRender},
+      {"render", 4, {"vorher", "nur", "vorher-liste"}, cliRender},
   };
   return t;
 }
@@ -108,5 +108,6 @@ int main(int argc, char** argv) {
   if (a.pos.size() != b->positional)
     return endeFehler(Fehler{"argument", name + " takes " + std::to_string(b->positional) + " positional argument(s), got " + std::to_string(a.pos.size())});
   if (a.hat("nur") && !a.hat("vorher")) return endeFehler(Fehler{"argument", "--nur needs --vorher"});
+  if (a.hat("vorher-liste") && !a.hat("vorher")) return endeFehler(Fehler{"argument", "--vorher-liste needs --vorher"});
   return b->lauf(a);
 }

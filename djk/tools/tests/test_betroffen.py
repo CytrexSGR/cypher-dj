@@ -193,3 +193,48 @@ def test_core_change_in_the_note_program_selects_the_page_test_that_starts_it():
     g, suites, dateien, _ = plan("djk/core/noten/src/render.cpp")
     gewaehlt = {f for fs in dateien.values() for f in fs}
     assert not g and "tests/proj_notes_real.test.mjs" in gewaehlt, sorted(gewaehlt)
+
+
+def _zeilen(tabelle):
+    return lambda rel: tabelle.get(rel, [])
+
+
+def test_an_added_serial_entry_runs_only_the_named_file_in_its_shard():
+    serial = av.ohne_ruhig(av.lies_serial(f"{UI}/serial.txt"), f"{UI}/ruhig.txt")
+    f = serial[-1]
+    g, suites, dateien, _ = b.plane(["djk/ui/tests/serial.txt"], zeilen_fn=_zeilen({"djk/ui/tests/serial.txt": [f]}))
+    assert not g and not suites
+    assert [s for s in dateien if s.startswith("ui-seriell-")] and all(fs == {f"tests/{f}"} for fs in dateien.values()), dateien
+
+
+def test_a_comment_change_in_a_test_list_runs_nothing():
+    for rel in ("djk/ui/tests/serial.txt", "djk/ui/tests/ruhig.txt", "djk/generator/tests/ruhig.txt"):
+        g, suites, dateien, _ = b.plane([rel], zeilen_fn=_zeilen({rel: ["# new explanation", ""]}))
+        assert not g and not suites and not dateien, rel
+
+
+def test_timing_and_pin_lists_name_the_file_in_their_second_field():
+    serial = av.lies_serial(f"{UI}/serial.txt")
+    f = serial[0]
+    for rel, zeile in (("djk/ui/tests/serial_zeiten.txt", f"12.5 {f}"), ("djk/ui/tests/serial_instanz.txt", f"c {f}  # reason")):
+        g, _, dateien, _ = b.plane([rel], zeilen_fn=_zeilen({rel: [zeile]}))
+        assert not g and any(f"tests/{f}" in fs for fs in dateien.values()), rel
+
+
+def test_a_removed_entry_of_a_deleted_file_names_nothing():
+    rel = "djk/ui/tests/serial.txt"
+    g, suites, dateien, _ = b.plane([rel], zeilen_fn=_zeilen({rel: ["gibt_es_nicht_mehr.test.mjs"]}))
+    assert not g and not suites and not dateien
+
+
+def test_an_unreadable_test_list_line_still_escalates():
+    rel = "djk/ui/tests/serial.txt"
+    for zeile in ("*.test.mjs", "some words here", "../ausbruch.test.mjs"):
+        g, *_ = b.plane([rel], zeilen_fn=_zeilen({rel: [zeile]}))
+        assert g, zeile
+
+
+def test_the_gate_scripts_escalate_even_with_line_reading():
+    for rel in ("djk/tools/alles.sh", "djk/tools/betroffen.py", "djk/tools/quarantaene.txt"):
+        g, *_ = b.plane([rel], zeilen_fn=_zeilen({rel: ["x.test.mjs"]}))
+        assert g, rel

@@ -13,15 +13,17 @@ import { bindeRackFenster } from './rack_panel.js';
 export const MAX_PLAETZE = 5;      // equal to project/model.ts MAX_INSERTS_PRO_STRANG, checked by tests/production_inserts.test.mjs
 export const MAX_KOMP = 160;       // equal to INSERT_ARTEN.komp.instanzen (160 since the 128-track pool, one per strip)
 export const MAX_EQ = 160;         // equal to INSERT_ARTEN.eq.instanzen (160 since the 128-track pool; 8 since arr-fx slice 2)
-export const MAX_SAETT = 4;        // equal to MAX_INS_SAETT (4 since arr-fx slice 2)
+export const MAX_SAETT = 32;       // equal to MAX_INS_SAETT (4 since arr-fx slice 2, 32 since strand 5 slice 3)
 export const MAX_LIM = 8;          // equal to MAX_INS_LIM (8 since strand 1 slice 4)
 export const MAX_UTIL = 8;         // equal to MAX_INS_UTIL (arr-fx)
 export const MAX_BK = 8;           // equal to MAX_INS_BK (arr-bk)
 export const MAX_GATE = 16;        // equal to MAX_INS_GATE (strand 1 slice 4)
 export const MAX_MB = 8;           // equal to MAX_INS_MB (strand 1 slice 4)
+export const MAX_TRANS = 32;       // equal to MAX_INS_TRANS (strand 5 slice 3)
+export const MAX_BILD = 16;        // equal to MAX_INS_BILD (strand 5 slice 3)
 export const MAX_VARIATIONEN = 8;     // equal to MAX_VARIATIONEN of project/model.ts (tests/production_rack.test.mjs)
 export const VARIATION_NAME_MAX = 32;  // equal to VARIATION_NAME_MAX
-export const MAX_ART = { komp: MAX_KOMP, eq: MAX_EQ, saett: MAX_SAETT, lim: MAX_LIM, utility: MAX_UTIL, bk: MAX_BK, gate: MAX_GATE, mb: MAX_MB };
+export const MAX_ART = { komp: MAX_KOMP, eq: MAX_EQ, saett: MAX_SAETT, lim: MAX_LIM, utility: MAX_UTIL, bk: MAX_BK, gate: MAX_GATE, mb: MAX_MB, trans: MAX_TRANS, bild: MAX_BILD };
 // arr-bk: the graph the `+ Fx` button puts on a strip; another effect graph is chosen with insert_setzen (replace) from the Hand or the graphen list
 export const BK_STANDARD_GRAPH = 'fx-delay-sync';
 // per kind: the short button text, the name of the stage, the pool-full text
@@ -33,6 +35,8 @@ export const ARTEN = {
   utility: { kurz: 'Util', name: 'utility', voll: 'No free utility', neu: 'Add a utility (width, bass mono, gain, balance)' },
   gate: { kurz: 'Gate', name: 'gate', voll: 'No free gate', neu: 'Add a noise gate' },
   mb: { kurz: 'MB', name: 'multiband', voll: 'No free multiband compressor', neu: 'Add a three-band compressor (Low, Mid, High)' },
+  trans: { kurz: 'Trans', name: 'transient shaper', voll: 'No free transient shaper', neu: 'Add a transient shaper (attack, sustain)' },
+  bild: { kurz: 'Width', name: 'imager', voll: 'No free imager', neu: 'Add a three-band imager' },
   bk: { kurz: 'Fx', name: 'effect', voll: 'No free effect stage', neu: 'Add a Cypher Modular effect (the tempo-synchronous delay; other graphs through the Hand)' },
 };
 // Plan 1.11 task 11: a plugin (host) stage. Not in ARTEN (those are the kinds with a button "+ ..." and a pool the page counts); added by the PLUGINS list.
@@ -75,6 +79,9 @@ export const SAETT_PARAMETER = [
   { name: 'drive', label: 'Drive', einheit: 'dB', min: 0, max: 36, vorgabe: 12, schritt: 0.5 },
   { name: 'out', label: 'Output', einheit: 'dB', min: -24, max: 12, vorgabe: -6, schritt: 0.5 },
   { name: 'mix', label: 'Mix', einheit: '', min: 0, max: 1, vorgabe: 1, schritt: 0.01 },
+  // strand 5 slice 1: the face curve (0 Tanh, 1 Soft clip, 2 Hard clip) and the ceiling; curve 1 and 2 are the Cypher Clipper
+  { name: 'kurve', label: 'Curve', einheit: '', min: 0, max: 2, vorgabe: 0, typ: 'wahl', optionen: ['Tanh', 'Soft clip', 'Hard clip'] },
+  { name: 'decke', label: 'Ceiling', einheit: 'dB', min: -24, max: 0, vorgabe: 0, schritt: 0.1 },
 ];
 export const LIM_PARAMETER = [
   { name: 'decke', label: 'Ceiling', einheit: 'dB', min: -60, max: 0, vorgabe: -1, schritt: 0.1 },
@@ -113,6 +120,22 @@ export const MB_BAND_PARAMETER = [
   { name: 'makeup', label: 'Makeup', einheit: 'dB', min: -24, max: 24, vorgabe: 0, schritt: 0.1 },
   { name: 'umgehen', label: 'Bypass', einheit: '', min: 0, max: 1, vorgabe: 0, typ: 'schalter' },
 ];
+// strand 5 slice 3: the transient shaper (attack and sustain in dB, speed in ms) and the three-band imager (widths 0..1 / 0..2 = 0..100 % / 0..200 %)
+export const TRANS_PARAMETER = [
+  { name: 'angriff', label: 'Attack', einheit: 'dB', min: -24, max: 24, vorgabe: 0, schritt: 0.5 },
+  { name: 'halten', label: 'Sustain', einheit: 'dB', min: -24, max: 24, vorgabe: 0, schritt: 0.5 },
+  { name: 'tempo', label: 'Speed', einheit: 'ms', min: 1, max: 100, vorgabe: 15, schritt: 0.5 },
+  { name: 'out', label: 'Output', einheit: 'dB', min: -24, max: 12, vorgabe: 0, schritt: 0.5 },
+  { name: 'mix', label: 'Mix', einheit: '', min: 0, max: 1, vorgabe: 1, schritt: 0.01 },
+];
+export const BILD_PARAMETER = [
+  { name: 'grenze_tief', label: 'Low / Mid crossover', einheit: 'Hz', min: 40, max: 1000, vorgabe: 150, skala: 'log' },
+  { name: 'grenze_hoch', label: 'Mid / High crossover', einheit: 'Hz', min: 1000, max: 12000, vorgabe: 4000, skala: 'log' },
+  { name: 'breite_tief', label: 'Low width', einheit: '', min: 0, max: 1, vorgabe: 1, schritt: 0.01 },
+  { name: 'breite_mitte', label: 'Mid width', einheit: '', min: 0, max: 2, vorgabe: 1, schritt: 0.01 },
+  { name: 'breite_hoch', label: 'High width', einheit: '', min: 0, max: 2, vorgabe: 1, schritt: 0.01 },
+  { name: 'mono_unter', label: 'Mono below', einheit: 'Hz', min: 0, max: 300, vorgabe: 0, schritt: 1 },
+];
 export const mbBandName = (m, name) => `b${m}/${name}`;
 // the name of a band group as the popover and the labels say it: the EQ counts "Band 3", the multiband names "Low band"
 export const bandText = (art, m) => (art === 'mb' ? `${MB_BAND_NAMEN[m - 1]} band` : `Band ${m}`);
@@ -146,8 +169,29 @@ export const EQ_BAND_PARAMETER = [
   { name: 'steil', label: 'Slope', einheit: '', min: 0, max: 3, vorgabe: 0, typ: 'wahl', optionen: EQ_STEIL },
   { name: 'platz', label: 'Placement', einheit: '', min: 0, max: 2, vorgabe: 0, typ: 'wahl', optionen: EQ_PLATZ },
 ];
-// every parameter row of an EQ stage in `Insert.werte` naming: 'out', 'propq', 'b1/an' ... 'b8/platz'
+// every parameter row of an EQ stage in `Insert.werte` naming: 'out', 'propq', 'b1/an' ... 'b8/platz', then the dynamic rows 'd1/dyn' ... 'd8/bereich' and 'dyn_attack', 'dyn_release'
 export const eqBandName = (m, name) => `b${m}/${name}`;
+// strand 5 slice 2 (EQ Pro): the dynamic rows of ONE band (name without the 'd<m>/' prefix; the mode is a step list, so no macro or lane target) and the two stage rows
+export const EQ_DYN_MODI = ['Off', 'Above', 'Below', 'Above (key)', 'Below (key)'];
+export const EQ_DYN_PARAMETER = [
+  { name: 'dyn', label: 'Dynamics', einheit: '', min: 0, max: 4, vorgabe: 0, typ: 'wahl', optionen: EQ_DYN_MODI },
+  { name: 'schwelle', label: 'Threshold', einheit: 'dB', min: -60, max: 0, vorgabe: -24, schritt: 0.5 },
+  { name: 'bereich', label: 'Range', einheit: 'dB', min: -24, max: 24, vorgabe: 0, schritt: 0.1 },
+];
+export const EQ_DYN_KOPF = [
+  { name: 'dyn_attack', label: 'Attack', einheit: 'ms', min: 0.1, max: 100, vorgabe: 5, schritt: 0.1 },
+  { name: 'dyn_release', label: 'Release', einheit: 'ms', min: 5, max: 1000, vorgabe: 80, schritt: 1 },
+];
+export const eqDynName = (m, name) => `d${m}/${name}`;
+// the band types that have a dynamic part (Bell, Low shelf, High shelf; the other types ignore `dyn`)
+export const EQ_DYN_TYPEN = new Set([0, 1, 2]);
+export const EQ_DYN_HINWEIS = 'Acts as Above or Below until a key is chosen';
+// the note shows for a key mode (3, 4) of a stage that has no key yet; with a key chosen (row sc or structural key) the mode listens to it and the note falls away
+export const eqDynHinweisSichtbar = (dynModus, mitSchluessel) => Number(dynModus) >= 3 && !mitSchluessel;
+export const hatSchluessel = (insert) => !!insert && (insert.sc > 0 || !!insert.key);
+// the stage's title: "Cypher EQ Pro" when any band runs dynamic
+export const eqDynAktiv = (werte) => { for (let m = 1; m <= EQ_BAENDER; m++) if (Number(werte?.[eqDynName(m, 'dyn')]) > 0) return true; return false; };
+export const eqTitel = (werte) => (eqDynAktiv(werte) ? 'Cypher EQ Pro' : 'Cypher EQ');
 // slider position <-> value for the logarithmic frequency slider (0..1000)
 export const POS_MAX = 1000;
 export const freqVonPos = (pos, q = EQ_BAND_PARAMETER[2]) => q.min * (q.max / q.min) ** (Math.min(Math.max(pos, 0), POS_MAX) / POS_MAX);
@@ -159,6 +203,8 @@ export function parameterVon(art, name) {
   if (art === 'lim') return LIM_PARAMETER.find((x) => x.name === name) ?? null;
   if (art === 'utility') return UTIL_PARAMETER.find((x) => x.name === name) ?? null;
   if (art === 'bk') return BK_PARAMETER.find((x) => x.name === name) ?? null;
+  if (art === 'trans') return TRANS_PARAMETER.find((x) => x.name === name) ?? null;
+  if (art === 'bild') return BILD_PARAMETER.find((x) => x.name === name) ?? null;
   if (art === 'gate') return GATE_PARAMETER.find((x) => x.name === name) ?? null;
   if (art === 'mb') {
     const mm = /^b([1-3])\/([a-z]+)$/.exec(name);
@@ -171,7 +217,9 @@ export function parameterVon(art, name) {
     const b = Number(m[1]) - 1;
     return m[2] === 'typ' ? { ...q, vorgabe: EQ_BAND_TYP_VORGABE[b] } : m[2] === 'freq' ? { ...q, vorgabe: EQ_BAND_FREQ_VORGABE[b] } : q;
   }
-  return EQ_KOPF_PARAMETER.find((x) => x.name === name) ?? null;
+  const d = /^d([1-8])\/([a-z]+)$/.exec(name);
+  if (d) return EQ_DYN_PARAMETER.find((x) => x.name === d[2]) ?? null;
+  return EQ_KOPF_PARAMETER.find((x) => x.name === name) ?? EQ_DYN_KOPF.find((x) => x.name === name) ?? null;
 }
 // the text of a value for the readout next to a control
 export function wertText(art, name, v) {
@@ -182,12 +230,18 @@ export function wertText(art, name, v) {
   if (art === 'komp') return paramText(name, v);
   if ((art === 'gate' || art === 'mb') && name.endsWith('ratio')) return `${v.toFixed(1)}:1`;
   if (art === 'gate' && (name === 'hold' || name === 'attack' || name === 'release')) return `${v >= 100 ? v.toFixed(0) : v.toFixed(1)} ms`;
+  if (art === 'trans' && name === 'tempo') return `${v >= 100 ? v.toFixed(0) : v.toFixed(1)} ms`;
+  if (art === 'bild') {   // widths as percentages (100 % = unchanged), mono below as a frequency or off
+    if (name.startsWith('breite')) return `${Math.round(v * 100)} %`;
+    if (name === 'mono_unter') return v < 1 ? 'off' : `${Math.round(Math.max(v, 20))} Hz`;
+  }
   if (art === 'lim' && name === 'abklingen') return `${Math.round(v)} ms`;
   if (art === 'utility') {   // width as a percentage (100 % = unchanged), mono below as a frequency or off, balance as a side and an amount
     if (name === 'breite') return `${Math.round(v * 100)} %`;
     if (name === 'mono_unter') return v < 1 ? 'off' : `${Math.round(Math.max(v, 20))} Hz`;
     if (name === 'balance') return Math.abs(v) < 0.005 ? 'centre' : `${v < 0 ? 'L' : 'R'} ${Math.round(Math.abs(v) * 100)} %`;
   }
+  if (art === 'eq' && q.einheit === 'ms') return `${v >= 100 ? v.toFixed(0) : v.toFixed(1)} ms`;
   if (art === 'mb' && q.einheit === 'ms') return `${v >= 100 ? v.toFixed(0) : v.toFixed(1)} ms`;
   if (q.einheit === 'Hz') return v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 1 : 2)} kHz` : `${v.toFixed(v >= 100 ? 0 : 1)} Hz`;
   if (name === 'mix') return `${Math.round(v * 100)} %`;
@@ -235,21 +289,21 @@ export function verschoben(ids, von, schritt) {
 // /e/ins_gr ,sf (kanal `ins/komp/<n>`, gr_db >= 0) comes at 20 Hz for every stage that computed in the last block and stops when it does not (bypass, removed).
 // A reading counts for 500 ms (the same rule as the meters of the mix tools in effects.js), then the stage shows "-". stand: {slot: {db, t}}.
 export const INS_GR_FRIST_MS = 500;
-// the key of a reading in the store: the compressor keeps its plain number, the other kinds are `lim<n>`, `gate<n>`, `mb<n>`
+// the key of a reading in the store: the compressor keeps its plain number, the other kinds are `saett<n>` (the clipper's clip amount), `lim<n>`, `gate<n>`, `mb<n>`, `trans<n>` (the transient shaper's largest gain change)
 const grSchluessel = (art, n) => (art === 'komp' ? n : `${art}${n}`);
 export function insGrAufnehmen(stand, f, jetzt) {
-  const m = /^ins\/(komp|lim|gate|mb)\/([0-9]+)$/.exec(typeof f?.kanal === 'string' ? f.kanal : '');
+  const m = /^ins\/(komp|saett|lim|gate|mb|trans|eq)\/([0-9]+)$/.exec(typeof f?.kanal === 'string' ? f.kanal : '');
   const n = m ? Number(m[2]) : 0;
   const w = f?.gr_db;
   if (n < 1 || n > (m ? MAX_ART[m[1]] : 0) || typeof w !== 'number' || !Number.isFinite(w)) return false;
-  stand[grSchluessel(m[1], n)] = { db: Math.max(0, w), t: jetzt };   // T8: the limiter stages report on ins/lim/<n>, stored as `lim<n>` (the compressor keeps its plain number)
+  stand[grSchluessel(m[1], n)] = { db: m[1] === 'eq' ? w : Math.max(0, w), t: jetzt };   // strand 5: an EQ stage with a dynamic band reports its deepest change, signed (positive = cut, negative = boost)   // T8: the limiter stages report on ins/lim/<n>, stored as `lim<n>` (the compressor keeps its plain number)
   return true;
 }
 export function insGrLesung(stand, slot, jetzt) {
   const g = stand?.[slot];
   return g && jetzt - g.t < INS_GR_FRIST_MS ? g.db : null;
 }
-/** The reading of a stage of kind `art` ('komp', 'lim', 'gate' or 'mb') and slot, or null (the 500 ms rule). */
+/** The reading of a stage of kind `art` ('komp', 'saett', 'lim', 'gate' or 'mb') and slot, or null (the 500 ms rule). */
 export const insGrLesungArt = (stand, art, slot, jetzt) => insGrLesung(stand, grSchluessel(art, slot), jetzt);
 // milliseconds until the next fresh reading expires, or null when none is fresh (the page schedules its reset with it)
 export function insGrAblaufIn(stand, jetzt) {
@@ -295,10 +349,11 @@ export function parameterNamen(art) {
   if (art !== 'eq') return kopf;
   const baender = [];
   for (let m = 1; m <= EQ_BAENDER; m++) for (const q of EQ_BAND_PARAMETER) baender.push(eqBandName(m, q.name));
-  return [...kopf, ...baender];
+  for (let m = 1; m <= EQ_BAENDER; m++) for (const q of EQ_DYN_PARAMETER) baender.push(eqDynName(m, q.name));
+  return [...kopf, ...baender, ...EQ_DYN_KOPF.map((q) => q.name)];
 }
 export const parameterLabel = (art, name) => {
-  const q = parameterVon(art, name), m = /^b([1-8])\//.exec(name);
+  const q = parameterVon(art, name), m = /^[bd]([1-8])\//.exec(name);
   return `${m ? `${bandText(art, Number(m[1]))} ` : ''}${q.label}`;
 };
 // the four macros of a strip as the editor sees them: [{name, ziel: [{insert, param, von, bis}]}] (empty ones when the strip has no rack)
@@ -405,7 +460,7 @@ export const rackLabels = (strang) => ({
 
 // ---- the page ----------------------------------------------------------------------------------------------------------------------------------
 // the parameter descriptors of a kind in popover order (the EQ: the head rows, then bands)
-export const KOPF = { komp: KOMP_PARAMETER, saett: SAETT_PARAMETER, lim: LIM_PARAMETER, utility: UTIL_PARAMETER, bk: BK_PARAMETER, gate: GATE_PARAMETER, mb: MB_KOPF_PARAMETER, eq: EQ_KOPF_PARAMETER };
+export const KOPF = { komp: KOMP_PARAMETER, saett: SAETT_PARAMETER, lim: LIM_PARAMETER, utility: UTIL_PARAMETER, bk: BK_PARAMETER, gate: GATE_PARAMETER, mb: MB_KOPF_PARAMETER, trans: TRANS_PARAMETER, bild: BILD_PARAMETER, eq: EQ_KOPF_PARAMETER };
 /** Panel adapter of one bk stage: values from the stage in the project, writes as insert_param_setzen through the coalescing writer of the K rows. */
 export const baueInsertAdapter = (ctx, s, insertId) => ({
   // a parameter a rack macro drives (slice 4c, like the K rows): its value is what the macro gives, and the control is blocked (no param_gemappt refusals)

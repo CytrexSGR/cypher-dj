@@ -562,7 +562,7 @@
       {"name": "mb_hoch_db", "typ": "f", "einheit": "db", "notiz": "Absenkung des Multiband-Kompressors, Band hoch (≥ 0)"},
       {"name": "lim_db", "typ": "f", "einheit": "db", "notiz": "Absenkung des Kanal-Limiters (≥ 0); 0, solange kanal_limiter_vorhalt_ms 0 ist (kein Limiter gebaut)"}]},
     {"adresse": "/e/ins_gr", "typen": ",sf", "abschnitt": "5.5f", "richtung": "vom_kern", "felder": [
-      {"name": "kanal", "typ": "s", "einheit": "pfad", "notiz": "pooled insert stage with a gain reduction: ins/komp/<n> (n = 1 to 160), ins/lim/<n> (n = 1 to 8), ins/gate/<n> (n = 1 to 16) or ins/mb/<n> (n = 1 to 8, the deepest band), the project's insert slot"},
+      {"name": "kanal", "typ": "s", "einheit": "pfad", "notiz": "pooled insert stage with a gain reduction: ins/komp/<n> (n = 1 to 160), ins/lim/<n> (n = 1 to 8), ins/gate/<n> (n = 1 to 16), ins/mb/<n> (n = 1 to 8, the deepest band), ins/saett/<n> (n = 1 to 32, dB over the clip ceiling), ins/eq/<n> (n = 1 to 160, only a stage with a dynamic band: its deepest dynamic cut, a boost reads negative) or ins/trans/<n> (n = 1 to 32, the largest change of the transient shaper), the project's insert slot"},
       {"name": "gr_db", "typ": "f", "einheit": "db", "notiz": "gain reduction (>= 0) at the end of the last block; 20 Hz with the levels, only for stages that ran in the last block"}]},
     {"adresse": "/e/stufe_pegel", "typen": ",sff", "abschnitt": "5.5g", "richtung": "vom_kern", "felder": [
       {"name": "kanal", "typ": "s", "einheit": "pfad", "notiz": "pooled insert stage: ins/komp/<n> (n = 1 to 160), ins/lim/<n> (n = 1 to 8), ins/gate/<n> (n = 1 to 16), ins/mb/<n> (n = 1 to 8), or komp/<channel> (the channel compressor of deck/1, deck/2, pad/1, pad/2)"},
@@ -711,12 +711,21 @@
       {"name": "start_beat", "typ": "d", "einheit": "beat"},
       {"name": "metronom_an", "typ": "i", "einheit": "schalter", "bereich": [0, 1]},
       {"name": "limiter_db", "typ": "f", "einheit": "db", "bereich": [-200, 0], "notiz": "Absenkung des Set-Limiters, ≤ 0; hält 0,5 s nach dem letzten Eingriff über 0,1 dB (1.10, E2)"}]},
+    {"adresse": "/zustand/arr/midi", "typen": ",iiiii", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [
+      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 128], "notiz": "track slot of the loaded playback whose MIDI stage this is (strand 7)"},
+      {"name": "gehalten", "typ": "i", "einheit": "anzahl", "notiz": "distinct input pitches the stage holds now"},
+      {"name": "ein", "typ": "i", "einheit": "anzahl", "notiz": "input note ons taken in since this playback was loaded (wraps at 2^32)"},
+      {"name": "aus", "typ": "i", "einheit": "anzahl", "notiz": "output note ons sent since this playback was loaded (a step skipped by chance does not count; wraps at 2^32)"},
+      {"name": "verloren", "typ": "i", "einheit": "anzahl", "notiz": "input note ons dropped (queue or held set full) since this playback was loaded (wraps at 2^32); 2 Hz per track with an active stage, playing or stopped, once with zeros when the stage goes away"}]},
     {"adresse": "/zustand/warp", "typen": ",iiiii", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [
       {"name": "stimmen", "typ": "i", "einheit": "anzahl", "notiz": "Stimmen im Warp-Werk (COMPLEX, TONES), eine auslaufende mitgezählt"},
       {"name": "unterlauf", "typ": "i", "einheit": "anzahl", "notiz": "Ausfälle des Rings während einer Stimme (Stille mit 2-ms-Blende), seit Kern-Start; soll 0 bleiben"},
       {"name": "kein_platz", "typ": "i", "einheit": "anzahl", "notiz": "Stimmen ohne Platz im Werk (Pool voll oder Werk fehlt): der Clip spielt als RE-PITCH, seit Kern-Start"},
       {"name": "spaet", "typ": "i", "einheit": "anzahl", "notiz": "Stimmen, deren Ring zum Einsatz noch leer war (Ansatz nicht rechtzeitig fertig), seit Kern-Start"},
       {"name": "faeden", "typ": "i", "einheit": "anzahl", "notiz": "Arbeitsfäden des Werks (kern.toml warp_faeden), 0 synchron"}]},
+    {"adresse": "/zustand/mod", "typen": ",if", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [
+      {"name": "nr", "typ": "i", "einheit": "nummer", "bereich": [1, 16], "notiz": "modulator slot nr of the loaded playback (strand 6 D11)"},
+      {"name": "wert", "typ": "f", "einheit": "faktor", "bereich": [-1, 1], "notiz": "modulator output before depth at the last sample of the previous block; 25 Hz per modulator, playing or stopped, none without modulators"}]},
     {"adresse": "/zustand/zelle", "typen": ",siiddid", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [
       {"name": "spur", "typ": "s", "einheit": "text", "notiz": "project track id"},
       {"name": "zelle", "typ": "i", "einheit": "nummer", "bereich": [0, 8], "notiz": "playing cell, 0 = silent"},

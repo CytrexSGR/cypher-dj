@@ -12,6 +12,8 @@
  * @property {number} [a]       target start (absent: equal to qa)
  * @property {number} [e]       target end (absent: equal to qe)
  * @property {number} [ton]     target pitch (absent: equal to qton)
+ * @property {number} [vib]     vibrato factor 0..4 (absent: 1, as sung)
+ * @property {number} [drift]   drift factor 0..4 (absent: 1, as sung)
  */
 
 /**
@@ -22,6 +24,7 @@
  * @property {{ hopS: number, ct: ArrayLike<number> } | null} kurve   detected pitch in cents (MIDI * 100, 0 = unvoiced), one value per hop
  * @property {{ hole(s0: number, s1: number, n: number): [number, number][] } | null} welle   n (min, max) pairs in -1..1 over [s0, s1]
  * @property {{ beatBeiS(s: number): number, sBeiBeat(b: number): number, beatsProTakt: number } | null} raster   beat grid of the clip
+ * @property {number} [staerke]                    strength of quantise and snap, 0..1 (absent: 1)
  * @property {((ton: number) => number) | null} rasteTonart   nearest tone of the project key for a whole MIDI pitch, null without a key
  * @property {{ zustand: string, text?: string }} render
  * @property {{ zustand: string, prozent?: number, text?: string } | null} analyse
@@ -29,10 +32,14 @@
 
 /**
  * @typedef {{ art: 'ton', ids: string[], um: number }
+ *   | { art: 'zeit', ids: string[], um_s: number }
+ *   | { art: 'kante', id: string, a?: number, e?: number }
+ *   | { art: 'raster', ids?: string[], zeit?: string, ton?: 'halbton' | 'tonart', staerke: number }
+ *   | { art: 'form', ids: string[], vib?: number, drift?: number }
  *   | { art: 'zuruecksetzen', ids?: string[] }
  *   | { art: 'erkennen', neu?: boolean }
  *   | { art: 'abbrechen' }
- *   | { art: 'entfernen' }} Op   the writes of the surface; `um` is a pitch shift in semitones added to every listed note's current target
+ *   | { art: 'entfernen' }} Op   the writes of the surface; `um` is a pitch shift in semitones added to every listed note's current target, `um_s` a time shift in seconds, `form` sets the factor of the vibrato (`vib`) and/or the drift 0..4 of the listed notes (1 = as sung), `raster` quantises starts to the raster id `zeit` and/or snaps pitch (`ton`) at `staerke`, `a` / `e` an absolute edge in source seconds
  */
 
 /**

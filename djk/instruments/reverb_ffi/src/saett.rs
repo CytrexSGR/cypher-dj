@@ -8,11 +8,13 @@
 //! `mix`: the crate keeps a dry line delayed by the same amount, so mix 0 and mix 1 line up (spec D10,
 //! sat_dsp/src/lib.rs).
 
-use saett_dsp::{Einstellung, Saett};
+use saett_dsp::{Einstellung, Kurve, Saett};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 pub struct CypherSaett {
     s: Saett,
+    // Last settings: `setze` and `setze_form` each change their part and re-apply the whole.
+    e: Einstellung,
     #[cfg(feature = "fehlerinjektion")]
     gift: bool,
 }
@@ -27,6 +29,7 @@ pub extern "C" fn cypher_saett_neu(fs: f64) -> *mut CypherSaett {
     match catch_unwind(|| {
         Box::into_raw(Box::new(CypherSaett {
             s: Saett::neu(fs),
+            e: Einstellung::default(),
             #[cfg(feature = "fehlerinjektion")]
             gift: false,
         }))
@@ -56,9 +59,42 @@ pub unsafe extern "C" fn cypher_saett_setze(h: *mut CypherSaett, drive_db: f64, 
     }
     if let Some(h) = h.as_mut() {
         let _ = catch_unwind(AssertUnwindSafe(|| {
-            h.s.setze(&Einstellung { drive_db: drive_db.clamp(-60.0, 60.0), ausgang_db: ausgang_db.clamp(-60.0, 60.0), mix })
+            h.e = Einstellung { drive_db: drive_db.clamp(-60.0, 60.0), ausgang_db: ausgang_db.clamp(-60.0, 60.0), mix, ..h.e };
+            h.s.setze(&h.e)
         }));
     }
+}
+
+/// Clip curve (0 tanh, 1 soft clip, 2 hard clip) and ceiling in dBFS (clamped to -24..0). A non-finite ceiling or a curve
+/// above 2 is ignored (the call changes nothing). A new curve is cross-faded over 10 ms. Defaults: tanh, 0 dB (bit-equal
+/// to the plain saturation). Drive, output and mix are kept.
+/// # Safety
+/// `h` valid or null, not concurrent with `cypher_saett_block`.
+#[no_mangle]
+pub unsafe extern "C" fn cypher_saett_setze_form(h: *mut CypherSaett, kurve: u8, decke_db: f64) {
+    let kurve = match kurve {
+        0 => Kurve::Tanh,
+        1 => Kurve::Weich,
+        2 => Kurve::Hart,
+        _ => return,
+    };
+    if !decke_db.is_finite() {
+        return;
+    }
+    if let Some(h) = h.as_mut() {
+        let _ = catch_unwind(AssertUnwindSafe(|| {
+            h.e = Einstellung { kurve, decke_db, ..h.e };
+            h.s.setze(&h.e)
+        }));
+    }
+}
+
+/// How far the driven signal went over the ceiling since the last call, in dB (0 if never); reads and resets. 0 for null.
+/// # Safety
+/// `h` valid or null, not concurrent with `cypher_saett_block`.
+#[no_mangle]
+pub unsafe extern "C" fn cypher_saett_clip_db(h: *mut CypherSaett) -> f32 {
+    h.as_mut().map(|h| catch_unwind(AssertUnwindSafe(|| h.s.clip_db())).unwrap_or(0.0)).unwrap_or(0.0)
 }
 
 /// State to zero (the core's NaN guard), settings kept, no allocation.

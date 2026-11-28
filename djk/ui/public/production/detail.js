@@ -17,6 +17,7 @@ import { RACK_TEXT } from './rack_device.js';
 import { bindeMusterFeld } from './pattern_field.js';
 import { bindeGeraetAnsicht, kannGeraetAnsicht, GERAET_TEXT } from './device_view.js';
 import { geraetText } from './track_heads.js';
+import { bindeMidiStufe } from './midi_stufe_operation.js';
 import { oeffneGeraetFenster, GERAET_FENSTER_TEXT } from '../device_open.js';
 
 // Gain-Regler: Bereich aus FELDER.gain_db (Spec 6.27, −96..+24 dB), sonst schnitte er Werte ab (V2 Fix F8: vorher −36..+12, +20 dB zeigte 12)
@@ -45,7 +46,7 @@ const GERUEST = `<div class="p-detail-kopf"><span data-d="titel">CLIP</span><spa
     <label class="p-warp-ton">TRANSPOSE <input data-d="transpose" inputmode="numeric" autocomplete="off" title="Semitones, whole numbers from -12 to 24. Takes effect after a moment (the clip is re-rendered ahead of time)" disabled> st</label><label class="p-warp-ton">DETUNE <input data-d="detune" inputmode="decimal" autocomplete="off" title="Cents" disabled> ct</label><span class="p-warp-info" data-d="warpinfo"></span>
     <span class="p-warp-tempo"><button data-d="tempo2" title="Double the tempo of the whole warp: the same piece of the track takes twice as many beats, so the clip gets twice as long" disabled>×2</button><button data-d="tempohalb" title="Halve the tempo of the whole warp: the clip gets half as long" disabled>:2</button><button data-d="projekttempo" title="Set the project tempo to the tempo of this clip, so the clip plays at its own speed" disabled>SET PROJECT TEMPO</button></span>
   </div>
-  <div class="p-noten-aktion" data-d="notenaktion"><button data-d="notenknopf" title="Detect the notes of this clip">DETECT NOTES</button><progress class="p-noten-balken" data-d="notenbalken" max="100" value="0" hidden></progress><button data-d="notenabbruch" title="Cancel the note detection" hidden>CANCEL</button></div>
+  <div class="p-noten-aktion" data-d="notenaktion"><button data-d="notenknopf" title="Detect the notes of this clip">DETECT NOTES</button><input type="number" class="p-noten-staerke" data-d="notenstaerke" min="0" max="100" step="5" value="100" aria-label="Quantise and snap strength in percent"><label class="p-noten-form" hidden>Vibrato <input data-d="notenvib" type="range" min="0" max="400" step="5" value="100" aria-label="Vibrato in percent"></label><label class="p-noten-form" hidden>Drift <input data-d="notendrift" type="range" min="0" max="400" step="5" value="100" aria-label="Drift in percent"></label><progress class="p-noten-balken" data-d="notenbalken" max="100" value="0" hidden></progress><button data-d="notenabbruch" title="Cancel the note detection" hidden>CANCEL</button></div>
   <div class="p-warp-editor" data-d="editor" hidden>
     <div class="p-warp-editor-leiste"><span class="p-warp-info" data-d="segment"></span><span class="p-roll-hilfe">Double click: add or delete a marker · drag: move it (Shift: move its beat) · right click: menu · wheel: scroll · Ctrl+wheel: zoom</span></div>
     <canvas class="p-warp-canvas" data-d="editorcanvas" tabindex="0" aria-label="Warp editor"></canvas>
@@ -59,6 +60,7 @@ const GERUEST = `<div class="p-detail-kopf"><span data-d="titel">CLIP</span><spa
 <div class="p-clip-muster" data-d="muster" hidden></div>
 <div class="p-clip-hk" data-d="hk" hidden></div>
 <div class="p-irack" data-d="rack" hidden></div>
+<div class="p-midistufe" data-d="midistufe" hidden></div>
 <div class="p-gerpanel" data-d="geraet" hidden></div>`;
 const LABEL = { name: 'Rename clip', start_beat: 'Move clip', laenge_beats: 'Clip length', gain_db: 'Clip gain', fade_ein_beats: 'Fade in', fade_aus_beats: 'Fade out', offset_s: 'Clip offset', versatz_beats: 'Clip offset' };
 
@@ -78,6 +80,7 @@ export function bindeDetail(ctx) {
   // front panels task 8: mode `geraet`: a click on the device label of a bk or RB-338 track (ctx.geraetOeffnen, track_heads.js) shows the front panel of the device
   // (device_view.js); selecting a clip goes back, and so does a device that no longer has a view (the track was switched to Surge)
   const geraetTeil = bindeGeraetAnsicht(ctx, d('geraet'));
+  const midiTeil = bindeMidiStufe(ctx, d('midistufe'));   // strand 7 task 1.5: MIDI FX strip above the front panel
   st.geraetSpur = null;
   // OPEN ↗ in the header of the rack panel and of the device panel: the track in its own window (device_window.js)
   d('fenster').addEventListener('click', () => { const id = st.rackSpur ?? st.geraetSpur; if (id) oeffneGeraetFenster(id, ctx.melde); });
@@ -182,7 +185,7 @@ export function bindeDetail(ctx) {
       for (const k of ['loop', 'teilen', 'duplizieren', 'loeschen']) d(k).disabled = true;
       for (const k of ['leer', 'audio', 'midi', 'reiter', 'hk', 'muster', 'geraet']) d(k).hidden = true;
       d('fenster').hidden = false;
-      geraetTeil.zeige(null); d('rack').hidden = false; d('titel').textContent = RACK_TEXT.titel; d('info').textContent = `${rs.name} · ${RACK_TEXT.info}`;
+      geraetTeil.zeige(null); midiTeil.zeige(null); d('rack').hidden = false; d('titel').textContent = RACK_TEXT.titel; d('info').textContent = `${rs.name} · ${RACK_TEXT.info}`;
       rolle.zeige(null); editor.zeige(null); notenTeil.zeige(null); hkTeil.zeige(null); musterTeil.zeige(null); rackTeil.zeige(rs);
       return;
     }
@@ -193,10 +196,10 @@ export function bindeDetail(ctx) {
       for (const k of ['leer', 'audio', 'midi', 'reiter', 'hk', 'muster']) d(k).hidden = true;
       d('fenster').hidden = false;
       d('geraet').hidden = false; d('titel').textContent = GERAET_TEXT.titel; d('info').textContent = `${gs.name} · ${geraetText(gs)}`;
-      rolle.zeige(null); editor.zeige(null); notenTeil.zeige(null); hkTeil.zeige(null); musterTeil.zeige(null); geraetTeil.zeige(gs);
+      rolle.zeige(null); editor.zeige(null); notenTeil.zeige(null); hkTeil.zeige(null); musterTeil.zeige(null); geraetTeil.zeige(gs); midiTeil.zeige(gs);
       return;
     }
-    st.geraetSpur = null; d('geraet').hidden = true; geraetTeil.zeige(null);
+    st.geraetSpur = null; d('geraet').hidden = true; geraetTeil.zeige(null); midiTeil.zeige(null);
     const t = gezeigt();
     for (const k of ['loop', 'teilen', 'duplizieren', 'loeschen']) d(k).disabled = !t;
     const loop = t?.clip.loop_beats != null;

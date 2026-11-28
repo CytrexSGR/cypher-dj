@@ -124,6 +124,13 @@ void ArrRbSenke::auto_parameter_summand(int spur, int param, float delta) noexce
 #endif
 }
 
+void ArrRbSenke::mod_summand(int spur, int param, float delta) noexcept {
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE || param < 0 || param >= ARR_GERAET_PARAMS || !(delta == delta)) return;
+  Spur& p = sp_[spur];
+  p.mod_delta[param] = delta;
+  p.mod_da[param] = true;
+}
+
 namespace {
 // Normalised defaults of the RB-338 (= RB_VORGABE_NORM in model.ts; test_arr_rb_senke_auto case 6 checks them against cypher_rb_vorgaben)
 constexpr float RB_VORGABE_NORM[ARR_GERAET_PARAMS] = {0.71034f, 0.62565f, 0.3f, 0.4f};
@@ -218,6 +225,15 @@ void ArrRbSenke::block_bahn(int spur, int64_t s0, int m, float* l, float* r, Arr
   ++a_lane.einheiten;   // counted on the caller's lane struct, also under the mutation
   if (spur < 0 || spur >= ARR_SENKEN_PLAETZE || m <= 0 || m > ARR_BLOCK) return;
   Spur& p = sp_[spur];
+  // strand 6 (D3): the modulator offset goes on top of the value the parameter plays in this block (the lane value reported for it, else the base value) and from here on travels as that
+  // block's lane value: start (lanes_vorab_), lanes_anwenden and the fall-away to the base value need no path of their own. Taken and cleared here, before any early return.
+  for (int g = 0; g < ARR_GERAET_PARAMS; ++g) {
+    if (!p.mod_da[g]) continue;
+    p.mod_da[g] = false;
+    const float v = (p.lane_da[g] ? p.lane_wert[g] : basiswert(arr_.snapshot(), spur, g)) + p.mod_delta[g];
+    p.lane_wert[g] = v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
+    p.lane_da[g] = true;
+  }
   if (!p.h) return;
   auto versatz = [&](int64_t ziel) -> uint32_t {
 #ifdef CYPHERDJ_MUTATION_ARR_RB_VERSATZ_NULL

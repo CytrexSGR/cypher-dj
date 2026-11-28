@@ -10,6 +10,7 @@ import { aufbau } from './support/output_setup.mjs';
 import { warteBis } from './support/proj_context.mjs';
 import { notenBereich, raeumeNotenReste, CURVE_ID } from '../areas/proj/notes.ts';
 import { kurveDatei } from '../project/notes_contract.ts';
+import { notenMass } from '../project/notes_audio.ts';
 
 const HIER = import.meta.dirname;
 const ATTRAPPE = path.join(HIER, 'support', 'notes_mock.mjs');
@@ -413,4 +414,18 @@ test('little pitched sound: fertig with the hint wenig_stimmhaft, the notes are 
   const y = await mitNoten(t, { netz: null });
   await y.ruf('POST', '/proj/noten/erkennen', { clip_id: 'c1' });
   assert.equal((await y.ende()).hinweis, undefined);
+});
+
+test('notenMass: mass only for notes with a target; ms to 0.1, stretch to 1e-3, cents to 0.1; the input stays', () => {
+  const liste = [
+    { id: 't1', qa: 1, qe: 2, qton: 60, p: 0.5 },
+    { id: 't2', qa: 2, qe: 3, qton: 62, p: 0.5, a: 2.05, e: 3.5, ton: 62.333 },
+    { id: 't3', qa: 4, qe: 5, qton: 64.1, p: 0.5, ton: 65.1 },
+  ];
+  const kopie = structuredClone(liste);
+  const m = notenMass(liste);
+  assert.deepEqual(liste, kopie);
+  assert.equal(m[0].mass, undefined);
+  assert.deepEqual(m[1].mass, { a_ms: 50, e_ms: 500, laenge_ms: 1450, dehnung: 1.45, ton_ct: 33.3 });
+  assert.deepEqual(m[2].mass, { a_ms: 0, e_ms: 0, laenge_ms: 1000, dehnung: 1, ton_ct: 100 });
 });

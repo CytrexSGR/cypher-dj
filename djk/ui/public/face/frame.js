@@ -133,7 +133,10 @@ export function baueReglerPlatte(host, { titel = '', abschnitte, parameter, adap
     ...(adapter.gesperrt ? { gesperrt: (p) => adapter.gesperrt(p) === true } : {}),
     ...(adapter.ende ? { ende: () => adapter.ende() } : {}),
   };
-  const platte = baueFrontplatte(host, { panel, regler: {}, parameter: ableseTabelle, adapter: platteAdapter, ...(dokument ? { dokument } : {}) });
+  // strand 6 task 4.4: adapter.modKnopf(param) gives the modulated value (real unit), null while the modulator is silent, undefined when none targets the parameter;
+  // the panel draws the ring (fp-mod) from the base to the angle of that value
+  const modKnopf = adapter.modKnopf ? (p) => { const w = adapter.modKnopf(p); return typeof w === 'number' ? nachK(p, w) : w; } : null;
+  const platte = baueFrontplatte(host, { panel, regler: {}, parameter: ableseTabelle, adapter: platteAdapter, ...(dokument ? { dokument } : {}), ...(modKnopf ? { modKnopf } : {}) });
   // exposed for the tests of the conversion: the same two mappings the plate uses
   platte.nachK = nachK; platte.nachWert = nachWert;
   return platte;

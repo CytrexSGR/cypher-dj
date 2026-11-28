@@ -17,8 +17,11 @@ import { hkStrecke, hkWert, istModulation, modulationsZiel, type Huellkurve } fr
 import { hatFxArbeit, rolleFxAus, type FxRahmen } from './fx_ausrollen.ts';
 import { geraetFx as geraetFxRegister } from '../devices_parameter.ts';   // default device mode of `uebersetze` (a caller cannot forget it)
 import { trackerEinstellung } from '../public/tracker/grid_model.js';   // LPB and TICKS of the project (task 1)
-import { LOOP_MAX_FRAMES, MAX_RETURNS, zellFehler, loopDeckGruppe, platzVonGruppe, strudelGruppe, istHalten } from './model.ts';
-import type { GliedGeraet, AudioClip, Clip, Insert, InsertTraeger, Lane, Ziel, MidiClip, Note, Projekt, Punkt, Spur, Warp, Zelle } from './model.ts';
+import { ARP_RATEN, LOOP_MAX_FRAMES, MAX_RETURNS, zellFehler, loopDeckGruppe, platzVonGruppe, strudelGruppe, istHalten,
+  MOD_ANGRIFF_VORGABE, MOD_ABFALL_VORGABE, MOD_EMPFINDLICH_VORGABE } from './model.ts';
+import { skalaMaske } from '../public/harmonie.js';
+import type { GliedGeraet, MidiStufe, Modulator, AudioClip, Clip, Insert,
+  InsertTraeger, Lane, Ziel, MidiClip, Note, Projekt, Punkt, Spur, Warp, Zelle } from './model.ts';
 import type { Stift } from '../steckfeld.ts';
 
 export const WIEDERGABE_FORMAT = 'cypherdj-arr/1';
@@ -77,7 +80,11 @@ export interface WInsert {
 export type HostStufe = { an: boolean; latenz: number };
 // `stumm_start` (live containers): the track starts this playback muted, the core applies it in the block of the swap (INTERFACES 4.11); written only for
 // the load that brings the stems of a module
-export type WSpur = WSpurKern & { stumm_start?: true };
+// the playback key `midi` of a note track (plan strand 7, 3.2); written only while the track has an active stage
+export type WMidi = { akkord?: number[];
+  skala?: { maske: number; lane?: boolean }; arp?: { muster: string; rate?: number; hz?: number; oktaven: number; gate: number };
+  velocity?: { kurve: number; zufall: number; fest: number }; chance?: number; saat: number };
+export type WSpur = WSpurKern & { stumm_start?: true; midi?: WMidi };
 type WSpurKern =
   | { nr: number; art: 'audio'; clips: WAudioClip[]; ausgang?: WZiel; auto?: WAuto[]; chain?: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[];
       id?: string; zellen?: WZelle[] }   // id and zellen: only the audio tracks of a loop deck group (index 1.2)
@@ -117,7 +124,32 @@ export interface Wiedergabe {
   format: typeof WIEDERGABE_FORMAT | typeof WIEDERGABE_FORMAT_2 | typeof WIEDERGABE_FORMAT_3 | typeof WIEDERGABE_FORMAT_4; nr: number; spuren: WSpur[];
     live?: true; gruppen?: WGruppe[];
   // returns (slice 3) like the groups; pm = the production master's chain, the kern's key (slice 4)
-  returns?: WReturn[]; pm?: { chain: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] } }
+  returns?: WReturn[]; pm?: { chain: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] };
+  // plan strand 7, 5.1 (/2..): the production harmony lane [beat, pitch class mask], beats strictly ascending; only when a track's scale follows it
+  harmonie?: [number, number][];
+
+  // strand 6 (/3 and /4): the project's switched-on modulators; only with at least one translatable target
+  mod?: WMod[] }
+// strand 6: `form` 0..4 = sinus, dreieck, saege, rechteck, zufall; `hz` instead of `takt` is a free rate;
+// `spur` = track number, `ret` = return number (fader only)
+// slice 4: `send.<return number>` on a track; a chain target names the strip (`kette` spur | grp | ret | pm and its number; the master is 1) and the stage
+// by its position in the written chain with the parameter index of its kind, or a rack macro 0..3. Plugin targets never reach the core (D2).
+export type WModKette = 'spur' | 'grp' | 'ret' | 'pm';
+export type WModZiel = (({ spur: number } | { ret: number }) & { ziel: string }
+  | { kette: WModKette; nr: number } & ({ stufe: number; param: number } | { makro: number }))
+  & { tiefe: number; uni: boolean };
+export interface WModLfo { nr: number; art: 'lfo'; form: number; takt?: number; hz?: number; phase: number; glatt_ms: number; saat: number; ziele: WModZiel[] }
+// slice 3: the envelope follower; `quelle` = the playback number of the source track; its output is unipolar for every target (`uni` true)
+export interface WModFolger { nr: number; art: 'folger'; quelle: number; angriff_ms: number; abfall_ms: number; empfindlich_db: number; glatt_ms: number;
+  ziele: WModZiel[] }
+export type WMod = WModLfo | WModFolger;
+const MOD_FORM_NR: Record<NonNullable<Modulator['form']>, number> = { sinus: 0, dreieck: 1, saege: 2, rechteck: 3, zufall: 4 };
+/** FNV-1a 32 of the UTF-8 bytes, unsigned: the seed of a random modulator (D5) */
+export function modSaat(id: string): number {
+  let h = 2166136261;
+  for (const b of Buffer.from(id, 'utf8')) h = Math.imul(h ^ b, 16777619);
+  return h >>> 0;
+}
 // slice 4c: the rack of a strip: its pooled slot and the mapping table (`stufe` = position in the chain, `param` = parameter index of the kind, `makro` 0..3)
 // 1.9 U8 T7 (E12): a member target has `glied` (the member's position 0..3 in the rack device) instead of `stufe`; its `param` is the core's member index space
 // (0..3 RB-338, 8..15 bk k1..k8, 16 gain_db, 17..40 bk k9..k32, 41..72 bk k33..k64)
@@ -171,6 +203,22 @@ export function blendLanen(lane: Lane, welche: 'original' | 'neu', trim = 0): [n
   });
   return aus;
 }
+// strand 6 task 4.2: a chain target of a modulator as the core takes it: the stage by its position in the chain this playback writes (a left-out host
+// slot is not in it), the parameter by its index (as kettenAuto), or the macro 0..3 while the strip's rack is written. Null = not playable (the stage is
+// not in the chain, a macro drives the parameter, the rack is not written): the target is dropped, the core would refuse the whole playback.
+const modKettenZiel = (strang: InsertTraeger, w: { chain?: WInsert[]; rack?: WRack } | undefined, ziel: string):
+  { stufe: number; param: number } | { makro: number } | null => {
+  const k = zerlegeKettenZiel(ziel);
+  if (!k || !w) return null;
+  if ('makro' in k) return w.rack ? { makro: k.makro - 1 } : null;
+  if (!w.chain) return null;
+  const alle = strang.inserts ?? [];
+  const liste = hostHaken.ohne?.size ? alle.filter((i) => !(i.art === 'host' && hostHaken.ohne!.has(i.slot))) : alle;
+  const stufe = liste.findIndex((x) => x.id === k.insert);
+  if (stufe < 0 || liste[stufe].art === 'host' || makroVon(strang, k.insert, k.param)) return null;
+  const param = insertParamIndex(liste[stufe].art as InsertPoolArt, k.param);
+  return param > 0 ? { stufe, param } : null;
+};
 const kettenPunkte = (k: { chain_auto?: WKettenLane[] }): number =>
   (k.chain_auto ?? []).reduce((n, l) => n + l.punkte.length, 0);
 const kettenAuto = (strang: InsertTraeger, liste: readonly Insert[], rack: WRack | undefined): WKettenLane[] => {
@@ -566,12 +614,32 @@ function sammleFx(fx: SpurFx, c: MidiClip, a: ReturnType<typeof rolleFxAus>, rah
   }
   if (a.pan.length) fx.pan.push({ von: a.pan[0][0], bis: ende, punkte: a.pan });
 }
+// The stage chain of a track as the core takes it, or null (no chain, `aus`, or no stage left). A scale that follows the project key without a key is left out.
+function midiSchluessel(m: MidiStufe | undefined, tonart: Projekt['tonart'], lane = false): WMidi | null {
+  if (!m || m.aus) return null;
+  const aus: WMidi = {};
+  if (m.akkord) aus.akkord = [...m.akkord.intervalle];
+  if (m.skala) {
+    // 'projekt' follows the project key; with a lane in the playback the track also follows the lane, and before its first entry it uses
+    // the project key (C minor without one)
+    const t = 'quelle' in m.skala ? (lane ? tonart ?? { grundton: 0, skala: 'minor' } : tonart) : m.skala;
+    if (t) aus.skala = { maske: skalaMaske(t.grundton, t.skala), ...('quelle' in m.skala && lane ? { lane: true } : {}) };
+  }
+  if (m.arp) {
+    aus.arp = { muster: m.arp.muster, ...(m.arp.sync ? { rate: ARP_RATEN[m.arp.rate] } : { hz: m.arp.hz }), oktaven: m.arp.oktaven, gate: m.arp.gate };
+  }
+  if (m.velocity) aus.velocity = { kurve: m.velocity.kurve, zufall: m.velocity.zufall, fest: m.velocity.fest ?? 0 };
+  if (m.chance !== undefined) aus.chance = m.chance;
+  if (Object.keys(aus).length === 0) return null;
+  return { ...aus, saat: m.saat ?? 0 };
+}
+
 // The notes of a track (sorted) and, when a clip carries effect commands, their events. A clip without `fx` is unrolled as before.
-function noten(s: Spur, rahmen: FxRahmen): { noten: WNote[]; fx: SpurFx | null } {
+function noten(s: Spur, rahmen: FxRahmen, clips: readonly Clip[] = s.clips): { noten: WNote[]; fx: SpurFx | null } {
   const aus: WNote[] = [];
   const fx: SpurFx = { bend: [], pegel: [], regler: new Map(), pan: [] };
   let hat = false;
-  for (const c of [...s.clips].sort((a, b) => a.start_beat - b.start_beat)) {
+  for (const c of [...clips].sort((a, b) => a.start_beat - b.start_beat)) {
     if (c.art !== 'midi') continue;
     // 1.12 slice 5 (D10): a transpose envelope moves the pitch, read at the note start in the clip and rounded; the same id
     const hk = c.huellkurven?.find((h) => h.ziel === 'transpose');
@@ -797,7 +865,7 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
       return { nr: s.nr, art: 'audio', clips: [{ id: `${s.id}/freeze`, start_beat: s.freeze.von_beat ?? 0, laenge_beats: laenge,
         sha256: s.freeze.sha256, datei, frames: s.freeze.frames, offset_frames: 0, gain_db: 0, ein_beats: 0, aus_beats: 0 }] };
     }
-    const { noten: n, fx } = noten(s, fxRahmen(p, s, opt.geraetFx ?? geraetFxRegister)); nZahl += n.length;
+    const { noten: n, fx } = noten(s, fxRahmen(p, s, opt.geraetFx ?? geraetFxRegister), spurClips(s, o.vorhoeren)); nZahl += n.length;
     if (fx) { fxJe.set(s.id, fx); fxEvents += fx.bend.length + fx.pegel.length; }
     if (g.art === 'rack') {
       const gl = g.glieder.map((m): WGlied => ({ id: m.id, ...gliedGeraet(m.geraet), ton: m.ton ?? [0, 127], vel: m.vel ?? [1, 127], kette: m.kette ?? [0, 127],
@@ -824,8 +892,11 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
   const geparkt = (id: string | undefined): boolean => { const t = spitzeVon(id); return live && t !== undefined && platzVonGruppe(p, t) === null; };
   const sichtbareReturns = (p.returns ?? []).filter((r) => !(live && returnEigner(p, r) !== undefined && geparkt(returnEigner(p, r))));
   const retNr = new Map(sichtbareReturns.map((r) => [r.id, r.nr]));   // the returns this playback has: send lanes name them by number
+  const laneDa = p.harmonie !== undefined;   // plan strand 7, 5.1: tracks that follow the project scale then also follow the lane (head key below)
   const spuren: WSpur[] = [...p.spuren].filter((s) => !geparkt(s.ausgang?.id)).sort((a, b) => a.nr - b.nr).map((s): WSpur => {
-    const w0 = ohneZiel(s);
+    const w00 = ohneZiel(s);
+    const mk = s.art === 'instrument' && w00.art !== 'audio' ? midiSchluessel(s.midi, p.tonart, laneDa) : null;   // a frozen track plays its audio: no stage
+    const w0: WSpur = mk ? { ...w00, midi: mk } : w00;
     let w: WSpur = w0;
     if (opt.stummStart?.has(s.nr)) w = { ...w0, stumm_start: true };
     if (s.ausgang) {
@@ -885,7 +956,49 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
       ...(r.pre ? { pre: true as const } : {}), ...(auto.length ? { auto } : {}),
       ...kette(r.inserts, r) };
   });
+  // strand 6: the switched-on modulators; a target on a strip the playback does not have (parked, left out) is dropped, a modulator without any target
+  // (a plugin target counts: it runs in the core with ziele []) too,
+  // and a follower whose source track the playback does not have (it would read silence: offset 0)
+  // (task 4.2) a send target needs its return in the playback, a chain target its stage or rack (modKettenZiel); a plugin target stays with the server
+  const spurNr = new Set(spuren.map((sp) => sp.nr));
   const pmW = p.master?.inserts?.length ? kette(p.master.inserts, p.master) as { chain: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] } : undefined;
+  const modOrt = (id: string): { kette: WModKette; nr: number; strang: InsertTraeger; w: { chain?: WInsert[]; rack?: WRack } | undefined } | null => {
+    if (id === 'master') return p.master && pmW ? { kette: 'pm', nr: 1, strang: p.master, w: pmW } : null;
+    const t = p.spuren.find((x) => x.id === id);
+    if (t) return spurNr.has(t.nr) ? { kette: 'spur', nr: t.nr, strang: t, w: spuren.find((sp) => sp.nr === t.nr) } : null;
+    const g = (p.gruppen ?? []).find((x) => x.id === id), gw = g ? gruppenW.find((x) => x.nr === g.nr) : undefined;
+    if (g) return gw ? { kette: 'grp', nr: g.nr, strang: g, w: gw } : null;
+    const r = (p.returns ?? []).find((x) => x.id === id), rn = retNr.get(id);
+    return r && rn !== undefined ? { kette: 'ret', nr: rn, strang: r, w: returnsW.find((x) => x.nr === rn) } : null;
+  };
+  const modW: WMod[] = (p.modulatoren ?? []).filter((m) => m.an !== false).flatMap((m): WMod[] => {
+    const ziele = m.ziele.flatMap((z): WModZiel[] => {
+      const tiefe = z.tiefe, uni = m.art === 'folger' || z.polaritaet === 'uni';
+      const ort = istPluginZiel(z.ziel) ? null : modOrt(z.strang_id);
+      if (!ort) return [];
+      if (istKettenZiel(z.ziel)) {
+        const k = modKettenZiel(ort.strang, ort.w, z.ziel);
+        return k ? [{ kette: ort.kette, nr: ort.nr, ...k, tiefe, uni }] : [];
+      }
+      if (ort.kette === 'spur') {
+        const rid = sendZielVon(z.ziel), rn = rid === null ? undefined : retNr.get(rid);
+        if (rid !== null) return rn !== undefined ? [{ spur: ort.nr, ziel: `send.${rn}`, tiefe, uni }] : [];
+        return [{ spur: ort.nr, ziel: z.ziel, tiefe, uni }];
+      }
+      return ort.kette === 'ret' && z.ziel === 'fader' ? [{ ret: ort.nr, ziel: 'fader', tiefe, uni }] : [];
+    });
+    // a plugin target stays with the server, which plays it from the core's /zustand/mod report: the core must run (and report) the modulator, with ziele []
+    if (!ziele.length && !m.ziele.some((z) => istPluginZiel(z.ziel))) return [];
+    if (m.art === 'folger') {
+      const q = p.spuren.find((x) => x.id === m.quelle);
+      if (!q || !spurNr.has(q.nr)) return [];
+      return [{ nr: m.nr, art: 'folger', quelle: q.nr, angriff_ms: m.angriff_ms ?? MOD_ANGRIFF_VORGABE, abfall_ms: m.abfall_ms ?? MOD_ABFALL_VORGABE,
+        empfindlich_db: m.empfindlich_db ?? MOD_EMPFINDLICH_VORGABE, glatt_ms: m.glatt_ms ?? 1, ziele }];
+    }
+    return [{ nr: m.nr, art: 'lfo', form: MOD_FORM_NR[m.form ?? 'sinus'], ...(m.hz !== undefined ? { hz: m.hz } : { takt: m.takt ?? 4 }),
+      phase: m.phase ?? 0, glatt_ms: m.glatt_ms ?? 1, saat: modSaat(m.id), ziele }];
+  });
+  const modTeil = modW.length ? { mod: modW } : {};
   const streifen: { chain_auto?: WKettenLane[] }[] = [...gruppenW, ...returnsW, ...(pmW ? [pmW] : [])];
   for (const k of streifen) autoPunkte += kettenPunkte(k);   // the tracks were counted above
   const kettenLanen = [...spuren as { chain_auto?: WKettenLane[] }[], ...streifen].reduce((n, k) => n + (k.chain_auto?.length ?? 0), 0);
@@ -911,19 +1024,25 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
   if (live) {                                                              // a live project is always /4 with the head flag `live`
     pruefeSendModule(p, geparkt);
     const w4: Wiedergabe = { format: WIEDERGABE_FORMAT_4, nr: opt.nr, spuren, live: true, gruppen: gruppenW,
-      ...(hatReturns ? { returns: returnsW } : {}), ...(pmW ? { pm: pmW } : {}) };
+      ...(hatReturns ? { returns: returnsW } : {}), ...(pmW ? { pm: pmW } : {}), ...modTeil };
     pruefeLiveWiedergabe(w4);
     return w4;
   }
+  // plan strand 7, 5.1: the lane goes into the head only when a track of this playback follows it; the key `harmonie` needs /2
+  const harmonieW: [number, number][] | null = p.harmonie && spuren.some((sp) => sp.midi?.skala?.lane === true)
+    ? p.harmonie.eintraege.map((e): [number, number] => [e.beat, skalaMaske(e.grundton, e.skala)]) : null;
   // ohne Routing, Warp und Lane byteweise die alte Datei (AK3)
-  if (!routing && !gewarpt && !automatisiert && !hatReturns && !eingefuegt && !huellen && !hatRack && !stummig && !fxDa) {
+  const midiDa = spuren.some((sp) => sp.midi !== undefined);                 // the key `midi` is refused in /1 by the core loader: it forces /2
+  if (!midiDa && !harmonieW && !routing && !gewarpt && !automatisiert && !hatReturns &&
+    !eingefuegt && !huellen && !hatRack && !stummig && !fxDa && !modW.length) {
     return { format: WIEDERGABE_FORMAT, nr: opt.nr, spuren };
   }
   const retLane = returnsW.some((r) => r.auto !== undefined);              // return automation slice 2: a return lane needs /3 (the version gate)
-  return { format: retLane ? WIEDERGABE_FORMAT_3 : WIEDERGABE_FORMAT_2, nr: opt.nr, spuren,
+  return { format: retLane || modW.length ? WIEDERGABE_FORMAT_3 : WIEDERGABE_FORMAT_2, nr: opt.nr, spuren,
     gruppen: gruppenW,
     ...(hatReturns ? { returns: returnsW } : {}),
-    ...(pmW ? { pm: pmW } : {}) };
+    ...(pmW ? { pm: pmW } : {}),
+    ...(harmonieW ? { harmonie: harmonieW } : {}), ...modTeil };
 }
 
 export const wiedergabeDatei = (arbeitsordner: string, nr: number): string => path.join(arbeitsordner, `wiedergabe-${nr}.json`);

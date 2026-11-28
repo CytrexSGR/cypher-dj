@@ -78,8 +78,10 @@ test('the schema and the description', async (t) => {
   const { c } = await verbinde(t);
   const x = (await c.listTools()).tools.find((y) => y.name === 'proj_analyse');
   assert.ok(x, 'proj_analyse is listed');
-  assert.deepEqual(Object.keys(x.inputSchema.properties).sort(), ['bis_beat', 'fein', 'quelle', 'vergleich', 'von_beat']);
-  assert.deepEqual(x.inputSchema.required, ['quelle']);
+  assert.deepEqual(Object.keys(x.inputSchema.properties).sort(), ['alle_paare', 'bis_beat', 'fein', 'quelle', 'vergleich', 'von_beat']);
+  assert.equal(x.inputSchema.required, undefined, 'quelle is checked in the tool: alle_paare needs none');
+  assert.equal(x.inputSchema.properties.alle_paare.type, 'boolean');
+  for (const wort of ['alle_paare', 'maskierung', 'vorschlag', 'befehle', 'proj_aendern', 'begrenzt']) assert.ok(x.description.includes(wort), `the description names ${wort}`);
   for (const k of ['quelle', 'vergleich']) {
     const q = x.inputSchema.properties[k];
     assert.equal(q.type, 'object');
@@ -238,4 +240,16 @@ test('proj_analyse passes a reference vergleich through and keeps abgleich and b
   const d = { art: 'datei', pfad: '/x.wav', von_s: 1, bis_s: 9 };
   await analyse(c, { quelle: QUELLE, vergleich: d });
   assert.deepEqual(gesehen[1].koerper, { quelle: QUELLE, vergleich: d });
+});
+
+test('proj_analyse alle_paare posts only the range and passes the masking list through; without quelle and without alle_paare it is refused before any request', async (t) => {
+  const MASK = { rev: 1, von_beat: 0, bis_beat: 8, tempo_bpm: 120, anzahl: 2, begrenzt: false, maskierung: [{ a: 's1', b: 's2', vorschlag: null }] };
+  const { c, gesehen } = await verbinde(t, () => [200, MASK]);
+  const r = await analyse(c, { alle_paare: true, quelle: { art: 'master' }, fein: true, von_beat: 0, bis_beat: 8 });
+  assert.ok(!r.isError, r.content[0].text.slice(0, 300));
+  assert.deepEqual(gesehen.map((g) => g.koerper), [{ alle_paare: true, von_beat: 0, bis_beat: 8 }]);
+  assert.deepEqual(antwort(r), MASK);
+  const f = await analyse(c, {});
+  assert.equal(f.isError, true);
+  assert.equal(gesehen.length, 1);
 });

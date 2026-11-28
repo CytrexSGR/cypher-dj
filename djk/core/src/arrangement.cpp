@@ -29,6 +29,7 @@ Arrangement::Arrangement(const sw::ReglerTabelle& tab, bool mit_hall) : ret_(mit
   iso_ = std::make_unique<cypherdj::dsp::Isolator[]>(ARR_SPUREN);   // loop deck channel strip KZ2: main thread, never in the callback
   spur_arbeit_ = std::make_unique<ArrArbeit[]>(ARR_ARBEIT_BAHNEN);
   for (int b = 0; b < ARR_ARBEIT_BAHNEN; ++b) spur_arbeit_[b].bahn = b;
+  for (int i = 0; i < ARR_SPUREN; ++i) stufen_->st[i].setze_spur(i);   // strand 7 task 1.3: the track number the stage passes to ArrSenke::note
 }
 
 // Loop lane strip K3: the unit settings reach the instances that are open or still ringing, as Mixer::fx_einheit_setze does for its channels. An idle instance (input closed, nothing ringing) is not touched, so it never
@@ -144,10 +145,18 @@ const ArrSnapshot* Arrangement::tausche(const ArrSnapshot* neu, int64_t s, const
   if (sonderlauf()) stopp(0, s, k);   // Paket K3: eine neue Wiedergabe bricht den Freeze ab (1.10 slice 7: und den Abgriff)
   const ArrSnapshot* alt = snap_;
   auto_tausch(neu, s);   // Automation Slice 1: needs the old snapshot (snap_), so before it is replaced
+  mod_tausch(neu);       // strand 6: the modulator state follows the nr (D11); needs the old snapshot too
   stimmen_tauschen(neu, s, k);   // unverändert: neu binden; geändert oder weg: Ausklang aus eigener Kopie
   launch_tauschen(neu, s);       // loop deck K5: launcher state follows the track ids (neu == nullptr: unload, everything ends)
   noten_tauschen(neu, s);     // offene Noten ohne Gegenstück: Off sofort
   live_tauschen(neu, s);      // 1.8 T7b: held live keys of a track that changes its sink: Off to the sink that got the On
+  for (int i = 0; i < ARR_SPUREN; ++i) {   // strand 7 task 3.3: the counters of /zustand/arr/midi count from this playback on (ONs the swap itself sends count to it)
+    const MidiStufe& st = stufen_->st[i];
+    stufe_basis_[i][0] = st.ein_noten();
+    stufe_basis_[i][1] = st.aus_noten();
+    stufe_basis_[i][2] = st.verloren();
+  }
+  stufen_tauschen(neu, s);    // strand 7 task 1.3: a MIDI stage that goes away or changes its sink ends every output, changed parameters swap at s
   senken_wechsel(neu, s);     // Spuren, die ihre Senke verlassen: Ausblende (RB), All Notes Off an den Slot (Wirt)
   for (int g = 0; g < ARR_GRUPPEN; ++g) {   // DJ view places: a group that loses its DJ output keeps the channel for the fading tail (see dj_rest_)
     const uint8_t vorher = alt ? alt->gruppe_dj[g] : 0, nachher = neu ? neu->gruppe_dj[g] : 0;
@@ -293,6 +302,7 @@ bool Arrangement::start(double start_beat, int quant, bool von_cypher, int64_t s
   beendet_s_ = -1;   // 1.8: neuer Lauf
   status_ = ArrStatus::wartet;
   von_cypher_ = von_cypher;
+  durchlauf_ = 0;   // strand 7 task 1.3: the pass count of the new run
   for (int i = 0; i < ARR_SPUREN; ++i) {   // Noten vor dem Einsatz gehen nie hinaus; Senken setzen zurück (K2: RB-FFI)
     gesendet_bis_[i] = start_s_;
     if (ArrSenke* se = senke_fuer(snap_, i)) se->transport_start(i, start_s_);
@@ -383,6 +393,7 @@ void Arrangement::beginne(const Karte& k, int64_t s) {
   vorzaehl_n_ = 0;   // the count-in is over
   status_ = ArrStatus::spielt;
   auto_beginn();
+  mod_beginn(s);   // strand 6: the free-rate modulators restart at their phase at this sample (D4)
   einstieg_ = true;
   gestartet_bei_ = s;
   if (freeze_) freeze_gestartet_bei_ = s;   // Paket K3
@@ -408,6 +419,7 @@ void Arrangement::beende(int64_t s) {
 void Arrangement::wrap(const Karte& k, int64_t s) {
   (void)k;
   ursprung_ += bis_ - von_;
+  ++durchlauf_;       // strand 7 task 1.3
   stimmen_naht();     // die Stimmen des alten Durchlaufs sind auf der Naht ausgeblendet
   einstieg_ = true;   // Clips, die von überspannen, setzen mit Kurz-Einblende ein
   letzte_naht_ = s;
@@ -640,6 +652,10 @@ void Arrangement::kette_einheit_planen() {
       kette_einheit_.setze(i);
     }
   ins_.je_post_quelle([&](int q) { kette_einheit_.loesche(q); });
+  // strand 6 (D12): an envelope follower hears its source track before trim and chain (mod_folgen after spur_quelle); in the unit both would already have run, so a source stays out,
+  // like the pre tap above, and live and export hear the same.
+  for (int k = 0; k < snap_->n_mod; ++k)
+    if (snap_->mod[k].art == 1 && snap_->mod[k].quelle >= 0 && snap_->mod[k].quelle < ARR_SPUREN) kette_einheit_.loesche(snap_->mod[k].quelle);
 }
 
 void Arrangement::spur_einheit(void* ctx, int spur, ArrArbeit& a) {
@@ -696,7 +712,7 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
 #else
   const bool ret_blendet = ret_.blendet();   // 1.10 slice 3 (P15): a return strip still fades, no quiet path yet
 #endif
-  if (!snap_ && n_offen_ == 0 && klick_rest_ == 0 && stimmen() == 0 && !weg && !ret_blendet && launch_ruhig()) {   // nichts geladen, nichts klingt:
+  if (!snap_ && n_offen_ == 0 && klick_rest_ == 0 && stimmen() == 0 && !weg && !ret_blendet && launch_ruhig() && stufen_ruhig()) {   // nichts geladen (strand 7: no MIDI stage sounds), nichts klingt:
     if (zell_an_) zell_ueber_loslassen();   // S1b K6: launch_huellen no longer runs here; the envelope lets go (nothing sounds), the kern reports the knob once
     monitor_loeschen();   // 1.8 S3: the sources are valid for one block only
     ruhe(m);                                                                      // DJ-Betrieb ohne Kosten (Slice 11)
@@ -757,10 +773,12 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
     a = b;
   }
   launch_block(k, s0, m);   // loop deck K2: the launcher voices add to the track buses, whether the transport plays or not
+  mod_planen(k, s0, m);   // strand 6: the beat of the block and the modulator outputs at its last sample, before any block-rate target is handed on
   bk_ueber_melden(m);   // production plan task 8: the written spur/<slot>/bk/<k> go to the bk sinks in every block, also with the transport stopped; a lane (auto_geraet, next) wins
   auto_geraet();   // Automation slice 2 (E9): the `geraet` lane values go to the sinks before their block()
   auto_send(m);    // send automation: one gain ramp per block and send lane, read by sends_bereiten() in mischen()
   auto_kette();    // 1.12 slice 6: the insert-parameter and rack-macro lane values go to ArrInserts, read by makros_planen() and the chains in mischen()
+  mod_ketten();    // strand 6 task 4.1: the modulator offsets on stage parameters and rack macros, on top of the lanes just set
   glied_makros_(s0, m);   // 1.9 U8 T9 (E12): the macro values of the member targets of the rack tracks, on the caller before phase Q (stopped transport included)
   // Strand 12 B2: what the insert chains read is planned before phase Q, because a track chain may run inside its track unit (kette_einheit_). None of these reads what
   // phase Q, freeze_abgriff, abgriff_block, monitor_planen or auto_block write: beat and tempo (the transport events of this block ran in segment), the macro rows and lanes
@@ -786,6 +804,7 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
     if (mon_[i].klingt) { monitor_spur_addieren(i, m, bus_l_[i], bus_r_[i]); mon_[i].klingt = false; }
 #endif
   auto_block(s0, m);       // Automation Slice 1: the lane (or its blend) replaces the fader course of a track for this block
+  mod_block(m);            // strand 6: the modulator offsets on top of the fader/pan course just set (D3), per sample
   // arr-bk slice 3: beat and tempo for the Baukasten insert stages, once per block (the beat of the project while it plays, so a loop jump is followed; the tempo of the map at the block start)
   ins_.takt(status_ == ArrStatus::spielt ? projekt_beat(k, static_cast<double>(s0)) : k.beat_at(static_cast<double>(s0)), k.bpm_at(static_cast<double>(s0)) / 60.0 / 48000.0);
   mischen(m, aus_l, aus_r);

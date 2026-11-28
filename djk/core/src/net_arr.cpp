@@ -258,6 +258,18 @@ bool Netz::arr_ereignis(const Ereignis& e) {
     an_alle(s);
     return true;
   }
+  if (e.art == Ereignis::MOD_ZUSTAND) {   // strand 6 task 1.5, §5.13 /zustand/mod ,if: nr, wert
+    osc::Schreiber s(v::zustand_mod);
+    s.i(e.deck).f(e.wert);
+    an_alle(s);
+    return true;
+  }
+  if (e.art == Ereignis::MIDI_ZUSTAND) {   // strand 7 task 3.3, §5.13 /zustand/arr/midi ,iiiii: spur, gehalten, ein, aus, verloren
+    osc::Schreiber s(v::zustand_arr_midi);
+    s.i(e.deck).i(e.midi_zahl[0]).i(e.midi_zahl[1]).i(e.midi_zahl[2]).i(e.midi_zahl[3]);
+    an_alle(s);
+    return true;
+  }
   if (e.art == Ereignis::SPUR_ZUSTAND) {   // mehrkern slice 3.2 task 7, §5.13
     osc::Schreiber s(v::zustand_spur_pool);
     s.i(e.spur_an).i(e.spur_modus).i(e.spur_blocks_parallel).i(e.spur_einheiten_worker).i(e.spur_einheiten_caller).i(e.spur_seriell).i(e.spur_haengt).i(e.spur_spaet).i(e.spur_zurueck);

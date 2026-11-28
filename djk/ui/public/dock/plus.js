@@ -6,8 +6,34 @@ import { duckKicks, duckBefehl } from '../production/key_choice.js';
 import { knopfEl } from './blocks.js';
 
 const PLUS_ARTEN = [['komp', 'Compressor'], ['eq', 'EQ'], ['saett', 'Saturator'], ['lim', 'Limiter']];
-const PLUS_MISCH = [['gate', 'Gate'], ['mb', 'Multiband']];   // after the Utility when the list has one
+const PLUS_MISCH = [['gate', 'Gate'], ['mb', 'Multiband'], ['trans', 'Transient shaper'], ['bild', 'Imager']];   // after the Utility when the list has one
 export const PLUS_VOLL_TEXT = `The strip holds ${MAX_PLAETZE} stages`;
+export const MASTER_VOLL_TEXT = 'The master chain has five stages';   // MAX_PLAETZE = 5
+/** The values of a fresh Cypher Clipper: the Hard clip curve, no drive, no output gain, ceiling -0.3 dB, fully wet. */
+export const KLIPPER_WERTE = { kurve: 2, drive: 0, out: 0, decke: -0.3, mix: 1 };
+/** The insert_setzen of a Clipper (a saturator stage with the Hard clip curve) at `pos` (default: the end of the chain), or null (pool or chain full). */
+export function klipperBefehl(p, strangId, pos) {
+  const b = neuerInsertBefehl(p, strangId, 'saett');
+  return b ? { ...b, ...(pos !== undefined ? { pos } : {}), werte: { ...KLIPPER_WERTE } } : null;
+}
+/** The CLIP button of the master strip: {insert: the clipper on the master (a saturator with a curve above Tanh) or null, befehl: the insert that adds one before the first
+ *  limiter (or at the end), grund: why it cannot be added}. */
+export function masterClipZustand(p) {
+  const kette = p?.master?.inserts ?? [];
+  const insert = kette.find((i) => i.art === 'saett' && Number(i.werte?.kurve) > 0) ?? null;
+  if (insert) return { insert, befehl: null, grund: '' };
+  if (kette.length >= MAX_PLAETZE) return { insert: null, befehl: null, grund: MASTER_VOLL_TEXT };
+  const l = kette.findIndex((i) => i.art === 'lim');
+  const befehl = klipperBefehl(p, 'master', l < 0 ? kette.length : l);
+  return { insert: null, befehl, grund: befehl ? '' : ARTEN.saett.voll };
+}
+/** The values of a fresh De-esser (strand 5 slice 2): an EQ stage with band 6 only, a High shelf at 6 kHz that cuts 8 dB above -30 dB (1 ms attack, 60 ms release). */
+export const DEESSER_WERTE = { 'b6/an': 1, 'b6/typ': 2, 'b6/freq': 6000, 'b6/gain': 0, 'b6/q': 0.707, 'd6/dyn': 1, 'd6/schwelle': -30, 'd6/bereich': -8, dyn_attack: 1, dyn_release: 60 };
+/** The insert_setzen of a De-esser (an EQ stage with the dynamic shelf above) at the end of the chain, or null (pool or chain full). */
+export function deesserBefehl(p, strangId) {
+  const b = neuerInsertBefehl(p, strangId, 'eq');
+  return b ? { ...b, werte: { ...DEESSER_WERTE } } : null;
+}
 /**
  * The entries of the "+" menu: [{text, befehl | null, grund?, label?} | {gruppe: true, text}]; befehl is null (with the reason) when the strip is full, the
  * pool of that kind is empty or a plugin is blocked. `opt` (all optional, `{}` is the STUDIO list): util adds Utility after Limiter (Gate and Multiband follow in both lists); zaehler appends
@@ -25,8 +51,18 @@ export function plusEintraege(p, strangId, graphen, opt = {}) {
     return { text: t, befehl: art === 'bk' ? { ...b, graph } : b };
   };
   const arten = opt.util ? [...PLUS_ARTEN, ['utility', 'Utility'], ...PLUS_MISCH] : [...PLUS_ARTEN, ...PLUS_MISCH];
+  const klipper = () => {   // strand 5 slice 1: a saturator stage that starts as a Hard clip at -0.3 dB
+    const t = mitZahl('Clipper', 'saett');
+    const b = voll ? null : klipperBefehl(p, strangId);
+    return b ? { text: t, befehl: b, label: `Add Clipper to ${strang.name}` } : { text: t, befehl: null, grund: voll ? PLUS_VOLL_TEXT : ARTEN.saett.voll };
+  };
+  const deesser = () => {   // strand 5 slice 2: an EQ stage that starts as a dynamic high shelf
+    const t = mitZahl('De-esser', 'eq');
+    const b = voll ? null : deesserBefehl(p, strangId);
+    return b ? { text: t, befehl: b, label: `Add De-esser to ${strang.name}` } : { text: t, befehl: null, grund: voll ? PLUS_VOLL_TEXT : ARTEN.eq.voll };
+  };
   const aus = [
-    ...arten.map(([art, text]) => eintrag(text, art)),
+    ...arten.flatMap(([art, text]) => (art === 'saett' ? [eintrag(text, art), klipper()] : art === 'eq' ? [eintrag(text, art), deesser()] : [eintrag(text, art)])),
     ...(graphen ?? []).filter((g) => g?.art === 'effekt' && typeof g.name === 'string').map((g) => eintrag(g.name, 'bk', g.name)),
   ];
   const effekte = (opt.plugins ?? []).filter((e) => e?.art === 'effekt');

@@ -14,10 +14,11 @@ const C400 = new Set(['argument_ungueltig', 'argument_unbekannt', 'befehl_unbeka
   'take_name_ungueltig', 'comp_leer', 'sidechain_spaet', 'sidechain_zyklus', 'sidechain_quelle',
   'bereich_leer', 'form_ungueltig', 'huellkurve_ziel', 'geraet_huellkurven',   // 1.12 slices 4 and 5 (lane editor tools, envelopes)
   'muster_fehler', 'klang_unbekannt', 'muster_zeitlimit', 'muster_zu_gross',   // strudel-clip: a pattern that does not run, a sound the kit lacks
-  'noten_ton_grenze']);   // note editor: a target pitch beyond 24 semitones or outside MIDI 0..127
+  'noten_ton_grenze', 'noten_ueberlappen', 'noten_dehnung_grenze']);   // note editor: a target pitch beyond 24 semitones or outside MIDI 0..127
 const C404 = new Set(['unbekannt', 'spur_unbekannt', 'clip_unbekannt', 'noten_unbekannt', 'sha_unbekannt', 'gruppe_unbekannt', 'ziel_unbekannt',
   'lane_unbekannt', 'return_unbekannt', 'insert_unbekannt', 'param_unbekannt', 'take_unbekannt', 'huellkurve_unbekannt',
-  'kit_unbekannt', 'plugin_unbekannt', 'patch_unbekannt', 'richtung_unbekannt', 'preset_unbekannt', 'glied_unbekannt', 'variation_unbekannt']);
+  'kit_unbekannt', 'plugin_unbekannt', 'patch_unbekannt', 'richtung_unbekannt', 'preset_unbekannt', 'glied_unbekannt', 'variation_unbekannt',
+  'mod_unbekannt']);
 // lane_gesperrt and geraet_lanes (automation slice 2) are conflicts with the current state: they fall through to 409 like lane_doppelt
 export function grundCode(grund: string): number {
   if (C400.has(grund)) return 400;
@@ -107,7 +108,7 @@ export function alleRetRegler(p: Projekt): Soll[] {
   return aus;
 }
 // 1.10 slice 4a/4b: ALL pooled rows ins/<art>/<slot>/* of every kind
-// (komp 10 per slot, eq 59, saett 4, lim 3, host 1, utility 5, bk 9, gate 8, mb 24; the switch last).
+// (komp 10 per slot, eq 85, saett 6, lim 3, host 1, utility 5, bk 9, gate 8, mb 24, trans 6, bild 7; the switch last).
 // A used slot gets the values of its stage, a free slot the pool defaults with the switch off: the core keeps the rows of the
 // previously opened project, and a stage added later sends
 // only the rows that differ from the defaults (commands.ts insertReglerAenderungen), so a stale free slot would sound through it.
@@ -115,7 +116,7 @@ export function alleRetRegler(p: Projekt): Soll[] {
 // bekannt(pfad) equals the value it would get (the pool default): the core already holds it. A used slot's rows are always sent.
 export function alleInsertRegler(p: Projekt, bekannt?: (pfad: string) => number | null): Soll[] {
   const aus: Soll[] = [];
-  for (const art of ['komp', 'eq', 'saett', 'lim', 'host', 'utility', 'bk', 'gate', 'mb'] as const) {
+  for (const art of ['komp', 'eq', 'saett', 'lim', 'host', 'utility', 'bk', 'gate', 'mb', 'trans', 'bild'] as const) {
     const benutzt = new Map(alleInserts(p).filter((x) => x.insert.art === art).map((x) => [x.insert.slot, x.insert] as const));
     for (let slot = 1; slot <= MAX_INS[art]; slot++) {
       const belegt = benutzt.get(slot);

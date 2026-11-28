@@ -95,6 +95,7 @@ struct Bau {
     return *this;
   }
   Bau& gruppe_ausgang(int g, int eltern) { s->gruppe_ausgang[g - 1] = static_cast<int8_t>(eltern); return *this; }   // nested groups: group g outputs into group `eltern` (0 = master)
+  Bau& midi(int nr, const cdj::ArrMidiParam& p) { s->spur[nr - 1].midi = p; return *this; }   // strand 7 task 1.3: the MIDI stage of track nr (playback key midi)
   Bau& ausgang(int nr, int gruppe) { s->spur[nr - 1].ausgang = static_cast<int8_t>(gruppe); return *this; }   // 1.10: 0 master, 1..8 Gruppe
   // 1.10 slice 4a: the insert chain of a strip (tracks 1..32 by nr, groups by grp(g)); the stages in order, slot 0-based
   Bau& kette(int nr, std::initializer_list<cdj::ArrStufe> st) { return kette_streifen(nr - 1, st); }

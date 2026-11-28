@@ -177,8 +177,8 @@ int main() {
     PRUEF((slot) == (cdj::ARR_INS_KOMP + cdj::ARR_INS_EQ + cdj::ARR_INS_SAETT));
     PRUEF((cdj::ins_global(ArrInsArt::lim, cdj::ARR_INS_LIM)) == (-1));
     PRUEF((cdj::ins_art(slot)) == (ArrInsArt::lim));
-    PRUEF((cdj::ARR_INS_ALLE) == (slot + cdj::ARR_INS_LIM + cdj::ARR_INS_UTIL + cdj::ARR_INS_BK + cdj::ARR_INS_GATE + cdj::ARR_INS_MB + cdj::ARR_INS_HOST));   // plan 1.11 T4 / arr-fx / arr-bk / strand 1 slice 4: the utility, bk, gate, mb and host slots follow the limiter
-    PRUEF((cdj::INS_G_HOST0) == (slot + cdj::ARR_INS_LIM + cdj::ARR_INS_UTIL + cdj::ARR_INS_BK + cdj::ARR_INS_GATE + cdj::ARR_INS_MB));
+    PRUEF((cdj::ARR_INS_ALLE) == (slot + cdj::ARR_INS_LIM + cdj::ARR_INS_UTIL + cdj::ARR_INS_BK + cdj::ARR_INS_GATE + cdj::ARR_INS_MB + cdj::ARR_INS_TRANS + cdj::ARR_INS_BILD + cdj::ARR_INS_HOST));   // plan 1.11 T4 / arr-fx / arr-bk / strand 1 slice 4 / strand 5 slice 3: the utility, bk, gate, mb, trans, bild and host slots follow the limiter
+    PRUEF((cdj::INS_G_HOST0) == (slot + cdj::ARR_INS_LIM + cdj::ARR_INS_UTIL + cdj::ARR_INS_BK + cdj::ARR_INS_GATE + cdj::ARR_INS_MB + cdj::ARR_INS_TRANS + cdj::ARR_INS_BILD));
     PRUEF((cdj::ARR_INS_LIM) == (8));                    // strand 1 slice 4: the limiter pool is 8 ("instanzen" of the contract kind lim)
     std::printf("5: pool lim %d, rows %d, global index %d, ARR_INS_ALLE %d\n", cdj::ARR_INS_LIM, n, slot, cdj::ARR_INS_ALLE);
   }

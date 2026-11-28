@@ -197,7 +197,9 @@ struct Ereignis {
     INS_HOST_ZUSTAND = 49,           // plan 1.11 T5 (/zustand/ins_host): host_gesund[h-1], host_rundweg[h-1]; on change and at 2 Hz while the host ports exist
     STUFE_PEGEL = 50,                // device faces T9 (/e/stufe_pegel): pfad = ins/komp/<n>, ins/lim/<n> or komp/<channel>, pegel[0] = input peak, pegel[1] = output peak in dBFS since the last report (-200 for none), 20 Hz with the levels, only stages that ran in the last block; netz_loop sends it as /e/stufe_pegel ,sff (§5.5g)
     ZELLE_ZUSTAND = 51,              // loop deck K6 (§5.13 /zustand/zelle): pfad = track id, zelle_*: one deck track, on change and at 2 Hz; verloren = launcher receipts dropped so far (the net thread logs a rise)
+    MIDI_ZUSTAND = 54,               // strand 7 task 3.3 (§5.13 /zustand/arr/midi ,iiiii): deck = spur (1..128), midi_zahl = gehalten, ein, aus, verloren since the playback was loaded; 2 Hz per track with an active MIDI stage, once with zeros after it goes away (53 is strand 6 MOD_ZUSTAND)
     CONTAINER_QUELLE = 52,           // container core K1 (the former place-channel event, value kept): /e/container/quelle ,ii, K8 fills it, nothing reports it before
+    MOD_ZUSTAND = 53,                // strand 6 task 1.5 (§5.13 /zustand/mod ,if): deck = modulator nr (1..16), wert = output -1..1 before depth at the last sample of the previous block; 25 Hz per modulator of the snapshot, playing or stopped
     INS_GR = 43,                    // 1.10 S4a (/e/ins_gr): pfad = ins/komp/<n> or ins/lim/<n> (T8: the pooled limiter stages), wert = gain reduction of the pooled stage in dB (>= 0), 20 Hz with the levels, only stages that ran in the last block; netz_loop sends it as /e/ins_gr ,sf (§5.5f)
   };
   int32_t art;
@@ -260,6 +262,7 @@ struct Ereignis {
   int32_t rec_scharf;   // 1.8, REC_ZUSTAND: Zahl der scharfen Spuren (Audio)
   int32_t rec_midi_scharf;   // 1.8 T7a, REC_ZUSTAND: Zahl der MIDI-scharfen Spuren (eingang 30)
   int64_t rec_luecken;  // 1.8, REC_ZUSTAND: Lücken des laufenden Takes
+  int32_t midi_zahl[4];   // strand 7 task 3.3, MIDI_ZUSTAND: gehalten, ein, aus, verloren (the three counters wrap)
 };
 
 constexpr int32_t ARR_FREEZE_ABGELEHNT = 3;  // Paket K3: Ereignis ARR_FREEZE eines abgelehnten Auftrags (Quittung 6 kam schon)
@@ -679,7 +682,10 @@ class Kern {
   int auto_armiert_ = 0;              // number of armed tracks (the fast path of auto_punkte_melden)
   void auto_punkte_melden(int64_t s0, int m);
   void warp_zustand(int64_t n0, int n);   // 1.13 Slice 2: /zustand/warp (§5.13b), bei Änderung und mit 2 Hz, solange ein Warp-Werk hängt
+  void mod_zustand(int64_t n0, int n);    // strand 6 task 1.5: /zustand/mod (§5.13), one event per modulator of the snapshot at 25 Hz (every 1920 samples)
   int32_t warp_gemeldet_[4] = {-1, -1, -1, -1};
+  void midi_zustand(int64_t n0, int n);   // strand 7 task 3.3: /zustand/arr/midi (§5.13) per track with an active MIDI stage at 2 Hz
+  bool midi_gemeldet_[ARR_SPUREN] = {};   // the track was reported with a stage: when the stage goes away one report with zeros follows
   // loop deck K6: receipts of the launcher need the source of the command, which the launcher does not keep; a small table id -> quelle, filled at the acceptance, freed by the receipt 3, 5 or 7
   struct ZelleQuelle { int64_t id = 0; char quelle[48] = {}; };
   static constexpr int ZELLE_QUELLEN = 32;

@@ -63,6 +63,21 @@ FxStand fx_stand(const ArrFxPunkt* e, int n, double b, float neutral) {
   return {l.wert, l.wert, 0.0};
 }
 
+// Strand 7 task 5.2: the mask of the harmony lane in force at project beat b (the last entry at or before b), 0 before the first entry or without a lane
+uint16_t harmonie_maske(const ArrSnapshot& s, double b) noexcept {
+  int lo = 0, hi = s.n_harmonie;   // first index with beat > b
+  while (lo < hi) {
+    const int mi = (lo + hi) / 2;
+    if (s.harmonie_beat[mi] <= b + EPS) lo = mi + 1;
+    else hi = mi;
+  }
+  return lo == 0 ? 0 : s.harmonie_maske[lo - 1];
+}
+
+bool folgt_lane(const ArrSnapshot* s, int spur) noexcept {   // the stage of this track takes its scale from the lane
+  return s && s->n_harmonie > 0 && s->spur[spur].midi.an && s->spur[spur].midi.skala_lane;
+}
+
 int erster_fx_ab(const ArrFxPunkt* e, int n, double b) {   // first index with beat >= b
   int lo = 0, hi = n;
   while (lo < hi) {
@@ -90,7 +105,7 @@ void Arrangement::offen_aus_bis(int64_t ende) {
   for (int i = 0; i < n_offen_; ++i) {
     const Offen& o = offen_[i];
     if (o.aus - o.senke->vorhalt() < ende) {
-      o.senke->note(o.spur, o.aus, o.ton, 0, false);
+      note_raus(o.spur, o.senke, o.aus, o.ton, 0, false, 0);
       continue;
     }
     offen_[w++] = o;
@@ -101,14 +116,19 @@ void Arrangement::offen_aus_bis(int64_t ende) {
 void Arrangement::noten_fenster(const Karte& k, int spur, ArrSenke* se, int64_t von, int64_t bis) {
   const ArrSpur& sp = snap_->spur[spur];
   if (sp.n_noten == 0) return;
+  const bool lane = folgt_lane(snap_, spur);   // task 5.2: a clip note takes the lane's mask at its own beat
   double kb_lo = k.beat_at(static_cast<double>(von) - 0.5);
   const double kb_hi = k.beat_at(static_cast<double>(bis) - 0.5);
   double urs = ursprung_;
+  uint64_t dl = durchlauf_;   // strand 7 task 1.3: the pass of the window, part of the note key of the MIDI stage (D6)
 #ifndef CYPHERDJ_MUTATION_ARR_FENSTER_LINEAR
   // Spec 2.2, §4.11: das Fenster liegt um den Vorhalt vor dem Kopf und kann schon hinter der Naht beginnen (die letzten
   // Blöcke vor dem Wrap); dann gehört es zum nächsten Durchlauf. bis − von ≥ 1 Beat ist länger als jeder Vorhalt, die
   // Schleife läuft höchstens einmal (Deckel 4 gegen Endlosschleifen bei kaputter Karte).
-  for (int n = 0; n < 4 && klammer() && kb_lo - urs + start_beat_ >= bis_ + EPS; ++n) urs += bis_ - von_;
+  for (int n = 0; n < 4 && klammer() && kb_lo - urs + start_beat_ >= bis_ + EPS; ++n) {
+    urs += bis_ - von_;
+    ++dl;
+  }
 #endif
   for (int durchlauf = 0; durchlauf < 2; ++durchlauf) {
     const double p_a = kb_lo - urs + start_beat_;
@@ -140,11 +160,12 @@ void Arrangement::noten_fenster(const Karte& k, int spur, ArrSenke* se, int64_t 
         bool relativ = false;
         if (arr_geraet_lane_wert(sp, param, n.beat, &wert, &relativ)) se->note_regler(spur, an, param, wert, relativ);
       }
-      se->note(spur, an, n.ton, n.vel, true);
+      note_raus(spur, se, an, n.ton, n.vel, true, n.id * 0x9e3779b97f4a7c15ull + dl, lane ? harmonie_maske(*snap_, n.beat) : 0);
     }
     if (!klammer || p_b <= bis_) break;
     kb_lo = bis_ + urs - start_beat_;   // der nächste Durchlauf beginnt auf der Naht mit p = von
     urs += bis_ - von_;
+    ++dl;
   }
 }
 
@@ -224,8 +245,19 @@ bool Arrangement::note_stumm(int spur, const ArrSenke* se, int64_t an) const {
 void Arrangement::noten_block(const Karte& k, int64_t s0, int m) {
   noten_s0_ = s0;
   noten_m_ = m;
+  if (snap_ && snap_->n_harmonie > 0) {   // task 5.2: where the project beat stands in this block, for live keys and free arp steps (lane_maske_bei)
+    lane_laeuft_ = status_ == ArrStatus::wartet || status_ == ArrStatus::spielt;
+    lane_ab_ = start_s_;
+    const bool drin = lane_laeuft_ && s0 >= start_s_;   // before the entry the line starts at the entry with start_beat_
+    lane_s0_ = drin ? s0 : start_s_;
+    lane_b0_ = drin ? projekt_beat_bei(k, s0) : start_beat_;
+    lane_bps_ = m > 0 ? (k.beat_at(static_cast<double>(s0 + m)) - k.beat_at(static_cast<double>(s0))) / m : 0.0;
+  }
   offen_aus_bis(s0 + m);   // fällige Offs zuerst, vor den Ons desselben Samples
-  if (!snap_ || (status_ != ArrStatus::wartet && status_ != ArrStatus::spielt)) return;
+  if (!snap_ || (status_ != ArrStatus::wartet && status_ != ArrStatus::spielt)) {
+    stufen_lauf(k, s0, m);   // strand 7 task 1.3: a held live key arpeggiates on a stopped transport too
+    return;
+  }
   for (int i = 0; i < ARR_SPUREN; ++i) {
     ArrSenke* se = senke_fuer(snap_, i);
     if (!se) continue;
@@ -246,6 +278,154 @@ void Arrangement::noten_block(const Karte& k, int64_t s0, int m) {
     gesendet_bis_[i] = std::max(gesendet_bis_[i], bis);
   }
   offen_aus_bis(s0 + m);   // Offs kurzer Noten, die in diesem Block an- und ausgehen
+  stufen_lauf(k, s0, m);   // strand 7 task 1.3: the MIDI stages send what this window holds
+}
+
+// Strand 7 task 1.3: the one way a note leaves the Arrangement. A track with an active stage in the snapshot in force queues the note in its stage (the stage sends it,
+// or what it makes of it, to the sink named here in stufen_lauf); every other track sends to the sink at once, as before.
+void Arrangement::note_raus(int spur, ArrSenke* se, int64_t ziel, uint8_t ton, uint8_t vel, bool an, uint64_t schluessel, uint16_t maske) noexcept {
+  if (snap_ && snap_->spur[spur].midi.an) {
+    stufen_->st[spur].ein(se, ziel, ton, vel, an, schluessel, maske);
+    return;
+  }
+  se->note(spur, ziel, ton, vel, an);
+}
+
+// Grid points of `rate` beats whose sample lies in [von, bis), ascending, at most MIDI_RASTER_MAX (D4). While the transport plays (or waits for its entry), from
+// the entry sample to a planned stop, the points are project beats g mapped to samples exactly as noten_fenster maps note beats (the same origin urs, the same
+// loop-pass walk); in the first pass the grid runs from project beat 0, in every later pass it restarts at von_ (the seam sample is a point). The step number is the
+// count since the transport start: j - j_start in the first pass, then n0 + (pass - 1) * nL + j. Outside that span (stopped, before the entry, after the stop) the
+// points are multiples of `rate` on the clock beat axis of the map, numbered by the multiple.
+// Task 5.2 (lane): every point carries the harmony lane's mask, at its project beat g, or at start_beat_ for a clock point.
+void Arrangement::stufe_raster(const Karte& k, double rate, int64_t von, int64_t bis, MidiRaster& r, bool lane) const noexcept {
+  r.n = 0;
+  if (!(rate > 0.0) || bis <= von) return;
+  auto rein = [&](int64_t s, uint64_t nr, uint16_t maske) {
+    if (r.n < MIDI_RASTER_MAX && (r.n == 0 || s > r.s[r.n - 1])) {
+      r.s[r.n] = s;
+      r.nr[r.n] = nr;
+      r.maske[r.n] = maske;
+      ++r.n;
+    }
+  };
+  const uint16_t uhr_maske = lane && snap_ ? harmonie_maske(*snap_, start_beat_) : 0;
+  auto uhr = [&](int64_t a, int64_t b) {
+    if (b <= a) return;
+    for (int64_t j = static_cast<int64_t>(std::ceil(k.beat_at(static_cast<double>(a) - 0.5) / rate - EPS)), n = 0; n < MIDI_RASTER_MAX + 4 && r.n < MIDI_RASTER_MAX; ++j, ++n) {
+      const int64_t s = std::llround(k.sample_at(static_cast<double>(j) * rate));
+      if (s >= b) break;
+      if (s >= a) rein(s, static_cast<uint64_t>(j), uhr_maske);
+    }
+  };
+  const bool laeuft = snap_ && (status_ == ArrStatus::wartet || status_ == ArrStatus::spielt);
+  if (!laeuft) {
+    uhr(von, bis);
+    return;
+  }
+  const int64_t pa = std::min(bis, std::max(von, start_s_));
+  const int64_t pb = std::max(pa, stopp_s_ >= 0 ? std::min(bis, stopp_s_) : bis);
+  uhr(von, pa);
+  if (pb > pa) {
+    const int64_t j_start = static_cast<int64_t>(std::ceil(start_beat_ / rate - EPS));
+    const int64_t n0 = static_cast<int64_t>(std::ceil(bis_ / rate - EPS)) - j_start;   // points of the first pass, [start_beat_, bis_)
+    const int64_t n_l = static_cast<int64_t>(std::ceil((bis_ - von_) / rate - EPS));    // points of every later pass, [von_, bis_)
+    double kb_lo = k.beat_at(static_cast<double>(pa) - 0.5);
+    const double kb_hi = k.beat_at(static_cast<double>(pb) - 0.5);
+    double urs = ursprung_;
+    uint64_t dl = durchlauf_;
+    for (int n = 0; n < 4 && klammer() && kb_lo - urs + start_beat_ >= bis_ + EPS; ++n) {
+      urs += bis_ - von_;
+      ++dl;
+    }
+    for (int durchlauf = 0; durchlauf < 2; ++durchlauf) {
+      const double p_a = kb_lo - urs + start_beat_;
+      const double p_b = kb_hi - urs + start_beat_;
+      const bool klammer = this->klammer() && p_a < bis_ + EPS;
+      const double p_ende = klammer ? std::min(p_b + EPS, bis_) : p_b + EPS;
+      const double o = dl > 0 ? von_ : 0.0;   // the grid origin of this pass
+      int64_t j = static_cast<int64_t>(std::ceil((p_a - o) / rate - EPS));
+      if (dl > 0 && j < 0) j = 0;
+      for (int n = 0; n < MIDI_RASTER_MAX + 4 && r.n < MIDI_RASTER_MAX; ++j, ++n) {
+        const double g = o + static_cast<double>(j) * rate;
+        if (g >= p_ende) break;
+        const int64_t s = std::llround(k.sample_at(g + urs - start_beat_));
+        if (s >= pb) break;
+        if (s < pa) continue;
+        const int64_t nr = dl == 0 ? j - j_start : n0 + static_cast<int64_t>(dl - 1) * n_l + j;
+        rein(s, static_cast<uint64_t>(nr), lane ? harmonie_maske(*snap_, g) : 0);
+      }
+      if (!klammer || p_b <= bis_) break;
+      kb_lo = bis_ + urs - start_beat_;
+      urs += bis_ - von_;
+      ++dl;
+    }
+  }
+  uhr(pb, bis);
+}
+
+// Strand 7 task 1.3: every track with an active stage runs its stage over the window of this block in sink time, [s0 + vorhalt, s0 + m + vorhalt) (D1 2.2, the
+// look-ahead of noten_fenster), from where the last run ended. Called at the end of noten_block, also when the transport stands.
+void Arrangement::stufen_lauf(const Karte& k, int64_t s0, int m) noexcept {
+  if (!snap_) return;
+  for (int i = 0; i < ARR_SPUREN; ++i) {
+    const ArrMidiParam& p = snap_->spur[i].midi;
+    if (!p.an) continue;
+    ArrSenke* se = senke_fuer(snap_, i);
+    if (!se) continue;
+    const int64_t v = se->vorhalt();
+    const int64_t von = std::max(s0 + v, stufe_bis_[i]), bis = s0 + m + v;
+    MidiRaster r;
+    r.n = 0;
+    const bool lane = folgt_lane(snap_, i);   // task 5.2
+    if (p.arp && p.sync) stufe_raster(k, p.rate_beats, von, bis, r, lane);
+    if (lane && p.arp && !p.sync) r.maske_frei = lane_maske_bei(von);
+    stufen_->st[i].lauf(p, r, bis);
+    stufe_bis_[i] = std::max(stufe_bis_[i], bis);
+  }
+}
+
+// Strand 7 task 1.3: a new snapshot (before snap_ is replaced, after noten_tauschen and live_tauschen queued their offs). A stage that goes away (no stage, no sink in
+// the new snapshot) or moves to another sink ends every output at the swap; one that keeps its sink and changes its parameters swaps them at the swap (MidiStufe::tausch).
+// The swap sample is in sink time: s plus the vorhalt of the sink the outputs went to.
+void Arrangement::stufen_tauschen(const ArrSnapshot* neu, int64_t s) noexcept {
+  if (!snap_) return;
+  for (int i = 0; i < ARR_SPUREN; ++i) {
+    const ArrMidiParam& alt = snap_->spur[i].midi;
+    if (!alt.an) continue;
+    ArrSenke* se = senke_fuer(snap_, i);
+    if (!se) continue;
+    MidiStufe& st = stufen_->st[i];
+    const int64_t t = s + se->vorhalt();
+    if (!neu || !neu->spur[i].midi.an || senke_fuer(neu, i) != se) st.alle_aus(t);
+    else if (!gleich(alt, neu->spur[i].midi)) st.tausch(neu->spur[i].midi, t);
+  }
+}
+
+// Strand 7 task 3.3: differences of 64-bit counters taken to 32 bits wrap (two's complement), as /zustand/arr/midi documents
+ArrMidiZaehler Arrangement::midi_zaehler(int spur0) const noexcept {
+  ArrMidiZaehler z;
+  if (spur0 < 0 || spur0 >= ARR_SPUREN) return z;
+  const MidiStufe& st = stufen_->st[spur0];
+  const auto w = [](uint64_t a, uint64_t b) { return static_cast<int32_t>(static_cast<uint32_t>(a - b)); };
+  z.gehalten = st.gehalten();
+  z.ein = w(st.ein_noten(), stufe_basis_[spur0][0]);
+  z.aus = w(st.aus_noten(), stufe_basis_[spur0][1]);
+  z.verloren = w(st.verloren(), stufe_basis_[spur0][2]);
+  return z;
+}
+
+// Task 5.2: the lane's mask at sample s (a live key, a free arp step): while the transport plays and s lies at or after its entry, the project beat of s from the
+// block noten_block worked on last (linear inside it; a loop seam inside that block is not followed); otherwise the mask at start_beat_.
+uint16_t Arrangement::lane_maske_bei(int64_t s) const noexcept {
+  if (!snap_ || snap_->n_harmonie == 0) return 0;
+  if (!lane_laeuft_ || s < lane_ab_) return harmonie_maske(*snap_, start_beat_);
+  return harmonie_maske(*snap_, lane_b0_ + static_cast<double>(s - lane_s0_) * lane_bps_);
+}
+
+bool Arrangement::stufen_ruhig() const noexcept {
+  for (int i = 0; i < ARR_SPUREN; ++i)
+    if (!stufen_->st[i].ruhig()) return false;
+  return true;
 }
 
 // 1.8 T7b: live notes (header). The On goes to the sink of the track now, the entry keeps that sink for the Off.
@@ -262,22 +442,22 @@ void Arrangement::live_note(int spur0, int64_t ziel, uint8_t ton, uint8_t vel, b
     ArrSenke* se = senke_fuer(snap_, spur0);
     if (!se) return;   // an empty track or none loaded: nothing to play, nothing to hold
     if (h) {   // retrigger: the old note ends at the new onset
-      h->note(spur0, ziel, ton, 0, false);
+      note_raus(spur0, h, ziel, ton, 0, false, 0);
       h = nullptr;
       --n_live_;
     }
     h = se;
     live_an_[spur0][ton] = ziel;
     ++n_live_;
-    se->note(spur0, ziel, ton, vel == 0 ? 1 : vel, true);
+    note_raus(spur0, se, ziel, ton, vel == 0 ? 1 : vel, true, (1ull << 63) | live_zaehler_++, folgt_lane(snap_, spur0) ? lane_maske_bei(ziel) : 0);
     return;
   }
   if (!h) return;   // an off with no on (a key held before the arm, a track without a sink)
 #ifdef CYPHERDJ_MUTATION_LIVE_AUS_NEUE_SENKE
   ArrSenke* ziel_senke = senke_fuer(snap_, spur0);   // error case: the off goes to the sink of the track now, not to the one that got the on
-  if (ziel_senke) ziel_senke->note(spur0, ziel, ton, 0, false);
+  if (ziel_senke) note_raus(spur0, ziel_senke, ziel, ton, 0, false, 0);
 #else
-  h->note(spur0, ziel, ton, 0, false);
+  note_raus(spur0, h, ziel, ton, 0, false, 0);
 #endif
   h = nullptr;
   --n_live_;
@@ -300,7 +480,7 @@ void Arrangement::live_spur_aus(int spur0, int64_t ziel) noexcept {
   for (int ton = 0; ton < 128; ++ton) {
     ArrSenke*& h = live_[spur0][ton];
     if (!h) continue;
-    h->note(spur0, ziel, static_cast<uint8_t>(ton), 0, false);
+    note_raus(spur0, h, ziel, static_cast<uint8_t>(ton), 0, false, 0);
     h = nullptr;
     --n_live_;
   }
@@ -321,9 +501,9 @@ void Arrangement::live_tauschen(const ArrSnapshot* neu, int64_t s) {
       ArrSenke*& h = live_[i][ton];
       if (!h || h == nach) continue;
 #ifdef CYPHERDJ_MUTATION_LIVE_AUS_NEUE_SENKE
-      if (nach) nach->note(i, s + nach->vorhalt(), static_cast<uint8_t>(ton), 0, false);   // error case: the off goes to the new sink, the old one keeps the note
+      if (nach) note_raus(i, nach, s + nach->vorhalt(), static_cast<uint8_t>(ton), 0, false, 0);   // error case: the off goes to the new sink, the old one keeps the note
 #else
-      h->note(i, s + h->vorhalt(), static_cast<uint8_t>(ton), 0, false);
+      note_raus(i, h, s + h->vorhalt(), static_cast<uint8_t>(ton), 0, false, 0);
 #endif
       h = nullptr;
       --n_live_;
@@ -343,7 +523,7 @@ void Arrangement::live_aus_bis(int64_t s) noexcept {
     for (int ton = 0; ton < 128; ++ton) {
       ArrSenke*& h = live_[i][ton];
       if (!h || live_an_[i][ton] > s) continue;
-      h->note(i, s, static_cast<uint8_t>(ton), 0, false);
+      note_raus(i, h, s, static_cast<uint8_t>(ton), 0, false, 0);
       h = nullptr;
       --n_live_;
     }
@@ -353,9 +533,10 @@ void Arrangement::alle_noten_aus(int64_t s) {
   live_aus_bis(s);   // 1.8 T7b: transport stop and every other all-off close the held live keys first (their offs precede the all-off of the sinks)
   for (int i = 0; i < n_offen_; ++i) {
     const Offen& o = offen_[i];
-    o.senke->note(o.spur, std::max(o.an, std::min(o.aus, s)), o.ton, 0, false);
+    note_raus(o.spur, o.senke, std::max(o.an, std::min(o.aus, s)), o.ton, 0, false, 0);
   }
   n_offen_ = 0;
+  for (int i = 0; i < ARR_SPUREN; ++i) stufen_->st[i].alle_aus(s);   // strand 7 task 1.3: every stage output off at s, inputs and pattern forgotten
   for (int i = 0; i < ARR_SPUREN; ++i)
     if (ArrSenke* se = senke_fuer(snap_, i)) se->alle_aus(i, s);
 }
@@ -374,7 +555,7 @@ void Arrangement::noten_tauschen(const ArrSnapshot* neu, int64_t s) {
       offen_[w++] = o;
       continue;
     }
-    o.senke->note(o.spur, std::max(o.an, s + o.senke->vorhalt()), o.ton, 0, false);
+    note_raus(o.spur, o.senke, std::max(o.an, s + o.senke->vorhalt()), o.ton, 0, false, 0);
   }
   n_offen_ = w;
 }

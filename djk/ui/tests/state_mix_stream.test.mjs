@@ -56,3 +56,18 @@ test('Strom: /zustand/box (no entry) stays out of the stream', async (t) => {
   await warte(100);
   assert.ok(!zeilen.join('').includes('/zustand/box'));
 });
+
+// strand 6 task 1.8: /zustand/mod (25 Hz per modulator) is throttled to 40 ms PER nr (the key carries nr, not only the address)
+test('Strom: /zustand/mod is passed on per nr; inside 40 ms one nr is condensed to the last message', async (t) => {
+  const { i, treffer } = await oeffneStrom(t);
+  i.vomKern('/zustand/mod', { nr: 1, wert: 0.1 });
+  i.vomKern('/zustand/mod', { nr: 2, wert: 0.2 });
+  for (let n = 0; n < 50 && treffer('/zustand/mod').length < 2; n++) await warte(10);
+  assert.deepEqual(treffer('/zustand/mod').map((x) => x.f.nr).sort(), [1, 2], 'two modulators in the same millisecond: both at once');
+  i.vomKern('/zustand/mod', { nr: 1, wert: 0.3 });
+  i.vomKern('/zustand/mod', { nr: 1, wert: 0.4 });
+  for (let n = 0; n < 50 && treffer('/zustand/mod').filter((x) => x.f.nr === 1).length < 2; n++) await warte(10);
+  const m1 = treffer('/zustand/mod').filter((x) => x.f.nr === 1);
+  assert.equal(m1.length, 2, 'one condensed message after the first');
+  assert.equal(m1[1].f.wert, 0.4, 'the last one counts');
+});

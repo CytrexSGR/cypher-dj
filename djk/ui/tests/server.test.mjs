@@ -2352,7 +2352,7 @@ test('Studio S6 Final-Review F2: abgelaufene Spuren fallen beim Laden weg, Muste
   const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
   const { o, url } = await stapel(t, [], { wirtOrdner: wo, musterOrdner: d, live: true });
   await stromSpuren(o, 1, 2, 3, 5);   // the alias paths erz/<n> need the strom tracks of the live project
-  const kurz = await postJson(url, '/spur', { spur: { name: 'kurz', fahrten: [{ ziel: 'erz/2/filter', ab_takt: 1, takte: 1, nach: -0.6 }] } }, CYPHER);
+  const kurz = await postJson(url, '/spur', { spur: { name: 'kurz', fahrten: [{ ziel: 'erz/2/filter', ab_takt: 1, takte: 3, nach: -0.6 }] } }, CYPHER);   // 3 bars: the restart plus liveOeffnen takes seconds on a loaded runner (1 bar ended inside it, CI 146 and 147), still over before the muster at +12 beats
   const mus = await postJson(url, '/spur', { spur: { name: 'mus', fahrten: [{ ziel: 'strom:2', ab_takt: 4, muster: 'silence' }] } }, CYPHER);
   assert.equal(kurz.code, 200); assert.equal(mus.code, 200, JSON.stringify(mus.j));
   const { o2, log } = await neustart(t, o);

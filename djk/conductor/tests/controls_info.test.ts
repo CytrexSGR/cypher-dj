@@ -66,9 +66,12 @@ test('1.15 A2: the table holds exactly the 201 tool paths of section 3 (containe
   assert.deepEqual(werkzeug.sort(), [...soll].sort());
   // 909 listed rows before A2 (measured at b257b17c; the controller table has 4 more unlisted ones), + 120 insert rows ins/komp/1..12/* (slice 4a T6) + 59 ins/eq/1/* + 4 ins/saett/1/* (slice 4b T12) + 59 ins/eq/2/* (eq pool 2, 2026-11-06) + 3 ins/lim/1/* (master limiter kind; the tool-row filter below skips ins/ because bus lim rows share the segment)
   // 730 = 120 komp + 8 x 59 eq + 4 x 4 saett + 2 x 3 lim + 4 host + 8 x 5 utility (arr-fx) + 8 x 65 bk (arr-bk, an + k1..k64 since the 64-knob widening; 8 x 33 at 32 knobs, 8 x 9 before); the pin said 245 and ignored the 4 host rows, so it was already red on main (249 rows)
-  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/')).length, 1750 + 138 * 10 + 144 * 59 + 16 * 8 + 8 * 24 + 6 * 3 + 4);   // + 4 (strand 1 slice 5: ins/host/5..8/an); + 338 (strand 1 slice 4: gate 16 x 8, multiband 8 x 24, limiters 2 -> 8: + 6 x 3); 1178 + 572 (strand 1 slice 1: komp 12 -> 22, eq 8 -> 16) + 9876 (strand 1 slice 3b: komp 22 -> 160, eq 16 -> 160; 5460 for 96 + 96 in slice 3)
-  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/eq/')).length, 160 * 59);   // strand 1 slice 3b: 96 -> 160 (slice 3: 16 -> 96, slice 1: 8 -> 16)
-  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/saett/')).length, 4 * 4);
+  // strand 5 (dynamics): ins/ rows by kind = komp 160 x 10 + eq 160 x 86 (EQ Pro + key row sc) + saett 32 x 6 + lim 8 x 3 + host 8 + utility 8 x 5 + bk 8 x 65 + gate 16 x 8 + mb 8 x 24 + trans 32 x 6 + bild 16 x 7 (16768; the per-kind pins follow)
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/')).length, 160 * 10 + 160 * 86 + 32 * 6 + 8 * 3 + 8 + 8 * 5 + 8 * 65 + 16 * 8 + 8 * 24 + 32 * 6 + 16 * 7);
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/eq/')).length, 160 * 86);   // strand 1 slice 3b: 96 -> 160; strand 5: EQ Pro 59 -> 85 parameters, slice 4: + key row sc
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/saett/')).length, 32 * 6);   // strand 5: 4 -> 32 instances, 6 parameters (an, drive, out, mix, kurve, decke)
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/trans/')).length, 32 * 6);   // strand 5 slice 3: transient shaper
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/bild/')).length, 16 * 7);   // strand 5 slice 3: imager
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/lim/')).length, 8 * 3);   // strand 1 slice 4: 2 -> 8
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/gate/')).length, 16 * 8);   // strand 1 slice 4
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/mb/')).length, 8 * 24);   // strand 1 slice 4: an, grenze_tief, grenze_hoch + 3 bands x 7
@@ -83,8 +86,10 @@ test('1.15 A2: the table holds exactly the 201 tool paths of section 3 (containe
   // + 338 rows: strand 1 slice 4 (gate, multiband, limiters 2 -> 8); + 572 rows: strand 1 slice 1, 10 more compressors (10 rows each) and 8 more EQs
   // (59 rows each); + 9876 rows: strand 1 slice 3b, 138 more compressors and 144 more EQs (slice 3: 74 and 80); + 2304 rows: strand 1 slice 6.1,
   // tracks 33..128 (96 x 24); + 128 rows: strand 2 slice 2, plug/<h>/k<m> (8 x 16)
-  assert.equal(REGLER.size, 4048 + 512 - 432 - 688 + 224 + 712 + 1024 + 160 + 128 + 64 + 44 + 32 * 3 + 10 * 10 + 8 * 59 + 138 * 10 + 144 * 59 + 16 * 8 +
-        8 * 24 + 6 * 3 + 4 + 96 * 24 + 8 * 16);
+  // strand 5: the 4048 of the 13-channel table held 1178 ins/ rows (the first 8 compressors and EQs, 4 saturators, ...); every ins/ row is now counted
+  // by kind in one sum (INS_ZEILEN, pinned per kind above), so the base is taken without them
+  const INS_ZEILEN = 160 * 10 + 160 * 86 + 32 * 6 + 8 * 3 + 8 + 8 * 5 + 8 * 65 + 16 * 8 + 8 * 24 + 32 * 6 + 16 * 7;
+  assert.equal(REGLER.size, 4048 - 1178 + 512 - 432 - 688 + 224 + 712 + 1024 + 160 + 128 + 64 + 44 + 32 * 3 + 96 * 24 + 8 * 16 + INS_ZEILEN);
   for (const p of soll) assert.equal(muster.test(p), true, `schema takes ${p}`);
 });
 

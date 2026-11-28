@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fft, rasterVon, StreifenAnalysator } from '../project/sound_measurement.ts';
+import { fft, rasterVon, StreifenAnalysator, maskierungPaare, resonanzVorschlag, resonanzBefehle, hinweiseQuelle } from '../project/sound_measurement.ts';
+import { fuehreListeAus } from '../project/commands.ts';
+import { neuesProjekt } from '../project/model.ts';
 
 const RATE = 48000;
 function prng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 2 ** 32 * 2 - 1; }; }
@@ -167,4 +169,140 @@ test('the lowest stereo band counts only bins from 20 Hz', () => {
   assert.ok(dc.stereo.baender[0].pegel_db <= -100, `${dc.stereo.baender[0].pegel_db}`);
   const b = messen(stereo(RATE, sine(60, 0.5), sine(60, 0.5)));
   assert.ok(b.stereo.baender[0].pegel_db > -20 && b.stereo.baender[0].korrelation > 0.99);
+});
+
+// ---- strand 5 slice 6: masking over all pairs ----
+const teilVon = (hz, amp, sek = 1.5) => { const m = messen(stereo(RATE * sek, sine(hz, amp), sine(hz, amp))); return { m, pegel_db: m.rms_db }; };
+
+test('maskierungPaare: only the pair that shares a band is listed, the cut goes on the quieter strip', () => {
+  const a = teilVon(100, 0.5), b = teilVon(100, 0.2), c = teilVon(3000, 0.3);
+  const r = maskierungPaare([{ id: 'S1', ...a }, { id: 'S2', ...b }, { id: 'S3', ...c }]);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].a, 'S1'); assert.equal(r[0].b, 'S2'); assert.equal(r[0].leiser, 'S2');
+  assert.ok(r[0].hz_von < 100 && r[0].hz_bis > 100 && r[0].anteil >= 0.5);
+  const v = r[0].vorschlag;
+  assert.equal(v.strang_id, 'S2'); assert.equal(v.gain_db, -3);
+  assert.ok(Math.abs(v.hz - 100) < 15, `centre ${v.hz}`);
+  assert.ok(v.q >= 0.7 && v.q <= 6);
+  assert.deepEqual(v.befehle, [{ befehl: 'insert_setzen', strang_id: 'S2', pos: 0, art: 'eq',
+    werte: { 'b4/an': 1, 'b4/typ': 0, 'b4/freq': v.hz, 'b4/q': v.q, 'b4/gain': -3 } }]);
+});
+
+test('maskierungPaare: fewer than two sounding strips and silent strips give an empty list', () => {
+  const a = teilVon(100, 0.5);
+  assert.deepEqual(maskierungPaare([]), []);
+  assert.deepEqual(maskierungPaare([{ id: 'S1', ...a }]), []);
+  const stumm = { m: messen(new Float32Array(RATE * 2)), pegel_db: -200 };
+  assert.equal(stumm.m.stumm, true);
+  assert.deepEqual(maskierungPaare([{ id: 'S1', ...a }, { id: 'S2', ...stumm }]), []);
+});
+
+test('maskierungPaare: a full chain lists the conflict without a proposal, the dynamic variant adds the d-rows, the position is taken over', () => {
+  const a = teilVon(100, 0.5), b = teilVon(100, 0.2);
+  const voll = maskierungPaare([{ id: 'S1', ...a }, { id: 'S2', ...b, pos: null }]);
+  assert.equal(voll.length, 1); assert.equal(voll[0].vorschlag, null);
+  const dyn = maskierungPaare([{ id: 'S1', ...a }, { id: 'S2', ...b, pos: 2 }], 5, { dynamisch: true, band: 5 });
+  const w = dyn[0].vorschlag.befehle[0];
+  assert.equal(w.pos, 2); assert.equal(w.werte['b5/gain'], -3); assert.equal(w.werte['d5/dyn'], 1);
+  assert.ok(Number.isFinite(w.werte['d5/schwelle']) && w.werte['d5/schwelle'] < 0);
+});
+
+test('maskierungPaare: at most `max` pairs, best score first, and the 24 loudest strips only', () => {
+  const laut = teilVon(100, 0.5), leise = teilVon(100, 0.2);
+  const teile = [];
+  for (let i = 0; i < 26; i++) teile.push({ id: `L${i}`, ...laut });
+  teile.push({ id: 'ZZ', ...leise });
+  const r = maskierungPaare(teile, 5);
+  assert.equal(r.length, 5);
+  assert.ok(r.every((x) => x.a !== 'ZZ' && x.b !== 'ZZ'), 'the 27th, quiet strip is outside the 24 loudest');
+  for (let i = 1; i < r.length; i++) assert.ok(r[i - 1].score >= r[i].score);
+  assert.equal(maskierungPaare(teile, 0).length, 0);
+});
+
+// ---- strand 5 slice 5: tame resonances ----
+function alsMessung(t, name) {
+  return { quelle: { art: 'spur', id: 's1' }, name, stumm: t.stumm,
+    lautheit: { lufs_i: null, lufs_s_max: null, lufs_m_max: null, lra: null, true_peak_dbtp: null, spitze_db: null, rms_db: null, crest_db: null },
+    stereo: t.stereo, spektrum: t.spektrum, zeitbild: t.zeitbild };
+}
+// noise with up to `freqs.length` strong sines on top, 4 s
+function rauschMitTonen(freqs, seed = 11) {
+  const r1 = prng(seed), r2 = prng(seed + 1), n1 = new Float32Array(4 * RATE), n2 = new Float32Array(4 * RATE);
+  for (let i = 0; i < n1.length; i++) { n1[i] = 0.1 * r1(); n2[i] = 0.1 * r2(); }
+  const basis = messen(stereo(4 * RATE, (i) => n1[i], (i) => n2[i]));
+  const amp = 10 ** ((basis.spektrum.mittel_db[87] + 20) / 20);
+  return messen(stereo(4 * RATE, (i) => n1[i] + freqs.reduce((a, f) => a + sine(f, amp)(i), 0), (i) => n2[i] + freqs.reduce((a, f) => a + sine(f, amp)(i), 0)));
+}
+const lauf = (p, b) => fuehreListeAus(p, b, { quelle: 'andreas' }).projekt;
+const projektMitSpur = () => lauf(neuesProjekt('Tame'), [{ befehl: 'spur_neu', art: 'audio', name: 'Pad' }]);
+
+test('resonanzVorschlag: up to three dynamic Bell bands from the resonance hints, threshold = band level minus 3 dB', () => {
+  const m = alsMessung(rauschMitTonen([500, 1200, 3000, 7000]), 'Pad');
+  const v = resonanzVorschlag(m);
+  assert.equal(v.length, 3, JSON.stringify(v));
+  const hinweise = hinweiseQuelle(m).filter((h) => h.art === 'resonanz');
+  assert.deepEqual(v.map((x) => x.hz), hinweise.map((h) => Math.round(h.hz * 10) / 10), 'the same resonances, strongest first');
+  for (const b of v) {
+    assert.equal(b.q, 8); assert.equal(b.bereich_db, -6);
+    const n = m.spektrum.hz.findIndex((hz) => Math.abs(hz - b.hz) < 1e-6 * hz + 0.06);
+    assert.ok(n >= 0, `band of ${b.hz} Hz`);
+    assert.ok(Math.abs(b.schwelle_db - (m.spektrum.mittel_db[n] - 3)) <= 0.05, `${b.schwelle_db} vs ${m.spektrum.mittel_db[n] - 3}`);
+    assert.ok(b.schwelle_db >= -60 && b.schwelle_db <= 0);
+  }
+});
+
+test('resonanzVorschlag: noise without a peak and a silent source give nothing', () => {
+  assert.deepEqual(resonanzVorschlag(alsMessung(rauschMitTonen([]), 'Pad')), []);
+  const stumm = alsMessung(messen(new Float32Array(RATE * 2)), 'Mute');
+  assert.equal(stumm.stumm, true);
+  assert.deepEqual(resonanzVorschlag(stumm), []);
+});
+
+test('resonanzBefehle: a strip without an EQ gets one new EQ stage with the bands as Bell and dyn 1, accepted by the project model', () => {
+  const v = resonanzVorschlag(alsMessung(rauschMitTonen([500, 1200, 3000]), 'Pad'));
+  assert.equal(v.length, 3);
+  const b = resonanzBefehle(v, { id: 's1', kette: 0, eq: null });
+  assert.equal(b.length, 1);
+  assert.equal(b[0].befehl, 'insert_setzen'); assert.equal(b[0].art, 'eq'); assert.equal(b[0].pos, 0);
+  const w = lauf(projektMitSpur(), b).spuren[0].inserts[0].werte;
+  v.forEach((x, i) => {
+    const k = i + 1;
+    assert.deepEqual([w[`b${k}/an`], w[`b${k}/typ`], w[`b${k}/freq`], w[`b${k}/gain`], w[`b${k}/q`], w[`d${k}/dyn`], w[`d${k}/schwelle`], w[`d${k}/bereich`]],
+      [1, 0, x.hz, 0, 8, 1, x.schwelle_db, -6]);
+  });
+  assert.equal(w['b4/an'], 0, 'the other bands stay off');
+});
+
+test('resonanzBefehle: the first EQ with enough free bands takes them, as one command list the model applies', () => {
+  let p = projektMitSpur();
+  p = lauf(p, [{ befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'eq', werte: { 'b1/an': 1, 'b1/freq': 100, 'b3/an': 1, 'b3/freq': 900 } }]);
+  const v = resonanzVorschlag(alsMessung(rauschMitTonen([500, 1200, 3000]), 'Pad'));
+  const b = resonanzBefehle(v, { id: 's1', kette: 1, eq: { insert_id: 'i1', frei: [2, 4, 5, 6, 7, 8] } });
+  assert.ok(b.every((x) => x.befehl === 'insert_param_setzen' && x.insert_id === 'i1'));
+  const r = fuehreListeAus(p, b, { quelle: 'andreas' }).projekt;
+  const w = r.spuren[0].inserts[0].werte;
+  assert.equal(r.spuren[0].inserts.length, 1, 'no new stage');
+  assert.deepEqual([w['b1/freq'], w['b3/freq']], [100, 900], 'the used bands are untouched');
+  [2, 4, 5].forEach((k, i) => assert.deepEqual([w[`b${k}/an`], w[`b${k}/freq`], w[`d${k}/dyn`], w[`d${k}/schwelle`], w[`d${k}/bereich`]], [1, v[i].hz, 1, v[i].schwelle_db, -6]));
+});
+
+test('resonanzBefehle: too few free bands -> a new stage if the chain has room; chain full -> the free bands as far as they go; nothing fits -> null', () => {
+  const v = resonanzVorschlag(alsMessung(rauschMitTonen([500, 1200, 3000]), 'Pad'));
+  assert.equal(resonanzBefehle([], { id: 's1', kette: 0, eq: null }), null);
+  const eng = { insert_id: 'i1', frei: [7, 8] };
+  const neu = resonanzBefehle(v, { id: 's1', kette: 4, eq: eng });
+  assert.deepEqual(neu.map((x) => x.befehl), ['insert_setzen']);
+  const voll = resonanzBefehle(v, { id: 's1', kette: 5, eq: eng });
+  assert.ok(voll.every((x) => x.befehl === 'insert_param_setzen'));
+  assert.deepEqual([...new Set(voll.map((x) => x.param.match(/^[bd](\d)/)[1]))], ['7', '8'], 'only the two free bands');
+  assert.equal(resonanzBefehle(v, { id: 's1', kette: 5, eq: null }), null);
+  assert.equal(resonanzBefehle(v, { id: 's1', kette: 5, eq: { insert_id: 'i1', frei: [] } }), null);
+  // a full chain on the model: the one-stage list is refused, the param list is accepted
+  let p = projektMitSpur();
+  p = lauf(p, [{ befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'eq', werte: Object.fromEntries([1, 2, 3, 4, 5, 6].flatMap((k) => [[`b${k}/an`, 1]])) },
+    ...['komp', 'saett', 'lim', 'gate'].map((art) => ({ befehl: 'insert_setzen', strang_id: 's1', pos: 1, art }))]);
+  assert.equal(p.spuren[0].inserts.length, 5);
+  const geht = resonanzBefehle(v, { id: 's1', kette: 5, eq: { insert_id: p.spuren[0].inserts.find((i) => i.art === 'eq').id, frei: [7, 8] } });
+  const w = lauf(p, geht).spuren[0].inserts.find((i) => i.art === 'eq').werte;
+  assert.deepEqual([w['b7/an'], w['b8/an'], w['d7/dyn'], w['d8/dyn']], [1, 1, 1, 1]);
 });

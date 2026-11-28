@@ -121,7 +121,7 @@ test('render.routing_inserts: a stage without a key has sc 0 in the file', () =>
 });
 
 // ---- opening a project -----------------------------------------------------------------------------------------------------------------------
-test('abbildung.alle_insert: all slots of all kinds (every pool slot of komp, eq, saett, lim, host, utility, bk, gate and mb; the used ones with their values, the free ones at the pool defaults), the switch last', () => {
+test('abbildung.alle_insert: all slots of all kinds (every pool slot of komp, eq, saett, lim, host, utility, bk, gate mb, trans and bild; the used ones with their values, the free ones at the pool defaults), the switch last', () => {
   const p = mitKette(), r = alleInsertRegler(p);
   assert.equal(r.length, INS_ZEILEN);
   assert.deepEqual([...new Set(r.filter((x) => x.pfad.startsWith('ins/komp/')).map((x) => x.pfad.split('/')[2]))], Array.from({ length: N('komp') }, (_, i) => String(i + 1)));
@@ -137,7 +137,7 @@ test('abbildung.alle_insert: all slots of all kinds (every pool slot of komp, eq
   assert.equal(r.filter((x) => x.pfad === 'ins/komp/1/an')[0].wert, 1);
   assert.equal(r.findLastIndex((x) => x.pfad.startsWith('ins/komp/1/')), r.findIndex((x) => x.pfad === 'ins/komp/1/an'), 'the switch is the last row of its slot');
   assert.equal(alleRegler(p).length, alleRegler(neuesProjekt('N')).length, 'the number does not depend on the stages in use: all slots are always set');
-  assert.deepEqual(alleInsertRegler(neuesProjekt('N')).filter((x) => /\/an$/.test(x.pfad) && !/\/b\d\/an$/.test(x.pfad)).map((x) => x.wert), Array(['komp', 'eq', 'saett', 'lim', 'host', 'utility', 'bk', 'gate', 'mb'].reduce((n, a) => n + N(a), 0)).fill(0), 'negative control: no stage, every stage switch off');
+  assert.deepEqual(alleInsertRegler(neuesProjekt('N')).filter((x) => /\/an$/.test(x.pfad) && !/\/b\d\/an$/.test(x.pfad)).map((x) => x.wert), Array(['komp', 'eq', 'saett', 'lim', 'host', 'utility', 'bk', 'gate', 'mb', 'trans', 'bild'].reduce((n, a) => n + N(a), 0)).fill(0), 'negative control: no stage, every stage switch off');
   assert.equal(alleRegler(neuesProjekt('N')).length, 365 + 64 + INS_ZEILEN + 48 + 4 * 32 + 236 + 3 * 32 + MEHR_SPUREN, 'the old 365 plus the 64 rows of groups 9 to 16 plus the pooled insert rows plus the 48 rack macro rows (slice 4c) plus filter and 3 eq rows for each of the 32 tracks (loop deck channel strip) plus 236 for eight returns instead of four (4 more send rows on each of the 32 tracks and 16 groups, 4 more returns of 11 rows) plus the 3 FX assign switches of each of the 32 tracks (loop lane strip)');
 });
 

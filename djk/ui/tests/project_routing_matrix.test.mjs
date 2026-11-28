@@ -184,7 +184,8 @@ test('(d) options only for the named stage, none for an eq stage', () => {
   const mitOpt = m.straenge.flatMap((s) => s.stufen).filter((x) => x.optionen);
   assert.deepEqual(mitOpt.map((x) => x.insert_id), [komp.insert_id]);
   const eq = alle.find((x) => x.art === 'eq');
-  assert.throws(() => routingMatrix(p, eq.insert_id), (e) => e instanceof BefehlFehler && e.grund === 'argument_ungueltig');
+  // strand 5 slice 4: an EQ stage has a key too, its options are listed like the compressor ones
+  assert.deepEqual(routingMatrix(p, eq.insert_id).straenge.flatMap((s) => s.stufen).filter((x) => x.optionen).map((x) => x.insert_id), [eq.insert_id]);
   assert.throws(() => routingMatrix(p, 'i999'), (e) => e instanceof BefehlFehler && e.grund === 'argument_ungueltig');
 });
 

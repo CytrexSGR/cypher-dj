@@ -58,10 +58,26 @@ test('proj_noten: the description names the notes, the render states, every refu
     'noten_vorhanden', 'noten_laeuft', 'noten_mehrstimmig', 'noten_fehler', 'noten_zeitlimit', 'noten_programm_fehlt', 'noten_render_fehler', 'noten_kurve_fehlt', 'noten_unbekannt',
     'kein_projekt', 'clip_unbekannt', 'feld_nur_audio', 'audio_fehlt', 'stems_laeuft', 'ki_gestoppt', 'nur_andreas_spur', 'argument_ungueltig', 'argument_unbekannt',
     'kein_auftrag', 'zu_spaet', 'abgebrochen', 'veraltet', 'keine_noten', 'wenig_stimmhaft', 'netz_fehler', 'laeuft', 'auftrag_id', 'DJK_HAND_FRIST_PROJ_NOTEN_MS',
-    'More than one note at a time', 'No notes found in this clip.', 'Little pitched sound found']) {
+    'More than one note at a time', 'No notes found in this clip.', 'Little pitched sound found', 'mass', 'With a pitch curve every note carries mass', 'messung = [{id, ton_ist, fehler_ct}]', 'a_ms', 'laenge_ms', 'dehnung', 'ton_ct', 'zeit_um', 'mit_nachbarn', 'noten_dehnung_grenze', 'noten_ueberlappen', '0.25..4']) {
     assert.ok(w.description.includes(wort), `description names ${wort}`);
   }
   assert.ok(!/—/.test(w.description), 'no em dash');
+});
+
+test('proj_aendern: the description names the time fields of audio_noten_aendern and their limits', async (t) => {
+  const { c } = await aufbau(t, () => null);
+  const w = (await c.listTools()).tools.find((x) => x.name === 'proj_aendern');
+  for (const wort of ['audio_noten_aendern {clip_id, ids, ton | ton_um, a, e, zeit_um, vib | vib_um, drift | drift_um, mit_nachbarn?}', 'vib_um', 'drift_um', 'argument_ungueltig', 'SOURCE seconds', 'noten_dehnung_grenze', 'noten_ueberlappen', '0.25..4', 'until render is bereit', 'audio_noten_raster {clip_id, ids?, zeit?, ton?, staerke?, tonart?}', 'vibrato and drift stay', 'staerke 0..1']) {
+    assert.ok(w.description.includes(wort), `description names ${wort}`);
+  }
+});
+
+test('proj_noten: the description names the vibrato and drift widths of mass', async (t) => {
+  const { c } = await aufbau(t, () => null);
+  const w = (await c.listTools()).tools.find((x) => x.name === 'proj_noten');
+  for (const wort of ['vib_ct', 'drift_ct', 'vib_ziel_ct', 'drift_ziel_ct', 'vib | vib_um | drift | drift_um']) {
+    assert.ok(w.description.includes(wort), `description names ${wort}`);
+  }
 });
 
 test('erkennen posts, waits for fertig and returns the notes; a refusal comes back with its English text', async (t) => {

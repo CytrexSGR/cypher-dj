@@ -133,8 +133,8 @@ function returnReglerAenderungen(alt: Projekt, neu: Projekt, aus: ReglerAenderun
 // 1.10 slice 4: the pooled rows ins/<art>/<slot>/* follow the stages by SLOT, not by strip: a slot that is free (or whose stage left) is at the
 // defaults (an 0, the pool defaults, sc 0). Values first, `an` last when a stage turns on; `an` first when it turns off, so nothing sounds with stale values.
 // Slice 4b: the same for eq, saett and lim (the contract names every row of the kind, the EQ band rows as 'b<m>/<parameter>').
-// utility, bk, gate and mb last, as in the contract (arr-fx, arr-bk, pool slice 4)
-const INS_POOL: readonly InsertPoolArt[] = ['komp', 'eq', 'saett', 'lim', 'host', 'utility', 'bk', 'gate', 'mb'];
+// utility, bk, gate, mb, trans and bild last, as in the contract (arr-fx, arr-bk, pool slice 4, strand 5 slice 3)
+const INS_POOL: readonly InsertPoolArt[] = ['komp', 'eq', 'saett', 'lim', 'host', 'utility', 'bk', 'gate', 'mb', 'trans', 'bild'];
 const INS_NAMEN = Object.fromEntries(INS_POOL.map((art) => [art, INSERT_ARTEN[art].parameter.map((q) => q.name)])) as Record<InsertPoolArt, string[]>;
 const INS_VORGABE: Record<InsertPoolArt, Record<string, number>> = Object.fromEntries(
   INS_POOL.map((art) => [art, Object.fromEntries(INSERT_ARTEN[art].parameter.map((q) => [q.name, q.vorgabe]))])
@@ -142,7 +142,9 @@ const INS_VORGABE: Record<InsertPoolArt, Record<string, number>> = Object.fromEn
 function insertReglerAenderungen(alt: Projekt, neu: Projekt, aus: ReglerAenderung[]): void {
   for (const art of INS_POOL) {
     const zustand = (p: Projekt): Map<number, Record<string, number>> => new Map(alleInserts(p).filter((x) => x.insert.art === art)
-      .map((x) => [x.insert.slot, { ...x.insert.werte, an: x.insert.an ? 1 : 0, ...(art === 'komp' ? { sc: x.insert.sc ?? 0 } : {}) }] as const));
+      .map((x) => [x.insert.slot, {
+        ...x.insert.werte, an: x.insert.an ? 1 : 0, ...(art === 'komp' || art === 'eq' ? { sc: x.insert.sc ?? 0 } : {}),
+      }] as const));
     const a = zustand(alt), n = zustand(neu);
     for (const slot of [...new Set([...a.keys(), ...n.keys()])].sort((x, y) => x - y)) {
       const v = a.get(slot) ?? INS_VORGABE[art], w = n.get(slot) ?? INS_VORGABE[art];
@@ -555,6 +557,7 @@ export function setzeDekodiert(p: Projekt, zustandVon: (sha256: string) => Dekod
 export function* alleAudioClips(p: Projekt): Generator<AudioClip> {
   for (const s of p.spuren) {
     for (const c of s.clips) if (c.art === 'audio') yield c;
-    for (const t of s.takes ?? []) for (const c of t.clips) yield c;
+    // 4.2: take lanes of instrument tracks hold MIDI clips
+    for (const t of s.takes ?? []) for (const c of t.clips) if (c.art === 'audio') yield c as AudioClip;
   }
 }

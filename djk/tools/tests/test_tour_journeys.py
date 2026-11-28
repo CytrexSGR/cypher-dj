@@ -2854,7 +2854,7 @@ class TestJ3Erweitert:
         try:
             w = tmp_path / "e.wav"
             j3_wav(w, ton_sek=14.0)
-            for erweitert, erwartet in ((None, 0), (True, 12)):
+            for erweitert, erwartet in ((None, 0), (True, len(J3_ERW_SCHRITTE))):
                 hand = J3FxHand(tmp_path / f"h{erwartet}", {"datei": str(w), "frames": 768000, "spitze_db": -12.0, "ueber_decke": False, "limiter_db_max": 0})
                 t = L.Tour("j3", J3Instanz(seite.url), tmp_path / f"aus{erwartet}", kurz=True)
                 t.fuehre(lambda tt: J3MOD.schritte(tt, hand=hand, erweitert=erweitert))
@@ -2862,9 +2862,30 @@ class TestJ3Erweitert:
                 assert len(neue) == erwartet
                 if erwartet:
                     assert neue == list(J3_ERW_SCHRITTE)
-                    assert {s["kennung"]: s["urteil"] for s in t.bericht().schritte if s["kennung"] in J3_ERW_SCHRITTE} == {k: "OK" for k in J3_ERW_SCHRITTE}
+                    # j3.take, j3.rack and j3.plugin, j3.zusammen and j3.resample are wired here but not modelled by J3FxHand (j3.take SKIPs: no sound source for a production project;
+                    # their behaviour is covered by test_tour_j3_take.py, test_tour_j3_rack.py and test_tour_j3_plugin.py and test_tour_j3_mixdown.py): they must run, the others must be OK
+                    alt = [k for k in J3_ERW_SCHRITTE if k not in ("j3.take", "j3.rack", "j3.plugin", "j3.zusammen", "j3.resample")]
+                    assert {s["kennung"]: s["urteil"] for s in t.bericht().schritte if s["kennung"] in alt} == {k: "OK" for k in alt}
         finally:
             seite.ende()
+
+    def test_env_filter_runs_only_the_named_extension_steps(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CYPHERDJ_TOUR_J3_SCHRITTE", "j3.undo, j3.take")
+        assert J3MOD.gewaehlte_schritte() == {"j3.undo", "j3.take"}
+        seite = J3ErwSeite(tmp_path)
+        try:
+            w = tmp_path / "e.wav"
+            j3_wav(w, ton_sek=14.0)
+            hand = J3FxHand(tmp_path / "h", {"datei": str(w), "frames": 768000, "spitze_db": -12.0, "ueber_decke": False, "limiter_db_max": 0})
+            t = L.Tour("j3", J3Instanz(seite.url), tmp_path / "aus", kurz=True)
+            t.fuehre(lambda tt: J3MOD.schritte(tt, hand=hand, erweitert=True))
+            ids = [s["kennung"] for s in t.bericht().schritte]
+            assert [k for k in ids if k in J3_ERW_SCHRITTE] == ["j3.undo", "j3.take"]
+            assert "j3.neu" in ids and "j3.datei" in ids
+        finally:
+            seite.ende()
+        monkeypatch.delenv("CYPHERDJ_TOUR_J3_SCHRITTE")
+        assert J3MOD.gewaehlte_schritte() is None
 
     def test_auto_green_and_red_when_the_lane_does_not_reach_the_audio(self, tmp_path):
         s, hand, _, _ = j3_erw_lauf(tmp_path, J3MOD._auto)
@@ -2993,7 +3014,7 @@ class TestJ3Erweitert:
         assert s["urteil"] == "FEHL" and s["grund"] == grund
 
 
-J3_ERW_SCHRITTE = ("j3.midi_export", "j3.einsammeln", "j3.relink", "j3.undo", "j3.zip", "j3.auto", "j3.eq", "j3.komp", "j3.hall", "j3.saett", "j3.limiter", "j3.pdc")
+J3_ERW_SCHRITTE = ("j3.midi_export", "j3.einsammeln", "j3.relink", "j3.undo", "j3.zip", "j3.auto", "j3.eq", "j3.komp", "j3.hall", "j3.saett", "j3.limiter", "j3.pdc", "j3.take", "j3.rack", "j3.plugin", "j3.zusammen", "j3.resample")
 
 
 

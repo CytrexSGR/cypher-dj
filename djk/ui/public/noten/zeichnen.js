@@ -82,6 +82,15 @@ export function zeichne(g, a, sicht, ui) {
       g.fillText(`${tonName(Math.round(zeigt.neu))} ${zeigt.neu.toFixed(2)}`, zeigt.k.x + zeigt.k.w + 4, zeigt.k.y + TON_HOEHE - 1);
     }
   }
+  if (ui.zeit?.length) {                                      // time drag preview: moved notes and neighbours that follow, with the pitch line along the new map
+    g.fillStyle = FARBE.vorschau; g.strokeStyle = FARBE.vorschauText;
+    for (const n of ui.zeit) {
+      const k = notenKasten(a, n);
+      g.fillRect(k.x, k.y, k.w, k.h);
+      const p = kurvePunkte(sicht.kurve, n, a);
+      if (p.length) { g.beginPath(); p.forEach(([x, y], i) => (i === 0 ? g.moveTo(x, y) : g.lineTo(x, y))); g.stroke(); }
+    }
+  }
   g.restore();
 
   g.font = '8px ui-monospace, monospace';

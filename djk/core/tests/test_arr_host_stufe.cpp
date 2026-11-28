@@ -792,8 +792,8 @@ static void schluessel() {
     cdj::gib_wiedergabe(e.snap.release(), cache);
   }
   {
-    cdj::ArrLadeErgebnis e = laden(93, "{\"art\":\"eq\",\"slot\":1,\"key\":{\"q\":\"spur\",\"nr\":2,\"punkt\":\"post\"}}");
-    PRUEF(!e.snap && e.grund == "format");   // negative control: the other kinds still take no key
+    cdj::ArrLadeErgebnis e = laden(93, "{\"art\":\"saett\",\"slot\":1,\"key\":{\"q\":\"spur\",\"nr\":2,\"punkt\":\"post\"}}");
+    PRUEF(!e.snap && e.grund == "format");   // negative control: the other kinds still take no key (eq takes one since strand 5 slice 4)
     cdj::gib_wiedergabe(e.snap.release(), cache);
   }
 }

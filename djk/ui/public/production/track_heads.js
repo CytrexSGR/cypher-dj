@@ -14,12 +14,15 @@ import { REGLER_MAX, REGLER_SCHRITT, reglerVonDb, dbVonRegler, tasteMerke, taste
 import { LANEN_TEXT, sperrBefehl, zeichenModus } from './lanes_operation.js';
 import { TAKE_TEXT, hatTakes, takeZeilenVon } from './takes.js';
 import { neueTakeKoepfe, vorhoerenSenden } from './takes_operation.js';
+import { baueModZeile } from './mod_line.js';
+import { hatMod, lebendWert, markenPos, liveText, neueSchleife, modAnzeigeAnschluss } from '../mod_display.js';
 import { oeffneMenue, kopfMenueAuf } from './context_menu.js';
 import { neueGesten, bindeAutoAufnahme, istArmiert, GESTE_RUHE_MS } from './auto_recording.js';
 import { geraetSchluessel } from './device_view.js';
 import { fokus } from '../controller_fokus.js';
 import { kannGeraetFenster, oeffneGeraetFenster, GERAET_FENSTER_TEXT } from '../device_open.js';
 import { recEingaenge } from '../kanaele.js';
+import { arpKopfText } from './midi_stufe.js';
 
 // S18: the inputs a track can record, built from the channel tables of kanaele.js (the page cannot import the .ts table); tests/proj_inputs_s18.test.mjs
 // binds it to INTERNE_EINGAENGE of contract/stroeme.ts. Streams 4, 8, 9, 10 are missing on purpose: the kern has no tap for them.
@@ -436,6 +439,39 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
   }
 
   // art 'gruppe': the head of a group's lane row (same elements, keyed by the group id; the targets are the chain targets only)
+  let projektStand = null;     // the project of the last draw (the modulator row reads it)
+  const modZeilen = new WeakMap(); // lane head element → its modulator row
+  // strand 6 task 2.2: the thin marker at the modulated value of the fader and pan, and the live readout of the modulator row. One frame loop for all heads;
+  // it runs only while a head carries a marker (a modulator targets its fader or pan) and the tab is visible.
+  const MOD_BEREICH = { fader: [FADER_MIN, FADER_MAX], pan: [-1, 1] };
+  const modBasis = (el, ziel) => { const r = el.querySelector(ziel === 'fader' ? '.p-fader' : '.p-pan'); return r ? (ziel === 'fader' ? dbVonRegler(r.value) : Number(r.value)) : NaN; };
+  function modSchritt(t) {
+    let an = false;
+    for (const [id, el] of els) {
+      for (const m of el.querySelectorAll('.p-modmarke')) {
+        an = true;
+        const ziel = m.dataset.ziel, w = lebendWert(projektStand, id, ziel, modBasis(el, ziel), MOD_BEREICH[ziel], t);
+        const pos = markenPos(ziel, w, (db) => reglerVonDb(db) / REGLER_MAX);
+        m.hidden = pos === null;
+        if (pos !== null) m.style.setProperty('--mod', String(pos));
+      }
+      const le = laneEls.get(id), g = le && modZeilen.get(le)?.gestalt();
+      if (g && MOD_BEREICH[g.ziel]) {
+        const basis = modBasis(el, g.ziel), w = lebendWert(projektStand, id, g.ziel, basis, MOD_BEREICH[g.ziel], t);
+        modZeilen.get(le).live(liveText(basis, w, g.ziel === 'fader' ? 'dB' : '', g.ziel === 'fader' ? 1 : 2));
+      }
+    }
+    return an || [...laneEls.values()].some((le) => modZeilen.get(le)?.gestalt());
+  }
+  const modSchleife = neueSchleife(modSchritt);
+  function modMarken(el, s) {
+    for (const ziel of ['fader', 'pan']) {
+      const hat = hatMod(projektStand, s.id, ziel), m = el.querySelector(`.p-modmarke[data-ziel="${ziel}"]`);
+      if (hat && !m) { const i = document.createElement('i'); i.className = 'p-modmarke'; i.dataset.ziel = ziel; i.hidden = true; i.setAttribute('aria-hidden', 'true'); el.append(i); }
+      else if (!hat && m) m.remove();
+    }
+    if (el.querySelector('.p-modmarke')) modSchleife.an();
+  }
   const strangVon = (id) => stand.get(id) ?? gruppenStand.find((g) => g.id === id) ?? strangStand.find((g) => g.id === id);
   function baueLane(id, art = 'spur') {
     const el = document.createElement('div');
@@ -450,6 +486,15 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
       laneAnlegen(aendere, waehle, id, ziel, art);
     });
     el.querySelector('.p-lanenwahl').addEventListener('change', (e) => waehle(id, e.target.value));
+    // strand 6 task 1.6: "+ Mod" and the modulator controls of the target the row shows (tracks and returns; a group and the master have none)
+    if (art === 'spur' || art === 'return') {
+      const mz = baueModZeile({ aendere, stand: () => {
+        const s = strangVon(id);
+        return s && projektStand ? { projekt: projektStand, strangId: id, ziel: gezeigteLane(s, wahl(id))?.ziel ?? 'fader', art } : null;
+      } });
+      el.querySelector('.p-lane-weg').after(mz.el);
+      modZeilen.set(el, mz);
+    }
     el.querySelector('.p-lane-sperre').addEventListener('click', () => sperreUmschalten(aendereAus, id, wahl));
     el.querySelector('.p-lane-zeichnen').addEventListener('click', () => zeichenModus.umschalten());   // 1.12 slice 4 (D1)
     el.querySelector('.p-lane-weg').addEventListener('click', () => {
@@ -490,6 +535,7 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
     q('.p-lane-weg').hidden = !gezeigt;
     q('.p-lane-weg').disabled = zu;
     el.style.setProperty('--farbe', s.farbe);
+    modZeilen.get(el)?.zeige();
   }
 
   function zeigeWerte(el, s) {
@@ -501,7 +547,7 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
     // plan 1.11 task 17: a plugin track whose host says `fehlt` (plugin file gone, not an instrument) is marked MISSING with the reason as the tooltip
     const ih = s.geraet?.plugin ? instrumente().find((x) => x.spur_id === s.id) : null;
     const fehlt = ih && ih.status === 'fehlt';
-    q('.p-geraet').textContent = geraetText(s) + (pm ? ` · ${pm.text}` : '') + (s.freeze ? ' · FROZEN' : '') + (fehlt ? ' · MISSING' : '');
+    q('.p-geraet').textContent = geraetText(s) + arpKopfText(s) + (pm ? ` · ${pm.text}` : '') + (s.freeze ? ' · FROZEN' : '') + (fehlt ? ' · MISSING' : '');
     const ge = q('.p-geraet');
     // the narrow head shows the name over two columns and not the device label (style: .p-geraet is hidden); the title starts with the name and then names the device
     q('.p-spurname').title = `${s.name}${ge.textContent ? ` · ${ge.textContent}` : ''} (double click, Enter or F2 to rename)`;
@@ -541,7 +587,7 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
     const la = q('.p-lane'), an = offen().has(s.id);
     la.classList.toggle('an', an); la.setAttribute('aria-pressed', String(an)); la.setAttribute('aria-label', spurLabels(s.name).lane);
     la.classList.toggle('hat', (s.automation ?? []).length > 0);
-    // 1.14: T shows the take rows of an audio track that has takes; the class makes room for it beside the level meter (CSS)
+    // 1.14: T shows the take rows of an audio or instrument track that has takes; the class makes room for it beside the level meter (CSS)
     const tk = q('.p-take'), hat = hatTakes(s), tan = hat && takeOffen().has(s.id);
     tk.hidden = !hat; el.classList.toggle('hat-takes', hat);
     tk.classList.toggle('an', tan); tk.setAttribute('aria-pressed', String(tan)); tk.setAttribute('aria-label', `Take lanes ${s.name}`);
@@ -601,6 +647,7 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
 
   return {
     element: (id) => els.get(id),
+    modAn: () => modSchleife.an(),   // a /zustand/mod event arrived: start the marker loop if it idles
     // the selection changed (st.spurWahl): classes only, no rebuild of the heads
     zeigeWahl() {
       const w = spurWahl();
@@ -615,6 +662,7 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
     zeigeArm(arm) { for (const [id, el] of els) zeigeArmKnopf(el, istArmiert(arm, id)); },
     zeige(projekt, wechsel = false) {
       if (wechsel) { frost.leere(); griff.leere(); gesten.verwirf(); }   // another project: no stale grip or frozen value (ids like s1 repeat)
+      projektStand = projekt ?? null;
       const spuren = projekt?.spuren ?? [];
       gruppenStand = projekt?.gruppen ?? [];
       strangStand = [...(projekt?.returns ?? []), ...(projekt?.master ? [{ ...projekt.master, id: 'master', farbe: '#8a8d98' }] : [])];
@@ -630,12 +678,13 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
         let el = els.get(s.id);
         if (!el) { el = baue(s.id); els.set(s.id, el); }
         zeigeWerte(el, s);
+        modMarken(el, s);
         zeigeArmKnopf(el, istArmiert(armStandJetzt(), s.id));
         const auf = mitLane.has(s.id);
         let le = laneEls.get(s.id);
         if (auf && !le) { le = baueLane(s.id); laneEls.set(s.id, le); }
         if (!auf && le) { le.remove(); laneEls.delete(s.id); le = null; }
-        if (le) zeigeLane(le, s);
+        if (le) { zeigeLane(le, s); if (modZeilen.get(le)?.gestalt()) modSchleife.an(); }
       }
       for (const f of folge) {
         if (f.art === 'gruppe') {
@@ -713,6 +762,7 @@ export function bindeSpuren(ctx) {
   const takeKoepfe = neueTakeKoepfe({ vorhoeren: () => st?.vorhoeren ?? {}, aendere: ctx.aendere, menue: oeffneMenue,
     sende: vorhoerenSenden(ctx) });
   // SSE take_vorhoeren {vorhoeren}: every audition change (also Cypher's hand) lights the speakers without a reload
+  modAnzeigeAnschluss(ctx, () => koepfeRef?.modAn?.());   // strand 6 task 2.2: /zustand/mod -> MOD_STAND
   ctx.beimEreignis.push((a, f) => {
     if (a !== 'take_vorhoeren' || !f?.vorhoeren || typeof f.vorhoeren !== 'object') return;
     st.vorhoeren = f.vorhoeren; koepfeRef?.zeige(st.projekt);

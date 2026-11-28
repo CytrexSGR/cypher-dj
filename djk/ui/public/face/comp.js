@@ -139,6 +139,7 @@ export function baueKompFace(host, quelle) {
       get: (n) => wert(n),
       set: (n, v) => { lokal.set(n, { v, t: jetzt() }); quelle.set(n, v); zeichne(); },
       gesperrt: (n) => quelle.gesperrt?.(n) === true,
+      ...(quelle.modKnopf ? { modKnopf: (n) => quelle.modKnopf(n) } : {}),
       ende: () => quelle.ende?.(),
     },
   });

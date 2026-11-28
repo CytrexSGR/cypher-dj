@@ -67,6 +67,23 @@ class Antwort:
         return dauerlauf.antwort_ok(self.code, self.j)
 
 
+BREMSE_MAX_S = 120.0                # per call: total time waited on `zu_schnell` before the refusal is returned
+_ZERSTOEREND_NAMEN = {"proj_export", "proj_export_spuren"}
+_ZERSTOEREND_AKTIONEN = {"leeren", "szene_loeschen", "loeschen", "stopp", "ersetzen", "aufraeumen", "speichere"}
+_schlaf = time.sleep                # patched in tests
+
+
+def _bremse_pause(name, argumente, antwort):
+    """Seconds to wait after a `zu_schnell` refusal: the server's hint `wieder_in_ms` when the answer carries one (the hand does not pass it on today),
+    else 2 s for a write and 21 s for a destructive call (bucket refill 1 per 20 s)."""
+    mehr = antwort.get("mehr") if isinstance(antwort.get("mehr"), dict) else {}
+    ms = antwort.get("wieder_in_ms", mehr.get("wieder_in_ms"))
+    if isinstance(ms, (int, float)) and not isinstance(ms, bool) and ms >= 0:
+        return min(max(ms / 1000.0 + 0.1, 0.1), 30.0)
+    zerstoerend = name in _ZERSTOEREND_NAMEN or (argumente or {}).get("aktion") in _ZERSTOEREND_AKTIONEN
+    return 21.0 if zerstoerend else 2.0
+
+
 def _http(url, methode, daten, kopf, timeout):
     req = urllib.request.Request(url, data=daten, method=methode, headers=kopf)
     try:
@@ -301,6 +318,18 @@ class Hand:
         """A tool answer as a dict; a tool error is data (`_fehler: True`), never an exception. With a tour, a tool error inside a step marks
         the step red unless it is expected: `erwartet` is a set of error codes or reasons (matched against the answer's `code`, `status`, `grund` or `fehler`: the hand reports refusals such as ki_gestoppt there)."""
         r = self._rufe(name, argumente, timeout)
+        gewartet = 0.0
+        while r.get("_fehler") and (r.get("fehler") == "zu_schnell" or r.get("grund") == "zu_schnell"):
+            # the page server's rate limit (strand 9): wait and repeat. The hand sends a new call id on every call and the server only records the
+            # ids of accepted calls, so a repeat is counted like a fresh call.
+            pause = _bremse_pause(name, argumente, r)
+            if gewartet + pause > BREMSE_MAX_S:
+                break
+            _schlaf(pause)
+            gewartet += pause
+            r = self._rufe(name, argumente, timeout)
+        if gewartet and self.tour is not None:
+            self.tour._notiere_bremse(name, gewartet)
         if self.tour is not None and r.get("_fehler"):
             self.tour._melde(f"tool {name}", r.get("code") or r.get("rpc", {}).get("code") or 0, r.get("grund") or r.get("fehler") or (r.get("rpc") or {}).get("message"),
                              erwartet, [r.get("code"), r.get("status"), r.get("grund"), r.get("fehler")])
@@ -544,6 +573,17 @@ class Tour:
         if daten is not None:
             kopf["content-type"] = "application/json"
         a = _http(self.instanz.url + pfad, methode, daten, kopf, timeout)
+        gewartet = 0.0
+        while quelle == "cypher" and methode not in ("GET", "HEAD") and a.code == 429 and a.grund == "zu_schnell":
+            # raw agent POSTs are rate-limited as writes (see Hand.rufe); the refusal body carries the hint
+            pause = _bremse_pause("", None, a.j if isinstance(a.j, dict) else {})
+            if gewartet + pause > BREMSE_MAX_S:
+                break
+            _schlaf(pause)
+            gewartet += pause
+            a = _http(self.instanz.url + pfad, methode, daten, kopf, timeout)
+        if gewartet:
+            self._notiere_bremse(f"{methode} {pfad}", gewartet)
         self._letzter = (f"{methode} {pfad}", a)
         self._melde(f"{methode} {pfad}", a.code, a.grund, erwartet, [a.code], a)
         return a
@@ -564,6 +604,15 @@ class Tour:
         if s.get("_rot_auto") is None:
             s["_rot_auto"] = text
             s["_ruf_fehl"] = (ruf, code, grund)
+
+    def _notiere_bremse(self, name, sek):
+        """Records a wait on the rate limit in the current step's values: `gewartet_s` (sum) and `bremse_warten` (one text per call)."""
+        s = self._aktuell
+        if s is None:
+            return
+        w = s["werte"]
+        w["gewartet_s"] = round(w.get("gewartet_s", 0) + sek, 2)
+        w.setdefault("bremse_warten", []).append(f"{name} {sek:g}s")
 
     def notiere(self, antwort, ruf=None):
         """Records `antwort` (from `ruf`, e.g. a worker thread) as the current step's last call; call it from the step's own thread."""

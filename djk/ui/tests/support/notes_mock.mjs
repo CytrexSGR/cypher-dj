@@ -15,6 +15,7 @@
 //                       | ueber_ende (the last note ends 4 ms after the source: the sidecar check allows it, the server must refuse it)
 //                       | wenig (like ok, but the sidecar says stimmhaft_anteil 0.05, as a full mix does: three notes, little pitched sound)
 //   NOTEN_ATTRAPPE_SCHLAF_MS = <n>   sleep before the work (any case), with progress lines, so a test can change the project meanwhile
+//   NOTEN_ATTRAPPE_MESSUNG = 1       the render line carries `messung` (every note with a target ton)
 //   NOTEN_ATTRAPPE_TIEF = 1          the notes are bass notes (MIDI 28 to 30, about 41 to 46 Hz)
 //   NOTEN_ATTRAPPE_PROTOKOLL = <file> appends one JSON line per call: the arguments, the case, OMP_NUM_THREADS and the nice value
 import fs from 'node:fs';
@@ -186,7 +187,10 @@ async function main() {
     }
     fortschritt(1, 1, 'rendern', 100);
     fs.writeFileSync(`${aus}.tmp`, daten); fs.renameSync(`${aus}.tmp`, aus);
-    return ende(0, { status: 'ok', datei: aus, bereiche, sekunden: sekunden() });
+    // NOTEN_ATTRAPPE_MESSUNG=1: a measurement of every note with a target ton (the output is the halved source: the stand-in reports ton - 0.5 ct)
+    const messung = process.env.NOTEN_ATTRAPPE_MESSUNG === '1'
+      ? auftrag.liste.filter((n) => n.ton !== undefined).map((n) => ({ id: n.id, ton_ist: Math.round(n.ton * 1000) / 1000, fehler_ct: -0.5 })) : null;
+    return ende(0, { status: 'ok', datei: aus, bereiche, ...(messung ? { messung } : {}), sekunden: sekunden() });
   }
   return ende(2, { status: 'fehler', fehler: 'argument', text: `unknown command ${befehl}` });
 }

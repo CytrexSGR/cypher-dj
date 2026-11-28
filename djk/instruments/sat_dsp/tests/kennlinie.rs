@@ -64,7 +64,7 @@ fn tabelle_entspricht_der_formel() {
 fn dsp_im_beharrungszustand_gleichanteil_wird_gesperrt() {
     for r in tabelle() {
         let mut s = Saett::neu(48000.0);
-        s.setze(&Einstellung { drive_db: r[0], ausgang_db: r[1], mix: r[2] });
+        s.setze(&Einstellung { drive_db: r[0], ausgang_db: r[1], mix: r[2], ..Einstellung::default() });
         s.leeren();
         let mut l = vec![r[3] as f32; 20000];
         let mut rr = l.clone();
@@ -94,7 +94,7 @@ fn dsp_sinus_grundton_folgt_der_kennlinie() {
     for &(drive, out) in &[(0.0, -6.0), (12.0, -6.0), (24.0, -12.0), (36.0, 0.0)] {
         for &amp in &[0.01, 0.05, 0.2, 0.5, 0.9] {
             let mut s = Saett::neu(fs);
-            s.setze(&Einstellung { drive_db: drive, ausgang_db: out, mix: 1.0 });
+            s.setze(&Einstellung { drive_db: drive, ausgang_db: out, mix: 1.0, ..Einstellung::default() });
             s.leeren();
             let n = 48000usize;
             let mut l: Vec<f32> = (0..n).map(|i| (amp * (w * i as f64).sin()) as f32).collect();

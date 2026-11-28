@@ -607,6 +607,50 @@ void Kern::warp_zustand(int64_t n0, int n) {
   melde(e);
 }
 
+// Strand 6 task 1.5 (§5.13 /zustand/mod): one event per modulator of the loaded snapshot at every multiple of 1920 samples (25 Hz), playing or stopped. The value is the
+// output -1..1 before depth that the arrangement left at the last sample of its previous block (this report runs before arr_->block() of the cycle). No snapshot or no
+// modulator: nothing. At most ARR_MODS events per report; nothing here allocates or locks.
+void Kern::mod_zustand(int64_t n0, int n) {
+  constexpr int64_t ABSTAND = 1920;
+  if ((n0 + ABSTAND - 1) / ABSTAND * ABSTAND >= n0 + n) return;
+  const ArrSnapshot* s = arr_->snapshot();
+  if (!s || s->n_mod == 0) return;
+  for (int k = 0; k < s->n_mod; ++k) {
+    Ereignis e{};
+    e.art = Ereignis::MOD_ZUSTAND;
+    e.sample = n0;
+    e.deck = s->mod[k].nr;
+    e.wert = arr_->mod_ausgang(s->mod[k].nr);
+    melde(e);
+  }
+}
+
+// Strand 7 task 3.3 (§5.13 /zustand/arr/midi): at every multiple of 24 000 samples (2 Hz), playing or stopped, one event per track whose MIDI stage is on in the loaded
+// snapshot: held input pitches and the three counters since that playback was loaded (Arrangement::midi_zaehler). A track reported before whose stage went away
+// (another playback, or none) gets one event with zeros at the next tick, then nothing. The stage counters belong to the callback thread, which runs this too:
+// they are copied into the event here and the net thread reads only the event ring, so nothing is shared, locked or allocated.
+void Kern::midi_zustand(int64_t n0, int n) {
+  constexpr int64_t ABSTAND = 24000;
+  if ((n0 + ABSTAND - 1) / ABSTAND * ABSTAND >= n0 + n) return;
+  for (int i = 0; i < ARR_SPUREN; ++i) {
+    const bool an = arr_->midi_stufe_an(i);
+    if (!an && !midi_gemeldet_[i]) continue;
+    midi_gemeldet_[i] = an;
+    Ereignis e{};
+    e.art = Ereignis::MIDI_ZUSTAND;
+    e.sample = n0;
+    e.deck = i + 1;
+    if (an) {
+      const ArrMidiZaehler z = arr_->midi_zaehler(i);
+      e.midi_zahl[0] = z.gehalten;
+      e.midi_zahl[1] = z.ein;
+      e.midi_zahl[2] = z.aus;
+      e.midi_zahl[3] = z.verloren;
+    }
+    melde(e);
+  }
+}
+
 // mehrkern Task 5 (§5.13): state of the Hall pool. Reported on every change and otherwise at 2 Hz (also without a pool: 0 0 0 0, so a late subscriber hears it too). A pool that switched itself off keeps
 // reporting (an 0 with its counters), so the page and the end-of-run line can see it. The reads are relaxed atomics of the pool; nothing here allocates or locks.
 void Kern::hall_zustand(int64_t n0, int n) {

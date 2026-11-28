@@ -2,7 +2,8 @@
 // playback forms (/1 without routing, /2 with it). tests/support/flach_golden.json holds the output of the code before nested groups existed
 // (generated from c3396e9a); tests/project_flach_golden.test.mjs compares byte for byte.
 import { fuehreAus } from '../../project/commands.ts';
-import { pruefeProjekt, kanonisch } from '../../project/model.ts';
+import { pruefeProjekt } from '../../project/model.ts';
+import { normalisiere } from '../../project/storage.ts';
 import { uebersetze } from '../../project/playback.ts';
 import { specProjekt, SHA_A, SHA_B } from './project.mjs';
 
@@ -20,5 +21,6 @@ export function bauFlach() {
   ok({ befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'komp', key: { quelle: 'spur', nr: 2, punkt: 'post' } });
   ok({ befehl: 'insert_setzen', strang_id: 'g2', pos: 0, art: 'komp', key: { quelle: 'grp', nr: 1, punkt: 'pre' } });
   ok({ befehl: 'insert_setzen', strang_id: 'g1', pos: 0, art: 'eq' });
-  return { datei: kanonisch(p), wiedergabe1: eins, wiedergabe2: uebersetze(p, opt()) };
+  return { datei: JSON.stringify(normalisiere(p)),   // the bytes a save writes (late parameters at their default are left out, project/insert_spaeter.ts)
+    wiedergabe1: eins, wiedergabe2: uebersetze(p, opt()) };
 }

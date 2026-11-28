@@ -297,6 +297,7 @@ set(ARR_QUELLEN src/arrangement.cpp src/arr_voices.cpp src/arr_output.cpp src/ar
     src/arr_tap.cpp # 1.10 slice 7: the real-time tap of any strip
     src/arr_export_run.cpp # plan 1.11 T12: the real-time export run of the production master (the writer thread is arr_export_writer.cpp, in the library only)
     src/arr_auto.cpp    # Automation Slice 1: fader lane per sample, blend (ADR 032)
+    src/arr_mod.cpp     # strand 6: project modulators (LFO offsets on fader, pan, device knobs)
     src/arr_returns.cpp # 1.10 Slice 3: Cypher Hall of the return strips
     src/reverb_pool.cpp   # mehrkern task 4: the return Halls compute on the HallPool
     src/arr_inserts.cpp # 1.10 slice 4a: pooled compressor inserts of the strips
@@ -307,7 +308,8 @@ set(ARR_QUELLEN src/arrangement.cpp src/arr_voices.cpp src/arr_output.cpp src/ar
     src/arr_warp.cpp    # Paket 1.13 Slice 2: Seite des Arrangements am Warp-Werk (nur die Schnittstelle warp_factory.h, kein Bungee)
     src/zell_map.cpp  # S1b K1: the cell read map (arr_launcher.cpp, and the warp work since K4)
     src/arr_launcher.cpp    # loop deck K2: launcher voices
-    src/beatfx.cpp)         # loop lane strip K3: the beat FX instances of the launcher tracks (the Mixer uses the same class)
+    src/beatfx.cpp          # loop lane strip K3: the beat FX instances of the launcher tracks (the Mixer uses the same class)
+    src/midi_stufe.cpp)     # strand 7 task 1.1: the MIDI stage of an instrument track (arp)
 list(APPEND ARR_QUELLEN src/arr_bk_sink.cpp src/arr_kit_sink.cpp src/arr_intern_sink.cpp src/arr_rb_sink.cpp src/arr_instrument_host_sink.cpp
      src/arr_rack_sink.cpp
      src/arr_stream_sink.cpp)   # container core K7: the strom tracks read the stream buffers. 1.9 U6: instrument rack. D1 K2b: Senken (RB-338 über cypherdj::dsp -> libhall_ffi.a, Wirt-Slots)
@@ -1233,6 +1235,7 @@ test_mutation(test_arr_inserts_gruppe_leer_laeuft_mutation test_arr_inserts CYPH
 test_mutation(test_arr_inserts_mix0_gr_steht_mutation test_arr_inserts CYPHERDJ_MUTATION_INS_MIX0_GR_STEHT ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)   # case 15
 # 1.10 slice 4b T12: eq and saturator inserts (test_arr_inserts_4b). Each mutation turns its named case red.
 test_mutation(test_arr_inserts_4b_eq_band_vertauscht_mutation test_arr_inserts_4b CYPHERDJ_MUTATION_INS_EQ_BAND_VERTAUSCHT ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)       # case 2 (and the b8 binding of case 1)
+test_mutation(test_arr_inserts_eq_schluessel_sc_ignoriert_mutation test_arr_inserts_eq_key CYPHERDJ_MUTATION_INS_EQ_SC_IGNORIERT ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)   # strand 5 slice 4: case 1 (the row key of an eq stage is ignored)
 test_mutation(test_arr_inserts_4b_saett_aus_nach_drive_mutation test_arr_inserts_4b CYPHERDJ_MUTATION_INS_SAETT_AUS_NACH_DRIVE ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp) # case 4
 test_mutation(test_arr_inserts_4b_pool_plus_eins_mutation test_arr_inserts_4b CYPHERDJ_MUTATION_INS_POOL_PLUS_EINS ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)           # case 5
 test_mutation(test_arr_inserts_4b_nan_durchlass_mutation test_arr_inserts_4b CYPHERDJ_MUTATION_INS_NAN_DURCHLASS ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)               # case 8

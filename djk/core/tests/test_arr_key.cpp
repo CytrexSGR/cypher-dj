@@ -303,8 +303,8 @@ int main() {
     PRUEF(grund(komp(1, key("spur", 2, "pre")), komp(2, "")) == "format");                               // (spur, pre) has one writer: the row sc
     PRUEF(grund(komp(1, key("spur", 2, "mitte")), komp(2, "")) == "format");
     PRUEF(grund(komp(1, "[1]"), komp(2, "")) == "format");                                               // not an object
-    PRUEF(grund("{\"art\":\"eq\",\"slot\":1,\"key\":" + key("spur", 2, "post") + "}", komp(2, "")) == "format");   // only a compressor has a key
-    PRUEF(grund("{\"art\":\"eq\",\"slot\":1}", komp(2, "")) == "+snap");                                  // control: the eq without a key loads
+    PRUEF(grund("{\"art\":\"saett\",\"slot\":1,\"key\":" + key("spur", 2, "post") + "}", komp(2, "")) == "format");   // a saturator has no key (an eq has one since strand 5 slice 4)
+    PRUEF(grund("{\"art\":\"saett\",\"slot\":1}", komp(2, "")) == "+snap");                                  // control: the saturator without a key loads
   }
 
   {  // 8 ohne_schluessel (negative control): without a structural key the order is the identity, a stage with only the row sc is unchanged

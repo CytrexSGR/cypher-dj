@@ -146,7 +146,8 @@ export type Pruefmodus = 'an' | 'aus' | 'unbekannt';
 // D1 S2: /zustand/arr 50 Hz beim Spielen, Drossel 50 ms (Spec 3.1)
 export const GRAPH_ABGELEHNT = [4, 6, 7, 8];   // quittung states of a refused command (INTERFACES 5.1; 5 = executed late, a positive answer)
 export const DROSSEL_MS: Record<string, number> = { '/uhr': 50, '/zustand/deck': 100, '/pegel': 100, '/zustand/komp': 100, '/zustand/arr': 50, '/zustand/ein': 250, '/zustand/rec': 100, '/zustand/mix': 100, '/e/ins_gr': 100, '/e/stufe_pegel': 100,
-  '/zustand/spektrum': 40 };   // 1.15 A7b: 25 Hz, keyed per source (kanal)
+  '/zustand/spektrum': 40,   // 1.15 A7b: 25 Hz, keyed per source (kanal)
+  '/zustand/mod': 40 };   // strand 6 task 1.5/1.8: 25 Hz per modulator, keyed per nr (server.ts)
 // /lage container.art: the core's code (/e/container/quelle) as the page reads it
 export const CONTAINER_ART = ['leer', 'player', 'modul'] as const;
 export const INS_GR_FRIST_MS = 500;   // 1.10 slice 4a: as the page's meters (MIX_FRIST_MS); the kern sends 20 Hz while a stage runs
@@ -156,6 +157,7 @@ export const DURCHREICHEN = new Set(['/uhr', '/zustand/deck', '/pegel', '/e/regl
   '/zustand/arr', '/e/freeze', '/zustand/ein', '/zustand/rec', '/e/aufnahme',   // D1 S2 (Spec 3.4); I08 (§5.14)
   '/e/ins_gr',   // 1.10 slice 4a (§5.5f): gain reduction per running insert stage, 20 Hz from the kern, throttled per kanal
   '/e/stufe_pegel',   // device faces T9 (§5.5g): input and output peak per running compressor or limiter stage, 20 Hz from the kern, throttled per kanal
+  '/zustand/mod',   // strand 6: modulator outputs (25 Hz per nr, 40 ms throttle per nr)
   '/zustand/mix', '/zustand/spektrum',   // 1.15 A6: gain-reduction meters (10 Hz per channel, throttled per kanal); A7b: the spectrum (25 Hz, 40 ms throttle per kanal)
   '/e/auto']);   // 1.12 S3 (D8, §5.13): the override state of a lane field, every change at once
 

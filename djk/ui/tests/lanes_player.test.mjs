@@ -110,3 +110,85 @@ test('automation(): an unknown index is logged once and skipped; the other value
   assert.equal(log.filter((z) => z.typ === 'plugin_lane_param_unbekannt').length, 1);
   assert.deepEqual([A.hosts.get(1).werte[0], A.hosts.get(1).werte[1]], [0.3, 0.4]);
 });
+
+// --- strand 6 task 4.3: modulators on plugin parameters, played by the server from /zustand/mod ---------------------------------------------------
+const mitMod = (p, id, index, mod = {}, ziel = {}) => fuehreListeAus(p, [{ befehl: 'mod_neu', art: 'lfo', ziele: [{ strang_id: 's1', ziel: `plugin.${id}.${index}`, tiefe: 0.2, ...ziel }], ...mod }]).projekt;
+function modSpieler(p, start = {}) {
+  const aus = [];
+  const uhr = { t: 1000 };
+  const s = new PluginLanenSpieler({ projekt: () => p, beatsProSekunde: () => 2, senden: (id, w) => aus.push([id, w]),
+    jetzt: () => uhr.t, parameterWert: async (id, i) => start[i] });
+  return { s, aus, uhr };
+}
+const modEv = (s, wert, nr = 1) => s.mod({ nr, wert });
+const nahe = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} != ${b}`);
+
+test('modulator output 1, depth 0.2 on base 0.5 sends 0.7 while the transport stands; the timer exists only for such a target', () => {
+  const { p, id } = mitHost();
+  const q = mitMod(p, id, 2);
+  const { s, aus } = modSpieler(q);
+  s.basisSetzen(id, { 2: 0.5 });
+  assert.equal(s.modTimerLaeuft(), false);
+  modEv(s, 1);
+  assert.equal(s.modTimerLaeuft(), true, 'a modulated plugin target starts the 50 Hz timer');
+  s.modTick();
+  assert.equal(aus.length, 1); assert.equal(aus[0][0], id); nahe(aus[0][1]['2'], 0.7);
+  modEv(s, -0.5); s.modTick();
+  nahe(aus[1][1]['2'], 0.4);
+  s.modTick(); assert.equal(aus.length, 2, 'unchanged: nothing');
+  s.halt(); assert.equal(s.modTimerLaeuft(), false);
+});
+
+test('unipolar depth, clamp to 0..1, two modulators add up', () => {
+  const { p, id } = mitHost();
+  let q = mitMod(p, id, 2, {}, { tiefe: 0.8, polaritaet: 'uni' });
+  q = mitMod(q, id, 2, {}, { tiefe: 0.8 });
+  const { s, aus } = modSpieler(q);
+  s.basisSetzen(id, { 2: 0.5 });
+  modEv(s, 1, 1); modEv(s, 1, 2); s.modTick();
+  nahe(aus[0][1]['2'], 1);   // 0.5 + 0.8 + 0.8, clamped at 1
+  modEv(s, -1, 1); modEv(s, -1, 2); s.modTick();
+  nahe(aus[1][1]['2'], 0);   // uni(-1) = 0, bipolar(-1) = -0.8: 0.5 - 0.8 = -0.3, clamped to 0
+});
+
+test('lane + offset while it plays: the lane is the base', () => {
+  const { p, id } = mitHost();
+  const q = mitMod(mitLane(p, id, 3, [{ beat: 0, wert: 0.4, form: 'linear' }]), id, 3);
+  const { s, aus } = modSpieler(q);
+  modEv(s, 1);
+  tick(s, 0);
+  assert.equal(s.modTimerLaeuft(), false, 'playing: the arrangement ticks carry it');
+  nahe(aus[0][1]['3'], 0.6);
+  modEv(s, 0); tick(s, 0.04);
+  nahe(aus[1][1]['3'], 0.4);
+  tick(s, 0.08, 0);   // stop: the base is the last lane value, the timer takes over
+  assert.equal(s.modTimerLaeuft(), true);
+  modEv(s, 1); s.modTick();
+  nahe(aus.at(-1)[1]['3'], 0.6);
+});
+
+test('no core event for 500 ms: the base goes out once, then nothing; a new event resumes', () => {
+  const { p, id } = mitHost();
+  const { s, aus, uhr } = modSpieler(mitMod(p, id, 2));
+  s.basisSetzen(id, { 2: 0.5 });
+  modEv(s, 1); s.modTick(); nahe(aus[0][1]['2'], 0.7);
+  uhr.t += 400; s.modTick(); assert.equal(aus.length, 1, 'still fresh');
+  uhr.t += 200; s.modTick();
+  assert.equal(aus.length, 2); nahe(aus[1][1]['2'], 0.5);
+  s.modTick(); uhr.t += 1000; s.modTick(); assert.equal(aus.length, 2, 'base once, not repeated');
+  modEv(s, 1); s.modTick(); nahe(aus[2][1]['2'], 0.7);
+});
+
+test('without lane or knob value the base comes from the plugin (asked once); a switched-off modulator and a foreign target send nothing', async () => {
+  const { p, id } = mitHost();
+  const { s, aus } = modSpieler(mitMod(p, id, 4), { 4: 0.25 });
+  modEv(s, 1); s.modTick(); assert.equal(aus.length, 0, 'base unknown yet');
+  await schlaf(5);
+  s.modTick(); nahe(aus[0][1]['4'], 0.45);
+  s.halt();
+  const aus2 = modSpieler(fuehreListeAus(mitMod(p, id, 4), [{ befehl: 'mod_aendern', mod_id: 'm1', an: false }]).projekt);
+  modEv(aus2.s, 1); assert.equal(aus2.s.modTimerLaeuft(), false);
+  const q = mitMod(p, id, 1);
+  const fremd = JSON.parse(JSON.stringify(q)); fremd.spuren[0].inserts.find((i) => i.id === id).art = 'eq';
+  const c = modSpieler(fremd); modEv(c.s, 1); assert.equal(c.s.modTimerLaeuft(), false);
+});

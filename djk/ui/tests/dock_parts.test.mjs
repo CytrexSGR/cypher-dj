@@ -53,7 +53,7 @@ test('the Hall chip keeps only Bypass or Enable', () => {
 });
 
 test('WINDOW ↗ in the chip menu only with the fenster switch, before Remove; the Hall chip never gets it', () => {
-  const s = strang([ins('k1', 'komp'), ins('e1', 'eq')]);
+  const s = strang([ins('k1', 'komp'), ins('e1', 'saett')]);
   assert.ok(!texte(chipMenuePunkte(s, s.inserts[1], { lage: null })).includes('WINDOW ↗'), 'off by default (STUDIO)');
   const p = chipMenuePunkte(s, s.inserts[1], { lage: null, fenster: true });
   assert.deepEqual(texte(p), ['Bypass', 'Move earlier', 'Move later', 'WINDOW ↗', 'Remove']);

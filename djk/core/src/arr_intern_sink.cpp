@@ -57,6 +57,10 @@ void ArrInternSenke::stift(int spur, int satz, int zeile, int spalte, float wert
   if (ArrSenke* s = ziel(spur)) s->stift(spur, satz, zeile, spalte, wert, gen);
 }
 
+void ArrInternSenke::mod_summand(int spur, int param, float delta) noexcept {
+  if (ArrSenke* s = ziel(spur)) s->mod_summand(spur, param, delta);
+}
+
 void ArrInternSenke::note_regler(int spur, int64_t z, int param, float wert, bool relativ) noexcept {
   if (ArrSenke* s = ziel(spur)) s->note_regler(spur, z, param, wert, relativ);   // the same sink as the note that follows
 }

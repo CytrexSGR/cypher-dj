@@ -238,6 +238,8 @@ const ROUTEN = [
   'POST /fx/routing',
   'POST /fx|/fx/zuweisung',
   'POST /deck/sprung|/deck/scrub|/deck/hotcue|/deck/loop|/deck/loop/sichern|/deck/raster|/deck/raster/fix',
+  'GET /harmonie',
+  'POST /harmonie',
   'GET /strudel',
   'POST /strudel|/strudel/autonom',
   'GET /ansage',

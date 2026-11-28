@@ -104,11 +104,89 @@ lanes. The lane is evaluated once per audio block, so a step is smoothed over up
 with a lane carries a mark, and the tooltip reads "Automated: the lane sets this send". Nothing grabs a send lane by hand: the
 send knob is stored but not heard while the lane exists.
 
+## Modulators
+
+A modulator is an LFO that moves a target around its base value. In the lane row of a track head, "+ Mod" adds one on the
+target the row shows: the fader, the pan or a knob of a Cypher Modular track (return faders work the same way). Choose a
+shape (sine, triangle, saw, square, random), a length in bars or beats (or a rate in Hz), a phase, a depth and the
+polarity. Depth is in the unit of the target: dB for a fader (up to 24), pan units, a fraction of the range for a knob.
+Bipolar swings above and below the base value, unipolar only one way (a negative depth on a square wave is a gate). A
+smoothing time (1 ms by default) rounds the steps of square and random so a fader does not click.
+
+The offset is added after everything the target already plays: its value, a lane, your hand. Turn the knob or move the
+fader while the modulator runs and the sweep moves with it and keeps running; to stop it, switch the modulator off or delete
+it. Modulators run while the transport stands, and a tempo-synced one is a function of the project beat, so the export
+equals what you hear. A project holds up to 16 modulators with 8 targets each, and at most 32 different faders and pans in
+all. The agent sets the same things with the commands `mod_neu`, `mod_aendern` and `mod_loeschen`.
+
+While a modulator runs you see where it is: a knob of a Cypher Modular track shows a ring from its base position to the modulated one,
+a track fader and a track pan a thin second marker at the modulated value, and the modulator row reads "base → value". The
+markers vanish when the core stops reporting. The agent reads the same values with `proj_auto` and a `mod_id`.
+
+An envelope follower is the second kind of modulator. In the modulator row, switch the type from LFO to Follower and pick
+a source track (any track but the one it moves). The follower listens to that track's signal before its chain and fader and
+turns its level into a movement from 0 to 1: attack (0.1 to 500 ms, 5 by default) is how fast it rises, release (1 to 5000
+ms, 150 by default) how fast it falls, and sensitivity (-24 to 24 dB) shifts the level at which it starts to react. A
+follower is always unipolar, so a negative depth ducks the target while the source plays: a follower from the kick on the
+pad fader with a depth of -12 dB makes the pad duck with every kick. It reads the previous audio block, so it lags the
+source by up to 21 ms. If the source track is deleted the follower switches itself off.
+
+More targets: a track's send level (`send.<return>`, in dB, tracks only, not groups), a continuous parameter of an insert
+stage on a track, group, return or the master (depth is a fraction of the parameter's own range), a macro of a rack
+(`rack.m1` to `rack.m4`) and a parameter of a plugin. In the popover of an insert and in the parameter rows of a plugin,
+"Mod" adds a modulator on that parameter; the compressor, saturator and limiter faces draw a ring on a modulated knob. A
+parameter that a rack macro drives cannot be modulated directly (the project says `param_gemappt`): modulate the macro. A
+plugin parameter is played by the page server about 50 times a second from the core's modulator report, so it works while
+the transport stands, but it is not sample exact like the other targets.
+
+## MIDI FX
+
+An instrument track can carry a MIDI FX chain between its notes and its instrument. The strip sits above the front panel in the
+device view of a track (RB-338, Cypher Modular instrument, Surge XT) and has the sections Arp, Chord, Scale, Velocity, Chance
+and Seed. A section is on when you set it; On/Off switches the whole chain without losing the settings. The order is fixed:
+Chord, Scale, Arp, Velocity, Chance.
+
+Every note the track plays goes through the chain: clip notes, the keys you play on a keyboard or controller, notes the agent
+writes, and the offline render (freeze, bounce, export), which runs the same core, so the export sounds like the playback.
+Recording keeps what you played, not what the chain made of it, so an arpeggio is not recorded twice.
+
+**Arpeggiator.** Patterns Up, Down, Up-Down, Down-Up, As Played, Random and Chord; rates 1/2, 1/4, 1/8, 1/16 and 1/32 with
+triplets of the middle three (1/4T, 1/8T, 1/16T), locked to the project beat grid and restarting at the loop start in every pass,
+or Free in Hz (0.5 to 40) from the first key of a phrase; 1 to 4 octaves; Gate 5 to 100 percent of the step. With the transport
+stopped, held keys arpeggiate on the beat of the master clock. A key pressed up to an eighth of a step late starts at once and counts as that
+step, a later one waits for the next grid point. The agent reads the chain in real units with `proj_lage` (step and gate in
+milliseconds at the project tempo) and sets it with `midi_stufe_setzen`.
+
+**Chord.** Up to six intervals in semitones (-24 to 24, not 0, all different) are added to every key you play, so one key
+sounds the chord; the key itself stays. Presets (Major, Minor, Sus2, Sus4, 7, m7, maj7, Power, Octave) or custom intervals. A
+tone that would leave the range 0 to 127 is dropped.
+
+**Scale.** Every note, including the chord tones, is moved to the nearest tone of the scale; a tie goes down. The scale is a root
+and a scale name, or Project key, which follows the project key (and the chord lane, when the project has one). Without a project key
+a Scale set to Project key does nothing.
+
+**Velocity.** Curve (-1 to 1) bends the incoming velocity: above 0 louder, below 0 softer, 0 leaves it. Fixed (1 to 127) plays
+every note at that value instead. Random (0 to 64) adds a random amount of up to plus or minus that value. The result stays in 1 to 127.
+
+**Chance.** Each note plays with the given probability in percent (100 means always). Without the arpeggiator the draw is made
+per key, and a key that does not sound has no note off to wait for. With the arpeggiator the draw is made per step: a skipped step is silent, and the pattern
+still moves on to the next position.
+
+**Seed.** Random pattern, Random velocity and Chance draw from the seed, the track and the step number, so a playback, a rerun
+and the export play the same. A new seed gives a new draw.
+
+**Counters.** The agent sees per track what the stage did in `proj_lage` under `midi.zaehler`: `gehalten` (input pitches held now),
+`ein` (input notes taken in), `aus` (notes the stage sent; a step skipped by chance does not count) and `verloren` (input
+notes dropped because the stage was full, should stay 0). The core reports them twice a second, counted since the playback was
+loaded; the value is null until the first report. They are not shown on the page.
+
 ## Takes, comping, bounce, merge
 
 Recording keeps every pass as a take lane under the track, and what it overwrote goes to a lane named Original. Drag a
 range on a take lane to comp it into the track; the edges get seam fades. A take can be auditioned on its own, live
-only. Take lanes are for audio tracks; MIDI takes do not exist yet.
+only. Instrument tracks have take lanes too: a MIDI recording in replace mode keeps every loop pass as its own take lane
+(a note held across the loop end is cut there), the track gets the last complete pass, and comping and auditioning work as on
+audio tracks, without seam fades. Stream tracks have no take lanes.
 
 Merge Tracks renders two or more tracks into one new audio track. Bounce Track in Place replaces a track's clips with its
 rendered audio and keeps the old ones in a lane named Before bounce; Bounce to New Track puts the render on a new track;
@@ -189,6 +267,16 @@ A double click on the empty strip, or + MARKER in the transport bar (at the star
 A project holds up to 64 markers, one per beat. Markers move with inserted and removed time and with the section moves
 of the tracker view, and one undo takes the move back. They are labels only: they change nothing in the sound, and the
 live container has none. The agent reads them with the project and writes them with `marker_setzen` and `marker_loeschen`.
+
+**Chord lane.** CHORDS in the transport bar, next to + MARKER, shows a row under the ruler with the harmony of the song: the
+key or chord that holds from a beat on. A double click on the empty row adds an entry at the snapped beat and opens a text field:
+type a chord symbol such as Am7 (the key is derived from the chord) or a key such as A minor; a double click or F2 on a block
+rewrites it, a drag moves it on the GRID, Delete removes it (the last one removes the lane). A project holds up to 512
+entries, one per beat, in the newer project format only; the live container has none. The lane is part of the project, one
+undo step per gesture; the agent writes it with `harmonie_setzen`. A track whose MIDI FX Scale is set to Project key follows the
+lane: the scale of that track is the one of the entry in force at the note's beat, and before the first entry the key of the
+project (C minor without one). That is stored and sent with the playback now (the head key `harmonie`, only when a track
+follows the lane); the engine does not read it yet, so the lane changes nothing you hear until it does.
 
 **Delivery files.** EXPORT opens a dialog. The master (WAV, 48 kHz, 32 bit float) is always written and never changed;
 up to four delivery files are made from it with ffmpeg and named like the master with a tag before the extension, for

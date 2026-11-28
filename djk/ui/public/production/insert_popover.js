@@ -1,5 +1,5 @@
 // PRODUCTION: the parameter popover of one insert stage as a function (extracted from inserts.js, behaviour unchanged), and the floating popover the dock opens
-// at a chip. baueStufenPopover(ctx, strang, insert, { liste }) -> { el, aktualisiere(p), zerstoere() } builds the rows of a utility, a gate, a multiband (grouped by band), a plugin (its generic parameter
+// at a chip. baueStufenPopover(ctx, strang, insert, { liste }) -> { el, aktualisiere(p), zerstoere() } builds the rows of a utility, a gate, a multiband (grouped by band), a transient shaper, an imager, a plugin (its generic parameter
 // list), a compressor (with the key select), a saturator, a limiter, an EQ, or the K rows of a Baukasten stage (liste: true; a Baukasten panel is the window's or
 // the old row's business, see inserts.js and dock/window.js). bindeStufenPopover(ctx) sets ctx.oeffneStufenPopover(strang, insert, anker) -> { schliesse }:
 // one floating popover at a time, position: fixed at the bottom left of the anchor, closed by its X, Escape, a click outside, a project switch or when its stage is gone.
@@ -10,6 +10,7 @@ import {
 } from './inserts.js';
 import { baueParameterListe } from './plugin_parameter.js';
 import { PLUGIN_ZIEL } from './lanes.js';
+import { baueModFeld, insertModZiel, pluginModZiel, pluginModIndizes, modKnopfZustand } from './mod_line.js';
 import { SC_EIGEN, schluesselGruppen, schluesselBefehl, schluesselWert, schluesselLabel, hostHatSchluessel, ohneSpurPre } from './key_choice.js';
 
 const zeileHtml = (art, q, name, beschriftung) => {
@@ -59,6 +60,8 @@ export function baueStufenPopover(ctx, strang, i0, { liste = false } = {}) {
   el.className = `p-ins-popover p-ins-${i.art}`; el.dataset.insert = i.id;
   let weg = false;
   const zerstoere = () => { weg = true; el.remove(); };
+  // strand 6 task 4.4: the modulator controls of the target the last "Mod" button chose (a row button creates the modulator, a second click hides the controls)
+  const modFeld = baueModFeld({ aendere: (...a) => ctx.aendere(...a), projekt: () => ctx.st.projekt, strangId: strang.id, art: strang.art });
   if (i.art === 'host') {   // the generic parameter list of a plugin: its own module, the values live in the plugin
     const pfad = `/proj/insert/${encodeURIComponent(i.id)}`;
     // "Lane" button per row: creates the lane `plugin.<stage id>.<index>` on this strip with the current value as its first point, then shows it
@@ -71,8 +74,10 @@ export function baueStufenPopover(ctx, strang, i0, { liste = false } = {}) {
     };
     const pl = baueParameterListe(el, { holeListe: () => ctx.holeGet(`${pfad}/parameter`), sende: (w) => ctx.holeJson(`${pfad}/param`, { werte: w }),
       fehler: (r) => ctx.melde(ctx.antwortText(r), true), lane: { insertId: i.id, anlegen },
+      mod: { zustand: (index) => modKnopfZustand(ctx.st.projekt, s.id, pluginModZiel(i.id, index)), knopf: (index) => modFeld.knopf(pluginModZiel(i.id, index)) },
       midi: { lernen: (index) => ctx.holeJson(`${pfad}/lernen`, { index }), loeschen: (index) => ctx.holeJson(`${pfad}/lernen/loeschen`, { index }) } });
     // strand 2 task 3.5: the key row of a host stage; the plugin's index entry (GET /plugins) says whether it has a key input (4 or more audio inputs)
+    el.prepend(modFeld.el);
     const zeile = document.createElement('label'); zeile.className = 'p-ins-zeile p-ins-hostkey';
     zeile.append('Key');
     const sel = document.createElement('select'); sel.className = 'p-ins-sc'; sel.setAttribute('aria-label', `Sidechain key of the plugin on ${s.name}`);
@@ -116,6 +121,8 @@ export function baueStufenPopover(ctx, strang, i0, { liste = false } = {}) {
     // the project says which parameters of this stage have a lane
     el.aktualisiere = (p) => {
       zeichneKey(p);
+      modFeld.zeige();
+      pl.setzeMods(pluginModIndizes(p, s.id, i.id));
       const st = [...(p?.spuren ?? []), ...(p?.gruppen ?? []), ...(p?.returns ?? []), ...(p?.master ? [p.master] : [])].find((x) => x.id === s.id);
       pl.setzeLanen((st?.automation ?? []).flatMap((l) => { const m = PLUGIN_ZIEL.exec(l.ziel ?? ''); return m && m[1] === i.id ? [Number(m[2])] : []; }));
     };
@@ -141,6 +148,7 @@ export function baueStufenPopover(ctx, strang, i0, { liste = false } = {}) {
     const zu = el.querySelector(':scope > .p-ins-zu'), umschalter = el.querySelector(':scope > .p-ins-liste');   // what a caller put in front survives a rebuild
     el.innerHTML = html;
     if (umschalter) el.prepend(umschalter);
+    el.prepend(modFeld.el);
     if (zu) el.prepend(zu);
     for (const r of el.querySelectorAll('.p-ins-param')) {
       const name = r.dataset.param, k = `${i.id}:${name}`, q = parameterVon(i.art, name);
@@ -153,6 +161,14 @@ export function baueStufenPopover(ctx, strang, i0, { liste = false } = {}) {
         ctx.aendere(`${bt ? `${bt} ` : ''}${q.label} ${ARTEN[i.art].name} on ${s.name}`, [paramBefehl(i.id, name, v)], k);
       };
       const stetig = r.type === 'range';
+      const modZiel = insertModZiel(i, name, q);   // a continuous parameter of a built-in stage: a Mod button at its row
+      if (modZiel) {
+        const mb = document.createElement('button');
+        mb.type = 'button'; mb.className = 'p-ins-mod'; mb.textContent = 'Mod'; mb.dataset.ziel = modZiel;
+        mb.setAttribute('aria-label', `Modulate ${q.label} of the ${ARTEN[i.art].name} on ${s.name}`);
+        mb.addEventListener('click', () => { modFeld.knopf(modZiel).then(() => modKnoepfe()); });
+        r.closest('.p-ins-zeile').append(mb);
+      }
       r.addEventListener(stetig ? 'input' : 'change', sende);
       if (stetig) {
         r.addEventListener('pointerdown', () => greift.add(k));
@@ -178,6 +194,14 @@ export function baueStufenPopover(ctx, strang, i0, { liste = false } = {}) {
     if (el.isConnected && jetzt) werte(el, s, jetzt, ctx.st.projekt);
   }
 
+  // the state of the row buttons from the project (active = the parameter has a modulator)
+  function modKnoepfe() {
+    modFeld.zeige();
+    for (const b of el.querySelectorAll('.p-ins-mod')) {
+      const z = modKnopfZustand(ctx.st.projekt, s.id, b.dataset.ziel);
+      b.classList.toggle('an', z.aktiv); b.setAttribute('aria-pressed', String(z.aktiv)); b.disabled = z.gesperrt || b.closest('.p-ins-zeile')?.classList.contains('gemappt'); b.title = z.titel;
+    }
+  }
   function werte(e, st, ins, p) {
     e.panel?.aktualisiere();
     const str = straenge(p).find((x) => x.id === st.id), mw = rackWerte(str);
@@ -193,6 +217,7 @@ export function baueStufenPopover(ctx, strang, i0, { liste = false } = {}) {
       if (!greift.has(`${ins.id}:${name}`)) setze(r, q, v);
       e.querySelector(`.p-ins-wert[data-param="${name}"]`).textContent = (nr !== null ? `M${nr} ` : '') + wertText(ins.art, name, v);
     }
+    modKnoepfe();
     const sc = e.querySelector('.p-ins-sc');
     if (!sc) return;
     const info = schl.get(ins.id), jetzt = schluesselWert(ins);

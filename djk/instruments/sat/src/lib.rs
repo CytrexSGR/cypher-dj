@@ -30,7 +30,7 @@ impl Default for SaettParams {
 
 impl SaettParams {
     fn einstellung(&self) -> Einstellung {
-        Einstellung { drive_db: self.drive.value() as f64, ausgang_db: self.ausgang.value() as f64, mix: self.mix.value() as f64 }
+        Einstellung { drive_db: self.drive.value() as f64, ausgang_db: self.ausgang.value() as f64, mix: self.mix.value() as f64, ..Einstellung::default() }
     }
 }
 

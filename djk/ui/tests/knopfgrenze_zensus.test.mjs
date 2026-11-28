@@ -51,6 +51,11 @@ const ERLAUBT = [
   { datei: 'ui/project/model.ts', fragment: "'geraet.k32'", grund: 'row of the knob table k1..k64' },
   { datei: 'ui/project/insert_key.ts', fragment: "name: 'k32'", grund: 'generated key list k1..k64' },
   { datei: 'conductor/src/insert_controls.ts', fragment: "/k32'", grund: 'generated rows ins/bk/<n>/k1..k64' },
+  // insert pools of 32 instances (strand 5: saturators 4 -> 32, transient shapers 32), not knobs
+  { datei: 'ui/hand_operation.ts', fragment: 'ins\\/saett\\/([1-9]|[12][0-9]|3[0-2])', grund: 'saturator pool ins/saett/1..32' },
+  { datei: 'ui/hand_operation.ts', fragment: 'ins\\/trans\\/([1-9]|[12][0-9]|3[0-2])', grund: 'transient shaper pool ins/trans/1..32' },
+  { datei: 'hand/hand.ts', fragment: 'ins/saett/1..32', grund: 'tool text: saturator pool of 32' },
+  { datei: 'hand/hand.ts', fragment: 'ins/trans/1..32', grund: 'tool text: transient shaper pool of 32' },
   // comments that describe the 8 -> 32 -> 64 history
   { datei: 'ui/project/model.ts', fragment: 'bk k9..k32', grund: 'comment: the index space of the rack members, k33..k64 follow' },
   { datei: 'ui/project/model.ts', fragment: 'k9..k32 = 17..40', grund: 'comment: GLIED_PARAM_BK9 range, GLIED_PARAM_BK33 follows' },

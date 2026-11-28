@@ -1,5 +1,9 @@
 // A minimal fake DOM for the heads of the track list (bindeKoepfe): enough for createElement, innerHTML, querySelector, events. Not a browser: the real
 // behaviour is proven by the browser probes. Every selector gives one element; fire(el, type, props) calls its handlers.
+// Every selector gives one element, so every head carries a modulator marker element and starts the animation frame loop (mod_display.js neueSchleife,
+// strand 6). Node has no frames: the stand-in never runs one.
+globalThis.requestAnimationFrame ??= () => 1;
+globalThis.cancelAnimationFrame ??= () => {};
 export function neuesElement() {
   const kinder = new Map(), hoerer = new Map(), klassen = new Set(), attr = new Map();
   const el = {

@@ -255,8 +255,8 @@ int main() {
     PRUEF(grund(88, spur(kette + rack(1, z(0, 0, 0)))) == "format");                      // the stage switch an
     PRUEF(grund(89, spur(kette + rack(1, z(0, 0, 9)))) == "format");                      // the compressor key sc
     PRUEF(grund(90, spur(kette + rack(1, z(0, 0, 10)))) == "format");                     // beyond the parameters of the compressor
-    PRUEF(grund(91, spur(kette + rack(1, z(0, 1, 58)))) == "+snap");                      // the last eq parameter is fine
-    PRUEF(grund(92, spur(kette + rack(1, z(0, 1, 59)))) == "format");                     // one beyond the eq
+    PRUEF(grund(91, spur(kette + rack(1, z(0, 1, 84)))) == "+snap");                      // the last eq parameter is fine (dyn_release since strand 5 slice 2; b8/platz 58 before)
+    PRUEF(grund(92, spur(kette + rack(1, z(0, 1, 85)))) == "format");                     // one beyond the eq (59 before strand 5 slice 2)
     PRUEF(grund(93, spur(kette + rack(1, z(0, 0, 1) + "," + z(1, 0, 1)))) == "format");   // the same target twice
     PRUEF(grund(94, spur(kette + rack(1, z(0, 0, 1) + "," + z(1, 0, 2)))) == "+snap");    // two different targets of one macro / two macros are fine
     PRUEF(grund(95, spur(kette + rack(1, z(0, 0, 1, "0", "nan")))) == "format");          // not a number

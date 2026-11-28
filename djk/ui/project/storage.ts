@@ -13,6 +13,7 @@ import { ablageOrdner, type AblageOptionen } from '../paths.ts';
 import path from 'node:path';
 import { nimmSperre, SperreBelegt } from '../lock.ts';
 import { SLUG, slugVon } from '../collection.ts';
+import { insertSpaeterKanonisch } from './insert_spaeter.ts';
 import { bkInsertKanonisch, bkReglerKanonisch, setzeVorgabenQuelle, vorgabenVonGraph as vorgabenQuelle } from './modular.ts';
 export { setzeVorgabenQuelle };
 import { seqV1Wandeln } from './seq.ts';
@@ -48,7 +49,11 @@ export function projektSlug(name: string): string {
 // so a project without knob 9..32 stays readable by older builds
 export const normalisiere = (p: Projekt): Projekt => {
   const n = sortiert(p) as Projekt;                                       // sortiert baut neue Objekte, die Eingabe bleibt unberührt
-  for (const { strang } of alleStraenge(n)) for (const i of strang.inserts ?? []) if (i.art === 'bk') bkInsertKanonisch(i.werte);
+  for (const { strang } of alleStraenge(n)) {
+    for (const i of strang.inserts ?? []) {
+      if (i.art === 'bk') bkInsertKanonisch(i.werte); else if (i.art !== 'host') insertSpaeterKanonisch(i.art, i.werte);
+    }
+  }
   // the sound snapshot: pad to 64, cut trailing values equal to the graph's `vorgabe` down to 8
   for (const e of n.baukasten ?? []) e.regler = bkReglerKanonisch(e.regler, vorgabenQuelle(e.graph));
   return n;

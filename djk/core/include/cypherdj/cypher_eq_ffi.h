@@ -19,4 +19,11 @@ void cypher_eq_setze_global(CypherEq* h, uint8_t prop_q, double ausgang_db);
 void cypher_eq_leeren(CypherEq* h);
 uint32_t cypher_eq_latenz(const CypherEq* h);
 void cypher_eq_block(CypherEq* h, float* l, float* r, size_t n);
+// Dynamic bands (only Bell, Low shelf, High shelf act on it). modus: 0 off, 1 above threshold, 2 below, 3 above with key, 4 below with key; schwelle/bereich in dB; non-finite is ignored.
+void cypher_eq_setze_dyn(CypherEq* h, uint32_t i, uint8_t modus, double schwelle, double bereich);
+void cypher_eq_setze_dyn_zeiten(CypherEq* h, double attack_ms, double release_ms);   // 0.1..100 / 5..1000 ms, clamped
+// Like block, with a key for bands in mode 3/4; kl/kr may be null (no key; null kr reuses kl); latency unchanged.
+void cypher_eq_block_schluessel(CypherEq* h, float* l, float* r, const float* kl, const float* kr, size_t n);
+float cypher_eq_dyn_db(const CypherEq* h, uint32_t i);   // current dynamic change of band i in dB
+float cypher_eq_dyn_max_db(CypherEq* h);                  // signed largest |change| since the last call (negative = cut), reads and resets
 }

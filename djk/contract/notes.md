@@ -60,12 +60,42 @@ Rules over the whole list (not expressible in JSON Schema), in this fixed order,
 1. duplicate ids,
 2. duration: `qe > qa + 0.01` is required, so a duration of exactly 0.01 s is refused,
 3. targets against detected values, note by note and, within a note, in this order: `ton` equal to `qton`, `ton` beyond the span,
-   `a` equal to `qa`, `e` equal to `qe`, effective end not greater than effective start,
+   `a` equal to `qa`, `e` equal to `qe`, effective end not greater than effective start, stretch outside 0.25 to 4 (see "Time targets"),
 4. order: `qa` must not decrease,
-5. overlap: `qe[i] <= qa[i+1]`.
+5. overlap: `qe[i] <= qa[i+1]`,
+6. clip field only, when order and overlap above passed: overlap of the effective intervals, `e_eff[i] <= a_eff[i+1]` (see "Time targets").
 
 Shape errors come first: the shape of every note (types, ranges, patterns, unknown fields, default-valued targets) is checked over the
 whole list before any rule is reported, `ton` outside 0 to 127 included.
+
+## Time targets
+
+Time targets (`a`, `e`) move or stretch a note along the time axis. Two rules decide whether a list with time targets is valid; both run in
+the clip field (`audioNotenPruefung`) and in the core (`render`), and the core answers with the same codes.
+
+- **Overlap of the effective intervals.** With `a_eff = a ?? qa` and `e_eff = e ?? qe`, notes in order of `qa` must satisfy
+  `e_eff[i] <= a_eff[i+1]`. Touching (`e_eff == a_eff`) is allowed. Otherwise the reason is `noten_ueberlappen` ("notes overlap after the
+  edit (end <e> of <id> is after the start <a> of <id>)"). The rule on the detected values (`qe[i] <= qa[i+1]`) stays and comes first.
+- **Stretch limit.** The stretch factor `f = (e_eff - a_eff) / (qe - qa)` must be in `[0.25, 4]` (1e-9 tolerance, so exactly 0.25 and exactly 4
+  are valid). Otherwise the reason is `noten_dehnung_grenze` ("a note can be stretched to at most 4 times and compressed to a quarter of its
+  detected length"). The rule runs per note after "effective end greater than effective start".
+
+A note with only `a` or only `e` is valid under the same rules (the other end counts as detected).
+
+**Neighbours (written for the command that edits times).** A command that moves an edge takes `mit_nachbarn` (default true). A neighbour
+whose effective edge touched the moved edge (gap smaller than 40 ms before the edit) follows it: its `e` (previous note) or its `a` (next
+note) is set to the new edge. Otherwise the gap gives. An overlap that remains after that is refused with `noten_ueberlappen`. Legato notes
+therefore never get holes, and separated notes keep their neighbours untouched.
+
+**Source end.** Commands enforce `a >= 0` only, because a command does not know the length of the source. The page clamps a target to the
+length of the source; the core clamps to the end of the source after the stretch check.
+
+**Vibrato and drift (decomposition, implemented in C++ and in TypeScript).** Inside `[qa, qe]` take the voiced frames of the curve,
+`dev = ct/100 - qton` (semitones), unvoiced frames linearly interpolated (held at the ends); none voiced: no change. `drift` is the centred
+moving mean of `dev` over 47 frames (0.25 s at hop 256), applied twice (a triangular window: one pass leaves about a fifth of a 6 Hz
+vibrato in the drift); each pass truncates its window at the note edges. `vibrato = dev - drift`. The render adds
+the extra shift `(drift_f - 1) * drift(t) + (vib_f - 1) * vibrato(t)`, read at the old time `tau(u)`, to the per-sample shift, shaped by the
+same edge ramps. One shared definition keeps the numbers of the page and the sound in step.
 
 ## The curve sidecar
 
@@ -122,10 +152,12 @@ The monophonic check: rewrites the sidecar with `mono` (atomically). A separate 
 the engine analysis it needs and the network path runs the same check. A polyphonic result is not an error: the line says
 `mehrstimmig: true`.
 
-### `render <quelle.f32> <kurve.json> <auftrag.json> <aus.f32> [--vorher <f32> --nur <id,id,...>]`
+### `render <quelle.f32> <kurve.json> <auftrag.json> <aus.f32> [--vorher <f32> --nur <id,id,...> [--vorher-liste <notes.json>]]`
 
 The output has exactly the frames of the source. `--nur` requires `--vorher` (`argument` otherwise); `--vorher` of another length
-is `vorher_passt_nicht`. The sample rate (48000, stereo, float32 little endian) and the frame count come from the source file.
+is `vorher_passt_nicht`. `--vorher-liste` is the note list `--vorher` was rendered from: the render also covers the interval each
+listed id had there, so a note moved back leaves no old copy. A list with time targets and `--nur` but without `--vorher-liste` is rendered
+in full. The core refuses `noten_ueberlappen` and `noten_dehnung_grenze` itself as well. The sample rate (48000, stereo, float32 little endian) and the frame count come from the source file.
 
 ## Lines
 
@@ -137,7 +169,14 @@ text with or without that one trailing LF, and refuses a second LF, a CR, or a l
 | `version` | `programm`, `vertrag`, `detektor`, `segmentierer`, `maschine` |
 | `analyse`, `segment` | `datei`, `noten` (count), `stimmhaft` (0 to 1), `sekunden` (CPU seconds) |
 | `pruefe` | `mehrstimmig`, `anteil`, `sekunden` |
-| `render` | `datei`, `bereiche` (`[[s0, s1], ...]`, rewritten sample ranges, half open, `s0 < s1`), `sekunden` |
+| `render` | `datei`, `bereiche` (`[[s0, s1], ...]`, rewritten sample ranges, half open, `s0 < s1`), `messung` (optional for readers, always written by the core), `sekunden` |
+
+`messung` is `[{"id", "ton_ist", "fehler_ct"}, ...]`, one entry per edited note (a target `ton`, `a`, `e`, `vib` or `drift`) in list order:
+the median of the voiced frames of the own detector (hop 256) on the output over the middle of the new interval, which lies between the
+head zone and the tail zone of a time edit (a pitch-only edit leaves 40 ms at the start and 12 ms at the end), as `ton_ist` (float MIDI,
+0.001) and `fehler_ct` = (`ton_ist` minus the target `ton ?? qton`) times 100 (cents, 0.1). A note whose middle is shorter than 4096 samples
+or has no voiced frame has no entry. An incremental render measures every edited note of the list, not only the re-rendered ones. The
+server keeps the array with the render state of the clip (`render.messung` of `GET /proj/noten`).
 
 Failure: `{"status":"fehler","fehler":<code>,"text":<English text>}`.
 
@@ -162,6 +201,8 @@ lines per second. Names: `laden`, `tonhoehe`,
 | `vorher_passt_nicht` | the `--vorher` file has another length than the source |
 | `schreiben` | an output file cannot be written or renamed |
 | `nicht_gebaut` | the command is still a stub (only while a command is not built) |
+| `noten_ueberlappen` | the effective intervals of two neighbours overlap after the time targets (the order carries it; `noten_ungueltig` is for the detected values) |
+| `noten_dehnung_grenze` | a note is stretched beyond 4 times or compressed below a quarter of its detected length |
 
 ## Reason codes
 
@@ -173,6 +214,8 @@ every bad example file is in `cases/noten/gruende.json` (the tests of both sides
 | anything the schema refuses (shape, ranges, patterns, unknown fields, default-valued targets) | `argument_ungueltig` | `format` |
 | `ton` outside 0 to 127 | `noten_ton_grenze` | `format` |
 | `ton` within 0 to 127 but beyond the span of 24 semitones | `noten_ton_grenze` | `noten_ungueltig` |
+| the effective intervals of two notes overlap after the time targets | `noten_ueberlappen` | `noten_ungueltig` |
+| the stretch of a note is outside 0.25 to 4 | `noten_dehnung_grenze` | `noten_ungueltig` |
 | any other list rule (duplicate id, duration, target equal to detected value, effective end, order, overlap) | `argument_ungueltig` | `noten_ungueltig` |
 | array lengths of a curve against its `frames`, decimals of `f0_ct` and `konf`, a `mono` rule | not applicable | `format` |
 | curve `frames` differ from the source, order's curve id differs from the sidecar's | not applicable | `kurve_passt_nicht` |

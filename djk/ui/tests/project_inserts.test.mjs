@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fuehreAus, fuehreListeAus, BefehlFehler } from '../project/commands.ts';
 import {
-  neuesProjekt, pruefeProjekt, kanonisch, wiedergabeSicht, MAX_INSERTS_PRO_STRANG, MAX_SPUREN, MAX_INS_KOMP, MAX_INS_EQ, MAX_INS_SAETT, MAX_INS_LIM, MAX_INS_UTIL, MAX_INS_BK, MAX_INS_GATE, MAX_INS_MB, MAX_RACK,
+  neuesProjekt, pruefeProjekt, kanonisch, wiedergabeSicht, MAX_INSERTS_PRO_STRANG, MAX_SPUREN, MAX_INS_KOMP, MAX_INS_EQ, MAX_INS_SAETT, MAX_INS_LIM, MAX_INS_UTIL, MAX_INS_BK, MAX_INS_GATE, MAX_INS_MB, MAX_INS_TRANS, MAX_INS_BILD, MAX_RACK,
 } from '../project/model.ts';
 import { INSERT_ARTEN } from '../project/insert_key.ts';
 import { wende } from '../project/patch.ts';
@@ -347,14 +347,14 @@ const EQ_ZEILEN = INSERT_ARTEN.eq.parameter.filter((q) => q.name !== 'an');
 test('4b: limits - the eq and saett pools are the measured sizes (T11), the project accepts both kinds', () => {
   assert.equal(MAX_INS_EQ, INSERT_ARTEN.eq.instanzen, 'the eq pool is the generated size');
   assert.equal(MAX_INS_SAETT, INSERT_ARTEN.saett.instanzen, 'the saett pool is the generated size');
-  assert.equal(EQ_ZEILEN.length, 58, 'out, propq and 8 x 7 band rows');
+  assert.equal(EQ_ZEILEN.length, 58 + 8 * 3 + 2 + 1, 'out, propq, 8 x 7 band rows, 8 x 3 dynamic rows (d<m>/dyn, schwelle, bereich), dyn_attack, dyn_release and the key row sc (strand 5 slice 4)');
 });
 
 test('4b: insert_setzen eq: defaults from the contract, a band parameter travels as ins/eq/1/b3/gain, `an` last; saett likewise', () => {
   const p = mit(1);
   const e = ok(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'eq' }); pruefe(p, e);
   assert.equal(e.projekt.spuren[0].inserts[0].art, 'eq');
-  assert.equal(Object.keys(e.projekt.spuren[0].inserts[0].werte).length, 58);
+  assert.equal(Object.keys(e.projekt.spuren[0].inserts[0].werte).length, 84);
   assert.equal(e.projekt.spuren[0].inserts[0].sc, undefined, 'only the compressor has a key');
   assert.deepEqual(e.regler_aenderungen, [{ pfad: 'ins/eq/1/an', wert: 1 }], 'defaults equal the pool defaults: only `an` differs');
   const w = ok(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'eq', werte: { 'b3/gain': 6, 'b3/an': 1, out: -3 } });
@@ -374,7 +374,6 @@ test('4b: refusals - range, integer steps, unknown name, key on a non-compressor
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'eq', werte: { 'b1/typ': 1.5 } }, 'argument_ungueltig');
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'eq', werte: { 'b9/gain': 1 } }, 'argument_unbekannt');
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'eq', werte: { schwelle: -10 } }, 'argument_unbekannt');
-  lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'eq', sc: 2 }, 'argument_unbekannt');
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'saett', werte: { drive: 37 } }, 'argument_ungueltig');
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'saett', sc: 2 }, 'argument_unbekannt');
   assert.equal(ok(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'eq', werte: { 'b1/gain': 24, 'b1/typ': 6 } }).projekt.spuren[0].inserts.length, 1, 'negative control: the edges are accepted');
@@ -385,10 +384,11 @@ test('4b: refusals - range, integer steps, unknown name, key on a non-compressor
   const { projekt: voll } = poolVoll('eq', MAX_INS_EQ);
   lehntAb(voll, { befehl: 'insert_setzen', strang_id: 'master', pos: 0, art: 'eq' }, 'ins_voll');
   assert.equal(ok(voll, { befehl: 'insert_setzen', strang_id: 'master', pos: 0, art: 'saett' }).projekt.master.inserts.length, 1);
-  // insert_param_setzen: eq band parameter ok, sc on an eq refused, unknown refused
+  // insert_param_setzen: eq band parameter ok, sc on a saturator refused, unknown refused
   const id = q.spuren[0].inserts[0].id;
   assert.deepEqual(ok(q, { befehl: 'insert_param_setzen', insert_id: id, param: 'b2/freq', wert: 123 }).regler_aenderungen, [{ pfad: 'ins/eq/1/b2/freq', wert: 123 }]);
-  lehntAb(q, { befehl: 'insert_param_setzen', insert_id: id, param: 'sc', wert: 1 }, 'argument_unbekannt');
+  const sa = ok(q, { befehl: 'insert_setzen', strang_id: 's1', pos: 1, art: 'saett' }).projekt;   // sc on a saturator refused (the eq has a key since strand 5 slice 4)
+  lehntAb(sa, { befehl: 'insert_param_setzen', insert_id: sa.spuren[0].inserts[1].id, param: 'sc', wert: 1 }, 'argument_unbekannt');
   lehntAb(q, { befehl: 'insert_param_setzen', insert_id: id, param: 'b2/freq', wert: 5 }, 'argument_ungueltig');
   lehntAb(q, { befehl: 'insert_param_setzen', insert_id: id, param: 'b9/freq', wert: 500 }, 'argument_unbekannt');
 });
@@ -792,7 +792,7 @@ test('alleInsertRegler(p, bekannt): a free slot row the core holds at the defaul
   const p = setze(mit(1), 's1', 'komp');
   p.spuren[0].inserts[0].slot = 3;
   const full = alleInsertRegler(p);
-  const ROWS = { komp: 10, eq: 59, saett: 4, lim: 3, host: 1, utility: 5, bk: 9 };
+  const ROWS = { komp: 10, eq: 85, saett: 4, lim: 3, host: 1, utility: 5, bk: 9 };
   const proArt = (liste, art) => liste.filter((r) => r.pfad.startsWith(`ins/${art}/`));
   for (const art of Object.keys(ROWS)) {
     assert.ok(proArt(full, art).length > 0, art);
@@ -873,6 +873,69 @@ test('gate and mb: alleInsertRegler emits every pool row of both kinds, free slo
   const { alleInsertRegler } = await import('../areas/proj/mapping.ts');
   const rows = alleInsertRegler(neuesProjekt('N'));
   for (const art of ['gate', 'mb']) {
+    const n = INSERT_ARTEN[art].parameter.length;
+    const r = rows.filter((x) => x.pfad.startsWith(`ins/${art}/`));
+    assert.equal(r.length, INSERT_ARTEN[art].instanzen * n, art);
+    assert.deepEqual(r.slice(-1), [{ pfad: `ins/${art}/${INSERT_ARTEN[art].instanzen}/an`, wert: 0 }]);
+  }
+});
+
+// ---- trans and bild kinds (strand 5 slice 3): transient shaper (32 x 6 rows) and three-band imager (16 x 7 rows); no key, no preset, latency 0 ----------
+test('trans and bild: the pools and the row counts are the contract ones, the kinds are accepted, the saturator pool is 32', () => {
+  assert.equal(MAX_INS_TRANS, INSERT_ARTEN.trans.instanzen); assert.equal(MAX_INS_TRANS, 32);
+  assert.equal(MAX_INS_BILD, INSERT_ARTEN.bild.instanzen); assert.equal(MAX_INS_BILD, 16);
+  assert.equal(MAX_INS_SAETT, 32);
+  assert.equal(INSERT_ARTEN.trans.latenz, 0); assert.equal(INSERT_ARTEN.bild.latenz, 0);
+});
+
+test('trans and bild: insert_setzen gives the contract defaults and `an` last; a given value travels first', () => {
+  const p = mit(1);
+  for (const art of ['trans', 'bild']) {
+    const r = ok(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art }); pruefe(p, r);
+    assert.deepEqual(r.projekt.spuren[0].inserts, [{ id: 'i1', art, slot: 1, an: true, werte: vorgabeVon(art) }], art);
+    assert.deepEqual(r.regler_aenderungen, [{ pfad: `ins/${art}/1/an`, wert: 1 }], `${art}: only the switch differs from the pool defaults`);
+    assert.equal(r.betrifft_wiedergabe, true);
+  }
+  const t = ok(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'trans', werte: { angriff: 6 } });
+  assert.deepEqual(t.regler_aenderungen, [{ pfad: 'ins/trans/1/angriff', wert: 6 }, { pfad: 'ins/trans/1/an', wert: 1 }]);
+});
+
+test('trans and bild: ranges from the contract (the low width only narrows), no key, no graph', () => {
+  const p = mit(1);
+  const s = (art, extra) => ({ befehl: 'insert_setzen', strang_id: 's1', pos: 0, art, ...extra });
+  lehntAb(p, s('trans', { werte: { angriff: 25 } }), 'argument_ungueltig');
+  lehntAb(p, s('trans', { werte: { tempo: 0.5 } }), 'argument_ungueltig');
+  lehntAb(p, s('trans', { werte: { decke: 0 } }), 'argument_unbekannt');
+  lehntAb(p, s('trans', { sc: 2 }), 'argument_unbekannt');
+  lehntAb(p, s('bild', { werte: { breite_tief: 1.5 } }), 'argument_ungueltig');
+  lehntAb(p, s('bild', { werte: { breite_hoch: 2.5 } }), 'argument_ungueltig');
+  lehntAb(p, s('bild', { graph: 'x' }), 'argument_unbekannt');
+  assert.equal(ok(p, s('bild', { werte: { breite_tief: 0, breite_hoch: 2, breite_mitte: 2 } })).projekt.spuren[0].inserts.length, 1, 'negative control: the edges are accepted');
+  const k = setze(p, 's1', 'bild');
+  const r = ok(k, { befehl: 'insert_param_setzen', insert_id: 'i1', param: 'breite_mitte', wert: 1.5 });
+  assert.deepEqual(r.regler_aenderungen, [{ pfad: 'ins/bild/1/breite_mitte', wert: 1.5 }]);
+  assert.equal(pruefeProjekt(r.projekt).fehler, undefined);
+});
+
+test('trans and bild: the pool counts over the whole project; one beyond it is ins_voll, a compressor next to it is fine', () => {
+  for (const art of ['trans', 'bild']) {
+    const max = INSERT_ARTEN[art].instanzen;
+    const { projekt: p } = poolVoll(art, max);
+    lehntAb(p, { befehl: 'insert_setzen', strang_id: 'master', pos: 0, art }, 'ins_voll');
+    assert.equal(ok(p, { befehl: 'insert_setzen', strang_id: 'master', pos: 0, art: 'komp' }).projekt.master.inserts.length, 1, art);
+  }
+});
+
+test('trans and bild: the playback chain entry is {art, slot, an: true}', () => {
+  const p = setze(setze(mit(1), 's1', 'trans'), 's1', 'bild', { pos: 1 });
+  const w = uebersetze(p, { nr: 1, audioOrdner: '/x', frames: () => 1 });
+  assert.deepEqual(w.spuren[0].chain, [{ art: 'trans', slot: 1, an: true }, { art: 'bild', slot: 1, an: true }]);
+});
+
+test('trans and bild: alleInsertRegler emits every pool row of both kinds, free slots at the defaults with the switch off', async () => {
+  const { alleInsertRegler } = await import('../areas/proj/mapping.ts');
+  const rows = alleInsertRegler(neuesProjekt('N'));
+  for (const art of ['trans', 'bild']) {
     const n = INSERT_ARTEN[art].parameter.length;
     const r = rows.filter((x) => x.pfad.startsWith(`ins/${art}/`));
     assert.equal(r.length, INSERT_ARTEN[art].instanzen * n, art);

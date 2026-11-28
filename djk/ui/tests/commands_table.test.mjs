@@ -72,7 +72,7 @@ const NAMEN_CONTAINER = ['platz_setzen', 'strom_send', 'strom_spur_neu'];
 const NAMEN_SESSION = ['session_aendern', 'szene_aendern', 'szene_doppeln', 'szene_fangen', 'szene_neu', 'zelle_halten', 'zelle_huelle'];
 const NAMEN_STECKFELD = ['geraet_stift_setzen', 'geraet_stifte_setzen'];
 // the note editor commands (family AUDIO_NOTEN): pitch targets of the detected notes of an audio clip
-const NAMEN_AUDIO_NOTEN = ['audio_noten_aendern', 'audio_noten_entfernen', 'audio_noten_zuruecksetzen'];
+const NAMEN_AUDIO_NOTEN = ['audio_noten_aendern', 'audio_noten_entfernen', 'audio_noten_raster', 'audio_noten_zuruecksetzen'];
 // the release metadata command (family TRANSPORT, export delivery plan task 4)
 const NAMEN_ABGABE = ['abgabe_meta_setzen'];
 // the piano roll tool commands (family CLIP): quantise with grid, strength and swing; humanise
@@ -81,12 +81,18 @@ const NAMEN_ROLLE = ['noten_humanisieren', 'noten_quantisieren'];
 const NAMEN_MARKER = ['marker_loeschen', 'marker_setzen'];
 // the plugin knob command (family INSERT, strand 2 task 2.2)
 const NAMEN_PLUGIN = ['plugin_regler_setzen'];
+// the MIDI stage command (family SPUR, strand 7 task 1.4)
+const NAMEN_MIDI = ['midi_stufe_setzen'];
+// the production harmony lane command (family TRANSPORT, strand 7 task 5.1)
+const NAMEN_HARMONIE = ['harmonie_setzen'];
+// the modulator commands (family AUTO, strand 6 task 1.1)
+const NAMEN_MOD = ['mod_aendern', 'mod_loeschen', 'mod_neu'];
 const NAMEN_ALLE = [...NAMEN_MAIN, ...NAMEN_SZENEN, ...NAMEN_TRACKER, ...NAMEN_ABSCHNITTE, ...NAMEN_VERBUND, ...NAMEN_FX, ...NAMEN_LOOPDECK,
-  ...NAMEN_CONTAINER, ...NAMEN_SESSION, ...NAMEN_STECKFELD, ...NAMEN_AUDIO_NOTEN, ...NAMEN_ABGABE, ...NAMEN_ROLLE, ...NAMEN_MARKER, ...NAMEN_PLUGIN];
+  ...NAMEN_CONTAINER, ...NAMEN_SESSION, ...NAMEN_STECKFELD, ...NAMEN_AUDIO_NOTEN, ...NAMEN_ABGABE, ...NAMEN_ROLLE, ...NAMEN_MARKER, ...NAMEN_PLUGIN, ...NAMEN_MIDI, ...NAMEN_HARMONIE, ...NAMEN_MOD];
 
-test('PRO_BEFEHL holds the 82 commands of the table before the split plus the 3 scene commands, the tracker command, the 8 time and section commands the 2 linked-clip commands and the effect command, the 8 loop deck commands, the 3 container commands, the 7 session commands, the 3 note editor commands, the release metadata command, the 2 piano roll tool commands and the 2 marker commands', () => {
+test('PRO_BEFEHL holds the 82 commands of the table before the split plus the 3 scene commands, the tracker command, the 8 time and section commands the 2 linked-clip commands and the effect command, the 8 loop deck commands, the 3 container commands, the 7 session commands, the 4 note editor commands, the release metadata command, the 2 piano roll tool commands and the 2 marker commands', () => {
   assert.equal(NAMEN_MAIN.length, 82);
-  assert.equal(NAMEN_ALLE.length, 126);   // + the plugin knob command
+  assert.equal(NAMEN_ALLE.length, 132);   // + the plugin knob command, + audio_noten_raster, + the MIDI stage command, + the harmony lane command, + the 3 modulator commands
   assert.deepEqual(Object.keys(PRO_BEFEHL).sort(), [...NAMEN_ALLE].sort());
 });
 

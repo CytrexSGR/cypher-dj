@@ -29,7 +29,7 @@ fn bit_gleich_wie_crate() {
             cypher_saett_frei(h);
         }
         let mut s = Saett::neu(fs);
-        s.setze(&Einstellung { drive_db: 17.5, ausgang_db: -4.0, mix: 0.7 });
+        s.setze(&Einstellung { drive_db: 17.5, ausgang_db: -4.0, mix: 0.7, ..Einstellung::default() });
         let (mut l2, mut r2) = (x.clone(), y.clone());
         s.block(&mut l2, &mut r2);
         assert!(l1 == l2 && r1 == r2, "FFI and crate must agree bit for bit at {fs}");

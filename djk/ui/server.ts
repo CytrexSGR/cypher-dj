@@ -95,6 +95,7 @@ import { leseBusRing, leseBusRingSeit, messeLive } from './project/sound_live.ts
 import { MasterPegel } from './project/master_level.ts';
 import { LIVE_VORLAUF_FRAMES, LIVE_LAUTHEIT_FRAMES } from './project/sound_contract.ts';
 import { tonartQuelle } from './areas/live/key.ts';
+import { LiveHarmonie, HarmonieFehler, type Takte } from './areas/live/harmonie.ts';   // strand 7 task 2.3: live harmony lane
 import { renderPegelMesser } from './areas/live/level.ts';   // plan live-module task 2
 import { pluginsBereich } from './areas/plugins/area.ts';   // 1.11 task 10
 import { PluginIndex, type ScanBefehl } from './plugins/index.ts';
@@ -672,6 +673,7 @@ export class Oberflaeche {
     const gemerkt = this.leseOffenesProjektDatei();   // read before anything can overwrite it
     // note editor B4: the render service knows the engine version and the cache before the first project opens; every stand then goes through it
     await this.notenRender.start();
+    this.harmonie.lade();   // the live lane comes back from the folder of stream 2
     this.proj.zugang.beiStand((p) => this.notenRender.beiStand(p));
     this.proj.sitzung.setzeNotenRender(this.notenRender);
     this.proj.sitzung.beiOffen((slug) => this.merkeOffenesProjekt(slug));
@@ -1005,7 +1007,7 @@ export class Oberflaeche {
     if (neuerKern || gebremst) { this.graphenVomKernMs = null; this.fragGraphen('neustart'); }   // Baukasten S16: ask the new kern
     if (neuerKern || gebremst || erstkontakt || NEUSTART_STAND_ADRESSEN.has(d.adresse)) this.merkeNeustartStand();   // t_7f487235
     if (neuerKern || gebremst) this.insGr = {};   // 1.10 slice 4a: a new kern starts without a stage running
-    if (d.adresse === '/e/ins_gr' && typeof f.kanal === 'string' && Number.isFinite(Number(f.gr_db))) this.insGr[f.kanal] = { db: Math.max(0, Number(f.gr_db)), t: Date.now() };
+    if (d.adresse === '/e/ins_gr' && typeof f.kanal === 'string' && Number.isFinite(Number(f.gr_db))) this.insGr[f.kanal] = { db: Number(f.gr_db), t: Date.now() };
     if (d.adresse === '/pegel') this.pegelPuffer.nimm({ kanal: String(f.kanal), spitze_db: Number(f.spitze_db) });   // vor der Drossel: Spitzen gehen nicht verloren
     // Spec D1 2.10: Haken ereignis? der Bereiche, für jedes Kern-Ereignis, nach der Zustandsführung und vor dem Durchreichen (Plan d1-s1 Task 9)
     this.router.ereignis(d.adresse, f, (bereich, e) => this.opt.log?.({ typ: 'bereich_ereignis_fehler', bereich, adresse: d.adresse, fehler: e.message }));
@@ -1013,7 +1015,7 @@ export class Oberflaeche {
     const ms = DROSSEL_MS[d.adresse];
     const n = { a: d.adresse, f };
     if (!ms) { this.verteile(n); return; }
-    const schluessel = `${d.adresse}|${f.deck ?? f.kanal ?? ''}`;
+    const schluessel = `${d.adresse}|${f.deck ?? f.kanal ?? (d.adresse === '/zustand/mod' ? f.nr : '') ?? ''}`;
     const jetzt = Date.now();
     const zuletzt = this.letzte.get(schluessel) ?? 0;
     if (jetzt - zuletzt >= ms) {
@@ -1956,6 +1958,13 @@ export class Oberflaeche {
     this.taktartVeroeffentlicht = true;
     veroeffentlicheTaktart(ALLE_STROEME.map((st) => this.musterOrdner(st)), n, undefined, (ordner, e) => this.opt.log?.({ typ: 'taktart_datei_fehler', ordner, text: e.message }));
     if (n !== this.letzteTaktart) { this.letzteTaktart = n; this.verteile({ a: 'taktart', f: { proTakt: n } }); }
+  }
+  // Strand 7 task 2.3: the live harmony lane; its file goes into every stream folder like the meter. The bars come from the master clock.
+  private readonly harmonie = new LiveHarmonie({ ordner: () => ALLE_STROEME.map((st) => this.musterOrdner(st)),
+    fehler: (ordner, e) => this.opt.log?.({ typ: 'harmonie_datei_fehler', ordner, text: e.message }) });
+  private harmonieTakte(): Takte {
+    const pt = this.proTakt(), u = this.kern.uhr as unknown as { beat: number } | null;
+    return { takt: Math.floor(this.abVon('takt') / pt) + 1, phrase: Math.floor(this.abVon('phrase') / pt) + 1, jetzt: Math.floor((u?.beat ?? 0) / pt) + 1 };
   }
   // Ziel-Beat der Master-Uhr zur Zeitangabe ab (D2): jetzt + Vorlauf, dann aufs Raster 1/4/16
   private abVon(ab: string): number {
@@ -3256,7 +3265,7 @@ export class Oberflaeche {
     const proTakt = this.proTakt();
     return { uhr: { naechster_takt: Math.floor(this.abVon('takt') / proTakt) + 1, naechste_phrase_takt: Math.floor(this.abVon('phrase') / proTakt) + 1,
       beat: Math.round(beat * 100) / 100, takt: Math.floor(beat / proTakt) + 1, schlag: Math.floor(((beat % proTakt) + proTakt) % proTakt) + 1,
-      bpm: u?.bpm ?? null }, ...(proTakt !== 4 ? { taktart: [proTakt, 4] } : {}), ki: { gestoppt: this.kiGestoppt }, decks, regler, fx: this.stand.fx,
+      bpm: u?.bpm ?? null }, ...(proTakt !== 4 ? { taktart: [proTakt, 4] } : {}), ki: { gestoppt: this.kiGestoppt }, ...(this.harmonie.lesen(this.harmonieTakte()) ? { harmonie: this.harmonie.lesen(this.harmonieTakte()) } : {}), decks, regler, fx: this.stand.fx,
       fx_routing: this.stand.fxRouting, plaetze: this.plaetzeLage(), container: this.proj.sitzung.lage.container.map((art) => ({ art: CONTAINER_ART[art] })), ...(Object.keys(insGr).length ? { ins_gr: insGr } : {}), ...(this.stand.kanalLimiter ? { kanal_limiter: { ...this.stand.kanalLimiter } } : {}), ...(this.stand.hallPool ? { hall_pool: { ...this.stand.hallPool } } : {}), ...(this.stand.spurPool ? { spur_pool: { ...this.stand.spurPool } } : {}), quittungen: this.cypherQuittungen.slice(-10), studio: this.studioLage(), ausgang: leseAusgang(this.opt.digitalout) };
   }
 
@@ -3515,6 +3524,19 @@ export class Oberflaeche {
         if (url.pathname === '/deck/raster') return this.deckRaster(d, a);
         if (url.pathname === '/deck/raster/fix') return this.deckRasterFix(d, a);
         return this.deckHotcue(d, a);
+      } },
+      { methode: 'GET', pfad: '/harmonie', schutz: O, handler: (_q, a) => this.json(a, 200, this.harmonie.lesen(this.harmonieTakte()) ?? { tonart: null, folge: [], takte_je_akkord: null, ab_takt: null, jetzt: { takt: this.harmonieTakte().jetzt, akkord: null }, naechster_wechsel_takt: null }) },
+      { methode: 'POST', pfad: '/harmonie', schutz: F, handler: async (q, a) => {
+        const d = await this.koerper(q);
+        if (this.quelle() === 'cypher' && this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt' });
+        try {
+          const r = this.harmonie.setze(d, this.harmonieTakte());
+          if (!r.probe) this.opt.log?.({ typ: 'harmonie', tonart: r.tonart, folge: r.folge, ab_takt: r.ab_takt });
+          return this.json(a, 200, r);
+        } catch (e) {
+          if (e instanceof HarmonieFehler) return this.json(a, e.code, { fehler: e.fehler, text: e.message, ...e.extra });
+          throw e;
+        }
       } },
       { methode: 'GET', pfad: '/strudel', schutz: O, handler: (_q, a, url) => {
         const strom = Oberflaeche.strom(url.searchParams.get('strom'));

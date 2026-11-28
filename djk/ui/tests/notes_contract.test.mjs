@@ -14,7 +14,7 @@ const lies = (n) => JSON.parse(fs.readFileSync(path.join(CASES, n + '.json'), 'u
 const schema = (n) => JSON.parse(fs.readFileSync(path.join(SCHEMAS, n + '.schema.json'), 'utf8'));
 const kopie = (x) => JSON.parse(JSON.stringify(x));
 
-const GUT = ['audio_noten_gut', 'audio_noten_leer_gut', 'audio_noten_ton_24_gut', 'kurve_gut', 'kurve_kurz_gut', 'kurve_mono_gut', 'kurve_mono_mehrstimmig_gut', 'roh_gut',
+const GUT = ['audio_noten_gut', 'audio_noten_leer_gut', 'audio_noten_ton_24_gut', 'audio_noten_zeit_gut', 'kurve_gut', 'kurve_kurz_gut', 'kurve_mono_gut', 'kurve_mono_mehrstimmig_gut', 'roh_gut',
   'auftrag_gut'];
 // every bad file: its expected reason code comes from cases/noten/gruende.json (the same table the C++ tests assert); the text carries the reason
 const TEXTE = {
@@ -23,6 +23,8 @@ const TEXTE = {
   audio_noten_schlecht_dauer: /duration/, audio_noten_schlecht_a_gleich: /\ba\b.*equal/, audio_noten_schlecht_e_gleich: /\be\b.*equal/,
   audio_noten_schlecht_ziel_ende: /e must be greater than a/, audio_noten_schlecht_ton_bereich: /ton.*0\.\.127/,
   audio_noten_schlecht_form_vor_regel: /\bid\b/, audio_noten_schlecht_regelfolge: /duplicate/,
+  audio_noten_schlecht_ziel_ueberlappen: /overlap after the edit \(end 1\.25 of t1 is after the start 1 of t2\)/,
+  audio_noten_schlecht_dehnung_gross: /stretched to at most 4 times/, audio_noten_schlecht_dehnung_klein: /compressed to a quarter/,
   kurve_schlecht_laenge: /length/, kurve_schlecht_f0: /f0_ct/, kurve_schlecht_praefix: /kurve/, kurve_schlecht_noten_dauer: /duration/,
   kurve_schlecht_noten_reihenfolge: /order/, kurve_schlecht_noten_ueberlappung: /overlap/, kurve_schlecht_noten_ausserhalb: /after the end of the source/,
   kurve_schlecht_mono_anteil: /mehrstimmig/, kurve_schlecht_mono_leer: /geprueft_frames/,
@@ -57,6 +59,21 @@ test('audioNotenPruefung accepts every good case and names the reason of every b
   assert.match(mit((k) => { k.liste[0].qe = k.liste[0].qa + 0.01; }).text, /duration/);
   assert.match(mit((k) => { k.liste[0].a = k.liste[0].qa; }).text, /equal/);
   assert.match(mit((k) => { k.liste[0].a = k.liste[0].qe + 0.1; }).text, /e must be greater than a/);
+  // time targets: touching is allowed, a note with only a or only e, the limits 0.25 and 4 are inside
+  const zeit = (liste) => V.audioNotenPruefung({ kurve: basis.kurve, liste });
+  const n2 = (t1, t2) => [{ id: 't1', qa: 0, qe: 0.5, qton: 60, p: 1, ...t1 }, { id: 't2', qa: 1, qe: 1.5, qton: 62, p: 1, ...t2 }];
+  assert.equal(zeit(n2({ e: 1 }, {})), null, 'touching');
+  assert.equal(zeit(n2({ e: 1.000001 }, {}))?.grund, 'noten_ueberlappen');
+  assert.equal(zeit(n2({}, { a: 0.5 })), null, 'only a');
+  assert.equal(zeit(n2({}, { a: 0.25 }))?.grund, 'noten_ueberlappen');
+  assert.equal(zeit(n2({ e: 2 }, { a: 2, e: 3 })), null, 'the neighbour follows: end 2 = start 2 (stretch 4 and 2)');
+  assert.equal(zeit([{ id: 't1', qa: 0, qe: 0.5, qton: 60, p: 1, e: 2 }]), null, 'exactly 4');
+  assert.equal(zeit([{ id: 't1', qa: 0, qe: 0.5, qton: 60, p: 1, e: 2.001 }])?.grund, 'noten_dehnung_grenze');
+  assert.equal(zeit([{ id: 't1', qa: 0, qe: 0.5, qton: 60, p: 1, e: 0.125 }]), null, 'exactly 0.25');
+  assert.equal(zeit([{ id: 't1', qa: 0, qe: 0.5, qton: 60, p: 1, e: 0.124 }])?.grund, 'noten_dehnung_grenze');
+  assert.match(zeit([{ id: 't1', qa: 0, qe: 0.5, qton: 60, p: 1, e: 3 }]).text, /factor 6\b/);
+  assert.equal(zeit(n2({ e: 3 }, {}))?.grund, 'noten_dehnung_grenze', 'per-note stretch comes before the effective overlap');
+  assert.equal(V.auftragPruefung({ format: 'cdj-noten-auftrag/1', kurve: basis.kurve, liste: n2({ e: 1.2 }, {}) })?.grund, 'noten_ungueltig', 'in a file it is a list rule');
   assert.equal(mit((k) => { k.liste[0].ton = k.liste[0].qton + 24; }), null, 'exactly 24 is inside');
   assert.equal(mit((k) => { k.liste[0].ton = k.liste[0].qton - 24.01; })?.grund, 'noten_ton_grenze');
   assert.equal(mit((k) => { k.liste[0].ton = 127.5; })?.grund, 'noten_ton_grenze', 'outside 0..127');

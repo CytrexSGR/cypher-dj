@@ -23,6 +23,7 @@
 #include "cypherdj/arr_returns.h"
 #include "cypherdj/arr_track_phase.h"
 #include "cypherdj/arr_playback.h"
+#include "cypherdj/midi_stufe.h"
 #include "cypherdj/pult_table.h"
 #include <cypherdj/beatfx.h>
 #include <cypherdj/dsp/colorfx.h>
@@ -143,6 +144,15 @@ class ArrSenke {
     (void)param;
     (void)delta;
   }
+  // Strand 6 task 1.4 (D3): the summed offset of the project modulators on device parameter `param` (the index space of auto_parameter: 0..3 RB-338, 0..63 Baukasten knobs) of track
+  // `spur`, in device units (-1..1). The sink adds it AFTER its whole stack (the reported value or its base value, plus a relative summand), clamps to 0..1, and keeps it for its next
+  // block() only. Called by the Arrangement on the caller thread once per block and (track, parameter), before bk_ueber_melden, auto_geraet and block(), whether the transport runs or
+  // not; no call: no offset in that block. Default: ignored.
+  virtual void mod_summand(int spur, int param, float delta) noexcept {
+    (void)spur;
+    (void)param;
+    (void)delta;
+  }
   // sampler A2 (E8.3): the value of a LATCHED device knob (ArrSpur::bk_rastet) at the project beat of the note-on that is sent with it, evaluated by the core from the device lane
   // at that beat. `param` is 0..63 (k1..k64), `ziel` the target sample of the note-on (same sample, same offset rule), `relativ` true: `wert` is a summand (-1..1) the sink adds
   // to its base value of the knob (a relative lane without an absolute one); false: `wert` is the final value (0..1, absolute lane, clamped sum with a relative one). Called by the
@@ -222,6 +232,10 @@ struct ArrAbgriff {
 };
 constexpr int32_t ARR_ABGRIFF_ABGELEHNT = 3;   // event ARR_ABGRIFF of a refused job (the receipt 6 came already): free only
 
+struct ArrMidiZaehler {   // strand 7 task 3.3, /zustand/arr/midi (§5.13): one MIDI stage; ein, aus, verloren since the snapshot was loaded, wrapping
+  int32_t gehalten = 0, ein = 0, aus = 0, verloren = 0;
+};
+
 struct ArrZustand {                     // /zustand/arr (INTERFACES §5.13)
   int64_t nr;                          // −1 ohne Schnappschuss
   ArrStatus status;
@@ -290,6 +304,13 @@ struct ZellGainGlatt {
     return g;
   }
 };
+
+// Strand 6 (arr_mod.cpp, D5, D6): the shared modulator formulas, pinned by djk/contract/mod_ref.json. splitmix32 in u32 arithmetic; the synced output of an LFO at a project beat,
+// t = frac(beat / takt + phase): form 0 sin(2 pi t), 1 1 - 4 |t - 0.5|, 2 2t - 1, 3 t < 0.5 ? 1 : -1, 4 splitmix32(saat + n) / 2^32 * 2 - 1 with n = floor(beat / takt + phase); the
+// offset of a target: bipolar tiefe * out, unipolar tiefe * (out + 1) / 2.
+uint32_t arr_mod_splitmix32(uint32_t x) noexcept;
+float arr_mod_form(int form, double beat, double takt, double phase, uint32_t saat) noexcept;
+float arr_mod_versatz(float out, float tiefe, bool uni) noexcept;
 
 struct ArrPruefZugang;   // nur Tests (test_warp_werk_folgen): liest Spur-Busse und Stimmen, schreibt nichts
 
@@ -549,6 +570,7 @@ class Arrangement {
   // TONES-Clip als RE-PITCH (im Takt, falsche Tonhöhe) und zählt warp_kein_platz; der Lader lässt solche Clips ohnehin nur mit Bungee zu.
   void setze_warp_werk(WarpWerk* w) { werk_ = w; }
   WarpWerk* warp_werk() const { return werk_; }
+  float mod_ausgang(int nr) const { return nr >= 1 && nr <= ARR_MODS ? mod_aus_[nr - 1] : 0.0f; }   // strand 6 task 1.5: output -1..1 of modulator nr at the last sample of the last block (0 outside 1..16)
   // Karten-Generation des Kerns (Tempoplan::generation_zeiger): wächst sie, setzt das Arrangement die Stimmen des Werks mit der neuen Karte neu an
   void setze_karten_generation(const uint32_t* g) {
     karte_gen_ = g;
@@ -571,6 +593,13 @@ class Arrangement {
   // drops a pending pin whose stamp is older than the generation of the snapshot it plays (a swap in between: the newer snapshot was built from a project that already held the pin or undid it). Nothing when there is no sink.
   void live_stift(int spur0, int satz, int zeile, int spalte, float wert) noexcept;
   int live_offene_noten() const noexcept { return n_live_; }
+  // strand 7 task 1.3: the MIDI stage of track spur0 (0-based). Every note of a track whose snapshot entry has midi.an goes through it (note_raus); read only
+  // (counters, ruhig) for tests and the read-out of task 3.3.
+  const MidiStufe& midi_stufe(int spur0) const noexcept { return stufen_->st[spur0]; }
+  // strand 7 task 3.3 (/zustand/arr/midi): the stage of track spur0 is on in the loaded snapshot, and its counters since that snapshot was swapped in
+  // (callback thread, like the stage itself)
+  bool midi_stufe_an(int spur0) const noexcept { return snap_ && spur0 >= 0 && spur0 < ARR_SPUREN && snap_->spur[spur0].midi.an; }
+  ArrMidiZaehler midi_zaehler(int spur0) const noexcept;
   static int64_t live_ziel(int64_t zyklus_start, uint32_t versatz, int n) noexcept {
     const int64_t erster = std::min<int64_t>(n > 0 ? n : 1, ARR_BLOCK);   // length of the first sub-block of the cycle
     return zyklus_start + std::min<int64_t>(versatz, erster - 1);
@@ -770,6 +799,14 @@ class Arrangement {
   void blende_vormerken(int spur, int feld, int64_t sample);              // a source blend starts at `sample` (at most two per block)
   void auto_ereignis_melden(int spur, int feld, bool zustand, int64_t sample);
   void auto_beginn();                                                     // in beginne(): the start takes the hard lane value, no blend
+  // Strand 6 (arr_mod.cpp, plan 2026-11-27): the project modulators. The offset of every target is added after the whole value stack (D3); fader and pan per sample in the lane
+  // buffers auto_buf_ (verlaeufe_nachfuehren keeps the base Wert::w for them), other targets once per block. Nothing runs without a modulator in the snapshot (n_mod 0).
+  void mod_planen(const Karte& k, int64_t s0, int m);   // before bk_ueber_melden(): the beat of this block, the output at its last sample (mod_aus_) for the block-rate targets
+  void mod_block(int m);                                // after auto_block(): the per-sample offsets onto the fader/pan course the mixer reads, then the free phase runs on
+  void mod_tausch(const ArrSnapshot* neu);              // in tausche(), before snap_ changes: keep the state of an nr whose art stays (D11), reset the others
+  void mod_beginn(int64_t s);                           // in beginne(): the free-rate phase restarts at its `phase` at sample s (D4)
+  float mod_wert(const ArrMod& md, int t) const;        // output -1..1 of a modulator at block sample t (synced: the beat; free: the accumulator)
+  void mod_ketten();                                    // after auto_kette(): the stage and macro offsets (art 3, 4) go to ArrInserts for this block (task 4.1)
 
   // Noten (arr_notes.cpp)
   struct Offen {
@@ -795,6 +832,17 @@ class Arrangement {
   void noten_tauschen(const ArrSnapshot* neu, int64_t s);
   void live_aus_bis(int64_t s) noexcept;   // 1.8 T7b review fix: the live keys that began at or before s end at s; a key with an onset after s stays held (see arr_notes.cpp)
   void live_tauschen(const ArrSnapshot* neu, int64_t s);   // 1.8 T7b: a held live key whose track gets another sink ends on the sink that got the On
+  // strand 7 task 1.3 (arr_notes.cpp): the MIDI stage in front of ArrSenke::note. note_raus is the one way a note leaves the Arrangement: with an active stage on
+  // the track (snap_) it is queued in the stage, else it goes to the sink. stufen_lauf runs every stage once per block (also with the transport stopped), stufe_raster
+  // computes its grid points, stufen_tauschen hands a new snapshot to the stages (before snap_ is replaced).
+  // Task 5.2: maske = the scale mask of the harmony lane for this note (0 = the stage's skala_maske); lane_maske_bei is the mask at sample s for a live key or a
+  // free arp step (the project beat of the sample while playing, start_beat_ otherwise; from the block noten_block works on); stufe_raster fills each grid point's.
+  void note_raus(int spur, ArrSenke* se, int64_t ziel, uint8_t ton, uint8_t vel, bool an, uint64_t schluessel, uint16_t maske = 0) noexcept;
+  void stufen_lauf(const Karte& k, int64_t s0, int m) noexcept;
+  void stufe_raster(const Karte& k, double rate, int64_t von, int64_t bis, MidiRaster& r, bool lane = false) const noexcept;
+  uint16_t lane_maske_bei(int64_t s) const noexcept;
+  void stufen_tauschen(const ArrSnapshot* neu, int64_t s) noexcept;
+  bool stufen_ruhig() const noexcept;
 
   // Freeze (arr_freeze.cpp, Paket K3)
   void freeze_abgriff(int64_t s0, int m);
@@ -988,6 +1036,35 @@ class Arrangement {
   int auto_ueber_offen_ = 0;                            // fields with a pending change (auto_ueber_n_ > 0)
   bool auto_pickup_[ARR_AUTO_SLOTS][AUTO_FELDER] = {};      // the pickup was handed out for the override that starts in this cycle (lane_wert answers false until then)
   float auto_lane_v_[ARR_AUTO_SLOTS][AUTO_FELDER] = {};     // the last value the lane itself played (not a blend, not the hand)
+  // Strand 6: modulator state per nr (index nr - 1), kept across a snapshot swap while the nr keeps its art (D11). mod_art_ 0: no modulator of this nr in the last snapshot, else art + 1.
+  uint8_t mod_art_[ARR_MODS] = {};
+  double mod_frei_phase_[ARR_MODS] = {};     // free rate: phase 0..1 at the start of the next block
+  int64_t mod_halt_[ARR_MODS] = {};          // free rate: periods completed since the start (the period index of the random hold)
+  float mod_aus_[ARR_MODS] = {};             // output -1..1 at the last sample of the block (the report, the block-rate targets)
+  float mod_kurve_[ARR_MODS][ARR_BLOCK] = {};   // output per sample of this block (64 KiB, a member: no allocation in the callback)
+  float mod_glatt_[ARR_AUTO_SLOTS][2] = {};  // one-pole state of the summed offset per automation slot and field (fader dB, pan units), D7
+  int64_t mod_s0_ = 0;                       // first sample of the block (mod_planen)
+  double mod_beat0_ = 0.0, mod_bps_ = 0.0;   // tempo-map beat at the block start and beats per sample (the beat while the transport does not play)
+  int64_t mod_start_s_ = INT64_MIN;          // sample of the last transport start (mod_beginn); the free phase restarts there
+  int mod_t_neu_ = -1;                       // block sample of that start when it lies in the running block (mod_planen), else -1
+  // Offsets of fields that lost every modulator at a swap glide to 0 with the smoothing they had (no click), then leave the list.
+  struct ModRest { int16_t slot = 0; uint8_t feld = 0; float a = 1.0f; };
+  ModRest mod_rest_[ARR_MOD_FELDER];
+  int mod_rest_n_ = 0;
+  // Slice 3 (D12): the envelope followers per nr. mod_block() runs each follower over the raw signal of its source track in the block just rendered (bus_l_/bus_r_ after spur_quelle,
+  // before mischen) and keeps the output per sample (-1..1, 2 * out - 1); the NEXT block plays that course (one block of latency). mod_folger_m_ 0: no course yet (output -1, silence).
+  float mod_folger_env_[ARR_MODS] = {};              // peak envelope (linear amplitude) at the end of the last block
+  float mod_folger_[ARR_MODS][ARR_BLOCK] = {};       // output per sample of the last block (64 KiB, a member)
+  int mod_folger_m_[ARR_MODS] = {};                  // its length
+  void mod_folgen(int m);                            // end of mod_block(): the followers over the block just rendered
+  // Slice 4 (task 4.1): the send offsets of this block in dB per (track, return), summed by mod_planen() before auto_send() reads them. Only the pairs in mod_send_liste_ are set;
+  // mod_planen() clears them first, also when the new snapshot has no modulator.
+  float mod_send_db_[ARR_SPUREN][ARR_RETURNS] = {};
+  bool mod_send_an_[ARR_SPUREN][ARR_RETURNS] = {};
+  uint16_t mod_send_liste_[ARR_MODS * ARR_MOD_ZIELE] = {};   // track * ARR_RETURNS + r
+  int mod_send_n_ = 0;
+  bool send_ld_[ARR_SPUREN][ARR_RETURNS] = {};       // the send plan of the last block came from a lane (send_da_ may also be set by a modulator on the knob)
+  float send_db_[ARR_SPUREN][ARR_RETURNS] = {};      // the lane value in dB at the end of the last running block (the base a modulator swings around while the transport stands)
   SpscRing<ArrAutoEreignis, 1024> auto_ev_;             // state changes for the net thread (task 3)
   std::atomic<uint32_t> auto_ev_verloren_{0};
   bool auto_vorausschau_ = true;                       // look-ahead inside a hold (auto_block); false only in tests
@@ -1109,8 +1186,8 @@ class Arrangement {
   void bk_ueber_nehmen(int m);    // a pointer course of the block becomes the written value (also on the quiet path: the pointer is good for one block)
   void bk_ueber_melden(int m);    // before auto_geraet(): every written value goes to the bk sink of its track, every block
   void bk_ueber_loeschen();       // tausche(): the new snapshot is the project value again; also computes bk_slot_ for the snapshot installed
-  int16_t regler_ins_[cypherdj::stellwerk::MAX_REGLER];   // 1.10 slice 4a: controller -> global slot * INS_PARAM_MAX + parameter of ins/<art>/<n>/*, -1: none
-  static_assert(ARR_INS_ALLE * INS_PARAM_MAX - 1 <= INT16_MAX, "regler_ins_ packs slot * INS_PARAM_MAX + parameter into int16_t");
+  int32_t regler_ins_[cypherdj::stellwerk::MAX_REGLER];   // 1.10 slice 4a: controller -> global slot * INS_PARAM_MAX + parameter of ins/<art>/<n>/*, -1: none (int16_t until strand 5 slice 3: 456 x 85 does not fit)
+  static_assert(static_cast<int64_t>(ARR_INS_ALLE) * INS_PARAM_MAX - 1 <= INT32_MAX, "regler_ins_ packs slot * INS_PARAM_MAX + parameter into int32_t");
   int16_t regler_rack_[cypherdj::stellwerk::MAX_REGLER];   // 1.10 slice 4c: controller -> rack slot * ARR_MAKROS + macro of rack/<k>/m<n>, -1: none
   float ziel_w_[ARR_SPUREN];                    // Anteil des neuen Ziels 0..1, 1 = Blende fertig (regler_binden setzt 1)
   bool grp_belegt_[ARR_GRUPPEN] = {};
@@ -1179,6 +1256,19 @@ class Arrangement {
   ArrSenke* (&live_)[ARR_SPUREN][128] = live_tab_->senke;
   int64_t (&live_an_)[ARR_SPUREN][128] = live_tab_->an;
   int n_live_ = 0;
+  // strand 7 task 1.3: one MIDI stage per track, on the heap like the live table (128 x ~10 KB), made by the constructor, never in the callback
+  struct MidiStufen {
+    MidiStufe st[ARR_SPUREN];
+  };
+  std::unique_ptr<MidiStufen> stufen_{new MidiStufen()};
+  int64_t stufe_bis_[ARR_SPUREN] = {};   // per track: the stage ran up to this sample (exclusive)
+  uint64_t stufe_basis_[ARR_SPUREN][3] = {};   // strand 7 task 3.3: ein, aus, verloren of each stage when the current snapshot was swapped in
+  uint64_t durchlauf_ = 0;               // loop passes since the transport start (wrap), part of the clip note key (D6) and of the grid step count
+  uint64_t live_zaehler_ = 0;            // running key of the live ONs (D6)
+  // task 5.2: the project beat at the start of the block noten_block works on and the beats per sample there (lane_maske_bei); lane_laeuft_ = the transport plays from lane_ab_
+  double lane_b0_ = 0.0, lane_bps_ = 0.0;
+  int64_t lane_s0_ = 0, lane_ab_ = 0;
+  bool lane_laeuft_ = false;
 
   bool metro_an_ = false;
   bool metronom_gesperrt_ = false;

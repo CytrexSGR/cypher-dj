@@ -109,7 +109,7 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   wirt_spiegel_fehler: 'the Surge host did not take the track\'s parameter map, so a freeze would render a sound that differs from the project; check the Surge host and try again',
   wirt_wert_unbekannt: 'the current value of a Surge parameter is not known: the project does not hold it and the Surge host did not tell it',
   takes_voll: 'a track holds at most 32 take lanes',
-  take_nur_audio: 'only audio tracks have take lanes',
+  take_nur_audio: 'stream tracks have no take lanes',
   take_name_ungueltig: 'a take lane name has 1 to 64 characters, not only spaces',
   clip_nicht_midi: 'that clip is not a MIDI clip',
   muster_fehler: 'the Strudel pattern does not run; the message names the line (and column)',
@@ -152,6 +152,10 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   lane_unbekannt: 'that automation lane does not exist',
   lane_doppelt: 'that track already has an automation lane for this target',
   plugin_lanen_voll: 'that host stage already has 16 plugin parameter lanes, the limit per host stage: delete one first',
+  // strand 6: project-level modulators (commands_auto.ts mod_*)
+  mod_voll: 'the project already has 16 modulators, the limit: delete one first',
+  mod_unbekannt: 'no modulator with that id in this project',
+  mod_ziel_unbekannt: 'a modulator cannot drive that target on that strip; the text names the target and what is allowed',
   send_hat_lane: 'that send has an automation lane: remove the send lane first (auto_loeschen), then the send can be switched off',
   lane_gesperrt: 'that automation lane is locked: unlock it with auto_aendern first',
   bereich_leer: 'the range is empty or outside the timeline: von_beat must lie before bis_beat (and before neu_bis_beat), all within 0..100000',
@@ -167,7 +171,7 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   gruppe_unbekannt: 'that group does not exist',
   return_unbekannt: 'that return does not exist',
   insert_unbekannt: 'that insert stage does not exist',
-  art_unbekannt: 'that insert kind is not available (komp, eq, saett, lim, utility, bk and host exist in this version)',
+  art_unbekannt: 'that insert kind is not available (komp, eq, saett, lim, utility, bk, gate, mb, trans, bild and host exist in this version)',
   kette_voll: 'the insert chain of that strip is full (five stages at most)',
   kein_lernen: 'this server has no controller learning',   // strand 2 task 2.4
   plugin_regler_voll: 'all 16 knobs of this plugin stage are in use: free one first',   // strand 2 task 2.4
@@ -188,7 +192,7 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   sidechain_spaet: 'that sidechain source is computed after the stage in the block order: a track stage can listen to tracks and DJ inputs only, a group stage to tracks, other groups (pre) and DJ inputs',
   sidechain_zyklus: 'that sidechain source depends on the stage itself (its own strip, a member keyed by its own group, tracks keying each other, the production master, or erz/4)',
   sidechain_quelle: 'that sidechain source is not available in the block of the arrangement (erz/2, erz/3, erz/5 to erz/8 and pad/1, pad/2 are computed after the production mixer)',
-  ins_voll: 'all stages of that kind are in use (160 compressors, 160 EQs, four saturators, eight limiters, eight utilities, 16 gates, eight multibands and eight Cypher Modular effects (bk) at most)',
+  ins_voll: 'all stages of that kind are in use (160 compressors, 160 EQs, 32 saturators, eight limiters, eight utilities, 16 gates, eight multibands, 32 transient shapers, 16 imagers and eight Cypher Modular effects (bk) at most)',
   host_grenze: 'all four effect hosts are in use: remove a plugin stage before adding another',
   host_fehlt: 'the effect host of that plugin stage is not running or not ready',
   plugin_nicht_ladbar: 'that plugin cannot be loaded (file missing, not an effect, or the class is not in the bundle)',
@@ -497,6 +501,8 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   // note editor, slice 1 (project/commands_audio_notes.ts)
   keine_audio_noten: 'the clip has no notes; detect notes first',
   noten_ton_grenze: 'the target pitch must stay within 24 semitones of the detected pitch and inside MIDI 0..127',
+  noten_ueberlappen: 'notes cannot overlap after the edit: move the neighbour first or let it follow',
+  noten_dehnung_grenze: 'a note can be stretched to at most 4 times and compressed to a quarter of its detected length',
   // note editor, slice 1: the detection job (areas/proj/notes.ts)
   noten_laeuft: 'a note detection is already running',
   noten_vorhanden: 'the clip already has notes; send neu: true to detect them again (the edits are lost)',

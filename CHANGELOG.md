@@ -3,6 +3,46 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-28, twenty-fourth update (source only, no new package)
+
+**Note editor**
+- Note editor, time (slice 2): move a note in time or stretch it by an edge, by drag (1/16 of the clip grid, Alt for free)
+  or by the agent (`audio_noten_aendern` with `zeit_um`, `a`, `e`). The note length stays on a move, a neighbour that touched the
+  moved edge follows it, and a stretch outside 0.25 to 4 times or an overlap is refused.
+- Note editor, quantise and key (slice 2): "Quantise starts to 1/16", "Snap to key" and "Snap to semitones" with a strength
+  from 0 to 100 percent, and the agent's `audio_noten_raster`. Vibrato and drift stay, a note at a limit stays unchanged.
+- Note editor, vibrato and drift (slice 3): both are set per note from 0 to 400 percent of what was sung, with "Flatten
+  vibrato" and "Flatten drift" in the menu and `vib`, `drift`, `vib_um`, `drift_um` for the agent.
+- Note editor, measurement (slice 3): the render measures the pitch of each edited note in its output (a note whose middle part is too short or unvoiced has no entry) and reports the
+  distance to the target in cents (`messung`, shown by `proj_noten` as `render.messung`); `proj_noten` also gives the
+  offsets in milliseconds, the stretch and the vibrato and drift widths of each edited note (`mass`).
+
+**Production**
+- Key source for EQ Pro. An EQ stage has a KEY button like the compressor: a dynamic band in a key mode (Above (key), Below (key)) now reacts to another track, a group, a return or a DJ input, so the bass shelf can duck only while the kick plays. Without a key the band acts on its own signal as before, and the agent sets the key with the same commands as for a compressor.
+- Cypher Clipper. The saturation stage has soft and hard clip curves and a ceiling, the insert menu has a Clipper entry, the master strip a CLIP button, and the agent reads how far the clipper goes over its ceiling.
+- EQ Pro and De-esser. A bell or shelf band of the EQ stage can act only above or below a threshold (a dynamic band), the insert menu has a De-esser entry, and the agent reads the deepest dynamic change of an EQ stage.
+- Transient shaper and imager. Two new insert stages for any strip: the transient shaper raises or lowers the onset and the tail of a sound separately, and the three-band imager sets the stereo width of the low, mid and high band and can make the lows mono. Both add no delay, and the agent can place and set them. The saturation pool grows from 4 to 32 stages.
+- Modulators. An LFO with five shapes, tempo synced or free in Hz, swings a track fader, a track pan, a return fader or a
+  knob of a Cypher Modular track around its base value. "+ Mod" in the lane row of a track head adds one; depth is in the
+  unit of the target, bipolar or unipolar. The sweep is added on top of the value, a lane and your hand, so turning the
+  knob moves the centre while it runs. Modulators run while the transport stands and the export renders them like the live
+  sound. The agent has `mod_neu`, `mod_aendern` and `mod_loeschen`.
+- Modulators, live value. A knob of a Cypher Modular track shows a ring from its base position to the modulated one, a track fader
+  and pan a second marker, and the modulator row reads "base → value". The agent reads the same with `proj_auto` and a `mod_id`.
+- MIDI FX. An instrument track can carry a MIDI FX chain in a strip above the front panel of its device view. The arpeggiator
+  (seven patterns, rates 1/2 to 1/32 on the project grid (triplets from 1/4 to 1/16) or free in Hz, octaves, gate) plays now for clip notes,
+  played keys and the agent's notes, and in the audio export. Chord, scale, velocity and chance play too, in the order chord, scale, arp,
+  velocity, chance. The agent reads per track the notes taken in and sent in `proj_lage`.
+- Chord lane. CHORDS in the transport bar shows a row under the ruler of PRODUCTION with chords or keys from a beat on (double click, drag, Delete);
+  the agent has `harmonie_setzen`. A track with MIDI FX Scale on Project key follows it, for clip notes and played keys. The lane is stored, sent with the
+  playback and read by the engine.
+- Envelope follower and more modulator targets. A modulator can now be an envelope follower: it follows the level of another
+  track (attack, release, sensitivity) and ducks or opens a target, for example a pad fader that ducks with the kick. It reads
+  the previous audio block, so it lags the source by up to 21 ms. Modulators also move a track's send level, a parameter of
+  an insert stage, a rack macro and a plugin parameter; "Mod" in an insert's popover and in the parameter rows of a plugin
+  adds one, and the compressor, saturator and limiter faces draw a ring on a modulated knob. A parameter a rack macro drives
+  is modulated through the macro (`param_gemappt`). A plugin parameter is played about 50 times a second by the page server.
+
 ## 2026-11-27, twenty-third update (source only, no new package)
 
 **The agent and the live hand**

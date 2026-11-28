@@ -83,7 +83,7 @@ test('a drag of a selected group sends one um for the whole selection; Ctrl togg
   u.ereignis('pointerdown', u.mitte('t1')); u.ereignis('pointerup', u.mitte('t1'));
   u.ereignis('pointerdown', { ...u.mitte('t1'), ctrlKey: true }); u.ereignis('pointerup', { ...u.mitte('t1'), ctrlKey: true });
   u.ereignis('contextmenu', { ...u.mitte('t3'), clientX: 5, clientY: 6 });   // opens on t3 and selects it alone
-  u.menues[0].punkte[0].aktion();
+  u.menues[0].punkte.find((p) => p.text === 'Reset note').aktion();
   await warte();
   assert.deepEqual(u.gesendet, [{ art: 'zuruecksetzen', ids: ['t3'] }]);
 });
@@ -99,13 +99,16 @@ test('double click sends zuruecksetzen for the note; the menu items send their o
   const m = aufbau();
   m.ereignis('contextmenu', { ...m.mitte('t2'), clientX: 300, clientY: 90 });
   assert.equal(m.menues.length, 1); assert.deepEqual([m.menues[0].x, m.menues[0].y], [300, 90]);
-  assert.deepEqual(m.menues[0].punkte.map((p) => [p.text, !!p.aus]), [['Reset note', false], ['Reset all notes', false], ['Remove notes from clip', false]]);
+  assert.deepEqual(m.menues[0].punkte.map((p) => [p.text, !!p.aus]), [['Quantise starts to 1/16', false], ['Snap to key', true], ['Snap to semitones', false], ['Flatten vibrato', false], ['Flatten drift', false], ['Reset note', false], ['Reset all notes', false], ['Remove notes from clip', false]]);
+  assert.equal(m.menues[0].punkte[1].titel, 'Set a project key first', 'no key: the entry is disabled with its hint');
   for (const p of m.menues[0].punkte) p.aktion();
   await warte();
-  assert.deepEqual(m.gesendet, [{ art: 'zuruecksetzen', ids: ['t2'] }, { art: 'zuruecksetzen' }, { art: 'entfernen' }]);
+  assert.deepEqual(m.gesendet, [{ art: 'raster', ids: ['t2'], zeit: '1/16', staerke: 1 }, { art: 'raster', ids: ['t2'], ton: 'halbton', staerke: 1 },
+    { art: 'form', ids: ['t2'], vib: 0 }, { art: 'form', ids: ['t2'], drift: 0 },
+    { art: 'zuruecksetzen', ids: ['t2'] }, { art: 'zuruecksetzen' }, { art: 'entfernen' }], 'quantise and snap act on the selection; the key entry did nothing');
   const leer = aufbau({ noten: [] });
   leer.ereignis('contextmenu', { offsetX: 100, offsetY: 50, clientX: 1, clientY: 2 });
-  assert.deepEqual(leer.menues[0].punkte.map((p) => !!p.aus), [true, true, true], 'nothing to reset or remove in an empty list');
+  assert.deepEqual(leer.menues[0].punkte.map((p) => !!p.aus), [true, true, true, true, true, true, true, true], 'nothing to reset or remove in an empty list');
   for (const p of leer.menues[0].punkte) p.aktion();
   await warte();
   assert.deepEqual(leer.gesendet, [] , 'a disabled item sends nothing');
@@ -197,7 +200,7 @@ test('the drag starts beyond 3 px of pointer travel in any direction, not before
   assert.deepEqual(await lauf(0, -2), [], '2 px: a click');
   assert.deepEqual(await lauf(0, -3), [], '3 px: still a click');
   assert.deepEqual(await lauf(0, -4), [{ art: 'ton', ids: ['t2'], um: 0.44 }], '4 px: a drag');
-  assert.deepEqual(await lauf(4, -2), [{ art: 'ton', ids: ['t2'], um: 0.22 }], 'sideways travel counts: 4.5 px starts the drag, only the vertical part moves the pitch');
+  assert.deepEqual(await lauf(2, -4), [{ art: 'ton', ids: ['t2'], um: 0.44 }], 'sideways travel counts: 4.5 px starts the drag; vertical-dominant stays a pitch drag, only the vertical part moves the pitch');
   assert.deepEqual(await lauf(2, -2), [], 'a diagonal of 2.8 px is a click');
   // a drag that was started and brought back to the start sends nothing
   const t = aufbau(), m = t.mitte('t2');
@@ -268,4 +271,15 @@ test('Delete and Backspace in the canvas stop at the surface (no global clip del
   f.ereignis('keydown', { key: 'Escape', stopPropagation() { gestoppt++; } });
   assert.equal(gestoppt, 0, 'negative control: other keys are not swallowed');
   assert.deepEqual(f.gesendet, [], 'slice 1: the keys do nothing');
+});
+
+test('the context menu: Snap to key is enabled with a key; strength comes from Sicht; without a selection the op names no ids', async () => {
+  const m = aufbau({ rasteTonart: (t) => t });
+  m.setzeSicht({ staerke: 0.5 });
+  m.ereignis('contextmenu', { offsetX: 400, offsetY: 5, clientX: 4, clientY: 5 });
+  const punkte = m.menues[0].punkte;
+  assert.equal(punkte[1].aus, false); assert.equal(punkte[1].titel, undefined);
+  for (const p of punkte.slice(0, 3)) p.aktion();
+  await warte();
+  assert.deepEqual(m.gesendet, [{ art: 'raster', zeit: '1/16', staerke: 0.5 }, { art: 'raster', ton: 'tonart', staerke: 0.5 }, { art: 'raster', ton: 'halbton', staerke: 0.5 }]);
 });

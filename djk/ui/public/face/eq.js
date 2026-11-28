@@ -3,7 +3,8 @@
 //
 // What is drawn is the TARGET response of the DSP (what eq_dsp's tests call `soll_db`: the RBJ analogue prototypes, cuts as Butterworth cascades). eq_dsp designs its
 // digital filters by least squares and its own test requires them to follow this target within 0.5 dB up to 20 kHz; the face says so on the display.
-import { EQ_TYPEN, EQ_STEIL, EQ_PLATZ, EQ_BAENDER, EQ_BAND_PARAMETER, EQ_KOPF_PARAMETER, EQ_BAND_TYP_VORGABE, EQ_BAND_FREQ_VORGABE, eqBandName, parameterVon } from '../production/inserts.js';
+import { EQ_TYPEN, EQ_STEIL, EQ_PLATZ, EQ_BAENDER, EQ_BAND_PARAMETER, EQ_KOPF_PARAMETER, EQ_BAND_TYP_VORGABE, EQ_BAND_FREQ_VORGABE, EQ_DYN_PARAMETER, EQ_DYN_KOPF, EQ_DYN_MODI, EQ_DYN_TYPEN, EQ_DYN_HINWEIS, eqDynHinweisSichtbar,
+  eqBandName, eqDynName, eqTitel, parameterVon } from '../production/inserts.js';
 import { baueAnzeige, ziehbar } from './display.js';
 import { baueReglerPlatte } from './frame.js';
 
@@ -74,26 +75,40 @@ export function eqBandDb(band, f, propQ = false) {
 /** The band m (1..8) from the flat values of a stage ('b3/freq' ...): defaults of the plug-in for what is missing. */
 export function eqBandWerte(werte, m) {
   const w = (n, vorgabe) => oder(werte?.[eqBandName(m, n)], vorgabe);
-  return { an: w('an', 0) >= 0.5, typ: w('typ', EQ_BAND_TYP_VORGABE[m - 1]), freq: w('freq', EQ_BAND_FREQ_VORGABE[m - 1]), gain: w('gain', 0), q: w('q', WURZEL_HALBE), steil: w('steil', 0), platz: Math.round(w('platz', 0)) };
+  const dw = (n, vorgabe) => oder(werte?.[eqDynName(m, n)], vorgabe);
+  return { an: w('an', 0) >= 0.5, typ: w('typ', EQ_BAND_TYP_VORGABE[m - 1]), freq: w('freq', EQ_BAND_FREQ_VORGABE[m - 1]), gain: w('gain', 0), q: w('q', WURZEL_HALBE), steil: w('steil', 0), platz: Math.round(w('platz', 0)),
+    dyn: klemme(Math.round(dw('dyn', 0)), 0, 4), schwelle: dw('schwelle', -24), bereich: dw('bereich', 0) };
 }
 
+/** The dynamic change of a band for the stage's reading `gr` (the deepest change, positive = cut, negative = boost): a cutting range follows a cut up to its size, a boosting range a boost. */
+export function eqDynDelta(gr, bereich) {
+  if (!endlich(gr) || !endlich(bereich)) return 0;
+  if (bereich < 0 && gr > 0) return -Math.min(-bereich, gr);
+  if (bereich > 0 && gr < 0) return Math.min(bereich, -gr);
+  return 0;
+}
+/** Does the band's type have a dynamic part (Bell, Low shelf, High shelf)? The face shows the DYNAMIC row for these only. */
+export const eqDynMoeglich = (typ) => EQ_DYN_TYPEN.has(Math.round(typ));
+
 /** The response of the whole stage in dB at f: the bands that are on and whose placement applies (`mitte`: Stereo and Mid; `seite`: Stereo and Side), plus the output gain. */
-export function eqSummeDb(werte, f, platz = 'mitte') {
+export function eqSummeDb(werte, f, platz = 'mitte', dynGr = null) {
   const prop = oder(werte?.propq, 0) >= 0.5;
   let s = klemme(oder(werte?.out, 0), -24, 24);
   for (let m = 1; m <= EQ_BAENDER; m++) {
     const b = eqBandWerte(werte, m);
     if (!b.an) continue;
     const gilt = b.platz === 0 || b.platz === (platz === 'seite' ? 2 : 1);
-    if (gilt) s += eqBandDb(b, f, prop);
+    if (!gilt) continue;
+    // the moving curve: a dynamic band's gain moves by the stage's reading (dynGr null: the static curve)
+    s += eqBandDb(dynGr !== null && b.dyn > 0 && eqDynMoeglich(b.typ) ? { ...b, gain: klemme(b.gain + eqDynDelta(dynGr, b.bereich), -GAIN, GAIN) } : b, f, prop);
   }
   return s;
 }
 
 /** The response curve, n points log-spaced from 10 Hz to 22 kHz, both ends included: [[f, dB]]. */
-export function eqKurve(werte, platz = 'mitte', n = 256) {
+export function eqKurve(werte, platz = 'mitte', n = 256, dynGr = null) {
   const lo = Math.log(EQ_ACHSEN.x.min), hi = Math.log(EQ_ACHSEN.x.max), aus = [];
-  for (let i = 0; i < n; i++) { const f = Math.exp(lo + (hi - lo) * i / (n - 1)); aus.push([f, eqSummeDb(werte, f, platz)]); }
+  for (let i = 0; i < n; i++) { const f = Math.exp(lo + (hi - lo) * i / (n - 1)); aus.push([f, eqSummeDb(werte, f, platz, dynGr)]); }
   return aus;
 }
 
@@ -120,14 +135,18 @@ const LOG = new Set(['freq', 'q']);
 function parameterTabelle(m) {
   const t = {};
   for (const q of EQ_BAND_PARAMETER) { const v = parameterVon('eq', eqBandName(m, q.name)); t[eqBandName(m, q.name)] = { name: eqBandName(m, q.name), label: q.label, min: q.min, max: q.max, log: LOG.has(q.name), einheit: q.einheit, vorgabe: v.vorgabe }; }
-  for (const q of EQ_KOPF_PARAMETER) t[q.name] = { name: q.name, label: q.label, min: q.min, max: q.max, log: false, einheit: q.einheit, vorgabe: q.vorgabe };
+  for (const q of EQ_DYN_PARAMETER) { const n = eqDynName(m, q.name); t[n] = { name: n, label: q.label, min: q.min, max: q.max, log: false, einheit: q.einheit, vorgabe: q.vorgabe }; }
+  for (const q of [...EQ_KOPF_PARAMETER, ...EQ_DYN_KOPF]) t[q.name] = { name: q.name, label: q.label, min: q.min, max: q.max, log: false, einheit: q.einheit, vorgabe: q.vorgabe };
   return t;
 }
 const LOKAL_MS = 800;   // a value the hand just set is shown for this long, before the project echoes it
 const RADIUS = 9, KLICK_PX = 3;
 
-/** The EQ face into `host`. quelle = {get(name), gesperrt?(name), set(name, v) -> Promise<boolean>|void, ende?(), an: {get(), set(b)},
- *  griff(m, werte {name: value}, einschalten) -> Promise<boolean>|void, waehleBand?(m), band?() -> m}. Returns {aktualisiere(), live: undefined, zerstoere()}.
+/** The header readout: the stage's deepest dynamic change as a gain ("dyn -3.2 dB"), or "dyn -" without a fresh reading. */
+export const eqDynText = (gr) => (endlich(gr) ? `dyn ${(-gr).toFixed(1)} dB` : 'dyn -');
+
+/** The EQ face into `host`. quelle = {get(name), gesperrt?(name), set(name, v) -> Promise<boolean>|void, ende?(), gr?(jetzt) -> dB|null, an: {get(), set(b)},
+ *  griff(m, werte {name: value}, einschalten) -> Promise<boolean>|void, waehleBand?(m), band?() -> m, schluessel?() -> boolean (the stage has a key: the key note falls away)}. Returns {aktualisiere(), live(jetzt), zerstoere()}; live is one frame: true when the readout or the moving curve changed.
  *  The curve and the handle follow the hand while it drags (the values the hand sets are shown at once); a write the project refuses gives the handle back. */
 export function baueEqFace(host, quelle) {
   const d = host.ownerDocument ?? globalThis.document;
@@ -135,8 +154,11 @@ export function baueEqFace(host, quelle) {
   const wurzel = mk('div', 'fa-eq');
   const anzeigeHost = mk('div', 'fa-eq-anzeige'), reiter = mk('div', 'fa-eq-reiter'), platten = mk('div', 'fa-eq-platten'), bandHost = mk('div', 'fa-eq-band'), wahlHost = mk('div', 'fa-eq-wahl'), stufeHost = mk('div', 'fa-eq-stufe');
   reiter.setAttribute('role', 'tablist'); reiter.setAttribute('aria-label', 'EQ bands');
+  const dynHost = mk('div', 'fa-eq-dyn'), dynKopf = mk('span', 'fa-marke fa-eq-dyn-kopf'), dynNotiz = mk('span', 'fa-eq-dyn-notiz'), dynPlatte = mk('div', 'fa-eq-dyn-platte');
+  dynKopf.textContent = 'DYNAMIC'; dynNotiz.textContent = EQ_DYN_HINWEIS;
+  dynHost.append(dynKopf, dynPlatte, dynNotiz);
   platten.append(bandHost, wahlHost, stufeHost);
-  wurzel.append(anzeigeHost, reiter, platten);
+  wurzel.append(anzeigeHost, reiter, platten, dynHost);
   host.append(wurzel);
   const jetzt = () => globalThis.performance?.now?.() ?? Date.now();
 
@@ -152,8 +174,9 @@ export function baueEqFace(host, quelle) {
   };
   const alleWerte = () => {
     const w = {};
-    for (const n of ['out', 'propq']) w[n] = wert(n);
+    for (const n of ['out', 'propq', ...EQ_DYN_KOPF.map((q) => q.name)]) w[n] = wert(n);
     for (let m = 1; m <= EQ_BAENDER; m++) for (const q of EQ_BAND_PARAMETER) w[eqBandName(m, q.name)] = wert(eqBandName(m, q.name));
+    for (let m = 1; m <= EQ_BAENDER; m++) for (const q of EQ_DYN_PARAMETER) w[eqDynName(m, q.name)] = wert(eqDynName(m, q.name));
     return w;
   };
 
@@ -163,7 +186,10 @@ export function baueEqFace(host, quelle) {
   ds.linieH('fa-eq-null', 0);
   const seitePfad = ds.pfad('fa-eq-seite', []);
   const kurvePfad = ds.pfad('fa-eq-kurve', []);
+  const bewegtPfad = ds.pfad('fa-eq-bewegt', []);   // the moving curve: only while the stage reports a dynamic change
   const hinweis = ds.text('fa-marke fa-eq-hinweis', 12, 27, 'TARGET RESPONSE (the filter follows it within 0.5 dB)', 'start');
+  // the header: the title (Cypher EQ, Cypher EQ Pro with a dynamic band) and the stage's dynamic readout, drawn into the display (no extra row)
+  const titelEl = ds.text('fa-marke fa-eq-titel', 21000, 27, 'Cypher EQ', 'end'), dynEl = ds.text('fa-marke fa-eq-dyn-gr', 21000, 22, 'dyn -', 'end');
   const griffe = [];
   for (let m = 1; m <= EQ_BAENDER; m++) {
     const ring = ds.punkt('fa-griff', 1000, 0, RADIUS), nr = ds.text('fa-griff-nr', 1000, 0, String(m), 'middle');
@@ -180,9 +206,14 @@ export function baueEqFace(host, quelle) {
     g.ring.classList.toggle('sel', m === gewaehlt); g.nr.classList.toggle('sel', m === gewaehlt);
     g.ring.setAttribute('aria-valuetext', `${Math.round(l.freq)} Hz${l.gainFrei ? `, ${l.db.toFixed(1)} dB` : ''}${an ? '' : ', off'}`);
   };
+  let grStand = null;   // the stage's last fresh reading (dB, positive = cut) or null
+  const bewegt = (w) => grStand !== null && Array.from({ length: EQ_BAENDER }, (_, i) => eqBandWerte(w, i + 1)).some((b) => b.an && b.dyn > 0 && eqDynMoeglich(b.typ) && eqDynDelta(grStand, b.bereich) !== 0);
   const zeichne = () => {
     const w = alleWerte();
     ds.setzePfad(kurvePfad, eqKurve(w, 'mitte'));
+    ds.setzePfad(bewegtPfad, bewegt(w) ? eqKurve(w, 'mitte', 256, grStand) : []);
+    titelEl.textContent = eqTitel(w);
+    zeigeDyn(w);
     const seite = Array.from({ length: EQ_BAENDER }, (_, i) => eqBandWerte(w, i + 1)).some((b) => b.an && b.platz !== 0);
     seitePfad.setAttribute('class', `fa-eq-seite${seite ? '' : ' fa-eq-leer'}`);
     ds.setzePfad(seitePfad, seite ? eqKurve(w, 'seite') : []);
@@ -239,7 +270,7 @@ export function baueEqFace(host, quelle) {
     });
   }
   // a write was refused (or failed): everything the hand set but the project did not take goes back to the project's values
-  const zurueck = () => { zug = null; lokal.clear(); zeichne(); bandPlatte?.aktualisiere(); stufePlatte?.aktualisiere(); };
+  const zurueck = () => { zug = null; lokal.clear(); zeichne(); bandPlatte?.aktualisiere(); stufePlatte?.aktualisiere(); dynPlatte2?.aktualisiere(); };
 
   // ---- the band tabs and the plates
   const tabs = [];
@@ -258,7 +289,26 @@ export function baueEqFace(host, quelle) {
       zeichne();
     },
     gesperrt: (n) => quelle.gesperrt?.(n) === true,
+    ...(quelle.modKnopf ? { modKnopf: (n) => quelle.modKnopf(n) } : {}),   // strand 6: the ring of a modulated knob, as on the compressor face
     ende: () => quelle.ende?.(),
+  };
+  // the DYNAMIC row of the selected band: shown for Bell and shelves only, the key note for the two key modes
+  let dynBand = null, dynPlatte2 = null;
+  const zeigeDyn = (w) => {
+    if (dynBand !== gewaehlt) baueDynPlatte();
+    const b = eqBandWerte(w, gewaehlt);
+    const sicht = eqDynMoeglich(b.typ);
+    dynHost.hidden = !sicht; dynHost.classList.toggle('fa-eq-dyn-aus', !sicht);
+    dynNotiz.hidden = !(sicht && eqDynHinweisSichtbar(b.dyn, quelle.schluessel?.() === true));
+  };
+  const baueDynPlatte = () => {
+    dynPlatte2?.zerstoere?.();
+    dynBand = gewaehlt;
+    const m = gewaehlt, n = (x) => eqDynName(m, x);
+    dynPlatte2 = baueReglerPlatte(dynPlatte, { titel: '', akzent: 'orange', dokument: d, parameter: parameterTabelle(m), adapter, abschnitte: [
+      { id: 'd1', cols: 1, steuer: [{ param: n('dyn'), typ: 'selector', label: 'Mode', optionen: EQ_DYN_MODI }] },
+      { id: 'd2', cols: 4, steuer: [{ param: n('schwelle'), typ: 'knob', label: 'Threshold' }, { param: n('bereich'), typ: 'knob', label: 'Range' }, { param: 'dyn_attack', typ: 'knob', label: 'Attack' }, { param: 'dyn_release', typ: 'knob', label: 'Release' }] },
+    ] });
   };
   const baueBandPlatte = () => {
     bandPlatte?.zerstoere?.();
@@ -287,6 +337,7 @@ export function baueEqFace(host, quelle) {
     quelle.waehleBand?.(m);
     baueBandPlatte();
     nachOben(m); zeigeReiter(); zeichne();
+    dynPlatte2?.aktualisiere();
   }
   const zeigeReiter = () => {
     const w = alleWerte();
@@ -300,10 +351,18 @@ export function baueEqFace(host, quelle) {
     const aus = quelle.an ? quelle.an.get() === false : false;
     if (aus !== gedimmt) { gedimmt = aus; wurzel.classList.toggle('fa-aus', aus); }
   };
-  baueBandPlatte(); baueStufePlatte(); nachOben(gewaehlt); zeigeReiter(); zeichne(); dimme();
+  // the readout: the stage's reading from /e/ins_gr (a bypassed stage shows none)
+  let zuletzt;
+  const zeigeGr = (zeit) => {
+    grStand = gedimmt ? null : (quelle.gr?.(zeit) ?? null);
+    const neu = eqDynText(grStand), anders = neu !== zuletzt;
+    if (anders) { zuletzt = neu; dynEl.textContent = neu; zeichne(); }
+    return anders;
+  };
+  baueBandPlatte(); baueStufePlatte(); nachOben(gewaehlt); dimme(); zeigeReiter(); zeichne(); zeigeGr(jetzt());
   return {
-    aktualisiere() { bandPlatte?.aktualisiere(); stufePlatte?.aktualisiere(); zeigeReiter(); zeichne(); dimme(); },
-    live: undefined,
-    zerstoere() { bandPlatte?.zerstoere?.(); stufePlatte?.zerstoere?.(); wurzel.remove?.(); },
+    aktualisiere() { bandPlatte?.aktualisiere(); stufePlatte?.aktualisiere(); dynPlatte2?.aktualisiere(); zeigeReiter(); dimme(); zeichne(); zeigeGr(jetzt()); },
+    live(zeit = jetzt()) { dimme(); return zeigeGr(zeit); },
+    zerstoere() { bandPlatte?.zerstoere?.(); stufePlatte?.zerstoere?.(); dynPlatte2?.zerstoere?.(); wurzel.remove?.(); },
   };
 }

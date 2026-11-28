@@ -327,18 +327,9 @@ export function notenName(hz: number): string {
   return tonName(Math.round(69 + 12 * Math.log2(hz / 440)));
 }
 
-// Objective findings about one source: bass_nicht_mono, true_peak, resonanz. A silent source has none.
-export function hinweiseQuelle(m: Messung): Hinweis[] {
-  if (m.stumm) return [];
-  const aus: Hinweis[] = [];
-  const bass = m.stereo.baender[0];
-  // The band carries energy when the power of L plus R below 120 Hz is above -60 dB (a bass in full antiphase has no mid left).
-  if (bass && bass.korrelation < SCHWELLEN.bassMono && bass.pegel_db > SCHWELLEN.pegelMinDb) {
-    aus.push({ art: 'bass_nicht_mono', text: `${m.name}: the bass below ${SCHWELLEN.bassHz} Hz is not mono (correlation ${bass.korrelation.toFixed(2)})` });
-  }
-  const tp = m.lautheit.true_peak_dbtp;
-  if (tp !== null && tp > SCHWELLEN.truePeak) aus.push({ art: 'true_peak',
-    text: `${m.name}: true peak ${tp.toFixed(1)} dBTP is above ${SCHWELLEN.truePeak} dBTP` });
+// The resonance bands of a source: a narrow peak that stands SCHWELLEN.resonanzDb over the median of the six bands on each side, at most three, strongest
+// first. `n` is the index in the 1/12 octave raster, `d` the height over the median (dB). The resonance hints and the tame proposal share it.
+function resonanzBaender(m: Messung): { n: number; d: number }[] {
   const db = m.spektrum.mittel_db, res: { n: number; d: number }[] = [];
   for (let n = 0; n < db.length; n++) {
     if (!(db[n] > SCHWELLEN.pegelMinDb)) continue;
@@ -353,7 +344,22 @@ export function hinweiseQuelle(m: Messung): Hinweis[] {
     res.push({ n, d });
   }
   res.sort((a, b) => b.d - a.d);
-  for (const { n, d } of res.slice(0, 3)) {
+  return res.slice(0, 3);
+}
+
+// Objective findings about one source: bass_nicht_mono, true_peak, resonanz. A silent source has none.
+export function hinweiseQuelle(m: Messung): Hinweis[] {
+  if (m.stumm) return [];
+  const aus: Hinweis[] = [];
+  const bass = m.stereo.baender[0];
+  // The band carries energy when the power of L plus R below 120 Hz is above -60 dB (a bass in full antiphase has no mid left).
+  if (bass && bass.korrelation < SCHWELLEN.bassMono && bass.pegel_db > SCHWELLEN.pegelMinDb) {
+    aus.push({ art: 'bass_nicht_mono', text: `${m.name}: the bass below ${SCHWELLEN.bassHz} Hz is not mono (correlation ${bass.korrelation.toFixed(2)})` });
+  }
+  const tp = m.lautheit.true_peak_dbtp;
+  if (tp !== null && tp > SCHWELLEN.truePeak) aus.push({ art: 'true_peak',
+    text: `${m.name}: true peak ${tp.toFixed(1)} dBTP is above ${SCHWELLEN.truePeak} dBTP` });
+  for (const { n, d } of resonanzBaender(m)) {
     const hz = ZWOELFTEL_HZ[n];
     aus.push({ art: 'resonanz', hz, text: `${m.name}: narrow peak at ${hzText(hz)} (${notenName(hz)}), ${d.toFixed(1)} dB above its octave` });
   }
@@ -367,4 +373,117 @@ export function hinweiseUeberdeckung(q: Messung, v: Messung, u: Ueberdeckung): H
     hz: Math.sqrt(s.hz_von * s.hz_bis),
     text: `${q.name} and ${v.name} mask each other from ${hzText(s.hz_von)} to ${hzText(s.hz_bis)} (${Math.round(s.anteil * 100)} % of the time)`,
   }));
+}
+
+// ---- masking over all strip pairs (strand 5 slice 6) ----
+
+/** One sounding strip as the masking analysis sees it. `pegel_db` orders the strips (RMS) and decides which of a pair is the quieter one.
+ *  `pos`: where a proposed EQ stage goes in the chain of that strip (default 0); `null` = the chain is full, the conflict is listed without a proposal. */
+export interface MaskierungTeil { id: string; name?: string; m: Teilmessung; pegel_db: number; pos?: number | null }
+export interface MaskierungOptionen {
+  /** Extension point for slice 2 (dynamic EQ Pro bands): true proposes `d<m>/dyn` 1 with the band's mean level as threshold instead of a static cut.
+   *  Off until slice 2 is merged: the rows `d<m>/*` do not exist before. */
+  dynamisch?: boolean;
+  /** The EQ band that carries the proposal (1..8; 4 is a Bell by default). */
+  band?: number;
+}
+export interface MaskierungBefehl { befehl: 'insert_setzen'; strang_id: string; pos: number; art: 'eq'; werte: Record<string, number> }
+export interface MaskierungVorschlag { strang_id: string; befehle: MaskierungBefehl[]; hz: number; q: number; gain_db: number }
+export interface MaskierungPaar {
+  a: string; b: string; hz_von: number; hz_bis: number; anteil: number; breite_okt: number; score: number;
+  /** The quieter strip of the pair, where the cut goes. */
+  leiser: string;
+  vorschlag: MaskierungVorschlag | null;
+}
+export const MASKIERUNG_MAX_STRANG = 24;
+export const MASKIERUNG_CUT_DB = -3;
+
+// Pairs of the (at most 24 loudest) strips: per pair the run of `ueberdeckung` with the best score (share of the time x width in octaves), then the
+// `max` best pairs, each with a Bell cut on the quieter strip of the pair, centred on the run (geometric centre), Q = centre / bandwidth clamped 0.7..6.
+// A silent strip never takes part. Ties keep the input order (stable).
+export function maskierungPaare(teile: MaskierungTeil[], max = 5, o: MaskierungOptionen = {}): MaskierungPaar[] {
+  const band = Math.min(8, Math.max(1, Math.round(o.band ?? 4)));
+  const klingt = teile.map((t, i) => ({ t, i })).filter(({ t }) => !t.m.stumm && t.pegel_db > SCHWELLEN.pegelMinDb);
+  klingt.sort((x, y) => y.t.pegel_db - x.t.pegel_db || x.i - y.i);
+  const laut = klingt.slice(0, MASKIERUNG_MAX_STRANG).map(({ t }) => t);
+  const aus: MaskierungPaar[] = [];
+  for (let i = 0; i < laut.length; i++) {
+    for (let j = i + 1; j < laut.length; j++) {
+      const lauter = laut[i], leiser = laut[j];   // sorted: i is at least as loud as j
+      const u = ueberdeckung(leiser.m, lauter.m);
+      let beste: { s: Schwerpunkt; breite: number; score: number } | null = null;
+      for (const s of u.schwerpunkte) {
+        const breite = Math.log2(s.hz_bis / s.hz_von);
+        const score = s.anteil * breite;
+        if (!beste || score > beste.score) beste = { s, breite, score };
+      }
+      if (!beste) continue;
+      const { s } = beste;
+      const mitte = Math.sqrt(s.hz_von * s.hz_bis);
+      const q = Math.min(6, Math.max(0.7, mitte / (s.hz_bis - s.hz_von)));
+      const im = u.baender.filter((b) => b.hz >= s.hz_von && b.hz <= s.hz_bis);
+      const pegel = im.length ? im.reduce((x, b) => x + b.quelle_db, 0) / im.length : DB_BODEN;
+      const runde = (x: number, n: number): number => Math.round(x * 10 ** n) / 10 ** n;
+      const hz = runde(mitte, 1), qr = runde(q, 2);
+      let vorschlag: MaskierungVorschlag | null = null;
+      if (leiser.pos !== null) {
+        const werte: Record<string, number> = { [`b${band}/an`]: 1, [`b${band}/typ`]: 0,
+          [`b${band}/freq`]: hz, [`b${band}/q`]: qr, [`b${band}/gain`]: MASKIERUNG_CUT_DB };
+        if (o.dynamisch) {   // slice 2: the cut works only above the mean level of the band
+          werte[`d${band}/dyn`] = 1; werte[`d${band}/schwelle`] = runde(pegel, 1);
+        }
+        vorschlag = { strang_id: leiser.id, hz, q: qr, gain_db: MASKIERUNG_CUT_DB,
+          befehle: [{ befehl: 'insert_setzen', strang_id: leiser.id, pos: leiser.pos ?? 0, art: 'eq', werte }] };
+      }
+      aus.push({ a: lauter.id, b: leiser.id, hz_von: s.hz_von, hz_bis: s.hz_bis, anteil: s.anteil, breite_okt: beste.breite, score: beste.score,
+        leiser: leiser.id, vorschlag });
+    }
+  }
+  aus.sort((x, y) => y.score - x.score);   // stable
+  return aus.slice(0, Math.max(0, max));
+}
+
+// ---- tame resonances (strand 5 slice 5) ----
+
+export interface ResonanzBand { hz: number; q: number; schwelle_db: number; bereich_db: number }
+export const RESONANZ_Q = 8, RESONANZ_BEREICH_DB = -6, RESONANZ_SCHWELLE_ABZUG_DB = 3, RESONANZ_KETTE_MAX = 5;
+/** Where the bands go: `kette` = stages in the chain of the strip (5 = full); `eq` = the strip's EQ stage that takes the bands (see resonanzBefehle) with
+ *  its free band numbers (1..8), null = the strip has no EQ with a free band. */
+export interface ResonanzStrang { id: string; kette: number; eq?: { insert_id: string; frei: number[] } | null }
+export type ResonanzBefehl =
+  | { befehl: 'insert_setzen'; strang_id: string; pos: number; art: 'eq'; werte: Record<string, number> }
+  | { befehl: 'insert_param_setzen'; insert_id: string; param: string; wert: number };
+
+const rundeAuf = (x: number, n: number): number => Math.round(x * 10 ** n) / 10 ** n;
+const zwischen = (x: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, x));
+
+/** At most three dynamic Bell bands for the resonances of a source: Q 8, range -6 dB, threshold = the level of the band minus 3 dB (the peak sits in its
+ *  own 1/12 octave band, so that is what the detector at the band sees). A silent source has none. Strongest resonance first. */
+export function resonanzVorschlag(m: Messung): ResonanzBand[] {
+  if (m.stumm) return [];
+  return resonanzBaender(m).map(({ n }) => ({ hz: rundeAuf(zwischen(ZWOELFTEL_HZ[n], 10, 22000), 1), q: RESONANZ_Q,
+    schwelle_db: rundeAuf(zwischen(m.spektrum.mittel_db[n] - RESONANZ_SCHWELLE_ABZUG_DB, -60, 0), 1), bereich_db: RESONANZ_BEREICH_DB }));
+}
+
+const bandWerte = (b: number, r: ResonanzBand): [string, number][] => [
+  [`b${b}/an`, 1], [`b${b}/typ`, 0], [`b${b}/freq`, r.hz], [`b${b}/gain`, 0], [`b${b}/q`, r.q],
+  [`d${b}/dyn`, 1], [`d${b}/schwelle`, r.schwelle_db], [`d${b}/bereich`, r.bereich_db]];
+function paramBefehle(baender: ResonanzBand[], eq: { insert_id: string; frei: number[] }): ResonanzBefehl[] {
+  return baender.flatMap((r, i) => bandWerte(eq.frei[i], r).map(([param, wert]) => (
+    { befehl: 'insert_param_setzen' as const, insert_id: eq.insert_id, param, wert })));
+}
+
+/** The ready command list for `proj_aendern` (one undo step): the bands go to free bands of the strip's EQ when it has enough, else into a new EQ stage at
+ *  position 0 (bands 1.., if the chain has room), else into the free bands of the EQ as far as they go. Always Bell with `dyn` 1. `null` = nothing fits
+ *  (chain full, no free band) or there are no bands. */
+export function resonanzBefehle(baender: ResonanzBand[], strang: ResonanzStrang): ResonanzBefehl[] | null {
+  if (!baender.length) return null;
+  const eq = strang.eq && strang.eq.frei.length ? strang.eq : null;
+  if (eq && eq.frei.length >= baender.length) return paramBefehle(baender, eq);
+  if (strang.kette < RESONANZ_KETTE_MAX) {
+    const werte: Record<string, number> = {};
+    baender.forEach((r, i) => { for (const [k, v] of bandWerte(i + 1, r)) werte[k] = v; });
+    return [{ befehl: 'insert_setzen', strang_id: strang.id, pos: 0, art: 'eq', werte }];
+  }
+  return eq ? paramBefehle(baender.slice(0, eq.frei.length), eq) : null;
 }

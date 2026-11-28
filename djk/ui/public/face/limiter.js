@@ -93,6 +93,7 @@ export function baueLimiterFace(host, quelle) {
         zeichne();
       },
       gesperrt: (n) => quelle.gesperrt?.(n) === true,
+      ...(quelle.modKnopf ? { modKnopf: (n) => quelle.modKnopf(n) } : {}),
       ende: () => quelle.ende?.(),
     },
   });

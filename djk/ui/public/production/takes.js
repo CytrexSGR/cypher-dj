@@ -17,7 +17,7 @@ export const TAKE_TEXT = {
 
 const EPS = 1e-6;                         // beats, R6 (splits round to 1e-9 per step)
 
-export const hatTakes = (spur) => spur?.art === 'audio' && Array.isArray(spur.takes) && spur.takes.length > 0;
+export const hatTakes = (spur) => (spur?.art === 'audio' || spur?.art === 'instrument') && Array.isArray(spur.takes) && spur.takes.length > 0;
 
 // Track index -> number of take rows shown. The T button state lives in the page (st.takeOffen, a Set of spur ids, like st.laneOffen); a project without
 // takes (every old file) gives an empty Map, so the row table is the one of today. projekt: the state that is drawn (the draft while a gesture runs).
@@ -28,12 +28,39 @@ export function takeZeilenVon(st, projekt = st?.projekt) {
   return m;
 }
 
+// Strand 7 (D10), mirrors project/takes.ts: notes as absolute tuples [beat, ton, vel, laenge]; a loop clip is unrolled over its span.
+function absoluteNoten(c) {
+  const aus = [], ende = c.start_beat + c.laenge_beats, l = c.loop_beats ?? null;
+  for (let k = 0; ; k++) {
+    const schub = l === null ? 0 : k * l;
+    if (l === null ? k > 0 : schub >= c.laenge_beats - 1e-9) break;
+    for (const n of c.noten ?? []) {
+      const b = c.start_beat + schub + n.beat;
+      if (n.beat >= (l ?? c.laenge_beats) - 1e-9 || b >= ende - 1e-9) continue;
+      aus.push([b, n.ton, n.vel, n.laenge]);
+    }
+  }
+  return aus;
+}
+const nachNote = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2] || a[3] - b[3];
+function notenImBereich(c, von, bis) {
+  const ende = Math.min(bis, c.start_beat + c.laenge_beats);
+  return absoluteNoten(c).filter(([b]) => b >= von - 1e-9 && b < bis - 1e-9).map(([b, ton, vel, l]) => [b, ton, vel, Math.min(l, ende - b)]).sort(nachNote);
+}
+// The main clip holds, over its own span, the same absolute notes the take holds there (lengths cut at the end of the main clip).
+function istMidiTakeKopie(haupt, take) {
+  const von = haupt.start_beat, bis = haupt.start_beat + haupt.laenge_beats;
+  const x = notenImBereich(haupt, von, bis), y = notenImBereich(take, von, bis);
+  return x.length === y.length && x.every((a, i) => a.every((v, k) => Math.abs(v - y[i][k]) <= EPS));
+}
+
 const gleich = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 // Is the main clip a copy of (a part of) the take clip, same material at the same place on the take's own timeline? R6, mirrors project/takes.ts istTakeKopie:
 // same sha; main.start_beat - take.start_beat == (main.offset_s - take.offset_s) * bpm / 60 within 1e-6 beats. Warp clips (both warped, equal markers)
 // compare versatz_beats instead of offset_s; a warp on one side only is no copy; loop clips never count. Ranges are not looked at here (genutzteBereiche).
 export function istTakeKopie(haupt, take, bpm) {
+  if (haupt?.art === 'midi' && take?.art === 'midi') return istMidiTakeKopie(haupt, take);   // strand 7 D10
   if (haupt?.art !== 'audio' || take?.art !== 'audio') return false;
   if (haupt.quelle?.sha256 !== take.quelle?.sha256) return false;
   if (haupt.loop_beats || take.loop_beats) return false;

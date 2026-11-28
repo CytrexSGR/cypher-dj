@@ -10,6 +10,7 @@ import { huellPunkte, lfoPunkte, filterPunkte, cutoffX, nullDbY, wtRahmen, wtGew
 import { GLYPHEN_PFAD } from './panel_glyphen.js';
 import { skaliere, diskretWert, diskretIndex, formatiereWert, klemme01 } from './panel_skala.js';
 import { ruhendeSteuerungen } from './panel_wirkung.js';
+import { markenWinkel, neueSchleife } from './mod_display.js';
 
 const WIE_BEI_REGLERN = 0.5;   // the control table starts every knob at 0.5 (core/signalbox/src/controls.cpp)
 
@@ -207,7 +208,23 @@ export function baueFrontplatte(host, opt) {
       if (text !== null) zelle.setAttribute('title', text); else zelle.removeAttribute('title');
     }
   };
+  // strand 6 task 2.2: `opt.modKnopf(nr)` returns the modulated position 0..1 of a knob, null while the modulator is silent, undefined when none targets the knob.
+  // The fp-mod arcs are redrawn by a frame loop that runs only while some knob is targeted (and the tab is visible).
+  const modKnoepfe = [];        // [{ nr, pfad, wert }]
+  const modSchleife = opt.modKnopf ? neueSchleife(() => {
+    let ziele = false;
+    for (const m of modKnoepfe) {
+      const mk = opt.modKnopf(m.nr);
+      if (mk === undefined) { m.pfad.setAttribute('d', ''); continue; }
+      ziele = true;
+      if (mk === null) { m.pfad.setAttribute('d', ''); continue; }
+      const [a0, a1] = markenWinkel(k[m.nr], mk);
+      m.pfad.setAttribute('d', bogenPfad(32, 32, 29, a0, a1));
+    }
+    return ziele;
+  }, { rahmen: opt.rahmen, abbrechen: opt.rahmenAbbrechen, sichtbar: opt.sichtbar, jetzt: opt.jetzt }) : null;
   const zeige = () => {
+    if (modSchleife && modKnoepfe.some((m) => opt.modKnopf(m.nr) !== undefined)) modSchleife.an();
     for (const f of zeiger) f();
     zeigeWirkung();
     for (const z of sperrZellen) { const an = z.nrs.some(gesperrtP); z.zelle.classList.toggle('fp-gesperrt', an); z.zelle.setAttribute('aria-disabled', String(an)); }
@@ -431,6 +448,7 @@ export function baueFrontplatte(host, opt) {
       kappe.setAttribute('cx', '32'); kappe.setAttribute('cy', '32'); kappe.setAttribute('r', '19');
       if (sc) svg.append(skala(c, nr, sc));
       svg.append(spur, wert, kappe, strich);
+      if (modSchleife) { const mp = el('path', 'fp-mod', undefined, true); svg.append(mp); modKnoepfe.push({ nr, pfad: mp }); }
       dreh.append(svg);
       const anzeige = el('output', 'fp-wert');
       zelle.append(dreh, anzeige);
@@ -1315,6 +1333,7 @@ export function baueFrontplatte(host, opt) {
       markiere();
     },
     zerstoere() {
+      modSchleife?.aus();
       for (const f of aufraeumen.splice(0)) f();
       if (radTimer !== null) { clearTimeout(radTimer); radTimer = null; fertig(); }
       for (const [t, f] of [['pointerdown', hostRunter], ['pointermove', hostBewegt], ['pointerup', hostHoch], ['pointercancel', hostHoch], ['lostpointercapture', hostHoch]]) host.removeEventListener?.(t, f);

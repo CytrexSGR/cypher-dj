@@ -118,6 +118,54 @@ pitches, velocities, starts and lengths, and the tempo of the project.
 `Undo (Ctrl+Z)` takes the last edit back, `Redo (Ctrl+Shift+Z)` puts it back. One undo undoes one edit: two fader moves that are more than
 a second apart are two steps. Moves of the same fader within a second count as one drag and are one step together.
 
+## 15. Two takes and a comp
+
+Arm an audio track and record the same bars twice: every pass is one take, and each take is its own lane under the track. Drag a range on
+`Take 1` to comp it into the track: that range of the take plays instead of what the track held there. Click the name of a take to audition
+it; the audition is not part of the project and ends when you click again. Undo takes the comp back, redo puts it back.
+
+The tour step `j3.take` records two passes of two bars, comps bar 1 from the first take, auditions it, exports before and after the comp and
+undoes it. In the export the low band over the high band must differ by at least 12 dB between bar 1 (kick) and bar 2 (hats), and undo must give
+back the clips of the track as they were. The step needs a sound a production project can record: Strudel and the loop decks sit in the live
+container and are silent while a project is open, and the library of the tour instance is empty, so the step is skipped (`abhaengigkeit`) until
+such a source exists.
+
+## 16. A rack with two devices and a macro
+
+A rack on an instrument track holds several devices, each with a key zone. Add a rack with two RB-338 members, one for the notes up to 59 and one
+from 60, and give macro 1 a target: the cutoff of the low member. Turning the macro from 0 to 1 opens the filter of that member while the other one
+stays as it is. `Save variation` keeps the macro values under a name, `Load variation` brings them back, and one undo takes the load back.
+
+The tour step `j3.rack` plays four beats of low notes and four beats of high notes through such a rack and exports twice, with the macro at 0 and
+at 1. Both halves must sound, the share of the energy above 1 kHz in the low half must rise by at least 6 dB, and in the high half it may change by
+at most 1.5 dB. It also saves, changes and loads the variation and checks that one undo takes the load back.
+
+## 17. A foreign plugin with a lane
+
+A third-party plugin runs on a track as a host stage: it lives in its own process (Carla), so a crashing plugin does not take the studio with it. Add
+the LSP stereo limiter (LV2) to a track from the plugin browser and wait until the stage reads `bereit`. Draw a lane on its threshold: the lane
+holds the limiter down in steps of 20 ms for as long as it runs. Delete the lane and the threshold is free again.
+
+The tour step `j3.plugin` builds a project of its own, exports it dry (A), adds the stage and waits at most 60 s for the host, draws a flat lane that puts
+the threshold 24 dB under the dry peak and exports again (B), deletes the lane and exports a third time (C). The peak of B must be at least 6 dB under A,
+and C must be at least 3 dB louder than B, so the lane did it and not a stuck value. A project with a plugin stage exports in real time, so the step
+takes as long as the song lasts, three times. Without Carla or without the LSP plugins the step is skipped (`abhaengigkeit`); it stays skipped until the instance has a plugin scan with the LSP plugins.
+
+## 18. Merge
+
+Select two tracks and choose `Merge`: both are bounced over the range into one new audio track, and the two sources are muted. The export sounds the
+same as before. Undo takes the new track away again. Tracks with insert stages are refused.
+
+The tour step `j3.zusammen` merges two RB-338 tracks (panned left and right, two different notes) over eight beats and exports before and after. RMS
+and the peak of each channel of the two exports must be within 0.5 dB, and they may lie at most one sample apart. One undo must remove the new track.
+
+## 19. Resample
+
+`Resample` bounces a strip as it sounds after its inserts into a new audio track, so the new track carries what you heard, effects included.
+
+The tour step `j3.resample` puts a utility insert (+6 dB) on an RB-338 track, exports it, resamples the strip, mutes the source and exports again.
+Level and peaks of the new track must be within 0.5 dB of the strip, and it must start at the same sample (at most one sample apart).
+
 ## What the tour does, and what it leaves out
 
 The tour `djk/tools/tour_cli.py j3 --instanz <letter>` does what this chapter describes, but through the hand tools of the studio (the tools Cypher uses) instead of
@@ -126,9 +174,9 @@ clicks on the page, and measures the result. It checks that the export is at lea
 than 6 dB below the level heard while the song plays. It also exports the same eight bars before and after the tempo change
 and requires that the end of the sound moves, so a tempo change that only exists in the project data does not pass.
 
-Beyond the sections up to 8 the tour also drives the sections 9 to 14 and measures each one, in the exported audio or in the state of the project
+Beyond the sections up to 8 the tour also drives the sections 9 to 19 and measures each one, in the exported audio or in the state of the project
 read back (the extension steps `j3.midi_export`, `j3.einsammeln`, `j3.relink`, `j3.undo`, `j3.zip` on the project of the chapter, and `j3.auto`, `j3.eq`,
-`j3.komp`, `j3.hall`, `j3.saett`, `j3.limiter`, `j3.pdc`, each in a small project of its own with a source that is the same in every second):
+`j3.komp`, `j3.hall`, `j3.saett`, `j3.limiter`, `j3.pdc`, `j3.take`, `j3.rack`, `j3.plugin`, `j3.zusammen`, `j3.resample`, each in a small project of its own with a source that is the same in every second):
 
 - **Lane.** The level of the export climbs by the 3.00 dB per second of the lane (the tour accepts 0.75 dB more or less) and no second is more than 2 dB away from the straight line.
 - **EQ.** The band 120 to 250 Hz falls by at least 6 dB and the energy above 2 kHz changes by at most 1 dB.

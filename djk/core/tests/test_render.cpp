@@ -328,7 +328,7 @@ int main() {
     const cdj::RenderErgebnis eqs = cdj::rendere(r);
     std::printf("Fall 12: eq and saett rows: Fehler '%s', Regler %d\n", eqs.fehler.c_str(), eqs.regler);
     PRUEF(eqs.fehler.empty() && eqs.regler == 4);
-    for (const char* pfad : {"ins/komp/161/schwelle", "ins/komp/0/schwelle", "ins/eq/161/an", "ins/saett/5/an", "ins/lim/9/an", "ins/gate/17/an", "ins/mb/9/an", "ins/utility/9/an", "ins/utility/1/zz", "ins/eq/1/b9/gain", "ins/eq/1/b8/gain/x", "ins/komp/1/zz"}) {
+    for (const char* pfad : {"ins/komp/161/schwelle", "ins/komp/0/schwelle", "ins/eq/161/an", "ins/saett/33/an", "ins/trans/33/an", "ins/bild/17/an", "ins/lim/9/an", "ins/gate/17/an", "ins/mb/9/an", "ins/utility/9/an", "ins/utility/1/zz", "ins/eq/1/b9/gain", "ins/eq/1/b8/gain/x", "ins/komp/1/zz"}) {
       r.spur_regler = {{pfad, 0.0f}};
       const cdj::RenderErgebnis e = cdj::rendere(r);
       std::printf("Fall 12: %s: Fehler '%s'\n", pfad, e.fehler.c_str());

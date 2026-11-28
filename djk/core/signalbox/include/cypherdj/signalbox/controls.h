@@ -20,6 +20,10 @@ constexpr int MAX_REGLER = 24576;   // 2026-10-11: 384 → 512 für komp/* je Qu
                                    // strand 1 slice 3b: 16384 -> 24576 for 128 tracks (18 278 rows with pools 160 + 160, gate, mb, 8 hosts and the rows of
                                    // tracks 33..128); CDJ_Z_REGLER moves with it, the state file version stays 6 (16384 was never shipped).
                                    // strand 2 slice 2: + 128 rows plug/<h>/k<m> at the end (18 406 rows); the ceiling, CDJ_Z_REGLER and the version stay.
+                                   // strand 5 slice 1: + 8 rows ins/saett/<n>/{kurve,decke} (18 414 rows); the ceiling, CDJ_Z_REGLER and the version stay.
+                                   // strand 5 slice 2: + 4160 rows ins/eq/<n>/d<m>/{dyn,schwelle,bereich} and ins/eq/<n>/{dyn_attack,dyn_release} (22 574 rows); the ceiling, CDJ_Z_REGLER and the version stay.
+                                   // strand 5 slice 3: + 472 rows: saett pool 4 -> 32 (168), ins/trans/1..32 (192), ins/bild/1..16 (112) (23 046 rows); the ceiling, CDJ_Z_REGLER and the version stay.
+                                   // strand 5 slice 4: + 160 rows ins/eq/<n>/sc (23 206 rows); the ceiling, CDJ_Z_REGLER and the version stay.
 constexpr int MAX_KANAELE = 20;     // deck/1..4, erz/1..8, pad/1..2, bus/1..4, master, cue
 
 enum class Rolle : uint8_t {
@@ -100,7 +104,20 @@ enum class Rolle : uint8_t {
   ins_mb_b_schwelle, ins_mb_b_ratio, ins_mb_b_attack, ins_mb_b_release, ins_mb_b_knie, ins_mb_b_makeup, ins_mb_b_umgehen,
   // Strand 2 slice 2 (appended after ins_mb_b_umgehen, now the last role: the order stays). plug/<h>/k<m>, h = 1..8, m = 1..16: knob m of effect host h.
   // No consumer in the core: the page server forwards /e/hand moves of these rows to the plugin (the hostlernen pattern).
-  plug_regler
+  plug_regler,
+  // Strand 5 slice 1 (appended after plug_regler, now the last role: the order stays). The clip curve ins/saett/<n>/kurve (0 Tanh, 1 Soft clip,
+  // 2 Hard clip) and the ceiling ins/saett/<n>/decke (dBFS -24..0) of a saturation stage.
+  ins_saett_kurve, ins_saett_decke,
+  // Strand 5 slice 2 (appended after ins_saett_decke, now the last role: the order stays). The dynamic EQ: per band ins/eq/<n>/d<m>/{dyn,schwelle,bereich}
+  // (dyn 0 off, 1 above, 2 below, 3 above with key, 4 below with key; the band number is read from the path) and per stage ins/eq/<n>/{dyn_attack,dyn_release}.
+  ins_eq_d_dyn, ins_eq_d_schwelle, ins_eq_d_bereich, ins_eq_dyn_attack, ins_eq_dyn_release,
+  // Strand 5 slice 3 (appended after ins_eq_dyn_release, now the last role: the order stays). The transient shaper ins/trans/<n>/... and the
+  // three-band imager ins/bild/<n>/... (pool kinds; the core binds them in slice 3 task 3.4).
+  ins_trans_an, ins_trans_angriff, ins_trans_halten, ins_trans_tempo, ins_trans_out, ins_trans_mix,
+  ins_bild_an, ins_bild_grenze_tief, ins_bild_grenze_hoch, ins_bild_breite_tief, ins_bild_breite_mitte, ins_bild_breite_hoch, ins_bild_mono_unter,
+  // Strand 5 slice 4 (appended after ins_bild_mono_unter, now the last role: the order stays). The key of an EQ stage ins/eq/<n>/sc (0 = its own signal,
+  // 1..128 = the input of that track before any chain, as ins_komp_sc); parameter 85 of the stage.
+  ins_eq_sc
 };
 // strand 2 slice 2: plug/<h>/k<m>. The hosts are ARR_INS_HOST of arr_playback.h (8), which this library cannot include; the knob count is
 // MAX_PLUGIN_REGLER of djk/ui/project/model.ts (16).

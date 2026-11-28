@@ -2,6 +2,7 @@
 // View a = { s0, pxProS, tonOben }: s0 is the source second at the left edge of the note area (right of the key column), pxProS the pixels per second,
 // tonOben the pitch of the top row. x is a pixel of the canvas (key column included), y too. Written after production/warp_editor.js (time axis) and
 // production/pianoroll.js (rows, key names), not imported from them: this folder stays free of anything outside public/noten/.
+import { zeitAnwenden } from './time.js';
 
 export const TASTEN_BREITE = 40;
 export const TON_HOEHE = 9;
@@ -55,6 +56,68 @@ export function trefferNote(noten, a, x, y) {
     if (x >= k.x - tol && x <= k.x + k.w + tol && y >= k.y && y <= k.y + k.h) return noten[i].id;
   }
   return null;
+}
+
+// Edge of a bar under (x, y): { id, kante: 'a' | 'e' } within TREFFER_PX of the start or end line (a bar narrower than twice that: only beside its
+// edges, so its body stays grabbable), else null. The later note wins when bars overlap; the key column hits nothing.
+export function trefferKante(noten, a, x, y) {
+  if (x < TASTEN_BREITE) return null;
+  for (let i = noten.length - 1; i >= 0; i--) {
+    const k = notenKasten(a, noten[i]);
+    if (y < k.y || y > k.y + k.h) continue;
+    const schmal = k.w < 2 * TREFFER_PX, r = k.x + k.w;
+    const nahA = schmal ? x >= k.x - TREFFER_PX && x < k.x : Math.abs(x - k.x) <= TREFFER_PX;
+    const nahE = schmal ? x > r && x <= r + TREFFER_PX : Math.abs(x - r) <= TREFFER_PX;
+    if (nahA || nahE) {
+      if (nahA && nahE) return { id: noten[i].id, kante: Math.abs(x - k.x) <= Math.abs(x - r) ? 'a' : 'e' };
+      return { id: noten[i].id, kante: nahA ? 'a' : 'e' };
+    }
+    if (x >= k.x && x <= r) return null;     // inside a body: the body wins over bars below it
+  }
+  return null;
+}
+
+const rundeS = (x) => Math.round(x * 1e6) / 1e6;
+// Time `s` snapped to 1/16 of the clip grid (modus 'raster' with a grid), else free at 0.001 s
+function rasteZeit(s, modus, raster) {
+  if (modus === 'frei' || !raster) return Math.round(s * 1e3) / 1e3;
+  const b = raster.beatBeiS(s), z = raster.sBeiBeat(Math.round(b * 4) / 4);
+  return Number.isFinite(z) ? z : Math.round(s * 1e3) / 1e3;
+}
+// Largest value toward `ziel` (from `von`, which is allowed) that `erlaubt` accepts: the target itself, else 20 steps of bisection
+function groesster(von, ziel, erlaubt) {
+  if (erlaubt(ziel)) return ziel;
+  let ok = von, nein = ziel;
+  for (let i = 0; i < 20; i++) { const m = (ok + nein) / 2; if (erlaubt(m)) ok = m; else nein = m; }
+  return ok;
+}
+// The time op for dragging by dxS seconds. kante null: every selected note moves by ONE delta, the anchor's start lands on the snapped time
+// ({ art: 'zeit', ids, um_s }); kante 'a' | 'e': that edge of the anchor alone ({ art: 'kante', id, a | e }). The result is clamped toward the pointer to what
+// zeitAnwenden accepts. null when nothing moves, the anchor is gone, or not even the smallest step is allowed.
+export function zeitZugOp(noten, ids, ankerId, dxS, kante, modus, raster) {
+  const anker = noten.find((n) => n.id === ankerId);
+  const wahl = noten.filter((n) => ids.includes(n.id));
+  if (!anker || !wahl.length) return null;
+  const ok = (aend) => !zeitAnwenden(noten, aend).grund;
+  if (kante) {
+    const feld = kante, alt = feld === 'a' ? effA(anker) : effE(anker);
+    const ziel = rundeS(rasteZeit(alt + dxS, modus, raster));
+    const wert = rundeS(groesster(alt, ziel, (w) => ok({ ids: [anker.id], [feld]: rundeS(w) })));
+    if (wert === alt || !ok({ ids: [anker.id], [feld]: wert })) return null;
+    return { art: 'kante', id: anker.id, [feld]: wert };
+  }
+  const start = effA(anker), ziel = rundeS(rasteZeit(start + dxS, modus, raster)) - start;
+  const um = rundeS(groesster(0, ziel, (d) => ok({ ids: wahl.map((n) => n.id), zeitUm: rundeS(d) })));
+  if (um === 0 || !ok({ ids: wahl.map((n) => n.id), zeitUm: um })) return null;
+  return { art: 'zeit', ids: wahl.map((n) => n.id), um_s: um };
+}
+// The notes a time op changes (moved notes and neighbours that follow), as they will be: the list that zeitAnwenden gives, restricted to changed notes
+export function zeitVorschau(noten, op) {
+  if (!op) return [];
+  const r = op.art === 'zeit' ? zeitAnwenden(noten, { ids: op.ids, zeitUm: op.um_s })
+    : op.art === 'kante' ? zeitAnwenden(noten, { ids: [op.id], ...(op.a !== undefined ? { a: op.a } : { e: op.e }) }) : { grund: 'x' };
+  if (r.grund) return [];
+  return r.liste.filter((n, i) => n !== noten[i]);
 }
 
 // Target pitch of note n when its bar is dragged by dy semitones (rows, positive = up) from its current target.

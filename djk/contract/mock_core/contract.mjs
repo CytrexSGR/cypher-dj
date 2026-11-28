@@ -128,6 +128,8 @@ export const AUSGABEN = {
   '/zustand/ein': f('ihhhh', 'verbunden midi_gesehen midi_verloren midi_sample flanke_sample'),   // I08 (§5.14)
   '/zustand/rec': f('iiihdiii', 'status kennung scharf luecken projekt_beat ausgang_vorhalt quantum rec_midi_scharf'),   // 1.8 (§5.14)
   '/zustand/zelle': f('siiddid', 'spur zelle verwaist ab_beat versatz_beats wartend wartend_ab'),   // loop deck V0 (§5.13): the cell state of one loop deck track
+  '/zustand/arr/midi': f('iiiii', 'spur gehalten ein aus verloren'),   // strand 7 task 3.3 (§5.13), type entry only: the Attrappe never sends it
+  '/zustand/mod': f('if', 'nr wert'),   // strand 6 D11 (§5.13), type entry only: the Attrappe has no modulators and never sends it
   '/zustand/warp': f('iiiii', 'stimmen unterlauf kein_platz spaet faeden'),   // 1.13 Slice 2 (§5.13): Zähler des Warp-Werks
   '/zustand/spur_pool': f('iiiiiiiii', 'an modus blocks_parallel einheiten_worker einheiten_caller seriell_summe haengt spaet zurueck'),   // mehrkern slice 3.2 (§5.13): track phases on the Hall pool
   '/zustand/hall_pool': f('iiii', 'an faeden spaet zurueck'),   // mehrkern Task 5 (§5.13): Zustand des Hall-Pools

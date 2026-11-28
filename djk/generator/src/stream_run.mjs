@@ -8,6 +8,7 @@ import { kodiere } from '../../contract/mock_core/osc.mjs';
 import { kompiliere } from './compile.mjs';
 import { Planer } from './planner.mjs';
 import { schreibeStatus, schreibeLebt, leseVersatz } from './pattern_state.mjs';
+import { leseHarmonie, HARMONIE_DATEI } from './harmonie_file.mjs';
 import { leseTaktart, TAKTART_DATEI } from './taktart_file.mjs';
 
 export class StromLauf {
@@ -25,7 +26,8 @@ export class StromLauf {
     this.beatJetzt = beatJetzt;
     this.logRoh = log;
     this.taktartPfad = path.join(ordner, TAKTART_DATEI);
-    this.planer = new Planer({ strom, kit: { midi: true }, sende, jetztUs, taktart: leseTaktart(ordner, 4) });
+    this.harmoniePfad = path.join(ordner, HARMONIE_DATEI);
+    this.planer = new Planer({ strom, kit: { midi: true }, sende, jetztUs, taktart: leseTaktart(ordner, 4), lane: leseHarmonie(ordner, []) });
     this.id = BigInt(Date.now()) * 1000n + BigInt(strom);   // per-stream ids stay distinct inside one process
     this.letzterStand = { taub: [], taub_muster: null };
     this.gemeldet = { nr: 0, n: 0 };
@@ -80,6 +82,24 @@ export class StromLauf {
     return true;
   }
 
+  /** The lane file harmonie.json changed (strand 7). Returns true when the lane changed; a broken file keeps the old lane. */
+  harmonieLesen() {
+    const neu = leseHarmonie(this.ordner, this.planer.lane);
+    if (JSON.stringify(neu) === JSON.stringify(this.planer.lane)) return false;
+    this.log(`harmony lane changed (${neu.length} entries)`);
+    const jetzt = this.beatJetzt();
+    this.planer.setzeLane(neu, jetzt === null ? -Infinity : jetzt);
+    return true;
+  }
+
+  /** Write the clash count of the latest window into status.json when it changed (absent without a lane). */
+  harmonieMelden() {
+    const h = this.planer.harmonie ?? undefined;
+    if (JSON.stringify(h) === JSON.stringify(this.letzterStand.harmonie)) return;
+    const { harmonie, ...rest } = this.letzterStand;
+    this.status(this.letzterStand = h ? { ...rest, harmonie: h } : rest);
+  }
+
   /** Bar n: send the next two bars (see Planer.takt), report deaf fields, write the heartbeat. */
   takt(n) {
     try {
@@ -88,6 +108,7 @@ export class StromLauf {
       this.log(`bar ${n} not sent: ${e.message} (the process keeps running)`);
     }
     this.felderMelden();
+    this.harmonieMelden();
     this.lebt();
   }
 

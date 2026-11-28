@@ -286,7 +286,7 @@ test('+ INSERT on a track writes insert_setzen and opens the new Cypher Modular 
   w.zeige(); await ruhe();
   const menue = menues();
   alle('karte-spur')[0].querySelector('[data-w="karte-plus"]').dispatch('click'); await ruhe();
-  assert.deepEqual(menue.punkte.slice(0, 4).map((p) => p.text), ['Compressor', 'EQ', 'Saturator', 'Limiter']);
+  assert.deepEqual(menue.punkte.slice(0, 6).map((p) => p.text), ['Compressor', 'EQ', 'De-esser', 'Saturator', 'Clipper', 'Limiter']);
   const neu = modul({ rev: 4 }); neu.spuren[1] = bk('s1', 1, 'Drums', 'drums-909', { inserts: [ins('i9', 'bk', { graph: 'fx-delay-sync' })] });
   attrappe.antworten['POST /proj/aendern'] = { j: { rev: 4, projekt: neu } };
   await menue.punkte.find((p) => p.text === 'fx-delay-sync').aktion(); await ruhe();

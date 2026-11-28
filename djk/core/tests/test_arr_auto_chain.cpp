@@ -298,8 +298,8 @@ int main() {
     PRUEF(grund(123, spur(kette + ca(st(0, 0)))) == "format");                                           // the stage switch
     PRUEF(grund(124, spur(kette + ca(st(0, 9)))) == "format");                                           // the compressor key
     PRUEF(grund(125, spur(kette + ca(st(0, 10)))) == "format");                                          // beyond the compressor
-    PRUEF(grund(126, spur(kette + ca(st(1, 58)))) == "+snap");                                           // the last eq parameter is fine
-    PRUEF(grund(127, spur(kette + ca(st(1, 59)))) == "format");                                          // one beyond the eq
+    PRUEF(grund(126, spur(kette + ca(st(1, 84)))) == "+snap");                                           // the last eq parameter is fine (dyn_release since strand 5 slice 2; 58 before)
+    PRUEF(grund(127, spur(kette + ca(st(1, 85)))) == "format");                                          // one beyond the eq (59 before strand 5 slice 2)
     {   // a host stage keeps its own parameters (the cache must know the host ports, else the chain itself is refused host_fehlt)
       cdj::ArrAudioCache cache_h(&konto, 50LL << 20, false);
       cache_h.setze_host_da(true);

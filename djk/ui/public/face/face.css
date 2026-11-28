@@ -140,6 +140,15 @@ circle.fa-hall-t0 { fill: var(--ak-blau); } circle.fa-hall-t1 { fill: var(--fa);
 .p-face:has(.fa-eq) { width: min(760px, calc(100vw - 32px)); max-height: min(620px, calc(100vh - 32px)); }
 .fa-eq { display: flex; flex-direction: column; gap: 8px; }
 .fa-eq-anzeige { position: relative; }
+.fa-eq-titel { font-weight: 700; fill: var(--text); }
+.fa-eq-dyn-gr { fill: var(--dim); font-variant-numeric: tabular-nums; }
+.fa-eq-bewegt { fill: none; stroke: var(--text); stroke-opacity: .7; stroke-width: 1.4; }
+.fa-eq-dyn { display: flex; gap: 14px; align-items: flex-start; justify-content: center; padding-top: 6px; border-top: 1px solid var(--line); }
+.p-face:has(.fa-eq-dyn:not([hidden])) { max-height: min(740px, calc(100vh - 32px)); }
+.fa-eq-dyn[hidden], .fa-eq-dyn-notiz[hidden] { display: none; }
+.fa-eq-dyn-kopf { font-size: 10px; letter-spacing: .08em; color: var(--dim); writing-mode: vertical-rl; transform: rotate(180deg); }
+.fa-eq-dyn-platte { flex: none; }
+.fa-eq-dyn-notiz { font-size: 10px; color: var(--dim); }
 .fa-eq-null { stroke: #566; stroke-width: 1; stroke-dasharray: 4 4; }
 .fa-eq-kurve { fill: none; stroke: var(--fa); stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 3px rgba(255, 154, 60, .35)); }
 .fa-eq-seite { fill: none; stroke: var(--text); stroke-opacity: .55; stroke-width: 1; stroke-dasharray: 3 3; }
@@ -190,3 +199,21 @@ circle.fa-hall-t0 { fill: var(--ak-blau); } circle.fa-hall-t1 { fill: var(--fa);
 
 /* the title bar buttons of a device face (production/insert_face.js) */
 .p-face-knopf { font-size: 10px; font-weight: 700; letter-spacing: .08em; padding: 3px 8px; border-radius: 6px; cursor: pointer; }
+.fa-saett-kopf { display: flex; align-items: center; gap: 10px; }
+.fa-saett-titel { flex: 1 1 auto; }
+.fa-saett-klipp { font-variant-numeric: tabular-nums; opacity: .85; }
+
+/* strand 5 slice 3: the transient shaper (two big knobs, live gain change) and the imager (band strip, width faders, crossover knobs) */
+.fa-trans, .fa-bild { display: flex; flex-direction: column; gap: 12px; }
+.fa-trans-platte .fp-sektion:first-child { transform: scale(1.25); transform-origin: top center; margin-bottom: 18px; }   /* Attack and Sustain are the big pair */
+.fa-trans-gr { display: flex; align-items: baseline; justify-content: center; gap: 10px; }
+.fa-trans-gr-text { font-size: 22px; font-variant-numeric: tabular-nums; color: var(--fa); }
+.fa-trans.fa-aus .fa-trans-gr-text, .fa-bild.fa-aus .fa-bild-baender { color: #6b6f7c; fill: #6b6f7c; stroke: #6b6f7c; }
+.fa-bild-streifen { align-self: center; width: min(100%, 340px); min-width: 0; }
+.fa-bild .fa-bild-baender { fill: color-mix(in srgb, var(--fa) 28%, transparent); stroke: var(--fa); }
+.fa-bild-grenze { stroke: var(--fa); stroke-dasharray: 3 3; opacity: .8; }
+.fa-bild-griff { fill: var(--fa); cursor: ew-resize; touch-action: none; }
+.fa-bild-fader { display: flex; flex-direction: column; gap: 6px; }
+.fa-bild-zeile { display: grid; grid-template-columns: 52px 1fr 56px; align-items: center; gap: 8px; }
+.fa-bild-schieber { width: 100%; accent-color: var(--fa); }
+.fa-bild-wert { font-variant-numeric: tabular-nums; text-align: right; }

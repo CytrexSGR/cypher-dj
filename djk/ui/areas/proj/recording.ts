@@ -22,7 +22,7 @@ import { json } from '../../http/transport.ts';
 import { grundText } from '../../http/reasons.ts';
 import { aendereStand } from '../../project/state.ts';
 import {
-  eingangsCode, leseMidiDatei, midiTakeNoten, nehmeMidiAuf, nehmeTakeAuf, schreibeWavAusF32, TakeFehler, type MidiTakeAngabe,
+  eingangsCode, leseMidiDatei, midiDurchlaufZahlen, midiTakeNoten, nehmeMidiAuf, nehmeTakeAuf, schreibeWavAusF32, TakeFehler, type MidiTakeAngabe,
 } from '../../project/recording.ts';
 import { aufnahmeVon, MAX_BEAT, MAX_SPUREN, type EingangExtern, type EingangIntern, type Projekt, type SpurAufnahme } from '../../project/model.ts';
 import { quittungsFristMs } from './recording_deadline.ts';
@@ -44,6 +44,7 @@ interface Lauf {
   nachlauf: number;                         // 1.8 S2b (D9): the one tail of the run = the largest offset of the armed tracks (0 with internal tracks only)
   laufend: boolean;                         // 1.8 S4b (D8): began inside a running transport; stopping ends the recording only
   punch: { ein: boolean; aus: boolean; von_beat: number; bis_beat: number } | null;   // 1.8 S4b (D6): punch range at the start; null = whole pass
+  loop: { von_beat: number; bis_beat: number } | null;   // 4.2: the loop at the start (null = off); in replace mode every pass of the run is a MIDI take
   overdub: boolean;                         // 1.8 T8 (R7): the overdub switch at the start; it decides how the MIDI take meets the clips of the range
   verworfen: string | null;                 // Grund der Quittung 7 (Kern verwirft), solange der Lauf schon als laufend galt
   abschluss: Promise<Antwort> | null;       // gesetzt, sobald der Lauf endet (eine Instanz für alle drei Wege)
@@ -408,7 +409,7 @@ export class Aufnahme {
       const startBeat = laufend ? (this.einsatzBeat ?? beat) : beat;
       this.lauf = { ordner: o.ordner, kennung, recId, startBeat, bpm: o.projekt.tempo_bpm, quelle, seit: Date.now(), verworfen: null, abschluss: null,
         nachlauf, laufend, punch,
-        overdub: au.overdub,
+        overdub: au.overdub, loop: o.projekt.loop.an ? { von_beat: o.projekt.loop.von_beat, bis_beat: o.projekt.loop.bis_beat } : null,
         spuren: scharf.map((s) => ({ id: s.id, nr: s.nr, name: s.name, versatz_samples: versatz.get(s.nr) ?? 0,
           ...(s.art === 'instrument' ? { art: 'instrument' as const } : {}) })) };
       this.letzte = null;
@@ -590,11 +591,14 @@ export class Aufnahme {
     const zusatz = m.status === 1 ? ' (gaps)' : m.status === 3 ? ' (disk full)' : '';
     for (const s of spuren) {
       const a: MidiTakeAngabe = { spurIds: [s.id], startBeat: l.startBeat, bpm: l.bpm, startSample: m.start_sample, ereignisse,
-        versatzSamples: s.versatz_samples, overdub: l.overdub, endeBeat, name: `Take ${l.kennung}${zusatz}`, ...(punch ? { punch } : {}) };
+        versatzSamples: s.versatz_samples, overdub: l.overdub, endeBeat, name: `Take ${l.kennung}${zusatz}`,
+          ...(punch ? { punch } : {}), ...(l.loop ? { loop: l.loop } : {}) };
       try {
+        const zahlen = midiDurchlaufZahlen(neu, a, s.id);   // before the placing: it reads the lanes the track had
         neu = nehmeMidiAuf(neu, a);
         ergebnis.push({ spur_id: s.id, art: 'midi', ereignisse: m.frames, noten: midiTakeNoten(a), luecken: m.luecken, status: m.status, datei,
-          versatz_samples: s.versatz_samples, overdub: l.overdub, ...(punch ? { punch } : {}) });
+          versatz_samples: s.versatz_samples, overdub: l.overdub, ...(punch ? { punch } : {}),
+          ...(zahlen ? { takes: zahlen.takes, ...(zahlen.verworfen > 0 ? { takes_verworfen: zahlen.verworfen } : {}) } : {}) });
       } catch (e) {
         if (e instanceof TakeFehler) ergebnis.push({ spur_id: s.id, fehler: e.grund, text: grundText(e.grund), datei });
         else {

@@ -327,12 +327,12 @@ int main() {
     PRUEF(grund(87, ",\"chain\":[{\"art\":\"utility\",\"slot\":1},{\"art\":\"utility\",\"slot\":2},{\"art\":\"utility\",\"slot\":3},{\"art\":\"utility\",\"slot\":4}]") == "+snap");   // four stages fill a chain
   }
 
-  {  // 9 util_hohe_slots: utility 7 and 8 are the global slots 338 and 339 since strand 1 slice 4 (160 + 160 + 4 + 8 + 6 and + 7, limiter pool 8; 332 and 333 after slice 3b, 204 and 205 after slice 3, 50 and 51 after slice 1, 32 and 33 before it),
-     // in the sixth word of the six-word slot mask (ArrSlotMaske, strand 1 task 2.1). The case exists to prove that slots beyond one mask word run audibly, alone and together, and are freed again.
+  {  // 9 util_hohe_slots: utility 7 and 8 are the global slots 366 and 367 since strand 5 slice 3 (160 + 160 + 32 + 8 + 6 and + 7, saett pool 32, limiter pool 8; 338 and 339 in strand 1 slice 4, 332 and 333 after slice 3b, 204 and 205 after slice 3, 50 and 51 after slice 1, 32 and 33 before it),
+     // in the sixth word of the eight-word slot mask (ArrSlotMaske, strand 1 task 2.1). The case exists to prove that slots beyond one mask word run audibly, alone and together, and are freed again.
     const int g7 = cdj::ins_global(ArrInsArt::utility, 6), g8 = cdj::ins_global(ArrInsArt::utility, 7);
-    PRUEF(g7 == 160 + 160 + 4 + 8 + 6 && g8 == g7 + 1);   // from the pool sizes: komp 160, eq 160, saett 4, lim 8 come first
+    PRUEF(g7 == 160 + 160 + 32 + 8 + 6 && g8 == g7 + 1);   // from the pool sizes: komp 160, eq 160, saett 32, lim 8 come first
     PRUEF(g7 >= 5 * 64 && g8 < 6 * 64);                 // the pin of why this case exists: both sit in mask word 5, a one-word (64-bit) mask would lose them
-    PRUEF(cdj::ARR_INS_ALLE == 380 && cdj::ARR_INS_ALLE == cdj::ARR_INS_KOMP + cdj::ARR_INS_EQ + cdj::ARR_INS_SAETT + cdj::ARR_INS_LIM + cdj::ARR_INS_UTIL + cdj::ARR_INS_BK + cdj::ARR_INS_GATE + cdj::ARR_INS_MB + cdj::ARR_INS_HOST);   // strand 1 slice 5: 380 slots with eight hosts, six mask words (376 in slice 4, 346 in slice 3b, 218 and four in slice 3) (ARR_INS_ALLE <= 64 is no longer a rule since task 2.1)
+    PRUEF(cdj::ARR_INS_ALLE == 456 && cdj::ARR_INS_ALLE == cdj::ARR_INS_KOMP + cdj::ARR_INS_EQ + cdj::ARR_INS_SAETT + cdj::ARR_INS_LIM + cdj::ARR_INS_UTIL + cdj::ARR_INS_BK + cdj::ARR_INS_GATE + cdj::ARR_INS_MB + cdj::ARR_INS_TRANS + cdj::ARR_INS_BILD + cdj::ARR_INS_HOST);   // strand 5 slice 3: 456 slots (saett 32, trans 32, bild 16), eight mask words; strand 1 slice 5: 380 slots with eight hosts, six mask words (376 in slice 4, 346 in slice 3b, 218 and four in slice 3) (ARR_INS_ALLE <= 64 is no longer a rule since task 2.1)
     TR(ref)
     spiele(ref, spur1(&q->a, false), 120000);
     const double sm0 = sm_db(ref, 1000.0);
